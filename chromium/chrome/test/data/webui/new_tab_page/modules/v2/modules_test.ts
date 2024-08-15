@@ -2,14 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {Module, MODULE_CUSTOMIZE_ELEMENT_ID, ModuleDescriptor, ModuleRegistry, ModulesV2Element, ModuleWrapperElement, NamedWidth, SUPPORTED_MODULE_WIDTHS} from 'chrome://new-tab-page/lazy_load.js';
+import type {Module, ModuleWrapperElement, NamedWidth} from 'chrome://new-tab-page/lazy_load.js';
+import {MODULE_CUSTOMIZE_ELEMENT_ID, ModuleDescriptor, ModuleRegistry, ModulesV2Element, SUPPORTED_MODULE_WIDTHS} from 'chrome://new-tab-page/lazy_load.js';
 import {NewTabPageProxy} from 'chrome://new-tab-page/new_tab_page.js';
-import {PageCallbackRouter, PageHandlerRemote, PageRemote} from 'chrome://new-tab-page/new_tab_page.mojom-webui.js';
+import type {PageRemote} from 'chrome://new-tab-page/new_tab_page.mojom-webui.js';
+import {PageCallbackRouter, PageHandlerRemote} from 'chrome://new-tab-page/new_tab_page.mojom-webui.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {fakeMetricsPrivate, MetricsTracker} from 'chrome://webui-test/metrics_test_support.js';
+import type {MetricsTracker} from 'chrome://webui-test/metrics_test_support.js';
+import {fakeMetricsPrivate} from 'chrome://webui-test/metrics_test_support.js';
 import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
-import {TestMock} from 'chrome://webui-test/test_mock.js';
+import type {TestMock} from 'chrome://webui-test/test_mock.js';
 
 import {assertNotStyle, assertStyle, createElement, initNullModule, installMock} from '../../test_support.js';
 
@@ -40,7 +43,8 @@ suite('NewTabPageModulesModulesV2Test', () => {
   });
 
   async function createModulesElement(
-      modules: Module[], enabled: boolean, width: number) {
+      modules: Module[], enabled: boolean,
+      width: number): Promise<ModulesV2Element> {
     if (!enabled) {
       assertTrue(
           modules.length === 0,
@@ -59,6 +63,24 @@ suite('NewTabPageModulesModulesV2Test', () => {
     document.body.appendChild(element);
     await modulesPromise;
     return element;
+  }
+
+  async function createModulesElementFromDescriptors(
+      descriptors: ModuleDescriptor[],
+      instanceCount: number): Promise<HTMLElement> {
+    handler.setResultFor('getModulesIdNames', {
+      data: descriptors,
+    });
+
+    const modules: Module[] = descriptors.map(descriptor => {
+      return {
+        descriptor: descriptor,
+        elements: Array(instanceCount).fill(0).map(_ => createElement()),
+      } as Module;
+    });
+    const modulesElement =
+        await createModulesElement(modules, true, SAMPLE_SCREEN_WIDTH);
+    return modulesElement;
   }
 
   const NARROW_WIDTH = SUPPORTED_MODULE_WIDTHS[0]!;
@@ -290,34 +312,40 @@ suite('NewTabPageModulesModulesV2Test', () => {
     const fooDescriptor = new ModuleDescriptor('foo', initNullModule);
     const barDescriptor = new ModuleDescriptor('bar', initNullModule);
     const descriptors = [
-      {id: fooDescriptor.id, name: fooDescriptor.id},
-      {id: barDescriptor.id, name: barDescriptor.id},
+      fooDescriptor,
+      barDescriptor,
     ];
-    handler.setResultFor('getModulesIdNames', {
-      data: descriptors,
-    });
-
-    const modulesElement = await createModulesElement(
-        [
-          {
-            descriptor: fooDescriptor,
-            elements: Array(SAMPLE_MAX_MODULE_INSTANCE_COUNT + 1)
-                          .fill(0)
-                          .map(_ => createElement()),
-          },
-          {
-            descriptor: barDescriptor,
-            elements: Array(SAMPLE_MAX_MODULE_INSTANCE_COUNT + 1)
-                          .fill(0)
-                          .map(_ => createElement()),
-          },
-        ],
-        true, SAMPLE_SCREEN_WIDTH);
+    const modulesElement = await createModulesElementFromDescriptors(
+        descriptors, SAMPLE_MAX_MODULE_INSTANCE_COUNT + 1);
     const moduleWrappers =
         modulesElement.shadowRoot!.querySelectorAll('ntp-module-wrapper');
     assertEquals(
         descriptors.length * SAMPLE_MAX_MODULE_INSTANCE_COUNT,
         moduleWrappers.length);
+  });
+
+  test('modules maxium instance capped to maximum column count', async () => {
+    const SAMPLE_MAX_COLUMN_COUNT = 3;
+    const SAMPLE_MAX_MODULE_INSTANCE_COUNT = 3;
+    loadTimeData.overrideValues({
+      modulesMaxColumnCount: SAMPLE_MAX_COLUMN_COUNT,
+      multipleLoadedModulesMaxModuleInstanceCount:
+          SAMPLE_MAX_MODULE_INSTANCE_COUNT,
+    });
+
+    const fooDescriptor = new ModuleDescriptor('foo', initNullModule);
+    const barDescriptor = new ModuleDescriptor('bar', initNullModule);
+    const bazDescriptor = new ModuleDescriptor('baz', initNullModule);
+    const descriptors = [
+      fooDescriptor,
+      barDescriptor,
+      bazDescriptor,
+    ];
+    const modulesElement = await createModulesElementFromDescriptors(
+        descriptors, SAMPLE_MAX_MODULE_INSTANCE_COUNT);
+    const moduleWrappers =
+        modulesElement.shadowRoot!.querySelectorAll('ntp-module-wrapper');
+    assertEquals(SAMPLE_MAX_COLUMN_COUNT, moduleWrappers.length);
   });
 
   enum UndoStrategy {
@@ -392,8 +420,10 @@ suite('NewTabPageModulesModulesV2Test', () => {
               // Act.
               await waitAfterNextRender(modulesElement);
               if (undoStrategy === UndoStrategy.BUTTON_ACTIVATION) {
-                const undoButton = modulesElement.shadowRoot!.querySelector(
-                                       '#undoButton') as HTMLElement;
+                const undoButton =
+                    modulesElement.shadowRoot!.querySelector<HTMLElement>(
+                        '#undoButton');
+                assertTrue(!!undoButton);
                 undoButton.click();
               } else if (undoStrategy === UndoStrategy.SHORTCUT_KEY) {
                 window.dispatchEvent(new KeyboardEvent('keydown', {
@@ -469,8 +499,10 @@ suite('NewTabPageModulesModulesV2Test', () => {
 
               await waitAfterNextRender(modulesElement);
               if (undoStrategy === UndoStrategy.BUTTON_ACTIVATION) {
-                const undoButton = modulesElement.shadowRoot!.querySelector(
-                                       '#undoButton') as HTMLElement;
+                const undoButton =
+                    modulesElement.shadowRoot!.querySelector<HTMLElement>(
+                        '#undoButton');
+                assertTrue(!!undoButton);
                 undoButton.click();
               } else if (undoStrategy === UndoStrategy.SHORTCUT_KEY) {
                 window.dispatchEvent(new KeyboardEvent('keydown', {

@@ -8,11 +8,11 @@
 
 #include <vector>
 
+#include "core/fxcrt/numerics/safe_conversions.h"
+#include "core/fxcrt/span.h"
 #include "fxjs/cfx_v8.h"
 #include "fxjs/fxv8.h"
 #include "fxjs/js_resources.h"
-#include "third_party/base/containers/span.h"
-#include "third_party/base/numerics/safe_conversions.h"
 #include "v8/include/v8-primitive.h"
 #include "xfa/fgas/crt/cfgas_decimal.h"
 #include "xfa/fxfa/cxfa_eventparam.h"
@@ -109,7 +109,7 @@ CJS_Result CJX_Field::getSaveItem(CFXJSE_Engine* runtime,
   if (!node->IsWidgetReady())
     return CJS_Result::Success(runtime->NewNull());
 
-  absl::optional<WideString> value = node->GetChoiceListItem(iIndex, true);
+  std::optional<WideString> value = node->GetChoiceListItem(iIndex, true);
   if (!value.has_value())
     return CJS_Result::Success(runtime->NewNull());
 
@@ -172,7 +172,7 @@ CJS_Result CJX_Field::getDisplayItem(
   if (!node->IsWidgetReady())
     return CJS_Result::Success(runtime->NewNull());
 
-  absl::optional<WideString> value = node->GetChoiceListItem(iIndex, false);
+  std::optional<WideString> value = node->GetChoiceListItem(iIndex, false);
   if (!value.has_value())
     return CJS_Result::Success(runtime->NewNull());
 
@@ -350,7 +350,7 @@ void CJX_Field::length(v8::Isolate* pIsolate,
 
   CXFA_Node* node = GetXFANode();
   *pValue = fxv8::NewNumberHelper(
-      pIsolate, node->IsWidgetReady() ? pdfium::base::checked_cast<int>(
+      pIsolate, node->IsWidgetReady() ? pdfium::checked_cast<int>(
                                             node->CountChoiceListItems(true))
                                       : 0);
 }

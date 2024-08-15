@@ -103,7 +103,7 @@ void LogWithLevel(LogLevel level,
      << TRACE_CURRENT_ID << "] " << message.rdbuf() << '\n';
   const auto ss_str = ss.str();
   const auto bytes_written = write(g_log_fd, ss_str.c_str(), ss_str.size());
-  OSP_DCHECK(bytes_written);
+  OSP_CHECK(bytes_written);
   if (g_log_messages_for_test) {
     g_log_messages_for_test->push_back(ss_str);
   }
@@ -112,7 +112,7 @@ void LogWithLevel(LogLevel level,
 void LogTraceMessage(const std::string& message) {
   const std::string to_write = message + '\n';
   const auto bytes_written = write(g_log_fd, to_write.c_str(), to_write.size());
-  OSP_DCHECK(bytes_written);
+  OSP_CHECK(bytes_written);
 }
 
 [[noreturn]] void Break() {

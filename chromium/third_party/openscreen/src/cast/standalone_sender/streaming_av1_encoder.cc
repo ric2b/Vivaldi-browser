@@ -45,7 +45,7 @@ StreamingAv1Encoder::StreamingAv1Encoder(const Parameters& params,
   ideal_speed_setting_ = kHighestEncodingSpeed;
   encode_thread_ = std::thread([this] { ProcessWorkUnitsUntilTimeToQuit(); });
 
-  OSP_DCHECK(params_.codec == VideoCodec::kAv1);
+  OSP_CHECK_EQ(params_.codec, VideoCodec::kAv1);
   const auto result = aom_codec_enc_config_default(aom_codec_av1_cx(), &config_,
                                                    AOM_USAGE_REALTIME);
   OSP_CHECK_EQ(result, AOM_CODEC_OK);
@@ -176,7 +176,7 @@ void StreamingAv1Encoder::EncodeAndSend(
 }
 
 void StreamingAv1Encoder::DestroyEncoder() {
-  OSP_DCHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
+  OSP_CHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
 
   if (is_encoder_initialized()) {
     aom_codec_destroy(&encoder_);
@@ -187,7 +187,7 @@ void StreamingAv1Encoder::DestroyEncoder() {
 }
 
 void StreamingAv1Encoder::ProcessWorkUnitsUntilTimeToQuit() {
-  OSP_DCHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
+  OSP_CHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
 
   for (;;) {
     WorkUnitWithResults work_unit{};
@@ -233,7 +233,7 @@ void StreamingAv1Encoder::ProcessWorkUnitsUntilTimeToQuit() {
 void StreamingAv1Encoder::PrepareEncoder(int width,
                                          int height,
                                          int target_bitrate) {
-  OSP_DCHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
+  OSP_CHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
 
   const int target_kbps = target_bitrate / kBytesPerKilobyte;
 
@@ -302,7 +302,7 @@ void StreamingAv1Encoder::PrepareEncoder(int width,
 
 void StreamingAv1Encoder::EncodeFrame(bool force_key_frame,
                                       WorkUnitWithResults& work_unit) {
-  OSP_DCHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
+  OSP_CHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
 
   // The presentation timestamp argument here is fixed to zero to force the
   // encoder to base its single-frame bandwidth calculations entirely on
@@ -337,7 +337,7 @@ void StreamingAv1Encoder::ComputeFrameEncodeStats(
     Clock::duration encode_wall_time,
     int target_bitrate,
     WorkUnitWithResults& work_unit) {
-  OSP_DCHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
+  OSP_CHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
 
   Stats& stats = work_unit.stats;
 
@@ -369,7 +369,7 @@ void StreamingAv1Encoder::ComputeFrameEncodeStats(
 }
 
 void StreamingAv1Encoder::SendEncodedFrame(WorkUnitWithResults results) {
-  OSP_DCHECK(main_task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(main_task_runner_.IsRunningOnTaskRunner());
 
   EncodedFrame frame;
   frame.frame_id = sender_->GetNextFrameId();
@@ -402,11 +402,11 @@ void StreamingAv1Encoder::SendEncodedFrame(WorkUnitWithResults results) {
 // static
 StreamingAv1Encoder::Av1ImageUniquePtr StreamingAv1Encoder::CloneAsAv1Image(
     const VideoFrame& frame) {
-  OSP_DCHECK_GE(frame.width, 0);
-  OSP_DCHECK_GE(frame.height, 0);
-  OSP_DCHECK_GE(frame.yuv_strides[0], 0);
-  OSP_DCHECK_GE(frame.yuv_strides[1], 0);
-  OSP_DCHECK_GE(frame.yuv_strides[2], 0);
+  OSP_CHECK_GE(frame.width, 0);
+  OSP_CHECK_GE(frame.height, 0);
+  OSP_CHECK_GE(frame.yuv_strides[0], 0);
+  OSP_CHECK_GE(frame.yuv_strides[1], 0);
+  OSP_CHECK_GE(frame.yuv_strides[2], 0);
 
   constexpr int kAlignment = 32;
   Av1ImageUniquePtr image(aom_img_alloc(nullptr, AOM_IMG_FMT_I420, frame.width,

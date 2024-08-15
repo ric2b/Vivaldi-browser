@@ -342,7 +342,7 @@ void AddNodeToFlatContentInjectionRuleTree(
     flatbuffers::FlatBufferBuilder* builder,
     ContentInjectionRuleTree* tree,
     const ContentInjectionRuleTreeNode& node,
-    absl::optional<size_t> first_child_node_index) {
+    std::optional<size_t> first_child_node_index) {
   std::vector<flatbuffers::Offset<flat::ContentInjectionRuleForDomain>>
       rules_for_domain;
 
@@ -372,7 +372,7 @@ size_t AddNodeDescendantsToFlatContentInjectionRuleTree(
     flatbuffers::FlatBufferBuilder* builder,
     ContentInjectionRuleTree* tree,
     const ContentInjectionRuleTreeNode& node) {
-  std::map<const ContentInjectionRuleTreeNode*, absl::optional<size_t>>
+  std::map<const ContentInjectionRuleTreeNode*, std::optional<size_t>>
       first_child_node_index_for_children;
   for (const auto& child : node.subdomains) {
     if (!child.second.subdomains.empty())
@@ -380,8 +380,7 @@ size_t AddNodeDescendantsToFlatContentInjectionRuleTree(
           {&child.second, AddNodeDescendantsToFlatContentInjectionRuleTree(
                               builder, tree, child.second)});
     else
-      first_child_node_index_for_children.insert(
-          {&child.second, absl::nullopt});
+      first_child_node_index_for_children.insert({&child.second, std::nullopt});
   }
 
   size_t first_child_node_index = tree->size();

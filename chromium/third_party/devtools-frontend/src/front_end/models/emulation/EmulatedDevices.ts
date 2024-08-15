@@ -494,9 +494,7 @@ export const _Show = {
   Never: 'Never',
 };
 
-// TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-// eslint-disable-next-line @typescript-eslint/naming-convention
-let _instance: EmulatedDevicesList;
+let emulatedDevicesListInstance: EmulatedDevicesList;
 
 export class EmulatedDevicesList extends Common.ObjectWrapper.ObjectWrapper<EventTypes> {
   readonly #standardSetting: Common.Settings.Setting<any[]>;
@@ -506,12 +504,12 @@ export class EmulatedDevicesList extends Common.ObjectWrapper.ObjectWrapper<Even
   constructor() {
     super();
 
-    this.#standardSetting = Common.Settings.Settings.instance().createSetting('standardEmulatedDeviceList', []);
+    this.#standardSetting = Common.Settings.Settings.instance().createSetting('standard-emulated-device-list', []);
     this.#standardInternal = new Set();
     this.listFromJSONV1(this.#standardSetting.get(), this.#standardInternal);
     this.updateStandardDevices();
 
-    this.#customSetting = Common.Settings.Settings.instance().createSetting('customEmulatedDeviceList', []);
+    this.#customSetting = Common.Settings.Settings.instance().createSetting('custom-emulated-device-list', []);
     this.#customInternal = new Set();
     if (!this.listFromJSONV1(this.#customSetting.get(), this.#customInternal)) {
       this.saveCustomDevices();
@@ -519,10 +517,10 @@ export class EmulatedDevicesList extends Common.ObjectWrapper.ObjectWrapper<Even
   }
 
   static instance(): EmulatedDevicesList {
-    if (!_instance) {
-      _instance = new EmulatedDevicesList();
+    if (!emulatedDevicesListInstance) {
+      emulatedDevicesListInstance = new EmulatedDevicesList();
     }
-    return _instance;
+    return emulatedDevicesListInstance;
   }
 
   private updateStandardDevices(): void {
@@ -940,19 +938,41 @@ const emulatedDevices = [
     'order': 34,
     'show-by-default': true,
     'foldable-screen': true,
-    'title': 'Galaxy Fold',
+    'title': 'Galaxy Z Fold 5',
     'screen': {
-      'horizontal': {'width': 653, 'height': 280},
-      'device-pixel-ratio': 3,
-      'vertical': {'width': 280, 'height': 653},
-      'vertical-spanned': {'width': 717, 'height': 512},
-      'horizontal-spanned': {'width': 512, 'height': 717},
+      'horizontal': {'width': 882, 'height': 344},
+      'device-pixel-ratio': 2.625,
+      'vertical': {'width': 344, 'height': 882},
+      'vertical-spanned': {
+        'width': 690,
+        'height': 829,
+        'hinge': {
+          'width': 0,
+          'height': 829,
+          'x': 345,
+          'y': 0,
+          'contentColor': {'r': 38, 'g': 38, 'b': 38, 'a': 0.2},
+          'outlineColor': {'r': 38, 'g': 38, 'b': 38, 'a': 0.7},
+        },
+      },
+      'horizontal-spanned': {
+        'width': 829,
+        'height': 690,
+        'hinge': {
+          'width': 829,
+          'height': 0,
+          'x': 0,
+          'y': 345,
+          'contentColor': {'r': 38, 'g': 38, 'b': 38, 'a': 0.2},
+          'outlineColor': {'r': 38, 'g': 38, 'b': 38, 'a': 0.7},
+        },
+      },
     },
     'capabilities': ['touch', 'mobile'],
     'user-agent':
-        'Mozilla/5.0 (Linux; Android 9.0; SAMSUNG SM-F900U Build/PPR1.180610.011) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s Mobile Safari/537.36',
+        'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s Mobile Safari/537.36',
     'user-agent-metadata':
-        {'platform': 'Android', 'platformVersion': '9.0', 'architecture': '', 'model': 'SM-F900U', 'mobile': true},
+        {'platform': 'Android', 'platformVersion': '10.0', 'architecture': '', 'model': 'SM-F946U', 'mobile': true},
     'type': 'phone',
     'modes': [
       {'title': 'default', 'orientation': 'vertical', 'insets': {'left': 0, 'top': 0, 'right': 0, 'bottom': 0}},

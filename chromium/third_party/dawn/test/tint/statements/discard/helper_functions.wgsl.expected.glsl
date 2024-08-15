@@ -1,5 +1,6 @@
 #version 310 es
 precision highp float;
+precision highp int;
 
 bool tint_discarded = false;
 layout(binding = 0, std430) buffer non_uniform_global_block_ssbo {
@@ -17,8 +18,9 @@ void foo() {
 }
 
 void bar() {
+  float tint_symbol_2 = dFdx(1.0f);
   if (!(tint_discarded)) {
-    tint_symbol.inner = dFdx(1.0f);
+    tint_symbol.inner = tint_symbol_2;
   }
 }
 

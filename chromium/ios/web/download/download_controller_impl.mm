@@ -8,14 +8,13 @@
 #import "base/task/sequenced_task_runner.h"
 #import "base/task/task_traits.h"
 #import "base/task/thread_pool.h"
-#import "ios/web/download/data_url_download_task.h"
 #import "ios/web/download/download_native_task_bridge.h"
 #import "ios/web/download/download_native_task_impl.h"
-#import "ios/web/download/download_session_cookie_storage.h"
-#import "ios/web/download/download_session_task_impl.h"
+#import "ios/web/download/web_state_content_download_task.h"
 #import "ios/web/public/browser_state.h"
 #import "ios/web/public/download/download_controller_delegate.h"
-#import "net/base/mac/url_conversions.h"
+#import "ios/web/public/web_state.h"
+#import "net/base/apple/url_conversions.h"
 #import "net/http/http_request_headers.h"
 
 namespace {
@@ -53,27 +52,16 @@ DownloadControllerImpl::~DownloadControllerImpl() {
   DCHECK(!delegate_);
 }
 
-void DownloadControllerImpl::CreateDownloadTask(
-    WebState* web_state,
-    NSString* identifier,
-    const GURL& original_url,
-    NSString* http_method,
-    const std::string& content_disposition,
-    int64_t total_bytes,
-    const std::string& mime_type) {
+void DownloadControllerImpl::CreateWebStateDownloadTask(WebState* web_state,
+                                                        NSString* identifier,
+                                                        int64_t total_bytes) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!delegate_)
+  if (!delegate_) {
     return;
-
-  if (original_url.SchemeIs(url::kDataScheme)) {
-    OnDownloadCreated(std::make_unique<DataUrlDownloadTask>(
-        web_state, original_url, http_method, content_disposition, total_bytes,
-        mime_type, identifier, task_runner_));
-  } else {
-    OnDownloadCreated(std::make_unique<DownloadSessionTaskImpl>(
-        web_state, original_url, http_method, content_disposition, total_bytes,
-        mime_type, identifier, task_runner_));
   }
+  OnDownloadCreated(std::make_unique<WebStateContentDownloadTask>(
+      web_state, web_state->GetLastCommittedURL(), @"", "", total_bytes,
+      web_state->GetContentsMimeType(), identifier, task_runner_));
 }
 
 void DownloadControllerImpl::CreateNativeDownloadTask(

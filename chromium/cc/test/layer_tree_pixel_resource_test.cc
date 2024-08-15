@@ -52,14 +52,11 @@ LayerTreeHostPixelResourceTest::CreateRasterBufferProvider(
       layer_tree_frame_sink->context_provider();
   viz::RasterContextProvider* worker_context_provider =
       layer_tree_frame_sink->worker_context_provider();
-  gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager =
-      layer_tree_frame_sink->gpu_memory_buffer_manager();
   int max_bytes_per_copy_operation = 1024 * 1024;
   int max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;
 
   RasterCapabilities raster_caps;
   if (compositor_context_provider) {
-    raster_caps.tile_texture_target = GL_TEXTURE_2D;
     if (host_impl->settings().use_rgba_4444) {
       raster_caps.tile_format = viz::SinglePlaneFormat::kRGBA_4444;
     } else {
@@ -93,7 +90,6 @@ LayerTreeHostPixelResourceTest::CreateRasterBufferProvider(
           gfx::Size(), true, host_impl->GetRasterQueryQueueForTesting());
     case TestRasterType::kZeroCopy:
       EXPECT_TRUE(compositor_context_provider);
-      EXPECT_TRUE(gpu_memory_buffer_manager);
       EXPECT_FALSE(use_software_renderer());
 
       return std::make_unique<ZeroCopyRasterBufferProvider>(
@@ -105,7 +101,7 @@ LayerTreeHostPixelResourceTest::CreateRasterBufferProvider(
 
       return std::make_unique<OneCopyRasterBufferProvider>(
           task_runner, compositor_context_provider, worker_context_provider,
-          gpu_memory_buffer_manager, max_bytes_per_copy_operation, false,
+          max_bytes_per_copy_operation, false,
           max_staging_buffer_usage_in_bytes, raster_caps);
   }
 }

@@ -13,7 +13,6 @@
 #include "base/process/process.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
-#include "build/chromecast_buildflags.h"
 #include "content/browser/utility_process_host.h"
 #include "content/common/child_process.mojom.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -25,10 +24,6 @@
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "sandbox/policy/mojom/sandbox.mojom.h"
-
-#if BUILDFLAG(IS_CASTOS) || BUILDFLAG(IS_CAST_ANDROID)
-#include "base/process/process_handle.h"
-#endif
 
 namespace content {
 
@@ -204,10 +199,14 @@ void LaunchServiceProcess(mojo::GenericPendingReceiver receiver,
   if (!options.preload_libraries.empty()) {
     host->SetPreloadLibraries(options.preload_libraries);
   }
-  if (options.pin_user32) {
+  if (options.pin_user32.has_value() && options.pin_user32.value()) {
     host->SetPinUser32();
   }
 #endif  // BUILDFLAG(IS_WIN)
+  if (options.allow_gpu_client.has_value() &&
+      options.allow_gpu_client.value()) {
+    host->SetAllowGpuClient();
+  }
   host->Start();
   host->GetChildProcess()->BindServiceInterface(std::move(receiver));
 }
@@ -242,29 +241,5 @@ void ServiceProcessHost::Launch(mojo::GenericPendingReceiver receiver,
                                   std::move(options), sandbox));
   }
 }
-
-// TODO(crbug.com/1328879): Remove this method when fixing the bug.
-#if BUILDFLAG(IS_CASTOS) || BUILDFLAG(IS_CAST_ANDROID)
-void LaunchUtilityProcessServiceDeprecated(
-    const std::string& service_name,
-    const std::u16string& display_name,
-    sandbox::mojom::Sandbox sandbox_type,
-    mojo::ScopedMessagePipeHandle service_pipe,
-    base::OnceCallback<void(base::ProcessId)> callback) {
-  UtilityProcessHost* host = new UtilityProcessHost();
-  host->SetName(display_name);
-  host->SetMetricsName(service_name);
-  host->SetSandboxType(sandbox_type);
-  host->Start();
-  host->RunServiceDeprecated(
-      service_name, std::move(service_pipe),
-      base::BindOnce(
-          [](base::OnceCallback<void(base::ProcessId)> callback,
-             const std::optional<base::ProcessId> pid) {
-            std::move(callback).Run(pid.value_or(base::kNullProcessId));
-          },
-          std::move(callback)));
-}
-#endif
 
 }  // namespace content

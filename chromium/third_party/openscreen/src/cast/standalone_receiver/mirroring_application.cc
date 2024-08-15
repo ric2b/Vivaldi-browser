@@ -28,13 +28,13 @@ MirroringApplication::MirroringApplication(TaskRunner& task_runner,
       interface_address_(interface_address),
       app_ids_(GetCastStreamingAppIds()),
       agent_(agent) {
-  OSP_DCHECK(agent_);
+  OSP_CHECK(agent_);
   agent_->RegisterApplication(this);
 }
 
 MirroringApplication::~MirroringApplication() {
   agent_->UnregisterApplication(this);  // ApplicationAgent may call Stop().
-  OSP_DCHECK(!current_session_);
+  OSP_CHECK(!current_session_);
 }
 
 const std::vector<std::string>& MirroringApplication::GetAppIds() const {
@@ -48,9 +48,9 @@ bool MirroringApplication::Launch(const std::string& app_id,
     return false;
   }
 
-#if defined(MAC_OSX)
+#if defined(__APPLE__)
   wake_lock_ = ScopedWakeLock::Create(task_runner_);
-#endif  // defined(MAC_OSX)
+#endif  // defined(__APPLE__)
   environment_ = std::make_unique<Environment>(
       &Clock::now, task_runner_,
       IPEndpoint{interface_address_, kDefaultCastStreamingPort});

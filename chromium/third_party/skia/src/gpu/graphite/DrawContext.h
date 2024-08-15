@@ -57,6 +57,7 @@ public:
     const SkColorInfo& colorInfo() const { return fImageInfo.colorInfo(); }
     TextureProxy* target()                { return fTarget.get(); }
     const TextureProxy* target()    const { return fTarget.get(); }
+    sk_sp<TextureProxy> refTarget() const { return fTarget; }
 
     TextureProxyView readSurfaceView(const Caps*);
 
@@ -74,7 +75,6 @@ public:
                     const PaintParams* paint,
                     const StrokeStyle* stroke);
 
-    bool recordTextUploads(TextAtlasManager*);
     bool recordUpload(Recorder* recorder,
                       sk_sp<TextureProxy> targetProxy,
                       const SkColorInfo& srcColorInfo,

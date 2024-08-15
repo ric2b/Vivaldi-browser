@@ -58,9 +58,7 @@ export type ChunkCallback = (arg0: Chunk) => void;
 
 export function createTokenizer(mimeType: string): (
     arg0: string, arg1: (arg0: string, arg1: string|null, arg2: number, arg3: number) => (Object | undefined | void)) =>
-    // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    any {
+    void {
   const mode = CodeMirror.getMode({indentUnit: 2}, mimeType);
   const state = CodeMirror.startState(mode);
 
@@ -73,7 +71,7 @@ export function createTokenizer(mimeType: string): (
   }
 
   return (line: string,
-          callback: (arg0: string, arg1: string|null, arg2: number, arg3: number) => void|Object|undefined): void => {
+          callback: (arg0: string, arg1: string|null, arg2: number, arg3: number) => void|Object|undefined) => {
     const stream = new CodeMirror.StringStream(line);
     while (!stream.eol()) {
       const style = mode.token(stream, state);
@@ -153,8 +151,7 @@ export function format(mimeType: string, text: string, indentString?: string): F
         formatter.format(text, lineEndings);
         break;
       }
-      case FormattableMediaTypes.TEXT_CSS:
-      case FormattableMediaTypes.TEXT_X_SCSS: {
+      case FormattableMediaTypes.TEXT_CSS: {
         const formatter = new CSSFormatter(builder);
         formatter.format(text, lineEndings, 0, text.length);
         break;
@@ -192,7 +189,7 @@ export function format(mimeType: string, text: string, indentString?: string): F
 
 (function disableLoggingForTest(): void {
   if (Root.Runtime.Runtime.queryParam('test')) {
-    console.error = (): undefined => undefined;
+    console.error = () => undefined;
   }
 })();
 

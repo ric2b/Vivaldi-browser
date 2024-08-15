@@ -59,7 +59,7 @@ BoringSSLParsedCertificate::~BoringSSLParsedCertificate() = default;
 
 ErrorOr<std::vector<uint8_t>> BoringSSLParsedCertificate::SerializeToDER(
     int front_spacing) const {
-  OSP_DCHECK_GE(front_spacing, 0);
+  OSP_CHECK_GE(front_spacing, 0);
   int cert_len = i2d_X509(cert_.get(), nullptr);
   if (cert_len <= 0) {
     return Error(Error::Code::kErrCertSerialize, "Serializing cert failed.");

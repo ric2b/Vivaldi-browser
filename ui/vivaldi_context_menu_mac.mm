@@ -112,8 +112,9 @@ VivaldiContextMenuMac::VivaldiContextMenuMac(
 VivaldiContextMenuMac::~VivaldiContextMenuMac() {
 }
 
-void VivaldiContextMenuMac::Init(ui::SimpleMenuModel* menu_model,
-                              vivaldi::ContextMenuPostitionDelegate* delegate) {
+void VivaldiContextMenuMac::Init(
+    ui::SimpleMenuModel* menu_model,
+    base::WeakPtr<ContextMenuPostitionDelegate> delegate) {
   menu_model_ = menu_model;
 }
 

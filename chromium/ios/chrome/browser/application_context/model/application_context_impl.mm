@@ -62,6 +62,7 @@
 #import "ios/chrome/browser/shared/model/prefs/browser_prefs.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/update_client/model/ios_chrome_update_query_params_delegate.h"
+#import "ios/chrome/browser/upgrade/model/upgrade_center.h"
 #import "ios/chrome/common/channel_info.h"
 #import "ios/components/security_interstitials/safe_browsing/safe_browsing_service_impl.h"
 #import "ios/public/provider/chrome/browser/app_distribution/app_distribution_api.h"
@@ -313,6 +314,8 @@ ApplicationContextImpl::GetChromeBrowserStateManager() {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (!chrome_browser_state_manager_) {
     chrome_browser_state_manager_.reset(new ChromeBrowserStateManagerImpl());
+    // Load last active browserStates.
+    chrome_browser_state_manager_->LoadBrowserStates();
   }
   return chrome_browser_state_manager_.get();
 }
@@ -378,7 +381,7 @@ ApplicationContextImpl::GetNetworkTimeTracker() {
     network_time_tracker_.reset(new network_time::NetworkTimeTracker(
         base::WrapUnique(new base::DefaultClock),
         base::WrapUnique(new base::DefaultTickClock), GetLocalState(),
-        GetSharedURLLoaderFactory()));
+        GetSharedURLLoaderFactory(), std::nullopt));
   }
   return network_time_tracker_.get();
 }
@@ -516,6 +519,15 @@ PushNotificationService* ApplicationContextImpl::GetPushNotificationService() {
   return push_notification_service_.get();
 }
 
+UpgradeCenter* ApplicationContextImpl::GetUpgradeCenter() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (!upgrade_center_) {
+    upgrade_center_ = [[UpgradeCenter alloc] init];
+    DCHECK(upgrade_center_);
+  }
+  return upgrade_center_;
+}
+
 void ApplicationContextImpl::OnAppEnterState(AppState app_state) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!tearing_down_);
@@ -640,9 +652,6 @@ void ApplicationContextImpl::CreateLocalState() {
 
   // Cleanup obsolete preferences.
   MigrateObsoleteLocalStatePrefs(local_state_.get());
-
-  // Delete obsolete data from user storage.
-  CleanupUnusedStorage();
 
   // Delete obsolete data from NSUserDefaults.
   MigrateObsoleteUserDefault();

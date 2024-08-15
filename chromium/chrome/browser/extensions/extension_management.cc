@@ -106,10 +106,11 @@ ExtensionManagement::ExtensionManagement(Profile* profile)
           NOTIFIED_FROM_MANAGEMENT_INITIAL_CREATION_NOT_FORCED);
   if (vivaldi::IsVivaldiRunning()) {
     providers_.push_back(
-        std::make_unique<VivaldiStandardManagementPolicyProvider>(this));
+        std::make_unique<VivaldiStandardManagementPolicyProvider>(
+            this, profile_.get()));
   } else
   providers_.push_back(
-      std::make_unique<StandardManagementPolicyProvider>(this));
+      std::make_unique<StandardManagementPolicyProvider>(this, profile_.get()));
   providers_.push_back(
       std::make_unique<PermissionsBasedManagementPolicyProvider>(this));
 }
@@ -424,14 +425,6 @@ const URLPatternSet& ExtensionManagement::GetPolicyAllowedHosts(
 bool ExtensionManagement::UsesDefaultPolicyHostRestrictions(
     const Extension* extension) {
   return GetSettingsForId(extension->id()) == nullptr;
-}
-
-bool ExtensionManagement::IsPolicyBlockedHost(const Extension* extension,
-                                              const GURL& url) {
-  auto* setting = GetSettingsForId(extension->id());
-  if (setting)
-    return setting->policy_blocked_hosts.MatchesURL(url);
-  return default_settings_->policy_blocked_hosts.MatchesURL(url);
 }
 
 std::unique_ptr<const PermissionSet> ExtensionManagement::GetBlockedPermissions(

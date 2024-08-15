@@ -33,7 +33,7 @@ You can then follow the instructions on that page.
 4.  Click **Stop Logging** button.
 5.  Provide the resulting log file to the bug investigator.
     *   Either attach the file to your existing or [new bug
-                report](https://crbug.com/new), or send email to the bug
+                report](https://issues.chromium.org/new), or send email to the bug
                 investigator.
     *   Provide the **entire** log file. Snippets are rarely sufficient
                 to diagnose problems.

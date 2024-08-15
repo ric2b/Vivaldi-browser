@@ -13,7 +13,7 @@
 #include "content/browser/speech/tts_controller_impl.h"
 #include "content/public/browser/tts_utterance.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/chromeos/styles/cros_tokens_color_mappings.h"
+#include "ui/color/color_id.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/image_button.h"
@@ -90,6 +90,9 @@ gfx::FontList GetFontList(TypographyToken token) {
     case TypographyToken::kCrosBody2Italic:
       return gfx::FontList(kGoogleSansFontFamily, gfx::Font::ITALIC,
                            /*font_size=*/13, gfx::Font::Weight::NORMAL);
+    case TypographyToken::kCrosButton1:
+      return gfx::FontList(kGoogleSansFontFamily, gfx::Font::NORMAL,
+                           /*font_size=*/14, gfx::Font::Weight::MEDIUM);
     case TypographyToken::kCrosButton2:
       return gfx::FontList(kGoogleSansFontFamily, gfx::Font::NORMAL,
                            /*font_size=*/13, gfx::Font::Weight::MEDIUM);
@@ -172,7 +175,7 @@ std::unique_ptr<views::FlexLayoutView> CreateHorizontalFlexLayoutView() {
 std::unique_ptr<views::Separator> CreateSeparatorView() {
   return views::Builder<views::Separator>()
       .SetOrientation(views::Separator::Orientation::kHorizontal)
-      .SetColorId(cros_tokens::kSeparatorColor)
+      .SetColorId(ui::kColorSeparator)
       .SetProperty(
           views::kMarginsKey,
           gfx::Insets::TLBR(kContentSingleSpacing, 0, kContentSingleSpacing, 0))

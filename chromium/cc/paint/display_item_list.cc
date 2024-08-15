@@ -91,7 +91,8 @@ void DisplayItemList::Raster(SkCanvas* canvas,
                      TotalOpCount());
   std::vector<size_t> offsets;
   rtree_.Search(canvas_playback_rect, &offsets);
-  paint_op_buffer_.Playback(canvas, PlaybackParams(image_provider), &offsets);
+  paint_op_buffer_.Playback(canvas, PlaybackParams(image_provider),
+                            /*local_ctm=*/true, &offsets);
 
   bool trace_enabled = false;
   TRACE_EVENT_CATEGORY_GROUP_ENABLED("cc", &trace_enabled);
@@ -350,8 +351,8 @@ bool DisplayItemList::GetColorIfSolidInRect(const gfx::Rect& rect,
 
 namespace {
 
-std::optional<DisplayItemList::DirectlyCompositedImageResult>
-DirectlyCompositedImageResultForPaintOpBuffer(const PaintOpBuffer& op_buffer) {
+std::optional<DirectlyCompositedImageInfo>
+DirectlyCompositedImageInfoForPaintOpBuffer(const PaintOpBuffer& op_buffer) {
   // A PaintOpBuffer for an image may have 1 (a kDrawimagerect or a kDrawrecord
   // that recursively contains a PaintOpBuffer for an image) or 4 paint
   // operations:
@@ -368,7 +369,7 @@ DirectlyCompositedImageResultForPaintOpBuffer(const PaintOpBuffer& op_buffer) {
     return std::nullopt;
 
   bool transpose_image_size = false;
-  std::optional<DisplayItemList::DirectlyCompositedImageResult> result;
+  std::optional<DirectlyCompositedImageInfo> result;
   for (const PaintOp& op : op_buffer) {
     switch (op.GetType()) {
       case PaintOpType::kSave:
@@ -418,7 +419,7 @@ DirectlyCompositedImageResultForPaintOpBuffer(const PaintOpBuffer& op_buffer) {
       case PaintOpType::kDrawRecord:
         if (result)
           return std::nullopt;
-        result = DirectlyCompositedImageResultForPaintOpBuffer(
+        result = DirectlyCompositedImageInfoForPaintOpBuffer(
             static_cast<const DrawRecordOp&>(op).record.buffer());
         if (!result)
           return std::nullopt;
@@ -437,9 +438,9 @@ DirectlyCompositedImageResultForPaintOpBuffer(const PaintOpBuffer& op_buffer) {
 
 }  // anonymous namespace
 
-std::optional<DisplayItemList::DirectlyCompositedImageResult>
-DisplayItemList::GetDirectlyCompositedImageResult() const {
-  return DirectlyCompositedImageResultForPaintOpBuffer(paint_op_buffer_);
+std::optional<DirectlyCompositedImageInfo>
+DisplayItemList::GetDirectlyCompositedImageInfo() const {
+  return DirectlyCompositedImageInfoForPaintOpBuffer(paint_op_buffer_);
 }
 
 }  // namespace cc

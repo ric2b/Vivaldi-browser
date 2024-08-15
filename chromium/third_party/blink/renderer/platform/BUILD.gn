@@ -227,6 +227,9 @@ declare_args() {
   # Enable TRACE_EVENT instrumentation for Blink bindings.
   # Disabled by default as it increases binary size.
   enable_blink_bindings_tracing = extended_tracing_enabled
+
+  # Enable cooperating scheduling hooks in auto-generated Blink bindings code.
+  enable_blink_bindings_cooperating_scheduling = false
 }
 
 buildflag_header("bindings_buildflags") {
@@ -236,6 +239,7 @@ buildflag_header("bindings_buildflags") {
   flags = [
     "RCS_COUNT_EVERYTHING=$runtime_call_stats_count_everything",
     "BLINK_BINDINGS_TRACE_ENABLED=$enable_blink_bindings_tracing",
+    "BLINK_BINDINGS_COOPERATIVE_SCHEDULING_ENABLED=$enable_blink_bindings_cooperating_scheduling",
   ]
 }
 
@@ -435,6 +439,7 @@ component("platform") {
     "bindings/callback_interface_base.h",
     "bindings/callback_method_retriever.cc",
     "bindings/callback_method_retriever.h",
+    "bindings/cooperative_scheduling_helpers.h",
     "bindings/cross_thread_copier.h",
     "bindings/dictionary_base.cc",
     "bindings/dictionary_base.h",
@@ -475,6 +480,8 @@ component("platform") {
     "bindings/scoped_persistent.h",
     "bindings/script_forbidden_scope.cc",
     "bindings/script_forbidden_scope.h",
+    "bindings/script_regexp.cc",
+    "bindings/script_regexp.h",
     "bindings/script_state.cc",
     "bindings/script_state.h",
     "bindings/script_wrappable.cc",
@@ -614,7 +621,6 @@ component("platform") {
     "fonts/font_cache_memory_dump_provider.h",
     "fonts/font_custom_platform_data.cc",
     "fonts/font_custom_platform_data.h",
-    "fonts/font_data.cc",
     "fonts/font_data.h",
     "fonts/font_data_cache.cc",
     "fonts/font_data_cache.h",
@@ -719,6 +725,7 @@ component("platform") {
     "fonts/shaping/font_features.cc",
     "fonts/shaping/font_features.h",
     "fonts/shaping/glyph_bounds_accumulator.h",
+    "fonts/shaping/glyph_data.h",
     "fonts/shaping/han_kerning.cc",
     "fonts/shaping/han_kerning.h",
     "fonts/shaping/harfbuzz_face.cc",
@@ -730,7 +737,6 @@ component("platform") {
     "fonts/shaping/harfbuzz_font_data.h",
     "fonts/shaping/harfbuzz_shaper.cc",
     "fonts/shaping/harfbuzz_shaper.h",
-    "fonts/shaping/ng_shape_cache.cc",
     "fonts/shaping/ng_shape_cache.h",
     "fonts/shaping/run_segmenter.cc",
     "fonts/shaping/run_segmenter.h",
@@ -778,7 +784,6 @@ component("platform") {
     "fonts/typesetting_features.h",
     "fonts/unicode_range_set.cc",
     "fonts/unicode_range_set.h",
-    "fonts/utf16_ragel_iterator.cc",
     "fonts/utf16_ragel_iterator.h",
     "fonts/utf16_text_iterator.cc",
     "fonts/utf16_text_iterator.h",
@@ -975,6 +980,8 @@ component("platform") {
     "graphics/gpu/extensions_3d_util.h",
     "graphics/gpu/graphics_context_3d_utils.cc",
     "graphics/gpu/graphics_context_3d_utils.h",
+    "graphics/gpu/image_extractor.cc",
+    "graphics/gpu/image_extractor.h",
     "graphics/gpu/image_layer_bridge.cc",
     "graphics/gpu/image_layer_bridge.h",
     "graphics/gpu/shared_context_rate_limiter.cc",
@@ -1170,6 +1177,8 @@ component("platform") {
     "graphics/static_bitmap_image_to_video_frame_copier.h",
     "graphics/stroke_data.cc",
     "graphics/stroke_data.h",
+    "graphics/styled_stroke_data.cc",
+    "graphics/styled_stroke_data.h",
     "graphics/subtree_paint_property_update_reason.cc",
     "graphics/subtree_paint_property_update_reason.h",
     "graphics/surface_layer_bridge.cc",
@@ -1406,6 +1415,8 @@ component("platform") {
     "text/date_time_format.cc",
     "text/date_time_format.h",
     "text/decode_escape_sequences.h",
+    "text/emoji_segmentation_category.h",
+    "text/emoji_segmentation_category_inline_header.h",
     "text/han_kerning_char_type.h",
     "text/hyphenation.cc",
     "text/hyphenation.h",
@@ -2190,6 +2201,7 @@ source_set("blink_platform_unittests_sources") {
     "peerconnection/resolution_monitor_unittest.cc",
     "peerconnection/rtc_encoded_audio_stream_transformer_test.cc",
     "peerconnection/rtc_encoded_video_stream_transformer_test.cc",
+    "peerconnection/rtc_ice_candidate_platform_test.cc",
     "peerconnection/rtc_rtp_source_test.cc",
     "peerconnection/rtc_video_decoder_adapter_test.cc",
     "peerconnection/rtc_video_decoder_factory_test.cc",
@@ -2315,7 +2327,6 @@ source_set("blink_platform_unittests_sources") {
     "//third_party/blink/renderer/platform/network:unit_tests",
     "//third_party/blink/renderer/platform/scheduler:unit_tests",
     "//third_party/blink/renderer/platform/wtf",
-    "//third_party/libavif:libavif",
     "//third_party/libyuv",
     "//third_party/webrtc/api/task_queue:task_queue_test",
     "//third_party/webrtc_overrides:metronome_like_task_queue_test",
@@ -2450,6 +2461,7 @@ group("blink_platform_unittests_data") {
     # Required by some image decoder tests.
     "image-decoders/testing/",
     "//third_party/blink/web_tests/images/resources/",
+    "//third_party/blink/web_tests/images/bmp-suite/",
 
     # Required by some font tests.
     "//third_party/blink/web_tests/external/wpt/fonts/",
@@ -2610,8 +2622,41 @@ fuzzer_test("web_icon_sizes_fuzzer") {
   dict = "//testing/libfuzzer/fuzzers/dicts/web_icon_sizes.dict"
 }
 
+# Fuzzer for blink::AVIFImageDecoder
+fuzzer_test("blink_avif_decoder_fuzzer") {
+  sources = [ "image-decoders/avif/avif_image_decoder_fuzzer.cc" ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+  ]
+  seed_corpuses = [ "//third_party/blink/web_tests/images/resources/avif" ]
+  libfuzzer_options = [ "rss_limit_mb=8192" ]
+}
+
+# Fuzzer for blink::ICOImageDecoder.
+fuzzer_test("blink_ico_decoder_fuzzer") {
+  sources = [ "image-decoders/ico/ico_image_decoder_fuzzer.cc" ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+  ]
+  seed_corpuses = [ "//third_party/blink/web_tests/images/resources/icofuzz" ]
+  libfuzzer_options = [ "rss_limit_mb=8192" ]
+}
+
+# Fuzzer for blink::GIFImageDecoder
+fuzzer_test("blink_gif_decoder_fuzzer") {
+  sources = [ "image-decoders/gif/gif_image_decoder_fuzzer.cc" ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+  ]
+  seed_corpuses = [ "//third_party/blink/web_tests/images/resources/giffuzz" ]
+  libfuzzer_options = [ "rss_limit_mb=8192" ]
+}
+
 fuzzer_test("blink_png_decoder_fuzzer") {
-  sources = [ "png_fuzzer.cc" ]
+  sources = [ "image-decoders/png/png_image_decoder_fuzzer.cc" ]
   deps = [
     ":blink_fuzzer_test_support",
     ":platform",
@@ -2623,6 +2668,28 @@ fuzzer_test("blink_png_decoder_fuzzer") {
     "//third_party/blink/web_tests/images/png-suite/samples",
     "//third_party/blink/web_tests/images/resources/pngfuzz",
   ]
+  libfuzzer_options = [ "rss_limit_mb=8192" ]
+}
+
+fuzzer_test("blink_jpeg_decoder_fuzzer") {
+  sources = [ "image-decoders/jpeg/jpeg_image_decoder_fuzzer.cc" ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+  ]
+  seed_corpuses = [ "//third_party/blink/web_tests/images/resources/jpegfuzz" ]
+  libfuzzer_options = [ "rss_limit_mb=8192" ]
+}
+
+# Fuzzer for blink::WEBPImageDecoder.
+fuzzer_test("blink_webp_decoder_fuzzer") {
+  sources = [ "image-decoders/webp/webp_image_decoder_fuzzer.cc" ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+  ]
+  seed_corpuses = [ "//third_party/blink/web_tests/images/resources/webpfuzz" ]
+  libfuzzer_options = [ "rss_limit_mb=8192" ]
 }
 
 # Fuzzer for blink::DateTimeFormat.

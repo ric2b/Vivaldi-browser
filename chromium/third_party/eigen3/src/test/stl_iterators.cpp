@@ -463,6 +463,13 @@ void test_stl_iterators(int rows = Rows, int cols = Cols) {
   // check rows/cols iterators with STL algorithms
   {
     RowVectorType row = RowVectorType::Random(cols);
+    VectorType col = VectorType::Random(rows);
+    // Prevent overflows for integer types.
+    if (Eigen::NumTraits<Scalar>::IsInteger) {
+      Scalar kMaxVal = Scalar(1000);
+      row.array() = row.array() - kMaxVal * (row.array() / kMaxVal);
+      col.array() = col.array() - kMaxVal * (col.array() / kMaxVal);
+    }
     A.rowwise() = row;
     VERIFY(std::all_of(A.rowwise().begin(), A.rowwise().end(), [&row](typename ColMatrixType::RowXpr x) {
       return internal::isApprox(x.squaredNorm(), row.squaredNorm());
@@ -471,7 +478,6 @@ void test_stl_iterators(int rows = Rows, int cols = Cols) {
       return internal::isApprox(x.squaredNorm(), row.squaredNorm());
     }));
 
-    VectorType col = VectorType::Random(rows);
     A.colwise() = col;
     VERIFY(std::all_of(A.colwise().begin(), A.colwise().end(), [&col](typename ColMatrixType::ColXpr x) {
       return internal::isApprox(x.squaredNorm(), col.squaredNorm());

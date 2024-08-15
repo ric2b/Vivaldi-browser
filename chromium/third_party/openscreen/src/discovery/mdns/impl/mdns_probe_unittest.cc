@@ -90,7 +90,7 @@ class MdnsProbeTests : public testing::Test {
   const IPEndpoint endpoint_v4_{address_v4_, 80};
 };
 
-// TODO(issuetracker.google.com/issues/243611087): Occasionally flaky in bots.
+// TODO(issuetracker.google.com/243611087): Occasionally flaky in bots.
 TEST_F(MdnsProbeTests, DISABLED_TestNoCancelationFlow) {
   EXPECT_CALL(sender_, SendMulticast(_));
   clock_.Advance(kDelayBetweenProbeQueries);
@@ -117,7 +117,7 @@ TEST_F(MdnsProbeTests, CancelationWhenMatchingMessageReceived) {
   OnMessageReceived(CreateMessage(name_));
 }
 
-// TODO(issuetracker.google.com/issues/243611087): Occasionally flaky in bots.
+// TODO(issuetracker.google.com/243611087): Occasionally flaky in bots.
 TEST_F(MdnsProbeTests, DISABLED_TestNoCancelationOnUnrelatedMessages) {
   OnMessageReceived(CreateMessage(name2_));
 

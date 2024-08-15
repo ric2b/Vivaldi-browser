@@ -21,7 +21,9 @@
 <translation id="1315107593850379616">E-mail til gendannelse</translation>
 <translation id="1325473901257014816">Med Vivaldi kan du beholde alle dine faner i en browser og synkronisere dem på tværs af alle enheder.</translation>
 <translation id="132683371494960526">Tryk to gange for at skifte overordnet mappe.</translation>
+<translation id="1341156196125040601">Vælg hvor du foretrækker at have adressefeltet.</translation>
 <translation id="1354002567845495520">Synkroniser Vivaldi-noter (vedhæftede filer kan ikke synkroniseres)</translation>
+<translation id="1365181765792690850">Aktivering af denne indstilling kan påvirke nogle websites og / eller billeder. Kræver en genstart for at få fuld effekt.</translation>
 <translation id="1379470994139227452">Indstil Vivaldi som standardbrowser</translation>
 <translation id="1381484244248892686">Du kan bruge gemte adgangskoder på enhver enhed. De er gemt i Vivaldi Password Manager på <ph name="EMAIL" /></translation>
 <translation id="1383876407941801731">Søg</translation>
@@ -38,6 +40,7 @@
 <translation id="1659112017960130179">Koreansk (<ph name="ORIGIN" />)</translation>
 <translation id="1689333818294560261">Kaldenavn</translation>
 <translation id="1711184756728070210"><ph name="BEGIN_LINK" />Betingelser for brug➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />Privacy Policy ➔<ph name="END_LINK2" /></translation>
+<translation id="1717473843091433383">Gennemtving et mørkt tema på alle websites</translation>
 <translation id="1721552494230946796">Ny kvikknaps-mappe</translation>
 <translation id="173924678149983125">Indtast URL til import af blokeringsregler</translation>
 <translation id="1751280147639351837">Annonce- og trackerblokering</translation>
@@ -72,13 +75,14 @@
 <translation id="2391028308389203648">Tyrkisk (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">Aktiver</translation>
 <translation id="2414886740292270097">Mørk</translation>
-<translation id="2433507940547922241">Udseende</translation>
 <translation id="2434910957904013691">Synkroniser alt</translation>
 <translation id="2448144008809286557">Har du glemt dit <ph name="BEGIN_LINK" />brugernavn<ph name="END_LINK" /> eller din <ph name="BEGIN_LINK" />adgangskode<ph name="END_LINK" />?</translation>
+<translation id="2478478121390627077">Aktuelt valgte farve</translation>
 <translation id="2536780277491102902">UNDTAGELSER</translation>
 <translation id="2558801801411970131">Blokerer trackere</translation>
 <translation id="2562040727226360285">Fjern irritationer, kan hindre sider i at fungere <ph name="ORIGIN" /></translation>
 <translation id="2577446409661931381">Ny note</translation>
+<translation id="261264557609353020">Vivaldi Startside</translation>
 <translation id="2619628557366098325">Portugisisk (<ph name="ORIGIN" />)</translation>
 <translation id="2620436844016719705">System</translation>
 <translation id="2666092431469916601">Øverst</translation>
@@ -127,6 +131,7 @@ blokeret</translation>
 <translation id="3527085408025491307">Mappe</translation>
 <translation id="3530991200302302959">Bulgarsk (<ph name="ORIGIN" />)</translation>
 <translation id="3601414719864711130">Efter dato</translation>
+<translation id="3602290021589620013">Forhåndsvis</translation>
 <translation id="3607176258839749451">Registrering mislykkedes grundet en fejl. Prøv venligst igen senere.</translation>
 <translation id="3646647753063635401">Synkroniser alle data, og aktiver automatisk synkronisering af nye datatyper</translation>
 <translation id="3682791711395736890">Vis standardversion af side</translation>
@@ -173,6 +178,7 @@ blokeret</translation>
 <translation id="4413780690230851155">Slet browserhistorik</translation>
 <translation id="4452878871193896747">Indonesisk (<ph name="ORIGIN" />)</translation>
 <translation id="445620040230332178">Fanestil</translation>
+<translation id="4461652107878667683">Navigation Fremad</translation>
 <translation id="4474581062946673155">Du har i øjeblikket ingen faner synkroniseret fra andre enheder.</translation>
 <translation id="4488900295693536220">Kan anvendes når adresselinjen er nederst, og gør det lettere at nå top-anbefalinger.</translation>
 <translation id="4493850495402472953">og</translation>
@@ -181,6 +187,7 @@ blokeret</translation>
 <translation id="4515084385531683114">Adgangskoder er gemt i Password Manager på denne enhed.</translation>
 <translation id="4525945044609022380">Denne e-mail er allerede forbundet med en anden konto.</translation>
 <translation id="4526803704855831732">Private faner</translation>
+<translation id="4553717494760925411">Navigation Tilbage</translation>
 <translation id="4563480492836333884">E-mail ikke accepteret. Brug venligst et andet domæne.</translation>
 <translation id="457386861538956877">Flere...</translation>
 <translation id="460370326897402035">Adgangskode er ikke gyldig.</translation>
@@ -189,6 +196,7 @@ blokeret</translation>
 <translation id="4654578955713250802">Bloker annoncer og trackere</translation>
 <translation id="4655510151391078468">Denne kode stemmer ikke overens med den vi sendte dig.
         Du har <ph name="ATTEMPTS" /> forsøg tilbage.</translation>
+<translation id="46613249405673440">Vælg som baggrund</translation>
 <translation id="466494460776294423">Bekræftelseskode er påkrævet</translation>
 <translation id="4714431804859029826">Gendan standarder</translation>
 <translation id="4727698999970341158">Islandsk (<ph name="ORIGIN" />)</translation>
@@ -197,8 +205,10 @@ blokeret</translation>
 <translation id="4780953868408193639">Tracker
 blokeret</translation>
 <translation id="4807415245238822255">Adgangskoderne skal være ens.</translation>
+<translation id="4818836520802586445">Betoningsfarve</translation>
 <translation id="4821701638681626529">Vivaldi registrerer ikke browserhistorik ved brug af private faner</translation>
 <translation id="4833044618885331665">Du skal opgradere Vivaldi for at kunne bruge Synkronisering.</translation>
+<translation id="484462545196658690">Auto</translation>
 <translation id="4852383705713307704">Annonce blokeret</translation>
 <translation id="4871370605780490696">Tilføj bogmærke</translation>
 <translation id="4903325570808402486">Synkroniser Vivaldi-indstillinger (ikke alle indstillinger kan endnu synkroniseres)</translation>
@@ -209,6 +219,8 @@ blokeret</translation>
 <translation id="497942794017668482">Blokerer trackere og annoncer</translation>
 <translation id="5037761343305489956">Kopieret til note</translation>
 <translation id="504986598654589766">At surfe i en privat fane betyder, at søgninger, besøgte websider, cookies og midlertidige filer ikke gemmes af Vivaldi. Det krypterer eller modificerer ikke din forbindelse.</translation>
+<translation id="505774819758747674">Forhåndsvisning til værktøjslinjen med valgt accentfarve</translation>
+<translation id="5094183365876568934">Nogle websites tilpasser deres farvetema ud fra brugerpræferencer. Vælg hvilket farvetema du ønsker de sites skal bruge.</translation>
 <translation id="5094376253685335202">Aktiver synkronisering</translation>
 <translation id="5116316489033177455">Synkroniser bogmærker og kvikknapper</translation>
 <translation id="5122095890854520072">Lettisk (<ph name="ORIGIN" />)</translation>
@@ -231,7 +243,6 @@ blokeret</translation>
 <translation id="5439835075346716808">Registrering er blevet midlertidigt blokeret fra denne IP. Prøv venligst igen senere.</translation>
 <translation id="5486261815000869482">Bekræft adgangskode</translation>
 <translation id="5494016731375030300">Nyligt lukkede faner</translation>
-<translation id="5569279496588266002">Startside-udseende</translation>
 <translation id="5639137028584114536">Din organisation kræver at du surfer privat. Faner gemmes ikke i privat tilstand.
         <ph name="BEGIN_LINK" />Lær mere<ph name="END_LINK" /></translation>
 <translation id="5684277895745049190">Liste</translation>
@@ -252,7 +263,7 @@ blokeret</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> elementer flyttet</translation>
 <translation id="6147094071357011481">Nyligt lukkede faner er utilgængelige</translation>
 <translation id="6193995664633100765">Indisk (<ph name="ORIGIN" />)</translation>
-<translation id="6278428485366576908">Tema</translation>
+<translation id="6224086034182508647">Indstillinger for website-udseende</translation>
 <translation id="6365929278691047681">Tysk (<ph name="ORIGIN" />)</translation>
 <translation id="6404511346730675251">Rediger bogmærke</translation>
 <translation id="6406506848690869874">Synkronisering</translation>
@@ -263,6 +274,7 @@ blokeret</translation>
 <translation id="6527303717912515753">Del</translation>
 <translation id="6535988230515403205">Polsk (<ph name="ORIGIN" />)</translation>
 <translation id="659351303388691480">Ryd browserdata ...</translation>
+<translation id="6602272356389933803">Udseende og tema</translation>
 <translation id="6614744450826097546">Annoncedetaljer</translation>
 <translation id="6627583120233659107">Rediger mappe</translation>
 <translation id="6631760746795162665">Colombiansk (<ph name="ORIGIN" />)</translation>
@@ -273,6 +285,8 @@ blokeret</translation>
 <translation id="6657585470893396449">Adgangskode</translation>
 <translation id="6690955457036363013">Administrer blokerings-niveau pr. side</translation>
 <translation id="6703516503311038964">Jeg ønsker at modtage Vivaldi's nyhedsbrev</translation>
+<translation id="6724024423419410528">Farver</translation>
+<translation id="6745857330065678428">Nedarv betoningsfarve fra side</translation>
 <translation id="6757792528048321576">Annonce- og trackerblokering</translation>
 <translation id="6798469570047202628">Forkert adgangskode indtastet</translation>
 <translation id="681368974849482173">Element oprettet</translation>
@@ -280,10 +294,12 @@ blokeret</translation>
 <translation id="6875510405870945573">Vælg dit foretrukne niveau af blokering.</translation>
 <translation id="6885837502028760851">Vis kun kvikknapmapper</translation>
 <translation id="6887143077297974801">Start af synkronisering fejlede.</translation>
+<translation id="691132463664340655">Browsertema</translation>
 <translation id="6937750621455385628">Du skal bruge en Vivaldi-konto for at logge ind.</translation>
 <translation id="6945221475159498467">Vælg</translation>
 <translation id="6946395294519639514">Med paneler kan du beholde go-to-værktøjer inden for rækkevidde i browserens sidebjælke.</translation>
 <translation id="6951435330868954105">Administrer standardindstillinger</translation>
+<translation id="6951948201878750661">Tryk for at vælge denne farve</translation>
 <translation id="6967884871145366229">Administrer indstillinger for privatliv</translation>
 <translation id="6973630695168034713">Mapper</translation>
 <translation id="7006864796794806241">Gendan adgangskode</translation>
@@ -306,11 +322,14 @@ blokeret</translation>
 <translation id="7417521636956146248">Søgemaskiner nulstilles til standardindstillinger, hvilket også nulstiller dine brugerdefinerede søgemaskiner.</translation>
 <translation id="7454640759045234067">Trackere blokeret</translation>
 <translation id="7461899062138731833">KILDER</translation>
+<translation id="7490291412537629707">Åbn i ny baggrundsfane</translation>
 <translation id="750493650310597496">0 valgt</translation>
 <translation id="7525067979554623046">Opret</translation>
+<translation id="753732157349120914">Faneskifter</translation>
 <translation id="7573518470897278603">Vis mobilversion af side</translation>
 <translation id="7574321014880720413">Tilføj nyt domæne</translation>
 <translation id="7587132259180664054">E-mail succesfuldt sendt</translation>
+<translation id="7587287726969638956">Website-udseende</translation>
 <translation id="7602336701644200880">Afsendelse af e-mail mislykkedes. Prøv venligst igen.</translation>
 <translation id="7606108789437688910">Åbn note-adresser i Inkognito</translation>
 <translation id="7622661618259256505">Vælg venligst en adgangskode på mindst 12 tegn.</translation>
@@ -320,20 +339,24 @@ blokeret</translation>
 <translation id="7730831244010940855">Skift din standardbrowser til Vivaldi på iPad?</translation>
 <translation id="7732622593814325274">Administrer kilder til trackerblokering</translation>
 <translation id="7765158879357617694">Flyt</translation>
+<translation id="7771452384635174008">Layout</translation>
 <translation id="7801204999757211519">Har du allerede en konto? <ph name="BEGIN_LINK" />Log ind ➔<ph name="END_LINK" /></translation>
 <translation id="7914995060146784406">Redigér note</translation>
 <translation id="7925340978147141704">Vis adgangskode</translation>
 <translation id="8008214489230610096">Bekræft e-mail til gendannelse</translation>
+<translation id="8046542428651654244">Opdater miniature</translation>
 <translation id="804786196054284061">Servicevilkår</translation>
 <translation id="8053851743673939284">Fransk (<ph name="ORIGIN" />)</translation>
 <translation id="8066170816074394954">Serverfejl.</translation>
 <translation id="8076492880354921740">Faner</translation>
 <translation id="8112996065264879835">Denne kode stemmer ikke overens med den vi sendte dig.
         Du er nået den maksimale grænse for forkerte forsøg. Anmod venligst om en ny kode ved brug af Gensend-knappen herunder.</translation>
+<translation id="8134672010161840864">Knib med to fingre for at beskære og placere billedet</translation>
 <translation id="8142291334394582384">Omvend rækkefølgen på søgeanbefalinger</translation>
 <translation id="8147118677117542370">Angiv venligst din alder.</translation>
 <translation id="8165573437634525334">Data sikret af krypteringsadgangskode</translation>
 <translation id="8182979418912184986">Ny privat fane</translation>
+<translation id="8237090677709100373">Brugerdefineret farvekode</translation>
 <translation id="8257908958623224237">Konflikt med en anden enheds data.</translation>
 <translation id="8261506727792406068">Slet</translation>
 <translation id="8273666073173891138">Note gemt i <ph name="FOLDER_TITLE" /></translation>
@@ -364,8 +387,8 @@ blokeret</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> elementer slettet</translation>
 <translation id="8763006697839582351">Åbn i Vivaldi privat</translation>
 <translation id="8765173886020357878">Søgeanbefalinger</translation>
-<translation id="8786689981011401964">Baggrunde</translation>
 <translation id="8804164990146287819">Privatlivspolitik</translation>
+<translation id="8818152010000655963">Baggrund</translation>
 <translation id="8819841443522803117">Tid til at skifte din standardbrowser? Vælg Vivaldi.</translation>
 <translation id="8820817407110198400">Bogmærker</translation>
 <translation id="8855707633300847215">Vis fanelinje</translation>

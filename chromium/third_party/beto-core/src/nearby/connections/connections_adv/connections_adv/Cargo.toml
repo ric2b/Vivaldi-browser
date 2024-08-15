@@ -1,8 +1,0 @@
-[package]
-name = "connections_adv"
-version.workspace = true
-edition.workspace = true
-publish.workspace = true
-
-[lints]
-workspace = true

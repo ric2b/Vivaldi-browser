@@ -29,6 +29,7 @@
 
 #include "third_party/blink/renderer/core/dom/document_init.h"
 
+#include "base/uuid.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
@@ -136,11 +137,8 @@ DocumentInit& DocumentInit::WithToken(const DocumentToken& token) {
   return *this;
 }
 
-const DocumentToken& DocumentInit::GetToken() const {
-  if (!token_) {
-    token_.emplace();
-  }
-  return *token_;
+const std::optional<DocumentToken>& DocumentInit::GetToken() const {
+  return token_;
 }
 
 DocumentInit& DocumentInit::ForInitialEmptyDocument(bool empty) {
@@ -290,6 +288,12 @@ DocumentInit& DocumentInit::WithJavascriptURL(bool is_for_javascript_url) {
 
 DocumentInit& DocumentInit::WithUkmSourceId(ukm::SourceId ukm_source_id) {
   ukm_source_id_ = ukm_source_id;
+  return *this;
+}
+
+DocumentInit& DocumentInit::WithBaseAuctionNonce(
+    base::Uuid base_auction_nonce) {
+  base_auction_nonce_ = base_auction_nonce;
   return *this;
 }
 

@@ -412,7 +412,7 @@ class GenericTrackMenu extends UI.TabbedPane.TabbedPane {
 
   addNewTab(trackNumber: number, element: AttributesView): void {
     const localizedTrackLower = i18nString(UIStrings.track);
-    const tabId = `Track${trackNumber}`;
+    const tabId = `track-${trackNumber}` as Lowercase<string>;
     if (this.hasTab(tabId)) {
       const tabElement = this.tabView(tabId);
       if (tabElement === null) {
@@ -437,7 +437,7 @@ class DecoderTrackMenu extends GenericTrackMenu {
     const title = `${decoderName} ${decoderLocalized}`;
     const propertiesLocalized = i18nString(UIStrings.properties);
     const hoverText = `${title} ${propertiesLocalized}`;
-    this.appendTab('DecoderProperties', title, informationalElement, hoverText);
+    this.appendTab('decoder-properties', title, informationalElement, hoverText);
   }
 }
 
@@ -478,7 +478,7 @@ export class PlayerPropertiesView extends UI.Widget.VBox {
   constructor() {
     super();
 
-    this.element.setAttribute('jslog', `${VisualLogging.pane().context('properties')}`);
+    this.element.setAttribute('jslog', `${VisualLogging.pane('properties')}`);
 
     this.contentElement.classList.add('media-properties-frame');
 

@@ -13,6 +13,7 @@
 #import "base/files/file_util.h"
 #import "base/files/scoped_temp_dir.h"
 #import "base/functional/bind.h"
+#import "base/memory/raw_ptr.h"
 #import "base/run_loop.h"
 #import "base/scoped_multi_source_observation.h"
 #import "base/strings/stringprintf.h"
@@ -92,7 +93,7 @@ struct Wrapper {
       return std::move(callback_).Run(std::move(args)...);
     }
 
-    Wrapper* owner_;
+    raw_ptr<Wrapper<Ret, Args...>> owner_;
     Callback callback_;
   };
 
@@ -227,7 +228,7 @@ class FileModificationTracker {
 // Structure storing a WebState and whether the native session is supposed
 // to be available. Used by ExpectedStorageFilesForWebStates.
 struct WebStateReference {
-  const web::WebState* web_state = nullptr;
+  raw_ptr<const web::WebState> web_state = nullptr;
   bool is_native_session_available = false;
 };
 
@@ -310,11 +311,8 @@ void MoveWebStateBetweenWebStateList(WebStateList* src_web_state_list,
         src_web_state_list->DetachWebStateAt(index);
 
     dst_web_state_list->InsertWebState(
-        0, std::move(web_state),
-        WebStateList::INSERT_FORCE_INDEX |
-            (active ? WebStateList::INSERT_ACTIVATE
-                    : WebStateList::INSERT_NO_FLAGS),
-        WebStateOpener{});
+        std::move(web_state),
+        WebStateList::InsertionParams::AtIndex(0).Activate(active));
   }
 }
 
@@ -390,8 +388,8 @@ class LegacySessionRestorationServiceTest : public PlatformTest {
           web::NavigationManager::WebLoadParams(GURL(url)));
 
       web_state_list->InsertWebState(
-          WebStateList::kInvalidIndex, std::move(web_state),
-          WebStateList::INSERT_ACTIVATE, WebStateOpener());
+          std::move(web_state),
+          WebStateList::InsertionParams::Automatic().Activate());
     }
 
     // Wait for the navigation to commit.
@@ -505,7 +503,7 @@ TEST_F(LegacySessionRestorationServiceTest, LoadSession) {
     // Check that closing the all the tabs after disconnecting the Browser
     // does not cause the session to be saved again nor deleted.
     SnapshotFiles();
-    browser.GetWebStateList()->CloseAllWebStates(WebStateList::CLOSE_NO_FLAGS);
+    CloseAllWebStates(*browser.GetWebStateList(), WebStateList::CLOSE_NO_FLAGS);
 
     WaitForSessionSaveComplete();
     EXPECT_EQ(DeletedFiles(), FilePathSet{});
@@ -722,17 +720,16 @@ TEST_F(LegacySessionRestorationServiceTest, AdoptUnrealizedWebStateOnMove) {
       continue;
     }
 
-    list1->InsertWebState(0, list0->DetachWebStateAt(reverse_index),
-                          WebStateList::INSERT_FORCE_INDEX, WebStateOpener());
+    list1->InsertWebState(list0->DetachWebStateAt(reverse_index),
+                          WebStateList::InsertionParams::AtIndex(0));
     ASSERT_EQ(list1->active_index(), WebStateList::kInvalidIndex);
   }
 
   ASSERT_EQ(list0->count(), 1);
   std::unique_ptr<web::WebState> web_state = list0->DetachWebStateAt(0);
   list1->InsertWebState(
-      old_active_index, std::move(web_state),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_ACTIVATE,
-      WebStateOpener());
+      std::move(web_state),
+      WebStateList::InsertionParams::AtIndex(old_active_index).Activate());
 
   ASSERT_EQ(list0->count(), 0);
   ASSERT_EQ(list1->count(), static_cast<int>(std::size(kURLs)));
@@ -871,8 +868,8 @@ TEST_F(LegacySessionRestorationServiceTest, CreateUnrealizedWebState) {
   // Insert the WebState into the Browser's WebStateList and then wait for
   // the session to be saved to storage.
   browser.GetWebStateList()->InsertWebState(
-      WebStateList::kInvalidIndex, std::move(web_state),
-      WebStateList::InsertionFlags::INSERT_ACTIVATE, WebStateOpener());
+      std::move(web_state),
+      WebStateList::InsertionParams::Automatic().Activate());
   WaitForSessionSaveComplete();
 
   // Check that the data for the WebState has been saved to disk.

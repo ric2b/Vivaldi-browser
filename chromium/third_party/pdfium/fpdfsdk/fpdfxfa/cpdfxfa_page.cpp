@@ -12,10 +12,10 @@
 #include "core/fpdfapi/page/cpdf_page.h"
 #include "core/fpdfapi/page/cpdf_pageimagecache.h"
 #include "core/fpdfapi/parser/cpdf_document.h"
+#include "core/fxcrt/check.h"
 #include "fpdfsdk/cpdfsdk_pageview.h"
 #include "fpdfsdk/fpdfxfa/cpdfxfa_context.h"
 #include "fpdfsdk/fpdfxfa/cpdfxfa_widget.h"
-#include "third_party/base/check.h"
 #include "xfa/fgas/graphics/cfgas_gegraphics.h"
 #include "xfa/fxfa/cxfa_ffdocview.h"
 #include "xfa/fxfa/cxfa_ffpageview.h"
@@ -172,25 +172,25 @@ float CPDFXFA_Page::GetPageHeight() const {
   return 0.0f;
 }
 
-absl::optional<CFX_PointF> CPDFXFA_Page::DeviceToPage(
+std::optional<CFX_PointF> CPDFXFA_Page::DeviceToPage(
     const FX_RECT& rect,
     int rotate,
     const CFX_PointF& device_point) const {
   CXFA_FFPageView* pPageView = GetXFAPageView();
   if (!m_pPDFPage && !pPageView)
-    return absl::nullopt;
+    return std::nullopt;
 
   CFX_Matrix page2device = GetDisplayMatrix(rect, rotate);
   return page2device.GetInverse().Transform(device_point);
 }
 
-absl::optional<CFX_PointF> CPDFXFA_Page::PageToDevice(
+std::optional<CFX_PointF> CPDFXFA_Page::PageToDevice(
     const FX_RECT& rect,
     int rotate,
     const CFX_PointF& page_point) const {
   CXFA_FFPageView* pPageView = GetXFAPageView();
   if (!m_pPDFPage && !pPageView)
-    return absl::nullopt;
+    return std::nullopt;
 
   CFX_Matrix page2device = GetDisplayMatrix(rect, rotate);
   return page2device.Transform(page_point);

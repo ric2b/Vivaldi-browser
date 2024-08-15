@@ -1,4 +1,4 @@
-    <style include="settings-shared passwords-shared cr-screen-reader-only">
+    <style include="settings-shared passwords-shared screen-reader-only">
       .expiration-column,
       .misc-column {
         align-items: center;
@@ -27,12 +27,16 @@
         margin-inline-end: 16px;
         vertical-align: middle;
       }
+
+      #summaryTermsLink {
+        text-decoration: none;
+      }
     </style>
     <div class="list-item" role="row">
       <div class="type-column" role="cell">
         <img id="cardImage" src="[[creditCard.imageSrc]]" alt="">
-        <div class="summary-column cr-screen-reader-only-host-node">
-          <div class="cr-screen-reader-only">
+        <div class="summary-column screen-reader-only-host-node">
+          <div class="screen-reader-only">
             [[getSummaryAriaLabel_(creditCard)]],
             [[getSummaryAriaSublabel_(creditCard)]]
           </div>
@@ -40,8 +44,14 @@
             [[creditCard.metadata.summaryLabel]]
           </div>
           <div id="summarySublabel"
-              class="ellipses sub-label" aria-hidden="true">
+              class="sub-label" aria-hidden="true">
             [[getSummarySublabel_(creditCard)]]
+            <template is="dom-if" if="[[isCardBenefitsProductUrlAvailable_(creditCard)]]">
+              (<a id="summaryTermsLink"
+                  on-click="onSummarySublabelTermsLinkClick_"
+                  href="[[getCardBenefitsProductUrl_(creditCard)]]"
+                  target="_blank">$i18n{benefitsTermsTagForCreditCardListEntry}</a>)
+            </template>
           </div>
         </div>
       </div>
@@ -59,7 +69,7 @@
             </if>
             <if expr="not _google_chrome">
               <span class="sub-label">
-                [[getPaymentsLabel_(creditCard.metadata)]]
+                $i18n{googlePayments}
               </span>
             </if>
           </div>

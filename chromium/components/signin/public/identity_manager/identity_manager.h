@@ -171,7 +171,7 @@ class IdentityManager : public KeyedService,
   // documentation.
   // Returns a non-empty struct if the primary account exists and was granted
   // the required consent level.
-  // TODO(crbug.com/1462978): revisit this once `ConsentLevel::kSync` is
+  // TODO(crbug.com/40067058): revisit this once `ConsentLevel::kSync` is
   // removed.
   // TODO(1046746): Update (./README.md).
   CoreAccountInfo GetPrimaryAccountInfo(ConsentLevel consent_level) const;
@@ -185,7 +185,7 @@ class IdentityManager : public KeyedService,
   // account for sync.
   // Note that `ConsentLevel::kSync` is deprecated, see the `ConsentLevel`
   // documentation.
-  // TODO(crbug.com/1462978): revisit this once `ConsentLevel::kSync` is
+  // TODO(crbug.com/40067058): revisit this once `ConsentLevel::kSync` is
   // removed.
   bool HasPrimaryAccount(ConsentLevel consent_level) const;
 
@@ -358,7 +358,9 @@ class IdentityManager : public KeyedService,
     std::unique_ptr<DiagnosticsProvider> diagnostics_provider;
     AccountConsistencyMethod account_consistency =
         AccountConsistencyMethod::kDisabled;
-    bool should_verify_scope_access = true;
+    // TODO(crbug.com/325904258): Reconsider whether completely disabling the
+    // scope checking is the right approach in the long run.
+    bool require_sync_consent_for_scope_verification = true;
     raw_ptr<SigninClient> signin_client = nullptr;
 #if BUILDFLAG(IS_CHROMEOS)
     raw_ptr<account_manager::AccountManagerFacade, DanglingUntriaged>
@@ -406,6 +408,15 @@ class IdentityManager : public KeyedService,
   AccountConsistencyMethod GetAccountConsistency() {
     return account_consistency_;
   }
+
+  // Calling this method provides a hint that a new account may be added in the
+  // near future, and front-loads some processing to speed that up.
+  //
+  // Calling this API is an optional optimization (particularly for cases where
+  // latency of async processing is user-visible). It is OK to call this even
+  // if a new account is not then added, and it is OK to not call this even if a
+  // new account is later added.
+  void PrepareForAddingNewAccount();
 
 #if BUILDFLAG(IS_ANDROID)
   // Returns a pointer to the AccountTrackerService Java instance associated
@@ -471,6 +482,8 @@ class IdentityManager : public KeyedService,
   friend AccountInfo MakeAccountAvailable(
       IdentityManager* identity_manager,
       const AccountAvailabilityOptions& options);
+  friend void SetAutomaticIssueOfAccessTokens(IdentityManager* identity_manager,
+                                              bool grant);
   friend void SetRefreshTokenForAccount(IdentityManager* identity_manager,
                                         const CoreAccountId& account_id,
                                         const std::string& token_value);
@@ -678,9 +691,9 @@ class IdentityManager : public KeyedService,
   AccountConsistencyMethod account_consistency_ =
       AccountConsistencyMethod::kDisabled;
 
-  // TODO(crbug.com/1462858): Remove this field once
+  // TODO(crbug.com/40067025): Remove this field once
   // kReplaceSyncPromosWithSignInPromos launches.
-  const bool should_verify_scope_access_;
+  const bool require_sync_consent_for_scope_verification_;
 
 #if BUILDFLAG(IS_ANDROID)
   // Java-side IdentityManager object.

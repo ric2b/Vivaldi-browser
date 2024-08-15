@@ -156,7 +156,7 @@ FindBarView::FindBarView(FindBarHost* host) {
   ChromeLayoutProvider* layout_provider = ChromeLayoutProvider::Get();
   const auto horizontal_margin =
       gfx::Insets::VH(0, layout_provider->GetDistanceMetric(
-                             DISTANCE_UNRELATED_CONTROL_HORIZONTAL) /
+                             views::DISTANCE_UNRELATED_CONTROL_HORIZONTAL) /
                              2);
   const gfx::Insets vector_button =
       layout_provider->GetInsetsMetric(views::INSETS_VECTOR_IMAGE_BUTTON);
@@ -334,14 +334,14 @@ void FindBarView::UpdateForResult(
   // The match_count label may have increased/decreased in size so we need to
   // do a layout and repaint the dialog so that the find text field doesn't
   // partially overlap the match-count label when it increases on no matches.
-  Layout();
+  DeprecatedLayoutImmediately();
   SchedulePaint();
 }
 
 void FindBarView::ClearMatchCount() {
   match_count_text_->ClearResult();
   UpdateMatchCountAppearance(false);
-  Layout();
+  DeprecatedLayoutImmediately();
   SchedulePaint();
 }
 

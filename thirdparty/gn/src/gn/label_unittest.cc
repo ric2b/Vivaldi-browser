@@ -28,48 +28,52 @@ struct ParseDepStringCase {
 
 TEST(Label, Resolve) {
   ParseDepStringCase cases[] = {
-    {"//chrome/", "", false, "", "", "", ""},
-    {"//chrome/", "/", false, "", "", "", ""},
-    {"//chrome/", ":", false, "", "", "", ""},
-    {"//chrome/", "/:", false, "", "", "", ""},
-    {"//chrome/", "blah", true, "//chrome/blah/", "blah", "//t/", "d"},
-    {"//chrome/", "blah:bar", true, "//chrome/blah/", "bar", "//t/", "d"},
-    // Absolute paths.
-    {"//chrome/", "/chrome:bar", true, "/chrome/", "bar", "//t/", "d"},
-    {"//chrome/", "/chrome/:bar", true, "/chrome/", "bar", "//t/", "d"},
+      {"//chrome/", "", false, "", "", "", ""},
+      {"//chrome/", "/", false, "", "", "", ""},
+      {"//chrome/", ":", false, "", "", "", ""},
+      {"//chrome/", "/:", false, "", "", "", ""},
+      {"//chrome/", "blah", true, "//chrome/blah/", "blah", "//t/", "d"},
+      {"//chrome/", "blah:bar", true, "//chrome/blah/", "bar", "//t/", "d"},
+      // Absolute paths.
+      {"//chrome/", "/chrome:bar", true, "/chrome/", "bar", "//t/", "d"},
+      {"//chrome/", "/chrome/:bar", true, "/chrome/", "bar", "//t/", "d"},
 #if defined(OS_WIN)
-    {"//chrome/", "/C:/chrome:bar", true, "/C:/chrome/", "bar", "//t/", "d"},
-    {"//chrome/", "/C:/chrome/:bar", true, "/C:/chrome/", "bar", "//t/", "d"},
-    {"//chrome/", "C:/chrome:bar", true, "/C:/chrome/", "bar", "//t/", "d"},
+      {"//chrome/", "/C:/chrome:bar", true, "/C:/chrome/", "bar", "//t/", "d"},
+      {"//chrome/", "/C:/chrome/:bar", true, "/C:/chrome/", "bar", "//t/", "d"},
+      {"//chrome/", "C:/chrome:bar", true, "/C:/chrome/", "bar", "//t/", "d"},
 #endif
-    // Refers to root dir.
-    {"//chrome/", "//:bar", true, "//", "bar", "//t/", "d"},
-    // Implicit directory
-    {"//chrome/", ":bar", true, "//chrome/", "bar", "//t/", "d"},
-    {"//chrome/renderer/", ":bar", true, "//chrome/renderer/", "bar", "//t/",
-     "d"},
-    // Implicit names.
-    {"//chrome/", "//base", true, "//base/", "base", "//t/", "d"},
-    {"//chrome/", "//base/i18n", true, "//base/i18n/", "i18n", "//t/", "d"},
-    {"//chrome/", "//base/i18n:foo", true, "//base/i18n/", "foo", "//t/", "d"},
-    {"//chrome/", "//", false, "", "", "", ""},
-    // Toolchain parsing.
-    {"//chrome/", "//chrome:bar(//t:n)", true, "//chrome/", "bar", "//t/", "n"},
-    {"//chrome/", "//chrome:bar(//t)", true, "//chrome/", "bar", "//t/", "t"},
-    {"//chrome/", "//chrome:bar(//t:)", true, "//chrome/", "bar", "//t/", "t"},
-    {"//chrome/", "//chrome:bar()", true, "//chrome/", "bar", "//t/", "d"},
-    {"//chrome/", "//chrome:bar(foo)", true, "//chrome/", "bar",
-     "//chrome/foo/", "foo"},
-    {"//chrome/", "//chrome:bar(:foo)", true, "//chrome/", "bar", "//chrome/",
-     "foo"},
-    // TODO(brettw) it might be nice to make this an error:
-    //{"//chrome/", "//chrome:bar())", false, "", "", "", "" },
-    {"//chrome/", "//chrome:bar(//t:bar(tc))", false, "", "", "", ""},
-    {"//chrome/", "//chrome:bar(()", false, "", "", "", ""},
-    {"//chrome/", "(t:b)", false, "", "", "", ""},
-    {"//chrome/", ":bar(//t/b)", true, "//chrome/", "bar", "//t/b/", "b"},
-    {"//chrome/", ":bar(/t/b)", true, "//chrome/", "bar", "/t/b/", "b"},
-    {"//chrome/", ":bar(t/b)", true, "//chrome/", "bar", "//chrome/t/b/", "b"},
+      // Refers to root dir.
+      {"//chrome/", "//:bar", true, "//", "bar", "//t/", "d"},
+      // Implicit directory
+      {"//chrome/", ":bar", true, "//chrome/", "bar", "//t/", "d"},
+      {"//chrome/renderer/", ":bar", true, "//chrome/renderer/", "bar", "//t/",
+       "d"},
+      // Implicit names.
+      {"//chrome/", "//base", true, "//base/", "base", "//t/", "d"},
+      {"//chrome/", "//base/i18n", true, "//base/i18n/", "i18n", "//t/", "d"},
+      {"//chrome/", "//base/i18n:foo", true, "//base/i18n/", "foo", "//t/",
+       "d"},
+      {"//chrome/", "//", false, "", "", "", ""},
+      // Toolchain parsing.
+      {"//chrome/", "//chrome:bar(//t:n)", true, "//chrome/", "bar", "//t/",
+       "n"},
+      {"//chrome/", "//chrome:bar(//t)", true, "//chrome/", "bar", "//t/", "t"},
+      {"//chrome/", "//chrome:bar(//t:)", true, "//chrome/", "bar", "//t/",
+       "t"},
+      {"//chrome/", "//chrome:bar()", true, "//chrome/", "bar", "//t/", "d"},
+      {"//chrome/", "//chrome:bar(foo)", true, "//chrome/", "bar",
+       "//chrome/foo/", "foo"},
+      {"//chrome/", "//chrome:bar(:foo)", true, "//chrome/", "bar", "//chrome/",
+       "foo"},
+      // TODO(brettw) it might be nice to make this an error:
+      //{"//chrome/", "//chrome:bar())", false, "", "", "", "" },
+      {"//chrome/", "//chrome:bar(//t:bar(tc))", false, "", "", "", ""},
+      {"//chrome/", "//chrome:bar(()", false, "", "", "", ""},
+      {"//chrome/", "(t:b)", false, "", "", "", ""},
+      {"//chrome/", ":bar(//t/b)", true, "//chrome/", "bar", "//t/b/", "b"},
+      {"//chrome/", ":bar(/t/b)", true, "//chrome/", "bar", "/t/b/", "b"},
+      {"//chrome/", ":bar(t/b)", true, "//chrome/", "bar", "//chrome/t/b/",
+       "b"},
   };
 
   Label default_toolchain(SourceDir("//t/"), "d");

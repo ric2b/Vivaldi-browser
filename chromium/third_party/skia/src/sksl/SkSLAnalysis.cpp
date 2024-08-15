@@ -50,6 +50,7 @@
 #include "src/sksl/ir/SkSLSwitchCase.h"
 #include "src/sksl/ir/SkSLSwitchStatement.h"
 #include "src/sksl/ir/SkSLSwizzle.h"
+#include "src/sksl/ir/SkSLSymbol.h"
 #include "src/sksl/ir/SkSLTernaryExpression.h"
 #include "src/sksl/ir/SkSLType.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
@@ -101,7 +102,7 @@ protected:
         if (e.is<ChildCall>() && &e.as<ChildCall>().child() == &fChild) {
             // Determine the type of call at this site, and merge it with the accumulated state
             const ExpressionArray& arguments = e.as<ChildCall>().arguments();
-            SkASSERT(arguments.size() >= 1);
+            SkASSERT(!arguments.empty());
 
             const Expression* maybeCoords = arguments[0].get();
             if (maybeCoords->type().matches(*fContext.fTypes.fFloat2)) {
@@ -371,9 +372,10 @@ bool Analysis::CallsSampleOutsideMain(const Program& program) {
 }
 
 bool Analysis::CallsColorTransformIntrinsics(const Program& program) {
-    for (auto [fn, count] : program.usage()->fCallCounts) {
-        if (count != 0 && (fn->intrinsicKind() == k_toLinearSrgb_IntrinsicKind ||
-                           fn->intrinsicKind() == k_fromLinearSrgb_IntrinsicKind)) {
+    for (auto [symbol, count] : program.usage()->fCallCounts) {
+        const FunctionDeclaration& fn = symbol->as<FunctionDeclaration>();
+        if (count != 0 && (fn.intrinsicKind() == k_toLinearSrgb_IntrinsicKind ||
+                           fn.intrinsicKind() == k_fromLinearSrgb_IntrinsicKind)) {
             return true;
         }
     }

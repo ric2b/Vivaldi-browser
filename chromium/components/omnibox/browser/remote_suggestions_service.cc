@@ -8,8 +8,10 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/metrics/histogram_functions.h"
 #include "components/omnibox/browser/base_search_provider.h"
 #include "components/omnibox/browser/document_suggestions_service.h"
+#include "components/search/search.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/variations/net/variations_http_headers.h"
 #include "net/base/load_flags.h"
@@ -18,8 +20,13 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 
 namespace {
+
+void LogSuggestRequestSent(RemoteRequestType request_type) {
+  base::UmaHistogramEnumeration("Omnibox.SuggestRequestsSent", request_type);
+}
 
 void AddVariationHeaders(network::ResourceRequest* request) {
   // Note: It's OK to pass InIncognito::kNo since we are expected to be in
@@ -27,6 +34,31 @@ void AddVariationHeaders(network::ResourceRequest* request) {
   // incognito mode).
   variations::AppendVariationsHeaderUnknownSignedIn(
       request->url, variations::InIncognito::kNo, request);
+}
+
+// Overrides or appends additional query params based on `page_classification`.
+void OverrideOrAppendQueryParams(
+    const TemplateURL* template_url,
+    const SearchTermsData& search_terms_data,
+    metrics::OmniboxEventProto::PageClassification page_classification,
+    TemplateURLRef::SearchTermsArgs* search_terms_args) {
+  switch (page_classification) {
+    case metrics::OmniboxEventProto::CHROMEOS_APP_LIST: {
+      // Append `sclient=` for the ChromeOS app_list launcher entry point for
+      // Google template URL.
+      if (!search::TemplateURLIsGoogle(template_url, search_terms_data)) {
+        break;
+      }
+      if (!search_terms_args->additional_query_params.empty()) {
+        search_terms_args->additional_query_params.append("&");
+      }
+      search_terms_args->additional_query_params.append(
+          "sclient=cros-launcher");
+      break;
+    }
+    default:
+      break;
+  }
 }
 
 }  // namespace
@@ -49,16 +81,16 @@ GURL RemoteSuggestionsService::EndpointUrl(
   const TemplateURLRef& suggestion_url_ref =
       template_url->suggestions_url_ref();
 
-  // Append a specific suggest client in ChromeOS app_list launcher contexts.
-  BaseSearchProvider::AppendSuggestClientToAdditionalQueryParams(
-      template_url, search_terms_data, search_terms_args.page_classification,
-      &search_terms_args);
+  OverrideOrAppendQueryParams(template_url, search_terms_data,
+                              search_terms_args.page_classification,
+                              &search_terms_args);
   return GURL(suggestion_url_ref.ReplaceSearchTerms(search_terms_args,
                                                     search_terms_data));
 }
 
 std::unique_ptr<network::SimpleURLLoader>
 RemoteSuggestionsService::StartSuggestionsRequest(
+    RemoteRequestType request_type,
     const TemplateURL* template_url,
     TemplateURLRef::SearchTermsArgs search_terms_args,
     const SearchTermsData& search_terms_data,
@@ -129,12 +161,13 @@ RemoteSuggestionsService::StartSuggestionsRequest(
     observer.OnSuggestRequestStarted(request_id, loader.get(),
                                      /*request_body*/ "");
   }
-
+  LogSuggestRequestSent(request_type);
   return loader;
 }
 
 std::unique_ptr<network::SimpleURLLoader>
 RemoteSuggestionsService::StartZeroPrefixSuggestionsRequest(
+    RemoteRequestType request_type,
     const TemplateURL* template_url,
     TemplateURLRef::SearchTermsArgs search_terms_args,
     const SearchTermsData& search_terms_data,
@@ -210,7 +243,7 @@ RemoteSuggestionsService::StartZeroPrefixSuggestionsRequest(
     observer.OnSuggestRequestStarted(request_id, loader.get(),
                                      /*request_body*/ "");
   }
-
+  LogSuggestRequestSent(request_type);
   return loader;
 }
 
@@ -311,7 +344,7 @@ RemoteSuggestionsService::StartDeletionRequest(
     observer.OnSuggestRequestStarted(request_id, loader.get(),
                                      /*request_body*/ "");
   }
-
+  LogSuggestRequestSent(RemoteRequestType::kDeletion);
   return loader;
 }
 
@@ -346,7 +379,7 @@ void RemoteSuggestionsService::OnDocumentSuggestionsLoaderAvailable(
   for (Observer& observer : observers_) {
     observer.OnSuggestRequestStarted(request_id, loader.get(), request_body);
   }
-
+  LogSuggestRequestSent(RemoteRequestType::kDocumentSuggest);
   std::move(start_callback).Run(std::move(loader));
 }
 

@@ -194,21 +194,20 @@ double DOMVisualViewport::scale() const {
   return 0;
 }
 
-absl::optional<HeapVector<Member<DOMRect>>> DOMVisualViewport::segments()
-    const {
+std::optional<HeapVector<Member<DOMRect>>> DOMVisualViewport::segments() const {
   LocalFrame* frame = window_->GetFrame();
   if (!frame || !frame->GetWidgetForLocalRoot() ||
       !frame->IsOutermostMainFrame()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   WebVector<gfx::Rect> web_segments =
-      frame->GetWidgetForLocalRoot()->WindowSegments();
+      frame->GetWidgetForLocalRoot()->ViewportSegments();
 
   // If there is a single segment, return null as authors should use other
   // properties on VisualViewport to determine the size.
   if (web_segments.size() <= 1)
-    return absl::nullopt;
+    return std::nullopt;
 
   // The rect passed to us from content is in DIP, relative to the main
   // frame/widget. This doesn't take the page's zoom factor into account so we

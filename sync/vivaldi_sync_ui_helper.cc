@@ -236,7 +236,7 @@ std::string VivaldiSyncUIHelper::GetBackupEncryptionToken() {
   }
 
   std::string encoded_key;
-  base::Base64Encode(decrypted_key, &encoded_key);
+  encoded_key = base::Base64Encode(decrypted_key);
   return encoded_key;
 }
 
@@ -259,7 +259,7 @@ bool VivaldiSyncUIHelper::RestoreEncryptionToken(
   }
 
   std::string encoded_token;
-  base::Base64Encode(encrypted_token, &encoded_token);
+  encoded_token = base::Base64Encode(encrypted_token);
   sync_service_->ResetEncryptionBootstrapToken(encoded_token);
 
   return true;

@@ -24,8 +24,16 @@ static PrefService *_prefService = nil;
 + (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry {
   registry->RegisterIntegerPref(vivaldiprefs::kVivaldiSpeedDialSortingMode,
                                 SpeedDialSortingManual);
+  registry->RegisterIntegerPref(vivaldiprefs::kVivaldiSpeedDialSortingOrder,
+                                SpeedDialSortingOrderAscending);
   registry->RegisterIntegerPref(vivaldiprefs::kVivaldiStartPageLayoutStyle,
                                 [VivaldiStartPagePrefs defaultLayout]);
+  registry->RegisterIntegerPref(vivaldiprefs::kVivaldiStartPageSDMaximumColumns,
+                                VivaldiStartPageLayoutColumnUnlimited);
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kVivaldiStartPageShowSpeedDials, YES);
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kVivaldiStartPageShowCustomizeButton, NO);
   registry->RegisterStringPref(vivaldiprefs::kVivaldiStartupWallpaper, "");
   registry->RegisterStringPref(vivaldiprefs::kVivaldiStartpagePortraitImage,"");
   registry->RegisterStringPref(vivaldiprefs::kVivaldiStartpageLandscapeImage,"");
@@ -51,8 +59,24 @@ static PrefService *_prefService = nil;
       return SpeedDialSortingByDescription;
     case 5:
       return SpeedDialSortingByDate;
+    case 6:
+      return SpeedDialSortingByKind;
     default:
       return SpeedDialSortingManual;
+  }
+}
+
++ (const SpeedDialSortingOrder)getSDSortingOrder {
+  PrefService *prefService = [VivaldiStartPagePrefs prefService];
+  int orderIndex =
+      prefService->GetInteger(vivaldiprefs::kVivaldiSpeedDialSortingOrder);
+  switch (orderIndex) {
+    case 0:
+      return SpeedDialSortingOrderAscending;
+    case 1:
+      return SpeedDialSortingOrderDescending;
+    default:
+      return SpeedDialSortingOrderAscending;
   }
 }
 
@@ -73,6 +97,51 @@ static PrefService *_prefService = nil;
     default:
       return [VivaldiStartPagePrefs defaultLayout];
   }
+}
+
++ (const VivaldiStartPageLayoutColumn)getStartPageSpeedDialMaximumColumns {
+  PrefService *prefService = [VivaldiStartPagePrefs prefService];
+  int style =
+      prefService->GetInteger(vivaldiprefs::kVivaldiStartPageSDMaximumColumns);
+
+  switch (style) {
+    case 1:
+      return VivaldiStartPageLayoutColumnOne;
+    case 2:
+      return VivaldiStartPageLayoutColumnTwo;
+    case 3:
+      return VivaldiStartPageLayoutColumnThree;
+    case 4:
+      return VivaldiStartPageLayoutColumnFour;
+    case 5:
+      return VivaldiStartPageLayoutColumnFive;
+    case 6:
+      return VivaldiStartPageLayoutColumnSix;
+    case 7:
+      return VivaldiStartPageLayoutColumnSeven;
+    case 8:
+      return VivaldiStartPageLayoutColumnEight;
+    case 10:
+      return VivaldiStartPageLayoutColumnTen;
+    case 12:
+      return VivaldiStartPageLayoutColumnTwelve;
+    case 5000:
+      return VivaldiStartPageLayoutColumnUnlimited;
+    default:
+      return VivaldiStartPageLayoutColumnUnlimited;
+  }
+}
+
++ (BOOL)showSpeedDials {
+  PrefService *prefService = [VivaldiStartPagePrefs prefService];
+  return prefService->GetBoolean(
+      vivaldiprefs::kVivaldiStartPageShowSpeedDials);
+}
+
++ (BOOL)showStartPageCustomizeButton {
+  PrefService *prefService = [VivaldiStartPagePrefs prefService];
+  return prefService->GetBoolean(
+      vivaldiprefs::kVivaldiStartPageShowCustomizeButton);
 }
 
 + (NSString*)getWallpaperName {
@@ -107,9 +176,33 @@ static PrefService *_prefService = nil;
   prefService->SetInteger(vivaldiprefs::kVivaldiSpeedDialSortingMode, mode);
 }
 
++ (void)setSDSortingOrder:(const SpeedDialSortingOrder)order {
+  PrefService *prefService = [VivaldiStartPagePrefs prefService];
+  prefService->SetInteger(vivaldiprefs::kVivaldiSpeedDialSortingOrder, order);
+}
+
 + (void)setStartPageLayoutStyle:(const VivaldiStartPageLayoutStyle)style {
   PrefService *prefService = [VivaldiStartPagePrefs prefService];
   prefService->SetInteger(vivaldiprefs::kVivaldiStartPageLayoutStyle, style);
+}
+
++ (void)setStartPageSpeedDialMaximumColumns:
+    (VivaldiStartPageLayoutColumn)columns {
+  PrefService *prefService = [VivaldiStartPagePrefs prefService];
+  prefService->SetInteger(vivaldiprefs::kVivaldiStartPageSDMaximumColumns,
+                          columns);
+}
+
++ (void)setShowSpeedDials:(BOOL)show {
+  PrefService *prefService = [VivaldiStartPagePrefs prefService];
+  prefService->SetBoolean(
+      vivaldiprefs::kVivaldiStartPageShowSpeedDials, show);
+}
+
++ (void)setShowStartPageCustomizeButton:(BOOL)show {
+  PrefService *prefService = [VivaldiStartPagePrefs prefService];
+  prefService->SetBoolean(
+      vivaldiprefs::kVivaldiStartPageShowCustomizeButton, show);
 }
 
 + (void)setWallpaperName:(NSString*)name {
@@ -136,6 +229,11 @@ static PrefService *_prefService = nil;
     isTablet ? VivaldiStartPageLayoutStyleMedium :
       VivaldiStartPageLayoutStyleSmall;
   return defaultLayout;
+}
+
+// Return unlimited column by default which means fill the available screen
++ (VivaldiStartPageLayoutColumn)defaultColumns {
+  return VivaldiStartPageLayoutColumnUnlimited;
 }
 
 + (void)storeImageAsBase64String:(UIImage *)image

@@ -14,7 +14,7 @@ Each stage includes links to debugging tools, if available.
 
 ## Device to Chrome
 
-![Flowchart of the stack from device to evdev](images/input_stack/kernel.png)
+![Flowchart of the stack from device to evdev](/chromium-os/developer-library/reference/infrastructure/input-stack/kernel.png)
 
 ### Transport
 
@@ -184,7 +184,7 @@ view.
 
 ## In Chrome
 
-![Flowchart of the Chrome part of the stack](images/input_stack/chrome.png)
+![Flowchart of the Chrome part of the stack](/chromium-os/developer-library/reference/infrastructure/input-stack/chrome.png)
 
 On ChromeOS, evdev is consumed by [Ozone], a part of Chrome which converts
 evdev events into Chrome's cross-platform UI events. Ozone has a number of
@@ -254,6 +254,19 @@ gestures.cc][interpreter-chains].
 `GestureInterpreterLibevdevCros`, which you can activate to show the gestures
 being produced.
 
+To activate the `DVLOG` statements, first add the following to the `/etc/chrome_dev.conf` of a DUT with a [debug Chrome build](simple_chrome_workflow.md#debug-builds):
+
+```
+--enable-logging
+--vmodule=*gesture*=3
+```
+
+Then restart Chrome by running the following command in the shell of your DUT:
+
+```
+restart ui
+```
+
 **Other useful tools:**
 
 *   Much of the Gestures library's behaviour is configured using [Gesture
@@ -271,7 +284,7 @@ being produced.
 
 ## Chrome to other apps
 
-![Flowchart of event delivery to apps](images/input_stack/vms-and-containers.png)
+![Flowchart of event delivery to apps](/chromium-os/developer-library/reference/infrastructure/input-stack/vms-and-containers.png)
 
 ### Linux apps (Crostini)
 

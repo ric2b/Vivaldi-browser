@@ -31,7 +31,6 @@
 #include "base/threading/thread_restrictions.h"
 #include "build/branding_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
-#include "chrome/app/notification_metrics.h"
 #include "chrome/browser/apps/app_shim/app_shim_termination_manager.h"
 #include "chrome/browser/apps/platform_apps/app_window_registry_util.h"
 #include "chrome/browser/browser_features.h"
@@ -77,7 +76,6 @@
 #import "chrome/browser/ui/cocoa/confirm_quit_panel_controller.h"
 #include "chrome/browser/ui/cocoa/handoff_observer.h"
 #import "chrome/browser/ui/cocoa/history_menu_bridge.h"
-#include "chrome/browser/ui/cocoa/last_active_browser_cocoa.h"
 #import "chrome/browser/ui/cocoa/profiles/profile_menu_controller.h"
 #import "chrome/browser/ui/cocoa/share_menu_controller.h"
 #import "chrome/browser/ui/cocoa/tab_menu_bridge.h"
@@ -114,8 +112,8 @@
 #include "content/public/browser/download_manager.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
+#include "net/base/apple/url_conversions.h"
 #include "net/base/filename_util.h"
-#include "net/base/mac/url_conversions.h"
 #import "ui/base/cocoa/nsmenu_additions.h"
 #import "ui/base/cocoa/nsmenuitem_additions.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -144,6 +142,10 @@
 
 #ifndef VIVALDI_SPARKLE_DISABLED
 #import  "vivaldi/Sparkle/SPUUpdater.h"
+#endif
+
+#if defined(ENABLE_RELAY_PROXY)
+#include "proxy/launcher.h"
 #endif
 
 namespace {
@@ -219,10 +221,10 @@ void LaunchBrowserStartup(Profile* profile) {
 
   base::AutoReset<bool> auto_reset_in_run(&g_is_opening_new_window, true);
   StartupBrowserCreator browser_creator;
-  browser_creator.LaunchBrowser(*base::CommandLine::ForCurrentProcess(),
-                                profile, base::FilePath(),
-                                chrome::startup::IsProcessStartup::kNo,
-                                chrome::startup::IsFirstRun::kYes, nullptr);
+  browser_creator.LaunchBrowser(
+      *base::CommandLine::ForCurrentProcess(), profile, base::FilePath(),
+      chrome::startup::IsProcessStartup::kNo, chrome::startup::IsFirstRun::kYes,
+      nullptr, /*restore_tabbed_browser=*/true);
 }
 
 // Creates an empty browser window with the given profile and returns a pointer
@@ -239,7 +241,7 @@ Browser* CreateBrowser(Profile* profile) {
     chrome::NewEmptyWindow(profile);
   }
 
-  Browser* browser = chrome::GetLastActiveBrowser();
+  Browser* browser = chrome::FindLastActive();
   CHECK(browser);
   return browser;
 }
@@ -473,6 +475,8 @@ Profile* GetLastProfileMac() {
 // Reset `_keepAlive` if Chrome is running in hidden mode, recreating it when
 // Chrome is no longer hidden.
 - (void)resetKeepAliveWhileHidden;
+
+- (void)openUrlsInVivaldi:(const std::vector<GURL>&)urls;
 @end
 
 class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
@@ -902,6 +906,13 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   // There better be no browser windows left at this point.
   CHECK_EQ(0u, chrome::GetTotalBrowserCount());
 
+
+  #if defined(ENABLE_RELAY_PROXY)
+  if (vivaldi::IsVivaldiRunning()) {
+    vivaldi::proxy::disconnect();
+  }
+  #endif
+
   // Tell BrowserList not to keep the browser process alive. Once all the
   // browsers get dealloc'd, it will stop the RunLoop and fall back into main().
   _keepAlive.reset();
@@ -1042,6 +1053,13 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
 
   // If the browser hasn't started yet, just queue up the URLs.
   if (!_startupComplete) {
+    if (vivaldi::IsVivaldiRunning()) {
+      Profile* profile =  [self lastProfileIfLoaded];
+      if (profile) {
+        vivaldi::VivaldiAppObserver::Get(profile)->SetUrlsToOpen(urls);
+        return;
+      }
+    }
     _startupUrls.insert(_startupUrls.end(), urls.begin(), urls.end());
     return;
   }
@@ -1072,10 +1090,6 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
 // This is called after profiles have been loaded and preferences registered.
 // It is safe to access the default profile here.
 - (void)applicationDidFinishLaunching:(NSNotification*)notify {
-  // Check if Chrome got launched by clicking on a notification.
-  if ([notify userInfo][NSApplicationLaunchUserNotificationKey])
-    LogLaunchedViaNotificationAction(NotificationActionSource::kBrowser);
-
   if (g_browser_process->browser_policy_connector()
           ->chrome_browser_cloud_management_controller()
           ->IsEnterpriseStartupDialogShowing()) {
@@ -1149,7 +1163,11 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
     _lastActiveColorProvider = browser->window()->GetColorProvider();
   }
   [self updateHandoffManager:activeWebContents];
+  // Vivaldi will open the startup urls when the vivaldi UI is ready
+  // via the VivaldiAppObserver
+  if (!vivaldi::IsVivaldiRunning()) {
   [self openStartupUrls];
+  }
 
   PrefService* localState = g_browser_process->local_state();
   if (localState) {
@@ -1328,7 +1346,7 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   if ([NSApp modalWindow])
     return YES;
 
-  Browser* browser = chrome::GetLastActiveBrowser();
+  Browser* browser = chrome::FindLastActive();
   return browser && [[browser->window()->GetNativeWindow().GetNativeNSWindow()
                             attachedSheet] isKindOfClass:[NSWindow class]];
 }
@@ -2394,13 +2412,10 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
 }
 
 - (const ui::ColorProvider&)lastActiveColorProvider {
-  // In rare situation the last active color provider is not properly tracked,
-  // probably because -windowDidBecomeMain: is not fired.
-  // TODO(crbug.com/1364279): DCHECK(_lastActiveColorProvider). If this is not
-  // possible, investigate if we should make a GetDefaultColorProvider(), or
-  // GetColorProviderForProfile().
+  // During the browser startup the creation of Browser and AppController is
+  // a race condition. The color provider will be missing if the browser is
+  // created later than the AppController.
   if (!_lastActiveColorProvider) {
-    base::debug::DumpWithoutCrashing();
     return *ui::ColorProviderManager::Get().GetColorProviderFor(
         ui::NativeTheme::GetInstanceForNativeUi()->GetColorProviderKey(
             nullptr));
@@ -2427,6 +2442,28 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   return browser && browser->is_type_normal();
 }
 
+- (NSWindow*)targetWindowFromWindow:(NSWindow*)window {
+  NSWindow* targetWindow = window;
+
+  // In immersive fullscreen if `targetWindow` is a child (a popover or
+  // bubble) the browser window should handle the command. Walk up the
+  // window tree until the root window is found, this will be the browser
+  // window.
+  if (base::FeatureList::IsEnabled(features::kImmersiveFullscreen)) {
+    while (targetWindow.parentWindow) {
+      targetWindow = targetWindow.parentWindow;
+    }
+    return targetWindow;
+  }
+
+  // If `targetWindow` is a child (a popover or bubble) the parent should
+  // handle the command.
+  if (targetWindow.parentWindow) {
+    targetWindow = targetWindow.parentWindow;
+  }
+  return targetWindow;
+}
+
 - (void)updateMenuItemKeyEquivalents {
   if (vivaldi::IsVivaldiRunning()) {
     return;
@@ -2445,12 +2482,8 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
     targetWindow = base::apple::ObjCCast<NSWindow>(target);
   }
 
-  if (targetWindow != nil) {
-    // If `targetWindow` is a child (a popover or bubble) the parent should
-    // handle the command.
-    if ([targetWindow parentWindow] != nil) {
-      targetWindow = [targetWindow parentWindow];
-    }
+  if (targetWindow) {
+    targetWindow = [self targetWindowFromWindow:targetWindow];
   }
 
   NSMenuItem* closeTabMenuItem = [self closeTabMenuItem];
@@ -2617,6 +2650,12 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   _lastActiveColorProvider = browser->window()->GetColorProvider();
 }
 
+- (void)openUrlsInVivaldi:(const std::vector<GURL>&)urls {
+  if (urls.size() > 0) {
+    [self openUrlsReplacingNTP:urls];
+  }
+}
+
 @end  // @implementation AppController
 
 //---------------------------------------------------------------------------
@@ -2642,6 +2681,16 @@ void OpenUrlsInBrowserWithProfile(const std::vector<GURL>& urls,
   Browser* browser = chrome::FindLastActiveWithProfile(profile);
   int startupIndex = TabStripModel::kNoTab;
   content::WebContents* startupContent = nullptr;
+
+  if (!browser && vivaldi::IsVivaldiRunning()) {
+    // If no browser exists, create a browser and queue the opening of urls
+    // until the vivaldi window is shown and ready
+    browser = CreateBrowser(profile);
+    vivaldi::VivaldiAppObserver::Get(profile)->SetUrlsToOpen(urls);
+    return;
+  }
+
+
   if (browser && browser->tab_strip_model()->count() == 1) {
     // If there's only 1 tab and the tab is NTP, close this NTP tab and open all
     // startup urls in new tabs, because the omnibox will stay focused if we

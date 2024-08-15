@@ -39,7 +39,8 @@ public class BookmarkToolbarCoordinator {
             BookmarkOpener bookmarkOpener,
             BookmarkUiPrefs bookmarkUiPrefs,
             ModalDialogManager modalDialogManager,
-            Runnable endSearchRunnable) {
+            Runnable endSearchRunnable,
+            BookmarkMoveSnackbarManager bookmarkMoveSnackbarManager) {
         mToolbar =
                 (BookmarkToolbar)
                         selectableListLayout.initializeToolbar(
@@ -72,7 +73,8 @@ public class BookmarkToolbarCoordinator {
                         bookmarkUiPrefs,
                         new BookmarkAddNewFolderCoordinator(
                                 context, modalDialogManager, bookmarkModel),
-                        endSearchRunnable);
+                        endSearchRunnable,
+                        bookmarkMoveSnackbarManager);
 
         PropertyModelChangeProcessor.create(mModel, mToolbar, BookmarkToolbarViewBinder::bind);
     }

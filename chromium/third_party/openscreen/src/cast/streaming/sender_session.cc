@@ -247,8 +247,8 @@ SenderSession::SenderSession(Configuration config)
         SendRpcMessage(std::move(message));
       }),
       packet_router_(config_.environment) {
-  OSP_DCHECK(config_.client);
-  OSP_DCHECK(config_.environment);
+  OSP_CHECK(config_.client);
+  OSP_CHECK(config_.environment);
 
   // We may or may not do remoting this session, however our RPC handler
   // is not negotiation-specific and registering on construction here allows us
@@ -436,7 +436,7 @@ void SenderSession::OnRpcMessage(ErrorOr<ReceiverMessage> message) {
 
 void SenderSession::HandleErrorMessage(ReceiverMessage message,
                                        const Error& default_error) {
-  OSP_DCHECK(!message.valid);
+  OSP_CHECK(!message.valid);
   if (absl::holds_alternative<ReceiverError>(message.body)) {
     const ReceiverError& error = absl::get<ReceiverError>(message.body);
     Error converted_error = error.ToError();
@@ -508,7 +508,7 @@ void SenderSession::SpawnVideoSender(ConfiguredSenders* senders,
 
 SenderSession::ConfiguredSenders SenderSession::SelectSenders(
     const Answer& answer) {
-  OSP_DCHECK(current_negotiation_);
+  OSP_CHECK(current_negotiation_);
 
   // Although we already have a message port set up with the TLS
   // address of the receiver, we don't know where to send the separate UDP

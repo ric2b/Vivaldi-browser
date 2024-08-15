@@ -4,14 +4,10 @@
 
 package org.chromium.chrome.browser.omnibox.status;
 
-import android.app.Activity;
 import android.graphics.Rect;
-import android.os.Handler;
-import android.os.Looper;
 import android.view.View;
 
 import androidx.annotation.StringRes;
-import androidx.annotation.VisibleForTesting;
 
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.omnibox.R;
@@ -22,34 +18,33 @@ import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /** Controller to manage when an IPH bubble for PageInfo is shown. */
 public class PageInfoIPHController {
     private final UserEducationHelper mUserEducationHelper;
     private final View mStatusView;
 
-    @VisibleForTesting
+    /**
+     * Constructor
+     *
+     * @param educationHelper The helper controlling user education.
+     * @param statusView The status view in the omnibox. Used as anchor for IPH bubble.
+     */
     public PageInfoIPHController(UserEducationHelper educationHelper, View statusView) {
         mUserEducationHelper = educationHelper;
         mStatusView = statusView;
     }
 
     /**
-     * Constructor
-     *
-     * @param activity The activity.
-     * @param statusView The status view in the omnibox. Used as anchor for IPH bubble.
-     */
-    public PageInfoIPHController(Activity activity, View statusView) {
-        this(new UserEducationHelper(activity, new Handler(Looper.getMainLooper())), statusView);
-    }
-
-    /**
      * Called when a permission prompt was shown.
      *
+     * @param profile The {@link Profile} associated with the permission dialog.
      * @param iphTimeout The timeout after which the IPH bubble should disappear if it was shown.
      */
-    public void onPermissionDialogShown(int iphTimeout) {
-        Tracker tracker = TrackerFactory.getTrackerForProfile(Profile.getLastUsedRegularProfile());
+    public void onPermissionDialogShown(Profile profile, int iphTimeout) {
+        Tracker tracker = TrackerFactory.getTrackerForProfile(profile);
         tracker.notifyEvent(EventConstants.PERMISSION_REQUEST_SHOWN);
 
         mUserEducationHelper.requestShowIPH(
@@ -93,6 +88,8 @@ public class PageInfoIPHController {
      *     accessibility.
      */
     public void showCookieControlsIPH(int iphTimeout, @StringRes int stringId) {
+        // Vivaldi
+        if (BuildConfig.IS_VIVALDI) return;
         mUserEducationHelper.requestShowIPH(
                 new IPHCommandBuilder(
                                 mStatusView.getContext().getResources(),

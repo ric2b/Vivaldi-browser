@@ -497,7 +497,7 @@ Profile* CalendarAsyncFunction::GetProfile() const {
 }
 
 ExtensionFunction::ResponseAction CalendarEventCreateFunction::Run() {
-  absl::optional<vivaldi::calendar::EventCreate::Params> params(
+  std::optional<vivaldi::calendar::EventCreate::Params> params(
       vivaldi::calendar::EventCreate::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -523,7 +523,7 @@ void CalendarEventCreateFunction::CreateEventComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarEventsCreateFunction::Run() {
-  absl::optional<vivaldi::calendar::EventsCreate::Params> params(
+  std::optional<vivaldi::calendar::EventsCreate::Params> params(
       vivaldi::calendar::EventsCreate::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -566,7 +566,7 @@ void CalendarEventsCreateFunction::CreateEventsComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
-  absl::optional<vivaldi::calendar::UpdateEvent::Params> params(
+  std::optional<vivaldi::calendar::UpdateEvent::Params> params(
       vivaldi::calendar::UpdateEvent::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -785,7 +785,7 @@ void CalendarUpdateEventFunction::UpdateEventComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarDeleteEventFunction::Run() {
-  absl::optional<vivaldi::calendar::DeleteEvent::Params> params(
+  std::optional<vivaldi::calendar::DeleteEvent::Params> params(
       vivaldi::calendar::DeleteEvent::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -818,7 +818,7 @@ void CalendarDeleteEventFunction::DeleteEventComplete(bool results) {
 
 ExtensionFunction::ResponseAction
 CalendarUpdateRecurrenceExceptionFunction::Run() {
-  absl::optional<vivaldi::calendar::UpdateRecurrenceException::Params> params(
+  std::optional<vivaldi::calendar::UpdateRecurrenceException::Params> params(
       vivaldi::calendar::UpdateRecurrenceException::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -891,7 +891,7 @@ void CalendarUpdateRecurrenceExceptionFunction::
 }
 
 ExtensionFunction::ResponseAction CalendarDeleteEventExceptionFunction::Run() {
-  absl::optional<vivaldi::calendar::DeleteEventException::Params> params(
+  std::optional<vivaldi::calendar::DeleteEventException::Params> params(
       vivaldi::calendar::DeleteEventException::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -952,7 +952,7 @@ vivaldi::calendar::Calendar CreateVivaldiCalendar(
 }
 
 ExtensionFunction::ResponseAction CalendarCreateFunction::Run() {
-  absl::optional<vivaldi::calendar::Create::Params> params(
+  std::optional<vivaldi::calendar::Create::Params> params(
       vivaldi::calendar::Create::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -1073,7 +1073,7 @@ void CalendarGetAllFunction::GetAllComplete(calendar::CalendarRows results) {
 }
 
 ExtensionFunction::ResponseAction CalendarUpdateFunction::Run() {
-  absl::optional<vivaldi::calendar::Update::Params> params(
+  std::optional<vivaldi::calendar::Update::Params> params(
       vivaldi::calendar::Update::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -1173,7 +1173,7 @@ void CalendarUpdateFunction::UpdateCalendarComplete(bool results) {
 }
 
 ExtensionFunction::ResponseAction CalendarDeleteFunction::Run() {
-  absl::optional<vivaldi::calendar::Delete::Params> params(
+  std::optional<vivaldi::calendar::Delete::Params> params(
       vivaldi::calendar::Delete::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -1228,7 +1228,7 @@ void CalendarGetAllEventTypesFunction::GetAllEventTypesComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarEventTypeCreateFunction::Run() {
-  absl::optional<vivaldi::calendar::EventTypeCreate::Params> params(
+  std::optional<vivaldi::calendar::EventTypeCreate::Params> params(
       vivaldi::calendar::EventTypeCreate::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -1267,7 +1267,7 @@ void CalendarEventTypeCreateFunction::CreateEventTypeComplete(bool results) {
 }
 
 ExtensionFunction::ResponseAction CalendarEventTypeUpdateFunction::Run() {
-  absl::optional<vivaldi::calendar::EventTypeUpdate::Params> params(
+  std::optional<vivaldi::calendar::EventTypeUpdate::Params> params(
       vivaldi::calendar::EventTypeUpdate::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -1319,7 +1319,7 @@ void CalendarEventTypeUpdateFunction::UpdateEventTypeComplete(bool results) {
 }
 
 ExtensionFunction::ResponseAction CalendarDeleteEventTypeFunction::Run() {
-  absl::optional<vivaldi::calendar::DeleteEventType::Params> params(
+  std::optional<vivaldi::calendar::DeleteEventType::Params> params(
       vivaldi::calendar::DeleteEventType::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -1351,7 +1351,7 @@ void CalendarDeleteEventTypeFunction::DeleteEventTypeComplete(bool result) {
 }
 
 ExtensionFunction::ResponseAction CalendarCreateEventExceptionFunction::Run() {
-  absl::optional<vivaldi::calendar::CreateEventException::Params> params(
+  std::optional<vivaldi::calendar::CreateEventException::Params> params(
       vivaldi::calendar::CreateEventException::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -1428,7 +1428,7 @@ void CalendarGetAllNotificationsFunction::GetAllNotificationsComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarCreateNotificationFunction::Run() {
-  absl::optional<vivaldi::calendar::CreateNotification::Params> params(
+  std::optional<vivaldi::calendar::CreateNotification::Params> params(
       vivaldi::calendar::CreateNotification::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -1483,7 +1483,7 @@ void CalendarCreateNotificationFunction::CreateNotificationComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarUpdateNotificationFunction::Run() {
-  absl::optional<vivaldi::calendar::UpdateNotification::Params> params(
+  std::optional<vivaldi::calendar::UpdateNotification::Params> params(
       vivaldi::calendar::UpdateNotification::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -1553,7 +1553,7 @@ void CalendarUpdateNotificationFunction::UpdateNotificationComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarDeleteNotificationFunction::Run() {
-  absl::optional<vivaldi::calendar::DeleteNotification::Params> params(
+  std::optional<vivaldi::calendar::DeleteNotification::Params> params(
       vivaldi::calendar::DeleteNotification::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -1588,7 +1588,7 @@ void CalendarDeleteNotificationFunction::DeleteNotificationComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarCreateInviteFunction::Run() {
-  absl::optional<vivaldi::calendar::CreateInvite::Params> params(
+  std::optional<vivaldi::calendar::CreateInvite::Params> params(
       vivaldi::calendar::CreateInvite::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -1635,7 +1635,7 @@ void CalendarCreateInviteFunction::CreateInviteComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarDeleteInviteFunction::Run() {
-  absl::optional<vivaldi::calendar::DeleteNotification::Params> params(
+  std::optional<vivaldi::calendar::DeleteNotification::Params> params(
       vivaldi::calendar::DeleteNotification::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -1667,7 +1667,7 @@ void CalendarDeleteInviteFunction::DeleteInviteComplete(bool results) {
 }
 
 ExtensionFunction::ResponseAction CalendarUpdateInviteFunction::Run() {
-  absl::optional<vivaldi::calendar::UpdateInvite::Params> params(
+  std::optional<vivaldi::calendar::UpdateInvite::Params> params(
       vivaldi::calendar::UpdateInvite::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -1732,7 +1732,7 @@ void CalendarUpdateInviteFunction::UpdateInviteComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarCreateAccountFunction::Run() {
-  absl::optional<vivaldi::calendar::CreateAccount::Params> params(
+  std::optional<vivaldi::calendar::CreateAccount::Params> params(
       vivaldi::calendar::CreateAccount::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -1763,13 +1763,13 @@ void CalendarCreateAccountFunction::CreateAccountComplete(
   } else {
     vivaldi::calendar::Account account = GetAccountType(results.createdRow);
     Respond(ArgumentList(
-        extensions::vivaldi::calendar::CreateAccount::Results::Create(account,
-                                                                      true)));
+        extensions::vivaldi::calendar::CreateAccount::Results::Create(
+            account)));
   }
 }
 
 ExtensionFunction::ResponseAction CalendarDeleteAccountFunction::Run() {
-  absl::optional<vivaldi::calendar::DeleteAccount::Params> params(
+  std::optional<vivaldi::calendar::DeleteAccount::Params> params(
       vivaldi::calendar::DeleteAccount::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -1803,7 +1803,7 @@ void CalendarDeleteAccountFunction::DeleteAccountComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarUpdateAccountFunction::Run() {
-  absl::optional<vivaldi::calendar::UpdateAccount::Params> params(
+  std::optional<vivaldi::calendar::UpdateAccount::Params> params(
       vivaldi::calendar::UpdateAccount::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -1864,8 +1864,8 @@ void CalendarUpdateAccountFunction::UpdateAccountComplete(
   } else {
     vivaldi::calendar::Account account = GetAccountType(results.updatedRow);
     Respond(ArgumentList(
-        extensions::vivaldi::calendar::CreateAccount::Results::Create(account,
-                                                                      true)));
+        extensions::vivaldi::calendar::UpdateAccount::Results::Create(
+            account)));
   }
 }
 
@@ -1892,7 +1892,7 @@ void CalendarGetAllAccountsFunction::GetAllAccountsComplete(
       vivaldi::calendar::GetAllAccounts::Results::Create(accountList)));
 }
 ExtensionFunction::ResponseAction CalendarCreateEventTemplateFunction::Run() {
-  absl::optional<vivaldi::calendar::CreateEventTemplate::Params> params(
+  std::optional<vivaldi::calendar::CreateEventTemplate::Params> params(
       vivaldi::calendar::CreateEventTemplate::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -1951,7 +1951,7 @@ void CalendarGetAllEventTemplatesFunction::GetAllEventTemplatesComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarUpdateEventTemplateFunction::Run() {
-  absl::optional<vivaldi::calendar::UpdateEventTemplate::Params> params(
+  std::optional<vivaldi::calendar::UpdateEventTemplate::Params> params(
       vivaldi::calendar::UpdateEventTemplate::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -1997,7 +1997,7 @@ void CalendarUpdateEventTemplateFunction::UpdateEventTemplateComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarDeleteEventTemplateFunction::Run() {
-  absl::optional<vivaldi::calendar::DeleteEventTemplate::Params> params(
+  std::optional<vivaldi::calendar::DeleteEventTemplate::Params> params(
       vivaldi::calendar::DeleteEventTemplate::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);

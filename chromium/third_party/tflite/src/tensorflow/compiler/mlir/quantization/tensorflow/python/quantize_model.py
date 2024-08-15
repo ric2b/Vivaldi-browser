@@ -19,6 +19,7 @@ from typing import Mapping, Optional
 
 from absl import logging
 
+from tensorflow.compiler.mlir.quantization.stablehlo import quantization_config_pb2 as stablehlo_quant_config_pb2
 from tensorflow.compiler.mlir.quantization.tensorflow import quantization_options_pb2 as quant_opts_pb2
 from tensorflow.compiler.mlir.quantization.tensorflow.python import py_function_lib
 from tensorflow.compiler.mlir.quantization.tensorflow.python import pywrap_quantize_model
@@ -114,11 +115,6 @@ def _run_static_range_qat(
   """
   logging.info('Running static-range quantization for QAT model.')
 
-  loader = saved_model_loader.SavedModelLoader(src_saved_model_path)
-  function_aliases = loader.get_meta_graph_def_from_tags(
-      quant_opts.tags
-  ).meta_info_def.function_aliases
-
   pywrap_quantize_model.quantize_qat_model(
       src_saved_model_path,
       dst_saved_model_path,
@@ -127,7 +123,6 @@ def _run_static_range_qat(
       signature_def_map_serialized=_serialize_signature_def_map(
           signature_def_map
       ),
-      function_aliases=dict(function_aliases),
       py_function_library=py_function_lib.PyFunctionLibrary(),
   )
 
@@ -159,11 +154,6 @@ def _run_static_range_ptq(
     ValueError if the graph doesn't contain a valid signature.
   """
   logging.info('Running static-range post-training quantization.')
-
-  loader = saved_model_loader.SavedModelLoader(src_saved_model_path)
-  function_aliases = loader.get_meta_graph_def_from_tags(
-      quant_opts.tags
-  ).meta_info_def.function_aliases
 
   signature_def_map_serialized = _serialize_signature_def_map(signature_def_map)
 
@@ -197,7 +187,6 @@ def _run_static_range_ptq(
       quantization_options_serialized=quant_opts.SerializeToString(),
       signature_keys=list(quant_opts.signature_keys),
       signature_def_map_serialized=signature_def_map_serialized,
-      function_aliases=dict(function_aliases),
       py_function_library=py_function_lib.PyFunctionLibrary(),
       representative_dataset_file_map_serialized=dataset_file_map_serialized,
   )
@@ -322,12 +311,6 @@ def _dynamic_range_quantize(
   )
   logging.info('QuantizationOptions: \n%s', quantization_options)
 
-  loader = saved_model_loader.SavedModelLoader(src_saved_model_path)
-
-  function_aliases = loader.get_meta_graph_def_from_tags(
-      quantization_options.tags
-  ).meta_info_def.function_aliases
-
   signature_def_map = save_model.get_signatures_from_saved_model(
       src_saved_model_path,
       quantization_options.signature_keys,
@@ -343,7 +326,6 @@ def _dynamic_range_quantize(
       signature_def_map_serialized=_serialize_signature_def_map(
           signature_def_map
       ),
-      function_aliases=dict(function_aliases),
       py_function_library=py_function_lib.PyFunctionLibrary(),
   )
 
@@ -384,12 +366,6 @@ def _weight_only_quantize(
   )
   logging.info('QuantizationOptions: \n%s', quantization_options)
 
-  loader = saved_model_loader.SavedModelLoader(src_saved_model_path)
-
-  function_aliases = loader.get_meta_graph_def_from_tags(
-      quantization_options.tags
-  ).meta_info_def.function_aliases
-
   signature_def_map = save_model.get_signatures_from_saved_model(
       src_saved_model_path,
       list(quantization_options.signature_keys),
@@ -403,7 +379,6 @@ def _weight_only_quantize(
       signature_def_map_serialized=_serialize_signature_def_map(
           signature_def_map
       ),
-      function_aliases=dict(function_aliases),
       py_function_library=py_function_lib.PyFunctionLibrary(),
   )
 
@@ -674,7 +649,9 @@ def _populate_quantization_options_default_values(
         _DYNAMIC_RANGE_DEFAULT_MIN_NUM_ELEMENTS_FOR_WEIGHTS,
     )
 
-  # TODO: b/307900054 - Set the per-channel quantization by default.
+  if not quantization_options.HasField('enable_per_channel_quantization'):
+    quantization_options.enable_per_channel_quantization = False
+
   if quantization_options.enable_per_channel_quantization and not (
       (
           quantization_options.op_set == quant_opts_pb2.OpSet.UNIFORM_QUANTIZED
@@ -682,15 +659,16 @@ def _populate_quantization_options_default_values(
           == _PresetMethod.METHOD_STATIC_RANGE_WEIGHT_ONLY_INT8
       )
       or (
-          quantization_options.op_set == quant_opts_pb2.OpSet.XLA
+          quantization_options.op_set
+          in (quant_opts_pb2.OpSet.XLA, quant_opts_pb2.OpSet.STABLEHLO)
           and quantization_options.quantization_method.preset_method
           == _PresetMethod.METHOD_STATIC_RANGE_INT8
       )
   ):
     raise ValueError(
         'Currently, per-channel quantization is supported for Uniform Quantized'
-        ' opset, weight only quantization, or XLA opset with static range'
-        ' quantization.'
+        ' opset, weight only quantization, or XLA/StableHLO opset with static'
+        ' range quantization.'
     )
 
   if (
@@ -729,7 +707,7 @@ def _populate_quantization_options_default_values(
 
     if (
         quantization_options.debugger_options.debugger_type
-        == quant_opts_pb2.DebuggerOptions.DebuggerType.DEBUGGER_TYPE_UNSPECIFIED
+        == stablehlo_quant_config_pb2.DebuggerConfig.DebuggerType.DEBUGGER_TYPE_UNSPECIFIED
     ):
       raise ValueError(
           'Debugger is enabled but debugger type was not specified.'
@@ -737,7 +715,7 @@ def _populate_quantization_options_default_values(
 
     if (
         quantization_options.debugger_options.debugger_type
-        == quant_opts_pb2.DebuggerOptions.DebuggerType.DEBUGGER_TYPE_WHOLE_MODEL
+        == stablehlo_quant_config_pb2.DebuggerConfig.DebuggerType.DEBUGGER_TYPE_WHOLE_MODEL
         and not quantization_options.debugger_options.unquantized_dump_model_path
     ):
       raise ValueError(

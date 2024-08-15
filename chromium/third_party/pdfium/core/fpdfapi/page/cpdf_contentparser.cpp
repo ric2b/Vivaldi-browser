@@ -18,14 +18,14 @@
 #include "core/fpdfapi/parser/cpdf_dictionary.h"
 #include "core/fpdfapi/parser/cpdf_stream.h"
 #include "core/fpdfapi/parser/cpdf_stream_acc.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
 #include "core/fxcrt/fixed_size_data_vector.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/pauseindicator_iface.h"
 #include "core/fxcrt/span_util.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
-#include "third_party/base/check.h"
-#include "third_party/base/check_op.h"
 
 CPDF_ContentParser::CPDF_ContentParser(CPDF_Page* pPage)
     : m_CurrentStage(Stage::kGetContent), m_pPageObjectHolder(pPage) {
@@ -118,6 +118,10 @@ CPDF_ContentParser::CPDF_ContentParser(
 
 CPDF_ContentParser::~CPDF_ContentParser() = default;
 
+CPDF_PageObjectHolder::CTMMap CPDF_ContentParser::TakeAllCTMs() {
+  return m_pParser ? m_pParser->TakeAllCTMs() : CPDF_PageObjectHolder::CTMMap();
+}
+
 // Returning |true| means that there is more content to be processed and
 // Continue() should be called again. Returning |false| means that we've
 // completed the parse and Continue() is complete.
@@ -181,16 +185,15 @@ CPDF_ContentParser::Stage CPDF_ContentParser::PrepareContent() {
   const size_t buffer_size = safe_size.ValueOrDie();
   auto buffer = FixedSizeDataVector<uint8_t>::TryZeroed(buffer_size);
   if (buffer.empty()) {
-    m_Data.emplace<pdfium::span<const uint8_t>>();
+    m_Data.emplace<pdfium::raw_span<const uint8_t>>();
     return Stage::kComplete;
   }
 
-  size_t pos = 0;
   auto data_span = buffer.span();
   for (const auto& stream : m_StreamArray) {
-    fxcrt::spancpy(data_span.subspan(pos), stream->GetSpan());
-    pos += stream->GetSize();
-    data_span[pos++] = ' ';
+    data_span = fxcrt::spancpy(data_span, stream->GetSpan());
+    data_span.front() = ' ';
+    data_span = data_span.subspan(1);
   }
   m_StreamArray.clear();
   m_Data = std::move(buffer);
@@ -200,7 +203,6 @@ CPDF_ContentParser::Stage CPDF_ContentParser::PrepareContent() {
 CPDF_ContentParser::Stage CPDF_ContentParser::Parse() {
   if (!m_pParser) {
     m_RecursionState.parsed_set.clear();
-    m_RecursionState.form_count = 0;
     m_pParser = std::make_unique<CPDF_StreamContentParser>(
         m_pPageObjectHolder->GetDocument(),
         m_pPageObjectHolder->GetMutablePageResources(), nullptr, nullptr,
@@ -276,5 +278,5 @@ pdfium::span<const uint8_t> CPDF_ContentParser::GetData() const {
   if (is_owned()) {
     return absl::get<FixedSizeDataVector<uint8_t>>(m_Data).span();
   }
-  return absl::get<pdfium::span<const uint8_t>>(m_Data);
+  return absl::get<pdfium::raw_span<const uint8_t>>(m_Data);
 }

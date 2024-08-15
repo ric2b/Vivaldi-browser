@@ -21,6 +21,7 @@ const kCollectiveOps = [
   { op: 'fwidthCoarse', stage: 'fragment' },
   { op: 'fwidthFine', stage: 'fragment' },
   { op: 'storageBarrier', stage: 'compute' },
+  { op: 'textureBarrier', stage: 'compute' },
   { op: 'workgroupBarrier', stage: 'compute' },
   { op: 'workgroupUniformLoad', stage: 'compute' },
 ];
@@ -43,6 +44,8 @@ const kConditions = [
   { cond: 'nonuniform_and2', expectation: false },
   { cond: 'uniform_func_var', expectation: true },
   { cond: 'nonuniform_func_var', expectation: false },
+  { cond: 'storage_texture_ro', expectation: true },
+  { cond: 'storage_texture_rw', expectation: false },
 ];
 
 function generateCondition(condition: string): string {
@@ -98,6 +101,12 @@ function generateCondition(condition: string): string {
     case 'nonuniform_func_var': {
       return `n_f == 0`;
     }
+    case 'storage_texture_ro': {
+      return `textureLoad(ro_storage_texture, vec2()).x == 0`;
+    }
+    case 'storage_texture_rw': {
+      return `textureLoad(rw_storage_texture, vec2()).x == 0`;
+    }
     default: {
       unreachable(`Unhandled condition`);
     }
@@ -116,6 +125,7 @@ function generateOp(op: string): string {
       return `let x = ${op}(tex_depth, s_comp, vec2(0,0), 0);\n`;
     }
     case 'storageBarrier':
+    case 'textureBarrier':
     case 'workgroupBarrier': {
       return `${op}();\n`;
     }
@@ -181,12 +191,16 @@ g.test('basics')
   .desc(`Test collective operations in simple uniform or non-uniform control flow.`)
   .params(u =>
     u
-      .combineWithParams(kCollectiveOps)
-      .combineWithParams(kConditions)
       .combine('statement', ['if', 'for', 'while', 'switch'] as const)
       .beginSubcases()
+      .combineWithParams(kConditions)
+      .combineWithParams(kCollectiveOps)
   )
   .fn(t => {
+    if (t.params.op === 'textureBarrier' || t.params.cond.startsWith('storage_texture')) {
+      t.skipIfLanguageFeatureNotSupported('readonly_and_readwrite_storage_textures');
+    }
+
     let code = `
  @group(0) @binding(0) var s : sampler;
  @group(0) @binding(1) var s_comp : sampler_comparison;
@@ -196,6 +210,9 @@ g.test('basics')
  @group(1) @binding(0) var<storage, read> ro_buffer : array<f32, 4>;
  @group(1) @binding(1) var<storage, read_write> rw_buffer : array<f32, 4>;
  @group(1) @binding(2) var<uniform> uniform_buffer : vec4<f32>;
+
+ @group(2) @binding(0) var ro_storage_texture : texture_storage_2d<rgba8unorm, read>;
+ @group(2) @binding(1) var rw_storage_texture : texture_storage_2d<rgba8unorm, read_write>;
 
  var<private> priv_var : array<f32, 4> = array(0,0,0,0);
 
@@ -2200,6 +2217,7 @@ g.test('binary_expressions')
     u
       .combine('e1', keysOf(kExpressionCases))
       .combine('e2', keysOf(kExpressionCases))
+      .beginSubcases()
       .combine('op', keysOf(kBinOps))
   )
   .fn(t => {

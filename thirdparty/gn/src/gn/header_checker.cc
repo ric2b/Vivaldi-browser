@@ -17,6 +17,7 @@
 #include "gn/err.h"
 #include "gn/filesystem_utils.h"
 #include "gn/scheduler.h"
+#include "gn/swift_values.h"
 #include "gn/target.h"
 #include "gn/trace.h"
 #include "util/worker_pool.h"
@@ -214,22 +215,33 @@ void HeaderChecker::AddTargetToFileMap(const Target* target, FileMap* dest) {
     files_to_public[source].is_public = default_public;
   }
 
-  // If the target includes some .swift files, it may also use a header file
-  // to provide bridging Objective-C code. This header needs to be considered
-  // as a source file with the default visibility.
-  if (target->has_swift_values()) {
-    const SourceFile& bridge_header = target->swift_values().bridge_header();
-    if (!bridge_header.is_null()) {
-      files_to_public[bridge_header].is_public = default_public;
-    }
-  }
-
   // Add in the public files, forcing them to public. This may overwrite some
   // entries, and it may add new ones.
   if (default_public)  // List only used when default is not public.
     DCHECK(target->public_headers().empty());
   for (const auto& source : target->public_headers()) {
     files_to_public[source].is_public = true;
+  }
+
+  // If target generates a swiftmodule, then
+  //  - it may use a bridge header which has default visibility
+  //  - it may generate public header which must be considered public
+  if (target->builds_swift_module()) {
+    const SourceFile& bridge_header = target->swift_values().bridge_header();
+    if (!bridge_header.is_null()) {
+      files_to_public[bridge_header].is_public = default_public;
+    }
+
+    std::vector<SourceFile> outputs;
+    target->swift_values().GetOutputsAsSourceFiles(target, &outputs);
+
+    for (const SourceFile& output : outputs) {
+      if (output.GetType() == SourceFile::SOURCE_H) {
+        PublicGeneratedPair* pair = &files_to_public[output];
+        pair->is_public = true;
+        pair->is_generated = true;
+      }
+    }
   }
 
   // Add in outputs from actions. These are treated as public (since if other
@@ -263,11 +275,11 @@ SourceFile HeaderChecker::SourceFileForInclude(
 
   Value relative_file_value(nullptr, std::string(include.contents));
 
-  auto find_predicate = [relative_file_value, err, this](const SourceDir& dir) -> bool {
-        SourceFile include_file =
-            dir.ResolveRelativeFile(relative_file_value, err);
-        return file_map_.find(include_file) != file_map_.end();
-      };
+  auto find_predicate = [relative_file_value, err,
+                         this](const SourceDir& dir) -> bool {
+    SourceFile include_file = dir.ResolveRelativeFile(relative_file_value, err);
+    return file_map_.find(include_file) != file_map_.end();
+  };
   if (!include.system_style_include) {
     const SourceDir& file_dir = source_file.dir();
     if (find_predicate(file_dir)) {
@@ -275,8 +287,8 @@ SourceFile HeaderChecker::SourceFileForInclude(
     }
   }
 
-  auto it = std::find_if(
-      include_dirs.begin(), include_dirs.end(), find_predicate);
+  auto it =
+      std::find_if(include_dirs.begin(), include_dirs.end(), find_predicate);
 
   if (it != include_dirs.end())
     return it->ResolveRelativeFile(relative_file_value, err);
@@ -335,10 +347,8 @@ bool HeaderChecker::CheckFile(const Target* from_target,
       continue;
 
     Err err;
-    SourceFile included_file = SourceFileForInclude(include,
-                                                    include_dirs,
-                                                    input_file,
-                                                    &err);
+    SourceFile included_file =
+        SourceFileForInclude(include, include_dirs, input_file, &err);
     if (!included_file.is_null()) {
       CheckInclude(from_target, input_file, included_file, include.location,
                    &no_dependency_cache, errors);

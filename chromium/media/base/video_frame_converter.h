@@ -30,16 +30,24 @@ class MEDIA_EXPORT VideoFrameConverter {
   //   * PIXEL_FORMAT_ARGB
   //   * PIXEL_FORMAT_I420
   //   * PIXEL_FORMAT_I420A
+  //   * PIXEL_FORMAT_I444
+  //   * PIXEL_FORMAT_I444A
   //   * PIXEL_FORMAT_NV12
   //   * PIXEL_FORMAT_NV12A
   //
   // Output formats:
   //   * PIXEL_FORMAT_I420
   //   * PIXEL_FORMAT_I420A
+  //   * PIXEL_FORMAT_I444
+  //   * PIXEL_FORMAT_I444A
   //   * PIXEL_FORMAT_NV12
   //   * PIXEL_FORMAT_NV12A
   EncoderStatus ConvertAndScale(const VideoFrame& src_frame,
                                 VideoFrame& dest_frame);
+
+  size_t get_pool_size_for_testing() const {
+    return frame_pool_->get_pool_size_for_testing();
+  }
 
  private:
   // Creates a temporary frame backed by `frame_pool_`.

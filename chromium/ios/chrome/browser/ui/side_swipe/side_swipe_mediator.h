@@ -10,9 +10,12 @@
 class FullscreenController;
 @protocol SideSwipeToolbarInteracting;
 @protocol SideSwipeToolbarSnapshotProviding;
-class SnapshotBrowserAgent;
 @protocol TabStripHighlighting;
 class WebStateList;
+
+namespace feature_engagement {
+class Tracker;
+}  // namespace feature_engagement
 
 // Notification sent when the user starts a side swipe (on tablet).
 extern NSString* const kSideSwipeWillStartNotification;
@@ -67,10 +70,11 @@ extern NSString* const kSideSwipeDidStopNotification;
 
 @property(nonatomic, assign) FullscreenController* fullscreenController;
 
+@property(nonatomic) feature_engagement::Tracker* engagementTracker;
+
 // Initializer.
 - (instancetype)
     initWithFullscreenController:(FullscreenController*)fullscreenController
-            snapshotBrowserAgent:(SnapshotBrowserAgent*)snapshotBrowserAgent
                     webStateList:(WebStateList*)webStateList;
 
 // Disconnects the mediator.

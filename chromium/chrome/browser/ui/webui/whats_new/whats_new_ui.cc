@@ -47,8 +47,7 @@ void CreateAndAddWhatsNewUIHtmlSource(Profile* profile) {
   // Allow embedding of iframe from chrome.com
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ChildSrc,
-      base::StringPrintf("child-src chrome://webui-test https: %s;",
-                         whats_new::kChromeWhatsNewURLShort));
+      "child-src chrome://webui-test https://www.google.com/;");
 }
 
 }  // namespace
@@ -89,11 +88,9 @@ void WhatsNewUI::CreateBrowserCommandHandler(
     mojo::PendingReceiver<browser_command::mojom::CommandHandler>
         pending_handler) {
   std::vector<browser_command::mojom::Command> supported_commands = {
-      browser_command::mojom::Command::kOpenPerformanceSettings,
-      browser_command::mojom::Command::kOpenNTPAndStartCustomizeChromeTutorial,
-      browser_command::mojom::Command::kOpenPasswordManager,
-      browser_command::mojom::Command::kStartPasswordManagerTutorial,
       browser_command::mojom::Command::kStartSavedTabGroupTutorial,
+      browser_command::mojom::Command::kOpenAISettings,
+      browser_command::mojom::Command::kOpenSafetyCheckFromWhatsNew,
   };
   command_handler_ = std::make_unique<BrowserCommandHandler>(
       std::move(pending_handler), profile_, supported_commands);

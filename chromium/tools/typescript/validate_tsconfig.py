@@ -11,6 +11,9 @@
 # configurations proliferating in the codebase.
 
 import os
+import pathlib
+
+from path_utils import isInAshFolder, getTargetPath
 
 _CWD = os.getcwd().replace('\\', '/')
 _HERE_DIR = os.path.dirname(__file__)
@@ -120,11 +123,13 @@ def validateJavaScriptAllowed(source_dir, out_dir, is_ios):
       # TODO(b/314827247): Migrate media_app_ui to TypeScript and remove
       # exception.
       'ash/webui/media_app_ui/',
+      # TODO(b/313562946): Migrate help_app_ui mojo pipeline to TypeScript and
+      # remove.
+      'ash/webui/help_app_ui/',
       # TODO(b/315002705): Migrate shimless_rma to TypeScript and remove
       # exception.
       'ash/webui/shimless_rma/',
       'ash/webui/shortcut_customization_ui/',
-      'ash/webui/sample_system_web_app_ui/',
       # TODO(b/267329383): Migrate A11y to TypeScript.
       'chrome/browser/resources/chromeos/accessibility',
       'ui/file_manager/',
@@ -142,6 +147,9 @@ def validateJavaScriptAllowed(source_dir, out_dir, is_ios):
       # TODO(crbug.com/1511758): Migrate to TypeScript.
       'chrome/browser/resources/device_log',
       'chrome/test/data/webui',
+      # TODO(crbug.com/1337318): Migrate bluetooth-internals to TypeScript and
+      # remove exception.
+      'chrome/test/data/webui/bluetooth_internals',
       'chrome/test/data/webui/chromeos',
       'chrome/test/data/webui/chromeos/ash_common',
       'chrome/test/data/webui/cr_components/chromeos',
@@ -168,44 +176,6 @@ def validateJavaScriptAllowed(source_dir, out_dir, is_ios):
       'code should be added in TypeScript.'
 
 
-def getTargetPath(gen_dir, root_gen_dir):
-  root_gen_dir_from_build = os.path.normpath(os.path.join(
-      gen_dir, root_gen_dir)).replace('\\', '/')
-  return os.path.relpath(gen_dir, root_gen_dir_from_build).replace('\\', '/')
-
-
-def isInAshFolder(path):
-  # TODO (https://crbug.com/1506296): Organize Ash WebUI code under fewer
-  # directories.
-  ash_folders = [
-      # Source code folders
-      'ash/webui',
-      'chrome/browser/resources/ash',
-      'chrome/browser/resources/chromeos',
-      'chrome/browser/resources/nearby_share',
-      'ui/file_manager',
-
-      # Test folders
-      'chrome/test/data/webui/chromeos',
-      'chrome/test/data/webui/cr_components/chromeos',
-      'chrome/test/data/webui/settings/chromeos',
-  ]
-  return any(path.startswith(folder) for folder in ash_folders)
-
-
-def isDependencyAllowed(is_ash_target, raw_dep, target_path):
-  is_ash_dep = isInAshFolder(raw_dep[2:])
-  if not is_ash_dep or is_ash_target:
-    return True
-
-  exceptions = [
-      # TODO(https://crbug.com/1506299): Remove this incorrect dependency
-      'chrome/browser/resources/settings',
-  ]
-
-  return target_path in exceptions
-
-
 def isMappingAllowed(is_ash_target, target_path, mapping_path):
   if is_ash_target:
     return True
@@ -219,8 +189,6 @@ def isUnsupportedJsTarget(gen_dir, root_gen_dir):
   target_path = getTargetPath(gen_dir, root_gen_dir)
   exceptions = [
       'ash/webui/color_internals/resources',
-      'ash/webui/sample_system_web_app_ui/resources/trusted',
-      'ash/webui/sample_system_web_app_ui/resources/untrusted',
       'chrome/browser/resources/chromeos/accessibility/select_to_speak',
   ]
   return target_path in exceptions
@@ -241,7 +209,7 @@ def validateRootDir(root_dir, gen_dir, root_gen_dir, is_ios):
   # unsupported behavior of setting the root_dir to src/.
   # TODO (https://www.crbug.com/1412158): Make iOS TypeScript build tools use
   # ts_library in a supported way, or change them to not rely on ts_library.
-  if (is_ios and (target_path.startswith('ios') or '/ios/' in target_path)):
+  if (is_ios and 'ios' in pathlib.Path(target_path).parts):
     return True, None
 
   # Legacy cases supported for backward-compatibility. Do not add new targets
@@ -249,15 +217,6 @@ def validateRootDir(root_dir, gen_dir, root_gen_dir, is_ios):
   exceptions = [
       # ChromeOS cases
       'ash/webui/color_internals/mojom',
-      'ash/webui/sample_system_web_app_ui/mojom',
-      # TODO(b/315150183): Migrate A11y code to use path mappings.
-      'chrome/browser/resources/chromeos/accessibility/accessibility_common',
-      'chrome/browser/resources/chromeos/accessibility/braille_ime',
-      'chrome/browser/resources/chromeos/accessibility/chromevox',
-      'chrome/browser/resources/chromeos/accessibility/common',
-      'chrome/browser/resources/chromeos/accessibility/enhanced_network_tts',
-      'chrome/browser/resources/chromeos/accessibility/select_to_speak',
-      'chrome/browser/resources/chromeos/accessibility/switch_access',
   ]
 
   if target_path in exceptions:
@@ -277,3 +236,48 @@ def validateRootDir(root_dir, gen_dir, root_gen_dir, is_ios):
 
   return False, f'Error: root_dir ({root_dir}) should be within {gen_dir} ' + \
       f'or {target_path_src}.'
+
+
+def validateDefinitionDeps(definitions_files, target_path, gen_dir,
+                           root_gen_dir, definitions):
+  # Root gen dir relative to the current working directory (essentially 'gen')
+  gen_dir_from_build = os.path.normpath(os.path.join(gen_dir,
+                                                     root_gen_dir)).replace(
+                                                         '\\', '/')
+
+  def getPathFromCwd(exception):
+    return os.path.relpath(os.path.join(_SRC_DIR, exception),
+                           _CWD).replace('\\', '/')
+
+  # TODO(https://crbug.com/326005022): Determine if the following are actually
+  # safe for computation of gn input values.
+  exceptions_list = [
+      'third_party/material_web_components/',
+      'third_party/node/node_modules/',
+      'third_party/polymer/v3_0/',
+      'tools/typescript/tests/',
+  ]
+  exceptions = [getPathFromCwd(e) for e in exceptions_list]
+  definitions_normalized = [d.replace('\\', '/') for d in definitions]
+
+  missing_inputs = []
+  for f in definitions_files:
+    # File path relative to the current working directory.
+    f_from_cwd = os.path.relpath(f, _CWD).replace('\\', '/')
+    is_gen_file = f_from_cwd.startswith(gen_dir_from_build)
+    f_from_gen = os.path.relpath(f, gen_dir).replace('\\', '/')
+    if not is_gen_file and f_from_gen not in definitions_normalized and \
+        not any(f_from_cwd.startswith(exception) for exception in exceptions):
+      missing_inputs.append(
+          os.path.relpath(f_from_cwd, _SRC_DIR).replace('\\', '/'))
+
+  if not missing_inputs:
+    return True, None
+
+  errorMessage = 'Undeclared dependencies to definition files encountered ' + \
+                 f'while building {target_path}. Please list the following ' + \
+                 'file(s) in |definitions|:\n'
+  for missing_input in missing_inputs:
+    errorMessage += f'//{missing_input}\n'
+
+  return False, errorMessage

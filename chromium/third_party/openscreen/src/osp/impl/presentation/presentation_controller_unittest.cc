@@ -112,11 +112,11 @@ class ControllerTest : public ::testing::Test {
   }
 
   void ExpectAvailabilityRequest(
-      msgs::PresentationUrlAvailabilityRequest* request) {
+      msgs::PresentationUrlAvailabilityRequest& request) {
     ssize_t decode_result = -1;
     msgs::Type msg_type;
     EXPECT_CALL(mock_callback_, OnStreamMessage(_, _, _, _, _, _))
-        .WillOnce(Invoke([request, &msg_type, &decode_result](
+        .WillOnce(Invoke([&request, &msg_type, &decode_result](
                              uint64_t endpoint_id, uint64_t cid,
                              msgs::Type message_type, const uint8_t* buffer,
                              size_t buffer_size, Clock::time_point now) {
@@ -199,12 +199,12 @@ class ControllerTest : public ::testing::Test {
   }
 
   void ExpectCloseRequest(MockMessageCallback* mock_callback,
-                          msgs::PresentationConnectionCloseRequest* request,
+                          msgs::PresentationConnectionCloseRequest& request,
                           Connection* connection) {
     ssize_t decode_result = -1;
     msgs::Type msg_type;
     EXPECT_CALL(*mock_callback, OnStreamMessage(_, _, _, _, _, _))
-        .WillOnce(Invoke([request, &msg_type, &decode_result](
+        .WillOnce(Invoke([&request, &msg_type, &decode_result](
                              uint64_t endpoint_id, uint64_t cid,
                              msgs::Type message_type, const uint8_t* buffer,
                              size_t buffer_size, Clock::time_point now) {
@@ -267,7 +267,7 @@ class ControllerTest : public ::testing::Test {
                              size_t buffer_size, Clock::time_point now) {
           msg_type = message_type;
           ssize_t result = msgs::DecodePresentationStartRequest(
-              buffer, buffer_size, &request);
+              buffer, buffer_size, request);
           return result;
         }));
     Controller::ConnectRequest connect_request = controller_->StartPresentation(
@@ -344,7 +344,7 @@ TEST_F(ControllerTest, ReceiverAvailable) {
       controller_->RegisterReceiverWatch({kTestUrl}, &mock_receiver_observer_);
 
   msgs::PresentationUrlAvailabilityRequest request;
-  ExpectAvailabilityRequest(&request);
+  ExpectAvailabilityRequest(request);
 
   msgs::PresentationUrlAvailabilityResponse response;
   response.request_id = request.request_id;
@@ -365,7 +365,7 @@ TEST_F(ControllerTest, ReceiverWatchCancel) {
       controller_->RegisterReceiverWatch({kTestUrl}, &mock_receiver_observer_);
 
   msgs::PresentationUrlAvailabilityRequest request;
-  ExpectAvailabilityRequest(&request);
+  ExpectAvailabilityRequest(request);
 
   msgs::PresentationUrlAvailabilityResponse response;
   response.request_id = request.request_id;
@@ -415,10 +415,11 @@ TEST_F(ControllerTest, TerminatePresentationFromController) {
                            size_t buffer_size, Clock::time_point now) {
         msg_type = message_type;
         ssize_t result = msgs::DecodePresentationTerminationRequest(
-            buffer, buffer_size, &termination_request);
+            buffer, buffer_size, termination_request);
         return result;
       }));
-  connection->Terminate(TerminationReason::kControllerTerminateCalled);
+  connection->Terminate(TerminationSource::kController,
+                        TerminationReason::kApplicationTerminated);
   quic_bridge_.RunTasksUntilIdle();
 
   ASSERT_EQ(msgs::Type::kPresentationTerminationRequest, msg_type);
@@ -441,8 +442,9 @@ TEST_F(ControllerTest, TerminatePresentationFromReceiver) {
 
   msgs::PresentationTerminationEvent termination_event;
   termination_event.presentation_id = connection->presentation_info().id;
+  termination_event.source = msgs::PresentationTerminationSource::kReceiver;
   termination_event.reason =
-      msgs::PresentationTerminationEvent_reason::kReceiverCalledTerminate;
+      msgs::PresentationTerminationReason::kApplicationRequest;
   SendTerminationEvent(termination_event);
 
   EXPECT_CALL(mock_connection_delegate, OnTerminated());
@@ -459,7 +461,7 @@ TEST_F(ControllerTest, CloseConnection) {
       quic_bridge_.receiver_demuxer->SetDefaultMessageTypeWatch(
           msgs::Type::kPresentationConnectionCloseRequest, &mock_callback);
   msgs::PresentationConnectionCloseRequest close_request;
-  ExpectCloseRequest(&mock_callback, &close_request, connection.get());
+  ExpectCloseRequest(&mock_callback, close_request, connection.get());
 
   msgs::PresentationConnectionCloseResponse close_response;
   close_response.request_id = close_request.request_id;
@@ -479,7 +481,7 @@ TEST_F(ControllerTest, Reconnect) {
       quic_bridge_.receiver_demuxer->SetDefaultMessageTypeWatch(
           msgs::Type::kPresentationConnectionCloseRequest, &mock_callback);
   msgs::PresentationConnectionCloseRequest close_request;
-  ExpectCloseRequest(&mock_callback, &close_request, connection.get());
+  ExpectCloseRequest(&mock_callback, close_request, connection.get());
 
   msgs::PresentationConnectionCloseResponse close_response;
   close_response.request_id = close_request.request_id;
@@ -506,7 +508,7 @@ TEST_F(ControllerTest, Reconnect) {
                            size_t buffer_size, Clock::time_point now) {
         msg_type = message_type;
         decode_result = msgs::DecodePresentationConnectionOpenRequest(
-            buffer, buffer_size, &open_request);
+            buffer, buffer_size, open_request);
         return decode_result;
       }));
   quic_bridge_.RunTasksUntilIdle();
@@ -519,6 +521,7 @@ TEST_F(ControllerTest, Reconnect) {
   open_response.connection_id = 17;
   open_response.result =
       msgs::PresentationConnectionOpenResponse_result::kSuccess;
+  open_response.connection_count = 1ULL;
   SendOpenResponse(open_response);
 
   EXPECT_CALL(reconnect_delegate, OnConnectionMock(_))

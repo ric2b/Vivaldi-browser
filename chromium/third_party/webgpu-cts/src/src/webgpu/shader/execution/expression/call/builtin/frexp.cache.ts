@@ -1,5 +1,5 @@
 import { skipUndefined } from '../../../../../util/compare.js';
-import { Scalar, Vector, i32, toVector } from '../../../../../util/conversion.js';
+import { ScalarValue, VectorValue, i32, toVector } from '../../../../../util/conversion.js';
 import { FP } from '../../../../../util/floating_point.js';
 import { frexp } from '../../../../../util/math.js';
 import { Case } from '../../case.js';
@@ -8,8 +8,8 @@ import { makeCaseCache } from '../../case_cache.js';
 /* @returns a fract Case for a given scalar or vector input */
 function makeCaseFract(v: number | readonly number[], trait: 'f32' | 'f16'): Case {
   const fp = FP[trait];
-  let toInput: (n: readonly number[]) => Scalar | Vector;
-  let toOutput: (n: readonly number[]) => Scalar | Vector;
+  let toInput: (n: readonly number[]) => ScalarValue | VectorValue;
+  let toOutput: (n: readonly number[]) => ScalarValue | VectorValue;
   if (v instanceof Array) {
     // Input is vector
     toInput = (n: readonly number[]) => toVector(n, fp.scalarBuilder);
@@ -36,8 +36,8 @@ function makeCaseFract(v: number | readonly number[], trait: 'f32' | 'f16'): Cas
 /* @returns an exp Case for a given scalar or vector input */
 function makeCaseExp(v: number | readonly number[], trait: 'f32' | 'f16'): Case {
   const fp = FP[trait];
-  let toInput: (n: readonly number[]) => Scalar | Vector;
-  let toOutput: (n: readonly number[]) => Scalar | Vector;
+  let toInput: (n: readonly number[]) => ScalarValue | VectorValue;
+  let toOutput: (n: readonly number[]) => ScalarValue | VectorValue;
   if (v instanceof Array) {
     // Input is vector
     toInput = (n: readonly number[]) => toVector(n, fp.scalarBuilder);

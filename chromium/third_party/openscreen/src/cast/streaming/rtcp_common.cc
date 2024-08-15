@@ -23,8 +23,8 @@ void RtcpCommonHeader::AppendFields(ByteBuffer& buffer) const {
   switch (packet_type) {
     case RtcpPacketType::kSenderReport:
     case RtcpPacketType::kReceiverReport:
-      OSP_DCHECK_LE(with.report_count,
-                    FieldBitmask<int>(kRtcpReportCountFieldNumBits));
+      OSP_CHECK_LE(with.report_count,
+                   FieldBitmask<int>(kRtcpReportCountFieldNumBits));
       byte0 |= with.report_count;
       break;
     case RtcpPacketType::kSourceDescription:
@@ -57,7 +57,7 @@ void RtcpCommonHeader::AppendFields(ByteBuffer& buffer) const {
   AppendField<uint8_t>(static_cast<uint8_t>(packet_type), buffer);
 
   // The size of the packet must be evenly divisible by the 32-bit word size.
-  OSP_DCHECK_EQ(0, payload_size % sizeof(uint32_t));
+  OSP_CHECK_EQ(0, payload_size % sizeof(uint32_t));
   AppendField<uint16_t>(payload_size / sizeof(uint32_t), buffer);
 }
 
@@ -121,13 +121,13 @@ void RtcpReportBlock::AppendFields(ByteBuffer& buffer) const {
   OSP_CHECK_GE(buffer.size(), kRtcpReportBlockSize);
 
   AppendField<uint32_t>(ssrc, buffer);
-  OSP_DCHECK_GE(packet_fraction_lost_numerator,
-                std::numeric_limits<uint8_t>::min());
-  OSP_DCHECK_LE(packet_fraction_lost_numerator,
-                std::numeric_limits<uint8_t>::max());
-  OSP_DCHECK_GE(cumulative_packets_lost, 0);
-  OSP_DCHECK_LE(cumulative_packets_lost,
-                FieldBitmask<int>(kRtcpCumulativePacketsFieldNumBits));
+  OSP_CHECK_GE(packet_fraction_lost_numerator,
+               std::numeric_limits<uint8_t>::min());
+  OSP_CHECK_LE(packet_fraction_lost_numerator,
+               std::numeric_limits<uint8_t>::max());
+  OSP_CHECK_GE(cumulative_packets_lost, 0);
+  OSP_CHECK_LE(cumulative_packets_lost,
+               FieldBitmask<int>(kRtcpCumulativePacketsFieldNumBits));
   AppendField<uint32_t>(
       (static_cast<int>(packet_fraction_lost_numerator)
        << kRtcpCumulativePacketsFieldNumBits) |
@@ -136,13 +136,13 @@ void RtcpReportBlock::AppendFields(ByteBuffer& buffer) const {
       buffer);
   AppendField<uint32_t>(extended_high_sequence_number, buffer);
   const int64_t jitter_ticks = jitter / RtpTimeDelta::FromTicks(1);
-  OSP_DCHECK_GE(jitter_ticks, 0);
-  OSP_DCHECK_LE(jitter_ticks, int64_t{std::numeric_limits<uint32_t>::max()});
+  OSP_CHECK_GE(jitter_ticks, 0);
+  OSP_CHECK_LE(jitter_ticks, int64_t{std::numeric_limits<uint32_t>::max()});
   AppendField<uint32_t>(jitter_ticks, buffer);
   AppendField<uint32_t>(last_status_report_id, buffer);
   const int64_t delay_ticks = delay_since_last_report.count();
-  OSP_DCHECK_GE(delay_ticks, 0);
-  OSP_DCHECK_LE(delay_ticks, int64_t{std::numeric_limits<uint32_t>::max()});
+  OSP_CHECK_GE(delay_ticks, 0);
+  OSP_CHECK_LE(delay_ticks, int64_t{std::numeric_limits<uint32_t>::max()});
   AppendField<uint32_t>(delay_ticks, buffer);
 }
 

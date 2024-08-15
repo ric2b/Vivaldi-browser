@@ -12,7 +12,7 @@
 namespace extensions {
 
 namespace {
-absl::optional<page_actions::Service::ScriptOverride>
+std::optional<page_actions::Service::ScriptOverride>
 FromVivaldiPageActionsScriptOverride(
     vivaldi::page_actions::ScriptOverride script_override) {
   switch (script_override) {
@@ -24,7 +24,7 @@ FromVivaldiPageActionsScriptOverride(
       return page_actions::Service::kDisabledOverride;
     default:
       NOTREACHED();
-      return absl::nullopt;
+      return std::nullopt;
   }
 }
 }  // namespace
@@ -138,7 +138,7 @@ PageActionsSetScriptOverrideForTabFunction::RunWithService(
     page_actions::Service* service) {
   namespace Results = vivaldi::page_actions::SetScriptOverrideForTab::Results;
   using vivaldi::page_actions::SetScriptOverrideForTab::Params;
-  absl::optional<Params> params(Params::Create(args()));
+  std::optional<Params> params(Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -160,7 +160,7 @@ PageActionsGetScriptOverridesForTabFunction::RunWithService(
     page_actions::Service* service) {
   namespace Results = vivaldi::page_actions::GetScriptOverridesForTab::Results;
   using vivaldi::page_actions::GetScriptOverridesForTab::Params;
-  absl::optional<Params> params(Params::Create(args()));
+  std::optional<Params> params(Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
 

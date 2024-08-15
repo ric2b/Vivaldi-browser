@@ -121,6 +121,8 @@ enum ModelType {
   WIFI_CONFIGURATIONS,
   // A web app object.
   WEB_APPS,
+  // A WebAPK object.
+  WEB_APKS,
   // OS-specific preferences (a.k.a. "OS settings"). Chrome OS only.
   OS_PREFERENCES,
   // Synced before other user types. Never encrypted. Chrome OS only.
@@ -150,6 +152,20 @@ enum ModelType {
   // become an incoming one for another.
   INCOMING_PASSWORD_SHARING_INVITATION,
   OUTGOING_PASSWORD_SHARING_INVITATION,
+
+  // Data related to tab group sharing.
+  SHARED_TAB_GROUP_DATA,
+
+  // Special datatype to notify client about People Group changes. Read-only on
+  // the client.
+  COLLABORATION_GROUP,
+
+  // Origin-specific email addresses forwarded from the user's account.
+  // Read-only on the client.
+  PLUS_ADDRESS,
+
+  // Product comparison groups.
+  COMPARE,
 
   // Notes items
   NOTES,
@@ -244,6 +260,11 @@ enum class ModelTypeForHistograms {
   kIncomingPasswordSharingInvitations = 59,
   kOutgoingPasswordSharingInvitations = 60,
   kAutofillWalletCredential = 61,
+  kWebApks = 62,
+  kSharedTabGroupData = 63,
+  kCollaborationGroup = 64,
+  kPlusAddresses = 65,
+  kCompare = 66,
 
   // Vivaldi
   kNotes = 300,
@@ -275,11 +296,11 @@ constexpr ModelTypeSet UserTypes() {
 
 // User types which are not user-controlled.
 constexpr ModelTypeSet AlwaysPreferredUserTypes() {
-  return {DEVICE_INFO,
-          USER_CONSENTS,
-          SECURITY_EVENTS,
-          SEND_TAB_TO_SELF,
-          SUPERVISED_USER_SETTINGS,
+  // TODO(b/322147254): `PLUS_ADDRESS` isn't bound to a `UserSelectableType` and
+  // always considered enabled. Revise once a product decision about the opt-out
+  // has been made.
+  return {DEVICE_INFO,     USER_CONSENTS,    PLUS_ADDRESS,
+          SECURITY_EVENTS, SEND_TAB_TO_SELF, SUPERVISED_USER_SETTINGS,
           SHARING_MESSAGE};
 }
 
@@ -362,6 +383,13 @@ constexpr ModelTypeSet CommitOnlyTypes() {
 // possible).
 constexpr ModelTypeSet ApplyUpdatesImmediatelyTypes() {
   return {HISTORY};
+}
+
+// Types for which `collaboration_id` field in SyncEntity should be provided.
+// These types also support `gc_directive` for collaborations to track active
+// collaboratons.
+constexpr ModelTypeSet SharedTypes() {
+  return {SHARED_TAB_GROUP_DATA};
 }
 
 // User types that can be encrypted, which is a subset of UserTypes() and a

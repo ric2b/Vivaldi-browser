@@ -10,27 +10,30 @@ import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classe
 import 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
 import 'chrome://resources/polymer/v3_0/paper-tooltip/paper-tooltip.js';
 import '../../settings_shared.css.js';
-import './exception_add_dialog.js';
 import './exception_edit_dialog.js';
 import './exception_entry.js';
 import './exception_tabbed_add_dialog.js';
 
-import {PrefsMixin, PrefsMixinInterface} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
-import {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
-import {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
-import {CrExpandButtonElement} from 'chrome://resources/cr_elements/cr_expand_button/cr_expand_button.js';
-import {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
-import {ListPropertyUpdateMixin, ListPropertyUpdateMixinInterface} from 'chrome://resources/cr_elements/list_property_update_mixin.js';
+import type {PrefsMixinInterface} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
+import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
+import type {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
+import type {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import type {CrExpandButtonElement} from 'chrome://resources/cr_elements/cr_expand_button/cr_expand_button.js';
+import type {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
+import type {ListPropertyUpdateMixinInterface} from 'chrome://resources/cr_elements/list_property_update_mixin.js';
+import {ListPropertyUpdateMixin} from 'chrome://resources/cr_elements/list_property_update_mixin.js';
 import {assert} from 'chrome://resources/js/assert.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {IronCollapseElement} from 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
-import {PaperTooltipElement} from 'chrome://resources/polymer/v3_0/paper-tooltip/paper-tooltip.js';
-import {DomRepeat, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import type {IronCollapseElement} from 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
+import type {PaperTooltipElement} from 'chrome://resources/polymer/v3_0/paper-tooltip/paper-tooltip.js';
+import type {DomRepeat} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {TooltipMixin, TooltipMixinInterface} from '../../tooltip_mixin.js';
-import {MemorySaverModeExceptionListAction, PerformanceMetricsProxy, PerformanceMetricsProxyImpl} from '../performance_metrics_proxy.js';
+import type {TooltipMixinInterface} from '../../tooltip_mixin.js';
+import {TooltipMixin} from '../../tooltip_mixin.js';
+import type {PerformanceMetricsProxy} from '../performance_metrics_proxy.js';
+import {MemorySaverModeExceptionListAction, PerformanceMetricsProxyImpl} from '../performance_metrics_proxy.js';
 
-import {ExceptionEntry} from './exception_entry.js';
+import type {ExceptionEntry} from './exception_entry.js';
 import {getTemplate} from './exception_list.html.js';
 import {TAB_DISCARD_EXCEPTIONS_MANAGED_PREF, TAB_DISCARD_EXCEPTIONS_PREF} from './exception_validation_mixin.js';
 
@@ -84,20 +87,6 @@ export class ExceptionListElement extends
         value: '',
       },
 
-      isDiscardExceptionsImprovementsEnabled_: {
-        readOnly: true,
-        type: Boolean,
-        value() {
-          return loadTimeData.getBoolean(
-              'isDiscardExceptionsImprovementsEnabled');
-        },
-      },
-
-      showAddDialog_: {
-        type: Boolean,
-        value: false,
-      },
-
       showTabbedAddDialog_: {
         type: Boolean,
         value: false,
@@ -122,8 +111,6 @@ export class ExceptionListElement extends
   private siteList_: ExceptionEntry[];
   private overflowSiteListExpanded: boolean;
   private selectedRule_: string;
-  private isDiscardExceptionsImprovementsEnabled_: boolean;
-  private showAddDialog_: boolean;
   private showTabbedAddDialog_: boolean;
   private showEditDialog_: boolean;
   private tooltipText_: string;
@@ -151,11 +138,7 @@ export class ExceptionListElement extends
 
   private onAddClick_() {
     assert(!this.showEditDialog_);
-    if (this.isDiscardExceptionsImprovementsEnabled_) {
-      this.showTabbedAddDialog_ = true;
-    } else {
-      this.showAddDialog_ = true;
-    }
+    this.showTabbedAddDialog_ = true;
   }
 
   private onMenuClick_(e: CustomEvent<{target: HTMLElement, site: string}>) {
@@ -166,21 +149,16 @@ export class ExceptionListElement extends
 
   private onEditClick_() {
     assert(this.selectedRule_);
-    assert(!this.showAddDialog_);
     assert(!this.showTabbedAddDialog_);
     this.showEditDialog_ = true;
     this.$.menu.get().close();
   }
 
   private onDeleteClick_() {
-    this.deletePrefListItem(TAB_DISCARD_EXCEPTIONS_PREF, this.selectedRule_);
+    this.deletePrefDictEntry(TAB_DISCARD_EXCEPTIONS_PREF, this.selectedRule_);
     this.metricsProxy_.recordExceptionListAction(
         MemorySaverModeExceptionListAction.REMOVE);
     this.$.menu.get().close();
-  }
-
-  private onAddDialogClose_() {
-    this.showAddDialog_ = false;
   }
 
   private onTabbedAddDialogClose_() {
@@ -198,10 +176,16 @@ export class ExceptionListElement extends
                  TAB_DISCARD_EXCEPTIONS_PREF]) {
       // Annotate sites with their managed status and append them to newSites
       // with managed sites first.
-      const {value: sites, enforcement} = this.getPref(pref);
+      const prefObject = this.getPref(pref);
+      let sites = prefObject.value;
+
+      if (sites.constructor.name === 'Object') {
+        sites = Object.keys(sites);
+      }
       const siteToExceptionEntry = (site: string) => ({
         site,
-        managed: enforcement === chrome.settingsPrivate.Enforcement.ENFORCED,
+        managed: prefObject.enforcement ===
+            chrome.settingsPrivate.Enforcement.ENFORCED,
       });
       newSites.push(...sites.map(siteToExceptionEntry));
     }

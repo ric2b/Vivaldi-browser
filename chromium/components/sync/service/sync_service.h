@@ -300,7 +300,7 @@ class SyncService : public KeyedService {
   // Whether the primary account has consented to Sync (see IdentityManager). If
   // this is false, then IsSyncFeatureEnabled will also be false, but
   // Sync-the-transport might still run.
-  // TODO(crbug.com/1462552): Remove once kSync becomes unreachable or is
+  // TODO(crbug.com/40066949): Remove once kSync becomes unreachable or is
   // deleted from the codebase. See ConsentLevel::kSync documentation for
   // details.
   virtual bool HasSyncConsent() const = 0;
@@ -334,7 +334,7 @@ class SyncService : public KeyedService {
   // first-time Sync setup has been completed by the user.
   // Note: This does not imply that Sync is actually running. Check
   // IsSyncFeatureActive or GetTransportState to get the current state.
-  // TODO(crbug.com/1462552): Remove once kSync becomes unreachable or is
+  // TODO(crbug.com/40066949): Remove once kSync becomes unreachable or is
   // deleted from the codebase. See ConsentLevel::kSync documentation for
   // details.
   bool IsSyncFeatureEnabled() const;
@@ -349,14 +349,13 @@ class SyncService : public KeyedService {
   bool IsEngineInitialized() const;
 
   // Returns whether Sync-the-feature can (attempt to) start. This means that
-  // there is a Sync-consented account and no disable reasons. It does *not*
-  // require first-time Sync setup to be complete, because that can only happen
-  // after the engine has started.
+  // there is a ConsentLevel::kSync account and no disable reasons. It does
+  // *not* require first-time Sync setup to be complete.
   // Note: This refers to Sync-the-feature. Sync-the-transport may be running
   // even if this is false.
   // TODO(crbug.com/1444344): Remove this API, in favor of
   // IsSyncFeatureEnabled().
-  // TODO(crbug.com/1462552): Remove once kSync becomes unreachable or is
+  // TODO(crbug.com/40066949): Remove once kSync becomes unreachable or is
   // deleted from the codebase. See ConsentLevel::kSync documentation for
   // details.
   bool CanSyncFeatureStart() const;
@@ -367,7 +366,7 @@ class SyncService : public KeyedService {
   // To see which datatypes are actually syncing, see GetActiveDataTypes().
   // Note: This refers to Sync-the-feature. Sync-the-transport may be active
   // even if this is false.
-  // TODO(crbug.com/1462552): Remove once kSync becomes unreachable or is
+  // TODO(crbug.com/40066949): Remove once kSync becomes unreachable or is
   // deleted from the codebase. See ConsentLevel::kSync documentation for
   // details.
   bool IsSyncFeatureActive() const;
@@ -474,12 +473,31 @@ class SyncService : public KeyedService {
   // page is opened.
   virtual void SetInvalidationsForSessionsEnabled(bool enabled) = 0;
 
+  // Necessary condition for SendExplicitPassphraseToPlatformClient() (not
+  // sufficient).
+  // TODO(crbug.com/1524184): Stop exposing this when UPM unenrollment is gone.
+  virtual bool SupportsExplicitPassphrasePlatformClient() = 0;
+
+  // Shares the explicit passphrase content with layers outside of the browser
+  // which have an independent sync client, and thus separate encryption
+  // infrastructure. That way, if the user has entered their passphrase in the
+  // browser, it does not need to be entered again.
+  // No-ops if SupportsExplicitPassphrasePlatformClient() is false, or the user
+  // didn't enter their passphrase in the browser yet, or never set up a custom
+  // passphrase in the first place.
+  virtual void SendExplicitPassphraseToPlatformClient() = 0;
+
   //////////////////////////////////////////////////////////////////////////////
   // OBSERVERS
   //////////////////////////////////////////////////////////////////////////////
 
-  // Adds/removes an observer. SyncService does not take ownership of the
-  // observer.
+  // Adds/removes an observer.
+  // IMPORTANT: Observers must be removed before SyncService::Shutdown() gets
+  // called (during the KeyedServices shutdown sequence). If your observer is
+  // tied to a KeyedService itself, declare an appropriate DependsOn()
+  // relation and remove the observer in your service's Shutdown(). Otherwise,
+  // implement SyncServiceObserver::OnSyncShutdown() and remove the observer
+  // there.
   virtual void AddObserver(SyncServiceObserver* observer) = 0;
   virtual void RemoveObserver(SyncServiceObserver* observer) = 0;
 

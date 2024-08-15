@@ -6,10 +6,12 @@
 
 #include <limits>
 #include <optional>
+#include <string>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/escaping.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "quiche/common/platform/api/quiche_expect_bug.h"
 #include "quiche/common/platform/api/quiche_test.h"
@@ -45,7 +47,9 @@ void ExpectEncoding(const std::string& description, absl::string_view expected,
 template <typename... Ts>
 void ExpectEncodingHex(const std::string& description,
                        absl::string_view expected_hex, Ts... data) {
-  ExpectEncoding(description, absl::HexStringToBytes(expected_hex), data...);
+  std::string expected;
+  ASSERT_TRUE(absl::HexStringToBytes(expected_hex, &expected));
+  ExpectEncoding(description, expected, data...);
 }
 
 TEST(SerializationTest, SerializeStrings) {
@@ -79,7 +83,9 @@ TEST(SerializationTest, SerializeLittleEndian) {
   QUICHE_ASSERT_OK(
       SerializeIntoWriter(writer, WireUint16(0x1234), WireUint16(0xabcd)));
   absl::string_view actual(writer.data(), writer.length());
-  EXPECT_EQ(actual, absl::HexStringToBytes("3412cdab"));
+  std::string expected;
+  ASSERT_TRUE(absl::HexStringToBytes("3412cdab", &expected));
+  EXPECT_EQ(actual, expected);
 }
 
 TEST(SerializationTest, SerializeVarInt62) {
@@ -237,18 +243,20 @@ class WireFormatterThatWritesTooLittle {
 };
 
 TEST(SerializationTest, CustomStructWritesTooLittle) {
-  constexpr absl::string_view kStr = "\xaa\xbb\xcc\xdd";
+  absl::Status status;
 #if defined(NDEBUG)
-  absl::Status status =
-      SerializeIntoSimpleBuffer(WireFormatterThatWritesTooLittle(kStr))
-          .status();
+  constexpr absl::string_view kStr = "\xaa\xbb\xcc\xdd";
+  status = SerializeIntoSimpleBuffer(WireFormatterThatWritesTooLittle(kStr))
+               .status();
   EXPECT_THAT(status, StatusIs(absl::StatusCode::kInternal,
                                ::testing::HasSubstr("Excess 1 bytes")));
-#else
-  EXPECT_DEATH(QUICHE_LOG(INFO) << SerializeIntoSimpleBuffer(
-                                       WireFormatterThatWritesTooLittle(kStr))
-                                       .status(),
-               "while serializing field #0");
+#elif GTEST_HAS_DEATH_TEST
+  constexpr absl::string_view kStr = "\xaa\xbb\xcc\xdd";
+  EXPECT_QUICHE_DEBUG_DEATH(
+      status = SerializeIntoSimpleBuffer(WireFormatterThatWritesTooLittle(kStr))
+                   .status(),
+      "while serializing field #0");
+  EXPECT_THAT(status, StatusIs(absl::StatusCode::kOk));
 #endif
 }
 

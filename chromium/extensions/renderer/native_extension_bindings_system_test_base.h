@@ -18,6 +18,7 @@
 #include "extensions/common/mojom/context_type.mojom-forward.h"
 #include "extensions/common/mojom/frame.mojom-forward.h"
 #include "extensions/common/mojom/message_port.mojom-shared.h"
+#include "extensions/renderer/api/core_extensions_renderer_api_provider.h"
 #include "extensions/renderer/api/messaging/message_target.h"
 #include "extensions/renderer/bindings/api_binding_test.h"
 #include "extensions/renderer/bindings/api_binding_types.h"
@@ -95,16 +96,6 @@ class TestIPCMessageSender : public IPCMessageSender {
            const std::string& channel_name,
            mojo::PendingAssociatedRemote<mojom::MessagePort> port,
            mojo::PendingAssociatedReceiver<mojom::MessagePortHost> port_host));
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-  MOCK_METHOD2(SendOpenMessagePort,
-               void(int routing_id, const PortId& port_id));
-  MOCK_METHOD3(SendCloseMessagePort,
-               void(int routing_id, const PortId& port_id, bool close_channel));
-  MOCK_METHOD2(SendPostMessageToPort,
-               void(const PortId& port_id, const Message& message));
-  MOCK_METHOD2(SendMessageResponsePending,
-               void(int routing_id, const PortId& port_id));
-#endif
   MOCK_METHOD6(SendActivityLogIPC,
                void(ScriptContext* script_context,
                     const ExtensionId& extension_id,
@@ -181,6 +172,7 @@ class NativeExtensionBindingsSystemUnittest
 
   StringSourceMap source_map_;
   TestExtensionsRendererClient renderer_client_;
+  CoreExtensionsRendererAPIProvider api_provider_;
 
   // True if we allow some v8::Contexts to avoid registration as a
   // ScriptContext.

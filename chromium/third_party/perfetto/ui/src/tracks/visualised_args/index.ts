@@ -29,21 +29,21 @@ import {
   TrackContext,
 } from '../../public';
 import {ChromeSliceTrack} from '../chrome_slices';
-
-export const VISUALISED_ARGS_SLICE_TRACK_URI = 'perfetto.VisualisedArgs';
-
-export interface VisualisedArgsState {
-  argName: string;
-  maxDepth: number;
-  trackId: number;
-}
+import {
+  VISUALISED_ARGS_SLICE_TRACK_URI,
+  VisualisedArgsState,
+} from '../../frontend/visualized_args_tracks';
 
 export class VisualisedArgsTrack extends ChromeSliceTrack {
   private helperViewName: string;
 
   constructor(
-      engine: EngineProxy, maxDepth: number, trackKey: string, trackId: number,
-      private argName: string) {
+    engine: EngineProxy,
+    maxDepth: number,
+    trackKey: string,
+    trackId: number,
+    private argName: string,
+  ) {
     const uuid = uuidv4();
     const namespace = `__arg_visualisation_helper_${argName}_${uuid}`;
     const escapedNamespace = namespace.replace(/[^a-zA-Z]/g, '_');
@@ -114,18 +114,18 @@ class VisualisedArgsPlugin implements Plugin {
     ctx.registerTrack({
       uri: VISUALISED_ARGS_SLICE_TRACK_URI,
       tags: {
-        metric: true,  // TODO(stevegolton): Is this track really a metric?
+        metric: true, // TODO(stevegolton): Is this track really a metric?
       },
-      track: (trackCtx) => {
+      trackFactory: (trackCtx) => {
         // TODO(stevegolton): Validate params properly. Note, this is no
         // worse than the situation we had before with track config.
         const params = trackCtx.params as VisualisedArgsState;
         return new VisualisedArgsTrack(
-            ctx.engine,
-            params.maxDepth,
-            trackCtx.trackKey,
-            params.trackId,
-            params.argName,
+          ctx.engine,
+          params.maxDepth,
+          trackCtx.trackKey,
+          params.trackId,
+          params.argName,
         );
       },
     });

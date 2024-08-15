@@ -90,7 +90,7 @@ void WorkerMainScriptLoader::Start(
     client_->OnFailedLoadingWorkerMainScript();
     resource_load_observer_->DidFailLoading(
         initial_request_.Url(), initial_request_.InspectorId(),
-        ResourceError(net::ERR_FAILED, last_request_url_, absl::nullopt),
+        ResourceError(net::ERR_FAILED, last_request_url_, std::nullopt),
         resource_response_.EncodedDataLength(),
         ResourceLoadObserver::IsInternalRequest(
             resource_loader_options_.initiator_info.name ==
@@ -112,7 +112,7 @@ void WorkerMainScriptLoader::Start(
       &WorkerMainScriptLoader::OnConnectionClosed, WrapWeakPersistent(this)));
   data_pipe_ = std::move(worker_main_script_load_params->response_body);
 
-  client_->OnStartLoadingBody(resource_response_);
+  client_->OnStartLoadingBodyWorkerMainScript(resource_response_);
   StartLoadingBody();
 }
 
@@ -136,7 +136,7 @@ void WorkerMainScriptLoader::OnReceiveEarlyHints(
 void WorkerMainScriptLoader::OnReceiveResponse(
     network::mojom::URLResponseHeadPtr response_head,
     mojo::ScopedDataPipeConsumerHandle handle,
-    absl::optional<mojo_base::BigBuffer> cached_metadata) {
+    std::optional<mojo_base::BigBuffer> cached_metadata) {
   // This has already happened in the browser process.
   NOTREACHED();
 }
@@ -200,6 +200,7 @@ void WorkerMainScriptLoader::Trace(Visitor* visitor) const {
   visitor->Trace(fetch_context_);
   visitor->Trace(resource_load_observer_);
   visitor->Trace(client_);
+  visitor->Trace(resource_loader_options_);
 }
 
 void WorkerMainScriptLoader::StartLoadingBody() {
@@ -246,7 +247,7 @@ void WorkerMainScriptLoader::OnReadable(MojoResult) {
 
   if (bytes_read > 0) {
     base::span<const char> span = base::make_span(buffer, bytes_read);
-    client_->DidReceiveData(span);
+    client_->DidReceiveDataWorkerMainScript(span);
     resource_load_observer_->DidReceiveData(initial_request_.InspectorId(),
                                             span);
   }
@@ -279,7 +280,7 @@ void WorkerMainScriptLoader::NotifyCompletionIfAppropriate() {
     client->OnFailedLoadingWorkerMainScript();
     resource_load_observer_->DidFailLoading(
         last_request_url_, initial_request_.InspectorId(),
-        ResourceError(status_.error_code, last_request_url_, absl::nullopt),
+        ResourceError(status_.error_code, last_request_url_, std::nullopt),
         resource_response_.EncodedDataLength(),
         ResourceLoadObserver::IsInternalRequest(
             ResourceLoadObserver::IsInternalRequest(

@@ -91,13 +91,20 @@ std::int64_t ClientProxy::GetClientId() const { return client_id_; }
 std::string ClientProxy::GetLocalEndpointId() {
   MutexLock lock(&mutex_);
   if (!local_endpoint_id_.empty()) {
+    NEARBY_LOGS(INFO) << __func__
+                      << "Reusing cached endpoint id: " << local_endpoint_id_;
     return local_endpoint_id_;
   }
   if (external_device_provider_ == nullptr) {
     local_endpoint_id_ = GenerateLocalEndpointId();
+    NEARBY_LOGS(INFO) << __func__ << "Locally generating endpoint id: "
+                      << local_endpoint_id_;
   } else {
     local_endpoint_id_ =
         external_device_provider_->GetLocalDevice()->GetEndpointId();
+    NEARBY_LOGS(INFO)
+        << __func__ << "From external device provider, populating endpoint id: "
+        << local_endpoint_id_;
   }
   return local_endpoint_id_;
 }
@@ -860,6 +867,7 @@ void ClientProxy::SetRemoteOsInfo(absl::string_view endpoint_id,
 
 std::optional<std::int32_t> ClientProxy::GetRemoteSafeToDisconnectVersion(
     absl::string_view endpoint_id) const {
+  MutexLock lock(&mutex_);
   const ConnectionPair* item = LookupConnection(endpoint_id);
   if (item != nullptr) {
     return item->first.safe_to_disconnect_version;
@@ -870,6 +878,7 @@ std::optional<std::int32_t> ClientProxy::GetRemoteSafeToDisconnectVersion(
 void ClientProxy::SetRemoteSafeToDisconnectVersion(
     absl::string_view endpoint_id,
     const std::int32_t& safe_to_disconnect_version) {
+  MutexLock lock(&mutex_);
   ConnectionPair* item = LookupConnection(endpoint_id);
   if (item != nullptr) {
     item->first.safe_to_disconnect_version = safe_to_disconnect_version;
@@ -982,7 +991,7 @@ void ClientProxy::RemoveAllEndpoints() {
 
 void ClientProxy::OnSessionComplete() {
   MutexLock lock(&mutex_);
-  if (connections_.empty() && !IsAdvertising() && !IsDiscovering()) {
+  if (connections_.empty() && !IsAdvertising()) {
     local_endpoint_id_.clear();
 
     analytics_recorder_->LogSession();

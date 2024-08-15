@@ -9,7 +9,6 @@
 #include <tuple>
 #include <utility>
 
-#include "base/containers/cxx20_erase.h"
 #include "base/time/clock.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
@@ -30,8 +29,7 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
 
-namespace extensions {
-namespace declarative_net_request {
+namespace extensions::declarative_net_request {
 
 namespace {
 
@@ -405,10 +403,9 @@ void ActionTracker::DispatchOnRuleMatchedDebugIfNeeded(
     const RequestAction& request_action,
     dnr_api::RequestDetails request_details) {
   const ExtensionId& extension_id = request_action.extension_id;
-  const Extension* extension =
-      ExtensionRegistry::Get(browser_context_)
-          ->GetExtensionById(extension_id,
-                             extensions::ExtensionRegistry::ENABLED);
+  const Extension* extension = ExtensionRegistry::Get(browser_context_)
+                                   ->enabled_extensions()
+                                   .GetByID(extension_id);
   DCHECK(extension);
 
   // Do not dispatch an event if the extension has not registered a listener.
@@ -511,5 +508,4 @@ dnr_api::MatchedRuleInfo ActionTracker::CreateMatchedRuleInfo(
   return matched_rule_info;
 }
 
-}  // namespace declarative_net_request
-}  // namespace extensions
+}  // namespace extensions::declarative_net_request

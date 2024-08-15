@@ -19,6 +19,9 @@
 #include "core/fxcrt/fx_string.h"
 #include "core/fxcrt/fx_string_wrappers.h"
 #include "core/fxcrt/fx_system.h"
+#include "core/fxcrt/notreached.h"
+#include "core/fxcrt/numerics/safe_conversions.h"
+#include "core/fxcrt/span.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
 #include "core/fxge/cfx_gemodule.h"
 #include "core/fxge/cfx_graphstatedata.h"
@@ -26,9 +29,6 @@
 #include "core/fxge/dib/cfx_dibbase.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
 #include "core/fxge/win32/cwin32_platform.h"
-#include "third_party/base/containers/span.h"
-#include "third_party/base/notreached.h"
-#include "third_party/base/numerics/safe_conversions.h"
 
 // Has to come before gdiplus.h
 namespace Gdiplus {
@@ -394,7 +394,7 @@ Gdiplus::GpPen* GdipCreatePenImpl(const CFX_GraphStateData* pGraphState,
   return pPen;
 }
 
-absl::optional<std::pair<size_t, size_t>> IsSmallTriangle(
+std::optional<std::pair<size_t, size_t>> IsSmallTriangle(
     pdfium::span<const Gdiplus::PointF> points,
     const CFX_Matrix* pMatrix) {
   static constexpr size_t kPairs[3][2] = {{1, 2}, {0, 2}, {0, 1}};
@@ -414,7 +414,7 @@ absl::optional<std::pair<size_t, size_t>> IsSmallTriangle(
     if (distance_square < 2.25f)
       return std::make_pair(i, pair1);
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 class GpStream final : public IStream {
@@ -454,10 +454,9 @@ class GpStream final : public IStream {
     if (m_ReadPos >= m_InterStream.tellp())
       return HRESULT_FROM_WIN32(ERROR_END_OF_MEDIA);
 
-    size_t bytes_left = pdfium::base::checked_cast<size_t>(
+    size_t bytes_left = pdfium::checked_cast<size_t>(
         std::streamoff(m_InterStream.tellp()) - m_ReadPos);
-    size_t bytes_out =
-        std::min(pdfium::base::checked_cast<size_t>(cb), bytes_left);
+    size_t bytes_out = std::min(pdfium::checked_cast<size_t>(cb), bytes_left);
     memcpy(output, m_InterStream.str().c_str() + m_ReadPos, bytes_out);
     m_ReadPos += bytes_out;
     if (pcbRead)
@@ -737,7 +736,7 @@ bool CGdiplusExt::DrawPath(HDC hDC,
   const Gdiplus::GpFillMode gp_fill_mode =
       FillType2Gdip(fill_options.fill_type);
   CallFunc(GdipCreatePath2)(gp_points.data(), gp_types.data(),
-                            pdfium::base::checked_cast<int>(points.size()),
+                            pdfium::checked_cast<int>(points.size()),
                             gp_fill_mode, &pGpPath);
   if (!pGpPath) {
     if (pMatrix)
@@ -764,10 +763,9 @@ bool CGdiplusExt::DrawPath(HDC hDC,
         if (i + 1 == points.size() ||
             gp_types[i + 1] == Gdiplus::PathPointTypeStart) {
           Gdiplus::GpPath* pSubPath;
-          CallFunc(GdipCreatePath2)(
-              &gp_points[iStart], &gp_types[iStart],
-              pdfium::base::checked_cast<int>(i - iStart + 1), gp_fill_mode,
-              &pSubPath);
+          CallFunc(GdipCreatePath2)(&gp_points[iStart], &gp_types[iStart],
+                                    pdfium::checked_cast<int>(i - iStart + 1),
+                                    gp_fill_mode, &pSubPath);
           iStart = i + 1;
           CallFunc(GdipDrawPath)(pGraphics, pPen, pSubPath);
           CallFunc(GdipDeletePath)(pSubPath);

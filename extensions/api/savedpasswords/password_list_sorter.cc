@@ -12,7 +12,8 @@
 #include <utility>
 
 #include "base/strings/string_split.h"
-#include "components/password_manager/core/browser/affiliation/affiliation_utils.h"
+#include "base/strings/utf_string_conversions.h"
+#include "components/affiliations/core/browser/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_ui_utils.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 
@@ -43,7 +44,7 @@ std::string CreateSortKey(
     const password_manager::CredentialUIEntry& credential) {
   std::string shown_origin = GetShownOrigin(credential);
 
-  const auto facet_uri = password_manager::FacetURI::FromPotentiallyInvalidSpec(
+  const auto facet_uri = affiliations::FacetURI::FromPotentiallyInvalidSpec(
       credential.GetFirstSignonRealm());
 
   std::string site_name =

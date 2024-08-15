@@ -29,20 +29,20 @@
 
 #include "third_party/blink/renderer/core/css/media_query_evaluator.h"
 
-#include "services/device/public/mojom/device_posture_provider.mojom-blink.h"
 #include "third_party/blink/public/common/css/forced_colors.h"
 #include "third_party/blink/public/common/css/navigation_controls.h"
 #include "third_party/blink/public/common/css/scripting.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
+#include "third_party/blink/public/mojom/device_posture/device_posture_provider.mojom-blink.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "third_party/blink/public/mojom/webpreferences/web_preferences.mojom-blink.h"
 #include "third_party/blink/renderer/core/css/css_container_values.h"
-#include "third_party/blink/renderer/core/css/css_custom_property_declaration.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/css/css_resolution_units.h"
 #include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
+#include "third_party/blink/renderer/core/css/css_unparsed_declaration_value.h"
 #include "third_party/blink/renderer/core/css/media_feature_names.h"
 #include "third_party/blink/renderer/core/css/media_features.h"
 #include "third_party/blink/renderer/core/css/media_list.h"
@@ -119,7 +119,7 @@ KleeneValue KleeneAnd(KleeneValue a, KleeneValue b) {
 
 }  // namespace
 
-using device::mojom::blink::DevicePostureType;
+using mojom::blink::DevicePostureType;
 using mojom::blink::HoverType;
 using mojom::blink::PointerType;
 
@@ -448,6 +448,8 @@ static bool DisplayModeMediaFeatureEval(const MediaQueryExpValue& value,
       return mode == blink::mojom::DisplayMode::kBorderless;
     case CSSValueID::kTabbed:
       return mode == blink::mojom::DisplayMode::kTabbed;
+    case CSSValueID::kPictureInPicture:
+      return mode == blink::mojom::DisplayMode::kPictureInPicture;
     default:
       NOTREACHED();
       return false;
@@ -1371,6 +1373,8 @@ static bool HorizontalViewportSegmentsMediaFeatureEval(
     const MediaQueryExpValue& value,
     MediaQueryOperator op,
     const MediaValues& media_values) {
+  UseCounter::Count(media_values.GetDocument(),
+                    WebFeature::kViewportSegmentsMediaFeature);
   int horizontal_viewport_segments =
       media_values.GetHorizontalViewportSegments();
 
@@ -1393,6 +1397,8 @@ static bool VerticalViewportSegmentsMediaFeatureEval(
     const MediaQueryExpValue& value,
     MediaQueryOperator op,
     const MediaValues& media_values) {
+  UseCounter::Count(media_values.GetDocument(),
+                    WebFeature::kViewportSegmentsMediaFeature);
   int vertical_viewport_segments = media_values.GetVerticalViewportSegments();
 
   MaybeRecordMediaFeatureValue(
@@ -1458,6 +1464,8 @@ static bool OverflowBlockMediaFeatureEval(const MediaQueryExpValue& value,
 static bool DevicePostureMediaFeatureEval(const MediaQueryExpValue& value,
                                           MediaQueryOperator,
                                           const MediaValues& media_values) {
+  UseCounter::Count(media_values.GetDocument(),
+                    WebFeature::kDevicePostureMediaFeature);
   // isValid() is false if there is no parameter. Without parameter we should
   // return true to indicate that device posture is enabled in the
   // browser.
@@ -1738,9 +1746,9 @@ KleeneValue MediaQueryEvaluator::EvalStyleFeature(
       container, CSSPropertyName(property_name), query_specified);
 
   if (const auto* decl_value =
-          DynamicTo<CSSCustomPropertyDeclaration>(query_value)) {
+          DynamicTo<CSSUnparsedDeclarationValue>(query_value)) {
     CSSVariableData* query_computed =
-        decl_value ? &decl_value->Value() : nullptr;
+        decl_value ? decl_value->VariableDataValue() : nullptr;
     CSSVariableData* computed =
         container->ComputedStyleRef().GetVariableData(property_name);
 
@@ -1752,9 +1760,9 @@ KleeneValue MediaQueryEvaluator::EvalStyleFeature(
 
   const CSSValue* computed_value =
       CustomProperty(property_name, *media_values_->GetDocument())
-          .CSSValueFromComputedStyle(container->ComputedStyleRef(),
-                                     nullptr /* layout_object */,
-                                     false /* allow_visited_style */);
+          .CSSValueFromComputedStyle(
+              container->ComputedStyleRef(), nullptr /* layout_object */,
+              false /* allow_visited_style */, CSSValuePhase::kComputedValue);
   if (base::ValuesEquivalent(query_value, computed_value) == explicit_value) {
     return KleeneValue::kTrue;
   }

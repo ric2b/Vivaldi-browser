@@ -8,7 +8,6 @@ import type { ClickOptions, ElementHandle } from '../api/ElementHandle.js';
 import type { HTTPResponse } from '../api/HTTPResponse.js';
 import type { Page, WaitForSelectorOptions, WaitTimeoutOptions } from '../api/Page.js';
 import type { DeviceRequestPrompt } from '../cdp/DeviceRequestPrompt.js';
-import type { IsolatedWorldChart } from '../cdp/IsolatedWorld.js';
 import type { PuppeteerLifeCycleEvent } from '../cdp/LifecycleWatcher.js';
 import { EventEmitter, type EventType } from '../common/EventEmitter.js';
 import type { Awaitable, EvaluateFunc, EvaluateFuncWith, HandleFor, NodeFor } from '../common/types.js';
@@ -231,10 +230,6 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
     /**
      * @internal
      */
-    worlds: IsolatedWorldChart;
-    /**
-     * @internal
-     */
     _name?: string;
     /**
      * @internal
@@ -287,12 +282,7 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
      * Server Error". The status code for such responses can be retrieved by
      * calling {@link HTTPResponse.status}.
      */
-    abstract goto(url: string, options?: {
-        referer?: string;
-        referrerPolicy?: string;
-        timeout?: number;
-        waitUntil?: PuppeteerLifeCycleEvent | PuppeteerLifeCycleEvent[];
-    }): Promise<HTTPResponse | null>;
+    abstract goto(url: string, options?: GoToOptions): Promise<HTTPResponse | null>;
     /**
      * Waits for the frame to navigate. It is useful for when you run code which
      * will indirectly cause the frame to navigate.
@@ -429,17 +419,6 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
      */
     $$eval<Selector extends string, Params extends unknown[], Func extends EvaluateFuncWith<Array<NodeFor<Selector>>, Params> = EvaluateFuncWith<Array<NodeFor<Selector>>, Params>>(selector: Selector, pageFunction: string | Func, ...args: Params): Promise<Awaited<ReturnType<Func>>>;
     /**
-     * @deprecated Use {@link Frame.$$} with the `xpath` prefix.
-     *
-     * Example: `await frame.$$('xpath/' + xpathExpression)`
-     *
-     * This method evaluates the given XPath expression and returns the results.
-     * If `xpath` starts with `//` instead of `.//`, the dot will be appended
-     * automatically.
-     * @param expression - the XPath expression to evaluate.
-     */
-    $x(expression: string): Promise<Array<ElementHandle<Node>>>;
-    /**
      * Waits for an element matching the given selector to appear in the frame.
      *
      * This method works across navigations.
@@ -475,29 +454,6 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
      * @throws Throws if an element matching the given selector doesn't appear.
      */
     waitForSelector<Selector extends string>(selector: Selector, options?: WaitForSelectorOptions): Promise<ElementHandle<NodeFor<Selector>> | null>;
-    /**
-     * @deprecated Use {@link Frame.waitForSelector} with the `xpath` prefix.
-     *
-     * Example: `await frame.waitForSelector('xpath/' + xpathExpression)`
-     *
-     * The method evaluates the XPath expression relative to the Frame.
-     * If `xpath` starts with `//` instead of `.//`, the dot will be appended
-     * automatically.
-     *
-     * Wait for the `xpath` to appear in page. If at the moment of calling the
-     * method the `xpath` already exists, the method will return immediately. If
-     * the xpath doesn't appear after the `timeout` milliseconds of waiting, the
-     * function will throw.
-     *
-     * For a code example, see the example for {@link Frame.waitForSelector}. That
-     * function behaves identically other than taking a CSS selector rather than
-     * an XPath.
-     *
-     * @param xpath - the XPath expression to wait for.
-     * @param options - options to configure the visibility of the element and how
-     * long to wait before timing out.
-     */
-    waitForXPath(xpath: string, options?: WaitForSelectorOptions): Promise<ElementHandle<Node> | null>;
     /**
      * @example
      * The `waitForFunction` can be used to observe viewport size change:
@@ -543,10 +499,7 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
      * @param options - Options to configure how long before timing out and at
      * what point to consider the content setting successful.
      */
-    abstract setContent(html: string, options?: {
-        timeout?: number;
-        waitUntil?: PuppeteerLifeCycleEvent | PuppeteerLifeCycleEvent[];
-    }): Promise<void>;
+    abstract setContent(html: string, options?: WaitForOptions): Promise<void>;
     /**
      * @internal
      */
@@ -692,27 +645,6 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
      * between key presses in milliseconds. Defaults to `0`.
      */
     type(selector: string, text: string, options?: Readonly<KeyboardTypeOptions>): Promise<void>;
-    /**
-     * @deprecated Replace with `new Promise(r => setTimeout(r, milliseconds));`.
-     *
-     * Causes your script to wait for the given number of milliseconds.
-     *
-     * @remarks
-     * It's generally recommended to not wait for a number of seconds, but instead
-     * use {@link Frame.waitForSelector}, {@link Frame.waitForXPath} or
-     * {@link Frame.waitForFunction} to wait for exactly the conditions you want.
-     *
-     * @example
-     *
-     * Wait for 1 second:
-     *
-     * ```ts
-     * await frame.waitForTimeout(1000);
-     * ```
-     *
-     * @param milliseconds - the number of milliseconds to wait.
-     */
-    waitForTimeout(milliseconds: number): Promise<void>;
     /**
      * The frame's title.
      */

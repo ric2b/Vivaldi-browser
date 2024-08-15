@@ -1,4 +1,4 @@
-/* Copyright 2016 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2016 The OpenXLA Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,11 +17,15 @@ limitations under the License.
 // the HostExecutor implementation.
 #include "xla/stream_executor/host/host_stream.h"
 
+#include <cfenv>  // NOLINT
+#include <cstddef>
 #include <queue>
 #include <utility>
 
 #include "absl/functional/any_invocable.h"
+#include "absl/log/check.h"
 #include "absl/status/status.h"
+#include "absl/synchronization/mutex.h"
 #include "absl/synchronization/notification.h"
 #include "tsl/platform/denormal.h"
 #include "tsl/platform/env.h"

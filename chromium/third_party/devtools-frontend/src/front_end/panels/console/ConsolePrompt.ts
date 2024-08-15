@@ -31,7 +31,7 @@ const UIStrings = {
    *@example {allow pasting} PH1
    */
   selfXssWarning:
-      'Warning: Don’t paste code into the DevTools Console that you don’t understand or haven’t reviewed yourself. This could allow attackers to steal your identity or take control of your computer. Please type ‘{PH1}’ below to allow pasting.',
+      'Warning: Don’t paste code into the DevTools Console that you don’t understand or haven’t reviewed yourself. This could allow attackers to steal your identity or take control of your computer. Please type ‘{PH1}’ below and hit Enter to allow pasting.',
   /**
    *@description Text a user needs to type in order to confirm that they are aware of the danger of pasting code into the DevTools console.
    */
@@ -63,12 +63,33 @@ export class ConsolePrompt extends Common.ObjectWrapper.eventMixin<EventTypes, t
 
   #editorHistory: TextEditor.TextEditorHistory.TextEditorHistory;
   #selfXssWarningShown = false;
+  #javaScriptCompletionCompartment: CodeMirror.Compartment = new CodeMirror.Compartment();
+
+  #getJavaScriptCompletionExtensions(): CodeMirror.Extension {
+    if (this.#selfXssWarningShown) {
+      // No (JavaScript) completions at all while showing the self-XSS warning.
+      return [];
+    }
+    if (Root.Runtime.Runtime.queryParam('noJavaScriptCompletion') !== 'true') {
+      return [
+        CodeMirror.javascript.javascript(),
+        TextEditor.JavaScript.completion(),
+      ];
+    }
+    return [CodeMirror.javascript.javascriptLanguage];
+  }
+
+  #updateJavaScriptCompletionCompartment(): void {
+    const extensions = this.#getJavaScriptCompletionExtensions();
+    const effects = this.#javaScriptCompletionCompartment.reconfigure(extensions);
+    this.editor.dispatch({effects});
+  }
 
   constructor() {
     super();
     this.addCompletionsFromHistory = true;
     this.historyInternal = new TextEditor.AutocompleteHistory.AutocompleteHistory(
-        Common.Settings.Settings.instance().createLocalSetting('consoleHistory', []));
+        Common.Settings.Settings.instance().createLocalSetting('console-history', []));
 
     this.initialText = '';
     this.eagerPreviewElement = document.createElement('div');
@@ -91,7 +112,7 @@ export class ConsolePrompt extends Common.ObjectWrapper.eventMixin<EventTypes, t
     this.element.appendChild(this.promptIcon);
     this.iconThrottler = new Common.Throttler.Throttler(0);
 
-    this.eagerEvalSetting = Common.Settings.Settings.instance().moduleSetting('consoleEagerEval');
+    this.eagerEvalSetting = Common.Settings.Settings.instance().moduleSetting('console-eager-eval');
     this.eagerEvalSetting.addChangeListener(this.eagerSettingChanged.bind(this));
     this.eagerPreviewElement.classList.toggle('hidden', !this.eagerEvalSetting.get());
 
@@ -102,7 +123,7 @@ export class ConsolePrompt extends Common.ObjectWrapper.eventMixin<EventTypes, t
     this.#argumentHintsState = argumentHints[0];
 
     const autocompleteOnEnter = TextEditor.Config.DynamicSetting.bool(
-        'consoleAutocompleteOnEnter', [], TextEditor.Config.conservativeCompletion);
+        'console-autocomplete-on-enter', [], TextEditor.Config.conservativeCompletion);
 
     const extensions = [
       CodeMirror.keymap.of(this.editorKeymap()),
@@ -113,26 +134,19 @@ export class ConsolePrompt extends Common.ObjectWrapper.eventMixin<EventTypes, t
       TextEditor.Config.baseConfiguration(this.initialText),
       TextEditor.Config.autocompletion.instance(),
       CodeMirror.javascript.javascriptLanguage.data.of({
-        autocomplete: (context: CodeMirror.CompletionContext): CodeMirror.CompletionResult | null =>
+        autocomplete: (context: CodeMirror.CompletionContext) =>
             this.addCompletionsFromHistory ? this.#editorHistory.historyCompletions(context) : null,
       }),
       CodeMirror.EditorView.contentAttributes.of({'aria-label': i18nString(UIStrings.consolePrompt)}),
       CodeMirror.EditorView.lineWrapping,
       CodeMirror.autocompletion({aboveCursor: true}),
+      this.#javaScriptCompletionCompartment.of(this.#getJavaScriptCompletionExtensions()),
     ];
-    if (Root.Runtime.Runtime.queryParam('noJavaScriptCompletion') !== 'true') {
-      extensions.push(
-          CodeMirror.javascript.javascript(),
-          TextEditor.JavaScript.completion(),
-      );
-    } else {
-      extensions.push(CodeMirror.javascript.javascriptLanguage);
-    }
     const doc = this.initialText;
     const editorState = CodeMirror.EditorState.create({doc, extensions});
 
     this.editor = new TextEditor.TextEditor.TextEditor(editorState);
-    this.editor.addEventListener('keydown', (event): void => {
+    this.editor.addEventListener('keydown', event => {
       if (event.defaultPrevented) {
         event.stopPropagation();
       }
@@ -150,7 +164,8 @@ export class ConsolePrompt extends Common.ObjectWrapper.eventMixin<EventTypes, t
     // Record the console tool load time after the console prompt constructor is complete.
     Host.userMetrics.panelLoaded('console', 'DevTools.Launch.Console');
 
-    this.element.setAttribute('jslog', `${VisualLogging.action().track({keydown: 'Enter'}).context('console-prompt')}`);
+    this.element.setAttribute(
+        'jslog', `${VisualLogging.textField('console-prompt').track({keydown: 'Enter|ArrowUp|ArrowDown|PageUp'})}`);
   }
 
   private eagerSettingChanged(): void {
@@ -247,26 +262,26 @@ export class ConsolePrompt extends Common.ObjectWrapper.eventMixin<EventTypes, t
 
   private editorKeymap(): readonly CodeMirror.KeyBinding[] {
     return [
-      {key: 'ArrowUp', run: (): boolean => this.#editorHistory.moveHistory(Direction.BACKWARD)},
-      {key: 'ArrowDown', run: (): boolean => this.#editorHistory.moveHistory(Direction.FORWARD)},
-      {mac: 'Ctrl-p', run: (): boolean => this.#editorHistory.moveHistory(Direction.BACKWARD, true)},
-      {mac: 'Ctrl-n', run: (): boolean => this.#editorHistory.moveHistory(Direction.FORWARD, true)},
+      {key: 'ArrowUp', run: () => this.#editorHistory.moveHistory(Direction.BACKWARD)},
+      {key: 'ArrowDown', run: () => this.#editorHistory.moveHistory(Direction.FORWARD)},
+      {mac: 'Ctrl-p', run: () => this.#editorHistory.moveHistory(Direction.BACKWARD, true)},
+      {mac: 'Ctrl-n', run: () => this.#editorHistory.moveHistory(Direction.FORWARD, true)},
       {
         key: 'Escape',
-        run: (): boolean => {
+        run: () => {
           return TextEditor.JavaScript.closeArgumentsHintsTooltip(this.editor.editor, this.#argumentHintsState);
         },
       },
       {
         key: 'Ctrl-Enter',
-        run: (): boolean => {
+        run: () => {
           void this.handleEnter(/* forceEvaluate */ true);
           return true;
         },
       },
       {
         key: 'Enter',
-        run: (): boolean => {
+        run: () => {
           void this.handleEnter();
           return true;
         },
@@ -297,6 +312,7 @@ export class ConsolePrompt extends Common.ObjectWrapper.eventMixin<EventTypes, t
         i18nString(UIStrings.selfXssWarning, {PH1: i18nString(UIStrings.allowPasting)}));
     this.#selfXssWarningShown = true;
     Host.userMetrics.actionTaken(Host.UserMetrics.Action.SelfXssWarningConsoleMessageShown);
+    this.#updateJavaScriptCompletionCompartment();
   }
 
   private async handleEnter(forceEvaluate?: boolean): Promise<void> {
@@ -307,10 +323,11 @@ export class ConsolePrompt extends Common.ObjectWrapper.eventMixin<EventTypes, t
         scrollIntoView: true,
       });
       Common.Settings.Settings.instance()
-          .createSetting('disableSelfXssWarning', false, Common.Settings.SettingStorageType.Synced)
+          .createSetting('disable-self-xss-warning', false, Common.Settings.SettingStorageType.Synced)
           .set(true);
       this.#selfXssWarningShown = false;
       Host.userMetrics.actionTaken(Host.UserMetrics.Action.SelfXssAllowPastingInConsole);
+      this.#updateJavaScriptCompletionCompartment();
       return;
     }
 
@@ -353,7 +370,7 @@ export class ConsolePrompt extends Common.ObjectWrapper.eventMixin<EventTypes, t
   private async evaluateCommandInConsole(
       executionContext: SDK.RuntimeModel.ExecutionContext, message: SDK.ConsoleModel.ConsoleMessage, expression: string,
       useCommandLineAPI: boolean): Promise<void> {
-    if (Root.Runtime.experiments.isEnabled('evaluateExpressionsWithSourceMaps')) {
+    if (Root.Runtime.experiments.isEnabled('evaluate-expressions-with-source-maps')) {
       const callFrame = executionContext.debuggerModel.selectedCallFrame();
       if (callFrame) {
         const nameMap = await SourceMapScopes.NamesResolver.allVariablesInCallFrame(callFrame);

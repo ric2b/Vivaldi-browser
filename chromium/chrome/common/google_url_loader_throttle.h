@@ -61,24 +61,29 @@ class GoogleURLLoaderThrottle final : public blink::URLLoaderThrottle {
                            network::mojom::URLResponseHead* response_head,
                            bool* defer) override;
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
-  void WillOnCompleteWithError(const network::URLLoaderCompletionStatus& status,
-                               bool* defer) override;
+  void WillOnCompleteWithError(
+      const network::URLLoaderCompletionStatus& status) override;
 #endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
 
  private:
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
   void OnDeferRequestForBoundSessionCompleted(
-      BoundSessionRequestThrottledHandler::UnblockAction resume);
+      BoundSessionRequestThrottledHandler::UnblockAction resume,
+      chrome::mojom::ResumeBlockedRequestsTrigger resume_trigger);
   void ResumeOrCancelRequest(
-      BoundSessionRequestThrottledHandler::UnblockAction resume);
+      BoundSessionRequestThrottledHandler::UnblockAction resume,
+      chrome::mojom::ResumeBlockedRequestsTrigger resume_trigger);
 
   std::unique_ptr<BoundSessionRequestThrottledHandler>
       bound_session_request_throttled_handler_;
   std::optional<base::TimeTicks> bound_session_request_throttled_start_time_;
   bool is_main_frame_navigation_ = false;
+  bool sends_cookies_ = false;
   // `true` if at least one URL in the redirect chain was affected.
   bool is_covered_by_bound_session_ = false;
   bool is_deferred_for_bound_session_ = false;
+  std::optional<chrome::mojom::ResumeBlockedRequestsTrigger>
+      deferred_request_resume_trigger_;
 #endif
 
 #if BUILDFLAG(IS_ANDROID)

@@ -89,15 +89,17 @@ class NinjaReclientTest(trial_dir.TestCase):
         if sys.platform.startswith('win'):
             self.assertEqual(
                 os.environ.get('RBE_server_address'),
-                "pipe://%s/reproxy.pipe" % hashlib.md5(
-                    os.path.join(self.root_dir, "out", "a",
-                                 ".reproxy_tmp").encode()).hexdigest())
+                "pipe://%s/reproxy.pipe" % hashlib.sha256(
+                    os.path.join(self.root_dir, "out", "a", ".reproxy_tmp",
+                                 "logs", "20170316T200041.000000_SOME_RANDOM_ID"
+                                 ).encode()).hexdigest())
         else:
             self.assertEqual(
                 os.environ.get('RBE_server_address'),
                 "unix:///tmp/reproxy_%s.sock" % hashlib.sha256(
-                    os.path.join(self.root_dir, "out", "a",
-                                 ".reproxy_tmp").encode()).hexdigest())
+                    os.path.join(self.root_dir, "out", "a", ".reproxy_tmp",
+                                 "logs", "20170316T200041.000000_SOME_RANDOM_ID"
+                                 ).encode()).hexdigest())
 
     @unittest.mock.patch('subprocess.call', return_value=0)
     @unittest.mock.patch('ninja.main', return_value=0)

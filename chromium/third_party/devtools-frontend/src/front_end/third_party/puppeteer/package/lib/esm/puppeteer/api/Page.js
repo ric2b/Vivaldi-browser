@@ -82,14 +82,11 @@ var __disposeResources = (this && this.__disposeResources) || (function (Suppres
     var e = new Error(message);
     return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
 });
-import { delay, filter, filterAsync, first, firstValueFrom, from, fromEvent, map, merge, of, raceWith, startWith, switchMap, } from '../../third_party/rxjs/rxjs.js';
+import { concat, EMPTY, filter, first, firstValueFrom, from, map, merge, mergeMap, mergeScan, of, raceWith, ReplaySubject, startWith, switchMap, take, takeUntil, timer, } from '../../third_party/rxjs/rxjs.js';
 import { TargetCloseError } from '../common/Errors.js';
 import { EventEmitter, } from '../common/EventEmitter.js';
-import { NetworkManagerEvent } from '../common/NetworkManagerEvents.js';
-import { paperFormats, } from '../common/PDFOptions.js';
 import { TimeoutSettings } from '../common/TimeoutSettings.js';
-import { debugError, importFSPromises, isNumber, isString, timeout, withSourcePuppeteerURLIfNone, } from '../common/util.js';
-import { assert } from '../util/assert.js';
+import { debugError, fromEmitterEvent, filterAsync, importFSPromises, isString, NETWORK_IDLE_TIME, timeout, withSourcePuppeteerURLIfNone, } from '../common/util.js';
 import { guarded } from '../util/decorators.js';
 import { AsyncDisposableStack, asyncDisposeSymbol, DisposableStack, disposeSymbol, } from '../util/disposable.js';
 import { FunctionLocator, Locator, NodeLocator, } from './locators/locators.js';
@@ -173,11 +170,25 @@ let Page = (() => {
          */
         _timeoutSettings = new TimeoutSettings();
         #requestHandlers = new WeakMap();
+        #inflight$ = new ReplaySubject(1);
         /**
          * @internal
          */
         constructor() {
             super();
+            fromEmitterEvent(this, "request" /* PageEvent.Request */)
+                .pipe(mergeMap(originalRequest => {
+                return concat(of(1), merge(fromEmitterEvent(this, "requestfailed" /* PageEvent.RequestFailed */), fromEmitterEvent(this, "requestfinished" /* PageEvent.RequestFinished */), fromEmitterEvent(this, "response" /* PageEvent.Response */).pipe(map(response => {
+                    return response.request();
+                }))).pipe(filter(request => {
+                    return request.id === originalRequest.id;
+                }), take(1), map(() => {
+                    return -1;
+                })));
+            }), mergeScan((acc, addend) => {
+                return of(acc + addend);
+            }, 0), takeUntil(fromEmitterEvent(this, "close" /* PageEvent.Close */)), startWith(0))
+                .subscribe(this.#inflight$);
         }
         /**
          * Listen to page events.
@@ -448,19 +459,6 @@ let Page = (() => {
             return await this.mainFrame().$$eval(selector, pageFunction, ...args);
         }
         /**
-         * The method evaluates the XPath expression relative to the page document as
-         * its context node. If there are no such elements, the method resolves to an
-         * empty array.
-         *
-         * @remarks
-         * Shortcut for {@link Frame.$x | Page.mainFrame().$x(expression) }.
-         *
-         * @param expression - Expression to evaluate
-         */
-        async $x(expression) {
-            return await this.mainFrame().$x(expression);
-        }
-        /**
          * Adds a `<script>` tag into the page with the desired URL or content.
          *
          * @remarks
@@ -596,14 +594,103 @@ let Page = (() => {
             return await this.mainFrame().waitForNavigation(options);
         }
         /**
+         * @param urlOrPredicate - A URL or predicate to wait for
+         * @param options - Optional waiting parameters
+         * @returns Promise which resolves to the matched request
+         * @example
+         *
+         * ```ts
+         * const firstRequest = await page.waitForRequest(
+         *   'https://example.com/resource'
+         * );
+         * const finalRequest = await page.waitForRequest(
+         *   request => request.url() === 'https://example.com'
+         * );
+         * return finalRequest.response()?.ok();
+         * ```
+         *
+         * @remarks
+         * Optional Waiting Parameters have:
+         *
+         * - `timeout`: Maximum wait time in milliseconds, defaults to `30` seconds, pass
+         *   `0` to disable the timeout. The default value can be changed by using the
+         *   {@link Page.setDefaultTimeout} method.
+         */
+        waitForRequest(urlOrPredicate, options = {}) {
+            const { timeout: ms = this._timeoutSettings.timeout() } = options;
+            if (typeof urlOrPredicate === 'string') {
+                const url = urlOrPredicate;
+                urlOrPredicate = (request) => {
+                    return request.url() === url;
+                };
+            }
+            const observable$ = fromEmitterEvent(this, "request" /* PageEvent.Request */).pipe(filterAsync(urlOrPredicate), raceWith(timeout(ms), fromEmitterEvent(this, "close" /* PageEvent.Close */).pipe(map(() => {
+                throw new TargetCloseError('Page closed!');
+            }))));
+            return firstValueFrom(observable$);
+        }
+        /**
+         * @param urlOrPredicate - A URL or predicate to wait for.
+         * @param options - Optional waiting parameters
+         * @returns Promise which resolves to the matched response.
+         * @example
+         *
+         * ```ts
+         * const firstResponse = await page.waitForResponse(
+         *   'https://example.com/resource'
+         * );
+         * const finalResponse = await page.waitForResponse(
+         *   response =>
+         *     response.url() === 'https://example.com' && response.status() === 200
+         * );
+         * const finalResponse = await page.waitForResponse(async response => {
+         *   return (await response.text()).includes('<html>');
+         * });
+         * return finalResponse.ok();
+         * ```
+         *
+         * @remarks
+         * Optional Parameter have:
+         *
+         * - `timeout`: Maximum wait time in milliseconds, defaults to `30` seconds,
+         *   pass `0` to disable the timeout. The default value can be changed by using
+         *   the {@link Page.setDefaultTimeout} method.
+         */
+        waitForResponse(urlOrPredicate, options = {}) {
+            const { timeout: ms = this._timeoutSettings.timeout() } = options;
+            if (typeof urlOrPredicate === 'string') {
+                const url = urlOrPredicate;
+                urlOrPredicate = (response) => {
+                    return response.url() === url;
+                };
+            }
+            const observable$ = fromEmitterEvent(this, "response" /* PageEvent.Response */).pipe(filterAsync(urlOrPredicate), raceWith(timeout(ms), fromEmitterEvent(this, "close" /* PageEvent.Close */).pipe(map(() => {
+                throw new TargetCloseError('Page closed!');
+            }))));
+            return firstValueFrom(observable$);
+        }
+        /**
+         * Waits for the network to be idle.
+         *
+         * @param options - Options to configure waiting behavior.
+         * @returns A promise which resolves once the network is idle.
+         */
+        waitForNetworkIdle(options = {}) {
+            return firstValueFrom(this.waitForNetworkIdle$(options));
+        }
+        /**
          * @internal
          */
-        _waitForNetworkIdle(networkManager, idleTime, requestsInFlight = 0) {
-            return merge(fromEvent(networkManager, NetworkManagerEvent.Request), fromEvent(networkManager, NetworkManagerEvent.Response), fromEvent(networkManager, NetworkManagerEvent.RequestFailed)).pipe(startWith(undefined), filter(() => {
-                return networkManager.inFlightRequestsCount() <= requestsInFlight;
-            }), switchMap(v => {
-                return of(v).pipe(delay(idleTime));
-            }));
+        waitForNetworkIdle$(options = {}) {
+            const { timeout: ms = this._timeoutSettings.timeout(), idleTime = NETWORK_IDLE_TIME, concurrency = 0, } = options;
+            return this.#inflight$.pipe(switchMap(inflight => {
+                if (inflight > concurrency) {
+                    return EMPTY;
+                }
+                return timer(idleTime);
+            }), map(() => { }), raceWith(timeout(ms), fromEmitterEvent(this, "close" /* PageEvent.Close */).pipe(map(() => {
+                throw new TargetCloseError('Page closed!');
+            }))));
         }
         /**
          * Waits for a frame matching the given conditions to appear.
@@ -623,7 +710,7 @@ let Page = (() => {
                     return urlOrPredicate === frame.url();
                 };
             }
-            return await firstValueFrom(merge(fromEvent(this, "frameattached" /* PageEvent.FrameAttached */), fromEvent(this, "framenavigated" /* PageEvent.FrameNavigated */), from(this.frames())).pipe(filterAsync(urlOrPredicate), first(), raceWith(timeout(ms), fromEvent(this, "close" /* PageEvent.Close */).pipe(map(() => {
+            return await firstValueFrom(merge(fromEmitterEvent(this, "frameattached" /* PageEvent.FrameAttached */), fromEmitterEvent(this, "framenavigated" /* PageEvent.FrameNavigated */), from(this.frames())).pipe(filterAsync(urlOrPredicate), first(), raceWith(timeout(ms), fromEmitterEvent(this, "close" /* PageEvent.Close */).pipe(map(() => {
                 throw new TargetCloseError('Page closed.');
             })))));
         }
@@ -996,50 +1083,6 @@ let Page = (() => {
             }
         }
         /**
-         * @internal
-         */
-        _getPDFOptions(options = {}, lengthUnit = 'in') {
-            const defaults = {
-                scale: 1,
-                displayHeaderFooter: false,
-                headerTemplate: '',
-                footerTemplate: '',
-                printBackground: false,
-                landscape: false,
-                pageRanges: '',
-                preferCSSPageSize: false,
-                omitBackground: false,
-                timeout: 30000,
-                tagged: false,
-            };
-            let width = 8.5;
-            let height = 11;
-            if (options.format) {
-                const format = paperFormats[options.format.toLowerCase()];
-                assert(format, 'Unknown paper format: ' + options.format);
-                width = format.width;
-                height = format.height;
-            }
-            else {
-                width = convertPrintParameterToInches(options.width, lengthUnit) ?? width;
-                height =
-                    convertPrintParameterToInches(options.height, lengthUnit) ?? height;
-            }
-            const margin = {
-                top: convertPrintParameterToInches(options.margin?.top, lengthUnit) || 0,
-                left: convertPrintParameterToInches(options.margin?.left, lengthUnit) || 0,
-                bottom: convertPrintParameterToInches(options.margin?.bottom, lengthUnit) || 0,
-                right: convertPrintParameterToInches(options.margin?.right, lengthUnit) || 0,
-            };
-            return {
-                ...defaults,
-                ...options,
-                width,
-                height,
-                margin,
-            };
-        }
-        /**
          * The page's title
          *
          * @remarks
@@ -1189,30 +1232,6 @@ let Page = (() => {
             return this.mainFrame().type(selector, text, options);
         }
         /**
-         * @deprecated Replace with `new Promise(r => setTimeout(r, milliseconds));`.
-         *
-         * Causes your script to wait for the given number of milliseconds.
-         *
-         * @remarks
-         *
-         * It's generally recommended to not wait for a number of seconds, but instead
-         * use {@link Frame.waitForSelector}, {@link Frame.waitForXPath} or
-         * {@link Frame.waitForFunction} to wait for exactly the conditions you want.
-         *
-         * @example
-         *
-         * Wait for 1 second:
-         *
-         * ```ts
-         * await page.waitForTimeout(1000);
-         * ```
-         *
-         * @param milliseconds - the number of milliseconds to wait.
-         */
-        waitForTimeout(milliseconds) {
-            return this.mainFrame().waitForTimeout(milliseconds);
-        }
-        /**
          * Wait for the `selector` to appear in page. If at the moment of calling the
          * method the `selector` already exists, the method will return immediately. If
          * the `selector` doesn't appear after the `timeout` milliseconds of waiting, the
@@ -1266,60 +1285,6 @@ let Page = (() => {
          */
         async waitForSelector(selector, options = {}) {
             return await this.mainFrame().waitForSelector(selector, options);
-        }
-        /**
-         * Wait for the `xpath` to appear in page. If at the moment of calling the
-         * method the `xpath` already exists, the method will return immediately. If
-         * the `xpath` doesn't appear after the `timeout` milliseconds of waiting, the
-         * function will throw.
-         *
-         * @example
-         * This method works across navigation
-         *
-         * ```ts
-         * import puppeteer from 'puppeteer';
-         * (async () => {
-         *   const browser = await puppeteer.launch();
-         *   const page = await browser.newPage();
-         *   let currentURL;
-         *   page
-         *     .waitForXPath('//img')
-         *     .then(() => console.log('First URL with image: ' + currentURL));
-         *   for (currentURL of [
-         *     'https://example.com',
-         *     'https://google.com',
-         *     'https://bbc.com',
-         *   ]) {
-         *     await page.goto(currentURL);
-         *   }
-         *   await browser.close();
-         * })();
-         * ```
-         *
-         * @param xpath - A
-         * {@link https://developer.mozilla.org/en-US/docs/Web/XPath | xpath} of an
-         * element to wait for
-         * @param options - Optional waiting parameters
-         * @returns Promise which resolves when element specified by xpath string is
-         * added to DOM. Resolves to `null` if waiting for `hidden: true` and xpath is
-         * not found in DOM, otherwise resolves to `ElementHandle`.
-         * @remarks
-         * The optional Argument `options` have properties:
-         *
-         * - `visible`: A boolean to wait for element to be present in DOM and to be
-         *   visible, i.e. to not have `display: none` or `visibility: hidden` CSS
-         *   properties. Defaults to `false`.
-         *
-         * - `hidden`: A boolean wait for element to not be found in the DOM or to be
-         *   hidden, i.e. have `display: none` or `visibility: hidden` CSS properties.
-         *   Defaults to `false`.
-         *
-         * - `timeout`: A number which is maximum time to wait for in milliseconds.
-         *   Defaults to `30000` (30 seconds). Pass `0` to disable timeout. The default
-         *   value can be changed by using the {@link Page.setDefaultTimeout} method.
-         */
-        waitForXPath(xpath, options) {
-            return this.mainFrame().waitForXPath(xpath, options);
         }
         /**
          * Waits for the provided function, `pageFunction`, to return a truthy value when
@@ -1413,46 +1378,6 @@ export const supportedMetrics = new Set([
     'JSHeapUsedSize',
     'JSHeapTotalSize',
 ]);
-/**
- * @internal
- */
-export const unitToPixels = {
-    px: 1,
-    in: 96,
-    cm: 37.8,
-    mm: 3.78,
-};
-function convertPrintParameterToInches(parameter, lengthUnit = 'in') {
-    if (typeof parameter === 'undefined') {
-        return undefined;
-    }
-    let pixels;
-    if (isNumber(parameter)) {
-        // Treat numbers as pixel values to be aligned with phantom's paperSize.
-        pixels = parameter;
-    }
-    else if (isString(parameter)) {
-        const text = parameter;
-        let unit = text.substring(text.length - 2).toLowerCase();
-        let valueText = '';
-        if (unit in unitToPixels) {
-            valueText = text.substring(0, text.length - 2);
-        }
-        else {
-            // In case of unknown unit try to parse the whole parameter as number of pixels.
-            // This is consistent with phantom's paperSize behavior.
-            unit = 'px';
-            valueText = text;
-        }
-        const value = Number(valueText);
-        assert(!isNaN(value), 'Failed to parse parameter value: ' + text);
-        pixels = value * unitToPixels[unit];
-    }
-    else {
-        throw new Error('page.pdf() Cannot handle parameter type: ' + typeof parameter);
-    }
-    return pixels / unitToPixels[lengthUnit];
-}
 /** @see https://w3c.github.io/webdriver-bidi/#normalize-rect */
 function normalizeRectangle(clip) {
     return {

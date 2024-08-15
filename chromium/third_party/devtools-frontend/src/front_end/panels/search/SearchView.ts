@@ -134,7 +134,7 @@ export class SearchView extends UI.Widget.VBox {
     this.visiblePane = null;
     this.#throttler = throttler;
 
-    this.element.setAttribute('jslog', `${VisualLogging.panel().context('search')}`);
+    this.contentElement.setAttribute('jslog', `${VisualLogging.panel('search').track({resize: true})}`);
 
     this.contentElement.classList.add('search-view');
     this.contentElement.addEventListener('keydown', event => {
@@ -146,15 +146,13 @@ export class SearchView extends UI.Widget.VBox {
     this.searchResultsElement.className = 'search-results';
 
     const searchContainer = document.createElement('div');
-    searchContainer.style.flex = 'auto';
-    searchContainer.style.justifyContent = 'start';
-    searchContainer.style.maxWidth = '300px';
-    searchContainer.style.overflow = 'revert';
+    searchContainer.classList.add('toolbar-item-search');
+
     this.search = UI.HistoryInput.HistoryInput.create();
     this.search.addEventListener('keydown', event => {
       this.onKeyDown((event as KeyboardEvent));
     });
-    this.search.setAttribute('jslog', `${VisualLogging.textField().track({keydown: true})}`);
+    this.search.setAttribute('jslog', `${VisualLogging.textField().track({keydown: 'ArrowUp|ArrowDown|Enter'})}`);
     searchContainer.appendChild(this.search);
     this.search.placeholder = i18nString(UIStrings.search);
     this.search.setAttribute('type', 'search');
@@ -165,6 +163,7 @@ export class SearchView extends UI.Widget.VBox {
     const searchItem = new UI.Toolbar.ToolbarItem(searchContainer);
 
     const toolbar = new UI.Toolbar.Toolbar('search-toolbar', this.searchPanelElement);
+    toolbar.element.setAttribute('jslog', `${VisualLogging.toolbar()}`);
     this.matchCaseButton = SearchView.appendToolbarToggle(toolbar, 'Aa', i18nString(UIStrings.matchCase), 'match-case');
     this.regexButton =
         SearchView.appendToolbarToggle(toolbar, '.*', i18nString(UIStrings.useRegularExpression), 'use-regex');
@@ -186,7 +185,7 @@ export class SearchView extends UI.Widget.VBox {
     this.searchResultsMessageElement = searchStatusBarElement.createChild('div', 'search-message');
 
     this.advancedSearchConfig = Common.Settings.Settings.instance().createLocalSetting(
-        settingKey + 'SearchConfig', new Workspace.SearchConfig.SearchConfig('', true, false).toPlainObject());
+        settingKey + '-search-config', new Workspace.SearchConfig.SearchConfig('', true, false).toPlainObject());
 
     this.load();
     this.searchScope = null;
@@ -465,8 +464,10 @@ export class SearchView extends UI.Widget.VBox {
 
     if (shouldShowAllForMac || shouldShowAllForOtherPlatforms) {
       this.searchResultsPane?.showAllMatches();
+      void VisualLogging.logKeyDown(event.currentTarget, event, 'show-all-matches');
     } else if (shouldCollapseAllForMac || shouldCollapseAllForOtherPlatforms) {
       this.searchResultsPane?.collapseAllResults();
+      void VisualLogging.logKeyDown(event.currentTarget, event, 'collapse-all-results');
     }
   }
 

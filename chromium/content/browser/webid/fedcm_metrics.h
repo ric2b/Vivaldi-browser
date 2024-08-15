@@ -186,14 +186,21 @@ class CONTENT_EXPORT FedCmMetrics {
  public:
   FedCmMetrics(const GURL& provider,
                const ukm::SourceId page_source_id,
-               int session_id,
-               bool is_disabled);
+               int session_id);
 
-  ~FedCmMetrics() = default;
+  ~FedCmMetrics();
+
+  // Records the number of times navigator.credentials.get() is called in a
+  // document. Requests made when FedCM is disabled or when there is a pending
+  // FedCM request are not counted.
+  static void RecordNumRequestsPerDocument(ukm::SourceId page_source_id,
+                                           const int num_requests);
 
   // Records the time from when a call to the API was made to when the accounts
   // dialog is shown.
-  void RecordShowAccountsDialogTime(base::TimeDelta duration);
+  void RecordShowAccountsDialogTime(
+      const std::vector<IdentityProviderData>& providers,
+      base::TimeDelta duration);
 
   // Records the time from when the accounts dialog is shown to when the user
   // presses the Continue button.
@@ -241,9 +248,10 @@ class CONTENT_EXPORT FedCmMetrics {
   // Records whether the user selected account is for sign-in or not.
   void RecordIsSignInUser(bool is_sign_in);
 
-  // Records whether a user has left the page where the API is called when the
-  // browser is ready to show the accounts dialog.
-  void RecordWebContentsVisibilityUponReadyToShowDialog(bool is_visible);
+  // Records whether the frame is visible or active upon ready to show accounts
+  // UI.
+  void RecordWebContentsStatusUponReadyToShowDialog(bool is_visible,
+                                                    bool is_active);
 
   // This enum is used in histograms. Do not remove or modify existing entries.
   // You may add entries at the end, and update |kMaxValue|.
@@ -289,11 +297,6 @@ class CONTENT_EXPORT FedCmMetrics {
   // Records a sample when an accounts request is sent.
   void RecordAccountsRequestSent();
 
-  // Records the number of times navigator.credentials.get() is called in a
-  // document. Requests made when FedCM is disabled, when there is a pending
-  // FedCM request or for the purpose of MDocs or multi-IDP are not counted.
-  void RecordNumRequestsPerDocument(const int num_requests);
-
   // Records metrics for a disconnect call. `duration` is nullopt if the
   // disconnect fetch request was not sent, in which case we do not log the
   // metric.
@@ -320,12 +323,19 @@ class CONTENT_EXPORT FedCmMetrics {
       IdpNetworkRequestManager::FedCmErrorUrlType type);
 
  private:
+  ukm::SourceId GetOrCreateProviderSourceId(const GURL& provider);
+
   // The page's SourceId. Used to log the UKM event Blink.FedCm.
   ukm::SourceId page_source_id_;
 
-  // The SourceId to be used to log the UKM event Blink.FedCmIdp. Uses
-  // |provider_| as the URL.
-  ukm::SourceId provider_source_id_;
+  // The SourceId to be used to log the UKM event Blink.FedCmIdp.
+  // TODO(crbug.com/326397737): remove this in favor of provider_source_ids_.
+  // In case of multiple IDPs, this will be set to the first IDP's source id.
+  ukm::SourceId provider_source_id_ = ukm::kInvalidSourceId;
+
+  // The SourceId to be used to log the UKM event Blink.FedCmIdp. Maps a
+  // provider's config URL to its UKM SourceId.
+  std::map<GURL, ukm::SourceId> provider_source_ids_;
 
   // Whether a RequestTokenStatus has been recorded.
   bool request_token_status_recorded_{false};
@@ -334,9 +344,6 @@ class CONTENT_EXPORT FedCmMetrics {
   // recording metrics. Each FedCM call gets a random integer session id, which
   // helps group UKM events by the session id.
   int session_id_;
-
-  // Whether metrics recording is disabled for the request.
-  bool is_disabled_{false};
 };
 
 // The following metric is recorded for UMA and UKM, but does not require an
@@ -369,6 +376,14 @@ void RecordSetLoginStatusIgnoredReason(FedCmSetLoginStatusIgnoredReason reason);
 // Records the lifecycle state if we fail a FedCM request due to a page not
 // being primary.
 void RecordLifecycleStateFailureReason(FedCmLifecycleStateFailureReason reason);
+
+// Records the number of accounts received before applying login/domain hints
+// filter.
+void RecordRawAccountsSize(int size);
+
+// Records the number of accounts received after applying login/domain hints
+// filter. If no account left, nothing will be recorded.
+void RecordReadyToShowAccountsSize(int size);
 
 }  // namespace content
 

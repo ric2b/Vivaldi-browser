@@ -131,7 +131,7 @@ inline auto ArbitraryAvifEncoder() {
                        speed);
 }
 
-// Generator for an arbitrary EncoderPtr with base options fuzzed (i.e.
+// Generator for an arbitrary DecoderPtr with base options fuzzed (i.e.
 // without "experimental" options hidden behind compile flags).
 inline auto ArbitraryBaseAvifDecoder() {
   // MAX_NUM_THREADS from libaom/aom_util/aom_thread.h
@@ -153,13 +153,13 @@ inline auto ArbitraryBaseAvifDecoder() {
       /*image_dimension_limit=*/fuzztest::Just(kMaxDimension),
       /*image_count_limit=*/fuzztest::Just(10),
       /*strict_flags=*/
-      fuzztest::BitFlagCombinationOf({AVIF_STRICT_PIXI_REQUIRED,
-                                      AVIF_STRICT_CLAP_VALID,
-                                      AVIF_STRICT_ALPHA_ISPE_REQUIRED}));
+      fuzztest::BitFlagCombinationOf<avifStrictFlags>(
+          {AVIF_STRICT_PIXI_REQUIRED, AVIF_STRICT_CLAP_VALID,
+           AVIF_STRICT_ALPHA_ISPE_REQUIRED}));
 }
 
 #if defined(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
-// Generator for an arbitrary EncoderPtr with base options and gain map
+// Generator for an arbitrary DecoderPtr with base options and gain map
 // options fuzzed, with the exception of 'ignoreColorAndAlpha' (because it would
 // break most tests' assumptions).
 inline auto ArbitraryAvifDecoderWithGainMapOptions() {

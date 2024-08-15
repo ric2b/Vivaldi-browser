@@ -26,6 +26,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
@@ -37,17 +38,23 @@ import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.Features;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.components.signin.SigninFeatures;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.BlankUiTestActivity;
 
 /** Test for {@link ConfirmManagedSyncDataDialogCoordinator} */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@EnableFeatures(SigninFeatures.ENTERPRISE_POLICY_ON_SIGNIN)
 @Batch(Batch.PER_CLASS)
 public class ConfirmManagedSyncDataDialogTest {
     private static final String TEST_DOMAIN = "test.domain.example.com";
+
+    @Rule public TestRule mProcessor = new Features.JUnitProcessor();
 
     @Rule
     public final BaseActivityTestRule<BlankUiTestActivity> mActivityTestRule =

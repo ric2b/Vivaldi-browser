@@ -82,9 +82,7 @@ fn mic_encrypted_identity_section_random_des() {
                 &broadcast_cm,
             ))
             .unwrap();
-        let section_salt = V1Salt::<CryptoProviderImpl>::from(
-            *section_builder.section_encoder.salt.as_array_ref(),
-        );
+        let section_salt: V1Salt<CryptoProviderImpl> = section_builder.section_encoder.salt.into();
 
         for de in extra_des.iter() {
             section_builder.add_de(|_| de).unwrap();
@@ -188,9 +186,7 @@ fn signature_encrypted_identity_section_random_des() {
                 &broadcast_cm,
             ))
             .unwrap();
-        let section_salt = V1Salt::<CryptoProviderImpl>::from(
-            *section_builder.section_encoder.salt.as_array_ref(),
-        );
+        let section_salt: V1Salt<CryptoProviderImpl> = section_builder.section_encoder.salt.into();
 
         let extra_des = (0..num_des)
             .map(|_| {
@@ -287,8 +283,7 @@ fn section_builder_too_full_doesnt_advance_de_index() {
             &broadcast_cm,
         ))
         .unwrap();
-    let salt =
-        V1Salt::<CryptoProviderImpl>::from(*section_builder.section_encoder.salt.as_array_ref());
+    let salt: V1Salt<CryptoProviderImpl> = section_builder.section_encoder.salt.into();
 
     section_builder
         .add_de(|de_salt| DummyDataElement {
@@ -384,8 +379,7 @@ fn section_builder_build_de_error_doesnt_advance_de_index() {
             &broadcast_cm,
         ))
         .unwrap();
-    let salt =
-        V1Salt::<CryptoProviderImpl>::from(*section_builder.section_encoder.salt.as_array_ref());
+    let salt: V1Salt<CryptoProviderImpl> = section_builder.section_encoder.salt.into();
 
     section_builder
         .add_de(|de_salt| DummyDataElement {
@@ -452,8 +446,7 @@ fn add_multiple_de_correct_de_offsets_mic_encrypted_identity() {
             &broadcast_cm,
         ))
         .unwrap();
-    let salt =
-        V1Salt::<CryptoProviderImpl>::from(*section_builder.section_encoder.salt.as_array_ref());
+    let salt: V1Salt<CryptoProviderImpl> = section_builder.section_encoder.salt.into();
 
     section_builder
         .add_de(|de_salt| DummyDataElement {
@@ -516,8 +509,7 @@ fn add_multiple_de_correct_de_offsets_signature_encrypted_identity() {
             &broadcast_cm,
         ))
         .unwrap();
-    let salt =
-        V1Salt::<CryptoProviderImpl>::from(*section_builder.section_encoder.salt.as_array_ref());
+    let salt: V1Salt<CryptoProviderImpl> = section_builder.section_encoder.salt.into();
 
     section_builder
         .add_de(|de_salt| DummyDataElement {
@@ -634,7 +626,8 @@ fn do_mic_encrypted_identity_fixed_key_material_test<W: WriteDataElement>(extra_
     let metadata_key = MetadataKey([1; 16]);
     let key_seed = [2; 32];
     let adv_header_byte = 0b00100000;
-    let section_salt: V1Salt<CryptoProviderImpl> = [3; 16].into();
+    let raw_salt = [3; 16];
+    let section_salt: V1Salt<CryptoProviderImpl> = raw_salt.into();
     let identity_type = EncryptedIdentityDataElementType::Private;
     let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
 
@@ -645,7 +638,7 @@ fn do_mic_encrypted_identity_fixed_key_material_test<W: WriteDataElement>(extra_
     let mut section_builder = adv_builder
         .section_builder(MicEncryptedSectionEncoder::<CryptoProviderImpl>::new(
             identity_type,
-            V1Salt::from(*section_salt.as_array_ref()),
+            RawV1Salt(raw_salt),
             &broadcast_cm,
         ))
         .unwrap();
@@ -719,7 +712,8 @@ fn do_signature_encrypted_identity_fixed_key_material_test<W: WriteDataElement>(
     let metadata_key = MetadataKey([1; 16]);
     let key_seed = [2; 32];
     let adv_header_byte = 0b00100000;
-    let section_salt: V1Salt<CryptoProviderImpl> = [3; 16].into();
+    let raw_salt = [3; 16];
+    let section_salt: V1Salt<CryptoProviderImpl> = raw_salt.into();
     let identity_type = EncryptedIdentityDataElementType::Private;
     let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
     let key_pair = KeyPair::generate();
@@ -732,7 +726,7 @@ fn do_signature_encrypted_identity_fixed_key_material_test<W: WriteDataElement>(
     let mut section_builder = adv_builder
         .section_builder(SignedEncryptedSectionEncoder::<CryptoProviderImpl>::new(
             identity_type,
-            V1Salt::from(*section_salt.as_array_ref()),
+            RawV1Salt(raw_salt),
             &broadcast_cm,
         ))
         .unwrap();
@@ -805,7 +799,7 @@ fn do_signature_encrypted_identity_fixed_key_material_test<W: WriteDataElement>(
 /// Write `section_contents_len` bytes of DE and header into `section_builder`
 pub(crate) fn fill_section_builder<I: SectionEncoder>(
     section_contents_len: usize,
-    section_builder: &mut SectionBuilder<I>,
+    section_builder: &mut SectionBuilder<&mut AdvBuilder, I>,
 ) {
     // DEs can only go up to 127, so we'll need multiple for long sections
     for _ in 0..(section_contents_len / 100) {
@@ -863,9 +857,14 @@ pub(crate) trait SectionBuilderExt {
     fn into_section(self) -> EncodedSection;
 }
 
-impl<'a, I: SectionEncoder> SectionBuilderExt for SectionBuilder<'a, I> {
+impl<R: AsMut<AdvBuilder>, I: SectionEncoder> SectionBuilderExt for SectionBuilder<R, I> {
     /// Convenience method for tests
-    fn into_section(self) -> EncodedSection {
-        Self::build_section(self.section.into_inner(), self.section_encoder, self.adv_builder)
+    fn into_section(mut self) -> EncodedSection {
+        let adv_builder_header_byte = self.adv_builder.as_mut().header_byte();
+        Self::build_section(
+            adv_builder_header_byte,
+            self.section.into_inner(),
+            self.section_encoder,
+        )
     }
 }

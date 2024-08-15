@@ -143,18 +143,6 @@
       "use_remoteexec": true
     }
   },
-  "chromeos-eve-arc-r-chrome": {
-    "args_file": "//build/args/chromeos/eve-arc-r.gni",
-    "gn_args": {
-      "dcheck_always_on": false,
-      "exclude_unwind_tables": false,
-      "is_chrome_branded": true,
-      "is_chromeos_device": true,
-      "is_official_build": true,
-      "ozone_platform_headless": true,
-      "use_remoteexec": true
-    }
-  },
   "chromeos-eve-chrome": {
     "args_file": "//build/args/chromeos/eve.gni",
     "gn_args": {
@@ -400,6 +388,17 @@
       "use_remoteexec": true
     }
   },
+  "linux-chromeos-chrome-with-lacros": {
+    "gn_args": {
+      "also_build_lacros_chrome": true,
+      "exclude_unwind_tables": false,
+      "is_chrome_branded": true,
+      "is_official_build": true,
+      "symbol_level": 1,
+      "target_os": "chromeos",
+      "use_remoteexec": true
+    }
+  },
   "linux-chromeos-compile-chrome": {
     "gn_args": {
       "exclude_unwind_tables": false,
@@ -414,6 +413,18 @@
     "gn_args": {
       "is_chrome_branded": true,
       "is_official_build": true,
+      "use_remoteexec": true
+    }
+  },
+  "linux-lacros-chrome": {
+    "gn_args": {
+      "also_build_ash_chrome": true,
+      "chromeos_is_browser_only": true,
+      "exclude_unwind_tables": false,
+      "is_chrome_branded": true,
+      "is_official_build": true,
+      "symbol_level": 1,
+      "target_os": "chromeos",
       "use_remoteexec": true
     }
   },

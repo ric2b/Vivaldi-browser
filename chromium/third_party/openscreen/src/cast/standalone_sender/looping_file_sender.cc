@@ -103,7 +103,7 @@ void LoopingFileSender::SendFileAgain() {
                << " (starts in one second)...";
   TRACE_DEFAULT_SCOPED(TraceCategory::kStandaloneSender);
 
-  OSP_DCHECK_EQ(num_capturers_running_, 0);
+  OSP_CHECK_EQ(num_capturers_running_, 0);
   num_capturers_running_ = 2;
   capture_begin_time_ = latest_frame_time_ = env_->now() + seconds(1);
   audio_capturer_.emplace(

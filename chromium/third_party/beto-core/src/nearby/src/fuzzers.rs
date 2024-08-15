@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use cmd_runner::{run_cmd_shell_with_color, YellowStderr};
+use cmd_runner::{run_cmd_shell, run_cmd_shell_with_color, YellowStderr};
 use std::{fs, path};
 
 pub(crate) fn run_rust_fuzzers(root: &path::Path) -> anyhow::Result<()> {
@@ -52,7 +52,7 @@ pub(crate) fn run_rust_fuzzers(root: &path::Path) -> anyhow::Result<()> {
     run_cmd_shell_with_color::<YellowStderr>(
         &root.join("crypto/crypto_provider_test"),
         concat!(
-            "cargo +nightly fuzz run fuzz_p256 --features=openssl --no-default-features ",
+            "cargo +nightly fuzz run fuzz_p256 --features=boringssl --no-default-features ",
             "-- -runs=10000 -max_total_time=60"
         ),
     )?;
@@ -60,22 +60,25 @@ pub(crate) fn run_rust_fuzzers(root: &path::Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub(crate) fn build_ffi_fuzzers(root: &path::Path) -> anyhow::Result<()> {
-    log::info!("Building ffi fuzzers");
-    // TODO currently broken because the FFI stuff hasn't necessarily been built yet
-    let mut build_dir = root.to_path_buf();
-    build_dir.push("presence/ldt_np_adv_ffi_fuzz/cmake-build");
+// Runs the fuzztest fuzzers as short lived unit tests, compatible with gtest
+pub(crate) fn build_fuzztest_uts(root: &path::Path) -> anyhow::Result<()> {
+    log::info!("Checking fuzztest targets in unit test mode");
 
-    if build_dir.exists() {
-        fs::remove_dir_all(&build_dir)?;
-    }
+    // first build the rust static libs to link against
+    let np_ffi_crate_dir = root.join("presence/np_c_ffi");
+    run_cmd_shell(&np_ffi_crate_dir, "cargo build --release")?;
+    let build_dir = root.join("presence/cmake-build");
     fs::create_dir_all(&build_dir)?;
-    run_cmd_shell_with_color::<YellowStderr>(
-        &build_dir,
-        "cmake -G Ninja ../.. -DENABLE_FUZZ=true",
-    )?;
-    run_cmd_shell_with_color::<YellowStderr>(&build_dir, "cmake --build .")?;
-    fs::remove_dir_all(&build_dir)?;
+    run_cmd_shell_with_color::<YellowStderr>(&build_dir, "cmake -G Ninja -DENABLE_FUZZ=true ..")?;
 
+    for target in ["deserialization_fuzzer", "ldt_fuzzer"] {
+        run_cmd_shell_with_color::<YellowStderr>(
+            &build_dir,
+            format!("cmake --build . --target {}", target),
+        )?;
+    }
+
+    run_cmd_shell_with_color::<YellowStderr>(&build_dir.join("np_cpp_ffi/fuzz/"), "ctest")?;
+    run_cmd_shell_with_color::<YellowStderr>(&build_dir.join("ldt_np_adv_ffi/c/fuzz/"), "ctest")?;
     Ok(())
 }

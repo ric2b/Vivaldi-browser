@@ -34,7 +34,7 @@
 #include "src/tint/lang/wgsl/ast/alias.h"
 #include "src/tint/lang/wgsl/ast/assignment_statement.h"
 #include "src/tint/lang/wgsl/ast/binary_expression.h"
-#include "src/tint/lang/wgsl/ast/bitcast_expression.h"
+#include "src/tint/lang/wgsl/ast/blend_src_attribute.h"
 #include "src/tint/lang/wgsl/ast/bool_literal_expression.h"
 #include "src/tint/lang/wgsl/ast/break_if_statement.h"
 #include "src/tint/lang/wgsl/ast/break_statement.h"
@@ -55,7 +55,6 @@
 #include "src/tint/lang/wgsl/ast/if_statement.h"
 #include "src/tint/lang/wgsl/ast/increment_decrement_statement.h"
 #include "src/tint/lang/wgsl/ast/index_accessor_expression.h"
-#include "src/tint/lang/wgsl/ast/index_attribute.h"
 #include "src/tint/lang/wgsl/ast/int_literal_expression.h"
 #include "src/tint/lang/wgsl/ast/internal_attribute.h"
 #include "src/tint/lang/wgsl/ast/interpolate_attribute.h"
@@ -133,7 +132,7 @@ bool ASTPrinter::Generate() {
         }
     }
 
-    return !diagnostics_.contains_errors();
+    return !diagnostics_.ContainsErrors();
 }
 
 void ASTPrinter::EmitDiagnosticControl(StringStream& out,
@@ -185,7 +184,6 @@ void ASTPrinter::EmitExpression(StringStream& out, const ast::Expression* expr) 
         expr,  //
         [&](const ast::IndexAccessorExpression* a) { EmitIndexAccessor(out, a); },
         [&](const ast::BinaryExpression* b) { EmitBinary(out, b); },
-        [&](const ast::BitcastExpression* b) { EmitBitcast(out, b); },
         [&](const ast::CallExpression* c) { EmitCall(out, c); },
         [&](const ast::IdentifierExpression* i) { EmitIdentifier(out, i); },
         [&](const ast::LiteralExpression* l) { EmitLiteral(out, l); },
@@ -225,15 +223,6 @@ void ASTPrinter::EmitMemberAccessor(StringStream& out, const ast::MemberAccessor
     }
 
     out << "." << expr->member->symbol.Name();
-}
-
-void ASTPrinter::EmitBitcast(StringStream& out, const ast::BitcastExpression* expr) {
-    out << "bitcast<";
-    EmitExpression(out, expr->type);
-
-    out << ">(";
-    EmitExpression(out, expr->expr);
-    out << ")";
 }
 
 void ASTPrinter::EmitCall(StringStream& out, const ast::CallExpression* expr) {
@@ -349,7 +338,7 @@ void ASTPrinter::EmitFunction(const ast::Function* func) {
 void ASTPrinter::EmitImageFormat(StringStream& out, const core::TexelFormat fmt) {
     switch (fmt) {
         case core::TexelFormat::kUndefined:
-            diagnostics_.add_error(diag::System::Writer, "unknown image format");
+            diagnostics_.AddError(diag::System::Writer, Source{}) << "unknown image format";
             break;
         default:
             out << fmt;
@@ -511,8 +500,8 @@ void ASTPrinter::EmitAttributes(StringStream& out, VectorRef<const ast::Attribut
                 EmitExpression(out, color->expr);
                 out << ")";
             },
-            [&](const ast::IndexAttribute* index) {
-                out << "index(";
+            [&](const ast::BlendSrcAttribute* index) {
+                out << "blend_src(";
                 EmitExpression(out, index->expr);
                 out << ")";
             },

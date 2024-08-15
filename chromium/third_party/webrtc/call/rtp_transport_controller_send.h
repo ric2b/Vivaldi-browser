@@ -38,12 +38,10 @@
 #include "modules/rtp_rtcp/include/rtp_rtcp_defines.h"
 #include "rtc_base/network_route.h"
 #include "rtc_base/race_checker.h"
-#include "rtc_base/task_queue.h"
 #include "rtc_base/task_utils/repeating_task.h"
 
 namespace webrtc {
 class FrameEncryptorInterface;
-class RtcEventLog;
 
 class RtpTransportControllerSend final
     : public RtpTransportControllerSendInterface,
@@ -67,7 +65,6 @@ class RtpTransportControllerSend final
       int rtcp_report_interval_ms,
       Transport* send_transport,
       const RtpSenderObservers& observers,
-      RtcEventLog* event_log,
       std::unique_ptr<FecController> fec_controller,
       const RtpSenderFrameEncryptionConfig& frame_encryption_config,
       rtc::scoped_refptr<FrameTransformerInterface> frame_transformer) override;
@@ -75,6 +72,8 @@ class RtpTransportControllerSend final
       RtpVideoSenderInterface* rtp_video_sender) override;
 
   // Implements RtpTransportControllerSendInterface
+  void RegisterSendingRtpStream(RtpRtcpInterface& rtp_module) override;
+  void DeRegisterSendingRtpStream(RtpRtcpInterface& rtp_module) override;
   PacketRouter* packet_router() override;
 
   NetworkStateEstimateObserver* network_state_estimate_observer() override;
@@ -82,6 +81,8 @@ class RtpTransportControllerSend final
   RtpPacketSender* packet_sender() override;
 
   void SetAllocatedSendBitrateLimits(BitrateAllocationLimits limits) override;
+  void ReconfigureBandwidthEstimation(
+      const BandwidthEstimationSettings& settings) override;
 
   void SetPacingFactor(float pacing_factor) override;
   void SetQueueTimeLimit(int limit_ms) override;
@@ -125,6 +126,7 @@ class RtpTransportControllerSend final
 
  private:
   void MaybeCreateControllers() RTC_RUN_ON(sequence_checker_);
+  void UpdateNetworkAvailability() RTC_RUN_ON(sequence_checker_);
   void UpdateInitialConstraints(TargetRateConstraints new_contraints)
       RTC_RUN_ON(sequence_checker_);
 
@@ -155,6 +157,7 @@ class RtpTransportControllerSend final
   RtpBitrateConfigurator bitrate_configurator_;
   std::map<std::string, rtc::NetworkRoute> network_routes_
       RTC_GUARDED_BY(sequence_checker_);
+  BandwidthEstimationSettings bwe_settings_ RTC_GUARDED_BY(sequence_checker_);
   bool pacer_started_ RTC_GUARDED_BY(sequence_checker_);
   TaskQueuePacedSender pacer_;
 

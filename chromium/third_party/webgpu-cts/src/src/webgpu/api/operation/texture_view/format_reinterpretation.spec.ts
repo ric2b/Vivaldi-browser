@@ -100,7 +100,8 @@ g.test('texture_binding')
       .combine('format', kRegularTextureFormats)
       .combine('viewFormat', kRegularTextureFormats)
       .filter(
-        ({ format, viewFormat }) => format !== viewFormat && viewCompatible(format, viewFormat)
+        ({ format, viewFormat }) =>
+          format !== viewFormat && viewCompatible(false, format, viewFormat)
       )
   )
   .beforeAllSubcases(t => {
@@ -202,7 +203,8 @@ in view format and match in base format.`
       .combine('format', kRenderableColorTextureFormats)
       .combine('viewFormat', kRenderableColorTextureFormats)
       .filter(
-        ({ format, viewFormat }) => format !== viewFormat && viewCompatible(format, viewFormat)
+        ({ format, viewFormat }) =>
+          format !== viewFormat && viewCompatible(false, format, viewFormat)
       )
       .combine('sampleCount', [1, 4])
   )

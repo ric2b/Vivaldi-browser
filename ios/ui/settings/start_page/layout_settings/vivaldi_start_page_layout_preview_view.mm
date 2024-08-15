@@ -11,6 +11,7 @@
 #import "ios/ui/ntp/cells/vivaldi_speed_dial_small_cell.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_container_view_flow_layout.h"
 #import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_style.h"
 #import "ui/base/device_form_factor.h"
 
@@ -27,14 +28,19 @@ NSString* cellIdList = @"cellIdList";
 
 @interface VivaldiStartPageLayoutPreviewView()<UICollectionViewDataSource>
 @property(weak,nonatomic) UICollectionView *collectionView;
+// Collection view layout for selected column and layout rendering
+@property(nonatomic,strong) VivaldiSpeedDialViewContainerViewFlowLayout *layout;
 // Currently selected layout
 @property(nonatomic,assign) VivaldiStartPageLayoutStyle selectedLayout;
+// Currently selected maximum columns
+@property(nonatomic,assign) VivaldiStartPageLayoutColumn selectedColumn;
 @end
 
 @implementation VivaldiStartPageLayoutPreviewView
 
 @synthesize collectionView = _collectionView;
 @synthesize selectedLayout = _selectedLayout;
+@synthesize selectedColumn = _selectedColumn;
 
 #pragma mark - INITIALIZER
 - (instancetype)initWithItemConfig:(PreviewItemConfig)itemConfig {
@@ -49,10 +55,13 @@ NSString* cellIdList = @"cellIdList";
 #pragma mark - SET UP UI COMPONENTS
 - (void)setUpUI {
 
-  UICollectionViewLayout *layout= [self createLayout];
+  VivaldiSpeedDialViewContainerViewFlowLayout *layout =
+      [VivaldiSpeedDialViewContainerViewFlowLayout new];
+  layout.isPreview = YES;
+  self.layout = layout;
   UICollectionView* collectionView =
-    [[UICollectionView alloc] initWithFrame:CGRectZero
-                       collectionViewLayout:layout];
+      [[UICollectionView alloc] initWithFrame:CGRectZero
+                         collectionViewLayout:layout];
   _collectionView = collectionView;
   collectionView.dataSource = self;
   collectionView.showsHorizontalScrollIndicator = NO;
@@ -73,8 +82,12 @@ NSString* cellIdList = @"cellIdList";
 }
 
 #pragma mark - SETTERS
-- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style {
+- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style
+                 layoutColumn:(VivaldiStartPageLayoutColumn)column {
   self.selectedLayout = style;
+  self.selectedColumn = column;
+  self.layout.layoutStyle = style;
+  self.layout.numberOfColumns = column;
   [self.collectionView.collectionViewLayout invalidateLayout];
   [self.collectionView reloadData];
 }
@@ -115,160 +128,6 @@ NSString* cellIdList = @"cellIdList";
   }
 }
 
-#pragma mark - SET UP UI COMPONENTS
-
-/// Create and return the comositional layout for the collection view
-- (UICollectionViewCompositionalLayout*)createLayout {
-  UICollectionViewCompositionalLayout *layout =
-    [[UICollectionViewCompositionalLayout alloc]
-      initWithSectionProvider:
-       ^NSCollectionLayoutSection*(NSInteger sectionIndex,
-       id<NSCollectionLayoutEnvironment> layoutEnvironment) {
-    return [self layoutSectionFor:sectionIndex environment:layoutEnvironment];
-  }];
-
-  return layout;
-}
-
-- (NSCollectionLayoutSection*)layoutSectionFor:(NSInteger)index
-     environment:(id<NSCollectionLayoutEnvironment>)environment {
-
-  CGFloat gridItemSize = [self itemSizeWidth];
-  CGFloat sectionPadding = [self getSectionPadding];
-  CGFloat itemPadding = [self getItemPadding];
-
-  NSCollectionLayoutSize *itemSize;
-  if (_selectedLayout == VivaldiStartPageLayoutStyleList) {
-    itemSize =
-      [NSCollectionLayoutSize
-        sizeWithWidthDimension:[NSCollectionLayoutDimension
-                                  fractionalWidthDimension:gridItemSize]
-               heightDimension:[NSCollectionLayoutDimension
-                                  absoluteDimension:vSDItemHeightListLayout]];
-  } else {
-    itemSize =
-      [NSCollectionLayoutSize
-        sizeWithWidthDimension:[NSCollectionLayoutDimension
-                                  fractionalWidthDimension:gridItemSize]
-               heightDimension:[NSCollectionLayoutDimension
-                                  fractionalWidthDimension:gridItemSize]];
-  }
-
-  NSCollectionLayoutItem *item =
-    [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
-  NSArray *items = [[NSArray alloc] initWithObjects:item, nil];
-
-  item.contentInsets = NSDirectionalEdgeInsetsMake(itemPadding,
-                                                   itemPadding,
-                                                   itemPadding,
-                                                   itemPadding);
-
-  NSCollectionLayoutSize *groupSize;
-  if (_selectedLayout == VivaldiStartPageLayoutStyleList) {
-    groupSize =
-      [NSCollectionLayoutSize
-        sizeWithWidthDimension:[NSCollectionLayoutDimension
-                                  fractionalWidthDimension:1.0]
-               heightDimension:[NSCollectionLayoutDimension
-                                  absoluteDimension:vSDItemHeightListLayout]];
-  } else {
-    groupSize =
-      [NSCollectionLayoutSize
-        sizeWithWidthDimension:[NSCollectionLayoutDimension
-                                  fractionalWidthDimension:1.0]
-               heightDimension:[NSCollectionLayoutDimension
-                                  fractionalWidthDimension:gridItemSize]];
-  }
-
-  NSCollectionLayoutGroup *group =
-    [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize
-                                                  subitems:items];
-
-  NSCollectionLayoutSection *section =
-    [NSCollectionLayoutSection sectionWithGroup:group];
-  section.contentInsets = NSDirectionalEdgeInsetsMake(0,
-                                                      sectionPadding,
-                                                      0,
-                                                      sectionPadding);
-  return section;
-}
-
-/// Returns true if device is iPad and multitasking UI has
-/// enough space to show iPad layout preview.
-- (BOOL)isCurrentDeviceTablet {
-  return GetDeviceFormFactor() == DEVICE_FORM_FACTOR_TABLET &&
-      ((VivaldiGlobalHelpers.isHorizontalTraitRegular &&
-        VivaldiGlobalHelpers.isVerticalTraitRegular) ||
-        VivaldiGlobalHelpers.iPadLayoutState == LayoutStateFullScreen ||
-       VivaldiGlobalHelpers.iPadLayoutState == LayoutStateTwoThirdScreen);
-}
-
-/// Returns the multiplier to generate the grid item from view width.
-- (CGFloat)itemSizeWidth {
-  switch (_selectedLayout) {
-    case VivaldiStartPageLayoutStyleLarge:
-      if (self.isCurrentDeviceTablet) {
-        return vSDWidthiPadLarge;
-      } else {
-        if (self.showiPhoneLandscapeLayout) {
-          return vSDWidthiPhoneLargeLand;
-        } else {
-          return vSDWidthiPhoneLarge;
-        }
-      }
-    case VivaldiStartPageLayoutStyleMedium:
-      if (self.isCurrentDeviceTablet) {
-        return vSDWidthiPadMedium;
-      } else {
-        if (self.showiPhoneLandscapeLayout) {
-          return vSDWidthiPhoneMediumLand;
-        } else {
-          return vSDWidthiPhoneMedium;
-        }
-      }
-    case VivaldiStartPageLayoutStyleSmall:
-      if (self.isCurrentDeviceTablet) {
-        return vSDWidthiPadSmall;
-      } else {
-        if (self.showiPhoneLandscapeLayout) {
-          return vSDWidthiPhoneSmallLand;
-        } else {
-          return vSDWidthiPhoneSmall;
-        }
-      }
-    case VivaldiStartPageLayoutStyleList:
-      if (self.isCurrentDeviceTablet) {
-        return vSDWidthiPadList;
-      } else {
-        if (self.showiPhoneLandscapeLayout) {
-          return vSDWidthiPhoneListLand;
-        } else {
-          return vSDWidthiPhoneList;
-        }
-      }
-  }
-}
-
-/// Return the item padding. For preview we will use the padding for iPhone on
-/// the iPad too since for iPad the settings page is a popup and doesn't have
-/// the actual height and width of the start page.
-- (CGFloat)getItemPadding {
-  return vSDPaddingiPhone;
-}
-
-/// Returns the section padding.
-- (CGFloat)getSectionPadding {
-  return (self.showiPhoneLandscapeLayout) ?
-    vSDSectionPaddingiPhoneLandscape : vSDSectionPaddingiPhonePortrait;
-}
-
-/// Returns true when app is running on split mode in
-/// iPad with half/half screen state
-- (BOOL)isAppStateHalfScreen {
-  return VivaldiGlobalHelpers.isSplitOrSlideOver &&
-      VivaldiGlobalHelpers.iPadLayoutState == LayoutStateHalfScreen;
-}
-
 /// Returns the number of items to render on preview based on device trait, type
 /// and selected layout.
 - (NSInteger)numberOfItemsInSection {
@@ -286,32 +145,21 @@ NSString* cellIdList = @"cellIdList";
   } else {
     switch (_selectedLayout) {
       case VivaldiStartPageLayoutStyleLarge:
-        return (self.showiPhoneLandscapeLayout) ?
-          _itemConfig.numberOfItemsLargeLandscape :
-          _itemConfig.numberOfItemsLarge;
+        return _itemConfig.numberOfItemsLarge;
       case VivaldiStartPageLayoutStyleMedium:
-        return (self.showiPhoneLandscapeLayout) ?
-          _itemConfig.numberOfItemsMediumLandscape :
-          _itemConfig.numberOfItemsMedium;
+        return _itemConfig.numberOfItemsMedium;
       case VivaldiStartPageLayoutStyleSmall:
-        return (self.showiPhoneLandscapeLayout) ?
-          _itemConfig.numberOfItemsSmallLandscape :
-          _itemConfig.numberOfItemsSmall;
+        return _itemConfig.numberOfItemsSmall;
       case VivaldiStartPageLayoutStyleList:
-        return (self.showiPhoneLandscapeLayout) ?
-          _itemConfig.numberOfItemsListLandscape :
-          _itemConfig.numberOfItemsList;
+        return _itemConfig.numberOfItemsList;
     }
   }
 }
 
-/// Returns true for iPhone in landscape and iPad in half/half state.
-/// In iPad half/half state leaves a bigger space which can be utilized
-/// showing the same number of items as iPhone landscape would
-/// show.
-- (BOOL)showiPhoneLandscapeLayout {
-  return VivaldiGlobalHelpers.isVerticalTraitCompact ||
-      self.isAppStateHalfScreen;
+/// Returns whether current device is iPhone or iPad.
+- (BOOL)isCurrentDeviceTablet {
+  return GetDeviceFormFactor() == DEVICE_FORM_FACTOR_TABLET &&
+  VivaldiGlobalHelpers.isHorizontalTraitRegular;
 }
 
 @end

@@ -7,7 +7,10 @@
 #include "base/check.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
+#include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/html/html_image_element.h"
+#include "third_party/blink/renderer/core/html/loading_attribute.h"
 #include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
 #include "third_party/blink/renderer/core/paint/timing/image_element_timing.h"
 #include "third_party/blink/renderer/core/paint/timing/image_paint_timing_detector.h"
@@ -108,10 +111,11 @@ void LargestContentfulPaintCalculator::UpdateWebExposedLargestContentfulImage(
   const KURL& url = media_timing->Url();
   bool expose_paint_time_to_api =
       url.ProtocolIsData() || media_timing->TimingAllowPassed();
+  const String& image_string = url.GetString();
   const String& image_url =
       url.ProtocolIsData()
-          ? url.GetString().Left(ImageElementTiming::kInlineImageMaxChars)
-          : url.GetString();
+          ? image_string.Left(ImageElementTiming::kInlineImageMaxChars)
+          : image_string;
   // Do not expose element attribution from shadow trees.
   Element* image_element =
       image_node->IsInShadowTree() ? nullptr : To<Element>(image_node);
@@ -153,7 +157,8 @@ void LargestContentfulPaintCalculator::UpdateWebExposedLargestContentfulImage(
 
     TRACE_EVENT_MARK_WITH_TIMESTAMP2(
         kTraceCategories, kLCPCandidate, largest_image->paint_time, "data",
-        ImageCandidateTraceData(largest_image, is_triggered_by_soft_navigation),
+        ImageCandidateTraceData(largest_image, is_triggered_by_soft_navigation,
+                                image_element),
         "frame", GetFrameIdForTracing(window->GetFrame()));
   }
 }
@@ -214,7 +219,7 @@ bool LargestContentfulPaintCalculator::NotifyMetricsIfLargestImagePaintChanged(
     uint64_t image_paint_size,
     ImageRecord* image_record,
     double image_bpp,
-    absl::optional<WebURLRequest::Priority> priority) {
+    std::optional<WebURLRequest::Priority> priority) {
   // (Experimental) Images with insufficient entropy are not considered
   // candidates for LCP
   if (base::FeatureList::IsEnabled(features::kExcludeLowEntropyImagesFromLCP)) {
@@ -263,11 +268,24 @@ bool LargestContentfulPaintCalculator::NotifyMetricsIfLargestImagePaintChanged(
             blink::LargestContentfulPaintType::kDataURI;
       }
 
-      latest_lcp_details_.largest_image_discovery_time =
+      // Set cross-origin flag of the image.
+      if (auto* window = window_performance_->DomWindow()) {
+        auto image_url = image_record->media_timing->Url();
+        if (!image_url.IsEmpty() && image_url.ProtocolIsInHTTPFamily() &&
+            window->GetFrame()->IsOutermostMainFrame()) {
+          auto image_origin = SecurityOrigin::Create(image_url);
+          if (!image_origin->IsSameOriginWith(window->GetSecurityOrigin())) {
+            latest_lcp_details_.largest_contentful_paint_type |=
+                blink::LargestContentfulPaintType::kCrossOrigin;
+          }
+        }
+      }
+
+      latest_lcp_details_.resource_load_timings.discovery_time =
           image_record->media_timing->DiscoveryTime();
-      latest_lcp_details_.largest_image_load_start =
+      latest_lcp_details_.resource_load_timings.load_start =
           image_record->media_timing->LoadStart();
-      latest_lcp_details_.largest_image_load_end =
+      latest_lcp_details_.resource_load_timings.load_end =
           image_record->media_timing->LoadEnd();
       latest_lcp_details_.is_loaded_from_memory_cache =
           image_record->media_timing->IsLoadedFromMemoryCache();
@@ -361,7 +379,8 @@ LargestContentfulPaintCalculator::TextCandidateTraceData(
 std::unique_ptr<TracedValue>
 LargestContentfulPaintCalculator::ImageCandidateTraceData(
     const ImageRecord* largest_image,
-    bool is_triggered_by_soft_navigation) {
+    bool is_triggered_by_soft_navigation,
+    Element* image_element) {
   auto value = std::make_unique<TracedValue>();
   value->SetString("type", "image");
   value->SetInteger("nodeId", static_cast<int>(largest_image->node_id));
@@ -385,6 +404,15 @@ LargestContentfulPaintCalculator::ImageCandidateTraceData(
   value->SetDouble("imageLoadEnd",
                    window_performance_->MonotonicTimeToDOMHighResTimeStamp(
                        largest_image->media_timing->LoadEnd()));
+
+  String loading_attr = "";
+
+  if (HTMLImageElement* html_image_element =
+          DynamicTo<HTMLImageElement>(image_element)) {
+    loading_attr =
+        html_image_element->FastGetAttribute(html_names::kLoadingAttr);
+  }
+  value->SetString("loadingAttr", loading_attr);
 
   return value;
 }

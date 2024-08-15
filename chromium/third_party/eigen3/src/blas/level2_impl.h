@@ -22,9 +22,9 @@ struct general_matrix_vector_product_wrapper {
   }
 };
 
-int EIGEN_BLAS_FUNC(gemv)(const char *opa, const int *m, const int *n, const RealScalar *palpha, const RealScalar *pa,
-                          const int *lda, const RealScalar *pb, const int *incb, const RealScalar *pbeta,
-                          RealScalar *pc, const int *incc) {
+EIGEN_BLAS_FUNC(gemv)
+(const char *opa, const int *m, const int *n, const RealScalar *palpha, const RealScalar *pa, const int *lda,
+ const RealScalar *pb, const int *incb, const RealScalar *pbeta, RealScalar *pc, const int *incc) {
   typedef void (*functype)(int, int, const Scalar *, int, const Scalar *, int, Scalar *, int, Scalar);
   static const functype func[4] = {// array index: NOTR
                                    (general_matrix_vector_product_wrapper<int, Scalar, ColMajor, false, false>::run),
@@ -53,9 +53,9 @@ int EIGEN_BLAS_FUNC(gemv)(const char *opa, const int *m, const int *n, const Rea
     info = 8;
   else if (*incc == 0)
     info = 11;
-  if (info) return xerbla_(SCALAR_SUFFIX_UP "GEMV ", &info, 6);
+  if (info) return xerbla_(SCALAR_SUFFIX_UP "GEMV ", &info);
 
-  if (*m == 0 || *n == 0 || (alpha == Scalar(0) && beta == Scalar(1))) return 0;
+  if (*m == 0 || *n == 0 || (alpha == Scalar(0) && beta == Scalar(1))) return;
 
   int actual_m = *m;
   int actual_n = *n;
@@ -72,18 +72,17 @@ int EIGEN_BLAS_FUNC(gemv)(const char *opa, const int *m, const int *n, const Rea
       make_vector(actual_c, actual_m) *= beta;
   }
 
-  if (code >= 4 || func[code] == 0) return 0;
+  if (code >= 4 || func[code] == 0) return;
 
   func[code](actual_m, actual_n, a, *lda, actual_b, 1, actual_c, 1, alpha);
 
   if (actual_b != b) delete[] actual_b;
   if (actual_c != c) delete[] copy_back(actual_c, c, actual_m, *incc);
-
-  return 1;
 }
 
-int EIGEN_BLAS_FUNC(trsv)(const char *uplo, const char *opa, const char *diag, const int *n, const RealScalar *pa,
-                          const int *lda, RealScalar *pb, const int *incb) {
+EIGEN_BLAS_FUNC(trsv)
+(const char *uplo, const char *opa, const char *diag, const int *n, const RealScalar *pa, const int *lda,
+ RealScalar *pb, const int *incb) {
   typedef void (*functype)(int, const Scalar *, int, Scalar *);
   static const functype func[16] = {
       // array index: NOTR  | (UP << 2) | (NUNIT << 3)
@@ -127,7 +126,7 @@ int EIGEN_BLAS_FUNC(trsv)(const char *uplo, const char *opa, const char *diag, c
     info = 6;
   else if (*incb == 0)
     info = 8;
-  if (info) return xerbla_(SCALAR_SUFFIX_UP "TRSV ", &info, 6);
+  if (info) return xerbla_(SCALAR_SUFFIX_UP "TRSV ", &info);
 
   Scalar *actual_b = get_compact_vector(b, *n, *incb);
 
@@ -135,12 +134,11 @@ int EIGEN_BLAS_FUNC(trsv)(const char *uplo, const char *opa, const char *diag, c
   func[code](*n, a, *lda, actual_b);
 
   if (actual_b != b) delete[] copy_back(actual_b, b, *n, *incb);
-
-  return 0;
 }
 
-int EIGEN_BLAS_FUNC(trmv)(const char *uplo, const char *opa, const char *diag, const int *n, const RealScalar *pa,
-                          const int *lda, RealScalar *pb, const int *incb) {
+EIGEN_BLAS_FUNC(trmv)
+(const char *uplo, const char *opa, const char *diag, const int *n, const RealScalar *pa, const int *lda,
+ RealScalar *pb, const int *incb) {
   typedef void (*functype)(int, int, const Scalar *, int, const Scalar *, int, Scalar *, int, const Scalar &);
   static const functype func[16] = {
       // array index: NOTR  | (UP << 2) | (NUNIT << 3)
@@ -186,23 +184,21 @@ int EIGEN_BLAS_FUNC(trmv)(const char *uplo, const char *opa, const char *diag, c
     info = 6;
   else if (*incb == 0)
     info = 8;
-  if (info) return xerbla_(SCALAR_SUFFIX_UP "TRMV ", &info, 6);
+  if (info) return xerbla_(SCALAR_SUFFIX_UP "TRMV ", &info);
 
-  if (*n == 0) return 1;
+  if (*n == 0) return;
 
   Scalar *actual_b = get_compact_vector(b, *n, *incb);
   Matrix<Scalar, Dynamic, 1> res(*n);
   res.setZero();
 
   int code = OP(*opa) | (UPLO(*uplo) << 2) | (DIAG(*diag) << 3);
-  if (code >= 16 || func[code] == 0) return 0;
+  if (code >= 16 || func[code] == 0) return;
 
   func[code](*n, *n, a, *lda, actual_b, 1, res.data(), 1, Scalar(1));
 
   copy_back(res.data(), b, *n, *incb);
   if (actual_b != b) delete[] actual_b;
-
-  return 1;
 }
 
 /**  GBMV  performs one of the matrix-vector operations
@@ -212,8 +208,9 @@ int EIGEN_BLAS_FUNC(trmv)(const char *uplo, const char *opa, const char *diag, c
  *  where alpha and beta are scalars, x and y are vectors and A is an
  *  m by n band matrix, with kl sub-diagonals and ku super-diagonals.
  */
-int EIGEN_BLAS_FUNC(gbmv)(char *trans, int *m, int *n, int *kl, int *ku, RealScalar *palpha, RealScalar *pa, int *lda,
-                          RealScalar *px, int *incx, RealScalar *pbeta, RealScalar *py, int *incy) {
+EIGEN_BLAS_FUNC(gbmv)
+(char *trans, int *m, int *n, int *kl, int *ku, RealScalar *palpha, RealScalar *pa, int *lda, RealScalar *px, int *incx,
+ RealScalar *pbeta, RealScalar *py, int *incy) {
   const Scalar *a = reinterpret_cast<const Scalar *>(pa);
   const Scalar *x = reinterpret_cast<const Scalar *>(px);
   Scalar *y = reinterpret_cast<Scalar *>(py);
@@ -238,9 +235,9 @@ int EIGEN_BLAS_FUNC(gbmv)(char *trans, int *m, int *n, int *kl, int *ku, RealSca
     info = 10;
   else if (*incy == 0)
     info = 13;
-  if (info) return xerbla_(SCALAR_SUFFIX_UP "GBMV ", &info, 6);
+  if (info) return xerbla_(SCALAR_SUFFIX_UP "GBMV ", &info);
 
-  if (*m == 0 || *n == 0 || (alpha == Scalar(0) && beta == Scalar(1))) return 0;
+  if (*m == 0 || *n == 0 || (alpha == Scalar(0) && beta == Scalar(1))) return;
 
   int actual_m = *m;
   int actual_n = *n;
@@ -276,8 +273,6 @@ int EIGEN_BLAS_FUNC(gbmv)(char *trans, int *m, int *n, int *kl, int *ku, RealSca
 
   if (actual_x != x) delete[] actual_x;
   if (actual_y != y) delete[] copy_back(actual_y, y, actual_m, *incy);
-
-  return 0;
 }
 
 #if 0
@@ -288,7 +283,7 @@ int EIGEN_BLAS_FUNC(gbmv)(char *trans, int *m, int *n, int *kl, int *ku, RealSca
   *  where x is an n element vector and  A is an n by n unit, or non-unit,
   *  upper or lower triangular band matrix, with ( k + 1 ) diagonals.
   */
-int EIGEN_BLAS_FUNC(tbmv)(char *uplo, char *opa, char *diag, int *n, int *k, RealScalar *pa, int *lda, RealScalar *px, int *incx)
+EIGEN_BLAS_FUNC(tbmv)(char *uplo, char *opa, char *diag, int *n, int *k, RealScalar *pa, int *lda, RealScalar *px, int *incx)
 {
   Scalar* a = reinterpret_cast<Scalar*>(pa);
   Scalar* x = reinterpret_cast<Scalar*>(px);
@@ -305,8 +300,7 @@ int EIGEN_BLAS_FUNC(tbmv)(char *uplo, char *opa, char *diag, int *n, int *k, Rea
   if(info)
     return xerbla_(SCALAR_SUFFIX_UP"TBMV ",&info,6);
 
-  if(*n==0)
-    return 0;
+  if(*n==0) return;
 
   int actual_n = *n;
 
@@ -334,8 +328,6 @@ int EIGEN_BLAS_FUNC(tbmv)(char *uplo, char *opa, char *diag, int *n, int *k, Rea
 
   if(actual_x!=x) delete[] actual_x;
   if(actual_y!=y) delete[] copy_back(actual_y,y,actual_m,*incy);
-
-  return 0;
 }
 #endif
 
@@ -350,8 +342,8 @@ int EIGEN_BLAS_FUNC(tbmv)(char *uplo, char *opa, char *diag, int *n, int *k, Rea
  *  No test for singularity or near-singularity is included in this
  *  routine. Such tests must be performed before calling this routine.
  */
-int EIGEN_BLAS_FUNC(tbsv)(char *uplo, char *op, char *diag, int *n, int *k, RealScalar *pa, int *lda, RealScalar *px,
-                          int *incx) {
+EIGEN_BLAS_FUNC(tbsv)
+(char *uplo, char *op, char *diag, int *n, int *k, RealScalar *pa, int *lda, RealScalar *px, int *incx) {
   typedef void (*functype)(int, int, const Scalar *, int, Scalar *);
   static const functype func[16] = {
       // array index: NOTR  | (UP << 2) | (NUNIT << 3)
@@ -403,22 +395,20 @@ int EIGEN_BLAS_FUNC(tbsv)(char *uplo, char *op, char *diag, int *n, int *k, Real
     info = 7;
   else if (*incx == 0)
     info = 9;
-  if (info) return xerbla_(SCALAR_SUFFIX_UP "TBSV ", &info, 6);
+  if (info) return xerbla_(SCALAR_SUFFIX_UP "TBSV ", &info);
 
-  if (*n == 0 || (*k == 0 && DIAG(*diag) == UNIT)) return 0;
+  if (*n == 0 || (*k == 0 && DIAG(*diag) == UNIT)) return;
 
   int actual_n = *n;
 
   Scalar *actual_x = get_compact_vector(x, actual_n, *incx);
 
   int code = OP(*op) | (UPLO(*uplo) << 2) | (DIAG(*diag) << 3);
-  if (code >= 16 || func[code] == 0) return 0;
+  if (code >= 16 || func[code] == 0) return;
 
   func[code](*n, *k, a, *lda, actual_x);
 
   if (actual_x != x) delete[] copy_back(actual_x, x, actual_n, *incx);
-
-  return 0;
 }
 
 /**  DTPMV  performs one of the matrix-vector operations
@@ -428,7 +418,7 @@ int EIGEN_BLAS_FUNC(tbsv)(char *uplo, char *op, char *diag, int *n, int *k, Real
  *  where x is an n element vector and  A is an n by n unit, or non-unit,
  *  upper or lower triangular matrix, supplied in packed form.
  */
-int EIGEN_BLAS_FUNC(tpmv)(char *uplo, char *opa, char *diag, int *n, RealScalar *pap, RealScalar *px, int *incx) {
+EIGEN_BLAS_FUNC(tpmv)(char *uplo, char *opa, char *diag, int *n, RealScalar *pap, RealScalar *px, int *incx) {
   typedef void (*functype)(int, const Scalar *, const Scalar *, Scalar *, Scalar);
   static const functype func[16] = {
       // array index: NOTR  | (UP << 2) | (NUNIT << 3)
@@ -480,23 +470,21 @@ int EIGEN_BLAS_FUNC(tpmv)(char *uplo, char *opa, char *diag, int *n, RealScalar 
     info = 4;
   else if (*incx == 0)
     info = 7;
-  if (info) return xerbla_(SCALAR_SUFFIX_UP "TPMV ", &info, 6);
+  if (info) return xerbla_(SCALAR_SUFFIX_UP "TPMV ", &info);
 
-  if (*n == 0) return 1;
+  if (*n == 0) return;
 
   Scalar *actual_x = get_compact_vector(x, *n, *incx);
   Matrix<Scalar, Dynamic, 1> res(*n);
   res.setZero();
 
   int code = OP(*opa) | (UPLO(*uplo) << 2) | (DIAG(*diag) << 3);
-  if (code >= 16 || func[code] == 0) return 0;
+  if (code >= 16 || func[code] == 0) return;
 
   func[code](*n, ap, actual_x, res.data(), Scalar(1));
 
   copy_back(res.data(), x, *n, *incx);
   if (actual_x != x) delete[] actual_x;
-
-  return 1;
 }
 
 /**  DTPSV  solves one of the systems of equations
@@ -509,7 +497,7 @@ int EIGEN_BLAS_FUNC(tpmv)(char *uplo, char *opa, char *diag, int *n, RealScalar 
  *  No test for singularity or near-singularity is included in this
  *  routine. Such tests must be performed before calling this routine.
  */
-int EIGEN_BLAS_FUNC(tpsv)(char *uplo, char *opa, char *diag, int *n, RealScalar *pap, RealScalar *px, int *incx) {
+EIGEN_BLAS_FUNC(tpsv)(char *uplo, char *opa, char *diag, int *n, RealScalar *pap, RealScalar *px, int *incx) {
   typedef void (*functype)(int, const Scalar *, Scalar *);
   static const functype func[16] = {
       // array index: NOTR  | (UP << 2) | (NUNIT << 3)
@@ -557,7 +545,7 @@ int EIGEN_BLAS_FUNC(tpsv)(char *uplo, char *opa, char *diag, int *n, RealScalar 
     info = 4;
   else if (*incx == 0)
     info = 7;
-  if (info) return xerbla_(SCALAR_SUFFIX_UP "TPSV ", &info, 6);
+  if (info) return xerbla_(SCALAR_SUFFIX_UP "TPSV ", &info);
 
   Scalar *actual_x = get_compact_vector(x, *n, *incx);
 
@@ -565,6 +553,4 @@ int EIGEN_BLAS_FUNC(tpsv)(char *uplo, char *opa, char *diag, int *n, RealScalar 
   func[code](*n, ap, actual_x);
 
   if (actual_x != x) delete[] copy_back(actual_x, x, *n, *incx);
-
-  return 1;
 }

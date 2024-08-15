@@ -108,12 +108,12 @@ class StructTraits<media::mojom::VideoBitrateAllocationDataView,
   static std::vector<uint32_t> bitrates(
       const media::VideoBitrateAllocation& bitrate_allocation);
 
-  static absl::optional<uint32_t> variable_bitrate_peak(
+  static std::optional<uint32_t> variable_bitrate_peak(
       const media::VideoBitrateAllocation& bitrate_allocation) {
     if (bitrate_allocation.GetMode() == media::Bitrate::Mode::kConstant) {
-      return absl::nullopt;
+      return std::nullopt;
     } else {
-      return absl::optional<uint32_t>(
+      return std::optional<uint32_t>(
           bitrate_allocation.GetSumBitrate().peak_bps());
     }
   }
@@ -223,11 +223,11 @@ class StructTraits<media::mojom::BitstreamBufferMetadataDataView,
       const media::BitstreamBufferMetadata& bbm) {
     return bbm;
   }
-  static absl::optional<gfx::Size> encoded_size(
+  static std::optional<gfx::Size> encoded_size(
       const media::BitstreamBufferMetadata& bbm) {
     return bbm.encoded_size;
   }
-  static absl::optional<gfx::ColorSpace> encoded_color_space(
+  static std::optional<gfx::ColorSpace> encoded_color_space(
       const media::BitstreamBufferMetadata& bbm) {
     return bbm.encoded_color_space;
   }
@@ -463,14 +463,9 @@ struct StructTraits<media::mojom::VideoEncodeAcceleratorConfigDataView,
     return input.bitrate;
   }
 
-  static uint32_t initial_framerate(
+  static uint32_t framerate(
       const media::VideoEncodeAccelerator::Config& input) {
-    return input.initial_framerate.value_or(0);
-  }
-
-  static bool has_initial_framerate(
-      const media::VideoEncodeAccelerator::Config& input) {
-    return input.initial_framerate.has_value();
+    return input.framerate;
   }
 
   static uint32_t gop_length(
@@ -500,13 +495,7 @@ struct StructTraits<media::mojom::VideoEncodeAcceleratorConfigDataView,
 
   static media::VideoEncodeAccelerator::Config::StorageType storage_type(
       const media::VideoEncodeAccelerator::Config& input) {
-    return input.storage_type.value_or(
-        media::VideoEncodeAccelerator::Config::StorageType::kShmem);
-  }
-
-  static bool has_storage_type(
-      const media::VideoEncodeAccelerator::Config& input) {
-    return input.storage_type.has_value();
+    return input.storage_type;
   }
 
   static media::VideoEncodeAccelerator::Config::ContentType content_type(

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <string_view>
+
 #include "ash/constants/app_types.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
@@ -11,6 +13,7 @@
 #include "ash/public/cpp/multi_user_window_manager.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/system/anchored_nudge_manager.h"
+#include "ash/public/cpp/test/app_list_test_api.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
@@ -36,6 +39,7 @@
 #include "chrome/browser/ash/scalable_iph/scalable_iph_browser_test_base.h"
 #include "chrome/browser/ash/scalable_iph/scalable_iph_delegate_impl.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/scalable_iph/scalable_iph_factory.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
@@ -56,6 +60,7 @@
 #include "components/feature_engagement/test/mock_tracker.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#include "components/variations/service/variations_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/test/browser_test.h"
 #include "extensions/common/constants.h"
@@ -89,6 +94,11 @@ constexpr char16_t kTestGameWindowTitle[] = u"ScalableIphTestGameWindow";
 BASE_FEATURE(kScalableIphTestTwo,
              "ScalableIphTestTwo",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+void OverrideStoredPermanentCountry(std::string_view country_code) {
+  CHECK(g_browser_process->variations_service()->OverrideStoredPermanentCountry(
+      std::string(country_code)));
+}
 
 bool IsGoogleChrome() {
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -303,6 +313,42 @@ class ScalableIphBrowserTestHelpAppParameterized
   }
 };
 
+class ScalableIphBrowserTestPerksMinecraftRealms
+    : public ScalableIphBrowserTest {
+ protected:
+  void AppendUiParams(base::FieldTrialParams& params) override {
+    ScalableIphBrowserTest::AppendFakeUiParamsNotification(
+        params, /*has_body_text=*/false, TestIphFeature());
+    params[FullyQualified(TestIphFeature(),
+                          scalable_iph::kCustomButtonActionTypeParamName)] =
+        scalable_iph::kActionTypeOpenChromebookPerksMinecraftRealms2023;
+  }
+};
+
+class PerksEnvironment {
+ public:
+  PerksEnvironment(std::string_view country_code, const GURL& perks_url)
+      : country_code_(country_code), perks_url_(perks_url) {}
+
+  const std::string& country_code() const { return country_code_; }
+
+  GURL perks_url() const { return perks_url_; }
+
+  static std::string GenerateTestName(
+      testing::TestParamInfo<PerksEnvironment> test_param_info) {
+    const PerksEnvironment& param = test_param_info.param;
+    return param.country_code();
+  }
+
+ private:
+  const std::string country_code_;
+  const GURL perks_url_;
+};
+
+class ScalableIphBrowserTestPerksMinecraftRealmsParameterized
+    : public ScalableIphBrowserTestPerksMinecraftRealms,
+      public testing::WithParamInterface<PerksEnvironment> {};
+
 class ScalableIphBrowserTestOobe : public ScalableIphBrowserTest {
  public:
   ScalableIphBrowserTestOobe() {
@@ -342,13 +388,15 @@ class ScalableIphBrowserTestMultipleIphs : public ScalableIphBrowserTest {
   void InitializeScopedFeatureList() override {
     base::FieldTrialParams params_one;
     AppendVersionNumber(params_one, TestIphFeature());
-    AppendFakeUiParamsNotification(params_one, TestIphFeature());
+    AppendFakeUiParamsNotification(params_one,
+                                   /*has_body_text=*/true, TestIphFeature());
     base::test::FeatureRefAndParams test_config_one(TestIphFeature(),
                                                     params_one);
 
     base::FieldTrialParams params_two;
     AppendVersionNumber(params_two, kScalableIphTestTwo);
-    AppendFakeUiParamsNotification(params_two, kScalableIphTestTwo);
+    AppendFakeUiParamsNotification(params_two,
+                                   /*has_body_text=*/true, kScalableIphTestTwo);
     base::test::FeatureRefAndParams test_config_two(kScalableIphTestTwo,
                                                     params_two);
 
@@ -366,7 +414,7 @@ class ScalableIphBrowserTestCustomConditionBase
   void InitializeScopedFeatureList() override {
     base::FieldTrialParams params;
     AppendVersionNumber(params);
-    AppendFakeUiParamsNotification(params);
+    AppendUiParams(params);
     AppendCustomCondition(params);
     base::test::FeatureRefAndParams test_config(TestIphFeature(), params);
 
@@ -529,7 +577,13 @@ class MockMessageCenterObserver
 };
 
 class ScalableIphBrowserTestNotification : public ScalableIphBrowserTest {
+ public:
+  ScalableIphBrowserTestNotification() : has_body_text_(true) {}
+
  protected:
+  explicit ScalableIphBrowserTestNotification(bool has_body_text)
+      : has_body_text_(has_body_text) {}
+
   void SetUpOnMainThread() override {
     ScalableIphBrowserTest::SetUpOnMainThread();
 
@@ -540,11 +594,18 @@ class ScalableIphBrowserTestNotification : public ScalableIphBrowserTest {
     mock_delegate()->FakeShowNotification();
   }
 
+  void AppendUiParams(base::FieldTrialParams& params) override {
+    AppendFakeUiParamsNotification(params, has_body_text_, TestIphFeature());
+  }
+
   void TearDownOnMainThread() override {
     scoped_observation_.Reset();
 
     ScalableIphBrowserTest::TearDownOnMainThread();
   }
+
+ protected:
+  const bool has_body_text_;
 
  private:
   // Observe notifications.
@@ -552,6 +613,13 @@ class ScalableIphBrowserTestNotification : public ScalableIphBrowserTest {
   base::ScopedObservation<message_center::MessageCenter,
                           message_center::MessageCenterObserver>
       scoped_observation_{&mock_};
+};
+
+class ScalableIphBrowserTestNotificationNoBodyText
+    : public ScalableIphBrowserTestNotification {
+ public:
+  ScalableIphBrowserTestNotificationNoBodyText()
+      : ScalableIphBrowserTestNotification(/*has_body_text=*/false) {}
 };
 
 class ScalableIphBrowserTestBubble : public ScalableIphBrowserTest {
@@ -586,7 +654,8 @@ class ScalableIphBrowserTestNotificationInvalidConfig
   void InitializeScopedFeatureList() override {
     base::FieldTrialParams params;
     AppendVersionNumber(params);
-    AppendFakeUiParamsNotification(params);
+    AppendFakeUiParamsNotification(params, /*has_body_text=*/true,
+                                   TestIphFeature());
     params[FullyQualified(TestIphFeature(),
                           scalable_iph::kCustomNotificationIdParamName)] = "";
     base::test::FeatureRefAndParams test_config(TestIphFeature(), params);
@@ -671,6 +740,7 @@ IN_PROC_BROWSER_TEST_F(ScalableIphBrowserTest, InvokeIphByTimer_Notification) {
                    std::unique_ptr<scalable_iph::IphSession> session) {
         // Simulate that an IPH gets dismissed.
         session.reset();
+        return true;
       });
   scalable_iph::ScalableIph* scalable_iph =
       ScalableIphFactory::GetForBrowserContext(browser()->profile());
@@ -702,6 +772,7 @@ IN_PROC_BROWSER_TEST_F(ScalableIphBrowserTest, InvokeIphByUnlock_Notification) {
                    std::unique_ptr<scalable_iph::IphSession> session) {
         // Simulate that an IPH gets dismissed.
         session.reset();
+        return true;
       });
   scalable_iph::ScalableIph* scalable_iph =
       ScalableIphFactory::GetForBrowserContext(browser()->profile());
@@ -853,9 +924,7 @@ IN_PROC_BROWSER_TEST_F(ScalableIphBrowserTestNoTestingConfig, AppListShown) {
   EXPECT_CALL(*mock_tracker(),
               NotifyEvent(scalable_iph::kEventNameAppListShown));
 
-  ash::AppListController* app_list_controller = ash::AppListController::Get();
-  CHECK(app_list_controller);
-  app_list_controller->ShowAppList(ash::AppListShowSource::kSearchKey);
+  ash::AppListTestApi().ShowBubbleAppListAndWait();
 }
 
 IN_PROC_BROWSER_TEST_F(ScalableIphBrowserTest, OpenPersonalizationApp) {
@@ -1044,7 +1113,7 @@ IN_PROC_BROWSER_TEST_F(ScalableIphBrowserTestMultipleIphs, OneIphAtATime) {
   // only a single IPH gets triggered at a time.
   EXPECT_CALL(*mock_delegate(),
               ShowNotification(::testing::_, ::testing::NotNull()))
-      .Times(1);
+      .WillOnce(testing::Return(true));
   TriggerConditionsCheckWithAFakeEvent(
       scalable_iph::ScalableIph::Event::kFiveMinTick);
   testing::Mock::VerifyAndClearExpectations(mock_tracker());
@@ -1072,7 +1141,7 @@ IN_PROC_BROWSER_TEST_F(ScalableIphBrowserTestPreinstallApps,
                                          app_list_model_updater);
   app_list_item_waiter.Wait();
 
-  app_list_client_impl->ShowAppList(ash::AppListShowSource::kSearchKey);
+  ash::AppListTestApi().ShowBubbleAppListAndWait();
 
   EXPECT_CALL(
       *mock_tracker(),
@@ -1082,8 +1151,9 @@ IN_PROC_BROWSER_TEST_F(ScalableIphBrowserTestPreinstallApps,
       ash::AppListLaunchedFrom::kLaunchedFromGrid);
 }
 
+// TODO(crbug.com/328713274): Test is flaky.
 IN_PROC_BROWSER_TEST_F(ScalableIphBrowserTestPreinstallApps,
-                       ShelfItemActivationWebApp) {
+                       DISABLED_ShelfItemActivationWebApp) {
   if (!IsGoogleChrome()) {
     GTEST_SKIP()
         << "Google Chrome is required for preinstall apps used by this test";
@@ -1106,6 +1176,80 @@ IN_PROC_BROWSER_TEST_F(ScalableIphBrowserTestHelpApp, HelpAppPinnedToShelf) {
   }
 
   EXPECT_TRUE(ash::ShelfModel::Get()->IsAppPinned(web_app::kHelpAppId));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    Perks,
+    ScalableIphBrowserTestPerksMinecraftRealmsParameterized,
+    testing::Values(
+        PerksEnvironment("us",
+                         GURL("https://www.google.com/chromebook/perks/"
+                              "?id=minecraft.realms.2023")),
+        PerksEnvironment("gb",
+                         GURL("https://www.google.com/chromebook/perks/"
+                              "?id=minecraft.uk.2023")),
+        PerksEnvironment("ca",
+                         GURL("https://www.google.com/chromebook/perks/"
+                              "?id=minecraft.realms.ca.2023")),
+        PerksEnvironment("au",
+                         GURL("https://www.google.com/chromebook/perks/"
+                              "?id=minecraft.realms.au.2023"))),
+    &PerksEnvironment::GenerateTestName);
+
+IN_PROC_BROWSER_TEST_P(ScalableIphBrowserTestPerksMinecraftRealmsParameterized,
+                       Config) {
+  const std::string country_code = GetParam().country_code();
+  const GURL expected_perks_url = GetParam().perks_url();
+
+  EnableTestIphFeature();
+
+  mock_delegate()->FakeShowNotification();
+  mock_delegate()->FakePerformActionForScalableIph();
+  OverrideStoredPermanentCountry(country_code);
+
+  TriggerConditionsCheckWithAFakeEvent(
+      scalable_iph::ScalableIph::Event::kFiveMinTick);
+
+  message_center::MessageCenter* message_center =
+      message_center::MessageCenter::Get();
+  message_center::Notification* notification =
+      message_center->FindVisibleNotificationById(kTestNotificationId);
+  ASSERT_TRUE(notification);
+  ASSERT_TRUE(notification->delegate());
+
+  ui_test_utils::AllBrowserTabAddedWaiter tab_added_waiter;
+  notification->delegate()->Click(/*button_index=*/0, /*reply=*/std::nullopt);
+  content::WebContents* web_contents = tab_added_waiter.Wait();
+  ASSERT_TRUE(web_contents);
+  EXPECT_EQ(expected_perks_url, web_contents->GetURL());
+}
+
+IN_PROC_BROWSER_TEST_F(ScalableIphBrowserTestPerksMinecraftRealms,
+                       ActionNotEligible) {
+  const std::string country_code_jp("jp");
+
+  EnableTestIphFeature();
+
+  mock_delegate()->FakeShowNotification();
+  mock_delegate()->FakePerformActionForScalableIph();
+  OverrideStoredPermanentCountry(country_code_jp);
+
+  // If an action is not eligible for a context, IPH is considered to be
+  // dismissed immediately.
+  EXPECT_CALL(*mock_tracker(), Dismissed(::testing::Ref(TestIphFeature())));
+
+  TriggerConditionsCheckWithAFakeEvent(
+      scalable_iph::ScalableIph::Event::kFiveMinTick);
+
+  message_center::MessageCenter* message_center =
+      message_center::MessageCenter::Get();
+  message_center::Notification* notification =
+      message_center->FindVisibleNotificationById(kTestNotificationId);
+  EXPECT_FALSE(notification)
+      << scalable_iph::kActionTypeOpenChromebookPerksMinecraftRealms2023
+      << " is not supported in " << country_code_jp
+      << ". No notification is expected as this config is considered to be "
+         "invalid.";
 }
 
 IN_PROC_BROWSER_TEST_F(ScalableIphBrowserTestOobe, SessionState) {
@@ -1462,6 +1606,22 @@ IN_PROC_BROWSER_TEST_F(ScalableIphBrowserTestNotification,
   testing::Mock::VerifyAndClearExpectations(mock_tracker());
 }
 
+// Test that a scalable_iph NotificationParam with an empty body text can create
+// a notification, i.e., make sure that it's accepted input.
+IN_PROC_BROWSER_TEST_F(ScalableIphBrowserTestNotificationNoBodyText,
+                       ShowNotification) {
+  EnableTestIphFeature();
+
+  TriggerConditionsCheckWithAFakeEvent(
+      scalable_iph::ScalableIph::Event::kFiveMinTick);
+
+  message_center::MessageCenter* message_center =
+      message_center::MessageCenter::Get();
+  message_center::Notification* notification =
+      message_center->FindVisibleNotificationById(kTestNotificationId);
+  EXPECT_TRUE(notification);
+}
+
 IN_PROC_BROWSER_TEST_F(ScalableIphBrowserTestBubble, InvokeIphByTimer_Bubble) {
   EnableTestIphFeature();
 
@@ -1488,6 +1648,7 @@ IN_PROC_BROWSER_TEST_F(ScalableIphBrowserTestBubble, InvokeIphByTimer_Bubble) {
              std::unique_ptr<scalable_iph::IphSession> session) {
             // Simulate that an IPH gets dismissed.
             session.reset();
+            return true;
           });
   scalable_iph::ScalableIph* scalable_iph =
       ScalableIphFactory::GetForBrowserContext(browser()->profile());
@@ -1520,6 +1681,7 @@ IN_PROC_BROWSER_TEST_F(ScalableIphBrowserTestBubble, InvokeIphByUnlock_Bubble) {
              std::unique_ptr<scalable_iph::IphSession> session) {
             // Simulate that an IPH gets dismissed.
             session.reset();
+            return true;
           });
   scalable_iph::ScalableIph* scalable_iph =
       ScalableIphFactory::GetForBrowserContext(browser()->profile());

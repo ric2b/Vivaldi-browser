@@ -20,12 +20,6 @@ struct MetadataTaggingRequest {
   int64_t value;
 };
 
-struct ProfileMetadataTaggingRequest {
-  base::StringPiece name;
-  int64_t key;
-  int64_t value;
-};
-
 class TestPageTimingMetadataRecorder : public PageTimingMetadataRecorder {
  public:
   explicit TestPageTimingMetadataRecorder(const MonotonicTiming& initial_timing,
@@ -47,30 +41,13 @@ class TestPageTimingMetadataRecorder : public PageTimingMetadataRecorder {
     });
   }
 
-  void AddProfileMetadata(base::StringPiece name,
-                          int64_t key,
-                          int64_t value,
-                          base::SampleMetadataScope scope) override {
-    profile_requests_.push_back({
-        name,
-        key,
-        value,
-    });
-  }
-
   const std::vector<MetadataTaggingRequest>& GetMetadataTaggingRequests()
       const {
     return requests_;
   }
 
-  const std::vector<ProfileMetadataTaggingRequest>&
-  GetProfileMetadataTaggingRequests() const {
-    return profile_requests_;
-  }
-
  private:
   std::vector<MetadataTaggingRequest> requests_;
-  std::vector<ProfileMetadataTaggingRequest> profile_requests_;
 };
 
 using PageTimingMetadataRecorderTest = testing::Test;
@@ -411,91 +388,55 @@ TEST_F(PageTimingMetadataRecorderTest,
   }
 }
 
-TEST_F(PageTimingMetadataRecorderTest, LargestContentfulPaintUpdate) {
+TEST_F(PageTimingMetadataRecorderTest,
+       InteractionDurationQueuedDurationSucceed) {
   PageTimingMetadataRecorder::MonotonicTiming timing;
-  // The PageTimingMetadataRecorder constructor is supposed to call
-  // UpdateMetadata once, but due to class construction limitation, the
-  // call to ApplyMetadataToPastSample will not be captured by test class,
-  // as the test class is not ready yet.
   TestPageTimingMetadataRecorder recorder(timing);
-  const std::vector<ProfileMetadataTaggingRequest>& requests =
-      recorder.GetProfileMetadataTaggingRequests();
+  const std::vector<MetadataTaggingRequest>& requests =
+      recorder.GetMetadataTaggingRequests();
 
-  timing.navigation_start = base::TimeTicks::Now();
-  timing.document_token = blink::DocumentToken();
-  recorder.UpdateMetadata(timing);
+  const base::TimeTicks time_origin = base::TimeTicks::Now();
 
-  ASSERT_EQ(2u, requests.size());
-  EXPECT_EQ("Internal.LargestContentfulPaint.NavigationStart",
-            requests[0].name);
-  EXPECT_EQ(timing.navigation_start->since_origin().InMilliseconds(),
-            requests[0].value);
-  EXPECT_EQ("Internal.LargestContentfulPaint.DocumentToken", requests[1].name);
-  EXPECT_EQ(blink::DocumentToken::Hasher()(*timing.document_token),
-            static_cast<uint64_t>(requests[1].value));
+  const base::TimeTicks interaction1_start =
+      time_origin - base::Milliseconds(500);
+  const base::TimeTicks interaction1_end =
+      time_origin - base::Milliseconds(300);
+  const base::TimeTicks interaction1_queued =
+      time_origin - base::Milliseconds(400);
+  recorder.AddInteractionDurationAfterQueueingMetadata(
+      interaction1_start, interaction1_queued, interaction1_end);
 
-  // Update navigation_start should sends another request.
-  *timing.navigation_start += base::Milliseconds(500);
-  recorder.UpdateMetadata(timing);
-  ASSERT_EQ(4u, requests.size());
-  EXPECT_EQ("Internal.LargestContentfulPaint.NavigationStart",
-            requests[2].name);
-  EXPECT_EQ(timing.navigation_start->since_origin().InMilliseconds(),
-            requests[2].value);
-  EXPECT_EQ("Internal.LargestContentfulPaint.DocumentToken", requests[3].name);
-  EXPECT_EQ(blink::DocumentToken::Hasher()(*timing.document_token),
-            static_cast<uint64_t>(requests[3].value));
-
-  // If nothing modified, should not send any requests.
-  recorder.UpdateMetadata(timing);
-  EXPECT_EQ(4u, requests.size());
-
-  // Update document_token should sends another request.
-  // `blink::DocumentToken()` generates a new/different token.
-  timing.document_token = blink::DocumentToken();
-  recorder.UpdateMetadata(timing);
-  ASSERT_EQ(6u, requests.size());
-  EXPECT_EQ("Internal.LargestContentfulPaint.NavigationStart",
-            requests[4].name);
-  EXPECT_EQ(timing.navigation_start->since_origin().InMilliseconds(),
-            requests[4].value);
-  EXPECT_EQ("Internal.LargestContentfulPaint.DocumentToken", requests[5].name);
-  EXPECT_EQ(blink::DocumentToken::Hasher()(*timing.document_token),
-            static_cast<uint64_t>(requests[5].value));
-
-  // All requests should have the same key, i.e. instance_id.
-  for (const auto& request : requests) {
-    EXPECT_EQ(requests[0].key, request.key);
-  }
+  ASSERT_EQ(1u, requests.size());
+  EXPECT_EQ(interaction1_queued, requests.at(0).period_start);
+  EXPECT_EQ(interaction1_end, requests.at(0).period_end);
 }
 
 TEST_F(PageTimingMetadataRecorderTest,
-       LargestContentfulPaintUpdateMultipleRecorder) {
+       InteractionDurationQueuedInvalidDurationRejected) {
   PageTimingMetadataRecorder::MonotonicTiming timing;
-  // The PageTimingMetadataRecorder constructor is supposed to call
-  // UpdateMetadata once, but due to class construction limitation, the
-  // call to ApplyMetadataToPastSample will not be captured by test class,
-  // as the test class is not ready yet.
-  TestPageTimingMetadataRecorder recorder1(timing);
-  TestPageTimingMetadataRecorder recorder2(timing);
+  TestPageTimingMetadataRecorder recorder(timing);
+  const std::vector<MetadataTaggingRequest>& requests =
+      recorder.GetMetadataTaggingRequests();
 
-  const std::vector<ProfileMetadataTaggingRequest>& requests1 =
-      recorder1.GetProfileMetadataTaggingRequests();
-  const std::vector<ProfileMetadataTaggingRequest>& requests2 =
-      recorder2.GetProfileMetadataTaggingRequests();
+  const base::TimeTicks time_origin = base::TimeTicks::Now();
 
-  timing.navigation_start = base::TimeTicks::Now();
-  timing.document_token = blink::DocumentToken();
+  const base::TimeTicks interaction1_start =
+      time_origin - base::Milliseconds(500);
+  const base::TimeTicks interaction1_end =
+      time_origin - base::Milliseconds(300);
+  // Queued timestamp earlier than start is invalid.
+  base::TimeTicks interaction1_queued = time_origin - base::Milliseconds(501);
+  recorder.AddInteractionDurationAfterQueueingMetadata(
+      interaction1_start, interaction1_queued, interaction1_end);
 
-  recorder1.UpdateMetadata(timing);
-  ASSERT_EQ(2u, requests1.size());
-  EXPECT_EQ(requests1[0].key, requests1[1].key);
+  ASSERT_EQ(0u, requests.size());
 
-  recorder2.UpdateMetadata(timing);
-  ASSERT_EQ(2u, requests2.size());
-  EXPECT_EQ(requests2[0].key, requests2[1].key);
+  // Queued timestamp after end is invalid.
+  interaction1_queued = time_origin - base::Milliseconds(299);
+  recorder.AddInteractionDurationAfterQueueingMetadata(
+      interaction1_start, interaction1_queued, interaction1_end);
 
-  EXPECT_NE(requests1[0].key, requests2[0].key);
+  ASSERT_EQ(0u, requests.size());
 }
 
 }  // namespace page_load_metrics

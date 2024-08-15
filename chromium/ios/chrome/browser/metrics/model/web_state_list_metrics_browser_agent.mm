@@ -105,10 +105,6 @@ void WebStateListMetricsBrowserAgent::WebStateListDidChange(
     return;
   }
 
-  if (change.type() == WebStateListChange::Type::kInsert) {
-    base::RecordAction(base::UserMetricsAction("MobileNewTabOpened"));
-  }
-
   if (status.active_web_state_change()) {
     session_metrics_->OnWebStateActivated();
     if (change.type() == WebStateListChange::Type::kReplace) {
@@ -137,7 +133,7 @@ void WebStateListMetricsBrowserAgent::DidFinishNavigation(
   web::NavigationItem* item =
       web_state->GetNavigationManager()->GetLastCommittedItem();
   navigation_metrics::RecordPrimaryMainFrameNavigation(
-      item ? item->GetVirtualURL() : GURL::EmptyGURL(),
+      item ? item->GetVirtualURL() : GURL(),
       navigation_context->IsSameDocument(),
       web_state->GetBrowserState()->IsOffTheRecord(),
       profile_metrics::GetBrowserProfileType(web_state->GetBrowserState()));

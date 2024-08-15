@@ -44,6 +44,8 @@
     *   [exec_script: Synchronously run a script and return the output.](#func_exec_script)
     *   [filter_exclude: Remove values that match a set of patterns.](#func_filter_exclude)
     *   [filter_include: Remove values that do not match a set of patterns.](#func_filter_include)
+    *   [filter_labels_exclude: Remove labels that match a set of patterns.](#func_filter_labels_exclude)
+    *   [filter_labels_include: Remove labels that do not match a set of patterns.](#func_filter_labels_include)
     *   [foreach: Iterate over a list.](#func_foreach)
     *   [forward_variables_from: Copies variables from a different scope.](#func_forward_variables_from)
     *   [get_label_info: Get an attribute from a target's label.](#func_get_label_info)
@@ -51,6 +53,7 @@
     *   [get_target_outputs: [file list] Get the list of outputs from a target.](#func_get_target_outputs)
     *   [getenv: Get an environment variable.](#func_getenv)
     *   [import: Import a file into the current scope.](#func_import)
+    *   [label_matches: Returns whether a label matches any of a list of patterns.](#func_label_matches)
     *   [not_needed: Mark variables from scope as not needed.](#func_not_needed)
     *   [pool: Defines a pool object.](#func_pool)
     *   [print: Prints to the console.](#func_print)
@@ -155,6 +158,7 @@
     *   [public_deps: [label list] Declare public dependencies.](#var_public_deps)
     *   [rebase: [boolean] Rebase collected metadata as files.](#var_rebase)
     *   [response_file_contents: [string list] Contents of .rsp file for actions.](#var_response_file_contents)
+    *   [rustflags: [string list] Flags passed to the Rust compiler.](#var_rustflags)
     *   [script: [file name] Script file for actions.](#var_script)
     *   [sources: [file list] Source files for a target.](#var_sources)
     *   [swiftflags: [string list] Flags passed to the swift compiler.](#var_swiftflags)
@@ -837,12 +841,12 @@
   --xcode-configs=<config_name_list>
       Configure the list of build configuration supported by the generated
       project. If specified, must be a list of semicolon-separated strings.
-      If ommitted, a single configuration will be used in the generated
+      If omitted, a single configuration will be used in the generated
       project derived from the build directory.
 
   --xcode-config-build-dir=<string>
       If present, must be a path relative to the source directory. It will
-      default to $root_out_dir if ommitted. The path is assumed to point to
+      default to $root_out_dir if omitted. The path is assumed to point to
       the directory where ninja needs to be invoked. This variable can be
       used to build for multiple configuration / platform / environment from
       the same generated Xcode project (assuming that the user has created a
@@ -859,7 +863,7 @@
 
   --xcode-additional-files-roots=<path_list>
       If present, must be a list of semicolon-separated paths. It will be used
-      as roots when looking for additional files to add. If ommitted, defaults
+      as roots when looking for additional files to add. If omitted, defaults
       to "//".
 
   --ninja-executable=<string>
@@ -913,7 +917,35 @@
       generated JSON file will be first argument when invoking script.
 
   --json-ide-script-args=<argument>
-      Optional second argument that will passed to executed script.
+      Optional second argument that will be passed to executed script.
+```
+
+#### **Ninja Outputs**
+
+```
+  The --ninja-outputs-file=<FILE> option dumps a JSON file that maps GN labels
+  to their Ninja output paths. This can be later processed to build an index
+  to convert between Ninja targets and GN ones before or after the build itself.
+  It looks like:
+
+    {
+      "label1": [
+        "path1",
+        "path2"
+      ],
+      "label2": [
+        "path3"
+      ]
+    }
+
+  --ninja-outputs-script=<path_to_python_script>
+    Executes python script after the outputs file is generated or updated
+    with new content. Path can be project absolute (//), system absolute (/) or
+    relative, in which case the output directory will be base. Path to
+    generated file will be first argument when invoking script.
+
+  --ninja-outputs-script-args=<argument>
+    Optional second argument that will be passed to executed script.
 ```
 
 #### **Compilation Database**
@@ -2652,6 +2684,42 @@
   result = filter_include(values, [ "*.proto" ])
   # result will be [ "foo.proto" ]
 ```
+### <a name="func_filter_labels_exclude"></a>**filter_labels_exclude**: Remove labels that match a set of patterns.
+
+```
+  filter_labels_exclude(labels, exclude_patterns)
+
+  The argument labels must be a list of strings.
+
+  The argument exclude_patterns must be a list of label patterns (see
+  "gn help label_pattern"). Only elements from labels matching at least
+  one of the patterns will be excluded.
+```
+
+#### **Examples**
+```
+  labels = [ "//foo:baz", "//foo/bar:baz", "//bar:baz" ]
+  result = filter_labels_exclude(labels, [ "//foo:*" ])
+  # result will be [ "//foo/bar:baz", "//bar:baz" ]
+```
+### <a name="func_filter_labels_include"></a>**filter_labels_include**: Remove labels that do not match a set of patterns.
+
+```
+  filter_labels_include(labels, include_patterns)
+
+  The argument labels must be a list of strings.
+
+  The argument include_patterns must be a list of label patterns (see
+  "gn help label_pattern"). Only elements from labels matching at least
+  one of the patterns will be included.
+```
+
+#### **Examples**
+```
+  labels = [ "//foo:baz", "//foo/bar:baz", "//bar:baz" ]
+  result = filter_labels_include(labels, [ "//foo:*" ])
+  # result will be [ "//foo:baz" ]
+```
 ### <a name="func_foreach"></a>**foreach**: Iterate over a list.
 
 ```
@@ -3013,6 +3081,21 @@
 
   # Looks in the current directory.
   import("my_vars.gni")
+```
+### <a name="func_label_matches"></a>**label_matches**: Returns true if the label matches any of a set of patterns.
+
+```
+  label_matches(target_label, patterns)
+
+  The argument patterns must be a list of label patterns (see
+  "gn help label_pattern"). If the target_label matches any of the patterns,
+  the function returns the value true.
+```
+
+#### **Examples**
+```
+  result = label_matches("//baz:bar", [ "//foo/bar/*", "//baz:*" ])
+  # result will be true
 ```
 ### <a name="func_not_needed"></a>**not_needed**: Mark variables from scope as not needed.
 
@@ -5324,8 +5407,8 @@
   versions of cflags* will be appended on the compiler command line after
   "cflags".
 
-  See also "asmflags" for flags for assembly-language files and "swiftflags"
-  for swift files.
+  See also "asmflags" for flags for assembly-language files, "swiftflags" for
+  swift files, and "rustflags" for Rust files.
 ```
 
 #### **Ordering of flags and values**
@@ -5358,8 +5441,8 @@
   versions of cflags* will be appended on the compiler command line after
   "cflags".
 
-  See also "asmflags" for flags for assembly-language files and "swiftflags"
-  for swift files.
+  See also "asmflags" for flags for assembly-language files, "swiftflags" for
+  swift files, and "rustflags" for Rust files.
 ```
 
 #### **Ordering of flags and values**
@@ -5392,8 +5475,8 @@
   versions of cflags* will be appended on the compiler command line after
   "cflags".
 
-  See also "asmflags" for flags for assembly-language files and "swiftflags"
-  for swift files.
+  See also "asmflags" for flags for assembly-language files, "swiftflags" for
+  swift files, and "rustflags" for Rust files.
 ```
 
 #### **Ordering of flags and values**
@@ -5426,8 +5509,8 @@
   versions of cflags* will be appended on the compiler command line after
   "cflags".
 
-  See also "asmflags" for flags for assembly-language files and "swiftflags"
-  for swift files.
+  See also "asmflags" for flags for assembly-language files, "swiftflags" for
+  swift files, and "rustflags" for Rust files.
 ```
 
 #### **Ordering of flags and values**
@@ -5460,8 +5543,8 @@
   versions of cflags* will be appended on the compiler command line after
   "cflags".
 
-  See also "asmflags" for flags for assembly-language files and "swiftflags"
-  for swift files.
+  See also "asmflags" for flags for assembly-language files, "swiftflags" for
+  swift files, and "rustflags" for Rust files.
 ```
 
 #### **Ordering of flags and values**
@@ -6046,7 +6129,7 @@
 
   Not all GN targets that get evaluated are actually turned into ninja targets
   (see "gn help execution"). If this target is generated, then any targets in
-  the "gen_deps" list will also be generated, regardless of the usual critera.
+  the "gen_deps" list will also be generated, regardless of the usual criteria.
 
   Since "gen_deps" are not build time dependencies, there can be cycles between
   "deps" and "gen_deps" or within "gen_deps" itself.
@@ -6851,6 +6934,13 @@
     ]
   }
 ```
+### <a name="var_rustflags"></a>**rustflags**: Flags passed to the Rust compiler.
+
+```
+  A list of strings.
+
+  "rustflags" are passed to all invocations of the Rust compiler.
+```
 ### <a name="var_script"></a>**script**: Script file for actions.
 
 ```
@@ -7290,6 +7380,18 @@
 
       The command-line switch --root-target will override this value (see "gn
       help --root-target").
+
+  root_patterns [optional]
+      A list of label pattern strings. When not defined or empty, the GN build
+      graph will contain all targets from any BUILD.gn evaluated in the default
+      toolchain context, and their transitive dependencies.
+
+      When set to a non empty list, only the targets in the default toolchain
+      matching these patterns, and their transitive dependencies, will be defined
+      instead.
+
+      The command-line switch --root-pattern will override this value (see
+      "gn help --root-pattern")
 
   script_executable [optional]
       By default, GN runs the scripts used in action targets and exec_script

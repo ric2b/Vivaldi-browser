@@ -7,7 +7,7 @@
  * an error. This element contains error image asset and loading animation.
  */
 import './base_page.js';
-import '//resources/cr_elements/cr_hidden_style.css.js';
+import '//resources/ash/common/cr_elements/cr_hidden_style.css.js';
 import '//resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import 'chrome://resources/cros_components/lottie_renderer/lottie-renderer.js';
 import '//resources/polymer/v3_0/iron-media-query/iron-media-query.js';
@@ -56,6 +56,12 @@ export class SetupLoadingPageElement extends PolymerElement {
   loadingMessage: string;
   loadingTitle: string|null;
   isSimDetectError: boolean;
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [SetupLoadingPageElement.is]: SetupLoadingPageElement;
+  }
 }
 
 customElements.define(SetupLoadingPageElement.is, SetupLoadingPageElement);

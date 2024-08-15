@@ -44,8 +44,9 @@ public final class AccountCapabilitiesTest {
         switch (capabilityName) {
             case AccountCapabilitiesConstants.CAN_HAVE_EMAIL_ADDRESS_DISPLAYED_CAPABILITY_NAME:
                 return capabilities.canHaveEmailAddressDisplayed();
-            case AccountCapabilitiesConstants.CAN_OFFER_EXTENDED_CHROME_SYNC_PROMOS_CAPABILITY_NAME:
-                return capabilities.canOfferExtendedSyncPromos();
+            case AccountCapabilitiesConstants
+                    .CAN_SHOW_HISTORY_SYNC_OPT_INS_WITHOUT_MINOR_MODE_RESTRICTIONS_CAPABILITY_NAME:
+                return capabilities.canShowHistorySyncOptInsWithoutMinorModeRestrictions();
             case AccountCapabilitiesConstants.CAN_RUN_CHROME_PRIVACY_SANDBOX_TRIALS_CAPABILITY_NAME:
                 return capabilities.canRunChromePrivacySandboxTrials();
             case AccountCapabilitiesConstants.IS_OPTED_IN_TO_PARENTAL_SUPERVISION_CAPABILITY_NAME:
@@ -54,6 +55,10 @@ public final class AccountCapabilitiesTest {
                 return capabilities.canToggleAutoUpdates();
             case AccountCapabilitiesConstants.CAN_USE_CHROME_IP_PROTECTION_NAME:
                 return capabilities.canUseChromeIpProtection();
+            case AccountCapabilitiesConstants.CAN_USE_EDU_FEATURES_CAPABILITY_NAME:
+                return capabilities.canUseEduFeatures();
+            case AccountCapabilitiesConstants.CAN_USE_MANTA_SERVICE_NAME:
+                return capabilities.canUseMantaService();
             case AccountCapabilitiesConstants.CAN_USE_MODEL_EXECUTION_FEATURES_NAME:
                 return capabilities.canUseModelExecutionFeatures();
             case AccountCapabilitiesConstants.IS_ALLOWED_FOR_MACHINE_LEARNING_CAPABILITY_NAME:
@@ -91,10 +96,10 @@ public final class AccountCapabilitiesTest {
                                         AccountCapabilitiesConstants
                                                 .CAN_HAVE_EMAIL_ADDRESS_DISPLAYED_CAPABILITY_NAME),
                         new ParameterSet()
-                                .name("CanOfferExtendedChromeSyncPromos")
+                                .name("CanShowHistorySyncOptInsWithoutMinorModeRestrictions")
                                 .value(
                                         AccountCapabilitiesConstants
-                                                .CAN_OFFER_EXTENDED_CHROME_SYNC_PROMOS_CAPABILITY_NAME),
+                                                .CAN_SHOW_HISTORY_SYNC_OPT_INS_WITHOUT_MINOR_MODE_RESTRICTIONS_CAPABILITY_NAME),
                         new ParameterSet()
                                 .name("CanRunChromePrivacySandboxTrials")
                                 .value(
@@ -113,6 +118,9 @@ public final class AccountCapabilitiesTest {
                                 .value(
                                         AccountCapabilitiesConstants
                                                 .CAN_USE_CHROME_IP_PROTECTION_NAME),
+                        new ParameterSet()
+                                .name("CanUseMantaService")
+                                .value(AccountCapabilitiesConstants.CAN_USE_MANTA_SERVICE_NAME),
                         new ParameterSet()
                                 .name("CanUseModelExecutionFeatures")
                                 .value(

@@ -17,7 +17,7 @@ package main
 //   uint32_t verbose;
 // } RawImage;
 //
-// extern int32_t RawImagePatch(RawImage *);
+// extern int32_t RawImagePatch(RawImage *) __attribute__((weak));
 import "C"
 
 import (
@@ -125,7 +125,7 @@ func (e *Extractor) vlog(format string, args ...interface{}) {
 func (e *Extractor) mountDMG(dmgPath string, mountpoint string) error {
 	cmd := exec.Command("hdiutil", "attach", dmgPath, "-mountpoint", mountpoint, "-quiet", "-nobrowse", "-readonly")
 	err := cmd.Run()
-	if err != nil {
+	if err == nil {
 		e.dmgMountPaths = append(e.dmgMountPaths, mountpoint)
 	}
 	return err
@@ -299,7 +299,7 @@ func (e *installAssistantExtractor) expandInstaller(installerPath string, destin
 // hasCryptexes returns true if the installer containing the plist at `plistPath` is for
 // macOS version 13 or higher, and accordingly stores dyld shared caches inside cryptexes.
 func (e *installAssistantExtractor) hasCryptexes(plistPath string) (bool, error) {
-	print_cmd := "print :Assets:1:OSVersion"
+	print_cmd := "print :Assets:0:OSVersion"
 	result, err := exec.Command("PlistBuddy", "-c", print_cmd, plistPath).Output()
 	if err != nil {
 		return false, fmt.Errorf("couldn't read OS version from %s: %v", plistPath, err)
@@ -502,6 +502,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
+	defer reader.Close()
 	if _, err := io.Copy(w, reader); err != nil {
 		return err
 	}

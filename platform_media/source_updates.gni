@@ -1,4 +1,5 @@
 import("//build/config/features.gni")
+import("//third_party/ffmpeg/ffmpeg_options.gni")
 import("//vivaldi/gn/config/features.gni")
 
 if (system_proprietary_codecs) {
@@ -119,8 +120,10 @@ if (is_linux || is_mac || is_win) {
     # Use custom generated include files.
     # We should is able to simplify this at some point.
     deps += ["//vivaldi/platform_media/ffmpeg:generate_config"]
-    assert(include_dirs[0] ==
-        "chromium/config/$ffmpeg_branding/$os_config/$ffmpeg_arch")
+    if (target_cpu == current_cpu) {
+      assert(include_dirs[0] ==
+            "chromium/config/$ffmpeg_branding/$os_config/$ffmpeg_arch")
+    }
     original_include_dir = include_dirs
     include_dirs = []
     include_dirs +=
@@ -132,7 +135,7 @@ if (is_linux || is_mac || is_win) {
     # before FFmpeg sources on the include list. The change triggers
     # a recompilation of all FFmpeg sources. Without this the cache
     # may not see that the include list should be re-searched.
-    defines += [ "VIVALDI_FFMPEG_REBUILD=20220920" ]
+    defines += [ "VIVALDI_FFMPEG_REBUILD=20240315" ]
   }
 
   if (is_mac) {
@@ -142,12 +145,5 @@ if (is_linux || is_mac || is_win) {
       }
       frameworks += [ "AudioToolbox.framework" ]
     }
-  }
-}
-
-if (is_linux) {
-  declare_overrides() {
-    # Vivaldi Linux need component build of ffmpeg
-    is_component_ffmpeg = true
   }
 }

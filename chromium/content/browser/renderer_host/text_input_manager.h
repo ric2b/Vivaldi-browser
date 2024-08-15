@@ -143,7 +143,7 @@ class CONTENT_EXPORT TextInputManager {
     std::u16string text_;
   };
 
-  explicit TextInputManager(bool should_do_learning);
+  TextInputManager();
 
   TextInputManager(const TextInputManager&) = delete;
   TextInputManager& operator=(const TextInputManager&) = delete;
@@ -196,6 +196,9 @@ class CONTENT_EXPORT TextInputManager {
   // Returns the bounds of the selected text in the root frame.
   const std::optional<gfx::Rect> GetTextSelectionBounds() const;
 
+  // NOTE (andre@vivaldi.com) : Added to return the visible selection in a view.
+  const std::u16string* GetVisibleTextSelection(RenderWidgetHostViewBase* view) const;
+
   // ---------------------------------------------------------------------------
   // The following methods are called by RWHVs on the tab to update their IME-
   // related state.
@@ -236,6 +239,9 @@ class CONTENT_EXPORT TextInputManager {
                         size_t offset,
                         const gfx::Range& range);
 
+  void VisibleSelectionChanged(RenderWidgetHostViewBase* view,
+                        const std::u16string& text);
+
   // Registers the given |view| for tracking its TextInputState. This is called
   // by any view which has updates in its TextInputState (whether tab's RWHV or
   // that of a child frame). The |view| must unregister itself before being
@@ -266,8 +272,6 @@ class CONTENT_EXPORT TextInputManager {
       RenderWidgetHostViewBase* view);
   const gfx::Range* GetCompositionRangeForTesting() const;
 
-  bool should_do_learning() const { return should_do_learning_; }
-
  private:
   // This class is used to create maps which hold specific IME state for a
   // view.
@@ -290,10 +294,8 @@ class CONTENT_EXPORT TextInputManager {
   ViewMap<SelectionRegion> selection_region_map_;
   ViewMap<CompositionRangeInfo> composition_range_info_map_;
   ViewMap<TextSelection> text_selection_map_;
-
-  // Whether the text input should be used to improve typing suggestions for the
-  // user.
-  bool should_do_learning_;
+  // Vivaldi addition.
+  ViewMap<std::u16string> visible_text_selection_map_;
 
   base::ObserverList<Observer>::Unchecked observer_list_;
 };

@@ -4,6 +4,7 @@
 
 #include "components/autofill/core/browser/ui/payments/autofill_error_dialog_controller_impl.h"
 
+#include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/payments/autofill_error_dialog_context.h"
@@ -13,35 +14,36 @@
 
 namespace autofill {
 
-AutofillErrorDialogControllerImpl::AutofillErrorDialogControllerImpl() =
-    default;
+AutofillErrorDialogControllerImpl::AutofillErrorDialogControllerImpl(
+    AutofillErrorDialogContext error_dialog_context)
+    : error_dialog_context_(std::move(error_dialog_context)) {}
 
 AutofillErrorDialogControllerImpl::~AutofillErrorDialogControllerImpl() {
-  Dismiss();
+  DismissIfApplicable();
 }
 
 void AutofillErrorDialogControllerImpl::Show(
-    const AutofillErrorDialogContext& autofill_error_dialog_context,
-    base::OnceCallback<AutofillErrorDialogView*()> view_creation_callback) {
-  if (autofill_error_dialog_view_) {
-    Dismiss();
-  }
-
+    base::OnceCallback<base::WeakPtr<AutofillErrorDialogView>()>
+        view_creation_callback) {
   CHECK(!autofill_error_dialog_view_);
-  error_dialog_context_ = autofill_error_dialog_context;
   autofill_error_dialog_view_ = std::move(view_creation_callback).Run();
   CHECK(autofill_error_dialog_view_);
 
   base::UmaHistogramEnumeration("Autofill.ErrorDialogShown",
-                                autofill_error_dialog_context.type);
+                                error_dialog_context_.type);
 
   // If both |server_returned_title| and |server_returned_description| are
   // populated, then the error dialog was displayed with the server-driven text.
   if (error_dialog_context_.server_returned_title &&
       error_dialog_context_.server_returned_description) {
     base::UmaHistogramEnumeration("Autofill.ErrorDialogShown.WithServerText",
-                                  autofill_error_dialog_context.type);
+                                  error_dialog_context_.type);
   }
+}
+
+base::WeakPtr<AutofillErrorDialogController>
+AutofillErrorDialogControllerImpl::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 void AutofillErrorDialogControllerImpl::OnDismissed() {
@@ -128,7 +130,7 @@ const std::u16string AutofillErrorDialogControllerImpl::GetButtonLabel() {
       IDS_AUTOFILL_ERROR_DIALOG_NEGATIVE_BUTTON_LABEL);
 }
 
-void AutofillErrorDialogControllerImpl::Dismiss() {
+void AutofillErrorDialogControllerImpl::DismissIfApplicable() {
   if (autofill_error_dialog_view_) {
     autofill_error_dialog_view_->Dismiss();
   }

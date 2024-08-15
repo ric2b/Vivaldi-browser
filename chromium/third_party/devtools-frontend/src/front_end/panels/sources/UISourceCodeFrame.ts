@@ -83,7 +83,7 @@ export class UISourceCodeFrame extends
   constructor(uiSourceCode: Workspace.UISourceCode.UISourceCode) {
     super(() => this.workingCopy());
 
-    this.element.setAttribute('jslog', `${VisualLogging.pane().context('source-code-frame')}`);
+    this.element.setAttribute('jslog', `${VisualLogging.textField()}`);
     this.uiSourceCodeInternal = uiSourceCode;
 
     this.muteSourceCodeEvents = false;
@@ -96,11 +96,11 @@ export class UISourceCodeFrame extends
     this.boundOnBindingChanged = this.onBindingChanged.bind(this);
 
     Common.Settings.Settings.instance()
-        .moduleSetting('persistenceNetworkOverridesEnabled')
+        .moduleSetting('persistence-network-overrides-enabled')
         .addChangeListener(this.onNetworkPersistenceChanged, this);
 
-    this.errorPopoverHelper =
-        new UI.PopoverHelper.PopoverHelper(this.textEditor.editor.contentDOM, this.getErrorPopoverContent.bind(this));
+    this.errorPopoverHelper = new UI.PopoverHelper.PopoverHelper(
+        this.textEditor.editor.contentDOM, this.getErrorPopoverContent.bind(this), 'sources.error');
     this.errorPopoverHelper.setHasPadding(true);
 
     this.errorPopoverHelper.setTimeout(100, 100);
@@ -418,7 +418,7 @@ export class UISourceCodeFrame extends
     this.textEditor.editor.destroy();
     this.detach();
     Common.Settings.Settings.instance()
-        .moduleSetting('persistenceNetworkOverridesEnabled')
+        .moduleSetting('persistence-network-overrides-enabled')
         .removeChangeListener(this.onNetworkPersistenceChanged, this);
   }
 
@@ -504,7 +504,7 @@ export class UISourceCodeFrame extends
     return {
       box: anchor,
       hide(): void{},
-      show: async(popover: UI.GlassPane.GlassPane): Promise<true> => {
+      show: async (popover: UI.GlassPane.GlassPane) => {
         popover.contentElement.append(element);
         return true;
       },
@@ -830,8 +830,7 @@ const rowMessageTheme = CodeMirror.EditorView.baseTheme({
 
 function rowMessages(initialMessages: RowMessage[]): CodeMirror.Extension {
   return [
-    showRowMessages.init(
-        (state): RowMessageDecorations => RowMessageDecorations.create(RowMessages.create(initialMessages), state.doc)),
+    showRowMessages.init(state => RowMessageDecorations.create(RowMessages.create(initialMessages), state.doc)),
     rowMessageTheme,
   ];
 }

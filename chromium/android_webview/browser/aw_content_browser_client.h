@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -162,7 +163,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       const base::RepeatingCallback<content::WebContents*()>& wc_getter,
       content::NavigationUIData* navigation_ui_data,
       int frame_tree_node_id,
-      absl::optional<int64_t> navigation_id) override;
+      std::optional<int64_t> navigation_id) override;
   std::vector<std::unique_ptr<blink::URLLoaderThrottle>>
   CreateURLLoaderThrottlesForKeepAlive(
       const network::ResourceRequest& request,
@@ -176,9 +177,10 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
                                 bool has_user_gesture,
                                 bool is_redirect,
                                 bool is_outermost_main_frame,
+                                bool is_prerendering,
                                 ui::PageTransition transition,
                                 bool* ignore_navigation) override;
-  bool CreateThreadPool(base::StringPiece name) override;
+  bool CreateThreadPool(std::string_view name) override;
   std::unique_ptr<content::LoginDelegate> CreateLoginDelegate(
       const net::AuthChallengeInfo& auth_info,
       content::WebContents* web_contents,
@@ -215,8 +217,9 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       content::SiteIsolationMode site_isolation_mode) override;
   bool ShouldLockProcessToSite(content::BrowserContext* browser_context,
                                const GURL& effective_url) override;
+  bool ShouldEnforceNewCanCommitUrlChecks() override;
   size_t GetMaxRendererProcessCountOverride() override;
-  bool WillCreateURLLoaderFactory(
+  void WillCreateURLLoaderFactory(
       content::BrowserContext* browser_context,
       content::RenderFrameHost* frame,
       int render_process_id,
@@ -224,7 +227,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       const url::Origin& request_initiator,
       std::optional<int64_t> navigation_id,
       ukm::SourceIdObj ukm_source_id,
-      mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
+      network::URLLoaderFactoryBuilder& factory_builder,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client,
       bool* bypass_redirect_checks,
@@ -268,7 +271,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
   void OnDisplayInsecureContent(content::WebContents* web_contents) override;
   network::mojom::AttributionSupport GetAttributionSupport(
       AttributionReportingOsApiState state,
-      content::WebContents* web_contents) override;
+      bool client_os_disabled) override;
   // Allows the embedder to control if Attribution Reporting API operations can
   // happen in a given context.
   // For WebView Browser Attribution is explicitly disabled.
@@ -280,13 +283,12 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       const url::Origin* destination_origin,
       const url::Origin* reporting_origin,
       bool* can_bypass) override;
-  bool ShouldUseOsWebSourceAttributionReporting(
-      content::RenderFrameHost* rfh) override;
-  bool ShouldUseOsWebTriggerAttributionReporting(
-      content::RenderFrameHost* rfh) override;
+  AttributionReportingOsReportTypes GetAttributionReportingOsReportTypes(
+      content::WebContents* web_contents) override;
   blink::mojom::OriginTrialsSettingsPtr GetOriginTrialsSettings() override;
   network::mojom::IpProtectionProxyBypassPolicy
   GetIpProtectionProxyBypassPolicy() override;
+  bool WillProvidePublicFirstPartySets() override;
 
   AwFeatureListCreator* aw_feature_list_creator() {
     return aw_feature_list_creator_;

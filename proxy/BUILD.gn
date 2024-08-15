@@ -30,15 +30,21 @@ if (enable_relay_proxy) {
 
   if (is_mac) {
     copy("copy-proxy-binary") {
-      sources = [ "//vivaldi/relayproxy/mac/relayproxy-darwin" ]
+      sources = [
+        "//vivaldi/relayproxy/mac/relayproxy-darwin",
+        "//vivaldi/relayproxy/mac/relayproxy.pem",
+      ]
 
-      outputs = [ "$root_out_dir/vivaldi-proxy/relayproxy-darwin"]
+      outputs = [ "$root_out_dir/vivaldi-proxy/{{source_file_part}}" ]
     }
   } else if (is_win && target_cpu == "x64") {
     copy("copy-proxy-binary") {
-      sources = [ "//vivaldi/relayproxy/win/relayproxy.exe" ]
+      sources = [
+        "//vivaldi/relayproxy/win/relayproxy.exe",
+        "//vivaldi/relayproxy/win/relayproxy.pem",
+      ]
 
-      outputs = [ "$root_out_dir/relayproxy.exe" ]
+      outputs = [ "$root_out_dir/{{source_file_part}}" ]
     }
   } else {
     group("copy-proxy-binary") {

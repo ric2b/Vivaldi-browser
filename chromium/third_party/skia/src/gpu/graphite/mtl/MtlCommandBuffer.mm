@@ -78,12 +78,6 @@ bool MtlCommandBuffer::commit() {
     SkASSERT(!fActiveRenderCommandEncoder);
     SkASSERT(!fActiveComputeCommandEncoder);
     this->endBlitCommandEncoder();
-#ifdef SK_BUILD_FOR_IOS
-    if (MtlIsAppInBackground()) {
-        NSLog(@"CommandBuffer: Tried to commit command buffer while in background.\n");
-        return false;
-    }
-#endif
     [(*fCommandBuffer) commit];
 
     if ((*fCommandBuffer).status == MTLCommandBufferStatusError) {
@@ -196,8 +190,16 @@ bool MtlCommandBuffer::onAddComputePass(const DispatchGroupList& groups) {
                         SkAlignTo(wgBuf.size, 16),
                         wgBuf.index);
             }
-            this->dispatchThreadgroups(dispatch.fParams.fGlobalDispatchSize,
-                                       dispatch.fParams.fLocalDispatchSize);
+            if (const WorkgroupSize* globalSize =
+                        std::get_if<WorkgroupSize>(&dispatch.fGlobalSizeOrIndirect)) {
+                this->dispatchThreadgroups(*globalSize, dispatch.fLocalSize);
+            } else {
+                SkASSERT(std::holds_alternative<BufferView>(dispatch.fGlobalSizeOrIndirect));
+                const BufferView& indirect =
+                        *std::get_if<BufferView>(&dispatch.fGlobalSizeOrIndirect);
+                this->dispatchThreadgroupsIndirect(
+                        dispatch.fLocalSize, indirect.fInfo.fBuffer, indirect.fInfo.fOffset);
+            }
         }
     }
     this->endComputePass();
@@ -211,12 +213,6 @@ bool MtlCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
     SkASSERT(!fActiveRenderCommandEncoder);
     SkASSERT(!fActiveComputeCommandEncoder);
     this->endBlitCommandEncoder();
-#ifdef SK_BUILD_FOR_IOS
-    if (MtlIsAppInBackground()) {
-        NSLog(@"CommandBuffer: tried to create MTLRenderCommandEncoder while in background.\n");
-        return false;
-    }
-#endif
 
     const static MTLLoadAction mtlLoadAction[] {
         MTLLoadActionLoad,
@@ -444,12 +440,6 @@ MtlBlitCommandEncoder* MtlCommandBuffer::getBlitCommandEncoder() {
     if (fActiveBlitCommandEncoder) {
         return fActiveBlitCommandEncoder.get();
     }
-#ifdef SK_BUILD_FOR_IOS
-    if (MtlIsAppInBackground()) {
-        NSLog(@"CommandBuffer: tried to create MTLBlitCommandEncoder while in background.\n");
-        return nullptr;
-    }
-#endif
 
     fActiveBlitCommandEncoder = MtlBlitCommandEncoder::Make(fSharedContext, fCommandBuffer.get());
 
@@ -759,6 +749,16 @@ void MtlCommandBuffer::dispatchThreadgroups(const WorkgroupSize& globalSize,
                                             const WorkgroupSize& localSize) {
     SkASSERT(fActiveComputeCommandEncoder);
     fActiveComputeCommandEncoder->dispatchThreadgroups(globalSize, localSize);
+}
+
+void MtlCommandBuffer::dispatchThreadgroupsIndirect(const WorkgroupSize& localSize,
+                                                    const Buffer* indirectBuffer,
+                                                    size_t indirectBufferOffset) {
+    SkASSERT(fActiveComputeCommandEncoder);
+
+    id<MTLBuffer> mtlIndirectBuffer = static_cast<const MtlBuffer*>(indirectBuffer)->mtlBuffer();
+    fActiveComputeCommandEncoder->dispatchThreadgroupsWithIndirectBuffer(
+            mtlIndirectBuffer, indirectBufferOffset, localSize);
 }
 
 void MtlCommandBuffer::endComputePass() {

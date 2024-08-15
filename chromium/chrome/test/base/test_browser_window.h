@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/functional/callback_helpers.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -87,6 +88,7 @@ class TestBrowserWindow : public BrowserWindow {
   void UpdateTitleBar() override {}
   void BookmarkBarStateChanged(
       BookmarkBar::AnimateChangeType change_type) override {}
+  void TemporarilyShowBookmarkBar(base::TimeDelta duration) override {}
   void UpdateDevTools() override {}
   void UpdateLoadingAnimations(bool is_visible) override {}
   void SetStarredState(bool is_starred) override {}
@@ -255,7 +257,8 @@ class TestBrowserWindow : public BrowserWindow {
   user_education::FeaturePromoHandle CloseFeaturePromoAndContinue(
       const base::Feature& iph_feature) override;
   void NotifyFeatureEngagementEvent(const char* event_name) override;
-  void NotifyPromoFeatureUsed(const base::Feature& iph_feature) override;
+  void NotifyPromoFeatureUsed(const base::Feature& feature) override;
+  bool MaybeShowNewBadgeFor(const base::Feature& new_badge_feature) override;
 
   // Sets the controller returned by GetFeaturePromoController().
   // Deletes the existing one, if any.

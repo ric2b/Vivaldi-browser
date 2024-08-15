@@ -15,7 +15,7 @@ exports_files_legacy(label_list = [
 ])
 
 skia_cc_library(
-    name = "tool_utils",
+    name = "legacy_tool_utils",
     testonly = True,
     srcs = [
         "EncodeUtils.cpp",
@@ -30,6 +30,7 @@ skia_cc_library(
         "SkMetaData.cpp",
     ],
     hdrs = [
+        "CodecUtils.h",
         "DecodeUtils.h",
         "EncodeUtils.h",
         "GpuToolUtils.h",
@@ -56,21 +57,19 @@ skia_cc_library(
         "//tools/testrunners/benchmark:__pkg__",
         "//tools/viewer:__pkg__",
     ],
-    deps = ["//:skia_internal"],
+    deps = ["//:core"],
 )
 
 skia_cc_library(
     name = "hash_and_encode",
     testonly = True,
-    srcs = [
-        "HashAndEncode.cpp",
-        "//tools/flags",
-    ],
+    srcs = ["HashAndEncode.cpp"],
     hdrs = ["HashAndEncode.h"],
-    visibility = ["//tools/testrunners/gm:__pkg__"],
+    visibility = ["//gm:__pkg__"],
     deps = [
-        "//:skia_internal",
-        "@libpng",
+        "//:core",
+        "//:png_encode_codec",
+        "//tools/flags:cmd_flags",
     ],
 )
 
@@ -84,6 +83,7 @@ skia_cc_library(
     name = "autorelease_pool",
     hdrs = ["AutoreleasePool.h"],
     visibility = [
+        "//bench:__pkg__",
         "//tools/gpu:__pkg__",
         "//tools/testrunners/benchmark:__pkg__",
     ],
@@ -101,7 +101,7 @@ skia_cc_library(
     srcs = ["UrlDataManager.cpp"],
     hdrs = ["UrlDataManager.h"],
     visibility = ["//tools/debugger:__pkg__"],
-    deps = ["//:skia_internal"],
+    deps = ["//:core"],
 )
 
 skia_cc_library(
@@ -109,7 +109,11 @@ skia_cc_library(
     srcs = ["SkSharingProc.cpp"],
     hdrs = ["SkSharingProc.h"],
     visibility = ["//tools/debugger:__pkg__"],
-    deps = ["//:skia_internal"],
+    deps = [
+        "//:core",
+        "//:png_decode_codec",
+        "//:png_encode_codec",
+    ],
 )
 
 skia_cc_library(
@@ -150,17 +154,84 @@ skia_cc_library(
 
 skia_cc_library(
     name = "stats",
-    hdrs = ["Stats.h"],
-    visibility = ["//tools/testrunners/benchmark:__pkg__"],
-    deps = ["//:skia_internal"],
+    srcs = ["ProcStats.cpp"],
+    hdrs = [
+        "ProcStats.h",
+        "Stats.h",
+    ],
+    visibility = [
+        "//bench:__pkg__",
+        "//tools/testrunners/benchmark:__pkg__",
+    ],
+    deps = ["//:core"],
 )
 
 skia_cc_library(
-    name = "proc_stats",
-    srcs = ["ProcStats.cpp"],
-    hdrs = ["ProcStats.h"],
-    visibility = ["//tools/testrunners/benchmark:__pkg__"],
-    deps = ["//:skia_internal"],
+    name = "tool_utils",
+    testonly = True,
+    srcs = [
+        "SkMetaData.cpp",
+        "ToolUtils.cpp",
+    ],
+    hdrs = [
+        "SkMetaData.h",
+        "ToolUtils.h",
+    ],
+    visibility = [
+        "//bench:__subpackages__",
+        "//gm:__subpackages__",
+        "//tools:__subpackages__",
+    ],
+    deps = [
+        "//:core",
+        "//src/base",
+        "//src/core:core_priv",
+    ],
+)
+
+skia_cc_library(
+    name = "codec_utils",
+    testonly = True,
+    srcs = [
+        "DecodeUtils.cpp",
+        "EncodeUtils.cpp",
+    ],
+    hdrs = [
+        "DecodeUtils.h",
+        "EncodeUtils.h",
+    ],
+    visibility = [
+        "//gm:__subpackages__",
+    ],
+    deps = [
+        "//:core",
+        "//:png_decode_codec",
+        "//:png_encode_codec",
+        "//src/base",
+        "//src/core:core_priv",
+        "//tools:resources",
+    ],
+)
+
+skia_cc_library(
+    name = "resources",
+    testonly = True,
+    srcs = [
+        "Resources.cpp",
+    ],
+    hdrs = [
+        "Resources.h",
+    ],
+    visibility = [
+        "//bench:__subpackages__",
+        "//tools:__subpackages__",
+    ],
+    deps = [
+        "//:core",
+        "//src/base",
+        "//src/core:core_priv",
+        "//tools/flags:cmd_flags",
+    ],
 )
 
 # Regenerate workarounds with `bazel run //tools:generate_workarounds`

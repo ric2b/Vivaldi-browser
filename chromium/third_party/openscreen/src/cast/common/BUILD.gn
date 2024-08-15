@@ -4,14 +4,11 @@
 
 import("//build_overrides/build.gni")
 import("//third_party/protobuf/proto_library.gni")
+import("../../gni/openscreen.gni")
 import("../../testing/libfuzzer/fuzzer_test.gni")
+import("./public/developer_certificate.gni")
 
 visibility = [ "./*" ]
-
-# TODO(jophba): remove if checks once Chrome uses the cast.gni file
-if (!build_with_chromium) {
-  import("../../build/config/cast.gni")
-}
 
 config("certificate_config") {
   visibility += [
@@ -20,14 +17,12 @@ config("certificate_config") {
   ]
   defines = []
 
-  if (!build_with_chromium) {
-    if (cast_allow_developer_certificate) {
-      defines += [ "CAST_ALLOW_DEVELOPER_CERTIFICATE" ]
-    }
+  if (cast_allow_developer_certificate) {
+    defines += [ "CAST_ALLOW_DEVELOPER_CERTIFICATE" ]
   }
 }
 
-source_set("certificate") {
+openscreen_source_set("certificate") {
   visibility += [
     "../*",
     "../..:gn_all",
@@ -44,7 +39,7 @@ source_set("certificate") {
   ]
   public_deps = [ ":public" ]
 
-  configs += [ ":certificate_config" ]
+  configs = [ ":certificate_config" ]
 
   deps = [
     "../../platform",
@@ -58,7 +53,7 @@ source_set("certificate") {
   ]
 }
 
-source_set("certificate_boringssl") {
+openscreen_source_set("certificate_boringssl") {
   # Used in Chromium by fuzz tests in
   # //components/media_router/common/providers/cast/channel. We don't
   # use [ "*" ] here to prevent accidental usage of boringssl in Chromium.
@@ -91,7 +86,7 @@ source_set("certificate_boringssl") {
   ]
 }
 
-source_set("channel") {
+openscreen_source_set("channel") {
   # Used in Chromium by //components/media_router/common/providers/cast/channel.
   #
   # TODO(https://issuetracker.google.com/issues/244211254): Move
@@ -132,7 +127,7 @@ source_set("channel") {
   ]
 }
 
-source_set("public") {
+openscreen_source_set("public") {
   visibility += [ "*" ]
   public = [
     "public/cast_socket.h",
@@ -156,14 +151,12 @@ source_set("public") {
   ]
 }
 
-if (!build_with_chromium) {
-  source_set("discovery_e2e_test") {
+if (!build_with_chromium && is_linux) {
+  openscreen_source_set("discovery_e2e_test") {
     visibility += [ "../..:e2e_tests_all" ]
     testonly = true
     public = []
-    if (!is_mac) {
-      sources = [ "discovery/e2e_test/tests.cc" ]
-    }
+    sources = [ "discovery/e2e_test/tests.cc" ]
 
     deps = [
       ":public",
@@ -176,7 +169,7 @@ if (!build_with_chromium) {
   }
 }
 
-source_set("test_helpers") {
+openscreen_source_set("test_helpers") {
   testonly = true
 
   # Used in Chromium for //components/media_router/common/providers/cast/channel unittests.
@@ -211,7 +204,7 @@ source_set("test_helpers") {
   friend = [ ":unittests" ]
 }
 
-source_set("unittests") {
+openscreen_source_set("unittests") {
   testonly = true
   visibility += [ "../..:openscreen_unittests_all" ]
   public = []

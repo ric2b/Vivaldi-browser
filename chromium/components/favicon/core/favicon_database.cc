@@ -28,7 +28,6 @@
 #include "sql/recovery.h"
 #include "sql/statement.h"
 #include "sql/transaction.h"
-#include "third_party/sqlite/sqlite3.h"
 #include "url/origin.h"
 
 #if BUILDFLAG(IS_APPLE)
@@ -105,13 +104,6 @@ namespace {
 const int kCurrentVersionNumber = 8;
 const int kCompatibleVersionNumber = 8;
 const int kDeprecatedVersionNumber = 6;  // and earlier.
-
-// When enabled, prefer to use the new recovery module to recover the
-// `FaviconDatabase` database. See https://crbug.com/1385500 for details.
-// This is a kill switch and is not intended to be used in a field trial.
-BASE_FEATURE(kFaviconDatabaseUseBuiltInRecoveryIfSupported,
-             "FaviconDatabaseUseBuiltInRecoveryIfSupported",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 void FillIconMapping(const GURL& page_url,
                      sql::Statement& statement,
@@ -203,10 +195,9 @@ void DatabaseErrorCallback(sql::Database* db,
   // see how to reach that.
 
   // Attempt to recover a corrupt database, if it is eligible to be recovered.
-  if (sql::BuiltInRecovery::RecoverIfPossible(
+  if (sql::Recovery::RecoverIfPossible(
           db, extended_error,
-          sql::BuiltInRecovery::Strategy::kRecoverWithMetaVersionOrRaze,
-          &kFaviconDatabaseUseBuiltInRecoveryIfSupported)) {
+          sql::Recovery::Strategy::kRecoverWithMetaVersionOrRaze)) {
     // Recovery was attempted. The database handle has been poisoned and the
     // error callback has been reset.
 
@@ -736,11 +727,11 @@ bool FaviconDatabase::GetIconMappingsForPageURL(
   return result;
 }
 
-absl::optional<GURL> FaviconDatabase::FindFirstPageURLForHost(
+std::optional<GURL> FaviconDatabase::FindFirstPageURLForHost(
     const GURL& url,
     const favicon_base::IconTypeSet& required_icon_types) {
   if (url.host().empty())
-    return absl::nullopt;
+    return std::nullopt;
 
   sql::Statement statement(
       db_.GetCachedStatement(SQL_FROM_HERE,
@@ -769,9 +760,9 @@ absl::optional<GURL> FaviconDatabase::FindFirstPageURLForHost(
         FaviconDatabase::FromPersistedIconType(statement.ColumnInt(1));
 
     if (required_icon_types.count(icon_type) != 0)
-      return absl::make_optional(GURL(statement.ColumnString(0)));
+      return std::make_optional(GURL(statement.ColumnString(0)));
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 IconMappingID FaviconDatabase::AddIconMapping(const GURL& page_url,

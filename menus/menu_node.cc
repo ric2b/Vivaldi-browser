@@ -83,7 +83,7 @@ Menu_Node* Menu_Node::GetMenuByResourceName(const std::string& menu) {
   return nullptr;
 }
 
-void Menu_Node::SetShowShortcut(absl::optional<bool> show_shortcut) {
+void Menu_Node::SetShowShortcut(std::optional<bool> show_shortcut) {
   show_shortcut_ = show_shortcut;
   for (auto& child : children()) {
     child->SetShowShortcut(show_shortcut);

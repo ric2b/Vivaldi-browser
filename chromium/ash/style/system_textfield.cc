@@ -4,6 +4,8 @@
 
 #include "ash/style/system_textfield.h"
 
+#include <optional>
+
 #include "ash/style/ash_color_id.h"
 #include "ash/style/system_textfield_controller.h"
 #include "ash/style/typography.h"
@@ -87,13 +89,13 @@ gfx::FontList GetFontListFromType(SystemTextfield::Type type) {
 class SystemTextfield::EventHandler : public ui::EventHandler {
  public:
   explicit EventHandler(SystemTextfield* textfield) : textfield_(textfield) {
-    aura::Env::GetInstance()->AddPostTargetHandler(this);
+    aura::Env::GetInstance()->AddPreTargetHandler(this);
   }
 
   EventHandler(const EventHandler&) = delete;
   EventHandler& operator=(const EventHandler&) = delete;
   ~EventHandler() override {
-    aura::Env::GetInstance()->RemovePostTargetHandler(this);
+    aura::Env::GetInstance()->RemovePreTargetHandler(this);
   }
 
   // ui::EventHandler:
@@ -108,6 +110,11 @@ class SystemTextfield::EventHandler : public ui::EventHandler {
 
     const ui::EventType event_type = event->type();
     if (event_type != ui::ET_MOUSE_PRESSED) {
+      return;
+    }
+
+    // Do not handle the pre-target event if the context menu is showing.
+    if (textfield_->IsMenuShowing()) {
       return;
     }
 
@@ -137,7 +144,9 @@ class SystemTextfield::EventHandler : public ui::EventHandler {
 //------------------------------------------------------------------------------
 // SystemTextfield::SystemTextfield:
 SystemTextfield::SystemTextfield(Type type)
-    : type_(type), event_handler_(std::make_unique<EventHandler>(this)) {
+    : type_(type),
+      event_handler_(std::make_unique<EventHandler>(this)),
+      corner_radius_(kCornerRadius) {
   SetFontList(GetFontListFromType(type_));
   SetBorder(views::CreateEmptyBorder(kBorderInsets));
   // Remove the default hover effect, since the hover effect of system textfield
@@ -146,7 +155,7 @@ SystemTextfield::SystemTextfield(Type type)
 
   // Override the very round highlight path set in `views::Textfield`.
   views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
-                                                kCornerRadius);
+                                                corner_radius_);
 
   // Configure focus ring.
   auto* focus_ring = views::FocusRing::Get(this);
@@ -195,6 +204,14 @@ void SystemTextfield::SetActiveStateChangedCallback(
   active_state_changed_callback_ = std::move(callback);
 }
 
+void SystemTextfield::SetCornerRadius(int corner_radius) {
+  corner_radius_ = corner_radius;
+
+  views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
+                                                corner_radius_);
+  UpdateBackground();
+}
+
 void SystemTextfield::SetActive(bool active) {
   if (IsActive() == active) {
     return;
@@ -226,8 +243,12 @@ void SystemTextfield::SetShowFocusRing(bool show) {
     return;
   }
   show_focus_ring_ = show;
-  views::FocusRing::Get(this)->SetOutsetFocusRingDisabled(true);
-  views::FocusRing::Get(this)->SchedulePaint();
+
+  // It's possible that derived classes could have removed the focus ring.
+  if (auto* focus_ring = views::FocusRing::Get(this); focus_ring != nullptr) {
+    focus_ring->SetOutsetFocusRingDisabled(true);
+    focus_ring->SchedulePaint();
+  }
 }
 
 void SystemTextfield::SetShowBackground(bool show) {
@@ -239,9 +260,18 @@ void SystemTextfield::RestoreText() {
   SetText(restored_text_content_);
 }
 
-void SystemTextfield::SetBackgroundColorEnabled(bool enabled) {
-  is_background_color_enabled_ = enabled;
-  UpdateBackground();
+void SystemTextfield::UpdateBackground() {
+  const bool has_background =
+      GetBackgroundEnabled() &&
+      (IsMouseHovered() || HasFocus() || show_background_);
+  if (!has_background) {
+    SetBackground(nullptr);
+    return;
+  }
+
+  SetBackground(views::CreateThemedRoundedRectBackground(
+      background_color_id_.value_or(cros_tokens::kCrosSysHoverOnSubtle),
+      corner_radius_));
 }
 
 gfx::Size SystemTextfield::CalculatePreferredSize() const {
@@ -287,6 +317,11 @@ void SystemTextfield::OnFocus() {
 }
 
 void SystemTextfield::OnBlur() {
+  // TODO(b/323054951): Remove this when we can correctly handle our peculiar
+  // blur logic.
+  UpdateCursorVisibility();
+
+  // Call SetActive last because some callbacks might delete `this`.
   SetActive(false);
 }
 
@@ -332,27 +367,13 @@ void SystemTextfield::UpdateTextColor() {
   render_text->set_selection_background_focused_color(
       color_provider->GetColor(selection_background_color_id_.value_or(
           cros_tokens::kCrosSysHighlightText)));
+
+  // Set placeholder text color
+  set_placeholder_text_color(color_provider->GetColor(
+      placeholder_text_color_id_.value_or(cros_tokens::kCrosSysDisabled)));
 }
 
-void SystemTextfield::UpdateBackground() {
-  const bool has_background =
-      is_background_color_enabled_ &&
-      (IsMouseHovered() || HasFocus() || show_background_);
-  if (!has_background) {
-    SetBackground(nullptr);
-    return;
-  }
-
-  const ui::ColorId default_hover_state_color_id =
-      chromeos::features::IsJellyrollEnabled()
-          ? cros_tokens::kCrosSysHoverOnSubtle
-          : static_cast<ui::ColorId>(kColorAshControlBackgroundColorInactive);
-  SetBackground(views::CreateThemedRoundedRectBackground(
-      background_color_id_.value_or(default_hover_state_color_id),
-      kCornerRadius));
-}
-
-BEGIN_METADATA(SystemTextfield, views::Textfield)
+BEGIN_METADATA(SystemTextfield)
 END_METADATA
 
 }  // namespace ash

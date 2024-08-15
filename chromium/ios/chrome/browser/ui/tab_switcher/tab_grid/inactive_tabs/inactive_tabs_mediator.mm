@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/inactive_tabs/inactive_tabs_mediator.h"
 
+#import "base/memory/raw_ptr.h"
 #import "base/notreached.h"
 #import "base/scoped_multi_source_observation.h"
 #import "base/scoped_observation.h"
@@ -22,6 +23,7 @@
 #import "ios/chrome/browser/tabs/model/inactive_tabs/features.h"
 #import "ios/chrome/browser/tabs/model/tabs_closer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_collection_consumer.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_item_identifier.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/inactive_tabs/inactive_tabs_info_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_toolbars_configuration.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_utils.h"
@@ -52,8 +54,9 @@ NSArray* CreateItemsOrderedByRecency(WebStateList* web_state_list) {
             });
 
   for (web::WebState* web_state : web_states) {
-    [items
-        addObject:[[WebStateTabSwitcherItem alloc] initWithWebState:web_state]];
+    WebStateTabSwitcherItem* item =
+        [[WebStateTabSwitcherItem alloc] initWithWebState:web_state];
+    [items addObject:[GridItemIdentifier tabIdentifier:item]];
   }
   return items;
 }
@@ -84,7 +87,7 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
                                     SnapshotStorageObserver,
                                     WebStateListObserving> {
   // The list of inactive tabs.
-  WebStateList* _webStateList;
+  raw_ptr<WebStateList> _webStateList;
   // The snapshot storage of _webStateList.
   __weak SnapshotStorage* _snapshotStorage;
   // The observers of _webStateList.
@@ -94,7 +97,7 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserverBridge;
   std::unique_ptr<ScopedWebStateObservation> _scopedWebStateObservation;
   // Preference service from the application context.
-  PrefService* _prefService;
+  raw_ptr<PrefService> _prefService;
   // Pref observer to track changes to prefs.
   std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
   // Registrar for pref changes notifications.
@@ -205,9 +208,10 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
 }
 
 - (void)updateConsumerItemForWebState:(web::WebState*)webState {
-  TabSwitcherItem* item =
-      [[WebStateTabSwitcherItem alloc] initWithWebState:webState];
-  [_consumer replaceItemID:webState->GetUniqueIdentifier() withItem:item];
+  GridItemIdentifier* item =
+      [GridItemIdentifier tabIdentifier:[[WebStateTabSwitcherItem alloc]
+                                            initWithWebState:webState]];
+  [_consumer replaceItem:item withReplacementItem:item];
 }
 
 #pragma mark - PrefObserverDelegate
@@ -237,9 +241,10 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
     // It is possible to observe an updated snapshot for a WebState before
     // observing that the WebState has been added to the WebStateList. It is the
     // consumer's responsibility to ignore any updates before inserts.
-    TabSwitcherItem* item =
-        [[WebStateTabSwitcherItem alloc] initWithWebState:webState];
-    [_consumer replaceItemID:webState->GetUniqueIdentifier() withItem:item];
+    GridItemIdentifier* item =
+        [GridItemIdentifier tabIdentifier:[[WebStateTabSwitcherItem alloc]
+                                              initWithWebState:webState]];
+    [_consumer replaceItem:item withReplacementItem:item];
   }
 }
 
@@ -291,8 +296,8 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
       web::WebState* insertedWebState = insertChange.inserted_web_state();
       TabSwitcherItem* item =
           [[WebStateTabSwitcherItem alloc] initWithWebState:insertedWebState];
-      [_consumer insertItem:item
-                    atIndex:status.index
+      [_consumer insertItem:[GridItemIdentifier tabIdentifier:item]
+                    atIndex:insertChange.index()
              selectedItemID:web::WebStateID()];
 
       _scopedWebStateObservation->AddObservation(insertedWebState);
@@ -344,7 +349,7 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
 - (void)closeAllItems {
   // TODO(crbug.com/1418021): Add metrics when the user closes all inactive
   // tabs.
-  _webStateList->CloseAllWebStates(WebStateList::CLOSE_USER_ACTION);
+  CloseAllWebStates(*_webStateList, WebStateList::CLOSE_USER_ACTION);
   [_snapshotStorage removeAllImages];
 }
 
@@ -447,6 +452,24 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
 
 - (BOOL)canUndoCloseAllTabs {
   return _tabsCloser && _tabsCloser->CanUndoCloseTabs();
+}
+
+#pragma mark - GridViewControllerMutator
+
+- (void)userTappedOnItemID:(GridItemIdentifier*)itemID {
+  // No-op
+}
+
+- (void)addToSelectionItemID:(GridItemIdentifier*)itemID {
+  NOTREACHED_NORETURN();
+}
+
+- (void)removeFromSelectionItemID:(GridItemIdentifier*)itemID {
+  // No-op
+}
+
+- (void)closeItemID:(web::WebStateID)itemID {
+  [self closeItemWithID:itemID];
 }
 
 @end

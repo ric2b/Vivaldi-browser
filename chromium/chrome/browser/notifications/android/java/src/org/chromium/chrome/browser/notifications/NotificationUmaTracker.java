@@ -154,7 +154,11 @@ public class NotificationUmaTracker {
         ActionType.PRICE_DROP_VISIT_SITE,
         ActionType.PRICE_DROP_TURN_OFF_ALERT,
         ActionType.WEB_APK_ACTION_BACK_TO_SITE,
-        ActionType.WEB_APK_ACTION_RETRY
+        ActionType.WEB_APK_ACTION_RETRY,
+        ActionType.PRE_UNSUBSCRIBE,
+        ActionType.UNDO_UNSUBSCRIBE,
+        ActionType.COMMIT_UNSUBSCRIBE_IMPLICIT,
+        ActionType.COMMIT_UNSUBSCRIBE_EXPLICIT
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ActionType {
@@ -217,7 +221,22 @@ public class NotificationUmaTracker {
         // Retry button on WebAPK install error notification.
         int WEB_APK_ACTION_RETRY = 29;
 
-        int NUM_ENTRIES = 30;
+        // The one-tap "Unsubscribe" button, used only for persistent web notifications in lieu of
+        // the `SETTINGS` button.
+        int PRE_UNSUBSCRIBE = 30;
+
+        // The "Undo" button to revert `PRE_UNSUBSCRIBE`.
+        int UNDO_UNSUBSCRIBE = 31;
+
+        // The "Okay" button to affirmatively commit `PRE_UNSUBSCRIBE`.
+        int COMMIT_UNSUBSCRIBE_EXPLICIT = 32;
+
+        // The "Provisionally Unsubscribed" service notification is dismissed or times out, leading
+        // to implicitly committing `PRE_UNSUBSCRIBE`.
+        int COMMIT_UNSUBSCRIBE_IMPLICIT = 33;
+
+        // Number of real entries, excluding `UNKNWON`.
+        int NUM_ENTRIES = 34;
     }
 
     /**
@@ -280,6 +299,27 @@ public class NotificationUmaTracker {
         int DENIED_ASKED_ONCE = 3;
         int DENIED_ASKED_TWICE = 4;
         int DENIED_ASKED_MORE_THAN_TWICE = 5;
+
+        int NUM_ENTRIES = 6;
+    }
+
+    /** The stages of the job handling a notification intent. */
+    @IntDef({
+        IntentHandlerJobStage.SCHEDULE_JOB,
+        IntentHandlerJobStage.SCHEDULE_JOB_FAILED,
+        IntentHandlerJobStage.ON_START_JOB,
+        IntentHandlerJobStage.ON_STOP_JOB,
+        IntentHandlerJobStage.DISPATCH_EVENT,
+        IntentHandlerJobStage.NATIVE_STARTUP
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface IntentHandlerJobStage {
+        int SCHEDULE_JOB = 0;
+        int SCHEDULE_JOB_FAILED = 1;
+        int ON_START_JOB = 2;
+        int ON_STOP_JOB = 3;
+        int NATIVE_STARTUP = 4;
+        int DISPATCH_EVENT = 5;
 
         int NUM_ENTRIES = 6;
     }
@@ -521,6 +561,43 @@ public class NotificationUmaTracker {
                 "Mobile.SystemNotification.Permission.StartupState",
                 state,
                 NotificationPermissionState.NUM_ENTRIES);
+    }
+
+    /**
+     * Records whether the origin was already in the provisionally unsubscribed state when
+     * processing a tap on the `PRE_UNSUBSCRIBE` action button.
+     */
+    public void recordIsDuplicatePreUnsubscribe(boolean isDuplicate) {
+        RecordHistogram.recordBooleanHistogram(
+                "Mobile.SystemNotification.Permission.OneTapUnsubscribe.IsDuplicatePreUnsubscribe",
+                isDuplicate);
+    }
+
+    /**
+     * Records a sample to indicate that the job to handle a notification intent has reached a given
+     * stage.
+     *
+     * @param stage The stage reached.
+     * @param intentAction The action of the intent being processed.
+     */
+    public void recordIntentHandlerJobStage(@IntentHandlerJobStage int stage, String intentAction) {
+        RecordHistogram.recordSparseHistogram("Notifications.Android.JobStage", stage);
+        if (NotificationConstants.ACTION_PRE_UNSUBSCRIBE.equals(intentAction)) {
+            RecordHistogram.recordSparseHistogram(
+                    "Notifications.Android.JobStage.PreUnsubscribe", stage);
+        }
+    }
+
+    /**
+     * Records the number of notifications that were suspended every time the user hits the
+     * `PRE_UNSUBSCRIBE` action button.
+     *
+     * @param count The number of notifications suspended, including the clicked notification.
+     */
+    public void recordSuspendedNotificationCountOnUnsubscribe(int count) {
+        RecordHistogram.recordCount100Histogram(
+                "Mobile.SystemNotification.Permission.OneTapUnsubscribe.SuspendedNotificationCount",
+                count);
     }
 
     private void logNotificationShown(

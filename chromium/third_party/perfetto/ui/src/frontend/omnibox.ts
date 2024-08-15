@@ -27,7 +27,7 @@ interface OmniboxOptionRowAttrs {
   // Human readable display name for the option.
   // This can either be a simple string, or a list of fuzzy segments in which
   // case highlighting will be applied to the matching segments.
-  displayName: FuzzySegment[]|string;
+  displayName: FuzzySegment[] | string;
 
   // Highlight this option.
   highlighted: boolean;
@@ -46,24 +46,21 @@ interface OmniboxOptionRowAttrs {
 class OmniboxOptionRow implements m.ClassComponent<OmniboxOptionRowAttrs> {
   private highlightedBefore = false;
 
-  view({attrs}: m.Vnode<OmniboxOptionRowAttrs>): void|m.Children {
+  view({attrs}: m.Vnode<OmniboxOptionRowAttrs>): void | m.Children {
     const {displayName, highlighted, rightContent, label, ...htmlAttrs} = attrs;
     return m(
-        'li',
-        {
-          class: classNames(highlighted && 'pf-highlighted'),
-          ...htmlAttrs,
-        },
-        m(
-            'span.pf-title',
-            this.renderTitle(displayName),
-            ),
-        label && m('span.pf-tag', label),
-        rightContent,
+      'li',
+      {
+        class: classNames(highlighted && 'pf-highlighted'),
+        ...htmlAttrs,
+      },
+      m('span.pf-title', this.renderTitle(displayName)),
+      label && m('span.pf-tag', label),
+      rightContent,
     );
   }
 
-  private renderTitle(title: FuzzySegment[]|string): m.Children {
+  private renderTitle(title: FuzzySegment[] | string): m.Children {
     if (isString(title)) {
       return title;
     } else {
@@ -90,7 +87,7 @@ export interface OmniboxOption {
 
   // Display name provided as a string or a list of fuzzy segments to enable
   // fuzzy match highlighting.
-  displayName: FuzzySegment[]|string;
+  displayName: FuzzySegment[] | string;
 
   // Some tag to place on the right (to the left of the right content).
   tag?: string;
@@ -110,7 +107,7 @@ export interface OmniboxAttrs {
   onInput?: (value: string, previousValue: string) => void;
 
   // Class or list of classes to append to the Omnibox element.
-  extraClasses?: string|string[];
+  extraClasses?: string | string[];
 
   // Called on close.
   onClose?: () => void;
@@ -171,76 +168,77 @@ export class Omnibox implements m.ClassComponent<OmniboxAttrs> {
     } = attrs;
 
     return m(
-        Popup,
-        {
-          onPopupMount: (dom: HTMLElement) => this.popupElement = dom,
-          onPopupUnMount: (_dom: HTMLElement) => this.popupElement = undefined,
-          isOpen: exists(options),
-          showArrow: false,
-          matchWidth: true,
-          offset: 2,
-          trigger: m(
-              '.omnibox',
-              {
-                class: classNames(extraClasses),
-              },
-              m('input', {
-                ref: inputRef,
-                value,
-                placeholder,
-                oninput: (e: Event) => {
-                  onInput((e.target as HTMLInputElement).value, value);
-                },
-                onkeydown: (e: KeyboardEvent) => {
-                  if (e.key === 'Backspace' && value === '') {
-                    this.close(attrs);
-                  } else if (e.key === 'Escape') {
-                    e.preventDefault();
-                    this.close(attrs);
-                  }
+      Popup,
+      {
+        onPopupMount: (dom: HTMLElement) => (this.popupElement = dom),
+        onPopupUnMount: (_dom: HTMLElement) => (this.popupElement = undefined),
+        isOpen: exists(options),
+        showArrow: false,
+        matchWidth: true,
+        offset: 2,
+        trigger: m(
+          '.omnibox',
+          {
+            class: classNames(extraClasses),
+          },
+          m('input', {
+            ref: inputRef,
+            value,
+            placeholder,
+            oninput: (e: Event) => {
+              onInput((e.target as HTMLInputElement).value, value);
+            },
+            onkeydown: (e: KeyboardEvent) => {
+              if (e.key === 'Backspace' && value === '') {
+                this.close(attrs);
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                this.close(attrs);
+              }
 
-                  if (options) {
-                    if (e.key === 'ArrowUp') {
-                      e.preventDefault();
-                      this.highlightPreviousOption(attrs);
-                    } else if (e.key === 'ArrowDown') {
-                      e.preventDefault();
-                      this.highlightNextOption(attrs);
-                    } else if (e.key === 'Enter') {
-                      e.preventDefault();
+              if (options) {
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  this.highlightPreviousOption(attrs);
+                } else if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  this.highlightNextOption(attrs);
+                } else if (e.key === 'Enter') {
+                  e.preventDefault();
 
-                      const option = options[selectedOptionIndex];
-                      // Return values from indexing arrays can be undefined.
-                      // We should enable noUncheckedIndexedAccess in
-                      // tsconfig.json.
-                      /* eslint-disable
+                  const option = options[selectedOptionIndex];
+                  // Return values from indexing arrays can be undefined.
+                  // We should enable noUncheckedIndexedAccess in
+                  // tsconfig.json.
+                  /* eslint-disable
                       @typescript-eslint/strict-boolean-expressions */
-                      if (option) {
-                        /* eslint-enable */
-                        closeOnSubmit && this.close(attrs);
+                  if (option) {
+                    /* eslint-enable */
+                    closeOnSubmit && this.close(attrs);
 
-                        const mod = e.metaKey || e.ctrlKey;
-                        const shift = e.shiftKey;
-                        onSubmit(option.key, mod, shift);
-                      }
-                    }
-                  } else {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-
-                      closeOnSubmit && this.close(attrs);
-
-                      const mod = e.metaKey || e.ctrlKey;
-                      const shift = e.shiftKey;
-                      onSubmit(value, mod, shift);
-                    }
+                    const mod = e.metaKey || e.ctrlKey;
+                    const shift = e.shiftKey;
+                    onSubmit(option.key, mod, shift);
                   }
-                },
-              }),
-              rightContent,
-              ),
-        },
-        options && this.renderDropdown(attrs));
+                }
+              } else {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+
+                  closeOnSubmit && this.close(attrs);
+
+                  const mod = e.metaKey || e.ctrlKey;
+                  const shift = e.shiftKey;
+                  onSubmit(value, mod, shift);
+                }
+              }
+            },
+          }),
+          rightContent,
+        ),
+      },
+      options && this.renderDropdown(attrs),
+    );
   }
 
   private renderDropdown(attrs: OmniboxAttrs): m.Children {
@@ -249,40 +247,34 @@ export class Omnibox implements m.ClassComponent<OmniboxAttrs> {
     if (!options) return null;
 
     if (options.length === 0) {
-      return m(EmptyState, {header: 'No matching options...'});
+      return m(EmptyState, {title: 'No matching options...'});
     } else {
       return m(
-          '.pf-omnibox-dropdown',
-          this.renderOptionsContainer(attrs, options),
-          this.renderFooter(),
+        '.pf-omnibox-dropdown',
+        this.renderOptionsContainer(attrs, options),
+        this.renderFooter(),
       );
     }
   }
 
   private renderFooter() {
     return m(
-        '.pf-omnibox-dropdown-footer',
-        m(
-            'section',
-            m(KeycapGlyph, {keyValue: 'ArrowUp'}),
-            m(KeycapGlyph, {keyValue: 'ArrowDown'}),
-            'to navigate',
-            ),
-        m(
-            'section',
-            m(KeycapGlyph, {keyValue: 'Enter'}),
-            'to use',
-            ),
-        m(
-            'section',
-            m(KeycapGlyph, {keyValue: 'Escape'}),
-            'to dismiss',
-            ),
+      '.pf-omnibox-dropdown-footer',
+      m(
+        'section',
+        m(KeycapGlyph, {keyValue: 'ArrowUp'}),
+        m(KeycapGlyph, {keyValue: 'ArrowDown'}),
+        'to navigate',
+      ),
+      m('section', m(KeycapGlyph, {keyValue: 'Enter'}), 'to use'),
+      m('section', m(KeycapGlyph, {keyValue: 'Escape'}), 'to dismiss'),
     );
   }
 
-  private renderOptionsContainer(attrs: OmniboxAttrs, options: OmniboxOption[]):
-      m.Children {
+  private renderOptionsContainer(
+    attrs: OmniboxAttrs,
+    options: OmniboxOption[],
+  ): m.Children {
     const {
       onClose = () => {},
       onSubmit = () => {},
@@ -304,10 +296,7 @@ export class Omnibox implements m.ClassComponent<OmniboxAttrs> {
       });
     });
 
-    return m(
-        'ul.pf-omnibox-options-container',
-        opts,
-    );
+    return m('ul.pf-omnibox-options-container', opts);
   }
 
   oncreate({attrs, dom}: m.VnodeDOM<OmniboxAttrs, this>) {
@@ -356,10 +345,7 @@ export class Omnibox implements m.ClassComponent<OmniboxAttrs> {
   }
 
   private highlightPreviousOption(attrs: OmniboxAttrs) {
-    const {
-      selectedOptionIndex = 0,
-      onSelectedOptionChanged = () => {},
-    } = attrs;
+    const {selectedOptionIndex = 0, onSelectedOptionChanged = () => {}} = attrs;
 
     onSelectedOptionChanged(Math.max(0, selectedOptionIndex - 1));
   }

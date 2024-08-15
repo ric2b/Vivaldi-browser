@@ -283,6 +283,18 @@ message TracingServiceState {
     // Time when the session was started, in the CLOCK_REALTIME domain.
     // Available only on Linux-based systems.
     optional int64 start_realtime_ns = 8;
+
+    // The fields below have been introduced in v42.
+
+    // The bugreport_score, as set in TraceConfig.bugreport_score.
+    optional int32 bugreport_score = 9;
+
+    // As per TraceConfig.bugreport_filename.
+    optional string bugreport_filename = 10;
+
+    // If true, the session is in the STARTED state. If false the session is in
+    // any other state (see `state` field).
+    optional bool is_started = 11;
   }
 
   // Lists all the producers connected.
@@ -349,6 +361,111 @@ message AndroidGameInterventionListConfig {
 }
 
 // End of protos/perfetto/config/android/android_game_intervention_list_config.proto
+
+// Begin of protos/perfetto/config/android/android_input_event_config.proto
+
+// Custom configuration for the "android.input.inputevent" data source.
+//
+// NOTE: Input traces can only be taken on debuggable (userdebug/eng) builds!
+//
+// Next ID: 5
+message AndroidInputEventConfig {
+
+    // Trace modes are tracing presets that are included in the system.
+    enum TraceMode {
+        // Preset mode for maximal tracing.
+        // WARNING: This will bypass all privacy measures on debuggable builds, and will record all
+        //          input events processed by the system, regardless of the context in which they
+        //          were processed. It should only be used for tracing on a local device or for
+        //          tests. It should NEVER be used for field tracing.
+        TRACE_MODE_TRACE_ALL = 0;
+        // Use the tracing rules defined in this config to specify what events to trace.
+        TRACE_MODE_USE_RULES = 1;
+    }
+
+    // The tracing mode to use. If unspecified, it will default to TRACE_MODE_USE_RULES.
+    optional TraceMode mode = 1;
+
+    // The level of tracing that should be applied to an event.
+    enum TraceLevel {
+        // Do not trace the input event.
+        TRACE_LEVEL_NONE = 0;
+        // Trace the event as a redacted event, where certain sensitive fields are omitted from
+        // the trace, including the coordinates of pointer events and the key/scan codes of key
+        // events.
+        TRACE_LEVEL_REDACTED = 1;
+        // Trace the complete event.
+        TRACE_LEVEL_COMPLETE = 2;
+    }
+
+    // A rule that specifies the TraceLevel for an event based on matching conditions.
+    // All matchers in the rule are optional. To trigger this rule, an event must match all
+    // of its specified matchers (i.e. the matchers function like a series of conditions connected
+    // by a logical 'AND' operator). A rule with no specified matchers will match all events.
+    // Next ID: 6
+    message TraceRule {
+        // The trace level to be used for events that trigger this rule.
+        // If unspecified, TRACE_LEVEL_NONE will be used by default.
+        optional TraceLevel trace_level = 1;
+
+        // --- Optional Matchers ---
+
+        // Package matchers
+        //
+        // Respectively matches if all or any of the target apps for this event are contained in
+        // the specified list of package names.
+        //
+        // Intended usage:
+        //   - Use match_all_packages to selectively allow tracing for the listed packages.
+        //   - Use match_any_packages to selectively deny tracing for certain packages.
+        //
+        // WARNING: Great care must be taken when designing rules for field tracing!
+        //          This is because each event is almost always sent to more than one app.
+        //              For example, when allowing tracing for a package that has a spy window
+        //          over the display (e.g. SystemUI) using match_any_packages, essentially all
+        //          input will be recorded on that display. This is because the events will be sent
+        //          to the spy as well as the foreground app, and regardless of what the foreground
+        //          app is, the event will end up being traced.
+        //              Alternatively, when attempting to block tracing for specific packages using
+        //          match_all_packages, no events will likely be blocked. This is because the event
+        //          will also be sent to other apps (such as, but not limited to, ones with spy
+        //          windows), so the matcher will not match unless all other targets are also
+        //          listed under the match_all_packages list.
+        repeated string match_all_packages = 2;
+        repeated string match_any_packages = 3;
+
+        // Matches if the event is secure, which means that at least one of the targets of
+        // this event is using the window flag FLAG_SECURE.
+        optional bool match_secure = 4;
+
+        // Matches if there was an active IME connection while this event was being processed.
+        optional bool match_ime_connection_active = 5;
+    }
+
+    // The list of rules to use to determine the trace level of events.
+    // Each event will be traced using the TraceLevel of the first rule that it triggers
+    // from this list. The rules are evaluated in the order in which they are specified.
+    // If an event does not match any of the rules, TRACE_LEVEL_NONE will be used by default.
+    repeated TraceRule rules = 2;
+
+    // --- Control flags ---
+
+    // Trace input events processed by the system as they are being dispatched
+    // to application windows. All trace rules will apply.
+    //   - If this flag is used without enabling trace_dispatcher_window_dispatch, it will
+    //     trace InputDispatcher's inbound events (which does not include events synthesized
+    //     within InputDispatcher) that match the rules.
+    //   - If used with trace_dispatcher_window_dispatch, all inbound and outbound events
+    //     matching the rules, including all events synthesized within InputDispatcher,
+    //     will be traced.
+    optional bool trace_dispatcher_input_events = 3;
+
+    // Trace details about which windows the system is sending each input event to.
+    // All trace rules will apply.
+    optional bool trace_dispatcher_window_dispatch = 4;
+}
+
+// End of protos/perfetto/config/android/android_input_event_config.proto
 
 // Begin of protos/perfetto/common/android_log_constants.proto
 
@@ -565,18 +682,32 @@ enum ProtoLogLevel {
 // ProtoLog is a logging mechanism that is intented to be more efficient than
 // logcat. This configures what logs to capture in the tracing instance.
 message ProtoLogConfig {
+  enum TracingMode {
+    // When using the DEFAULT tracing mode, only log groups and levels specified
+    // in the group_overrides are traced.
+    DEFAULT = 0;
+    // When using the ENABLE_ALL tracing mode, all log groups and levels are
+    // traced, unless specified in the group_overrides.
+    ENABLE_ALL = 1;
+  }
+
   // Specified the configurations for each of the logging groups. If none is
   // specified for a group the defaults will be used.
   repeated ProtoLogGroup group_overrides = 1;
+  // Specified what tracing mode to use for the tracing instance.
+  optional TracingMode tracing_mode = 2;
 }
 
 message ProtoLogGroup {
-  // The ProtoLog tag this configuration entry applies to.
-  optional string tag = 1;
+  // The ProtoLog group name this configuration entry applies to.
+  optional string group_name = 1;
   // Specify the level from which to start capturing protologs.
   // e.g. if ProtoLogLevel.WARN is specified only warning, errors and fatal log
   // message will be traced.
   optional ProtoLogLevel log_from = 2;
+  // When set to true we will collect the stacktrace for each protolog message
+  // in this group that we are tracing.
+  optional bool collect_stacktrace = 3;
 }
 
 // End of protos/perfetto/config/android/protolog_config.proto
@@ -719,14 +850,32 @@ message EtwConfig {
 
 // Begin of protos/perfetto/config/ftrace/ftrace_config.proto
 
-// Next id: 26.
+// Next id: 28
 message FtraceConfig {
+  // Ftrace events to record, example: "sched/sched_switch".
   repeated string ftrace_events = 1;
+  // Android-specific event categories:
   repeated string atrace_categories = 2;
   repeated string atrace_apps = 3;
-  // *Per-CPU* buffer size.
+
+  // Size of each per-cpu kernel ftrace ring buffer.
+  // Not guaranteed if there are multiple concurrent tracing sessions, as the
+  // buffers cannot be resized without pausing recording in the kernel.
   optional uint32 buffer_size_kb = 10;
+
+  // If set, specifies how often the tracing daemon reads from the kernel ring
+  // buffer. Not guaranteed if there are multiple concurrent tracing sessions.
+  // Leave unset unless you're fine-tuning a local config.
   optional uint32 drain_period_ms = 11;
+
+  // If set, the tracing daemon will read kernel ring buffers as soon as
+  // they're filled past this percentage of occupancy. In other words, a value
+  // of 50 means that a read pass is triggered as soon as any per-cpu buffer is
+  // half-full. Not guaranteed if there are multiple concurrent tracing
+  // sessions.
+  // Currently does nothing on Linux kernels below v6.1.
+  // Introduced in: perfetto v43.
+  optional uint32 drain_buffer_percent = 26;
 
   // Configuration for compact encoding of scheduler events. When enabled (and
   // recording the relevant ftrace events), specific high-volume events are
@@ -826,9 +975,10 @@ message FtraceConfig {
   // Introduced in: Android T.
   optional bool disable_generic_events = 16;
 
-  // The list of syscalls that should be recorded by sys_{enter,exit} ftrace
-  // events. When empty, all syscalls are recorded. If neither sys_{enter,exit}
-  // are enabled, this setting has no effect. Example: ["sys_read", "sys_open"].
+  // The subset of syscalls to record. Enables raw_syscalls/sys_{enter,exit}.
+  // To record all syscalls, leave this unset and add raw_syscalls to
+  // |ftrace_events|.
+  // Example: ["sys_read", "sys_open"].
   // Introduced in: Android U.
   repeated string syscall_events = 18;
 
@@ -895,6 +1045,24 @@ message FtraceConfig {
   //  * ftrace_events
   //  * buffer_size_kb
   optional string instance_name = 25;
+
+  // If true, |buffer_size_kb| is interpreted as a lower bound, allowing the
+  // implementation to choose a bigger buffer size.
+  //
+  // Most configs for perfetto v43+ should simply leave both fields unset.
+  //
+  // If you need a config compatible with a range of perfetto builds and you
+  // used to set a non-default buffer_size_kb, consider setting both fields.
+  // Example:
+  //   buffer_size_kb: 4096
+  //   buffer_size_lower_bound: true
+  // On older builds, the per-cpu buffers will be exactly 4 MB.
+  // On v43+, buffers will be at least 4 MB.
+  // In both cases, neither is guaranteed if there are other concurrent
+  // perfetto ftrace sessions, as the buffers cannot be resized without pausing
+  // the recording in the kernel.
+  // Introduced in: perfetto v43.
+  optional bool buffer_size_lower_bound = 27;
 }
 
 // End of protos/perfetto/config/ftrace/ftrace_config.proto
@@ -1040,7 +1208,6 @@ message ProcessStatsConfig {
 
     DISABLE_ON_DEMAND = 2;
   }
-
   repeated Quirks quirks = 1;
 
   // If enabled all processes will be scanned and dumped when the trace starts.
@@ -1054,14 +1221,9 @@ message ProcessStatsConfig {
   // /proc/pid/status and oom_score_adj every X ms.
   // It will also sample /proc/pid/smaps_rollup if scan_smaps_rollup = true.
   // This is required to be > 100ms to avoid excessive CPU usage.
-  // TODO(primiano): add CPU cost for change this value.
   optional uint32 proc_stats_poll_ms = 4;
 
-  // If empty samples stats for all processes. If non empty samples stats only
-  // for processes matching the given string in their argv0 (i.e. the first
-  // entry of /proc/pid/cmdline).
-  // TODO(primiano): implement this feature.
-  // repeated string proc_stats_filter = 5;
+  // id 5 never used
 
   // This is required to be either = 0 or a multiple of |proc_stats_poll_ms|
   // (default: |proc_stats_poll_ms|). If = 0, will be set to
@@ -1069,22 +1231,30 @@ message ProcessStatsConfig {
   // multiple.
   optional uint32 proc_stats_cache_ttl_ms = 6;
 
-  // DEPRECATED record_thread_time_in_state
-  reserved 7;
-
-  // DEPRECATED thread_time_in_state_cache_size
-  reserved 8;
-
-  // If true this will resolve filedescriptors for each process so these
-  // can be mapped to their actual device or file.
-  // Requires raw_syscalls/sys_exit ftrace events to be enabled or
+  // Niche feature: If true this will resolve file descriptors for each process
+  // so these can be mapped to their actual device or file.
+  // Requires raw_syscalls/sys_{enter,exit} ftrace events to be enabled or
   // new fds opened after initially scanning a process will not be
   // recognized.
   optional bool resolve_process_fds = 9;
 
-  // If enabled memory stats from /proc/pid/smaps_rollup will be included
-  // in process stats.
+  // If true, output will include memory stats from /proc/pid/smaps_rollup.
   optional bool scan_smaps_rollup = 10;
+
+  // If true: process descriptions will include process age (starttime in
+  // /proc/pid/stat).
+  // Introduced in: perfetto v44.
+  optional bool record_process_age = 11;
+
+  // If true and |proc_stats_poll_ms| is true, process stats will include time
+  // spent running in user/kernel mode (utime/stime in /proc/pid/stat).
+  // Introduced in: perfetto v44.
+  optional bool record_process_runtime = 12;
+
+  // record_thread_time_in_state
+  reserved 7;
+  // thread_time_in_state_cache_size
+  reserved 8;
 }
 
 // End of protos/perfetto/config/process_stats/process_stats_config.proto
@@ -3058,7 +3228,7 @@ message TrackEventConfig {
 // Begin of protos/perfetto/config/data_source_config.proto
 
 // The configuration that is passed to each data source when starting tracing.
-// Next id: 126
+// Next id: 129
 message DataSourceConfig {
   enum SessionInitiator {
     SESSION_INITIATOR_UNSPECIFIED = 0;
@@ -3203,6 +3373,9 @@ message DataSourceConfig {
   // Data source name: android.protolog
   optional ProtoLogConfig protolog_config = 126 [lazy = true];
 
+  // Data source name: android.input.inputevent
+  optional AndroidInputEventConfig android_input_event_config = 128 [lazy = true];
+
   // This is a fallback mechanism to send a free-form text config to the
   // producer. In theory this should never be needed. All the code that
   // is part of the platform (i.e. traced service) is supposed to *not* truncate
@@ -3228,7 +3401,7 @@ message DataSourceConfig {
 // It contains the general config for the logging buffer(s) and the configs for
 // all the data source being enabled.
 //
-// Next id: 38.
+// Next id: 39.
 message TraceConfig {
   message BufferConfig {
     optional uint32 size_kb = 1;
@@ -3436,7 +3609,9 @@ message TraceConfig {
     // a 24 hour period.
     // On R-, this override only affected userdebug builds. Since S, it also
     // affects user builds.
-    optional uint64 max_upload_per_day_bytes = 1;
+    // In 24Q3+ (V+), this override is a noop because upload guardrail logic
+    // was removed from Perfetto.
+    optional uint64 max_upload_per_day_bytes = 1 [deprecated = true];
 
     // Overrides the guardrail for maximum trace buffer size.
     // Available on U+
@@ -3486,6 +3661,13 @@ message TraceConfig {
   // When this field is set the tracing session becomes eligible to be cloned
   // by other UIDs.
   optional int32 bugreport_score = 30;
+
+  // When set, defines name of the file that will be saved under
+  // /data/misc/perfetto-traces/bugreport/ when using --save-all-for-bugreport.
+  // If omitted, traces will be named systrace.pftrace, systrace_1.pftrace, etc,
+  // starting from the highest `bugreport_score`.
+  // Introduced in v42 / Android V.
+  optional string bugreport_filename = 38;
 
   // Triggers allow producers to start or stop the tracing session when an event
   // occurs.
@@ -4119,7 +4301,7 @@ message AndroidGameInterventionList {
 
   repeated GamePackageInfo game_packages = 1;
 
-  // True when at least one error occured when parsing
+  // True when at least one error occurred when parsing
   // game_mode_intervention.list
   optional bool parse_error = 2;
 
@@ -4236,13 +4418,13 @@ message AndroidInputEvent {
   oneof event {
     // Traces input events received by or generated by InputDispatcher
     AndroidMotionEvent dispatcher_motion_event = 1;
-    AndroidMotionEvent dispatcher_motion_event_sensitive = 2;
+    AndroidMotionEvent dispatcher_motion_event_redacted = 2;
     AndroidKeyEvent dispatcher_key_event = 3;
-    AndroidKeyEvent dispatcher_key_event_sensitive = 4;
+    AndroidKeyEvent dispatcher_key_event_redacted = 4;
 
     // Traces an event being dispatched to a window.
     AndroidWindowInputDispatchEvent dispatcher_window_dispatch_event = 5;
-    AndroidWindowInputDispatchEvent dispatcher_window_dispatch_event_sensitive = 6;
+    AndroidWindowInputDispatchEvent dispatcher_window_dispatch_event_redacted = 6;
   }
 }
 
@@ -4816,22 +4998,25 @@ message PackagesList {
 /* represents a single log entry */
 message ProtoLogMessage {
   /* log statement identifier, created from message string and log level. */
-  optional fixed32 message_id = 1;
+  optional fixed64 message_id = 1;
   /* string parameters passed to the log call that have been interned. */
-  repeated uint32 interned_str_params = 2;
+  repeated uint32 str_param_iids = 2;
   /* integer parameters passed to the log call. */
   repeated sint64 sint64_params = 3;
   /* floating point parameters passed to the log call. */
   repeated double double_params = 4;
   /* boolean parameters passed to the log call. */
   repeated int32 boolean_params = 5;
+  // id of the interned stacktrace string
+  // (only dumped if explicitly confuigured to do so)
+  optional uint32 stacktrace_iid = 6;
 }
 
 /* contains all the data required to fully decode the protolog messages */
 message ProtoLogViewerConfig {
   message MessageData {
     // the id of the message that is logged in a ProtoLogMessage
-    optional fixed32 message_id = 1;
+    optional fixed64 message_id = 1;
     // the string representation of the message
     optional string message = 2;
     // the level of the message
@@ -4881,11 +5066,11 @@ message ShellTransition {
   // (using SystemClock.elapsedRealtimeNanos()).
   optional int64 merge_request_time_ns = 6;
   // If the transition was aborted on the shell side, this is the time that
-  // occured.
+  // occurred.
   // (using SystemClock.elapsedRealtimeNanos())
   optional int64 shell_abort_time_ns = 7;
   // If the transition was aborted on the wm side, this is the time that
-  // occured.
+  // occurred.
   // (using SystemClock.elapsedRealtimeNanos())
   optional int64 wm_abort_time_ns = 8;
   // The time WM considers the transition to be complete.
@@ -5112,8 +5297,10 @@ enum HwcCompositionType {
   // Similar to DEVICE, but the layer position may have been asynchronously set
   // through setCursorPosition
   HWC_TYPE_CURSOR = 4;
-  // Layer was composited by the device via a sideband stream.
+  // Layer was composited by the device via a sideband stream
   HWC_TYPE_SIDEBAND = 5;
+   // Layer was composited by hardware optimized for display decoration
+  HWC_TYPE_DISPLAY_DECORATION = 6;
 }
 
 // Information about each layer.
@@ -9201,6 +9388,15 @@ message RegulatorSetVoltageCompleteFtraceEvent {
 
 // End of protos/perfetto/trace/ftrace/regulator.proto
 
+// Begin of protos/perfetto/trace/ftrace/rpm.proto
+
+message RpmStatusFtraceEvent {
+  optional string name = 1;
+  optional int32 status = 2;
+}
+
+// End of protos/perfetto/trace/ftrace/rpm.proto
+
 // Begin of protos/perfetto/trace/ftrace/samsung.proto
 
 message SamsungTracingMarkWriteFtraceEvent {
@@ -10385,6 +10581,7 @@ message FtraceEvent {
     BinderReturnFtraceEvent binder_return = 486;
     SchedSwitchWithCtrsFtraceEvent sched_switch_with_ctrs = 487;
     GpuWorkPeriodFtraceEvent gpu_work_period = 488;
+    RpmStatusFtraceEvent rpm_status = 489;
   }
 }
 
@@ -10414,6 +10611,8 @@ message FtraceCpuStats {
 
   // Size of entries currently in the kernel buffer (see |entries|) in bytes.
   // The field should be named "bytes", but is misnamed for historical reasons.
+  // This value has known inaccuracies before Linux v6.6:
+  // https://github.com/torvalds/linux/commit/45d99ea
   optional uint64 bytes_read = 5;
 
   // The timestamp for the oldest event still in the ring buffer.
@@ -10525,10 +10724,6 @@ message FtraceEventBundle {
   // Set to true if there was data loss between the last time we've read from
   // the corresponding per-cpu kernel buffer, and the earliest event recorded
   // in this bundle.
-  // TODO(rsavitski): consider replicating in the newer FtraceError. This field
-  // has been set since the original implementation, but used only for manual
-  // debugging. Trace processor instead looks at the FtraceStats totals for the
-  // tracing session.
   optional bool lost_events = 3;
 
   // Optionally-enabled compact encoding of a batch of scheduling events. Only
@@ -12425,6 +12620,8 @@ message InternedData {
 
   // Interned protolog strings args.
   repeated InternedString protolog_string_args = 36;
+  // Interned protolog stacktraces.
+  repeated InternedString protolog_stacktrace = 37;
 }
 
 // End of protos/perfetto/trace/interned_data/interned_data.proto
@@ -13356,7 +13553,7 @@ message SmapsPacket {
 // dedicated message (as opposite to be fields in process_tree.proto) because
 // they are dumped at a different rate than cmdline and thread list.
 // Note: not all of these stats will be present in every ProcessStats message
-// and sometimes processes may be missing . This is because counters are
+// and sometimes processes may be missing. This is because counters are
 // cached to reduce emission of counters which do not change.
 message ProcessStats {
   // Per-thread periodically sampled stats.
@@ -13383,6 +13580,8 @@ message ProcessStats {
   message Process {
     optional int32 pid = 1;
 
+    repeated Thread threads = 11;
+
     // See /proc/[pid]/status in `man 5 proc` for a description of these fields.
     optional uint64 vm_size_kb = 2;
     optional uint64 vm_rss_kb = 3;
@@ -13396,8 +13595,6 @@ message ProcessStats {
     // the trace processor.
 
     optional int64 oom_score_adj = 10;
-
-    repeated Thread threads = 11;
 
     // The peak resident set size is resettable in newer Posix kernels.
     // This field specifies if reset is supported and if the writer had reset
@@ -13418,6 +13615,16 @@ message ProcessStats {
     optional uint64 smr_pss_anon_kb = 18;
     optional uint64 smr_pss_file_kb = 19;
     optional uint64 smr_pss_shmem_kb = 20;
+
+    // Time spent scheduled in user mode in nanoseconds. Parsed from utime in
+    // /proc/pid/stat. Recorded if record_process_runtime config option is set.
+    // Resolution of "clock ticks", usually 10ms.
+    optional uint64 runtime_user_mode = 21;
+
+    // Time spent scheduled in kernel mode in nanoseconds. Parsed from stime in
+    // /proc/pid/stat. Recorded if record_process_runtime config option is set.
+    // Resolution of "clock ticks", usually 10ms.
+    optional uint64 runtime_kernel_mode = 22;
   }
   repeated Process processes = 1;
 
@@ -13468,17 +13675,22 @@ message ProcessTree {
     // and it will contain /proc/pid/comm.
     repeated string cmdline = 3;
 
-    // No longer used as of Apr 2018, when the dedicated |threads| field was
-    // introduced in ProcessTree.
-    repeated Thread threads_deprecated = 4 [deprecated = true];
-
     // The uid for the process, as per /proc/pid/status.
     optional int32 uid = 5;
 
     // The non-root-level process IDs if the process runs in a PID namespace.
-    // Read from the NSpid entry of /proc/<pid>/status, with the first element (
-    // root-level process ID) omitted.
+    // Read from the NSpid entry of /proc/<pid>/status, with the first element
+    // (root-level process ID) omitted.
     repeated int32 nspid = 6;
+
+    // Timestamp of when the process was created, in nanoseconds
+    // from boot. Parsed from starttime in /proc/pid/stat.
+    // Recorded if record_process_age config option is set.
+    // Resolution of "clock ticks", usually 10ms.
+    optional uint64 process_start_from_boot = 7;
+
+    // threads_deprecated
+    reserved 4;
   }
 
   // List of processes and threads in the client. These lists are incremental
@@ -13498,6 +13710,24 @@ message ProcessTree {
 }
 
 // End of protos/perfetto/trace/ps/process_tree.proto
+
+// Begin of protos/perfetto/trace/remote_clock_sync.proto
+
+// Records the parameters for aligning clock readings between machines.
+message RemoteClockSync {
+  // Synchronized clock snapshots taken on both sides of the relay port (the
+  // tracing service and the relay service). A round of clock synchronization
+  // IPC takes emits 2 SyncedClocks messages, i.e., client snapshot -> host
+  // snapshot -> client snapshot -> host snapshot.
+  message SyncedClocks {
+    optional ClockSnapshot client_clocks = 2;
+    optional ClockSnapshot host_clocks = 3;
+  }
+
+  repeated SyncedClocks synced_clocks = 1;
+}
+
+// End of protos/perfetto/trace/remote_clock_sync.proto
 
 // Begin of protos/perfetto/trace/statsd/statsd_atom.proto
 
@@ -13679,9 +13909,6 @@ message SystemInfo {
   optional Utsname utsname = 1;
   optional string android_build_fingerprint = 2;
 
-  // Ticks per second - sysconf(_SC_CLK_TCK).
-  optional int64 hz = 3;
-
   // The version of traced (the same returned by `traced --version`).
   // This is a human readable string with and its format varies depending on
   // the build system and the repo (standalone vs AOSP).
@@ -13695,9 +13922,18 @@ message SystemInfo {
   // Kernel page size - sysconf(_SC_PAGESIZE).
   optional uint32 page_size = 6;
 
+  // Number of cpus - sysconf(_SC_NPROCESSORS_CONF).
+  // Might be different to the number of online cpus.
+  // Introduced in perfetto v44.
+  optional uint32 num_cpus = 8;
+
   // The timezone offset from UTC, as per strftime("%z"), in minutes.
   // Introduced in v38 / Android V.
   optional int32 timezone_off_mins = 7;
+
+  // Ticks per second - sysconf(_SC_CLK_TCK).
+  // Not serialised as of perfetto v44.
+  optional int64 hz = 3;
 }
 
 // End of protos/perfetto/trace/system_info.proto
@@ -14331,7 +14567,7 @@ message UiState {
 // See the [Buffers and Dataflow](/docs/concepts/buffers.md) doc for details.
 //
 // Next reserved id: 14 (up to 15).
-// Next id: 107.
+// Next id: 108.
 message TracePacket {
   // The timestamp of the TracePacket.
   // By default this timestamps refers to the trace clock (CLOCK_BOOTTIME on
@@ -14466,6 +14702,9 @@ message TracePacket {
 
     // InputFlinger traces
     AndroidInputEvent android_input_event = 106;
+
+    // Clock synchronization with remote machines.
+    RemoteClockSync remote_clock_sync = 107;
 
     // This field is only used for testing.
     // In previous versions of this proto this field had the id 268435455

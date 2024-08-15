@@ -24,7 +24,7 @@ bool TlsWriteBuffer::Push(const void* data, size_t len) {
   // Calculates the current size of the buffer.
   const size_t bytes_currently_used =
       currently_written_bytes - current_read_bytes;
-  OSP_DCHECK_LE(bytes_currently_used, kBufferSizeBytes);
+  OSP_CHECK_LE(bytes_currently_used, kBufferSizeBytes);
   if ((kBufferSizeBytes - bytes_currently_used) < len) {
     return false;
   }
@@ -75,7 +75,7 @@ void TlsWriteBuffer::Consume(size_t byte_count) {
   const size_t currently_written_bytes =
       bytes_written_so_far_.load(std::memory_order_acquire);
 
-  OSP_DCHECK_GE(currently_written_bytes - current_read_bytes, byte_count);
+  OSP_CHECK_GE(currently_written_bytes - current_read_bytes, byte_count);
   const size_t new_read_index = current_read_bytes + byte_count;
   bytes_read_so_far_.store(new_read_index, std::memory_order_release);
 }

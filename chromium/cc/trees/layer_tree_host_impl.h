@@ -8,13 +8,13 @@
 #include <stddef.h>
 
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
-#include <optional>
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/containers/lru_cache.h"
@@ -223,7 +223,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
     // RAW_PTR_EXCLUSION: Renderer performance: visible in sampling profiler
     // stacks.
     RAW_PTR_EXCLUSION const RenderSurfaceList* render_surface_list = nullptr;
-    LayerImplList will_draw_layers;
+    RAW_PTR_EXCLUSION LayerImplList will_draw_layers;
     bool has_no_damage = false;
     bool may_contain_video = false;
     viz::BeginFrameAck begin_frame_ack;
@@ -633,7 +633,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   // token is greater than or equal to `frame_token`.
   void RegisterMainThreadSuccessfulPresentationTimeCallbackForTesting(
       uint32_t frame_token,
-      PresentationTimeCallbackBuffer::SuccessfulCallback callback);
+      PresentationTimeCallbackBuffer::SuccessfulCallbackWithDetails callback);
 
   // Buffers `callback` until a relevant successful presentation occurs, at
   // which point the callback will be run on the compositor thread. A successful
@@ -994,8 +994,6 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   // DrawResult::kSuccess if the frame should be drawn.
   DrawResult CalculateRenderPasses(FrameData* frame);
 
-  void StartScrollbarFadeRecursive(LayerImpl* layer);
-
   // Once a resource is uploaded or deleted, it is no longer an evicted id, this
   // removes it from the evicted set, and updates if we're able to draw now that
   // all UIResources are valid.
@@ -1057,6 +1055,9 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
 
   // Flush pending work if we are currently not visible.
   void MaybeFlushPendingWork();
+
+  // Returns whether the LayerTreeHostImpl is running on a renderer process.
+  bool RunningOnRendererProcess() const;
 
   // Once bound, this instance owns the InputHandler. However, an InputHandler
   // need not be bound so this should be null-checked before dereferencing.
@@ -1169,7 +1170,8 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
 
   std::unique_ptr<MutatorHost> mutator_host_;
   std::unique_ptr<MutatorEvents> mutator_events_;
-  std::set<VideoFrameController*> video_frame_controllers_;
+  std::set<raw_ptr<VideoFrameController, SetExperimental>>
+      video_frame_controllers_;
   const raw_ptr<RasterDarkModeFilter> dark_mode_filter_;
 
   // Map from scroll element ID to scrollbar animation controller.
@@ -1190,7 +1192,8 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   raw_ptr<TaskGraphRunner> task_graph_runner_;
   int id_;
 
-  std::set<LatencyInfoSwapPromiseMonitor*> latency_info_swap_promise_monitor_;
+  std::set<raw_ptr<LatencyInfoSwapPromiseMonitor, SetExperimental>>
+      latency_info_swap_promise_monitor_;
 
   bool requires_high_res_to_draw_ = false;
   bool is_likely_to_require_a_draw_ = false;

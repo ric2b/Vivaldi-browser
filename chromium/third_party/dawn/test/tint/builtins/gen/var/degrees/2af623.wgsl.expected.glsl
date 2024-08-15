@@ -7,6 +7,7 @@ vec3 tint_degrees(vec3 param_0) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   vec3 inner;
+  uint pad;
 } prevent_dce;
 
 void degrees_2af623() {
@@ -30,6 +31,7 @@ void main() {
 }
 #version 310 es
 precision highp float;
+precision highp int;
 
 vec3 tint_degrees(vec3 param_0) {
   return param_0 * 57.29577951308232286465f;
@@ -38,6 +40,7 @@ vec3 tint_degrees(vec3 param_0) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   vec3 inner;
+  uint pad;
 } prevent_dce;
 
 void degrees_2af623() {
@@ -63,6 +66,7 @@ vec3 tint_degrees(vec3 param_0) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   vec3 inner;
+  uint pad;
 } prevent_dce;
 
 void degrees_2af623() {

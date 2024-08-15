@@ -92,7 +92,8 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
             Remove(old_menu);
           }
           if (new_menu) {
-            absl::optional<size_t> index = details->mainmenu_node()->GetIndexOf(
+            std::optional<size_t> index =
+                details->mainmenu_node()->GetIndexOf(
               new_menu);
             if (index.has_value()) {
               std::unique_ptr<Menu_Node> new_menu_node =

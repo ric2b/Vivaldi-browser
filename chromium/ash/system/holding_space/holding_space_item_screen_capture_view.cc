@@ -155,7 +155,7 @@ views::View* HoldingSpaceItemScreenCaptureView::GetTooltipHandlerForPoint(
 
 std::u16string HoldingSpaceItemScreenCaptureView::GetTooltipText(
     const gfx::Point& point) const {
-  return item() ? item()->GetText() : base::EmptyString16();
+  return item() ? item()->GetText() : std::u16string();
 }
 
 void HoldingSpaceItemScreenCaptureView::OnHoldingSpaceItemUpdated(
@@ -185,7 +185,7 @@ void HoldingSpaceItemScreenCaptureView::UpdateImage() {
   SchedulePaint();
 }
 
-BEGIN_METADATA(HoldingSpaceItemScreenCaptureView, HoldingSpaceItemView)
+BEGIN_METADATA(HoldingSpaceItemScreenCaptureView)
 END_METADATA
 
 }  // namespace ash

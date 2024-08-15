@@ -170,14 +170,14 @@ void IndexStorage::OnModelWillBeDeleted() {
   model_ = nullptr;
 }
 
-absl::optional<std::string> IndexStorage::SerializeData() {
+std::optional<std::string> IndexStorage::SerializeData() {
   IndexCodec codec;
   std::string output;
   JSONStringValueSerializer serializer(&output);
   serializer.set_pretty_print(true);
   base::Value value = codec.Encode(model_);
   if (!serializer.Serialize(value))
-    return absl::nullopt;
+    return std::nullopt;
 
   return output;
 }
@@ -196,7 +196,7 @@ bool IndexStorage::SaveNow() {
     return false;
   }
 
-  absl::optional<std::string> data = SerializeData();
+  std::optional<std::string> data = SerializeData();
   if (!data)
     return false;
   writer_.WriteNow(data.value());

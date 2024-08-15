@@ -97,7 +97,7 @@ base::FilePath GetExePath() {
 #elif defined(OS_SOLARIS)
 
 base::FilePath GetExePath() {
-  const char *raw = getexecname();
+  const char* raw = getexecname();
   if (raw == NULL) {
     return base::FilePath();
   }

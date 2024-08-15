@@ -37,22 +37,19 @@
 #include "core/fpdfapi/parser/fpdf_parser_utility.h"
 #include "core/fxcrt/autonuller.h"
 #include "core/fxcrt/bytestring.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/fx_safe_types.h"
+#include "core/fxcrt/notreached.h"
 #include "core/fxcrt/scoped_set_insertion.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxge/cfx_graphstate.h"
 #include "core/fxge/cfx_graphstatedata.h"
-#include "third_party/base/check.h"
-#include "third_party/base/containers/contains.h"
-#include "third_party/base/containers/span.h"
-#include "third_party/base/notreached.h"
 
 namespace {
 
 constexpr int kMaxFormLevel = 40;
-
-// Upper limit for the number of form XObjects within a form XObject.
-constexpr int kFormCountLimit = 8192;
 
 constexpr int kSingleCoordinatePair = 1;
 constexpr int kTensorCoordinatePairs = 16;
@@ -407,6 +404,10 @@ CPDF_StreamContentParser::CPDF_StreamContentParser(
 
   // Add the sentinel.
   m_ContentMarksStack.push(std::make_unique<CPDF_ContentMarks>());
+
+  // Initialize `m_AllCTMs`, as there is a CTM, even if the stream contains no
+  // cm operators.
+  m_AllCTMs[0] = m_pCurStates->current_transformation_matrix();
 }
 
 CPDF_StreamContentParser::~CPDF_StreamContentParser() {
@@ -688,6 +689,8 @@ void CPDF_StreamContentParser::Handle_CurveTo_123() {
 
 void CPDF_StreamContentParser::Handle_ConcatMatrix() {
   m_pCurStates->prepend_to_current_transformation_matrix(GetMatrix());
+  m_AllCTMs[GetCurrentStreamIndex()] =
+      m_pCurStates->current_transformation_matrix();
   OnChangeTextMatrix();
 }
 
@@ -746,21 +749,9 @@ void CPDF_StreamContentParser::Handle_ExecuteXObject() {
   if (!pXObject)
     return;
 
-  ByteString type;
-  if (pXObject->GetDict())
-    type = pXObject->GetDict()->GetByteStringFor("Subtype");
-
+  const ByteString type = pXObject->GetDict()->GetByteStringFor("Subtype");
   if (type == "Form") {
-    if (m_RecursionState->form_count > kFormCountLimit) {
-      return;
-    }
-
-    const bool is_first = m_RecursionState->form_count == 0;
-    ++m_RecursionState->form_count;
     AddForm(std::move(pXObject), name);
-    if (is_first) {
-      m_RecursionState->form_count = 0;
-    }
     return;
   }
 
@@ -1002,10 +993,14 @@ void CPDF_StreamContentParser::Handle_SaveGraphState() {
 }
 
 void CPDF_StreamContentParser::Handle_RestoreGraphState() {
-  if (m_StateStack.empty())
+  if (m_StateStack.empty()) {
     return;
+  }
+
   *m_pCurStates = *m_StateStack.back();
   m_StateStack.pop_back();
+  m_AllCTMs[GetCurrentStreamIndex()] =
+      m_pCurStates->current_transformation_matrix();
 }
 
 void CPDF_StreamContentParser::Handle_Rectangle() {
@@ -1188,6 +1183,12 @@ RetainPtr<CPDF_Font> CPDF_StreamContentParser::FindFont(
     }
   }
   return pFont;
+}
+
+CPDF_PageObjectHolder::CTMMap CPDF_StreamContentParser::TakeAllCTMs() {
+  CPDF_PageObjectHolder::CTMMap all_ctms;
+  all_ctms.swap(m_AllCTMs);
+  return all_ctms;
 }
 
 RetainPtr<CPDF_ColorSpace> CPDF_StreamContentParser::FindColorSpace(

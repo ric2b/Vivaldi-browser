@@ -16,8 +16,8 @@
 namespace views {
 
 void MenuConfig::Init() {
-  context_menu_font_list = font_list =
-      gfx::FontList(gfx::win::GetSystemFont(gfx::win::SystemFont::kMenu));
+  context_menu_font_list = font_list = // Vivaldi keep
+      gfx::FontList(gfx::win::GetSystemFont(gfx::win::SystemFont::kMenu)); // Vivaldi keep
 
   BOOL show_cues;
   show_mnemonics =

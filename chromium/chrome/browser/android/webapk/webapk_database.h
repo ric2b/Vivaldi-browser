@@ -49,6 +49,9 @@ class WebApkDatabase {
              std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
              CompletionCallback callback);
 
+  void DeleteAllDataAndMetadata(
+      syncer::ModelTypeStore::CallbackWithResult callback);
+
   bool is_opened() const { return opened_; }
 
  private:
@@ -67,6 +70,8 @@ class WebApkDatabase {
 
   void OnDataWritten(CompletionCallback callback,
                      const std::optional<syncer::ModelError>& error);
+
+  void RecordSyncedWebApkCountHistogram(int num_web_apks) const;
 
   std::unique_ptr<syncer::ModelTypeStore> store_;
   const raw_ptr<AbstractWebApkDatabaseFactory, DanglingUntriaged>

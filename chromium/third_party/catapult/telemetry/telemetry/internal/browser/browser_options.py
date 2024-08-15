@@ -4,10 +4,10 @@
 
 from __future__ import print_function
 from __future__ import absolute_import
+import argparse
 import atexit
 import copy
 import logging
-import optparse  # pylint: disable=deprecated-module
 import os
 import shlex
 import socket
@@ -17,6 +17,7 @@ from py_utils import cloud_storage  # pylint: disable=import-error
 
 from telemetry import compat_mode_options
 from telemetry.core import cast_interface
+from telemetry.core import optparse_argparse_migration as oam
 from telemetry.core import platform
 from telemetry.core import util
 from telemetry.internal.browser import browser_finder
@@ -33,18 +34,19 @@ def _IsWin():
   return sys.platform == 'win32'
 
 
-class BrowserFinderOptions(optparse.Values):
+class BrowserFinderOptions(argparse.Namespace):
   """Options to be used for discovering a browser."""
 
   emulator_environment = None
 
   def __init__(self, browser_type=None):
-    optparse.Values.__init__(self)
+    super().__init__()
 
     self.browser_type = browser_type
     self.browser_executable = None
     # The set of possible platforms the browser should run on.
     self.target_platforms = None
+    self.os_name = None
     self.chrome_root = None  # Path to src/
     self.chromium_output_dir = None  # E.g.: out/Debug
     self.device = None
@@ -81,7 +83,7 @@ class BrowserFinderOptions(optparse.Values):
     return copy.deepcopy(self)
 
   def CreateParser(self, *args, **kwargs):
-    parser = optparse.OptionParser(*args, **kwargs)
+    parser = oam.CreateFromOptparseInputs(*args, **kwargs)
 
     # Options to interact with a potential external results processor.
     parser.set_defaults(
@@ -98,7 +100,7 @@ class BrowserFinderOptions(optparse.Values):
         upload_bucket=None)
 
     # Selection group
-    group = optparse.OptionGroup(parser, 'Which browser to use')
+    group = oam.CreateOptionGroup(parser, 'Which browser to use')
     group.add_option(
         '--browser',
         dest='browser_type',
@@ -138,7 +140,15 @@ class BrowserFinderOptions(optparse.Values):
         # This is set in ParseArgs if necessary.
         default=-1,
         dest='remote_ssh_port',
-        help='The SSH port of the remote ChromeOS device (requires --remote).')
+        help=
+        'The SSH port of the remote ChromeOS device (requires --remote or --fetch-cros-remote).'
+    )
+    group.add_option(
+        '--fetch-cros-remote',
+        action='store_true',
+        dest='fetch_cros_remote',
+        help='Will extract device hostname from the SWARMING_BOT_ID env var if '
+        'running on ChromeOS Swarming.')
     compat_mode_options_list = [
         compat_mode_options.NO_FIELD_TRIALS,
         compat_mode_options.IGNORE_CERTIFICATE_ERROR,
@@ -184,7 +194,7 @@ class BrowserFinderOptions(optparse.Values):
     parser.add_option_group(group)
 
     # Debugging options
-    group = optparse.OptionGroup(parser, 'When things go wrong')
+    group = oam.CreateOptionGroup(parser, 'When things go wrong')
     group.add_option('--print-bootstrap-deps',
                      action='store_true',
                      help='Output bootstrap deps list.')
@@ -217,7 +227,7 @@ class BrowserFinderOptions(optparse.Values):
     parser.add_option_group(group)
 
     # Platform options
-    group = optparse.OptionGroup(parser, 'Platform options')
+    group = oam.CreateOptionGroup(parser, 'Platform options')
     group.add_option(
         '--performance-mode',
         choices=[android_device.HIGH_PERFORMANCE_MODE,
@@ -245,7 +255,7 @@ class BrowserFinderOptions(optparse.Values):
     parser.add_option_group(group)
 
     # Remote platform options
-    group = optparse.OptionGroup(parser, 'Remote platform options')
+    group = oam.CreateOptionGroup(parser, 'Remote platform options')
     group.add_option('--android-denylist-file',
                      help='Device denylist JSON file.')
     group.add_option(
@@ -274,7 +284,7 @@ class BrowserFinderOptions(optparse.Values):
     parser.add_option_group(group)
 
     # Cast browser options
-    group = optparse.OptionGroup(parser, 'Cast browser options')
+    group = oam.CreateOptionGroup(parser, 'Cast browser options')
     group.add_option('--cast-output-dir',
                      help='Output directory for Cast Core.')
     group.add_option('--cast-runtime-exe',
@@ -285,7 +295,7 @@ class BrowserFinderOptions(optparse.Values):
     group.add_option('--cast-device-ip',
                      help='IP address of the Cast device.')
 
-    group = optparse.OptionGroup(parser, 'Fuchsia platform options')
+    group = oam.CreateOptionGroup(parser, 'Fuchsia platform options')
     group.add_option(
         '--fuchsia-ssh-config',
         default=os.path.join(util.GetChromiumSrcDir(), 'build', 'fuchsia',
@@ -312,7 +322,7 @@ class BrowserFinderOptions(optparse.Values):
     parser.add_option_group(group)
 
     # CPU profiling on Android/Linux/ChromeOS.
-    group = optparse.OptionGroup(parser, (
+    group = oam.CreateOptionGroup(parser, (
         'CPU profiling over intervals of interest, '
         'Android, Linux, and ChromeOS only'))
     group.add_option(
@@ -323,10 +333,12 @@ class BrowserFinderOptions(optparse.Values):
         'which is supported only on Linux and Android, or system-wide, which '
         'is supported only on ChromeOS.')
     group.add_option(
-        '--interval-profiling-period', dest='interval_profiling_periods',
-        type='choice',
+        '--interval-profiling-period',
+        dest='interval_profiling_periods',
         choices=('navigation', 'interactions', 'story_run'),
-        action='append', default=[], metavar='PERIOD',
+        action='append',
+        default=[],
+        metavar='PERIOD',
         help='Run the CPU profiler during this test period. '
         'May be specified multiple times except when the story_run period is '
         'used; available choices are ["navigation", "interactions", '
@@ -363,7 +375,7 @@ class BrowserFinderOptions(optparse.Values):
         if k in self.__dict__ and self.__dict__[k] is not None:
           continue
         self.__dict__[k] = v
-      ret = real_parse(args, self)  # pylint: disable=E1121
+      ret = real_parse(args, self)
 
       if self.chromium_output_dir:
         os.environ['CHROMIUM_OUTPUT_DIR'] = self.chromium_output_dir
@@ -412,9 +424,10 @@ class BrowserFinderOptions(optparse.Values):
             print('     No browsers found for this device')
         sys.exit(0)
 
-      if ((self.browser_type == 'cros-chrome' or
-           self.browser_type == 'lacros-chrome') and
-          self.remote and (self.remote_ssh_port < 0)):
+      if ((self.browser_type == 'cros-chrome'
+           or self.browser_type == 'lacros-chrome')
+          and (self.remote or self.fetch_cros_remote)
+          and (self.remote_ssh_port < 0)):
         try:
           self.remote_ssh_port = socket.getservbyname('ssh')
         except OSError as e:
@@ -558,7 +571,8 @@ class BrowserFinderOptions(optparse.Values):
 
   def MergeDefaultValues(self, defaults):
     for k, v in defaults.__dict__.items():
-      self.ensure_value(k, v)
+      if not hasattr(self, k) or getattr(self, k) is None:
+        setattr(self, k, v)
 
 
 class BrowserOptions():
@@ -665,12 +679,11 @@ class BrowserOptions():
     # options.                                                                 #
     ############################################################################
 
-    group = optparse.OptionGroup(parser, 'Browser options')
+    group = oam.CreateOptionGroup(parser, 'Browser options')
     profile_choices = profile_types.GetProfileTypes()
     group.add_option(
         '--profile-type',
         dest='profile_type',
-        type='choice',
         default='clean',
         choices=profile_choices,
         help=('The user profile to use. A clean profile is used by default. '
@@ -697,19 +710,19 @@ class BrowserOptions():
     group.add_option(
         '--browser-logging-verbosity',
         dest='logging_verbosity',
-        type='choice',
         choices=cls._LOGGING_LEVELS,
         help=('Browser logging verbosity. The log file is saved in temp '
               "directory. Note that logging affects the browser's "
-              'performance. Supported values: %s. Defaults to %s.' % (
-                  ', '.join(cls._LOGGING_LEVELS), cls._DEFAULT_LOGGING_LEVEL)))
+              'performance. Supported values: %s. Defaults to %s.' %
+              (', '.join(cls._LOGGING_LEVELS), cls._DEFAULT_LOGGING_LEVEL)))
     group.add_option(
         '--assert-gpu-compositing',
-        dest='assert_gpu_compositing', action='store_true',
+        dest='assert_gpu_compositing',
+        action='store_true',
         help='Assert the browser uses gpu compositing and not software path.')
     parser.add_option_group(group)
 
-    group = optparse.OptionGroup(parser, 'Compatibility options')
+    group = oam.CreateOptionGroup(parser, 'Compatibility options')
     group.add_option(
         '--gtest_output',
         help='Ignored argument for compatibility with runtest.py harness')

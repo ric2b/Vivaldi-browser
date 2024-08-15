@@ -154,7 +154,7 @@ void SearchEnginesAPI::OnTemplateURLServiceShuttingDown() {
 }
 
 ExtensionFunction::ResponseAction SearchEnginesGetKeywordForUrlFunction::Run() {
-  absl::optional<vivaldi::search_engines::GetKeywordForUrl::Params> params(
+  std::optional<vivaldi::search_engines::GetKeywordForUrl::Params> params(
       vivaldi::search_engines::GetKeywordForUrl::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -260,7 +260,7 @@ ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction SearchEnginesAddTemplateUrlFunction::Run() {
-  absl::optional<vivaldi::search_engines::AddTemplateUrl::Params> params(
+  std::optional<vivaldi::search_engines::AddTemplateUrl::Params> params(
       vivaldi::search_engines::AddTemplateUrl::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -298,7 +298,7 @@ ExtensionFunction::ResponseAction SearchEnginesAddTemplateUrlFunction::Run() {
 
 ExtensionFunction::ResponseAction
 SearchEnginesRemoveTemplateUrlFunction::Run() {
-  absl::optional<vivaldi::search_engines::RemoveTemplateUrl::Params> params(
+  std::optional<vivaldi::search_engines::RemoveTemplateUrl::Params> params(
       vivaldi::search_engines::RemoveTemplateUrl::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -365,7 +365,7 @@ SearchEnginesRemoveTemplateUrlFunction::Run() {
 
 ExtensionFunction::ResponseAction
 SearchEnginesUpdateTemplateUrlFunction::Run() {
-  absl::optional<vivaldi::search_engines::UpdateTemplateUrl::Params> params(
+  std::optional<vivaldi::search_engines::UpdateTemplateUrl::Params> params(
       vivaldi::search_engines::UpdateTemplateUrl::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -402,7 +402,7 @@ SearchEnginesUpdateTemplateUrlFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction SearchEnginesMoveTemplateUrlFunction::Run() {
-  absl::optional<vivaldi::search_engines::MoveTemplateUrl::Params> params(
+  std::optional<vivaldi::search_engines::MoveTemplateUrl::Params> params(
       vivaldi::search_engines::MoveTemplateUrl::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -441,7 +441,7 @@ ExtensionFunction::ResponseAction SearchEnginesMoveTemplateUrlFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction SearchEnginesSetDefaultFunction::Run() {
-  absl::optional<vivaldi::search_engines::SetDefault::Params> params(
+  std::optional<vivaldi::search_engines::SetDefault::Params> params(
       vivaldi::search_engines::SetDefault::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -463,7 +463,7 @@ ExtensionFunction::ResponseAction SearchEnginesSetDefaultFunction::Run() {
         vivaldi::search_engines::SetDefault::Results::Create(false)));
 
   auto default_type = [](vivaldi::search_engines::DefaultType default_type)
-      -> absl::optional<TemplateURLService::DefaultSearchType> {
+      -> std::optional<TemplateURLService::DefaultSearchType> {
     switch (default_type) {
       case vivaldi::search_engines::DefaultType::kDefaultSearch:
         return TemplateURLService::kDefaultSearchMain;
@@ -481,7 +481,7 @@ ExtensionFunction::ResponseAction SearchEnginesSetDefaultFunction::Run() {
         return TemplateURLService::kDefaultSearchImage;
       default:
         NOTREACHED();
-        return absl::nullopt;
+        return std::nullopt;
     }
   }(params->default_type);
 
@@ -492,7 +492,7 @@ ExtensionFunction::ResponseAction SearchEnginesSetDefaultFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction SearchEnginesGetSearchRequestFunction::Run() {
-  absl::optional<vivaldi::search_engines::GetSearchRequest::Params> params(
+  std::optional<vivaldi::search_engines::GetSearchRequest::Params> params(
       vivaldi::search_engines::GetSearchRequest::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -521,7 +521,7 @@ ExtensionFunction::ResponseAction SearchEnginesGetSearchRequestFunction::Run() {
 
 ExtensionFunction::ResponseAction
 SearchEnginesGetSuggestRequestFunction::Run() {
-  absl::optional<vivaldi::search_engines::GetSuggestRequest::Params> params(
+  std::optional<vivaldi::search_engines::GetSuggestRequest::Params> params(
       vivaldi::search_engines::GetSuggestRequest::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -550,7 +550,7 @@ SearchEnginesGetSuggestRequestFunction::Run() {
 
 ExtensionFunction::ResponseAction
 SearchEnginesRepairPrepopulatedTemplateUrlsFunction::Run() {
-  absl::optional<
+  std::optional<
       vivaldi::search_engines::RepairPrepopulatedTemplateUrls::Params>
       params(vivaldi::search_engines::RepairPrepopulatedTemplateUrls::Params::
                  Create(args()));

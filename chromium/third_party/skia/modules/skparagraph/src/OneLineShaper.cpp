@@ -1,7 +1,8 @@
 // Copyright 2019 Google LLC.
+#include "modules/skparagraph/src/OneLineShaper.h"
 
 #include "modules/skparagraph/src/Iterators.h"
-#include "modules/skparagraph/src/OneLineShaper.h"
+#include "modules/skshaper/include/SkShaper_harfbuzz.h"
 #include "src/base/SkUTF.h"
 
 #include <algorithm>
@@ -222,9 +223,15 @@ void OneLineShaper::finish(const Block& block, SkScalar height, SkScalar& advanc
 
             auto index = i - glyphs.start;
             if (i < glyphs.end) {
+                // There are only n glyphs in a run, not n+1.
                 piece->fGlyphs[index] = run->fGlyphs[i];
+
+                // fClusterIndexes n+1 is already set to the end of the run.
+                // Do not attempt to overwrite this value with the cluster index
+                // that starts the next Run.
+                // It is assumed later that all clusters in a Run are contained by the Run.
+                piece->fClusterIndexes[index] = run->fClusterIndexes[i];
             }
-            piece->fClusterIndexes[index] = run->fClusterIndexes[i];
             piece->fPositions[index] = run->fPositions[i] - zero;
             piece->fOffsets[index] = run->fOffsets[i];
             piece->addX(index, advanceX);
@@ -271,7 +278,7 @@ void OneLineShaper::addUnresolvedWithRun(GlyphRange glyphRange) {
     RunBlock unresolved(fCurrentRun, extendedText, glyphRange, 0);
     if (unresolved.fGlyphs.width() == fCurrentRun->size()) {
         SkASSERT(unresolved.fText.width() == fCurrentRun->fTextRange.width());
-    } else if (fUnresolvedBlocks.size() > 0) {
+    } else if (!fUnresolvedBlocks.empty()) {
         auto& lastUnresolved = fUnresolvedBlocks.back();
         if (lastUnresolved.fRun != nullptr &&
             lastUnresolved.fRun->fIndex == fCurrentRun->fIndex) {
@@ -575,7 +582,7 @@ bool OneLineShaper::iterateThroughShapingRegions(const ShapeVisitor& shape) {
             placeholder.fTextStyle.getFontFamilies(),
             placeholder.fTextStyle.getFontStyle(),
             placeholder.fTextStyle.getFontArguments());
-        sk_sp<SkTypeface> typeface = typefaces.size() ? typefaces.front() : nullptr;
+        sk_sp<SkTypeface> typeface = typefaces.empty() ? nullptr : typefaces.front();
         SkFont font(typeface, placeholder.fTextStyle.getFontSize());
 
         // "Shape" the placeholder
@@ -618,8 +625,8 @@ bool OneLineShaper::shape() {
             (TextRange textRange, SkSpan<Block> styleSpan, SkScalar& advanceX, TextIndex textStart, uint8_t defaultBidiLevel) {
 
         // Set up the shaper and shape the next
-        auto shaper = SkShaper::MakeShapeDontWrapOrReorder(fParagraph->fUnicode->copy(),
-                                                           SkFontMgr::RefEmpty()); // no fallback
+        auto shaper = SkShapers::HB::ShapeDontWrapOrReorder(fParagraph->fUnicode->copy(),
+                                                            SkFontMgr::RefEmpty());  // no fallback
         if (shaper == nullptr) {
             // For instance, loadICU does not work. We have to stop the process
             return false;
@@ -675,8 +682,8 @@ bool OneLineShaper::shape() {
                     LangIterator langIter(unresolvedText, blockSpan,
                                       fParagraph->paragraphStyle().getTextStyle());
                     SkShaper::TrivialBiDiRunIterator bidiIter(defaultBidiLevel, unresolvedText.size());
-                    auto scriptIter = SkShaper::MakeSkUnicodeHbScriptRunIterator(
-                            unresolvedText.begin(), unresolvedText.size());
+                    auto scriptIter = SkShapers::HB::ScriptRunIterator(unresolvedText.begin(),
+                                                                       unresolvedText.size());
                     fCurrentText = unresolvedRange;
 
                     // Map the block's features to subranges within the unresolved range.

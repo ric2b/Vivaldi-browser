@@ -7,6 +7,9 @@
 // Public License v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+#include <cstdlib>
+#include <string>
+
 #include "sparse.h"
 
 #ifdef min
@@ -18,6 +21,16 @@
 #endif
 
 #include <Eigen/SparseExtra>
+
+// Read from an environment variable TEST_TMPDIR, if available,
+// and append the provided filename. Defaults to local directory.
+std::string GetTestTempFilename(const char* filename) {
+  const char* test_tmpdir = std::getenv("TEST_TMPDIR");
+  if (test_tmpdir == nullptr) {
+    return std::string(filename);
+  }
+  return std::string(test_tmpdir) + std::string("/") + std::string(filename);
+}
 
 template <typename SetterType, typename DenseType, typename Scalar, int Options>
 bool test_random_setter(SparseMatrix<Scalar, Options>& sm, const DenseType& ref,
@@ -116,8 +129,9 @@ void check_marketio() {
   Index cols = internal::random<Index>(1, 100);
   SparseMatrixType m1, m2;
   m1 = DenseMatrix::Random(rows, cols).sparseView();
-  saveMarket(m1, "sparse_extra.mtx");
-  loadMarket(m2, "sparse_extra.mtx");
+  std::string filename = GetTestTempFilename("sparse_extra.mtx");
+  saveMarket(m1, filename);
+  loadMarket(m2, filename);
   VERIFY_IS_EQUAL(DenseMatrix(m1), DenseMatrix(m2));
 }
 
@@ -126,8 +140,9 @@ void check_marketio_vector() {
   Index size = internal::random<Index>(1, 100);
   VectorType v1, v2;
   v1 = VectorType::Random(size);
-  saveMarketVector(v1, "vector_extra.mtx");
-  loadMarketVector(v2, "vector_extra.mtx");
+  std::string filename = GetTestTempFilename("vector_extra.mtx");
+  saveMarketVector(v1, filename);
+  loadMarketVector(v2, filename);
   VERIFY_IS_EQUAL(v1, v2);
 }
 
@@ -149,8 +164,9 @@ void check_marketio_dense() {
 
   DenseMatrixType m1, m2;
   m1 = DenseMatrixType::Random(rows, cols);
-  saveMarketDense(m1, "dense_extra.mtx");
-  loadMarketDense(m2, "dense_extra.mtx");
+  std::string filename = GetTestTempFilename("dense_extra.mtx");
+  saveMarketDense(m1, filename);
+  loadMarketDense(m2, filename);
   VERIFY_IS_EQUAL(m1, m2);
 }
 

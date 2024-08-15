@@ -5,7 +5,7 @@
 #import "ios/chrome/browser/ui/app_store_rating/features.h"
 
 #import "base/feature_list.h"
-#import "ios/chrome/browser/promos_manager/features.h"
+#import "ios/chrome/browser/promos_manager/model/features.h"
 
 BASE_FEATURE(kAppStoreRating,
              "AppStoreRating",
@@ -13,7 +13,7 @@ BASE_FEATURE(kAppStoreRating,
 
 BASE_FEATURE(kAppStoreRatingDBExclusionJan2024,
              "AppStoreRatingDBExclusionJan2024",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsAppStoreRatingEnabled() {
   return base::FeatureList::IsEnabled(kAppStoreRating);

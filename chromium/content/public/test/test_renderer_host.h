@@ -49,7 +49,9 @@ struct WebPreferences;
 }  // namespace blink
 
 namespace display {
+#if BUILDFLAG(IS_ANDROID)
 class Screen;
+#endif
 class ScopedNativeScreen;
 }  // namespace display
 
@@ -166,6 +168,11 @@ class RenderFrameHostTester {
   // Creates the WebUsbService and binds `receiver`.
   virtual void CreateWebUsbServiceForTesting(
       mojo::PendingReceiver<blink::mojom::WebUsbService> receiver) = 0;
+
+  // Detaches the LocalFrame mojo connection to the renderer. This is useful
+  // when tests override the creation logic for the LocalFrame and need the
+  // connection to be re-initialized.
+  virtual void ResetLocalFrame() = 0;
 };
 
 // An interface and utility for driving tests of RenderViewHost.

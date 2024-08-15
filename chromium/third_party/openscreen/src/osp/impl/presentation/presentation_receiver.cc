@@ -36,29 +36,37 @@ msgs::PresentationConnectionCloseEvent_reason GetEventCloseReason(
   }
 }
 
-msgs::PresentationTerminationEvent_reason GetEventTerminationReason(
+msgs::PresentationTerminationSource GetTerminationSource(
+    TerminationSource source) {
+  switch (source) {
+    case TerminationSource::kController:
+      return msgs::PresentationTerminationSource::kController;
+    case TerminationSource::kReceiver:
+      return msgs::PresentationTerminationSource::kReceiver;
+    default:
+      return msgs::PresentationTerminationSource::kUnknown;
+  }
+}
+
+msgs::PresentationTerminationReason GetTerminationReason(
     TerminationReason reason) {
   switch (reason) {
-    case TerminationReason::kReceiverUserTerminated:
-      return msgs::PresentationTerminationEvent_reason::
-          kUserTerminatedViaReceiver;
-    case TerminationReason::kReceiverShuttingDown:
-      return msgs::PresentationTerminationEvent_reason::kReceiverPoweringDown;
-    case TerminationReason::kReceiverPresentationUnloaded:
-      return msgs::PresentationTerminationEvent_reason::
-          kReceiverAttemptedToNavigate;
+    case TerminationReason::kApplicationTerminated:
+      return msgs::PresentationTerminationReason::kApplicationRequest;
+    case TerminationReason::kUserTerminated:
+      return msgs::PresentationTerminationReason::kUserRequest;
     case TerminationReason::kReceiverPresentationReplaced:
-      return msgs::PresentationTerminationEvent_reason::
-          kReceiverReplacedPresentation;
+      return msgs::PresentationTerminationReason::kReceiverReplacedPresentation;
     case TerminationReason::kReceiverIdleTooLong:
-      return msgs::PresentationTerminationEvent_reason::kReceiverIdleTooLong;
+      return msgs::PresentationTerminationReason::kReceiverIdleTooLong;
+    case TerminationReason::kReceiverPresentationUnloaded:
+      return msgs::PresentationTerminationReason::kReceiverAttemptedToNavigate;
+    case TerminationReason::kReceiverShuttingDown:
+      return msgs::PresentationTerminationReason::kReceiverPoweringDown;
     case TerminationReason::kReceiverError:
-      return msgs::PresentationTerminationEvent_reason::kReceiverCrashed;
-    case TerminationReason::kReceiverTerminateCalled:
-      return msgs::PresentationTerminationEvent_reason::
-          kReceiverCalledTerminate;
+      return msgs::PresentationTerminationReason::kReceiverError;
     default:
-      return msgs::PresentationTerminationEvent_reason::kUnknown;
+      return msgs::PresentationTerminationReason::kUnknown;
   }
 }
 
@@ -113,7 +121,7 @@ ErrorOr<size_t> Receiver::OnStreamMessage(uint64_t endpoint_id,
       OSP_VLOG << "got presentation-url-availability-request";
       msgs::PresentationUrlAvailabilityRequest request;
       ssize_t decode_result = msgs::DecodePresentationUrlAvailabilityRequest(
-          buffer, buffer_size, &request);
+          buffer, buffer_size, request);
       if (decode_result < 0) {
         OSP_LOG_WARN << "Presentation-url-availability-request parse error: "
                      << decode_result;
@@ -136,7 +144,7 @@ ErrorOr<size_t> Receiver::OnStreamMessage(uint64_t endpoint_id,
       OSP_VLOG << "got presentation-start-request";
       msgs::PresentationStartRequest request;
       const ssize_t result =
-          msgs::DecodePresentationStartRequest(buffer, buffer_size, &request);
+          msgs::DecodePresentationStartRequest(buffer, buffer_size, request);
       if (result < 0) {
         OSP_LOG_WARN << "Presentation-initiation-request parse error: "
                      << result;
@@ -198,7 +206,7 @@ ErrorOr<size_t> Receiver::OnStreamMessage(uint64_t endpoint_id,
       OSP_VLOG << "Got a presentation-connection-open-request";
       msgs::PresentationConnectionOpenRequest request;
       const ssize_t result = msgs::DecodePresentationConnectionOpenRequest(
-          buffer, buffer_size, &request);
+          buffer, buffer_size, request);
       if (result < 0) {
         OSP_LOG_WARN << "Presentation-connection-open-request parse error: "
                      << result;
@@ -266,7 +274,7 @@ ErrorOr<size_t> Receiver::OnStreamMessage(uint64_t endpoint_id,
       OSP_VLOG << "got presentation-termination-request";
       msgs::PresentationTerminationRequest request;
       const ssize_t result = msgs::DecodePresentationTerminationRequest(
-          buffer, buffer_size, &request);
+          buffer, buffer_size, request);
       if (result < 0) {
         OSP_LOG_WARN << "Presentation-termination-request parse error: "
                      << result;
@@ -281,12 +289,13 @@ ErrorOr<size_t> Receiver::OnStreamMessage(uint64_t endpoint_id,
       if (presentation_id &&
           presentation_entry != started_presentations_.end()) {
         TerminationReason reason =
-            (request.reason == msgs::PresentationTerminationRequest_reason::
-                                   kUserTerminatedViaController)
-                ? TerminationReason::kControllerTerminateCalled
-                : TerminationReason::kControllerUserTerminated;
+            (request.reason ==
+             msgs::PresentationTerminationReason::kApplicationRequest)
+                ? TerminationReason::kApplicationTerminated
+                : TerminationReason::kUserTerminated;
         presentation_entry->second.terminate_request_id = request.request_id;
-        delegate_->TerminatePresentation(presentation_id, reason);
+        delegate_->TerminatePresentation(
+            presentation_id, TerminationSource::kController, reason);
 
         msgs::PresentationTerminationResponse response;
         response.request_id = request.request_id;
@@ -302,12 +311,13 @@ ErrorOr<size_t> Receiver::OnStreamMessage(uint64_t endpoint_id,
       }
 
       TerminationReason reason =
-          (request.reason == msgs::PresentationTerminationRequest_reason::
-                                 kControllerCalledTerminate)
-              ? TerminationReason::kControllerTerminateCalled
-              : TerminationReason::kControllerUserTerminated;
+          (request.reason ==
+           msgs::PresentationTerminationReason::kApplicationRequest)
+              ? TerminationReason::kApplicationTerminated
+              : TerminationReason::kUserTerminated;
       presentation_entry->second.terminate_request_id = request.request_id;
-      delegate_->TerminatePresentation(presentation_id, reason);
+      delegate_->TerminatePresentation(presentation_id,
+                                       TerminationSource::kController, reason);
 
       return result;
     }
@@ -359,7 +369,7 @@ void Receiver::SetReceiverDelegate(ReceiverDelegate* delegate) {
   }
 
   for (auto& presentation_id : presentations_to_remove) {
-    OnPresentationTerminated(presentation_id,
+    OnPresentationTerminated(presentation_id, TerminationSource::kReceiver,
                              TerminationReason::kReceiverShuttingDown);
   }
 }
@@ -460,12 +470,14 @@ Error Receiver::CloseConnection(Connection* connection,
   event.connection_id = connection->connection_id();
   event.reason = GetEventCloseReason(reason);
   event.has_error_message = false;
+  event.connection_count = connection_manager_->ConnectionCount();
   msgs::CborEncodeBuffer buffer;
   return protocol_connection->WriteMessage(
       event, msgs::EncodePresentationConnectionCloseEvent);
 }
 
 Error Receiver::OnPresentationTerminated(const std::string& presentation_id,
+                                         TerminationSource source,
                                          TerminationReason reason) {
   auto presentation_entry = started_presentations_.find(presentation_id);
   if (presentation_entry == started_presentations_.end())
@@ -494,7 +506,8 @@ Error Receiver::OnPresentationTerminated(const std::string& presentation_id,
 
   msgs::PresentationTerminationEvent event;
   event.presentation_id = presentation_id;
-  event.reason = GetEventTerminationReason(reason);
+  event.source = GetTerminationSource(source);
+  event.reason = GetTerminationReason(reason);
   started_presentations_.erase(presentation_entry);
   return WritePresentationTerminationEvent(event, protocol_connection.get());
 }

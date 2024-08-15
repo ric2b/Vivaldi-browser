@@ -106,7 +106,7 @@ const UIEdgeInsets titleLabelPadding =
   UILabel* label = [[UILabel alloc] init];
   _titleLabel = label;
   label.textColor = [UIColor colorNamed:vNTPSpeedDialDomainTextColor];
-  label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+  label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
   label.numberOfLines = 1;
   label.textAlignment = NSTextAlignmentCenter;
 

@@ -11,6 +11,22 @@
 
 namespace autofill {
 
+::testing::Matcher<Suggestion> EqualsSuggestion(PopupItemId id);
+
+::testing::Matcher<Suggestion> EqualsSuggestion(
+    PopupItemId id,
+    const std::u16string& main_text);
+
+::testing::Matcher<Suggestion> EqualsSuggestion(PopupItemId id,
+                                                const std::u16string& main_text,
+                                                Suggestion::Icon icon);
+
+::testing::Matcher<Suggestion> EqualsSuggestion(
+    PopupItemId id,
+    const std::u16string& main_text,
+    Suggestion::Icon icon,
+    const Suggestion::Payload& payload);
+
 template <class... Matchers>
 inline auto SuggestionVectorIdsAre(const Matchers&... matchers) {
   return ::testing::ElementsAre(::testing::Field(

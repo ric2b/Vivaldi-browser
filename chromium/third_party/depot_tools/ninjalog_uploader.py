@@ -12,6 +12,8 @@ Uploaded ninjalog is stored in BigQuery table having following schema.
 https://cs.chromium.org/chromium/infra/go/src/infra/appengine/chromium_build_stats/ninjaproto/ninjalog.proto
 
 The log will be used to analyze user side build performance.
+
+See also the privacy review. http://eldar/assessments/656778450
 """
 
 import argparse
@@ -31,6 +33,8 @@ import urllib.request
 ALLOWLISTED_CONFIGS = (
     "symbol_level",
     "use_goma",
+    "use_remoteexec",
+    "use_siso",
     "is_debug",
     "is_component_build",
     "enable_nacl",

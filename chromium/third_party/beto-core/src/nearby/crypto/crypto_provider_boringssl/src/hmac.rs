@@ -19,7 +19,7 @@ pub struct HmacSha256(bssl_crypto::hmac::HmacSha256);
 
 impl crypto_provider::hmac::Hmac<32> for HmacSha256 {
     fn new_from_key(key: [u8; 32]) -> Self {
-        Self(bssl_crypto::hmac::HmacSha256::new(key))
+        Self(bssl_crypto::hmac::HmacSha256::new(&key))
     }
 
     fn new_from_slice(key: &[u8]) -> Result<Self, InvalidLength> {
@@ -31,7 +31,7 @@ impl crypto_provider::hmac::Hmac<32> for HmacSha256 {
     }
 
     fn finalize(self) -> [u8; 32] {
-        self.0.finalize()
+        self.0.digest()
     }
 
     fn verify_slice(self, tag: &[u8]) -> Result<(), MacError> {
@@ -39,7 +39,7 @@ impl crypto_provider::hmac::Hmac<32> for HmacSha256 {
     }
 
     fn verify(self, tag: [u8; 32]) -> Result<(), MacError> {
-        self.0.verify(tag).map_err(|_| MacError)
+        self.0.verify(&tag).map_err(|_| MacError)
     }
 
     fn verify_truncated_left(self, tag: &[u8]) -> Result<(), MacError> {
@@ -52,7 +52,7 @@ pub struct HmacSha512(bssl_crypto::hmac::HmacSha512);
 
 impl crypto_provider::hmac::Hmac<64> for HmacSha512 {
     fn new_from_key(key: [u8; 64]) -> Self {
-        Self(bssl_crypto::hmac::HmacSha512::new(key))
+        Self(bssl_crypto::hmac::HmacSha512::new(&key))
     }
 
     fn new_from_slice(key: &[u8]) -> Result<Self, InvalidLength> {
@@ -64,7 +64,7 @@ impl crypto_provider::hmac::Hmac<64> for HmacSha512 {
     }
 
     fn finalize(self) -> [u8; 64] {
-        self.0.finalize()
+        self.0.digest()
     }
 
     fn verify_slice(self, tag: &[u8]) -> Result<(), MacError> {
@@ -72,7 +72,7 @@ impl crypto_provider::hmac::Hmac<64> for HmacSha512 {
     }
 
     fn verify(self, tag: [u8; 64]) -> Result<(), MacError> {
-        self.0.verify(tag).map_err(|_| MacError)
+        self.0.verify(&tag).map_err(|_| MacError)
     }
 
     fn verify_truncated_left(self, tag: &[u8]) -> Result<(), MacError> {

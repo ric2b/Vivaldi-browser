@@ -81,12 +81,12 @@ const fuchsia::sysmem::ColorSpaceType kSupportedColorSpaces[] = {
     fuchsia::sysmem::ColorSpaceType::REC709,
 };
 
-absl::optional<gfx::Size> ParseMinBufferSize() {
+std::optional<gfx::Size> ParseMinBufferSize() {
   std::string min_buffer_size_arg =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           switches::kMinVideoDecoderOutputBufferSize);
   if (min_buffer_size_arg.empty())
-    return absl::nullopt;
+    return std::nullopt;
   size_t width;
   size_t height;
   if (sscanf(min_buffer_size_arg.c_str(), "%zux%zu" SCNu32, &width, &height) !=
@@ -94,13 +94,13 @@ absl::optional<gfx::Size> ParseMinBufferSize() {
     LOG(WARNING) << "Invalid value for --"
                  << switches::kMinVideoDecoderOutputBufferSize << ": '"
                  << min_buffer_size_arg << "'";
-    return absl::nullopt;
+    return std::nullopt;
   }
   return gfx::Size(width, height);
 }
 
-absl::optional<gfx::Size> GetMinBufferSize() {
-  static absl::optional<gfx::Size> value = ParseMinBufferSize();
+std::optional<gfx::Size> GetMinBufferSize() {
+  static std::optional<gfx::Size> value = ParseMinBufferSize();
   return value;
 }
 
@@ -140,8 +140,8 @@ class FuchsiaVideoDecoder::OutputMailbox {
 
       shared_image_ =
           raster_context_provider_->SharedImageInterface()->CreateSharedImage(
-              shared_image_format, size, color_space, kTopLeft_GrSurfaceOrigin,
-              kPremul_SkAlphaType, usage, "FuchsiaVideoDecoder",
+              {shared_image_format, size, color_space, usage,
+               "FuchsiaVideoDecoder"},
               std::move(gmb_handle));
     } else {
       // Note that we are keeping |gmb| creation intact here for the sake of not
@@ -154,9 +154,9 @@ class FuchsiaVideoDecoder::OutputMailbox {
 
       shared_image_ =
           raster_context_provider_->SharedImageInterface()->CreateSharedImage(
-              gmb.get(), nullptr, gfx::BufferPlane::DEFAULT, color_space,
-              kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage,
-              "FuchsiaVideoDecoder");
+              gmb.get(), nullptr, gfx::BufferPlane::DEFAULT,
+              {color_space, kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
+               usage, "FuchsiaVideoDecoder"});
     }
 
     create_sync_token_ = raster_context_provider_->SharedImageInterface()

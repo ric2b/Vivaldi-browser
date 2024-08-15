@@ -15,7 +15,6 @@ import subcommand
 import sys
 import urllib.parse
 
-import fix_encoding
 import gerrit_util
 import setup_color
 
@@ -511,11 +510,6 @@ class OptionParser(optparse.OptionParser):
 
 
 def main(argv):
-    if sys.version_info[0] < 3:
-        print('\nYour python version %s is unsupported, please upgrade.\n' %
-              (sys.version.split(' ', 1)[0], ),
-              file=sys.stderr)
-        return 2
     dispatcher = subcommand.CommandDispatcher(__name__)
     return dispatcher.execute(OptionParser(), argv)
 
@@ -523,7 +517,6 @@ def main(argv):
 if __name__ == '__main__':
     # These affect sys.stdout so do it outside of main() to simplify mocks in
     # unit testing.
-    fix_encoding.fix_encoding()
     setup_color.init()
     try:
         sys.exit(main(sys.argv[1:]))

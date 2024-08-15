@@ -66,12 +66,12 @@ export class RuntimeModel extends SDKModel<EventTypes> {
     this.#executionContextComparatorInternal = ExecutionContext.comparator;
     this.#hasSideEffectSupportInternal = null;
 
-    if (Common.Settings.Settings.instance().moduleSetting('customFormatters').get()) {
+    if (Common.Settings.Settings.instance().moduleSetting('custom-formatters').get()) {
       void this.agent.invoke_setCustomObjectFormatterEnabled({enabled: true});
     }
 
     Common.Settings.Settings.instance()
-        .moduleSetting('customFormatters')
+        .moduleSetting('custom-formatters')
         .addChangeListener(this.customFormattersStateChanged.bind(this));
   }
 
@@ -315,6 +315,10 @@ export class RuntimeModel extends SDKModel<EventTypes> {
     return await this.agent.invoke_addBinding(event);
   }
 
+  async removeBinding(request: Protocol.Runtime.RemoveBindingRequest): Promise<Protocol.ProtocolResponseWithError> {
+    return await this.agent.invoke_removeBinding(request);
+  }
+
   bindingCalled(event: Protocol.Runtime.BindingCalledEvent): void {
     this.dispatchEventToListeners(Events.BindingCalled, event);
   }
@@ -326,7 +330,7 @@ export class RuntimeModel extends SDKModel<EventTypes> {
       return;
     }
 
-    const indent = Common.Settings.Settings.instance().moduleSetting('textEditorIndent').get();
+    const indent = Common.Settings.Settings.instance().moduleSetting('text-editor-indent').get();
     void object
         .callFunctionJSON(toStringForClipboard, [{
                             value: {
@@ -431,7 +435,7 @@ export class RuntimeModel extends SDKModel<EventTypes> {
     }
     // Check for a positive throwOnSideEffect response without triggering side effects.
     const response = await this.agent.invoke_evaluate({
-      expression: _sideEffectTestExpression,
+      expression: sideEffectTestExpression,
       contextId: testContext.id,
       throwOnSideEffect: true,
     });
@@ -461,11 +465,8 @@ export class RuntimeModel extends SDKModel<EventTypes> {
  * - IMPORTANT: must not actually cause user-visible or JS-visible side-effects.
  * - Must throw when evaluated with `throwOnSideEffect: true`.
  * - Must be valid when run from any ExecutionContext that supports `throwOnSideEffect`.
- * @const
  */
-// TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-// eslint-disable-next-line @typescript-eslint/naming-convention
-const _sideEffectTestExpression: string = '(async function(){ await 1; })()';
+const sideEffectTestExpression = '(async function(){ await 1; })()';
 
 export enum Events {
   BindingCalled = 'BindingCalled',

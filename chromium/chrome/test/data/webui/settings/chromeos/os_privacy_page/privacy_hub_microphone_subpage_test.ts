@@ -120,7 +120,8 @@ suite('<settings-privacy-hub-microphone-subpage>', () => {
         privacyHubMicrophoneSubpage.prefs.ash.user.microphone_allowed.value);
     assertEquals(privacyHubMicrophoneSubpage.i18n('deviceOn'), getOnOffText());
     assertEquals(
-        privacyHubMicrophoneSubpage.i18n('microphoneToggleSubtext'),
+        privacyHubMicrophoneSubpage.i18n(
+            'privacyHubMicrophoneSubpageMicrophoneToggleSubtext'),
         getOnOffSubtext());
     assertTrue(isMicrophoneListSectionVisible());
     assertFalse(isBlockedSuffixDisplayedAfterMicrophoneName());
@@ -489,6 +490,21 @@ suite('<settings-privacy-hub-microphone-subpage>', () => {
             'ChromeOS.PrivacyHub.MicrophoneSubpage.UserAction',
             PrivacyHubSensorSubpageUserAction.WEBSITE_PERMISSION_LINK_CLICKED));
   });
+
+  test(
+      'Clicking Chrome row opens Chrome browser microphone permission settings',
+      async () => {
+        assertEquals(
+            PermissionType.kUnknown,
+            fakeHandler.getLastOpenedBrowserPermissionSettingsType());
+
+        getManagePermissionsInChromeRow()!.click();
+        await fakeHandler.whenCalled('openBrowserPermissionSettings');
+
+        assertEquals(
+            PermissionType.kMicrophone,
+            fakeHandler.getLastOpenedBrowserPermissionSettingsType());
+      });
 
   test('System services section when microphone is allowed', async () => {
     assertEquals(

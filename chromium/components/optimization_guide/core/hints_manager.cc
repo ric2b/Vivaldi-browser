@@ -5,6 +5,7 @@
 #include "components/optimization_guide/core/hints_manager.h"
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -76,7 +77,7 @@ void MaybeRunUpdateClosure(base::OnceClosure update_closure) {
     std::move(update_closure).Run();
 }
 
-absl::optional<base::Version>
+std::optional<base::Version>
 GetPendingOptimizationHintsComponentVersionFromPref(PrefService* pref_service) {
   const std::string previous_attempted_version_string =
       pref_service->GetString(prefs::kPendingHintsProcessingVersion);
@@ -87,11 +88,11 @@ GetPendingOptimizationHintsComponentVersionFromPref(PrefService* pref_service) {
       DLOG(ERROR) << "Bad contents in hints processing pref";
       // Clear pref for fresh start next time.
       pref_service->ClearPref(prefs::kPendingHintsProcessingVersion);
-      return absl::nullopt;
+      return std::nullopt;
     }
-    return absl::make_optional(previous_attempted_version);
+    return std::make_optional(previous_attempted_version);
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 // Returns whether |optimization_type| is allowlisted by |optimizations|. If
@@ -309,6 +310,8 @@ bool ShouldContextResponsePopulateHintCache(
       return false;
     case proto::RequestContext::CONTEXT_NON_PERSONALIZED_PAGE_INSIGHTS_HUB:
       return false;
+    case proto::RequestContext::CONTEXT_SHOPPING:
+      return false;
   }
   NOTREACHED();
   return false;
@@ -349,7 +352,9 @@ HintsManager::HintsManager(
       identity_manager_(identity_manager),
       clock_(base::DefaultClock::GetInstance()),
       background_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
-          {base::MayBlock(), base::TaskPriority::BEST_EFFORT})) {
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT})),
+      allowed_contexts_for_personalized_metadata_(
+          features::GetAllowedContextsForPersonalizedMetadata()) {
   if (push_notification_manager_) {
     push_notification_manager_->SetDelegate(this);
   }
@@ -566,9 +571,12 @@ void HintsManager::ProcessOptimizationFilterSet(
 void HintsManager::OnHintCacheInitialized() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  OPTIMIZATION_GUIDE_LOGGER(optimization_guide_common::mojom::LogSource::HINTS,
-                            optimization_guide_logger_)
-      << "Hint cache initialized";
+  if (optimization_guide_logger_->ShouldEnableDebugLogs()) {
+    OPTIMIZATION_GUIDE_LOGGER(
+        optimization_guide_common::mojom::LogSource::HINTS,
+        optimization_guide_logger_)
+        << "Hint cache initialized";
+  }
 
   if (push_notification_manager_) {
     push_notification_manager_->OnDelegateReady();
@@ -616,7 +624,7 @@ void HintsManager::UpdateComponentHints(
   OPTIMIZATION_GUIDE_LOGGER(optimization_guide_common::mojom::LogSource::HINTS,
                             optimization_guide_logger_)
       << "Component successfully processed";
-  currently_processing_component_version_ = absl::nullopt;
+  currently_processing_component_version_ = std::nullopt;
   pref_service_->ClearPref(prefs::kPendingHintsProcessingVersion);
 
   if (!config) {
@@ -804,13 +812,13 @@ void HintsManager::FetchHintsForActiveTabs() {
                      weak_ptr_factory_.GetWeakPtr(), top_hosts_set,
                      base::flat_set<GURL>(active_tab_urls_to_refresh.begin(),
                                           active_tab_urls_to_refresh.end())),
-      nullptr);
+      std::nullopt);
 }
 
 void HintsManager::OnHintsForActiveTabsFetched(
     const base::flat_set<std::string>& hosts_fetched,
     const base::flat_set<GURL>& urls_fetched,
-    absl::optional<std::unique_ptr<proto::GetHintsResponse>>
+    std::optional<std::unique_ptr<proto::GetHintsResponse>>
         get_hints_response) {
   if (!get_hints_response) {
     OPTIMIZATION_GUIDE_LOG(optimization_guide_common::mojom::LogSource::HINTS,
@@ -832,10 +840,10 @@ void HintsManager::OnHintsForActiveTabsFetched(
 
 void HintsManager::OnPageNavigationHintsFetched(
     base::WeakPtr<OptimizationGuideNavigationData> navigation_data_weak_ptr,
-    const absl::optional<GURL>& navigation_url,
+    const std::optional<GURL>& navigation_url,
     const base::flat_set<GURL>& page_navigation_urls_requested,
     const base::flat_set<std::string>& page_navigation_hosts_requested,
-    absl::optional<std::unique_ptr<proto::GetHintsResponse>>
+    std::optional<std::unique_ptr<proto::GetHintsResponse>>
         get_hints_response) {
   if (navigation_url) {
     CleanUpFetcherForNavigation(*navigation_url);
@@ -881,7 +889,7 @@ void HintsManager::OnFetchedActiveTabsHintsStored() {
 
 void HintsManager::OnFetchedPageNavigationHintsStored(
     base::WeakPtr<OptimizationGuideNavigationData> navigation_data_weak_ptr,
-    const absl::optional<GURL>& navigation_url,
+    const std::optional<GURL>& navigation_url,
     const base::flat_set<std::string>& page_navigation_hosts_requested) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -983,7 +991,7 @@ void HintsManager::FetchHintsForURLs(const std::vector<GURL>& urls,
               const GURL&,
               const base::flat_map<proto::OptimizationType,
                                    OptimizationGuideDecisionWithMetadata>&)>()),
-      nullptr);
+      std::nullopt);
 }
 
 void HintsManager::OnHintLoaded(base::OnceClosure callback,
@@ -1022,7 +1030,7 @@ void HintsManager::RegisterOptimizationTypes(
           << "Registered new OptimizationType: " << optimization_type;
     }
 
-    absl::optional<double> value = previously_registered_opt_types->FindBool(
+    std::optional<double> value = previously_registered_opt_types->FindBool(
         proto::OptimizationType_Name(optimization_type));
     if (!value) {
       if (!is_off_the_record_ &&
@@ -1106,7 +1114,7 @@ void HintsManager::CanApplyOptimizationOnDemand(
     const base::flat_set<proto::OptimizationType>& optimization_types,
     proto::RequestContext request_context,
     OnDemandOptimizationGuideDecisionRepeatingCallback callback,
-    proto::RequestContextMetadata* request_context_metadata) {
+    std::optional<proto::RequestContextMetadata> request_context_metadata) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   InsertionOrderedSet<GURL> urls_to_fetch;
@@ -1120,14 +1128,13 @@ void HintsManager::CanApplyOptimizationOnDemand(
                              urls_to_fetch.vector(), hosts_to_fetch.vector(),
                              optimization_guide_logger_);
 
-  if (request_context_metadata != nullptr) {
+  if (request_context_metadata != std::nullopt) {
     if (request_context != proto::RequestContext::CONTEXT_PAGE_INSIGHTS_HUB ||
         !request_context_metadata->has_page_insights_hub_metadata()) {
-      request_context_metadata = nullptr;
+      request_context_metadata = std::nullopt;
     }
   }
-
-  if (features::ShouldEnablePersonalizedMetadata(request_context)) {
+  if (allowed_contexts_for_personalized_metadata_.Has(request_context)) {
     // Request the token before fetching the hints.
     RequestAccessToken(
         identity_manager_,
@@ -1151,11 +1158,10 @@ void HintsManager::FetchOptimizationGuideServiceBatchHints(
         optimization_types,
     optimization_guide::proto::RequestContext request_context,
     OnDemandOptimizationGuideDecisionRepeatingCallback callback,
-    proto::RequestContextMetadata* request_context_metadata,
+    std::optional<proto::RequestContextMetadata> request_context_metadata,
     const std::string& access_token) {
   std::pair<int32_t, HintsFetcher*> request_id_and_fetcher =
       CreateAndTrackBatchUpdateHintsFetcher();
-
   request_id_and_fetcher.second->FetchOptimizationGuideServiceHints(
       hosts.vector(), urls.vector(), optimization_types, request_context,
       application_locale_, access_token, /*skip_cache=*/true,
@@ -1263,7 +1269,7 @@ void HintsManager::OnBatchUpdateHintsFetched(
     const base::flat_set<GURL>& urls_with_pending_callback,
     const base::flat_set<proto::OptimizationType>& optimization_types,
     OnDemandOptimizationGuideDecisionRepeatingCallback callback,
-    absl::optional<std::unique_ptr<proto::GetHintsResponse>>
+    std::optional<std::unique_ptr<proto::GetHintsResponse>>
         get_hints_response) {
   CleanUpBatchUpdateHintsFetcher(request_id);
 
@@ -1720,7 +1726,7 @@ void HintsManager::MaybeFetchHintsForNavigation(
                      navigation_data->GetWeakPtr(), url,
                      base::flat_set<GURL>(urls.begin(), urls.end()),
                      base::flat_set<std::string>(hosts.begin(), hosts.end())),
-      nullptr);
+      std::nullopt);
   if (fetch_attempted) {
     navigation_data->set_hints_fetch_start(base::TimeTicks::Now());
 
@@ -1824,7 +1830,7 @@ void HintsManager::ClearHostKeyedHints() {
 void HintsManager::AddHintForTesting(
     const GURL& url,
     proto::OptimizationType optimization_type,
-    const absl::optional<OptimizationMetadata>& metadata) {
+    const std::optional<OptimizationMetadata>& metadata) {
   std::unique_ptr<proto::Hint> hint = std::make_unique<proto::Hint>();
   hint->set_key(url.spec());
   proto::PageHint* page_hint = hint->add_page_hints();

@@ -4,17 +4,18 @@
 
 #include "components/sync_user_events/user_event_sync_bridge.h"
 
+#include <array>
 #include <map>
 #include <set>
 #include <utility>
 #include <vector>
 
-#include "base/big_endian.h"
 #include "base/check_op.h"
-#include "base/containers/contains.h"
+#include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
+#include "base/numerics/byte_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -40,16 +41,14 @@ std::string GetStorageKeyFromSpecifics(const UserEventSpecifics& specifics) {
   // which allows leveldb to append new writes, which it is best at.
   // TODO(skym): Until we force |event_time_usec| to never conflict, this has
   // the potential for errors.
-  std::string key(8, 0);
-  base::WriteBigEndian(&key[0], specifics.event_time_usec());
-  return key;
+  std::array<uint8_t, 8> key =
+      base::numerics::U64ToBigEndian(specifics.event_time_usec());
+  return std::string(key.begin(), key.end());
 }
 
 int64_t GetEventTimeFromStorageKey(const std::string& storage_key) {
-  int64_t event_time;
-  base::ReadBigEndian(reinterpret_cast<const uint8_t*>(&storage_key[0]),
-                      &event_time);
-  return event_time;
+  return base::numerics::U64FromBigEndian(
+      base::as_byte_span(storage_key).first<8u>());
 }
 
 std::unique_ptr<EntityData> MoveToEntityData(
@@ -84,7 +83,7 @@ UserEventSyncBridge::CreateMetadataChangeList() {
   return WriteBatch::CreateMetadataChangeList();
 }
 
-absl::optional<ModelError> UserEventSyncBridge::MergeFullSyncData(
+std::optional<ModelError> UserEventSyncBridge::MergeFullSyncData(
     std::unique_ptr<MetadataChangeList> metadata_change_list,
     EntityChangeList entity_data) {
   DCHECK(entity_data.empty());
@@ -94,7 +93,7 @@ absl::optional<ModelError> UserEventSyncBridge::MergeFullSyncData(
                                      std::move(entity_data));
 }
 
-absl::optional<ModelError> UserEventSyncBridge::ApplyIncrementalSyncChanges(
+std::optional<ModelError> UserEventSyncBridge::ApplyIncrementalSyncChanges(
     std::unique_ptr<MetadataChangeList> metadata_change_list,
     EntityChangeList entity_changes) {
   std::unique_ptr<WriteBatch> batch = store_->CreateWriteBatch();
@@ -109,12 +108,12 @@ absl::optional<ModelError> UserEventSyncBridge::ApplyIncrementalSyncChanges(
   // Because we receive ApplyIncrementalSyncChanges with deletions when our
   // commits are confirmed, this is the perfect time to cleanup our in flight
   // objects which are no longer in flight.
-  std::erase_if(in_flight_nav_linked_events_,
-                [&deleted_event_times](
-                    const std::pair<int64_t, sync_pb::UserEventSpecifics> kv) {
-                  return base::Contains(deleted_event_times,
-                                        kv.second.event_time_usec());
-                });
+  std::erase_if(
+      in_flight_nav_linked_events_,
+      [&deleted_event_times](
+          const std::pair<int64_t, sync_pb::UserEventSpecifics> kv) {
+        return deleted_event_times.contains(kv.second.event_time_usec());
+      });
 
   batch->TakeMetadataChangesFrom(std::move(metadata_change_list));
   store_->CommitWriteBatch(std::move(batch),
@@ -208,7 +207,7 @@ void UserEventSyncBridge::RecordUserEventImpl(
 }
 
 void UserEventSyncBridge::OnStoreCreated(
-    const absl::optional<ModelError>& error,
+    const std::optional<ModelError>& error,
     std::unique_ptr<ModelTypeStore> store) {
   if (error) {
     change_processor()->ReportError(*error);
@@ -221,7 +220,7 @@ void UserEventSyncBridge::OnStoreCreated(
 }
 
 void UserEventSyncBridge::OnReadAllMetadata(
-    const absl::optional<ModelError>& error,
+    const std::optional<ModelError>& error,
     std::unique_ptr<MetadataBatch> metadata_batch) {
   TRACE_EVENT0("sync", "syncer::UserEventSyncBridge::OnReadAllMetadata");
   if (error) {
@@ -231,14 +230,14 @@ void UserEventSyncBridge::OnReadAllMetadata(
   }
 }
 
-void UserEventSyncBridge::OnCommit(const absl::optional<ModelError>& error) {
+void UserEventSyncBridge::OnCommit(const std::optional<ModelError>& error) {
   if (error) {
     change_processor()->ReportError(*error);
   }
 }
 
 void UserEventSyncBridge::OnReadData(DataCallback callback,
-                                     const absl::optional<ModelError>& error,
+                                     const std::optional<ModelError>& error,
                                      std::unique_ptr<RecordList> data_records,
                                      std::unique_ptr<IdList> missing_id_list) {
   OnReadAllData(std::move(callback), error, std::move(data_records));
@@ -246,7 +245,7 @@ void UserEventSyncBridge::OnReadData(DataCallback callback,
 
 void UserEventSyncBridge::OnReadAllData(
     DataCallback callback,
-    const absl::optional<ModelError>& error,
+    const std::optional<ModelError>& error,
     std::unique_ptr<RecordList> data_records) {
   if (error) {
     change_processor()->ReportError(*error);

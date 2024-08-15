@@ -13,6 +13,7 @@
 #include "chrome/browser/ui/autofill/autofill_popup_controller_impl.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
+#include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/content/browser/scoped_autofill_managers_observation.h"
 #include "components/autofill/core/browser/autofill_address_util.h"
 #include "components/autofill/core/browser/autofill_manager.h"
@@ -60,6 +61,22 @@ std::optional<std::pair<FormData, FormFieldData>> FindFieldWithFormData(
   return std::nullopt;
 }
 
+std::optional<std::string> GetRenderFrameDevtoolsToken(
+    const std::string& target_id,
+    const std::string& frame_token) {
+  auto host = content::DevToolsAgentHost::GetForId(target_id);
+  CHECK(host);
+
+  std::string result;
+  host->GetWebContents()->GetOutermostWebContents()->ForEachRenderFrameHost(
+      [&result, &frame_token](content::RenderFrameHost* rfh) {
+        if (rfh->GetFrameToken().ToString() == frame_token) {
+          result = rfh->GetDevToolsFrameToken().ToString();
+        }
+      });
+  return result;
+}
+
 }  // namespace
 
 AutofillHandler::AutofillHandler(protocol::UberDispatcher* dispatcher,
@@ -76,32 +93,13 @@ AutofillHandler::AutofillHandler(protocol::UberDispatcher* dispatcher,
 
 AutofillHandler::~AutofillHandler() = default;
 
-void AutofillHandler::Trigger(
+protocol::Response AutofillHandler::Trigger(
     int field_id,
     Maybe<String> frame_id,
-    std::unique_ptr<protocol::Autofill::CreditCard> card,
-    std::unique_ptr<TriggerCallback> callback) {
+    std::unique_ptr<protocol::Autofill::CreditCard> card) {
   auto host = content::DevToolsAgentHost::GetForId(target_id_);
   if (!host) {
-    std::move(callback)->sendFailure(Response::ServerError("Target not found"));
-    return;
-  }
-  host->GetUniqueFormControlId(
-      field_id,
-      base::BindOnce(&AutofillHandler::FinishTrigger,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(frame_id),
-                     std::move(card), std::move(callback)));
-}
-
-void AutofillHandler::FinishTrigger(
-    Maybe<String> frame_id,
-    std::unique_ptr<protocol::Autofill::CreditCard> card,
-    std::unique_ptr<TriggerCallback> callback,
-    uint64_t field_id) {
-  auto host = content::DevToolsAgentHost::GetForId(target_id_);
-  if (!host) {
-    std::move(callback)->sendFailure(Response::ServerError("Target not found"));
-    return;
+    return Response::ServerError("Target not found");
   }
 
   content::RenderFrameHost* outermost_primary_rfh =
@@ -116,9 +114,7 @@ void AutofillHandler::FinishTrigger(
           }
         });
     if (!frame_rfh) {
-      std::move(callback)->sendFailure(
-          Response::ServerError("Frame not found"));
-      return;
+      return Response::ServerError("Frame not found");
     }
   } else {
     frame_rfh = outermost_primary_rfh;
@@ -147,15 +143,11 @@ void AutofillHandler::FinishTrigger(
   }
 
   if (!field_data.has_value()) {
-    std::move(callback)->sendFailure(
-        Response::InvalidRequest("Field not found"));
-    return;
+    return Response::InvalidRequest("Field not found");
   }
 
   if (!autofill_driver) {
-    std::move(callback)->sendFailure(
-        Response::ServerError("RenderFrameHost is being destroyed"));
-    return;
+    return Response::ServerError("RenderFrameHost is being destroyed");
   }
 
   CreditCard tmp_autofill_card;
@@ -172,11 +164,13 @@ void AutofillHandler::FinishTrigger(
 
   static_cast<autofill::BrowserAutofillManager&>(
       autofill_driver->GetAutofillManager())
-      .FillCreditCardForm(field_data->first, field_data->second,
-                          tmp_autofill_card, base::UTF8ToUTF16(card->GetCvc()),
-                          {.trigger_source = AutofillTriggerSource::kPopup});
+      .FillOrPreviewCreditCardForm(
+          autofill::mojom::ActionPersistence::kFill, field_data->first,
+          field_data->second, tmp_autofill_card,
+          base::UTF8ToUTF16(card->GetCvc()),
+          {.trigger_source = AutofillTriggerSource::kPopup});
 
-  std::move(callback)->sendSuccess();
+  return Response::Success();
 }
 
 void AutofillHandler::SetAddresses(
@@ -251,10 +245,17 @@ void AutofillHandler::OnFillOrPreviewDataModelForm(
             return std::make_pair(field->global_id(), field);
           });
 
+  auto filled_form_ids = base::MakeFlatSet<autofill::FormGlobalId>(
+      filled_fields, {}, &FormFieldData::renderer_form_id);
   auto filled_fields_to_be_sent_to_devtools =
       std::make_unique<protocol::Array<protocol::Autofill::FilledField>>();
   filled_fields_to_be_sent_to_devtools->reserve(filled_fields.size());
   for (const auto& autofill_field : form_structure) {
+    // `form_structure` may contains fields from multiple forms, filter out
+    // fields from forms that have no autofilled fields as irrelevant.
+    if (!filled_form_ids.contains(autofill_field->renderer_form_id())) {
+      continue;
+    }
     // Whether the field was classified from the autocomplete attribute or
     // predictions. If no autocomplete attribute exists OR the actual ServerType
     // differs from what it would have been with only autocomplete, autofill
@@ -286,10 +287,11 @@ void AutofillHandler::OnFillOrPreviewDataModelForm(
                     ? protocol::Autofill::FillingStrategyEnum::AutofillInferred
                     : protocol::Autofill::FillingStrategyEnum::
                           AutocompleteAttribute)
-            .SetFieldId(base::FeatureList::IsEnabled(
-                            blink::features::kAutofillUseDomNodeIdForRendererId)
-                            ? autofill_field->unique_renderer_id.value()
-                            : 0)
+            .SetFrameId(GetRenderFrameDevtoolsToken(
+                            target_id_,
+                            autofill_field->global_id().frame_token->ToString())
+                            .value_or(""))
+            .SetFieldId(autofill_field->renderer_id.value())
             .Build());
   }
 
@@ -376,6 +378,29 @@ void AutofillHandler::OnFillOrPreviewDataModelForm(
           .Build());
 }
 
+void AutofillHandler::OnAutofillManagerDestroyed(
+    autofill::AutofillManager& manager) {
+  autofill_manager_observation_.Reset();
+}
+
+void AutofillHandler::OnContentAutofillDriverFactoryDestroyed(
+    autofill::ContentAutofillDriverFactory& factory) {
+  autofill_manager_observation_.Reset();
+}
+
+void AutofillHandler::OnContentAutofillDriverCreated(
+    autofill::ContentAutofillDriverFactory&,
+    autofill::ContentAutofillDriver& new_driver) {
+  // If the outermost frame driver (returned by `GetAutofillDriver()`) was
+  // recreated (e.g. happens after certain navigations) we need to resubscribe
+  // to the autofill manager, which is also recreated, to keep getting observer
+  // callbacks like `OnFillOrPreviewDataModelForm`.
+  if (enabled_ && &new_driver == GetAutofillDriver()) {
+    autofill_manager_observation_.Reset();
+    autofill_manager_observation_.Observe(&new_driver.GetAutofillManager());
+  }
+}
+
 autofill::ContentAutofillDriver* AutofillHandler::GetAutofillDriver() {
   auto host = content::DevToolsAgentHost::GetForId(target_id_);
   CHECK(host);
@@ -397,16 +422,21 @@ Response AutofillHandler::Enable() {
           autofill::features::kAutofillTestFormWithDevtools)) {
     auto host = content::DevToolsAgentHost::GetForId(target_id_);
     CHECK(host);
-    autofill_managers_observation_.Observe(
-        host->GetWebContents(),
-        autofill::ScopedAutofillManagersObservation::InitializationPolicy::
-            kObservePreexistingManagers);
+
+    autofill::ContentAutofillDriver* driver = GetAutofillDriver();
+    if (driver && host->GetType() == content::DevToolsAgentHost::kTypePage) {
+      factory_observation_.Observe(
+          autofill::ContentAutofillDriverFactory::FromWebContents(
+              host->GetWebContents()));
+      autofill_manager_observation_.Observe(&driver->GetAutofillManager());
+    }
   }
+
   return Response::Success();
 }
 
 Response AutofillHandler::Disable() {
   enabled_ = false;
-  autofill_managers_observation_.Reset();
+  autofill_manager_observation_.Reset();
   return Response::Success();
 }

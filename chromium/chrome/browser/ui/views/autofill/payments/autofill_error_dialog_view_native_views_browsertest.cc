@@ -6,6 +6,7 @@
 
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "chrome/browser/ui/autofill/payments/view_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
@@ -25,10 +26,7 @@ class AutofillErrorDialogViewNativeViewsBrowserTest
     : public DialogBrowserTest,
       public testing::WithParamInterface<std::tuple<bool, bool>> {
  public:
-  AutofillErrorDialogViewNativeViewsBrowserTest() {
-    autofill_error_dialog_controller_ =
-        std::make_unique<AutofillErrorDialogControllerImpl>();
-  }
+  AutofillErrorDialogViewNativeViewsBrowserTest() = default;
 
   ~AutofillErrorDialogViewNativeViewsBrowserTest() override = default;
 
@@ -60,8 +58,10 @@ class AutofillErrorDialogViewNativeViewsBrowserTest
           AutofillErrorDialogType::kVirtualCardNotEligibleError;
     }
 
+    autofill_error_dialog_controller_ =
+        std::make_unique<AutofillErrorDialogControllerImpl>(
+            autofill_error_dialog_context);
     autofill_error_dialog_controller_->Show(
-        autofill_error_dialog_context,
         base::BindOnce(&CreateAndShowAutofillErrorDialog,
                        base::Unretained(controller()),
                        base::Unretained(contents())));
@@ -72,12 +72,12 @@ class AutofillErrorDialogViewNativeViewsBrowserTest
       return nullptr;
     }
 
-    AutofillErrorDialogView* dialog_view =
+    base::WeakPtr<AutofillErrorDialogView> dialog_view =
         autofill_error_dialog_controller_->autofill_error_dialog_view();
     if (!dialog_view)
       return nullptr;
 
-    return static_cast<AutofillErrorDialogViewNativeViews*>(dialog_view);
+    return static_cast<AutofillErrorDialogViewNativeViews*>(dialog_view.get());
   }
 
   bool server_did_return_title() { return std::get<0>(GetParam()); }

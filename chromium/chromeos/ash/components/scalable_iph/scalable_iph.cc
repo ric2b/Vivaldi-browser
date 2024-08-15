@@ -147,6 +147,8 @@ const base::flat_map<std::string, ActionType>& GetActionTypesMap() {
            ActionType::kOpenChromebookPerksGfnPriority2022},
           {kActionTypeOpenChromebookPerksMinecraft2023,
            ActionType::kOpenChromebookPerksMinecraft2023},
+          {kActionTypeOpenChromebookPerksMinecraftRealms2023,
+           ActionType::kOpenChromebookPerksMinecraftRealms2023},
       });
   return *action_types_map;
 }
@@ -303,6 +305,7 @@ ActionType ParseActionType(const std::string& action_type_string) {
     // kInvalid as the parsed result.
     return ActionType::kInvalid;
   }
+
   return it->second;
 }
 
@@ -362,12 +365,10 @@ std::unique_ptr<NotificationParams> ParseNotificationParams(
                             kCustomNotificationTitleParamName);
     return nullptr;
   }
+
+  // Notification body text is an optional field. This can take an empty string.
   param->text = GetParamValue(feature, kCustomNotificationBodyTextParamName);
-  if (param->text.empty()) {
-    LogParamValueParseError(logger, FROM_HERE, feature.name,
-                            kCustomNotificationBodyTextParamName);
-    return nullptr;
-  }
+
   param->button.text =
       GetParamValue(feature, kCustomNotificationButtonTextParamName);
   if (param->button.text.empty()) {
@@ -407,6 +408,8 @@ std::unique_ptr<NotificationParams> ParseNotificationParams(
   param->image_type = ScalableIphDelegate::NotificationImageType::kNoImage;
   if (image_type == kCustomNotificationImageTypeValueWallpaper) {
     param->image_type = ScalableIphDelegate::NotificationImageType::kWallpaper;
+  } else if (image_type == kCustomNotificationImageTypeValueMinecraft) {
+    param->image_type = ScalableIphDelegate::NotificationImageType::kMinecraft;
   }
 
   std::string icon = GetParamValue(feature, kCustomNotificationIconParamName);
@@ -693,7 +696,7 @@ void ScalableIph::PerformActionForIphSession(ActionType action_type) {
 }
 
 void ScalableIph::MaybeRecordAppListItemActivation(const std::string& id) {
-  auto* it = kAppListItemActivationEventsMap.find(id);
+  auto it = kAppListItemActivationEventsMap.find(id);
   if (it == kAppListItemActivationEventsMap.end()) {
     SCALABLE_IPH_LOG(GetLogger())
         << "Observed an app list item activation. But not recording an app "
@@ -710,7 +713,7 @@ void ScalableIph::MaybeRecordAppListItemActivation(const std::string& id) {
 }
 
 void ScalableIph::MaybeRecordShelfItemActivationById(const std::string& id) {
-  auto* it = kShelfItemActivationEventsMap.find(id);
+  auto it = kShelfItemActivationEventsMap.find(id);
   if (it == kShelfItemActivationEventsMap.end()) {
     SCALABLE_IPH_LOG(GetLogger())
         << "Observed a shelf item activation. But not recording a shelf item "
@@ -920,10 +923,22 @@ void ScalableIph::CheckTriggerConditions(
           continue;
         }
         SCALABLE_IPH_LOG(GetLogger()) << "Triggering a notification.";
-        delegate_->ShowNotification(
-            *notification_params.get(),
-            std::make_unique<IphSession>(*feature, tracker_, this));
-        return;
+
+        if (delegate_->ShowNotification(
+                *notification_params.get(),
+                std::make_unique<IphSession>(*feature, tracker_, this))) {
+          SCALABLE_IPH_LOG(GetLogger())
+              << "Requested the UI framework to show a notification. Request "
+                 "status: success. -> Do not check other trigger conditions to "
+                 "avoid triggering multiple IPHs at the same time.";
+          return;
+        }
+
+        SCALABLE_IPH_LOG(GetLogger())
+            << "Requested the UI framework to show a notification. Request "
+               "status: failure. -> Keep checking other trigger conditions as "
+               "this IPH should not be shown.";
+        continue;
       }
       case UiType::kBubble: {
         std::unique_ptr<BubbleParams> bubble_params =
@@ -935,10 +950,21 @@ void ScalableIph::CheckTriggerConditions(
           continue;
         }
         SCALABLE_IPH_LOG(GetLogger()) << "Triggering a bubble.";
-        delegate_->ShowBubble(
-            *bubble_params.get(),
-            std::make_unique<IphSession>(*feature, tracker_, this));
-        return;
+        if (delegate_->ShowBubble(
+                *bubble_params.get(),
+                std::make_unique<IphSession>(*feature, tracker_, this))) {
+          SCALABLE_IPH_LOG(GetLogger())
+              << "Requested the UI framework to show a bubble. Request status: "
+                 "success. -> Do not check other trigger conditions to avoid "
+                 "triggering multiple IPHs at the same time.";
+          return;
+        }
+
+        SCALABLE_IPH_LOG(GetLogger())
+            << "Requested the UI framework to show a bubble. Request status: "
+               "failure. -> Keep checking other trigger conditions as this IPH "
+               "should not be shown.";
+        continue;
       }
       case UiType::kNone:
         SCALABLE_IPH_LOG(GetLogger())

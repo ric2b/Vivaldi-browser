@@ -139,24 +139,17 @@ const char* ProtoEnumToString(
   return "";
 }
 
-const char* ProtoEnumToString(
-    sync_pb::GetUpdatesCallerInfo::GetUpdatesSource updates_source) {
-  ASSERT_ENUM_BOUNDS(sync_pb::GetUpdatesCallerInfo, GetUpdatesSource, UNKNOWN,
-                     PROGRAMMATIC);
-  switch (updates_source) {
-    ENUM_CASE(sync_pb::GetUpdatesCallerInfo, UNKNOWN);
-    ENUM_CASE(sync_pb::GetUpdatesCallerInfo, FIRST_UPDATE);
-    ENUM_CASE(sync_pb::GetUpdatesCallerInfo, LOCAL);
-    ENUM_CASE(sync_pb::GetUpdatesCallerInfo, NOTIFICATION);
-    ENUM_CASE(sync_pb::GetUpdatesCallerInfo, PERIODIC);
-    ENUM_CASE(sync_pb::GetUpdatesCallerInfo, SYNC_CYCLE_CONTINUATION);
-    ENUM_CASE(sync_pb::GetUpdatesCallerInfo, NEWLY_SUPPORTED_DATATYPE);
-    ENUM_CASE(sync_pb::GetUpdatesCallerInfo, MIGRATION);
-    ENUM_CASE(sync_pb::GetUpdatesCallerInfo, NEW_CLIENT);
-    ENUM_CASE(sync_pb::GetUpdatesCallerInfo, RECONFIGURATION);
-    ENUM_CASE(sync_pb::GetUpdatesCallerInfo, DATATYPE_REFRESH);
-    ENUM_CASE(sync_pb::GetUpdatesCallerInfo, RETRY);
-    ENUM_CASE(sync_pb::GetUpdatesCallerInfo, PROGRAMMATIC);
+const char* ProtoEnumToString(sync_pb::NigoriSpecifics::
+    AutoUpgradeDebugInfo::AutoUpgradeState auto_upgrade_state) {
+  ASSERT_ENUM_BOUNDS(sync_pb::NigoriSpecifics::AutoUpgradeDebugInfo,
+    AutoUpgradeState, STATE_UNSPECIFIED, VALIDATION);
+
+  switch (auto_upgrade_state) {
+    ENUM_CASE(sync_pb::NigoriSpecifics::AutoUpgradeDebugInfo,
+        STATE_UNSPECIFIED);
+    ENUM_CASE(sync_pb::NigoriSpecifics::AutoUpgradeDebugInfo, AUTO_UPGRADED);
+    ENUM_CASE(sync_pb::NigoriSpecifics::AutoUpgradeDebugInfo, CONTROL);
+    ENUM_CASE(sync_pb::NigoriSpecifics::AutoUpgradeDebugInfo, VALIDATION);
   }
   NOTREACHED();
   return "";
@@ -180,10 +173,11 @@ const char* ProtoEnumToString(sync_pb::NigoriSpecifics::PassphraseType type) {
 const char* ProtoEnumToString(
     sync_pb::PaymentInstrument::SupportedRail supported_rail) {
   ASSERT_ENUM_BOUNDS(sync_pb::PaymentInstrument, SupportedRail,
-                     SUPPORTED_RAIL_UNKNOWN, PIX);
+                     SUPPORTED_RAIL_UNKNOWN, IBAN);
   switch (supported_rail) {
     ENUM_CASE(sync_pb::PaymentInstrument, SUPPORTED_RAIL_UNKNOWN);
     ENUM_CASE(sync_pb::PaymentInstrument, PIX);
+    ENUM_CASE(sync_pb::PaymentInstrument, IBAN);
   }
   NOTREACHED();
   return "";
@@ -287,6 +281,24 @@ const char* ProtoEnumToString(sync_pb::SessionTab::FaviconType favicon_type) {
   ASSERT_ENUM_BOUNDS(sync_pb::SessionTab, FaviconType, TYPE_WEB_FAVICON,
                      TYPE_WEB_FAVICON);
   switch (favicon_type) { ENUM_CASE(sync_pb::SessionTab, TYPE_WEB_FAVICON); }
+  NOTREACHED();
+  return "";
+}
+
+const char* ProtoEnumToString(sync_pb::SharedTabGroup::Color color) {
+  ASSERT_ENUM_BOUNDS(sync_pb::SharedTabGroup, Color, UNSPECIFIED, ORANGE);
+  switch (color) {
+    ENUM_CASE(sync_pb::SharedTabGroup, UNSPECIFIED);
+    ENUM_CASE(sync_pb::SharedTabGroup, GREY);
+    ENUM_CASE(sync_pb::SharedTabGroup, BLUE);
+    ENUM_CASE(sync_pb::SharedTabGroup, RED);
+    ENUM_CASE(sync_pb::SharedTabGroup, YELLOW);
+    ENUM_CASE(sync_pb::SharedTabGroup, GREEN);
+    ENUM_CASE(sync_pb::SharedTabGroup, PINK);
+    ENUM_CASE(sync_pb::SharedTabGroup, PURPLE);
+    ENUM_CASE(sync_pb::SharedTabGroup, CYAN);
+    ENUM_CASE(sync_pb::SharedTabGroup, ORANGE);
+  }
   NOTREACHED();
   return "";
 }

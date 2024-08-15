@@ -51,7 +51,7 @@ documentation](https://support.google.com/chromebook/answer/1086915).
 ### Entering
 
 Please see our new [Debug Button Shortcuts
-document](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/debug_buttons.md)
+document](/chromium-os/developer-library/guides/debugging/debug-buttons)
 for more details. It explains different form factors too.
 
 ### Leaving

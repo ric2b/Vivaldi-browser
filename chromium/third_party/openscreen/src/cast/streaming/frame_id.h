@@ -53,44 +53,44 @@ class FrameId : public ExpandedValueBase<int64_t, FrameId> {
 
   // Distance operator.
   int64_t operator-(FrameId rhs) const {
-    OSP_DCHECK(!is_null());
-    OSP_DCHECK(!rhs.is_null());
+    OSP_CHECK(!is_null());
+    OSP_CHECK(!rhs.is_null());
     return value_ - rhs.value_;
   }
 
   // Operators to compute advancement by incremental amounts.
   FrameId operator+(int64_t rhs) const {
-    OSP_DCHECK(!is_null());
+    OSP_CHECK(!is_null());
     return FrameId(value_ + rhs);
   }
   FrameId operator-(int64_t rhs) const {
-    OSP_DCHECK(!is_null());
+    OSP_CHECK(!is_null());
     return FrameId(value_ - rhs);
   }
   FrameId& operator+=(int64_t rhs) {
-    OSP_DCHECK(!is_null());
+    OSP_CHECK(!is_null());
     return (*this = (*this + rhs));
   }
   FrameId& operator-=(int64_t rhs) {
-    OSP_DCHECK(!is_null());
+    OSP_CHECK(!is_null());
     return (*this = (*this - rhs));
   }
   FrameId& operator++() {
-    OSP_DCHECK(!is_null());
+    OSP_CHECK(!is_null());
     ++value_;
     return *this;
   }
   FrameId& operator--() {
-    OSP_DCHECK(!is_null());
+    OSP_CHECK(!is_null());
     --value_;
     return *this;
   }
   FrameId operator++(int) {
-    OSP_DCHECK(!is_null());
+    OSP_CHECK(!is_null());
     return FrameId(value_++);
   }
   FrameId operator--(int) {
-    OSP_DCHECK(!is_null());
+    OSP_CHECK(!is_null());
     return FrameId(value_--);
   }
 

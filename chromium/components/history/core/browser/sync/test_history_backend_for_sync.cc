@@ -4,7 +4,8 @@
 
 #include "components/history/core/browser/sync/test_history_backend_for_sync.h"
 
-#include "base/containers/cxx20_erase_vector.h"
+#include <vector>
+
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace history {
@@ -58,10 +59,10 @@ void TestHistoryBackendForSync::AddOrReplaceContentAnnotation(
 }
 
 void TestHistoryBackendForSync::RemoveURLAndVisits(URLID url_id) {
-  base::EraseIf(visits_, [url_id](const VisitRow& visit) {
+  std::erase_if(visits_, [url_id](const VisitRow& visit) {
     return visit.url_id == url_id;
   });
-  base::EraseIf(urls_,
+  std::erase_if(urls_,
                 [url_id](const URLRow& url) { return url.id() == url_id; });
 }
 
@@ -176,7 +177,8 @@ bool TestHistoryBackendForSync::GetForeignVisit(
   return false;
 }
 
-std::vector<AnnotatedVisit> TestHistoryBackendForSync::ToAnnotatedVisits(
+std::vector<AnnotatedVisit>
+TestHistoryBackendForSync::ToAnnotatedVisitsFromRows(
     const VisitVector& visit_rows,
     bool compute_redirect_chain_start_properties) {
   std::vector<AnnotatedVisit> annotated_visits;
@@ -202,8 +204,8 @@ VisitID TestHistoryBackendForSync::AddSyncedVisit(
     const std::u16string& title,
     bool hidden,
     const VisitRow& visit,
-    const absl::optional<VisitContextAnnotations>& context_annotations,
-    const absl::optional<VisitContentAnnotations>& content_annotations) {
+    const std::optional<VisitContextAnnotations>& context_annotations,
+    const std::optional<VisitContentAnnotations>& content_annotations) {
   const URLRow& url_row = FindOrAddURL(url, title, hidden);
 
   VisitRow visit_to_add = visit;
@@ -225,8 +227,8 @@ VisitID TestHistoryBackendForSync::UpdateSyncedVisit(
     const std::u16string& title,
     bool hidden,
     const VisitRow& visit,
-    const absl::optional<VisitContextAnnotations>& context_annotations,
-    const absl::optional<VisitContentAnnotations>& content_annotations) {
+    const std::optional<VisitContextAnnotations>& context_annotations,
+    const std::optional<VisitContentAnnotations>& content_annotations) {
   for (URLRow& existing_url : urls_) {
     if (existing_url.url() == url) {
       existing_url.set_title(title);

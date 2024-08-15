@@ -13,7 +13,10 @@
 #include <utility>
 
 #include "build/build_config.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
 #include "core/fxcrt/fx_safe_types.h"
+#include "core/fxcrt/span.h"
 #include "core/fxge/cfx_color.h"
 #include "core/fxge/cfx_defaultrenderdevice.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
@@ -31,9 +34,6 @@
 #include "core/fxge/renderdevicedriver_iface.h"
 #include "core/fxge/text_char_pos.h"
 #include "core/fxge/text_glyph_pos.h"
-#include "third_party/base/check.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/containers/span.h"
 
 #if defined(PDF_USE_SKIA)
 #include "third_party/skia/include/core/SkTypes.h"  // nogncheck
@@ -160,7 +160,7 @@ void NormalizeArgb(int src_value,
                    int src_alpha) {
   uint8_t back_alpha = dest[3];
   if (back_alpha == 0)
-    FXARGB_SETDIB(dest, ArgbEncode(src_alpha, r, g, b));
+    FXARGB_SetDIB(dest, ArgbEncode(src_alpha, r, g, b));
   else if (src_alpha != 0)
     ApplyDestAlpha(back_alpha, src_alpha, r, g, b, dest);
 }
@@ -635,7 +635,7 @@ bool CFX_RenderDevice::DrawPathWithBlend(
   }
 
   if (stroke_alpha == 0 && !fill_options.rect_aa) {
-    absl::optional<CFX_FloatRect> maybe_rect_f = path.GetRect(pObject2Device);
+    std::optional<CFX_FloatRect> maybe_rect_f = path.GetRect(pObject2Device);
     if (maybe_rect_f.has_value()) {
       const CFX_FloatRect& rect_f = maybe_rect_f.value();
       FX_RECT rect_i = rect_f.GetOuterRect();
@@ -793,8 +793,8 @@ bool CFX_RenderDevice::DrawFillStrokePath(
     return false;
   }
   FX_RECT src_rect(0, 0, rect.Width(), rect.Height());
-  return m_pDeviceDriver->SetDIBits(std::move(bitmap), 0, src_rect, rect.left,
-                                    rect.top, BlendMode::kNormal);
+  return m_pDeviceDriver->SetDIBits(std::move(bitmap), /*color=*/0, src_rect,
+                                    rect.left, rect.top, BlendMode::kNormal);
 }
 
 bool CFX_RenderDevice::FillRectWithBlend(const FX_RECT& rect,
@@ -817,8 +817,8 @@ bool CFX_RenderDevice::FillRectWithBlend(const FX_RECT& rect,
     return false;
 
   FX_RECT src_rect(0, 0, rect.Width(), rect.Height());
-  m_pDeviceDriver->SetDIBits(bitmap, 0, src_rect, rect.left, rect.top,
-                             BlendMode::kNormal);
+  m_pDeviceDriver->SetDIBits(std::move(bitmap), /*color=*/0, src_rect,
+                             rect.left, rect.top, BlendMode::kNormal);
   return true;
 }
 
@@ -877,25 +877,30 @@ void CFX_RenderDevice::DrawZeroAreaPath(
                             path_options, blend_type);
 }
 
-bool CFX_RenderDevice::GetDIBits(const RetainPtr<CFX_DIBitmap>& pBitmap,
+bool CFX_RenderDevice::GetDIBits(RetainPtr<CFX_DIBitmap> bitmap,
                                  int left,
                                  int top) {
   return (m_RenderCaps & FXRC_GET_BITS) &&
-         m_pDeviceDriver->GetDIBits(pBitmap, left, top);
+         m_pDeviceDriver->GetDIBits(std::move(bitmap), left, top);
+}
+
+bool CFX_RenderDevice::SetDIBits(RetainPtr<const CFX_DIBBase> bitmap,
+                                 int left,
+                                 int top) {
+  return SetDIBitsWithBlend(std::move(bitmap), left, top, BlendMode::kNormal);
 }
 
 RetainPtr<CFX_DIBitmap> CFX_RenderDevice::GetBackDrop() {
   return m_pDeviceDriver->GetBackDrop();
 }
 
-bool CFX_RenderDevice::SetDIBitsWithBlend(
-    const RetainPtr<const CFX_DIBBase>& pBitmap,
-    int left,
-    int top,
-    BlendMode blend_mode) {
-  DCHECK(!pBitmap->IsMaskFormat());
-  FX_RECT dest_rect(left, top, left + pBitmap->GetWidth(),
-                    top + pBitmap->GetHeight());
+bool CFX_RenderDevice::SetDIBitsWithBlend(RetainPtr<const CFX_DIBBase> bitmap,
+                                          int left,
+                                          int top,
+                                          BlendMode blend_mode) {
+  DCHECK(!bitmap->IsMaskFormat());
+  FX_RECT dest_rect(left, top, left + bitmap->GetWidth(),
+                    top + bitmap->GetHeight());
   dest_rect.Intersect(m_ClipBox);
   if (dest_rect.IsEmpty())
     return true;
@@ -904,8 +909,8 @@ bool CFX_RenderDevice::SetDIBitsWithBlend(
                    dest_rect.left - left + dest_rect.Width(),
                    dest_rect.top - top + dest_rect.Height());
   if ((blend_mode == BlendMode::kNormal || (m_RenderCaps & FXRC_BLEND_MODE)) &&
-      (!pBitmap->IsAlphaFormat() || (m_RenderCaps & FXRC_ALPHA_IMAGE))) {
-    return m_pDeviceDriver->SetDIBits(std::move(pBitmap), 0, src_rect,
+      (!bitmap->IsAlphaFormat() || (m_RenderCaps & FXRC_ALPHA_IMAGE))) {
+    return m_pDeviceDriver->SetDIBits(std::move(bitmap), /*color=*/0, src_rect,
                                       dest_rect.left, dest_rect.top,
                                       blend_mode);
   }
@@ -923,13 +928,14 @@ bool CFX_RenderDevice::SetDIBitsWithBlend(
     return false;
 
   if (!background->CompositeBitmap(0, 0, bg_pixel_width, bg_pixel_height,
-                                   std::move(pBitmap), src_rect.left,
+                                   std::move(bitmap), src_rect.left,
                                    src_rect.top, blend_mode, nullptr, false)) {
     return false;
   }
   FX_RECT rect(0, 0, bg_pixel_width, bg_pixel_height);
-  return m_pDeviceDriver->SetDIBits(background, 0, rect, dest_rect.left,
-                                    dest_rect.top, BlendMode::kNormal);
+  return m_pDeviceDriver->SetDIBits(std::move(background), /*color=*/0, rect,
+                                    dest_rect.left, dest_rect.top,
+                                    BlendMode::kNormal);
 }
 
 bool CFX_RenderDevice::StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
@@ -958,13 +964,13 @@ bool CFX_RenderDevice::StretchDIBitsWithFlagsAndBlend(
                                    dest_height, &clip_box, options, blend_mode);
 }
 
-bool CFX_RenderDevice::SetBitMask(const RetainPtr<CFX_DIBBase>& pBitmap,
+bool CFX_RenderDevice::SetBitMask(RetainPtr<const CFX_DIBBase> bitmap,
                                   int left,
                                   int top,
                                   uint32_t argb) {
-  FX_RECT src_rect(0, 0, pBitmap->GetWidth(), pBitmap->GetHeight());
-  return m_pDeviceDriver->SetDIBits(pBitmap, argb, src_rect, left, top,
-                                    BlendMode::kNormal);
+  FX_RECT src_rect(0, 0, bitmap->GetWidth(), bitmap->GetHeight());
+  return m_pDeviceDriver->SetDIBits(std::move(bitmap), argb, src_rect, left,
+                                    top, BlendMode::kNormal);
 }
 
 bool CFX_RenderDevice::StretchBitMask(RetainPtr<CFX_DIBBase> bitmap,
@@ -1150,8 +1156,7 @@ bool CFX_RenderDevice::DrawNormalText(pdfium::span<const TextCharPos> pCharPos,
       if (!glyph.m_pGlyph)
         continue;
 
-      absl::optional<CFX_Point> point =
-          glyph.GetOrigin({pixel_left, pixel_top});
+      std::optional<CFX_Point> point = glyph.GetOrigin({pixel_left, pixel_top});
       if (!point.has_value())
         continue;
 
@@ -1160,7 +1165,8 @@ bool CFX_RenderDevice::DrawNormalText(pdfium::span<const TextCharPos> pCharPos,
                                   pGlyph->GetWidth(), pGlyph->GetHeight(),
                                   pGlyph, 0, 0);
     }
-    return SetBitMask(bitmap, bmp_rect.left, bmp_rect.top, fill_color);
+    return SetBitMask(std::move(bitmap), bmp_rect.left, bmp_rect.top,
+                      fill_color);
   }
   auto bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
   if (m_bpp == 8) {
@@ -1187,7 +1193,7 @@ bool CFX_RenderDevice::DrawNormalText(pdfium::span<const TextCharPos> pCharPos,
     if (!glyph.m_pGlyph)
       continue;
 
-    absl::optional<CFX_Point> point = glyph.GetOrigin({pixel_left, pixel_top});
+    std::optional<CFX_Point> point = glyph.GetOrigin({pixel_left, pixel_top});
     if (!point.has_value())
       continue;
 
@@ -1218,10 +1224,11 @@ bool CFX_RenderDevice::DrawNormalText(pdfium::span<const TextCharPos> pCharPos,
                          end_col, normalize, x_subpixel, a, r, g, b);
   }
 
-  if (bitmap->IsMaskFormat())
-    SetBitMask(bitmap, bmp_rect.left, bmp_rect.top, fill_color);
-  else
-    SetDIBits(bitmap, bmp_rect.left, bmp_rect.top);
+  if (bitmap->IsMaskFormat()) {
+    SetBitMask(std::move(bitmap), bmp_rect.left, bmp_rect.top, fill_color);
+  } else {
+    SetDIBits(std::move(bitmap), bmp_rect.left, bmp_rect.top);
+  }
   return true;
 }
 
@@ -1485,9 +1492,8 @@ bool CFX_RenderDevice::MultiplyAlpha(float alpha) {
   return m_pDeviceDriver->MultiplyAlpha(alpha);
 }
 
-bool CFX_RenderDevice::MultiplyAlphaMask(
-    const RetainPtr<const CFX_DIBBase>& mask) {
-  return m_pDeviceDriver->MultiplyAlphaMask(mask);
+bool CFX_RenderDevice::MultiplyAlphaMask(RetainPtr<const CFX_DIBitmap> mask) {
+  return m_pDeviceDriver->MultiplyAlphaMask(std::move(mask));
 }
 
 CFX_RenderDevice::StateRestorer::StateRestorer(CFX_RenderDevice* pDevice)

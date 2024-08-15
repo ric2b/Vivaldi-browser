@@ -36,6 +36,7 @@
 #include "dawn/native/DawnNative.h"
 #include "dawn/native/d3d/DeviceD3D.h"
 #include "dawn/native/d3d/Forward.h"
+#include "dawn/native/d3d/KeyedMutex.h"
 #include "dawn/native/d3d/QueueD3D.h"
 #include "dawn/native/d3d/SharedFenceD3D.h"
 #include "dawn/native/d3d/TextureD3D.h"
@@ -62,9 +63,11 @@ MaybeError ValidateTextureDescriptorCanBeWrapped(const UnpackedPtr<TextureDescri
 ExternalImageDXGIImpl::ExternalImageDXGIImpl(
     Device* backendDevice,
     ComPtr<IUnknown> d3dResource,
+    Ref<d3d::KeyedMutex> keyedMutex,
     const UnpackedPtr<TextureDescriptor>& textureDescriptor)
     : mBackendDevice(backendDevice),
       mD3DResource(std::move(d3dResource)),
+      mKeyedMutex(std::move(keyedMutex)),
       mUsage(textureDescriptor->usage),
       mDimension(textureDescriptor->dimension),
       mSize(textureDescriptor->size),
@@ -83,15 +86,10 @@ ExternalImageDXGIImpl::ExternalImageDXGIImpl(
                              textureDescriptor->nextInChain)
                              ->internalUsage;
     }
-
-    // If the resource has IDXGIKeyedMutex interface, it will be used for synchronization.
-    // TODO(dawn:1906): remove the mDXGIKeyedMutex when it is not used in chrome.
-    mD3DResource.As(&mDXGIKeyedMutex);
 }
 
 ExternalImageDXGIImpl::~ExternalImageDXGIImpl() {
     DAWN_ASSERT(mBackendDevice->IsLockedByCurrentThreadIfNeeded());
-    mDXGIKeyedMutexReleaser.reset();
     DestroyInternal();
 }
 
@@ -107,6 +105,7 @@ bool ExternalImageDXGIImpl::IsValid() const {
 void ExternalImageDXGIImpl::DestroyInternal() {
     DAWN_ASSERT(mBackendDevice->IsLockedByCurrentThreadIfNeeded());
     if (IsInList()) {
+        mKeyedMutex = nullptr;
         mD3DResource = nullptr;
     }
 
@@ -169,20 +168,9 @@ WGPUTexture ExternalImageDXGIImpl::BeginAccess(
 
     Ref<TextureBase> texture =
         ToBackend(mBackendDevice.Get())
-            ->CreateD3DExternalTexture(Unpack(&textureDescriptor), mD3DResource,
+            ->CreateD3DExternalTexture(Unpack(&textureDescriptor), mD3DResource, mKeyedMutex,
                                        std::move(waitFences), descriptor->isSwapChainTexture,
                                        descriptor->isInitialized);
-
-    if (mDXGIKeyedMutex && mAccessCount == 0) {
-        HRESULT hr = mDXGIKeyedMutex->AcquireSync(kDXGIKeyedMutexAcquireKey, INFINITE);
-        if (FAILED(hr)) {
-            dawn::ErrorLog() << "Failed to acquire keyed mutex for external image";
-            return nullptr;
-        }
-        mDXGIKeyedMutexReleaser.emplace(mDXGIKeyedMutex);
-    }
-    ++mAccessCount;
-
     return ToAPI(ReturnToAPI(std::move(texture)));
 }
 
@@ -216,11 +204,6 @@ void ExternalImageDXGIImpl::EndAccess(WGPUTexture texture,
 
     signalFence->fenceHandle = sharedFence->GetFenceHandle();
     signalFence->fenceValue = static_cast<uint64_t>(fenceValue);
-
-    --mAccessCount;
-    if (mDXGIKeyedMutexReleaser && mAccessCount == 0) {
-        mDXGIKeyedMutexReleaser.reset();
-    }
 }
 
 }  // namespace dawn::native::d3d

@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <utility>
 
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/containers/adapters.h"
 #include "core/fxcrt/css/cfx_csscolorvalue.h"
 #include "core/fxcrt/css/cfx_csscomputedstyle.h"
 #include "core/fxcrt/css/cfx_csscustomproperty.h"
@@ -19,8 +21,6 @@
 #include "core/fxcrt/css/cfx_cssstylesheet.h"
 #include "core/fxcrt/css/cfx_csssyntaxparser.h"
 #include "core/fxcrt/css/cfx_cssvaluelist.h"
-#include "third_party/base/check.h"
-#include "third_party/base/containers/adapters.h"
 
 CFX_CSSStyleSelector::CFX_CSSStyleSelector() = default;
 
@@ -209,7 +209,7 @@ void CFX_CSSStyleSelector::ApplyProperty(CFX_CSSProperty eProperty,
     case CFX_CSSProperty::LineHeight:
       if (eType == CFX_CSSValue::PrimitiveType::kNumber) {
         RetainPtr<CFX_CSSNumberValue> v = pValue.As<CFX_CSSNumberValue>();
-        if (v->unit() == CFX_CSSNumberValue::Unit::kNumber) {
+        if (v->unit() == CFX_CSSNumber::Unit::kNumber) {
           pComputedStyle->m_InheritedData.m_fLineHeight =
               v->value() * pComputedStyle->m_InheritedData.m_fFontSize;
         } else {
@@ -361,7 +361,7 @@ void CFX_CSSStyleSelector::ApplyProperty(CFX_CSSProperty eProperty,
             CFX_CSSLengthUnit::Normal);
       } else if (eType == CFX_CSSValue::PrimitiveType::kNumber) {
         if (pValue.AsRaw<CFX_CSSNumberValue>()->unit() ==
-            CFX_CSSNumberValue::Unit::kPercent) {
+            CFX_CSSNumber::Unit::kPercent) {
           break;
         }
 
@@ -376,7 +376,7 @@ void CFX_CSSStyleSelector::ApplyProperty(CFX_CSSProperty eProperty,
             CFX_CSSLengthUnit::Normal);
       } else if (eType == CFX_CSSValue::PrimitiveType::kNumber) {
         if (pValue.AsRaw<CFX_CSSNumberValue>()->unit() ==
-            CFX_CSSNumberValue::Unit::kPercent) {
+            CFX_CSSNumber::Unit::kPercent) {
           break;
         }
         SetLengthWithPercent(pComputedStyle->m_InheritedData.m_WordSpacing,
@@ -470,7 +470,7 @@ bool CFX_CSSStyleSelector::SetLengthWithPercent(
     float fFontSize) {
   if (eType == CFX_CSSValue::PrimitiveType::kNumber) {
     RetainPtr<CFX_CSSNumberValue> v = pValue.As<CFX_CSSNumberValue>();
-    if (v->unit() == CFX_CSSNumberValue::Unit::kPercent) {
+    if (v->unit() == CFX_CSSNumber::Unit::kPercent) {
       width.Set(CFX_CSSLengthUnit::Percent,
                 pValue.AsRaw<CFX_CSSNumberValue>()->value() / 100.0f);
       return width.NonZero();
@@ -556,7 +556,7 @@ Mask<CFX_CSSTEXTDECORATION> CFX_CSSStyleSelector::ToTextDecoration(
     const RetainPtr<CFX_CSSValueList>& pValue) {
   Mask<CFX_CSSTEXTDECORATION> dwDecoration;
   for (const RetainPtr<CFX_CSSValue>& val :
-       pdfium::base::Reversed(pValue->values())) {
+       pdfium::Reversed(pValue->values())) {
     if (val->GetType() != CFX_CSSValue::PrimitiveType::kEnum)
       continue;
 

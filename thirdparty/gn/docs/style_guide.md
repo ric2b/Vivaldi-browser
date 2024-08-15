@@ -132,6 +132,8 @@ only listed once and it's easier to reason about when reading.
     qualified with the file name (just `:foo`).
   * Other deps should always use fully-qualified path names unless
     relative ones are required for some reason.
+  * Prefer to omit the colon and name when possible. See the [GN implicit
+    names](reference.md#implicit-names).
 
 ```
   deps = [

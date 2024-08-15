@@ -55,7 +55,7 @@ namespace web_app::integration_tests {
 // Enumerations used by the integration tests framework actions. These are C++
 // versions of the enumerations in the file chrome/test/webapps/data/enums.md.
 
-enum class Site {
+enum class Site : int {
   kStandalone,
   kStandaloneNestedA,
   kStandaloneNestedB,
@@ -75,6 +75,7 @@ enum class Site {
   kHasSubApps,
   kSubApp1,
   kSubApp2,
+  kChromeUrl,
 };
 
 enum class InstallableSite {
@@ -90,9 +91,7 @@ enum class InstallableSite {
   kNoServiceWorker,
   kNotInstalled,
   kScreenshots,
-  kHasSubApps,
-  kSubApp1,
-  kSubApp2,
+  kChromeUrl,
 };
 
 enum class Title { kStandaloneOriginal, kStandaloneUpdated };
@@ -284,10 +283,11 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
   // TODO(b/240449120): Standardize behavior to install preinstalled apps when
   // CUJs for that are added.
   void InstallPreinstalledApp(Site site);
-  void InstallSubApp(Site parentapp,
-                     Site subapp,
+  void InstallIsolatedApp(Site site);
+  void InstallSubApp(Site parent_app,
+                     Site sub_app,
                      SubAppInstallDialogOptions option);
-  void RemoveSubApp(Site parentapp, Site subapp);
+  void RemoveSubApp(Site parent_app, Site sub_app);
   // These functions install apps which are tabbed and creates shortcuts.
   void ApplyRunOnOsLoginPolicyAllowed(Site site);
   void ApplyRunOnOsLoginPolicyBlocked(Site site);
@@ -419,7 +419,7 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
   void AwaitManifestSystemIdle();
 
   webapps::AppId GetAppIdBySiteMode(Site site);
-  GURL GetUrlForSite(Site site);
+  GURL GetUrlForSite(Site site, const std::string& suffix = "");
   std::optional<AppState> GetAppBySiteMode(StateSnapshot* state_snapshot,
                                            Profile* profile,
                                            Site site);
@@ -499,7 +499,7 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
       content::TestWebUI* web_ui);
 #endif
 
-  base::test::ScopedFeatureList scoped_feature_list_;
+  base::ScopedTempDir scoped_temp_dir_;
 
   base::flat_set<webapps::AppId> previous_manifest_updates_;
 
@@ -547,6 +547,8 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
   base::flat_set<Site> site_remember_deny_open_file_;
   base::AutoReset<std::optional<web_app::AppIdentityUpdate>>
       update_dialog_scope_;
+
+  base::ScopedClosureRunner valid_chrome_url_for_webapps_registration_;
 
   base::TimeTicks start_time_ = base::TimeTicks::Now();
 };

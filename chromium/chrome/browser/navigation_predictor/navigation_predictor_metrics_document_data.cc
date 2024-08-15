@@ -4,6 +4,8 @@
 
 #include "navigation_predictor_metrics_document_data.h"
 
+#include <algorithm>
+
 #include "chrome/browser/navigation_predictor/navigation_predictor_metrics_document_data.h"
 #include "services/metrics/public/cpp/metrics_utils.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -49,12 +51,16 @@ NavigationPredictorMetricsDocumentData::AnchorsData::~AnchorsData() = default;
 
 int NavigationPredictorMetricsDocumentData::AnchorsData::MedianLinkLocation() {
   DCHECK(!link_locations_.empty());
-  sort(link_locations_.begin(), link_locations_.end());
-  size_t idx = link_locations_.size() / 2;
+  size_t median_idx = link_locations_.size() / 2;
+  std::nth_element(link_locations_.begin(),
+                   link_locations_.begin() + median_idx, link_locations_.end());
+  int median = link_locations_[median_idx];
   if (link_locations_.size() % 2 == 0) {
-    return (link_locations_[idx - 1] + link_locations_[idx]) * 50;
+    auto median2_it = std::max_element(link_locations_.begin(),
+                                       link_locations_.begin() + median_idx);
+    return (median + *median2_it) * 50;
   }
-  return link_locations_[link_locations_.size() / 2] * 100;
+  return median * 100;
 }
 
 void NavigationPredictorMetricsDocumentData::RecordAnchorData(
@@ -153,7 +159,7 @@ void NavigationPredictorMetricsDocumentData::RecordAnchorElementMetricsData(
   builder.SetIsBold(metrics.is_bold_);
   builder.SetNavigationStartToLinkLoggedMs(ukm::GetExponentialBucketMin(
       metrics.navigation_start_to_link_logged.InMilliseconds(), 1.3));
-  builder.SetFontSize(metrics.font_size_);
+  builder.SetFontSize(metrics.font_size_bucket_);
   builder.SetPathLength(metrics.path_length_);
   builder.SetPathDepth(metrics.path_depth_);
   builder.SetBucketedPathHash(metrics.bucketed_path_hash_);

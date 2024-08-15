@@ -36,6 +36,8 @@
 #include "chrome/browser/extensions/api/certificate_provider/certificate_provider_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/notifications/request_pin_view_chromeos.h"
 #include "chrome/common/chrome_paths.h"
@@ -55,6 +57,7 @@
 #include "extensions/browser/api/test/test_api_observer.h"
 #include "extensions/browser/api/test/test_api_observer_registry.h"
 #include "extensions/browser/disable_reason.h"
+#include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_host_test_helper.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
@@ -165,10 +168,10 @@ std::string GetPageTextContent(content::WebContents* web_contents) {
 }
 
 std::string GetCertFingerprint1(const net::X509Certificate& cert) {
-  unsigned char hash[base::kSHA1Length];
+  uint8_t hash[base::kSHA1Length];
   base::SHA1HashBytes(CRYPTO_BUFFER_data(cert.cert_buffer()),
                       CRYPTO_BUFFER_len(cert.cert_buffer()), hash);
-  return base::ToLowerASCII(base::HexEncode(hash, base::kSHA1Length));
+  return base::ToLowerASCII(base::HexEncode(hash));
 }
 
 // Generates a gtest failure whenever extension JS reports failure.

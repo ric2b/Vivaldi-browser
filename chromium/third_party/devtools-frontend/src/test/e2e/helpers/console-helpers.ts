@@ -3,13 +3,12 @@
 // found in the LICENSE file.
 
 import {assert} from 'chai';
-
 import type * as puppeteer from 'puppeteer-core';
 
+import {AsyncScope} from '../../shared/async-scope.js';
 import {
   $,
   $$,
-  assertNotNullOrUndefined,
   click,
   getBrowserAndPages,
   goToResource,
@@ -19,7 +18,6 @@ import {
   waitForAria,
   waitForFunction,
 } from '../../shared/helper.js';
-import {AsyncScope} from '../../shared/async-scope.js';
 
 export const CONSOLE_TAB_SELECTOR = '#tab-console';
 export const CONSOLE_MESSAGES_SELECTOR = '.console-group-messages';
@@ -255,9 +253,7 @@ export async function unifyLogVM(actualLog: string, expectedLog: string) {
   const actualLogArray = actualLog.trim().split('\n').map(s => s.trim());
   const expectedLogArray = expectedLog.trim().split('\n').map(s => s.trim());
 
-  if (actualLogArray.length !== expectedLogArray.length) {
-    throw 'logs are not the same length';
-  }
+  assert.strictEqual(actualLogArray.length, expectedLogArray.length, 'logs are not the same length');
 
   for (let index = 0; index < actualLogArray.length; index++) {
     const repl = actualLogArray[index].match(/VM\d+:/g);
@@ -287,7 +283,7 @@ export async function navigateToConsoleTab() {
 
 export async function waitForConsoleInfoMessageAndClickOnLink() {
   const consoleMessage = await waitFor('div.console-group-messages .console-info-level span.source-code');
-  await click('span.devtools-link', {root: consoleMessage});
+  await click('button.devtools-link', {root: consoleMessage});
 }
 
 export async function turnOffHistoryAutocomplete() {
@@ -309,7 +305,6 @@ async function getIssueButtonLabel(): Promise<string|null> {
   const infobarButton = await waitFor('#console-issues-counter');
   const iconButton = await waitFor('icon-button', infobarButton);
   const titleElement = await waitFor('.icon-button-title', iconButton);
-  assertNotNullOrUndefined(titleElement);
   const infobarButtonText = await titleElement.evaluate(node => (node as HTMLElement).textContent);
   return infobarButtonText;
 }

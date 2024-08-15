@@ -30,7 +30,7 @@ import("../../../scripts/dawn_overrides_with_defaults.gni")
 import("${dawn_root}/scripts/dawn_features.gni")
 
 config("absl_config") {
-  if (dawn_standalone && is_clang) {
+  if (!build_with_chromium && is_clang) {
     cflags = [
       # Allow the use of enable_if()
       "-Wno-gcc-compat",
@@ -639,7 +639,6 @@ absl_source_set("strings") {
     "${dawn_abseil_dir}/absl/strings/str_cat.cc",
     "${dawn_abseil_dir}/absl/strings/str_replace.cc",
     "${dawn_abseil_dir}/absl/strings/str_split.cc",
-    "${dawn_abseil_dir}/absl/strings/string_view.cc",
     "${dawn_abseil_dir}/absl/strings/substitute.cc",
   ]
   public = [
@@ -653,7 +652,6 @@ absl_source_set("strings") {
     "${dawn_abseil_dir}/absl/strings/str_join.h",
     "${dawn_abseil_dir}/absl/strings/str_replace.h",
     "${dawn_abseil_dir}/absl/strings/str_split.h",
-    "${dawn_abseil_dir}/absl/strings/string_view.h",
     "${dawn_abseil_dir}/absl/strings/strip.h",
     "${dawn_abseil_dir}/absl/strings/substitute.h",
   ]
@@ -663,6 +661,7 @@ absl_source_set("strings") {
     ":endian",
     ":int128",
     ":raw_logging_internal",
+    ":string_view",
     ":strings_internal",
     ":throw_delegate",
     ":type_traits",

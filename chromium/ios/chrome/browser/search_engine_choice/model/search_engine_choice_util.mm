@@ -4,8 +4,11 @@
 
 #import "ios/chrome/browser/search_engine_choice/model/search_engine_choice_util.h"
 
+#import "base/check_deref.h"
+#import "base/command_line.h"
 #import "components/search_engines/search_engine_choice/search_engine_choice_service.h"
 #import "components/search_engines/search_engine_choice_utils.h"
+#import "components/search_engines/search_engines_switches.h"
 #import "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/browser/policy/model/browser_state_policy_connector.h"
 #import "ios/chrome/browser/search_engines/model/search_engine_choice_service_factory.h"
@@ -18,10 +21,10 @@
 namespace {
 // Whether the choice screen might be displayed. The choice screen is by default
 // disabled for tests or for non-branded builds. This method eliminates those
-// cases.
-bool IsChoiceEnabled() {
-  if (IsSearchEngineForceEnabled()) {
-    // This branch is only selected in tests that are related to choice screen.
+// cases, unless it is force-enabled by flag.
+bool IsChoiceEnabled(search_engines::ChoicePromo promo) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kForceSearchEngineChoiceScreen)) {
     return true;
   }
   if (tests_hook::DisableDefaultSearchEngineChoice()) {
@@ -32,25 +35,42 @@ bool IsChoiceEnabled() {
     // Outside of tests, this view should be disabled upstream.
     return false;
   }
-  return search_engines::IsChoiceScreenFlagEnabled(
-      search_engines::ChoicePromo::kDialog);
+  return search_engines::IsChoiceScreenFlagEnabled(promo);
 }
 }  // namespace
 
-bool ShouldDisplaySearchEngineChoiceScreen(Browser* browser) {
-  if (!IsChoiceEnabled()) {
+bool ShouldDisplaySearchEngineChoiceScreen(ChromeBrowserState& browser_state,
+                                           search_engines::ChoicePromo promo) {
+  if (!IsChoiceEnabled(promo)) {
+    // This build is not eligible for the choice screen.
     return false;
   }
-  ChromeBrowserState* browser_state = browser->GetBrowserState();
-  if (!browser_state) {
-    return false;
-  }
+  ChromeBrowserState* original_browser_state =
+      browser_state.GetOriginalChromeBrowserState();
+  // Getting data needed to check condition.
   search_engines::SearchEngineChoiceService* search_engine_choice_service =
-      ios::SearchEngineChoiceServiceFactory::GetForBrowserState(browser_state);
+      ios::SearchEngineChoiceServiceFactory::GetForBrowserState(
+          original_browser_state);
   BrowserStatePolicyConnector* policy_connector =
-      browser_state->GetPolicyConnector();
-  return search_engine_choice_service->ShouldShowChoiceScreen(
-      *policy_connector->GetPolicyService(),
-      /*is_regular_profile=*/true,
-      ios::TemplateURLServiceFactory::GetForBrowserState(browser_state));
+      original_browser_state->GetPolicyConnector();
+  const policy::PolicyService& policy_service =
+      *policy_connector->GetPolicyService();
+  TemplateURLService* template_url_service =
+      ios::TemplateURLServiceFactory::GetForBrowserState(
+          original_browser_state);
+
+  // Checking whether the user is eligible for the screen.
+  auto condition =
+      search_engine_choice_service->GetStaticChoiceScreenConditions(
+          policy_service, /*is_regular_profile=*/true,
+          CHECK_DEREF(template_url_service));
+  if (condition ==
+      search_engines::SearchEngineChoiceScreenConditions::kEligible) {
+    condition = search_engine_choice_service->GetDynamicChoiceScreenConditions(
+        *template_url_service);
+  }
+
+  RecordChoiceScreenProfileInitCondition(condition);
+  return condition ==
+         search_engines::SearchEngineChoiceScreenConditions::kEligible;
 }

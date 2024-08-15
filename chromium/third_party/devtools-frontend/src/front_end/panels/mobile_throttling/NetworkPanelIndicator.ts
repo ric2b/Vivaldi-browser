@@ -42,7 +42,7 @@ export class NetworkPanelIndicator {
     manager.addEventListener(SDK.NetworkManager.MultitargetNetworkManager.Events.InterceptorsChanged, updateVisibility);
     manager.addEventListener(
         SDK.NetworkManager.MultitargetNetworkManager.Events.AcceptedEncodingsChanged, updateVisibility);
-    Common.Settings.Settings.instance().moduleSetting('cacheDisabled').addChangeListener(updateVisibility, this);
+    Common.Settings.Settings.instance().moduleSetting('cache-disabled').addChangeListener(updateVisibility, this);
 
     updateVisibility();
 

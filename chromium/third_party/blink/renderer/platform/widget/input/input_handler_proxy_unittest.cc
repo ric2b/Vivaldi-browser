@@ -1816,7 +1816,7 @@ class UnifiedScrollingInputHandlerProxyTest : public testing::Test {
   using LatencyInfo = ui::LatencyInfo;
   using ScrollGranularity = ui::ScrollGranularity;
   using ScrollState = cc::ScrollState;
-  using ReturnedDisposition = absl::optional<EventDisposition>;
+  using ReturnedDisposition = std::optional<EventDisposition>;
 
   UnifiedScrollingInputHandlerProxyTest()
       : input_handler_proxy_(mock_input_handler_, &mock_client_) {}
@@ -2273,7 +2273,7 @@ TEST_F(UnifiedScrollingInputHandlerProxyTest, MainThreadHitTestFailed) {
     DispatchEvent(ScrollUpdate());
 
     EXPECT_EQ(InputHandlerProxy::DID_HANDLE, *disposition);
-    disposition = absl::nullopt;
+    disposition = std::nullopt;
 
     DispatchEvent(ScrollUpdate(), &disposition);
     EXPECT_FALSE(disposition);
@@ -3344,7 +3344,7 @@ TEST_P(InputHandlerProxyMainThreadScrollingReasonTest,
 
   cc::InputHandler::ScrollStatus scroll_status = kImplThreadScrollState;
   scroll_status.main_thread_repaint_reasons =
-      cc::MainThreadScrollingReason::kNoScrollingLayer;
+      cc::MainThreadScrollingReason::kPreferNonCompositedScrolling;
 
   EXPECT_CALL(mock_input_handler_, ScrollBegin(_, _))
       .WillOnce(testing::Return(scroll_status));
@@ -3360,7 +3360,7 @@ TEST_P(InputHandlerProxyMainThreadScrollingReasonTest,
   VERIFY_AND_RESET_MOCKS();
 
   EXPECT_MAIN_THREAD_WHEEL_SCROLL_SAMPLE(
-      cc::MainThreadScrollingReason::kNoScrollingLayer);
+      cc::MainThreadScrollingReason::kPreferNonCompositedScrolling);
 }
 
 TEST_P(InputHandlerProxyMainThreadScrollingReasonTest, WheelScrollHistogram) {

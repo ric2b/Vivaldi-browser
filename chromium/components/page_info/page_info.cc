@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -22,7 +23,6 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "components/browsing_data/content/browsing_data_helper.h"
-#include "components/browsing_data/core/features.h"
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/browser/ui/cookie_controls_controller.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
@@ -71,7 +71,6 @@
 #include "net/ssl/ssl_connection_status_flags.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/boringssl/src/include/openssl/ssl.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -117,7 +116,6 @@ ContentSettingsType kPermissionType[] = {
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
     ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER,
 #endif
-    ContentSettingsType::MIDI,
     ContentSettingsType::MIDI_SYSEX,
     ContentSettingsType::CLIPBOARD_READ_WRITE,
 #if BUILDFLAG(IS_ANDROID)
@@ -139,6 +137,7 @@ ContentSettingsType kPermissionType[] = {
 #if !BUILDFLAG(IS_ANDROID)
     ContentSettingsType::AUTO_PICTURE_IN_PICTURE,
 #endif  // !BUILDFLAG(IS_ANDROID)
+    ContentSettingsType::AUTOMATIC_FULLSCREEN,
 
 #if defined(VIVALDI_BUILD)
     ContentSettingsType::AUTOPLAY,
@@ -271,7 +270,7 @@ PageInfo::PageInfo(std::unique_ptr<PageInfoDelegate> delegate,
 
   // Every time this is created, page info dialog is opened.
   // So this counts how often the page Info dialog is opened.
-  RecordPageInfoAction(PAGE_INFO_OPENED);
+  RecordPageInfoAction(page_info::PAGE_INFO_OPENED);
 
   // Record the time when the page info dialog is opened so the total time it is
   // open can be measured.
@@ -330,8 +329,7 @@ PageInfo::~PageInfo() {
   base::RecordAction(base::UserMetricsAction("PageInfo.Closed"));
 }
 
-void PageInfo::OnStatusChanged(CookieControlsStatus status,
-                               bool controls_visible,
+void PageInfo::OnStatusChanged(bool controls_visible,
                                bool protections_on,
                                CookieControlsEnforcement enforcement,
                                CookieBlocking3pcdStatus blocking_status,
@@ -349,29 +347,11 @@ void PageInfo::OnStatusChanged(CookieControlsStatus status,
   }
 }
 
-void PageInfo::OnSitesCountChanged(int allowed_third_party_sites_count,
-                                   int blocked_third_party_sites_count) {
-  if (allowed_third_party_sites_count_ != allowed_third_party_sites_count ||
-      blocked_third_party_sites_count_ != blocked_third_party_sites_count) {
-    allowed_third_party_sites_count_ = allowed_third_party_sites_count;
-    blocked_third_party_sites_count_ = blocked_third_party_sites_count;
-    PresentSiteData(base::DoNothing());
-  }
-}
-
-void PageInfo::OnBreakageConfidenceLevelChanged(
-    CookieControlsBreakageConfidenceLevel level) {
-  if (cookie_controls_confidence_ != level) {
-    cookie_controls_confidence_ = level;
-    PresentSiteData(base::DoNothing());
-  }
-}
-
 void PageInfo::OnThirdPartyToggleClicked(bool block_third_party_cookies) {
   DCHECK(controls_visible_);
   RecordPageInfoAction(block_third_party_cookies
-                           ? PAGE_INFO_COOKIES_BLOCKED_FOR_SITE
-                           : PAGE_INFO_COOKIES_ALLOWED_FOR_SITE);
+                           ? page_info::PAGE_INFO_COOKIES_BLOCKED_FOR_SITE
+                           : page_info::PAGE_INFO_COOKIES_ALLOWED_FOR_SITE);
   controller_->OnCookieBlockingEnabledForSite(block_third_party_cookies);
   show_info_bar_ = true;
 }
@@ -419,8 +399,8 @@ void PageInfo::UpdateSecurityState() {
   PresentSiteIdentity();
 }
 
-void PageInfo::RecordPageInfoAction(PageInfoAction action) {
-  if (action != PAGE_INFO_OPENED) {
+void PageInfo::RecordPageInfoAction(page_info::PageInfoAction action) {
+  if (action != page_info::PAGE_INFO_OPENED) {
     did_perform_action_ = true;
   }
 
@@ -428,7 +408,8 @@ void PageInfo::RecordPageInfoAction(PageInfoAction action) {
   delegate_->OnPageInfoActionOccurred(action);
 #endif
 
-  base::UmaHistogramEnumeration("WebsiteSettings.Action", action);
+  base::UmaHistogramEnumeration(page_info::kWebsiteSettingsActionHistogram,
+                                action);
 
   if (web_contents_) {
     ukm::builders::PageInfoBubble(
@@ -445,12 +426,12 @@ void PageInfo::RecordPageInfoAction(PageInfoAction action) {
   bool has_topic = settings->HasAccessedTopics();
   bool has_fledge = settings->HasJoinedUserToInterestGroup();
   switch (action) {
-    case PageInfoAction::PAGE_INFO_OPENED:
+    case page_info::PAGE_INFO_OPENED:
       base::RecordAction(base::UserMetricsAction("PageInfo.Opened"));
       base::UmaHistogramBoolean("Security.PageInfo.AdPersonalizationRowShown",
                                 has_fledge || has_topic);
       break;
-    case PageInfoAction::PAGE_INFO_AD_PERSONALIZATION_PAGE_OPENED:
+    case page_info::PAGE_INFO_AD_PERSONALIZATION_PAGE_OPENED:
       if (has_fledge && has_topic) {
         base::RecordAction(base::UserMetricsAction(
             "PageInfo.AdPersonalization.OpenedWithFledgeAndTopics"));
@@ -462,110 +443,110 @@ void PageInfo::RecordPageInfoAction(PageInfoAction action) {
             "PageInfo.AdPersonalization.OpenedWithTopics"));
       }
       break;
-    case PageInfoAction::PAGE_INFO_AD_PERSONALIZATION_SETTINGS_OPENED:
+    case page_info::PAGE_INFO_AD_PERSONALIZATION_SETTINGS_OPENED:
       base::RecordAction(base::UserMetricsAction(
           "PageInfo.AdPersonalization.ManageInterestClicked"));
       break;
-    case PAGE_INFO_CERTIFICATE_DIALOG_OPENED:
+    case page_info::PAGE_INFO_CERTIFICATE_DIALOG_OPENED:
       base::RecordAction(
           base::UserMetricsAction("PageInfo.Security.Certificate.Opened"));
       break;
-    case PAGE_INFO_CONNECTION_HELP_OPENED:
+    case page_info::PAGE_INFO_CONNECTION_HELP_OPENED:
       base::RecordAction(
           base::UserMetricsAction("PageInfo.Security.ConnectionHelp.Opened"));
       break;
-    case PAGE_INFO_SECURITY_DETAILS_OPENED:
+    case page_info::PAGE_INFO_SECURITY_DETAILS_OPENED:
       base::RecordAction(base::UserMetricsAction("PageInfo.Security.Opened"));
       break;
-    case PAGE_INFO_SITE_SETTINGS_OPENED:
+    case page_info::PAGE_INFO_SITE_SETTINGS_OPENED:
       base::RecordAction(
           base::UserMetricsAction("PageInfo.SiteSettings.Opened"));
       break;
-    case PAGE_INFO_COOKIES_DIALOG_OPENED:
+    case page_info::PAGE_INFO_COOKIES_DIALOG_OPENED:
       base::RecordAction(base::UserMetricsAction("PageInfo.Cookies.Opened"));
       break;
-    case PAGE_INFO_COOKIES_ALLOWED_FOR_SITE:
+    case page_info::PAGE_INFO_COOKIES_ALLOWED_FOR_SITE:
       base::RecordAction(base::UserMetricsAction("PageInfo.Cookies.Allowed"));
       break;
-    case PAGE_INFO_COOKIES_BLOCKED_FOR_SITE:
+    case page_info::PAGE_INFO_COOKIES_BLOCKED_FOR_SITE:
       base::RecordAction(base::UserMetricsAction("PageInfo.Cookies.Blocked"));
       break;
-    case PAGE_INFO_COOKIES_CLEARED:
+    case page_info::PAGE_INFO_COOKIES_CLEARED:
       base::RecordAction(base::UserMetricsAction("PageInfo.Cookies.Cleared"));
       break;
-    case PAGE_INFO_PERMISSION_DIALOG_OPENED:
+    case page_info::PAGE_INFO_PERMISSION_DIALOG_OPENED:
       base::RecordAction(base::UserMetricsAction("PageInfo.Permission.Opened"));
       break;
-    case PAGE_INFO_CHANGED_PERMISSION:
+    case page_info::PAGE_INFO_CHANGED_PERMISSION:
       base::RecordAction(
           base::UserMetricsAction("PageInfo.Permission.Changed"));
       break;
-    case PAGE_INFO_PERMISSIONS_CLEARED:
+    case page_info::PAGE_INFO_PERMISSIONS_CLEARED:
       base::RecordAction(
           base::UserMetricsAction("PageInfo.Permission.Cleared"));
       break;
-    case PAGE_INFO_CHOOSER_OBJECT_DELETED:
+    case page_info::PAGE_INFO_CHOOSER_OBJECT_DELETED:
       base::RecordAction(
           base::UserMetricsAction("PageInfo.Permission.ChooserObjectDeleted"));
       break;
-    case PAGE_INFO_RESET_DECISIONS_CLICKED:
+    case page_info::PAGE_INFO_RESET_DECISIONS_CLICKED:
       base::RecordAction(
           base::UserMetricsAction("PageInfo.Permission.ResetDecisions"));
       break;
-    case PAGE_INFO_FORGET_SITE_OPENED:
+    case page_info::PAGE_INFO_FORGET_SITE_OPENED:
       base::RecordAction(base::UserMetricsAction("PageInfo.ForgetSite.Opened"));
       break;
-    case PAGE_INFO_FORGET_SITE_CLEARED:
+    case page_info::PAGE_INFO_FORGET_SITE_CLEARED:
       base::RecordAction(
           base::UserMetricsAction("PageInfo.ForgetSite.Cleared"));
       break;
-    case PAGE_INFO_HISTORY_OPENED:
+    case page_info::PAGE_INFO_HISTORY_OPENED:
       base::RecordAction(base::UserMetricsAction("PageInfo.History.Opened"));
       break;
-    case PAGE_INFO_HISTORY_ENTRY_REMOVED:
+    case page_info::PAGE_INFO_HISTORY_ENTRY_REMOVED:
       base::RecordAction(
           base::UserMetricsAction("PageInfo.History.EntryRemoved"));
       break;
-    case PAGE_INFO_HISTORY_ENTRY_CLICKED:
+    case page_info::PAGE_INFO_HISTORY_ENTRY_CLICKED:
       base::RecordAction(
           base::UserMetricsAction("PageInfo.History.EntryClicked"));
       break;
-    case PAGE_INFO_PASSWORD_REUSE_ALLOWED:
+    case page_info::PAGE_INFO_PASSWORD_REUSE_ALLOWED:
       base::RecordAction(
           base::UserMetricsAction("PageInfo.PasswordReuseAllowed"));
       break;
-    case PAGE_INFO_CHANGE_PASSWORD_PRESSED:
+    case page_info::PAGE_INFO_CHANGE_PASSWORD_PRESSED:
       base::RecordAction(
           base::UserMetricsAction("PageInfo.ChangePasswordPressed"));
       break;
-    case PAGE_INFO_SAFETY_TIP_HELP_OPENED:
+    case page_info::PAGE_INFO_SAFETY_TIP_HELP_OPENED:
       base::RecordAction(
           base::UserMetricsAction("PageInfo.SafetyTip.HelpOpened"));
       break;
-    case PAGE_INFO_STORE_INFO_CLICKED:
+    case page_info::PAGE_INFO_STORE_INFO_CLICKED:
       base::RecordAction(base::UserMetricsAction("PageInfo.StoreInfo.Opened"));
       break;
-    case PAGE_INFO_ABOUT_THIS_SITE_PAGE_OPENED:
+    case page_info::PAGE_INFO_ABOUT_THIS_SITE_PAGE_OPENED:
       base::RecordAction(
           base::UserMetricsAction("PageInfo.AboutThisSite.Opened"));
       break;
-    case PAGE_INFO_ABOUT_THIS_SITE_SOURCE_LINK_CLICKED:
+    case page_info::PAGE_INFO_ABOUT_THIS_SITE_SOURCE_LINK_CLICKED:
       base::RecordAction(
           base::UserMetricsAction("PageInfo.AboutThisSite.SourceLinkClicked"));
       break;
-    case PAGE_INFO_ABOUT_THIS_SITE_MORE_ABOUT_CLICKED:
+    case page_info::PAGE_INFO_ABOUT_THIS_SITE_MORE_ABOUT_CLICKED:
       base::RecordAction(
           base::UserMetricsAction("PageInfo.AboutThisSite.MoreAboutClicked"));
       break;
-    case PAGE_INFO_COOKIES_PAGE_OPENED:
+    case page_info::PAGE_INFO_COOKIES_PAGE_OPENED:
       base::RecordAction(
           base::UserMetricsAction("PageInfo.CookiesSubpage.Opened"));
       break;
-    case PAGE_INFO_COOKIES_SETTINGS_OPENED:
+    case page_info::PAGE_INFO_COOKIES_SETTINGS_OPENED:
       base::RecordAction(base::UserMetricsAction(
           "PageInfo.CookiesSubpage.SettingsLinkClicked"));
       break;
-    case PAGE_INFO_ALL_SITES_WITH_FPS_FILTER_OPENED:
+    case page_info::PAGE_INFO_ALL_SITES_WITH_FPS_FILTER_OPENED:
       base::RecordAction(base::UserMetricsAction(
           "PageInfo.CookiesSubpage.AllSitesFilteredOpened"));
       break;
@@ -580,7 +561,7 @@ void PageInfo::UpdatePermissions() {
 void PageInfo::OnSitePermissionChanged(
     ContentSettingsType type,
     ContentSetting setting,
-    absl::optional<url::Origin> requesting_origin,
+    std::optional<url::Origin> requesting_origin,
     bool is_one_time) {
   ContentSettingChangedViaPageInfo(type);
 
@@ -601,7 +582,7 @@ void PageInfo::OnSitePermissionChanged(
   // total count of permission changes in another histogram makes it easier to
   // compare it against other kinds of actions in Page Info.
   HostContentSettingsMap* map = GetContentSettings();
-  RecordPageInfoAction(PAGE_INFO_CHANGED_PERMISSION);
+  RecordPageInfoAction(page_info::PAGE_INFO_CHANGED_PERMISSION);
   if (type == ContentSettingsType::SOUND) {
     ContentSetting default_setting =
         map->GetDefaultContentSetting(ContentSettingsType::SOUND, nullptr);
@@ -627,7 +608,7 @@ void PageInfo::OnSitePermissionChanged(
     // Retrieve latest permission action for the current origin and the current
     // content settings type. Note that these values are only kept in memory and
     // not persisted across browser sessions.
-    absl::optional<permissions::PermissionActionTime> entry =
+    std::optional<permissions::PermissionActionTime> entry =
         permissions::PermissionsClient::Get()
             ->GetOriginKeyedPermissionActionService(
                 web_contents_->GetBrowserContext())
@@ -663,7 +644,8 @@ void PageInfo::OnSitePermissionChanged(
   using Constraints = content_settings::ContentSettingConstraints;
   Constraints constraints;
   if (is_one_time) {
-    constraints.set_session_model(content_settings::SessionModel::OneTime);
+    constraints.set_session_model(
+        content_settings::mojom::SessionModel::ONE_TIME);
     if (base::FeatureList::IsEnabled(
             content_settings::features::kActiveContentSettingExpiry)) {
       constraints.set_lifetime(permissions::kOneTimePermissionMaximumLifetime);
@@ -731,7 +713,7 @@ void PageInfo::OnSiteChosenObjectDeleted(const ChooserUIInfo& ui_info,
 
   // Refresh the UI to reflect the changed settings.
   PresentSitePermissions();
-  RecordPageInfoAction(PAGE_INFO_CHOOSER_OBJECT_DELETED);
+  RecordPageInfoAction(page_info::PAGE_INFO_CHOOSER_OBJECT_DELETED);
 }
 
 void PageInfo::OnUIClosing(bool* reload_prompt) {
@@ -757,14 +739,14 @@ void PageInfo::OnRevokeSSLErrorBypassButtonPressed() {
   stateful_ssl_host_state_delegate->RevokeUserAllowExceptionsHard(
       site_url().host());
   did_revoke_user_ssl_decisions_ = true;
-  RecordPageInfoAction(PAGE_INFO_RESET_DECISIONS_CLICKED);
+  RecordPageInfoAction(page_info::PAGE_INFO_RESET_DECISIONS_CLICKED);
 }
 
 void PageInfo::OpenSiteSettingsView() {
 #if BUILDFLAG(IS_ANDROID)
   NOTREACHED();
 #else
-  RecordPageInfoAction(PAGE_INFO_SITE_SETTINGS_OPENED);
+  RecordPageInfoAction(page_info::PAGE_INFO_SITE_SETTINGS_OPENED);
   delegate_->ShowSiteSettings(site_url());
 #endif
 }
@@ -773,7 +755,7 @@ void PageInfo::OpenCookiesSettingsView() {
 #if BUILDFLAG(IS_ANDROID)
   NOTREACHED();
 #else
-  RecordPageInfoAction(PAGE_INFO_COOKIES_SETTINGS_OPENED);
+  RecordPageInfoAction(page_info::PAGE_INFO_COOKIES_SETTINGS_OPENED);
   delegate_->ShowCookiesSettings();
 #endif
 }
@@ -783,7 +765,7 @@ void PageInfo::OpenAllSitesViewFilteredToFps() {
   NOTREACHED();
 #else
   auto fps_owner = delegate_->GetFpsOwner(site_url_);
-  RecordPageInfoAction(PAGE_INFO_ALL_SITES_WITH_FPS_FILTER_OPENED);
+  RecordPageInfoAction(page_info::PAGE_INFO_ALL_SITES_WITH_FPS_FILTER_OPENED);
   if (fps_owner) {
     delegate_->ShowAllSitesSettingsFilteredByFpsOwner(*fps_owner);
   } else {
@@ -801,7 +783,7 @@ void PageInfo::OpenCookiesDialog() {
     return;
   }
 
-  RecordPageInfoAction(PAGE_INFO_COOKIES_DIALOG_OPENED);
+  RecordPageInfoAction(page_info::PAGE_INFO_COOKIES_DIALOG_OPENED);
   delegate_->OpenCookiesDialog();
 #endif
 }
@@ -816,7 +798,7 @@ void PageInfo::OpenCertificateDialog(net::X509Certificate* certificate) {
 
   gfx::NativeWindow top_window = web_contents_->GetTopLevelNativeWindow();
   if (certificate && top_window) {
-    RecordPageInfoAction(PAGE_INFO_CERTIFICATE_DIALOG_OPENED);
+    RecordPageInfoAction(page_info::PAGE_INFO_CERTIFICATE_DIALOG_OPENED);
     delegate_->OpenCertificateDialog(certificate);
   }
 #endif
@@ -826,7 +808,7 @@ void PageInfo::OpenSafetyTipHelpCenterPage() {
 #if BUILDFLAG(IS_ANDROID)
   NOTREACHED();
 #else
-  RecordPageInfoAction(PAGE_INFO_SAFETY_TIP_HELP_OPENED);
+  RecordPageInfoAction(page_info::PAGE_INFO_SAFETY_TIP_HELP_OPENED);
   delegate_->OpenSafetyTipHelpCenterPage();
 #endif
 }
@@ -835,7 +817,7 @@ void PageInfo::OpenConnectionHelpCenterPage(const ui::Event& event) {
 #if BUILDFLAG(IS_ANDROID)
   NOTREACHED();
 #else
-  RecordPageInfoAction(PAGE_INFO_CONNECTION_HELP_OPENED);
+  RecordPageInfoAction(page_info::PAGE_INFO_CONNECTION_HELP_OPENED);
   delegate_->OpenConnectionHelpCenterPage(event);
 #endif
 }
@@ -845,14 +827,14 @@ void PageInfo::OpenContentSettingsExceptions(
 #if BUILDFLAG(IS_ANDROID)
   NOTREACHED();
 #else
-  RecordPageInfoAction(PAGE_INFO_CONNECTION_HELP_OPENED);
+  RecordPageInfoAction(page_info::PAGE_INFO_CONNECTION_HELP_OPENED);
   delegate_->OpenContentSettingsExceptions(content_settings_type);
 #endif
 }
 
 void PageInfo::OnChangePasswordButtonPressed() {
 #if BUILDFLAG(FULL_SAFE_BROWSING)
-  RecordPageInfoAction(PAGE_INFO_CHANGE_PASSWORD_PRESSED);
+  RecordPageInfoAction(page_info::PAGE_INFO_CHANGE_PASSWORD_PRESSED);
   delegate_->OnUserActionOnPasswordUi(
       safe_browsing::WarningAction::CHANGE_PASSWORD);
 #endif
@@ -860,14 +842,14 @@ void PageInfo::OnChangePasswordButtonPressed() {
 
 void PageInfo::OnAllowlistPasswordReuseButtonPressed() {
 #if BUILDFLAG(FULL_SAFE_BROWSING)
-  RecordPageInfoAction(PAGE_INFO_PASSWORD_REUSE_ALLOWED);
+  RecordPageInfoAction(page_info::PAGE_INFO_PASSWORD_REUSE_ALLOWED);
   delegate_->OnUserActionOnPasswordUi(
       safe_browsing::WarningAction::MARK_AS_LEGITIMATE);
 #endif
 }
 
 void PageInfo::OnCookiesPageOpened() {
-  RecordPageInfoAction(PAGE_INFO_COOKIES_PAGE_OPENED);
+  RecordPageInfoAction(page_info::PAGE_INFO_COOKIES_PAGE_OPENED);
   delegate_->OnCookiesPageOpened();
 }
 
@@ -1176,8 +1158,9 @@ void PageInfo::PopulatePermissionInfo(PermissionInfo& permission_info,
   permission_info.setting = setting;
 
   permission_info.source = info.source;
-  permission_info.is_one_time = (info.metadata.session_model() ==
-                                 content_settings::SessionModel::OneTime);
+  permission_info.is_one_time =
+      (info.metadata.session_model() ==
+       content_settings::mojom::SessionModel::ONE_TIME);
 
   auto* page_specific_content_settings = GetPageSpecificContentSettings();
   if (page_specific_content_settings && setting == CONTENT_SETTING_ALLOW) {
@@ -1213,7 +1196,7 @@ void PageInfo::PopulatePermissionInfo(PermissionInfo& permission_info,
           url::Origin::Create(site_url_), permission_info.requesting_origin);
     } else if (permission_info.type ==
                ContentSettingsType::FEDERATED_IDENTITY_API) {
-      absl::optional<content::PermissionResult> embargo_result =
+      std::optional<content::PermissionResult> embargo_result =
           delegate_->GetPermissionDecisionAutoblocker()->GetEmbargoResult(
               site_url_, permission_info.type);
       if (embargo_result) {
@@ -1268,6 +1251,12 @@ bool PageInfo::ShouldShowPermission(
     }
   }
 #endif  // !BUILDFLAG(IS_ANDROID)
+
+  if (info.type == ContentSettingsType::AUTOMATIC_FULLSCREEN &&
+      !base::FeatureList::IsEnabled(
+          features::kAutomaticFullscreenContentSetting)) {
+    return false;
+  }
 
   const bool is_incognito =
       web_contents_->GetBrowserContext()->IsOffTheRecord();
@@ -1324,32 +1313,6 @@ bool PageInfo::ShouldShowPermission(
     return true;
   }
 
-  if (base::FeatureList::IsEnabled(features::kBlockMidiByDefault)) {
-    ContentSetting midi_sysex_setting = GetContentSettings()->GetContentSetting(
-        site_url_, site_url_, ContentSettingsType::MIDI_SYSEX);
-    // At most one of MIDI and MIDI-SysEx should be displayed in the page info
-    // bubble. Show MIDI-SysEx if it's allowed since it has higher access to
-    // MIDI devices, show MIDI otherwise.
-    // Don't show MIDI if SysEx is allowed.
-    if (info.type == ContentSettingsType::MIDI &&
-        midi_sysex_setting == ContentSetting::CONTENT_SETTING_ALLOW) {
-      return false;
-    }
-    // Don't show MIDI-SysEx if it is not allowed. Technically having MIDI_SYSEX
-    // blocked and MIDI default is legal, but with the current implementation
-    // blocking either permission with block both permissions so we don't have
-    // to handle that case.
-    if (info.type == ContentSettingsType::MIDI_SYSEX &&
-        midi_sysex_setting != ContentSetting::CONTENT_SETTING_ALLOW) {
-      return false;
-    }
-  } else {
-    // Don't show MIDI.
-    if (info.type == ContentSettingsType::MIDI) {
-      return false;
-    }
-  }
-
   // Show the content setting when it has a non-default value.
   if (!PageInfo::IsPermissionFactoryDefault(info, is_incognito)) {
     return true;
@@ -1378,12 +1341,6 @@ void PageInfo::PresentSitePermissions() {
   }
 
   for (ContentSettingsType type : kTwoPatternPermissions) {
-    if (type == ContentSettingsType::STORAGE_ACCESS &&
-        !base::FeatureList::IsEnabled(
-            permissions::features::kPermissionStorageAccessAPI)) {
-      continue;
-    }
-
     for (auto& requester : GetTwoSitePermissionRequesters(type)) {
       PermissionInfo permission_info;
       permission_info.type = type;
@@ -1483,14 +1440,6 @@ void PageInfo::PresentSiteDataInternal(base::OnceClosure done) {
 
   PageInfoUI::CookiesNewInfo cookies_info;
   cookies_info.allowed_sites_count = GetSitesWithAllowedCookiesAccessCount();
-  // TODO(crbug.com/1446230): Clean up and remove the fallback after the feature
-  // was launched. If blocked_third_party_sites_count_ isn't set, use fallback
-  // and count the sites.
-  cookies_info.blocked_third_party_sites_count =
-      blocked_third_party_sites_count_.value_or(
-          GetThirdPartySitesWithBlockedCookiesAccessCount(site_url_));
-  cookies_info.allowed_third_party_sites_count =
-      allowed_third_party_sites_count_.value_or(0);
 
 #if !BUILDFLAG(IS_ANDROID)
   if (base::FeatureList::IsEnabled(
@@ -1508,7 +1457,6 @@ void PageInfo::PresentSiteDataInternal(base::OnceClosure done) {
   cookies_info.enforcement = enforcement_;
   cookies_info.blocking_status = blocking_status_;
   cookies_info.expiration = cookie_exception_expiration_;
-  cookies_info.confidence = cookie_controls_confidence_;
   cookies_info.is_otr = web_contents_->GetBrowserContext()->IsOffTheRecord();
   ui_->SetCookieInfo(cookies_info);
 
@@ -1517,16 +1465,8 @@ void PageInfo::PresentSiteDataInternal(base::OnceClosure done) {
 
 void PageInfo::PresentSiteData(base::OnceClosure done) {
   auto* settings = GetPageSpecificContentSettings();
-  if (settings) {
-    if (base::FeatureList::IsEnabled(
-            browsing_data::features::kMigrateStorageToBDM) &&
-        weak_factory_.GetWeakPtr()) {
-      PresentSiteDataInternal(std::move(done));
-    } else {
-      settings->allowed_local_shared_objects().UpdateIgnoredEmptyStorageKeys(
-          base::BindOnce(&PageInfo::PresentSiteDataInternal,
-                         weak_factory_.GetWeakPtr(), std::move(done)));
-    }
+  if (settings && weak_factory_.GetWeakPtr()) {
+    PresentSiteDataInternal(std::move(done));
   } else {
     std::move(done).Run();
   }

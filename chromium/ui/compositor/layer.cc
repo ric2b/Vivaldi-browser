@@ -6,6 +6,8 @@
 
 #include <cmath>
 #include <memory>
+#include <optional>
+#include <sstream>
 #include <utility>
 
 #include "base/auto_reset.h"
@@ -31,7 +33,6 @@
 #include "cc/trees/layer_tree_settings.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/resources/transferable_resource.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/compositor/layer_animator.h"
@@ -213,7 +214,6 @@ Layer::Layer(LayerType type)
       layer_mask_back_link_(nullptr),
       zoom_(1),
       zoom_inset_(0),
-      delegate_(nullptr),
       owner_(nullptr),
       cc_layer_(nullptr),
       device_scale_factor_(1.0f),
@@ -867,13 +867,34 @@ void Layer::ConvertPointToLayer(const Layer* source,
   if (source == target)
     return;
 
-  const Layer* root_layer = GetRoot(source);
-  CHECK_EQ(root_layer, GetRoot(target));
+  const Layer* source_root_layer = GetRoot(source);
+  const Layer* target_root_layer = GetRoot(target);
+  // TODO(b/319939913): Remove this log when the issue is fixed.
+  if (source_root_layer != target_root_layer) {
+    auto chain_name = [](const Layer* layer) {
+      std::ostringstream out;
+      out << "[";
+      out << layer->name();
+      while (layer->parent()) {
+        out << "]-[" << layer->name();
+        layer = layer->parent();
+      }
+      out << "]";
+      return out.str();
+    };
+    LOG(ERROR) << "Source has different root than tareget: source chain="
+               << chain_name(source) << ", target chain=" << chain_name(target);
+  }
+  CHECK_EQ(source_root_layer, target_root_layer);
 
-  if (source != root_layer)
-    source->ConvertPointForAncestor(root_layer, use_target_transform, point);
-  if (target != root_layer)
-    target->ConvertPointFromAncestor(root_layer, use_target_transform, point);
+  if (source != source_root_layer) {
+    source->ConvertPointForAncestor(source_root_layer, use_target_transform,
+                                    point);
+  }
+  if (target != source_root_layer) {
+    target->ConvertPointFromAncestor(source_root_layer, use_target_transform,
+                                     point);
+  }
 }
 
 void Layer::SetFillsBoundsOpaquely(bool fills_bounds_opaquely) {
@@ -1572,7 +1593,7 @@ bool Layer::ConvertPointFromAncestor(const Layer* ancestor,
             : GetTransformRelativeTo(ancestor, &transform))) {
     return false;
   }
-  const absl::optional<gfx::PointF> transformed_point =
+  const std::optional<gfx::PointF> transformed_point =
       transform.InverseMapPoint(*point);
   if (!transformed_point.has_value())
     return false;
@@ -1618,8 +1639,9 @@ void Layer::SetBoundsFromAnimation(const gfx::Rect& bounds,
       mirror_dest->SetBounds(bounds);
   }
 
-  for (auto* reflecting_layer : subtree_reflecting_layers_)
+  for (Layer* reflecting_layer : subtree_reflecting_layers_) {
     reflecting_layer->MatchLayerSize(this);
+  }
 }
 
 void Layer::SetTransformFromAnimation(const gfx::Transform& new_transform,
@@ -1775,12 +1797,12 @@ LayerAnimatorCollection* Layer::GetLayerAnimatorCollection() {
   return compositor ? compositor->layer_animator_collection() : nullptr;
 }
 
-absl::optional<int> Layer::GetFrameNumber() const {
+std::optional<int> Layer::GetFrameNumber() const {
   if (const Compositor* compositor = GetCompositor()) {
     return compositor->activated_frame_count();
   }
 
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 float Layer::GetRefreshRate() const {

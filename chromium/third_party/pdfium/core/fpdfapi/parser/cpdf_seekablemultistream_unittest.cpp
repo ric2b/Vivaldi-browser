@@ -9,7 +9,6 @@
 
 #include "core/fpdfapi/parser/cpdf_dictionary.h"
 #include "core/fpdfapi/parser/cpdf_stream.h"
-#include "core/fxcrt/data_vector.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 TEST(CPDFSeekableMultiStreamTest, NoStreams) {
@@ -25,7 +24,9 @@ TEST(CPDFSeekableMultiStreamTest, NoStreams) {
 
 TEST(CXFAFileReadTest, EmptyStreams) {
   std::vector<RetainPtr<const CPDF_Stream>> streams;
-  streams.push_back(pdfium::MakeRetain<CPDF_Stream>());
+  streams.push_back(
+      pdfium::MakeRetain<CPDF_Stream>(pdfium::MakeRetain<CPDF_Dictionary>()));
+
   auto fileread =
       pdfium::MakeRetain<CPDF_SeekableMultiStream>(std::move(streams));
 
@@ -44,15 +45,9 @@ TEST(CXFAFileReadTest, NormalStreams) {
   ByteStringView one_view(kOne);
   ByteStringView two_view(kTwo);
   ByteStringView three_view(kThree);
-  auto stream1 = pdfium::MakeRetain<CPDF_Stream>(
-      DataVector<uint8_t>(one_view.begin(), one_view.end()),
-      pdfium::MakeRetain<CPDF_Dictionary>());
-  auto stream2 = pdfium::MakeRetain<CPDF_Stream>(
-      DataVector<uint8_t>(two_view.begin(), two_view.end()),
-      pdfium::MakeRetain<CPDF_Dictionary>());
-  auto stream3 = pdfium::MakeRetain<CPDF_Stream>(
-      DataVector<uint8_t>(three_view.begin(), three_view.end()),
-      pdfium::MakeRetain<CPDF_Dictionary>());
+  auto stream1 = pdfium::MakeRetain<CPDF_Stream>(one_view.unsigned_span());
+  auto stream2 = pdfium::MakeRetain<CPDF_Stream>(two_view.unsigned_span());
+  auto stream3 = pdfium::MakeRetain<CPDF_Stream>(three_view.unsigned_span());
 
   std::vector<RetainPtr<const CPDF_Stream>> streams;
   streams.push_back(std::move(stream1));

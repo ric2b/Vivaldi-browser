@@ -7,9 +7,11 @@ import 'chrome://settings/settings.js';
 
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {AutofillManagerImpl, CountryDetailManagerImpl, CrInputElement, CrTextareaElement} from 'chrome://settings/lazy_load.js';
+import type {CrInputElement, CrTextareaElement} from 'chrome://settings/lazy_load.js';
+import {AutofillManagerImpl, CountryDetailManagerImpl} from 'chrome://settings/lazy_load.js';
 import {assertEquals, assertFalse, assertGT, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {fakeMetricsPrivate, MetricsTracker} from 'chrome://webui-test/metrics_test_support.js';
+import type {MetricsTracker} from 'chrome://webui-test/metrics_test_support.js';
+import {fakeMetricsPrivate} from 'chrome://webui-test/metrics_test_support.js';
 import {eventToPromise, whenAttributeIs, isVisible} from 'chrome://webui-test/test_util.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
@@ -496,48 +498,45 @@ suite('AutofillSectionAddressTests', function() {
     });
   });
 
-  test('verifyPhoneAndEmailAreSaved', function() {
+  test('verifyPhoneAndEmailAreSaved', async () => {
     const address = createEmptyAddressEntry();
-    return createAddressDialog(address).then(function(dialog) {
-      const rows = dialog.$.dialog.querySelectorAll('.address-row');
-      assertGT(rows.length, 0, 'dialog should contain address rows');
+    const dialog = await createAddressDialog(address);
+    const rows = dialog.$.dialog.querySelectorAll('.address-row');
+    assertGT(rows.length, 0, 'dialog should contain address rows');
 
-      const lastRow = rows[rows.length - 1]!;
-      const phoneInput =
-          lastRow.querySelector<CrInputElement>('cr-input:nth-of-type(1)');
-      const emailInput =
-          lastRow.querySelector<CrInputElement>('cr-input:nth-of-type(2)');
+    const lastRow = rows[rows.length - 1]!;
+    const phoneInput =
+        lastRow.querySelector<CrInputElement>('cr-input:nth-of-type(1)');
+    const emailInput =
+        lastRow.querySelector<CrInputElement>('cr-input:nth-of-type(2)');
 
-      assertTrue(!!phoneInput, 'phone element should be the first cr-input');
-      assertTrue(!!emailInput, 'email element should be the second cr-input');
+    assertTrue(!!phoneInput, 'phone element should be the first cr-input');
+    assertTrue(!!emailInput, 'email element should be the second cr-input');
 
-      assertEquals(undefined, phoneInput.value);
-      assertFalse(
-          !!getAddressFieldValue(address, FieldType.PHONE_HOME_WHOLE_NUMBER));
+    assertEquals(undefined, phoneInput.value);
+    assertFalse(
+        !!getAddressFieldValue(address, FieldType.PHONE_HOME_WHOLE_NUMBER));
 
-      assertEquals(undefined, emailInput.value);
-      assertFalse(!!getAddressFieldValue(address, FieldType.EMAIL_ADDRESS));
+    assertEquals(undefined, emailInput.value);
+    assertFalse(!!getAddressFieldValue(address, FieldType.EMAIL_ADDRESS));
 
-      const phoneNumber = '(555) 555-5555';
-      const emailAddress = 'no-reply@chromium.org';
+    const phoneNumber = '(555) 555-5555';
+    const emailAddress = 'no-reply@chromium.org';
 
-      phoneInput.value = phoneNumber;
-      emailInput.value = emailAddress;
-
-      return expectEvent(dialog, 'save-address', function() {
-               dialog.$.saveButton.click();
-             }).then(function() {
-        assertEquals(phoneNumber, phoneInput.value);
-        assertEquals(
-            phoneNumber,
-            getAddressFieldValue(address, FieldType.PHONE_HOME_WHOLE_NUMBER));
-
-        assertEquals(emailAddress, emailInput.value);
-        assertEquals(
-            emailAddress,
-            getAddressFieldValue(address, FieldType.EMAIL_ADDRESS));
-      });
+    phoneInput.value = phoneNumber;
+    emailInput.value = emailAddress;
+    await Promise.all([phoneInput.updateComplete, emailInput.updateComplete]);
+    await expectEvent(dialog, 'save-address', function() {
+      dialog.$.saveButton.click();
     });
+    assertEquals(phoneNumber, phoneInput.value);
+    assertEquals(
+        phoneNumber,
+        getAddressFieldValue(address, FieldType.PHONE_HOME_WHOLE_NUMBER));
+
+    assertEquals(emailAddress, emailInput.value);
+    assertEquals(
+        emailAddress, getAddressFieldValue(address, FieldType.EMAIL_ADDRESS));
   });
 
   // TODO(crbug.com/1473847): Fix the flakiness.
@@ -668,27 +667,53 @@ suite('AutofillSectionAddressTests', function() {
     });
   });
 
-  test('verifyCancelDoesNotSaveAddress', function(done) {
+  test(
+      'verifyNoSaveAddressEventWhenEditDialogCancelButtonIsClicked',
+      function(done) {
+        createAddressDialog(createAddressEntry()).then(function(dialog) {
+          eventToPromise('save-address', dialog).then(function() {
+            // Fail the test because the save event should not be fired when
+            // the cancel is clicked.
+            assertTrue(true);
+          });
+
+          eventToPromise('cancel', dialog).then(function() {
+            // Test is |done| in a timeout in order to ensure that
+            // 'save-address' is NOT fired after this test.
+            assertEquals(
+                1,
+                metricsTracker.count('Autofill.Settings.EditAddress', false));
+            window.setTimeout(done, 100);
+          });
+
+          dialog.$.cancelButton.click();
+        });
+      });
+
+  test('verifyNoCancelEventWhenEditDialogSaveButtonIsClicked', function(done) {
     createAddressDialog(createAddressEntry()).then(function(dialog) {
-      eventToPromise('save-address', dialog).then(function() {
-        // Fail the test because the save event should not be called when
-        // cancel is clicked.
+      eventToPromise('cancel', dialog).then(function() {
+        // Fail the test because the cancel event should not be fired when
+        // the save is clicked.
         assertTrue(false);
       });
 
-      eventToPromise('close', dialog).then(function() {
+      eventToPromise('save-address', dialog).then(function() {
         // Test is |done| in a timeout in order to ensure that
         // 'save-address' is NOT fired after this test.
+        assertEquals(
+            1, metricsTracker.count('Autofill.Settings.EditAddress', true));
         window.setTimeout(done, 100);
       });
 
-      dialog.$.cancelButton.click();
+      dialog.$.saveButton.click();
     });
   });
 
   // TODO(crbug.com/1473847): Fix the flakiness.
   test.skip('verifySyncSourceNoticeForNewAddress', async () => {
     const section = await createAutofillSection([], {}, {
+      ...STUB_USER_ACCOUNT_INFO,
       email: 'stub-user@example.com',
       isSyncEnabledForAutofillProfiles: true,
       isEligibleForAddressAccountStorage: false,
@@ -706,6 +731,7 @@ suite('AutofillSectionAddressTests', function() {
   test('verifyAccountSourceNoticeForNewAddress', async () => {
     const email = 'stub-user@example.com';
     const section = await createAutofillSection([], {}, {
+      ...STUB_USER_ACCOUNT_INFO,
       email,
       isSyncEnabledForAutofillProfiles: true,
       isEligibleForAddressAccountStorage: true,
@@ -722,6 +748,127 @@ suite('AutofillSectionAddressTests', function() {
         section.i18n('newAccountAddressSourceNotice', email));
 
     document.body.removeChild(section);
+  });
+
+  // TODO(crbug.com/1502843): Remove when toggle becomes available on the Sync
+  // page for non-syncing users.
+  test('verifyAutofillSyncToggleAvailability', async () => {
+    const autofillManager = new TestAutofillManager();
+    autofillManager.data.accountInfo = {
+      ...STUB_USER_ACCOUNT_INFO,
+      isAutofillSyncToggleAvailable: false,
+    };
+    AutofillManagerImpl.setInstance(autofillManager);
+
+    const section = document.createElement('settings-autofill-section');
+    document.body.appendChild(section);
+    await autofillManager.whenCalled('getAddressList');
+    await flushTasks();
+
+    assertFalse(
+        isVisible(section.$.autofillSyncToggle),
+        'The toggle should not be visible because of ' +
+            'accountInfo.isAutofillSyncToggleAvailable == false');
+    const changeListener =
+        autofillManager.lastCallback.setPersonalDataManagerListener;
+    assertTrue(
+        !!changeListener,
+        'PersonalDataChangedListener should be set in the section element');
+
+    // Imitate native code `PersonalDataChangedListener` triggering.
+    changeListener([], [], [], {
+      ...STUB_USER_ACCOUNT_INFO,
+      isAutofillSyncToggleAvailable: true,
+      isAutofillSyncToggleEnabled: false,
+    });
+
+    await flushTasks();
+    assertTrue(
+        isVisible(section.$.autofillSyncToggle),
+        'The toggle should be visible because of ' +
+            'accountInfo.isAutofillSyncToggleAvailable == true');
+    assertFalse(
+        section.$.autofillSyncToggle.checked,
+        'The toggle should not be checked because of ' +
+            'accountInfo.isAutofillSyncToggleEnabled == false');
+
+    // Imitate native code `PersonalDataChangedListener` triggering.
+    changeListener([], [], [], {
+      ...STUB_USER_ACCOUNT_INFO,
+      isAutofillSyncToggleAvailable: true,
+      isAutofillSyncToggleEnabled: true,
+    });
+
+    await flushTasks();
+    assertTrue(
+        isVisible(section.$.autofillSyncToggle),
+        'The toggle should be visible because of ' +
+            'accountInfo.isAutofillSyncToggleAvailable == true');
+    assertTrue(
+        section.$.autofillSyncToggle.checked,
+        'The toggle should be checked because of ' +
+            'accountInfo.isAutofillSyncToggleEnabled == true');
+  });
+
+  // TODO(crbug.com/1502843): Remove as part of the cleanup work for the ticket.
+  test('verifyAutofillSyncToggleChanges', async () => {
+    const autofillManager = new TestAutofillManager();
+    autofillManager.data.accountInfo = {
+      ...STUB_USER_ACCOUNT_INFO,
+      isAutofillSyncToggleAvailable: true,
+      isAutofillSyncToggleEnabled: false,
+    };
+    AutofillManagerImpl.setInstance(autofillManager);
+
+    const section = document.createElement('settings-autofill-section');
+    document.body.appendChild(section);
+    await autofillManager.whenCalled('getAddressList');
+    await flushTasks();
+
+    const changeListener =
+        autofillManager.lastCallback.setPersonalDataManagerListener;
+    assertTrue(
+        !!changeListener,
+        'PersonalDataChangedListener should be set in the section element');
+
+    assertFalse(
+        section.$.autofillSyncToggle.checked,
+        'The toggle should not be checked because of initial ' +
+            'accountInfo.isAutofillSyncToggleEnabled == false');
+
+    section.$.autofillSyncToggle.click();
+    await section.$.autofillSyncToggle.updateComplete;
+
+    assertTrue(
+        section.$.autofillSyncToggle.checked,
+        'The toggle should be checked after the click.');
+    assertEquals(
+        autofillManager.getCallCount('setAutofillSyncToggleEnabled'), 1);
+
+    section.$.autofillSyncToggle.click();
+    await section.$.autofillSyncToggle.updateComplete;
+
+    assertFalse(
+        section.$.autofillSyncToggle.checked,
+        'The toggle should not be checked after another click.');
+    assertEquals(
+        autofillManager.getCallCount('setAutofillSyncToggleEnabled'), 2);
+
+    // Imitate native code `PersonalDataChangedListener` triggering. Notice
+    // that it was unchecked after the second click, but the listener was
+    // given `true`, the following assert checks it an covers the case when
+    // the toggle was not updated in the native code for some reason.
+    changeListener([], [], [], {
+      ...STUB_USER_ACCOUNT_INFO,
+      isAutofillSyncToggleAvailable: true,
+      isAutofillSyncToggleEnabled: true,
+    });
+    await flushTasks();
+
+    assertTrue(
+        section.$.autofillSyncToggle.checked,
+        'The toggle should be checked because of ' +
+            'accountInfo.isAutofillSyncToggleEnabled == true');
   });
 });
 

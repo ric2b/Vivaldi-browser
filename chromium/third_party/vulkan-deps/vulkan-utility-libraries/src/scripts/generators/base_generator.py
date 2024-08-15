@@ -1,9 +1,9 @@
 #!/usr/bin/python3 -i
 #
-# Copyright 2023 The Khronos Group Inc.
-# Copyright 2023 Valve Corporation
-# Copyright 2023 LunarG, Inc.
-# Copyright 2023 RasterGrid Kft.
+# Copyright 2023-2024 The Khronos Group Inc.
+# Copyright 2023-2024 Valve Corporation
+# Copyright 2023-2024 LunarG, Inc.
+# Copyright 2023-2024 RasterGrid Kft.
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -134,6 +134,7 @@ class BaseGenerator(OutputGenerator):
         self.enumFieldAliasMap = dict()
         self.bitmaskAliasMap = dict()
         self.flagAliasMap = dict()
+        self.structAliasMap = dict()
 
     def write(self, data):
         # Prevents having to check before writting
@@ -281,6 +282,18 @@ class BaseGenerator(OutputGenerator):
                                 if bitmaskName not in extension.flags:
                                     extension.flags[bitmaskName] = [] # Dict needs init
                                 extension.flags[bitmaskName].extend([flag] if flag not in extension.flags[bitmaskName] else [])
+
+        # Some structs (ex VkAttachmentSampleCountInfoAMD) can have multiple alias pointing to same extension
+        for extension in self.vk.extensions.values():
+            dict = self.featureDictionary[extension.name]['struct']
+            for required in dict:
+                for group in dict[required]:
+                    for structName in dict[required][group]:
+                        isAlias = structName in self.structAliasMap
+                        structName = self.structAliasMap[structName] if isAlias else structName
+                        if structName in self.vk.structs:
+                            struct = self.vk.structs[structName]
+                            struct.extensions.extend([extension] if extension not in struct.extensions else [])
 
     def endFile(self):
         # This is the point were reg.py has ran, everything is collected
@@ -511,10 +524,7 @@ class BaseGenerator(OutputGenerator):
         if (category == 'struct' or category == 'union'):
             extension = [self.currentExtension] if self.currentExtension is not None else []
             if alias is not None:
-                struct = self.vk.structs[alias]
-                # Some structs (ex VkAttachmentSampleCountInfoAMD) can have multiple alias pointing to same extension
-                struct.extensions += extension if extension and extension[0] not in struct.extensions else []
-                struct.version = self.currentVersion if struct.version is None else struct.version
+                self.structAliasMap[typeName] = alias
                 return
 
             union = category == 'union'

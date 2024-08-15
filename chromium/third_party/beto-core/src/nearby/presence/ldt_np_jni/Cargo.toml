@@ -20,7 +20,6 @@ jni.workspace = true
 [features]
 default = ["rustcrypto"]
 rustcrypto = ["crypto_provider_default/rustcrypto", "crypto_provider_default/std"]
-opensslbssl = ["crypto_provider_default/opensslbssl"]
 boringssl = ["crypto_provider_default/boringssl"]
 
 [lib]

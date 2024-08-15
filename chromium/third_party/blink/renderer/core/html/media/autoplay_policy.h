@@ -5,11 +5,16 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_HTML_MEDIA_AUTOPLAY_POLICY_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_HTML_MEDIA_AUTOPLAY_POLICY_H_
 
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include <optional>
+
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+
+namespace WTF {
+class String;
+}  // namespace WTF
 
 namespace blink {
 
@@ -82,7 +87,7 @@ class CORE_EXPORT AutoplayPolicy final
   // Request the playback via play() method. This method will check the autoplay
   // restrictions and record metrics. This method can only be called once
   // per call of play().
-  absl::optional<DOMExceptionCode> RequestPlay();
+  std::optional<DOMExceptionCode> RequestPlay();
 
   // Returns whether an umute action should pause an autoplaying element. The
   // method will check autoplay restrictions and record metrics. This method can
@@ -104,7 +109,7 @@ class CORE_EXPORT AutoplayPolicy final
 
   // Returns an error string to be used by the HTMLMediaElement when the play()
   // method fails because of autoplay restrictions.
-  String GetPlayErrorMessage() const;
+  WTF::String GetPlayErrorMessage() const;
 
   // Returns whether the media element was initiated via autoplay.
   // In this context, autoplay means that it was initiated before any user
@@ -170,7 +175,7 @@ class CORE_EXPORT AutoplayPolicy final
 
   Member<AutoplayUmaHelper> autoplay_uma_helper_;
 
-  absl::optional<bool> autoplay_initiated_;
+  std::optional<bool> autoplay_initiated_;
 };
 
 }  // namespace blink

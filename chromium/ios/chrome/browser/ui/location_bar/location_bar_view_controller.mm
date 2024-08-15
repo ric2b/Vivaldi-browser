@@ -12,7 +12,7 @@
 #import "components/omnibox/browser/omnibox_field_trial.h"
 #import "components/open_from_clipboard/clipboard_recent_content.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/default_browser/model/utils.h"
+#import "ios/chrome/browser/default_browser/model/default_browser_interest_signals.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/commands/activity_service_commands.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
@@ -31,6 +31,7 @@
 #import "ios/chrome/browser/ui/orchestrator/location_bar_offset_provider.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_type.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/util/pointer_interaction_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/lens/lens_api.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -601,6 +602,10 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
           l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_VOICE_SEARCH);
       self.locationBarSteadyView.trailingButton.accessibilityIdentifier =
           kOmniboxVoiceSearchButtonIdentifier;
+      self.locationBarSteadyView.trailingButton.layer.cornerRadius =
+          self.locationBarSteadyView.trailingButton.frame.size.width / 2;
+      self.locationBarSteadyView.trailingButton.clipsToBounds = YES;
+
       [self.locationBarSteadyView enableTrailingButton:YES];
     }
   }
@@ -907,8 +912,8 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 - (void)visitCopiedLink:(id)sender {
   // A search using clipboard link is activity that should indicate a user
   // that would be interested in setting Chrome as the default browser.
-  LogCopyPasteInOmniboxForDefaultBrowserPromo();
   [self.delegate locationBarVisitCopyLinkTapped];
+  RecordAction(UserMetricsAction("Mobile.OmniboxContextMenu.VisitCopiedLink"));
   ClipboardRecentContent::GetInstance()->GetRecentURLFromClipboard(
       base::BindOnce(^(std::optional<GURL> optionalURL) {
         if (!optionalURL) {
@@ -925,7 +930,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 - (void)searchCopiedText:(id)sender {
   // A search using clipboard text is activity that should indicate a user
   // that would be interested in setting Chrome as the default browser.
-  LogCopyPasteInOmniboxForDefaultBrowserPromo();
+  default_browser::NotifyOmniboxTextCopyPasteAndNavigate();
   RecordAction(UserMetricsAction("Mobile.OmniboxContextMenu.SearchCopiedText"));
   ClipboardRecentContent::GetInstance()->GetRecentTextFromClipboard(
       base::BindOnce(^(std::optional<std::u16string> optionalText) {

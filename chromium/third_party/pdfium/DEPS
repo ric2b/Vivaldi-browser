@@ -42,9 +42,6 @@ vars = {
 
   'checkout_v8': 'checkout_configuration != "minimal"',
 
-  # By default, download the fuchsia sdk from the public sdk directory.
-  'fuchsia_sdk_cipd_prefix': 'fuchsia/sdk/core/',
-
   # Fetch configuration files required for the 'use_remoteexec' gn arg
   'download_remoteexec_cfg': False,
   # RBE instance to use for running remote builds
@@ -55,7 +52,7 @@ vars = {
   # reclient CIPD package
   'reclient_package': 'infra/rbe/client/',
   # reclient CIPD package version
-  'reclient_version': 're_client_version:0.125.0.f3883c2-gomaip',
+  'reclient_version': 're_client_version:0.130.0.546556b-gomaip',
 
   'chromium_git': 'https://chromium.googlesource.com',
   'pdfium_git': 'https://pdfium.googlesource.com',
@@ -64,7 +61,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling abseil
   # and whatever else without interference from each other.
-  'abseil_revision': 'b7ad4e9effbc9a1eb4cc8f9c31bd8906d85f0281',
+  'abseil_revision': '2b09b9df510152c293382dbc16c83f385527c8c3',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling android_toolchain
   # and whatever else without interference from each other.
@@ -72,15 +69,15 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build
   # and whatever else without interference from each other.
-  'build_revision': '9ca0d2ce96782da804d646c3f0a282e5c68e23b0',
+  'build_revision': 'e9a12f27664b7ede2b97cb510c90f27dba8a2143',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling buildtools
   # and whatever else without interference from each other.
-  'buildtools_revision': '5e016b7d32822a0cbc3c65162aa9fc2bd021f275',
+  'buildtools_revision': '9491ff1efcb98797b3989a454c3bb721272689e5',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': 'f2abc0cd0cd83b02d25af8ecb68c586470915793',
+  'catapult_revision': '4dc7721a144450da73f9adc3abcff225c804ff3f',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling clang format
   # and whatever else without interference from each other.
@@ -88,11 +85,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling clang
   # and whatever else without interference from each other.
-  'clang_revision': '2b9d966ec582b984a9c1bfb6d9e2dc404595b196',
+  'clang_revision': 'd298a77be81d33986ae546cd42cfc70aa400d732',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling code_coverage
   # and whatever else without interference from each other.
-  'code_coverage_revision': '2bd00824f0328d9bf5d7cb0821418abe106973a7',
+  'code_coverage_revision': '10ce382356ce1665f83c54bb8d34c8fc450a3f53',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling code_coverage
   # and whatever else without interference from each other.
@@ -100,7 +97,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling depot_tools
   # and whatever else without interference from each other.
-  'depot_tools_revision': '35a5306635084412e01fa23d64654907f39bc44a',
+  'depot_tools_revision': 'fbb0301f1f70813fb62e1f64e05410b730c8417e',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling fp16
   # and whatever else without interference from each other.
@@ -108,35 +105,27 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling freetype
   # and whatever else without interference from each other.
-  'freetype_revision': 'ca76683b781db5d06ef1a0e2cb62a767e7dbe626',
-  # Three lines of non-changing comments so that
-  # the commit queue can handle CLs rolling Fuchsia gn sdk
-  # and whatever else without interference from each other.
-  'fuchsia_gn_sdk_revision': '3f588d789b567e53fa284be308db4dbf3787d8f3',
-  # Three lines of non-changing comments so that
-  # the commit queue can handle CLs rolling Fuchsia sdk
-  # and whatever else without interference from each other.
-  'fuchsia_version': 'version:16.20231030.2.1',
+  'freetype_revision': '2a790a9f4937c3950028bd3de29e63c6b0d419ce',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling GN CIPD package version
   # and whatever else without interference from each other.
-  'gn_version': 'git_revision:85944ebc24a90ec1e489e85a46fdc68542c3146f',
+  'gn_version': 'git_revision:88e8054aff7bd0cb2295c7d9361d2be0b7355f27',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling gtest
   # and whatever else without interference from each other.
-  'gtest_revision': 'af29db7ec28d6df1c7f0f745186884091e602e07',
+  'gtest_revision': 'e4fdb87e76b9fc4b01c54ad81aea19d6e994b994',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling icu
   # and whatever else without interference from each other.
-  'icu_revision': 'a622de35ac311c5ad390a7af80724634e5dc61ed',
+  'icu_revision': '1112fa6b3b8a5a4125d9dbc1b2efbb55e2e47a27',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling instrumented_lib
   # and whatever else without interference from each other.
-  'instrumented_lib_revision': '0011c28c8d35fc5093bb29631d05428932cd1206',
+  'instrumented_lib_revision': '0893d760101b3ddf9a2408b9d20f15ec2b80b2c1',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling jinja2
   # and whatever else without interference from each other.
-  'jinja2_revision': 'e2d024354e11cc6b041b0cff032d73f0c7e43a07',
+  'jinja2_revision': 'c9c77525ea20c871a1d4658f8d312b51266d4bad',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling jpeg_turbo
   # and whatever else without interference from each other.
@@ -146,23 +135,23 @@ vars = {
   # and whatever else without interference from each other.
   # If you change this, also update the libc++ revision in
   # //buildtools/deps_revisions.gni.
-  'libcxx_revision': '15db46be4ec5e2c31a35bf07357b5025e2754693',
+  'libcxx_revision': '80307e66e74bae927fb8709a549859e777e3bf0b',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libc++abi
   # and whatever else without interference from each other.
-  'libcxxabi_revision': '8806fb8bb26e20206241ea2dfcee4fd2d4157b83',
+  'libcxxabi_revision': 'fc6253a642c9e336480b17fb17771e2c1efc7fff',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libpng
   # and whatever else without interference from each other.
-  'libpng_revision': '1db23788f5aa2c9f4e67bd56267a213014dd040b',
+  'libpng_revision': '3c7486b231c76de403db38af8b43795bf2b4255f',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libunwind
   # and whatever else without interference from each other.
-  'libunwind_revision': '2602aecdf4bfa2a4bd70722937b2ec503d8c46c8',
+  'libunwind_revision': 'fc505746f02c927d792bdeb328307e0e87500342',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling markupsafe
   # and whatever else without interference from each other.
-  'markupsafe_revision': '0bad08bb207bbfc1d6f3bbc82b9242b0c50e5794',
+  'markupsafe_revision': 'e582d7f0edb9d67499b0f5abd6ae5550e91da7f2',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling nasm_source
   # and whatever else without interference from each other.
@@ -174,11 +163,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling partition_allocator
   # and whatever else without interference from each other.
-  'partition_allocator_revision': '72b7e1a3fb42281f5ef11691656d759646651468',
+  'partition_allocator_revision': 'c702699cceb42a9b43296000129f46a8a419651c',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling pdfium_tests
   # and whatever else without interference from each other.
-  'pdfium_tests_revision': 'da0f4435882d0cf8c9e4ebb66db97ecbe2a582bc',
+  'pdfium_tests_revision': 'fb95f93e24cbce917c23da62f6161db5216b5f3a',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling resultdb
   # and whatever else without interference from each other.
@@ -186,11 +175,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling clang
   # and whatever else without interference from each other.
-  'rust_revision': 'e721a72ada161eee9693d6d96fcbdb6155c7a8b1',
+  'rust_revision': '1d0018c655c8fe52b77dc7c72ce0dfd4f8cdc89d',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling skia
   # and whatever else without interference from each other.
-  'skia_revision': 'a9db1213b17966d0344957ba1d3834b420b2a329',
+  'skia_revision': '32f1cb50734a4a5dad0c54b4a06ad8bdce2e7be5',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling test_fonts
   # and whatever else without interference from each other.
@@ -202,7 +191,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling tools_memory
   # and whatever else without interference from each other.
-  'tools_memory_revision': '216d33bbf954ef7a6c277e8bb86d6a1b9a3dc3c6',
+  'tools_memory_revision': 'c6d669e13804ead0066fdd88e653dd4f9af7b0c1',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling trace_event
   # and whatever else without interference from each other.
@@ -210,11 +199,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling v8
   # and whatever else without interference from each other.
-  'v8_revision': 'b6fd2f17bced4df7aeae5fb84c5e29b2d06c8f2f',
+  'v8_revision': 'fe4ad3b98bf67e019706406e5d1e42f8bdf2b089',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling zlib
   # and whatever else without interference from each other.
-  'zlib_revision': '956936c53cb6169f2b97e009bfaefd66da227ab6',
+  'zlib_revision': 'c5bf1b566e5df14e763507e2ce30cbfebefeeccf',
 }
 
 # Only these hosts are allowed for dependencies in this DEPS file.
@@ -340,13 +329,6 @@ deps = {
   'third_party/freetype/src':
     Var('chromium_git') + '/chromium/src/third_party/freetype2.git@' +
         Var('freetype_revision'),
-
-  'third_party/fuchsia-gn-sdk': {
-    'url': Var('chromium_git') +
-        '/chromium/src/third_party/fuchsia-gn-sdk.git@' +
-        Var('fuchsia_gn_sdk_revision'),
-    'condition': 'checkout_fuchsia',
-  },
 
   'third_party/googletest/src':
     Var('chromium_git') + '/external/github.com/google/googletest.git@' +
@@ -506,16 +488,33 @@ include_rules = [
   '+build/build_config.h',
   '+constants',
   '+testing',
-  '+third_party/base',
 
-  # Abseil features must be allowlisted explicitly for now. See Chromium's
-  # //styleguide/c++/c++11.html. Allowed features' headers will be listed
-  # explicitly here.
-  '-absl',
-  '-third_party/abseil-cpp',
+  # Abseil is allowed by default, but some features are banned. See Chromium's
+  # //styleguide/c++/c++-features.md.
+  '+third_party/abseil-cpp',
+  '-third_party/abseil-cpp/absl/algorithm/container.h',
+  '-third_party/abseil-cpp/absl/base/no_destructor.h',
+  '-third_party/abseil-cpp/absl/base/nullability.h',
+  '-third_party/abseil-cpp/absl/container',
   '+third_party/abseil-cpp/absl/container/inlined_vector.h',
-  '+third_party/abseil-cpp/absl/types/optional.h',
-  '+third_party/abseil-cpp/absl/types/variant.h',
+  '-third_party/abseil-cpp/absl/crc',
+  '-third_party/abseil-cpp/absl/flags',
+  '-third_party/abseil-cpp/absl/functional/any_invocable.h',
+  '-third_party/abseil-cpp/absl/functional/bind_front.h',
+  '-third_party/abseil-cpp/absl/functional/function_ref.h',
+  '-third_party/abseil-cpp/absl/functional/overload.h',
+  '-third_party/abseil-cpp/absl/hash',
+  '-third_party/abseil-cpp/absl/log',
+  '-third_party/abseil-cpp/absl/random',
+  '-third_party/abseil-cpp/absl/status/statusor.h',
+  '-third_party/abseil-cpp/absl/strings',
+  '+third_party/abseil-cpp/absl/strings/ascii.h',
+  '+third_party/abseil-cpp/absl/strings/cord.h',
+  '-third_party/abseil-cpp/absl/synchronization',
+  '-third_party/abseil-cpp/absl/time',
+  '-third_party/abseil-cpp/absl/types/any.h',
+  '-third_party/abseil-cpp/absl/types/optional.h',
+  '-third_party/abseil-cpp/absl/types/span.h',
 ]
 
 specific_include_rules = {
@@ -734,17 +733,6 @@ hooks = [
     'pattern': '.',
     'action': ['python3', 'build/util/lastchange.py',
                '-o', 'build/util/LASTCHANGE'],
-  },
-  {
-    'name': 'Download Fuchsia SDK from GCS',
-    'pattern': '.',
-    'condition': 'checkout_fuchsia',
-    'action': [
-      'python3',
-      'build/fuchsia/update_sdk.py',
-      '--cipd-prefix={fuchsia_sdk_cipd_prefix}',
-      '--version={fuchsia_version}',
-    ],
   },
   # Download remote exec cfg files
   {

@@ -9,29 +9,40 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/base/metadata/metadata_header_macros.h"
-#include "ui/views/layout/box_layout_view.h"
+#include "ui/views/layout/flex_layout_view.h"
 
-namespace views {
-class Label;
-}  // namespace views
+namespace ui {
+class Event;
+}  // namespace ui
 
 namespace ash {
 
+class IconButton;
+class MahiQuestionAnswerView;
+class SummaryOutlinesSection;
+
 // The code for Mahi main panel view. This view is placed within
 // `MahiPanelWidget`.
-class ASH_EXPORT MahiPanelView : public views::BoxLayoutView {
+class ASH_EXPORT MahiPanelView : public views::FlexLayoutView {
+  METADATA_HEADER(MahiPanelView, views::FlexLayoutView)
+
  public:
-  METADATA_HEADER(MahiPanelView);
   MahiPanelView();
   MahiPanelView(const MahiPanelView&) = delete;
   MahiPanelView& operator=(const MahiPanelView&) = delete;
   ~MahiPanelView() override;
 
-  views::Label* summary_label_for_test() { return summary_label_; }
-
  private:
+  // Callbacks for buttons and link.
+  void OnCloseButtonPressed(const ui::Event& event);
+  void OnLearnMoreLinkClicked();
+  void OnBackButtonPressed();
+  void OnSendButtonPressed();
+
   // Owned by the views hierarchy.
-  raw_ptr<views::Label> summary_label_ = nullptr;
+  raw_ptr<IconButton> back_button_;
+  raw_ptr<MahiQuestionAnswerView> question_answer_view_;
+  raw_ptr<SummaryOutlinesSection> summary_outlines_section_;
 
   base::WeakPtrFactory<MahiPanelView> weak_ptr_factory_{this};
 };

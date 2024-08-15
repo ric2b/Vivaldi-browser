@@ -13,6 +13,7 @@
 #include "base/version.h"
 #include "build/chromeos_buildflags.h"
 #include "components/signin/public/base/gaia_id_hash.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/sync/base/features.h"
 #include "components/sync/base/passphrase_enums.h"
@@ -53,6 +54,27 @@ ModelTypeSet UserSelectableOsTypesToModelTypes(
 int GetCurrentMajorProductVersion() {
   DCHECK(version_info::GetVersion().IsValid());
   return version_info::GetVersion().components()[0];
+}
+
+// Checks if the AUTOFILL_WALLET_CREDENTIAL should be ignored if it is the only
+// encrypted datatype.
+bool ShouldAutofillWalletCredentialBeIgnoredIfOnlyEncryptedType() {
+  // Explicit sign-in to the browser via native UI, making this scenario an edge
+  // case as more features will usually be enabled, including PASSWORDS. Thus,
+  // AUTOFILL_WALLET_CREDENTIAL is not the only active encrypted type.
+  if (switches::IsExplicitBrowserSigninUIOnDesktopEnabled(
+          switches::ExplicitBrowserSigninPhase::kFull)) {
+    return false;
+  }
+  // Similar to above: more features will usually be enabled, including
+  // PASSWORDS, making this an edge case.
+  if (base::FeatureList::IsEnabled(
+          syncer::kReplaceSyncPromosWithSignInPromos)) {
+    return false;
+  }
+  // AUTOFILL_WALLET_CREDENTIAL is the only active encrypted type for the
+  // previously signed-in-non-syncing users.
+  return true;
 }
 
 }  // namespace
@@ -327,7 +349,7 @@ bool SyncUserSettingsImpl::IsUsingExplicitPassphrase() const {
   // TODO(crbug.com/1466401): Either make this method return a Tribool, so the
   // "unknown" case is properly communicated, or just remove it altogether
   // (callers can always use the global IsExplicitPassphrase() helper).
-  absl::optional<PassphraseType> type = GetPassphraseType();
+  std::optional<PassphraseType> type = GetPassphraseType();
   if (!type.has_value()) {
     return false;
   }
@@ -338,7 +360,7 @@ base::Time SyncUserSettingsImpl::GetExplicitPassphraseTime() const {
   return crypto_->GetExplicitPassphraseTime();
 }
 
-absl::optional<PassphraseType> SyncUserSettingsImpl::GetPassphraseType() const {
+std::optional<PassphraseType> SyncUserSettingsImpl::GetPassphraseType() const {
   return crypto_->GetPassphraseType();
 }
 
@@ -380,20 +402,23 @@ ModelTypeSet SyncUserSettingsImpl::GetPreferredDataTypes() const {
   // though they're technically not registered.
   types.PutAll(ControlTypes());
 
-  static_assert(47 + 1 /* notes */ == GetNumModelTypes(),
+  static_assert(52 + 1 /* notes */ == GetNumModelTypes(),
                 "If adding a new sync data type, update the list below below if"
                 " you want to disable the new data type for local sync.");
   if (prefs_->IsLocalSyncEnabled()) {
     types.Remove(APP_LIST);
     types.Remove(AUTOFILL_WALLET_OFFER);
     types.Remove(AUTOFILL_WALLET_USAGE);
+    types.Remove(COLLABORATION_GROUP);
     types.Remove(CONTACT_INFO);
     types.Remove(HISTORY);
     types.Remove(INCOMING_PASSWORD_SHARING_INVITATION);
     types.Remove(OUTGOING_PASSWORD_SHARING_INVITATION);
+    types.Remove(PLUS_ADDRESS);
     types.Remove(SECURITY_EVENTS);
     types.Remove(SEGMENTATION);
     types.Remove(SEND_TAB_TO_SELF);
+    types.Remove(SHARED_TAB_GROUP_DATA);
     types.Remove(SHARING_MESSAGE);
     types.Remove(USER_CONSENTS);
     types.Remove(USER_EVENTS);
@@ -407,10 +432,50 @@ ModelTypeSet SyncUserSettingsImpl::GetEncryptedDataTypes() const {
 }
 
 bool SyncUserSettingsImpl::IsEncryptedDatatypeEnabled() const {
-  const ModelTypeSet preferred_types = GetPreferredDataTypes();
+  ModelTypeSet preferred_types = GetPreferredDataTypes();
   const ModelTypeSet encrypted_types = GetEncryptedDataTypes();
   DCHECK(encrypted_types.HasAll(AlwaysEncryptedUserTypes()));
+  if (ShouldAutofillWalletCredentialBeIgnoredIfOnlyEncryptedType()) {
+    // Remove AUTOFILL_WALLET_CREDENTIAL from the set to avoid that the
+    // function returns true for the case where the set ONLY includes
+    // AUTOFILL_WALLET_CREDENTIAL. This feature alone is not sufficient to
+    // trigger error UI, which may be confusing to some users given that strings
+    // may allude to passwords. This is a side effect of
+    // AUTOFILL_WALLET_CREDENTIAL being listed as AlwaysEncryptedUserTypes().
+    preferred_types.Remove(syncer::AUTOFILL_WALLET_CREDENTIAL);
+  }
   return !Intersection(preferred_types, encrypted_types).Empty();
+}
+
+std::string SyncUserSettingsImpl::GetEncryptionBootstrapToken() const {
+  if (base::FeatureList::IsEnabled(kSyncRememberCustomPassphraseAfterSignout)) {
+    const std::string& gaia_id = delegate_->GetSyncAccountInfoForPrefs().gaia;
+    if (gaia_id.empty()) {
+      return std::string();
+    }
+    signin::GaiaIdHash gaia_id_hash = signin::GaiaIdHash::FromGaiaId(gaia_id);
+    CHECK(gaia_id_hash.IsValid());
+    return prefs_->GetEncryptionBootstrapTokenForAccount(gaia_id_hash);
+  }
+  return prefs_->GetEncryptionBootstrapToken();
+}
+
+void SyncUserSettingsImpl::SetEncryptionBootstrapToken(
+    const std::string& token) {
+  if (base::FeatureList::IsEnabled(kSyncRememberCustomPassphraseAfterSignout)) {
+    const std::string& gaia_id = delegate_->GetSyncAccountInfoForPrefs().gaia;
+    if (gaia_id.empty()) {
+      // TODO(crbug.com/1505100): Convert to NOTREACHED_NORETURN.
+      DUMP_WILL_BE_NOTREACHED_NORETURN()
+          << "Must not set passphrase while signed out";
+      return;
+    }
+    signin::GaiaIdHash gaia_id_hash = signin::GaiaIdHash::FromGaiaId(gaia_id);
+    CHECK(gaia_id_hash.IsValid());
+    prefs_->SetEncryptionBootstrapTokenForAccount(token, gaia_id_hash);
+    return;
+  }
+  prefs_->SetEncryptionBootstrapToken(token);
 }
 
 }  // namespace syncer

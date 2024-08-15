@@ -68,9 +68,11 @@ struct DidOverscrollParams;
 namespace content {
 
 class CursorManager;
+class DevicePosturePlatformProvider;
 class MouseWheelPhaseHandler;
 class RenderWidgetHostImpl;
 class RenderWidgetHostViewBaseObserver;
+class ScopedViewTransitionResources;
 class SyntheticGestureTarget;
 class TextInputManager;
 class TouchSelectionControllerClientManager;
@@ -101,9 +103,9 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   void WasUnOccluded() override {}
   void WasOccluded() override {}
   std::u16string GetSelectedText() override;
-  bool IsMouseLocked() override;
-  bool GetIsMouseLockedUnadjustedMovementForTesting() override;
-  bool CanBeMouseLocked() override;
+  bool IsPointerLocked() override;
+  bool GetIsPointerLockedUnadjustedMovementForTesting() override;
+  bool CanBePointerLocked() override;
   bool AccessibilityHasFocus() override;
   bool LockKeyboard(std::optional<base::flat_set<ui::DomCode>> codes) override;
   void SetBackgroundColor(SkColor color) override;
@@ -124,6 +126,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
       override;
   display::ScreenInfo GetScreenInfo() const override;
   display::ScreenInfos GetScreenInfos() const override;
+  const std::u16string* GetVisibleSelectedText() override;
 
   // Identical to `CopyFromSurface()`, except that this method issues the
   // `viz::CopyOutputRequest` against the exact `viz::Surface` currently
@@ -213,6 +216,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   virtual void SelectionChanged(const std::u16string& text,
                                 size_t offset,
                                 const gfx::Range& range);
+
+  virtual void VisibleTextSelectionChanged(const std::u16string& text);
 
   // The requested size of the renderer. May differ from GetViewBounds().size()
   // when the view requires additional throttling.
@@ -548,6 +553,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   virtual void SetDisplayFeatureForTesting(
       const DisplayFeature* display_feature) = 0;
 
+  DevicePosturePlatformProvider* GetDevicePosturePlatformProvider();
+
   // Returns the associated RenderWidgetHostImpl.
   RenderWidgetHostImpl* host() const { return host_; }
 
@@ -619,8 +626,13 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
 
   void SetIsFrameSinkIdOwner(bool is_owner);
 
-  // Vivaldi addition:
-  bool IsRenderWidgetHostViewMac() { return is_render_widget_host_view_mac_; }
+  void SetViewTransitionResources(
+      std::unique_ptr<ScopedViewTransitionResources> resources);
+  bool HasViewTransitionResourcesForTesting() const {
+    return !!view_transition_resources_;
+  }
+
+  virtual viz::SurfaceId GetFallbackSurfaceIdForTesting() const;
 
  protected:
   explicit RenderWidgetHostViewBase(RenderWidgetHost* host);
@@ -736,9 +748,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // to all displays.
   gfx::Size system_cursor_size_;
 
-  // Vivaldi addition:
-  bool is_render_widget_host_view_mac_ = false;
-
  private:
   FRIEND_TEST_ALL_PREFIXES(
       BrowserSideFlingBrowserTest,
@@ -796,6 +805,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   bool is_evicted_ = false;
 
   bool is_frame_sink_id_owner_ = false;
+
+  std::unique_ptr<ScopedViewTransitionResources> view_transition_resources_;
 
   base::WeakPtrFactory<RenderWidgetHostViewBase> weak_factory_{this};
 };

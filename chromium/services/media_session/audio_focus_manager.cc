@@ -6,9 +6,9 @@
 
 #include <iterator>
 #include <utility>
+#include <vector>
 
 #include "base/containers/adapters.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/functional/bind.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/power_monitor/power_observer.h"
@@ -383,8 +383,10 @@ void AudioFocusManager::MaybeUpdateActiveSession() {
   AudioFocusRequest* active = nullptr;
 
   for (auto& row : base::Reversed(audio_focus_stack_)) {
-    if (!row->info()->is_controllable)
+    if (!row->info()->is_controllable ||
+        row->info()->ignore_for_active_session) {
       continue;
+    }
 
     active = row.get();
     break;
@@ -506,7 +508,7 @@ void AudioFocusManager::EnforceSingleSession(AudioFocusRequest* session,
 }
 
 void AudioFocusManager::CleanupSourceObservers() {
-  base::EraseIf(source_observers_,
+  std::erase_if(source_observers_,
                 [](const auto& holder) { return !holder->is_valid(); });
 }
 

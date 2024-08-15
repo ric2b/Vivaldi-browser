@@ -79,7 +79,7 @@
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
-#import "net/base/mac/url_conversions.h"
+#import "net/base/apple/url_conversions.h"
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/base/l10n/l10n_util_mac.h"
@@ -327,9 +327,9 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
 }
 
 - (void)dealloc {
-  // TODO(crbug.com/1464966): Switch back to DCHECK if the number of reports is
-  // low.
-  DUMP_WILL_BE_CHECK(!_accountManagerServiceObserver.get());
+  // Not an invariant due to possible race conditions. DCHECKing for debugging
+  // purposes. See crbug.com/40067451.
+  DCHECK(!_accountManagerServiceObserver.get());
 }
 
 - (void)setReauthenticationModule:
@@ -1818,41 +1818,45 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
     return;
   }
 
+  __weak __typeof(self) weakSelf = self;
   [self.tableView
       performBatchUpdates:^{
-        if (self.passwordProblemsItem) {
-          [self reconfigureCellsForItems:@[ self.passwordProblemsItem ]];
+        if (weakSelf.passwordProblemsItem) {
+          [weakSelf
+              reconfigureCellsForItems:@[ weakSelf.passwordProblemsItem ]];
           // When in safe state, a custom accessibility label needs to be set
           // for the Password Checkup cell.
           if (state == PasswordCheckStateSafe) {
-            [self setPasswordProblemsItemAccessibilityLabelForSafeState];
+            [weakSelf setPasswordProblemsItemAccessibilityLabelForSafeState];
           }
         }
-        if (self.checkForProblemsItem) {
-          BOOL checkForProblemsItemIsInModel = [self.tableViewModel
+        if (weakSelf.checkForProblemsItem) {
+          BOOL checkForProblemsItemIsInModel = [weakSelf.tableViewModel
               hasItemForItemType:ItemTypeCheckForProblemsButton
                sectionIdentifier:SectionIdentifierPasswordCheck];
           // Check if the check button should be removed from the table view.
-          if (!self.shouldShowCheckButton && checkForProblemsItemIsInModel) {
-            [self.tableView
-                deleteRowsAtIndexPaths:@[ [self checkButtonIndexPath] ]
+          if (!weakSelf.shouldShowCheckButton &&
+              checkForProblemsItemIsInModel) {
+            NSIndexPath* checkButtonIndexPath = [weakSelf checkButtonIndexPath];
+            [weakSelf
+                removeFromModelItemAtIndexPaths:@[ checkButtonIndexPath ]];
+            [weakSelf.tableView
+                deleteRowsAtIndexPaths:@[ checkButtonIndexPath ]
                       withRowAnimation:UITableViewRowAnimationAutomatic];
-            [self.tableViewModel
-                       removeItemWithType:ItemTypeCheckForProblemsButton
-                fromSectionWithIdentifier:SectionIdentifierPasswordCheck];
-          } else if (self.shouldShowCheckButton) {
-            [self reconfigureCellsForItems:@[ self.checkForProblemsItem ]];
+          } else if (weakSelf.shouldShowCheckButton) {
+            [weakSelf
+                reconfigureCellsForItems:@[ weakSelf.checkForProblemsItem ]];
             // Check if the check button should be added to the table view.
             if (!checkForProblemsItemIsInModel) {
-              [self.tableViewModel addItem:self.checkForProblemsItem
-                   toSectionWithIdentifier:SectionIdentifierPasswordCheck];
-              [self.tableView
-                  insertRowsAtIndexPaths:@[ [self checkButtonIndexPath] ]
+              [weakSelf.tableViewModel addItem:weakSelf.checkForProblemsItem
+                       toSectionWithIdentifier:SectionIdentifierPasswordCheck];
+              [weakSelf.tableView
+                  insertRowsAtIndexPaths:@[ [weakSelf checkButtonIndexPath] ]
                         withRowAnimation:UITableViewRowAnimationAutomatic];
             }
           }
         }
-        [self.tableView layoutIfNeeded];
+        [weakSelf.tableView layoutIfNeeded];
       }
                completion:nil];
 }

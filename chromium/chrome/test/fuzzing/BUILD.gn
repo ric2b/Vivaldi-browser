@@ -24,7 +24,10 @@ if (fuzzing_engine_supports_custom_main) {
       ":in_process_fuzzer_buildflags",
       "//testing/libfuzzer:fuzzing_engine_no_main",
     ]
-    public_deps = [ "//chrome/test:test_support" ]
+    public_deps = [
+      "//chrome/test:chrome_test_launcher",
+      "//chrome/test:test_support",
+    ]
   }
 
   buildflag_header("in_process_fuzzer_buildflags") {
@@ -49,6 +52,9 @@ if (!is_android) {
   in_process_fuzzer("html_in_process_fuzzer") {
     sources = [ "html_in_process_fuzzer.cc" ]
     dict = "html_in_process_fuzzer.dictionary"
+  }
+  in_process_fuzzer("js_in_process_fuzzer") {
+    sources = [ "js_in_process_fuzzer.cc" ]
   }
   in_process_proto_fuzzer("page_load_in_process_fuzzer") {
     sources = [ "page_load_in_process_fuzzer.cc" ]

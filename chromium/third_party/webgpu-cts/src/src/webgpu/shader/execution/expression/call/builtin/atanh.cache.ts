@@ -2,11 +2,14 @@ import { FP } from '../../../../../util/floating_point.js';
 import { biasedRange } from '../../../../../util/math.js';
 import { makeCaseCache } from '../../case_cache.js';
 
-// Cases: [f32|f16]_[non_]const
-const cases = (['f32', 'f16'] as const)
+// Cases: [f32|f16|abstract]_[non_]const
+const cases = (['f32', 'f16', 'abstract'] as const)
   .flatMap(trait =>
     ([true, false] as const).map(nonConst => ({
       [`${trait}_${nonConst ? 'non_const' : 'const'}`]: () => {
+        if (trait === 'abstract' && nonConst) {
+          return [];
+        }
         return FP[trait].generateScalarToIntervalCases(
           [
             // discontinuity at x = -1
@@ -18,7 +21,8 @@ const cases = (['f32', 'f16'] as const)
             ...FP[trait].scalarRange(),
           ],
           nonConst ? 'unfiltered' : 'finite',
-          FP[trait].atanhInterval
+          // atanh has an inherited accuracy, so is only expected to be as accurate as f32
+          FP[trait !== 'abstract' ? trait : 'f32'].atanhInterval
         );
       },
     }))

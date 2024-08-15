@@ -48,6 +48,9 @@ Attribute ParseAttribute(std::string_view str) {
     if (str == "binding") {
         return Attribute::kBinding;
     }
+    if (str == "blend_src") {
+        return Attribute::kBlendSrc;
+    }
     if (str == "builtin") {
         return Attribute::kBuiltin;
     }
@@ -68,9 +71,6 @@ Attribute ParseAttribute(std::string_view str) {
     }
     if (str == "id") {
         return Attribute::kId;
-    }
-    if (str == "index") {
-        return Attribute::kIndex;
     }
     if (str == "interpolate") {
         return Attribute::kInterpolate;
@@ -104,6 +104,8 @@ std::string_view ToString(Attribute value) {
             return "align";
         case Attribute::kBinding:
             return "binding";
+        case Attribute::kBlendSrc:
+            return "blend_src";
         case Attribute::kBuiltin:
             return "builtin";
         case Attribute::kColor:
@@ -118,8 +120,6 @@ std::string_view ToString(Attribute value) {
             return "group";
         case Attribute::kId:
             return "id";
-        case Attribute::kIndex:
-            return "index";
         case Attribute::kInterpolate:
             return "interpolate";
         case Attribute::kInvariant:

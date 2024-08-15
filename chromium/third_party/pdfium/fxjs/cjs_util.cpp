@@ -14,7 +14,9 @@
 #include <vector>
 
 #include "build/build_config.h"
+#include "core/fxcrt/check_op.h"
 #include "core/fxcrt/fx_extension.h"
+#include "core/fxcrt/span.h"
 #include "fxjs/cjs_event_context.h"
 #include "fxjs/cjs_object.h"
 #include "fxjs/cjs_publicmethods.h"
@@ -23,8 +25,6 @@
 #include "fxjs/fxv8.h"
 #include "fxjs/js_define.h"
 #include "fxjs/js_resources.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/containers/span.h"
 #include "v8/include/v8-date.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -112,7 +112,7 @@ CJS_Result CJS_Util::printf(CJS_Runtime* pRuntime,
   {
     size_t offset = 0;
     while (true) {
-      absl::optional<size_t> offset_end =
+      std::optional<size_t> offset_end =
           unsafe_fmt_string.Find(L"%", offset + 1);
       if (!offset_end.has_value()) {
         unsafe_conversion_specifiers.push_back(

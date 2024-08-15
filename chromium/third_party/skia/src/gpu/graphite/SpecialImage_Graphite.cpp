@@ -37,7 +37,11 @@ public:
 
     TextureProxyView textureProxyView() const { return fTextureProxyView; }
 
-    sk_sp<SkSpecialImage> onMakeSubset(const SkIRect& subset) const override {
+    SkISize backingStoreDimensions() const override {
+        return fTextureProxyView.proxy()->dimensions();
+    }
+
+    sk_sp<SkSpecialImage> onMakeBackingStoreSubset(const SkIRect& subset) const override {
         return SkSpecialImages::MakeGraphite(subset,
                                              this->uniqueID(),
                                              fTextureProxyView,

@@ -18,13 +18,14 @@
 #include <array>
 #include <cmath>
 #include <complex>
+#include <cstdint>
 #include <limits>
 #include <list>
 #include <map>
 #include <memory>
 #include <optional>
-#include <ostream>
 #include <set>
+#include <sstream>
 #include <string>
 #include <tuple>
 #include <type_traits>
@@ -41,11 +42,15 @@
 #include "absl/strings/strip.h"
 #include "absl/time/time.h"
 #include "./fuzztest/domain.h"
+#include "./fuzztest/internal/meta.h"
+#include "./fuzztest/internal/printer.h"
 #include "./fuzztest/internal/test_protobuf.pb.h"
 
 namespace fuzztest::internal {
 namespace {
 
+using ::fuzztest::domain_implementor::PrintMode;
+using ::fuzztest::domain_implementor::PrintValue;
 using ::testing::AllOf;
 using ::testing::Contains;
 using ::testing::Each;
@@ -193,6 +198,12 @@ TEST(StringTest, Printer) {
                           R"("printf(\"Hello, world!\");")"));
 }
 
+TEST(ByteArrayTest, Printer) {
+  EXPECT_THAT(TestPrintValue(std::vector<uint8_t>{'\0', 'a', 0223, 'b', '\"'}),
+              ElementsAre(R"("\000a\223b"")",
+                          R"(fuzztest::ToByteArray("\000a\223b\""))"));
+}
+
 TEST(CompoundTest, Printer) {
   EXPECT_THAT(
       TestPrintValue(std::pair(1, 1.5), Arbitrary<std::pair<int, double>>()),
@@ -217,10 +228,10 @@ TEST(ProtobufTest, Printer) {
   internal::TestProtobuf proto;
   proto.set_b(true);
   proto.add_rep_subproto()->set_subproto_i32(17);
-  EXPECT_THAT(TestPrintValue(proto),
-              ElementsAre(absl::StrCat("(", proto.ShortDebugString(), ")"),
-                          absl::StrCat("ParseTestProto(R\"pb(",
-                                       proto.ShortDebugString(), ")pb\")")));
+  EXPECT_THAT(
+      TestPrintValue(proto),
+      ElementsAre(absl::StrCat("(", proto, ")"),
+                  absl::StrCat("ParseTestProto(R\"pb(", proto, ")pb\")")));
 }
 
 TEST(ProtobufEnumTest, Printer) {

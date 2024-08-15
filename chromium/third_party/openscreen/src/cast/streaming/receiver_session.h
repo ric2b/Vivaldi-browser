@@ -204,7 +204,7 @@ class ReceiverSession final : public Environment::SocketSubscriber {
   Answer ConstructAnswer(const PendingOffer& properties);
 
   // Creates a ReceiverCapability version 2 object. This will be deprecated
-  // as part of https://issuetracker.google.com/184429130.
+  // as part of issuetracker.google.com/184429130.
   ReceiverCapability CreateRemotingCapabilityV2();
 
   // Handles resetting receivers and notifying the client.

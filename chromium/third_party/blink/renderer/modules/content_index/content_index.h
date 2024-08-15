@@ -9,6 +9,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "third_party/blink/public/mojom/content_index/content_index.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
@@ -18,7 +19,6 @@ namespace blink {
 
 class ContentDescription;
 class ExceptionState;
-class ScriptPromiseResolver;
 class ScriptState;
 class ServiceWorkerRegistration;
 
@@ -31,14 +31,16 @@ class ContentIndex final : public ScriptWrappable {
   ~ContentIndex() override;
 
   // Web-exposed function defined in the IDL file.
-  ScriptPromise add(ScriptState* script_state,
-                    const ContentDescription* description,
-                    ExceptionState& exception_state);
-  ScriptPromise deleteDescription(ScriptState* script_state,
-                                  const String& id,
-                                  ExceptionState& exception_state);
-  ScriptPromise getDescriptions(ScriptState* script_state,
-                                ExceptionState& exception_state);
+  ScriptPromiseTyped<IDLUndefined> add(ScriptState* script_state,
+                                       const ContentDescription* description,
+                                       ExceptionState& exception_state);
+  ScriptPromiseTyped<IDLUndefined> deleteDescription(
+      ScriptState* script_state,
+      const String& id,
+      ExceptionState& exception_state);
+  ScriptPromiseTyped<IDLSequence<ContentDescription>> getDescriptions(
+      ScriptState* script_state,
+      ExceptionState& exception_state);
 
   void Trace(Visitor* visitor) const override;
 
@@ -47,23 +49,24 @@ class ContentIndex final : public ScriptWrappable {
 
   // Callbacks.
   void DidGetIconSizes(mojom::blink::ContentDescriptionPtr description,
-                       ScriptPromiseResolver* resolver,
+                       ScriptPromiseResolverTyped<IDLUndefined>* resolver,
                        const Vector<gfx::Size>& icon_sizes);
-  void DidGetIcons(ScriptPromiseResolver* resolver,
+  void DidGetIcons(ScriptPromiseResolverTyped<IDLUndefined>* resolver,
                    mojom::blink::ContentDescriptionPtr description,
                    Vector<SkBitmap> icons);
   void DidCheckOfflineCapability(
       KURL launch_url,
       mojom::blink::ContentDescriptionPtr description,
       Vector<SkBitmap> icons,
-      ScriptPromiseResolver* resolver,
+      ScriptPromiseResolverTyped<IDLUndefined>* resolver,
       bool is_offline_capable);
-  void DidAdd(ScriptPromiseResolver* resolver,
-              mojom::blink::ContentIndexError error);
-  void DidDeleteDescription(ScriptPromiseResolver* resolver,
-                            mojom::blink::ContentIndexError error);
-  void DidGetDescriptions(
-      ScriptPromiseResolver* resolver,
+  static void DidAdd(ScriptPromiseResolverTyped<IDLUndefined>* resolver,
+                     mojom::blink::ContentIndexError error);
+  static void DidDeleteDescription(
+      ScriptPromiseResolverTyped<IDLUndefined>* resolver,
+      mojom::blink::ContentIndexError error);
+  static void DidGetDescriptions(
+      ScriptPromiseResolverTyped<IDLSequence<ContentDescription>>* resolver,
       mojom::blink::ContentIndexError error,
       Vector<mojom::blink::ContentDescriptionPtr> descriptions);
 

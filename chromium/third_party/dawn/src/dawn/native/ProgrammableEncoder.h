@@ -35,6 +35,7 @@
 #include "dawn/native/Forward.h"
 #include "dawn/native/IntegerTypes.h"
 #include "dawn/native/ObjectBase.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 
 #include "dawn/native/dawn_platform.h"
 
@@ -73,7 +74,7 @@ class ProgrammableEncoder : public ApiObjectBase {
                         ErrorTag errorTag,
                         const char* label);
 
-    EncodingContext* mEncodingContext = nullptr;
+    raw_ptr<EncodingContext> mEncodingContext = nullptr;
 
     uint64_t mDebugGroupStackSize = 0;
 

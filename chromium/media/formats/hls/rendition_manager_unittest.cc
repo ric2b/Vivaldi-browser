@@ -4,6 +4,8 @@
 
 #include "media/formats/hls/rendition_manager.h"
 
+#include <optional>
+
 #include "base/logging.h"
 #include "base/test/gmock_callback_support.h"
 #include "media/base/media_util.h"
@@ -13,14 +15,13 @@
 #include "media/formats/hls/types.h"
 #include "media/formats/hls/variant_stream.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace media::hls {
 
 namespace {
 
 RenditionManager::CodecSupportType GetCodecSupportType(
-    base::StringPiece container,
+    std::string_view container,
     base::span<const std::string> codecs) {
   bool has_audio = false;
   bool has_video = false;
@@ -48,7 +49,7 @@ RenditionManager::CodecSupportType GetCodecSupportType(
 }
 
 RenditionManager::CodecSupportType GetCodecSupportForSoftwareOnlyLinux(
-    base::StringPiece container,
+    std::string_view container,
     base::span<const std::string> codecs) {
   bool has_audio = false;
   bool has_video = false;
@@ -127,7 +128,7 @@ class HlsRenditionManagerTest : public testing::Test {
   template <typename... Strings>
   RenditionManager GetCustomSupportRenditionManager(
       base::RepeatingCallback<RenditionManager::CodecSupportType(
-          base::StringPiece,
+          std::string_view,
           base::span<const std::string>)> support_cb,
       Strings... strings) {
     MultivariantPlaylistTestBuilder builder;
@@ -606,7 +607,7 @@ TEST_F(HlsRenditionManagerTest, MultipleRenditionGroupsVariantsOutOfOrder) {
   // Unselect a preferred rendition, which switches back to english.
   EXPECT_CALL(*this, VariantSelected("/video/800kbit.m3u8",
                                      "/audio/stereo/en/128kbit.m3u8"));
-  rm.SetPreferredAudioRendition(absl::nullopt);
+  rm.SetPreferredAudioRendition(std::nullopt);
 }
 
 }  // namespace media::hls

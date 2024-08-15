@@ -22,8 +22,8 @@
 #include "chrome/browser/password_manager/profile_password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/sync_service_factory.h"
-#include "chrome/browser/web_data_service_factory.h"
 #include "chrome/browser/webauthn/chrome_authenticator_request_delegate.h"
+#include "chrome/browser/webdata_services/web_data_service_factory.h"
 #include "components/browsing_data/core/counters/autofill_counter.h"
 #include "components/browsing_data/core/counters/browsing_data_counter.h"
 #include "components/browsing_data/core/counters/history_counter.h"
@@ -105,7 +105,7 @@ BrowsingDataCounterFactory::GetForProfileAndPref(Profile* profile,
             profile, ServiceAccessType::EXPLICIT_ACCESS),
         AccountPasswordStoreFactory::GetForProfile(
             profile, ServiceAccessType::EXPLICIT_ACCESS),
-        SyncServiceFactory::GetForProfile(profile),
+        profile->GetPrefs(), SyncServiceFactory::GetForProfile(profile),
         std::move(credential_store));
   }
 
@@ -137,6 +137,11 @@ BrowsingDataCounterFactory::GetForProfileAndPref(Profile* profile,
     return std::make_unique<HostedAppsCounter>(profile);
   }
 #endif
+
+  if (pref_name == browsing_data::prefs::kCloseTabs) {
+    // Tab counter is not implemented yet.
+    return nullptr;
+  }
 
   return nullptr;
 }

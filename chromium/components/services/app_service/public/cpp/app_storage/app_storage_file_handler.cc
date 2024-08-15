@@ -14,6 +14,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
+#include "components/services/app_service/public/cpp/app.h"
 #include "components/services/app_service/public/cpp/icon_effects.h"
 #include "components/services/app_service/public/cpp/intent_filter_util.h"
 #include "components/services/app_service/public/cpp/permission.h"
@@ -33,6 +34,7 @@ constexpr char kReadinessKey[] = "readiness";
 constexpr char kNameKey[] = "name";
 constexpr char kShortNameKey[] = "short_name";
 constexpr char kPublisherIdKey[] = "publisher_id";
+constexpr char kInstallerPackageIdKey[] = "installer_package_id";
 constexpr char kDescriptionKey[] = "description";
 constexpr char kVersionKey[] = "version";
 constexpr char kAdditionalSearchTermsKey[] = "additional_search_terms";
@@ -63,21 +65,20 @@ constexpr char kSupportedLocalesKey[] = "supported_locales";
 constexpr char kSelectedLocaleKey[] = "selected_locale";
 constexpr char kExtraKey[] = "extra";
 
-absl::optional<std::string> GetStringValueFromDict(
-    const base::Value::Dict& dict,
-    std::string_view key_name) {
+std::optional<std::string> GetStringValueFromDict(const base::Value::Dict& dict,
+                                                  std::string_view key_name) {
   const std::string* value = dict.FindString(key_name);
-  return value ? absl::optional<std::string>(*value) : absl::nullopt;
+  return value ? std::optional<std::string>(*value) : std::nullopt;
 }
 
-absl::optional<uint64_t> GetUint64ValueFromDict(const base::Value::Dict& dict,
-                                                std::string_view key_name) {
+std::optional<uint64_t> GetUint64ValueFromDict(const base::Value::Dict& dict,
+                                               std::string_view key_name) {
   const std::string* value = dict.FindString(key_name);
   uint64_t ret = 0;
   if (value && base::StringToUint64(*value, &ret)) {
     return ret;
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 template <typename T>
@@ -86,7 +87,7 @@ bool FieldHasValue(const AppPtr& app, T App::*field) {
 }
 
 template <typename T>
-bool FieldHasValue(const AppPtr& app, absl::optional<T> App::*field) {
+bool FieldHasValue(const AppPtr& app, std::optional<T> App::*field) {
   return (app.get()->*field).has_value();
 }
 
@@ -101,19 +102,18 @@ base::Value GetValue(const AppPtr& app, T App::*field) {
 }
 
 template <typename T>
-base::Value GetValue(const AppPtr& app, absl::optional<T> App::*field) {
+base::Value GetValue(const AppPtr& app, std::optional<T> App::*field) {
   return base::Value((app.get()->*field).value());
 }
 
 template <>
-base::Value GetValue(const AppPtr& app,
-                     absl::optional<base::Time> App::*field) {
+base::Value GetValue(const AppPtr& app, std::optional<base::Time> App::*field) {
   return base::TimeToValue((app.get()->*field).value());
 }
 
 template <>
 base::Value GetValue(const AppPtr& app,
-                     absl::optional<base::Value::Dict> App::*field) {
+                     std::optional<base::Value::Dict> App::*field) {
   return base::Value(std::move((app.get()->*field).value()));
 }
 
@@ -144,13 +144,18 @@ base::Value GetValue(const AppPtr& app,
 
 template <>
 base::Value GetValue(const AppPtr& app,
-                     absl::optional<RunOnOsLogin> App::*field) {
+                     std::optional<RunOnOsLogin> App::*field) {
   return base::Value(ConvertRunOnOsLoginToDict((app.get()->*field).value()));
 }
 
 template <>
-base::Value GetValue(const AppPtr& app, absl::optional<uint64_t> App::*field) {
+base::Value GetValue(const AppPtr& app, std::optional<uint64_t> App::*field) {
   return base::Value(base::NumberToString((app.get()->*field).value()));
+}
+
+template <>
+base::Value GetValue(const AppPtr& app, std::optional<PackageId> App::*field) {
+  return base::Value((app.get()->*field)->ToString());
 }
 
 template <typename T>
@@ -268,6 +273,7 @@ base::Value AppStorageFileHandler::ConvertAppsToValue(
     SetKey(app, &App::name, kNameKey, dict);
     SetKey(app, &App::short_name, kShortNameKey, dict);
     SetKey(app, &App::publisher_id, kPublisherIdKey, dict);
+    SetKey(app, &App::installer_package_id, kInstallerPackageIdKey, dict);
     SetKey(app, &App::description, kDescriptionKey, dict);
     SetKey(app, &App::version, kVersionKey, dict);
     SetKey(app, &App::additional_search_terms, kAdditionalSearchTermsKey, dict);
@@ -352,6 +358,13 @@ std::unique_ptr<AppInfo> AppStorageFileHandler::ConvertValueToApps(
     app->name = GetStringValueFromDict(*value, kNameKey);
     app->short_name = GetStringValueFromDict(*value, kShortNameKey);
     app->publisher_id = GetStringValueFromDict(*value, kPublisherIdKey);
+
+    const std::string* package_id_string =
+        value->FindString(kInstallerPackageIdKey);
+    app->installer_package_id = package_id_string
+                                    ? PackageId::FromString(*package_id_string)
+                                    : std::nullopt;
+
     app->description = GetStringValueFromDict(*value, kDescriptionKey);
     app->version = GetStringValueFromDict(*value, kVersionKey);
 

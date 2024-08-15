@@ -5,7 +5,7 @@
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
-import * as Platform from '../../core/platform/platform.js';
+import type * as Platform from '../../core/platform/platform.js';
 import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
@@ -61,7 +61,7 @@ function getCurrentStyleSheet(
     url: Platform.DevToolsPath.UrlString, cssModel: SDK.CSSModel.CSSModel): Protocol.CSS.StyleSheetId {
   const currentStyleSheet = cssModel.getStyleSheetIdsForURL(url);
   if (currentStyleSheet.length === 0) {
-    Platform.DCHECK(() => currentStyleSheet.length !== 0, 'Can\'t find style sheet ID for current URL');
+    throw new Error('Can\'t find style sheet ID for current URL');
   }
 
   return currentStyleSheet[0];
@@ -253,7 +253,7 @@ function createCSSTooltip(active: ActiveTooltip): CodeMirror.Tooltip {
       let widget: UI.Widget.VBox, addListener: (handler: (event: {data: string}) => void) => void;
       if (active.type === TooltipType.Color) {
         const spectrum = new ColorPicker.Spectrum.Spectrum();
-        addListener = (handler): void => {
+        addListener = handler => {
           spectrum.addEventListener(ColorPicker.Spectrum.Events.ColorChanged, handler);
         };
         spectrum.addEventListener(ColorPicker.Spectrum.Events.SizeChanged, () => view.requestMeasure());
@@ -263,7 +263,7 @@ function createCSSTooltip(active: ActiveTooltip): CodeMirror.Tooltip {
       } else {
         const spectrum = new InlineEditor.BezierEditor.BezierEditor(active.curve);
         widget = spectrum;
-        addListener = (handler): void => {
+        addListener = handler => {
           spectrum.addEventListener(InlineEditor.BezierEditor.Events.BezierChanged, handler);
         };
       }
@@ -295,10 +295,10 @@ function createCSSTooltip(active: ActiveTooltip): CodeMirror.Tooltip {
         dom,
         resize: false,
         offset: {x: -8, y: 0},
-        mount: (): void => {
+        mount: () => {
           widget.focus();
           widget.wasShown();
-          addListener((event: {data: string}): void => {
+          addListener((event: {data: string}) => {
             view.dispatch({
               changes: {from: active.pos, to: active.pos + text.length, insert: event.data},
               annotations: isSwatchEdit.of(true),
@@ -414,7 +414,7 @@ export function cssBindings(): CodeMirror.Extension {
   });
 
   return CodeMirror.EditorView.domEventHandlers({
-    keydown: (event, view): boolean => {
+    keydown: (event, view) => {
       const prevView = currentView;
       currentView = view;
       listener(event);
@@ -484,7 +484,8 @@ export class CSSPlugin extends Plugin implements SDK.TargetManager.SDKModelObser
     if (this.uiSourceCode.project().type() === Workspace.Workspace.projectTypes.Network && cssModel &&
         !Bindings.IgnoreListManager.IgnoreListManager.instance().isUserIgnoreListedURL(url)) {
       const addSourceMapURLLabel = i18nString(UIStrings.addSourceMap);
-      contextMenu.debugSection().appendItem(addSourceMapURLLabel, () => addSourceMapURL(cssModel, url));
+      contextMenu.debugSection().appendItem(
+          addSourceMapURLLabel, () => addSourceMapURL(cssModel, url), {jslogContext: 'add-source-map'});
     }
   }
 }

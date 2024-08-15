@@ -61,10 +61,10 @@ To contribute change for review:
     ...
     git cl upload -t "Fixes goat teleporter destination to be Australia"
 
-See also [open bugs](https://bugs.chromium.org/p/chromium/issues/list?can=2&q=component%3AInfra%3ESDK),
+See also [open bugs](https://issues.chromium.org/issues?q=status:open%20componentid:1456102),
 [open reviews](https://chromium-review.googlesource.com/q/status:open+project:chromium%252Ftools%252Fdepot_tools),
 [forum](https://groups.google.com/a/chromium.org/forum/#!forum/infra-dev) or
-[report problems](https://bugs.chromium.org/p/chromium/issues/entry?components=Infra%3ESDK).
+[report problems](https://issues.chromium.org/issues/new?component=1456102).
 
 ### cpplint.py
 

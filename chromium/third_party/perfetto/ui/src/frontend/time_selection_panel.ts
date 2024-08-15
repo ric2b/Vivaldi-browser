@@ -14,13 +14,7 @@
 
 import m from 'mithril';
 
-import {
-  duration,
-  Span,
-  time,
-  Time,
-  TimeSpan,
-} from '../base/time';
+import {duration, Span, time, Time, TimeSpan} from '../base/time';
 import {timestampFormat, TimestampFormat} from '../common/timestamp_format';
 
 import {
@@ -53,7 +47,11 @@ export interface BBox {
 // The |bounds| bounding box gives the visible region, this is used to adjust
 // the positioning of the label to ensure it is on screen.
 function drawHBar(
-    ctx: CanvasRenderingContext2D, target: BBox, bounds: BBox, label: string) {
+  ctx: CanvasRenderingContext2D,
+  target: BBox,
+  bounds: BBox,
+  label: string,
+) {
   ctx.fillStyle = FOREGROUND_COLOR;
 
   const xLeft = Math.floor(target.x);
@@ -79,8 +77,11 @@ function drawHBar(
   // By default put the label in the middle of the H:
   let labelXLeft = Math.floor(xWidth / 2 - labelWidth / 2 + xLeft);
 
-  if (labelWidth > target.width || labelXLeft < bounds.x ||
-      (labelXLeft + labelWidth) > (bounds.x + bounds.width)) {
+  if (
+    labelWidth > target.width ||
+    labelXLeft < bounds.x ||
+    labelXLeft + labelWidth > bounds.x + bounds.width
+  ) {
     // It won't fit in the middle or would be at least partly out of bounds
     // so put it either to the left or right:
     if (xRight > bounds.x + bounds.width) {
@@ -103,7 +104,11 @@ function drawHBar(
 }
 
 function drawIBar(
-    ctx: CanvasRenderingContext2D, xPos: number, bounds: BBox, label: string) {
+  ctx: CanvasRenderingContext2D,
+  xPos: number,
+  bounds: BBox,
+  label: string,
+) {
   if (xPos < bounds.x) return;
 
   ctx.fillStyle = FOREGROUND_COLOR;
@@ -138,7 +143,7 @@ export class TimeSelectionPanel implements Panel {
 
   constructor(readonly key: string) {}
 
-  get mithril(): m.Children {
+  render(): m.Children {
     return m('.time-selection-panel');
   }
 
@@ -184,12 +189,17 @@ export class TimeSelectionPanel implements Panel {
     }
 
     for (const note of Object.values(globals.state.notes)) {
-      const noteIsSelected = selection !== null && selection.kind === 'AREA' &&
-          selection.noteId === note.id;
+      const noteIsSelected =
+        selection !== null &&
+        selection.kind === 'AREA' &&
+        selection.noteId === note.id;
       if (note.noteType === 'AREA' && !noteIsSelected) {
         const selectedArea = globals.state.areas[note.areaId];
         this.renderSpan(
-            ctx, size, new TimeSpan(selectedArea.start, selectedArea.end));
+          ctx,
+          size,
+          new TimeSpan(selectedArea.start, selectedArea.end),
+        );
       }
     }
 
@@ -205,22 +215,25 @@ export class TimeSelectionPanel implements Panel {
   }
 
   renderSpan(
-      ctx: CanvasRenderingContext2D, size: PanelSize,
-      span: Span<time, duration>) {
+    ctx: CanvasRenderingContext2D,
+    size: PanelSize,
+    span: Span<time, duration>,
+  ) {
     const {visibleTimeScale} = globals.timeline;
     const xLeft = visibleTimeScale.timeToPx(span.start);
     const xRight = visibleTimeScale.timeToPx(span.end);
     const label = renderDuration(span.duration);
     drawHBar(
-        ctx,
-        {
-          x: TRACK_SHELL_WIDTH + xLeft,
-          y: 0,
-          width: xRight - xLeft,
-          height: size.height,
-        },
-        this.bounds(size),
-        label);
+      ctx,
+      {
+        x: TRACK_SHELL_WIDTH + xLeft,
+        y: 0,
+        width: xRight - xLeft,
+        height: size.height,
+      },
+      this.bounds(size),
+      label,
+    );
   }
 
   private bounds(size: PanelSize): BBox {

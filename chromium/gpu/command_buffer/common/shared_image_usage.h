@@ -32,8 +32,8 @@ enum SharedImageUsage : uint32_t {
   // only use RasterInterface for OOP rasterization. TODO(backer): Eliminate
   // once we can CPU raster to SkImage via RasterInterface.
   SHARED_IMAGE_USAGE_OOP_RASTERIZATION = 1 << 6,
-  // Image will be used by Dawn (for WebGPU)
-  SHARED_IMAGE_USAGE_WEBGPU = 1 << 7,
+  // Image will be read by Dawn (for WebGPU)
+  SHARED_IMAGE_USAGE_WEBGPU_READ = 1 << 7,
   // Image may use concurrent read/write access. Used by single buffered canvas.
   // TODO(crbug.com/969114): This usage is currently not supported in GL/Vulkan
   // interop cases.
@@ -53,9 +53,11 @@ enum SharedImageUsage : uint32_t {
   // Image will be used in RasterInterface with RawDraw.
   SHARED_IMAGE_USAGE_RAW_DRAW = 1 << 14,
   // Image will be used in RasterInterface for DelegatedCompositing.
-  // TODO(crbug.com/1254033): this usage shall be removed after cc is able to
-  // set a single (duplicated) fence for bunch of tiles instead of having the SI
-  // framework creating fences for each single message when write access ends.
+  // This is intended to avoid the overhead of a GPU fence per tile.
+  // TODO(crbug.com/1519911): In order to delegate buffers we need all buffer
+  // allocations to be set as SCANOUT. This will cause a fence per rastered
+  // tiled. A new buffer concept that avoids scanout but allows delegation might
+  // enable us to remove this usage.
   SHARED_IMAGE_USAGE_RASTER_DELEGATED_COMPOSITING = 1 << 15,
   // Image will be created on the high performance GPU if supported.
   SHARED_IMAGE_USAGE_HIGH_PERFORMANCE_GPU = 1 << 16,
@@ -74,17 +76,33 @@ enum SharedImageUsage : uint32_t {
   // Image will be written via RasterInterface
   SHARED_IMAGE_USAGE_RASTER_WRITE = 1 << 20,
 
+  // Image will be written by Dawn (for WebGPU)
+  SHARED_IMAGE_USAGE_WEBGPU_WRITE = 1 << 21,
+
+  // The image will be used by GLES2 only for raster over the GLES2 interface.
+  // Specified in conjunction with GLES2_READ and/or GLES2_WRITE.
+  SHARED_IMAGE_USAGE_GLES2_FOR_RASTER_ONLY = 1 << 22,
+
+  // The image will be used by raster only over the GLES2 interface.
+  // Specified in conjunction with RASTER_READ and/or RASTER_WRITE.
+  SHARED_IMAGE_USAGE_RASTER_OVER_GLES2_ONLY = 1 << 23,
+
   // Start service side only usage flags after this entry. They must be larger
   // than `LAST_CLIENT_USAGE`.
-  LAST_CLIENT_USAGE = SHARED_IMAGE_USAGE_RASTER_WRITE,
+  LAST_CLIENT_USAGE = SHARED_IMAGE_USAGE_RASTER_OVER_GLES2_ONLY,
 
   // Image will have pixels uploaded from CPU. The backing must implement
   // `UploadFromMemory()` if it supports this usage. Clients should specify
   // SHARED_IMAGE_USAGE_CPU_WRITE if they need to write pixels to the image.
-  SHARED_IMAGE_USAGE_CPU_UPLOAD = 1 << 21,
+  SHARED_IMAGE_USAGE_CPU_UPLOAD = 1 << 24,
 
   LAST_SHARED_IMAGE_USAGE = SHARED_IMAGE_USAGE_CPU_UPLOAD
 };
+
+// This is used as the debug_label prefix for all shared images created by
+// importing buffers in Exo. This prefix is checked in the GPU process when
+// reporting if memory for shared images is attributed to exo imports or not.
+GPU_EXPORT extern const char kExoTextureLabelPrefix[];
 
 // Returns true if usage is a valid client usage.
 GPU_EXPORT bool IsValidClientUsage(uint32_t usage);

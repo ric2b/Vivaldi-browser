@@ -66,8 +66,8 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/password_manager/android/mock_password_checkup_launcher_helper.h"
-#include "chrome/browser/password_manager/android/password_manager_android_util.h"
 #include "chrome/browser/sync/sync_service_factory.h"
+#include "chrome/common/chrome_switches.h"
 #include "components/sync/test/test_sync_service.h"
 #endif
 
@@ -427,11 +427,12 @@ class ChromePasswordProtectionServiceTest
   }
 
   void SimulateRequestFinished(
-      LoginReputationClientResponse::VerdictType verdict_type) {
+      LoginReputationClientResponse::VerdictType verdict_type,
+      RequestOutcome request_outcome = RequestOutcome::SUCCEEDED) {
     std::unique_ptr<LoginReputationClientResponse> verdict =
         std::make_unique<LoginReputationClientResponse>();
     verdict->set_verdict_type(verdict_type);
-    service_->RequestFinished(request_.get(), RequestOutcome::SUCCEEDED,
+    service_->RequestFinished(request_.get(), request_outcome,
                               std::move(verdict));
   }
 
@@ -747,6 +748,8 @@ TEST_F(ChromePasswordProtectionServiceTest, VerifyGetOrganizationTypeGSuite) {
 }
 
 TEST_F(ChromePasswordProtectionServiceTest, VerifyUpdateSecurityState) {
+  using enum SBThreatType;
+
   GURL url("http://password_reuse_url.com");
   NavigateAndCommit(url);
   SBThreatType current_threat_type = SB_THREAT_TYPE_UNUSED;
@@ -774,8 +777,8 @@ TEST_F(ChromePasswordProtectionServiceTest, VerifyUpdateSecurityState) {
       web_contents(), false, &current_threat_type));
   EXPECT_EQ(SB_THREAT_TYPE_SIGNED_IN_SYNC_PASSWORD_REUSE, current_threat_type);
 
-  service_->UpdateSecurityState(safe_browsing::SB_THREAT_TYPE_SAFE,
-                                reused_password_type, web_contents());
+  service_->UpdateSecurityState(SB_THREAT_TYPE_SAFE, reused_password_type,
+                                web_contents());
   current_threat_type = SB_THREAT_TYPE_UNUSED;
   service_->ui_manager()->IsUrlAllowlistedOrPendingForWebContents(
       url, false, web_contents()->GetController().GetLastCommittedEntry(),
@@ -1263,6 +1266,23 @@ TEST_F(ChromePasswordProtectionServiceTest,
                    OnPolicySpecifiedPasswordChanged::kEventName));
 }
 
+TEST_F(
+    ChromePasswordProtectionServiceTest,
+    VerifyTriggerOnPolicySpecifiedPasswordReuseDetectedForEnterprisePasswordWithAlertMode) {
+  TestExtensionEventObserver event_observer(test_event_router_);
+  profile()->GetPrefs()->SetInteger(prefs::kPasswordProtectionWarningTrigger,
+                                    PASSWORD_REUSE);
+  NavigateAndCommit(GURL(kPasswordReuseURL));
+  PrepareRequest(LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
+                 PasswordType::ENTERPRISE_PASSWORD,
+                 /*is_warning_showing=*/false);
+  SimulateRequestFinished(LoginReputationClientResponse::SAFE,
+                          RequestOutcome::PASSWORD_ALERT_MODE);
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1, test_event_router_->GetEventCount(
+                   OnPolicySpecifiedPasswordReuseDetected::kEventName));
+}
+
 TEST_F(ChromePasswordProtectionServiceTest,
        VerifyTriggerOnPolicySpecifiedPasswordReuseDetectedForGsuiteUser) {
   TestExtensionEventObserver event_observer(test_event_router_);
@@ -1588,21 +1608,17 @@ class ChromePasswordProtectionServiceWithAccountPasswordStoreTest
  public:
   ChromePasswordProtectionServiceWithAccountPasswordStoreTest() {
 #if BUILDFLAG(IS_ANDROID)
-    // Using the account store on Android also requires UPM support for local
-    // passwords.
-    feature_list_.InitWithFeatures(
-        {password_manager::features::kEnablePasswordsAccountStorage,
-         password_manager::features::
-             kUnifiedPasswordManagerLocalPasswordsAndroidNoMigration},
-        {});
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        password_manager_android_util::
-            kSkipLocalUpmGmsCoreVersionCheckForTesting);
-#else
+    // Using the account store on Android requires enabling the flag for UPM
+    // support of local passwords. Skip the Gms version check, otherwise the
+    // flag won't do anything in bots that have outdated GmsCore.
     feature_list_.InitAndEnableFeature(
-        password_manager::features::kEnablePasswordsAccountStorage);
+        password_manager::features::
+            kUnifiedPasswordManagerLocalPasswordsAndroidNoMigration);
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kSkipLocalUpmGmsCoreVersionCheckForTesting);
 #endif
   }
+
  private:
   base::test::ScopedFeatureList feature_list_;
 };
@@ -1681,19 +1697,15 @@ class PasswordCheckupWithPhishGuardAfterPasswordStoreSplitAndroidTest
     : public PasswordCheckupWithPhishGuardTest {
  public:
   void SetUp() override {
-    PasswordCheckupWithPhishGuardTest::SetUp();
-    feature_list_.InitWithFeatures(
-        {password_manager::features::kEnablePasswordsAccountStorage,
-         password_manager::features::
-             kUnifiedPasswordManagerLocalPasswordsAndroidNoMigration},
-        {});
+    // Splitting the stores requires enabling the flag for UPM support of local
+    // passwords. Skip the Gms version check, otherwise the flag won't do
+    // anything in bots that have outdated GmsCore.
+    feature_list_.InitAndEnableFeature(
+        password_manager::features::
+            kUnifiedPasswordManagerLocalPasswordsAndroidNoMigration);
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        password_manager_android_util::
-            kSkipLocalUpmGmsCoreVersionCheckForTesting);
-    profile()->GetPrefs()->SetInteger(
-        password_manager::prefs::kPasswordsUseUPMLocalAndSeparateStores,
-        static_cast<int>(
-            password_manager::prefs::UseUpmLocalAndSeparateStoresState::kOn));
+        switches::kSkipLocalUpmGmsCoreVersionCheckForTesting);
+    PasswordCheckupWithPhishGuardTest::SetUp();
   }
 };
 
@@ -1711,7 +1723,7 @@ TEST_F(PasswordCheckupWithPhishGuardAfterPasswordStoreSplitAndroidTest,
   EXPECT_CALL(
       *mock_checkup_launcher_,
       LaunchCheckupOnDevice(
-          _, web_contents()->GetTopLevelNativeWindow(),
+          _, profile(), web_contents()->GetTopLevelNativeWindow(),
           password_manager::PasswordCheckReferrerAndroid::kPhishedWarningDialog,
           TestingProfile::kDefaultProfileUserName));
 
@@ -1732,7 +1744,7 @@ TEST_F(PasswordCheckupWithPhishGuardAfterPasswordStoreSplitAndroidTest,
   EXPECT_CALL(
       *mock_checkup_launcher_,
       LaunchCheckupOnDevice(
-          _, web_contents()->GetTopLevelNativeWindow(),
+          _, profile(), web_contents()->GetTopLevelNativeWindow(),
           password_manager::PasswordCheckReferrerAndroid::kPhishedWarningDialog,
           /*account=*/""));
 
@@ -1753,7 +1765,7 @@ TEST_F(PasswordCheckupWithPhishGuardAfterPasswordStoreSplitAndroidTest,
   EXPECT_CALL(
       *mock_checkup_launcher_,
       LaunchCheckupOnDevice(
-          _, web_contents()->GetTopLevelNativeWindow(),
+          _, profile(), web_contents()->GetTopLevelNativeWindow(),
           password_manager::PasswordCheckReferrerAndroid::kPhishedWarningDialog,
           /*account=*/""));
 
@@ -1783,15 +1795,10 @@ class PasswordCheckupWithPhishGuardUPMBeforeStoreSplitAndroidTest
     : public PasswordCheckupWithPhishGuardTest {
  public:
   void SetUp() override {
+    feature_list_.InitAndDisableFeature(
+        password_manager::features::
+            kUnifiedPasswordManagerLocalPasswordsAndroidNoMigration);
     PasswordCheckupWithPhishGuardTest::SetUp();
-    feature_list_.InitWithFeatures(
-        {}, {password_manager::features::kEnablePasswordsAccountStorage,
-             password_manager::features::
-                 kUnifiedPasswordManagerLocalPasswordsAndroidNoMigration});
-    profile()->GetPrefs()->SetInteger(
-        password_manager::prefs::kPasswordsUseUPMLocalAndSeparateStores,
-        static_cast<int>(
-            password_manager::prefs::UseUpmLocalAndSeparateStoresState::kOff));
   }
 };
 
@@ -1810,7 +1817,7 @@ TEST_F(
   EXPECT_CALL(
       *mock_checkup_launcher_,
       LaunchCheckupOnDevice(
-          _, web_contents()->GetTopLevelNativeWindow(),
+          _, profile(), web_contents()->GetTopLevelNativeWindow(),
           password_manager::PasswordCheckReferrerAndroid::kPhishedWarningDialog,
           /*account=*/""));
 
@@ -1831,7 +1838,7 @@ TEST_F(PasswordCheckupWithPhishGuardUPMBeforeStoreSplitAndroidTest,
   EXPECT_CALL(
       *mock_checkup_launcher_,
       LaunchCheckupOnDevice(
-          _, web_contents()->GetTopLevelNativeWindow(),
+          _, profile(), web_contents()->GetTopLevelNativeWindow(),
           password_manager::PasswordCheckReferrerAndroid::kPhishedWarningDialog,
           TestingProfile::kDefaultProfileUserName));
 

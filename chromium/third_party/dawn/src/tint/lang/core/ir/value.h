@@ -48,7 +48,7 @@ struct Usage {
     size_t operand_index = 0u;
 
     /// @returns the hash code of the Usage
-    size_t HashCode() const { return Hash(instruction, operand_index); }
+    tint::HashCode HashCode() const { return Hash(instruction, operand_index); }
 
     /// An equality helper for Usage.
     /// @param other the usage to compare against
@@ -100,7 +100,7 @@ class Value : public Castable<Value> {
     /// @param instruction the instruction
     /// @param operand_index the in
     bool HasUsage(const Instruction* instruction, size_t operand_index) const {
-        return uses_.Contains({const_cast<Instruction*>(instruction), operand_index});
+        return uses_.Contains(Usage{const_cast<Instruction*>(instruction), operand_index});
     }
 
     /// Apply a function to all uses of the value that exist prior to calling this method.

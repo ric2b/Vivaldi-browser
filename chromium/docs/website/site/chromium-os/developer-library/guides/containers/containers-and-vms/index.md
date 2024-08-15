@@ -533,17 +533,16 @@ list`.
 
 ### How can I run VMs with data images on external storage?
 
-If your ChromeOS uses v4.19+ kernel or in developer mode, you can run a VM with
-a disk images on external storage such as an SD card or a USB stick.
+You can run a VM with a disk image on external storage such as an SD card or a
+USB stick.
 
 If your USB stick is shown as `USB Drive` in the Files app, you can create an
 extra disk image there with the following command:
 
 ```bash
 # Allocate a 1GB data image on the inserted USB stick.
-crosh> vmc create-extra-disk --size=1G --removable-media "USB Drive/extra-disk.img"
-# Or, you can specify the full path.
-crosh> vmc create-extra-disk --size=1G "/media/removable/USB Drive/extra-disk.img"
+crosh> vmc create-extra-disk --size=1G extra-disk.img "USB Drive"
+A raw disk is created at /media/removable/USB Drive/extra-disk.img.
 ```
 
 Then, you can start a VM with the disk image mounted.
@@ -552,8 +551,6 @@ Then, you can start a VM with the disk image mounted.
 # Make sure the VM instance is stopped.
 crosh> vmc stop termina
 # Pass the image path with `--extra-disk` option to `vmc start`.
-# If you're on kernel < 4.19, you need to be in developer mode and pass in the
-# `--untrusted` flag.
 crosh> vmc start termina --extra-disk "/media/removable/USB Drive/extra-disk.img"
 ```
 
@@ -1066,7 +1063,7 @@ It's not that [crouton] is bad, it's simply a completely different model.
 [UTC]: https://en.wikipedia.org/wiki/Coordinated_Universal_Time
 [virtio]: http://docs.oasis-open.org/virtio/virtio/v1.0/virtio-v1.0.html
 [VM]: https://en.wikipedia.org/wiki/Virtual_machine
-[vmc]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/vm_tools/crostini_client/
+[vmc]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/vm_tools/vmc/
 [vsh]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/vm_tools/vsh/
 [Wayland]: https://wayland.freedesktop.org/
 [WINE]: https://www.winehq.org/

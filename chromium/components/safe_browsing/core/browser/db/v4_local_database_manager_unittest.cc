@@ -275,7 +275,8 @@ class TestClient : public SafeBrowsingDatabaseManager::Client {
                                 const std::string& threat_hash) override {
     ASSERT_EQ(expected_urls_[0], url);
     ASSERT_EQ(expected_sb_threat_type_, threat_type);
-    ASSERT_EQ(threat_type == SB_THREAT_TYPE_SAFE, threat_hash.empty());
+    ASSERT_EQ(threat_type == SBThreatType::SB_THREAT_TYPE_SAFE,
+              threat_hash.empty());
     on_check_resource_url_result_called_ = true;
   }
 
@@ -319,7 +320,8 @@ class TestAllowlistClient : public SafeBrowsingDatabaseManager::Client {
 
   void OnCheckAllowlistUrlResult(bool is_allowlisted) override {
     EXPECT_EQ(match_expected_, is_allowlisted);
-    EXPECT_EQ(SB_THREAT_TYPE_CSD_ALLOWLIST, expected_sb_threat_type_);
+    EXPECT_EQ(SBThreatType::SB_THREAT_TYPE_CSD_ALLOWLIST,
+              expected_sb_threat_type_);
     callback_called_ = true;
   }
 
@@ -392,6 +394,8 @@ class FakeV4LocalDatabaseManager : public V4LocalDatabaseManager {
 
 class V4LocalDatabaseManagerTest : public PlatformTest {
  public:
+  using enum SBThreatType;
+
   V4LocalDatabaseManagerTest() : task_runner_(new base::TestSimpleTaskRunner) {}
 
   void SetUp() override {
@@ -424,7 +428,7 @@ class V4LocalDatabaseManagerTest : public PlatformTest {
   }
 
   void TearDown() override {
-    StopLocalDatabaseManager();
+    ShutdownLocalDatabaseManager();
 
     PlatformTest::TearDown();
   }
@@ -1851,6 +1855,12 @@ TEST_F(V4LocalDatabaseManagerTest, TestQueuedChecksMatchArtificialPrefixes) {
       "mark_as_malware", "https://example.com/");
   WaitForTasksOnTaskRunner();
 
+  if (kMmapSafeBrowsingDatabaseAsync.Get()) {
+    EXPECT_FALSE(client.on_check_browse_url_result_called());
+    WaitForTasksOnTaskRunner();
+  }
+
+  EXPECT_TRUE(client.on_check_browse_url_result_called());
   EXPECT_TRUE(GetQueuedChecks().empty());
 }
 

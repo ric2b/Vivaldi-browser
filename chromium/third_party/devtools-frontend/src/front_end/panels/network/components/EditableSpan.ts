@@ -99,7 +99,7 @@ export class EditableSpan extends HTMLElement {
         class="editable"
         tabindex="0"
         .innerText=${this.#value}
-        jslog=${VisualLogging.textField().track({keydown: true}).context('header-editor')}
+        jslog=${VisualLogging.value('header-editor').track({keydown: 'Enter|Escape'})}
     </span>`, this.#shadow, {host: this});
     // clang-format on
   }
@@ -112,7 +112,7 @@ export class EditableSpan extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-editable-span', EditableSpan);
+customElements.define('devtools-editable-span', EditableSpan);
 
 declare global {
   interface HTMLElementTagNameMap {

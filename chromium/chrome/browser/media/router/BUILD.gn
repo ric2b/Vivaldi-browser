@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromeos/ui_mode.gni")
 import("//extensions/buildflags/buildflags.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
@@ -57,6 +58,10 @@ static_library("media_router_feature") {
     "//media",
   ]
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
+  if (is_chromeos_ash) {
+    deps += [ "//chromeos/ash/components/browser_context_helper" ]
+  }
 }
 
 static_library("router") {
@@ -338,10 +343,14 @@ source_set("unittests") {
       "providers/dial/dial_media_route_provider_unittest.cc",
       "providers/wired_display/wired_display_media_route_provider_unittest.cc",
     ]
+    if (is_win) {
+      sources += [ "discovery/discovery_network_list_win_unittest.cc" ]
+    }
     deps += [
       ":logger_list",
       ":test_support",
       "//chrome/browser/media/router/discovery",
+      "//chrome/browser/media/router/discovery:test_support",
       "//chrome/browser/media/router/discovery/access_code:access_code_cast_feature",
       "//chrome/browser/media/router/discovery/access_code:access_code_sink_service",
       "//chrome/browser/media/router/discovery/access_code:discovery_resources_proto",
@@ -374,7 +383,7 @@ source_set("unittests") {
 }
 
 # TODO(crbug.com/1290541): Fails to link on Fuchsia builds.
-# TODO(https://issuetracker.google.com/236160471): CDDL compiler doesn't build
+# TODO(issuetracker.google.com/236160471): CDDL compiler doesn't build
 # on Windows.
 if (!is_fuchsia && !is_win) {
   test("openscreen_unittests") {

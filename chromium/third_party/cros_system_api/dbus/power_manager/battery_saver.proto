@@ -7,7 +7,7 @@ syntax = "proto2";
 option optimize_for = LITE_RUNTIME;
 
 package power_manager;
-option go_package = "chromiumos/system_api/power_manager_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/power_manager_proto";
 
 // Request to manually set the state of Battery Saver Mode.
 //

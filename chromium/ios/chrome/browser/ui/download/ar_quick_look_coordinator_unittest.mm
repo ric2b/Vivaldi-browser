@@ -57,10 +57,8 @@ class ARQuickLookCoordinatorTest : public PlatformTest {
     // ARQuickLookTabHelper instances once started.
     auto web_state = std::make_unique<web::FakeWebState>();
     auto* web_state_ptr = web_state.get();
-    ARQuickLookTabHelper::CreateForWebState(web_state_ptr);
-    browser_->GetWebStateList()->InsertWebState(0, std::move(web_state),
-                                                WebStateList::INSERT_NO_FLAGS,
-                                                WebStateOpener());
+    ARQuickLookTabHelper::GetOrCreateForWebState(web_state_ptr);
+    browser_->GetWebStateList()->InsertWebState(std::move(web_state));
     [coordinator_ start];
   }
 
@@ -72,7 +70,7 @@ class ARQuickLookCoordinatorTest : public PlatformTest {
   }
 
   ARQuickLookTabHelper* tab_helper() {
-    return ARQuickLookTabHelper::FromWebState(web_state());
+    return ARQuickLookTabHelper::GetOrCreateForWebState(web_state());
   }
 
   // Needed for test browser state created by TestBrowser().
@@ -91,21 +89,21 @@ TEST_F(ARQuickLookCoordinatorTest, InstallDelegates) {
   // Coordinator should install itself as delegate for a new web state.
   auto web_state2 = std::make_unique<web::FakeWebState>();
   auto* web_state_ptr2 = web_state2.get();
-  ARQuickLookTabHelper::CreateForWebState(web_state_ptr2);
-  EXPECT_FALSE(ARQuickLookTabHelper::FromWebState(web_state_ptr2)->delegate());
-  browser_->GetWebStateList()->InsertWebState(0, std::move(web_state2),
-                                              WebStateList::INSERT_NO_FLAGS,
-                                              WebStateOpener());
-  EXPECT_TRUE(ARQuickLookTabHelper::FromWebState(web_state_ptr2)->delegate());
+  EXPECT_FALSE(
+      ARQuickLookTabHelper::GetOrCreateForWebState(web_state_ptr2)->delegate());
+  browser_->GetWebStateList()->InsertWebState(std::move(web_state2));
+  EXPECT_TRUE(
+      ARQuickLookTabHelper::GetOrCreateForWebState(web_state_ptr2)->delegate());
 
   // Coordinator should install itself as delegate for a web state replacing an
   // existing one.
   auto web_state3 = std::make_unique<web::FakeWebState>();
   auto* web_state_ptr3 = web_state3.get();
-  ARQuickLookTabHelper::CreateForWebState(web_state_ptr3);
-  EXPECT_FALSE(ARQuickLookTabHelper::FromWebState(web_state_ptr3)->delegate());
+  EXPECT_FALSE(
+      ARQuickLookTabHelper::GetOrCreateForWebState(web_state_ptr3)->delegate());
   browser_->GetWebStateList()->ReplaceWebStateAt(0, std::move(web_state3));
-  EXPECT_TRUE(ARQuickLookTabHelper::FromWebState(web_state_ptr3)->delegate());
+  EXPECT_TRUE(
+      ARQuickLookTabHelper::GetOrCreateForWebState(web_state_ptr3)->delegate());
 }
 
 // Tests presenting a valid USDZ file.

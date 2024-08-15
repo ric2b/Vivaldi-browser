@@ -565,6 +565,16 @@ NoteModelMerger::FindGuidMatchesOrReassignLocal(
     const vivaldi::NoteNode* const node = iterator.Next();
     DCHECK(node->uuid().is_valid());
 
+    // Ignore changes to non-syncable nodes. Managed nodes, which are
+    // unsyncable, use a random UUID so they should never match, but this
+    // codepath is useful when NoteModelMerger is used together with
+    // `NoteModelViewUsingAccountNodes`, which would otherwise match against
+    // local nodes. (Doesn't actually exist in Vivaldi either, but doesn't hurt
+    // to keep the code in sync with bookmarks.)
+    if (!notes_model->IsNodeSyncable(node)) {
+      continue;
+    }
+
     const auto remote_it = uuid_to_remote_node_map.find(node->uuid());
     if (remote_it == uuid_to_remote_node_map.end()) {
       continue;

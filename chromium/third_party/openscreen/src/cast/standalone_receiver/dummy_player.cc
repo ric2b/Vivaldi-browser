@@ -17,7 +17,7 @@ namespace openscreen::cast {
 using clock_operators::operator<<;
 
 DummyPlayer::DummyPlayer(Receiver* receiver) : receiver_(receiver) {
-  OSP_DCHECK(receiver_);
+  OSP_CHECK(receiver_);
   receiver_->SetConsumer(this);
 }
 

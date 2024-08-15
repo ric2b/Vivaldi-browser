@@ -5,7 +5,10 @@
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
+import * as Platform from '../../core/platform/platform.js';
+import type * as Root from '../../core/root/root.js';
 import * as IconButton from '../components/icon_button/icon_button.js';
+import * as VisualLogging from '../visual_logging/visual_logging.js';
 
 import * as ARIAUtils from './ARIAUtils.js';
 import {type ContextMenu} from './ContextMenu.js';
@@ -127,7 +130,7 @@ export class PreRegisteredView implements View {
     return this.viewRegistration.experiment;
   }
 
-  condition(): string|undefined {
+  condition(): Root.Runtime.Condition|undefined {
     return this.viewRegistration.condition;
   }
 }
@@ -144,7 +147,7 @@ export class ViewManager {
     this.locationNameByViewId = new Map();
 
     // Read override setting for location
-    this.locationOverrideSetting = Common.Settings.Settings.instance().createSetting('viewsLocationOverride', {});
+    this.locationOverrideSetting = Common.Settings.Settings.instance().createSetting('views-location-override', {});
     const preferredExtensionLocations = this.locationOverrideSetting.get();
 
     // Views may define their initial ordering within a location. When the user has not reordered, we use the
@@ -176,6 +179,9 @@ export class ViewManager {
       const location = view.location();
       if (this.views.has(viewId)) {
         throw new Error(`Duplicate view id '${viewId}'`);
+      }
+      if (!Platform.StringUtilities.isExtendedKebabCase(viewId)) {
+        throw new Error(`Invalid view ID '${viewId}'`);
       }
       this.views.set(viewId, view);
       // Use the preferred user location if available
@@ -328,8 +334,8 @@ export class ViewManager {
     return new TabbedLocation(this, revealCallback, location, restoreSelection, allowReorder, defaultTab);
   }
 
-  createStackLocation(revealCallback?: (() => void), location?: string): ViewLocation {
-    return new StackLocation(this, revealCallback, location);
+  createStackLocation(revealCallback?: (() => void), location?: string, jslogContext?: string): ViewLocation {
+    return new StackLocation(this, revealCallback, location, jslogContext);
   }
 
   hasViewsForLocation(location: string): boolean {
@@ -418,6 +424,10 @@ class ExpandableContainerWidget extends VBox {
 
     this.titleElement = document.createElement('div');
     this.titleElement.classList.add('expandable-view-title');
+    this.titleElement.setAttribute('jslog', `${VisualLogging.sectionHeader().context(view.viewId()).track({
+                                     click: true,
+                                     keydown: 'Enter|Space|ArrowLeft|ArrowRight',
+                                   })}`);
     ARIAUtils.markAsTreeitem(this.titleElement);
     this.titleExpandIcon = IconButton.Icon.create('triangle-right', 'title-expand-icon');
     this.titleElement.appendChild(this.titleExpandIcon);
@@ -590,15 +600,15 @@ class TabbedLocation extends Location implements TabbedViewLocation {
     this.tabbedPaneInternal.addEventListener(TabbedPaneEvents.TabSelected, this.tabSelected, this);
     this.tabbedPaneInternal.addEventListener(TabbedPaneEvents.TabClosed, this.tabClosed, this);
 
-    this.closeableTabSetting = Common.Settings.Settings.instance().createSetting('closeableTabs', {});
+    this.closeableTabSetting = Common.Settings.Settings.instance().createSetting('closeable-tabs', {});
     // As we give tabs the capability to be closed we also need to add them to the setting so they are still open
     // until the user decide to close them
     this.setOrUpdateCloseableTabsSetting();
 
-    this.tabOrderSetting = Common.Settings.Settings.instance().createSetting(location + '-tabOrder', {});
+    this.tabOrderSetting = Common.Settings.Settings.instance().createSetting(location + '-tab-order', {});
     this.tabbedPaneInternal.addEventListener(TabbedPaneEvents.TabOrderChanged, this.persistTabOrder, this);
     if (restoreSelection) {
-      this.lastSelectedTabSetting = Common.Settings.Settings.instance().createSetting(location + '-selectedTab', '');
+      this.lastSelectedTabSetting = Common.Settings.Settings.instance().createSetting(location + '-selected-tab', '');
     }
     this.defaultTab = defaultTab;
 
@@ -628,7 +638,7 @@ class TabbedLocation extends Location implements TabbedViewLocation {
   }
 
   enableMoreTabsButton(): ToolbarMenuButton {
-    const moreTabsButton = new ToolbarMenuButton(this.appendTabsToMenu.bind(this));
+    const moreTabsButton = new ToolbarMenuButton(this.appendTabsToMenu.bind(this), undefined, 'more-tabs');
     this.tabbedPaneInternal.leftToolbar().appendToolbarItem(moreTabsButton);
     this.tabbedPaneInternal.disableOverflowMenu();
     return moreTabsButton;
@@ -690,11 +700,12 @@ class TabbedLocation extends Location implements TabbedViewLocation {
         contextMenu.defaultSection().appendItem(title, () => {
           Host.userMetrics.issuesPanelOpenedFrom(Host.UserMetrics.IssueOpener.HamburgerMenu);
           void this.showView(view, undefined, true);
-        });
+        }, {jslogContext: 'issues-pane'});
         continue;
       }
 
-      contextMenu.defaultSection().appendItem(title, this.showView.bind(this, view, undefined, true));
+      contextMenu.defaultSection().appendItem(
+          title, this.showView.bind(this, view, undefined, true), {jslogContext: view.viewId()});
     }
   }
 
@@ -826,8 +837,9 @@ class StackLocation extends Location implements ViewLocation {
   private readonly vbox: VBox;
   private readonly expandableContainers: Map<string, ExpandableContainerWidget>;
 
-  constructor(manager: ViewManager, revealCallback?: (() => void), location?: string) {
+  constructor(manager: ViewManager, revealCallback?: (() => void), location?: string, jslogContext?: string) {
     const vbox = new VBox();
+    vbox.element.setAttribute('jslog', `${VisualLogging.pane(jslogContext || 'sidebar').track({resize: true})}`);
     super(manager, vbox, revealCallback);
     this.vbox = vbox;
     ARIAUtils.markAsTree(vbox.element);

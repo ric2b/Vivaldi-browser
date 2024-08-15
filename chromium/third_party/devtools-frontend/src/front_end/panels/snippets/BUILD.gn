@@ -4,6 +4,7 @@
 
 import("../../../scripts/build/ninja/devtools_entrypoint.gni")
 import("../../../scripts/build/ninja/devtools_module.gni")
+import("../../../third_party/typescript/typescript.gni")
 import("../visibility.gni")
 
 devtools_module("snippets") {
@@ -32,11 +33,27 @@ devtools_entrypoint("bundle") {
 
   visibility = [
     ":*",
-    "../../../test/unittests/front_end/entrypoints/missing_entrypoints/*",
     "../../entrypoints/*",
     "../changes/*",
     "../sources/*",
   ]
 
   visibility += devtools_panels_visibility
+}
+
+ts_library("unittests") {
+  testonly = true
+
+  sources = [ "ScriptSnippetFileSystem.test.ts" ]
+
+  deps = [
+    ":bundle",
+    "../../core/common:bundle",
+    "../../core/platform:bundle",
+    "../../core/sdk:bundle",
+    "../../models/persistence:bundle",
+    "../../models/workspace:bundle",
+    "../../testing",
+    "../../ui/legacy:bundle",
+  ]
 }

@@ -22,6 +22,7 @@ uvec3 tint_first_leading_bit(uvec3 v) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   uvec3 inner;
+  uint pad;
 } prevent_dce;
 
 void firstLeadingBit_3fd7d0() {
@@ -45,6 +46,7 @@ void main() {
 }
 #version 310 es
 precision highp float;
+precision highp int;
 
 uvec3 tint_select(uvec3 param_0, uvec3 param_1, bvec3 param_2) {
     return uvec3(param_2[0] ? param_1[0] : param_0[0], param_2[1] ? param_1[1] : param_0[1], param_2[2] ? param_1[2] : param_0[2]);
@@ -68,6 +70,7 @@ uvec3 tint_first_leading_bit(uvec3 v) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   uvec3 inner;
+  uint pad;
 } prevent_dce;
 
 void firstLeadingBit_3fd7d0() {
@@ -108,6 +111,7 @@ uvec3 tint_first_leading_bit(uvec3 v) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   uvec3 inner;
+  uint pad;
 } prevent_dce;
 
 void firstLeadingBit_3fd7d0() {

@@ -110,12 +110,13 @@ than 'Prior to this commit'. The commit is written based on the current state of
 the world (present tense), and takes some action based on that. Discussions
 about the state before and after this commit just confuse things.
 
-The subject should be no more than 50 characters, including any tags. The tags
-indicate the subsystem the commit relates to. Capitalize the first word after
-the final tag but do not add a period at the end. You can include identifiers
-or filenames from the code in your subject, although this is somewhat rare,
-since often you can just reference the topic or feature. When you do add
-identifiers / filenames, use the same case in the subject.
+Make the subject line readable and concise. Aim for 60 characters including any
+tags, but consider 72 the hard limit when feasible. The tags indicate the
+subsystem the commit relates to. Capitalize the first word after the final tag
+but do not add a period at the end. You can include identifiers or filenames
+from the code in your subject, although this is somewhat rare, since often you
+can just reference the topic or feature. When you do add identifiers /
+filenames, use the same case in the subject.
 
 Examples of bad subjects and how to improve them:
 
@@ -968,7 +969,7 @@ wouldn't protect from [insider threats].
 [FAQ]: #faq
 [Gerrit]: https://gerrit-review.googlesource.com/Documentation/
 [Gerrit Guide]: https://dev.chromium.org/chromium-os/developer-guide/gerrit-guide
-[Gerrit OWNERS documentation]: https://gerrit.googlesource.com/plugins/code-owners/+/HEAD/resources/Documentation/how-to-use.md#add-code-owners-to-your-change
+[Gerrit OWNERS documentation]: https://chromium-review.googlesource.com/plugins/code-owners/Documentation/how-to-use.html#add-code-owners-to-your-change
 [Git & Gerrit Intro]: git_and_gerrit_intro.md
 [Gitiles]: https://gerrit.googlesource.com/gitiles/
 [insider threats]: https://en.wikipedia.org/wiki/Insider_threat

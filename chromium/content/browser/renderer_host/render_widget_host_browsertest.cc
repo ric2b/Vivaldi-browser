@@ -36,7 +36,6 @@
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/test/content_browser_test_utils_internal.h"
-#include "content/test/mock_display_feature.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -50,6 +49,7 @@
 
 #if BUILDFLAG(IS_MAC)
 #include "third_party/blink/public/mojom/choosers/popup_menu.mojom-blink.h"
+#include "third_party/blink/public/mojom/frame/frame.mojom-test-utils.h"
 #endif
 
 namespace content {
@@ -891,10 +891,9 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
         return !!document.fullscreenElement;
     });
   )JS";
-  MockDisplayFeature mock_display_feature(view());
   // Initial state. This will ensure that no display feature/viewport segments
   // are coming from the platform.
-  mock_display_feature.SetDisplayFeature(nullptr);
+  view()->SetDisplayFeatureForTesting(nullptr);
   host()->SynchronizeVisualProperties();
   ASSERT_TRUE(EvalJs(web_contents(), kEnterFullscreenScript).ExtractBool());
 
@@ -906,7 +905,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
   DisplayFeature emulated_display_feature{
       DisplayFeature::Orientation::kVertical, offset,
       /* mask_length */ kDisplayFeatureLength};
-  mock_display_feature.SetDisplayFeature(&emulated_display_feature);
+  view()->SetDisplayFeatureForTesting(&emulated_display_feature);
   host()->SynchronizeVisualProperties();
   WaitForVisualPropertiesAck();
   EXPECT_EQ(base::NumberToString(offset) + "px",
@@ -919,7 +918,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
       DisplayFeature::Orientation::kHorizontal;
   offset = root_view_size.height() / 2 - kDisplayFeatureLength / 2;
   emulated_display_feature.offset = offset;
-  mock_display_feature.SetDisplayFeature(&emulated_display_feature);
+  view()->SetDisplayFeatureForTesting(&emulated_display_feature);
   host()->SynchronizeVisualProperties();
   WaitForVisualPropertiesAck();
   EXPECT_EQ(base::NumberToString(offset) + "px",
@@ -930,7 +929,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
 
   // No display feature/viewport segments are set, the video should go
   // fullscreen.
-  mock_display_feature.SetDisplayFeature(nullptr);
+  view()->SetDisplayFeatureForTesting(nullptr);
   host()->SynchronizeVisualProperties();
   WaitForVisualPropertiesAck();
   EXPECT_EQ(
@@ -949,7 +948,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
   ASSERT_FALSE(web_contents()->IsFullscreen());
 
   // Change the viewport segments/display feature before entering fullscreen.
-  mock_display_feature.SetDisplayFeature(&emulated_display_feature);
+  view()->SetDisplayFeatureForTesting(&emulated_display_feature);
   ASSERT_TRUE(EvalJs(web_contents(), kEnterFullscreenScript).ExtractBool());
   host()->SynchronizeVisualProperties();
   WaitForVisualPropertiesAck();
@@ -960,7 +959,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
       EvalJs(shell(), "parseInt(getComputedStyle(video).width)").ExtractInt());
 }
 
-// Tests that the renderer receives the root widget's window segments and
+// Tests that the renderer receives the root widget's viewport segments and
 // correctly exposes those via CSS.
 // TODO(crbug.com/1098549) Convert this to a WPT once emulation is available
 // via WebDriver.
@@ -1039,8 +1038,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
   DisplayFeature emulated_display_feature{
       DisplayFeature::Orientation::kVertical, offset,
       /* mask_length */ kDisplayFeatureLength};
-  MockDisplayFeature mock_display_feature(view());
-  mock_display_feature.SetDisplayFeature(&emulated_display_feature);
+  view()->SetDisplayFeatureForTesting(&emulated_display_feature);
   host()->SynchronizeVisualProperties();
 
   EXPECT_EQ(
@@ -1071,7 +1069,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
   offset = root_view_size.height() / 2 - kDisplayFeatureLength / 2;
   emulated_display_feature.offset = offset;
 
-  mock_display_feature.SetDisplayFeature(&emulated_display_feature);
+  view()->SetDisplayFeatureForTesting(&emulated_display_feature);
   host()->SynchronizeVisualProperties();
 
   EXPECT_EQ(
@@ -1097,7 +1095,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
       "0.3",
       EvalJs(shell(), "getComputedStyle(target).opacity").ExtractString());
 
-  mock_display_feature.SetDisplayFeature(nullptr);
+  view()->SetDisplayFeatureForTesting(nullptr);
   host()->SynchronizeVisualProperties();
 
   EXPECT_EQ(
@@ -1145,8 +1143,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
       DisplayFeature::Orientation::kVertical, offset,
       /* mask_length */ kDisplayFeatureLength};
   {
-    MockDisplayFeature mock_display_feature(view());
-    mock_display_feature.SetDisplayFeature(&emulated_display_feature);
+    view()->SetDisplayFeatureForTesting(&emulated_display_feature);
     host()->SynchronizeVisualProperties();
   }
 
@@ -1168,8 +1165,8 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
         navigation_manager.GetNavigationHandle()
             ->GetRenderFrameHost()
             ->GetRenderWidgetHost());
-    MockDisplayFeature mock_display_feature(target_rwh->GetView());
-    mock_display_feature.SetDisplayFeature(&emulated_display_feature);
+    target_rwh->GetView()->SetDisplayFeatureForTesting(
+        &emulated_display_feature);
     target_rwh->SynchronizeVisualProperties();
   }
   EXPECT_TRUE(navigation_manager.WaitForNavigationFinished());

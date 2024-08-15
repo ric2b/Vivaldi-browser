@@ -69,7 +69,7 @@ source_set("eg2_tests") {
     "//build:branding_buildflags",
     "//components/search_engines",
     "//ios/chrome/app/strings",
-    "//ios/chrome/browser/promos_manager:features",
+    "//ios/chrome/browser/promos_manager/model:features",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/ui/authentication:eg_test_support+eg2",
@@ -78,7 +78,26 @@ source_set("eg2_tests") {
     "//ios/chrome/test/earl_grey:eg_test_support+eg2",
     "//ios/chrome/test/earl_grey:switches",
     "//ios/testing/earl_grey:eg_test_support+eg2",
+    "//ios/testing/earl_grey:launch_configuration",
     "//ui/base",
   ]
   frameworks = [ "UIKit.framework" ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [ "metrics_unittest.mm" ]
+  deps = [
+    ":omnibox_position_ui",
+    "//base/test:test_support",
+    "//components/prefs",
+    "//components/prefs:test_support",
+    "//components/segmentation_platform/embedder/default_model",
+    "//components/segmentation_platform/public",
+    "//components/segmentation_platform/public:test_support",
+    "//components/sync_device_info",
+    "//components/sync_device_info:test_support",
+    "//ios/chrome/browser/shared/model/utils:test_support",
+    "//testing/gtest",
+  ]
 }

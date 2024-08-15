@@ -118,7 +118,7 @@ class CORE_EXPORT HTMLImageElement final
   int x() const;
   int y() const;
 
-  ScriptPromise decode(ScriptState*, ExceptionState&);
+  ScriptPromiseTyped<IDLUndefined> decode(ScriptState*, ExceptionState&);
 
   bool complete() const;
 
@@ -151,7 +151,7 @@ class CORE_EXPORT HTMLImageElement final
 
   void SetIsFallbackImage() { is_fallback_image_ = true; }
 
-  absl::optional<float> GetResourceWidth() const;
+  std::optional<float> GetResourceWidth() const;
   float SourceSize(Element&);
 
   void ForceReload() const;

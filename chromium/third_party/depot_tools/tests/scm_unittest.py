@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from testing_support import fake_repos
 
 import scm
+import subprocess
 import subprocess2
 
 
@@ -29,10 +30,11 @@ class GitWrapperTestCase(unittest.TestCase):
 
     @mock.patch('scm.GIT.Capture')
     def testGetEmail(self, mockCapture):
-        mockCapture.return_value = 'mini@me.com'
+        mockCapture.return_value = 'user.email\nmini@me.com\x00'
         self.assertEqual(scm.GIT.GetEmail(self.root_dir), 'mini@me.com')
-        mockCapture.assert_called_with(['config', 'user.email'],
-                                       cwd=self.root_dir)
+        mockCapture.assert_called_with(['config', '--list', '-z'],
+                                       cwd=self.root_dir,
+                                       strip_out=False)
 
     def testRefToRemoteRef(self):
         remote = 'origin'
@@ -132,14 +134,19 @@ class GitWrapperTestCase(unittest.TestCase):
         actual_state = scm.GIT.IsVersioned('cwd', 'dir')
         self.assertEqual(actual_state, scm.VERSIONED_DIR)
 
-    @mock.patch('scm.GIT.Capture')
     @mock.patch('os.path.exists', return_value=True)
-    def testListSubmodules(self, mockExists, mockCapture):
+    @mock.patch('scm.GIT.Capture')
+    def testListSubmodules(self, mockCapture, *_mock):
         mockCapture.return_value = (
             'submodule.submodulename.path foo/path/script'
             '\nsubmodule.submodule2name.path foo/path/script2')
         actual_list = scm.GIT.ListSubmodules('root')
-        self.assertEqual(actual_list, ['foo/path/script', 'foo/path/script2'])
+        if sys.platform.startswith('win'):
+            self.assertEqual(actual_list,
+                             ['foo\\path\\script', 'foo\\path\\script2'])
+        else:
+            self.assertEqual(actual_list,
+                             ['foo/path/script', 'foo/path/script2'])
 
     def testListSubmodules_missing(self):
         self.assertEqual(scm.GIT.ListSubmodules('root'), [])
@@ -201,10 +208,66 @@ class RealGitTest(fake_repos.FakeReposTestBase):
         self.assertEqual('set-value',
                          scm.GIT.GetConfig(self.cwd, key, 'default-value'))
 
+        scm.GIT.SetConfig(self.cwd, key, '')
+        self.assertEqual('', scm.GIT.GetConfig(self.cwd, key))
+        self.assertEqual('', scm.GIT.GetConfig(self.cwd, key, 'default-value'))
+
+        scm.GIT._clear_config(self.cwd)
+        subprocess.run(['git', 'config', key, 'line 1\nline 2\nline 3'],
+                       cwd=self.cwd)
+        self.assertEqual('line 1\nline 2\nline 3',
+                         scm.GIT.GetConfig(self.cwd, key))
+        self.assertEqual('line 1\nline 2\nline 3',
+                         scm.GIT.GetConfig(self.cwd, key, 'default-value'))
+
         scm.GIT.SetConfig(self.cwd, key)
         self.assertIsNone(scm.GIT.GetConfig(self.cwd, key))
         self.assertEqual('default-value',
                          scm.GIT.GetConfig(self.cwd, key, 'default-value'))
+
+    def testGetSetConfigBool(self):
+        key = 'scm.test-key'
+        self.assertFalse(scm.GIT.GetConfigBool(self.cwd, key))
+
+        scm.GIT.SetConfig(self.cwd, key, 'true')
+        self.assertTrue(scm.GIT.GetConfigBool(self.cwd, key))
+
+        scm.GIT.SetConfig(self.cwd, key)
+        self.assertFalse(scm.GIT.GetConfigBool(self.cwd, key))
+
+    def testGetSetConfigList(self):
+        key = 'scm.test-key'
+        self.assertListEqual([], scm.GIT.GetConfigList(self.cwd, key))
+
+        scm.GIT.SetConfig(self.cwd, key, 'foo')
+        scm.GIT.Capture(['config', '--add', key, 'bar'], cwd=self.cwd)
+        self.assertListEqual(['foo', 'bar'],
+                             scm.GIT.GetConfigList(self.cwd, key))
+
+        scm.GIT.SetConfig(self.cwd, key, modify_all=True, value_pattern='^f')
+        self.assertListEqual(['bar'], scm.GIT.GetConfigList(self.cwd, key))
+
+        scm.GIT.SetConfig(self.cwd, key)
+        self.assertListEqual([], scm.GIT.GetConfigList(self.cwd, key))
+
+    def testYieldConfigRegexp(self):
+        key1 = 'scm.aaa'
+        key2 = 'scm.aaab'
+
+        config = scm.GIT.YieldConfigRegexp(self.cwd, key1)
+        with self.assertRaises(StopIteration):
+            next(config)
+
+        scm.GIT.SetConfig(self.cwd, key1, 'foo')
+        scm.GIT.SetConfig(self.cwd, key2, 'bar')
+        scm.GIT.Capture(['config', '--add', key2, 'baz'], cwd=self.cwd)
+
+        config = scm.GIT.YieldConfigRegexp(self.cwd, '^scm\\.aaa')
+        self.assertEqual((key1, 'foo'), next(config))
+        self.assertEqual((key2, 'bar'), next(config))
+        self.assertEqual((key2, 'baz'), next(config))
+        with self.assertRaises(StopIteration):
+            next(config)
 
     def testGetSetBranchConfig(self):
         branch = scm.GIT.GetBranch(self.cwd)

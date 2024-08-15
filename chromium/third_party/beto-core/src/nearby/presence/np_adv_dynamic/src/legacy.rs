@@ -20,7 +20,7 @@ use np_adv::legacy::serialize::*;
 use np_adv::legacy::*;
 use np_adv::shared_data::*;
 use np_adv::PublicIdentity;
-use thiserror::Error;
+use std::fmt::{Display, Formatter};
 
 /// Wrapper around a V0 advertisement builder which
 /// is agnostic to the kind of identity used in the advertisement.
@@ -112,21 +112,32 @@ impl<C: CryptoProvider> BoxedAdvBuilder<C> {
 
 /// Possible errors generated when trying to add a DE to a
 /// BoxedAdvBuilder.
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum BoxedAddDataElementError {
     /// Some kind of error in adding the data element which
     /// is not an issue with trying to add a DE of the incorrect
     /// packet flavoring.
-    #[error("{0:?}")]
     UnderlyingError(AddDataElementError),
-    #[error(
-        "Expected packet flavoring for added DEs does not match the actual packet flavor of the DE"
-    )]
     /// Error when attempting to add a DE which requires one
     /// of an (encrypted/plaintext) advertisement, but the
     /// advertisement builder doesn't match this requirement.
     FlavorMismatchError,
 }
+
+impl Display for BoxedAddDataElementError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BoxedAddDataElementError::UnderlyingError(u) => {
+                write!(f, "{0:?}", u)
+            }
+            BoxedAddDataElementError::FlavorMismatchError => {
+                write!(f, "Expected packet flavoring for added DEs does not match the actual packet flavor of the DE")
+            }
+        }
+    }
+}
+
+impl std::error::Error for BoxedAddDataElementError {}
 
 impl From<AddDataElementError> for BoxedAddDataElementError {
     fn from(add_data_element_error: AddDataElementError) -> Self {
@@ -284,6 +295,18 @@ pub enum BoxedActionBits {
     Ciphertext(ActionBits<Ciphertext>),
 }
 
+impl From<ActionBits<Plaintext>> for BoxedActionBits {
+    fn from(bits: ActionBits<Plaintext>) -> Self {
+        Self::Plaintext(bits)
+    }
+}
+
+impl From<ActionBits<Ciphertext>> for BoxedActionBits {
+    fn from(bits: ActionBits<Ciphertext>) -> Self {
+        Self::Ciphertext(bits)
+    }
+}
+
 /// Error which is raised when the flavor of a [`BoxedActionBits`]
 /// does not match the supported flavors of a [`ToBoxedActionElement`]
 /// upon attempting to add the action to the bit-field.
@@ -297,6 +320,24 @@ impl BoxedActionBits {
         match packet_flavor {
             PacketFlavorEnum::Plaintext => BoxedActionBits::Plaintext(ActionBits::default()),
             PacketFlavorEnum::Ciphertext => BoxedActionBits::Ciphertext(ActionBits::default()),
+        }
+    }
+
+    /// Gets the context-sync sequence number from these boxed action bits.
+    pub fn get_context_sync_seq_num(&self) -> ContextSyncSeqNum {
+        match self {
+            BoxedActionBits::Plaintext(x) => x.context_sync_seq_num(),
+            BoxedActionBits::Ciphertext(x) => x.context_sync_seq_num(),
+        }
+    }
+
+    /// Returns whether a boolean action type is set in these action bits, or `None`
+    /// if the given action type does not represent a boolean (e.g: a context-sync
+    /// sequence number).
+    pub fn has_action(&self, action_type: &ActionType) -> Option<bool> {
+        match self {
+            BoxedActionBits::Plaintext(x) => x.has_action(action_type),
+            BoxedActionBits::Ciphertext(x) => x.has_action(action_type),
         }
     }
 

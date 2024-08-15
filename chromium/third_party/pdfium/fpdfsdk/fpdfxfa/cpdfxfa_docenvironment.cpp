@@ -13,6 +13,7 @@
 #include "core/fpdfapi/parser/cpdf_stream.h"
 #include "core/fpdfapi/parser/cpdf_stream_acc.h"
 #include "core/fpdfapi/parser/cpdf_string.h"
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/retain_ptr.h"
 #include "fpdfsdk/cpdfsdk_formfillenvironment.h"
 #include "fpdfsdk/cpdfsdk_helpers.h"
@@ -20,7 +21,6 @@
 #include "fpdfsdk/cpdfsdk_pageview.h"
 #include "fpdfsdk/fpdfxfa/cpdfxfa_context.h"
 #include "fpdfsdk/fpdfxfa/cpdfxfa_page.h"
-#include "third_party/base/check.h"
 #include "xfa/fxfa/cxfa_ffdocview.h"
 #include "xfa/fxfa/cxfa_ffwidget.h"
 #include "xfa/fxfa/cxfa_ffwidgethandler.h"
@@ -503,7 +503,7 @@ void CPDFXFA_DocEnvironment::ExportData(CXFA_FFDoc* hDoc,
         continue;
       }
       if (i == pArray->size() - 1) {
-        WideString wPath = WideString::FromUTF16LE(bs.raw_span());
+        WideString wPath = WideString::FromUTF16LE(bs.unsigned_span());
         ByteString bPath = wPath.ToUTF8();
         static const char kFormat[] =
             "\n<pdf href=\"%s\" xmlns=\"http://ns.adobe.com/xdp/pdf/\"/>";
@@ -659,12 +659,11 @@ bool CPDFXFA_DocEnvironment::MailToInfo(WideString& csURL,
                                         WideString& csSubject,
                                         WideString& csMsg) {
   WideString srcURL = csURL;
-  srcURL.TrimLeft();
-  if (srcURL.Left(7).CompareNoCase(L"mailto:") != 0)
+  srcURL.TrimWhitespaceFront();
+  if (!srcURL.Left(7).EqualsASCIINoCase("mailto:")) {
     return false;
-
+  }
   auto pos = srcURL.Find(L'?');
-
   {
     WideString tmp;
     if (!pos.has_value()) {
@@ -677,33 +676,31 @@ bool CPDFXFA_DocEnvironment::MailToInfo(WideString& csURL,
       tmp = srcURL.Left(pos.value());
       tmp = tmp.Right(tmp.GetLength() - 7);
     }
-    tmp.Trim();
+    tmp.TrimWhitespace();
     csToAddress = std::move(tmp);
   }
 
   srcURL = srcURL.Right(srcURL.GetLength() - (pos.value() + 1));
   while (!srcURL.IsEmpty()) {
-    srcURL.Trim();
+    srcURL.TrimWhitespace();
     pos = srcURL.Find(L'&');
     WideString tmp = (!pos.has_value()) ? srcURL : srcURL.Left(pos.value());
-    tmp.Trim();
-    if (tmp.GetLength() >= 3 && tmp.Left(3).CompareNoCase(L"cc=") == 0) {
+    tmp.TrimWhitespace();
+    if (tmp.GetLength() >= 3 && tmp.Left(3).EqualsASCIINoCase("cc=")) {
       tmp = tmp.Right(tmp.GetLength() - 3);
       if (!csCCAddress.IsEmpty())
         csCCAddress += L';';
       csCCAddress += tmp;
-    } else if (tmp.GetLength() >= 4 &&
-               tmp.Left(4).CompareNoCase(L"bcc=") == 0) {
+    } else if (tmp.GetLength() >= 4 && tmp.Left(4).EqualsASCIINoCase("bcc=")) {
       tmp = tmp.Right(tmp.GetLength() - 4);
       if (!csBCCAddress.IsEmpty())
         csBCCAddress += L';';
       csBCCAddress += tmp;
     } else if (tmp.GetLength() >= 8 &&
-               tmp.Left(8).CompareNoCase(L"subject=") == 0) {
+               tmp.Left(8).EqualsASCIINoCase("subject=")) {
       tmp = tmp.Right(tmp.GetLength() - 8);
       csSubject += tmp;
-    } else if (tmp.GetLength() >= 5 &&
-               tmp.Left(5).CompareNoCase(L"body=") == 0) {
+    } else if (tmp.GetLength() >= 5 && tmp.Left(5).EqualsASCIINoCase("body=")) {
       tmp = tmp.Right(tmp.GetLength() - 5);
       csMsg += tmp;
     }
@@ -920,7 +917,7 @@ bool CPDFXFA_DocEnvironment::SubmitInternal(CXFA_FFDoc* hDoc,
   switch (submit->GetSubmitFormat()) {
     case XFA_AttributeValue::Xdp: {
       WideString csContent = submit->GetSubmitXDPContent();
-      csContent.Trim();
+      csContent.TrimWhitespace();
 
       WideString space = WideString::FromDefANSI(" ");
       csContent = space + csContent + space;
@@ -952,7 +949,7 @@ bool CPDFXFA_DocEnvironment::SubmitInternal(CXFA_FFDoc* hDoc,
   if (!pFileHandler)
     return false;
 
-  if (csURL.Left(7).CompareNoCase(L"mailto:") == 0) {
+  if (csURL.Left(7).EqualsASCIINoCase("mailto:")) {
     WideString csToAddress;
     WideString csCCAddress;
     WideString csBCCAddress;

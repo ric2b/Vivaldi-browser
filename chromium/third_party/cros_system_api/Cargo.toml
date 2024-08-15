@@ -10,5 +10,5 @@ chromeos-dbus-bindings = { path = "../chromeos-dbus-bindings"} # provided by ebu
 protobuf-codegen = "3.2"
 
 [dependencies]
-dbus = "0.9"
+dbus = { version = "0.9.7", features = ["stdfd"] }
 protobuf = "3.2"

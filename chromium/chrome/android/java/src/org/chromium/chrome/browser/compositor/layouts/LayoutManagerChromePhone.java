@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.compositor.layouts;
 import android.content.Context;
 import android.view.ViewGroup;
 
-import org.chromium.base.ContextUtils;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
@@ -33,6 +32,7 @@ import android.content.SharedPreferences;
 import android.view.View;
 import android.view.ViewStub;
 
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
@@ -57,6 +57,10 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
     private SharedPreferences.OnSharedPreferenceChangeListener mPrefsListener;
     /** A {@link TitleCache} instance that stores all title/favicon bitmaps as CC resources. */
     protected LayerTitleCache mLayerTitleCache;
+
+    // Vivaldi
+    protected ObservableSupplierImpl<LayerTitleCache> mLayerTitleCacheSupplier =
+            new ObservableSupplierImpl<>();
 
     /**
      * Creates an instance of a {@link LayoutManagerChromePhone}.
@@ -114,8 +118,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         for (int i = 0; i < 2; i++) {
             mTabStrips.add(new StripLayoutHelperManager(mHost.getContext(), host, this,
                     mHost.getLayoutRenderHost(),
-                    ()
-                            -> mLayerTitleCache,
+                    mLayerTitleCacheSupplier,
                     tabModelStartupInfoSupplier, lifecycleDispatcher, multiInstanceManager,
                     dragAndDropDelegate, toolbarContainerView, tabHoverCardViewStub,
                     tabContentManagerSupplier, browserControlsStateProvider, windowAndroid,
@@ -155,6 +158,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         if (DeviceClassManager.enableLayerDecorationCache()) {
             mLayerTitleCache = new LayerTitleCache(mHost.getContext(), getResourceManager());
             mLayerTitleCache.setTabModelSelector(selector);
+            mLayerTitleCacheSupplier.set(mLayerTitleCache);
         }
     }
 
@@ -263,16 +267,9 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
 
     // Vivaldi
     @Override
-    protected void emptyTabCachesExcept(int tabId) {
-        super.emptyTabCachesExcept(tabId);
-        if (mLayerTitleCache != null) mLayerTitleCache.clearExcept(tabId);
-    }
-
-    // Vivaldi
-    @Override
     public void initLayoutTabFromHost(final int tabId) {
         if (mLayerTitleCache != null) {
-            mLayerTitleCache.remove(tabId);
+            mLayerTitleCache.removeTabTitle(tabId);
         }
         super.initLayoutTabFromHost(tabId);
     }
@@ -280,7 +277,9 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
     // Vivaldi
     @Override
     public void releaseTabLayout(int id) {
-        mLayerTitleCache.remove(id);
+        if (mLayerTitleCache != null) {
+            mLayerTitleCache.removeTabTitle(id);
+        }
         super.releaseTabLayout(id);
     }
 
@@ -288,7 +287,9 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
     @Override
     public void releaseResourcesForTab(int tabId) {
         super.releaseResourcesForTab(tabId);
-        mLayerTitleCache.remove(tabId);
+        if (mLayerTitleCache != null) {
+            mLayerTitleCache.removeTabTitle(tabId);
+        }
     }
 
     @Override

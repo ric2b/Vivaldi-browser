@@ -51,14 +51,14 @@ void TH_Storage::OnModelWillBeDeleted() {
   model_ = nullptr;
 }
 
-absl::optional<std::string> TH_Storage::SerializeData() {
+std::optional<std::string> TH_Storage::SerializeData() {
   TH_Codec codec;
   std::string output;
   JSONStringValueSerializer serializer(&output);
   serializer.set_pretty_print(true);
   base::Value value = codec.Encode(*model_->list());
   if (!serializer.Serialize(value))
-    return absl::nullopt;
+    return std::nullopt;
 
   return output;
 }

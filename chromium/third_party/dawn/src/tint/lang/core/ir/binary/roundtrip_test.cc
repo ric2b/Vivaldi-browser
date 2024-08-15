@@ -50,11 +50,11 @@ class IRBinaryRoundtripTestBase : public IRTestParamHelper<T> {
         auto pre = Disassemble(this->mod);
         auto encoded = Encode(this->mod);
         if (encoded != Success) {
-            return {pre, encoded.Failure().reason.str()};
+            return {pre, encoded.Failure().reason.Str()};
         }
         auto decoded = Decode(encoded->Slice());
         if (decoded != Success) {
-            return {pre, decoded.Failure().reason.str()};
+            return {pre, decoded.Failure().reason.Str()};
         }
         auto post = Disassemble(decoded.Get());
         return {pre, post};
@@ -276,7 +276,7 @@ TEST_F(IRBinaryRoundtripTest, struct) {
 TEST_F(IRBinaryRoundtripTest, StructMemberAttributes) {
     type::StructMemberAttributes attrs{};
     attrs.location = 1;
-    attrs.index = 2;
+    attrs.blend_src = 2;
     attrs.color = 3;
     attrs.builtin = core::BuiltinValue::kFragDepth;
     attrs.interpolation = core::Interpolation{

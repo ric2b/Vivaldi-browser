@@ -108,8 +108,8 @@ void UpdateCodecParameters(SdpMessage* sdp_message, bool incoming) {
 
 std::string GetTransportProtocol(const cricket::CandidatePair& candidate_pair) {
   const cricket::Candidate& local_candidate = candidate_pair.local_candidate();
-  return (local_candidate.type() == "relay") ? local_candidate.relay_protocol()
-                                             : local_candidate.protocol();
+  return local_candidate.is_relay() ? local_candidate.relay_protocol()
+                                    : local_candidate.protocol();
 }
 
 // Returns true if the selected candidate-pair indicates a relay connection.
@@ -119,24 +119,20 @@ std::optional<bool> IsConnectionRelayed(
       selected_candidate_pair.local_candidate();
   const cricket::Candidate& remote_candidate =
       selected_candidate_pair.remote_candidate();
-  return local_candidate.type() == "relay" ||
-         remote_candidate.type() == "relay";
+  return local_candidate.is_relay() || remote_candidate.is_relay();
 }
 
 // Utility function to map a cricket::Candidate string type to a
 // TransportRoute::RouteType enum value.
 TransportRoute::RouteType CandidateTypeToTransportRouteType(
-    const std::string& candidate_type) {
-  if (candidate_type == "local") {
-    return TransportRoute::DIRECT;
-  } else if (candidate_type == "stun" || candidate_type == "prflx") {
+    const cricket::Candidate& candidate) {
+  if (candidate.is_stun() || candidate.is_prflx()) {
     return TransportRoute::STUN;
-  } else if (candidate_type == "relay") {
+  } else if (candidate.is_relay()) {
     return TransportRoute::RELAY;
-  } else {
-    LOG(ERROR) << "Unknown candidate type: " << candidate_type;
-    return TransportRoute::DIRECT;
   }
+  DCHECK(candidate.is_local());
+  return TransportRoute::DIRECT;
 }
 
 void SetSenderParameters(webrtc::RtpSenderInterface& sender,
@@ -429,7 +425,7 @@ WebrtcTransport::WebrtcTransport(
 
 WebrtcTransport::~WebrtcTransport() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  Close(OK);
+  Close(ErrorCode::OK);
 }
 
 webrtc::PeerConnectionInterface* WebrtcTransport::peer_connection() {
@@ -539,7 +535,7 @@ bool WebrtcTransport::ProcessTransportInfo(XmlElement* transport_info) {
           kDisableAuthenticationSwitchName);
 #endif
       if (!ignore_error) {
-        Close(AUTHENTICATION_FAILED);
+        Close(ErrorCode::AUTHENTICATION_FAILED);
         return true;
       }
     }
@@ -731,7 +727,7 @@ void WebrtcTransport::Close(ErrorCode error) {
                       std::move(event_data_channel_),
                       std::move(peer_connection_wrapper_));
 
-  if (error != OK) {
+  if (error != ErrorCode::OK) {
     event_handler_->OnWebrtcTransportError(error);
   }
 }
@@ -769,14 +765,14 @@ void WebrtcTransport::OnLocalSessionDescriptionCreated(
 
   if (!description) {
     LOG(ERROR) << "PeerConnection offer creation failed: " << error;
-    Close(CHANNEL_CONNECTION_ERROR);
+    Close(ErrorCode::CHANNEL_CONNECTION_ERROR);
     return;
   }
 
   std::string description_sdp;
   if (!description->ToString(&description_sdp)) {
     LOG(ERROR) << "Failed to serialize description.";
-    Close(CHANNEL_CONNECTION_ERROR);
+    Close(ErrorCode::CHANNEL_CONNECTION_ERROR);
     return;
   }
 
@@ -794,7 +790,7 @@ void WebrtcTransport::OnLocalSessionDescriptionCreated(
   if (!description) {
     LOG(ERROR) << "Failed to parse the session description: "
                << parse_error.description << " line: " << parse_error.line;
-    Close(CHANNEL_CONNECTION_ERROR);
+    Close(ErrorCode::CHANNEL_CONNECTION_ERROR);
     return;
   }
 
@@ -833,7 +829,7 @@ void WebrtcTransport::OnLocalDescriptionSet(bool success,
 
   if (!success) {
     LOG(ERROR) << "Failed to set local description: " << error;
-    Close(CHANNEL_CONNECTION_ERROR);
+    Close(ErrorCode::CHANNEL_CONNECTION_ERROR);
     return;
   }
 
@@ -859,7 +855,7 @@ void WebrtcTransport::OnRemoteDescriptionSet(bool send_answer,
 
   if (!success) {
     LOG(ERROR) << "Failed to set remote description: " << error;
-    Close(CHANNEL_CONNECTION_ERROR);
+    Close(ErrorCode::CHANNEL_CONNECTION_ERROR);
     return;
   }
 
@@ -1008,16 +1004,15 @@ void WebrtcTransport::OnIceSelectedCandidatePairChanged(
   static_assert(TransportRoute::DIRECT < TransportRoute::STUN &&
                     TransportRoute::STUN < TransportRoute::RELAY,
                 "Route type enum values are ordered by 'indirectness'");
-  route.type =
-      std::max(CandidateTypeToTransportRouteType(local_candidate.type()),
-               CandidateTypeToTransportRouteType(remote_candidate.type()));
+  route.type = std::max(CandidateTypeToTransportRouteType(local_candidate),
+                        CandidateTypeToTransportRouteType(remote_candidate));
 
   VLOG(0) << "Selected candidate-pair changed, reason = " << event.reason;
   VLOG(0) << "  Local IP = " << local_candidate.address().ToString()
-          << ", type = " << local_candidate.type()
+          << ", type = " << local_candidate.type_name()
           << ", protocol = " << local_candidate.protocol();
   VLOG(0) << "  Remote IP = " << remote_candidate.address().ToString()
-          << ", type = " << remote_candidate.type()
+          << ", type = " << remote_candidate.type_name()
           << ", protocol = " << remote_candidate.protocol();
 
   // Try to convert local and peer addresses. These may sometimes be invalid,
@@ -1195,7 +1190,7 @@ void WebrtcTransport::AddPendingCandidatesIfPossible() {
     for (const auto& candidate : pending_incoming_candidates_) {
       if (!peer_connection()->AddIceCandidate(candidate.get())) {
         LOG(ERROR) << "Failed to add incoming candidate";
-        Close(INCOMPATIBLE_PROTOCOL);
+        Close(ErrorCode::INCOMPATIBLE_PROTOCOL);
         return;
       }
     }

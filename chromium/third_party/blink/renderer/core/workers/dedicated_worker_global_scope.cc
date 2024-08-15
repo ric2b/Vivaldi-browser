@@ -34,10 +34,13 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/trace_event/trace_id_helper.h"
+#include "base/trace_event/typed_macros.h"
 #include "base/types/pass_key.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/worker_main_script_load_parameters.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
+#include "third_party/blink/public/mojom/frame/back_forward_cache_controller.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/post_message_helper.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_post_message_options.h"
@@ -47,6 +50,7 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
 #include "third_party/blink/renderer/core/inspector/worker_thread_debugger.h"
 #include "third_party/blink/renderer/core/messaging/blink_transferable_message.h"
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
@@ -60,6 +64,7 @@
 #include "third_party/blink/renderer/platform/back_forward_cache_buffer_limit_tracker.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
+#include "third_party/blink/renderer/platform/bindings/source_location.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_client_settings_object_snapshot.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 
@@ -396,12 +401,22 @@ void DedicatedWorkerGlobalScope::postMessage(ScriptState* script_state,
       exception_state);
   if (exception_state.HadException())
     return;
+  uint64_t trace_id = base::trace_event::GetNextGlobalTraceId();
+  transferable_message.trace_id = trace_id;
   WorkerThreadDebugger* debugger =
       WorkerThreadDebugger::From(script_state->GetIsolate());
   transferable_message.sender_stack_trace_id =
       debugger->StoreCurrentStackTrace("postMessage");
   WorkerObjectProxy().PostMessageToWorkerObject(
       std::move(transferable_message));
+
+  TRACE_EVENT_INSTANT(
+      "devtools.timeline", "SchedulePostMessage", "data",
+      [&](perfetto::TracedValue context) {
+        inspector_schedule_post_message_event::Data(
+            std::move(context), GetExecutionContext(), trace_id);
+      },
+      perfetto::Flow::Global(trace_id));  // SchedulePostMessage
 }
 
 void DedicatedWorkerGlobalScope::DidReceiveResponseForClassicScript(
@@ -499,8 +514,8 @@ void DedicatedWorkerGlobalScope::UpdateBackForwardCacheDisablingFeatures(
     return;
   }
   auto mojom_details = LocalFrame::ConvertFeatureAndLocationToMojomStruct(
-      details.non_sticky_features_and_js_locations,
-      details.sticky_features_and_js_locations);
+      *details.non_sticky_features_and_js_locations,
+      *details.sticky_features_and_js_locations);
   back_forward_cache_controller_host_
       ->DidChangeBackForwardCacheDisablingFeatures(std::move(mojom_details));
 }
@@ -513,7 +528,8 @@ void DedicatedWorkerGlobalScope::Trace(Visitor* visitor) const {
 }
 
 void DedicatedWorkerGlobalScope::EvictFromBackForwardCache(
-    mojom::blink::RendererEvictionReason reason) {
+    mojom::blink::RendererEvictionReason reason,
+    std::unique_ptr<SourceLocation> source_location) {
   if (!back_forward_cache_controller_host_.is_bound()) {
     return;
   }
@@ -525,7 +541,12 @@ void DedicatedWorkerGlobalScope::EvictFromBackForwardCache(
     return;
   }
   UMA_HISTOGRAM_ENUMERATION("BackForwardCache.Eviction.Renderer", reason);
-  back_forward_cache_controller_host_->EvictFromBackForwardCache(reason);
+  // This implementation shouldn't be called for JavaScript execution. Since we
+  // capture source location only when the eviction reason is JavaScript
+  // execution, `source_location` should always be null here.
+  CHECK(!source_location);
+  back_forward_cache_controller_host_->EvictFromBackForwardCache(
+      /*reason=*/std::move(reason), /*source=*/nullptr);
 }
 
 void DedicatedWorkerGlobalScope::DidBufferLoadWhileInBackForwardCache(

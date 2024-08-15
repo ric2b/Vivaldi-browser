@@ -249,7 +249,7 @@ std::wstring ReadLocaleStateLanguage() {
     LOG(WARNING) << "Failed to read " << local_state_path;
     return std::wstring();
   }
-  absl::optional<base::Value> json = base::JSONReader::Read(json_text);
+  std::optional<base::Value> json = base::JSONReader::Read(json_text);
   if (!json) {
     LOG(WARNING) << "Failed to parse " << local_state_path << " as json";
     return std::wstring();

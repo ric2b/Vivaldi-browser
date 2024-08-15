@@ -10,13 +10,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
+
 namespace fxcrt {
 
 template <typename CharType>
 class StringDataTemplate {
  public:
-  static StringDataTemplate* Create(size_t nLen);
-  static StringDataTemplate* Create(const CharType* pStr, size_t nLen);
+  static RetainPtr<StringDataTemplate> Create(size_t nLen);
+  static RetainPtr<StringDataTemplate> Create(pdfium::span<const CharType> str);
 
   void Retain() { ++m_nRefs; }
   void Release();
@@ -26,8 +29,31 @@ class StringDataTemplate {
   }
 
   void CopyContents(const StringDataTemplate& other);
-  void CopyContents(const CharType* pStr, size_t nLen);
-  void CopyContentsAt(size_t offset, const CharType* pStr, size_t nLen);
+  void CopyContents(pdfium::span<const CharType> str);
+  void CopyContentsAt(size_t offset, pdfium::span<const CharType> str);
+
+  pdfium::span<CharType> span() {
+    return pdfium::make_span(m_String, m_nDataLength);
+  }
+  pdfium::span<const CharType> span() const {
+    return pdfium::make_span(m_String, m_nDataLength);
+  }
+
+  // Includes the terminating NUL not included in lengths.
+  pdfium::span<CharType> capacity_span() {
+    return pdfium::make_span(m_String, m_nAllocLength + 1);
+  }
+  pdfium::span<const CharType> capacity_span() const {
+    return pdfium::make_span(m_String, m_nAllocLength + 1);
+  }
+
+  // Unlike std::string::front(), this is always safe and returns a
+  // NUL char when the string is empty.
+  CharType Front() const { return !span().empty() ? span().front() : 0; }
+
+  // Unlike std::string::back(), this is always safe and returns a
+  // NUL char when the string is empty.
+  CharType Back() const { return !span().empty() ? span().back() : 0; }
 
   // To ensure ref counts do not overflow, consider the worst possible case:
   // the entire address space contains nothing but pointers to this object.

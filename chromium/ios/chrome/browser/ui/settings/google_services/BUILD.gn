@@ -4,8 +4,6 @@
 
 source_set("google_services") {
   sources = [
-    "accounts_table_view_controller.h",
-    "accounts_table_view_controller.mm",
     "google_services_settings_command_handler.h",
     "google_services_settings_consumer.h",
     "google_services_settings_coordinator.h",
@@ -30,7 +28,9 @@ source_set("google_services") {
   ]
   deps = [
     ":constants",
+    ":features",
     ":parcel_tracking",
+    ":personalize_google_services",
     "resources:google_services_enterprise",
     "//base",
     "//components/browser_sync",
@@ -40,10 +40,11 @@ source_set("google_services") {
     "//components/password_manager/core/common:features",
     "//components/prefs",
     "//components/prefs/ios",
+    "//components/search_engines:search_engines",
     "//components/signin/public/base",
     "//components/signin/public/identity_manager/objc",
     "//components/strings",
-    "//components/supervised_user/core/browser:supervised_user_preferences",
+    "//components/supervised_user/core/browser",
     "//components/supervised_user/core/common",
     "//components/sync",
     "//components/sync/service",
@@ -53,6 +54,7 @@ source_set("google_services") {
     "//ios/chrome/browser/net/model:crurl",
     "//ios/chrome/browser/parcel_tracking:util",
     "//ios/chrome/browser/policy/model:policy_util",
+    "//ios/chrome/browser/search_engines/model:template_url_service_factory",
     "//ios/chrome/browser/settings/model/sync/utils",
     "//ios/chrome/browser/settings/model/sync/utils:identity_error_util",
     "//ios/chrome/browser/shared/coordinator/alert",
@@ -89,6 +91,9 @@ source_set("google_services") {
     "//ios/chrome/browser/ui/settings/elements:enterprise_info_popover_view_controller",
     "//ios/chrome/browser/ui/settings/elements:info_popover_view_controller",
     "//ios/chrome/browser/ui/settings/google_services/bulk_upload",
+    "//ios/chrome/browser/ui/settings/google_services/manage_accounts",
+    "//ios/chrome/browser/ui/settings/google_services/manage_accounts:constants",
+    "//ios/chrome/browser/ui/settings/google_services/manage_accounts:manage_accounts_ui",
     "//ios/chrome/browser/ui/settings/sync",
     "//ios/chrome/browser/ui/settings/utils",
     "//ios/chrome/browser/url_loading/model",
@@ -129,16 +134,45 @@ source_set("parcel_tracking") {
   ]
 }
 
+source_set("personalize_google_services") {
+  sources = [
+    "personalize_google_services_command_handler.h",
+    "personalize_google_services_coordinator.h",
+    "personalize_google_services_coordinator.mm",
+    "personalize_google_services_view_controller.h",
+    "personalize_google_services_view_controller.mm",
+  ]
+  deps = [
+    ":constants",
+    "//base",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
+    "//ios/chrome/browser/shared/model/application_context",
+    "//ios/chrome/browser/shared/model/browser",
+    "//ios/chrome/browser/shared/model/browser_state",
+    "//ios/chrome/browser/shared/ui/list_model",
+    "//ios/chrome/browser/shared/ui/symbols",
+    "//ios/chrome/browser/shared/ui/table_view:utils",
+    "//ios/chrome/browser/shared/ui/table_view/cells",
+    "//ios/chrome/browser/signin/model",
+    "//ios/chrome/browser/signin/model:system_identity_manager",
+    "//ios/chrome/browser/ui/settings:settings_root",
+    "//ios/chrome/common/ui/colors",
+    "//ui/base",
+  ]
+}
+
 source_set("constants") {
   sources = [
-    "accounts_table_view_controller_constants.h",
-    "accounts_table_view_controller_constants.mm",
     "google_services_settings_constants.h",
     "google_services_settings_constants.mm",
     "manage_sync_settings_constants.h",
     "manage_sync_settings_constants.mm",
   ]
-  deps = [ "//ios/chrome/browser/shared/ui/list_model" ]
+  deps = [
+    "//ios/chrome/browser/shared/ui/list_model",
+    "//ios/chrome/browser/ui/settings/google_services/manage_accounts:constants",
+  ]
 }
 
 source_set("eg_app_support+eg2") {
@@ -170,24 +204,25 @@ source_set("eg2_tests") {
   configs += [ "//build/config/ios:xctest_config" ]
   testonly = true
   sources = [
-    "accounts_table_egtest.mm",
     "google_services_settings_egtest.mm",
     "manage_sync_settings_egtest.mm",
   ]
   deps = [
     ":eg_test_support+eg2",
+    ":features",
     "//base",
     "//base/test:test_support",
-    "//components/bookmarks/common",
     "//components/feature_engagement/public",
     "//components/password_manager/core/common",
     "//components/policy:generated",
     "//components/policy/core/common:common_constants",
+    "//components/search_engines",
     "//components/signin/public/base",
     "//components/strings",
     "//components/supervised_user/core/common:features",
     "//components/sync/base:features",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser/bookmarks/model:bookmark_model_type",
     "//ios/chrome/browser/parcel_tracking:features",
     "//ios/chrome/browser/policy/model:constants",
     "//ios/chrome/browser/policy/model:eg_test_support+eg2",
@@ -205,12 +240,14 @@ source_set("eg2_tests") {
     "//ios/chrome/browser/ui/settings:eg_test_support+eg2",
     "//ios/chrome/browser/ui/settings/google_services:constants",
     "//ios/chrome/browser/ui/settings/google_services/bulk_upload:constants",
+    "//ios/chrome/browser/ui/settings/google_services/manage_accounts:constants",
     "//ios/chrome/browser/ui/settings/password:eg_test_support",
     "//ios/chrome/browser/ui/settings/password:eg_test_support+eg2",
     "//ios/chrome/common/ui/promo_style:constants",
     "//ios/chrome/test/earl_grey:eg_test_support+eg2",
     "//ios/chrome/test/earl_grey:switches",
     "//ios/testing/earl_grey:eg_test_support+eg2",
+    "//ios/testing/earl_grey:launch_configuration",
     "//net:test_support",
     "//ui/base",
   ]
@@ -220,14 +257,16 @@ source_set("eg2_tests") {
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "accounts_table_view_controller_unittest.mm",
     "manage_sync_settings_mediator_unittest.mm",
     "parcel_tracking_settings_mediator_unittest.mm",
     "parcel_tracking_settings_view_controller_unittest.mm",
+    "personalize_google_services_view_controller_unittest.mm",
   ]
   deps = [
+    ":features",
     ":google_services",
     ":parcel_tracking",
+    ":personalize_google_services",
     "//base/test:test_support",
     "//components/prefs",
     "//components/prefs:test_support",
@@ -268,4 +307,12 @@ source_set("unit_tests") {
     "//third_party/ocmock:ocmock",
     "//ui/base",
   ]
+}
+
+source_set("features") {
+  sources = [
+    "features.h",
+    "features.mm",
+  ]
+  public_deps = [ "//base" ]
 }

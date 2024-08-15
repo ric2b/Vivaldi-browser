@@ -7,7 +7,7 @@ syntax = "proto2";
 option optimize_for = LITE_RUNTIME;
 
 package arc;
-option go_package = "chromiumos/system_api/arc_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/arc_proto";
 
 // ARC start options sent from Chrome to session manager. This message is used
 // in the SessionManagerInterface.StartArcMiniContainer method for ARC

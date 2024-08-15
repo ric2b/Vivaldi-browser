@@ -37,7 +37,7 @@ class ClipboardWin : public Clipboard {
 
   // Clipboard overrides:
   void OnPreShutdown() override;
-  absl::optional<DataTransferEndpoint> GetSource(
+  std::optional<DataTransferEndpoint> GetSource(
       ClipboardBuffer buffer) const override;
   const ClipboardSequenceNumberToken& GetSequenceNumber(
       ClipboardBuffer buffer) const override;
@@ -89,11 +89,11 @@ class ClipboardWin : public Clipboard {
       ClipboardBuffer buffer,
       const ObjectMap& objects,
       std::vector<Clipboard::PlatformRepresentation> platform_representations,
-      std::unique_ptr<DataTransferEndpoint> data_src) override;
+      std::unique_ptr<DataTransferEndpoint> data_src,
+      uint32_t privacy_types) override;
   void WriteText(base::StringPiece text) override;
   void WriteHTML(base::StringPiece markup,
-                 absl::optional<base::StringPiece> source_url,
-                 ClipboardContentType content_type) override;
+                 std::optional<base::StringPiece> source_url) override;
   void WriteSvg(base::StringPiece markup) override;
   void WriteRTF(base::StringPiece rtf) override;
   void WriteFilenames(std::vector<ui::FileInfo> filenames) override;
@@ -102,6 +102,9 @@ class ClipboardWin : public Clipboard {
   void WriteBitmap(const SkBitmap& bitmap) override;
   void WriteData(const ClipboardFormatType& format,
                  base::span<const uint8_t> data) override;
+  void WriteClipboardHistory() override;
+  void WriteUploadCloudClipboard() override;
+  void WriteConfidentialDataForPassword() override;
   std::vector<uint8_t> ReadPngInternal(ClipboardBuffer buffer) const;
   SkBitmap ReadBitmapInternal(ClipboardBuffer buffer) const;
 

@@ -124,7 +124,7 @@ class TruncateInterstageVariables final
         std::bitset<30> interstage_locations;
 
         /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-        TINT_REFLECT(interstage_variables);
+        TINT_REFLECT(Config, interstage_locations);
     };
 
     /// Constructor using a the configuration provided in the input Data

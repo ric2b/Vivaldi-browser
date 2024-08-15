@@ -5,10 +5,12 @@
 // clang-format off
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {CookieControlsMode, ContentSetting, SettingsCollapseRadioButtonElement, ContentSettingsTypes, SettingsCookiesPageElement, SITE_EXCEPTION_WILDCARD, SiteSettingsPrefsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
-import {CrSettingsPrefs, MetricsBrowserProxyImpl, PrivacyElementInteractions, Router, routes, SettingsPrefsElement, SettingsToggleButtonElement} from 'chrome://settings/settings.js';
+import type {SettingsCollapseRadioButtonElement, SettingsRadioGroupElement, SettingsCookiesPageElement} from 'chrome://settings/lazy_load.js';
+import {CookieControlsMode, ContentSetting, ContentSettingsTypes, SITE_EXCEPTION_WILDCARD, SiteSettingsPrefsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
+import type {SettingsPrefsElement, SettingsToggleButtonElement} from 'chrome://settings/settings.js';
+import {CrSettingsPrefs, MetricsBrowserProxyImpl, PrivacyElementInteractions, Router, routes} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {isChildVisible} from 'chrome://webui-test/test_util.js';
+import {eventToPromise, isChildVisible} from 'chrome://webui-test/test_util.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 import {TestMetricsBrowserProxy} from './test_metrics_browser_proxy.js';
@@ -22,6 +24,13 @@ suite('CookiesPageTest', function() {
   let testMetricsBrowserProxy: TestMetricsBrowserProxy;
   let page: SettingsCookiesPageElement;
   let settingsPrefs: SettingsPrefsElement;
+
+  function primarySettingGroup(): SettingsRadioGroupElement {
+    const group = page.shadowRoot!.querySelector<SettingsRadioGroupElement>(
+        '#primarySettingGroup');
+    assertTrue(!!group);
+    return group;
+  }
 
   function blockThirdParty(): SettingsCollapseRadioButtonElement {
     return page.shadowRoot!.querySelector('#blockThirdParty')!;
@@ -37,7 +46,10 @@ suite('CookiesPageTest', function() {
 
   suiteSetup(function() {
     // This test is for the pre-3PCD cookies page.
-    loadTimeData.overrideValues({is3pcdCookieSettingsRedesignEnabled: false});
+    loadTimeData.overrideValues({
+      is3pcdCookieSettingsRedesignEnabled: false,
+      isCookieSettingsUiAlignmentEnabled: true,
+    });
     settingsPrefs = document.createElement('settings-prefs');
     return CrSettingsPrefs.initialized;
   });
@@ -66,29 +78,30 @@ suite('CookiesPageTest', function() {
   });
 
   test('ElementVisibility', async function() {
-    // TODO(): Remove assertFalse checks after the feature is launched.
     await flushTasks();
+    // Headers
     assertTrue(isChildVisible(page, '#explanationText'));
     assertTrue(isChildVisible(page, '#generalControls'));
-    assertTrue(isChildVisible(page, '#exceptionHeader'));
+    assertTrue(isChildVisible(page, '#advancedHeader'));
+    assertTrue(isChildVisible(page, '#exceptionHeader3pcd'));
     assertTrue(isChildVisible(page, '#allowExceptionsList'));
-    assertFalse(isChildVisible(page, '#sessionOnlyExceptionsList'));
-    assertFalse(isChildVisible(page, '#blockExceptionsList'));
+    // To be removed with old UI.
+    assertFalse(isChildVisible(page, '#exceptionHeader'));
+    assertFalse(isChildVisible(page, '#exceptionHeaderSubLabel'));
 
-    assertFalse(isChildVisible(page, '#clearOnExit'));
-    assertFalse(isChildVisible(page, '#rollbackNotice'));
-
+    // Settings
     assertTrue(isChildVisible(page, '#doNotTrack'));
-
     assertTrue(isChildVisible(page, '#allowThirdParty'));
     assertTrue(isChildVisible(page, '#blockThirdParty'));
     assertTrue(isChildVisible(page, '#blockThirdPartyIncognito'));
-    assertFalse(isChildVisible(page, '#allowAll'));
-    assertFalse(isChildVisible(page, '#blockAll'));
+    // By default these toggles should be hidden.
+    assertFalse(isChildVisible(page, '#blockThirdPartyToggle'));
+    assertFalse(isChildVisible(page, '#ipProtectionToggle'));
   });
 
   test('ThirdPartyCookiesRadioClicksRecorded', async function() {
     blockThirdParty().click();
+    await eventToPromise('selected-changed', primarySettingGroup());
     assertEquals(
         page.getPref('profile.cookie_controls_mode.value'),
         CookieControlsMode.BLOCK_THIRD_PARTY);
@@ -98,6 +111,7 @@ suite('CookiesPageTest', function() {
     testMetricsBrowserProxy.reset();
 
     blockThirdPartyIncognito().click();
+    await eventToPromise('selected-changed', primarySettingGroup());
     assertEquals(
         page.getPref('profile.cookie_controls_mode.value'),
         CookieControlsMode.INCOGNITO_ONLY);
@@ -109,6 +123,7 @@ suite('CookiesPageTest', function() {
     testMetricsBrowserProxy.reset();
 
     allowThirdParty().click();
+    await eventToPromise('selected-changed', primarySettingGroup());
     assertEquals(
         page.getPref('profile.cookie_controls_mode.value'),
         CookieControlsMode.OFF);
@@ -123,6 +138,7 @@ suite('CookiesPageTest', function() {
 
     // Disabling third-party cookies should display the privacy sandbox toast.
     blockThirdParty().click();
+    await eventToPromise('selected-changed', primarySettingGroup());
     await flushTasks();
     assertEquals(
         page.getPref('profile.cookie_controls_mode.value'),
@@ -138,6 +154,7 @@ suite('CookiesPageTest', function() {
 
     // Renabling 3P cookies for regular sessions should not display the toast.
     blockThirdPartyIncognito().click();
+    await eventToPromise('selected-changed', primarySettingGroup());
     await flushTasks();
     assertEquals(
         page.getPref('profile.cookie_controls_mode.value'),
@@ -160,6 +177,7 @@ suite('CookiesPageTest', function() {
         'prefs.profile.cookie_controls_mode.value',
         CookieControlsMode.INCOGNITO_ONLY);
     blockThirdParty().click();
+    await eventToPromise('selected-changed', primarySettingGroup());
     await flushTasks();
     assertEquals(
         page.getPref('profile.cookie_controls_mode.value'),
@@ -169,6 +187,7 @@ suite('CookiesPageTest', function() {
 
     // Reselecting a non-3P cookie blocking setting should hide the toast.
     allowThirdParty().click();
+    await eventToPromise('selected-changed', primarySettingGroup());
     await flushTasks();
     assertEquals(
         page.getPref('profile.cookie_controls_mode.value'),
@@ -178,6 +197,7 @@ suite('CookiesPageTest', function() {
     // Navigating away from the page should hide the toast, even if navigated
     // back to.
     blockThirdParty().click();
+    await eventToPromise('selected-changed', primarySettingGroup());
     await flushTasks();
     assertEquals(
         page.getPref('profile.cookie_controls_mode.value'),
@@ -203,27 +223,27 @@ suite('CookiesPageTest', function() {
     assertFalse(page.$.toast.open);
   });
 
-  test('disabledFPSToggle', function() {
+  test('disabledFPSToggle', async () => {
     // Confirm that when the user has not selected the block 3PC setting, the
     // FPS toggle is disabled.
     const firstPartySetsToggle =
         page.shadowRoot!.querySelector<SettingsToggleButtonElement>(
             '#firstPartySetsToggle')!;
     blockThirdParty().click();
-    flush();
+    await eventToPromise('selected-changed', primarySettingGroup());
     assertEquals(
         CookieControlsMode.BLOCK_THIRD_PARTY,
         page.prefs.profile.cookie_controls_mode.value);
     assertFalse(firstPartySetsToggle.disabled, 'expect toggle to be enabled');
 
     allowThirdParty().click();
-    flush();
+    await eventToPromise('selected-changed', primarySettingGroup());
     assertEquals(
         CookieControlsMode.OFF, page.prefs.profile.cookie_controls_mode.value);
     assertTrue(firstPartySetsToggle.disabled, 'expect toggle to be disabled');
 
     blockThirdPartyIncognito().click();
-    flush();
+    await eventToPromise('selected-changed', primarySettingGroup());
     assertEquals(
         CookieControlsMode.INCOGNITO_ONLY,
         page.prefs.profile.cookie_controls_mode.value);
@@ -239,6 +259,43 @@ suite('CookiesPageTest', function() {
     assertEquals(
         loadTimeData.getString('cookiePageBlockThirdIncognitoBulTwoFps'),
         cookiesPageBlockThirdPartyIncognitoBulTwoLabel);
+  });
+});
+
+suite('PreCookieSettingsUiAlignmentTest', function() {
+  let page: SettingsCookiesPageElement;
+  let settingsPrefs: SettingsPrefsElement;
+
+  suiteSetup(function() {
+    // This test is for the V2 UI of the pre-3PCD cookies page.
+    loadTimeData.overrideValues({
+      is3pcdCookieSettingsRedesignEnabled: false,
+      isCookieSettingsUiAlignmentEnabled: false,
+    });
+    settingsPrefs = document.createElement('settings-prefs');
+    return CrSettingsPrefs.initialized;
+  });
+
+  setup(function() {
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    page = document.createElement('settings-cookies-page');
+    page.prefs = settingsPrefs.prefs!;
+    document.body.appendChild(page);
+    flush();
+  });
+
+  test('ElementVisibility', async function() {
+    assertTrue(isChildVisible(page, '#explanationText'));
+    assertTrue(isChildVisible(page, '#generalControls'));
+    assertTrue(isChildVisible(page, '#exceptionHeader'));
+    assertTrue(isChildVisible(page, '#allowExceptionsList'));
+    assertFalse(isChildVisible(page, '#rollbackNotice'));
+
+    assertTrue(isChildVisible(page, '#doNotTrack'));
+
+    assertTrue(isChildVisible(page, '#allowThirdParty'));
+    assertTrue(isChildVisible(page, '#blockThirdParty'));
+    assertTrue(isChildVisible(page, '#blockThirdPartyIncognito'));
   });
 });
 
@@ -419,6 +476,53 @@ suite('TrackingProtectionSettings', function() {
     assertEquals(
         page.getPref('tracking_protection.block_all_3pc_toggle_enabled.value'),
         true);
+  });
+});
+
+suite('IpProtectionToggle', function() {
+  let page: SettingsCookiesPageElement;
+  let settingsPrefs: SettingsPrefsElement;
+  let testMetricsBrowserProxy: TestMetricsBrowserProxy;
+
+  suiteSetup(function() {
+    loadTimeData.overrideValues({
+      is3pcdCookieSettingsRedesignEnabled: false,
+      isCookieSettingsUiAlignmentEnabled: true,
+      isIpProtectionV1Enabled: true,
+    });
+    settingsPrefs = document.createElement('settings-prefs');
+    return CrSettingsPrefs.initialized;
+  });
+
+  setup(function() {
+    testMetricsBrowserProxy = new TestMetricsBrowserProxy();
+    MetricsBrowserProxyImpl.setInstance(testMetricsBrowserProxy);
+
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    page = document.createElement('settings-cookies-page');
+    page.prefs = settingsPrefs.prefs!;
+    document.body.appendChild(page);
+    flush();
+  });
+
+  test('CheckVisibility', function() {
+    // Setting is visible
+    assertTrue(isChildVisible(page, '#ipProtectionToggle'));
+  });
+
+  test('ToggleIpProtection', async function() {
+    page.set('prefs.tracking_protection.ip_protection_enabled.value', false);
+    const ipProtectionToggle =
+        page.shadowRoot!.querySelector<SettingsToggleButtonElement>(
+            '#ipProtectionToggle')!;
+    assertTrue(!!ipProtectionToggle);
+
+    ipProtectionToggle.click();
+    const result =
+        await testMetricsBrowserProxy.whenCalled('recordSettingsPageHistogram');
+    assertEquals(PrivacyElementInteractions.IP_PROTECTION, result);
+    assertEquals(
+        page.getPref('tracking_protection.ip_protection_enabled.value'), true);
   });
 });
 

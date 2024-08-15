@@ -258,6 +258,85 @@ TEST_F(InspectorGetEntryPointTest, DefaultWorkgroupSize) {
     EXPECT_EQ(1u, workgroup_size->z);
 }
 
+// Test that push_constant_size is zero if there are no push constants.
+TEST_F(InspectorGetEntryPointTest, PushConstantSizeNone) {
+    MakeEmptyBodyFunction("foo", Vector{
+                                     Stage(ast::PipelineStage::kFragment),
+                                 });
+
+    Inspector& inspector = Build();
+
+    auto result = inspector.GetEntryPoints();
+    ASSERT_FALSE(inspector.has_error()) << inspector.error();
+
+    ASSERT_EQ(1u, result.size());
+    EXPECT_EQ(0u, result[0].push_constant_size);
+}
+
+// Test that push_constant_size is 4 (bytes) if there is a single F32 push constant.
+TEST_F(InspectorGetEntryPointTest, PushConstantSizeOneWord) {
+    Enable(wgsl::Extension::kChromiumExperimentalPushConstant);
+    GlobalVar("pc", core::AddressSpace::kPushConstant, ty.f32());
+    MakePlainGlobalReferenceBodyFunction("foo", "pc", ty.f32(),
+                                         Vector{
+                                             Stage(ast::PipelineStage::kFragment),
+                                         });
+
+    Inspector& inspector = Build();
+
+    auto result = inspector.GetEntryPoints();
+    ASSERT_FALSE(inspector.has_error()) << inspector.error();
+
+    ASSERT_EQ(1u, result.size());
+    EXPECT_EQ(4u, result[0].push_constant_size);
+}
+
+// Test that push_constant_size is 12 (bytes) if there is a struct containing one
+// each of i32, f32 and u32.
+TEST_F(InspectorGetEntryPointTest, PushConstantSizeThreeWords) {
+    Enable(wgsl::Extension::kChromiumExperimentalPushConstant);
+    auto* pc_struct_type =
+        MakeStructType("PushConstantStruct", Vector{ty.i32(), ty.f32(), ty.u32()});
+    GlobalVar("pc", core::AddressSpace::kPushConstant, ty.Of(pc_struct_type));
+    MakePlainGlobalReferenceBodyFunction("foo", "pc", ty.Of(pc_struct_type),
+                                         Vector{
+                                             Stage(ast::PipelineStage::kFragment),
+                                         });
+
+    Inspector& inspector = Build();
+
+    auto result = inspector.GetEntryPoints();
+    ASSERT_FALSE(inspector.has_error()) << inspector.error();
+
+    ASSERT_EQ(1u, result.size());
+    EXPECT_EQ(12u, result[0].push_constant_size);
+}
+
+// Test that push_constant_size is 4 (bytes) if there are two push constants,
+// one used by the entry point containing an f32, and one unused by the entry
+// point containing a struct of size 12 bytes.
+TEST_F(InspectorGetEntryPointTest, PushConstantSizeTwoConstants) {
+    Enable(wgsl::Extension::kChromiumExperimentalPushConstant);
+    auto* unused_struct_type =
+        MakeStructType("PushConstantStruct", Vector{ty.i32(), ty.f32(), ty.u32()});
+    GlobalVar("unused", core::AddressSpace::kPushConstant, ty.Of(unused_struct_type));
+    GlobalVar("pc", core::AddressSpace::kPushConstant, ty.f32());
+    MakePlainGlobalReferenceBodyFunction("foo", "pc", ty.f32(),
+                                         Vector{
+                                             Stage(ast::PipelineStage::kFragment),
+                                         });
+
+    Inspector& inspector = Build();
+
+    auto result = inspector.GetEntryPoints();
+    ASSERT_FALSE(inspector.has_error()) << inspector.error();
+
+    ASSERT_EQ(1u, result.size());
+
+    // Check that the result only includes the single f32 push constant.
+    EXPECT_EQ(4u, result[0].push_constant_size);
+}
+
 TEST_F(InspectorGetEntryPointTest, NonDefaultWorkgroupSize) {
     MakeEmptyBodyFunction("foo", Vector{
                                      Stage(ast::PipelineStage::kCompute),
@@ -305,7 +384,7 @@ TEST_F(InspectorGetEntryPointTest, WorkgroupStorageSizeSimple) {
     ASSERT_FALSE(inspector.has_error()) << inspector.error();
 
     ASSERT_EQ(1u, result.size());
-    EXPECT_EQ(4u, result[0].workgroup_storage_size);
+    EXPECT_EQ(16u, result[0].workgroup_storage_size);
 }
 
 TEST_F(InspectorGetEntryPointTest, WorkgroupStorageSizeCompoundTypes) {
@@ -338,7 +417,7 @@ TEST_F(InspectorGetEntryPointTest, WorkgroupStorageSizeCompoundTypes) {
     ASSERT_FALSE(inspector.has_error()) << inspector.error();
 
     ASSERT_EQ(1u, result.size());
-    EXPECT_EQ(72u, result[0].workgroup_storage_size);
+    EXPECT_EQ(96u, result[0].workgroup_storage_size);
 }
 
 TEST_F(InspectorGetEntryPointTest, WorkgroupStorageSizeAlignmentPadding) {
@@ -3701,5 +3780,286 @@ fn main(@location(0) fragUV: vec2<f32>,
     inspector.GetSamplerTextureUses("main");
 }
 
+class InspectorTextureTest : public InspectorRunner, public testing::Test {};
+
+TEST_F(InspectorTextureTest, TextureLevelInEP) {
+    std::string shader = R"(
+@group(2) @binding(3) var myTexture: texture_2d<f32>;
+
+@compute @workgroup_size(1)
+fn main() {
+  let num = textureNumLevels(myTexture);
+})";
+
+    Inspector& inspector = Initialize(shader);
+    auto info = inspector.GetTextureQueries("main");
+
+    ASSERT_EQ(1u, info.size());
+    EXPECT_EQ(Inspector::TextureQueryType::kTextureNumLevels, info[0].type);
+    EXPECT_EQ(2u, info[0].group);
+    EXPECT_EQ(3u, info[0].binding);
+}
+
+TEST_F(InspectorTextureTest, TextureLevelInEPNoDups) {
+    std::string shader = R"(
+@group(0) @binding(0) var myTexture: texture_2d<f32>;
+
+@compute @workgroup_size(1)
+fn main() {
+  let num1 = textureNumLevels(myTexture);
+  let num2 = textureNumLevels(myTexture);
+})";
+
+    Inspector& inspector = Initialize(shader);
+    auto info = inspector.GetTextureQueries("main");
+
+    ASSERT_EQ(1u, info.size());
+}
+
+TEST_F(InspectorTextureTest, TextureLevelInEPMultiple) {
+    std::string shader = R"(
+@group(2) @binding(3) var tex1: texture_2d<f32>;
+@group(1) @binding(2) var tex2: texture_2d<f32>;
+
+@compute @workgroup_size(1)
+fn main() {
+  let num1 = textureNumLevels(tex1);
+  let num2 = textureNumLevels(tex2);
+})";
+
+    Inspector& inspector = Initialize(shader);
+    auto info = inspector.GetTextureQueries("main");
+
+    ASSERT_EQ(2u, info.size());
+
+    EXPECT_EQ(Inspector::TextureQueryType::kTextureNumLevels, info[0].type);
+    EXPECT_EQ(2u, info[0].group);
+    EXPECT_EQ(3u, info[0].binding);
+
+    EXPECT_EQ(Inspector::TextureQueryType::kTextureNumLevels, info[1].type);
+    EXPECT_EQ(1u, info[1].group);
+    EXPECT_EQ(2u, info[1].binding);
+}
+
+TEST_F(InspectorTextureTest, TextureSamplesInEP) {
+    std::string shader = R"(
+@group(2) @binding(3) var myTexture: texture_multisampled_2d<f32>;
+
+@compute @workgroup_size(1)
+fn main() {
+  let num = textureNumSamples(myTexture);
+})";
+
+    Inspector& inspector = Initialize(shader);
+    auto info = inspector.GetTextureQueries("main");
+
+    ASSERT_EQ(1u, info.size());
+    EXPECT_EQ(Inspector::TextureQueryType::kTextureNumSamples, info[0].type);
+    EXPECT_EQ(2u, info[0].group);
+    EXPECT_EQ(3u, info[0].binding);
+}
+
+TEST_F(InspectorTextureTest, TextureSamplesInEPNoDups) {
+    std::string shader = R"(
+@group(0) @binding(0) var myTexture: texture_multisampled_2d<f32>;
+
+@compute @workgroup_size(1)
+fn main() {
+  let num1 = textureNumSamples(myTexture);
+  let num2 = textureNumSamples(myTexture);
+})";
+
+    Inspector& inspector = Initialize(shader);
+    auto info = inspector.GetTextureQueries("main");
+
+    ASSERT_EQ(1u, info.size());
+}
+
+TEST_F(InspectorTextureTest, TextureSamplesInEPMultiple) {
+    std::string shader = R"(
+@group(2) @binding(3) var tex1: texture_multisampled_2d<f32>;
+@group(1) @binding(2) var tex2: texture_multisampled_2d<f32>;
+
+@compute @workgroup_size(1)
+fn main() {
+  let num1 = textureNumSamples(tex1);
+  let num2 = textureNumSamples(tex2);
+})";
+
+    Inspector& inspector = Initialize(shader);
+    auto info = inspector.GetTextureQueries("main");
+
+    ASSERT_EQ(2u, info.size());
+
+    EXPECT_EQ(Inspector::TextureQueryType::kTextureNumSamples, info[0].type);
+    EXPECT_EQ(2u, info[0].group);
+    EXPECT_EQ(3u, info[0].binding);
+
+    EXPECT_EQ(Inspector::TextureQueryType::kTextureNumSamples, info[1].type);
+    EXPECT_EQ(1u, info[1].group);
+    EXPECT_EQ(2u, info[1].binding);
+}
+
+TEST_F(InspectorTextureTest, TextureLoadInEP) {
+    std::string shader = R"(
+@group(2) @binding(3) var tex1: texture_2d<f32>;
+
+@compute @workgroup_size(1)
+fn main() {
+  let num1 = textureLoad(tex1, vec2(0, 0), 0);
+})";
+
+    Inspector& inspector = Initialize(shader);
+    auto info = inspector.GetTextureQueries("main");
+
+    ASSERT_EQ(1u, info.size());
+
+    EXPECT_EQ(Inspector::TextureQueryType::kTextureNumLevels, info[0].type);
+    EXPECT_EQ(2u, info[0].group);
+    EXPECT_EQ(3u, info[0].binding);
+}
+
+TEST_F(InspectorTextureTest, TextureLoadMultisampledInEP) {
+    std::string shader = R"(
+@group(2) @binding(3) var tex1: texture_multisampled_2d<f32>;
+
+@compute @workgroup_size(1)
+fn main() {
+  let num1 = textureLoad(tex1, vec2(0, 0), 0);
+})";
+
+    Inspector& inspector = Initialize(shader);
+    auto info = inspector.GetTextureQueries("main");
+
+    ASSERT_EQ(1u, info.size());
+
+    EXPECT_EQ(Inspector::TextureQueryType::kTextureNumSamples, info[0].type);
+    EXPECT_EQ(2u, info[0].group);
+    EXPECT_EQ(3u, info[0].binding);
+}
+
+TEST_F(InspectorTextureTest, TextureLoadMultipleInEP) {
+    std::string shader = R"(
+@group(2) @binding(3) var tex1: texture_2d<f32>;
+@group(1) @binding(4) var tex2: texture_multisampled_2d<f32>;
+
+@compute @workgroup_size(1)
+fn main() {
+  let num1 = textureLoad(tex1, vec2(0, 0), 0);
+  let num2 = textureLoad(tex2, vec2(0, 0), 0);
+})";
+
+    Inspector& inspector = Initialize(shader);
+    auto info = inspector.GetTextureQueries("main");
+
+    ASSERT_EQ(2u, info.size());
+
+    EXPECT_EQ(Inspector::TextureQueryType::kTextureNumLevels, info[0].type);
+    EXPECT_EQ(2u, info[0].group);
+    EXPECT_EQ(3u, info[0].binding);
+    EXPECT_EQ(Inspector::TextureQueryType::kTextureNumSamples, info[1].type);
+    EXPECT_EQ(1u, info[1].group);
+    EXPECT_EQ(4u, info[1].binding);
+}
+
+TEST_F(InspectorTextureTest, TextureInSubfunction) {
+    std::string shader = R"(
+@group(2) @binding(3) var tex1: texture_2d<f32>;
+@group(1) @binding(4) var tex2: texture_multisampled_2d<f32>;
+@group(1) @binding(3) var tex3: texture_2d<f32>;
+
+fn b(tx1: texture_2d<f32>, tx2: texture_multisampled_2d<f32>, tx3: texture_2d<f32>, tx4: texture_2d<f32>) {
+  let v1 = textureNumLevels(tx1);
+  let v2 = textureNumSamples(tx2);
+  let v3 = textureLoad(tx3, vec2(0, 0), 0);
+  let v4 = textureNumLevels(tx4);
+}
+
+fn a(tx1: texture_2d<f32>, tx2: texture_multisampled_2d<f32>, tx3: texture_2d<f32>) {
+  b(tx1, tx2, tx3, tx1);
+}
+
+@compute @workgroup_size(1)
+fn main() {
+  a(tex1, tex2, tex3);
+})";
+
+    Inspector& inspector = Initialize(shader);
+    auto info = inspector.GetTextureQueries("main");
+
+    ASSERT_EQ(3u, info.size());
+
+    EXPECT_EQ(Inspector::TextureQueryType::kTextureNumLevels, info[0].type);
+    EXPECT_EQ(2u, info[0].group);
+    EXPECT_EQ(3u, info[0].binding);
+    EXPECT_EQ(Inspector::TextureQueryType::kTextureNumSamples, info[1].type);
+    EXPECT_EQ(1u, info[1].group);
+    EXPECT_EQ(4u, info[1].binding);
+    EXPECT_EQ(Inspector::TextureQueryType::kTextureNumLevels, info[2].type);
+    EXPECT_EQ(1u, info[2].group);
+    EXPECT_EQ(3u, info[2].binding);
+}
+
+TEST_F(InspectorTextureTest, TextureMultipleEPs) {
+    std::string shader = R"(
+@group(0) @binding(0) var<storage, read_write> dstBuf : array<u32>;
+@group(0) @binding(1) var tex1 : texture_2d_array<f32>;
+@group(0) @binding(4) var tex2 : texture_multisampled_2d<f32>;
+@group(1) @binding(3) var tex3 : texture_2d_array<f32>;
+
+@compute @workgroup_size(1, 1, 1) fn main1() {
+    dstBuf[0] = textureNumLayers(tex1);
+    dstBuf[1] = textureNumLevels(tex1);
+    dstBuf[2] = textureNumSamples(tex2);
+    dstBuf[3] = textureNumLevels(tex3);
+}
+
+@compute @workgroup_size(1, 1, 1) fn main2() {
+    dstBuf[0] = textureNumLayers(tex1);
+    dstBuf[1] = textureNumLevels(tex1);
+    dstBuf[2] = textureNumSamples(tex2);
+}
+    )";
+    Inspector& inspector = Initialize(shader);
+    {
+        auto info1 = inspector.GetTextureQueries("main1");
+        ASSERT_EQ(3u, info1.size());
+
+        EXPECT_EQ(Inspector::TextureQueryType::kTextureNumLevels, info1[0].type);
+        EXPECT_EQ(0u, info1[0].group);
+        EXPECT_EQ(1u, info1[0].binding);
+        EXPECT_EQ(Inspector::TextureQueryType::kTextureNumSamples, info1[1].type);
+        EXPECT_EQ(0u, info1[1].group);
+        EXPECT_EQ(4u, info1[1].binding);
+        EXPECT_EQ(Inspector::TextureQueryType::kTextureNumLevels, info1[2].type);
+        EXPECT_EQ(1u, info1[2].group);
+        EXPECT_EQ(3u, info1[2].binding);
+    }
+    {
+        auto info2 = inspector.GetTextureQueries("main2");
+        ASSERT_EQ(2u, info2.size());
+
+        EXPECT_EQ(Inspector::TextureQueryType::kTextureNumLevels, info2[0].type);
+        EXPECT_EQ(0u, info2[0].group);
+        EXPECT_EQ(1u, info2[0].binding);
+        EXPECT_EQ(Inspector::TextureQueryType::kTextureNumSamples, info2[1].type);
+        EXPECT_EQ(0u, info2[1].group);
+        EXPECT_EQ(4u, info2[1].binding);
+    }
+}
+
 }  // namespace
+
+static std::ostream& operator<<(std::ostream& out, const Inspector::TextureQueryType& ty) {
+    switch (ty) {
+        case Inspector::TextureQueryType::kTextureNumLevels:
+            out << "textureNumLevels";
+            break;
+        case Inspector::TextureQueryType::kTextureNumSamples:
+            out << "textureNumSamples";
+            break;
+    }
+    return out;
+}
+
 }  // namespace tint::inspector

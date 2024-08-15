@@ -8,7 +8,6 @@ import type * as Platform from '../../../core/platform/platform.js';
 import * as SDK from '../../../core/sdk/sdk.js';
 import * as Protocol from '../../../generated/protocol.js';
 import * as NetworkForward from '../../../panels/network/forward/forward.js';
-import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as Coordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
 import * as ReportView from '../../../ui/components/report_view/report_view.js';
@@ -133,8 +132,10 @@ export class PermissionsPolicySection extends HTMLElement {
           ReportView.ReportView.ReportKey.litTagName}>
         <${ReportView.ReportView.ReportValue.litTagName}>
           ${disallowed.map(p => p.feature).join(', ')}
-          <button class="link" @click=${(): void => this.#toggleShowPermissionsDisallowedDetails()}
-          jslog=${VisualLogging.action().track({click: true}).context('show-disabled-features-details')}>
+          <button class="link" @click=${() => this.#toggleShowPermissionsDisallowedDetails()}
+          jslog=${VisualLogging.action('show-disabled-features-details').track({
+        click: true,
+      })}>
             ${i18nString(UIStrings.showDetails)}
           </button>
         </${ReportView.ReportView.ReportValue.litTagName}>
@@ -151,7 +152,7 @@ export class PermissionsPolicySection extends HTMLElement {
       const resource = frame && frame.resourceForURL(frame.url);
       const linkTargetRequest =
           blockReason === Protocol.Page.PermissionsPolicyBlockReason.Header && resource && resource.request;
-      const blockReasonText = ((): String => {
+      const blockReasonText = (() => {
         switch (blockReason) {
           case Protocol.Page.PermissionsPolicyBlockReason.IframeAttribute:
             return i18nString(UIStrings.disabledByIframe);
@@ -197,7 +198,7 @@ export class PermissionsPolicySection extends HTMLElement {
             ${
           linkTargetDOMNode ? renderIconLink(
                                   'code-circle', i18nString(UIStrings.clickToShowIframe),
-                                  (): Promise<void> => Common.Revealer.reveal(linkTargetDOMNode), 'reveal-in-elements') :
+                                  () => Common.Revealer.reveal(linkTargetDOMNode), 'reveal-in-elements') :
                               LitHtml.nothing}
             ${
           linkTargetRequest ? renderIconLink(
@@ -218,8 +219,10 @@ export class PermissionsPolicySection extends HTMLElement {
       <${ReportView.ReportView.ReportValue.litTagName} class="policies-list">
         ${featureRows}
         <div class="permissions-row">
-          <button class="link" @click=${(): void => this.#toggleShowPermissionsDisallowedDetails()}
-          jslog=${VisualLogging.action().track({click: true}).context('hide-disabled-features-details')}>
+          <button class="link" @click=${() => this.#toggleShowPermissionsDisallowedDetails()}
+          jslog=${VisualLogging.action('hide-disabled-features-details').track({
+      click: true,
+    })}>
             ${i18nString(UIStrings.hideDetails)}
           </button>
         </div>
@@ -247,11 +250,9 @@ export class PermissionsPolicySection extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent(
-    'devtools-resources-permissions-policy-section', PermissionsPolicySection);
+customElements.define('devtools-resources-permissions-policy-section', PermissionsPolicySection);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-resources-permissions-policy-section': PermissionsPolicySection;
   }

@@ -57,8 +57,8 @@ bool IsGreaterThan(const Rdata& lhs, const Rdata& rhs) {
 
   const bool lhs_write = lhs_writer.Write(lhs_cast);
   const bool rhs_write = rhs_writer.Write(rhs_cast);
-  OSP_DCHECK(lhs_write);
-  OSP_DCHECK(rhs_write);
+  OSP_CHECK(lhs_write);
+  OSP_CHECK(rhs_write);
 
   // Skip the size bits.
   const size_t min_size = std::min(lhs_writer.offset(), rhs_writer.offset());
@@ -186,7 +186,7 @@ RawRecordRdata::RawRecordRdata() = default;
 RawRecordRdata::RawRecordRdata(std::vector<uint8_t> rdata)
     : rdata_(std::move(rdata)) {
   // Ensure RDATA length does not exceed the maximum allowed.
-  OSP_DCHECK(rdata_.size() <= kMaxRawRecordSize);
+  OSP_CHECK_LE(rdata_.size(), kMaxRawRecordSize);
 }
 
 RawRecordRdata::RawRecordRdata(const uint8_t* begin, size_t size)
@@ -559,7 +559,7 @@ MdnsRecord::MdnsRecord(DomainName name,
       record_type_(record_type),
       ttl_(ttl),
       rdata_(std::move(rdata)) {
-  OSP_DCHECK(IsValidConfig(name_, dns_type, ttl_, rdata_));
+  OSP_CHECK(IsValidConfig(name_, dns_type, ttl_, rdata_));
 }
 
 MdnsRecord::MdnsRecord(const MdnsRecord& other) = default;
@@ -778,10 +778,10 @@ MdnsMessage::MdnsMessage(uint16_t id,
       answers_(std::move(answers)),
       authority_records_(std::move(authority_records)),
       additional_records_(std::move(additional_records)) {
-  OSP_DCHECK(questions_.size() < kMaxMessageFieldEntryCount);
-  OSP_DCHECK(answers_.size() < kMaxMessageFieldEntryCount);
-  OSP_DCHECK(authority_records_.size() < kMaxMessageFieldEntryCount);
-  OSP_DCHECK(additional_records_.size() < kMaxMessageFieldEntryCount);
+  OSP_DCHECK_LT(questions_.size(), kMaxMessageFieldEntryCount);
+  OSP_CHECK_LT(answers_.size(), kMaxMessageFieldEntryCount);
+  OSP_CHECK_LT(authority_records_.size(), kMaxMessageFieldEntryCount);
+  OSP_CHECK_LT(additional_records_.size(), kMaxMessageFieldEntryCount);
 
   for (const MdnsQuestion& question : questions_) {
     max_wire_size_ += question.MaxWireSize();
@@ -835,25 +835,25 @@ size_t MdnsMessage::MaxWireSize() const {
 }
 
 void MdnsMessage::AddQuestion(MdnsQuestion question) {
-  OSP_DCHECK(questions_.size() < kMaxMessageFieldEntryCount);
+  OSP_CHECK_LT(questions_.size(), kMaxMessageFieldEntryCount);
   max_wire_size_ += question.MaxWireSize();
   questions_.emplace_back(std::move(question));
 }
 
 void MdnsMessage::AddAnswer(MdnsRecord record) {
-  OSP_DCHECK(answers_.size() < kMaxMessageFieldEntryCount);
+  OSP_CHECK_LT(answers_.size(), kMaxMessageFieldEntryCount);
   max_wire_size_ += record.MaxWireSize();
   answers_.emplace_back(std::move(record));
 }
 
 void MdnsMessage::AddAuthorityRecord(MdnsRecord record) {
-  OSP_DCHECK(authority_records_.size() < kMaxMessageFieldEntryCount);
+  OSP_CHECK_LT(authority_records_.size(), kMaxMessageFieldEntryCount);
   max_wire_size_ += record.MaxWireSize();
   authority_records_.emplace_back(std::move(record));
 }
 
 void MdnsMessage::AddAdditionalRecord(MdnsRecord record) {
-  OSP_DCHECK(additional_records_.size() < kMaxMessageFieldEntryCount);
+  OSP_CHECK_LT(additional_records_.size(), kMaxMessageFieldEntryCount);
   max_wire_size_ += record.MaxWireSize();
   additional_records_.emplace_back(std::move(record));
 }

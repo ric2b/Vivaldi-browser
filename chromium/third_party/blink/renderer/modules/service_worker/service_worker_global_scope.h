@@ -73,7 +73,6 @@ class ExceptionState;
 class FetchEvent;
 class RespondWithObserver;
 class RequestInit;
-class ScriptPromise;
 class ScriptState;
 class ServiceWorker;
 class ServiceWorkerClients;
@@ -169,7 +168,7 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
   ServiceWorkerRegistration* registration();
   ::blink::ServiceWorker* serviceWorker();
 
-  ScriptPromise skipWaiting(ScriptState*);
+  ScriptPromiseTyped<IDLUndefined> skipWaiting(ScriptState*);
 
   void BindServiceWorker(mojo::PendingReceiver<mojom::blink::ServiceWorker>);
   void BindControllerServiceWorker(
@@ -242,7 +241,7 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
       int fetch_event_id,
       const KURL& request_url,
       bool range_request,
-      absl::optional<network::DataElementChunkedDataPipe> request_body,
+      std::optional<network::DataElementChunkedDataPipe> request_body,
       base::TimeTicks event_dispatch_time,
       base::TimeTicks respond_with_settled_time);
   // Responds to the fetch event with |response|.
@@ -356,7 +355,7 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
   bool SetAttributeEventListener(const AtomicString& event_type,
                                  EventListener* listener) override;
 
-  absl::optional<mojo::PendingRemote<network::mojom::blink::URLLoaderFactory>>
+  std::optional<mojo::PendingRemote<network::mojom::blink::URLLoaderFactory>>
   FindRaceNetworkRequestURLLoaderFactory(
       const base::UnguessableToken& token) final;
 
@@ -557,7 +556,7 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
   void StartFetchEvent(
       mojom::blink::DispatchFetchEventParamsPtr params,
       base::WeakPtr<CrossOriginResourcePolicyChecker> corp_checker,
-      absl::optional<base::TimeTicks> created_time,
+      std::optional<base::TimeTicks> created_time,
       int event_id);
   void StartInstallEvent(int event_id);
   void StartActivateEvent(int event_id);
@@ -636,7 +635,7 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
   Member<::blink::ServiceWorker> service_worker_;
 
   // Registry of interfaces exposed to the browser from Service Workers.
-  const raw_ptr<InterfaceRegistry, ExperimentalRenderer> interface_registry_;
+  const raw_ptr<InterfaceRegistry> interface_registry_;
 
   // Map from service worker version id to JavaScript ServiceWorker object in
   // current execution context.

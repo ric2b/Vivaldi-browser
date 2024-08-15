@@ -209,13 +209,10 @@ def GenTests(api):
         ```
         ''').strip()) + api.post_process(post_process.DropExpectation))
 
-  bug_msg = (
-    'Something unexpected occurred'
-    ' while running presubmit checks.'
-    ' Please [file a bug](https://bugs.chromium.org'
-    '/p/chromium/issues/entry?components='
-    'Infra%3EClient%3EChrome&status=Untriaged)'
-  )
+  bug_msg = ('Something unexpected occurred'
+             ' while running presubmit checks.'
+             ' Please [file a bug](https://issues.chromium.org'
+             '/issues/new?component=1456211)')
   yield (api.test('failure-no-json', status="INFRA_FAILURE") +
          api.runtime(is_experimental=False) +
          api.buildbucket.try_build(project='infra') +

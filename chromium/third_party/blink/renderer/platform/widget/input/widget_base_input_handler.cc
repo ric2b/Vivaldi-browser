@@ -222,7 +222,7 @@ class WidgetBaseInputHandler::HandlingState {
     event_overscroll_ = std::move(params);
   }
 
-  absl::optional<WebTouchAction>& touch_action() { return touch_action_; }
+  std::optional<WebTouchAction>& touch_action() { return touch_action_; }
 
   Vector<WidgetBaseInputHandler::InjectScrollGestureParams>&
   injected_scroll_params() {
@@ -238,7 +238,7 @@ class WidgetBaseInputHandler::HandlingState {
   // supporting overscroll IPC notifications due to fling animation updates.
   std::unique_ptr<InputHandlerProxy::DidOverscrollParams> event_overscroll_;
 
-  absl::optional<WebTouchAction> touch_action_;
+  std::optional<WebTouchAction> touch_action_;
 
   // Used to hold a sequence of parameters corresponding to scroll gesture
   // events that should be injected once the current input event is done
@@ -249,7 +249,7 @@ class WidgetBaseInputHandler::HandlingState {
   // Whether the event we are handling is a touch start or move.
   bool touch_start_or_move_;
 
-  raw_ptr<HandlingState, ExperimentalRenderer> previous_state_;
+  raw_ptr<HandlingState> previous_state_;
   bool previous_was_handling_input_;
   base::WeakPtr<WidgetBaseInputHandler> input_handler_;
 };
@@ -277,8 +277,9 @@ WebInputEventResult WidgetBaseInputHandler::HandleTouchEvent(
   for (unsigned i = 0; i < touch_event.touches_length; ++i) {
     const WebTouchPoint& touch_point = touch_event.touches[i];
     if (touch_point.state != WebTouchPoint::State::kStateStationary) {
-      const WebPointerEvent& pointer_event =
-          WebPointerEvent(touch_event, touch_point);
+      WebPointerEvent pointer_event = WebPointerEvent(touch_event, touch_point);
+      // Copy queued timestamp from original WebInputEvent.
+      pointer_event.SetQueuedTimeStamp(input_event.QueuedTimeStamp());
       const WebCoalescedInputEvent& coalesced_pointer_event =
           GetCoalescedWebPointerEventForTouch(
               pointer_event, coalesced_event.GetCoalescedEventsPointers(),

@@ -810,6 +810,8 @@ extern const int16_t kDirectionalIntraPredictorDerivative[44];
 
 extern const uint8_t kDeblockFilterLevelIndex[kMaxPlanes][kNumLoopFilterTypes];
 
+extern const uint16_t kBlockWeight[kMaxBlockSizes];
+
 }  // namespace libgav1
 
 #endif  // LIBGAV1_SRC_UTILS_CONSTANTS_H_

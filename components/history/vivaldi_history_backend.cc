@@ -28,18 +28,20 @@ void HistoryBackend::DropHistoryTables() {
 }
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-DetailedHistory::DetailedHistoryList
-HistoryBackend::QueryDetailedHistoryWStatement(
-    const char* sql_query,
-    const std::string& search_string,
-    int max_hits) {
-  DetailedHistory::DetailedHistoryList query_results;
-  if (db_) {
-    db_->GetDetailedMatchesWStatement(
-      sql_query, search_string, max_hits, &query_results);
-  }
-  return query_results;
+
+history::TypedUrlResults HistoryBackend::QueryTypedHistory(
+    const std::string query,
+    KeywordID prefix_keyword,
+    int max_results) {
+  return db_->GetVivaldiTypedHistory(query, prefix_keyword, max_results);
 }
+
+history::DetailedUrlResults HistoryBackend::GetVivaldiDetailedHistory(
+    const std::string query,
+    int max_results) {
+  return db_->GetVivaldiDetailedHistory(query, max_results);
+}
+
 #endif
 
 }  // namespace history

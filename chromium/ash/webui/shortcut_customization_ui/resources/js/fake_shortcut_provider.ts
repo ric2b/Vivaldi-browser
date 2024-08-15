@@ -6,7 +6,7 @@ import {FakeMethodResolver} from 'chrome://resources/ash/common/fake_method_reso
 import {FakeObservables} from 'chrome://resources/ash/common/fake_observables.js';
 import {assert} from 'chrome://resources/js/assert.js';
 
-import {AcceleratorResultData, AcceleratorsUpdatedObserverRemote, EditDialogCompletedActions, PolicyUpdatedObserverRemote, Subactions, UserAction} from '../mojom-webui/ash/webui/shortcut_customization_ui/mojom/shortcut_customization.mojom-webui.js';
+import {AcceleratorResultData, AcceleratorsUpdatedObserverRemote, EditDialogCompletedActions, PolicyUpdatedObserverRemote, Subactions, UserAction} from '../mojom-webui/shortcut_customization.mojom-webui.js';
 
 import {Accelerator, AcceleratorCategory, AcceleratorConfigResult, AcceleratorSource, MojoAcceleratorConfig, MojoLayoutInfo, ShortcutProviderInterface} from './shortcut_types.js';
 
@@ -172,8 +172,10 @@ export class FakeShortcutProvider implements ShortcutProviderInterface {
 
   restoreAllDefaults(): Promise<{result: AcceleratorResultData}> {
     // Always return kSuccess in this fake.
-    const result:
-        AcceleratorResultData = {result: AcceleratorConfigResult.kSuccess};
+    const result: AcceleratorResultData = {
+      result: AcceleratorConfigResult.kSuccess,
+      shortcutName: null,
+    };
     this.methods.setResult('restoreAllDefaults', {result});
     return this.methods.resolveMethod('restoreAllDefaults');
   }

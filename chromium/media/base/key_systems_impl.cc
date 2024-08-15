@@ -309,8 +309,7 @@ void KeySystemsImpl::UpdateSupportedKeySystems() {
     OnSupportedKeySystemsUpdated({});
     return;
   }
-
-  GetMediaClient()->GetSupportedKeySystems(
+  key_system_support_observer_ = GetMediaClient()->GetSupportedKeySystems(
       base::BindRepeating(&KeySystemsImpl::OnSupportedKeySystemsUpdated,
                           weak_factory_.GetWeakPtr()));
 }
@@ -730,7 +729,7 @@ bool IsSupportedKeySystemWithInitDataType(const std::string& key_system,
 }
 
 std::string GetKeySystemNameForUMA(const std::string& key_system,
-                                   absl::optional<bool> use_hw_secure_codecs) {
+                                   std::optional<bool> use_hw_secure_codecs) {
   // Here we maintain a short list of known key systems to facilitate UMA
   // reporting. Mentioned key systems are not necessarily supported by
   // the current platform.

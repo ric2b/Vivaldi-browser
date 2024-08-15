@@ -550,26 +550,6 @@ bool OmniboxFieldTrial::HUPSearchDatabase() {
   return value.empty() || (value == "true");
 }
 
-bool OmniboxFieldTrial::IsActionsUISimplificationEnabled() {
-  return base::FeatureList::IsEnabled(omnibox::kOmniboxActionsUISimplification);
-}
-
-bool OmniboxFieldTrial::IsKeywordModeRefreshEnabled() {
-  return base::FeatureList::IsEnabled(omnibox::kOmniboxKeywordModeRefresh);
-}
-
-const base::FeatureParam<bool>
-    OmniboxFieldTrial::kActionsUISimplificationIncludeRealbox(
-        &omnibox::kOmniboxActionsUISimplification,
-        "ActionsUISimplificationIncludeRealbox",
-        true);
-
-const base::FeatureParam<bool>
-    OmniboxFieldTrial::kActionsUISimplificationTrimExtra(
-        &omnibox::kOmniboxActionsUISimplification,
-        "ActionsUISimplificationTrimExtra",
-        true);
-
 bool OmniboxFieldTrial::IsOnDeviceHeadSuggestEnabledForIncognito() {
   return base::FeatureList::IsEnabled(omnibox::kOnDeviceHeadProviderIncognito);
 }
@@ -978,7 +958,7 @@ const base::FeatureParam<omnibox::CompanyEntityIconAdjustmentGroup>
     kCompanyEntityIconAdjustmentGroup{
         &omnibox::kCompanyEntityIconAdjustment,
         "OmniboxCompanyEntityAdjustmentGroup",
-        omnibox::CompanyEntityIconAdjustmentGroup::kLeastAggressive,
+        omnibox::CompanyEntityIconAdjustmentGroup::kModerate,
         &kCompanyEntityIconAdjustmentGroupOptions};
 
 const base::FeatureParam<bool> kCompanyEntityIconAdjustmentCounterfactual(
@@ -1000,7 +980,7 @@ const base::FeatureParam<bool> kEnableScoringSignalsAnnotatorsForLogging(
 const base::FeatureParam<bool> kEnableScoringSignalsAnnotatorsForMlScoring(
     &omnibox::kMlUrlScoring,
     "enable_scoring_signals_annotators_for_ml_scoring",
-    false);
+    true);
 
 // If true, runs the ML scoring model but does not assign new relevance scores
 // to the URL suggestions and does not rerank them.
@@ -1032,7 +1012,7 @@ MLConfig::MLConfig() {
                                "MlUrlScoringShortcutDocumentSignals", false)
           .Get() ||
       base::FeatureParam<bool>(&omnibox::kMlUrlScoring,
-                               "MlUrlScoringShortcutDocumentSignals", false)
+                               "MlUrlScoringShortcutDocumentSignals", true)
           .Get();
 
   ml_url_scoring = base::FeatureList::IsEnabled(omnibox::kMlUrlScoring);
@@ -1071,6 +1051,14 @@ MLConfig::MLConfig() {
           .Get();
 
   url_scoring_model = base::FeatureList::IsEnabled(omnibox::kUrlScoringModel);
+
+  ml_url_score_caching =
+      base::FeatureList::IsEnabled(omnibox::kMlUrlScoreCaching);
+  max_ml_score_cache_size =
+      base::FeatureParam<int>(&omnibox::kMlUrlScoreCaching,
+                              "MlUrlScoreCaching_MaxMlScoreCacheSize",
+                              max_ml_score_cache_size)
+          .Get();
 }
 
 MLConfig::MLConfig(const MLConfig&) = default;
@@ -1122,6 +1110,9 @@ bool IsMlUrlScoringUnlimitedNumCandidatesEnabled() {
 bool IsUrlScoringModelEnabled() {
   return GetMLConfig().url_scoring_model;
 }
+bool IsMlUrlScoreCachingEnabled() {
+  return GetMLConfig().ml_url_score_caching;
+}
 
 // <- ML Relevance Scoring
 // ---------------------------------------------------------
@@ -1139,6 +1130,17 @@ const base::FeatureParam<int>
         "max_prefetches_per_omnibox_session",
         5);
 // <- Touch Down Trigger For Prefetch
+// ---------------------------------------------------------
+// Site Search Starter Pack ->
+const base::FeatureParam<std::string> kGeminiUrlOverride(
+    &omnibox::kStarterPackExpansion,
+    "StarterPackGeminiUrlOverride",
+    "https://gemini.google.com/prompt");
+
+bool IsStarterPackExpansionEnabled() {
+  return base::FeatureList::IsEnabled(omnibox::kStarterPackExpansion);
+}
+// <- Site Search Starter Pack
 // ---------------------------------------------------------
 
 }  // namespace OmniboxFieldTrial

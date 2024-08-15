@@ -10,6 +10,20 @@
 
 namespace plus_addresses::test {
 
+PlusProfile GetPlusProfile() {
+  return {.profile_id = 123,
+          .facet = "foo.com",
+          .plus_address = "plus+foo@plus.plus",
+          .is_confirmed = true};
+}
+
+PlusProfile GetPlusProfile2() {
+  return {.profile_id = 234,
+          .facet = "bar.com",
+          .plus_address = "plus+bar@plus.plus",
+          .is_confirmed = true};
+}
+
 std::string MakeCreationResponse(const PlusProfile& profile) {
   std::string json = base::ReplaceStringPlaceholders(
       R"(
@@ -27,12 +41,12 @@ std::string MakeListResponse(const std::vector<PlusProfile>& profiles) {
   base::Value::List list;
   for (const PlusProfile& profile : profiles) {
     std::string json = MakePlusProfile(profile);
-    absl::optional<base::Value::Dict> dict = base::JSONReader::ReadDict(json);
+    std::optional<base::Value::Dict> dict = base::JSONReader::ReadDict(json);
     DCHECK(dict.has_value());
     list.Append(std::move(dict.value()));
   }
   response.Set("plusProfiles", std::move(list));
-  absl::optional<std::string> json = base::WriteJson(response);
+  std::optional<std::string> json = base::WriteJson(response);
   DCHECK(json.has_value());
   return json.value();
 }

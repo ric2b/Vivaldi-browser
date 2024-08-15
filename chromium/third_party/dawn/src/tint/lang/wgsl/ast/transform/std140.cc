@@ -57,7 +57,7 @@ namespace {
 /// UniformVariable is used by Std140::State::AccessIndex to indicate the root uniform variable
 struct UniformVariable {
     /// @returns a hash code for this object
-    size_t HashCode() const { return 0; }
+    tint::HashCode HashCode() const { return 0; }
 };
 
 /// Inequality operator for UniformVariable
@@ -70,7 +70,7 @@ struct DynamicIndex {
     size_t slot;  // The index of the expression in Std140::State::AccessChain::dynamic_indices
 
     /// @returns a hash code for this object
-    size_t HashCode() const { return Hash(slot); }
+    tint::HashCode HashCode() const { return Hash(slot); }
 };
 
 /// Inequality operator for DynamicIndex
@@ -193,12 +193,8 @@ struct Std140::State {
         /// The chain of accesses indices.
         AccessIndices indices;
 
-        /// Hash function for LoadFnKey.
-        struct Hasher {
-            /// @param fn the LoadFnKey to hash
-            /// @return the hash for the given LoadFnKey
-            size_t operator()(const LoadFnKey& fn) const { return Hash(fn.var, fn.indices); }
-        };
+        /// @returns the hash code for the LoadFnKey
+        tint::HashCode HashCode() const { return Hash(var, indices); }
 
         /// Equality operator
         bool operator==(const LoadFnKey& other) const {
@@ -218,7 +214,7 @@ struct Std140::State {
     const SymbolTable& sym = src.Symbols();
 
     /// Map of load function signature, to the generated function
-    Hashmap<LoadFnKey, Symbol, 8, LoadFnKey::Hasher> load_fns;
+    Hashmap<LoadFnKey, Symbol, 8> load_fns;
 
     /// Map of std140-forked type to converter function name
     Hashmap<const core::type::Type*, Symbol, 8> conv_fns;
@@ -403,14 +399,14 @@ struct Std140::State {
         return Switch(
             ty,  //
             [&](const core::type::Struct* str) {
-                if (auto std140 = std140_structs.Find(str)) {
+                if (auto std140 = std140_structs.Get(str)) {
                     return b.ty(*std140);
                 }
                 return Type{};
             },
             [&](const core::type::Matrix* mat) {
                 if (MatrixNeedsDecomposing(mat)) {
-                    auto std140_mat = std140_mats.GetOrCreate(mat, [&] {
+                    auto std140_mat = std140_mats.GetOrAdd(mat, [&] {
                         auto name = b.Symbols().New("mat" + std::to_string(mat->columns()) + "x" +
                                                     std::to_string(mat->rows()) + "_" +
                                                     mat->type()->FriendlyName());
@@ -460,6 +456,8 @@ struct Std140::State {
         uint32_t size) {
         // Replace the member with column vectors.
         const auto num_columns = mat->columns();
+        const auto column_size = mat->ColumnType()->Size();
+        const auto column_stride = mat->ColumnStride();
         // Build a struct member for each column of the matrix
         tint::Vector<const StructMember*, 4> out;
         for (uint32_t i = 0; i < num_columns; i++) {
@@ -470,10 +468,13 @@ struct Std140::State {
                 // needs to be applied to the first column vector.
                 attributes.Push(b.MemberAlign(i32(align)));
             }
-            if ((i == num_columns - 1) && mat->Size() != size) {
-                // The matrix was @size() annotated with a larger size than the
-                // natural size for the matrix. This extra padding needs to be
-                // applied to the last column vector.
+            if ((i == num_columns - 1) &&
+                (column_stride * (num_columns - 1) + column_size) != size) {
+                // The matrix size is larger than the individual component vectors.
+                // This occurs with matNx3 matrices, as the last vec3 column has space for one extra
+                // trailing scalar, which is occupied by the matrix. It also applies to matrices
+                // with an explicit @size() attribute.
+                // Apply extra padding needs to the last column vector.
                 attributes.Push(
                     b.MemberSize(AInt(size - mat->ColumnType()->Align() * (num_columns - 1))));
             }
@@ -671,7 +672,7 @@ struct Std140::State {
     /// @returns the converted value expression.
     const Expression* Convert(const core::type::Type* ty, const Expression* expr) {
         // Get an existing, or create a new function for converting the std140 type to ty.
-        auto fn = conv_fns.GetOrCreate(ty, [&] {
+        auto fn = conv_fns.GetOrAdd(ty, [&] {
             auto std140_ty = Std140Type(ty);
             if (!std140_ty) {
                 // ty was not forked for std140.
@@ -690,7 +691,7 @@ struct Std140::State {
                     // call, or by reassembling a std140 matrix from column vector members.
                     tint::Vector<const Expression*, 8> args;
                     for (auto* member : str->Members()) {
-                        if (auto col_members = std140_mat_members.Find(member)) {
+                        if (auto col_members = std140_mat_members.Get(member)) {
                             // std140 decomposed matrix. Reassemble.
                             auto mat_ty = CreateASTTypeFor(ctx, member->Type());
                             auto mat_args =
@@ -772,7 +773,7 @@ struct Std140::State {
     const Expression* LoadMatrixWithFn(const AccessChain& access) {
         // Get an existing, or create a new function for loading the uniform buffer value.
         // This function is keyed off the uniform buffer variable and the access chain.
-        auto fn = load_fns.GetOrCreate(LoadFnKey{access.var, access.indices}, [&] {
+        auto fn = load_fns.GetOrAdd(LoadFnKey{access.var, access.indices}, [&] {
             if (access.IsMatrixSubset()) {
                 // Access chain passes through the matrix, but ends either at a column vector,
                 // column swizzle, or element.

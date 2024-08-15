@@ -482,6 +482,13 @@ export namespace ProtocolMapping {
      */
     'Storage.interestGroupAuctionEventOccurred': [Protocol.Storage.InterestGroupAuctionEventOccurredEvent];
     /**
+     * Specifies which auctions a particular network fetch may be related to, and
+     * in what role. Note that it is not ordered with respect to
+     * Network.requestWillBeSent (but will happen before loadingFinished
+     * loadingFailed).
+     */
+    'Storage.interestGroupAuctionNetworkRequestCreated': [Protocol.Storage.InterestGroupAuctionNetworkRequestCreatedEvent];
+    /**
      * Shared storage was accessed by the associated page.
      * The following parameters are included in all events.
      */
@@ -809,7 +816,7 @@ export namespace ProtocolMapping {
     /**
      * Query a DOM node's accessibility subtree for accessible name and role.
      * This command computes the name and role for all nodes in the subtree, including those that are
-     * ignored for accessibility, and returns those that mactch the specified name and role. If no DOM
+     * ignored for accessibility, and returns those that match the specified name and role. If no DOM
      * node is specified, or the DOM node does not exist, the command returns an error. If neither
      * `accessibleName` or `role` is specified, it returns all the accessibility nodes in the subtree.
      */
@@ -1213,6 +1220,14 @@ export namespace ProtocolMapping {
     'CSS.getLayersForNode': {
       paramsType: [Protocol.CSS.GetLayersForNodeRequest];
       returnType: Protocol.CSS.GetLayersForNodeResponse;
+    };
+    /**
+     * Given a CSS selector text and a style sheet ID, getLocationForSelector
+     * returns an array of locations of the CSS selector in the style sheet.
+     */
+    'CSS.getLocationForSelector': {
+      paramsType: [Protocol.CSS.GetLocationForSelectorRequest];
+      returnType: Protocol.CSS.GetLocationForSelectorResponse;
     };
     /**
      * Starts tracking the given computed styles for updates. The specified array of properties
@@ -2091,7 +2106,7 @@ export namespace ProtocolMapping {
       returnType: void;
     };
     /**
-     * Updates the sensor readings reported by a sensor type previously overriden
+     * Updates the sensor readings reported by a sensor type previously overridden
      * by setSensorOverrideEnabled.
      */
     'Emulation.setSensorOverrideReadings': {
@@ -2181,6 +2196,7 @@ export namespace ProtocolMapping {
     };
     /**
      * Allows overriding user agent with the given string.
+     * `userAgentMetadata` must be set for Client Hint headers to be sent.
      */
     'Emulation.setUserAgentOverride': {
       paramsType: [Protocol.Emulation.SetUserAgentOverrideRequest];
@@ -2324,7 +2340,7 @@ export namespace ProtocolMapping {
       returnType: void;
     };
     /**
-     * This method sets the current candidate text for ime.
+     * This method sets the current candidate text for IME.
      * Use imeCommitComposition to commit the final text.
      * Use imeSetComposition with empty string as text to cancel composition.
      */
@@ -2634,7 +2650,7 @@ export namespace ProtocolMapping {
       returnType: void;
     };
     /**
-     * Deletes browser cookies with matching name and url or domain/path pair.
+     * Deletes browser cookies with matching name and url or domain/path/partitionKey pair.
      */
     'Network.deleteCookies': {
       paramsType: [Protocol.Network.DeleteCookiesRequest];
@@ -2870,8 +2886,8 @@ export namespace ProtocolMapping {
     };
     /**
      * Highlights owner element of the frame with given id.
-     * Deprecated: Doesn't work reliablity and cannot be fixed due to process
-     * separatation (the owner node might be in a different process). Determine
+     * Deprecated: Doesn't work reliably and cannot be fixed due to process
+     * separation (the owner node might be in a different process). Determine
      * the owner node in the client and use highlightNode.
      */
     'Overlay.highlightFrame': {
@@ -3380,7 +3396,7 @@ export namespace ProtocolMapping {
     };
     /**
      * Requests backend to produce compilation cache for the specified scripts.
-     * `scripts` are appeneded to the list of scripts for which the cache
+     * `scripts` are appended to the list of scripts for which the cache
      * would be produced. The list may be reset during page navigation.
      * When script with a matching URL is encountered, the cache is optionally
      * produced upon backend discretion, based on internal heuristics.
@@ -3726,7 +3742,8 @@ export namespace ProtocolMapping {
       returnType: void;
     };
     /**
-     * Enables/Disables issuing of interestGroupAuctionEvent events.
+     * Enables/Disables issuing of interestGroupAuctionEventOccurred and
+     * interestGroupAuctionNetworkRequestCreated.
      */
     'Storage.setInterestGroupAuctionTracking': {
       paramsType: [Protocol.Storage.SetInterestGroupAuctionTrackingRequest];
@@ -3817,6 +3834,14 @@ export namespace ProtocolMapping {
       returnType: void;
     };
     /**
+     * Returns the effective Related Website Sets in use by this profile for the browser
+     * session. The effective Related Website Sets will not change during a browser session.
+     */
+    'Storage.getRelatedWebsiteSets': {
+      paramsType: [];
+      returnType: Protocol.Storage.GetRelatedWebsiteSetsResponse;
+    };
+    /**
      * Returns information about the system.
      */
     'SystemInfo.getInfo': {
@@ -3871,7 +3896,7 @@ export namespace ProtocolMapping {
      *
      * Injected object will be available as `window[bindingName]`.
      *
-     * The object has the follwing API:
+     * The object has the following API:
      * - `binding.send(json)` - a method to send messages over the remote debugging protocol
      * - `binding.onmessage = json => handleMessage(json)` - a callback that will be called for the protocol notifications and command responses.
      */
@@ -4220,6 +4245,14 @@ export namespace ProtocolMapping {
       returnType: void;
     };
     /**
+     * Allows setting credential properties.
+     * https://w3c.github.io/webauthn/#sctn-automation-set-credential-properties
+     */
+    'WebAuthn.setCredentialProperties': {
+      paramsType: [Protocol.WebAuthn.SetCredentialPropertiesRequest];
+      returnType: void;
+    };
+    /**
      * Enables the Media domain
      */
     'Media.enable': {
@@ -4283,6 +4316,10 @@ export namespace ProtocolMapping {
     };
     'FedCm.clickDialogButton': {
       paramsType: [Protocol.FedCm.ClickDialogButtonRequest];
+      returnType: void;
+    };
+    'FedCm.openUrl': {
+      paramsType: [Protocol.FedCm.OpenUrlRequest];
       returnType: void;
     };
     'FedCm.dismissDialog': {

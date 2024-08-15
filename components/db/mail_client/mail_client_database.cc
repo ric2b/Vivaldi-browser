@@ -119,6 +119,10 @@ sql::InitStatus MailClientDatabase::Init(
   return committer.Commit() ? sql::INIT_OK : sql::INIT_FAILURE;
 }
 
+void MailClientDatabase::Close() {
+  db_.Close();
+}
+
 // static
 int MailClientDatabase::GetCurrentVersion() {
   return kCurrentVersionNumber;

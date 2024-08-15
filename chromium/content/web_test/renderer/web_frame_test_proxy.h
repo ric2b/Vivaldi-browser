@@ -89,6 +89,7 @@ class WebFrameTestProxy : public RenderFrameImpl,
       bool should_reset_browser_interface_broker,
       const blink::ParsedPermissionsPolicy& permissions_policy_header,
       const blink::DocumentPolicyFeatureState& document_policy_header) override;
+  void HandleAXObjectDetachedForTest(unsigned axid) override;
   void HandleWebAccessibilityEventForTest(
       const blink::WebAXObject& object,
       const char* event_name,
@@ -121,7 +122,7 @@ class WebFrameTestProxy : public RenderFrameImpl,
 
   TestRunner* test_runner();
 
-  const raw_ptr<TestRunner, ExperimentalRenderer> test_runner_;
+  const raw_ptr<TestRunner> test_runner_;
 
   std::unique_ptr<SpellCheckClient> spell_check_;
 

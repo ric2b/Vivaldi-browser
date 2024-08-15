@@ -67,8 +67,10 @@
 #include "content/public/test/fake_frame_widget.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
+#include "content/test/mock_render_input_router.h"
 #include "content/test/mock_render_widget_host_delegate.h"
 #include "content/test/mock_widget.h"
+#include "content/test/mock_widget_input_handler.h"
 #include "content/test/test_overscroll_delegate.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
@@ -395,10 +397,12 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
                                         routing_id, hidden);
   }
 
-  MockWidgetInputHandler* input_handler() { return &input_handler_; }
+  MockWidgetInputHandler* input_handler() {
+    return mock_render_input_router_->mock_widget_input_handler_.get();
+  }
 
-  blink::mojom::WidgetInputHandler* GetWidgetInputHandler() override {
-    return &input_handler_;
+  RenderInputRouter* GetRenderInputRouter() override {
+    return mock_render_input_router_.get();
   }
 
   void reset_new_content_rendering_timeout_fired() {
@@ -433,6 +437,7 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
             hidden,
             /*renderer_initiated_creation=*/false,
             std::make_unique<FrameTokenMessageQueue>()) {
+    SetupMockRenderInputRouter();
     BindWidgetInterfaces(mojo::AssociatedRemote<blink::mojom::WidgetHost>()
                              .BindNewEndpointAndPassDedicatedReceiver(),
                          widget_.GetNewRemote());
@@ -442,10 +447,18 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
     new_content_rendering_timeout_fired_ = true;
   }
 
+  void SetupMockRenderInputRouter() {
+    mock_render_input_router_.reset();
+    mock_render_input_router_ = std::make_unique<MockRenderInputRouter>(
+        this, this, MakeFlingScheduler(),
+        base::SingleThreadTaskRunner::GetCurrentDefault());
+    SetupInputRouter();
+  }
+
   ui::LatencyInfo last_wheel_or_touch_event_latency_info_;
   bool new_content_rendering_timeout_fired_ = false;
-  MockWidgetInputHandler input_handler_;
   MockWidget widget_;
+  std::unique_ptr<MockRenderInputRouter> mock_render_input_router_;
   std::optional<WebGestureEvent> last_forwarded_gesture_event_;
 };
 
@@ -5324,7 +5337,7 @@ TEST_F(RenderWidgetHostViewAuraTest, ForwardMouseEvent) {
   EXPECT_EQ("0 1 0", delegate.GetMouseMotionCountsAndReset());
 
   // Lock the mouse, simulate, and ensure they are forwarded.
-  view_->LockMouse(false /* request_unadjusted_movement */);
+  view_->LockPointer(false /* request_unadjusted_movement */);
 
   mouse_event =
       ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
@@ -5337,7 +5350,7 @@ TEST_F(RenderWidgetHostViewAuraTest, ForwardMouseEvent) {
   view_->OnMouseEvent(&mouse_event);
   EXPECT_EQ("0 1 0", delegate.GetMouseMotionCountsAndReset());
 
-  view_->UnlockMouse();
+  view_->UnlockPointer();
 
   // view_ will be destroyed when parent is destroyed.
   view_ = nullptr;

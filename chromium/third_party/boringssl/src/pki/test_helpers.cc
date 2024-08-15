@@ -47,11 +47,10 @@ bool GetValue(std::string_view prefix, std::string_view line,
 // hex-encoded string on error.
 std::string OidToString(der::Input oid) {
   CBS cbs;
-  CBS_init(&cbs, oid.UnsafeData(), oid.Length());
+  CBS_init(&cbs, oid.data(), oid.size());
   bssl::UniquePtr<char> text(CBS_asn1_oid_to_text(&cbs));
   if (!text) {
-    return "invalid:" +
-           bssl::string_util::HexEncode(oid.UnsafeData(), oid.Length());
+    return "invalid:" + bssl::string_util::HexEncode(oid);
   }
   return text.get();
 }
@@ -130,14 +129,14 @@ std::string GetTestRoot(void) {
 
 namespace der {
 
-void PrintTo(const Input &data, ::std::ostream *os) {
+void PrintTo(Input data, ::std::ostream *os) {
   size_t len;
-  if (!EVP_EncodedLength(&len, data.Length())) {
+  if (!EVP_EncodedLength(&len, data.size())) {
     *os << "[]";
     return;
   }
   std::vector<uint8_t> encoded(len);
-  len = EVP_EncodeBlock(encoded.data(), data.UnsafeData(), data.Length());
+  len = EVP_EncodeBlock(encoded.data(), data.data(), data.size());
   // Skip the trailing \0.
   std::string b64_encoded(encoded.begin(), encoded.begin() + len);
   *os << "[" << b64_encoded << "]";
@@ -148,7 +147,7 @@ void PrintTo(const Input &data, ::std::ostream *os) {
 der::Input SequenceValueFromString(std::string_view s) {
   der::Parser parser((der::Input(s)));
   der::Input data;
-  if (!parser.ReadTag(der::kSequence, &data)) {
+  if (!parser.ReadTag(CBS_ASN1_SEQUENCE, &data)) {
     ADD_FAILURE();
     return der::Input();
   }
@@ -507,7 +506,7 @@ void VerifyUserConstrainedPolicySet(
     const std::set<der::Input> &actual_user_constrained_policy_set,
     const std::string &errors_file_path) {
   std::set<std::string> actual_user_constrained_policy_str_set;
-  for (const der::Input &der_oid : actual_user_constrained_policy_set) {
+  for (der::Input der_oid : actual_user_constrained_policy_set) {
     actual_user_constrained_policy_str_set.insert(OidToString(der_oid));
   }
   if (expected_user_constrained_policy_str_set !=

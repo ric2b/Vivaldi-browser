@@ -24,9 +24,9 @@ module.exports = function (grunt) {
         cmd: 'node',
         args: ['tools/gen_version'],
       },
-      'generate-listings': {
+      'generate-listings-and-webworkers': {
         cmd: 'node',
-        args: ['tools/gen_listings', 'gen/', ...kAllSuites.map(s => 'src/' + s)],
+        args: ['tools/gen_listings_and_webworkers', 'gen/', ...kAllSuites.map(s => 'src/' + s)],
       },
       validate: {
         cmd: 'node',
@@ -159,14 +159,14 @@ module.exports = function (grunt) {
         // Must run after generate-common and run:build-out.
         files: [
           { expand: true, dest: 'out/', cwd: 'gen', src: 'common/internal/version.js' },
-          { expand: true, dest: 'out/', cwd: 'gen', src: '*/listing.js' },
+          { expand: true, dest: 'out/', cwd: 'gen', src: '*/**/*.js' },
         ],
       },
       'gen-to-out-wpt': {
         // Must run after generate-common and run:build-out-wpt.
         files: [
           { expand: true, dest: 'out-wpt/', cwd: 'gen', src: 'common/internal/version.js' },
-          { expand: true, dest: 'out-wpt/', cwd: 'gen', src: 'webgpu/listing.js' },
+          { expand: true, dest: 'out-wpt/', cwd: 'gen', src: 'webgpu/**/*.js' },
         ],
       },
       'htmlfiles-to-out': {
@@ -243,7 +243,7 @@ module.exports = function (grunt) {
 
   grunt.registerTask('generate-common', 'Generate files into gen/ and src/', [
     'run:generate-version',
-    'run:generate-listings',
+    'run:generate-listings-and-webworkers',
     'run:generate-cache',
   ]);
   grunt.registerTask('build-standalone', 'Build out/ (no checks; run after generate-common)', [

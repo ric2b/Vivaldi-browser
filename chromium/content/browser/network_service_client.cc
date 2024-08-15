@@ -281,12 +281,6 @@ void NetworkServiceClient::OnCertificateRequested(
         cert_responder_remote) {
   mojo::Remote<network::mojom::ClientCertificateResponder> cert_responder(
       std::move(cert_responder_remote));
-
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          network::switches::kIgnoreUrlFetcherCertRequests)) {
-    cert_responder->ContinueWithoutCertificate();
-    return;
-  }
   cert_responder->CancelRequest();
 }
 
@@ -350,5 +344,8 @@ void NetworkServiceClient::Clone(
         observer) {
   url_loader_network_service_observers_.Add(this, std::move(observer));
 }
+
+void NetworkServiceClient::OnWebSocketConnectedToPrivateNetwork(
+    network::mojom::IPAddressSpace ip_address_space) {}
 
 }  // namespace content

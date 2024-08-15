@@ -12,9 +12,9 @@
 #include "core/fpdfdoc/cpdf_structelement.h"
 #include "core/fpdfdoc/cpdf_structtree.h"
 #include "core/fxcrt/fx_safe_types.h"
+#include "core/fxcrt/numerics/safe_conversions.h"
 #include "core/fxcrt/stl_util.h"
 #include "fpdfsdk/cpdfsdk_helpers.h"
-#include "third_party/base/numerics/safe_conversions.h"
 
 namespace {
 
@@ -103,7 +103,7 @@ FPDF_StructElement_GetID(FPDF_STRUCTELEMENT struct_element,
       CPDFStructElementFromFPDFStructElement(struct_element);
   if (!elem)
     return 0;
-  absl::optional<WideString> id = elem->GetID();
+  std::optional<WideString> id = elem->GetID();
   if (!id.has_value())
     return 0;
   return Utf16EncodeMaybeCopyAndReturnLength(id.value(), buffer, buflen);
@@ -117,7 +117,7 @@ FPDF_StructElement_GetLang(FPDF_STRUCTELEMENT struct_element,
       CPDFStructElementFromFPDFStructElement(struct_element);
   if (!elem)
     return 0;
-  absl::optional<WideString> lang = elem->GetLang();
+  std::optional<WideString> lang = elem->GetLang();
   if (!lang.has_value())
     return 0;
   return Utf16EncodeMaybeCopyAndReturnLength(lang.value(), buffer, buflen);
@@ -419,7 +419,7 @@ FPDF_StructElement_Attr_GetBlobValue(FPDF_STRUCTELEMENT_ATTR struct_attribute,
 
   ByteString result = obj->GetString();
   const unsigned long len =
-      pdfium::base::checked_cast<unsigned long>(result.GetLength());
+      pdfium::checked_cast<unsigned long>(result.GetLength());
   if (buffer && len <= buflen)
     memcpy(buffer, result.c_str(), len);
 

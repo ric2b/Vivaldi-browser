@@ -103,6 +103,10 @@
   "chrome/browser/nearby_sharing/internal/nearby_share_internal_strings.grd": {
     "messages": [2260],
   },
+  "chrome/browser/platform_experience/win/resources/resources.grd": {
+    "includes": [2270],
+    "messages": [2275],
+  },
   "chrome/browser/recent_tabs/internal/android/java/strings/android_restore_tabs_strings.grd": {
     "messages": [2280],
   },
@@ -182,6 +186,10 @@
     "META": {"sizes": {"includes": [50]}},
     "includes": [2640],
   },
+  "chrome/browser/resources/chromeos/seal/resources.grd": {
+    "META": {"sizes": {"includes": [50]}},
+    "includes": [2650],
+  },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/parent_access/resources.grd": {
     "META": {"sizes": {"includes": [50],}},
     "includes": [2660],
@@ -212,18 +220,13 @@
   "chrome/browser/resources/chromeos/app_icon/app_icon_resources.grd": {
     "structures": [2800],
   },
-  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/login/oobe_conditional_resources.grd": {
-    "META": {"sizes": {"includes": [150], "structures": [300]}},
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/login/resources.grd": {
+    "META": {"sizes": {"includes": [300],}},
     "includes": [2820],
-    "structures": [2840],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/lock_screen_reauth/resources.grd": {
     "META": {"sizes": {"includes": [30]}},
     "includes": [2860],
-  },
-  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/login/oobe_unconditional_resources.grd": {
-    "META": {"sizes": {"includes": [350]}},
-    "includes": [2880],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/multidevice_internals/resources.grd": {
     "META": {"sizes": {"includes": [35]}},
@@ -245,10 +248,6 @@
     "META": {"sizes": {"includes": [5]}},
     "includes": [2980],
   },
-  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/commander/resources.grd": {
-    "META": {"sizes": {"includes": [15]}},
-    "includes": [3020],
-  },
   "chrome/browser/resources/component_extension_resources.grd": {
     "includes": [3040],
     "structures": [3060],
@@ -256,6 +255,10 @@
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/access_code_cast/resources.grd": {
     "META": {"sizes": {"includes": [50]}},
     "includes": [3080],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/commerce/resources.grd": {
+    "META": {"sizes": {"includes": [10]}},
+    "includes": [3090],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/compose/resources.grd": {
     "META": {"sizes": {"includes": [15]}},
@@ -416,6 +419,10 @@
     "META": {"sizes": {"includes": [20],}},
     "includes": [3860],
   },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/ash/extended_updates/resources.grd": {
+    "META": {"sizes": {"includes": [20]}},
+    "includes": [3865],
+  },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/ash/inline_login/resources.grd": {
     "META": {"sizes": {"includes": [20]}},
     "includes": [3870],
@@ -510,7 +517,7 @@
     "META": {"sizes": {"includes": [10],}},
     "includes": [4320],
   },
-  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/network_ui/network_ui_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/network_ui/resources.grd": {
     "META": {"sizes": {"includes": [20]}},
     "includes": [4340],
   },
@@ -607,7 +614,7 @@
    "includes": [4760],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/app_settings/resources.grd": {
-    "META": {"sizes": {"includes": [10]}},
+    "META": {"sizes": {"includes": [40]}},
     "includes": [4780],
   },
   "<(SHARED_INTERMEDIATE_DIR)/components/sync/service/resources/resources.grd": {
@@ -682,15 +689,15 @@
     "includes": [5140],
   },
   "<(SHARED_INTERMEDIATE_DIR)/components/metrics/debug/resources.grd": {
-    "META": {"sizes": {"includes": [10]}},
+    "META": {"sizes": {"includes": [15]}},
     "includes": [5160],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/lens/resources.grd": {
     "META": {"sizes": {"includes": [10]}},
     "includes": [5180],
   },
-  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/lens/untrusted_resources.grd": {
-    "META": {"sizes": {"includes": [10]}},
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/lens/overlay/resources.grd": {
+    "META": {"sizes": {"includes": [20]}},
     "includes": [5200],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/enterprise_reporting/resources.grd": {
@@ -837,11 +844,15 @@
     "META": {"join": 2, "sizes": {"includes": [20]}},
     "includes": [5880],
   },
-  "<(SHARED_INTERMEDIATE_DIR)/ash/webui/sample_system_web_app_ui/resources/trusted/ash_sample_system_web_app_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/ash/webui/print_preview_cros/resources/resources.grd": {
+    "META": {"sizes": {"includes": [50]}},
+    "includes": [5885],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/ash/webui/sample_system_web_app_ui/resources/trusted/resources.grd": {
     "META": {"sizes": {"includes": [50],}},
     "includes": [5900],
   },
-  "<(SHARED_INTERMEDIATE_DIR)/ash/webui/sample_system_web_app_ui/resources/untrusted/ash_sample_system_web_app_untrusted_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/ash/webui/sample_system_web_app_ui/resources/untrusted/resources.grd": {
     "META": {"sizes": {"includes": [50],}},
     "includes": [5920],
   },
@@ -969,6 +980,9 @@
     "includes": [7220]
   },
 
+  "components/privacy_sandbox_strings.grd": {
+    "messages": [7240],
+  },
   "components/search_engine_descriptions_strings.grd": {
     "messages": [7260],
   },
@@ -1101,7 +1115,7 @@
     "META": {"sizes": {"includes": [200],}},
     "includes": [7460],
   },
-  "<(SHARED_INTERMEDIATE_DIR)/ash/webui/shortcut_customization_ui/resources/ash_shortcut_customization_app_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/ash/webui/shortcut_customization_ui/resources/resources.grd": {
     "META": {"sizes": {"includes": [200],}},
     "includes": [7480],
   },
@@ -1121,6 +1135,9 @@
   "ash/public/cpp/resources/ash_public_unscaled_resources.grd": {
     "includes": [7580],
     "structures": [7600],
+  },
+  "ash/system/mahi/resources/mahi_resources.grd": {
+    "structures":[7610],
   },
   "base/tracing/protos/resources.grd": {
     "includes": [7620],

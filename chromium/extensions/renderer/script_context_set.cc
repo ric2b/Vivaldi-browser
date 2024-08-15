@@ -7,12 +7,14 @@
 #include "base/compiler_specific.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/worker_thread.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/common/mojom/host_id.mojom.h"
 #include "extensions/common/utils/extension_utils.h"
@@ -158,7 +160,7 @@ void ScriptContextSet::ForEach(
     const base::RepeatingCallback<void(ScriptContext*)>& callback) {
   // We copy the context list, because calling into javascript may modify it
   // out from under us.
-  std::set<ScriptContext*> contexts_copy = contexts_;
+  std::set<raw_ptr<ScriptContext, SetExperimental>> contexts_copy = contexts_;
 
   for (ScriptContext* context : contexts_copy) {
     // For the same reason as above, contexts may become invalid while we run.
@@ -203,7 +205,7 @@ void ScriptContextSet::ExecuteCallbackWithContext(
   }
 }
 
-void ScriptContextSet::OnExtensionUnloaded(const std::string& extension_id) {
+void ScriptContextSet::OnExtensionUnloaded(const ExtensionId& extension_id) {
   ScriptContextSetIterable::ForEach(
       GenerateHostIdFromExtensionId(extension_id),
       base::BindRepeating(&ScriptContextSet::Remove, base::Unretained(this)));
@@ -217,7 +219,7 @@ const Extension* ScriptContextSet::GetExtensionFromFrameAndWorld(
     blink::WebLocalFrame* frame,
     int32_t world_id,
     bool use_effective_url) {
-  std::string extension_id;
+  ExtensionId extension_id;
   if (world_id != 0) {
     // Isolated worlds (content script).
     extension_id =
@@ -294,9 +296,9 @@ mojom::ContextType ScriptContextSet::ClassifyJavaScriptContext(
   if (extension && active_extension_ids_->count(extension->id()) > 0) {
     // |extension| is active in this process, but it could be either a true
     // extension process or within the extent of a hosted app. In the latter
-    // case this would usually be considered a (blessed) web page context,
+    // case this would usually be considered a (privileged) web page context,
     // unless the extension in question is a component extension, in which case
-    // we cheat and call it blessed.
+    // we cheat and call it privileged.
     if (extension->is_hosted_app() &&
         extension->location() != mojom::ManifestLocation::kComponent) {
       return mojom::ContextType::kPrivilegedWebPage;

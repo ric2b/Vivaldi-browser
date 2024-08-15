@@ -16,6 +16,7 @@
 #include "base/containers/stack.h"
 #include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -89,6 +90,15 @@ class CONTENT_EXPORT IndexedDBTransaction
 
   // Called by the scopes lock manager when this transaction is unblocked.
   void Start();
+
+  // If the client is in BFCache and blocking live clients, this will kill it
+  // and release the locks.
+  void DontAllowInactiveClientToBlockOthers(
+      storage::mojom::DisallowInactiveClientReason reason);
+
+  // Returns true if the given transaction wants to hold any locks that
+  // other transactions *from other clients* are waiting for.
+  bool IsTransactionBlockingOtherClients() const;
 
   // Returns the locks required for this transaction to start. NB: this is only
   // relevant to readonly and readwrite transactions. Lock requests for version
@@ -209,7 +219,8 @@ class CONTENT_EXPORT IndexedDBTransaction
       storage::mojom::WriteBlobToFileResult error);
   void CloseOpenCursors();
   leveldb::Status CommitPhaseTwo();
-  void Timeout();
+  void TimeoutFired();
+  void ResetTimeoutTimer();
 
   const int64_t id_;
   const std::set<int64_t> object_store_ids_;
@@ -218,6 +229,8 @@ class CONTENT_EXPORT IndexedDBTransaction
   bool used_ = false;
   State state_ = CREATED;
   base::flat_set<PartitionedLockId> lock_ids_;
+  // Holds the locks from when they're acquired until they're handed off to the
+  // backing store transaction.
   PartitionedLockHolder locks_receiver_;
   bool is_commit_pending_ = false;
 
@@ -299,14 +312,20 @@ class CONTENT_EXPORT IndexedDBTransaction
   // See crbug.com/1493696 for discussion of how this should be improved.
   int64_t preliminary_size_estimate_ = 0;
 
-  std::set<IndexedDBCursor*> open_cursors_;
+  std::set<raw_ptr<IndexedDBCursor, SetExperimental>> open_cursors_;
 
   // This timer is started after requests have been processed. If no subsequent
   // requests are processed before the timer fires, assume the script is
   // unresponsive and abort to unblock the transaction queue.
-  // TODO(crbug.com/1474996): this will not be necessary when each backing store
-  // has its own task runner.
-  base::OneShotTimer timeout_timer_;
+  base::RepeatingTimer timeout_timer_;
+  int timeout_strikes_ = 0;
+  // Poll every 20 seconds to see if this transaction is blocking others, and
+  // kill the transaction after 3 strikes. The polling mitigates the fact that
+  // timers may or may not pause when a system is suspended
+  // (crbug.com/40296804). See also crbug.com/40581991.
+  static constexpr base::TimeDelta kInactivityTimeoutPollPeriod =
+      base::Seconds(20);
+  static const int kMaxTimeoutStrikes = 3;
 
   Diagnostics diagnostics_;
 

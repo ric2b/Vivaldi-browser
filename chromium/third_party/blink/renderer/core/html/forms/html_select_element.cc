@@ -41,6 +41,7 @@
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
 #include "third_party/blink/renderer/core/dom/attribute.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
+#include "third_party/blink/renderer/core/dom/events/event_dispatch_forbidden_scope.h"
 #include "third_party/blink/renderer/core/dom/events/scoped_event_queue.h"
 #include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
 #include "third_party/blink/renderer/core/dom/focus_params.h"
@@ -51,9 +52,11 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/forms/form_controller.h"
 #include "third_party/blink/renderer/core/html/forms/form_data.h"
+#include "third_party/blink/renderer/core/html/forms/html_data_list_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_opt_group_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_option_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_options_collection.h"
 #include "third_party/blink/renderer/core/html/forms/select_type.h"
 #include "third_party/blink/renderer/core/html/html_hr_element.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
@@ -78,25 +81,85 @@ namespace blink {
 
 using mojom::blink::FormControlType;
 
-namespace {
-
-bool CanAssignToSelectSlot(const Node& node) {
-  // Even if options/optgroups are not rendered as children of menulist SELECT,
-  // we still need to add them to the flat tree through slotting since we need
-  // their ComputedStyle for popup rendering.
-  return node.HasTagName(html_names::kOptionTag) ||
-         node.HasTagName(html_names::kOptgroupTag) ||
-         node.HasTagName(html_names::kHrTag);
-}
-
-}  // namespace
-
 // https://html.spec.whatwg.org/#dom-htmloptionscollection-length
 static const unsigned kMaxListItems = 100000;
 
 // Default size when the multiple attribute is present but size attribute is
 // absent.
 const int kDefaultListBoxSize = 4;
+
+class HTMLSelectElement::SelectMutationObserver
+    : public GarbageCollected<HTMLSelectElement::SelectMutationObserver>,
+      public SynchronousMutationObserver {
+ public:
+  explicit SelectMutationObserver(HTMLSelectElement* select) : select_(select) {
+    CHECK(RuntimeEnabledFeatures::StylableSelectEnabled());
+    SetDocument(&select_->GetDocument());
+  }
+
+  void DidChangeChildren(const ContainerNode& container,
+                         const ContainerNode::ChildrenChange& change) override {
+    CHECK(RuntimeEnabledFeatures::StylableSelectEnabled());
+    EventDispatchForbiddenScope assert_no_event_dispatch;
+
+    bool modified_datalist = false;
+    if (container == select_ &&
+        (((change.type == ChildrenChangeType::kElementInserted ||
+           change.type == ChildrenChangeType::kElementRemoved) &&
+          IsA<HTMLDataListElement>(change.sibling_changed)) ||
+         change.type == ChildrenChangeType::kAllChildrenRemoved)) {
+      select_->RecalcFirstChildDatalist();
+      modified_datalist = true;
+    }
+
+    if (!modified_datalist) {
+      if (container == select_) {
+        // Direct children are handled by HTMLSelectElement::ElementInserted.
+        // Checking IsDescendantOf slows down a performance test too much.
+        return;
+      }
+
+      auto* first_datalist = select_->FirstChildDatalist();
+      if (!first_datalist || (container != first_datalist &&
+                              !container.IsDescendantOf(first_datalist))) {
+        return;
+      }
+    }
+
+    if (change.type == ChildrenChangeType::kElementInserted) {
+      for (Node& node :
+           NodeTraversal::InclusiveDescendantsOf(*change.sibling_changed)) {
+        if (auto* option = DynamicTo<HTMLOptionElement>(node)) {
+          select_->OptionInserted(*option, option->Selected());
+        }
+      }
+    } else if (change.type == ChildrenChangeType::kElementRemoved) {
+      for (Node& node :
+           NodeTraversal::InclusiveDescendantsOf(*change.sibling_changed)) {
+        if (auto* option = DynamicTo<HTMLOptionElement>(node)) {
+          select_->OptionRemoved(*option);
+        }
+      }
+    } else if (change.type == ChildrenChangeType::kAllChildrenRemoved) {
+      for (Member<Node> removed_node : change.removed_nodes) {
+        for (Node& node :
+             NodeTraversal::InclusiveDescendantsOf(*removed_node)) {
+          if (auto* option = DynamicTo<HTMLOptionElement>(node)) {
+            select_->OptionRemoved(*option);
+          }
+        }
+      }
+    }
+  }
+
+  void Trace(Visitor* visitor) const override {
+    visitor->Trace(select_);
+    SynchronousMutationObserver::Trace(visitor);
+  }
+
+ private:
+  Member<HTMLSelectElement> select_;
+};
 
 HTMLSelectElement::HTMLSelectElement(Document& document)
     : HTMLFormControlElementWithState(html_names::kSelectTag, document),
@@ -109,8 +172,11 @@ HTMLSelectElement::HTMLSelectElement(Document& document)
   // Make sure SelectType is created after initializing |uses_menu_list_|.
   select_type_ = SelectType::Create(*this);
   SetHasCustomStyleCallbacks();
-  EnsureUserAgentShadowRoot().SetSlotAssignmentMode(
-      SlotAssignmentMode::kManual);
+  EnsureUserAgentShadowRoot(SlotAssignmentMode::kManual);
+
+  if (RuntimeEnabledFeatures::StylableSelectEnabled()) {
+    mutation_observer_ = MakeGarbageCollected<SelectMutationObserver>(this);
+  }
 }
 
 HTMLSelectElement::~HTMLSelectElement() = default;
@@ -295,17 +361,15 @@ String HTMLSelectElement::Value() const {
 }
 
 void HTMLSelectElement::setValueForBinding(const String& value) {
-  if (!IsAutofilled()) {
-    SetValue(value);
-  } else {
-    String old_value = this->Value();
-    SetValue(value, false,
-             value != old_value ? WebAutofillState::kNotFilled
-                                : WebAutofillState::kAutofilled);
-    if (Page* page = GetDocument().GetPage()) {
-      page->GetChromeClient().JavaScriptChangedAutofilledValue(*this,
-                                                               old_value);
-    }
+  String old_value = this->Value();
+  bool was_autofilled = IsAutofilled();
+  bool value_changed = old_value != value;
+  SetValue(value, false,
+           was_autofilled && !value_changed ? WebAutofillState::kAutofilled
+                                            : WebAutofillState::kNotFilled);
+  if (Page* page = GetDocument().GetPage(); page && value_changed) {
+    page->GetChromeClient().JavaScriptChangedValue(*this, old_value,
+                                                   was_autofilled);
   }
 }
 
@@ -798,10 +862,21 @@ void HTMLSelectElement::OptionInserted(HTMLOptionElement& option,
   SetRecalcListItems();
   if (option_is_selected) {
     SelectOption(&option, IsMultiple() ? 0 : kDeselectOtherOptionsFlag);
-  } else {
-    // No need to reset if we already have a selected option.
-    if (!last_on_change_option_)
+  } else if (!last_on_change_option_) {
+    // The newly added option is not selected and we do not already have a
+    // selected option. We should re-run the selection algorithm if there is a
+    // chance that the newly added option can become the selected option.
+    // However, we should not re-run the algorithm if either of these is true:
+    //
+    // 1. The new option is disabled because disabled options can never be
+    // selected.
+    // 2. The size attribute is greater than 1 because the HTML spec does not
+    // mention a default value for that case.
+    //
+    // https://html.spec.whatwg.org/multipage/form-elements.html#selectedness-setting-algorithm
+    if (size_ <= 1 && !option.IsDisabledFormControl()) {
       ResetToDefaultSelection();
+    }
   }
   SetNeedsValidityCheck();
   select_type_->ClearLastOnChangeSelection();
@@ -1127,6 +1202,15 @@ void HTMLSelectElement::DefaultEventHandler(Event& event) {
     return;
   }
 
+  if (SlottedButton() && FirstChildDatalist()) {
+    // If there is a custom <button> and <datalist> at the same time, then the
+    // popover triggering code will handle everything for now.
+    // TODO(crbug.com/1511354): Implement keyboard behavior for stylable
+    // <select> to match <selectlist> and other OpenUI resolutions.
+    CHECK(RuntimeEnabledFeatures::StylableSelectEnabled());
+    return;
+  }
+
   if (select_type_->DefaultEventHandler(event)) {
     event.SetDefaultHandled();
     return;
@@ -1247,46 +1331,29 @@ void HTMLSelectElement::Trace(Visitor* visitor) const {
   visitor->Trace(option_slot_);
   visitor->Trace(last_on_change_option_);
   visitor->Trace(suggested_option_);
+  visitor->Trace(first_child_datalist_);
+  visitor->Trace(mutation_observer_);
   visitor->Trace(select_type_);
   HTMLFormControlElementWithState::Trace(visitor);
 }
 
 void HTMLSelectElement::DidAddUserAgentShadowRoot(ShadowRoot& root) {
-  // Even if UsesMenuList(), the <slot> is necessary to have ComputedStyles
-  // for <option>s. LayoutFlexibleBox::IsChildAllowed() rejects all of
-  // LayoutObject children except for MenuListInnerElement's.
-
-  option_slot_ = MakeGarbageCollected<HTMLSlotElement>(GetDocument());
-  root.AppendChild(option_slot_);
   UpdateUserAgentShadowTree(root);
   select_type_->UpdateTextStyleAndContent();
 }
 
 void HTMLSelectElement::ManuallyAssignSlots() {
-  ShadowRoot* shadow_root = UserAgentShadowRoot();
-  DCHECK(shadow_root);
-
-  HeapVector<Member<Node>> option_nodes;
-  for (Node& child : NodeTraversal::ChildrenOf(*this)) {
-    if (!child.IsSlotable())
-      continue;
-    if (CanAssignToSelectSlot(child))
-      option_nodes.push_back(child);
-  }
-  option_slot_->Assign(option_nodes);
+  select_type_->ManuallyAssignSlots();
 }
 
 void HTMLSelectElement::UpdateUserAgentShadowTree(ShadowRoot& root) {
-  // Remove all children of the ShadowRoot except for <slot>.
+  // Remove all children of the ShadowRoot so that select_type_ can set it up
+  // however it wants.
   Node* node = root.firstChild();
   while (node) {
-    if (IsA<HTMLSlotElement>(node)) {
-      node = node->nextSibling();
-    } else {
-      auto* will_be_removed = node;
-      node = node->nextSibling();
-      will_be_removed->remove();
-    }
+    auto* will_be_removed = node;
+    node = node->nextSibling();
+    will_be_removed->remove();
   }
   select_type_->CreateShadowSubtree(root);
 }
@@ -1463,7 +1530,9 @@ void HTMLSelectElement::ChangeRendering() {
   }
   if (!InActiveDocument())
     return;
-  GetDocument().GetStyleEngine().ChangeRenderingForHTMLSelect(*this);
+  SetForceReattachLayoutTree();
+  SetNeedsStyleRecalc(kLocalStyleChange, StyleChangeReasonForTracing::Create(
+                                             style_change_reason::kControl));
 }
 
 const ComputedStyle* HTMLSelectElement::OptionStyle() const {
@@ -1566,6 +1635,27 @@ bool HTMLSelectElement::HandleInvokeInternal(HTMLElement& invoker,
   select_type_->ShowPicker();
 
   return true;
+}
+
+HTMLButtonElement* HTMLSelectElement::SlottedButton() const {
+  return select_type_->SlottedButton();
+}
+
+HTMLDataListElement* HTMLSelectElement::FirstChildDatalist() const {
+  return first_child_datalist_;
+}
+
+void HTMLSelectElement::RecalcFirstChildDatalist() {
+  first_child_datalist_ = nullptr;
+  Node* next_child = firstChild();
+  while (next_child && !first_child_datalist_) {
+    first_child_datalist_ = DynamicTo<HTMLDataListElement>(next_child);
+    next_child = next_child->nextSibling();
+  }
+}
+
+bool HTMLSelectElement::IsAppearanceBikeshed() const {
+  return select_type_->IsAppearanceBikeshed();
 }
 
 }  // namespace blink

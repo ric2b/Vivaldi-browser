@@ -105,11 +105,12 @@ void SearchEngineChoiceDialogService::NotifyChoiceMade(int prepopulate_id,
   // that it is already the default search engine so we don't need to change
   // anything.
   const int kCustomSearchEngineId = 0;
-  if (prepopulate_id != kCustomSearchEngineId &&
+  if (prepopulate_id != kCustomSearchEngineId // Vivaldi // &&
       // Distribution custom search engines are not part of the prepopulated
       // data but still have an ID, assigned starting from 1000.
       // TODO(crbug.com/324880292): Revisit how we should handle them.
-      prepopulate_id <= TemplateURLPrepopulateData::kMaxPrepopulatedEngineID) {
+      // Vivaldi // prepopulate_id <= TemplateURLPrepopulateData::kMaxPrepopulatedEngineID
+      ) {
     std::unique_ptr<TemplateURLData> search_engine =
         TemplateURLPrepopulateData::GetPrepopulatedEngine(
             pref_service, &search_engine_choice_service_.get(), prepopulate_id);
@@ -201,13 +202,6 @@ void SearchEngineChoiceDialogService::SetDialogDisabledForTests(
     bool dialog_disabled) {
   CHECK_IS_TEST();
   g_dialog_disabled_for_testing = dialog_disabled;
-}
-
-// static
-void SearchEngineChoiceDialogService::RegisterLocalStatePrefs(
-    PrefRegistrySimple* registry) {
-  registry->RegisterFilePathPref(prefs::kSearchEnginesChoiceProfile,
-                                 base::FilePath());
 }
 
 // static
@@ -324,15 +318,6 @@ SearchEngineChoiceDialogService::ComputeDialogConditions(Browser& browser) {
   if (dynamic_conditions !=
       search_engines::SearchEngineChoiceScreenConditions::kEligible) {
     return dynamic_conditions;
-  }
-
-  // Lastly, we check if this profile can be the selected one for showing the
-  // dialogs. We check it last to make sure we don't mark to eagerly this one
-  // as the choice profile if one of the other conditions is not met.
-  if (!SearchEngineChoiceDialogServiceFactory::IsSelectedChoiceProfile(
-          profile_.get(), /*try_claim=*/true)) {
-    return search_engines::SearchEngineChoiceScreenConditions::
-        kProfileOutOfScope;
   }
 
   return search_engines::SearchEngineChoiceScreenConditions::kEligible;

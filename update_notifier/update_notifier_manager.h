@@ -14,8 +14,6 @@
 #include "base/synchronization/waitable_event_watcher.h"
 #include "base/win/scoped_handle.h"
 
-#include "third_party/abseil-cpp/absl/types/optional.h"
-
 #include "update_notifier/thirdparty/winsparkle/src/appcast.h"
 #include "update_notifier/thirdparty/winsparkle/src/error.h"
 #include "update_notifier/thirdparty/winsparkle/src/ui.h"
@@ -80,13 +78,13 @@ class UpdateNotifierManager : public UIDelegate {
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_runner_;
   base::RunLoop run_loop_;
 
-  absl::optional<base::WaitableEvent> check_for_updates_event_;
+  std::optional<base::WaitableEvent> check_for_updates_event_;
   base::WaitableEventWatcher check_for_updates_event_watch_;
 
-  absl::optional<base::WaitableEvent> quit_event_;
+  std::optional<base::WaitableEvent> quit_event_;
   base::WaitableEventWatcher quit_event_watch_;
 
-  absl::optional<base::WaitableEvent> global_quit_event_;
+  std::optional<base::WaitableEvent> global_quit_event_;
   base::WaitableEventWatcher global_quit_event_watch_;
 
   base::Time check_start_time_;

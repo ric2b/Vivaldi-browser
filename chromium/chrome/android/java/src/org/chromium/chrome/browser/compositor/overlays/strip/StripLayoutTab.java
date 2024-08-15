@@ -51,7 +51,7 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
  * {@link StripLayoutTab} is used to keep track of the strip position and rendering information for
  * a particular tab so it can draw itself onto the GL canvas.
  */
-public class StripLayoutTab implements VirtualView {
+public class StripLayoutTab extends StripLayoutView {
     /** An observer interface for StripLayoutTab. */
     public interface Observer {
         /** @param visible Whether the StripLayoutTab is visible. */
@@ -184,7 +184,7 @@ public class StripLayoutTab implements VirtualView {
     // Strip Tab Offset Constants
     private static final float TOP_MARGIN_DP = 0.f; // Vivaldi
     private static final float FOLIO_CONTENT_OFFSET_Y = 8.f;
-    private static final float TOUCH_TARGET_INSET = 16.f;
+    protected static final float FOLIO_FOOT_LENGTH_DP = 16.f;
 
     // Divider Constants
     private static final int DIVIDER_OFFSET_X = 13;
@@ -202,7 +202,6 @@ public class StripLayoutTab implements VirtualView {
     private final LayoutUpdateHost mUpdateHost;
     private TintedCompositorButton mCloseButton;
 
-    private boolean mVisible = true;
     private boolean mIsDying;
     private boolean mIsReordering;
     private boolean mIsDraggedOffStrip;
@@ -328,9 +327,9 @@ public class StripLayoutTab implements VirtualView {
         mCloseButton.setClickSlop(0.f);
         if (LocalizationUtils.isLayoutRtl()) {
             mLeftInset = getCloseButtonOffsetX();
-            mRightInset = TOUCH_TARGET_INSET;
+            mRightInset = FOLIO_FOOT_LENGTH_DP;
         } else {
-            mLeftInset = TOUCH_TARGET_INSET;
+            mLeftInset = FOLIO_FOOT_LENGTH_DP;
             mRightInset = getCloseButtonOffsetX();
         }
 
@@ -349,14 +348,10 @@ public class StripLayoutTab implements VirtualView {
         mObservers.removeObserver(observer);
     }
 
-    /**
-     * Get a list of virtual views for accessibility events.
-     *
-     * @param views     A List to populate with virtual views.
-     */
+    @Override
     public void getVirtualViews(List<VirtualView> views) {
-        views.add(this);
-        if (mShowingCloseButton) views.add(mCloseButton);
+        super.getVirtualViews(views);
+        if (mShowingCloseButton) mCloseButton.getVirtualViews(views);
     }
 
     /**
@@ -372,6 +367,7 @@ public class StripLayoutTab implements VirtualView {
         mCloseButton.setAccessibilityDescription(closeButtonDescription, closeButtonDescription);
     }
 
+    /** {@link org.chromium.chrome.browser.layouts.components.VirtualView} Implementation */
     @Override
     public String getAccessibilityDescription() {
         return mAccessibilityDescription;
@@ -508,7 +504,8 @@ public class StripLayoutTab implements VirtualView {
         // Note(david@vivaldi.com): Get appropriate resource when toolbar is at the bottom.
         if (!VivaldiUtils.isTopToolbarOn())
             return R.drawable.bg_tabstrip_background_tab_outline_bottom;
-        return R.drawable.bg_tabstrip_background_tab_outline;
+
+        return R.drawable.tab_group_outline;
     }
 
     /**
@@ -601,24 +598,15 @@ public class StripLayoutTab implements VirtualView {
         return mEndDividerVisible;
     }
 
-    /**
-     * @param visible Whether or not this {@link StripLayoutTab} should be drawn.
-     */
+    @Override
     public void setVisible(boolean visible) {
-        mVisible = visible;
+        super.setVisible(visible);
         if (!visible) {
             mUpdateHost.releaseResourcesForTab(mId);
         }
         for (Observer observer : mObservers) {
-            observer.onVisibilityChanged(mVisible);
+            observer.onVisibilityChanged(isVisible());
         }
-    }
-
-    /**
-     * @return Whether or not this {@link StripLayoutTab} should be drawn.
-     */
-    public boolean isVisible() {
-        return mVisible;
     }
 
     /**
@@ -751,68 +739,53 @@ public class StripLayoutTab implements VirtualView {
         checkCloseButtonVisibility(animate);
     }
 
-    /**
-     * @param x The actual position in the strip, taking into account stacking, scrolling, etc.
-     */
+    /** {@link StripLayoutView} Implementation */
+    @Override
     public void setDrawX(float x) {
-        mCloseButton.setX(mCloseButton.getX() + (x - mDrawX));
+        mCloseButton.setDrawX(mCloseButton.getDrawX() + (x - mDrawX));
         mDrawX = x;
         mTouchTarget.left = mDrawX + mLeftInset;
         mTouchTarget.right = mDrawX + mWidth - mRightInset;
     }
 
-    /**
-     * @return The actual position in the strip, taking into account stacking, scrolling, etc.
-     */
+    @Override
     public float getDrawX() {
         return mDrawX;
     }
 
-    /**
-     * @param y The vertical position for the tab.
-     */
+    @Override
     public void setDrawY(float y) {
-        mCloseButton.setY(mCloseButton.getY() + (y - mDrawY));
+        mCloseButton.setDrawY(mCloseButton.getDrawY() + (y - mDrawY));
         mDrawY = y;
         mTouchTarget.top = mDrawY;
         mTouchTarget.bottom = mDrawY + mHeight;
     }
 
-    /**
-     * @return The vertical position for the tab.
-     */
+    @Override
     public float getDrawY() {
         return mDrawY;
     }
 
-    /**
-     * @param width The width of the tab.
-     */
+    @Override
     public void setWidth(float width) {
         mWidth = width;
         resetCloseRect();
         mTouchTarget.right = mDrawX + mWidth - mRightInset;
     }
 
-    /**
-     * @return The width of the tab.
-     */
+    @Override
     public float getWidth() {
         return mWidth;
     }
 
-    /**
-     * @param height The height of the tab.
-     */
+    @Override
     public void setHeight(float height) {
         mHeight = height;
         resetCloseRect();
         mTouchTarget.bottom = mDrawY + mHeight;
     }
 
-    /**
-     * @return The height of the tab.
-     */
+    @Override
     public float getHeight() {
         return mHeight;
     }
@@ -979,8 +952,8 @@ public class StripLayoutTab implements VirtualView {
         RectF closeRect = getCloseRect();
         mCloseButton.setWidth(closeRect.width());
         mCloseButton.setHeight(closeRect.height());
-        mCloseButton.setX(closeRect.left);
-        mCloseButton.setY(closeRect.top);
+        mCloseButton.setDrawX(closeRect.left);
+        mCloseButton.setDrawY(closeRect.top);
     }
 
     private RectF getCloseRect() {

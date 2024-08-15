@@ -175,6 +175,11 @@ DefaultSearchManager::~DefaultSearchManager() {
 void DefaultSearchManager::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterDictionaryPref(kDefaultSearchProviderDataPrefName);
+  registry->RegisterIntegerPref(
+      kDefaultSearchProviderChoiceLocationPrefName,
+      static_cast<int>(search_engines::ChoiceMadeLocation::kOther));
+
+  // Vivaldi
   registry->RegisterDictionaryPref(kDefaultPrivateSearchProviderDataPrefName);
   registry->RegisterDictionaryPref(kDefaultSearchFieldProviderDataPrefName);
   registry->RegisterDictionaryPref(
@@ -184,6 +189,7 @@ void DefaultSearchManager::RegisterProfilePrefs(
   registry->RegisterDictionaryPref(
       kDefaultSpeeddialsPrivateSearchProviderDataPrefName);
   registry->RegisterDictionaryPref(kDefaultImageSearchProviderDataPrefName);
+  // End Vivaldi
 }
 
 // static
@@ -263,13 +269,30 @@ DefaultSearchManager::GetDefaultSearchEngineSource() const {
   return source;
 }
 
+search_engines::ChoiceMadeLocation
+DefaultSearchManager::GetChoiceMadeLocationForUserSelectedDefaultSearchEngine()
+    const {
+  if (GetDefaultSearchEngineSource() != Source::FROM_USER) {
+    return search_engines::ChoiceMadeLocation::kOther;
+  }
+  int choice_made_location =
+      pref_service_->GetInteger(kDefaultSearchProviderChoiceLocationPrefName);
+  if (choice_made_location < 0 ||
+      choice_made_location >
+          static_cast<int>(search_engines::ChoiceMadeLocation::kMaxValue)) {
+    return search_engines::ChoiceMadeLocation::kOther;
+  }
+  return static_cast<search_engines::ChoiceMadeLocation>(choice_made_location);
+}
+
 const TemplateURLData* DefaultSearchManager::GetFallbackSearchEngine() const {
   return g_fallback_search_engines_disabled ? nullptr
                                             : fallback_default_search_.get();
 }
 
 void DefaultSearchManager::SetUserSelectedDefaultSearchEngine(
-    const TemplateURLData& data) {
+    const TemplateURLData& data,
+    search_engines::ChoiceMadeLocation choice_location) {
   if (!pref_service_) {
     prefs_default_search_ = std::make_unique<TemplateURLData>(data);
     MergePrefsDataWithPrepopulated();
@@ -279,6 +302,8 @@ void DefaultSearchManager::SetUserSelectedDefaultSearchEngine(
 
   pref_service_->SetDict(vivaldi_default_pref_,
                          TemplateURLDataToDictionary(data));
+  pref_service_->SetInteger(kDefaultSearchProviderChoiceLocationPrefName,
+                            static_cast<int>(choice_location));
 #if BUILDFLAG(IS_ANDROID)
   // Commit the pref immediately so it isn't lost if the app is killed.
   pref_service_->CommitPendingWrite();
@@ -288,6 +313,7 @@ void DefaultSearchManager::SetUserSelectedDefaultSearchEngine(
 void DefaultSearchManager::ClearUserSelectedDefaultSearchEngine() {
   if (pref_service_) {
     pref_service_->ClearPref(vivaldi_default_pref_);
+    pref_service_->ClearPref(kDefaultSearchProviderChoiceLocationPrefName);
   } else {
     prefs_default_search_.reset();
     NotifyObserver();

@@ -9,9 +9,10 @@
 
 #include <windows.h>
 
+#include <optional>
+
 #include "core/fxcrt/retain_ptr.h"
 #include "core/fxge/renderdevicedriver_iface.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class CFX_DIBBase;
 
@@ -48,11 +49,11 @@ class CGdiDeviceDriver : public RenderDeviceDriverIface {
                         BlendMode blend_type) override;
   bool GetClipBox(FX_RECT* pRect) override;
   bool MultiplyAlpha(float alpha) override;
-  bool MultiplyAlphaMask(const RetainPtr<const CFX_DIBBase>& mask) override;
+  bool MultiplyAlphaMask(RetainPtr<const CFX_DIBitmap> mask) override;
 
   void DrawLine(float x1, float y1, float x2, float y2);
 
-  bool GDI_SetDIBits(const RetainPtr<const CFX_DIBBase>& source,
+  bool GDI_SetDIBits(RetainPtr<const CFX_DIBBase> source,
                      const FX_RECT& src_rect,
                      int left,
                      int top);
@@ -76,7 +77,7 @@ class CGdiDeviceDriver : public RenderDeviceDriverIface {
   int m_nBitsPerPixel;
   const DeviceType m_DeviceType;
   int m_RenderCaps;
-  absl::optional<FX_RECT> m_BaseClipBox;
+  std::optional<FX_RECT> m_BaseClipBox;
 };
 
 #endif  // CORE_FXGE_WIN32_CGDI_DEVICE_DRIVER_H_

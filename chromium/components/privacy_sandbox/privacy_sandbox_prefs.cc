@@ -14,9 +14,6 @@ namespace privacy_sandbox {
 
 void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   if (vivaldi::IsVivaldiRunning()) {
-    registry->RegisterBooleanPref(
-        prefs::kPrivacySandboxApisEnabled, false,
-        user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
     registry->RegisterBooleanPref(prefs::kPrivacySandboxM1ConsentDecisionMade,
                                   false);
     registry->RegisterBooleanPref(prefs::kPrivacySandboxM1EEANoticeAcknowledged,
@@ -32,9 +29,6 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
                                   false);
     registry->RegisterBooleanPref(prefs::kPrivacySandboxM1Restricted, false);
   } else {
-  registry->RegisterBooleanPref(
-      prefs::kPrivacySandboxApisEnabled, true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(prefs::kPrivacySandboxM1ConsentDecisionMade,
                                 false);
   registry->RegisterBooleanPref(prefs::kPrivacySandboxM1EEANoticeAcknowledged,

@@ -34,9 +34,9 @@ class TrayBubbleView;
 // opens a bubble with a scrollable list of all current notifications.
 class ASH_EXPORT NotificationCenterTray : public TrayBackgroundView,
                                           public TrayItemView::Observer {
- public:
-  METADATA_HEADER(NotificationCenterTray);
+  METADATA_HEADER(NotificationCenterTray, TrayBackgroundView)
 
+ public:
   // Inherit from this class to be notified of events that happen for a specific
   // `NotificationCenterTray`.
   class Observer : public base::CheckedObserver {
@@ -77,7 +77,7 @@ class ASH_EXPORT NotificationCenterTray : public TrayBackgroundView,
   void HandleLocaleChange() override;
   void HideBubbleWithView(const TrayBubbleView* bubble_view) override;
   void HideBubble(const TrayBubbleView* bubble_view) override;
-  void ClickedOutsideBubble() override;
+  void ClickedOutsideBubble(const ui::LocatedEvent& event) override;
   void UpdateTrayItemColor(bool is_active) override;
   void CloseBubble() override;
   void ShowBubble() override;

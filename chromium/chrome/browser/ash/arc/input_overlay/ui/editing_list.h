@@ -41,8 +41,9 @@ class DisplayOverlayController;
 //   |  +---------------------------+  |
 //   +---------------------------------+
 class EditingList : public views::View, public TouchInjectorObserver {
+  METADATA_HEADER(EditingList, views::View)
+
  public:
-  METADATA_HEADER(EditingList);
   explicit EditingList(DisplayOverlayController* display_overlay_controller);
   EditingList(const EditingList&) = delete;
   EditingList& operator=(const EditingList&) = delete;
@@ -113,7 +114,6 @@ class EditingList : public views::View, public TouchInjectorObserver {
   void OnActionRemoved(const Action& action) override;
   void OnActionTypeChanged(Action* action, Action* new_action) override;
   void OnActionInputBindingUpdated(const Action& action) override;
-  void OnActionNameUpdated(const Action& action) override;
   void OnActionNewStateRemoved(const Action& action) override;
 
   // For test.

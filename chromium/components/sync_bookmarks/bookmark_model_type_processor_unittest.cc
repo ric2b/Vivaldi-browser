@@ -388,14 +388,10 @@ TEST_F(BookmarkModelTypeProcessorTest, ShouldDoInitialMergeWithZeroBookmarks) {
 
   base::HistogramTester histogram_tester;
   processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
-                                /*gc_directive=*/absl::nullopt);
+                                /*gc_directive=*/std::nullopt);
   EXPECT_TRUE(processor()->IsTrackingMetadata());
   EXPECT_THAT(bookmark_model()->bookmark_bar_node()->children(), IsEmpty());
 
-  histogram_tester.ExpectUniqueSample(
-      "Sync.ModelTypeInitialUpdateReceived",
-      /*sample=*/syncer::ModelTypeHistogramValue(syncer::BOOKMARKS),
-      /*expected_bucket_count=*/3);
   histogram_tester.ExpectTotalCount(
       kPersistentModelTypeConfigurationTimeMetricName,
       /*count=*/1);
@@ -421,14 +417,10 @@ TEST_F(BookmarkModelTypeProcessorTest, ShouldDoInitialMergeWithOneBookmark) {
 
   base::HistogramTester histogram_tester;
   processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
-                                /*gc_directive=*/absl::nullopt);
+                                /*gc_directive=*/std::nullopt);
   EXPECT_TRUE(processor()->IsTrackingMetadata());
   EXPECT_THAT(bookmark_model()->bookmark_bar_node()->children(), SizeIs(1));
 
-  histogram_tester.ExpectUniqueSample(
-      "Sync.ModelTypeInitialUpdateReceived",
-      /*sample=*/syncer::ModelTypeHistogramValue(syncer::BOOKMARKS),
-      /*expected_bucket_count=*/4);
   histogram_tester.ExpectTotalCount(
       kPersistentModelTypeConfigurationTimeMetricName,
       /*count=*/1);
@@ -462,7 +454,7 @@ TEST_F(BookmarkModelTypeProcessorTest,
 
   base::HistogramTester histogram_tester;
   processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
-                                /*gc_directive=*/absl::nullopt);
+                                /*gc_directive=*/std::nullopt);
 
   EXPECT_FALSE(processor()->IsTrackingMetadata());
   EXPECT_FALSE(processor()->IsConnectedForTest());
@@ -504,7 +496,7 @@ TEST_F(BookmarkModelTypeProcessorTest,
 
   base::HistogramTester histogram_tester;
   processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
-                                /*gc_directive=*/absl::nullopt);
+                                /*gc_directive=*/std::nullopt);
 
   EXPECT_FALSE(processor()->IsTrackingMetadata());
   EXPECT_FALSE(processor()->IsConnectedForTest());
@@ -543,7 +535,7 @@ TEST_F(BookmarkModelTypeProcessorTest, ShouldUpdateModelAfterRemoteCreation) {
 
   base::HistogramTester histogram_tester;
   processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
-                                /*gc_directive=*/absl::nullopt);
+                                /*gc_directive=*/std::nullopt);
 
   ASSERT_THAT(bookmark_bar->children().front().get(), NotNull());
   EXPECT_THAT(bookmark_bar->children().front()->GetTitle(),
@@ -585,17 +577,12 @@ TEST_F(BookmarkModelTypeProcessorTest, ShouldUpdateModelAfterRemoteUpdate) {
 
   base::HistogramTester histogram_tester;
   processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
-                                /*gc_directive=*/absl::nullopt);
+                                /*gc_directive=*/std::nullopt);
 
   // Check if the bookmark has been updated properly.
   EXPECT_THAT(bookmark_bar->children().front().get(), Eq(bookmark_node));
   EXPECT_THAT(bookmark_node->GetTitle(), Eq(ASCIIToUTF16(kNewTitle)));
   EXPECT_THAT(bookmark_node->url(), Eq(GURL(kNewUrl)));
-
-  histogram_tester.ExpectUniqueSample(
-      "Sync.ModelTypeIncrementalUpdateReceived",
-      /*sample=*/syncer::ModelTypeHistogramValue(syncer::BOOKMARKS),
-      /*expected_bucket_count=*/1);
 }
 
 TEST_F(
@@ -628,7 +615,7 @@ TEST_F(
 
   EXPECT_CALL(*schedule_save_closure(), Run());
   processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
-                                /*gc_directive=*/absl::nullopt);
+                                /*gc_directive=*/std::nullopt);
 }
 
 TEST_F(BookmarkModelTypeProcessorTest, ShouldDecodeSyncMetadata) {
@@ -798,7 +785,7 @@ TEST_F(BookmarkModelTypeProcessorTest,
   // type state.
   syncer::UpdateResponseDataList empty_updates_list;
   processor()->OnUpdateReceived(model_type_state, std::move(empty_updates_list),
-                                /*gc_directive=*/absl::nullopt);
+                                /*gc_directive=*/std::nullopt);
 
   // The model type state inside the tracker should have been updated, and
   // carries the new encryption key name.
@@ -869,7 +856,7 @@ TEST_F(BookmarkModelTypeProcessorTest,
   syncer::UpdateResponseDataList updates;
   updates.push_back(std::move(response_data));
   processor()->OnUpdateReceived(model_type_state, std::move(updates),
-                                /*gc_directive=*/absl::nullopt);
+                                /*gc_directive=*/std::nullopt);
 
   // The bookmarks shouldn't be marked for committing.
   ASSERT_THAT(tracker->GetEntityForSyncId(kNodeId), NotNull());
@@ -1064,7 +1051,7 @@ TEST_F(BookmarkModelTypeProcessorTest, ShouldReuploadLegacyBookmarksOnStart) {
   EXPECT_CALL(*mock_commit_queue(), NudgeForCommit());
   processor()->OnUpdateReceived(CreateDummyModelTypeState(),
                                 syncer::UpdateResponseDataList(),
-                                /*gc_directive=*/absl::nullopt);
+                                /*gc_directive=*/std::nullopt);
 
   // Check that all entities are unsynced now and metadata is marked as
   // reuploaded.
@@ -1302,7 +1289,7 @@ TEST_F(BookmarkModelTypeProcessorTest,
 
   ASSERT_FALSE(error_reported);
   processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
-                                /*gc_directive=*/absl::nullopt);
+                                /*gc_directive=*/std::nullopt);
   EXPECT_TRUE(error_reported);
   EXPECT_FALSE(processor()->IsConnectedForTest());
   // New bookmark gets added though. Note that this is as per the current
@@ -1350,7 +1337,7 @@ TEST_F(BookmarkModelTypeProcessorTest,
 
   ASSERT_FALSE(error_reported);
   processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
-                                /*gc_directive=*/absl::nullopt);
+                                /*gc_directive=*/std::nullopt);
   EXPECT_TRUE(error_reported);
   EXPECT_FALSE(processor()->IsConnectedForTest());
   EXPECT_TRUE(processor()->IsTrackingMetadata());
@@ -1409,7 +1396,7 @@ TEST_F(BookmarkModelTypeProcessorTest,
 
   ASSERT_FALSE(error_reported);
   processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
-                                /*gc_directive=*/absl::nullopt);
+                                /*gc_directive=*/std::nullopt);
   EXPECT_TRUE(error_reported);
   EXPECT_FALSE(processor()->IsConnectedForTest());
   // Tracker should remain null and bookmark model unchanged.
@@ -1455,7 +1442,7 @@ TEST_F(BookmarkModelTypeProcessorTest,
   ASSERT_TRUE(processor()->IsConnectedForTest());
 
   processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
-                                /*gc_directive=*/absl::nullopt);
+                                /*gc_directive=*/std::nullopt);
 
   ASSERT_FALSE(processor()->IsTrackingMetadata());
   ASSERT_FALSE(processor()->IsConnectedForTest());
@@ -1513,7 +1500,7 @@ TEST_F(BookmarkModelTypeProcessorTest,
 
   ASSERT_FALSE(error_reported);
   processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
-                                /*gc_directive=*/absl::nullopt);
+                                /*gc_directive=*/std::nullopt);
   ASSERT_TRUE(error_reported);
   ASSERT_FALSE(processor()->IsTrackingMetadata());
   ASSERT_FALSE(processor()->IsConnectedForTest());
@@ -1587,7 +1574,7 @@ TEST_F(BookmarkModelTypeProcessorTest,
 
   ASSERT_FALSE(error_reported);
   processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
-                                /*gc_directive=*/absl::nullopt);
+                                /*gc_directive=*/std::nullopt);
   ASSERT_TRUE(error_reported);
 
   ASSERT_FALSE(processor()->IsTrackingMetadata());
@@ -1754,7 +1741,7 @@ TEST_F(BookmarkModelTypeProcessorTest,
   SimulateOnSyncStarting();
   processor()->OnUpdateReceived(CreateDummyModelTypeState(),
                                 CreateUpdateResponseDataListForPermanentNodes(),
-                                /*gc_directive=*/absl::nullopt);
+                                /*gc_directive=*/std::nullopt);
   bookmark_model()->AddURL(bookmark_model()->bookmark_bar_node(), /*index=*/0,
                            u"foo", kUrl);
   ASSERT_TRUE(processor()->IsTrackingMetadata());
@@ -1852,7 +1839,7 @@ TEST_F(BookmarkModelTypeProcessorTest,
   SimulateOnSyncStarting();
   processor()->OnUpdateReceived(CreateDummyModelTypeState(),
                                 CreateUpdateResponseDataListForPermanentNodes(),
-                                /*gc_directive=*/absl::nullopt);
+                                /*gc_directive=*/std::nullopt);
   EXPECT_TRUE(processor()->IsTrackingMetadata());
 
   processor()->OnSyncStopping(syncer::CLEAR_METADATA);

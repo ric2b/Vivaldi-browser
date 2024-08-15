@@ -82,8 +82,8 @@ void CastSocketMessagePort::PostMessage(
 void CastSocketMessagePort::OnMessage(VirtualConnectionRouter* router,
                                       CastSocket* socket,
                                       ::cast::channel::CastMessage message) {
-  OSP_DCHECK(router == router_);
-  OSP_DCHECK(!socket || socket_.get() == socket);
+  OSP_CHECK_EQ(router, router_);
+  OSP_CHECK(!socket || socket_.get() == socket);
 
   // Message ports are for specific virtual connections, and do not pass-through
   // broadcasts.

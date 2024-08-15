@@ -10,6 +10,7 @@ import * as Protocol from '../../generated/protocol.js';
 import type * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as UI from '../../ui/legacy/legacy.js';
+import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import {ConsoleFilter, FilterType, type LevelsMask} from './ConsoleFilter.js';
 import consoleSidebarStyles from './consoleSidebar.css.js';
@@ -63,13 +64,12 @@ export class ConsoleSidebar extends Common.ObjectWrapper.eventMixin<EventTypes, 
     this.tree = new UI.TreeOutline.TreeOutlineInShadow();
     this.tree.addEventListener(UI.TreeOutline.Events.ElementSelected, this.selectionChanged.bind(this));
 
+    this.contentElement.setAttribute('jslog', `${VisualLogging.pane('sidebar').track({resize: true})}`);
     this.contentElement.appendChild(this.tree.element);
     this.selectedTreeElement = null;
     this.treeElements = [];
     const selectedFilterSetting =
-        // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-        // @ts-expect-error
-        Common.Settings.Settings.instance().createSetting<string>('console.sidebarSelectedFilter', null);
+        Common.Settings.Settings.instance().createSetting<string|null>('console.sidebar-selected-filter', null);
 
     const consoleAPIParsedFilters = [{
       key: FilterType.Source,
@@ -102,7 +102,7 @@ export class ConsoleSidebar extends Common.ObjectWrapper.eventMixin<EventTypes, 
 
   private appendGroup(
       name: string, parsedFilters: TextUtils.TextUtils.ParsedFilter[], levelsMask: LevelsMask,
-      icon: IconButton.Icon.Icon, selectedFilterSetting: Common.Settings.Setting<string>): void {
+      icon: IconButton.Icon.Icon, selectedFilterSetting: Common.Settings.Setting<string|null>): void {
     const filter = new ConsoleFilter(name, parsedFilters, null, levelsMask);
     const treeElement = new FilterTreeElement(filter, icon, selectedFilterSetting);
     this.tree.appendChild(treeElement);
@@ -202,13 +202,13 @@ const stringForFilterSidebarItemMap = new Map<GroupName, string>([
 ]);
 
 export class FilterTreeElement extends ConsoleSidebarTreeElement {
-  private readonly selectedFilterSetting: Common.Settings.Setting<string>;
+  private readonly selectedFilterSetting: Common.Settings.Setting<string|null>;
   private readonly urlTreeElements: Map<string|null, URLGroupTreeElement>;
   private messageCount: number;
   private uiStringForFilterCount: string;
 
   constructor(
-      filter: ConsoleFilter, icon: IconButton.Icon.Icon, selectedFilterSetting: Common.Settings.Setting<string>) {
+      filter: ConsoleFilter, icon: IconButton.Icon.Icon, selectedFilterSetting: Common.Settings.Setting<string|null>) {
     super(filter.name, filter);
     this.uiStringForFilterCount = stringForFilterSidebarItemMap.get(filter.name as GroupName) || '';
     this.selectedFilterSetting = selectedFilterSetting;

@@ -10,6 +10,7 @@
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/media_preview/camera_preview/video_format_comparison.h"
 #include "chrome/grit/generated_resources.h"
+#include "content/public/browser/context_factory.h"
 #include "media/base/video_transformation.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -24,11 +25,31 @@ VideoStreamView::VideoStreamView()
   SetAccessibleName(l10n_util::GetStringUTF16(
       IDS_MEDIA_PREVIEW_VIDEO_STREAM_ACCESSIBLE_NAME));
   SetAccessibleRole(ax::mojom::Role::kImage);
-  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+
+  raster_context_provider_ =
+      content::GetContextFactory()->SharedMainThreadRasterContextProvider();
+  if (raster_context_provider_) {
+    raster_context_provider_->AddObserver(this);
+  }
 }
 
 VideoStreamView::~VideoStreamView() {
   ClearFrame();
+  if (raster_context_provider_) {
+    raster_context_provider_->RemoveObserver(this);
+  }
+}
+
+void VideoStreamView::OnContextLost() {
+  if (raster_context_provider_) {
+    raster_context_provider_->RemoveObserver(this);
+  }
+
+  raster_context_provider_ =
+      content::GetContextFactory()->SharedMainThreadRasterContextProvider();
+  if (raster_context_provider_) {
+    raster_context_provider_->AddObserver(this);
+  }
 }
 
 void VideoStreamView::ScheduleFramePaint(
@@ -55,16 +76,25 @@ void VideoStreamView::ClearFrame() {
   has_updated_preferred_size_ = false;
   video_renderer_.ResetCache();
   latest_frame_.reset();
+  rendered_frame_count_ = 0;
   PreferredSizeChanged();
   SchedulePaint();
 }
 
+size_t VideoStreamView::GetRenderedFrameCount() {
+  return rendered_frame_count_;
+}
+
 void VideoStreamView::OnPaint(gfx::Canvas* canvas) {
   if (!latest_frame_) {
-    gfx::RectF base_rect(width(), height());
-    canvas->DrawRoundRect(base_rect, rounded_radius_, cc::PaintFlags());
+    gfx::RectF background_rect(width(), height());
+    cc::PaintFlags background_flags;
+    background_flags.setAntiAlias(true);
+    canvas->DrawRoundRect(background_rect, rounded_radius_, background_flags);
     return;
   }
+
+  ++rendered_frame_count_;
 
   // Centers the video frame horizontally in the view
   int rendered_frame_width =
@@ -82,6 +112,9 @@ void VideoStreamView::OnPaint(gfx::Canvas* canvas) {
 
   const gfx::RectF dest_rect(x, 0, rendered_frame_width, height());
   cc::PaintFlags flags;
+  // Select high quality frame scaling.
+  flags.setFilterQuality(cc::PaintFlags::FilterQuality::kHigh);
+  flags.setAntiAlias(true);
   media::VideoTransformation transformation;
   transformation.mirrored = true;
   video_renderer_.Paint(std::move(latest_frame_), canvas->sk_canvas(),

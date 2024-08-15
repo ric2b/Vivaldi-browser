@@ -43,9 +43,9 @@ namespace ash {
 namespace {
 
 bool IsKioskUserType(user_manager::UserType type) {
-  return type == user_manager::USER_TYPE_KIOSK_APP ||
-         type == user_manager::USER_TYPE_ARC_KIOSK_APP ||
-         type == user_manager::USER_TYPE_WEB_KIOSK_APP;
+  return type == user_manager::UserType::kKioskApp ||
+         type == user_manager::UserType::kArcKioskApp ||
+         type == user_manager::UserType::kWebKioskApp;
 }
 
 user_data_auth::AuthIntent SerializeIntent(AuthSessionIntent intent) {
@@ -137,9 +137,7 @@ void AuthPerformer::OnServiceRunning(std::unique_ptr<UserContext> context,
   request.set_intent(SerializeIntent(intent));
 
   if (ephemeral) {
-    request.set_flags(user_data_auth::AUTH_SESSION_FLAGS_EPHEMERAL_USER);
-  } else {
-    request.set_flags(user_data_auth::AUTH_SESSION_FLAGS_NONE);
+    request.set_is_ephemeral_user(true);
   }
 
   client_->StartAuthSession(
@@ -221,7 +219,8 @@ void AuthPerformer::AuthenticateUsingKnowledgeKey(
       LOGIN_LOG(ERROR) << "Could not find Password key";
       std::move(callback).Run(
           std::move(context),
-          AuthenticationError{user_data_auth::CRYPTOHOME_ERROR_KEY_NOT_FOUND});
+          AuthenticationError{cryptohome::ErrorWrapper::CreateFromErrorCodeOnly(
+              user_data_auth::CRYPTOHOME_ERROR_KEY_NOT_FOUND)});
       return;
     }
     key->SetLabel(factor->ref().label().value());
@@ -238,7 +237,7 @@ void AuthPerformer::AuthenticateUsingKnowledgeKey(
     cryptohome::AuthFactorInput input(
         cryptohome::AuthFactorInput::Pin{key->GetSecret()});
     cryptohome::SerializeAuthInput(ref, input, request.mutable_auth_input());
-    request.set_auth_factor_label(ref.label().value());
+    request.add_auth_factor_labels(ref.label().value());
   } else {
     cryptohome::AuthFactorRef ref{cryptohome::AuthFactorType::kPassword,
                                   cryptohome::KeyLabel{key->GetLabel()}};
@@ -246,7 +245,7 @@ void AuthPerformer::AuthenticateUsingKnowledgeKey(
         cryptohome::AuthFactorInput::Password{key->GetSecret()});
 
     cryptohome::SerializeAuthInput(ref, input, request.mutable_auth_input());
-    request.set_auth_factor_label(ref.label().value());
+    request.add_auth_factor_labels(ref.label().value());
   }
   client_->AuthenticateAuthFactor(
       request,
@@ -299,7 +298,7 @@ void AuthPerformer::AuthenticateUsingChallengeResponseKey(
       cryptohome::kCryptohomeKeyDelegateServiceName,
   });
   cryptohome::SerializeAuthInput(ref, input, request.mutable_auth_input());
-  request.set_auth_factor_label(ref.label().value());
+  request.add_auth_factor_labels(ref.label().value());
   client_->AuthenticateAuthFactor(
       request, base::BindOnce(&AuthPerformer::OnAuthenticateAuthFactor,
                               weak_factory_.GetWeakPtr(), clock_->Now(),
@@ -323,7 +322,8 @@ void AuthPerformer::AuthenticateWithPassword(
                      << key_label;
     std::move(callback).Run(
         std::move(context),
-        AuthenticationError{user_data_auth::CRYPTOHOME_ERROR_KEY_NOT_FOUND});
+        AuthenticationError{cryptohome::ErrorWrapper::CreateFromErrorCodeOnly(
+            user_data_auth::CRYPTOHOME_ERROR_KEY_NOT_FOUND)});
     return;
   }
   SystemSaltGetter::Get()->GetSystemSalt(base::BindOnce(
@@ -363,7 +363,8 @@ void AuthPerformer::AuthenticateWithPin(const std::string& pin,
     LOGIN_LOG(ERROR) << "User does not have PIN as factor";
     std::move(callback).Run(
         std::move(context),
-        AuthenticationError{user_data_auth::CRYPTOHOME_ERROR_KEY_NOT_FOUND});
+        AuthenticationError{cryptohome::ErrorWrapper::CreateFromErrorCodeOnly(
+            user_data_auth::CRYPTOHOME_ERROR_KEY_NOT_FOUND)});
     return;
   }
   DCHECK_EQ(factor->ref().label().value(), kCryptohomePinLabel);
@@ -391,13 +392,14 @@ void AuthPerformer::AuthenticateAsKiosk(std::unique_ptr<UserContext> context,
     LOGIN_LOG(ERROR) << "Could not find Kiosk key";
     std::move(callback).Run(
         std::move(context),
-        AuthenticationError{user_data_auth::CRYPTOHOME_ERROR_KEY_NOT_FOUND});
+        AuthenticationError{cryptohome::ErrorWrapper::CreateFromErrorCodeOnly(
+            user_data_auth::CRYPTOHOME_ERROR_KEY_NOT_FOUND)});
     return;
   }
   cryptohome::AuthFactorInput input(cryptohome::AuthFactorInput::Kiosk{});
   cryptohome::SerializeAuthInput(existing_factor->ref(), input,
                                  request.mutable_auth_input());
-  request.set_auth_factor_label(existing_factor->ref().label().value());
+  request.add_auth_factor_labels(existing_factor->ref().label().value());
   client_->AuthenticateAuthFactor(
       request, base::BindOnce(&AuthPerformer::OnAuthenticateAuthFactor,
                               weak_factory_.GetWeakPtr(), clock_->Now(),
@@ -493,7 +495,7 @@ void AuthPerformer::AuthenticateWithRecovery(
   user_data_auth::AuthenticateAuthFactorRequest request;
 
   request.set_auth_session_id(context->GetAuthSessionId());
-  request.set_auth_factor_label(kCryptohomeRecoveryKeyLabel);
+  request.add_auth_factor_labels(kCryptohomeRecoveryKeyLabel);
 
   user_data_auth::CryptohomeRecoveryAuthInput* recovery_input =
       request.mutable_auth_input()->mutable_cryptohome_recovery_input();
@@ -637,44 +639,20 @@ void AuthPerformer::OnGetAuthSessionStatus(
   if (cryptohome::ErrorMatches(
           error, user_data_auth::CRYPTOHOME_INVALID_AUTH_SESSION_TOKEN)) {
     // Do not trigger error handling
-    std::move(callback).Run(AuthSessionStatus(), base::TimeDelta(),
-                            std::move(context),
+    std::move(callback).Run(std::move(context),
                             /*cryptohome_error=*/std::nullopt);
     return;
   }
 
   if (cryptohome::HasError(error)) {
     LOGIN_LOG(EVENT) << "Failed to get authsession status " << error;
-    std::move(callback).Run(AuthSessionStatus(), base::TimeDelta(),
-                            std::move(context), AuthenticationError{error});
+    std::move(callback).Run(std::move(context), AuthenticationError{error});
     return;
   }
   CHECK(reply.has_value());
   CHECK(reply->has_auth_properties());
-  // TODO(b/301078137): As lifetime is now stored in UserContext,
-  // there is no need to pass it separately.
-  base::TimeDelta lifetime;
-  AuthSessionStatus status;
-  switch (reply->status()) {
-    case ::user_data_auth::AUTH_SESSION_STATUS_NOT_SET:
-    case ::user_data_auth::AUTH_SESSION_STATUS_INVALID_AUTH_SESSION:
-      break;
-    case ::user_data_auth::AUTH_SESSION_STATUS_FURTHER_FACTOR_REQUIRED:
-      status.Put(AuthSessionLevel::kSessionIsValid);
-      // Once we support multi-factor authentication (and have partially
-      // authenticated sessions) we might need to use value from reply.
-      lifetime = base::TimeDelta::Max();
-      break;
-    case ::user_data_auth::AUTH_SESSION_STATUS_AUTHENTICATED:
-      status.Put(AuthSessionLevel::kSessionIsValid);
-      status.Put(AuthSessionLevel::kCryptohomeStrong);
-      lifetime = base::Seconds(reply->auth_properties().seconds_left());
-      break;
-    default:
-      NOTREACHED();
-  }
   FillAuthenticationData(request_start, reply->auth_properties(), *context);
-  std::move(callback).Run(status, lifetime, std::move(context),
+  std::move(callback).Run(std::move(context),
                           /*cryptohome_error=*/std::nullopt);
 }
 

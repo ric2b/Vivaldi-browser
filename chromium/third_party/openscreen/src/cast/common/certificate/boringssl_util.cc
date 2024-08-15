@@ -16,9 +16,9 @@ namespace {
 // function assumes the caller already did a bounds check and checked the inputs
 // are digits.
 uint8_t ParseAsn1TimeDoubleDigit(std::string_view time, size_t index) {
-  OSP_DCHECK_LT(index + 1, time.size());
-  OSP_DCHECK('0' <= time[index] && time[index] <= '9');
-  OSP_DCHECK('0' <= time[index + 1] && time[index + 1] <= '9');
+  OSP_CHECK_LT(index + 1, time.size());
+  OSP_CHECK('0' <= time[index] && time[index] <= '9');
+  OSP_CHECK('0' <= time[index + 1] && time[index + 1] <= '9');
   return (time[index] - '0') * 10 + (time[index + 1] - '0');
 }
 

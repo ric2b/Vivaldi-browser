@@ -58,6 +58,8 @@ constexpr int kAllocatedSpace = (360 - kLargeSegmentSweepAngle) / 2;
 constexpr int kSpacingSweepAngle = kAllocatedSpace / kNumSpacingSegments;
 constexpr int kSmallSegmentSweepAngle = kAllocatedSpace / kNumSmallSegments;
 
+constexpr double kDiscardedIconFinalOpacity = 0.8;
+
 bool NetworkStateIsAnimated(TabNetworkState network_state) {
   return network_state != TabNetworkState::kNone &&
          network_state != TabNetworkState::kError;
@@ -130,16 +132,6 @@ TabIcon::TabIcon()
 
   // Initial state (before any data) should not be animating.
   DCHECK(!GetShowingLoadingAnimation());
-
-  if (base::FeatureList::IsEnabled(
-          performance_manager::features::kDiscardedTabTreatment)) {
-    discard_tab_treatment_option_ =
-        static_cast<performance_manager::features::DiscardTabTreatmentOptions>(
-            performance_manager::features::kDiscardedTabTreatmentOption.Get());
-
-    discard_tab_icon_final_opacity_ =
-        performance_manager::features::kDiscardedTabTreatmentOpacity.Get();
-  }
 
   if (!gfx::Animation::ShouldRenderRichAnimation()) {
     tab_discard_animation_.SetDuration(base::TimeDelta());
@@ -246,10 +238,7 @@ void TabIcon::OnPaint(gfx::Canvas* canvas) {
   if (!GetShowingLoadingAnimation() && GetShowingAttentionIndicator() &&
       !should_display_crashed_favicon_) {
     PaintAttentionIndicatorAndIcon(canvas, GetIconToPaint(), icon_bounds);
-  } else if (discard_tab_treatment_option_ ==
-                 performance_manager::features::DiscardTabTreatmentOptions::
-                     kFadeSmallFaviconWithRing &&
-             was_discard_indicator_shown_) {
+  } else if (was_discard_indicator_shown_) {
     PaintDiscardRingAndIcon(canvas, GetIconToPaint(), icon_bounds);
   } else {
     MaybePaintFavicon(canvas, GetIconToPaint(), icon_bounds);
@@ -415,14 +404,9 @@ void TabIcon::MaybePaintFavicon(gfx::Canvas* canvas,
 
   std::unique_ptr<gfx::ScopedCanvas> scoped_canvas;
   bool use_scale_filter = false;
-  bool show_discard_ring_treatment =
-      was_discard_indicator_shown_ &&
-      discard_tab_treatment_option_ ==
-          performance_manager::features::DiscardTabTreatmentOptions::
-              kFadeSmallFaviconWithRing;
 
   if (GetShowingLoadingAnimation() || favicon_size_animation_.is_animating() ||
-      show_discard_ring_treatment) {
+      was_discard_indicator_shown_) {
     scoped_canvas = std::make_unique<gfx::ScopedCanvas>(canvas);
     use_scale_filter = true;
     // The favicon is initially inset with the width of the loading-animation
@@ -435,7 +419,8 @@ void TabIcon::MaybePaintFavicon(gfx::Canvas* canvas,
     const float kFinalFaviconDiameterDp = sqrt(2) * gfx::kFaviconSize;
 
     SkScalar diameter = kInitialFaviconDiameterDp;
-    if (show_discard_ring_treatment || favicon_size_animation_.is_animating()) {
+    if (was_discard_indicator_shown_ ||
+        favicon_size_animation_.is_animating()) {
       // Animate the icon based on the favicon size animation.
       diameter = gfx::Tween::FloatValueBetween(
           gfx::Tween::CalculateValue(gfx::Tween::EASE_IN,
@@ -464,18 +449,11 @@ void TabIcon::MaybePaintFavicon(gfx::Canvas* canvas,
   }
 
   cc::PaintFlags opacity_flag;
-  if (show_discard_ring_treatment) {
+  if (was_discard_indicator_shown_) {
     opacity_flag.setAlphaf(gfx::Tween::FloatValueBetween(
         gfx::Tween::CalculateValue(gfx::Tween::EASE_OUT,
                                    tab_discard_animation_.GetCurrentValue()),
-        1.0, discard_tab_icon_final_opacity_));
-  } else if (was_discard_indicator_shown_ &&
-             discard_tab_treatment_option_ ==
-                 performance_manager::features::DiscardTabTreatmentOptions::
-                     kFadeFullsizedFavicon) {
-    opacity_flag.setAlphaf(
-        gfx::Tween::FloatValueBetween(tab_discard_animation_.GetCurrentValue(),
-                                      1.0, discard_tab_icon_final_opacity_));
+        1.0, kDiscardedIconFinalOpacity));
   }
 
   canvas->DrawImageInt(icon, 0, 0, bounds.width(), bounds.height(), bounds.x(),
@@ -510,9 +488,7 @@ void TabIcon::SetIcon(const ui::ImageModel& icon, bool should_themify_favicon) {
 }
 
 void TabIcon::SetDiscarded(bool should_show_discard_status) {
-  if (was_discard_indicator_shown_ != should_show_discard_status &&
-      discard_tab_treatment_option_ !=
-          performance_manager::features::DiscardTabTreatmentOptions::kNone) {
+  if (was_discard_indicator_shown_ != should_show_discard_status) {
     was_discard_indicator_shown_ = should_show_discard_status;
     if (should_show_discard_status) {
       tab_discard_animation_.Start();

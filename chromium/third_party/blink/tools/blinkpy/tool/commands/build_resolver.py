@@ -13,7 +13,13 @@ from requests.exceptions import RequestException
 from blinkpy.common import exit_codes
 from blinkpy.common.net.rpc import Build
 from blinkpy.common.net.web import Web
-from blinkpy.common.net.git_cl import BuildStatuses, GitCL, TryJobStatus
+from blinkpy.common.net.git_cl import (
+    BuildStatuses,
+    CLRevisionID,
+    GitCL,
+    TryJobStatus,
+)
+from blinkpy.tool.grammar import pluralize
 
 _log = logging.getLogger(__name__)
 
@@ -192,10 +198,15 @@ class BuildResolver:
             UnresolvedBuildException: If the CL issue number is not set or no
                 try jobs are available but try jobs cannot be triggered.
         """
-        if not self._git_cl.get_issue_number().isdigit():
+        issue_number = self._git_cl.get_issue_number()
+        if not issue_number.isdigit():
             raise UnresolvedBuildException(
                 'No issue number for current branch.')
-        build_statuses = self._git_cl.latest_try_jobs(builder_names=builders,
+        cl = CLRevisionID(int(issue_number), patchset)
+        _log.info(f'Fetching status for {pluralize("build", len(builders))} '
+                  f'from {cl}.')
+        build_statuses = self._git_cl.latest_try_jobs(issue_number,
+                                                      builder_names=builders,
                                                       patchset=patchset)
         if not build_statuses and not self._can_trigger_jobs:
             raise UnresolvedBuildException(

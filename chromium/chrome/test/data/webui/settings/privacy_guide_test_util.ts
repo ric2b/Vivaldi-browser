@@ -5,14 +5,16 @@
 // clang-format off
 import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {CookiePrimarySetting, PrivacyGuideStep, SafeBrowsingSetting, SettingsPrivacyGuidePageElement, NetworkPredictionOptions} from 'chrome://settings/lazy_load.js';
-import {Router, routes, SettingsPrefsElement, StatusAction} from 'chrome://settings/settings.js';
+import type {SettingsPrivacyGuidePageElement} from 'chrome://settings/lazy_load.js';
+import {CookiePrimarySetting, PrivacyGuideStep, SafeBrowsingSetting} from 'chrome://settings/lazy_load.js';
+import type {SettingsPrefsElement} from 'chrome://settings/settings.js';
+import {Router, routes, StatusAction} from 'chrome://settings/settings.js';
 import {assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {isChildVisible} from 'chrome://webui-test/test_util.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 import {getSyncAllPrefs} from './sync_test_util.js';
-import {TestSyncBrowserProxy} from './test_sync_browser_proxy.js';
+import type {TestSyncBrowserProxy} from './test_sync_browser_proxy.js';
 
 // clang-format on
 
@@ -106,23 +108,6 @@ export function shouldShowHistorySyncCard(
     syncBrowserProxy: TestSyncBrowserProxy): boolean {
   return !syncBrowserProxy.testSyncStatus ||
       !!syncBrowserProxy.testSyncStatus.signedIn;
-}
-
-// Set the preload setting for the privacy guide.
-export function setPreloadSetting(
-    page: SettingsPrivacyGuidePageElement,
-    setting: NetworkPredictionOptions): void {
-  page.set('prefs.net.network_prediction_options', {
-    type: chrome.settingsPrivate.PrefType.NUMBER,
-    value: setting,
-  });
-}
-
-export function shouldShowPreloadCard(page: SettingsPrivacyGuidePageElement):
-    boolean {
-  const setting = page.getPref('net.network_prediction_options').value;
-  return setting === NetworkPredictionOptions.DISABLED ||
-      setting === NetworkPredictionOptions.STANDARD;
 }
 
 // Bundles functionality to create the page object for tests.

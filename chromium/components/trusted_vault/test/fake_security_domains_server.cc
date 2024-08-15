@@ -11,6 +11,7 @@
 #include "components/trusted_vault/securebox.h"
 #include "components/trusted_vault/trusted_vault_crypto.h"
 #include "components/trusted_vault/trusted_vault_server_constants.h"
+#include "net/http/http_status_code.h"
 
 namespace trusted_vault {
 
@@ -19,7 +20,6 @@ namespace {
 const char kServerPathPrefix[] = "sds/";
 const int kSharedKeyLength = 16;
 
-// TODO(crbug.com/1234719): use most appropriate error codes for all callers.
 std::unique_ptr<net::test_server::HttpResponse> CreateErrorResponse(
     net::HttpStatusCode response_code) {
   auto response = std::make_unique<net::test_server::BasicHttpResponse>();
@@ -32,7 +32,8 @@ CreateHttpResponseForSuccessfulJoinSecurityDomainsRequest(int current_epoch) {
   trusted_vault_pb::JoinSecurityDomainsResponse response_proto;
   trusted_vault_pb::SecurityDomain* security_domain =
       response_proto.mutable_security_domain();
-  security_domain->set_name(kSyncSecurityDomainName);
+  security_domain->set_name(
+      GetSecurityDomainPath(SecurityDomainId::kChromeSync));
   security_domain->set_current_epoch(current_epoch);
 
   auto response = std::make_unique<net::test_server::BasicHttpResponse>();
@@ -44,7 +45,9 @@ CreateHttpResponseForSuccessfulJoinSecurityDomainsRequest(int current_epoch) {
 // Returns whether |request| satisfies protocol expectations.
 bool ValidateJoinSecurityDomainsRequest(
     const trusted_vault_pb::JoinSecurityDomainsRequest& request) {
-  if (request.security_domain().name() != kSyncSecurityDomainName) {
+  const std::string expected_name =
+      GetSecurityDomainPath(SecurityDomainId::kChromeSync);
+  if (request.security_domain().name() != expected_name) {
     DVLOG(1)
         << "JoinSecurityDomains request has unexpected security domain name: "
         << request.security_domain().name();
@@ -206,7 +209,7 @@ FakeSecurityDomainsServer::HandleRequest(
     base::AutoLock autolock(lock_);
     DVLOG(1) << "Unknown request url: " << http_request.GetURL().spec();
     state_.received_invalid_request = true;
-    response = CreateErrorResponse(net::HTTP_BAD_REQUEST);
+    response = CreateErrorResponse(net::HTTP_NOT_FOUND);
   }
 
   observers_->Notify(FROM_HERE, &Observer::OnRequestHandled);
@@ -342,7 +345,7 @@ FakeSecurityDomainsServer::HandleJoinSecurityDomainsRequest(
     DVLOG(1) << "JoinSecurityDomains request has wrong method: "
              << http_request.method;
     state_.received_invalid_request = true;
-    return CreateErrorResponse(net::HTTP_BAD_REQUEST);
+    return CreateErrorResponse(net::HTTP_INTERNAL_SERVER_ERROR);
   }
   // TODO(crbug.com/1113599): consider verifying content type and access token
   // headers.
@@ -351,19 +354,19 @@ FakeSecurityDomainsServer::HandleJoinSecurityDomainsRequest(
   if (!deserialized_content.ParseFromString(http_request.content)) {
     DVLOG(1) << "Failed to deserialize JoinSecurityDomains request content";
     state_.received_invalid_request = true;
-    return CreateErrorResponse(net::HTTP_BAD_REQUEST);
+    return CreateErrorResponse(net::HTTP_INTERNAL_SERVER_ERROR);
   }
 
   if (!ValidateJoinSecurityDomainsRequest(deserialized_content)) {
     state_.received_invalid_request = true;
-    return CreateErrorResponse(net::HTTP_BAD_REQUEST);
+    return CreateErrorResponse(net::HTTP_INTERNAL_SERVER_ERROR);
   }
 
   const trusted_vault_pb::SecurityDomainMember& member =
       deserialized_content.security_domain_member();
   if (state_.public_key_to_shared_keys.count(member.public_key()) != 0) {
     // Member already exists.
-    return CreateErrorResponse(net::HTTP_BAD_REQUEST);
+    return CreateErrorResponse(net::HTTP_CONFLICT);
   }
 
   int last_shared_key_epoch =
@@ -426,7 +429,8 @@ FakeSecurityDomainsServer::HandleGetSecurityDomainMemberRequest(
 
   trusted_vault_pb::SecurityDomainMember::SecurityDomainMembership* membership =
       member.add_memberships();
-  membership->set_security_domain(kSyncSecurityDomainName);
+  membership->set_security_domain(
+      GetSecurityDomainPath(SecurityDomainId::kChromeSync));
   for (const trusted_vault_pb::SharedMemberKey& shared_key :
        state_.public_key_to_shared_keys[member_public_key]) {
     *membership->add_keys() = shared_key;

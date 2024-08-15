@@ -53,7 +53,7 @@ bool Resolution::IsValid() const {
 }
 
 Json::Value Resolution::ToJson() const {
-  OSP_DCHECK(IsValid());
+  OSP_CHECK(IsValid());
   Json::Value root;
   root[kWidth] = width;
   root[kHeight] = height;
@@ -88,7 +88,7 @@ bool Dimensions::IsValid() const {
 }
 
 Json::Value Dimensions::ToJson() const {
-  OSP_DCHECK(IsValid());
+  OSP_CHECK(IsValid());
   Json::Value root;
   root[kWidth] = width;
   root[kHeight] = height;

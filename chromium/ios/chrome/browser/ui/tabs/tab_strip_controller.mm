@@ -12,15 +12,16 @@
 #import "base/apple/foundation_util.h"
 #import "base/i18n/rtl.h"
 #import "base/ios/ios_util.h"
+#import "base/memory/raw_ptr.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "base/numerics/safe_conversions.h"
 #import "base/strings/sys_string_conversions.h"
-#import "components/bookmarks/browser/bookmark_model.h"
 #import "components/favicon/ios/web_favicon_driver.h"
 #import "components/feature_engagement/public/event_constants.h"
 #import "components/feature_engagement/public/tracker.h"
+#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
 #import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/drag_and_drop/model/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/model/url_drag_drop_handler.h"
@@ -60,7 +61,6 @@
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/browser/web_state_list/model/web_state_list_favicon_driver_observer.h"
-#import "ios/chrome/common/button_configuration_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -196,8 +196,8 @@ const CGFloat kSymbolSize = 18;
                                   UIGestureRecognizerDelegate,
                                   UIScrollViewDelegate,
                                   URLDropDelegate> {
-  Browser* _browser;
-  WebStateList* _webStateList;
+  raw_ptr<Browser> _browser;
+  raw_ptr<WebStateList> _webStateList;
   TabStripContainerView* _view;
   TabStripView* _tabStripView;
   UIButton* _buttonNewTab;
@@ -1317,9 +1317,13 @@ const CGFloat kSymbolSize = 18;
       // The activation is handled after this switch statement.
       break;
     case WebStateListChange::Type::kDetach: {
+      const WebStateListChangeDetach& detachChange =
+          change.As<WebStateListChangeDetach>();
+
       // Keep the actual view around while it is animating out.  Once the
       // animation is done, remove the view.
-      NSUInteger index = [self indexForWebStateListIndex:status.index];
+      NSUInteger index =
+          [self indexForWebStateListIndex:detachChange.detached_from_index()];
       TabView* view = [_tabArray objectAtIndex:index];
       [_closingTabs addObject:view];
       _targetFrames.RemoveFrame(view);
@@ -1361,7 +1365,7 @@ const CGFloat kSymbolSize = 18;
           [self indexForWebStateListIndex:moveChange.moved_from_index()];
       TabView* view = [_tabArray objectAtIndex:arrayIndex];
       [_tabArray removeObject:view];
-      [_tabArray insertObject:view atIndex:status.index];
+      [_tabArray insertObject:view atIndex:moveChange.moved_to_index()];
       [self setNeedsLayoutWithAnimation];
       break;
     }
@@ -1379,13 +1383,15 @@ const CGFloat kSymbolSize = 18;
       TabView* view =
           [self createTabViewForWebState:insertChange.inserted_web_state()
                               isSelected:status.active_web_state_change()];
-      [_tabArray insertObject:view
-                      atIndex:[self indexForWebStateListIndex:status.index]];
+      [_tabArray
+          insertObject:view
+               atIndex:[self indexForWebStateListIndex:insertChange.index()]];
       [[self tabStripView] addSubview:view];
 
       [self updateContentSizeAndRepositionViews];
       [self setNeedsLayoutWithAnimation];
-      [self updateContentOffsetForWebStateIndex:status.index isNewWebState:YES];
+      [self updateContentOffsetForWebStateIndex:insertChange.index()
+                                  isNewWebState:YES];
       break;
     }
   }
@@ -1463,7 +1469,20 @@ const CGFloat kSymbolSize = 18;
   if (listIndex == WebStateList::kInvalidIndex)
     return nil;
   NSUInteger index = [self indexForWebStateListIndex:listIndex];
+
+  // Note:(prio@vivaldi.com) - Access the tab array only when index is valid.
+  // In some cases when trait collection changes before _tabArray is populated
+  // accessing the index could lead to crash.
+  if (IsVivaldiRunning()) {
+    if (index < _tabArray.count) {
+      return [_tabArray objectAtIndex:index];
+    } else {
+      return nil;
+    }
+  } else {
   return [_tabArray objectAtIndex:index];
+  } // End Vivaldi
+
 }
 
 - (CGFloat)tabStripVisibleSpace {
@@ -2113,16 +2132,17 @@ const CGFloat kSymbolSize = 18;
 
 /// This is a private method called if device trait collection is changed.
 - (void)scrollToSelectedTab {
-  int selectedIndex;
-  for (int index = 0; index < _webStateList->count(); ++index) {
-    if (index == _webStateList->active_index())
-      selectedIndex = index;
-  }
+  int selectedIndex = _webStateList->active_index();
+  if (selectedIndex == WebStateList::kInvalidIndex)
+    return;
 
   NSUInteger index = [self indexForWebStateListIndex:selectedIndex];
-  if (_tabArray.count > 0) {
+
+  if (_tabArray.count > 0 && index < _tabArray.count ) {
     TabView* activeView = [_tabArray objectAtIndex:index];
-    [self tabViewTapped:activeView animated:NO];
+    if (activeView) {
+      [self tabViewTapped:activeView animated:NO];
+    }
   }
 }
 
@@ -2299,7 +2319,8 @@ const CGFloat kSymbolSize = 18;
     return;
   TabView* view = [self tabViewForWebState:activeWebState];
   for (TabView* tab in _tabArray) {
-    [tab updateTabViewStyleWithThemeColor:[self themeColorForWebState:activeWebState]
+    [tab updateTabViewStyleWithThemeColor:
+                          [self themeColorForWebState:activeWebState]
                                 tintColor:[self tabViewTintColor]
                                isSelected:tab == view];
   }

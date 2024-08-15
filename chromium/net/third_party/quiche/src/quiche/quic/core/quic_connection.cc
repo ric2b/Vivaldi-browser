@@ -361,11 +361,6 @@ QuicConnection::QuicConnection(
   // TODO(ianswett): Supply the NetworkChangeVisitor as a constructor argument
   // and make it required non-null, because it's always used.
   sent_packet_manager_.SetNetworkChangeVisitor(this);
-  if (GetQuicRestartFlag(quic_offload_pacing_to_usps2)) {
-    sent_packet_manager_.SetPacingAlarmGranularity(QuicTime::Delta::Zero());
-    release_time_into_future_ =
-        QuicTime::Delta::FromMilliseconds(kMinReleaseTimeIntoFutureMs);
-  }
   // Allow the packet writer to potentially reduce the packet size to a value
   // even smaller than kDefaultMaxPacketSize.
   SetMaxPacketLength(perspective_ == Perspective::IS_SERVER
@@ -648,7 +643,7 @@ void QuicConnection::SetFromConfig(const QuicConfig& config) {
 
   if (version().HasIetfQuicFrames() &&
       config.HasReceivedPreferredAddressConnectionIdAndToken() &&
-      config.HasClientSentConnectionOption(kSPAD, perspective_)) {
+      config.SupportsServerPreferredAddress(perspective_)) {
     if (self_address().host().IsIPv4() &&
         config.HasReceivedIPv4AlternateServerAddress()) {
       received_server_preferred_address_ =
@@ -2120,6 +2115,25 @@ bool QuicConnection::OnAckFrequencyFrame(const QuicAckFrequencyFrame& frame) {
   return true;
 }
 
+bool QuicConnection::OnResetStreamAtFrame(const QuicResetStreamAtFrame& frame) {
+  QUIC_BUG_IF(OnResetStreamAtFrame_connection_closed, !connected_)
+      << "Processing RESET_STREAM_AT frame while the connection is closed. "
+         "Received packet info: "
+      << last_received_packet_info_;
+
+  if (debug_visitor_ != nullptr) {
+    debug_visitor_->OnResetStreamAtFrame(frame);
+  }
+  if (!UpdatePacketContent(RESET_STREAM_AT_FRAME)) {
+    return false;
+  }
+
+  // TODO(b/278878322): implement.
+
+  MaybeUpdateAckTimeout();
+  return true;
+}
+
 bool QuicConnection::OnBlockedFrame(const QuicBlockedFrame& frame) {
   QUIC_BUG_IF(quic_bug_12714_17, !connected_)
       << "Processing BLOCKED frame when connection is closed. Received packet "
@@ -2921,11 +2935,22 @@ void QuicConnection::SetDefaultPathState(PathState new_path_state) {
   packet_creator_.SetServerConnectionId(default_path_.server_connection_id);
 }
 
+// TODO(wub): Inline this function when deprecating
+// --quic_test_peer_addr_change_after_normalize.
+bool QuicConnection::PeerAddressChanged() const {
+  if (quic_test_peer_addr_change_after_normalize_) {
+    return direct_peer_address_.Normalized() !=
+           last_received_packet_info_.source_address.Normalized();
+  }
+
+  return direct_peer_address_ != last_received_packet_info_.source_address;
+}
+
 bool QuicConnection::ProcessValidatedPacket(const QuicPacketHeader& header) {
   if (perspective_ == Perspective::IS_CLIENT && version().HasIetfQuicFrames() &&
       direct_peer_address_.IsInitialized() &&
       last_received_packet_info_.source_address.IsInitialized() &&
-      direct_peer_address_ != last_received_packet_info_.source_address &&
+      PeerAddressChanged() &&
       !IsKnownServerAddress(last_received_packet_info_.source_address)) {
     // Discard packets received from unseen server addresses.
     return false;
@@ -5705,8 +5730,23 @@ QuicPacketLength QuicConnection::GetGuaranteedLargestMessagePayload() const {
 
 uint32_t QuicConnection::cipher_id() const {
   if (version().KnowsWhichDecrypterToUse()) {
-    return framer_.GetDecrypter(last_received_packet_info_.decrypted_level)
-        ->cipher_id();
+    if (quic_limit_new_streams_per_loop_2_) {
+      QUIC_RELOADABLE_FLAG_COUNT_N(quic_limit_new_streams_per_loop_2, 4, 4);
+      for (auto decryption_level :
+           {ENCRYPTION_FORWARD_SECURE, ENCRYPTION_HANDSHAKE,
+            ENCRYPTION_ZERO_RTT, ENCRYPTION_INITIAL}) {
+        const QuicDecrypter* decrypter = framer_.GetDecrypter(decryption_level);
+        if (decrypter != nullptr) {
+          return decrypter->cipher_id();
+        }
+      }
+      QUICHE_BUG(no_decrypter_found)
+          << ENDPOINT << "No decrypter found at all encryption levels";
+      return 0;
+    } else {
+      return framer_.GetDecrypter(last_received_packet_info_.decrypted_level)
+          ->cipher_id();
+    }
   }
   return framer_.decrypter()->cipher_id();
 }
@@ -5815,14 +5855,13 @@ void QuicConnection::SendAllPendingAcks() {
     if (!flushed) {
       // Connection is write blocked.
       QUIC_BUG_IF(quic_bug_12714_33,
-                  !writer_->IsWriteBlocked() &&
+                  connected_ && !writer_->IsWriteBlocked() &&
                       !LimitedByAmplificationFactor(
                           packet_creator_.max_packet_length()) &&
                       !IsMissingDestinationConnectionID())
           << "Writer not blocked and not throttled by amplification factor, "
              "but ACK not flushed for packet space:"
           << PacketNumberSpaceToString(static_cast<PacketNumberSpace>(i))
-          << ", connected: " << connected_
           << ", fill_coalesced_packet: " << fill_coalesced_packet_
           << ", blocked_by_no_connection_id: "
           << (peer_issued_cid_manager_ != nullptr &&
@@ -6670,6 +6709,10 @@ void QuicConnection::ValidatePath(
                                   context->peer_address(), client_connection_id,
                                   server_connection_id, stateless_reset_token);
   }
+  if (multi_port_stats_ != nullptr &&
+      reason == PathValidationReason::kMultiPort) {
+    multi_port_stats_->num_client_probing_attempts++;
+  }
   path_validator_.StartPathValidation(std::move(context),
                                       std::move(result_delegate), reason);
   if (perspective_ == Perspective::IS_CLIENT &&
@@ -7097,6 +7140,7 @@ void QuicConnection::OnMultiPortPathProbingSuccess(
   multi_port_probing_alarm_->Set(clock_->ApproximateNow() +
                                  multi_port_probing_interval_);
   if (multi_port_stats_ != nullptr) {
+    multi_port_stats_->num_successful_probes++;
     auto now = clock_->Now();
     auto time_delta = now - start_time;
     multi_port_stats_->rtt_stats.UpdateRtt(time_delta, QuicTime::Delta::Zero(),
@@ -7118,6 +7162,9 @@ void QuicConnection::MaybeProbeMultiPortPath() {
       !visitor_->ShouldKeepConnectionAlive() ||
       multi_port_probing_alarm_->IsSet()) {
     return;
+  }
+  if (multi_port_stats_ != nullptr) {
+    multi_port_stats_->num_client_probing_attempts++;
   }
   auto multi_port_validation_result_delegate =
       std::make_unique<MultiPortPathValidationResultDelegate>(this);

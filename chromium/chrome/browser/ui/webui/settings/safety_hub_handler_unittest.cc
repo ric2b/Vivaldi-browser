@@ -60,8 +60,10 @@ constexpr char kUnusedTestSite[] = "https://example1.com";
 constexpr char kUsedTestSite[] = "https://example2.com";
 constexpr char16_t kUsername[] = u"bob";
 constexpr char16_t kCompromisedPassword[] = u"fnlsr4@cm^mdls@fkspnsg3d";
-constexpr ContentSettingsType kUnusedPermission =
+constexpr ContentSettingsType kUnusedRegularPermission =
     ContentSettingsType::GEOLOCATION;
+constexpr ContentSettingsType kUnusedChooserPermission =
+    ContentSettingsType::FILE_SYSTEM_ACCESS_CHOOSER_DATA;
 
 class SafetyHubHandlerTest : public testing::Test {
  public:
@@ -69,6 +71,8 @@ class SafetyHubHandlerTest : public testing::Test {
     feature_list_.InitWithFeatures(
         /*enabled_features=*/
         {content_settings::features::kSafetyCheckUnusedSitePermissions,
+         content_settings::features::
+             kSafetyCheckUnusedSitePermissionsForSupportedChooserPermissions,
          features::kSafetyHub},
         /*disabled_features=*/{});
   }
@@ -127,10 +131,18 @@ class SafetyHubHandlerTest : public testing::Test {
   }
 
   void AddRevokedPermission() {
-    auto dict = base::Value::Dict().Set(
-        permissions::kRevokedKey,
-        base::Value::List().Append(
-            static_cast<int32_t>(ContentSettingsType::GEOLOCATION)));
+    auto dict =
+        base::Value::Dict()
+            .Set(permissions::kRevokedKey,
+                 base::Value::List()
+                     .Append(static_cast<int32_t>(kUnusedRegularPermission))
+                     .Append(static_cast<int32_t>(kUnusedChooserPermission)))
+            .Set(permissions::kRevokedChooserPermissionsKey,
+                 base::Value::Dict().Set(
+                     base::NumberToString(
+                         static_cast<int32_t>(kUnusedChooserPermission)),
+                     base::Value::Dict().Set("foo", "bar")));
+
     hcsm()->SetWebsiteSettingDefaultScope(
         GURL(kUnusedTestSite), GURL(kUnusedTestSite),
         ContentSettingsType::REVOKED_UNUSED_SITE_PERMISSIONS,
@@ -173,7 +185,10 @@ class SafetyHubHandlerTest : public testing::Test {
     EXPECT_EQ(
         ContentSetting::CONTENT_SETTING_ASK,
         hcsm()->GetContentSetting(GURL(kUnusedTestSite), GURL(kUnusedTestSite),
-                                  kUnusedPermission));
+                                  kUnusedRegularPermission));
+    EXPECT_EQ(base::Value(), hcsm()->GetWebsiteSetting(
+                                 GURL(kUnusedTestSite), GURL(kUnusedTestSite),
+                                 kUnusedChooserPermission));
   }
 
   void ValidateNotificationPermissionUpdate() {
@@ -443,7 +458,11 @@ TEST_F(SafetyHubHandlerTest, HandleAllowPermissionsAgainForUnusedSite) {
   EXPECT_EQ(
       ContentSetting::CONTENT_SETTING_ALLOW,
       hcsm()->GetContentSetting(GURL(kUnusedTestSite), GURL(kUnusedTestSite),
-                                kUnusedPermission));
+                                kUnusedRegularPermission));
+  EXPECT_EQ(
+      base::Value::Dict().Set("foo", "bar"),
+      hcsm()->GetWebsiteSetting(GURL(kUnusedTestSite), GURL(kUnusedTestSite),
+                                kUnusedChooserPermission));
 
   // Undoing restores the initial state.
   handler()->HandleUndoAllowPermissionsAgainForUnusedSite(
@@ -473,10 +492,6 @@ TEST_F(SafetyHubHandlerTest,
 
 TEST_F(SafetyHubHandlerTest,
        HandleIgnoreOriginsForNotificationPermissionReview) {
-  base::test::ScopedFeatureList scoped_feature;
-  scoped_feature.InitAndEnableFeature(
-      ::features::kSafetyCheckNotificationPermissions);
-
   HostContentSettingsMap* content_settings =
       HostContentSettingsMapFactory::GetForProfile(profile());
   ContentSettingsForOneType ignored_patterns =
@@ -518,10 +533,6 @@ TEST_F(SafetyHubHandlerTest,
 }
 
 TEST_F(SafetyHubHandlerTest, HandleAllowNotificationPermissionForOrigins) {
-  base::test::ScopedFeatureList scoped_feature;
-  scoped_feature.InitAndEnableFeature(
-      ::features::kSafetyCheckNotificationPermissions);
-
   base::Value::List args;
   base::Value::List origins = GetOriginList(2);
   args.Append(origins.Clone());
@@ -545,10 +556,6 @@ TEST_F(SafetyHubHandlerTest, HandleAllowNotificationPermissionForOrigins) {
 }
 
 TEST_F(SafetyHubHandlerTest, HandleBlockNotificationPermissionForOrigins) {
-  base::test::ScopedFeatureList scoped_feature;
-  scoped_feature.InitAndEnableFeature(
-      ::features::kSafetyCheckNotificationPermissions);
-
   base::Value::List args;
   base::Value::List origins = GetOriginList(2);
   args.Append(origins.Clone());
@@ -573,10 +580,6 @@ TEST_F(SafetyHubHandlerTest, HandleBlockNotificationPermissionForOrigins) {
 }
 
 TEST_F(SafetyHubHandlerTest, HandleResetNotificationPermissionForOrigins) {
-  base::test::ScopedFeatureList scoped_feature;
-  scoped_feature.InitAndEnableFeature(
-      ::features::kSafetyCheckNotificationPermissions);
-
   HostContentSettingsMap* content_settings =
       HostContentSettingsMapFactory::GetForProfile(profile());
   base::Value::List args;
@@ -698,6 +701,7 @@ TEST_F(SafetyHubHandlerTest, RevokeAllContentSettingTypes) {
   static constexpr auto kNoNameTypes =
       base::MakeFixedFlatSet<ContentSettingsType>({
           // clang-format off
+          ContentSettingsType::MIDI,
           ContentSettingsType::DURABLE_STORAGE,
           ContentSettingsType::ACCESSIBILITY_EVENTS,
           ContentSettingsType::NFC,

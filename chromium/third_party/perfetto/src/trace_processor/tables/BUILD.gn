@@ -20,6 +20,7 @@ perfetto_tp_tables("tables_python") {
     "android_tables.py",
     "counter_tables.py",
     "flow_tables.py",
+    "jit_tables.py",
     "memory_tables.py",
     "metadata_tables.py",
     "profiler_tables.py",
@@ -41,7 +42,10 @@ source_set("tables") {
   deps = [
     "../../../gn:default_deps",
     "../../../include/perfetto/ext/base",
-    "../db",
+    "../../../include/perfetto/trace_processor",
+    "../containers",
+    "../db:minimal",
+    "../db/column",
   ]
   public_deps = [ ":tables_python" ]
 }
@@ -58,6 +62,7 @@ source_set("unittests") {
     ":tables",
     "../../../gn:default_deps",
     "../../../gn:gtest_and_gmock",
+    "../containers",
     "../db",
   ]
 }
@@ -69,6 +74,9 @@ if (enable_perfetto_benchmarks) {
       ":py_tables_benchmark",
       "../../../gn:benchmark",
       "../../../gn:default_deps",
+      "../../../include/perfetto/trace_processor",
+      "../containers",
+      "../db",
     ]
     sources = [ "py_tables_benchmark.cc" ]
   }

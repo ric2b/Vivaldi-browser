@@ -11,6 +11,7 @@ NSString* const kGoogleShieldSymbol = @"google_shield";
 NSString* const kMulticolorChromeballSymbol = @"multicolor_chromeball";
 NSString* const kGoogleMapsSymbol = @"google_maps";
 NSString* const kGooglePhotosSymbol = @"google_photos";
+NSString* const kPageInsightsSymbol = @"page_insights";
 // TODO(crbug.com/1489185): Move PNG images out of this file.
 NSString* const kFedexCarrierImage = @"parcel_tracking_carrier_fedex";
 NSString* const kUPSCarrierImage = @"parcel_tracking_carrier_ups";
@@ -23,8 +24,6 @@ NSString* const kArrowClockWiseSymbol = @"arrow_clockwise";
 NSString* const kIncognitoSymbol = @"incognito";
 NSString* const kSquareNumberSymbol = @"square_number";
 NSString* const kTranslateSymbol = @"translate";
-NSString* const kCameraSymbol = @"camera";
-NSString* const kCameraFillSymbol = @"camera_fill";
 NSString* const kPasswordManagerSymbol = @"password_manager";
 NSString* const kPopupBadgeMinusSymbol = @"popup_badge_minus";
 NSString* const kPhotoBadgePlusSymbol = @"photo_badge_plus";
@@ -38,6 +37,7 @@ NSString* const kPasswordSymbol = @"password";
 #if !BUILDFLAG(IS_IOS_MACCATALYST)
 NSString* const kMulticolorPasswordSymbol = @"multicolor_password";
 #endif  // BUILDFLAG(IS_IOS_MACCATALYST)
+NSString* const kVoiceSymbol = @"voice";
 NSString* const kCameraLensSymbol = @"camera_lens";
 NSString* const kDownTrendSymbol = @"line_downtrend";
 NSString* const kUpTrendSymbol = @"line_uptrend";
@@ -66,6 +66,11 @@ NSString* const kCustomMovePlatterToBottomPhoneSymbol =
     @"custom_platter_filled_bottom_and_arrow_down_iphone";
 NSString* const kCustomMovePlatterToTopPhoneSymbol =
     @"custom_platter_filled_top_and_arrow_up_iphone";
+
+// Use custom symbol for camera because the default video icon in iOS should
+// always represent “Apple Facetime”.
+NSString* const kCameraSymbol = @"custom_camera";
+NSString* const kCameraFillSymbol = @"custom_camera_fill";
 
 // Default symbol names.
 NSString* const kChartBarXAxisSymbol = @"chart.bar.xaxis";
@@ -149,11 +154,9 @@ NSString* const kPersonFillSymbol = @"person.fill";
 NSString* const kMailFillSymbol = @"envelope.fill";
 NSString* const kPhoneFillSymbol = @"phone.fill";
 NSString* const kDownloadPromptFillSymbol = @"arrow.down.to.line.circle.fill";
-NSString* const kDownloadPromptFilliOS14Symbol = @"arrow.down.circle.fill";
 NSString* const kDownloadDocFillSymbol = @"doc.fill";
 NSString* const kDocSymbol = @"doc";
 NSString* const kOpenInDownloadsSymbol = @"arrow.down.to.line.compact";
-NSString* const kOpenInDownloadsiOS14Symbol = @"arrow.down.to.line.alt";
 NSString* const kExternalLinkSymbol = @"arrow.up.forward.square";
 NSString* const kChevronDownSymbol = @"chevron.down";
 NSString* const kChevronForwardSymbol = @"chevron.forward";
@@ -199,6 +202,9 @@ NSString* const kLightBulbSymbol = @"lightbulb";
 NSString* const kNewTabGroupActionSymbol = @"plus.square.on.square";
 NSString* const kRemoveTabFromGroupActionSymbol = @"minus.square";
 NSString* const kMoveTabToGroupActionSymbol = @"arrow.up.right.square";
+NSString* const kClockSymbol = @"clock";
+NSString* const kUngroupTabGroupSymbol = @"viewfinder";
+NSString* const kPlusInSquareSymbol = @"plus.square";
 
 // Names of the default symbol being non-monochrome by default. When using them,
 // you probably want to set their color to monochrome.

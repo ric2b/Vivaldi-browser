@@ -47,6 +47,7 @@ if (is_chromeos_ash) {
     "mojo/public/mojom/base/int128.mojom-webui.js",
     "mojo/public/mojom/base/process_id.mojom-webui.js",
     "mojo/public/mojom/base/read_only_buffer.mojom-webui.js",
+    "mojo/public/mojom/base/read_only_file.mojom-webui.js",
     "mojo/public/mojom/base/safe_base_name.mojom-webui.js",
     "mojo/public/mojom/base/string16.mojom-webui.js",
     "mojo/public/mojom/base/text_direction.mojom-webui.js",
@@ -60,6 +61,7 @@ if (is_chromeos_ash) {
 
   mojo_ts_files += [
     "chromeos/ash/services/auth_factor_config/public/mojom/auth_factor_config.mojom-webui.ts",
+    "chromeos/components/in_session_auth/mojom/in_session_auth.mojom-webui.ts",
     "chromeos/ash/services/connectivity/public/mojom/passpoint.mojom-webui.ts",
     "chromeos/ash/services/hotspot_config/public/mojom/cros_hotspot_config.mojom-webui.ts",
     "chromeos/ash/services/nearby/public/mojom/nearby_share_settings.mojom-webui.ts",
@@ -77,6 +79,7 @@ if (is_chromeos_ash) {
     "mojo/public/mojom/base/int128.mojom-webui.ts",
     "mojo/public/mojom/base/process_id.mojom-webui.ts",
     "mojo/public/mojom/base/read_only_buffer.mojom-webui.ts",
+    "mojo/public/mojom/base/read_only_file.mojom-webui.ts",
     "mojo/public/mojom/base/safe_base_name.mojom-webui.ts",
     "mojo/public/mojom/base/string16.mojom-webui.ts",
     "mojo/public/mojom/base/text_direction.mojom-webui.ts",
@@ -109,6 +112,7 @@ preprocess_if_expr("copy_mojo_ts") {
       "//chromeos/ash/services/connectivity/public/mojom:mojom_ts__generator",
       "//chromeos/ash/services/hotspot_config/public/mojom:mojom_ts__generator",
       "//chromeos/ash/services/nearby/public/mojom:nearby_share_settings_ts__generator",
+      "//chromeos/components/in_session_auth/mojom:mojom_ts__generator",
       "//ui/base/accelerators/mojom:mojom_ts__generator",
       "//ui/events/mojom:mojom_ts__generator",
       "//ui/latency/mojom:mojom_ts__generator",

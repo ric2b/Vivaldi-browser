@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -18,7 +19,6 @@
 #include "net/base/completion_repeating_callback.h"
 #include "net/base/net_export.h"
 #include "net/base/network_anonymization_key.h"
-#include "net/base/privacy_mode.h"
 #include "net/dns/public/host_resolver_results.h"
 #include "net/dns/public/resolve_error_info.h"
 #include "net/socket/connect_job.h"
@@ -26,7 +26,6 @@
 #include "net/socket/ssl_client_socket.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_config_service.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace net {
 
@@ -48,7 +47,6 @@ class NET_EXPORT_PRIVATE SSLSocketParams
                   scoped_refptr<HttpProxySocketParams> http_proxy_params,
                   const HostPortPair& host_and_port,
                   const SSLConfig& ssl_config,
-                  PrivacyMode privacy_mode,
                   NetworkAnonymizationKey network_anonymization_key);
 
   SSLSocketParams(const SSLSocketParams&) = delete;
@@ -69,7 +67,6 @@ class NET_EXPORT_PRIVATE SSLSocketParams
 
   const HostPortPair& host_and_port() const { return host_and_port_; }
   const SSLConfig& ssl_config() const { return ssl_config_; }
-  PrivacyMode privacy_mode() const { return privacy_mode_; }
   const NetworkAnonymizationKey& network_anonymization_key() const {
     return network_anonymization_key_;
   }
@@ -83,7 +80,6 @@ class NET_EXPORT_PRIVATE SSLSocketParams
   const scoped_refptr<HttpProxySocketParams> http_proxy_params_;
   const HostPortPair host_and_port_;
   const SSLConfig ssl_config_;
-  const PrivacyMode privacy_mode_;
   const NetworkAnonymizationKey network_anonymization_key_;
 };
 
@@ -211,11 +207,11 @@ class NET_EXPORT_PRIVATE SSLConnectJob : public ConnectJob,
 
   // The endpoint result used by `nested_connect_job_`. Stored because
   // `nested_connect_job_` has a limited lifetime.
-  absl::optional<HostResolverEndpointResult> endpoint_result_;
+  std::optional<HostResolverEndpointResult> endpoint_result_;
 
-  // If not `absl::nullopt`, the ECH retry configs to use in the ECH recovery
+  // If not `std::nullopt`, the ECH retry configs to use in the ECH recovery
   // flow. `endpoint_result_` will then contain the endpoint to reconnect to.
-  absl::optional<std::vector<uint8_t>> ech_retry_configs_;
+  std::optional<std::vector<uint8_t>> ech_retry_configs_;
 };
 
 }  // namespace net

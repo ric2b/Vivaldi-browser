@@ -25,6 +25,7 @@ var VIVALDI_WEB_VIEW_API_METHODS = [
   'setIsFullscreen',
   'showPageInfo',
   'sendRequest',
+  'getPageSelection',
 ];
 
 // Exports.

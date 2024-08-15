@@ -133,6 +133,7 @@ namespace http://www.w3.org/1999/xhtml
     property getElementsByClassName
     property getElementsByTagName
     property getElementsByTagNameNS
+    property getHTML
     property getInnerHTML
     property getRootNode
     property hasAttribute
@@ -349,6 +350,7 @@ namespace http://www.w3.org/1999/xhtml
     property webkitMatchesSelector
     property webkitRequestFullScreen
     property webkitRequestFullscreen
+    property writingSuggestions
 html element a
     property attributionSrc
     property charset
@@ -360,6 +362,8 @@ html element a
     property href
     property hrefTranslate
     property hreflang
+    property interestAction
+    property interestTargetElement
     property name
     property origin
     property password
@@ -506,6 +510,8 @@ html element button
     property formMethod
     property formNoValidate
     property formTarget
+    property interestAction
+    property interestTargetElement
     property invokeAction
     property invokeTargetElement
     property labels
@@ -585,6 +591,7 @@ html element fencedframe
     property allow
     property config
     property height
+    property onfencedtreeclick
     property sandbox
     property width
 html element fieldset
@@ -706,6 +713,7 @@ html element iframe
     property referrerPolicy
     property sandbox
     property scrolling
+    property sharedStorageWritable
     property src
     property srcdoc
     property width
@@ -730,6 +738,7 @@ html element img
     property naturalHeight
     property naturalWidth
     property referrerPolicy
+    property sharedStorageWritable
     property sizes
     property src
     property srcset
@@ -759,6 +768,8 @@ html element input
     property height
     property incremental
     property indeterminate
+    property interestAction
+    property interestTargetElement
     property invokeAction
     property invokeTargetElement
     property labels
@@ -1104,7 +1115,10 @@ html element td
 html element template
     property content
     property parseparts
+    property shadowRootClonable
+    property shadowRootDelegatesFocus
     property shadowRootMode
+    property shadowRootSerializable
 html element textarea
     property autocomplete
     property checkValidity
@@ -1305,6 +1319,7 @@ namespace http://www.w3.org/2000/svg
     property accessibleNode
     property addEventListener
     property after
+    property anchorElement
     property animate
     property append
     property appendChild
@@ -1402,6 +1417,7 @@ namespace http://www.w3.org/2000/svg
     property getElementsByClassName
     property getElementsByTagName
     property getElementsByTagNameNS
+    property getHTML
     property getInnerHTML
     property getRootNode
     property hasAttribute

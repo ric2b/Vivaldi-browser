@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -62,6 +63,14 @@ struct BLINK_COMMON_EXPORT
     return data.use_subpixel_positioning;
   }
 
+  static const float& text_contrast(const ::blink::RendererPreferences& data) {
+    return data.text_contrast;
+  }
+
+  static const float& text_gamma(const ::blink::RendererPreferences& data) {
+    return data.text_gamma;
+  }
+
   static const uint32_t& focus_ring_color(
       const ::blink::RendererPreferences& data) {
     return data.focus_ring_color;
@@ -92,7 +101,7 @@ struct BLINK_COMMON_EXPORT
     return data.browser_handles_all_top_level_requests;
   }
 
-  static absl::optional<base::TimeDelta> caret_blink_interval(
+  static std::optional<base::TimeDelta> caret_blink_interval(
       const ::blink::RendererPreferences& data) {
     return data.caret_blink_interval;
   }
@@ -243,6 +252,11 @@ struct BLINK_COMMON_EXPORT
   static const std::vector<uint16_t>& explicitly_allowed_network_ports(
       const ::blink::RendererPreferences& data) {
     return data.explicitly_allowed_network_ports;
+  }
+
+  static const std::optional<bool> prefixed_fullscreen_video_api_availability(
+      const ::blink::RendererPreferences& data) {
+    return data.prefixed_fullscreen_video_api_availability;
   }
 
   /* Vivaldi*/

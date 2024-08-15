@@ -76,7 +76,7 @@ void QuickUnlockPrivateGetAuthTokenHelper::OnAuthSessionStarted(
   DCHECK(user_exists);
   if (error.has_value()) {
     LOG(ERROR) << "Failed to start auth session, code "
-               << error->get_cryptohome_code();
+               << error->get_cryptohome_error();
     std::move(callback).Run(std::nullopt, *error);
     return;
   }
@@ -88,7 +88,8 @@ void QuickUnlockPrivateGetAuthTokenHelper::OnAuthSessionStarted(
     LOG(ERROR) << "Could not find password key";
     std::move(callback).Run(
         std::nullopt, ash::AuthenticationError(
-                          user_data_auth::CRYPTOHOME_ERROR_KEY_NOT_FOUND));
+                          cryptohome::ErrorWrapper::CreateFromErrorCodeOnly(
+                              user_data_auth::CRYPTOHOME_ERROR_KEY_NOT_FOUND)));
     return;
   }
 
@@ -108,7 +109,7 @@ void QuickUnlockPrivateGetAuthTokenHelper::OnAuthenticated(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (error.has_value()) {
     LOG(ERROR) << "Failed to authenticate with password, code "
-               << error->get_cryptohome_code();
+               << error->get_cryptohome_error();
     std::move(callback).Run(std::nullopt, *error);
     return;
   }
@@ -128,7 +129,7 @@ void QuickUnlockPrivateGetAuthTokenHelper::OnAuthFactorsConfiguration(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (error.has_value()) {
     LOG(ERROR) << "Failed to load auth factors configuration, code "
-               << error->get_cryptohome_code();
+               << error->get_cryptohome_error();
     std::move(callback).Run(std::nullopt, *error);
     return;
   }

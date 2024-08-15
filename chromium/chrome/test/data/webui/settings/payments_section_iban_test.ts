@@ -6,12 +6,15 @@
 import 'chrome://settings/lazy_load.js';
 
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {SettingsSimpleConfirmationDialogElement, CrInputElement, PaymentsManagerImpl, SettingsIbanEditDialogElement} from 'chrome://settings/lazy_load.js';
-import {CrButtonElement, loadTimeData} from 'chrome://settings/settings.js';
+import type {SettingsSimpleConfirmationDialogElement, CrInputElement, SettingsIbanEditDialogElement} from 'chrome://settings/lazy_load.js';
+import {PaymentsManagerImpl} from 'chrome://settings/lazy_load.js';
+import type {CrButtonElement} from 'chrome://settings/settings.js';
+import {loadTimeData} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {eventToPromise, isVisible, whenAttributeIs} from 'chrome://webui-test/test_util.js';
 
-import {createIbanEntry, TestPaymentsManager} from './autofill_fake_data.js';
+import type {TestPaymentsManager} from './autofill_fake_data.js';
+import {createIbanEntry} from './autofill_fake_data.js';
 import {createPaymentsSection, getDefaultExpectations} from './payments_section_utils.js';
 
 // clang-format on
@@ -19,8 +22,10 @@ import {createPaymentsSection, getDefaultExpectations} from './payments_section_
 /**
  * Helper function to update IBAN value in the IBAN field.
  */
-function updateIbanTextboxValue(valueInput: CrInputElement, value: string) {
+async function updateIbanTextboxValue(
+    valueInput: CrInputElement, value: string): Promise<void> {
   valueInput.value = value;
+  await valueInput.updateComplete;
   valueInput.dispatchEvent(
       new CustomEvent('input', {bubbles: true, composed: true}));
 }
@@ -54,7 +59,7 @@ suite('PaymentsSectionIban', function() {
   function getIbanListItems() {
     return document.body.querySelector('settings-payments-section')!.shadowRoot!
         .querySelector('#paymentsList')!.shadowRoot!.querySelectorAll(
-            'settings-iban-list-entry')!;
+            'settings-iban-list-entry');
   }
 
   /**
@@ -147,10 +152,10 @@ suite('PaymentsSectionIban', function() {
 
     // Add a valid IBAN value.
     const valueInput = ibanDialog.$.valueInput;
-    updateIbanTextboxValue(valueInput, 'FI1410093000123458');
+    await updateIbanTextboxValue(valueInput, 'FI1410093000123458');
 
     // Type in another valid IBAN value.
-    updateIbanTextboxValue(valueInput, 'IT60X0542811101000000123456');
+    await updateIbanTextboxValue(valueInput, 'IT60X0542811101000000123456');
 
     const savePromise = eventToPromise('save-iban', ibanDialog);
     saveButton.click();

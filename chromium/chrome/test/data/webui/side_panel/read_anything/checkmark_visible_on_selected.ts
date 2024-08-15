@@ -4,22 +4,26 @@
 
 import 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything_toolbar.js';
 
-import {ReadAnythingToolbarElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything_toolbar.js';
+import type {ReadAnythingToolbarElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything_toolbar.js';
 import {assertEquals} from 'chrome-untrusted://webui-test/chai_assert.js';
 
+import {suppressInnocuousErrors} from './common.js';
 import {FakeReadingMode} from './fake_reading_mode.js';
 
 suite('CheckmarkVisibleOnSelected', () => {
   let toolbar: ReadAnythingToolbarElement;
 
   setup(function() {
+    suppressInnocuousErrors();
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     const readingMode = new FakeReadingMode();
     chrome.readingMode = readingMode as unknown as typeof chrome.readingMode;
+  });
 
+  function createToolbar(): void {
     toolbar = document.createElement('read-anything-toolbar');
     document.body.appendChild(toolbar);
-  });
+  }
 
   function assertCheckMarkVisible(
       checkMarks: NodeListOf<HTMLElement>, expectedIndex: number): void {
@@ -41,12 +45,54 @@ suite('CheckmarkVisibleOnSelected', () => {
     });
   }
 
-  test('test', function() {
-    assertCheckMarksForDropdown(toolbar.$.fontMenu);
-    assertCheckMarksForDropdown(toolbar.$.rateMenu);
-    assertCheckMarksForDropdown(toolbar.$.lineSpacingMenu);
-    assertCheckMarksForDropdown(toolbar.$.letterSpacingMenu);
-    assertCheckMarksForDropdown(toolbar.$.colorMenu);
-    assertCheckMarksForDropdown(toolbar.$.voiceSelectionMenu);
+  suite('with read aloud', () => {
+    setup(() => {
+      chrome.readingMode.isReadAloudEnabled = true;
+      createToolbar();
+    });
+
+    test('rate menu has checkmarks', () => {
+      assertCheckMarksForDropdown(toolbar.$.rateMenu);
+    });
+
+    test('line spacing menu has checkmarks', () => {
+      assertCheckMarksForDropdown(toolbar.$.lineSpacingMenu);
+    });
+
+    test('letter spacing menu has checkmarks', () => {
+      assertCheckMarksForDropdown(toolbar.$.letterSpacingMenu);
+    });
+
+    test('color menu has checkmarks', () => {
+      assertCheckMarksForDropdown(toolbar.$.colorMenu);
+    });
+
+    test('font menu has checkmarks', () => {
+      assertCheckMarksForDropdown(toolbar.$.fontMenu);
+    });
   });
+
+  suite('without read aloud', () => {
+    setup(() => {
+      chrome.readingMode.isReadAloudEnabled = false;
+      createToolbar();
+    });
+
+    test('font menu has checkmarks', () => {
+      assertCheckMarksForDropdown(toolbar.$.fontMenu);
+    });
+
+    test('line spacing menu has checkmarks', () => {
+      assertCheckMarksForDropdown(toolbar.$.lineSpacingMenu);
+    });
+
+    test('letter spacing menu has checkmarks', () => {
+      assertCheckMarksForDropdown(toolbar.$.letterSpacingMenu);
+    });
+
+    test('color menu has checkmarks', () => {
+      assertCheckMarksForDropdown(toolbar.$.colorMenu);
+    });
+  });
+
 });

@@ -2114,7 +2114,12 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,
       /*sample=*/trusted_vault::TrustedVaultDownloadKeysStatus::kSuccess,
       /*expected_bucket_count=*/1);
   histogram_tester.ExpectUniqueSample(
-      "Sync.TrustedVaultURLFetchResponse.DownloadKeys",
+      "TrustedVault.SecurityDomainServiceURLFetchResponse.DownloadKeys",
+      /*sample=*/200,
+      /*expected_bucket_count=*/1);
+  histogram_tester.ExpectUniqueSample(
+      "TrustedVault.SecurityDomainServiceURLFetchResponse.DownloadKeys."
+      "ChromeSync",
       /*sample=*/200,
       /*expected_bucket_count=*/1);
 }
@@ -2239,47 +2244,52 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,
 
 // ChromeOS doesn't have unconsented primary accounts.
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
-class SingleClientNigoriWithWebApiAndPasswordsAccountStorageTest
-    : public SingleClientNigoriWithWebApiTest {
+
+class SingleClientNigoriWithWebApiExplicitParamTest
+    : public SingleClientNigoriWithWebApiTest,
+      public testing::WithParamInterface<bool /*explicit_signin*/> {
  public:
-  SingleClientNigoriWithWebApiAndPasswordsAccountStorageTest() {
-    override_features_.InitWithFeatures(
-        /*enabled_features=*/{password_manager::features::
-                                  kEnablePasswordsAccountStorage},
-        /*disabled_features=*/{switches::kUnoDesktop});
-  }
+  SingleClientNigoriWithWebApiExplicitParamTest() = default;
 
-  ~SingleClientNigoriWithWebApiAndPasswordsAccountStorageTest() override =
-      default;
+  bool is_explicit_signin() const { return GetParam(); }
 
-  // SetupClients() must have been already called.
-  void SetupSyncTransport() {
-    secondary_account_helper::SignInUnconsentedAccount(
-        GetProfile(0), &test_url_loader_factory_, SyncTest::kDefaultUserEmail);
-    ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
-    ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
+  void SignInMaybeExplicit() {
+    if (is_explicit_signin()) {
+      secondary_account_helper::SignInUnconsentedAccount(
+          GetProfile(0), &test_url_loader_factory_,
+          SyncTest::kDefaultUserEmail);
+    } else {
+      secondary_account_helper::ImplicitSignInUnconsentedAccount(
+          GetProfile(0), &test_url_loader_factory_,
+          SyncTest::kDefaultUserEmail);
+    }
   }
 
  private:
-  base::test::ScopedFeatureList override_features_;
+  base::test::ScopedFeatureList scoped_feature_list_{switches::kUnoDesktop};
 };
 
-IN_PROC_BROWSER_TEST_F(
-    SingleClientNigoriWithWebApiAndPasswordsAccountStorageTest,
-    ShouldAcceptEncryptionKeysFromTheWeb) {
+IN_PROC_BROWSER_TEST_P(SingleClientNigoriWithWebApiExplicitParamTest,
+                       ShouldAcceptEncryptionKeysFromTheWebInTransportMode) {
   // Mimic the account using a trusted vault passphrase.
   SetNigoriInFakeServer(BuildTrustedVaultNigoriSpecifics({kTestEncryptionKey}),
                         GetFakeServer());
 
   ASSERT_TRUE(SetupClients());
-  SetupSyncTransport();
 
-  // Chrome isn't trying to sync passwords, because the user hasn't opted in to
-  // passwords account storage. So the error shouldn't be surfaced yet.
-  ASSERT_FALSE(GetAvatarSyncErrorType(GetProfile(0)).has_value());
+  SignInMaybeExplicit();
+  ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
+  ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
 
-  password_manager::features_util::OptInToAccountStorage(
-      GetProfile(0)->GetPrefs(), GetSyncService(0));
+  if (!is_explicit_signin()) {
+    // If signin is implicit, Chrome isn't trying to sync passwords, because the
+    // user hasn't opted in to passwords account storage. So the error shouldn't
+    // be surfaced yet.
+    ASSERT_FALSE(GetAvatarSyncErrorType(GetProfile(0)).has_value());
+
+    password_manager::features_util::OptInToAccountStorage(
+        GetProfile(0)->GetPrefs(), GetSyncService(0));
+  }
 
   // The error is now shown, because PASSWORDS is trying to sync. The data
   // type isn't active yet though due to the missing encryption keys.
@@ -2311,9 +2321,9 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_FALSE(GetAvatarSyncErrorType(GetProfile(0)).has_value());
 }
 
-IN_PROC_BROWSER_TEST_F(
-    SingleClientNigoriWithWebApiAndPasswordsAccountStorageTest,
-    ShouldReportDegradedTrustedVaultRecoverability) {
+IN_PROC_BROWSER_TEST_P(
+    SingleClientNigoriWithWebApiExplicitParamTest,
+    ShouldReportDegradedTrustedVaultRecoverabilityInTransportMode) {
   base::HistogramTester histogram_tester;
 
   // Mimic the key being available upon startup but recoverability degraded.
@@ -2332,14 +2342,18 @@ IN_PROC_BROWSER_TEST_F(
       GetSecurityDomainsServer()->GetAllTrustedVaultKeys(),
       /*last_key_version=*/GetSecurityDomainsServer()->GetCurrentEpoch());
 
-  SetupSyncTransport();
+  SignInMaybeExplicit();
+  ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
+  ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
 
-  // Chrome isn't trying to sync passwords, because the user hasn't opted in to
-  // passwords account storage. So the error shouldn't be surfaced yet.
-  ASSERT_FALSE(GetAvatarSyncErrorType(GetProfile(0)).has_value());
+  if (!is_explicit_signin()) {
+    // Chrome isn't trying to sync passwords, because the user hasn't opted in
+    // to passwords account storage. So the error shouldn't be surfaced yet.
+    ASSERT_FALSE(GetAvatarSyncErrorType(GetProfile(0)).has_value());
 
-  password_manager::features_util::OptInToAccountStorage(
-      GetProfile(0)->GetPrefs(), GetSyncService(0));
+    password_manager::features_util::OptInToAccountStorage(
+        GetProfile(0)->GetPrefs(), GetSyncService(0));
+  }
 
   ASSERT_TRUE(TrustedVaultRecoverabilityDegradedStateChecker(GetSyncService(0),
                                                              /*degraded=*/true)
@@ -2368,6 +2382,14 @@ IN_PROC_BROWSER_TEST_F(
       "Sync.TrustedVaultRecoverabilityDegradedOnStartup",
       /*sample=*/true, /*expected_bucket_count=*/1);
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    /* no prefix */,
+    SingleClientNigoriWithWebApiExplicitParamTest,
+    ::testing::Bool(),
+    [](const testing::TestParamInfo<bool>& info) {
+      return info.param ? "Explicit" : "Implicit";
+    });
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 }  // namespace

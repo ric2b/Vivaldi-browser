@@ -34,6 +34,7 @@
 #import <AppKit/AppKit.h>
 #import <CoreFoundation/CoreFoundation.h>
 #import <CoreText/CoreText.h>
+#include <Foundation/Foundation.h>
 
 #include "base/apple/bridging.h"
 #include "base/apple/foundation_util.h"
@@ -56,9 +57,10 @@
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
 
+using base::apple::CFToNSOwnershipCast;
 using base::apple::CFToNSPtrCast;
-using base::apple::GetValueFromDictionary;
 using base::apple::NSToCFOwnershipCast;
+using base::apple::NSToCFPtrCast;
 using base::apple::ScopedCFTypeRef;
 
 // Forward declare Mac SPIs.
@@ -86,18 +88,6 @@ ScopedCFTypeRef<CTFontRef> CreateCopyWithTraitsAndWeightFromFont(
     CTFontSymbolicTraits traits,
     float weight,
     float size) {
-  ScopedCFTypeRef<CFNumberRef> traits_num(
-      CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &traits));
-  ScopedCFTypeRef<CFNumberRef> weight_num(
-      CFNumberCreate(kCFAllocatorDefault, kCFNumberFloatType, &weight));
-
-  const CFStringRef traits_keys[] = {kCTFontSymbolicTrait, kCTFontWeightTrait};
-  const CFTypeRef traits_values[] = {traits_num.get(), weight_num.get()};
-  ScopedCFTypeRef<CFDictionaryRef> traits_dict(CFDictionaryCreate(
-      kCFAllocatorDefault, (const void**)traits_keys,
-      (const void**)traits_values, 2, &kCFTypeDictionaryKeyCallBacks,
-      &kCFTypeDictionaryValueCallBacks));
-
   ScopedCFTypeRef<CFStringRef> family_name(CTFontCopyFamilyName(font));
   // Some broken fonts may lack a postscript name (nameID="6"), full font
   // name (nameId="4") or family name (nameID="1") in the 'name' font table, see
@@ -107,16 +97,19 @@ ScopedCFTypeRef<CTFontRef> CreateCopyWithTraitsAndWeightFromFont(
   if (!family_name) {
     return ScopedCFTypeRef<CTFontRef>(nullptr);
   }
-  const CFStringRef attribute_keys[] = {kCTFontFamilyNameAttribute,
-                                        kCTFontTraitsAttribute};
-  const CFTypeRef attribute_values[] = {family_name.get(), traits_dict.get()};
-  ScopedCFTypeRef<CFDictionaryRef> attributes(CFDictionaryCreate(
-      kCFAllocatorDefault, (const void**)attribute_keys,
-      (const void**)attribute_values, 2, &kCFTypeDictionaryKeyCallBacks,
-      &kCFTypeDictionaryValueCallBacks));
+
+  NSDictionary* traits_dict = @{
+    CFToNSPtrCast(kCTFontSymbolicTrait) : @(traits),
+    CFToNSPtrCast(kCTFontWeightTrait) : @(weight),
+  };
+  NSDictionary* attributes = @{
+    CFToNSPtrCast(kCTFontFamilyNameAttribute) :
+        CFToNSPtrCast(family_name.get()),
+    CFToNSPtrCast(kCTFontTraitsAttribute) : traits_dict,
+  };
 
   ScopedCFTypeRef<CTFontDescriptorRef> descriptor(
-      CTFontDescriptorCreateWithAttributes(attributes.get()));
+      CTFontDescriptorCreateWithAttributes(NSToCFPtrCast(attributes)));
   // When we try to find the substitute font of "Menlo Regular" with italic
   // traits attribute for the selected code point using
   // `CTFontCreateCopyWithAttributes`, it gives us the same "Menlo Regular" font
@@ -134,7 +127,8 @@ bool IsLastResortFont(CTFontRef font) {
 }
 
 ScopedCFTypeRef<CTFontRef> GetSubstituteFont(CTFontRef ct_font,
-                                             UChar32 character) {
+                                             UChar32 character,
+                                             float size) {
   DCHECK(RuntimeEnabledFeatures::FontMatchingCTMigrationEnabled());
 
   auto bytes = base::bit_cast<std::array<UInt8, 4>>(character);
@@ -142,8 +136,22 @@ ScopedCFTypeRef<CTFontRef> GetSubstituteFont(CTFontRef ct_font,
       kCFAllocatorDefault, std::data(bytes), std::size(bytes),
       kCFStringEncodingUTF32LE, false));
   CFRange range = CFRangeMake(0, CFStringGetLength(string.get()));
-  ScopedCFTypeRef<CTFontRef> substitute_font(
-      CTFontCreateForString(ct_font, string.get(), range));
+
+  ScopedCFTypeRef<CTFontRef> substitute_font;
+  if (!ct_font) {
+    // For some web fonts for which we use FreeType backend (for instance some
+    // color fonts), `ct_font` is null. For these fonts we still want to have a
+    // substitute font for a character. We are using the default value of
+    // standard font from user settings defined in
+    // `chrome/app/resources/locale_settings_mac.grd` as the font to substitute
+    // from in `CTFontCreateForString`.
+    ScopedCFTypeRef<CTFontRef> font_to_substitute(
+        CTFontCreateWithName(CFSTR("Times"), size, nullptr));
+    substitute_font.reset(
+        CTFontCreateForString(font_to_substitute.get(), string.get(), range));
+  } else {
+    substitute_font.reset(CTFontCreateForString(ct_font, string.get(), range));
+  }
 
   if (!substitute_font || IsLastResortFont(substitute_font.get())) {
     return ScopedCFTypeRef<CTFontRef>(nullptr);
@@ -164,27 +172,30 @@ bool TraitsMismatch(CTFontSymbolicTraits desired_traits,
   return (desired_traits & TraitsMask) != (found_traits & TraitsMask);
 }
 
-std::unique_ptr<FontPlatformData> GetAlternateFontPlatformData(
+const FontPlatformData* GetAlternateFontPlatformData(
     const FontDescription& font_description,
     UChar32 character,
     const FontPlatformData& platform_data) {
   DCHECK(RuntimeEnabledFeatures::FontMatchingCTMigrationEnabled());
   CTFontRef ct_font = platform_data.CtFont();
 
+  float size = font_description.ComputedPixelSize();
+
   ScopedCFTypeRef<CTFontRef> substitute_font(
-      GetSubstituteFont(ct_font, character));
+      GetSubstituteFont(ct_font, character, size));
   if (!substitute_font) {
     return nullptr;
   }
 
   auto get_ct_font_weight = [](CTFontRef font) -> float {
-    ScopedCFTypeRef<CFDictionaryRef> font_traits(CTFontCopyTraits(font));
+    NSDictionary* font_traits = CFToNSOwnershipCast(CTFontCopyTraits(font));
+
     float weight = kCTNormalWeightValue;
     if (font_traits) {
-      CFNumberRef weight_num = GetValueFromDictionary<CFNumberRef>(
-          font_traits.get(), kCTFontWeightTrait);
+      NSNumber* weight_num = base::apple::ObjCCast<NSNumber>(
+          font_traits[CFToNSPtrCast(kCTFontWeightTrait)]);
       if (weight_num) {
-        CFNumberGetValue(weight_num, kCFNumberFloatType, &weight);
+        weight = weight_num.floatValue;
       }
     }
     return weight;
@@ -192,7 +203,6 @@ std::unique_ptr<FontPlatformData> GetAlternateFontPlatformData(
 
   CTFontSymbolicTraits traits;
   float weight = ToCTFontWeight(font_description.Weight());
-  float size = font_description.ComputedPixelSize();
   if (ct_font) {
     traits = CTFontGetSymbolicTraits(ct_font);
     if (platform_data.synthetic_bold_) {
@@ -238,7 +248,7 @@ std::unique_ptr<FontPlatformData> GetAlternateFontPlatformData(
                           !(substitute_font_traits & kCTFontTraitItalic);
 
   return FontPlatformDataFromCTFont(
-      substitute_font, font_description.EffectiveFontSize(),
+      substitute_font.get(), font_description.EffectiveFontSize(),
       font_description.SpecifiedSize(), synthetic_bold, synthetic_italic,
       font_description.TextRendering(), ResolvedFontFeatures(),
       platform_data.Orientation(), font_description.FontOpticalSizing(),
@@ -293,22 +303,22 @@ static inline bool IsAppKitFontWeightBold(NSInteger app_kit_font_weight) {
   return app_kit_font_weight >= 7;
 }
 
-scoped_refptr<SimpleFontData> FontCache::PlatformFallbackFontForCharacter(
+const SimpleFontData* FontCache::PlatformFallbackFontForCharacter(
     const FontDescription& font_description,
     UChar32 character,
     const SimpleFontData* font_data_to_substitute,
     FontFallbackPriority fallback_priority) {
   if (fallback_priority == FontFallbackPriority::kEmojiEmoji) {
-    scoped_refptr<SimpleFontData> emoji_font =
-        GetFontData(font_description, AtomicString(kColorEmojiFontMac));
-    if (emoji_font)
+    if (const SimpleFontData* emoji_font =
+            GetFontData(font_description, AtomicString(kColorEmojiFontMac))) {
       return emoji_font;
+    }
   }
 
   const FontPlatformData& platform_data =
       font_data_to_substitute->PlatformData();
 
-  std::unique_ptr<FontPlatformData> alternate_font;
+  const FontPlatformData* alternate_font = nullptr;
   if (RuntimeEnabledFeatures::FontMatchingCTMigrationEnabled()) {
     alternate_font = GetAlternateFontPlatformData(font_description, character,
                                                   platform_data);
@@ -326,7 +336,7 @@ scoped_refptr<SimpleFontData> FontCache::PlatformFallbackFontForCharacter(
       code_units_length = 2;
     }
 
-    NSFont* ns_font = base::apple::CFToNSPtrCast(platform_data.CtFont());
+    NSFont* ns_font = CFToNSPtrCast(platform_data.CtFont());
 
     NSString* string = [[NSString alloc]
         initWithCharacters:reinterpret_cast<UniChar*>(code_units)
@@ -407,10 +417,8 @@ scoped_refptr<SimpleFontData> FontCache::PlatformFallbackFontForCharacter(
                           !IsAppKitFontWeightBold(substitute_font_weight);
 
     alternate_font = FontPlatformDataFromCTFont(
-        ScopedCFTypeRef<CTFontRef>(base::apple::NSToCFOwnershipCast(
-            substitute_font)),  // Ownership -> Ptr
-        font_description.EffectiveFontSize(), font_description.SpecifiedSize(),
-        synthetic_bold,
+        NSToCFPtrCast(substitute_font), font_description.EffectiveFontSize(),
+        font_description.SpecifiedSize(), synthetic_bold,
         (traits & NSFontItalicTrait) &&
             !(substitute_font_traits & NSFontItalicTrait),
         font_description.TextRendering(), ResolvedFontFeatures(),
@@ -421,18 +429,17 @@ scoped_refptr<SimpleFontData> FontCache::PlatformFallbackFontForCharacter(
   if (!alternate_font)
     return nullptr;
 
-  return FontDataFromFontPlatformData(alternate_font.get(), kDoNotRetain);
+  return FontDataFromFontPlatformData(alternate_font);
 }
 
-scoped_refptr<SimpleFontData> FontCache::GetLastResortFallbackFont(
-    const FontDescription& font_description,
-    ShouldRetain should_retain) {
+const SimpleFontData* FontCache::GetLastResortFallbackFont(
+    const FontDescription& font_description) {
   // FIXME: Would be even better to somehow get the user's default font here.
   // For now we'll pick the default that the user would get without changing
   // any prefs.
-  scoped_refptr<SimpleFontData> simple_font_data =
+  const SimpleFontData* simple_font_data =
       GetFontData(font_description, font_family_names::kTimes,
-                  AlternateFontName::kAllowAlternate, should_retain);
+                  AlternateFontName::kAllowAlternate);
   if (simple_font_data)
     return simple_font_data;
 
@@ -441,10 +448,10 @@ scoped_refptr<SimpleFontData> FontCache::GetLastResortFallbackFont(
   // that's guaranteed to be there, according to Nathan Taylor. This is good
   // enough to avoid a crash at least.
   return GetFontData(font_description, font_family_names::kLucidaGrande,
-                     AlternateFontName::kAllowAlternate, should_retain);
+                     AlternateFontName::kAllowAlternate);
 }
 
-std::unique_ptr<FontPlatformData> FontCache::CreateFontPlatformData(
+const FontPlatformData* FontCache::CreateFontPlatformData(
     const FontDescription& font_description,
     const FontFaceCreationParams& creation_params,
     float size,
@@ -525,9 +532,9 @@ std::unique_ptr<FontPlatformData> FontCache::CreateFontPlatformData(
   // font loading failing.  Out-of-process loading occurs for registered fonts
   // stored in non-system locations.  When loading fails, we do not want to use
   // the returned FontPlatformData since it will not have a valid SkTypeface.
-  std::unique_ptr<FontPlatformData> platform_data = FontPlatformDataFromCTFont(
-      matched_font, size, font_description.SpecifiedSize(), synthetic_bold,
-      synthetic_italic, font_description.TextRendering(),
+  const FontPlatformData* platform_data = FontPlatformDataFromCTFont(
+      matched_font.get(), size, font_description.SpecifiedSize(),
+      synthetic_bold, synthetic_italic, font_description.TextRendering(),
       ResolvedFontFeatures(), font_description.Orientation(),
       font_description.FontOpticalSizing(),
       font_description.VariationSettings());

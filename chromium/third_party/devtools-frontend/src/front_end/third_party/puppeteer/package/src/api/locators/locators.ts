@@ -8,27 +8,27 @@ import type {
   OperatorFunction,
 } from '../../../third_party/rxjs/rxjs.js';
 import {
-  mergeMap,
-  from,
   EMPTY,
+  catchError,
+  defaultIfEmpty,
   defer,
   filter,
   first,
+  firstValueFrom,
+  from,
+  fromEvent,
   identity,
   ignoreElements,
-  retry,
-  throwIfEmpty,
-  race,
-  catchError,
-  defaultIfEmpty,
-  firstValueFrom,
-  fromEvent,
   map,
   merge,
+  mergeMap,
   noop,
   pipe,
+  race,
   raceWith,
+  retry,
   tap,
+  throwIfEmpty,
 } from '../../../third_party/rxjs/rxjs.js';
 import type {EventType} from '../../common/EventEmitter.js';
 import {EventEmitter} from '../../common/EventEmitter.js';
@@ -109,24 +109,14 @@ export enum LocatorEvent {
    */
   Action = 'action',
 }
-export {
-  /**
-   * @deprecated Use {@link LocatorEvent}.
-   */
-  LocatorEvent as LocatorEmittedEvents,
-};
+
 /**
  * @public
  */
 export interface LocatorEvents extends Record<EventType, unknown> {
   [LocatorEvent.Action]: undefined;
 }
-export type {
-  /**
-   * @deprecated Use {@link LocatorEvents}.
-   */
-  LocatorEvents as LocatorEventObject,
-};
+
 /**
  * Locators describe a strategy of locating objects and performing an action on
  * them. If the action fails because the object is not ready for the action, the

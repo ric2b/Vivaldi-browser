@@ -12,13 +12,12 @@
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_constants.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_constants.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
-#import "ios/chrome/browser/ui/authentication/signin_earl_grey_app_interface.h"
 #import "ios/chrome/browser/ui/authentication/signin_matchers.h"
 #import "ios/chrome/browser/ui/authentication/unified_consent/unified_consent_constants.h"
 #import "ios/chrome/browser/ui/authentication/views/views_constants.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_constants.h"
-#import "ios/chrome/browser/ui/settings/google_services/accounts_table_view_controller_constants.h"
 #import "ios/chrome/browser/ui/settings/google_services/google_services_settings_constants.h"
+#import "ios/chrome/browser/ui/settings/google_services/manage_accounts/accounts_table_view_controller_constants.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -86,7 +85,7 @@ void CloseSigninManagedAccountDialogIfAny(FakeSystemIdentity* fakeIdentity) {
 // the history opt-in confirmation if the user is not opted-in yet.
 void MaybeTapSigninBottomSheetAndHistoryConfirmationDialog(
     FakeSystemIdentity* fakeIdentity) {
-  if ([SigninEarlGreyAppInterface isSignedOut]) {
+  if ([SigninEarlGrey isSignedOut]) {
     // First tap the "Continue as ..." button in the signin bottom sheet.
     [ChromeEarlGreyUI waitForAppToIdle];
     [[EarlGrey selectElementWithMatcher:chrome_test_util::
@@ -120,18 +119,18 @@ void MaybeTapSigninBottomSheetAndHistoryConfirmationDialog(
     [ChromeEarlGrey signInWithoutSyncWithIdentity:fakeIdentity];
     CloseSigninManagedAccountDialogIfAny(fakeIdentity);
     ConditionBlock condition = ^bool {
-      return [[SigninEarlGreyAppInterface primaryAccountGaiaID]
+      return [[SigninEarlGrey primaryAccountGaiaID]
           isEqualToString:fakeIdentity.gaiaID];
     };
     BOOL isSigned = base::test::ios::WaitUntilConditionOrTimeout(
         base::test::ios::kWaitForActionTimeout, condition);
-    GREYAssert(
-        isSigned, @"Signed in failed. Expected: %@, Currently signed: %@",
-        fakeIdentity.gaiaID, [SigninEarlGreyAppInterface primaryAccountGaiaID]);
+    GREYAssert(isSigned,
+               @"Signed in failed. Expected: %@, Currently signed: %@",
+               fakeIdentity.gaiaID, [SigninEarlGrey primaryAccountGaiaID]);
     return;
   }
 
-  if ([SigninEarlGreyAppInterface isSignedOut] ||
+  if ([SigninEarlGrey isSignedOut] ||
       ![ChromeEarlGrey isReplaceSyncWithSigninEnabled]) {
     [SigninEarlGreyUI tapPrimarySignInButtonInRecentTabs];
     [[EarlGrey selectElementWithMatcher:grey_accessibilityID(

@@ -29,7 +29,7 @@ void PlatformClientPosix::Create(Clock::duration networking_operation_timeout) {
 
 // static
 void PlatformClientPosix::ShutDown() {
-  OSP_DCHECK(instance_);
+  OSP_CHECK(instance_);
   delete instance_;
   instance_ = nullptr;
 }
@@ -71,7 +71,7 @@ PlatformClientPosix::~PlatformClientPosix() {
 
 // static
 void PlatformClientPosix::SetInstance(PlatformClientPosix* instance) {
-  OSP_DCHECK(!instance_);
+  OSP_CHECK(!instance_);
   instance_ = instance;
 }
 

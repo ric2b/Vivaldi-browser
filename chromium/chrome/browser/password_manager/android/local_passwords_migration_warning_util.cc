@@ -10,6 +10,8 @@
 #include "chrome/android/chrome_jni_headers/PasswordMigrationWarningBridge_jni.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/sync/sync_service_factory.h"
+#include "components/password_manager/core/browser/features/password_features.h"
+#include "components/password_manager/core/browser/password_store/split_stores_and_local_upm.h"
 #include "components/password_manager/core/browser/password_sync_util.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
@@ -19,10 +21,11 @@
 #include "ui/gfx/native_widget_types.h"
 
 using base::android::AttachCurrentThread;
+using password_manager::prefs::UseUpmLocalAndSeparateStoresState;
 
 namespace local_password_migration {
 
-constexpr base::TimeDelta kMinIntervalBetweenWarnings = base::Days(30);
+constexpr base::TimeDelta kMinIntervalBetweenWarnings = base::Days(1);
 
 void SaveWarningShownTimestamp(PrefService* pref_service) {
   pref_service->SetTime(
@@ -78,6 +81,9 @@ void ShowWarningWithActivity(
 }
 
 bool ShouldShowWarning(Profile* profile) {
+  if (password_manager::UsesSplitStoresAndUPMForLocal(profile->GetPrefs())) {
+    return false;
+  }
   // The warning should not show up on stable builds.
   version_info::Channel channel = version_info::android::GetChannel();
   if (channel == version_info::Channel::STABLE) {
@@ -101,7 +107,7 @@ bool ShouldShowWarning(Profile* profile) {
     return false;
   }
 
-  // TODO(crbug.com/1466445): Migrate away from `ConsentLevel::kSync` on
+  // TODO(crbug.com/40067770): Migrate away from `ConsentLevel::kSync` on
   // Android.
   if (password_manager::sync_util::IsSyncFeatureEnabledIncludingPasswords(
           SyncServiceFactory::GetForProfile(profile))) {
@@ -121,6 +127,44 @@ bool ShouldShowWarning(Profile* profile) {
   }
 
   return true;
+}
+
+void MaybeShowPostMigrationSheet(const gfx::NativeWindow window,
+                                 Profile* profile) {
+  if (!window) {
+    return;
+  }
+  if (!profile) {
+    return;
+  }
+  if (!ShouldShowPostMigrationSheet(profile)) {
+    return;
+  }
+
+  Java_PasswordMigrationWarningBridge_maybeShowPostMigrationSheet(
+      AttachCurrentThread(), window->GetJavaObject(),
+      ProfileAndroid::FromProfile(profile)->GetJavaObject());
+}
+
+bool ShouldShowPostMigrationSheet(Profile* profile) {
+  // Don't show in incognito.
+  if (profile->IsOffTheRecord()) {
+    return false;
+  }
+
+  // The sheet should only show on non-stable channels.
+  version_info::Channel channel = version_info::android::GetChannel();
+  if (channel == version_info::Channel::STABLE) {
+    return false;
+  }
+
+  // The post password migration sheet should be shown for an active UPM user
+  // that uses split stores only once, so
+  // `kLocalPasswordMigrationWarningShownAtStartup` will be true only when the
+  // migration algorithm sets it to true and it will be flipped to false when
+  // the sheet is shown.
+  return profile->GetPrefs()->GetBoolean(
+      password_manager::prefs::kShouldShowPostPasswordMigrationSheetAtStartup);
 }
 
 }  // namespace local_password_migration

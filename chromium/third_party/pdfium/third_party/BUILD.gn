@@ -526,15 +526,6 @@ if (pdf_enable_xfa_tiff) {
   }
 }
 
-source_set("pdfium_compiler_specific") {
-  configs -= [ "//build/config/compiler:chromium_code" ]
-  configs += [
-    "//build/config/compiler:no_chromium_code",
-    ":pdfium_third_party_config",
-  ]
-  sources = [ "base/compiler_specific.h" ]
-}
-
 if (pdf_use_partition_alloc) {
   group("pdfium_pa") {
     public_deps = [
@@ -542,74 +533,5 @@ if (pdf_use_partition_alloc) {
       "//base/allocator/partition_allocator/src/partition_alloc:raw_ptr",
     ]
     deps = [ "//base/allocator/partition_allocator/src/partition_alloc" ]
-  }
-}
-
-source_set("pdfium_base") {
-  configs -= [ "//build/config/compiler:chromium_code" ]
-  configs += [
-    "//build/config/compiler:no_chromium_code",
-    ":pdfium_third_party_config",
-  ]
-  sources = [
-    "base/bits.h",
-    "base/check.h",
-    "base/check_op.h",
-    "base/component_export.h",
-    "base/containers/adapters.h",
-    "base/containers/contains.h",
-    "base/containers/span.h",
-    "base/debug/alias.cc",
-    "base/debug/alias.h",
-    "base/immediate_crash.h",
-    "base/memory/aligned_memory.cc",
-    "base/memory/aligned_memory.h",
-    "base/memory/ptr_util.h",
-    "base/no_destructor.h",
-    "base/notreached.h",
-    "base/numerics/checked_math.h",
-    "base/numerics/checked_math_impl.h",
-    "base/numerics/clamped_math.h",
-    "base/numerics/clamped_math_impl.h",
-    "base/numerics/safe_conversions.h",
-    "base/numerics/safe_conversions_arm_impl.h",
-    "base/numerics/safe_conversions_impl.h",
-    "base/numerics/safe_math.h",
-    "base/numerics/safe_math_arm_impl.h",
-    "base/numerics/safe_math_clang_gcc_impl.h",
-    "base/numerics/safe_math_shared_impl.h",
-    "base/sys_byteorder.h",
-    "base/template_util.h",
-  ]
-  public_deps = [
-    ":pdfium_compiler_specific",
-    "//third_party/abseil-cpp:absl",
-  ]
-  if (is_win) {
-    sources += [
-      "base/win/scoped_select_object.h",
-      "base/win/win_util.cc",
-      "base/win/win_util.h",
-    ]
-  }
-  if (pdf_use_partition_alloc) {
-    public_deps += [ ":pdfium_pa" ]
-  }
-}
-
-source_set("pdfium_base_test_support") {
-  testonly = true
-  sources = []
-  configs += [
-    "../:pdfium_strict_config",
-    "../:pdfium_noshorten_config",
-  ]
-  deps = []
-  if (is_posix || is_fuchsia) {
-    sources += [
-      "base/test/scoped_locale.cc",
-      "base/test/scoped_locale.h",
-    ]
-    deps += [ "//testing/gtest" ]
   }
 }

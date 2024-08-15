@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 
+#import "base/memory/raw_ptr.h"
 #include "components/omnibox/browser/location_bar_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_text_change_delegate.h"
@@ -21,6 +22,7 @@ class ChromeBrowserState;
 class GURL;
 class WebLocationBar;
 struct AutocompleteMatch;
+@protocol OmniboxAdditionalTextConsumer;
 @class OmniboxTextFieldIOS;
 @protocol OmniboxCommands;
 @protocol ToolbarCommands;
@@ -37,7 +39,8 @@ class OmniboxViewIOS : public OmniboxView,
                  WebLocationBar* location_bar,
                  ChromeBrowserState* browser_state,
                  id<OmniboxCommands> omnibox_focuser,
-                 id<ToolbarCommands> toolbar_commands_handler);
+                 id<ToolbarCommands> toolbar_commands_handler,
+                 id<OmniboxAdditionalTextConsumer> additional_text_consumer);
 
   ~OmniboxViewIOS() override;
 
@@ -102,10 +105,10 @@ class OmniboxViewIOS : public OmniboxView,
   bool OnAfterPossibleChange(bool allow_keyword_ui_change) override;
   bool IsImeComposing() const override;
   bool IsIndicatingQueryRefinement() const override;
+  void SetAdditionalText(const std::u16string& text) override;
 
   // OmniboxView stubs.
   void Update() override {}
-  void SetAdditionalText(const std::u16string& text) override {}
   void EnterKeywordModeForDefaultSearchProvider() override {}
   bool IsSelectAll() const override;
   void GetSelectionBounds(std::u16string::size_type* start,
@@ -175,13 +178,16 @@ class OmniboxViewIOS : public OmniboxView,
 
   OmniboxTextFieldIOS* field_;
 
-  WebLocationBar* location_bar_;  // weak, owns us
+  raw_ptr<WebLocationBar> location_bar_;  // weak, owns us
   // Focuser, used to transition the location bar to focused/defocused state as
   // necessary.
   __weak id<OmniboxCommands> omnibox_focuser_;
 
   // Handler for ToolbarCommands.
   __weak id<ToolbarCommands> toolbar_commands_handler_;
+
+  // Consumer of additional text.
+  __weak id<OmniboxAdditionalTextConsumer> additional_text_consumer_;
 
   State state_before_change_;
   NSString* marked_text_before_change_;
@@ -197,7 +203,7 @@ class OmniboxViewIOS : public OmniboxView,
   // Whether the popup was scrolled during this omnibox interaction.
   bool suggestions_list_scrolled_ = false;
 
-  OmniboxPopupProvider* popup_provider_;  // weak
+  raw_ptr<OmniboxPopupProvider> popup_provider_;  // weak
 
   // Used to cancel clipboard callbacks if this is deallocated;
   base::WeakPtrFactory<OmniboxViewIOS> weak_ptr_factory_{this};

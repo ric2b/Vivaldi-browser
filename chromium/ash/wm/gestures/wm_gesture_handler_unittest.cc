@@ -64,8 +64,8 @@ class TestInputDeviceSettingsController
             kDefaultTapToClickEnabled,
             kDefaultThreeFingerClickEnabled,
             kDefaultTapDraggingEnabled,
-            /*scroll_sensitivity=*/kDefaultSensitivity,
-            kDefaultScrollAcceleration,
+            /*scroll_sensitivity=*/kDefaultScrollSensitivity,
+            kDefaultScrollAccelerationEnabled,
             kDefaultHapticSensitivity,
             kDefaultHapticFeedbackEnabled,
             /*simulate_right_click=*/
@@ -452,7 +452,7 @@ class WmGestureHandlerKioskTest : public WmGestureHandlerTest {
 
   void SetUp() override {
     WmGestureHandlerTest::SetUp();
-    SimulateKioskMode(user_manager::USER_TYPE_WEB_KIOSK_APP);
+    SimulateKioskMode(user_manager::UserType::kWebKioskApp);
   }
 };
 

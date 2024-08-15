@@ -6,9 +6,8 @@
 
 #import "components/password_manager/core/browser/password_manager_util.h"
 #import "components/prefs/pref_service.h"
-#import "ios/chrome/browser/credential_provider_promo/model/features.h"
-#import "ios/chrome/browser/promos_manager/constants.h"
-#import "ios/chrome/browser/promos_manager/promos_manager.h"
+#import "ios/chrome/browser/promos_manager/model/constants.h"
+#import "ios/chrome/browser/promos_manager/model/promos_manager.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
@@ -54,8 +53,7 @@
       bool isPromoRegistered =
           GetApplicationContext()->GetLocalState()->GetBoolean(
               prefs::kIosCredentialProviderPromoHasRegisteredWithPromoManager);
-      bool shouldNotShowPromo =
-          !IsCredentialProviderExtensionPromoEnabled() || [self isCPEEnabled];
+      bool shouldNotShowPromo = [self isCPEEnabled];
       if (isPromoRegistered && shouldNotShowPromo) {
         _promosManager->DeregisterPromo(
             promos_manager::Promo::CredentialProviderExtension);

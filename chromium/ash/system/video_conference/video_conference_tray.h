@@ -117,9 +117,9 @@ class ASH_EXPORT VideoConferenceTray
       public TrayBackgroundView,
       public VideoConferenceTrayController::Observer,
       public VideoConferenceTrayEffectsManager::Observer {
- public:
-  METADATA_HEADER(VideoConferenceTray);
+  METADATA_HEADER(VideoConferenceTray, TrayBackgroundView)
 
+ public:
   explicit VideoConferenceTray(Shelf* shelf);
   VideoConferenceTray(const VideoConferenceTray&) = delete;
   VideoConferenceTray& operator=(const VideoConferenceTray&) = delete;
@@ -138,7 +138,7 @@ class ASH_EXPORT VideoConferenceTray
   std::u16string GetAccessibleNameForBubble() override;
   void HideBubbleWithView(const TrayBubbleView* bubble_view) override;
   void HideBubble(const TrayBubbleView* bubble_view) override;
-  void ClickedOutsideBubble() override;
+  void ClickedOutsideBubble(const ui::LocatedEvent& event) override;
   // No need to override since this view doesn't have an active/inactive state.
   void UpdateTrayItemColor(bool is_active) override {}
   void HandleLocaleChange() override;

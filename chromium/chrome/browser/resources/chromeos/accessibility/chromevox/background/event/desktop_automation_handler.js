@@ -5,13 +5,15 @@
 /**
  * @fileoverview Handles automation from a desktop automation node.
  */
-import {AsyncUtil} from '../../../common/async_util.js';
-import {AutomationPredicate} from '../../../common/automation_predicate.js';
-import {AutomationUtil} from '../../../common/automation_util.js';
-import {constants} from '../../../common/constants.js';
-import {WrappingCursor} from '../../../common/cursors/cursor.js';
-import {CursorRange} from '../../../common/cursors/range.js';
-import {LocalStorage} from '../../../common/local_storage.js';
+import {AsyncUtil} from '/common/async_util.js';
+import {AutomationPredicate} from '/common/automation_predicate.js';
+import {AutomationUtil} from '/common/automation_util.js';
+import {constants} from '/common/constants.js';
+import {WrappingCursor} from '/common/cursors/cursor.js';
+import {CursorRange} from '/common/cursors/range.js';
+import {LocalStorage} from '/common/local_storage.js';
+import {TestImportManager} from '/common/testing/test_import_manager.js';
+
 import {Command} from '../../common/command.js';
 import {ChromeVoxEvent, CustomAutomationEvent} from '../../common/custom_automation_event.js';
 import {EventSourceType} from '../../common/event_source_type.js';
@@ -963,3 +965,5 @@ DesktopAutomationHandler.MIN_ALERT_DELAY_MS = 50;
  * @const {number}
  */
 DesktopAutomationHandler.ATTRIBUTE_DELAY_MS = 1500;
+
+TestImportManager.exportForTesting(DesktopAutomationHandler);

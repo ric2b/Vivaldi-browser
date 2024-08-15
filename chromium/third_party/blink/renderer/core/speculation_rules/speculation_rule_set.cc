@@ -346,7 +346,7 @@ SpeculationRule* ParseSpeculationRule(JSONObject* input,
   }
 
   // Let targetHint be null.
-  absl::optional<mojom::blink::SpeculationTargetHint> target_hint;
+  std::optional<mojom::blink::SpeculationTargetHint> target_hint;
 
   // If input["target_hint"] exists:
   JSONValue* target_hint_value = input->Get("target_hint");
@@ -370,7 +370,7 @@ SpeculationRule* ParseSpeculationRule(JSONObject* input,
   }
 
   // Let referrerPolicy be the empty string.
-  absl::optional<network::mojom::ReferrerPolicy> referrer_policy;
+  std::optional<network::mojom::ReferrerPolicy> referrer_policy;
   // If input["referrer_policy"] exists:
   JSONValue* referrer_policy_value = input->Get("referrer_policy");
   if (referrer_policy_value) {
@@ -395,6 +395,8 @@ SpeculationRule* ParseSpeculationRule(JSONObject* input,
       DCHECK_NE(referrer_policy_out, network::mojom::ReferrerPolicy::kDefault);
       // Set referrerPolicy to input["referrer_policy"].
       referrer_policy = referrer_policy_out;
+      UseCounter::Count(context,
+                        WebFeature::kSpeculationRulesExplicitReferrerPolicy);
     }
   }
 
@@ -458,7 +460,7 @@ SpeculationRule* ParseSpeculationRule(JSONObject* input,
   if (is_browser_injected) {
     injection_type =
         mojom::blink::SpeculationInjectionType::kAutoSpeculationRules;
-  } else if (auto world = context->GetCurrentWorld()) {
+  } else if (auto* world = context->GetCurrentWorld()) {
     if (world->IsMainWorld()) {
       injection_type = mojom::blink::SpeculationInjectionType::kMainWorldScript;
     } else {
@@ -480,9 +482,9 @@ SpeculationRule* ParseSpeculationRule(JSONObject* input,
 SpeculationRuleSet::Source::Source(base::PassKey<SpeculationRuleSet::Source>,
                                    const String& source_text,
                                    Document* document,
-                                   absl::optional<DOMNodeId> node_id,
-                                   absl::optional<KURL> base_url,
-                                   absl::optional<uint64_t> request_id)
+                                   std::optional<DOMNodeId> node_id,
+                                   std::optional<KURL> base_url,
+                                   std::optional<uint64_t> request_id)
     : source_text_(source_text),
       document_(document),
       node_id_(node_id),
@@ -494,8 +496,8 @@ SpeculationRuleSet::Source* SpeculationRuleSet::Source::FromInlineScript(
     Document& document,
     DOMNodeId node_id) {
   return MakeGarbageCollected<Source>(base::PassKey<Source>(), source_text,
-                                      &document, node_id, absl::nullopt,
-                                      absl::nullopt);
+                                      &document, node_id, std::nullopt,
+                                      std::nullopt);
 }
 
 SpeculationRuleSet::Source* SpeculationRuleSet::Source::FromRequest(
@@ -503,7 +505,7 @@ SpeculationRuleSet::Source* SpeculationRuleSet::Source::FromRequest(
     const KURL& base_url,
     uint64_t request_id) {
   return MakeGarbageCollected<Source>(base::PassKey<Source>(), source_text,
-                                      nullptr, absl::nullopt, base_url,
+                                      nullptr, std::nullopt, base_url,
                                       request_id);
 }
 
@@ -511,8 +513,8 @@ SpeculationRuleSet::Source* SpeculationRuleSet::Source::FromBrowserInjected(
     const String& source_text,
     const KURL& base_url) {
   return MakeGarbageCollected<Source>(base::PassKey<Source>(), source_text,
-                                      nullptr, absl::nullopt, base_url,
-                                      absl::nullopt);
+                                      nullptr, std::nullopt, base_url,
+                                      std::nullopt);
 }
 
 bool SpeculationRuleSet::Source::IsFromInlineScript() const {
@@ -531,19 +533,19 @@ const String& SpeculationRuleSet::Source::GetSourceText() const {
   return source_text_;
 }
 
-const absl::optional<DOMNodeId>& SpeculationRuleSet::Source::GetNodeId() const {
+const std::optional<DOMNodeId>& SpeculationRuleSet::Source::GetNodeId() const {
   return node_id_;
 }
 
-const absl::optional<KURL> SpeculationRuleSet::Source::GetSourceURL() const {
+const std::optional<KURL> SpeculationRuleSet::Source::GetSourceURL() const {
   if (IsFromRequest()) {
     CHECK(base_url_.has_value());
     return base_url_;
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
-const absl::optional<uint64_t>& SpeculationRuleSet::Source::GetRequestId()
+const std::optional<uint64_t>& SpeculationRuleSet::Source::GetRequestId()
     const {
   return request_id_;
 }

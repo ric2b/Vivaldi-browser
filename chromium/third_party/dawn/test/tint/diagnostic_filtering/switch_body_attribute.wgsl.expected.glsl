@@ -12,6 +12,7 @@
 
 #version 310 es
 precision highp float;
+precision highp int;
 
 layout(location = 0) in float x_1;
 int tint_ftoi(float v) {
@@ -21,6 +22,7 @@ int tint_ftoi(float v) {
 void tint_symbol(float x) {
   switch(tint_ftoi(x)) {
     default: {
+      float tint_phony = dFdx(1.0f);
       break;
     }
   }

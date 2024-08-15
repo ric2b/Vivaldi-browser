@@ -80,7 +80,7 @@ class MockWebRtcVideoTrackSource
                        const rtc::VideoSinkWants& wants) override;
   void RemoveSink(rtc::VideoSinkInterface<webrtc::VideoFrame>* sink) override;
   bool is_screencast() const override;
-  absl::optional<bool> needs_denoising() const override;
+  std::optional<bool> needs_denoising() const override;
   bool GetStats(Stats* stats) override;
   bool SupportsEncodedOutput() const override;
   void GenerateKeyFrame() override;
@@ -126,8 +126,7 @@ class MockWebRtcVideoTrack
   bool enabled_;
   TrackState state_;
   ObserverSet observers_;
-  raw_ptr<rtc::VideoSinkInterface<webrtc::VideoFrame>, ExperimentalRenderer>
-      sink_;
+  raw_ptr<rtc::VideoSinkInterface<webrtc::VideoFrame>> sink_;
 };
 
 class MockMediaStream : public webrtc::MediaStreamInterface {

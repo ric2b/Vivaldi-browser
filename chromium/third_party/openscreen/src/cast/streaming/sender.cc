@@ -163,10 +163,10 @@ Sender::Sender(Environment* environment,
       rtp_timebase_(config.rtp_timebase),
       crypto_(config.aes_secret_key, config.aes_iv_mask),
       target_playout_delay_(config.target_playout_delay) {
-  OSP_DCHECK(packet_router_);
-  OSP_DCHECK_NE(rtcp_session_.sender_ssrc(), rtcp_session_.receiver_ssrc());
-  OSP_DCHECK_GT(rtp_timebase_, 0);
-  OSP_DCHECK(target_playout_delay_ > milliseconds::zero());
+  OSP_CHECK(packet_router_);
+  OSP_CHECK_NE(rtcp_session_.sender_ssrc(), rtcp_session_.receiver_ssrc());
+  OSP_CHECK_GT(rtp_timebase_, 0);
+  OSP_CHECK_GT(target_playout_delay_, milliseconds::zero());
 
   pending_sender_report_.reference_time = SenderPacketRouter::kNever;
 
@@ -195,7 +195,7 @@ Clock::duration Sender::GetInFlightMediaDuration(
   // Note: The oldest slot's frame cannot have been canceled because the
   // protocol does not allow ACK'ing this particular frame without also moving
   // the checkpoint forward. See "CST2 feedback" discussion in rtp_defines.h.
-  OSP_DCHECK(oldest_slot.is_active_for_frame(checkpoint_frame_id_ + 1));
+  OSP_CHECK(oldest_slot.is_active_for_frame(checkpoint_frame_id_ + 1));
 
   return (next_frame_rtp_timestamp - oldest_slot.frame->rtp_timestamp)
       .ToDuration<Clock::duration>(rtp_timebase_);
@@ -229,13 +229,13 @@ Clock::duration Sender::GetCurrentRoundTripTime() const {
 Sender::EnqueueFrameResult Sender::EnqueueFrame(const EncodedFrame& frame) {
   // Assume the fields of the `frame` have all been set correctly, with
   // monotonically increasing timestamps and a valid pointer to the data.
-  OSP_DCHECK_EQ(frame.frame_id, GetNextFrameId());
-  OSP_DCHECK_GE(frame.referenced_frame_id, FrameId::first());
+  OSP_CHECK_EQ(frame.frame_id, GetNextFrameId());
+  OSP_CHECK_GE(frame.referenced_frame_id, FrameId::first());
   if (frame.frame_id != FrameId::first()) {
-    OSP_DCHECK_GT(frame.rtp_timestamp, pending_sender_report_.rtp_timestamp);
-    OSP_DCHECK_GT(frame.reference_time, pending_sender_report_.reference_time);
+    OSP_CHECK_GT(frame.rtp_timestamp, pending_sender_report_.rtp_timestamp);
+    OSP_CHECK_GT(frame.reference_time, pending_sender_report_.reference_time);
   }
-  OSP_DCHECK(frame.data.data());
+  OSP_CHECK(frame.data.data());
 
   // Check whether enqueuing the frame would exceed the design limit for the
   // span of FrameIds. Even if `num_frames_in_flight_` is less than
@@ -253,7 +253,7 @@ Sender::EnqueueFrameResult Sender::EnqueueFrame(const EncodedFrame& frame) {
 
   // Encrypt the frame and initialize the slot tracking its sending.
   PendingFrameSlot* const slot = get_slot_for(frame.frame_id);
-  OSP_DCHECK(!slot->frame);
+  OSP_CHECK(!slot->frame);
   slot->frame = crypto_.Encrypt(frame);
   const int packet_count = rtp_packetizer_.ComputeNumberOfPackets(*slot->frame);
   if (packet_count <= 0) {
@@ -266,8 +266,8 @@ Sender::EnqueueFrameResult Sender::EnqueueFrame(const EncodedFrame& frame) {
   // Officially record the "enqueue."
   ++num_frames_in_flight_;
   last_enqueued_frame_id_ = slot->frame->frame_id;
-  OSP_DCHECK_LE(num_frames_in_flight_,
-                last_enqueued_frame_id_ - checkpoint_frame_id_);
+  OSP_CHECK_LE(num_frames_in_flight_,
+               last_enqueued_frame_id_ - checkpoint_frame_id_);
   if (slot->frame->dependency == EncodedFrame::Dependency::kKeyFrame) {
     last_enqueued_key_frame_id_ = slot->frame->frame_id;
   }
@@ -365,7 +365,7 @@ ByteBuffer Sender::GetRtpPacketForImmediateSend(Clock::time_point send_time,
       return buffer.subspan(0, 0);
     }
     chosen = kickstart;
-    OSP_DCHECK(chosen);
+    OSP_CHECK(chosen);
   }
 
   const ByteBuffer result = rtp_packetizer_.GeneratePacket(
@@ -381,7 +381,7 @@ ByteBuffer Sender::GetRtpPacketForImmediateSend(Clock::time_point send_time,
   // Receiver implementations use this for anything, and so this should be fine.
   const int approximate_octet_count =
       static_cast<int>(result.size()) - RtpPacketizer::kBaseRtpHeaderSize;
-  OSP_DCHECK_GE(approximate_octet_count, 0);
+  OSP_CHECK_GE(approximate_octet_count, 0);
   pending_sender_report_.send_octet_count += approximate_octet_count;
 
   return result;
@@ -407,7 +407,7 @@ void Sender::OnReceiverReferenceTimeAdvanced(Clock::time_point reference_time) {
 }
 
 void Sender::OnReceiverReport(const RtcpReportBlock& receiver_report) {
-  OSP_DCHECK_NE(rtcp_packet_arrival_time_, SenderPacketRouter::kNever);
+  OSP_CHECK_NE(rtcp_packet_arrival_time_, SenderPacketRouter::kNever);
 
   const Clock::duration total_delay =
       rtcp_packet_arrival_time_ -
@@ -505,7 +505,7 @@ void Sender::OnReceiverCheckpoint(FrameId frame_id,
     return;
   }
   // CompoundRtcpParser should guarantee this:
-  OSP_DCHECK(playout_delay >= milliseconds::zero());
+  OSP_CHECK_GE(playout_delay, milliseconds::zero());
   while (checkpoint_frame_id_ < frame_id) {
     ++checkpoint_frame_id_;
     PendingFrameSlot* const slot = get_slot_for(checkpoint_frame_id_);
@@ -557,7 +557,7 @@ void Sender::OnReceiverIsMissingPackets(std::vector<PacketNack> nacks) {
   TRACE_SCOPED1(TraceCategory::kSender, "OnReceiverIsMissingPackets",
                 "number_of_packets", std::to_string(nacks.size()));
   OSP_DCHECK(!nacks.empty() && AreElementsSortedAndUnique(nacks));
-  OSP_DCHECK_NE(rtcp_packet_arrival_time_, SenderPacketRouter::kNever);
+  OSP_CHECK_NE(rtcp_packet_arrival_time_, SenderPacketRouter::kNever);
 
   // This is a point-in-time threshold that indicates whether each NACK will
   // trigger a packet retransmit. The threshold is based on the network round
@@ -661,14 +661,14 @@ Sender::ChosenPacketAndWhen Sender::ChooseKickstartPacket() {
   chosen.slot = get_slot_for(last_enqueued_frame_id_);
   // Note: This frame cannot have been canceled since
   // `latest_expected_frame_id_` hasn't yet reached this point.
-  OSP_DCHECK(chosen.slot->is_active_for_frame(last_enqueued_frame_id_));
+  OSP_CHECK(chosen.slot->is_active_for_frame(last_enqueued_frame_id_));
   chosen.packet_id = chosen.slot->send_flags.size() - 1;
 
   const Clock::time_point time_last_sent =
       chosen.slot->packet_sent_times[chosen.packet_id];
   // Sanity-check: This method should not be called to choose a packet while
   // there are still unsent packets.
-  OSP_DCHECK_NE(time_last_sent, SenderPacketRouter::kNever);
+  OSP_CHECK_NE(time_last_sent, SenderPacketRouter::kNever);
 
   // The desired Kickstart interval is a fraction of the total
   // `target_playout_delay_`. The reason for the specific ratio here is based on
@@ -706,7 +706,7 @@ void Sender::CancelPendingFrame(FrameId frame_id, bool was_acked) {
   }
 
   slot->frame.reset();
-  OSP_DCHECK_GT(num_frames_in_flight_, 0);
+  OSP_CHECK_GT(num_frames_in_flight_, 0);
   --num_frames_in_flight_;
   if (observer_) {
     pending_cancellations_.emplace_back(frame_id);

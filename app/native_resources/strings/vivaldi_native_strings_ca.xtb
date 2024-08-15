@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Paisatge 12</translation>
 <translation id="1158503667684816647">No mostris més aquesta confirmació</translation>
 <translation id="1222195720020481779">Iniciant l'instal·lador...</translation>
+<translation id="1270785070369717623">Desgraciadament, els teus ajusts d'Opera GX no estan disponibles mentre el navegador funciona. Per importar-los a Vivaldi, desa el que estiguis fent i tanca totes les finestres d'Opera GX. Després clica a continuar.</translation>
 <translation id="1276145862619442150">Accessos ràpids</translation>
 <translation id="1281950884873973195">Animal 6</translation>
 <translation id="1411638389238344450">Envia l'enllaç per correu</translation>
@@ -12,6 +13,7 @@
 <translation id="1462666970065907900">Segur que vols tancar aquesta finestra?</translation>
 <translation id="1480046233931937785">Crèdits</translation>
 <translation id="1526344461589023948">Ha ocorregut un error mentre s'intentava desar una actualització descarregada. Si us plau, comprova que el dispositiu tingui prou espai al disc i torna-ho a intentar més tard.</translation>
+<translation id="1635542496948266458">Canvia de perfil</translation>
 <translation id="1657174850639146440">Monstre 9</translation>
 <translation id="1676595396635191120">Nova finestra privada</translation>
 <translation id="1702758681952953055">Si l'error persisteix, si us plau informa'ns incloent els següents detalls:</translation>
@@ -27,12 +29,14 @@
 <translation id="1985669426322966465">Actualització del programari</translation>
 <translation id="2079036669923635404">Fes clic aquí per actualitzar Vivaldi a la versió <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Ha ocorregut un error mentre es descarregaven els fitxers de l'actualització. Si us plau, revisa la teva connexió a internet i torna-ho a intentar més tard.</translation>
+<translation id="2226825946708954262">⚠ Continua, amb pèrdua de dades</translation>
 <translation id="2339641773402824483">Buscant actualitzacions...</translation>
 <translation id="2441056087170876076">Monstre 2</translation>
 <translation id="2444387452209867610">Insereix nota</translation>
 <translation id="2486841023299517366">Animal 4</translation>
 <translation id="2612127540243995147">Preparat per instal·lar. Vivaldi es tancarà i reobrirà.</translation>
 <translation id="2613387515621326337">Mostra el lloc web d'actualitzacions</translation>
+<translation id="2645477450146475243">Desgraciadament, els teus ajusts d'Opera no estan disponibles mentre el navegador funciona. Per importar-los a Vivaldi, desa el que estiguis fent i tanca totes les finestres d'Opera. Després clica a continuar.</translation>
 <translation id="2647368062414805334">Malauradament, els teus ajustos d'Edge no són disponibles mentre aquest sigui obert. Per importar aquests ajustos a Vivaldi, desa la teva feina i tanca totes les finestres d'Edge. Aleshores, fes clic a continua.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Animal 3</translation>
@@ -41,11 +45,14 @@
 <translation id="2923448633003185837">Enganxa i vés-hi</translation>
 <translation id="2953943267837858202">No permesos per la reproducció automàtica de vídeo</translation>
 <translation id="2977472760057091832">Obre l'enllaç a una finestra privada</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Obre a una pestanya nova</translation>
 <translation id="3027988479108856431">Malauradament, els teus ajustos de Yandex no són disponibles mentre aquest sigui obert. Per importar aquests ajustos a Vivaldi, desa la teva feina i tanca totes les finestres de Yandex. Aleshores, fes clic a continua.</translation>
 <translation id="3084011186245865060">Paisatge 6</translation>
+<translation id="3085906383264247940">Opera (Beta)</translation>
 <translation id="3093931836425623631">Vivaldi és possible gràcies al projecte de codi obert Chromium i altres programes de codi obert.</translation>
 <translation id="3127383884976966729">Animal 7</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">Nou marcador</translation>
 <translation id="3255747772218936245">Instal·la l'actualització</translation>
 <translation id="3259769196742189631">Valida</translation>
@@ -54,7 +61,6 @@
 <translation id="3334610655141903168">(sense títol)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> és la versió disponible més recent.</translation>
 <translation id="3383198080133834965">Vivaldi s'ha actualitzat!</translation>
-<translation id="3402602684546832928">Selecciona el fitxer de marcadors d'Opera</translation>
 <translation id="3451317331714872347">Paisatge 8</translation>
 <translation id="3457498675806041407">Confirma la sortida</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> ja s'ha instal·lat i s'activarà quan reiniciïs el navegador.</translation>
@@ -65,6 +71,7 @@
 <translation id="3588820906588687999">Obre la imatge a una pestanya nova</translation>
 <translation id="3601066750251199488">Monstre 3</translation>
 <translation id="3620979700683094848">Llocs que poden reproduir vídeo automàticament</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Una nova versió de Vivaldi està disponible!</translation>
 <translation id="3708982624815781692">La descàrrega s'ha cancel·lat.</translation>
 <translation id="3732157130969736834">Afegeix l'enllaç als marcadors</translation>
@@ -76,6 +83,9 @@
 <translation id="3914946330804881301">Importat des de l'Opera</translation>
 <translation id="3921292902397893431">Monstre 8</translation>
 <translation id="3943857333388298514">Enganxa</translation>
+<translation id="3974783668264968389">Vivaldi no ha pogut obrir el teu magatzem de claus segures. Sense el magatzem de claus, perdràs els teus inicis de sessió desats, galetes segures i algunes funcionalitats com la sincronització, el correu i el calendari deixaran de funcionar.
+
+    Si us plau, surt ara, desbloqueja o repara el magatzem de claus i torna-ho a provar. Si realment vols continuar, marca la casella i prem el botó "Continua, amb pèrdua de dades".</translation>
 <translation id="4005270918754737597">Omet aquesta versió</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4074744496918018786">Obre la imatge a una finestra privada</translation>
@@ -88,7 +98,6 @@
 <translation id="443008484043213881">Eines</translation>
 <translation id="4456211719108566931">Monstre 6</translation>
 <translation id="4512900838580567989">Obre l'enllaç a una pestanya nova en segon pla</translation>
-<translation id="4515472507709384008">Opera versió 15+</translation>
 <translation id="4545097004879999966">Correu d'Opera</translation>
 <translation id="4548358047305717967">Obre la imatge a una pestanya nova en segon pla</translation>
 <translation id="4582480609585453144">Obre l'enllaç a una pestanya en segon pla</translation>
@@ -100,16 +109,17 @@
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> de <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Accessos ràpids importats</translation>
 <translation id="5092656712000637858">Afegeix la pàgina al tauler web</translation>
+<translation id="5106275083540628394">Ha fallat el desxifrat: Risc de pèrdua de dades</translation>
 <translation id="5177818338935286353">Monstre 7</translation>
 <translation id="5213743983876949565">Animal 1</translation>
 <translation id="5238244642230426581">Marcadors importats</translation>
 <translation id="527605719918376753">Silencia la pestanya</translation>
 <translation id="5305569355661722298">Confirma el tancament de la finestra</translation>
+<translation id="5322922669477407077">Opera (Desenvolupador)</translation>
 <translation id="5388358297987318779">Obre la imatge</translation>
 <translation id="5416008465899576639">Una nova versió de Vivaldi està disponible.</translation>
 <translation id="5497042274492038489">Confirma el tancament de la finestra</translation>
 <translation id="5594602170491763400">Monstre 5</translation>
-<translation id="5615637589913244581">Opera versió 15+ (Beta)</translation>
 <translation id="5648110075441906505">Obre la imatge a una finestra nova</translation>
 <translation id="5656371807944747581">S'ha produït un error d'actualització!</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> ja està disponible (actualment tens la versió <ph name="OLD_VERSION" />). Vols descarregar-la ara?</translation>
@@ -120,8 +130,8 @@
 <translation id="6040143037577758943">Tanca</translation>
 <translation id="6229528619562190452">Fes clic aquí per actualitzar Vivaldi.</translation>
 <translation id="6234173136417926046">Fes servir aquesta imatge com a fons de la pantalla d'inici</translation>
-<translation id="630690498669249215">Fitxer de marcadors d'Opera</translation>
 <translation id="6339818817272922368">Compte local</translation>
+<translation id="6398710281890660037">Assegura el meu perfil</translation>
 <translation id="6438786710866753178">Paisatge 4</translation>
 <translation id="6477028720702061455">Selecciona la carpeta del perfil d'Opera a importar</translation>
 <translation id="6510706699590490869">Act&amp;ualitza Vivaldi</translation>
@@ -131,11 +141,13 @@
 <translation id="6635049669875534328">Notes de la versió:</translation>
 <translation id="6693585104974197539">Selecciona la carpeta del perfil d'Edge per importar</translation>
 <translation id="6726279523566323394">Selecciona la carpeta del perfil de Brave per importar</translation>
-<translation id="6804831687363620480">Malauradament, els teus ajustos d'Opera 15+ no són disponibles mentre aquest sigui obert. Per importar aquests ajustos a Vivaldi, desa la teva feina i tanca totes les finestres de d'Opera 15+. Aleshores, fes clic a continua.</translation>
 <translation id="6892812721183419409">Obre l'enllaç com a <ph name="USER" /></translation>
 <translation id="6896758677409633944">Copia</translation>
+<translation id="6960139763942959188">Actualment aquest perfil està emmagatzemat de manera insegura en un format no xifrat. Vivaldi és a punt d'actualitzat el teu perfil a un format xifrat més segur. Hauries de fer una còpia de seguretat del teu perfil abans de continuar.</translation>
 <translation id="7086554968911045110">Paisatge 7</translation>
+<translation id="7099506190679014195">Actualització del magatzem de claus segures</translation>
 <translation id="7111492742514999492">Paisatge 9</translation>
+<translation id="7208252576848052204">Desgraciadament, els teus ajusts d'Arc no estan disponibles mentre el navegador funciona. Per importar-los a Vivaldi, desa el que estiguis fent i tanca totes les finestres d'Arc. Després clica a continuar.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Error en iniciar l'instal·lador d'actualitzacions. Si us plau, comprova que el dispositiu tingui suficient memòria o espai al disc i torna-ho a intentar més tard.</translation>
 <translation id="7658239707568436148">Cancel·la</translation>
@@ -162,7 +174,6 @@
 <translation id="8562339533180097902">Tanca Vivaldi i instal·la'l ara</translation>
 <translation id="8567452685425968223">Extraient actualització...</translation>
 <translation id="8624587806981488221">&amp;Tornar a carregar la imatge</translation>
-<translation id="864444594187862076">Opera versió 15+ (Desenvolupador)</translation>
 <translation id="8651348004684669199">Afegeix la pestanya activa</translation>
 <translation id="8669345741879513971">Monstre 10</translation>
 <translation id="867544375504146191">Yandex</translation>
@@ -178,6 +189,7 @@
 <translation id="9048058608784130603">Actualització pendent <ph name="VERSION" /></translation>
 <translation id="9048224371732578627">Permesos per reproduir vídeo automàticament</translation>
 <translation id="9065203028668620118">Edita</translation>
+<translation id="9090254883741610153">Deixa'm continuar</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Obre la imatge com a <ph name="USER" /></translation>
 <translation id="9157539936604258187">Obre l'enllaç</translation>

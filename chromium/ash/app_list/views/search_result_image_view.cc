@@ -48,8 +48,9 @@ constexpr gfx::Insets kFocusRingInsets =
 constexpr double kDraggedImageOpacity = 0.6;
 
 class ImagePreviewView : public views::ImageButton {
+  METADATA_HEADER(ImagePreviewView, views::ImageButton)
+
  public:
-  METADATA_HEADER(ImagePreviewView);
   ImagePreviewView() {
     SetInstallFocusRingOnFocus(false);
     SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
@@ -74,7 +75,7 @@ class ImagePreviewView : public views::ImageButton {
   }
 };
 
-BEGIN_METADATA(ImagePreviewView, views::ImageButton)
+BEGIN_METADATA(ImagePreviewView)
 END_METADATA
 
 }  // namespace
@@ -87,7 +88,7 @@ SearchResultImageView::SearchResultImageView(
   SetLayoutManager(std::make_unique<views::FillLayout>());
   result_image_ = AddChildView(std::make_unique<ImagePreviewView>());
   result_image_->SetCanProcessEventsWithinSubtree(false);
-  result_image_->GetViewAccessibility().OverrideIsIgnored(true);
+  result_image_->GetViewAccessibility().SetIsIgnored(true);
 
   views::FocusRing::Install(this);
   views::FocusRing* const focus_ring = views::FocusRing::Get(this);
@@ -137,7 +138,7 @@ void SearchResultImageView::CreatePulsingBlockView() {
   pulsing_block_view_ = AddChildView(std::make_unique<PulsingBlockView>(
       size(), base::Milliseconds(index_ * 200), kRoundedCornerRadius));
   pulsing_block_view_->SetCanProcessEventsWithinSubtree(false);
-  pulsing_block_view_->GetViewAccessibility().OverrideIsIgnored(true);
+  pulsing_block_view_->GetViewAccessibility().SetIsIgnored(true);
 }
 
 gfx::ImageSkia SearchResultImageView::CreateDragImage() {
@@ -168,7 +169,7 @@ void SearchResultImageView::OnMetadataChanged() {
   UpdateAccessibleName();
   // By default, the description will be set to the tooltip text, but the title
   // is already announced in the accessible name.
-  GetViewAccessibility().OverrideDescription(
+  GetViewAccessibility().SetDescription(
       u"", ax::mojom::DescriptionFrom::kAttributeExplicitlyEmpty);
 
   if (!result() || result()->icon().icon.IsEmpty()) {
@@ -199,7 +200,7 @@ void SearchResultImageView::OnMetadataChanged() {
 
 SearchResultImageView::~SearchResultImageView() = default;
 
-BEGIN_METADATA(SearchResultImageView, SearchResultBaseView)
+BEGIN_METADATA(SearchResultImageView)
 END_METADATA
 
 }  // namespace ash

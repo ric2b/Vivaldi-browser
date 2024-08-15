@@ -19,6 +19,10 @@ export function isChild(): boolean {
   return loadTimeData.getBoolean('isChild');
 }
 
+export function isSecondaryUser(): boolean {
+  return loadTimeData.getBoolean('isSecondaryUser');
+}
+
 export function isRevampWayfindingEnabled(): boolean {
   return loadTimeData.getBoolean('isRevampWayfindingEnabled');
 }
@@ -68,9 +72,19 @@ export function isAccountManagerEnabled(): boolean {
   return loadTimeData.getBoolean('isAccountManagerEnabled');
 }
 
+// Personalization page
+export function shouldShowMultitaskingInPersonalization(): boolean {
+  return loadTimeData.getBoolean('shouldShowMultitaskingInPersonalization');
+}
+
 // Reset page
 export function isPowerwashAllowed(): boolean {
   return loadTimeData.getBoolean('allowPowerwash');
+}
+
+// Reset page
+export function isSanitizeAllowed(): boolean {
+  return loadTimeData.getBoolean('allowSanitize');
 }
 
 // Search page
@@ -78,11 +92,15 @@ export function isAssistantAllowed(): boolean {
   return loadTimeData.getBoolean('isAssistantAllowed');
 }
 
-export function shouldShowQuickAnswersSettings(): boolean {
-  return loadTimeData.getBoolean('shouldShowQuickAnswersSettings');
+export function isQuickAnswersSupported(): boolean {
+  return loadTimeData.getBoolean('isQuickAnswersSupported');
 }
 
 // System preferences page
 export function shouldShowStartup(): boolean {
   return loadTimeData.getBoolean('shouldShowStartup');
+}
+
+export function shouldShowMultitasking(): boolean {
+  return loadTimeData.getBoolean('shouldShowMultitasking');
 }

@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <fcntl.h>
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include FT_ADVANCES_H
@@ -92,7 +93,7 @@ static const FcFtEncoding   fcFtEncoding[] = {
  {  TT_PLATFORM_MICROSOFT,	TT_MS_ID_SYMBOL_CS,	"UTF-16BE" },
  {  TT_PLATFORM_MICROSOFT,	TT_MS_ID_UNICODE_CS,	"UTF-16BE" },
  {  TT_PLATFORM_MICROSOFT,	TT_MS_ID_SJIS,		"SJIS-WIN" },
- {  TT_PLATFORM_MICROSOFT,	TT_MS_ID_GB2312,	"GB2312" },
+ {  TT_PLATFORM_MICROSOFT,	TT_MS_ID_PRC,		"GB18030" },
  {  TT_PLATFORM_MICROSOFT,	TT_MS_ID_BIG_5,		"BIG-5" },
  {  TT_PLATFORM_MICROSOFT,	TT_MS_ID_WANSUNG,	"Wansung" },
  {  TT_PLATFORM_MICROSOFT,	TT_MS_ID_JOHAB,		"Johab" },
@@ -698,6 +699,7 @@ FcSfntNameTranscode (FT_SfntName *sname)
     iconv_t cd;
 #endif
     FcChar8 *utf8;
+    FcBool redecoded = FcFalse;
 
     for (i = 0; i < NUM_FC_FT_ENCODING; i++)
 	if (fcFtEncoding[i].platform_id == sname->platform_id &&
@@ -708,6 +710,7 @@ FcSfntNameTranscode (FT_SfntName *sname)
 	return 0;
     fromcode = fcFtEncoding[i].fromcode;
 
+retry:
     /*
      * Many names encoded for TT_PLATFORM_MACINTOSH are broken
      * in various ways. Kludge around them.
@@ -716,6 +719,10 @@ FcSfntNameTranscode (FT_SfntName *sname)
     {
 	if (sname->language_id == TT_MAC_LANGID_ENGLISH &&
 	    FcLooksLikeSJIS (sname->string, sname->string_len))
+	{
+	    fromcode = "SJIS";
+	}
+	else if (sname->language_id == TT_MAC_LANGID_JAPANESE)
 	{
 	    fromcode = "SJIS";
 	}
@@ -857,12 +864,27 @@ FcSfntNameTranscode (FT_SfntName *sname)
 	    {
 		iconv_close (cd);
 		free (utf8);
+		if (!redecoded)
+		{
+		    /* Regard the encoding as UTF-16BE and try again. */
+		    redecoded = FcTrue;
+		    fromcode = "UTF-16BE";
+		    goto retry;
+		}
 		return 0;
 	    }
 	}
     	iconv_close (cd);
 	*outbuf = '\0';
 	goto done;
+    }
+#else
+    if (!redecoded)
+    {
+	/* Regard the encoding as UTF-16BE and try again. */
+	redecoded = FcTrue;
+	fromcode = "UTF-16BE";
+	goto retry;
     }
 #endif
     return 0;
@@ -1719,7 +1741,7 @@ FcFreeTypeQueryFaceInternal (const FT_Face  face,
 	    goto bail1;
 	len = strlen ((const char *) style);
 	for (i = 0; style[i] != 0 && isspace (style[i]); i++);
-	memcpy (style, &style[i], len - i);
+	memmove (style, &style[i], len - i);
 	FcStrBufInit (&sbuf, NULL, 0);
 	FcStrBufString (&sbuf, family);
 	FcStrBufChar (&sbuf, ' ');
@@ -2163,6 +2185,9 @@ FcFreeTypeQueryFaceInternal (const FT_Face  face,
 	if (!FcPatternObjectAddBool (pat, FC_ANTIALIAS_OBJECT, FcFalse))
 	    goto bail2;
     }
+
+    FcChar8* wrapper = NULL;
+
 #if HAVE_FT_GET_X11_FONT_FORMAT
     /*
      * Use the (not well documented or supported) X-specific function
@@ -2171,11 +2196,43 @@ FcFreeTypeQueryFaceInternal (const FT_Face  face,
     {
 	const char *font_format = FT_Get_X11_Font_Format (face);
 	if (font_format)
+	{
 	    if (!FcPatternObjectAddString (pat, FC_FONTFORMAT_OBJECT, (FcChar8 *) font_format))
 		goto bail2;
+
+	    /* If this is not a SFNT font and format is CFF, then it is a standlone CFF font */
+	    if (!FT_IS_SFNT (face) && !strcmp (font_format, "CFF"))
+		wrapper = (FcChar8*) "CFF";
+	}
     }
 #endif
+
     if (!FcPatternObjectAddBool (pat, FC_NAMED_INSTANCE_OBJECT, !!(id > 0xffff)))
+	    goto bail2;
+
+    if (FT_IS_SFNT (face))
+    {
+	/* If this is an SFNT wrapper, try to sniff the SFNT tag which is the
+	 * first 4 bytes, to see if it is a WOFF or WOFF2 wrapper. */
+	wrapper = (FcChar8*) "SFNT";
+
+	char buf[4];
+	int fd = FcOpen ((char *) file, O_RDONLY);
+	if (fd != -1 && read (fd, buf, 4))
+	{
+	    if (buf[0] == 'w' && buf[1] == 'O' && buf[2] == 'F')
+	    {
+		if (buf[3] == 'F')
+		    wrapper = (FcChar8*) "WOFF";
+		else if (buf[3] == '2')
+		    wrapper = (FcChar8*) "WOFF2";
+	    }
+	}
+	close (fd);
+    }
+
+    if (wrapper)
+	if (!FcPatternObjectAddString (pat, FC_FONT_WRAPPER_OBJECT, wrapper))
 	    goto bail2;
 
     /*

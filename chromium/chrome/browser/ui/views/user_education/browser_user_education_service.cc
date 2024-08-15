@@ -9,6 +9,7 @@
 #include "base/metrics/user_metrics.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/ui/browser.h"
@@ -47,8 +48,11 @@
 #include "components/user_education/common/feature_promo_specification.h"
 #include "components/user_education/common/help_bubble_factory_registry.h"
 #include "components/user_education/common/help_bubble_params.h"
+#include "components/user_education/common/new_badge_specification.h"
 #include "components/user_education/common/tutorial_description.h"
 #include "components/user_education/common/tutorial_registry.h"
+#include "components/user_education/common/user_education_features.h"
+#include "components/user_education/common/user_education_metadata.h"
 #include "components/user_education/views/help_bubble_delegate.h"
 #include "components/user_education/views/help_bubble_factory_views.h"
 #include "components/user_education/webui/help_bubble_handler.h"
@@ -126,8 +130,6 @@ bool HasTabGroups(const BrowserView* browser_view) {
 
 }  // namespace
 
-const char kSideSearchTutorialId[] = "Side Search Tutorial";
-
 user_education::HelpBubbleDelegate* GetHelpBubbleDelegate() {
   static base::NoDestructor<BrowserHelpBubbleDelegate> delegate;
   return delegate.get();
@@ -158,8 +160,8 @@ void RegisterChromeHelpBubbleFactories(
 void MaybeRegisterChromeFeaturePromos(
     user_education::FeaturePromoRegistry& registry) {
   using user_education::FeaturePromoSpecification;
-  using Metadata = user_education::FeaturePromoSpecification::Metadata;
   using user_education::HelpBubbleArrow;
+  using user_education::Metadata;
 
   // This icon got updated, so select which is used based on whether refresh is
   // enabled. Note that the WebUI refresh state is not taken into account, so
@@ -178,14 +180,29 @@ void MaybeRegisterChromeFeaturePromos(
 
   // TODO(1432894): Use toast or snooze instead of legacy promo.
   // kIPHAutofillExternalAccountProfileSuggestionFeature:
+  registry.RegisterFeature(
+      std::move(FeaturePromoSpecification::CreateForLegacyPromo(
+                    &feature_engagement::
+                        kIPHAutofillExternalAccountProfileSuggestionFeature,
+                    kAutofillSuggestionElementId,
+                    IDS_AUTOFILL_IPH_EXTERNAL_ACCOUNT_PROFILE_SUGGESTION)
+                    .SetBubbleArrow(HelpBubbleArrow::kLeftCenter)
+                    .SetMetadata(115, "vykochko@google.com",
+                                 "Triggered after autofill popup appears.")));
+
+  // kIPHAutofillVirtualCardSuggestionFeature:
   registry.RegisterFeature(std::move(
-      FeaturePromoSpecification::CreateForLegacyPromo(
-          &feature_engagement::
-              kIPHAutofillExternalAccountProfileSuggestionFeature,
-          kAutofillSuggestionElementId,
-          IDS_AUTOFILL_IPH_EXTERNAL_ACCOUNT_PROFILE_SUGGESTION)
-          .SetBubbleArrow(HelpBubbleArrow::kLeftCenter)
-          .SetMetadata(115, "vykochko@google.com", "Autofill popup appears.")));
+      FeaturePromoSpecification::CreateForToastPromo(
+          feature_engagement::kIPHAutofillManualFallbackFeature,
+          kAutofillManualFallbackElementId, IDS_AUTOFILL_IPH_MANUAL_FALLBACK,
+          IDS_AUTOFILL_IPH_MANUAL_FALLBACK_SCREENREADER,
+          FeaturePromoSpecification::AcceleratorInfo())
+          .SetBubbleArrow(HelpBubbleArrow::kTopRight)
+          .SetMetadata(
+              123, "theocristea@google.com",
+              "User focuses a field, but autofill cannot be triggered "
+              "automatically because the field has autocomplete=garbage. In "
+              "this case, autofill can be triggered from the context menu.")));
 
   // kIPHAutofillVirtualCardCVCSuggestionFeature:
   registry.RegisterFeature(std::move(
@@ -197,7 +214,7 @@ void MaybeRegisterChromeFeaturePromos(
           FeaturePromoSpecification::AcceleratorInfo())
           .SetBubbleArrow(HelpBubbleArrow::kLeftCenter)
           .SetMetadata(118, "alexandertekle@google.com",
-                       "Autofill popup appears.")));
+                       "Triggered after autofill popup appears.")));
 
   // kIPHAutofillVirtualCardSuggestionFeature:
   registry.RegisterFeature(std::move(
@@ -206,25 +223,17 @@ void MaybeRegisterChromeFeaturePromos(
           kAutofillCreditCardSuggestionEntryElementId,
           IDS_AUTOFILL_VIRTUAL_CARD_SUGGESTION_IPH_BUBBLE_LABEL)
           .SetBubbleArrow(HelpBubbleArrow::kLeftCenter)
-          .SetMetadata(100, "siyua@chromium.org", "Autofill popup appears.")));
+          .SetMetadata(100, "siyua@chromium.org",
+                       "Triggered after autofill popup appears.")));
 
   // kIPHDesktopPwaInstallFeature:
   registry.RegisterFeature(
       std::move(user_education::FeaturePromoSpecification::CreateForLegacyPromo(
                     &feature_engagement::kIPHDesktopPwaInstallFeature,
                     kInstallPwaElementId, IDS_DESKTOP_PWA_INSTALL_PROMO)
-                    .SetMetadata(Metadata(
-                        89, "phillis@chromium.org",
-                        "User navigates to a page with a promotable PWA."))));
-
-  // kIPHDesktopTabGroupsNewGroupFeature:
-  registry.RegisterFeature(
-      std::move(FeaturePromoSpecification::CreateForTutorialPromo(
-                    feature_engagement::kIPHDesktopTabGroupsNewGroupFeature,
-                    kTabStripRegionElementId, IDS_TAB_GROUPS_NEW_GROUP_PROMO,
-                    kTabGroupTutorialId)
-                    .SetBubbleArrow(HelpBubbleArrow::kNone)
-                    .SetBubbleIcon(kLightbulbOutlineIcon)));
+                    .SetMetadata(Metadata(89, "phillis@chromium.org",
+                                          "Triggered after user navigates to a "
+                                          "page with a promotable PWA."))));
 
   // kIPHDesktopCustomizeChromeFeature:
   registry.RegisterFeature(std::move(
@@ -340,7 +349,8 @@ void MaybeRegisterChromeFeaturePromos(
           .SetBubbleTitleText(IDS_IPH_EXPERIMENTAL_AI_PROMO)
           .SetCustomActionDismissText(IDS_NO_THANKS)
           .SetBubbleArrow(HelpBubbleArrow::kTopRight)
-          .SetCustomActionIsDefault(true)));
+          .SetCustomActionIsDefault(true)
+          .OverrideFocusOnShow(false)));
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // kIPHExtensionsMenuFeature:
@@ -610,9 +620,11 @@ void MaybeRegisterChromeFeaturePromos(
                     .SetBubbleArrow(HelpBubbleArrow::kTopLeft)));
 
   // kIPHTabSearchFeature:
-  registry.RegisterFeature(FeaturePromoSpecification::CreateForLegacyPromo(
-      &feature_engagement::kIPHTabSearchFeature, kTabSearchButtonElementId,
-      IDS_TAB_SEARCH_PROMO));
+  registry.RegisterFeature(std::move(
+      FeaturePromoSpecification::CreateForLegacyPromo(
+          &feature_engagement::kIPHTabSearchFeature, kTabSearchButtonElementId,
+          IDS_TAB_SEARCH_PROMO)
+          .SetBubbleArrow(user_education::HelpBubbleArrow::kTopLeft)));
 
   // Tracking Protection Offboarding IPH
   registry.RegisterFeature(std::move(
@@ -686,12 +698,13 @@ void MaybeRegisterChromeFeaturePromos(
           .SetBubbleArrow(HelpBubbleArrow::kBottomRight)
           .SetBubbleIcon(&vector_icons::kCelebrationIcon)
           .SetMetadata(
-              90, "dfried@google.com", "Test IPH.",
+              90, "dfried@google.com",
+              "This is a test IPH, designed to verify that IPH can attach to "
+              "elements in WebUI in the main browser tab.",
               // These are not required features; they are just an example to
               // ensure that the tester page formats this data correctly.
-              FeaturePromoSpecification::Metadata::FeatureSet{
-                  &feature_engagement::kIPHWebUiHelpBubbleTestFeature,
-                  &feature_engagement::kIPHDesktopTabGroupsNewGroupFeature})));
+              Metadata::FeatureSet{
+                  &feature_engagement::kIPHWebUiHelpBubbleTestFeature})));
 
   // kIPHBatterySaverModeFeature:
   registry.RegisterFeature(std::move(
@@ -831,6 +844,23 @@ void MaybeRegisterChromeFeaturePromos(
                       .SetBubbleArrow(HelpBubbleArrow::kBottomRight)));
   }
 #endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+
+  // kIPHDeepScanPromptRemovalFeature
+  registry.RegisterFeature(std::move(
+      FeaturePromoSpecification::CreateForCustomAction(
+          feature_engagement::kIPHDeepScanPromptRemovalFeature,
+          kToolbarDownloadButtonElementId, IDS_DEEP_SCANNING_PROMPT_REMOVAL_IPH,
+          IDS_DEEP_SCANNING_PROMPT_REMOVAL_IPH_ACTION,
+          base::BindRepeating(
+              [](ui::ElementContext ctx,
+                 user_education::FeaturePromoHandle promo_handle) {
+                auto* browser = chrome::FindBrowserWithUiElementContext(ctx);
+                if (!browser) {
+                  return;
+                }
+                chrome::ShowSafeBrowsingEnhancedProtection(browser);
+              }))
+          .SetBubbleArrow(HelpBubbleArrow::kTopRight)));
 }
 
 void MaybeRegisterChromeTutorials(
@@ -849,6 +879,13 @@ void MaybeRegisterChromeTutorials(
 
   {  // Menu item bubble test.
     TutorialDescription test_description;
+    test_description.metadata.additional_description = "Used for testing only.";
+    test_description.metadata.launch_milestone = 116;
+    test_description.metadata.owners = "Frizzle Team";
+    // These features aren't actually required; they are merely here to verify
+    // that Tutorials have their required features shown on the tester page.
+    test_description.metadata.required_features = {
+        &feature_engagement::kIPHWebUiHelpBubbleTestFeature};
     test_description.steps = {
         BubbleStep(kToolbarAppMenuButtonElementId)
             .SetBubbleBodyText(IDS_OK)
@@ -1130,4 +1167,57 @@ void MaybeRegisterChromeTutorials(
               .SetBubbleTitleText(IDS_TUTORIAL_GENERIC_SUCCESS_TITLE)
               .SetBubbleBodyText(IDS_TUTORIAL_PASSWORD_MANAGER_SUCCESS_BODY)
               .SetBubbleArrow(HelpBubbleArrow::kNone)));
+}
+
+void MaybeRegisterNewBadges(user_education::NewBadgeRegistry& registry) {
+  if (registry.IsFeatureRegistered(
+          user_education::features::kNewBadgeTestFeature)) {
+    return;
+  }
+
+  registry.RegisterFeature(user_education::NewBadgeSpecification(
+      user_education::features::kNewBadgeTestFeature,
+      user_education::Metadata(124, "Frizzle Team",
+                               "Used to test \"New\" Badge logic.")));
+
+  registry.RegisterFeature(user_education::NewBadgeSpecification(
+      compose::features::kEnableCompose, user_education::Metadata()));
+  registry.RegisterFeature(user_education::NewBadgeSpecification(
+      compose::features::kEnableComposeNudge, user_education::Metadata()));
+}
+
+std::unique_ptr<BrowserFeaturePromoController> CreateUserEducationResources(
+    BrowserView* browser_view) {
+  Profile* const profile = browser_view->GetProfile();
+
+  // Get the user education service.
+  if (!UserEducationServiceFactory::ProfileAllowsUserEducation(profile)) {
+    return nullptr;
+  }
+  UserEducationService* const user_education_service =
+      UserEducationServiceFactory::GetForBrowserContext(profile);
+  if (!user_education_service) {
+    return nullptr;
+  }
+
+  // Consider registering factories, etc.
+  RegisterChromeHelpBubbleFactories(
+      user_education_service->help_bubble_factory_registry());
+  MaybeRegisterChromeFeaturePromos(
+      user_education_service->feature_promo_registry());
+  MaybeRegisterChromeTutorials(user_education_service->tutorial_registry());
+  CHECK(user_education_service->new_badge_registry());
+
+  MaybeRegisterNewBadges(*user_education_service->new_badge_registry());
+  user_education_service->new_badge_controller()->InitData();
+
+  return std::make_unique<BrowserFeaturePromoController>(
+      browser_view,
+      feature_engagement::TrackerFactory::GetForBrowserContext(profile),
+      &user_education_service->feature_promo_registry(),
+      &user_education_service->help_bubble_factory_registry(),
+      &user_education_service->feature_promo_storage_service(),
+      &user_education_service->feature_promo_session_policy(),
+      &user_education_service->tutorial_service(),
+      &user_education_service->product_messaging_controller());
 }

@@ -8,8 +8,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
-#include "third_party/blink/renderer/core/layout/layout_block.h"
-#include "third_party/blink/renderer/core/layout/layout_block_flow.h"
+#include "third_party/blink/renderer/core/layout/layout_ng_block_flow.h"
 #include "third_party/blink/renderer/core/layout/layout_result.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
@@ -21,12 +20,11 @@ namespace blink {
 class LayoutBlockTest : public RenderingTest {};
 
 TEST_F(LayoutBlockTest, LayoutNameCalledWithNullStyle) {
-  const ComputedStyle& style = GetDocument().GetStyleResolver().InitialStyle();
-  LayoutObject* obj = LayoutBlockFlow::CreateAnonymous(&GetDocument(), &style);
-  obj->SetStyle(nullptr, LayoutObject::ApplyStyleChanges::kNo);
+  auto* element = MakeGarbageCollected<Element>(
+      QualifiedName(AtomicString("div")), &GetDocument());
+  auto* obj = MakeGarbageCollected<LayoutNGBlockFlow>(element);
   EXPECT_FALSE(obj->Style());
-  EXPECT_THAT(obj->DecoratedName().Ascii(),
-              MatchesRegex("LayoutN?G?BlockFlow \\(anonymous, inline\\)"));
+  EXPECT_EQ(obj->DecoratedName().Ascii(), "LayoutNGBlockFlow (inline)");
   obj->Destroy();
 }
 
@@ -44,7 +42,7 @@ TEST_F(LayoutBlockTest, WidthAvailableToChildrenChanged) {
       <div style='height:20px'>Item</div>
     </div>
   )HTML");
-  Element* list_element = GetDocument().getElementById(AtomicString("list"));
+  Element* list_element = GetElementById("list");
   ASSERT_TRUE(list_element);
   auto* list_box = list_element->GetLayoutBox();
   Element* item_element = ElementTraversal::FirstChild(*list_element);
@@ -118,8 +116,7 @@ TEST_F(LayoutBlockTest, ContainmentStyleChange) {
     </div>
   )HTML");
 
-  Element* target_element =
-      GetDocument().getElementById(AtomicString("target"));
+  Element* target_element = GetElementById("target");
   auto* target = To<LayoutBlockFlow>(target_element->GetLayoutObject());
   EXPECT_TRUE(target->GetSingleCachedLayoutResult()
                   ->GetPhysicalFragment()

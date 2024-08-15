@@ -5,9 +5,8 @@
 #ifndef COMPONENTS_USER_EDUCATION_COMMON_FEATURE_PROMO_RESULT_H_
 #define COMPONENTS_USER_EDUCATION_COMMON_FEATURE_PROMO_RESULT_H_
 
+#include <optional>
 #include <ostream>
-
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace user_education {
 
@@ -52,7 +51,10 @@ class FeaturePromoResult {
              // since the last heavyweight promo.
     kRecentlyAborted = 11,  // The promo recently aborted due to a UI change and
                             // cannot be shown again for a short period of time.
-    kMaxValue = kRecentlyAborted
+    kExceededMaxShowCount = 12,  // The promo has been shown so many times that
+                                 // it should be considered permanently
+                                 // dismissed.
+    kMaxValue = kExceededMaxShowCount
   };
 
   constexpr FeaturePromoResult() = default;
@@ -84,7 +86,7 @@ class FeaturePromoResult {
   constexpr auto failure() const { return failure_; }
 
  private:
-  absl::optional<Failure> failure_;
+  std::optional<Failure> failure_;
 };
 
 constexpr bool operator==(FeaturePromoResult::Failure f,

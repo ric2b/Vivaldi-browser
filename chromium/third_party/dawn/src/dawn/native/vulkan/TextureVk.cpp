@@ -153,10 +153,31 @@ VkAccessFlags VulkanAccessFlags(wgpu::TextureUsage usage, const Format& format) 
     if (usage & kReadOnlyRenderAttachment) {
         flags |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
     }
-    if (usage & kPresentTextureUsage) {
-        // The present usage is only used internally by the swapchain and is never used in
+
+    if (usage & kPresentAcquireTextureUsage) {
+        // The present acquire usage is only used internally by the swapchain and is never used in
         // combination with other usages.
-        DAWN_ASSERT(usage == kPresentTextureUsage);
+        DAWN_ASSERT(usage == kPresentAcquireTextureUsage);
+        // The Vulkan spec has the following note:
+        //
+        //   When the presentable image will be accessed by some stage S, the recommended idiom
+        //   for ensuring correct synchronization is:
+        //
+        //   The VkSubmitInfo used to submit the image layout transition for execution includes
+        //   vkAcquireNextImageKHR::semaphore in its pWaitSemaphores member, with the
+        //   corresponding element of pWaitDstStageMask including S.
+        //
+        //   The synchronization command that performs any necessary image layout transition
+        //   includes S in both the srcStageMask and dstStageMask.
+        //
+        // There is no mention of an access flag because there is no access flag associated with
+        // the presentation engine, so we leave it to 0.
+        flags |= 0;
+    }
+    if (usage & kPresentReleaseTextureUsage) {
+        // The present release usage is only used internally by the swapchain and is never used in
+        // combination with other usages.
+        DAWN_ASSERT(usage == kPresentReleaseTextureUsage);
         // The Vulkan spec has the following note:
         //
         //   When transitioning the image to VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR or
@@ -221,10 +242,35 @@ VkPipelineStageFlags VulkanPipelineStage(wgpu::TextureUsage usage,
             flags |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         }
     }
-    if (usage & kPresentTextureUsage) {
-        // The present usage is only used internally by the swapchain and is never used in
+
+    if (usage & kPresentAcquireTextureUsage) {
+        // The present acquire usage is only used internally by the swapchain and is never used in
         // combination with other usages.
-        DAWN_ASSERT(usage == kPresentTextureUsage);
+        DAWN_ASSERT(usage == kPresentAcquireTextureUsage);
+        // The vkAcquireNextImageKHR method is a read operation in Vulkan which completes
+        // before the semaphore/fence out parameters are signaled. This means that future uses
+        // of the texture must performs a memory barriers that synchronizes with that
+        // semaphore/barrier. Dawn uses the ALL_COMMANDS_BIT stage for the semaphore, however
+        // such a semaphore doesn't synchronize with a subsequent BOTTOM_OF_PIPE or NONE
+        // srcStage vkPipelineBarrier because there are no common stages. Instead we also use
+        // VK_PIPELINE_STAGE_ALL_COMMANDS_BIT for srcStage for presentable images, ensuring
+        // correct ordering. This explains the idiom noted in the Vulkan spec:
+        //
+        //   When the presentable image will be accessed by some stage S, the recommended idiom
+        //   for ensuring correct synchronization is:
+        //
+        //   The VkSubmitInfo used to submit the image layout transition for execution includes
+        //   vkAcquireNextImageKHR::semaphore in its pWaitSemaphores member, with the
+        //   corresponding element of pWaitDstStageMask including S.
+        //
+        //   The synchronization command that performs any necessary image layout transition
+        //   includes S in both the srcStageMask and dstStageMask.
+        flags |= VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    }
+    if (usage & kPresentReleaseTextureUsage) {
+        // The present release usage is only used internally by the swapchain and is never used in
+        // combination with other usages.
+        DAWN_ASSERT(usage == kPresentReleaseTextureUsage);
         // The Vulkan spec has the following note:
         //
         //   When transitioning the image to VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR or
@@ -611,8 +657,12 @@ VkImageLayout VulkanImageLayout(const Format& format, wgpu::TextureUsage usage) 
         case kReadOnlyRenderAttachment:
             return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
-        case kPresentTextureUsage:
+        case kPresentReleaseTextureUsage:
             return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        case kPresentAcquireTextureUsage:
+            // We always consider images being acquired from the swapchain as uninitialized,
+            // so we can use the UNDEFINED Vulkan image layout.
+            return VK_IMAGE_LAYOUT_UNDEFINED;
 
         case wgpu::TextureUsage::TransientAttachment:
             // Will be covered by RenderAttachment above, as specification of
@@ -949,6 +999,7 @@ MaybeError Texture::InitializeFromExternal(const ExternalImageDescriptorVk* desc
 
 void Texture::InitializeForSwapChain(VkImage nativeImage) {
     mHandle = nativeImage;
+    mSubresourceLastSyncInfos.Fill({kPresentAcquireTextureUsage, wgpu::ShaderStage::None});
     SetLabelHelper("Dawn_SwapChainTexture");
 }
 
@@ -1310,45 +1361,45 @@ void Texture::TransitionUsageForPassImpl(
     wgpu::ShaderStage allNewShaderStages = wgpu::ShaderStage::None;
     wgpu::ShaderStage allLastShaderStages = wgpu::ShaderStage::None;
 
-    mSubresourceLastSyncInfos.Merge(
-        subresourceSyncInfos, [&](const SubresourceRange& range, TextureSyncInfo* lastSyncInfo,
-                                  const TextureSyncInfo& newSyncInfo) {
-            if (newSyncInfo.usage == wgpu::TextureUsage::None ||
-                CanReuseWithoutBarrier(lastSyncInfo->usage, newSyncInfo.usage,
-                                       lastSyncInfo->shaderStages, newSyncInfo.shaderStages)) {
-                return;
-            }
+    mSubresourceLastSyncInfos.Merge(subresourceSyncInfos, [&](const SubresourceRange& range,
+                                                              TextureSyncInfo* lastSyncInfo,
+                                                              const TextureSyncInfo& newSyncInfo) {
+        wgpu::TextureUsage newUsage = newSyncInfo.usage;
+        if (newSyncInfo.shaderStages == wgpu::ShaderStage::None) {
+            // If the image isn't used in any shader stages, ignore shader usages. Eg. ignore a
+            // texture binding that isn't actually sampled in any shader.
+            newUsage &= ~kShaderTextureUsages;
+        }
 
-            imageBarriers->push_back(
-                BuildMemoryBarrier(this, lastSyncInfo->usage, newSyncInfo.usage, range));
+        if (newUsage == wgpu::TextureUsage::None ||
+            CanReuseWithoutBarrier(lastSyncInfo->usage, newUsage, lastSyncInfo->shaderStages,
+                                   newSyncInfo.shaderStages)) {
+            return;
+        }
 
-            allLastUsages |= lastSyncInfo->usage;
-            allNewUsages |= newSyncInfo.usage;
+        imageBarriers->push_back(BuildMemoryBarrier(this, lastSyncInfo->usage, newUsage, range));
 
-            allLastShaderStages |= lastSyncInfo->shaderStages;
-            allNewShaderStages |= newSyncInfo.shaderStages;
+        allLastUsages |= lastSyncInfo->usage;
+        allNewUsages |= newUsage;
 
-            if (lastSyncInfo->usage == newSyncInfo.usage &&
-                IsSubset(lastSyncInfo->usage, kReadOnlyTextureUsages)) {
-                // Read only usage and no layout transition. We can keep previous shader stages so
-                // future uses in those stages don't insert barriers.
-                lastSyncInfo->shaderStages |= newSyncInfo.shaderStages;
-            } else {
-                // Image was altered by write or layout transition. We need to clear previous shader
-                // stages so future uses in those stages will insert barriers.
-                lastSyncInfo->shaderStages = newSyncInfo.shaderStages;
-            }
-            lastSyncInfo->usage = newSyncInfo.usage;
-        });
+        allLastShaderStages |= lastSyncInfo->shaderStages;
+        allNewShaderStages |= newSyncInfo.shaderStages;
+
+        if (lastSyncInfo->usage == newUsage &&
+            IsSubset(lastSyncInfo->usage, kReadOnlyTextureUsages)) {
+            // Read only usage and no layout transition. We can keep previous shader stages so
+            // future uses in those stages don't insert barriers.
+            lastSyncInfo->shaderStages |= newSyncInfo.shaderStages;
+        } else {
+            // Image was altered by write or layout transition. We need to clear previous shader
+            // stages so future uses in those stages will insert barriers.
+            lastSyncInfo->shaderStages = newSyncInfo.shaderStages;
+        }
+        lastSyncInfo->usage = newUsage;
+    });
 
     if (mExternalState != ExternalState::InternalOnly) {
         TweakTransitionForExternalUsage(recordingContext, imageBarriers, transitionBarrierStart);
-    }
-
-    if (allNewShaderStages == wgpu::ShaderStage::None) {
-        // If the image isn't used in any shader stages, ignore shader usages. Eg. ignore a texture
-        // binding that isn't actually sampled in any shader.
-        allNewUsages &= ~kShaderTextureUsages;
     }
 
     // Skip adding pipeline stages if no barrier was needed to avoid putting TOP_OF_PIPE in the

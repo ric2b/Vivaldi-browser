@@ -57,52 +57,43 @@ UrlCheckerOnSB::StartParams::~StartParams() = default;
 UrlCheckerOnSB::UrlCheckerOnSB(
     GetDelegateCallback delegate_getter,
     int frame_tree_node_id,
-    absl::optional<int64_t> navigation_id,
+    std::optional<int64_t> navigation_id,
     base::RepeatingCallback<content::WebContents*()> web_contents_getter,
     OnCompleteCheckCallback complete_callback,
     bool url_real_time_lookup_enabled,
-    bool can_urt_check_subresource_url,
     bool can_check_db,
     bool can_check_high_confidence_allowlist,
     std::string url_lookup_service_metric_suffix,
     base::WeakPtr<RealTimeUrlLookupServiceBase> url_lookup_service,
     base::WeakPtr<HashRealTimeService> hash_realtime_service,
-    hash_realtime_utils::HashRealTimeSelection hash_realtime_selection)
+    hash_realtime_utils::HashRealTimeSelection hash_realtime_selection,
+    bool is_async_check,
+    SessionID tab_id)
     : delegate_getter_(std::move(delegate_getter)),
       frame_tree_node_id_(frame_tree_node_id),
       navigation_id_(navigation_id),
       web_contents_getter_(web_contents_getter),
       complete_callback_(std::move(complete_callback)),
       url_real_time_lookup_enabled_(url_real_time_lookup_enabled),
-      can_urt_check_subresource_url_(can_urt_check_subresource_url),
       can_check_db_(can_check_db),
       can_check_high_confidence_allowlist_(can_check_high_confidence_allowlist),
       url_lookup_service_metric_suffix_(url_lookup_service_metric_suffix),
       url_lookup_service_(url_lookup_service),
       hash_realtime_service_(hash_realtime_service),
       hash_realtime_selection_(hash_realtime_selection),
-      creation_time_(base::TimeTicks::Now()) {
-  content::WebContents* contents = web_contents_getter_.Run();
-  if (!!contents) {
-    last_committed_url_ = contents->GetLastCommittedURL();
-  }
-}
+      creation_time_(base::TimeTicks::Now()),
+      is_async_check_(is_async_check),
+      tab_id_(tab_id) {}
 
 UrlCheckerOnSB::~UrlCheckerOnSB() {
-  DCHECK_CURRENTLY_ON(
-      base::FeatureList::IsEnabled(safe_browsing::kSafeBrowsingOnUIThread)
-          ? content::BrowserThread::UI
-          : content::BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   base::UmaHistogramMediumTimes(
       "SafeBrowsing.BrowserThrottle.CheckerOnIOLifetime",
       base::TimeTicks::Now() - creation_time_);
 }
 
 void UrlCheckerOnSB::Start(const StartParams& params) {
-  DCHECK_CURRENTLY_ON(
-      base::FeatureList::IsEnabled(safe_browsing::kSafeBrowsingOnUIThread)
-          ? content::BrowserThread::UI
-          : content::BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   scoped_refptr<UrlCheckerDelegate> url_checker_delegate =
       std::move(delegate_getter_).Run();
 
@@ -114,20 +105,17 @@ void UrlCheckerOnSB::Start(const StartParams& params) {
         params.has_user_gesture, url_checker_delegate, web_contents_getter_,
         nullptr, content::ChildProcessHost::kInvalidUniqueID, std::nullopt,
         frame_tree_node_id_, navigation_id_, url_real_time_lookup_enabled_,
-        can_urt_check_subresource_url_, can_check_db_,
-        can_check_high_confidence_allowlist_, url_lookup_service_metric_suffix_,
-        last_committed_url_, content::GetUIThreadTaskRunner({}),
-        url_lookup_service_, hash_realtime_service_, hash_realtime_selection_);
+        can_check_db_, can_check_high_confidence_allowlist_,
+        url_lookup_service_metric_suffix_, content::GetUIThreadTaskRunner({}),
+        url_lookup_service_, hash_realtime_service_, hash_realtime_selection_,
+        is_async_check_, tab_id_);
   }
 
   CheckUrl(params.url, params.method);
 }
 
 void UrlCheckerOnSB::CheckUrl(const GURL& url, const std::string& method) {
-  DCHECK_CURRENTLY_ON(
-      base::FeatureList::IsEnabled(safe_browsing::kSafeBrowsingOnUIThread)
-          ? content::BrowserThread::UI
-          : content::BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(url_checker_);
   pending_checks_++;
   redirect_chain_.push_back(url);
@@ -155,6 +143,10 @@ bool UrlCheckerOnSB::IsRealTimeCheckForTesting() {
              hash_realtime_utils::HashRealTimeSelection::kNone;
 }
 
+bool UrlCheckerOnSB::IsAsyncCheckForTesting() {
+  return is_async_check_;
+}
+
 void UrlCheckerOnSB::AddUrlInRedirectChainForTesting(const GURL& url) {
   redirect_chain_.push_back(url);
 }
@@ -179,12 +171,7 @@ void UrlCheckerOnSB::OnCompleteCheck(
   OnCompleteCheckResult result(proceed, showed_interstitial,
                                has_post_commit_interstitial_skipped,
                                performed_check, all_checks_completed);
-  if (base::FeatureList::IsEnabled(safe_browsing::kSafeBrowsingOnUIThread)) {
-    complete_callback_.Run(result);
-  } else {
-    content::GetUIThreadTaskRunner({})->PostTask(
-        FROM_HERE, base::BindOnce(complete_callback_, result));
-  }
+  complete_callback_.Run(result);
 }
 
 }  // namespace safe_browsing

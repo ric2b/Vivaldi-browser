@@ -41,7 +41,7 @@ ScopedTraceOperation::ScopedTraceOperation(TraceId trace_id,
     // Create a new root node. This will re-call this constructor and add the
     // root node to the stack before proceeding with the original node.
     root_node_ = new TraceIdSetter(TraceIdHierarchy::Empty());
-    OSP_DCHECK(!traces_->empty());
+    OSP_CHECK(!traces_->empty());
   }
 
   // Setting trace id fields.
@@ -53,7 +53,7 @@ ScopedTraceOperation::ScopedTraceOperation(TraceId trace_id,
 
   // Add this item to the stack.
   traces_->push(this);
-  OSP_DCHECK(traces_->size() < 1024);
+  OSP_CHECK_LT(traces_->size(), 1024);
 }
 
 ScopedTraceOperation::~ScopedTraceOperation() {

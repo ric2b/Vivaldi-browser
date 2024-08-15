@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_WEBAUDIO_AUDIO_CONTEXT_H_
 
 #include "base/gtest_prod_util.h"
+#include "base/time/time.h"
 #include "third_party/blink/public/mojom/mediastream/media_devices.mojom-blink.h"
 #include "third_party/blink/public/mojom/permissions/permission.mojom-blink.h"
 #include "third_party/blink/public/mojom/webaudio/audio_context_manager.mojom-blink.h"
@@ -54,7 +55,7 @@ class MODULES_EXPORT AudioContext : public BaseAudioContext,
 
   AudioContext(LocalDOMWindow&,
                const WebAudioLatencyHint&,
-               absl::optional<float> sample_rate,
+               std::optional<float> sample_rate,
                WebAudioSinkDescriptor sink_descriptor);
   ~AudioContext() override;
 
@@ -104,6 +105,10 @@ class MODULES_EXPORT AudioContext : public BaseAudioContext,
 
   AudioCallbackMetric GetCallbackMetric() const;
 
+  // Returns the audio buffer duration of the output driving playout of
+  // AudioDestination.
+  base::TimeDelta PlatformBufferDuration() const;
+
   // mojom::blink::PermissionObserver
   void OnPermissionStatusChange(mojom::blink::PermissionStatus) override;
 
@@ -129,6 +134,8 @@ class MODULES_EXPORT AudioContext : public BaseAudioContext,
   // A helper function to validate the given sink descriptor. See:
   // webaudio.github.io/web-audio-api/#validating-sink-identifier
   bool IsValidSinkDescriptor(const WebAudioSinkDescriptor&);
+
+  void OnRenderError();
 
  protected:
   void Uninitialize() final;
@@ -248,12 +255,12 @@ class MODULES_EXPORT AudioContext : public BaseAudioContext,
   // Autoplay status associated with this AudioContext, if any.
   // Will only be set if there is an autoplay policy in place.
   // Will never be set for OfflineAudioContext.
-  absl::optional<AutoplayStatus> autoplay_status_;
+  std::optional<AutoplayStatus> autoplay_status_;
 
   // Autoplay unlock type for this AudioContext.
   // Will only be set if there is an autoplay policy in place.
   // Will never be set for OfflineAudioContext.
-  absl::optional<AutoplayUnlockType> autoplay_unlock_type_;
+  std::optional<AutoplayUnlockType> autoplay_unlock_type_;
 
   // Records if start() was ever called for any source node in this context.
   bool source_node_started_ = false;

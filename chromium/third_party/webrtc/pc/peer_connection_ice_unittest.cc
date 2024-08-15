@@ -94,7 +94,6 @@ using ::testing::Values;
 
 constexpr int kIceCandidatesTimeout = 10000;
 constexpr int64_t kWaitTimeout = 10000;
-constexpr uint64_t kTiebreakerDefault = 44444;
 
 class PeerConnectionWrapperForIceTest : public PeerConnectionWrapper {
  public:
@@ -215,10 +214,10 @@ class PeerConnectionIceBaseTest : public ::testing::Test {
   cricket::Candidate CreateLocalUdpCandidate(
       const rtc::SocketAddress& address) {
     cricket::Candidate candidate;
+    RTC_DCHECK_EQ(candidate.type(), IceCandidateType::kHost);
     candidate.set_component(cricket::ICE_CANDIDATE_COMPONENT_DEFAULT);
     candidate.set_protocol(cricket::UDP_PROTOCOL_NAME);
     candidate.set_address(address);
-    candidate.set_type(cricket::LOCAL_PORT_TYPE);
     return candidate;
   }
 
@@ -362,7 +361,7 @@ class PeerConnectionIceTest
                  << " != " << b.address().ToString();
   }
   if (a.type() != b.type()) {
-    failure_info << "\ntype: " << a.type() << " != " << b.type();
+    failure_info << "\ntype: " << a.type_name() << " != " << b.type_name();
   }
   std::string failure_info_str = failure_info.str();
   if (failure_info_str.empty()) {
@@ -1448,7 +1447,6 @@ class PeerConnectionIceConfigTest : public ::testing::Test {
                                        packet_socket_factory_.get(),
                                        &field_trials_));
     port_allocator_ = port_allocator.get();
-    port_allocator_->SetIceTiebreaker(kTiebreakerDefault);
     PeerConnectionDependencies pc_dependencies(&observer_);
     pc_dependencies.allocator = std::move(port_allocator);
     auto result = pc_factory_->CreatePeerConnectionOrError(

@@ -51,8 +51,9 @@ VivaldiContextMenuViews::VivaldiContextMenuViews(
 
 VivaldiContextMenuViews::~VivaldiContextMenuViews() {}
 
-void VivaldiContextMenuViews::Init(ui::SimpleMenuModel* menu_model,
-                                   ContextMenuPostitionDelegate* delegate) {
+void VivaldiContextMenuViews::Init(
+    ui::SimpleMenuModel* menu_model,
+    base::WeakPtr<ContextMenuPostitionDelegate> delegate) {
   menu_model_ = menu_model;
   if (context_menu_) {
     menu_view_ =

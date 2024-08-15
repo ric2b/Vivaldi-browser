@@ -119,28 +119,6 @@ std::unique_ptr<web::WebState> CreateWebStateFromProto(
   return CreateWebState();
 }
 
-// Creates a WebStateMetadataStorage for `web_state`.
-web::proto::WebStateMetadataStorage MetadataStorage(web::WebState* web_state) {
-  web::proto::WebStateMetadataStorage storage;
-  storage.set_navigation_item_count(web_state->GetNavigationItemCount());
-  web::SerializeTimeToProto(web_state->GetCreationTime(),
-                            *storage.mutable_creation_time());
-  web::SerializeTimeToProto(web_state->GetLastActiveTime(),
-                            *storage.mutable_last_active_time());
-
-  const std::u16string& title = web_state->GetTitle();
-  if (!title.empty()) {
-    storage.mutable_active_page()->set_page_title(base::UTF16ToUTF8(title));
-  }
-
-  const GURL& url = web_state->GetVisibleURL();
-  if (url.is_valid()) {
-    storage.mutable_active_page()->set_page_url(url.spec());
-  }
-
-  return storage;
-}
-
 // Helper wrapping SerializeWebStateList(...) with an auto-generated
 // WebStateMetadataMap.
 void SerializeWebStateList(const WebStateList& web_state_list,
@@ -150,8 +128,10 @@ void SerializeWebStateList(const WebStateList& web_state_list,
   for (int index = 0; index < web_state_list.count(); ++index) {
     web::WebState* const web_state = web_state_list.GetWebStateAt(index);
     const web::WebStateID web_state_id = web_state->GetUniqueIdentifier();
-    metadata_map.insert(
-        std::make_pair(web_state_id, MetadataStorage(web_state)));
+
+    web::proto::WebStateMetadataStorage metadata;
+    web_state->SerializeMetadataToProto(metadata);
+    metadata_map.insert(std::make_pair(web_state_id, std::move(metadata)));
   }
 
   SerializeWebStateList(web_state_list, metadata_map, storage);
@@ -201,19 +181,19 @@ TEST_F(WebStateListSerializationTest, Serialize_ObjC) {
   FakeWebStateListDelegate delegate;
   WebStateList web_state_list(&delegate);
   web_state_list.InsertWebState(
-      0, CreateWebState(),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_PINNED,
-      WebStateOpener());
+      CreateWebState(), WebStateList::InsertionParams::AtIndex(0).Pinned());
   web_state_list.InsertWebState(
-      1, CreateWebState(),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_ACTIVATE,
-      WebStateOpener(web_state_list.GetWebStateAt(0), 3));
+      CreateWebState(),
+      WebStateList::InsertionParams::AtIndex(1).Activate().WithOpener(
+          WebStateOpener(web_state_list.GetWebStateAt(0), 3)));
   web_state_list.InsertWebState(
-      2, CreateWebState(), WebStateList::INSERT_FORCE_INDEX,
-      WebStateOpener(web_state_list.GetWebStateAt(0), 2));
+      CreateWebState(),
+      WebStateList::InsertionParams::AtIndex(2).WithOpener(
+          WebStateOpener(web_state_list.GetWebStateAt(0), 2)));
   web_state_list.InsertWebState(
-      3, CreateWebState(), WebStateList::INSERT_FORCE_INDEX,
-      WebStateOpener(web_state_list.GetWebStateAt(1), 1));
+      CreateWebState(),
+      WebStateList::InsertionParams::AtIndex(3).WithOpener(
+          WebStateOpener(web_state_list.GetWebStateAt(1), 1)));
 
   // Serialize the session and check the serialized data is correct.
   SessionWindowIOS* session_window = SerializeWebStateList(&web_state_list);
@@ -268,26 +248,25 @@ TEST_F(WebStateListSerializationTest, Serialize_ObjC_DropNoNavigation) {
   FakeWebStateListDelegate delegate;
   WebStateList web_state_list(&delegate);
   web_state_list.InsertWebState(
-      0, CreateWebStateRestoreSessionInProgress(),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_PINNED,
-      WebStateOpener());
+      CreateWebStateRestoreSessionInProgress(),
+      WebStateList::InsertionParams::AtIndex(0).Pinned());
   web_state_list.InsertWebState(
-      0, CreateWebStateWithNoNavigation(),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_PINNED,
-      WebStateOpener());
+      CreateWebStateWithNoNavigation(),
+      WebStateList::InsertionParams::AtIndex(0).Pinned());
   web_state_list.InsertWebState(
-      1, CreateWebStateWithNoNavigation(),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_ACTIVATE,
-      WebStateOpener(web_state_list.GetWebStateAt(0), 3));
+      CreateWebStateWithNoNavigation(),
+      WebStateList::InsertionParams::AtIndex(1).Activate().WithOpener(
+          WebStateOpener(web_state_list.GetWebStateAt(0), 3)));
   web_state_list.InsertWebState(
-      2, CreateWebStateWithNoNavigation(), WebStateList::INSERT_FORCE_INDEX,
-      WebStateOpener(web_state_list.GetWebStateAt(0), 2));
+      CreateWebStateWithNoNavigation(),
+      WebStateList::InsertionParams::AtIndex(2).WithOpener(
+          WebStateOpener(web_state_list.GetWebStateAt(0), 2)));
+  web_state_list.InsertWebState(CreateWebState(),
+                                WebStateList::InsertionParams::AtIndex(3));
   web_state_list.InsertWebState(
-      3, CreateWebState(), WebStateList::INSERT_FORCE_INDEX, WebStateOpener());
-  web_state_list.InsertWebState(
-      4, CreateWebStateWithPendingNavigation(pending_item.get()),
-      WebStateList::INSERT_FORCE_INDEX,
-      WebStateOpener(web_state_list.GetWebStateAt(2), 1));
+      CreateWebStateWithPendingNavigation(pending_item.get()),
+      WebStateList::InsertionParams::AtIndex(4).WithOpener(
+          WebStateOpener(web_state_list.GetWebStateAt(2), 1)));
 
   // Serialize the session and check the serialized data is correct.
   SessionWindowIOS* session_window = SerializeWebStateList(&web_state_list);
@@ -309,36 +288,26 @@ TEST_F(WebStateListSerializationTest, Serialize_ObjC_DropDuplicates) {
   FakeWebStateListDelegate delegate;
   WebStateList web_state_list(&delegate);
   web_state_list.InsertWebState(
-      0,
       CreateWebStateWithWebStateID(web::WebStateID::FromSerializedValue(4444)),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_PINNED,
-      WebStateOpener());
+      WebStateList::InsertionParams::AtIndex(0).Pinned());
   web_state_list.InsertWebState(
-      1,
       CreateWebStateWithWebStateID(web::WebStateID::FromSerializedValue(4444)),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_PINNED,
-      WebStateOpener());
+      WebStateList::InsertionParams::AtIndex(1).Pinned());
   web_state_list.InsertWebState(
-      2,
       CreateWebStateWithWebStateID(web::WebStateID::FromSerializedValue(2222)),
-      WebStateList::INSERT_FORCE_INDEX, WebStateOpener());
+      WebStateList::InsertionParams::AtIndex(2));
   web_state_list.InsertWebState(
-      3,
       CreateWebStateWithWebStateID(web::WebStateID::FromSerializedValue(4444)),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_ACTIVATE,
-      WebStateOpener());
+      WebStateList::InsertionParams::AtIndex(3).Activate());
   web_state_list.InsertWebState(
-      4,
       CreateWebStateWithWebStateID(web::WebStateID::FromSerializedValue(4444)),
-      WebStateList::INSERT_FORCE_INDEX, WebStateOpener());
+      WebStateList::InsertionParams::AtIndex(4));
   web_state_list.InsertWebState(
-      5,
       CreateWebStateWithWebStateID(web::WebStateID::FromSerializedValue(2222)),
-      WebStateList::INSERT_FORCE_INDEX, WebStateOpener());
+      WebStateList::InsertionParams::AtIndex(5));
   web_state_list.InsertWebState(
-      6,
       CreateWebStateWithWebStateID(web::WebStateID::FromSerializedValue(1111)),
-      WebStateList::INSERT_FORCE_INDEX, WebStateOpener());
+      WebStateList::InsertionParams::AtIndex(6));
 
   // Serialize the session and check the serialized data is correct.
   SessionWindowIOS* session_window = SerializeWebStateList(&web_state_list);
@@ -363,14 +332,10 @@ TEST_F(WebStateListSerializationTest,
   WebStateList web_state_list(&delegate);
   web::WebStateID same_web_state_id = web::WebStateID::NewUnique();
   web_state_list.InsertWebState(
-      0, CreateWebStateWithNoNavigation(same_web_state_id),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_PINNED |
-          WebStateList::INSERT_ACTIVATE,
-      WebStateOpener());
-  web_state_list.InsertWebState(
-      1, CreateWebStateWithWebStateID(same_web_state_id),
-      WebStateList::INSERT_FORCE_INDEX, WebStateOpener());
-
+      CreateWebStateWithNoNavigation(same_web_state_id),
+      WebStateList::InsertionParams::AtIndex(0).Pinned().Activate());
+  web_state_list.InsertWebState(CreateWebStateWithWebStateID(same_web_state_id),
+                                WebStateList::InsertionParams::AtIndex(1));
   // Serialize the session and check the serialized data is correct.
   SessionWindowIOS* session_window = SerializeWebStateList(&web_state_list);
 
@@ -415,19 +380,19 @@ TEST_F(WebStateListSerializationTest, Serialize_Proto) {
   FakeWebStateListDelegate delegate;
   WebStateList web_state_list(&delegate);
   web_state_list.InsertWebState(
-      0, CreateWebState(),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_PINNED,
-      WebStateOpener());
+      CreateWebState(), WebStateList::InsertionParams::AtIndex(0).Pinned());
   web_state_list.InsertWebState(
-      1, CreateWebState(),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_ACTIVATE,
-      WebStateOpener(web_state_list.GetWebStateAt(0), 3));
+      CreateWebState(),
+      WebStateList::InsertionParams::AtIndex(1).Activate().WithOpener(
+          WebStateOpener(web_state_list.GetWebStateAt(0), 3)));
   web_state_list.InsertWebState(
-      2, CreateWebState(), WebStateList::INSERT_FORCE_INDEX,
-      WebStateOpener(web_state_list.GetWebStateAt(0), 2));
+      CreateWebState(),
+      WebStateList::InsertionParams::AtIndex(2).WithOpener(
+          WebStateOpener(web_state_list.GetWebStateAt(0), 2)));
   web_state_list.InsertWebState(
-      3, CreateWebState(), WebStateList::INSERT_FORCE_INDEX,
-      WebStateOpener(web_state_list.GetWebStateAt(1), 1));
+      CreateWebState(),
+      WebStateList::InsertionParams::AtIndex(3).WithOpener(
+          WebStateOpener(web_state_list.GetWebStateAt(1), 1)));
 
   // Serialize the session and check the serialized data is correct.
   ios::proto::WebStateListStorage storage;
@@ -472,26 +437,25 @@ TEST_F(WebStateListSerializationTest, Serialize_Proto_DropNoNavigation) {
   FakeWebStateListDelegate delegate;
   WebStateList web_state_list(&delegate);
   web_state_list.InsertWebState(
-      0, CreateWebStateRestoreSessionInProgress(),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_PINNED,
-      WebStateOpener());
+      CreateWebStateRestoreSessionInProgress(),
+      WebStateList::InsertionParams::AtIndex(0).Pinned());
   web_state_list.InsertWebState(
-      0, CreateWebStateWithNoNavigation(),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_PINNED,
-      WebStateOpener());
+      CreateWebStateWithNoNavigation(),
+      WebStateList::InsertionParams::AtIndex(0).Pinned());
   web_state_list.InsertWebState(
-      1, CreateWebStateWithNoNavigation(),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_ACTIVATE,
-      WebStateOpener(web_state_list.GetWebStateAt(0), 3));
+      CreateWebStateWithNoNavigation(),
+      WebStateList::InsertionParams::AtIndex(1).Activate().WithOpener(
+          WebStateOpener(web_state_list.GetWebStateAt(0), 3)));
   web_state_list.InsertWebState(
-      2, CreateWebStateWithNoNavigation(), WebStateList::INSERT_FORCE_INDEX,
-      WebStateOpener(web_state_list.GetWebStateAt(0), 2));
+      CreateWebStateWithNoNavigation(),
+      WebStateList::InsertionParams::AtIndex(2).WithOpener(
+          WebStateOpener(web_state_list.GetWebStateAt(0), 2)));
+  web_state_list.InsertWebState(CreateWebState(),
+                                WebStateList::InsertionParams::AtIndex(3));
   web_state_list.InsertWebState(
-      3, CreateWebState(), WebStateList::INSERT_FORCE_INDEX, WebStateOpener());
-  web_state_list.InsertWebState(
-      4, CreateWebStateWithPendingNavigation(pending_item.get()),
-      WebStateList::INSERT_FORCE_INDEX,
-      WebStateOpener(web_state_list.GetWebStateAt(2), 1));
+      CreateWebStateWithPendingNavigation(pending_item.get()),
+      WebStateList::InsertionParams::AtIndex(4).WithOpener(
+          WebStateOpener(web_state_list.GetWebStateAt(2), 1)));
 
   // Serialize the session and check the serialized data is correct.
   ios::proto::WebStateListStorage storage;
@@ -515,36 +479,26 @@ TEST_F(WebStateListSerializationTest, Serialize_Proto_DropDuplicates) {
   FakeWebStateListDelegate delegate;
   WebStateList web_state_list(&delegate);
   web_state_list.InsertWebState(
-      0,
       CreateWebStateWithWebStateID(web::WebStateID::FromSerializedValue(4444)),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_PINNED,
-      WebStateOpener());
+      WebStateList::InsertionParams::AtIndex(0).Pinned());
   web_state_list.InsertWebState(
-      1,
       CreateWebStateWithWebStateID(web::WebStateID::FromSerializedValue(4444)),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_PINNED,
-      WebStateOpener());
+      WebStateList::InsertionParams::AtIndex(1).Pinned());
   web_state_list.InsertWebState(
-      2,
       CreateWebStateWithWebStateID(web::WebStateID::FromSerializedValue(2222)),
-      WebStateList::INSERT_FORCE_INDEX, WebStateOpener());
+      WebStateList::InsertionParams::AtIndex(2));
   web_state_list.InsertWebState(
-      3,
       CreateWebStateWithWebStateID(web::WebStateID::FromSerializedValue(4444)),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_ACTIVATE,
-      WebStateOpener());
+      WebStateList::InsertionParams::AtIndex(3).Activate());
   web_state_list.InsertWebState(
-      4,
       CreateWebStateWithWebStateID(web::WebStateID::FromSerializedValue(4444)),
-      WebStateList::INSERT_FORCE_INDEX, WebStateOpener());
+      WebStateList::InsertionParams::AtIndex(4));
   web_state_list.InsertWebState(
-      5,
       CreateWebStateWithWebStateID(web::WebStateID::FromSerializedValue(2222)),
-      WebStateList::INSERT_FORCE_INDEX, WebStateOpener());
+      WebStateList::InsertionParams::AtIndex(5));
   web_state_list.InsertWebState(
-      6,
       CreateWebStateWithWebStateID(web::WebStateID::FromSerializedValue(1111)),
-      WebStateList::INSERT_FORCE_INDEX, WebStateOpener());
+      WebStateList::InsertionParams::AtIndex(6));
 
   // Serialize the session and check the serialized data is correct.
   ios::proto::WebStateListStorage storage;
@@ -571,14 +525,10 @@ TEST_F(WebStateListSerializationTest,
   WebStateList web_state_list(&delegate);
   web::WebStateID same_web_state_id = web::WebStateID::NewUnique();
   web_state_list.InsertWebState(
-      0, CreateWebStateWithNoNavigation(same_web_state_id),
-      WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_PINNED |
-          WebStateList::INSERT_ACTIVATE,
-      WebStateOpener());
-  web_state_list.InsertWebState(
-      1, CreateWebStateWithWebStateID(same_web_state_id),
-      WebStateList::INSERT_FORCE_INDEX, WebStateOpener());
-
+      CreateWebStateWithNoNavigation(same_web_state_id),
+      WebStateList::InsertionParams::AtIndex(0).Pinned().Activate());
+  web_state_list.InsertWebState(CreateWebStateWithWebStateID(same_web_state_id),
+                                WebStateList::InsertionParams::AtIndex(1));
   // Serialize the session and check the serialized data is correct.
   ios::proto::WebStateListStorage storage;
   SerializeWebStateList(web_state_list, storage);
@@ -604,19 +554,19 @@ TEST_F(WebStateListSerializationTest, Deserialize_ObjC_PinnedEnabled) {
   {
     WebStateList web_state_list(&delegate);
     web_state_list.InsertWebState(
-        0, CreateWebState(),
-        WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_PINNED,
-        WebStateOpener());
+        CreateWebState(), WebStateList::InsertionParams::AtIndex(0).Pinned());
     web_state_list.InsertWebState(
-        1, CreateWebState(),
-        WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_ACTIVATE,
-        WebStateOpener(web_state_list.GetWebStateAt(0), 3));
+        CreateWebState(),
+        WebStateList::InsertionParams::AtIndex(1).Activate().WithOpener(
+            WebStateOpener(web_state_list.GetWebStateAt(0), 3)));
     web_state_list.InsertWebState(
-        2, CreateWebState(), WebStateList::INSERT_FORCE_INDEX,
-        WebStateOpener(web_state_list.GetWebStateAt(0), 2));
+        CreateWebState(),
+        WebStateList::InsertionParams::AtIndex(2).WithOpener(
+            WebStateOpener(web_state_list.GetWebStateAt(0), 2)));
     web_state_list.InsertWebState(
-        3, CreateWebState(), WebStateList::INSERT_FORCE_INDEX,
-        WebStateOpener(web_state_list.GetWebStateAt(1), 1));
+        CreateWebState(),
+        WebStateList::InsertionParams::AtIndex(3).WithOpener(
+            WebStateOpener(web_state_list.GetWebStateAt(1), 1)));
 
     session_window = SerializeWebStateList(&web_state_list);
 
@@ -662,19 +612,19 @@ TEST_F(WebStateListSerializationTest, Deserialize_ObjC_PinnedDisabled) {
   {
     WebStateList web_state_list(&delegate);
     web_state_list.InsertWebState(
-        0, CreateWebState(),
-        WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_PINNED,
-        WebStateOpener());
+        CreateWebState(), WebStateList::InsertionParams::AtIndex(0).Pinned());
     web_state_list.InsertWebState(
-        1, CreateWebState(),
-        WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_ACTIVATE,
-        WebStateOpener(web_state_list.GetWebStateAt(0), 3));
+        CreateWebState(),
+        WebStateList::InsertionParams::AtIndex(1).Activate().WithOpener(
+            WebStateOpener(web_state_list.GetWebStateAt(0), 3)));
     web_state_list.InsertWebState(
-        2, CreateWebState(), WebStateList::INSERT_FORCE_INDEX,
-        WebStateOpener(web_state_list.GetWebStateAt(0), 2));
+        CreateWebState(),
+        WebStateList::InsertionParams::AtIndex(2).WithOpener(
+            WebStateOpener(web_state_list.GetWebStateAt(0), 2)));
     web_state_list.InsertWebState(
-        3, CreateWebState(), WebStateList::INSERT_FORCE_INDEX,
-        WebStateOpener(web_state_list.GetWebStateAt(1), 1));
+        CreateWebState(),
+        WebStateList::InsertionParams::AtIndex(3).WithOpener(
+            WebStateOpener(web_state_list.GetWebStateAt(1), 1)));
 
     session_window = SerializeWebStateList(&web_state_list);
 
@@ -720,19 +670,19 @@ TEST_F(WebStateListSerializationTest, Deserialize_Proto_PinnedEnabled) {
   {
     WebStateList web_state_list(&delegate);
     web_state_list.InsertWebState(
-        0, CreateWebState(),
-        WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_PINNED,
-        WebStateOpener());
+        CreateWebState(), WebStateList::InsertionParams::AtIndex(0).Pinned());
     web_state_list.InsertWebState(
-        1, CreateWebState(),
-        WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_ACTIVATE,
-        WebStateOpener(web_state_list.GetWebStateAt(0), 3));
+        CreateWebState(),
+        WebStateList::InsertionParams::AtIndex(1).Activate().WithOpener(
+            WebStateOpener(web_state_list.GetWebStateAt(0), 3)));
     web_state_list.InsertWebState(
-        2, CreateWebState(), WebStateList::INSERT_FORCE_INDEX,
-        WebStateOpener(web_state_list.GetWebStateAt(0), 2));
+        CreateWebState(),
+        WebStateList::InsertionParams::AtIndex(2).WithOpener(
+            WebStateOpener(web_state_list.GetWebStateAt(0), 2)));
     web_state_list.InsertWebState(
-        3, CreateWebState(), WebStateList::INSERT_FORCE_INDEX,
-        WebStateOpener(web_state_list.GetWebStateAt(1), 1));
+        CreateWebState(),
+        WebStateList::InsertionParams::AtIndex(3).WithOpener(
+            WebStateOpener(web_state_list.GetWebStateAt(1), 1)));
 
     SerializeWebStateList(web_state_list, storage);
 
@@ -778,19 +728,19 @@ TEST_F(WebStateListSerializationTest, Deserialize_Proto_PinnedDisabled) {
   {
     WebStateList web_state_list(&delegate);
     web_state_list.InsertWebState(
-        0, CreateWebState(),
-        WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_PINNED,
-        WebStateOpener());
+        CreateWebState(), WebStateList::InsertionParams::AtIndex(0).Pinned());
     web_state_list.InsertWebState(
-        1, CreateWebState(),
-        WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_ACTIVATE,
-        WebStateOpener(web_state_list.GetWebStateAt(0), 3));
+        CreateWebState(),
+        WebStateList::InsertionParams::AtIndex(1).Activate().WithOpener(
+            WebStateOpener(web_state_list.GetWebStateAt(0), 3)));
     web_state_list.InsertWebState(
-        2, CreateWebState(), WebStateList::INSERT_FORCE_INDEX,
-        WebStateOpener(web_state_list.GetWebStateAt(0), 2));
+        CreateWebState(),
+        WebStateList::InsertionParams::AtIndex(2).WithOpener(
+            WebStateOpener(web_state_list.GetWebStateAt(0), 2)));
     web_state_list.InsertWebState(
-        3, CreateWebState(), WebStateList::INSERT_FORCE_INDEX,
-        WebStateOpener(web_state_list.GetWebStateAt(1), 1));
+        CreateWebState(),
+        WebStateList::InsertionParams::AtIndex(3).WithOpener(
+            WebStateOpener(web_state_list.GetWebStateAt(1), 1)));
 
     SerializeWebStateList(web_state_list, storage);
 
@@ -843,19 +793,19 @@ TEST_F(WebStateListSerializationTest, Deserialize_Proto_SessionIDCheck) {
   {
     WebStateList web_state_list(&delegate);
     web_state_list.InsertWebState(
-        0, CreateWebState(),
-        WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_PINNED,
-        WebStateOpener());
+        CreateWebState(), WebStateList::InsertionParams::AtIndex(0).Pinned());
     web_state_list.InsertWebState(
-        1, CreateWebState(),
-        WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_ACTIVATE,
-        WebStateOpener(web_state_list.GetWebStateAt(0), 3));
+        CreateWebState(),
+        WebStateList::InsertionParams::AtIndex(1).Activate().WithOpener(
+            WebStateOpener(web_state_list.GetWebStateAt(0), 3)));
     web_state_list.InsertWebState(
-        2, CreateWebState(), WebStateList::INSERT_FORCE_INDEX,
-        WebStateOpener(web_state_list.GetWebStateAt(0), 2));
+        CreateWebState(),
+        WebStateList::InsertionParams::AtIndex(2).WithOpener(
+            WebStateOpener(web_state_list.GetWebStateAt(0), 2)));
     web_state_list.InsertWebState(
-        3, CreateWebState(), WebStateList::INSERT_FORCE_INDEX,
-        WebStateOpener(web_state_list.GetWebStateAt(1), 1));
+        CreateWebState(),
+        WebStateList::InsertionParams::AtIndex(3).WithOpener(
+            WebStateOpener(web_state_list.GetWebStateAt(1), 1)));
 
     SerializeWebStateList(web_state_list, storage);
 

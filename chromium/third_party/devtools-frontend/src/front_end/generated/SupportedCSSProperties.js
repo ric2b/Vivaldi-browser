@@ -2825,15 +2825,35 @@ export const generatedProperties = [
  },
  {
   "keywords": [
-   "none"
-  ],
-  "name": "position-fallback"
- },
- {
-  "keywords": [
    "normal"
   ],
   "name": "position-fallback-bounds"
+ },
+ {
+  "longhands": [
+   "position-try-order",
+   "position-try-options"
+  ],
+  "name": "position-try"
+ },
+ {
+  "keywords": [
+   "none",
+   "flip-block",
+   "flip-inline",
+   "flip-start"
+  ],
+  "name": "position-try-options"
+ },
+ {
+  "keywords": [
+   "normal",
+   "most-width",
+   "most-height",
+   "most-block-size",
+   "most-inline-size"
+  ],
+  "name": "position-try-order"
  },
  {
   "name": "prefix"
@@ -2851,6 +2871,17 @@ export const generatedProperties = [
  },
  {
   "name": "range"
+ },
+ {
+  "keywords": [
+   "normal",
+   "flex-visual",
+   "flex-flow",
+   "grid-rows",
+   "grid-columns",
+   "grid-order"
+  ],
+  "name": "reading-order-items"
  },
  {
   "keywords": [
@@ -3335,6 +3366,9 @@ export const generatedProperties = [
   "name": "text-autospace"
  },
  {
+  "name": "text-box-edge"
+ },
+ {
   "keywords": [
    "none",
    "start",
@@ -3681,6 +3715,12 @@ export const generatedProperties = [
  },
  {
   "name": "view-timeline-name"
+ },
+ {
+  "keywords": [
+   "none"
+  ],
+  "name": "view-transition-class"
  },
  {
   "keywords": [
@@ -5226,20 +5266,42 @@ export const generatedPropertyValues = {
    "sticky"
   ]
  },
- "position-fallback": {
-  "values": [
-   "none"
-  ]
- },
  "position-fallback-bounds": {
   "values": [
    "normal"
+  ]
+ },
+ "position-try-options": {
+  "values": [
+   "none",
+   "flip-block",
+   "flip-inline",
+   "flip-start"
+  ]
+ },
+ "position-try-order": {
+  "values": [
+   "normal",
+   "most-width",
+   "most-height",
+   "most-block-size",
+   "most-inline-size"
   ]
  },
  "quotes": {
   "values": [
    "auto",
    "none"
+  ]
+ },
+ "reading-order-items": {
+  "values": [
+   "normal",
+   "flex-visual",
+   "flex-flow",
+   "grid-rows",
+   "grid-columns",
+   "grid-order"
   ]
  },
  "resize": {
@@ -5725,6 +5787,11 @@ export const generatedPropertyValues = {
    "text-top",
    "text-bottom",
    "middle"
+  ]
+ },
+ "view-transition-class": {
+  "values": [
+   "none"
   ]
  },
  "view-transition-name": {

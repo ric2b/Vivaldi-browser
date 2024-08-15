@@ -25,7 +25,9 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/omnibox/browser/vector_icons.h"
+#include "ui/color/color_id.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/views/style/typography.h"
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #include "components/plus_addresses/resources/vector_icons.h"
 #endif
@@ -62,7 +64,7 @@ constexpr int kAutofillPopupAdditionalDoubleRowHeight = 22;
 constexpr int kAutofillPopupAdditionalDoubleRowHeightNewStyle = 16;
 
 // The additional padding of the row in case it has three lines of text.
-constexpr int kAutofillPopupAdditionalPadding = 16;
+constexpr int kAutofillPopupAdditionalVerticalPadding = 16;
 
 // Vertical spacing between labels in one row.
 constexpr int kAdjacentLabelsVerticalSpacing = 2;
@@ -276,6 +278,10 @@ std::u16string GetVoiceOverStringFromSuggestion(const Suggestion& suggestion) {
   return base::JoinString(text, u" ");
 }
 
+// TODO(b/330912574): Refactor this code that is today confusing. Horizontal
+// margins are being set both here and in the popup row. Furthermore, there is a
+// `PopupBaseView::GetHorizontalMargin()` that makes things even more
+// complicated.
 gfx::Insets GetMarginsForContentCell(bool has_control_element) {
   int left_margin = PopupBaseView::GetHorizontalMargin();
   int right_margin = left_margin;
@@ -451,8 +457,11 @@ void AddSuggestionContentToView(
   // If there are three rows in total, add extra padding to avoid cramming.
   DCHECK_LE(subtext_views.size(), 2u);
   if (subtext_views.size() == 2u) {
-    layout.set_inside_border_insets(gfx::Insets::VH(
-        kAutofillPopupAdditionalPadding, PopupBaseView::GetHorizontalMargin()));
+    layout.set_inside_border_insets(
+        gfx::Insets::TLBR(kAutofillPopupAdditionalVerticalPadding,
+                          layout.inside_border_insets().left(),
+                          kAutofillPopupAdditionalVerticalPadding,
+                          layout.inside_border_insets().right()));
   }
 
   // The leading icon.
@@ -518,19 +527,31 @@ std::unique_ptr<views::Label> CreateMainTextLabel(
   int non_primary_text_style = ShouldApplyNewAutofillPopupStyle()
                                    ? views::style::TextStyle::STYLE_BODY_3
                                    : views::style::TextStyle::STYLE_PRIMARY;
-  return std::make_unique<views::Label>(
+  auto label = std::make_unique<views::Label>(
       main_text.value, views::style::CONTEXT_DIALOG_BODY_TEXT,
       main_text.is_primary ? primary_text_style : non_primary_text_style);
+
+  if (!main_text.is_primary && ShouldApplyNewAutofillPopupStyle()) {
+    label->SetEnabledColorId(ui::kColorLabelForegroundSecondary);
+  }
+
+  return label;
 }
 
 // Creates a label for the suggestion's minor text.
 std::unique_ptr<views::Label> CreateMinorTextLabel(
     const Suggestion::Text& minor_text) {
-  return minor_text.value.empty()
-             ? nullptr
-             : std::make_unique<views::Label>(
-                   minor_text.value, views::style::CONTEXT_DIALOG_BODY_TEXT,
-                   GetSecondaryTextStyle());
+  if (minor_text.value.empty()) {
+    return nullptr;
+  }
+
+  auto label = std::make_unique<views::Label>(
+      minor_text.value, views::style::CONTEXT_DIALOG_BODY_TEXT,
+      GetSecondaryTextStyle());
+  if (ShouldApplyNewAutofillPopupStyle()) {
+    label->SetEnabledColorId(ui::kColorLabelForegroundSecondary);
+  }
+  return label;
 }
 
 int GetMaxPopupAddressProfileWidth() {
@@ -572,6 +593,9 @@ std::vector<std::unique_ptr<views::View>> CreateAndTrackSubtextViews(
               label_text.value,
               ChromeTextContext::CONTEXT_DIALOG_BODY_TEXT_SMALL,
               text_style ? *text_style : GetSecondaryTextStyle()));
+      if (ShouldApplyNewAutofillPopupStyle()) {
+        label->SetEnabledColorId(ui::kColorLabelForegroundSecondary);
+      }
       content_view.TrackLabel(label);
       // TODO(crbug.com/1459990): Remove feature check as part of the clean up.
       if (!base::FeatureList::IsEnabled(

@@ -9,6 +9,8 @@
 #include "base/strings/string_piece.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/webid/account_selection_view.h"
+#include "chrome/browser/webid/identity_provider_permission_request.h"
+#include "components/permissions/permission_request_manager.h"
 
 IdentityDialogController::IdentityDialogController(
     content::WebContents* rp_web_contents)
@@ -30,18 +32,20 @@ void IdentityDialogController::ShowAccountsDialog(
     const std::vector<content::IdentityProviderData>& identity_provider_data,
     content::IdentityRequestAccount::SignInMode sign_in_mode,
     blink::mojom::RpMode rp_mode,
-    bool show_auto_reauthn_checkbox,
+    const std::optional<content::IdentityProviderData>& new_account_idp,
     AccountSelectionCallback on_selected,
     LoginToIdPCallback on_add_account,
-    DismissCallback dismiss_callback) {
+    DismissCallback dismiss_callback,
+    AccountsDisplayedCallback accounts_displayed_callback) {
   on_account_selection_ = std::move(on_selected);
   on_login_ = std::move(on_add_account);
   on_dismiss_ = std::move(dismiss_callback);
+  on_accounts_displayed_ = std::move(accounts_displayed_callback);
   if (!account_view_)
     account_view_ = AccountSelectionView::Create(this);
   account_view_->Show(top_frame_for_display, iframe_for_display,
                       identity_provider_data, sign_in_mode, rp_mode,
-                      show_auto_reauthn_checkbox);
+                      new_account_idp);
 }
 
 void IdentityDialogController::ShowFailureDialog(
@@ -88,17 +92,32 @@ void IdentityDialogController::ShowErrorDialog(
                                  idp_metadata, error);
 }
 
-void IdentityDialogController::OnLoginToIdP(const GURL& idp_login_url) {
-  std::move(on_login_).Run(idp_login_url);
+void IdentityDialogController::ShowLoadingDialog(
+    const std::string& top_frame_for_display,
+    const std::string& idp_for_display,
+    blink::mojom::RpContext rp_context,
+    blink::mojom::RpMode rp_mode,
+    DismissCallback dismiss_callback) {
+  on_dismiss_ = std::move(dismiss_callback);
+  if (!account_view_) {
+    account_view_ = AccountSelectionView::Create(this);
+  }
+
+  account_view_->ShowLoadingDialog(top_frame_for_display, idp_for_display,
+                                   rp_context, rp_mode);
+}
+
+void IdentityDialogController::OnLoginToIdP(const GURL& idp_config_url,
+                                            const GURL& idp_login_url) {
+  std::move(on_login_).Run(idp_config_url, idp_login_url);
 }
 
 void IdentityDialogController::OnMoreDetails() {
   std::move(on_more_details_).Run();
 }
 
-void IdentityDialogController::ShowIdpSigninFailureDialog(
-    base::OnceClosure user_notified_callback) {
-  NOTIMPLEMENTED();
+void IdentityDialogController::OnAccountsDisplayed() {
+  std::move(on_accounts_displayed_).Run();
 }
 
 std::string IdentityDialogController::GetTitle() const {
@@ -163,4 +182,17 @@ void IdentityDialogController::CloseModalDialog() {
 #endif  // BUILDFLAG(IS_ANDROID)
   CHECK(account_view_);
   account_view_->CloseModalDialog();
+}
+
+void IdentityDialogController::RequestIdPRegistrationPermision(
+    const url::Origin& origin,
+    base::OnceCallback<void(bool accepted)> callback) {
+  permissions::PermissionRequestManager* permission_request_manager =
+      permissions::PermissionRequestManager::FromWebContents(rp_web_contents_);
+
+  auto* request =
+      new IdentityProviderPermissionRequest(origin, std::move(callback));
+
+  permission_request_manager->AddRequest(
+      rp_web_contents_->GetPrimaryMainFrame(), request);
 }

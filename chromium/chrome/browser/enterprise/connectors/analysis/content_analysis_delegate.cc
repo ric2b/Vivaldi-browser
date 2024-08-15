@@ -26,6 +26,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/connectors/analysis/analysis_settings.h"
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_dialog.h"
+#include "chrome/browser/enterprise/connectors/analysis/content_analysis_features.h"
 #include "chrome/browser/enterprise/connectors/analysis/files_request_handler.h"
 #include "chrome/browser/enterprise/connectors/analysis/page_print_analysis_request.h"
 #include "chrome/browser/enterprise/connectors/common.h"
@@ -40,6 +41,7 @@
 #include "chrome/browser/safe_browsing/download_protection/check_client_download_request.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/enterprise/buildflags/buildflags.h"
+#include "components/enterprise/common/files_scan_data.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/policy/core/common/chrome_schema.h"
 #include "components/prefs/pref_service.h"
@@ -81,6 +83,45 @@ ContentAnalysisDelegate::OnAckAllRequestsCallback* OnAckAllRequestsStorage() {
   return callback.get();
 }
 
+void OnContentAnalysisComplete(
+    std::unique_ptr<FilesScanData> files_scan_data,
+    ContentAnalysisDelegate::ForFilesCompletionCallback callback,
+    const ContentAnalysisDelegate::Data& data,
+    ContentAnalysisDelegate::Result& result) {
+  std::set<size_t> file_indexes_to_block =
+      files_scan_data->IndexesToBlock(result.paths_results);
+
+  std::vector<bool> allowed;
+  allowed.reserve(files_scan_data->base_paths().size());
+  for (size_t i = 0; i < files_scan_data->base_paths().size(); ++i) {
+    allowed.push_back(file_indexes_to_block.count(i) == 0);
+  }
+
+  std::move(callback).Run(files_scan_data->take_base_paths(),
+                          std::move(allowed));
+}
+
+void OnPathsExpanded(
+    base::WeakPtr<content::WebContents> web_contents,
+    safe_browsing::DeepScanAccessPoint access_point,
+    ContentAnalysisDelegate::Data data,
+    std::unique_ptr<FilesScanData> files_scan_data,
+    ContentAnalysisDelegate::ForFilesCompletionCallback callback) {
+  if (!web_contents) {
+    size_t size = files_scan_data->base_paths().size();
+    std::move(callback).Run(files_scan_data->take_base_paths(),
+                            std::vector<bool>(size, true));
+    return;
+  }
+
+  data.paths = files_scan_data->expanded_paths();
+  ContentAnalysisDelegate::CreateForWebContents(
+      web_contents.get(), std::move(data),
+      base::BindOnce(&OnContentAnalysisComplete, std::move(files_scan_data),
+                     std::move(callback)),
+      access_point);
+}
+
 }  // namespace
 
 StringAnalysisRequest::StringAnalysisRequest(
@@ -116,6 +157,34 @@ ContentAnalysisDelegate::Data::Data(Data&& other) = default;
 ContentAnalysisDelegate::Data& ContentAnalysisDelegate::Data::operator=(
     ContentAnalysisDelegate::Data&& other) = default;
 ContentAnalysisDelegate::Data::~Data() = default;
+
+void ContentAnalysisDelegate::Data::AddClipboardData(
+    const content::ClipboardPasteData& clipboard_paste_data) {
+  if (!clipboard_paste_data.text.empty()) {
+    text.push_back(base::UTF16ToUTF8(clipboard_paste_data.text));
+  }
+  if (!clipboard_paste_data.html.empty()) {
+    text.push_back(base::UTF16ToUTF8(clipboard_paste_data.html));
+  }
+  if (!clipboard_paste_data.svg.empty()) {
+    text.push_back(base::UTF16ToUTF8(clipboard_paste_data.svg));
+  }
+  if (!clipboard_paste_data.rtf.empty()) {
+    text.push_back(clipboard_paste_data.rtf);
+  }
+  if (!clipboard_paste_data.png.empty()) {
+    // Send image only to local agent for analysis.
+    if (settings.cloud_or_local_settings.is_local_analysis()) {
+      image = std::string(clipboard_paste_data.png.begin(),
+                          clipboard_paste_data.png.end());
+    }
+  }
+  if (!clipboard_paste_data.custom_data.empty()) {
+    for (const auto& entry : clipboard_paste_data.custom_data) {
+      text.push_back(base::UTF16ToUTF8(entry.second));
+    }
+  }
+}
 
 ContentAnalysisDelegate::Result::Result() = default;
 ContentAnalysisDelegate::Result::Result(Result&& other) = default;
@@ -208,6 +277,16 @@ void ContentAnalysisDelegate::Cancel(bool warning) {
 
 std::optional<std::u16string> ContentAnalysisDelegate::GetCustomMessage()
     const {
+  // Rule-based custom messages take precedence over policy-based.
+  if (IsDialogCustomRuleMessageEnabled()) {
+    std::u16string custom_rule_message =
+        GetCustomRuleString(custom_rule_message_);
+    if (!custom_rule_message.empty()) {
+      return l10n_util::GetStringFUTF16(IDS_DEEP_SCANNING_DIALOG_CUSTOM_MESSAGE,
+                                        custom_rule_message);
+    }
+  }
+
   auto element = data_.settings.tags.find(final_result_tag_);
   if (element != data_.settings.tags.end() &&
       !element->second.custom_message.message.empty()) {
@@ -226,6 +305,19 @@ std::optional<GURL> ContentAnalysisDelegate::GetCustomLearnMoreUrl() const {
     return element->second.custom_message.learn_more_url;
   }
 
+  return std::nullopt;
+}
+
+std::optional<std::vector<std::pair<gfx::Range, GURL>>>
+ContentAnalysisDelegate::GetCustomRuleMessageRanges() const {
+  size_t offset;
+  l10n_util::GetStringFUTF16(IDS_DEEP_SCANNING_DIALOG_CUSTOM_MESSAGE,
+                             std::u16string{}, &offset);
+  std::vector<std::pair<gfx::Range, GURL>> custom_rule_message_ranges =
+      GetCustomRuleStyles(custom_rule_message_, offset);
+  if (!custom_rule_message_ranges.empty()) {
+    return custom_rule_message_ranges;
+  }
   return std::nullopt;
 }
 
@@ -377,6 +469,23 @@ void ContentAnalysisDelegate::CreateForWebContents(
 }
 
 // static
+void ContentAnalysisDelegate::CreateForFilesInWebContents(
+    content::WebContents* web_contents,
+    Data data,
+    ForFilesCompletionCallback callback,
+    safe_browsing::DeepScanAccessPoint access_point) {
+  DCHECK(data.text.empty());
+  DCHECK(data.image.empty());
+  DCHECK(!data.page.IsValid());
+
+  auto files_scan_data = std::make_unique<FilesScanData>(std::move(data.paths));
+  auto* files_scan_data_ptr = files_scan_data.get();
+  files_scan_data_ptr->ExpandPaths(base::BindOnce(
+      &OnPathsExpanded, web_contents->GetWeakPtr(), access_point,
+      std::move(data), std::move(files_scan_data), std::move(callback)));
+}
+
+// static
 void ContentAnalysisDelegate::SetFactoryForTesting(Factory factory) {
   *GetFactoryStorage() = factory;
 }
@@ -471,7 +580,8 @@ void ContentAnalysisDelegate::StringRequestCallback(
       CalculateEventResult(data_.settings, text_complies, should_warn));
 
   UpdateFinalResult(string_request_result_.final_result,
-                    string_request_result_.tag);
+                    string_request_result_.tag,
+                    string_request_result_.custom_rule_message);
 
   if (should_warn) {
     text_warning_ = true;
@@ -516,7 +626,8 @@ void ContentAnalysisDelegate::ImageRequestCallback(
       CalculateEventResult(data_.settings, image_complies, should_warn));
 
   UpdateFinalResult(image_request_result_.final_result,
-                    image_request_result_.tag);
+                    image_request_result_.tag,
+                    image_request_result_.custom_rule_message);
 
   if (should_warn) {
     image_warning_ = true;
@@ -541,7 +652,8 @@ void ContentAnalysisDelegate::FilesRequestCallback(
     if (result == FinalContentAnalysisResult::WARNING) {
       warned_file_indices_.push_back(index);
     }
-    UpdateFinalResult(result, results[index].tag);
+    UpdateFinalResult(result, results[index].tag,
+                      results[index].custom_rule_message);
   }
   files_request_results_ = std::move(results);
   files_request_complete_ = true;
@@ -603,7 +715,8 @@ void ContentAnalysisDelegate::PageRequestCallback(
       CalculateEventResult(data_.settings, result_.page_result, should_warn));
 
   UpdateFinalResult(request_handler_result.final_result,
-                    request_handler_result.tag);
+                    request_handler_result.tag,
+                    request_handler_result.custom_rule_message);
 
   if (should_warn) {
     page_warning_ = true;
@@ -929,10 +1042,13 @@ void ContentAnalysisDelegate::RunCallback() {
 
 void ContentAnalysisDelegate::UpdateFinalResult(
     FinalContentAnalysisResult result,
-    const std::string& tag) {
+    const std::string& tag,
+    const ContentAnalysisResponse::Result::TriggeredRule::CustomRuleMessage&
+        custom_rule_message) {
   if (result < final_result_) {
     final_result_ = result;
     final_result_tag_ = tag;
+    custom_rule_message_ = custom_rule_message;
   }
 }
 

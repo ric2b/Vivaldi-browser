@@ -210,7 +210,7 @@ UI.ActionRegistration.registerActionExtension({
 Common.Settings.registerSettingExtension({
   category: Common.Settings.SettingCategory.NETWORK,
   title: i18nLazyString(UIStrings.forceAdBlocking),
-  settingName: 'network.adBlockingEnabled',
+  settingName: 'network.ad-blocking-enabled',
   settingType: Common.Settings.SettingType.BOOLEAN,
   storageType: Common.Settings.SettingStorageType.Session,
   defaultValue: false,
@@ -230,7 +230,7 @@ Common.Settings.registerSettingExtension({
   category: Common.Settings.SettingCategory.GLOBAL,
   storageType: Common.Settings.SettingStorageType.Synced,
   title: i18nLazyString(UIStrings.autoOpenDevTools),
-  settingName: 'autoAttachToCreatedPages',
+  settingName: 'auto-attach-to-created-pages',
   settingType: Common.Settings.SettingType.BOOLEAN,
   order: 2,
   defaultValue: false,
@@ -250,7 +250,7 @@ Common.Settings.registerSettingExtension({
   category: Common.Settings.SettingCategory.APPEARANCE,
   storageType: Common.Settings.SettingStorageType.Synced,
   title: i18nLazyString(UIStrings.disablePaused),
-  settingName: 'disablePausedStateOverlay',
+  settingName: 'disable-paused-state-overlay',
   settingType: Common.Settings.SettingType.BOOLEAN,
   defaultValue: false,
 });
@@ -262,10 +262,6 @@ UI.Toolbar.registerToolbarItem({
   },
   order: 2,
   location: UI.Toolbar.ToolbarItemLocation.MAIN_TOOLBAR_LEFT,
-  showLabel: undefined,
-  condition: undefined,
-  separator: undefined,
-  actionId: undefined,
 });
 
 UI.Toolbar.registerToolbarItem({
@@ -275,9 +271,5 @@ UI.Toolbar.registerToolbarItem({
   },
   order: 98,
   location: UI.Toolbar.ToolbarItemLocation.MAIN_TOOLBAR_RIGHT,
-  showLabel: undefined,
-  condition: undefined,
-  separator: undefined,
-  actionId: undefined,
   experiment: Root.Runtime.ExperimentName.OUTERMOST_TARGET_SELECTOR,
 });

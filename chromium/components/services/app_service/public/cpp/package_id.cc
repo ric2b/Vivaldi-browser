@@ -4,17 +4,18 @@
 
 #include "components/services/app_service/public/cpp/package_id.h"
 
+#include <optional>
 #include <ostream>
 #include <string>
 
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
 #include "components/services/app_service/public/cpp/app_types.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace apps {
 
 namespace {
+constexpr char kUnknownName[] = "unknown";
 constexpr char kArcPlatformName[] = "android";
 constexpr char kWebPlatformName[] = "web";
 
@@ -31,6 +32,8 @@ AppType PlatformNameToAppType(std::string_view platform_name) {
 
 std::string_view AppTypeToPlatformName(AppType app_type) {
   switch (app_type) {
+    case AppType::kUnknown:
+      return kUnknownName;
     case AppType::kArc:
       return kArcPlatformName;
     case AppType::kWeb:
@@ -45,9 +48,12 @@ std::string_view AppTypeToPlatformName(AppType app_type) {
 
 PackageId::PackageId(AppType app_type, std::string_view identifier)
     : app_type_(app_type), identifier_(identifier) {
-  DCHECK(app_type_ == AppType::kArc || app_type_ == AppType::kWeb);
+  DCHECK(app_type_ == AppType::kUnknown || app_type_ == AppType::kArc ||
+         app_type_ == AppType::kWeb);
   DCHECK(!identifier_.empty());
 }
+
+PackageId::PackageId() : PackageId(AppType::kUnknown, kUnknownName) {}
 
 PackageId::PackageId(const PackageId&) = default;
 PackageId& PackageId::operator=(const PackageId&) = default;
@@ -77,17 +83,17 @@ bool PackageId::operator!=(const PackageId& rhs) const {
 }
 
 // static
-absl::optional<PackageId> PackageId::FromString(
+std::optional<PackageId> PackageId::FromString(
     std::string_view package_id_string) {
   size_t separator = package_id_string.find_first_of(':');
   if (separator == std::string::npos ||
       separator == package_id_string.size() - 1) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   AppType type = PlatformNameToAppType(package_id_string.substr(0, separator));
   if (type == AppType::kUnknown) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   return PackageId(type, package_id_string.substr(separator + 1));

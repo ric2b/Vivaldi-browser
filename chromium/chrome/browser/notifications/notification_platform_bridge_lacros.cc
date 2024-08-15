@@ -42,6 +42,10 @@ crosapi::mojom::NotificationType ToMojo(message_center::NotificationType type) {
       // TYPE_CUSTOM exists only within ash.
       NOTREACHED();
       return crosapi::mojom::NotificationType::kSimple;
+    case message_center::NOTIFICATION_TYPE_CONVERSATION:
+      // TYPE_CONVERSATION is not currently supported for Lacros.
+      NOTREACHED();
+      return crosapi::mojom::NotificationType::kSimple;
   }
 }
 
@@ -72,6 +76,18 @@ crosapi::mojom::FullscreenVisibility ToMojo(
   }
 }
 
+crosapi::mojom::SettingsButtonHandler ToMojo(
+    message_center::SettingsButtonHandler settings_button_handler) {
+  switch (settings_button_handler) {
+    case message_center::SettingsButtonHandler::NONE:
+      return crosapi::mojom::SettingsButtonHandler::kNone;
+    case message_center::SettingsButtonHandler::INLINE:
+      return crosapi::mojom::SettingsButtonHandler::kInline;
+    case message_center::SettingsButtonHandler::DELEGATE:
+      return crosapi::mojom::SettingsButtonHandler::kDelegate;
+  }
+}
+
 crosapi::mojom::NotificationPtr ToMojo(
     const message_center::Notification& notification,
     const ui::ColorProvider* color_provider) {
@@ -97,8 +113,8 @@ crosapi::mojom::NotificationPtr ToMojo(
   }
   for (const auto& item : notification.items()) {
     auto mojo_item = crosapi::mojom::NotificationItem::New();
-    mojo_item->title = item.title;
-    mojo_item->message = item.message;
+    mojo_item->title = item.title();
+    mojo_item->message = item.message();
     mojo_note->items.push_back(std::move(mojo_item));
   }
   mojo_note->progress = std::clamp(notification.progress(), -1, 100);
@@ -137,6 +153,9 @@ crosapi::mojom::NotificationPtr ToMojo(
   if (image_path.has_value()) {
     mojo_note->image_path = image_path;
   }
+
+  mojo_note->settings_button_handler =
+      ToMojo(notification.rich_notification_data().settings_button_handler);
 
   return mojo_note;
 }

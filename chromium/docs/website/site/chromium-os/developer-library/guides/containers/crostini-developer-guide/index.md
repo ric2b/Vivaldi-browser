@@ -17,7 +17,7 @@ how the crostini is made, not how to use it. :)
 Note: this diagram is not exhaustive, but covers the major services and how they
 interact.
 
-![Crostini services diagram](images/crostini_services.png)
+![Crostini services diagram](/chromium-os/developer-library/guides/containers/crostini-developer-guide/crostini_services.png)
 
 Googlers: update this image at [go/termina-rpc]
 
@@ -101,20 +101,20 @@ To begin working on a change to one of the host services (see
 [Where does the code live?]), use the `cros_workon` command:
 
 ```bash
-(inside) $ cros_workon --board=${BOARD} start ${PACKAGE_NAME}
+(outside) $ cros workon --board=${BOARD} start ${PACKAGE_NAME}
 ```
 
 Now that the package(s) are `cros_workon start`-ed, they will be built from
 source instead of using binary prebuilts:
 
 ```bash
-(inside) $ emerge-${BOARD} ${PACKAGE_NAME}
+(outside) $ cros_sdk emerge-${BOARD} ${PACKAGE_NAME}
 ```
 
 Then deploy the package to the device for testing:
 
 ```bash
-(inside) $ cros deploy ${DEVICE_IP} ${PACKAGE_NAME}
+(outside) $ cros deploy ${DEVICE_IP} ${PACKAGE_NAME}
 ```
 
 Most VM services on the host have upstart conditions `start on started
@@ -139,17 +139,18 @@ To determine the guest board type, run `uname -m` on the device.
 
 | `uname -m` | termina board                        |
 |------------|--------------------------------------|
-| `x86_64`   | `(inside) $ export GUEST_BOARD=tatl` |
-| `aarch64`  | `(inside) $ export GUEST_BOARD=tael` |
+| `x86_64`   | `(outside) $ export GUEST_BOARD=tatl` |
+| `aarch64`  | `(outside) $ export GUEST_BOARD=tael` |
 
 First, `cros_workon --board=${GUEST_BOARD} start` each guest package you are
 modifying (see [Where does the code live?]):
 
 ```bash
-(inside) $ cros_workon --board=${GUEST_BOARD} start ${PACKAGE_NAME}
+(outside) $ cros workon --board=${GUEST_BOARD} start ${PACKAGE_NAME}
 ```
 
 #### Deploying individual packages
+
 This is the equivalent of `cros deploy` for host OS packages, it will deploy
 modified files for a package. Note that this just copies files and won't e.g.
 deploy dependencies. Each time you sync you'll usually need to deploy a full
@@ -158,7 +159,7 @@ image first, then can deploy individual packages.
 Build the package like a normal CrOS board:
 
 ```bash
-(inside) $ cros_workon_make --install --test --board=${GUEST_BOARD} \
+(outside) $ cros_sdk cros_workon_make --install --test --board=${GUEST_BOARD} \
            ${PACKAGE_NAME}
 ```
 
@@ -172,6 +173,7 @@ up
 ```
 
 #### Deploying a full image
+
 This is the equivalent of `cros flash` for a host OS image, it will rebuild and
 redeploy everything and is needed for some changes (e.g. adding new users), but
 is slower.
@@ -179,23 +181,42 @@ is slower.
 Build the guest image like a normal CrOS board:
 
 ```bash
-(inside) $ build_packages --board=${GUEST_BOARD}
-(inside) $ ./build_image --board=${GUEST_BOARD} test
+(outside) $ cros build-packages --board=${GUEST_BOARD}
+(outside) $ cros build-image --board=${GUEST_BOARD} test
 ```
 
 This image is installed into the host image by the `termina-dlc` package, and
 can be built and deployed like the host service changes above:
 
 ```bash
-(inside) $ cros_workon --board=${BOARD} start termina-dlc
-(inside) $ emerge-${BOARD} termina-dlc
+(outside) $ cros workon --board=${BOARD} start termina-dlc
+(outside) $ cros_sdk emerge-${BOARD} termina-dlc
 # Shut down any running VMs before deploying for changes to get picked up.
 $ ssh ${DEVICE_IP} -- restart vm_concierge
-(inside) $ cros deploy ${DEVICE_IP} termina-dlc
+(outside) $ cros deploy ${DEVICE_IP} termina-dlc
 ```
 
 After `cros deploy` completes, newly-launched VMs will use the test DLC with the
 updated packages.
+
+#### Deploying a new kernel
+
+When testing changes to the `termina` kernel, the process is similar to a full
+image deploy as above, but the kernel will also need to be rebuilt. For more
+information specifically about configuration, etc, please reference the
+[ChromiumOS Documentation]. The current kernel version may be found in the
+[termina configuration] but for the purposes of this documentation we assume
+the current (as of writing) 6.1 kernel.
+
+To build the kernel:
+```bash
+(outside) cros workon --board=${GUEST_BOARD} start chromeos-kernel-6_1
+(outside) # use emacs, vim, vscode, or magnetized needle directly on storage medium to effect kernel changes
+(outside) cros_sdk cros_workon_make --install --test --board=${GUEST_BOARD} chromeos-kernel-6_1
+```
+
+After which you can follow the `termina-dlc` instructions above to deploy the
+full image.
 
 ### Container changes
 
@@ -222,8 +243,8 @@ must be manually emerged to propagate changes into
 `/opt/google/cros-containers`. The following example uses `sommelier`:
 
 ```bash
-(inside) $ emerge-${GUEST_BOARD} sommelier               # build for Termina
-(inside) $ emerge-${GUEST_BOARD} termina_container_tools # copy into /opt
+(outside) $ cros_sdk emerge-${GUEST_BOARD} sommelier               # build for Termina
+(outside) $ cros_sdk emerge-${GUEST_BOARD} termina_container_tools # copy into /opt
 ```
 
 Once `termina_container_tools` is manually rebuilt, the `termina-dlc` flow will
@@ -358,7 +379,7 @@ You can now connect to Crostini the same as you would the host.
 
 ### Chrome
 
-See [Chrome Logging on Chrome OS](chrome_os_logging.md).
+See [Chrome Logging on Chrome OS](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/chrome_os_logging.md).
 
 ### Host Services
 
@@ -435,3 +456,5 @@ Then run the given command in GDB to load symbols for `$BINARY_PATH`.
 [APT]: https://en.wikipedia.org/wiki/APT_(software)
 [go/termina-rpc]: http://go/termina-rpc
 [Where does the code live?]: #repo-table
+[ChromiumOS Documentation]: https://www.chromium.org/chromium-os/how-tos-and-troubleshooting/kernel-configuration/
+[termina configuration]: https://source.chromium.org/chromiumos/chromiumos/codesearch/+/main:src/overlays/project-termina/profiles/base/make.defaults

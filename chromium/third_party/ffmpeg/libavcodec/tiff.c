@@ -1701,7 +1701,7 @@ static int tiff_decode_tag(TiffContext *s, AVFrame *frame)
         break;
     case TIFF_ICC_PROFILE:
         gb_temp = s->gb;
-        bytestream2_seek(&gb_temp, SEEK_SET, off);
+        bytestream2_seek(&gb_temp, off, SEEK_SET);
 
         if (bytestream2_get_bytes_left(&gb_temp) < count)
             return AVERROR_INVALIDDATA;
@@ -2416,7 +2416,6 @@ static av_cold int tiff_init(AVCodecContext *avctx)
         return AVERROR(ENOMEM);
     s->avctx_mjpeg->flags = avctx->flags;
     s->avctx_mjpeg->flags2 = avctx->flags2;
-    s->avctx_mjpeg->dct_algo = avctx->dct_algo;
     s->avctx_mjpeg->idct_algo = avctx->idct_algo;
     s->avctx_mjpeg->max_pixels = avctx->max_pixels;
     ret = avcodec_open2(s->avctx_mjpeg, codec, NULL);

@@ -32,7 +32,7 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/profiles/profile_types_ash.h"
+#include "chromeos/ash/components/browser_context_helper/browser_context_types.h"
 #endif
 
 // NOTE: Consider separating out UI-only features that are not consumed by the
@@ -68,14 +68,10 @@ BASE_FEATURE(kCastMirroringPlayoutDelay,
 const base::FeatureParam<int> kCastMirroringPlayoutDelayMs{
     &kCastMirroringPlayoutDelay, "cast_mirroring_playout_delay_ms", -1};
 
-// TODO(b/202294946): Remove when enabled by default on ChromeOS.
+// TODO(b/202294946): Remove when enabled by default after a few milestones.
 BASE_FEATURE(kGlobalMediaControlsCastStartStop,
              "GlobalMediaControlsCastStartStop",
-#if BUILDFLAG(IS_CHROMEOS)
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#else
              base::FEATURE_ENABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_CHROMEOS)
 
 BASE_FEATURE(kCastSilentlyRemoveVcOnNavigation,
              "CastSilentlyRemoveVcOnNavigation",
@@ -117,8 +113,9 @@ bool MediaRouterEnabled(content::BrowserContext* context) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // TODO(crbug.com/1380828): Make the Media Router feature configurable via a
   // policy for non-user profiles, i.e. sign-in and lock screen profiles.
-  if (!IsUserProfile(Profile::FromBrowserContext(context)))
+  if (!ash::IsUserBrowserContext(context)) {
     return false;
+  }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   // If the Media Router was already enabled or disabled for |context|, then it
@@ -179,7 +176,7 @@ std::string GetReceiverIdHashToken(PrefService* pref_service) {
   if (token.empty()) {
     crypto::RandBytes(base::WriteInto(&token, kHashTokenSize + 1),
                       kHashTokenSize);
-    base::Base64Encode(token, &token);
+    token = base::Base64Encode(token);
     pref_service->SetString(prefs::kMediaRouterReceiverIdHashToken, token);
   }
   return token;

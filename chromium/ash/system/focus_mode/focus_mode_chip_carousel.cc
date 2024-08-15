@@ -97,7 +97,7 @@ FocusModeChipCarousel::FocusModeChipCarousel(
       views::ScrollView::ScrollBarMode::kHiddenButEnabled);
   scroll_view_->SetDrawOverflowIndicator(false);
   scroll_view_->SetPaintToLayer();
-  scroll_view_->SetBackgroundColor(absl::nullopt);
+  scroll_view_->SetBackgroundColor(std::nullopt);
 
   scroll_contents_ =
       scroll_view_->SetContents(std::make_unique<views::FlexLayoutView>());
@@ -126,12 +126,12 @@ FocusModeChipCarousel::FocusModeChipCarousel(
 
 FocusModeChipCarousel::~FocusModeChipCarousel() = default;
 
-void FocusModeChipCarousel::Layout() {
+void FocusModeChipCarousel::Layout(PassKey) {
   if (!GetVisible()) {
     return;
   }
 
-  views::View::Layout();
+  LayoutSuperclass<views::View>(this);
   scroll_contents_->SizeToPreferredSize();
 
   const gfx::Rect contents_bounds = GetContentsBounds();

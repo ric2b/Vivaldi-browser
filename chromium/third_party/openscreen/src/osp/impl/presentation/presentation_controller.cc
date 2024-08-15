@@ -370,7 +370,7 @@ Controller::ReceiverWatch::~ReceiverWatch() {
 }
 
 Controller::ReceiverWatch& Controller::ReceiverWatch::operator=(
-    Controller::ReceiverWatch other) {
+    Controller::ReceiverWatch&& other) {
   swap(*this, other);
   return *this;
 }
@@ -405,7 +405,7 @@ Controller::ConnectRequest::~ConnectRequest() {
 }
 
 Controller::ConnectRequest& Controller::ConnectRequest::operator=(
-    ConnectRequest other) {
+    ConnectRequest&& other) {
   swap(*this, other);
   return *this;
 }
@@ -550,6 +550,7 @@ Error Controller::CloseConnection(Connection* connection,
 }
 
 Error Controller::OnPresentationTerminated(const std::string& presentation_id,
+                                           TerminationSource source,
                                            TerminationReason reason) {
   auto presentation_entry = presentations_.find(presentation_id);
   if (presentation_entry == presentations_.end()) {
@@ -561,8 +562,7 @@ Error Controller::OnPresentationTerminated(const std::string& presentation_id,
   }
   TerminationRequest request;
   request.request.presentation_id = presentation_id;
-  request.request.reason =
-      msgs::PresentationTerminationRequest_reason::kUserTerminatedViaController;
+  request.request.reason = msgs::PresentationTerminationReason::kUserRequest;
   group_streams_[presentation.service_id]->SendTerminationRequest(
       std::move(request));
   presentations_.erase(presentation_entry);
@@ -653,7 +653,7 @@ ErrorOr<size_t> Controller::TerminationListener::OnStreamMessage(
                static_cast<int>(message_type));
   msgs::PresentationTerminationEvent event;
   ssize_t result =
-      msgs::DecodePresentationTerminationEvent(buffer, buffer_size, &event);
+      msgs::DecodePresentationTerminationEvent(buffer, buffer_size, event);
   if (result < 0) {
     OSP_LOG_WARN << "decode presentation-termination-event error: " << result;
     return Error::Code::kCborParsing;

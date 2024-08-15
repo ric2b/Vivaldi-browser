@@ -5,12 +5,12 @@
 #ifndef CC_TEST_PAINT_OP_MATCHERS_H_
 #define CC_TEST_PAINT_OP_MATCHERS_H_
 
+#include <optional>
 #include <ostream>
 #include <sstream>
 #include <string>
 #include <utility>
 
-#include <optional>
 #include "base/memory/ref_counted.h"
 #include "base/strings/stringprintf.h"
 #include "cc/paint/paint_op_buffer.h"
@@ -100,6 +100,30 @@ class PaintOpIs {
     *os << "isn't a valid " << PaintOpTypeToString(OpT::kType) << " paint op";
   }
 };
+
+// Equality matcher for DrawRecordOp objects.
+//
+// Example use:
+//   PaintOpBuffer nested_buffer;
+//   nested_buffer.push<SaveOp>();
+//   nested_buffer.push<RestoreOp>();
+//
+//   PaintOpBuffer parent_buffer;
+//   parent_buffer.push<DrawRecordOp>(nested_buffer.ReleaseAsRecord());
+//
+//   EXPECT_THAT(parent_buffer.ReleaseAsRecord(),
+//               ElementsAre(DrawRecordOpEq(PaintOpEq<SaveOp>(),
+//                                          PaintOpEq<RestoreOp>())));
+template <typename... Args>
+testing::Matcher<PaintOp> DrawRecordOpEq(Args... args) {
+  return testing::AllOf(
+      PaintOpIs<DrawRecordOp>(),
+      testing::ResultOf(
+          [](const PaintOp& record) {
+            return static_cast<const DrawRecordOp&>(record).record;
+          },
+          testing::ElementsAre(args...)));
+}
 
 }  // namespace cc
 

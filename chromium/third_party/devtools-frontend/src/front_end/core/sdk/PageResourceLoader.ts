@@ -29,6 +29,13 @@ const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('core/sdk/PageResourceLoader.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
+export interface ExtensionInitiator {
+  target: null;
+  frameId: null;
+  initiatorUrl: Platform.DevToolsPath.UrlString;
+  extensionId: string;
+}
+
 export type PageResourceLoadInitiator = {
   target: null,
   frameId: Protocol.Page.FrameId,
@@ -37,7 +44,11 @@ export type PageResourceLoadInitiator = {
   target: Target,
   frameId: Protocol.Page.FrameId | null,
   initiatorUrl: Platform.DevToolsPath.UrlString | null,
-};
+}|ExtensionInitiator;
+
+function isExtensionInitiator(initiator: PageResourceLoadInitiator): initiator is ExtensionInitiator {
+  return 'extensionId' in initiator;
+}
 
 export interface PageResource {
   success: boolean|null;
@@ -142,7 +153,8 @@ export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<Event
 
   getScopedResourcesLoaded(): Map<string, PageResource> {
     return new Map([...this.#pageResources].filter(
-        ([_, pageResource]) => TargetManager.instance().isInScope(pageResource.initiator.target)));
+        ([_, pageResource]) => TargetManager.instance().isInScope(pageResource.initiator.target) ||
+            isExtensionInitiator(pageResource.initiator)));
   }
 
   /**
@@ -180,7 +192,7 @@ export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<Event
       this.#currentlyLoadingPerTarget.set(target.id(), currentCount + 1);
     }
     if (this.#currentlyLoading > this.#maxConcurrentLoads) {
-      const entry: LoadQueueEntry = {resolve: (): void => {}, reject: (): void => {}};
+      const entry: LoadQueueEntry = {resolve: () => {}, reject: (): void => {}};
       const waitForCapacity = new Promise<void>((resolve, reject) => {
         entry.resolve = resolve;
         entry.reject = reject;
@@ -204,6 +216,13 @@ export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<Event
     }
   }
 
+  static makeExtensionKey(url: Platform.DevToolsPath.UrlString, initiator: PageResourceLoadInitiator): string {
+    if (isExtensionInitiator(initiator) && initiator.extensionId) {
+      return `${url}-${initiator.extensionId}`;
+    }
+    throw new Error('Invalid initiator');
+  }
+
   static makeKey(url: Platform.DevToolsPath.UrlString, initiator: PageResourceLoadInitiator): string {
     if (initiator.frameId) {
       return `${url}-${initiator.frameId}`;
@@ -214,9 +233,18 @@ export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<Event
     throw new Error('Invalid initiator');
   }
 
+  resourceLoadedThroughExtension(pageResource: PageResource): void {
+    const key = PageResourceLoader.makeExtensionKey(pageResource.url, pageResource.initiator);
+    this.#pageResources.set(key, pageResource);
+    this.dispatchEventToListeners(Events.Update);
+  }
+
   async loadResource(url: Platform.DevToolsPath.UrlString, initiator: PageResourceLoadInitiator): Promise<{
     content: string,
   }> {
+    if (isExtensionInitiator(initiator)) {
+      throw new Error('Invalid initiator');
+    }
     const key = PageResourceLoader.makeKey(url, initiator);
     const pageResource: PageResource = {success: null, size: null, errorMessage: undefined, url, initiator};
     this.#pageResources.set(key, pageResource);
@@ -251,6 +279,10 @@ export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<Event
     content: string,
     errorDescription: Host.ResourceLoader.LoadErrorDescription,
   }> {
+    if (isExtensionInitiator(initiator)) {
+      throw new Error('Invalid initiator');
+    }
+
     let failureReason: string|null = null;
     if (this.#loadOverride) {
       return this.#loadOverride(url);
@@ -334,7 +366,7 @@ export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<Event
   }> {
     const networkManager = (target.model(NetworkManager) as NetworkManager);
     const ioModel = (target.model(IOModel) as IOModel);
-    const disableCache = Common.Settings.Settings.instance().moduleSetting('cacheDisabled').get();
+    const disableCache = Common.Settings.Settings.instance().moduleSetting('cache-disabled').get();
     const resource = await networkManager.loadNetworkResource(frameId, url, {disableCache, includeCredentials: true});
     try {
       const content = resource.stream ? await ioModel.readToString(resource.stream) : '';
@@ -360,7 +392,7 @@ export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<Event
 }
 
 export function getLoadThroughTargetSetting(): Common.Settings.Setting<boolean> {
-  return Common.Settings.Settings.instance().createSetting('loadThroughTarget', true);
+  return Common.Settings.Settings.instance().createSetting('load-through-target', true);
 }
 
 export const enum Events {

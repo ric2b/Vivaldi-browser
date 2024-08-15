@@ -12,6 +12,7 @@
 #include "discovery/mdns/public/mdns_service.h"
 #include "discovery/public/dns_sd_service_factory.h"
 #include "platform/api/task_runner.h"
+#include "util/osp_logging.h"
 #include "util/trace_logging.h"
 
 namespace openscreen::discovery {
@@ -65,7 +66,9 @@ ServiceDispatcher::ServiceDispatcher(TaskRunner& task_runner,
     : task_runner_(task_runner),
       publisher_(config.enable_publication ? this : nullptr),
       querier_(config.enable_querying ? this : nullptr) {
-  OSP_DCHECK_GT(config.network_info.size(), 0);
+  if (config.network_info.empty()) {
+    OSP_LOG_ERROR << "There are no network interfaces passed in the config.";
+  }
 
   service_instances_.reserve(config.network_info.size());
   for (const auto& network_info : config.network_info) {
@@ -75,7 +78,7 @@ ServiceDispatcher::ServiceDispatcher(TaskRunner& task_runner,
 }
 
 ServiceDispatcher::~ServiceDispatcher() {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 }
 
 // DnsSdQuerier overrides.

@@ -35,19 +35,13 @@ bool IsSourceFileFromAssetsCatalog(std::string_view source,
   //    .*\.xcassets/[^/]*\.symbolset/[^/]*
   bool is_file_from_asset_catalog = false;
   std::string_view dir = FindDirNoTrailingSeparator(source);
-  if (base::EndsWith(source, "/Contents.json", base::CompareCase::SENSITIVE) &&
-      base::EndsWith(dir, ".xcassets", base::CompareCase::SENSITIVE)) {
+  if (source.ends_with("/Contents.json") && dir.ends_with(".xcassets")) {
     is_file_from_asset_catalog = true;
-  } else if (base::EndsWith(dir, ".appiconset", base::CompareCase::SENSITIVE) ||
-             base::EndsWith(dir, ".colorset", base::CompareCase::SENSITIVE) ||
-             base::EndsWith(dir, ".dataset", base::CompareCase::SENSITIVE) ||
-             base::EndsWith(dir, ".imageset", base::CompareCase::SENSITIVE) ||
-             base::EndsWith(dir, ".launchimage",
-                            base::CompareCase::SENSITIVE) ||
-             base::EndsWith(dir, ".symbolset", base::CompareCase::SENSITIVE)) {
+  } else if (dir.ends_with(".appiconset") || dir.ends_with(".colorset") ||
+             dir.ends_with(".dataset") || dir.ends_with(".imageset") ||
+             dir.ends_with(".launchimage") || dir.ends_with(".symbolset")) {
     dir = FindDirNoTrailingSeparator(dir);
-    is_file_from_asset_catalog =
-        base::EndsWith(dir, ".xcassets", base::CompareCase::SENSITIVE);
+    is_file_from_asset_catalog = dir.ends_with(".xcassets");
   }
   if (is_file_from_asset_catalog && asset_catalog) {
     std::string asset_catalog_path(dir);
@@ -202,6 +196,6 @@ SourceDir BundleData::GetBundleRootDirOutputAsDir(
   return SourceDir(GetBundleRootDirOutput(settings).value());
 }
 
-SourceDir BundleData::GetBundleDir(const Settings* settings) const{
+SourceDir BundleData::GetBundleDir(const Settings* settings) const {
   return GetBundleRootDirOutput(settings).GetDir();
 }

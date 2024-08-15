@@ -333,6 +333,8 @@ using vivaldi::IsVivaldiRunning;
     _editButton.tintColor = [UIColor colorNamed:vTabGridToolbarTextButtonColor];
     _addToButton.tintColor = [UIColor colorNamed:vTabGridToolbarTextButtonColor];
     _shareButton.tintColor = [UIColor colorNamed:vTabGridToolbarTextButtonColor];
+    _closeTabsButton.tintColor =
+        [UIColor colorNamed:vTabGridToolbarTextButtonColor];
   }
   // End Vivaldi
 

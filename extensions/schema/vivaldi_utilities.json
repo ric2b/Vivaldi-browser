@@ -30,6 +30,14 @@
         }
       },
       {
+        "id": "GetEnvVarsResponse",
+        "type": "object",
+        "description": "Object containing valid environment variable values.",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      {
         "id": "WindowState",
         "type": "string",
         "description": "The state of this browser window.",
@@ -122,10 +130,6 @@
           "guest": {
             "type": "boolean",
             "description": "Window is guest."
-          },
-          "fullscreenMenubarShown": {
-            "type": "boolean",
-            "description": "Window has menubar in fullscreen."
           },
           "html5FullScreen": {
             "type": "boolean",
@@ -677,6 +681,31 @@
             "description": "Mime type of the read image."
           }
         }
+      },
+      {
+        "id": "DirectMatchItem",
+        "type": "object",
+        "description": "A Direct match item",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "click_url": {
+            "type": "string"
+          },
+          "target_url": {
+            "type": "string"
+          },
+          "image_url": {
+            "type": "string"
+          },
+          "image_path": {
+            "type": "string"
+          }
+        }
       }
     ],
     "functions": [
@@ -933,17 +962,25 @@
         }
       },
       {
-        "name": "getFFMPEGState",
+        "name": "getEnvVars",
         "type": "function",
-        "description": "Helper function for Linux. Reads the env. variable VIVALDI_FFMPEG_FOUND and returns the result",
-        "parameters": [],
+        "description": "Gathers values of environment variables specified in the first argument, returns a list of pairs containing keys and values (or none in case the variable does not exist)",
+        "parameters": [
+          {
+            "name": "keys",
+            "type": "array",
+            "description": "list of names of environment variables",
+            "items": {
+              "type": "string"
+            }
+          }
+        ],
         "returns_async": {
           "name": "callback",
           "parameters": [
             {
-              "name": "value",
-              "type": "boolean",
-              "description": "True if env. variable is set to YES, otherwise False (also if variable does not exists)."
+              "name": "results",
+              "$ref": "GetEnvVarsResponse"
             }
           ]
         }
@@ -1232,13 +1269,12 @@
           {
             "name": "value",
             "type": "string"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": []
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": []
+        }
       },
       {
         "name": "getDefaultContentSettings",
@@ -2081,6 +2117,38 @@
             {
               "name": "hasNewCrashes",
               "type": "boolean"
+            }
+          ]
+        }
+      },
+      {
+        "name": "isRTL",
+        "type": "function",
+        "description": "Checks if current locale Right-To-Left locale.",
+        "parameters": [],
+        "returns": {
+          "type": "boolean"
+        }
+      },
+      {
+        "name": "getDirectMatch",
+        "type": "function",
+        "description": "Get DirectMatch item that best matches the query",
+        "parameters": [
+          {
+            "name": "query",
+            "type": "string",
+            "description": "The query to search in items"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "item",
+              "$ref": "DirectMatchItem",
+              "optional": true
             }
           ]
         }

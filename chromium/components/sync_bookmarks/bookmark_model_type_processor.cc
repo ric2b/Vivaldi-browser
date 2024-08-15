@@ -205,7 +205,7 @@ void BookmarkModelTypeProcessor::OnCommitCompleted(
 void BookmarkModelTypeProcessor::OnUpdateReceived(
     const sync_pb::ModelTypeState& model_type_state,
     syncer::UpdateResponseDataList updates,
-    absl::optional<sync_pb::GarbageCollectionDirective> gc_directive) {
+    std::optional<sync_pb::GarbageCollectionDirective> gc_directive) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!model_type_state.cache_guid().empty());
   CHECK_EQ(model_type_state.cache_guid(), activation_request_.cache_guid);
@@ -217,10 +217,6 @@ void BookmarkModelTypeProcessor::OnUpdateReceived(
 
   // TODO(crbug.com/1356900): validate incoming updates, e.g. `gc_directive`
   // must be empty for Bookmarks.
-
-  syncer::LogUpdatesReceivedByProcessorHistogram(
-      syncer::BOOKMARKS,
-      /*is_initial_sync=*/!bookmark_tracker_, updates.size());
 
   // Clients before M94 did not populate the parent UUID in specifics.
   PopulateParentGuidInSpecifics(bookmark_tracker_.get(), &updates);
@@ -385,16 +381,26 @@ void BookmarkModelTypeProcessor::ModelReadyToSync(
     }
   }
 
-  if (!bookmark_tracker_ &&
-      wipe_model_upon_sync_disabled_behavior_ ==
-          syncer::WipeModelUponSyncDisabledBehavior::kOnceIfTrackingMetadata) {
-    // Since the model isn't initially tracking metadata, move away from
-    // kOnceIfTrackingMetadata so the behavior doesn't kick in, in case sync is
-    // turned on later and back to off. This should be practically unreachable
-    // because usually ClearMetadataIfStopped() would be invoked earlier,
-    // but let's be extra safe and avoid relying on this behavior.
-    wipe_model_upon_sync_disabled_behavior_ =
-        syncer::WipeModelUponSyncDisabledBehavior::kNever;
+  if (!bookmark_tracker_) {
+    switch (wipe_model_upon_sync_disabled_behavior_) {
+      case syncer::WipeModelUponSyncDisabledBehavior::kNever:
+        // Nothing to do.
+        break;
+      case syncer::WipeModelUponSyncDisabledBehavior::kOnceIfTrackingMetadata:
+        // Since the model isn't initially tracking metadata, move away from
+        // kOnceIfTrackingMetadata so the behavior doesn't kick in, in case sync
+        // is turned on later and back to off. This should be practically
+        // unreachable because usually ClearMetadataIfStopped() would be invoked
+        // earlier, but let's be extra safe and avoid relying on this behavior.
+        wipe_model_upon_sync_disabled_behavior_ =
+            syncer::WipeModelUponSyncDisabledBehavior::kNever;
+        break;
+      case syncer::WipeModelUponSyncDisabledBehavior::kAlways:
+        // Remove any previous data that may exist, if its lifetime is strongly
+        // coupled with the tracker's (sync metadata's).
+        bookmark_model_->RemoveAllSyncableNodes();
+        break;
+    }
   }
 
   ConnectIfReady();
@@ -695,7 +701,9 @@ void BookmarkModelTypeProcessor::GetAllNodesForDebugging(
   const bookmarks::BookmarkNode* model_root_node = bookmark_model_->root_node();
   int i = 0;
   for (const auto& child : model_root_node->children()) {
-    AppendNodeAndChildrenForDebugging(child.get(), i++, &all_nodes);
+    if (bookmark_model_->IsNodeSyncable(child.get())) {
+      AppendNodeAndChildrenForDebugging(child.get(), i++, &all_nodes);
+    }
   }
 
   std::move(callback).Run(syncer::BOOKMARKS, std::move(all_nodes));

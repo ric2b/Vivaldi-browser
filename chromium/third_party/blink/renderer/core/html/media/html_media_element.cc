@@ -184,7 +184,8 @@ String UrlForLoggingMedia(const KURL& url) {
 
   if (url.GetString().length() < kMaximumURLLengthForLogging)
     return url.GetString();
-  return url.GetString().Substring(0, kMaximumURLLengthForLogging) + "...";
+  return url.GetString().GetString().Substring(0, kMaximumURLLengthForLogging) +
+         "...";
 }
 
 const char* BoolString(bool val) {
@@ -759,16 +760,13 @@ void HTMLMediaElement::ParseAttribute(
              RuntimeEnabledFeatures::MediaLatencyHintEnabled()) {
     if (web_media_player_)
       web_media_player_->SetLatencyHint(latencyHint());
+  } else if (name == html_names::kMutedAttr) {
+    if (params.reason == AttributeModificationReason::kByParser) {
+      muted_ = true;
+    }
   } else {
     HTMLElement::ParseAttribute(params);
   }
-}
-
-void HTMLMediaElement::ParserDidSetAttributes() {
-  HTMLElement::ParserDidSetAttributes();
-
-  if (FastHasAttribute(html_names::kMutedAttr))
-    muted_ = true;
 }
 
 // This method is being used as a way to know that cloneNode finished cloning
@@ -2786,17 +2784,20 @@ WebMediaPlayer::Preload HTMLMediaElement::EffectivePreloadType() const {
   return preload;
 }
 
-ScriptPromise HTMLMediaElement::playForBindings(ScriptState* script_state) {
+ScriptPromiseTyped<IDLUndefined> HTMLMediaElement::playForBindings(
+    ScriptState* script_state) {
   // We have to share the same logic for internal and external callers. The
   // internal callers do not want to receive a Promise back but when ::play()
   // is called, |play_promise_resolvers_| needs to be populated. What this code
   // does is to populate |play_promise_resolvers_| before calling ::play() and
   // remove the Promise if ::play() failed.
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
-  ScriptPromise promise = resolver->Promise();
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolverTyped<IDLUndefined>>(
+          script_state);
+  auto promise = resolver->Promise();
   play_promise_resolvers_.push_back(resolver);
 
-  absl::optional<DOMExceptionCode> code = Play();
+  std::optional<DOMExceptionCode> code = Play();
   if (code) {
     DCHECK(!play_promise_resolvers_.empty());
     play_promise_resolvers_.pop_back();
@@ -2819,10 +2820,10 @@ ScriptPromise HTMLMediaElement::playForBindings(ScriptState* script_state) {
   return promise;
 }
 
-absl::optional<DOMExceptionCode> HTMLMediaElement::Play() {
+std::optional<DOMExceptionCode> HTMLMediaElement::Play() {
   DVLOG(2) << "play(" << *this << ")";
 
-  absl::optional<DOMExceptionCode> exception_code =
+  std::optional<DOMExceptionCode> exception_code =
       autoplay_policy_->RequestPlay();
 
   if (exception_code == DOMExceptionCode::kNotAllowedError) {
@@ -2830,7 +2831,7 @@ absl::optional<DOMExceptionCode> HTMLMediaElement::Play() {
     // Call playInternal to handle scheduling the promise resolution.
     if (!paused_) {
       PlayInternal();
-      return absl::nullopt;
+      return std::nullopt;
     }
     return exception_code;
   }
@@ -2844,7 +2845,7 @@ absl::optional<DOMExceptionCode> HTMLMediaElement::Play() {
 
   PlayInternal();
 
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 void HTMLMediaElement::PlayInternal() {
@@ -2932,6 +2933,8 @@ void HTMLMediaElement::PauseInternal(PlayPromiseError code,
 
     ScheduleRejectPlayPromises(code);
   }
+
+  OnPause();
 
   UpdatePlayState(pause_speech);
 }
@@ -4527,7 +4530,7 @@ void HTMLMediaElement::ScheduleNotifyPlaying() {
 
 void HTMLMediaElement::ResolveScheduledPlayPromises() {
   for (auto& resolver : play_promise_resolve_list_)
-    resolver->Resolve();
+    resolver->DowncastTo<IDLUndefined>()->Resolve();
 
   play_promise_resolve_list_.clear();
 }
@@ -4742,8 +4745,8 @@ void HTMLMediaElement::DidMediaMetadataChange(
     observer->OnMediaMetadataChanged(has_audio, has_video, media_content_type);
   }
 
-  video_codec_ = has_video ? absl::make_optional(video_codec) : absl::nullopt;
-  audio_codec_ = has_audio ? absl::make_optional(audio_codec) : absl::nullopt;
+  video_codec_ = has_video ? std::make_optional(video_codec) : std::nullopt;
+  audio_codec_ = has_audio ? std::make_optional(audio_codec) : std::nullopt;
 
   is_encrypted_media_ = is_encrypted_media;
   OnRemotePlaybackMetadataChange();

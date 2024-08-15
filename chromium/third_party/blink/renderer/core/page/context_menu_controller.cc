@@ -43,7 +43,6 @@
 #include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/public/web/web_plugin.h"
 #include "third_party/blink/public/web/web_text_check_client.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_regexp.h"
 #include "third_party/blink/renderer/core/annotation/annotation_agent_container_impl.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
@@ -90,6 +89,7 @@
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
+#include "third_party/blink/renderer/platform/bindings/script_regexp.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_response.h"
 
 #if !BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
@@ -123,12 +123,15 @@ void SetPasswordManagerData(Element* element, ContextMenuData& data) {
     const AtomicString& id = input->GetIdAttribute();
     const AtomicString& name = input->GetNameAttribute();
 
-    // TODO(crbug.com/1504626): This should be generic V8PerIsolateData.
-    DEFINE_STATIC_LOCAL(Persistent<ScriptRegexp>, passwordRegexp,
-                        (MakeGarbageCollected<ScriptRegexp>(
-                            element->GetDocument().GetAgent().isolate(),
-                            kPasswordRe, kTextCaseUnicodeInsensitive)));
+    auto* isolate = element->GetDocument().GetAgent().isolate();
+    auto* per_isolate_data = V8PerIsolateData::From(isolate);
+    if (!per_isolate_data->GetPasswordRegexp()) {
+      per_isolate_data->SetPasswordRegexp(MakeGarbageCollected<ScriptRegexp>(
+          element->GetDocument().GetAgent().isolate(), kPasswordRe,
+          kTextCaseUnicodeInsensitive));
+    }
 
+    auto* password_regexp = per_isolate_data->GetPasswordRegexp();
     data.is_password_type_by_heuristics =
         (data.form_control_type == mojom::blink::FormControlType::kInputText ||
          data.form_control_type == mojom::blink::FormControlType::kInputEmail ||
@@ -136,8 +139,8 @@ void SetPasswordManagerData(Element* element, ContextMenuData& data) {
              mojom::blink::FormControlType::kInputSearch ||
          data.form_control_type == mojom::blink::FormControlType::kInputUrl ||
          data.form_control_type == mojom::blink::FormControlType::kTextArea) &&
-        (passwordRegexp->Match(id.GetString()) >= 0 ||
-         passwordRegexp->Match(name.GetString()) >= 0 ||
+        (password_regexp->Match(id.GetString()) >= 0 ||
+         password_regexp->Match(name.GetString()) >= 0 ||
          input->HasBeenPasswordField());
   }
 }
@@ -145,15 +148,9 @@ void SetPasswordManagerData(Element* element, ContextMenuData& data) {
 void SetAutofillData(Node* node, ContextMenuData& data) {
   if (auto* form_control = DynamicTo<HTMLFormControlElement>(node)) {
     data.form_control_type = form_control->FormControlType();
-    data.field_renderer_id = base::FeatureList::IsEnabled(
-                                 features::kAutofillUseDomNodeIdForRendererId)
-                                 ? form_control->GetDomNodeId()
-                                 : form_control->UniqueRendererFormControlId();
+    data.field_renderer_id = form_control->GetDomNodeId();
     if (auto* form = form_control->Form()) {
-      data.form_renderer_id = base::FeatureList::IsEnabled(
-                                  features::kAutofillUseDomNodeIdForRendererId)
-                                  ? form->GetDomNodeId()
-                                  : form->UniqueRendererFormId();
+      data.form_renderer_id = form->GetDomNodeId();
     } else {
       data.form_renderer_id = 0;
     }
@@ -162,17 +159,14 @@ void SetAutofillData(Node* node, ContextMenuData& data) {
           node ? DynamicTo<HTMLElement>(RootEditableElement(*node)) : nullptr) {
     ContentEditableType content_editable =
         html_element->contentEditableNormalized();
-    if (base::FeatureList::IsEnabled(
-            features::kAutofillUseDomNodeIdForRendererId)) {
-      data.is_content_editable_for_autofill =
-          (content_editable == ContentEditableType::kPlaintextOnly ||
-           content_editable == ContentEditableType::kContentEditable) &&
-          !DynamicTo<HTMLFormElement>(node) &&
-          !DynamicTo<HTMLFormControlElement>(node);
-      if (data.is_content_editable_for_autofill) {
-        data.field_renderer_id = html_element->GetDomNodeId();
-        data.form_renderer_id = html_element->GetDomNodeId();
-      }
+    data.is_content_editable_for_autofill =
+        (content_editable == ContentEditableType::kPlaintextOnly ||
+         content_editable == ContentEditableType::kContentEditable) &&
+        !DynamicTo<HTMLFormElement>(node) &&
+        !DynamicTo<HTMLFormControlElement>(node);
+    if (data.is_content_editable_for_autofill) {
+      data.field_renderer_id = html_element->GetDomNodeId();
+      data.form_renderer_id = html_element->GetDomNodeId();
     }
   }
 }
@@ -702,16 +696,12 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
             .Utf8();
     WebRange range =
         selected_frame->GetInputMethodController().GetSelectionOffsets();
-    data.selection_start_offset = range.StartOffset();
-    // TODO(crbug.com/850954): Remove redundant log after we identified the
-    // issue.
-    CHECK_GE(data.selection_start_offset, 0)
-        << "Log issue against https://crbug.com/850954\n"
-        << "data.selection_start_offset: " << data.selection_start_offset
-        << "\nrange: [" << range.StartOffset() << ", " << range.EndOffset()
-        << "]\nVisibleSelection: "
-        << selected_frame->Selection()
-               .ComputeVisibleSelectionInDOMTreeDeprecated();
+    // TODO(crbug.com/40093243): `range.StartOffset()` shouldn't be negative but
+    // it happens. crbug.com/40093243#comment28 suggested not to show context
+    // menu. For now, prefer showing it at wrong place/data than not showing.
+    if (range.StartOffset() >= 0) {
+      data.selection_start_offset = range.StartOffset();
+    }
     if (!result.IsContentEditable()) {
       TextFragmentHandler::OpenedContextMenuOverSelection(selected_frame);
       AnnotationAgentContainerImpl* annotation_container =
@@ -858,7 +848,7 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
                 selected_frame->GetAttributionSrcLoader();
             attribution_src_loader->CanRegister(result.AbsoluteLinkURL(),
                                                 /*element=*/anchor,
-                                                /*request_id=*/absl::nullopt)) {
+                                                /*request_id=*/std::nullopt)) {
           data.impression = blink::Impression{
               .runtime_features = attribution_src_loader->GetRuntimeFeatures(),
           };
@@ -893,7 +883,7 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
   if (!selected_web_frame || !selected_web_frame->Client())
     return false;
 
-  absl::optional<gfx::Point> host_context_menu_location;
+  std::optional<gfx::Point> host_context_menu_location;
   if (selected_web_frame->FrameWidgetImpl()) {
     host_context_menu_location =
         selected_web_frame->FrameWidgetImpl()->GetAndResetContextMenuLocation();

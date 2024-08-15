@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -24,7 +25,6 @@
 #include "net/websockets/websocket_event_interface.h"
 #include "net/websockets/websocket_frame.h"
 #include "net/websockets/websocket_stream.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 namespace url {
@@ -202,6 +202,10 @@ class NET_EXPORT WebSocketChannel {
   // Called when a URLRequest is created for handshaking.
   void OnCreateURLRequest(URLRequest* request);
 
+  // Called when a URLRequest's OnConnected is called. Forwards the call to the
+  // |event_interface_|
+  void OnURLRequestConnected(URLRequest* request, const TransportInfo& info);
+
   // Success callback from WebSocketStream::CreateAndConnectStream(). Reports
   // success to the event interface. May delete |this|.
   void OnConnectSuccess(
@@ -212,7 +216,7 @@ class NET_EXPORT WebSocketChannel {
   // failure to the event interface. May delete |this|.
   void OnConnectFailure(const std::string& message,
                         int net_error,
-                        absl::optional<int> response_code);
+                        std::optional<int> response_code);
 
   // SSL certificate error callback from
   // WebSocketStream::CreateAndConnectStream(). Forwards the request to the
@@ -230,7 +234,7 @@ class NET_EXPORT WebSocketChannel {
                      scoped_refptr<HttpResponseHeaders> response_headers,
                      const IPEndPoint& remote_endpoint,
                      base::OnceCallback<void(const AuthCredentials*)> callback,
-                     absl::optional<AuthCredentials>* credentials);
+                     std::optional<AuthCredentials>* credentials);
 
   // Sets |state_| to |new_state| and updates UMA if necessary.
   void SetState(State new_state);

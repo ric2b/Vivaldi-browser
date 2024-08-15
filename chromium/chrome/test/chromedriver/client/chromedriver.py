@@ -106,8 +106,10 @@ class ChromeDriver(object):
       send_w3c_capability=True, send_w3c_request=True,
       page_load_strategy=None, unexpected_alert_behaviour=None,
       devtools_events_to_log=None, accept_insecure_certs=None,
-      timeouts=None, test_name=None, web_socket_url=None, browser_name=None):
-    self._executor = command_executor.CommandExecutor(server_url)
+      timeouts=None, test_name=None, web_socket_url=None, browser_name=None,
+      http_timeout=None):
+    self._executor = command_executor.CommandExecutor(server_url,
+                                                      http_timeout=http_timeout)
     self._server_url = server_url
     self.w3c_compliant = False
     self.debuggerAddress = None
@@ -670,7 +672,8 @@ class ChromeDriver(object):
   def AddVirtualAuthenticator(self, protocol=None, transport=None,
                               hasResidentKey=None, hasUserVerification=None,
                               isUserConsenting=None, isUserVerified=None,
-                              extensions=None):
+                              extensions=None, defaultBackupState=None,
+                              defaultBackupEligibility=None):
     options = {}
     if protocol is not None:
       options['protocol'] = protocol
@@ -686,6 +689,10 @@ class ChromeDriver(object):
       options['isUserVerified'] = isUserVerified
     if extensions is not None:
       options['extensions'] = extensions
+    if defaultBackupState is not None:
+      options['defaultBackupState'] = defaultBackupState
+    if defaultBackupEligibility is not None:
+      options['defaultBackupEligibility'] = defaultBackupEligibility
 
     return self.ExecuteCommand(Command.ADD_VIRTUAL_AUTHENTICATOR, options)
 
@@ -695,7 +702,8 @@ class ChromeDriver(object):
 
   def AddCredential(self, authenticatorId=None, credentialId=None,
                     isResidentCredential=None, rpId=None, privateKey=None,
-                    userHandle=None, signCount=None, largeBlob=None):
+                    userHandle=None, signCount=None, largeBlob=None,
+                    backupState=None, backupEligibility=None):
     options = {}
     if authenticatorId is not None:
       options['authenticatorId'] = authenticatorId
@@ -713,6 +721,10 @@ class ChromeDriver(object):
       options['signCount'] = signCount
     if largeBlob is not None:
       options['largeBlob'] = largeBlob
+    if backupState is not None:
+      options['backupState'] = backupState
+    if backupEligibility is not None:
+      options['backupEligibility'] = backupEligibility
     return self.ExecuteCommand(Command.ADD_CREDENTIAL, options)
 
   def GetCredentials(self, authenticatorId):
@@ -732,6 +744,15 @@ class ChromeDriver(object):
     params = {'authenticatorId': authenticatorId,
               'isUserVerified': isUserVerified}
     return self.ExecuteCommand(Command.SET_USER_VERIFIED, params)
+
+  def SetCredentialProperties(self, authenticatorId, credentialId,
+                              backupState=None, backupEligibility=None):
+    params = {'authenticatorId': authenticatorId, 'credentialId': credentialId}
+    if backupState is not None:
+      params['backupState'] = backupState
+    if backupEligibility is not None:
+      params['backupEligibility'] = backupEligibility
+    return self.ExecuteCommand(Command.SET_CREDENTIAL_PROPERTIES, params)
 
   def SetSPCTransactionMode(self, mode):
     params = {'mode': mode}

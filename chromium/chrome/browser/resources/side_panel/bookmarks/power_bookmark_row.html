@@ -21,30 +21,17 @@
 
   cr-input {
     --cr-input-background-color: transparent;
-    --cr-input-border-bottom: 1px solid var(--cr-secondary-text-color);
-    --cr-input-border-radius: 0;
     --cr-input-error-display: none;
-    --cr-input-padding-start: 0;
     width: 100%;
   }
 
   iron-icon {
-    --iron-icon-fill-color: var(--google-grey-700);
+    --iron-icon-fill-color: currentColor;
     height: 16px;
     width: 16px;
   }
 
-  @media (prefers-color-scheme: dark) {
-    iron-icon {
-      --iron-icon-fill-color: var(--google-grey-100);
-    }
-  }
-
-  :host-context([chrome-refresh-2023]) iron-icon {
-    --iron-icon-fill-color: currentColor;
-  }
-
-  :host-context([chrome-refresh-2023]) .sp-labelless-input:hover {
+  cr-input.stroked:hover {
     --cr-input-hover-background-color: transparent;
   }
 </style>
@@ -76,7 +63,7 @@
   <template is="dom-if" if="[[hasInput]]" on-dom-change="onInputDisplayChange_"
       restamp>
     <cr-input slot="content" id="input" value="[[bookmark.title]]"
-        class="sp-labelless-input"
+        class="stroked"
         on-change="onInputChange_" on-blur="onInputBlur_"
         on-keydown="onInputKeyDown_"
         aria-label="[[rowAriaLabel]]"

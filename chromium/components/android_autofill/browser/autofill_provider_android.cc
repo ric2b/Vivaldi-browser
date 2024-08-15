@@ -10,6 +10,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/debug/crash_logging.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/types/cxx23_to_underlying.h"
@@ -188,6 +189,8 @@ void AutofillProviderAndroid::OnAskForValuesToFill(
   if (!IsLinkedForm(
           form, /*similarity_metric=*/kSimilarityCheckAskForValuesToFillUma)) {
     StartNewSession(manager, form, field, bounding_box);
+  } else {
+    last_focused_field_id_ = field.global_id();
   }
 
   if (field.datalist_options.empty()) {
@@ -246,7 +249,7 @@ void AutofillProviderAndroid::StartNewSession(AndroidAutofillManager* manager,
     return;
   }
 
-  field_id_ = field.global_id();
+  last_focused_field_id_ = field.global_id();
   field_type_group_ = manager->ComputeFieldTypeGroupForField(form, field);
   triggered_origin_ = field.origin;
   check_submission_ = false;
@@ -333,8 +336,9 @@ void AutofillProviderAndroid::OnAutofillAvailable() {
 void AutofillProviderAndroid::OnAcceptDatalistSuggestion(
     const std::u16string& value) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (auto* manager = manager_.get()) {
-    RendererShouldAcceptDataListSuggestion(manager, field_id_, value);
+  if (manager_) {
+    RendererShouldAcceptDataListSuggestion(manager_.get(),
+                                           last_focused_field_id_, value);
   }
 }
 
@@ -431,9 +435,7 @@ void AutofillProviderAndroid::OnFormSubmitted(AndroidAutofillManager* manager,
                                               bool known_success,
                                               SubmissionSource source) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  // TODO(b/297228856): Remove `!form_` check when
-  // `kAndroidAutofillFormSubmissionCheckById` launches.
-  if (!IsLinkedManager(manager) || !form_) {
+  if (!IsLinkedManager(manager)) {
     return;
   }
 
@@ -442,10 +444,7 @@ void AutofillProviderAndroid::OnFormSubmitted(AndroidAutofillManager* manager,
   // Even if the page modifies the form between the user interaction and the
   // form submission, we want to inform `AutofillManager` about the submission.
   // Otherwise no saving prompt can be offered.
-  if (base::FeatureList::IsEnabled(
-          features::kAndroidAutofillFormSubmissionCheckById)
-          ? !IsIdOfLinkedForm(form.global_id())
-          : !form_->SimilarFormAs(form)) {
+  if (!IsIdOfLinkedForm(form.global_id())) {
     return;
   }
 
@@ -466,7 +465,7 @@ void AutofillProviderAndroid::OnFocusNoLongerOnForm(
     return;
   }
 
-  bridge_->OnFocusChanged(absl::nullopt);
+  bridge_->OnFocusChanged(std::nullopt);
 }
 
 void AutofillProviderAndroid::OnFocusOnFormField(
@@ -528,9 +527,6 @@ void AutofillProviderAndroid::OnDidFillAutofillFormData(
     base::TimeTicks timestamp) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (manager != manager_.get() || !IsIdOfLinkedForm(form.global_id())) {
-    base::UmaHistogramBoolean(
-        "Autofill.WebView.OnDidFillAutofillFormDataEarlyReturnReason",
-        manager == manager_.get());
     return;
   }
   // TODO(crbug.com/1198811): Investigate passing the actually filled fields, in
@@ -577,6 +573,7 @@ void AutofillProviderAndroid::OnManagerResetOrDestroyed(
   // we consider this navigation to be resulting from the submission.
   if (check_submission_ && form_.get()) {
     FireSuccessfulSubmission(pending_submission_source_);
+    return;
   }
 
   Reset();
@@ -594,8 +591,8 @@ bool AutofillProviderAndroid::IntendsToShowBottomSheet(
     FormGlobalId form,
     FieldGlobalId field,
     const FormData& form_data) const {
-  return !has_used_cached_form_ && cached_form_ &&
-         form == cached_form_->form().global_id();
+  return !has_used_cached_form_ && cached_data_ && cached_data_->cached_form &&
+         form == cached_data_->cached_form->form().global_id();
 }
 
 bool AutofillProviderAndroid::WasBottomSheetJustShown(
@@ -663,17 +660,30 @@ gfx::RectF AutofillProviderAndroid::ToClientAreaBound(
 void AutofillProviderAndroid::Reset() {
   manager_ = nullptr;
   form_.reset();
-  field_id_ = {};
+  last_focused_field_id_ = {};
   field_type_group_ = FieldTypeGroup::kNoGroup;
   triggered_origin_ = {};
   check_submission_ = false;
   was_shown_bottom_sheet_timer_.Stop();
   was_bottom_sheet_just_shown_ = false;
 
+  if (base::FeatureList::IsEnabled(
+          features::kAndroidAutofillCancelSessionOnNavigation)) {
+    CancelSession();
+  }
+
   // Resets the Java instance and hides the datalist popup if there is one.
   bridge_->Reset();
   // TODO(crbug.com/1488233): Also send an unfocus event to make sure that the
   // Autofill session is truly terminated.
+}
+
+void AutofillProviderAndroid::CancelSession() {
+  cached_data_ = std::nullopt;
+  has_used_cached_form_ = false;
+  was_bottom_sheet_just_shown_ = false;
+  was_shown_bottom_sheet_timer_.Stop();
+  bridge_->CancelSession();
 }
 
 SessionId AutofillProviderAndroid::CreateSessionId() {
@@ -751,13 +761,12 @@ AutofillProviderAndroid::PasswordParserOverrides::FromLoginForm(
     const FormStructure& form_structure) {
   PasswordParserOverrides result;
   for (const std::unique_ptr<AutofillField>& field : form_structure) {
-    if (field->unique_renderer_id == pw_form.username_element_renderer_id) {
+    if (field->renderer_id == pw_form.username_element_renderer_id) {
       if (result.username_field_id) {
         return std::nullopt;
       }
       result.username_field_id = field->global_id();
-    } else if (field->unique_renderer_id ==
-               pw_form.password_element_renderer_id) {
+    } else if (field->renderer_id == pw_form.password_element_renderer_id) {
       if (result.password_field_id) {
         return std::nullopt;
       }
@@ -766,6 +775,23 @@ AutofillProviderAndroid::PasswordParserOverrides::FromLoginForm(
   }
   // A login form must always have a username field and a password field.
   if (!result.username_field_id || !result.password_field_id) {
+    // TODO(crbug.com/1523259): This should never be reachable. Remove once it
+    // is clear how it can happen.
+    SCOPED_CRASH_KEY_NUMBER("crbug1523259", "pw_form.username_id",
+                            pw_form.username_element_renderer_id.value());
+    SCOPED_CRASH_KEY_NUMBER("crbug1523259", "pw_form.password_id",
+                            pw_form.password_element_renderer_id.value());
+    SCOPED_CRASH_KEY_NUMBER("crbug1523259", "fs.fields.size",
+                            form_structure.fields().size());
+    SCOPED_CRASH_KEY_STRING1024("crbug1523259", "fs.fields.global_ids", [&] {
+      std::ostringstream ss;
+      for (size_t i = 0;
+           i < std::min<size_t>(10u, form_structure.fields().size()); ++i) {
+        ss << form_structure.fields()[i]->global_id() << " ";
+      }
+      return ss.str();
+    }());
+    base::debug::DumpWithoutCrashing();
     return std::nullopt;
   }
   return result;

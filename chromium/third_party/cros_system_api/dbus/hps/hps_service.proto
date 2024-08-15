@@ -5,7 +5,7 @@
 syntax = "proto3";
 
 package hps;
-option go_package = "chromiumos/system_api/hps_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/hps_proto";
 
 option optimize_for = LITE_RUNTIME;
 

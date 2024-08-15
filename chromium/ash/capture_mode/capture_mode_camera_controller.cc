@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <vector>
 
 #include "ash/accessibility/accessibility_controller.h"
 #include "ash/capture_mode/capture_mode_camera_preview_view.h"
@@ -14,6 +15,7 @@
 #include "ash/capture_mode/capture_mode_metrics.h"
 #include "ash/capture_mode/capture_mode_session.h"
 #include "ash/capture_mode/capture_mode_util.h"
+#include "ash/game_dashboard/game_dashboard_controller.h"
 #include "ash/public/cpp/capture_mode/capture_mode_delegate.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
@@ -29,6 +31,7 @@
 #include "ash/wm/wm_event.h"
 #include "base/check.h"
 #include "base/containers/contains.h"
+#include "base/debug/crash_logging.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
@@ -198,7 +201,8 @@ gfx::Rect GetTargetBoundsForBoundsAnimation(
   return result;
 }
 
-gfx::Rect GetCollisionAvoidanceRect(aura::Window* root_window) {
+gfx::Rect GetCollisionAvoidanceRect(aura::Window* root_window,
+                                    aura::Window* preview_parent) {
   DCHECK(root_window);
 
   auto* status_area_widget =
@@ -218,6 +222,15 @@ gfx::Rect GetCollisionAvoidanceRect(aura::Window* root_window) {
         collision_avoidance_rect.Union(
             tray_bubble_widget->GetWindowBoundsInScreen());
       }
+    }
+  }
+
+  if (auto* game_dashboard_controller = GameDashboardController::Get()) {
+    if (auto* game_dashboard_context =
+            game_dashboard_controller->GetGameDashboardContext(
+                preview_parent)) {
+      collision_avoidance_rect.Union(
+          game_dashboard_context->GetToolbarBoundsInScreen());
     }
   }
 
@@ -471,6 +484,24 @@ void CaptureModeCameraController::SetSelectedCamera(CameraId camera_id) {
 
 void CaptureModeCameraController::SetShouldShowPreview(bool value) {
   should_show_preview_ = value;
+
+  // TODO(http://b/290363225): Remove this if no more crashes after the fix.
+  SCOPED_CRASH_KEY_BOOL("SelfieCam", "selected_cam_valid",
+                        selected_camera_.is_valid());
+  SCOPED_CRASH_KEY_STRING256("SelfieCam", "selected_camera_",
+                             selected_camera_.ToString());
+  SCOPED_CRASH_KEY_STRING256("SelfieCam", "selected_cam_display_name",
+                             GetDisplayNameOfSelectedCamera());
+  SCOPED_CRASH_KEY_BOOL("SelfieCam", "should_show_preview_",
+                        should_show_preview_);
+  SCOPED_CRASH_KEY_BOOL("SelfieCam", "is_shutting_down_", is_shutting_down_);
+  SCOPED_CRASH_KEY_BOOL("SelfieCam", "camera_preview_widget_",
+                        !!camera_preview_widget_);
+  SCOPED_CRASH_KEY_BOOL("SelfieCam", "camera_preview_view_",
+                        !!camera_preview_view_);
+  SCOPED_CRASH_KEY_BOOL("SelfieCam", "IsCameraDisabledByPolicy",
+                        IsCameraDisabledByPolicy());
+
   RefreshCameraPreview();
 }
 
@@ -663,7 +694,7 @@ void CaptureModeCameraController::OnFrameHandlerFatalError() {
   DCHECK(camera_preview_view_);
   DCHECK_EQ(selected_camera_, camera_preview_view_->camera_id());
 
-  base::EraseIf(available_cameras_, [&](const CameraInfo& info) {
+  std::erase_if(available_cameras_, [&](const CameraInfo& info) {
     return selected_camera_ == info.camera_id;
   });
 
@@ -846,7 +877,9 @@ void CaptureModeCameraController::RefreshCameraPreview() {
     }
   }
 
-  if (!camera_info) {
+  // The supported formats might be empty and then cause a crash. Please see
+  // b/290363225.
+  if (!camera_info || camera_info->supported_formats.empty()) {
     camera_preview_widget_.reset();
     camera_preview_view_ = nullptr;
     if (old_root)
@@ -919,7 +952,7 @@ gfx::Rect CaptureModeCameraController::CalculatePreviewWidgetTargetBounds(
           : controller->GetOnCaptureSurfaceWidgetParentWindow();
   DCHECK(parent);
   const gfx::Rect collision_rect_screen =
-      GetCollisionAvoidanceRect(parent->GetRootWindow());
+      GetCollisionAvoidanceRect(parent->GetRootWindow(), parent);
 
   std::vector<CameraPreviewSnapPosition> snap_positions = {
       CameraPreviewSnapPosition::kBottomRight,
@@ -928,10 +961,7 @@ gfx::Rect CaptureModeCameraController::CalculatePreviewWidgetTargetBounds(
 
   // Move `camera_preview_snap_position_` to the beginning of `snap_positions`
   // vector, since we should always try the current snap position first.
-  base::EraseIf(snap_positions,
-                [this](CameraPreviewSnapPosition snap_position) {
-                  return snap_position == camera_preview_snap_position_;
-                });
+  std::erase(snap_positions, camera_preview_snap_position_);
   snap_positions.insert(snap_positions.begin(), camera_preview_snap_position_);
 
   // Cache the current preview bounds and return it directly when we find no

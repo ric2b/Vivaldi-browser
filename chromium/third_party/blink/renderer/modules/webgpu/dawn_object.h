@@ -68,6 +68,31 @@ DAWN_OBJECTS
 
 class GPUDevice;
 
+// RAII tracker for known memory allocations outside of V8, informing V8 using
+// AdjustAmountOfExternalAllocatedMemory. This causes V8 to collect garbage
+// more often when it knows the footprint of V8-managed objects is large.
+//
+// - It is OK for the tracked size to be an estimate.
+// - It is OK to update the tracked size dynamically/asynchronously.
+// - It is OK to use this for CPU memory allocated in another process.
+// - It is NOT OK to use this for VRAM allocations. This may cause GC to
+//   trigger too often: GC is trying to manage CPU memory pressure, but freeing
+//   VRAM allocations may or may not reduce CPU memory pressure.
+class ExternalMemoryTracker final {
+ public:
+  // Non-copyable/non-movable
+  ExternalMemoryTracker(const ExternalMemoryTracker&) = delete;
+  ExternalMemoryTracker& operator=(const ExternalMemoryTracker&) = delete;
+
+  ExternalMemoryTracker() = default;
+  ~ExternalMemoryTracker();
+
+  void SetCurrentSize(size_t newSize);
+
+ private:
+  int64_t size_ = 0;
+};
+
 // This class allows objects to hold onto a DawnControlClientHolder.
 // The DawnControlClientHolder is used to hold the WebGPUInterface and keep
 // track of whether or not the client has been destroyed. If the client is
@@ -75,7 +100,8 @@ class GPUDevice;
 class DawnObjectBase {
  public:
   explicit DawnObjectBase(
-      scoped_refptr<DawnControlClientHolder> dawn_control_client);
+      scoped_refptr<DawnControlClientHolder> dawn_control_client,
+      const String& label);
 
   const scoped_refptr<DawnControlClientHolder>& GetDawnControlClient() const;
   base::WeakPtr<WebGraphicsContext3DProviderWrapper> GetContextProviderWeakPtr()
@@ -106,7 +132,7 @@ class DawnObjectBase {
 
 class DawnObjectImpl : public ScriptWrappable, public DawnObjectBase {
  public:
-  explicit DawnObjectImpl(GPUDevice* device);
+  explicit DawnObjectImpl(GPUDevice* device, const String& label);
   ~DawnObjectImpl() override;
 
   WGPUDevice GetDeviceHandle();
@@ -121,8 +147,8 @@ class DawnObjectImpl : public ScriptWrappable, public DawnObjectBase {
 template <typename Handle>
 class DawnObject : public DawnObjectImpl {
  public:
-  DawnObject(GPUDevice* device, Handle handle)
-      : DawnObjectImpl(device),
+  DawnObject(GPUDevice* device, Handle handle, const String& label)
+      : DawnObjectImpl(device, label),
         handle_(handle),
         device_handle_(GetDeviceHandle()) {
     // All WebGPU Blink objects created directly or by the Device hold a
@@ -154,8 +180,9 @@ template <>
 class DawnObject<WGPUDevice> : public DawnObjectBase {
  public:
   DawnObject(scoped_refptr<DawnControlClientHolder> dawn_control_client,
-             WGPUDevice handle)
-      : DawnObjectBase(dawn_control_client), handle_(handle) {}
+             WGPUDevice handle,
+             const String& label)
+      : DawnObjectBase(dawn_control_client, label), handle_(handle) {}
   ~DawnObject() { GetProcs().deviceRelease(handle_); }
 
   WGPUDevice GetHandle() const { return handle_; }
@@ -168,8 +195,9 @@ template <>
 class DawnObject<WGPUAdapter> : public DawnObjectBase {
  public:
   DawnObject(scoped_refptr<DawnControlClientHolder> dawn_control_client,
-             WGPUAdapter handle)
-      : DawnObjectBase(dawn_control_client), handle_(handle) {}
+             WGPUAdapter handle,
+             const String& label)
+      : DawnObjectBase(dawn_control_client, label), handle_(handle) {}
   ~DawnObject() { GetProcs().adapterRelease(handle_); }
 
   WGPUAdapter GetHandle() const { return handle_; }

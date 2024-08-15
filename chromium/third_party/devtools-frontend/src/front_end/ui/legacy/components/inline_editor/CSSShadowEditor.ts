@@ -9,7 +9,6 @@ import * as VisualLogging from '../../../visual_logging/visual_logging.js';
 import * as UI from '../../legacy.js';
 
 import cssShadowEditorStyles from './cssShadowEditor.css.js';
-import {CSSLength, type CSSShadowModel} from './CSSShadowModel.js';
 
 const UIStrings = {
   /**
@@ -42,6 +41,57 @@ const defaultUnit: string = 'px';
 const sliderThumbRadius: number = 6;
 const canvasSize: number = 88;
 
+export interface CSSShadowModel {
+  setInset(inset: boolean): void;
+  setOffsetX(offsetX: CSSLength): void;
+  setOffsetY(offsetY: CSSLength): void;
+  setBlurRadius(blurRadius: CSSLength): void;
+  setSpreadRadius(spreadRadius: CSSLength): void;
+  isBoxShadow(): boolean;
+  inset(): boolean;
+  offsetX(): CSSLength;
+  offsetY(): CSSLength;
+  blurRadius(): CSSLength;
+  spreadRadius(): CSSLength;
+}
+
+export class CSSLength {
+  amount: number;
+  unit: string;
+  constructor(amount: number, unit: string) {
+    this.amount = amount;
+    this.unit = unit;
+  }
+
+  static parse(text: string): CSSLength|null {
+    const lengthRegex = new RegExp('^(?:' + CSSLength.Regex.source + ')$', 'i');
+    const match = text.match(lengthRegex);
+    if (!match) {
+      return null;
+    }
+    if (match.length > 2 && match[2]) {
+      return new CSSLength(parseFloat(match[1]), match[2]);
+    }
+    return CSSLength.zero();
+  }
+
+  static zero(): CSSLength {
+    return new CSSLength(0, '');
+  }
+
+  asCSSText(): string {
+    return this.amount + this.unit;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  static Regex = (function(): RegExp {
+    const number = '([+-]?(?:[0-9]*[.])?[0-9]+(?:[eE][+-]?[0-9]+)?)';
+    const unit = '(ch|cm|em|ex|in|mm|pc|pt|px|rem|vh|vmax|vmin|vw)';
+    const zero = '[+-]?(?:0*[.])?0+(?:[eE][+-]?[0-9]+)?';
+    return new RegExp(number + unit + '|' + zero, 'gi');
+  })();
+}
+
 export class CSSShadowEditor extends Common.ObjectWrapper.eventMixin<EventTypes, typeof UI.Widget.VBox>(
     UI.Widget.VBox) {
   private readonly typeField: HTMLElement;
@@ -63,7 +113,8 @@ export class CSSShadowEditor extends Common.ObjectWrapper.eventMixin<EventTypes,
   constructor() {
     super(true);
     this.contentElement.tabIndex = 0;
-    this.contentElement.setAttribute('jslog', `${VisualLogging.cssShadowEditor()}`);
+    this.contentElement.setAttribute(
+        'jslog', `${VisualLogging.dialog('cssShadowEditor').parent('mapped').track({keydown: 'Enter|Escape'})}`);
     this.setDefaultFocusedElement(this.contentElement);
 
     this.typeField = this.contentElement.createChild('div', 'shadow-editor-field shadow-editor-flex-field');
@@ -76,11 +127,15 @@ export class CSSShadowEditor extends Common.ObjectWrapper.eventMixin<EventTypes,
     this.insetButton.addEventListener('click', this.onButtonClick.bind(this), false);
 
     const xField = this.contentElement.createChild('div', 'shadow-editor-field');
-    this.xInput = this.createTextInput(xField, i18nString(UIStrings.xOffset), 'xOffset');
+    this.xInput = this.createTextInput(xField, i18nString(UIStrings.xOffset), 'x-offset');
     const yField = this.contentElement.createChild('div', 'shadow-editor-field');
-    this.yInput = this.createTextInput(yField, i18nString(UIStrings.yOffset), 'yOffset');
+    this.yInput = this.createTextInput(yField, i18nString(UIStrings.yOffset), 'y-offset');
     this.xySlider = (xField.createChild('canvas', 'shadow-editor-2D-slider') as HTMLCanvasElement);
-    this.xySlider.setAttribute('jslog', `${VisualLogging.slider().track({click: true, drag: true}).context('xy')}`);
+    this.xySlider.setAttribute('jslog', `${VisualLogging.slider('xy').track({
+                                 click: true,
+                                 drag: true,
+                                 keydown: 'ArrowUp|ArrowDown|ArrowLeft|ArrowRight',
+                               })}`);
     this.xySlider.width = canvasSize;
     this.xySlider.height = canvasSize;
     this.xySlider.tabIndex = -1;
@@ -111,7 +166,8 @@ export class CSSShadowEditor extends Common.ObjectWrapper.eventMixin<EventTypes,
     textInput.addEventListener('wheel', this.handleValueModification.bind(this), false);
     textInput.addEventListener('input', this.onTextInput.bind(this), false);
     textInput.addEventListener('blur', this.onTextBlur.bind(this), false);
-    textInput.setAttribute('jslog', `${VisualLogging.value().track({keydown: true}).context(jslogContext)}`);
+    textInput.setAttribute(
+        'jslog', `${VisualLogging.value().track({change: true, keydown: 'ArrowUp|ArrowDown'}).context(jslogContext)}`);
     return textInput;
   }
 

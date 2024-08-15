@@ -67,13 +67,6 @@ struct SanitizedResult {
 
     /// The sanitized program.
     Program program;
-
-    /// True if the shader needs a UBO.
-    bool needs_internal_uniform_buffer = false;
-
-    /// Store a map of global texture variable binding point to the byte offset and data type to
-    /// push into the internal uniform buffer.
-    TextureBuiltinsFromUniformOptions::BindingPointToFieldAndOffset bindpoint_to_data;
 };
 
 /// Sanitize a program in preparation for generating GLSL.
@@ -124,10 +117,10 @@ class ASTPrinter : public tint::TextGenerator {
     /// @param out the output of the expression stream
     /// @param expr the expression
     void EmitVectorRelational(StringStream& out, const ast::BinaryExpression* expr);
-    /// Handles generating a vector relational expression
+    /// Handles a bitcast call expression
     /// @param out the output of the expression stream
     /// @param expr the expression
-    void EmitBitcast(StringStream& out, const ast::BitcastExpression* expr);
+    void EmitBitcastCall(StringStream& out, const ast::CallExpression* expr);
     /// Emits a list of statements
     /// @param stmts the statement list
     void EmitStatements(VectorRef<const ast::Statement*> stmts);

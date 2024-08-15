@@ -156,7 +156,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
   }
   bool hidden_ssid() const { return hidden_ssid_; }
   const std::string& passpoint_id() const { return passpoint_id_; }
-
+  bool metered() const { return metered_; }
   // Wifi property accessors
   const std::string& eap_method() const { return eap_method_; }
   const std::vector<uint8_t>& raw_ssid() const { return raw_ssid_; }
@@ -168,6 +168,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
   const std::string& activation_type() const { return activation_type_; }
   const std::string& activation_state() const { return activation_state_; }
   bool allow_roaming() const { return allow_roaming_; }
+  const std::string& payment_method() const { return payment_method_; }
   const std::string& payment_url() const { return payment_url_; }
   const std::string& payment_post_data() const { return payment_post_data_; }
   bool cellular_out_of_credits() const { return cellular_out_of_credits_; }
@@ -372,6 +373,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
   bool blocked_by_policy_ = false;
   bool hidden_ssid_ = false;
   std::string passpoint_id_;
+  bool metered_ = false;
 
   // Cellular properties, used for icons, Connect, and Activation.
   std::string eid_;
@@ -382,6 +384,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
   std::string roaming_;
   bool allow_roaming_ = false;
   bool provider_requires_roaming_ = false;
+  std::string payment_method_;
   std::string payment_url_;
   std::string payment_post_data_;
   bool cellular_out_of_credits_ = false;

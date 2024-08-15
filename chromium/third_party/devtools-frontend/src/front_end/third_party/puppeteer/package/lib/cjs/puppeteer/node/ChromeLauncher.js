@@ -25,20 +25,6 @@ class ChromeLauncher extends ProductLauncher_js_1.ProductLauncher {
         super(puppeteer, 'chrome');
     }
     launch(options = {}) {
-        const headless = options.headless ?? true;
-        if (headless === true &&
-            this.puppeteer.configuration.logLevel === 'warn' &&
-            !Boolean(process.env['PUPPETEER_DISABLE_HEADLESS_WARNING'])) {
-            console.warn([
-                '\x1B[1m\x1B[43m\x1B[30m',
-                'Puppeteer old Headless deprecation warning:\x1B[0m\x1B[33m',
-                '  In the near future `headless: true` will default to the new Headless mode',
-                '  for Chrome instead of the old Headless implementation. For more',
-                '  information, please see https://developer.chrome.com/articles/new-headless/.',
-                '  Consider opting in early by passing `headless: "new"` to `puppeteer.launch()`',
-                '  If you encounter any bugs, please report them to https://github.com/puppeteer/puppeteer/issues/new/choose.\x1B[0m\n',
-            ].join('\n  '));
-        }
         if (this.puppeteer.configuration.logLevel === 'warn' &&
             process.platform === 'darwin' &&
             process.arch === 'x64') {
@@ -100,7 +86,7 @@ class ChromeLauncher extends ProductLauncher_js_1.ProductLauncher {
         let chromeExecutable = executablePath;
         if (!chromeExecutable) {
             (0, assert_js_1.assert)(channel || !this.puppeteer._isPuppeteerCore, `An \`executablePath\` or \`channel\` must be specified for \`puppeteer-core\``);
-            chromeExecutable = this.executablePath(channel);
+            chromeExecutable = this.executablePath(channel, options.headless ?? true);
         }
         return {
             executablePath: chromeExecutable,
@@ -172,6 +158,7 @@ class ChromeLauncher extends ProductLauncher_js_1.ProductLauncher {
             '--disable-sync',
             '--enable-automation',
             '--export-tagged-pdf',
+            '--generate-pdf-document-outline',
             '--force-color-profile=srgb',
             '--metrics-recording-only',
             '--no-first-run',
@@ -188,7 +175,7 @@ class ChromeLauncher extends ProductLauncher_js_1.ProductLauncher {
             chromeArguments.push('--auto-open-devtools-for-tabs');
         }
         if (headless) {
-            chromeArguments.push(headless === 'new' ? '--headless=new' : '--headless', '--hide-scrollbars', '--mute-audio');
+            chromeArguments.push(headless === 'shell' ? '--headless' : '--headless=new', '--hide-scrollbars', '--mute-audio');
         }
         if (args.every(arg => {
             return arg.startsWith('-');
@@ -198,7 +185,7 @@ class ChromeLauncher extends ProductLauncher_js_1.ProductLauncher {
         chromeArguments.push(...args);
         return chromeArguments;
     }
-    executablePath(channel) {
+    executablePath(channel, headless) {
         if (channel) {
             return (0, browsers_1.computeSystemExecutablePath)({
                 browser: browsers_1.Browser.CHROME,
@@ -206,7 +193,7 @@ class ChromeLauncher extends ProductLauncher_js_1.ProductLauncher {
             });
         }
         else {
-            return this.resolveExecutablePath();
+            return this.resolveExecutablePath(headless);
         }
     }
 }

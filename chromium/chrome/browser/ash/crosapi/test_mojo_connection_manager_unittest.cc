@@ -29,7 +29,6 @@
 #include "chrome/browser/ash/crosapi/browser_service_host_observer.h"
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
-#include "chrome/browser/ash/crosapi/environment_provider.h"
 #include "chrome/browser/ash/crosapi/idle_service_ash.h"
 #include "chrome/browser/ash/crosapi/test_crosapi_dependency_registry.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
@@ -90,7 +89,8 @@ class TestBrowserService : public crosapi::mojom::BrowserService {
                            NewFullscreenWindowCallback callback) override {}
   void NewGuestWindow(int64_t target_display_id,
                       NewGuestWindowCallback callback) override {}
-  void NewTab(NewTabCallback callback) override {}
+  void NewTab(std::optional<uint64_t> profile_id,
+              NewTabCallback callback) override {}
   void Launch(int64_t target_display_id,
               std::optional<uint64_t> profile_id,
               LaunchCallback callback) override {}
@@ -110,6 +110,8 @@ class TestBrowserService : public crosapi::mojom::BrowserService {
   void OpenProfileManager() override {}
   void UpdateComponentPolicy(
       base::flat_map<policy::PolicyNamespace, base::Value> policy) override {}
+  void OpenCaptivePortalSignin(const GURL& url,
+                               OpenUrlCallback callback) override {}
 
  private:
   mojo::Receiver<mojom::BrowserService> receiver_;
@@ -221,6 +223,7 @@ TEST_F(TestMojoConnectionManagerTest, ConnectMultipleClients) {
   TestingProfile* profile =
       testing_profile_manager.CreateTestingProfile(account.GetUserEmail());
   profile->set_profile_name(account.GetUserEmail());
+  user_manager.OnUserProfileCreated(account, profile->GetPrefs());
 
   auto crosapi_manager = CreateCrosapiManagerWithTestRegistry();
 
@@ -241,11 +244,8 @@ TEST_F(TestMojoConnectionManagerTest, ConnectMultipleClients) {
                       EXPECT_FALSE(error);
                       run_loop1.Quit();
                     })));
-  std::unique_ptr<EnvironmentProvider> environment_provider =
-      std::make_unique<EnvironmentProvider>();
-  environment_provider->SetLastPolicyFetchAttemptTimestamp(base::Time::Now());
   TestMojoConnectionManager test_mojo_connection_manager{
-      base::FilePath(socket_path), environment_provider.get()};
+      base::FilePath(socket_path)};
   run_loop1.Run();
 
   // Test connects with ash-chrome via the socket.
@@ -281,6 +281,8 @@ TEST_F(TestMojoConnectionManagerTest, ConnectMultipleClients) {
   sub1.Close();
   ASSERT_TRUE(base::TerminateMultiProcessTestChild(sub2, 0, true));
   sub2.Close();
+
+  user_manager.OnUserProfileWillBeDestroyed(account);
 }
 
 // Another process that emulates the behavior of lacros-chrome.

@@ -7,7 +7,7 @@ import 'chrome://webui-test/chromeos/mojo_webui_test_support.js';
 import {fakeAcceleratorConfig, fakeLayoutInfo} from 'chrome://shortcut-customization/js/fake_data.js';
 import {FakeShortcutProvider} from 'chrome://shortcut-customization/js/fake_shortcut_provider.js';
 import {Accelerator, AcceleratorConfigResult, AcceleratorSource, MojoAcceleratorConfig, MojoLayoutInfo} from 'chrome://shortcut-customization/js/shortcut_types.js';
-import {AcceleratorResultData, AcceleratorsUpdatedObserverRemote, PolicyUpdatedObserverRemote} from 'chrome://shortcut-customization/mojom-webui/ash/webui/shortcut_customization_ui/mojom/shortcut_customization.mojom-webui.js';
+import {AcceleratorResultData, AcceleratorsUpdatedObserverRemote, PolicyUpdatedObserverRemote} from 'chrome://shortcut-customization/mojom-webui/shortcut_customization.mojom-webui.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 
 suite('fakeShortcutProviderTest', function() {
@@ -115,7 +115,7 @@ suite('fakeShortcutProviderTest', function() {
     // TODO(jimmyxgong): Remove this test once real data is ready.
     const fakeResult: AcceleratorResultData = {
       result: AcceleratorConfigResult.kSuccess,
-      shortcutName: undefined,
+      shortcutName: null,
     };
 
     getProvider().setFakeAddAcceleratorResult(fakeResult);
@@ -132,7 +132,7 @@ suite('fakeShortcutProviderTest', function() {
   test('ReplaceAcceleratorFake', () => {
     const fakeResult: AcceleratorResultData = {
       result: AcceleratorConfigResult.kSuccess,
-      shortcutName: undefined,
+      shortcutName: null,
     };
 
     getProvider().setFakeReplaceAcceleratorResult(fakeResult);
@@ -150,7 +150,7 @@ suite('fakeShortcutProviderTest', function() {
   test('RemoveAcceleratorFake', () => {
     const fakeResult: AcceleratorResultData = {
       result: AcceleratorConfigResult.kSuccess,
-      shortcutName: undefined,
+      shortcutName: null,
     };
 
     getProvider().setFakeRemoveAcceleratorResult(fakeResult);
@@ -169,7 +169,7 @@ suite('fakeShortcutProviderTest', function() {
   test('RestoreDefaultFake', () => {
     const fakeResult: AcceleratorResultData = {
       result: AcceleratorConfigResult.kSuccess,
-      shortcutName: undefined,
+      shortcutName: null,
     };
 
     getProvider().setFakeRestoreDefaultResult(fakeResult);

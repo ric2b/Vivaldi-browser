@@ -73,6 +73,7 @@
 #include "services/network/public/cpp/network_switches.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/mojom/context_menu/context_menu.mojom.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-shared.h"
 
 using ::testing::IsEmpty;
@@ -625,8 +626,9 @@ IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest,
     std::string content =
         EvalJs(web_contents, "document.body ? document.body.innerText : '';")
             .ExtractString();
-    if (content.find("HTTP ERROR 404") != std::string::npos)
+    if (content.find("HTTP ERROR 404") != std::string::npos) {
       break;
+    }
     base::RunLoop run_loop;
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());

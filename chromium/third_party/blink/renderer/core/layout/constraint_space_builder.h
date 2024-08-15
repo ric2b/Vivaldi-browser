@@ -5,9 +5,10 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_CONSTRAINT_SPACE_BUILDER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_CONSTRAINT_SPACE_BUILDER_H_
 
+#include <optional>
+
 #include "base/check_op.h"
 #include "base/dcheck_is_on.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/constraint_space.h"
 #include "third_party/blink/renderer/core/layout/floats_utils.h"
@@ -177,6 +178,19 @@ class CORE_EXPORT ConstraintSpaceBuilder final {
   }
 
   void DisableFurtherFragmentation() { space_.DisableFurtherFragmentation(); }
+  void DisableMonolithicOverflowPropagation() {
+    space_.DisableMonolithicOverflowPropagation();
+  }
+
+  void SetIsHiddenForPaint(bool is_hidden_for_paint) {
+#if DCHECK_IS_ON()
+    DCHECK(!is_hidden_for_paint_set_);
+    is_hidden_for_paint_set_ = true;
+#endif
+    if (is_hidden_for_paint) {
+      space_.bitfields_.is_hidden_for_paint = true;
+    }
+  }
 
   void SetIsFixedInlineSize(bool b) {
     if (LIKELY(is_in_parallel_flow_))
@@ -391,7 +405,7 @@ class CORE_EXPORT ConstraintSpaceBuilder final {
   }
 
   void SetTableCellAlignmentBaseline(
-      const absl::optional<LayoutUnit>& table_cell_alignment_baseline) {
+      const std::optional<LayoutUnit>& table_cell_alignment_baseline) {
 #if DCHECK_IS_ON()
     DCHECK(!is_table_cell_alignment_baseline_set_);
     is_table_cell_alignment_baseline_set_ = true;
@@ -408,17 +422,6 @@ class CORE_EXPORT ConstraintSpaceBuilder final {
     is_table_cell_column_index_set_ = true;
 #endif
     space_.EnsureRareData()->SetTableCellColumnIndex(column_index);
-  }
-
-  void SetIsTableCellHiddenForPaint(bool is_hidden_for_paint) {
-#if DCHECK_IS_ON()
-    DCHECK(!is_table_cell_hidden_for_paint_set_);
-    is_table_cell_hidden_for_paint_set_ = true;
-#endif
-    if (is_hidden_for_paint) {
-      space_.EnsureRareData()->SetIsTableCellHiddenForPaint(
-          is_hidden_for_paint);
-    }
   }
 
   void SetIsTableCellWithCollapsedBorders(bool has_collapsed_borders) {
@@ -487,7 +490,7 @@ class CORE_EXPORT ConstraintSpaceBuilder final {
       space_.EnsureRareData()->is_line_clamp_context = true;
   }
 
-  void SetLinesUntilClamp(const absl::optional<int>& clamp) {
+  void SetLinesUntilClamp(const std::optional<int>& clamp) {
 #if DCHECK_IS_ON()
     DCHECK(!is_lines_until_clamp_set_);
     is_lines_until_clamp_set_ = true;
@@ -495,6 +498,13 @@ class CORE_EXPORT ConstraintSpaceBuilder final {
     DCHECK(!is_new_fc_);
     if (clamp)
       space_.EnsureRareData()->SetLinesUntilClamp(*clamp);
+  }
+
+  void SetShouldTextBoxTrimStart() {
+    space_.EnsureRareData()->should_text_box_trim_start = true;
+  }
+  void SetShouldTextBoxTrimEnd() {
+    space_.EnsureRareData()->should_text_box_trim_end = true;
   }
 
   void SetIsPushedByFloats() {
@@ -558,6 +568,7 @@ class CORE_EXPORT ConstraintSpaceBuilder final {
   bool adjust_inline_size_if_needed_;
 
 #if DCHECK_IS_ON()
+  bool is_hidden_for_paint_set_ = false;
   bool is_available_size_set_ = false;
   bool is_percentage_resolution_size_set_ = false;
   bool is_fragmentainer_block_size_set_ = false;
@@ -570,7 +581,6 @@ class CORE_EXPORT ConstraintSpaceBuilder final {
   bool is_table_cell_borders_set_ = false;
   bool is_table_cell_alignment_baseline_set_ = false;
   bool is_table_cell_column_index_set_ = false;
-  bool is_table_cell_hidden_for_paint_set_ = false;
   bool is_table_cell_with_collapsed_borders_set_ = false;
   bool is_custom_layout_data_set_ = false;
   bool is_lines_until_clamp_set_ = false;

@@ -34,11 +34,13 @@ title: Triage Best Practices
         *   **Pro Tip:** People can only do a finite amount of work,
                     adding more work to someone's pile won't get it done faster.
         *   **Pro Tip:** It's perfectly fine to mark something as
-                    Status:Available (i.e. no Owner), if the work doesn't need
+                    "New" (i.e. no Owner), if the work doesn't need
                     to be scheduled immediately, but please make sure that the
-                    work has a specific categorization label (e.g.
-                    Component=UI&gt;Browser&gt;Foo), so that it's clear which
+                    work is in the proper component, so that it's clear which
                     team(s) are accountable for it's priority.
+        *   **Pro Tip:** It's also advisable to add it to the
+                    [Available hotlist](https://issues.chromium.org/hotlists/5438642)
+                    to let people know it should be could be worked on.
 
 ## How to Think about Priorities
 
@@ -57,40 +59,6 @@ title: Triage Best Practices
 *   P3 - **Not time sensitive**
     *   Can be completed at any time, no release targeting required.
 
-## **Recommended Processing Order for Triage Practice**
-
-*   Start by checking your team's load balance.
-    *   Using your standard triage query, pull up the
-                "[Grid](https://bugs.chromium.org/p/chromium/issues/list?can=2&q=&colspec=ID+Pri+M+Stars+ReleaseBlock+Cr+Status+Owner+Summary+OS+Modified&groupby=&sort=&x=m&y=releaseblock&cells=tiles&mode=grid)"
-                view. Set ***Rows*** to be "Owner," ***Columns*** to be "None,"
-                and ***Cells*** to be "Counts"
-    *   Get a rough sense for everyone's issue distribution.
-    *   **Pro Tip:** Keep that page opened in the background, as a
-                reference for when you are assigning issues.
-*   Assign unassigned (-has:owner) Release Blockers + P0 & P1 issues.
-    *   These are important to start with first, since these issues are
-                likely time sensitive (notice Blockers, which actively hold back
-                releases, are prioritized first).
-    *   **Pro Tip:** It's OK to change the Blocking status or Priority,
-                but please be clear about why (e.g. "this isn't a release block
-                stable because ....")
-*   Untriaged (status=untriaged and status=unconfirmed) issues next,
-            ordering by age (i.e. try and process the requests that have been in
-            the queue longest)
-    *   The point here is really to answer the 3 questions (i.e. "Is
-                this something we want to do?," "How important is it?," "Who
-                should do it?")
-    *   Please ensure that all P1+ issues are assigned an owner.
-    *   **Pro Tip:** Ideally you'll budget enough time to get through
-                everything, but if your list is too large to process in a single
-                triage session, ==prioritize looking at Type-Bug-Regression==
-                (i.e. they are the most likely to be P1+ issues).
-*   Once you've triaged the most important issues, sanity check your
-            team's load balance (to make sure that you haven't overloaded
-            anyone).
-*   Review / Assign unassigned P2 & P3 issue, as well as any open
-            Available issues.
-
 ## More Pro Tips
 
 *   Set aside a regular time (and place) to Triage.
@@ -106,7 +74,6 @@ title: Triage Best Practices
             they start by working on valid/ relevant issues.
 *   Make sure that things are properly categorized, especially as
             Available issues, so that they are discoverable.
-
 *   **Spend most of your time on issues opened in the last year.**
     *   **Most issues have a half-life.** Issue reports are a static
                 reflection of what was... not necessarily what is. That is...

@@ -8,6 +8,7 @@
 
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "components/performance_manager/graph/graph_impl.h"
 #include "components/performance_manager/graph/graph_impl_util.h"
 #include "components/performance_manager/graph/initializing_frame_node_observer.h"
@@ -218,7 +219,7 @@ bool FrameNodeImpl::IsCapturingMediaStream() const {
   return is_capturing_media_stream_.value();
 }
 
-absl::optional<bool> FrameNodeImpl::IntersectsViewport() const {
+std::optional<bool> FrameNodeImpl::IntersectsViewport() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // The intersection with the viewport of the outermost main frame or embedder
   // is not tracked.
@@ -283,24 +284,26 @@ int FrameNodeImpl::render_frame_id() const {
   return render_frame_id_;
 }
 
-const base::flat_set<FrameNodeImpl*>& FrameNodeImpl::child_frame_nodes() const {
+const base::flat_set<raw_ptr<FrameNodeImpl, CtnExperimental>>&
+FrameNodeImpl::child_frame_nodes() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return child_frame_nodes_;
 }
 
-const base::flat_set<PageNodeImpl*>& FrameNodeImpl::opened_page_nodes() const {
+const base::flat_set<raw_ptr<PageNodeImpl, CtnExperimental>>&
+FrameNodeImpl::opened_page_nodes() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return opened_page_nodes_;
 }
 
-const base::flat_set<PageNodeImpl*>& FrameNodeImpl::embedded_page_nodes()
-    const {
+const base::flat_set<raw_ptr<PageNodeImpl, CtnExperimental>>&
+FrameNodeImpl::embedded_page_nodes() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return embedded_page_nodes_;
 }
 
-const base::flat_set<WorkerNodeImpl*>& FrameNodeImpl::child_worker_nodes()
-    const {
+const base::flat_set<raw_ptr<WorkerNodeImpl, CtnExperimental>>&
+FrameNodeImpl::child_worker_nodes() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return child_worker_nodes_;
 }
@@ -516,7 +519,7 @@ const ProcessNode* FrameNodeImpl::GetProcessNode() const {
 bool FrameNodeImpl::VisitChildFrameNodes(
     const FrameNodeVisitor& visitor) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  for (auto* frame_impl : child_frame_nodes()) {
+  for (FrameNodeImpl* frame_impl : child_frame_nodes()) {
     const FrameNode* frame = frame_impl;
     if (!visitor(frame)) {
       return false;
@@ -534,7 +537,7 @@ const base::flat_set<const FrameNode*> FrameNodeImpl::GetChildFrameNodes()
 
 bool FrameNodeImpl::VisitOpenedPageNodes(const PageNodeVisitor& visitor) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  for (auto* page_impl : opened_page_nodes()) {
+  for (PageNodeImpl* page_impl : opened_page_nodes()) {
     const PageNode* page = page_impl;
     if (!visitor(page)) {
       return false;
@@ -552,7 +555,7 @@ const base::flat_set<const PageNode*> FrameNodeImpl::GetOpenedPageNodes()
 bool FrameNodeImpl::VisitEmbeddedPageNodes(
     const PageNodeVisitor& visitor) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  for (auto* page_impl : embedded_page_nodes()) {
+  for (PageNodeImpl* page_impl : embedded_page_nodes()) {
     const PageNode* page = page_impl;
     if (!visitor(page)) {
       return false;
@@ -576,7 +579,7 @@ const base::flat_set<const WorkerNode*> FrameNodeImpl::GetChildWorkerNodes()
 bool FrameNodeImpl::VisitChildDedicatedWorkers(
     const WorkerNodeVisitor& visitor) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  for (auto* worker_node_impl : child_worker_nodes()) {
+  for (WorkerNodeImpl* worker_node_impl : child_worker_nodes()) {
     const WorkerNode* node = worker_node_impl;
     if (node->GetWorkerType() == WorkerNode::WorkerType::kDedicated &&
         !visitor(node)) {
@@ -615,15 +618,8 @@ void FrameNodeImpl::OnJoiningGraph() {
 
   // Make sure all weak pointers, even `weak_this_` that was created on the UI
   // thread in the constructor, can only be dereferenced on the graph sequence.
-  //
-  // If this is the first pointer dereferenced, it will bind all pointers from
-  // `weak_factory_` to the current sequence. If not, get() will DCHECK.
-  // DCHECK'ing the return value of get() prevents the compiler from optimizing
-  // it away.
-  //
-  // TODO(crbug.com/1134162): Use WeakPtrFactory::BindToCurrentSequence for this
-  // (it's clearer but currently not exposed publicly).
-  DCHECK(GetWeakPtr().get());
+  weak_factory_.BindToCurrentSequence(
+      base::subtle::BindWeakPtrFactoryPassKey());
 
   // Enable querying this node using process and frame routing ids.
   graph()->RegisterFrameNodeForId(process_node_->GetRenderProcessHostId(),
@@ -687,7 +683,7 @@ void FrameNodeImpl::SeverPageRelationshipsAndMaybeReparent() {
   // disappear, or it must be explicitly severed (this can happen with
   // portals).
   while (!opened_page_nodes_.empty()) {
-    auto* opened_node = *opened_page_nodes_.begin();
+    auto* opened_node = (*opened_page_nodes_.begin()).get();
     if (parent_frame_node_) {
       opened_node->SetOpenerFrameNode(parent_frame_node_);
     } else {
@@ -697,7 +693,7 @@ void FrameNodeImpl::SeverPageRelationshipsAndMaybeReparent() {
   }
 
   while (!embedded_page_nodes_.empty()) {
-    auto* embedded_node = *embedded_page_nodes_.begin();
+    auto* embedded_node = (*embedded_page_nodes_.begin()).get();
     auto embedding_type = embedded_node->GetEmbeddingType();
     if (parent_frame_node_) {
       embedded_node->SetEmbedderFrameNodeAndEmbeddingType(parent_frame_node_,

@@ -31,7 +31,6 @@
 #include "chrome/browser/ash/login/signin/token_handle_util.h"
 #include "chrome/browser/ash/net/secure_dns_manager.h"
 #include "chrome/browser/ash/net/xdr_manager.h"
-#include "chrome/browser/ash/notifications/update_notification.h"
 #include "chrome/browser/ash/release_notes/release_notes_notification.h"
 #include "chrome/browser/ash/system_web_apps/apps/help_app/help_app_notification_controller.h"
 #include "chrome/browser/profiles/profile.h"
@@ -64,7 +63,6 @@ class TokenHandleFetcher;
 class EolNotification;
 class InputEventsBlocker;
 class U2FNotification;
-class UpdateNotificationShowingController;
 
 namespace test {
 class UserSessionManagerTestApi;
@@ -219,10 +217,10 @@ class UserSessionManager
   // user sessions restoration is in progress.
   bool UserSessionsRestoreInProgress() const;
 
-  // Send the notification before creating the browser so additional objects
-  // that need the profile (e.g. the launcher) can be created first.
-  void NotifyUserProfileLoaded(Profile* profile,
-                               const user_manager::User* user);
+  // Called when user profile is loaded. Send the notification before creating
+  // the browser so additional objects that need the profile (e.g. the launcher)
+  // can be created first.
+  void OnUserProfileLoaded(Profile* profile, const user_manager::User* user);
 
   // Start the Tether service if it is ready.
   void StartTetherServiceIfPossible(Profile* profile);
@@ -336,17 +334,9 @@ class UserSessionManager
   // Shows U2F notification if necessary.
   void MaybeShowU2FNotification();
 
-  // Shows update notification if necessary.
-  void MaybeShowUpdateNotification(Profile* profile);
-
   // Shows Help App release notes notification, if a notification for the help
   // app has not yet been shown in the current milestone.
   void MaybeShowHelpAppReleaseNotesNotification(Profile* profile);
-
-  // Shows Help App discover notification if the profile meets the criteria and
-  // if a notification for the help app has not yet been shown in the current
-  // milestone.
-  void MaybeShowHelpAppDiscoverNotification(Profile* profile);
 
   using EolNotificationHandlerFactoryCallback =
       base::RepeatingCallback<std::unique_ptr<EolNotification>(
@@ -365,7 +355,6 @@ class UserSessionManager
   // Observes the Device Account's LST and informs UserSessionManager about it.
   class DeviceAccountGaiaTokenObserver;
   friend class test::UserSessionManagerTestApi;
-  friend class UpdateNotificationTest;
   friend struct base::DefaultSingletonTraits<UserSessionManager>;
 
   using SigninSessionRestoreStateSet = std::set<AccountId>;
@@ -445,8 +434,10 @@ class UserSessionManager
   // profile is ready.
   void InitializeBrowser(Profile* profile);
 
-  // Launches the Help App depending on flags / prefs / user.
-  void MaybeLaunchHelpApp(Profile* profile) const;
+  // Launches the Help App depending on flags / prefs / user. This should only
+  // be used for the first run experience, i.e. after the user completed the
+  // OOBE setup.
+  void MaybeLaunchHelpAppForFirstRun(Profile* profile) const;
 
   // Start user onboarding if the user is new.
   bool MaybeStartNewUserOnboarding(Profile* profile);
@@ -546,11 +537,6 @@ class UserSessionManager
   HelpAppNotificationController* GetHelpAppNotificationController(
       Profile* profile);
 
-  // Get a reference of the `UpdateNotificationController`, creating it if it
-  // doesn't exist.
-  UpdateNotificationShowingController* GetUpdateNotificationShowingController(
-      Profile* profile);
-
   base::WeakPtr<UserSessionManagerDelegate> delegate_;
 
   // Used to listen to network changes.
@@ -638,7 +624,8 @@ class UserSessionManager
   // Mapped to `chrome::AttemptRestart`, except in tests.
   base::RepeatingClosure attempt_restart_closure_;
 
-  base::flat_set<Profile*> user_profile_initialized_called_;
+  base::flat_set<raw_ptr<Profile, CtnExperimental>>
+      user_profile_initialized_called_;
 
   std::unique_ptr<arc::AlwaysOnVpnManager> always_on_vpn_manager_;
 
@@ -650,13 +637,8 @@ class UserSessionManager
 
   std::unique_ptr<U2FNotification> u2f_notification_;
 
-  std::unique_ptr<UpdateNotification> update_notification_;
-
   std::unique_ptr<HelpAppNotificationController>
       help_app_notification_controller_;
-
-  std::unique_ptr<UpdateNotificationShowingController>
-      update_notification_showing_controller_;
 
   bool token_handle_backfill_tried_for_testing_ = false;
 

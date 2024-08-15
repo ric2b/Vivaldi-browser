@@ -223,7 +223,7 @@ Error Stream::TryParse(const Json::Value& value,
 }
 
 Json::Value Stream::ToJson() const {
-  OSP_DCHECK(IsValid());
+  OSP_CHECK(IsValid());
 
   Json::Value root;
   root["index"] = index;
@@ -281,7 +281,7 @@ Error AudioStream::TryParse(const Json::Value& value, AudioStream* out) {
 }
 
 Json::Value AudioStream::ToJson() const {
-  OSP_DCHECK(IsValid());
+  OSP_CHECK(IsValid());
 
   Json::Value out = stream.ToJson();
   out[kCodecName] = CodecToString(codec);
@@ -339,7 +339,7 @@ Error VideoStream::TryParse(const Json::Value& value, VideoStream* out) {
 }
 
 Json::Value VideoStream::ToJson() const {
-  OSP_DCHECK(IsValid());
+  OSP_CHECK(IsValid());
 
   Json::Value out = stream.ToJson();
   out["codecName"] = CodecToString(codec);
@@ -414,7 +414,7 @@ Error Offer::TryParse(const Json::Value& root, Offer* out) {
 }
 
 Json::Value Offer::ToJson() const {
-  OSP_DCHECK(IsValid());
+  OSP_CHECK(IsValid());
   Json::Value root;
   root["castMode"] = GetEnumName(kCastModeNames, cast_mode).value();
   Json::Value streams;

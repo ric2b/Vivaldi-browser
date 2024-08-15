@@ -21,6 +21,10 @@
 #include "components/bookmarks/browser/titled_url_index.h"
 #include "ui/base/models/tree_node_iterator.h"
 
+#if BUILDFLAG(IS_IOS)
+#include "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
+#endif
+
 namespace bookmarks {
 
 namespace {
@@ -48,7 +52,7 @@ class VivaldiBookmarkModelFriend {
       return;
 
     for (BookmarkModelObserver& observer : model->observers_) {
-      observer.OnWillChangeBookmarkNode(model, node);
+      observer.OnWillChangeBookmarkNode(node);
     }
 
     if (node->is_url()) {
@@ -63,11 +67,16 @@ class VivaldiBookmarkModelFriend {
       model->titled_url_index_->Add(node);
     }
 
-    if (model->store_)
-      model->store_->ScheduleSave();
+    if (model->local_or_syncable_store_) {
+      model->local_or_syncable_store_->ScheduleSave();
+    }
+
+    if (model->account_store_) {
+      model->account_store_->ScheduleSave();
+    }
 
     for (BookmarkModelObserver& observer : model->observers_) {
-      observer.BookmarkNodeChanged(model, node);
+      observer.BookmarkNodeChanged(node);
     }
   }
 };
@@ -82,8 +91,11 @@ namespace {
 
 class BookmarkModelLoadWaiter : public bookmarks::BaseBookmarkModelObserver {
  public:
-  BookmarkModelLoadWaiter(RunAfterModelLoadCallback callback)
-      : callback_(std::move(callback)) {}
+  BookmarkModelLoadWaiter(VivaldiBookmarkModelType* bookmark_model,
+                          RunAfterModelLoadCallback callback)
+      : callback_(std::move(callback)), bookmark_model_(bookmark_model) {
+    bookmark_model_->AddObserver(this);
+  }
   BookmarkModelLoadWaiter(const BookmarkModelLoadWaiter&) = delete;
   BookmarkModelLoadWaiter& operator=(const BookmarkModelLoadWaiter&) = delete;
 
@@ -93,15 +105,15 @@ class BookmarkModelLoadWaiter : public bookmarks::BaseBookmarkModelObserver {
   // bookmarks::BaseBookmarkModelObserver:
   void BookmarkModelChanged() override {}
 
-  void BookmarkModelLoaded(bookmarks::BookmarkModel* model,
-                           bool ids_reassigned) override {
-    model->RemoveObserver(this);
+  void BookmarkModelLoaded(bool ids_reassigned) override {
+    bookmark_model_->RemoveObserver(this);
     RunAfterModelLoadCallback callback = std::move(callback_);
+    const raw_ptr<VivaldiBookmarkModelType> model = std::move(bookmark_model_);
     delete this;
     std::move(callback).Run(model);
   }
 
-  void BookmarkModelBeingDeleted(bookmarks::BookmarkModel* model) override {
+  void BookmarkModelBeingDeleted() override {
     // The model can be deleted before AfterBookmarkModelLoaded is called.
     // Ensure that we do not leak this and prevent AfterBookmarkModelLoaded from
     // being called.
@@ -112,6 +124,7 @@ class BookmarkModelLoadWaiter : public bookmarks::BaseBookmarkModelObserver {
   }
 
   RunAfterModelLoadCallback callback_;
+  const raw_ptr<VivaldiBookmarkModelType> bookmark_model_;
 };
 
 // Struct holding std::string constants with names that we use to get/set values
@@ -181,7 +194,7 @@ void SetMetaString(BookmarkNode::MetaInfoMap* map,
 
 }  // namespace
 
-void RunAfterModelLoad(bookmarks::BookmarkModel* model,
+void RunAfterModelLoad(VivaldiBookmarkModelType* model,
                        RunAfterModelLoadCallback callback) {
   if (!model || model->loaded()) {
     std::move(callback).Run(model);
@@ -189,9 +202,7 @@ void RunAfterModelLoad(bookmarks::BookmarkModel* model,
   }
   // waiter will be deleted after receiving BookmarkModelLoaded or
   // BookmarkModelBeingDeleted notifications.
-  BookmarkModelLoadWaiter* waiter =
-      new BookmarkModelLoadWaiter(std::move(callback));
-  model->AddObserver(waiter);
+  new BookmarkModelLoadWaiter(model, std::move(callback));
 }
 
 const std::string& ThumbnailString() {
@@ -261,7 +272,7 @@ SkColor GetThemeColor(const BookmarkNode* node) {
 }
 
 std::string GetThemeColorForCSS(const BookmarkNode* node) {
-  SkColor theme_color = GetThemeColor(node) ;
+  SkColor theme_color = GetThemeColor(node);
   if (theme_color == SK_ColorTRANSPARENT)
     return "";
 
@@ -392,6 +403,43 @@ void SetNodeThemeColor(BookmarkModel* model,
   model->SetNodeMetaInfo(node, GetMetaNames().theme_color,
                          base::NumberToString(theme_color));
 }
+
+#if BUILDFLAG(IS_IOS)
+// iOS specific functions
+bool DoesNickExists(LegacyBookmarkModel* model,
+                    const std::string& nickname,
+                    const BookmarkNode* updated_node) {
+  return model->DoesNickExists(nickname, updated_node);
+}
+
+void SetNodeNickname(LegacyBookmarkModel* model,
+                     const BookmarkNode* node,
+                     const std::string& nickname) {
+  model->SetNodeNickname(node, nickname);
+}
+
+void SetNodeDescription(LegacyBookmarkModel* model,
+                        const BookmarkNode* node,
+                        const std::string& description) {
+  model->SetNodeDescription(node, description);
+}
+
+void SetNodeSpeeddial(LegacyBookmarkModel* model,
+                      const BookmarkNode* node,
+                      bool speeddial) {
+  model->SetNodeSpeeddial(node, speeddial);
+}
+
+void SetNodeThumbnail(LegacyBookmarkModel* model,
+                      const BookmarkNode* node,
+                      const std::string& thumbnail) {
+  model->SetNodeThumbnail(node, thumbnail);
+}
+
+void RemovePartnerId(LegacyBookmarkModel* model, const BookmarkNode* node) {
+  model->RemovePartnerId(node);
+}
+#endif
 
 bool WriteBookmarkData(const base::Value::Dict& value,
                        BookmarkWriteFunc write_func,

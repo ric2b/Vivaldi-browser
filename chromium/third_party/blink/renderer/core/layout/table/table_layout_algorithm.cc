@@ -65,7 +65,7 @@ ConstraintSpace CreateCaptionConstraintSpace(
     const ComputedStyle& table_style,
     const BlockNode& caption,
     LogicalSize available_size,
-    absl::optional<LayoutUnit> block_offset = absl::nullopt) {
+    std::optional<LayoutUnit> block_offset = std::nullopt) {
   ConstraintSpaceBuilder builder(table_constraint_space,
                                  caption.Style().GetWritingDirection(),
                                  /* is_new_fc */ true);
@@ -151,7 +151,7 @@ void ComputeCaptionFragments(
     //
     // TODO(mstensho): We can remove this if we only perform this operation once
     // per table node (and e.g. store the table data in the break tokens).
-    absl::optional<DisableLayoutSideEffectsScope> disable_side_effects;
+    std::optional<DisableLayoutSideEffectsScope> disable_side_effects;
     if ((!captions && !caption.GetLayoutBox()->NeedsLayout()) ||
         InvolvedInBlockFragmentation(table_builder)) {
       disable_side_effects.emplace();
@@ -499,7 +499,7 @@ LayoutUnit TableLayoutAlgorithm::ComputeTableInlineSize(
     const BoxStrut& table_border_padding) {
   const bool is_fixed_layout = table.Style().IsFixedTableLayout();
   // Tables need autosizer.
-  absl::optional<TextAutosizer::TableLayoutScope> text_autosizer;
+  std::optional<TextAutosizer::TableLayoutScope> text_autosizer;
   if (!is_fixed_layout)
     text_autosizer.emplace(To<LayoutTable>(table.GetLayoutBox()));
 
@@ -682,7 +682,7 @@ MinMaxSizesResult TableLayoutAlgorithm::ComputeMinMaxSizes(
     const MinMaxSizesFloatInput&) {
   const bool is_fixed_layout = Style().IsFixedTableLayout();
   // Tables need autosizer.
-  absl::optional<TextAutosizer::TableLayoutScope> text_autosizer;
+  std::optional<TextAutosizer::TableLayoutScope> text_autosizer;
   if (!is_fixed_layout)
     text_autosizer.emplace(To<LayoutTable>(Node().GetLayoutBox()));
 
@@ -774,9 +774,10 @@ void TableLayoutAlgorithm::ComputeRows(
     }
   }
 
+  const ConstraintSpace& space = GetConstraintSpace();
+
   LayoutUnit css_table_block_size;
-  if (GetConstraintSpace().IsInitialBlockSizeIndefinite() &&
-      !GetConstraintSpace().IsFixedBlockSize()) {
+  if (space.IsInitialBlockSizeIndefinite() && !space.IsFixedBlockSize()) {
     // We get here when a flexbox wants to use the table's intrinsic height as
     // an input to the flex algorithm.
     css_table_block_size = kIndefiniteSize;
@@ -784,24 +785,28 @@ void TableLayoutAlgorithm::ComputeRows(
     // If we can correctly resolve our min-block-size we want to distribute
     // sections/rows into this space. Pass a definite intrinsic block-size into
     // |ComputeBlockSizeForFragment| to force it to resolve.
-    LayoutUnit intrinsic_block_size =
-        BlockLengthUnresolvable(GetConstraintSpace(),
-                                Style().LogicalMinHeight())
+    //
+    // NOTE: We use `ResolveMainBlockLength` for resolving `min_length` so that
+    // it will resolve to `kIndefiniteSize` if unresolvable.
+    const Length& min_length = Style().LogicalMinHeight();
+    const LayoutUnit intrinsic_block_size =
+        min_length.IsAuto() ||
+                ResolveMainBlockLength(space, Style(), table_border_padding,
+                                       min_length, /* auto_length */ nullptr,
+                                       kIndefiniteSize) == kIndefiniteSize
             ? kIndefiniteSize
             : table_border_padding.BlockSum();
 
     LayoutUnit override_available_block_size = kIndefiniteSize;
-    if (GetConstraintSpace().AvailableSize().block_size != kIndefiniteSize) {
+    if (space.AvailableSize().block_size != kIndefiniteSize) {
       override_available_block_size =
-          (GetConstraintSpace().AvailableSize().block_size -
-           captions_block_size)
+          (space.AvailableSize().block_size - captions_block_size)
               .ClampNegativeToZero();
     }
 
     css_table_block_size = ComputeBlockSizeForFragment(
-        GetConstraintSpace(), Style(), table_border_padding,
-        intrinsic_block_size, table_grid_inline_size,
-        override_available_block_size);
+        space, Style(), table_border_padding, intrinsic_block_size,
+        table_grid_inline_size, override_available_block_size);
   }
   // In quirks mode, empty tables ignore any specified block-size.
   const bool is_empty_quirks_mode_table =
@@ -1055,9 +1060,9 @@ const LayoutResult* TableLayoutAlgorithm::GenerateFragment(
   const LayoutUnit section_inline_offset =
       border_padding.inline_start + border_spacing.inline_size;
 
-  absl::optional<TableBoxExtent> table_box_extent;
-  absl::optional<LayoutUnit> first_baseline;
-  absl::optional<LayoutUnit> last_baseline;
+  std::optional<TableBoxExtent> table_box_extent;
+  std::optional<LayoutUnit> first_baseline;
+  std::optional<LayoutUnit> last_baseline;
 
   bool has_repeated_header = false;
   bool has_pending_repeated_footer = false;
@@ -1180,14 +1185,14 @@ const LayoutResult* TableLayoutAlgorithm::GenerateFragment(
 
     const BlockBreakToken* child_break_token = entry.GetBreakToken();
     const LayoutResult* child_result;
-    absl::optional<LayoutUnit> offset_before_repeated_header;
+    std::optional<LayoutUnit> offset_before_repeated_header;
     LayoutUnit child_inline_offset;
 
     // Captions allow margins.
     LayoutUnit child_block_start_margin;
     LayoutUnit child_block_end_margin;
 
-    absl::optional<TableBoxExtent> new_table_box_extent;
+    std::optional<TableBoxExtent> new_table_box_extent;
     bool is_repeated_section = false;
     bool has_overlapping_repeated_header = false;
 

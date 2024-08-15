@@ -41,12 +41,12 @@ class EditLabels : public views::View {
       DisplayOverlayController* controller,
       Action* action,
       NameTag* name_tag,
-      bool should_update_title);
+      bool for_editing_list);
 
   EditLabels(DisplayOverlayController* controller,
              Action* action,
              NameTag* name_tag,
-             bool should_update_title);
+             bool for_editing_list);
 
   EditLabels(const EditLabels&) = delete;
   EditLabels& operator=(const EditLabels&) = delete;
@@ -56,17 +56,17 @@ class EditLabels : public views::View {
 
   void SetNameTagState(bool is_error, const std::u16string& error_tooltip);
   void RemoveNewState();
-  // Called when this view is clicked upon.
+
+  // Focuses on the first edit label if no child is focused. Otherwise focus on
+  // the next edit label.
   void FocusLabel();
 
-  // Returns Action name, such as "Joystick WASD".
+  // Returns Action name, such as "Joystick wasd".
   std::u16string CalculateActionName();
+  // Returns key list, such as "w, a, s, d" or "w".
+  std::u16string CalculateKeyListForA11yLabel() const;
 
   void PerformPulseAnimationOnFirstLabel();
-
-  void set_should_update_title(bool should_update_title) {
-    should_update_title_ = should_update_title;
-  }
 
  private:
   friend class ButtonOptionsMenuTest;
@@ -84,14 +84,12 @@ class EditLabels : public views::View {
   raw_ptr<Action, DanglingUntriaged> action_ = nullptr;
   // Displays the content in `labels_`.
   raw_ptr<NameTag, DanglingUntriaged> name_tag_ = nullptr;
+  const bool for_editing_list_ = false;
 
   std::vector<raw_ptr<EditLabel, VectorExperimental>> labels_;
 
   // It is true that at least one of `labels_` is unassigned.
   bool missing_assign_ = false;
-
-  // Allows for title modification if true.
-  bool should_update_title_ = false;
 };
 }  // namespace arc::input_overlay
 

@@ -14,6 +14,7 @@
 #include <string_view>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "components/autofill/core/browser/autofill_type.h"
@@ -21,7 +22,6 @@
 #include "components/autofill/core/browser/data_model/address.h"
 #include "components/autofill/core/browser/data_model/autofill_data_model.h"
 #include "components/autofill/core/browser/data_model/autofill_i18n_api.h"
-#include "components/autofill/core/browser/data_model/birthdate.h"
 #include "components/autofill/core/browser/data_model/contact_info.h"
 #include "components/autofill/core/browser/data_model/phone_number.h"
 #include "components/autofill/core/browser/profile_token_quality.h"
@@ -50,6 +50,27 @@ class AutofillProfile : public AutofillDataModel {
     // that are shared beyond Autofill across different services.
     kAccount = 1,
     kMaxValue = kAccount,
+  };
+
+  // These fields are, by default, the only candidates for being added to the
+  // list of profile labels. Note that the call to generate labels can specify a
+  // custom set of fields, in which case such set would be used instead of this
+  // one.
+  // TODO(b/40285811): Change this into a FieldTypeSet once the priority is not
+  // decided by the order of these entries anymore.
+  static constexpr FieldType kDefaultDistinguishingFieldsForLabels[] = {
+      NAME_FULL,
+      ADDRESS_HOME_LINE1,
+      ADDRESS_HOME_LINE2,
+      ADDRESS_HOME_DEPENDENT_LOCALITY,
+      ADDRESS_HOME_CITY,
+      ADDRESS_HOME_STATE,
+      ADDRESS_HOME_ZIP,
+      ADDRESS_HOME_SORTING_CODE,
+      ADDRESS_HOME_COUNTRY,
+      EMAIL_ADDRESS,
+      PHONE_HOME_WHOLE_NUMBER,
+      COMPANY_NAME,
   };
 
   // The values used to represent Autofill in the `initial_creator_id()` and
@@ -99,16 +120,9 @@ class AutofillProfile : public AutofillDataModel {
 
   std::u16string GetRawInfo(FieldType type) const override;
 
-  int GetRawInfoAsInt(FieldType type) const override;
-
   void SetRawInfoWithVerificationStatus(FieldType type,
                                         const std::u16string& value,
                                         VerificationStatus status) override;
-
-  void SetRawInfoAsIntWithVerificationStatus(
-      FieldType type,
-      int value,
-      VerificationStatus status) override;
 
   void GetSupportedTypes(FieldTypeSet* supported_types) const override;
 
@@ -180,12 +194,6 @@ class AutofillProfile : public AutofillDataModel {
   bool MergeDataFrom(const AutofillProfile& profile,
                      const std::string& app_locale);
 
-  // Saves info from |profile| into |this|, provided |this| and |profile| do not
-  // have any direct conflicts (i.e. data is present but different).
-  // Returns true if |this| and |profile| are similar.
-  bool SaveAdditionalInfo(const AutofillProfile& profile,
-                          const std::string& app_locale);
-
   // Creates a differentiating label for each of the |profiles|.
   // Labels consist of the minimal differentiating combination of:
   // 1. Full name.
@@ -214,6 +222,7 @@ class AutofillProfile : public AutofillDataModel {
   // from it minus those in `excluded_fields`. Otherwise, the label fields are
   // drawn from a default set. Each label includes at least
   // `minimal_fields_shown` fields, if possible.
+  // TODO(b/40285811): Make `suggested_fields` non-optional.
   static void CreateInferredLabels(
       const std::vector<raw_ptr<const AutofillProfile, VectorExperimental>>&
           profiles,
@@ -227,10 +236,10 @@ class AutofillProfile : public AutofillDataModel {
   // Builds inferred label from the first |num_fields_to_include| non-empty
   // fields in |label_fields|. Uses as many fields as possible if there are not
   // enough non-empty fields.
-  std::u16string ConstructInferredLabel(const FieldType* label_fields,
-                                        const size_t label_fields_size,
-                                        size_t num_fields_to_include,
-                                        const std::string& app_locale) const;
+  std::u16string ConstructInferredLabel(
+      base::span<const FieldType> label_fields,
+      size_t num_fields_to_include,
+      const std::string& app_locale) const;
 
   const std::string& language_code() const { return language_code_; }
   void set_language_code(const std::string& language_code) {
@@ -257,7 +266,7 @@ class AutofillProfile : public AutofillDataModel {
   // Returns true if the profile contains any structured data. This can be any
   // name type but the full name, or for addresses, the street name or house
   // number.
-  bool HasStructuredData();
+  bool HasStructuredData() const;
 
   // Returns a constant reference to the |name_| field.
   const NameInfo& GetNameInfo() const { return name_; }
@@ -338,9 +347,9 @@ class AutofillProfile : public AutofillDataModel {
 
   // Utilities for listing and lookup of the data members that constitute
   // user-visible profile information.
-  std::array<const FormGroup*, 6> FormGroups() const {
+  std::array<const FormGroup*, 5> FormGroups() const {
     // Adjust the return type size as necessary.
-    return {&name_, &email_, &company_, &phone_number_, &address_, &birthdate_};
+    return {&name_, &email_, &company_, &phone_number_, &address_};
   }
 
   const FormGroup* FormGroupForType(const AutofillType& type) const;
@@ -371,7 +380,6 @@ class AutofillProfile : public AutofillDataModel {
   CompanyInfo company_;
   PhoneNumber phone_number_;
   Address address_;
-  Birthdate birthdate_;
 
   // The label is chosen by the user and can contain an arbitrary value.
   // However, there are two labels that play a special role to indicate that an

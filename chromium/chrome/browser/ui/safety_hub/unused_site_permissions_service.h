@@ -34,9 +34,6 @@ class PrefChangeRegistrar;
 class PrefService;
 
 constexpr char kUnusedSitePermissionsResultKey[] = "permissions";
-constexpr char kUnusedSitePermissionsResultPermissionTypesKey[] =
-    "permissionTypes";
-constexpr char kUnusedSitePermissionsResultExpirationKey[] = "expiration";
 
 namespace url {
 class Origin;
@@ -79,8 +76,6 @@ class UnusedSitePermissionsService final : public SafetyHubService,
    public:
     UnusedSitePermissionsResult();
 
-    explicit UnusedSitePermissionsResult(const base::Value::Dict& dict);
-
     UnusedSitePermissionsResult(const UnusedSitePermissionsResult&);
     UnusedSitePermissionsResult& operator=(const UnusedSitePermissionsResult&) =
         default;
@@ -92,6 +87,9 @@ class UnusedSitePermissionsService final : public SafetyHubService,
     using UnusedPermissionMap =
         std::map<std::string, std::list<ContentSettingEntry>>;
 
+    // Adds a revoked permission, defined by origin, a set of permission types
+    // and the expiration until the user is made aware of the revoked
+    // permission.
     void AddRevokedPermission(ContentSettingsPattern origin,
                               std::set<ContentSettingsType> permission_types,
                               base::Time expiration);
@@ -114,7 +112,7 @@ class UnusedSitePermissionsService final : public SafetyHubService,
     bool IsTriggerForMenuNotification() const override;
 
     bool WarrantsNewMenuNotification(
-        const Result& previousResult) const override;
+        const base::Value::Dict& previous_result_dict) const override;
 
     std::u16string GetNotificationString() const override;
 
@@ -176,7 +174,8 @@ class UnusedSitePermissionsService final : public SafetyHubService,
   // Reverse changes made by |RegrantPermissionsForOrigin|. Adds this origin to
   // the removed permissions list and resets its permissions.
   void UndoRegrantPermissionsForOrigin(
-      const std::set<ContentSettingsType> permissions,
+      const std::set<ContentSettingsType>& permissions,
+      const base::Value::Dict& chooser_permissions_data,
       const std::optional<content_settings::ContentSettingConstraints>
           constraint,
       const url::Origin origin);
@@ -187,7 +186,8 @@ class UnusedSitePermissionsService final : public SafetyHubService,
 
   // Stores revoked permissions data on HCSM.
   void StorePermissionInRevokedPermissionSetting(
-      const std::set<ContentSettingsType> permissions,
+      const std::set<ContentSettingsType>& permissions,
+      const base::Value::Dict& chooser_permissions_data,
       const std::optional<content_settings::ContentSettingConstraints>
           constraint,
       const url::Origin origin);
@@ -238,7 +238,8 @@ class UnusedSitePermissionsService final : public SafetyHubService,
 
   // Stores revoked permissions data on HCSM.
   void StorePermissionInRevokedPermissionSetting(
-      const std::set<ContentSettingsType> permissions,
+      const std::set<ContentSettingsType>& permissions,
+      const base::Value::Dict& chooser_permissions_data,
       const std::optional<content_settings::ContentSettingConstraints>
           constraint,
       const ContentSettingsPattern& primary_pattern,

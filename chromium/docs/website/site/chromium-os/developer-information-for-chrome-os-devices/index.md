@@ -3761,7 +3761,7 @@ such as the auto update until date, first release, and more.
   <tr>
     <td>2023-03-31</td>
     <td>Lenovo</td>
-    <td>Lenovo 500e Yoga Chromebook Gen 4</td>
+    <td><a href="https://psref.lenovo.com/Product/Lenovo/Lenovo_500e_Yoga_Chromebook_Gen_4">Lenovo 500e Yoga Chromebook Gen 4</a></td>
     <td>Pujjo</td>
     <td>Nissa</td>
     <td>Nissa</td>
@@ -3776,7 +3776,7 @@ such as the auto update until date, first release, and more.
   <tr>
     <td>2023-03-31</td>
     <td>Lenovo</td>
-    <td>Lenovo IdeaPad Flex 3i Chromebook</td>
+    <td><a href="https://psref.lenovo.com/Product/IdeaPad/IP_Flex_3_Chrome_12IAN8">Lenovo IdeaPad Flex 3i Chromebook</a></td>
     <td>Pujjoflex</td>
     <td>Nissa</td>
     <td>Nissa</td>
@@ -3791,7 +3791,7 @@ such as the auto update until date, first release, and more.
   <tr>
     <td>2023-03-31</td>
     <td>Lenovo</td>
-    <td>Lenovo 14e Chromebook Gen 3</td>
+    <td><a href="https://psref.lenovo.com/Product/Lenovo/Lenovo_14e_Chromebook_Gen_3">Lenovo 14e Chromebook Gen 3</a></td>
     <td>Pujjoteen</td>
     <td>Nissa</td>
     <td>Nissa</td>
@@ -3806,7 +3806,7 @@ such as the auto update until date, first release, and more.
   <tr>
     <td>2023-03-31</td>
     <td>Lenovo</td>
-    <td>Lenovo IdeaPad Slim 3i Chromebook</td>
+    <td><a href="https://www.lenovo.com/us/en/p/laptops/ideapad/ideapad-300/ideapad-slim-3i-chromebook-gen-8-(14-inch-intel)/len101i0083">Lenovo IdeaPad Slim 3i Chromebook</a></td>
     <td>Pujjoteen15W</td>
     <td>Nissa</td>
     <td>Nissa</td>
@@ -3860,6 +3860,36 @@ such as the auto update until date, first release, and more.
     <td>x86_64</td>
     <td>Alderlake-U/P</td>
     <td>Convertible</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+   <tr>
+   <td>2023-07-14</td>
+   <td>HP</td>
+   <td><a href="https://www.hp.com/us-en/cloud-computing/chrome-enterprise.html#section=tabs&tab=chromebox-enterprise">HP Chromebox Enterprise G4</a></td>
+   <td>Gladios</td>
+   <td>Brask</td>
+   <td>Brask</td>
+   <td>x86_64</td>
+   <td>5.15</td>
+   <td>x86_64</td>
+   <td>Alderlake-U</td>
+   <td>Chromebox</td>
+   <td>Yes</td>
+   <td>Yes</td>
+   </tr>
+   <tr>
+    <td>2024-02-02</td>
+    <td>Lenovo</td>
+    <td><a href="https://www.lenovo.com/il/en/laptops/lenovo/student-chromebooks/Lenovo-100e-Chromebook-Gen-4-11-6-inch-Intel/p/LEN101L0043">Lenovo 100e Chromebook Gen 4 (ADL-N)</a></td>
+    <td>Pujjo1e</td>
+    <td>Nissa</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>5.15</td>
+    <td>x86_64</td>
+    <td>AlderLake-N</td>
+    <td>Chromebook</td>
     <td>Yes</td>
     <td>Yes</td>
   </tr>

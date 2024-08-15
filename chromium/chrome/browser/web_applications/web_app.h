@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_WEB_APPLICATIONS_WEB_APP_H_
 
 #include <stdint.h>
+
 #include <iosfwd>
 #include <optional>
 #include <set>
@@ -20,7 +21,7 @@
 #include "base/version.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/web_applications/features.h"
-#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_location.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_storage_location.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom-forward.h"
 #include "chrome/browser/web_applications/proto/web_app.pb.h"
 #include "chrome/browser/web_applications/proto/web_app_os_integration_state.pb.h"
@@ -101,15 +102,15 @@ class WebApp {
 
   std::optional<mojom::UserDisplayMode> user_display_mode() const {
     if (!base::FeatureList::IsEnabled(kSeparateUserDisplayModeForCrOS)) {
-      return user_display_mode_non_cros_;
+      return user_display_mode_default_;
     }
 
 #if BUILDFLAG(IS_CHROMEOS)
     CHECK(user_display_mode_cros_.has_value(), base::NotFatalUntil::M125);
     return user_display_mode_cros_;
 #else
-    CHECK(user_display_mode_non_cros_.has_value(), base::NotFatalUntil::M125);
-    return user_display_mode_non_cros_;
+    CHECK(user_display_mode_default_.has_value(), base::NotFatalUntil::M125);
+    return user_display_mode_default_;
 #endif  // BUILDFLAG(IS_CHROMEOS)
   }
 
@@ -119,8 +120,8 @@ class WebApp {
   }
 
   // Exposed for database/sync layer only. Elsewhere use `user_display_mode()`.
-  std::optional<mojom::UserDisplayMode> user_display_mode_non_cros() const {
-    return user_display_mode_non_cros_;
+  std::optional<mojom::UserDisplayMode> user_display_mode_default() const {
+    return user_display_mode_default_;
   }
 
   const std::vector<DisplayMode>& display_mode_override() const {
@@ -362,12 +363,11 @@ class WebApp {
   }
 
   // If present, signals that this app is an Isolated Web App, and contains
-  // IWA-specific information like bundle location.
+  // IWA-specific information like from where the contents should be served.
   struct IsolationData {
-    // If present, signals that an update for this app is available locally and
-    // waiting to be applied.
     struct PendingUpdateInfo {
-      PendingUpdateInfo(IsolatedWebAppLocation location, base::Version version);
+      PendingUpdateInfo(IsolatedWebAppStorageLocation location,
+                        base::Version version);
       ~PendingUpdateInfo();
       PendingUpdateInfo(const PendingUpdateInfo&);
       PendingUpdateInfo& operator=(const PendingUpdateInfo&);
@@ -381,7 +381,7 @@ class WebApp {
         return os << update_info.AsDebugValue();
       }
 
-      IsolatedWebAppLocation location;
+      IsolatedWebAppStorageLocation location;
       base::Version version;
 
       // TODO(cmfcmf): Add further information about the update here, such as
@@ -389,8 +389,9 @@ class WebApp {
       // closed.
     };
 
-    IsolationData(IsolatedWebAppLocation location, base::Version version);
-    IsolationData(IsolatedWebAppLocation location,
+    IsolationData(IsolatedWebAppStorageLocation location,
+                  base::Version version);
+    IsolationData(IsolatedWebAppStorageLocation location,
                   base::Version version,
                   const std::set<std::string>& controlled_frame_partitions,
                   const std::optional<PendingUpdateInfo>& pending_update_info);
@@ -409,10 +410,10 @@ class WebApp {
       return os << isolation_data.AsDebugValue();
     }
 
-    // Sets the pending update info. Will `CHECK` if the type of
-    // `pending_update_info.location` is not the same as `location`. In other
-    // words, a `DevModeBundle` app cannot be updated to, e.g.,
-    // `InstalledBundle`.
+    // Sets the pending update info. Will `CHECK` if dev mode is different
+    // between `pending_update_info.location` and `location`. In other words, a
+    // dev mode owned bundle can never be updated to a prod mode owned bundle,
+    // etc.
     void SetPendingUpdateInfo(
         const std::optional<PendingUpdateInfo>& pending_update_info);
 
@@ -420,11 +421,13 @@ class WebApp {
       return pending_update_info_;
     }
 
-    IsolatedWebAppLocation location;
+    IsolatedWebAppStorageLocation location;
     base::Version version;
     std::set<std::string> controlled_frame_partitions;
 
    private:
+    // If present, signals that an update for this app is available locally and
+    // waiting to be applied.
     std::optional<PendingUpdateInfo> pending_update_info_;
   };
   const std::optional<IsolationData>& isolation_data() const {
@@ -445,6 +448,8 @@ class WebApp {
   int supported_links_offer_dismiss_count() const {
     return supported_links_offer_dismiss_count_;
   }
+
+  bool is_diy_app() const { return is_diy_app_; }
 
   // A Web App can be installed from multiple sources simultaneously. Installs
   // add a source to the app. Uninstalls remove a source from the app.
@@ -479,15 +484,15 @@ class WebApp {
   void SetBackgroundColor(std::optional<SkColor> background_color);
   void SetDarkModeBackgroundColor(std::optional<SkColor> background_color);
   void SetDisplayMode(DisplayMode display_mode);
-  // Sets the UserDisplayMode for the current platform (CrOS or non-CrOS).
+  // Sets the UserDisplayMode for the current platform (CrOS or default).
   void SetUserDisplayMode(mojom::UserDisplayMode user_display_mode);
-  // Sets the UserDisplayMode for CrOS (required on all platforms to maintain
+  // Sets the UserDisplayMode for CrOS (exists on all platforms to maintain
   // sync information).
   void SetUserDisplayModeCrOS(mojom::UserDisplayMode user_display_mode_cros);
-  // Sets the UserDisplayMode for non-CrOS (required on all platforms to
-  // maintain sync information).
-  void SetUserDisplayModeNonCrOS(
-      mojom::UserDisplayMode user_display_mode_non_cros);
+  // Sets the non-platform-specific UserDisplayMode value (exists on all
+  // platforms to maintain sync information).
+  void SetUserDisplayModeDefault(
+      mojom::UserDisplayMode user_display_mode_default);
   void SetDisplayModeOverride(std::vector<DisplayMode> display_mode_override);
   void SetUserPageOrdinal(syncer::StringOrdinal page_ordinal);
   void SetUserLaunchOrdinal(syncer::StringOrdinal launch_ordinal);
@@ -550,6 +555,7 @@ class WebApp {
       proto::LinkCapturingUserPreference user_link_capturing_preference);
   void SetSupportedLinksOfferIgnoreCount(int ignore_count);
   void SetSupportedLinksOfferDismissCount(int dismiss_count);
+  void SetIsDiyApp(bool is_diy_app);
 
   void AddPlaceholderInfoToManagementExternalConfigMap(
       WebAppManagement::Type source_type,
@@ -611,7 +617,7 @@ class WebApp {
   std::optional<SkColor> dark_mode_background_color_;
   DisplayMode display_mode_ = DisplayMode::kUndefined;
   std::optional<mojom::UserDisplayMode> user_display_mode_cros_;
-  std::optional<mojom::UserDisplayMode> user_display_mode_non_cros_;
+  std::optional<mojom::UserDisplayMode> user_display_mode_default_;
   std::vector<DisplayMode> display_mode_override_;
   syncer::StringOrdinal user_page_ordinal_;
   syncer::StringOrdinal user_launch_ordinal_;
@@ -702,6 +708,8 @@ class WebApp {
 
   int supported_links_offer_ignore_count_ = 0;
   int supported_links_offer_dismiss_count_ = 0;
+
+  bool is_diy_app_ = false;
 
   // New fields must be added to:
   //  - |operator==|

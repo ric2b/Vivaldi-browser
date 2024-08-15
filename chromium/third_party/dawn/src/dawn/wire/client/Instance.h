@@ -33,7 +33,6 @@
 #include "dawn/wire/WireClient.h"
 #include "dawn/wire/WireCmd_autogen.h"
 #include "dawn/wire/client/ObjectBase.h"
-#include "dawn/wire/client/RequestTracker.h"
 
 namespace dawn::wire::client {
 
@@ -44,6 +43,8 @@ class Instance final : public ObjectWithEventsBase {
   public:
     explicit Instance(const ObjectBaseParams& params);
     ~Instance() override;
+
+    ObjectType GetObjectType() const override;
 
     WireResult Initialize(const WGPUInstanceDescriptor* descriptor);
 

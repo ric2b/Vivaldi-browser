@@ -4,7 +4,7 @@
 
 import {assert} from 'chrome://resources/js/assert.js';
 
-import {AcceleratorConfigurationProvider, AcceleratorConfigurationProviderRemote, AcceleratorResultData, AcceleratorsUpdatedObserverRemote, EditDialogCompletedActions, PolicyUpdatedObserverRemote, Subactions, UserAction} from '../mojom-webui/ash/webui/shortcut_customization_ui/mojom/shortcut_customization.mojom-webui.js';
+import {AcceleratorConfigurationProvider, AcceleratorConfigurationProviderRemote, AcceleratorResultData, AcceleratorsUpdatedObserverRemote, EditDialogCompletedActions, PolicyUpdatedObserverRemote, Subactions, UserAction} from '../mojom-webui/shortcut_customization.mojom-webui.js';
 
 import {fakeAcceleratorConfig, fakeLayoutInfo} from './fake_data.js';
 import {FakeShortcutProvider} from './fake_shortcut_provider.js';
@@ -36,7 +36,6 @@ export function setUseFakeProviderForTesting(useFake: boolean): void {
 
 /**
  * Sets up a FakeShortcutProvider to be used at runtime.
- * TODO(zentaro): Remove once mojo bindings are implemented.
  */
 export function setupFakeShortcutProvider(): ShortcutProviderInterface {
   // Create provider.
@@ -57,7 +56,6 @@ export function setupFakeShortcutProvider(): ShortcutProviderInterface {
 /**
  * This wrapper is used to bridge the gap from the fake provider to the
  * real provider until all methods are implemented.
- * TODO(cambickel): Remove once all mojo bindings are implemented.
  */
 export class ShortcutProviderWrapper implements ShortcutProviderInterface {
   private remote: AcceleratorConfigurationProviderRemote;

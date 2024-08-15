@@ -5,7 +5,7 @@ WITH
 # Get swarming task IDs of builds that occurred between lookback dates.
 build_task_ids AS (
   SELECT
-    b.infra.swarming.task_id build_task_id,
+    b.infra.backend.task.id.id build_task_id,
     b.builder.builder try_builder,
     b.start_time,
   FROM
@@ -17,6 +17,7 @@ build_task_ids AS (
     AND JSON_VALUE(b.input.properties, '$.cq') = 'required'
     AND JSON_QUERY(b.output.properties, '$.rts_was_used') IS NULL
     AND b.status = 'SUCCESS'
+    AND b.builder.project = 'chromium'
 ),
 deduped_tasks AS (
   SELECT DISTINCT

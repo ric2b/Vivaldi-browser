@@ -7,12 +7,12 @@
  * information.
  */
 
-import 'chrome://resources/cr_components/localized_link/localized_link.js';
+import 'chrome://resources/ash/common/cr_elements/localized_link/localized_link.js';
 import 'chrome://resources/cr_components/settings_prefs/prefs.js';
-import 'chrome://resources/cr_elements/cr_button/cr_button.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
-import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
-import 'chrome://resources/cr_elements/icons.html.js';
+import 'chrome://resources/ash/common/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/ash/common/cr_elements/cr_icon_button/cr_icon_button.js';
+import 'chrome://resources/ash/common/cr_elements/cr_link_row/cr_link_row.js';
+import 'chrome://resources/ash/common/cr_elements/icons.html.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/iron-media-query/iron-media-query.js';
 import '../icons.html.js';
@@ -27,8 +27,9 @@ import './update_warning_dialog.js';
 import '../crostini_page/crostini_settings_card.js';
 
 import {LifetimeBrowserProxyImpl} from '/shared/settings/lifetime_browser_proxy.js';
-import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {CrButtonElement} from 'chrome://resources/ash/common/cr_elements/cr_button/cr_button.js';
+import {I18nMixin} from 'chrome://resources/ash/common/cr_elements/i18n_mixin.js';
+import {WebUiListenerMixin} from 'chrome://resources/ash/common/cr_elements/web_ui_listener_mixin.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {sanitizeInnerHtml} from 'chrome://resources/js/parse_html_subset.js';
@@ -51,17 +52,21 @@ declare global {
   }
 }
 
-interface OsAboutPageElement {
+export interface OsAboutPageElement {
   $: {
-    updateStatusMessageInner: HTMLDivElement,
+    buttonContainer: HTMLElement,
+    checkForUpdatesButton: CrButtonElement,
     productLogo: HTMLImageElement,
+    regulatoryInfo: HTMLElement,
+    relaunchButton: CrButtonElement,
+    updateStatusMessageInner: HTMLDivElement,
   };
 }
 
 const OsAboutPageBase = DeepLinkingMixin(
     RouteOriginMixin(I18nMixin(WebUiListenerMixin(PolymerElement))));
 
-class OsAboutPageElement extends OsAboutPageBase {
+export class OsAboutPageElement extends OsAboutPageBase {
   static get is() {
     return 'os-about-page' as const;
   }
@@ -190,7 +195,8 @@ class OsAboutPageElement extends OsAboutPageBase {
       showCheckUpdates_: {
         type: Boolean,
         computed: 'computeShowCheckUpdates_(' +
-            'currentUpdateStatusEvent_, hasCheckedForUpdates_, hasEndOfLife_)',
+            'currentUpdateStatusEvent_, hasCheckedForUpdates_, hasEndOfLife_,' +
+            'showExtendedUpdatesOption_)',
       },
 
       showUpdateWarningDialog_: {
@@ -266,14 +272,25 @@ class OsAboutPageElement extends OsAboutPageBase {
           };
         },
       },
+
+      /**
+       * Controls whether the extended updates opt-in option is shown.
+       *
+       * TODO(b/322418004): Implement logic.
+       */
+      showExtendedUpdatesOption_: {
+        type: Boolean,
+        value: false,
+      },
     };
   }
 
   static get observers() {
     return [
       'updateShowUpdateStatus_(hasEndOfLife_, currentUpdateStatusEvent_,' +
-          'hasCheckedForUpdates_)',
-      'updateShowButtonContainer_(showRelaunch_, showCheckUpdates_)',
+          'hasCheckedForUpdates_, showExtendedUpdatesOption_)',
+      'updateShowButtonContainer_(showRelaunch_, showCheckUpdates_,' +
+          'showExtendedUpdatesOption_)',
       'handleCrostiniEnabledChanged_(prefs.crostini.enabled.value)',
     ];
   }
@@ -307,6 +324,7 @@ class OsAboutPageElement extends OsAboutPageBase {
   private updateInfo_?: AboutPageUpdateInfo;
   private isPendingOsUpdateDeepLink_: boolean;
   private isRevampWayfindingEnabled_: boolean;
+  private showExtendedUpdatesOption_: boolean;
 
   private aboutBrowserProxy_: AboutPageBrowserProxy;
 
@@ -441,7 +459,6 @@ class OsAboutPageElement extends OsAboutPageBase {
   }
 
   private onRelaunchClick_(): void {
-    recordSettingChange();
     LifetimeBrowserProxyImpl.getInstance().relaunch();
   }
 
@@ -460,8 +477,9 @@ class OsAboutPageElement extends OsAboutPageBase {
       return;
     }
 
-    // Do not show "updated" status if the device is end of life.
-    if (this.hasEndOfLife_) {
+    // Do not show "updated" status if the device is end of life or needs to
+    // opt into extended updates.
+    if (this.hasEndOfLife_ || this.showExtendedUpdatesOption_) {
       this.showUpdateStatus_ = false;
       return;
     }
@@ -475,7 +493,8 @@ class OsAboutPageElement extends OsAboutPageBase {
    * container displays an unwanted border (see separator class).
    */
   private updateShowButtonContainer_(): void {
-    this.showButtonContainer_ = this.showRelaunch_ || this.showCheckUpdates_;
+    this.showButtonContainer_ = this.showRelaunch_ || this.showCheckUpdates_ ||
+        this.showExtendedUpdatesOption_;
 
     // Check if we have yet to focus the check for update button.
     if (!this.isPendingOsUpdateDeepLink_) {
@@ -578,6 +597,11 @@ class OsAboutPageElement extends OsAboutPageBase {
     if (this.hasEndOfLife_) {
       return 'os-settings:end-of-life';
     }
+    // Show a special icon if extended updates are available.
+    // TODO(b/328506053): Finalize icon.
+    if (this.showExtendedUpdatesOption_) {
+      return 'os-settings:about-update-complete';
+    }
 
     switch (this.currentUpdateStatusEvent_.status) {
       case UpdateStatus.DISABLED_BY_ADMIN:
@@ -617,7 +641,7 @@ class OsAboutPageElement extends OsAboutPageBase {
   }
 
   private getThrobberSrcIfUpdating_(): string|null {
-    if (this.hasEndOfLife_) {
+    if (this.hasEndOfLife_ || this.showExtendedUpdatesOption_) {
       return null;
     }
 
@@ -673,8 +697,9 @@ class OsAboutPageElement extends OsAboutPageBase {
   }
 
   private computeShowCheckUpdates_(): boolean {
-    // Disable update button if the device is end of life.
-    if (this.hasEndOfLife_) {
+    // Disable update button if the device is end of life or needs to opt-in
+    // to extended updates.
+    if (this.hasEndOfLife_ || this.showExtendedUpdatesOption_) {
       return false;
     }
 
@@ -797,6 +822,10 @@ class OsAboutPageElement extends OsAboutPageBase {
           this.i18n('aboutFirmwareUpToDateDescription');
     }
     return null;
+  }
+
+  private onExtendedUpdatesButtonClick_(): void {
+    this.aboutBrowserProxy_.openExtendedUpdatesDialog();
   }
 }
 

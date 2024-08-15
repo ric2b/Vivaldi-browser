@@ -159,10 +159,11 @@ void WebAppProviderBridgeLacros::WebAppInstalledInArcImpl(
         std::move(*arc_install_info->additional_policy_ids);
   }
 
-  provider->scheduler().InstallFromInfo(
+  provider->scheduler().InstallFromInfoWithParams(
       std::move(install_info),
       /*overwrite_existing_manifest_fields=*/false,
-      webapps::WebappInstallSource::ARC, std::move(callback));
+      webapps::WebappInstallSource::ARC, std::move(callback),
+      web_app::WebAppInstallParams());
 }
 
 // static
@@ -172,7 +173,7 @@ void WebAppProviderBridgeLacros::WebAppUninstalledInArcImpl(
     Profile* profile) {
   DCHECK(profile);
   auto* provider = web_app::WebAppProvider::GetForWebApps(profile);
-  provider->scheduler().RemoveInstallSource(
+  provider->scheduler().RemoveInstallManagementMaybeUninstall(
       app_id, web_app::WebAppManagement::kWebAppStore,
       webapps::WebappUninstallSource::kArc, std::move(callback));
 }

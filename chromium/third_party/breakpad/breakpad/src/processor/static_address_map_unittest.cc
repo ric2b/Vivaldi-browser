@@ -124,7 +124,7 @@ class TestStaticAddressMap : public ::testing::Test {
 
     srand(time(0));
     for (int data_item = 0; data_item < testsize[testcase]; ++data_item) {
-      // Retrive (aka, search) for target address and compare results from
+      // Retrieve (aka, search) for target address and compare results from
       // AddressMap and StaticAddressMap.
 
       // First, assign the search target to be one of original testdata that is

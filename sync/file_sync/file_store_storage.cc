@@ -133,26 +133,26 @@ std::map<syncer::ModelType, std::set<T>> LoadReferences(
   return references;
 }
 
-absl::optional<SyncedFileData> LoadFileInfo(
+std::optional<SyncedFileData> LoadFileInfo(
     const base::Value::Dict& file_info) {
   SyncedFileData file_data;
 
-  absl::optional<bool> has_content_locally =
+  std::optional<bool> has_content_locally =
       file_info.FindBool(kHasContentLocally);
   if (!has_content_locally)
-    return absl::nullopt;
+    return std::nullopt;
 
   file_data.has_content_locally = *has_content_locally;
 
   const std::string* mimetype = file_info.FindString(kMimeType);
   if (!mimetype)
-    return absl::nullopt;
+    return std::nullopt;
   file_data.mimetype = *mimetype;
 
   const base::Value::Dict* local_references_dict =
       file_info.FindDict(kLocalReferences);
   if (!local_references_dict)
-    return absl::nullopt;
+    return std::nullopt;
 
   file_data.local_references =
       LoadReferences<base::Uuid>(*local_references_dict);
@@ -160,14 +160,14 @@ absl::optional<SyncedFileData> LoadFileInfo(
   const base::Value::Dict* sync_references_dict =
       file_info.FindDict(kSyncReferences);
   if (!sync_references_dict)
-    return absl::nullopt;
+    return std::nullopt;
 
   file_data.sync_references =
       LoadReferences<std::string>(*sync_references_dict);
 
   // File has no references and no local content. It practically doesn't exist.
   if (file_data.IsUnreferenced() && !file_data.has_content_locally) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   return file_data;
@@ -196,7 +196,7 @@ SyncedFilesData DoLoad(const base::FilePath& path) {
   for (auto file_info : *files_info) {
     if (!file_info.second.is_dict())
       continue;
-    absl::optional<SyncedFileData> file_data =
+    std::optional<SyncedFileData> file_data =
         LoadFileInfo(file_info.second.GetDict());
     if (file_data)
       files_data[file_info.first] = std::move(*file_data);
@@ -270,14 +270,14 @@ SyncedFileStoreStorage::GetSerializedDataProducerForBackgroundSequence() {
   root.Set(kFilesInfo, std::move(files_info));
 
   return base::BindOnce(
-      [](base::Value::Dict root) -> absl::optional<std::string> {
+      [](base::Value::Dict root) -> std::optional<std::string> {
         // This runs on the background sequence.
         std::string output;
         JSONStringValueSerializer serializer(&output);
         serializer.set_pretty_print(true);
         if (serializer.Serialize(root))
           return output;
-        return absl::nullopt;
+        return std::nullopt;
       },
       std::move(root));
 }

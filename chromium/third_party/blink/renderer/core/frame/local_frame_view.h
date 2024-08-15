@@ -44,7 +44,7 @@
 #include "third_party/blink/renderer/core/frame/layout_subtree_root_list.h"
 #include "third_party/blink/renderer/core/frame/overlay_interstitial_ad_detector.h"
 #include "third_party/blink/renderer/core/frame/sticky_ad_detector.h"
-#include "third_party/blink/renderer/core/layout/hit_test_result.h"
+#include "third_party/blink/renderer/core/layout/hit_test_request.h"
 #include "third_party/blink/renderer/core/paint/layout_object_counter.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition_request_forward.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
@@ -52,6 +52,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/cull_rect.h"
 #include "third_party/blink/renderer/platform/graphics/paint_invalidation_reason.h"
 #include "third_party/blink/renderer/platform/graphics/subtree_paint_property_update_reason.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_linked_hash_set.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cancellable_task.h"
 #include "third_party/blink/renderer/platform/timer.h"
@@ -81,10 +82,13 @@ class AXObjectCache;
 class ChromeClient;
 class DarkModeFilter;
 class DocumentLifecycle;
+class Element;
 class FragmentAnchor;
 class Frame;
 class FrameViewAutoSizeInfo;
 class HTMLVideoElement;
+class HitTestLocation;
+class HitTestResult;
 class JSONObject;
 class KURL;
 class LayoutBox;
@@ -106,7 +110,6 @@ class RemoteFrameView;
 class RootFrameViewport;
 class ScrollableArea;
 class Scrollbar;
-class ScrollingCoordinator;
 class TapFriendlinessChecker;
 class TransformState;
 class LocalFrameUkmAggregator;
@@ -216,11 +219,16 @@ class CORE_EXPORT LocalFrameView final
   enum IntersectionObservationState {
     // The next painting frame does not need an intersection observation.
     kNotNeeded = 0,
-    // The next painting frame needs an intersection observation.
-    kDesired = 1,
+    // The next painting frame needs to update
+    // - intersection observations whose MinScrollDeltaToUpdate is exceeded by
+    //   the accumulated scroll delta in the frame.
+    // - intersection observers that trackVisibility.
+    kScrollAndVisibilityOnly = 1,
+    // The next painting frame needs to update all intersection observations.
+    kDesired = 2,
     // The next painting frame must be generated up to intersection observation
     // (even if frame is throttled).
-    kRequired = 2
+    kRequired = 3
   };
 
   // Sets the internal IntersectionObservationState to the max of the
@@ -231,7 +239,6 @@ class CORE_EXPORT LocalFrameView final
       const {
     return intersection_observation_state_;
   }
-  void InvalidateIntersectionObservations();
 
   // Get the InstersectionObservation::ComputeFlags for target elements in this
   // view.
@@ -379,12 +386,34 @@ class CORE_EXPORT LocalFrameView final
     target_state_ = state;
   }
 
-  // This for doing work that needs to run synchronously at the end of lifecyle
+  // Layout invalidation is allowed by default. Instantiating this class
+  // disallows layout invalidation within the containing scope. If layout
+  // invalidation takes place while the scoper is active a DCHECK will be
+  // triggered.
+  class InvalidationDisallowedScope {
+    STACK_ALLOCATED();
+
+   public:
+    explicit InvalidationDisallowedScope(const LocalFrameView& frame_view);
+    InvalidationDisallowedScope(const InvalidationDisallowedScope&) = delete;
+    InvalidationDisallowedScope& operator=(const InvalidationDisallowedScope&) =
+        delete;
+    ~InvalidationDisallowedScope();
+
+   private:
+    base::AutoReset<bool> resetter_;
+    // The number of |InvalidationDisallowedScope| class instances currently in
+    // existence.
+    static int instance_count_;
+  };
+  friend class InvalidationDisallowedScope;
+
+  // This for doing work that needs to run synchronously at the end of lifecycle
   // updates, but needs to happen outside of the lifecycle code. It's OK to
   // schedule another animation frame here, but the layout tree should not be
   // invalidated.
   void RunPostLifecycleSteps();
-  bool InPostLifecycleSteps() const;
+  bool InvalidationDisallowed() const;
 
   void ScheduleVisualUpdateForVisualOverflowIfNeeded();
   void ScheduleVisualUpdateForPaintInvalidationIfNeeded();
@@ -911,12 +940,10 @@ class CORE_EXPORT LocalFrameView final
   // Methods to do point conversion via layoutObjects, in order to take
   // transforms into account.
   gfx::Rect ConvertToContainingEmbeddedContentView(const gfx::Rect&) const;
-  gfx::Point ConvertToContainingEmbeddedContentView(const gfx::Point&) const;
   PhysicalOffset ConvertToContainingEmbeddedContentView(
       const PhysicalOffset&) const;
   gfx::PointF ConvertToContainingEmbeddedContentView(const gfx::PointF&) const;
   gfx::Rect ConvertFromContainingEmbeddedContentView(const gfx::Rect&) const;
-  gfx::Point ConvertFromContainingEmbeddedContentView(const gfx::Point&) const;
   PhysicalOffset ConvertFromContainingEmbeddedContentView(
       const PhysicalOffset&) const;
   gfx::PointF ConvertFromContainingEmbeddedContentView(
@@ -931,8 +958,6 @@ class CORE_EXPORT LocalFrameView final
   AXObjectCache* ExistingAXObjectCache() const;
 
   void SetLayoutSizeInternal(const gfx::Size&);
-
-  ScrollingCoordinator* GetScrollingCoordinator() const;
 
   void CollectAnnotatedRegions(LayoutObject&,
                                Vector<AnnotatedRegionValue>&) const;
@@ -950,7 +975,7 @@ class CORE_EXPORT LocalFrameView final
 
   bool UpdateViewportIntersectionsForSubtree(
       unsigned parent_flags,
-      absl::optional<base::TimeTicks>& monotonic_time) override;
+      std::optional<base::TimeTicks>& monotonic_time) override;
   void DeliverSynchronousIntersectionObservations();
 
   bool RunScrollSnapshotClientSteps();
@@ -973,7 +998,7 @@ class CORE_EXPORT LocalFrameView final
   // need to happen in post-layout.
   void ComputePostLayoutIntersections(
       unsigned parent_flags,
-      absl::optional<base::TimeTicks>& monotonic_time);
+      std::optional<base::TimeTicks>& monotonic_time);
 
   // Returns true if the root object was laid out. Returns false if the layout
   // was prevented (e.g. by ancestor display-lock) or not needed.
@@ -1016,7 +1041,7 @@ class CORE_EXPORT LocalFrameView final
   Member<LocalFrame> frame_;
 
   bool can_have_scrollbars_;
-  bool in_post_lifecycle_steps_ = false;
+  bool invalidation_disallowed_ = false;
 
   bool has_pending_layout_;
   LayoutSubtreeRootList layout_subtree_root_list_;
@@ -1024,7 +1049,6 @@ class CORE_EXPORT LocalFrameView final
   bool layout_scheduling_enabled_;
   unsigned layout_count_for_testing_;
   uint32_t block_layout_count_for_testing_ = 0;
-  unsigned lifecycle_update_count_for_testing_;
   HeapTaskRunnerTimer<LocalFrameView> update_plugins_timer_;
 
   bool first_layout_ = true;
@@ -1035,7 +1059,7 @@ class CORE_EXPORT LocalFrameView final
 
   // Used for tracking the frame's size and replicating it to the browser
   // process when it changes.
-  absl::optional<gfx::Size> frame_size_;
+  std::optional<gfx::Size> frame_size_;
 
   AtomicString media_type_;
   AtomicString media_type_when_not_printing_;
@@ -1075,10 +1099,6 @@ class CORE_EXPORT LocalFrameView final
 
   bool root_layer_did_scroll_;
 
-  // Mark if something has changed in the mapping from Frame to GraphicsLayer
-  // and the Frame Timing regions should be recalculated.
-  bool frame_timing_requests_dirty_;
-
   // Exists only on root frame.
   Member<RootFrameViewport> viewport_scrollable_area_;
 
@@ -1111,8 +1131,6 @@ class CORE_EXPORT LocalFrameView final
   gfx::Vector2dF accumulated_scroll_delta_since_last_intersection_update_;
 
   mojom::blink::ViewportIntersectionState last_intersection_state_;
-
-  bool needs_focus_on_fragment_;
 
   // True if the frame has deferred commits at least once per document load.
   // We won't defer again for the same document. This is only meaningful for

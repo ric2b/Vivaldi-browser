@@ -270,7 +270,7 @@ std::string MenubarMenuShowFunction::Open(content::WebContents* web_contents,
 }
 
 std::string MenubarMenuShowFunction::PopulateModel(
-    absl::optional<vivaldi::menubar_menu::Show::Params> &params,
+    std::optional<vivaldi::menubar_menu::Show::Params>& params,
     int menu_id,
     bool dark_text_color,
     const std::vector<Element>& list,

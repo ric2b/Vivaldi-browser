@@ -23,6 +23,11 @@ enum WebPrintColorMode {
   kMonochrome
 };
 
+enum WebPrintingOrientationRequested {
+  kPortrait,
+  kLandscape,
+};
+
 // Corresponds to the printer-state IPP field.
 // Reports the current state of the printer.
 enum WebPrinterState {
@@ -87,13 +92,52 @@ struct WebPrintingRange {
   uint32 to;
 };
 
+union WebPrintingMediaSizeDimension {
+  WebPrintingRange range;
+  uint32 value;
+};
+
+// Each media size dimension can be either a fixed value or a range.
+// Examples from the IPP spec:
+//
+// /* ISO A4 transparency only from manual feed */
+// media-size={
+//  x-dimension=21000
+//  y-dimension=29700
+// }
+//
+// /* Custom sizes from 3x5 to 8.5x14 inches */
+// media-size={
+//  x-dimension=7620-21590
+//  y-dimension=12700-35560
+// }
+//
+// Dimensions are specified in PWG units (hundredths of millimeters).
+struct WebPrintingMediaSize {
+  WebPrintingMediaSizeDimension x_dimension;
+  WebPrintingMediaSizeDimension y_dimension;
+};
+
+// Represents the media-col entry of printer attributes. See §6.3.1 in
+// in https://ftp.pwg.org/pub/pwg/candidates/cs-ippjobext21-20230210-5100.7.pdf
+struct WebPrintingMediaCollection {
+  WebPrintingMediaSize media_size;
+  string media_size_name;
+};
+
 // Detailed description of a single printer.
 struct WebPrinterAttributes {
   uint32 copies_default;
   WebPrintingRange copies_supported;
 
+  WebPrintingMediaCollection media_col_default;
+  array<WebPrintingMediaCollection> media_col_database;
+
   WebPrintingMultipleDocumentHandling multiple_document_handling_default;
   array<WebPrintingMultipleDocumentHandling> multiple_document_handling_supported;
+
+  WebPrintingOrientationRequested orientation_requested_default;
+  array<WebPrintingOrientationRequested> orientation_requested_supported;
 
   gfx.mojom.Size printer_resolution_default;
   array<gfx.mojom.Size> printer_resolution_supported;
@@ -109,11 +153,22 @@ struct WebPrinterAttributes {
   array<WebPrintingSides> sides_supported;
 };
 
+// Represents the requested media-col entry for a print job. Note that this
+// struct slightly differs from WebPrintingMediaCollection and thus is defined
+// separately:
+//   * `media_size` dimensions are defined as values instead of ranges;
+//   * `media_size_name` is omitted (callers are supposed to pass `media_size`).
+struct WebPrintingMediaCollectionRequested {
+  gfx.mojom.Size media_size;
+};
+
 struct WebPrintJobTemplateAttributes {
   string job_name;
 
   uint32 copies;
+  WebPrintingMediaCollectionRequested? media_col;
   WebPrintingMultipleDocumentHandling? multiple_document_handling;
+  WebPrintingOrientationRequested? orientation_requested;
   gfx.mojom.Size? printer_resolution;
   WebPrintColorMode? print_color_mode;
   WebPrintingSides? sides;
@@ -138,16 +193,43 @@ interface WebPrintJobStateObserver {
   OnWebPrintJobUpdate(WebPrintJobUpdate update);
 };
 
+// Allows the renderer to control a particular job.
+interface WebPrintJobController {
+  // Requests the browser to cancel the job.
+  Cancel();
+};
+
 struct WebPrintJobInfo {
   string job_name;
   uint32 job_pages;
   pending_receiver<WebPrintJobStateObserver> observer;
+  pending_remote<WebPrintJobController> controller;
+};
+
+enum GetPrintersError {
+  kUserPermissionDenied,
+};
+
+union GetPrintersResult {
+  array<WebPrinterInfo> printers;
+  GetPrintersError error;
+};
+
+enum WebPrinterFetchError {
+  kPrinterUnreachable,
+  kUserPermissionDenied,
+};
+
+union WebPrinterFetchResult {
+  WebPrinterAttributes printer_attributes;
+  WebPrinterFetchError error;
 };
 
 enum WebPrintError {
   kPrinterUnreachable,
   kDocumentMalformed,
   kPrintJobTemplateAttributesMismatch,
+  kUserPermissionDenied,
 };
 
 union WebPrintResult {
@@ -159,7 +241,7 @@ union WebPrintResult {
 // The implementation is responsible for checking access permissions.
 interface WebPrinter {
   // Fetches full attributes of this printer.
-  FetchAttributes() => (WebPrinterAttributes? attributes);
+  FetchAttributes() => (WebPrinterFetchResult result);
 
   // Sends a print job to a printer.
   Print(pending_remote<blink.mojom.Blob> document,
@@ -170,5 +252,5 @@ interface WebPrinter {
 // The implementation is responsible for checking access permissions.
 interface WebPrintingService {
   // Returns a list of local printers for this device.
-  GetPrinters() => (array<WebPrinterInfo> printers);
+  GetPrinters() => (GetPrintersResult result);
 };

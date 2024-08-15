@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {DrawingUtils, FaceLandmarker, FilesetResolver} from '../third_party/mediapipe/task_vision/task_vision.js';
-import {FaceLandmarkerResult} from '../third_party/mediapipe/task_vision/vision.js';
+import type {FaceLandmarkerOptions, FaceLandmarkerResult} from '/third_party/mediapipe/vision.js';
+import {DrawingUtils, FaceLandmarker} from 'chrome-extension://egfdjlfmgnehecnclamagfafdccgfndp/accessibility_common/third_party/mediapipe_task_vision/vision_bundle.mjs';
 
 import {MouseController} from './mouse_controller.js';
 
@@ -31,16 +31,39 @@ export class WebCamFaceLandmarker {
   }
 
   private async createFaceLandmarker_(): Promise<void> {
-    const resolver =
-        await FilesetResolver.forVisionTasks('mediapipe_task_vision');
-    this.faceLandmarker_ = await FaceLandmarker.createFromOptions(resolver, {
-      baseOptions: {
-        modelAssetPath: `mediapipe_task_vision/face_landmarker.task`,
-      },
-      outputFaceBlendshapes: true,
-      outputFacialTransformationMatrixes: true,
-      runningMode: 'VIDEO',
-      numFaces: 1,
+    let proceed: Function|undefined;
+    chrome.accessibilityPrivate.installFaceGazeAssets(async assets => {
+      if (!assets) {
+        throw new Error(
+            `Couldn't create FaceLandmarker because FaceGaze assets couldn't be
+              installed.`);
+      }
+
+      // Create a blob to hold the wasm contents.
+      const blob = new Blob([assets.wasm]);
+      const customFileset = {
+        // The wasm loader JS is checked in, so specify the path.
+        wasmLoaderPath:
+            '../third_party/mediapipe_task_vision/vision_wasm_internal.js',
+        // The wasm is stored in a blob, so pass a URL to the blob.
+        wasmBinaryPath: URL.createObjectURL(blob),
+      };
+
+      // Create the FaceLandmarker and set options.
+      this.faceLandmarker_ = await FaceLandmarker.createFromModelBuffer(
+          customFileset, new Uint8Array(assets.model));
+      const options: FaceLandmarkerOptions = {
+        outputFaceBlendshapes: true,
+        outputFacialTransformationMatrixes: true,
+        runningMode: 'VIDEO',
+        numFaces: 1,
+      };
+      this.faceLandmarker_!.setOptions(options);
+      proceed!();
+    });
+
+    return new Promise(resolve => {
+      proceed = resolve;
     });
   }
 
@@ -132,4 +155,5 @@ document.addEventListener('DOMContentLoaded', () => {
   button?.addEventListener(
       'click', () => globalThis.webCamFaceLandmarker.init());
   button?.removeAttribute('hidden');
+  chrome.runtime.sendMessage(undefined, {type: 'cameraStreamReadyForTesting'});
 });

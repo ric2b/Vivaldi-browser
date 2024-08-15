@@ -237,7 +237,7 @@ class IDBRequestTest : public testing::Test {
   }
 
   test::TaskEnvironment task_environment_;
-  raw_ptr<URLLoaderMockFactory, ExperimentalRenderer> url_loader_mock_factory_;
+  raw_ptr<URLLoaderMockFactory> url_loader_mock_factory_;
   Persistent<IDBDatabase> db_;
   Persistent<IDBTransaction> transaction_;
   Persistent<IDBObjectStore> store_;
@@ -516,7 +516,7 @@ class AsyncTraceStateForTesting : public IDBRequest::AsyncTraceState {
     return *this;
   }
 
-  absl::optional<IDBRequest::TypeForMetrics> type() const {
+  std::optional<IDBRequest::TypeForMetrics> type() const {
     return IDBRequest::AsyncTraceState::type();
   }
   const base::TimeTicks& start_time() const {

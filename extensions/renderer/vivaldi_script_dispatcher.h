@@ -9,15 +9,19 @@
 #include <vector>
 
 #include "extensions/renderer/dispatcher.h"
+#include "extensions/renderer/script_context.h"
 
 namespace extensions {
 class ModuleSystem;
 class ScriptContext;
+class ResourceBundleSourceMap;
 }  // namespace extensions
 
 namespace vivaldi {
-void VivaldiAddScriptResources(
-    std::vector<extensions::Dispatcher::JsResourceInfo>* resources);
+
+void VivaldiRegisterNativeHandler(extensions::ModuleSystem* module_system,
+                                  extensions::ScriptContext* context);
+void VivaldiAddScriptResources(extensions::ResourceBundleSourceMap* source_map);
 void VivaldiAddRequiredModules(extensions::ScriptContext* context,
                                extensions::ModuleSystem* module_system);
 }  // namespace vivaldi

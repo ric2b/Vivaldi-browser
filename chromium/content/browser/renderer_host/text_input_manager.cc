@@ -41,8 +41,7 @@ bool ShouldUpdateTextInputState(const ui::mojom::TextInputState& old_state,
 
 }  // namespace
 
-TextInputManager::TextInputManager(bool should_do_learning)
-    : active_view_(nullptr), should_do_learning_(should_do_learning) {}
+TextInputManager::TextInputManager() : active_view_(nullptr) {}
 
 TextInputManager::~TextInputManager() {
   // If there is an active view, we should unregister it first so that the
@@ -397,6 +396,7 @@ void TextInputManager::Register(RenderWidgetHostViewBase* view) {
   selection_region_map_[view] = SelectionRegion();
   composition_range_info_map_[view] = CompositionRangeInfo();
   text_selection_map_[view] = TextSelection();
+  visible_text_selection_map_[view] = std::u16string();
 }
 
 void TextInputManager::Unregister(RenderWidgetHostViewBase* view) {
@@ -406,6 +406,7 @@ void TextInputManager::Unregister(RenderWidgetHostViewBase* view) {
   selection_region_map_.erase(view);
   composition_range_info_map_.erase(view);
   text_selection_map_.erase(view);
+  visible_text_selection_map_.erase(view);
 
   if (active_view_ == view) {
     active_view_ = nullptr;

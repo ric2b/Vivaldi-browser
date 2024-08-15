@@ -7,7 +7,6 @@ from __future__ import absolute_import
 import contextlib
 import itertools
 import logging
-import optparse  # pylint: disable=deprecated-module
 import os
 import re
 import sys
@@ -23,6 +22,7 @@ from py_utils import logging_util  # pylint: disable=import-error
 from py_utils.constants import exit_codes
 
 from telemetry.core import exceptions
+from telemetry.core import optparse_argparse_migration as oam
 from telemetry.internal.actions import page_action
 from telemetry.internal.browser import browser_finder
 from telemetry.internal.browser import browser_finder_exceptions
@@ -58,7 +58,7 @@ class ArchiveError(Exception):
 def AddCommandLineArgs(parser):
   story_filter_module.StoryFilterFactory.AddCommandLineArgs(parser)
 
-  group = optparse.OptionGroup(parser, 'Story runner options')
+  group = oam.CreateOptionGroup(parser, 'Story runner options')
   # Note that the default for pageset-repeat is 1 unless the benchmark
   # specifies a different default by adding
   # `options = {'pageset_repeat': X}` in their benchmark. Defaults are always
@@ -86,7 +86,7 @@ def AddCommandLineArgs(parser):
                    help='Suppress typ expectation tags validation errors.')
   parser.add_option_group(group)
 
-  group = optparse.OptionGroup(parser, 'Web Page Replay options')
+  group = oam.CreateOptionGroup(parser, 'Web Page Replay options')
   group.add_option(
       '--use-live-sites',
       dest='use_live_sites', action='store_true',
@@ -331,7 +331,7 @@ def RunStorySet(test, story_set, finder_options, results,
               test, finder_options.Copy(), story_set, possible_browser)
 
         with results.CreateStoryRun(story, storyset_repeat_counter):
-          skip_reason = story_filter.ShouldSkip(story)
+          skip_reason = story_filter.ShouldSkip(story, should_log=True)
           if skip_reason:
             results.Skip(skip_reason)
             continue
@@ -445,6 +445,10 @@ def RunBenchmark(benchmark, finder_options):
     test = benchmark.CreatePageTest(finder_options)
     test.__name__ = benchmark.__class__.__name__
 
+    # Add the OS to the `finder_options` so that benchmarks can filter out
+    # stories that are only supported on subsets of OSes which the benchmark
+    # supports.
+    finder_options.os_name = possible_browser.platform.GetOSName()
     story_set = benchmark.CreateStorySet(finder_options)
 
     if isinstance(test, legacy_page_test.LegacyPageTest):

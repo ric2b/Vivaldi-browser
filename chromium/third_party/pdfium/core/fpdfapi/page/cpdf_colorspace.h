@@ -11,6 +11,7 @@
 #include <stdint.h>
 
 #include <array>
+#include <optional>
 #include <set>
 #include <utility>
 #include <vector>
@@ -21,8 +22,9 @@
 #include "core/fxcrt/bytestring.h"
 #include "core/fxcrt/observed_ptr.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/unowned_ptr.h"
-#include "third_party/base/containers/span.h"
+#include "core/fxge/dib/fx_dib.h"
 
 class CPDF_Document;
 class CPDF_IndexedCS;
@@ -93,7 +95,7 @@ class CPDF_ColorSpace : public Retainable, public Observable {
   // Should only be called if this colorspace is not a pattern.
   std::vector<float> CreateBufAndSetDefaultColor() const;
 
-  uint32_t CountComponents() const;
+  uint32_t ComponentCount() const;
   Family GetFamily() const { return m_Family; }
   bool IsSpecial() const {
     return GetFamily() == Family::kSeparation ||
@@ -101,7 +103,12 @@ class CPDF_ColorSpace : public Retainable, public Observable {
            GetFamily() == Family::kPattern;
   }
 
-  // Use CPDF_Pattern::GetPatternRGB() instead of GetRGB() for patterns.
+  // Wrapper around GetRGB() that returns the RGB value as FX_COLORREF. The
+  // GetRGB() return value is sanitized to fit into FX_COLORREF, where the color
+  // components are integers.
+  std::optional<FX_COLORREF> GetColorRef(pdfium::span<const float> buffer);
+
+  // Use CPDF_Pattern::GetPatternColorRef() instead of GetRGB() for patterns.
   virtual bool GetRGB(pdfium::span<const float> pBuf,
                       float* R,
                       float* G,

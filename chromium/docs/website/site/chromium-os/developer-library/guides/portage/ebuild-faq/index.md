@@ -45,10 +45,10 @@ To cross-compile, the SDK requires special tools which are installed via the
 `virtual/target-chromium-os-sdk` package. When additional tools are needed,
 this package can be upgraded and re-merged (see
 [Adding a Package to the SDK](https://www.chromium.org/chromium-os/build/add-sdk-package)).
-The `build_packages` script ensures
-that re-merging will add required tools automatically. Notice that since we are
-updating the chroot/host, we use the standard `emerge` command that installs
-packages at the root and uses the host's configuration:
+The `cros build-packages` command ensures that re-merging will add required
+tools automatically.  Notice that since we are updating the chroot/host, we use
+the standard `emerge` command that installs packages at the root and uses the
+host's configuration:
 
 ```bash
 sudo emerge -a virtual/target-chromium-os-sdk
@@ -67,7 +67,7 @@ such as compiler `CFLAGS`.
 When cross-compiling, you also need packages that correspond to the target,
 such as header files and libraries. All build-time dependencies for a target
 are installed in to that target's sysroot. These are only used for compilation
-and will not be placed into images that are built via `build_image`.
+and will not be placed into images that are built via `cros build-image`.
 
 Once a board is set up, we can start building packages for the board target. We
 use the board target specific version of emerge to do this.
@@ -76,9 +76,10 @@ use the board target specific version of emerge to do this.
 
 Building a full bootable image is a multi-step process. For a given target, the
 first step is to build binary packages for all packages needed by ChromiumOS
-using `build_packages`. If you look into the details of `build_packages`, you
-will see that it works by installing the `virtual/target-os` package into a
-target. For example, to prepare to build an x86-generic image:
+using `cros build-packages`. If you look into the details of
+`cros build-packages`, you will see that it works by installing the
+`virtual/target-os` package into a target. For example, to prepare to build an
+x86-generic image:
 
 ```bash
 emerge-amd64-generic -a virtual/target-os
@@ -88,12 +89,12 @@ We've set a portage option to build binary packages as a side-effect of building
 anything from source. If you build all of the packages needed by the
 `virtual/target-os` ebuild then we will have a binary package for each of these.
 
-Once `build_packages` finishes, we'll run build_image. If we look into the
-details of `build_image`, you will see that it works by setting up a
-loopback-mounted ext3 file system, prepping it for booting, and then installing
-`virtual/target-os` into it with an option to force using binary packages only.
-That way we only install the packages and their run-time dependencies and shed
-all of the build dependencies:
+Once `cros build-packages` finishes, we'll run `cros build-image`. If we look
+into the details of `cros build-image`, you will see that it works by setting up
+a loopback-mounted ext3 file system, prepping it for booting, and then
+installing `virtual/target-os` into it with an option to force using binary
+packages only.  That way we only install the packages and their run-time
+dependencies and shed all of the build dependencies:
 
 ```bash
 emerge-<board_name> --root="$ROOT_FS_DIR" --root-deps=rdeps --usepkgonly
@@ -109,7 +110,7 @@ clean file system.
 lie. Most developers don't actually build all binary packages from source when
 they do a build. By default, the build system "cheats" and downloads a binary
 package from the `BINHOST` if it can find one. See
-[What does build_packages actually do](#what-does-build-packages-do).
+[What does `cros build-packages` actually do](#what-does-build-packages-do).
 ***
 
 ## Where do the important files live?
@@ -232,7 +233,7 @@ package B is in package A's `DEPEND` field in its ebuild), and
 * A --DEPEND-> B --RDEPEND-> C
 * A --RDEPEND-> D --RDEPEND-> E --BDEPEND-> F -> RDEPEND G
 
-`build_packages A && build_image`:
+`cros build-packages A && cros build-image`:
 
 | Location | Packages |
 | --- | --- |
@@ -264,7 +265,7 @@ a `BDEPEND` of E, so since F is only ever needed in the **SDK**, so is G.
 * A --RDEPEND-> D --DEPEND-> B
 * A --RDEPEND-> C
 
-`build_packages A && build_image`:
+`cros build-packages A && cros build-image`:
 
 | Location | Packages |
 | --- | --- |
@@ -287,6 +288,68 @@ C is installed to the **Image** because A `RDEPEND`s on C, so C must be on the
 Since B was only ever in `DEPEND`s, it's no longer needed and does not get
 installed in the **Image**.
 
+## How do I specify dependency versions, and what are slots?
+
+Version and slot operators work together to specify what dependencies you want
+and your package's behavior when they change.
+A very basic description of the most common case for first-party packages can
+be found in this section.
+
+Please refer to your specific dependencies' ebuilds to determine if this case
+matches your needs, and see the provided references for more in depth
+information.
+The "see also" links are related FAQs that may provide some additional context
+or use cases.
+
+### Versions
+
+* Reference: [Version Dependencies]
+* See also: [How do I handle file collisions?](#file-collisions)
+
+Most commonly, some sort of version must be specified to get the correct
+dependency.
+A package's revision (e.g. `-r123`) is a component of the version, but
+typically won't be a component that needs to be included.
+However, many cros-workon packages simply use the default `0.0.1`, in which
+case it is more likely you'll need to use the revision for constraints.
+
+See [Version Dependencies] for the available operators.
+They are largely comparison operators that do what you would expect, but the
+semantics of `=` vs `~` and blockers (`!` and `!!`) in particular should be
+reviewed if you think you need to use them.
+
+**Note:** Constraints on a package's version are not "collapsed".
+`DEPEND=">=foo/bar-1.0.0 <foo/bar-2.0.0"` are two constraints that mean it
+needs a version of bar `>=1.0.0`, and a version of foo `<2.0.0`.
+It does NOT mean it needs a version of foo, `X`, such that
+`1.0.0 <= X < 2.0.0`, but such a version WOULD satisfy both constraints.
+For example, it could be satisfied by installing `foo/bar-1.2.3`
+(`1.0.0 <= 1.2.3 < 2.0.0`), but it could alternatively be satisfied by
+installing `foo/bar-0.0.1` (`0.0.1 < 2.0.0`) AND
+`foo/bar-2.3.4` (`1.0.0 <= 2.3.4`).
+See the version dependencies reference for how to handle ranged dependencies.
+
+### Slots
+
+* Reference: [Slotting]
+* Reference: [Slot Dependencies]
+* See also: [When does a dependency cause a rebuild?](#dependency-cause-rebuild)
+* See also: [How do I uprev an ebuild?](#uprev-ebuild)
+
+Start with [Slotting] for a description of what slots and subslots are.
+
+cros-workon packages use `SLOT="0/${PVR}"` by default, meaning the subslot
+changes on every uprev.
+For most cros-workon packages, this will happen automatically any time there is
+a change to the code or ebuild for the package.
+If your package needs to be rebuilt when a dependency changes, you probably
+want the `:=` slot operator, e.g. `DEPEND=">=foo/bar-1.2.3:="`.
+When the slot or subslot of the installed `foo/bar` changes, your package
+would be rebuilt.
+
+See the slot dependencies reference for more information and additional
+slot operators.
+
 ## How do I see and trim dependencies?
 
 The easiest way to inspect dependencies is to use the `--emptytree` and
@@ -307,10 +370,10 @@ Calculating dependencies... done!
 ```
 
 To get an idea of the dependency tree and why some packages would be built do
-`parallel_emerge --pretend --emptytree --tree` like so:
+`emerge --pretend --emptytree --tree` like so:
 
 ```bash
-parallel_emerge --pretend --emptytree --tree --board=x86-generic vim
+emerge-amd64-generic --pretend --emptytree --tree vim
 
 app-editors/vim-7.2.303: (merge) needs
     app-editors/vim-core-7.2.303
@@ -366,14 +429,14 @@ qsize-<board> -i '/usr/lib/debug/' -i '/usr/include/' shill
 
 For an accurate estimate, the above requires manually excluding files that would
 normally be removed due to the `INSTALL_MASK` (defined in
-src/scripts/common.sh). You can also use the more direct method of replicating
-what `build_image` does by installing the package into an empty root.
+chromite/lib/install_mask.py). You can also use the more direct method of replicating
+what `cros build-image` does by installing the package into an empty root.
 
 Example: Say you want to find out how much space `update_engine` and its runtime
 dependencies would take on an empty image.
 
 ```bash
-export INSTALL_MASK="<DEFAULT_INSTALL_MASK from src/scripts/common.sh>"
+export INSTALL_MASK="<DEFAULT_INSTALL_MASK from chromite/lib/install_mask.py>"
 mkdir /tmp/foo
 emerge-<board> --root=/tmp/foo --root-deps=rdeps --usepkgonly update_engine
 du -sh /tmp/foo
@@ -409,6 +472,15 @@ ebuild-arm-generic openssh-5.2_p1-r3.ebuild compile
 If you are writing a new package for that does not exist upstream then you will
 want to upload the files for the package to the localmirror. See the
 [download mirror](#download-mirror) section.
+
+### How do I write unit tests for my ebuild?
+
+See the
+[Best practices for writing ChromeOS unit tests](../testing/unit_tests.md) page.
+
+### How do I run unit tests?
+
+See the [ChromiumOS Unit Testing](../testing/running_unit_tests.md) page.
 
 ## How do I store transient artifacts in an ebuild?
 
@@ -560,20 +632,18 @@ USE="cros-debug" CFLAGS="-g -O0" FEATURES="nostrip noclean -splitdebug" \
 *   prebuilts binaries produced by the builder do not contain the separate
     symbols. To install the debug symbols for all packages, you can run
     `cros_install_debug_syms --board=$BOARD --all` in the chroot or always run
-    `build_packages` with `--withdebugsymbols`
+    `cros build-packages` with `--withdebugsymbols`
 
 ## How do I use the dev server?
 
 See
 [Using the dev server][devserver].
 
-## How do I install a single package (using gmerge and the dev server)?
+## How do I install a single package?
 
-See the
-[How to build a single package and install it without doing a full update][devserver-single-package]
-section of the dev server page.
+Use [cros deploy](/cros_deploy.md).
 
-## How do I install a single package (without gmerge)?
+## How do I install a single package into a local disk image?
 
 Mount the image from file or USB stick using:
 
@@ -765,7 +835,7 @@ package will not cross compile (for ARM or x86). Here is how to do that:
 1.  Check that it builds OK now
 
     ```bash
-    (cros-chroot) $ emerge-arm_generic nfs-utils
+    (cros-chroot) $ emerge-arm-generic nfs-utils
     ```
 
 1.  Upload this change to the review server and go through the process to get it
@@ -775,7 +845,7 @@ package will not cross compile (for ARM or x86). Here is how to do that:
     git commit
     # Modifications to nfs-utils to make it build
     #
-    # TEST=emerge-arm_generic
+    # TEST=emerge-arm-generic
 
     git cl upload
     # ... wait for review
@@ -878,13 +948,13 @@ If the file you are moving comes from a `cros-workon` package (where you only
 modify the 9999 ebuild), the uprev is handled automatically. This means there
 isn't anything to safely block against.  Instead, you should add/update
 `chromeos-version.sh` and bump the version.  See the
-[`chromeos-version.sh` description](#using-chromeos_version_sh) for more
+[`chromeos-version.sh` description](#using-chromeos-version-sh) for more
 details.
 
 ### Testing of upstream packages
 
-For example, you had tried to `build_packages` or `emerge` after pulling in some
-new/updated upstream packages.
+For example, you had tried to `cros build-packages` or `emerge` after pulling in
+some new/updated upstream packages.
 
 To recover from mixing of upstream packages, you can:
 
@@ -903,7 +973,7 @@ dev-util/gtk-doc-am-1.18 (/usr/bin/gtkdoc-rebase)
 
 To deal with moving files between packages, you'll want to utilize blockers.
 
-## What does "build_packages" actually do?
+## What does `cros build-packages` actually do?
 
 ```bash
 emerge-arm-generic virtual/target-os
@@ -913,12 +983,12 @@ Depending on the options you give, other packages may be emerged also (note that
 many of these options are the default):
 
 *   `--withdev` brings in `virtual/target-os-dev` which is some extra stuff
-    useful for developers like python, the gmerge utility and some X11
-    utilities.
+    useful for developers like python, compression & archive utils, ssh, rsync,
+    and more.
 *   `--withfactory` brings in `chromeos-base/chromeos-factoryinstall` sets
     things up for the factory (production)
 *   `--withtest` brings in `virtual/target-os-test` which includes test
-    infrastructure like gzip, tar, and ssh server and rsync
+    infrastructure like autotest and tast.
 *   `--withautotest` brings in `chromeos-base/autotest-all` which brings in the
     python autotests. These are used to test that the built image functions
     correctly.
@@ -934,11 +1004,10 @@ base ebuild containing all the packages in ChromeOS. This ebuild lists all
 other top-level ChromiumOS packages as explicit dependencies. Thus, all of
 ChromiumOS is built when building this one package.
 
-A small but important detail is that normally `build_packages` calls
-`parallel_emerge`, a script which builds a number of packages in parallel,
-taking advantage of multi-core machines. This is why you will see a display
-showing how many packages are left to build, and how many are currently in
-progress.
+A small but important detail is that normally `cros build-packages` calls
+`emerge`, a script which builds a number of packages in parallel, taking
+advantage of multi-core machines. This is why you will see a display showing how
+many packages are left to build, and how many are currently in progress.
 
 If you are using the minilayout then you will not have downloaded all the source
 for ChromeOS. So when an ebuild is emerged it may need to download some source.
@@ -952,7 +1021,7 @@ It has some `SRC_URI` lines describing where the source package can be
 downloaded from. The file used in case of tar may be something like:
 
 ```
-http://gsdview.appspot.com/chromeos-mirror/gentoo/distfiles/tar-1.23.tar.bz2
+https://gsdview.appspot.com/chromeos-mirror/gentoo/distfiles/tar-1.23.tar.bz2
 ```
 
 This file is cached for you after the first download, in, for example,
@@ -966,32 +1035,27 @@ ebuild you can even see where it patches these in, using `epatch`.
 If you want to try this out, type:
 
 ```bash
-(cros) emerge-arm_generic app-arch/tar
+(cros) emerge-arm-generic app-arch/tar
 ```
 
 You should see it download some source, build it and install it into your target
 build in `chroot/build/arm-generic`.
 
-So does `build_packages` build absolutely everything from source? Wouldn't that
-take forever? Actually, no. It cheats. There are ChromiumOS build servers
-constantly building binary packages for many common platforms. These pre-built
-packages are available and normally these are used instead. There is a
-`--usepkg` (default true) option for `build_packages` that adds some flags to
-the emerge command to make it use binary packages. To see what happens in this
-case, type:
+So does `cros build-packages` build absolutely everything from source? Wouldn't
+that take forever?  Actually, no.  It cheats.  There are ChromiumOS build
+servers constantly building binary packages for many common platforms.  These
+pre-built packages are available and normally these are used instead.  There is
+a `--usepkg` (default true) option for `cros build-packages` that adds some
+flags to the emerge command to make it use binary packages.  To see what happens
+in this case, type:
 
 ```bash
 emerge-amd64-generic --getbinpkg --usepkg --with-bdeps y app-arch/tar
 ```
 
-This time you will probably see it download something like:
-
-```
-http://gsdview.appspot.com/chromeos-prebuilt/board/x86-generic/master-02.12.10.182555/packages/app-arch/tar-1.23-r4.tbz2
-```
-
-and then simply install the package as before. The C compiler will not be
-touched. Again the file is cached, this time in something like
+This time you will probably see it download and then simply install the package
+as before. The C compiler will not be touched. Again the file is cached, this
+time in something like
 `chroot/build/arm-generic/packages/app-arch/tar-1.23-r4.tbz2`. Next time you run
 the `emerge --usepkg` it will not need to download anything.
 
@@ -1235,10 +1299,12 @@ Instructions for building ChromiumOS can be found
 [Gentoo]: https://www.gentoo.org/
 [localmirror]: ../archive_mirrors.md
 [devserver]: https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/docs/devserver.md
-[devserver-single-package]: https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/docs/devserver.md#TOC-How-to-build-a-single-package-and-i
 [gentoo-blockers]: https://devmanual.gentoo.org/general-concepts/dependencies/#blockers
 [virtual/editor]: https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/virtual/editor/editor-1.ebuild
 [ChromiumOS's virtual/linux-sources ebuild]: https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/virtual/linux-sources/
 [package management specification]: https://projects.gentoo.org/pms/8/pms.html
 [chromium-os-dev-guide]: ../developer_guide.md
 [cups-ebuild-use-debug]: https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/932089ace19442cbd1d72a9304226ab604984ac4/net-print/cups/cups-9999.ebuild#28
+[Slotting]: https://devmanual.gentoo.org/general-concepts/slotting/
+[Version Dependencies]: https://devmanual.gentoo.org/general-concepts/dependencies/index.html#version-dependencies
+[Slot Dependencies]: https://devmanual.gentoo.org/general-concepts/dependencies/index.html#slot-dependencies

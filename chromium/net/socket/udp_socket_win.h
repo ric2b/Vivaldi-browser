@@ -9,6 +9,9 @@
 #include <stdint.h>
 #include <winsock2.h>
 
+// Must be after winsock2.h:
+#include <MSWSock.h>
+
 #include <atomic>
 #include <memory>
 #include <set>
@@ -26,6 +29,7 @@
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_export.h"
 #include "net/base/network_handle.h"
+#include "net/base/sockaddr_storage.h"
 #include "net/log/net_log_with_source.h"
 #include "net/socket/datagram_socket.h"
 #include "net/socket/diff_serv_code_point.h"
@@ -264,7 +268,7 @@ class NET_EXPORT UDPSocketWin : public base::win::ObjectWatcher::Delegate {
 
   // Requests that packets received by this socket have the ECN bit set. Returns
   // a network error code if there was a problem.
-  int SetRecvEcn();
+  int SetRecvTos();
 
   // This is a no-op on Windows.
   void SetMsgConfirm(bool confirm);
@@ -346,6 +350,14 @@ class NET_EXPORT UDPSocketWin : public base::win::ObjectWatcher::Delegate {
   // initialization is in progress.
   int SetDiffServCodePoint(DiffServCodePoint dscp);
 
+  // Requests that packets sent by this socket have the DSCP and/or ECN
+  // bits set. Returns a network error code if there was a problem. If
+  // DSCP_NO_CHANGE or ECN_NO_CHANGE are set, will preserve those parts of
+  // the original setting.
+  // ECN values other than 0 must not be used outside of tests, without
+  // appropriate congestion control.
+  int SetTos(DiffServCodePoint dscp, EcnCodePoint ecn);
+
   // Sets IPV6_V6ONLY on the socket. If this flag is true, the socket will be
   // restricted to only IPv6; false allows both IPv4 and IPv6 traffic.
   int SetIPv6Only(bool ipv6_only);
@@ -371,6 +383,15 @@ class NET_EXPORT UDPSocketWin : public base::win::ObjectWatcher::Delegate {
     return multicast_interface_;
   }
   bool get_use_non_blocking_io_for_testing() { return use_non_blocking_io_; }
+
+  // Because the windows API separates out DSCP and ECN better than Posix, this
+  // function does not actually return the correct DSCP value, instead always
+  // returning DSCP_DEFAULT rather than the last incoming value.
+  // If a use case arises for reading the incoming DSCP value, it would only
+  // then worth be executing the system call.
+  // However, the ECN member of the return value is correct if SetRecvTos()
+  // was called previously on the socket.
+  DscpAndEcn GetLastTos() const { return last_tos_; }
 
  private:
   enum SocketOptions {
@@ -406,6 +427,27 @@ class NET_EXPORT UDPSocketWin : public base::win::ObjectWatcher::Delegate {
                     CompletionOnceCallback callback);
 
   int InternalConnect(const IPEndPoint& address);
+
+  // Returns a function pointer to the platform's instantiation of WSARecvMsg()
+  // or WSASendMsg().
+  LPFN_WSARECVMSG GetRecvMsgPointer();
+  LPFN_WSASENDMSG GetSendMsgPointer();
+
+  // Populates |message| with |storage|, |data_buffer|, and |control_buffer| to
+  // use ECN before calls to either WSASendMsg() (if |send| is true) or
+  // WSARecvMsg().
+  // |data_buffer| is the datagram. |control_buffer| is the storage
+  // space for cmsgs. If |send| is false for an overlapped socket, the caller
+  // must retain a reference to |msghdr|, |storage|, and the buf members of
+  // |data_buffer| and |control_buffer|, in case WSARecvMsg() returns IO_PENDING
+  // and the result is delivered asynchronously.
+  void PopulateWSAMSG(WSAMSG& message,
+                      SockaddrStorage& storage,
+                      WSABUF* data_buffer,
+                      WSABUF& control_buffer,
+                      bool send);
+  // Sets last_tos_ to the last ECN codepoint contained in |message|.
+  void SetLastTosFromWSAMSG(WSAMSG& message);
 
   // Version for using overlapped IO.
   int InternalRecvFromOverlapped(IOBuffer* buf,
@@ -497,6 +539,20 @@ class NET_EXPORT UDPSocketWin : public base::win::ObjectWatcher::Delegate {
   // Manages decrementing the global open UDP socket counter when this
   // UDPSocket is destroyed.
   OwnedUDPSocketCount owned_socket_count_;
+
+  DscpAndEcn last_tos_ = {DSCP_DEFAULT, ECN_DEFAULT};
+
+  // If true, the socket has been configured to report ECN on incoming
+  // datagrams.
+  bool report_ecn_ = false;
+
+  // Function pointers to the platform implementations of WSARecvMsg() and
+  // WSASendMsg().
+  LPFN_WSARECVMSG wsa_recv_msg_ = nullptr;
+  LPFN_WSASENDMSG wsa_send_msg_ = nullptr;
+
+  // The ECN codepoint to send on outgoing packets.
+  EcnCodePoint send_ecn_ = ECN_NOT_ECT;
 
   THREAD_CHECKER(thread_checker_);
 

@@ -64,11 +64,11 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
 
     /** The interface that the Opt-in promo uses to communicate with this Panel. */
     interface ContextualSearchPromoHost extends ContextualSearchPanelSectionHost {
-        /** Notifies that the user has opted in. */
-        void onPromoOptIn();
+        /** Notifies the host that the promo was shown. */
+        void onPromoShown();
 
-        /** Notifies that the user has opted out. */
-        void onPromoOptOut();
+        /** Notifies the host whether the user enabled the feature via the promotion. */
+        void setContextualSearchPromoCardSelection(boolean enabled);
     }
 
     /** The interface that the Related Searches section uses to communicate with this Panel. */
@@ -254,8 +254,7 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
     public void setPanelState(@PanelState int toState, @StateChangeReason int reason) {
         @PanelState int fromState = getPanelState();
 
-        mPanelMetrics.onPanelStateChanged(
-                fromState, toState, reason, Profile.getLastUsedRegularProfile());
+        mPanelMetrics.onPanelStateChanged(fromState, toState, reason, getProfile());
 
         if (toState == PanelState.CLOSED || toState == PanelState.UNDEFINED) {
             mManagementDelegate.onPanelFinishedShowing();
@@ -448,13 +447,7 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
 
     @Override
     protected float getPeekedHeight() {
-        // When Edge To Edge is enabled and drawing to the bottom edge, increase the peek
-        // positioning to keep the whole Bar above the Gesture Nav.
-        int e2eAdditionalPadding = 0;
-        if (mEdgeToEdgeControllerSupplier.get() != null) {
-            e2eAdditionalPadding = mEdgeToEdgeControllerSupplier.get().getBottomInset();
-        }
-        return getBarHeight() + e2eAdditionalPadding;
+        return getBarHeight();
     }
 
     @Override
@@ -469,7 +462,16 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
         // smaller than the height required to display the bar's content. In such cases, it is
         // necessary to select the larger value between the preset height and the actual content
         // height.
-        return Math.max(super.getBarHeight(), getSearchBarControlMinHeightDps())
+        float baseBarHeight = super.getBarHeight();
+
+        // When Edge To Edge is enabled and drawing to the bottom edge, increase the base bar height
+        // to properly account for the extra bottom inset when positioning the peek height. The
+        // padding will appear in the search bar control min height after a delay, once the view has
+        // inflated, but that's too late for initial positioning.
+        if (mEdgeToEdgeControllerSupplier.get() != null) {
+            baseBarHeight += mEdgeToEdgeControllerSupplier.get().getBottomInset();
+        }
+        return Math.max(baseBarHeight, getSearchBarControlMinHeightDps())
                 + getInBarRelatedSearchesAnimatedHeightDps();
     }
 
@@ -965,9 +967,28 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
      */
     @Override
     public ContextualSearchBarControl getSearchBarControl() {
+        // When Edge To Edge is enabled and drawing to the bottom edge, pass in the bottom inset
+        // to pad the search bar (specifically, the caption's bottom padding). Use 0 otherwise.
+        // TODO(crbug.com/332543636) Remove padding when it's no longer needed in EXPANDED and
+        //  MAXIMIZED states
+        @Nullable EdgeToEdgeController edgeToEdgeController = mEdgeToEdgeControllerSupplier.get();
+        int bottomEdgeToEdgePaddingDp =
+                edgeToEdgeController != null ? edgeToEdgeController.getBottomInset() : 0;
+
         if (mSearchBarControl == null) {
             mSearchBarControl =
-                    new ContextualSearchBarControl(this, mContext, mContainerView, mResourceLoader);
+                    new ContextualSearchBarControl(
+                            this,
+                            mContext,
+                            mContainerView,
+                            mResourceLoader,
+                            bottomEdgeToEdgePaddingDp);
+        } else {
+            // mSearchBarControl is often created pre-emptively after the previous assignment is
+            // cleaned up. It should be updated with the current edge-to-edge bottom inset, in case
+            // it was created with a different inset on another tab with a different edge-to-edge
+            // status.
+            mSearchBarControl.overrideEdgeToEdgePadding(bottomEdgeToEdgePaddingDp);
         }
         return mSearchBarControl;
     }
@@ -1065,10 +1086,14 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
                         }
 
                         @Override
-                        public void onPromoOptIn() {}
+                        public void onPromoShown() {
+                            mManagementDelegate.onPromoShown();
+                        }
 
                         @Override
-                        public void onPromoOptOut() {}
+                        public void setContextualSearchPromoCardSelection(boolean enabled) {
+                            mManagementDelegate.setContextualSearchPromoCardSelection(enabled);
+                        }
                     };
         }
 

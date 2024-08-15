@@ -231,8 +231,9 @@ class TestExternallyManagedAppManager : public ExternallyManagedAppManager {
   }
 
   GURL GetNextInstallationLaunchURL(const GURL& url) {
-    if (!base::Contains(next_installation_launch_urls_, url))
-      return GURL::EmptyGURL();
+    if (!base::Contains(next_installation_launch_urls_, url)) {
+      return GURL();
+    }
 
     auto result = next_installation_launch_urls_.at(url);
     next_installation_launch_urls_.erase(url);
@@ -429,12 +430,13 @@ class TestWebAppCommandScheduler : public WebAppCommandScheduler {
   }
 
   // WebAppCommandScheduler:
-  void RemoveInstallUrl(std::optional<webapps::AppId> app_id,
-                        WebAppManagement::Type install_source,
-                        const GURL& install_url,
-                        webapps::WebappUninstallSource uninstall_source,
-                        UninstallJob::Callback callback,
-                        const base::Location& location = FROM_HERE) override {
+  void RemoveInstallUrlMaybeUninstall(
+      std::optional<webapps::AppId> app_id,
+      WebAppManagement::Type install_source,
+      const GURL& install_url,
+      webapps::WebappUninstallSource uninstall_source,
+      UninstallJob::Callback callback,
+      const base::Location& location = FROM_HERE) override {
     uninstall_external_web_app_urls_.push_back(install_url);
 
     auto [preset_app_id, code] =
@@ -452,7 +454,7 @@ class TestWebAppCommandScheduler : public WebAppCommandScheduler {
               std::move(callback).Run(code);
             }));
   }
-  void RemoveInstallSource(
+  void RemoveInstallManagementMaybeUninstall(
       const webapps::AppId& app_id,
       WebAppManagement::Type install_source,
       webapps::WebappUninstallSource uninstall_source,

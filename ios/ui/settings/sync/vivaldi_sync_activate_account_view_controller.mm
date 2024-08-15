@@ -220,7 +220,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)onResendCodeResponse:(NSData*)data
                     response:(NSURLResponse*)response
                        error:(NSError*)error {
-  absl::optional<base::Value> readResult = NSDataToDict(data);
+  std::optional<base::Value> readResult = NSDataToDict(data);
   if (error || !readResult.has_value()) {
     [self showErrorCellWithMessage:
         l10n_util::GetNSString(IDS_SYNC_SERVER_OTHER_ERROR)];
@@ -246,7 +246,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)onActivateResponse:(NSData*)data
                   response:(NSURLResponse*)response
                      error:(NSError*)error {
-  absl::optional<base::Value> readResult = NSDataToDict(data);
+  std::optional<base::Value> readResult = NSDataToDict(data);
   if (error || !readResult.has_value()) {
     [self showErrorCellWithMessage:
         l10n_util::GetNSString(IDS_SYNC_SERVER_OTHER_ERROR)];

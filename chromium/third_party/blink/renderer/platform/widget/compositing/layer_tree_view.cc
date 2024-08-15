@@ -43,6 +43,7 @@
 #include "services/metrics/public/cpp/mojo_ukm_recorder.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/renderer/platform/graphics/dark_mode_filter.h"
 #include "third_party/blink/renderer/platform/graphics/dark_mode_settings_builder.h"
 #include "third_party/blink/renderer/platform/graphics/raster_dark_mode_filter_impl.h"
@@ -272,7 +273,7 @@ void LayerTreeView::OnCommitRequested() {
 void LayerTreeView::OnDeferCommitsChanged(
     bool status,
     cc::PaintHoldingReason reason,
-    absl::optional<cc::PaintHoldingCommitTrigger> trigger) {
+    std::optional<cc::PaintHoldingCommitTrigger> trigger) {
   if (!delegate_)
     return;
   delegate_->OnDeferCommitsChanged(status, reason, trigger);
@@ -400,21 +401,22 @@ void LayerTreeView::DidCompletePageScaleAnimation(int source_frame_number) {
 
 void LayerTreeView::DidPresentCompositorFrame(
     uint32_t frame_token,
-    const gfx::PresentationFeedback& feedback) {
+    const viz::FrameTimingDetails& frame_timing_details) {
   if (!delegate_)
     return;
   DCHECK(layer_tree_host_->GetTaskRunnerProvider()
              ->MainThreadTaskRunner()
              ->RunsTasksInCurrentSequence());
   // Only run callbacks on successful presentations.
-  if (feedback.failed())
+  if (frame_timing_details.presentation_feedback.failed()) {
     return;
+  }
   while (!presentation_callbacks_.empty()) {
     const auto& front = presentation_callbacks_.begin();
     if (viz::FrameTokenGT(front->first, frame_token))
       break;
     for (auto& callback : front->second)
-      std::move(callback).Run(feedback.timestamp);
+      std::move(callback).Run(frame_timing_details);
     presentation_callbacks_.erase(front);
   }
 
@@ -423,8 +425,10 @@ void LayerTreeView::DidPresentCompositorFrame(
     const auto& front = core_animation_error_code_callbacks_.begin();
     if (viz::FrameTokenGT(front->first, frame_token))
       break;
-    for (auto& callback : front->second)
-      std::move(callback).Run(feedback.ca_layer_error_code);
+    for (auto& callback : front->second) {
+      std::move(callback).Run(
+          frame_timing_details.presentation_feedback.ca_layer_error_code);
+    }
     core_animation_error_code_callbacks_.erase(front);
   }
 #endif
@@ -480,6 +484,12 @@ void LayerTreeView::RunPaintBenchmark(int repeat_count,
     delegate_->RunPaintBenchmark(repeat_count, result);
 }
 
+std::string LayerTreeView::GetPausedDebuggerLocalizedMessage() {
+  return Platform::Current()
+      ->QueryLocalizedString(IDS_DEBUGGER_PAUSED_IN_ANOTHER_TAB)
+      .Utf8();
+}
+
 void LayerTreeView::DidRunBeginMainFrame() {
   if (!delegate_)
     return;
@@ -500,7 +510,7 @@ void LayerTreeView::ScheduleAnimationForWebTests() {
 
 void LayerTreeView::AddPresentationCallback(
     uint32_t frame_token,
-    base::OnceCallback<void(base::TimeTicks)> callback) {
+    base::OnceCallback<void(const viz::FrameTimingDetails&)> callback) {
   AddCallback(frame_token, std::move(callback), presentation_callbacks_);
 }
 

@@ -50,8 +50,7 @@ class PrivacyHubNotificationControllerTest : public AshTestBase {
  public:
   PrivacyHubNotificationControllerTest()
       : AshTestBase(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kCrosPrivacyHubV0, features::kCrosPrivacyHub}, {});
+    scoped_feature_list_.InitWithFeatures({features::kCrosPrivacyHub}, {});
     auto delegate = std::make_unique<MockNewWindowDelegate>();
     new_window_delegate_ = delegate.get();
     window_delegate_provider_ =
@@ -132,7 +131,7 @@ class PrivacyHubNotificationControllerTest : public AshTestBase {
       const std::string& id) const {
     const message_center::NotificationList::Notifications& notifications =
         message_center::MessageCenter::Get()->GetVisibleNotifications();
-    for (const auto* notification : notifications) {
+    for (const message_center::Notification* notification : notifications) {
       if (notification->id() == id) {
         return notification;
       }

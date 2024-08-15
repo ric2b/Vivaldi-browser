@@ -6,11 +6,12 @@
 #define COMPONENTS_ATTRIBUTION_REPORTING_TEST_UTILS_H_
 
 #include <iosfwd>
+#include <optional>
+#include <vector>
 
 #include "components/attribution_reporting/filters.h"
 #include "components/attribution_reporting/source_type.mojom-forward.h"
 #include "components/attribution_reporting/trigger_config.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
 class TimeDelta;
@@ -24,18 +25,28 @@ class AggregatableValues;
 class AggregationKeys;
 class DestinationSet;
 class EventReportWindows;
+class RandomizedResponseData;
 class SuitableOrigin;
 class SummaryBuckets;
 
 struct AggregatableDedupKey;
 struct EventTriggerData;
+struct FakeEventLevelReport;
 struct OsRegistrationItem;
+struct ParseError;
 struct SourceRegistration;
 struct TriggerRegistration;
 
 FiltersDisjunction FiltersForSourceType(
     mojom::SourceType,
-    absl::optional<base::TimeDelta> lookback_window = absl::nullopt);
+    std::optional<base::TimeDelta> lookback_window = std::nullopt);
+
+// Creates test data where each spec has daily windows (starting from 1 day).
+// `collapse_into_single_spec` will collapse the vector into a single spec,
+// assuming it is possible (i.e. `windows_per_type` contains a single distinct
+// value).
+TriggerSpecs SpecsFromWindowList(const std::vector<int>& windows_per_type,
+                                 bool collapse_into_single_spec);
 
 std::ostream& operator<<(std::ostream&, const AggregationKeys&);
 
@@ -72,6 +83,12 @@ std::ostream& operator<<(std::ostream&, const TriggerSpecs&);
 std::ostream& operator<<(std::ostream&, const TriggerSpecs::const_iterator&);
 
 std::ostream& operator<<(std::ostream&, const AggregatableTriggerConfig&);
+
+std::ostream& operator<<(std::ostream&, const ParseError&);
+
+std::ostream& operator<<(std::ostream& out, const FakeEventLevelReport&);
+
+std::ostream& operator<<(std::ostream& out, const RandomizedResponseData&);
 
 }  // namespace attribution_reporting
 

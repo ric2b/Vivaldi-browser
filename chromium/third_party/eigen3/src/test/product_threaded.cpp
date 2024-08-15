@@ -13,9 +13,9 @@
 void test_parallelize_gemm() {
   constexpr int n = 1024;
   constexpr int num_threads = 4;
-  MatrixXf a(n, n);
-  MatrixXf b(n, n);
-  MatrixXf c(n, n);
+  MatrixXf a = MatrixXf::Random(n, n);
+  MatrixXf b = MatrixXf::Random(n, n);
+  MatrixXf c = MatrixXf::Random(n, n);
   c.noalias() = a * b;
 
   ThreadPool pool(num_threads);

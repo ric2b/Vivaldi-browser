@@ -8,22 +8,23 @@
 #include <stddef.h>
 
 #include <memory>
+#include <optional>
 
 #include "build/build_config.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/themed_vector_icon.h"
 #include "ui/color/color_id.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/views_export.h"
 
 namespace gfx {
 class Canvas;
-class RoundedCornersF;
-}
+}  // namespace gfx
 
 namespace ui {
 class ThemedVectorIcon;
-}
+}  // namespace ui
 
 namespace views {
 
@@ -45,10 +46,8 @@ class View;
 class VIEWS_EXPORT Background {
  public:
   Background();
-
   Background(const Background&) = delete;
   Background& operator=(const Background&) = delete;
-
   virtual ~Background();
 
   // Render the background for the provided view
@@ -61,6 +60,10 @@ class VIEWS_EXPORT Background {
   // This is called by the View on which it is attached. This is overridden for
   // subclasses that depend on theme colors.
   virtual void OnViewThemeChanged(View* view);
+
+  // Returns the rounded corner radii of the background. Returns `std::nullopt`
+  // by default.
+  virtual std::optional<gfx::RoundedCornersF> GetRoundedCornerRadii() const;
 
   // Returns the "background color".  This is equivalent to the color set in
   // SetNativeControlColor().  For solid backgrounds, this is the color; for
@@ -103,13 +106,13 @@ VIEWS_EXPORT std::unique_ptr<Background> CreateThemedRoundedRectBackground(
     ui::ColorId color_id,
     float top_radius,
     float bottom_radius,
-    int for_border_thickness);
+    int for_border_thickness = 0);
 
 // Same as above except each corner radius can be different and customized.
 VIEWS_EXPORT std::unique_ptr<Background> CreateThemedRoundedRectBackground(
     ui::ColorId color_id,
     const gfx::RoundedCornersF& radii,
-    int for_border_thickness);
+    int for_border_thickness = 0);
 
 // Creates a background that fills the canvas in the color specified by the
 // view's ColorProvider and the given color identifier.

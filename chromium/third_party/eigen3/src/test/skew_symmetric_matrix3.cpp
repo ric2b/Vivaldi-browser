@@ -177,7 +177,7 @@ void exponentialRotation() {
 
   // rotate around z-axis
   Vector v2;
-  v2 << 0, 0, EIGEN_PI;
+  v2 << 0, 0, Scalar(EIGEN_PI);
   const SquareMatrix r2 = v2.asSkewSymmetric().exponential();
   VERIFY_IS_APPROX(r2 * (Vector() << 1, 0, 0).finished(), (Vector() << -1, 0, 0).finished());
   VERIFY_IS_APPROX(r2 * (Vector() << 0, 1, 0).finished(), (Vector() << 0, -1, 0).finished());
@@ -196,8 +196,8 @@ EIGEN_DECLARE_TEST(skew_symmetric_matrix3) {
     CALL_SUBTEST_2(plusMinus<double>());
     CALL_SUBTEST_2(multiplyScale<float>());
     CALL_SUBTEST_2(multiplyScale<double>());
-    CALL_SUBTEST_2(skewSymmetricMultiplication(MatrixXf(3, internal::random<int>(1, EIGEN_TEST_MAX_SIZE))));
-    CALL_SUBTEST_2(skewSymmetricMultiplication(MatrixXd(3, internal::random<int>(1, EIGEN_TEST_MAX_SIZE))));
+    CALL_SUBTEST_2(skewSymmetricMultiplication(MatrixXf(3, internal::random<int>(3, EIGEN_TEST_MAX_SIZE))));
+    CALL_SUBTEST_2(skewSymmetricMultiplication(MatrixXd(3, internal::random<int>(3, EIGEN_TEST_MAX_SIZE))));
     CALL_SUBTEST_2(traceAndDet<float>());
     CALL_SUBTEST_2(traceAndDet<double>());
     CALL_SUBTEST_2(transpose<float>());

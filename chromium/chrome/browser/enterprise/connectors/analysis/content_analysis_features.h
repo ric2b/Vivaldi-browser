@@ -9,16 +9,18 @@
 
 namespace enterprise_connectors {
 
-// Controls whether the local content analysis feature can be used for any
-// service provider and/or policy configuration.
-BASE_DECLARE_FEATURE(kLocalContentAnalysisEnabled);
-
 // Controls whether the custom message per rule feature is enabled or not. Does
 // not affect interstitials custom message per rule feature.
 BASE_DECLARE_FEATURE(kDialogCustomRuleMessageEnabled);
 
-// Return true if custom rule message is enabled.
+// Controls whether the resumable upload protocol is enabled or not.
+BASE_DECLARE_FEATURE(kResumableUploadEnabled);
+
+// Returns true if custom rule message is enabled.
 bool IsDialogCustomRuleMessageEnabled();
+
+// Returns true if resumable upload is enabled.
+bool IsResumableUploadEnabled();
 
 }  // namespace enterprise_connectors
 

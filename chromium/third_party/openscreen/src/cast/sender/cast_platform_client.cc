@@ -28,8 +28,8 @@ CastPlatformClient::CastPlatformClient(VirtualConnectionRouter* router,
       virtual_conn_router_(router),
       clock_(clock),
       task_runner_(task_runner) {
-  OSP_DCHECK(virtual_conn_router_);
-  OSP_DCHECK(clock_);
+  OSP_CHECK(virtual_conn_router_);
+  OSP_CHECK(clock_);
   virtual_conn_router_->AddHandlerForLocalId(sender_id_, this);
 }
 
@@ -59,7 +59,7 @@ std::optional<int> CastPlatformClient::RequestAppAvailability(
   int request_id = GetNextRequestId();
   ErrorOr<::cast::channel::CastMessage> message =
       CreateAppAvailabilityRequest(sender_id_, request_id, app_id);
-  OSP_DCHECK(message);
+  OSP_CHECK(message);
 
   PendingRequests& pending_requests =
       pending_requests_by_receiver_id_[receiver_id];

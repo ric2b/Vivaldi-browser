@@ -199,7 +199,7 @@ void CrashesDOMHandler::UpdateUI() {
       IdentityManagerFactory::GetForProfile(Profile::FromWebUI(web_ui()));
   if (identity_manager) {
     is_internal = gaia::IsGoogleInternalAccountEmail(
-        identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSync)
+        identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin)
             .email);
   }
 

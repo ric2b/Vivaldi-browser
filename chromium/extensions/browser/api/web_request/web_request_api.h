@@ -14,6 +14,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/feature_list.h"
 #include "base/functional/callback.h"
@@ -37,6 +38,7 @@
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
+#include "extensions/common/extension_id.h"
 #include "ipc/ipc_sender.h"
 #include "net/base/auth.h"
 #include "net/base/completion_once_callback.h"
@@ -57,6 +59,10 @@ class AuthCredentials;
 class HttpResponseHeaders;
 class SiteForCookies;
 }  // namespace net
+
+namespace network {
+class URLLoaderFactoryBuilder;
+}  // namespace network
 
 namespace extensions {
 
@@ -89,6 +95,11 @@ class WebRequestAPI : public BrowserContextKeyedAPI,
         scoped_refptr<net::HttpResponseHeaders> response_headers,
         int32_t request_id,
         AuthRequestCallback callback);
+
+    // Called when an extension that can execute declarativeNetRequest actions
+    // is unloaded, so orphaned DNR actions on current requests can be cleaned
+    // up.
+    virtual void OnDNRExtensionUnloaded(const Extension* extension) = 0;
   };
 
   // A ProxySet is a set of proxies used by WebRequestAPI: It holds Proxy
@@ -127,6 +138,8 @@ class WebRequestAPI : public BrowserContextKeyedAPI,
         scoped_refptr<net::HttpResponseHeaders> response_headers,
         const content::GlobalRequestID& request_id,
         AuthRequestCallback callback);
+
+    void OnDNRExtensionUnloaded(const Extension* extension);
 
    private:
     // Although these members are initialized on the UI thread, we expect at
@@ -201,7 +214,7 @@ class WebRequestAPI : public BrowserContextKeyedAPI,
       content::ContentBrowserClient::URLLoaderFactoryType type,
       std::optional<int64_t> navigation_id,
       ukm::SourceIdObj ukm_source_id,
-      mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
+      network::URLLoaderFactoryBuilder& factory_builder,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client,
       scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner,
@@ -325,7 +338,7 @@ class WebRequestInternalFunction : public ExtensionFunction {
  protected:
   ~WebRequestInternalFunction() override = default;
 
-  const std::string& extension_id_safe() const {
+  const ExtensionId& extension_id_safe() const {
     return extension() ? extension_id() : base::EmptyString();
   }
 };

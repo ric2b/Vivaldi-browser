@@ -33,17 +33,12 @@ class WindowPreviewView;
 // installation and update logic to be used or implemented by `WindowMiniView`
 // and `GroupContainerCycleView`.
 class WindowMiniViewBase : public views::View {
- public:
-  METADATA_HEADER(WindowMiniViewBase);
+  METADATA_HEADER(WindowMiniViewBase, views::View)
 
+ public:
   WindowMiniViewBase(const WindowMiniViewBase&) = delete;
   WindowMiniViewBase& operator=(const WindowMiniViewBase&) = delete;
   ~WindowMiniViewBase() override;
-
-  // Sets rounded corners on the exposed corners, the inner corners will be
-  // sharp.
-  void SetRoundedCornersRadius(
-      const gfx::RoundedCornersF& exposed_rounded_corners);
 
   // Shows or hides a focus ring around this.
   void UpdateFocusState(bool focus);
@@ -85,12 +80,6 @@ class WindowMiniViewBase : public views::View {
  protected:
   WindowMiniViewBase();
 
-  // If these optional values are set, the preset rounded corners will be used
-  // otherwise the default rounded corners will be used.
-  std::optional<gfx::RoundedCornersF> exposed_rounded_corners_;
-  std::optional<gfx::RoundedCornersF> header_view_rounded_corners_;
-  std::optional<gfx::RoundedCornersF> preview_view_rounded_corners_;
-
   // True if `this` is focused when using keyboard navigation.
   bool is_focused_ = false;
 };
@@ -100,9 +89,9 @@ class WindowMiniViewBase : public views::View {
 // `SetShowPreview` in their constructors (or later on if they like).
 class ASH_EXPORT WindowMiniView : public WindowMiniViewBase,
                                   public aura::WindowObserver {
- public:
-  METADATA_HEADER(WindowMiniView);
+  METADATA_HEADER(WindowMiniView, WindowMiniViewBase)
 
+ public:
   WindowMiniView(const WindowMiniView&) = delete;
   WindowMiniView& operator=(const WindowMiniView&) = delete;
   ~WindowMiniView() override;
@@ -118,11 +107,16 @@ class ASH_EXPORT WindowMiniView : public WindowMiniViewBase,
   WindowPreviewView* preview_view() { return preview_view_; }
   const WindowPreviewView* preview_view() const { return preview_view_; }
 
+  // Sets rounded corners on the exposed corners, the inner corners will be
+  // sharp.
+  void SetRoundedCornersRadius(
+      const gfx::RoundedCornersF& exposed_rounded_corners);
+
   // Sets the visibility of |backdrop_view_|. Creates it if it is null.
   void SetBackdropVisibility(bool visible);
 
   // Sets or hides rounded corners on `preview_view_`, if it exists.
-  void RefreshPreviewRoundedCorners(bool show);
+  void RefreshPreviewRoundedCorners();
 
   // Updates the rounded corners on `header_view_`, if it exists.
   void RefreshHeaderViewRoundedCorners();
@@ -143,6 +137,15 @@ class ASH_EXPORT WindowMiniView : public WindowMiniViewBase,
   gfx::RoundedCornersF GetRoundedCorners() const override;
   void SetSelectedWindowForFocus(aura::Window* window) override;
   void ClearFocusSelection() override;
+  void Layout(PassKey) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+
+  // aura::WindowObserver:
+  void OnWindowPropertyChanged(aura::Window* window,
+                               const void* key,
+                               intptr_t old) override;
+  void OnWindowDestroying(aura::Window* window) override;
+  void OnWindowTitleChanged(aura::Window* window) override;
 
  protected:
   explicit WindowMiniView(aura::Window* source_window);
@@ -156,18 +159,11 @@ class ASH_EXPORT WindowMiniView : public WindowMiniViewBase,
   // and layouts of the preview view.
   virtual gfx::Size GetPreviewViewSize() const;
 
-  // views::View:
-  void Layout() override;
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
-
-  // aura::WindowObserver:
-  void OnWindowPropertyChanged(aura::Window* window,
-                               const void* key,
-                               intptr_t old) override;
-  void OnWindowDestroying(aura::Window* window) override;
-  void OnWindowTitleChanged(aura::Window* window) override;
-
  private:
+  // Called when setting the rounded corners to refresh the rounded corners on
+  // the `header_view_`, `preview_view_` and focus ring.
+  void OnRoundedCornersSet();
+
   void InstallFocusRing();
 
   // Generates the focus ring path for `this`, which has four rounded corners by
@@ -188,6 +184,11 @@ class ASH_EXPORT WindowMiniView : public WindowMiniViewBase,
 
   // Optionally shows a preview of |window_|.
   raw_ptr<WindowPreviewView, DanglingUntriaged> preview_view_ = nullptr;
+
+  // If these optional values are set, they will be used otherwise the default
+  // rounded corners will be used.
+  std::optional<gfx::RoundedCornersF> exposed_rounded_corners_;
+  std::optional<gfx::RoundedCornersF> preview_view_rounded_corners_;
 
   base::ScopedObservation<aura::Window, aura::WindowObserver>
       window_observation_{this};

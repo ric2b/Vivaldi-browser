@@ -165,8 +165,8 @@ std::string MetricsTypeToString(const ash::SearchResultType metrics_type) {
       return "DRIVE_SEARCH";
     case ash::SearchResultType::HELP_APP_UPDATES:
       return "HELP_APP_UPDATES";
-    case ash::SearchResultType::HELP_APP_DISCOVER:
-      return "HELP_APP_DISCOVER";
+    case ash::SearchResultType::HELP_APP_DISCOVER_DEPRECATED:
+      return "HELP_APP_DISCOVER_DEPRECATED";
     case ash::SearchResultType::KEYBOARD_SHORTCUT:
       return "KEYBOARD_SHORTCUT";
     case ash::SearchResultType::OPEN_TAB:
@@ -207,6 +207,36 @@ std::string DisplayTypeToString(
       return "RecentApps";
     case ash::SearchResultDisplayType::kImage:
       return "Image";
+  }
+  NOTREACHED();
+}
+
+ash::AppListSearchControlCategory MapSearchCategoryToControlCategory(
+    SearchCategory search_category) {
+  switch (search_category) {
+    case SearchCategory::kApps:
+      return ash::AppListSearchControlCategory::kApps;
+    case SearchCategory::kAppShortcuts:
+      return ash::AppListSearchControlCategory::kAppShortcuts;
+    case SearchCategory::kFiles:
+      return ash::AppListSearchControlCategory::kFiles;
+    case SearchCategory::kGames:
+      return ash::AppListSearchControlCategory::kGames;
+    case SearchCategory::kHelp:
+      return ash::AppListSearchControlCategory::kHelp;
+    case SearchCategory::kImages:
+      return ash::AppListSearchControlCategory::kImages;
+    case SearchCategory::kPlayStore:
+      return ash::AppListSearchControlCategory::kPlayStore;
+    case SearchCategory::kWeb:
+      return ash::AppListSearchControlCategory::kWeb;
+    case SearchCategory::kSettings:
+    case SearchCategory::kOmnibox:
+    case SearchCategory::kTest:
+    case SearchCategory::kDesksAdmin:
+    case SearchCategory::kAssistant:
+    case SearchCategory::kSystemInfoCard:
+      return ash::AppListSearchControlCategory::kCannotToggle;
   }
   NOTREACHED();
 }

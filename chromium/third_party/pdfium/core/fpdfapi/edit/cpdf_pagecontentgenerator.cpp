@@ -8,6 +8,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <tuple>
@@ -39,11 +40,12 @@
 #include "core/fpdfapi/parser/fpdf_parser_decode.h"
 #include "core/fpdfapi/parser/fpdf_parser_utility.h"
 #include "core/fpdfapi/parser/object_tree_traversal_util.h"
-#include "third_party/base/check.h"
-#include "third_party/base/containers/contains.h"
-#include "third_party/base/containers/span.h"
-#include "third_party/base/notreached.h"
-#include "third_party/base/numerics/safe_conversions.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
+#include "core/fxcrt/containers/contains.h"
+#include "core/fxcrt/notreached.h"
+#include "core/fxcrt/numerics/safe_conversions.h"
+#include "core/fxcrt/span.h"
 
 namespace {
 
@@ -51,15 +53,21 @@ namespace {
 // Value: The resource names of a given type.
 using ResourcesMap = std::map<ByteString, std::set<ByteString>>;
 
-bool GetColor(const CPDF_Color* pColor, float* rgb) {
-  int intRGB[3];
-  if (!pColor || !pColor->IsColorSpaceRGB() ||
-      !pColor->GetRGB(&intRGB[0], &intRGB[1], &intRGB[2])) {
+// Returns whether it wrote to `buf` or not.
+bool WriteColorToStream(fxcrt::ostringstream& buf, const CPDF_Color* color) {
+  if (!color || !color->IsColorSpaceRGB()) {
     return false;
   }
-  rgb[0] = intRGB[0] / 255.0f;
-  rgb[1] = intRGB[1] / 255.0f;
-  rgb[2] = intRGB[2] / 255.0f;
+
+  std::optional<FX_COLORREF> colors = color->GetColorRef();
+  if (!colors.has_value()) {
+    return false;
+  }
+
+  // TODO(thestig): Remove float to int to float conversion.
+  buf << FXSYS_GetRValue(colors.value()) / 255.0f << " "
+      << FXSYS_GetGValue(colors.value()) / 255.0f << " "
+      << FXSYS_GetBValue(colors.value()) / 255.0f;
   return true;
 }
 
@@ -172,10 +180,14 @@ CPDF_PageContentGenerator::GenerateModifiedStreams() {
   for (int32_t dirty_stream : all_dirty_streams) {
     fxcrt::ostringstream buf;
 
-    // Set the default graphic state values
+    // Set the default graphic state values. Update CTM to be the identity
+    // matrix for the duration of this stream, if it is not already.
     buf << "q\n";
-    if (!m_pObjHolder->GetLastCTM().IsIdentity())
-      WriteMatrix(buf, m_pObjHolder->GetLastCTM().GetInverse()) << " cm\n";
+    const CFX_Matrix ctm =
+        m_pObjHolder->GetCTMAtBeginningOfStream(dirty_stream);
+    if (!ctm.IsIdentity()) {
+      WriteMatrix(buf, ctm.GetInverse()) << " cm\n";
+    }
 
     ProcessDefaultGraphics(&buf);
     streams[dirty_stream] = std::move(buf);
@@ -199,15 +211,46 @@ CPDF_PageContentGenerator::GenerateModifiedStreams() {
 
   // Finish dirty streams.
   for (int32_t dirty_stream : all_dirty_streams) {
+    CFX_Matrix prev_ctm;
+    CFX_Matrix ctm;
+    bool affects_ctm;
+    if (dirty_stream == 0) {
+      // For the first stream, `prev_ctm` is the identity matrix.
+      ctm = m_pObjHolder->GetCTMAtEndOfStream(dirty_stream);
+      affects_ctm = !ctm.IsIdentity();
+    } else if (dirty_stream > 0) {
+      prev_ctm = m_pObjHolder->GetCTMAtEndOfStream(dirty_stream - 1);
+      ctm = m_pObjHolder->GetCTMAtEndOfStream(dirty_stream);
+      affects_ctm = prev_ctm != ctm;
+    } else {
+      CHECK_EQ(CPDF_PageObject::kNoContentStream, dirty_stream);
+      // This is the last stream, so there is no subsequent stream that it can
+      // affect.
+      affects_ctm = false;
+    }
+
+    const bool is_empty = pdfium::Contains(empty_streams, dirty_stream);
+
     fxcrt::ostringstream* buf = &streams[dirty_stream];
-    if (pdfium::Contains(empty_streams, dirty_stream)) {
+    if (is_empty && !affects_ctm) {
       // Clear to show that this stream needs to be deleted.
       buf->str("");
-    } else {
-      FinishMarks(buf, current_content_marks[dirty_stream]);
+      continue;
+    }
 
-      // Return graphics to original state
-      *buf << "Q\n";
+    if (!is_empty) {
+      FinishMarks(buf, current_content_marks[dirty_stream]);
+    }
+
+    // Return graphics to original state.
+    *buf << "Q\n";
+
+    if (affects_ctm) {
+      // Update CTM so the next stream gets the expected value.
+      CFX_Matrix ctm_difference = prev_ctm.GetInverse() * ctm;
+      if (!ctm_difference.IsIdentity()) {
+        WriteMatrix(*buf, ctm_difference) << " cm\n";
+      }
     }
   }
 
@@ -228,7 +271,7 @@ void CPDF_PageContentGenerator::UpdateContentStreams(
 
     if (stream_index == CPDF_PageObject::kNoContentStream) {
       int new_stream_index =
-          pdfium::base::checked_cast<int>(page_content_manager.AddStream(buf));
+          pdfium::checked_cast<int>(page_content_manager.AddStream(buf));
       UpdateStreamlessPageObjects(new_stream_index);
       continue;
     }
@@ -397,8 +440,8 @@ void CPDF_PageContentGenerator::ProcessPageObject(fxcrt::ostringstream* buf,
 
 void CPDF_PageContentGenerator::ProcessImage(fxcrt::ostringstream* buf,
                                              CPDF_ImageObject* pImageObj) {
-  if ((pImageObj->matrix().a == 0 && pImageObj->matrix().b == 0) ||
-      (pImageObj->matrix().c == 0 && pImageObj->matrix().d == 0)) {
+  const CFX_Matrix& matrix = pImageObj->matrix();
+  if ((matrix.a == 0 && matrix.b == 0) || (matrix.c == 0 && matrix.d == 0)) {
     return;
   }
 
@@ -411,7 +454,10 @@ void CPDF_PageContentGenerator::ProcessImage(fxcrt::ostringstream* buf,
     return;
 
   *buf << "q ";
-  WriteMatrix(*buf, pImageObj->matrix()) << " cm ";
+
+  if (!matrix.IsIdentity()) {
+    WriteMatrix(*buf, matrix) << " cm ";
+  }
 
   bool bWasInline = pStream->IsInline();
   if (bWasInline)
@@ -430,8 +476,8 @@ void CPDF_PageContentGenerator::ProcessImage(fxcrt::ostringstream* buf,
 
 void CPDF_PageContentGenerator::ProcessForm(fxcrt::ostringstream* buf,
                                             CPDF_FormObject* pFormObj) {
-  if ((pFormObj->form_matrix().a == 0 && pFormObj->form_matrix().b == 0) ||
-      (pFormObj->form_matrix().c == 0 && pFormObj->form_matrix().d == 0)) {
+  const CFX_Matrix& matrix = pFormObj->form_matrix();
+  if ((matrix.a == 0 && matrix.b == 0) || (matrix.c == 0 && matrix.d == 0)) {
     return;
   }
 
@@ -443,7 +489,11 @@ void CPDF_PageContentGenerator::ProcessForm(fxcrt::ostringstream* buf,
   pFormObj->SetResourceName(name);
 
   *buf << "q\n";
-  WriteMatrix(*buf, pFormObj->form_matrix()) << " cm ";
+
+  if (!matrix.IsIdentity()) {
+    WriteMatrix(*buf, matrix) << " cm ";
+  }
+
   *buf << "/" << PDF_NameEncode(name) << " Do Q\n";
 }
 
@@ -502,7 +552,11 @@ void CPDF_PageContentGenerator::ProcessPath(fxcrt::ostringstream* buf,
                                             CPDF_PathObject* pPathObj) {
   ProcessGraphics(buf, pPathObj);
 
-  WriteMatrix(*buf, pPathObj->matrix()) << " cm ";
+  const CFX_Matrix& matrix = pPathObj->matrix();
+  if (!matrix.IsIdentity()) {
+    WriteMatrix(*buf, matrix) << " cm ";
+  }
+
   ProcessPathPoints(buf, &pPathObj->path());
 
   if (pPathObj->has_no_filltype())
@@ -527,19 +581,16 @@ void CPDF_PageContentGenerator::ProcessPath(fxcrt::ostringstream* buf,
 void CPDF_PageContentGenerator::ProcessGraphics(fxcrt::ostringstream* buf,
                                                 CPDF_PageObject* pPageObj) {
   *buf << "q ";
-  float fillColor[3];
-  if (GetColor(pPageObj->color_state().GetFillColor(), fillColor)) {
-    *buf << fillColor[0] << " " << fillColor[1] << " " << fillColor[2]
-         << " rg ";
+  if (WriteColorToStream(*buf, pPageObj->color_state().GetFillColor())) {
+    *buf << " rg ";
   }
-  float strokeColor[3];
-  if (GetColor(pPageObj->color_state().GetStrokeColor(), strokeColor)) {
-    *buf << strokeColor[0] << " " << strokeColor[1] << " " << strokeColor[2]
-         << " RG ";
+  if (WriteColorToStream(*buf, pPageObj->color_state().GetStrokeColor())) {
+    *buf << " RG ";
   }
-  float lineWidth = pPageObj->graph_state().GetLineWidth();
-  if (lineWidth != 1.0f)
-    WriteFloat(*buf, lineWidth) << " w ";
+  float line_width = pPageObj->graph_state().GetLineWidth();
+  if (line_width != 1.0f) {
+    WriteFloat(*buf, line_width) << " w ";
+  }
   CFX_GraphStateData::LineCap lineCap = pPageObj->graph_state().GetLineCap();
   if (lineCap != CFX_GraphStateData::LineCap::kButt)
     *buf << static_cast<int>(lineCap) << " J ";
@@ -591,7 +642,7 @@ void CPDF_PageContentGenerator::ProcessGraphics(fxcrt::ostringstream* buf,
   }
 
   ByteString name;
-  absl::optional<ByteString> maybe_name =
+  std::optional<ByteString> maybe_name =
       m_pObjHolder->GraphicsMapSearch(graphD);
   if (maybe_name.has_value()) {
     name = std::move(maybe_name.value());
@@ -630,7 +681,7 @@ ByteString CPDF_PageContentGenerator::GetOrCreateDefaultGraphics() const {
   defaultGraphics.strokeAlpha = 1.0f;
   defaultGraphics.blendType = BlendMode::kNormal;
 
-  absl::optional<ByteString> maybe_name =
+  std::optional<ByteString> maybe_name =
       m_pObjHolder->GraphicsMapSearch(defaultGraphics);
   if (maybe_name.has_value())
     return maybe_name.value();
@@ -654,7 +705,12 @@ void CPDF_PageContentGenerator::ProcessText(fxcrt::ostringstream* buf,
                                             CPDF_TextObject* pTextObj) {
   ProcessGraphics(buf, pTextObj);
   *buf << "BT ";
-  WriteMatrix(*buf, pTextObj->GetTextMatrix()) << " Tm ";
+
+  const CFX_Matrix& matrix = pTextObj->GetTextMatrix();
+  if (!matrix.IsIdentity()) {
+    WriteMatrix(*buf, matrix) << " Tm ";
+  }
+
   RetainPtr<CPDF_Font> pFont(pTextObj->GetFont());
   if (!pFont)
     pFont = CPDF_Font::GetStockFont(m_pDocument, "Helvetica");
@@ -675,7 +731,7 @@ void CPDF_PageContentGenerator::ProcessText(fxcrt::ostringstream* buf,
   data.baseFont = pFont->GetBaseFontName();
 
   ByteString dict_name;
-  absl::optional<ByteString> maybe_name = m_pObjHolder->FontsMapSearch(data);
+  std::optional<ByteString> maybe_name = m_pObjHolder->FontsMapSearch(data);
   if (maybe_name.has_value()) {
     dict_name = std::move(maybe_name.value());
   } else {

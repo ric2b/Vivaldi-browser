@@ -16,6 +16,7 @@ load("./proto_linux.star", "proto")
 load("./reproxy.star", "reproxy")
 load("./rust_linux.star", "rust")
 load("./typescript_unix.star", "typescript")
+load("./v8.star", "v8")
 
 def __filegroups(ctx):
     fg = {}
@@ -47,14 +48,18 @@ def __step_config(ctx, step_config):
     if android.enabled(ctx):
         step_config = android.step_config(ctx, step_config)
 
+    # nacl step config should be added before clang step config for link step
+    # rules.
+    step_config = nacl.step_config(ctx, step_config)
+
     step_config = clang.step_config(ctx, step_config)
     step_config = cros.step_config(ctx, step_config)
     step_config = devtools_frontend.step_config(ctx, step_config)
-    step_config = nacl.step_config(ctx, step_config)
     step_config = nasm.step_config(ctx, step_config)
     step_config = proto.step_config(ctx, step_config)
     step_config = rust.step_config(ctx, step_config)
     step_config = typescript.step_config(ctx, step_config)
+    step_config = v8.step_config(ctx, step_config)
 
     return step_config
 

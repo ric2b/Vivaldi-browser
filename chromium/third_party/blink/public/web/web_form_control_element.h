@@ -67,8 +67,6 @@ class BLINK_EXPORT WebFormControlElement : public WebElement {
   bool IsAutofilled() const;
   bool IsPreviewed() const;
   void SetAutofillState(enum WebAutofillState);
-  void SetPreventHighlightingOfAutofilledFields(bool prevent_highlighting);
-  bool PreventHighlightingOfAutofilledFields() const;
   bool UserHasEditedTheField() const;
   void SetUserHasEditedTheField(bool value);
 
@@ -151,11 +149,6 @@ class BLINK_EXPORT WebFormControlElement : public WebElement {
   WebString NameForAutofill() const;
 
   WebFormElement Form() const;
-
-  // Returns the identifier which is unique among all form control elements in
-  // the current renderer process. In the current implementation ids are
-  // consecutive numbers.
-  uint64_t UniqueRendererFormControlId() const;
 
   // Returns the ax node id of the form control element in the accessibility
   // tree. The ax node id is consistent across renderer and browser processes.

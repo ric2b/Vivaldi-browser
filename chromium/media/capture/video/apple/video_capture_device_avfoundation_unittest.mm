@@ -27,12 +27,13 @@ using testing::_;
 using testing::Gt;
 using testing::Ne;
 using testing::Return;
+using testing::WithArg;
 
 namespace media {
 
-// TODO(https://crbug.com/1383901): Fix and re-enable these tests.
+// TODO: https://crbug.com/40253946 - Fix and re-enable these tests.
 TEST(VideoCaptureDeviceAVFoundationMacTest,
-     OutputsNv12WithoutScalingByDefault) {
+     DISABLED_OutputsNv12WithoutScalingByDefault) {
   RunTestCase(base::BindOnce([] {
     NSString* deviceId = GetFirstDeviceId();
     if (!deviceId) {
@@ -55,8 +56,8 @@ TEST(VideoCaptureDeviceAVFoundationMacTest,
     base::RunLoop first_frame_received(
         base::RunLoop::Type::kNestableTasksAllowed);
     EXPECT_CALL(frame_receiver, ReceiveExternalGpuMemoryBufferFrame)
-        .WillRepeatedly(testing::Invoke(
-            [&](CapturedExternalVideoBuffer frame, base::TimeDelta timestamp) {
+        .WillRepeatedly(
+            testing::Invoke(WithArg<0>([&](CapturedExternalVideoBuffer frame) {
               if (has_received_first_frame) {
                 // Ignore subsequent frames.
                 return;
@@ -64,14 +65,15 @@ TEST(VideoCaptureDeviceAVFoundationMacTest,
               EXPECT_EQ(frame.format.pixel_format, PIXEL_FORMAT_NV12);
               has_received_first_frame = true;
               first_frame_received.Quit();
-            }));
+            })));
     first_frame_received.Run();
 
     [captureDevice stopCapture];
   }));
 }
 
-TEST(VideoCaptureDeviceAVFoundationMacTest, TakePhoto) {
+// TODO: https://crbug.com/40253946 - Fix and re-enable these tests.
+TEST(VideoCaptureDeviceAVFoundationMacTest, DISABLED_TakePhoto) {
   RunTestCase(
       base::BindOnce([] {
         NSString* deviceId = GetFirstDeviceId();
@@ -93,7 +95,6 @@ TEST(VideoCaptureDeviceAVFoundationMacTest, TakePhoto) {
 
         base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
         EXPECT_CALL(frame_receiver, OnPhotoTaken)
-
             .WillOnce([&run_loop](const uint8_t* image_data,
                                   size_t image_length,
                                   const std::string& mime_type) {
@@ -107,7 +108,9 @@ TEST(VideoCaptureDeviceAVFoundationMacTest, TakePhoto) {
       }));
 }
 
-TEST(VideoCaptureDeviceAVFoundationMacTest, StopCaptureWhileTakingPhoto) {
+// TODO: https://crbug.com/40253946 - Fix and re-enable these tests.
+TEST(VideoCaptureDeviceAVFoundationMacTest,
+     DISABLED_StopCaptureWhileTakingPhoto) {
   RunTestCase(
       base::BindOnce([] {
         NSString* deviceId = GetFirstDeviceId();
@@ -139,7 +142,9 @@ TEST(VideoCaptureDeviceAVFoundationMacTest, StopCaptureWhileTakingPhoto) {
       }));
 }
 
-TEST(VideoCaptureDeviceAVFoundationMacTest, MultiplePendingTakePhotos) {
+// TODO: https://crbug.com/40253946 - Fix and re-enable these tests.
+TEST(VideoCaptureDeviceAVFoundationMacTest,
+     DISABLED_MultiplePendingTakePhotos) {
   RunTestCase(
       base::BindOnce([] {
         NSString* deviceId = GetFirstDeviceId();
@@ -171,8 +176,9 @@ TEST(VideoCaptureDeviceAVFoundationMacTest, MultiplePendingTakePhotos) {
       }));
 }
 
+// TODO: https://crbug.com/40253946 - Fix and re-enable these tests.
 TEST(VideoCaptureDeviceAVFoundationMacTest,
-     StopCaptureWhileMultiplePendingTakePhotos) {
+     DISABLED_StopCaptureWhileMultiplePendingTakePhotos) {
   RunTestCase(
       base::BindOnce([] {
         NSString* deviceId = GetFirstDeviceId();
@@ -208,8 +214,9 @@ TEST(VideoCaptureDeviceAVFoundationMacTest,
       }));
 }
 
+// TODO: https://crbug.com/40253946 - Fix and re-enable these tests.
 TEST(VideoCaptureDeviceAVFoundationMacTest,
-     StopPhotoOutputWhenNoLongerTakingPhotos) {
+     DISABLED_StopPhotoOutputWhenNoLongerTakingPhotos) {
   RunTestCase(base::BindOnce([] {
     NSString* deviceId = GetFirstDeviceId();
     if (!deviceId) {
@@ -243,8 +250,9 @@ TEST(VideoCaptureDeviceAVFoundationMacTest,
   }));
 }
 
+// TODO: https://crbug.com/40253946 - Fix and re-enable these tests.
 TEST(VideoCaptureDeviceAVFoundationMacTest,
-     TakePhotoAndShutDownWithoutWaiting) {
+     DISABLED_TakePhotoAndShutDownWithoutWaiting) {
   RunTestCase(base::BindOnce([] {
     NSString* deviceId = GetFirstDeviceId();
     if (!deviceId) {
@@ -281,15 +289,16 @@ TEST(VideoCaptureDeviceAVFoundationMacTest, ForwardsOddPixelBufferResolution) {
     std::unique_ptr<ByteArrayPixelBuffer> buffer =
         CreateYuvsPixelBufferFromSingleRgbColor(size.width(), size.height(), 0,
                                                 0, 0);
-    [captureDevice
-        callLocked:base::BindLambdaForTesting([&] {
-          EXPECT_CALL(frame_receiver,
-                      ReceiveFrame(_, _, format, _, _, _, _, _));
-          [captureDevice processPixelBufferPlanes:buffer->pixel_buffer.get()
+    [captureDevice callLocked:base::BindLambdaForTesting([&] {
+                     EXPECT_CALL(frame_receiver,
+                                 ReceiveFrame(_, _, format, _, _, _, _, _, _));
+                     [captureDevice
+                         processPixelBufferPlanes:buffer->pixel_buffer.get()
                                     captureFormat:format
                                        colorSpace:gfx::ColorSpace::CreateSRGB()
-                                        timestamp:base::TimeDelta()];
-        })];
+                                        timestamp:base::TimeDelta()
+                               capture_begin_time:std::nullopt];
+                   })];
   }));
 }
 

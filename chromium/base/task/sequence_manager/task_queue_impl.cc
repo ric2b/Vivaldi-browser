@@ -7,6 +7,7 @@
 #include <inttypes.h>
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "base/check.h"
@@ -29,20 +30,36 @@
 #include "base/task/sequence_manager/task_order.h"
 #include "base/task/sequence_manager/wake_up_queue.h"
 #include "base/task/sequence_manager/work_queue.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/task_features.h"
 #include "base/task/task_observer.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "base/trace_event/base_tracing.h"
-#include "base/types/pass_key.h"
 #include "build/build_config.h"
 #include "third_party/abseil-cpp/absl/container/inlined_vector.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
 namespace sequence_manager {
 
 namespace internal {
+
+// This class outside the anonymous namespace exists to allow being a friend of
+// `SingleThreadTaskRunner::CurrentDefaultHandle` in order to access
+// `SingleThreadTaskRunner::CurrentDefaultHandle::MayAlreadyExist`.
+class CurrentDefaultHandleOverrideForRunOrPostTask {
+ public:
+  explicit CurrentDefaultHandleOverrideForRunOrPostTask(
+      scoped_refptr<SequencedTaskRunner> task_runner)
+      : sttr_override_(
+            nullptr,
+            SingleThreadTaskRunner::CurrentDefaultHandle::MayAlreadyExist{}),
+        str_override_(std::move(task_runner)) {}
+
+ private:
+  SingleThreadTaskRunner::CurrentDefaultHandle sttr_override_;
+  SequencedTaskRunner::CurrentDefaultHandle str_override_;
+};
 
 namespace {
 
@@ -56,10 +73,14 @@ std::atomic_bool g_explicit_high_resolution_timer_win{true};
 #endif  // BUILDFLAG(IS_WIN)
 
 void RunTaskSynchronously(const AssociatedThreadId* associated_thread,
+                          scoped_refptr<SingleThreadTaskRunner> task_runner,
                           OnceClosure closure) {
   base::internal::TaskScope sequence_scope(
       associated_thread->GetBoundSequenceToken(),
-      /* is_thread_bound=*/false);
+      /* is_thread_bound=*/false,
+      /* is_running_synchronously=*/true);
+  CurrentDefaultHandleOverrideForRunOrPostTask task_runner_override(
+      std::move(task_runner));
   std::move(closure).Run();
 }
 
@@ -114,6 +135,7 @@ bool TaskQueueImpl::GuardedTaskPoster::RunOrPostTask(PostedTask task) {
   // `IsQueueEnabledFromAnyThread()`. That won't prevent the task from running.
   if (sync_work_auth.IsValid() && outer_->IsQueueEnabledFromAnyThread()) {
     RunTaskSynchronously(outer_->associated_thread_.get(),
+                         outer_->sequence_manager_->GetTaskRunner(),
                          std::move(task.callback));
     return true;
   }
@@ -188,8 +210,26 @@ bool TaskQueueImpl::TaskRunner::RunOrPostTask(subtle::RunOrPostTaskPassKey,
                  Nestable::kNestable, task_type_));
 }
 
-bool TaskQueueImpl::TaskRunner::RunsTasksInCurrentSequence() const {
+bool TaskQueueImpl::TaskRunner::BelongsToCurrentThread() const {
   return associated_thread_->IsBoundToCurrentThread();
+}
+
+bool TaskQueueImpl::TaskRunner::RunsTasksInCurrentSequence() const {
+  // Return true on the bound thread. This works even after `thread_local`
+  // destruction.
+  if (BelongsToCurrentThread()) {
+    return true;
+  }
+
+  // Return true in a `RunOrPostTask` callback running synchronously on a
+  // different thread.
+  if (associated_thread_->IsBound() &&
+      associated_thread_->GetBoundSequenceToken() ==
+          base::internal::SequenceToken::GetForCurrentThread()) {
+    return true;
+  }
+
+  return false;
 }
 
 // static
@@ -567,7 +607,7 @@ void TaskQueueImpl::TakeImmediateIncomingQueueTasks(TaskDeque* queue) {
       DCHECK(!task.queue_time.is_null());
       DCHECK(task.delayed_run_time.is_null());
       if (task.queue_time >= main_thread_only().delayed_fence.value()) {
-        main_thread_only().delayed_fence = absl::nullopt;
+        main_thread_only().delayed_fence = std::nullopt;
         DCHECK(!main_thread_only().current_fence);
         main_thread_only().current_fence = Fence(task.task_order());
         // Do not trigger WorkQueueSets notification when taking incoming
@@ -626,10 +666,10 @@ bool TaskQueueImpl::HasTaskToRunImmediatelyOrReadyDelayedTask() const {
   return !any_thread_.immediate_incoming_queue.empty();
 }
 
-absl::optional<WakeUp> TaskQueueImpl::GetNextDesiredWakeUp() {
+std::optional<WakeUp> TaskQueueImpl::GetNextDesiredWakeUp() {
   // Note we don't scheduled a wake-up for disabled queues.
   if (main_thread_only().delayed_incoming_queue.empty() || !IsQueueEnabled())
-    return absl::nullopt;
+    return std::nullopt;
 
   const auto& top_task = main_thread_only().delayed_incoming_queue.top();
 
@@ -896,9 +936,9 @@ void TaskQueueImpl::InsertFence(TaskQueue::InsertFencePosition position) {
 
 void TaskQueueImpl::InsertFence(Fence current_fence) {
   // Only one fence may be present at a time.
-  main_thread_only().delayed_fence = absl::nullopt;
+  main_thread_only().delayed_fence = std::nullopt;
 
-  absl::optional<Fence> previous_fence = main_thread_only().current_fence;
+  std::optional<Fence> previous_fence = main_thread_only().current_fence;
 
   // Tasks posted after this point will have a strictly higher enqueue order
   // and will be blocked from running.
@@ -941,9 +981,9 @@ void TaskQueueImpl::InsertFenceAt(TimeTicks time) {
 }
 
 void TaskQueueImpl::RemoveFence() {
-  absl::optional<Fence> previous_fence = main_thread_only().current_fence;
-  main_thread_only().current_fence = absl::nullopt;
-  main_thread_only().delayed_fence = absl::nullopt;
+  std::optional<Fence> previous_fence = main_thread_only().current_fence;
+  main_thread_only().current_fence = std::nullopt;
+  main_thread_only().delayed_fence = std::nullopt;
 
   bool front_task_unblocked =
       main_thread_only().immediate_work_queue->RemoveFence();
@@ -1089,7 +1129,7 @@ void TaskQueueImpl::SetQueueEnabled(bool enabled) {
 
   // Update the |main_thread_only_| struct.
   main_thread_only().is_enabled = enabled;
-  main_thread_only().disabled_time = absl::nullopt;
+  main_thread_only().disabled_time = std::nullopt;
 
   // |sequence_manager_| can be null in tests.
   if (!sequence_manager_)
@@ -1269,7 +1309,7 @@ void TaskQueueImpl::ResetThrottler() {
 }
 
 void TaskQueueImpl::UpdateWakeUp(LazyNow* lazy_now) {
-  absl::optional<WakeUp> wake_up = GetNextDesiredWakeUp();
+  std::optional<WakeUp> wake_up = GetNextDesiredWakeUp();
   if (main_thread_only().throttler && IsQueueEnabled()) {
     // GetNextAllowedWakeUp() may return a non-null wake_up even if |wake_up| is
     // nullopt, e.g. to throttle immediate tasks.
@@ -1280,7 +1320,7 @@ void TaskQueueImpl::UpdateWakeUp(LazyNow* lazy_now) {
 }
 
 void TaskQueueImpl::SetNextWakeUp(LazyNow* lazy_now,
-                                  absl::optional<WakeUp> wake_up) {
+                                  std::optional<WakeUp> wake_up) {
   if (main_thread_only().scheduled_wake_up == wake_up)
     return;
   main_thread_only().scheduled_wake_up = wake_up;
@@ -1378,7 +1418,7 @@ void TaskQueueImpl::ActivateDelayedFenceIfNeeded(const Task& task) {
   if (main_thread_only().delayed_fence.value() > task.delayed_run_time)
     return;
   InsertFence(Fence(task.task_order()));
-  main_thread_only().delayed_fence = absl::nullopt;
+  main_thread_only().delayed_fence = std::nullopt;
 }
 
 void TaskQueueImpl::MaybeReportIpcTaskQueuedFromMainThread(
@@ -1548,7 +1588,8 @@ void TaskQueueImpl::OnQueueEnabledVoteChanged(bool enabled) {
 }
 
 void TaskQueueImpl::CompleteInitializationOnBoundThread() {
-  voter_weak_ptr_factory_.BindToCurrentSequence(PassKey<TaskQueueImpl>());
+  voter_weak_ptr_factory_.BindToCurrentSequence(
+      subtle::BindWeakPtrFactoryPassKey());
 }
 
 TaskQueue::QueuePriority TaskQueueImpl::DefaultPriority() const {

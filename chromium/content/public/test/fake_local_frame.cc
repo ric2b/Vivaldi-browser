@@ -8,6 +8,7 @@
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom.h"
 #include "third_party/blink/public/mojom/frame/media_player_action.mojom.h"
+#include "third_party/blink/public/mojom/navigation/navigation_params.mojom.h"
 #include "third_party/blink/public/mojom/push_messaging/push_messaging.mojom.h"
 
 #if BUILDFLAG(IS_MAC)
@@ -201,7 +202,11 @@ void FakeLocalFrame::DispatchNavigateEventForCrossDocumentTraversal(
     bool is_browser_initiated) {}
 
 void FakeLocalFrame::SnapshotDocumentForViewTransition(
+    const viz::NavigationId& navigation_id,
+    blink::mojom::PageSwapEventParamsPtr,
     SnapshotDocumentForViewTransitionCallback callback) {}
+
+void FakeLocalFrame::DispatchPageSwap(blink::mojom::PageSwapEventParamsPtr) {}
 
 void FakeLocalFrame::AddResourceTimingEntryForFailedSubframeNavigation(
     const ::blink::FrameToken& subframe_token,

@@ -45,10 +45,10 @@ const char kVivaldiWorkspace[] = "workspaceId";
 bool SetTabFlag(sessions::SessionTab* tab, int key, bool flag) {
   std::string ext_data = tab->viv_ext_data;
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> json =
+  std::optional<base::Value> json =
      base::JSONReader::Read(ext_data, options);
   if (json && json->is_dict()) {
-    absl::optional<int> candidate = json->GetDict().FindDouble(kVivaldiTabFlag);
+    std::optional<int> candidate = json->GetDict().FindDouble(kVivaldiTabFlag);
     int value = candidate.has_value() ? candidate.value() : 0;
     if (flag) {
       value |= key;
@@ -64,11 +64,11 @@ bool SetTabFlag(sessions::SessionTab* tab, int key, bool flag) {
   return false;
 }
 
-absl::optional<int> GetTabFlag(const sessions::SessionTab* tab) {
+std::optional<int> GetTabFlag(const sessions::SessionTab* tab) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> json =
+  std::optional<base::Value> json =
      base::JSONReader::Read(tab->viv_ext_data, options);
-  absl::optional<int> value;
+  std::optional<int> value;
   if (json && json->is_dict()) {
     value = json->GetDict().FindInt(kVivaldiTabFlag);
   }
@@ -78,7 +78,7 @@ absl::optional<int> GetTabFlag(const sessions::SessionTab* tab) {
 bool SetTabStackId(sessions::SessionTab* tab, const std::string& id) {
   std::string ext_data = tab->viv_ext_data;
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> json =
+  std::optional<base::Value> json =
     base::JSONReader::Read(ext_data, options);
   std::string value;
   if (json && json->is_dict()) {
@@ -94,7 +94,7 @@ bool SetTabStackId(sessions::SessionTab* tab, const std::string& id) {
 bool RemoveTabStackId(sessions::SessionTab* tab) {
   std::string ext_data = tab->viv_ext_data;
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> json =
+  std::optional<base::Value> json =
     base::JSONReader::Read(ext_data, options);
   std::string value;
   if (json && json->is_dict()) {
@@ -110,7 +110,7 @@ bool RemoveTabStackId(sessions::SessionTab* tab) {
 bool RemoveTabStackTitle(sessions::SessionWindow* window, std::string group) {
   std::string ext_data = window->viv_ext_data;
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> json =
+  std::optional<base::Value> json =
     base::JSONReader::Read(ext_data, options);
   if (json && json->is_dict()) {
     base::Value::Dict* titles = json->GetIfDict()->FindDict(
@@ -131,12 +131,12 @@ bool RemoveTabStackTitle(sessions::SessionWindow* window, std::string group) {
   return false;
 }
 
-absl::optional<double> GetWorkspaceId(sessions::SessionTab* tab) {
+std::optional<double> GetWorkspaceId(sessions::SessionTab* tab) {
   std::string ext_data = tab->viv_ext_data;
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> json =
+  std::optional<base::Value> json =
      base::JSONReader::Read(ext_data, options);
-  absl::optional<double> value;
+  std::optional<double> value;
   if (json && json->is_dict()) {
     value = json->GetDict().FindDouble(kVivaldiWorkspace);
   }
@@ -146,7 +146,7 @@ absl::optional<double> GetWorkspaceId(sessions::SessionTab* tab) {
 bool SetWorkspaceId(sessions::SessionTab* tab, double id) {
   std::string ext_data = tab->viv_ext_data;
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> json =
+  std::optional<base::Value> json =
     base::JSONReader::Read(ext_data, options);
   std::string value;
   if (json && json->is_dict()) {
@@ -162,7 +162,7 @@ bool SetWorkspaceId(sessions::SessionTab* tab, double id) {
 bool RemoveWorkspaceId(sessions::SessionTab* tab) {
   std::string ext_data = tab->viv_ext_data;
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> json =
+  std::optional<base::Value> json =
     base::JSONReader::Read(ext_data, options);
   std::string value;
   if (json && json->is_dict()) {
@@ -598,7 +598,7 @@ int SetNodeState(BrowserContext* browser_context, const base::FilePath& file,
       if (is_quarantine) {
         num_quarantine ++;
       }
-      absl::optional<double> id = GetWorkspaceId(tit->second.get());
+      std::optional<double> id = GetWorkspaceId(tit->second.get());
       if (id.has_value()) {
         it = std::find(listed.begin(), listed.end(), id.value());
         if (it == listed.end()) {
@@ -619,7 +619,7 @@ int SetNodeState(BrowserContext* browser_context, const base::FilePath& file,
     for (base::Value& elm : known_workspaces) {
       base::Value::Dict* dict = elm.GetIfDict();
       if (dict) {
-        absl::optional<double> id = dict->FindDouble("id");
+        std::optional<double> id = dict->FindDouble("id");
         if (id.has_value()) {
           it = std::find(listed.begin(), listed.end(), id.value());
           if (it != listed.end()) {
@@ -1074,13 +1074,13 @@ int PinTabs(BrowserContext* browser_context,
 }
 
 int MoveTabs(BrowserContext* browser_context,
-            base::FilePath path,
-            std::vector<int32_t> ids,
-            int before_tab_id,
-            absl::optional<int32_t> window_id,
-            absl::optional<bool> pinned,
-            absl::optional<std::string> group,
-            absl::optional<double> workspace) {
+             base::FilePath path,
+             std::vector<int32_t> ids,
+             int before_tab_id,
+             std::optional<int32_t> window_id,
+             std::optional<bool> pinned,
+             std::optional<std::string> group,
+             std::optional<double> workspace) {
   // Load content
   SessionContent content;
   GetContent(path, content);
@@ -1189,7 +1189,7 @@ int SetTabStack(content::BrowserContext* browser_context,
   if (!group.empty() && candidates.size() > 0) {
     bool pinned = candidates[0].get()->pinned;
     SessionID window_id = candidates[0].get()->window_id;
-    absl::optional<double> workspace_id = GetWorkspaceId(candidates[0].get());
+    std::optional<double> workspace_id = GetWorkspaceId(candidates[0].get());
     for (auto& candidate : candidates) {
       candidate.get()->pinned = pinned;
       candidate.get()->window_id = window_id;
@@ -1439,13 +1439,13 @@ int QuarantineTabs(BrowserContext* browser_context,
 }
 
 bool IsTabQuarantined(const SessionTab* tab) {
-  absl::optional<int> flag = GetTabFlag(tab);
+  std::optional<int> flag = GetTabFlag(tab);
   return flag.has_value() ? flag.value() & TAB_QUARANTNE : false;
 }
 
 std::string GetTabStackId(const SessionTab* tab) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> json =
+  std::optional<base::Value> json =
      base::JSONReader::Read(tab->viv_ext_data, options);
   std::string value;
   if (json && json->is_dict()) {
@@ -1486,7 +1486,7 @@ int SetTabStackTitle(BrowserContext* browser_context,
 
   // Save data to window ext data.
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> json =
+  std::optional<base::Value> json =
     base::JSONReader::Read(window->viv_ext_data, options);
   if (json && json->is_dict()) {
     base::Value::Dict* titles = json->GetIfDict()->FindDict(
@@ -1528,7 +1528,7 @@ int SetTabStackTitle(BrowserContext* browser_context,
 std::unique_ptr<base::Value::Dict> GetTabStackTitles(
     const SessionWindow* window) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> json =
+  std::optional<base::Value> json =
      base::JSONReader::Read(window->viv_ext_data, options);
   if (json && json->is_dict()) {
     base::Value::Dict* titles = json->GetIfDict()->FindDict(
@@ -1589,7 +1589,7 @@ bool AddCommandLineTab(Browser* browser) {
   if (!browser)
     return false;
   std::string v_e_d = browser->viv_ext_data();
-  absl::optional<base::Value> json = absl::nullopt;
+  std::optional<base::Value> json = std::nullopt;
   json = base::JSONReader::Read(v_e_d, base::JSON_PARSE_RFC);
   if (!(json && json->is_dict()))
     return false;

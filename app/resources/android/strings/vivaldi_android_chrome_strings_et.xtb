@@ -16,6 +16,7 @@
 <translation id="2433507940547922241">Välimus</translation>
 <translation id="2501278716633472235">Mine tagasi</translation>
 <translation id="2633278372998075009">Privaatsed kaardid</translation>
+<translation id="272026394418727548">Vivaldi avaleht</translation>
 <translation id="2951071800649516099">Lugemisnimekirja saab lisada lehti, mida hiljem lugeda</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> järjehoidja}
@@ -26,6 +27,7 @@
 <translation id="3504699618187058974">Virnasta kaardid</translation>
 <translation id="3518985090088779359">Olen nõus – jätka</translation>
 <translation id="3571177741182643350">Lugemata – saadaval võrguühenduseta:</translation>
+<translation id="3602290021589620013">Eelvaade</translation>
 <translation id="3700829948786686853">Tere tulemast Vivaldit kasutama</translation>
 <translation id="3719826155360621982">Koduleht</translation>
 <translation id="385051799172605136">Tagasi</translation>
@@ -65,7 +67,6 @@ Otsimiseks puuduta pikalt mõnd sõna. Otsingu täpsustamiseks libista paneel t�
 <translation id="7427132068601343474">Teave Vivaldi kohta</translation>
 <translation id="7465104139234185284">Sulge kõik privaatsed kaardid</translation>
 <translation id="7481312909269577407">Edasi</translation>
-<translation id="7583262514280211622">Lugemisnimekirjas pole veel midagi.</translation>
 <translation id="7968014550143838305">Lisati lugemisnimekirja</translation>
 <translation id="804786196054284061">Tarkvara litsentsileping</translation>
 <translation id="8127542551745560481">Kodulehe muutmine</translation>

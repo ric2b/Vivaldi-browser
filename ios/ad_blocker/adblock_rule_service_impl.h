@@ -77,19 +77,19 @@ class RuleServiceImpl : public RuleService, public RuleManager::Observer {
   void OnDoneApplyingRules(RuleGroup group);
 
   web::BrowserState* browser_state_;
-  web::BrowserState* incognito_browser_state_;
+  web::BrowserState* incognito_browser_state_ = nullptr;
   RuleSourceHandler::RulesCompiler rules_compiler_;
   std::string locale_;
 
-  absl::optional<RuleServiceStorage> state_store_;
+  std::optional<RuleServiceStorage> state_store_;
 
   bool is_loaded_ = false;
-  absl::optional<RuleManagerImpl> rule_manager_;
-  absl::optional<KnownRuleSourcesHandlerImpl> known_sources_handler_;
-  std::array<absl::optional<OrganizedRulesManager>, kRuleGroupCount>
+  std::optional<RuleManagerImpl> rule_manager_;
+  std::optional<KnownRuleSourcesHandlerImpl> known_sources_handler_;
+  std::array<std::optional<OrganizedRulesManager>, kRuleGroupCount>
       organized_rules_manager_;
 
-  absl::optional<Resources> resources_;
+  std::optional<Resources> resources_;
   std::unique_ptr<ContentInjectionHandler> content_injection_handler_;
 
   scoped_refptr<base::SequencedTaskRunner> file_task_runner_;

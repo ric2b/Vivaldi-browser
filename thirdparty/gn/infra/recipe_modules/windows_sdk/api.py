@@ -29,16 +29,17 @@ class WindowsSDKApi(recipe_api.RecipeApi):
       yield
       return
 
-    try:
-      with self.m.context(infra_steps=True):
-        sdk_dir = self._ensure_sdk()
-      with self.m.context(**self._sdk_env(sdk_dir)):
+    with self.m.context(infra_steps=True):
+      sdk_dir = self._ensure_sdk()
+
+    with self.m.context(**self._sdk_env(sdk_dir)):
+      try:
         yield
-    finally:
-      # cl.exe automatically starts background mspdbsrv.exe daemon which
-      # needs to be manually stopped so Swarming can tidy up after itself.
-      self.m.step('taskkill mspdbsrv',
-                  ['taskkill.exe', '/f', '/t', '/im', 'mspdbsrv.exe'])
+      finally:
+        # cl.exe automatically starts background mspdbsrv.exe daemon which
+        # needs to be manually stopped so Swarming can tidy up after itself.
+        self.m.step('taskkill mspdbsrv',
+                    ['taskkill.exe', '/f', '/t', '/im', 'mspdbsrv.exe'])
 
   def _ensure_sdk(self):
     """Ensures the Windows SDK CIPD package is installed.
@@ -66,11 +67,11 @@ class WindowsSDKApi(recipe_api.RecipeApi):
     env = {}
     env_prefixes = {}
 
-    # Load .../win_sdk/bin/SetEnv.${arch}.json to extract the required
+    # Load .../Windows Kits/10/bin/SetEnv.${arch}.json to extract the required
     # environment. It contains a dict that looks like this:
     # {
     #   "env": {
-    #     "VAR": [["..", "..", "x"], ["..", "..", "y"]],
+    #     "VAR": [["x"], ["y"]],
     #     ...
     #   }
     # }
@@ -79,23 +80,16 @@ class WindowsSDKApi(recipe_api.RecipeApi):
     filename = 'SetEnv.%s.json' % {32: 'x86', 64: 'x64'}[self.m.platform.bits]
     step_result = self.m.json.read(
         'read %s' % filename,
-        sdk_dir.join('win_sdk', 'bin', filename),
+        sdk_dir.join('Windows Kits', '10', 'bin', filename),
         step_test_data=lambda: self.m.json.test_api.output({
             'env': {
-                'PATH': [['..', '..', 'win_sdk', 'bin', 'x64']],
-                'VSINSTALLDIR': [['..', '..\\']],},}))
+                'PATH': [['Windows Kits', '10', 'bin', '10.0.19041.0', 'x64']],
+                'VSINSTALLDIR': [['.\\']],
+            },
+        }))
     data = step_result.json.output.get('env')
     for key in data:
-      # recipes' Path() does not like .., ., \, or /, so this is cumbersome.
-      # What we want to do is:
-      #   [sdk_bin_dir.join(*e) for e in env[k]]
-      # Instead do that badly, and rely (but verify) on the fact that the paths
-      # are all specified relative to the root, but specified relative to
-      # win_sdk/bin (i.e. everything starts with "../../".)
-      results = []
-      for value in data[key]:
-        assert value[0] == '..' and (value[1] == '..' or value[1] == '..\\')
-        results.append('%s' % sdk_dir.join(*value[2:]))
+      results = ['%s' % sdk_dir.join(*e) for e in data[key]]
 
       # PATH is special-cased because we don't want to overwrite other things
       # like C:\Windows\System32. Others are replacements because prepending

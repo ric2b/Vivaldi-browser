@@ -3,8 +3,9 @@
 # found in the LICENSE file.
 
 # Defines fuzzer_test.
-#
+
 import("//build_overrides/build.gni")
+import("../../gni/openscreen.gni")  #
 
 # fuzzer_test is used to define individual libfuzzer tests.
 #
@@ -135,11 +136,12 @@ template("openscreen_fuzzer_test") {
       test_deps += [ ":" + config_file_name ]
     }
 
-    executable(target_name) {
+    openscreen_executable(target_name) {
       testonly = true
       forward_variables_from(invoker, "*")
       deps += test_deps
 
+      configs = []
       if (defined(invoker.additional_configs)) {
         configs += invoker.additional_configs
       }

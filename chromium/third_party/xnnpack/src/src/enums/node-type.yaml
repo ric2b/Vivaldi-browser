@@ -29,6 +29,8 @@
   string: "Concatenate3"
 - name: xnn_node_type_concatenate4
   string: "Concatenate4"
+- name: xnn_node_type_concatenate5
+  string: "Concatenate5"
 - name: xnn_node_type_convert
   string: "Convert"
 - name: xnn_node_type_convolution_2d
@@ -81,6 +83,10 @@
   string: "Negate"
 - name: xnn_node_type_prelu
   string: "PReLU"
+- name: xnn_node_type_reciprocal_square_root
+  string: "Reciprocal Square Root"
+- name: xnn_node_type_reshape_2d
+  string: "Reshape 2D"
 - name: xnn_node_type_rope
   string: "RoPE"
 - name: xnn_node_type_scaled_dot_product_attention

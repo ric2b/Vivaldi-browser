@@ -42,7 +42,7 @@ StreamingOpusEncoder::StreamingOpusEncoder(int num_channels,
       input_(new float[num_channels_ * samples_per_cast_frame_]),
       output_(new uint8_t[kOpusMaxPayloadSize]) {
   OSP_CHECK_GT(cast_frames_per_second, 0);
-  OSP_DCHECK(sender_);
+  OSP_CHECK(sender_);
   OSP_CHECK_GT(samples_per_cast_frame_, 0);
   OSP_CHECK_EQ(sample_rate() % cast_frames_per_second, 0);
   OSP_CHECK(approximate_cast_frame_duration_ > Clock::duration::zero());
@@ -88,8 +88,8 @@ void StreamingOpusEncoder::EncodeAndSend(const float* interleaved_samples,
                                          Clock::time_point capture_begin_time,
                                          Clock::time_point capture_end_time,
                                          Clock::time_point reference_time) {
-  OSP_DCHECK(interleaved_samples);
-  OSP_DCHECK_GT(num_samples, 0);
+  OSP_CHECK(interleaved_samples);
+  OSP_CHECK_GT(num_samples, 0);
 
   ResolveTimestampsAndMaybeSkip(reference_time);
 

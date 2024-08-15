@@ -17,9 +17,9 @@ import {
   DepthStencilFormat,
   ColorTextureFormat,
   isCompressedTextureFormat,
-  isEncodableTextureformat,
   viewCompatible,
-  EncodableTextureFormat,
+  RegularTextureFormat,
+  isRegularTextureFormat,
 } from '../../../format_info.js';
 import { GPUTest, TextureTestMixin } from '../../../gpu_test.js';
 import { makeBufferWithContents } from '../../../util/buffer.js';
@@ -211,7 +211,7 @@ class F extends TextureTestMixin(GPUTest) {
       align(dstBlocksPerRow * bytesPerBlock, 4);
 
     if (isCompressedTextureFormat(dstTexture.format) && this.isCompatibility) {
-      assert(viewCompatible(srcFormat, dstFormat));
+      assert(viewCompatible(this.isCompatibility, srcFormat, dstFormat));
       // compare by rendering. We need the expected texture to match
       // the dstTexture so we'll create a texture where we supply
       // all of the data in JavaScript.
@@ -346,21 +346,21 @@ class F extends TextureTestMixin(GPUTest) {
       return;
     }
 
-    assert(isEncodableTextureformat(dstFormat));
-    const encodableDstFormat = dstFormat as EncodableTextureFormat;
+    assert(isRegularTextureFormat(dstFormat));
+    const regularDstFormat = dstFormat as RegularTextureFormat;
 
     // Verify the content of the whole subresource of dstTexture at dstCopyLevel (in dstBuffer) is expected.
     const checkByTextureFormat = (actual: Uint8Array) => {
       const zero = { x: 0, y: 0, z: 0 };
 
-      const actTexelView = TexelView.fromTextureDataByReference(encodableDstFormat, actual, {
+      const actTexelView = TexelView.fromTextureDataByReference(regularDstFormat, actual, {
         bytesPerRow: bytesInRow,
         rowsPerImage: dstBlockRowsPerImage,
         subrectOrigin: zero,
         subrectSize: dstTextureSizeAtLevel,
       });
       const expTexelView = TexelView.fromTextureDataByReference(
-        encodableDstFormat,
+        regularDstFormat,
         expectedUint8DataWithPadding,
         {
           bytesPerRow: bytesInRow,
@@ -371,7 +371,7 @@ class F extends TextureTestMixin(GPUTest) {
       );
 
       const failedPixelsMessage = findFailedPixels(
-        encodableDstFormat,
+        regularDstFormat,
         zero,
         dstTextureSizeAtLevel,
         { actTexelView, expTexelView },
@@ -1376,6 +1376,9 @@ g.test('copy_multisampled_color')
     texture can only be 1.
   `
   )
+  .beforeAllSubcases(t => {
+    t.skipIf(t.isCompatibility, 'multisample textures are not copyable in compatibility mode');
+  })
   .fn(t => {
     const textureSize = [32, 16, 1] as const;
     const kColorFormat = 'rgba8unorm';
@@ -1564,6 +1567,9 @@ g.test('copy_multisampled_depth')
     texture can only be 1.
   `
   )
+  .beforeAllSubcases(t => {
+    t.skipIf(t.isCompatibility, 'multisample textures are not copyable in compatibility mode');
+  })
   .fn(t => {
     const textureSize = [32, 16, 1] as const;
     const kDepthFormat = 'depth24plus';

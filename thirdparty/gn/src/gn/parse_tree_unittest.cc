@@ -83,15 +83,20 @@ TEST(ParseTree, SubscriptedAccess) {
   EXPECT_EQ(second.type(), Value::INTEGER);
   EXPECT_EQ(second.int_value(), 3);
 
+  const Scope* scope_var = setup.scope()->GetValue("scope")->scope_value();
+  EXPECT_TRUE(scope_var->IsSetButUnused("foo"));
   Value foo = setup.ExecuteExpression("scope[\"foo\"]", &err);
   EXPECT_FALSE(err.has_error());
   EXPECT_EQ(foo.type(), Value::INTEGER);
   EXPECT_EQ(foo.int_value(), 5);
+  EXPECT_FALSE(scope_var->IsSetButUnused("foo"));
 
+  EXPECT_TRUE(scope_var->IsSetButUnused("bar"));
   Value bar = setup.ExecuteExpression("scope[bar_key]", &err);
   EXPECT_FALSE(err.has_error());
   EXPECT_EQ(bar.type(), Value::INTEGER);
   EXPECT_EQ(bar.int_value(), 8);
+  EXPECT_FALSE(scope_var->IsSetButUnused("bar"));
 
   Value invalid1 = setup.ExecuteExpression("scope[second_element_idx]", &err);
   EXPECT_TRUE(err.has_error());

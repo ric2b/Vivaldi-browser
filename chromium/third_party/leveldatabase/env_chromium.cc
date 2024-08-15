@@ -699,20 +699,13 @@ size_t WriteBufferSize(int64_t disk_size) {
           (kDiskMaxBuffSize - kDiskMinBuffSize));
 }
 
-ChromiumEnv::ChromiumEnv() : ChromiumEnv("LevelDBEnv") {}
+ChromiumEnv::ChromiumEnv()
+    : ChromiumEnv(std::make_unique<storage::FilesystemProxy>(
+          storage::FilesystemProxy::UNRESTRICTED,
+          base::FilePath())) {}
 
 ChromiumEnv::ChromiumEnv(std::unique_ptr<storage::FilesystemProxy> filesystem)
-    : ChromiumEnv("LevelDBEnv", std::move(filesystem)) {}
-
-ChromiumEnv::ChromiumEnv(const std::string& name)
-    : ChromiumEnv(name,
-                  std::make_unique<storage::FilesystemProxy>(
-                      storage::FilesystemProxy::UNRESTRICTED,
-                      base::FilePath())) {}
-
-ChromiumEnv::ChromiumEnv(const std::string& name,
-                         std::unique_ptr<storage::FilesystemProxy> filesystem)
-    : filesystem_(std::move(filesystem)), name_(name) {
+    : filesystem_(std::move(filesystem)) {
   DCHECK(filesystem_);
 
   size_t max_open_files = base::GetMaxFds();
@@ -1476,7 +1469,7 @@ std::string_view MakeStringView(const leveldb::Slice& s) {
 }
 
 leveldb::Slice MakeSlice(std::string_view s) {
-  return leveldb::Slice(s.begin(), s.size());
+  return leveldb::Slice(s.data(), s.size());
 }
 
 leveldb::Slice MakeSlice(base::span<const uint8_t> s) {

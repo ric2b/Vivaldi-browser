@@ -27,7 +27,7 @@ constexpr char kPrepareForUpdateAdvertisingIdKey[] = "advertising_id";
 constexpr char kPrepareForUpdateSecondarySharedSecretKey[] =
     "secondary_shared_secret";
 
-bool IsResumeAfterUpdate() {
+bool ShouldResumeAfterUpdate() {
   const base::Value::Dict& maybe_info =
       g_browser_process->local_state()->GetDict(
           prefs::kResumeQuickStartAfterRebootInfo);
@@ -37,24 +37,7 @@ bool IsResumeAfterUpdate() {
 
 }  // namespace
 
-SessionContext::SessionContext() {
-  is_resume_after_update_ = IsResumeAfterUpdate();
-  QS_LOG(INFO)
-      << "Going to fetch/generate session context. is_resume_after_update_: "
-      << is_resume_after_update_;
-
-  if (is_resume_after_update_) {
-    FetchPersistedSessionContext();
-  } else {
-    // The session_id_ should be in range (INT32_MAX, INT64_MAX].
-    int64_t min = static_cast<int64_t>(INT32_MAX) + 1;
-    int64_t range = INT64_MAX - INT32_MAX;
-    session_id_ = min + base::RandGenerator(range);
-    advertising_id_ = AdvertisingId();
-    crypto::RandBytes(shared_secret_);
-    crypto::RandBytes(secondary_shared_secret_);
-  }
-}
+SessionContext::SessionContext() = default;
 
 SessionContext::SessionContext(SessionId session_id,
                                AdvertisingId advertising_id,
@@ -74,6 +57,23 @@ SessionContext& SessionContext::operator=(const SessionContext& other) =
 
 SessionContext::~SessionContext() = default;
 
+void SessionContext::FillOrResetSession() {
+  is_resume_after_update_ = ShouldResumeAfterUpdate();
+  QS_LOG(INFO)
+      << "Going to fetch/generate session context. is_resume_after_update_: "
+      << is_resume_after_update_;
+
+  if (is_resume_after_update_) {
+    FetchPersistedSessionContext();
+  } else {
+    PopulateRandomSessionContext();
+  }
+}
+
+void SessionContext::CancelResume() {
+  is_resume_after_update_ = false;
+}
+
 base::Value::Dict SessionContext::GetPrepareForUpdateInfo() {
   base::Value::Dict prepare_for_update_info;
   prepare_for_update_info.Set(kPrepareForUpdateSessionIdKey,
@@ -90,6 +90,16 @@ base::Value::Dict SessionContext::GetPrepareForUpdateInfo() {
       base::Base64Encode(secondary_shared_secret_bytes));
 
   return prepare_for_update_info;
+}
+
+void SessionContext::PopulateRandomSessionContext() {
+  // The session_id_ should be in range (INT32_MAX, INT64_MAX].
+  int64_t min = static_cast<int64_t>(INT32_MAX) + 1;
+  int64_t range = INT64_MAX - INT32_MAX;
+  session_id_ = min + base::RandGenerator(range);
+  advertising_id_ = AdvertisingId();
+  crypto::RandBytes(shared_secret_);
+  crypto::RandBytes(secondary_shared_secret_);
 }
 
 void SessionContext::FetchPersistedSessionContext() {

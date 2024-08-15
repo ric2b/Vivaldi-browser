@@ -26,7 +26,6 @@
 #include "services/on_device_model/public/cpp/model_assets.h"
 #include "services/on_device_model/public/mojom/on_device_model.mojom.h"
 #include "services/on_device_model/public/mojom/on_device_model_service.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class OptimizationGuideLogger;
 
@@ -38,6 +37,7 @@ namespace optimization_guide {
 class OnDeviceModelAccessController;
 class OnDeviceModelComponentStateManager;
 class OnDeviceModelExecutionConfigInterpreter;
+class ModelQualityLogsUploaderService;
 
 // Controls the lifetime of the on-device model service, loading and unloading
 // of the models, and executing them via the service.
@@ -69,7 +69,10 @@ class OnDeviceModelServiceController
   std::unique_ptr<OptimizationGuideModelExecutor::Session> CreateSession(
       proto::ModelExecutionFeature feature,
       ExecuteRemoteFn execute_remote_fn,
-      OptimizationGuideLogger* logger);
+      OptimizationGuideLogger* logger,
+      base::WeakPtr<ModelQualityLogsUploaderService>
+          model_quality_uploader_service,
+      const std::optional<SessionConfigParams>& config_params);
 
   // Launches the on-device model-service.
   virtual void LaunchService() = 0;

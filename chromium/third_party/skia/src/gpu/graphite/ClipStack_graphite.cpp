@@ -16,7 +16,6 @@
 #include "src/core/SkRectPriv.h"
 #include "src/gpu/graphite/Device.h"
 #include "src/gpu/graphite/DrawParams.h"
-#include "src/gpu/graphite/Renderer.h"
 #include "src/gpu/graphite/geom/BoundsManager.h"
 #include "src/gpu/graphite/geom/Geometry.h"
 
@@ -41,8 +40,8 @@ bool oriented_bbox_intersection(const Rect& a, const Transform& aXform,
     // NOTE: We intentionally exclude projected bounds for two reasons:
     //   1. We can skip the division by w and worring about clipping to w = 0.
     //   2. W/o the projective case, the separating axes are simpler to compute (see below).
-    SkASSERT(aXform.type() != Transform::Type::kProjection &&
-             bXform.type() != Transform::Type::kProjection);
+    SkASSERT(aXform.type() != Transform::Type::kPerspective &&
+             bXform.type() != Transform::Type::kPerspective);
     SkV4 quadA[4], quadB[4];
 
     aXform.mapPoints(a, quadA);
@@ -130,8 +129,8 @@ bool ClipStack::TransformedShape::intersects(const TransformedShape& o) const {
         // complexity (for paths) and limited utility (e.g. two round rects that are disjoint
         // solely from their corner curves).
         return fShape.bounds().intersects(o.fShape.bounds());
-    } else if (fLocalToDevice.type() != Transform::Type::kProjection &&
-               o.fLocalToDevice.type() != Transform::Type::kProjection) {
+    } else if (fLocalToDevice.type() != Transform::Type::kPerspective &&
+               o.fLocalToDevice.type() != Transform::Type::kPerspective) {
         // The shapes don't share the same coordinate system, and their approximate 'outer'
         // bounds in device space could have substantial outsetting to contain the transformed
         // shape (e.g. 45 degree rotation). Perform a more detailed check on their oriented
@@ -1089,7 +1088,7 @@ void ClipStack::clipShape(const Transform& localToDevice,
 Clip ClipStack::visitClipStackForDraw(const Transform& localToDevice,
                                       const Geometry& geometry,
                                       const SkStrokeRec& style,
-                                      const Renderer& renderer,
+                                      bool outsetBoundsForAA,
                                       ClipStack::ElementList* outEffectiveElements) const {
     static const Clip kClippedOut = {
             Rect::InfiniteInverted(), Rect::InfiniteInverted(), SkIRect::MakeEmpty(), nullptr};
@@ -1140,8 +1139,8 @@ Clip ClipStack::visitClipStackForDraw(const Transform& localToDevice,
     bool shapeInDeviceSpace = false;
 
     // Some renderers make the drawn area larger than the geometry for anti-aliasing
-    float rendererOutset = renderer.outsetBoundsForAA() ?
-            localToDevice.localAARadius(styledShape->bounds()) : 0.f;
+    float rendererOutset = outsetBoundsForAA ? localToDevice.localAARadius(styledShape->bounds())
+                                             : 0.f;
     if (!SkScalarIsFinite(rendererOutset)) {
         transformedShapeBounds = deviceBounds;
         infiniteBounds = true;

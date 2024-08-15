@@ -662,6 +662,13 @@ bool ServiceWorkerVersion::OnRequestTermination() {
     }
   }
 
+  will_warm_up_on_stopped_ =
+      will_be_terminated &&
+      base::FeatureList::IsEnabled(
+          blink::features::kSpeculativeServiceWorkerWarmUp) &&
+      blink::features::kSpeculativeServiceWorkerWarmUpOnIdleTimeout.Get() &&
+      scope_.SchemeIsHTTPOrHTTPS();
+
   if (will_be_terminated) {
     embedded_worker_->Stop();
   } else {
@@ -1187,7 +1194,8 @@ void ServiceWorkerVersion::InitializeGlobalScope() {
   // The registration must exist since we keep a reference to it during
   // service worker startup.
   DCHECK(registration);
-  DCHECK(worker_host_);
+  CHECK(worker_host_);
+  CHECK(worker_host_->container_host());
   DCHECK(service_worker_remote_);
   service_worker_remote_->InitializeGlobalScope(
       std::move(service_worker_host), std::move(associated_remote_from_browser),
@@ -1484,6 +1492,7 @@ void ServiceWorkerVersion::OnStarted(
 }
 
 void ServiceWorkerVersion::OnStopping() {
+  TRACE_EVENT0("ServiceWorker", "ServiceWorkerVersion::OnStopping");
   DCHECK(stop_time_.is_null());
   RestartTick(&stop_time_);
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN2(
@@ -1492,6 +1501,11 @@ void ServiceWorkerVersion::OnStopping() {
                           stop_time_.since_origin().InMicroseconds()),
       "Script", script_url_.spec(), "Version Status",
       VersionStatusToString(status_));
+
+  // If the service worker is warming up or warmed up, Such workers
+  // don't need to be restarted in `OnStoppedInternal()`.
+  is_stopping_warmed_up_worker_ =
+      embedded_worker_->pause_initializing_global_scope();
 
   // Endpoint isn't available after calling EmbeddedWorkerInstance::Stop().
   // This needs to be set here without waiting until the worker is actually
@@ -2366,9 +2380,8 @@ void ServiceWorkerVersion::StartWorkerInternal() {
   params->controller_receiver = std::move(controller_receiver_);
 
   params->provider_info = std::move(provider_info);
-
+  params->service_worker_token = worker_host_->token();
   params->ukm_source_id = ukm_source_id_;
-
   params->storage_key = key_;
 
   // policy_container_host could be null for registration restored from old DB
@@ -2720,6 +2733,7 @@ void ServiceWorkerVersion::FoundRegistrationForUpdate(
 
 void ServiceWorkerVersion::OnStoppedInternal(
     blink::EmbeddedWorkerStatus old_status) {
+  TRACE_EVENT0("ServiceWorker", "ServiceWorkerVersion::OnStoppedInternal");
   DCHECK_EQ(blink::EmbeddedWorkerStatus::kStopped, running_status());
   scoped_refptr<ServiceWorkerVersion> protect;
   if (!in_dtor_)
@@ -2729,17 +2743,27 @@ void ServiceWorkerVersion::OnStoppedInternal(
   // the worker was stopping. The worker must be restarted to fulfill the
   // request.
   bool should_restart = !start_callbacks_.empty();
+  bool should_warm_up =
+      will_warm_up_on_stopped_ && !is_stopping_warmed_up_worker_;
   if (is_redundant() || in_dtor_) {
     // This worker will be destroyed soon.
     should_restart = false;
+    should_warm_up = false;
   } else if (ping_controller_.IsTimedOut()) {
     // This worker exhausted its time to run, don't let it restart.
     should_restart = false;
+    should_warm_up = false;
   } else if (old_status == blink::EmbeddedWorkerStatus::kStarting) {
     // This worker unexpectedly stopped because start failed.  Attempting to
     // restart on start failure could cause an endless loop of start attempts,
     // so don't try to restart now.
     should_restart = false;
+    should_warm_up = false;
+  } else if (is_stopping_warmed_up_worker_) {
+    // This worker is stopped while warmed-up or warming-up. Such workers don't
+    // need to restart nor re-warm-up.
+    should_restart = false;
+    should_warm_up = false;
   }
 
   if (!stop_time_.is_null()) {
@@ -2798,6 +2822,8 @@ void ServiceWorkerVersion::OnStoppedInternal(
   pending_external_requests_.clear();
   worker_is_idle_on_renderer_ = true;
   worker_host_.reset();
+  will_warm_up_on_stopped_ = false;
+  is_stopping_warmed_up_worker_ = false;
 
   for (auto& observer : observers_)
     observer.OnRunningStateChanged(this);
@@ -2805,6 +2831,19 @@ void ServiceWorkerVersion::OnStoppedInternal(
     StartWorkerInternal();
   } else if (!HasWorkInBrowser()) {
     OnNoWorkInBrowser();
+  }
+
+  if (should_warm_up && !should_restart && context_) {
+    // Posts a re-warm-up task so that the warming up operation runs in a
+    // different task.
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(
+                       [](base::WeakPtr<ServiceWorkerContextCore> context,
+                          const GURL scope, const blink::StorageKey key) {
+                         context->wrapper()->WarmUpServiceWorker(
+                             scope, key, base::DoNothing());
+                       },
+                       context_, scope_, key_));
   }
 }
 
@@ -2816,6 +2855,12 @@ void ServiceWorkerVersion::FinishStartWorker(
   for (auto& callback : callbacks)
     std::move(callback).Run(status);
   is_running_start_callbacks_ = false;
+
+  std::vector<StatusCallback> warm_up_callbacks;
+  warm_up_callbacks.swap(warm_up_callbacks_);
+  for (auto& callback : warm_up_callbacks) {
+    std::move(callback).Run(status);
+  }
 }
 
 void ServiceWorkerVersion::CleanUpExternalRequest(
@@ -3054,7 +3099,35 @@ bool ServiceWorkerVersion::SetupRouterEvaluator(
     router_evaluator_.reset();
     return false;
   }
+  CHECK_NE(fetch_handler_existence(), FetchHandlerExistence::UNKNOWN);
+  if (router_evaluator_->has_fetch_event_source() &&
+      fetch_handler_existence() == FetchHandlerExistence::DOES_NOT_EXIST) {
+    router_evaluator_.reset();
+    return false;
+  }
   return true;
+}
+
+bool ServiceWorkerVersion::NeedRouterEvaluate() const {
+  // If there's no router, return false.
+  if (!router_evaluator_) {
+    return false;
+  }
+  // If the router has non fetch-event source e.g. cache, we can't skip the
+  // router evaluate.
+  if (router_evaluator_->has_non_fetch_event_source()) {
+    return true;
+  }
+  // In this case, there are router rules, but all sources are "fetch-event".
+  switch (fetch_handler_type()) {
+    case FetchHandlerType::kNoHandler:
+      // If there's no fetch handler, we can skip the router evaluate because
+      // the router evaluation will be no-op.
+      return false;
+    case FetchHandlerType::kEmptyFetchHandler:
+    case FetchHandlerType::kNotSkippable:
+      return true;
+  }
 }
 
 bool ServiceWorkerVersion::IsStaticRouterEnabled() {

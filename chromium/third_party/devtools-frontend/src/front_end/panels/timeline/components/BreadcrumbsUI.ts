@@ -71,7 +71,7 @@ export class BreadcrumbsUI extends HTMLElement {
     const breadcrumbRange = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(breadcrumb.window.range);
     // clang-format off
     return html`
-          <div class="breadcrumb" @click=${(): void => this.#removeBreadcrumb(breadcrumb)}>
+          <div class="breadcrumb" @click=${() => this.#removeBreadcrumb(breadcrumb)}>
            <span class="${(index !== 0 && breadcrumb.child === null) ? 'last-breadcrumb' : ''} range">
             ${(index === 0) ?
               `Full range (${breadcrumbRange.toFixed(2)}ms)` :
@@ -107,10 +107,9 @@ export class BreadcrumbsUI extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-breadcrumbs-ui', BreadcrumbsUI);
+customElements.define('devtools-breadcrumbs-ui', BreadcrumbsUI);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-breadcrumbs-ui': BreadcrumbsUI;
   }

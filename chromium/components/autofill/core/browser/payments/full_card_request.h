@@ -26,6 +26,7 @@ class AutofillMetricsTest;
 class CreditCardAccessManagerTest;
 class CreditCardCvcAuthenticatorTest;
 class CreditCard;
+class FormFillerTest;
 class PersonalDataManager;
 
 namespace autofill_metrics {
@@ -174,7 +175,7 @@ class FullCardRequest final : public CardUnmaskDelegate {
   // Called by the PaymentsNetworkInterface when a card has been unmasked.
   void OnDidGetRealPan(
       AutofillClient::PaymentsRpcResult result,
-      payments::PaymentsNetworkInterface::UnmaskResponseDetails&
+      const payments::PaymentsNetworkInterface::UnmaskResponseDetails&
           response_details);
 
   // Called when verification is cancelled. This is used only by
@@ -199,6 +200,7 @@ class FullCardRequest final : public CardUnmaskDelegate {
   friend class autofill::autofill_metrics::AutofillMetricsBaseTest;
   friend class autofill::CreditCardAccessManagerTest;
   friend class autofill::CreditCardCvcAuthenticatorTest;
+  friend class autofill::FormFillerTest;
 
   // Retrieves the pan for `card` and invokes
   // `Delegate::OnFullCardRequestSucceeded()` or

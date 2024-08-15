@@ -9,6 +9,7 @@
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_utils.h"
+#include "ash/wm/window_util.h"
 #include "ash/wm/wm_constants.h"
 #include "base/memory/raw_ptr.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -28,19 +29,20 @@ constexpr int kDropTargetBorderThickness = 2;
 // overview. It includes a background view. Dragged window in tablet mode can be
 // dragged into it and then dropped into overview.
 class OverviewDropTargetView : public views::View {
- public:
-  METADATA_HEADER(OverviewDropTargetView);
+  METADATA_HEADER(OverviewDropTargetView, views::View)
 
+ public:
   OverviewDropTargetView() {
     SetUseDefaultFillLayout(true);
 
     background_view_ = AddChildView(std::make_unique<views::View>());
+
+    const int corner_radius = window_util::GetMiniWindowRoundedCornerRadius();
     background_view_->SetBackground(views::CreateThemedRoundedRectBackground(
-        kColorAshShieldAndBase20, kWindowMiniViewCornerRadius,
-        /*for_border_thickness=*/0));
+        kColorAshShieldAndBase20, corner_radius));
 
     SetBorder(views::CreateThemedRoundedRectBorder(
-        kDropTargetBorderThickness, kWindowMiniViewCornerRadius,
+        kDropTargetBorderThickness, corner_radius,
         cros_tokens::kCrosSysSystemBaseElevated));
   }
   OverviewDropTargetView(const OverviewDropTargetView&) = delete;
@@ -56,7 +58,7 @@ class OverviewDropTargetView : public views::View {
   raw_ptr<views::View> background_view_ = nullptr;
 };
 
-BEGIN_METADATA(OverviewDropTargetView, views::View)
+BEGIN_METADATA(OverviewDropTargetView)
 END_METADATA
 
 OverviewDropTarget::OverviewDropTarget(OverviewGrid* overview_grid)

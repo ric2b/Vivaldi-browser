@@ -43,14 +43,6 @@ COMPONENT_EXPORT(UI_BASE_FEATURES) BASE_DECLARE_FEATURE(kElasticOverscroll);
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kApplyNativeOccludedRegionToWindowTracker);
 COMPONENT_EXPORT(UI_BASE_FEATURES)
-BASE_DECLARE_FEATURE(kApplyNativeOcclusionToCompositor);
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-extern const char kApplyNativeOcclusionToCompositorType[];
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-extern const char kApplyNativeOcclusionToCompositorTypeRelease[];
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-extern const char kApplyNativeOcclusionToCompositorTypeThrottle[];
-COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kCalculateNativeWinOcclusion);
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kInputPaneOnScreenKeyboard);
@@ -61,6 +53,20 @@ BASE_DECLARE_FEATURE(kScreenPowerListenerForNativeWinOcclusion);
 // Returns true if the system should use WM_POINTER events for touch events.
 COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsUsingWMPointerForTouch();
 #endif  // BUILDFLAG(IS_WIN)
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_LACROS)
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+BASE_DECLARE_FEATURE(kApplyNativeOcclusionToCompositor);
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+extern const base::FeatureParam<std::string>
+    kApplyNativeOcclusionToCompositorType;
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+extern const char kApplyNativeOcclusionToCompositorTypeRelease[];
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+extern const char kApplyNativeOcclusionToCompositorTypeThrottle[];
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+extern const char kApplyNativeOcclusionToCompositorTypeThrottleAndRelease[];
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #if BUILDFLAG(IS_CHROMEOS)
 COMPONENT_EXPORT(UI_BASE_FEATURES)
@@ -112,12 +118,6 @@ BASE_DECLARE_FEATURE(kNotificationsIgnoreRequireInteraction);
 
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 bool IsNotificationsIgnoreRequireInteractionEnabled();
-
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-BASE_DECLARE_FEATURE(kShortcutCustomizationApp);
-
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-bool IsShortcutCustomizationAppEnabled();
 
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kShortcutCustomization);
@@ -203,6 +203,12 @@ BASE_DECLARE_FEATURE(kVariableRefreshRateAvailable);
 // this flag is overridden by the user, then the availability flag is ignored.
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kEnableVariableRefreshRate);
+// This feature indicates that this device should have variable refresh rates
+// enabled by default if available. This overrides the default value of
+// |kEnableVariableRefreshRate|. This flag is added by USE and not exposed in
+// the chrome://flags UI.
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+BASE_DECLARE_FEATURE(kVariableRefreshRateDefaultEnabled);
 COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsVariableRefreshRateEnabled();
 // Enables the variable refresh rate feature at all times.
 COMPONENT_EXPORT(UI_BASE_FEATURES)

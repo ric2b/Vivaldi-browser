@@ -6,8 +6,9 @@
 import 'chrome://settings/lazy_load.js';
 
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {SettingsPersonalizationOptionsElement} from 'chrome://settings/lazy_load.js';
-import {CrLinkRowElement, CrSettingsPrefs, loadTimeData, PrivacyPageVisibility, PrivacyPageBrowserProxyImpl, Router, routes, SettingsPrefsElement, StatusAction, SyncBrowserProxyImpl} from 'chrome://settings/settings.js';
+import type {SettingsPersonalizationOptionsElement} from 'chrome://settings/lazy_load.js';
+import type {CrLinkRowElement, PrivacyPageVisibility, SettingsPrefsElement} from 'chrome://settings/settings.js';
+import {CrSettingsPrefs, loadTimeData, PrivacyPageBrowserProxyImpl, Router, routes, StatusAction, SyncBrowserProxyImpl} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {isChildVisible, isVisible} from 'chrome://webui-test/test_util.js';
 // <if expr="not is_chromeos">
@@ -418,7 +419,7 @@ suite('OfficialBuild', function() {
 
   // <if expr="chromeos_ash">
   test(
-      'Metrics toggle links to OS sync page with deprecate sync metrics off',
+      'Metrics row links to OS sync page with deprecate sync metrics off',
       function() {
         let targetUrl: string = '';
         testElement['navigateTo_'] = (url: string) => {
@@ -437,7 +438,8 @@ suite('OfficialBuild', function() {
       });
 
   test(
-      'Metrics toggle links to OS privacy page with deprecate sync metrics on',
+      'Metrics row links to OS Settings Privacy Hub subpage with deprecate ' +
+          'sync metrics on',
       function() {
         let targetUrl: string = '';
         testElement['navigateTo_'] = (url: string) => {
@@ -448,11 +450,10 @@ suite('OfficialBuild', function() {
           osDeprecateSyncMetricsToggle: true,
         });
 
-        const privacyUrl = loadTimeData.getString('osPrivacySettingsUrl');
-
         testElement.$.metricsReportingLink.click();
-
-        assertEquals(privacyUrl, targetUrl);
+        const expectedUrl =
+            loadTimeData.getString('osSettingsPrivacyHubSubpageUrl');
+        assertEquals(expectedUrl, targetUrl);
       });
   // </if>
 });

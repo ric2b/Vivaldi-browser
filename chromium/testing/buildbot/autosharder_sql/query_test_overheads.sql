@@ -4,7 +4,7 @@
 WITH
     build_task_ids AS (
       SELECT
-        b.infra.swarming.task_id build_task_id,
+        b.infra.backend.task.id.id build_task_id,
         b.builder.builder try_builder,
       FROM
         `cr-buildbucket.chromium.builds` b
@@ -15,6 +15,7 @@ WITH
         AND JSON_VALUE(b.input.properties, '$.cq') = 'required'
         AND JSON_QUERY(b.output.properties, '$.rts_was_used') IS NULL
         AND b.status = 'SUCCESS'
+        AND b.builder.project = 'chromium'
     ),
     # Get all the triggered swarming test tasks for each build
     deduped_tasks AS (

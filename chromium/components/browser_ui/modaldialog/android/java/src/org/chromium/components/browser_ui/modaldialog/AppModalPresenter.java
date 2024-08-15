@@ -22,6 +22,10 @@ import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+import org.chromium.components.browser_ui.styles.ChromeColors;
+
 /** The presenter that shows a {@link ModalDialogView} in an Android dialog. */
 public class AppModalPresenter extends ModalDialogManager.Presenter {
     // Duration of enter animation. This is an estimation because there is no reliable way to
@@ -55,6 +59,13 @@ public class AppModalPresenter extends ModalDialogManager.Presenter {
     }
 
     private ModalDialogView loadDialogView() {
+        if (BuildConfig.IS_VIVALDI) {
+            ModalDialogView dialogView = (ModalDialogView) // Vivaldi Ref. VAB-8844
+                    LayoutInflaterUtils.inflate(mDialog.getContext(), R.layout.modal_dialog_view, null);
+            // Setting the background manually, to overlay over wrong background beneath Modal
+            dialogView.setBackgroundColor(ChromeColors.getDefaultThemeColor(mContext, false));
+            return dialogView;
+        } // End Vivaldi
         return (ModalDialogView)
                 LayoutInflaterUtils.inflate(mDialog.getContext(), R.layout.modal_dialog_view, null);
     }

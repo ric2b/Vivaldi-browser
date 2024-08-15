@@ -10,6 +10,7 @@
 #include <numeric>
 
 #include "base/auto_reset.h"
+#include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -20,7 +21,6 @@
 #include "components/autofill/core/browser/form_parsing/address_field_parser.h"
 #include "components/autofill/core/browser/form_parsing/autofill_parsing_utils.h"
 #include "components/autofill/core/browser/form_parsing/autofill_scanner.h"
-#include "components/autofill/core/browser/form_parsing/birthdate_field_parser.h"
 #include "components/autofill/core/browser/form_parsing/credit_card_field_parser.h"
 #include "components/autofill/core/browser/form_parsing/email_field_parser.h"
 #include "components/autofill/core/browser/form_parsing/form_field_parser.h"
@@ -73,11 +73,11 @@ RegexMatchesCache::Key RegexMatchesCache::BuildKey(
              std::hash<std::u16string_view>{}(pattern));
 }
 
-absl::optional<bool> RegexMatchesCache::Get(RegexMatchesCache::Key key) {
+std::optional<bool> RegexMatchesCache::Get(RegexMatchesCache::Key key) {
   if (auto it = cache_.Get(key); it != cache_.end()) {
     return it->second;
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 void RegexMatchesCache::Put(RegexMatchesCache::Key key, bool value) {
@@ -111,7 +111,7 @@ bool FormFieldParser::MatchesRegexWithCache(
   RegexMatchesCache::Key key;
   if (!groups && context.matches_cache) {
     key = RegexMatchesCache::BuildKey(input, pattern);
-    absl::optional<bool> cache_entry = context.matches_cache->Get(key);
+    std::optional<bool> cache_entry = context.matches_cache->Get(key);
     if (cache_entry.has_value()) {
       return cache_entry.value();
     }
@@ -151,12 +151,6 @@ void FormFieldParser::ParseFormFields(
   ParseFormFieldsPass(AddressFieldParser::Parse, context, processed_fields,
                       field_candidates);
 
-  // Birthdate pass.
-  if (base::FeatureList::IsEnabled(features::kAutofillEnableBirthdateParsing)) {
-    ParseFormFieldsPass(BirthdateFieldParser::Parse, context, processed_fields,
-                        field_candidates);
-  }
-
   // Numeric quantity pass.
   ParseFormFieldsPass(NumericQuantityFieldParser::Parse, context,
                       processed_fields, field_candidates);
@@ -186,13 +180,6 @@ void FormFieldParser::ParseFormFields(
   // Search pass.
   ParseFormFieldsPass(SearchFieldParser::Parse, context, processed_fields,
                       field_candidates);
-
-  // Deduce `field_candidates` for the `processed_fields` by parsing their
-  // `parsable_name()` as an autocomplete attribute.
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillParseNameAsAutocompleteType)) {
-    ParseUsingAutocompleteAttributes(processed_fields, field_candidates);
-  }
 
   // Single fields pass.
   ParseSingleFieldForms(context, fields, is_form_tag, field_candidates);
@@ -236,9 +223,7 @@ void FormFieldParser::ClearCandidatesIfHeuristicsDidNotFindEnoughFields(
   FieldTypeSet permitted_single_field_types{
       MERCHANT_PROMO_CODE, IBAN_VALUE,
       CREDIT_CARD_STANDALONE_VERIFICATION_CODE};
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillEnableZipOnlyAddressForms) &&
-      AddressFieldParser::IsStandaloneZipSupported(context.client_country)) {
+  if (AddressFieldParser::IsStandaloneZipSupported(context.client_country)) {
     permitted_single_field_types.insert(ADDRESS_HOME_ZIP);
   }
 
@@ -354,39 +339,55 @@ bool FormFieldParser::FieldMatchesMatchPatternRef(
     base::span<const MatchPatternRef> patterns,
     const AutofillField& field,
     const char* regex_name,
-    MatchingPattern (*projection)(const MatchingPattern&)) {
+    MatchParams (*projection)(const MatchParams&)) {
+  // Calling the regex engine with multiple smaller regexes is less efficient
+  // than calling it with one larger regex. For this reasons, positive_patterns
+  // are batched by OR-ing them together. Since matching further depends on the
+  // MatchAttributes of the pattern, `batched_patterns` is used to group them by
+  // MatchAttributes.
+  base::flat_map<DenseSet<MatchAttribute>, std::vector<std::u16string_view>>
+      batched_patterns;
+
   for (MatchPatternRef pattern_ref : patterns) {
-    MatchingPattern pattern =
-        projection ? (*projection)(*pattern_ref) : *pattern_ref;
+    MatchingPattern pattern = *pattern_ref;
+    CHECK(!IsEmpty(pattern.positive_pattern));
+    MatchParams match_params(pattern.match_field_attributes,
+                             pattern.form_control_types);
+    if (projection) {
+      match_params = (*projection)(match_params);
+    }
     if (!MatchesFormControlType(field.form_control_type,
-                                pattern.form_control_types)) {
+                                match_params.field_types)) {
       continue;
     }
 
-    // For each of the two match field attributes, kName and kLabel, that are
-    // active for the current pattern, test if the attribute matches the
-    // negative pattern. If yes, remove it from the attributes that are
-    // considered for positive matching.
-    MatchParams match_type(pattern.match_field_attributes,
-                           pattern.form_control_types);
-
+    DenseSet<MatchAttribute> reduced_attributes = match_params.attributes;
     if (!IsEmpty(pattern.negative_pattern)) {
-      for (MatchAttribute attribute : pattern.match_field_attributes) {
-        if (Match(context, &field, pattern.negative_pattern,
-                  MatchParams({attribute}, match_type.field_types),
+      // For each attribute that is active for the current pattern, test if it
+      // matches the negative pattern. If so, remove it from the attributes that
+      // are considered for positive matching.
+      for (MatchAttribute attribute : match_params.attributes) {
+        if (Match(context, &field, pattern.negative_pattern, {attribute},
                   regex_name)) {
-          match_type.attributes.erase(attribute);
+          reduced_attributes.erase(attribute);
         }
+      }
+      if (reduced_attributes.empty()) {
+        continue;
       }
     }
 
-    if (match_type.attributes.empty()) {
-      continue;
+    auto it = batched_patterns.lower_bound(reduced_attributes);
+    if (it != batched_patterns.end() && it->first == reduced_attributes) {
+      it->second.push_back((*pattern_ref).positive_pattern);
+    } else {
+      batched_patterns.insert(
+          it, {reduced_attributes, {(*pattern_ref).positive_pattern}});
     }
-
-    if (!IsEmpty(pattern.positive_pattern) &&
-        Match(context, &field, pattern.positive_pattern, match_type,
-              regex_name)) {
+  }
+  for (const auto& [attributes, positive_patterns] : batched_patterns) {
+    if (Match(context, &field, base::JoinString(positive_patterns, u"|"),
+              attributes, regex_name)) {
       return true;
     }
   }
@@ -420,7 +421,7 @@ bool FormFieldParser::ParseFieldSpecificsWithLegacyPattern(
                               match_type.field_types)) {
     return false;
   }
-  if (Match(context, field, pattern, match_type, regex_name)) {
+  if (Match(context, field, pattern, match_type.attributes, regex_name)) {
     if (match) {
       *match = field;
     }
@@ -437,7 +438,7 @@ bool FormFieldParser::ParseFieldSpecificsWithNewPatterns(
     base::span<const MatchPatternRef> patterns,
     raw_ptr<AutofillField>* match,
     const char* regex_name,
-    MatchingPattern (*projection)(const MatchingPattern&)) {
+    MatchParams (*projection)(const MatchParams&)) {
   if (scanner->IsEnd()) {
     return false;
   }
@@ -462,14 +463,15 @@ bool FormFieldParser::ParseFieldSpecifics(
     base::span<const MatchPatternRef> patterns,
     raw_ptr<AutofillField>* match,
     const char* regex_name,
-    MatchingPattern (*projection)(const MatchingPattern&)) {
+    MatchParams (*match_pattern_projection)(const MatchParams&)) {
   return (base::FeatureList::IsEnabled(
               features::kAutofillParsingPatternProvider) ||
           // Some patterns may not exist as an old-school regex because they
           // require negative matching.
           pattern == kNoLegacyPattern)
              ? ParseFieldSpecificsWithNewPatterns(context, scanner, patterns,
-                                                  match, regex_name, projection)
+                                                  match, regex_name,
+                                                  match_pattern_projection)
              : ParseFieldSpecificsWithLegacyPattern(
                    context, scanner, pattern, match_type, match, regex_name);
 }
@@ -572,7 +574,7 @@ FormFieldParser::RemoveCheckableFields(
 bool FormFieldParser::Match(ParsingContext& context,
                             const AutofillField* field,
                             base::StringPiece16 pattern,
-                            MatchParams match_type,
+                            DenseSet<MatchAttribute> match_attributes,
                             const char* regex_name) {
   bool found_match = false;
   std::string_view match_type_string;
@@ -590,14 +592,13 @@ bool FormFieldParser::Match(ParsingContext& context,
 
   const std::u16string& name = field->parseable_name();
 
-  const bool match_label =
-      match_type.attributes.contains(MatchAttribute::kLabel);
+  const bool match_label = match_attributes.contains(MatchAttribute::kLabel);
   if (match_label &&
       MatchesRegexWithCache(context, label, pattern, capture_destination)) {
     found_match = true;
     match_type_string = "Match in label";
     value = label;
-  } else if (match_type.attributes.contains(MatchAttribute::kName) &&
+  } else if (match_attributes.contains(MatchAttribute::kName) &&
              MatchesRegexWithCache(context, name, pattern,
                                    capture_destination)) {
     found_match = true;
@@ -666,22 +667,6 @@ bool FormFieldParser::MatchesFormControlType(
 bool FormFieldParser::IsSingleFieldParseableType(FieldType field_type) {
   return field_type == MERCHANT_PROMO_CODE || field_type == IBAN_VALUE ||
          field_type == CREDIT_CARD_STANDALONE_VERIFICATION_CODE;
-}
-
-// static
-void FormFieldParser::ParseUsingAutocompleteAttributes(
-    const std::vector<raw_ptr<AutofillField, VectorExperimental>>& fields,
-    FieldCandidatesMap& field_candidates) {
-  for (const AutofillField* field : fields) {
-    HtmlFieldType html_type = FieldTypeFromAutocompleteAttributeValue(
-        base::UTF16ToUTF8(field->parseable_name()));
-    // The HTML_MODE is irrelevant when converting to a FieldType.
-    FieldType type = AutofillType(html_type).GetStorableType();
-    if (type != UNKNOWN_TYPE) {
-      AddClassification(field, type, kBaseAutocompleteParserScore,
-                        field_candidates);
-    }
-  }
 }
 
 }  // namespace autofill

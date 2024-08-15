@@ -117,6 +117,18 @@ class WebViewPrivateSendRequestFunction
   ResponseAction Run() override;
 };
 
+class WebViewPrivateGetPageSelectionFunction
+    : public VivaldiWebViewWithGuestFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("webViewPrivate.getPageSelection",
+                             WEBVIEWINTERNAL_GETPAGESELECTION)
+  WebViewPrivateGetPageSelectionFunction() = default;
+
+ private:
+  ~WebViewPrivateGetPageSelectionFunction() override = default;
+  ResponseAction Run() override;
+};
+
 }  // namespace vivaldi
 }  // namespace extensions
 

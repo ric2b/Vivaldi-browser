@@ -26,7 +26,6 @@
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/signin/public/base/consent_level.h"
 #include "google_apis/gaia/gaia_auth_util.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/json/json_reader.h"
@@ -145,6 +144,7 @@ void PasswordReuseManagerImpl::Shutdown() {
 
 void PasswordReuseManagerImpl::Init(
     PrefService* prefs,
+    PrefService* local_prefs,
     PasswordStoreInterface* profile_store,
     PasswordStoreInterface* account_store,
     std::unique_ptr<PasswordReuseDetector> password_reuse_detector,
@@ -152,6 +152,8 @@ void PasswordReuseManagerImpl::Init(
     std::unique_ptr<SharedPreferencesDelegate> shared_pref_delegate) {
   prefs_ = prefs;
   hash_password_manager_.set_prefs(prefs_);
+  hash_password_manager_.set_local_prefs(local_prefs);
+  hash_password_manager_.MigrateEnterprisePasswordHashes();
   identity_manager_ = identity_manager;
 #if BUILDFLAG(IS_ANDROID)
   if (shared_pref_delegate) {

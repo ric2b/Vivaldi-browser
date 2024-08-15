@@ -31,7 +31,6 @@
 #include "extensions/browser/api/virtual_keyboard_private/virtual_keyboard_private_api.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/common/api/virtual_keyboard_private.h"
-#include "extensions/common/extension_messages.h"
 #include "ui/base/ime/ash/ime_bridge.h"
 #include "ui/base/ime/ash/input_method_manager.h"
 #include "ui/base/ime/input_method.h"
@@ -422,12 +421,19 @@ void ChromeKeyboardControllerClient::OnSessionStateChanged() {
   pref_change_registrar_->Add(
       prefs::kTouchVirtualKeyboardEnabled,
       base::BindRepeating(
-          &ChromeKeyboardControllerClient::SetVirtualKeyboardBehaviorFromPrefs,
+          &ChromeKeyboardControllerClient::SetTouchKeyboardEnabledFromPrefs,
           base::Unretained(this)));
-  SetVirtualKeyboardBehaviorFromPrefs();
+  pref_change_registrar_->Add(
+      prefs::kVirtualKeyboardSmartVisibilityEnabled,
+      base::BindRepeating(
+          &ChromeKeyboardControllerClient::SetSmartVisibilityFromPrefs,
+          base::Unretained(this)));
+
+  SetTouchKeyboardEnabledFromPrefs();
+  SetSmartVisibilityFromPrefs();
 }
 
-void ChromeKeyboardControllerClient::SetVirtualKeyboardBehaviorFromPrefs() {
+void ChromeKeyboardControllerClient::SetTouchKeyboardEnabledFromPrefs() {
   using keyboard::KeyboardEnableFlag;
   const PrefService* service = pref_change_registrar_->prefs();
   if (service->HasPrefPath(prefs::kTouchVirtualKeyboardEnabled)) {
@@ -438,6 +444,14 @@ void ChromeKeyboardControllerClient::SetVirtualKeyboardBehaviorFromPrefs() {
   } else {
     ClearEnableFlag(KeyboardEnableFlag::kPolicyDisabled);
     ClearEnableFlag(KeyboardEnableFlag::kPolicyEnabled);
+  }
+}
+
+void ChromeKeyboardControllerClient::SetSmartVisibilityFromPrefs() {
+  const PrefService* service = pref_change_registrar_->prefs();
+  if (service->HasPrefPath(prefs::kVirtualKeyboardSmartVisibilityEnabled)) {
+    keyboard_controller_->SetSmartVisibilityEnabled(
+        service->GetBoolean(prefs::kVirtualKeyboardSmartVisibilityEnabled));
   }
 }
 

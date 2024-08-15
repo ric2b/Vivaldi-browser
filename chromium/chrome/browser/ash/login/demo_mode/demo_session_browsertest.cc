@@ -4,11 +4,12 @@
 
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
 
+#include <string_view>
+
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/strings/string_piece.h"
 #include "chrome/browser/ash/login/demo_mode/demo_setup_controller.h"
 #include "chrome/browser/ash/login/login_manager_test.h"
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
@@ -364,9 +365,7 @@ IN_PROC_BROWSER_TEST_F(DemoSessionLoginTest, SessionStartup) {
   login_manager_mixin_.WaitForActiveSession();
 }
 
-// TODO(b/1513575): Flaky.
-IN_PROC_BROWSER_TEST_F(DemoSessionLoginTest,
-                       DISABLED_DemoSWALaunchesOnSessionStartup) {
+IN_PROC_BROWSER_TEST_F(DemoSessionLoginTest, DemoSWALaunchesOnSessionStartup) {
   base::ScopedAllowBlockingForTesting scoped_allow_blocking;
 
   OpenBrowserAndInstallSystemAppForActiveProfile();
@@ -402,7 +401,7 @@ class DemoSessionLoginWithGrowthCampaignTest : public DemoSessionLoginTest {
         {});
   }
 
-  void CreateTestCampaignsFile(base::StringPiece data) {
+  void CreateTestCampaignsFile(std::string_view data) {
     auto campaigns_mounted_path = growth_campaigns_mounted_path();
     CHECK(base::CreateDirectory(campaigns_mounted_path));
 
@@ -415,13 +414,8 @@ class DemoSessionLoginWithGrowthCampaignTest : public DemoSessionLoginTest {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-#if BUILDFLAG(IS_LINUX)
-#define MAYBE_DemoSWALaunchesOnSessionStartupWithPayload DISABLED_DemoSWALaunchesOnSessionStartupWithPayload
-#else
-#define MAYBE_DemoSWALaunchesOnSessionStartupWithPayload DemoSWALaunchesOnSessionStartupWithPayload
-#endif
 IN_PROC_BROWSER_TEST_F(DemoSessionLoginWithGrowthCampaignTest,
-                       MAYBE_DemoSWALaunchesOnSessionStartupWithPayload) {
+                       DemoSWALaunchesOnSessionStartupWithPayload) {
   base::ScopedAllowBlockingForTesting scoped_allow_blocking;
 
   CreateTestCampaignsFile(R"({
@@ -464,9 +458,8 @@ IN_PROC_BROWSER_TEST_F(DemoSessionLoginWithGrowthCampaignTest,
       variations::IsInSyntheticTrialGroup("CrOSGrowthStudy1", "CampaignId3"));
 }
 
-// TODO(crbug.com/1513575): Flaky.
 IN_PROC_BROWSER_TEST_F(DemoSessionLoginWithGrowthCampaignTest,
-                       DISABLED_DemoSWALaunchesOnSessionStartupWithoutPayload) {
+                       DemoSWALaunchesOnSessionStartupWithoutPayload) {
   base::ScopedAllowBlockingForTesting scoped_allow_blocking;
 
   CreateTestCampaignsFile(R"({
@@ -493,8 +486,10 @@ IN_PROC_BROWSER_TEST_F(DemoSessionLoginWithGrowthCampaignTest,
   EXPECT_EQ(tab->GetController().GetVisibleEntry()->GetPageType(),
             content::PAGE_TYPE_NORMAL);
 
-  // False because campaign not used.
-  EXPECT_FALSE(variations::HasSyntheticTrial("CrOSGrowthStudy"));
+  // Campaign is active with empty payload. Empty payload means the demo app
+  // would be launched without params.
+  EXPECT_TRUE(
+      variations::IsInSyntheticTrialGroup("CrOSGrowthStudy", "CampaignId3"));
 }
 
 IN_PROC_BROWSER_TEST_F(DemoSessionLoginWithGrowthCampaignTest,
@@ -548,8 +543,7 @@ IN_PROC_BROWSER_TEST_F(DemoSessionLoginWithGrowthCampaignTest,
 }
 
 IN_PROC_BROWSER_TEST_F(DemoSessionLoginWithGrowthCampaignTest,
-                       // TODO(crbug.com/1516799): Re-enable this test
-                       DISABLED_DemoSWACampaignNoStudyId) {
+                       DemoSWACampaignNoStudyId) {
   base::ScopedAllowBlockingForTesting scoped_allow_blocking;
 
   CreateTestCampaignsFile(R"({

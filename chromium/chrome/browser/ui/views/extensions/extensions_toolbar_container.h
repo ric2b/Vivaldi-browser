@@ -114,6 +114,9 @@ class ExtensionsToolbarContainer : public ToolbarIconContainerView,
       extensions::PermissionsManager::UserSiteSetting site_setting,
       content::WebContents* web_contents);
 
+  // Updates the container visibility and animation as needed.
+  void UpdateContainerVisibility();
+
   // Updates the controls visibility.
   void UpdateControlsVisibility();
 
@@ -163,13 +166,6 @@ class ExtensionsToolbarContainer : public ToolbarIconContainerView,
     return close_side_panel_button_;
   }
 
-  // Updates the flex layout rules for the extension toolbar container to have
-  // views::MinimumFlexSizeRule::kPreferred when WindowControlsOverlay (WCO) is
-  // toggled on for PWAs. Otherwise the extensions icon does not stay visible as
-  // it is not considered for during the calculation of the preferred size of
-  // it's parent (in the case of WCO PWAs, WebAppFrameToolbarView).
-  void WindowControlsOverlayEnabledChanged(bool enabled);
-
   // Called when the side panel state has changed for an extensions side panel
   // to pop out button reflecting the side panel being open.
   void UpdateSidePanelState(bool is_active);
@@ -207,6 +203,7 @@ class ExtensionsToolbarContainer : public ToolbarIconContainerView,
       std::unique_ptr<ToolbarActionsBarBubbleDelegate> bubble) override;
   void ToggleExtensionsMenu() override;
   bool HasAnyExtensions() const override;
+  bool HasBlockingSecurityUI() const override;
   void UpdateToolbarActionHoverCard(
       ToolbarActionView* action_view,
       ToolbarActionHoverCardUpdateType update_type) override;
@@ -269,8 +266,8 @@ class ExtensionsToolbarContainer : public ToolbarIconContainerView,
   void CreateActionForId(const ToolbarActionsModel::ActionId& action_id);
 
   // Sorts child views to display them in the correct order (pinned actions,
-  // popped out actions, extensions button).
-  void ReorderViews();
+  // popped out actions, other buttons).
+  void ReorderAllChildViews();
 
   // Utility function for going from width to icon counts.
   size_t WidthToIconCount(int x_offset);
@@ -280,9 +277,6 @@ class ExtensionsToolbarContainer : public ToolbarIconContainerView,
   // Sets a pinned extension button's image to be shown/hidden.
   void SetExtensionIconVisibility(ToolbarActionsModel::ActionId id,
                                   bool visible);
-
-  // Calls SetVisible() with ShouldContainerBeVisible().
-  void UpdateContainerVisibility();
 
   // Returns whether the contianer should be showing, e.g. not if there are no
   // extensions installed, nor if the container is inactive in kAutoHide mode.
@@ -325,7 +319,8 @@ class ExtensionsToolbarContainer : public ToolbarIconContainerView,
 
   const raw_ptr<ExtensionsToolbarButton, AcrossTasksDanglingUntriaged>
       extensions_button_;
-  raw_ptr<ExtensionsRequestAccessButton> request_access_button_ = nullptr;
+  raw_ptr<ExtensionsRequestAccessButton, DanglingUntriaged>
+      request_access_button_ = nullptr;
 
   DisplayMode display_mode_;
 

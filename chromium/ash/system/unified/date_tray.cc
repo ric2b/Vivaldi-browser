@@ -114,7 +114,7 @@ void DateTray::HideBubble(const TrayBubbleView* bubble_view) {
   CloseBubble();
 }
 
-void DateTray::ClickedOutsideBubble() {
+void DateTray::ClickedOutsideBubble(const ui::LocatedEvent& event) {
   if (bubble_) {
     HideGlanceableBubble();
   }
@@ -167,7 +167,7 @@ void DateTray::HideGlanceableBubble() {
   SetIsActive(false);
 }
 
-BEGIN_METADATA(DateTray, views::Button)
+BEGIN_METADATA(DateTray)
 END_METADATA
 
 }  // namespace ash

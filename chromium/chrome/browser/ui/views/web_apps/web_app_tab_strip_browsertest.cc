@@ -104,7 +104,8 @@ class WebAppTabStripBrowserTest : public WebAppControllerBrowserTest {
     web_app_info->scope = start_url.GetWithoutFilename();
     web_app_info->title = u"Test app";
     web_app_info->background_color = kAppBackgroundColor;
-    web_app_info->user_display_mode = mojom::UserDisplayMode::kTabbed;
+    web_app_info->user_display_mode = mojom::UserDisplayMode::kStandalone;
+    web_app_info->display_override = {blink::mojom::DisplayMode::kTabbed};
     webapps::AppId app_id =
         test::InstallWebApp(profile, std::move(web_app_info));
 
@@ -200,6 +201,8 @@ IN_PROC_BROWSER_TEST_F(WebAppTabStripBrowserTest, PopOutTabOnInstall) {
   // Install the site with the user display mode set to kTabbed.
   webapps::AppId app_id;
   {
+    ui_test_utils::BrowserChangeObserver app_browser_observer(
+        nullptr, ui_test_utils::BrowserChangeObserver::ChangeType::kAdded);
     base::RunLoop run_loop;
     auto* provider = WebAppProvider::GetForTest(browser()->profile());
     DCHECK(provider);
@@ -222,8 +225,9 @@ IN_PROC_BROWSER_TEST_F(WebAppTabStripBrowserTest, PopOutTabOnInstall) {
               app_id = installed_app_id;
               run_loop.Quit();
             }),
-        /*use_fallback=*/true);
+        FallbackBehavior::kAllowFallbackDataAlways);
     run_loop.Run();
+    ui_test_utils::WaitForBrowserSetLastActive(app_browser_observer.Wait());
   }
 
   // After installing a tabbed display mode app the install page should pop out
@@ -321,6 +325,19 @@ IN_PROC_BROWSER_TEST_F(WebAppTabStripBrowserTest, NewTabUrl) {
   EXPECT_EQ(
       app_browser->tab_strip_model()->GetActiveWebContents()->GetVisibleURL(),
       embedded_test_server()->GetURL("/web_apps/favicon_only.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(WebAppTabStripBrowserTest, NonTabbedWebApp) {
+  Profile* profile = browser()->profile();
+
+  auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
+  web_app_info->title = u"Test app";
+  web_app_info->start_url = embedded_test_server()->GetURL(kAppPath);
+  webapps::AppId app_id = test::InstallWebApp(profile, std::move(web_app_info));
+
+  Browser* app_browser = web_app::LaunchWebAppBrowser(profile, app_id);
+
+  EXPECT_TRUE(app_browser->app_controller()->ShouldHideNewTabButton());
 }
 
 IN_PROC_BROWSER_TEST_F(WebAppTabStripBrowserTest, InstallingPinsHomeTab) {
@@ -632,12 +649,16 @@ IN_PROC_BROWSER_TEST_F(WebAppTabStripBrowserTest, MoveTabsToNewWindow) {
       embedded_test_server()->GetURL("/web_apps/tab_strip_customizations.html");
   webapps::AppId app_id = InstallTestWebApp(start_url);
   Browser* app_browser = LaunchWebAppBrowser(app_id);
+  ui_test_utils::WaitForBrowserSetLastActive(app_browser);
 
   chrome::NewTab(app_browser);
 
   size_t initial_browser_count = BrowserList::GetInstance()->size();
 
+  ui_test_utils::BrowserChangeObserver new_browser_observer(
+      nullptr, ui_test_utils::BrowserChangeObserver::ChangeType::kAdded);
   chrome::MoveTabsToNewWindow(app_browser, {1});
+  ui_test_utils::WaitForBrowserSetLastActive(new_browser_observer.Wait());
 
   EXPECT_EQ(initial_browser_count + 1, BrowserList::GetInstance()->size());
 
@@ -661,10 +682,14 @@ IN_PROC_BROWSER_TEST_F(WebAppTabStripBrowserTest, MoveTabsToExistingWindow) {
       embedded_test_server()->GetURL("/web_apps/tab_strip_customizations.html");
   webapps::AppId app_id = InstallTestWebApp(start_url);
   Browser* app_browser = LaunchWebAppBrowser(app_id);
+  ui_test_utils::WaitForBrowserSetLastActive(app_browser);
   chrome::NewTab(app_browser);
 
   // Open a second app browser window.
+  ui_test_utils::BrowserChangeObserver app_browser_observer(
+      nullptr, ui_test_utils::BrowserChangeObserver::ChangeType::kAdded);
   chrome::MoveTabsToNewWindow(app_browser, {1});
+  ui_test_utils::WaitForBrowserSetLastActive(app_browser_observer.Wait());
   Browser* app_browser2 = BrowserList::GetInstance()->GetLastActive();
 
   EXPECT_EQ(app_browser->tab_strip_model()->count(), 1);

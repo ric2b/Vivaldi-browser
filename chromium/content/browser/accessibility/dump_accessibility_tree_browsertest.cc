@@ -130,17 +130,6 @@ void DumpAccessibilityTreeTest::ChooseFeatures(
                                             disabled_features);
 }
 
-void DumpAccessibilityTreeTestWithIgnoredNodes::ChooseFeatures(
-    std::vector<base::test::FeatureRef>* enabled_features,
-    std::vector<base::test::FeatureRef>* disabled_features) {
-  // http://crbug.com/1063155 - temporary until this is enabled
-  // everywhere.
-  enabled_features->emplace_back(
-      features::kEnableAccessibilityExposeIgnoredNodes);
-  DumpAccessibilityTreeTest::ChooseFeatures(enabled_features,
-                                            disabled_features);
-}
-
 class DumpAccessibilityTreeTestExceptUIA : public DumpAccessibilityTreeTest {};
 
 // Parameterize the tests so that each test-pass is run independently.
@@ -183,12 +172,6 @@ INSTANTIATE_TEST_SUITE_P(
     All,
     DumpAccessibilityTreeTestExceptUIA,
     ::testing::ValuesIn(DumpAccessibilityTestBase::TreeTestPassesExceptUIA()),
-    DumpAccessibilityTreeTestPassToString());
-
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    DumpAccessibilityTreeTestWithIgnoredNodes,
-    ::testing::ValuesIn(DumpAccessibilityTestBase::TreeTestPasses()),
     DumpAccessibilityTreeTestPassToString());
 
 INSTANTIATE_TEST_SUITE_P(
@@ -848,8 +831,18 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityAriaHiddenChangedOnButtons) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-hidden-changed-on-buttons.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        AccessibilityAriaHiddenDescendants) {
   RunAriaTest(FILE_PATH_LITERAL("aria-hidden-descendants.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityAriaHiddenLineBreakingObjects) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-hidden-line-breaking-objects.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
@@ -1804,6 +1797,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityDisabled) {
   RunHtmlTest(FILE_PATH_LITERAL("disabled.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityDisabledWithSubtree) {
+  RunHtmlTest(FILE_PATH_LITERAL("disabled-with-subtree.html"));
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityDiv) {
   RunHtmlTest(FILE_PATH_LITERAL("div.html"));
 }
@@ -1854,8 +1852,9 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
   RunHtmlTest(FILE_PATH_LITERAL("contenteditable-docs-li.html"));
 }
 
+// TODO(b/324376803): Re-enable flaky test.
 IN_PROC_BROWSER_TEST_P(YieldingParserDumpAccessibilityTreeTest,
-                       AccessibilityContenteditableDocsLi) {
+                       DISABLED_AccessibilityContenteditableDocsLi) {
   RunHtmlTest(FILE_PATH_LITERAL("contenteditable-docs-li.html"));
 }
 
@@ -2300,8 +2299,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityInPageLinks) {
 #else
 #define MAYBE_InertAttribute InertAttribute
 #endif
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTestWithIgnoredNodes,
-                       MAYBE_InertAttribute) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, MAYBE_InertAttribute) {
   RunHtmlTest(FILE_PATH_LITERAL("inert-attribute.html"));
 }
 
@@ -2457,12 +2455,27 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityInputNumber) {
   RunHtmlTest(FILE_PATH_LITERAL("input-number.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityInputPassword) {
+// Test flakes on Android P - b/329275097.
+#if BUILDFLAG(IS_ANDROID)
+#define MAYBE_AccessibilityInputPassword DISABLED_AccessibilityInputPassword
+#else
+#define MAYBE_AccessibilityInputPassword AccessibilityInputPassword
+#endif
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       MAYBE_AccessibilityInputPassword) {
   RunHtmlTest(FILE_PATH_LITERAL("input-password.html"));
 }
 
+// Test flakes on Android P - b/329271598.
+#if BUILDFLAG(IS_ANDROID)
+#define MAYBE_AccessibilityInputPasswordObscured \
+  DISABLED_AccessibilityInputPasswordObscured
+#else
+#define MAYBE_AccessibilityInputPasswordObscured \
+  AccessibilityInputPasswordObscured
+#endif
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       AccessibilityInputPasswordObscured) {
+                       MAYBE_AccessibilityInputPasswordObscured) {
   RunHtmlTest(FILE_PATH_LITERAL("input-password-obscured.html"));
 }
 
@@ -2470,7 +2483,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityInputRadio) {
   RunHtmlTest(FILE_PATH_LITERAL("input-radio.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTestWithIgnoredNodes,
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        AccessibilityInputRadioCheckboxLabel) {
   RunHtmlTest(FILE_PATH_LITERAL("input-radio-checkbox-label.html"));
 }
@@ -2850,12 +2863,6 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
   RunHtmlTest(FILE_PATH_LITERAL("modal-dialog-opened.html"));
 }
 
-// http://crbug.com/738497
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       DISABLED_AccessibilityModalDialogInIframeClosed) {
-  RunHtmlTest(FILE_PATH_LITERAL("modal-dialog-in-iframe-closed.html"));
-}
-
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        AccessibilityModalDialogInIframeOpened) {
   RunHtmlTest(FILE_PATH_LITERAL("modal-dialog-in-iframe-opened.html"));
@@ -2866,7 +2873,7 @@ IN_PROC_BROWSER_TEST_P(YieldingParserDumpAccessibilityTreeTest,
   RunHtmlTest(FILE_PATH_LITERAL("modal-dialog-in-iframe-opened.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTestWithIgnoredNodes,
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        AccessibilityModalDialogAndIframes) {
   RunHtmlTest(FILE_PATH_LITERAL("modal-dialog-and-iframes.html"));
 }
@@ -3801,38 +3808,72 @@ IN_PROC_BROWSER_TEST_P(YieldingParserDumpAccessibilityTreeTest,
   RunRegressionTest(FILE_PATH_LITERAL("reused-map-change-map-name.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       LanguageDetectionLangAttribute) {
+// Enable language detection for both static and dynamic content.
+class DumpAccessibilityTreeWithLanguageDetectionTest
+    : public DumpAccessibilityTreeTest {
+ public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    DumpAccessibilityTreeTest::SetUpCommandLine(command_line);
+
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        ::switches::kEnableExperimentalAccessibilityLanguageDetection);
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        ::switches::kEnableExperimentalAccessibilityLanguageDetectionDynamic);
+  }
+
+  void RunLanguageDetectionTest(const base::FilePath::CharType* file_path) {
+    base::FilePath test_path =
+        GetTestFilePath("accessibility", "language-detection");
+    {
+      base::ScopedAllowBlockingForTesting allow_blocking;
+      ASSERT_TRUE(base::PathExists(test_path)) << test_path.LossyDisplayName();
+    }
+    base::FilePath language_detection_file =
+        test_path.Append(base::FilePath(file_path));
+
+    RunTest(ui::kAXModeComplete, language_detection_file,
+            "accessibility/language-detection");
+  }
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    DumpAccessibilityTreeWithLanguageDetectionTest,
+    ::testing::ValuesIn(DumpAccessibilityTestBase::TreeTestPasses()),
+    DumpAccessibilityTreeTestPassToString());
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeWithLanguageDetectionTest,
+                       LangAttribute) {
   RunLanguageDetectionTest(FILE_PATH_LITERAL("lang-attribute.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       LanguageDetectionLangAttributeNested) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeWithLanguageDetectionTest,
+                       LangAttributeNested) {
   RunLanguageDetectionTest(FILE_PATH_LITERAL("lang-attribute-nested.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       LanguageDetectionLangAttributeSwitching) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeWithLanguageDetectionTest,
+                       LangAttributeSwitching) {
   RunLanguageDetectionTest(FILE_PATH_LITERAL("lang-attribute-switching.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       LanguageDetectionLangDetectionStaticBasic) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeWithLanguageDetectionTest,
+                       LangDetectionStaticBasic) {
   RunLanguageDetectionTest(FILE_PATH_LITERAL("static-basic.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       LanguageDetectionLangDetectionDynamicBasic) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeWithLanguageDetectionTest,
+                       LangDetectionDynamicBasic) {
   RunLanguageDetectionTest(FILE_PATH_LITERAL("dynamic-basic.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       LanguageDetectionLangDetectionDynamicMultipleInserts) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeWithLanguageDetectionTest,
+                       LangDetectionDynamicMultipleInserts) {
   RunLanguageDetectionTest(FILE_PATH_LITERAL("dynamic-multiple-inserts.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       LanguageDetectionLangDetectionDynamicReparenting) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeWithLanguageDetectionTest,
+                       LangDetectionDynamicReparenting) {
   RunLanguageDetectionTest(FILE_PATH_LITERAL("dynamic-reparenting.html"));
 }
 

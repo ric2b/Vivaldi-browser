@@ -523,6 +523,9 @@ void TextFragmentAnchor::SetTickClockForTesting(
 }
 
 bool TextFragmentAnchor::HasSearchEngineSource() {
+  // Blink doesn't need the search engines. VB-104297
+  return false;
+  /*
   if (!frame_->GetDocument() || !frame_->GetDocument()->Loader())
     return false;
 
@@ -538,6 +541,7 @@ bool TextFragmentAnchor::HasSearchEngineSource() {
 
   return IsKnownSearchEngine(
       frame_->GetDocument()->Loader()->GetRequestorOrigin()->ToString());
+  */
 }
 
 bool TextFragmentAnchor::MarkFailedAttachmentsForRetry() {

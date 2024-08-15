@@ -10,5 +10,6 @@ const char kMimeType[] = "mimeType";
 const char kSuggestedFilename[] = "suggestedFilename";
 const char kProtocolDisplayName[] = "protocolDisplayName";
 const char kSuppressedPrompt[] = "suppressedPrompt";
+const char kMixedDownload[] = "mixedDownload";
 
 }  // namespace guest_view

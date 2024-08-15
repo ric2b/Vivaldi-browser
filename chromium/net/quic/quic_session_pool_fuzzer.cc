@@ -11,6 +11,9 @@
 #include "base/no_destructor.h"
 #include "base/task/sequenced_task_runner.h"
 #include "net/base/network_anonymization_key.h"
+#include "net/base/privacy_mode.h"
+#include "net/base/proxy_chain.h"
+#include "net/base/session_usage.h"
 #include "net/base/test_completion_callback.h"
 #include "net/cert/do_nothing_ct_verifier.h"
 #include "net/cert/mock_cert_verifier.h"
@@ -25,6 +28,7 @@
 #include "net/quic/mock_quic_context.h"
 #include "net/quic/quic_context.h"
 #include "net/quic/quic_http_stream.h"
+#include "net/quic/quic_session_key.h"
 #include "net/quic/test_task_runner.h"
 #include "net/socket/fuzzed_datagram_client_socket.h"
 #include "net/socket/fuzzed_socket_factory.h"
@@ -141,7 +145,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
       env->net_log.net_log(), host_resolver.get(),
       env->ssl_config_service.get(), &socket_factory, &http_server_properties,
       env->cert_verifier.get(), &env->transport_security_state, nullptr,
-      nullptr, &env->crypto_client_stream_factory, &env->quic_context);
+      nullptr, nullptr, &env->crypto_client_stream_factory, &env->quic_context);
 
   QuicSessionRequest request(factory.get());
   TestCompletionCallback callback;
@@ -154,10 +158,12 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   quic::QuicEnableVersion(version);
 
   request.Request(
-      env->scheme_host_port, version, PRIVACY_MODE_DISABLED, DEFAULT_PRIORITY,
-      SocketTag(), NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
-      true /* use_dns_aliases */, false /* require_dns_https_alpn */,
-      kCertVerifyFlags, GURL(kUrl), env->net_log, &net_error_details,
+      env->scheme_host_port, version, ProxyChain::Direct(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, SessionUsage::kDestination,
+      PRIVACY_MODE_DISABLED, DEFAULT_PRIORITY, SocketTag(),
+      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
+      /*require_dns_https_alpn=*/false, kCertVerifyFlags, GURL(kUrl),
+      env->net_log, &net_error_details,
       /*failed_on_default_network_callback=*/CompletionOnceCallback(),
       callback.callback());
 

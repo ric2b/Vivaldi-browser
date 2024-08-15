@@ -18,11 +18,6 @@
 #import "ios/chrome/browser/prefs/model/ios_chrome_pref_service_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 
-// Vivaldi
-#import "components/ad_blocker/adblock_rule_service.h"
-#import "ios/ad_blocker/adblock_rule_service_factory.h"
-// End Vivaldi
-
 OffTheRecordChromeBrowserStateImpl::OffTheRecordChromeBrowserStateImpl(
     scoped_refptr<base::SequencedTaskRunner> io_task_runner,
     ChromeBrowserState* original_chrome_browser_state,
@@ -40,14 +35,9 @@ OffTheRecordChromeBrowserStateImpl::OffTheRecordChromeBrowserStateImpl(
   profile_metrics::SetBrowserProfileType(
       this, profile_metrics::BrowserProfileType::kIncognito);
   base::RecordAction(base::UserMetricsAction("IncognitoMode_Started"));
-
-  adblock_filter::RuleServiceFactory::GetForBrowserState(this)
-      ->SetIncognitoBrowserState(this);
 }
 
 OffTheRecordChromeBrowserStateImpl::~OffTheRecordChromeBrowserStateImpl() {
-  adblock_filter::RuleServiceFactory::GetForBrowserState(this)
-      ->SetIncognitoBrowserState(nullptr);
   BrowserStateDependencyManager::GetInstance()->DestroyBrowserStateServices(
       this);
   if (pref_proxy_config_tracker_) {

@@ -37,15 +37,14 @@
 namespace fuzztest::internal {
 namespace {
 
-using testing::_;
-using testing::ElementsAre;
-using testing::Eq;
-using testing::FieldsAre;
-using testing::NanSensitiveDoubleEq;
-using testing::Not;
-using testing::Optional;
-using testing::Pair;
-using testing::VariantWith;
+using ::testing::_;
+using ::testing::ElementsAre;
+using ::testing::FieldsAre;
+using ::testing::NanSensitiveDoubleEq;
+using ::testing::Not;
+using ::testing::Optional;
+using ::testing::Pair;
+using ::testing::VariantWith;
 
 template <typename T>
 auto ValueIs(const T& v) {
@@ -229,6 +228,24 @@ TEST(SerializerTest, ExtraWhitespaceIsFine) {
               Optional(ValueIs<uint64_t>(0)));
   EXPECT_THAT(IRObject::FromString("FUZZTESTv1 sub {   \n i:   0 \n}  \n "),
               Optional(SubsAre(ValueIs<uint64_t>(0))));
+}
+
+IRObject CreateRecursiveObject(int depth) {
+  IRObject obj;
+  if (depth > 0) {
+    obj.MutableSubs().push_back(CreateRecursiveObject(depth - 1));
+  }
+  return obj;
+}
+
+TEST(SerializerTest, RecursiveStructureBelowDepthLimitGetsParsed) {
+  std::string serialized = CreateRecursiveObject(/*depth=*/100).ToString();
+  EXPECT_TRUE(IRObject::FromString(serialized).has_value());
+}
+
+TEST(SerializerTest, RecursiveStructureAboveDepthLimitDoesNotGetParsed) {
+  std::string serialized = CreateRecursiveObject(/*depth=*/150).ToString();
+  EXPECT_FALSE(IRObject::FromString(serialized).has_value());
 }
 
 template <typename T>

@@ -5,14 +5,17 @@
 import 'chrome://new-tab-page/lazy_load.js';
 
 import {CartHandlerRemote} from 'chrome://new-tab-page/chrome_cart.mojom-webui.js';
-import {ChromeCartProxy, CustomizeModulesElement} from 'chrome://new-tab-page/lazy_load.js';
+import type {CustomizeModulesElement} from 'chrome://new-tab-page/lazy_load.js';
+import {ChromeCartProxy} from 'chrome://new-tab-page/lazy_load.js';
 import {$$, NewTabPageProxy} from 'chrome://new-tab-page/new_tab_page.js';
-import {ModuleIdName, PageCallbackRouter, PageHandlerRemote, PageRemote} from 'chrome://new-tab-page/new_tab_page.mojom-webui.js';
+import type {ModuleIdName, PageRemote} from 'chrome://new-tab-page/new_tab_page.mojom-webui.js';
+import {PageCallbackRouter, PageHandlerRemote} from 'chrome://new-tab-page/new_tab_page.mojom-webui.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {fakeMetricsPrivate, MetricsTracker} from 'chrome://webui-test/metrics_test_support.js';
-import {TestMock} from 'chrome://webui-test/test_mock.js';
-import {isVisible} from 'chrome://webui-test/test_util.js';
+import type {MetricsTracker} from 'chrome://webui-test/metrics_test_support.js';
+import {fakeMetricsPrivate} from 'chrome://webui-test/metrics_test_support.js';
+import type {TestMock} from 'chrome://webui-test/test_mock.js';
+import {eventToPromise, isVisible} from 'chrome://webui-test/test_util.js';
 
 import {assertNotStyle, assertStyle, installMock} from './test_support.js';
 
@@ -103,6 +106,9 @@ suite('NewTabPageCustomizeModulesTest', () => {
       $$<HTMLElement>(
           customizeModules,
           `#${visible ? 'hide' : 'customize'}Button`)!.click();
+      await eventToPromise(
+          'selected-changed',
+          $$<HTMLElement>(customizeModules, 'cr-radio-group')!);
       customizeModules.apply();
 
       // Assert.
@@ -164,6 +170,7 @@ suite('NewTabPageCustomizeModulesTest', () => {
     const toggles = customizeModules.shadowRoot!.querySelectorAll('cr-toggle');
     toggles[0]!.click();
     toggles[2]!.click();
+    await Promise.all([toggles[0]!.updateComplete, toggles[2]!.updateComplete]);
     customizeModules.apply();
 
     // Assert.
@@ -224,7 +231,10 @@ suite('NewTabPageCustomizeModulesTest', () => {
         customizeModules.shadowRoot!.querySelectorAll('.toggle-option-row');
 
     // Act.
-    subToggleRows[0]!.querySelector('cr-toggle')!.click();
+    const toggle = subToggleRows[0]!.querySelector('cr-toggle');
+    assertTrue(!!toggle);
+    toggle.click();
+    await toggle.updateComplete;
     customizeModules.apply();
 
     // Assert.
@@ -258,24 +268,30 @@ suite('NewTabPageCustomizeModulesTest', () => {
     assertTrue(subToggleRows[0]!.querySelector('cr-toggle')!.checked);
 
     // Act.
-    toggleRows[0]!.querySelector('cr-toggle')!.click();
+    const toggle = toggleRows[0]!.querySelector('cr-toggle');
+    assertTrue(!!toggle);
+    toggle.click();
+    await toggle.updateComplete;
     customizeModules.$.toggleRepeat.render();
 
     // Assert.
-    assertFalse(toggleRows[0]!.querySelector('cr-toggle')!.checked);
+    assertFalse(toggle.checked);
     assertFalse(isVisible(subToggleRows[0]!));
 
     // Act.
-    toggleRows[0]!.querySelector('cr-toggle')!.click();
+    toggle.click();
+    await toggle.updateComplete;
     customizeModules.$.toggleRepeat.render();
 
     // Assert.
-    assertTrue(toggleRows[0]!.querySelector('cr-toggle')!.checked);
+    assertTrue(toggle.checked);
     assertTrue(isVisible(subToggleRows[0]!));
     assertTrue(subToggleRows[0]!.querySelector('cr-toggle')!.checked);
 
     // Act.
     $$<HTMLElement>(customizeModules, '#hideButton')!.click();
+    const radioGroup = $$<HTMLElement>(customizeModules, 'cr-radio-group')!;
+    await eventToPromise('selected-changed', radioGroup);
     customizeModules.apply();
     customizeModules.$.toggleRepeat.render();
 
@@ -299,7 +315,10 @@ suite('NewTabPageCustomizeModulesTest', () => {
     assertEquals(0, metrics.count('NewTabPage.Carts.DisableDiscount'));
 
     // Act.
-    subToggleRows[0]!.querySelector('cr-toggle')!.click();
+    const toggle = subToggleRows[0]!.querySelector('cr-toggle');
+    assertTrue(!!toggle);
+    toggle.click();
+    await toggle.updateComplete;
     customizeModules.apply();
 
     // Assert.
@@ -322,7 +341,10 @@ suite('NewTabPageCustomizeModulesTest', () => {
     assertEquals(0, metrics.count('NewTabPage.Carts.DisableDiscount'));
 
     // Act.
-    subToggleRows[0]!.querySelector('cr-toggle')!.click();
+    const toggle = subToggleRows[0]!.querySelector('cr-toggle');
+    assertTrue(!!toggle);
+    toggle.click();
+    await toggle.updateComplete;
     customizeModules.apply();
 
     // Assert.
@@ -427,7 +449,11 @@ suite('NewTabPageCustomizeModulesTest', () => {
       // Act.
       const cartOption =
           customizeModules.shadowRoot!.querySelector('#cartOption')!;
-      cartOption!.querySelector('cr-toggle')!.click();
+      const toggle = cartOption!.querySelector('cr-toggle');
+      assertTrue(!!toggle);
+      toggle.click();
+      await toggle.updateComplete;
+
       customizeModules.apply();
 
       // Assert.
@@ -499,7 +525,10 @@ suite('NewTabPageCustomizeModulesTest', () => {
       // Act.
       const discountOption =
           customizeModules.shadowRoot!.querySelector('#discountOption')!;
-      discountOption!.querySelector('cr-toggle')!.click();
+      const toggle = discountOption!.querySelector('cr-toggle');
+      assertTrue(!!toggle);
+      toggle.click();
+      await toggle.updateComplete;
       customizeModules.apply();
 
       // Assert.
@@ -554,7 +583,10 @@ suite('NewTabPageCustomizeModulesTest', () => {
       assertTrue(isVisible(discountOption));
 
       // Act.
-      cartOption!.querySelector('cr-toggle')!.click();
+      const toggle = cartOption!.querySelector('cr-toggle');
+      assertTrue(!!toggle);
+      toggle.click();
+      await toggle.updateComplete;
       customizeModules.$.toggleRepeat.render();
 
       // Assert.
@@ -613,11 +645,14 @@ suite('NewTabPageCustomizeModulesTest', () => {
           assertTrue(isVisible(discountOption));
 
           // Act.
-          toggleRows[0]!.querySelector('cr-toggle')!.click();
+          const toggle = toggleRows[0]!.querySelector('cr-toggle');
+          assertTrue(!!toggle);
+          toggle.click();
+          await toggle.updateComplete;
           customizeModules.$.toggleRepeat.render();
 
           // Assert.
-          assertFalse(toggleRows[0]!.querySelector('cr-toggle')!.checked);
+          assertFalse(toggle.checked);
           assertFalse(isVisible(discountOption));
           assertFalse(isVisible(cartOption));
         });

@@ -6,11 +6,12 @@
 load("//lib/args.star", "args")
 load("//lib/builder_config.star", "builder_config")
 load("//lib/builder_health_indicators.star", "health_spec")
-load("//lib/builders.star", "builders", "os", "reclient", "sheriff_rotations", "xcode")
+load("//lib/builders.star", "builders", "os", "reclient", "sheriff_rotations")
 load("//lib/branches.star", "branches")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
 load("//lib/gn_args.star", "gn_args")
+load("//lib/xcode.star", "xcode")
 
 ci.defaults.set(
     executable = ci.DEFAULT_EXECUTABLE,
@@ -519,6 +520,7 @@ ci.builder(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
             apply_configs = [
+                "checkout_pgo_profiles",
                 "clang_tot",
                 "android",
             ],
@@ -821,7 +823,6 @@ clang_tot_linux_builder(
             "release",
             "chromeos_codecs",
             "pdf_xfa",
-            "disable_nacl",
             "optimize_for_fuzzing",
             "mojo_fuzzer",
         ],
@@ -1176,7 +1177,6 @@ ci.builder(
             "release",
             "chrome_with_codecs",
             "pdf_xfa",
-            "disable_nacl",
             "minimal_symbols",
         ],
     ),
@@ -1477,7 +1477,6 @@ clang_mac_builder(
     gn_args = gn_args.config(
         configs = [
             "asan",
-            "disable_nacl",
             "clang_tot",
             "minimal_symbols",
             "release_builder",

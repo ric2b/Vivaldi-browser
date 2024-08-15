@@ -7,16 +7,12 @@
 
 #include <string>
 
-#include "components/metrics/structured/key_data_provider.h"
 #include "components/metrics/structured/key_data_provider_prefs.h"
+#include "components/metrics/structured/lib/key_data_provider.h"
 #include "components/metrics/structured/lib/proto/key.pb.h"
 
 class PrefRegistrySimple;
 class PrefService;
-
-namespace base {
-class FilePath;
-}
 
 namespace metrics::structured {
 
@@ -35,7 +31,6 @@ class KeyDataProviderChrome : public KeyDataProvider {
 
   // KeyDataProvider:
   bool IsReady() override;
-  void OnProfileAdded(const base::FilePath& profile_path) override;
   std::optional<uint64_t> GetId(const std::string& project_name) override;
   KeyData* GetKeyData(const std::string& project_name) override;
   void Purge() override;

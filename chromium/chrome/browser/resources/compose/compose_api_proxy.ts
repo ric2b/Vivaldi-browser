@@ -2,16 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {CloseReason, ComposeClientPageHandlerRemote, ComposeDialogCallbackRouter, ComposeSessionPageHandlerFactory, ComposeSessionPageHandlerRemote, ComposeState, OpenMetadata, StyleModifiers, UserFeedback} from './compose.mojom-webui.js';
+import type {CloseReason, ComposeState, OpenMetadata, StyleModifiers, UserFeedback} from './compose.mojom-webui.js';
+import {ComposeClientUntrustedPageHandlerRemote, ComposeSessionUntrustedPageHandlerFactory, ComposeSessionUntrustedPageHandlerRemote, ComposeUntrustedDialogCallbackRouter} from './compose.mojom-webui.js';
 
 /** @interface */
 export interface ComposeApiProxy {
   acceptComposeResult(): Promise<boolean>;
+  logCancelEdit(): void;
   completeFirstRun(): void;
   closeUi(reason: CloseReason): void;
   compose(input: string, edited: boolean): void;
   rewrite(style: StyleModifiers|null): void;
-  getRouter(): ComposeDialogCallbackRouter;
+  logEditInput(): void;
+  getRouter(): ComposeUntrustedDialogCallbackRouter;
   openBugReportingLink(): void;
   openComposeLearnMorePage(): void;
   openComposeSettings(): void;
@@ -27,13 +30,13 @@ export interface ComposeApiProxy {
 export class ComposeApiProxyImpl implements ComposeApiProxy {
   static instance: ComposeApiProxy|null = null;
 
-  composeSessionPageHandler = new ComposeSessionPageHandlerRemote();
-  composeClientPageHandler = new ComposeClientPageHandlerRemote();
-  router = new ComposeDialogCallbackRouter();
+  composeSessionPageHandler = new ComposeSessionUntrustedPageHandlerRemote();
+  composeClientPageHandler = new ComposeClientUntrustedPageHandlerRemote();
+  router = new ComposeUntrustedDialogCallbackRouter();
 
   constructor() {
-    const factoryRemote = ComposeSessionPageHandlerFactory.getRemote();
-    factoryRemote.createComposeSessionPageHandler(
+    const factoryRemote = ComposeSessionUntrustedPageHandlerFactory.getRemote();
+    factoryRemote.createComposeSessionUntrustedPageHandler(
         this.composeClientPageHandler.$.bindNewPipeAndPassReceiver(),
         this.composeSessionPageHandler.$.bindNewPipeAndPassReceiver(),
         this.router.$.bindNewPipeAndPassRemote());
@@ -51,6 +54,10 @@ export class ComposeApiProxyImpl implements ComposeApiProxy {
   acceptComposeResult(): Promise<boolean> {
     return this.composeSessionPageHandler.acceptComposeResult().then(
         res => res.success);
+  }
+
+  logCancelEdit(): void {
+    this.composeSessionPageHandler.logCancelEdit();
   }
 
   completeFirstRun(): void {
@@ -71,6 +78,10 @@ export class ComposeApiProxyImpl implements ComposeApiProxy {
 
   rewrite(style: StyleModifiers|null): void {
     this.composeSessionPageHandler.rewrite(style);
+  }
+
+  logEditInput(): void {
+    this.composeSessionPageHandler.logEditInput();
   }
 
   getRouter() {

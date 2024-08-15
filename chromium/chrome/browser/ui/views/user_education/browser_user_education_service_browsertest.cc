@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/ui/views/user_education/browser_user_education_service.h"
+
 #include <cstdint>
 #include <map>
 #include <optional>
@@ -9,7 +11,7 @@
 #include <sstream>
 #include <vector>
 
-#include "base/containers/fixed_flat_set.h"
+#include "base/containers/flat_set.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/run_loop.h"
@@ -30,6 +32,7 @@
 #include "components/user_education/common/feature_promo_registry.h"
 #include "components/user_education/common/feature_promo_specification.h"
 #include "components/user_education/common/tutorial_identifier.h"
+#include "components/user_education/common/user_education_features.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
@@ -259,8 +262,6 @@ IN_PROC_BROWSER_TEST_F(BrowserUserEducationServiceBrowserTest,
        IPHFailureReason::kWrongSessionRate, "crbug.com/1443063"},
       {&feature_engagement::kIPHDesktopCustomizeChromeRefreshFeature,
        IPHFailureReason::kWrongSessionImpact, "crbug.com/1443063"},
-      {&feature_engagement::kIPHDesktopTabGroupsNewGroupFeature,
-       IPHFailureReason::kWrongSessionRate, "crbug.com/1443063"},
       {&feature_engagement::kIPHSideSearchFeature,
        IPHFailureReason::kWrongSessionRate, "crbug.com/1443063"},
       {&feature_engagement::kIPHMemorySaverModeFeature,
@@ -323,8 +324,7 @@ IN_PROC_BROWSER_TEST_F(BrowserUserEducationServiceBrowserTest,
 
   // Iterate through registered IPH and ensure that the configurations are
   // consistent.
-  for (const auto& [feature, spec] :
-       registry.GetRegisteredFeaturePromoSpecifications()) {
+  for (const auto& [feature, spec] : registry.feature_data()) {
     const feature_engagement::FeatureConfig* feature_config =
         &configuration->GetFeatureConfig(*feature);
 
@@ -352,6 +352,7 @@ IN_PROC_BROWSER_TEST_F(BrowserUserEducationServiceBrowserTest,
         feature_engagement::SessionRateImpact::Type::ALL;
     const bool is_session_limited =
         IsComparatorLimited(feature_config->session_rate, 1);
+    const bool is_v2 = user_education::features::IsUserEducationV2();
 
     switch (spec.promo_type()) {
       case user_education::FeaturePromoSpecification::PromoType::kToast:
@@ -370,7 +371,7 @@ IN_PROC_BROWSER_TEST_F(BrowserUserEducationServiceBrowserTest,
           case user_education::FeaturePromoSpecification::PromoSubtype::kNormal:
             // Standard promos should be session-limited and should limit other
             // IPH.
-            if (!is_session_limited) {
+            if (is_v2 == is_session_limited) {
               MaybeAddFailure(failures, exceptions, feature,
                               IPHFailureReason::kWrongSessionRate,
                               feature_config);
@@ -481,14 +482,19 @@ std::ostream& operator<<(std::ostream& os, const TutorialFailure& failure) {
 
 IN_PROC_BROWSER_TEST_F(BrowserUserEducationServiceBrowserTest,
                        TutorialConsistencyCheck) {
-  const auto kAlwaysPresentElementIds =
-      base::MakeFixedFlatSet<ui::ElementIdentifier>(
-          {kToolbarAppMenuButtonElementId, kToolbarAvatarButtonElementId,
-           kToolbarBackButtonElementId, kBrowserViewElementId,
-           kToolbarForwardButtonElementId, kNewTabButtonElementId,
-           kOmniboxElementId, kToolbarSidePanelButtonElementId,
-           kTabSearchButtonElementId, kTabStripElementId,
-           kTabStripRegionElementId, kTopContainerElementId});
+  const base::flat_set<ui::ElementIdentifier> kAlwaysPresentElementIds = {
+      kToolbarAppMenuButtonElementId,
+      kToolbarAvatarButtonElementId,
+      kToolbarBackButtonElementId,
+      kBrowserViewElementId,
+      kToolbarForwardButtonElementId,
+      kNewTabButtonElementId,
+      kOmniboxElementId,
+      kToolbarSidePanelButtonElementId,
+      kTabSearchButtonElementId,
+      kTabStripElementId,
+      kTabStripRegionElementId,
+      kTopContainerElementId};
 
   std::vector<TutorialFailure> failures;
 
@@ -540,15 +546,19 @@ IN_PROC_BROWSER_TEST_F(BrowserUserEducationServiceBrowserTest, AutoConfigure) {
                 feature_engagement::kMaxStoragePeriod,
                 feature_engagement::kMaxStoragePeriod),
             config.used);
-  EXPECT_EQ(
-      feature_engagement::EventConfig(
-          "WebUiHelpBubbleTest_trigger",
-          feature_engagement::Comparator(feature_engagement::LESS_THAN, 5),
-          feature_engagement::kMaxStoragePeriod,
-          feature_engagement::kMaxStoragePeriod),
-      config.trigger);
+  EXPECT_EQ(feature_engagement::EventConfig(
+                "WebUiHelpBubbleTest_trigger",
+                user_education::features::IsUserEducationV2()
+                    ? feature_engagement::Comparator(feature_engagement::ANY, 0)
+                    : feature_engagement::Comparator(
+                          feature_engagement::LESS_THAN, 5),
+                feature_engagement::kMaxStoragePeriod,
+                feature_engagement::kMaxStoragePeriod),
+            config.trigger);
   EXPECT_TRUE(config.event_configs.empty());
-  EXPECT_EQ(feature_engagement::Comparator(feature_engagement::EQUAL, 0),
+  EXPECT_EQ(user_education::features::IsUserEducationV2()
+                ? feature_engagement::Comparator(feature_engagement::ANY, 0)
+                : feature_engagement::Comparator(feature_engagement::EQUAL, 0),
             config.session_rate);
   EXPECT_EQ(feature_engagement::SessionRateImpact::Type::ALL,
             config.session_rate_impact.type);
@@ -559,4 +569,75 @@ IN_PROC_BROWSER_TEST_F(BrowserUserEducationServiceBrowserTest, AutoConfigure) {
   EXPECT_FALSE(config.tracking_only);
   EXPECT_EQ(feature_engagement::SnoozeParams(), config.snooze_params);
   EXPECT_TRUE(config.groups.empty());
+}
+
+class BrowserUserEducationServiceNewBadgeBrowserTest
+    : public InProcessBrowserTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  BrowserUserEducationServiceNewBadgeBrowserTest() {
+    if (GetParam()) {
+      feature_list_.InitAndEnableFeature(
+          user_education::features::kNewBadgeTestFeature);
+    }
+  }
+
+  ~BrowserUserEducationServiceNewBadgeBrowserTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(,
+                         BrowserUserEducationServiceNewBadgeBrowserTest,
+                         testing::Bool());
+
+IN_PROC_BROWSER_TEST_P(BrowserUserEducationServiceNewBadgeBrowserTest,
+                       ShowsNewBadge) {
+  // Ensure both ways to check the badge work as expected.
+  EXPECT_EQ(GetParam(), browser()->window()->MaybeShowNewBadgeFor(
+                            user_education::features::kNewBadgeTestFeature));
+  EXPECT_EQ(GetParam(), UserEducationService::MaybeShowNewBadge(
+                            browser()->profile(),
+                            user_education::features::kNewBadgeTestFeature));
+
+  // Ensure that the feature can be marked as used.
+  for (int i = 0; i < user_education::features::GetNewBadgeFeatureUsedCount();
+       i += 2) {
+    browser()->window()->NotifyPromoFeatureUsed(
+        user_education::features::kNewBadgeTestFeature);
+    UserEducationService::MaybeNotifyPromoFeatureUsed(
+        browser()->profile(), user_education::features::kNewBadgeTestFeature);
+  }
+
+  // The badge should now be blocked.
+  EXPECT_FALSE(browser()->window()->MaybeShowNewBadgeFor(
+      user_education::features::kNewBadgeTestFeature));
+  EXPECT_FALSE(UserEducationService::MaybeShowNewBadge(
+      browser()->profile(), user_education::features::kNewBadgeTestFeature));
+}
+
+IN_PROC_BROWSER_TEST_P(BrowserUserEducationServiceNewBadgeBrowserTest,
+                       IncognitoDoesNotShowBadge) {
+  // Both ways to check the badge should return false for an OTR profile.
+  auto* const incog = CreateIncognitoBrowser();
+  EXPECT_FALSE(incog->window()->MaybeShowNewBadgeFor(
+      user_education::features::kNewBadgeTestFeature));
+  EXPECT_FALSE(UserEducationService::MaybeShowNewBadge(
+      incog->profile(), user_education::features::kNewBadgeTestFeature));
+
+  // Ensure that the feature can be marked as used.
+  for (int i = 0; i < user_education::features::GetNewBadgeFeatureUsedCount();
+       i += 2) {
+    browser()->window()->NotifyPromoFeatureUsed(
+        user_education::features::kNewBadgeTestFeature);
+    UserEducationService::MaybeNotifyPromoFeatureUsed(
+        browser()->profile(), user_education::features::kNewBadgeTestFeature);
+  }
+
+  // The badge should still be blocked.
+  EXPECT_FALSE(incog->window()->MaybeShowNewBadgeFor(
+      user_education::features::kNewBadgeTestFeature));
+  EXPECT_FALSE(UserEducationService::MaybeShowNewBadge(
+      incog->profile(), user_education::features::kNewBadgeTestFeature));
 }

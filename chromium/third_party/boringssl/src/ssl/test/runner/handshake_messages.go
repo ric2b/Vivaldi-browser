@@ -194,7 +194,7 @@ type clientHelloMsg struct {
 	emptyExtensions                          bool
 	pad                                      int
 	compressedCertAlgs                       []uint16
-	delegatedCredentials                     bool
+	delegatedCredential                      []signatureAlgorithm
 	alpsProtocols                            []string
 	alpsProtocolsOld                         []string
 	outerExtensions                          []uint16
@@ -501,15 +501,15 @@ func (m *clientHelloMsg) marshalBody(hello *cryptobyte.Builder, typ clientHelloT
 			body: body.BytesOrPanic(),
 		})
 	}
-	if m.delegatedCredentials {
+	if len(m.delegatedCredential) > 0 {
 		body := cryptobyte.NewBuilder(nil)
 		body.AddUint16LengthPrefixed(func(signatureSchemeList *cryptobyte.Builder) {
-			for _, sigAlg := range m.signatureAlgorithms {
+			for _, sigAlg := range m.delegatedCredential {
 				signatureSchemeList.AddUint16(uint16(sigAlg))
 			}
 		})
 		extensions = append(extensions, extension{
-			id:   extensionDelegatedCredentials,
+			id:   extensionDelegatedCredential,
 			body: body.BytesOrPanic(),
 		})
 	}
@@ -756,7 +756,7 @@ func (m *clientHelloMsg) unmarshal(data []byte) bool {
 	m.alpnProtocols = nil
 	m.extendedMasterSecret = false
 	m.customExtension = ""
-	m.delegatedCredentials = false
+	m.delegatedCredential = nil
 	m.alpsProtocols = nil
 	m.alpsProtocolsOld = nil
 
@@ -1029,11 +1029,10 @@ func (m *clientHelloMsg) unmarshal(data []byte) bool {
 					return false
 				}
 			}
-		case extensionDelegatedCredentials:
-			if len(body) != 0 {
+		case extensionDelegatedCredential:
+			if !parseSignatureAlgorithms(&body, &m.delegatedCredential, false) || len(body) != 0 {
 				return false
 			}
-			m.delegatedCredentials = true
 		case extensionApplicationSettings:
 			var protocols cryptobyte.String
 			if !body.ReadUint16LengthPrefixed(&protocols) || len(body) != 0 {
@@ -1923,13 +1922,14 @@ type certificateEntry struct {
 }
 
 type delegatedCredential struct {
-	// https://tools.ietf.org/html/draft-ietf-tls-subcerts-03#section-3
-	signedBytes            []byte
-	lifetimeSecs           uint32
-	expectedCertVerifyAlgo signatureAlgorithm
-	pkixPublicKey          []byte
-	algorithm              signatureAlgorithm
-	signature              []byte
+	// https://www.rfc-editor.org/rfc/rfc9345.html#section-4
+	raw              []byte
+	signedBytes      []byte
+	lifetimeSecs     uint32
+	dcCertVerifyAlgo signatureAlgorithm
+	pkixPublicKey    []byte
+	algorithm        signatureAlgorithm
+	signature        []byte
 }
 
 type certificateMsg struct {
@@ -2029,18 +2029,18 @@ func (m *certificateMsg) unmarshal(data []byte) bool {
 					}
 				case extensionSignedCertificateTimestamp:
 					cert.sctList = []byte(body)
-				case extensionDelegatedCredentials:
-					// https://tools.ietf.org/html/draft-ietf-tls-subcerts-03#section-3
+				case extensionDelegatedCredential:
+					// https://www.rfc-editor.org/rfc/rfc9345.html#section-4
 					if cert.delegatedCredential != nil {
 						return false
 					}
 
 					dc := new(delegatedCredential)
 					origBody := body
-					var expectedCertVerifyAlgo, algorithm uint16
+					var dcCertVerifyAlgo, algorithm uint16
 
 					if !body.ReadUint32(&dc.lifetimeSecs) ||
-						!body.ReadUint16(&expectedCertVerifyAlgo) ||
+						!body.ReadUint16(&dcCertVerifyAlgo) ||
 						!readUint24LengthPrefixedBytes(&body, &dc.pkixPublicKey) ||
 						!body.ReadUint16(&algorithm) ||
 						!readUint16LengthPrefixedBytes(&body, &dc.signature) ||
@@ -2048,8 +2048,9 @@ func (m *certificateMsg) unmarshal(data []byte) bool {
 						return false
 					}
 
-					dc.expectedCertVerifyAlgo = signatureAlgorithm(expectedCertVerifyAlgo)
+					dc.dcCertVerifyAlgo = signatureAlgorithm(dcCertVerifyAlgo)
 					dc.algorithm = signatureAlgorithm(algorithm)
+					dc.raw = origBody
 					dc.signedBytes = []byte(origBody)[:4+2+3+len(dc.pkixPublicKey)]
 					cert.delegatedCredential = dc
 				default:

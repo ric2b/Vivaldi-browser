@@ -3,12 +3,11 @@
 # found in the LICENSE file.
 import argparse
 import unittest
+from unittest import mock
 
 from telemetry.core import platform
 from telemetry.internal.platform import linux_based_device
 from telemetry.util import cmd_util
-
-import mock
 
 
 class LinuxBasedDeviceTest(unittest.TestCase):
@@ -37,8 +36,9 @@ class LinuxBasedDeviceTest(unittest.TestCase):
 
   def test_find_available_devices_returns_devices_if_found(self):
     options = argparse.Namespace(remote='some_address',
-                             remote_ssh_port=50,
-                             ssh_identity='path/to/id_rsa')
+                                 fetch_cros_remote=False,
+                                 remote_ssh_port=50,
+                                 ssh_identity='path/to/id_rsa')
     with mock.patch.object(platform, 'GetHostPlatform',
                            return_value=self.host_platform):
       self._set_os('linux')
@@ -55,6 +55,7 @@ class LinuxBasedDeviceTest(unittest.TestCase):
 
   def test_find_available_devices_returns_devices_if_no_ssh(self):
     options = argparse.Namespace(remote='some_address',
+                                 fetch_cros_remote=False,
                                  remote_ssh_port=None,
                                  ssh_identity=None)
     with mock.patch.object(platform, 'GetHostPlatform',

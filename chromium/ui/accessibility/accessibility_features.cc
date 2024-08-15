@@ -7,20 +7,13 @@
 #include "base/feature_list.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "ui/accessibility/ax_features.mojom-features.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/constants/ash_features.h"
 #endif
 
 namespace features {
-
-BASE_FEATURE(kAblateSendPendingAccessibilityEvents,
-             "AblateSendPendingAccessibilityEvents",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-bool IsAblateSendPendingAccessibilityEventsEnabled() {
-  return base::FeatureList::IsEnabled(
-      ::features::kAblateSendPendingAccessibilityEvents);
-}
 
 BASE_FEATURE(kAccessibilityFocusHighlight,
              "AccessibilityFocusHighlight",
@@ -42,9 +35,17 @@ bool IsAccessibilityPdfOcrForSelectToSpeakEnabled() {
       ::features::kAccessibilityPdfOcrForSelectToSpeak);
 }
 
+BASE_FEATURE(kAccessibilityPruneRedundantInlineText,
+             "AccessibilityPruneRedundantInlineText",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+bool IsAccessibilityPruneRedundantInlineTextEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kAccessibilityPruneRedundantInlineText);
+}
+
 BASE_FEATURE(kAugmentExistingImageLabels,
              "AugmentExistingImageLabels",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 bool IsAugmentExistingImageLabelsEnabled() {
   return base::FeatureList::IsEnabled(::features::kAugmentExistingImageLabels);
 }
@@ -70,14 +71,6 @@ BASE_FEATURE(kEnableAccessibilityExposeHTMLElement,
 bool IsAccessibilityExposeHTMLElementEnabled() {
   return base::FeatureList::IsEnabled(
       ::features::kEnableAccessibilityExposeHTMLElement);
-}
-
-BASE_FEATURE(kEnableAccessibilityExposeIgnoredNodes,
-             "AccessibilityExposeIgnoredNodes",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-bool IsAccessibilityExposeIgnoredNodesEnabled() {
-  return base::FeatureList::IsEnabled(
-      ::features::kEnableAccessibilityExposeIgnoredNodes);
 }
 
 BASE_FEATURE(kEnableAccessibilityLanguageDetection,
@@ -153,20 +146,20 @@ bool IsDictationOfflineAvailable() {
       ash::features::kOnDeviceSpeechRecognition);
 }
 
-BASE_FEATURE(kAccessibilityAcceleratorNotificationsTimeout,
-             "AccessibilityAcceleratorNotificationsTimeout",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-bool IsAccessibilityAcceleratorNotificationsTimeoutEnabled() {
-  return base::FeatureList::IsEnabled(
-      ::features::kAccessibilityAcceleratorNotificationsTimeout);
-}
-
 BASE_FEATURE(kAccessibilityDictationKeyboardImprovements,
              "AccessibilityDictationKeyboardImprovements",
              base::FEATURE_ENABLED_BY_DEFAULT);
 bool IsAccessibilityDictationKeyboardImprovementsEnabled() {
   return base::FeatureList::IsEnabled(
       ::features::kAccessibilityDictationKeyboardImprovements);
+}
+
+BASE_FEATURE(kAccessibilityReducedAnimations,
+             "AccessibilityReducedAnimations",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+bool IsAccessibilityReducedAnimationsEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kAccessibilityReducedAnimations);
 }
 
 BASE_FEATURE(kAccessibilityFaceGaze,
@@ -186,7 +179,7 @@ bool IsAccessibilitySelectToSpeakHoverTextImprovementsEnabled() {
 
 BASE_FEATURE(kExperimentalAccessibilityGoogleTtsHighQualityVoices,
              "ExperimentalAccessibilityGoogleTtsHighQualityVoices",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 bool IsExperimentalAccessibilityGoogleTtsHighQualityVoicesEnabled() {
   return base::FeatureList::IsEnabled(
       ::features::kExperimentalAccessibilityGoogleTtsHighQualityVoices);
@@ -210,7 +203,7 @@ bool IsExperimentalAccessibilityGoogleTtsLanguagePacksEnabled() {
 
 BASE_FEATURE(kAccessibilityExtraLargeCursor,
              "AccessibilityExtraLargeCursor",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 bool IsAccessibilityExtraLargeCursorEnabled() {
   return base::FeatureList::IsEnabled(
       ::features::kAccessibilityExtraLargeCursor);
@@ -224,17 +217,24 @@ bool IsAccessibilityMagnifierFollowsStsEnabled() {
       ::features::kAccessibilityMagnifierFollowsSts);
 }
 
+BASE_FEATURE(kAccessibilityMouseKeys,
+             "AccessibilityMouseKeys",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+bool IsAccessibilityMouseKeysEnabled() {
+  return base::FeatureList::IsEnabled(::features::kAccessibilityMouseKeys);
+}
+
+BASE_FEATURE(kAccessibilityCaretBlinkIntervalSetting,
+             "AccessibilityCaretBlinkIntervalSetting",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+bool IsAccessibilityCaretBlinkIntervalSettingEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kAccessibilityCaretBlinkIntervalSetting);
+}
+
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_ANDROID)
-BASE_FEATURE(kAccessibilityPerformanceFiltering,
-             "AccessibilityPerformanceFiltering",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-bool IsAccessibilityPerformanceFilteringEnabled() {
-  return base::FeatureList::IsEnabled(
-      ::features::kAccessibilityPerformanceFiltering);
-}
-
 BASE_FEATURE(kAccessibilitySnapshotStressTests,
              "AccessibilitySnapshotStressTests",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -245,21 +245,14 @@ bool IsAccessibilitySnapshotStressTestsEnabled() {
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if !BUILDFLAG(IS_ANDROID)
-// This feature can be used as an emergency kill switch to disable Screen AI
-// main content extraction service in case of security or other issues.
-// Please talk to components/services/screen_ai/OWNERS if any changes to this
-// feature or its functionality is needed.
-BASE_FEATURE(kEmergencyDisableScreenAIMainContentExtraction,
-             "EmergencyDisableScreenAIMainContentExtraction",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+bool IsScreenAIMainContentExtractionEnabled() {
+  return base::FeatureList::IsEnabled(
+      ax::mojom::features::kScreenAIMainContentExtractionEnabled);
+}
 
-// This feature can be used as an emergency kill switch to disable Screen AI
-// OCR service in case of security or other issues.
-// Please talk to components/services/screen_ai/OWNERS if any changes to this
-// feature or its functionality is needed.
-BASE_FEATURE(kEmergencyDisableScreenAIOCR,
-             "EmergencyDisableScreenAIOCR",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+bool IsScreenAIOCREnabled() {
+  return base::FeatureList::IsEnabled(ax::mojom::features::kScreenAIOCREnabled);
+}
 
 BASE_FEATURE(kAccessibilityService,
              "AccessibilityService",
@@ -296,9 +289,7 @@ BASE_FEATURE(kPdfOcr,
 );
 
 bool IsPdfOcrEnabled() {
-  return base::FeatureList::IsEnabled(::features::kPdfOcr) &&
-         !base::FeatureList::IsEnabled(
-             ::features::kEmergencyDisableScreenAIOCR);
+  return base::FeatureList::IsEnabled(::features::kPdfOcr);
 }
 
 BASE_FEATURE(kReadAnything, "ReadAnything", base::FEATURE_ENABLED_BY_DEFAULT);
@@ -322,6 +313,14 @@ bool IsReadAnythingOmniboxIconEnabled() {
   return base::FeatureList::IsEnabled(::features::kReadAnythingOmniboxIcon);
 }
 
+BASE_FEATURE(kReadAnythingDelaySidePanelLoad,
+             "ReadAnythingDelaySidePanelLoad",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+bool IsReadAnythingDelaySidePanelLoadEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kReadAnythingDelaySidePanelLoad);
+}
+
 BASE_FEATURE(kReadAnythingReadAloud,
              "ReadAnythingReadAloud",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -340,9 +339,7 @@ BASE_FEATURE(kReadAnythingWithScreen2x,
              "ReadAnythingWithScreen2x",
              base::FEATURE_ENABLED_BY_DEFAULT);
 bool IsReadAnythingWithScreen2xEnabled() {
-  return base::FeatureList::IsEnabled(::features::kReadAnythingWithScreen2x) &&
-         !base::FeatureList::IsEnabled(
-             ::features::kEmergencyDisableScreenAIMainContentExtraction);
+  return base::FeatureList::IsEnabled(::features::kReadAnythingWithScreen2x);
 }
 
 BASE_FEATURE(kReadAnythingWithAlgorithm,
@@ -350,6 +347,15 @@ BASE_FEATURE(kReadAnythingWithAlgorithm,
              base::FEATURE_ENABLED_BY_DEFAULT);
 bool IsReadAnythingWithAlgorithmEnabled() {
   return base::FeatureList::IsEnabled(::features::kReadAnythingWithAlgorithm);
+}
+
+BASE_FEATURE(kReadAnythingImagesViaAlgorithm,
+             "ReadAnythingImagesViaAlgorithm",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+bool IsReadAnythingImagesViaAlgorithmEnabled() {
+  return base::FeatureList::IsEnabled(
+             ::features::kReadAnythingImagesViaAlgorithm) &&
+         IsReadAnythingWithAlgorithmEnabled();
 }
 
 // This feature is only for debug purposes and for security/privacy reasons,
@@ -367,6 +373,14 @@ BASE_FEATURE(kScreenAITestMode,
              base::FEATURE_DISABLED_BY_DEFAULT);
 bool IsScreenAITestModeEnabled() {
   return base::FeatureList::IsEnabled(::features::kScreenAITestMode);
+}
+
+// This feature is only used in tests and must not be enabled by default.
+BASE_FEATURE(kMainNodeAnnotations,
+             "MainNodeAnnotations",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+bool IsMainNodeAnnotationsEnabled() {
+  return base::FeatureList::IsEnabled(::features::kMainNodeAnnotations);
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 

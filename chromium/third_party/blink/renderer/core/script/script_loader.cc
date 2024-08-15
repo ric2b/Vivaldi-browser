@@ -79,7 +79,7 @@
 #include "third_party/blink/renderer/platform/loader/subresource_integrity.h"
 #include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
-#include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
+#include "third_party/blink/renderer/platform/scheduler/public/task_attribution_tracker.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
@@ -87,19 +87,20 @@
 #include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_view.h"
 
+namespace blink {
+
 namespace {
-blink::scheduler::TaskAttributionInfo* GetRunningTask(
-    blink::ScriptState* script_state) {
+
+scheduler::TaskAttributionInfo* GetRunningTask(ScriptState* script_state) {
   auto* tracker =
-      blink::ThreadScheduler::Current()->GetTaskAttributionTracker();
+      scheduler::TaskAttributionTracker::From(script_state->GetIsolate());
   if (!script_state || !script_state->World().IsMainWorld() || !tracker) {
     return nullptr;
   }
-  return tracker->RunningTask(script_state);
+  return tracker->RunningTask();
 }
 
 }  // namespace
-namespace blink {
 
 ScriptLoader::ScriptLoader(ScriptElementBase* element,
                            const CreateElementFlags flags)
@@ -330,6 +331,51 @@ bool IsEligibleForDelay(const Resource& resource,
   if (!feature_limit.is_zero() &&
       element_document.GetStartTime().Elapsed() > feature_limit) {
     return false;
+  }
+
+  bool is_ad_resource = resource.GetResourceRequest().IsAdResource();
+  static const features::AsyncScriptExperimentalSchedulingTarget target =
+      features::kDelayAsyncScriptExecutionTargetParam.Get();
+  switch (target) {
+    case features::AsyncScriptExperimentalSchedulingTarget::kAds:
+      if (!is_ad_resource) {
+        return false;
+      }
+      break;
+    case features::AsyncScriptExperimentalSchedulingTarget::kNonAds:
+      if (is_ad_resource) {
+        return false;
+      }
+      break;
+    case features::AsyncScriptExperimentalSchedulingTarget::kBoth:
+      break;
+  }
+
+  static const bool opt_out_low =
+      features::kDelayAsyncScriptExecutionOptOutLowFetchPriorityHintParam.Get();
+  static const bool opt_out_auto =
+      features::kDelayAsyncScriptExecutionOptOutAutoFetchPriorityHintParam
+          .Get();
+  static const bool opt_out_high =
+      features::kDelayAsyncScriptExecutionOptOutHighFetchPriorityHintParam
+          .Get();
+
+  switch (resource.GetResourceRequest().GetFetchPriorityHint()) {
+    case mojom::blink::FetchPriorityHint::kLow:
+      if (opt_out_low) {
+        return false;
+      }
+      break;
+    case mojom::blink::FetchPriorityHint::kAuto:
+      if (opt_out_auto) {
+        return false;
+      }
+      break;
+    case mojom::blink::FetchPriorityHint::kHigh:
+      if (opt_out_high) {
+        return false;
+      }
+      break;
   }
 
   static const features::DelayAsyncScriptTarget delay_async_script_target =
@@ -816,7 +862,7 @@ PendingScript* ScriptLoader::PrepareScript(
         context_window->GetFrame()->GetAttributionSrcLoader()->CanRegister(
             url,
             /*element=*/nullptr,
-            /*request_id=*/absl::nullopt)) {
+            /*request_id=*/std::nullopt)) {
       options.SetAttributionReportingEligibility(
           ScriptFetchOptions::AttributionReportingEligibility::kEligible);
     }
@@ -1085,6 +1131,17 @@ PendingScript* ScriptLoader::PrepareScript(
         // return.</spec>
         if (!module_script)
           return nullptr;
+
+        if (RuntimeEnabledFeatures::RenderBlockingInlineModuleScriptEnabled() &&
+            potentially_render_blocking &&
+            element_document.GetRenderBlockingResourceManager()) {
+          // After https://github.com/whatwg/html/pull/10035:
+          // <spec label="fetch-an-inline-module-script-graph" step="3">If el is
+          // potentially render-blocking, then block rendering on el and set
+          // options's  render-blocking  to true.</spec>
+          element_document.GetRenderBlockingResourceManager()->AddPendingScript(
+              *element_);
+        }
 
         // <spec label="fetch-an-inline-module-script-graph" step="4">Fetch the
         // descendants of and link script, given settings object, the

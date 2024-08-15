@@ -25,6 +25,7 @@
 #include "chrome/browser/tpcd/experiment/tpcd_utils.h"
 #include "chrome/browser/tpcd/support/tpcd_support_service.h"
 #include "chrome/browser/tpcd/support/tpcd_support_service_factory.h"
+#include "chrome/browser/tpcd/support/validity_service.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -48,11 +49,13 @@
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "net/base/features.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -167,11 +170,10 @@ class AdHeuristicTPCDBrowserTestBase
     // trigger the calls, it only works for cases when matching the first
     // primary pattern.
     base::ScopedAllowBlockingForTesting allow_blocking;
-    const std::string primary_pattern_spec =
-        ContentSettingsPattern::FromURL(third_party_url).ToString();
-    tpcd::metadata::Metadata metadata =
-        tpcd::metadata::MakeMetadataProtoFromVectorOfPair(
-            {{primary_pattern_spec, "*"}});
+    tpcd::metadata::Metadata metadata;
+    tpcd::metadata::AddEntryToMetadata(
+        metadata, ContentSettingsPattern::FromURL(third_party_url).ToString(),
+        "*");
     EXPECT_EQ(metadata.metadata_entries_size(), 1);
     MockComponentInstallation(metadata);
     EXPECT_EQ(CookieSettingsFactory::GetForProfile(browser()->profile())
@@ -475,6 +477,10 @@ class AdHeuristicTPCDBrowserTestTrialGrant
            {"SkipTpcdMitigationsForAdsMetadata", "true"},
            {"SkipTpcdMitigationsForAdsHeuristics", "true"}}}},
         {});
+
+    // Disable the validity service so it doesn't remove manually created
+    // trial settings.
+    tpcd::trial::ValidityService::DisableForTesting();
   }
 
  private:
@@ -515,6 +521,10 @@ class AdHeuristicTPCDBrowserTestSkipTrialGrant
            {"SkipTpcdMitigationsForAdsMetadata", "false"},
            {"SkipTpcdMitigationsForAdsHeuristics", "false"}}}},
         {});
+
+    // Disable the validity service so it doesn't remove manually created
+    // trial settings.
+    tpcd::trial::ValidityService::DisableForTesting();
   }
 
  private:
@@ -562,6 +572,10 @@ class AdHeuristicTPCDBrowserTestTopLevelTrialGrant
            {"SkipTpcdMitigationsForAdsMetadata", "true"},
            {"SkipTpcdMitigationsForAdsHeuristics", "true"}}}},
         {});
+
+    // Disable the validity service so it doesn't remove manually created
+    // trial settings.
+    tpcd::trial::ValidityService::DisableForTesting();
   }
 
  private:
@@ -599,6 +613,10 @@ class AdHeuristicTPCDBrowserTestSkipTopLevelTrialGrant
            {"SkipTpcdMitigationsForAdsMetadata", "false"},
            {"SkipTpcdMitigationsForAdsHeuristics", "false"}}}},
         {});
+
+    // Disable the validity service so it doesn't remove manually created
+    // trial settings.
+    tpcd::trial::ValidityService::DisableForTesting();
   }
 
  private:

@@ -18,52 +18,89 @@ use bssl_crypto::aead::Aead as _;
 use crypto_provider::aead::{Aead, AeadError, AeadInit};
 use crypto_provider::aes::{Aes128Key, Aes256Key, AesKey};
 
-pub struct AesGcmSiv(bssl_crypto::aead::AesGcmSiv);
+pub struct AesGcmSiv128(bssl_crypto::aead::Aes128GcmSiv);
 
-impl AeadInit<Aes128Key> for AesGcmSiv {
+impl AeadInit<Aes128Key> for AesGcmSiv128 {
     fn new(key: &Aes128Key) -> Self {
-        Self(bssl_crypto::aead::new_aes_128_gcm_siv(key.as_array()))
+        Self(bssl_crypto::aead::Aes128GcmSiv::new(key.as_array()))
     }
 }
 
-impl AeadInit<Aes256Key> for AesGcmSiv {
-    fn new(key: &Aes256Key) -> Self {
-        Self(bssl_crypto::aead::new_aes_256_gcm_siv(key.as_array()))
-    }
-}
+impl crypto_provider::aead::AesGcmSiv for AesGcmSiv128 {}
 
-impl crypto_provider::aead::AesGcmSiv for AesGcmSiv {}
-
-impl Aead for AesGcmSiv {
+impl Aead for AesGcmSiv128 {
     const TAG_SIZE: usize = 16;
     type Nonce = [u8; 12];
     type Tag = [u8; 16];
 
     fn encrypt(&self, msg: &[u8], aad: &[u8], nonce: &Self::Nonce) -> Result<Vec<u8>, AeadError> {
-        self.0.encrypt(msg, aad, nonce).map_err(|_| AeadError)
+        Ok(self.0.seal(nonce, msg, aad))
     }
 
     fn encrypt_detached(
         &self,
-        _msg: &mut [u8],
-        _aad: &[u8],
-        _nonce: &Self::Nonce,
+        msg: &mut [u8],
+        aad: &[u8],
+        nonce: &Self::Nonce,
     ) -> Result<Self::Tag, AeadError> {
-        unimplemented!("Not yet supported by boringssl")
+        Ok(self.0.seal_in_place(nonce, msg, aad))
     }
 
     fn decrypt(&self, msg: &[u8], aad: &[u8], nonce: &Self::Nonce) -> Result<Vec<u8>, AeadError> {
-        self.0.decrypt(msg, aad, nonce).map_err(|_| AeadError)
+        self.0.open(nonce, msg, aad).ok_or(AeadError)
     }
 
     fn decrypt_detached(
         &self,
-        _msg: &mut [u8],
-        _aad: &[u8],
-        _nonce: &Self::Nonce,
-        _tag: &Self::Tag,
+        msg: &mut [u8],
+        aad: &[u8],
+        nonce: &Self::Nonce,
+        tag: &Self::Tag,
     ) -> Result<(), AeadError> {
-        unimplemented!("Not yet supported by boringssl")
+        self.0.open_in_place(nonce, msg, tag, aad).map_err(|_| AeadError)
+    }
+}
+
+pub struct AesGcmSiv256(bssl_crypto::aead::Aes256GcmSiv);
+
+impl AeadInit<Aes256Key> for AesGcmSiv256 {
+    fn new(key: &Aes256Key) -> Self {
+        Self(bssl_crypto::aead::Aes256GcmSiv::new(key.as_array()))
+    }
+}
+
+impl crypto_provider::aead::AesGcmSiv for AesGcmSiv256 {}
+
+impl Aead for AesGcmSiv256 {
+    const TAG_SIZE: usize = 16;
+    type Nonce = [u8; 12];
+    type Tag = [u8; 16];
+
+    fn encrypt(&self, msg: &[u8], aad: &[u8], nonce: &Self::Nonce) -> Result<Vec<u8>, AeadError> {
+        Ok(self.0.seal(nonce, msg, aad))
+    }
+
+    fn encrypt_detached(
+        &self,
+        msg: &mut [u8],
+        aad: &[u8],
+        nonce: &Self::Nonce,
+    ) -> Result<Self::Tag, AeadError> {
+        Ok(self.0.seal_in_place(nonce, msg, aad))
+    }
+
+    fn decrypt(&self, msg: &[u8], aad: &[u8], nonce: &Self::Nonce) -> Result<Vec<u8>, AeadError> {
+        self.0.open(nonce, msg, aad).ok_or(AeadError)
+    }
+
+    fn decrypt_detached(
+        &self,
+        msg: &mut [u8],
+        aad: &[u8],
+        nonce: &Self::Nonce,
+        tag: &Self::Tag,
+    ) -> Result<(), AeadError> {
+        self.0.open_in_place(nonce, msg, tag, aad).map_err(|_| AeadError)
     }
 }
 
@@ -77,12 +114,12 @@ mod tests {
     use super::*;
 
     #[apply(aes_128_gcm_siv_test_cases)]
-    fn aes_gcm_siv_128_test(testcase: CryptoProviderTestCase<AesGcmSiv>) {
+    fn aes_gcm_siv_128_test(testcase: CryptoProviderTestCase<AesGcmSiv128>) {
         testcase(PhantomData);
     }
 
     #[apply(aes_256_gcm_siv_test_cases)]
-    fn aes_gcm_siv_256_test(testcase: CryptoProviderTestCase<AesGcmSiv>) {
+    fn aes_gcm_siv_256_test(testcase: CryptoProviderTestCase<AesGcmSiv256>) {
         testcase(PhantomData);
     }
 }

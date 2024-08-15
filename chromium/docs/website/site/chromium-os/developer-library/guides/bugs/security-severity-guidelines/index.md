@@ -205,7 +205,7 @@ These bugs are often:
     Restrict-View-Google.
 
 [Severity Guidelines for Chrome Security Issues]: https://chromium.googlesource.com/chromium/src/+/HEAD/docs/security/severity-guidelines.md
-[Hardening Prioritizing Guidelines]: https://chromium.googlesource.com/chromiumos/docs/+/HEAD/security/hardening_prioritizing_guidelines.md
+[Hardening Prioritizing Guidelines]: (https://www.chromium.org/chromium-os/developer-library/reference/security/hardening-prioritizing-guidelines)
 [crbug.com/764540]: https://crbug.com/764540
 [SheriffBot]: https://www.chromium.org/issue-tracking/autotriage
 [vulnerability disclosure recommendations]: https://security.googleblog.com/2010/07/rebooting-responsible-disclosure-focus.html

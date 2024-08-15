@@ -36,6 +36,7 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_view.h"
+#include "ui/views/view_utils.h"
 
 namespace ash::video_conference {
 
@@ -65,9 +66,9 @@ bool HasLinuxApps(const MediaApps& apps) {
 // other media apps, used to warn users that effects cannot be applied to Linux
 // apps.
 class LinuxAppWarningView : public views::View {
- public:
-  METADATA_HEADER(LinuxAppWarningView);
+  METADATA_HEADER(LinuxAppWarningView, views::View)
 
+ public:
   LinuxAppWarningView() {
     SetID(BubbleViewID::kLinuxAppWarningView);
     SetLayoutManager(std::make_unique<views::FlexLayout>())
@@ -100,7 +101,7 @@ class LinuxAppWarningView : public views::View {
   ~LinuxAppWarningView() override = default;
 };
 
-BEGIN_METADATA(LinuxAppWarningView, views::View);
+BEGIN_METADATA(LinuxAppWarningView);
 END_METADATA
 
 }  // namespace
@@ -194,11 +195,12 @@ void BubbleView::SetBackgroundReplaceUiVisible(bool visible) {
   CHECK(features::IsVcBackgroundReplaceEnabled() && set_camera_background_view_)
       << "Can't show set_camera_background_view before it is constructed.";
 
-  set_camera_background_view_->SetVisible(visible);
+  views::AsViewClass<SetCameraBackgroundView>(set_camera_background_view_)
+      ->SetBackgroundReplaceUiVisible(visible);
   ChildPreferredSizeChanged(set_camera_background_view_);
 }
 
-BEGIN_METADATA(BubbleView, TrayBubbleView)
+BEGIN_METADATA(BubbleView)
 END_METADATA
 
 }  // namespace ash::video_conference

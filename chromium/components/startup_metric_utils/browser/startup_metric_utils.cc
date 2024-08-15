@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -19,7 +20,6 @@
 #include "base/threading/scoped_thread_priority.h"
 #include "base/trace_event/trace_event.h"
 #include "components/privacy_sandbox/privacy_sandbox_attestations/privacy_sandbox_attestations_histograms.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_WIN)
 #include <windows.h>
@@ -187,14 +187,14 @@ BrowserStartupMetricRecorder& GetBrowser() {
 #if BUILDFLAG(IS_WIN)
 // Returns the hard fault count of the current process, or nullopt if it can't
 // be determined.
-absl::optional<uint32_t>
+std::optional<uint32_t>
 BrowserStartupMetricRecorder::GetHardFaultCountForCurrentProcess() {
   // Get the function pointer.
   static const NtQuerySystemInformationPtr query_sys_info =
       reinterpret_cast<NtQuerySystemInformationPtr>(::GetProcAddress(
           GetModuleHandle(L"ntdll.dll"), "NtQuerySystemInformation"));
   if (query_sys_info == nullptr) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   // The output of this system call depends on the number of threads and
@@ -225,7 +225,7 @@ BrowserStartupMetricRecorder::GetHardFaultCountForCurrentProcess() {
       // to fill a large buffer just to record histograms.
       constexpr ULONG kMaxLength = 512 * 1024;
       if (return_length >= kMaxLength) {
-        return absl::nullopt;
+        return std::nullopt;
       }
 
       // Resize the buffer and retry, if the buffer hasn't already been
@@ -242,7 +242,7 @@ BrowserStartupMetricRecorder::GetHardFaultCountForCurrentProcess() {
     // times.
     DCHECK(return_length <= buffer.size() ||
            num_buffer_resize >= kMaxNumBufferResize);
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   // Look for the struct housing information for the current process.
@@ -258,12 +258,12 @@ BrowserStartupMetricRecorder::GetHardFaultCountForCurrentProcess() {
     // The list ends when NextEntryOffset is zero. This also prevents busy
     // looping if the data is in fact invalid.
     if (proc_info->NextEntryOffset <= 0) {
-      return absl::nullopt;
+      return std::nullopt;
     }
     index += proc_info->NextEntryOffset;
   }
 
-  return absl::nullopt;
+  return std::nullopt;
 }
 #endif  // BUILDFLAG(IS_WIN)
 
@@ -275,7 +275,8 @@ void BrowserStartupMetricRecorder::ResetSessionForTesting() {
   message_loop_start_ticks_ = base::TimeTicks();
   browser_window_display_ticks_ = base::TimeTicks();
   browser_window_first_paint_ticks_ = base::TimeTicks();
-  is_privacy_sandbox_attestations_histogram_recorded_ = false;
+  is_privacy_sandbox_attestations_component_ready_recorded_ = false;
+  is_privacy_sandbox_attestations_first_check_recorded_ = false;
 }
 
 bool BrowserStartupMetricRecorder::WasMainWindowStartupInterrupted() const {
@@ -471,7 +472,7 @@ void BrowserStartupMetricRecorder::RecordHardFaultHistogram() {
 #if BUILDFLAG(IS_WIN)
   DCHECK_EQ(UNDETERMINED_STARTUP_TEMPERATURE, g_startup_temperature);
 
-  const absl::optional<uint32_t> hard_fault_count =
+  const std::optional<uint32_t> hard_fault_count =
       GetHardFaultCountForCurrentProcess();
 
   if (hard_fault_count.has_value()) {
@@ -551,41 +552,58 @@ void BrowserStartupMetricRecorder::RecordExternalStartupMetric(
 // To reduce the noise introduced by non-browser UI, we measure from the first
 // browser window paint if it has been recorded. If it is not recorded, the
 // measurement is taken from application start.
+// TODO(crbug.com/329235182): The Privacy Sandbox Attestation start up related
+// histograms are not using the temperature breakouts. The logic for all these
+// histograms could just live in the privacy sandbox component itself, which
+// pulls from startup code just to get the application start timeticks.
 void BrowserStartupMetricRecorder::RecordPrivacySandboxAttestationsFirstReady(
     base::TimeTicks ticks) {
   DCHECK(!ticks.is_null());
 
   // This metric should be recorded at most once for each Chrome session.
-  if (is_privacy_sandbox_attestations_histogram_recorded_) {
+  if (is_privacy_sandbox_attestations_component_ready_recorded_) {
     return;
   }
 
   // The first browser window paint has been recorded.
   if (!browser_window_first_paint_ticks_.is_null()) {
-    is_privacy_sandbox_attestations_histogram_recorded_ = true;
-    UmaHistogramWithTraceAndTemperature(
-        &base::UmaHistogramLongTimes100,
+    is_privacy_sandbox_attestations_component_ready_recorded_ = true;
+    base::UmaHistogramLongTimes100(
         privacy_sandbox::kComponentReadyFromBrowserWindowFirstPaintUMA,
-        browser_window_first_paint_ticks_, ticks);
+        ticks - browser_window_first_paint_ticks_);
     return;
   }
 
   // Otherwise, this implies the component is installed before first browser
   // window paint.
-  is_privacy_sandbox_attestations_histogram_recorded_ = true;
+  is_privacy_sandbox_attestations_component_ready_recorded_ = true;
   if (WasMainWindowStartupInterrupted()) {
     // The durations should be a few minutes.
-    UmaHistogramWithTraceAndTemperature(
-        &base::UmaHistogramLongTimes100,
+    base::UmaHistogramLongTimes100(
         privacy_sandbox::kComponentReadyFromApplicationStartWithInterruptionUMA,
-        GetCommon().application_start_ticks_, ticks);
+        ticks - GetCommon().application_start_ticks_);
   } else {
     // The durations should be a few milliseconds.
-    UmaHistogramWithTraceAndTemperature(
-        &base::UmaHistogramLongTimes100,
+    base::UmaHistogramLongTimes100(
         privacy_sandbox::kComponentReadyFromApplicationStartUMA,
-        GetCommon().application_start_ticks_, ticks);
+        ticks - GetCommon().application_start_ticks_);
   }
+}
+
+void BrowserStartupMetricRecorder::RecordPrivacySandboxAttestationFirstCheck(
+    base::TimeTicks ticks) {
+  DCHECK(!ticks.is_null());
+
+  // This metric should be recorded at most once for each Chrome session.
+  if (is_privacy_sandbox_attestations_first_check_recorded_) {
+    return;
+  }
+
+  is_privacy_sandbox_attestations_first_check_recorded_ = true;
+
+  // Record the first time a Privacy Sandbox API is checked for attestation.
+  base::UmaHistogramLongTimes100(privacy_sandbox::kAttestationFirstCheckTimeUMA,
+                                 ticks - GetCommon().application_start_ticks_);
 }
 
 }  // namespace startup_metric_utils

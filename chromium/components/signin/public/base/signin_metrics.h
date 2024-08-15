@@ -107,8 +107,13 @@ enum class ProfileSignout {
   // Profile signout when IdleTimeoutActions enterprise policy triggers sign
   // out.
   kIdleTimeoutPolicyTriggeredSignOut = 31,
+  // User adds the primary account through the sync flow then aborts.
+  kCancelSyncConfirmationRemoveAccount = 32,
+  // Move primary account to another profile on sign in interception or sync
+  // merge data confirmation.
+  kMovePrimaryAccount = 33,
   // Keep this as the last enum.
-  kMaxValue = kIdleTimeoutPolicyTriggeredSignOut
+  kMaxValue = kMovePrimaryAccount
 };
 
 // Enum values which enumerates all access points where sign in could be
@@ -133,7 +138,7 @@ enum class AccessPoint : int {
   ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN = 10,
   ACCESS_POINT_USER_MANAGER = 11,
   ACCESS_POINT_DEVICES_PAGE = 12,
-  ACCESS_POINT_CLOUD_PRINT = 13,
+  // ACCESS_POINT_CLOUD_PRINT = 13, no longer used.
   // ACCESS_POINT_CONTENT_AREA = 14, no longer used.
   ACCESS_POINT_SIGNIN_PROMO = 15,
   ACCESS_POINT_RECENT_TABS = 16,
@@ -194,6 +199,10 @@ enum class AccessPoint : int {
   ACCESS_POINT_TAB_ORGANIZATION = 56,
   // Access point for the Save to Drive feature on iOS.
   ACCESS_POINT_SAVE_TO_DRIVE_IOS = 57,
+  // Access point for the Tips Notification on iOS.
+  ACCESS_POINT_TIPS_NOTIFICATION = 58,
+  // Access point for the Notifications Opt-In Screen.
+  ACCESS_POINT_NOTIFICATIONS_OPT_IN_SCREEN_CONTENT_TOGGLE = 59,
 
   // Add values above this line with a corresponding label to the
   // "SigninAccessPoint" enum in tools/metrics/histograms/enums.xml
@@ -309,17 +318,25 @@ enum class AccountConsistencyPromoAction : int {
   // User started with the bottom sheet without a device-account, and signed in
   // to chrome by finishing the add-account and sign-in flows.
   SIGNED_IN_WITH_NO_DEVICE_ACCOUNT = 23,
-  kMaxValue = SIGNED_IN_WITH_NO_DEVICE_ACCOUNT,
+  // User was shown the confirm management screen on signin.
+  CONFIRM_MANAGEMENT_SHOWN = 24,
+  // User accepted management on signin.
+  CONFIRM_MANAGEMENT_ACCEPTED = 25,
+  kMaxValue = CONFIRM_MANAGEMENT_ACCEPTED,
 };
 #endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
 
 // Enum values which enumerates all reasons to start sign in process.
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
-// Please keep in Sync with "SigninReason" in
+// Please keep in sync with "SigninReason" in
 // src/tools/metrics/histograms/enums.xml.
 enum class Reason : int {
+  // Used only for the Sync flows, i.e. the user will be proposed to enable Sync
+  // after sign-in.
   kSigninPrimaryAccount = 0,
+  // Used for signing in without enabling Sync. This might also be used for
+  // adding a new primary account without enabling Sync.
   kAddSecondaryAccount = 1,
   kReauthentication = 2,
   // REASON_UNLOCK = 3,  // DEPRECATED, profile unlocking was removed.
@@ -327,7 +344,7 @@ enum class Reason : int {
   kUnknownReason = 4,
   kForcedSigninPrimaryAccount = 5,
   // Used to simply login and acquire a login scope token without actually
-  // signing into any profiles on Chrome. This allows the chrome signin page to
+  // signing into any profiles on Chrome. This allows the Chrome sign-in page to
   // work in incognito mode.
   kFetchLstOnly = 6,
   kMaxValue = kFetchLstOnly,
@@ -361,16 +378,6 @@ enum class SigninAccountType : int {
   kManaged = 1,
   // Always the last enumerated type.
   kMaxValue = kManaged,
-};
-
-// When the user is give a choice of deleting their profile or not when signing
-// out, the |kDeleted| or |kKeeping| metric should be used. If the user is not
-// given any option, then use the |kIgnoreMetric| value should be used.
-// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.signin.metrics
-enum class SignoutDelete : int {
-  kDeleted = 0,
-  kKeeping,
-  kIgnoreMetric,
 };
 
 // This is the relationship between the account used to sign into chrome, and
@@ -436,8 +443,9 @@ enum class SourceForRefreshTokenOperation {
   // kAccountReconcilor_RevokeTokensNotInCookies = 18,
   kLogoutTabHelper_PrimaryPageChanged = 19,
   kForceSigninReauthWithDifferentAccount = 20,
+  kAccountReconcilor_RevokeTokensNotInCookies = 21,
 
-  kMaxValue = kForceSigninReauthWithDifferentAccount,
+  kMaxValue = kAccountReconcilor_RevokeTokensNotInCookies,
 };
 
 // Different types of reporting. This is used as a histogram suffix.
@@ -467,6 +475,34 @@ enum class FetchAccountCapabilitiesFromSystemLibraryResult {
   kErrorUnexpectedValue = 21,
 
   kMaxValue = kErrorUnexpectedValue
+};
+
+// Tracks type of the button that was presented to the user.
+enum class SyncButtonsType : int {
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  kSyncEqualWeighted = 0,
+  kSyncNotEqualWeighted = 1,
+  kHistorySyncEqualWeighted = 2,
+  kHistorySyncNotEqualWeighted = 3,
+  kMaxValue = kHistorySyncNotEqualWeighted,
+};
+
+// Tracks type of the button that was clicked by the user.
+enum class SyncButtonClicked : int {
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  kSyncOptInEqualWeighted = 0,
+  kSyncCancelEqualWeighted = 1,
+  kSyncSettingsEqualWeighted = 2,
+  kSyncOptInNotEqualWeighted = 3,
+  kSyncCancelNotEqualWeighted = 4,
+  kSyncSettingsNotEqualWeighted = 5,
+  kHistorySyncOptInEqualWeighted = 6,
+  kHistorySyncCancelEqualWeighted = 7,
+  kHistorySyncOptInNotEqualWeighted = 8,
+  kHistorySyncCancelNotEqualWeighted = 9,
+  kMaxValue = kHistorySyncCancelNotEqualWeighted,
 };
 
 // -----------------------------------------------------------------------------
@@ -509,7 +545,7 @@ void LogSigninAccountReconciliationDuration(base::TimeDelta duration,
                                             bool successful);
 
 // Track a profile signout.
-void LogSignout(ProfileSignout source_metric, SignoutDelete delete_metric);
+void LogSignout(ProfileSignout source_metric);
 
 // Tracks whether the external connection results were all fetched before
 // the gaia cookie manager service tried to use them with merge session.

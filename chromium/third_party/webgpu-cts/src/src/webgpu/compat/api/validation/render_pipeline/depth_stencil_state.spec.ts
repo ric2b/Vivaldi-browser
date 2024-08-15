@@ -42,6 +42,8 @@ g.test('depthBiasClamp')
       },
       depthStencil: {
         format: 'depth24plus',
+        depthWriteEnabled: true,
+        depthCompare: 'always',
         ...(depthBiasClamp !== undefined && { depthBiasClamp }),
       },
     };

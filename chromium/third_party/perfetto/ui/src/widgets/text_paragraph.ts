@@ -30,8 +30,9 @@ export class TextParagraph implements m.ClassComponent<TextParagraphAttrs> {
       compressSpace = true;
     }
     return m(
-        `div.pf-text-paragraph`,
-        compressSpace ? text.replace(/\s\s+/g, ' ') : text);
+      `div.pf-text-paragraph`,
+      compressSpace ? text.replace(/\s\s+/g, ' ') : text,
+    );
   }
 }
 
@@ -40,16 +41,13 @@ interface MultiParagraphTextAttrs {
   className?: string;
 }
 
-export class MultiParagraphText implements
-    m.ClassComponent<MultiParagraphTextAttrs> {
+export class MultiParagraphText
+  implements m.ClassComponent<MultiParagraphTextAttrs>
+{
   view({attrs, children}: m.Vnode<MultiParagraphTextAttrs>): m.Children {
-    const {
-      className = '',
-    } = attrs;
+    const {className = ''} = attrs;
 
-    const classes = classNames(
-        className,
-    );
+    const classes = classNames(className);
 
     return m('div', {class: classes}, children);
   }

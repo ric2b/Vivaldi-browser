@@ -63,7 +63,7 @@ export class CdpHTTPResponse extends HTTPResponse {
     }
     _resolveBody(err) {
         if (err) {
-            return this.#bodyLoadedDeferred.resolve(err);
+            return this.#bodyLoadedDeferred.reject(err);
         }
         return this.#bodyLoadedDeferred.resolve();
     }
@@ -92,13 +92,10 @@ export class CdpHTTPResponse extends HTTPResponse {
         if (!this.#contentPromise) {
             this.#contentPromise = this.#bodyLoadedDeferred
                 .valueOrThrow()
-                .then(async (error) => {
-                if (error) {
-                    throw error;
-                }
+                .then(async () => {
                 try {
                     const response = await this.#client.send('Network.getResponseBody', {
-                        requestId: this.#request._requestId,
+                        requestId: this.#request.id,
                     });
                     return Buffer.from(response.body, response.base64Encoded ? 'base64' : 'utf8');
                 }

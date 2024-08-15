@@ -146,26 +146,29 @@ enum SubmissionIndicatorEvent {
   DOM_MUTATION_AFTER_AUTOFILL = 12,
 };
 
+// These values are persisted to UMA logs. Entries should not be renumbered
+// and numeric values should never be reused. This indicates the source of
+// a submission firing event.
 enum SubmissionSource {
   // No submission signal was detected.
-  NONE,
+  NONE = 0,
   // After a same document navigation finished, the last interacted form became
   // inaccessible or was removed.
-  SAME_DOCUMENT_NAVIGATION,
+  SAME_DOCUMENT_NAVIGATION = 1,
   // Immediately after a successful XHR, the last interacted form became
   // inaccessible or was removed.
-  XHR_SUCCEEDED,
+  XHR_SUCCEEDED = 2,
   // The subframe or non-primary main frame containing the form was detached.
-  FRAME_DETACHED,
+  FRAME_DETACHED = 3,
   // A mainframe navigation was started which was initiated in the content area
   // (i.e. not clicking on a bookmark or typing a URL in the omnibar), not by
   // a link click. Only observed after the user interacted with a form.
-  PROBABLY_FORM_SUBMITTED,
+  PROBABLY_FORM_SUBMITTED = 4,
   // Normal form submission (i.e. user presses the submit button and no
   // JavaScript is involved). Observed via RenderFrameObserver::WillSubmitForm.
-  FORM_SUBMISSION,
+  FORM_SUBMISSION = 5,
   // The form or field was hidden or removed after autofilling it.
-  DOM_MUTATION_AFTER_AUTOFILL,
+  DOM_MUTATION_AFTER_AUTOFILL = 6,
 };
 
 enum FocusedFieldType {
@@ -357,7 +360,7 @@ struct FormFieldData {
   mojo_base.mojom.String16 css_classes;
   mojo_base.mojom.String16 aria_label;
   mojo_base.mojom.String16 aria_description;
-  FieldRendererId unique_renderer_id;
+  FieldRendererId renderer_id;
   FormRendererId host_form_id;
   uint32 properties_mask;
   int32 form_control_ax_id;
@@ -387,6 +390,17 @@ struct FormFieldData {
   bool force_override;
 };
 
+// autofill::FormFieldData::FillData
+// (components/autofill/core/common/form_field_filling_data.h)
+struct FormFieldData_FillData {
+  mojo_base.mojom.String16 value;
+  FieldRendererId renderer_id;
+  FormRendererId host_form_id;
+  bool is_autofilled;
+  Section section;
+  bool force_override;
+};
+
 // autofill::ButtonTitleInfo (components/autofill/core/common/form_data.h)
 struct ButtonTitleInfo {
   mojo_base.mojom.String16 title;
@@ -401,8 +415,7 @@ struct FormData {
   array<ButtonTitleInfo> button_titles;
   url.mojom.Url action;
   bool is_action_empty;
-  bool is_form_tag;
-  FormRendererId unique_renderer_id;
+  FormRendererId renderer_id;
   array<FrameTokenWithPredecessor> child_frames;
   SubmissionIndicatorEvent submission_event;
   array<FormFieldData> fields;
@@ -480,6 +493,20 @@ struct PasswordGenerationUIData {
   bool input_field_empty;
 };
 
+// autofill::PasswordSuggestionRequest
+// (components/autofill/core/common/password_form_fill_data.h)
+struct PasswordSuggestionRequest {
+  FieldRendererId element_id;
+  FormData form_data;
+  AutofillSuggestionTriggerSource trigger_source;
+  uint64 username_field_index;
+  uint64 password_field_index;
+  mojo_base.mojom.TextDirection text_direction;
+  mojo_base.mojom.String16 typed_username;
+  bool show_webauthn_credentials;
+  gfx.mojom.RectF bounds;
+};
+
 // autofill::ParsingResult
 // (components/autofill/core/common/password_form_fill_data.h)
 struct ParsingResult {
@@ -510,15 +537,16 @@ enum ActionPersistence {
 };
 
 // The possible actions that Autofill can perform on forms.
-enum ActionType {
+enum FormActionType {
   kFill,  // Autofill should fill the form.
   kUndo,  // Autofill should undo some previous fill operation on the form.
 };
 
-// Indicates which part of a text field's value Autofill replaces.
-enum TextReplacement {
+// The possible actions that Autofill can perform on fields.
+enum FieldActionType {
   kReplaceAll,        // Replace the field's current value.
   kReplaceSelection,  // Replace only the currently selected text.
+  kSelectAll,         // Selects all the text within this field.
 };
 
 // Describes which action triggered Autofill suggestions. This has implications
@@ -571,12 +599,25 @@ enum AutofillSuggestionTriggerSource {
   // trigger sources. They are all treated as `kiOS`. See crbug.com/1448447.
   kiOS,
   // Suggestions triggered by selecting the Autofill address manual fallback
-  // entry from the Chrome context menu.
+  // entry from the Chrome context menu. This trigger source is also used to
+  // reopen the Autofill popup after the user closed a dialog opened from the
+  // popup.
   kManualFallbackAddress,
   // Suggestions triggered by selecting the Autofill payment methods manual
   // fallback entry from the Chrome context menu.
   kManualFallbackPayments,
-  // Suggestions triggered by the user closing a dialog after performing some
-  // action.
-  kShowPromptAfterDialogClosed,
+  // Suggestions triggered by selecting the Autofill password manager manual
+  // fallback entry from the Chrome context menu.
+  kManualFallbackPasswords,
+  // Suggestions triggered by selecting the Plus Address manual fallback entry
+  // from the Chrome context menu.
+  kManualFallbackPlusAddresses,
+  // Suggestions are triggered after the user the user closed a dialog. For
+  // example, this can be profile edit or delete dialog. This trigger source
+  // is used only if the suggestions were triggered manually via the Chrome
+  // context menu.
+  kShowPromptAfterDialogClosedNonManualFallback,
+  // The compose saved state notification is triggered when the compose dialog
+  // loses focus and is closed.
+  kComposeDialogLostFocus,
 };

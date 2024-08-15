@@ -20,7 +20,7 @@ These parameters will be passed through to the config's main method.
 import json
 import argparse
 import os
-import pipes
+import shlex
 import subprocess
 import sys
 
@@ -57,7 +57,7 @@ class Checkout(object):
         pass
 
     def run(self, cmd, return_stdout=False, **kwargs):
-        print('Running: %s' % (' '.join(pipes.quote(x) for x in cmd)))
+        print('Running: %s' % (' '.join(shlex.quote(x) for x in cmd)))
         if self.options.dry_run:
             return ''
         if return_stdout:
@@ -98,7 +98,7 @@ class GclientCheckout(Checkout):
 
 class GitCheckout(Checkout):
     def run_git(self, *cmd, **kwargs):
-        print('Running: git %s' % (' '.join(pipes.quote(x) for x in cmd)))
+        print('Running: git %s' % (' '.join(shlex.quote(x) for x in cmd)))
         if self.options.dry_run:
             return ''
         return git_common.run(*cmd, **kwargs)

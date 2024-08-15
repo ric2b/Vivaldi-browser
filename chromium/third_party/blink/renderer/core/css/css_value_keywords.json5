@@ -776,6 +776,19 @@
     "no-autospace",
 
     //
+    // text-box-edge
+    //
+    // "alphabetic",
+    // "text"
+    //
+    // not implemented
+    // "ideographic",
+    // "ideographic-ink",
+    "cap",
+    "ex",
+    "leading",
+
+    //
     // text-overflow
     //
     "clip",
@@ -878,6 +891,9 @@
     // stretch
     // repeat
     "round",
+    // TODO(crbug.com/1511354): "bikeshed" is a temporary name for stylable
+    // <select>. It should be renamed when a standardized name is chosen.
+    "bikeshed",
 
     //
     // background-clip/background-origin
@@ -1114,6 +1130,7 @@
     "browser",
     "window-controls-overlay",
     "tabbed",
+    "picture-in-picture",
 
     // (display-state:) media feature
     // normal
@@ -1379,7 +1396,7 @@
     "lch",
     "oklch",
     // "color",
-    "-internal-light-dark",
+    "light-dark",
 
     // color spaces
     // "srgb", included in color-interpolation
@@ -1465,6 +1482,12 @@
     "max",
     "clamp",
 
+    // proposed math function
+    // https://github.com/w3c/csswg-drafts/issues/626
+    "calc-size",
+    // value that goes within calc-size()
+    "any",
+
     // Trigonometic functions
     "sin",
     "cos",
@@ -1548,6 +1571,9 @@
     "var",
     "-internal-variable-value",
     "env",
+
+    // CSS Functions
+    "arg",
 
     // break-before, break-after, break-inside
     "avoid-page",
@@ -1694,8 +1720,6 @@
 
     // anchor positioning
     "anchor",
-    // auto,
-    "auto-same",
     // top,
     // left,
     // right,
@@ -1713,7 +1737,7 @@
     "self-block",
     "self-inline",
 
-    // anchor-default
+    // position-anchor
     "implicit",
     // none,
 
@@ -1785,5 +1809,30 @@
     // inline
     // auto (legacy version of -internal-textarea-auto)
     "-internal-textarea-auto",
+
+    // position-try-order
+    // normal
+    "most-width",
+    "most-height",
+    "most-block-size",
+    "most-inline-size",
+
+    // position-try-options
+    // none
+    "flip-block",
+    "flip-inline",
+    "flip-start",
+
+    // reading-order-items
+    // normal
+    "flex-visual",
+    "flex-flow",
+    "grid-rows",
+    "grid-columns",
+    "grid-order",
+
+    // fill / stroke
+    "context-fill",
+    "context-stroke"
   ],
 }

@@ -20,7 +20,7 @@ DeprecatedNoteAttachment::DeprecatedNoteAttachment(const std::string& content)
   if (content.empty())
     return;
 
-  base::Base64Encode(crypto::SHA256HashString(content), &checksum_);
+  checksum_ = base::Base64Encode(crypto::SHA256HashString(content));
   checksum_ += "|" + base::NumberToString(content.size());
 }
 

@@ -5,6 +5,7 @@
 #include "components/manta/orca_provider.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -14,30 +15,26 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/endpoint_fetcher/endpoint_fetcher.h"
+#include "components/manta/base_provider.h"
 #include "components/manta/features.h"
 #include "components/manta/manta_status.h"
 #include "components/manta/proto/manta.pb.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace manta {
 
 namespace {
 
 constexpr char kOauthConsumerName[] = "manta_orca";
-constexpr char kHttpMethod[] = "POST";
-constexpr char kHttpContentType[] = "application/x-protobuf";
 constexpr char kAutopushEndpointUrl[] =
     "https://autopush-aratea-pa.sandbox.googleapis.com/generate";
 constexpr char kProdEndpointUrl[] = "https://aratea-pa.googleapis.com/generate";
-constexpr char kOAuthScope[] = "https://www.googleapis.com/auth/mdi.aratea";
-constexpr base::TimeDelta kTimeoutMs = base::Seconds(30);
 
 using Tone = proto::RequestConfig::Tone;
 
-absl::optional<Tone> GetTone(const std::string& tone) {
+std::optional<Tone> GetTone(const std::string& tone) {
   static constexpr auto tone_map =
       base::MakeFixedFlatMap<base::StringPiece, Tone>({
           {"UNSPECIFIED", proto::RequestConfig::UNSPECIFIED},
@@ -50,10 +47,10 @@ absl::optional<Tone> GetTone(const std::string& tone) {
           {"FREEFORM_WRITE", proto::RequestConfig::FREEFORM_WRITE},
 
       });
-  const auto* iter = tone_map.find(tone);
+  const auto iter = tone_map.find(tone);
 
-  return iter != tone_map.end() ? absl::optional<Tone>(iter->second)
-                                : absl::nullopt;
+  return iter != tone_map.end() ? std::optional<Tone>(iter->second)
+                                : std::nullopt;
 }
 
 std::string GetEndpointUrl() {
@@ -61,18 +58,18 @@ std::string GetEndpointUrl() {
                                                 : kAutopushEndpointUrl;
 }
 
-absl::optional<proto::Request> ComposeRequest(
+std::optional<proto::Request> ComposeRequest(
     const std::map<std::string, std::string>& input) {
   const auto& tone_iter = input.find("tone");
   if (tone_iter == input.end()) {
     DVLOG(1) << "Tone not found in the parameters";
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   auto tone = GetTone(tone_iter->second);
-  if (tone == absl::nullopt) {
+  if (tone == std::nullopt) {
     DVLOG(1) << "Invalid tone";
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   proto::Request request;
@@ -125,10 +122,7 @@ void OnServerResponseOrErrorReceived(
 OrcaProvider::OrcaProvider(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     signin::IdentityManager* identity_manager)
-    : url_loader_factory_(url_loader_factory) {
-  CHECK(identity_manager);
-  identity_manager_observation_.Observe(identity_manager);
-}
+    : BaseProvider(url_loader_factory, identity_manager) {}
 
 OrcaProvider::~OrcaProvider() = default;
 
@@ -140,8 +134,8 @@ void OrcaProvider::Call(const std::map<std::string, std::string>& input,
     return;
   }
 
-  absl::optional<proto::Request> request = ComposeRequest(input);
-  if (request == absl::nullopt) {
+  std::optional<proto::Request> request = ComposeRequest(input);
+  if (request == std::nullopt) {
     std::move(done_callback)
         .Run(base::Value::Dict(),
              {MantaStatusCode::kInvalidInput, std::string()});
@@ -151,8 +145,11 @@ void OrcaProvider::Call(const std::map<std::string, std::string>& input,
   std::string serialized_request;
   request.value().SerializeToString(&serialized_request);
 
-  std::unique_ptr<EndpointFetcher> fetcher = CreateEndpointFetcher(
-      GURL{GetEndpointUrl()}, {kOAuthScope}, serialized_request);
+  // TODO(b:288019728): MISSING_TRAFFIC_ANNOTATION should be resolved before
+  // launch.
+  std::unique_ptr<EndpointFetcher> fetcher =
+      CreateEndpointFetcher(GURL{GetEndpointUrl()}, kOauthConsumerName,
+                            MISSING_TRAFFIC_ANNOTATION, serialized_request);
 
   EndpointFetcher* const fetcher_ptr = fetcher.get();
   MantaProtoResponseCallback internal_callback = base::BindOnce(
@@ -160,34 +157,6 @@ void OrcaProvider::Call(const std::map<std::string, std::string>& input,
   fetcher_ptr->Fetch(base::BindOnce(&OnEndpointFetcherComplete,
                                     std::move(internal_callback),
                                     std::move(fetcher)));
-}
-
-void OrcaProvider::OnIdentityManagerShutdown(
-    signin::IdentityManager* identity_manager) {
-  if (identity_manager_observation_.IsObservingSource(identity_manager)) {
-    identity_manager_observation_.Reset();
-  }
-}
-
-std::unique_ptr<EndpointFetcher> OrcaProvider::CreateEndpointFetcher(
-    const GURL& url,
-    const std::vector<std::string>& scopes,
-    const std::string& post_data) {
-  CHECK(identity_manager_observation_.IsObserving());
-  // TODO(b:288019728): MISSING_TRAFFIC_ANNOTATION should be resolved before
-  // launch.
-  return std::make_unique<EndpointFetcher>(
-      /*url_loader_factory=*/url_loader_factory_,
-      /*oauth_consumer_name=*/kOauthConsumerName,
-      /*url=*/url,
-      /*http_method=*/kHttpMethod,
-      /*content_type=*/kHttpContentType,
-      /*scopes=*/scopes,
-      /*timeout_ms=*/kTimeoutMs.InMilliseconds(),
-      /*post_data=*/post_data,
-      /*annotation_tag=*/MISSING_TRAFFIC_ANNOTATION,
-      /*identity_manager=*/identity_manager_observation_.GetSource(),
-      /*consent_level=*/signin::ConsentLevel::kSignin);
 }
 
 }  // namespace manta

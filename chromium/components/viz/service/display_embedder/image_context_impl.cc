@@ -64,7 +64,7 @@ ImageContextImpl::ImageContextImpl(
     const gfx::Size& size,
     SharedImageFormat format,
     bool maybe_concurrent_reads,
-    const absl::optional<gpu::VulkanYCbCrInfo>& ycbcr_info,
+    const std::optional<gpu::VulkanYCbCrInfo>& ycbcr_info,
     sk_sp<SkColorSpace> color_space,
     bool is_for_render_pass,
     bool raw_draw_if_possible)
@@ -149,10 +149,11 @@ void ImageContextImpl::CreateFallbackImage(
     for (int plane_index = 0; plane_index < num_planes; plane_index++) {
       SkISize sk_size =
           gfx::SizeToSkISize(format().GetPlaneSize(plane_index, size()));
-
+      auto tex_info =
+          gpu::FallbackGraphiteBackendTextureInfo(tex_infos[plane_index]);
       graphite_fallback_textures_.push_back(
           context_state->gpu_main_graphite_recorder()->createBackendTexture(
-              sk_size, tex_infos[plane_index]));
+              sk_size, tex_info));
 
       SkColorType color_type =
           ToClosestSkColorType(/*gpu_compositing=*/true, format(), plane_index);

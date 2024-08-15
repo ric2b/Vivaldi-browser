@@ -131,7 +131,7 @@ class HoldingSpaceAnimationRegistry::ProgressIndicatorAnimationDelegate
       return;
 
     auto* animation = registry_->SetProgressIconAnimationForKey(
-        key, std::make_unique<ProgressIconAnimation>());
+        key, ProgressIconAnimation::Create());
 
     // Only `Start()` the `animation` if it is associated with the holding space
     // `controller_`. In all other cases, the `animation` is associated with a
@@ -288,18 +288,17 @@ class HoldingSpaceAnimationRegistry::ProgressIndicatorAnimationDelegate
         FROM_HERE,
         base::BindOnce(
             [](const base::WeakPtr<ProgressIndicatorAnimationDelegate>& self,
-               AnimationKey key, ProgressRingAnimation* animation) {
+               AnimationKey key,
+               MayBeDangling<ProgressRingAnimation> animation) {
               if (!self) {
                 return;
               }
               auto* registry = self->registry_.get();
-              if (registry->GetProgressRingAnimationForKey(key) == animation)
+              if (registry->GetProgressRingAnimationForKey(key) == animation) {
                 registry->SetProgressRingAnimationForKey(key, nullptr);
+              }
             },
-            weak_factory_.GetWeakPtr(), key,
-            // This is safe. `animation` is owned by the registry and has
-            // at least the same lifetime as the delegate.
-            animation));
+            weak_factory_.GetWeakPtr(), key, base::UnsafeDangling(animation)));
   }
 
   const raw_ptr<ProgressIndicatorAnimationRegistry, LeakedDanglingUntriaged>

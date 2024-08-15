@@ -18,7 +18,7 @@
 #import "ios/web/public/test/fakes/fake_download_task.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
 #import "ios/web/public/test/web_task_environment.h"
-#import "net/base/mac/url_conversions.h"
+#import "net/base/apple/url_conversions.h"
 #import "net/base/net_errors.h"
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
@@ -47,12 +47,12 @@ class ARQuickLookTabHelperTest : public PlatformTest,
  protected:
   ARQuickLookTabHelperTest()
       : delegate_([[FakeARQuickLookTabHelperDelegate alloc] init]) {
-    ARQuickLookTabHelper::CreateForWebState(&web_state_);
-    ARQuickLookTabHelper::FromWebState(&web_state_)->set_delegate(delegate_);
+    ARQuickLookTabHelper::GetOrCreateForWebState(&web_state_)
+        ->set_delegate(delegate_);
   }
 
   ARQuickLookTabHelper* tab_helper() {
-    return ARQuickLookTabHelper::FromWebState(&web_state_);
+    return ARQuickLookTabHelper::GetOrCreateForWebState(&web_state_);
   }
 
   FakeARQuickLookTabHelperDelegate* delegate() { return delegate_; }

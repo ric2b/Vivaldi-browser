@@ -5,19 +5,29 @@
 #import "ios/chrome/browser/ui/content_suggestions/magic_stack/magic_stack_module_contents_factory.h"
 
 #import "base/notreached.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_tile_view.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_shortcut_tile_view.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_tile_layout_util.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/most_visited_tiles_commands.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/multi_row_container_view.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/shortcuts_commands.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/shortcuts_config.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/shortcuts_consumer_source.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_image_data_source.h"
 #import "ios/chrome/browser/ui/content_suggestions/magic_stack/most_visited_tiles_config.h"
-#import "ios/chrome/browser/ui/content_suggestions/magic_stack/shortcuts_config.h"
 #import "ios/chrome/browser/ui/content_suggestions/parcel_tracking/parcel_tracking_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/parcel_tracking/parcel_tracking_view.h"
+#import "ios/chrome/browser/ui/content_suggestions/safety_check/safety_check_consumer_source.h"
 #import "ios/chrome/browser/ui/content_suggestions/safety_check/safety_check_state.h"
 #import "ios/chrome/browser/ui/content_suggestions/safety_check/safety_check_view.h"
+#import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_config.h"
+#import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_consumer_source.h"
+#import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_item_view.h"
+#import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_mediator.h"
+#import "ios/chrome/browser/ui/content_suggestions/set_up_list/utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/tab_resumption/tab_resumption_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/tab_resumption/tab_resumption_view.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
@@ -50,18 +60,24 @@
           static_cast<TabResumptionItem*>(config);
       return [self tabResumptionViewForConfig:tabResumptionItem];
     }
-    case ContentSuggestionsModuleType::kParcelTracking:
-    case ContentSuggestionsModuleType::kParcelTrackingSeeMore: {
+    case ContentSuggestionsModuleType::kParcelTracking: {
       ParcelTrackingItem* parcelTrackingItem =
           static_cast<ParcelTrackingItem*>(config);
       return [self parcelTrackingViewForConfig:parcelTrackingItem];
     }
-    case ContentSuggestionsModuleType::kSafetyCheck:
-    case ContentSuggestionsModuleType::kSafetyCheckMultiRow:
-    case ContentSuggestionsModuleType::kSafetyCheckMultiRowOverflow: {
+    case ContentSuggestionsModuleType::kSafetyCheck: {
       SafetyCheckState* safetyCheckConfig =
           static_cast<SafetyCheckState*>(config);
       return [self safetyCheckViewForConfigState:safetyCheckConfig];
+    }
+    case ContentSuggestionsModuleType::kSetUpListSync:
+    case ContentSuggestionsModuleType::kSetUpListDefaultBrowser:
+    case ContentSuggestionsModuleType::kSetUpListAutofill:
+    case ContentSuggestionsModuleType::kCompactedSetUpList:
+    case ContentSuggestionsModuleType::kSetUpListAllSet:
+    case ContentSuggestionsModuleType::kSetUpListNotifications: {
+      SetUpListConfig* setUpListConfig = static_cast<SetUpListConfig*>(config);
+      return [self setUpListViewForConfig:setUpListConfig];
     }
     default:
       NOTREACHED_NORETURN();
@@ -124,6 +140,9 @@
            .shortcutItems) {
     ContentSuggestionsShortcutTileView* view =
         [[ContentSuggestionsShortcutTileView alloc] initWithConfiguration:item];
+    if (IsIOSMagicStackCollectionViewEnabled()) {
+      [shortcutsConfig.consumerSource addConsumer:view];
+    }
     [shortcutsViews addObject:view];
   }
   UIStackView* shortcutsStackView = [[UIStackView alloc] init];
@@ -166,8 +185,31 @@
 - (UIView*)safetyCheckViewForConfigState:(SafetyCheckState*)state {
   SafetyCheckView* safetyCheckView =
       [[SafetyCheckView alloc] initWithState:state];
-  safetyCheckView.commandhandler = state.commandhandler;
+  safetyCheckView.audience = state.audience;
+  [state.safetyCheckConsumerSource addConsumer:safetyCheckView];
   return safetyCheckView;
+}
+
+- (UIView*)setUpListViewForConfig:(SetUpListConfig*)config {
+  NSArray<SetUpListItemViewData*>* items = config.setUpListItems;
+
+  if (!config.shouldShowCompactModule) {
+    DCHECK([items count] == 1);
+    SetUpListItemView* view = [[SetUpListItemView alloc] initWithData:items[0]];
+    [config.setUpListConsumerSource addConsumer:view];
+    view.commandHandler = config.commandHandler;
+    return view;
+  }
+
+  NSMutableArray<SetUpListItemView*>* compactedSetUpListViews =
+      [NSMutableArray array];
+  for (SetUpListItemViewData* data in items) {
+    SetUpListItemView* view = [[SetUpListItemView alloc] initWithData:data];
+    [config.setUpListConsumerSource addConsumer:view];
+    view.commandHandler = config.commandHandler;
+    [compactedSetUpListViews addObject:view];
+  }
+  return [[MultiRowContainerView alloc] initWithViews:compactedSetUpListViews];
 }
 
 @end

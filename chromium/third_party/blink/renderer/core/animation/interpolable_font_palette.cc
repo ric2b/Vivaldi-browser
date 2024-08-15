@@ -14,18 +14,19 @@
 namespace blink {
 
 InterpolableFontPalette::InterpolableFontPalette(
-    scoped_refptr<FontPalette> font_palette)
+    scoped_refptr<const FontPalette> font_palette)
     : font_palette_(font_palette) {
   DCHECK(font_palette);
 }
 
 // static
 InterpolableFontPalette* InterpolableFontPalette::Create(
-    scoped_refptr<FontPalette> font_palette) {
+    scoped_refptr<const FontPalette> font_palette) {
   return MakeGarbageCollected<InterpolableFontPalette>(font_palette);
 }
 
-scoped_refptr<FontPalette> InterpolableFontPalette::GetFontPalette() const {
+scoped_refptr<const FontPalette> InterpolableFontPalette::GetFontPalette()
+    const {
   return font_palette_;
 }
 
@@ -75,7 +76,7 @@ void InterpolableFontPalette::Interpolate(const InterpolableValue& to,
     result_palette.font_palette_ = FontPalette::Mix(
         font_palette_, to_palette.font_palette_, percentages.start,
         percentages.end, normalized_progress, 1.0, Color::ColorSpace::kOklab,
-        absl::nullopt);
+        std::nullopt);
   }
 }
 

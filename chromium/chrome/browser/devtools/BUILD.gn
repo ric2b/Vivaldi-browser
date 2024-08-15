@@ -144,6 +144,7 @@ static_library("devtools") {
       "//components/metrics/structured:structured_events",
       "//components/pref_registry",
       "//components/prefs",
+      "//components/search_engines:search_engines",
       "//components/sessions",
       "//components/signin/public/identity_manager:identity_manager",
       "//components/sync/service",
@@ -160,6 +161,9 @@ static_library("devtools") {
       "//ui/shell_dialogs",
       "//ui/views/controls/webview",
     ]
+    if (is_chromeos) {
+      deps += [ "//chromeos/constants" ]
+    }
     if (is_chromeos_ash) {
       deps += [ "//ash/constants" ]
     }
@@ -227,6 +231,8 @@ static_library("devtools") {
       "devtools_window.h",
       "global_confirm_info_bar.cc",
       "global_confirm_info_bar.h",
+      "process_sharing_infobar_delegate.cc",
+      "process_sharing_infobar_delegate.h",
       "remote_debugging_server.cc",
       "remote_debugging_server.h",
       "serialize_host_descriptions.cc",

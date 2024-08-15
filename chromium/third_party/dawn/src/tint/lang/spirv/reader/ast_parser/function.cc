@@ -38,7 +38,6 @@
 #include "src/tint/lang/core/type/texture_dimension.h"
 #include "src/tint/lang/spirv/reader/ast_lower/atomics.h"
 #include "src/tint/lang/wgsl/ast/assignment_statement.h"
-#include "src/tint/lang/wgsl/ast/bitcast_expression.h"
 #include "src/tint/lang/wgsl/ast/break_statement.h"
 #include "src/tint/lang/wgsl/ast/builtin_attribute.h"
 #include "src/tint/lang/wgsl/ast/call_statement.h"
@@ -3428,7 +3427,7 @@ bool FunctionEmitter::EmitStatementsInBasicBlock(const BlockInfo& block_info,
                 auto copy_name = namer_.MakeDerivedName(namer_.Name(phi_id) + "_c" +
                                                         std::to_string(block_info.id));
                 auto copy_sym = builder_.Symbols().Register(copy_name);
-                copied_phis.GetOrCreate(phi_id, [copy_sym] { return copy_sym; });
+                copied_phis.GetOrAdd(phi_id, [copy_sym] { return copy_sym; });
                 AddStatement(builder_.WrapInStatement(
                     builder_.Let(copy_sym, builder_.Expr(namer_.Name(phi_id)))));
             }
@@ -3439,7 +3438,7 @@ bool FunctionEmitter::EmitStatementsInBasicBlock(const BlockInfo& block_info,
             const auto phi_id = assignment.phi_id;
             auto* const lhs_expr = builder_.Expr(namer_.Name(phi_id));
             // If RHS value is actually a phi we just cpatured, then use it.
-            auto copy_sym = copied_phis.Find(assignment.value_id);
+            auto copy_sym = copied_phis.Get(assignment.value_id);
             auto* const rhs_expr =
                 copy_sym ? builder_.Expr(*copy_sym) : MakeExpression(assignment.value_id).expr;
             AddStatement(builder_.Assign(lhs_expr, rhs_expr));

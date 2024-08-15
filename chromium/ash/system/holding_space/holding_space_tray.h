@@ -66,7 +66,7 @@ class ASH_EXPORT HoldingSpaceTray : public TrayBackgroundView,
 
   // TrayBackgroundView:
   void Initialize() override;
-  void ClickedOutsideBubble() override;
+  void ClickedOutsideBubble(const ui::LocatedEvent& event) override;
   std::u16string GetAccessibleNameForTray() override;
   views::View* GetTooltipHandlerForPoint(const gfx::Point& point) override;
   std::u16string GetTooltipText(const gfx::Point& point) const override;
@@ -86,7 +86,7 @@ class ASH_EXPORT HoldingSpaceTray : public TrayBackgroundView,
   int OnDragUpdated(const ui::DropTargetEvent& event) override;
   views::View::DropCallback GetDropCallback(
       const ui::DropTargetEvent& event) override;
-  void Layout() override;
+  void Layout(PassKey) override;
   void VisibilityChanged(views::View* starting_from, bool is_visible) override;
   void OnThemeChanged() override;
   void OnShouldShowAnimationChanged(bool should_animate) override;

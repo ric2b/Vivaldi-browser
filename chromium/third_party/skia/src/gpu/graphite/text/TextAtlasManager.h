@@ -67,7 +67,7 @@ public:
         this->getAtlas(format)->setLastUseTokenBulk(updater, token);
     }
 
-    bool recordUploads(UploadList*);
+    bool recordUploads(DrawContext* dc);
 
     void evictAtlases() {
         for (int i = 0; i < kMaskFormatCount; ++i) {
@@ -76,6 +76,8 @@ public:
             }
         }
     }
+
+    void postFlush();
 
     // Some clients may wish to verify the integrity of the texture backing store of the
     // GrDrawOpAtlas. The atlasGeneration returned below is a monotonically increasing number which

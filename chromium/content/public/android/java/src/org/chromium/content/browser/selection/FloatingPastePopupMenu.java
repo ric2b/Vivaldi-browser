@@ -139,13 +139,13 @@ public class FloatingPastePopupMenu implements PastePopupMenu {
             SortedSet<SelectionMenuGroup> nonSelectionMenuItems =
                     SelectActionMenuHelper.getNonSelectionMenuItems(
                             mContext, actionMenuDelegate, mSelectionActionMenuDelegate);
+            mCustomMenuItemClickListeners.clear();
             SelectionPopupControllerImpl.initializeActionMenu(
                     mContext, nonSelectionMenuItems, menu, mCustomMenuItemClickListeners, null);
         }
 
         @Override
         public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
-            mCustomMenuItemClickListeners.clear();
             return false;
         }
 
@@ -155,6 +155,7 @@ public class FloatingPastePopupMenu implements PastePopupMenu {
                     mCustomMenuItemClickListeners.get(item);
             if (customMenuItemClickListener != null) {
                 customMenuItemClickListener.onClick(mParent);
+                mode.finish();
             } else {
                 int id = item.getItemId();
                 if (id == R.id.select_action_menu_paste) {

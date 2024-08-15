@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "dawn/common/MatchVariant.h"
 #include "dawn/native/CacheRequest.h"
 #include "dawn/native/PhysicalDevice.h"
 #include "dawn/native/Serializable.h"
@@ -46,6 +47,7 @@
 #include "dawn/platform/DawnPlatform.h"
 #include "dawn/platform/metrics/HistogramMacros.h"
 #include "dawn/platform/tracing/TraceEvent.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 #include "tint/tint.h"
 
 #ifdef DAWN_ENABLE_SPIRV_VALIDATION
@@ -64,7 +66,7 @@ DAWN_SERIALIZABLE(struct, CompiledSpirv, COMPILED_SPIRV_MEMBERS){};
 
 bool TransformedShaderModuleCacheKey::operator==(
     const TransformedShaderModuleCacheKey& other) const {
-    if (layout != other.layout || entryPoint != other.entryPoint ||
+    if (layoutPtr != other.layoutPtr || entryPoint != other.entryPoint ||
         constants.size() != other.constants.size()) {
         return false;
     }
@@ -80,7 +82,7 @@ bool TransformedShaderModuleCacheKey::operator==(
 size_t TransformedShaderModuleCacheKeyHashFunc::operator()(
     const TransformedShaderModuleCacheKey& key) const {
     size_t hash = 0;
-    HashCombine(&hash, key.layout, key.entryPoint);
+    HashCombine(&hash, key.layoutPtr, key.entryPoint);
     for (const auto& entry : key.constants) {
         HashCombine(&hash, entry.first, entry.second);
     }
@@ -146,7 +148,7 @@ class ShaderModule::ConcurrentTransformedShaderModuleCache {
         }
     };
 
-    Device* mDevice;
+    raw_ptr<Device> mDevice;
     std::mutex mMutex;
     absl::flat_hash_map<TransformedShaderModuleCacheKey,
                         Entry,
@@ -208,18 +210,16 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
     const ProgrammableStage& programmableStage,
     const PipelineLayout* layout,
     bool clampFragDepth,
+    bool emitPointSize,
     std::optional<uint32_t> maxSubgroupSizeForFullSubgroups) {
     TRACE_EVENT0(GetDevice()->GetPlatform(), General, "ShaderModuleVk::GetHandleAndSpirv");
-
-    // If the shader was destroyed, we should never call this function.
-    DAWN_ASSERT(IsAlive());
 
     ScopedTintICEHandler scopedICEHandler(GetDevice());
 
     // Check to see if we have the handle and spirv cached already.
-    auto cacheKey = TransformedShaderModuleCacheKey{layout, programmableStage.entryPoint.c_str(),
-                                                    programmableStage.constants,
-                                                    maxSubgroupSizeForFullSubgroups};
+    auto cacheKey = TransformedShaderModuleCacheKey{
+        reinterpret_cast<uintptr_t>(layout), programmableStage.entryPoint.c_str(),
+        programmableStage.constants, maxSubgroupSizeForFullSubgroups};
     auto handleAndSpirv = mTransformedShaderModuleCache->Find(cacheKey);
     if (handleAndSpirv.has_value()) {
         return std::move(*handleAndSpirv);
@@ -236,16 +236,22 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
     for (BindGroupIndex group : IterateBitSet(layout->GetBindGroupLayoutsMask())) {
         const BindGroupLayout* bgl = ToBackend(layout->GetBindGroupLayout(group));
 
-        for (const auto& [binding, bindingInfo] : moduleBindingInfo[group]) {
+        for (const auto& currentModuleBindingInfo : moduleBindingInfo[group]) {
+            // We cannot use structured binding here because lambda expressions can only capture
+            // variables, while structured binding doesn't introduce variables.
+            const auto& binding = currentModuleBindingInfo.first;
+            const auto& shaderBindingInfo = currentModuleBindingInfo.second;
+
             tint::BindingPoint srcBindingPoint{static_cast<uint32_t>(group),
                                                static_cast<uint32_t>(binding)};
 
             tint::BindingPoint dstBindingPoint{
                 static_cast<uint32_t>(group), static_cast<uint32_t>(bgl->GetBindingIndex(binding))};
 
-            switch (bindingInfo.bindingType) {
-                case BindingInfoType::Buffer:
-                    switch (bindingInfo.buffer.type) {
+            MatchVariant(
+                shaderBindingInfo.bindingInfo,
+                [&](const BufferBindingInfo& bindingInfo) {
+                    switch (bindingInfo.type) {
                         case wgpu::BufferBindingType::Uniform:
                             bindings.uniform.emplace(
                                 srcBindingPoint,
@@ -264,23 +270,23 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
                             DAWN_UNREACHABLE();
                             break;
                     }
-                    break;
-                case BindingInfoType::Sampler:
+                },
+                [&](const SamplerBindingInfo& bindingInfo) {
                     bindings.sampler.emplace(srcBindingPoint,
                                              tint::spirv::writer::binding::Sampler{
                                                  dstBindingPoint.group, dstBindingPoint.binding});
-                    break;
-                case BindingInfoType::Texture:
+                },
+                [&](const SampledTextureBindingInfo& bindingInfo) {
                     bindings.texture.emplace(srcBindingPoint,
                                              tint::spirv::writer::binding::Texture{
                                                  dstBindingPoint.group, dstBindingPoint.binding});
-                    break;
-                case BindingInfoType::StorageTexture:
+                },
+                [&](const StorageTextureBindingInfo& bindingInfo) {
                     bindings.storage_texture.emplace(
                         srcBindingPoint, tint::spirv::writer::binding::StorageTexture{
                                              dstBindingPoint.group, dstBindingPoint.binding});
-                    break;
-                case BindingInfoType::ExternalTexture: {
+                },
+                [&](const ExternalTextureBindingInfo& bindingInfo) {
                     const auto& bindingMap = bgl->GetExternalTextureBindingExpansionMap();
                     const auto& expansion = bindingMap.find(binding);
                     DAWN_ASSERT(expansion != bindingMap.end());
@@ -299,9 +305,7 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
                     bindings.external_texture.emplace(
                         srcBindingPoint,
                         tint::spirv::writer::binding::ExternalTexture{metadata, plane0, plane1});
-                    break;
-                }
-            }
+                });
         }
     }
 
@@ -312,7 +316,8 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
 
     SpirvCompilationRequest req = {};
     req.stage = stage;
-    req.inputProgram = GetTintProgram();
+    auto tintProgram = GetTintProgram();
+    req.inputProgram = &(tintProgram->program);
     req.entryPointName = programmableStage.entryPoint;
     req.disableSymbolRenaming = GetDevice()->IsToggleEnabled(Toggle::DisableSymbolRenaming);
     req.platform = UnsafeUnkeyedValue(GetDevice()->GetPlatform());
@@ -321,11 +326,13 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
 
     req.tintOptions.clamp_frag_depth = clampFragDepth;
     req.tintOptions.disable_robustness = !GetDevice()->IsRobustnessEnabled();
-    req.tintOptions.emit_vertex_point_size = true;
+    req.tintOptions.emit_vertex_point_size = emitPointSize;
     req.tintOptions.disable_workgroup_init =
         GetDevice()->IsToggleEnabled(Toggle::DisableWorkgroupInit);
     req.tintOptions.use_zero_initialize_workgroup_memory_extension =
         GetDevice()->IsToggleEnabled(Toggle::VulkanUseZeroInitializeWorkgroupMemoryExtension);
+    req.tintOptions.use_storage_input_output_16 =
+        GetDevice()->IsToggleEnabled(Toggle::VulkanUseStorageInputOutput16);
     req.tintOptions.bindings = std::move(bindings);
     req.tintOptions.disable_image_robustness =
         GetDevice()->IsToggleEnabled(Toggle::VulkanUseImageRobustAccess2);
@@ -420,7 +427,7 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
                 auto ir = tint::wgsl::reader::ProgramToLoweredIR(program);
                 DAWN_INVALID_IF(ir != tint::Success,
                                 "An error occurred while generating Tint IR\n%s",
-                                ir.Failure().reason.str());
+                                ir.Failure().reason.Str());
 
                 tintResult = tint::spirv::writer::Generate(ir.Get(), r.tintOptions);
             } else {
@@ -428,7 +435,7 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
             }
             DAWN_INVALID_IF(tintResult != tint::Success,
                             "An error occurred while generating SPIR-V\n%s",
-                            tintResult.Failure().reason.str());
+                            tintResult.Failure().reason.Str());
 
             CompiledSpirv result;
             result.spirv = std::move(tintResult.Get().spirv);

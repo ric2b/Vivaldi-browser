@@ -4,7 +4,6 @@
 
 import * as i18n from '../../../../core/i18n/i18n.js';
 import * as Platform from '../../../../core/platform/platform.js';
-import * as ComponentHelpers from '../../../components/helpers/helpers.js';
 import * as LitHtml from '../../../lit-html/lit-html.js';
 import * as VisualLogging from '../../../visual_logging/visual_logging.js';
 
@@ -40,7 +39,7 @@ class BaseLinkSwatch extends HTMLElement {
   }
 
   set data(data: BaseLinkSwatchRenderData) {
-    this.onLinkActivate = (linkText: string, event: MouseEvent|KeyboardEvent): void => {
+    this.onLinkActivate = (linkText: string, event: MouseEvent|KeyboardEvent) => {
       if (event instanceof MouseEvent && event.button !== 0) {
         return;
       }
@@ -135,7 +134,7 @@ export class CSSVarSwatch extends HTMLElement {
     // clang-format off
     render(
         html`<span data-title=${data.computedValue || ''}
-          jslog=${VisualLogging.link().track({click: true, hover: true}).context('css-var')}
+          jslog=${VisualLogging.link('css-variable').track({click: true, hover: true})}
         >var(${this.#link}<slot name="fallback">${data.fallbackText ? `, ${data.fallbackText}` : ''}</slot>)</span>`,
         this.shadow, {host: this});
     // clang-format on
@@ -172,12 +171,11 @@ export class LinkSwatch extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-base-link-swatch', BaseLinkSwatch);
-ComponentHelpers.CustomElements.defineComponent('devtools-link-swatch', LinkSwatch);
-ComponentHelpers.CustomElements.defineComponent('devtools-css-var-swatch', CSSVarSwatch);
+customElements.define('devtools-base-link-swatch', BaseLinkSwatch);
+customElements.define('devtools-link-swatch', LinkSwatch);
+customElements.define('devtools-css-var-swatch', CSSVarSwatch);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-base-link-swatch': BaseLinkSwatch;
     'devtools-link-swatch': LinkSwatch;

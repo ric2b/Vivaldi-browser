@@ -7,7 +7,7 @@ option optimize_for = LITE_RUNTIME;
 
 // This file defines messages used for interacting with the chunneld service.
 package vm_tools.chunneld;
-option go_package = "chromiumos/system_api/chunneld_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/chunneld_proto";
 
 // Sent to chunneld to update the listening ports across all VMs/containers.
 message UpdateListeningPortsRequest {

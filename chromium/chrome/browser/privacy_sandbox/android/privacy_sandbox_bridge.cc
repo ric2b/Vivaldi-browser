@@ -30,15 +30,13 @@ using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 
 namespace {
-const char TOPICS_JAVA_CLASS[] =
-    "org/chromium/chrome/browser/privacy_sandbox/Topic";
 
 PrivacySandboxService* GetPrivacySandboxService() {
   return PrivacySandboxServiceFactory::GetForProfile(
       ProfileManager::GetActiveUserProfile());
 }
 
-ScopedJavaLocalRef<jobjectArray> ToJavaTopicsArray(
+std::vector<jni_zero::ScopedJavaLocalRef<jobject>> ToJavaTopicsArray(
     JNIEnv* env,
     const std::vector<privacy_sandbox::CanonicalTopic>& topics) {
   std::vector<ScopedJavaLocalRef<jobject>> j_topics;
@@ -48,8 +46,7 @@ ScopedJavaLocalRef<jobjectArray> ToJavaTopicsArray(
         ConvertUTF16ToJavaString(env, topic.GetLocalizedRepresentation()),
         ConvertUTF16ToJavaString(env, topic.GetLocalizedDescription())));
   }
-  return base::android::ToJavaArrayOfObjects(
-      env, base::android::GetClass(env, TOPICS_JAVA_CLASS), j_topics);
+  return j_topics;
 }
 }  // namespace
 
@@ -63,21 +60,32 @@ static jboolean JNI_PrivacySandboxBridge_IsRestrictedNoticeEnabled(
   return GetPrivacySandboxService()->IsRestrictedNoticeEnabled();
 }
 
-static ScopedJavaLocalRef<jobjectArray>
+static std::vector<jni_zero::ScopedJavaLocalRef<jobject>>
 JNI_PrivacySandboxBridge_GetCurrentTopTopics(JNIEnv* env) {
   return ToJavaTopicsArray(env,
                            GetPrivacySandboxService()->GetCurrentTopTopics());
 }
 
-static ScopedJavaLocalRef<jobjectArray>
+static std::vector<jni_zero::ScopedJavaLocalRef<jobject>>
 JNI_PrivacySandboxBridge_GetBlockedTopics(JNIEnv* env) {
   return ToJavaTopicsArray(env, GetPrivacySandboxService()->GetBlockedTopics());
 }
 
-static ScopedJavaLocalRef<jobjectArray>
+static std::vector<jni_zero::ScopedJavaLocalRef<jobject>>
 JNI_PrivacySandboxBridge_GetFirstLevelTopics(JNIEnv* env) {
   return ToJavaTopicsArray(env,
                            GetPrivacySandboxService()->GetFirstLevelTopics());
+}
+
+static std::vector<jni_zero::ScopedJavaLocalRef<jobject>>
+JNI_PrivacySandboxBridge_GetChildTopicsCurrentlyAssigned(
+    JNIEnv* env,
+    jint topic_id,
+    jint taxonomy_version) {
+  return ToJavaTopicsArray(
+      env, GetPrivacySandboxService()->GetChildTopicsCurrentlyAssigned(
+               privacy_sandbox::CanonicalTopic(browsing_topics::Topic(topic_id),
+                                               taxonomy_version)));
 }
 
 static void JNI_PrivacySandboxBridge_SetTopicAllowed(JNIEnv* env,

@@ -12,6 +12,7 @@
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/browser/crash_report/model/crash_report_helper.h"
 #import "ios/chrome/browser/device_sharing/model/device_sharing_browser_agent.h"
+#import "ios/chrome/browser/metrics/model/tab_usage_recorder_browser_agent.h"
 #import "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/sessions/session_restoration_service.h"
 #import "ios/chrome/browser/sessions/session_restoration_service_factory.h"
@@ -27,6 +28,7 @@
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_browser_agent.h"
 #import "ios/chrome/browser/tabs/model/inactive_tabs/features.h"
 #import "ios/chrome/browser/tabs/model/inactive_tabs/utils.h"
@@ -40,7 +42,7 @@
 
   __weak SceneState* _sceneState;
   __weak id<ApplicationCommands> _applicationEndpoint;
-  __weak id<ApplicationSettingsCommands> _settingsEndpoint;
+  __weak id<SettingsCommands> _settingsEndpoint;
   __weak id<BrowsingDataCommands> _browsingDataEndpoint;
 
   std::unique_ptr<Browser> _mainBrowser;
@@ -56,7 +58,7 @@
     initWithBrowserState:(ChromeBrowserState*)browserState
               sceneState:(SceneState*)sceneState
      applicationEndpoint:(id<ApplicationCommands>)applicationEndpoint
-        settingsEndpoint:(id<ApplicationSettingsCommands>)settingsEndpoint
+        settingsEndpoint:(id<SettingsCommands>)settingsEndpoint
     browsingDataEndpoint:(id<BrowsingDataCommands>)browsingDataEndpoint {
   if ((self = [super init])) {
     _browserState = browserState;
@@ -167,8 +169,12 @@
   }
 
   if (_currentInterface) {
-    // Tell the current BVC it moved to the background.
-    [_currentInterface setPrimary:NO];
+    // Record that the primary browser was changed.
+    TabUsageRecorderBrowserAgent* tabUsageRecorder =
+        TabUsageRecorderBrowserAgent::FromBrowser(_currentInterface.browser);
+    if (tabUsageRecorder) {
+      tabUsageRecorder->RecordPrimaryBrowserChange(true);
+    }
   }
 
   _currentInterface = interface;
@@ -278,7 +284,7 @@
   [dispatcher startDispatchingToTarget:_applicationEndpoint
                            forProtocol:@protocol(ApplicationCommands)];
   [dispatcher startDispatchingToTarget:_settingsEndpoint
-                           forProtocol:@protocol(ApplicationSettingsCommands)];
+                           forProtocol:@protocol(SettingsCommands)];
   [dispatcher startDispatchingToTarget:_browsingDataEndpoint
                            forProtocol:@protocol(BrowsingDataCommands)];
 }
@@ -355,7 +361,7 @@
   // in their -dealloc method, ensure the -autorelease introduced by ARC are
   // processed before the WebStateList destructor is called.
   @autoreleasepool {
-    webStateList->CloseAllWebStates(WebStateList::CLOSE_NO_FLAGS);
+    CloseAllWebStates(*webStateList, WebStateList::CLOSE_NO_FLAGS);
   }
 }
 

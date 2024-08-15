@@ -10,12 +10,11 @@
 #import "base/check_op.h"
 #import "base/debug/dump_without_crashing.h"
 #import "base/notreached.h"
+#import "ios/chrome/browser/shared/ui/elements/extended_touch_target_button.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/group_bottom_trailing_view.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/group_grid_configurable_view.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/group_tab_view.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/tab_groups/tab_group_snapshots_view.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -31,9 +30,7 @@ NSInteger kIconSymbolPointSize = 13;
 const CGFloat kSnapshotViewLeadingOffset = 4;
 const CGFloat kSnapshotViewTrailingOffset = 4;
 const CGFloat kSnapShotViewBottomOffset = 4;
-
-// The vertical/horizontal spacing to apply between the snapshot views.
-const CGFloat kSpacing = 4;
+const CGFloat kGroupColorViewSize = 18;
 
 }  // namespace
 
@@ -50,7 +47,7 @@ const CGFloat kSpacing = 4;
   NSLayoutConstraint* _topBarHeightConstraint;
   // Visual components of the cell.
   UIView* _topBar;
-  UIImageView* _iconView;
+  UIView* _groupColorView;
   UILabel* _titleLabel;
   UIImageView* _closeIconView;
   UIImageView* _selectIconView;
@@ -58,11 +55,8 @@ const CGFloat kSpacing = 4;
   // size, use an overlaid tap target button.
   UIButton* _closeTapTargetButton;
   UIView* _border;
-  GroupGridConfigurableView* _groupSnapshotsView;
-  GroupTabView* _topLeadingSnapshotView;
-  GroupTabView* _topTrailingSnapshotView;
-  GroupTabView* _bottomLeadingSnapshotView;
-  GroupGridBottomTrailingView* _bottomTrailingSnapshotView;
+
+  TabGroupSnapshotsView* _groupSnapshotsView;
 }
 
 // `-dequeueReusableCellWithReuseIdentifier:forIndexPath:` calls this method to
@@ -84,30 +78,21 @@ const CGFloat kSpacing = 4;
     contentView.layer.cornerRadius = kGridCellCornerRadius;
     contentView.layer.masksToBounds = YES;
     [self setupTopBar];
-    _groupSnapshotsView =
-        [[GroupGridConfigurableView alloc] initWithSpacing:kSpacing];
-    _topLeadingSnapshotView = [self buildGroupTabView];
-    _topTrailingSnapshotView = [self buildGroupTabView];
-    _bottomLeadingSnapshotView = [self buildGroupTabView];
-    _bottomTrailingSnapshotView = [[GroupGridBottomTrailingView alloc] init];
+    _groupSnapshotsView = [[TabGroupSnapshotsView alloc]
+        initWithTabGroupInfos:nil
+                         size:0
+                        light:self.theme == GridThemeLight
+                         cell:YES];
     _groupSnapshotsView.translatesAutoresizingMaskIntoConstraints = NO;
-    _topLeadingSnapshotView.translatesAutoresizingMaskIntoConstraints = NO;
-    _topTrailingSnapshotView.translatesAutoresizingMaskIntoConstraints = NO;
-    _bottomLeadingSnapshotView.translatesAutoresizingMaskIntoConstraints = NO;
-    _bottomTrailingSnapshotView.translatesAutoresizingMaskIntoConstraints = NO;
-    _closeTapTargetButton = [UIButton buttonWithType:UIButtonTypeCustom];
+
+    _closeTapTargetButton =
+        [ExtendedTouchTargetButton buttonWithType:UIButtonTypeCustom];
     _closeTapTargetButton.translatesAutoresizingMaskIntoConstraints = NO;
     [_closeTapTargetButton addTarget:self
                               action:@selector(closeButtonTapped:)
                     forControlEvents:UIControlEventTouchUpInside];
     _closeTapTargetButton.accessibilityIdentifier =
         kGridCellCloseButtonIdentifier;
-    [_groupSnapshotsView updateTopLeadingWithView:_topLeadingSnapshotView];
-    [_groupSnapshotsView updateTopTrailingWithView:_topTrailingSnapshotView];
-    [_groupSnapshotsView
-        updateBottomLeadingWithView:_bottomLeadingSnapshotView];
-    [_groupSnapshotsView
-        updateBottomTrailingWithView:_bottomTrailingSnapshotView];
 
     [contentView addSubview:_topBar];
     [contentView addSubview:_groupSnapshotsView];
@@ -116,12 +101,8 @@ const CGFloat kSpacing = 4;
 
     self.contentView.backgroundColor =
         [UIColor colorNamed:kSecondaryBackgroundColor];
-    _bottomTrailingSnapshotView.backgroundColor = [UIColor clearColor];
 
-    _bottomTrailingSnapshotView.layer.cornerRadius = kGroupGridCellCornerRadius;
-    _bottomTrailingSnapshotView.layer.masksToBounds = YES;
 
-    [self hideAllSubviews];
 
     _groupSnapshotsView.backgroundColor =
         [UIColor colorNamed:kSecondaryBackgroundColor];
@@ -165,6 +146,11 @@ const CGFloat kSpacing = 4;
     ];
     [NSLayoutConstraint activateConstraints:constraints];
   }
+
+  if (@available(iOS 17, *)) {
+    [self registerForTraitChanges:@[ UITraitPreferredContentSizeCategory.self ]
+                       withAction:@selector(updateTopBarSize)];
+  }
   return self;
 }
 
@@ -172,6 +158,11 @@ const CGFloat kSpacing = 4;
 
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
+
+  if (@available(iOS 17, *)) {
+    return;
+  }
+
   BOOL isPreviousAccessibilityCategory =
       UIContentSizeCategoryIsAccessibilityCategory(
           previousTraitCollection.preferredContentSizeCategory);
@@ -180,6 +171,19 @@ const CGFloat kSpacing = 4;
           self.traitCollection.preferredContentSizeCategory);
   if (isPreviousAccessibilityCategory ^ isCurrentAccessibilityCategory) {
     [self updateTopBarSize];
+  }
+}
+
+- (void)didMoveToWindow {
+  if (self.window) {
+    if (self.theme == GridThemeLight) {
+      UIUserInterfaceStyle previousStyle =
+          self.window.overrideUserInterfaceStyle;
+      self.window.overrideUserInterfaceStyle = UIUserInterfaceStyleUnspecified;
+      self.overrideUserInterfaceStyle =
+          self.window.traitCollection.userInterfaceStyle;
+      self.window.overrideUserInterfaceStyle = previousStyle;
+    }
   }
 }
 
@@ -193,8 +197,7 @@ const CGFloat kSpacing = 4;
   [super prepareForReuse];
   self.title = nil;
   self.titleHidden = NO;
-  self.icon = nil;
-  [self configureWithGroupTabInfos:nil totalTabsCount:0];
+  self.groupColorName = nil;
   self.selected = NO;
   self.opacity = 1.0;
 }
@@ -237,61 +240,19 @@ const CGFloat kSpacing = 4;
   _theme = theme;
 }
 
-- (void)setIcon:(UIImage*)icon {
-  _iconView.image = icon;
-  _icon = icon;
+- (void)setGroupColorName:(NSString*)groupColorName {
+  if (groupColorName) {
+    _groupColorName = groupColorName;
+    _groupColorView.backgroundColor = [UIColor colorNamed:_groupColorName];
+  }
 }
 
 - (void)configureWithGroupTabInfos:(NSArray<GroupTabInfo*>*)groupTabInfos
                     totalTabsCount:(NSInteger)totalTabsCount {
   CHECK_LE((int)groupTabInfos.count, totalTabsCount);
-  // Hide all the views when the cell is reconfigured and clear their images.
-  [_topLeadingSnapshotView hideAllAttributes];
-  [_topTrailingSnapshotView hideAllAttributes];
-  [_bottomLeadingSnapshotView hideAllAttributes];
-  [_bottomTrailingSnapshotView configureWithGroupTabInfo:nil];
-  [_bottomTrailingSnapshotView configureWithFavicons:nil remainingTabsCount:0];
-  [self hideAllSubviews];
-
-  int groupTabInfosLength = [groupTabInfos count];
-  if (groupTabInfosLength > 0) {
-    [_topLeadingSnapshotView configureWithSnapshot:groupTabInfos[0].snapshot
-                                           favicon:groupTabInfos[0].snapshot];
-    _topLeadingSnapshotView.hidden = NO;
-  }
-  if (groupTabInfosLength > 1) {
-    [_topTrailingSnapshotView configureWithSnapshot:groupTabInfos[1].snapshot
-                                            favicon:groupTabInfos[1].snapshot];
-    _topTrailingSnapshotView.hidden = NO;
-  }
-  if (groupTabInfosLength > 2) {
-    [_bottomLeadingSnapshotView
-        configureWithSnapshot:groupTabInfos[2].snapshot
-                      favicon:groupTabInfos[2].snapshot];
-    _bottomLeadingSnapshotView.hidden = NO;
-  }
-  if (groupTabInfosLength == 4) {
-    [_bottomTrailingSnapshotView configureWithGroupTabInfo:groupTabInfos[3]];
-    _bottomTrailingSnapshotView.hidden = NO;
-  } else if (groupTabInfosLength > 4) {
-    NSMutableArray<UIImage*>* favicons = [[NSMutableArray alloc] init];
-    NSRange range;
-    range.location = 3;
-    range.length = groupTabInfosLength - 3;
-    for (GroupTabInfo* snapshotFavicon in
-         [groupTabInfos subarrayWithRange:range]) {
-      if (snapshotFavicon.favicon != nil) {
-        [favicons addObject:snapshotFavicon.favicon];
-      }
-    }
-    // `remainingTabsCount` is used to display the `bottomTrailingFavicon` view
-    // of `bottomTrailingSnapshotView` the remaning tabs count is equal to the
-    // `totalTabsCount` minus the first 3 tabs of the group and the 4 favicons
-    // views of the bottomTrailing view.
-    [_bottomTrailingSnapshotView configureWithFavicons:favicons
-                                    remainingTabsCount:totalTabsCount - 7];
-    _bottomTrailingSnapshotView.hidden = NO;
-  }
+  [_groupSnapshotsView
+      configureTabGroupSnapshotsViewWithTabGroupInfos:groupTabInfos
+                                                 size:totalTabsCount];
 }
 
 - (void)setTitle:(NSString*)title {
@@ -331,13 +292,9 @@ const CGFloat kSpacing = 4;
   _topBar = [[UIView alloc] init];
   _topBar.translatesAutoresizingMaskIntoConstraints = NO;
 
-  _iconView = [[UIImageView alloc] init];
-  _iconView.translatesAutoresizingMaskIntoConstraints = NO;
-  _iconView.contentMode = UIViewContentModeScaleAspectFill;
-  _iconView.layer.cornerRadius = kGridCellIconCornerRadius;
-  _iconView.layer.masksToBounds = YES;
-  _iconView.backgroundColor = UIColor.clearColor;
-  _iconView.tintColor = [UIColor colorNamed:kGrey400Color];
+  _groupColorView = [[UIView alloc] init];
+  _groupColorView.translatesAutoresizingMaskIntoConstraints = NO;
+  _groupColorView.layer.cornerRadius = kGroupColorViewSize / 2;
 
   _titleLabel = [[UILabel alloc] init];
   _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -360,7 +317,7 @@ const CGFloat kSpacing = 4;
 
   [_topBar addSubview:_selectIconView];
 
-  [_topBar addSubview:_iconView];
+  [_topBar addSubview:_groupColorView];
   [_topBar addSubview:_titleLabel];
   [_topBar addSubview:_closeIconView];
 
@@ -368,19 +325,21 @@ const CGFloat kSpacing = 4;
     [_titleLabel.leadingAnchor
         constraintEqualToAnchor:_topBar.leadingAnchor
                        constant:kGridCellHeaderLeadingInset],
-    [_iconView.widthAnchor constraintEqualToConstant:0],
-    [_iconView.heightAnchor constraintEqualToConstant:0],
+    [_groupColorView.widthAnchor constraintEqualToConstant:0],
+    [_groupColorView.heightAnchor constraintEqualToConstant:0],
   ];
 
   _nonAccessibilityConstraints = @[
-    [_iconView.leadingAnchor
+    [_groupColorView.heightAnchor
+        constraintEqualToConstant:kGroupColorViewSize],
+    [_groupColorView.widthAnchor constraintEqualToConstant:kGroupColorViewSize],
+    [_groupColorView.leadingAnchor
         constraintEqualToAnchor:_topBar.leadingAnchor
                        constant:kGridCellHeaderLeadingInset],
-    [_iconView.centerYAnchor constraintEqualToAnchor:_topBar.centerYAnchor],
-    [_iconView.widthAnchor constraintEqualToConstant:kGridCellIconDiameter],
-    [_iconView.heightAnchor constraintEqualToConstant:kGridCellIconDiameter],
+    [_groupColorView.centerYAnchor
+        constraintEqualToAnchor:_topBar.centerYAnchor],
     [_titleLabel.leadingAnchor
-        constraintEqualToAnchor:_iconView.trailingAnchor
+        constraintEqualToAnchor:_groupColorView.trailingAnchor
                        constant:kGridCellHeaderLeadingInset],
   ];
 
@@ -548,21 +507,6 @@ const CGFloat kSpacing = 4;
              self.traitCollection.preferredContentSizeCategory)
              ? kGridCellHeaderAccessibilityHeight
              : kGridCellHeaderHeight;
-}
-
-- (GroupTabView*)buildGroupTabView {
-  GroupTabView* groupTabView = [[GroupTabView alloc] init];
-  groupTabView.backgroundColor = [UIColor colorNamed:kBackgroundColor];
-  groupTabView.layer.cornerRadius = kGroupGridCellCornerRadius;
-  groupTabView.layer.masksToBounds = YES;
-  return groupTabView;
-}
-
-- (void)hideAllSubviews {
-  _topLeadingSnapshotView.hidden = YES;
-  _topTrailingSnapshotView.hidden = YES;
-  _bottomLeadingSnapshotView.hidden = YES;
-  _bottomTrailingSnapshotView.hidden = YES;
 }
 
 @end

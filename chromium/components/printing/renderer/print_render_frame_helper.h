@@ -79,8 +79,8 @@ class FrameReference {
   blink::WebView* view();
 
  private:
-  raw_ptr<blink::WebView, ExperimentalRenderer> view_;
-  raw_ptr<blink::WebLocalFrame, ExperimentalRenderer> frame_;
+  raw_ptr<blink::WebView> view_;
+  raw_ptr<blink::WebLocalFrame> frame_;
 };
 
 // Helper to ensure that quit closures for Mojo response are called.
@@ -235,7 +235,7 @@ class PrintRenderFrameHelper
   void OnDestruct() override;
   void DidStartNavigation(
       const GURL& url,
-      absl::optional<blink::WebNavigationType> navigation_type) override;
+      std::optional<blink::WebNavigationType> navigation_type) override;
   void DidFailProvisionalLoad() override;
   void DidFinishLoad() override;
   void DidFinishLoadForPrinting() override;

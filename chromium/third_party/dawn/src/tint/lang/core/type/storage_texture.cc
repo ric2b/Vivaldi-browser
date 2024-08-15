@@ -42,7 +42,7 @@ StorageTexture::StorageTexture(TextureDimension dim,
                                core::TexelFormat format,
                                core::Access access,
                                const Type* subtype)
-    : Base(Hash(tint::TypeInfo::Of<StorageTexture>().full_hashcode, dim, format, access), dim),
+    : Base(Hash(tint::TypeCode::Of<StorageTexture>().bits, dim, format, access), dim),
       texel_format_(format),
       access_(access),
       subtype_(subtype) {}
@@ -80,6 +80,7 @@ Type* StorageTexture::SubtypeFor(core::TexelFormat format, Manager& type_mgr) {
             return type_mgr.Get<I32>();
         }
 
+        case core::TexelFormat::kR8Unorm:
         case core::TexelFormat::kBgra8Unorm:
         case core::TexelFormat::kRgba8Unorm:
         case core::TexelFormat::kRgba8Snorm:

@@ -54,7 +54,7 @@ StreamingVpxEncoder::StreamingVpxEncoder(const Parameters& params,
   if (params_.codec == VideoCodec::kVp9) {
     ctx = vpx_codec_vp9_cx();
   } else {
-    OSP_DCHECK(params_.codec == VideoCodec::kVp8);
+    OSP_CHECK_EQ(params_.codec, VideoCodec::kVp8);
     ctx = vpx_codec_vp8_cx();
   }
 
@@ -187,7 +187,7 @@ void StreamingVpxEncoder::EncodeAndSend(
 }
 
 void StreamingVpxEncoder::DestroyEncoder() {
-  OSP_DCHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
+  OSP_CHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
 
   if (is_encoder_initialized()) {
     vpx_codec_destroy(&encoder_);
@@ -198,7 +198,7 @@ void StreamingVpxEncoder::DestroyEncoder() {
 }
 
 void StreamingVpxEncoder::ProcessWorkUnitsUntilTimeToQuit() {
-  OSP_DCHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
+  OSP_CHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
 
   for (;;) {
     WorkUnitWithResults work_unit{};
@@ -244,7 +244,7 @@ void StreamingVpxEncoder::ProcessWorkUnitsUntilTimeToQuit() {
 void StreamingVpxEncoder::PrepareEncoder(int width,
                                          int height,
                                          int target_bitrate) {
-  OSP_DCHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
+  OSP_CHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
 
   const int target_kbps = target_bitrate / kBytesPerKilobyte;
 
@@ -284,7 +284,7 @@ void StreamingVpxEncoder::PrepareEncoder(int width,
     if (params_.codec == VideoCodec::kVp9) {
       ctx = vpx_codec_vp9_cx();
     } else {
-      OSP_DCHECK(params_.codec == VideoCodec::kVp8);
+      OSP_CHECK_EQ(params_.codec, VideoCodec::kVp8);
       ctx = vpx_codec_vp8_cx();
     }
 
@@ -323,7 +323,7 @@ void StreamingVpxEncoder::PrepareEncoder(int width,
 
 void StreamingVpxEncoder::EncodeFrame(bool force_key_frame,
                                       WorkUnitWithResults& work_unit) {
-  OSP_DCHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
+  OSP_CHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
 
   // The presentation timestamp argument here is fixed to zero to force the
   // encoder to base its single-frame bandwidth calculations entirely on
@@ -359,7 +359,7 @@ void StreamingVpxEncoder::ComputeFrameEncodeStats(
     Clock::duration encode_wall_time,
     int target_bitrate,
     WorkUnitWithResults& work_unit) {
-  OSP_DCHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
+  OSP_CHECK_EQ(std::this_thread::get_id(), encode_thread_.get_id());
 
   Stats& stats = work_unit.stats;
 
@@ -391,7 +391,7 @@ void StreamingVpxEncoder::ComputeFrameEncodeStats(
 }
 
 void StreamingVpxEncoder::SendEncodedFrame(WorkUnitWithResults results) {
-  OSP_DCHECK(main_task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(main_task_runner_.IsRunningOnTaskRunner());
 
   EncodedFrame frame;
   frame.frame_id = sender_->GetNextFrameId();
@@ -424,11 +424,11 @@ void StreamingVpxEncoder::SendEncodedFrame(WorkUnitWithResults results) {
 // static
 StreamingVpxEncoder::VpxImageUniquePtr StreamingVpxEncoder::CloneAsVpxImage(
     const VideoFrame& frame) {
-  OSP_DCHECK_GE(frame.width, 0);
-  OSP_DCHECK_GE(frame.height, 0);
-  OSP_DCHECK_GE(frame.yuv_strides[0], 0);
-  OSP_DCHECK_GE(frame.yuv_strides[1], 0);
-  OSP_DCHECK_GE(frame.yuv_strides[2], 0);
+  OSP_CHECK_GE(frame.width, 0);
+  OSP_CHECK_GE(frame.height, 0);
+  OSP_CHECK_GE(frame.yuv_strides[0], 0);
+  OSP_CHECK_GE(frame.yuv_strides[1], 0);
+  OSP_CHECK_GE(frame.yuv_strides[2], 0);
 
   constexpr int kAlignment = 32;
   VpxImageUniquePtr image(vpx_img_alloc(nullptr, VPX_IMG_FMT_I420, frame.width,

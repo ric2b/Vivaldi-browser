@@ -3,6 +3,7 @@
 #include "extensions/renderer/vivaldi_utilities_hook_delegate.h"
 
 #include "base/i18n/case_conversion.h"
+#include "base/i18n/rtl.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/lookalikes/core/lookalike_url_util.h"
 #include "components/url_formatter/elide_url.h"
@@ -55,6 +56,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleRequest(
        "utilities.urlToThumbnailText"},
       {&VivaldiUtilitiesHookDelegate::HandleSupportsProxy,
        "utilities.supportsProxy"},
+      {&VivaldiUtilitiesHookDelegate::HandleIsRTL, "utilities.isRTL"},
   };
 
   Handler handler = nullptr;
@@ -340,4 +342,15 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleSupportsProxy(
   return result;
 }
 
+RequestResult VivaldiUtilitiesHookDelegate::HandleIsRTL(
+    v8::Local<v8::Context> context,
+    v8::LocalVector<v8::Value>& arguments) {
+  bool isRTL = base::i18n::IsRTL();
+
+  v8::Isolate* isolate = context->GetIsolate();
+
+  RequestResult result(RequestResult::HANDLED);
+  result.return_value = v8::Boolean::New(isolate, isRTL);
+  return result;
+}
 }  // namespace extensions

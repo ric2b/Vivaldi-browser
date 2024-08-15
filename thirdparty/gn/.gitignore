@@ -45,6 +45,7 @@
 .pydevproject
 .recipe_deps
 .checkstyle
+/clang
 compile_commands.json
 cscope.*
 out/

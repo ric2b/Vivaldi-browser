@@ -191,16 +191,20 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     EnableFeature(Feature::Norm16TextureFormats);
     EnableFeature(Feature::AdapterPropertiesMemoryHeaps);
     EnableFeature(Feature::AdapterPropertiesD3D);
+    EnableFeature(Feature::R8UnormStorage);
 
-    // To import multi planar textures, we need to at least tier 2 support.
-    if (mDeviceInfo.supportsSharedResourceCapabilityTier2) {
-        EnableFeature(Feature::DawnMultiPlanarFormats);
-        EnableFeature(Feature::MultiPlanarFormatP010);
-    }
+    // Multi planar formats are always supported since Feature Level 11.0
+    // https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/format-support-for-direct3d-11-0-feature-level-hardware
+    EnableFeature(Feature::DawnMultiPlanarFormats);
+    EnableFeature(Feature::MultiPlanarFormatP010);
+    EnableFeature(Feature::MultiPlanarRenderTargets);
+
     if (mDeviceInfo.supportsROV) {
         EnableFeature(Feature::PixelLocalStorageCoherent);
     }
 
+    // Always expose SharedTextureMemoryDXGISharedHandle, since the d3d11 should be able to
+    // import shared handles which are exported from d3d device.
     EnableFeature(Feature::SharedTextureMemoryDXGISharedHandle);
     EnableFeature(Feature::SharedTextureMemoryD3D11Texture2D);
     EnableFeature(Feature::SharedFenceDXGISharedHandle);

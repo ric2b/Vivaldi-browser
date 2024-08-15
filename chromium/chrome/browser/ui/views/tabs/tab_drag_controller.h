@@ -38,12 +38,14 @@ namespace views {
 class View;
 class ViewTracker;
 }
+namespace tabs {
+class TabModel;
+}
 class Browser;
 class KeyEventTracker;
 class Tab;
 class TabDragControllerTest;
 class TabDragContext;
-class TabModel;
 class TabSlotView;
 class TabStripModel;
 class WindowFinder;
@@ -243,8 +245,14 @@ class TabDragController : public views::WidgetObserver,
     // valid.  On platforms where this state is used, the kDraggingWindow and
     // kWaitingToDragTabs states are not used.
     kDraggingUsingSystemDragAndDrop,
-    // The session is waiting for the nested move loop to exit to transition
-    // to kDraggingTabs.  Not used on all platforms.
+    // The session has already attached to the target tabstrip, but must wait
+    // for the nested move loop to exit to transition to kDraggingTabs. Used on
+    // platforms where `can_release_capture_` is false.
+    kWaitingToExitRunLoop,
+    // The session is still attached to the drag-created window, and is waiting
+    // for the nested move loop to exit to transition to kDraggingTabs and
+    // attach to `tab_strip_to_attach_to_after_exit_`. Used on platforms where
+    // `can_release_capture_` is true.
     kWaitingToDragTabs,
     // The drag session has completed or been canceled.
     kStopped
@@ -307,7 +315,7 @@ class TabDragController : public views::WidgetObserver,
     // There is a brief period of time when a tab is being moved from one tab
     // strip to another [after Detach but before Attach] that the TabDragData
     // owns the WebContents.
-    std::unique_ptr<TabModel> owned_tab;
+    std::unique_ptr<tabs::TabModel> owned_tab;
 
     // This is the index of the tab in |source_context_| when the drag
     // began. This is used to restore the previous state if the drag is aborted.

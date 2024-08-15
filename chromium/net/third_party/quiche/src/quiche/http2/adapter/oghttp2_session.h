@@ -60,10 +60,6 @@ class QUICHE_EXPORT OgHttp2Session : public Http2Session,
     // Whether (as server) to send a RST_STREAM NO_ERROR when sending a fin on
     // an incomplete stream.
     bool rst_stream_no_error_when_incomplete = false;
-    // Whether (as server) to queue trailers until after a stream's data source
-    // has indicated the end of data. If false, the server will assume that
-    // submitting trailers indicates the end of data.
-    bool trailers_require_end_data = false;
     // Whether to mark all input data as consumed upon encountering a connection
     // error while processing bytes. If true, subsequent processing will also
     // mark all input data as consumed.
@@ -88,6 +84,9 @@ class QUICHE_EXPORT OgHttp2Session : public Http2Session,
     // If true, allows different values for `host` and `:authority` headers to
     // be present in request headers.
     bool allow_different_host_and_authority = false;
+    // If true, crumbles `Cookie` header field values for potentially better
+    // HPACK compression.
+    bool crumble_cookies = false;
   };
 
   OgHttp2Session(Http2VisitorInterface& visitor, Options options);
@@ -268,12 +267,13 @@ class QUICHE_EXPORT OgHttp2Session : public Http2Session,
     PassthroughHeadersHandler(OgHttp2Session& session,
                               Http2VisitorInterface& visitor);
 
-    void set_stream_id(Http2StreamId stream_id) {
-      stream_id_ = stream_id;
+    void Reset() {
+      error_encountered_ = false;
       result_ = Http2VisitorInterface::HEADER_OK;
     }
 
-    void set_frame_contains_fin() { frame_contains_fin_ = true; }
+    void set_stream_id(Http2StreamId stream_id) { stream_id_ = stream_id; }
+    void set_frame_contains_fin(bool value) { frame_contains_fin_ = value; }
     void set_header_type(HeaderType type) { type_ = type; }
     HeaderType header_type() const { return type_; }
 
@@ -300,6 +300,8 @@ class QUICHE_EXPORT OgHttp2Session : public Http2Session,
     bool CanReceiveBody() const;
 
    private:
+    void SetResult(Http2VisitorInterface::OnHeaderResult result);
+
     OgHttp2Session& session_;
     Http2VisitorInterface& visitor_;
     Http2StreamId stream_id_ = 0;
@@ -309,6 +311,7 @@ class QUICHE_EXPORT OgHttp2Session : public Http2Session,
     std::unique_ptr<HeaderValidatorBase> validator_;
     HeaderType type_ = HeaderType::RESPONSE;
     bool frame_contains_fin_ = false;
+    bool error_encountered_ = false;
   };
 
   struct QUICHE_EXPORT ProcessBytesResultVisitor;

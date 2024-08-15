@@ -21,10 +21,6 @@ base::Value VivaldiPrefsDefinitions::GetPlatformComputedDefault(
     return base::Value(getActionOnDoubleClick());
   }
 
-  if (path == vivaldiprefs::kSystemMacAquaColorVariant) {
-    return base::Value(getAquaColor());
-  }
-
   if (path == vivaldiprefs::kSystemMacKeyboardUiMode) {
     return base::Value(getKeyboardUIMode());
   }
@@ -43,14 +39,6 @@ base::Value VivaldiPrefsDefinitions::GetPlatformComputedDefault(
 
   if (path == vivaldiprefs::kSystemHighlightColor) {
     return base::Value(getSystemHighlightColor());
-  }
-
-  if (path == vivaldiprefs::kSystemMacMenubarVisibleInFullscreen) {
-    return base::Value(getMenubarVisibleInFullscreen());
-  }
-
-  if (path == vivaldiprefs::kSystemMacHideMenubar) {
-    return base::Value(getHideMenubar());
   }
 
   return base::Value();

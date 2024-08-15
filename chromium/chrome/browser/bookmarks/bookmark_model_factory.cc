@@ -16,7 +16,6 @@
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
-#include "components/bookmarks/common/storage_type.h"
 #include "components/sync_bookmarks/bookmark_sync_service.h"
 #include "components/undo/bookmark_undo_service.h"
 
@@ -49,8 +48,7 @@ std::unique_ptr<KeyedService> BuildBookmarkModel(
 
   bookmark_model->set_vivaldi_synced_file_store(
       SyncedFileStoreFactory::GetForBrowserContext(context));
-  bookmark_model->Load(profile->GetPath(),
-                       bookmarks::StorageType::kLocalOrSyncable);
+  bookmark_model->Load(profile->GetPath());
   BookmarkUndoServiceFactory::GetForProfile(profile)
       ->StartObservingBookmarkModel(bookmark_model.get());
   return bookmark_model;

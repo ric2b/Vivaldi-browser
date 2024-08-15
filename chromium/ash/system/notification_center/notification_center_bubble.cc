@@ -30,6 +30,7 @@ NotificationCenterBubble::NotificationCenterBubble(
       /*tray=*/notification_center_tray_, /*anchor_to_shelf_corner=*/true);
 
   // Create and customize bubble view.
+  init_params.set_can_activate_on_click_or_tap = true;
   init_params.corner_radius = kNotificationCenterBubbleCornerRadius;
   bubble_view_ = std::make_unique<TrayBubbleView>(init_params);
   bubble_view_->SetMaxHeight(CalculateMaxTrayBubbleHeight(
@@ -38,7 +39,8 @@ NotificationCenterBubble::NotificationCenterBubble(
   if (features::IsNotificationCenterControllerEnabled()) {
     notification_center_controller_ =
         std::make_unique<NotificationCenterController>();
-    bubble_view_->AddChildView(notification_center_controller_->CreateView());
+    bubble_view_->AddChildView(
+        notification_center_controller_->CreateNotificationCenterView());
   } else {
     notification_center_view_ =
         bubble_view_->AddChildView(std::make_unique<NotificationCenterView>());
@@ -54,7 +56,7 @@ NotificationCenterBubble::~NotificationCenterBubble() {
 
 void NotificationCenterBubble::ShowBubble() {
   if (features::IsNotificationCenterControllerEnabled()) {
-    notification_center_controller_->InitView();
+    notification_center_controller_->InitNotificationCenterView();
   }
   bubble_wrapper_->ShowBubble(std::move(bubble_view_));
   if (!features::IsNotificationCenterControllerEnabled()) {

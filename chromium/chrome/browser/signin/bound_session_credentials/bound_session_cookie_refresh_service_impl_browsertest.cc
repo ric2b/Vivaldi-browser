@@ -43,6 +43,7 @@
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "services/network/public/cpp/network_switches.h"
+#include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -54,9 +55,9 @@ using testing::Eq;
 using testing::Pointee;
 using HeaderVector = net::HttpRequestHeaders::HeaderVector;
 
-constexpr std::string_view kDomain = "example.com";
-constexpr std::string_view KTriggerRegistrationPath = "/trigger_registration";
-constexpr std::string_view kRegisterSessionPath = "/register_session";
+constexpr std::string_view kDomain = "google.com";
+constexpr std::string_view KTriggerRegistrationPath = "/TriggerRegistration";
+constexpr std::string_view kRegisterSessionPath = "/RegisterSession";
 constexpr std::string_view kRotateCookiesPath = "/RotateBoundCookies";
 constexpr std::string_view kChallenge = "test_challenge";
 
@@ -347,6 +348,7 @@ class BoundSessionCookieRefreshServiceImplBrowserTest
       public ChromeBrowserMainExtraParts {
  public:
   void SetUp() override {
+    embedded_https_test_server().SetCertHostnames({std::string(kDomain)});
     CHECK(embedded_https_test_server().InitializeAndListen());
     InProcessBrowserTest::SetUp();
   }

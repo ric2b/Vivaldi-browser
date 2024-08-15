@@ -53,7 +53,10 @@ def _get_libcxx_include_path(api):
 def _get_compilation_environment(api, target, cipd_dir):
   if target.is_linux:
     triple = '--target=%s' % target.triple
-    sysroot = '--sysroot=%s' % cipd_dir.join('sysroot')
+    if target.triple == 'riscv64-linux-gnu':
+      sysroot = '--sysroot=%s' % cipd_dir.join('sysroot-focal')
+    else:
+      sysroot = '--sysroot=%s' % cipd_dir.join('sysroot')
     env = {
         'CC': cipd_dir.join('bin', 'clang'),
         'CXX': cipd_dir.join('bin', 'clang++'),
@@ -130,11 +133,19 @@ def RunSteps(api, repository):
       pkgs.add_package('fuchsia/third_party/sysroot/linux',
                        'git_revision:c912d089c3d46d8982fdef76a50514cca79b6132',
                        'sysroot')
+      # RISCV64 support starts in focal.
+      pkgs.add_package('fuchsia/third_party/sysroot/focal',
+                       'git_revision:fa7a5a9710540f30ff98ae48b62f2cdf72ed2acd',
+                       'sysroot-focal')
     api.cipd.ensure(cipd_dir, pkgs)
 
   def release_targets():
     if api.platform.is_linux:
-      return [api.target('linux-amd64'), api.target('linux-arm64')]
+      return [
+          api.target('linux-amd64'),
+          api.target('linux-arm64'),
+          api.target('linux-riscv64')
+      ]
     elif api.platform.is_mac:
       return [api.target('mac-amd64'), api.target('mac-arm64')]
     else:

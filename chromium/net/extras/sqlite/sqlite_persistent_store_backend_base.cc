@@ -118,7 +118,8 @@ bool SQLitePersistentStoreBackendBase::InitializeDatabase() {
       constexpr int kPreReadSize = 128 * 1024 * 1024;  // 128 MB
       // TODO(crbug.com/1434166): Consider moving preload behind a database
       // option.
-      base::PreReadFile(path_, /*is_executable=*/false, kPreReadSize);
+      base::PreReadFile(path_, /*is_executable=*/false, /*sequential=*/false,
+                        kPreReadSize);
     }
   }
 
@@ -213,7 +214,7 @@ bool SQLitePersistentStoreBackendBase::MigrateDatabaseSchema() {
 
   // |cur_version| is the version that the database ends up at, after all the
   // database upgrade statements.
-  absl::optional<int> cur_version = DoMigrateDatabaseSchema();
+  std::optional<int> cur_version = DoMigrateDatabaseSchema();
   if (!cur_version.has_value())
     return false;
 

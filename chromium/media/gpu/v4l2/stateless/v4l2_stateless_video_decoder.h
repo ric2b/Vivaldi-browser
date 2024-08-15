@@ -5,6 +5,7 @@
 #ifndef MEDIA_GPU_V4L2_STATELESS_V4L2_STATELESS_VIDEO_DECODER_H_
 #define MEDIA_GPU_V4L2_STATELESS_V4L2_STATELESS_VIDEO_DECODER_H_
 
+#include <optional>
 #include <queue>
 #include <vector>
 
@@ -24,7 +25,6 @@
 #include "media/gpu/v4l2/stateless/queue.h"
 #include "media/gpu/v4l2/stateless/stateless_decode_surface_handler.h"
 #include "media/gpu/v4l2/stateless/stateless_device.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace media {
 
@@ -41,14 +41,12 @@ class MEDIA_GPU_EXPORT V4L2StatelessVideoDecoder
       scoped_refptr<base::SequencedTaskRunner> decoder_task_runner,
       base::WeakPtr<VideoDecoderMixin::Client> client);
 
-  static absl::optional<SupportedVideoDecoderConfigs> GetSupportedConfigs();
-
   // VideoDecoderMixin implementation, VideoDecoder part.
   void Initialize(const VideoDecoderConfig& config,
                   bool low_delay,
                   CdmContext* cdm_context,
                   InitCB init_cb,
-                  const OutputCB& output_cb,
+                  const PipelineOutputCB& output_cb,
                   const WaitingCB& waiting_cb) override;
   void Decode(scoped_refptr<DecoderBuffer> buffer, DecodeCB decode_cb) override;
   void Reset(base::OnceClosure reset_cb) override;
@@ -108,10 +106,12 @@ class MEDIA_GPU_EXPORT V4L2StatelessVideoDecoder
   // the |decoder_| member variable.
   bool CreateDecoder(VideoCodecProfile profile, VideoColorSpace color_space);
 
-  // Create a queue of buffers for compressed frames to go into. V4L2 needs
-  // to know |profile| and |resolution| in order to know if the queue
-  // can be created.
-  bool CreateInputQueue(VideoCodecProfile profile, const gfx::Size resolution);
+  // Trampoline the preparation of a resolution change to the client.
+  void PrepareChangeResolution(DecoderStatus status);
+
+  // Continue with the resolution change after allowing the teardown of the
+  // queues to occur.
+  void ContinueApplyResolutionChange();
 
   // The uncompressed format that the driver produces is setup by the
   // |output_queue_|. This format then needs to be passed further down the
@@ -125,9 +125,12 @@ class MEDIA_GPU_EXPORT V4L2StatelessVideoDecoder
   void HandleDequeuedOutputBuffers(Buffer buffer);
   void HandleDequeuedInputBuffers(Buffer buffer);
 
-  // Callback for VideoFrame destructor observer that will enqueue the output
+  // Callback for frame destructor observer that will enqueue the output
   // buffer after it is done being used.
   void EnqueueDecodedOutputBufferByFrameID(uint64_t frame_id);
+
+  // Empty out the |decode_request_queue_| and |display_queue_|.
+  void ClearPendingRequests(DecoderStatus status);
 
   // Match up frames that have been decoded and are sitting in the
   // |output_queue_| with |display_queue_| which holds the frames in display
@@ -145,7 +148,7 @@ class MEDIA_GPU_EXPORT V4L2StatelessVideoDecoder
 
   // Callback obtained from Initialize() to be called after every frame
   // has finished decoding and is ready for the client to display.
-  OutputCB output_cb_ GUARDED_BY_CONTEXT(decoder_sequence_checker_);
+  PipelineOutputCB output_cb_ GUARDED_BY_CONTEXT(decoder_sequence_checker_);
 
   // Hold the callback that came in with the EOS signal until the rest of the
   // frames have finished decoding.
@@ -184,8 +187,8 @@ class MEDIA_GPU_EXPORT V4L2StatelessVideoDecoder
   // through the queue. To do that the |last_frame_id_generated_| holds the id
   // of the last input buffer while |last_frame_id_dequeued_| holds the id of
   // the last output buffer.
-  uint64_t last_frame_id_generated_;
-  uint64_t last_frame_id_dequeued_;
+  uint64_t last_frame_id_generated_ = 0;
+  uint64_t last_frame_id_dequeued_ = 0;
 
   base::LRUCache<int32_t, base::TimeDelta> bitstream_id_to_timestamp_;
 
@@ -193,17 +196,13 @@ class MEDIA_GPU_EXPORT V4L2StatelessVideoDecoder
   std::queue<DecodeRequest> decode_request_queue_;
 
   // The decode request decode loop needs to keep this alive.
-  absl::optional<DecodeRequest> current_decode_request_;
-
-  base::CancelableTaskTracker cancelable_output_queue_tracker_;
-  base::CancelableTaskTracker cancelable_input_queue_tracker_;
-
-  // Workers that block and wait for buffers to be ready to be dequeued.
-  scoped_refptr<base::SequencedTaskRunner> input_queue_task_runner_;
-  scoped_refptr<base::SequencedTaskRunner> output_queue_task_runner_;
+  std::optional<DecodeRequest> current_decode_request_;
 
   // Queue holding surfaces in display order.
   std::queue<scoped_refptr<StatelessDecodeSurface>> display_queue_;
+
+  // Prevent nested resolution changes by tracking when one is occurring.
+  bool resolution_changing_ = false;
 
   // Weak factories associated with the main thread
   // (|decoder_sequence_checker_|).

@@ -333,7 +333,9 @@ fn run_with_v1_creds<C>(
         }
     }
 }
-fn add_des<I: SectionEncoder>(sb: &mut SectionBuilder<I>) {
+fn add_des<I: SectionEncoder>(
+    sb: &mut SectionBuilder<&mut np_adv::extended::serialize::AdvBuilder, I>,
+) {
     sb.add_de_res(|_| TxPower::try_from(17).map(TxPowerDataElement::from)).unwrap();
     sb.add_de_res(|_| GenericDataElement::try_from(100_u32.into(), &[0; 10])).unwrap();
 }

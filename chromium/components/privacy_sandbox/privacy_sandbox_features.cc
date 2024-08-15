@@ -19,14 +19,9 @@ const base::FeatureParam<std::string> kPrivacySandboxAdsNoticeCCTAppId{
     &kPrivacySandboxAdsNoticeCCT, kPrivacySandboxAdsNoticeCCTAppIdName, ""};
 #endif  // BUILDFLAG(IS_ANDROID)
 
-// Show the Tracking Protection onboarding flow if not already onboarded.
-BASE_FEATURE(kPrivacySandboxSuppressDialogOnNonNormalBrowsers,
-             "PrivacySandboxSuppressDialogOnNonNormalBrowsers",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kPrivacySandboxSettings4,
              "PrivacySandboxSettings4",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi
 
 const char kPrivacySandboxSettings4ConsentRequiredName[] = "consent-required";
 const char kPrivacySandboxSettings4NoticeRequiredName[] = "notice-required";
@@ -96,7 +91,7 @@ BASE_FEATURE(kDisablePrivacySandboxPrompts,
 
 BASE_FEATURE(kPrivacySandboxFirstPartySetsUI,
              "PrivacySandboxFirstPartySetsUI",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi
 const base::FeatureParam<bool> kPrivacySandboxFirstPartySetsUISampleSets{
     &kPrivacySandboxFirstPartySetsUI, "use-sample-sets", false};
 
@@ -117,7 +112,7 @@ const char kPrivacySandboxEnrollmentOverrides[] =
 
 BASE_FEATURE(kPrivacySandboxAttestationsHigherComponentRegistrationPriority,
              "PrivacySandboxAttestationsHigherComponentRegistrationPriority",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kPrivacySandboxAttestationsUserBlockingPriority,
              "PrivacySandboxAttestationsUserBlockingPriority",
@@ -148,7 +143,7 @@ BASE_FEATURE(kAttributionDebugReportingCookieDeprecationTesting,
 
 BASE_FEATURE(kPrivateAggregationDebugReportingCookieDeprecationTesting,
              "PrivateAggregationDebugReportingCookieDeprecationTesting",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kPrivacySandboxInternalsDevUI,
              "PrivacySandboxInternalsDevUI",
@@ -156,6 +151,22 @@ BASE_FEATURE(kPrivacySandboxInternalsDevUI,
 
 BASE_FEATURE(kIpProtectionV1,
              "IpProtectionV1",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kFingerprintingProtectionSetting,
+             "FingerprintingProtectionSetting",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kIpProtectionUx,
+             "IpProtectionUx",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kCookieSettingsUiAlignment,
+             "CookieSettingsUiAlignment",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kTrackingProtectionSettingsLaunch,
+             "TrackingProtectionSettingsLaunch",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_ANDROID)

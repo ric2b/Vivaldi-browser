@@ -48,9 +48,10 @@ bool operator>(const DateTime& a, const DateTime& b) {
 
 bool DateTimeFromSeconds(uint64_t seconds, DateTime* time) {
   struct tm tm = {};
+  // NOTE: Convert to checked_cast.
   time_t sec = static_cast<time_t>(seconds);
-  OSP_DCHECK_GE(sec, 0);
-  OSP_DCHECK_EQ(static_cast<uint64_t>(sec), seconds);
+  OSP_CHECK_GE(sec, 0);
+  OSP_CHECK_EQ(static_cast<uint64_t>(sec), seconds);
 #if defined(_WIN32)
   // NOTE: This is for compiling in Chromium and is not validated in any direct
   // libcast Windows build.
@@ -76,10 +77,10 @@ bool DateTimeFromSeconds(uint64_t seconds, DateTime* time) {
 static_assert(sizeof(time_t) >= 4, "Can't avoid overflow with < 32-bits");
 
 std::chrono::seconds DateTimeToSeconds(const DateTime& time) {
-  OSP_DCHECK_GE(time.month, 1);
-  OSP_DCHECK_GE(time.year, 1900);
+  OSP_CHECK_GE(time.month, 1);
+  OSP_CHECK_GE(time.year, 1900);
   // NOTE: Guard against overflow if time_t is 32-bit.
-  OSP_DCHECK(sizeof(time_t) >= 8 || time.year < 2038) << time.year;
+  OSP_CHECK(sizeof(time_t) >= 8 || time.year < 2038) << time.year;
   struct tm tm = {};
   tm.tm_sec = time.second;
   tm.tm_min = time.minute;

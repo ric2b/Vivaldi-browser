@@ -10,16 +10,15 @@ import android.graphics.RectF;
 import android.util.FloatProperty;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.layouts.components.VirtualView;
+import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutView;
 
 /**
- * {@link CompositorButton} keeps track of state for buttons that are rendered
- * in the compositor.
+ * {@link CompositorButton} keeps track of state for buttons that are rendered in the compositor.
  */
-public class CompositorButton implements VirtualView {
+public class CompositorButton extends StripLayoutView {
     /**
-     * A property that can be used with a
-     * {@link org.chromium.chrome.browser.compositor.animation.CompositorAnimator}.
+     * A property that can be used with a {@link
+     * org.chromium.chrome.browser.layouts.animation.CompositorAnimator}.
      */
     public static final FloatProperty<CompositorButton> OPACITY =
             new FloatProperty<CompositorButton>("opacity") {
@@ -39,12 +38,12 @@ public class CompositorButton implements VirtualView {
             new FloatProperty<CompositorButton>("drawX") {
                 @Override
                 public void setValue(CompositorButton object, float value) {
-                    object.setX(value);
+                    object.setDrawX(value);
                 }
 
                 @Override
                 public Float get(CompositorButton object) {
-                    return object.getX();
+                    return object.getDrawX();
                 }
             };
 
@@ -75,7 +74,6 @@ public class CompositorButton implements VirtualView {
     private boolean mIsPressed;
     private boolean mIsPressedFromMouse;
     private boolean mIsHovered;
-    private boolean mIsVisible;
     private boolean mIsIncognito;
     private boolean mIsEnabled;
     private String mAccessibilityDescription = "";
@@ -94,9 +92,9 @@ public class CompositorButton implements VirtualView {
 
         mOpacity = 1.f;
         mIsPressed = false;
-        mIsVisible = true;
         mIsIncognito = false;
         mIsEnabled = true;
+        setVisible(true);
 
         Resources res = context.getResources();
         float sPxToDp = 1.0f / res.getDisplayMetrics().density;
@@ -131,6 +129,7 @@ public class CompositorButton implements VirtualView {
         mAccessibilityDescriptionIncognito = incognitoDescription;
     }
 
+    /** {@link org.chromium.chrome.browser.layouts.components.VirtualView} Implementation */
     @Override
     public String getAccessibilityDescription() {
         return mIsIncognito ? mAccessibilityDescriptionIncognito : mAccessibilityDescription;
@@ -144,59 +143,63 @@ public class CompositorButton implements VirtualView {
     }
 
     /**
-     * @return The x offset of the button.
+     * @param x The x offset of the click.
+     * @param y The y offset of the click.
+     * @return Whether or not that click occurred inside of the button + slop area.
      */
-    public float getX() {
+    @Override
+    public boolean checkClickedOrHovered(float x, float y) {
+        if (mOpacity < 1.f || !isVisible() || !mIsEnabled) return false;
+
+        mCacheBounds.set(mBounds);
+        mCacheBounds.inset(-mClickSlop, -mClickSlop);
+        return mCacheBounds.contains(x, y);
+    }
+
+    @Override
+    public void handleClick(long time) {
+        mClickHandler.onClick(time);
+    }
+
+    /** {@link StripLayoutView} Implementation */
+    @Override
+    public float getDrawX() {
         return mBounds.left;
     }
 
-    /**
-     * @param x The x offset of the button.
-     */
-    public void setX(float x) {
+    @Override
+    public void setDrawX(float x) {
         mBounds.right = x + mBounds.width();
         mBounds.left = x;
     }
 
-    /**
-     * @return The y offset of the button.
-     */
-    public float getY() {
+    @Override
+    public float getDrawY() {
         return mBounds.top;
     }
 
-    /**
-     * @param y The y offset of the button.
-     */
-    public void setY(float y) {
+    @Override
+    public void setDrawY(float y) {
         mBounds.bottom = y + mBounds.height();
         mBounds.top = y;
     }
 
-    /**
-     * @return The width of the button.
-     */
+    @Override
     public float getWidth() {
         return mBounds.width();
     }
 
-    /**
-     * @param width The width of the button.
-     */
+    @Override
     public void setWidth(float width) {
         mBounds.right = mBounds.left + width;
     }
 
-    /**
-     * @return The height of the button.
-     */
+    @Override
     public float getHeight() {
         return mBounds.height();
     }
 
-    /**
-     * @param height The height of the button.
-     */
+    @Override
     public void setHeight(float height) {
         mBounds.bottom = mBounds.top + height;
     }
@@ -251,20 +254,6 @@ public class CompositorButton implements VirtualView {
     }
 
     /**
-     * @return The visibility of the button.
-     */
-    public boolean isVisible() {
-        return mIsVisible;
-    }
-
-    /**
-     * @param state The visibility of the button.
-     */
-    public void setVisible(boolean state) {
-        mIsVisible = state;
-    }
-
-    /**
      * @return The incognito state of the button.
      */
     public boolean isIncognito() {
@@ -308,25 +297,6 @@ public class CompositorButton implements VirtualView {
             return isIncognito() ? mIncognitoPressedResource : mPressedResource;
         }
         return isIncognito() ? mIncognitoResource : mResource;
-    }
-
-    /**
-     * @param x The x offset of the click.
-     * @param y The y offset of the click.
-     * @return Whether or not that click occurred inside of the button + slop area.
-     */
-    @Override
-    public boolean checkClickedOrHovered(float x, float y) {
-        if (mOpacity < 1.f || !mIsVisible || !mIsEnabled) return false;
-
-        mCacheBounds.set(mBounds);
-        mCacheBounds.inset(-mClickSlop, -mClickSlop);
-        return mCacheBounds.contains(x, y);
-    }
-
-    @Override
-    public void handleClick(long time) {
-        mClickHandler.onClick(time);
     }
 
     /**

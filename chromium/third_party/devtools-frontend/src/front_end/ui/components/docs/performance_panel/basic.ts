@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as FrontendHelpers from '../../../../../test/unittests/front_end/helpers/EnvironmentHelpers.js';
 import * as Common from '../../../../core/common/common.js';
 import * as Root from '../../../../core/root/root.js';
 import * as SDK from '../../../../core/sdk/sdk.js';
 import * as Bindings from '../../../../models/bindings/bindings.js';
 import * as Workspace from '../../../../models/workspace/workspace.js';
 import * as Timeline from '../../../../panels/timeline/timeline.js';
+import * as FrontendHelpers from '../../../../testing/EnvironmentHelpers.js';
 import * as UI from '../../../legacy/legacy.js';
 import * as ComponentSetup from '../../helpers/helpers.js';
 
@@ -93,13 +93,14 @@ UI.ActionRegistration.registerActionExtension({
 
 const actionRegistry = UI.ActionRegistry.ActionRegistry.instance();
 UI.ShortcutRegistry.ShortcutRegistry.instance({forceNew: true, actionRegistry: actionRegistry});
-Common.Settings.settingForTest('flamechartMouseWheelAction').set('zoom');
+Common.Settings.settingForTest('flamechart-mouse-wheel-action').set('zoom');
 const params = new URLSearchParams(window.location.search);
 const traceFileName = params.get('trace');
 const cpuprofileName = params.get('cpuprofile');
+const traceUrl = params.get('loadTimelineFromURL');
 const nodeMode = params.get('isNode');
 const isNodeMode = nodeMode === 'true' ? true : false;
-Root.Runtime.experiments.setEnabled('timelineInvalidationTracking', params.has('invalidations'));
+Root.Runtime.experiments.setEnabled('timeline-invalidation-tracking', params.has('invalidations'));
 
 const timeline = Timeline.TimelinePanel.TimelinePanel.instance({forceNew: true, isNode: isNodeMode});
 const container = document.getElementById('container');
@@ -109,12 +110,15 @@ if (!container) {
 container.innerHTML = '';
 timeline.markAsRoot();
 timeline.show(container);
+window.addEventListener('resize', () => timeline.doResize());
 
 let fileName;
 if (traceFileName) {
   fileName = `${traceFileName}.json.gz`;
 } else if (cpuprofileName) {
   fileName = `${cpuprofileName}.cpuprofile.gz`;
+} else if (traceUrl) {
+  fileName = traceUrl;
 }
 
 if (fileName) {
@@ -122,11 +126,12 @@ if (fileName) {
 }
 
 async function loadFromFile(fileNameWithExtension: string) {
-  const file = new URL(`../../../../../test/unittests/fixtures/traces/${fileNameWithExtension}`, import.meta.url);
+  // Load from fixture/traces if its a bare filename, but if it's a complete URL, use that.
+  const file = new URL(fileNameWithExtension, new URL('../../../../panels/timeline/fixtures/traces/', import.meta.url));
   const response = await fetch(file);
   const asBlob = await response.blob();
-  const asFile = new File([asBlob], `${fileNameWithExtension}`, {
-    type: 'application/gzip',
+  const asFile = new File([asBlob], fileNameWithExtension, {
+    type: asBlob.type,
   });
   await timeline.loadFromFile(asFile);
 }

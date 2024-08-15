@@ -45,7 +45,7 @@ void ClientHintsBrandRegisterProfilePrefs(PrefService* prefs) {
   g_client_hints_prefs = prefs;
 }
 
-void SelectClientHintsBrand(absl::optional<std::string>& brand,
+void SelectClientHintsBrand(std::optional<std::string>& brand,
                             std::string& major_version,
                             std::string& full_version) {
   if (!IsVivaldiRunning() || (!g_client_hints_prefs && !g_brand_override))

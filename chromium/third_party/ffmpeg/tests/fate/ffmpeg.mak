@@ -36,7 +36,7 @@ fate-ffmpeg-attached_pics: CMD = threads=2 framecrc -i $(TARGET_SAMPLES)/lossles
 
 FATE_SAMPLES_FFMPEG-$(call FILTERDEMDEC, COLORKEY OVERLAY SCALE, MPEGPS IMAGE_PPM_PIPE, CAVS PPM, CAVSVIDEO_PARSER) += fate-ffmpeg-filter_colorkey
 fate-ffmpeg-filter_colorkey: tests/data/filtergraphs/colorkey
-fate-ffmpeg-filter_colorkey: CMD = framecrc -auto_conversion_filters -idct simple -fflags +bitexact -flags +bitexact  -sws_flags +accurate_rnd+bitexact -i $(TARGET_SAMPLES)/cavs/cavs.mpg -fflags +bitexact -flags +bitexact -sws_flags +accurate_rnd+bitexact -i $(TARGET_SAMPLES)/lena.pnm -an -filter_complex_script $(TARGET_PATH)/tests/data/filtergraphs/colorkey -sws_flags +accurate_rnd+bitexact -fflags +bitexact -flags +bitexact -qscale 2 -frames:v 10
+fate-ffmpeg-filter_colorkey: CMD = framecrc -auto_conversion_filters -idct simple -fflags +bitexact -flags +bitexact  -sws_flags +accurate_rnd+bitexact -i $(TARGET_SAMPLES)/cavs/cavs.mpg -fflags +bitexact -flags +bitexact -sws_flags +accurate_rnd+bitexact -i $(TARGET_SAMPLES)/lena.pnm -an -/filter_complex $(TARGET_PATH)/tests/data/filtergraphs/colorkey -sws_flags +accurate_rnd+bitexact -fflags +bitexact -flags +bitexact -qscale 2 -frames:v 10
 
 FATE_FFMPEG-$(call FILTERFRAMECRC, COLOR) += fate-ffmpeg-lavfi
 fate-ffmpeg-lavfi: CMD = framecrc -lavfi color=d=1:r=5 -fflags +bitexact
@@ -227,13 +227,9 @@ FATE_SAMPLES_FFMPEG-$(call REMUX, MOV, AAC_DEMUXER AAC_DECODER AAC_PARSER AAC_AD
 fate-adtstoasc_ticket3715: CMD = transcode "aac" $(TARGET_SAMPLES)/aac/foo.aac\
                       mov "-c copy -bsf:a aac_adtstoasc" "-codec copy"
 
-FATE_SAMPLES_FFMPEG-$(call REMUX, H264, MOV_DEMUXER H264_MP4TOANNEXB_BSF H264_PARSER H264_DECODER EXTRACT_EXTRADATA_BSF) += fate-h264_mp4toannexb_ticket2991 fate-h264_mp4toannexb_ticket5927 fate-h264_mp4toannexb_ticket5927_2
+FATE_SAMPLES_FFMPEG-$(call REMUX, H264, MOV_DEMUXER H264_MP4TOANNEXB_BSF H264_PARSER H264_DECODER EXTRACT_EXTRADATA_BSF) += fate-h264_mp4toannexb_ticket2991
 fate-h264_mp4toannexb_ticket2991: CMD = transcode "mp4" $(TARGET_SAMPLES)/h264/wwwq_cut.mp4\
                                   h264 "-c:v copy -bsf:v h264_mp4toannexb" "-codec copy"
-fate-h264_mp4toannexb_ticket5927:   CMD = transcode "mp4" $(TARGET_SAMPLES)/h264/thezerotheorem-cut.mp4 \
-                                          h264 "-c:v copy -bsf:v h264_mp4toannexb -an" "-c:v copy"
-fate-h264_mp4toannexb_ticket5927_2: CMD = transcode "mp4" $(TARGET_SAMPLES)/h264/thezerotheorem-cut.mp4 \
-                                          h264 "-c:v copy -an" "-c:v copy"
 
 FATE_SAMPLES_FFMPEG-$(call TRANSCODE, MPEG4 MPEG2VIDEO, AVI, MPEGPS_DEMUXER MPEGVIDEO_DEMUXER MPEGVIDEO_PARSER EXTRACT_EXTRADATA_BSF REMOVE_EXTRADATA_BSF) += fate-ffmpeg-bsf-remove-k fate-ffmpeg-bsf-remove-r fate-ffmpeg-bsf-remove-e
 fate-ffmpeg-bsf-remove-k: CMD = transcode "mpeg" $(TARGET_SAMPLES)/mpeg2/matrixbench_mpeg2.lq1.mpg\
@@ -260,3 +256,26 @@ FATE_SAMPLES_FFMPEG-$(call FRAMECRC, MPEGVIDEO, MPEG2VIDEO) += fate-ffmpeg-input
 fate-ffmpeg-error-rate-fail: CMD = ffmpeg -i $(TARGET_SAMPLES)/mkv/h264_tta_undecodable.mkv -c:v copy -f null -; test $$? -eq 69
 fate-ffmpeg-error-rate-pass: CMD = ffmpeg -i $(TARGET_SAMPLES)/mkv/h264_tta_undecodable.mkv -c:v copy -f null - -max_error_rate 1
 FATE_SAMPLES_FFMPEG-$(call ENCDEC, PCM_S16LE TTA, NULL MATROSKA) += fate-ffmpeg-error-rate-fail fate-ffmpeg-error-rate-pass
+
+# test input -bsf
+# use -stream_loop, because it tests flushing bsfs
+fate-ffmpeg-bsf-input: CMD = framecrc -stream_loop 2 -bsf setts=PTS*2 -i $(TARGET_SAMPLES)/hevc/extradata-reload-multi-stsd.mov -c copy
+FATE_SAMPLES_FFMPEG-$(call FRAMECRC, MOV, , SETTS_BSF) += fate-ffmpeg-bsf-input
+
+# Test behaviour when a complex filtergraph returns EOF on one of its inputs,
+# but other inputs are still active.
+# cf. #10803
+fate-ffmpeg-filter-in-eof: tests/data/vsynth_lena.yuv
+fate-ffmpeg-filter-in-eof: CMD = framecrc                                                      \
+    -f rawvideo -s 352x288 -pix_fmt yuv420p -t 1 -i $(TARGET_PATH)/tests/data/vsynth_lena.yuv  \
+    -f rawvideo -s 352x288 -pix_fmt yuv420p -t 1 -i $(TARGET_PATH)/tests/data/vsynth_lena.yuv  \
+    -filter_complex "[0][1]concat" -c:v rawvideo
+FATE_FFMPEG-$(call FRAMECRC, RAWVIDEO, RAWVIDEO, CONCAT_FILTER) += fate-ffmpeg-filter-in-eof
+
+# Test termination on streamcopy with -t as an output option.
+fate-ffmpeg-streamcopy-t: tests/data/vsynth_lena.yuv
+fate-ffmpeg-streamcopy-t: CMP = null
+fate-ffmpeg-streamcopy-t: CMD = ffmpeg                                                                    \
+    -stream_loop -1 -f rawvideo -s 352x288 -pix_fmt yuv420p -i $(TARGET_PATH)/tests/data/vsynth_lena.yuv  \
+    -c copy -f null -t 1 -
+FATE_FFMPEG-$(call REMUX, RAWVIDEO) += fate-ffmpeg-streamcopy-t

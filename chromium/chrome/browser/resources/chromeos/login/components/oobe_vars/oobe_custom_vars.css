@@ -5,7 +5,7 @@
 
 /* #css_wrapper_metadata_start
  * #type=vars
- * #import=//resources/cr_elements/cr_shared_vars.css.js
+ * #import=//resources/ash/common/cr_elements/cr_shared_vars.css.js
  * #css_wrapper_metadata_end */
 
     html {
@@ -93,8 +93,6 @@
       --oobe-gesture-navigation-list-item-font-size: 15px;
 
       --oobe-encryption-migration-warning-line-height: 22px;
-
-      --oobe-offline-ad-login-select-title-font-size: 13px;
 
       --oobe-reset-firmware-update-line-height: 20px;
 
@@ -200,9 +198,6 @@
 
       --oobe-encryption-migration-warning-line-height:
           var(--oobe-default-line-height);
-
-      --oobe-offline-ad-login-select-title-font-size:
-          var(--oobe-default-font-size);
 
       --oobe-reset-firmware-update-line-height: var(--oobe-default-line-height);
 

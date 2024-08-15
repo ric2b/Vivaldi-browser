@@ -10,7 +10,7 @@ import "attestation_ca.proto";
 import "keystore.proto";
 
 package attestation;
-option go_package = "chromiumos/system_api/attestation_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/attestation_proto";
 
 // Holds TPM credentials that the attestation server will need to see. These
 // credentials must be cleared once the attestation server has certified the

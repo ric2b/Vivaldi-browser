@@ -29,19 +29,22 @@ class Clipboard : public EventTarget, public Supplement<Navigator> {
   Clipboard(const Clipboard&) = delete;
   Clipboard& operator=(const Clipboard&) = delete;
 
-  ScriptPromise read(ScriptState*,
-                     ClipboardUnsanitizedFormats* formats,
-                     ExceptionState&);
-  ScriptPromise read(ScriptState* script_state,
-                     ExceptionState& exception_state) {
+  ScriptPromiseTyped<IDLSequence<ClipboardItem>>
+  read(ScriptState*, ClipboardUnsanitizedFormats* formats, ExceptionState&);
+  ScriptPromiseTyped<IDLSequence<ClipboardItem>> read(
+      ScriptState* script_state,
+      ExceptionState& exception_state) {
     return read(script_state, nullptr, exception_state);
   }
-  ScriptPromise readText(ScriptState*, ExceptionState&);
+  ScriptPromiseTyped<IDLString> readText(ScriptState*, ExceptionState&);
 
-  ScriptPromise write(ScriptState*,
-                      const HeapVector<Member<ClipboardItem>>&,
-                      ExceptionState&);
-  ScriptPromise writeText(ScriptState*, const String&, ExceptionState&);
+  ScriptPromiseTyped<IDLUndefined> write(
+      ScriptState*,
+      const HeapVector<Member<ClipboardItem>>&,
+      ExceptionState&);
+  ScriptPromiseTyped<IDLUndefined> writeText(ScriptState*,
+                                             const String&,
+                                             ExceptionState&);
 
   // EventTarget
   const AtomicString& InterfaceName() const override;

@@ -361,24 +361,23 @@
         "name": "hasDesktopShortcut",
         "type": "function",
         "description": "Checks whether the active profile has a generated desktop shortcut. Windows only, other platforms will return false.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "type": "boolean",
-                "name": "hasShortcut",
-                "description": "true if the active profile has a desktop shortcut, otherwise false. Windows only, other platforms will always return false."
-              },
-              {
-                "type": "boolean",
-                "name": "canModifyShortcut",
-                "description": "true if the active profile allows for creating or modifying desktop shortcuts. Will be false if --user-data-dir is used and on non-Windows platforms."
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "does_not_support_promises": "vivaldi",
+          "parameters": [
+            {
+              "type": "boolean",
+              "name": "hasShortcut",
+              "description": "true if the active profile has a desktop shortcut, otherwise false. Windows only, other platforms will always return false."
+            },
+            {
+              "type": "boolean",
+              "name": "canModifyShortcut",
+              "description": "true if the active profile allows for creating or modifying desktop shortcuts. Will be false if --user-data-dir is used and on non-Windows platforms."
+            }
+          ]
+        }
       },
       {
         "name": "getProfileDefaults",

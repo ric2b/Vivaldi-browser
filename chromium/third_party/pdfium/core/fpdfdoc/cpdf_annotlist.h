@@ -17,7 +17,6 @@
 #include "core/fxcrt/fx_coordinates.h"
 #include "core/fxcrt/unowned_ptr.h"
 
-class CFX_RenderDevice;
 class CPDF_Annot;
 class CPDF_Document;
 class CPDF_Page;
@@ -28,9 +27,7 @@ class CPDF_AnnotList final : public CPDF_PageRenderContext::AnnotListIface {
   explicit CPDF_AnnotList(CPDF_Page* pPage);
   ~CPDF_AnnotList() override;
 
-  void DisplayAnnots(CPDF_Page* pPage,
-                     CFX_RenderDevice* pDevice,
-                     CPDF_RenderContext* pContext,
+  void DisplayAnnots(CPDF_RenderContext* pContext,
                      bool bPrinting,
                      const CFX_Matrix& mtUser2Device,
                      bool bShowWidget);
@@ -40,13 +37,12 @@ class CPDF_AnnotList final : public CPDF_PageRenderContext::AnnotListIface {
   bool Contains(const CPDF_Annot* pAnnot) const;
 
  private:
-  void DisplayPass(CPDF_Page* pPage,
-                   CFX_RenderDevice* pDevice,
-                   CPDF_RenderContext* pContext,
+  void DisplayPass(CPDF_RenderContext* pContext,
                    bool bPrinting,
                    const CFX_Matrix& mtMatrix,
                    bool bWidget);
 
+  UnownedPtr<CPDF_Page> const m_pPage;
   UnownedPtr<CPDF_Document> const m_pDocument;
 
   // The first |m_nAnnotCount| elements are from the PDF itself. The rest are

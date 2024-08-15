@@ -11,9 +11,10 @@
 #include <set>
 
 #include "base/containers/unique_ptr_adapters.h"
+#import "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "ios/web/public/download/download_task_observer.h"
-#include "ios/web/public/web_state_user_data.h"
+#include "ios/web/public/lazy_web_state_user_data.h"
 
 @class JSUnzipper;
 @protocol WebContentCommands;
@@ -52,7 +53,7 @@ enum class DownloadPassKitResult {
 
 // TabHelper which downloads pkpass file, constructs PKPass object and passes
 // that PKPass to the delegate.
-class PassKitTabHelper : public web::WebStateUserData<PassKitTabHelper>,
+class PassKitTabHelper : public web::LazyWebStateUserData<PassKitTabHelper>,
                          public web::DownloadTaskObserver {
  public:
   PassKitTabHelper(const PassKitTabHelper&) = delete;
@@ -72,7 +73,7 @@ class PassKitTabHelper : public web::WebStateUserData<PassKitTabHelper>,
   explicit PassKitTabHelper(web::WebState* web_state);
 
  private:
-  friend class web::WebStateUserData<PassKitTabHelper>;
+  friend class web::LazyWebStateUserData<PassKitTabHelper>;
 
   // web::DownloadTaskObserver overrides:
   void OnDownloadUpdated(web::DownloadTask* task) override;
@@ -89,7 +90,7 @@ class PassKitTabHelper : public web::WebStateUserData<PassKitTabHelper>,
                              DownloadPassKitResult uma_result,
                              NSArray<NSData*>* all_data);
 
-  web::WebState* web_state_;
+  raw_ptr<web::WebState> web_state_;
   __weak id<WebContentCommands> handler_ = nil;
   // Set of unfinished download tasks.
   std::set<std::unique_ptr<web::DownloadTask>, base::UniquePtrComparator>

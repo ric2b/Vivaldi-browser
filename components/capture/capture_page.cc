@@ -252,16 +252,16 @@ class PaintPreviewCaptureState {
     delete this;
   }
 
-  static absl::optional<base::ReadOnlySharedMemoryRegion>
+  static std::optional<base::ReadOnlySharedMemoryRegion>
   ToReadOnlySharedMemory(paint_preview::PaintPreviewProto&& proto) {
     auto region =
         base::WritableSharedMemoryRegion::Create(proto.ByteSizeLong());
     if (!region.IsValid())
-      return absl::nullopt;
+      return std::nullopt;
 
     auto mapping = region.Map();
     if (!mapping.IsValid())
-      return absl::nullopt;
+      return std::nullopt;
 
     proto.SerializeToArray(mapping.memory(), mapping.size());
     return base::WritableSharedMemoryRegion::ConvertToReadOnly(

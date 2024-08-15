@@ -526,7 +526,7 @@ const char kGenDeps_Help[] =
 
   Not all GN targets that get evaluated are actually turned into ninja targets
   (see "gn help execution"). If this target is generated, then any targets in
-  the "gen_deps" list will also be generated, regardless of the usual critera.
+  the "gen_deps" list will also be generated, regardless of the usual criteria.
 
   Since "gen_deps" are not build time dependencies, there can be cycles between
   "deps" and "gen_deps" or within "gen_deps" itself.
@@ -788,8 +788,8 @@ const char kCommonCflagsHelp[] =
   versions of cflags* will be appended on the compiler command line after
   "cflags".
 
-  See also "asmflags" for flags for assembly-language files and "swiftflags"
-  for swift files.
+  See also "asmflags" for flags for assembly-language files, "swiftflags" for
+  swift files, and "rustflags" for Rust files.
 )" COMMON_ORDERING_HELP;
 const char* kCflags_Help = kCommonCflagsHelp;
 
@@ -1436,8 +1436,7 @@ const char kLibDirs_Help[] =
   Specifies additional directories passed to the linker for searching for the
   required libraries. If an item is not an absolute path, it will be treated as
   being relative to the current build file.
-)" COMMON_LIB_INHERITANCE_HELP COMMON_ORDERING_HELP
-        LIBS_AND_LIB_DIRS_ORDERING_HELP
+)" COMMON_LIB_INHERITANCE_HELP COMMON_ORDERING_HELP LIBS_AND_LIB_DIRS_ORDERING_HELP
     R"(
 Example
 

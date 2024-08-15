@@ -33,6 +33,13 @@ mojom_component("ax_enums_mojo") {
   output_prefix = "ui_accessibility_ax_mojom"
 }
 
+mojom_component("ax_features_mojo") {
+  sources = [ "ax_features.mojom" ]
+
+  macro_prefix = "UI_ACCESSIBILITY_AX_FEATURES_MOJOM"
+  output_prefix = "ui_accessibility_ax_features_mojom"
+}
+
 # A tiny subset of accessibility code that's allowed to be
 # included by Blink. The rule of thumb (for now) is that it's
 # anything platform-neutral (no platform/ directory) that
@@ -77,6 +84,7 @@ component("ax_base") {
     "ax_role_properties.h",
     "ax_text_attributes.cc",
     "ax_text_attributes.h",
+    "ax_tree_checks.h",
     "ax_tree_data.cc",
     "ax_tree_data.h",
     "ax_tree_id.cc",
@@ -96,6 +104,7 @@ component("ax_base") {
   public_deps = [
     ":ax_constants_mojo",
     ":ax_enums_mojo",
+    ":ax_features_mojo",
     "//base",
     "//ui/gfx",
     "//ui/gfx/geometry",
@@ -468,7 +477,6 @@ if (is_android) {
 
   generate_jni("ax_base_jni_headers") {
     sources = [ "android/java/src/org/chromium/ui/accessibility/AccessibilityFeaturesMap.java" ]
-    deps = [ "//third_party/jni_zero:jni_zero_java" ]
   }
 
   generate_jni("ax_jni_headers") {
@@ -477,7 +485,6 @@ if (is_android) {
       "android/java/src/org/chromium/ui/accessibility/AccessibilityState.java",
       "android/java/src/org/chromium/ui/accessibility/UiAccessibilityFeatureMap.java",
     ]
-    deps = [ "//third_party/jni_zero:jni_zero_java" ]
   }
 
   source_set("ax_base_android") {
@@ -512,7 +519,6 @@ if (is_android) {
       "android/java/src/org/chromium/ui/accessibility/UiAccessibilityFeatureMap.java",
     ]
     deps = [
-      ":ax_base_android",
       ":ui_accessibility_features_java",
       "//base:base_java",
       "//build/android:build_java",

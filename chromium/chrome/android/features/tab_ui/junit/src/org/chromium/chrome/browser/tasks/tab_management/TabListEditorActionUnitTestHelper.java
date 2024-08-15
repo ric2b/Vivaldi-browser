@@ -105,15 +105,14 @@ public class TabListEditorActionUnitTestHelper {
                 if (group.isSelected() && groupTabs.isEmpty()) {
                     selectedTabs.add(tab);
                 }
+                when(filter.isTabInTabGroup(tab)).thenReturn(group.getTabIds().length > 1);
                 groupTabs.add(tab);
-                final boolean hasOtherRelatedTabs = group.getTabIds().length > 1;
-                when(filter.hasOtherRelatedTabs(tab)).thenReturn(hasOtherRelatedTabs);
             }
             if (group.isSelected()) {
                 selectedTabIds.add(group.getTabIdAt(0));
                 selectedAndRelatedTabs.addAll(groupTabs);
             }
-            when(filter.getRootId(groupTabs.get(0))).thenReturn(group.getTabIdAt(0));
+            groupTabs.get(0).setRootId(group.getTabIdAt(0));
             when(filter.getRelatedTabList(group.getTabIdAt(0))).thenReturn(groupTabs);
             when(filter.getRelatedTabCountForRootId(group.getTabIdAt(0)))
                     .thenReturn(groupTabs.size());

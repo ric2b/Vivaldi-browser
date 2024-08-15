@@ -8,6 +8,7 @@ uvec3 tint_insert_bits(uvec3 v, uvec3 n, uint offset, uint count) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   uvec3 inner;
+  uint pad;
 } prevent_dce;
 
 void insertBits_87826b() {
@@ -34,6 +35,7 @@ void main() {
 }
 #version 310 es
 precision highp float;
+precision highp int;
 
 uvec3 tint_insert_bits(uvec3 v, uvec3 n, uint offset, uint count) {
   uint s = min(offset, 32u);
@@ -43,6 +45,7 @@ uvec3 tint_insert_bits(uvec3 v, uvec3 n, uint offset, uint count) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   uvec3 inner;
+  uint pad;
 } prevent_dce;
 
 void insertBits_87826b() {
@@ -72,6 +75,7 @@ uvec3 tint_insert_bits(uvec3 v, uvec3 n, uint offset, uint count) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   uvec3 inner;
+  uint pad;
 } prevent_dce;
 
 void insertBits_87826b() {

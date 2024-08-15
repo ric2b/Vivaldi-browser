@@ -63,7 +63,7 @@ class FrameHandler : public content::RenderFrameObserver,
   mojo::Remote<mojom::FrameInjectionHelper> injection_helper_;
   mojom::InjectionsForFramePtr pending_injections_;
   std::set<std::string> injected_static_scripts_;
-  absl::optional<mojom::ItemRunTime> last_run_time_;
+  std::optional<mojom::ItemRunTime> last_run_time_;
   mojo::ReceiverSet<mojom::FrameHandler> receivers_;
 };
 

@@ -5,16 +5,16 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_DIRECT_SOCKETS_UDP_SOCKET_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_DIRECT_SOCKETS_UDP_SOCKET_H_
 
-#include "third_party/blink/renderer/modules/direct_sockets/socket.h"
+#include <optional>
 
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/restricted_udp_socket.mojom-blink.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise_property.h"
+#include "third_party/blink/renderer/modules/direct_sockets/socket.h"
 #include "third_party/blink/renderer/modules/direct_sockets/udp_readable_stream_wrapper.h"
 #include "third_party/blink/renderer/modules/direct_sockets/udp_socket_mojo_remote.h"
 #include "third_party/blink/renderer/modules/direct_sockets/udp_writable_stream_wrapper.h"
@@ -33,10 +33,10 @@ class IPEndPoint;
 }  // namespace net
 
 namespace blink {
-
-class UDPSocketOptions;
 class ScriptState;
 class SocketCloseOptions;
+class UDPSocketOpenInfo;
+class UDPSocketOptions;
 
 // UDPSocket interface from udp_socket.idl
 class MODULES_EXPORT UDPSocket final : public ScriptWrappable,
@@ -51,7 +51,9 @@ class MODULES_EXPORT UDPSocket final : public ScriptWrappable,
                            ExceptionState&);
 
   // Socket:
-  ScriptPromise close(ScriptState*, ExceptionState&) override;
+  ScriptPromiseTyped<UDPSocketOpenInfo> opened(ScriptState*) const;
+  ScriptPromiseTyped<IDLUndefined> close(ScriptState*,
+                                         ExceptionState&) override;
 
  public:
   explicit UDPSocket(ScriptState*);
@@ -66,15 +68,15 @@ class MODULES_EXPORT UDPSocket final : public ScriptWrappable,
   void OnConnectedUDPSocketOpened(
       mojo::PendingReceiver<network::mojom::blink::UDPSocketListener>,
       int32_t result,
-      const absl::optional<net::IPEndPoint>& local_addr,
-      const absl::optional<net::IPEndPoint>& peer_addr);
+      const std::optional<net::IPEndPoint>& local_addr,
+      const std::optional<net::IPEndPoint>& peer_addr);
 
   // On net::OK initializes readable/writable streams and resolves opened
   // promise. Otherwise rejects the opened promise.
   void OnBoundUDPSocketOpened(
       mojo::PendingReceiver<network::mojom::blink::UDPSocketListener>,
       int32_t result,
-      const absl::optional<net::IPEndPoint>& local_addr);
+      const std::optional<net::IPEndPoint>& local_addr);
 
   void Trace(Visitor*) const override;
 
@@ -89,8 +91,8 @@ class MODULES_EXPORT UDPSocket final : public ScriptWrappable,
       network::mojom::RestrictedUDPSocketMode,
       mojo::PendingReceiver<network::mojom::blink::UDPSocketListener>,
       int32_t result,
-      const absl::optional<net::IPEndPoint>& local_addr,
-      const absl::optional<net::IPEndPoint>& peer_addr);
+      const std::optional<net::IPEndPoint>& local_addr,
+      const std::optional<net::IPEndPoint>& peer_addr);
 
   void FailOpenWith(int32_t error);
 
@@ -109,6 +111,8 @@ class MODULES_EXPORT UDPSocket final : public ScriptWrappable,
   void OnBothStreamsClosed(std::vector<ScriptValue> args);
 
   Member<UDPSocketMojoRemote> udp_socket_;
+
+  Member<ScriptPromiseProperty<UDPSocketOpenInfo, DOMException>> opened_;
 
   Member<UDPReadableStreamWrapper> readable_stream_wrapper_;
   Member<UDPWritableStreamWrapper> writable_stream_wrapper_;

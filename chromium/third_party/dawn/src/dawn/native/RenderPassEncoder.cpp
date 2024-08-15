@@ -128,7 +128,13 @@ Ref<RenderPassEncoder> RenderPassEncoder::MakeError(DeviceBase* device,
         new RenderPassEncoder(device, commandEncoder, encodingContext, ObjectBase::kError, label));
 }
 
+RenderPassEncoder::~RenderPassEncoder() {
+    mEncodingContext = nullptr;
+}
+
 void RenderPassEncoder::DestroyImpl() {
+    mCommandBufferState.End();
+
     RenderEncoderBase::DestroyImpl();
     // Ensure that the pass has exited. This is done for passes only since validation requires
     // they exit before destruction while bundles do not.
@@ -158,6 +164,8 @@ void RenderPassEncoder::APIEnd() {
 
 void RenderPassEncoder::End() {
     DAWN_ASSERT(GetDevice()->IsLockedByCurrentThreadIfNeeded());
+
+    mCommandBufferState.End();
 
     if (mEnded && IsValidationEnabled()) {
         GetDevice()->HandleError(DAWN_VALIDATION_ERROR("%s was already ended.", this));

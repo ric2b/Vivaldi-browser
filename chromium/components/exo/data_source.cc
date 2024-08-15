@@ -5,6 +5,7 @@
 #include "components/exo/data_source.h"
 
 #include <limits>
+#include <optional>
 
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -18,8 +19,8 @@
 #include "components/exo/data_source_delegate.h"
 #include "components/exo/data_source_observer.h"
 #include "components/exo/mime_utils.h"
+#include "components/exo/security_delegate.h"
 #include "net/base/mime_util.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/mime_util/mime_util.h"
 #include "third_party/icu/source/common/unicode/ucnv.h"
 #include "ui/base/clipboard/clipboard_constants.h"
@@ -50,7 +51,7 @@ constexpr char kImageBitmap[] = "image/bmp";
 constexpr char kImagePNG[] = "image/png";
 constexpr char kImageAPNG[] = "image/apng";
 
-absl::optional<std::vector<uint8_t>> ReadDataOnWorkerThread(base::ScopedFD fd) {
+std::optional<std::vector<uint8_t>> ReadDataOnWorkerThread(base::ScopedFD fd) {
   constexpr size_t kChunkSize = 1024;
   std::vector<uint8_t> bytes;
   while (true) {
@@ -64,7 +65,7 @@ absl::optional<std::vector<uint8_t>> ReadDataOnWorkerThread(base::ScopedFD fd) {
       return bytes;
     if (bytes_read < 0) {
       PLOG(ERROR) << "Failed to read selection data from clipboard";
-      return absl::nullopt;
+      return std::nullopt;
     }
   }
 }
@@ -190,7 +191,7 @@ void DataSource::SetActions(const base::flat_set<DndAction>& dnd_actions) {
   dnd_actions_ = dnd_actions;
 }
 
-void DataSource::Target(const absl::optional<std::string>& mime_type) {
+void DataSource::Target(const std::optional<std::string>& mime_type) {
   delegate_->OnTarget(mime_type);
 }
 
@@ -212,6 +213,12 @@ void DataSource::DndFinished() {
   finished_ = true;
   read_data_weak_ptr_factory_.InvalidateWeakPtrs();
   delegate_->OnDndFinished();
+}
+
+std::vector<ui::FileInfo> DataSource::GetFilenames(
+    ui::EndpointType source,
+    const std::vector<uint8_t>& data) const {
+  return delegate_->GetSecurityDelegate()->GetFilenames(source, data);
 }
 
 void DataSource::ReadDataForTesting(const std::string& mime_type,
@@ -249,7 +256,7 @@ void DataSource::OnDataRead(base::WeakPtr<DataSource> data_source_ptr,
                             ReadDataCallback callback,
                             const std::string& mime_type,
                             base::OnceClosure failure_callback,
-                            const absl::optional<std::vector<uint8_t>>& data) {
+                            const std::optional<std::vector<uint8_t>>& data) {
   if (!data_source_ptr || !data) {
     std::move(failure_callback).Run();
     return;

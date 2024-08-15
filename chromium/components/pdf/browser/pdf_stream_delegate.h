@@ -5,10 +5,10 @@
 #ifndef COMPONENTS_PDF_BROWSER_PDF_STREAM_DELEGATE_H_
 #define COMPONENTS_PDF_BROWSER_PDF_STREAM_DELEGATE_H_
 
+#include <optional>
 #include <string>
 
 #include "base/memory/raw_ptr_exclusion.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "url/gurl.h"
 
@@ -46,23 +46,25 @@ class PdfStreamDelegate {
     bool use_skia = false;
   };
 
-  PdfStreamDelegate();
-  PdfStreamDelegate(const PdfStreamDelegate&) = delete;
-  PdfStreamDelegate& operator=(const PdfStreamDelegate&) = delete;
-  virtual ~PdfStreamDelegate();
+  virtual ~PdfStreamDelegate() = default;
 
   // Maps the navigation to the original URL. This method should associate a
   // `StreamInfo` with the `blink::Document` for `navigation_handle`'s parent
   // `RenderFrameHost`, for later retrieval by `GetStreamInfo()`.
-  virtual absl::optional<GURL> MapToOriginalUrl(
-      content::NavigationHandle& navigation_handle);
+  virtual std::optional<GURL> MapToOriginalUrl(
+      content::NavigationHandle& navigation_handle) = 0;
 
   // Gets the stream information associated with the given `RenderFrameHost`.
   // The frame must be a PDF extension frame or Print Preview's frame.
   // Returns null if there is no associated stream or if `embedder_frame` is
   // `nullptr`.
-  virtual absl::optional<StreamInfo> GetStreamInfo(
-      content::RenderFrameHost* embedder_frame);
+  virtual std::optional<StreamInfo> GetStreamInfo(
+      content::RenderFrameHost* embedder_frame) = 0;
+
+  // Called after calculating sandbox flags for the PDF embedder frame and it's
+  // determined that the frame is sandboxed. This signals that the PDF
+  // navigation will fail and gives `PdfStreamDelegate` a chance to clean up.
+  virtual void OnPdfEmbedderSandboxed(int frame_tree_node_id) = 0;
 };
 
 }  // namespace pdf

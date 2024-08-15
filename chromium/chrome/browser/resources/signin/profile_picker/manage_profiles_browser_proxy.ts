@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {AvatarIcon} from 'chrome://resources/cr_elements/cr_profile_avatar_selector/cr_profile_avatar_selector.js';
+import type {AvatarIcon} from 'chrome://resources/cr_elements/cr_profile_avatar_selector/cr_profile_avatar_selector.js';
 import {sendWithPromise} from 'chrome://resources/js/cr.js';
 
 /**
@@ -137,7 +137,7 @@ export interface ManageProfilesBrowserProxy {
    * browser window.
    * TODO(https://crbug.com/1282157): Add createShortcut parameter.
    */
-  createProfileAndOpenCustomizationDialog(profileColor: number): void;
+  continueWithoutAccount(profileColor: number): void;
 
   /**
    * Sets the local profile name.
@@ -248,8 +248,8 @@ export class ManageProfilesBrowserProxyImpl {
     return sendWithPromise('getAvailableIcons');
   }
 
-  createProfileAndOpenCustomizationDialog(profileColor: number) {
-    chrome.send('createProfileAndOpenCustomizationDialog', [profileColor]);
+  continueWithoutAccount(profileColor: number) {
+    chrome.send('continueWithoutAccount', [profileColor]);
   }
 
   setProfileName(profilePath: string, profileName: string) {

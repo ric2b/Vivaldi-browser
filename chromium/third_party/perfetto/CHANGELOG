@@ -1,18 +1,101 @@
 Unreleased:
   Tracing service and probes:
+    *
+  Trace Processor:
+    *
+  UI:
+    * Per-cpu scheduling tracks now distinguish real-time priority threads with
+      a hatched pattern and name prefix. Based on priority during switch-in.
+  SDK:
+    *
+
+
+v43.2 - 2024-03-07:
+  UI:
+    * Added redirection to pinned UI version when using
+      `trace_processor_shell --httpd` and pinned version is available.
+
+
+v43.1 - 2024-03-05:
+  Tracing service and probes:
+    * Cherry-pick of https://r.android.com/2988674, which fixes the android x86
+      standalone build.
+
+
+v43.0 - 2024-03-05:
+  Tracing service and probes:
+    * Buffers marked as `transfer_on_clone` will be flushed independently when
+      cloning.
+    * ftrace: added drain_buffer_percent option to read kernel ring buffer
+      based on occupancy in addition to existing periodic reads. Requires Linux
+      kernel v6.1+.
+    * ftrace: changed default kernel per-cpu ring buffer sizes if a config
+      doesn't request an explicit size via buffer_size_kb. Added
+      buffer_size_lower_bound option that lets the service choose a bigger ring
+      buffer size than requested.
+    * "linux.process_stats" data source: added options to record: process age,
+      time spent running in userspace, and time spent running in kernel mode,
+      using /proc/pid/stat. See "record_process_age" and
+      "record_process_runtime" options.
+  Trace Processor:
+    * Added `decompress_packets` mode to the traceconv tool.
+    * Support memory mapped file access on Windows.
+    * Deprecated `common` standard library module, it will be removed by v45.
+      Some of the functionality have been migrated to other parts of standard
+      library.
+  UI:
+    * Added a "defaultPlugins" list to allow control over which plugins are
+      enabled by default.
+    * Added a feature to allow enabling/disabling plugins permanently from the
+      plugins page.
+    * Added plugin load times to the plugin page.
+    * Added scrolling to the pinned track area.
+    * Added commands for expanding and closing all tracks.
+    * Added {expand,collapse}GroupsByPredicate to plugin API.
+    * Added SimpleSliceTrack & SimpleCounterTrack which have the same
+      functionality of debug tracks but may be added on trace load from within
+      plugins.
+    * Added naive track crash containment, which means tracks that crash should
+      not crash the entire UI.
+    * Don't render "idle" kernel thread slices in thread state tracks.
+    * Fixed crash when using autofill in text inputs in chrome.
+    * Fixed bug where "incomplete" slices were sometimes not rendered.
+    * Fixed crash when calls to CacheStorage fail via promise rejection.
+    * Fixed bug causing slices to occasionally disappear in tracks v2.
+    * Fixes crash in tracksV2 when visible window is negative.
+    * Fix bug when toggling the sidebar without a trace loaded would either
+      crash the UI or simply not work.
+    * Various TabsV2 QoL improvements.
+    * Various AndroidLongBatteryTracing plugin improvements.
+
+
+v42.0 - 2024-02-02:
+  Tracing service and probes:
     * Linux/Android: kernel scheduling data (sched_switch and sched_waking
       ftrace events) is now serialised in a more compact format by default
       (previously required setting ftrace_config.compact_sched.enabled).
-  Trace Processor:
-    *
   UI:
     * Added "Realtime (Trace TZ)" timestamp formatting option to see timestamps
       in the local time of the traced device. It requires recent versions of the
       tracing service which set the system_info.timezone_off_mins field.
+    * Added tab support to the plugin API.
+    * Added a plugin to improve visualization of Android power traces containing
+      ODPM (on-device power rail monitor) data.
+    * Added support to attach the UI via ?rpc_port=1234 to multiple instances of
+      trace_processor --httpd --http-port=1234 (see UI docs).
+    * Fixed OOM detection message on in-memory tables.
+    * Fixed rendering of events at the every beginning and end of the trace.
+    * Fixed rendering of low density slices.
+    * Fixed bug in filterVisibleSlices (Thanks to Liangliang Sui).
   SDK:
+    * Fixed a bug that would cause DataSource::OnStop to be called twice upon
+      service disconnection with HandleStopAsynchronously().
+    * Fixed a long standing bug that caused the last TracePacket for every
+      sequence to be lost during scraping, for data sources that do not support
+      flushing. The fix works with old versions of the tracing service.
 
 
-v41.0 - 2023-01-02:
+v41.0 - 2024-01-11:
   Tracing service and probes:
     * Added support for ADB_SERVER_SOCKET in the websocket bridge.
     * Added support for reading Pressure Stall Information (PSI) from the kernel.
@@ -25,9 +108,6 @@ v41.0 - 2023-01-02:
     * Fixed a long standing bug that caused the last TrackEvent event for each
       thread to be lost during scraping. The fix works with old versions of the
       tracing service.
-    * Fixed a long standing bug that caused the last TracePacket for every
-      sequence to be lost during scraping, for data sources that do not support
-      flushing. The fix works with old versions of the tracing service.
 
 
 v40.0 - 2023-12-04:

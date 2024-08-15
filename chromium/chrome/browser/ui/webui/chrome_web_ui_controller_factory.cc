@@ -17,7 +17,6 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/about_flags.h"
-#include "chrome/browser/accessibility/accessibility_ui.h"
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/commerce/shopping_service_factory.h"
 #include "chrome/browser/devtools/devtools_ui_bindings.h"
@@ -28,10 +27,9 @@
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/safe_browsing/chrome_safe_browsing_local_state_delegate.h"
 #include "chrome/browser/signin/signin_features.h"
 #include "chrome/browser/ui/webui/about/about_ui.h"
-#include "chrome/browser/ui/webui/autofill_and_password_manager_internals/autofill_internals_ui.h"
-#include "chrome/browser/ui/webui/autofill_and_password_manager_internals/password_manager_internals_ui.h"
 #include "chrome/browser/ui/webui/browsing_topics/browsing_topics_internals_ui.h"
 #include "chrome/browser/ui/webui/components/components_ui.h"
 #include "chrome/browser/ui/webui/constrained_web_dialog_ui.h"
@@ -74,7 +72,6 @@
 #include "chrome/common/webui_url_constants.h"
 #include "components/commerce/content/browser/commerce_internals_ui.h"
 #include "components/commerce/core/commerce_constants.h"
-#include "components/compose/buildflags.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/favicon_base/favicon_util.h"
 #include "components/favicon_base/select_favicon_frames.h"
@@ -137,7 +134,6 @@
 #include "chrome/browser/ui/webui/access_code_cast/access_code_cast_ui.h"
 #include "chrome/browser/ui/webui/app_service_internals/app_service_internals_ui.h"
 #include "chrome/browser/ui/webui/bookmarks/bookmarks_ui.h"
-#include "chrome/browser/ui/webui/commander/commander_ui.h"
 #include "chrome/browser/ui/webui/commerce/shopping_insights_side_panel_ui.h"
 #include "chrome/browser/ui/webui/devtools/devtools_ui.h"
 #include "chrome/browser/ui/webui/downloads/downloads_ui.h"
@@ -164,7 +160,6 @@
 #include "chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_ui.h"
 #include "chrome/browser/ui/webui/side_panel/history_clusters/history_clusters_side_panel_ui.h"
 #include "chrome/browser/ui/webui/side_panel/performance_controls/performance_side_panel_ui.h"
-#include "chrome/browser/ui/webui/side_panel/read_anything/read_anything_untrusted_ui.h"
 #include "chrome/browser/ui/webui/side_panel/reading_list/reading_list_ui.h"
 #include "chrome/browser/ui/webui/side_panel/user_notes/user_notes_side_panel_ui.h"
 #include "chrome/browser/ui/webui/signin/sync_confirmation_ui.h"
@@ -188,6 +183,7 @@
 #include "ash/webui/files_internals/url_constants.h"
 #include "ash/webui/help_app_ui/url_constants.h"
 #include "ash/webui/multidevice_debug/url_constants.h"
+#include "ash/webui/print_preview_cros/url_constants.h"
 #include "ash/webui/vc_background_ui/url_constants.h"
 #include "chrome/browser/ash/extensions/url_constants.h"
 #include "chrome/browser/extensions/extension_keeplist_chromeos.h"
@@ -200,10 +196,6 @@
 #include "chromeos/crosapi/cpp/gurl_os_handler_utils.h"
 #include "url/url_util.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
-
-#if !BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chrome/browser/ui/webui/bluetooth_internals/bluetooth_internals_ui.h"  // nogncheck
-#endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ui/webui/chromeos/chrome_url_disabled/chrome_url_disabled_ui.h"
@@ -292,12 +284,6 @@
 
 #if BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
 #include "chrome/browser/ui/webui/lens/lens_ui.h"
-#endif
-
-#if BUILDFLAG(ENABLE_COMPOSE)
-#include "chrome/browser/compose/compose_enabling.h"
-#include "chrome/browser/ui/webui/compose/compose_ui.h"
-#include "components/compose/core/browser/compose_features.h"
 #endif
 
 #if defined(VIVALDI_BUILD)
@@ -438,23 +424,16 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   //
   // We must compare hosts only since some of the Web UIs append extra stuff
   // after the host name.
-  if (url.host_piece() == chrome::kChromeUIAccessibilityHost)
-    return &NewWebUI<AccessibilityUI>;
-  if (url.host_piece() == chrome::kChromeUIAutofillInternalsHost)
-    return &NewWebUI<AutofillInternalsUI>;
-
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (url.host_piece() == chrome::kChromeUIAppDisabledHost)
     return &NewWebUI<chromeos::ChromeURLDisabledUI>;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-#if !BUILDFLAG(IS_CHROMEOS_LACROS)
-  if (url.host_piece() == chrome::kChromeUIBluetoothInternalsHost)
-    return &NewWebUI<BluetoothInternalsUI>;
-#endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
-
+#if !defined(VIVALDI_BUILD)
   if (url.host_piece() == chrome::kChromeUIBrowsingTopicsInternalsHost)
     return &NewWebUI<BrowsingTopicsInternalsUI>;
+#endif
+
   if (url.host_piece() == chrome::kChromeUIComponentsHost)
     return &NewWebUI<ComponentsUI>;
 #if !BUILDFLAG(IS_ANDROID)
@@ -511,12 +490,11 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
       optimization_guide_internals::kChromeUIOptimizationGuideInternalsHost) {
     return &NewWebUI<OptimizationGuideInternalsUI>;
   }
-  if (url.host_piece() == chrome::kChromeUIPasswordManagerInternalsHost)
-    return &NewWebUI<PasswordManagerInternalsUI>;
   if (url.host_piece() == chrome::kChromeUIPredictorsHost)
     return &NewWebUI<PredictorsUI>;
   if (url.host_piece() == safe_browsing::kChromeUISafeBrowsingHost)
-    return &NewWebUI<safe_browsing::SafeBrowsingUI>;
+    return &NewComponentUI<safe_browsing::SafeBrowsingUI,
+                           ChromeSafeBrowsingLocalStateDelegate>;
   if (url.host_piece() == chrome::kChromeUISegmentationInternalsHost)
     return &NewWebUI<SegmentationInternalsUI>;
   if (url.host_piece() == chrome::kChromeUISignInInternalsHost)
@@ -559,8 +537,6 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   if (url.host_piece() == password_manager::kChromeUIPasswordManagerHost) {
     return &NewWebUI<PasswordManagerUI>;
   }
-  if (url.host_piece() == chrome::kChromeUICommanderHost)
-    return &NewWebUI<CommanderUI>;
   // Identity API is not available on Android.
   if (url.host_piece() == chrome::kChromeUIIdentityInternalsHost)
     return &NewWebUI<IdentityInternalsUI>;
@@ -752,12 +728,6 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   if (url.host_piece() == chrome::kChromeUIWebuiGalleryHost) {
     return &NewWebUI<WebuiGalleryUI>;
   }
-#if BUILDFLAG(ENABLE_COMPOSE)
-  if (url.host_piece() == chrome::kChromeUIComposeHost &&
-      ComposeEnabling::IsEnabledForProfile(profile)) {
-    return &NewWebUI<ComposeUI>;
-  }
-#endif
   if (url.host_piece() == chrome::kChromeUIWhatsNewHost &&
       whats_new::IsEnabled()) {
     return &NewWebUI<WhatsNewUI>;
@@ -1126,6 +1096,7 @@ ChromeWebUIControllerFactory::GetListOfAcceptableURLs() {
     GURL(ash::kChromeUICameraAppURL),
     GURL(ash::kChromeUIFilesInternalsURL),
     GURL(ash::kChromeUIHelpAppURL),
+    GURL(ash::kChromeUIPrintPreviewCrosURL),
     GURL(ash::multidevice::kChromeUIProximityAuthURL),
     GURL(ash::vc_background_ui::kChromeUIVcBackgroundURL),
     GURL(chrome::kChromeUIAccountManagerErrorURL),

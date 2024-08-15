@@ -7,13 +7,18 @@
 #include <memory>
 #include <optional>
 
-#include "base/base64.h"
+#include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
-#include "chrome/browser/ip_protection/get_proxy_config.pb.h"
 #include "chrome/browser/ip_protection/ip_protection_config_http.h"
+#include "chrome/browser/ip_protection/ip_protection_switches.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/channel_info.h"
+#include "components/prefs/pref_service.h"
+#include "components/privacy_sandbox/privacy_sandbox_features.h"
+#include "components/privacy_sandbox/tracking_protection_prefs.h"
 #include "components/privacy_sandbox/tracking_protection_settings.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
@@ -23,20 +28,37 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/features.h"
+#include "net/base/proxy_chain.h"
+#include "net/base/proxy_server.h"
+#include "net/base/proxy_string_util.h"
 #include "net/third_party/quiche/src/quiche/blind_sign_auth/blind_sign_auth.h"
 #include "net/third_party/quiche/src/quiche/blind_sign_auth/proto/blind_sign_auth_options.pb.h"
 #include "net/third_party/quiche/src/quiche/blind_sign_auth/proto/spend_token_data.pb.h"
 
+namespace {
+// TODO(https://crbug.com/1299886): Once `google_apis::GetAPIKey()` handles this
+// logic we can remove this helper.
+std::string GetAPIKey() {
+  return chrome::GetChannel() == version_info::Channel::STABLE
+             ? google_apis::GetAPIKey()
+             : google_apis::GetNonStableAPIKey();
+}
+constexpr char kChromeIpBlinding[] = "chromeipblinding";
+}  // namespace
+
 IpProtectionConfigProvider::IpProtectionConfigProvider(
     signin::IdentityManager* identity_manager,
     privacy_sandbox::TrackingProtectionSettings* tracking_protection_settings,
+    PrefService* pref_service,
     Profile* profile)
     : identity_manager_(identity_manager),
       tracking_protection_settings_(tracking_protection_settings),
+      pref_service_(pref_service),
       profile_(profile) {
   CHECK(identity_manager);
   identity_manager_->AddObserver(this);
   CHECK(tracking_protection_settings);
+  CHECK(pref_service_);
   tracking_protection_settings_->AddObserver(this);
 }
 
@@ -50,16 +72,15 @@ void IpProtectionConfigProvider::SetUp() {
     ip_protection_config_http_ =
         std::make_unique<IpProtectionConfigHttp>(url_loader_factory_.get());
   }
+  if (!ip_protection_proxy_config_retriever_) {
+    ip_protection_proxy_config_retriever_ =
+        std::make_unique<IpProtectionProxyConfigRetriever>(
+            url_loader_factory_.get(), kChromeIpBlinding, GetAPIKey());
+  }
   if (!bsa_) {
     if (!blind_sign_auth_) {
       privacy::ppn::BlindSignAuthOptions bsa_options{};
-      // Note: If a substantial number of new options get added to
-      // BlindSignAuthOptions, we could use one feature flag that contains the
-      // base64-encoded proto contents and then initialize `bsa_options` from
-      // that. For now just use individual feature flags for each of the
-      // options.
-      bsa_options.set_enable_privacy_pass(
-          net::features::kIpPrivacyBsaEnablePrivacyPass.Get());
+      bsa_options.set_enable_privacy_pass(true);
 
       blind_sign_auth_ = std::make_unique<quiche::BlindSignAuth>(
           ip_protection_config_http_.get(), std::move(bsa_options));
@@ -69,11 +90,16 @@ void IpProtectionConfigProvider::SetUp() {
 }
 
 void IpProtectionConfigProvider::SetUpForTesting(
+    std::unique_ptr<IpProtectionProxyConfigRetriever>
+        ip_protection_proxy_config_retriever,
     std::unique_ptr<IpProtectionConfigHttp> ip_protection_config_http,
     quiche::BlindSignAuthInterface* bsa) {
   // Carefully destroy any existing values in the correct order.
+  ip_protection_proxy_config_retriever_ = nullptr;
   ip_protection_config_http_ = nullptr;
   url_loader_factory_ = nullptr;
+  ip_protection_proxy_config_retriever_ =
+      std::move(ip_protection_proxy_config_retriever);
   ip_protection_config_http_ = std::move(ip_protection_config_http);
 
   bsa_ = nullptr;
@@ -98,6 +124,17 @@ void IpProtectionConfigProvider::TryGetAuthTokens(
     return;
   }
 
+  // If IP Protection is disabled via user settings then don't attempt to fetch
+  // tokens.
+  if (!IsIpProtectionEnabled()) {
+    TryGetAuthTokensComplete(
+        std::nullopt, std::move(callback),
+        IpProtectionTryGetAuthTokensResult::kFailedDisabledByUser);
+    return;
+  }
+
+  // If we are in a state where the OAuth token has persistent errors then don't
+  // try to request tokens.
   if (last_try_get_auth_tokens_backoff_ &&
       *last_try_get_auth_tokens_backoff_ == base::TimeDelta::Max()) {
     TryGetAuthTokensComplete(
@@ -127,6 +164,22 @@ void IpProtectionConfigProvider::GetProxyList(GetProxyListCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   CHECK(!is_shutting_down_);
   SetUp();
+
+  // If IP Protection is disabled via user settings then don't attempt to get a
+  // proxy list.
+  // TODO(https://crbug.com/1521138): We don't currently prevent GetProxyList
+  // calls from being made from the network service once the user has disabled
+  // the feature, so for now we will fail all of these requests here (and rely
+  // on rate-limiting by the network service to prevent the browser process from
+  // being flooded with messages). We are currently planning to move the
+  // GetProxyList calls to be made in the network service directly, so once that
+  // happens it should obviate the need for a long-term solution here. If that
+  // plan changes, though, we should implement a way for these requests to stop
+  // being made.
+  if (!IsIpProtectionEnabled()) {
+    std::move(callback).Run(std::nullopt);
+    return;
+  }
 
   // This feature flag is false by default.
   if (!net::features::kIpPrivacyIncludeOAuthTokenInGetProxyConfig.Get()) {
@@ -169,10 +222,10 @@ void IpProtectionConfigProvider::RequestOAuthToken(
           /*consumer_name=*/"IpProtectionService", identity_manager_, scopes,
           mode, signin::ConsentLevel::kSignin);
   auto* oauth_token_fetcher_ptr = oauth_token_fetcher.get();
-  oauth_token_fetcher_ptr->Start(base::BindOnce(
-      &IpProtectionConfigProvider::OnRequestOAuthTokenCompleted,
-      weak_ptr_factory_.GetWeakPtr(), std::move(oauth_token_fetcher),
-      std::move(callback)));
+  oauth_token_fetcher_ptr->Start(
+      base::BindOnce(&IpProtectionConfigProvider::OnRequestOAuthTokenCompleted,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     std::move(oauth_token_fetcher), std::move(callback)));
 }
 
 void IpProtectionConfigProvider::OnRequestOAuthTokenCompleted(
@@ -235,51 +288,76 @@ void IpProtectionConfigProvider::OnRequestOAuthTokenCompletedForGetProxyConfig(
 void IpProtectionConfigProvider::CallGetProxyConfig(
     GetProxyListCallback callback,
     std::optional<std::string> oauth_token) {
-  ip_protection_config_http_->GetProxyConfig(
+  ip_protection_proxy_config_retriever_->GetProxyConfig(
       oauth_token,
-      base::BindOnce(
-          [](GetProxyListCallback callback,
-             absl::StatusOr<ip_protection::GetProxyConfigResponse> response) {
-            if (!response.ok()) {
-              VLOG(2) << "IPATP::GetProxyList failed: " << response.status();
-              std::move(callback).Run(std::nullopt);
-              return;
-            }
-            std::vector<std::vector<std::string>> proxy_list;
-            if (net::features::kIpPrivacyUseProxyChains.Get()) {
-              for (const auto& proxy_chain : response->proxy_chain()) {
-                std::vector<std::string> proxies = {};
-                if (const std::string a_override =
-                        net::features::kIpPrivacyProxyAHostnameOverride.Get();
-                    a_override != "") {
-                  proxies.push_back(a_override);
-                } else {
-                  proxies.push_back(proxy_chain.proxy_a());
-                }
-                if (const std::string b_override =
-                        net::features::kIpPrivacyProxyBHostnameOverride.Get();
-                    b_override != "") {
-                  proxies.push_back(b_override);
-                } else {
-                  // TODO(crbug.com/1491092): Remove check once proxy_b is
-                  // populated by Phosphor.
-                  if (!proxy_chain.proxy_b().empty()) {
-                    proxies.push_back(proxy_chain.proxy_b());
-                  }
-                }
-                proxy_list.push_back(std::move(proxies));
-              }
-            } else {
-              for (const auto& hostname : response->first_hop_hostnames()) {
-                proxy_list.push_back({hostname});
-              }
-            }
+      base::BindOnce(&IpProtectionConfigProvider::OnGetProxyConfigCompleted,
+                     base::Unretained(this), std::move(callback)));
+}
 
-            VLOG(2) << "IPATP::GetProxyList got proxy list of length "
-                    << proxy_list.size();
-            std::move(callback).Run(std::move(proxy_list));
-          },
-          std::move(callback)));
+void IpProtectionConfigProvider::OnGetProxyConfigCompleted(
+    GetProxyListCallback callback,
+    base::expected<ip_protection::GetProxyConfigResponse, std::string>
+        response) {
+  if (!response.has_value()) {
+    VLOG(2) << "IPATP::GetProxyList failed: " << response.error();
+    std::move(callback).Run(std::nullopt);
+    return;
+  }
+
+  // Shortcut to create a ProxyServer with SCHEME_HTTPS from a string in the
+  // proto.
+  auto add_server = [](std::vector<net::ProxyServer>& proxies,
+                       std::string host) {
+    net::ProxyServer proxy_server = net::ProxySchemeHostAndPortToProxyServer(
+        net::ProxyServer::SCHEME_HTTPS, host);
+    if (!proxy_server.is_valid()) {
+      return false;
+    }
+    proxies.push_back(proxy_server);
+    return true;
+  };
+
+  std::vector<net::ProxyChain> proxy_list;
+  for (const auto& proxy_chain : response->proxy_chain()) {
+    std::vector<net::ProxyServer> proxies;
+    bool ok = true;
+    bool overridden = false;
+    if (const std::string a_override =
+            net::features::kIpPrivacyProxyAHostnameOverride.Get();
+        a_override != "") {
+      overridden = true;
+      ok = ok && add_server(proxies, a_override);
+    } else {
+      ok = ok && add_server(proxies, proxy_chain.proxy_a());
+    }
+    if (const std::string b_override =
+            net::features::kIpPrivacyProxyBHostnameOverride.Get();
+        ok && b_override != "") {
+      overridden = true;
+      ok = ok && add_server(proxies, b_override);
+    } else {
+      ok = ok && add_server(proxies, proxy_chain.proxy_b());
+    }
+
+    // Create a new ProxyChain if the proxies were all valid.
+    if (ok) {
+      // If the `chain_id` is out of range or local features overrode the
+      // chain, use the proxy chain anyway, but with the default `chain_id`.
+      // This allows adding new IDs on the server side without breaking older
+      // browsers.
+      int chain_id = proxy_chain.chain_id();
+      if (overridden || chain_id < 0 ||
+          chain_id > net::ProxyChain::kMaxIpProtectionChainId) {
+        chain_id = net::ProxyChain::kDefaultIpProtectionChainId;
+      }
+      proxy_list.push_back(
+          net::ProxyChain::ForIpProtection(std::move(proxies), chain_id));
+    }
+  }
+
+  VLOG(2) << "IPATP::GetProxyList got proxy list of length "
+          << proxy_list.size();
+  std::move(callback).Run(std::move(proxy_list));
 }
 
 void IpProtectionConfigProvider::FetchBlindSignedToken(
@@ -375,19 +453,12 @@ IpProtectionConfigProvider::CreateBlindSignedAuthToken(
   // What the network service will receive as a "token" is the fully constructed
   // authorization header value.
   std::string token_header_value = "";
-  if (net::features::kIpPrivacyBsaEnablePrivacyPass.Get()) {
-    privacy::ppn::PrivacyPassTokenData privacy_pass_token_data;
-    if (privacy_pass_token_data.ParseFromString(bsa_token.token)) {
-      token_header_value =
-          base::StrCat({"PrivateToken token=\"",
-                        privacy_pass_token_data.token(), "\" extensions=\"",
-                        privacy_pass_token_data.encoded_extensions(), "\""});
-    }
-  } else {
-    std::string encoded_token;
-    base::Base64Encode(bsa_token.token, &encoded_token);
-
-    token_header_value = base::StrCat({"Bearer ", encoded_token});
+  privacy::ppn::PrivacyPassTokenData privacy_pass_token_data;
+  if (privacy_pass_token_data.ParseFromString(bsa_token.token)) {
+    token_header_value =
+        base::StrCat({"PrivateToken token=\"", privacy_pass_token_data.token(),
+                      "\" extensions=\"",
+                      privacy_pass_token_data.encoded_extensions(), "\""});
   }
   return network::mojom::BlindSignedAuthToken::New(
       std::move(token_header_value), expiration);
@@ -435,6 +506,7 @@ std::optional<base::TimeDelta> IpProtectionConfigProvider::CalculateBackoff(
       break;
     case IpProtectionTryGetAuthTokensResult::kFailedNoAccount:
     case IpProtectionTryGetAuthTokensResult::kFailedOAuthTokenPersistent:
+    case IpProtectionTryGetAuthTokensResult::kFailedDisabledByUser:
       backoff = base::TimeDelta::Max();
       break;
     case IpProtectionTryGetAuthTokensResult::kFailedNotEligible:
@@ -515,6 +587,7 @@ void IpProtectionConfigProvider::Shutdown() {
   CHECK(tracking_protection_settings_);
   tracking_protection_settings_->RemoveObserver(this);
   tracking_protection_settings_ = nullptr;
+  pref_service_ = nullptr;
   profile_ = nullptr;
   // If we are shutting down, we can't process messages anymore because we rely
   // on having `identity_manager_` to get the OAuth token. Thus, just reset the
@@ -606,6 +679,46 @@ bool IpProtectionConfigProvider::CanRequestOAuthToken() {
   return identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSignin);
 }
 
+// static
+bool IpProtectionConfigProvider::CanIpProtectionBeEnabled() {
+  return base::FeatureList::IsEnabled(
+             net::features::kEnableIpProtectionProxy) &&
+         !base::CommandLine::ForCurrentProcess()->HasSwitch(
+             switches::kDisableIpProtectionProxy);
+}
+
+bool IpProtectionConfigProvider::IsIpProtectionEnabled() {
+  if (is_shutting_down_) {
+    return false;
+  }
+
+  // If the user's enterprise has a policy for IP, use this regardless of user
+  // UX feature status. Enterprises should have the ability to enable or disable
+  // IPP even when users do not have UX access to the feature.
+  if (pref_service_->IsManagedPreference(prefs::kIpProtectionEnabled)) {
+    return pref_service_->GetBoolean(prefs::kIpProtectionEnabled);
+  }
+
+  // TODO(https://crbug.com/1521138): We should ultimately use
+  // `tracking_protection_settings_->IsIpProtectionEnabled()` but we can't yet
+  // because it would prevent us from being able to do experiments via Finch
+  // without showing the user setting.
+  if (!base::FeatureList::IsEnabled(privacy_sandbox::kIpProtectionV1)) {
+    // If the preference isn't visible to users then IP Protection is enabled
+    // via other means like via Finch experiment.
+    return true;
+  }
+  return tracking_protection_settings_->IsIpProtectionEnabled();
+}
+
 void IpProtectionConfigProvider::OnIpProtectionEnabledChanged() {
-  // TODO(brgoldstein): Update IP protection state based on user settings.
+  if (is_shutting_down_) {
+    return;
+  }
+
+  ClearOAuthTokenProblemBackoff();
+
+  for (auto& ipp_proxy_delegate : remotes_) {
+    ipp_proxy_delegate->SetIpProtectionEnabled(IsIpProtectionEnabled());
+  }
 }

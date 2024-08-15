@@ -36,10 +36,10 @@ void alignedbox(const BoxType& box) {
 
   const Index dim = box.dim();
 
-  VectorType p0 = VectorType::Random(dim);
-  VectorType p1 = VectorType::Random(dim);
+  VectorType p0 = VectorType::Random(dim) / Scalar(2);
+  VectorType p1 = VectorType::Random(dim) / Scalar(2);
   while (p1 == p0) {
-    p1 = VectorType::Random(dim);
+    p1 = VectorType::Random(dim) / Scalar(2);
   }
   RealScalar s1 = internal::random<RealScalar>(0, 1);
 
@@ -216,7 +216,7 @@ template <typename Scalar, int Dim>
 Matrix<Scalar, Dim, (1 << Dim)> boxGetCorners(const Matrix<Scalar, Dim, 1>& min_, const Matrix<Scalar, Dim, 1>& max_) {
   Matrix<Scalar, Dim, (1 << Dim)> result;
   for (Index i = 0; i < (1 << Dim); ++i) {
-    for (Index j = 0; j < Dim; ++j) result(j, i) = (i & (1 << j)) ? min_(j) : max_(j);
+    for (Index j = 0; j < Dim; ++j) result(j, i) = (i & (Index(1) << j)) ? min_(j) : max_(j);
   }
   return result;
 }

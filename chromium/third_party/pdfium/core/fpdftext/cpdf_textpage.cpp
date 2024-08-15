@@ -23,13 +23,13 @@
 #include "core/fpdfapi/parser/cpdf_dictionary.h"
 #include "core/fpdfapi/parser/cpdf_string.h"
 #include "core/fpdftext/unicodenormalizationdata.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_bidi.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_unicode.h"
 #include "core/fxcrt/stl_util.h"
-#include "third_party/base/check.h"
-#include "third_party/base/check_op.h"
 
 namespace {
 
@@ -606,7 +606,7 @@ CPDF_TextPage::TextOrientation CPDF_TextPage::FindTextlineFlowOrientation()
 
 void CPDF_TextPage::AppendGeneratedCharacter(wchar_t unicode,
                                              const CFX_Matrix& formMatrix) {
-  absl::optional<CharInfo> pGenerateChar = GenerateCharInfo(unicode);
+  std::optional<CharInfo> pGenerateChar = GenerateCharInfo(unicode);
   if (!pGenerateChar.has_value())
     return;
 
@@ -976,7 +976,7 @@ void CPDF_TextPage::ProcessTextObject(const TransformedTextObject& obj) {
       case GenerateCharacter::kNone:
         break;
       case GenerateCharacter::kSpace: {
-        absl::optional<CharInfo> pGenerateChar = GenerateCharInfo(L' ');
+        std::optional<CharInfo> pGenerateChar = GenerateCharInfo(L' ');
         if (pGenerateChar.has_value()) {
           if (!form_matrix.IsIdentity())
             pGenerateChar->m_Matrix = form_matrix;
@@ -1417,11 +1417,11 @@ bool CPDF_TextPage::IsSameAsPreTextObject(
   return false;
 }
 
-absl::optional<CPDF_TextPage::CharInfo> CPDF_TextPage::GenerateCharInfo(
+std::optional<CPDF_TextPage::CharInfo> CPDF_TextPage::GenerateCharInfo(
     wchar_t unicode) {
   const CharInfo* pPrevCharInfo = GetPrevCharInfo();
   if (!pPrevCharInfo)
-    return absl::nullopt;
+    return std::nullopt;
 
   CharInfo info;
   info.m_Index = m_TextBuf.GetLength();

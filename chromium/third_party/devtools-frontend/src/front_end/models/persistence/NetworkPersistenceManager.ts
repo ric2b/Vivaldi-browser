@@ -9,6 +9,7 @@ import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as Breakpoints from '../breakpoints/breakpoints.js';
+import * as TextUtils from '../text_utils/text_utils.js';
 import * as Workspace from '../workspace/workspace.js';
 
 import {type FileSystem, FileSystemWorkspaceBinding} from './FileSystemWorkspaceBinding.js';
@@ -47,7 +48,7 @@ export class NetworkPersistenceManager extends Common.ObjectWrapper.ObjectWrappe
     this.savingForOverrides = new WeakSet();
     this.savingSymbol = Symbol('SavingForOverrides');
 
-    this.enabledSetting = Common.Settings.Settings.instance().moduleSetting('persistenceNetworkOverridesEnabled');
+    this.enabledSetting = Common.Settings.Settings.instance().moduleSetting('persistence-network-overrides-enabled');
     this.enabledSetting.addChangeListener(this.enabledChanged, this);
 
     this.workspace = workspace;
@@ -944,7 +945,7 @@ export class NetworkPersistenceManager extends Common.ObjectWrapper.ObjectWrappe
     if (fileSystemUISourceCode) {
       this.originalResponseContentPromises.set(
           fileSystemUISourceCode, interceptedRequest.responseBody().then(response => {
-            if (SDK.ContentData.ContentData.isError(response) || !response.isTextContent) {
+            if (TextUtils.ContentData.ContentData.isError(response) || !response.isTextContent) {
               return null;
             }
             return response.text;
@@ -961,10 +962,10 @@ export class NetworkPersistenceManager extends Common.ObjectWrapper.ObjectWrappe
           new Blob([], {type: mimeType}), /* encoded */ true, responseHeaders, /* isBodyOverridden */ false);
     } else {
       const responseBody = await interceptedRequest.responseBody();
-      if (!SDK.ContentData.ContentData.isError(responseBody)) {
+      if (!TextUtils.ContentData.ContentData.isError(responseBody)) {
         const content = responseBody.isTextContent ? responseBody.text : responseBody.base64;
         void interceptedRequest.continueRequestWithContent(
-            new Blob([content], {type: mimeType}), /* encoded */ true, responseHeaders,
+            new Blob([content], {type: mimeType}), /* encoded */ !responseBody.isTextContent, responseHeaders,
             /* isBodyOverridden */ false);
       }
     }

@@ -17,6 +17,7 @@
 #import "ios/web/find_in_page/find_in_page_java_script_feature.h"
 #import "ios/web/js_features/context_menu/context_menu_java_script_feature.h"
 #import "ios/web/js_features/error_page/error_page_java_script_feature.h"
+#import "ios/web/js_features/fullscreen/fullscreen_java_script_feature.h"
 #import "ios/web/js_features/scroll_helper/scroll_helper_java_script_feature.h"
 #import "ios/web/js_features/window_error/window_error_java_script_feature.h"
 #import "ios/web/js_messaging/web_frames_manager_java_script_feature.h"
@@ -79,6 +80,7 @@ std::vector<JavaScriptFeature*> GetBuiltInJavaScriptFeatures(
       ContextMenuJavaScriptFeature::FromBrowserState(browser_state),
       ErrorPageJavaScriptFeature::GetInstance(),
       FindInPageJavaScriptFeature::GetInstance(),
+      FullscreenJavaScriptFeature::GetInstance(),
       GetFaviconJavaScriptFeature(),
       GetScrollHelperJavaScriptFeature(),
       GetWindowErrorJavaScriptFeature(),
@@ -107,7 +109,7 @@ JavaScriptFeature* GetBaseJavaScriptFeature() {
   // Static storage is ok for `base_feature` as it holds no state.
   static base::NoDestructor<JavaScriptFeature> base_feature(
       ContentWorld::kAllContentWorlds,
-      std::vector<const JavaScriptFeature::FeatureScript>(
+      std::vector<JavaScriptFeature::FeatureScript>(
           {JavaScriptFeature::FeatureScript::CreateWithFilename(
               kBaseScriptName,
               JavaScriptFeature::FeatureScript::InjectionTime::kDocumentStart,
@@ -119,7 +121,7 @@ JavaScriptFeature* GetCommonJavaScriptFeature() {
   // Static storage is ok for `common_feature` as it holds no state.
   static base::NoDestructor<JavaScriptFeature> common_feature(
       ContentWorld::kAllContentWorlds,
-      std::vector<const JavaScriptFeature::FeatureScript>(
+      std::vector<JavaScriptFeature::FeatureScript>(
           {JavaScriptFeature::FeatureScript::CreateWithFilename(
               kCommonScriptName,
               JavaScriptFeature::FeatureScript::InjectionTime::kDocumentStart,
@@ -132,7 +134,7 @@ JavaScriptFeature* GetMessageJavaScriptFeature() {
   // Static storage is ok for `message_feature` as it holds no state.
   static base::NoDestructor<JavaScriptFeature> message_feature(
       ContentWorld::kAllContentWorlds,
-      std::vector<const JavaScriptFeature::FeatureScript>(
+      std::vector<JavaScriptFeature::FeatureScript>(
           {JavaScriptFeature::FeatureScript::CreateWithFilename(
               kMessageScriptName,
               JavaScriptFeature::FeatureScript::InjectionTime::kDocumentStart,

@@ -6,8 +6,10 @@
 import 'chrome://settings/settings.js';
 
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {SettingsPrivacyGuidePageElement, PrivacyGuideStep} from 'chrome://settings/lazy_load.js';
-import {CrSettingsPrefs, MetricsBrowserProxyImpl, PrivacyGuideStepsEligibleAndReached, Router, routes, SettingsPrefsElement, SyncBrowserProxyImpl} from 'chrome://settings/settings.js';
+import type {SettingsPrivacyGuidePageElement} from 'chrome://settings/lazy_load.js';
+import {PrivacyGuideStep} from 'chrome://settings/lazy_load.js';
+import type {SettingsPrefsElement} from 'chrome://settings/settings.js';
+import {CrSettingsPrefs, MetricsBrowserProxyImpl, PrivacyGuideStepsEligibleAndReached, Router, routes, SyncBrowserProxyImpl} from 'chrome://settings/settings.js';
 import {assertTrue, assertNotReached} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
@@ -131,10 +133,10 @@ suite('PrivacyGuideEligibleReachedMetrics', function() {
   test('recordStepsAreEligibleReached', async function() {
     const optionalSteps: PrivacyGuideStep[] = [];
     optionalSteps.push(PrivacyGuideStep.HISTORY_SYNC);
+    optionalSteps.push(PrivacyGuideStep.SAFE_BROWSING);
     if (!loadTimeData.getBoolean('is3pcdCookieSettingsRedesignEnabled')) {
       optionalSteps.push(PrivacyGuideStep.COOKIES);
     }
-    optionalSteps.push(PrivacyGuideStep.SAFE_BROWSING);
 
     const masks: number[] = [];
     for (let i = 0; i < optionalSteps.length; i++) {
@@ -162,8 +164,6 @@ suite('PrivacyGuideEligibleReachedMetrics', function() {
         }
       });
 
-      expectedArguments.add(
-          PrivacyGuideStepsEligibleAndReached.SEARCH_SUGGESTIONS_ELIGIBLE);
       expectedArguments.add(
           PrivacyGuideStepsEligibleAndReached.COMPLETION_ELIGIBLE);
 
@@ -200,20 +200,6 @@ suite('PrivacyGuideEligibleReachedMetrics', function() {
         assertTrue(!!nextButtonElementOnStep);
         nextButtonElementOnStep.click();
       }
-
-      expectedArguments.add(
-          PrivacyGuideStepsEligibleAndReached.SEARCH_SUGGESTIONS_REACHED);
-
-      assertTrue(
-          isSetEqual(
-              expectedArguments,
-              await getPromiseArguments(testMetricsBrowserProxy)),
-          'Sets differ for the step: SEARCH_SUGGESTIONS_REACHED');
-
-      const nextButtonElementOnSearchSuggestionsStep =
-          page.shadowRoot!.querySelector<HTMLElement>('#nextButton');
-      assertTrue(!!nextButtonElementOnSearchSuggestionsStep);
-      nextButtonElementOnSearchSuggestionsStep.click();
 
       expectedArguments.add(
           PrivacyGuideStepsEligibleAndReached.COMPLETION_REACHED);

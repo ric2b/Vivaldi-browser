@@ -4,9 +4,16 @@
 
 #include "content/browser/indexed_db/indexed_db_control_wrapper.h"
 
-#include "base/task/sequenced_task_runner.h"
-#include "content/public/browser/browser_task_traits.h"
-#include "content/public/browser/browser_thread.h"
+#include <ostream>
+#include <utility>
+
+#include "base/check.h"
+#include "base/functional/bind.h"
+#include "components/services/storage/public/cpp/buckets/bucket_locator.h"
+#include "components/services/storage/public/mojom/storage_policy_update.mojom.h"
+#include "content/browser/indexed_db/indexed_db_context_impl.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 
 namespace content {
@@ -45,6 +52,7 @@ void IndexedDBControlWrapper::BindIndexedDB(
     const storage::BucketLocator& bucket_locator,
     mojo::PendingRemote<storage::mojom::IndexedDBClientStateChecker>
         client_state_checker_remote,
+    const base::UnguessableToken& client_token,
     mojo::PendingReceiver<blink::mojom::IDBFactory> receiver) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   BindRemoteIfNeeded();
@@ -56,15 +64,7 @@ void IndexedDBControlWrapper::BindIndexedDB(
   }
   indexed_db_control_->BindIndexedDB(bucket_locator,
                                      std::move(client_state_checker_remote),
-                                     std::move(receiver));
-}
-
-void IndexedDBControlWrapper::DeleteForStorageKey(
-    const blink::StorageKey& storage_key,
-    DeleteForStorageKeyCallback callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BindRemoteIfNeeded();
-  indexed_db_control_->DeleteForStorageKey(storage_key, std::move(callback));
+                                     client_token, std::move(receiver));
 }
 
 void IndexedDBControlWrapper::ForceClose(

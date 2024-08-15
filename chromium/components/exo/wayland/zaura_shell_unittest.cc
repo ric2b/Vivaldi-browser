@@ -8,6 +8,7 @@
 
 #include <sys/socket.h>
 #include <memory>
+#include <vector>
 
 #include "ash/session/session_controller_impl.h"
 #include "ash/shelf/shelf.h"
@@ -173,8 +174,7 @@ class ZAuraSurfaceTest : public test::ExoTestBase,
     test::ExoTestBase::SetUp();
 
     gfx::Size buffer_size(10, 10);
-    std::unique_ptr<Buffer> buffer(
-        new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+    auto buffer = test::ExoTestHelper::CreateBuffer(buffer_size);
 
     surface_ = std::make_unique<Surface>();
     surface_->Attach(buffer.get());
@@ -376,8 +376,7 @@ TEST_F(ZAuraSurfaceTest, OcclusionIncludesOffScreenArea) {
   UpdateDisplay("200x150");
 
   gfx::Size buffer_size(80, 100);
-  std::unique_ptr<Buffer> buffer(
-      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  auto buffer = test::ExoTestHelper::CreateBuffer(buffer_size);
   // This is scaled by 1.5 - set the bounds to (-60, 75, 120, 150) in screen
   // coordinates so 75% of it is outside of the screen.
   surface().window()->SetBounds(gfx::Rect(-40, 50, 80, 100));
@@ -400,8 +399,7 @@ TEST_F(ZAuraSurfaceTest, OcclusionFractionDoesNotDoubleCountOutsideOfScreen) {
 
   // Create a surface which is halfway offscreen.
   gfx::Size buffer1_size(80, 100);
-  std::unique_ptr<Buffer> buffer1(
-      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer1_size)));
+  auto buffer1 = test::ExoTestHelper::CreateBuffer(buffer1_size);
   surface().window()->SetBounds(gfx::Rect(-40, 50, 80, 100));
   surface().Attach(buffer1.get());
   surface().Commit();
@@ -719,13 +717,13 @@ class MockAuraOutput : public AuraOutput {
 };
 
 class ZAuraOutputTest : public test::ExoTestBase {
- protected:
+ public:
   ZAuraOutputTest() = default;
   ZAuraOutputTest(const ZAuraOutputTest&) = delete;
   ZAuraOutputTest& operator=(const ZAuraOutputTest&) = delete;
-  // test::ExxoTestBase:
   ~ZAuraOutputTest() override = default;
 
+  // test::ExoTestBase:
   void SetUp() override {
     test::ExoTestBase::SetUp();
 
@@ -736,12 +734,12 @@ class ZAuraOutputTest : public test::ExoTestBase {
 
     UpdateDisplayOutput();
   }
-
   void TearDown() override {
     output_holder_list_.clear();
     test::ExoTestBase::TearDown();
   }
 
+ protected:
   void ResetDisplayOutput() {
     for (auto& holder : output_holder_list_) {
       holder->aura_output.reset();
@@ -754,7 +752,7 @@ class ZAuraOutputTest : public test::ExoTestBase {
     auto iter = output_holder_list_.begin();
     while (iter != output_holder_list_.end()) {
       auto* out_ptr = (*iter)->output.get();
-      bool erased = base::EraseIf(display_list,
+      bool erased = std::erase_if(display_list,
                                   [out_ptr](const display::Display& display) {
                                     return display.id() == out_ptr->id();
                                   });
@@ -767,8 +765,7 @@ class ZAuraOutputTest : public test::ExoTestBase {
     for (auto& display : display_list) {
       auto output_holder = std::make_unique<OutputHolder>();
       output_holder->client = client_;
-      output_holder->output =
-          std::make_unique<WaylandDisplayOutput>(display.id());
+      output_holder->output = std::make_unique<WaylandDisplayOutput>(display);
 
       wl_resource* output_resource = wl_resource_create(
           client_, &wl_output_interface, kWlOutputVersion, 0);
@@ -903,51 +900,6 @@ TEST_F(ZAuraOutputTest, DestroyAuraOutput) {
   EXPECT_TRUE(output_holder->aura_output->HasDisplayHandlerForTesting());
   output_holder->handler.reset();
   EXPECT_FALSE(output_holder->aura_output->HasDisplayHandlerForTesting());
-}
-
-// Make sure that data associated with wl/aura outputs are destroyed
-// properly regardless of which one is destroyed first.
-TEST_F(ZAuraOutputTest, ActiveDisplay) {
-  UpdateDisplay("800x600, 800x600");
-  UpdateDisplayOutput();
-  auto* screen = display::Screen::GetScreen();
-  int64_t primary_id = screen->GetAllDisplays()[0].id();
-  int64_t secondary_id = screen->GetAllDisplays()[1].id();
-
-  auto* primary_output_holder = GetOutputHolder(primary_id);
-  auto* secondary_output_holder = GetOutputHolder(secondary_id);
-
-  auto shell_surface =
-      test::ShellSurfaceBuilder({100, 100}).BuildShellSurface();
-
-  auto test_widget = CreateTestWidget();
-  test_widget->SetBounds({800, 0, 100, 100});
-
-  ASSERT_EQ(screen->GetDisplayNearestWindow(shell_surface->host_window()).id(),
-            primary_id);
-  ASSERT_EQ(
-      screen->GetDisplayNearestWindow(test_widget->GetNativeWindow()).id(),
-      secondary_id);
-
-  EXPECT_CALL(*(primary_output_holder->aura_output), SendActiveDisplay())
-      .Times(1);
-  EXPECT_CALL(*(secondary_output_holder->aura_output), SendActiveDisplay())
-      .Times(0);
-  shell_surface->GetWidget()->Activate();
-  testing::Mock::VerifyAndClearExpectations(
-      primary_output_holder->aura_output.get());
-  testing::Mock::VerifyAndClearExpectations(
-      secondary_output_holder->aura_output.get());
-
-  EXPECT_CALL(*(primary_output_holder->aura_output), SendActiveDisplay())
-      .Times(0);
-  EXPECT_CALL(*(secondary_output_holder->aura_output), SendActiveDisplay())
-      .Times(1);
-  test_widget->Activate();
-  testing::Mock::VerifyAndClearExpectations(
-      primary_output_holder->aura_output.get());
-  testing::Mock::VerifyAndClearExpectations(
-      secondary_output_holder->aura_output.get());
 }
 
 }  // namespace wayland

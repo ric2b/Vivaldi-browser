@@ -74,10 +74,10 @@ TNode<FixedArray> WasmBuiltinsAssembler::LoadTablesFromInstanceData(
                                      WasmTrustedInstanceData::kTablesOffset);
 }
 
-TNode<FixedArray> WasmBuiltinsAssembler::LoadInternalFunctionsFromInstanceData(
+TNode<FixedArray> WasmBuiltinsAssembler::LoadFuncRefsFromInstanceData(
     TNode<WasmTrustedInstanceData> trusted_data) {
-  return LoadObjectField<FixedArray>(
-      trusted_data, WasmTrustedInstanceData::kWasmInternalFunctionsOffset);
+  return LoadObjectField<FixedArray>(trusted_data,
+                                     WasmTrustedInstanceData::kFuncRefsOffset);
 }
 
 TNode<FixedArray> WasmBuiltinsAssembler::LoadManagedObjectMapsFromInstanceData(
@@ -141,6 +141,16 @@ TF_BUILTIN(WasmToJsWrapperCSA, WasmBuiltinsAssembler) {
       UncheckedParameter<WasmApiFunctionRef>(Descriptor::kWasmApiFunctionRef));
   PopAndReturn(result.popCount, result.result0, result.result1, result.result2,
                result.result3);
+}
+
+TF_BUILTIN(WasmToJsWrapperInvalidSig, WasmBuiltinsAssembler) {
+  TNode<WasmApiFunctionRef> ref =
+      UncheckedParameter<WasmApiFunctionRef>(Descriptor::kWasmApiFunctionRef);
+  TNode<Context> context =
+      LoadObjectField<Context>(ref, WasmApiFunctionRef::kNativeContextOffset);
+
+  CallRuntime(Runtime::kWasmThrowJSTypeError, context);
+  Unreachable();
 }
 
 }  // namespace v8::internal

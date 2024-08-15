@@ -63,6 +63,12 @@ class DAWN_WIRE_EXPORT CommandHandler {
     virtual const volatile char* HandleCommands(const volatile char* commands, size_t size) = 0;
 };
 
+// Handle struct that are used to uniquely represent an object of a particular type in the wire.
+struct Handle {
+    uint32_t id = 0;
+    uint32_t generation = 0;
+};
+
 }  // namespace dawn::wire
 
 #endif  // INCLUDE_DAWN_WIRE_WIRE_H_

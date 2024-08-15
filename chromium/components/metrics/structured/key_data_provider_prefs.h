@@ -8,8 +8,8 @@
 #include <optional>
 #include <string_view>
 
-#include "components/metrics/structured/key_data.h"
-#include "components/metrics/structured/key_data_provider.h"
+#include "components/metrics/structured/lib/key_data.h"
+#include "components/metrics/structured/lib/key_data_provider.h"
 #include "components/prefs/pref_service.h"
 
 namespace metrics::structured {
@@ -23,7 +23,6 @@ class KeyDataProviderPrefs : public KeyDataProvider {
 
   // KeyDataProvider:
   bool IsReady() override;
-  void OnProfileAdded(const base::FilePath& profile_path) override;
   std::optional<uint64_t> GetId(const std::string& project_name) override;
   KeyData* GetKeyData(const std::string& project_name) override;
   void Purge() override;

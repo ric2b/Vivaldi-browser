@@ -401,14 +401,14 @@ class PLATFORM_EXPORT ResourceLoadScheduler final
 
   const Member<DetachableConsoleLogger> console_logger_;
 
-  raw_ptr<const base::Clock, ExperimentalRenderer> clock_;
+  raw_ptr<const base::Clock> clock_;
 
   ThrottleOptionOverride throttle_option_override_;
 
   Member<LoadingBehaviorObserver> loading_behavior_observer_;
 
-  absl::optional<base::TimeDelta> http_rtt_ = absl::nullopt;
-  absl::optional<base::TimeDelta> http_rtt_for_testing_ = absl::nullopt;
+  std::optional<base::TimeDelta> http_rtt_ = std::nullopt;
+  std::optional<base::TimeDelta> http_rtt_for_testing_ = std::nullopt;
 };
 
 }  // namespace blink

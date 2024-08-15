@@ -75,7 +75,7 @@ class BrowserURLLoaderThrottle : public blink::URLLoaderThrottle {
       const base::RepeatingCallback<content::WebContents*()>&
           web_contents_getter,
       int frame_tree_node_id,
-      absl::optional<int64_t> navigation_id,
+      std::optional<int64_t> navigation_id,
       base::WeakPtr<RealTimeUrlLookupServiceBase> url_lookup_service,
       base::WeakPtr<HashRealTimeService> hash_realtime_service,
       hash_realtime_utils::HashRealTimeSelection hash_realtime_selection,
@@ -114,7 +114,7 @@ class BrowserURLLoaderThrottle : public blink::URLLoaderThrottle {
       const base::RepeatingCallback<content::WebContents*()>&
           web_contents_getter,
       int frame_tree_node_id,
-      absl::optional<int64_t> navigation_id,
+      std::optional<int64_t> navigation_id,
       base::WeakPtr<RealTimeUrlLookupServiceBase> url_lookup_service,
       base::WeakPtr<HashRealTimeService> hash_realtime_service,
       hash_realtime_utils::HashRealTimeSelection hash_realtime_selection,
@@ -147,9 +147,8 @@ class BrowserURLLoaderThrottle : public blink::URLLoaderThrottle {
   // Called when the URL is identified as dangerous.
   void BlockUrlLoader(bool showed_interstitial);
 
-  // Destroys all checkers on the IO thread, or UI thread if
-  // kSafeBrowsingOnUIThread is enabled.
-  void DeleteUrlCheckerOnSB();
+  // Destroys all checkers.
+  void DeleteUrlChecker();
 
   // If |sync_sb_checker_| has completed, but |async_sb_checker_| has not,
   // transfer the ownership of |async_sb_checker_| to |async_check_tracker_|.
@@ -211,9 +210,10 @@ class BrowserURLLoaderThrottle : public blink::URLLoaderThrottle {
   hash_realtime_utils::HashRealTimeSelection hash_realtime_selection_;
 
   int frame_tree_node_id_;
-  absl::optional<int64_t> navigation_id_;
+  std::optional<int64_t> navigation_id_;
   UrlCheckerOnSB::GetDelegateCallback delegate_getter_;
   base::RepeatingCallback<content::WebContents*()> web_contents_getter_;
+  SessionID tab_id_ = SessionID::InvalidValue();
 
   // Checkers used to perform Safe Browsing checks. |sync_sb_checker_| may defer
   // the URL loader. |async_sb_checker_| doesn't defer the URL loader and may

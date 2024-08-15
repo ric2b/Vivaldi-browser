@@ -88,11 +88,7 @@ bool g_skip_main_profile_check_for_testing = false;
 GURL EncodeIconAsUrl(const SkBitmap& bitmap) {
   std::vector<unsigned char> output;
   gfx::PNGCodec::EncodeBGRASkBitmap(bitmap, false, &output);
-  std::string encoded;
-  base::Base64Encode(
-      base::StringPiece(reinterpret_cast<const char*>(output.data()),
-                        output.size()),
-      &encoded);
+  std::string encoded = base::Base64Encode(output);
   return GURL("data:image/png;base64," + encoded);
 }
 
@@ -212,6 +208,7 @@ DisplayMode ResolveAppDisplayModeForStandaloneLaunchContainer(
     case DisplayMode::kMinimalUi:
       return DisplayMode::kMinimalUi;
     case DisplayMode::kUndefined:
+    case DisplayMode::kPictureInPicture:
       NOTREACHED();
       [[fallthrough]];
     case DisplayMode::kStandalone:
@@ -286,7 +283,7 @@ DisplayMode ResolveNonIsolatedEffectiveDisplayMode(
     mojom::UserDisplayMode user_display_mode,
     bool is_shortcut_app,
     bool ignore_shortstand) {
-  const absl::optional<DisplayMode> resolved_display_mode =
+  const std::optional<DisplayMode> resolved_display_mode =
       ShouldResolveShortstandDisplayMode(ignore_shortstand)
           ? TryResolveShortstandUserDisplayMode(is_shortcut_app)
           : TryResolveUserDisplayMode(user_display_mode);
@@ -626,6 +623,7 @@ apps::LaunchContainer ConvertDisplayModeToAppLaunchContainer(
     case DisplayMode::kWindowControlsOverlay:
     case DisplayMode::kTabbed:
     case DisplayMode::kBorderless:
+    case DisplayMode::kPictureInPicture:
       return apps::LaunchContainer::kLaunchContainerWindow;
     case DisplayMode::kUndefined:
       return apps::LaunchContainer::kLaunchContainerNone;

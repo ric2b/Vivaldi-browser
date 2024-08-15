@@ -243,25 +243,6 @@ void TextBlob::draw(SkCanvas* canvas,
     fSubRuns->draw(canvas, drawOrigin, paint, this, atlasDelegate);
 }
 
-#if defined(GR_TEST_UTILS)
-struct SubRunContainerPeer {
-    static const AtlasSubRun* getAtlasSubRun(const SubRunContainer& subRuns) {
-        if (subRuns.isEmpty()) {
-            return nullptr;
-        }
-        return subRuns.fSubRuns.front().testingOnly_atlasSubRun();
-    }
-};
-#endif
-
-const AtlasSubRun* TextBlob::testingOnlyFirstSubRun() const {
-#if defined(GR_TEST_UTILS)
-    return SubRunContainerPeer::getAtlasSubRun(*fSubRuns);
-#else
-    return nullptr;
-#endif
-}
-
 TextBlob::TextBlob(SubRunAllocator&& alloc,
                    SubRunContainerOwner subRuns,
                    int totalMemorySize,
@@ -273,11 +254,9 @@ TextBlob::TextBlob(SubRunAllocator&& alloc,
 
 sk_sp<Slug> MakeSlug(const SkMatrix& drawMatrix,
                      const sktext::GlyphRunList& glyphRunList,
-                     const SkPaint& initialPaint,
-                     const SkPaint& drawingPaint,
+                     const SkPaint& paint,
                      SkStrikeDeviceInfo strikeDeviceInfo,
                      sktext::StrikeForGPUCacheInterface* strikeCache) {
-    return SlugImpl::Make(
-            drawMatrix, glyphRunList, initialPaint, drawingPaint, strikeDeviceInfo, strikeCache);
+    return SlugImpl::Make(drawMatrix, glyphRunList, paint, strikeDeviceInfo, strikeCache);
 }
 }  // namespace sktext::gpu

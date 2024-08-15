@@ -114,8 +114,7 @@ TEST_F(NinjaBuildWriterTest, TwoTargets) {
   target_baz.action_values().outputs() = SubstitutionList::MakeForTest(
       "//out/Debug/out5.out", "//out/Debug/out6.out");
   target_baz.SetToolchain(&other_toolchain);
-  target_baz.set_pool(
-      LabelPtrPair<Pool>(&another_regular_pool));
+  target_baz.set_pool(LabelPtrPair<Pool>(&another_regular_pool));
   ASSERT_TRUE(target_baz.OnResolved(&err));
 
   // The console pool must be in the default toolchain.

@@ -17,6 +17,7 @@
 #include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/wm/wm_move_resize_handler.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/test/widget_activation_waiter.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -122,6 +123,10 @@ class FakeWmMoveResizeHandler : public ui::WmMoveResizeHandler {
 
   void set_bounds(const gfx::Rect& bounds) { bounds_ = bounds; }
 
+  void set_platform_window(ui::PlatformWindow* platform_window) {
+    platform_window_ = platform_window;
+  }
+
   // ui::WmMoveResizeHandler
   void DispatchHostWindowDragMovement(
       int hittest,
@@ -204,7 +209,7 @@ class HitTestWidgetDelegate : public WidgetDelegate {
   }
 
  private:
-  raw_ptr<HitTestNonClientFrameView> frame_view_ = nullptr;
+  raw_ptr<HitTestNonClientFrameView, DanglingUntriaged> frame_view_ = nullptr;
 };
 
 // Test host that can intercept calls to the real host.
@@ -440,6 +445,8 @@ TEST_P(DesktopWindowTreeHostPlatformImplTestWithTouch, MAYBE_HitTest) {
                                        ui::EF_LEFT_MOUSE_BUTTON));
     }
   }
+  handler->set_platform_window(nullptr);
+  widget.reset();
 }
 
 // Tests that the window is maximized in response to a double click event.
@@ -565,18 +572,16 @@ TEST_F(DesktopWindowTreeHostPlatformImplTest, Deactivate) {
   std::unique_ptr<Widget> widget(CreateWidget(gfx::Rect(100, 100, 100, 100)));
 
   {
-    views::test::WidgetActivationWaiter waiter(widget.get(), true);
     widget->Show();
     widget->Activate();
-    waiter.Wait();
+    views::test::WaitForWidgetActive(widget.get(), true);
   }
 
   {
     // Regardless of whether |widget|'s X11 window eventually gets deactivated,
     // |widget|'s "active" state should change.
-    views::test::WidgetActivationWaiter waiter(widget.get(), false);
     widget->Deactivate();
-    waiter.Wait();
+    views::test::WaitForWidgetActive(widget.get(), false);
     EXPECT_FALSE(widget->IsActive());
   }
 
@@ -585,9 +590,8 @@ TEST_F(DesktopWindowTreeHostPlatformImplTest, Deactivate) {
     // should update the widget's "active" state. Note: Activating a widget
     // whose X11 window is not active does not synchronously update the widget's
     // "active" state.
-    views::test::WidgetActivationWaiter waiter(widget.get(), true);
     widget->Activate();
-    waiter.Wait();
+    views::test::WaitForWidgetActive(widget.get(), true);
     EXPECT_TRUE(widget->IsActive());
   }
 }
@@ -600,15 +604,13 @@ TEST_F(DesktopWindowTreeHostPlatformImplTest, CaptureEventForwarding) {
 
   std::unique_ptr<Widget> widget1(CreateWidget(gfx::Rect(100, 100, 100, 100)));
   aura::Window* window1 = widget1->GetNativeWindow();
-  views::test::WidgetActivationWaiter waiter1(widget1.get(), true);
   widget1->Show();
-  waiter1.Wait();
+  views::test::WaitForWidgetActive(widget1.get(), true);
 
   std::unique_ptr<Widget> widget2(CreateWidget(gfx::Rect(200, 100, 100, 100)));
   aura::Window* window2 = widget2->GetNativeWindow();
-  views::test::WidgetActivationWaiter waiter2(widget2.get(), true);
   widget2->Show();
-  waiter2.Wait();
+  views::test::WaitForWidgetActive(widget2.get(), true);
 
   MouseMoveCounterHandler recorder1;
   window1->AddPreTargetHandler(&recorder1);
@@ -688,9 +690,8 @@ TEST_F(DesktopWindowTreeHostPlatformImplTest, InputMethodFocus) {
   // EXPECT_EQ(ui::TEXT_INPUT_TYPE_NONE,
   //           widget->GetInputMethod()->GetTextInputType());
 
-  views::test::WidgetActivationWaiter waiter(widget.get(), true);
   widget->Activate();
-  waiter.Wait();
+  views::test::WaitForWidgetActive(widget.get(), true);
 
   EXPECT_TRUE(widget->IsActive());
   EXPECT_EQ(ui::TEXT_INPUT_TYPE_TEXT,

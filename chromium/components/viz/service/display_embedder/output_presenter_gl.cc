@@ -151,6 +151,17 @@ void OutputPresenterGL::InitializeCapabilities(
 #if BUILDFLAG(IS_ANDROID)
   capabilities->supports_dynamic_frame_buffer_allocation = true;
 #endif
+  // MakeCurrent needs to be called if we:
+  //
+  // * allocate and bind buffers to GL in the SkiaOutputDevice instance - ie
+  // when `renderer_allocates_images` is false.
+  //
+  // * the platform can not rely on kernel (GPU fences) to sync.
+  // In configurations like this, the Presenter commonly waits on CPU for GPU
+  // to finish with a (EGL) fence + a worker thread.
+  capabilities->present_requires_make_current =
+      !capabilities->renderer_allocates_images ||
+      !presenter_->SupportsPlaneGpuFences();
 
   // TODO(https://crbug.com/1108406): only add supported formats base on
   // platform, driver, etc.
@@ -256,7 +267,7 @@ void OutputPresenterGL::SchedulePrimaryPlane(
           plane.damage_rect.value_or(gfx::Rect(plane.resource_size)),
           plane.opacity, plane.priority_hint, plane.rounded_corners,
           presenter_image->color_space(),
-          /*hdr_metadata=*/absl::nullopt));
+          /*hdr_metadata=*/std::nullopt));
 }
 
 void OutputPresenterGL::ScheduleOverlayPlane(
@@ -324,6 +335,7 @@ void OutputPresenterGL::ScheduleOverlayPlane(
             overlay_plane_candidate.color_space,
             overlay_plane_candidate.hdr_metadata, overlay_plane_candidate.color,
             overlay_plane_candidate.is_solid_color,
+            overlay_plane_candidate.is_root_render_pass,
             overlay_plane_candidate.clip_rect));
   }
 #elif BUILDFLAG(IS_APPLE)
@@ -357,6 +369,9 @@ void OutputPresenterGL::SetCALayerErrorCode(
   ca_layer_error_code_ = ca_layer_error_code;
 }
 
+void OutputPresenterGL::SetMaxPendingSwaps(int max_pending_swaps) {
+  presenter_->SetMaxPendingSwaps(max_pending_swaps);
+}
 #endif
 
 }  // namespace viz

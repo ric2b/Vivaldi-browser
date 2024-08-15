@@ -2,9 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("../../gni/openscreen.gni")
+
 visibility = [ "./*" ]
 
-source_set("util") {
+openscreen_source_set("util") {
   testonly = true
 
   visibility += [ "../../*" ]
@@ -21,6 +23,4 @@ source_set("util") {
     "../../third_party/abseil",
     "../../util",
   ]
-
-  public_configs = [ "../../build:openscreen_include_dirs" ]
 }

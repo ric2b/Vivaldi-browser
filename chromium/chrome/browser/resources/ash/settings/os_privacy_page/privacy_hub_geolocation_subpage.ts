@@ -9,19 +9,27 @@
  */
 
 import './privacy_hub_app_permission_row.js';
+import 'chrome://resources/ash/common/cr_elements/icons.html.js';
+import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 
-import {DropdownMenuOptionList, SettingsDropdownMenuElement} from '/shared/settings/controls/settings_dropdown_menu.js';
+import {I18nMixin} from 'chrome://resources/ash/common/cr_elements/i18n_mixin.js';
 import {PermissionType} from 'chrome://resources/cr_components/app_management/app_management.mojom-webui.js';
 import {isPermissionEnabled} from 'chrome://resources/cr_components/app_management/permission_util.js';
 import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
-import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {OpenWindowProxyImpl} from 'chrome://resources/js/open_window_proxy.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {assertExhaustive, castExists} from '../assert_extras.js';
+import {DeepLinkingMixin} from '../common/deep_linking_mixin.js';
+import {isSecondaryUser} from '../common/load_time_booleans.js';
+import {RouteObserverMixin} from '../common/route_observer_mixin.js';
+import {DropdownMenuOptionList, SettingsDropdownMenuElement} from '../controls/settings_dropdown_menu.js';
 import {App, AppPermissionsHandlerInterface, AppPermissionsObserverReceiver} from '../mojom-webui/app_permission_handler.mojom-webui.js';
+import {Setting} from '../mojom-webui/setting.mojom-webui.js';
+import {Route, Router, routes} from '../router.js';
 
 import {getAppPermissionProvider} from './mojo_interface_provider.js';
+import {PrivacyHubBrowserProxy, PrivacyHubBrowserProxyImpl} from './privacy_hub_browser_proxy.js';
 import {getTemplate} from './privacy_hub_geolocation_subpage.html.js';
 import {LOCATION_PERMISSION_CHANGE_FROM_SETTINGS_HISTOGRAM_NAME} from './privacy_hub_metrics_util.js';
 
@@ -53,7 +61,7 @@ export interface SettingsPrivacyHubGeolocationSubpage {
 }
 
 const SettingsPrivacyHubGeolocationSubpageBase =
-    PrefsMixin(I18nMixin(PolymerElement));
+    RouteObserverMixin(DeepLinkingMixin(PrefsMixin(I18nMixin(PolymerElement))));
 
 export class SettingsPrivacyHubGeolocationSubpage extends
     SettingsPrivacyHubGeolocationSubpageBase {
@@ -87,25 +95,94 @@ export class SettingsPrivacyHubGeolocationSubpage extends
         },
       },
       /**
+       * Show the right description text for the selected geolocation mode.
+       */
+      geolocationModeDescriptionText_: {
+        type: TrustedHTML,
+        computed: 'computeGeolocationModeDescriptionText_(' +
+            'prefs.ash.user.geolocation_access_level.value)',
+      },
+      /**
        * Apps with location permission defined.
        */
       appList_: {
         type: Array,
         value: [],
       },
+      automaticTimeZoneText_: {
+        type: String,
+        notify: true,
+        computed: 'computeAutomaticTimeZoneText_(' +
+            'prefs.ash.user.geolocation_access_level.value,' +
+            'currentTimeZoneName_)',
+      },
+      isSecondaryUser_: {
+        type: Boolean,
+        value() {
+          return isSecondaryUser();
+        },
+        readOnly: true,
+      },
       isGeolocationAllowedForApps_: {
         type: Boolean,
         computed: 'computedIsGeolocationAllowedForApps_(' +
             'prefs.ash.user.geolocation_access_level.value)',
       },
+      currentTimeZoneName_: {
+        type: String,
+        notify: true,
+      },
+      currentSunRiseTime_: {
+        type: String,
+        notify: true,
+      },
+      currentSunSetTime_: {
+        type: String,
+        notify: true,
+      },
+      sunsetScheduleText_: {
+        type: String,
+        notify: true,
+        computed: 'computeSunsetScheduleText_(' +
+            'prefs.ash.user.geolocation_access_level.value,' +
+            'currentSunRiseTime_, currentSunSetTime_)',
+      },
     };
   }
 
+  static get observers() {
+    return [
+      'onTimeZoneChanged_(prefs.cros.system.timezone.value)',
+    ];
+  }
+
+  override currentRouteChanged(route: Route): void {
+    // Does not apply to this page.
+    if (route !== routes.PRIVACY_HUB_GEOLOCATION_ADVANCED) {
+      return;
+    }
+
+    this.attemptDeepLink();
+  }
+
+  /**
+   * Used by DeepLinkingMixin to focus this page's deep links.
+   */
+  override supportedSettingIds = new Set([
+    Setting.kGeolocationAdvanced,
+  ]);
+
   private geolocationMapTargets_: DropdownMenuOptionList;
+  private geolocationModeDescriptionText_: string;
   private appList_: App[];
   private appPermissionsObserverReceiver_: AppPermissionsObserverReceiver|null;
+  private isSecondaryUser_: boolean;
   private isGeolocationAllowedForApps_: boolean;
   private mojoInterfaceProvider_: AppPermissionsHandlerInterface;
+  private browserProxy_: PrivacyHubBrowserProxy;
+  private currentTimeZoneName_: string;
+  private currentSunRiseTime_: string;
+  private currentSunSetTime_: string;
 
   constructor() {
     super();
@@ -113,6 +190,13 @@ export class SettingsPrivacyHubGeolocationSubpage extends
     this.mojoInterfaceProvider_ = getAppPermissionProvider();
 
     this.appPermissionsObserverReceiver_ = null;
+    this.browserProxy_ = PrivacyHubBrowserProxyImpl.getInstance();
+    // Assigning the initial time zone name.
+    this.currentTimeZoneName_ = this.i18n('timeZoneName');
+    this.currentSunRiseTime_ =
+        this.i18n('privacyHubSystemServicesInitSunRiseTime');
+    this.currentSunSetTime_ =
+        this.i18n('privacyHubSystemServicesInitSunSetTime');
   }
 
   override connectedCallback(): void {
@@ -129,6 +213,19 @@ export class SettingsPrivacyHubGeolocationSubpage extends
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.appPermissionsObserverReceiver_!.$.close();
+  }
+
+  private settingControlledByPrimaryUserText_(): string {
+    return this.i18n(
+        'geolocationControlledByPrimaryUserText',
+        loadTimeData.getString('primaryUserEmail'));
+  }
+
+  /**
+   * The function is used for sorting app names alphabetically.
+   */
+  private alphabeticalSort_(first: App, second: App): number {
+    return first.name.localeCompare(second.name);
   }
 
   private async updateAppList_(): Promise<void> {
@@ -180,9 +277,43 @@ export class SettingsPrivacyHubGeolocationSubpage extends
     }
   }
 
+  private computeAutomaticTimeZoneText_(): string {
+    return this.geolocationAllowedForSystem_() ?
+        this.i18n('privacyHubSystemServicesAllowedText') :
+        this.i18n(
+            'privacyHubSystemServicesAutomaticTimeZoneBlockedText',
+            this.currentTimeZoneName_);
+  }
+
+  private computeSunsetScheduleText_(): string {
+    return this.geolocationAllowedForSystem_() ?
+        this.i18n('privacyHubSystemServicesAllowedText') :
+        this.i18n(
+            'privacyHubSystemServicesSunsetScheduleBlockedText',
+            this.currentSunRiseTime_, this.currentSunSetTime_);
+  }
+
   private onManagePermissionsInChromeRowClick_(): void {
-    OpenWindowProxyImpl.getInstance().openUrl(
-        'chrome://settings/content/location');
+    this.mojoInterfaceProvider_.openBrowserPermissionSettings(
+        PermissionType.kLocation);
+  }
+
+  private computeGeolocationModeDescriptionText_(): TrustedHTML {
+    const accessLevel: GeolocationAccessLevel =
+        this.getPref<GeolocationAccessLevel>(
+                'ash.user.geolocation_access_level')
+            .value;
+    switch (accessLevel) {
+      case GeolocationAccessLevel.ALLOWED:
+        return this.i18nAdvanced('geolocationAllowedModeDescription');
+      case GeolocationAccessLevel.ONLY_ALLOWED_FOR_SYSTEM:
+        return this.i18nAdvanced(
+            'geolocationOnlyAllowedForSystemModeDescription');
+      case GeolocationAccessLevel.DISALLOWED:
+        return this.i18nAdvanced('geolocationBlockedModeDescription');
+      default:
+        assertExhaustive(accessLevel);
+    }
   }
 
   private recordMetric_(): void {
@@ -194,14 +325,36 @@ export class SettingsPrivacyHubGeolocationSubpage extends
   }
 
   private geolocationAllowedForSystem_(): boolean {
+    if (!this.prefs) {
+      // Won't show blocked services and apps in case that the geolocation pref
+      // is not yet loaded.
+      return true;
+    }
     return this.getPref<GeolocationAccessLevel>(
                    'ash.user.geolocation_access_level')
                .value !== GeolocationAccessLevel.DISALLOWED;
   }
+
   private getSystemServicesPermissionText_(): string {
     return this.geolocationAllowedForSystem_() ?
         this.i18n('privacyHubSystemServicesAllowedText') :
         this.i18n('privacyHubSystemServicesBlockedText');
+  }
+
+  private onTimeZoneChanged_(): void {
+    this.browserProxy_.getCurrentTimeZoneName().then((timeZoneName) => {
+      this.currentTimeZoneName_ = timeZoneName;
+    });
+    this.browserProxy_.getCurrentSunriseTime().then((time) => {
+      this.currentSunRiseTime_ = time;
+    });
+    this.browserProxy_.getCurrentSunsetTime().then((time) => {
+      this.currentSunSetTime_ = time;
+    });
+  }
+
+  private onGeolocationAdvancedAreaClick_(): void {
+    Router.getInstance().navigateTo(routes.PRIVACY_HUB_GEOLOCATION_ADVANCED);
   }
 }
 

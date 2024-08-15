@@ -20,7 +20,7 @@ will proxy itself to the web ui side.
 */
 class ConfirmInfoBarWebProxy : public InfoBarView {
  public:
-  ConfirmInfoBarWebProxy(std::unique_ptr<ConfirmInfoBarDelegate> delegate);
+  ConfirmInfoBarWebProxy(std::unique_ptr<infobars::InfoBarDelegate> delegate);
   ~ConfirmInfoBarWebProxy() override;
 
   ConfirmInfoBarDelegate* GetDelegate();

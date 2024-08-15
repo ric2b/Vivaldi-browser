@@ -12,14 +12,16 @@
 #include "base/json/json_writer.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/values_test_util.h"
 #include "base/values.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "content/browser/webid/fake_identity_request_dialog_controller.h"
 #include "content/browser/webid/identity_registry.h"
-#include "content/browser/webid/test/mock_digital_credential_provider.h"
+#include "content/browser/webid/test/mock_digital_identity_provider.h"
 #include "content/browser/webid/test/mock_identity_request_dialog_controller.h"
 #include "content/browser/webid/test/mock_modal_dialog_view_delegate.h"
 #include "content/browser/webid/test/webid_test_content_browser_client.h"
@@ -83,6 +85,20 @@ static constexpr char kLoggedOutHeaderValue[] = "logged-out";
 
 // Token value in //content/test/data/id_assertion_endpoint.json
 constexpr char kToken[] = "[not a real token]";
+
+constexpr char kJsErrorPrefix[] = "a JavaScript error:";
+
+// Extracts error from `result` removing `kJsErrorPrefix` and removing leading
+// and trailing whitespace and quotes.
+std::string ExtractJsError(const EvalJsResult& result) {
+  if (!base::StartsWith(result.error, kJsErrorPrefix)) {
+    return result.error;
+  }
+
+  std::string error_message = result.error.substr(strlen(kJsErrorPrefix));
+  base::TrimString(error_message, "\n \"", &error_message);
+  return error_message;
+}
 
 bool IsGetRequestWithPath(const HttpRequest& request,
                           const std::string& expected_path) {
@@ -209,7 +225,7 @@ class TestFederatedIdentityModalDialogViewDelegate
 
   void SetClosure(base::OnceClosure closure) { closure_ = std::move(closure); }
 
-  void NotifyClose() override {
+  void OnClose() override {
     DCHECK(closure_);
     std::move(closure_).Run();
     closed_ = true;
@@ -249,7 +265,7 @@ class WebIdBrowserTest : public ContentBrowserTest {
 
     test_browser_client_ = std::make_unique<WebIdTestContentBrowserClient>();
     SetTestIdentityRequestDialogController("not_real_account");
-    SetTestDigitalCredentialProvider();
+    SetTestDigitalIdentityProvider();
     SetTestModalDialogViewDelegate();
   }
 
@@ -321,9 +337,9 @@ class WebIdBrowserTest : public ContentBrowserTest {
         std::move(controller));
   }
 
-  void SetTestDigitalCredentialProvider() {
-    auto provider = std::make_unique<MockDigitalCredentialProvider>();
-    test_browser_client_->SetDigitalCredentialProvider(std::move(provider));
+  void SetTestDigitalIdentityProvider() {
+    auto provider = std::make_unique<MockDigitalIdentityProvider>();
+    test_browser_client_->SetDigitalIdentityProvider(std::move(provider));
   }
 
   void SetTestModalDialogViewDelegate() {
@@ -331,7 +347,7 @@ class WebIdBrowserTest : public ContentBrowserTest {
         std::make_unique<TestFederatedIdentityModalDialogViewDelegate>();
     test_browser_client_->SetIdentityRegistry(
         shell()->web_contents(), test_modal_dialog_view_delegate_->GetWeakPtr(),
-        url::Origin::Create(GURL(BaseIdpUrl())));
+        GURL(BaseIdpUrl()));
   }
 
  protected:
@@ -468,16 +484,29 @@ IN_PROC_BROWSER_TEST_F(WebIdBrowserTest, FailsOnHTTP) {
         }) ()
     )";
 
-  std::string expected_error =
-      "a JavaScript error: \"NetworkError: Error "
-      "retrieving a token.\"\n";
-  EXPECT_EQ(expected_error, EvalJs(shell(), script).error);
+  std::string expected_error = "NetworkError: Error retrieving a token.";
+  EXPECT_EQ(expected_error, ExtractJsError(EvalJs(shell(), script)));
 }
 
 // Verify that an IdP can register itself.
 IN_PROC_BROWSER_TEST_F(WebIdIdPRegistryBrowserTest, RegisterIdP) {
   GURL configURL = GURL(BaseIdpUrl());
   idp_server()->SetConfigResponseDetails(BuildValidConfigDetails());
+
+  auto mock = std::make_unique<
+      ::testing::NiceMock<MockIdentityRequestDialogController>>();
+  test_browser_client_->SetIdentityRequestDialogController(std::move(mock));
+
+  MockIdentityRequestDialogController* controller =
+      static_cast<MockIdentityRequestDialogController*>(
+          test_browser_client_->GetIdentityRequestDialogControllerForTests());
+
+  // Expects the account chooser to be opened. Selects the first account.
+  EXPECT_CALL(*controller, RequestIdPRegistrationPermision(_, _))
+      .WillOnce(::testing::WithArg<1>(
+          [](base::OnceCallback<void(bool accepted)> callback) {
+            std::move(callback).Run(true);
+          }));
 
   // We navigate to the IdP's configURL so that we can run
   // the script below with the IdP's origin as the top level
@@ -512,16 +541,31 @@ IN_PROC_BROWSER_TEST_F(WebIdIdPRegistryBrowserTest, RpCantRegisterIdP) {
   // developer friendly, since this was a call error rather
   // than a user declining the permission error.
   std::string expected_error =
-      "a JavaScript error: \"NotAllowedError: "
-      "User declined the permission to register the Identity Provider.\"\n";
+      "NotAllowedError: User declined the permission to register the Identity "
+      "Provider.";
 
-  EXPECT_EQ(expected_error, EvalJs(shell(), script).error);
+  EXPECT_EQ(expected_error, ExtractJsError(EvalJs(shell(), script)));
 }
 
 // Verify that an IdP can unregister itself.
 IN_PROC_BROWSER_TEST_F(WebIdIdPRegistryBrowserTest, UnregisterIdP) {
   GURL configURL = GURL(BaseIdpUrl());
   idp_server()->SetConfigResponseDetails(BuildValidConfigDetails());
+
+  auto mock = std::make_unique<
+      ::testing::NiceMock<MockIdentityRequestDialogController>>();
+  test_browser_client_->SetIdentityRequestDialogController(std::move(mock));
+
+  MockIdentityRequestDialogController* controller =
+      static_cast<MockIdentityRequestDialogController*>(
+          test_browser_client_->GetIdentityRequestDialogControllerForTests());
+
+  // Expects the account chooser to be opened. Selects the first account.
+  EXPECT_CALL(*controller, RequestIdPRegistrationPermision(_, _))
+      .WillOnce(::testing::WithArg<1>(
+          [](base::OnceCallback<void(bool accepted)> callback) {
+            std::move(callback).Run(true);
+          }));
 
   // We navigate to the IdP's configURL so that we can run
   // the script below with the IdP's origin as the top level
@@ -547,6 +591,21 @@ IN_PROC_BROWSER_TEST_F(WebIdIdPRegistryBrowserTest, UnregisterIdP) {
 IN_PROC_BROWSER_TEST_F(WebIdIdPRegistryBrowserTest, UseRegistry) {
   GURL configURL = GURL(BaseIdpUrl());
   idp_server()->SetConfigResponseDetails(BuildValidConfigDetails());
+
+  auto mock = std::make_unique<
+      ::testing::NiceMock<MockIdentityRequestDialogController>>();
+  test_browser_client_->SetIdentityRequestDialogController(std::move(mock));
+
+  MockIdentityRequestDialogController* controller =
+      static_cast<MockIdentityRequestDialogController*>(
+          test_browser_client_->GetIdentityRequestDialogControllerForTests());
+
+  // Expects the account chooser to be opened. Selects the first account.
+  EXPECT_CALL(*controller, RequestIdPRegistrationPermision(_, _))
+      .WillOnce(::testing::WithArg<1>(
+          [](base::OnceCallback<void(bool accepted)> callback) {
+            std::move(callback).Run(true);
+          }));
 
   // We navigate to the IdP's configURL so that we can run
   // the script below with the IdP's origin as the top level
@@ -586,6 +645,8 @@ IN_PROC_BROWSER_TEST_F(WebIdIdPRegistryBrowserTest, UseRegistry) {
           return token;
         }) ()
     )";
+
+  SetTestIdentityRequestDialogController("not_real_account");
 
   EXPECT_EQ(std::string(kToken), EvalJs(shell(), get_script));
 }
@@ -885,13 +946,57 @@ class WebIdDigitalCredentialsBrowserTest : public WebIdBrowserTest {
   }
 };
 
+std::string BuildDigitalIdentityValidJsRequestDictionary() {
+  return R"({
+      identity: {
+        providers: [{
+          holder: {
+            selector: {
+              format: ['mdoc'],
+              doctype: 'org.iso.18013.5.1.mDL',
+              fields: [
+                'org.iso.18013.5.1.family_name',
+                'org.iso.18013.5.1.portrait',
+              ]
+            },
+            params: {
+              nonce: '1234',
+              readerPublicKey: 'test_reader_public_key',
+              extraParamAsNeededByDigitalCredentials: true,
+            },
+          },
+        }],
+      },
+    })";
+}
+
+EvalJsResult EvalJsAndReturnToken(const ToRenderFrameHost& execution_target,
+                                  std::string_view script_setting_token) {
+  std::string script = base::StringPrintf(R"(
+      (async () => {
+          %s
+          return token;
+      }) ()
+      )",
+                                          script_setting_token.data());
+  return EvalJs(execution_target, script);
+}
+
+EvalJsResult RunDigitalIdentityValidRequest(
+    const ToRenderFrameHost& execution_target) {
+  std::string script = base::StringPrintf(
+      "const {token} = await navigator.credentials.get(%s);",
+      BuildDigitalIdentityValidJsRequestDictionary().c_str());
+  return EvalJsAndReturnToken(execution_target, script);
+}
+
 // Test that a Verifiable Credential can be requested via the JS API.
 IN_PROC_BROWSER_TEST_F(WebIdDigitalCredentialsBrowserTest,
                        RequestDigitalCredentials) {
   idp_server()->SetConfigResponseDetails(BuildValidConfigDetails());
-  MockDigitalCredentialProvider* digital_credential_provider =
-      static_cast<MockDigitalCredentialProvider*>(
-          test_browser_client_->GetDigitalCredentialProviderForTests());
+  MockDigitalIdentityProvider* digital_identity_provider =
+      static_cast<MockDigitalIdentityProvider*>(
+          test_browser_client_->GetDigitalIdentityProviderForTests());
 
   const char request[] = R"(
   {
@@ -916,78 +1021,79 @@ IN_PROC_BROWSER_TEST_F(WebIdDigitalCredentialsBrowserTest,
   }
   )";
 
-  EXPECT_CALL(*digital_credential_provider,
-              RequestDigitalCredential(_, _, IsJson(request), _))
+  EXPECT_CALL(*digital_identity_provider, Request(_, _, IsJson(request), _))
       .WillOnce(WithArg<3>(
-          [](DigitalCredentialProvider::DigitalCredentialCallback callback) {
-            std::move(callback).Run("test-mdoc");
+          [](DigitalIdentityProvider::DigitalIdentityCallback callback) {
+            std::move(callback).Run(
+                "test-mdoc",
+                DigitalIdentityProvider::RequestStatusForMetrics::kSuccess);
           }));
 
-  std::string script = R"(
-        (async () => {
-          const {token} = await navigator.credentials.get({
-            identity: {
-              providers: [{
-                holder: {
-                  selector: {
-                    format: ['mdoc'],
-                    doctype: 'org.iso.18013.5.1.mDL',
-                    fields: [
-                      'org.iso.18013.5.1.family_name',
-                      'org.iso.18013.5.1.portrait',
-                    ]
-                  },
-                  params: {
-                    nonce: '1234',
-                    readerPublicKey: 'test_reader_public_key',
-                    extraParamAsNeededByDigitalCredentials: true,
-                  },
-                },
-              }],
-            },
-          });
-          return token;
-        }) ()
-    )";
-
-  EXPECT_EQ("test-mdoc", EvalJs(shell(), script));
+  EXPECT_EQ("test-mdoc", RunDigitalIdentityValidRequest(shell()));
 }
 
-// Test that a Verifiable Credential can be requested via the alternative JS
-// API.
-IN_PROC_BROWSER_TEST_F(WebIdDigitalCredentialsBrowserTest, AlternativeJSAPI) {
+// Test that a Verifiable Credential can be requested via the navigator.identity
+// JS API
+IN_PROC_BROWSER_TEST_F(WebIdDigitalCredentialsBrowserTest,
+                       NavigatorIdentityApi) {
   idp_server()->SetConfigResponseDetails(BuildValidConfigDetails());
-  MockDigitalCredentialProvider* digital_credential_provider =
-      static_cast<MockDigitalCredentialProvider*>(
-          test_browser_client_->GetDigitalCredentialProviderForTests());
+  MockDigitalIdentityProvider* digital_identity_provider =
+      static_cast<MockDigitalIdentityProvider*>(
+          test_browser_client_->GetDigitalIdentityProviderForTests());
 
   const char request[] = R"(
   {
    "providers": [ {
-     "protocol": "OpenID4VP",
-     "request": "{canBeAnything: true}",
-     "publicKey": "anything really? yeah."
+      "params": {
+         "extraParamAsNeededByDigitalCredentials": "true",
+         "nonce": "1234",
+         "readerPublicKey": "test_reader_public_key"
+      },
+      "responseFormat": [ "mdoc" ],
+      "selector": {
+         "fields": [ {
+            "equals": "org.iso.18013.5.1.mDL",
+            "name": "doctype"
+         }, {
+            "name": "org.iso.18013.5.1.family_name"
+         }, {
+            "name": "org.iso.18013.5.1.portrait"
+         } ]
+      }
    } ]
   }
   )";
 
-  EXPECT_CALL(*digital_credential_provider,
-              RequestDigitalCredential(_, _, IsJson(request), _))
+  EXPECT_CALL(*digital_identity_provider, Request(_, _, IsJson(request), _))
       .WillOnce(WithArg<3>(
-          [](DigitalCredentialProvider::DigitalCredentialCallback callback) {
-            std::move(callback).Run("test-mdoc");
+          [](DigitalIdentityProvider::DigitalIdentityCallback callback) {
+            std::move(callback).Run(
+                "test-mdoc",
+                DigitalIdentityProvider::RequestStatusForMetrics::kSuccess);
           }));
 
   std::string script = R"(
         (async () => {
-          const {token} = await navigator.credentials.requestIdentity({
-            providers: [{
-              protocol: "OpenID4VP",
-              request: "{canBeAnything: true}",
-              publicKey: "anything really? yeah.",
-            }],
+          const credential = await navigator.identity.get({
+            digital: {
+              providers: [{
+                selector: {
+                  format: ['mdoc'],
+                  doctype: 'org.iso.18013.5.1.mDL',
+                  fields: [
+                    'org.iso.18013.5.1.family_name',
+                    'org.iso.18013.5.1.portrait',
+                  ]
+                },
+                params: {
+                  nonce: '1234',
+                  readerPublicKey: 'test_reader_public_key',
+                  extraParamAsNeededByDigitalCredentials: true,
+                },
+              }],
+            },
           });
-          return token;
+          return credential.data;
         }) ()
     )";
 
@@ -999,50 +1105,71 @@ IN_PROC_BROWSER_TEST_F(WebIdDigitalCredentialsBrowserTest, AlternativeJSAPI) {
 IN_PROC_BROWSER_TEST_F(WebIdDigitalCredentialsBrowserTest,
                        OnlyOneInFlightDigitalCredentialRequestIsAllowed) {
   idp_server()->SetConfigResponseDetails(BuildValidConfigDetails());
-  MockDigitalCredentialProvider* digital_credential_provider =
-      static_cast<MockDigitalCredentialProvider*>(
-          test_browser_client_->GetDigitalCredentialProviderForTests());
+  MockDigitalIdentityProvider* digital_identity_provider =
+      static_cast<MockDigitalIdentityProvider*>(
+          test_browser_client_->GetDigitalIdentityProviderForTests());
 
-  std::string script = R"(
-        (async () => {
-          const {token} = await navigator.credentials.get({
-            identity: {
-              providers: [{
-                holder: {
-                  selector: {
-                    format: ["mdoc"],
-                    doctype: 'org.iso.18013.5.1.mDL',
-                    fields: [
-                      'org.iso.18013.5.1.family_name',
-                      'org.iso.18013.5.1.portrait',
-                    ],
-                  },
-                  params: {
-                    nonce: '1234',
-                    readerPublicKey: 'test_reader_public_key',
-                    extraParamAsNeededByDigitalCredentials: true,
-                  },
-                },
-              }],
-            },
-          });
-          return token;
-        }) ()
-    )";
-
-  EXPECT_CALL(*digital_credential_provider,
-              RequestDigitalCredential(_, _, _, _))
+  EXPECT_CALL(*digital_identity_provider, Request(_, _, _, _))
       .WillOnce(WithArg<3>(
-          [&](DigitalCredentialProvider::DigitalCredentialCallback callback) {
+          [&](DigitalIdentityProvider::DigitalIdentityCallback callback) {
             EXPECT_EQ(
-                "a JavaScript error: \"AbortError: Only one "
-                "navigator.credentials.get request may be outstanding at one "
-                "time.\"\n",
-                EvalJs(shell(), script).error);
-            std::move(callback).Run("test-mdoc");
+                "NotAllowedError: Only one navigator.credentials.get request "
+                "may be outstanding at one time.",
+                ExtractJsError(RunDigitalIdentityValidRequest(shell())));
+            std::move(callback).Run(
+                "test-mdoc",
+                DigitalIdentityProvider::RequestStatusForMetrics::kSuccess);
           }));
 
-  EXPECT_EQ("test-mdoc", EvalJs(shell(), script));
+  EXPECT_EQ("test-mdoc", RunDigitalIdentityValidRequest(shell()));
+}
+
+// Test that when the user declines a digital identity request, the error
+// message returned to JavaScript does not indicate that the user declined the
+// request.
+IN_PROC_BROWSER_TEST_F(WebIdDigitalCredentialsBrowserTest,
+                       UserDeclinesRequest) {
+  idp_server()->SetConfigResponseDetails(BuildValidConfigDetails());
+  MockDigitalIdentityProvider* digital_identity_provider =
+      static_cast<MockDigitalIdentityProvider*>(
+          test_browser_client_->GetDigitalIdentityProviderForTests());
+
+  EXPECT_CALL(*digital_identity_provider, Request(_, _, _, _))
+      .WillOnce(WithArg<3>(
+          [&](DigitalIdentityProvider::DigitalIdentityCallback callback) {
+            std::move(callback).Run(
+                "test-mdoc", DigitalIdentityProvider::RequestStatusForMetrics::
+                                 kErrorUserDeclined);
+          }));
+
+  EXPECT_EQ("NetworkError: Error retrieving a token.",
+            ExtractJsError(RunDigitalIdentityValidRequest(shell())));
+}
+
+// Test that Blink.DigitalIdentityRequest.Status UMA metric is recorded when
+// digital identity request completes.
+IN_PROC_BROWSER_TEST_F(WebIdDigitalCredentialsBrowserTest,
+                       RecordRequestStatusHistogramAfterRequestCompletes) {
+  base::HistogramTester histogram_tester;
+
+  idp_server()->SetConfigResponseDetails(BuildValidConfigDetails());
+  MockDigitalIdentityProvider* digital_identity_provider =
+      static_cast<MockDigitalIdentityProvider*>(
+          test_browser_client_->GetDigitalIdentityProviderForTests());
+
+  EXPECT_CALL(*digital_identity_provider, Request(_, _, _, _))
+      .WillOnce(WithArg<3>(
+          [](DigitalIdentityProvider::DigitalIdentityCallback callback) {
+            std::move(callback).Run(
+                "test-mdoc",
+                DigitalIdentityProvider::RequestStatusForMetrics::kSuccess);
+          }));
+
+  RunDigitalIdentityValidRequest(shell());
+
+  histogram_tester.ExpectUniqueSample(
+      "Blink.DigitalIdentityRequest.Status",
+      DigitalIdentityProvider::RequestStatusForMetrics::kSuccess, 1);
 }
 
 // Verify that the Authz parameters are passed to the id assertion endpoint.
@@ -1174,7 +1301,7 @@ IN_PROC_BROWSER_TEST_F(WebIdAuthzBrowserTest, Authz_openPopUpWindow) {
           test_browser_client_->GetIdentityRequestDialogControllerForTests());
 
   // Expects the account chooser to be opened. Selects the first account.
-  EXPECT_CALL(*controller, ShowAccountsDialog(_, _, _, _, _, _, _, _, _))
+  EXPECT_CALL(*controller, ShowAccountsDialog(_, _, _, _, _, _, _, _, _, _))
       .WillOnce(::testing::WithArg<6>([&config_url](auto on_selected) {
         std::move(on_selected)
             .Run(config_url,
@@ -1265,9 +1392,9 @@ IN_PROC_BROWSER_TEST_F(WebIdErrorBrowserTest, IdentityCredentialError) {
   idp_server()->SetConfigResponseDetails(config_details);
 
   std::string expected_error =
-      "a JavaScript error: \"IdentityCredentialError: Error "
-      "retrieving a token.\"\n";
-  EXPECT_EQ(expected_error, EvalJs(shell(), GetBasicRequestString()).error);
+      "IdentityCredentialError: Error retrieving a token.";
+  EXPECT_EQ(expected_error,
+            ExtractJsError(EvalJs(shell(), GetBasicRequestString())));
 }
 
 // Verify that auto re-authn can be triggered if the Rp is on the

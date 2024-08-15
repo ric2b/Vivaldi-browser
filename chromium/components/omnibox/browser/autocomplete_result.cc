@@ -6,14 +6,16 @@
 
 #include <functional>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/containers/adapters.h"
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/debug/stack_trace.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
@@ -46,7 +48,6 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/url_fixer.h"
 #include "omnibox_triggered_feature_service.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
@@ -189,7 +190,7 @@ void AutocompleteResult::TransferOldMatches(const AutocompleteInput& input,
   //   on every pass to keep them associated with the triggering match.
   // Exclude specialized suggestion types from being transferred to prevent
   // user-visible artifacts.
-  base::EraseIf(old_matches->matches_, [](const auto& old_match) {
+  std::erase_if(old_matches->matches_, [](const auto& old_match) {
     return old_match.type == AutocompleteMatchType::PEDAL ||
            (old_match.provider && old_match.provider->done()) ||
            old_match.type == AutocompleteMatchType::URL_WHAT_YOU_TYPED ||
@@ -203,7 +204,7 @@ void AutocompleteResult::TransferOldMatches(const AutocompleteInput& input,
 
   if (empty()) {
     // If we've got no matches we can copy everything from the last result.
-    Swap(old_matches);
+    SwapMatchesWith(old_matches);
     for (auto& match : *this)
       match.from_previous = true;
     return;
@@ -288,7 +289,7 @@ void AutocompleteResult::DeduplicateMatches(
 void AutocompleteResult::Sort(
     const AutocompleteInput& input,
     TemplateURLService* template_url_service,
-    absl::optional<AutocompleteMatch> default_match_to_preserve) {
+    std::optional<AutocompleteMatch> default_match_to_preserve) {
   if (!is_ios)
     DemoteOnDeviceSearchSuggestions();
 
@@ -347,7 +348,7 @@ void AutocompleteResult::SortAndCull(
     const AutocompleteInput& input,
     TemplateURLService* template_url_service,
     OmniboxTriggeredFeatureService* triggered_feature_service,
-    absl::optional<AutocompleteMatch> default_match_to_preserve) {
+    std::optional<AutocompleteMatch> default_match_to_preserve) {
   SCOPED_UMA_HISTOGRAM_TIMER_MICROS(
       "Omnibox.AutocompletionTime.UpdateResult.SortAndCull");
   Sort(input, template_url_service, default_match_to_preserve);
@@ -380,7 +381,7 @@ void AutocompleteResult::SortAndCull(
 
     // Some providers give 0 relevance matches that are meant for deduping only
     // but shouldn't be shown otherwise. Filter them out.
-    base::EraseIf(matches_,
+    std::erase_if(matches_,
                   [&](const auto& match) { return match.relevance == 0; });
   }
 
@@ -463,15 +464,20 @@ void AutocompleteResult::SortAndCull(
     matches_ = Section::GroupMatches(std::move(sections), matches_);
   } else if (use_grouping_for_non_zps) {
     PSections sections;
-    sections.push_back(
-        std::make_unique<DesktopNonZpsSection>(suggestion_groups_map_));
+    if constexpr (is_android) {
+      sections.push_back(
+          std::make_unique<AndroidNonZPSSection>(suggestion_groups_map_));
+    } else {
+      sections.push_back(
+          std::make_unique<DesktopNonZpsSection>(suggestion_groups_map_));
+    }
     matches_ = Section::GroupMatches(std::move(sections), matches_);
   } else {
     // Limit history cluster suggestions to 1. This has to be done before
     // limiting URL matches below so that a to-be-removed history cluster
     // suggestion doesn't waste a URL slot.
     bool history_cluster_included = false;
-    base::EraseIf(matches_, [&](const auto& match) {
+    std::erase_if(matches_, [&](const auto& match) {
       // If not a history cluster match, don't erase it.
       if (match.type != AutocompleteMatch::Type::HISTORY_CLUSTER)
         return false;
@@ -598,14 +604,12 @@ void AutocompleteResult::SplitActionsToSuggestions() {
       }
     }
   }
-  if (OmniboxFieldTrial::kActionsUISimplificationTrimExtra.Get()) {
-    // By design, do not change result size. But allow triggering
-    // for the edge case where the pedal extends a list that still
-    // does not exceed maximum.
-    if (matches_[size() - 1].type != AutocompleteMatchType::PEDAL ||
-        size() > GetDynamicMaxMatches()) {
-      matches_.resize(size_before);
-    }
+  // By design, do not change result size. But allow triggering
+  // for the edge case where the pedal extends a list that still
+  // does not exceed maximum.
+  if (matches_[size() - 1].type != AutocompleteMatchType::PEDAL ||
+      size() > GetDynamicMaxMatches()) {
+    matches_.resize(size_before);
   }
 }
 
@@ -757,7 +761,7 @@ void AutocompleteResult::ConvertOpenTabMatches(
     // If already converted this match, don't re-search through open tabs and
     // possibly re-change the description.
     // Note: explicitly check for value rather than deferring to implicit
-    // boolean conversion of absl::optional.
+    // boolean conversion of std::optional.
     if (match.has_tab_match.has_value()) {
       continue;
     }
@@ -1032,6 +1036,11 @@ size_t AutocompleteResult::CalculateNumMatchesPerUrlCount(
 }
 
 void AutocompleteResult::Reset() {
+  ClearMatches();
+  session_.Reset();
+}
+
+void AutocompleteResult::ClearMatches() {
   matches_.clear();
   suggestion_groups_map_.clear();
   MergeSuggestionGroupsMap(omnibox::BuildDefaultGroups());
@@ -1040,21 +1049,28 @@ void AutocompleteResult::Reset() {
 #endif
 }
 
-void AutocompleteResult::Swap(AutocompleteResult* other) {
+void AutocompleteResult::SessionData::Reset() {
+  zero_prefix_enabled_ = false;
+  num_zero_prefix_suggestions_shown_ = 0u;
+}
+
+void AutocompleteResult::SwapMatchesWith(AutocompleteResult* other) {
   matches_.swap(other->matches_);
   suggestion_groups_map_.swap(other->suggestion_groups_map_);
+
 #if BUILDFLAG(IS_ANDROID)
   DestroyJavaObject();
   other->DestroyJavaObject();
 #endif
 }
 
-void AutocompleteResult::CopyFrom(const AutocompleteResult& other) {
+void AutocompleteResult::CopyMatchesFrom(const AutocompleteResult& other) {
   if (this == &other)
     return;
 
   matches_ = other.matches_;
   suggestion_groups_map_ = other.suggestion_groups_map_;
+
 #if BUILDFLAG(IS_ANDROID)
   DestroyJavaObject();
 #endif
@@ -1154,7 +1170,7 @@ void AutocompleteResult::DeduplicateMatches(
   }
 
   // Erase duplicate matches.
-  base::EraseIf(*matches, [&url_to_matches](const AutocompleteMatch& match) {
+  std::erase_if(*matches, [&url_to_matches](const AutocompleteMatch& match) {
     auto match_comparison_fields = GetMatchComparisonFields(match);
     return !match.stripped_destination_url.is_empty() &&
            &(*url_to_matches[match_comparison_fields].front()) != &match;
@@ -1333,19 +1349,19 @@ void AutocompleteResult::MaybeCullTailSuggestions(
 
   // Cull non-tail suggestions when the default is a tail suggestion.
   if (!default_normal && default_tail) {
-    base::EraseIf(*matches, std::not_fn(is_tail));
+    std::erase_if(*matches, std::not_fn(is_tail));
     return;
   }
 
   // Cull tail suggestions when there is a non-tail, non-default suggestion.
   if (other_normals) {
-    base::EraseIf(*matches, is_tail);
+    std::erase_if(*matches, is_tail);
     return;
   }
 
   // If showing tail suggestions, hide history cluster suggestions.
   if (any_history_clusters)
-    base::EraseIf(*matches, is_history_cluster);
+    std::erase_if(*matches, is_history_cluster);
 
   // If showing tail suggestions with a default non-tail, make sure the tail
   // suggestions are not defaulted.
@@ -1435,7 +1451,7 @@ void AutocompleteResult::LimitNumberOfURLsShown(
   size_t url_count = 0;
   // Erase URL suggestions past the count of allowed ones, or anything past
   // maximum.
-  base::EraseIf(matches_,
+  std::erase_if(matches_,
                 [&url_count, max_url_count](const AutocompleteMatch& m) {
                   return !AutocompleteMatch::IsSearchType(m.type) &&
                          ++url_count > max_url_count;
@@ -1453,21 +1469,6 @@ void AutocompleteResult::GroupSuggestionsBySearchVsURL(iterator begin,
   if (begin == end)
     return;
 
-  base::ranges::stable_sort(begin, end, {}, [](const auto& m) {
-    if (AutocompleteMatch::IsStarterPackType(m.type))
-      return 0;
-#if !BUILDFLAG(IS_IOS)
-    // Group history cluster suggestions with searches.
-    if (m.type == AutocompleteMatchType::HISTORY_CLUSTER)
-      return 2;
-#endif  // !BUILDFLAG(IS_IOS)
-    if (AutocompleteMatch::IsSearchType(m.type))
-      return 2;
-    // Group boosted shortcuts above searches.
-    if (omnibox_feature_configs::ShortcutBoosting::Get().group_with_searches &&
-        m.shortcut_boosted) {
-      return 1;
-    }
-    return 3;
-  });
+  base::ranges::stable_sort(begin, end, {},
+                            [](const auto& m) { return m.GetSortingOrder(); });
 }

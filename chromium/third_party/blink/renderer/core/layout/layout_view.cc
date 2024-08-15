@@ -28,6 +28,7 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/scroll/scrollbar_mode.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/web/web_print_page_description.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -44,6 +45,7 @@
 #include "third_party/blink/renderer/core/layout/block_node.h"
 #include "third_party/blink/renderer/core/layout/constraint_space_builder.h"
 #include "third_party/blink/renderer/core/layout/geometry/transform_state.h"
+#include "third_party/blink/renderer/core/layout/hit_test_cache.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_counter.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
@@ -67,7 +69,6 @@
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/traced_value.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "ui/display/screen_info.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -140,6 +141,7 @@ LayoutView::~LayoutView() = default;
 void LayoutView::Trace(Visitor* visitor) const {
   visitor->Trace(frame_view_);
   visitor->Trace(svg_text_descendants_);
+  visitor->Trace(text_to_variable_length_transform_result_);
   visitor->Trace(hit_test_cache_);
   visitor->Trace(initial_containing_block_resize_handled_list_);
   LayoutNGBlockFlow::Trace(visitor);
@@ -148,8 +150,7 @@ void LayoutView::Trace(Visitor* visitor) const {
 bool LayoutView::HitTest(const HitTestLocation& location,
                          HitTestResult& result) {
   NOT_DESTROYED();
-  if (RuntimeEnabledFeatures::SvgTextFixHittestAfterScaleEnabled() &&
-      has_svg_text_descendants_) {
+  if (has_svg_text_descendants_) {
     // This is necessary because SVG <text> might have obsolete geometry after
     // scale-only changes.  See crbug.com/1296089#c16
     auto it = svg_text_descendants_->find(this);
@@ -412,6 +413,24 @@ TrackedDescendantsMap& LayoutView::SvgTextDescendantsMap() {
   if (!svg_text_descendants_)
     svg_text_descendants_ = MakeGarbageCollected<TrackedDescendantsMap>();
   return *svg_text_descendants_;
+}
+
+void LayoutView::RegisterVariableLengthTransformResult(
+    const LayoutText& text,
+    const VariableLengthTransformResult& result) {
+  CHECK(text.HasVariableLengthTransform());
+  text_to_variable_length_transform_result_.Set(&text, result);
+}
+
+void LayoutView::UnregisterVariableLengthTransformResult(
+    const LayoutText& text) {
+  text_to_variable_length_transform_result_.erase(&text);
+}
+
+VariableLengthTransformResult LayoutView::GetVariableLengthTransformResult(
+    const LayoutText& text) {
+  CHECK(text.HasVariableLengthTransform());
+  return text_to_variable_length_transform_result_.at(&text);
 }
 
 LayoutViewTransitionRoot* LayoutView::GetViewTransitionRoot() const {
@@ -704,8 +723,8 @@ PhysicalSize LayoutView::PageAreaSize(wtf_size_t page_index,
   NOT_DESTROYED();
   const ComputedStyle* page_style =
       GetDocument().StyleForPage(page_index, page_name);
-  WebPrintPageDescription description = default_page_description_;
-  GetDocument().GetPageDescriptionNoLifecycleUpdate(*page_style, &description);
+  WebPrintPageDescription description =
+      GetDocument().GetPageDescriptionNoLifecycleUpdate(*page_style);
 
   gfx::SizeF page_size(
       std::max(.0f, description.size.width() -
@@ -915,13 +934,15 @@ gfx::SizeF LayoutView::DynamicViewportSizeForViewportUnits() const {
 
 gfx::SizeF LayoutView::DefaultPageAreaSize() const {
   NOT_DESTROYED();
+  const WebPrintPageDescription& default_page_description =
+      frame_view_->GetFrame().GetPrintParams().default_page_description;
   return gfx::SizeF(
-      std::max(.0f, default_page_description_.size.width() -
-                        (default_page_description_.margin_left +
-                         default_page_description_.margin_right)),
-      std::max(.0f, default_page_description_.size.height() -
-                        (default_page_description_.margin_top +
-                         default_page_description_.margin_bottom)));
+      std::max(.0f, default_page_description.size.width() -
+                        (default_page_description.margin_left +
+                         default_page_description.margin_right)),
+      std::max(.0f, default_page_description.size.height() -
+                        (default_page_description.margin_top +
+                         default_page_description.margin_bottom)));
 }
 
 void LayoutView::WillBeDestroyed() {

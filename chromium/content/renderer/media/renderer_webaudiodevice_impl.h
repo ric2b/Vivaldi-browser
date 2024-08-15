@@ -71,6 +71,8 @@ class CONTENT_EXPORT RendererWebAudioDeviceImpl
              const media::AudioGlitchInfo& glitch_info,
              media::AudioBus* dest) override;
 
+  // This callback method may be called from either the main thread or non-main
+  // threads.
   void OnRenderError() override;
 
   void SetSilentSinkTaskRunnerForTesting(
@@ -125,8 +127,7 @@ class CONTENT_EXPORT RendererWebAudioDeviceImpl
   const blink::WebAudioLatencyHint latency_hint_;
 
   // The WebAudio renderer's callback; directs to `AudioDestination::Render()`.
-  const raw_ptr<media::AudioRendererSink::RenderCallback, ExperimentalRenderer>
-      webaudio_callback_;
+  const raw_ptr<media::AudioRendererSink::RenderCallback> webaudio_callback_;
 
   // To avoid the need for locking, ensure the control methods of the
   // blink::WebAudioDevice implementation are called on the same thread.
@@ -154,6 +155,8 @@ class CONTENT_EXPORT RendererWebAudioDeviceImpl
   bool is_stopped_ = true;
 
   std::unique_ptr<media::SpeechRecognitionClient> speech_recognition_client_;
+
+  base::WeakPtrFactory<RendererWebAudioDeviceImpl> weak_ptr_factory_{this};
 
   FRIEND_TEST_ALL_PREFIXES(RendererWebAudioDeviceImplTest,
                            CreateSinkAndGetDeviceStatus_HealthyDevice);

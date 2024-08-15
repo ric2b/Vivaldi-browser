@@ -193,7 +193,7 @@ bool AudioConstraints::TryParse(const Json::Value& root,
 }
 
 Json::Value AudioConstraints::ToJson() const {
-  OSP_DCHECK(IsValid());
+  OSP_CHECK(IsValid());
   Json::Value root;
   root[kMaxSampleRate] = max_sample_rate;
   root[kMaxChannels] = max_channels;
@@ -246,7 +246,7 @@ bool VideoConstraints::IsValid() const {
 }
 
 Json::Value VideoConstraints::ToJson() const {
-  OSP_DCHECK(IsValid());
+  OSP_CHECK(IsValid());
   Json::Value root;
   root[kMaxDimensions] = max_dimensions.ToJson();
   root[kMinBitRate] = min_bit_rate;
@@ -279,7 +279,7 @@ bool Constraints::IsValid() const {
 }
 
 Json::Value Constraints::ToJson() const {
-  OSP_DCHECK(IsValid());
+  OSP_CHECK(IsValid());
   Json::Value root;
   root[kAudio] = audio.ToJson();
   root[kVideo] = video.ToJson();
@@ -328,7 +328,7 @@ bool DisplayDescription::IsValid() const {
 }
 
 Json::Value DisplayDescription::ToJson() const {
-  OSP_DCHECK(IsValid());
+  OSP_CHECK(IsValid());
   Json::Value root;
   if (aspect_ratio.has_value()) {
     root[kAspectRatio] = absl::StrCat(
@@ -385,7 +385,7 @@ bool Answer::IsValid() const {
 }
 
 Json::Value Answer::ToJson() const {
-  OSP_DCHECK(IsValid());
+  OSP_CHECK(IsValid());
   Json::Value root;
   if (constraints.has_value()) {
     root[kConstraints] = constraints->ToJson();

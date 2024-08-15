@@ -161,7 +161,7 @@ std::unique_ptr<TemplateURLData> TemplateURLDataFromDictionary(
       }
     }
   }
-  absl::optional<bool> safe_for_autoreplace =
+  std::optional<bool> safe_for_autoreplace =
       dict.FindBool(DefaultSearchManager::kSafeForAutoReplace);
   if (safe_for_autoreplace) {
     result->safe_for_autoreplace = *safe_for_autoreplace;
@@ -340,7 +340,7 @@ base::Value::Dict TemplateURLDataToDictionary(const TemplateURLData& data) {
   std::string position;
   std::string position_encoded;
   data.vivaldi_position.SerializeToString(&position);
-  base::Base64Encode(position, &position_encoded);
+  position_encoded = base::Base64Encode(position);
   url_dict.Set(DefaultSearchManager::kPosition, position_encoded);
 
   return url_dict;
@@ -418,7 +418,7 @@ std::unique_ptr<TemplateURLData> TemplateURLDataFromOverrideDictionary(
   if (string_value) {
     encoding = *string_value;
   }
-  absl::optional<int> id = engine_dict.FindInt("id");
+  std::optional<int> id = engine_dict.FindInt("id");
 
   // The following fields are required for each search engine configuration.
   if (!name.empty() && !keyword.empty() && !search_url.empty() &&

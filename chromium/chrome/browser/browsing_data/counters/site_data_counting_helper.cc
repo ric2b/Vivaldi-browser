@@ -67,6 +67,9 @@ void SiteDataCountingHelper::CountAndDestroySelfWhenFinished() {
   if (quota_manager) {
     // Count storage keys with filesystem, websql, indexeddb, serviceworkers,
     // cachestorage, and medialicense using quota manager.
+    // TODO(crbug.com/1434517): For now, media licenses are part of the quota
+    // management system, but when dis-integrated, remove media license logic
+    // from quota logic.
     auto buckets_callback =
         base::BindRepeating(&SiteDataCountingHelper::GetQuotaBucketsCallback,
                             base::Unretained(this));
@@ -93,6 +96,8 @@ void SiteDataCountingHelper::CountAndDestroySelfWhenFinished() {
     // TODO(772337): Enable session storage counting when deletion is fixed.
   }
 
+// TODO(1454512): Add CdmStorageManager logic to count origins, and add test
+// to browsing_data_remover_browsertest.cc to test counting logic.
 #if BUILDFLAG(IS_ANDROID)
   // Count origins with media licenses on Android.
   tasks_ += 1;
@@ -144,7 +149,7 @@ void SiteDataCountingHelper::GetCookiesCallback(
   for (const net::CanonicalCookie& cookie : cookies) {
     if (cookie.CreationDate() >= begin_ && cookie.CreationDate() < end_) {
       GURL url = net::cookie_util::CookieOriginToURL(cookie.Domain(),
-                                                     cookie.IsSecure());
+                                                     cookie.SecureAttribute());
       origins.push_back(url);
     }
   }

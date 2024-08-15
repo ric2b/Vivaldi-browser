@@ -8,7 +8,6 @@ import android.content.Context;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.blink.mojom.Authenticator;
-import org.chromium.components.webauthn.WebauthnModeProvider.WebauthnMode;
 import org.chromium.content_public.browser.RenderFrameHost;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsStatics;
@@ -20,15 +19,12 @@ import org.chromium.url.Origin;
 public class AuthenticatorFactory implements InterfaceFactory<Authenticator> {
     private final RenderFrameHost mRenderFrameHost;
     private final CreateConfirmationUiDelegate.Factory mConfirmationFactory;
-    private final @WebauthnMode int mMode;
 
     public AuthenticatorFactory(
             RenderFrameHost renderFrameHost,
-            CreateConfirmationUiDelegate.Factory confirmationFactory,
-            @WebauthnMode int mode) {
+            CreateConfirmationUiDelegate.Factory confirmationFactory) {
         mRenderFrameHost = renderFrameHost;
         mConfirmationFactory = confirmationFactory;
-        mMode = mode;
     }
 
     @Override
@@ -37,7 +33,9 @@ public class AuthenticatorFactory implements InterfaceFactory<Authenticator> {
             return null;
         }
         WebContents webContents = WebContentsStatics.fromRenderFrameHost(mRenderFrameHost);
-        if (webContents == null) {
+        if (webContents == null
+                || WebauthnModeProvider.getInstance().getWebauthnMode(webContents)
+                        == WebauthnMode.NONE) {
             return null;
         }
 
@@ -56,10 +54,10 @@ public class AuthenticatorFactory implements InterfaceFactory<Authenticator> {
         Origin topOrigin = webContents.getMainFrame().getLastCommittedOrigin();
         return new AuthenticatorImpl(
                 context,
+                webContents,
                 new AuthenticatorImpl.WindowIntentSender(window),
                 createConfirmationUiDelegate,
                 mRenderFrameHost,
-                topOrigin,
-                mMode);
+                topOrigin);
     }
 }

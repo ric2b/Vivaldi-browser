@@ -3,8 +3,6 @@
 // found in the LICENSE file.
 
 #include "ash/wm/multi_display/persistent_window_controller.h"
-#include "base/memory/raw_ptr.h"
-
 #include "ash/display/display_move_window_util.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
 #include "ash/display/window_tree_host_manager.h"
@@ -16,7 +14,9 @@
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "chromeos/ui/base/display_util.h"
 #include "chromeos/ui/base/window_state_type.h"
 #include "ui/display/test/display_manager_test_api.h"
@@ -25,7 +25,23 @@ using session_manager::SessionState;
 
 namespace ash {
 
-using PersistentWindowControllerTest = AshTestBase;
+class PersistentWindowControllerTest : public AshTestBase {
+ public:
+  PersistentWindowControllerTest() {
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{features::kFasterSplitScreenSetup,
+                              features::kOsSettingsRevampWayfinding},
+        /*disabled_features=*/{});
+  }
+  PersistentWindowControllerTest(const PersistentWindowControllerTest&) =
+      delete;
+  PersistentWindowControllerTest& operator=(
+      const PersistentWindowControllerTest&) = delete;
+  ~PersistentWindowControllerTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
 
 display::ManagedDisplayInfo CreateDisplayInfo(int64_t id,
                                               const gfx::Rect& bounds) {
@@ -500,8 +516,8 @@ TEST_F(PersistentWindowControllerTest, RestoreBoundsOnInternalDisplayRemoval) {
   // Move the window to the secondary display and snap it.
   display_move_window_util::HandleMoveActiveWindowBetweenDisplays();
   WindowState* window_state = WindowState::Get(window.get());
-  const WindowSnapWMEvent snap_left(WM_EVENT_SNAP_PRIMARY);
-  window_state->OnWMEvent(&snap_left);
+  const WindowSnapWMEvent snap_primary(WM_EVENT_SNAP_PRIMARY);
+  window_state->OnWMEvent(&snap_primary);
   EXPECT_EQ(secondary_id, screen->GetDisplayNearestWindow(window.get()).id());
   EXPECT_TRUE(window_state->IsSnapped());
   EXPECT_TRUE(window_state->HasRestoreBounds());
@@ -902,10 +918,9 @@ TEST_F(PersistentWindowControllerTest, NoRestoreOnRotationForSnappedWindows) {
   auto* split_view_controller =
       SplitViewController::Get(Shell::GetPrimaryRootWindow());
 
-  // Snap the unique window in clamshell mode will not enter split view mode.
-  WindowSnapWMEvent wm_left_snap_event(WM_EVENT_SNAP_PRIMARY);
+  WindowSnapWMEvent primary_snap_event(WM_EVENT_SNAP_PRIMARY);
   auto* window_state = WindowState::Get(w1);
-  window_state->OnWMEvent(&wm_left_snap_event);
+  window_state->OnWMEvent(&primary_snap_event);
   EXPECT_FALSE(split_view_controller->InSplitViewMode());
   EXPECT_TRUE(window_state->IsSnapped());
   EXPECT_EQ(chromeos::WindowStateType::kPrimarySnapped,

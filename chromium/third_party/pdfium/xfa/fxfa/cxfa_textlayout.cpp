@@ -11,8 +11,10 @@
 #include <algorithm>
 #include <utility>
 
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/css/cfx_csscomputedstyle.h"
 #include "core/fxcrt/css/cfx_cssstyleselector.h"
+#include "core/fxcrt/notreached.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxcrt/xml/cfx_xmlelement.h"
 #include "core/fxcrt/xml/cfx_xmlnode.h"
@@ -23,8 +25,6 @@
 #include "core/fxge/cfx_renderdevice.h"
 #include "core/fxge/text_char_pos.h"
 #include "fxjs/xfa/cjx_object.h"
-#include "third_party/base/check.h"
-#include "third_party/base/notreached.h"
 #include "xfa/fde/cfde_textout.h"
 #include "xfa/fgas/font/cfgas_gefont.h"
 #include "xfa/fgas/layout/cfgas_linkuserdata.h"
@@ -47,7 +47,7 @@ void ProcessText(WideString* pText) {
   if (iLen == 0)
     return;
 
-  size_t iTrimLeft = 0;
+  size_t iTrimFront = 0;
   {
     // Span's lifetime must end before ReleaseBuffer() below.
     pdfium::span<wchar_t> psz = pText->GetBuffer(iLen);
@@ -60,10 +60,10 @@ void ProcessText(WideString* pText) {
         continue;
 
       wPrev = wch;
-      psz[iTrimLeft++] = wch;
+      psz[iTrimFront++] = wch;
     }
   }
-  pText->ReleaseBuffer(iTrimLeft);
+  pText->ReleaseBuffer(iTrimFront);
 }
 
 }  // namespace
@@ -508,7 +508,7 @@ bool CXFA_TextLayout::LayoutInternal(size_t szBlockIndex) {
     m_pLoader->nCharIdx = 0;
     if (!m_Blocks.empty()) {
       m_pLoader->iTotalLines =
-          pdfium::base::checked_cast<int32_t>(m_Blocks[szBlockIndex].szLength);
+          pdfium::checked_cast<int32_t>(m_Blocks[szBlockIndex].szLength);
     }
     Loader(szText.width, &fLinePos, true);
     if (m_Blocks.empty() && m_pLoader->fStartLineOffset < 0.1f)
@@ -516,7 +516,7 @@ bool CXFA_TextLayout::LayoutInternal(size_t szBlockIndex) {
   } else if (m_pTextDataNode) {
     if (!m_Blocks.empty() && szBlockIndex < m_Blocks.size() - 1) {
       m_pLoader->iTotalLines =
-          pdfium::base::checked_cast<int32_t>(m_Blocks[szBlockIndex].szLength);
+          pdfium::checked_cast<int32_t>(m_Blocks[szBlockIndex].szLength);
     }
     m_pBreak->Reset();
     if (m_bRichText) {
@@ -719,7 +719,7 @@ void CXFA_TextLayout::LoadText(CXFA_Node* pNode,
   }
 
   WideString wsText = pNode->JSObject()->GetContent(false);
-  wsText.TrimRight(L" ");
+  wsText.TrimBack(L" ");
   bool bRet = AppendChar(wsText, pLinePos, fSpaceAbove, bSavePieces);
   if (bRet && m_pLoader)
     m_pLoader->pNode = pNode;
@@ -811,7 +811,7 @@ bool CXFA_TextLayout::LoadRichText(const CFX_XMLNode* pXMLNode,
           while (iTabCount-- > 0)
             wsText += L'\t';
         } else {
-          absl::optional<WideString> obj =
+          std::optional<WideString> obj =
               m_pTextParser->GetEmbeddedObj(m_pTextProvider, pXMLNode);
           if (obj.has_value())
             wsText = obj.value();
@@ -823,7 +823,7 @@ bool CXFA_TextLayout::LoadRichText(const CFX_XMLNode* pXMLNode,
 
       if (m_pLoader) {
         if (wsText.GetLength() > 0 && m_pLoader->bFilterSpace) {
-          wsText.TrimLeft(L" ");
+          wsText.TrimFront(L" ");
         }
         if (CFX_CSSDisplay::Block == eDisplay) {
           m_pLoader->bFilterSpace = true;

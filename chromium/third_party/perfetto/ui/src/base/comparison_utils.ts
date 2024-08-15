@@ -16,20 +16,23 @@ import {isString} from './object_utils';
 
 export type ComparisonFn<X> = (a: X, b: X) => number;
 
-export type SortDirection = 'DESC'|'ASC';
+export type SortDirection = 'DESC' | 'ASC';
 
 // Having a comparison function of type S and a getter that returns value of
 // type S from value of type T, values of type T can be compared.
 export function comparingBy<T, S>(
-    getter: (t: T) => S, comparison: ComparisonFn<S>): ComparisonFn<T> {
+  getter: (t: T) => S,
+  comparison: ComparisonFn<S>,
+): ComparisonFn<T> {
   return (x, y) => {
     return comparison(getter(x), getter(y));
   };
 }
 
 export function withDirection<T>(
-    comparison: ComparisonFn<T>,
-    sortDirection?: SortDirection): ComparisonFn<T> {
+  comparison: ComparisonFn<T>,
+  sortDirection?: SortDirection,
+): ComparisonFn<T> {
   if (sortDirection !== 'DESC') {
     return comparison;
   }
@@ -39,7 +42,13 @@ export function withDirection<T>(
   };
 }
 
-export type SortableValue = string|number|bigint|null|Uint8Array|undefined;
+export type SortableValue =
+  | string
+  | number
+  | bigint
+  | null
+  | Uint8Array
+  | undefined;
 
 function columnTypeKind(a: SortableValue): number {
   if (a === undefined) {

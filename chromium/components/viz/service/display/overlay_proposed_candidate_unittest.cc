@@ -87,7 +87,7 @@ class OverlayProposedCandidateTest
   }
 
   ResourceId CreateResource(bool is_overlay_candidate) {
-    scoped_refptr<ContextProvider> child_context_provider =
+    scoped_refptr<RasterContextProvider> child_context_provider =
         TestContextProvider::Create();
 
     child_context_provider->BindToCurrentSequence();
@@ -133,7 +133,7 @@ class OverlayProposedCandidateTest
         /*transform=*/quad_to_target_transform, quad_rect,
         /*visible_layer_rect=*/quad_rect,
         /*filter_info=*/gfx::MaskFilterInfo(),
-        /*clip=*/absl::nullopt,
+        /*clip=*/std::nullopt,
         /*are contents opaque=*/true,
         /*opacity_f=*/1.f,
         /*blend=*/SkBlendMode::kSrcOver, /*sorting_context=*/0, /*layer_id=*/0u,
@@ -176,11 +176,11 @@ TEST_P(OverlayProposedCandidateTest, CorrectRoundedDisplayMaskBounds) {
                                  /*is_overlay_candidate=*/true, identity,
                                  mask_info_, &render_pass);
 
+  OverlayCandidateFactory::OverlayContext context;
+  context.supports_rounded_display_masks = true;
   OverlayCandidateFactory factory = OverlayCandidateFactory(
       &render_pass, &resource_provider_, &surface_damage_list_, &identity_,
-      gfx::RectF(render_pass.output_rect), &render_pass_filters_,
-      OverlayCandidateFactory::OverlayContext{.supports_rounded_display_masks =
-                                                  true});
+      gfx::RectF(render_pass.output_rect), &render_pass_filters_, context);
 
   OverlayCandidate candidate;
   OverlayCandidateFactory::CandidateStatus status =

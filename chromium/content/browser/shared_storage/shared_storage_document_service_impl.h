@@ -34,6 +34,13 @@ extern CONTENT_EXPORT const char kSharedStorageSelectURLDisabledMessage[];
 extern CONTENT_EXPORT const char kSharedStorageAddModuleDisabledMessage[];
 extern CONTENT_EXPORT const char kSharedStorageSelectURLLimitReachedMessage[];
 
+// Will conditionally combine an `input_message` with a `debug_message`
+// containing additional details if the
+// `blink::features::kSharedStorageDebugDisabledMessage` feature param is true,
+// returning `input_message` otherwise.
+std::string GetSharedStorageErrorMessage(const std::string& debug_message,
+                                         const std::string& input_message);
+
 // Handle renderer-initiated shared storage access and worklet operations. The
 // worklet operations (i.e. `addModule()`, `selectURL()`, `run()`) will be
 // dispatched to the `SharedStorageWorkletHost` to be handled.
@@ -45,7 +52,7 @@ class CONTENT_EXPORT SharedStorageDocumentServiceImpl final
 
   const url::Origin& main_frame_origin() const { return main_frame_origin_; }
 
-  std::string main_frame_id() const { return main_frame_id_; }
+  int main_frame_id() const { return main_frame_id_; }
 
   void Bind(mojo::PendingAssociatedReceiver<
             blink::mojom::SharedStorageDocumentService> receiver);
@@ -53,11 +60,14 @@ class CONTENT_EXPORT SharedStorageDocumentServiceImpl final
   // blink::mojom::SharedStorageDocumentService.
   void CreateWorklet(
       const GURL& script_source_url,
+      network::mojom::CredentialsMode credentials_mode,
       const std::vector<blink::mojom::OriginTrialFeature>&
           origin_trial_features,
       mojo::PendingAssociatedReceiver<blink::mojom::SharedStorageWorkletHost>
           worklet_host,
       CreateWorkletCallback callback) override;
+  void SharedStorageGet(const std::u16string& key,
+                        SharedStorageGetCallback callback) override;
   void SharedStorageSet(const std::u16string& key,
                         const std::u16string& value,
                         bool ignore_if_present,
@@ -82,9 +92,10 @@ class CONTENT_EXPORT SharedStorageDocumentServiceImpl final
 
   storage::SharedStorageManager* GetSharedStorageManager();
 
-  bool IsSharedStorageAllowed();
+  bool IsSharedStorageAllowed(std::string* out_debug_message = nullptr);
 
-  bool IsSharedStorageAddModuleAllowed();
+  bool IsSharedStorageAddModuleAllowed(
+      std::string* out_debug_message = nullptr);
 
   std::string SerializeLastCommittedOrigin() const;
 
@@ -97,9 +108,9 @@ class CONTENT_EXPORT SharedStorageDocumentServiceImpl final
   // save the value of the main frame origin in the constructor.
   const url::Origin main_frame_origin_;
 
-  // The DevTools frame token for the main frame, to be used by notifications
-  // to DevTools.
-  const std::string main_frame_id_;
+  // The FrameTreeNodeId for the main frame, to be used by notifications
+  // to DevTools. (DevTools will convert this to a DevTools frame token.)
+  const int main_frame_id_;
 
   DOCUMENT_USER_DATA_KEY_DECL();
 

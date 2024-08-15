@@ -56,7 +56,7 @@ TlsConnectionPosix::~TlsConnectionPosix() {
 }
 
 void TlsConnectionPosix::TryReceiveMessage() {
-  OSP_DCHECK(ssl_);
+  OSP_CHECK(ssl_);
   constexpr int kMaxApplicationDataBytes = 65536;
   std::vector<uint8_t> block(kMaxApplicationDataBytes);
   ClearOpenSSLERRStack(CURRENT_LOCATION);
@@ -87,26 +87,26 @@ void TlsConnectionPosix::TryReceiveMessage() {
 }
 
 void TlsConnectionPosix::SetClient(Client* client) {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
   client_ = client;
 }
 
 bool TlsConnectionPosix::Send(const void* data, size_t len) {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
   return buffer_.Push(data, len);
 }
 
 IPEndpoint TlsConnectionPosix::GetRemoteEndpoint() const {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 
   std::optional<IPEndpoint> endpoint = socket_->remote_address();
-  OSP_DCHECK(endpoint.has_value());
+  OSP_CHECK(endpoint.has_value());
   return endpoint.value();
 }
 
 void TlsConnectionPosix::RegisterConnectionWithDataRouter(
     PlatformClientPosix* platform_client) {
-  OSP_DCHECK(!platform_client_);
+  OSP_CHECK(!platform_client_);
   platform_client_ = platform_client;
   platform_client_->tls_data_router()->RegisterConnection(this);
 }

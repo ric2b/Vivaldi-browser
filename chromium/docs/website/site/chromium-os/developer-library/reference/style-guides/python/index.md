@@ -3,7 +3,7 @@ breadcrumbs:
 - - /chromium-os/developer-library/reference
   - Chromium OS > Developer Library > Reference
 page_name: python
-title: Python Style Guidelines [go/cros-pystyle]
+title: Python style guidelines [go/cros-pystyle]
 ---
 
 [TOC]
@@ -275,7 +275,15 @@ is better than leaving this code undocumented.
 
 See also the [Google style guide] here.
 
-All TODOs should be formatted in one of these formats:
+New TODOs should be formatted as follows:
+
+```python
+# TODO: b/123456789 - Revisit this code when the frob feature is done.
+# TODO: crbug.com/1234567 - Revisit this code when the frob feature is done.
+```
+
+The following formats were formerly recommended, but discouraged for use in new
+code:
 
 ```python
 # TODO(username): Revisit this code when the frob feature is done.

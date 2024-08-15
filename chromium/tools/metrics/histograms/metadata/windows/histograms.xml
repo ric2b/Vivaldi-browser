@@ -45,7 +45,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Windows.CetEnabled" enum="BooleanEnabled"
-    expires_after="2024-06-30">
+    expires_after="2024-09-01">
   <owner>ajgo@chromium.org</owner>
   <owner>wfh@chromium.org</owner>
   <summary>
@@ -81,7 +81,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Windows.HasHighResolutionTimeTicks" enum="Boolean"
-    expires_after="2024-06-30">
+    expires_after="2024-09-01">
   <owner>brucedawson@chromium.org</owner>
   <owner>gab@chromium.org</owner>
   <summary>
@@ -90,8 +90,18 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Windows.HasThreadTicks" enum="Boolean"
+    expires_after="2025-02-23">
+  <owner>olivierli@chromium.org</owner>
+  <owner>gab@chromium.org</owner>
+  <summary>
+    The value of ThreadTicks::IsSupported(). Reported once per browser session,
+    on startup.
+  </summary>
+</histogram>
+
 <histogram name="Windows.HighResolutionTimerUsage" units="%"
-    expires_after="2024-05-19">
+    expires_after="2024-07-21">
   <owner>olivierli@chromium.org</owner>
   <owner>catan-team@chromium.org</owner>
   <summary>
@@ -102,7 +112,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Windows.HypervPresent" enum="BooleanEnabled"
-    expires_after="2024-06-01">
+    expires_after="2024-08-04">
   <owner>rkc@chromium.org</owner>
   <owner>vnagarnaik@google.com</owner>
   <owner>rockot@chromium.org</owner>
@@ -210,7 +220,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Windows.ProcessorFamily" enum="ProcessorFamily"
-    expires_after="2024-06-01">
+    expires_after="2024-08-04">
   <owner>rkc@chromium.org</owner>
   <owner>vnagarnaik@google.com</owner>
   <owner>rockot@chromium.org</owner>

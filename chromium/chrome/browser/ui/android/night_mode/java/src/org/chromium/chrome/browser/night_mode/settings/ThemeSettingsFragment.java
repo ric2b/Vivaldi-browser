@@ -19,6 +19,7 @@ import org.chromium.chrome.browser.night_mode.R;
 import org.chromium.chrome.browser.night_mode.WebContentsDarkModeController;
 import org.chromium.chrome.browser.night_mode.WebContentsDarkModeMessageController;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
+import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.settings.ChromeBaseSettingsFragment;
 import org.chromium.components.browser_ui.settings.CustomDividerFragment;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
@@ -26,7 +27,7 @@ import org.chromium.ui.UiUtils;
 
 import androidx.preference.PreferenceCategory;
 
-import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 
 /** Fragment to manage the theme user settings. */
@@ -106,12 +107,12 @@ public class ThemeSettingsFragment extends ChromeBaseSettingsFragment
             darkWebPagesSwitch.setKey(KEY_DARK_MODE_FOR_WEBPAGES);
             darkWebPagesSwitch.setChecked(
                     WebContentsDarkModeController.isGlobalUserSettingsEnabled(
-                            Profile.getLastUsedRegularProfile()));
+                            ProfileManager.getLastUsedRegularProfile()));
             darkWebPagesSwitch.setOnPreferenceChangeListener((preference, newValue) -> {
                 ChromeSharedPreferences.getInstance().writeBoolean(KEY_DARK_MODE_FOR_WEBPAGES,
                         true);
                 WebContentsDarkModeController.setGlobalUserSettings(
-                        Profile.getLastUsedRegularProfile(), (boolean) newValue);
+                        ProfileManager.getLastUsedRegularProfile(), (boolean) newValue);
                 return true;
             });
             getPreferenceScreen().addPreference(darkWebPagesSwitch);

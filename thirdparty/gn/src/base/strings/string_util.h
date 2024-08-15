@@ -246,31 +246,19 @@ bool LowerCaseEqualsASCII(std::u16string_view str,
 // undefined if the |ascii| string is not ASCII.
 bool EqualsASCII(std::u16string_view str, std::string_view ascii);
 
-// Indicates case sensitivity of comparisons. Only ASCII case insensitivity
-// is supported. Full Unicode case-insensitive conversions would need to go in
-// base/i18n so it can use ICU.
-//
+// starts_with/ends_with for ASCII case-insensitive comparisons.
 // If you need to do Unicode-aware case-insensitive StartsWith/EndsWith, it's
 // best to call base::i18n::ToLower() or base::i18n::FoldCase() (see
 // base/i18n/case_conversion.h for usage advice) on the arguments, and then use
 // the results to a case-sensitive comparison.
-enum class CompareCase {
-  SENSITIVE,
-  INSENSITIVE_ASCII,
-};
-
-bool StartsWith(std::string_view str,
-                std::string_view search_for,
-                CompareCase case_sensitivity);
-bool StartsWith(std::u16string_view str,
-                std::u16string_view search_for,
-                CompareCase case_sensitivity);
-bool EndsWith(std::string_view str,
-              std::string_view search_for,
-              CompareCase case_sensitivity);
-bool EndsWith(std::u16string_view str,
-              std::u16string_view search_for,
-              CompareCase case_sensitivity);
+bool StartsWithCaseInsensitiveASCII(std::string_view str,
+                                    std::string_view search_for);
+bool StartsWithCaseInsensitiveASCII(std::u16string_view str,
+                                    std::u16string_view search_for);
+bool EndsWithCaseInsensitiveASCII(std::string_view str,
+                                  std::string_view search_for);
+bool EndsWithCaseInsensitiveASCII(std::u16string_view str,
+                                  std::u16string_view search_for);
 
 // Determines the type of ASCII character, independent of locale (the C
 // library versions will change based on locale).

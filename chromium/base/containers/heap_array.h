@@ -163,6 +163,25 @@ class TRIVIAL_ABI GSL_OWNER HeapArray {
     return as_span().last(count);
   }
 
+  // Leaks the memory in the HeapArray so that it will never be freed, and
+  // consumes the HeapArray, returning an unowning span that points to the
+  // memory.
+  base::span<T> leak() && {
+    HeapArray<T> dropped = std::move(*this);
+    T* leaked = dropped.data_.release();
+    return make_span(leaked, dropped.size_);
+  }
+
+  // Delete the memory previously obtained from leak(). Argument is a pointer
+  // rather than a span to facilitate use by callers that have lost track of
+  // size information, as may happen when being passed through a C-style
+  // function callback. The void* argument type makes its signature compatible
+  // with typical void (*cb)(void*) C-style deletion callback.
+  static void DeleteLeakedData(void* ptr) {
+    // Memory is freed by unique ptr going out of scope.
+    std::unique_ptr<T[]> deleter(static_cast<T*>(ptr));
+  }
+
  private:
   HeapArray(std::unique_ptr<T[]> data, size_t size)
       : data_(std::move(data)), size_(size) {}

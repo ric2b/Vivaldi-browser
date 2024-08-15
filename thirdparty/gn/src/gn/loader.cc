@@ -198,8 +198,8 @@ const Settings* LoaderImpl::GetToolchainSettings(const Label& label) const {
 }
 
 SourceFile LoaderImpl::BuildFileForLabel(const Label& label) const {
-  return SourceFile(
-      label.dir().value() + "BUILD" + build_file_extension_ + ".gn");
+  return SourceFile(label.dir().value() + "BUILD" + build_file_extension_ +
+                    ".gn");
 }
 
 void LoaderImpl::ScheduleLoadFile(const Settings* settings,

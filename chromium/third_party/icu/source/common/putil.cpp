@@ -1174,6 +1174,7 @@ uprv_tzname(int n)
         int32_t ret = (int32_t)readlink(TZDEFAULT, gTimeZoneBuffer, sizeof(gTimeZoneBuffer)-1);
         if (0 < ret) {
             int32_t tzZoneInfoTailLen = uprv_strlen(TZZONEINFOTAIL);
+            gTimeZoneBuffer[ret] = 0;
             char *  tzZoneInfoTailPtr = uprv_strstr(gTimeZoneBuffer, TZZONEINFOTAIL);
 
             if (tzZoneInfoTailPtr != nullptr

@@ -5,18 +5,19 @@
 #include <stddef.h>
 
 #include <memory>
+#include <string_view>
 
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/input_method/assistive_window_controller.h"
 #include "chrome/browser/ash/input_method/ui/input_method_menu_item.h"
 #include "chrome/browser/ash/input_method/ui/input_method_menu_manager.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/test/base/interactive_test_utils.h"
@@ -1190,7 +1191,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, DISABLED_APIArgumentTest) {
       ExtensionTestMessageListener focus_listener(
           "onFocus:password:true:true:true:true");
 
-      constexpr base::StringPiece password_field_change_to_text_script = R"(
+      constexpr std::string_view password_field_change_to_text_script = R"(
         const input = document.createElement('input');
         document.body.appendChild(input);
         input.type = 'password';

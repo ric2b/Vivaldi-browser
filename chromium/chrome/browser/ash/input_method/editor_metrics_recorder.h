@@ -18,6 +18,11 @@ EditorStates ToEditorStatesMetric(EditorBlockedReason reason);
 
 EditorStates ToEditorStatesMetric(orca::mojom::TextQueryErrorCode error_code);
 
+std::optional<EditorStates> ToEditorStatesMetric(
+    orca::mojom::MetricEvent metric_event);
+
+EditorTone ToEditorMetricTone(orca::mojom::TriggerContextPtr trigger_context);
+
 class EditorMetricsRecorder {
  public:
   explicit EditorMetricsRecorder(EditorOpportunityMode mode);
@@ -32,6 +37,7 @@ class EditorMetricsRecorder {
   void LogNumberOfCharactersInserted(int number_of_characters);
   void LogNumberOfCharactersSelectedForInsert(int number_of_characters);
   void LogNumberOfResponsesFromServer(int number_of_responses);
+  void LogLengthOfLongestResponseFromServer(int number_of_characters);
 
  private:
   EditorOpportunityMode mode_;

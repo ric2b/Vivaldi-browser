@@ -5,10 +5,10 @@
 import 'chrome://settings/lazy_load.js';
 import 'chrome://settings/settings.js';
 
-import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {CrIconButtonElement, IronCollapseElement, SettingsRadioGroupElement} from 'chrome://settings/lazy_load.js';
-import {ExceptionAddDialogElement, ExceptionEditDialogElement, ExceptionEntryElement, ExceptionListElement, ExceptionTabbedAddDialogElement, MEMORY_SAVER_MODE_PREF, MemorySaverModeExceptionListAction, MemorySaverModeState, PerformanceBrowserProxyImpl, PerformanceMetricsProxyImpl, SettingsCheckboxListEntryElement, SettingsDropdownMenuElement, SettingsPerformancePageElement, TAB_DISCARD_EXCEPTIONS_MANAGED_PREF, TAB_DISCARD_EXCEPTIONS_OVERFLOW_SIZE, TAB_DISCARD_EXCEPTIONS_PREF} from 'chrome://settings/settings.js';
+import type {CrIconButtonElement, IronCollapseElement, SettingsRadioGroupElement} from 'chrome://settings/lazy_load.js';
+import type {ExceptionEditDialogElement, ExceptionEntryElement, ExceptionListElement, ExceptionTabbedAddDialogElement, SettingsCheckboxListEntryElement, SettingsDropdownMenuElement, SettingsPerformancePageElement} from 'chrome://settings/settings.js';
+import {convertDateToWindowsEpoch, MEMORY_SAVER_MODE_PREF, MemorySaverModeExceptionListAction, MemorySaverModeState, PerformanceBrowserProxyImpl, PerformanceMetricsProxyImpl, TAB_DISCARD_EXCEPTIONS_MANAGED_PREF, TAB_DISCARD_EXCEPTIONS_OVERFLOW_SIZE, TAB_DISCARD_EXCEPTIONS_PREF} from 'chrome://settings/settings.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
@@ -37,9 +37,9 @@ function tabDiscardingMockPrefs(): Record<
     string, Record<string, Omit<chrome.settingsPrivate.PrefObject, 'key'>>> {
   return {
     tab_discarding: {
-      exceptions: {
-        type: chrome.settingsPrivate.PrefType.LIST,
-        value: [],
+      exceptions_with_time: {
+        type: chrome.settingsPrivate.PrefType.DICTIONARY,
+        value: {},
       },
       exceptions_managed: {
         enforcement: chrome.settingsPrivate.Enforcement.ENFORCED,
@@ -278,7 +278,9 @@ suite('TabDiscardExceptionList', function() {
       performancePage.setPrefValue(
           TAB_DISCARD_EXCEPTIONS_MANAGED_PREF, managedRules);
     }
-    performancePage.setPrefValue(TAB_DISCARD_EXCEPTIONS_PREF, rules);
+    performancePage.setPrefValue(
+        TAB_DISCARD_EXCEPTIONS_PREF,
+        Object.fromEntries(rules.map(r => [r, convertDateToWindowsEpoch()])));
     flush();
     assertExceptionListEquals([...managedRules ?? [], ...rules]);
   }
@@ -372,17 +374,6 @@ suite('TabDiscardExceptionList', function() {
     assertExceptionListEquals([]);
   });
 
-  async function getAddDialog():
-      Promise<ExceptionAddDialogElement|ExceptionTabbedAddDialogElement> {
-    if (loadTimeData.getBoolean('isDiscardExceptionsImprovementsEnabled')) {
-      return await getTabbedAddDialog();
-    }
-    const dialog = exceptionList.shadowRoot!.querySelector(
-        'tab-discard-exception-add-dialog');
-    assertTrue(!!dialog);
-    return dialog;
-  }
-
   async function getTabbedAddDialog():
       Promise<ExceptionTabbedAddDialogElement> {
     await performanceBrowserProxy.whenCalled('getCurrentOpenSites');
@@ -397,15 +388,6 @@ suite('TabDiscardExceptionList', function() {
         'tab-discard-exception-edit-dialog');
     assertTrue(!!dialog);
     return dialog;
-  }
-
-  function assertAddDialogDoesNotExist() {
-    if (loadTimeData.getBoolean('isDiscardExceptionsImprovementsEnabled')) {
-      assertTabbedAddDialogDoesNotExist();
-    }
-    const dialog = exceptionList.shadowRoot!.querySelector(
-        'tab-discard-exception-add-dialog');
-    assertFalse(!!dialog);
   }
 
   function assertTabbedAddDialogDoesNotExist() {
@@ -423,11 +405,11 @@ suite('TabDiscardExceptionList', function() {
   }
 
   async function inputDialog(
-      dialog: ExceptionAddDialogElement|ExceptionTabbedAddDialogElement|
-      ExceptionEditDialogElement,
+      dialog: ExceptionTabbedAddDialogElement|ExceptionEditDialogElement,
       input: string) {
     const inputEvent = eventToPromise('input', dialog.$.input.$.input);
     dialog.$.input.$.input.value = input;
+    await dialog.$.input.$.input.updateComplete;
     dialog.$.input.$.input.dispatchEvent(new CustomEvent('input'));
     await inputEvent;
     dialog.$.actionButton.click();
@@ -435,12 +417,12 @@ suite('TabDiscardExceptionList', function() {
 
   test('testExceptionListAdd', async function() {
     setupExceptionListEntries(['foo']);
-    assertAddDialogDoesNotExist();
+    assertTabbedAddDialogDoesNotExist();
 
     exceptionList.$.addButton.click();
     flush();
 
-    const addDialog = await getAddDialog();
+    const addDialog = await getTabbedAddDialog();
     assertTrue(addDialog.$.dialog.open);
     assertEquals('', addDialog.$.input.$.input.value);
     await inputDialog(addDialog, 'bar');
@@ -475,7 +457,7 @@ suite('TabDiscardExceptionList', function() {
     exceptionList.$.addButton.click();
     flush();
 
-    const addDialog = await getAddDialog();
+    const addDialog = await getTabbedAddDialog();
     assertEquals('', addDialog.$.input.$.input.value);
   });
 
@@ -490,25 +472,24 @@ suite('TabDiscardExceptionList', function() {
     assertFalse(exceptionList.$.expandButton.hidden);
 
     exceptionList.$.expandButton.click();
+    await exceptionList.$.expandButton.updateComplete;
     assertTrue(exceptionList.$.collapse.opened);
 
     exceptionList.$.expandButton.click();
+    await exceptionList.$.expandButton.updateComplete;
     assertFalse(exceptionList.$.collapse.opened);
 
     exceptionList.$.addButton.click();
     flush();
 
     const newRule = `rule${TAB_DISCARD_EXCEPTIONS_OVERFLOW_SIZE + 1}`;
-    const addDialog = await getAddDialog();
+    const addDialog = await getTabbedAddDialog();
     await inputDialog(addDialog, newRule);
     assertFalse(exceptionList.$.collapse.opened);
     assertExceptionListEquals([...entries, newRule]);
   });
 
   test('testExceptionListAddExceptionsOverflow', async function() {
-    if (!loadTimeData.getBoolean('isDiscardExceptionsImprovementsEnabled')) {
-      return;
-    }
     const existingEntry = 'www.foo.com';
     setupExceptionListEntries([existingEntry]);
     const entries = [
@@ -522,12 +503,14 @@ suite('TabDiscardExceptionList', function() {
     await eventToPromise('iron-resize', addDialog);
     flush();
 
-    addDialog.$.list.$.list
-        .querySelectorAll<SettingsCheckboxListEntryElement>(
-            'settings-checkbox-list-entry:not([hidden])')
-        .forEach(currentSitesEntryElement => {
-          currentSitesEntryElement.$.checkbox.click();
-        });
+    const listEntries = addDialog.$.list.$.list
+                            .querySelectorAll<SettingsCheckboxListEntryElement>(
+                                'settings-checkbox-list-entry:not([hidden])');
+    for (const entry of listEntries) {
+      entry.$.checkbox.click();
+      await entry.$.checkbox.updateComplete;
+    }
+
     assertFalse(addDialog.$.actionButton.disabled);
     addDialog.$.actionButton.click();
     flush();

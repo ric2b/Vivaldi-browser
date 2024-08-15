@@ -95,6 +95,8 @@ PrefWatcher::PrefWatcher(Profile* profile)
                                      renderer_callback);
   profile_pref_change_registrar_.Add(prefs::kEnableEncryptedMedia,
                                      renderer_callback);
+  profile_pref_change_registrar_.Add(
+      prefs::kPrefixedVideoFullscreenApiAvailability, renderer_callback);
   profile_pref_change_registrar_.Add(prefs::kWebRTCIPHandlingPolicy,
                                      renderer_callback);
   profile_pref_change_registrar_.Add(prefs::kWebRTCUDPPortRange,
@@ -152,8 +154,9 @@ void PrefWatcher::OnDoNotTrackEnabledChanged() {
 }
 
 void PrefWatcher::UpdateRendererPreferences() {
-  for (auto* helper : tab_helpers_)
+  for (PrefsTabHelper* helper : tab_helpers_) {
     helper->UpdateRendererPreferences();
+  }
 
   blink::RendererPreferences prefs;
   renderer_preferences_util::UpdateFromSystemSettings(&prefs, profile_);
@@ -162,8 +165,9 @@ void PrefWatcher::UpdateRendererPreferences() {
 }
 
 void PrefWatcher::OnWebPrefChanged(const std::string& pref_name) {
-  for (auto* helper : tab_helpers_)
+  for (PrefsTabHelper* helper : tab_helpers_) {
     helper->OnWebPrefChanged(pref_name);
+  }
 }
 
 // static

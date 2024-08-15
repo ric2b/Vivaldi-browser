@@ -30,7 +30,7 @@ export enum CauseThread {
   COMPOSITOR = 'Compositor',
   CHROME_CHILD_IO_THREAD = 'Chrome_ChildIOThread',
   VIZ_COMPOSITOR = 'VizCompositorThread',
-  SURFACE_FLINGER = 'surfaceflinger'
+  SURFACE_FLINGER = 'surfaceflinger',
 }
 
 export interface ScrollJankCause {
@@ -139,8 +139,9 @@ export class ScrollJankCauseMap {
     }
   }
 
-  public static getEventLatencyDetails(eventLatency: string):
-      EventLatencyStageDetails|undefined {
+  public static getEventLatencyDetails(
+    eventLatency: string,
+  ): EventLatencyStageDetails | undefined {
     if (eventLatency in ScrollJankCauseMap.instance.causes) {
       return ScrollJankCauseMap.instance.causes[eventLatency];
     }

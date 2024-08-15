@@ -7,13 +7,13 @@ import type * as Platform from '../../../../core/platform/platform.js';
 import type * as Protocol from '../../../../generated/protocol.js';
 import * as ChromeLink from '../../../../ui/components/chrome_link/chrome_link.js';
 import * as Dialogs from '../../../../ui/components/dialogs/dialogs.js';
-import * as ComponentHelpers from '../../../../ui/components/helpers/helpers.js';
 import * as IconButton from '../../../../ui/components/icon_button/icon_button.js';
 import * as LegacyWrapper from '../../../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import * as Coordinator from '../../../../ui/components/render_coordinator/render_coordinator.js';
 import * as ReportView from '../../../../ui/components/report_view/report_view.js';
 import * as UI from '../../../../ui/legacy/legacy.js';
 import * as LitHtml from '../../../../ui/lit-html/lit-html.js';
+import * as VisualLogging from '../../../../ui/visual_logging/visual_logging.js';
 
 import preloadingDisabledInfobarStyles from './preloadingDisabledInfobar.css.js';
 
@@ -36,7 +36,7 @@ const UIStrings = {
   headerDisabledByPreference: 'User settings or extensions',
   /**
    *@description Description in dialog
-   *@example {Preload pages settings (linked to chrome://settings/preloading)} PH1
+   *@example {Preload pages settings (linked to chrome://settings/performance)} PH1
    *@example {Extensions settings (linked to chrome://extensions)} PH2
    */
   descriptionDisabledByPreference:
@@ -160,6 +160,7 @@ export class PreloadingDisabledInfobar extends LegacyWrapper.LegacyWrapper.Wrapp
             closeOnESC: true,
             closeOnScroll: false,
           } as Dialogs.IconDialog.IconDialogData}
+          jslog=${VisualLogging.dialog('preloading-disabled').track({resize: true, keydown: 'Escape'})}
         >
           ${this.#dialogContents()}
         </${Dialogs.IconDialog.IconDialog.litTagName}>
@@ -259,11 +260,9 @@ export class PreloadingDisabledInfobar extends LegacyWrapper.LegacyWrapper.Wrapp
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent(
-    'devtools-resources-preloading-disabled-infobar', PreloadingDisabledInfobar);
+customElements.define('devtools-resources-preloading-disabled-infobar', PreloadingDisabledInfobar);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-resources-preloading-disabled-infobar': PreloadingDisabledInfobar;
   }

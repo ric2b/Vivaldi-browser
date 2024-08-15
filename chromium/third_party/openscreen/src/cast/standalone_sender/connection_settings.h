@@ -31,7 +31,7 @@ struct ConnectionSettings {
 
   // Whether we should use the hacky RTP stream IDs for legacy android
   // receivers, or if we should use the proper values. For more information,
-  // see https://issuetracker.google.com/184438154.
+  // see issuetracker.google.com/184438154.
   bool use_android_rtp_hack = true;
 
   // Whether we should use remoting for the video, instead of the default of

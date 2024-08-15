@@ -30,15 +30,22 @@ BASE_FEATURE(kIOSKeyboardAccessoryUpgrade,
              "kIOSKeyboardAccessoryUpgrade",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kIOSPaymentsBottomSheet,
-             "IOSPaymentsBottomSheet",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kTestFeature, "TestFeature", base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSafetyCheckMagicStack,
              "SafetyCheckMagicStack",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+const char kSafetyCheckMagicStackAutorunHoursThreshold[] =
+    "SafetyCheckMagicStackAutorunHoursThreshold";
+
+// How many hours between each autorun of the Safety Check in the Magic Stack.
+const base::TimeDelta TimeDelayForSafetyCheckAutorun() {
+  int delay = base::GetFieldTrialParamByFeatureAsInt(
+      kSafetyCheckMagicStack, kSafetyCheckMagicStackAutorunHoursThreshold,
+      /*default_value=*/24);
+  return base::Hours(delay);
+}
 
 BASE_FEATURE(kSharedHighlightingIOS,
              "SharedHighlightingIOS",
@@ -48,11 +55,13 @@ BASE_FEATURE(kShareInWebContextMenuIOS,
              "ShareInWebContextMenuIOS",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// TODO(crbug.com/1128242): Remove this flag after the refactoring work is
-// finished.
 BASE_FEATURE(kModernTabStrip,
              "ModernTabStrip",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+const char kModernTabStripParameterName[] = "modern-tab-strip-new-tab-button";
+const char kModernTabStripNTBDynamicParam[] = "dynamic";
+const char kModernTabStripNTBStaticParam[] = "static";
 
 BASE_FEATURE(kIncognitoNtpRevamp,
              "IncognitoNtpRevamp",
@@ -67,10 +76,22 @@ BASE_FEATURE(kIOSBrowserEditMenuMetrics,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 const char kIOSDockingPromoExperimentType[] = "IOSDockingPromoExperimentType";
+const char kIOSDockingPromoNewUserInactiveThresholdHours[] =
+    "IOSDockingPromoNewUserInactiveThresholdHours";
+const char kIOSDockingPromoOldUserInactiveThresholdHours[] =
+    "IOSDockingPromoOldUserInactiveThresholdHours";
 
 BASE_FEATURE(kIOSDockingPromo,
              "IOSDockingPromo",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kIOSDockingPromoFixedTriggerLogicKillswitch,
+             "IOSDockingPromoFixedTriggerLogicKillswitch",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kIOSDockingPromoPreventDeregistrationKillswitch,
+             "IOSDockingPromoPreventDeregistrationKillswitch",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kNonModalDefaultBrowserPromoCooldownRefactor,
              "NonModalDefaultBrowserPromoCooldownRefactor",
@@ -83,7 +104,7 @@ constexpr base::FeatureParam<int>
 
 BASE_FEATURE(kDefaultBrowserVideoPromo,
              "DefaultBrowserVideoPromo",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const char kIOSEditMenuPartialTranslateNoIncognitoParam[] =
     "IOSEditMenuPartialTranslateNoIncognitoParam";
@@ -132,6 +153,10 @@ BASE_FEATURE(kIOSNewOmniboxImplementation,
              "kIOSNewOmniboxImplementation",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kEnableColorLensAndVoiceIconsInHomeScreenWidget,
+             "kEnableColorLensAndVoiceIconsInHomeScreenWidget",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kEnableLensInOmniboxCopiedImage,
              "EnableLensInOmniboxCopiedImage",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -151,10 +176,6 @@ BASE_FEATURE(kEnableShortenedPasswordAutoFillInstruction,
 BASE_FEATURE(kEnableStartupImprovements,
              "EnableStartupImprovements",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kEnableExpKitAppleCalendar,
-             "EnableExpKitAppleCalendar",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kTCRexKillSwitch,
              "kTCRexKillSwitch",
@@ -207,7 +228,7 @@ BASE_FEATURE(kSpotlightReadingListSource,
 
 BASE_FEATURE(kSpotlightDonateNewIntents,
              "SpotlightDonateNewIntents",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kConsistencyNewAccountInterface,
              "ConsistencyNewAccountInterface",
@@ -221,10 +242,6 @@ BASE_FEATURE(kNewNTPOmniboxLayout,
              "kNewNTPOmniboxLayout",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kBottomOmniboxSteadyState,
-             "BottomOmniboxSteadyState",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 const char kBottomOmniboxDefaultSettingParam[] =
     "BottomOmniboxDefaultSettingParam";
 const char kBottomOmniboxDefaultSettingParamTop[] = "Top";
@@ -235,10 +252,6 @@ BASE_FEATURE(kBottomOmniboxDefaultSetting,
              "BottomOmniboxDefaultSetting",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kBottomOmniboxDeviceSwitcherResults,
-             "BottomOmniboxDeviceSwitcherResults",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 bool IsBottomOmniboxSteadyStateEnabled() {
 
   // Note: (prio@vivaldi.com) - We have bottom omnibox for both iPad and iPhones
@@ -246,15 +259,9 @@ bool IsBottomOmniboxSteadyStateEnabled() {
     return true; // End Vivaldi
 
   // Bottom omnibox is only available on phones.
-  if (ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_PHONE) {
-    return false;
-  }
-  return base::FeatureList::IsEnabled(kBottomOmniboxSteadyState);
-}
-
-bool IsBottomOmniboxDeviceSwitcherResultsEnabled() {
-  return IsBottomOmniboxSteadyStateEnabled() &&
-         base::FeatureList::IsEnabled(kBottomOmniboxDeviceSwitcherResults);
+  // TODO(crbug.com/1508532): Cleanup usage of this function as the feature flag
+  // is now enabled by default.
+  return ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE;
 }
 
 BASE_FEATURE(kBottomOmniboxPromoFRE,
@@ -304,22 +311,9 @@ BASE_FEATURE(kOnlyAccessClipboardAsync,
 BASE_FEATURE(kDefaultBrowserVideoInSettings,
              "DefaultBrowserVideoInSettings",
              base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kDefaultBrowserTriggerCriteriaExperiment,
-             "DefaultBrowserTriggerCriteriaExperiment",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kFullScreenPromoOnOmniboxCopyPaste,
-             "FullScreenPromoOnOmniboxCopyPaste",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kThemeColorInTopToolbar,
              "ThemeColorInTopToolbar",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kDynamicThemeColor,
-             "DynamicThemeColor",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kDynamicBackgroundColor,
-             "DynamicBackgroundColor",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kTabGridAlwaysBounce,
@@ -328,7 +322,7 @@ BASE_FEATURE(kTabGridAlwaysBounce,
 
 BASE_FEATURE(kTabGridCompositionalLayout,
              "TabGridCompositionalLayout",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsTabGridCompositionalLayoutEnabled() {
   return base::FeatureList::IsEnabled(kTabGridCompositionalLayout);
@@ -407,7 +401,7 @@ BASE_FEATURE(kIOSLargeFakebox,
 
 BASE_FEATURE(kIOSHideFeedWithSearchChoice,
              "IOSHideFeedWithSearchChoice",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kFullscreenImprovement,
              "FullscreenImprovement",
@@ -417,12 +411,20 @@ BASE_FEATURE(kTabGroupsInGrid,
              "TabGroupsInGrid",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+bool IsTabGroupInGridEnabled() {
+  return base::FeatureList::IsEnabled(kTabGroupsInGrid);
+}
+
 BASE_FEATURE(kIOSExternalActionURLs,
              "IOSExternalActionURLs",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kDisableLensCamera,
              "DisableLensCamera",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kOmniboxColorIcons,
+             "OmniboxColorIcons",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Key for NSUserDefaults containing a bool indicating whether the next run
@@ -458,6 +460,18 @@ DockingPromoDisplayTriggerArm DockingPromoExperimentTypeEnabled() {
       base::GetFieldTrialParamByFeatureAsInt(
           kIOSDockingPromo, kIOSDockingPromoExperimentType,
           /*default_value=*/(int)DockingPromoDisplayTriggerArm::kAfterFRE));
+}
+
+int HoursInactiveForNewUsersUntilShowingDockingPromo() {
+  return base::GetFieldTrialParamByFeatureAsInt(
+      kIOSDockingPromo, kIOSDockingPromoNewUserInactiveThresholdHours,
+      /*default_value=*/24);
+}
+
+int HoursInactiveForOldUsersUntilShowingDockingPromo() {
+  return base::GetFieldTrialParamByFeatureAsInt(
+      kIOSDockingPromo, kIOSDockingPromoOldUserInactiveThresholdHours,
+      /*default_value=*/72);
 }
 
 bool IsWebChannelsEnabled() {
@@ -582,7 +596,7 @@ double GetBackgroundRefreshMaxAgeInSeconds() {
 bool IsIOSHideFeedWithSearchChoiceTargeted() {
   return base::GetFieldTrialParamByFeatureAsBool(
       kIOSHideFeedWithSearchChoice, kIOSHideFeedWithSearchChoiceTargeted,
-      /*default=*/false);
+      /*default=*/true);
 }
 
 bool IsFeedAblationEnabled() {
@@ -624,7 +638,16 @@ bool IsContentPushNotificationsSetUpListEnabled() {
 
 bool IsContentPushNotificationsProvisionalEnabled() {
   return (ContentNotificationsExperimentTypeEnabled() ==
-          NotificationsExperimentTypeProvisional);
+              NotificationsExperimentTypeProvisional ||
+          ContentNotificationsExperimentTypeEnabled() ==
+              NotificationsExperimentTypeProvisionalBypass);
+}
+
+// TODO(b/322348322): Remove provisional notifications bypass conditions testing
+// flag param.
+bool IsContentPushNotificationsProvisionalBypass() {
+  return (ContentNotificationsExperimentTypeEnabled() ==
+          NotificationsExperimentTypeProvisionalBypass);
 }
 
 bool IsIOSLargeFakeboxEnabled() {
@@ -641,15 +664,13 @@ bool IsKeyboardAccessoryUpgradeEnabled() {
 }
 
 // Feature disabled by default.
-BASE_FEATURE(kMagicStack, "MagicStack", base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kMagicStack, "MagicStack", base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableFeedContainment,
              "EnableFeedContainment",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kTabResumption,
-             "TabResumption",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kTabResumption, "TabResumption", base::FEATURE_ENABLED_BY_DEFAULT);
 
 const char kMagicStackMostVisitedModuleParam[] = "MagicStackMostVisitedModule";
 
@@ -673,13 +694,8 @@ const char kTabResumptionAllTabsParam[] = "tab-resumption-all-tabs";
 const char kTabResumptionAllTabsOneDayThresholdParam[] =
     "tab-resumption-all-tabs-one-day-threshold";
 
-bool IsMagicStackEnabled() {
-  return base::FeatureList::IsEnabled(kMagicStack);
-}
-
 bool IsFeedContainmentEnabled() {
-  return IsMagicStackEnabled() &&
-         base::FeatureList::IsEnabled(kEnableFeedContainment);
+  return base::FeatureList::IsEnabled(kEnableFeedContainment);
 }
 
 int HomeModuleMinimumPadding() {
@@ -688,14 +704,14 @@ int HomeModuleMinimumPadding() {
 }
 
 bool IsTabResumptionEnabled() {
-  return IsMagicStackEnabled() && base::FeatureList::IsEnabled(kTabResumption);
+  return base::FeatureList::IsEnabled(kTabResumption);
 }
 
 bool IsTabResumptionEnabledForMostRecentTabOnly() {
   CHECK(IsTabResumptionEnabled());
   std::string feature_param = base::GetFieldTrialParamValueByFeature(
       kTabResumption, kTabResumptionParameterName);
-  return feature_param == kTabResumptionMostRecentTabOnlyParam;
+  return feature_param != kTabResumptionAllTabsParam;
 }
 
 const base::TimeDelta TabResumptionForXDevicesTimeThreshold() {
@@ -716,7 +732,7 @@ bool ShouldPutMostVisitedSitesInMagicStack() {
 
 double ReducedNTPTopMarginSpaceForMagicStack() {
   return base::GetFieldTrialParamByFeatureAsDouble(kMagicStack,
-                                                   kReducedSpaceParam, 0);
+                                                   kReducedSpaceParam, 20);
 }
 
 bool ShouldHideIrrelevantModules() {
@@ -726,7 +742,7 @@ bool ShouldHideIrrelevantModules() {
 
 int TimeUntilShowingCompactedSetUpList() {
   return base::GetFieldTrialParamByFeatureAsInt(
-      kMagicStack, kSetUpListCompactedTimeThresholdDays, 3);
+      kMagicStack, kSetUpListCompactedTimeThresholdDays, 0);
 }
 
 bool IsExternalActionSchemeHandlingEnabled() {
@@ -741,6 +757,39 @@ BASE_FEATURE(kIOSTipsNotifications,
              "IOSTipsNotifications",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+const char kIOSTipsNotificationsTriggerTimeParam[] = "trigger_time";
+const char kIOSTipsNotificationsEnabledParam[] = "enabled";
+
 bool IsIOSTipsNotificationsEnabled() {
   return base::FeatureList::IsEnabled(kIOSTipsNotifications);
 }
+
+BASE_FEATURE(kIOSMagicStackCollectionView,
+             "IOSMagicStackCollectionView",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsIOSMagicStackCollectionViewEnabled() {
+  return base::FeatureList::IsEnabled(kIOSMagicStackCollectionView);
+}
+
+BASE_FEATURE(kDisableFullscreenScrolling,
+             "DisableFullscreenScrolling",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPrefetchSystemCapabilitiesOnFirstRun,
+             "PrefetchSystemCapabilitiesOnFirstRun",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsPrefetchingSystemCapabilitiesOnFirstRun() {
+  return base::FeatureList::IsEnabled(kPrefetchSystemCapabilitiesOnFirstRun);
+}
+
+// Vivaldi
+BASE_FEATURE(kNewStartPage,
+             "kNewStartPage",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsNewStartPageIsEnabled() {
+  return base::FeatureList::IsEnabled(kNewStartPage);
+}
+// End Vivaldi

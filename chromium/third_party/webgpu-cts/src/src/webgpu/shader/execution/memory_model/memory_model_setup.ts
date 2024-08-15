@@ -1,6 +1,7 @@
-import { GPUTest } from '../../../gpu_test';
+import { GPUTest } from '../../../gpu_test.js';
 import { checkElementsPassPredicate } from '../../../util/check_contents.js';
 import { align } from '../../../util/math.js';
+import { PRNG } from '../../../util/prng.js';
 
 /* All buffer sizes are counted in units of 4-byte words. */
 
@@ -15,6 +16,9 @@ import { align } from '../../../util/math.js';
  */
 export type AccessValueType = 'f16' | 'u32';
 export const kAccessValueTypes = ['f16', 'u32'] as const;
+
+/** The width used for textures (default compat limit in WebGPU). */
+const kWidth = 4096;
 
 /* Parameter values are set heuristically, typically by a time-intensive search. */
 export type MemoryModelTestParams = {
@@ -83,6 +87,16 @@ type BufferWithSource = {
   size: number;
 };
 
+/** Represents a device texture and a utility buffer for resetting memory and copying parameters. */
+type TextureWithSource = {
+  /** Texture used by shader code. */
+  deviceTex: GPUTexture;
+  /** Buffer populated from the host side, data is copied to device buffer for use by shader. */
+  srcBuf: GPUBuffer;
+  /** Size in bytes of the buffer. */
+  size: number;
+};
+
 type SubBufferWithSource = {
   /** Buffer used by shader code. This buffer is shared for multiple used */
   deviceBuf: GPUBuffer;
@@ -112,6 +126,10 @@ type MemoryModelBuffers = {
   scratchMemoryLocations: BufferWithSource;
   /** Parameters that are used by the shader to calculate memory locations and perform stress. */
   stressParams: BufferWithSource;
+};
+
+type MemoryModelTextures = {
+  testLocations: TextureWithSource;
 };
 
 /** The number of stress params to add to the stress params buffer. */
@@ -187,10 +205,14 @@ export class MemoryModelTester {
   protected test: GPUTest;
   protected params: MemoryModelTestParams;
   protected buffers: MemoryModelBuffers;
+  protected textures: MemoryModelTextures | undefined;
   protected testPipeline: GPUComputePipeline;
   protected testBindGroup: GPUBindGroup;
+  protected textureBindGroup: GPUBindGroup | undefined;
   protected resultPipeline: GPUComputePipeline;
   protected resultBindGroup: GPUBindGroup;
+  protected prng: PRNG;
+  protected useTexture: boolean;
 
   /** Sets up a memory model test by initializing buffers and pipeline layouts. */
   constructor(
@@ -198,10 +220,13 @@ export class MemoryModelTester {
     params: MemoryModelTestParams,
     testShader: string,
     resultShader: string,
-    accessValueType: AccessValueType = 'u32'
+    accessValueType: AccessValueType = 'u32',
+    useTexture: boolean = false
   ) {
+    this.prng = new PRNG(1);
     this.test = t;
     this.params = params;
+    this.useTexture = useTexture;
 
     const workgroupXSize = Math.min(params.workgroupSize, t.device.limits.maxComputeWorkgroupSizeX);
     const constants = `
@@ -273,6 +298,26 @@ export class MemoryModelTester {
       }),
       size: shuffledWorkgroupsSize,
     };
+
+    if (this.useTexture) {
+      const numTexels = testLocationsSize / bytesPerWord;
+      const width = kWidth;
+      const height = numTexels / width;
+      const textureSize: GPUExtent3D = { width, height };
+      const textureLocations: TextureWithSource = {
+        deviceTex: this.test.device.createTexture({
+          format: 'r32uint',
+          dimension: '2d',
+          size: textureSize,
+          usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING,
+        }),
+        srcBuf: testLocationsBuffer.srcBuf,
+        size: testLocationsSize,
+      };
+      this.textures = {
+        testLocations: textureLocations,
+      };
+    }
 
     // Combine 3 arrays into 1 buffer as we need to keep the number of storage buffers to 4 for compat.
     const falseSharingAvoidanceQuantum = 4096;
@@ -363,10 +408,41 @@ export class MemoryModelTester {
         { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
       ],
     });
+
+    let layouts: GPUBindGroupLayout[] = [testLayout];
+    if (this.useTexture) {
+      const textureLayout = this.test.device.createBindGroupLayout({
+        label: 'textureLayout',
+        entries: [
+          {
+            binding: 0,
+            visibility: GPUShaderStage.COMPUTE,
+            storageTexture: {
+              access: 'read-write',
+              format: 'r32uint',
+              viewDimension: '2d',
+            },
+          },
+        ],
+      });
+      layouts = [testLayout, textureLayout];
+
+      const texLocations = (this.textures as MemoryModelTextures).testLocations.deviceTex;
+      this.textureBindGroup = this.test.device.createBindGroup({
+        label: 'textureBindGroup',
+        entries: [
+          {
+            binding: 0,
+            resource: texLocations.createView(),
+          },
+        ],
+        layout: textureLayout,
+      });
+    }
     this.testPipeline = this.test.device.createComputePipeline({
       label: 'testPipeline',
       layout: this.test.device.createPipelineLayout({
-        bindGroupLayouts: [testLayout],
+        bindGroupLayouts: layouts,
       }),
       compute: {
         module: this.test.device.createShaderModule({
@@ -444,10 +520,16 @@ export class MemoryModelTester {
       this.copyBufferToBuffer(encoder, this.buffers.scratchpad);
       this.copyBufferToBuffer(encoder, this.buffers.scratchMemoryLocations);
       this.copyBufferToBuffer(encoder, this.buffers.stressParams);
+      if (this.useTexture) {
+        this.copyBufferToTexture(encoder, (this.textures as MemoryModelTextures).testLocations);
+      }
 
       const testPass = encoder.beginComputePass();
       testPass.setPipeline(this.testPipeline);
       testPass.setBindGroup(0, this.testBindGroup);
+      if (this.useTexture) {
+        testPass.setBindGroup(1, this.textureBindGroup as GPUBindGroup);
+      }
       testPass.dispatchWorkgroups(numWorkgroups);
       testPass.end();
 
@@ -485,8 +567,8 @@ export class MemoryModelTester {
    * If the weak index's value is not 0, it means the test has observed a behavior disallowed by the memory model and
    * is considered a test failure.
    */
-  protected checkResult(weakIndex: number): (i: number, v: number) => boolean {
-    return function (i: number, v: number): boolean {
+  protected checkResult(weakIndex: number): (i: number, v: number | bigint) => boolean {
+    return function (i: number, v: number | bigint): boolean {
       if (i === weakIndex && v > 0) {
         return false;
       }
@@ -495,7 +577,7 @@ export class MemoryModelTester {
   }
 
   /** Returns a printer function that visualizes the results of checking the test results. */
-  protected resultPrinter(weakIndex: number): (i: number) => string | number {
+  protected resultPrinter(weakIndex: number): (i: number) => string | number | bigint {
     return function (i: number): string | number {
       if (i === weakIndex) {
         return 0;
@@ -519,12 +601,29 @@ export class MemoryModelTester {
     );
   }
 
-  /** Returns a random integer between 0 and the max. */
-  protected getRandomInt(max: number): number {
-    return Math.floor(Math.random() * max);
+  /** Utility method that simplifies copying source buffers to device textures. */
+  protected copyBufferToTexture(encoder: GPUCommandEncoder, texture: TextureWithSource): void {
+    const bytesPerWord = 4; // always uses r32uint format.
+    const numTexels = texture.size / bytesPerWord;
+    const size: GPUExtent3D = { width: kWidth, height: numTexels / kWidth };
+    encoder.copyBufferToTexture(
+      {
+        buffer: texture.srcBuf,
+        offset: 0,
+        bytesPerRow: kWidth * bytesPerWord,
+        rowsPerImage: size.height,
+      },
+      { texture: texture.deviceTex },
+      size
+    );
   }
 
-  /** Returns a random number in between the min and max values. */
+  /** Returns a random integer in the range [0, max). */
+  protected getRandomInt(max: number): number {
+    return this.prng.randomU32() % max;
+  }
+
+  /** Returns a random number in the range [min, max). */
   protected getRandomInRange(min: number, max: number): number {
     if (min === max) {
       return min;
@@ -777,6 +876,11 @@ const nonAtomicTestShaderBindings = [
   commonTestShaderBindings,
 ].join('\n');
 
+/** The extra binding for texture non-atomic texture tests. */
+const textureBindings = `
+@group(1) @binding(0) var texture_locations : texture_storage_2d<r32uint, read_write>;
+`;
+
 /** Bindings used in the result aggregation phase of the test. */
 const resultShaderBindings = `
   @group(0) @binding(0) var<storage, read_write> test_locations : Memory;
@@ -815,6 +919,16 @@ const memoryLocationFunctions = `
 
   fn stripe_workgroup(workgroup_id: u32, local_id: u32) -> u32 {
     return (workgroup_id + 1u + local_id % (stress_params.testing_workgroups - 1u)) % stress_params.testing_workgroups;
+  }
+`;
+
+/**
+ * Function to convert an index into an equivalent 2D coordinate for the texture.
+ */
+const textureFunctions = `
+  const kWidth = ${kWidth};
+  fn indexToCoord(idx : u32) -> vec2u {
+    return vec2u(idx % kWidth, idx / kWidth);
   }
 `;
 
@@ -1048,6 +1162,18 @@ const storageMemoryNonAtomicTestShaderCode = [
   testShaderCommonHeader,
 ].join('\n');
 
+/** The common shader code for the test shaders that perform non-atomic texture memory litmus tests. */
+const textureMemoryNonAtomicTestShaderCode = [
+  shaderMemStructures,
+  nonAtomicTestShaderBindings,
+  textureBindings,
+  memoryLocationFunctions,
+  textureFunctions,
+  testShaderFunctions,
+  shaderEntryPoint,
+  testShaderCommonHeader,
+].join('\n');
+
 /** The common shader code for test shaders that perform atomic workgroup class memory litmus tests. */
 const workgroupMemoryAtomicTestShaderCode = [
   shaderMemStructures,
@@ -1091,6 +1217,8 @@ export enum MemoryType {
   AtomicWorkgroupClass = 'atomic_workgroup',
   /** Non-atomic memory in the workgroup address space. */
   NonAtomicWorkgroupClass = 'non_atomic_workgroup',
+  /** Non-atomic memory in a texture. */
+  NonAtomicTextureClass = 'non_atomic_texture',
 }
 
 /**
@@ -1120,21 +1248,26 @@ export function buildTestShader(
   testType: TestType
 ): string {
   let memoryTypeCode;
-  let isStorageAS = false;
+  let isGlobalSpace = false;
   switch (memoryType) {
     case MemoryType.AtomicStorageClass:
       memoryTypeCode = storageMemoryAtomicTestShaderCode;
-      isStorageAS = true;
+      isGlobalSpace = true;
       break;
     case MemoryType.NonAtomicStorageClass:
       memoryTypeCode = storageMemoryNonAtomicTestShaderCode;
-      isStorageAS = true;
+      isGlobalSpace = true;
       break;
     case MemoryType.AtomicWorkgroupClass:
       memoryTypeCode = workgroupMemoryAtomicTestShaderCode;
       break;
     case MemoryType.NonAtomicWorkgroupClass:
       memoryTypeCode = workgroupMemoryNonAtomicTestShaderCode;
+      break;
+    case MemoryType.NonAtomicTextureClass:
+      memoryTypeCode = textureMemoryNonAtomicTestShaderCode;
+      isGlobalSpace = true;
+      break;
   }
   let testTypeCode;
   switch (testType) {
@@ -1142,7 +1275,7 @@ export function buildTestShader(
       testTypeCode = interWorkgroupTestShaderCode;
       break;
     case TestType.IntraWorkgroup:
-      if (isStorageAS) {
+      if (isGlobalSpace) {
         testTypeCode = storageIntraWorkgroupTestShaderCode;
       } else {
         testTypeCode = intraWorkgroupTestShaderCode;

@@ -23,12 +23,12 @@ enum class ContentSuggestionsModuleType {
   kCompactedSetUpList = 5,
   kSetUpListAllSet = 6,
   kSafetyCheck = 7,
-  kSafetyCheckMultiRow = 8,
-  kSafetyCheckMultiRowOverflow = 9,
+  // Removed: kSafetyCheckMultiRow = 8,
+  // Removed: kSafetyCheckMultiRowOverflow = 9,
   kTabResumption = 10,
   kParcelTracking = 11,
-  kParcelTrackingSeeMore = 12,
-  kSetUpListContentNotification = 13,
+  // Removed: kParcelTrackingSeeMore = 12,
+  kSetUpListNotifications = 13,
   kPlaceholder = 14,
   kMaxValue = kPlaceholder,
 };
@@ -66,12 +66,6 @@ extern NSString* const kMagicStackScrollViewAccessibilityIdentifier;
 // Represents the Magic Stack UIStackView.
 extern NSString* const kMagicStackViewAccessibilityIdentifier;
 
-// Represents the Edit Button Container in the Magic Stack.
-extern NSString* const kMagicStackEditButtonContainerAccessibilityIdentifier;
-
-// Represents the Edit Button in the Magic Stack.
-extern NSString* const kMagicStackEditButtonAccessibilityIdentifier;
-
 // Represents the "Done" button in the Magic Stack edit half sheet.
 extern NSString* const
     kMagicStackEditHalfSheetDoneButtonAccessibilityIdentifier;
@@ -99,5 +93,8 @@ const int kMaxTrendingQueries = 4;
 // SetUpListItemType `type`.
 ContentSuggestionsModuleType SetUpListModuleTypeForSetUpListType(
     SetUpListItemType type);
+
+// Returns true if the module type is one of the SetUpList types.
+bool IsSetUpListModuleType(ContentSuggestionsModuleType type);
 
 #endif  // IOS_CHROME_BROWSER_UI_CONTENT_SUGGESTIONS_CONTENT_SUGGESTIONS_CONSTANTS_H_

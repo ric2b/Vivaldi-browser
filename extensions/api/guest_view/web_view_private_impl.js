@@ -62,6 +62,13 @@ WebViewImpl.prototype.allowBlockedInsecureContent = function () {
   WebViewPrivate.allowBlockedInsecureContent(this.guest.getId());
 };
 
+WebViewImpl.prototype.getPageSelection = function () {
+  if (!this.guest.getId()) {
+    return;
+  }
+  return WebViewPrivate.getPageSelection(this.guest.getId());
+};
+
 WebViewImpl.prototype.sendRequest =
   function (url, transition, fromUrlField, usePost, postData, extraHeaders) {
     if (!this.guest.getId()) {

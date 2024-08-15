@@ -8,6 +8,7 @@
 
 #include <cstring>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "base/memory/raw_ptr.h"
@@ -66,9 +67,9 @@ class CupsPrinterImpl : public CupsPrinter {
   }
 
   // CupsOptionProvider
-  std::vector<base::StringPiece> GetSupportedOptionValueStrings(
+  std::vector<std::string_view> GetSupportedOptionValueStrings(
       const char* option_name) const override {
-    std::vector<base::StringPiece> values;
+    std::vector<std::string_view> values;
     ipp_attribute_t* attr = GetSupportedOptionValues(option_name);
     if (!attr)
       return values;
@@ -153,6 +154,13 @@ class CupsPrinterImpl : public CupsPrinter {
     // On Mac, "printer-info" option specifies the human-readable printer name,
     // while "printer-make-and-model" specifies the printer description.
     printer_info->display_name = info;
+
+    // It is possible to create a printer with a blank display name, so just
+    // use the printer name in such a case.
+    if (printer_info->display_name.empty()) {
+      printer_info->display_name = printer->name;
+    }
+
     printer_info->printer_description = make_and_model;
 #else
     // On other platforms, "printer-info" specifies the printer description.

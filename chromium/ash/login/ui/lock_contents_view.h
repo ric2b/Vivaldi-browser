@@ -91,8 +91,9 @@ class ASH_EXPORT LockContentsView
       public chromeos::PowerManagerClient::Observer,
       public EnterpriseDomainObserver,
       public views::FocusChangeListener {
+  METADATA_HEADER(LockContentsView, NonAccessibleView)
+
  public:
-  METADATA_HEADER(LockContentsView);
   friend class LockContentsViewTestApi;
 
   enum class DisplayStyle {
@@ -130,7 +131,7 @@ class ASH_EXPORT LockContentsView
   void SetHasKioskApp(bool has_kiosk_apps);
 
   // views::View:
-  void Layout() override;
+  void Layout(PassKey) override;
   void AddedToWidget() override;
   void RemovedFromWidget() override;
   void OnFocus() override;

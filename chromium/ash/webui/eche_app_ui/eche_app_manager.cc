@@ -58,12 +58,12 @@ EcheAppManager::EcheAppManager(
               device_sync_client,
               secure_channel_client,
               kSecureChannelFeatureName,
-              std::make_unique<EcheConnectionMetricsRecorder>())),
+              std::make_unique<EcheConnectionMetricsRecorder>(),
+              /*secure_channel_structured_metrics_logger*/ nullptr)),
       eche_connection_status_handler_(
           std::make_unique<EcheConnectionStatusHandler>()),
       feature_status_provider_(std::make_unique<EcheFeatureStatusProvider>(
           phone_hub_manager,
-          device_sync_client,
           multidevice_setup_client,
           connection_manager_.get(),
           eche_connection_status_handler_.get())),

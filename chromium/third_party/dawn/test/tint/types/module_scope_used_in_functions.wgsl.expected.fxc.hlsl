@@ -1,5 +1,13 @@
-static float p = 0.0f;
 groupshared float w;
+
+void tint_zero_workgroup_memory(uint local_idx) {
+  if ((local_idx < 1u)) {
+    w = 0.0f;
+  }
+  GroupMemoryBarrierWithGroupSync();
+}
+
+static float p = 0.0f;
 ByteAddressBuffer uniforms : register(t1);
 RWByteAddressBuffer storages : register(u0);
 
@@ -18,7 +26,7 @@ void bar(float a, float b) {
 }
 
 void foo(float a) {
-  const float b = 2.0f;
+  float b = 2.0f;
   bar(a, b);
   no_uses();
 }
@@ -28,10 +36,7 @@ struct tint_symbol_1 {
 };
 
 void main_inner(uint local_invocation_index) {
-  {
-    w = 0.0f;
-  }
-  GroupMemoryBarrierWithGroupSync();
+  tint_zero_workgroup_memory(local_invocation_index);
   foo(1.0f);
 }
 

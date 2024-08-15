@@ -25,6 +25,7 @@ class Profile;
 namespace views {
 class DialogDelegate;
 class View;
+class Widget;
 }  // namespace views
 
 namespace web_app {
@@ -60,6 +61,10 @@ class IsolatedWebAppInstallerViewController
   void SetIcon(gfx::ImageSkia icon);
 
   void SetViewForTesting(IsolatedWebAppInstallerView* view);
+
+  views::Widget* GetWidgetForTesting();
+
+  views::Widget* GetChildWidgetForTesting();
 
  private:
   friend class IsolatedWebAppInstallerViewUiPixelTest;
@@ -101,6 +106,7 @@ class IsolatedWebAppInstallerViewController
   void OnSettingsLinkClicked() override;
   void OnChildDialogCanceled() override;
   void OnChildDialogAccepted() override;
+  void OnChildDialogDestroying() override;
 
   // `IsolatedWebAppInstallerModel::Observer`:
   void OnStepChanged() override;
@@ -113,11 +119,13 @@ class IsolatedWebAppInstallerViewController
   gfx::NativeWindow window_ = nullptr;
   gfx::ImageSkia icon_ = gfx::ImageSkia();
 
-  raw_ptr<Profile> profile_;
-  raw_ptr<WebAppProvider> web_app_provider_;
-  raw_ptr<IsolatedWebAppInstallerModel> model_;
-  raw_ptr<IsolatedWebAppInstallerView> view_;
-  raw_ptr<views::DialogDelegate> dialog_delegate_;
+  raw_ptr<Profile> profile_ = nullptr;
+  raw_ptr<WebAppProvider> web_app_provider_ = nullptr;
+  raw_ptr<IsolatedWebAppInstallerModel> model_ = nullptr;
+  raw_ptr<IsolatedWebAppInstallerView> view_ = nullptr;
+  raw_ptr<views::DialogDelegate> dialog_delegate_ = nullptr;
+  raw_ptr<views::Widget> widget_ = nullptr;
+  raw_ptr<views::Widget> child_widget_ = nullptr;
 
   std::unique_ptr<CallbackDelayer> callback_delayer_;
   std::unique_ptr<IsolatedWebAppsEnabledPrefObserver> pref_observer_;

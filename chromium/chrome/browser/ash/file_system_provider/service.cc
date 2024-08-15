@@ -48,7 +48,9 @@ Service::Service(Profile* profile,
       registry_(new Registry(profile)) {
   extension_registry_->AddObserver(this);
   if (chromeos::features::IsFileSystemProviderContentCacheEnabled()) {
-    content_cache_ = std::make_unique<ContentCache>();
+    DCHECK(profile);
+    cache_manager_ = std::make_unique<CacheManager>(profile->GetPath(),
+                                                    /*in_memory_only=*/true);
   }
 }
 
@@ -79,6 +81,10 @@ void Service::Shutdown() {
   }
 
   DCHECK_EQ(0u, file_system_map_.size());
+
+  for (auto& observer : observers_) {
+    observer.OnShutDown();
+  }
 }
 
 void Service::AddObserver(Observer* observer) {
@@ -124,8 +130,8 @@ base::File::Error Service::MountFileSystemInternal(
       util::GetMountPath(profile_, provider_id, options.file_system_id);
   const std::string mount_point_name = mount_path.BaseName().AsUTF8Unsafe();
 
-  // The content cache is an experimentation on ODFS behind a feature flag, only
-  // pass it through if those conditions are met.
+  // The content cache is an experimentation on ODFS behind two feature flags,
+  // only pass it through if those conditions are met.
   // TODO(b/317137739): This logic should be moved to a capability in the
   // manifest.json.
   const bool is_content_cache_enabled_and_odfs =
@@ -188,7 +194,7 @@ base::File::Error Service::MountFileSystemInternal(
 
   std::unique_ptr<ProvidedFileSystemInterface> file_system =
       provider->CreateProvidedFileSystem(profile_, file_system_info,
-                                         content_cache_.get());
+                                         cache_manager_.get());
   DCHECK(file_system);
   ProvidedFileSystemInterface* file_system_ptr = file_system.get();
   file_system_map_[FileSystemKey(
@@ -290,8 +296,8 @@ std::vector<ProvidedFileSystemInfo> Service::GetProvidedFileSystemInfoList() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   std::vector<ProvidedFileSystemInfo> result;
-  for (auto it = file_system_map_.begin(); it != file_system_map_.end(); ++it) {
-    result.push_back(it->second->GetFileSystemInfo());
+  for (auto& it : file_system_map_) {
+    result.push_back(it.second->GetFileSystemInfo());
   }
   return result;
 }

@@ -6,7 +6,8 @@ import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 
 import {pageVisibility} from './page_visibility.js';
-import {Route, Router, SettingsRoutes} from './router.js';
+import type {SettingsRoutes} from './router.js';
+import {Route, Router} from './router.js';
 
 /**
  * Add all of the child routes that originate from the privacy route,
@@ -139,10 +140,11 @@ function addPrivacyChildRoutes(r: Partial<SettingsRoutes>) {
   r.SITE_SETTINGS_FILE_SYSTEM_WRITE_DETAILS =
       r.SITE_SETTINGS_FILE_SYSTEM_WRITE.createChild('siteDetails');
   r.SITE_SETTINGS_LOCAL_FONTS = r.SITE_SETTINGS.createChild('localFonts');
+  r.SITE_SETTINGS_STORAGE_ACCESS = r.SITE_SETTINGS.createChild('storageAccess');
 
-  if (loadTimeData.getBoolean('enablePermissionStorageAccessApi')) {
-    r.SITE_SETTINGS_STORAGE_ACCESS =
-        r.SITE_SETTINGS.createChild('storageAccess');
+  if (loadTimeData.getBoolean('enableAutomaticFullscreenContentSetting')) {
+    r.SITE_SETTINGS_AUTOMATIC_FULLSCREEN =
+        r.SITE_SETTINGS.createChild('automaticFullscreen');
   }
 
   // Vivaldi:

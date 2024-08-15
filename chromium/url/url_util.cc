@@ -297,7 +297,7 @@ bool DoCanonicalize(const CHAR* spec,
   } else {
     // Non-special scheme URLs like data: and javascript:.
     if (url::IsUsingStandardCompliantNonSpecialSchemeURLParsing()) {
-      ParseNonSpecialURL(spec, spec_len, &parsed_input);
+      ParseNonSpecialURLInternal(spec, spec_len, trim_path_end, &parsed_input);
       success =
           CanonicalizeNonSpecialURL(spec, spec_len, parsed_input,
                                     charset_converter, *output, *output_parsed);
@@ -338,15 +338,22 @@ bool DoResolveRelative(const char* base_spec,
     base_is_hierarchical = num_slashes > 0;
   }
 
-  SchemeType unused_scheme_type = SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION;
-  bool standard_base_scheme =
-      base_parsed.scheme.is_nonempty() &&
-      DoIsStandard(base_spec, base_parsed.scheme, &unused_scheme_type);
+  bool is_hierarchical_base;
+
+  if (url::IsUsingStandardCompliantNonSpecialSchemeURLParsing()) {
+    is_hierarchical_base =
+        base_parsed.scheme.is_nonempty() && !base_parsed.has_opaque_path;
+  } else {
+    SchemeType unused_scheme_type = SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION;
+    is_hierarchical_base =
+        base_parsed.scheme.is_nonempty() &&
+        DoIsStandard(base_spec, base_parsed.scheme, &unused_scheme_type);
+  }
 
   bool is_relative;
   Component relative_component;
   if (!IsRelativeURL(base_spec, base_parsed, relative, relative_length,
-                     (base_is_hierarchical || standard_base_scheme),
+                     (base_is_hierarchical || is_hierarchical_base),
                      &is_relative, &relative_component)) {
     // Error resolving.
     return false;
@@ -358,7 +365,7 @@ bool DoResolveRelative(const char* base_spec,
   // Pretend for a moment that |base_spec| is a standard URL. Normally
   // non-standard URLs are treated as PathURLs, but if the base has an
   // authority we would like to preserve it.
-  if (is_relative && base_is_authority_based && !standard_base_scheme) {
+  if (is_relative && base_is_authority_based && !is_hierarchical_base) {
     Parsed base_parsed_authority;
     ParseStandardURL(base_spec, base_spec_len, &base_parsed_authority);
     if (base_parsed_authority.host.is_nonempty()) {
@@ -379,9 +386,9 @@ bool DoResolveRelative(const char* base_spec,
     // Relative, resolve and canonicalize.
     bool file_base_scheme = base_parsed.scheme.is_nonempty() &&
         DoCompareSchemeComponent(base_spec, base_parsed.scheme, kFileScheme);
-    return ResolveRelativeURL(base_spec, base_parsed, file_base_scheme, relative,
-                              relative_component, charset_converter, output,
-                              output_parsed);
+    return ResolveRelativeURL(base_spec, base_parsed, file_base_scheme,
+                              relative, relative_component, charset_converter,
+                              output, output_parsed);
   }
 
   // Not relative, canonicalize the input.
@@ -485,11 +492,15 @@ bool DoReplaceComponents(const char* spec,
     return ReplaceStandardURL(spec, parsed, replacements, scheme_type,
                               charset_converter, output, out_parsed);
   }
-  if (DoCompareSchemeComponent(spec, parsed.scheme, url::kMailToScheme)) {
+  if (!IsUsingStandardCompliantNonSpecialSchemeURLParsing() &&
+      DoCompareSchemeComponent(spec, parsed.scheme, url::kMailToScheme)) {
     return ReplaceMailtoURL(spec, parsed, replacements, output, out_parsed);
   }
 
-  // Default is a path URL.
+  if (IsUsingStandardCompliantNonSpecialSchemeURLParsing()) {
+    return ReplaceNonSpecialURL(spec, parsed, replacements, charset_converter,
+                                *output, *out_parsed);
+  }
   return ReplacePathURL(spec, parsed, replacements, output, out_parsed);
 }
 
@@ -693,6 +704,11 @@ void LockSchemeRegistries() {
 bool IsStandard(const char* spec, const Component& scheme) {
   SchemeType unused_scheme_type;
   return DoIsStandard(spec, scheme, &unused_scheme_type);
+}
+
+bool IsStandardScheme(std::string_view scheme) {
+  return IsStandard(scheme.data(),
+                    Component(0, base::checked_cast<int>(scheme.size())));
 }
 
 bool GetStandardSchemeType(const char* spec,
@@ -940,6 +956,11 @@ bool HasInvalidURLEscapeSequences(std::string_view input) {
     }
   }
   return false;
+}
+
+bool IsAndroidWebViewHackEnabledScheme(std::string_view scheme) {
+  return AllowNonStandardSchemesForAndroidWebView() &&
+         !IsStandardScheme(scheme);
 }
 
 }  // namespace url

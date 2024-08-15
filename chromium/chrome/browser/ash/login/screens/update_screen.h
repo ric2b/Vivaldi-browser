@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "base/containers/fixed_flat_set.h"
 #include "base/functional/callback.h"
@@ -196,9 +197,13 @@ class UpdateScreen : public BaseScreen,
   // check for update is done.
   bool is_opt_out_enabled_ = false;
 
+  // Whether Quick Start was notified of an update. True for users who
+  // previously started Quick Start and will install an update.
+  bool did_prepare_quick_start_for_update_ = false;
+
   // EU country list.
   inline static constexpr auto kEUCountriesSet =
-      base::MakeFixedFlatSet<base::StringPiece>(
+      base::MakeFixedFlatSet<std::string_view>(
           {"at", "be", "bg", "hr", "cy", "cz", "dk", "ee", "fi",
            "fr", "de", "gr", "hu", "ie", "it", "lv", "lt", "lu",
            "mt", "nl", "pl", "pt", "ro", "sk", "si", "es", "se"});

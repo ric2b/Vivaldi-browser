@@ -5,12 +5,14 @@
 import 'chrome://customize-chrome-side-panel.top-chrome/strings.m.js';
 import 'chrome://resources/cr_components/theme_color_picker/theme_color_picker.js';
 
-import {ManagedDialogElement} from 'chrome://resources/cr_components/managed_dialog/managed_dialog.js';
+import type {ManagedDialogElement} from 'chrome://resources/cr_components/managed_dialog/managed_dialog.js';
 import {ThemeColorPickerBrowserProxy} from 'chrome://resources/cr_components/theme_color_picker/browser_proxy.js';
-import {Color, DARK_BASELINE_BLUE_COLOR, DARK_BASELINE_GREY_COLOR, DARK_DEFAULT_COLOR, LIGHT_BASELINE_BLUE_COLOR, LIGHT_BASELINE_GREY_COLOR, LIGHT_DEFAULT_COLOR} from 'chrome://resources/cr_components/theme_color_picker/color_utils.js';
-import {ThemeColorElement} from 'chrome://resources/cr_components/theme_color_picker/theme_color.js';
-import {ThemeColorPickerElement} from 'chrome://resources/cr_components/theme_color_picker/theme_color_picker.js';
-import {ChromeColor, Theme, ThemeColorPickerClientCallbackRouter, ThemeColorPickerClientRemote, ThemeColorPickerHandlerRemote} from 'chrome://resources/cr_components/theme_color_picker/theme_color_picker.mojom-webui.js';
+import type {Color} from 'chrome://resources/cr_components/theme_color_picker/color_utils.js';
+import {DARK_BASELINE_BLUE_COLOR, DARK_BASELINE_GREY_COLOR, DARK_DEFAULT_COLOR, LIGHT_BASELINE_BLUE_COLOR, LIGHT_BASELINE_GREY_COLOR, LIGHT_DEFAULT_COLOR} from 'chrome://resources/cr_components/theme_color_picker/color_utils.js';
+import type {ThemeColorElement} from 'chrome://resources/cr_components/theme_color_picker/theme_color.js';
+import type {ThemeColorPickerElement} from 'chrome://resources/cr_components/theme_color_picker/theme_color_picker.js';
+import type {ChromeColor, Theme, ThemeColorPickerClientRemote} from 'chrome://resources/cr_components/theme_color_picker/theme_color_picker.mojom-webui.js';
+import {ThemeColorPickerClientCallbackRouter, ThemeColorPickerHandlerRemote} from 'chrome://resources/cr_components/theme_color_picker/theme_color_picker.mojom-webui.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
 import {BrowserColorVariant} from 'chrome://resources/mojo/ui/base/mojom/themes.mojom-webui.js';
 import {assertDeepEquals, assertEquals, assertNotReached, assertTrue} from 'chrome://webui-test/chai_assert.js';
@@ -22,12 +24,12 @@ function createTheme(isDarkMode = false): Theme {
   return {
     hasBackgroundImage: false,
     hasThirdPartyTheme: false,
-    backgroundImageMainColor: undefined,
+    backgroundImageMainColor: null,
     isDarkMode,
     seedColor: {value: 0xff0000ff},
     seedColorHue: 0,
     backgroundColor: {value: 0xffff0000},
-    foregroundColor: undefined,
+    foregroundColor: null,
     colorPickerIconColor: {value: 0xffff0000},
     colorsManagedByPolicy: false,
     isGreyBaseline: false,
@@ -137,7 +139,7 @@ suite('CrComponentsThemeColorPickerTest', () => {
   test('sets default color', async () => {
     initializeElement();
     const theme = createTheme();
-    theme.foregroundColor = undefined;
+    theme.foregroundColor = null;
     callbackRouter.setTheme(theme);
     await callbackRouter.$.flushForTesting();
     await waitAfterNextRender(colorsElement);
@@ -151,7 +153,7 @@ suite('CrComponentsThemeColorPickerTest', () => {
     document.documentElement.toggleAttribute('chrome-refresh-2023', true);
     initializeElement();
     const theme = createTheme();
-    theme.foregroundColor = undefined;
+    theme.foregroundColor = null;
     callbackRouter.setTheme(theme);
     await callbackRouter.$.flushForTesting();
     await waitAfterNextRender(colorsElement);
@@ -347,7 +349,7 @@ suite('CrComponentsThemeColorPickerTest', () => {
     const otherTheme = createTheme();
     otherTheme.seedColor = {value: 0xff00ff00};
     otherTheme.backgroundColor = {value: 0xffffffff};
-    otherTheme.foregroundColor = undefined;  // Makes a default theme.
+    otherTheme.foregroundColor = null;  // Makes a default theme.
     otherTheme.colorPickerIconColor = {value: 0xffffffff};
     callbackRouter.setTheme(otherTheme);
     await callbackRouter.$.flushForTesting();
@@ -393,7 +395,7 @@ suite('CrComponentsThemeColorPickerTest', () => {
     // Set a theme that is not a custom color theme.
     const otherTheme = createTheme();
     otherTheme.backgroundColor = {value: 0xffffffff};
-    otherTheme.foregroundColor = undefined;  // Makes a default theme.
+    otherTheme.foregroundColor = null;  // Makes a default theme.
     otherTheme.colorPickerIconColor = {value: 0xffffffff};
     callbackRouter.setTheme(otherTheme);
     await callbackRouter.$.flushForTesting();
@@ -431,7 +433,7 @@ suite('CrComponentsThemeColorPickerTest', () => {
     const theme = createTheme();
 
     // Set default color.
-    theme.foregroundColor = undefined;
+    theme.foregroundColor = null;
     callbackRouter.setTheme(theme);
     await callbackRouter.$.flushForTesting();
     await waitAfterNextRender(colorsElement);
@@ -543,10 +545,10 @@ suite('CrComponentsThemeColorPickerTest', () => {
       });
 
   ([
-    ['#defaultColor', undefined, undefined],
+    ['#defaultColor', null, null],
     ['#mainColor', 7, 7],
-    ['.chrome-color', 3, undefined],
-    ['#customColor', 10, undefined],
+    ['.chrome-color', 3, null],
+    ['#customColor', 10, null],
   ] as Array<[string, number?, number?]>)
       .forEach(([selector, foregroundColor, mainColor]) => {
         test(`respects policy for ${selector}`, async () => {

@@ -11,6 +11,7 @@
 #include "base/notreached.h"
 #include "base/time/time.h"
 #include "components/user_education/common/feature_promo_data.h"
+#include "components/user_education/common/feature_promo_result.h"
 #include "components/user_education/common/feature_promo_storage_service.h"
 #include "components/user_education/common/help_bubble.h"
 #include "components/user_education/common/user_education_features.h"
@@ -68,10 +69,15 @@ FeaturePromoResult FeaturePromoLifecycle::CanShow() const {
 
   switch (promo_subtype_) {
     case PromoSubtype::kNormal:
+      if (features::IsUserEducationV2() &&
+          data->show_count >= features::GetMaxPromoShowCount()) {
+        return FeaturePromoResult::kExceededMaxShowCount;
+      }
       switch (promo_type_) {
         case PromoType::kLegacy:
         case PromoType::kToast:
-          return FeaturePromoResult::Success();
+          return data->is_dismissed ? FeaturePromoResult::kPermanentlyDismissed
+                                    : FeaturePromoResult::Success();
         case PromoType::kCustomAction:
         case PromoType::kSnooze:
         case PromoType::kTutorial:
@@ -213,10 +219,12 @@ FeaturePromoResult FeaturePromoLifecycle::CanShowSnoozePromo(
     // In V1, it was always the default snooze duration from the previous
     // show or snooze time (non-snoozed IPH were subject to "non-clicker policy"
     // which still used the default snooze duration).
-    const auto last_show =
-        std::max(promo_data.last_show_time, promo_data.last_snooze_time);
-    if (now < last_show + features::GetSnoozeDuration()) {
+    const auto snooze_time = features::GetSnoozeDuration();
+    if (now < promo_data.last_snooze_time + snooze_time) {
       return FeaturePromoResult::kSnoozed;
+    }
+    if (now < promo_data.last_show_time + snooze_time) {
+      return FeaturePromoResult::kRecentlyAborted;
     }
   }
 
@@ -279,7 +287,7 @@ void FeaturePromoLifecycle::RecordShown() {
 
   // Record Promo type
   UMA_HISTOGRAM_ENUMERATION("UserEducation.MessageShown.Type", promo_type_);
-  UMA_HISTOGRAM_ENUMERATION("UserEducation.MessageShown.SubType",
+  UMA_HISTOGRAM_ENUMERATION("UserEducation.MessageShown.Subtype",
                             promo_subtype_);
   std::string type_action_name = "UserEducation.MessageShown.";
   switch (promo_subtype_) {

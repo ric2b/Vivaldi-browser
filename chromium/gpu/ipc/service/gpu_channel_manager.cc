@@ -464,7 +464,9 @@ gles2::ProgramCache* GpuChannelManager::program_cache() {
 }
 
 void GpuChannelManager::RemoveChannel(int client_id) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  // Using sequence enforcement to avoid further wrong-thread accesses
+  // in production.
+  CHECK(task_runner_->RunsTasksInCurrentSequence());
 
   auto it = gpu_channels_.find(client_id);
   if (it == gpu_channels_.end())
@@ -577,7 +579,8 @@ void GpuChannelManager::OnDiskCacheHandleDestoyed(
       // different handles).
       break;
     }
-    case gpu::GpuDiskCacheType::kDawnWebGPU: {
+    case gpu::GpuDiskCacheType::kDawnWebGPU:
+    case gpu::GpuDiskCacheType::kDawnGraphite: {
 #if BUILDFLAG(USE_DAWN)
       dawn_caching_interface_factory()->ReleaseHandle(handle);
 #endif
@@ -612,7 +615,8 @@ void GpuChannelManager::PopulateCache(const gpu::GpuDiskCacheHandle& handle,
         program_cache()->LoadProgram(key, data);
       break;
     }
-    case gpu::GpuDiskCacheType::kDawnWebGPU: {
+    case gpu::GpuDiskCacheType::kDawnWebGPU:
+    case gpu::GpuDiskCacheType::kDawnGraphite: {
 #if BUILDFLAG(USE_DAWN) || BUILDFLAG(SKIA_USE_DAWN)
       std::unique_ptr<gpu::webgpu::DawnCachingInterface>
           dawn_caching_interface =

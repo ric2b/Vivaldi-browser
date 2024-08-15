@@ -307,6 +307,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void UpdateTitleBar() override;
   void BookmarkBarStateChanged(
       BookmarkBar::AnimateChangeType change_type) override {}
+  void TemporarilyShowBookmarkBar(base::TimeDelta duration) override {}
   void UpdateDevTools() override;
   void UpdateLoadingAnimations(bool should_animate) override {}
   void SetStarredState(bool is_starred) override {}
@@ -424,7 +425,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
       bool show_stay_in_chrome,
       bool show_remember_selection,
       apps::IntentPickerBubbleType bubble_type,
-      const absl::optional<url::Origin>& initiating_origin,
+      const std::optional<url::Origin>& initiating_origin,
       IntentPickerResponse callback) override {}
 #endif
   sharing_hub::SharingHubBubbleView* ShowSharingHubBubble(
@@ -462,6 +463,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
       const base::Feature& iph_feature) override;
   void NotifyFeatureEngagementEvent(const char* event_name) override {}
   void NotifyPromoFeatureUsed(const base::Feature& iph_feature) override {}
+  bool MaybeShowNewBadgeFor(const base::Feature& feature) override;
   void ShowIncognitoClearBrowsingDataDialog() override {}
   void ShowIncognitoHistoryDisclaimerDialog() override {}
   std::string GetWorkspace() const override;

@@ -54,33 +54,37 @@ export class CpuProfileController extends Controller<'main'> {
     this.lastSelectedSample = this.copyCpuProfileSample(selection);
 
     this.getSampleData(selectedSample.id)
-        .then((sampleData) => {
-          /* eslint-disable @typescript-eslint/strict-boolean-expressions */
-          if (sampleData !== undefined && selectedSample &&
-              /* eslint-enable */
-              this.lastSelectedSample &&
-              this.lastSelectedSample.id === selectedSample.id) {
-            const cpuProfileDetails: CpuProfileDetails = {
-              id: selectedSample.id,
-              ts: selectedSample.ts,
-              utid: selectedSample.utid,
-              stack: sampleData,
-            };
+      .then((sampleData) => {
+        /* eslint-disable @typescript-eslint/strict-boolean-expressions */
+        if (
+          sampleData !== undefined &&
+          selectedSample &&
+          /* eslint-enable */
+          this.lastSelectedSample &&
+          this.lastSelectedSample.id === selectedSample.id
+        ) {
+          const cpuProfileDetails: CpuProfileDetails = {
+            id: selectedSample.id,
+            ts: selectedSample.ts,
+            utid: selectedSample.utid,
+            stack: sampleData,
+          };
 
-            publishCpuProfileDetails(cpuProfileDetails);
-          }
-        })
-        .finally(() => {
-          this.requestingData = false;
-          if (this.queuedRunRequest) {
-            this.queuedRunRequest = false;
-            this.run();
-          }
-        });
+          publishCpuProfileDetails(cpuProfileDetails);
+        }
+      })
+      .finally(() => {
+        this.requestingData = false;
+        if (this.queuedRunRequest) {
+          this.queuedRunRequest = false;
+          this.run();
+        }
+      });
   }
 
-  private copyCpuProfileSample(cpuProfileSample: CpuProfileSampleSelection):
-      CpuProfileSampleSelection {
+  private copyCpuProfileSample(
+    cpuProfileSample: CpuProfileSampleSelection,
+  ): CpuProfileSampleSelection {
     return {
       kind: cpuProfileSample.kind,
       id: cpuProfileSample.id,
@@ -90,9 +94,11 @@ export class CpuProfileController extends Controller<'main'> {
   }
 
   private shouldRequestData(selection: CpuProfileSampleSelection) {
-    return this.lastSelectedSample === undefined ||
-        (this.lastSelectedSample !== undefined &&
-         (this.lastSelectedSample.id !== selection.id));
+    return (
+      this.lastSelectedSample === undefined ||
+      (this.lastSelectedSample !== undefined &&
+        this.lastSelectedSample.id !== selection.id)
+    );
   }
 
   async getSampleData(id: number) {
@@ -116,7 +122,7 @@ export class CpuProfileController extends Controller<'main'> {
             WHERE symbol.symbol_set_id = spf.symbol_set_id
             LIMIT 1
           ),
-          COALESCE(spf.deobfuscated_name, spf.name)
+          COALESCE(spf.deobfuscated_name, spf.name, "")
         ) AS name,
         spm.name AS mapping
       FROM cpu_profile_stack_sample AS samples

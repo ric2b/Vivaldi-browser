@@ -48,7 +48,7 @@ std::unique_ptr<BluetoothServiceAttributeValueBlueZ> ReadAttributeValue(
   if (!struct_reader->PopUint32(&size))
     return nullptr;
 
-  absl::optional<base::Value> value;
+  std::optional<base::Value> value;
   switch (type) {
     case bluez::BluetoothServiceAttributeValueBlueZ::NULLTYPE: {
       break;
@@ -85,7 +85,7 @@ std::unique_ptr<BluetoothServiceAttributeValueBlueZ> ReadAttributeValue(
         // don't have any fields which use this size. If we ever decide to
         // change this, this needs to get fixed.
         default:
-          NOTREACHED();
+          DUMP_WILL_BE_NOTREACHED_NORETURN();
       }
       break;
     }

@@ -16,9 +16,12 @@
 #include "components/zoom/zoom_controller.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/host_zoom_map.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/preview_cancel_reason.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/mojom/window_features/window_features.mojom.h"
 #include "ui/base/page_transition_types.h"
@@ -32,12 +35,10 @@
 namespace {
 
 content::WebContents::CreateParams CreateWebContentsCreateParams(
-    content::BrowserContext* context,
-    content::WebContentsDelegate* delegate) {
+    content::BrowserContext* context) {
   CHECK(context);
-  CHECK(delegate);
   content::WebContents::CreateParams params(context);
-  params.delegate = delegate;
+  params.preview_mode = true;
   return params;
 }
 
@@ -68,10 +69,13 @@ class PreviewTab::PreviewWidget final : public views::Widget {
       return;
     }
 
-    if (!is_event_for_preview_window &&
-        event->type() == ui::ET_MOUSE_RELEASED) {
+    // This doesn't triggered for long press trigger.
+    //
+    // TODO(b:320386573): Cancel preview when focus lost.
+    if (!is_event_for_preview_window && event->type() == ui::ET_MOUSE_PRESSED) {
       event->SetHandled();
-      preview_manager_->Cancel();
+      preview_manager_->Cancel(content::PreviewCancelReason::Build(
+          content::PreviewFinalStatus::kCancelledByWindowClose));
       return;
     }
 
@@ -87,12 +91,15 @@ PreviewTab::PreviewTab(PreviewManager* preview_manager,
                        content::WebContents& initiator_web_contents,
                        const GURL& url)
     : web_contents_(content::WebContents::Create(CreateWebContentsCreateParams(
-          initiator_web_contents.GetBrowserContext(),
-          this))),
+          initiator_web_contents.GetBrowserContext()))),
       widget_(std::make_unique<PreviewWidget>(preview_manager)),
       view_(std::make_unique<views::WebView>(nullptr)),
       url_(url) {
   CHECK(base::FeatureList::IsEnabled(blink::features::kLinkPreview));
+  web_contents_->SetDelegate(this);
+  scoped_ignore_web_inputs_ =
+      web_contents_->IgnoreInputEvents(base::BindRepeating(
+          &PreviewTab::AuditWebInputEvent, base::Unretained(this)));
 
   // WebView setup.
   view_->SetWebContents(web_contents_.get());
@@ -154,16 +161,45 @@ void PreviewTab::InitWindow(content::WebContents& initiator_web_contents) {
   widget_->SetCapture(widget_->client_view());
 }
 
+bool PreviewTab::AuditWebInputEvent(const blink::WebInputEvent& event) {
+  // Permit only page scroll related events.
+  // TODO(b:329147054): Revisit to support touch devices, and care for web
+  // exposed behaviors' compatibility.
+  const blink::WebInputEvent::Type type = event.GetType();
+  if (type == blink::WebInputEvent::Type::kMouseWheel ||
+      type == blink::WebInputEvent::Type::kGestureScrollBegin ||
+      type == blink::WebInputEvent::Type::kGestureScrollEnd ||
+      type == blink::WebInputEvent::Type::kGestureScrollUpdate) {
+    return true;
+  }
+  return false;
+}
+
 content::PreloadingEligibility PreviewTab::IsPrerender2Supported(
     content::WebContents& web_contents) {
   return content::PreloadingEligibility::kPreloadingDisabled;
 }
 
-bool PreviewTab::IsInPreviewMode() const {
-  return true;
+void PreviewTab::CancelPreview(content::PreviewCancelReason reason) {
+  // TODO(b:299240273): Show an error page when final status is
+  // kBlockedByMojoBinderPolicy.
+  cancel_reason_ = std::move(reason);
 }
 
 void PreviewTab::PromoteToNewTab(content::WebContents& initiator_web_contents) {
+  // If preview failed, prevent activation and just close the preview window.
+  //
+  // Currently, PreviewFinalStatus::kBlockedByMojoBinderPolicy contains just
+  // deferred cases and we don't reject activation here.
+  //
+  // TODO(b:316226787): Consider to split the final status into
+  // cancelled/deferred.
+  if (cancel_reason_.has_value() &&
+      cancel_reason_->GetFinalStatus() !=
+          content::PreviewFinalStatus::kBlockedByMojoBinderPolicy) {
+    return;
+  }
+
   view_->SetWebContents(nullptr);
   view_ = nullptr;
 
@@ -172,6 +208,12 @@ void PreviewTab::PromoteToNewTab(content::WebContents& initiator_web_contents) {
   preview_zoom_controller_->ResetZoomForActivation();
 
   TabHelpers::AttachTabHelpers(web_contents_.get());
+
+  // TODO(b:314242439): Should be called before the AttachTabHelpers() above.
+  // We should update the preview mode status so that the AttachTabHelpers() can
+  // know the helpers should be initialized for normal mode rather than preview
+  // mode.
+  web_contents_->WillActivatePreviewPage();
 
   // Detach WebContentsDelegate before passing WebContents to another
   // WebContentsDelegate. It would be not necessary, but it's natural because
@@ -198,11 +240,6 @@ void PreviewTab::PromoteToNewTab(content::WebContents& initiator_web_contents) {
 void PreviewTab::Activate(base::WeakPtr<content::WebContents> web_contents) {
   CHECK(web_contents);
   web_contents->ActivatePreviewPage();
-}
-
-void PreviewTab::CancelPreviewByMojoBinderPolicy(
-    const std::string& interface_name) {
-  // TODO(b:299240273): Navigate to an error page.
 }
 
 // Copied from chrome/browser/ui/views/accelerator_table.h

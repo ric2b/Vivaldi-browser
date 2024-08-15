@@ -7,6 +7,7 @@ syntax = "proto3";
 option optimize_for = LITE_RUNTIME;
 
 package oobe_config;
+option go_package = "go.chromium.org/chromiumos/system_api/oobe_config_proto";
 
 message OobeRestoreData {
   string chrome_config_json = 1;

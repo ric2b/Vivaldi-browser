@@ -30,13 +30,14 @@ const char *const vivaldi_extra_locales_array[] = {
   "jbo",
   "ka",
   "kab",
-  "ku",
+  "kmr",
   "mk",
   "nn",
   "sc",
   "sq",
 };
 
+bool using_legacy_menu = false;
 }  // namespace
 
 bool IsVivaldiApp(base::StringPiece extension_id) {
@@ -57,6 +58,13 @@ bool IsVivaldiExtraLocale(base::StringPiece locale) {
   }());
   return std::binary_search(std::begin(vivaldi_extra_locales_array),
                             std::end(vivaldi_extra_locales_array), locale);
+}
+
+bool BASE_EXPORT UsingCompactLegacyMenu() {
+  return using_legacy_menu;
+}
+void BASE_EXPORT SetUsingCompactLegacyMenu(bool flag) {
+  using_legacy_menu = flag;
 }
 
 }  // namespace vivaldi

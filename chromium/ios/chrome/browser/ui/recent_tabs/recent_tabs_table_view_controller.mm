@@ -41,10 +41,12 @@
 #import "ios/chrome/browser/settings/model/sync/utils/sync_util.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/commands/show_signin_command.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
@@ -1779,8 +1781,10 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
       self.searchTerms = @"";
     }
     web::WebState* currentWebState = self.webStateList->GetActiveWebState();
-    new_tab_page_uma::RecordAction(
-        self.isIncognito, currentWebState,
+    bool is_ntp = currentWebState &&
+                  currentWebState->GetVisibleURL() == kChromeUINewTabURL;
+    new_tab_page_uma::RecordNTPAction(
+        self.isIncognito, is_ntp,
         new_tab_page_uma::ACTION_OPENED_FOREIGN_SESSION);
     std::unique_ptr<web::WebState> web_state =
         session_util::CreateWebStateWithNavigationEntries(
@@ -1791,9 +1795,8 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
                                            std::move(web_state));
     } else {
       self.webStateList->InsertWebState(
-          self.webStateList->count(), std::move(web_state),
-          (WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_ACTIVATE),
-          WebStateOpener());
+          std::move(web_state),
+          WebStateList::InsertionParams::Automatic().Activate());
     }
   }
   [self.presentationDelegate showActiveRegularTabFromRecentTabs];
@@ -1818,8 +1821,11 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
     base::RecordAction(base::UserMetricsAction(
         "MobileRecentTabManagerRecentTabOpenedSearchResult"));
   }
-  new_tab_page_uma::RecordAction(
-      self.isIncognito, self.webStateList->GetActiveWebState(),
+  web::WebState* activeWebState = self.webStateList->GetActiveWebState();
+  bool is_ntp =
+      activeWebState && activeWebState->GetVisibleURL() == kChromeUINewTabURL;
+  new_tab_page_uma::RecordNTPAction(
+      self.isIncognito, is_ntp,
       new_tab_page_uma::ACTION_OPENED_RECENTLY_CLOSED_ENTRY);
 
   WindowOpenDisposition disposition =
@@ -1864,9 +1870,8 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
   web::WebState* webStatePtr = webState.get();
 
   self.webStateList->InsertWebState(
-      self.webStateList->count(), std::move(webState),
-      (WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_ACTIVATE),
-      WebStateOpener());
+      std::move(webState),
+      WebStateList::InsertionParams::Automatic().Activate());
   webStatePtr->OpenURL(web::WebState::OpenURLParams(
       searchUrl, web::Referrer(), WindowOpenDisposition::CURRENT_TAB,
       ui::PAGE_TRANSITION_GENERATED, /*is_renderer_initiated=*/false));

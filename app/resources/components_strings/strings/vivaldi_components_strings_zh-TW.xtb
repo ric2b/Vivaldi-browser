@@ -75,7 +75,7 @@
 <translation id="3681007416295224113">憑證資訊</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />檢查代理、防火牆和 DNS 設定<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">如果您使用代理伺服器……</translation>
-<translation id="3894751534882749287">如果您仍然想查看此頁面，您可以在追蹤器攔截彈出視窗中變更其追蹤保護等級，或點擊允許按鈕</translation>
+<translation id="3894751534882749287">如果您仍然想查看此頁面，您可以在追蹤器攔截器彈出視窗中變更其追蹤保護等級，或點擊允許按鈕</translation>
 <translation id="3950820424414687140">登入</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> 已遭封鎖</translation>
 <translation id="3987940399970879459">小於 1 MB</translation>
@@ -102,7 +102,7 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">您的連線已中斷</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />正在執行 Windows 網路診斷<ph name="END_LINK" /></translation>
-<translation id="4736016046474602958">反追蹤</translation>
+<translation id="4736016046474602958">追蹤器攔截器</translation>
 <translation id="4744603770635761495">可執行檔路徑</translation>
 <translation id="4750917950439032686">您傳送給這個網站的資訊（例如密碼或信用卡號碼）不會外洩。</translation>
 <translation id="4764776831041365478"><ph name="URL" /> 的網頁可能暫時無法使用或被永久移至新網址。</translation>
@@ -216,7 +216,7 @@
 <translation id="9069693763241529744">依據擴充功能設定封鎖</translation>
 <translation id="9073799351042754113">您已選擇關閉此網站的安全性警告。</translation>
 <translation id="9169664750068251925">永遠禁止在這個網站執行</translation>
-<translation id="9180553614777056266">廣告封鎖器</translation>
+<translation id="9180553614777056266">廣告攔截器</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> 使用了不支援的通訊協定。</translation>
 <translation id="936602727769022409">您可能失去 Google 帳號存取權限，Chromium 建議立即變更密碼，系統會請求登入帳號。</translation>
 <translation id="969892804517981540">正式版本</translation>

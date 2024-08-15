@@ -3,7 +3,7 @@ breadcrumbs:
 - - /chromium-os/developer-library/reference
   - Chromium OS > Developer Library > Reference
 page_name: shell
-title: Shell Style Guidelines [go/cros-shstyle]
+title: Shell style guidelines [go/cros-shstyle]
 ---
 
 [TOC]
@@ -65,7 +65,7 @@ The list above isn't comprehensive; to be sure, you must consult the
 ## Beyond The Guide
 
 The Google Shell Style guide leaves a lot of things unspecified. Here we will
-covers many things it does not.
+cover many things it does not.
 
 ### Arithmetic
 
@@ -267,7 +267,7 @@ main() {
 main "$@"
 ```
 
-[Google Shell Style guide]: https://google.github.io/styleguide/shell.xml
+[Google Shell Style guide]: https://google.github.io/styleguide/shellguide.html
 [GNU Bash]: https://www.gnu.org/software/bash/
 [POSIX standard]: https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html
 [getopts]: https://pubs.opengroup.org/onlinepubs/9699919799/utilities/getopts.html

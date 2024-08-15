@@ -4,6 +4,8 @@
 
 #include "chrome/browser/metrics/structured/chrome_structured_metrics_recorder.h"
 
+#include <utility>
+
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -14,10 +16,11 @@
 #include "base/threading/scoped_blocking_call.h"
 #include "components/metrics/structured/event.h"
 #include "components/metrics/structured/key_data_prefs_delegate.h"
-#include "components/metrics/structured/key_util.h"
+#include "components/metrics/structured/lib/key_util.h"
 #include "components/metrics/structured/lib/proto/key.pb.h"
 #include "components/metrics/structured/proto/event_storage.pb.h"
 #include "components/metrics/structured/structured_events.h"
+#include "components/metrics/structured/structured_metrics_client.h"
 #include "components/metrics/structured/structured_metrics_prefs.h"
 #include "components/metrics/structured/structured_metrics_validator.h"
 #include "components/prefs/testing_pref_service.h"
@@ -148,9 +151,9 @@ TEST_F(ChromeStructuredMetricsRecorderTest, DeviceEventsRecorded) {
   // keys set by WriteTestingDeviceKeys. In this case the expected key is
   // "ddd...d", which we observe by checking the ID and HMAC have the correct
   // value given that key.
-  events::v2::test_project_four::TestEventFive()
-      .SetTestMetricFive("value")
-      .Record();
+  StructuredMetricsClient::Record(std::move(
+      events::v2::test_project_four::TestEventFive().SetTestMetricFive(
+          "value")));
 
   const auto data = GetEventMetrics();
   ASSERT_EQ(data.events_size(), 1);

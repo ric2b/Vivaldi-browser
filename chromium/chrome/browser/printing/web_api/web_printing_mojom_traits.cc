@@ -9,6 +9,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "mojo/public/cpp/bindings/type_converter.h"
 #include "printing/mojom/print.mojom-shared.h"
+#include "printing/units.h"
 #include "third_party/blink/public/mojom/printing/web_printing.mojom.h"
 
 namespace mojo {
@@ -21,6 +22,9 @@ using printing::mojom::DuplexMode;
 // multiple-document-handling:
 using MultipleDocumentHandling =
     blink::mojom::WebPrintingMultipleDocumentHandling;
+
+// orientation-requested:
+using OrientationRequested = blink::mojom::WebPrintingOrientationRequested;
 
 // print-color-mode:
 using PrintColorMode = blink::mojom::WebPrintColorMode;
@@ -43,6 +47,27 @@ ColorModel PrintColorModeToColorModel(PrintColorMode print_color_mode) {
     case PrintColorMode::kMonochrome:
       return ColorModel::kColorModeMonochrome;
   }
+}
+
+bool InferRequestedMedia(
+    blink::mojom::WebPrintJobTemplateAttributesDataView data,
+    printing::PrintSettings& settings) {
+  blink::mojom::WebPrintingMediaCollectionRequestedDataView media_col;
+  data.GetMediaColDataView(&media_col);
+  if (media_col.is_null()) {
+    // media-col is an optional field.
+    return true;
+  }
+  gfx::Size media_size;
+  if (!media_col.ReadMediaSize(&media_size)) {
+    return false;
+  }
+  // The incoming size is specified in hundredths of millimeters (PWG units)
+  // whereas the printing subsystem operates on microns.
+  settings.set_requested_media(
+      {.size_microns = {media_size.width() * printing::kMicronsPerPwgUnit,
+                        media_size.height() * printing::kMicronsPerPwgUnit}});
+  return true;
 }
 
 }  // namespace
@@ -194,6 +219,19 @@ bool StructTraits<blink::mojom::WebPrintJobTemplateAttributesDataView,
     if (duplex_mode) {
       settings->set_duplex_mode(*duplex_mode);
     }
+  }
+  if (auto orientation = data.orientation_requested()) {
+    switch (*orientation) {
+      case OrientationRequested::kPortrait:
+        settings->SetOrientation(/*landscape=*/false);
+        break;
+      case OrientationRequested::kLandscape:
+        settings->SetOrientation(/*landscape=*/true);
+        break;
+    }
+  }
+  if (!InferRequestedMedia(data, *settings)) {
+    return false;
   }
   if (auto mdh = data.multiple_document_handling()) {
     switch (*mdh) {

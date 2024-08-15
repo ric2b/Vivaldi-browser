@@ -3,12 +3,14 @@
 // found in the LICENSE file.
 import {assert} from 'chai';
 import type * as puppeteer from 'puppeteer-core';
-import {AsyncScope} from '../../shared/async-scope.js';
 
+import {AsyncScope} from '../../shared/async-scope.js';
 import {
   $,
   $$,
   click,
+  clickElement,
+  clickMoreTabsButton,
   getBrowserAndPages,
   getTextContent,
   goToResource,
@@ -19,7 +21,6 @@ import {
   typeText,
   waitFor,
   waitForAria,
-  clickElement,
   waitForFunction,
 } from '../../shared/helper.js';
 
@@ -144,7 +145,7 @@ export const getContentOfSelectedNode = async () => {
   return await selectedNode.evaluate(node => node.textContent as string);
 };
 
-export const waitForSelectedNodeChange = async(initialValue: string, asyncScope = new AsyncScope()): Promise<void> => {
+export const waitForSelectedNodeChange = async (initialValue: string, asyncScope = new AsyncScope()) => {
   await waitForFunction(async () => {
     const currentContent = await getContentOfSelectedNode();
     return currentContent !== initialValue;
@@ -286,16 +287,18 @@ export const expandSelectedNodeRecursively = async () => {
 };
 
 export const forcePseudoState = async (pseudoState: string) => {
-  // Open element state pane and wait for it to be loaded asynchronously
-  await click('[aria-label="Toggle Element State"]');
-  await waitFor(`[aria-label="${pseudoState}"]`);
+  // Open element & page state pane and wait for it to be loaded asynchronously
+  await click('[aria-label="Toggle element & page state"]');
+
+  const stateEl = await waitForAria(pseudoState);
   // FIXME(crbug/1112692): Refactor test to remove the timeout.
   await timeout(100);
-  await click(`[aria-label="${pseudoState}"]`);
+  await stateEl.click();
 };
 
 export const removePseudoState = async (pseudoState: string) => {
-  await click(`[aria-label="${pseudoState}"]`);
+  const stateEl = await waitForAria(pseudoState);
+  await stateEl.click();
 };
 
 export const getComputedStylesForDomNode =
@@ -694,7 +697,7 @@ export const navigateToElementsTab = async () => {
 
 export const clickOnFirstLinkInStylesPanel = async () => {
   const stylesPane = await waitFor('div.styles-pane');
-  await click('div.styles-section-subtitle span.devtools-link', {root: stylesPane});
+  await click('div.styles-section-subtitle button.devtools-link', {root: stylesPane});
 };
 
 export const toggleClassesPane = async () => {
@@ -760,8 +763,7 @@ export const toggleAccessibilityPane = async () => {
   let a11yPane = await $('Accessibility', undefined, 'aria');
   if (!a11yPane) {
     const elementsPanel = await waitForAria('Elements panel');
-    const moreTabs = await waitForAria('More tabs', elementsPanel);
-    await clickElement(moreTabs);
+    await clickMoreTabsButton(elementsPanel);
     a11yPane = await waitForAria('Accessibility');
   }
   await clickElement(a11yPane);

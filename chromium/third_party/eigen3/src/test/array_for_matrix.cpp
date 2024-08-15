@@ -19,11 +19,17 @@ void array_for_matrix(const MatrixType& m) {
   Index cols = m.cols();
 
   MatrixType m1 = MatrixType::Random(rows, cols), m2 = MatrixType::Random(rows, cols), m3(rows, cols);
-
   ColVectorType cv1 = ColVectorType::Random(rows);
   RowVectorType rv1 = RowVectorType::Random(cols);
 
   Scalar s1 = internal::random<Scalar>(), s2 = internal::random<Scalar>();
+
+  // Prevent overflows for integer types.
+  if (Eigen::NumTraits<Scalar>::IsInteger) {
+    Scalar kMaxVal = Scalar(10000);
+    m1.array() = m1.array() - kMaxVal * (m1.array() / kMaxVal);
+    m2.array() = m2.array() - kMaxVal * (m2.array() / kMaxVal);
+  }
 
   // scalar addition
   VERIFY_IS_APPROX(m1.array() + s1, s1 + m1.array());

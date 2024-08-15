@@ -207,25 +207,21 @@ void LoginShelfView::RequestShutdown() {
     return;
   }
   base::RecordAction(base::UserMetricsAction("Shelf_ShutDown"));
-  if (base::FeatureList::IsEnabled(features::kShutdownConfirmationBubble)) {
-    Shelf* shelf = Shelf::ForWindow(GetWidget()->GetNativeWindow());
-    // When the created ShelfShutdownConfirmationBubble is destroyed, it would
-    // call LoginShelfView::OnRequestShutdownCancelled() in the destructor to
-    // ensure that the pointer test_shutdown_confirmation_bubble_ here is
-    // cleaned up.
-    // And ShelfShutdownConfirmationBubble would be destroyed when it's
-    // dismissed or its buttons were presses.
-    shutdown_confirmation_button_->SetIsActive(true);
+  Shelf* shelf = Shelf::ForWindow(GetWidget()->GetNativeWindow());
+  // When the created ShelfShutdownConfirmationBubble is destroyed, it would
+  // call LoginShelfView::OnRequestShutdownCancelled() in the destructor to
+  // ensure that the pointer test_shutdown_confirmation_bubble_ here is
+  // cleaned up.
+  // And ShelfShutdownConfirmationBubble would be destroyed when it's
+  // dismissed or its buttons were presses.
+  shutdown_confirmation_button_->SetIsActive(true);
 
-    test_shutdown_confirmation_bubble_ = new ShelfShutdownConfirmationBubble(
-        shutdown_confirmation_button_, shelf->alignment(),
-        base::BindOnce(&LoginShelfView::OnRequestShutdownConfirmed,
-                       weak_ptr_factory_.GetWeakPtr()),
-        base::BindOnce(&LoginShelfView::OnRequestShutdownCancelled,
-                       weak_ptr_factory_.GetWeakPtr()));
-  } else {
-    OnRequestShutdownConfirmed();
-  }
+  test_shutdown_confirmation_bubble_ = new ShelfShutdownConfirmationBubble(
+      shutdown_confirmation_button_, shelf->alignment(),
+      base::BindOnce(&LoginShelfView::OnRequestShutdownConfirmed,
+                     weak_ptr_factory_.GetWeakPtr()),
+      base::BindOnce(&LoginShelfView::OnRequestShutdownCancelled,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 LoginShelfView::LoginShelfView(
@@ -304,10 +300,8 @@ LoginShelfView::LoginShelfView(
                  base::Unretained(Shell::Get()->login_screen_controller())),
              IDS_ASH_BROWSE_AS_GUEST_BUTTON, kShelfBrowseAsGuestButtonIcon);
   add_button(kAddUser,
-             base::BindRepeating(
-                 &LoginScreenController::ShowGaiaSignin,
-                 base::Unretained(Shell::Get()->login_screen_controller()),
-                 EmptyAccountId()),
+             base::BindRepeating(&LoginShelfView::OnAddUserButtonClicked,
+                                 base::Unretained(this)),
              IDS_ASH_ADD_USER_BUTTON, kShelfAddPersonButtonIcon);
   add_button(kParentAccess, base::BindRepeating([]() {
                // TODO(https://crbug.com/999387): Remove this when handling
@@ -374,10 +368,6 @@ void LoginShelfView::AddedToWidget() {
   UpdateUi();
 }
 
-const char* LoginShelfView::GetClassName() const {
-  return "LoginShelfView";
-}
-
 void LoginShelfView::OnFocus() {
   LOG(WARNING) << "LoginShelfView was focused, but this should never happen. "
                   "Forwarded focus to shelf widget with an unknown direction.";
@@ -405,18 +395,18 @@ void LoginShelfView::AboutToRequestFocusFromTabTraversal(bool reverse) {
 
 void LoginShelfView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   if (LockScreen::HasInstance()) {
-    GetViewAccessibility().OverridePreviousFocus(LockScreen::Get()->widget());
+    GetViewAccessibility().SetPreviousFocus(LockScreen::Get()->widget());
   }
 
   Shelf* shelf = Shelf::ForWindow(GetWidget()->GetNativeWindow());
 
-  GetViewAccessibility().OverrideNextFocus(shelf->GetStatusAreaWidget());
+  GetViewAccessibility().SetNextFocus(shelf->GetStatusAreaWidget());
   node_data->role = ax::mojom::Role::kToolbar;
   node_data->SetName(l10n_util::GetStringUTF8(IDS_ASH_SHELF_ACCESSIBLE_NAME));
 }
 
-void LoginShelfView::Layout() {
-  views::View::Layout();
+void LoginShelfView::Layout(PassKey) {
+  LayoutSuperclass<views::View>(this);
   UpdateButtonUnionBounds();
 }
 
@@ -723,14 +713,13 @@ void LoginShelfView::UpdateUi() {
   SetFocusBehavior(is_anything_focusable ? views::View::FocusBehavior::ALWAYS
                                          : views::View::FocusBehavior::NEVER);
 
-  // When the login shelf view is moved to its own widget, the login shelf
+  // The login shelf view lives in its own widget, therefore the login shelf
   // widget needs to change the size according to the login shelf view's
   // preferred size.
-  if (old_preferred_size != GetPreferredSize() &&
-      features::IsUseLoginShelfWidgetEnabled()) {
+  if (old_preferred_size != GetPreferredSize()) {
     PreferredSizeChanged();
   } else {
-    Layout();
+    DeprecatedLayoutImmediately();
   }
 }
 
@@ -903,6 +892,21 @@ bool LoginShelfView::ShouldShowOsInstallButton() const {
   }
 
   return true;
+}
+
+void LoginShelfView::OnAddUserButtonClicked() {
+  session_manager::SessionState current_state =
+      Shell::Get()->session_controller()->GetSessionState();
+  if (current_state != session_manager::SessionState::OOBE &&
+      current_state != session_manager::SessionState::LOGIN_PRIMARY) {
+    // TODO(b/333882432): Prevent starting a gaia signin in some transitioning
+    // state like LOGGED_IN_NOT_ACTIVE.
+    LOG(WARNING) << "Add User button was called in an unexpected state: "
+                 << static_cast<int>(current_state)
+                 << " skip to call ShowGaiaSignin.";
+    return;
+  }
+  Shell::Get()->login_screen_controller()->ShowGaiaSignin(EmptyAccountId());
 }
 
 BEGIN_METADATA(LoginShelfView)

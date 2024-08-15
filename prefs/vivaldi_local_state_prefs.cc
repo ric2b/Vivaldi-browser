@@ -77,5 +77,6 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
 #else
       false);
 #endif
+  registry->RegisterIntegerPref(vivaldiprefs::kVivaldiPreferredColorScheme, 0);
 }
 }  // namespace vivaldi

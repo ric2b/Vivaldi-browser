@@ -71,8 +71,14 @@
             "type": "object",
             "name": "position",
             "properties": {
-              "left": { "type": "integer", "description": "Anchor left position, screen coordinates." },
-              "top": { "type": "integer", "description": "Anchor top position, screen coordinates." }
+              "left": {
+                "type": "integer",
+                "description": "Anchor left position, screen coordinates."
+              },
+              "top": {
+                "type": "integer",
+                "description": "Anchor top position, screen coordinates."
+              }
             }
           }
         ]
@@ -100,33 +106,42 @@
             "type": "integer",
             "name": "instanceId",
             "description": "The instance ID of the guest <webview> process."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "description": "Called when history .",
-            "parameters": [
-              {
-                "type": "integer",
-                "name": "currentEntryIndex",
-                "description": "The current index."
-              },
-              {
-                "name": "pageHistory",
-                "type": "array",
-                "description": "Array of history items with name and index.",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "name": { "type": "string", "description": "Title for the page." },
-                    "url": { "type": "string", "description": "URL for the entry." },
-                    "index": { "type": "integer", "description": "Relative history index. This can be used in <webview>.go(|index|)." }
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Called when history .",
+          "does_not_support_promises": "vivaldi",
+          "parameters": [
+            {
+              "type": "integer",
+              "name": "currentEntryIndex",
+              "description": "The current index."
+            },
+            {
+              "name": "pageHistory",
+              "type": "array",
+              "description": "Array of history items with name and index.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Title for the page."
+                  },
+                  "url": {
+                    "type": "string",
+                    "description": "URL for the entry."
+                  },
+                  "index": {
+                    "type": "integer",
+                    "description": "Relative history index. This can be used in <webview>.go(|index|)."
                   }
                 }
               }
-            ]
-          }
-        ]
+            }
+          ]
+        }
       },
       {
         "name": "allowBlockedInsecureContent",
@@ -156,7 +171,7 @@
           {
             "$ref": "historyPrivate.TransitionType",
             "name": "transitionType",
-            "description":  "How the URL was reached."
+            "description": "How the URL was reached."
           },
           {
             "type": "boolean",
@@ -179,6 +194,27 @@
             "description": "Extra headers to pass with the request. See OpenURLParams in chromium code."
           }
         ]
+      },
+      {
+        "name": "getPageSelection",
+        "type": "function",
+        "description": "Get any selected text in the page.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "instanceId"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "text",
+              "type": "string",
+              "description": "Get any selected text in the page."
+            }
+          ]
+        }
       }
     ]
   }

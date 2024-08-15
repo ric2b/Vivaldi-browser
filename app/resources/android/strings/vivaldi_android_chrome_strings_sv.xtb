@@ -16,6 +16,7 @@
 <translation id="2433507940547922241">Utseende</translation>
 <translation id="2501278716633472235">Gå tillbaka</translation>
 <translation id="2633278372998075009">Privata flikar</translation>
+<translation id="272026394418727548">Vivaldis hemsida</translation>
 <translation id="2951071800649516099">Lägg till sidor till din läslista för senare</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> bokmärke}
@@ -26,6 +27,7 @@
 <translation id="3504699618187058974">Stapla flikar</translation>
 <translation id="3518985090088779359">Godkänn och fortsätt</translation>
 <translation id="3571177741182643350">Olästa artiklar - Tillgängliga offline:</translation>
+<translation id="3602290021589620013">Förhandsgranskning</translation>
 <translation id="3700829948786686853">Välkommen till Vivaldi</translation>
 <translation id="3719826155360621982">Hemsida</translation>
 <translation id="385051799172605136">Tillbaka</translation>
@@ -65,7 +67,6 @@ Gör ett långt tryck för att justera din sökterm. För att förfina sökninge
 <translation id="7427132068601343474">Om Vivaldi</translation>
 <translation id="7465104139234185284">Stäng alla privata flikar</translation>
 <translation id="7481312909269577407">Framåt</translation>
-<translation id="7583262514280211622">Du hittar din läslista här</translation>
 <translation id="7968014550143838305">Lades till läslistan</translation>
 <translation id="804786196054284061">Användarvillkor</translation>
 <translation id="8127542551745560481">Redigera startsida</translation>

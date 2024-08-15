@@ -52,6 +52,7 @@ import androidx.annotation.VisibleForTesting;
 import org.jni_zero.CalledByNative;
 import org.jni_zero.CalledByNativeUnchecked;
 import org.jni_zero.JNINamespace;
+import org.jni_zero.JniType;
 import org.jni_zero.NativeMethods;
 
 import org.chromium.android_webview.autofill.AndroidAutofillSafeModeAction;
@@ -93,6 +94,7 @@ import org.chromium.base.metrics.ScopedSysTraceEvent;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
+import org.chromium.components.autofill.AndroidAutofillClient;
 import org.chromium.components.autofill.AutofillProvider;
 import org.chromium.components.autofill.AutofillSelectionMenuItemHelper;
 import org.chromium.components.content_capture.OnscreenContentProvider;
@@ -185,6 +187,10 @@ public class AwContents implements SmartClipProvider {
 
     private static final String SAMSUNG_WORKAROUND_BASE_URL = "email://";
     private static final int SAMSUNG_WORKAROUND_DELAY = 200;
+
+    private static int sLastId;
+    // Unique id given to each AwContents object, starting from 1.
+    private final int mId;
 
     @VisibleForTesting
     public static final String LOAD_URL_SCHEME_HISTOGRAM_NAME = "Android.WebView.LoadUrl.UrlScheme";
@@ -485,7 +491,7 @@ public class AwContents implements SmartClipProvider {
     private float mContentWidthDip;
     private float mContentHeightDip;
 
-    private AwAutofillClient mAwAutofillClient;
+    private AndroidAutofillClient mAndroidAutofillClient;
 
     private AwPdfExporter mAwPdfExporter;
 
@@ -896,14 +902,16 @@ public class AwContents implements SmartClipProvider {
         public void onScrollStarted(int scrollOffsetY, int scrollExtentY, boolean isDirectionUp) {
             mZoomControls.invokeZoomPicker();
             if (mAwFrameMetricsListener != null) {
-                mAwFrameMetricsListener.onWebContentsScrollStateUpdate(/* isScrolling= */ true);
+                mAwFrameMetricsListener.onWebContentsScrollStateUpdate(
+                        /* isScrolling= */ true, mId);
             }
         }
 
         @Override
         public void onScrollEnded(int scrollOffsetY, int scrollExtentY) {
             if (mAwFrameMetricsListener != null) {
-                mAwFrameMetricsListener.onWebContentsScrollStateUpdate(/* isScrolling= */ false);
+                mAwFrameMetricsListener.onWebContentsScrollStateUpdate(
+                        /* isScrolling= */ false, mId);
             }
         }
 
@@ -1105,6 +1113,8 @@ public class AwContents implements SmartClipProvider {
         private JankTracker mJankTracker;
         private WeakReference<Window> mWindow;
 
+        private static final WeakHashMap<Window, Integer> sNumActiveScrolls = new WeakHashMap<>();
+
         public AwFrameMetricsListener() {
             FrameMetricsStore metricsStore = new FrameMetricsStore();
             mController =
@@ -1140,14 +1150,35 @@ public class AwContents implements SmartClipProvider {
             mController.stopPeriodicReporting();
         }
 
-        public void onWebContentsScrollStateUpdate(boolean isScrolling) {
+        public void onWebContentsScrollStateUpdate(boolean isScrolling, long scrollId) {
+            if (!mAttached) return;
+            // scrollIds are unique across multiple webviews in a window.
+            Window window = mWindow.get();
+            if (window == null) return;
+            int numActiveScrolls = sNumActiveScrolls.getOrDefault(window, 0);
             if (isScrolling) {
-                mJankTracker.startTrackingScenario(JankScenario.WEBVIEW_SCROLLING);
+                numActiveScrolls += 1;
+                mJankTracker.startTrackingScenario(
+                        new JankScenario(JankScenario.Type.WEBVIEW_SCROLLING, scrollId));
             } else {
+                assert numActiveScrolls >= 1;
+                numActiveScrolls -= 1;
                 mJankTracker.finishTrackingScenario(
-                        JankScenario.WEBVIEW_SCROLLING,
+                        new JankScenario(JankScenario.Type.WEBVIEW_SCROLLING, scrollId),
                         TimeUtils.uptimeMillis() * TimeUtils.NANOSECONDS_PER_MILLISECOND);
             }
+
+            if (numActiveScrolls == 0) {
+                mJankTracker.finishTrackingScenario(
+                        JankScenario.COMBINED_WEBVIEW_SCROLLING,
+                        TimeUtils.uptimeMillis() * TimeUtils.NANOSECONDS_PER_MILLISECOND);
+                sNumActiveScrolls.remove(window);
+                return;
+            }
+            if (numActiveScrolls == 1 && isScrolling) {
+                mJankTracker.startTrackingScenario(JankScenario.COMBINED_WEBVIEW_SCROLLING);
+            }
+            sNumActiveScrolls.put(window, numActiveScrolls);
         }
     }
 
@@ -1198,6 +1229,8 @@ public class AwContents implements SmartClipProvider {
             AwSettings settings,
             DependencyFactory dependencyFactory) {
         assert browserContext != null;
+        sLastId += 1;
+        mId = sLastId;
         if (!browserContext.isDefaultAwBrowserContext()) {
             // The browser context has been explicitly set by the application.
             mBrowserContextSetExplicitly = true;
@@ -1638,13 +1671,9 @@ public class AwContents implements SmartClipProvider {
 
             // Save injected WebMessageListeners.
             webMessageListenerInfo =
-                    AwContentsJni.get()
-                            .getWebMessageListenerInfos(
-                                    awContents.mNativeAwContents, WebMessageListenerInfo.class);
+                    AwContentsJni.get().getWebMessageListenerInfos(awContents.mNativeAwContents);
             startupJavascriptInfo =
-                    AwContentsJni.get()
-                            .getDocumentStartupJavascripts(
-                                    awContents.mNativeAwContents, StartupJavascriptInfo.class);
+                    AwContentsJni.get().getDocumentStartupJavascripts(awContents.mNativeAwContents);
         }
     }
 
@@ -3756,8 +3785,8 @@ public class AwContents implements SmartClipProvider {
      */
     public void hideAutofillPopup() {
         if (TRACE) Log.i(TAG, "%s hideAutofillPopup", this);
-        if (mAwAutofillClient != null) {
-            mAwAutofillClient.hideAutofillPopup();
+        if (mAndroidAutofillClient != null) {
+            mAndroidAutofillClient.hideAutofillPopup();
         }
         if (mAutofillProvider != null) {
             mAutofillProvider.hideDatalistPopup();
@@ -4091,14 +4120,14 @@ public class AwContents implements SmartClipProvider {
     }
 
     @CalledByNative
-    private void setAwAutofillClient(AwAutofillClient client) {
-        mAwAutofillClient = client;
+    private void setAndroidAutofillClient(AndroidAutofillClient client) {
+        mAndroidAutofillClient = client;
         client.init(mContext);
     }
 
     @VisibleForTesting
-    public AwAutofillClient getAutofillClient() {
-        return mAwAutofillClient;
+    public AndroidAutofillClient getAutofillClient() {
+        return mAndroidAutofillClient;
     }
 
     @CalledByNative
@@ -4199,6 +4228,11 @@ public class AwContents implements SmartClipProvider {
      */
     public static String getSafeBrowsingLocaleForTesting() {
         return AwContentsJni.get().getSafeBrowsingLocaleForTesting();
+    }
+
+    /** Returns the AwContents instance associated with |webContents|, or NULL */
+    public static AwContents fromWebContents(WebContents webContents) {
+        return AwContentsJni.get().fromWebContents(webContents);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -4850,6 +4884,8 @@ public class AwContents implements SmartClipProvider {
 
         String getSafeBrowsingLocaleForTesting();
 
+        AwContents fromWebContents(WebContents webContents);
+
         void setJavaPeers(
                 long nativeAwContents,
                 AwContents awContents,
@@ -4991,9 +5027,11 @@ public class AwContents implements SmartClipProvider {
 
         void removeWebMessageListener(long nativeAwContents, String jsObjectName);
 
-        WebMessageListenerInfo[] getWebMessageListenerInfos(long nativeAwContents, Class clazz);
+        @JniType("std::vector")
+        WebMessageListenerInfo[] getWebMessageListenerInfos(long nativeAwContents);
 
-        StartupJavascriptInfo[] getDocumentStartupJavascripts(long nativeAwContents, Class clazz);
+        @JniType("std::vector")
+        StartupJavascriptInfo[] getDocumentStartupJavascripts(long nativeAwContents);
 
         void onConfigurationChanged(long nativeAwContents);
     }

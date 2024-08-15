@@ -27,6 +27,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/fenced_frame_test_util.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -115,8 +116,7 @@ class PaintPreviewBrowserTest
   }
 
   void LoadHtml(const base::StringPiece& html) const {
-    std::string base64_html;
-    base::Base64Encode(html, &base64_html);
+    std::string base64_html = base::Base64Encode(html);
     GURL url(std::string("data:text/html;base64,") + base64_html);
     ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   }

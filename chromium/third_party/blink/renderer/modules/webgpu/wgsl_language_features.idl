@@ -19,7 +19,7 @@ enum WGSLFeatureName {
 };
 
 [
-    Exposed=(Window, DedicatedWorker),
+    Exposed=(Window, Worker),
     SecureContext
 ] interface WGSLLanguageFeatures {
     readonly setlike<DOMString>;

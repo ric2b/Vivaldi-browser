@@ -8,6 +8,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "gn/builder_record.h"
 #include "gn/filesystem_utils.h"
 #include "gn/switches.h"
 #include "gn/test_with_scheduler.h"
@@ -195,4 +196,167 @@ export_compile_commands = [ "//base/*" ]
   EXPECT_EQ("//base/*", export_cc[0].Describe());
   EXPECT_EQ("//tools:doom_melon", export_cc[1].Describe());
   EXPECT_EQ("//src/gn:*", export_cc[2].Describe());
+}
+
+TEST_F(SetupTest, RootPatternsInGnConfig) {
+  base::CommandLine cmdline(base::CommandLine::NO_PROGRAM);
+
+  // Provide a default root pattern for all top-level targets from //BUILD.gn
+  const char kDotfileContents[] = R"(
+buildconfig = "//BUILDCONFIG.gn"
+root_patterns = [ "//:*" ]
+)";
+
+  // Create a temp directory containing the build.
+  base::ScopedTempDir in_temp_dir;
+  ASSERT_TRUE(in_temp_dir.CreateUniqueTempDir());
+  base::FilePath in_path = in_temp_dir.GetPath();
+
+  WriteFile(in_path.Append(FILE_PATH_LITERAL("BUILDCONFIG.gn")), "");
+  WriteFile(in_path.Append(FILE_PATH_LITERAL(".gn")), kDotfileContents);
+
+  cmdline.AppendSwitch(switches::kRoot, FilePathToUTF8(in_path));
+
+  // Create another temp dir for writing the generated files to.
+  base::ScopedTempDir build_temp_dir;
+  ASSERT_TRUE(build_temp_dir.CreateUniqueTempDir());
+
+  // Run setup and check that the .gn file is in the scheduler's gen deps.
+  Setup setup;
+  Err err;
+  EXPECT_TRUE(setup.DoSetupWithErr(FilePathToUTF8(build_temp_dir.GetPath()),
+                                   true, cmdline, &err));
+
+  const std::vector<LabelPattern>& root_patterns =
+      setup.build_settings().root_patterns();
+  ASSERT_EQ(1u, root_patterns.size());
+  EXPECT_EQ("//.:*", root_patterns[0].Describe());
+}
+
+TEST_F(SetupTest, RootPatternsOnCommandLineOverrideGnConfig) {
+  base::CommandLine cmdline(base::CommandLine::NO_PROGRAM);
+
+  // Provide a default root pattern for only //:foo
+  const char kDotfileContents[] = R"(
+buildconfig = "//BUILDCONFIG.gn"
+root_patterns = [ "//:foo" ]
+)";
+
+  // Create a temp directory containing the build.
+  base::ScopedTempDir in_temp_dir;
+  ASSERT_TRUE(in_temp_dir.CreateUniqueTempDir());
+  base::FilePath in_path = in_temp_dir.GetPath();
+
+  WriteFile(in_path.Append(FILE_PATH_LITERAL("BUILDCONFIG.gn")), "");
+  WriteFile(in_path.Append(FILE_PATH_LITERAL(".gn")), kDotfileContents);
+
+  cmdline.AppendSwitch(switches::kRoot, FilePathToUTF8(in_path));
+
+  // Override the default root pattern list.
+  cmdline.AppendSwitch(switches::kRootPattern, "//:bar");
+  cmdline.AppendSwitch(switches::kRootPattern, "//:qux");
+
+  // Create another temp dir for writing the generated files to.
+  base::ScopedTempDir build_temp_dir;
+  ASSERT_TRUE(build_temp_dir.CreateUniqueTempDir());
+
+  // Run setup and check that the .gn file is in the scheduler's gen deps.
+  Setup setup;
+  Err err;
+  EXPECT_TRUE(setup.DoSetupWithErr(FilePathToUTF8(build_temp_dir.GetPath()),
+                                   true, cmdline, &err));
+
+  const std::vector<LabelPattern>& root_patterns =
+      setup.build_settings().root_patterns();
+  ASSERT_EQ(2u, root_patterns.size());
+  EXPECT_EQ("//.:bar", root_patterns[0].Describe());
+  EXPECT_EQ("//.:qux", root_patterns[1].Describe());
+}
+
+TEST_F(SetupTest, RootPatternsFiltersPatterns) {
+  base::CommandLine cmdline(base::CommandLine::NO_PROGRAM);
+
+  const char kDotfileContents[] = R"(
+buildconfig = "//BUILDCONFIG.gn"
+root_patterns = [ "//:foo" ]
+)";
+
+  const char kBuildConfigContents[] = R"(
+set_default_toolchain("//:toolchain")
+)";
+
+  const char kBuildGnContents[] = R"(
+group("foo") {
+  deps = [ ":bar" ]
+}
+
+group("bar") {
+}
+
+group("zoo") {
+}
+
+group("qux") {
+}
+
+# Minimal default toolchain definition for this test. Non-functional.
+toolchain("toolchain") {
+  tool("stamp") {
+    command = "stamp"
+  }
+}
+)";
+
+  // Create a temp directory containing the build.
+  base::ScopedTempDir in_temp_dir;
+  ASSERT_TRUE(in_temp_dir.CreateUniqueTempDir());
+  base::FilePath in_path = in_temp_dir.GetPath();
+
+  WriteFile(in_path.Append(FILE_PATH_LITERAL("BUILD.gn")), kBuildGnContents);
+  WriteFile(in_path.Append(FILE_PATH_LITERAL("BUILDCONFIG.gn")),
+            kBuildConfigContents);
+  WriteFile(in_path.Append(FILE_PATH_LITERAL(".gn")), kDotfileContents);
+
+  cmdline.AppendSwitch(switches::kRoot, FilePathToUTF8(in_path));
+
+  // Create another temp dir for writing the generated files to.
+  base::ScopedTempDir build_temp_dir;
+  ASSERT_TRUE(build_temp_dir.CreateUniqueTempDir());
+
+  // Run setup and check that the .gn file is in the scheduler's gen deps.
+  Setup setup;
+  Err err;
+  EXPECT_TRUE(setup.DoSetupWithErr(FilePathToUTF8(build_temp_dir.GetPath()),
+                                   true, cmdline, &err));
+
+  const std::vector<LabelPattern>& root_patterns =
+      setup.build_settings().root_patterns();
+  ASSERT_EQ(1u, root_patterns.size());
+  EXPECT_EQ("//.:foo", root_patterns[0].Describe());
+
+  // Now build the graph, then verify it only includes //:foo and //:bar
+  ASSERT_TRUE(setup.Run(cmdline));
+
+  SourceDir top_dir("//");
+
+  const BuilderRecord* foo_record =
+      setup.builder().GetRecord(Label(top_dir, "foo", top_dir, "toolchain"));
+  const BuilderRecord* bar_record =
+      setup.builder().GetRecord(Label(top_dir, "bar", top_dir, "toolchain"));
+  const BuilderRecord* qux_record =
+      setup.builder().GetRecord(Label(top_dir, "qux", top_dir, "toolchain"));
+  const BuilderRecord* zoo_record =
+      setup.builder().GetRecord(Label(top_dir, "zoo", top_dir, "toolchain"));
+
+  // All four targets were added as build graph records.
+  ASSERT_TRUE(foo_record);
+  ASSERT_TRUE(bar_record);
+  ASSERT_TRUE(zoo_record);
+  ASSERT_TRUE(qux_record);
+
+  // But only foo and bar should be generated in the Ninja plan.
+  EXPECT_TRUE(foo_record->should_generate());
+  EXPECT_TRUE(bar_record->should_generate());
+  EXPECT_FALSE(qux_record->should_generate());
+  EXPECT_FALSE(zoo_record->should_generate());
 }

@@ -198,16 +198,13 @@ void CalculatePopupYAndHeight(int popup_preferred_height,
   popup_bounds->set_height(popup_preferred_height);
   popup_bounds->set_y(top_growth_end);
 
-  if (bottom_available >= popup_preferred_height ||
-      bottom_available >= top_available) {
-    popup_bounds->AdjustToFit(
-        gfx::Rect(popup_bounds->x(), element_bounds.bottom(),
-                  popup_bounds->width(), bottom_available));
-  } else {
-    popup_bounds->AdjustToFit(gfx::Rect(popup_bounds->x(),
-                                        content_area_bounds.y(),
-                                        popup_bounds->width(), top_available));
-  }
+  int y_adjustment = (bottom_available >= popup_preferred_height ||
+                      bottom_available >= top_available)
+                         ? element_bounds.bottom()
+                         : content_area_bounds.y();
+  popup_bounds->AdjustToFit(gfx::Rect(popup_bounds->x(), y_adjustment,
+                                      popup_bounds->width(),
+                                      content_area_bounds.height()));
 }
 
 gfx::Rect CalculatePopupBounds(const gfx::Size& desired_size,
@@ -570,13 +567,14 @@ bool IsFooterPopupItemId(PopupItemId popup_item_id) {
     case PopupItemId::kSeePromoCodeDetails:
     case PopupItemId::kEditAddressProfile:
     case PopupItemId::kDeleteAddressProfile:
+    case PopupItemId::kViewPasswordDetails:
       return true;
     case PopupItemId::kAccountStoragePasswordEntry:
-    case PopupItemId::kAccountStorageUsernameEntry:
     case PopupItemId::kAddressEntry:
     case PopupItemId::kAddressFieldByFieldFilling:
     case PopupItemId::kAutocompleteEntry:
     case PopupItemId::kCompose:
+    case PopupItemId::kComposeSavedStateNotification:
     case PopupItemId::kCreateNewPlusAddress:
     case PopupItemId::kCreditCardEntry:
     case PopupItemId::kCreditCardFieldByFieldFilling:
@@ -595,10 +593,11 @@ bool IsFooterPopupItemId(PopupItemId popup_item_id) {
     case PopupItemId::kMixedFormMessage:
     case PopupItemId::kPasswordEntry:
     case PopupItemId::kSeparator:
-    case PopupItemId::kUsernameEntry:
     case PopupItemId::kVirtualCreditCardEntry:
     case PopupItemId::kWebauthnCredential:
     case PopupItemId::kWebauthnSignInWithAnotherDevice:
+    case PopupItemId::kPasswordFieldByFieldFilling:
+    case PopupItemId::kFillPassword:
       return false;
   }
 }
@@ -614,14 +613,15 @@ bool IsExpandablePopupItemId(PopupItemId popup_item_id) {
     case PopupItemId::kFillFullEmail:
     case PopupItemId::kFillFullPhoneNumber:
     case PopupItemId::kCreditCardEntry:
+    case PopupItemId::kPasswordEntry:
       return true;
     case PopupItemId::kAccountStoragePasswordEntry:
-    case PopupItemId::kAccountStorageUsernameEntry:
     case PopupItemId::kAllSavedPasswordsEntry:
     case PopupItemId::kAutocompleteEntry:
     case PopupItemId::kAutofillOptions:
     case PopupItemId::kClearForm:
     case PopupItemId::kCompose:
+    case PopupItemId::kComposeSavedStateNotification:
     case PopupItemId::kCreateNewPlusAddress:
     case PopupItemId::kDatalistEntry:
     case PopupItemId::kDevtoolsTestAddressEntry:
@@ -638,12 +638,13 @@ bool IsExpandablePopupItemId(PopupItemId popup_item_id) {
     case PopupItemId::kPasswordAccountStorageOptIn:
     case PopupItemId::kPasswordAccountStorageOptInAndGenerate:
     case PopupItemId::kPasswordAccountStorageReSignin:
-    case PopupItemId::kPasswordEntry:
+    case PopupItemId::kPasswordFieldByFieldFilling:
+    case PopupItemId::kFillPassword:
+    case PopupItemId::kViewPasswordDetails:
     case PopupItemId::kScanCreditCard:
     case PopupItemId::kSeePromoCodeDetails:
     case PopupItemId::kSeparator:
     case PopupItemId::kShowAccountCards:
-    case PopupItemId::kUsernameEntry:
     case PopupItemId::kVirtualCreditCardEntry:
     case PopupItemId::kWebauthnCredential:
     case PopupItemId::kWebauthnSignInWithAnotherDevice:

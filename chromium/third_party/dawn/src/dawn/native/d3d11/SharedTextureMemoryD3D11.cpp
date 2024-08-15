@@ -33,6 +33,7 @@
 
 #include "dawn/native/D3D11Backend.h"
 #include "dawn/native/d3d/D3DError.h"
+#include "dawn/native/d3d/KeyedMutex.h"
 #include "dawn/native/d3d/UtilsD3D.h"
 #include "dawn/native/d3d11/DeviceD3D11.h"
 #include "dawn/native/d3d11/TextureD3D11.h"
@@ -145,15 +146,25 @@ SharedTextureMemory::SharedTextureMemory(Device* device,
                                          const char* label,
                                          SharedTextureMemoryProperties properties,
                                          ComPtr<ID3D11Resource> resource)
-    : d3d::SharedTextureMemory(device, label, properties, resource.Get()),
-      mResource(std::move(resource)) {}
+    : d3d::SharedTextureMemory(device, label, properties), mResource(std::move(resource)) {
+    ComPtr<IDXGIKeyedMutex> dxgiKeyedMutex;
+    mResource.As(&dxgiKeyedMutex);
+    if (dxgiKeyedMutex) {
+        mKeyedMutex = AcquireRef(new d3d::KeyedMutex(device, std::move(dxgiKeyedMutex)));
+    }
+}
 
 void SharedTextureMemory::DestroyImpl() {
+    mKeyedMutex = nullptr;
     mResource = nullptr;
 }
 
 ID3D11Resource* SharedTextureMemory::GetD3DResource() const {
     return mResource.Get();
+}
+
+d3d::KeyedMutex* SharedTextureMemory::GetKeyedMutex() const {
+    return mKeyedMutex.Get();
 }
 
 ResultOrError<Ref<TextureBase>> SharedTextureMemory::CreateTextureImpl(

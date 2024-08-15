@@ -38,6 +38,7 @@
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
+#include "third_party/blink/public/web/web_link_preview_triggerer.h"
 #include "third_party/blink/renderer/core/clipboard/data_transfer.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -221,6 +222,9 @@ const ComputedStyle* GetComputedStyleFromScrollbar(
     // TODO(crbug.com/1519197): if the mouse is over a scroll corner, there must
     // be a scrollable area. Investigate where this is coming from.
     if (!scrollable_area) {
+      SCOPED_CRASH_KEY_STRING64("cr1519197", "hit-object",
+                                layout_object.DebugName().Utf8());
+      base::debug::DumpWithoutCrashing();
       return nullptr;
     }
 
@@ -518,7 +522,7 @@ void EventHandler::UpdateCursor() {
   layout_view->HitTest(location, result);
 
   if (LocalFrame* frame = result.InnerNodeFrame()) {
-    absl::optional<ui::Cursor> optional_cursor =
+    std::optional<ui::Cursor> optional_cursor =
         frame->GetEventHandler().SelectCursor(location, result);
     if (optional_cursor.has_value()) {
       view->SetCursor(optional_cursor.value());
@@ -537,16 +541,17 @@ bool EventHandler::ShouldShowResizeForNode(const LayoutObject& layout_object,
 
 bool EventHandler::IsSelectingLink(const HitTestResult& result) {
   // If a drag may be starting or we're capturing mouse events for a particular
-  // node, don't treat this as a selection. Note calling
-  // ComputeVisibleSelectionInDOMTreeDeprecated may update layout.
+  // node, don't treat this as a selection.
+  // TODO(editing-dev): The use of UpdateStyleAndLayout needs to be audited. See
+  // http://crbug.com/590369 for more details.
+  frame_->GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kSelection);
+
   const bool mouse_selection =
       !capturing_mouse_events_element_ &&
       mouse_event_manager_->MousePressed() &&
       GetSelectionController().MouseDownMayStartSelect() &&
       !mouse_event_manager_->MouseDownMayStartDrag() &&
-      !frame_->Selection()
-           .ComputeVisibleSelectionInDOMTreeDeprecated()
-           .IsNone();
+      !frame_->Selection().ComputeVisibleSelectionInDOMTree().IsNone();
   return mouse_selection && result.IsOverLink();
 }
 
@@ -561,17 +566,17 @@ bool EventHandler::ShouldShowIBeamForNode(const Node* node,
   return IsEditable(*node);
 }
 
-absl::optional<ui::Cursor> EventHandler::SelectCursor(
+std::optional<ui::Cursor> EventHandler::SelectCursor(
     const HitTestLocation& location,
     const HitTestResult& result) {
   if (scroll_manager_->InResizeMode())
-    return absl::nullopt;
+    return std::nullopt;
 
   Page* page = frame_->GetPage();
   if (!page)
-    return absl::nullopt;
+    return std::nullopt;
   if (scroll_manager_->MiddleClickAutoscrollInProgress())
-    return absl::nullopt;
+    return std::nullopt;
 
   if (result.GetScrollbar() && !result.GetScrollbar()->IsCustomScrollbar()) {
     return PointerCursor();
@@ -610,7 +615,7 @@ absl::optional<ui::Cursor> EventHandler::SelectCursor(
       case kSetCursor:
         return override_cursor;
       case kDoNotSetCursor:
-        return absl::nullopt;
+        return std::nullopt;
     }
   }
 
@@ -813,7 +818,7 @@ absl::optional<ui::Cursor> EventHandler::SelectCursor(
   return PointerCursor();
 }
 
-absl::optional<ui::Cursor> EventHandler::SelectAutoCursor(
+std::optional<ui::Cursor> EventHandler::SelectAutoCursor(
     const HitTestResult& result,
     Node* node,
     const ui::Cursor& i_beam) {
@@ -1055,6 +1060,13 @@ void EventHandler::HandleMouseLeaveEvent(const WebMouseEvent& event) {
   Page* page = frame_->GetPage();
   if (page)
     page->GetChromeClient().ClearToolTip(*frame_);
+
+  WebLinkPreviewTriggerer* triggerer =
+      frame_->GetOrCreateLinkPreviewTriggerer();
+  if (triggerer) {
+    triggerer->MaybeChangedKeyEventModifier(WebInputEvent::kNoModifiers);
+  }
+
   HandleMouseMoveOrLeaveEvent(event, Vector<WebMouseEvent>(),
                               Vector<WebMouseEvent>());
   pointer_event_manager_->RemoveLastMousePosition();
@@ -1123,6 +1135,12 @@ WebInputEventResult EventHandler::HandleMouseMoveOrLeaveEvent(
     return WebInputEventResult::kHandledSystem;
   }
 
+  // TODO(crbug.com/1519197): This crash key is set during the hit test if a
+  // scroll corner is hit. It will be reported in the DumpWithoutCrashing that
+  // occurs from GetComputedStyleFromScrollbar via the SelectCursor call below.
+  // Clear it here to ensure we're using the value from this hit test if we do
+  // end up calling DumpWithoutCrashing.
+  base::debug::ClearCrashKeyString(CrashKeyForBug1519197());
   HitTestRequest::HitTestRequestType hit_type = HitTestRequest::kMove;
   if (mouse_event_manager_->MousePressed()) {
     hit_type |= HitTestRequest::kActive;
@@ -1216,7 +1234,7 @@ WebInputEventResult EventHandler::HandleMouseMoveOrLeaveEvent(
 
     LocalFrameView* view = frame_->View();
     if (!is_remote_frame && view) {
-      absl::optional<ui::Cursor> optional_cursor =
+      std::optional<ui::Cursor> optional_cursor =
           SelectCursor(mev.GetHitTestLocation(), mev.GetHitTestResult());
       if (optional_cursor.has_value()) {
         view->SetCursor(optional_cursor.value());
@@ -1224,6 +1242,7 @@ WebInputEventResult EventHandler::HandleMouseMoveOrLeaveEvent(
     }
   }
 
+  base::debug::ClearCrashKeyString(CrashKeyForBug1519197());
   last_mouse_move_event_subframe_ = current_subframe;
 
   if (event_result != WebInputEventResult::kNotHandled) {
@@ -2618,6 +2637,13 @@ void EventHandler::ReleaseMouseCaptureFromCurrentFrame() {
     subframe->GetEventHandler().ReleaseMouseCaptureFromCurrentFrame();
   pointer_event_manager_->ReleaseMousePointerCapture();
   capturing_subframe_element_ = nullptr;
+}
+
+base::debug::CrashKeyString* EventHandler::CrashKeyForBug1519197() const {
+  static auto* const scroll_corner_crash_key =
+      base::debug::AllocateCrashKeyString("cr1519197-area-object",
+                                          base::debug::CrashKeySize::Size64);
+  return scroll_corner_crash_key;
 }
 
 }  // namespace blink

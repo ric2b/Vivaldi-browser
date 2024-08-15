@@ -10,6 +10,8 @@
 
 #include "sdk/android/src/jni/video_decoder_wrapper.h"
 
+#include "absl/memory/memory.h"
+#include "api/environment/environment.h"
 #include "api/video/render_resolution.h"
 #include "api/video/video_frame.h"
 #include "api/video_codecs/video_decoder.h"
@@ -269,16 +271,15 @@ absl::optional<uint8_t> VideoDecoderWrapper::ParseQP(
 
 std::unique_ptr<VideoDecoder> JavaToNativeVideoDecoder(
     JNIEnv* jni,
-    const JavaRef<jobject>& j_decoder) {
-  const jlong native_decoder =
-      Java_VideoDecoder_createNativeVideoDecoder(jni, j_decoder);
-  VideoDecoder* decoder;
-  if (native_decoder == 0) {
-    decoder = new VideoDecoderWrapper(jni, j_decoder);
+    const JavaRef<jobject>& j_decoder,
+    jlong webrtcEnvRef) {
+  if (jlong native_decoder =
+          Java_VideoDecoder_createNative(jni, j_decoder, webrtcEnvRef);
+      native_decoder != 0) {
+    return absl::WrapUnique(reinterpret_cast<VideoDecoder*>(native_decoder));
   } else {
-    decoder = reinterpret_cast<VideoDecoder*>(native_decoder);
+    return std::make_unique<VideoDecoderWrapper>(jni, j_decoder);
   }
-  return std::unique_ptr<VideoDecoder>(decoder);
 }
 
 }  // namespace jni

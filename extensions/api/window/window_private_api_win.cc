@@ -11,4 +11,8 @@ bool WindowPrivateIsOnScreenWithNotchFunction::IsWindowOnScreenWithNotch(
   return false;
 }
 
+void WindowPrivateSetControlButtonsPaddingFunction::RequestChange(
+    gfx::NativeWindow window,
+    vivaldi::window_private::ControlButtonsPadding) {}
+
 }  // namespace extensions

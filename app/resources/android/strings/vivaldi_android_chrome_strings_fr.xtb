@@ -16,6 +16,7 @@
 <translation id="2433507940547922241">Apparence</translation>
 <translation id="2501278716633472235">Revenir à la page précédente</translation>
 <translation id="2633278372998075009">Onglets privés</translation>
+<translation id="272026394418727548">Page d’accueil de Vivaldi</translation>
 <translation id="2951071800649516099">Ajoutez des pages à votre liste de lecture pour plus tard</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> signet}
@@ -26,6 +27,7 @@
 <translation id="3504699618187058974">Piles d’onglets</translation>
 <translation id="3518985090088779359">Accepter et continuer</translation>
 <translation id="3571177741182643350">Articles non lus - Disponibles hors connexion :</translation>
+<translation id="3602290021589620013">Aperçu</translation>
 <translation id="3700829948786686853">Bienvenue dans Vivaldi</translation>
 <translation id="3719826155360621982">Page d’accueil</translation>
 <translation id="385051799172605136">Retour</translation>
@@ -65,7 +67,6 @@ Pour ajuster votre terme de recherche, appuyez longuement pour sélectionner. Po
 <translation id="7427132068601343474">À propos de Vivaldi</translation>
 <translation id="7465104139234185284">Fermer tous les onglets privés</translation>
 <translation id="7481312909269577407">Page suivante</translation>
-<translation id="7583262514280211622">Votre liste de lecture s’affichera ici</translation>
 <translation id="7968014550143838305">Ajouté à la liste de lecture</translation>
 <translation id="804786196054284061">Conditions d’utilisation de Vivaldi</translation>
 <translation id="8127542551745560481">Modifier la page d’accueil</translation>

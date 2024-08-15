@@ -9,6 +9,7 @@
 
 #import "base/ios/block_types.h"
 
+#import "base/memory/raw_ptr.h"
 #import "base/memory/weak_ptr.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
@@ -71,7 +72,7 @@ typedef struct {
   TabStripLegacyCoordinator* legacyTabStripCoordinator;
   SideSwipeMediator* sideSwipeMediator;
   BookmarksCoordinator* bookmarksCoordinator;
-  FullscreenController* fullscreenController;
+  raw_ptr<FullscreenController> fullscreenController;
   id<TextZoomCommands> textZoomHandler;
   id<HelpCommands> helpHandler;
   id<PopupMenuCommands> popupMenuCommandsHandler;
@@ -79,10 +80,10 @@ typedef struct {
   id<FindInPageCommands> findInPageCommandsHandler;
   LayoutGuideCenter* layoutGuideCenter;
   BOOL isOffTheRecord;
-  PagePlaceholderBrowserAgent* pagePlaceholderBrowserAgent;
-  UrlLoadingBrowserAgent* urlLoadingBrowserAgent;
+  raw_ptr<PagePlaceholderBrowserAgent> pagePlaceholderBrowserAgent;
+  raw_ptr<UrlLoadingBrowserAgent> urlLoadingBrowserAgent;
   id<VoiceSearchController> voiceSearchController;
-  TabUsageRecorderBrowserAgent* tabUsageRecorderBrowserAgent;
+  raw_ptr<TabUsageRecorderBrowserAgent> tabUsageRecorderBrowserAgent;
   base::WeakPtr<WebStateList> webStateList;
   SafeAreaProvider* safeAreaProvider;
 
@@ -149,9 +150,6 @@ typedef struct {
 // Command handler for omnibox commands.
 @property(nonatomic, weak) id<OmniboxCommands> omniboxCommandsHandler;
 
-// Whether the receiver is currently the primary BVC.
-- (void)setPrimary:(BOOL)primary;
-
 // Opens a new tab as if originating from `originPoint` and `focusOmnibox`.
 - (void)openNewTabFromOriginPoint:(CGPoint)originPoint
                      focusOmnibox:(BOOL)focusOmnibox
@@ -165,11 +163,6 @@ typedef struct {
 // Shows the voice search UI.
 - (void)startVoiceSearch;
 
-// Displays or refreshes the current tab.
-// TODO:(crbug.com/1385847): Remove this when BVC is refactored to not know
-// about model layer objects such as webstates.
-- (void)displayCurrentTab;
-
 // Vivaldi
 // Browser state of this BVC.
 @property(nonatomic,assign) ChromeBrowserState* browserState;
@@ -177,6 +170,7 @@ typedef struct {
 - (web::WebState*)getCurrentWebState;
 - (void)openWhatsNewTab;
 - (CGFloat)headerHeightForOverscroll;
+- (CGFloat)headerInsetForOverscroll;
 - (BOOL)canShowTabStrip;
 - (BOOL)isBottomOmniboxEnabled;
 // End Vivaldi

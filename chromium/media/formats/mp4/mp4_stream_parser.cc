@@ -13,7 +13,6 @@
 
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
-#include "base/numerics/math_constants.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -73,18 +72,19 @@ class ExternalMemoryAdapter : public DecoderBuffer::ExternalMemory {
 
 }  // namespace
 
-MP4StreamParser::MP4StreamParser(const std::set<int>& audio_object_types,
-                                 bool has_sbr,
-                                 bool has_flac,
-                                 bool has_iamf,
-                                 bool has_dv)
+MP4StreamParser::MP4StreamParser(
+    std::optional<base::flat_set<int>> strict_audio_object_types,
+    bool has_sbr,
+    bool has_flac,
+    bool has_iamf,
+    bool has_dv)
     : state_(kWaitingForInit),
       moof_head_(0),
       mdat_tail_(0),
       highest_end_offset_(0),
       has_audio_(false),
       has_video_(false),
-      audio_object_types_(audio_object_types),
+      strict_audio_object_types_(strict_audio_object_types),
       has_sbr_(has_sbr),
       has_flac_(has_flac),
       has_iamf_(has_iamf),
@@ -541,12 +541,14 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
         }
 #endif  // BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
         DVLOG(1) << "audio_type 0x" << std::hex << static_cast<int>(audio_type);
-        if (audio_object_types_.find(audio_type) == audio_object_types_.end()) {
-          MEDIA_LOG(ERROR, media_log_)
-              << "audio object type 0x" << std::hex
-              << static_cast<int>(audio_type)
-              << " does not match what is specified in the mimetype.";
-          return false;
+        if (strict_audio_object_types_.has_value()) {
+          if (!strict_audio_object_types_->contains(audio_type)) {
+            MEDIA_LOG(ERROR, media_log_)
+                << "audio object type 0x" << std::hex
+                << static_cast<int>(audio_type)
+                << " does not match what is specified in the mimetype.";
+            return false;
+          }
         }
 
         // Check if it is MPEG4 AAC defined in ISO 14496 Part 3 or
@@ -570,12 +572,11 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
 #if BUILDFLAG(ENABLE_PLATFORM_AC3_EAC3_AUDIO)
         } else if (audio_type == kAC3) {
           codec = AudioCodec::kAC3;
-          channel_layout = GuessChannelLayout(entry.ac3.dac3.GetChannelCount());
+          channel_layout = entry.ac3.dac3.GetChannelLayout();
           sample_per_second = entry.samplerate;
         } else if (audio_type == kEAC3) {
           codec = AudioCodec::kEAC3;
-          channel_layout =
-              GuessChannelLayout(entry.eac3.dec3.GetChannelCount());
+          channel_layout = entry.eac3.dec3.GetChannelLayout();
           sample_per_second = entry.samplerate;
 #endif
 #if BUILDFLAG(ENABLE_PLATFORM_AC4_AUDIO)

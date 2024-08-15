@@ -122,7 +122,7 @@ class VivaldiAccountSetPendingRegistrationFunction : public ExtensionFunction {
  private:
   ~VivaldiAccountSetPendingRegistrationFunction() override = default;
   void OnEncryptDone(
-      absl::optional<vivaldi::vivaldi_account::PendingRegistration>
+      std::optional<vivaldi::vivaldi_account::PendingRegistration>
           pending_registration,
       std::unique_ptr<std::string> encrypted_password,
       bool result);
@@ -139,7 +139,7 @@ class VivaldiAccountGetPendingRegistrationFunction : public ExtensionFunction {
  private:
   ~VivaldiAccountGetPendingRegistrationFunction() override = default;
   void OnDecryptDone(
-      absl::optional<vivaldi::vivaldi_account::PendingRegistration>
+      std::optional<vivaldi::vivaldi_account::PendingRegistration>
           pending_registration,
       bool result);
   // ExtensionFunction:

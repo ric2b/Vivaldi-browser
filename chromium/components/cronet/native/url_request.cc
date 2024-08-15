@@ -4,6 +4,7 @@
 
 #include "components/cronet/native/url_request.h"
 
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -22,7 +23,6 @@
 #include "components/cronet/native/upload_data_sink.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_states.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace {
 
@@ -513,9 +513,13 @@ void Cronet_UrlRequestImpl::GetStatus(
     base::AutoLock lock(lock_);
     if (started_ && request_) {
       status_listeners_.insert(listener);
+      // UnsafeDanglingUntriaged triggered by test:
+      // UrlRequestTest.GetStatus
+      // TODO(https://crbug.com/1380714): Remove `UnsafeDanglingUntriaged`
       request_->GetStatus(
           base::BindOnce(&Cronet_UrlRequestImpl::NetworkTasks::OnStatus,
-                         base::Unretained(network_tasks_), listener));
+                         base::Unretained(network_tasks_),
+                         base::UnsafeDanglingUntriaged(listener)));
       return;
     }
   }

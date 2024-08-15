@@ -17,6 +17,7 @@
 // End Vivaldi
 
 @class LayoutGuideCenter;
+@protocol OmniboxAdditionalTextConsumer;
 @protocol OmniboxKeyboardDelegate;
 @protocol OmniboxReturnDelegate;
 @class OmniboxViewController;
@@ -63,6 +64,10 @@ class OmniboxTextChangeDelegate;
 // The view, which contains a text field view.
 @property(nonatomic, readonly)
     UIView<TextFieldViewContaining>* viewContainingTextField;
+
+// Consumer of additional text.
+@property(nonatomic, readonly) id<OmniboxAdditionalTextConsumer>
+    additionalTextConsumer;
 
 // The default leading image to be used on omnibox focus before this is updated
 // via OmniboxConsumer protocol.

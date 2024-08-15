@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/paint/timing/image_element_timing.h"
 
 #include "base/time/time.h"
+#include "components/viz/common/frame_timing_details.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
@@ -174,9 +175,10 @@ void ImageElementTiming::NotifyImagePaintedInternal(
   // PerformanceElementTiming entry should be the URL trimmed to 100 characters.
   // If it is not, then pass in the full URL regardless of the length to be
   // consistent with Resource Timing.
+  const String& image_string = url.GetString();
   const String& image_url = url.ProtocolIsData()
-                                ? url.GetString().Left(kInlineImageMaxChars)
-                                : url.GetString();
+                                ? image_string.Left(kInlineImageMaxChars)
+                                : image_string;
   element_timings_.emplace_back(MakeGarbageCollected<ElementTimingInfo>(
       image_url, intersection_rect, load_time, attr,
       cached_image.IntrinsicSize(respect_orientation), id, element));
@@ -230,7 +232,9 @@ void ImageElementTiming::NotifyBackgroundImagePainted(
 }
 
 void ImageElementTiming::ReportImagePaintPresentationTime(
-    base::TimeTicks timestamp) {
+    const viz::FrameTimingDetails& presentation_details) {
+  base::TimeTicks timestamp =
+      presentation_details.presentation_feedback.timestamp;
   WindowPerformance* performance =
       DOMWindowPerformance::performance(*GetSupplementable());
   if (performance) {

@@ -62,6 +62,7 @@ AuctionURLLoaderFactoryProxy::AuctionURLLoaderFactoryProxy(
     GetUrlLoaderFactoryCallback get_trusted_url_loader_factory,
     PreconnectSocketCallback preconnect_socket_callback,
     GetCookieDeprecationLabelCallback get_cookie_deprecation_label,
+    GetDevtoolsAuctionIdsCallback get_devtools_auction_ids,
     bool force_reload,
     const url::Origin& top_frame_origin,
     const url::Origin& frame_origin,
@@ -78,6 +79,7 @@ AuctionURLLoaderFactoryProxy::AuctionURLLoaderFactoryProxy(
       get_trusted_url_loader_factory_(
           std::move(get_trusted_url_loader_factory)),
       get_cookie_deprecation_label_(std::move(get_cookie_deprecation_label)),
+      get_devtools_auction_ids_(std::move(get_devtools_auction_ids)),
       top_frame_origin_(top_frame_origin),
       frame_origin_(frame_origin),
       renderer_process_id_(renderer_process_id),
@@ -122,6 +124,7 @@ void AuctionURLLoaderFactoryProxy::CreateLoaderAndStart(
 
   bool is_request_allowed = false;
   bool is_trusted_bidding_signals_request = false;
+  std::optional<InterestGroupAuctionFetchType> event_type;
 
   const SubresourceUrlBuilder::BundleSubresourceInfo* maybe_subresource_info =
       nullptr;
@@ -130,11 +133,17 @@ void AuctionURLLoaderFactoryProxy::CreateLoaderAndStart(
   if (url_request.url == script_url_ &&
       accept_header == "application/javascript") {
     is_request_allowed = true;
+    event_type = is_for_seller_ ? InterestGroupAuctionFetchType::kSellerJs
+                                : InterestGroupAuctionFetchType::kBidderJs;
   } else if (wasm_url_.has_value() && url_request.url == wasm_url_.value() &&
              accept_header == "application/wasm") {
+    event_type = InterestGroupAuctionFetchType::kBidderWasm;
     is_request_allowed = true;
   } else if (CouldBeTrustedSignalsUrl(url_request.url) &&
              accept_header == "application/json") {
+    event_type = is_for_seller_
+                     ? InterestGroupAuctionFetchType::kSellerTrustedSignals
+                     : InterestGroupAuctionFetchType::kBidderTrustedSignals;
     is_request_allowed = true;
     is_trusted_bidding_signals_request = true;
   } else {
@@ -188,6 +197,16 @@ void AuctionURLLoaderFactoryProxy::CreateLoaderAndStart(
   new_request.request_initiator = frame_origin_;
   new_request.enable_load_timing = url_request.enable_load_timing;
 
+  if (event_type.has_value() && new_request.devtools_request_id.has_value() &&
+      devtools_instrumentation::NeedInterestGroupAuctionEvents(
+          owner_frame_tree_node_id_)) {
+    std::vector<std::string> relevant_auction_ids =
+        get_devtools_auction_ids_.Run();
+    devtools_instrumentation::OnInterestGroupAuctionNetworkRequestCreated(
+        owner_frame_tree_node_id_, *event_type,
+        *new_request.devtools_request_id, relevant_auction_ids);
+  }
+
   if (is_trusted_bidding_signals_request) {
     std::optional<std::string> maybe_deprecation_label =
         get_cookie_deprecation_label_.Run();
@@ -208,7 +227,7 @@ void AuctionURLLoaderFactoryProxy::CreateLoaderAndStart(
     // URL's scheme is https and not uuid-in-package. However, unlike
     // traditional network requests, the browser cannot read the response if
     // kNoCors is used, even with CORS-safe methods and headers -- the response
-    // is blocked by CORB.
+    // is blocked by ORB.
     new_request.mode = network::mojom::RequestMode::kCors;
   } else {
     // CORS is not needed.
@@ -219,9 +238,9 @@ void AuctionURLLoaderFactoryProxy::CreateLoaderAndStart(
     //
     // For seller worklets, while the publisher page provides both the script
     // and the trusted signals URLs, both requests use safe methods (GET), and
-    // don't set any headers, so CORS is not needed. CORB would block the
+    // don't set any headers, so CORS is not needed. ORB would block the
     // signal's JSON response, if made in the context of the page, but the JSON
-    // is only made available to the same-origin script, so CORB isn't needed
+    // is only made available to the same-origin script, so ORB isn't needed
     // here.
     new_request.mode = network::mojom::RequestMode::kNoCors;
   }

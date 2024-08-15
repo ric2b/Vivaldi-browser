@@ -48,7 +48,7 @@
 #include "chrome/browser/trusted_vault/trusted_vault_service_factory.h"
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "chrome/browser/web_applications/web_app_provider_factory.h"
-#include "chrome/browser/web_data_service_factory.h"
+#include "chrome/browser/webdata_services/web_data_service_factory.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/channel_info.h"
 #include "components/password_manager/core/browser/sharing/password_receiver_service.h"
@@ -95,6 +95,10 @@
 #include "base/android/scoped_java_ref.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/sync/android/jni_headers/SyncServiceFactory_jni.h"
+#endif  // BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/android/webapk/webapk_sync_service_factory.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #include "app/vivaldi_apptools.h"
@@ -275,7 +279,7 @@ SyncServiceFactory::SyncServiceFactory()
   DependsOn(PowerBookmarkServiceFactory::GetInstance());
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
     BUILDFLAG(IS_WIN)
-  DependsOn(SavedTabGroupServiceFactory::GetInstance());
+  DependsOn(tab_groups::SavedTabGroupServiceFactory::GetInstance());
 #endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) ||
         // BUILDFLAG(IS_WIN)
   DependsOn(SecurityEventRecorderFactory::GetInstance());
@@ -292,6 +296,11 @@ SyncServiceFactory::SyncServiceFactory()
   DependsOn(ThemeServiceFactory::GetInstance());
 #endif  // !BUILDFLAG(IS_ANDROID)
   DependsOn(TrustedVaultServiceFactory::GetInstance());
+#if BUILDFLAG(IS_ANDROID)
+  if (base::FeatureList::IsEnabled(syncer::kWebApkBackupAndRestoreBackend)) {
+    DependsOn(webapk::WebApkSyncServiceFactory::GetInstance());
+  }
+#endif  // BUILDFLAG(IS_ANDROID)
   DependsOn(WebDataServiceFactory::GetInstance());
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)

@@ -36,7 +36,7 @@
 #include "media/base/win/color_space_util_win.h"
 #include "media/base/win/mf_helpers.h"
 #include "media/base/win/mf_initializer.h"
-#include "media/filters/vp9_parser.h"
+#include "media/filters/temporal_scalability_id_extractor.h"
 #include "media/gpu/gpu_video_encode_accelerator_helpers.h"
 #include "media/gpu/windows/vp9_video_rate_control_wrapper.h"
 #include "third_party/libvpx/source/libvpx/vp9/ratectrl_rtc.h"
@@ -303,7 +303,11 @@ uint32_t EnumerateHardwareEncoders(VideoCodec codec, IMFActivate*** activates) {
   if (!InitializeMediaFoundation()) {
     return 0;
   }
-
+#if defined(ARCH_CPU_ARM64)
+  // TODO (crbug.com/1509117): Temporarily disable video encoding on arm64
+  // until we figure out what OS reports all codecs as supported.
+  return 0;
+#else
   uint32_t flags = MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER;
   MFT_REGISTER_TYPE_INFO input_info;
   input_info.guidMajorType = MFMediaType_Video;
@@ -332,6 +336,7 @@ uint32_t EnumerateHardwareEncoders(VideoCodec codec, IMFActivate*** activates) {
   }
 
   return count - excluded_encoders;
+#endif
 }
 
 bool IsCodecSupportedForEncoding(VideoCodec codec, int* num_temporal_layers) {
@@ -423,169 +428,6 @@ VideoRateControlWrapper::RateControlConfig CreateRateControllerConfig(
 }
 
 }  // namespace
-
-class MediaFoundationVideoEncodeAccelerator::BitstreamParserHelper {
- public:
-  // Describe a slot of reference frame buffer.
-  struct ReferenceBufferSlot {
-    uint32_t frame_id;
-    int temporal_id;
-  };
-  // Metadata parsed from encoding bitstream buffer.
-  struct BitstreamMetadata {
-    int temporal_id = 0;
-    // A list of referenced frames info for this frame. Currently, only be
-    // filled for VP9 encoding.
-    std::vector<ReferenceBufferSlot> ref_frame_list;
-  };
-
-  BitstreamParserHelper() = delete;
-  ~BitstreamParserHelper() = default;
-  explicit BitstreamParserHelper(VideoCodec codec) : codec_(codec) {
-    switch (codec_) {
-      case VideoCodec::kH264:
-        h264_ = std::make_unique<H264Parser>();
-        break;
-#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
-      case VideoCodec::kHEVC:
-        h265_ = std::make_unique<H265NaluParser>();
-        break;
-#endif
-      case VideoCodec::kVP9:
-        vp9_ = std::make_unique<Vp9Parser>(false);
-        break;
-      default:
-        break;
-    }
-  }
-
-  bool ParseStream(const uint8_t* stream,
-                   off_t size,
-                   uint32_t frame_id,
-                   int tid_by_svc_spec,
-                   BitstreamMetadata& md) {
-    switch (codec_) {
-      case VideoCodec::kH264:
-        return ParseH264(stream, size, md);
-#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
-      case VideoCodec::kHEVC:
-        return ParseHEVC(stream, size, md);
-#endif
-      case VideoCodec::kVP9:
-        return ParseVP9(stream, size, frame_id, tid_by_svc_spec, md);
-      default:
-        return false;
-    }
-  }
-
- private:
-
-  bool ParseH264(const uint8_t* stream, off_t size, BitstreamMetadata& md) {
-    h264_->SetStream(stream, size);
-    H264NALU nalu;
-    H264Parser::Result result;
-    while ((result = h264_->AdvanceToNextNALU(&nalu)) !=
-           H264Parser::kEOStream) {
-      // Fallback to software when the stream is invalid.
-      if (result == H264Parser::Result::kInvalidStream) {
-        return false;
-      }
-      // See the 7.3.1 NAL unit syntax in H264 spec.
-      // https://www.itu.int/rec/T-REC-H.264
-      // H264 can parse the temporal id from nal_unit_header_svc_extension
-      // located in Nalu(7.3.1 NAL unit syntax).
-      constexpr size_t kPrefixNALLocatedBytePos = 3;
-      constexpr size_t kH264SVCExtensionFlagLocatedBytePos = 1;
-      if (nalu.nal_unit_type == H264NALU::kPrefix &&
-          static_cast<size_t>(nalu.size) > kPrefixNALLocatedBytePos) {
-        bool svc_extension_flag =
-            (nalu.data[kH264SVCExtensionFlagLocatedBytePos] & 0b1000'0000) >> 7;
-        // nal_unit_header_svc_extension exists iff svc_extension_flag is true.
-        if (svc_extension_flag) {
-          md.temporal_id =
-              (nalu.data[kPrefixNALLocatedBytePos] & 0b1110'0000) >> 5;
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
-  bool ParseHEVC(const uint8_t* stream, off_t size, BitstreamMetadata& md) {
-    h265_->SetStream(stream, size);
-    H265NALU nalu;
-    H265NaluParser::Result result;
-    while ((result = h265_->AdvanceToNextNALU(&nalu)) !=
-           H265NaluParser::kEOStream) {
-      if (result == H265NaluParser::Result::kInvalidStream) {
-        return false;
-      }
-      // See section 7.3.1.1, NAL unit syntax in H265 spec.
-      // https://www.itu.int/rec/T-REC-H.265
-      // Unlike AVC, HEVC stores the temporal ID information in VCL NAL unit
-      // header instead of using prefix NAL unit. According to HEVC spec,
-      // TemporalId = nuh_temporal_id_plus1 − 1.
-      if (nalu.nal_unit_type <= H265NALU::RSV_VCL31) {
-        md.temporal_id = nalu.nuh_temporal_id_plus1 - 1;
-        return true;
-      }
-    }
-    return false;
-  }
-#endif
-
-  bool ParseVP9(const uint8_t* stream,
-                off_t size,
-                uint32_t frame_id,
-                int tid_by_svc_spec,
-                BitstreamMetadata& md) {
-    Vp9FrameHeader hdr;
-    gfx::Size coded_size;
-    vp9_->SetStream(stream, size, nullptr);
-
-    if (vp9_->ParseNextFrame(&hdr, &coded_size, nullptr) != Vp9Parser::kOk) {
-      return false;
-    }
-    // VP9 bitstream spec doesn't provide the temporal information, we can
-    // only assign it based on spec.
-    md.temporal_id = tid_by_svc_spec;
-    // Calculate the diffs of frame id between current frame and the
-    // referenced frames.
-    if (!hdr.IsKeyframe()) {
-      std::bitset<kVp9NumRefFrames> reference_frame_flags;
-      for (size_t i = 0; i < kVp9NumRefsPerFrame; i++) {
-        int idx = hdr.ref_frame_idx[i];
-        if (!reference_frame_flags[idx]) {
-          // References upper temporal layer is not allowed.
-          if (vp9_ref_buffer_[idx].temporal_id > md.temporal_id) {
-            DLOG(ERROR) << "Check reference structure failed.";
-            return false;
-          }
-          md.ref_frame_list.push_back(vp9_ref_buffer_[idx]);
-        }
-        reference_frame_flags.set(idx, true);
-      }
-    }
-    for (size_t idx = 0; idx < kVp9NumRefFrames; idx++) {
-      if (hdr.RefreshFlag(idx)) {
-        ReferenceBufferSlot& slot = vp9_ref_buffer_[idx];
-        slot.frame_id = frame_id;
-        slot.temporal_id = md.temporal_id;
-      }
-    }
-    return true;
-  }
-
- private:
-  const VideoCodec codec_;
-  std::unique_ptr<H264Parser> h264_;
-#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
-  std::unique_ptr<H265NaluParser> h265_;
-#endif
-  std::unique_ptr<Vp9Parser> vp9_;
-  ReferenceBufferSlot vp9_ref_buffer_[kVp9NumRefFrames];
-};
 
 class MediaFoundationVideoEncodeAccelerator::EncodeOutput {
  public:
@@ -781,9 +623,8 @@ bool MediaFoundationVideoEncodeAccelerator::Initialize(
         << " is not supported by profile " << profile_;
   }
   input_visible_size_ = config.input_visible_size;
-  if (config.initial_framerate.has_value() &&
-      config.initial_framerate.value()) {
-    frame_rate_ = config.initial_framerate.value();
+  if (config.framerate > 0) {
+    frame_rate_ = config.framerate;
   } else {
     frame_rate_ = kMaxFrameRateNumerator / kMaxFrameRateDenominator;
   }
@@ -823,9 +664,8 @@ bool MediaFoundationVideoEncodeAccelerator::Initialize(
   input_since_keyframe_count_ = 0;
   zero_layer_counter_ = 0;
   // Init bitream parser in the case temporal scalability encoding.
-  if (IsTemporalScalabilityCoding()) {
-    parser_ = std::make_unique<BitstreamParserHelper>(codec_);
-  }
+  svc_parser_ = std::make_unique<TemporalScalabilityIdExtractor>(
+      codec_, num_temporal_layers_);
 
   SetState(kInitializing);
   IMFActivate** pp_activates = nullptr;
@@ -1088,7 +928,7 @@ void MediaFoundationVideoEncodeAccelerator::UseOutputBitstreamBuffer(
 void MediaFoundationVideoEncodeAccelerator::RequestEncodingParametersChange(
     const Bitrate& bitrate,
     uint32_t framerate,
-    const absl::optional<gfx::Size>& size) {
+    const std::optional<gfx::Size>& size) {
   DVLOG(3) << __func__ << ": bitrate=" << bitrate.ToString()
            << ": framerate=" << framerate
            << ": size=" << (size.has_value() ? size->ToString() : "nullopt");
@@ -1113,7 +953,7 @@ void MediaFoundationVideoEncodeAccelerator::RequestEncodingParametersChange(
 void MediaFoundationVideoEncodeAccelerator::RequestEncodingParametersChange(
     const VideoBitrateAllocation& bitrate_allocation,
     uint32_t framerate,
-    const absl::optional<gfx::Size>& size) {
+    const std::optional<gfx::Size>& size) {
   DVLOG(3) << __func__ << ": bitrate=" << bitrate_allocation.GetSumBps()
            << ": framerate=" << framerate
            << ": size=" << (size.has_value() ? size->ToString() : "nullopt");
@@ -1667,7 +1507,7 @@ HRESULT MediaFoundationVideoEncodeAccelerator::ProcessInput(
                "timestamp", input.frame->timestamp(), "discard_output",
                input.discard_output);
 
-  absl::optional<int> metadata_qp;
+  std::optional<int> metadata_qp;
   if (has_prepared_input_sample_) {
     if (DCHECK_IS_ON()) {
       // Let's validate that prepared sample actually matches the frame
@@ -1690,7 +1530,7 @@ HRESULT MediaFoundationVideoEncodeAccelerator::ProcessInput(
     HRESULT hr = PopulateInputSampleBuffer(input);
     RETURN_ON_HR_FAILURE(hr, "Couldn't populate input sample buffer", hr);
 
-    absl::optional<uint8_t> quantizer;
+    std::optional<uint8_t> quantizer;
     int temporal_id = 0;
     if (input.options.quantizer.has_value()) {
       DCHECK_EQ(codec_, VideoCodec::kH264);
@@ -1701,7 +1541,8 @@ HRESULT MediaFoundationVideoEncodeAccelerator::ProcessInput(
           input.options.key_frame
               ? VideoRateControlWrapper::FrameParams::FrameType::kKeyFrame
               : VideoRateControlWrapper::FrameParams::FrameType::kInterFrame;
-      temporal_id = AssignTemporalIdBySvcSpec(input_since_keyframe_count_);
+      temporal_id =
+          svc_parser_->AssignTemporalIdBySvcSpec(input_since_keyframe_count_);
       frame_params.temporal_layer_id = temporal_id;
       // For now, MFVEA does not support spatial layer encoding.
       frame_params.spatial_layer_id = 0;
@@ -2021,13 +1862,18 @@ HRESULT MediaFoundationVideoEncodeAccelerator::PopulateInputSampleBufferGpu(
     // operation could block other users of the texture. Not holding the mutex
     // could theoretically cause issues such as the texture not being bound but
     // in practise we've been unable to reproduce issues with this path.
-    absl::optional<gpu::DXGIScopedReleaseKeyedMutex> release_keyed_mutex;
+    std::optional<gpu::DXGIScopedReleaseKeyedMutex> release_keyed_mutex;
     Microsoft::WRL::ComPtr<IDXGIKeyedMutex> keyed_mutex;
     hr = input_texture->QueryInterface(IID_PPV_ARGS(&keyed_mutex));
     if (SUCCEEDED(hr)) {
       constexpr int kMaxSyncTimeMs = 100;
       hr = keyed_mutex->AcquireSync(0, kMaxSyncTimeMs);
-      RETURN_ON_HR_FAILURE(hr, "Failed to acquire keyed mutex", hr);
+      // Can't check for FAILED(hr) because AcquireSync may return e.g.
+      // WAIT_ABANDONED.
+      if (hr != S_OK && hr != WAIT_TIMEOUT) {
+        LOG(ERROR) << "Failed to acquire mutex: " << PrintHr(hr);
+        return E_FAIL;
+      }
       release_keyed_mutex.emplace(std::move(keyed_mutex), 0);
     }
     sample_texture = input_texture;
@@ -2051,28 +1897,6 @@ HRESULT MediaFoundationVideoEncodeAccelerator::PopulateInputSampleBufferGpu(
   hr = input_sample_->AddBuffer(input_buffer.Get());
   RETURN_ON_HR_FAILURE(hr, "Failed to add buffer to sample", hr);
   return S_OK;
-}
-
-int MediaFoundationVideoEncodeAccelerator::AssignTemporalIdBySvcSpec(
-    uint32_t frame_id) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  int result = 0;
-
-  switch (num_temporal_layers_) {
-    case 1:
-      return 0;
-    case 2: {
-      constexpr static std::array<int, 2> kTwoTemporalLayers = {0, 1};
-      result = kTwoTemporalLayers[frame_id % kTwoTemporalLayers.size()];
-      break;
-    }
-    case 3: {
-      constexpr static std::array<int, 4> kThreeTemporalLayers = {0, 2, 1, 2};
-      result = kThreeTemporalLayers[frame_id % kThreeTemporalLayers.size()];
-      break;
-    }
-  }
-  return result;
 }
 
 void MediaFoundationVideoEncodeAccelerator::ProcessOutput() {
@@ -2127,7 +1951,7 @@ void MediaFoundationVideoEncodeAccelerator::ProcessOutput() {
   // If not set, the QP may be parsed by WebRTC from the bitstream but only if
   // the QP is trusted (`encoder_info_.reports_average_qp` is true, which it is
   // by default).
-  absl::optional<int32_t> frame_qp;
+  std::optional<int32_t> frame_qp;
   bool should_notify_encoder_info_change = false;
   // If there exists a valid qp in sample metadata, do not query HMFT for
   // MFSampleExtension_VideoEncodeQP.
@@ -2173,12 +1997,11 @@ void MediaFoundationVideoEncodeAccelerator::ProcessOutput() {
 
   int temporal_id = 0;
   if (IsTemporalScalabilityCoding()) {
-    DCHECK(parser_);
-    BitstreamParserHelper::BitstreamMetadata bits_md;
+    DCHECK(svc_parser_);
+    TemporalScalabilityIdExtractor::BitstreamMetadata bits_md;
     MediaBufferScopedPointer scoped_buffer(output_buffer.Get());
-    int tid_by_svc_spec = AssignTemporalIdBySvcSpec(metadata.frame_id);
-    if (!parser_->ParseStream(scoped_buffer.get(), size, metadata.frame_id,
-                              tid_by_svc_spec, bits_md)) {
+    if (!svc_parser_->ParseChunk(base::span(scoped_buffer.get(), size),
+                                 metadata.frame_id, bits_md)) {
       NotifyErrorStatus({EncoderStatus::Codes::kEncoderHardwareDriverError,
                          "Parse bitstream failed"});
       return;
@@ -2477,7 +2300,7 @@ HRESULT MediaFoundationVideoEncodeAccelerator::PerformD3DScaling(
                                                     &output_d3d11_color_space);
 
   {
-    absl::optional<gpu::DXGIScopedReleaseKeyedMutex> release_keyed_mutex;
+    std::optional<gpu::DXGIScopedReleaseKeyedMutex> release_keyed_mutex;
     ComDXGIKeyedMutex keyed_mutex;
     hr = input_texture->QueryInterface(IID_PPV_ARGS(&keyed_mutex));
     if (SUCCEEDED(hr)) {
@@ -2488,7 +2311,12 @@ HRESULT MediaFoundationVideoEncodeAccelerator::PerformD3DScaling(
       // level then it still may block here temporarily.
       constexpr int kMaxSyncTimeMs = 100;
       hr = keyed_mutex->AcquireSync(0, kMaxSyncTimeMs);
-      RETURN_ON_HR_FAILURE(hr, "Failed to acquire keyed mutex", hr);
+      // Can't check for FAILED(hr) because AcquireSync may return e.g.
+      // WAIT_ABANDONED.
+      if (hr != S_OK && hr != WAIT_TIMEOUT) {
+        LOG(ERROR) << "Failed to acquire mutex: " << PrintHr(hr);
+        return E_FAIL;
+      }
       release_keyed_mutex.emplace(std::move(keyed_mutex), 0);
     }
 
@@ -2588,13 +2416,18 @@ HRESULT MediaFoundationVideoEncodeAccelerator::PerformD3DCopy(
 
   {
     // We need to hold a keyed mutex during the copy operation.
-    absl::optional<gpu::DXGIScopedReleaseKeyedMutex> release_keyed_mutex;
+    std::optional<gpu::DXGIScopedReleaseKeyedMutex> release_keyed_mutex;
     ComDXGIKeyedMutex keyed_mutex;
     hr = input_texture->QueryInterface(IID_PPV_ARGS(&keyed_mutex));
     if (SUCCEEDED(hr)) {
       constexpr int kMaxSyncTimeMs = 100;
       hr = keyed_mutex->AcquireSync(0, kMaxSyncTimeMs);
-      RETURN_ON_HR_FAILURE(hr, "Failed to acquire keyed mutex", hr);
+      // Can't check for FAILED(hr) because AcquireSync may return e.g.
+      // WAIT_ABANDONED.
+      if (hr != S_OK && hr != WAIT_TIMEOUT) {
+        LOG(ERROR) << "Failed to acquire mutex: " << PrintHr(hr);
+        return E_FAIL;
+      }
       release_keyed_mutex.emplace(std::move(keyed_mutex), 0);
     }
 

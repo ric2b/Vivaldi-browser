@@ -9,7 +9,7 @@ import {registerChildFrame} from '//components/autofill/ios/form_util/resources/
 import * as fillConstants from '//components/autofill/ios/form_util/resources/fill_constants.js';
 import {inferLabelFromNext} from '//components/autofill/ios/form_util/resources/fill_element_inference.js';
 import * as inferenceUtil from '//components/autofill/ios/form_util/resources/fill_element_inference_util.js';
-import * as fillUtil from '//components/autofill/ios/form_util/resources/fill_util.js';
+import type * as fillUtil from '//components/autofill/ios/form_util/resources/fill_util.js';
 import {gCrWeb} from '//ios/web/public/js_messaging/resources/gcrweb.js';
 
 // This file provides methods used to fill forms in JavaScript.
@@ -402,7 +402,7 @@ gCrWeb.fill.webFormElementToFormData = function(
   form.id_attribute = formElement.getAttribute('id') || '';
 
   gCrWeb.fill.setUniqueIDIfNeeded(formElement);
-  form.unique_renderer_id = gCrWeb.fill.getUniqueID(formElement);
+  form.renderer_id = gCrWeb.fill.getUniqueID(formElement);
 
   form.frame_id = frame.__gCrWeb.message.getFrameId();
 
@@ -459,7 +459,7 @@ gCrWeb.fill.webFormControlElementToFormField = function(
   field.id_attribute = element.getAttribute('id') || '';
 
   gCrWeb.fill.setUniqueIDIfNeeded(element);
-  field.unique_renderer_id = gCrWeb.fill.getUniqueID(element);
+  field.renderer_id = gCrWeb.fill.getUniqueID(element);
 
   field.form_control_type = element.type;
   const autocompleteAttribute = element.getAttribute('autocomplete');
@@ -658,7 +658,6 @@ gCrWeb.fill.unownedFormElementsAndFieldSetsToFormData = function(
   form.name = '';
   form.origin = gCrWeb.common.removeQueryAndReferenceFromURL(frame.origin);
   form.action = '';
-  form.is_form_tag = false;
 
   if (!restrictUnownedFieldsToFormlessCheckout) {
     // TODO(crbug.com/1440471): Pass iframe elements.

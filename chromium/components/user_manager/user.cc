@@ -8,12 +8,14 @@
 
 #include <memory>
 
+#include "ash/constants/ash_pref_names.h"
 #include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "components/account_id/account_id.h"
+#include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 
@@ -48,36 +50,30 @@ std::string GetUserName(const std::string& email) {
 
 // static
 bool User::TypeHasGaiaAccount(UserType user_type) {
-  return user_type == USER_TYPE_REGULAR ||
-         user_type == USER_TYPE_CHILD;
+  return user_type == UserType::kRegular || user_type == UserType::kChild;
 }
 
 // static
 bool User::TypeIsKiosk(UserType type) {
-  return type == USER_TYPE_KIOSK_APP || type == USER_TYPE_ARC_KIOSK_APP ||
-         type == USER_TYPE_WEB_KIOSK_APP;
+  return type == UserType::kKioskApp || type == UserType::kArcKioskApp ||
+         type == UserType::kWebKioskApp;
 }
 
 User::User(const AccountId& account_id, UserType type)
     : account_id_(account_id), type_(type), user_image_(new UserImage()) {
   switch (type_) {
-    case user_manager::USER_TYPE_REGULAR:
-    case user_manager::USER_TYPE_CHILD:
-    case user_manager::USER_TYPE_KIOSK_APP:
-    case user_manager::USER_TYPE_ARC_KIOSK_APP:
-    case user_manager::USER_TYPE_WEB_KIOSK_APP:
+    case user_manager::UserType::kRegular:
+    case user_manager::UserType::kChild:
+    case user_manager::UserType::kKioskApp:
+    case user_manager::UserType::kArcKioskApp:
+    case user_manager::UserType::kWebKioskApp:
       set_display_email(account_id.GetUserEmail());
       break;
-    case user_manager::USER_TYPE_GUEST:
-    case user_manager::USER_TYPE_PUBLIC_ACCOUNT:
+    case user_manager::UserType::kGuest:
+    case user_manager::UserType::kPublicAccount:
       // Public accounts nor guest account do not have a real email address,
       // so they do not set |display_email_|.
       break;
-  }
-
-  if (type_ == user_manager::USER_TYPE_REGULAR ||
-      type_ == user_manager::USER_TYPE_CHILD) {
-    set_can_lock(true);
   }
 }
 
@@ -107,10 +103,10 @@ const AccountId& User::GetAccountId() const {
 
 void User::UpdateType(UserType new_type) {
   // Can only change between regular and child.
-  if ((type_ == user_manager::USER_TYPE_CHILD ||
-       type_ == user_manager::USER_TYPE_REGULAR) &&
-      (new_type == user_manager::USER_TYPE_CHILD ||
-       new_type == user_manager::USER_TYPE_REGULAR)) {
+  if ((type_ == user_manager::UserType::kChild ||
+       type_ == user_manager::UserType::kRegular) &&
+      (new_type == user_manager::UserType::kChild ||
+       new_type == user_manager::UserType::kRegular)) {
     // We want all the other type changes to crash, that is why this check is
     // not at the top level.
     if (type_ == new_type) {
@@ -120,7 +116,7 @@ void User::UpdateType(UserType new_type) {
     LOG(WARNING) << "User type has changed: " << type_ << " -> " << new_type;
     type_ = new_type;
 
-    UMAUserTypeChanged(new_type == user_manager::USER_TYPE_CHILD
+    UMAUserTypeChanged(new_type == user_manager::UserType::kChild
                            ? UserTypeChangeHistogram::REGULAR_TO_CHILD
                            : UserTypeChangeHistogram::CHILD_TO_REGULAR);
     return;
@@ -139,7 +135,7 @@ bool User::IsActiveDirectoryUser() const {
 }
 
 bool User::IsChild() const {
-  return GetType() == USER_TYPE_CHILD;
+  return GetType() == UserType::kChild;
 }
 
 std::string User::GetAccountName(bool use_display_email) const {
@@ -149,16 +145,37 @@ std::string User::GetAccountName(bool use_display_email) const {
     return GetUserName(account_id_.GetUserEmail());
 }
 
+bool User::CanLock() const {
+  switch (type_) {
+    case user_manager::UserType::kRegular:
+    case user_manager::UserType::kChild:
+      if (!profile_prefs_) {
+        return false;
+      }
+      break;
+    case user_manager::UserType::kKioskApp:
+    case user_manager::UserType::kArcKioskApp:
+    case user_manager::UserType::kWebKioskApp:
+    case user_manager::UserType::kGuest:
+      return false;
+    case user_manager::UserType::kPublicAccount:
+      if (!profile_prefs_ ||
+          !profile_prefs_->GetBoolean(
+              ash::prefs::kLoginExtensionApiCanLockManagedGuestSession)) {
+        return false;
+      }
+      break;
+  }
+
+  return profile_prefs_->GetBoolean(ash::prefs::kAllowScreenLock);
+}
+
 bool User::HasDefaultImage() const {
   return UserManager::Get()->IsValidDefaultUserImageId(image_index_);
 }
 
 std::string User::display_email() const {
   return display_email_;
-}
-
-bool User::can_lock() const {
-  return can_lock_;
 }
 
 const std::string& User::username_hash() const {
@@ -177,14 +194,14 @@ bool User::has_gaia_account() const {
   static_assert(static_cast<int>(user_manager::UserType::kMaxValue) == 9,
                 "kMaxValue should equal 9");
   switch (GetType()) {
-    case user_manager::USER_TYPE_REGULAR:
-    case user_manager::USER_TYPE_CHILD:
+    case user_manager::UserType::kRegular:
+    case user_manager::UserType::kChild:
       return true;
-    case user_manager::USER_TYPE_GUEST:
-    case user_manager::USER_TYPE_PUBLIC_ACCOUNT:
-    case user_manager::USER_TYPE_KIOSK_APP:
-    case user_manager::USER_TYPE_ARC_KIOSK_APP:
-    case user_manager::USER_TYPE_WEB_KIOSK_APP:
+    case user_manager::UserType::kGuest:
+    case user_manager::UserType::kPublicAccount:
+    case user_manager::UserType::kKioskApp:
+    case user_manager::UserType::kArcKioskApp:
+    case user_manager::UserType::kWebKioskApp:
       return false;
   }
   return false;
@@ -241,14 +258,14 @@ void User::SetAffiliation(bool is_affiliated) {
 
 bool User::IsDeviceLocalAccount() const {
   switch (type_) {
-    case user_manager::USER_TYPE_REGULAR:
-    case user_manager::USER_TYPE_CHILD:
-    case user_manager::USER_TYPE_GUEST:
+    case user_manager::UserType::kRegular:
+    case user_manager::UserType::kChild:
+    case user_manager::UserType::kGuest:
       return false;
-    case user_manager::USER_TYPE_PUBLIC_ACCOUNT:
-    case user_manager::USER_TYPE_KIOSK_APP:
-    case user_manager::USER_TYPE_ARC_KIOSK_APP:
-    case user_manager::USER_TYPE_WEB_KIOSK_APP:
+    case user_manager::UserType::kPublicAccount:
+    case user_manager::UserType::kKioskApp:
+    case user_manager::UserType::kArcKioskApp:
+    case user_manager::UserType::kWebKioskApp:
       return true;
   }
   return false;
@@ -260,31 +277,31 @@ bool User::IsKioskType() const {
 
 User* User::CreateRegularUser(const AccountId& account_id,
                               const UserType type) {
-  CHECK(type == USER_TYPE_REGULAR || type == USER_TYPE_CHILD)
+  CHECK(type == UserType::kRegular || type == UserType::kChild)
       << "Invalid user type " << type;
 
   return new User(account_id, type);
 }
 
 User* User::CreateGuestUser(const AccountId& guest_account_id) {
-  return new User(guest_account_id, USER_TYPE_GUEST);
+  return new User(guest_account_id, UserType::kGuest);
 }
 
 User* User::CreateKioskAppUser(const AccountId& kiosk_app_account_id) {
-  return new User(kiosk_app_account_id, USER_TYPE_KIOSK_APP);
+  return new User(kiosk_app_account_id, UserType::kKioskApp);
 }
 
 User* User::CreateArcKioskAppUser(const AccountId& arc_kiosk_account_id) {
-  return new User(arc_kiosk_account_id, USER_TYPE_ARC_KIOSK_APP);
+  return new User(arc_kiosk_account_id, UserType::kArcKioskApp);
 }
 
 User* User::CreateWebKioskAppUser(const AccountId& web_kiosk_account_id) {
-  return new User(web_kiosk_account_id, USER_TYPE_WEB_KIOSK_APP);
+  return new User(web_kiosk_account_id, UserType::kWebKioskApp);
 }
 
 User* User::CreatePublicAccountUser(const AccountId& account_id,
                                     bool is_using_saml) {
-  User* user = new User(account_id, USER_TYPE_PUBLIC_ACCOUNT);
+  User* user = new User(account_id, UserType::kPublicAccount);
   user->set_using_saml(is_using_saml);
   return user;
 }

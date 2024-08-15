@@ -9,7 +9,9 @@
 #include "base/values.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
+#include "components/bookmarks/test/test_bookmark_client.h"
 #include "components/commerce/core/commerce_feature_list.h"
+#include "components/commerce/core/feature_utils.h"
 #include "components/commerce/core/mock_account_checker.h"
 #include "components/commerce/core/mock_discounts_storage.h"
 #include "components/commerce/core/pref_names.h"
@@ -27,6 +29,7 @@
 #include "components/search/ntp_features.h"
 #include "components/sync/base/features.h"
 #include "components/sync/test/test_sync_service.h"
+#include "net/base/url_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using optimization_guide::OptimizationGuideDecision;
@@ -96,16 +99,14 @@ class ShoppingServiceTest : public ShoppingServiceTestBase,
         ShouldEnableReplaceSyncPromosWithSignInPromos());
     sync_service_->SetHasSyncConsent(
         !ShouldEnableReplaceSyncPromosWithSignInPromos());
-    ShoppingServiceTestBase::SetUp();
-  }
+    // Mimic not only the sync ConsentLevel being set but also bookmarks
+    // being specifically on.
+    static_cast<bookmarks::TestBookmarkClient*>(
+        local_or_syncable_bookmark_model_->client())
+        ->SetIsSyncFeatureEnabledIncludingBookmarks(
+            !ShouldEnableReplaceSyncPromosWithSignInPromos());
 
-  // Expose the private feature check for testing.
-  static bool IsShoppingListEligible(AccountChecker* account_checker,
-                                     PrefService* prefs,
-                                     const std::string& country,
-                                     const std::string& locale) {
-    return ShoppingService::IsShoppingListEligible(account_checker, prefs,
-                                                   country, locale);
+    ShoppingServiceTestBase::SetUp();
   }
 
   bool ShouldEnableReplaceSyncPromosWithSignInPromos() const {
@@ -142,7 +143,7 @@ TEST_P(ShoppingServiceTest, TestProductInfoResponse) {
       GURL(kProductUrl),
       base::BindOnce(
           [](base::RunLoop* run_loop, const GURL& url,
-             const absl::optional<const ProductInfo>& info) {
+             const std::optional<const ProductInfo>& info) {
             ASSERT_EQ(kProductUrl, url.spec());
             ASSERT_TRUE(info.has_value());
 
@@ -164,6 +165,63 @@ TEST_P(ShoppingServiceTest, TestProductInfoResponse) {
   run_loop.Run();
 }
 
+// Test that product info is fetched on demand if there is no web page open but
+// the cache has an entry for the queried URL.
+TEST_P(ShoppingServiceTest, TestProductInfoResponse_FallbackToOnDemand) {
+  // Ensure a feature that uses product info is enabled. This doesn't
+  // necessarily need to be the shopping list.
+  test_features_.InitWithFeatures(
+      {commerce::kShoppingList, commerce::kCommerceAllowServerImages}, {});
+
+  OptimizationMetadata meta = opt_guide_->BuildPriceTrackingResponse(
+      kTitle, kImageUrl, kOfferId, kClusterId, kCountryCode, kPrice,
+      kCurrencyCode, kGpcTitle);
+  opt_guide_->AddOnDemandShoppingResponse(
+      GURL(kProductUrl), OptimizationGuideDecision::kTrue, meta);
+
+  // If the URL is not in the cache, we should not expect a response.
+  base::RunLoop run_loop;
+  shopping_service_->GetProductInfoForUrl(
+      GURL(kProductUrl), base::BindOnce(
+                             [](base::RunLoop* run_loop, const GURL& url,
+                                const std::optional<const ProductInfo>& info) {
+                               ASSERT_EQ(kProductUrl, url.spec());
+                               ASSERT_FALSE(info.has_value());
+                               run_loop->Quit();
+                             },
+                             &run_loop));
+  run_loop.Run();
+
+  // When the URL is referenced by the cache, we should successfully use the
+  // on-demand api.
+  GetCache().AddRef(GURL(kProductUrl));
+
+  base::RunLoop run_loop_after_cache;
+  shopping_service_->GetProductInfoForUrl(
+      GURL(kProductUrl), base::BindOnce(
+                             [](base::RunLoop* run_loop, const GURL& url,
+                                const std::optional<const ProductInfo>& info) {
+                               ASSERT_EQ(kProductUrl, url.spec());
+                               ASSERT_TRUE(info.has_value());
+
+                               ASSERT_EQ(kTitle, info->title);
+                               ASSERT_EQ(kGpcTitle,
+                                         info->product_cluster_title);
+                               ASSERT_EQ(kImageUrl, info->image_url);
+                               ASSERT_EQ(kOfferId, info->offer_id);
+                               ASSERT_EQ(kClusterId, info->product_cluster_id);
+                               ASSERT_EQ(kCountryCode, info->country_code);
+
+                               ASSERT_EQ(kCurrencyCode, info->currency_code);
+                               ASSERT_EQ(kPrice, info->amount_micros);
+                               run_loop->Quit();
+                             },
+                             &run_loop_after_cache));
+  run_loop_after_cache.Run();
+
+  GetCache().RemoveRef(GURL(kProductUrl));
+}
+
 // Test that the product info api fails gracefully (callback run with nullopt)
 // if it is disabled.
 TEST_P(ShoppingServiceTest, TestProductInfoResponse_ApiDisabled) {
@@ -176,7 +234,7 @@ TEST_P(ShoppingServiceTest, TestProductInfoResponse_ApiDisabled) {
   shopping_service_->GetProductInfoForUrl(
       GURL(kProductUrl), base::BindOnce(
                              [](base::RunLoop* run_loop, const GURL& url,
-                                const absl::optional<const ProductInfo>& info) {
+                                const std::optional<const ProductInfo>& info) {
                                ASSERT_EQ(kProductUrl, url.spec());
                                ASSERT_FALSE(info.has_value());
                                run_loop->Quit();
@@ -208,7 +266,7 @@ TEST_P(ShoppingServiceTest, TestProductInfoResponse_CurrencyMismatch) {
       GURL(kProductUrl),
       base::BindOnce(
           [](base::RunLoop* run_loop, const GURL& url,
-             const absl::optional<const ProductInfo>& info) {
+             const std::optional<const ProductInfo>& info) {
             ASSERT_EQ(kProductUrl, url.spec());
             ASSERT_TRUE(info.has_value());
 
@@ -242,7 +300,7 @@ TEST_P(ShoppingServiceTest, TestProductInfoResponse_OptGuideFalse) {
   shopping_service_->GetProductInfoForUrl(
       GURL(kProductUrl), base::BindOnce(
                              [](base::RunLoop* run_loop, const GURL& url,
-                                const absl::optional<const ProductInfo>& info) {
+                                const std::optional<const ProductInfo>& info) {
                                ASSERT_EQ(kProductUrl, url.spec());
                                ASSERT_FALSE(info.has_value());
                                run_loop->Quit();
@@ -320,7 +378,7 @@ TEST_P(ShoppingServiceTest, TestProductInfoCacheFullLifecycle) {
   ASSERT_EQ(1, GetProductInfoCacheOpenURLCount(GURL(kProductUrl)));
 
   // We should be able to access the cached data.
-  absl::optional<ProductInfo> cached_info =
+  std::optional<ProductInfo> cached_info =
       shopping_service_->GetAvailableProductInfoForUrl(GURL(kProductUrl));
   ASSERT_EQ(kTitle, cached_info->title);
   ASSERT_EQ(kImageUrl, cached_info->image_url);
@@ -333,7 +391,7 @@ TEST_P(ShoppingServiceTest, TestProductInfoCacheFullLifecycle) {
   shopping_service_->GetProductInfoForUrl(
       GURL(kProductUrl), base::BindOnce(
                              [](base::RunLoop* run_loop, const GURL& url,
-                                const absl::optional<const ProductInfo>& info) {
+                                const std::optional<const ProductInfo>& info) {
                                ASSERT_EQ(kProductUrl, url.spec());
                                ASSERT_TRUE(info.has_value());
 
@@ -382,7 +440,7 @@ TEST_P(ShoppingServiceTest,
   ASSERT_EQ(1, GetProductInfoCacheOpenURLCount(GURL(kProductUrl)));
 
   // We should be able to access the cached data.
-  absl::optional<ProductInfo> cached_info =
+  std::optional<ProductInfo> cached_info =
       shopping_service_->GetAvailableProductInfoForUrl(GURL(kProductUrl));
   ASSERT_EQ(kTitle, cached_info->title);
   ASSERT_EQ("", cached_info->image_url);
@@ -395,7 +453,7 @@ TEST_P(ShoppingServiceTest,
   shopping_service_->GetProductInfoForUrl(
       GURL(kProductUrl), base::BindOnce(
                              [](base::RunLoop* run_loop, const GURL& url,
-                                const absl::optional<const ProductInfo>& info) {
+                                const std::optional<const ProductInfo>& info) {
                                ASSERT_EQ(kProductUrl, url.spec());
                                ASSERT_TRUE(info.has_value());
 
@@ -459,7 +517,7 @@ TEST_P(ShoppingServiceTest,
   ASSERT_EQ(1, GetProductInfoCacheOpenURLCount(GURL(kProductUrl)));
 
   // We should be able to access the cached data.
-  absl::optional<ProductInfo> cached_info =
+  std::optional<ProductInfo> cached_info =
       shopping_service_->GetAvailableProductInfoForUrl(GURL(kProductUrl));
   ASSERT_EQ(kTitle, cached_info->title);
   // Since the fallback will run immediately, we should have a populated image
@@ -474,7 +532,7 @@ TEST_P(ShoppingServiceTest,
   shopping_service_->GetProductInfoForUrl(
       GURL(kProductUrl), base::BindOnce(
                              [](base::RunLoop* run_loop, const GURL& url,
-                                const absl::optional<const ProductInfo>& info) {
+                                const std::optional<const ProductInfo>& info) {
                                ASSERT_EQ(kProductUrl, url.spec());
                                ASSERT_TRUE(info.has_value());
 
@@ -511,7 +569,7 @@ TEST_P(ShoppingServiceTest, TestMerchantInfoResponse) {
       GURL(kMerchantUrl),
       base::BindOnce(
           [](base::RunLoop* run_loop, const GURL& url,
-             absl::optional<MerchantInfo> info) {
+             std::optional<MerchantInfo> info) {
             ASSERT_EQ(kMerchantUrl, url.spec());
             ASSERT_TRUE(info.has_value());
 
@@ -536,7 +594,7 @@ TEST_P(ShoppingServiceTest, TestMerchantInfoResponse_ApiDisabled) {
   shopping_service_->GetMerchantInfoForUrl(
       GURL(kMerchantUrl), base::BindOnce(
                               [](base::RunLoop* run_loop, const GURL& url,
-                                 absl::optional<MerchantInfo> info) {
+                                 std::optional<MerchantInfo> info) {
                                 ASSERT_EQ(kMerchantUrl, url.spec());
                                 ASSERT_FALSE(info.has_value());
                                 run_loop->Quit();
@@ -568,7 +626,7 @@ TEST_P(ShoppingServiceTest, TestGetUpdatedProductInfoForBookmarks) {
   auto callback = base::BindRepeating(
       [](bookmarks::BookmarkModel* model, int* call_count,
          base::RunLoop* run_loop, const int64_t id, const GURL& url,
-         absl::optional<ProductInfo> info) {
+         std::optional<ProductInfo> info) {
         const bookmarks::BookmarkNode* node =
             bookmarks::GetBookmarkNodeByID(model, id);
         EXPECT_EQ(url.spec(), node->url().spec());
@@ -643,13 +701,14 @@ TEST_P(ShoppingServiceTest, TestShoppingListEligible_Policy) {
   SetShoppingListEnterprisePolicyPref(&prefs, true);
 
   MockAccountChecker checker;
+  checker.SetCountry(kEligibleCountry);
+  checker.SetLocale(kEligibleLocale);
+  checker.SetPrefs(&prefs);
 
-  ASSERT_TRUE(IsShoppingListEligible(&checker, &prefs, kEligibleCountry,
-                                     kEligibleLocale));
+  ASSERT_TRUE(IsShoppingListEligible(&checker));
 
   SetShoppingListEnterprisePolicyPref(&prefs, false);
-  ASSERT_FALSE(IsShoppingListEligible(&checker, &prefs, kEligibleCountry,
-                                      kEligibleLocale));
+  ASSERT_FALSE(IsShoppingListEligible(&checker));
 }
 
 TEST_P(ShoppingServiceTest, TestShoppingListEligible_FeatureFlagOff) {
@@ -661,9 +720,11 @@ TEST_P(ShoppingServiceTest, TestShoppingListEligible_FeatureFlagOff) {
   SetShoppingListEnterprisePolicyPref(&prefs, true);
 
   MockAccountChecker checker;
+  checker.SetCountry(kEligibleCountry);
+  checker.SetLocale(kEligibleLocale);
+  checker.SetPrefs(&prefs);
 
-  ASSERT_FALSE(IsShoppingListEligible(&checker, &prefs, kEligibleCountry,
-                                      kEligibleLocale));
+  ASSERT_FALSE(IsShoppingListEligible(&checker));
 }
 
 TEST_P(ShoppingServiceTest, TestShoppingListEligible_MSBB) {
@@ -675,14 +736,15 @@ TEST_P(ShoppingServiceTest, TestShoppingListEligible_MSBB) {
   SetShoppingListEnterprisePolicyPref(&prefs, true);
 
   MockAccountChecker checker;
+  checker.SetCountry(kEligibleCountry);
+  checker.SetLocale(kEligibleLocale);
+  checker.SetPrefs(&prefs);
 
-  ASSERT_TRUE(IsShoppingListEligible(&checker, &prefs, kEligibleCountry,
-                                     kEligibleLocale));
+  ASSERT_TRUE(IsShoppingListEligible(&checker));
 
   checker.SetAnonymizedUrlDataCollectionEnabled(false);
 
-  ASSERT_FALSE(IsShoppingListEligible(&checker, &prefs, kEligibleCountry,
-                                      kEligibleLocale));
+  ASSERT_FALSE(IsShoppingListEligible(&checker));
 }
 
 TEST_P(ShoppingServiceTest, TestShoppingListEligible_SignIn) {
@@ -694,14 +756,15 @@ TEST_P(ShoppingServiceTest, TestShoppingListEligible_SignIn) {
   SetShoppingListEnterprisePolicyPref(&prefs, true);
 
   MockAccountChecker checker;
+  checker.SetCountry(kEligibleCountry);
+  checker.SetLocale(kEligibleLocale);
+  checker.SetPrefs(&prefs);
 
-  ASSERT_TRUE(IsShoppingListEligible(&checker, &prefs, kEligibleCountry,
-                                     kEligibleLocale));
+  ASSERT_TRUE(IsShoppingListEligible(&checker));
 
   checker.SetSignedIn(false);
 
-  ASSERT_FALSE(IsShoppingListEligible(&checker, &prefs, kEligibleCountry,
-                                      kEligibleLocale));
+  ASSERT_FALSE(IsShoppingListEligible(&checker));
 }
 
 TEST_P(ShoppingServiceTest, TestShoppingListEligible_ChildAccount) {
@@ -713,14 +776,15 @@ TEST_P(ShoppingServiceTest, TestShoppingListEligible_ChildAccount) {
   SetShoppingListEnterprisePolicyPref(&prefs, true);
 
   MockAccountChecker checker;
+  checker.SetCountry(kEligibleCountry);
+  checker.SetLocale(kEligibleLocale);
+  checker.SetPrefs(&prefs);
 
-  ASSERT_TRUE(IsShoppingListEligible(&checker, &prefs, kEligibleCountry,
-                                     kEligibleLocale));
+  ASSERT_TRUE(IsShoppingListEligible(&checker));
 
   checker.SetIsSubjectToParentalControls(true);
 
-  ASSERT_FALSE(IsShoppingListEligible(&checker, &prefs, kEligibleCountry,
-                                      kEligibleLocale));
+  ASSERT_FALSE(IsShoppingListEligible(&checker));
 }
 
 TEST_P(ShoppingServiceTest, TestShoppingListEligible_SyncState) {
@@ -732,14 +796,15 @@ TEST_P(ShoppingServiceTest, TestShoppingListEligible_SyncState) {
   SetShoppingListEnterprisePolicyPref(&prefs, true);
 
   MockAccountChecker checker;
+  checker.SetCountry(kEligibleCountry);
+  checker.SetLocale(kEligibleLocale);
+  checker.SetPrefs(&prefs);
 
-  ASSERT_TRUE(IsShoppingListEligible(&checker, &prefs, kEligibleCountry,
-                                     kEligibleLocale));
+  ASSERT_TRUE(IsShoppingListEligible(&checker));
 
   checker.SetSyncingBookmarks(false);
 
-  ASSERT_FALSE(IsShoppingListEligible(&checker, &prefs, kEligibleCountry,
-                                      kEligibleLocale));
+  ASSERT_FALSE(IsShoppingListEligible(&checker));
 }
 
 TEST_P(ShoppingServiceTest, TestShoppingListEligible_CountryAndLocale) {
@@ -751,13 +816,18 @@ TEST_P(ShoppingServiceTest, TestShoppingListEligible_CountryAndLocale) {
   SetShoppingListEnterprisePolicyPref(&prefs, true);
 
   MockAccountChecker checker;
+  checker.SetCountry(kEligibleCountry);
+  checker.SetLocale(kEligibleLocale);
+  checker.SetPrefs(&prefs);
 
-  ASSERT_TRUE(IsShoppingListEligible(&checker, &prefs, kEligibleCountry,
-                                     kEligibleLocale));
+  ASSERT_TRUE(IsShoppingListEligible(&checker));
+
+  checker.SetCountry("ZZ");
+  checker.SetLocale("zz-zz");
 
   // This should continue to work since we can assume, for the sake of the test,
   // that the experiment config includes the ZZ country and zz-zz locale.
-  ASSERT_TRUE(IsShoppingListEligible(&checker, &prefs, "ZZ", "zz-zz"));
+  ASSERT_TRUE(IsShoppingListEligible(&checker));
 }
 
 TEST_P(ShoppingServiceTest,
@@ -770,13 +840,18 @@ TEST_P(ShoppingServiceTest,
   SetShoppingListEnterprisePolicyPref(&prefs, true);
 
   MockAccountChecker checker;
+  checker.SetCountry(kEligibleCountry);
+  checker.SetLocale(kEligibleLocale);
+  checker.SetPrefs(&prefs);
 
-  ASSERT_TRUE(IsShoppingListEligible(&checker, &prefs, kEligibleCountry,
-                                     kEligibleLocale));
+  ASSERT_TRUE(IsShoppingListEligible(&checker));
+
+  checker.SetCountry("ZZ");
+  checker.SetLocale("zz-zz");
 
   // Same as the previous test, this should still work since, presumably, the
   // experiment config for "ShoppingList" includes these.
-  ASSERT_TRUE(IsShoppingListEligible(&checker, &prefs, "ZZ", "zz-zz"));
+  ASSERT_TRUE(IsShoppingListEligible(&checker));
 }
 
 TEST_P(ShoppingServiceTest, TestShoppingListEligible_CountryAndLocale_NoFlags) {
@@ -789,10 +864,12 @@ TEST_P(ShoppingServiceTest, TestShoppingListEligible_CountryAndLocale_NoFlags) {
 
   MockAccountChecker checker;
 
-  ASSERT_FALSE(IsShoppingListEligible(&checker, &prefs, kEligibleCountry,
-                                      kEligibleLocale));
+  ASSERT_FALSE(IsShoppingListEligible(&checker));
 
-  ASSERT_FALSE(IsShoppingListEligible(&checker, &prefs, "ZZ", "zz-zz"));
+  checker.SetCountry("ZZ");
+  checker.SetLocale("zz-zz");
+
+  ASSERT_FALSE(IsShoppingListEligible(&checker));
 }
 
 TEST_P(ShoppingServiceTest,
@@ -805,14 +882,19 @@ TEST_P(ShoppingServiceTest,
   SetShoppingListEnterprisePolicyPref(&prefs, true);
 
   MockAccountChecker checker;
+  checker.SetCountry(kEligibleCountry);
+  checker.SetLocale(kEligibleLocale);
+  checker.SetPrefs(&prefs);
 
-  ASSERT_TRUE(IsShoppingListEligible(&checker, &prefs, kEligibleCountry,
-                                     kEligibleLocale));
+  ASSERT_TRUE(IsShoppingListEligible(&checker));
+
+  checker.SetCountry("ZZ");
+  checker.SetLocale("zz-zz");
 
   // If we only have the region flag enabled, we should be restricted to
   // specific countries and locales. The fake country and locale below should
   // be blocked.
-  ASSERT_FALSE(IsShoppingListEligible(&checker, &prefs, "ZZ", "zz-zz"));
+  ASSERT_FALSE(IsShoppingListEligible(&checker));
 }
 
 class ShoppingServiceReadyTest : public ShoppingServiceTest {
@@ -898,7 +980,7 @@ TEST_P(ShoppingServiceTest, TestPriceInsightsInfoResponse) {
       GURL(kPriceInsightsUrl),
       base::BindOnce(
           [](base::RunLoop* run_loop, const GURL& url,
-             const absl::optional<PriceInsightsInfo>& info) {
+             const std::optional<PriceInsightsInfo>& info) {
             ASSERT_EQ(kPriceInsightsUrl, url.spec());
             ASSERT_TRUE(info.has_value());
 
@@ -946,7 +1028,7 @@ TEST_P(ShoppingServiceTest,
       GURL(kPriceInsightsUrl),
       base::BindOnce(
           [](base::RunLoop* run_loop, const GURL& url,
-             const absl::optional<PriceInsightsInfo>& info) {
+             const std::optional<PriceInsightsInfo>& info) {
             ASSERT_EQ(kPriceInsightsUrl, url.spec());
             ASSERT_TRUE(info.has_value());
 
@@ -954,9 +1036,9 @@ TEST_P(ShoppingServiceTest,
             ASSERT_EQ(kCurrencyCode, info->currency_code);
             ASSERT_EQ(kLowTypicalPrice, info->typical_low_price_micros);
             ASSERT_EQ(kHighTypicalPrice, info->typical_high_price_micros);
-            ASSERT_EQ(absl::nullopt, info->catalog_attributes);
+            ASSERT_EQ(std::nullopt, info->catalog_attributes);
             ASSERT_EQ(0, (int)(info->catalog_history_prices.size()));
-            ASSERT_EQ(absl::nullopt, info->jackpot_url);
+            ASSERT_EQ(std::nullopt, info->jackpot_url);
             ASSERT_EQ(PriceBucket::kHighPrice, info->price_bucket);
             ASSERT_EQ(true, info->has_multiple_catalogs);
 
@@ -987,7 +1069,7 @@ TEST_P(ShoppingServiceTest, TestPriceInsightsInfoResponse_EmptyClusterId) {
       GURL(kPriceInsightsUrl),
       base::BindOnce(
           [](base::RunLoop* run_loop, const GURL& url,
-             const absl::optional<PriceInsightsInfo>& info) {
+             const std::optional<PriceInsightsInfo>& info) {
             ASSERT_EQ(kPriceInsightsUrl, url.spec());
             ASSERT_FALSE(info.has_value());
 
@@ -1017,14 +1099,14 @@ TEST_P(ShoppingServiceTest, TestPriceInsightsInfoResponse_EmptyRange) {
       GURL(kPriceInsightsUrl),
       base::BindOnce(
           [](base::RunLoop* run_loop, const GURL& url,
-             const absl::optional<PriceInsightsInfo>& info) {
+             const std::optional<PriceInsightsInfo>& info) {
             ASSERT_EQ(kPriceInsightsUrl, url.spec());
             ASSERT_TRUE(info.has_value());
 
             ASSERT_EQ(kClusterId, info->product_cluster_id);
             ASSERT_EQ(kCurrencyCode, info->currency_code);
-            ASSERT_EQ(absl::nullopt, info->typical_low_price_micros);
-            ASSERT_EQ(absl::nullopt, info->typical_high_price_micros);
+            ASSERT_EQ(std::nullopt, info->typical_low_price_micros);
+            ASSERT_EQ(std::nullopt, info->typical_high_price_micros);
             ASSERT_EQ(kAttributes, info->catalog_attributes);
             ASSERT_EQ(2, (int)(info->catalog_history_prices.size()));
             ASSERT_EQ("2021-01-01",
@@ -1033,7 +1115,7 @@ TEST_P(ShoppingServiceTest, TestPriceInsightsInfoResponse_EmptyRange) {
                       std::get<0>(info->catalog_history_prices[1]));
             ASSERT_EQ(100, std::get<1>(info->catalog_history_prices[0]));
             ASSERT_EQ(200, std::get<1>(info->catalog_history_prices[1]));
-            ASSERT_EQ(absl::nullopt, info->jackpot_url);
+            ASSERT_EQ(std::nullopt, info->jackpot_url);
             ASSERT_EQ(PriceBucket::kHighPrice, info->price_bucket);
             ASSERT_EQ(true, info->has_multiple_catalogs);
 
@@ -1064,7 +1146,7 @@ TEST_P(ShoppingServiceTest, TestPriceInsightsInfoResponse_WithoutCache) {
       GURL(kPriceInsightsUrl),
       base::BindOnce(
           [](base::RunLoop* run_loop, const GURL& url,
-             const absl::optional<PriceInsightsInfo>& info) {
+             const std::optional<PriceInsightsInfo>& info) {
             ASSERT_EQ(kPriceInsightsUrl, url.spec());
             ASSERT_TRUE(info.has_value());
             ASSERT_EQ(kClusterId, info->product_cluster_id);
@@ -1083,7 +1165,7 @@ TEST_P(ShoppingServiceTest, TestPriceInsightsInfoResponse_WithoutCache) {
       GURL(kPriceInsightsUrl),
       base::BindOnce(
           [](base::RunLoop* run_loop, const GURL& url,
-             const absl::optional<PriceInsightsInfo>& info) {
+             const std::optional<PriceInsightsInfo>& info) {
             ASSERT_EQ(kPriceInsightsUrl, url.spec());
             ASSERT_FALSE(info.has_value());
             run_loop->Quit();
@@ -1113,7 +1195,7 @@ TEST_P(ShoppingServiceTest, TestPriceInsightsInfoResponse_WithCache) {
       GURL(kPriceInsightsUrl),
       base::BindOnce(
           [](base::RunLoop* run_loop, const GURL& url,
-             const absl::optional<PriceInsightsInfo>& info) {
+             const std::optional<PriceInsightsInfo>& info) {
             ASSERT_EQ(kPriceInsightsUrl, url.spec());
             ASSERT_TRUE(info.has_value());
             ASSERT_EQ(kClusterId, info->product_cluster_id);
@@ -1135,7 +1217,7 @@ TEST_P(ShoppingServiceTest, TestPriceInsightsInfoResponse_WithCache) {
       GURL(kPriceInsightsUrl),
       base::BindOnce(
           [](base::RunLoop* run_loop, const GURL& url,
-             const absl::optional<PriceInsightsInfo>& info) {
+             const std::optional<PriceInsightsInfo>& info) {
             ASSERT_EQ(kPriceInsightsUrl, url.spec());
             ASSERT_TRUE(info.has_value());
             ASSERT_EQ(kClusterId, info->product_cluster_id);
@@ -1151,7 +1233,7 @@ TEST_P(ShoppingServiceTest, TestPriceInsightsInfoResponse_WithCache) {
       GURL(kPriceInsightsUrl),
       base::BindOnce(
           [](base::RunLoop* run_loop, const GURL& url,
-             const absl::optional<PriceInsightsInfo>& info) {
+             const std::optional<PriceInsightsInfo>& info) {
             ASSERT_EQ(kPriceInsightsUrl, url.spec());
             ASSERT_FALSE(info.has_value());
             run_loop->Quit();
@@ -1185,7 +1267,7 @@ TEST_P(ShoppingServiceTest,
       GURL(kPriceInsightsUrl),
       base::BindOnce(
           [](base::RunLoop* run_loop, const GURL& url,
-             const absl::optional<PriceInsightsInfo>& info) {
+             const std::optional<PriceInsightsInfo>& info) {
             ASSERT_EQ(kPriceInsightsUrl, url.spec());
             ASSERT_TRUE(info.has_value());
             ASSERT_EQ(kClusterId, info->product_cluster_id);
@@ -1210,7 +1292,7 @@ TEST_P(ShoppingServiceTest,
       GURL(kPriceInsightsUrl),
       base::BindOnce(
           [](base::RunLoop* run_loop, const GURL& url,
-             const absl::optional<PriceInsightsInfo>& info) {
+             const std::optional<PriceInsightsInfo>& info) {
             ASSERT_EQ(kPriceInsightsUrl, url.spec());
             ASSERT_TRUE(info.has_value());
             ASSERT_EQ(kClusterId, info->product_cluster_id);
@@ -1226,7 +1308,7 @@ TEST_P(ShoppingServiceTest,
       GURL(kPriceInsightsUrl),
       base::BindOnce(
           [](base::RunLoop* run_loop, const GURL& url,
-             const absl::optional<PriceInsightsInfo>& info) {
+             const std::optional<PriceInsightsInfo>& info) {
             ASSERT_EQ(kPriceInsightsUrl, url.spec());
             ASSERT_FALSE(info.has_value());
             run_loop->Quit();
@@ -1255,7 +1337,7 @@ TEST_P(ShoppingServiceTest, TestIsShoppingPage) {
   shopping_service_->IsShoppingPage(
       GURL(kProductUrl), base::BindOnce(
                              [](base::RunLoop* run_loop, const GURL& url,
-                                absl::optional<bool> info) {
+                                std::optional<bool> info) {
                                ASSERT_TRUE(info.has_value());
                                ASSERT_TRUE(info.value());
                                run_loop->Quit();
@@ -1270,7 +1352,7 @@ TEST_P(ShoppingServiceTest, TestIsShoppingPage) {
   shopping_service_->IsShoppingPage(
       GURL(kProductUrl), base::BindOnce(
                              [](base::RunLoop* run_loop, const GURL& url,
-                                absl::optional<bool> info) {
+                                std::optional<bool> info) {
                                ASSERT_FALSE(info.has_value());
                                run_loop->Quit();
                              },
@@ -1289,7 +1371,7 @@ TEST_P(ShoppingServiceTest, TestIsShoppingPage) {
   shopping_service_->IsShoppingPage(
       GURL(kProductUrl), base::BindOnce(
                              [](base::RunLoop* run_loop, const GURL& url,
-                                absl::optional<bool> info) {
+                                std::optional<bool> info) {
                                ASSERT_TRUE(info.has_value());
                                ASSERT_FALSE(info.value());
                                run_loop->Quit();
@@ -1429,7 +1511,7 @@ TEST_P(ShoppingServiceTest, TestDiscountInfoResponse_InfoWithoutTerms) {
   valid_info.type = DiscountType::kFreeListingWithCode;
   valid_info.language_code = kDiscountLanguageCode;
   valid_info.description_detail = kDiscountDetail;
-  valid_info.terms_and_conditions = absl::nullopt;
+  valid_info.terms_and_conditions = std::nullopt;
   valid_info.value_in_text = kDiscountValueText;
   valid_info.discount_code = kDiscountCode;
   valid_info.id = kDiscountId1;
@@ -1473,7 +1555,7 @@ TEST_P(ShoppingServiceTest, TestDiscountInfoResponse_InfoWithoutDiscountCode) {
   invalid_info.description_detail = kDiscountDetail;
   invalid_info.terms_and_conditions = kDiscountTerms;
   invalid_info.value_in_text = kDiscountValueText;
-  invalid_info.discount_code = absl::nullopt;
+  invalid_info.discount_code = std::nullopt;
   invalid_info.id = kDiscountId1;
   invalid_info.is_merchant_wide = true;
   invalid_info.expiry_time_sec = kDiscountExpiryTime;
@@ -1494,6 +1576,84 @@ TEST_P(ShoppingServiceTest, TestDiscountInfoResponse_InfoWithoutDiscountCode) {
             run_loop->Quit();
           },
           &run_loop));
+  run_loop.Run();
+}
+
+TEST_P(ShoppingServiceTest, TestProductSpecificationsSetResponse) {
+  OptimizationMetadata meta = opt_guide_->BuildPriceTrackingResponse(
+      kTitle, kImageUrl, kOfferId, kClusterId, kCountryCode, kPrice,
+      kCurrencyCode, kGpcTitle);
+
+  opt_guide_->SetResponse(GURL(kProductUrl), OptimizationType::PRICE_TRACKING,
+                          OptimizationGuideDecision::kTrue, meta);
+
+  base::RunLoop run_loop;
+  shopping_service_->GetProductSpecificationsSetForUrls(
+      std::vector<GURL>{GURL(kProductUrl), GURL(kMerchantUrl)},
+      base::BindOnce(
+          [](base::RunLoop* run_loop,
+             commerce::ProductSpecificationSet spec_set) {
+            std::string ids;
+            net::GetValueForKeyInQuery(spec_set.product_spec_url, "ids", &ids);
+            ASSERT_EQ("456,0", ids);
+            run_loop->Quit();
+          },
+          &run_loop));
+  run_loop.Run();
+}
+
+TEST_P(ShoppingServiceTest,
+       TestProductSpecificationsSetResponse_MultipleProducts) {
+  OptimizationMetadata meta = opt_guide_->BuildPriceTrackingResponse(
+      kTitle, kImageUrl, kOfferId, kClusterId, kCountryCode, kPrice,
+      kCurrencyCode, kGpcTitle);
+
+  opt_guide_->SetResponse(GURL(kProductUrl), OptimizationType::PRICE_TRACKING,
+                          OptimizationGuideDecision::kTrue, meta);
+
+  base::RunLoop run_loop;
+  shopping_service_->GetProductSpecificationsSetForUrls(
+      std::vector<GURL>{
+          GURL(kProductUrl),
+          GURL(kProductUrl),
+      },
+      base::BindOnce(
+          [](base::RunLoop* run_loop,
+             commerce::ProductSpecificationSet spec_set) {
+            std::string ids;
+            net::GetValueForKeyInQuery(spec_set.product_spec_url, "ids", &ids);
+            ASSERT_EQ("456,456", ids);
+            run_loop->Quit();
+          },
+          &run_loop));
+
+  run_loop.Run();
+}
+
+TEST_P(ShoppingServiceTest, TestProductSpecificationsSetResponse_NoProducts) {
+  OptimizationMetadata meta = opt_guide_->BuildPriceTrackingResponse(
+      kTitle, kImageUrl, kOfferId, kClusterId, kCountryCode, kPrice,
+      kCurrencyCode, kGpcTitle);
+
+  opt_guide_->SetResponse(GURL(kProductUrl), OptimizationType::PRICE_TRACKING,
+                          OptimizationGuideDecision::kFalse, meta);
+
+  base::RunLoop run_loop;
+  shopping_service_->GetProductSpecificationsSetForUrls(
+      std::vector<GURL>{
+          GURL(kProductUrl),
+          GURL(kProductUrl),
+      },
+      base::BindOnce(
+          [](base::RunLoop* run_loop,
+             commerce::ProductSpecificationSet spec_set) {
+            std::string ids;
+            net::GetValueForKeyInQuery(spec_set.product_spec_url, "ids", &ids);
+            ASSERT_EQ("0,0", ids);
+            run_loop->Quit();
+          },
+          &run_loop));
+
   run_loop.Run();
 }
 

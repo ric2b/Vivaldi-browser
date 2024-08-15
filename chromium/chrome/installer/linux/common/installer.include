@@ -328,8 +328,15 @@ stage_install_common() {
   chmod 755 "${STAGEDIR}/${INSTALLDIR}/update-ffmpeg"
 
   # Privacy Guard binary (vivaldi)
-  install -m 755 "${OUTPUTDIR}/installer/common/relayproxy-linux" \
-  "${STAGEDIR}/${INSTALLDIR}/relayproxy-linux"
+  # Not all architectures (like arm) are supported.
+  if [ -f "${OUTPUTDIR}/installer/common/relayproxy-linux" ]; then
+    install -m 755 "${OUTPUTDIR}/installer/common/relayproxy-linux" \
+    "${STAGEDIR}/${INSTALLDIR}/relayproxy-linux"
+  fi
+  if [ -f "${OUTPUTDIR}/installer/common/relayproxy.pem" ]; then
+    install -m 644 "${OUTPUTDIR}/installer/common/relayproxy.pem" \
+    "${STAGEDIR}/${INSTALLDIR}/relayproxy.pem"
+  fi
 
   # Add License
   install -m 644 "${OUTPUTDIR}/installer/common/EULA.html" \

@@ -25,6 +25,7 @@
 #include <utility>
 
 #include "perfetto/base/build_config.h"
+#include "perfetto/base/compiler.h"
 #include "perfetto/base/export.h"
 #include "perfetto/base/logging.h"
 #include "perfetto/base/platform_handle.h"
@@ -84,7 +85,17 @@ SockFamily GetSockFamily(const char* addr);
 
 // Returns whether inter-process shared memory is supported for the socket.
 inline bool SockShmemSupported(SockFamily sock_family) {
+#if !PERFETTO_BUILDFLAG(PERFETTO_OS_WIN)
   return sock_family == SockFamily::kUnix;
+#else
+  base::ignore_result(sock_family);
+  // On Windows shm is negotiated by sharing an unguessable token
+  // over TCP sockets. In theory works on any socket type, in practice
+  // we need to tell the difference between a local and a remote
+  // connection. For now we assume everything is local.
+  // See comments on r.android.com/2951909 .
+  return true;
+#endif
 }
 inline bool SockShmemSupported(const char* addr) {
   return SockShmemSupported(GetSockFamily(addr));

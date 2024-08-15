@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include "third_party/base/check.h"
+#include "core/fxcrt/check.h"
 #include "v8/include/cppgc/visitor.h"
 #include "xfa/fwl/cfwl_combobox.h"
 #include "xfa/fwl/cfwl_eventselectchanged.h"
@@ -253,13 +253,13 @@ bool CXFA_FFComboBox::Redo() {
          ToComboBox(GetNormalWidget())->EditRedo();
 }
 
-absl::optional<WideString> CXFA_FFComboBox::Copy() {
+std::optional<WideString> CXFA_FFComboBox::Copy() {
   return ToComboBox(GetNormalWidget())->EditCopy();
 }
 
-absl::optional<WideString> CXFA_FFComboBox::Cut() {
+std::optional<WideString> CXFA_FFComboBox::Cut() {
   if (!m_pNode->IsChoiceListAllowTextEntry())
-    return absl::nullopt;
+    return std::nullopt;
 
   return ToComboBox(GetNormalWidget())->EditCut();
 }

@@ -4,7 +4,7 @@
 
 #import "UIKit/UIKit.h"
 
-#import "ios/chrome/browser/favicon/favicon_loader.h"
+#import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
@@ -19,7 +19,9 @@
 #import "ios/ui/ntp/cells/vivaldi_speed_dial_regular_cell.h"
 #import "ios/ui/ntp/cells/vivaldi_speed_dial_small_cell.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_add_group_view.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_container_view_flow_layout.h"
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "url/gurl.h"
@@ -27,6 +29,7 @@
 
 using ui::GetDeviceFormFactor;
 using ui::DEVICE_FORM_FACTOR_TABLET;
+using l10n_util::GetNSString;
 
 // NAMESPACE
 namespace {
@@ -38,23 +41,32 @@ NSString* cellIdSmall = @"cellIdSmall";
 NSString* cellIdList = @"cellIdList";
 
 NSString* syncedStoreURLKey = @"synced-store";
+
+const CGFloat commonPadding = 20;
 }
 
 @interface VivaldiSpeedDialContainerView() <UICollectionViewDataSource,
                                             UICollectionViewDelegate,
                                             UICollectionViewDragDelegate,
-                                            UICollectionViewDropDelegate>
+                                            UICollectionViewDropDelegate,
+                                     VivaldiSpeedDialAddGroupViewDelegate>
 // FaviconLoader is a keyed service that uses LargeIconService to retrieve
 // favicon images.
 @property(nonatomic,assign) FaviconLoader* faviconLoader;
 // Collection view that holds the speed dial folder's children
 @property(weak,nonatomic) UICollectionView *collectionView;
+// Add group view visible when no items present or on last slide.
+@property(weak,nonatomic) VivaldiSpeedDialAddGroupView *addGroupView;
+// Collection view layout for selected column and layout rendering
+@property(nonatomic,strong) VivaldiSpeedDialViewContainerViewFlowLayout *layout;
 // Parent speed dial folder
 @property(assign,nonatomic) VivaldiSpeedDialItem* parent;
 // Array to store the children to populate on the collection view
 @property(strong,nonatomic) NSMutableArray *speedDialItems;
 // Currently selected layout
 @property(nonatomic,assign) VivaldiStartPageLayoutStyle selectedLayout;
+// Currently selected maximum columns
+@property(nonatomic,assign) VivaldiStartPageLayoutColumn selectedColumn;
 @end
 
 @implementation VivaldiSpeedDialContainerView
@@ -67,7 +79,6 @@ NSString* syncedStoreURLKey = @"synced-store";
 #pragma mark - INITIALIZER
 - (instancetype)init {
   if (self = [super initWithFrame:CGRectZero]) {
-    self.backgroundColor = UIColor.clearColor;
     [self setUpUI];
     [self startObservingSDItemPropertyChange];
   }
@@ -80,8 +91,10 @@ NSString* syncedStoreURLKey = @"synced-store";
 
 #pragma mark - SET UP UI COMPONENTS
 - (void)setUpUI {
-
-  UICollectionViewLayout *layout= [self createLayout];
+  VivaldiSpeedDialViewContainerViewFlowLayout *layout =
+      [VivaldiSpeedDialViewContainerViewFlowLayout new];
+  layout.isPreview = NO;
+  self.layout = layout;
   UICollectionView* collectionView =
     [[UICollectionView alloc] initWithFrame:CGRectZero
                        collectionViewLayout:layout];
@@ -111,24 +124,67 @@ NSString* syncedStoreURLKey = @"synced-store";
 
   [self addSubview:_collectionView];
   [_collectionView fillSuperview];
+  _collectionView.hidden = YES;
+
+  // Add group view
+  VivaldiSpeedDialAddGroupView* addGroupView =
+      [VivaldiSpeedDialAddGroupView new];
+  addGroupView.translatesAutoresizingMaskIntoConstraints = NO;
+  self.addGroupView = addGroupView;
+  addGroupView.delegate = self;
+  [self addSubview:addGroupView];
+
+  [NSLayoutConstraint activateConstraints:@[
+    [addGroupView.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+    [addGroupView.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
+    [addGroupView.leadingAnchor
+        constraintGreaterThanOrEqualToAnchor:self.leadingAnchor
+                                    constant:commonPadding],
+    [addGroupView.trailingAnchor
+        constraintLessThanOrEqualToAnchor:self.trailingAnchor
+                                 constant:-commonPadding]
+  ]];
+  addGroupView.hidden = YES;
 }
 
 #pragma mark - SETTERS
 - (void)configureWith:(NSArray*)speedDials
                parent:(VivaldiSpeedDialItem*)parent
         faviconLoader:(FaviconLoader*)faviconLoader
-          layoutStyle:(VivaldiStartPageLayoutStyle)style {
+          layoutStyle:(VivaldiStartPageLayoutStyle)style
+         layoutColumn:(VivaldiStartPageLayoutColumn)column
+         showAddGroup:(BOOL)showAddGroup
+    verticalSizeClass:(UIUserInterfaceSizeClass)verticalSizeClass {
   self.parent = parent;
   self.faviconLoader = faviconLoader;
   self.selectedLayout = style;
+  self.selectedColumn = column;
+  self.layout.layoutStyle = style;
+  self.layout.numberOfColumns = column;
   self.speedDialItems = [[NSMutableArray alloc] initWithArray:speedDials];
+  self.collectionView.hidden = showAddGroup;
+  self.addGroupView.hidden = !showAddGroup;
+  [self.collectionView reloadData];
+
+  [self.addGroupView refreshLayoutWithVerticalSizeClass:verticalSizeClass];
+  [self.addGroupView setNeedsLayout];
+}
+
+- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style
+                 layoutColumn:(VivaldiStartPageLayoutColumn)column {
+  self.selectedLayout = style;
+  self.selectedColumn = column;
+  self.layout.layoutStyle = style;
+  self.layout.numberOfColumns = column;
+  [self.collectionView.collectionViewLayout invalidateLayout];
   [self.collectionView reloadData];
 }
 
-- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style {
-  self.selectedLayout = style;
-  [self.collectionView.collectionViewLayout invalidateLayout];
-  [self.collectionView reloadData];
+#pragma mark - VivaldiSpeedDialAddGroupViewDelegate
+- (void)didTapAddNewGroup {
+  if (self.delegate) {
+    [self.delegate didSelectAddNewGroupForParent:self.parent];
+  }
 }
 
 #pragma mark - COLLECTIONVIEW DATA SOURCE
@@ -246,9 +302,9 @@ NSString* syncedStoreURLKey = @"synced-store";
   switch (_selectedLayout) {
     case VivaldiStartPageLayoutStyleLarge:
     case VivaldiStartPageLayoutStyleMedium:
-    case VivaldiStartPageLayoutStyleSmall:
       desiredFaviconSizeInPoints = kDesiredSmallFaviconSizePt;
       break;
+    case VivaldiStartPageLayoutStyleSmall:
     case VivaldiStartPageLayoutStyleList: {
       desiredFaviconSizeInPoints = kDesiredMediumFaviconSizePt;
       break;
@@ -527,8 +583,7 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
                                           previewProvider:nil
                                            actionProvider:^UIMenu*
    _Nullable(NSArray<UIMenuElement*>* _Nonnull menuActions) {
-    NSString* newSpeedDialActionTitle =
-      l10n_util::GetNSString(IDS_IOS_NEW_SPEED_DIAL);
+    NSString* newSpeedDialActionTitle = GetNSString(IDS_IOS_NEW_SPEED_DIAL);
     UIAction * newSpeedDialAction =
       [UIAction actionWithTitle:newSpeedDialActionTitle
                           image:[UIImage systemImageNamed:@"plus"]
@@ -540,8 +595,7 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
                                            parent:self.parent];
       }];
 
-    NSString* newFolderActionTitle =
-      l10n_util::GetNSString(IDS_IOS_NEW_SPEED_DIAL_FOLDER);
+    NSString* newFolderActionTitle = GetNSString(IDS_IOS_NEW_FOLDER);
     UIAction * newFolderAction =
       [UIAction actionWithTitle:newFolderActionTitle
                           image:[UIImage systemImageNamed:@"folder.badge.plus"]
@@ -610,194 +664,10 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
   return range.location != NSNotFound;
 }
 
-/// Create and return the compositional layout for the collection view
-- (UICollectionViewCompositionalLayout*)createLayout {
-  UICollectionViewCompositionalLayout *layout =
-    [[UICollectionViewCompositionalLayout alloc]
-      initWithSectionProvider:
-       ^NSCollectionLayoutSection*(NSInteger sectionIndex,
-       id<NSCollectionLayoutEnvironment> layoutEnvironment) {
-    return [self layoutSectionFor:sectionIndex environment:layoutEnvironment];
-  }];
-
-  return layout;
-}
-
-- (NSCollectionLayoutSection*)layoutSectionFor:(NSInteger)index
-     environment:(id<NSCollectionLayoutEnvironment>)environment {
-
-  CGFloat gridItemSize = [self itemSizeWidth];
-  CGFloat sectionPadding =
-    self.isCurrentDeviceTablet ? self.getSectionPaddingForTablet
-                               : self.getSectionPaddingForPhone;
-  CGFloat itemPadding = [self getItemPadding];
-
-  NSCollectionLayoutSize *itemSize;
-  if (_selectedLayout == VivaldiStartPageLayoutStyleList) {
-    itemSize =
-      [NSCollectionLayoutSize
-        sizeWithWidthDimension:[NSCollectionLayoutDimension
-                                  fractionalWidthDimension:gridItemSize]
-               heightDimension:[NSCollectionLayoutDimension
-                                  absoluteDimension:vSDItemHeightListLayout]];
-  } else {
-    itemSize =
-      [NSCollectionLayoutSize
-        sizeWithWidthDimension:[NSCollectionLayoutDimension
-                                  fractionalWidthDimension:gridItemSize]
-               heightDimension:[NSCollectionLayoutDimension
-                                  fractionalWidthDimension:gridItemSize]];
-  }
-
-  NSCollectionLayoutItem *item =
-    [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
-  NSArray *items = [[NSArray alloc] initWithObjects:item, nil];
-
-  item.contentInsets = NSDirectionalEdgeInsetsMake(itemPadding,
-                                                   itemPadding,
-                                                   itemPadding,
-                                                   itemPadding);
-
-  NSCollectionLayoutSize *groupSize;
-  if (_selectedLayout == VivaldiStartPageLayoutStyleList) {
-    groupSize =
-      [NSCollectionLayoutSize
-        sizeWithWidthDimension:[NSCollectionLayoutDimension
-                                  fractionalWidthDimension:1.0]
-               heightDimension:[NSCollectionLayoutDimension
-                                  absoluteDimension:vSDItemHeightListLayout]];
-  } else {
-    groupSize =
-      [NSCollectionLayoutSize
-        sizeWithWidthDimension:[NSCollectionLayoutDimension
-                                  fractionalWidthDimension:1.0]
-               heightDimension:[NSCollectionLayoutDimension
-                                  fractionalWidthDimension:gridItemSize]];
-  }
-
-  NSCollectionLayoutGroup *group =
-    [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize
-                                                  subitems:items];
-
-  NSCollectionLayoutSection *section =
-    [NSCollectionLayoutSection sectionWithGroup:group];
-  section.contentInsets =
-      NSDirectionalEdgeInsetsMake(vSDContainerTopPadding,
-                                  sectionPadding,
-                                  [self containerBottomPadding],
-                                  sectionPadding);
-  return section;
-}
-
 /// Returns whether current device is iPhone or iPad.
 - (BOOL)isCurrentDeviceTablet {
   return GetDeviceFormFactor() == DEVICE_FORM_FACTOR_TABLET &&
       VivaldiGlobalHelpers.isHorizontalTraitRegular;
-}
-
-// Returns the multiplier to generate the grid item from view width.
-- (CGFloat)itemSizeWidth {
-  switch (_selectedLayout) {
-    case VivaldiStartPageLayoutStyleLarge:
-      if (self.isCurrentDeviceTablet) {
-        return vSDWidthiPadLarge;
-      } else {
-        if (self.showiPhoneLandscapeLayout) {
-          return vSDWidthiPhoneLargeLand;
-        } else {
-          return vSDWidthiPhoneLarge;
-        }
-      }
-    case VivaldiStartPageLayoutStyleMedium:
-      if (self.isCurrentDeviceTablet) {
-        return vSDWidthiPadMedium;
-      } else {
-        if (self.showiPhoneLandscapeLayout) {
-          return vSDWidthiPhoneMediumLand;
-        } else {
-          return vSDWidthiPhoneMedium;
-        }
-      }
-    case VivaldiStartPageLayoutStyleSmall:
-      if (self.isCurrentDeviceTablet) {
-        return vSDWidthiPadSmall;
-      } else {
-        if (self.showiPhoneLandscapeLayout) {
-          return vSDWidthiPhoneSmallLand;
-        } else {
-          return vSDWidthiPhoneSmall;
-        }
-      }
-    case VivaldiStartPageLayoutStyleList:
-      if (self.isCurrentDeviceTablet) {
-        return vSDWidthiPadList;
-      } else {
-        if (self.showiPhoneLandscapeLayout) {
-          return vSDWidthiPhoneListLand;
-        } else {
-          return vSDWidthiPhoneList;
-        }
-      }
-  }
-}
-
-/// Return the item padding for iPhone and iPad
-/// Same item padding is used for both portrait and landscape mode.
-- (CGFloat)getItemPadding {
-  return (self.isCurrentDeviceTablet &&
-          !VivaldiGlobalHelpers.isSplitOrSlideOver) ?
-      vSDPaddingiPad : vSDPaddingiPhone;
-}
-
-/// Returns the section padding for tablet
-- (CGFloat)getSectionPaddingForTablet {
-  return self.isTabletPortrait ||
-      VivaldiGlobalHelpers.isSplitOrSlideOver ?
-      vSDSectionPaddingiPadPortrait : vSDSectionPaddingiPadLandscape;
-}
-
-/// Returns the section padding for iPhone
-- (CGFloat)getSectionPaddingForPhone {
-  return VivaldiGlobalHelpers.isVerticalTraitCompact ?
-    vSDSectionPaddingiPhoneLandscape : vSDSectionPaddingiPhonePortrait;
-}
-
-// (Important)VIB-133 Workaround for (ntp + landscape + bottom omnibox) combo
-// Return the bottom padding for the container from the height of secondary
-// toolbar with insets. This avoids jumpy animation for tab switcher on NTP.
-- (CGFloat)containerBottomPadding {
-  CGFloat padding = vSDContainerBottomPadding;
-  if (!IsSplitToolbarMode(self.traitCollection)) {
-    CGFloat toolbarHeight =
-        ToolbarExpandedHeight(
-            self.traitCollection.preferredContentSizeCategory);
-    return toolbarHeight + kSecondaryToolbarWithoutOmniboxHeight +
-        self.safeAreaInsets.bottom + vSDContainerBottomPadding;
-  }
-  return padding;
-}
-
-/// Returns true when app is running on split mode in
-/// iPad with half/half screen state
-- (BOOL)isAppStateHalfScreen {
-  return VivaldiGlobalHelpers.isSplitOrSlideOver &&
-      VivaldiGlobalHelpers.iPadLayoutState == LayoutStateHalfScreen;
-}
-
-/// Returns iPad orientation from global helpers and frame.
-- (BOOL)isTabletPortrait {
-  return VivaldiGlobalHelpers.isValidOrientation ?
-      VivaldiGlobalHelpers.isiPadOrientationPortrait :
-      self.isiPadOrientationPortrait;
-}
-
-/// Returns true for iPhone in landscape and iPad in half/half state.
-/// In iPad half/half state leaves a bigger space which can be utilized
-/// showing the same number of items as iPhone landscape would
-/// show.
-- (BOOL)showiPhoneLandscapeLayout {
-  return VivaldiGlobalHelpers.isVerticalTraitCompact ||
-      self.isAppStateHalfScreen;
 }
 
 @end

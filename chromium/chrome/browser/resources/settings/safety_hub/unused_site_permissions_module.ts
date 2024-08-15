@@ -9,8 +9,8 @@ import '../i18n_setup.js';
 import '../icons.html.js';
 import './safety_hub_module.js';
 
-import {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
-import {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
+import type {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
+import type {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
@@ -19,16 +19,19 @@ import {PluralStringProxyImpl} from 'chrome://resources/js/plural_string_proxy.j
 import {isUndoKeyboardEvent} from 'chrome://resources/js/util.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {MetricsBrowserProxy, MetricsBrowserProxyImpl, SafetyCheckUnusedSitePermissionsModuleInteractions} from '../metrics_browser_proxy.js';
+import type {MetricsBrowserProxy} from '../metrics_browser_proxy.js';
+import {MetricsBrowserProxyImpl, SafetyCheckUnusedSitePermissionsModuleInteractions} from '../metrics_browser_proxy.js';
 import {routes} from '../route.js';
-import {Route, RouteObserverMixin, Router} from '../router.js';
-import {ContentSettingsTypes} from '../site_settings/constants.js';
+import type {Route} from '../router.js';
+import {RouteObserverMixin, Router} from '../router.js';
+import type {ContentSettingsTypes} from '../site_settings/constants.js';
 import {SiteSettingsMixin} from '../site_settings/site_settings_mixin.js';
 import {getLocalizationStringForContentType} from '../site_settings_page/site_settings_page_util.js';
 import {TooltipMixin} from '../tooltip_mixin.js';
 
-import {SafetyHubBrowserProxy, SafetyHubBrowserProxyImpl, SafetyHubEvent, UnusedSitePermissions} from './safety_hub_browser_proxy.js';
-import {SettingsSafetyHubModuleElement, SiteInfo} from './safety_hub_module.js';
+import type {SafetyHubBrowserProxy, UnusedSitePermissions} from './safety_hub_browser_proxy.js';
+import {SafetyHubBrowserProxyImpl, SafetyHubEvent} from './safety_hub_browser_proxy.js';
+import type {SettingsSafetyHubModuleElement, SiteInfo} from './safety_hub_module.js';
 import {getTemplate} from './unused_site_permissions_module.html.js';
 
 export interface SettingsSafetyHubUnusedSitePermissionsModuleElement {
@@ -221,14 +224,31 @@ export class SettingsSafetyHubUnusedSitePermissionsModuleElement extends
     }
   }
 
-  private onAllowAgainClick_(event: CustomEvent<UnusedSitePermissions>) {
+  /** Clears all the changes made by a previous action. */
+  private resetValues(event: Event) {
     event.stopPropagation();
+    this.$.undoToast.hide();
+  }
+
+  private onAllowAgainClick_(event: CustomEvent<UnusedSitePermissions>) {
+    this.resetValues(event);
+
+    // Set values needed for the action.
     const item = event.detail;
     this.lastUserAction_ = Action.ALLOW_AGAIN;
     this.lastUnusedSitePermissionsAllowedAgain_ = item;
 
-    this.showUndoToast_(
-        this.i18n('safetyCheckUnusedSitePermissionsToastLabel', item.origin));
+    // Update the toastText_ that isused both as an undo toast text and as a
+    // header text.
+    this.toastText_ =
+        this.i18n('safetyCheckUnusedSitePermissionsToastLabel', item.origin);
+    // Only show Undo toast if there are multiple sites to review. Otherwise,
+    // once the single site is reviewed, the completion state with a permanent
+    // Undo button in the header will be shown.
+    if (this.sites_!.length > 1) {
+      this.$.undoToast.show();
+    }
+
     this.$.module.animateHide(
         item.origin,
         this.browserProxy_.allowPermissionsAgainForUnusedSite.bind(
@@ -240,18 +260,21 @@ export class SettingsSafetyHubUnusedSitePermissionsModuleElement extends
   }
 
   private async onGotItClick_(e: Event) {
-    e.stopPropagation();
+    this.resetValues(e);
+
+    // Set values needed for the action.
     assert(this.sites_ !== null);
     this.lastUserAction_ = Action.GOT_IT;
     this.lastUnusedSitePermissionsListAcknowledged_ = this.sites_;
+
+    // Update the toastText_ that is also used as a header text.
+    this.toastText_ = await PluralStringProxyImpl.getInstance().getPluralString(
+        'safetyCheckUnusedSitePermissionsToastBulkLabel', this.sites_.length);
 
     this.$.module.animateHide(
         /* all origins */ null,
         this.browserProxy_.acknowledgeRevokedUnusedSitePermissionsList.bind(
             this.browserProxy_));
-    const toastText = await PluralStringProxyImpl.getInstance().getPluralString(
-        'safetyCheckUnusedSitePermissionsToastBulkLabel', this.sites_.length);
-    this.showUndoToast_(toastText);
 
     this.metricsBrowserProxy_
         .recordSafetyHubUnusedSitePermissionsModuleInteractionsHistogram(
@@ -283,9 +306,8 @@ export class SettingsSafetyHubUnusedSitePermissionsModuleElement extends
   }
 
   private setHeaderToCompletionState_() {
-    this.headerString_ = this.toastText_ ?
-        this.toastText_ :
-        this.i18n('safetyCheckUnusedSitePermissionsDoneLabel');
+    assert(this.headerString_);
+    this.headerString_ = this.toastText_!;
     this.subheaderString_ = '';
     this.headerIconString_ = 'cr:check';
   }
@@ -368,11 +390,6 @@ export class SettingsSafetyHubUnusedSitePermissionsModuleElement extends
       this.undoLastAction_();
       e.stopPropagation();
     }
-  }
-
-  private showUndoToast_(text: string) {
-    this.toastText_ = text;
-    this.$.undoToast.show();
   }
 
   // TODO(crbug.com/1443466): Move common functionality between

@@ -223,19 +223,19 @@ static int cbs_vp8_read_unsigned_le(CodedBitstreamContext *ctx, GetBitContext *g
 #define SUBSCRIPTS(subs, ...) \
     (subs > 0 ? ((int[subs + 1]){subs, __VA_ARGS__}) : NULL)
 
-#define f(width, name) xf(width, name, 0)
+#define f(width, name) xf(width, name, 0, )
 
 // bool [de|en]coder methods.
-#define bc_f(width, name) bc_unsigned_subs(width, DEFAULT_PROB, true, name, 0)
-#define bc_s(width, name) bc_signed_subs(width, DEFAULT_PROB, name, 0)
+#define bc_f(width, name) bc_unsigned_subs(width, DEFAULT_PROB, true, name, 0, )
+#define bc_s(width, name) bc_signed_subs(width, DEFAULT_PROB, name, 0, )
 #define bc_fs(width, name, subs, ...) \
     bc_unsigned_subs(width, DEFAULT_PROB, true, name, subs, __VA_ARGS__)
 #define bc_ss(width, name, subs, ...) \
     bc_signed_subs(width, DEFAULT_PROB, name, subs, __VA_ARGS__)
 
 // bool [de|en]coder methods for boolean value and disable tracing.
-#define bc_b(name) bc_unsigned_subs(1, DEFAULT_PROB, false, name, 0)
-#define bc_b_prob(prob, name) bc_unsigned_subs(1, prob, false, name, 0)
+#define bc_b(name) bc_unsigned_subs(1, DEFAULT_PROB, false, name, 0, )
+#define bc_b_prob(prob, name) bc_unsigned_subs(1, prob, false, name, 0, )
 
 #define READ
 #define READWRITE read
@@ -307,7 +307,7 @@ static int cbs_vp8_read_unit(CodedBitstreamContext *ctx,
     frame = unit->content;
 
     // Create GetBitContext for uncompressed header.
-    err = init_get_bits8_le(&gbc, unit->data, 8 * unit->data_size);
+    err = init_get_bits8_le(&gbc, unit->data, unit->data_size);
     if (err < 0)
         return err;
 
@@ -353,11 +353,6 @@ static int cbs_vp8_assemble_fragment(CodedBitstreamContext *ctx,
     return AVERROR_PATCHWELCOME;
 }
 
-static void cbs_vp8_flush(CodedBitstreamContext *ctx)
-{
-    // Do nothing.
-}
-
 static const CodedBitstreamUnitTypeDescriptor cbs_vp8_unit_types[] = {
     CBS_UNIT_TYPE_INTERNAL_REF(0, VP8RawFrame, data),
     CBS_UNIT_TYPE_END_OF_LIST,
@@ -373,8 +368,6 @@ const CodedBitstreamType ff_cbs_type_vp8 = {
     .split_fragment    = &cbs_vp8_split_fragment,
     .read_unit         = &cbs_vp8_read_unit,
     .write_unit        = &cbs_vp8_write_unit,
-
-    .flush             = &cbs_vp8_flush,
 
     .assemble_fragment = &cbs_vp8_assemble_fragment,
 };

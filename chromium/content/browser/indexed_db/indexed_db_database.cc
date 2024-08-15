@@ -41,6 +41,7 @@
 #include "content/browser/indexed_db/indexed_db_external_object.h"
 #include "content/browser/indexed_db/indexed_db_factory_client.h"
 #include "content/browser/indexed_db/indexed_db_index_writer.h"
+#include "content/browser/indexed_db/indexed_db_lock_request_data.h"
 #include "content/browser/indexed_db/indexed_db_pending_connection.h"
 #include "content/browser/indexed_db/indexed_db_return_value.h"
 #include "content/browser/indexed_db/indexed_db_transaction.h"
@@ -158,7 +159,7 @@ IndexedDBBackingStore* IndexedDBDatabase::backing_store() {
   return bucket_context_->backing_store();
 }
 
-PartitionedLockManager* IndexedDBDatabase::lock_manager() {
+PartitionedLockManager& IndexedDBDatabase::lock_manager() {
   return bucket_context_->lock_manager();
 }
 
@@ -167,13 +168,18 @@ void IndexedDBDatabase::RequireBlockingTransactionClientsToBeActive(
     std::vector<PartitionedLockManager::PartitionedLockRequest>&
         lock_requests) {
   std::vector<PartitionedLockId> blocked_lock_ids =
-      lock_manager()->GetUnacquirableLocks(lock_requests);
+      lock_manager().GetUnacquirableLocks(lock_requests);
 
   if (blocked_lock_ids.empty()) {
     return;
   }
 
   for (IndexedDBConnection* connection : connections_) {
+    if (connection->client_token() ==
+        current_transaction->connection()->client_token()) {
+      continue;
+    }
+
     // If any of the connection's transactions is holding one of the blocked
     // lock IDs, require that client to be active.
     if (std::any_of(
@@ -182,9 +188,6 @@ void IndexedDBDatabase::RequireBlockingTransactionClientsToBeActive(
             [&](const std::pair<const int64_t,
                                 std::unique_ptr<IndexedDBTransaction>>&
                     existing_transaction) {
-              if (existing_transaction.second.get() == current_transaction) {
-                return false;
-              }
               return !base::STLSetIntersection<std::vector<PartitionedLockId>>(
                           blocked_lock_ids,
                           existing_transaction.second->lock_ids())
@@ -192,7 +195,7 @@ void IndexedDBDatabase::RequireBlockingTransactionClientsToBeActive(
             })) {
       connection->DisallowInactiveClient(
           storage::mojom::DisallowInactiveClientReason::
-              kTransactionIsBlockingOthers,
+              kTransactionIsAcquiringLocks,
           base::DoNothing());
     }
   }
@@ -210,7 +213,7 @@ void IndexedDBDatabase::RegisterAndScheduleTransaction(
 
   RequireBlockingTransactionClientsToBeActive(transaction, lock_requests);
 
-  lock_manager()->AcquireLocks(
+  lock_manager().AcquireLocks(
       std::move(lock_requests),
       transaction->mutable_locks_receiver()->AsWeakPtr(),
       base::BindOnce(&IndexedDBTransaction::Start, transaction->AsWeakPtr()));
@@ -324,8 +327,7 @@ leveldb::Status IndexedDBDatabase::ForceCloseAndRunTasks() {
       task_state != IndexedDBConnectionCoordinator::ExecuteTaskResult::kError);
   DCHECK(connections_.empty());
   force_closing_ = false;
-  if (CanBeDestroyed())
-    bucket_context_->QueueRunTasks();
+  bucket_context_->QueueRunTasks();
   return status;
 }
 
@@ -742,7 +744,7 @@ Status IndexedDBDatabase::GetOperation(
   } else {
     if (index_id == IndexedDBIndexMetadata::kInvalidId) {
       // ObjectStore Retrieval Operation
-      if (cursor_type == indexed_db::CURSOR_KEY_ONLY) {
+      if (cursor_type == indexed_db::CursorType::kKeyOnly) {
         backing_store_cursor = backing_store()->OpenObjectStoreKeyCursor(
             transaction->BackingStoreTransaction(), id(), object_store_id,
             *key_range, blink::mojom::IDBCursorDirection::Next, &s);
@@ -751,7 +753,7 @@ Status IndexedDBDatabase::GetOperation(
             transaction->BackingStoreTransaction(), id(), object_store_id,
             *key_range, blink::mojom::IDBCursorDirection::Next, &s);
       }
-    } else if (cursor_type == indexed_db::CURSOR_KEY_ONLY) {
+    } else if (cursor_type == indexed_db::CursorType::kKeyOnly) {
       // Index Value Retrieval Operation
       backing_store_cursor = backing_store()->OpenIndexKeyCursor(
           transaction->BackingStoreTransaction(), id(), object_store_id,
@@ -800,7 +802,7 @@ Status IndexedDBDatabase::GetOperation(
       return s;
     }
 
-    if (cursor_type == indexed_db::CURSOR_KEY_ONLY) {
+    if (cursor_type == indexed_db::CursorType::kKeyOnly) {
       std::move(callback).Run(
           blink::mojom::IDBDatabaseGetResult::NewKey(std::move(*key)));
       return s;
@@ -837,7 +839,7 @@ Status IndexedDBDatabase::GetOperation(
     std::move(callback).Run(blink::mojom::IDBDatabaseGetResult::NewEmpty(true));
     return s;
   }
-  if (cursor_type == indexed_db::CURSOR_KEY_ONLY) {
+  if (cursor_type == indexed_db::CursorType::kKeyOnly) {
     // Index Value Retrieval Operation
     std::move(callback).Run(
         blink::mojom::IDBDatabaseGetResult::NewKey(std::move(*primary_key)));
@@ -909,7 +911,7 @@ Status IndexedDBDatabase::GetAllOperation(
   Status s = Status::OK();
   std::unique_ptr<IndexedDBBackingStore::Cursor> cursor;
 
-  if (cursor_type == indexed_db::CURSOR_KEY_ONLY) {
+  if (cursor_type == indexed_db::CursorType::kKeyOnly) {
     // Retrieving keys
     if (index_id == IndexedDBIndexMetadata::kInvalidId) {
       // Object Store: Key Retrieval Operation
@@ -988,7 +990,7 @@ Status IndexedDBDatabase::GetAllOperation(
     IndexedDBReturnValue return_value;
     IndexedDBKey return_key;
 
-    if (cursor_type == indexed_db::CURSOR_KEY_ONLY) {
+    if (cursor_type == indexed_db::CursorType::kKeyOnly) {
       return_key = cursor->primary_key();
     } else {
       // Retrieving values
@@ -999,13 +1001,14 @@ Status IndexedDBDatabase::GetAllOperation(
       }
     }
 
-    if (cursor_type == indexed_db::CURSOR_KEY_ONLY)
+    if (cursor_type == indexed_db::CursorType::kKeyOnly) {
       found_keys.push_back(return_key);
-    else
+    } else {
       found_values.push_back(return_value);
+    }
 
     // Periodically stream values and keys if we have too many.
-    if (cursor_type == indexed_db::CURSOR_KEY_ONLY) {
+    if (cursor_type == indexed_db::CursorType::kKeyOnly) {
       if (found_keys.size() >= max_values_before_sending) {
         result_sink->ReceiveKeys(std::move(found_keys));
         found_keys.clear();
@@ -1019,7 +1022,7 @@ Status IndexedDBDatabase::GetAllOperation(
     }
   }
 
-  if (cursor_type == indexed_db::CURSOR_KEY_ONLY) {
+  if (cursor_type == indexed_db::CursorType::kKeyOnly) {
     if (!found_keys.empty()) {
       result_sink->ReceiveKeys(std::move(found_keys));
     }
@@ -1247,7 +1250,7 @@ Status IndexedDBDatabase::OpenCursorOperation(
   Status s;
   std::unique_ptr<IndexedDBBackingStore::Cursor> backing_store_cursor;
   if (params->index_id == IndexedDBIndexMetadata::kInvalidId) {
-    if (params->cursor_type == indexed_db::CURSOR_KEY_ONLY) {
+    if (params->cursor_type == indexed_db::CursorType::kKeyOnly) {
       DCHECK_EQ(params->task_type, blink::mojom::IDBTaskType::Normal);
       backing_store_cursor = backing_store()->OpenObjectStoreKeyCursor(
           transaction->BackingStoreTransaction(), id(), params->object_store_id,
@@ -1259,7 +1262,7 @@ Status IndexedDBDatabase::OpenCursorOperation(
     }
   } else {
     DCHECK_EQ(params->task_type, blink::mojom::IDBTaskType::Normal);
-    if (params->cursor_type == indexed_db::CURSOR_KEY_ONLY) {
+    if (params->cursor_type == indexed_db::CursorType::kKeyOnly) {
       backing_store_cursor = backing_store()->OpenIndexKeyCursor(
           transaction->BackingStoreTransaction(), id(), params->object_store_id,
           params->index_id, *params->key_range, params->direction, &s);
@@ -1503,14 +1506,16 @@ Status IndexedDBDatabase::OpenInternal() {
 std::unique_ptr<IndexedDBConnection> IndexedDBDatabase::CreateConnection(
     std::unique_ptr<IndexedDBDatabaseCallbacks> database_callbacks,
     mojo::Remote<storage::mojom::IndexedDBClientStateChecker>
-        client_state_checker) {
+        client_state_checker,
+    base::UnguessableToken client_token) {
   auto connection = std::make_unique<IndexedDBConnection>(
       *bucket_context_, weak_factory_.GetWeakPtr(),
       base::BindRepeating(&IndexedDBDatabase::VersionChangeIgnored,
                           weak_factory_.GetWeakPtr()),
       base::BindOnce(&IndexedDBDatabase::ConnectionClosed,
                      weak_factory_.GetWeakPtr()),
-      std::move(database_callbacks), std::move(client_state_checker));
+      std::move(database_callbacks), std::move(client_state_checker),
+      client_token);
   connections_.insert(connection.get());
   return connection;
 }
@@ -1549,7 +1554,7 @@ void IndexedDBDatabase::SendVersionChangeToAllConnections(int64_t old_version,
     // No matter which path it follows, the `SendVersionChangeToAllConnections`
     // method is executed asynchronously.
     connection->DisallowInactiveClient(
-        storage::mojom::DisallowInactiveClientReason::kClientEventIsTriggered,
+        storage::mojom::DisallowInactiveClientReason::kVersionChangeEvent,
         base::BindOnce(
             [](base::WeakPtr<IndexedDBConnection> connection,
                int64_t old_version, int64_t new_version,
@@ -1579,19 +1584,6 @@ void IndexedDBDatabase::ConnectionClosed(IndexedDBConnection* connection) {
 
 bool IndexedDBDatabase::CanBeDestroyed() {
   return !connection_coordinator_.HasTasks() && connections_.empty();
-}
-
-bool IndexedDBDatabase::IsTransactionBlockingOthers(
-    IndexedDBTransaction* transaction) const {
-  base::flat_set<PartitionedLockId> lock_ids = transaction->lock_ids();
-  for (const auto& lock_id : lock_ids) {
-    if (bucket_context_->lock_manager()->GetQueuedLockRequestCount(lock_id) >
-        0) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 }  // namespace content

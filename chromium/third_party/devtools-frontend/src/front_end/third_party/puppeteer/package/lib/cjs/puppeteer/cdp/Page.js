@@ -78,7 +78,16 @@ const Input_js_1 = require("./Input.js");
 const IsolatedWorlds_js_1 = require("./IsolatedWorlds.js");
 const JSHandle_js_1 = require("./JSHandle.js");
 const Tracing_js_1 = require("./Tracing.js");
+const utils_js_1 = require("./utils.js");
 const WebWorker_js_1 = require("./WebWorker.js");
+function convertConsoleMessageLevel(method) {
+    switch (method) {
+        case 'warning':
+            return 'warn';
+        default:
+            return method;
+    }
+}
 /**
  * @internal
  */
@@ -290,7 +299,7 @@ class CdpPage extends Page_js_1.Page {
         (0, assert_js_1.assert)(session instanceof CDPSession_js_2.CdpCDPSession);
         this.#frameManager.onAttachedToTarget(session._target());
         if (session._target()._getTargetInfo().type === 'worker') {
-            const worker = new WebWorker_js_1.CdpWebWorker(session, session._target().url(), this.#addConsoleMessage.bind(this), this.#handleException.bind(this));
+            const worker = new WebWorker_js_1.CdpWebWorker(session, session._target().url(), session._target()._targetId, session._target().type(), this.#addConsoleMessage.bind(this), this.#handleException.bind(this));
             this.#workers.set(session.id(), worker);
             this.emit("workercreated" /* PageEvent.WorkerCreated */, worker);
         }
@@ -398,7 +407,7 @@ class CdpPage extends Page_js_1.Page {
             });
         }
         if (source !== 'worker') {
-            this.emit("console" /* PageEvent.Console */, new ConsoleMessage_js_1.ConsoleMessage(level, text, [], [{ url, lineNumber }]));
+            this.emit("console" /* PageEvent.Console */, new ConsoleMessage_js_1.ConsoleMessage(convertConsoleMessageLevel(level), text, [], [{ url, lineNumber }]));
         }
     }
     mainFrame() {
@@ -465,7 +474,7 @@ class CdpPage extends Page_js_1.Page {
         const originalCookies = (await this.#primaryTargetClient.send('Network.getCookies', {
             urls: urls.length ? urls : [this.url()],
         })).cookies;
-        const unsupportedCookieAttributes = ['priority'];
+        const unsupportedCookieAttributes = ['sourcePort'];
         const filterUnsupportedAttributes = (cookie) => {
             for (const attr of unsupportedCookieAttributes) {
                 delete cookie[attr];
@@ -517,7 +526,7 @@ class CdpPage extends Page_js_1.Page {
                 break;
         }
         this.#bindings.set(name, binding);
-        const expression = (0, util_js_1.pageBindingInitString)('exposedFun', name);
+        const expression = (0, utils_js_1.pageBindingInitString)('exposedFun', name);
         await this.#primaryTargetClient.send('Runtime.addBinding', { name });
         // TODO: investigate this as it appears to only apply to the main frame and
         // local subframes instead of the entire frame tree (including future
@@ -588,7 +597,7 @@ class CdpPage extends Page_js_1.Page {
         return result;
     }
     #handleException(exception) {
-        this.emit("pageerror" /* PageEvent.PageError */, (0, util_js_1.createClientError)(exception.exceptionDetails));
+        this.emit("pageerror" /* PageEvent.PageError */, (0, utils_js_1.createClientError)(exception.exceptionDetails));
     }
     async #onConsoleAPI(event) {
         if (event.executionContextId === 0) {
@@ -615,7 +624,7 @@ class CdpPage extends Page_js_1.Page {
         const values = event.args.map(arg => {
             return (0, ExecutionContext_js_1.createCdpHandle)(context._world, arg);
         });
-        this.#addConsoleMessage(event.type, values, event.stackTrace);
+        this.#addConsoleMessage(convertConsoleMessageLevel(event.type), values, event.stackTrace);
     }
     async #onBindingCalled(event) {
         let payload;
@@ -654,7 +663,7 @@ class CdpPage extends Page_js_1.Page {
                 textTokens.push(arg.toString());
             }
             else {
-                textTokens.push((0, util_js_1.valueFromRemoteObject)(remoteObject));
+                textTokens.push((0, utils_js_1.valueFromRemoteObject)(remoteObject));
             }
         }
         const stackTraceLocations = [];
@@ -667,7 +676,7 @@ class CdpPage extends Page_js_1.Page {
                 });
             }
         }
-        const message = new ConsoleMessage_js_1.ConsoleMessage(eventType, textTokens.join(' '), args, stackTraceLocations);
+        const message = new ConsoleMessage_js_1.ConsoleMessage(convertConsoleMessageLevel(eventType), textTokens.join(' '), args, stackTraceLocations);
         this.emit("console" /* PageEvent.Console */, message);
     }
     #onDialog(event) {
@@ -684,18 +693,6 @@ class CdpPage extends Page_js_1.Page {
     }
     async createCDPSession() {
         return await this.target().createCDPSession();
-    }
-    async waitForRequest(urlOrPredicate, options = {}) {
-        const { timeout = this._timeoutSettings.timeout() } = options;
-        return await (0, util_js_1.waitForHTTP)(this.#frameManager.networkManager, NetworkManagerEvents_js_1.NetworkManagerEvent.Request, urlOrPredicate, timeout, this.#sessionCloseDeferred);
-    }
-    async waitForResponse(urlOrPredicate, options = {}) {
-        const { timeout = this._timeoutSettings.timeout() } = options;
-        return await (0, util_js_1.waitForHTTP)(this.#frameManager.networkManager, NetworkManagerEvents_js_1.NetworkManagerEvent.Response, urlOrPredicate, timeout, this.#sessionCloseDeferred);
-    }
-    async waitForNetworkIdle(options = {}) {
-        const { idleTime = util_js_1.NETWORK_IDLE_TIME, timeout: ms = this._timeoutSettings.timeout(), } = options;
-        await (0, rxjs_js_1.firstValueFrom)(this._waitForNetworkIdle(this.#frameManager.networkManager, idleTime).pipe((0, rxjs_js_1.raceWith)((0, util_js_1.timeout)(ms), (0, rxjs_js_1.from)(this.#sessionCloseDeferred.valueOrThrow()))));
     }
     async goBack(options = {}) {
         return await this.#go(-1, options);
@@ -816,7 +813,8 @@ class CdpPage extends Page_js_1.Page {
         }
     }
     async createPDFStream(options = {}) {
-        const { landscape, displayHeaderFooter, headerTemplate, footerTemplate, printBackground, scale, width: paperWidth, height: paperHeight, margin, pageRanges, preferCSSPageSize, omitBackground, timeout: ms, tagged: generateTaggedPDF, } = this._getPDFOptions(options);
+        const { timeout: ms = this._timeoutSettings.timeout() } = options;
+        const { landscape, displayHeaderFooter, headerTemplate, footerTemplate, printBackground, scale, width: paperWidth, height: paperHeight, margin, pageRanges, preferCSSPageSize, omitBackground, tagged: generateTaggedPDF, outline: generateDocumentOutline, } = (0, util_js_1.parsePDFOptions)(options);
         if (omitBackground) {
             await this.#emulationManager.setTransparentBackgroundColor();
         }
@@ -837,6 +835,7 @@ class CdpPage extends Page_js_1.Page {
             pageRanges,
             preferCSSPageSize,
             generateTaggedPDF,
+            generateDocumentOutline,
         });
         const result = await (0, rxjs_js_1.firstValueFrom)((0, rxjs_js_1.from)(printCommandPromise).pipe((0, rxjs_js_1.raceWith)((0, util_js_1.timeout)(ms))));
         if (omitBackground) {

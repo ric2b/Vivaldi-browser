@@ -52,6 +52,7 @@ import org.chromium.url.GURL;
 
 // Vivaldi
 import org.chromium.chrome.browser.homepage.HomepageManager;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 /** This class creates various kinds of new tabs and adds them to the right {@link TabModel}. */
 public class ChromeTabCreator extends TabCreator {
@@ -412,7 +413,12 @@ public class ChromeTabCreator extends TabCreator {
     public boolean createTabWithWebContents(
             @Nullable Tab parent, WebContents webContents, @TabLaunchType int type, GURL url) {
         assert webContents != null;
-
+        int newTabPosition = ChromeSharedPreferences.getInstance().readInt("new_tab_position", 1);
+        // Ref. VAB-8839 Sets the current tab as parent to help with grouping newly created tab per
+        // the setting NewTabPositionSetting.AS_TAB_STACK_WITH_RELATED_TAB
+        if (type == 4 && newTabPosition == 3 && mTabModelSelectorSupplier.get() != null) {
+            parent = mTabModelSelectorSupplier.get().getCurrentTab();
+        }
         // The parent tab was already closed.  Do not open child tabs.
         int parentId = parent != null ? parent.getId() : Tab.INVALID_TAB_ID;
         if (mTabModel.isClosurePending(parentId)) return false;

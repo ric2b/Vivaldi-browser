@@ -10,7 +10,7 @@
 typedef void (^ServerRequestCompletionHandler)
     (NSData* data, NSURLResponse* response, NSError* error);
 
-absl::optional<base::Value> NSDataToDict(NSData* data);
+std::optional<base::Value> NSDataToDict(NSData* data);
 
 void sendRequestToServer(base::Value::Dict dict, NSURL* url,
     ServerRequestCompletionHandler handler, NSURLSessionDataTask* task);

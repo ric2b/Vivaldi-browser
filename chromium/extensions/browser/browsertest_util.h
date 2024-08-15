@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "content/public/test/browser_test_utils.h"
+#include "extensions/common/extension_id.h"
 
 namespace base {
 class Value;
@@ -34,7 +34,7 @@ enum class ScriptUserActivation {
 // determines if the script should be executed after a user activation.
 base::Value ExecuteScriptInBackgroundPage(
     content::BrowserContext* context,
-    const std::string& extension_id,
+    const ExtensionId& extension_id,
     const std::string& script,
     ScriptUserActivation script_user_activation =
         ScriptUserActivation::kDontActivate);
@@ -46,7 +46,7 @@ base::Value ExecuteScriptInBackgroundPage(
 // determines if the script should be executed after a user activation.
 bool ExecuteScriptInBackgroundPageNoWait(
     content::BrowserContext* context,
-    const std::string& extension_id,
+    const ExtensionId& extension_id,
     const std::string& script,
     ScriptUserActivation script_user_activation =
         ScriptUserActivation::kDontActivate);
@@ -59,7 +59,7 @@ bool ExecuteScriptInBackgroundPageNoWait(
 // user activation.
 std::string ExecuteScriptInBackgroundPageDeprecated(
     content::BrowserContext* context,
-    const std::string& extension_id,
+    const ExtensionId& extension_id,
     const std::string& script,
     ScriptUserActivation script_user_activation =
         ScriptUserActivation::kDontActivate);
@@ -68,7 +68,7 @@ std::string ExecuteScriptInBackgroundPageDeprecated(
 // given `extension_id` at global scope. The extension must be installed and
 // enabled.
 void StopServiceWorkerForExtensionGlobalScope(content::BrowserContext* context,
-                                              const std::string& extension_id);
+                                              const ExtensionId& extension_id);
 
 }  // namespace extensions::browsertest_util
 

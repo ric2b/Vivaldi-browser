@@ -11,6 +11,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/observer_list_threadsafe.h"
+#include "base/scoped_observation.h"
 #include "base/sequence_checker.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
@@ -20,7 +21,7 @@
 #include "components/performance_manager/public/resource_attribution/resource_types.h"
 #include "components/performance_manager/public/resource_attribution/type_helpers.h"
 
-namespace performance_manager::resource_attribution {
+namespace resource_attribution {
 
 namespace internal {
 struct QueryParams;
@@ -126,6 +127,11 @@ class ScopedResourceUsageQuery {
       GUARDED_BY_CONTEXT(sequence_checker_);
 };
 
+// Convenience alias for a ScopedObservation that observes a
+// ScopedResourceUsageQuery.
+using ScopedQueryObservation =
+    base::ScopedObservation<ScopedResourceUsageQuery, QueryResultObserver>;
+
 // Creates a query to request resource usage measurements on a schedule.
 //
 // Use CreateScopedQuery() to return an object that makes repeated measurements
@@ -215,6 +221,6 @@ class QueryBuilder {
       GUARDED_BY_CONTEXT(sequence_checker_);
 };
 
-}  // namespace performance_manager::resource_attribution
+}  // namespace resource_attribution
 
 #endif  // COMPONENTS_PERFORMANCE_MANAGER_PUBLIC_RESOURCE_ATTRIBUTION_QUERIES_H_

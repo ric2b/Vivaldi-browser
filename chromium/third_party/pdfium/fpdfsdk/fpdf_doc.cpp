@@ -25,11 +25,11 @@
 #include "core/fpdfdoc/cpdf_dest.h"
 #include "core/fpdfdoc/cpdf_linklist.h"
 #include "core/fpdfdoc/cpdf_pagelabel.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/containers/contains.h"
+#include "core/fxcrt/numerics/safe_conversions.h"
 #include "fpdfsdk/cpdfsdk_helpers.h"
 #include "public/fpdf_formfill.h"
-#include "third_party/base/check.h"
-#include "third_party/base/containers/contains.h"
-#include "third_party/base/numerics/safe_conversions.h"
 
 namespace {
 
@@ -236,7 +236,7 @@ FPDFAction_GetURIPath(FPDF_DOCUMENT document,
   ByteString path = cAction.GetURI(pDoc);
 
   const unsigned long len =
-      pdfium::base::checked_cast<unsigned long>(path.GetLength() + 1);
+      pdfium::checked_cast<unsigned long>(path.GetLength() + 1);
   if (buffer && len <= buflen)
     memcpy(buffer, path.c_str(), len);
   return len;
@@ -264,7 +264,7 @@ FPDFDest_GetView(FPDF_DEST dest, unsigned long* pNumParams, FS_FLOAT* pParams) {
 
   CPDF_Dest destination(pdfium::WrapRetain(CPDFArrayFromFPDFDest(dest)));
   const unsigned long nParams =
-      pdfium::base::checked_cast<unsigned long>(destination.GetNumParams());
+      pdfium::checked_cast<unsigned long>(destination.GetNumParams());
   DCHECK(nParams <= 4);
   *pNumParams = nParams;
   for (unsigned long i = 0; i < nParams; ++i)
@@ -512,7 +512,7 @@ FPDF_GetPageLabel(FPDF_DOCUMENT document,
 
   // CPDF_PageLabel can deal with NULL |document|.
   CPDF_PageLabel label(CPDFDocumentFromFPDFDocument(document));
-  absl::optional<WideString> str = label.GetLabel(page_index);
+  std::optional<WideString> str = label.GetLabel(page_index);
   return str.has_value()
              ? Utf16EncodeMaybeCopyAndReturnLength(str.value(), buffer, buflen)
              : 0;

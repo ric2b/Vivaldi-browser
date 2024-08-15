@@ -100,8 +100,7 @@ ContextualPageActionsModel::GetModelConfig() {
 
   // Set output config, labels, and classifier.
   writer.AddOutputConfigForMultiClassClassifier(
-      kContextualPageActionModelLabels.begin(),
-      kContextualPageActionModelLabels.size(),
+      kContextualPageActionModelLabels,
       /*top_k_outputs=*/1, threshold);
 
   constexpr int kModelVersion = 1;
@@ -120,7 +119,7 @@ void ContextualPageActionsModel::ExecuteModelWithInput(
   // Invalid inputs.
   if (inputs.size() != expected_input_size) {
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback), absl::nullopt));
+        FROM_HERE, base::BindOnce(std::move(callback), std::nullopt));
     return;
   }
 

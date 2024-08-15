@@ -2392,6 +2392,9 @@ static void print_pkt_side_data(WriterContext *w,
             AVContentLightMetadata *metadata = (AVContentLightMetadata *)sd->data;
             print_int("max_content", metadata->MaxCLL);
             print_int("max_average", metadata->MaxFALL);
+        } else if (sd->type == AV_PKT_DATA_AMBIENT_VIEWING_ENVIRONMENT) {
+            print_ambient_viewing_environment(
+                w, (const AVAmbientViewingEnvironment *)sd->data);
         } else if (sd->type == AV_PKT_DATA_DYNAMIC_HDR10_PLUS) {
             AVDynamicHDRPlus *metadata = (AVDynamicHDRPlus *)sd->data;
             print_dynamic_hdr10_plus(w, metadata);
@@ -3716,7 +3719,7 @@ static int opt_show_optional_fields(void *optctx, const char *opt, const char *a
 
     if (show_optional_fields == SHOW_OPTIONAL_FIELDS_AUTO && av_strcasecmp(arg, "auto")) {
         double num;
-        int ret = parse_number("show_optional_fields", arg, OPT_INT,
+        int ret = parse_number("show_optional_fields", arg, OPT_TYPE_INT,
                                SHOW_OPTIONAL_FIELDS_AUTO, SHOW_OPTIONAL_FIELDS_ALWAYS, &num);
         if (ret < 0)
             return ret;
@@ -3828,7 +3831,9 @@ static int opt_input_file(void *optctx, const char *arg)
     }
     if (!strcmp(arg, "-"))
         arg = "fd:";
-    input_filename = arg;
+    input_filename = av_strdup(arg);
+    if (!input_filename)
+        return AVERROR(ENOMEM);
 
     return 0;
 }
@@ -3849,22 +3854,25 @@ static int opt_output_file_o(void *optctx, const char *opt, const char *arg)
     }
     if (!strcmp(arg, "-"))
         arg = "fd:";
-    output_filename = arg;
+    output_filename = av_strdup(arg);
+    if (!output_filename)
+        return AVERROR(ENOMEM);
 
     return 0;
 }
 
 static int opt_print_filename(void *optctx, const char *opt, const char *arg)
 {
-    print_input_filename = arg;
-    return 0;
+    av_freep(&print_input_filename);
+    print_input_filename = av_strdup(arg);
+    return print_input_filename ? 0 : AVERROR(ENOMEM);
 }
 
 void show_help_default(const char *opt, const char *arg)
 {
     av_log_set_callback(log_callback_help);
     show_usage();
-    show_help_options(options, "Main options:", 0, 0, 0);
+    show_help_options(options, "Main options:", 0, 0);
     printf("\n");
 
     show_help_children(avformat_get_class(), AV_OPT_FLAG_DECODING_PARAM);
@@ -4078,50 +4086,50 @@ DEFINE_OPT_SHOW_SECTION(programs,         PROGRAMS)
 
 static const OptionDef real_options[] = {
     CMDUTILS_COMMON_OPTIONS
-    { "f", HAS_ARG, {.func_arg = opt_format}, "force format", "format" },
-    { "unit", OPT_BOOL, {&show_value_unit}, "show unit of the displayed values" },
-    { "prefix", OPT_BOOL, {&use_value_prefix}, "use SI prefixes for the displayed values" },
-    { "byte_binary_prefix", OPT_BOOL, {&use_byte_value_binary_prefix},
+    { "f",                     OPT_TYPE_FUNC, OPT_FUNC_ARG, {.func_arg = opt_format}, "force format", "format" },
+    { "unit",                  OPT_TYPE_BOOL,        0, {&show_value_unit}, "show unit of the displayed values" },
+    { "prefix",                OPT_TYPE_BOOL,        0, {&use_value_prefix}, "use SI prefixes for the displayed values" },
+    { "byte_binary_prefix",    OPT_TYPE_BOOL,        0, {&use_byte_value_binary_prefix},
       "use binary prefixes for byte units" },
-    { "sexagesimal", OPT_BOOL,  {&use_value_sexagesimal_format},
+    { "sexagesimal",           OPT_TYPE_BOOL,        0, {&use_value_sexagesimal_format},
       "use sexagesimal format HOURS:MM:SS.MICROSECONDS for time units" },
-    { "pretty", 0, {.func_arg = opt_pretty},
+    { "pretty",                OPT_TYPE_FUNC,        0, {.func_arg = opt_pretty},
       "prettify the format of displayed values, make it more human readable" },
-    { "output_format", OPT_STRING | HAS_ARG, { &output_format },
+    { "output_format",         OPT_TYPE_STRING,      0, { &output_format },
       "set the output printing format (available formats are: default, compact, csv, flat, ini, json, xml)", "format" },
-    { "print_format", OPT_STRING | HAS_ARG, { &output_format }, "alias for -output_format (deprecated)" },
-    { "of", OPT_STRING | HAS_ARG, { &output_format }, "alias for -output_format", "format" },
-    { "select_streams", OPT_STRING | HAS_ARG, { &stream_specifier }, "select the specified streams", "stream_specifier" },
-    { "sections", OPT_EXIT, {.func_arg = opt_sections}, "print sections structure and section information, and exit" },
-    { "show_data",    OPT_BOOL, { &do_show_data }, "show packets data" },
-    { "show_data_hash", OPT_STRING | HAS_ARG, { &show_data_hash }, "show packets data hash" },
-    { "show_error",   0, { .func_arg = &opt_show_error },  "show probing error" },
-    { "show_format",  0, { .func_arg = &opt_show_format }, "show format/container info" },
-    { "show_frames",  0, { .func_arg = &opt_show_frames }, "show frames info" },
-    { "show_entries", HAS_ARG, {.func_arg = opt_show_entries},
+    { "print_format",          OPT_TYPE_STRING,      0, { &output_format }, "alias for -output_format (deprecated)" },
+    { "of",                    OPT_TYPE_STRING,      0, { &output_format }, "alias for -output_format", "format" },
+    { "select_streams",        OPT_TYPE_STRING,      0, { &stream_specifier }, "select the specified streams", "stream_specifier" },
+    { "sections",              OPT_TYPE_FUNC, OPT_EXIT, {.func_arg = opt_sections}, "print sections structure and section information, and exit" },
+    { "show_data",             OPT_TYPE_BOOL,        0, { &do_show_data }, "show packets data" },
+    { "show_data_hash",        OPT_TYPE_STRING,      0, { &show_data_hash }, "show packets data hash" },
+    { "show_error",            OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_error },  "show probing error" },
+    { "show_format",           OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_format }, "show format/container info" },
+    { "show_frames",           OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_frames }, "show frames info" },
+    { "show_entries",          OPT_TYPE_FUNC, OPT_FUNC_ARG, {.func_arg = opt_show_entries},
       "show a set of specified entries", "entry_list" },
 #if HAVE_THREADS
-    { "show_log", OPT_INT|HAS_ARG, { &do_show_log }, "show log" },
+    { "show_log",              OPT_TYPE_INT,         0, { &do_show_log }, "show log" },
 #endif
-    { "show_packets", 0, { .func_arg = &opt_show_packets }, "show packets info" },
-    { "show_programs", 0, { .func_arg = &opt_show_programs }, "show programs info" },
-    { "show_streams", 0, { .func_arg = &opt_show_streams }, "show streams info" },
-    { "show_chapters", 0, { .func_arg = &opt_show_chapters }, "show chapters info" },
-    { "count_frames", OPT_BOOL, { &do_count_frames }, "count the number of frames per stream" },
-    { "count_packets", OPT_BOOL, { &do_count_packets }, "count the number of packets per stream" },
-    { "show_program_version",  0, { .func_arg = &opt_show_program_version },  "show ffprobe version" },
-    { "show_library_versions", 0, { .func_arg = &opt_show_library_versions }, "show library versions" },
-    { "show_versions",         0, { .func_arg = &opt_show_versions }, "show program and library versions" },
-    { "show_pixel_formats", 0, { .func_arg = &opt_show_pixel_formats }, "show pixel format descriptions" },
-    { "show_optional_fields", HAS_ARG, { .func_arg = &opt_show_optional_fields }, "show optional fields" },
-    { "show_private_data", OPT_BOOL, { &show_private_data }, "show private data" },
-    { "private",           OPT_BOOL, { &show_private_data }, "same as show_private_data" },
-    { "bitexact", OPT_BOOL, {&do_bitexact}, "force bitexact output" },
-    { "read_intervals", HAS_ARG, {.func_arg = opt_read_intervals}, "set read intervals", "read_intervals" },
-    { "i", HAS_ARG, {.func_arg = opt_input_file_i}, "read specified file", "input_file"},
-    { "o", HAS_ARG, {.func_arg = opt_output_file_o}, "write to specified output", "output_file"},
-    { "print_filename", HAS_ARG, {.func_arg = opt_print_filename}, "override the printed input filename", "print_file"},
-    { "find_stream_info", OPT_BOOL | OPT_INPUT | OPT_EXPERT, { &find_stream_info },
+    { "show_packets",          OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_packets }, "show packets info" },
+    { "show_programs",         OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_programs }, "show programs info" },
+    { "show_streams",          OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_streams }, "show streams info" },
+    { "show_chapters",         OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_chapters }, "show chapters info" },
+    { "count_frames",          OPT_TYPE_BOOL,        0, { &do_count_frames }, "count the number of frames per stream" },
+    { "count_packets",         OPT_TYPE_BOOL,        0, { &do_count_packets }, "count the number of packets per stream" },
+    { "show_program_version",  OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_program_version },  "show ffprobe version" },
+    { "show_library_versions", OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_library_versions }, "show library versions" },
+    { "show_versions",         OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_versions }, "show program and library versions" },
+    { "show_pixel_formats",    OPT_TYPE_FUNC,        0, { .func_arg = &opt_show_pixel_formats }, "show pixel format descriptions" },
+    { "show_optional_fields",  OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = &opt_show_optional_fields }, "show optional fields" },
+    { "show_private_data",     OPT_TYPE_BOOL,        0, { &show_private_data }, "show private data" },
+    { "private",               OPT_TYPE_BOOL,        0, { &show_private_data }, "same as show_private_data" },
+    { "bitexact",              OPT_TYPE_BOOL,        0, {&do_bitexact}, "force bitexact output" },
+    { "read_intervals",        OPT_TYPE_FUNC, OPT_FUNC_ARG, {.func_arg = opt_read_intervals}, "set read intervals", "read_intervals" },
+    { "i",                     OPT_TYPE_FUNC, OPT_FUNC_ARG, {.func_arg = opt_input_file_i}, "read specified file", "input_file"},
+    { "o",                     OPT_TYPE_FUNC, OPT_FUNC_ARG, {.func_arg = opt_output_file_o}, "write to specified output", "output_file"},
+    { "print_filename",        OPT_TYPE_FUNC, OPT_FUNC_ARG, {.func_arg = opt_print_filename}, "override the printed input filename", "print_file"},
+    { "find_stream_info",      OPT_TYPE_BOOL, OPT_INPUT | OPT_EXPERT, { &find_stream_info },
         "read and decode the streams to fill missing information with heuristics" },
     { NULL, },
 };
@@ -4287,6 +4295,9 @@ int main(int argc, char **argv)
 
 end:
     av_freep(&output_format);
+    av_freep(&output_filename);
+    av_freep(&input_filename);
+    av_freep(&print_input_filename);
     av_freep(&read_intervals);
     av_hash_freep(&hash);
 

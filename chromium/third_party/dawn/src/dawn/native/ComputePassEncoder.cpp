@@ -131,6 +131,10 @@ ComputePassEncoder::ComputePassEncoder(DeviceBase* device,
     GetObjectTrackingList()->Track(this);
 }
 
+ComputePassEncoder::~ComputePassEncoder() {
+    mEncodingContext = nullptr;
+}
+
 // static
 Ref<ComputePassEncoder> ComputePassEncoder::Create(DeviceBase* device,
                                                    const ComputePassDescriptor* descriptor,
@@ -157,6 +161,8 @@ Ref<ComputePassEncoder> ComputePassEncoder::MakeError(DeviceBase* device,
 }
 
 void ComputePassEncoder::DestroyImpl() {
+    mCommandBufferState.End();
+
     // Ensure that the pass has exited. This is done for passes only since validation requires
     // they exit before destruction while bundles do not.
     mEncodingContext->EnsurePassExited(this);
@@ -167,6 +173,8 @@ ObjectType ComputePassEncoder::GetType() const {
 }
 
 void ComputePassEncoder::APIEnd() {
+    mCommandBufferState.End();
+
     if (mEnded && IsValidationEnabled()) {
         GetDevice()->HandleError(DAWN_VALIDATION_ERROR("%s was already ended.", this));
         return;

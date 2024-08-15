@@ -10,6 +10,7 @@
 #include "third_party/blink/public/common/fenced_frame/fenced_frame_utils.h"
 #include "third_party/blink/public/mojom/fenced_frame/fenced_frame.mojom-blink.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/html/fenced_frame/fenced_frame_config.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
@@ -93,7 +94,7 @@ class CORE_EXPORT HTMLFencedFrameElement : public HTMLFrameOwnerElement {
   // The frozen state is kept in this element so that it can survive across
   // reattaches.
   // The size is in layout size (i.e., DSF multiplied.)
-  const absl::optional<PhysicalSize> FrozenFrameSize() const;
+  const std::optional<PhysicalSize> FrozenFrameSize() const;
   // True if the frame size should be frozen when the next resize completed.
   // When `config` is set but layout is not completed yet, the frame size is
   // frozen after the first layout.
@@ -119,15 +120,24 @@ class CORE_EXPORT HTMLFencedFrameElement : public HTMLFrameOwnerElement {
   // `NavigatorAuction::canLoadAdAuctionFencedFrame` instead.
   static bool canLoadOpaqueURL(ScriptState*);
 
+  // Fires an event named `event_type` at `this`. This path is only invoked for
+  // events that were originally fired *inside* of the fenced frame content, and
+  // that have been intentionally propagated outwards to `this`, the frame
+  // owner, for reception by the embedder script.
+  void DispatchFencedEvent(const WTF::String& event_type);
+
+  // Defines attribute event listener `onfencedtreeclick`.
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(fencedtreeclick, kFencedtreeclick)
+
  private:
   // This method will only navigate the underlying frame if the element
   // `isConnected()`. It will be deferred if the page is currently prerendering.
-  void Navigate(const KURL& url,
-                absl::optional<bool> deprecated_should_freeze_initial_size =
-                    absl::nullopt,
-                absl::optional<gfx::Size> container_size = absl::nullopt,
-                absl::optional<gfx::Size> content_size = absl::nullopt,
-                String embedder_shared_storage_context = String());
+  void Navigate(
+      const KURL& url,
+      std::optional<bool> deprecated_should_freeze_initial_size = std::nullopt,
+      std::optional<gfx::Size> container_size = std::nullopt,
+      std::optional<gfx::Size> content_size = std::nullopt,
+      String embedder_shared_storage_context = String());
 
   // This method delegates to `Navigate()` above only if `this` has a non-null
   // `config_`. If that's the case, this method pulls the appropriate URL off of
@@ -199,8 +209,8 @@ class CORE_EXPORT HTMLFencedFrameElement : public HTMLFrameOwnerElement {
   Member<ResizeObserver> resize_observer_;
   Member<FencedFrameConfig> config_;
   // See |FrozenFrameSize| above. Stored in CSS pixel (without DSF multiplied.)
-  absl::optional<PhysicalSize> frozen_frame_size_;
-  absl::optional<PhysicalRect> content_rect_;
+  std::optional<PhysicalSize> frozen_frame_size_;
+  std::optional<PhysicalRect> content_rect_;
   bool should_freeze_frame_size_on_next_layout_ = false;
   bool collapsed_by_client_ = false;
   // This represents the element's `mode` attribute. We store it here instead of

@@ -297,7 +297,7 @@ void CaptureModeSessionFocusCycler::HighlightableView::PseudoFocus() {
     needs_highlight_path_ = false;
   }
 
-  focus_ring_->Layout();
+  focus_ring_->DeprecatedLayoutImmediately();
   focus_ring_->SchedulePaint();
 
   view->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
@@ -312,7 +312,7 @@ void CaptureModeSessionFocusCycler::HighlightableView::PseudoBlur() {
   if (!focus_ring_)
     return;
 
-  focus_ring_->Layout();
+  focus_ring_->DeprecatedLayoutImmediately();
   focus_ring_->SchedulePaint();
 }
 
@@ -1001,8 +1001,8 @@ void CaptureModeSessionFocusCycler::UpdateA11yAnnotation() {
         DCHECK(target);
         auto* contents_view = target->GetContentsView();
         auto& view_a11y = contents_view->GetViewAccessibility();
-        view_a11y.OverridePreviousFocus(previous);
-        view_a11y.OverrideNextFocus(next);
+        view_a11y.SetPreviousFocus(previous);
+        view_a11y.SetNextFocus(next);
         contents_view->NotifyAccessibilityEvent(ax::mojom::Event::kTreeChanged,
                                                 true);
       };

@@ -54,9 +54,18 @@ class TestPathBuilderDelegate : public SimplePathBuilderDelegate {
 
   MockSignatureVerifyCache *GetMockVerifyCache() { return &cache_; }
 
- private:
+  void AllowPrecert() { allow_precertificate_ = true; }
+
+  void DisallowPrecert() { allow_precertificate_ = false; }
+
+  bool AcceptPreCertificates() override {
+    return allow_precertificate_;
+  }
+
+private:
   bool deadline_is_expired_ = false;
   bool use_signature_cache_ = false;
+  bool allow_precertificate_ = false;
   MockSignatureVerifyCache cache_;
 };
 
@@ -907,6 +916,46 @@ TEST_F(PathBuilderMultiRootTest, TestDepthLimitMultiplePaths) {
   EXPECT_EQ(c_by_d_, valid_path->certs[2]);
 }
 
+TEST_F(PathBuilderMultiRootTest, TestPreCertificate) {
+
+  std::string test_dir =
+      "testdata/path_builder_unittest/precertificate/";
+  std::shared_ptr<const ParsedCertificate> root1 =
+      ReadCertFromFile(test_dir + "root.pem");
+  ASSERT_TRUE(root1);
+  std::shared_ptr<const ParsedCertificate> target =
+      ReadCertFromFile(test_dir + "precertificate.pem");
+  ASSERT_TRUE(target);
+
+  der::GeneralizedTime precert_time = {2023, 10, 1, 0, 0, 0};
+
+  TrustStoreInMemory trust_store;
+  trust_store.AddTrustAnchor(root1);
+
+  // PreCertificate should be rejected by default.
+  EXPECT_FALSE(delegate_.AcceptPreCertificates());
+  CertPathBuilder path_builder(
+      target, &trust_store, &delegate_, precert_time, KeyPurpose::ANY_EKU,
+      initial_explicit_policy_, user_initial_policy_set_,
+      initial_policy_mapping_inhibit_, initial_any_policy_inhibit_);
+  auto result = path_builder.Run();
+  ASSERT_EQ(1U, result.paths.size());
+  ASSERT_FALSE(result.paths[0]->IsValid())
+      << result.paths[0]->errors.ToDebugString(result.paths[0]->certs);
+
+  // PreCertificate should be accepted if configured.
+  delegate_.AllowPrecert();
+  EXPECT_TRUE(delegate_.AcceptPreCertificates());
+  CertPathBuilder path_builder2(
+      target, &trust_store, &delegate_, precert_time, KeyPurpose::ANY_EKU,
+      initial_explicit_policy_, user_initial_policy_set_,
+      initial_policy_mapping_inhibit_, initial_any_policy_inhibit_);
+  auto result2 = path_builder2.Run();
+  ASSERT_EQ(1U, result2.paths.size());
+  ASSERT_TRUE(result2.paths[0]->IsValid())
+      << result2.paths[0]->errors.ToDebugString(result.paths[0]->certs);
+}
+
 class PathBuilderKeyRolloverTest : public ::testing::Test {
  public:
   PathBuilderKeyRolloverTest()
@@ -1362,9 +1411,7 @@ TEST_F(PathBuilderKeyRolloverTest, ExplorePathsWithPathLimit) {
       {0, 4},  // No path limit. Three valid, one partial path should be built
       {1, 1},  // One valid path
       {2, 3},  // Two valid, one partial
-      {3, 4},
-      {4, 4},
-      {5, 4},
+      {3, 4}, {4, 4}, {5, 4},
   };
 
   // Trust both old and new roots.
@@ -1523,9 +1570,9 @@ TEST_F(PathBuilderKeyRolloverTest, TestDuplicateIntermediates) {
   // Create a separate copy of oldintermediate.
   std::shared_ptr<const ParsedCertificate> oldintermediate_dupe(
       ParsedCertificate::Create(
-          bssl::UniquePtr<CRYPTO_BUFFER>(CRYPTO_BUFFER_new(
-              oldintermediate_->der_cert().UnsafeData(),
-              oldintermediate_->der_cert().Length(), nullptr)),
+          bssl::UniquePtr<CRYPTO_BUFFER>(
+              CRYPTO_BUFFER_new(oldintermediate_->der_cert().data(),
+                                oldintermediate_->der_cert().size(), nullptr)),
           {}, nullptr));
 
   // Only newroot is a trusted root.
@@ -1590,8 +1637,8 @@ TEST_F(PathBuilderKeyRolloverTest, TestDuplicateIntermediateAndRoot) {
   std::shared_ptr<const ParsedCertificate> newroot_dupe(
       ParsedCertificate::Create(
           bssl::UniquePtr<CRYPTO_BUFFER>(
-              CRYPTO_BUFFER_new(newroot_->der_cert().UnsafeData(),
-                                newroot_->der_cert().Length(), nullptr)),
+              CRYPTO_BUFFER_new(newroot_->der_cert().data(),
+                                newroot_->der_cert().size(), nullptr)),
           {}, nullptr));
 
   // Only newroot is a trusted root.
@@ -1784,9 +1831,9 @@ TEST_F(PathBuilderKeyRolloverTest, TestDuplicateAsyncIntermediates) {
 
   std::shared_ptr<const ParsedCertificate> oldintermediate_dupe(
       ParsedCertificate::Create(
-          bssl::UniquePtr<CRYPTO_BUFFER>(CRYPTO_BUFFER_new(
-              oldintermediate_->der_cert().UnsafeData(),
-              oldintermediate_->der_cert().Length(), nullptr)),
+          bssl::UniquePtr<CRYPTO_BUFFER>(
+              CRYPTO_BUFFER_new(oldintermediate_->der_cert().data(),
+                                oldintermediate_->der_cert().size(), nullptr)),
           {}, nullptr));
 
   EXPECT_CALL(*target_issuers_req, GetNext(_))
@@ -2012,7 +2059,8 @@ TEST_F(PathBuilderCheckPathAfterVerificationTest, AddsWarningToValidPath) {
   const CertErrors *cert1_errors =
       result.GetBestValidPath()->errors.GetErrorsForCert(1);
   ASSERT_TRUE(cert1_errors);
-  EXPECT_TRUE(cert1_errors->ContainsError(kWarningFromDelegate));
+  EXPECT_TRUE(cert1_errors->ContainsErrorWithSeverity(
+      kWarningFromDelegate, CertError::SEVERITY_WARNING));
 }
 
 DEFINE_CERT_ERROR_ID(kErrorFromDelegate, "Error from delegate");

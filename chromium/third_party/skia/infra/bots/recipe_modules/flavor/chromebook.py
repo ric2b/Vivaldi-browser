@@ -39,17 +39,10 @@ class ChromebookFlavor(ssh.SSHFlavor):
              'sudo', 'mount', '-i', '-o', 'remount,exec', '/home/chronos')
 
   def _copy_dir(self, src, dest):
-    # We can't use rsync to communicate with the chromebooks because the
-    # chromebooks don't have rsync installed on them.
-    self.m.python.inline(str('scp -r %s %s' % (src, dest)),
-    """
-    import subprocess
-    import sys
-    src = sys.argv[1] + '/*'
-    dest   = sys.argv[2]
-    print(subprocess.check_output(
-        'scp -r %s %s' % (src, dest), shell=True).decode('utf-8'))
-    """, args=[src, dest], infra_step=True)
+    script = self.module.resource('scp.py')
+    self.m.step(str('scp -r %s %s' % (src, dest)),
+        cmd=['python3', script, src, dest],
+        infra_step=True)
 
   def copy_directory_contents_to_device(self, host_path, device_path):
     self._copy_dir(host_path, self.scp_device_path(device_path))

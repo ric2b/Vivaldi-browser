@@ -64,12 +64,12 @@ void ParseContent(const std::string& file_contents,
 
 void LoadTrackerInfos(
     const base::FilePath& tracker_infos_path,
-    base::OnceCallback<void(absl::optional<base::Value::Dict>)> callback) {
+    base::OnceCallback<void(std::optional<base::Value::Dict>)> callback) {
   JSONFileValueDeserializer serializer(tracker_infos_path);
   std::unique_ptr<base::Value> tracker_infos(
       serializer.Deserialize(nullptr, nullptr));
   if (!tracker_infos || !tracker_infos->is_dict())
-    std::move(callback).Run(absl::nullopt);
+    std::move(callback).Run(std::nullopt);
   else
     std::move(callback).Run(std::move(tracker_infos->GetDict()));
 }
@@ -87,7 +87,7 @@ struct RuleSourceHandler::RulesReadResult {
   FetchResult fetch_result = FetchResult::kSuccess;
   RulesInfo rules_info;
   std::string checksum;
-  absl::optional<base::Value::Dict> tracker_infos;
+  std::optional<base::Value::Dict> tracker_infos;
 };
 
 /*static*/
@@ -179,7 +179,7 @@ RuleSourceHandler::RuleSourceHandler(
 RuleSourceHandler::~RuleSourceHandler() = default;
 
 void RuleSourceHandler::OnTrackerInfosLoaded(
-    absl::optional<base::Value::Dict> tracker_infos) {
+    std::optional<base::Value::Dict> tracker_infos) {
   if (tracker_infos) {
     on_tracker_infos_update_callback_.Run(rule_source_,
                                           std::move(*tracker_infos));

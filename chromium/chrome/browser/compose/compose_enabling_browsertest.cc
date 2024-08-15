@@ -24,6 +24,7 @@
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/unified_consent/pref_names.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/fenced_frame_test_util.h"
 #include "content/public/test/test_host_resolver.h"
 #include "net/dns/mock_host_resolver.h"
@@ -72,8 +73,6 @@ IN_PROC_BROWSER_TEST_F(ComposeEnablingBrowserTest,
 
   // Confirm that the required feature flags are enabled by default.
   EXPECT_TRUE(base::FeatureList::IsEnabled(compose::features::kEnableCompose));
-  EXPECT_TRUE(base::FeatureList::IsEnabled(
-      autofill::features::kAutofillContentEditables));
 
   // Enable Compose via the Optimization Guide's pref.
   browser()->profile()->GetPrefs()->SetInteger(

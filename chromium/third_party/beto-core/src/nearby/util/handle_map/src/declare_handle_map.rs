@@ -16,17 +16,18 @@
 
 #[macro_export]
 /// ```ignore
-/// declare_handle_map! {
-///     mod $handle_module_name {
-///         #[dimensions = $map_dimension_provider]
-///         type $handle_type_name: HandleLike<Object = $wrapped_type>;
-///     }
-/// }
+/// declare_handle_map! (
+///     $handle_module_name,
+///     $map_dimension_provider,
+///     $handle_type_name,
+///     $wrapped_type,
+/// )
 /// ```
 ///
-/// Declares a new public module with name `handle_module_name` which includes a new type
-/// `handle_type_name` which is `#[repr(C)]` and represents FFI-accessible handles
-/// to values of type `wrapped_type`.
+/// Declares a new public module with name `handle_module_name` which implements handle functionality
+/// for the given struct `handle_type_name` which is `#[repr(C)]` and represents FFI-accessible
+/// handles to values of type `wrapped_type`. `handle_type_name` expects a struct with a single u64
+/// field `handle_id`.
 ///
 /// Internal to the generated module, a new static `SingletonHandleMap` is created, where the
 /// maximum number of active handles and the number of shards are given by
@@ -54,14 +55,16 @@
 ///     }
 ///  }
 ///
-///  declare_handle_map! {
-///     mod string_handle {
-///         #[dimensions = super::get_string_handle_map_dimensions()]
-///         type StringHandle: HandleLike<Object = String>;
-///     }
+///  struct StringHandle {
+///     handle_id: u64
 ///  }
 ///
-///  use string_handle::StringHandle;
+///  declare_handle_map!(
+///     string_handle,
+///     super::get_string_handle_map_dimensions(),
+///     super::StringHandle,
+///     String
+///  );
 ///
 ///  fn main() {
 ///         // Note: this method could panic if there are
@@ -90,10 +93,10 @@
 /// ```
 macro_rules! declare_handle_map {
     (
-        mod $handle_module_name:ident {
-            #[dimensions = $map_dimension_provider:expr]
-            type $handle_type_name:ident: HandleLike<Object = $wrapped_type:ty>;
-        }
+        $handle_module_name:ident,
+        $map_dimension_provider:expr,
+        $handle_type_name:ty,
+        $wrapped_type:ty
      ) => {
         #[doc = ::core::concat!(
                     "Macro-generated (via `handle_map::declare_handle_map!`) module which",
@@ -102,7 +105,6 @@ macro_rules! declare_handle_map {
                     " which references values of type `", ::core::stringify!($wrapped_type), "`."
                 )]
         pub mod $handle_module_name {
-
             lazy_static! {
                 static ref GLOBAL_HANDLE_MAP: $crate::HandleMap<$wrapped_type> =
                 $crate::HandleMap::with_dimensions($map_dimension_provider);
@@ -112,11 +114,6 @@ macro_rules! declare_handle_map {
                         "A `#[repr(C)]` handle to a value of type `",
                         ::core::stringify!($wrapped_type), "`."
                     )]
-            #[repr(C)]
-            #[derive(Clone, Copy, PartialEq, Eq)]
-            pub struct $handle_type_name {
-                handle_id: u64,
-            }
 
             impl $handle_type_name {
                 /// Cast the given raw Handle to this HandleLike

@@ -782,9 +782,12 @@ PendingRegistration pendingRegistration;
   self.startSyncingButton.buttonText =
       l10n_util::GetNSString(IDS_VIVALDI_START_SYNCING);
   self.startSyncingButton.textAlignment = NSTextAlignmentNatural;
-  self.startSyncingButton.buttonTextColor = [UIColor colorNamed:kBlueColor];
   self.startSyncingButton.buttonBackgroundColor =
-      [UIColor colorNamed:kBackgroundColor];
+      [UIColor colorNamed:kBlueColor];
+  self.startSyncingButton.buttonTextColor =
+      [UIColor colorNamed:kSolidButtonTextColor];
+  self.startSyncingButton.cellBackgroundColor =
+      self.startSyncingButton.buttonBackgroundColor;
   self.startSyncingButton.disableButtonIntrinsicWidth = YES;
   self.startSyncingButton.enabled = [self getStartSyncingButtonEnabled];
 
@@ -1066,7 +1069,7 @@ PendingRegistration pendingRegistration;
                        response:(NSURLResponse*)response
                           error:(NSError*)error
                      deviceName:(NSString*)deviceName {
-  absl::optional<base::Value> readResult = NSDataToDict(data);
+  std::optional<base::Value> readResult = NSDataToDict(data);
   if (!readResult.has_value()) {
     [self.commandHandler createAccountFailed:vErrorCodeOther];
     return;
@@ -1109,7 +1112,7 @@ PendingRegistration pendingRegistration;
   }
 
   std::string encoded_password;
-  base::Base64Encode(encrypted_password, &encoded_password);
+  base::Base64Encode(encrypted_password);
   base::Value pending_registration(base::Value::Type::DICT);
 
   pending_registration.GetDict().Set(kRecoveryEmailKey,

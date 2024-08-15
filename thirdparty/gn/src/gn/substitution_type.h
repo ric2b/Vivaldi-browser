@@ -15,8 +15,10 @@ class ParseNode;
 // Each pair here represents the string representation of the substitution in GN
 // and in Ninja.
 struct Substitution {
-  const char* name;
-  const char* ninja_name;
+  const char* name = nullptr;
+  const char* ninja_name = nullptr;
+  Substitution(const char* name, const char* ninja_name)
+      : name(name), ninja_name(ninja_name) {}
   Substitution(const Substitution&) = delete;
   Substitution& operator=(const Substitution&) = delete;
 };

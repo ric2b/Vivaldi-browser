@@ -4,12 +4,11 @@
 
 import * as Common from '../../../../core/common/common.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
-import * as Platform from '../../../../core/platform/platform.js';
+import type * as Platform from '../../../../core/platform/platform.js';
 import {assertNotNullOrUndefined} from '../../../../core/platform/platform.js';
 import * as SDK from '../../../../core/sdk/sdk.js';
 import * as Protocol from '../../../../generated/protocol.js';
 import * as DataGrid from '../../../../ui/components/data_grid/data_grid.js';
-import * as ComponentHelpers from '../../../../ui/components/helpers/helpers.js';
 import * as IconButton from '../../../../ui/components/icon_button/icon_button.js';
 import * as LegacyWrapper from '../../../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import type * as UI from '../../../../ui/legacy/legacy.js';
@@ -82,11 +81,10 @@ export class RuleSetGrid extends LegacyWrapper.LegacyWrapper.WrappableComponent<
       return;
     }
 
-    const k = Platform.StringUtilities.kebab;
     const reportsGridData: DataGrid.DataGridController.DataGridControllerData = {
       columns: [
         {
-          id: k('rule-set'),
+          id: 'rule-set',
           title: i18nString(UIStrings.ruleSet),
           widthWeighting: 20,
           hideable: false,
@@ -94,7 +92,7 @@ export class RuleSetGrid extends LegacyWrapper.LegacyWrapper.WrappableComponent<
           sortable: true,
         },
         {
-          id: k('status'),
+          id: 'status',
           title: i18nString(UIStrings.status),
           widthWeighting: 80,
           hideable: false,
@@ -110,7 +108,7 @@ export class RuleSetGrid extends LegacyWrapper.LegacyWrapper.WrappableComponent<
     // clang-format off
     LitHtml.render(LitHtml.html`
       <div class="ruleset-container"
-      jslog=${VisualLogging.pane().context('preloading-rules')}>
+      jslog=${VisualLogging.pane('preloading-rules')}>
         <${DataGrid.DataGridController.DataGridController.litTagName} .data=${
             reportsGridData as DataGrid.DataGridController.DataGridControllerData}>
         </${DataGrid.DataGridController.DataGridController.litTagName}>
@@ -142,7 +140,7 @@ export class RuleSetGrid extends LegacyWrapper.LegacyWrapper.WrappableComponent<
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-resources-ruleset-grid', RuleSetGrid);
+customElements.define('devtools-resources-ruleset-grid', RuleSetGrid);
 
 declare global {
   interface HTMLElementTagNameMap {
@@ -181,7 +179,7 @@ function ruleSetRenderer(
           'padding-inline-start': '0',
           'padding-inline-end': '0',
         })}
-        jslog=${VisualLogging.action().track({click: true}).context('reveal-in-elements-panel')}
+        jslog=${VisualLogging.action('reveal-in-elements').track({click: true})}
       >
         <${IconButton.Icon.Icon.litTagName}
           .data=${{
@@ -289,7 +287,7 @@ function statusRenderer(preloadsStatusSummary: string, ruleSet: Protocol.Preload
           'padding-inline-start': '0',
           'padding-inline-end': '0',
         })}
-        jslog=${VisualLogging.action().track({click: true}).context('reveal-preloads')}>
+        jslog=${VisualLogging.action('reveal-preloads').track({click: true})}>
         ${preloadsStatusSummary}
       </button>
     `;

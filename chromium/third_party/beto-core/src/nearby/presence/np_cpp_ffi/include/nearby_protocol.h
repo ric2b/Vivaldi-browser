@@ -15,11 +15,20 @@
 #ifndef NEARBY_PRESENCE_NP_CPP_FFI_INCLUDE_NP_PROTOCOL_H_
 #define NEARBY_PRESENCE_NP_CPP_FFI_INCLUDE_NP_PROTOCOL_H_
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <span>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/string_view.h"
 #include "np_cpp_ffi_types.h"
-
-#include <span>
 
 // This namespace provides a C++ API surface to the Rust nearby protocol
 // implementation. This is a wrapper over the np_ffi::internal namespace defined
@@ -52,20 +61,35 @@
 namespace nearby_protocol {
 
 // Re-exporting cbindgen generated types which are used in the public API
-using np_ffi::internal::AddCredentialToSlabResult;
+using np_ffi::internal::AddV0CredentialToSlabResult;
+using np_ffi::internal::AddV0DEResult;
+using np_ffi::internal::AddV1CredentialToSlabResult;
+using np_ffi::internal::AdvertisementBuilderKind;
 using np_ffi::internal::BooleanActionType;
 using np_ffi::internal::CreateCredentialBookResultKind;
 using np_ffi::internal::CreateCredentialSlabResultKind;
+using np_ffi::internal::CreateV0AdvertisementBuilderResultKind;
+using np_ffi::internal::CreateV1SectionBuilderResultKind;
 using np_ffi::internal::DeserializeAdvertisementResultKind;
 using np_ffi::internal::DeserializedV0AdvertisementKind;
+using np_ffi::internal::DeserializedV0IdentityDetails;
 using np_ffi::internal::DeserializedV0IdentityKind;
+using np_ffi::internal::DeserializedV1IdentityDetails;
 using np_ffi::internal::DeserializedV1IdentityKind;
+using np_ffi::internal::EncryptedIdentityType;
 using np_ffi::internal::GetV0DEResultKind;
 using np_ffi::internal::PanicReason;
-using np_ffi::internal::TxPower;
+using np_ffi::internal::SerializeV0AdvertisementResultKind;
+using np_ffi::internal::SerializeV1AdvertisementResultKind;
 using np_ffi::internal::V0DataElementKind;
+using np_ffi::internal::V1VerificationMode;
 
-template <uintptr_t N> using FfiByteBuffer = np_ffi::internal::ByteBuffer<N>;
+const uint8_t MAX_ADV_PAYLOAD_SIZE = 255;
+const uint8_t MAX_V1_DE_PAYLOAD_SIZE = 127;
+const uint8_t KEY_SEED_SIZE = 32;
+const uint8_t HMAC_TAG_SIZE = 32;
+const uint8_t PUBLIC_SIGNING_KEY_SIZE = 32;
+const uint8_t DERIVED_SALT_SIZE = 16;
 
 // All of the types defined in this header
 class RawAdvertisementPayload;
@@ -96,11 +120,11 @@ class V1DataElement;
 // on memory consumption. See np_ffi_global_config_* functions in
 // np_cpp_ffi_functions.h for more info
 class GlobalConfig {
-public:
+ public:
   // This class provides the static methods needed for global configuration,
   // so it does not need to be constructable, cloneable, or assignable.
-  GlobalConfig(GlobalConfig const &) = delete;
-  void operator=(GlobalConfig const &) = delete;
+  GlobalConfig(const GlobalConfig &) = delete;
+  void operator=(const GlobalConfig &) = delete;
   GlobalConfig() = delete;
 
   // Provides a user specified panic handler. This method will only have an
@@ -139,14 +163,20 @@ public:
   // which may be active at any one time
   static void SetMaxNumDeserializedV1Advertisements(
       uint32_t max_num_deserialized_v1_advertisements);
+
+  // Sets the maximum number of active handles to v0 advertisement builders
+  // which may be active at any one time
+  static void SetMaxNumV0AdvertisementBuilders(
+      uint32_t max_num_v0_advertisement_builders);
 };
 
 // Holds the credentials used in the construction of a credential book
 // using CredentialBook::TryCreateFromSlab()
 class CredentialSlab {
-public:
-  // Don't allow copy constructor or copy assignment, since that would result in
-  // the underlying handle being freed multiple times
+ public:
+  // Don't allow copy constructor, copy-assignment or default constructor, since
+  // this class wraps a handle to externally allocated resources.
+  CredentialSlab() = delete;
   CredentialSlab(const CredentialSlab &other) = delete;
   CredentialSlab &operator=(const CredentialSlab &other) = delete;
 
@@ -170,7 +200,7 @@ public:
   // Adds a V1 credential to the slab
   [[nodiscard]] absl::Status AddV1Credential(V1MatchableCredential v1_cred);
 
-private:
+ private:
   friend class CredentialBook;
   explicit CredentialSlab(np_ffi::internal::CredentialSlab credential_slab)
       : credential_slab_(credential_slab), moved_(false) {}
@@ -183,9 +213,10 @@ private:
 // This needs to be passed to Deserializer::DeserializeAdvertisement() when
 // attempting to deserialize a payload
 class CredentialBook {
-public:
-  // Don't allow copy constructor or copy assignment, since that would result in
-  // the underlying handle being freed multiple times
+ public:
+  // Don't allow copy constructor, copy-assignment or default constructor, since
+  // this class wraps a handle to externally allocated resources.
+  CredentialBook() = delete;
   CredentialBook(const CredentialBook &other) = delete;
   CredentialBook &operator=(const CredentialBook &other) = delete;
 
@@ -203,10 +234,10 @@ public:
   // returning the CredentialBook on success or a Status code on failure.
   // The passed credential-slab will be deallocated if this operation
   // is successful.
-  [[nodiscard]] static absl::StatusOr<CredentialBook>
-  TryCreateFromSlab(CredentialSlab &slab);
+  [[nodiscard]] static absl::StatusOr<CredentialBook> TryCreateFromSlab(
+      CredentialSlab &slab);
 
-private:
+ private:
   friend class Deserializer;
   explicit CredentialBook(np_ffi::internal::CredentialBook credential_book)
       : credential_book_(credential_book), moved_(false) {}
@@ -218,21 +249,20 @@ private:
 // Holds data associated with a specific credential which will be returned to
 // the caller when it is successfully matched with an advertisement.
 class MatchedCredentialData {
-public:
+ public:
   // Creates matched credential data from a provided credential_id used to
   // correlate the data back to its full credential data, and the metadata byte
-  // buffer as copied from the given span over bytes. After calling
-  // this the bytes are copied into the rust code, so the
-  // encrypted_metadata_bytes_buffer can be freed.
+  // buffer as copied from the given span over bytes. The span must be valid
+  // until the corresponding Add_*_Credential is called using this data.
   //
   // Safety: this is safe if the span is over a valid buffer of bytes. The copy
   // from the memory address isn't atomic, so concurrent modification of the
   // array from another thread would cause undefined behavior.
-  [[nodiscard]] MatchedCredentialData(uint32_t cred_id,
-                                      std::span<uint8_t> metadata_bytes);
+  [[nodiscard]] MatchedCredentialData(
+      uint32_t cred_id, std::span<const uint8_t> encrypted_metadata_bytes);
 
-private:
-  np_ffi::internal::FfiMatchedCredential data_;
+ private:
+  np_ffi::internal::FfiMatchedCredential data_{};
   friend class V0MatchableCredential;
   friend class V1MatchableCredential;
 };
@@ -241,15 +271,15 @@ private:
 // advertisements, along with some provided matched data that will be returned
 // back to the caller upon a successful credential match.
 class V0MatchableCredential {
-public:
+ public:
   // Creates a new V0MatchableCredential from a key seed, its calculated hmac
   // value and some match data.
   [[nodiscard]] V0MatchableCredential(
-      std::array<uint8_t, 32> key_seed,
-      std::array<uint8_t, 32> legacy_metadata_key_hmac,
+      std::array<uint8_t, KEY_SEED_SIZE> key_seed,
+      std::array<uint8_t, HMAC_TAG_SIZE> legacy_metadata_key_hmac,
       MatchedCredentialData matched_credential_data);
 
-private:
+ private:
   friend class CredentialSlab;
   np_ffi::internal::V0MatchableCredential internal_{};
 };
@@ -258,34 +288,78 @@ private:
 // advertisements, along with some provided matched data that will be returned
 // back to the caller upon a successful credential match.
 class V1MatchableCredential {
-public:
+ public:
+  V1MatchableCredential() = delete;
+
   // Creates a new V1MatchableCredential from key material, its calculated hmac
   // value and some match data.
   [[nodiscard]] V1MatchableCredential(
-      std::array<uint8_t, 32> key_seed,
-      std::array<uint8_t, 32> expected_unsigned_metadata_key_hmac,
-      std::array<uint8_t, 32> expected_signed_metadata_key_hmac,
-      std::array<uint8_t, 32> pub_key,
+      std::array<uint8_t, KEY_SEED_SIZE> key_seed,
+      std::array<uint8_t, HMAC_TAG_SIZE> expected_unsigned_metadata_key_hmac,
+      std::array<uint8_t, HMAC_TAG_SIZE> expected_signed_metadata_key_hmac,
+      std::array<uint8_t, PUBLIC_SIGNING_KEY_SIZE> pub_key,
       MatchedCredentialData matched_credential_data);
 
-private:
+ private:
   friend class CredentialSlab;
-  np_ffi::internal::V1MatchableCredential internal_;
+  np_ffi::internal::V1MatchableCredential internal_{};
 };
 
-// Representation of a buffer of bytes returned from deserialization APIs
-template <size_t N> class ByteBuffer {
-public:
-  // Constructor for a fixed length buffer of bytes from its internal struct
-  // data representation consisting of a length and array of unint8_t bytes.
-  [[nodiscard]] explicit ByteBuffer(FfiByteBuffer<N> internal)
-      : internal_(internal) {}
+// Holds the V0 credential data needed to encrypt advertisements.
+class V0BroadcastCredential {
+ public:
+  V0BroadcastCredential() = delete;
+
+  // Creates a new V0Broadcast credential with the given
+  // key seed and metadata key.
+  [[nodiscard]] V0BroadcastCredential(std::array<uint8_t, 32> key_seed,
+                                      std::array<uint8_t, 14> metadata_key);
+
+ private:
+  friend class V0AdvertisementBuilder;
+  np_ffi::internal::V0BroadcastCredential internal_;
+};
+
+// Representation of a buffer of bytes returned from and passed to Rust library
+// deserialization APIs. `N` is the max size of the buffer but its actual
+// contents can be up to N in size.
+template <size_t N>
+class ByteBuffer {
+ public:
+  // Constructs a ByteBuffer from an std::array of bytes
+  template <size_t M>
+  [[nodiscard]] constexpr explicit ByteBuffer(std::array<uint8_t, M> data) {
+    static_assert(N >= M);
+    np_ffi::internal::ByteBuffer<N> internal =
+        np_ffi::internal::ByteBuffer<N>();
+    internal.len = M;
+    std::copy(data.begin(), data.end(), internal.bytes);
+    internal_ = internal;
+  }
+
+  // Creates a ByteBuffer from a std::vector<uint8_t> of bytes, returning an
+  // absl::OutOfRangeError in the case where bytes is too large to fit into the
+  // buffer. On success the returned type contains a copy of the provided bytes.
+  [[nodiscard]] static absl::StatusOr<ByteBuffer<N>> TryFromSpan(
+      std::span<const uint8_t> bytes) {
+    if (bytes.size() > N) {
+      return absl::OutOfRangeError(
+          absl::StrFormat("Provided bytes of length %d will not fit into a "
+                          "ByteBuffer<N> of size N=%d",
+                          bytes.size(), N));
+    }
+    np_ffi::internal::ByteBuffer<N> internal =
+        np_ffi::internal::ByteBuffer<N>();
+    internal.len = bytes.size();
+    std::copy(std::begin(bytes), std::end(bytes), internal.bytes);
+    return ByteBuffer(internal);
+  }
 
   // Creates a ByteBuffer from a absl::string_view of bytes, returning an
   // absl::OutOfRangeError in the case where bytes is too large to fit into the
   // buffer. On success the returned type contains a copy of the provided bytes.
-  [[nodiscard]] static absl::StatusOr<ByteBuffer<N>>
-  CopyFrom(absl::string_view bytes) {
+  [[nodiscard]] static absl::StatusOr<ByteBuffer<N>> TryFromString(
+      absl::string_view bytes) {
     if (bytes.length() > N) {
       return absl::OutOfRangeError(
           absl::StrFormat("Provided bytes of length %d will not fit into a "
@@ -301,7 +375,7 @@ public:
 
   // Helper method to convert the ByteBuffer into a vector. The vector will
   // contain a copy of the bytes and won't share the underlying buffer.
-  [[nodiscard]] std::vector<uint8_t> ToVector() {
+  [[nodiscard]] std::vector<uint8_t> ToVector() const {
     std::vector<uint8_t> result(internal_.bytes,
                                 internal_.bytes + internal_.len);
     return result;
@@ -310,64 +384,71 @@ public:
   // Helper method to convert the ByteBuffer into a std::string. The returned
   // string will contain a copy of the bytes and won't share the underlying
   // buffer.
-  [[nodiscard]] std::string ToString() {
+  [[nodiscard]] std::string ToString() const {
     std::string result;
     result.assign(internal_.bytes, internal_.bytes + internal_.len);
     return result;
   }
+  // Constructor for a fixed length buffer of bytes from its internal struct
+  // data representation consisting of a length and array of unint8_t bytes.
+  [[nodiscard]] explicit ByteBuffer(np_ffi::internal::ByteBuffer<N> internal)
+      : internal_(internal) {}
 
-private:
+ private:
+  friend class V0AdvertisementBuilder;
   friend class V1DataElement;
   friend class Deserializer;
   np_ffi::internal::ByteBuffer<N> internal_;
 };
 
 class RawAdvertisementPayload {
-public:
+ public:
   // Creates a RawAdvertisementPayload from a ByteBuffer.
-  explicit RawAdvertisementPayload(ByteBuffer<255> bytes) : buffer_(bytes) {}
+  explicit constexpr RawAdvertisementPayload(
+      ByteBuffer<MAX_ADV_PAYLOAD_SIZE> bytes)
+      : buffer_(bytes) {}
 
-  ByteBuffer<255> buffer_;
-
-private:
+ private:
+  ByteBuffer<MAX_ADV_PAYLOAD_SIZE> buffer_;
   friend class Deserializer;
 };
 
 // A global static Deserializer, configured by GlobalConfig and used to
 // deserialize advertisement payloads
 class Deserializer {
-public:
+ public:
   // Attempts to deserialize an advertisement with the given service-data
   // payload (presumed to be under the NP service UUID) using credentials pulled
   // from the given credential-book. See np_ffi_deserialize_advertisement in
   // np_cpp_ffi_functions.h for more info
-  [[nodiscard]] static DeserializeAdvertisementResult
-  DeserializeAdvertisement(RawAdvertisementPayload &payload,
-                           const CredentialBook &credential_book);
+  [[nodiscard]] static DeserializeAdvertisementResult DeserializeAdvertisement(
+      const RawAdvertisementPayload &payload,
+      const CredentialBook &credential_book);
 };
 
 // The result type returned from Deserializer::DeserializeAdvertisement(). Can
 // be used to further process the advertisement and inspect its contents
 class DeserializeAdvertisementResult {
-public:
-  // Don't allow copy constructor or copy assignment, since that would result in
-  // the underlying handle being freed multiple times
+ public:
+  // Don't allow copy constructor, copy-assignment or default constructor, since
+  // this class wraps a handle to externally allocated resources.
+  DeserializeAdvertisementResult() = delete;
   DeserializeAdvertisementResult(const DeserializeAdvertisementResult &other) =
       delete;
-  DeserializeAdvertisementResult &
-  operator=(const DeserializeAdvertisementResult &other) = delete;
+  DeserializeAdvertisementResult &operator=(
+      const DeserializeAdvertisementResult &other) = delete;
 
   // Move constructor and move assignment operators
   DeserializeAdvertisementResult(
       DeserializeAdvertisementResult &&other) noexcept;
-  DeserializeAdvertisementResult &
-  operator=(DeserializeAdvertisementResult &&other) noexcept;
+  DeserializeAdvertisementResult &operator=(
+      DeserializeAdvertisementResult &&other) noexcept;
 
   // Frees the underlying resources of the result.
   ~DeserializeAdvertisementResult();
 
   // Returns the DeserializeAdvertisementResultKind of the Result
-  [[nodiscard]] DeserializeAdvertisementResultKind GetKind();
+  [[nodiscard]] DeserializeAdvertisementResultKind GetKind() const;
 
   // Casts a `DeserializeAdvertisementResult` to the `V0` variant, panicking in
   // the case where the passed value is of a different enum variant. This can
@@ -381,7 +462,7 @@ public:
   // is no longer valid.
   [[nodiscard]] DeserializedV1Advertisement IntoV1();
 
-private:
+ private:
   friend class Deserializer;
   explicit DeserializeAdvertisementResult(
       np_ffi::internal::DeserializeAdvertisementResult result)
@@ -393,25 +474,26 @@ private:
 
 // A deserialized V0 advertisement payload
 class DeserializedV0Advertisement {
-public:
-  // Don't allow copy constructor or copy assignment, since that would result in
-  // the underlying handle being freed multiple times
+ public:
+  // Don't allow copy constructor, copy-assignment or default constructor, since
+  // this class wraps a handle to externally allocated resources.
+  DeserializedV0Advertisement() = delete;
   DeserializedV0Advertisement(const DeserializedV0Advertisement &other) =
       delete;
-  DeserializedV0Advertisement &
-  operator=(const DeserializedV0Advertisement &other) = delete;
+  DeserializedV0Advertisement &operator=(
+      const DeserializedV0Advertisement &other) = delete;
 
   // Move constructor and move assignment operators
   DeserializedV0Advertisement(DeserializedV0Advertisement &&other) noexcept;
-  DeserializedV0Advertisement &
-  operator=(DeserializedV0Advertisement &&other) noexcept;
+  DeserializedV0Advertisement &operator=(
+      DeserializedV0Advertisement &&other) noexcept;
 
   // The destructor which will be called when a DeserializedV0Advertisement
   // instance goes out of scope, and will free the underlying resources
   ~DeserializedV0Advertisement();
 
   // Returns the DeserializedV0AdvertisementKind of the advertisement
-  [[nodiscard]] DeserializedV0AdvertisementKind GetKind();
+  [[nodiscard]] DeserializedV0AdvertisementKind GetKind() const;
 
   // Casts a `DeserializedV0Advertisement` to the `Legible` variant, panicking
   // in the case where the passed value is of a different enum variant.
@@ -419,7 +501,7 @@ public:
   // `LegibleDeserializedV0Advertisement`, and this object is no longer valid.
   [[nodiscard]] LegibleDeserializedV0Advertisement IntoLegible();
 
-private:
+ private:
   friend class DeserializeAdvertisementResult;
   explicit DeserializedV0Advertisement(
       np_ffi::internal::DeserializedV0Advertisement v0_advertisement)
@@ -433,19 +515,20 @@ private:
 // either plaintext OR have already been decrypted successfully by a matching
 // credential in the provided CredentialBook
 class LegibleDeserializedV0Advertisement {
-public:
-  // Don't allow copy constructor or copy assignment, since that would result in
-  // the underlying handle being freed multiple times
+ public:
+  // Don't allow copy constructor, copy-assignment or default constructor, since
+  // this class wraps a handle to externally allocated resources.
+  LegibleDeserializedV0Advertisement() = delete;
   LegibleDeserializedV0Advertisement(
       const LegibleDeserializedV0Advertisement &other) = delete;
-  LegibleDeserializedV0Advertisement &
-  operator=(const LegibleDeserializedV0Advertisement &other) = delete;
+  LegibleDeserializedV0Advertisement &operator=(
+      const LegibleDeserializedV0Advertisement &other) = delete;
 
   // Move constructor and move assignment operators
   LegibleDeserializedV0Advertisement(
       LegibleDeserializedV0Advertisement &&other) noexcept;
-  LegibleDeserializedV0Advertisement &
-  operator=(LegibleDeserializedV0Advertisement &&other) noexcept;
+  LegibleDeserializedV0Advertisement &operator=(
+      LegibleDeserializedV0Advertisement &&other) noexcept;
 
   // The destructor which will be called when a this instance goes out of scope,
   // and will free the underlying parent handle.
@@ -453,13 +536,13 @@ public:
 
   // Returns just the kind of identity (public/encrypted)
   // associated with the advertisement
-  [[nodiscard]] DeserializedV0IdentityKind GetIdentityKind();
+  [[nodiscard]] DeserializedV0IdentityKind GetIdentityKind() const;
   // Returns the number of data elements in the advertisement
-  [[nodiscard]] uint8_t GetNumberOfDataElements();
+  [[nodiscard]] uint8_t GetNumberOfDataElements() const;
   // Returns just the data-element payload of the advertisement
   [[nodiscard]] V0Payload IntoPayload();
 
-private:
+ private:
   friend class DeserializedV0Advertisement;
   explicit LegibleDeserializedV0Advertisement(
       np_ffi::internal::LegibleDeserializedV0Advertisement
@@ -473,9 +556,10 @@ private:
 
 // A data element payload of a Deserialized V0 Advertisement.
 class V0Payload {
-public:
-  // Don't allow copy constructor or copy assignment, since that would result in
-  // the underlying parent handle being freed multiple times.
+ public:
+  // Don't allow copy constructor, copy-assignment or default constructor, since
+  // this class wraps a handle to externally allocated resources.
+  V0Payload() = delete;
   V0Payload(const V0Payload &other) = delete;
   V0Payload &operator=(const V0Payload &other) = delete;
 
@@ -488,9 +572,20 @@ public:
 
   // Tries to retrieve the data element at the given index, returns the data
   // element if it exists otherwise returns an Error status code
-  [[nodiscard]] absl::StatusOr<V0DataElement> TryGetDataElement(uint8_t index);
+  [[nodiscard]] absl::StatusOr<V0DataElement> TryGetDataElement(
+      uint8_t index) const;
 
-private:
+  // Decrypts the metadata of the credential which matched with this
+  // advertisement, or returns an error if the metadata key is invalid and
+  // unable to successfully decrypt the metadata.
+  [[nodiscard]] absl::StatusOr<std::vector<uint8_t>> DecryptMetadata() const;
+
+  // Gets the details of the identity data element of this payload or returns an
+  // error if the payload does not have an identity (public advertisement)
+  [[nodiscard]] absl::StatusOr<DeserializedV0IdentityDetails>
+  GetIdentityDetails() const;
+
+ private:
   friend class LegibleDeserializedV0Advertisement;
   explicit V0Payload(np_ffi::internal::V0Payload v0_payload)
       : v0_payload_(v0_payload), moved_(false) {}
@@ -499,40 +594,102 @@ private:
   bool moved_;
 };
 
-// A single deserialized V0 data element
+// A Tx Power [transmission power] between -100dBm and 20dBm
+class TxPower {
+ public:
+  TxPower() = delete;
+
+  // Gets the value of this tx power as a signed byte.
+  [[nodiscard]] int8_t GetAsI8() const;
+
+  // Attempts to construct a tx power with the given value contained
+  // in a signed byte. If the number is not within the representable
+  // range, this method will return an invalid argument error.
+  [[nodiscard]] static absl::StatusOr<TxPower> TryBuildFromI8(int8_t value);
+
+ private:
+  friend class V0DataElement;
+  explicit TxPower(np_ffi::internal::TxPower tx_power) : tx_power_(tx_power) {}
+  np_ffi::internal::TxPower tx_power_;
+};
+
+// A single V0 data element
 class V0DataElement {
-public:
+ public:
   // Yields the V0DataElementKind of the data element
-  [[nodiscard]] V0DataElementKind GetKind();
+  [[nodiscard]] V0DataElementKind GetKind() const;
   // Casts the V0DataElement into the TxPower variant, panicking in the case
   // where the data element is of a different enum variant
-  [[nodiscard]] TxPower AsTxPower();
+  [[nodiscard]] TxPower AsTxPower() const;
   // Casts the V0DataElement into the Actions variant, panicking in the case
   // where the data element is of a different enum variant
-  [[nodiscard]] V0Actions AsActions();
+  [[nodiscard]] V0Actions AsActions() const;
 
-private:
+  // Constructs a Tx Power V0 data element
+  explicit V0DataElement(TxPower tx_power);
+  // Constructs an Actions V0 data element
+  explicit V0DataElement(V0Actions actions);
+
+ private:
+  friend class V0AdvertisementBuilder;
   friend class V0Payload;
   explicit V0DataElement(np_ffi::internal::V0DataElement v0_data_element)
       : v0_data_element_(v0_data_element) {}
   np_ffi::internal::V0DataElement v0_data_element_;
 };
 
+// A Context Sync Sequence Number [0-15]
+class ContextSyncSeqNum {
+ public:
+  ContextSyncSeqNum() = delete;
+
+  // Gets the value of this context-sync sequence number.
+  [[nodiscard]] uint8_t GetAsU8() const;
+
+  // Attempts to construct a context-sync sequence number with the given
+  // value contained in an unsigned byte. If the number may not be
+  // represented in a single nibble, this method will return an
+  // invalid argument error.
+  [[nodiscard]] static absl::StatusOr<ContextSyncSeqNum> TryBuildFromU8(
+      uint8_t value);
+
+ private:
+  friend class V0Actions;
+  explicit ContextSyncSeqNum(np_ffi::internal::ContextSyncSeqNum seq_num)
+      : seq_num_(seq_num) {}
+  np_ffi::internal::ContextSyncSeqNum seq_num_;
+};
+
 // A V0 Actions Data Element
 class V0Actions {
-public:
+ public:
+  V0Actions() = delete;
+
   // Gets the V0 Action bits as represented by a u32 where the last 8 bits are
   // always 0 since V0 actions can only hold up to 24 bits.
-  [[nodiscard]] uint32_t GetAsU32();
+  [[nodiscard]] uint32_t GetAsU32() const;
 
   /// Return whether a boolean action type is present in this data element
-  [[nodiscard]] bool HasAction(BooleanActionType action);
+  [[nodiscard]] bool HasAction(BooleanActionType action) const;
 
-  /// Gets the 4 bit context sync sequence number as a uint8_t from this data
-  /// element
-  [[nodiscard]] uint8_t GetContextSyncSequenceNumber();
+  /// Gets the 4 bit context sync sequence number from this data element
+  [[nodiscard]] ContextSyncSeqNum GetContextSyncSequenceNumber() const;
 
-private:
+  /// Attempts to set the given action bit to the given boolean value.
+  /// This operation may fail with an invalid argument error
+  /// if the requested action bit may not be set given the encoding
+  /// of the containing advertisement.
+  /// In this case, the action bits will be unaltered by this call.
+  absl::Status TrySetAction(BooleanActionType action, bool value);
+
+  /// Sets the context sync sequence number.
+  void SetContextSyncSequenceNumber(ContextSyncSeqNum seq_num);
+
+  // Constructs an all-zeroed V0 actions DE for the given advertisement builder
+  // kind.
+  [[nodiscard]] static V0Actions BuildNewZeroed(AdvertisementBuilderKind kind);
+
+ private:
   friend class V0DataElement;
   explicit V0Actions(np_ffi::internal::V0Actions actions) : actions_(actions) {}
   np_ffi::internal::V0Actions actions_;
@@ -540,32 +697,33 @@ private:
 
 // A deserialized V1 Advertisement payload
 class DeserializedV1Advertisement {
-public:
-  // Don't allow copy constructor or copy assignment, since that would result in
-  // the underlying handle being freed multiple times
+ public:
+  // Don't allow copy constructor, copy-assignment or default constructor, since
+  // this class wraps a handle to externally allocated resources.
+  DeserializedV1Advertisement() = delete;
   DeserializedV1Advertisement(const DeserializedV1Advertisement &other) =
       delete;
-  DeserializedV1Advertisement &
-  operator=(const DeserializedV1Advertisement &other) = delete;
+  DeserializedV1Advertisement &operator=(
+      const DeserializedV1Advertisement &other) = delete;
 
   // Move constructor and move assignment operators
   DeserializedV1Advertisement(DeserializedV1Advertisement &&other) noexcept;
-  DeserializedV1Advertisement &
-  operator=(DeserializedV1Advertisement &&other) noexcept;
+  DeserializedV1Advertisement &operator=(
+      DeserializedV1Advertisement &&other) noexcept;
 
   // Gets the number of legible sections on a deserialized V1 advertisement.
   // This is usable as an iteration bound for the section_index of TryGetSection
-  [[nodiscard]] uint8_t GetNumLegibleSections();
+  [[nodiscard]] uint8_t GetNumLegibleSections() const;
   // Gets the number of sections on a deserialized V1 advertisement which
   // were unable to be decrypted with the credentials that the receiver
   // possesses
-  [[nodiscard]] uint8_t GetNumUndecryptableSections();
+  [[nodiscard]] uint8_t GetNumUndecryptableSections() const;
   // Tries to get the section with the given index in a deserialized V1
   // advertisement. Returns a error code in the result of an invalid index
-  [[nodiscard]] absl::StatusOr<DeserializedV1Section>
-  TryGetSection(uint8_t section_index);
+  [[nodiscard]] absl::StatusOr<DeserializedV1Section> TryGetSection(
+      uint8_t section_index) const;
 
-private:
+ private:
   friend class DeserializeAdvertisementResult;
   explicit DeserializedV1Advertisement(
       np_ffi::internal::DeserializedV1Advertisement v1_advertisement);
@@ -576,15 +734,34 @@ private:
 
 // A Deserialized V1 Section of an advertisement
 class DeserializedV1Section {
-public:
+ public:
   // Returns the number of data elements present in the section
-  [[nodiscard]] uint8_t NumberOfDataElements();
-  // Returns the DeserializedV1IdentityKind of the identity
-  [[nodiscard]] DeserializedV1IdentityKind GetIdentityKind();
-  // Tries to get the data element in the section at the given index
-  [[nodiscard]] absl::StatusOr<V1DataElement> TryGetDataElement(uint8_t index);
+  [[nodiscard]] uint8_t NumberOfDataElements() const;
 
-private:
+  // Returns the DeserializedV1IdentityKind of the identity
+  [[nodiscard]] DeserializedV1IdentityKind GetIdentityKind() const;
+
+  // Tries to get the data element in the section at the given index
+  [[nodiscard]] absl::StatusOr<V1DataElement> TryGetDataElement(
+      uint8_t index) const;
+
+  // Decrypts the metadata of the credential which matched with this section
+  [[nodiscard]] absl::StatusOr<std::vector<uint8_t>> DecryptMetadata() const;
+
+  // Gets the details of the identity data element of this section or returns an
+  // error if the section does not contain an identity (public section)
+  [[nodiscard]] absl::StatusOr<DeserializedV1IdentityDetails>
+  GetIdentityDetails() const;
+
+  // Attempts to derive a 16-byte DE salt for a DE in this section with the
+  // given DE offset. This operation may fail if the passed offset is 255
+  // (causes overflow) or if the section is leveraging a public identity, and
+  // hence, doesn't have an associated salt. The offset should come from a
+  // particular deserialized v1 de via `V1DataElement::GetOffset()`
+  [[nodiscard]] absl::StatusOr<std::array<uint8_t, DERIVED_SALT_SIZE>>
+  DeriveSaltForOffset(uint8_t offset) const;
+
+ private:
   friend class DeserializedV1Advertisement;
   explicit DeserializedV1Section(
       np_ffi::internal::DeserializedV1Section section,
@@ -599,19 +776,81 @@ private:
 
 // A V1 Data Element
 class V1DataElement {
-public:
+ public:
   // Yields the unsigned 32-bit integer V1 DE type code
   [[nodiscard]] uint32_t GetDataElementTypeCode() const;
   // Yields the payload bytes of the data element
-  [[nodiscard]] ByteBuffer<127> GetPayload() const;
+  [[nodiscard]] ByteBuffer<MAX_V1_DE_PAYLOAD_SIZE> GetPayload() const;
+  /// Gets the offset for this V1 data element.
+  [[nodiscard]] uint8_t GetOffset() const;
 
-private:
+ private:
   friend class DeserializedV1Section;
   explicit V1DataElement(np_ffi::internal::V1DataElement v1_data_element)
       : v1_data_element_(v1_data_element) {}
   np_ffi::internal::V1DataElement v1_data_element_;
 };
 
-} //  namespace nearby_protocol
+// A builder for V0 advertisements
+class V0AdvertisementBuilder {
+ public:
+  V0AdvertisementBuilder() = delete;
+  // Don't allow copy constructor or copy assignment, since that would result in
+  // the underlying handle being freed multiple times
+  V0AdvertisementBuilder(const V0AdvertisementBuilder &other) = delete;
+  V0AdvertisementBuilder &operator=(const V0AdvertisementBuilder &other) =
+      delete;
 
-#endif // NEARBY_PRESENCE_NP_CPP_FFI_INCLUDE_NP_PROTOCOL_H_
+  // Move constructor and move assignment operators
+  V0AdvertisementBuilder(V0AdvertisementBuilder &&other) noexcept;
+  V0AdvertisementBuilder &operator=(V0AdvertisementBuilder &&other) noexcept;
+
+  // Frees the underlying resources of the adv builder.
+  ~V0AdvertisementBuilder();
+
+  // Tries to add the given data element to the advertisement builder.
+  // May fail with:
+  //  - An invalid argument code if:
+  //    - The adv builder handle is invalid
+  //    OR
+  //    - The identity type of the adv builder is invalid
+  //    for the data element we're attempting to add.
+  //  - A resource exhausted error if there's no remaining adv space.
+  absl::Status TryAddDE(V0DataElement de);
+
+  // Attempts to serialize the contents of the advertisement
+  // builder to bytes. This operation will always result in the
+  // contents behind the handle for this instance being deallocated.
+  //
+  // This operation may return an out-of-range error in the case
+  // where the advertisement contents are of a size inappropriate
+  // for LDT encryption in an encrypted V0 advertisement.
+  [[nodiscard]] absl::StatusOr<ByteBuffer<24>> TrySerialize();
+
+  // Creates a new V0 advertisement builder for a public advertisement,
+  // or returns a Status code on failure.
+  [[nodiscard]] static absl::StatusOr<V0AdvertisementBuilder> TryCreatePublic();
+
+  // Creates a new V0 advertisement builder for an encrypted advertisement,
+  // or returns a Status code on failure.
+  [[nodiscard]] static absl::StatusOr<V0AdvertisementBuilder>
+  TryCreateEncrypted(V0BroadcastCredential broadcast_cred,
+                     EncryptedIdentityType identity_type,
+                     std::array<uint8_t, 2> salt);
+
+ private:
+  [[nodiscard]] static absl::StatusOr<V0AdvertisementBuilder>
+  CreateV0AdvertisementBuilderResultToInternal(
+      np_ffi::internal::CreateV0AdvertisementBuilderResult result);
+
+  explicit V0AdvertisementBuilder(
+      np_ffi::internal::V0AdvertisementBuilder adv_builder)
+      : adv_builder_(adv_builder), moved_(false) {}
+
+  np_ffi::internal::V0AdvertisementBuilder adv_builder_;
+  bool moved_;
+};
+
+}  //  namespace nearby_protocol
+
+#endif  // NEARBY_PRESENCE_NP_CPP_FFI_INCLUDE_NP_PROTOCOL_H_

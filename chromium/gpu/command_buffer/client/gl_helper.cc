@@ -137,8 +137,7 @@ class I420ConverterImpl : public I420Converter {
 
 // Implements texture consumption/readback and encapsulates
 // the data needed for it.
-class GLHelper::CopyTextureToImpl
-    : public base::SupportsWeakPtr<GLHelper::CopyTextureToImpl> {
+class GLHelper::CopyTextureToImpl final {
  public:
   CopyTextureToImpl(GLES2Interface* gl,
                     ContextSupport* context_support,
@@ -243,7 +242,7 @@ class GLHelper::CopyTextureToImpl
     void Add(Request* r) { requests_.push(r); }
 
    private:
-    base::queue<Request*> requests_;
+    base::queue<raw_ptr<Request, CtnExperimental>> requests_;
   };
 
   // A readback pipeline that also converts the data to YUV before
@@ -318,7 +317,7 @@ class GLHelper::CopyTextureToImpl
   // this object is destroyed. Must be declared before other Scoped* fields.
   ScopedFlush flush_;
 
-  base::queue<Request*> request_queue_;
+  base::queue<raw_ptr<Request, CtnExperimental>> request_queue_;
 
   // Lazily set by IsBGRAReadbackSupported().
   enum {
@@ -334,6 +333,8 @@ class GLHelper::CopyTextureToImpl
     BGRA_PREFERRED,
     BGRA_NOT_PREFERRED
   } bgra_preference_ = BGRA_PREFERENCE_UNKNOWN;
+
+  base::WeakPtrFactory<CopyTextureToImpl> weak_ptr_factory_{this};
 };
 
 std::unique_ptr<GLHelper::ScalerInterface> GLHelper::CreateScaler(
@@ -380,8 +381,8 @@ void GLHelper::CopyTextureToImpl::ReadbackAsync(
   gl_->EndQueryEXT(GL_ASYNC_PIXEL_PACK_COMPLETED_CHROMIUM);
   gl_->BindBuffer(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM, 0);
   context_support_->SignalQuery(
-      request->query,
-      base::BindOnce(&CopyTextureToImpl::ReadbackDone, AsWeakPtr(), request));
+      request->query, base::BindOnce(&CopyTextureToImpl::ReadbackDone,
+                                     weak_ptr_factory_.GetWeakPtr(), request));
 }
 
 void GLHelper::CopyTextureToImpl::ReadbackTextureAsync(

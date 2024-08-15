@@ -22,6 +22,7 @@
 
 #include <memory>
 
+#include "base/containers/heap_array.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/sys_byteorder.h"
@@ -507,8 +508,8 @@ uint8_t ImageDecoder::GetYUVBitDepth() const {
   return 8;
 }
 
-absl::optional<gfx::HDRMetadata> ImageDecoder::GetHDRMetadata() const {
-  return absl::nullopt;
+std::optional<gfx::HDRMetadata> ImageDecoder::GetHDRMetadata() const {
+  return std::nullopt;
 }
 
 gfx::Size ImageDecoder::FrameSizeAtIndex(wtf_size_t) const {
@@ -592,9 +593,9 @@ bool ImageDecoder::FrameIsDecodedAtIndex(wtf_size_t index) const {
          frame_buffer_cache_[index].GetStatus() == ImageFrame::kFrameComplete;
 }
 
-absl::optional<base::TimeDelta> ImageDecoder::FrameTimestampAtIndex(
+std::optional<base::TimeDelta> ImageDecoder::FrameTimestampAtIndex(
     wtf_size_t) const {
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 base::TimeDelta ImageDecoder::FrameDurationAtIndex(wtf_size_t) const {
@@ -996,7 +997,7 @@ wtf_size_t ImagePlanes::RowBytes(cc::YUVIndex index) const {
 }
 
 ColorProfile::ColorProfile(const skcms_ICCProfile& profile,
-                           std::unique_ptr<uint8_t[]> buffer)
+                           base::HeapArray<uint8_t> buffer)
     : profile_(profile), buffer_(std::move(buffer)) {}
 
 ColorProfile::~ColorProfile() = default;
@@ -1005,10 +1006,11 @@ std::unique_ptr<ColorProfile> ColorProfile::Create(const void* buffer,
                                                    size_t size) {
   // After skcms_Parse, profile will have pointers into the passed buffer,
   // so we need to copy first, then parse.
-  std::unique_ptr<uint8_t[]> owned_buffer(new uint8_t[size]);
-  memcpy(owned_buffer.get(), buffer, size);
+  auto owned_buffer = base::HeapArray<uint8_t>::Uninit(size);
+  owned_buffer.copy_from(
+      base::span<const uint8_t>(static_cast<const uint8_t*>(buffer), size));
   skcms_ICCProfile profile;
-  if (skcms_Parse(owned_buffer.get(), size, &profile)) {
+  if (skcms_Parse(owned_buffer.data(), owned_buffer.size(), &profile)) {
     return std::make_unique<ColorProfile>(profile, std::move(owned_buffer));
   }
   return nullptr;

@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as FrontendHelpers from '../../../../../test/unittests/front_end/helpers/EnvironmentHelpers.js';
 import * as Common from '../../../../core/common/common.js';
 import * as Platform from '../../../../core/platform/platform.js';
+import * as FrontendHelpers from '../../../../testing/EnvironmentHelpers.js';
 import * as ComponentHelpers from '../../helpers/helpers.js';
 
 await ComponentHelpers.ComponentServerSetup.setup();
@@ -30,7 +30,7 @@ form.addEventListener('submit', event => {
 });
 
 /**
- * This code is largely copy and pasted from the legacy theme_support_impl
+ * This code is largely copy and pasted from the legacy ThemeSupport
  * around color patching. This is because we are working towards removing the
  * legacy color patching, but still may need to be able to generate legacy dark
  * mode values for light colors during the migration. This doc exists for that

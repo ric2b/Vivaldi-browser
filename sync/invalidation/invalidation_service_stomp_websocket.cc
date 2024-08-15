@@ -108,7 +108,7 @@ InvalidationServiceStompWebsocket::InvalidationServiceStompWebsocket(
       /*auth_cert_observer=*/mojo::NullRemote(),
       /*auth_handler=*/mojo::NullRemote(),
       /*header_client=*/mojo::NullRemote(),
-      /*throttling_profile_id=*/absl::nullopt);
+      /*throttling_profile_id=*/std::nullopt);
 }
 
 InvalidationServiceStompWebsocket::~InvalidationServiceStompWebsocket() {
@@ -455,7 +455,7 @@ bool InvalidationServiceStompWebsocket::HandleFrame() {
     }
     body = body.substr(0, body_end);
 
-    absl::optional<base::Value> invalidation = base::JSONReader::Read(body);
+    std::optional<base::Value> invalidation = base::JSONReader::Read(body);
     if (invalidation && invalidation->is_dict())
       client_->OnInvalidation(std::move(invalidation->GetDict()));
   } else {

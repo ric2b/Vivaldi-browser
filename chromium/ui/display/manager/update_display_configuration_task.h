@@ -8,11 +8,11 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/display/manager/configure_displays_task.h"
 #include "ui/display/manager/display_configurator.h"
 #include "ui/display/types/native_display_observer.h"
@@ -33,8 +33,7 @@ class DISPLAY_MANAGER_EXPORT UpdateDisplayConfigurationTask
       /*unassociated_displays=*/
       const std::vector<raw_ptr<DisplaySnapshot, VectorExperimental>>&,
       /*new_display_state=*/MultipleDisplayState,
-      /*new_power_state=*/chromeos::DisplayPowerState,
-      /*new_vrr_state=*/bool)>;
+      /*new_power_state=*/chromeos::DisplayPowerState)>;
 
   UpdateDisplayConfigurationTask(
       NativeDisplayDelegate* delegate,
@@ -43,7 +42,7 @@ class DISPLAY_MANAGER_EXPORT UpdateDisplayConfigurationTask
       chromeos::DisplayPowerState new_power_state,
       int power_flags,
       RefreshRateThrottleState refresh_rate_throttle_state,
-      bool new_vrr_state,
+      const base::flat_set<int64_t>& new_vrr_state,
       bool force_configure,
       ConfigurationType configuration_type,
       ResponseCallback callback);
@@ -114,9 +113,9 @@ class DISPLAY_MANAGER_EXPORT UpdateDisplayConfigurationTask
   // for the internal display.
   RefreshRateThrottleState refresh_rate_throttle_state_;
 
-  // The requested VRR enabled state which the configuration task should apply
-  // to all capable displays.
-  bool new_vrr_state_;
+  // The requested VRR state which lists the set of display ids that should have
+  // VRR enabled, while all omitted displays should have VRR disabled.
+  const base::flat_set<int64_t> new_vrr_state_;
 
   bool force_configure_;
 

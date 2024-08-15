@@ -32,6 +32,8 @@
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/api/content_settings/content_settings_helpers.h"
 #include "extensions/common/api/types.h"
+#include "extensions/common/extension_id.h"
+#include "url/gurl.h"
 
 using content::BrowserThread;
 using content_settings::ConcatenationIterator;
@@ -98,6 +100,44 @@ std::unique_ptr<RuleIterator> ContentSettingsStore::GetRuleIterator(
     return nullptr;
 
   return std::make_unique<ConcatenationIterator>(std::move(iterators));
+}
+
+std::unique_ptr<content_settings::Rule> ContentSettingsStore::GetRule(
+    const GURL& primary_url,
+    const GURL& secondary_url,
+    ContentSettingsType content_type,
+    bool off_the_record) const {
+  base::AutoLock entries_lock(lock_);
+  std::unique_ptr<content_settings::Rule> result;
+
+  for (const auto& entry : entries_) {
+    if (off_the_record) {
+      {
+        base::AutoLock lock(entry->incognito_session_only_settings.GetLock());
+        result = entry->incognito_session_only_settings.GetRule(
+            primary_url, secondary_url, content_type);
+        if (result) {
+          return result;
+        }
+      }
+      {
+        base::AutoLock lock(entry->incognito_persistent_settings.GetLock());
+        result = entry->incognito_persistent_settings.GetRule(
+            primary_url, secondary_url, content_type);
+        if (result) {
+          return result;
+        }
+      }
+    } else {
+      base::AutoLock lock(entry->settings.GetLock());
+      result =
+          entry->settings.GetRule(primary_url, secondary_url, content_type);
+      if (result) {
+        return result;
+      }
+    }
+  }
+  return nullptr;
 }
 
 void ContentSettingsStore::SetExtensionContentSetting(
@@ -301,16 +341,13 @@ void ContentSettingsStore::ClearContentSettingsForExtensionAndContentType(
     DCHECK(map);
 
     base::AutoLock map_lock(map->GetLock());
-    if (map->find(content_type) == map->end())
-      return;
-
     map->DeleteValues(content_type);
   }
   NotifyOfContentSettingChanged(ext_id, scope != ChromeSettingScope::kRegular);
 }
 
 base::Value::List ContentSettingsStore::GetSettingsForExtension(
-    const std::string& extension_id,
+    const ExtensionId& extension_id,
     ChromeSettingScope scope) const {
   base::AutoLock lock(lock_);
   const OriginValueMap* map = GetValueMap(extension_id, scope);
@@ -321,12 +358,7 @@ base::Value::List ContentSettingsStore::GetSettingsForExtension(
     // Grab the set of keys first as OriginValueMap::GetRuleIterator
     // requires that the lock isn't already held.
     base::AutoLock map_lock(map->GetLock());
-    // Range-based for loops break locking annotations.
-    // https://github.com/llvm/llvm-project/issues/62497
-    // NOLINTNEXTLINE(modernize-loop-convert)
-    for (auto it = map->begin(); it != map->end(); it++) {
-      keys.push_back(it->first);
-    }
+    keys = map->types();
   }
   base::Value::List settings;
   for (ContentSettingsType key : keys) {
@@ -363,7 +395,7 @@ base::Value::List ContentSettingsStore::GetSettingsForExtension(
              << " extension id: " << extension_id
 
 void ContentSettingsStore::SetExtensionContentSettingFromList(
-    const std::string& extension_id,
+    const ExtensionId& extension_id,
     const base::Value::List& list,
     ChromeSettingScope scope) {
   for (const base::Value& value : list) {
@@ -475,7 +507,7 @@ void ContentSettingsStore::RemoveObserver(Observer* observer) {
 }
 
 void ContentSettingsStore::NotifyOfContentSettingChanged(
-    const std::string& extension_id,
+    const ExtensionId& extension_id,
     bool incognito) {
   for (auto& observer : observers_)
     observer.OnContentSettingChanged(extension_id, incognito);

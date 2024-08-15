@@ -38,7 +38,7 @@ void UpdateVersionUIDataSource(content::WebUIDataSource* html_source) {
 
   std::string pending_update;
 #ifdef OS_WIN
-  absl::optional<base::Version> pending_version;
+  std::optional<base::Version> pending_version;
   {
     // TODO(igor@vivaldi): Use a worker thread to get the pending version.
     base::VivaldiScopedAllowBlocking allow_blocking;

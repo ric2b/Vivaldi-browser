@@ -18,10 +18,10 @@ tests) but each can be used for different context (production vs fast developmen
 
 This document assumes you have a Chromebook that you can ssh to, and are able to
 `emerge` and `deploy` packages to your DUT. If not, please start with this [Developer
-Guide](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/developer_guide.md).
+Guide](https://www.chromium.org/chromium-os/developer-library/guides/development/developer-guide).
 For Chamelium tests, it also assumes that you have a working reachable Chamelium device.
 
-The document uses the ChromeOS [typography convention](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/developer_guide.md#typography-conventions).
+The document uses the ChromeOS [typography convention](https://www.chromium.org/chromium-os/developer-library/guides/development/developer-guide/#typography-conventions).
 
 [TOC]
 
@@ -30,7 +30,7 @@ Source code and everything in between to run, develop and test IGT.
 
 ### ChromiumOS Internal
 - [Local Source](https://source.chromium.org/chromiumos/chromiumos/codesearch/+/main:src/third_party/igt-gpu-tools/)
-- [ChromiumOS Git](https://chromium.googlesource.com/chromiumos/third_party/igt-gpu-tools/)
+- [ChromiumOS Git](https://chromium.googlesource.com/chromiumos/third_party/igt-gpu-tools)
 
 ### Google lab links
 - [Everything IGT](http://goto.google.com/igtlab)

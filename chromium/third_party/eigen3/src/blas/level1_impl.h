@@ -9,13 +9,13 @@
 
 #include "common.h"
 
-int EIGEN_BLAS_FUNC(axpy)(const int *n, const RealScalar *palpha, const RealScalar *px, const int *incx, RealScalar *py,
-                          const int *incy) {
+EIGEN_BLAS_FUNC(axpy)
+(const int *n, const RealScalar *palpha, const RealScalar *px, const int *incx, RealScalar *py, const int *incy) {
   const Scalar *x = reinterpret_cast<const Scalar *>(px);
   Scalar *y = reinterpret_cast<Scalar *>(py);
   Scalar alpha = *reinterpret_cast<const Scalar *>(palpha);
 
-  if (*n <= 0) return 0;
+  if (*n <= 0) return;
 
   if (*incx == 1 && *incy == 1)
     make_vector(y, *n) += alpha * make_vector(x, *n);
@@ -27,12 +27,10 @@ int EIGEN_BLAS_FUNC(axpy)(const int *n, const RealScalar *palpha, const RealScal
     make_vector(y, *n, *incy) += alpha * make_vector(x, *n, -*incx).reverse();
   else if (*incx < 0 && *incy < 0)
     make_vector(y, *n, -*incy).reverse() += alpha * make_vector(x, *n, -*incx).reverse();
-
-  return 0;
 }
 
-int EIGEN_BLAS_FUNC(copy)(int *n, RealScalar *px, int *incx, RealScalar *py, int *incy) {
-  if (*n <= 0) return 0;
+EIGEN_BLAS_FUNC(copy)(int *n, RealScalar *px, int *incx, RealScalar *py, int *incy) {
+  if (*n <= 0) return;
 
   Scalar *x = reinterpret_cast<Scalar *>(px);
   Scalar *y = reinterpret_cast<Scalar *>(py);
@@ -49,11 +47,9 @@ int EIGEN_BLAS_FUNC(copy)(int *n, RealScalar *px, int *incx, RealScalar *py, int
       y += *incy;
     }
   }
-
-  return 0;
 }
 
-int EIGEN_BLAS_FUNC(rotg)(RealScalar *pa, RealScalar *pb, RealScalar *pc, RealScalar *ps) {
+EIGEN_BLAS_FUNC(rotg)(RealScalar *pa, RealScalar *pb, RealScalar *pc, RealScalar *ps) {
   using std::abs;
   using std::sqrt;
 
@@ -104,12 +100,10 @@ int EIGEN_BLAS_FUNC(rotg)(RealScalar *pa, RealScalar *pb, RealScalar *pc, RealSc
   //   r.makeGivens(a,b);
   //   *c = r.c();
   //   *s = r.s();
-
-  return 0;
 }
 
-int EIGEN_BLAS_FUNC(scal)(int *n, RealScalar *palpha, RealScalar *px, int *incx) {
-  if (*n <= 0) return 0;
+EIGEN_BLAS_FUNC(scal)(int *n, RealScalar *palpha, RealScalar *px, int *incx) {
+  if (*n <= 0) return;
 
   Scalar *x = reinterpret_cast<Scalar *>(px);
   Scalar alpha = *reinterpret_cast<Scalar *>(palpha);
@@ -118,12 +112,10 @@ int EIGEN_BLAS_FUNC(scal)(int *n, RealScalar *palpha, RealScalar *px, int *incx)
     make_vector(x, *n) *= alpha;
   else
     make_vector(x, *n, std::abs(*incx)) *= alpha;
-
-  return 0;
 }
 
-int EIGEN_BLAS_FUNC(swap)(int *n, RealScalar *px, int *incx, RealScalar *py, int *incy) {
-  if (*n <= 0) return 0;
+EIGEN_BLAS_FUNC(swap)(int *n, RealScalar *px, int *incx, RealScalar *py, int *incy) {
+  if (*n <= 0) return;
 
   Scalar *x = reinterpret_cast<Scalar *>(px);
   Scalar *y = reinterpret_cast<Scalar *>(py);
@@ -138,6 +130,4 @@ int EIGEN_BLAS_FUNC(swap)(int *n, RealScalar *px, int *incx, RealScalar *py, int
     make_vector(y, *n, *incy).swap(make_vector(x, *n, -*incx).reverse());
   else if (*incx < 0 && *incy < 0)
     make_vector(y, *n, -*incy).reverse().swap(make_vector(x, *n, -*incx).reverse());
-
-  return 1;
 }

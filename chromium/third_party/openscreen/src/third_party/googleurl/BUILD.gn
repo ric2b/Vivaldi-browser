@@ -15,6 +15,9 @@ if (build_with_chromium) {
 
   config("private_googleurl_config") {
     cflags = [ "-Wno-return-type" ]
+
+    # Googleurl doesn't properly detect that wchar is utf32.
+    defines = [ "WCHAR_T_IS_UTF32" ]
   }
 
   source_set("googleurl") {
@@ -69,7 +72,7 @@ if (build_with_chromium) {
       "src/base/template_util.h",
       "src/base/third_party/icu/icu_utf.h",
       "src/base/types/always_false.h",
-      "src/build/build.config.h",
+      "src/build/build_config.h",
       "src/build/buildflag.h",
       "src/polyfills/base/allocator/buildflags.h",
       "src/polyfills/base/base_export.h",

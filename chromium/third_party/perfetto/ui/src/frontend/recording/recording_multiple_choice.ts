@@ -18,12 +18,8 @@ import {
   RecordingTargetV2,
   TargetFactory,
 } from '../../common/recordingV2/recording_interfaces_v2';
-import {
-  RecordingPageController,
-} from '../../common/recordingV2/recording_page_controller';
-import {
-  RECORDING_MODAL_DIALOG_KEY,
-} from '../../common/recordingV2/recording_utils';
+import {RecordingPageController} from '../../common/recordingV2/recording_page_controller';
+import {RECORDING_MODAL_DIALOG_KEY} from '../../common/recordingV2/recording_utils';
 import {closeModal} from '../../widgets/modal';
 
 interface RecordingMultipleChoiceAttrs {
@@ -33,13 +29,15 @@ interface RecordingMultipleChoiceAttrs {
   controller: RecordingPageController;
 }
 
-export class RecordingMultipleChoice implements
-    m.ClassComponent<RecordingMultipleChoiceAttrs> {
+export class RecordingMultipleChoice
+  implements m.ClassComponent<RecordingMultipleChoiceAttrs>
+{
   private selectedIndex: number = -1;
 
   targetSelection(
-      targets: RecordingTargetV2[],
-      controller: RecordingPageController): m.Vnode|undefined {
+    targets: RecordingTargetV2[],
+    controller: RecordingPageController,
+  ): m.Vnode | undefined {
     const targetInfo = controller.getTargetInfo();
     const targetNames = [];
     this.selectedIndex = -1;
@@ -53,34 +51,35 @@ export class RecordingMultipleChoice implements
 
     const selectedIndex = this.selectedIndex;
     return m(
-        'label',
-        m('select',
-          {
-            selectedIndex,
-            onchange: (e: Event) => {
-              controller.onTargetSelection(
-                  (e.target as HTMLSelectElement).value);
-            },
-            onupdate: (select) => {
-              // Work around mithril bug
-              // (https://github.com/MithrilJS/mithril.js/issues/2107): We
-              // may update the select's options while also changing the
-              // selectedIndex at the same time. The update of selectedIndex
-              // may be applied before the new options are added to the
-              // select element. Because the new selectedIndex may be
-              // outside of the select's options at that time, we have to
-              // reselect the correct index here after any new children were
-              // added.
-              (select.dom as HTMLSelectElement).selectedIndex =
-                  this.selectedIndex;
-            },
-            ...{size: targets.length, multiple: 'multiple'},
+      'label',
+      m(
+        'select',
+        {
+          selectedIndex,
+          onchange: (e: Event) => {
+            controller.onTargetSelection((e.target as HTMLSelectElement).value);
           },
-          ...targetNames),
+          onupdate: (select) => {
+            // Work around mithril bug
+            // (https://github.com/MithrilJS/mithril.js/issues/2107): We
+            // may update the select's options while also changing the
+            // selectedIndex at the same time. The update of selectedIndex
+            // may be applied before the new options are added to the
+            // select element. Because the new selectedIndex may be
+            // outside of the select's options at that time, we have to
+            // reselect the correct index here after any new children were
+            // added.
+            (select.dom as HTMLSelectElement).selectedIndex =
+              this.selectedIndex;
+          },
+          ...{size: targets.length, multiple: 'multiple'},
+        },
+        ...targetNames,
+      ),
     );
   }
 
-  view({attrs}: m.CVnode<RecordingMultipleChoiceAttrs>): m.Vnode[]|undefined {
+  view({attrs}: m.CVnode<RecordingMultipleChoiceAttrs>): m.Vnode[] | undefined {
     const controller = attrs.controller;
     if (!controller.shouldShowTargetSelection()) {
       return undefined;
@@ -97,9 +96,11 @@ export class RecordingMultipleChoice implements
 
     return [
       m('text', 'Select target:'),
-      m('.record-modal-command',
+      m(
+        '.record-modal-command',
         this.targetSelection(targets, controller),
-        m('button.record-modal-button-high',
+        m(
+          'button.record-modal-button-high',
           {
             disabled: this.selectedIndex === -1,
             onclick: () => {
@@ -107,7 +108,9 @@ export class RecordingMultipleChoice implements
               controller.onStartRecordingPressed();
             },
           },
-          'Connect')),
+          'Connect',
+        ),
+      ),
     ];
   }
 }

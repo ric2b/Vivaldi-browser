@@ -13,7 +13,6 @@
 #import "ios/chrome/browser/ui/account_picker/account_picker_layout_delegate.h"
 #import "ios/chrome/browser/ui/authentication/views/identity_button_control.h"
 #import "ios/chrome/browser/ui/authentication/views/identity_view.h"
-#import "ios/chrome/common/button_configuration_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/button_util.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
@@ -59,6 +58,7 @@ CGFloat GetPixelLength() {
   __strong UIStackView* _contentView;
   // Button to present the default identity.
   __strong IdentityButtonControl* _identityButtonControl;
+  BOOL _identityButtonControlShouldBeHidden;
   // "Grouped" section containing the identity button and the switch.
   // If there is no switch, then this is equal to `identityButtonControl`.
   __strong UIView* _groupedIdentityButtonSection;
@@ -110,8 +110,10 @@ CGFloat GetPixelLength() {
   DCHECK(_activityIndicatorView);
   [_activityIndicatorView removeFromSuperview];
   _activityIndicatorView = nil;
-  // Show the IdentityButtonControl, since it may be hidden.
-  _identityButtonControl.hidden = NO;
+  if (!_identityButtonControlShouldBeHidden) {
+    // Show the IdentityButtonControl, since it may be hidden.
+    _identityButtonControl.hidden = NO;
+  }
   // Enable buttons.
   _identityButtonControl.enabled = YES;
   _askEveryTimeSwitch.enabled = YES;
@@ -121,6 +123,7 @@ CGFloat GetPixelLength() {
 }
 
 - (void)setIdentityButtonHidden:(BOOL)hidden animated:(BOOL)animated {
+  _identityButtonControlShouldBeHidden = hidden;
   if (!animated) {
     _identityButtonControl.hidden = hidden;
     return;
@@ -128,9 +131,16 @@ CGFloat GetPixelLength() {
   __weak __typeof(_identityButtonControl) weakIdentityButton =
       _identityButtonControl;
   [UIView animateWithDuration:kIdentityButtonAnimationDuration
-                   animations:^{
-                     weakIdentityButton.hidden = hidden;
-                   }];
+      animations:^{
+        weakIdentityButton.hidden = hidden;
+      }
+      completion:^(BOOL finished) {
+        // Without this completion, it appears there is some form of race
+        // condition which leads to the animation getting stuck in a state where
+        // the button is visible, but its superview lays itself out without
+        // making enough space. See https://crbug.com/329387878 for details.
+        weakIdentityButton.hidden = hidden;
+      }];
 }
 
 #pragma mark - UIViewController
@@ -172,6 +182,7 @@ CGFloat GetPixelLength() {
   // Replace the controller view by the scroll view.
   UIScrollView* scrollView = [[UIScrollView alloc] init];
   scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+  scrollView.alwaysBounceVertical = _configuration.alwaysBounceVertical;
   [self.view addSubview:scrollView];
   [NSLayoutConstraint activateConstraints:@[
     [scrollView.topAnchor
@@ -339,10 +350,13 @@ CGFloat GetPixelLength() {
     [_primaryButton.widthAnchor
         constraintEqualToAnchor:_contentView.widthAnchor]
   ]];
-  // Adjust the identity button control rounded corners to the same value than
-  // the "continue as" button.
-  _groupedIdentityButtonSection.layer.cornerRadius =
-      _primaryButton.configuration.background.cornerRadius;
+
+  if (!_configuration.defaultCornerRadius) {
+    // Adjust the identity button control rounded corners to the same value than
+    // the "continue as" button.
+    _groupedIdentityButtonSection.layer.cornerRadius =
+        _primaryButton.configuration.background.cornerRadius;
+  }
 
   // Ensure that keyboard is hidden.
   UIResponder* firstResponder = GetFirstResponder();
@@ -424,7 +438,9 @@ CGFloat GetPixelLength() {
   // If spinner is active, delay UI updates until stopSpinner() is called.
   if (!_activityIndicatorView) {
     SetConfigurationTitle(_primaryButton, _submitString);
-    _identityButtonControl.hidden = NO;
+    if (!_identityButtonControlShouldBeHidden) {
+      _identityButtonControl.hidden = NO;
+    }
   }
 }
 

@@ -1169,8 +1169,8 @@ SELinux policies to refer to though it's for Android, at
 [go/sepolicy-debug](https://goto.google.com/sepolicy-debug)
 
 [SELinux talk]: https://drive.google.com/file/d/1zT0IH3fg2KoTx0phU78aj6pEscHPIqAq/view
-[File Contexts]: https://chromium.googlesource.com/chromiumos/docs/+/main/security/selinux.md#File-Contexts
-[How to read the denials in audit logs]: https://chromium.googlesource.com/chromiumos/docs/+/main/security/selinux.md#How-to-read-the-denials-in-audit-logs
+[File Contexts]: https://www.chromium.org/chromium-os/developer-library/reference/security/selinux/#file-contexts
+[How to read the denials in audit logs]: https://www.chromium.org/chromium-os/developer-library/reference/security/selinux/#how-to-read-the-denials-in-audit-logs
 
 [base/imported/global_macros]: https://source.corp.google.com/chromeos_public/src/platform2/sepolicy/policy/base/imported/global_macros
 [base/imported/te_macros]: https://source.corp.google.com/chromeos_public/src/platform2/sepolicy/policy/base/imported/te_macros

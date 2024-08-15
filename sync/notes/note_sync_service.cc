@@ -37,11 +37,16 @@ NoteSyncService::GetNoteSyncControllerDelegate() {
 }
 
 bool NoteSyncService::IsTrackingMetadata() const {
-  return note_model_type_processor_.IsTrackingMetadata();
+  return note_model_type_processor_.IsTrackingMetadata() ||
+         is_tracking_metadata_for_testing_;
 }
 
 sync_notes::NoteModelView* NoteSyncService::note_model_view() {
   return note_model_view_.get();
+}
+
+void NoteSyncService::SetIsTrackingMetadataForTesting() {
+  is_tracking_metadata_for_testing_ = true;
 }
 
 void NoteSyncService::SetNotesLimitForTesting(size_t limit) {

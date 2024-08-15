@@ -55,6 +55,7 @@ class Queue final : public QueueBase {
                                size_t size) override;
     MaybeError WriteTextureImpl(const ImageCopyTexture& destination,
                                 const void* data,
+                                size_t dataSize,
                                 const TextureDataLayout& dataLayout,
                                 const Extent3D& writeSizePixel) override;
 
@@ -63,6 +64,7 @@ class Queue final : public QueueBase {
     ResultOrError<bool> WaitForQueueSerial(ExecutionSerial serial, Nanoseconds timeout) override;
 
     bool HasPendingCommands() const override;
+    MaybeError SubmitPendingCommands() override;
     ResultOrError<ExecutionSerial> CheckAndUpdateCompletedSerials() override;
     void ForceEventualFlushOfCommands() override;
     MaybeError WaitForIdleForDestruction() override;

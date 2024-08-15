@@ -2,25 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import '//resources/cr_elements/chromeos/cros_color_overrides.css.js';
-import '//resources/cr_elements/cr_checkbox/cr_checkbox.js';
-import '//resources/cr_elements/cr_icon_button/cr_icon_button.js';
+import '//resources/ash/common/cr_elements/cros_color_overrides.css.js';
+import '//resources/ash/common/cr_elements/cr_checkbox/cr_checkbox.js';
+import '//resources/ash/common/cr_elements/cr_icon_button/cr_icon_button.js';
 import '//resources/ash/common/cr_scrollable_behavior.js';
-import '//resources/cr_elements/icons.html.js';
+import '//resources/ash/common/cr_elements/icons.html.js';
+import './common_styles/oobe_common_styles.css.js';
 
 import {PolymerElementProperties} from '//resources/polymer/v3_0/polymer/interfaces.js';
-import {mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {OobeI18nBehavior, OobeI18nBehaviorInterface} from './behaviors/oobe_i18n_behavior.js';
-
+import {OobeI18nMixin} from './mixins/oobe_i18n_mixin.js';
+import {OobeScrollableMixin} from './mixins/oobe_scrollable_mixin.js';
 import {getTemplate} from './oobe_apps_list.html.js';
 
 const MAX_IMG_LOADING_TIME_SEC = 7;
 
-const OobeAppsListBase = mixinBehaviors([OobeI18nBehavior],
-    PolymerElement) as {
-      new (): PolymerElement & OobeI18nBehaviorInterface,
-    };
+const OobeAppsListBase = OobeI18nMixin(OobeScrollableMixin(PolymerElement));
 
 export class OobeAppsList extends OobeAppsListBase {
   static get is() {
@@ -64,6 +62,16 @@ export class OobeAppsList extends OobeAppsListBase {
     this.loadingTimer = undefined;
     this.allSelected = false;
     this.loadedImagesCount = 0;
+  }
+
+  override ready() {
+    super.ready();
+    const scrollContainer = this.shadowRoot?.querySelector('#appsList');
+    const scrollContent = this.shadowRoot?.querySelector('#scrollContent');
+    if (!scrollContainer || !scrollContent) {
+      return;
+    }
+    this.initScrollableObservers(scrollContainer, scrollContent);
   }
 
   /**
@@ -194,14 +202,10 @@ export class OobeAppsList extends OobeAppsListBase {
   }
 
   unselectSymbolHidden(appsSelected: number): boolean {
-    // TOOD(b/320253448): Investigate why shadowRoot is null during OOBE
-    // initialization.
-    if (this.shadowRoot === null) {
-      return true;
-    }
-    const selectAll = this.shadowRoot.getElementById(
-      'selectAll')!;
-    if (selectAll === null) {
+    const selectAll = this.shadowRoot?.querySelector('#selectAll');
+    // First call happens during creation of unselectAll, before the shadow tree
+    // is attached to the dom
+    if (!selectAll) {
       return true;
     }
     if (appsSelected > 0 && appsSelected < this.appList.length) {

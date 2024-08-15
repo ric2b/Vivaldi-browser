@@ -7,8 +7,8 @@
 #include <algorithm>
 #include <map>
 #include <utility>
+#include <vector>
 
-#include "base/containers/cxx20_erase.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_action_data.h"
@@ -383,9 +383,9 @@ AXPlatformNode* TestAXNodeWrapper::GetFromTreeIDAndNodeID(
   return GetFromNodeID(id);
 }
 
-absl::optional<size_t> TestAXNodeWrapper::GetIndexInParent() const {
-  return node_ ? absl::make_optional(node_->GetUnignoredIndexInParent())
-               : absl::nullopt;
+std::optional<size_t> TestAXNodeWrapper::GetIndexInParent() const {
+  return node_ ? std::make_optional(node_->GetUnignoredIndexInParent())
+               : std::nullopt;
 }
 
 void TestAXNodeWrapper::ReplaceIntAttribute(int32_t node_id,
@@ -402,9 +402,8 @@ void TestAXNodeWrapper::ReplaceIntAttribute(int32_t node_id,
   std::vector<std::pair<ax::mojom::IntAttribute, int32_t>>& attributes =
       new_data.int_attributes;
 
-  base::EraseIf(attributes, [attribute](auto& pair) {
-    return pair.first == attribute;
-  });
+  std::erase_if(attributes,
+                [attribute](auto& pair) { return pair.first == attribute; });
 
   new_data.AddIntAttribute(attribute, value);
   node->SetData(new_data);
@@ -417,7 +416,7 @@ void TestAXNodeWrapper::ReplaceFloatAttribute(
   std::vector<std::pair<ax::mojom::FloatAttribute, float>>& attributes =
       new_data.float_attributes;
 
-  base::EraseIf(attributes,
+  std::erase_if(attributes,
                 [attribute](auto& pair) { return pair.first == attribute; });
 
   new_data.AddFloatAttribute(attribute, value);
@@ -430,7 +429,7 @@ void TestAXNodeWrapper::ReplaceBoolAttribute(ax::mojom::BoolAttribute attribute,
   std::vector<std::pair<ax::mojom::BoolAttribute, bool>>& attributes =
       new_data.bool_attributes;
 
-  base::EraseIf(attributes,
+  std::erase_if(attributes,
                 [attribute](auto& pair) { return pair.first == attribute; });
 
   new_data.AddBoolAttribute(attribute, value);
@@ -444,7 +443,7 @@ void TestAXNodeWrapper::ReplaceStringAttribute(
   std::vector<std::pair<ax::mojom::StringAttribute, std::string>>& attributes =
       new_data.string_attributes;
 
-  base::EraseIf(attributes,
+  std::erase_if(attributes,
                 [attribute](auto& pair) { return pair.first == attribute; });
 
   new_data.AddStringAttribute(attribute, value);
@@ -467,23 +466,23 @@ void TestAXNodeWrapper::ReplaceTreeDataTextSelection(int32_t anchor_node_id,
   tree_->UpdateDataForTesting(new_tree_data);
 }
 
-absl::optional<int> TestAXNodeWrapper::GetTableRowCount() const {
+std::optional<int> TestAXNodeWrapper::GetTableRowCount() const {
   return node_->GetTableRowCount();
 }
 
-absl::optional<int> TestAXNodeWrapper::GetTableColCount() const {
+std::optional<int> TestAXNodeWrapper::GetTableColCount() const {
   return node_->GetTableColCount();
 }
 
-absl::optional<int> TestAXNodeWrapper::GetTableAriaRowCount() const {
+std::optional<int> TestAXNodeWrapper::GetTableAriaRowCount() const {
   return node_->GetTableAriaRowCount();
 }
 
-absl::optional<int> TestAXNodeWrapper::GetTableAriaColCount() const {
+std::optional<int> TestAXNodeWrapper::GetTableAriaColCount() const {
   return node_->GetTableAriaColCount();
 }
 
-absl::optional<int> TestAXNodeWrapper::GetTableCellCount() const {
+std::optional<int> TestAXNodeWrapper::GetTableCellCount() const {
   return node_->GetTableCellCount();
 }
 
@@ -509,7 +508,7 @@ bool TestAXNodeWrapper::IsTableRow() const {
   return node_->IsTableRow();
 }
 
-absl::optional<int> TestAXNodeWrapper::GetTableRowRowIndex() const {
+std::optional<int> TestAXNodeWrapper::GetTableRowRowIndex() const {
   return node_->GetTableRowRowIndex();
 }
 
@@ -517,39 +516,49 @@ bool TestAXNodeWrapper::IsTableCellOrHeader() const {
   return node_->IsTableCellOrHeader();
 }
 
-absl::optional<int> TestAXNodeWrapper::GetTableCellIndex() const {
+std::optional<int> TestAXNodeWrapper::GetTableCellIndex() const {
   return node_->GetTableCellIndex();
 }
 
-absl::optional<int> TestAXNodeWrapper::GetTableCellColIndex() const {
+std::optional<int> TestAXNodeWrapper::GetTableCellColIndex() const {
   return node_->GetTableCellColIndex();
 }
 
-absl::optional<int> TestAXNodeWrapper::GetTableCellRowIndex() const {
+std::optional<int> TestAXNodeWrapper::GetTableCellRowIndex() const {
   return node_->GetTableCellRowIndex();
 }
 
-absl::optional<int> TestAXNodeWrapper::GetTableCellColSpan() const {
+std::optional<int> TestAXNodeWrapper::GetTableCellColSpan() const {
   return node_->GetTableCellColSpan();
 }
 
-absl::optional<int> TestAXNodeWrapper::GetTableCellRowSpan() const {
+std::optional<int> TestAXNodeWrapper::GetTableCellRowSpan() const {
   return node_->GetTableCellRowSpan();
 }
 
-absl::optional<int> TestAXNodeWrapper::GetTableCellAriaColIndex() const {
+std::optional<int> TestAXNodeWrapper::GetTableCellAriaColIndex() const {
   return node_->GetTableCellAriaColIndex();
 }
 
-absl::optional<int> TestAXNodeWrapper::GetTableCellAriaRowIndex() const {
+std::optional<int> TestAXNodeWrapper::GetTableCellAriaRowIndex() const {
   return node_->GetTableCellAriaRowIndex();
 }
 
-absl::optional<int32_t> TestAXNodeWrapper::GetCellId(int row_index,
-                                                     int col_index) const {
+std::optional<int32_t> TestAXNodeWrapper::GetCellId(int row_index,
+                                                    int col_index) const {
   AXNode* cell = node_->GetTableCellFromCoords(row_index, col_index);
   if (!cell)
-    return absl::nullopt;
+    return std::nullopt;
+  return cell->id();
+}
+std::optional<int32_t> TestAXNodeWrapper::GetCellIdAriaCoords(
+    int aria_row_index,
+    int aria_col_index) const {
+  AXNode* cell =
+      node_->GetTableCellFromAriaCoords(aria_row_index, aria_col_index);
+  if (!cell) {
+    return std::nullopt;
+  }
   return cell->id();
 }
 
@@ -558,10 +567,10 @@ TestAXNodeWrapper::GetTargetForNativeAccessibilityEvent() {
   return native_event_target_;
 }
 
-absl::optional<int32_t> TestAXNodeWrapper::CellIndexToId(int cell_index) const {
+std::optional<int32_t> TestAXNodeWrapper::CellIndexToId(int cell_index) const {
   AXNode* cell = node_->GetTableCellFromIndex(cell_index);
   if (!cell)
-    return absl::nullopt;
+    return std::nullopt;
   return cell->id();
 }
 
@@ -899,11 +908,11 @@ bool TestAXNodeWrapper::IsOrderedSet() const {
   return node_->IsOrderedSet();
 }
 
-absl::optional<int> TestAXNodeWrapper::GetPosInSet() const {
+std::optional<int> TestAXNodeWrapper::GetPosInSet() const {
   return node_->GetPosInSet();
 }
 
-absl::optional<int> TestAXNodeWrapper::GetSetSize() const {
+std::optional<int> TestAXNodeWrapper::GetSetSize() const {
   return node_->GetSetSize();
 }
 

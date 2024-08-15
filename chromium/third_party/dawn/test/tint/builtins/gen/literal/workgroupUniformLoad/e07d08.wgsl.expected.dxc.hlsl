@@ -1,8 +1,15 @@
 groupshared float16_t arg_0;
 
+void tint_zero_workgroup_memory(uint local_idx) {
+  if ((local_idx < 1u)) {
+    arg_0 = float16_t(0.0h);
+  }
+  GroupMemoryBarrierWithGroupSync();
+}
+
 float16_t tint_workgroupUniformLoad_arg_0() {
   GroupMemoryBarrierWithGroupSync();
-  const float16_t result = arg_0;
+  float16_t result = arg_0;
   GroupMemoryBarrierWithGroupSync();
   return result;
 }
@@ -19,10 +26,7 @@ struct tint_symbol_1 {
 };
 
 void compute_main_inner(uint local_invocation_index) {
-  {
-    arg_0 = float16_t(0.0h);
-  }
-  GroupMemoryBarrierWithGroupSync();
+  tint_zero_workgroup_memory(local_invocation_index);
   workgroupUniformLoad_e07d08();
 }
 

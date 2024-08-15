@@ -10,7 +10,6 @@
 #import "base/test/scoped_feature_list.h"
 #import "build/build_config.h"
 #import "components/infobars/core/infobar.h"
-#import "ios/chrome/browser/credential_provider_promo/model/features.h"
 #import "ios/chrome/browser/infobars/model/infobar_ios.h"
 #import "ios/chrome/browser/overlays/model/public/default/default_infobar_overlay_request_config.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_request.h"
@@ -52,8 +51,7 @@ class PasswordInfobarBannerOverlayMediatorTest : public PlatformTest {
     infobar_ = std::make_unique<InfoBarIOS>(
         InfobarType::kInfobarTypePasswordSave,
         MockIOSChromeSavePasswordInfoBarDelegate::Create(
-            kUsername, kPassword, GURL::EmptyGURL(),
-            account_to_store_password));
+            kUsername, kPassword, GURL(), account_to_store_password));
     request_ =
         OverlayRequest::CreateWithConfig<DefaultInfobarOverlayRequestConfig>(
             infobar_.get(), InfobarOverlayType::kBanner);
@@ -121,28 +119,6 @@ TEST_F(PasswordInfobarBannerOverlayMediatorTest, MainButtonTapped) {
   InitInfobar();
   EXPECT_CALL(mock_delegate(), Accept()).WillOnce(testing::Return(true));
   [mediator_ bannerInfobarButtonWasPressed:nil];
-}
-
-// Tests that tapping the main button sends CredentialProviderPromo command.
-TEST_F(PasswordInfobarBannerOverlayMediatorTest,
-       MainButtonTriggersCredentialProviderPromo) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeatureWithParameters(
-      kCredentialProviderExtensionPromo,
-      {{"enable_promo_on_password_saved", "true"}});
-  InitInfobar();
-
-  id commands_handler =
-      OCMStrictProtocolMock(@protocol(CredentialProviderPromoCommands));
-  [mock_delegate().GetDispatcher()
-      startDispatchingToTarget:commands_handler
-                   forProtocol:@protocol(CredentialProviderPromoCommands)];
-
-  [[commands_handler expect] showCredentialProviderPromoWithTrigger:
-                                 CredentialProviderPromoTrigger::PasswordSaved];
-
-  [mediator_ bannerInfobarButtonWasPressed:nil];
-  [commands_handler verify];
 }
 
 // Ensures that calling the -bannerInfobarButtonWasPressed: after the infobar

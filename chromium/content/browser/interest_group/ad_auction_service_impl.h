@@ -35,6 +35,7 @@
 #include "third_party/blink/public/mojom/interest_group/ad_auction_service.mojom.h"
 #include "third_party/blink/public/mojom/interest_group/interest_group_types.mojom-forward.h"
 #include "third_party/blink/public/mojom/parakeet/ad_request.mojom.h"
+#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-forward.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -44,7 +45,6 @@ class InterestGroupManagerImpl;
 struct BiddingAndAuctionServerKey;
 class RenderFrameHost;
 class RenderFrameHostImpl;
-class PageImpl;
 class PrivateAggregationManager;
 
 // Implements the AdAuctionService service called by Blink code.
@@ -81,7 +81,8 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
       DeprecatedGetURLFromURNCallback callback) override;
   void DeprecatedReplaceInURN(
       const GURL& urn_url,
-      std::vector<blink::mojom::AdKeywordReplacementPtr> replacements,
+      const std::vector<blink::AuctionConfig::AdKeywordReplacement>&
+          replacements,
       DeprecatedReplaceInURNCallback callback) override;
   void GetInterestGroupAdAuctionData(
       const url::Origin& seller,
@@ -141,7 +142,17 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
   // Checks if a join or leave interest group is allowed to be sent from the
   // current renderer. If not, returns false and invokes
   // ReportBadMessageAndDeleteThis().
-  bool JoinOrLeaveApiAllowedFromRenderer(const url::Origin& owner);
+  bool JoinOrLeaveApiAllowedFromRenderer(const url::Origin& owner,
+                                         const char* invoked_method);
+
+  // Checks if `feature` is enabled for the frame, and returns true if so, and
+  // false if not. Additionally, if the feature is enabled, prints a warning to
+  // the console if the feature would not be enabled if the default state of the
+  // feature across cross-origin frames were switched to disabled instead of
+  // enabled.
+  bool IsPermissionPolicyEnabledAndWarnIfNeeded(
+      blink::mojom::PermissionsPolicyFeature feature,
+      const char* method);
 
   // Returns true if `origin` is allowed to perform the specified
   // `interest_group_api_operation` in this frame. Must be called on worklet /
@@ -154,9 +165,6 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
   void OnAuctionComplete(
       RunAdAuctionCallback callback,
       GURL urn_uuid,
-      FencedFrameURLMapping::Id fenced_frame_urls_map_id,
-      GlobalRenderFrameHostId render_frame_host_id,
-      const base::WeakPtr<PageImpl> page_impl,
       AuctionRunner* auction,
       bool aborted_by_script,
       std::optional<blink::InterestGroupKey> winning_group_key,
@@ -180,7 +188,6 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
   void OnGotAuctionData(base::Uuid request_id, BiddingAndAuctionData data);
   void OnGotBiddingAndAuctionServerKey(
       base::Uuid request_id,
-      scoped_refptr<network::WrapperSharedURLLoaderFactory> loader,
       base::expected<BiddingAndAuctionServerKey, std::string> maybe_key);
   void OnGotAuctionDataAndKey(base::Uuid request_id);
 
@@ -188,13 +195,7 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
 
   url::Origin GetTopWindowOrigin() const;
 
-  // Return whether the auction is expected to fail because any of
-  // RenderFrameHostImpl, PageImpl and FencedFrameUrlMapping has changed during
-  // the auction.
-  bool IsAuctionExpectedToFail(
-      FencedFrameURLMapping::Id fenced_frame_urls_map_id,
-      GlobalRenderFrameHostId render_frame_host_id,
-      const base::WeakPtr<PageImpl> page_impl);
+  AdAuctionPageData* GetAdAuctionPageData();
 
   // To avoid race conditions associated with top frame navigations (mentioned
   // in document_service.h), we need to save the values of the main frame
@@ -215,10 +216,9 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
   // worklets it manages.
   AuctionWorkletManager auction_worklet_manager_;
 
-  // Manages auction nonces issued by prior calls to
-  // CreateAuctionNonce, which are used by subsequent calls to
-  // RunAdAuction.
-  AuctionNonceManager auction_nonce_manager_;
+  // Manages auction nonces issued by prior calls to CreateAuctionNonce,
+  // which are used by subsequent calls to RunAdAuction.
+  std::unique_ptr<AuctionNonceManager> auction_nonce_manager_;
 
   // Use a map instead of a list so can remove entries without destroying them.
   // TODO(mmenke): Switch to std::set() and use extract() once that's allowed.
@@ -241,6 +241,12 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
   // BiddingAndAuctionDataConstructionState's data and key will be edited in
   // place as they are loaded.
   base::queue<BiddingAndAuctionDataConstructionState> ba_data_callbacks_;
+
+  // True if a feature is currently enabled, but would be disabled if the
+  // default policy for the feature were switched to EnableForSelf. Lazily
+  // populated.
+  std::map<blink::mojom::PermissionsPolicyFeature, bool>
+      should_warn_about_feature_;
 
   base::WeakPtrFactory<AdAuctionServiceImpl> weak_ptr_factory_{this};
 };

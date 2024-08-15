@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <string_view>
 
 #include "base/check_op.h"
 #include "base/containers/contains.h"
@@ -22,6 +23,7 @@
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/views/view_utils.h"
 
 namespace arc::input_overlay {
 namespace {
@@ -32,7 +34,7 @@ constexpr char kTopLeft[] = "top_left";
 constexpr char kBottomRight[] = "bottom_right";
 
 std::unique_ptr<Position> ParseApplyAreaPosition(const base::Value::Dict& dict,
-                                                 base::StringPiece key) {
+                                                 std::string_view key) {
   const auto* point = dict.FindDict(key);
   if (!point) {
     LOG(ERROR) << "Apply area in mouse move action requires: " << key;
@@ -82,7 +84,7 @@ class ActionMove::ActionMoveMouseView : public ActionView {
 
   void ChildPreferredSizeChanged(View* child) override {
     DCHECK_EQ(labels_.size(), 1u);
-    if (static_cast<ActionLabel*>(child) != labels_[0]) {
+    if (views::AsViewClass<ActionLabel>(child) != labels_[0]) {
       return;
     }
 
@@ -174,9 +176,9 @@ class ActionMove::ActionMoveKeyView : public ActionView {
     }
 
     int label_index = -1;
-    const auto* child_label = static_cast<ActionLabel*>(child);
     for (size_t i = 0; i < kActionMoveKeysSize; i++) {
-      if (child_label == labels_[i]) {
+      if (const auto* child_label = views::AsViewClass<ActionLabel>(child);
+          child_label && child_label == labels_[i]) {
         label_index = i;
         break;
       }

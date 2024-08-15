@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <cstring>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace dawn::wire::client {
@@ -44,7 +45,11 @@ namespace dawn::wire::client {
         } else if constexpr (std::is_constructible_v<Child, const ObjectBaseParams&, const ObjectHandle&, decltype(args)...>) {
             return p->GetClient()->template Make<Child>(p->GetEventManagerHandle(), args...);
         } else {
-            return p->GetClient()->template Make<Child>();
+            if constexpr (std::is_base_of_v<ObjectWithEventsBase, Child>) {
+                return p->GetClient()->template Make<Child>(p->GetEventManagerHandle());
+            } else {
+                return p->GetClient()->template Make<Child>();
+            }
         }
     }
 
@@ -117,18 +122,7 @@ namespace dawn::wire::client {
         //* When an object's refcount reaches 0, notify the server side of it and delete it.
         void Client{{as_MethodSuffix(type.name, Name("release"))}}({{cType}} cObj) {
             {{Type}}* obj = reinterpret_cast<{{Type}}*>(cObj);
-
-            if (!obj->Release()) {
-                return;
-            }
-
-            DestroyObjectCmd cmd;
-            cmd.objectType = ObjectType::{{type.name.CamelCase()}};
-            cmd.objectId = obj->GetWireId();
-
-            Client* client = obj->GetClient();
-            client->SerializeCommand(cmd);
-            client->Free(obj);
+            obj->Release();
         }
 
         void Client{{as_MethodSuffix(type.name, Name("reference"))}}({{cType}} cObj) {

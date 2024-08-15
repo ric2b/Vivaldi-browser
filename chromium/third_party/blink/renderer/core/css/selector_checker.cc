@@ -61,6 +61,7 @@
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_option_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
+#include "third_party/blink/renderer/core/html/html_details_element.h"
 #include "third_party/blink/renderer/core/html/html_dialog_element.h"
 #include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
@@ -1249,8 +1250,17 @@ EarlyBreakOnHasArgumentChecking CheckEarlyBreakForHasArgument(
 
 bool SelectorChecker::CheckPseudoHas(const SelectorCheckingContext& context,
                                      MatchResult& result) const {
+  if (context.element->GetDocument().InPseudoHasChecking()) {
+    // :has() within :has() would normally be rejected parse-time, but we can
+    // end up in this situation nevertheless, due to nesting. We just return
+    // a not-matched for now; it is possible that we should fail the entire rule
+    // (consider what happens if it is e.g. within :not()), but we would have to
+    // have some way to propagate that up the stack, and consider interactions
+    // with the forgiveness of :is().
+    return false;
+  }
   CheckPseudoHasCacheScope check_pseudo_has_cache_scope(
-      &context.element->GetDocument());
+      &context.element->GetDocument(), /*within_selector_checking=*/true);
 
   Element* has_anchor_element = context.element;
   Document& document = has_anchor_element->GetDocument();
@@ -1777,6 +1787,16 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
 
       return element.CachedDirectionality() == direction;
     }
+    case CSSSelector::kPseudoSelectAuthorButton:
+      if (auto* select = DynamicTo<HTMLSelectElement>(element)) {
+        return select->SlottedButton();
+      }
+      return false;
+    case CSSSelector::kPseudoSelectAuthorDatalist:
+      if (auto* select = DynamicTo<HTMLSelectElement>(element)) {
+        return select->FirstChildDatalist();
+      }
+      return false;
     case CSSSelector::kPseudoDialogInTopLayer:
       if (auto* dialog = DynamicTo<HTMLDialogElement>(element)) {
         if (dialog->IsModal() &&
@@ -1787,7 +1807,7 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
         // When the dialog is transitioning to closed, we have to check the
         // elements which are in the top layer but are pending removal to see if
         // this element used to be open as a dialog.
-        absl::optional<Document::TopLayerReason> top_layer_reason =
+        std::optional<Document::TopLayerReason> top_layer_reason =
             dialog->GetDocument().IsScheduledForTopLayerRemoval(dialog);
         return top_layer_reason &&
                *top_layer_reason == Document::TopLayerReason::kDialog;
@@ -1806,7 +1826,7 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
         // When the popover is transitioning to closed, popoverOpen won't return
         // true and we have to check the elements which are in the top layer but
         // are pending removal to see if this element used to be popoverOpen.
-        absl::optional<Document::TopLayerReason> top_layer_reason =
+        std::optional<Document::TopLayerReason> top_layer_reason =
             html_element->GetDocument().IsScheduledForTopLayerRemoval(
                 html_element);
         return top_layer_reason &&
@@ -1822,11 +1842,23 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
     case CSSSelector::kPseudoOpen:
       if (auto* selectlist = DynamicTo<HTMLSelectListElement>(element)) {
         return selectlist->open();
+      } else if (auto* dialog = DynamicTo<HTMLDialogElement>(element)) {
+        return dialog->FastHasAttribute(html_names::kOpenAttr);
+      } else if (auto* details = DynamicTo<HTMLDetailsElement>(element)) {
+        return details->FastHasAttribute(html_names::kOpenAttr);
+      } else if (auto* select = DynamicTo<HTMLSelectElement>(element)) {
+        return select->PopupIsVisible();
       }
       return false;
     case CSSSelector::kPseudoClosed:
       if (auto* selectlist = DynamicTo<HTMLSelectListElement>(element)) {
         return !selectlist->open();
+      } else if (auto* dialog = DynamicTo<HTMLDialogElement>(element)) {
+        return !dialog->FastHasAttribute(html_names::kOpenAttr);
+      } else if (auto* details = DynamicTo<HTMLDetailsElement>(element)) {
+        return !details->FastHasAttribute(html_names::kOpenAttr);
+      } else if (auto* select = DynamicTo<HTMLSelectElement>(element)) {
+        return select->UsesMenuList() && !select->PopupIsVisible();
       }
       return false;
     case CSSSelector::kPseudoFullscreen:
@@ -1921,9 +1953,15 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
         return false;
       }
       return !element.GetDocument().GetPage()->GetFocusController().IsActive();
-    case CSSSelector::kPseudoState: {
+    case CSSSelector::kPseudoStateDeprecatedSyntax: {
+      CHECK(RuntimeEnabledFeatures::CSSCustomStateDeprecatedSyntaxEnabled());
       return element.DidAttachInternals() &&
              element.EnsureElementInternals().HasState(selector.Value());
+    }
+    case CSSSelector::kPseudoState: {
+      CHECK(RuntimeEnabledFeatures::CSSCustomStateNewSyntaxEnabled());
+      return element.DidAttachInternals() &&
+             element.EnsureElementInternals().HasState(selector.Argument());
     }
     case CSSSelector::kPseudoHorizontal:
     case CSSSelector::kPseudoVertical:
@@ -1973,20 +2011,25 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
       DCHECK(context.relative_anchor_element);
       return context.relative_anchor_element == &element;
     case CSSSelector::kPseudoActiveViewTransition: {
-      // :active_view_transition is only valid on the html element.
+      // :active-view-transition is only valid on the html element.
       if (!IsA<HTMLElement>(element)) {
         return false;
       }
 
-      if (mode_ == kResolvingStyle) {
-        if (UNLIKELY(context.is_inside_has_pseudo_class)) {
-          element.SetAncestorsOrSiblingsAffectedByActiveViewTransitionInHas();
-        } else if (ImpactsNonSubject(context)) {
-          element.SetChildrenOrSiblingsAffectedByActiveViewTransition();
-        }
+      // The pseudo is only valid if there is a transition.
+      auto* transition =
+          ViewTransitionUtils::GetTransition(element.GetDocument());
+      if (!transition) {
+        return false;
       }
-      if (ImpactsSubject(context)) {
-        result.SetFlag(MatchFlag::kAffectedByActiveViewTransition);
+
+      // Ask the transition to match for active-view-transition.
+      return transition->MatchForActiveViewTransition();
+    }
+    case CSSSelector::kPseudoActiveViewTransitionType: {
+      // :active-view-transition-type is only valid on the html element.
+      if (!IsA<HTMLElement>(element)) {
+        return false;
       }
 
       // The pseudo is only valid if there is a transition.
@@ -1997,7 +2040,7 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
       }
 
       // Ask the transition to match based on the argument list.
-      return transition->MatchForActiveViewTransition(selector.IdentList());
+      return transition->MatchForActiveViewTransitionType(selector.IdentList());
     }
     case CSSSelector::kPseudoUnparsed:
       // Only kept around for parsing; can never match anything
@@ -2040,7 +2083,7 @@ bool SelectorChecker::CheckPseudoAutofill(CSSSelector::PseudoType pseudo_type,
       return form_control_element->GetAutofillState() ==
              WebAutofillState::kPreviewed;
     case CSSSelector::kPseudoAutofillSelected:
-      return form_control_element->HighlightAutofilled();
+      return form_control_element->IsAutofilled();
     default:
       NOTREACHED();
   }
@@ -2147,9 +2190,36 @@ bool SelectorChecker::CheckPseudoElement(const SelectorCheckingContext& context,
         return false;
       }
       result.dynamic_pseudo = context.pseudo_id;
-      return selector_pseudo_id == kPseudoIdViewTransition ||
-             selector.Argument() == CSSSelector::UniversalSelectorAtom() ||
-             selector.Argument() == pseudo_argument_;
+      if (selector_pseudo_id == kPseudoIdViewTransition) {
+        return true;
+      }
+
+      CHECK(!selector.IdentList().empty());
+      const AtomicString& name_or_wildcard = selector.IdentList()[0];
+
+      // note that the pseudo_ident_list_ is the class list, and
+      // pseudo_argument_ is the name, while in the selector the IdentList() is
+      // both the name and the classes.
+      if (name_or_wildcard != CSSSelector::UniversalSelectorAtom() &&
+          name_or_wildcard != pseudo_argument_) {
+        return false;
+      }
+
+      // https://drafts.csswg.org/css-view-transitions-2/#typedef-pt-class-selector
+      // A named view transition pseudo-element selector which has one or more
+      // <custom-ident> values in its <pt-class-selector> would only match an
+      // element if the class list value in named elements for the
+      // pseudo-element’s view-transition-name contains all of those values.
+
+      // selector.IdentList() is equivalent to
+      // <pt-name-selector><pt-class-selector>, as in [name, class, class, ...]
+      // so we check that all of its items excluding the first one are
+      // contained in the pseudo element's classes (pseudo_ident_list_).
+      return base::ranges::all_of(
+          selector.IdentList().begin() + 1, selector.IdentList().end(),
+          [&](const AtomicString& class_from_selector) {
+            return base::Contains(pseudo_ident_list_, class_from_selector);
+          });
     }
     case CSSSelector::kPseudoScrollbarButton:
     case CSSSelector::kPseudoScrollbarCorner:

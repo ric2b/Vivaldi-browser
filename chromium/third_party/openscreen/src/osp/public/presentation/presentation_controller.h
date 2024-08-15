@@ -58,10 +58,12 @@ class Controller final : public ServiceListener::Observer,
     ReceiverWatch(Controller* controller,
                   const std::vector<std::string>& urls,
                   ReceiverObserver* observer);
+    ReceiverWatch(const ReceiverWatch&) = delete;
     ReceiverWatch(ReceiverWatch&&) noexcept;
     ~ReceiverWatch();
 
-    ReceiverWatch& operator=(ReceiverWatch);
+    ReceiverWatch& operator=(const ReceiverWatch&) = delete;
+    ReceiverWatch& operator=(ReceiverWatch&&);
 
     explicit operator bool() const { return observer_; }
 
@@ -80,10 +82,12 @@ class Controller final : public ServiceListener::Observer,
                    const std::string& service_id,
                    bool is_reconnect,
                    std::optional<uint64_t> request_id);
+    ConnectRequest(const ConnectRequest&) = delete;
     ConnectRequest(ConnectRequest&&) noexcept;
     ~ConnectRequest();
 
-    ConnectRequest& operator=(ConnectRequest);
+    ConnectRequest& operator=(const ConnectRequest&) = delete;
+    ConnectRequest& operator=(ConnectRequest&&);
 
     explicit operator bool() const { return request_id_.has_value(); }
 
@@ -91,9 +95,9 @@ class Controller final : public ServiceListener::Observer,
 
    private:
     std::string service_id_;
-    bool is_reconnect_;
+    bool is_reconnect_ = false;
     std::optional<uint64_t> request_id_;
-    Controller* controller_;
+    Controller* controller_ = nullptr;
   };
 
   explicit Controller(ClockNowFunctionPtr now_function);
@@ -141,6 +145,7 @@ class Controller final : public ServiceListener::Observer,
   // Also called by the embedder to report that a presentation has been
   // terminated.
   Error OnPresentationTerminated(const std::string& presentation_id,
+                                 TerminationSource source,
                                  TerminationReason reason) override;
 
   void OnConnectionDestroyed(Connection* connection) override;

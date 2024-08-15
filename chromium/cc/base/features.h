@@ -93,6 +93,12 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kUseDMSAAForTiles);
 // Use DMSAA instead of MSAA for rastering tiles on Android GL backend. Note
 // that the above flag kUseDMSAAForTiles is used for Android Vulkan backend.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kUseDMSAAForTilesAndroidGL);
+
+// Break synchronization of scrolling website content and browser controls in
+// android to see performance gains for moving browser controls to viz.
+// WARNING: Don't enable this feature! It should only be used to measure
+// performance on prestable channels.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kAndroidNoSurfaceSyncForBrowserControls);
 #endif
 
 // Updating browser controls state will IPC directly from browser main to the
@@ -110,6 +116,8 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kReclaimResourcesFlushInBackground);
 
 // When LayerTreeHostImpl::ReclaimResources() is called in background, trigger a
 // additional delayed flush to reclaim resources.
+//
+// Enabled 03/2024, kept to run a holdback experiment.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kReclaimResourcesDelayedFlushInBackground);
 
 // Try to play a longer list of ops before giving up in solid color analysis for
@@ -150,14 +158,28 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kUseMapRectForPixelMovement);
 // viz::Surface.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kEvictionThrottlesDraw);
 
-// Kill switch for trigger late deadline timer immediately in scheduler when
-// there's no active tree likely.
-CC_BASE_EXPORT BASE_DECLARE_FEATURE(kResetTimerWhenNoActiveTreeLikely);
+// Whether to use the recorded bounds (i.e. `DisplayItemList::bounds()`) to
+// determine the area of tiling. See crbug.com/1517714.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kUseRecordedBoundsForTiling);
 
 // Permits adjusting the threshold we use for determining if main thread updates
 // are fast. Specifically, via a scalar on the range [0,1] that we multiply with
 // the existing threshold. I.e., |new_threshold| = |scalar| * |old_threshold|.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kAdjustFastMainThreadThreshold);
+
+// When a LayerTreeHostImpl is not visible, clear its transferable resources
+// that haven't been imported into viz.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kClearCanvasResourcesInBackground);
+
+// Re-enables legacy cc/metrics V1 termination path, to validate if some shifts
+// in V3 metrics were from the interactions of these paths.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kUseV1MetricsTermination);
+
+// Currently CC Metrics does a lot of calculations for UMA and Tracing. While
+// Traces themselves won't run when we are not tracing, some of the calculation
+// work is done regardless. When enabled this feature reduces extra calculation
+// to when tracing is enabled.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kMetricsTracingCalculationReduction);
 
 }  // namespace features
 

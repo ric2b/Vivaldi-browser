@@ -78,10 +78,8 @@
 #endif
 
 // TODO(thakis): Remove this after LLVM 19's libc++ is rolled in.
-// TODO(andre@vivaldi.com) : Update notifier are using unsigned int for 32bit
-// chars, and there are no char_traits defined for this. VB-100878
-#if !defined(VIVALDI_BUILD)
+// NOTE(andre@vivaldi.com) : Update notifier are using unsigned int for 32bit
+// chars, and there are no char_traits defined for this. VB-100878 & VB-104892.
 #define _LIBCPP_CHAR_TRAITS_REMOVE_BASE_SPECIALIZATION
-#endif //!VIVALDI_BUILD
 
 #endif // _LIBCPP_CONFIG_SITE

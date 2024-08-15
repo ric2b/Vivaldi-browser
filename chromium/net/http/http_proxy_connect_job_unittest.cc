@@ -24,6 +24,7 @@
 #include "net/base/network_anonymization_key.h"
 #include "net/base/proxy_chain.h"
 #include "net/base/proxy_string_util.h"
+#include "net/base/session_usage.h"
 #include "net/base/test_proxy_delegate.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/dns/public/secure_dns_policy.h"
@@ -154,7 +155,7 @@ class HttpProxyConnectJobTest : public ::testing::TestWithParam<HttpProxyType>,
             secure_dns_policy, OnHostResolutionCallback(),
             /*supported_alpns=*/base::flat_set<std::string>()),
         nullptr, nullptr, HostPortPair(kHttpsProxyHost, 443), SSLConfig(),
-        PRIVACY_MODE_DISABLED, NetworkAnonymizationKey());
+        NetworkAnonymizationKey());
   }
 
   // Returns a correctly constructed HttpProxyParams for a single HTTP or HTTPS
@@ -165,6 +166,7 @@ class HttpProxyConnectJobTest : public ::testing::TestWithParam<HttpProxyType>,
     return base::MakeRefCounted<HttpProxySocketParams>(
         CreateHttpProxyParams(secure_dns_policy),
         CreateHttpsProxyParams(secure_dns_policy),
+        /*quic_ssl_config=*/std::nullopt,
         HostPortPair(kEndpointHost, tunnel ? 443 : 80),
         GetParam() == HTTP ? kHttpProxyChain : kHttpsProxyChain,
         /*proxy_chain_index=*/0, tunnel, TRAFFIC_ANNOTATION_FOR_TESTS,
@@ -210,8 +212,7 @@ class HttpProxyConnectJobTest : public ::testing::TestWithParam<HttpProxyType>,
     return base::MakeRefCounted<SSLSocketParams>(
         std::move(transport_params),
         /*socks_proxy_params=*/nullptr, std::move(http_proxy_params),
-        proxy_server.host_port_pair(), SSLConfig(), PRIVACY_MODE_DISABLED,
-        NetworkAnonymizationKey());
+        proxy_server.host_port_pair(), SSLConfig(), NetworkAnonymizationKey());
   }
 
   // Creates a correctly constructed `HttpProxySocketParams()` corresponding to
@@ -241,9 +242,10 @@ class HttpProxyConnectJobTest : public ::testing::TestWithParam<HttpProxyType>,
       connect_host_port_pair = HostPortPair(kEndpointHost, tunnel ? 443 : 80);
     }
     return base::MakeRefCounted<HttpProxySocketParams>(
-        nullptr, std::move(ssl_params), connect_host_port_pair, proxy_chain,
-        proxy_chain_index, tunnel, TRAFFIC_ANNOTATION_FOR_TESTS,
-        NetworkAnonymizationKey(), secure_dns_policy);
+        nullptr, std::move(ssl_params), /*quic_ssl_config=*/std::nullopt,
+        connect_host_port_pair, proxy_chain, proxy_chain_index, tunnel,
+        TRAFFIC_ANNOTATION_FOR_TESTS, NetworkAnonymizationKey(),
+        secure_dns_policy);
   }
 
   std::unique_ptr<HttpProxyConnectJob> CreateConnectJobForHttpRequest(
@@ -1224,17 +1226,19 @@ TEST_P(HttpProxyConnectJobTest, SpdySessionKeyDisableSecureDns) {
   EXPECT_TRUE(
       common_connect_job_params_->spdy_session_pool->FindAvailableSession(
           SpdySessionKey(kHttpsProxyServer.host_port_pair(),
-                         ProxyChain::Direct(), PRIVACY_MODE_DISABLED,
-                         SpdySessionKey::IsProxySession::kTrue, SocketTag(),
-                         NetworkAnonymizationKey(), SecureDnsPolicy::kDisable),
+                         PRIVACY_MODE_DISABLED, ProxyChain::Direct(),
+                         SessionUsage::kProxy, SocketTag(),
+                         NetworkAnonymizationKey(), SecureDnsPolicy::kDisable,
+                         /*disable_cert_verification_network_fetches=*/true),
           /* enable_ip_based_pooling = */ false,
           /* is_websocket = */ false, NetLogWithSource()));
   EXPECT_FALSE(
       common_connect_job_params_->spdy_session_pool->FindAvailableSession(
           SpdySessionKey(kHttpsProxyServer.host_port_pair(),
-                         ProxyChain::Direct(), PRIVACY_MODE_DISABLED,
-                         SpdySessionKey::IsProxySession::kTrue, SocketTag(),
-                         NetworkAnonymizationKey(), SecureDnsPolicy::kAllow),
+                         PRIVACY_MODE_DISABLED, ProxyChain::Direct(),
+                         SessionUsage::kProxy, SocketTag(),
+                         NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
+                         /*disable_cert_verification_network_fetches=*/true),
           /* enable_ip_based_pooling = */ false,
           /* is_websocket = */ false, NetLogWithSource()));
 }

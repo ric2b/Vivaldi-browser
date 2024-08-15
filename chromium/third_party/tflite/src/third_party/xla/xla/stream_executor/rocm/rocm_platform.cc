@@ -1,4 +1,4 @@
-/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2018 The OpenXLA Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -147,21 +147,16 @@ ROCmPlatform::GetUncachedExecutor(const StreamExecutorConfig& config) {
 }  // namespace gpu
 
 static void InitializeROCmPlatform() {
-  // Disabling leak checking, MultiPlatformManager does not destroy its
+  // Disabling leak checking, PlatformManager does not destroy its
   // registered platforms.
-  auto status = MultiPlatformManager::PlatformWithName("ROCM");
+  auto status = PlatformManager::PlatformWithName("ROCM");
   if (!status.ok()) {
     std::unique_ptr<gpu::ROCmPlatform> platform(new gpu::ROCmPlatform);
-    TF_CHECK_OK(MultiPlatformManager::RegisterPlatform(std::move(platform)));
+    TF_CHECK_OK(PlatformManager::RegisterPlatform(std::move(platform)));
   }
 }
 
 }  // namespace stream_executor
 
-REGISTER_MODULE_INITIALIZER(rocm_platform,
-                            stream_executor::InitializeROCmPlatform());
-
-DECLARE_MODULE_INITIALIZER(multi_platform_manager);
-// Note that module initialization sequencing is not supported in the
-// open-source project, so this will be a no-op there.
-REGISTER_MODULE_INITIALIZER_SEQUENCE(rocm_platform, multi_platform_manager);
+STREAM_EXECUTOR_REGISTER_MODULE_INITIALIZER(
+    rocm_platform, stream_executor::InitializeROCmPlatform());

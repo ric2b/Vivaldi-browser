@@ -1179,11 +1179,7 @@ class OmniboxPedalManageGoogleAccount : public OmniboxPedalAuthRequired {
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   const gfx::VectorIcon& GetVectorIcon() const override {
-    if (OmniboxFieldTrial::IsActionsUISimplificationEnabled()) {
-      return vector_icons::kGoogleGLogoMonochromeIcon;
-    } else {
-      return vector_icons::kGoogleSuperGIcon;
-    }
+    return vector_icons::kGoogleGLogoMonochromeIcon;
   }
 #endif
 
@@ -1242,11 +1238,7 @@ class OmniboxPedalChangeGooglePassword : public OmniboxPedalAuthRequired {
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   const gfx::VectorIcon& GetVectorIcon() const override {
-    if (OmniboxFieldTrial::IsActionsUISimplificationEnabled()) {
-      return vector_icons::kGoogleGLogoMonochromeIcon;
-    } else {
-      return vector_icons::kGoogleSuperGIcon;
-    }
+    return vector_icons::kGoogleGLogoMonochromeIcon;
   }
 #endif
 
@@ -1439,11 +1431,7 @@ class OmniboxPedalFindMyPhone : public OmniboxPedalAuthRequired {
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   const gfx::VectorIcon& GetVectorIcon() const override {
-    if (OmniboxFieldTrial::IsActionsUISimplificationEnabled()) {
-      return vector_icons::kGoogleGLogoMonochromeIcon;
-    } else {
-      return vector_icons::kGoogleSuperGIcon;
-    }
+    return vector_icons::kGoogleGLogoMonochromeIcon;
   }
 #endif
 
@@ -1492,11 +1480,7 @@ class OmniboxPedalManageGooglePrivacy : public OmniboxPedalAuthRequired {
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   const gfx::VectorIcon& GetVectorIcon() const override {
-    if (OmniboxFieldTrial::IsActionsUISimplificationEnabled()) {
-      return vector_icons::kGoogleGLogoMonochromeIcon;
-    } else {
-      return vector_icons::kGoogleSuperGIcon;
-    }
+    return vector_icons::kGoogleGLogoMonochromeIcon;
   }
 #endif
 
@@ -2097,13 +2081,13 @@ GetPedalImplementations(bool incognito, bool guest, bool testing) {
   // platform is different from other desktop platforms.
   add(new OmniboxPedalShareThisPage());
   add(new OmniboxPedalManageChromeAccessibility());
+  add(new OmniboxPedalSetChromeAsDefaultBrowser());
 #else   // !BUILDFLAG(IS_CHROMEOS)
   add(new OmniboxPedalManageChromeOSAccessibility());
 #endif  // !BUILDFLAG(IS_CHROMEOS)
   add(new OmniboxPedalCustomizeChromeFonts());
   add(new OmniboxPedalManageChromeThemes());
   add(new OmniboxPedalCustomizeSearchEngines());
-  add(new OmniboxPedalSetChromeAsDefaultBrowser());
 #endif  // BUILDFLAG(IS_ANDROID)
 
   return pedals;

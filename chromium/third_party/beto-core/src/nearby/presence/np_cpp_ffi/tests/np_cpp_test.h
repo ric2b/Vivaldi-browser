@@ -15,13 +15,12 @@
 #ifndef NEARBY_PRESENCE_NP_CPP_FFI_TESTS_NP_CPP_TEST_H_
 #define NEARBY_PRESENCE_NP_CPP_FFI_TESTS_NP_CPP_TEST_H_
 
+#include "gtest/gtest.h"
 #include "nearby_protocol.h"
 #include "shared_test_util.h"
 
-#include <gtest/gtest.h>
-
 class NpCppTest : public testing::Test {
-protected:
+ protected:
   static void SetUpTestSuite() {
     if (!panic_handler_set) {
       ASSERT_TRUE(
@@ -31,6 +30,7 @@ protected:
       nearby_protocol::GlobalConfig::SetMaxNumDeserializedV1Advertisements(2);
       nearby_protocol::GlobalConfig::SetMaxNumCredentialSlabs(3);
       nearby_protocol::GlobalConfig::SetMaxNumCredentialBooks(2);
+      nearby_protocol::GlobalConfig::SetMaxNumV0AdvertisementBuilders(2);
     } else {
       ASSERT_FALSE(
           nearby_protocol::GlobalConfig::SetPanicHandler(test_panic_handler));
@@ -39,4 +39,4 @@ protected:
   static bool panic_handler_set;
 };
 
-#endif // NEARBY_PRESENCE_NP_CPP_FFI_TESTS_NP_CPP_TEST_H_
+#endif  // NEARBY_PRESENCE_NP_CPP_FFI_TESTS_NP_CPP_TEST_H_

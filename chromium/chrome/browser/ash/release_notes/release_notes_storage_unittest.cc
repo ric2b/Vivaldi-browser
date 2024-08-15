@@ -75,10 +75,8 @@ class ReleaseNotesStorageTest : public testing::Test,
   }
 
   void SetUp() override {
-    scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{features::kReleaseNotesNotificationAllChannels,
-                              features::kReleaseNotesSuggestionChip},
-        /*disabled_features=*/{});
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kReleaseNotesNotificationAllChannels);
   }
 
   raw_ptr<FakeChromeUserManager, DanglingUntriaged> user_manager_;
@@ -211,18 +209,6 @@ TEST_F(ReleaseNotesStorageTest, ShowReleaseNotesSuggestionChip) {
   EXPECT_EQ(0, profile_.get()->GetPrefs()->GetInteger(
                    prefs::kReleaseNotesSuggestionChipTimesLeftToShow));
   EXPECT_EQ(false, release_notes_storage_->ShouldShowSuggestionChip());
-}
-
-// Tests that when we mark a notification as shown, we also show the suggestion
-// chip.
-TEST_F(ReleaseNotesStorageTest, ShowSuggestionChipWhenNotificationShown) {
-  SetUpProfile();
-
-  release_notes_storage_->MarkNotificationShown();
-
-  EXPECT_EQ(3, profile_.get()->GetPrefs()->GetInteger(
-                   prefs::kReleaseNotesSuggestionChipTimesLeftToShow));
-  EXPECT_EQ(true, release_notes_storage_->ShouldShowSuggestionChip());
 }
 
 }  // namespace ash

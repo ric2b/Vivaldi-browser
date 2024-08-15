@@ -50,7 +50,7 @@ Ref<ComputePipeline> ComputePipeline::CreateUninitialized(
     return AcquireRef(new ComputePipeline(device, descriptor));
 }
 
-MaybeError ComputePipeline::Initialize() {
+MaybeError ComputePipeline::InitializeImpl() {
     Device* device = ToBackend(GetDevice());
     const PipelineLayout* layout = ToBackend(GetLayout());
 
@@ -79,6 +79,7 @@ MaybeError ComputePipeline::Initialize() {
         module->GetHandleAndSpirv(
             SingleShaderStage::Compute, computeStage, layout,
             /*clampFragDepth*/ false,
+            /*emitPointSize*/ false,
             /* maxSubgroupSizeForFullSubgroups */
             IsFullSubgroupsRequired()
                 ? std::make_optional(device->GetLimits().experimentalSubgroupLimits.maxSubgroupSize)

@@ -13,10 +13,11 @@
 
 #include "base/check_deref.h"
 #include "base/containers/contains.h"
+#include "base/containers/to_vector.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/to_vector.h"
+#include "base/test/task_environment.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/form_forest.h"
 #include "components/autofill/core/browser/form_forest_test_api.h"
@@ -239,7 +240,7 @@ std::vector<std::vector<T>> Permutations(const std::vector<T>& xs) {
 template <typename T>
 std::vector<std::vector<T>> FlattenedPermutations(
     const std::vector<std::vector<T>>& xs) {
-  return base::test::ToVector(Permutations(xs), &Flattened<std::string>);
+  return base::ToVector(Permutations(xs), &Flattened<std::string>);
 }
 
 // Mimics typical //content layer behaviour:
@@ -256,10 +257,11 @@ class FakeAutofillDriver : public TestAutofillDriver {
   enum class SharedAutofillPolicy { kDefault, kEnabled, kDisabled };
 
   static std::unique_ptr<FakeAutofillDriver> CreateChildFrame(
+      AutofillClient* client,
       const url::Origin& origin,
       FakeAutofillDriver* parent,
       SharedAutofillPolicy shared_autofill) {
-    auto driver = base::WrapUnique(new FakeAutofillDriver(origin));
+    auto driver = base::WrapUnique(new FakeAutofillDriver(client, origin));
     driver->SetParent(parent);
     driver->SetLocalFrameToken(test::MakeLocalFrameToken());
     if (parent && driver->origin() != parent->origin()) {
@@ -314,7 +316,7 @@ class FakeAutofillDriver : public TestAutofillDriver {
     form.main_frame_origin = origin_;
     for (FormFieldData& field : form.fields) {
       field.host_frame = form.host_frame;
-      field.host_form_id = form.unique_renderer_id;
+      field.host_form_id = form.renderer_id;
       field.origin = origin_;
     }
   }
@@ -329,7 +331,8 @@ class FakeAutofillDriver : public TestAutofillDriver {
   bool is_sub_root() const { return is_sub_root_; }
 
  private:
-  explicit FakeAutofillDriver(const url::Origin& origin) : origin_(origin) {}
+  explicit FakeAutofillDriver(AutofillClient* client, const url::Origin& origin)
+      : TestAutofillDriver(client), origin_(origin) {}
 
   const url::Origin origin_;
   bool is_sub_root_ = false;
@@ -346,6 +349,7 @@ class FakeAutofillDriver : public TestAutofillDriver {
 // RemoteFrameTokens.)
 class FormForestTest : public testing::Test {
  private:
+  base::test::TaskEnvironment task_environment_;
   test::AutofillUnitTestEnvironment autofill_test_environment_;
 };
 
@@ -400,7 +404,7 @@ class FormForestTestWithMockedTree : public FormForestTest {
              : !parent_driver        ? kMainUrl
                                      : kIframeUrl);
     drivers_.push_back(FakeAutofillDriver::CreateChildFrame(
-        Origin(url), /*parent=*/parent_driver,
+        &client_, Origin(url), /*parent=*/parent_driver,
         /*shared_autofill=*/frame_info.policy));
     FakeAutofillDriver* driver = drivers_.back().get();
 
@@ -554,6 +558,7 @@ class FormForestTestWithMockedTree : public FormForestTest {
   FormForest flattened_forms_;
 
  private:
+  TestAutofillClient client_;
   std::vector<std::unique_ptr<FakeAutofillDriver>> drivers_;
   std::map<std::string, FormGlobalId, std::less<>> forms_;
 };
@@ -1138,7 +1143,7 @@ class FormForestTestUpdateFieldAdd
     size_t target_index = GetParam().field_index;
     FormFieldData field = target_form.fields.front();
     field.name = base::StrCat({field.name, u"_copy"});
-    field.unique_renderer_id = test::MakeFieldRendererId();
+    field.renderer_id = test::MakeFieldRendererId();
     target_form.fields.insert(target_form.fields.begin() + target_index, field);
   }
 };
@@ -1185,7 +1190,7 @@ class FormForestTestUpdateFieldMove
     size_t target_index = p.target.field_index;
 
     FormFieldData field = source_form.fields[source_index];
-    field.host_form_id = target_form.unique_renderer_id;
+    field.host_form_id = target_form.renderer_id;
 
     if (source_index > target_index) {
       source_form.fields.erase(source_form.fields.begin() + source_index);

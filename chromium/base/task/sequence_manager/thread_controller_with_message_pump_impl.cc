@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <optional>
 #include <utility>
 
 #include "base/auto_reset.h"
@@ -23,7 +24,6 @@
 #include "base/time/time.h"
 #include "base/trace_event/base_tracing.h"
 #include "build/build_config.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_IOS)
 #include "base/message_loop/message_pump_apple.h"
@@ -46,11 +46,6 @@ TimeTicks CapAtOneDay(TimeTicks next_run_time, LazyNow* lazy_now) {
   return std::min(next_run_time, lazy_now->Now() + Days(1));
 }
 
-// Feature to run tasks by batches before pumping out messages.
-BASE_FEATURE(kRunTasksByBatches,
-             "RunTasksByBatches",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kAvoidScheduleWorkDuringNativeEventProcessing,
              "AvoidScheduleWorkDuringNativeEventProcessing",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -67,7 +62,7 @@ std::atomic_bool g_use_less_high_res_timers = true;
 std::atomic_bool g_run_tasks_by_batches = false;
 std::atomic_bool g_avoid_schedule_calls_during_native_event_processing = false;
 
-base::TimeDelta GetLeewayForWakeUp(absl::optional<WakeUp> wake_up) {
+base::TimeDelta GetLeewayForWakeUp(std::optional<WakeUp> wake_up) {
   if (!wake_up || wake_up->delay_policy == subtle::DelayPolicy::kPrecise) {
     return TimeDelta();
   }
@@ -78,7 +73,7 @@ base::TimeDelta GetLeewayForWakeUp(absl::optional<WakeUp> wake_up) {
 
 // static
 void ThreadControllerWithMessagePumpImpl::InitializeFeatures() {
-  g_run_tasks_by_batches.store(FeatureList::IsEnabled(kRunTasksByBatches),
+  g_run_tasks_by_batches.store(FeatureList::IsEnabled(base::kRunTasksByBatches),
                                std::memory_order_relaxed);
   g_avoid_schedule_calls_during_native_event_processing.store(
       FeatureList::IsEnabled(kAvoidScheduleWorkDuringNativeEventProcessing),
@@ -92,7 +87,7 @@ void ThreadControllerWithMessagePumpImpl::InitializeFeatures() {
 // static
 void ThreadControllerWithMessagePumpImpl::ResetFeatures() {
   g_run_tasks_by_batches.store(
-      kRunTasksByBatches.default_state == FEATURE_ENABLED_BY_DEFAULT,
+      base::kRunTasksByBatches.default_state == FEATURE_ENABLED_BY_DEFAULT,
       std::memory_order_relaxed);
 }
 
@@ -200,7 +195,7 @@ void ThreadControllerWithMessagePumpImpl::BeginNativeWorkBeforeDoWork() {
 
 void ThreadControllerWithMessagePumpImpl::SetNextDelayedDoWork(
     LazyNow* lazy_now,
-    absl::optional<WakeUp> wake_up) {
+    std::optional<WakeUp> wake_up) {
   DCHECK(!wake_up || !wake_up->is_immediate());
   // It's very rare for PostDelayedTask to be called outside of a DoWork in
   // production, so most of the time this does nothing.
@@ -340,7 +335,7 @@ ThreadControllerWithMessagePumpImpl::DoWork() {
 
   work_deduplicator_.OnWorkStarted();
   LazyNow continuation_lazy_now(time_source_);
-  absl::optional<WakeUp> next_wake_up = DoWorkImpl(&continuation_lazy_now);
+  std::optional<WakeUp> next_wake_up = DoWorkImpl(&continuation_lazy_now);
 
   // If we are yielding after DoWorkImpl (a work batch) set the flag boolean.
   // This will inform the MessagePump to schedule a new continuation based on
@@ -396,7 +391,7 @@ ThreadControllerWithMessagePumpImpl::DoWork() {
   return next_work_info;
 }
 
-absl::optional<WakeUp> ThreadControllerWithMessagePumpImpl::DoWorkImpl(
+std::optional<WakeUp> ThreadControllerWithMessagePumpImpl::DoWorkImpl(
     LazyNow* continuation_lazy_now) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("sequence_manager"),
                "ThreadControllerImpl::DoWork");
@@ -406,7 +401,7 @@ absl::optional<WakeUp> ThreadControllerWithMessagePumpImpl::DoWorkImpl(
     // helps spot nested loops that intentionally starve application tasks.
     TRACE_EVENT0("base", "ThreadController: application tasks disallowed");
     if (main_thread_only().quit_runloop_after == TimeTicks::Max())
-      return absl::nullopt;
+      return std::nullopt;
     return WakeUp{main_thread_only().quit_runloop_after};
   }
 
@@ -417,11 +412,11 @@ absl::optional<WakeUp> ThreadControllerWithMessagePumpImpl::DoWorkImpl(
   const base::TimeDelta batch_duration =
       RunsTasksByBatches() ? base::Milliseconds(8) : base::Milliseconds(0);
 
-  const absl::optional<base::TimeTicks> start_time =
+  const std::optional<base::TimeTicks> start_time =
       batch_duration.is_zero()
-          ? absl::nullopt
-          : absl::optional<base::TimeTicks>(time_source_->NowTicks());
-  absl::optional<base::TimeTicks> recent_time = start_time;
+          ? std::nullopt
+          : std::optional<base::TimeTicks>(time_source_->NowTicks());
+  std::optional<base::TimeTicks> recent_time = start_time;
 
   // Loops for |batch_duration|, or |work_batch_size| times if |batch_duration|
   // is zero.
@@ -444,7 +439,7 @@ absl::optional<WakeUp> ThreadControllerWithMessagePumpImpl::DoWorkImpl(
         power_monitor_.IsProcessInPowerSuspendState()
             ? SequencedTaskSource::SelectTaskOption::kSkipDelayedTask
             : SequencedTaskSource::SelectTaskOption::kDefault;
-    absl::optional<SequencedTaskSource::SelectedTask> selected_task =
+    std::optional<SequencedTaskSource::SelectedTask> selected_task =
         main_thread_only().task_source->SelectNextTask(lazy_now_select_task,
                                                        select_task_option);
     LazyNow lazy_now_task_selected(time_source_);
@@ -512,7 +507,7 @@ absl::optional<WakeUp> ThreadControllerWithMessagePumpImpl::DoWorkImpl(
   }
 
   if (main_thread_only().quit_pending)
-    return absl::nullopt;
+    return std::nullopt;
 
   work_deduplicator_.WillCheckForMoreWork();
 
@@ -545,7 +540,7 @@ bool ThreadControllerWithMessagePumpImpl::DoIdleWork() {
    private:
     const raw_ref<RunLevelTracker> run_level_tracker;
   };
-  absl::optional<OnIdle> on_idle;
+  std::optional<OnIdle> on_idle;
 
   // Must be after `on_idle` as this trace event's scope must end before the END
   // of the "ThreadController active" trace event emitted from

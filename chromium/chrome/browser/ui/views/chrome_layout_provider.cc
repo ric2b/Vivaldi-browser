@@ -58,6 +58,10 @@ gfx::Insets ChromeLayoutProvider::GetInsetsMetric(int metric) const {
       return features::IsChromeRefresh2023() ? gfx::Insets::VH(20, 20)
                                              : gfx::Insets(kHarmonyLayoutUnit);
     }
+    case views::INSETS_DIALOG_FOOTNOTE: {
+      return features::IsChromeRefresh2023() ? gfx::Insets::TLBR(10, 20, 15, 20)
+                                             : gfx::Insets(kHarmonyLayoutUnit);
+    }
     case views::INSETS_CHECKBOX_RADIO_BUTTON: {
       gfx::Insets insets = LayoutProvider::GetInsetsMetric(metric);
       // Checkboxes and radio buttons should be aligned flush to the left edge.
@@ -150,8 +154,6 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
       return 8;
     case DISTANCE_TOAST_LABEL_VERTICAL:
       return 12;
-    case DISTANCE_UNRELATED_CONTROL_HORIZONTAL:
-      return kHarmonyLayoutUnit;
     case DISTANCE_UNRELATED_CONTROL_HORIZONTAL_LARGE:
       return kHarmonyLayoutUnit;
     case DISTANCE_UNRELATED_CONTROL_VERTICAL_LARGE:
@@ -166,8 +168,6 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
       return 24;
     case DISTANCE_OMNIBOX_CELL_VERTICAL_PADDING:
       return OmniboxFieldTrial::IsCr23LayoutEnabled() ? 12 : 8;
-    case DISTANCE_OMNIBOX_CHIPS_OVERLAP:
-      return 10;
     case DISTANCE_OMNIBOX_TWO_LINE_CELL_VERTICAL_PADDING:
       return 4;
     case DISTANCE_SIDE_PANEL_HEADER_VECTOR_ICON_SIZE:

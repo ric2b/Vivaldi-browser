@@ -141,6 +141,7 @@ class NetworkHandler : public DevToolsDomainHandler,
                      Maybe<std::string> url,
                      Maybe<std::string> domain,
                      Maybe<std::string> path,
+                     Maybe<std::string> partition_key,
                      std::unique_ptr<DeleteCookiesCallback> callback) override;
   void SetCookie(const std::string& name,
                  const std::string& value,
@@ -169,7 +170,10 @@ class NetworkHandler : public DevToolsDomainHandler,
       double latency,
       double download_throughput,
       double upload_throughput,
-      Maybe<protocol::Network::ConnectionType> connection_type) override;
+      Maybe<protocol::Network::ConnectionType> connection_type,
+      Maybe<double> packet_loss,
+      Maybe<int> packet_queue_length,
+      Maybe<bool> packet_reordering) override;
   Response SetBypassServiceWorker(bool bypass) override;
 
   DispatchResponse SetRequestInterception(

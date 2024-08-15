@@ -144,7 +144,7 @@ void WorkerClassicScriptLoader::LoadTopLevelScriptAsynchronously(
     RejectCoepUnsafeNone reject_coep_unsafe_none,
     mojo::PendingRemote<network::mojom::blink::URLLoaderFactory>
         blob_url_loader_factory,
-    absl::optional<uint64_t> main_script_identifier) {
+    std::optional<uint64_t> main_script_identifier) {
   DCHECK(fetch_client_settings_object_fetcher);
   DCHECK(response_callback || finished_callback);
   response_callback_ = std::move(response_callback);
@@ -248,7 +248,7 @@ void WorkerClassicScriptLoader::DidReceiveResponse(
     std::move(response_callback_).Run();
 }
 
-void WorkerClassicScriptLoader::DidReceiveData(const char* data, unsigned len) {
+void WorkerClassicScriptLoader::DidReceiveData(base::span<const char> data) {
   if (failed_)
     return;
 
@@ -259,10 +259,11 @@ void WorkerClassicScriptLoader::DidReceiveData(const char* data, unsigned len) {
                                    : WTF::TextEncoding(response_encoding_)));
   }
 
-  if (!len)
+  if (data.empty()) {
     return;
+  }
 
-  source_text_.Append(decoder_->Decode(data, len));
+  source_text_.Append(decoder_->Decode(data.data(), data.size()));
 }
 
 void WorkerClassicScriptLoader::DidReceiveCachedMetadata(
@@ -291,7 +292,8 @@ void WorkerClassicScriptLoader::DidFailRedirectCheck(uint64_t) {
   NotifyError();
 }
 
-void WorkerClassicScriptLoader::DidReceiveData(base::span<const char> span) {
+void WorkerClassicScriptLoader::DidReceiveDataWorkerMainScript(
+    base::span<const char> span) {
   if (!decoder_) {
     decoder_ = std::make_unique<TextResourceDecoder>(TextResourceDecoderOptions(
         TextResourceDecoderOptions::kPlainTextContent,

@@ -16,6 +16,7 @@
 <translation id="2433507940547922241">Videz</translation>
 <translation id="2501278716633472235">Pojdi nazaj</translation>
 <translation id="2633278372998075009">Zasebni zavihki</translation>
+<translation id="272026394418727548">Vivaldijeva domača stran</translation>
 <translation id="2951071800649516099">Dodajte strani na bralni seznam za pozneje</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> zaznamek}
@@ -26,6 +27,7 @@
 <translation id="3504699618187058974">Zloži zavihke</translation>
 <translation id="3518985090088779359">Sprejmi in nadaljuj</translation>
 <translation id="3571177741182643350">Neprebrani članki – na voljo brez povezave:</translation>
+<translation id="3602290021589620013">Predogled</translation>
 <translation id="3700829948786686853">Dobrodošli v Vivaldi</translation>
 <translation id="3719826155360621982">Domača stran</translation>
 <translation id="385051799172605136">Nazaj</translation>
@@ -65,7 +67,6 @@ Iskanje z dotikom je funkcija, ki je na voljo le, če je Google nastavljen kot p
 <translation id="7427132068601343474">O brskalniku Vivaldi</translation>
 <translation id="7465104139234185284">Zapri vse zasebne zavihke</translation>
 <translation id="7481312909269577407">Naprej</translation>
-<translation id="7583262514280211622">Tukaj boste našli svoj bralni seznam</translation>
 <translation id="7968014550143838305">Dodano na bralni seznam</translation>
 <translation id="804786196054284061">Licenčna pogodba za končnega uporabnika</translation>
 <translation id="8127542551745560481">Uredi domačo stran</translation>

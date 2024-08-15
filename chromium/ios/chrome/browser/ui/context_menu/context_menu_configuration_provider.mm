@@ -10,8 +10,8 @@
 #import "base/metrics/user_metrics.h"
 #import "components/prefs/pref_service.h"
 #import "components/search_engines/template_url_service.h"
-#import "ios/chrome/browser/favicon/favicon_loader.h"
-#import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
+#import "ios/chrome/browser/favicon/model/favicon_loader.h"
+#import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/photos/model/photos_availability.h"
 #import "ios/chrome/browser/photos/model/photos_metrics.h"
@@ -62,6 +62,8 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/shared/public/commands/activity_service_commands.h"
+#import "ios/chrome/browser/shared/public/commands/share_highlight_command.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -390,6 +392,25 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
       [menuElements addObject:searchByImage];
     }
   }
+
+  // Vivaldi: Add share link item for context menu.
+  if (isImage || isLink) {
+    id<ActivityServiceCommands> handler =
+        HandlerForProtocol(_browser->GetCommandDispatcher(),
+                           ActivityServiceCommands);
+    UIAction* shareAction =
+        [actionFactory actionToShareWithBlock:^{
+          ShareHighlightCommand* command =
+              [[ShareHighlightCommand alloc] initWithURL:linkURL
+                                                   title:@""
+                                            selectedText:@""
+                                              sourceView:params.view
+                                              sourceRect:params.view.frame];
+          [handler shareHighlight:command];
+        }];
+    [menuElements addObject:shareAction];
+  }
+  // End Vivaldi
 
   NSString* menuTitle;
 

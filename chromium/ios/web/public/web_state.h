@@ -6,7 +6,6 @@
 #define IOS_WEB_PUBLIC_WEB_STATE_H_
 
 #import <UIKit/UIKit.h>
-
 #include <stdint.h>
 
 #include <map>
@@ -17,6 +16,7 @@
 #include <vector>
 
 #include "base/functional/callback_forward.h"
+#import "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/supports_user_data.h"
@@ -83,7 +83,7 @@ class WebState : public base::SupportsUserData {
     ~CreateParams();
 
     // The corresponding BrowserState for the new WebState.
-    web::BrowserState* browser_state;
+    raw_ptr<web::BrowserState> browser_state;
 
     // Whether the WebState is created as the result of a window.open or by
     // clicking a link with a blank target.  Used to determine whether the
@@ -180,7 +180,7 @@ class WebState : public base::SupportsUserData {
         callback.Run(std::move(typed_receiver));
     }
 
-    WebState* const web_state_;
+    const raw_ptr<WebState> web_state_;
     std::map<std::string, Callback> callbacks_;
   };
 
@@ -213,6 +213,11 @@ class WebState : public base::SupportsUserData {
   // Serializes the object to `storage`. It is an error to call this method
   // on a WebState that is not realized.
   virtual void SerializeToProto(proto::WebStateStorage& storage) const = 0;
+
+  // Serializes the object metadata to `storage`. It is valid to call this
+  // method on an unrealized WebState.
+  virtual void SerializeMetadataToProto(
+      proto::WebStateMetadataStorage& storage) const = 0;
 
   // Gets/Sets the delegate.
   virtual WebStateDelegate* GetDelegate() = 0;
@@ -314,9 +319,11 @@ class WebState : public base::SupportsUserData {
   // Stops any pending navigation.
   virtual void Stop() = 0;
 
-  // Gets the NavigationManager associated with this WebState. Can never return
-  // null.
+  // Gets the NavigationManager associated with this WebState. Will return null
+  // iff the WebState is unrealized. It doesn't force the realization.
   virtual const NavigationManager* GetNavigationManager() const = 0;
+  // Gets the NavigationManager associated with this WebState. Can never return
+  // null. It forces the realization if needed.
   virtual NavigationManager* GetNavigationManager() = 0;
 
   // Gets the WebFramesManager associated with this WebState. Can never return

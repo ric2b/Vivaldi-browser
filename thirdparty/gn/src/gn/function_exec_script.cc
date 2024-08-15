@@ -237,10 +237,9 @@ Value RunExecScript(Scope* scope,
   {
     if (!internal::ExecProcess(cmdline, startup_dir, &output, &stderr_output,
                                &exit_code)) {
-      *err = Err(
-          function->function(), "Could not execute interpreter.",
-          "I was trying to execute \"" + FilePathToUTF8(interpreter_path) +
-          "\".");
+      *err = Err(function->function(), "Could not execute interpreter.",
+                 "I was trying to execute \"" +
+                     FilePathToUTF8(interpreter_path) + "\".");
       return Value();
     }
   }

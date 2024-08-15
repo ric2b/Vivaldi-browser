@@ -11,6 +11,7 @@
 #include "include/core/SkImage.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkRect.h"
+#include "include/core/SkSize.h"
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/private/base/SkAssert.h"
@@ -47,13 +48,17 @@ public:
 
     GrSurfaceProxyView view(GrRecordingContext*) const { return fView; }
 
-    sk_sp<SkSpecialImage> onMakeSubset(const SkIRect& subset) const override {
+    SkISize backingStoreDimensions() const override {
+        return fView.proxy()->backingStoreDimensions();
+    }
+
+    sk_sp<SkSpecialImage> onMakeBackingStoreSubset(const SkIRect& subset) const override {
         return SkSpecialImages::MakeDeferredFromGpu(
                 fContext, subset, this->uniqueID(), fView, this->colorInfo(), this->props());
     }
 
     sk_sp<SkImage> asImage() const override {
-        fView.proxy()->priv().exactify(true);
+        fView.proxy()->priv().exactify();
         return sk_make_sp<SkImage_Ganesh>(
                 sk_ref_sp(fContext), this->uniqueID(), fView, this->colorInfo());
     }

@@ -14,6 +14,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
+#include "build/chromecast_buildflags.h"
 #include "build/chromeos_buildflags.h"
 #include "components/viz/common/buildflags.h"
 #include "components/viz/common/features.h"
@@ -76,6 +77,27 @@ void ConvertToOzoneOverlaySurface(
       overlay_candidate.color) {
     ozone_candidate->background_color = overlay_candidate.color->toSkColor();
   }
+}
+
+void ConvertToTiledOzoneOverlaySurface(
+    const OverlayCandidate& overlay_candidate,
+    ui::OverlaySurfaceCandidate* ozone_candidate) {
+  ozone_candidate->transform = gfx::OVERLAY_TRANSFORM_NONE;
+  ozone_candidate->format = gfx::BufferFormat::RGBA_8888;
+  ozone_candidate->color_space = overlay_candidate.color_space;
+  ozone_candidate->display_rect = overlay_candidate.display_rect;
+  ozone_candidate->crop_rect = gfx::RectF(1.0, 1.0);
+  ozone_candidate->clip_rect = std::nullopt;
+  ozone_candidate->is_opaque = overlay_candidate.is_opaque;
+  ozone_candidate->opacity = overlay_candidate.opacity;
+  ozone_candidate->plane_z_order = overlay_candidate.plane_z_order;
+  ozone_candidate->buffer_size =
+      gfx::Size(static_cast<int>(overlay_candidate.display_rect.width()),
+                static_cast<int>(overlay_candidate.display_rect.height()));
+  ozone_candidate->requires_overlay = true;
+  ozone_candidate->priority_hint = overlay_candidate.priority_hint;
+  ozone_candidate->rounded_corners = overlay_candidate.rounded_corners;
+  ozone_candidate->native_pixmap = nullptr;
 }
 
 uint32_t MailboxToUInt32(const gpu::Mailbox& mailbox) {
@@ -196,6 +218,17 @@ bool OverlayProcessorOzone::NeedsSurfaceDamageRectList() const {
   return true;
 }
 
+bool OverlayProcessorOzone::SupportsFlipRotateTransform() const {
+  // TODO(petermcneeley): Test and enable for ChromeOS.
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  return false;
+#elif BUILDFLAG(IS_CASTOS)
+  return false;
+#else
+  return false;
+#endif
+}
+
 void OverlayProcessorOzone::CheckOverlaySupportImpl(
     const OverlayProcessorInterface::OutputSurfaceOverlayPlane* primary_plane,
     OverlayCandidateList* surfaces) {
@@ -260,6 +293,12 @@ void OverlayProcessorOzone::CheckOverlaySupportImpl(
     for (; ozone_surface_iterator < ozone_surface_list.end() &&
            surface_iterator < surfaces->cend();
          ozone_surface_iterator++, surface_iterator++) {
+      if (surface_iterator->needs_detiling) {
+        ConvertToTiledOzoneOverlaySurface(*surface_iterator,
+                                          &(*ozone_surface_iterator));
+        continue;
+      }
+
       ConvertToOzoneOverlaySurface(*surface_iterator,
                                    &(*ozone_surface_iterator));
 #if BUILDFLAG(IS_CHROMEOS_ASH)

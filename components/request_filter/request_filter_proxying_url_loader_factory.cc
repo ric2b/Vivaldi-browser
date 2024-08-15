@@ -28,6 +28,7 @@
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/redirect_util.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/url_loader_factory_builder.h"
 #include "services/network/public/mojom/early_hints.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/parsed_headers.mojom-forward.h"
@@ -874,6 +875,8 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     case URLLoaderFactoryType::kServiceWorkerScript:
     case URLLoaderFactoryType::kDownload:
     case URLLoaderFactoryType::kPrefetch:
+    case URLLoaderFactoryType::kDevTools:
+    case URLLoaderFactoryType::kEarlyHints:
       break;
   }
 
@@ -978,10 +981,11 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   if (request_.url.SchemeIsHTTPOrHTTPS() ||
       request_.url.SchemeIs(url::kUuidInPackageScheme)) {
     DCHECK(info_.has_value());
+    bool should_collapse_initiator = false;
     int result = factory_->request_handler_->OnHeadersReceived(
         factory_->browser_context_, &info_.value(),
         std::move(callback_pair.first), current_response_->headers.get(),
-        &override_headers_, &redirect_url_);
+        &override_headers_, &redirect_url_, &should_collapse_initiator);
     if (result == net::ERR_BLOCKED_BY_CLIENT) {
       const int status_code = current_response_->headers
                                   ? current_response_->headers->response_code()
@@ -995,7 +999,9 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
       } else {
         state = State::kRejectedByOnHeadersReceivedForFinalResponse;
       }
-      OnRequestError(CreateURLLoaderCompletionStatus(result), state);
+      OnRequestError(
+          CreateURLLoaderCompletionStatus(result, should_collapse_initiator),
+          state);
       return;
     }
 
@@ -1109,8 +1115,7 @@ RequestFilterProxyingURLLoaderFactory::RequestFilterProxyingURLLoaderFactory(
     RequestFilterManager::RequestHandler* request_handler,
     RequestFilterManager::RequestIDGenerator* request_id_generator,
     std::optional<int64_t> navigation_id,
-    mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
-    mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory_remote,
+    network::URLLoaderFactoryBuilder& factory_builder,
     mojo::PendingReceiver<network::mojom::TrustedURLLoaderHeaderClient>
         header_client_receiver,
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
@@ -1141,6 +1146,8 @@ RequestFilterProxyingURLLoaderFactory::RequestFilterProxyingURLLoaderFactory(
               base::BindRepeating(&RequestFilterManager::ProxySet::RemoveProxy,
                                   base::Unretained(proxies_), this));
 
+  auto [loader_receiver, target_factory_remote] = factory_builder.Append();
+
   target_factory_.Bind(std::move(target_factory_remote));
   target_factory_.set_disconnect_handler(base::BindOnce(
       &RequestFilterProxyingURLLoaderFactory::OnTargetFactoryError,
@@ -1164,8 +1171,7 @@ void RequestFilterProxyingURLLoaderFactory::StartProxying(
     RequestFilterManager::RequestHandler* request_handler,
     RequestFilterManager::RequestIDGenerator* request_id_generator,
     std::optional<int64_t> navigation_id,
-    mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
-    mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory_remote,
+    network::URLLoaderFactoryBuilder& factory_builder,
     mojo::PendingReceiver<network::mojom::TrustedURLLoaderHeaderClient>
         header_client_receiver,
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
@@ -1178,9 +1184,9 @@ void RequestFilterProxyingURLLoaderFactory::StartProxying(
   auto proxy = std::make_unique<RequestFilterProxyingURLLoaderFactory>(
       browser_context, render_process_id, frame_routing_id, view_routing_id,
       request_handler, request_id_generator, std::move(navigation_id),
-      std::move(loader_receiver), std::move(target_factory_remote),
-      std::move(header_client_receiver), std::move(forwarding_header_client),
-      proxies, loader_factory_type, std::move(navigation_response_task_runner));
+      factory_builder, std::move(header_client_receiver),
+      std::move(forwarding_header_client), proxies, loader_factory_type,
+      std::move(navigation_response_task_runner));
 
   proxies->AddProxy(std::move(proxy));
 }

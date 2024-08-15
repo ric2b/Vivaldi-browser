@@ -52,7 +52,7 @@ void TlsDataRouterPosix::DeregisterConnection(TlsConnectionPosix* connection) {
 void TlsDataRouterPosix::RegisterAcceptObserver(
     std::unique_ptr<StreamSocketPosix> socket,
     SocketObserver* observer) {
-  OSP_DCHECK(observer);
+  OSP_CHECK(observer);
   StreamSocketPosix* socket_ptr = socket.get();
   {
     std::unique_lock<std::mutex> lock(accept_socket_mutex_);
@@ -70,7 +70,7 @@ void TlsDataRouterPosix::DeregisterAcceptObserver(SocketObserver* observer) {
     for (auto it = accept_stream_sockets_.begin();
          it != accept_stream_sockets_.end();) {
       auto map_entry = accept_socket_mappings_.find(it->get());
-      OSP_DCHECK(map_entry != accept_socket_mappings_.end());
+      OSP_CHECK(map_entry != accept_socket_mappings_.end());
       if (map_entry->second == observer) {
         sockets_to_delete.push_back(std::move(*it));
         accept_socket_mappings_.erase(map_entry);

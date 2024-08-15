@@ -10,7 +10,6 @@
 #include <string>
 
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
@@ -952,8 +951,8 @@ bool NativeWindowOcclusionTrackerWin::WindowOcclusionCalculator::
          (IsWindowOnCurrentVirtualDesktop(hwnd) == true);
 }
 
-absl::optional<bool> NativeWindowOcclusionTrackerWin::
-    WindowOcclusionCalculator::IsWindowOnCurrentVirtualDesktop(HWND hwnd) {
+std::optional<bool> NativeWindowOcclusionTrackerWin::WindowOcclusionCalculator::
+    IsWindowOnCurrentVirtualDesktop(HWND hwnd) {
   if (!virtual_desktop_manager_)
     return true;
 

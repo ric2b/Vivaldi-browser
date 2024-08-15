@@ -291,7 +291,7 @@ void AdverseAdFilterListService::LoadAndInitializeFromString(
 
   ComputeSHA256Sum(json_string->c_str(), json_string->length());
 
-  absl::optional<base::Value> loaded_json_list =
+  std::optional<base::Value> loaded_json_list =
       base::JSONReader::Read(*json_string);
 
   DLOG_IF(WARNING, loaded_json_list);

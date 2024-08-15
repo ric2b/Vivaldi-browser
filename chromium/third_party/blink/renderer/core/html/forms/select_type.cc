@@ -34,6 +34,7 @@
 #include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_mutation_observer_init.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
+#include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/dom/mutation_observer.h"
 #include "third_party/blink/renderer/core/dom/mutation_record.h"
@@ -45,10 +46,14 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
+#include "third_party/blink/renderer/core/html/forms/html_button_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_data_list_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/forms/menu_list_inner_element.h"
 #include "third_party/blink/renderer/core/html/forms/popup_menu.h"
+#include "third_party/blink/renderer/core/html/html_slot_element.h"
+#include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/input/input_device_capabilities.h"
 #include "third_party/blink/renderer/core/keywords.h"
@@ -73,8 +78,18 @@ HTMLOptionElement* EventTargetOption(const Event& event) {
   return DynamicTo<HTMLOptionElement>(event.target()->ToNode());
 }
 
+bool CanAssignToSelectSlot(const Node& node) {
+  // Even if options/optgroups are not rendered as children of menulist SELECT,
+  // we still need to add them to the flat tree through slotting since we need
+  // their ComputedStyle for popup rendering.
+  return node.HasTagName(html_names::kOptionTag) ||
+         node.HasTagName(html_names::kOptgroupTag) ||
+         node.HasTagName(html_names::kHrTag);
+}
+
 }  // anonymous namespace
 
+// TODO(crbug.com/1511354): Rename this class to PopUpSelectType
 class MenuListSelectType final : public SelectType {
  public:
   explicit MenuListSelectType(HTMLSelectElement& select) : SelectType(select) {}
@@ -99,6 +114,9 @@ class MenuListSelectType final : public SelectType {
   void MaximumOptionWidthMightBeChanged() const override;
 
   void CreateShadowSubtree(ShadowRoot& root) override;
+  void ManuallyAssignSlots() override;
+  HTMLButtonElement* SlottedButton() const override;
+  bool IsAppearanceBikeshed() const override;
   Element& InnerElement() const override;
   void ShowPopup(PopupMenu::ShowEventType type) override;
   void HidePopup() override;
@@ -125,16 +143,25 @@ class MenuListSelectType final : public SelectType {
   Member<PopupMenu> popup_;
   Member<PopupUpdater> popup_updater_;
   Member<const ComputedStyle> option_style_;
+  Member<HTMLSlotElement> button_slot_;
+  Member<HTMLSlotElement> datalist_slot_;
+  Member<HTMLSlotElement> option_slot_;
+  Member<MenuListInnerElement> inner_element_;
   int ax_menulist_last_active_index_ = -1;
   bool has_updated_menulist_active_option_ = false;
   bool popup_is_visible_ = false;
   bool snav_arrow_key_selection_ = false;
+  bool is_appearance_bikeshed_ = false;
 };
 
 void MenuListSelectType::Trace(Visitor* visitor) const {
   visitor->Trace(popup_);
   visitor->Trace(popup_updater_);
   visitor->Trace(option_style_);
+  visitor->Trace(button_slot_);
+  visitor->Trace(datalist_slot_);
+  visitor->Trace(option_slot_);
+  visitor->Trace(inner_element_);
   SelectType::Trace(visitor);
 }
 
@@ -304,21 +331,93 @@ bool MenuListSelectType::HandlePopupOpenKeyboardEvent() {
 
 void MenuListSelectType::CreateShadowSubtree(ShadowRoot& root) {
   Document& doc = select_->GetDocument();
-  Element* inner_element = MakeGarbageCollected<MenuListInnerElement>(doc);
-  inner_element->setAttribute(html_names::kAriaHiddenAttr, keywords::kTrue);
+
+  ContainerNode* inner_element_container = &root;
+  if (RuntimeEnabledFeatures::StylableSelectEnabled()) {
+    button_slot_ = MakeGarbageCollected<HTMLSlotElement>(doc);
+    button_slot_->SetIdAttribute(shadow_element_names::kSelectButton);
+    root.appendChild(button_slot_);
+    inner_element_container = button_slot_.Get();
+
+    datalist_slot_ = MakeGarbageCollected<HTMLSlotElement>(doc);
+    datalist_slot_->SetIdAttribute(shadow_element_names::kSelectDatalist);
+    root.appendChild(datalist_slot_);
+  }
+
+  inner_element_ = MakeGarbageCollected<MenuListInnerElement>(doc);
+  inner_element_->setAttribute(html_names::kAriaHiddenAttr, keywords::kTrue);
   // Make sure InnerElement() always has a Text node.
-  inner_element->appendChild(Text::Create(doc, g_empty_string));
-  root.insertBefore(inner_element, root.firstChild());
+  inner_element_->appendChild(Text::Create(doc, g_empty_string));
+  inner_element_container->appendChild(inner_element_);
+
+  // Even in MenuList mode, slotting <option>s is necessary to have
+  // ComputedStyles for <option>s. LayoutFlexibleBox::IsChildAllowed() rejects
+  // all of LayoutObject children except for MenuListInnerElement's.
+  // This slot does not have anything slotted into it in the StylableSelect mode
+  // because the <datalist> containing all the <option>s is slotted in instead.
+  option_slot_ = MakeGarbageCollected<HTMLSlotElement>(doc);
+  option_slot_->SetIdAttribute(shadow_element_names::kSelectOptions);
+  root.appendChild(option_slot_);
+}
+
+void MenuListSelectType::ManuallyAssignSlots() {
+  VectorOf<Node> option_nodes;
+  VectorOf<Node> buttons;
+  Node* first_datalist = nullptr;
+  for (Node& child : NodeTraversal::ChildrenOf(*select_)) {
+    if (!child.IsSlotable()) {
+      continue;
+    }
+    if (CanAssignToSelectSlot(child)) {
+      option_nodes.push_back(child);
+    } else if (IsA<HTMLButtonElement>(child)) {
+      buttons.push_back(child);
+    } else if (!first_datalist && IsA<HTMLDataListElement>(child)) {
+      first_datalist = &child;
+    }
+  }
+  option_slot_->Assign(option_nodes);
+
+  if (RuntimeEnabledFeatures::StylableSelectEnabled()) {
+    button_slot_->Assign(buttons);
+    datalist_slot_->Assign(first_datalist);
+    select_->GetShadowRoot()->SetDelegatesFocus(buttons.size());
+  }
+}
+
+HTMLButtonElement* MenuListSelectType::SlottedButton() const {
+  if (!RuntimeEnabledFeatures::StylableSelectEnabled()) {
+    CHECK(!button_slot_);
+    return nullptr;
+  }
+  CHECK(button_slot_);
+  return To<HTMLButtonElement>(button_slot_->FirstAssignedNode());
+}
+
+bool MenuListSelectType::IsAppearanceBikeshed() const {
+  if (!RuntimeEnabledFeatures::StylableSelectEnabled()) {
+    return false;
+  }
+  if (auto* style = select_->GetComputedStyle()) {
+    return style->EffectiveAppearance() == ControlPart::kBikeshedPart;
+  }
+  return false;
 }
 
 Element& MenuListSelectType::InnerElement() const {
-  auto* inner_element =
-      DynamicTo<Element>(select_->UserAgentShadowRoot()->firstChild());
-  DCHECK(inner_element);
-  return *inner_element;
+  return *inner_element_;
 }
 
 void MenuListSelectType::ShowPopup(PopupMenu::ShowEventType type) {
+  if (auto* datalist = select_->FirstChildDatalist()) {
+    if (IsAppearanceBikeshed()) {
+      // TODO(crbug.com/1511354): Instead of calling ShowPopover here, we should
+      // create a method in HTMLSelectElement like
+      // HTMLSelectListElement::OpenListbox which focuses an option.
+      datalist->showPopover(ASSERT_NO_EXCEPTION);
+    }
+  }
+
   if (PopupIsVisible())
     return;
   Document& document = select_->GetDocument();
@@ -476,6 +575,19 @@ void MenuListSelectType::DidDetachLayoutTree() {
 }
 
 void MenuListSelectType::DidRecalcStyle(const StyleRecalcChange change) {
+  if (auto* style = select_->GetComputedStyle()) {
+    bool is_appearance_bikeshed =
+        style->EffectiveAppearance() == ControlPart::kBikeshedPart;
+    if (is_appearance_bikeshed_ != is_appearance_bikeshed) {
+      is_appearance_bikeshed_ = is_appearance_bikeshed;
+      // Switching appearance needs layout to be rebuilt because of special
+      // logic in LayoutFlexibleBox::IsChildAllowed which ignores children in
+      // appearance:auto mode. We also call SetNeedsReattachLayoutTree every
+      // time that the size and multiple attributes are changed.
+      select_->SetNeedsReattachLayoutTree();
+    }
+  }
+
   if (change.ReattachLayoutTree())
     return;
   UpdateTextStyle();
@@ -673,6 +785,7 @@ void MenuListSelectType::DidMutateSubtree() {
 
 // ============================================================================
 
+// TODO(crbug.com/1511354): Rename this class to InPageSelectType
 class ListBoxSelectType final : public SelectType {
  public:
   explicit ListBoxSelectType(HTMLSelectElement& select) : SelectType(select) {}
@@ -695,6 +808,10 @@ class ListBoxSelectType final : public SelectType {
   void HandleMouseRelease() override;
   void ListBoxOnChange() override;
   void ClearLastOnChangeSelection() override;
+  void CreateShadowSubtree(ShadowRoot&) override;
+  void ManuallyAssignSlots() override;
+  HTMLButtonElement* SlottedButton() const override;
+  bool IsAppearanceBikeshed() const override;
 
  private:
   HTMLOptionElement* NextSelectableOptionPageAway(HTMLOptionElement*,
@@ -719,6 +836,7 @@ class ListBoxSelectType final : public SelectType {
   Member<HTMLOptionElement> option_to_scroll_to_;
   Member<HTMLOptionElement> active_selection_anchor_;
   Member<HTMLOptionElement> active_selection_end_;
+  Member<HTMLSlotElement> option_slot_;
   bool is_in_non_contiguous_selection_ = false;
   bool active_selection_state_ = false;
 };
@@ -727,6 +845,7 @@ void ListBoxSelectType::Trace(Visitor* visitor) const {
   visitor->Trace(option_to_scroll_to_);
   visitor->Trace(active_selection_anchor_);
   visitor->Trace(active_selection_end_);
+  visitor->Trace(option_slot_);
   SelectType::Trace(visitor);
 }
 
@@ -1327,6 +1446,34 @@ void ListBoxSelectType::ClearLastOnChangeSelection() {
   last_on_change_selection_.clear();
 }
 
+void ListBoxSelectType::CreateShadowSubtree(ShadowRoot& root) {
+  Document& doc = select_->GetDocument();
+  option_slot_ = MakeGarbageCollected<HTMLSlotElement>(doc);
+  option_slot_->SetIdAttribute(shadow_element_names::kSelectOptions);
+  root.appendChild(option_slot_);
+}
+
+void ListBoxSelectType::ManuallyAssignSlots() {
+  VectorOf<Node> option_nodes;
+  for (Node& child : NodeTraversal::ChildrenOf(*select_)) {
+    if (child.IsSlotable() && CanAssignToSelectSlot(child)) {
+      option_nodes.push_back(child);
+    }
+  }
+  option_slot_->Assign(option_nodes);
+  if (RuntimeEnabledFeatures::StylableSelectEnabled()) {
+    select_->GetShadowRoot()->SetDelegatesFocus(false);
+  }
+}
+
+HTMLButtonElement* ListBoxSelectType::SlottedButton() const {
+  return nullptr;
+}
+
+bool ListBoxSelectType::IsAppearanceBikeshed() const {
+  return false;
+}
+
 // ============================================================================
 
 SelectType::SelectType(HTMLSelectElement& select) : select_(select) {}
@@ -1392,8 +1539,6 @@ void SelectType::HandleMouseRelease() {}
 void SelectType::ListBoxOnChange() {}
 
 void SelectType::ClearLastOnChangeSelection() {}
-
-void SelectType::CreateShadowSubtree(ShadowRoot& root) {}
 
 Element& SelectType::InnerElement() const {
   NOTREACHED();

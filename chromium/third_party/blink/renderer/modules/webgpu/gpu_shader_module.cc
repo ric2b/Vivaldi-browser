@@ -7,6 +7,7 @@
 #include <dawn/webgpu.h>
 
 #include "base/command_line.h"
+#include "base/numerics/clamped_math.h"
 #include "gpu/command_buffer/client/webgpu_interface.h"
 #include "gpu/config/gpu_switches.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -34,14 +35,13 @@ GPUShaderModule* GPUShaderModule::Create(
   std::string wgsl_code;
   WGPUShaderModuleWGSLDescriptor wgsl_desc = {};
   WGPUShaderModuleSPIRVDescriptor spirv_desc = {};
-  std::string label;
   WGPUShaderModuleDescriptor dawn_desc = {};
 
   const auto* wgsl_or_spirv = webgpu_desc->code();
   bool has_null_character = false;
   switch (wgsl_or_spirv->GetContentType()) {
     case V8UnionUSVStringOrUint32Array::ContentType::kUSVString: {
-      WTF::String wtf_wgsl_code(wgsl_or_spirv->GetAsUSVString());
+      const WTF::String& wtf_wgsl_code = wgsl_or_spirv->GetAsUSVString();
       wgsl_code = wtf_wgsl_code.Utf8();
       wgsl_desc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
       wgsl_desc.code = wgsl_code.c_str();
@@ -77,8 +77,8 @@ GPUShaderModule* GPUShaderModule::Create(
     }
   }
 
-  if (webgpu_desc->hasLabel()) {
-    label = webgpu_desc->label().Utf8();
+  std::string label = webgpu_desc->label().Utf8();
+  if (!label.empty()) {
     dawn_desc.label = label.c_str();
   }
 
@@ -91,19 +91,33 @@ GPUShaderModule* GPUShaderModule::Create(
     shader_module = device->GetProcs().deviceCreateShaderModule(
         device->GetHandle(), &dawn_desc);
   }
-  GPUShaderModule* shader =
-      MakeGarbageCollected<GPUShaderModule>(device, shader_module);
-  if (webgpu_desc->hasLabel())
-    shader->setLabel(webgpu_desc->label());
+
+  GPUShaderModule* shader = MakeGarbageCollected<GPUShaderModule>(
+      device, shader_module, webgpu_desc->label());
+
+  // Very roughly approximate how much memory Tint might need for this shader.
+  // Pessimizes if Tint actually holds less memory than this (including if the
+  // shader module ends up being invalid).
+  //
+  // The actual estimate (100x code size) is chosen by profiling: large enough
+  // to show some improvement in peak GPU process memory usage, small enough to
+  // not slow down shader conformance tests (which are much, much heavier on
+  // shader creation than normal workloads) more than a few percent.
+  //
+  // TODO(crbug.com/dawn/2367): Get a real memory estimate from Tint.
+  base::ClampedNumeric<int32_t> input_code_size = wgsl_code.size();
+  shader->tint_memory_estimate_.SetCurrentSize(input_code_size * 100);
+
   return shader;
 }
 
 GPUShaderModule::GPUShaderModule(GPUDevice* device,
-                                 WGPUShaderModule shader_module)
-    : DawnObject<WGPUShaderModule>(device, shader_module) {}
+                                 WGPUShaderModule shader_module,
+                                 const String& label)
+    : DawnObject<WGPUShaderModule>(device, shader_module, label) {}
 
 void GPUShaderModule::OnCompilationInfoCallback(
-    ScriptPromiseResolver* resolver,
+    ScriptPromiseResolverTyped<GPUCompilationInfo>* resolver,
     WGPUCompilationInfoRequestStatus status,
     const WGPUCompilationInfo* info) {
   if (status != WGPUCompilationInfoRequestStatus_Success || !info) {
@@ -141,9 +155,12 @@ void GPUShaderModule::OnCompilationInfoCallback(
   resolver->Resolve(result);
 }
 
-ScriptPromise GPUShaderModule::getCompilationInfo(ScriptState* script_state) {
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
-  ScriptPromise promise = resolver->Promise();
+ScriptPromiseTyped<GPUCompilationInfo> GPUShaderModule::getCompilationInfo(
+    ScriptState* script_state) {
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolverTyped<GPUCompilationInfo>>(
+          script_state);
+  auto promise = resolver->Promise();
 
   auto* callback =
       MakeWGPUOnceCallback(resolver->WrapCallbackInScriptScope(WTF::BindOnce(

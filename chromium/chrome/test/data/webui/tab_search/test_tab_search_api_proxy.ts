@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {PageCallbackRouter, PageRemote, ProfileData, SwitchToTabInfo, Tab, TabOrganizationSession, TabSearchApiProxy, UserFeedback} from 'chrome://tab-search.top-chrome/tab_search.js';
+import type {PageRemote, ProfileData, SwitchToTabInfo, Tab, TabOrganizationSession, TabSearchApiProxy, UserFeedback} from 'chrome://tab-search.top-chrome/tab_search.js';
+import {PageCallbackRouter} from 'chrome://tab-search.top-chrome/tab_search.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 
 export class TestTabSearchApiProxy extends TestBrowserProxy implements
@@ -22,6 +23,7 @@ export class TestTabSearchApiProxy extends TestBrowserProxy implements
       'openRecentlyClosedEntry',
       'requestTabOrganization',
       'removeTabFromOrganization',
+      'rejectSession',
       'restartSession',
       'switchToTab',
       'saveRecentlyClosedExpandedPref',
@@ -81,6 +83,10 @@ export class TestTabSearchApiProxy extends TestBrowserProxy implements
       sessionId: number, organizationId: number, tab: Tab) {
     this.methodCalled(
         'removeTabFromOrganization', sessionId, organizationId, tab);
+  }
+
+  rejectSession() {
+    this.methodCalled('rejectSession');
   }
 
   restartSession() {

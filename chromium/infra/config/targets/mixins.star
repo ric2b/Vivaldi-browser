@@ -197,6 +197,15 @@ targets.mixin(
 )
 
 targets.mixin(
+    name = "amd_radeon_rx_5500_xt",
+    swarming = targets.swarming(
+        dimensions = {
+            "gpu": "1002:7340",
+        },
+    ),
+)
+
+targets.mixin(
     name = "android",
     swarming = targets.swarming(
         dimensions = {
@@ -220,6 +229,15 @@ targets.mixin(
     swarming = targets.swarming(
         dimensions = {
             "device_os": "TP1A.220624.021",
+        },
+    ),
+)
+
+targets.mixin(
+    name = "android_u",
+    swarming = targets.swarming(
+        dimensions = {
+            "device_os": "UQ1A.240105.002",
         },
     ),
 )
@@ -275,15 +293,6 @@ targets.mixin(
             "pool": "chrome.tests.intelligence",
         },
     ),
-)
-
-targets.mixin(
-    name = "chrome-refresh-2023",
-    args = [
-        # All features to be launched under CR2023.
-        # See go/chrome-cr2023-testing-on-bots
-        "--enable-features=ChromeRefresh2023,ChromeRefreshSecondary2023,ChromeWebuiRefresh2023,Cr2023ActionChips,Cr2023ActionChipsIcons,kOmniboxCR23SteadyStateIcons,OmniboxExpandedLayout,OmniboxExpandedStateColors,OmniboxExpandedStateHeight,OmniboxExpandedStateShape,OmniboxExpandedStateSuggestIcons,OmniboxSteadyStateBackgroundColor,OmniboxSteadyStateHeight,OmniboxSteadyStateTextColor,OmniboxSuggestionHoverFillShape,IPH_DesktopCustomizeChromeRefresh",
-    ],
 )
 
 targets.mixin(
@@ -403,6 +412,21 @@ targets.mixin(
 )
 
 targets.mixin(
+    name = "chromeos-tast-public-builder",
+    skylab = targets.skylab(
+        args = [
+            # FieldTrial is disabled on ChromeOS builders but not in this builder.
+            # Notify Tast to handle the different UI by that.
+            "tast.setup.FieldTrialConfig=enable",
+
+            # Tests using the default gaia pool cannot be run by public builders.
+            # These variables are fed by private bundles, thus not for public builders.
+            "maybemissingvars=ui\\.(gaiaPoolDefault|signinProfileTestExtensionManifestKey)",
+        ],
+    ),
+)
+
+targets.mixin(
     name = "chromeos-jacuzzi-skylab-chrome-all-tast-tests",
     # jacuzzi is slow. So that we use more number of shards.
     shards = 20,
@@ -472,6 +496,15 @@ targets.mixin(
 targets.mixin(
     name = "ci_only",
     ci_only = True,
+)
+
+targets.mixin(
+    name = "chromium-tests-oslogin",
+    swarming = targets.swarming(
+        dimensions = {
+            "pool": "chromium.tests.oslogin",
+        },
+    ),
 )
 
 targets.mixin(
@@ -598,6 +631,15 @@ targets.mixin(
 )
 
 targets.mixin(
+    name = "gce",
+    swarming = targets.swarming(
+        dimensions = {
+            "gce": "1",
+        },
+    ),
+)
+
+targets.mixin(
     name = "gpu-swarming-pool",
     swarming = targets.swarming(
         dimensions = {
@@ -623,6 +665,15 @@ targets.mixin(
     swarming = targets.swarming(
         dimensions = {
             "integrity": "high",
+        },
+    ),
+)
+
+targets.mixin(
+    name = "intel_uhd_630",
+    swarming = targets.swarming(
+        dimensions = {
+            "gpu": "8086:9bc5",
         },
     ),
 )
@@ -682,24 +733,24 @@ targets.mixin(
 )
 
 targets.mixin(
-    name = "ios_runtime_cache_17_0",
-    swarming = targets.swarming(
-        named_caches = [
-            swarming.cache(
-                name = "runtime_ios_17_0",
-                path = "Runtime-ios-17.0",
-            ),
-        ],
-    ),
-)
-
-targets.mixin(
     name = "ios_runtime_cache_17_2",
     swarming = targets.swarming(
         named_caches = [
             swarming.cache(
                 name = "runtime_ios_17_2",
                 path = "Runtime-ios-17.2",
+            ),
+        ],
+    ),
+)
+
+targets.mixin(
+    name = "ios_runtime_cache_17_4",
+    swarming = targets.swarming(
+        named_caches = [
+            swarming.cache(
+                name = "runtime_ios_17_4",
+                path = "Runtime-ios-17.4",
             ),
         ],
     ),
@@ -758,15 +809,6 @@ targets.mixin(
 )
 
 targets.mixin(
-    name = "linux-jammy-or-bionic",
-    swarming = targets.swarming(
-        dimensions = {
-            "os": "Ubuntu-22.04|Ubuntu-18.04",
-        },
-    ),
-)
-
-targets.mixin(
     name = "linux-jammy-or-focal",
     swarming = targets.swarming(
         dimensions = {
@@ -814,6 +856,17 @@ targets.mixin(
         dimensions = {
             "gpu": "8086:9bc5-20.0.8",
             "os": "Ubuntu-18.04.6",
+            "pool": "chromium.tests.gpu",
+        },
+    ),
+)
+
+targets.mixin(
+    name = "linux_intel_uhd_770_stable",
+    swarming = targets.swarming(
+        dimensions = {
+            "gpu": "8086:4680-23.2.1",
+            "os": "Ubuntu-22.04.4",
             "pool": "chromium.tests.gpu",
         },
     ),
@@ -948,11 +1001,43 @@ targets.mixin(
     ),
 )
 
+# TODO(b/331775322) Remove when mac migration is done.
+targets.mixin(
+    name = "mac_13_or_14_arm64",
+    swarming = targets.swarming(
+        dimensions = {
+            "cpu": "arm64",
+            "os": "Mac-13|Mac-14",
+        },
+    ),
+)
+
+# TODO(b/331775322) Remove when mac migration is done.
+targets.mixin(
+    name = "mac_13_or_14_x64",
+    swarming = targets.swarming(
+        dimensions = {
+            "cpu": "x86-64",
+            "os": "Mac-13|Mac-14",
+        },
+    ),
+)
+
 targets.mixin(
     name = "mac_14_arm64",
     swarming = targets.swarming(
         dimensions = {
             "cpu": "arm64",
+            "os": "Mac-14",
+        },
+    ),
+)
+
+targets.mixin(
+    name = "mac_14_x64",
+    swarming = targets.swarming(
+        dimensions = {
+            "cpu": "x86-64",
             "os": "Mac-14",
         },
     ),
@@ -965,7 +1050,7 @@ targets.mixin(
             "cpu": "arm64",
             "gpu": "apple:m1",
             "mac_model": "Macmini9,1",
-            "os": "Mac-13.4",
+            "os": "Mac-14.3.1",
             "pool": "chromium.tests",
             "display_attached": "1",
         },
@@ -982,6 +1067,21 @@ targets.mixin(
             "os": "Mac-13.5.2",
             "pool": "chromium.tests",
             "display_attached": "1",
+        },
+    ),
+)
+
+targets.mixin(
+    name = "mac_arm64_apple_m2_retina_gpu_experimental",
+    swarming = targets.swarming(
+        dimensions = {
+            "cpu": "arm64",
+            "gpu": "apple:m2",
+            "mac_model": "Mac14,7",
+            "os": "Mac-14.3.1",
+            "pool": "chromium.tests.gpu",
+            "display_attached": "1",
+            "hidpi": "1",
         },
     ),
 )
@@ -1016,7 +1116,7 @@ targets.mixin(
     swarming = targets.swarming(
         dimensions = {
             "cpu": "x86-64",
-            "os": "Mac-13.5",
+            "os": "Mac-14",
         },
     ),
 )
@@ -1050,7 +1150,7 @@ targets.mixin(
         dimensions = {
             "cpu": "x86-64",
             "gpu": "8086:3e9b",
-            "os": "Mac-13.5",
+            "os": "Mac-14.3.1",
             "display_attached": "1",
         },
     ),
@@ -1092,7 +1192,7 @@ targets.mixin(
             "cpu": "x86-64",
             "gpu": "1002:67ef",
             "hidpi": "1",
-            "os": "Mac-13.5",
+            "os": "Mac-14.3.1",
             "pool": "chromium.tests.gpu",
             "display_attached": "1",
         },
@@ -1215,6 +1315,15 @@ targets.mixin(
 )
 
 targets.mixin(
+    name = "nvidia_geforce_gtx_1660",
+    swarming = targets.swarming(
+        dimensions = {
+            "gpu": "10de:2184",
+        },
+    ),
+)
+
+targets.mixin(
     name = "nougat-x86-emulator",
     args = [
         "--avd-config=../../tools/android/avd/proto/generic_android24.textpb",
@@ -1282,6 +1391,17 @@ targets.mixin(
     swarming = targets.swarming(
         dimensions = {
             "device_type": "oriole",
+            "os": "Android",
+        },
+    ),
+)
+
+# Pixel 8
+targets.mixin(
+    name = "shiba",
+    swarming = targets.swarming(
+        dimensions = {
+            "device_type": "shiba",
             "os": "Android",
         },
     ),
@@ -1516,7 +1636,7 @@ targets.mixin(
             targets.cipd_package(
                 package = "chromium/android_webview/tools/cts_archive",
                 location = "android_webview/tools/cts_archive",
-                revision = "dMHDxWyIpkzGNem_Z7ywDRj3Y2lUQKM7h4JT87_ejr8C",
+                revision = "UYQZhJpB3MWpJIAcesI-M1bqRoTghiKCYr_SD9tPDewC",
             ),
         ],
     ),
@@ -1541,13 +1661,13 @@ targets.mixin(
 )
 
 targets.mixin(
-    name = "win10_amd_rx_5500_xt",
+    name = "win10_amd_rx_5500_xt_stable",
     swarming = targets.swarming(
         dimensions = {
             "display_attached": "1",
-            "gpu": "1002:7340",
-            "os": "Windows-10",
-            "pool": "chromium.tests.gpu.experimental",
+            "gpu": "1002:7340-31.0.24002.92",
+            "os": "Windows-10-19045.3930",
+            "pool": "chromium.tests.gpu",
         },
     ),
 )
@@ -1569,7 +1689,7 @@ targets.mixin(
     swarming = targets.swarming(
         dimensions = {
             "display_attached": "1",
-            "gpu": "8086:9bc5-31.0.101.2111",
+            "gpu": "8086:9bc5-31.0.101.2114",
             "os": "Windows-10",
             "pool": "chromium.tests.gpu",
         },
@@ -1617,6 +1737,22 @@ targets.mixin(
 )
 
 targets.mixin(
+    name = "win11_qualcomm_adreno_690_stable",
+    swarming = targets.swarming(
+        dimensions = {
+            "display_attached": "1",
+            # Screen scaling is mostly to ensure that pixel test output is
+            # consistent.
+            "screen_scaling_percent": "100",
+            "cpu": "arm64",
+            "gpu": "qcom:043a-27.20.1870.0",
+            "os": "Windows-11-22621.3007",
+            "pool": "chromium.tests",
+        },
+    ),
+)
+
+targets.mixin(
     name = "win11",
     swarming = targets.swarming(
         dimensions = {
@@ -1626,22 +1762,15 @@ targets.mixin(
 )
 
 targets.mixin(
-    name = "win_arm64",
+    name = "win-arm64",
     swarming = targets.swarming(
         dimensions = {
+            # Certain tests require 100 percent screen scaling, and all devices
+            # should be configured for this.
+            "screen_scaling_percent": "100",
             "cpu": "arm64",
             "os": "Windows-11",
-            "pool": "chrome.tests",
-            # Qualcomm Adreno 690.
-            "gpu": "qcom:043a",
-            # Currently used to limit testing to the homogenous fleet. Can be
-            # removed once the older experimental devices are decommissioned.
-            "zone": "us-sfo",
         },
-        # The resources are limited in the pool.
-        # The slowest test is expected to run >9 hours.
-        expiration_sec = 64800,  # 18 hours
-        hard_timeout_sec = 43200,  # 12 hours
     ),
 )
 
@@ -1658,12 +1787,12 @@ targets.mixin(
     name = "xcode_15_beta",
     args = [
         "--xcode-build-version",
-        "15c500b",
+        "15e204a",
     ],
     swarming = targets.swarming(
         named_caches = [
             swarming.cache(
-                name = "xcode_ios_15c500b",
+                name = "xcode_ios_15e204a",
                 path = "Xcode.app",
             ),
         ],
@@ -1674,12 +1803,12 @@ targets.mixin(
     name = "xcode_15_main",
     args = [
         "--xcode-build-version",
-        "15a507",
+        "15c500b",
     ],
     swarming = targets.swarming(
         named_caches = [
             swarming.cache(
-                name = "xcode_ios_15a507",
+                name = "xcode_ios_15c500b",
                 path = "Xcode.app",
             ),
         ],

@@ -89,4 +89,11 @@ message CrOSVersionAttestationBlob {
 message CrOSSpecificBlob {
   // Records the version attestation information.
   CrOSVersionAttestationBlob version_attestation = 1;
+
+  // device_key_certs contains the certificate chain for the device key used
+  // for Android Attestation. The certificate chain is presented with the
+  // certificate authority being last in the array. The leaf certificate in
+  // the chain (the first in the array) should be issued by Asbestos and have
+  // a X.509 subject with RDN O="ARC TPM Certifying Key".
+  repeated string device_key_certs = 2;
 }

@@ -269,13 +269,13 @@ export class OverridesNavigatorView extends NavigatorView {
     const project = Persistence.NetworkPersistenceManager.NetworkPersistenceManager.instance().project();
     if (project) {
       const enableCheckbox = new UI.Toolbar.ToolbarSettingCheckbox(
-          Common.Settings.Settings.instance().moduleSetting('persistenceNetworkOverridesEnabled'));
+          Common.Settings.Settings.instance().moduleSetting('persistence-network-overrides-enabled'));
       this.toolbar.appendToolbarItem(enableCheckbox);
 
       this.toolbar.appendToolbarItem(new UI.Toolbar.ToolbarSeparator(true));
       const clearButton = new UI.Toolbar.ToolbarButton(i18nString(UIStrings.clearConfiguration), 'clear');
       clearButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, () => {
-        Common.Settings.Settings.instance().moduleSetting('persistenceNetworkOverridesEnabled').set(false);
+        Common.Settings.Settings.instance().moduleSetting('persistence-network-overrides-enabled').set(false);
         project.remove();
       });
       this.toolbar.appendToolbarItem(clearButton);
@@ -295,7 +295,7 @@ export class OverridesNavigatorView extends NavigatorView {
     if (!fileSystem) {
       return;
     }
-    Common.Settings.Settings.instance().moduleSetting('persistenceNetworkOverridesEnabled').set(true);
+    Common.Settings.Settings.instance().moduleSetting('persistence-network-overrides-enabled').set(true);
   }
 
   override sourceSelected(uiSourceCode: Workspace.UISourceCode.UISourceCode, focusSource: boolean): void {
@@ -340,8 +340,8 @@ export class SnippetsNavigatorView extends NavigatorView {
   `);
 
     const toolbar = new UI.Toolbar.Toolbar('navigator-toolbar');
-    const newButton =
-        new UI.Toolbar.ToolbarButton(i18nString(UIStrings.newSnippet), 'plus', i18nString(UIStrings.newSnippet));
+    const newButton = new UI.Toolbar.ToolbarButton(
+        i18nString(UIStrings.newSnippet), 'plus', i18nString(UIStrings.newSnippet), 'sources.new-snippet');
     newButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, _event => {
       void this.create(
           Snippets.ScriptSnippetFileSystem.findSnippetsProject(), '' as Platform.DevToolsPath.EncodedPathString);
@@ -359,7 +359,8 @@ export class SnippetsNavigatorView extends NavigatorView {
     contextMenu.headerSection().appendItem(
         i18nString(UIStrings.createNewSnippet),
         () => this.create(
-            Snippets.ScriptSnippetFileSystem.findSnippetsProject(), '' as Platform.DevToolsPath.EncodedPathString));
+            Snippets.ScriptSnippetFileSystem.findSnippetsProject(), '' as Platform.DevToolsPath.EncodedPathString),
+        {jslogContext: 'create-new-snippet'});
     void contextMenu.show();
   }
 
@@ -367,11 +368,14 @@ export class SnippetsNavigatorView extends NavigatorView {
     const uiSourceCode = node.uiSourceCode();
     const contextMenu = new UI.ContextMenu.ContextMenu(event);
     contextMenu.headerSection().appendItem(
-        i18nString(UIStrings.run), () => Snippets.ScriptSnippetFileSystem.evaluateScriptSnippet(uiSourceCode));
-    contextMenu.editSection().appendItem(i18nString(UIStrings.rename), () => this.rename(node, false));
+        i18nString(UIStrings.run), () => Snippets.ScriptSnippetFileSystem.evaluateScriptSnippet(uiSourceCode),
+        {jslogContext: 'run'});
     contextMenu.editSection().appendItem(
-        i18nString(UIStrings.remove), () => uiSourceCode.project().deleteFile(uiSourceCode));
-    contextMenu.saveSection().appendItem(i18nString(UIStrings.saveAs), this.handleSaveAs.bind(this, uiSourceCode));
+        i18nString(UIStrings.rename), () => this.rename(node, false), {jslogContext: 'rename'});
+    contextMenu.editSection().appendItem(
+        i18nString(UIStrings.remove), () => uiSourceCode.project().deleteFile(uiSourceCode), {jslogContext: 'remove'});
+    contextMenu.saveSection().appendItem(
+        i18nString(UIStrings.saveAs), this.handleSaveAs.bind(this, uiSourceCode), {jslogContext: 'save-as'});
     void contextMenu.show();
   }
 

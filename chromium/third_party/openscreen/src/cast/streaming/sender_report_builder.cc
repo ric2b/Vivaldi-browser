@@ -11,7 +11,7 @@ namespace openscreen::cast {
 
 SenderReportBuilder::SenderReportBuilder(RtcpSession* session)
     : session_(session) {
-  OSP_DCHECK(session_);
+  OSP_CHECK(session_);
 }
 
 SenderReportBuilder::~SenderReportBuilder() = default;

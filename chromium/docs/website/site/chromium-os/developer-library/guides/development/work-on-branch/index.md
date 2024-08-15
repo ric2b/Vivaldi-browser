@@ -67,20 +67,36 @@ To resolve simple conflicts manually in Gerrit:
 *** promo
 Note: When to update ebuilds while merging changes
 
-This works the same way on other branches as it does on the master branch:
+This works the same way on other branches as it does on [ToT].
 If you're merging a change to code that is built as part of a `cros_workon`
 package, or to a `.ebuild` file for a `cros_workon` package, the package will be
 uprev-ed automatically.
 
 If you're changing a non-`cros_workon` package, you must uprev the corresponding
 `.ebuild` file on the branch manually, just as you do when making changes to
-non-`cros_workon` packages on the master (or main) branch.
+non-`cros_workon` packages on [ToT].
 ***
 
-## Use cros\_merge\_to\_branch tool from your chroot
+## Merge via Gerrit CLI
 
-The second easiest way to create a change from a change you already committed on
-top-of-tree (ToT) in ChromeOS is using `cros_merge_to_branch`.
+The `gerrit cherry-pick` tool uses the same backend APIs as the
+[Gerrit UI](#merge-via-gerrit-ui).
+
+```shell
+gerrit cherry-pick --branches release-R76 1376991
+```
+
+The `--branches` option supports multiple branches and autocompletion.
+If there is only one branch that matches `release-R76`, we will expand to the
+full name for you.
+
+Multiple CLs can be specified, but they will be cherry-picked independently.
+This tool cannot be used to cherry-pick stacks of CLs that depend on each other.
+
+## Use cros\_merge\_to\_branch tool
+
+The next easiest way to create a change from a change you already committed on
+[ToT] in ChromeOS is using `cros_merge_to_branch`.
 
 Example usage:
 
@@ -90,11 +106,8 @@ cros_merge_to_branch 1376991 release-R76-12239.B
 
 This creates Gerrit changes for R76 from CL 1376991 in less than 10 seconds.
 After running, you can check Gerrit to actually commit the changes (search your
-open CLs for R76-\* branch). You can also run these changes through a
-[try-job][using-remote-tryjobs] (make sure to specify the branch with -b with
-the remote tryjob).
-For more advanced usage information, use `--help`, or ping
-[chromeos-chatty-eng@][contact].
+open CLs for R76-\* branch).
+For more advanced usage information, use `--help`.
 
 You should run with `--dry-run` the first time around to not actually upload
 your change until you are sure about how to use the tool. Note this tool accepts
@@ -154,12 +167,8 @@ repo init \
 ```
 
 This will get you chromite and all the tools it includes i.e.
-`cros_merge_to_branch`. Make sure you pass the `--nomirror` option so it will
+`cros_merge_to_branch`. Make sure you pass the `--no-mirror` option so it will
 fetch the single git repo needed to cherry-pick & upload the CL.
-
-Finally, use `cros tryjob` to run remote tryjobs.
-See the [page on testing with remote tryjobs][using-remote-tryjobs] for more
-info.
 
 ## Checking out a single repository (with git)
 
@@ -244,23 +253,11 @@ git push ${REMOTE_NAME} ${LOCAL_BRANCH_NAME}:refs/for/${REMOTE_BRANCH_NAME}
 git push origin R76:refs/for/release-R76-12239.B
 ```
 
-## Testing with remote trybot
-
-Before you commit the change, test it! Launch a tryjob to verify it actually
-builds properly. See [Using Remote Trybots][using-remote-tryjobs] for more
-information.
-
-```bash
-cd <repo_root>/chromiumos/chromite
-git checkout cros/master
-cros tryjob -g <review_id> -b <branchname> caroline-release-tryjob eve-release-tryjob
-```
-
 ## Reusing a single repository in an existing repo checkout
 
 While it is possible to manually checkout a different branch in an existing
 repo checkout (e.g. checking out `release-R69-10895.B` in `chromite/` when the
-rest of the manifest is tracking `ToT`), this is *strongly not recommended*.
+rest of the manifest is tracking [ToT]), this is *strongly not recommended*.
 
 Mixing different branches in git trees in a single repo checkout can easily
 break existing tools and is not supported. Even if you want to do it as a one
@@ -271,11 +268,10 @@ or even months later as a weird error in a seemingly unrelated location.
 
 This is why we only support the methods listed above.
 
-[contact]: ./contact.md
 [contributing]: ./contributing.md#Getting-Code_Review
 [drover]: https://dev.chromium.org/developers/how-tos/drover
 [developer-guide]: ./developer_guide.md
 [experimental-branches]: https://dev.chromium.org/developers/experimental-branches
 [developer_guide.md]: developer_guide.md
 [merge request]: https://chromium.googlesource.com/chromium/src/+/HEAD/docs/process/merge_request.md
-[using-remote-tryjobs]: ./remote_trybots.md
+[ToT]: /glossary

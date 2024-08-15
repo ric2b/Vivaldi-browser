@@ -274,12 +274,15 @@ void WebSocketTestURLRequestContextHost::SetProxyConfig(
       std::move(proxy_resolution_service));
 }
 
+void DummyConnectDelegate::OnURLRequestConnected(URLRequest* request,
+                                                 const TransportInfo& info) {}
+
 int DummyConnectDelegate::OnAuthRequired(
     const AuthChallengeInfo& auth_info,
     scoped_refptr<HttpResponseHeaders> response_headers,
     const IPEndPoint& host_port_pair,
     base::OnceCallback<void(const AuthCredentials*)> callback,
-    absl::optional<AuthCredentials>* credentials) {
+    std::optional<AuthCredentials>* credentials) {
   return OK;
 }
 

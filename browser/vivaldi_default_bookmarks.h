@@ -16,6 +16,17 @@ namespace bookmarks {
 class BookmarkModel;
 }
 
+// Note: (prio@vivaldi.com) - Chromium is refactoring the bookmarks model on
+// CR124 for iOS. This requires iOS to use LegacyBookmarkModel instead of
+// BookmarkModel. This might be temporary or not, we don't know yet, depends on
+// Chromium to finish their refactoring.
+#if !BUILDFLAG(IS_IOS)
+using VivaldiBookmarkModelType = bookmarks::BookmarkModel;
+#else
+class LegacyBookmarkModel;
+using VivaldiBookmarkModelType = LegacyBookmarkModel;
+#endif
+
 namespace vivaldi_default_bookmarks {
 
 using FaviconServiceGetter =
@@ -24,7 +35,7 @@ using FaviconServiceGetter =
 class UpdaterClient {
  public:
   virtual ~UpdaterClient();
-  virtual bookmarks::BookmarkModel* GetBookmarkModel() = 0;
+  virtual VivaldiBookmarkModelType* GetBookmarkModel() = 0;
   virtual FaviconServiceGetter GetFaviconServiceGetter() = 0;
   virtual PrefService* GetPrefService() = 0;
   virtual const std::string& GetApplicationLocale() = 0;

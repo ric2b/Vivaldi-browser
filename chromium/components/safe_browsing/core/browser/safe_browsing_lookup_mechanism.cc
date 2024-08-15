@@ -25,14 +25,15 @@ SafeBrowsingLookupMechanism::CompleteCheckResult::CompleteCheckResult(
     const GURL& url,
     SBThreatType threat_type,
     const ThreatMetadata& metadata,
-    absl::optional<ThreatSource> threat_source,
+    std::optional<ThreatSource> threat_source,
     std::unique_ptr<RTLookupResponse> url_real_time_lookup_response)
     : url(url),
       threat_type(threat_type),
       metadata(metadata),
       threat_source(threat_source),
       url_real_time_lookup_response(std::move(url_real_time_lookup_response)) {
-  DCHECK(threat_source.has_value() || threat_type == SB_THREAT_TYPE_SAFE);
+  DCHECK(threat_source.has_value() ||
+         threat_type == SBThreatType::SB_THREAT_TYPE_SAFE);
 }
 
 SafeBrowsingLookupMechanism::CompleteCheckResult::~CompleteCheckResult() =

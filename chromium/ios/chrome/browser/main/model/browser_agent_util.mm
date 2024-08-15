@@ -7,9 +7,10 @@
 #import "base/feature_list.h"
 #import "components/breadcrumbs/core/breadcrumbs_status.h"
 #import "ios/chrome/browser/app_launcher/model/app_launcher_browser_agent.h"
+#import "ios/chrome/browser/contextual_panel/model/contextual_panel_browser_agent.h"
 #import "ios/chrome/browser/crash_report/model/breadcrumbs/breadcrumb_manager_browser_agent.h"
 #import "ios/chrome/browser/device_sharing/model/device_sharing_browser_agent.h"
-#import "ios/chrome/browser/favicon/favicon_browser_agent.h"
+#import "ios/chrome/browser/favicon/model/favicon_browser_agent.h"
 #import "ios/chrome/browser/follow/model/follow_browser_agent.h"
 #import "ios/chrome/browser/infobars/model/overlays/browser_agent/infobar_overlay_browser_agent_util.h"
 #import "ios/chrome/browser/intents/user_activity_browser_agent.h"
@@ -123,8 +124,13 @@ void AttachBrowserAgents(Browser* browser) {
     SyncErrorBrowserAgent::CreateForBrowser(browser);
   }
 
-  UpgradeCenterBrowserAgent::CreateForBrowser(browser,
-                                              [UpgradeCenter sharedInstance]);
+  // The UpgradeCenter may be null (e.g. in unit tests). Do not create the
+  // UpgradeCenterBrowserAgent in that case.
+  if (UpgradeCenter* upgrade_center =
+          GetApplicationContext()->GetUpgradeCenter()) {
+    UpgradeCenterBrowserAgent::CreateForBrowser(browser, upgrade_center);
+  }
+
   WebStateUpdateBrowserAgent::CreateForBrowser(browser);
   ReadingListBrowserAgent::CreateForBrowser(browser);
 
@@ -135,6 +141,10 @@ void AttachBrowserAgents(Browser* browser) {
 
   if (!browser_is_inactive) {
     TabBasedIPHBrowserAgent::CreateForBrowser(browser);
+  }
+
+  if (IsContextualPanelEnabled()) {
+    ContextualPanelBrowserAgent::CreateForBrowser(browser);
   }
 
   // This needs to be called last in case any downstream browser agents need to

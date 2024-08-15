@@ -89,7 +89,8 @@ bool ChromeEnterpriseRealTimeUrlLookupService::CanSendPageLoadToken() const {
   return false;
 }
 
-bool ChromeEnterpriseRealTimeUrlLookupService::CanCheckSubresourceURL() const {
+bool ChromeEnterpriseRealTimeUrlLookupService::
+    CanIncludeSubframeUrlInReferrerChain() const {
   return false;
 }
 
@@ -107,28 +108,25 @@ bool ChromeEnterpriseRealTimeUrlLookupService::
 
 void ChromeEnterpriseRealTimeUrlLookupService::GetAccessToken(
     const GURL& url,
-    const GURL& last_committed_url,
-    bool is_mainframe,
     RTLookupResponseCallback response_callback,
-    scoped_refptr<base::SequencedTaskRunner> callback_task_runner) {
+    scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
+    SessionID tab_id) {
   token_fetcher_->Start(base::BindOnce(
       &ChromeEnterpriseRealTimeUrlLookupService::OnGetAccessToken,
-      weak_factory_.GetWeakPtr(), url, last_committed_url, is_mainframe,
-      std::move(response_callback), std::move(callback_task_runner),
-      base::TimeTicks::Now()));
+      weak_factory_.GetWeakPtr(), url, std::move(response_callback),
+      std::move(callback_task_runner), base::TimeTicks::Now(), tab_id));
 }
 
 void ChromeEnterpriseRealTimeUrlLookupService::OnGetAccessToken(
     const GURL& url,
-    const GURL& last_committed_url,
-    bool is_mainframe,
     RTLookupResponseCallback response_callback,
     scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
     base::TimeTicks get_token_start_time,
+    SessionID tab_id,
     const std::string& access_token) {
-  SendRequest(url, last_committed_url, is_mainframe, access_token,
-              std::move(response_callback), std::move(callback_task_runner),
-              /* is_sampled_report */ false);
+  MaybeSendRequest(url, access_token, std::move(response_callback),
+                   std::move(callback_task_runner),
+                   /* is_sampled_report */ false, tab_id);
 }
 
 std::optional<std::string>

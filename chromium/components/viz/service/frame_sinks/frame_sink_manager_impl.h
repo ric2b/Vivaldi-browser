@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,7 @@
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "components/viz/common/constants.h"
+#include "components/viz/common/navigation_id.h"
 #include "components/viz/common/surfaces/frame_sink_bundle_id.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_impl.h"
@@ -46,7 +48,6 @@
 #include "services/viz/privileged/mojom/compositing/frame_sink_manager.mojom.h"
 #include "services/viz/privileged/mojom/compositing/frame_sink_video_capture.mojom.h"
 #include "services/viz/public/mojom/compositing/video_detector_observer.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace viz {
 
@@ -79,7 +80,7 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
     InitParams& operator=(InitParams&& other);
 
     raw_ptr<SharedBitmapManager> shared_bitmap_manager = nullptr;
-    absl::optional<uint32_t> activation_deadline_in_frames =
+    std::optional<uint32_t> activation_deadline_in_frames =
         kDefaultActivationDeadlineInFrames;
     raw_ptr<OutputSurfaceProvider> output_surface_provider = nullptr;
     raw_ptr<GmbVideoFramePoolContextProvider> gmb_context_provider = nullptr;
@@ -128,7 +129,7 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
       mojo::PendingRemote<mojom::FrameSinkBundleClient> client) override;
   void CreateCompositorFrameSink(
       const FrameSinkId& frame_sink_id,
-      const absl::optional<FrameSinkBundleId>& bundle_id,
+      const std::optional<FrameSinkBundleId>& bundle_id,
       mojo::PendingReceiver<mojom::CompositorFrameSink> receiver,
       mojo::PendingRemote<mojom::CompositorFrameSinkClient> client) override;
   void DestroyCompositorFrameSink(
@@ -162,6 +163,10 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
                                  base::TimeDelta bucket_size) override;
   void StopFrameCountingForTest(
       StopFrameCountingForTestCallback callback) override;
+  void ClearUnclaimedViewTransitionResources(
+      const NavigationId& navigation_id) override;
+  void HasUnclaimedViewTransitionResourcesForTest(
+      HasUnclaimedViewTransitionResourcesForTestCallback callback) override;
 
   void DestroyFrameSinkBundle(const FrameSinkBundleId& id);
 
@@ -208,7 +213,7 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
   void SubmitHitTestRegionList(
       const SurfaceId& surface_id,
       uint64_t frame_index,
-      absl::optional<HitTestRegionList> hit_test_region_list);
+      std::optional<HitTestRegionList> hit_test_region_list);
 
   // Instantiates |video_detector_| for tests where we simulate the passage of
   // time.
@@ -271,11 +276,11 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
   // CompositorFrameSink but animations are executed on a different
   // CompositorFrameSink.
   void CacheSurfaceAnimationManager(
-      NavigationID navigation_id,
+      NavigationId navigation_id,
       std::unique_ptr<SurfaceAnimationManager> manager);
   std::unique_ptr<SurfaceAnimationManager> TakeSurfaceAnimationManager(
-      NavigationID navigation_id);
-  void ClearSurfaceAnimationManager(NavigationID navigation_id);
+      NavigationId navigation_id);
+  void ClearSurfaceAnimationManager(NavigationId navigation_id);
 
   FrameCounter* frame_counter() {
     return frame_counter_ ? &frame_counter_.value() : nullptr;
@@ -415,7 +420,7 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
                  base::UniquePtrComparator>
       video_capturers_;
 
-  base::flat_map<NavigationID, std::unique_ptr<SurfaceAnimationManager>>
+  base::flat_map<NavigationId, std::unique_ptr<SurfaceAnimationManager>>
       navigation_to_animation_manager_;
 
   // The ids of the frame sinks that are currently being captured.
@@ -433,7 +438,7 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
 
   // If present, the throttling interval which defines the upper bound of how
   // often BeginFrames are sent for all current and future frame sinks.
-  absl::optional<base::TimeDelta> global_throttle_interval_ = absl::nullopt;
+  std::optional<base::TimeDelta> global_throttle_interval_ = std::nullopt;
 
   base::flat_map<uint32_t, base::ScopedClosureRunner> cached_back_buffers_;
 
@@ -464,7 +469,7 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
   base::ObserverList<FrameSinkObserver>::Unchecked observer_list_;
 
   // Counts frames for test.
-  absl::optional<FrameCounter> frame_counter_;
+  std::optional<FrameCounter> frame_counter_;
 };
 
 }  // namespace viz

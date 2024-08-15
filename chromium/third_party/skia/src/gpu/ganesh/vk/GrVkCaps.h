@@ -167,6 +167,8 @@ public:
     // Returns true if the VK_EXT_image_drm_format_modifier is enabled.
     bool supportsDRMFormatModifiers() const { return fSupportsDRMFormatModifiers; }
 
+    bool supportsDeviceFaultInfo() const { return fSupportsDeviceFaultInfo; }
+
     // Returns whether we prefer to record draws directly into a primary command buffer.
     bool preferPrimaryOverSecondaryCommandBuffers() const {
         return fPreferPrimaryOverSecondaryCommandBuffers;
@@ -183,10 +185,6 @@ public:
     bool mustInvalidatePrimaryCmdBufferStateAfterClearAttachments() const {
         return fMustInvalidatePrimaryCmdBufferStateAfterClearAttachments;
     }
-
-    // For host visible allocations, this returns true if we require that they are coherent. This
-    // is used to work around bugs for devices that don't handle non-coherent memory correctly.
-    bool mustUseCoherentHostVisibleMemory() const { return fMustUseCoherentHostVisibleMemory; }
 
     // Returns whether a pure GPU accessible buffer is more performant to read than a buffer that is
     // also host visible. If so then in some cases we may prefer the cost of doing a copy to the
@@ -457,10 +455,11 @@ private:
 
     bool fSupportsDRMFormatModifiers = false;
 
+    bool fSupportsDeviceFaultInfo = false;
+
     bool fPreferPrimaryOverSecondaryCommandBuffers = true;
     bool fMustInvalidatePrimaryCmdBufferStateAfterClearAttachments = false;
 
-    bool fMustUseCoherentHostVisibleMemory = false;
     bool fGpuOnlyBuffersMorePerformant = false;
     bool fShouldPersistentlyMapCpuToGpuBuffers = true;
 

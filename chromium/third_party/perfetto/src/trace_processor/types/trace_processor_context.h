@@ -47,19 +47,21 @@ class ChunkedTraceReader;
 class ClockTracker;
 class ClockConverter;
 class DeobfuscationMappingTable;
+class EtwModule;
 class EventTracker;
 class ForwardingTraceParser;
 class FtraceModule;
 class GlobalArgsTracker;
-class GlobalStackProfileTracker;
+class StackProfileTracker;
 class HeapGraphTracker;
-class HeapProfileTracker;
 class PerfSampleTracker;
+class MappingTracker;
 class MetadataTracker;
 class PacketAnalyzer;
 class ProtoImporterModule;
 class TrackEventModule;
 class ProcessTracker;
+class SchedEventTracker;
 class SliceTracker;
 class SliceTranslationTable;
 class FlowTracker;
@@ -98,11 +100,12 @@ class TraceProcessorContext {
   std::unique_ptr<FlowTracker> flow_tracker;
   std::unique_ptr<ProcessTracker> process_tracker;
   std::unique_ptr<EventTracker> event_tracker;
+  std::unique_ptr<SchedEventTracker> sched_event_tracker;
   std::unique_ptr<ClockTracker> clock_tracker;
   std::unique_ptr<ClockConverter> clock_converter;
-  std::unique_ptr<HeapProfileTracker> heap_profile_tracker;
+  std::unique_ptr<MappingTracker> mapping_tracker;
   std::unique_ptr<PerfSampleTracker> perf_sample_tracker;
-  std::unique_ptr<GlobalStackProfileTracker> global_stack_profile_tracker;
+  std::unique_ptr<StackProfileTracker> stack_profile_tracker;
   std::unique_ptr<MetadataTracker> metadata_tracker;
 
   // These fields are stored as pointers to Destructible objects rather than
@@ -113,7 +116,6 @@ class TraceProcessorContext {
   std::unique_ptr<Destructible> android_probes_tracker;  // AndroidProbesTracker
   std::unique_ptr<Destructible> binder_tracker;          // BinderTracker
   std::unique_ptr<Destructible> heap_graph_tracker;      // HeapGraphTracker
-  std::unique_ptr<Destructible> sched_tracker;           // SchedEventTracker
   std::unique_ptr<Destructible> syscall_tracker;         // SyscallTracker
   std::unique_ptr<Destructible> system_info_tracker;     // SystemInfoTracker
   std::unique_ptr<Destructible> v4l2_tracker;            // V4l2Tracker
@@ -124,8 +126,11 @@ class TraceProcessorContext {
   std::unique_ptr<Destructible> perf_data_tracker;       // PerfDataTracker
   std::unique_ptr<Destructible> content_analyzer;        // ProtoContentAnalyzer
   std::unique_ptr<Destructible>
-      shell_transitions_tracker;             // ShellTransitionsTracker
-  std::unique_ptr<Destructible> v8_tracker;  // V8Tracker
+      shell_transitions_tracker;  // ShellTransitionsTracker
+  std::unique_ptr<Destructible>
+      ftrace_sched_tracker;  // FtraceSchedEventTracker
+  std::unique_ptr<Destructible> v8_tracker;   // V8Tracker
+  std::unique_ptr<Destructible> jit_tracker;  // JitTracker
 
   // These fields are trace readers which will be called by |forwarding_parser|
   // once the format of the trace is discovered. They are placed here as they
@@ -157,6 +162,7 @@ class TraceProcessorContext {
   // all fields.
   std::vector<ProtoImporterModule*> modules_for_all_fields;
   FtraceModule* ftrace_module = nullptr;
+  EtwModule* etw_module = nullptr;
   TrackEventModule* track_module = nullptr;
 
   // Marks whether the uuid was read from the trace.

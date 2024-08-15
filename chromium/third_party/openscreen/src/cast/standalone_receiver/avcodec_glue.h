@@ -55,7 +55,7 @@ DEFINE_AV_UNIQUE_PTR(AVFrame, av_frame_alloc, av_frame_free(&obj));
 // its own FF_API* macros that are related to removing APIs (not deprecating
 // them).
 //
-// TODO(https://issuetracker.google.com/224642520): dedup with standalone
+// TODO(issuetracker.google.com/224642520): dedup with standalone
 // sender.
 #define _LIBAVUTIL_OLD_CHANNEL_LAYOUT (LIBAVUTIL_VERSION_MAJOR < 57)
 

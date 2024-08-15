@@ -151,6 +151,8 @@ class CC_EXPORT FrameSequenceMetrics {
       base::TimeDelta frame_interval);
 
  private:
+  friend class FrameSequenceMetricsTest;
+  friend class FrameSequenceTrackerTest;
   // FrameInfo is a merger of two threads' frame production. We should only look
   // at the `final_state`, `last_presented_termination_time` and
   // `termination_time` for the GetEffectiveThread.

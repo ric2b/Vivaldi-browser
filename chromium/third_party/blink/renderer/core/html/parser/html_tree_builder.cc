@@ -1007,22 +1007,22 @@ void HTMLTreeBuilder::ProcessStartTagForInBody(AtomicHTMLToken* token) {
 }
 
 namespace {
-DeclarativeShadowRootType DeclarativeShadowRootTypeFromToken(
+DeclarativeShadowRootMode DeclarativeShadowRootModeFromToken(
     AtomicHTMLToken* token,
     const Document& document,
     bool include_shadow_roots) {
   Attribute* type_attribute =
       token->GetAttributeItem(html_names::kShadowrootmodeAttr);
   if (!type_attribute) {
-    return DeclarativeShadowRootType::kNone;
+    return DeclarativeShadowRootMode::kNone;
   }
   String shadow_mode = type_attribute->Value();
 
   if (include_shadow_roots) {
     if (EqualIgnoringASCIICase(shadow_mode, "open")) {
-      return DeclarativeShadowRootType::kOpen;
+      return DeclarativeShadowRootMode::kOpen;
     } else if (EqualIgnoringASCIICase(shadow_mode, "closed")) {
-      return DeclarativeShadowRootType::kClosed;
+      return DeclarativeShadowRootMode::kClosed;
     }
   }
   if (!include_shadow_roots) {
@@ -1030,7 +1030,8 @@ DeclarativeShadowRootType DeclarativeShadowRootTypeFromToken(
         mojom::blink::ConsoleMessageSource::kOther,
         mojom::blink::ConsoleMessageLevel::kWarning,
         "Found declarative shadowrootmode attribute on a template, but "
-        "declarative Shadow DOM has not been enabled by includeShadowRoots."));
+        "declarative Shadow DOM is not being parsed. Use setHTMLUnsafe() "
+        "or parseHTMLUnsafe() instead."));
   } else {
     document.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::blink::ConsoleMessageSource::kOther,
@@ -1038,7 +1039,7 @@ DeclarativeShadowRootType DeclarativeShadowRootTypeFromToken(
         "Invalid declarative shadowrootmode attribute value \"" + shadow_mode +
             "\". Valid values include \"open\" and \"closed\"."));
   }
-  return DeclarativeShadowRootType::kNone;
+  return DeclarativeShadowRootMode::kNone;
 }
 }  // namespace
 
@@ -1046,7 +1047,7 @@ void HTMLTreeBuilder::ProcessTemplateStartTag(AtomicHTMLToken* token) {
   tree_.ActiveFormattingElements()->AppendMarker();
   tree_.InsertHTMLTemplateElement(
       token,
-      DeclarativeShadowRootTypeFromToken(
+      DeclarativeShadowRootModeFromToken(
           token, tree_.OwnerDocumentForCurrentNode(), include_shadow_roots_));
   frameset_ok_ = false;
   template_insertion_modes_.push_back(kTemplateContentsMode);
@@ -1476,6 +1477,13 @@ void HTMLTreeBuilder::ProcessStartTag(AtomicHTMLToken* token) {
           ProcessEndTag(&end_select);
           break;
         }
+        case HTMLTag::kButton:
+        case HTMLTag::kDatalist:
+          // Don't allow nesting of buttons or datalists in this mode because
+          // when we end these tags we go back to kInSelectMode.
+          // TODO(crbug.com/1511354): Try removing this when kButton and
+          // kDatalist are handled in ResetInsertionModeAppropriately
+          break;
         default:
           ProcessStartTagForInBody(token);
           break;
@@ -1570,7 +1578,11 @@ void HTMLTreeBuilder::ProcessStartTag(AtomicHTMLToken* token) {
           // we are shipping with <button> and <datalist>.
           UseCounter::Count(tree_.CurrentNode()->GetDocument(),
                             WebFeature::kHTMLButtonInSelect);
-          if (RuntimeEnabledFeatures::StylableSelectEnabled()) {
+          // TODO(crbug.com/1511354): Consider adding support for stylable
+          // select in <table>s and remove this kInSelectMode check and the one
+          // in the kDatalist case.
+          if (RuntimeEnabledFeatures::StylableSelectEnabled() &&
+              GetInsertionMode() == kInSelectMode) {
             SetInsertionMode(kInButtonInSelectMode);
             ProcessStartTagForInBody(token);
             return;
@@ -1579,13 +1591,16 @@ void HTMLTreeBuilder::ProcessStartTag(AtomicHTMLToken* token) {
         case HTMLTag::kDatalist:
           UseCounter::Count(tree_.CurrentNode()->GetDocument(),
                             WebFeature::kHTMLDatalistInSelect);
-          if (RuntimeEnabledFeatures::StylableSelectEnabled()) {
+          if (RuntimeEnabledFeatures::StylableSelectEnabled() &&
+              GetInsertionMode() == kInSelectMode) {
             SetInsertionMode(kInDatalistInSelectMode);
             ProcessStartTagForInBody(token);
             return;
           }
           break;
         default:
+          UseCounter::Count(tree_.CurrentNode()->GetDocument(),
+                            WebFeature::kSelectParserDroppedTag);
           break;
       }
       break;
@@ -1831,6 +1846,9 @@ void HTMLTreeBuilder::ResetInsertionModeAppropriately() {
             }
           }
           return SetInsertionMode(kInSelectMode);
+        // TODO(crbug.com/1511354): Consider adding cases for kButton and
+        // kDatalist here to reset the insertion mode to kInButtonInSelectMode
+        // and kInDatalistInSelectMode
         case HTMLTag::kTd:
         case HTMLTag::kTh:
           return SetInsertionMode(kInCellMode);
@@ -2414,11 +2432,7 @@ void HTMLTreeBuilder::ProcessEndTag(AtomicHTMLToken* token) {
     case kInButtonInSelectMode:
       CHECK(RuntimeEnabledFeatures::StylableSelectEnabled());
       switch (tag) {
-        case HTMLTag::kButton:
-          SetInsertionMode(kInSelectMode);
-          break;
         case HTMLTag::kSelect:
-          SetInsertionMode(kInSelectMode);
           tree_.OpenElements()->PopUntilPopped(HTMLTag::kSelect);
           ResetInsertionModeAppropriately();
           return;
@@ -2428,12 +2442,12 @@ void HTMLTreeBuilder::ProcessEndTag(AtomicHTMLToken* token) {
       // TODO(crbug.com/1511354): We need to review which end tags cause which
       // elements to close once there's a reviewed HTML PR for styleable select.
       ProcessEndTagForInBody(token);
+      if (tag == HTMLTag::kButton) {
+        ResetInsertionModeAppropriately();
+      }
       return;
     case kInDatalistInSelectMode:
       switch (tag) {
-        case HTMLTag::kDatalist:
-          SetInsertionMode(kInSelectMode);
-          break;
         case HTMLTag::kSelect:
           SetInsertionMode(kInSelectMode);
           tree_.OpenElements()->PopUntilPopped(HTMLTag::kSelect);
@@ -2443,6 +2457,9 @@ void HTMLTreeBuilder::ProcessEndTag(AtomicHTMLToken* token) {
           break;
       }
       ProcessEndTagForInBody(token);
+      if (tag == HTMLTag::kDatalist) {
+        ResetInsertionModeAppropriately();
+      }
       return;
     case kInSelectInTableMode:
       switch (tag) {

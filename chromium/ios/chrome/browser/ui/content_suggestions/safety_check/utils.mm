@@ -11,7 +11,10 @@
 #import "ios/chrome/browser/passwords/model/password_checkup_utils.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/shared/public/commands/settings_commands.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/content_suggestions/safety_check/safety_check_state.h"
+#import "ios/chrome/browser/ui/content_suggestions/safety_check/utils.h"
 #import "ios/chrome/common/channel_info.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -20,9 +23,6 @@
 #import "url/gurl.h"
 
 namespace {
-
-// The Safety Check should only be run once every 24 hours.
-constexpr base::TimeDelta kSafetyCheckRunThreshold = base::Hours(24);
 
 // The amount of time after which the last run timestamp is shown, instead of
 // displaying the last run "just now" text.
@@ -59,7 +59,6 @@ int UniqueWarningTypeCount(
 }  // namespace
 
 using password_manager::WarningType;
-using password_manager::PasswordCheckReferrer::kSafetyCheckMagicStack;
 using password_manager::WarningType::kCompromisedPasswordsWarning;
 
 void HandleSafetyCheckUpdateChromeTap(
@@ -85,7 +84,7 @@ void HandleSafetyCheckUpdateChromeTap(
 void HandleSafetyCheckPasswordTap(
     std::vector<password_manager::CredentialUIEntry>& compromised_credentials,
     id<ApplicationCommands> applicationHandler,
-    id<ApplicationSettingsCommands> settingsHandler) {
+    id<SettingsCommands> settingsHandler) {
   // If there's only one compromised credential, navigate users to the detail
   // view for that particular credential.
   if (compromised_credentials.size() == 1) {
@@ -107,7 +106,9 @@ void HandleSafetyCheckPasswordTap(
         password_manager::GetWarningOfHighestPriority(compromised_credentials);
     [applicationHandler
         showPasswordIssuesWithWarningType:type
-                                 referrer:kSafetyCheckMagicStack];
+                                 referrer:password_manager::
+                                              PasswordCheckReferrer::
+                                                  kSafetyCheckMagicStack];
     return;
   }
 
@@ -118,7 +119,8 @@ void HandleSafetyCheckPasswordTap(
       base::UserMetricsAction("MobileMagicStackOpenPasswordCheckup"));
 
   [applicationHandler
-      showPasswordCheckupPageForReferrer:kSafetyCheckMagicStack];
+      showPasswordCheckupPageForReferrer:
+          password_manager::PasswordCheckReferrer::kSafetyCheckMagicStack];
 }
 
 bool InvalidUpdateChromeState(UpdateChromeSafetyCheckState state) {
@@ -135,24 +137,6 @@ bool InvalidSafeBrowsingState(SafeBrowsingSafetyCheckState state) {
   return state == SafeBrowsingSafetyCheckState::kUnsafe;
 }
 
-int CheckIssuesCount(SafetyCheckState* state) {
-  int invalid_check_count = 0;
-
-  if (InvalidUpdateChromeState(state.updateChromeState)) {
-    invalid_check_count++;
-  }
-
-  if (InvalidPasswordState(state.passwordState)) {
-    invalid_check_count++;
-  }
-
-  if (InvalidSafeBrowsingState(state.safeBrowsingState)) {
-    invalid_check_count++;
-  }
-
-  return invalid_check_count;
-}
-
 bool CanRunSafetyCheck(std::optional<base::Time> last_run_time) {
   // The Safety Check should be run if it's never been run before.
   if (!last_run_time.has_value()) {
@@ -161,11 +145,7 @@ bool CanRunSafetyCheck(std::optional<base::Time> last_run_time) {
 
   base::TimeDelta last_run_age = base::Time::Now() - last_run_time.value();
 
-  if (last_run_age > kSafetyCheckRunThreshold) {
-    return true;
-  }
-
-  return false;
+  return last_run_age > TimeDelayForSafetyCheckAutorun();
 }
 
 NSString* FormatElapsedTimeSinceLastSafetyCheck(

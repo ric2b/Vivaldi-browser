@@ -37,7 +37,7 @@ OCSPResponse::~OCSPResponse() = default;
 //    issuerKeyHash           OCTET STRING, -- Hash of issuer's public key
 //    serialNumber            CertificateSerialNumber
 // }
-bool ParseOCSPCertID(const der::Input &raw_tlv, OCSPCertID *out) {
+bool ParseOCSPCertID(der::Input raw_tlv, OCSPCertID *out) {
   der::Parser outer_parser(raw_tlv);
   der::Parser parser;
   if (!outer_parser.ReadSequence(&parser)) {
@@ -51,16 +51,16 @@ bool ParseOCSPCertID(const der::Input &raw_tlv, OCSPCertID *out) {
   if (!parser.ReadRawTLV(&sigalg_tlv)) {
     return false;
   }
-  if (!ParseHashAlgorithm(sigalg_tlv, &(out->hash_algorithm))) {
+  if (!ParseHashAlgorithm(sigalg_tlv, &out->hash_algorithm)) {
     return false;
   }
-  if (!parser.ReadTag(der::kOctetString, &(out->issuer_name_hash))) {
+  if (!parser.ReadTag(CBS_ASN1_OCTETSTRING, &out->issuer_name_hash)) {
     return false;
   }
-  if (!parser.ReadTag(der::kOctetString, &(out->issuer_key_hash))) {
+  if (!parser.ReadTag(CBS_ASN1_OCTETSTRING, &out->issuer_key_hash)) {
     return false;
   }
-  if (!parser.ReadTag(der::kInteger, &(out->serial_number))) {
+  if (!parser.ReadTag(CBS_ASN1_INTEGER, &out->serial_number)) {
     return false;
   }
   CertErrors errors;
@@ -82,22 +82,23 @@ namespace {
 //      revocationTime              GeneralizedTime,
 //      revocationReason    [0]     EXPLICIT CRLReason OPTIONAL
 // }
-bool ParseRevokedInfo(const der::Input &raw_tlv, OCSPCertStatus *out) {
+bool ParseRevokedInfo(der::Input raw_tlv, OCSPCertStatus *out) {
   der::Parser parser(raw_tlv);
   if (!parser.ReadGeneralizedTime(&(out->revocation_time))) {
     return false;
   }
 
   der::Input reason_input;
-  if (!parser.ReadOptionalTag(der::ContextSpecificConstructed(0), &reason_input,
-                              &(out->has_reason))) {
+  if (!parser.ReadOptionalTag(
+          CBS_ASN1_CONTEXT_SPECIFIC | CBS_ASN1_CONSTRUCTED | 0, &reason_input,
+          &(out->has_reason))) {
     return false;
   }
   if (out->has_reason) {
     der::Parser reason_parser(reason_input);
     der::Input reason_value_input;
     uint8_t reason_value;
-    if (!reason_parser.ReadTag(der::kEnumerated, &reason_value_input)) {
+    if (!reason_parser.ReadTag(CBS_ASN1_ENUMERATED, &reason_value_input)) {
       return false;
     }
     if (!der::ParseUint8(reason_value_input, &reason_value)) {
@@ -130,23 +131,24 @@ bool ParseRevokedInfo(const der::Input &raw_tlv, OCSPCertStatus *out) {
 // }
 //
 // UnknownInfo ::= NULL
-bool ParseCertStatus(const der::Input &raw_tlv, OCSPCertStatus *out) {
+bool ParseCertStatus(der::Input raw_tlv, OCSPCertStatus *out) {
   der::Parser parser(raw_tlv);
-  der::Tag status_tag;
+  CBS_ASN1_TAG status_tag;
   der::Input status;
   if (!parser.ReadTagAndValue(&status_tag, &status)) {
     return false;
   }
 
   out->has_reason = false;
-  if (status_tag == der::ContextSpecificPrimitive(0)) {
+  if (status_tag == (CBS_ASN1_CONTEXT_SPECIFIC | 0)) {
     out->status = OCSPRevocationStatus::GOOD;
-  } else if (status_tag == der::ContextSpecificConstructed(1)) {
+  } else if (status_tag ==
+             (CBS_ASN1_CONTEXT_SPECIFIC | CBS_ASN1_CONSTRUCTED | 1)) {
     out->status = OCSPRevocationStatus::REVOKED;
     if (!ParseRevokedInfo(status, out)) {
       return false;
     }
-  } else if (status_tag == der::ContextSpecificPrimitive(2)) {
+  } else if (status_tag == (CBS_ASN1_CONTEXT_SPECIFIC | 2)) {
     out->status = OCSPRevocationStatus::UNKNOWN;
   } else {
     return false;
@@ -158,13 +160,13 @@ bool ParseCertStatus(const der::Input &raw_tlv, OCSPCertStatus *out) {
 // Writes the hash of |value| as an OCTET STRING to |cbb|, using |hash_type| as
 // the algorithm. Returns true on success.
 bool AppendHashAsOctetString(const EVP_MD *hash_type, CBB *cbb,
-                             const der::Input &value) {
+                             der::Input value) {
   CBB octet_string;
   unsigned hash_len;
   uint8_t hash_buffer[EVP_MAX_MD_SIZE];
 
   return CBB_add_asn1(cbb, &octet_string, CBS_ASN1_OCTETSTRING) &&
-         EVP_Digest(value.UnsafeData(), value.Length(), hash_buffer, &hash_len,
+         EVP_Digest(value.data(), value.size(), hash_buffer, &hash_len,
                     hash_type, nullptr) &&
          CBB_add_bytes(&octet_string, hash_buffer, hash_len) && CBB_flush(cbb);
 }
@@ -178,8 +180,7 @@ bool AppendHashAsOctetString(const EVP_MD *hash_type, CBB *cbb,
 //      nextUpdate         [0]       EXPLICIT GeneralizedTime OPTIONAL,
 //      singleExtensions   [1]       EXPLICIT Extensions OPTIONAL
 // }
-bool ParseOCSPSingleResponse(const der::Input &raw_tlv,
-                             OCSPSingleResponse *out) {
+bool ParseOCSPSingleResponse(der::Input raw_tlv, OCSPSingleResponse *out) {
   der::Parser outer_parser(raw_tlv);
   der::Parser parser;
   if (!outer_parser.ReadSequence(&parser)) {
@@ -204,8 +205,9 @@ bool ParseOCSPSingleResponse(const der::Input &raw_tlv,
   }
 
   der::Input next_update_input;
-  if (!parser.ReadOptionalTag(der::ContextSpecificConstructed(0),
-                              &next_update_input, &(out->has_next_update))) {
+  if (!parser.ReadOptionalTag(
+          CBS_ASN1_CONTEXT_SPECIFIC | CBS_ASN1_CONSTRUCTED | 0,
+          &next_update_input, &(out->has_next_update))) {
     return false;
   }
   if (out->has_next_update) {
@@ -218,8 +220,9 @@ bool ParseOCSPSingleResponse(const der::Input &raw_tlv,
     }
   }
 
-  if (!parser.ReadOptionalTag(der::ContextSpecificConstructed(1),
-                              &(out->extensions), &(out->has_extensions))) {
+  if (!parser.ReadOptionalTag(
+          CBS_ASN1_CONTEXT_SPECIFIC | CBS_ASN1_CONSTRUCTED | 1,
+          &(out->extensions), &(out->has_extensions))) {
     return false;
   }
 
@@ -235,28 +238,27 @@ namespace {
 //      byName               [1] Name,
 //      byKey                [2] KeyHash
 // }
-bool ParseResponderID(const der::Input &raw_tlv,
-                      OCSPResponseData::ResponderID *out) {
+bool ParseResponderID(der::Input raw_tlv, OCSPResponseData::ResponderID *out) {
   der::Parser parser(raw_tlv);
-  der::Tag id_tag;
+  CBS_ASN1_TAG id_tag;
   der::Input id_input;
   if (!parser.ReadTagAndValue(&id_tag, &id_input)) {
     return false;
   }
 
-  if (id_tag == der::ContextSpecificConstructed(1)) {
+  if (id_tag == (CBS_ASN1_CONTEXT_SPECIFIC | CBS_ASN1_CONSTRUCTED | 1)) {
     out->type = OCSPResponseData::ResponderType::NAME;
     out->name = id_input;
-  } else if (id_tag == der::ContextSpecificConstructed(2)) {
+  } else if (id_tag == (CBS_ASN1_CONTEXT_SPECIFIC | CBS_ASN1_CONSTRUCTED | 2)) {
     der::Parser key_parser(id_input);
     der::Input key_hash;
-    if (!key_parser.ReadTag(der::kOctetString, &key_hash)) {
+    if (!key_parser.ReadTag(CBS_ASN1_OCTETSTRING, &key_hash)) {
       return false;
     }
     if (key_parser.HasMore()) {
       return false;
     }
-    if (key_hash.Length() != SHA_DIGEST_LENGTH) {
+    if (key_hash.size() != SHA_DIGEST_LENGTH) {
       return false;
     }
 
@@ -277,7 +279,7 @@ bool ParseResponderID(const der::Input &raw_tlv,
 //      responses                SEQUENCE OF SingleResponse,
 //      responseExtensions   [1] EXPLICIT Extensions OPTIONAL
 // }
-bool ParseOCSPResponseData(const der::Input &raw_tlv, OCSPResponseData *out) {
+bool ParseOCSPResponseData(der::Input raw_tlv, OCSPResponseData *out) {
   der::Parser outer_parser(raw_tlv);
   der::Parser parser;
   if (!outer_parser.ReadSequence(&parser)) {
@@ -289,8 +291,9 @@ bool ParseOCSPResponseData(const der::Input &raw_tlv, OCSPResponseData *out) {
 
   der::Input version_input;
   bool version_present;
-  if (!parser.ReadOptionalTag(der::ContextSpecificConstructed(0),
-                              &version_input, &version_present)) {
+  if (!parser.ReadOptionalTag(
+          CBS_ASN1_CONTEXT_SPECIFIC | CBS_ASN1_CONSTRUCTED | 0, &version_input,
+          &version_present)) {
     return false;
   }
 
@@ -337,8 +340,9 @@ bool ParseOCSPResponseData(const der::Input &raw_tlv, OCSPResponseData *out) {
     out->responses.push_back(single_response);
   }
 
-  if (!parser.ReadOptionalTag(der::ContextSpecificConstructed(1),
-                              &(out->extensions), &(out->has_extensions))) {
+  if (!parser.ReadOptionalTag(
+          CBS_ASN1_CONTEXT_SPECIFIC | CBS_ASN1_CONSTRUCTED | 1,
+          &(out->extensions), &(out->has_extensions))) {
     return false;
   }
 
@@ -357,7 +361,7 @@ namespace {
 //      signature            BIT STRING,
 //      certs            [0] EXPLICIT SEQUENCE OF Certificate OPTIONAL
 // }
-bool ParseBasicOCSPResponse(const der::Input &raw_tlv, OCSPResponse *out) {
+bool ParseBasicOCSPResponse(der::Input raw_tlv, OCSPResponse *out) {
   der::Parser outer_parser(raw_tlv);
   der::Parser parser;
   if (!outer_parser.ReadSequence(&parser)) {
@@ -387,8 +391,9 @@ bool ParseBasicOCSPResponse(const der::Input &raw_tlv, OCSPResponse *out) {
   }
   out->signature = signature.value();
   der::Input certs_input;
-  if (!parser.ReadOptionalTag(der::ContextSpecificConstructed(0), &certs_input,
-                              &(out->has_certs))) {
+  if (!parser.ReadOptionalTag(
+          CBS_ASN1_CONTEXT_SPECIFIC | CBS_ASN1_CONSTRUCTED | 0, &certs_input,
+          &(out->has_certs))) {
     return false;
   }
 
@@ -425,7 +430,7 @@ bool ParseBasicOCSPResponse(const der::Input &raw_tlv, OCSPResponse *out) {
 //      responseType   OBJECT IDENTIFIER,
 //      response       OCTET STRING
 // }
-bool ParseOCSPResponse(const der::Input &raw_tlv, OCSPResponse *out) {
+bool ParseOCSPResponse(der::Input raw_tlv, OCSPResponse *out) {
   der::Parser outer_parser(raw_tlv);
   der::Parser parser;
   if (!outer_parser.ReadSequence(&parser)) {
@@ -437,7 +442,7 @@ bool ParseOCSPResponse(const der::Input &raw_tlv, OCSPResponse *out) {
 
   der::Input response_status_input;
   uint8_t response_status;
-  if (!parser.ReadTag(der::kEnumerated, &response_status_input)) {
+  if (!parser.ReadTag(CBS_ASN1_ENUMERATED, &response_status_input)) {
     return false;
   }
   if (!der::ParseUint8(response_status_input, &response_status)) {
@@ -455,8 +460,9 @@ bool ParseOCSPResponse(const der::Input &raw_tlv, OCSPResponse *out) {
   if (out->status == OCSPResponse::ResponseStatus::SUCCESSFUL) {
     der::Parser outer_bytes_parser;
     der::Parser bytes_parser;
-    if (!parser.ReadConstructed(der::ContextSpecificConstructed(0),
-                                &outer_bytes_parser)) {
+    if (!parser.ReadConstructed(
+            CBS_ASN1_CONTEXT_SPECIFIC | CBS_ASN1_CONSTRUCTED | 0,
+            &outer_bytes_parser)) {
       return false;
     }
     if (!outer_bytes_parser.ReadSequence(&bytes_parser)) {
@@ -467,7 +473,7 @@ bool ParseOCSPResponse(const der::Input &raw_tlv, OCSPResponse *out) {
     }
 
     der::Input type_oid;
-    if (!bytes_parser.ReadTag(der::kOid, &type_oid)) {
+    if (!bytes_parser.ReadTag(CBS_ASN1_OBJECT, &type_oid)) {
       return false;
     }
     if (type_oid != der::Input(kBasicOCSPResponseOid)) {
@@ -477,7 +483,7 @@ bool ParseOCSPResponse(const der::Input &raw_tlv, OCSPResponse *out) {
     // As per RFC 6960 Section 4.2.1, the value of |response| SHALL be the DER
     // encoding of BasicOCSPResponse.
     der::Input response;
-    if (!bytes_parser.ReadTag(der::kOctetString, &response)) {
+    if (!bytes_parser.ReadTag(CBS_ASN1_OCTETSTRING, &response)) {
       return false;
     }
     if (!ParseBasicOCSPResponse(response, out)) {
@@ -494,12 +500,11 @@ bool ParseOCSPResponse(const der::Input &raw_tlv, OCSPResponse *out) {
 namespace {
 
 // Checks that the |type| hash of |value| is equal to |hash|
-bool VerifyHash(const EVP_MD *type, const der::Input &hash,
-                const der::Input &value) {
+bool VerifyHash(const EVP_MD *type, der::Input hash, der::Input value) {
   unsigned value_hash_len;
   uint8_t value_hash[EVP_MAX_MD_SIZE];
-  if (!EVP_Digest(value.UnsafeData(), value.Length(), value_hash,
-                  &value_hash_len, type, nullptr)) {
+  if (!EVP_Digest(value.data(), value.size(), value_hash, &value_hash_len, type,
+                  nullptr)) {
     return false;
   }
 
@@ -521,10 +526,10 @@ bool VerifyHash(const EVP_MD *type, const der::Input &hash,
 //     algorithm               OBJECT IDENTIFIER,
 //     parameters              ANY DEFINED BY algorithm OPTIONAL  }
 //
-bool GetSubjectPublicKeyBytes(const der::Input &spki_tlv, der::Input *spk_tlv) {
+bool GetSubjectPublicKeyBytes(der::Input spki_tlv, der::Input *spk_tlv) {
   CBS outer, inner, alg, spk;
   uint8_t unused_bit_count;
-  CBS_init(&outer, spki_tlv.UnsafeData(), spki_tlv.Length());
+  CBS_init(&outer, spki_tlv.data(), spki_tlv.size());
   //   The subjectPublicKey field includes the unused bit count. For this
   //   application, the unused bit count must be zero, and is not included in
   //   the result. We extract the subjectPubicKey bit string, verify the first
@@ -610,9 +615,9 @@ std::shared_ptr<const ParsedCertificate> OCSPParseCertificate(
     case OCSPResponseData::ResponderType::NAME: {
       der::Input name_rdn;
       der::Input cert_rdn;
-      if (!der::Parser(id.name).ReadTag(der::kSequence, &name_rdn) ||
+      if (!der::Parser(id.name).ReadTag(CBS_ASN1_SEQUENCE, &name_rdn) ||
           !der::Parser(cert->tbs().subject_tlv)
-               .ReadTag(der::kSequence, &cert_rdn)) {
+               .ReadTag(CBS_ASN1_SEQUENCE, &cert_rdn)) {
         return false;
       }
       return VerifyNameMatch(name_rdn, cert_rdn);
@@ -699,7 +704,7 @@ std::shared_ptr<const ParsedCertificate> OCSPParseCertificate(
   //  (3) Has signed the OCSP response using its public key.
   for (const auto &responder_cert_tlv : response.certs) {
     std::shared_ptr<const ParsedCertificate> cur_responder_certificate =
-        OCSPParseCertificate(responder_cert_tlv.AsStringView());
+        OCSPParseCertificate(BytesAsStringView(responder_cert_tlv));
 
     // If failed parsing the certificate, keep looking.
     if (!cur_responder_certificate) {
@@ -735,7 +740,7 @@ std::shared_ptr<const ParsedCertificate> OCSPParseCertificate(
 // Parse ResponseData and return false if any unhandled critical extensions are
 // found. No known critical ResponseData extensions exist.
 bool ParseOCSPResponseDataExtensions(
-    const der::Input &response_extensions,
+    der::Input response_extensions,
     OCSPVerifyResult::ResponseStatus *response_details) {
   std::map<der::Input, ParsedExtension> extensions;
   if (!ParseExtensions(response_extensions, &extensions)) {
@@ -760,7 +765,7 @@ bool ParseOCSPResponseDataExtensions(
 // to be marked critical, but since it is handled by Chrome, we will overlook
 // the flag setting.
 bool ParseOCSPSingleResponseExtensions(
-    const der::Input &single_extensions,
+    der::Input single_extensions,
     OCSPVerifyResult::ResponseStatus *response_details) {
   std::map<der::Input, ParsedExtension> extensions;
   if (!ParseExtensions(single_extensions, &extensions)) {
@@ -1060,8 +1065,8 @@ bool CreateOCSPRequest(const ParsedCertificate *cert,
   if (!CBB_add_asn1(&req_cert, &serial_number, CBS_ASN1_INTEGER)) {
     return false;
   }
-  if (!CBB_add_bytes(&serial_number, cert->tbs().serial_number.UnsafeData(),
-                     cert->tbs().serial_number.Length())) {
+  if (!CBB_add_bytes(&serial_number, cert->tbs().serial_number.data(),
+                     cert->tbs().serial_number.size())) {
     return false;
   }
 

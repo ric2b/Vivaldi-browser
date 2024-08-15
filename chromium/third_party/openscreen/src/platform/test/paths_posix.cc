@@ -11,7 +11,7 @@ namespace {
 
 std::string ReadTestDataPath() {
   std::string exe_path = GetExePath();
-  OSP_DCHECK(!exe_path.empty());
+  OSP_CHECK(!exe_path.empty());
 
   // NOTE: This assumes that the executable is two directories above the source
   // root (e.g. out/Debug/unittests).  This is the standard layout GN expects
@@ -24,7 +24,7 @@ std::string ReadTestDataPath() {
       break;
     }
   }
-  OSP_DCHECK_EQ(slashes_found, 3);
+  OSP_CHECK_EQ(slashes_found, 3);
 
   return exe_path.substr(0, i + 1) + OPENSCREEN_TEST_DATA_DIR;
 }

@@ -836,7 +836,7 @@ ci.builder(
     ),
     gn_args = gn_args.config(
         configs = [
-            "android_builder",
+            "android_builder_without_codecs",
             "cronet_android",
             "debug_static_builder",
             "reclient",
@@ -881,7 +881,7 @@ ci.builder(
     ),
     gn_args = gn_args.config(
         configs = [
-            "android_builder",
+            "android_builder_without_codecs",
             "cronet_android",
             "official_optimize",
             "release_builder",
@@ -923,7 +923,7 @@ ci.builder(
     ),
     gn_args = gn_args.config(
         configs = [
-            "android_builder",
+            "android_builder_without_codecs",
             "cronet_android",
             "debug_static_builder",
             "reclient",
@@ -961,7 +961,7 @@ ci.builder(
     ),
     gn_args = gn_args.config(
         configs = [
-            "android_builder",
+            "android_builder_without_codecs",
             "cronet_android",
             "official_optimize",
             "release_builder",
@@ -1002,7 +1002,7 @@ ci.builder(
     ),
     gn_args = gn_args.config(
         configs = [
-            "android_builder",
+            "android_builder_without_codecs",
             "cronet_android",
             "release_builder",
             "reclient",
@@ -1044,7 +1044,7 @@ ci.builder(
     ),
     gn_args = gn_args.config(
         configs = [
-            "android_builder",
+            "android_builder_without_codecs",
             "cronet_android",
             "debug_static_builder",
             "reclient",
@@ -1084,7 +1084,7 @@ ci.builder(
     ),
     gn_args = gn_args.config(
         configs = [
-            "android_builder",
+            "android_builder_without_codecs",
             "cronet_android",
             "official_optimize",
             "release_builder",
@@ -1104,88 +1104,9 @@ ci.builder(
     notifies = ["cronet"],
 )
 
-# Compiles with Android Mainline Clang
-ci.builder(
-    name = "android-cronet-mainline-clang-riscv64-dbg",
-    builder_spec = builder_config.builder_spec(
-        gclient_config = builder_config.gclient_config(
-            config = "chromium",
-            apply_configs = ["android"],
-        ),
-        chromium_config = builder_config.chromium_config(
-            config = "android",
-            apply_configs = [
-                "cronet_builder",
-                "mb",
-            ],
-            build_config = builder_config.build_config.DEBUG,
-            target_bits = 64,
-            target_platform = builder_config.target_platform.ANDROID,
-        ),
-        android_config = builder_config.android_config(config = "main_builder"),
-        build_gs_bucket = "chromium-android-archive",
-    ),
-    gn_args = gn_args.config(
-        configs = [
-            "android_builder",
-            "cronet_android",
-            "debug_static_builder",
-            "reclient",
-            "riscv64",
-            "cronet_android_mainline_clang",
-        ],
-    ),
-    sheriff_rotations = args.ignore_default(None),
-    console_view_entry = consoles.console_view_entry(
-        category = "cronet|mainline_clang|riscv64",
-        short_name = "dbg",
-    ),
-    contact_team_email = "cronet-team@google.com",
-    notifies = ["cronet"],
-)
-
-# Compiles with Android Mainline Clang
-ci.builder(
-    name = "android-cronet-mainline-clang-riscv64-rel",
-    builder_spec = builder_config.builder_spec(
-        gclient_config = builder_config.gclient_config(
-            config = "chromium",
-            apply_configs = ["android"],
-        ),
-        chromium_config = builder_config.chromium_config(
-            config = "android",
-            apply_configs = [
-                "cronet_builder",
-                "mb",
-            ],
-            build_config = builder_config.build_config.RELEASE,
-            target_bits = 64,
-            target_platform = builder_config.target_platform.ANDROID,
-        ),
-        android_config = builder_config.android_config(config = "main_builder"),
-        build_gs_bucket = "chromium-android-archive",
-    ),
-    gn_args = gn_args.config(
-        configs = [
-            "android_builder",
-            "cronet_android",
-            "official_optimize",
-            "release_builder",
-            "reclient",
-            "minimal_symbols",
-            "riscv64",
-            "strip_debug_info",
-            "cronet_android_mainline_clang",
-        ],
-    ),
-    sheriff_rotations = args.ignore_default(None),
-    console_view_entry = consoles.console_view_entry(
-        category = "cronet|mainline_clang|riscv64",
-        short_name = "rel",
-    ),
-    contact_team_email = "cronet-team@google.com",
-    notifies = ["cronet"],
-)
+# TODO: crbug.com/41484811 - Bring back builder definitions
+# "android-cronet-mainline-clang-riscv64-dbg" and
+# "android-cronet-mainline-clang-riscv64-rel" in this location.
 
 # Compiles with Android Mainline Clang
 ci.builder(
@@ -1215,7 +1136,7 @@ ci.builder(
     ),
     gn_args = gn_args.config(
         configs = [
-            "android_builder",
+            "android_builder_without_codecs",
             "cronet_android",
             "debug_static_builder",
             "reclient",
@@ -1255,7 +1176,7 @@ ci.builder(
     ),
     gn_args = gn_args.config(
         configs = [
-            "android_builder",
+            "android_builder_without_codecs",
             "cronet_android",
             "official_optimize",
             "release_builder",
@@ -1281,7 +1202,7 @@ ci.builder(
     executable = "recipe:cronet",
     gn_args = gn_args.config(
         configs = [
-            "android_builder",
+            "android_builder_without_codecs",
             "cronet_android",
             "official_optimize",
             "release_builder",
@@ -1326,7 +1247,7 @@ ci.builder(
     ),
     gn_args = gn_args.config(
         configs = [
-            "android_builder",
+            "android_builder_without_codecs",
             "cronet_android",
             "debug_static_builder",
             "reclient",
@@ -1364,7 +1285,7 @@ ci.builder(
     ),
     gn_args = gn_args.config(
         configs = [
-            "android_builder",
+            "android_builder_without_codecs",
             "cronet_android",
             "official_optimize",
             "release_builder",
@@ -1410,7 +1331,7 @@ ci.builder(
     ),
     gn_args = gn_args.config(
         configs = [
-            "android_builder",
+            "android_builder_without_codecs",
             "cronet_android",
             "debug_static_builder",
             "reclient",
@@ -1453,7 +1374,7 @@ ci.builder(
     ),
     gn_args = gn_args.config(
         configs = [
-            "android_builder",
+            "android_builder_without_codecs",
             "cronet_android",
             "debug_static_builder",
             "reclient",
@@ -1843,7 +1764,7 @@ ci.builder(
     ),
     gn_args = gn_args.config(
         configs = [
-            "android_builder",
+            "android_builder_without_codecs",
             "cronet_android",
             "official_optimize",
             "release_builder",
@@ -1884,7 +1805,7 @@ ci.builder(
     ),
     gn_args = gn_args.config(
         configs = [
-            "android_builder",
+            "android_builder_without_codecs",
             "cronet_android",
             "official_optimize",
             "release_builder",

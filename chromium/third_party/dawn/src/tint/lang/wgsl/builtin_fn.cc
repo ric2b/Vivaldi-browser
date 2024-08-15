@@ -72,6 +72,9 @@ BuiltinFn ParseBuiltinFn(std::string_view name) {
     if (name == "atanh") {
         return BuiltinFn::kAtanh;
     }
+    if (name == "bitcast") {
+        return BuiltinFn::kBitcast;
+    }
     if (name == "ceil") {
         return BuiltinFn::kCeil;
     }
@@ -405,7 +408,7 @@ BuiltinFn ParseBuiltinFn(std::string_view name) {
     if (name == "subgroupBroadcast") {
         return BuiltinFn::kSubgroupBroadcast;
     }
-    if (name == "_tint_materialize") {
+    if (name == "__tint_materialize") {
         return BuiltinFn::kTintMaterialize;
     }
     return BuiltinFn::kNone;
@@ -437,6 +440,8 @@ const char* str(BuiltinFn i) {
             return "atan2";
         case BuiltinFn::kAtanh:
             return "atanh";
+        case BuiltinFn::kBitcast:
+            return "bitcast";
         case BuiltinFn::kCeil:
             return "ceil";
         case BuiltinFn::kClamp:
@@ -660,7 +665,7 @@ const char* str(BuiltinFn i) {
         case BuiltinFn::kSubgroupBroadcast:
             return "subgroupBroadcast";
         case BuiltinFn::kTintMaterialize:
-            return "_tint_materialize";
+            return "__tint_materialize";
     }
     return "<unknown>";
 }
@@ -747,6 +752,18 @@ bool HasSideEffects(BuiltinFn f) {
         case BuiltinFn::kAtomicStore:
         case BuiltinFn::kAtomicSub:
         case BuiltinFn::kAtomicXor:
+        case BuiltinFn::kDpdx:
+        case BuiltinFn::kDpdxCoarse:
+        case BuiltinFn::kDpdxFine:
+        case BuiltinFn::kDpdy:
+        case BuiltinFn::kDpdyCoarse:
+        case BuiltinFn::kDpdyFine:
+        case BuiltinFn::kFwidth:
+        case BuiltinFn::kFwidthCoarse:
+        case BuiltinFn::kFwidthFine:
+        case BuiltinFn::kTextureSample:
+        case BuiltinFn::kTextureSampleBias:
+        case BuiltinFn::kTextureSampleCompare:
         case BuiltinFn::kTextureStore:
         case BuiltinFn::kWorkgroupUniformLoad:
             return true;

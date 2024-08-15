@@ -6,7 +6,6 @@
 #define CONTENT_BROWSER_STORAGE_PARTITION_IMPL_H_
 
 #include <stdint.h>
-
 #include <map>
 #include <memory>
 #include <string>
@@ -42,15 +41,15 @@
 #include "mojo/public/cpp/bindings/unique_receiver_set.h"
 #include "net/cookies/cookie_setting_override.h"
 #include "services/network/public/cpp/network_service_buildflags.h"
-#include "services/network/public/mojom/cert_verifier_service.mojom.h"
-#include "services/network/public/mojom/cookie_manager.mojom.h"
-#include "services/network/public/mojom/network_context.mojom.h"
+#include "services/network/public/mojom/cert_verifier_service_updater.mojom.h"
+#include "services/network/public/mojom/network_context_client.mojom.h"
 #include "storage/browser/blob/blob_url_registry.h"
 #include "storage/browser/quota/quota_client_type.h"
 #include "storage/browser/quota/quota_settings.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/dom_storage/dom_storage.mojom.h"
+#include "third_party/blink/public/mojom/frame/remote_frame.mojom.h"
 
 namespace leveldb_proto {
 class ProtoDatabaseProvider;
@@ -59,6 +58,12 @@ class ProtoDatabaseProvider;
 namespace net {
 class IsolationInfo;
 }  // namespace net
+
+namespace network {
+namespace mojom {
+class SharedDictionaryAccessObserver;
+}  // namespace mojom
+}  // namespace network
 
 namespace storage {
 class SharedStorageManager;
@@ -77,6 +82,7 @@ class KeepAliveURLLoaderService;
 class BucketManager;
 class CacheStorageControlWrapper;
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+class CdmStorageDataModel;
 class CdmStorageManager;
 class MediaLicenseManager;
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
@@ -91,13 +97,13 @@ class HostZoomLevelContext;
 class IndexedDBControlWrapper;
 class InterestGroupManagerImpl;
 class LockManager;
+class NavigationStateKeepAlive;
 class PaymentAppContextImpl;
 class PrivateAggregationDataModel;
 class PrivateAggregationManager;
 class PrivateAggregationManagerImpl;
 class PushMessagingContext;
 class QuotaContext;
-class SharedDictionaryAccessObserver;
 class SharedStorageHeaderObserver;
 class SharedStorageWorkletHostManager;
 class SharedWorkerServiceImpl;
@@ -122,18 +128,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   // StoragePartition uses. This method generates that representation.
   static storage::QuotaClientTypes GenerateQuotaClientTypes(
       uint32_t remove_mask);
-
-  // Allows overriding the URLLoaderFactory creation for
-  // GetURLLoaderFactoryForBrowserProcess.
-  // Passing a null callback will restore the default behavior.
-  // This method must be called either on the UI thread or before threads start.
-  // This callback is run on the UI thread.
-  using CreateNetworkFactoryCallback = base::RepeatingCallback<
-      mojo::PendingRemote<network::mojom::URLLoaderFactory>(
-          mojo::PendingRemote<network::mojom::URLLoaderFactory>
-              original_factory)>;
-  static void SetGetURLLoaderFactoryForBrowserProcessCallbackForTesting(
-      CreateNetworkFactoryCallback url_loader_factory_callback);
 
   // Forces Storage Service instances to be run in-process.
   static void ForceInProcessStorageServiceForTesting();
@@ -214,6 +208,9 @@ class CONTENT_EXPORT StoragePartitionImpl
   AttributionDataModel* GetAttributionDataModel() override;
   PrivateAggregationDataModel* GetPrivateAggregationDataModel() override;
   CookieDeprecationLabelManager* GetCookieDeprecationLabelManager() override;
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+  CdmStorageDataModel* GetCdmStorageDataModel() override;
+#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
   void SetProtoDatabaseProvider(
       std::unique_ptr<leveldb_proto::ProtoDatabaseProvider> proto_db_provider)
@@ -282,7 +279,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   FontAccessManager* GetFontAccessManager();
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   MediaLicenseManager* GetMediaLicenseManager();
-  CdmStorageManager* GetCdmStorageManager();
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
   storage::SharedStorageManager* GetSharedStorageManager() override;
@@ -346,6 +342,8 @@ class CONTENT_EXPORT StoragePartitionImpl
   void Clone(
       mojo::PendingReceiver<network::mojom::URLLoaderNetworkServiceObserver>
           listener) override;
+  void OnWebSocketConnectedToPrivateNetwork(
+      network::mojom::IPAddressSpace ip_address_space) override;
   void OnAuthRequired(
       const std::optional<base::UnguessableToken>& window_id,
       uint32_t request_id,
@@ -467,56 +465,19 @@ class CONTENT_EXPORT StoragePartitionImpl
   // Called by BrowserContextImpl prior to destruction.
   void OnBrowserContextWillBeDestroyed();
 
-  class URLLoaderNetworkContext {
-   public:
-    enum class Type {
-      kRenderFrameHostContext,
-      kNavigationRequestContext,
-      kServiceWorkerContext,
-    };
+  // Store `receiver` and its corresponding `handle`. These will be kept alive
+  // as long as the remote endpoint of `receiver` is still alive on the renderer
+  // side. The receiver will be automatically deleted when the endpoint is
+  // disconnected.
+  void RegisterKeepAliveHandle(
+      mojo::PendingReceiver<blink::mojom::NavigationStateKeepAliveHandle>
+          receiver,
+      std::unique_ptr<NavigationStateKeepAlive> handle);
 
-    ~URLLoaderNetworkContext();
-
-    // Allow copy and assign.
-    URLLoaderNetworkContext(const URLLoaderNetworkContext& other);
-    URLLoaderNetworkContext& operator=(const URLLoaderNetworkContext& other);
-
-    // Creates a URLLoaderNetworkContext for the RenderFrameHost.
-    static StoragePartitionImpl::URLLoaderNetworkContext
-    CreateForRenderFrameHost(
-        GlobalRenderFrameHostId global_render_frame_host_id);
-
-    // Creates a URLLoaderNetworkContext for the navigation request.
-    static StoragePartitionImpl::URLLoaderNetworkContext CreateForNavigation(
-        NavigationRequest& navigation_request);
-
-    // Used when `type` is `kRenderFrameHostContext`.
-    explicit URLLoaderNetworkContext(
-        GlobalRenderFrameHostId global_render_frame_host_id);
-
-    // Used when `type` is `kServiceWorkerContext`.
-    explicit URLLoaderNetworkContext(int process_id);
-
-    // Used when `type` is `kNavigationRequestContext`.
-    explicit URLLoaderNetworkContext(NavigationRequest& navigation_request);
-
-    // Returns true if `type` is `kNavigationRequestContext`.
-    bool IsNavigationRequestContext() const;
-
-    Type type() const { return type_; }
-
-    NavigationOrDocumentHandle* navigation_or_document() const {
-      return navigation_or_document_.get();
-    }
-
-    int process_id() const { return process_id_; }
-
-   private:
-    Type type_;
-    scoped_refptr<NavigationOrDocumentHandle> navigation_or_document_;
-
-    // Only valid when `type_` is kServiceWorkerContext.
-    int process_id_ = content::ChildProcessHost::kInvalidUniqueID;
+  enum class ContextType {
+    kRenderFrameHostContext,
+    kNavigationRequestContext,
+    kServiceWorkerContext,
   };
 
  private:
@@ -526,6 +487,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   class ServiceWorkerCookieAccessObserver;
   class ServiceWorkerTrustTokenAccessObserver;
   class ServiceWorkerSharedDictionaryAccessObserver;
+  struct NetworkContextOwner;
 
   friend class BackgroundSyncManagerTest;
   friend class BackgroundSyncServiceImplTestHarness;
@@ -568,6 +530,59 @@ class CONTENT_EXPORT StoragePartitionImpl
                            RemoveProtectedLocalStorageForever);
   FRIEND_TEST_ALL_PREFIXES(StoragePartitionImplTest,
                            RemoveLocalStorageForLastWeek);
+
+  class URLLoaderNetworkContext {
+   public:
+    ~URLLoaderNetworkContext();
+
+    // Allow copy and assign.
+    URLLoaderNetworkContext(const URLLoaderNetworkContext& other);
+    URLLoaderNetworkContext& operator=(const URLLoaderNetworkContext& other);
+
+    // Creates a URLLoaderNetworkContext for the RenderFrameHost.
+    static StoragePartitionImpl::URLLoaderNetworkContext
+    CreateForRenderFrameHost(
+        GlobalRenderFrameHostId global_render_frame_host_id);
+
+    // Creates a URLLoaderNetworkContext for the navigation request.
+    static StoragePartitionImpl::URLLoaderNetworkContext CreateForNavigation(
+        NavigationRequest& navigation_request);
+
+    // Used when `type` is `kRenderFrameHostContext`.
+    explicit URLLoaderNetworkContext(
+        GlobalRenderFrameHostId global_render_frame_host_id);
+
+    // Used when `type` is `kServiceWorkerContext`.
+    explicit URLLoaderNetworkContext(int process_id);
+
+    // Used when `type` is `kNavigationRequestContext`.
+    explicit URLLoaderNetworkContext(NavigationRequest& navigation_request);
+
+    // Returns true if `type` is `kNavigationRequestContext`.
+    bool IsNavigationRequestContext() const;
+
+    ContextType type() const { return type_; }
+
+    NavigationOrDocumentHandle* navigation_or_document() const {
+      return navigation_or_document_.get();
+    }
+
+    int process_id() const { return process_id_; }
+
+    // If `type_` is kServiceWorkerContext, returns nullptr. Otherwise returns
+    // the WebContents.
+    WebContents* GetWebContents();
+
+    // Returns true if the request is the primary main frame navigation.
+    bool IsPrimaryMainFrameRequest();
+
+   private:
+    ContextType type_;
+    scoped_refptr<NavigationOrDocumentHandle> navigation_or_document_;
+
+    // Only valid when `type_` is kServiceWorkerContext.
+    int process_id_ = content::ChildProcessHost::kInvalidUniqueID;
+  };
 
   // `relative_partition_path` is the relative path under `profile_path` to the
   // StoragePartition's on-disk-storage.
@@ -644,6 +659,8 @@ class CONTENT_EXPORT StoragePartitionImpl
   std::optional<blink::StorageKey> CalculateStorageKey(
       const url::Origin& origin,
       const base::UnguessableToken* nonce);
+
+  GlobalRenderFrameHostId GetRenderFrameHostIdFromNetworkContext();
 
   void VivaldiUpdateBlobUrlRegistryWithFallback(storage::BlobUrlRegistry* fallback);
 
@@ -745,13 +762,9 @@ class CONTENT_EXPORT StoragePartitionImpl
   std::map<mojo::ReceiverId, mojo::Remote<blink::mojom::DomStorageClient>>
       dom_storage_clients_;
 
-  // This is the NetworkContext used to
-  // make requests for the StoragePartition. When the network service is
-  // enabled, the underlying NetworkContext will be owned by the network
-  // service. When it's disabled, the underlying NetworkContext may either be
-  // provided by the embedder, or is created by the StoragePartition and owned
-  // by `network_context_owner_`.
-  mojo::Remote<network::mojom::NetworkContext> network_context_;
+  // Owns the NetworkContext used to make requests for the StoragePartition.
+  // Forward declared so we don't need to include network_context.mojom.h here.
+  std::unique_ptr<NetworkContextOwner> network_context_owner_;
 
   mojo::Receiver<network::mojom::NetworkContextClient>
       network_context_client_receiver_{this};
@@ -809,6 +822,21 @@ class CONTENT_EXPORT StoragePartitionImpl
       url_loader_network_observers_;
 
   int next_pending_trust_token_issuance_callback_key_ = 0;
+
+  // Active keepalive handles for in-flight navigations. They are retained
+  // on `StoragePartition` because, by design, they may need to outlive the
+  // `RenderFrameHostImpl` that initiated the navigation, but shouldn't be used
+  // in a different StoragePartition.
+  // Note that this set may contain in-flight navigations for different
+  // RenderFrameHosts, and furthermore, there may even be multiple in-flight
+  // navigations for a single RenderFrameHost.
+  // Lookups should not be done from this set. Accessing PolicyContainerHosts
+  // kept alive by NavigationStateKeepAlive should be done through
+  // PolicyContainerHost::FromFrameToken.
+  // TODO(crbug.com/323753235, yangsharon): Add token keep alive map to
+  // StoragePartition.
+  mojo::UniqueReceiverSet<blink::mojom::NavigationStateKeepAliveHandle>
+      keep_alive_handles_receiver_set_;
 
 #if DCHECK_IS_ON()
   bool on_browser_context_will_be_destroyed_called_ = false;

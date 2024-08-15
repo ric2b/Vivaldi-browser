@@ -38,6 +38,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/console_message.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/service_worker_context.h"
@@ -1296,8 +1297,14 @@ class WebUsbExtensionFeatureDisabledBrowserTest
   }
 };
 
+// TODO(crbug.com/1521554): Flaky on non-Mac release builds.
+#if !BUILDFLAG(IS_MAC) && defined(NDEBUG)
+#define MAYBE_FeatureDisabled DISABLED_FeatureDisabled
+#else
+#define MAYBE_FeatureDisabled FeatureDisabled
+#endif
 IN_PROC_BROWSER_TEST_F(WebUsbExtensionFeatureDisabledBrowserTest,
-                       FeatureDisabled) {
+                       MAYBE_FeatureDisabled) {
   constexpr base::StringPiece kBackgroundJs = R"(
     chrome.test.sendMessage("ready", async () => {
       try {
@@ -1311,7 +1318,13 @@ IN_PROC_BROWSER_TEST_F(WebUsbExtensionFeatureDisabledBrowserTest,
   LoadExtensionAndRunTest(kBackgroundJs);
 }
 
-IN_PROC_BROWSER_TEST_F(WebUsbExtensionBrowserTest, GetDevices) {
+// TODO(crbug.com/1521554): Flaky on non-Mac release builds.
+#if !BUILDFLAG(IS_MAC) && defined(NDEBUG)
+#define MAYBE_GetDevices DISABLED_GetDevices
+#else
+#define MAYBE_GetDevices GetDevices
+#endif
+IN_PROC_BROWSER_TEST_F(WebUsbExtensionBrowserTest, MAYBE_GetDevices) {
   constexpr base::StringPiece kBackgroundJs = R"(
     chrome.test.sendMessage("ready", async () => {
       try {
@@ -1327,7 +1340,13 @@ IN_PROC_BROWSER_TEST_F(WebUsbExtensionBrowserTest, GetDevices) {
   LoadExtensionAndRunTest(kBackgroundJs);
 }
 
-IN_PROC_BROWSER_TEST_F(WebUsbExtensionBrowserTest, RequestDevice) {
+// TODO(crbug.com/1521554): Flaky on non-Mac release builds.
+#if !BUILDFLAG(IS_MAC) && defined(NDEBUG)
+#define MAYBE_RequestDevice DISABLED_RequestDevice
+#else
+#define MAYBE_RequestDevice RequestDevice
+#endif
+IN_PROC_BROWSER_TEST_F(WebUsbExtensionBrowserTest, MAYBE_RequestDevice) {
   constexpr base::StringPiece kBackgroundJs = R"(
     chrome.test.sendMessage("ready", async () => {
       try {
@@ -1341,7 +1360,13 @@ IN_PROC_BROWSER_TEST_F(WebUsbExtensionBrowserTest, RequestDevice) {
   LoadExtensionAndRunTest(kBackgroundJs);
 }
 
-IN_PROC_BROWSER_TEST_F(WebUsbExtensionBrowserTest, UsbConnectionTracker) {
+// TODO(crbug.com/1521554): Flaky on non-Mac release builds.
+#if !BUILDFLAG(IS_MAC) && defined(NDEBUG)
+#define MAYBE_UsbConnectionTracker DISABLED_UsbConnectionTracker
+#else
+#define MAYBE_UsbConnectionTracker UsbConnectionTracker
+#endif
+IN_PROC_BROWSER_TEST_F(WebUsbExtensionBrowserTest, MAYBE_UsbConnectionTracker) {
   constexpr char kBackgroundJs[] = R"(
     // |device| is a global variable to store UsbDevice object being tested in
     // case the local one is garbage collected, which can close the connection.
@@ -1370,8 +1395,17 @@ IN_PROC_BROWSER_TEST_F(WebUsbExtensionBrowserTest, UsbConnectionTracker) {
 
 // Test the scenario of waking up the service worker upon device events and
 // the service worker being kept alive with active device session.
-IN_PROC_BROWSER_TEST_F(WebUsbExtensionBrowserTest,
-                       DeviceConnectAndOpenDeviceWhenServiceWorkerStopped) {
+// TODO(crbug.com/1521554): Flaky on non-Mac release builds.
+#if !BUILDFLAG(IS_MAC) && defined(NDEBUG)
+#define MAYBE_DeviceConnectAndOpenDeviceWhenServiceWorkerStopped \
+  DISABLED_DeviceConnectAndOpenDeviceWhenServiceWorkerStopped
+#else
+#define MAYBE_DeviceConnectAndOpenDeviceWhenServiceWorkerStopped \
+  DeviceConnectAndOpenDeviceWhenServiceWorkerStopped
+#endif
+IN_PROC_BROWSER_TEST_F(
+    WebUsbExtensionBrowserTest,
+    MAYBE_DeviceConnectAndOpenDeviceWhenServiceWorkerStopped) {
   content::ServiceWorkerContext* context = browser()
                                                ->profile()
                                                ->GetDefaultStoragePartition()
@@ -1473,8 +1507,16 @@ IN_PROC_BROWSER_TEST_F(WebUsbExtensionBrowserTest,
   SimulateClickOnSystemTrayIconButton(browser(), extension);
 }
 
+// TODO(crbug.com/1521554): Flaky on non-Mac release builds.
+#if !BUILDFLAG(IS_MAC) && defined(NDEBUG)
+#define MAYBE_EventListenerAddedAfterServiceWorkerIsActivated \
+  DISABLED_EventListenerAddedAfterServiceWorkerIsActivated
+#else
+#define MAYBE_EventListenerAddedAfterServiceWorkerIsActivated \
+  EventListenerAddedAfterServiceWorkerIsActivated
+#endif
 IN_PROC_BROWSER_TEST_F(WebUsbExtensionBrowserTest,
-                       EventListenerAddedAfterServiceWorkerIsActivated) {
+                       MAYBE_EventListenerAddedAfterServiceWorkerIsActivated) {
   const char kWarningMessage[] =
       "Event handler of '%s' event must be added on the initial evaluation "
       "of worker script. More info: "

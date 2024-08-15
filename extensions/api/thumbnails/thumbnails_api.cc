@@ -68,7 +68,7 @@ struct CaptureData {
   std::string title;
 
   // Output parameters
-  absl::optional<bool> success;
+  std::optional<bool> success;
   std::string base64;
   base::FilePath image_path;
 };
@@ -337,7 +337,7 @@ void ShowFolderIfNecessary(content::BrowserContext* browser_context,
 ExtensionFunction::ResponseAction ThumbnailsCaptureUIFunction::Run() {
   using vivaldi::thumbnails::CaptureUI::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
@@ -420,7 +420,7 @@ void ThumbnailsCaptureUIFunction::SendResult(
 ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
   using vivaldi::thumbnails::CaptureTab::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   auto data = std::make_unique<CaptureData>();
@@ -550,7 +550,7 @@ void ThumbnailsCaptureBookmarkFunction::OnProfileWillBeDestroyed(Profile* profil
 ExtensionFunction::ResponseAction ThumbnailsCaptureBookmarkFunction::Run() {
   using vivaldi::thumbnails::CaptureBookmark::Params;
 
-  absl::optional<Params> params(Params::Create(args()));
+  std::optional<Params> params(Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   int64_t bookmark_id;

@@ -53,9 +53,8 @@ constexpr char kClassroomHomePage[] = "https://classroom.google.com/u/0/h";
 
 ClassroomBubbleBaseView::ClassroomBubbleBaseView(
     std::unique_ptr<ui::ComboboxModel> combobox_model)
-    : GlanceableTrayChildBubble(/*for_glanceables_container=*/true) {
-  layout_manager_ = SetLayoutManager(std::make_unique<views::FlexLayout>());
-  layout_manager_
+    : GlanceableTrayChildBubble(/*use_glanceables_container_style=*/true) {
+  SetLayoutManager(std::make_unique<views::FlexLayout>())
       ->SetInteriorMargin(gfx::Insets::TLBR(kInteriorGlanceableBubbleMargin,
                                             kInteriorGlanceableBubbleMargin, 0,
                                             kInteriorGlanceableBubbleMargin))
@@ -210,11 +209,12 @@ void ClassroomBubbleBaseView::OnGetAssignments(
       MaybeDismissErrorMessage();
     } else {
       ShowErrorMessage(
-          l10n_util::GetStringUTF16(IDS_GLANCEABLES_CLASSROOM_FETCH_ERROR));
-
-      // Explicitly signal to the layout manager to ignore the view.
-      layout_manager_->SetChildViewIgnoredByLayout(error_message(),
-                                                   /*ignored=*/true);
+          l10n_util::GetStringUTF16(IDS_GLANCEABLES_CLASSROOM_FETCH_ERROR),
+          base::BindRepeating(
+              &ClassroomBubbleBaseView::MaybeDismissErrorMessage,
+              base::Unretained(this)),
+          GlanceablesErrorMessageView::ButtonActionType::kDismiss);
+      error_message()->SetProperty(views::kViewIgnoredByLayoutKey, true);
     }
   }
 }
@@ -248,7 +248,7 @@ void ClassroomBubbleBaseView::OnHeaderIconPressed() {
   OpenUrl(GURL(kClassroomHomePage));
 }
 
-BEGIN_METADATA(ClassroomBubbleBaseView, views::View)
+BEGIN_METADATA(ClassroomBubbleBaseView)
 END_METADATA
 
 }  // namespace ash

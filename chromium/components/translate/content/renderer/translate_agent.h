@@ -6,6 +6,7 @@
 #define COMPONENTS_TRANSLATE_CONTENT_RENDERER_TRANSLATE_AGENT_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/gtest_prod_util.h"
@@ -17,7 +18,6 @@
 #include "content/public/renderer/render_frame_observer.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 namespace blink {
@@ -43,6 +43,9 @@ class TranslateAgent : public content::RenderFrameObserver,
 
   // Informs us that the page's text has been extracted.
   void PageCaptured(const std::u16string& contents);
+
+  // Updates page registration in translate driver.
+  void RenewPageRegistration();
 
   // Lets the translation system know that we are preparing to navigate to
   // the specified URL. If there is anything that can or should be done before
@@ -116,10 +119,6 @@ class TranslateAgent : public content::RenderFrameObserver,
   // script was run successfully. Otherwise, returns 0.
   virtual int64_t ExecuteScriptAndGetIntegerResult(const std::string& script);
 
-  // Cancels any translation that is currently being performed.  This does not
-  // revert existing translations.
-  void CancelPendingTranslation();
-
  private:
   FRIEND_TEST_ALL_PREFIXES(TranslateAgentTest, TestBuildTranslationScript);
 
@@ -139,6 +138,12 @@ class TranslateAgent : public content::RenderFrameObserver,
 
   // RenderFrameObserver implementation.
   void OnDestruct() override;
+
+ protected:  // Vivaldi
+  // Cancels any translation that is currently being performed.  This does not
+  // revert existing translations.
+  void CancelPendingTranslation();
+ private:
 
   // Checks if the current running page translation is finished or errored and
   // notifies the browser accordingly.  If the translation has not terminated,
@@ -186,6 +191,8 @@ class TranslateAgent : public content::RenderFrameObserver,
   // LanguageDetectionTabHelper (which implements the ContentTranslateDriver
   // Mojo interface).
   mojo::Remote<mojom::ContentTranslateDriver> translate_handler_;
+
+  std::optional<LanguageDetectionDetails> last_details_;
 
   mojo::Receiver<mojom::TranslateAgent> receiver_{this};
 

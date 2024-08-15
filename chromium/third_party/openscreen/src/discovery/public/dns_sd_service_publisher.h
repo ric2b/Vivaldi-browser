@@ -40,7 +40,7 @@ class DnsSdServicePublisher : public DnsSdPublisher::Client {
       : conversion_(conversion),
         service_name_(std::move(service_name)),
         publisher_(service ? service->GetPublisher() : nullptr) {
-    OSP_DCHECK(publisher_);
+    OSP_CHECK(publisher_);
   }
 
   ~DnsSdServicePublisher() = default;

@@ -65,6 +65,7 @@ class ChromeSigninClient : public SigninClient {
       bool has_sync_account) override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   network::mojom::CookieManager* GetCookieManager() override;
+  network::mojom::NetworkContext* GetNetworkContext() override;
   bool AreSigninCookiesAllowed() override;
   bool AreSigninCookiesDeletedOnExit() override;
   void AddContentSettingsObserver(
@@ -77,10 +78,13 @@ class ChromeSigninClient : public SigninClient {
       GaiaAuthConsumer* consumer,
       gaia::GaiaSource source) override;
   version_info::Channel GetClientChannel() override;
-  void OnPrimaryAccountChangedWithEventSource(
-      signin::PrimaryAccountChangeEvent event_details,
-      absl::variant<signin_metrics::AccessPoint, signin_metrics::ProfileSignout>
-          event_source) override;
+  void OnPrimaryAccountChanged(
+      signin::PrimaryAccountChangeEvent event_details) override;
+
+#if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+  std::unique_ptr<signin::BoundSessionOAuthMultiLoginDelegate>
+  CreateBoundSessionOAuthMultiloginDelegate() const override;
+#endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   std::optional<account_manager::Account> GetInitialPrimaryAccount() override;

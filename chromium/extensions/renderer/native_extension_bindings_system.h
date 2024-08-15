@@ -10,6 +10,7 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/common/mojom/event_dispatcher.mojom-forward.h"
 #include "extensions/renderer/api/messaging/native_renderer_messaging_service.h"
 #include "extensions/renderer/bindings/api_binding_types.h"
@@ -158,7 +159,7 @@ class NativeExtensionBindingsSystem {
   // content scripts running in an isolated world.
   void SetScriptingParams(ScriptContext* context);
 
-  const raw_ptr<Delegate, ExperimentalRenderer> delegate_;
+  const raw_ptr<Delegate> delegate_;
 
   std::unique_ptr<IPCMessageSender> ipc_message_sender_;
 

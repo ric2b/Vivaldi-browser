@@ -100,29 +100,29 @@
             "name": "menu",
             "type": "string",
             "description": "Menu resource name."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "id",
-                "type": "string",
-                "description": "Root id of the menu."
-              },
-              {
-                "name": "role",
-                "$ref": "Role",
-                "description": "Describes how the menu can be used."
-              },
-              {
-                "name": "result",
-                "type": "array",
-                "items": { "$ref": "MenuTreeNode" }
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "does_not_support_promises": "vivaldi",
+          "parameters": [
+            {
+              "name": "id",
+              "type": "string",
+              "description": "Root id of the menu."
+            },
+            {
+              "name": "role",
+              "$ref": "Role",
+              "description": "Describes how the menu can be used."
+            },
+            {
+              "name": "result",
+              "type": "array",
+              "items": { "$ref": "MenuTreeNode" }
+            }
+          ]
+        }
       },
       {
         "name": "move",
@@ -181,23 +181,23 @@
             "name": "items",
             "type": "array",
             "items": { "$ref": "MenuTreeNode" }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "result",
-                "type": "boolean"
-              },
-              {
-                "name": "ids",
-                "type": "array",
-                "items": { "type": "string" }
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "does_not_support_promises": "vivaldi",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            },
+            {
+              "name": "ids",
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          ]
+        }
       },
       {
         "name": "remove",

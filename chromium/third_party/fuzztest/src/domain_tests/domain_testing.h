@@ -39,7 +39,6 @@
 #include "./fuzztest/internal/meta.h"
 #include "./fuzztest/internal/serialization.h"
 #include "./fuzztest/internal/test_protobuf.pb.h"
-#include "./fuzztest/internal/type_support.h"
 #include "google/protobuf/util/field_comparator.h"
 #include "google/protobuf/util/message_differencer.h"
 
@@ -576,6 +575,16 @@ inline bool TowardsZero(const internal::TestProtobuf& prev,
     ADD_FAILURE() << "Failed on field: " << error_field;
     return false;
   }
+}
+
+// Returns the number of iterations needed to hit `num_cases`, with the
+// probability of hitting a case given as `hit_probability`, so that the
+// probability of failure is upper-bounded by `10^(-confidence_level)`.
+inline int IterationsToHitAll(int num_cases, double hit_probability,
+                              int confidence_level = 15) {
+  return static_cast<int>(
+      -(confidence_level * std::log(10) + std::log(num_cases)) /
+      std::log(1.0 - hit_probability));
 }
 
 }  // namespace fuzztest

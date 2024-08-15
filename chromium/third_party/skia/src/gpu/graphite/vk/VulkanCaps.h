@@ -79,12 +79,12 @@ public:
 
     bool supportsYcbcrConversion() const { return fSupportsYcbcrConversion; }
 
+    bool supportsDeviceFaultInfo() const { return fSupportsDeviceFaultInfo; }
+
     uint32_t maxVertexAttributes() const {
         return fMaxVertexAttributes;
     }
     uint64_t maxUniformBufferRange() const { return fMaxUniformBufferRange; }
-
-    uint64_t getRenderPassDescKey(const RenderPassDesc& renderPassDesc) const;
 
     const VkPhysicalDeviceMemoryProperties2& physicalDeviceMemoryProperties2() const {
         return fPhysicalDeviceMemoryProperties2;
@@ -235,6 +235,7 @@ private:
     bool fShouldAlwaysUseDedicatedImageMemory = false;
     bool fGpuOnlyBuffersMorePerformant = false;
     bool fShouldPersistentlyMapCpuToGpuBuffers = true;
+    bool fSupportsDeviceFaultInfo = false;
 };
 
 } // namespace skgpu::graphite

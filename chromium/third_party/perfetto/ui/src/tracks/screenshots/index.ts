@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import {uuidv4} from '../../base/uuid';
 import {AddTrackArgs} from '../../common/actions';
+import {GenericSliceDetailsTabConfig} from '../../frontend/generic_slice_details_tab';
+import {NamedSliceTrackTypes} from '../../frontend/named_slice_track';
 import {
-  NamedSliceTrackTypes,
-} from '../../frontend/named_slice_track';
-import {
+  BottomTabToSCSAdapter,
   NUM,
   Plugin,
   PluginContext,
@@ -31,9 +32,7 @@ import {
   CustomSqlTableSliceTrack,
 } from '../custom_sql_table_slices';
 
-import {
-  ScreenshotTab,
-} from './screenshot_panel';
+import {ScreenshotTab} from './screenshot_panel';
 
 class ScreenshotsTrack extends CustomSqlTableSliceTrack<NamedSliceTrackTypes> {
   static readonly kind = 'dev.perfetto.ScreenshotsTrack';
@@ -57,18 +56,20 @@ class ScreenshotsTrack extends CustomSqlTableSliceTrack<NamedSliceTrackTypes> {
 }
 
 export type DecideTracksResult = {
-  tracksToAdd: AddTrackArgs[],
+  tracksToAdd: AddTrackArgs[];
 };
 
 // TODO(stevegolton): Use suggestTrack().
-export async function decideTracks(engine: Engine):
-    Promise<DecideTracksResult> {
+export async function decideTracks(
+  engine: Engine,
+): Promise<DecideTracksResult> {
   const result: DecideTracksResult = {
     tracksToAdd: [],
   };
 
-  const res =
-      await engine.query('select count() as count from android_screenshots');
+  const res = await engine.query(
+    'select count() as count from android_screenshots',
+  );
   const {count} = res.firstRow({count: NUM});
 
   if (count > 0) {
@@ -89,7 +90,8 @@ class ScreenshotsPlugin implements Plugin {
     await ctx.engine.query(`INCLUDE PERFETTO MODULE android.screenshots`);
 
     const res = await ctx.engine.query(
-        'select count() as count from android_screenshots');
+      'select count() as count from android_screenshots',
+    );
     const {count} = res.firstRow({count: NUM});
 
     if (count > 0) {
@@ -99,13 +101,32 @@ class ScreenshotsPlugin implements Plugin {
         uri,
         displayName,
         kind: ScreenshotsTrack.kind,
-        track: ({trackKey}) => {
+        trackFactory: ({trackKey}) => {
           return new ScreenshotsTrack({
             engine: ctx.engine,
             trackKey,
           });
         },
       });
+
+      ctx.registerDetailsPanel(
+        new BottomTabToSCSAdapter({
+          tabFactory: (selection) => {
+            if (
+              selection.kind === 'GENERIC_SLICE' &&
+              selection.detailsPanelConfig.kind === ScreenshotTab.kind
+            ) {
+              const config = selection.detailsPanelConfig.config;
+              return new ScreenshotTab({
+                config: config as GenericSliceDetailsTabConfig,
+                engine: ctx.engine,
+                uuid: uuidv4(),
+              });
+            }
+            return undefined;
+          },
+        }),
+      );
     }
   }
 }

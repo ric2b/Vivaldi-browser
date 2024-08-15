@@ -107,7 +107,7 @@ class HlsRenditionImplUnittest : public testing::Test {
     }
     return std::make_unique<HlsRenditionImpl>(mock_mdeh_.get(), mock_hrh_.get(),
                                               "test", std::move(parsed).value(),
-                                              absl::nullopt, uri);
+                                              std::nullopt, uri);
   }
 
   MOCK_METHOD(void, CheckStateComplete, (base::TimeDelta delay), ());
@@ -255,7 +255,7 @@ TEST_F(HlsRenditionImplUnittest, TestNonRealTimePlaybackRate) {
   auto rendition =
       MakeLiveRendition(GURL("http://example.com"), kInitialFetchPlaylist);
   ASSERT_NE(rendition, nullptr);
-  ASSERT_EQ(rendition->GetDuration(), absl::nullopt);
+  ASSERT_EQ(rendition->GetDuration(), std::nullopt);
 
   // Any rate not 0.0 or 1.0 should error.
   EXPECT_CALL(*mock_mdeh_, OnError(_));
@@ -267,7 +267,7 @@ TEST_F(HlsRenditionImplUnittest, TestCreateRenditionPaused) {
   auto rendition =
       MakeLiveRendition(GURL("http://example.com"), kInitialFetchPlaylist);
   ASSERT_NE(rendition, nullptr);
-  ASSERT_EQ(rendition->GetDuration(), absl::nullopt);
+  ASSERT_EQ(rendition->GetDuration(), std::nullopt);
 
   // CheckState causes the rentidion to:
   // Check buffered ranges first
@@ -288,7 +288,7 @@ TEST_F(HlsRenditionImplUnittest, TestPausedRenditionHasSomeData) {
   auto rendition =
       MakeLiveRendition(GURL("http://example.com"), kInitialFetchPlaylist);
   ASSERT_NE(rendition, nullptr);
-  ASSERT_EQ(rendition->GetDuration(), absl::nullopt);
+  ASSERT_EQ(rendition->GetDuration(), std::nullopt);
 
   // CheckState causes the rentidion to:
   // Check buffered ranges first. In this case, we've loaded a bunch of content
@@ -311,7 +311,7 @@ TEST_F(HlsRenditionImplUnittest, TestPausedRenditionHasEnoughBufferedData) {
   auto rendition =
       MakeLiveRendition(GURL("http://example.com"), kInitialFetchPlaylist);
   ASSERT_NE(rendition, nullptr);
-  ASSERT_EQ(rendition->GetDuration(), absl::nullopt);
+  ASSERT_EQ(rendition->GetDuration(), std::nullopt);
 
   // CheckState causes the rentidion to:
   // Check buffered ranges first. In this case, we've loaded a bunch of content
@@ -333,7 +333,7 @@ TEST_F(HlsRenditionImplUnittest, TestRenditionHasEnoughDataFetchNewManifest) {
   auto rendition =
       MakeLiveRendition(GURL("http://example.com"), kInitialFetchPlaylist);
   ASSERT_NE(rendition, nullptr);
-  ASSERT_EQ(rendition->GetDuration(), absl::nullopt);
+  ASSERT_EQ(rendition->GetDuration(), std::nullopt);
 
   // CheckState causes the rentidion to:
   // Check buffered ranges first. In this case, we've loaded a bunch of content
@@ -348,9 +348,10 @@ TEST_F(HlsRenditionImplUnittest, TestRenditionHasEnoughDataFetchNewManifest) {
   task_environment_.FastForwardBy(base::Seconds(23));
   EXPECT_CALL(*mock_hrh_,
               UpdateRenditionManifestUri("test", GURL("http://example.com"), _))
-      .WillOnce([](std::string role, GURL uri, base::OnceClosure cb) {
-        std::move(cb).Run();
-      });
+      .WillOnce(
+          [](std::string role, GURL uri, base::OnceCallback<void(bool)> cb) {
+            std::move(cb).Run(true);
+          });
 
   // CheckState should in this case respond with a delay of 12 - 10/2 seconds.
   rendition->CheckState(base::Seconds(0), 0.0,
@@ -362,7 +363,7 @@ TEST_F(HlsRenditionImplUnittest, TestRenditionHasEnoughDataDeleteOldContent) {
   auto rendition =
       MakeLiveRendition(GURL("http://example.com"), kInitialFetchPlaylist);
   ASSERT_NE(rendition, nullptr);
-  ASSERT_EQ(rendition->GetDuration(), absl::nullopt);
+  ASSERT_EQ(rendition->GetDuration(), std::nullopt);
 
   // CheckState causes the rentidion to:
   // Check buffered ranges first. In this case, we've loaded a bunch of content
@@ -399,7 +400,7 @@ TEST_F(HlsRenditionImplUnittest, TestPauseAndUnpause) {
   auto rendition =
       MakeLiveRendition(GURL("http://example.com"), kInitialFetchPlaylist);
   ASSERT_NE(rendition, nullptr);
-  ASSERT_EQ(rendition->GetDuration(), absl::nullopt);
+  ASSERT_EQ(rendition->GetDuration(), std::nullopt);
 
   ON_CALL(*mock_mdeh_, OnError(_)).WillByDefault([](PipelineStatus st) {
     LOG(ERROR) << MediaSerialize(st);
@@ -457,7 +458,7 @@ TEST_F(HlsRenditionImplUnittest, TestPauseAndUnpause) {
   // come back with a 0 second delay.
   EXPECT_CALL(*mock_mdeh_, RequestSeek(base::Seconds(202)));
   EXPECT_CALL(*mock_hrh_, UpdateRenditionManifestUri("test", _, _))
-      .WillOnce(base::test::RunOnceClosure<2>());
+      .WillOnce(base::test::RunOnceCallback<2>(true));
   task_environment_.FastForwardBy(base::Seconds(190));
   rendition->CheckState(base::Seconds(10), 1.0,
                         BindCheckState(base::Seconds(0)));

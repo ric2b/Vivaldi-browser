@@ -27,7 +27,7 @@ import {Spinner} from '../widgets/spinner';
 
 function isVegaLite(spec: unknown): boolean {
   if (typeof spec === 'object') {
-    const schema = (spec as {'$schema': unknown})['$schema'];
+    const schema = (spec as {$schema: unknown})['$schema'];
     if (schema !== undefined && isString(schema)) {
       // If the schema is available use that:
       return schema.includes('vega-lite');
@@ -42,13 +42,11 @@ export interface VegaViewData {
   [name: string]: any;
 }
 
-
 interface VegaViewAttrs {
   spec: string;
   data: VegaViewData;
   engine?: EngineProxy;
 }
-
 
 // VegaWrapper is in exactly one of these states:
 enum Status {
@@ -63,12 +61,11 @@ enum Status {
   Done,
 }
 
-
 class EngineLoader implements vega.Loader {
   private engine?: EngineProxy;
   private loader: vega.Loader;
 
-  constructor(engine: EngineProxy|undefined) {
+  constructor(engine: EngineProxy | undefined) {
     this.engine = engine;
     this.loader = vega.loader();
   }
@@ -78,7 +75,7 @@ class EngineLoader implements vega.Loader {
     if (this.engine === undefined) {
       return '';
     }
-    const result = this.engine.query(uri);
+    const result = this.engine.execute(uri);
     try {
       await result.waitAllRows();
     } catch (e) {
@@ -158,7 +155,7 @@ class VegaWrapper {
     this.updateView();
   }
 
-  set engine(engine: EngineProxy|undefined) {
+  set engine(engine: EngineProxy | undefined) {
     this._engine = engine;
   }
 
@@ -215,12 +212,12 @@ class VegaWrapper {
 
       const pending = this.view.runAsync();
       pending
-          .then(() => {
-            this.handleComplete(pending);
-          })
-          .catch((err) => {
-            this.handleError(pending, err);
-          });
+        .then(() => {
+          this.handleComplete(pending);
+        })
+        .catch((err) => {
+          this.handleError(pending, err);
+        });
       this.pending = pending;
       this._status = Status.Loading;
     }
@@ -292,12 +289,12 @@ export class VegaView implements m.ClassComponent<VegaViewAttrs> {
 
   view(_: m.Vnode<VegaViewAttrs>) {
     return m(
-        '.pf-vega-view',
-        m(''),
-        (this.wrapper?.status === Status.Loading) &&
-            m('.pf-vega-view-status', m(Spinner)),
-        (this.wrapper?.status === Status.Error) &&
-            m('.pf-vega-view-status', this.wrapper?.error ?? 'Error'),
+      '.pf-vega-view',
+      m(''),
+      this.wrapper?.status === Status.Loading &&
+        m('.pf-vega-view-status', m(Spinner)),
+      this.wrapper?.status === Status.Error &&
+        m('.pf-vega-view-status', this.wrapper?.error ?? 'Error'),
     );
   }
 }

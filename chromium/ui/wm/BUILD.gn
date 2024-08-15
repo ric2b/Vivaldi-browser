@@ -40,6 +40,8 @@ component("wm") {
     "core/focus_rules.h",
     "core/native_cursor_manager.h",
     "core/native_cursor_manager_delegate.h",
+    "core/scoped_animation_disabler.cc",
+    "core/scoped_animation_disabler.h",
     "core/shadow_controller.cc",
     "core/shadow_controller.h",
     "core/shadow_controller_delegate.h",
@@ -88,11 +90,13 @@ component("wm") {
   ]
 
   deps = [
+    "//cc/paint",
     "//skia",
     "//ui/base/ime",
     "//ui/compositor_extra",
     "//ui/events/platform",
     "//ui/gfx/animation",
+    "//ui/lottie",
     "//ui/resources",
   ]
 

@@ -105,8 +105,8 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/process_manager.h"
+#include "extensions/browser/service_worker/service_worker_task_queue.h"
 #include "extensions/browser/service_worker/service_worker_test_utils.h"
-#include "extensions/browser/service_worker_task_queue.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/extension_features.h"
 #include "extensions/common/features/feature.h"
@@ -134,6 +134,7 @@
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
+#include "services/network/public/cpp/url_loader_factory_builder.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/test/test_url_loader_client.h"
 #include "third_party/blink/public/common/features.h"
@@ -358,7 +359,7 @@ class ExtensionWebRequestApiTest : public ExtensionApiTest {
         network::mojom::URLLoaderFactoryParams::New();
     params->process_id = network::mojom::kBrowserProcessId;
     params->automatically_assign_isolation_info = true;
-    params->is_corb_enabled = false;
+    params->is_orb_enabled = false;
     mojo::PendingRemote<network::mojom::URLLoaderFactory> loader_factory;
     profile()
         ->GetDefaultStoragePartition()
@@ -847,9 +848,6 @@ enum class ProfileMode {
 };
 
 struct ARTestParams {
-  ARTestParams(ProfileMode profile_mode, ContextType context_type)
-      : profile_mode(profile_mode), context_type(context_type) {}
-
   ProfileMode profile_mode;
   ContextType context_type;
 };
@@ -1029,8 +1027,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiTestWithContextType,
       << message_;
 }
 
-// TODO(crbug.com/1450976): test is flaky on Mac11.
-#if BUILDFLAG(IS_MAC)
+// TODO: crbug.com/1450976 - Re-enable tests on Mac and Lacros.
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #define MAYBE_WebRequestCORSWithExtraHeaders \
   DISABLED_WebRequestCORSWithExtraHeaders
 #else
@@ -1144,8 +1142,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiTestWithContextType,
   ResultCatcher catcher;
 
   ExtensionRegistry* registry = ExtensionRegistry::Get(browser()->profile());
-  const Extension* extension = registry->GetExtensionById(
-      last_loaded_extension_id(), extensions::ExtensionRegistry::ENABLED);
+  const Extension* extension =
+      registry->enabled_extensions().GetByID(last_loaded_extension_id());
   GURL url = extension->GetResourceURL("newTab/a.html");
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
@@ -2001,7 +1999,8 @@ class ExtensionWebRequestApiWebTransportTest
 
 // Test that the webRequest events are dispatched for the WebTransport
 // handshake.
-IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiWebTransportTest, Main) {
+// TODO(crbug.com/326122304): Re-enable this test
+IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiWebTransportTest, DISABLED_Main) {
   ASSERT_TRUE(RunTest("test_webtransport.html")) << message_;
 }
 
@@ -2296,8 +2295,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
   api->ForceProxyForTesting();
   temp_profile->GetDefaultStoragePartition()->FlushNetworkInterfaceForTesting();
 
-  mojo::Remote<network::mojom::URLLoaderFactory> factory;
-  auto pending_receiver = factory.BindNewPipeAndPassReceiver();
+  network::URLLoaderFactoryBuilder factory_builder;
+
   auto temp_web_contents =
       WebContents::Create(WebContents::CreateParams(temp_profile.get()));
   content::RenderFrameHost* frame = temp_web_contents->GetPrimaryMainFrame();
@@ -2305,14 +2304,16 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
       frame->GetProcess()->GetBrowserContext(), frame,
       frame->GetProcess()->GetID(),
       content::ContentBrowserClient::URLLoaderFactoryType::kDocumentSubResource,
-      std::nullopt, ukm::kInvalidSourceIdObj, &pending_receiver, nullptr,
+      std::nullopt, ukm::kInvalidSourceIdObj, factory_builder, nullptr,
       nullptr));
   temp_web_contents.reset();
   auto params = network::mojom::URLLoaderFactoryParams::New();
   params->process_id = 0;
-  temp_profile->GetDefaultStoragePartition()
-      ->GetNetworkContext()
-      ->CreateURLLoaderFactory(std::move(pending_receiver), std::move(params));
+  mojo::Remote<network::mojom::URLLoaderFactory> factory(
+      std::move(factory_builder)
+          .Finish<mojo::PendingRemote<network::mojom::URLLoaderFactory>>(
+              temp_profile->GetDefaultStoragePartition()->GetNetworkContext(),
+              std::move(params)));
 
   network::TestURLLoaderClient client;
   mojo::PendingRemote<network::mojom::URLLoader> loader;
@@ -3361,9 +3362,6 @@ IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiTestWithContextType,
 }
 
 struct SWTestParams {
-  SWTestParams(bool extra_info_spec, ContextType context_type)
-      : extra_info_spec(extra_info_spec), context_type(context_type) {}
-
   // This parameter is for opt_extraInfoSpec passed to addEventListener.
   // 'blocking' and 'requestHeaders' if it's false, and 'extraHeaders' in
   // addition to them if it's true.
@@ -4146,9 +4144,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
 }
 
 struct SWBTestParams {
-  SWBTestParams(bool extra_info_spec, ContextType context_type)
-      : extra_info_spec(extra_info_spec), context_type(context_type) {}
-
   // The parameter is for opt_extraInfoSpec passed to addEventListener.
   // 'blocking' if it's false, and 'extraHeaders' in addition to them
   // if it's true.
@@ -5092,9 +5087,6 @@ enum class RedirectType {
 };
 
 struct RITestParams {
-  RITestParams(RedirectType redirect_type, ContextType context_type)
-      : redirect_type(redirect_type), context_type(context_type) {}
-
   RedirectType redirect_type;
   ContextType context_type;
 };

@@ -204,18 +204,17 @@
             "type": "integer",
             "name": "instanceId",
             "description": "The instance ID of the guest <webview> process."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "audible",
-                "type": "boolean"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "audible",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "setAudioMuted",
@@ -243,18 +242,17 @@
             "type": "integer",
             "name": "instanceId",
             "description": "The instance ID of the guest <webview> process."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "muted",
-                "type": "boolean"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "muted",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "executeScript",
@@ -275,23 +273,22 @@
             "$ref": "extensionTypes.InjectDetails",
             "name": "details",
             "description": "Details of the script to run."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "description": "Called after all the JavaScript has been executed.",
-            "parameters": [
-              {
-                "name": "result",
-                "optional": true,
-                "type": "array",
-                "items": {"type": "any", "minimum": 0},
-                "description": "The result of the script in every injected frame."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "description": "Called after all the JavaScript has been executed.",
+          "parameters": [
+            {
+              "name": "result",
+              "optional": true,
+              "type": "array",
+              "items": {"type": "any", "minimum": 0},
+              "description": "The result of the script in every injected frame."
+            }
+          ]
+        }
       },
       {
         "name": "insertCSS",
@@ -312,15 +309,14 @@
             "$ref": "extensionTypes.InjectDetails",
             "name": "details",
             "description": "Details of the CSS text to insert."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "description": "Called when all the CSS has been inserted.",
-            "parameters": []
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "description": "Called when all the CSS has been inserted.",
+          "parameters": []
+        }
       },
       {
         "name": "addContentScripts",
@@ -379,15 +375,14 @@
             "type": "number",
             "name": "zoomFactor",
             "description" : "The new zoom factor."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "description": "Called after the zoom message has been sent to the guest process.",
-            "optional": true,
-            "parameters": []
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Called after the zoom message has been sent to the guest process.",
+          "optional": true,
+          "parameters": []
+        }
       },
       {
         "name": "getZoom",
@@ -397,20 +392,19 @@
             "type": "integer",
             "name": "instanceId",
             "description": "The instance ID of the guest <webview> process."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "description": "Called after the current zoom factor is retrieved.",
-            "parameters": [
-              {
-                "type": "number",
-                "name": "zoomFactor",
-                "description": "The current zoom factor."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Called after the current zoom factor is retrieved.",
+          "parameters": [
+            {
+              "type": "number",
+              "name": "zoomFactor",
+              "description": "The current zoom factor."
+            }
+          ]
+        }
       },
       {
         "name": "setZoomMode",
@@ -426,15 +420,14 @@
             "$ref": "ZoomMode",
             "name": "ZoomMode",
             "description": "Defines how zooming is handled in the webview."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "description": "Called after the zoom mode has been changed.",
-            "optional": true,
-            "parameters": []
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Called after the zoom mode has been changed.",
+          "optional": true,
+          "parameters": []
+        }
       },
       {
         "name": "getZoomMode",
@@ -445,20 +438,19 @@
             "type": "integer",
             "name": "instanceId",
             "description": "The instance ID of the guest <webview> process."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "description": "Called with the webview's current zoom mode.",
-            "parameters": [
-              {
-                "$ref": "ZoomMode",
-                "name": "ZoomMode",
-                "description": "The webview's current zoom mode."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Called with the webview's current zoom mode.",
+          "parameters": [
+            {
+              "$ref": "ZoomMode",
+              "name": "ZoomMode",
+              "description": "The webview's current zoom mode."
+            }
+          ]
+        }
       },
       {
         "name": "find",
@@ -496,53 +488,52 @@
                 "optional": true
               }
             }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "description": "Called after all find results have been returned for this find request.",
-            "optional": true,
-            "parameters": [
-              {
-                "type": "object",
-                "name": "results",
-                "optional": true,
-                "properties": {
-                  "numberOfMatches": {
-                    "type": "integer",
-                    "description": "The number of times |searchText| was matched on the page."
-                  },
-                  "activeMatchOrdinal": {
-                    "type": "integer",
-                    "description": "The ordinal number of the current match."
-                  },
-                  "selectionRect": {
-                    "type": "object",
-                    "description": "Describes a rectangle around the active match.",
-                    "properties": {
-                      "left": {
-                        "type": "integer"
-                      },
-                      "top": {
-                        "type": "integer"
-                      },
-                      "width": {
-                        "type": "integer"
-                      },
-                      "height": {
-                        "type": "integer"
-                      }
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Called after all find results have been returned for this find request.",
+          "optional": true,
+          "parameters": [
+            {
+              "type": "object",
+              "name": "results",
+              "optional": true,
+              "properties": {
+                "numberOfMatches": {
+                  "type": "integer",
+                  "description": "The number of times |searchText| was matched on the page."
+                },
+                "activeMatchOrdinal": {
+                  "type": "integer",
+                  "description": "The ordinal number of the current match."
+                },
+                "selectionRect": {
+                  "type": "object",
+                  "description": "Describes a rectangle around the active match.",
+                  "properties": {
+                    "left": {
+                      "type": "integer"
+                    },
+                    "top": {
+                      "type": "integer"
+                    },
+                    "width": {
+                      "type": "integer"
+                    },
+                    "height": {
+                      "type": "integer"
                     }
-                  },
-                  "canceled": {
-                    "type": "boolean",
-                    "description": "Indicates whether this find request was canceled."
                   }
+                },
+                "canceled": {
+                  "type": "boolean",
+                  "description": "Indicates whether this find request was canceled."
                 }
               }
-            ]
-          }
-        ]
+            }
+          ]
+        }
       },
       {
         "name": "stopFinding",
@@ -563,10 +554,10 @@
         ]
       },
       {
-	"name": "loadDataWithBaseUrl",
-	"type": "function",
-	"description": "Loads a data URL with a specified base URL used for relative links. Optionally, a virtual URL can be provided to be shown to the user instead of the data URL.",
-	"parameters": [
+        "name": "loadDataWithBaseUrl",
+        "type": "function",
+        "description": "Loads a data URL with a specified base URL used for relative links. Optionally, a virtual URL can be provided to be shown to the user instead of the data URL.",
+        "parameters": [
           {
             "type": "integer",
             "name": "instanceId",
@@ -582,19 +573,18 @@
             "name": "baseUrl",
             "description": "The base URL that will be used for relative links."
           },
-	  {
+          {
             "type": "string",
             "name": "virtualUrl",
             "description": "The URL that will be displayed to the user.",
-	    "optional": true
-          },
-	  {
-            "type": "function",
-            "name": "callback",
-            "description": "Called internally for the purpose of reporting errors to console.error().",
-            "parameters": []
+            "optional": true
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Called internally for the purpose of reporting errors to console.error().",
+          "parameters": []
+        }
       },
       {
         "name": "go",
@@ -607,20 +597,19 @@
           {
             "type": "integer",
             "name": "relativeIndex"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "success",
-                "type": "boolean",
-                "description": "Indicates whether the navigation was successful."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "success",
+              "type": "boolean",
+              "description": "Indicates whether the navigation was successful."
+            }
+          ]
+        }
       },
       {
         "name": "overrideUserAgent",
@@ -708,19 +697,18 @@
             "type": "string",
             "name": "userInput",
             "optional": true
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "allowed",
-                "type": "boolean"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "allowed",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "navigate",
@@ -775,18 +763,17 @@
             "$ref": "extensionTypes.ImageDetails",
             "name": "options",
             "optional": true
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {"type": "string",
-                "name": "dataUrl",
-                "description": "A data URL which encodes an image of the visible area of the captured tab. May be assigned to the 'src' property of an HTML Image element for display."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {"type": "string",
+              "name": "dataUrl",
+              "description": "A data URL which encodes an image of the visible area of the captured tab. May be assigned to the 'src' property of an HTML Image element for display."
+            }
+          ]
+        }
       },
       {
         "name": "setSpatialNavigationEnabled",
@@ -814,18 +801,17 @@
             "type": "integer",
             "name": "instanceId",
             "description": "The instance ID of the guest <webview> process."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "spatialNavEnabled",
-                "type": "boolean"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "spatialNavEnabled",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "clearData",
@@ -845,15 +831,14 @@
             "name": "dataToRemove",
             "$ref": "DataTypeSet",
             "description": "The set of data types to remove."
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "description": "Called when deletion has completed.",
-            "optional": true,
-            "parameters": []
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Called when deletion has completed.",
+          "optional": true,
+          "parameters": []
+        }
       }
     ]
   }

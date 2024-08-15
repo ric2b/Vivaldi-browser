@@ -269,10 +269,10 @@ void RegisterWebApp(Profile* profile, apps::AppPtr app) {
 std::unique_ptr<net::CanonicalCookie> CreateCookieKey(
     const GURL& url,
     const std::string& cookie_line,
-    absl::optional<net::CookiePartitionKey> cookie_partition_key =
-        absl::nullopt) {
+    std::optional<net::CookiePartitionKey> cookie_partition_key =
+        std::nullopt) {
   return net::CanonicalCookie::Create(url, cookie_line, base::Time::Now(),
-                                      absl::nullopt /* server_time */,
+                                      std::nullopt /* server_time */,
                                       cookie_partition_key);
 }
 
@@ -534,7 +534,7 @@ class SiteSettingsHandlerBaseTest : public testing::Test {
     constraints.set_lifetime(lifetime);
     if (is_auto_granted) {
       constraints.set_session_model(
-          content_settings::SessionModel::NonRestorableUserSession);
+          content_settings::mojom::SessionModel::NON_RESTORABLE_USER_SESSION);
     }
 
     map->SetContentSettingCustomScope(
@@ -872,14 +872,9 @@ class SiteSettingsHandlerBaseTest : public testing::Test {
 
     auto container = std::make_unique<LocalDataContainer>(
         mock_browsing_data_cookie_helper,
-        /*database_helper=*/nullptr, mock_browsing_data_local_storage_helper,
+        mock_browsing_data_local_storage_helper,
         /*session_storage_helper=*/nullptr,
-        /*indexed_db_helper=*/nullptr,
-        /*file_system_helper=*/nullptr,
-        /*quota_helper=*/nullptr,
-        /*service_worker_helper=*/nullptr,
-        /*data_shared_worker_helper=*/nullptr,
-        /*cache_storage_helper=*/nullptr);
+        /*quota_helper=*/nullptr);
     auto mock_cookies_tree_model = std::make_unique<CookiesTreeModel>(
         std::move(container), profile()->GetExtensionSpecialStoragePolicy());
 
@@ -2438,14 +2433,6 @@ TEST_P(SiteSettingsHandlerTest, SetCategory_GetException_ResetCategory) {
 TEST_P(SiteSettingsHandlerTest, NotificationPermissionRevokeUkm) {
   const std::string google("https://www.google.com");
   ukm::TestAutoSetUkmRecorder ukm_recorder;
-  auto* history_service = HistoryServiceFactory::GetForProfile(
-      profile(), ServiceAccessType::EXPLICIT_ACCESS);
-  history_service->AddPage(GURL(google), base::Time::Now(),
-                           history::SOURCE_BROWSED);
-  base::RunLoop origin_queried_waiter;
-  history_service->set_origin_queried_closure_for_testing(
-      origin_queried_waiter.QuitClosure());
-
   {
     base::Value::List set_notification_origin_args;
     set_notification_origin_args.Append(google);
@@ -2469,8 +2456,6 @@ TEST_P(SiteSettingsHandlerTest, NotificationPermissionRevokeUkm) {
     handler()->HandleSetCategoryPermissionForPattern(
         set_notification_origin_args);
   }
-
-  origin_queried_waiter.Run();
 
   auto entries = ukm_recorder.GetEntriesByName("Permission");
   EXPECT_EQ(1u, entries.size());
@@ -2956,7 +2941,7 @@ TEST_P(SiteSettingsHandlerTest, TemporaryCookieExceptions) {
 
   content_settings::ContentSettingConstraints constraints;
   constraints.set_lifetime(base::Days(kExpirationDurationInDays));
-  constraints.set_session_model(content_settings::SessionModel::Durable);
+  constraints.set_session_model(content_settings::mojom::SessionModel::DURABLE);
 
   HostContentSettingsMap* host_content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(profile());
@@ -3122,10 +3107,6 @@ class SiteSettingsHandlerInfobarTest : public BrowserWithTestWindowTest {
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-    SetUpUserManager(profile());
-#endif
-
     handler_ = std::make_unique<SiteSettingsHandler>(profile());
     handler()->set_web_ui(web_ui());
     handler()->AllowJavascript();
@@ -3170,21 +3151,18 @@ class SiteSettingsHandlerInfobarTest : public BrowserWithTestWindowTest {
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  void SetUpUserManager(TestingProfile* profile) {
-    // On ChromeOS a user account is needed in order to check whether the user
-    // account is affiliated with the device owner for the purposes of applying
-    // enterprise policy.
-    constexpr char kTestUserGaiaId[] = "1111111111";
-    auto fake_user_manager = std::make_unique<ash::FakeChromeUserManager>();
-    auto* fake_user_manager_ptr = fake_user_manager.get();
-    scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
-        std::move(fake_user_manager));
-
-    auto account_id =
-        AccountId::FromUserEmailGaiaId(kTestUserEmail, kTestUserGaiaId);
-    fake_user_manager_ptr->AddUserWithAffiliation(account_id,
-                                                  /*is_affiliated=*/true);
-    fake_user_manager_ptr->LoginUser(account_id);
+  // On ChromeOS a user account is needed in order to check whether the user
+  // account is affiliated with the device owner for the purposes of applying
+  // enterprise policy.
+  void LogIn(const std::string& email) override {
+    const AccountId account_id = AccountId::FromUserEmail(email);
+    user_manager()->AddUserWithAffiliation(account_id, /*is_affiliated=*/true);
+    ash_test_helper()->test_session_controller_client()->AddUserSession(email);
+    user_manager()->UserLoggedIn(
+        account_id,
+        user_manager::FakeUserManager::GetFakeUsernameHash(account_id),
+        /*browser_restart=*/false,
+        /*is_child=*/false);
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -3219,9 +3197,6 @@ class SiteSettingsHandlerInfobarTest : public BrowserWithTestWindowTest {
   std::unique_ptr<Browser> browser2_;
   std::unique_ptr<BrowserWindow> window3_;
   std::unique_ptr<Browser> browser3_;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
-#endif
 };
 
 TEST_F(SiteSettingsHandlerInfobarTest, SettingPermissionsTriggersInfobar) {
@@ -4048,12 +4023,6 @@ class PersistentPermissionsSiteSettingsHandlerTest
 
  public:
   PersistentPermissionsSiteSettingsHandlerTest() {
-    // TODO(crbug.com/1373962): Remove this feature list enabler
-    // when Persistent Permissions is launched.
-
-    // Enable Persisted Permissions.
-    // TODO(crbug.com/1467574): Remove `kFileSystemAccessPersistentPermissions`
-    // flag after FSA Persistent Permissions feature launch.
     feature_list_.InitAndEnableFeature(
         features::kFileSystemAccessPersistentPermissions);
   }
@@ -4129,23 +4098,23 @@ TEST_F(PersistentPermissionsSiteSettingsHandlerTest,
             "https://www.b.com/");
 
   const base::Value::List* kTestOrigin1ViewGrants =
-      first_grant.FindList(site_settings::kViewGrants);
+      first_grant.FindList(site_settings::kFileSystemViewGrants);
   const base::Value::List* kTestOrigin1EditGrants =
-      first_grant.FindList(site_settings::kEditGrants);
+      first_grant.FindList(site_settings::kFileSystemEditGrants);
 
   const base::Value::List* kTestOrigin2ViewGrants =
-      second_grant.FindList(site_settings::kViewGrants);
+      second_grant.FindList(site_settings::kFileSystemViewGrants);
   const base::Value::List* kTestOrigin2EditGrants =
-      second_grant.FindList(site_settings::kEditGrants);
+      second_grant.FindList(site_settings::kFileSystemEditGrants);
 
   // Checks that the grants for test origins are populated as expected.
   EXPECT_TRUE(CHECK_DEREF(kTestOrigin1ViewGrants)[0]
                   .GetDict()
-                  .FindBool(site_settings::kIsDirectory)
+                  .FindBool(site_settings::kFileSystemIsDirectory)
                   .value_or(false));
   EXPECT_EQ(
       CHECK_DEREF(CHECK_DEREF(kTestOrigin1ViewGrants)[1].GetDict().FindString(
-          site_settings::kFilePath)),
+          site_settings::kFileSystemFilePath)),
       "/a/b");
   ASSERT_TRUE(kTestOrigin1EditGrants != nullptr);
   EXPECT_TRUE(kTestOrigin1EditGrants->empty());
@@ -4162,7 +4131,7 @@ TEST_F(PersistentPermissionsSiteSettingsHandlerTest,
       "/f/g/h/");
   EXPECT_FALSE(CHECK_DEREF(kTestOrigin2EditGrants)[1]
                    .GetDict()
-                   .FindBool(site_settings::kIsDirectory)
+                   .FindBool(site_settings::kFileSystemIsDirectory)
                    .value_or(true));
 }
 
@@ -4215,7 +4184,10 @@ TEST_F(PersistentPermissionsSiteSettingsHandlerTest,
 
   // After revoking the `file_read_grant` for kTestOrigin1, only one view grant
   // should remain when retrieving the file system grants for kTestOrigin1.
-  EXPECT_EQ(grants[0].GetDict().FindList(site_settings::kViewGrants)->size(),
+  EXPECT_EQ(grants[0]
+                .GetDict()
+                .FindList(site_settings::kFileSystemViewGrants)
+                ->size(),
             1UL);
 
   // Revoking a single grant from an origin with multiple grants in a given
@@ -4233,13 +4205,15 @@ TEST_F(PersistentPermissionsSiteSettingsHandlerTest,
       *web_ui()->call_data().back();
   const base::Value::List& updated_grants = updated_data.arg3()->GetList();
 
-  EXPECT_EQ(
-      updated_grants[1].GetDict().FindList(site_settings::kEditGrants)->size(),
-      1UL);
+  EXPECT_EQ(updated_grants[1]
+                .GetDict()
+                .FindList(site_settings::kFileSystemEditGrants)
+                ->size(),
+            1UL);
   EXPECT_EQ(CHECK_DEREF(CHECK_DEREF(updated_grants[1].GetDict().FindList(
-                site_settings::kEditGrants))[0]
+                site_settings::kFileSystemEditGrants))[0]
                             .GetDict()
-                            .FindString(site_settings::kFilePath)),
+                            .FindString(site_settings::kFileSystemFilePath)),
             "/f/g/h/");
 }
 
@@ -4301,9 +4275,11 @@ TEST_F(PersistentPermissionsSiteSettingsHandlerTest,
   // All grants are revoked for kTestOrigin1, and the grants for kTestOrigin2
   // are unaffected.
   EXPECT_EQ(updated_grants.size(), 1UL);
-  EXPECT_EQ(
-      updated_grants[0].GetDict().FindList(site_settings::kEditGrants)->size(),
-      2UL);
+  EXPECT_EQ(updated_grants[0]
+                .GetDict()
+                .FindList(site_settings::kFileSystemEditGrants)
+                ->size(),
+            2UL);
 
   // Expect that the WebUIListenerCallback was triggered.
   EXPECT_EQ(web_ui()->call_data()[0]->function_name(),

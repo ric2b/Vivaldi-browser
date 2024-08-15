@@ -7,13 +7,14 @@
 #ifndef CORE_FXGE_DIB_CFX_DIBITMAP_H_
 #define CORE_FXGE_DIB_CFX_DIBITMAP_H_
 
+#include <optional>
+
 #include "core/fxcrt/fx_memory_wrappers.h"
 #include "core/fxcrt/maybe_owned.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxge/dib/cfx_dibbase.h"
 #include "core/fxge/dib/fx_dib.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/base/containers/span.h"
 
 class CFX_DIBitmap final : public CFX_DIBBase {
  public:
@@ -59,13 +60,15 @@ class CFX_DIBitmap final : public CFX_DIBBase {
   uint32_t GetPixelForTesting(int x, int y) const;
 #endif  // defined(PDF_USE_SKIA)
 
-  bool SetRedFromBitmap(RetainPtr<const CFX_DIBBase> source);
-  bool SetAlphaFromBitmap(RetainPtr<const CFX_DIBBase> source);
+  // Requires `this` to be of format `FXDIB_Format::kArgb`.
+  void SetRedFromAlpha();
+
+  // Requires `this` to be of format `FXDIB_Format::kArgb`.
   bool SetUniformOpaqueAlpha();
 
   // TODO(crbug.com/pdfium/2007): Migrate callers to `CFX_RenderDevice`.
   bool MultiplyAlpha(float alpha);
-  bool MultiplyAlphaMask(RetainPtr<const CFX_DIBBase> source);
+  bool MultiplyAlphaMask(RetainPtr<const CFX_DIBitmap> mask);
 
   bool TransferBitmap(int dest_left,
                       int dest_top,
@@ -121,10 +124,10 @@ class CFX_DIBitmap final : public CFX_DIBBase {
   // If |pitch| is non-zero, then that be used as the actual pitch.
   // The actual pitch will be used to calculate the size.
   // Returns the calculated pitch and size on success, or nullopt on failure.
-  static absl::optional<PitchAndSize> CalculatePitchAndSize(int width,
-                                                            int height,
-                                                            FXDIB_Format format,
-                                                            uint32_t pitch);
+  static std::optional<PitchAndSize> CalculatePitchAndSize(int width,
+                                                           int height,
+                                                           FXDIB_Format format,
+                                                           uint32_t pitch);
 
 #if defined(PDF_USE_SKIA)
   // Converts to un-pre-multiplied alpha if necessary.
@@ -151,8 +154,6 @@ class CFX_DIBitmap final : public CFX_DIBBase {
   CFX_DIBitmap(const CFX_DIBitmap& src);
   ~CFX_DIBitmap() override;
 
-  bool SetChannelFromBitmap(Channel dest_channel,
-                            RetainPtr<const CFX_DIBBase> source);
   void ConvertBGRColorScale(uint32_t forecolor, uint32_t backcolor);
   bool TransferWithUnequalFormats(FXDIB_Format dest_format,
                                   int dest_left,

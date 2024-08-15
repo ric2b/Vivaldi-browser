@@ -14,15 +14,12 @@
 
 cmake_minimum_required(VERSION 3.14)
 
-project(NearbyProtocol)
+project(NearbyPresenceProtocol)
 
-# required for designated initializers on MSVC
 set(CMAKE_CXX_STANDARD 20)
 
-# root directory of repo
 set(BETO_CORE_ROOT ${CMAKE_SOURCE_DIR}/../..)
-
-# location of external third_party dependencies
+set(NEARBY_ROOT ${CMAKE_SOURCE_DIR}/..)
 set(THIRD_PARTY_DIR ${BETO_CORE_ROOT}/third_party)
 
 set(CMAKE_C_FLAGS_DEBUG "-DDEBUG")
@@ -32,13 +29,6 @@ if (UNIX)
     set(CMAKE_CXX_FLAGS_DEBUG "-g ${CMAKE_C_FLAGS_DEBUG}")
 endif ()
 
-find_package(OpenSSL REQUIRED)
-if (OPENSSL_FOUND)
-    message(STATUS "OpenSSL Found: ${OPENSSL_VERSION}")
-    message(STATUS "OpenSSL Include: ${OPENSSL_INCLUDE_DIR}")
-    message(STATUS "OpenSSL Libraries: ${OPENSSL_LIBRARIES}")
-endif ()
-
 if (MSVC)
     add_compile_options(-W4 -O1 -MD)
 endif ()
@@ -46,12 +36,16 @@ endif ()
 if (ENABLE_TESTS)
     message(STATUS "Enabling workspace wide tests")
 
+    # We want to suppress warnings coming from external libraries as they just
+    # pollute the build output
+    add_compile_options(-w)
+
     # Setup GoogleTest
     include(FetchContent)
     FetchContent_Declare(
             googletest
             GIT_REPOSITORY https://github.com/google/googletest.git
-            GIT_TAG release-1.12.1
+            GIT_TAG v1.14.0
     )
     FetchContent_MakeAvailable(googletest)
     enable_testing()
@@ -69,19 +63,42 @@ if (ENABLE_TESTS)
     )
 endif ()
 
-# Add these compile options for our own code, not needed for the above deps
-if (UNIX)
-    add_compile_options(-Wall -Wextra -Wimplicit-fallthrough -Wextra-semi
-            -Wno-missing-field-initializers -Wno-unused-parameter -Wno-psabi
-            -Wshadow
-            -Wsign-compare)
-endif()
+set(ABSL_PROPAGATE_CXX_STD ON)
+if (ENABLE_FUZZ)
+    if (NOT "${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+        MESSAGE(FATAL_ERROR "fuzzing is only enabed when building with Clang, please set CC and CXX to use clang instead of ${CMAKE_CXX_COMPILER_ID}")
+    endif()
 
+    add_subdirectory(${THIRD_PARTY_DIR}/boringssl boringssl-build)
+    add_subdirectory(${THIRD_PARTY_DIR}/fuzztest fuzztest-build)
+    enable_testing()
+    include(GoogleTest)
+else ()
+    # fuzztest handles pulling in absl, so we if we are not building fuzzers we need
+    # to include it ourselves via third_party.
+    add_subdirectory(${THIRD_PARTY_DIR}/abseil-cpp ${THIRD_PARTY_DIR}/abseil-cpp/build)
+endif ()
+
+if (UNIX)
+    set_directory_properties(
+            PROPERTIES
+            COMPILE_OPTIONS
+            -Wall -Wextra -Wimplicit-fallthrough -Wextra-semi
+            -Wno-missing-field-initializers -Wno-unused-parameter -Wno-psabi
+            -Wshadow -Wsign-compare
+    )
+endif ()
+
+# rust std lib requires linking against these
+if (UNIX)
+    link_libraries(
+            dl pthread -fsanitize=address
+    )
+elseif (MSVC)
+    link_libraries(
+            bcrypt ntdll userenv ws2_32
+    )
+endif ()
 
 add_subdirectory(np_cpp_ffi)
-add_subdirectory(ldt_np_c_sample)
-
-if (ENABLE_FUZZ)
-    message(STATUS "Building fuzzers")
-    add_subdirectory(ldt_np_adv_ffi_fuzz)
-endif ()
+add_subdirectory(ldt_np_adv_ffi/c)

@@ -275,6 +275,9 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_AddInstalledFont(void* mapper,
  *          Platform support implementation should implement required methods of
  *          FFDF_SYSFONTINFO interface, then call this function during PDFium
  *          initialization process.
+ *
+ *          Call this with NULL to tell PDFium to stop using a previously set
+ *          |FPDF_SYSFONTINFO|.
  */
 FPDF_EXPORT void FPDF_CALLCONV
 FPDF_SetSystemFontInfo(FPDF_SYSFONTINFO* pFontInfo);
@@ -305,7 +308,7 @@ FPDF_EXPORT FPDF_SYSFONTINFO* FPDF_CALLCONV FPDF_GetDefaultSystemFontInfo();
  *           None
  * Comments:
  *           This function should be called on the output from
- *           FPDF_SetSystemFontInfo() once it is no longer needed.
+ *           FPDF_GetDefaultSystemFontInfo() once it is no longer needed.
  */
 FPDF_EXPORT void FPDF_CALLCONV
 FPDF_FreeDefaultSystemFontInfo(FPDF_SYSFONTINFO* pFontInfo);

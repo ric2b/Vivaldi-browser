@@ -542,7 +542,7 @@ bool VivaldiUIEvents::DoHandleMouseEvent(
   // Check if the view has pointer-lock enabled. This should take precedence so
   // that the webpage mouse events do not trigger Vivaldi mouse actions by
   // accident. VB-66772.
-  if (root_view->IsMouseLocked()) {
+  if (root_view->IsPointerLocked()) {
     return /*eat_event*/ false;
   }
   if (event.GetType() == blink::WebInputEvent::Type::kMouseMove) {

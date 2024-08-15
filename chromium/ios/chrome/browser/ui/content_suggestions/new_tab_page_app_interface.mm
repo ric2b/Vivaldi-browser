@@ -21,7 +21,7 @@
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_item_view.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
-#import "net/base/mac/url_conversions.h"
+#import "net/base/apple/url_conversions.h"
 
 using content_suggestions::SearchFieldWidth;
 using set_up_list_prefs::SetUpListItemState;
@@ -33,6 +33,10 @@ using set_up_list_prefs::SetUpListItemState;
                                   (UITraitCollection*)traitCollection {
   return content_suggestions::SearchFieldWidth(collectionWidth,
                                                traitCollection);
+}
+
++ (UIView*)NTPView {
+  return ntp_home::NTPView();
 }
 
 + (UICollectionView*)collectionView {
@@ -65,24 +69,8 @@ using set_up_list_prefs::SetUpListItemState;
                                   SetUpListItemType::kDefaultBrowser, unknown);
   set_up_list_prefs::SetItemState(localState, SetUpListItemType::kAutofill,
                                   unknown);
-}
-
-+ (BOOL)setUpListItemSignInSyncIsComplete {
-  return ntp_home::SetUpListItemViewWithAccessibilityId(
-             set_up_list::kSignInItemID)
-      .complete;
-}
-
-+ (BOOL)setUpListItemDefaultBrowserIsComplete {
-  SetUpListItemView* view = ntp_home::SetUpListItemViewWithAccessibilityId(
-      set_up_list::kDefaultBrowserItemID);
-  return view.complete;
-}
-
-+ (BOOL)setUpListItemAutofillIsComplete {
-  return ntp_home::SetUpListItemViewWithAccessibilityId(
-             set_up_list::kAutofillItemID)
-      .complete;
+  set_up_list_prefs::SetItemState(localState, SetUpListItemType::kNotifications,
+                                  unknown);
 }
 
 + (BOOL)setUpListItemDefaultBrowserInMagicStackIsComplete {

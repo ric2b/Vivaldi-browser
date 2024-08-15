@@ -18,8 +18,7 @@ use criterion::{
     criterion_group, criterion_main, measurement::WallTime, BatchSize, BenchmarkGroup, Criterion,
 };
 use crypto_provider::CryptoProvider;
-use crypto_provider_openssl::Openssl;
-use crypto_provider_rustcrypto::RustCrypto;
+use crypto_provider_default::CryptoProviderImpl;
 use rand::{distributions::Standard, rngs::ThreadRng, Rng};
 
 fn constant_time_eq_equals(c: &mut Criterion) {
@@ -57,8 +56,7 @@ fn constant_time_eq_equals(c: &mut Criterion) {
         }
     }
 
-    add_benches::<RustCrypto>(&mut group, &mut rng);
-    add_benches::<Openssl>(&mut group, &mut rng);
+    add_benches::<CryptoProviderImpl>(&mut group, &mut rng);
 }
 
 criterion_group!(benches, constant_time_eq_equals);

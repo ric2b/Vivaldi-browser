@@ -9,11 +9,13 @@
 #import "base/apple/foundation_util.h"
 #import "base/check.h"
 #import "base/check_op.h"
+#import "base/memory/raw_ptr.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
-#import "components/bookmarks/browser/bookmark_model.h"
+#import "components/bookmarks/browser/bookmark_node.h"
 #import "components/bookmarks/common/bookmark_features.h"
 #import "ios/chrome/browser/bookmarks/model/account_bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
 #import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
@@ -31,8 +33,10 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
-#import "ios/ui/bookmarks_editor/vivaldi_bookmark_add_edit_folder_view_controller.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmark_prefs.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_consumer.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_coordinator.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_entry_point.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_item.h"
 
 using vivaldi::IsVivaldiRunning;
@@ -44,7 +48,7 @@ using vivaldi::IsVivaldiRunning;
     BookmarksFolderEditorCoordinatorDelegate,
 
     // Vivaldi
-    VivaldiBookmarkAddEditControllerDelegate,
+    VivaldiBookmarksEditorConsumer,
     // End Vivaldi
 
     UIAdaptivePresentationControllerDelegate>
@@ -68,13 +72,13 @@ using vivaldi::IsVivaldiRunning;
   // This is only used for clients of this coordinator to update the UI. This
   // does not reflect the folder users chose by clicking. For that information
   // use `bookmarksFolderChooserCoordinatorDidConfirm:withSelectedFolder:`.
-  const bookmarks::BookmarkNode* _selectedFolder;
+  raw_ptr<const bookmarks::BookmarkNode> _selectedFolder;
 
   // Vivaldi
   // The user's browser state model used.
   ChromeBrowserState* currentBrowserState;
   // The view controller to present when pushing to adding folder
-  VivaldiBookmarkAddEditFolderViewController* bookmarkFolderEditorController;
+  VivaldiBookmarksEditorCoordinator* _vivaldiBookmarksEditorCoordinator;
   // End Vivaldi
 
 }
@@ -143,10 +147,10 @@ using vivaldi::IsVivaldiRunning;
   currentBrowserState = browserState;
   // End Vivaldi
 
-  bookmarks::BookmarkModel* localOrSyncableModel =
+  LegacyBookmarkModel* localOrSyncableModel =
       ios::LocalOrSyncableBookmarkModelFactory::GetForBrowserState(
           browserState);
-  bookmarks::BookmarkModel* accountModel =
+  LegacyBookmarkModel* accountModel =
       ios::AccountBookmarkModelFactory::GetForBrowserState(browserState);
   AuthenticationService* authenticationService =
       AuthenticationServiceFactory::GetForBrowserState(browserState);
@@ -225,6 +229,11 @@ using vivaldi::IsVivaldiRunning;
   _viewController.dataSource = nil;
   _viewController.mutator = nil;
   _viewController = nil;
+
+  // Vivaldi
+  [self stopBookmarkFolderEditorController];
+  // End Vivaldi
+
 }
 
 #pragma mark - BookmarksFolderChooserMediatorDelegate
@@ -341,31 +350,30 @@ using vivaldi::IsVivaldiRunning;
             getFolderViewModeFromPrefService:currentBrowserState->GetPrefs()];
 }
 
-/// Parameters: Item can be nil, parent is non-null and a boolean whether
-/// presenting on editing mode or not is provided.
 - (void)navigateToBookmarkFolderEditorWithParent:
     (const bookmarks::BookmarkNode*)parentNode {
 
   VivaldiSpeedDialItem* parentItem =
     [[VivaldiSpeedDialItem alloc] initWithBookmark:parentNode];
 
-  VivaldiBookmarkAddEditFolderViewController* controller =
-    [VivaldiBookmarkAddEditFolderViewController
-       initWithBrowser:self.browser
-                  item:nil
-                parent:parentItem
-             isEditing:NO
-          allowsCancel:NO];
-  bookmarkFolderEditorController = controller;
-
-  controller.allowsNewFolders = NO;
-  controller.delegate = self;
-  [_baseNavigationController pushViewController:controller animated:YES];
+  VivaldiBookmarksEditorCoordinator* bookmarksEditorCoordinator =
+      [[VivaldiBookmarksEditorCoordinator alloc]
+         initWithBaseNavigationController:_baseNavigationController
+                                  browser:self.browser
+                                     item:nil
+                                   parent:parentItem
+                               entryPoint:VivaldiBookmarksEditorEntryPointFolder
+                                isEditing:NO
+                             allowsCancel:NO];
+  _vivaldiBookmarksEditorCoordinator = bookmarksEditorCoordinator;
+  _vivaldiBookmarksEditorCoordinator.allowsNewFolders = NO;
+  _vivaldiBookmarksEditorCoordinator.consumer = self;
+  [_vivaldiBookmarksEditorCoordinator start];
 }
 
 - (void)stopBookmarkFolderEditorController {
-  bookmarkFolderEditorController.delegate = nil;
-  bookmarkFolderEditorController = nil;
+  _vivaldiBookmarksEditorCoordinator.consumer = nil;
+  _vivaldiBookmarksEditorCoordinator = nil;
 }
 
 #pragma mark - BookmarksFolderChooserMediatorDelegate
@@ -373,7 +381,7 @@ using vivaldi::IsVivaldiRunning;
   [self setShowOnlySpeedDialFolder:show];
 }
 
-#pragma mark - VIVALDI_BOOKMARK_ADD_EDIT_CONTROLLER_DELEGATE
+#pragma mark - VivaldiBookmarksEditorConsumer
 - (void)didCreateNewFolder:(const bookmarks::BookmarkNode*)folder {
   [self stopBookmarkFolderEditorController];
   [_delegate bookmarksFolderChooserCoordinatorDidConfirm:self

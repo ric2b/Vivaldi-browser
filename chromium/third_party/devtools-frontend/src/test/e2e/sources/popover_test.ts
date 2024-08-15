@@ -10,7 +10,7 @@ import {addBreakpointForLine, openSourceCodeEditorForFile, RESUME_BUTTON} from '
 
 const LAST_ELEMENT_SELECTOR = '.cm-executionLine > span:last-child';
 
-describe('Sources Tab', async function() {
+describe('Sources Tab', function() {
   it('shows correct preview for `object.foo` member expressions', async () => {
     const {target, frontend} = getBrowserAndPages();
 
@@ -83,7 +83,7 @@ describe('Sources Tab', async function() {
     const {target, frontend} = getBrowserAndPages();
 
     // This only works without consistent source map variable experiment.
-    await disableExperiment('evaluateExpressionsWithSourceMaps');
+    await disableExperiment('evaluate-expressions-with-source-maps');
 
     await openSourceCodeEditorForFile('popover-terser.js', 'popover-terser.html');
     await addBreakpointForLine(frontend, 5);

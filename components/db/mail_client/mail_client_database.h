@@ -34,7 +34,7 @@ class MailClientDatabase : public MessageTable {
   ~MailClientDatabase() override;
   MailClientDatabase(const MailClientDatabase&) = delete;
   MailClientDatabase& operator=(const MailClientDatabase&) = delete;
-
+  void Close();
   // Call before Init() to set the error callback to be used for the
   // underlying database connection.
   void set_error_callback(const sql::Database::ErrorCallback& error_callback) {

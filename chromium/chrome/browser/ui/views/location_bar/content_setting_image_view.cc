@@ -64,9 +64,8 @@ std::optional<ViewID> GetViewID(
     case ImageType::FRAMEBUST:
     case ImageType::CLIPBOARD_READ_WRITE:
     case ImageType::SENSORS:
-    case ImageType::NOTIFICATIONS_QUIET_PROMPT:
+    case ImageType::NOTIFICATIONS:
     case ImageType::STORAGE_ACCESS:
-    case ImageType::MIDI:
       return std::nullopt;
 
     case ImageType::NUM_IMAGE_TYPES:
@@ -79,8 +78,6 @@ std::optional<ViewID> GetViewID(
 
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(ContentSettingImageView,
                                       kMediaActivityIndicatorElementId);
-DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(ContentSettingImageView,
-                                      kMidiActivityIndicatorElementId);
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(ContentSettingImageView,
                                       kMidiSysexActivityIndicatorElementId);
 
@@ -95,7 +92,7 @@ ContentSettingImageView::ContentSettingImageView(
       bubble_view_(nullptr) {
   DCHECK(delegate_);
   SetUpForInOutAnimation();
-  image()->SetFlipCanvasOnPaintForRTLUI(true);
+  image_container_view()->SetFlipCanvasOnPaintForRTLUI(true);
 
   std::optional<ViewID> view_id =
       GetViewID(content_setting_image_model_->image_type());
@@ -142,14 +139,14 @@ void ContentSettingImageView::Update() {
 
   if (!content_setting_image_model_->is_visible()) {
     SetVisible(false);
-    GetViewAccessibility().OverrideIsIgnored(true);
+    GetViewAccessibility().SetIsIgnored(true);
     critical_promo_bubble_.reset();
     return;
   }
   DCHECK(web_contents);
   UpdateImage();
   SetVisible(true);
-  GetViewAccessibility().OverrideIsIgnored(false);
+  GetViewAccessibility().SetIsIgnored(false);
   // An alert role is required in order to fire the alert event.
   SetAccessibleRole(ax::mojom::Role::kAlert);
 
@@ -202,9 +199,6 @@ void ContentSettingImageView::Update() {
   switch (content_setting_image_model_->image_type()) {
     case ContentSettingImageModel::ImageType::MEDIASTREAM:
       element_identifier = kMediaActivityIndicatorElementId;
-      break;
-    case ContentSettingImageModel::ImageType::MIDI:
-      element_identifier = kMidiActivityIndicatorElementId;
       break;
     case ContentSettingImageModel::ImageType::MIDI_SYSEX:
       element_identifier = kMidiSysexActivityIndicatorElementId;

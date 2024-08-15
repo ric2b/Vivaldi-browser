@@ -15,6 +15,7 @@
 
 use crate::common::*;
 use crate::utils::{FfiEnum, LocksLongerThan};
+use crypto_provider::ed25519::InvalidPublicKeyBytes;
 use crypto_provider_default::CryptoProviderImpl;
 use handle_map::{
     declare_handle_map, HandleLike, HandleMapDimensions, HandleMapFullError,
@@ -71,8 +72,10 @@ impl V1DiscoveryCredential {
             pub_key,
         }
     }
-    fn into_internal(self) -> np_adv::credential::v1::V1DiscoveryCredential {
-        np_adv::credential::v1::V1DiscoveryCredential::new(
+    fn into_internal(
+        self,
+    ) -> Result<np_adv::credential::v1::V1DiscoveryCredential, InvalidPublicKeyBytes> {
+        np_adv::credential::v1::V1DiscoveryCredential::new::<CryptoProviderImpl>(
             self.key_seed,
             self.expected_unsigned_metadata_key_hmac,
             self.expected_signed_metadata_key_hmac,
@@ -164,11 +167,12 @@ impl CredentialSlabInternals {
         &mut self,
         discovery_credential: V1DiscoveryCredential,
         match_data: MatchedCredential,
-    ) {
-        let discovery_credential = discovery_credential.into_internal();
-        let matchable_credential =
-            np_adv::credential::MatchableCredential { discovery_credential, match_data };
-        self.v1_creds.push(matchable_credential);
+    ) -> Result<(), InvalidPublicKeyBytes> {
+        discovery_credential.into_internal().map(|discovery_credential| {
+            let matchable_credential =
+                np_adv::credential::MatchableCredential { discovery_credential, match_data };
+            self.v1_creds.push(matchable_credential);
+        })
     }
 }
 
@@ -200,22 +204,33 @@ impl From<Result<CredentialSlab, HandleMapFullError>> for CreateCredentialSlabRe
     }
 }
 
-/// Result type for trying to add a credential to a credential-slab.
+/// Result type for trying to add a V1 credential to a credential-slab.
 #[repr(u8)]
-pub enum AddCredentialToSlabResult {
+pub enum AddV1CredentialToSlabResult {
+    /// We succeeded in adding the credential to the slab.
+    Success = 0,
+    /// The handle to the slab was actually invalid.
+    InvalidHandle = 1,
+    /// The provided public key bytes do not actually represent a valid "edwards y" format
+    /// or that said compressed point is not actually a point on the curve.
+    InvalidPublicKeyBytes = 2,
+}
+
+/// Result type for trying to add a V0 credential to a credential-slab.
+#[repr(u8)]
+pub enum AddV0CredentialToSlabResult {
     /// We succeeded in adding the credential to the slab.
     Success = 0,
     /// The handle to the slab was actually invalid.
     InvalidHandle = 1,
 }
 
-declare_handle_map! {
-    mod credential_slab {
-        #[dimensions = super::get_credential_slab_handle_map_dimensions()]
-        type CredentialSlab: HandleLike<Object = super::CredentialSlabInternals>;
-    }
+/// A `#[repr(C)]` handle to a value of type `CredentialSlabInternals`
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct CredentialSlab {
+    handle_id: u64,
 }
-use credential_slab::CredentialSlab;
 
 fn get_credential_slab_handle_map_dimensions() -> HandleMapDimensions {
     HandleMapDimensions {
@@ -224,6 +239,13 @@ fn get_credential_slab_handle_map_dimensions() -> HandleMapDimensions {
     }
 }
 
+declare_handle_map!(
+    credential_slab,
+    super::get_credential_slab_handle_map_dimensions(),
+    super::CredentialSlab,
+    super::CredentialSlabInternals
+);
+
 impl CredentialSlab {
     /// Adds the given V0 discovery credential with some associated
     /// match-data to this credential slab.
@@ -231,13 +253,13 @@ impl CredentialSlab {
         &self,
         discovery_credential: V0DiscoveryCredential,
         match_data: MatchedCredential,
-    ) -> AddCredentialToSlabResult {
+    ) -> AddV0CredentialToSlabResult {
         match self.get_mut() {
             Ok(mut write_guard) => {
                 write_guard.add_v0(discovery_credential, match_data);
-                AddCredentialToSlabResult::Success
+                AddV0CredentialToSlabResult::Success
             }
-            Err(_) => AddCredentialToSlabResult::InvalidHandle,
+            Err(_) => AddV0CredentialToSlabResult::InvalidHandle,
         }
     }
     /// Adds the given V1 discovery credential with some associated
@@ -246,13 +268,13 @@ impl CredentialSlab {
         &self,
         discovery_credential: V1DiscoveryCredential,
         match_data: MatchedCredential,
-    ) -> AddCredentialToSlabResult {
+    ) -> AddV1CredentialToSlabResult {
         match self.get_mut() {
-            Ok(mut write_guard) => {
-                write_guard.add_v1(discovery_credential, match_data);
-                AddCredentialToSlabResult::Success
-            }
-            Err(_) => AddCredentialToSlabResult::InvalidHandle,
+            Ok(mut write_guard) => match write_guard.add_v1(discovery_credential, match_data) {
+                Ok(_) => AddV1CredentialToSlabResult::Success,
+                Err(_) => AddV1CredentialToSlabResult::InvalidPublicKeyBytes,
+            },
+            Err(_) => AddV1CredentialToSlabResult::InvalidHandle,
         }
     }
 }
@@ -298,13 +320,19 @@ fn get_credential_book_handle_map_dimensions() -> HandleMapDimensions {
     }
 }
 
-declare_handle_map! {
-    mod credential_book {
-        #[dimensions = super::get_credential_book_handle_map_dimensions()]
-        type CredentialBook: HandleLike<Object = super::CredentialBookInternals>;
-    }
+/// A `#[repr(C)]` handle to a value of type `CredentialBookInternals`
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct CredentialBook {
+    handle_id: u64,
 }
-pub use credential_book::CredentialBook;
+
+declare_handle_map!(
+    credential_book,
+    super::get_credential_book_handle_map_dimensions(),
+    super::CredentialBook,
+    super::CredentialBookInternals
+);
 
 /// Discriminant for `CreateCredentialBookResult`
 #[repr(u8)]
@@ -379,4 +407,67 @@ pub fn deallocate_credential_book(credential_book: CredentialBook) -> Deallocate
 /// Deallocates a credential-slab by its handle
 pub fn deallocate_credential_slab(credential_slab: CredentialSlab) -> DeallocateResult {
     credential_slab.deallocate().map(|_| ()).into()
+}
+
+/// Cryptographic information about a particular V0 broadcast credential
+/// necessary to LDT-encrypt V0 advertisements.
+#[repr(C)]
+pub struct V0BroadcastCredential {
+    key_seed: [u8; 32],
+    metadata_key: [u8; 14],
+}
+
+impl V0BroadcastCredential {
+    /// Constructs a new `V0BroadcastCredential` from the given
+    /// key-seed and 14-byte metadata key.
+    ///
+    /// Safety: Since this representation requires transmission
+    /// of the raw bytes of sensitive cryptographic info over FFI,
+    /// foreign-lang code around how this information is maintained
+    /// deserves close scrutiny.
+    pub fn new(key_seed: [u8; 32], metadata_key: [u8; 14]) -> Self {
+        Self { key_seed, metadata_key }
+    }
+    pub(crate) fn into_internal(
+        self,
+    ) -> np_adv::credential::SimpleBroadcastCryptoMaterial<np_adv::credential::v0::V0> {
+        np_adv::credential::SimpleBroadcastCryptoMaterial::new(
+            self.key_seed,
+            np_adv::legacy::ShortMetadataKey(self.metadata_key),
+        )
+    }
+}
+
+/// Cryptographic information about a particular V1 broadcast credential
+/// necessary to encrypt V1 MIC-verified and signature-verified sections.
+#[repr(C)]
+pub struct V1BroadcastCredential {
+    key_seed: [u8; 32],
+    metadata_key: [u8; 16],
+    private_key: [u8; 32],
+}
+
+impl V1BroadcastCredential {
+    /// Constructs a new `V1BroadcastCredential` from the given
+    /// key-seed, 16-byte metadata key, and the raw bytes
+    /// of the ed25519 private key.
+    ///
+    /// Safety: Since this representation requires transmission
+    /// of the raw bytes of an ed25519 private key (and other
+    /// sensitive cryptographic info) over FFI, foreign-lang
+    /// code around how this information is maintained
+    /// deserves close scrutiny.
+    pub const fn new(key_seed: [u8; 32], metadata_key: [u8; 16], private_key: [u8; 32]) -> Self {
+        Self { key_seed, metadata_key, private_key }
+    }
+    pub(crate) fn into_internal(
+        self,
+    ) -> np_adv::credential::v1::SimpleSignedBroadcastCryptoMaterial {
+        let permit = crypto_provider::ed25519::RawPrivateKeyPermit::default();
+        np_adv::credential::v1::SimpleSignedBroadcastCryptoMaterial::new(
+            self.key_seed,
+            np_adv::MetadataKey(self.metadata_key),
+            crypto_provider::ed25519::PrivateKey::from_raw_private_key(self.private_key, &permit),
+        )
+    }
 }

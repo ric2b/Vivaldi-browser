@@ -10,7 +10,7 @@ import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
 
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {FeaturePromoDemoPageInfo} from './user_education_internals.mojom-webui.js';
+import type {FeaturePromoDemoPageInfo} from './user_education_internals.mojom-webui.js';
 import {getTemplate} from './user_education_internals_card.html.js';
 
 const PROMO_LAUNCH_EVENT = 'promo-launch';
@@ -28,6 +28,11 @@ class UserEducationInternalsCardElement extends PolymerElement {
   static get properties() {
     return {
       promo: Object,
+
+      showAction: {
+        type: Boolean,
+        value: false,
+      },
 
       /**
        * Indicates if the list of instructions is expanded or collapsed.
@@ -48,6 +53,7 @@ class UserEducationInternalsCardElement extends PolymerElement {
   }
 
   promo: FeaturePromoDemoPageInfo;
+  showAction: boolean;
   private instructionsExpanded_: boolean;
   private dataExpanded_: boolean;
 
@@ -59,9 +65,9 @@ class UserEducationInternalsCardElement extends PolymerElement {
 
   private clearData_() {
     if (confirm(
-            'Clear Feature Promo data and Feature Enagement events?\n' +
+            'Clear all data associated with this User Education journey?\n' +
             'Note: because of session tracking and event constraints, ' +
-            'Feature Engagement may still disallow this promo.')) {
+            'Feature Engagement may still disallow some IPH.')) {
       this.dispatchEvent(new CustomEvent(
           CLEAR_PROMO_DATA_EVENT,
           {bubbles: true, composed: true, detail: this.promo.internalName}));

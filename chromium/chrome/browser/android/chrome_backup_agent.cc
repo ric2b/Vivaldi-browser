@@ -19,18 +19,21 @@
 
 namespace {
 
-static_assert(47 + 1 /* notes */ == syncer::GetNumModelTypes(),
+static_assert(52 + 1 /* notes */ == syncer::GetNumModelTypes(),
               "If the new type has a corresponding pref, add it here");
 const char* const kBackedUpBoolPreferences[] = {
     syncer::prefs::internal::kSyncKeepEverythingSynced,
+    syncer::prefs::internal::kSyncApps,
     syncer::prefs::internal::kSyncAutofill,
     syncer::prefs::internal::kSyncBookmarks,
+    syncer::prefs::internal::kSyncCompare,
     syncer::prefs::internal::kSyncHistory,
     syncer::prefs::internal::kSyncPasswords,
     syncer::prefs::internal::kSyncPayments,
     syncer::prefs::internal::kSyncPreferences,
     syncer::prefs::internal::kSyncReadingList,
     syncer::prefs::internal::kSyncSavedTabGroups,
+    syncer::prefs::internal::kSyncSharedTabGroupData,
     syncer::prefs::internal::kSyncTabs,
 };
 

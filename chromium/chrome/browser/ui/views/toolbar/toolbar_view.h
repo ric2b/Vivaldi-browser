@@ -197,7 +197,7 @@ class ToolbarView : public views::AccessiblePaneView,
   // views::View:
   gfx::Size CalculatePreferredSize() const override;
   gfx::Size GetMinimumSize() const override;
-  void Layout() override;
+  void Layout(PassKey) override;
   void OnThemeChanged() override;
   bool AcceleratorPressed(const ui::Accelerator& acc) override;
   void ChildPreferredSizeChanged(views::View* child) override;
@@ -252,8 +252,9 @@ class ToolbarView : public views::AccessiblePaneView,
   DownloadToolbarButtonView* GetDownloadButton() override;
 
   // BrowserRootView::DropTarget
-  BrowserRootView::DropIndex GetDropIndex(
-      const ui::DropTargetEvent& event) override;
+  std::optional<BrowserRootView::DropIndex> GetDropIndex(
+      const ui::DropTargetEvent& event,
+      bool allow_replacement) override;
   BrowserRootView::DropTarget* GetDropTarget(
       gfx::Point loc_in_local_coords) override;
   views::View* GetViewForDrop() override;
@@ -311,8 +312,7 @@ class ToolbarView : public views::AccessiblePaneView,
   AppMenuIconController app_menu_icon_controller_;
 
   std::unique_ptr<ChromeLabsModel> chrome_labs_model_;
-  std::unique_ptr<ExtensionsToolbarCoordinator>
-      extensions_toolbar_coordinator_ = nullptr;
+  std::unique_ptr<ExtensionsToolbarCoordinator> extensions_toolbar_coordinator_;
 
   // Controls whether or not a home button should be shown on the toolbar.
   BooleanPrefMember show_home_button_;

@@ -426,7 +426,7 @@ bool InputMethodManagerImpl::StateImpl::SetAllowedInputMethods(
   allowed_keyboard_layout_input_method_ids_.clear();
   for (auto input_method_id : new_allowed_input_method_ids) {
     std::string migrated_id =
-        manager_->util_.MigrateInputMethod(input_method_id);
+        manager_->util_.GetMigratedInputMethod(input_method_id);
     if (manager_->util_.IsValidInputMethodId(migrated_id)) {
       allowed_keyboard_layout_input_method_ids_.push_back(migrated_id);
       // Kiosk users are not able to go to the settings and manually enable
@@ -459,8 +459,9 @@ bool InputMethodManagerImpl::StateImpl::IsInputMethodAllowed(
 
   return base::Contains(allowed_keyboard_layout_input_method_ids_,
                         input_method_id) ||
-         base::Contains(allowed_keyboard_layout_input_method_ids_,
-                        manager_->util_.MigrateInputMethod(input_method_id));
+         base::Contains(
+             allowed_keyboard_layout_input_method_ids_,
+             manager_->util_.GetMigratedInputMethod(input_method_id));
 }
 
 std::string
@@ -487,8 +488,8 @@ void InputMethodManagerImpl::StateImpl::ChangeInputMethod(
   // |enabled_input_method_ids_|.
   const InputMethodDescriptor* descriptor = LookupInputMethod(input_method_id);
   if (!descriptor) {
-    descriptor =
-        LookupInputMethod(manager_->util_.MigrateInputMethod(input_method_id));
+    descriptor = LookupInputMethod(
+        manager_->util_.GetMigratedInputMethod(input_method_id));
     if (!descriptor) {
       LOG(ERROR) << "Can't find InputMethodDescriptor for \"" << input_method_id
                  << "\"";
@@ -920,7 +921,7 @@ bool InputMethodManagerImpl::IsLoginKeyboard(
 
 std::string InputMethodManagerImpl::GetMigratedInputMethodID(
     const std::string& input_method_id) {
-  return util_.MigrateInputMethod(input_method_id);
+  return util_.GetMigratedInputMethod(input_method_id);
 }
 
 bool InputMethodManagerImpl::GetMigratedInputMethodIDs(
@@ -1112,17 +1113,26 @@ void InputMethodManagerImpl::ChangeInputMethodInternalFromActiveState(
   }
 
   // Change the keyboard layout to a preferred layout for the input method.
-  if (!keyboard_->SetCurrentKeyboardLayoutByName(
-          state_->GetCurrentInputMethod().keyboard_layout())) {
+  keyboard_->SetCurrentKeyboardLayoutByName(
+      state_->GetCurrentInputMethod().keyboard_layout(),
+      base::BindOnce(&InputMethodManagerImpl::NotifyInputMethodChanged,
+                     base::Unretained(this), show_message));
+
+  // Update the current input method in IME menu.
+  NotifyImeMenuListChanged();
+}
+
+void InputMethodManagerImpl::NotifyInputMethodChanged(bool show_message,
+                                                      bool success) {
+  if (!success) {
     LOG(ERROR) << "Failed to change keyboard layout to "
                << state_->GetCurrentInputMethod().keyboard_layout();
   }
 
   // Update input method indicators (e.g. "US", "DV") in Chrome windows.
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.InputMethodChanged(this, state_->GetProfile(), show_message);
-  // Update the current input method in IME menu.
-  NotifyImeMenuListChanged();
+  }
 }
 
 void InputMethodManagerImpl::ActivateInputMethodMenuItem(

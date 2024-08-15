@@ -153,7 +153,7 @@ class MdnsRecordTracker : public MdnsTracker {
   // instance is not provided.
   //
   // In this case, creating an MdnsRecord with the below data will result in a
-  // runtime error due to DCHECKS and that Rdata's associated type will not
+  // runtime error due to CHECKS and that Rdata's associated type will not
   // match DnsType when |record_| is of type NSEC. Therefore, creating such
   // records should be guarded by is_negative_response() checks.
   const DomainName& name() const { return record_.name(); }

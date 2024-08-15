@@ -14,6 +14,7 @@
 #include "base/files/file_path.h"
 #include "gn/args.h"
 #include "gn/label.h"
+#include "gn/label_pattern.h"
 #include "gn/scope.h"
 #include "gn/source_dir.h"
 #include "gn/source_file.h"
@@ -34,6 +35,12 @@ class BuildSettings {
   // Root target label.
   const Label& root_target_label() const { return root_target_label_; }
   void SetRootTargetLabel(const Label& r);
+
+  // Root target label patterns.
+  const std::vector<LabelPattern>& root_patterns() const {
+    return root_patterns_;
+  }
+  void SetRootPatterns(std::vector<LabelPattern>&& root_patterns);
 
   // Absolute path of the source root on the local system. Everything is
   // relative to this. Does not end in a [back]slash.
@@ -146,6 +153,7 @@ class BuildSettings {
 
  private:
   Label root_target_label_;
+  std::vector<LabelPattern> root_patterns_;
   base::FilePath dotfile_name_;
   base::FilePath root_path_;
   std::string root_path_utf8_;

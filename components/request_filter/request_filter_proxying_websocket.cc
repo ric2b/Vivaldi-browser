@@ -186,7 +186,7 @@ void RequestFilterProxyingWebSocket::ContinueToHeadersReceived() {
       weak_factory_.GetWeakPtr());
   int result = request_handler_->OnHeadersReceived(
       browser_context_, &info_, continuation, response_->headers.get(),
-      &override_headers_, &redirect_url_);
+      &override_headers_, &redirect_url_, nullptr);
 
   if (result == net::ERR_BLOCKED_BY_CLIENT) {
     OnError(result);
@@ -269,7 +269,7 @@ void RequestFilterProxyingWebSocket::OnAuthRequired(
       weak_factory_.GetWeakPtr(), auth_info);
   int result = request_handler_->OnHeadersReceived(
       browser_context_, &info_, continuation, response_->headers.get(),
-      &override_headers_, &redirect_url_);
+      &override_headers_, &redirect_url_, nullptr);
 
   if (result == net::ERR_BLOCKED_BY_CLIENT) {
     OnError(result);

@@ -11,19 +11,22 @@
 import '/strings.m.js';
 import 'chrome://resources/ash/common/personalization/common.css.js';
 import 'chrome://resources/ash/common/personalization/cros_button_style.css.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
-import 'chrome://resources/cr_elements/cr_icons.css.js';
-import 'chrome://resources/cr_elements/icons.html.js';
+import 'chrome://resources/ash/common/cr_elements/cr_icon_button/cr_icon_button.js';
+import 'chrome://resources/ash/common/cr_elements/cr_icons.css.js';
+import 'chrome://resources/ash/common/cr_elements/icons.html.js';
 import 'chrome://resources/polymer/v3_0/iron-a11y-keys/iron-a11y-keys.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
 
 import {assert} from 'chrome://resources/ash/common/assert.js';
+import {AnchorAlignment, CrActionMenuElement} from 'chrome://resources/ash/common/cr_elements/cr_action_menu/cr_action_menu.js';
 import {getSeaPenTemplates, SeaPenTemplate} from 'chrome://resources/ash/common/sea_pen/constants.js';
 import {isSeaPenEnabled} from 'chrome://resources/ash/common/sea_pen/load_time_booleans.js';
-import {SeaPenTemplateId} from 'chrome://resources/ash/common/sea_pen/sea_pen.mojom-webui.js';
+import {setThumbnailResponseStatusCodeAction} from 'chrome://resources/ash/common/sea_pen/sea_pen_actions.js';
+import {SeaPenTemplateId} from 'chrome://resources/ash/common/sea_pen/sea_pen_generated.mojom-webui.js';
+import {getSeaPenStore} from 'chrome://resources/ash/common/sea_pen/sea_pen_store.js';
 import {isNonEmptyArray} from 'chrome://resources/ash/common/sea_pen/sea_pen_utils.js';
-import {AnchorAlignment} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
+import {getTransitionEnabled, setTransitionsEnabled} from 'chrome://resources/ash/common/sea_pen/transition.js';
 import {IronA11yKeysElement} from 'chrome://resources/polymer/v3_0/iron-a11y-keys/iron-a11y-keys.js';
 import {IronSelectorElement} from 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
 
@@ -302,7 +305,7 @@ export class PersonalizationBreadcrumbElement extends WithPersonalizationStore {
         // with new path.
         const breadcrumb = e.target as HTMLElement;
         breadcrumb.blur();
-        PersonalizationRouterElement.instance().goToRoute(newPath as Paths);
+        this.goBackToRoute_(newPath as Paths);
       }
     }
     // If the user clicks the last breadcrumb and the sea pen dropdown is
@@ -316,11 +319,22 @@ export class PersonalizationBreadcrumbElement extends WithPersonalizationStore {
 
   private onClickMenuIcon_(e: Event) {
     const targetElement = e.currentTarget as HTMLElement;
+    const rect = targetElement.getBoundingClientRect();
+    // Anchors the menu at the top-left corner of the chip while also
+    // accounting for the scrolling of the page.
     const config = {
       anchorAlignmentX: AnchorAlignment.AFTER_START,
       anchorAlignmentY: AnchorAlignment.AFTER_START,
+      minX: 0,
+      minY: 0,
+      maxX: window.innerWidth,
+      maxY: window.innerHeight,
+      top: rect.top - document.scrollingElement!.scrollTop,
+      left: rect.left - document.scrollingElement!.scrollLeft,
     };
-    const menuElement = this.shadowRoot!.querySelector('cr-action-menu');
+    const menuElement =
+        this.shadowRoot!.querySelector<CrActionMenuElement>('cr-action-menu');
+    menuElement!.shadowRoot!.getElementById('dialog')!.style.position = 'fixed';
     menuElement!.showAt(targetElement, config);
   }
 
@@ -328,8 +342,21 @@ export class PersonalizationBreadcrumbElement extends WithPersonalizationStore {
     const targetElement = e.currentTarget as HTMLElement;
     const templateId = targetElement.dataset['id'];
     assert(!!templateId, 'templateId is required');
-    PersonalizationRouterElement.instance().goToRoute(
-        Paths.SEA_PEN_RESULTS, {seaPenTemplateId: templateId});
+
+    // resets the Sea Pen thumbnail response status code when switching
+    // template; otherwise, error state will remain in sea-pen-images element if
+    // it happens in the last query search.
+    getSeaPenStore().dispatch(setThumbnailResponseStatusCodeAction(null));
+    const transitionsEnabled = getTransitionEnabled();
+    // disables the page transition when switching templates from the drop down.
+    // Then resets it back to the original value after routing is done to not
+    // interfere with other page transitions.
+    setTransitionsEnabled(false);
+    PersonalizationRouterElement.instance()
+        .goToRoute(Paths.SEA_PEN_RESULTS, {seaPenTemplateId: templateId})
+        ?.finally(() => {
+          setTransitionsEnabled(transitionsEnabled);
+        });
     this.closeOptionMenu_();
   }
 
@@ -354,7 +381,15 @@ export class PersonalizationBreadcrumbElement extends WithPersonalizationStore {
   }
 
   private onHomeIconClick_() {
-    PersonalizationRouterElement.instance().goToRoute(Paths.ROOT);
+    this.goBackToRoute_(Paths.ROOT);
+  }
+
+  // Helper method to apply back transition style when navigating to path.
+  private goBackToRoute_(path: Paths) {
+    document.documentElement.classList.add('back-transition');
+    PersonalizationRouterElement.instance().goToRoute(path)?.finally(() => {
+      document.documentElement.classList.remove('back-transition');
+    });
   }
 }
 

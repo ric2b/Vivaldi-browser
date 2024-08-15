@@ -704,7 +704,7 @@ const cc::SnapContainerData* RootFrameViewport::GetSnapContainerData() const {
 }
 
 void RootFrameViewport::SetSnapContainerData(
-    absl::optional<cc::SnapContainerData> data) {
+    std::optional<cc::SnapContainerData> data) {
   LayoutViewport().SetSnapContainerData(data);
 }
 
@@ -721,7 +721,7 @@ void RootFrameViewport::SetSnapContainerDataNeedsUpdate(bool needs_update) {
   LayoutViewport().SetSnapContainerDataNeedsUpdate(needs_update);
 }
 
-absl::optional<gfx::PointF> RootFrameViewport::GetSnapPositionAndSetTarget(
+std::optional<gfx::PointF> RootFrameViewport::GetSnapPositionAndSetTarget(
     const cc::SnapSelectionStrategy& strategy) {
   return LayoutViewport().GetSnapPositionAndSetTarget(strategy);
 }
@@ -746,20 +746,20 @@ void RootFrameViewport::UpdateSnappedTargetsAndEnqueueSnapChanged() {
   LayoutViewport().UpdateSnappedTargetsAndEnqueueSnapChanged();
 }
 
-const cc::SnappedTargetData* RootFrameViewport::GetSnapChangingTargetData()
-    const {
-  return LayoutViewport().GetSnapChangingTargetData();
+std::optional<cc::TargetSnapAreaElementIds>
+RootFrameViewport::GetSnapchangingTargetIds() const {
+  return LayoutViewport().GetSnapchangingTargetIds();
 }
 
-void RootFrameViewport::SetSnapChangingTargetData(
-    absl::optional<cc::SnappedTargetData> data) {
-  LayoutViewport().SetSnapChangingTargetData(data);
+void RootFrameViewport::SetSnapchangingTargetIds(
+    std::optional<cc::TargetSnapAreaElementIds> new_target_ids) {
+  LayoutViewport().SetSnapchangingTargetIds(new_target_ids);
 }
 
 void RootFrameViewport::UpdateSnapChangingTargetsAndEnqueueSnapChanging(
-    const gfx::PointF& scroll_offset) {
+    const cc::TargetSnapAreaElementIds& new_target_ids) {
   LayoutViewport().UpdateSnapChangingTargetsAndEnqueueSnapChanging(
-      scroll_offset);
+      new_target_ids);
 }
 
 const cc::SnapSelectionStrategy* RootFrameViewport::GetImplSnapStrategy()
@@ -774,6 +774,15 @@ void RootFrameViewport::SetImplSnapStrategy(
 
 void RootFrameViewport::EnqueueSnapChangingEventFromImplIfNeeded() {
   LayoutViewport().EnqueueSnapChangingEventFromImplIfNeeded();
+}
+
+std::optional<cc::ElementId> RootFrameViewport::GetTargetedSnapAreaId() {
+  return LayoutViewport().GetTargetedSnapAreaId();
+}
+
+void RootFrameViewport::SetTargetedSnapAreaId(
+    const std::optional<cc::ElementId>& id) {
+  LayoutViewport().SetTargetedSnapAreaId(id);
 }
 
 }  // namespace blink

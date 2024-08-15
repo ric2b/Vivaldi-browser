@@ -4,6 +4,7 @@
 
 import("//build_overrides/build.gni")
 import("//cast/streaming/external_libraries.gni")
+import("../../gni/openscreen.gni")
 
 visibility = [ "./*" ]
 
@@ -38,7 +39,7 @@ if (!build_with_chromium) {
   have_external_libs = have_ffmpeg && have_libsdl2
 
   if (have_external_libs) {
-    source_set("standalone_receiver_sdl") {
+    openscreen_source_set("standalone_receiver_sdl") {
       testonly = true
       public = shared_public
       sources = shared_sources
@@ -64,7 +65,7 @@ if (!build_with_chromium) {
     }
   }
 
-  source_set("standalone_receiver_dummy") {
+  openscreen_source_set("standalone_receiver_dummy") {
     testonly = true
     public = shared_public
     sources = shared_sources
@@ -76,13 +77,13 @@ if (!build_with_chromium) {
     ]
   }
 
-  executable("cast_receiver") {
+  openscreen_executable("cast_receiver") {
     testonly = true
     visibility += [ "../..:gn_all" ]
     sources = [ "main.cc" ]
 
     deps = shared_deps + [ "../common:certificate_boringssl" ]
-    configs += [ "../common:certificate_config" ]
+    configs = [ "../common:certificate_config" ]
 
     if (have_external_libs) {
       deps += [ ":standalone_receiver_sdl" ]

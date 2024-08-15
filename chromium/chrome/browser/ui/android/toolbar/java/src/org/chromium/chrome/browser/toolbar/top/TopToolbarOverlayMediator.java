@@ -343,7 +343,7 @@ public class TopToolbarOverlayMediator {
 
     /** Vivaldi: Updates the y offset of the scene layer. */
     public void updateYOffset(float value) {
-        final float yOffset = value + mBrowserControlsStateProvider.getTopControlsMinHeight();
+        final float yOffset = value + mBrowserControlsStateProvider.getContentOffset();
         mModel.set(TopToolbarOverlayProperties.CONTENT_OFFSET, yOffset);
 
         updateVisibility();

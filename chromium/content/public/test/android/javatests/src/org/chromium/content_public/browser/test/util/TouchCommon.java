@@ -213,7 +213,7 @@ public class TouchCommon {
      */
     /* package */ static boolean singleClickViewThroughTarget(
             View view, View target, int x, int y) {
-        int windowXY[] = viewToWindowCoordinates(view, x, y);
+        int[] windowXY = viewToWindowCoordinates(view, x, y);
         int windowX = windowXY[0];
         int windowY = windowXY[1];
         return singleClickInternal(target, windowX, windowY);
@@ -254,7 +254,7 @@ public class TouchCommon {
      * @param y Y coordinate, relative to v.
      */
     public static void longPressView(View v, int x, int y) {
-        int windowXY[] = viewToWindowCoordinates(v, x, y);
+        int[] windowXY = viewToWindowCoordinates(v, x, y);
         int windowX = windowXY[0];
         int windowY = windowXY[1];
         longPressInternal(v.getRootView(), windowX, windowY);
@@ -280,7 +280,7 @@ public class TouchCommon {
      * @param downTime When the drag was started, in millis since the epoch.
      */
     public static void longPressViewWithoutUp(View v, int x, int y, long downTime) {
-        int windowXY[] = viewToWindowCoordinates(v, x, y);
+        int[] windowXY = viewToWindowCoordinates(v, x, y);
         int windowX = windowXY[0];
         int windowY = windowXY[1];
         longPressWithoutUpInternal(v.getRootView(), windowX, windowY, downTime);
@@ -331,10 +331,11 @@ public class TouchCommon {
 
     /**
      * Sends a MotionEvent to the specified view.
+     *
      * @param view The view that should receive the event.
      * @param event The view to be dispatched.
      */
-    private static boolean dispatchTouchEvent(final View view, final MotionEvent event) {
+    public static boolean dispatchTouchEvent(final View view, final MotionEvent event) {
         try {
             return TestThreadUtils.runOnUiThreadBlocking(
                     new Callable<Boolean>() {
@@ -356,7 +357,7 @@ public class TouchCommon {
      * @return The coordinates relative to the window as a 2-element array.
      */
     private static int[] viewToWindowCoordinates(View v, int x, int y) {
-        int windowXY[] = new int[2];
+        int[] windowXY = new int[2];
         v.getLocationInWindow(windowXY);
         windowXY[0] += x;
         windowXY[1] += y;

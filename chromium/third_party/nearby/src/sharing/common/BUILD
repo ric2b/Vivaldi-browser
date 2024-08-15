@@ -21,7 +21,6 @@ cc_library(
         "nearby_share_switches.cc",
     ],
     hdrs = [
-        "nearby_share_enums.h",
         "nearby_share_prefs.h",
         "nearby_share_profile_info_provider.h",
         "nearby_share_switches.h",
@@ -29,7 +28,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//sharing/internal/api:platform",
-        "//sharing/proto:share_cc_proto",
+        "//sharing/proto:enums_cc_proto",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/time",
@@ -52,14 +51,9 @@ cc_library(
 
 cc_library(
     name = "enum",
-    srcs = [
-    ],
-    hdrs = [
-        "nearby_share_enums.h",
-    ],
+    hdrs = ["nearby_share_enums.h"],
     visibility = ["//visibility:public"],
-    deps = [
-    ],
+    deps = [],
 )
 
 cc_library(

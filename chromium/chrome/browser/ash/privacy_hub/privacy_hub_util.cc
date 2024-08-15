@@ -7,8 +7,11 @@
 #include <optional>
 #include <string>
 
+#include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/privacy_hub_delegate.h"
 #include "ash/shell.h"
+#include "ash/system/geolocation/geolocation_controller.h"
 #include "ash/system/privacy_hub/camera_privacy_switch_controller.h"
 #include "ash/system/privacy_hub/geolocation_privacy_switch_controller.h"
 #include "ash/system/privacy_hub/privacy_hub_controller.h"
@@ -17,14 +20,14 @@
 #include "base/check_deref.h"
 #include "base/supports_user_data.h"
 #include "chrome/browser/ash/camera_presence_notifier.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/app_access_notifier.h"
+#include "components/prefs/pref_service.h"
 
 namespace ash::privacy_hub_util {
 
 void SetFrontend(PrivacyHubDelegate* ptr) {
-  if (!features::IsCrosPrivacyHubEnabled()) {
-    return;
-  }
   PrivacyHubController* const controller = PrivacyHubController::Get();
   if (controller != nullptr) {
     // Controller may not be available when used from a test.
@@ -45,10 +48,6 @@ bool ShouldForceDisableCameraSwitch() {
 }
 
 void SetUpCameraCountObserver() {
-  if (!features::IsCrosPrivacyHubEnabled()) {
-    return;
-  }
-
   auto* camera_controller = CameraPrivacySwitchController::Get();
   CHECK(camera_controller);
 
@@ -68,8 +67,7 @@ void SetUpCameraCountObserver() {
 
 // Notifies the Privacy Hub controller.
 void TrackGeolocationAttempted(const std::string& name) {
-  if (!features::IsCrosPrivacyHubEnabled() ||
-      !features::IsCrosPrivacyHubLocationEnabled()) {
+  if (!features::IsCrosPrivacyHubLocationEnabled()) {
     return;
   }
   GeolocationPrivacySwitchController* controller =
@@ -82,8 +80,7 @@ void TrackGeolocationAttempted(const std::string& name) {
 
 // Notifies the Privacy Hub controller.
 void TrackGeolocationRelinquished(const std::string& name) {
-  if (!features::IsCrosPrivacyHubEnabled() ||
-      !features::IsCrosPrivacyHubLocationEnabled()) {
+  if (!features::IsCrosPrivacyHubLocationEnabled()) {
     return;
   }
   GeolocationPrivacySwitchController* controller =
@@ -94,6 +91,21 @@ void TrackGeolocationRelinquished(const std::string& name) {
   }
 }
 
+bool IsCrosLocationOobeNegotiationNeeded() {
+  // No negotiation needed, if the PH Location feature is not yet enabled.
+  if (!ash::features::IsCrosPrivacyHubLocationEnabled()) {
+    return false;
+  }
+
+  const Profile* profile = ProfileManager::GetPrimaryUserProfile();
+  if (profile->GetPrefs()->IsManagedPreference(
+          ash::prefs::kUserGeolocationAccessLevel)) {
+    return false;
+  }
+
+  return true;
+}
+
 namespace {
 std::optional<bool> camera_led_fallback_for_testing{};
 }
@@ -101,9 +113,6 @@ std::optional<bool> camera_led_fallback_for_testing{};
 // TODO(b/289510726): remove when all cameras fully support the software
 // switch.
 bool UsingCameraLEDFallback() {
-  if (!features::IsCrosPrivacyHubEnabled()) {
-    return false;
-  }
   if (!camera_led_fallback_for_testing.has_value()) {
     CameraPrivacySwitchController* const controller =
         CameraPrivacySwitchController::Get();
@@ -158,6 +167,24 @@ void SetAppAccessNotifier(AppAccessNotifier* app_access_notifier) {
   controller->SetSensorDisabledNotificationDelegate(
       app_access_notifier ? std::make_unique<Wrapper>(app_access_notifier)
                           : nullptr);
+}
+
+std::pair<base::Time, base::Time> SunriseSunsetSchedule() {
+  const base::Time default_sunrise_time =
+      base::Time::Now().LocalMidnight() + base::Hours(6);
+  const base::Time default_sunset_time = default_sunrise_time + base::Hours(12);
+  const ash::GeolocationController* geolocation_controller =
+      ash::GeolocationController::Get();
+  const base::Time sunrise_time =
+      geolocation_controller
+          ? geolocation_controller->GetSunriseTime().value_or(
+                default_sunrise_time)
+          : default_sunrise_time;
+  const base::Time sunset_time =
+      geolocation_controller ? geolocation_controller->GetSunsetTime().value_or(
+                                   default_sunset_time)
+                             : default_sunrise_time;
+  return std::make_pair(sunrise_time, sunset_time);
 }
 
 }  // namespace ash::privacy_hub_util

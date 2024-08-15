@@ -71,8 +71,6 @@ class ThreadedWorkletThreadForTest : public WorkerThread {
     return *worklet_thread_holder->GetThread();
   }
 
-  void ClearWorkerBackingThread() override {}
-
   static void EnsureSharedBackingThread() {
     DCHECK(IsMainThread());
     WorkletThreadHolder<ThreadedWorkletThreadForTest>::EnsureInstance(
@@ -234,7 +232,7 @@ class ThreadedWorkletMessagingProxyForTest
             nullptr /* parent_permissions_policy */,
             GetExecutionContext()->GetAgentClusterID(), ukm::kInvalidSourceId,
             GetExecutionContext()->GetExecutionContextToken()),
-        absl::nullopt, absl::nullopt);
+        std::nullopt, std::nullopt);
   }
 
  private:

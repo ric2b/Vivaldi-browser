@@ -16,6 +16,10 @@
 #include "components/prefs/pref_service.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
+#if BUILDFLAG(IS_IOS)
+#include "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
+#endif
+
 namespace vivaldi_partners {
 
 // To determine meta data changes for which we should clear the partner id
@@ -55,7 +59,7 @@ void RemovedPartnersTracker::Create(Profile* profile,
 #else
 /*static*/
 void RemovedPartnersTracker::Create(PrefService* prefs,
-                                    bookmarks::BookmarkModel* model) {
+                                    LegacyBookmarkModel* model) {
   new RemovedPartnersTracker(prefs, model);
 }
 #endif // !IS_IOS
@@ -88,15 +92,15 @@ RemovedPartnersTracker::RemovedPartnersTracker(Profile* profile,
     : model_(model), prefs_(profile->GetPrefs()), profile_(profile) {
   model_->AddObserver(this);
   if (model_->loaded())
-    BookmarkModelLoaded(model, false);
+    BookmarkModelLoaded(false);
 }
 #else
 RemovedPartnersTracker::RemovedPartnersTracker(PrefService* prefs,
-                                               bookmarks::BookmarkModel* model)
+                                               LegacyBookmarkModel* model)
     : model_(model), prefs_(prefs) {
   model_->AddObserver(this);
   if (model_->loaded())
-    BookmarkModelLoaded(model, false);
+    BookmarkModelLoaded(model);
 }
 #endif // !IS_IOS
 
@@ -105,13 +109,11 @@ RemovedPartnersTracker::~RemovedPartnersTracker() {
 }
 
 void RemovedPartnersTracker::BookmarkNodeChanged(
-    bookmarks::BookmarkModel* model,
     const bookmarks::BookmarkNode* node) {
   TrackRemovals(node, false);
 }
 
 void RemovedPartnersTracker::OnWillRemoveBookmarks(
-    bookmarks::BookmarkModel* model,
     const bookmarks::BookmarkNode* parent,
     size_t old_index,
     const bookmarks::BookmarkNode* node) {
@@ -119,7 +121,6 @@ void RemovedPartnersTracker::OnWillRemoveBookmarks(
 }
 
 void RemovedPartnersTracker::OnWillChangeBookmarkMetaInfo(
-    bookmarks::BookmarkModel* model,
     const bookmarks::BookmarkNode* node) {
   // No need to filter on upgrade
   if (!vivaldi_default_bookmarks::g_bookmark_update_active) {
@@ -128,7 +129,6 @@ void RemovedPartnersTracker::OnWillChangeBookmarkMetaInfo(
 }
 
 void RemovedPartnersTracker::BookmarkMetaInfoChanged(
-    bookmarks::BookmarkModel* model,
     const bookmarks::BookmarkNode* node) {
   if (change_filter_ && change_filter_->HasChanged(node)) {
     TrackRemovals(node, false);
@@ -137,7 +137,6 @@ void RemovedPartnersTracker::BookmarkMetaInfoChanged(
 }
 
 void RemovedPartnersTracker::BookmarkModelLoaded(
-    bookmarks::BookmarkModel* model,
     bool ids_reassigned) {
   const base::Value::List& deleted_partners =
       prefs_->GetList(vivaldiprefs::kBookmarksDeletedPartners);
@@ -147,8 +146,7 @@ void RemovedPartnersTracker::BookmarkModelLoaded(
     SaveRemovedPartners();
 }
 
-void RemovedPartnersTracker::BookmarkModelBeingDeleted(
-    bookmarks::BookmarkModel* model) {
+void RemovedPartnersTracker::BookmarkModelBeingDeleted() {
   delete this;
 }
 

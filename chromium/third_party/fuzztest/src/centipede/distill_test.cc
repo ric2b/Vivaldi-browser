@@ -23,24 +23,23 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "absl/flags/declare.h"
 #include "absl/flags/reflection.h"
 #include "absl/log/check.h"
 #include "./centipede/blob_file.h"
 #include "./centipede/defs.h"
 #include "./centipede/environment.h"
 #include "./centipede/feature.h"
+#include "./centipede/resource_pool.h"
+#include "./centipede/rusage_stats.h"
 #include "./centipede/shard_reader.h"
 #include "./centipede/test_util.h"
 #include "./centipede/util.h"
 #include "./centipede/workdir.h"
 
-ABSL_DECLARE_FLAG(std::string, binary_hash);
-ABSL_DECLARE_FLAG(std::string, binary);
-ABSL_DECLARE_FLAG(std::string, workdir);
-
 namespace centipede {
 namespace {
+
+using testing::UnorderedElementsAreArray;
 
 struct TestCorpusRecord {
   ByteArray input;
@@ -105,7 +104,7 @@ std::vector<TestCorpusRecord> TestDistill(
   // We need to set at least --binary_hash before `env` is constructed,
   // so we do this by overriding the flags.
   absl::FlagSaver flag_saver;
-  std::string dir = std::filesystem::path(GetTestTempDir()).append(test_name);
+  std::string dir = GetTestTempDir(test_name);
   std::filesystem::remove_all(dir);
   std::filesystem::create_directories(dir);
   Environment env;
@@ -118,6 +117,11 @@ std::vector<TestCorpusRecord> TestDistill(
   const WorkDir wd{env};
   std::filesystem::create_directories(wd.CoverageDirPath());
 
+  // Do not limit the max RAM.
+  perf::ResourcePool ram_pool{perf::RUsageMemory::Max()};
+  // Turn off parallel writes to ensure deterministic outputs.
+  constexpr int kParallelism = 1;
+
   // Write the shards.
   for (size_t shard_index = 0; shard_index < shards.size(); ++shard_index) {
     for (const auto &record : shards[shard_index]) {
@@ -125,7 +129,7 @@ std::vector<TestCorpusRecord> TestDistill(
     }
   }
   // Distill.
-  DistillTask(env, shard_indices);
+  DistillTask(env, shard_indices, ram_pool, kParallelism);
   // Read the result back.
   return ReadFromDistilled(wd);
 }
@@ -140,45 +144,50 @@ TEST(Distill, BasicDistill) {
 
   ShardVec shards = {
       // shard 0; note: distillation iterates the shards backwards.
-      {{in3, {10}}, {in0, {10, 20}}},
+      {
+          {in3, {10}},
+          {in0, {10, 20}},
+      },
       // shard 1
-      {{in1, {20, 30, usr0}}},
+      {
+          {in1, {20, 30, usr0}},
+      },
       // shard 2
-      {{in2, {30, 40, usr1}}},
+      {
+          {in2, {30, 40, usr1}},
+      },
   };
   // Distill these 3 shards in different orders, observe different results.
   EXPECT_THAT(TestDistill(shards, {0, 1, 2}, test_info_->name(), 0),
-              testing::ElementsAreArray({
+              UnorderedElementsAreArray({
                   EqualsTestCorpusRecord(in0, FeatureVec{10, 20}),
                   EqualsTestCorpusRecord(in1, FeatureVec{20, 30}),
                   EqualsTestCorpusRecord(in2, FeatureVec{30, 40}),
               }));
-
   EXPECT_THAT(TestDistill(shards, {2, 0, 1}, test_info_->name(), 0),
-              testing::ElementsAreArray({
+              UnorderedElementsAreArray({
                   EqualsTestCorpusRecord(in2, FeatureVec{30, 40}),
                   EqualsTestCorpusRecord(in0, FeatureVec{10, 20}),
               }));
   EXPECT_THAT(TestDistill(shards, {2, 0, 1}, test_info_->name(), 0x1),
-              testing::ElementsAreArray({
+              UnorderedElementsAreArray({
                   EqualsTestCorpusRecord(in2, FeatureVec{30, 40}),
                   EqualsTestCorpusRecord(in0, FeatureVec{10, 20}),
                   EqualsTestCorpusRecord(in1, FeatureVec{20, 30, usr0}),
               }));
   EXPECT_THAT(TestDistill(shards, {2, 0, 1}, test_info_->name(), 0x2),
-              testing::ElementsAreArray({
+              UnorderedElementsAreArray({
                   EqualsTestCorpusRecord(in2, FeatureVec{30, 40, usr1}),
                   EqualsTestCorpusRecord(in0, FeatureVec{10, 20}),
               }));
   EXPECT_THAT(TestDistill(shards, {2, 0, 1}, test_info_->name(), 0x3),
-              testing::ElementsAreArray({
+              UnorderedElementsAreArray({
                   EqualsTestCorpusRecord(in2, FeatureVec{30, 40, usr1}),
                   EqualsTestCorpusRecord(in0, FeatureVec{10, 20}),
                   EqualsTestCorpusRecord(in1, FeatureVec{20, 30, usr0}),
               }));
-
   EXPECT_THAT(TestDistill(shards, {1, 0, 2}, test_info_->name(), 0),
-              testing::ElementsAreArray({
+              UnorderedElementsAreArray({
                   EqualsTestCorpusRecord(in1, FeatureVec{20, 30}),
                   EqualsTestCorpusRecord(in0, FeatureVec{10, 20}),
                   EqualsTestCorpusRecord(in2, FeatureVec{30, 40}),

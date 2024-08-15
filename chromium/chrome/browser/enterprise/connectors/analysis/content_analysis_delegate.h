@@ -21,6 +21,7 @@
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
+#include "content/public/browser/clipboard_types.h"
 #include "url/gurl.h"
 
 class Profile;
@@ -92,8 +93,13 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase {
   struct Data {
     Data();
     Data(Data&& other);
-    Data& operator=(Data&&);
+    Data& operator=(Data&& other);
     ~Data();
+
+    // Helper function to populate `text` and `image` with the data in a
+    // `content::ClipboardPasteData` object.
+    void AddClipboardData(
+        const content::ClipboardPasteData& clipboard_paste_data);
 
     // URL of the page that is to receive sensitive data.
     GURL url;
@@ -165,6 +171,15 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase {
   using CompletionCallback =
       base::OnceCallback<void(const Data& data, Result& result)>;
 
+  // Callback used with CreateForFilesInWebContents() that informs caller of
+  // verdict of deep scans.  `data` is the object passed to
+  // CreateForFilesInWebContents(). The boolean vector holds the same number of
+  // elements as `data.paths` and each corresponds to a path in `data.paths`
+  // with the same index.
+  using ForFilesCompletionCallback =
+      base::OnceCallback<void(std::vector<base::FilePath> paths,
+                              std::vector<bool>)>;
+
   // A factory function used in tests to create fake ContentAnalysisDelegate
   // instances.
   using Factory =
@@ -190,9 +205,16 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase {
   // "CancelledByUser" metrics should not be recorded.
   void Cancel(bool warning) override;
 
+  // Returns both rule-based and policy-based custom message without the prefix
+  // if DialogCustomRuleMessageEnabled flag enabled.
+  // TODO(b/322999022) Cleanup comments after custom rule message finch flag
+  // experiment.
   std::optional<std::u16string> GetCustomMessage() const override;
 
   std::optional<GURL> GetCustomLearnMoreUrl() const override;
+
+  std::optional<std::vector<std::pair<gfx::Range, GURL>>>
+  GetCustomRuleMessageRanges() const override;
 
   bool BypassRequiresJustification() const override;
 
@@ -224,6 +246,20 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase {
       content::WebContents* web_contents,
       Data data,
       CompletionCallback callback,
+      safe_browsing::DeepScanAccessPoint access_point);
+
+  // Helper function for calling CreateForWebContents() when the data to
+  // process is a collection of files on disk.  This requires first expanding
+  // any directories in the given paths in order analyze all the files.
+  // If the calling code has already done the directory expansion then it can
+  // call `CreateForWebContents()` directly.
+  //
+  // `data.paths` is expected to contain the files and/or directories to
+  // analyze.  `text` and `page` are expected to be null/empty.
+  static void CreateForFilesInWebContents(
+      content::WebContents* web_contents,
+      Data data,
+      ForFilesCompletionCallback callback,
       safe_browsing::DeepScanAccessPoint access_point);
 
   // In tests, sets a factory function for creating fake
@@ -360,8 +396,11 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase {
 
   // Updates `final_result_` following the precedence established by the
   // FinalResult enum.
-  void UpdateFinalResult(FinalContentAnalysisResult message,
-                         const std::string& tag);
+  void UpdateFinalResult(
+      FinalContentAnalysisResult message,
+      const std::string& tag,
+      const ContentAnalysisResponse::Result::TriggeredRule::CustomRuleMessage&
+          custom_rule_message);
 
   // Send an acknowledgement to the service provider of the final result
   // for the requests of this ContentAnalysisDelegate instance.
@@ -483,6 +522,10 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase {
   std::string page_content_type_;
 
   base::TimeTicks upload_start_time_;
+
+  // Custom message for rule.
+  ContentAnalysisResponse::Result::TriggeredRule::CustomRuleMessage
+      custom_rule_message_;
 
   base::WeakPtrFactory<ContentAnalysisDelegate> weak_ptr_factory_{this};
 };

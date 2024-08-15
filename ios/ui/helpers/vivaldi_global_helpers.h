@@ -51,6 +51,9 @@ typedef NS_ENUM(NSUInteger, IPadLayoutState) {
 /// Returns boolean whether dark text should be used above a view using the
 /// given color for background.
 + (BOOL)shouldUseDarkTextForColor:(UIColor* _Nonnull)color;
+/// Returns boolean whether dark text should be used above an image using the
+/// dominant color for the image.
++ (BOOL)shouldUseDarkTextForImage:(UIImage* _Nonnull)image;
 /// Returns boolean whether tab strip should use default themeColor for
 /// the given color. Too bright or dark(near white/black) webState themeColor could
 /// conflict with tab selected color which is also white for light scheme.
@@ -88,6 +91,16 @@ typedef NS_ENUM(NSUInteger, IPadLayoutState) {
 /// Returns alphabetically  sorted result from two provided NSString keys.
 + (NSComparisonResult)compare:(NSString* _Nonnull)first
                        second:(NSString* _Nonnull)second;
+/// Returns sorted result from two provided BOOL keys
+/// and whether folders or items move to the top.
+/// Used for cases like sort by kind for Speed Dial,
+/// Bookmarks, or Notes where two kinds of item such as folder and non-folder
+/// is present.
+/// Example: first, second BOOL value indicates whether isFolder is YES.
+/// foldersFirst BOOL decides whether folders will move to top or bottom.
++ (NSComparisonResult)compare:(BOOL)first
+                       second:(BOOL)second
+                 foldersFirst:(BOOL)foldersFirst;
 /// Returns True if URL A and URL B has same host.
 + (BOOL)areHostsEquivalentForURL:(NSURL* _Nonnull)aURL
                             bURL:(NSURL* _Nonnull)bURL;

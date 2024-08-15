@@ -7,14 +7,24 @@
 
 #import "ios/ui/ntp/vivaldi_speed_dial_sorting_mode.h"
 #import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_style.h"
+#import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_column.h"
 
 @interface VivaldiStartPagePrefsHelper : NSObject
 
 #pragma mark - Getters
 /// Returns the speed dial sorting mode from prefs.
 + (const SpeedDialSortingMode)getSDSortingMode;
+/// Returns the speed dial sorting order from prefs.
++ (const SpeedDialSortingOrder)getSDSortingOrder;
 /// Returns the start page layout setting
 + (const VivaldiStartPageLayoutStyle)getStartPageLayoutStyle;
+/// Returns the start page speed dial maximum columns
++ (const VivaldiStartPageLayoutColumn)getStartPageSpeedDialMaximumColumns;
+/// Returns whether speed dials are visible on the start page.
++ (BOOL)showSpeedDials;
+/// Returns whether start page customize button is visible on the start page.
++ (BOOL)showStartPageCustomizeButton;
+
 /// Returns the startup wallpaper
 + (NSString*)getWallpaperName;
 /// Retrieves the UIImage from the stored Base64 encoded string
@@ -24,8 +34,18 @@
 #pragma mark - Setters
 /// Sets the speed dial sorting mode to the prefs.
 + (void)setSDSortingMode:(const SpeedDialSortingMode)mode;
+/// Sets the speed dial sorting order to the prefs.
++ (void)setSDSortingOrder:(const SpeedDialSortingOrder)order;
 /// Sets the start page layout style.
 + (void)setStartPageLayoutStyle:(const VivaldiStartPageLayoutStyle)style;
+/// Sets the start page speed dial maximum columns.
++ (void)setStartPageSpeedDialMaximumColumns:
+    (VivaldiStartPageLayoutColumn)columns;
+/// Sets whether speed dials are visible on the start page.
++ (void)setShowSpeedDials:(BOOL)show;
+/// Sets whether start page customize button is visible on the start page.
++ (void)setShowStartPageCustomizeButton:(BOOL)show;
+
 /// Sets the wallpaper name for starup wallpaper
 + (void)setWallpaperName:(NSString*)name;
 /// Stores the UIImage as a Base64 encoded string

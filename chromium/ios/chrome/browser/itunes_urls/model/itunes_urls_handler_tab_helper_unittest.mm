@@ -22,8 +22,7 @@ class ITunesUrlsHandlerTabHelperTest : public PlatformTest {
         chrome_browser_state_(TestChromeBrowserState::Builder().Build()) {
     web_state_.SetBrowserState(
         chrome_browser_state_->GetOriginalChromeBrowserState());
-    ITunesUrlsHandlerTabHelper::CreateForWebState(&web_state_);
-    ITunesUrlsHandlerTabHelper::FromWebState(&web_state_)
+    ITunesUrlsHandlerTabHelper::GetOrCreateForWebState(&web_state_)
         ->SetWebContentsHandler(fake_handler_);
   }
 
@@ -33,6 +32,7 @@ class ITunesUrlsHandlerTabHelperTest : public PlatformTest {
     const web::WebStatePolicyDecider::RequestInfo request_info(
         ui::PageTransition::PAGE_TRANSITION_LINK, main_frame,
         /*target_frame_is_cross_origin=*/false,
+        /*target_window_is_cross_origin=*/false,
         /*has_user_gesture=*/false, /*user_tapped_recently=*/false);
     __block bool callback_called = false;
     __block web::WebStatePolicyDecider::PolicyDecision request_policy =

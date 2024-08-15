@@ -10,12 +10,14 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/android/callback_android.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/debug/crash_logging.h"
 #include "base/feature_list.h"
 #include "base/hash/hash.h"
+#include "content/browser/accessibility/accessibility_tree_snapshot_combiner.h"
 #include "content/browser/accessibility/browser_accessibility_android.h"
 #include "content/browser/accessibility/browser_accessibility_manager_android.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl_android.h"
@@ -24,6 +26,7 @@
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/android/content_jni_headers/AccessibilityNodeInfoBuilder_jni.h"
+#include "content/public/android/content_jni_headers/AssistDataBuilder_jni.h"
 #include "content/public/android/content_jni_headers/WebContentsAccessibilityImpl_jni.h"
 #include "content/public/common/content_features.h"
 #include "net/base/data_url.h"
@@ -221,6 +224,18 @@ WebContentsAccessibilityAndroid::WebContentsAccessibilityAndroid(
   connector_ = nullptr;
 }
 
+WebContentsAccessibilityAndroid::WebContentsAccessibilityAndroid(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    const base::android::JavaParamRef<jobject>& jassist_data_builder,
+    WebContents* web_contents)
+    : java_ref_(env, obj),
+      java_adb_ref_(env, jassist_data_builder),
+      web_contents_(static_cast<WebContentsImpl*>(web_contents)) {
+  // A Connector is not required for a simple snapshot.
+  connector_ = nullptr;
+}
+
 WebContentsAccessibilityAndroid::~WebContentsAccessibilityAndroid() {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
@@ -260,9 +275,6 @@ void WebContentsAccessibilityAndroid::DeleteEarly(JNIEnv* env) {
 
 void WebContentsAccessibilityAndroid::DisableRendererAccessibility(
     JNIEnv* env) {
-  // This method should only be called if the Auto-Disable feature is enabled.
-  DCHECK(base::FeatureList::IsEnabled(::features::kAutoDisableAccessibilityV2));
-
   // This method should only be called when |snapshot_root_manager_| is null,
   // which means this instance was constructed via a web contents and not an
   // AXTreeUpdate (e.g. for snapshots, frozen tabs, paint preview, etc).
@@ -294,9 +306,6 @@ void WebContentsAccessibilityAndroid::DisableRendererAccessibility(
 void WebContentsAccessibilityAndroid::ReEnableRendererAccessibility(
     JNIEnv* env,
     const JavaParamRef<jobject>& jweb_contents) {
-  // This method should only be called if the Auto-Disable feature is enabled.
-  DCHECK(base::FeatureList::IsEnabled(::features::kAutoDisableAccessibilityV2));
-
   // This method should only be called when |snapshot_root_manager_| is null,
   // which means this instance was constructed via a web contents and not an
   // AXTreeUpdate (e.g. for snapshots, frozen tabs, paint preview, etc).
@@ -780,8 +789,7 @@ jboolean WebContentsAccessibilityAndroid::PopulateAccessibilityNodeInfo(
   }
   if (child_ids.size()) {
     Java_AccessibilityNodeInfoBuilder_addAccessibilityNodeInfoChildren(
-        env, obj, info,
-        base::android::ToJavaIntArray(env, child_ids.data(), child_ids.size()));
+        env, obj, info, base::android::ToJavaIntArray(env, child_ids));
   }
 
   Java_AccessibilityNodeInfoBuilder_setAccessibilityNodeInfoBooleanAttributes(
@@ -1480,6 +1488,146 @@ void WebContentsAccessibilityAndroid::UpdateFrameInfo(float page_scale) {
   frame_info_initialized_ = true;
 }
 
+void WebContentsAccessibilityAndroid::RequestAccessibilityTreeSnapshot(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& view_structure_root,
+    const base::android::JavaParamRef<jobject>& on_done_callback) {
+  // This method should only be called by the unified snapshots feature.
+  CHECK(base::FeatureList::IsEnabled(features::kAccessibilityUnifiedSnapshots));
+
+  // This is the callback provided by the Java-side code and will be called
+  // after the snapshot has been requested and fully processed. This is not to
+  // be confused with the ProcessCompletedAccessibilityTreeSnapshot callback
+  // below, which is called once the renderer has returned all AXTreeUpdates.
+  on_done_callback_ = std::move(on_done_callback);
+
+  base::android::ScopedJavaGlobalRef<jobject> movable_view_structure_root;
+  movable_view_structure_root.Reset(env, view_structure_root);
+
+  // Define snapshot parameters:
+  auto params = mojom::SnapshotAccessibilityTreeParams::New();
+  params->ax_mode =
+      ui::AXMode(ui::kAXModeComplete.flags() | ui::AXMode::kHTMLMetadata)
+          .flags();
+  params->max_nodes = 5000;
+  params->timeout = base::Seconds(2);
+
+  // Use AccessibilityTreeSnapshotCombiner to perform snapshots
+  auto combiner = base::MakeRefCounted<AccessibilityTreeSnapshotCombiner>(
+      base::BindOnce(&WebContentsAccessibilityAndroid::
+                         ProcessCompletedAccessibilityTreeSnapshot,
+                     GetWeakPtr(), env, std::move(movable_view_structure_root)),
+      std::move(params));
+  web_contents_->GetPrimaryMainFrame()->ForEachRenderFrameHost(
+      [&combiner](RenderFrameHostImpl* rfhi) {
+        combiner->RequestSnapshotOnRenderFrameHost(rfhi);
+      });
+}
+
+void WebContentsAccessibilityAndroid::ProcessCompletedAccessibilityTreeSnapshot(
+    JNIEnv* env,
+    const base::android::JavaRef<jobject>& view_structure_root,
+    const ui::AXTreeUpdate& result) {
+  // If we don't have a connection back to the Java-side objects, then fail.
+  ScopedJavaLocalRef<jobject> obj = java_adb_ref_.get(env);
+  CHECK(obj);
+
+  // Construct a root manager without a delegate using the snapshot result.
+  snapshot_root_manager_ = std::make_unique<BrowserAccessibilityManagerAndroid>(
+      result, GetWeakPtr(), /* delegate= */ nullptr);
+
+  auto* root = static_cast<BrowserAccessibilityAndroid*>(
+      snapshot_root_manager_->GetBrowserAccessibilityRoot());
+  CHECK(root);
+
+  // Construct the Java-side tree, use the JNI builder `java_adb_ref_` to
+  // recursively construct each node of the tree starting with the provided
+  // root.
+  RecursivelyPopulateViewStructureTree(env, obj, root, view_structure_root,
+                                       /* is_root= */ true);
+
+  // Add tree-level (root only) data to Java-side tree (e.g. HTML metadata).
+  const auto& metadata_strings =
+      GetRootBrowserAccessibilityManager()->GetMetadataForTree();
+  if (!metadata_strings.empty()) {
+    Java_AssistDataBuilder_populateHTMLMetadataProperties(
+        env, obj, view_structure_root,
+        base::android::ToJavaArrayOfStrings(env, metadata_strings));
+  }
+
+  // We have fulfilled the request for an accessibility tree snapshot, so we can
+  // now call the provided Java-side callback to inform original client that the
+  // async construction is complete.
+  base::android::RunRunnableAndroid(on_done_callback_);
+}
+
+void WebContentsAccessibilityAndroid::RecursivelyPopulateViewStructureTree(
+    JNIEnv* env,
+    ScopedJavaLocalRef<jobject> obj,
+    const BrowserAccessibilityAndroid* node,
+    const base::android::JavaRef<jobject>& java_side_assist_data_object,
+    bool is_root) {
+  PopulateViewStructureNode(env, obj, node, java_side_assist_data_object);
+  for (size_t child_index = 0; const auto& child : node->PlatformChildren()) {
+    const auto& child_node =
+        static_cast<const BrowserAccessibilityAndroid&>(child);
+    base::android::ScopedJavaLocalRef<jobject> java_side_child_object =
+        Java_AssistDataBuilder_addChildNode(
+            env, obj, java_side_assist_data_object, child_index);
+    child_index++;
+    RecursivelyPopulateViewStructureTree(env, obj, &child_node,
+                                         java_side_child_object,
+                                         /* is_root= */ false);
+  }
+  if (!is_root) {
+    Java_AssistDataBuilder_commitNode(env, obj, java_side_assist_data_object);
+  }
+}
+
+void WebContentsAccessibilityAndroid::PopulateViewStructureNode(
+    JNIEnv* env,
+    ScopedJavaLocalRef<jobject> obj,
+    const BrowserAccessibilityAndroid* node,
+    const base::android::JavaRef<jobject>& java_side_assist_data_object) {
+  Java_AssistDataBuilder_populateBaseProperties(
+      env, obj, java_side_assist_data_object,
+      GetCanonicalJNIString(env, node->GetClassName()), node->GetChildCount());
+
+  int bgcolor = 0;
+  int color = 0;
+  int text_size = -1.0;
+  if (node->HasFloatAttribute(ax::mojom::FloatAttribute::kFontSize)) {
+    color = node->GetIntAttribute(ax::mojom::IntAttribute::kColor);
+    bgcolor = node->GetIntAttribute(ax::mojom::IntAttribute::kBackgroundColor);
+    text_size = node->GetFloatAttribute(ax::mojom::FloatAttribute::kFontSize);
+  }
+  Java_AssistDataBuilder_populateTextProperties(
+      env, obj, java_side_assist_data_object,
+      base::android::ConvertUTF16ToJavaString(env, node->GetTextContentUTF16()),
+      node->GetSelectedItemCount() > 0, node->GetSelectionStart(),
+      node->GetSelectionEnd(), color, bgcolor, text_size,
+      node->HasTextStyle(ax::mojom::TextStyle::kBold),
+      node->HasTextStyle(ax::mojom::TextStyle::kItalic),
+      node->HasTextStyle(ax::mojom::TextStyle::kUnderline),
+      node->HasTextStyle(ax::mojom::TextStyle::kLineThrough));
+
+  Java_AssistDataBuilder_populateBoundsProperties(env, obj,
+                                                  java_side_assist_data_object);
+
+  std::vector<std::vector<std::u16string>> html_attrs;
+  for (const auto& attr : node->GetHtmlAttributes()) {
+    html_attrs.push_back(
+        {base::UTF8ToUTF16(attr.first), base::UTF8ToUTF16(attr.second)});
+  }
+  Java_AssistDataBuilder_populateHTMLProperties(
+      env, obj, java_side_assist_data_object,
+      GetCanonicalJNIString(
+          env, node->GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag)),
+      GetCanonicalJNIString(
+          env, node->GetStringAttribute(ax::mojom::StringAttribute::kDisplay)),
+      base::android::ToJavaArrayOfStringArray(env, html_attrs));
+}
+
 base::WeakPtr<WebContentsAccessibilityAndroid>
 WebContentsAccessibilityAndroid::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
@@ -1506,6 +1654,18 @@ jlong JNI_WebContentsAccessibilityImpl_Init(
       env, obj, web_contents, jaccessibility_node_info_builder));
 }
 
+jlong JNI_WebContentsAccessibilityImpl_InitForAssistData(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& jweb_contents,
+    const JavaParamRef<jobject>& jassist_data_builder) {
+  WebContents* web_contents = WebContents::FromJavaWebContents(jweb_contents);
+  DCHECK(web_contents);
+
+  return reinterpret_cast<intptr_t>(new WebContentsAccessibilityAndroid(
+      env, obj, jassist_data_builder, web_contents));
+}
+
 void JNI_WebContentsAccessibilityImpl_SetBrowserAXMode(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
@@ -1515,10 +1675,10 @@ void JNI_WebContentsAccessibilityImpl_SetBrowserAXMode(
   BrowserAccessibilityStateImpl* accessibility_state =
       BrowserAccessibilityStateImpl::GetInstance();
 
-  // The AXMode flags will be set according to enabled feature flag and what is
-  // needed by the current system as indicated by the parameters.
-  if (!accessibility_state->IsPerformanceFilteringAllowed() ||
-      !features::IsAccessibilityPerformanceFilteringEnabled()) {
+  // The AXMode flags will be set according to requirements of the current
+  // system based on running services. This can be disabled with an enterprise
+  // policy, in which case accessibility becomes an all-or-none approach.
+  if (!accessibility_state->IsPerformanceFilteringAllowed()) {
     // When the browser is not yet accessible, then set the AXMode to
     // |ui::kAXModeComplete| for all web contents.
     if (!accessibility_state->IsAccessibleBrowser()) {
@@ -1527,10 +1687,15 @@ void JNI_WebContentsAccessibilityImpl_SetBrowserAXMode(
     return;
   }
 
-  // If the AccessibilityPerformanceFiltering feature flag has been enabled,
-  // then set |ui::kAXModeComplete| if a screen reader is present,
-  // |ui::kAXModeFormControls| if form controls mode is enabled, and
-  // |ui::kAXModeBasic| otherwise.
+  // Set the AXMode based on currently running services, sent from Java-side
+  // code and will fit into one of the below categories:
+  //
+  //    1. Screenreader running - |ui::kAXModeComplete|
+  //    2. Only password manager running - |ui::kAXModeFormControls|
+  //    3. Some accessibility services running that need more information than a
+  //       password manager, but not as much as a screenreader -
+  //       |ui::kAXModeBasic|
+  //
   if (is_screen_reader_enabled) {
     // Remove form controls experimental mode to preserve screen reader mode.
     ui::AXMode flags_to_remove(ui::AXMode::kNone,

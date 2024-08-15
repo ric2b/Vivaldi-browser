@@ -249,7 +249,7 @@ void RenderViewContextMenuBase::UpdateMenuItem(int command_id,
                                                bool enabled,
                                                bool hidden,
                                                const std::u16string& label) {
-  absl::optional<size_t> index = menu_model_.GetIndexOfCommandId(command_id);
+  std::optional<size_t> index = menu_model_.GetIndexOfCommandId(command_id);
   if (!index.has_value())
     return;
 
@@ -267,7 +267,7 @@ void RenderViewContextMenuBase::UpdateMenuItem(int command_id,
 
 void RenderViewContextMenuBase::UpdateMenuIcon(int command_id,
                                                const ui::ImageModel& icon) {
-  absl::optional<size_t> index = menu_model_.GetIndexOfCommandId(command_id);
+  std::optional<size_t> index = menu_model_.GetIndexOfCommandId(command_id);
   if (!index.has_value())
     return;
 
@@ -279,7 +279,7 @@ void RenderViewContextMenuBase::UpdateMenuIcon(int command_id,
 }
 
 void RenderViewContextMenuBase::RemoveMenuItem(int command_id) {
-  absl::optional<size_t> index = menu_model_.GetIndexOfCommandId(command_id);
+  std::optional<size_t> index = menu_model_.GetIndexOfCommandId(command_id);
   if (!index.has_value())
     return;
 
@@ -308,7 +308,7 @@ void RenderViewContextMenuBase::RemoveAdjacentSeparators() {
 }
 
 void RenderViewContextMenuBase::RemoveSeparatorBeforeMenuItem(int command_id) {
-  absl::optional<size_t> index = menu_model_.GetIndexOfCommandId(command_id);
+  std::optional<size_t> index = menu_model_.GetIndexOfCommandId(command_id);
   // Ignore if command not found or if it's the first menu item.
   if (!index.has_value() || index == size_t{0})
     return;

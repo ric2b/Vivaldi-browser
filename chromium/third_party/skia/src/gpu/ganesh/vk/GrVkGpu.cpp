@@ -53,7 +53,8 @@
 #include "src/gpu/vk/VulkanMemory.h"
 #include "src/gpu/vk/VulkanUtilsPriv.h"
 
-#include <utility>
+#include "include/gpu/vk/VulkanTypes.h"
+#include "include/private/gpu/vk/SkiaVulkan.h"
 
 using namespace skia_private;
 
@@ -186,14 +187,12 @@ std::unique_ptr<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
     sk_sp<skgpu::VulkanMemoryAllocator> memoryAllocator = backendContext.fMemoryAllocator;
     if (!memoryAllocator) {
         // We were not given a memory allocator at creation
-        bool mustUseCoherentHostVisibleMemory = caps->mustUseCoherentHostVisibleMemory();
         memoryAllocator = skgpu::VulkanAMDMemoryAllocator::Make(backendContext.fInstance,
                                                                 backendContext.fPhysicalDevice,
                                                                 backendContext.fDevice,
                                                                 physDevVersion,
                                                                 backendContext.fVkExtensions,
-                                                                interface,
-                                                                mustUseCoherentHostVisibleMemory,
+                                                                interface.get(),
                                                                 /*=threadSafe=*/false);
     }
     if (!memoryAllocator) {
@@ -235,7 +234,9 @@ GrVkGpu::GrVkGpu(GrDirectContext* direct,
         , fResourceProvider(this)
         , fStagingBufferManager(this)
         , fDisconnected(false)
-        , fProtectedContext(backendContext.fProtectedContext) {
+        , fProtectedContext(backendContext.fProtectedContext)
+        , fDeviceLostContext(backendContext.fDeviceLostContext)
+        , fDeviceLostProc(backendContext.fDeviceLostProc) {
     SkASSERT(!backendContext.fOwnsInstanceAndDevice);
     SkASSERT(fMemoryAllocator);
 
@@ -2674,7 +2675,15 @@ bool GrVkGpu::checkVkResult(VkResult result) {
         case VK_SUCCESS:
             return true;
         case VK_ERROR_DEVICE_LOST:
-            fDeviceIsLost = true;
+            if (!fDeviceIsLost) {
+                // Callback should only be invoked once, and device should be marked as lost first.
+                fDeviceIsLost = true;
+                skgpu::InvokeDeviceLostCallback(vkInterface(),
+                                                device(),
+                                                fDeviceLostContext,
+                                                fDeviceLostProc,
+                                                vkCaps().supportsDeviceFaultInfo());
+            }
             return false;
         case VK_ERROR_OUT_OF_DEVICE_MEMORY:
         case VK_ERROR_OUT_OF_HOST_MEMORY:

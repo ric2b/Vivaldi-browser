@@ -19,7 +19,7 @@
   }
 
   .dialog {
-    min-width: 448px;
+    width: 448px;
     display: flex;
     flex-direction: column;
     gap: var(--gap-between-sections_);
@@ -102,40 +102,6 @@
     display: flex;
     flex-direction: column;
     padding: 0 20px;
-  }
-
-  #savedStateDialog {
-    display: flex;
-    align-items: center;
-    min-width: 180px;
-    padding: 10px var(--padding_);
-  }
-
-  #savedStateIconContainer {
-    color: var(--cr-secondary-text-color);
-    margin-inline-end: var(--gap-between-sections_);
-    min-width: 22px;
-    height: 22px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    transform-origin: top left;
-  }
-
-  #savedStateIconContainer iron-icon {
-    --iron-icon-width: 20px;
-    --iron-icon-height: 20px;
-  }
-
-  #savedStateTextContainer {
-    color: var(--cr-primary-text-color);
-    font: inherit;
-    font-size: 15px;
-    line-height: 22px;
-  }
-
-  #savedStateLabel {
-    color: var(--cr-secondary-text-color);
   }
 
   #heading {
@@ -306,12 +272,6 @@
     padding: 16px;
   }
 
-  .result-text {
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    user-select: text;
-  }
-
   #resultOptions {
     display: flex;
     align-items: flex-end;
@@ -327,6 +287,7 @@
     --md-select-bg-color: transparent;
     min-height: 36px;
     min-width: 96px;
+    height: auto;
     width: auto;
   }
 
@@ -447,7 +408,6 @@
   .footer[hidden],
   .result-container[hidden],
   #loading[hidden],
-  #savedStateDialog[hidden],
   #editContainer[hidden] {
     display: none;
   }
@@ -532,17 +492,15 @@
         </cr-loading-gradient>
       </div>
       <div id="resultContainer" class="result-container"
-          hidden="[[!hasPartialOrCompleteResponse_(response_,
-              partialResponse_)]]">
+          hidden="[[!hasOutput_]]">
         <div id="resultContainerInner">
-          <div class="result-text"
-              hidden="[[hasPartialResponse_(partialResponse_)]]"
-              >[[getTrimmedResult_(response_.result)]]</div>
-          <div id="partialResultText" class="result-text"
-              hidden="[[!hasPartialResponse_(partialResponse_)]]"
-              >[[getTrimmedPartialResult_(partialResponse_)]]</div>
+          <compose-result-text id="resultText" text-input="[[responseText_]]"
+              is-output-complete="{{outputComplete_}}"
+              has-output="{{hasOutput_}}"
+              has-partial-output="{{hasPartialOutput_}}">
+          </compose-result-text>
           <div id="resultOptions"
-              inert$="[[hasPartialResponse_(partialResponse_)]]">
+              inert$="[[!outputComplete_]]">
             <select class="md-select" id="lengthMenu" value="[[selectedLength_]]"
                 aria-label="$i18n{lengthMenuTitle}" on-change="onLengthChanged_">
               <template is="dom-repeat" items="[[lengthOptions_]]">
@@ -590,8 +548,8 @@
     </div>
 
     <div id="resultFooter" class="footer"
-        hidden$="[[!hasSuccessfulResponse_(response_)]]"
-        inert$="[[hasPartialResponse_(partialResponse_)]]">
+        hidden$="[[!outputComplete_]]"
+        inert$="[[hasPartialOutput_]]">
       <div class="footer-text">
         <div on-click="onFooterClick_">
           <b id="onDeviceUsedFooter"
@@ -604,7 +562,7 @@
           <span hidden="[[showOnDeviceDogfoodFooter_(response_)]]"
               >$i18nRaw{resultFooter}</span>
         </div>
-        <cr-feedback-buttons
+        <cr-feedback-buttons id="feedbackButtons"
             on-selected-option-changed="onFeedbackSelectedOptionChanged_"
             selected-option="[[feedbackState_]]">
         </cr-feedback-buttons>
@@ -631,28 +589,24 @@
         input-params="[[inputParams_]]">
       </compose-textarea>
       <div class="footer">
-        <cr-button id="cancelEditButton" class="tonal-button"
-          on-click="onCancelEditClick_">
-          $i18n{editCancelButton}
-        </cr-button>
+        <if expr="not(is_win)">
+          <cr-button id="cancelEditButton" class="tonal-button"
+            on-click="onCancelEditClick_">
+            $i18n{editCancelButton}
+          </cr-button>
+        </if>
         <cr-button id="submitEditButton" class="action-button"
           on-click="onSubmitEdit_"
           disabled$="[[!isEditSubmitEnabled_]]">
           $i18n{editUpdateButton}
         </cr-button>
+        <if expr="is_win">
+          <cr-button id="cancelEditButton" class="tonal-button"
+            on-click="onCancelEditClick_">
+            $i18n{editCancelButton}
+          </cr-button>
+        </if>
       </div>
     </div>
-  </div>
-</div>
-
-
-<div id="savedStateDialog" hidden="[[!showSavedStateDialog_]]"
-  on-click="onSavedStateDialogClick_">
-  <div id="savedStateIconContainer">
-    <iron-icon icon="compose:compose"></iron-icon>
-  </div>
-  <div id="savedStateTextContainer">
-    <div id="savedStateText">$i18n{savedText}</div>
-    <div id="savedStateLabel">$i18n{savedLabel}</div>
   </div>
 </div>

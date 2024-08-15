@@ -8,17 +8,23 @@ import '//resources/cr_elements/cr_icons.css.js';
 import '//resources/cr_elements/icons.html.js';
 import '//resources/cr_elements/cr_action_menu/cr_action_menu.js';
 import '//resources/cr_elements/md_select.css.js';
+import './voice_selection_menu.js';
 import './icons.html.js';
 
-import {AnchorAlignment, CrActionMenuElement, ShowAtPositionConfig} from '//resources/cr_elements/cr_action_menu/cr_action_menu.js';
+import type {CrActionMenuElement, ShowAtPositionConfig} from '//resources/cr_elements/cr_action_menu/cr_action_menu.js';
+import {AnchorAlignment} from '//resources/cr_elements/cr_action_menu/cr_action_menu.js';
+import type {CrIconButtonElement} from '//resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import {WebUiListenerMixin} from '//resources/cr_elements/web_ui_listener_mixin.js';
 import {assert} from '//resources/js/assert.js';
 import {loadTimeData} from '//resources/js/load_time_data.js';
-import {IronIconElement} from '//resources/polymer/v3_0/iron-icon/iron-icon.js';
-import {DomRepeat, DomRepeatEvent, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import type {IronIconElement} from '//resources/polymer/v3_0/iron-icon/iron-icon.js';
+import type {DomRepeat, DomRepeatEvent} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {ReadAnythingElement} from './app.js';
+import {validatedFontName} from './common.js';
 import {getTemplate} from './read_anything_toolbar.html.js';
+import type {VoiceSelectionMenuElement} from './voice_selection_menu.js';
 
 export interface ReadAnythingToolbarElement {
   $: {
@@ -29,16 +35,11 @@ export interface ReadAnythingToolbarElement {
     fontMenu: CrActionMenuElement,
     fontSizeMenu: CrActionMenuElement,
     moreOptionsMenu: CrActionMenuElement,
-    voiceSelectionMenu: CrActionMenuElement,
+    voiceSelectionMenu: VoiceSelectionMenuElement,
     fontTemplate: DomRepeat,
   };
 }
 
-interface VoiceDropdown {
-  voice: SpeechSynthesisVoice;
-  selected: boolean;
-  previewPlaying: boolean;
-}
 
 interface MenuStateItem<T> {
   title: string;
@@ -56,6 +57,13 @@ interface MenuButton {
   menuToOpen: () => CrActionMenuElement;
 }
 
+interface ToggleButton {
+  id: string;
+  icon: string;
+  title: string;
+  callback: (event: DomRepeatEvent<ToggleButton>) => void;
+}
+
 // Enum for logging when a text style setting is changed.
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
@@ -65,18 +73,35 @@ enum ReadAnythingSettingsChange {
   THEME_CHANGE = 2,
   LINE_HEIGHT_CHANGE = 3,
   LETTER_SPACING_CHANGE = 4,
+  LINKS_ENABLED_CHANGE = 5,
 
   // Must be last.
-  COUNT = 5,
+  COUNT = 6,
 }
 
 const SETTINGS_CHANGE_UMA = 'Accessibility.ReadAnything.SettingsChange';
 const moreOptionsClass = '.more-options-icon';
 const activeClass = ' active';
 
+// Link toggle button constants.
+export const LINKS_ENABLED_ICON = 'read-anything:links-enabled';
+export const LINKS_DISABLED_ICON = 'read-anything:links-disabled';
+export const LINK_TOGGLE_BUTTON_ID = 'link-toggle-button';
+
+// Events emitted from the toolbar to the app
+export const FONT_SIZE_EVENT = 'font-size-change';
+export const FONT_EVENT = 'font-change';
+export const RATE_EVENT = 'rate-change';
+export const PLAY_PAUSE_EVENT = 'play-pause-click';
+export const HIGHLIGHT_TOGGLE_EVENT = 'highlight-toggle';
+export const NEXT_GRANULARITY_EVENT = 'next-granularity-click';
+export const PREVIOUS_GRANULARITY_EVENT = 'previous-granularity-click';
+export const LINKS_EVENT = 'links-toggle';
+
 const ReadAnythingToolbarElementBase = WebUiListenerMixin(PolymerElement);
 export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
   contentPage = document.querySelector('read-anything-app');
+
   static get is() {
     return 'read-anything-toolbar';
   }
@@ -93,6 +118,13 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
       colorOptions_: Array,
       rateOptions_: Array,
       textStyleOptions_: Array,
+      textStyleToggles_: Array,
+      paused: Boolean,
+      hasContent: Boolean,
+      selectedVoice: Object,
+      availableVoices: Array,
+      localeToDisplayName: Object,
+      previewVoicePlaying: Object,
     };
   }
 
@@ -100,7 +132,7 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
   // callback which doesn't have access to "this"
   static maybeUpdateMoreOptions(toolbar: HTMLElement) {
     // Hide the more options button first to calculate if we need it
-    const moreOptionsButton = toolbar.querySelector('#more') as HTMLElement;
+    const moreOptionsButton = toolbar.querySelector<HTMLElement>('#more');
     assert(moreOptionsButton);
     ReadAnythingToolbarElement.hideElement(moreOptionsButton, false);
 
@@ -116,9 +148,12 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
       ReadAnythingToolbarElement.showElement(btn as HTMLElement);
     });
 
-    // When scroll width and client width are the different, then the content
-    // has overflowed.
-    if (toolbar.scrollWidth !== toolbar.clientWidth) {
+    const parentWidth = toolbar.offsetParent?.clientWidth;
+    assert(parentWidth);
+
+    // When the toolbar's width exceeds the parent width, then the content has
+    // overflowed.
+    if (toolbar.clientWidth > parentWidth) {
       ReadAnythingToolbarElement.showElement(moreOptionsButton);
       // Hide all the buttons on the toolbar that are in the more options menu
       buttonsOnToolbarToMaybeHide.forEach(btn => {
@@ -193,6 +228,18 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
     },
   ];
 
+  private textStyleToggles_: ToggleButton[] = [
+    {
+      id: LINK_TOGGLE_BUTTON_ID,
+      icon: chrome.readingMode.linksEnabled?
+      LINKS_ENABLED_ICON: LINKS_DISABLED_ICON,
+      title: chrome.readingMode.linksEnabled?
+           loadTimeData.getString('disableLinksLabel'):
+               loadTimeData.getString('enableLinksLabel'),
+      callback: this.onToggleLinksClick_.bind(this),
+    },
+  ];
+
   private colorOptions_: Array<MenuStateItem<string>> = [
     {
       title: loadTimeData.getString('defaultColorTitle'),
@@ -226,7 +273,6 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
     },
   ];
 
-  private voiceSelectionOptions_: Array<MenuStateItem<VoiceDropdown>> = [];
 
   private rateOptions_: number[] = [0.5, 0.8, 1, 1.2, 1.5, 2, 3, 4];
 
@@ -263,8 +309,17 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
   private isHighlightOn_: boolean = true;
   private activeButton_: HTMLElement|null;
 
-  // If Read Aloud is in the paused state.
-  private isPaused_: boolean = true;
+  private toolbarContainerObserver_: ResizeObserver|null;
+  private dragResizeCallback_: () => void;
+
+  // If Read Aloud is in the paused state. This is set from the parent element
+  // via one way data binding.
+  private readonly paused: boolean;
+
+  // If Read Anything has content. If it doesn't, certain toolbar buttons
+  // like the play / pause button should be disabled. This is set from
+  // the parent element via one way data binding.
+  private readonly hasContent: boolean;
 
   override connectedCallback() {
     super.connectedCallback();
@@ -289,12 +344,33 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
       assert(shadowRoot);
       const toolbar = shadowRoot.getElementById('toolbar-container');
       assert(toolbar);
-      new ResizeObserver(this.onToolbarResize_).observe(toolbar);
+
+      this.toolbarContainerObserver_ =
+          new ResizeObserver(this.onToolbarResize_);
+      this.toolbarContainerObserver_.observe(toolbar);
+
+      this.dragResizeCallback_ = this.onDragResize_.bind(this);
+      window.addEventListener('resize', this.dragResizeCallback_);
     }
     this.textStyleOptions_ =
         this.textStyleOptions_.concat(this.moreOptionsButtons_);
 
     this.updateFonts();
+  }
+
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this.dragResizeCallback_) {
+      window.removeEventListener('resize', this.dragResizeCallback_);
+    }
+    this.toolbarContainerObserver_?.disconnect();
+  }
+
+  private onDragResize_() {
+    const toolbar =
+        this.shadowRoot?.getElementById('toolbar-container') as HTMLElement;
+    assert(toolbar);
+    ReadAnythingToolbarElement.maybeUpdateMoreOptions(toolbar);
   }
 
   private onToolbarResize_(entries: ResizeObserverEntry[]) {
@@ -317,14 +393,7 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
       // scrollbar because the height is calculated before the font is set.
       // Therefore, only set the custom fonts on the individual items when
       // Read Aloud is enabled.
-      fontOptions.forEach(element => {
-        assert(element instanceof HTMLElement);
-        if (!element.innerText) {
-          return;
-        }
-        // Update the font of each button to be the same as the font text.
-        element.style.fontFamily = element.innerText;
-      });
+      this.setFontForFontOptions_(fontOptions);
     } else {
       const shadowRoot = this.shadowRoot;
       assert(shadowRoot);
@@ -336,8 +405,21 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
     }
   }
 
+  private setFontForFontOptions_(fontOptions: Element[]) {
+    fontOptions.forEach(element => {
+      assert(element instanceof HTMLElement);
+      if (!element.innerText) {
+        return;
+      }
+      // Update the font of each button to be the same as the font text.
+      element.style.fontFamily = element.innerText;
+    });
+  }
+
   restoreSettingsFromPrefs(colorSuffix?: string) {
     this.restoreFontMenu_();
+
+    this.updateLinkToggleButton();
 
     if (this.isReadAloudEnabled_) {
       const speechRate = parseFloat(chrome.readingMode.speechRate.toFixed(1));
@@ -377,73 +459,19 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
     });
 
     this.$.fontTemplate.render();
-  }
-
-  updateUiForPlaying() {
-    const shadowRoot = this.shadowRoot;
-    assert(shadowRoot);
-    const button = shadowRoot.getElementById('play-pause');
-    assert(button);
-    button.setAttribute('iron-icon', 'read-anything-20:pause');
-    button.setAttribute('aria-label', loadTimeData.getString('pauseLabel'));
-    this.isPaused_ = false;
-
-    this.updateStyles({
-      '--audio-controls-background': 'var(--color-sys-tonal-container)',
-      '--audio-controls-right-padding': '4px',
-      '--audio-controls-right-margin': '6px',
-    });
-
-    const toolbar = shadowRoot.getElementById('toolbar-container');
-    assert(toolbar);
-    ReadAnythingToolbarElement.maybeUpdateMoreOptions(toolbar);
-  }
-
-  showVoicePreviewPlaying(voice: SpeechSynthesisVoice|null) {
-    if (!voice) {
-      return;
+    if (this.isReadAloudEnabled_) {
+      this.setFontForFontOptions_(Array.from(this.$.fontMenu.children));
     }
-    this.voiceSelectionOptions_ = this.voiceSelectionOptions_.map(
-        ({data, ...rest}) => ({
-          ...rest,
-          data: {
-            voice: data.voice,
-            selected: data.selected,
-            previewPlaying: this.voicesAreEqual_(data.voice, voice),
-          },
-        }));
   }
 
-  showVoicePreviewDone() {
-    this.voiceSelectionOptions_ =
-        this.voiceSelectionOptions_.map(({data, ...rest}) => ({
-                                          ...rest,
-                                          data: {
-                                            voice: data.voice,
-                                            selected: data.selected,
-                                            previewPlaying: false,
-                                          },
-                                        }));
+
+  private playPauseButtonAriaLabel_(paused: boolean) {
+    return paused ? loadTimeData.getString('playLabel') :
+                    loadTimeData.getString('pauseLabel');
   }
 
-  updateUiForPausing() {
-    const shadowRoot = this.shadowRoot;
-    assert(shadowRoot);
-    const button = shadowRoot.getElementById('play-pause');
-    assert(button);
-    button.setAttribute('iron-icon', 'read-anything-20:play');
-    button.setAttribute('aria-label', loadTimeData.getString('playLabel'));
-    this.isPaused_ = true;
-
-    this.updateStyles({
-      '--audio-controls-background': 'transparent',
-      '--audio-controls-right-padding': '0px',
-      '--audio-controls-right-margin': '2px',
-    });
-
-    const toolbar = shadowRoot.getElementById('toolbar-container');
-    assert(toolbar);
-    ReadAnythingToolbarElement.maybeUpdateMoreOptions(toolbar);
+  private playPauseButtonIronIcon_(paused: boolean) {
+    return paused ? 'read-anything-20:play' : 'read-anything-20:pause';
   }
 
   private closeMenus_() {
@@ -454,16 +482,20 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
     this.$.fontMenu.close();
   }
 
+  private emitEvent_(name: string, eventDetail?: any) {
+    this.dispatchEvent(new CustomEvent(name, {
+      bubbles: true,
+      composed: true,
+      detail: eventDetail,
+    }));
+  }
+
   private onNextGranularityClick_() {
-    if (this.contentPage) {
-      this.contentPage.playNextGranularity();
-    }
+    this.emitEvent_(NEXT_GRANULARITY_EVENT);
   }
 
   private onPreviousGranularityClick_() {
-    if (this.contentPage) {
-      this.contentPage.playPreviousGranularity();
-    }
+    this.emitEvent_(PREVIOUS_GRANULARITY_EVENT);
   }
 
   private onTextStyleMenuButtonClick_(event: DomRepeatEvent<MenuButton>) {
@@ -472,52 +504,6 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
 
   private onShowRateMenuClick_(event: MouseEvent) {
     this.openMenu_(this.$.rateMenu, event.target as HTMLElement);
-  }
-
-  private voicesAreEqual_(
-      voice1?: SpeechSynthesisVoice, voice2?: SpeechSynthesisVoice): boolean {
-    if (!voice1 || !voice2) {
-      return false;
-    }
-    return voice1.default === voice2.default && voice1.lang === voice2.lang &&
-        voice1.localService === voice2.localService &&
-        voice1.name === voice2.name && voice1.voiceURI === voice2.voiceURI;
-  }
-
-  // TODO(crbug.com/1474951): Add unit tests
-  private onVoiceSelectionMenuClick_(event: MouseEvent) {
-    if (this.contentPage) {
-      const voices = this.contentPage.getVoices();
-      const selectedVoice = this.contentPage.getSpeechSynthesisVoice();
-
-      // TODO(crbug.com/1474951): Use the full language code instead of
-      // splitting it once we start using page language instead of browser
-      // language.
-      this.voiceSelectionOptions_ = Object.entries(voices).reduce(
-          (aggregateVoiceList: Array<MenuStateItem<VoiceDropdown>>,
-           [_, voiceListForLang]) =>
-              ([
-                ...aggregateVoiceList,
-                ...(voiceListForLang)
-                    .map(speechSynthesisVoice => ({
-                           title: speechSynthesisVoice.name,
-                           icon: '',
-                           data: {
-                             voice: speechSynthesisVoice,
-                             selected: this.voicesAreEqual_(
-                                 selectedVoice, speechSynthesisVoice),
-                             previewPlaying: false,
-                           },
-                           callback: () => chrome.readingMode.onVoiceChange(
-                               speechSynthesisVoice.name,
-                               speechSynthesisVoice.lang.split('-')[0]),
-                         })),
-              ]),
-          []);
-
-      this.openMenu_(
-          this.$.voiceSelectionMenu, event.target as HTMLElement, true);
-    }
   }
 
   private onMoreOptionsClick_(event: MouseEvent) {
@@ -582,9 +568,9 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
       button.setAttribute('title', loadTimeData.getString('turnHighlightOn'));
     }
 
-    if (this.contentPage) {
-      this.contentPage.updateHighlight(this.isHighlightOn_);
-    }
+    this.emitEvent_(HIGHLIGHT_TOGGLE_EVENT, {
+      highlightOn: this.isHighlightOn_,
+    });
   }
 
   private onLetterSpacingClick_(event: DomRepeatEvent<MenuStateItem<number>>) {
@@ -607,35 +593,6 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
         ReadAnythingElement.prototype.updateThemeFromWebUi);
   }
 
-  private onVoiceSelectClick_(
-      event: DomRepeatEvent<MenuStateItem<VoiceDropdown>>) {
-    event.model.item.callback();
-    if (this.contentPage) {
-      const selectedVoice = event.model.item.data.voice;
-      this.contentPage.setSpeechSynthesisVoice(selectedVoice);
-      this.voiceSelectionOptions_ = this.voiceSelectionOptions_.map(
-          ({data, ...rest}) => ({
-            ...rest,
-            data: {
-              voice: data.voice,
-              selected: this.voicesAreEqual_(selectedVoice, data.voice),
-              previewPlaying: false,
-            },
-          }));
-    }
-  }
-
-  private onVoicePreviewClick_(
-      event: DomRepeatEvent<MenuStateItem<VoiceDropdown>>) {
-    // Because the preview button is layered onto the voice-selection button,
-    // the onVoiceSelectClick_() listener is also subscribed to this event. This
-    // line is to make sure that the voice-selection callback is not triggered.
-    event.stopImmediatePropagation();
-
-    if (this.contentPage) {
-      this.contentPage.previewSpeechSynthesisVoice(event.model.item.data.voice);
-    }
-  }
 
   private onTextStyleClick_(
       event: DomRepeatEvent<MenuStateItem<any>>,
@@ -656,10 +613,7 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
         SETTINGS_CHANGE_UMA, ReadAnythingSettingsChange.FONT_CHANGE,
         ReadAnythingSettingsChange.COUNT);
     const fontName = event.model.item;
-    chrome.readingMode.onFontChange(fontName);
-    if (this.contentPage) {
-      this.contentPage.updateFont(fontName);
-    }
+    this.propagateFontChange_(fontName);
     this.setCheckMarkForMenu_(this.$.fontMenu, event.model.index);
 
     this.closeMenus_();
@@ -667,18 +621,23 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
 
   private onFontSelectValueChange_(event: Event) {
     const fontName = (event.target as HTMLSelectElement).value;
+    this.propagateFontChange_(fontName);
+  }
+
+  private propagateFontChange_(fontName: string) {
     chrome.readingMode.onFontChange(fontName);
-    if (this.contentPage) {
-      this.contentPage.updateFont(fontName);
-    }
+    this.emitEvent_(FONT_EVENT, {
+      fontName,
+    });
+    this.style.fontFamily = validatedFontName(fontName);
   }
 
   private onRateClick_(event: DomRepeatEvent<number>) {
     chrome.readingMode.onSpeechRateChange(event.model.item);
-    if (this.contentPage) {
-      this.contentPage.onSpeechRateChange(event.model.item);
-      this.setRateIcon_(event.model.item);
-    }
+    this.emitEvent_(RATE_EVENT, {
+      rate: event.model.item,
+    });
+    this.setRateIcon_(event.model.item);
     this.setCheckMarkForMenu_(this.$.rateMenu, event.model.index);
 
     this.closeMenus_();
@@ -712,14 +671,42 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
     this.updateFontSize_(false);
   }
 
+  private onToggleButtonClick_(event: DomRepeatEvent<ToggleButton>) {
+    event.model.item.callback(event);
+  }
+
+  private onToggleLinksClick_(event: DomRepeatEvent<ToggleButton>) {
+    if (!event.target) {
+      return;
+    }
+
+    chrome.metricsPrivate.recordEnumerationValue(
+        SETTINGS_CHANGE_UMA, ReadAnythingSettingsChange.LINKS_ENABLED_CHANGE,
+        ReadAnythingSettingsChange.COUNT);
+
+    chrome.readingMode.onLinksEnabledToggled();
+    this.emitEvent_(LINKS_EVENT);
+    this.updateLinkToggleButton();
+  }
+
+  private updateLinkToggleButton() {
+    const button = this.shadowRoot?.getElementById(LINK_TOGGLE_BUTTON_ID) as
+        CrIconButtonElement;
+    if (button) {
+      button.ironIcon = chrome.readingMode.linksEnabled ? LINKS_ENABLED_ICON :
+                                                          LINKS_DISABLED_ICON;
+      button.title = chrome.readingMode.linksEnabled ?
+          loadTimeData.getString('disableLinksLabel') :
+          loadTimeData.getString('enableLinksLabel');
+    }
+  }
+
   private updateFontSize_(increase: boolean) {
     chrome.metricsPrivate.recordEnumerationValue(
         SETTINGS_CHANGE_UMA, ReadAnythingSettingsChange.FONT_SIZE_CHANGE,
         ReadAnythingSettingsChange.COUNT);
     chrome.readingMode.onFontSizeChanged(increase);
-    if (this.contentPage) {
-      this.contentPage.updateFontSize();
-    }
+    this.emitEvent_(FONT_SIZE_EVENT);
     // Don't close the menu
   }
 
@@ -728,23 +715,11 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
         SETTINGS_CHANGE_UMA, ReadAnythingSettingsChange.FONT_SIZE_CHANGE,
         ReadAnythingSettingsChange.COUNT);
     chrome.readingMode.onFontSizeReset();
-    if (this.contentPage) {
-      this.contentPage.updateFontSize();
-    }
+    this.emitEvent_(FONT_SIZE_EVENT);
   }
 
-  onPlayPauseClick() {
-    if (this.isPaused_) {
-      this.updateUiForPlaying();
-      if (this.contentPage) {
-        this.contentPage.playSpeech();
-      }
-    } else {
-      this.updateUiForPausing();
-      if (this.contentPage) {
-        this.contentPage.stopSpeech();
-      }
-    }
+  private onPlayPauseClick_() {
+    this.emitEvent_(PLAY_PAUSE_EVENT);
   }
 
   private onToolbarKeyDown_(e: KeyboardEvent) {
@@ -771,7 +746,7 @@ export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
     }
 
     // Allow focusing the more options menu if it's visible.
-    const moreOptionsButton = toolbar.querySelector('#more') as HTMLElement;
+    const moreOptionsButton = toolbar.querySelector<HTMLElement>('#more');
     assert(moreOptionsButton);
     if (moreOptionsButton.style.display &&
         (moreOptionsButton.style.display !== 'none')) {

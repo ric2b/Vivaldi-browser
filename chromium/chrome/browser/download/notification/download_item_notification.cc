@@ -418,10 +418,7 @@ void DownloadItemNotification::Click(
     case download::DownloadItem::INTERRUPTED:
       base::RecordAction(
           UserMetricsAction("DownloadNotification.Click_Stopped"));
-      GetBrowser()->OpenURL(content::OpenURLParams(
-          GURL(chrome::kChromeUIDownloadsURL), content::Referrer(),
-          WindowOpenDisposition::NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_LINK,
-          false /* is_renderer_initiated */));
+      chrome::ShowDownloads(GetBrowser());
       CloseNotification();
       break;
     case download::DownloadItem::COMPLETE:
@@ -727,7 +724,7 @@ DownloadItemNotification::GetExtraActions() const {
       // opened already.
       if (!in_review_) {
         if (enterprise_connectors::ShouldPromptReviewForDownload(
-                profile(), item_->GetDangerType())) {
+                profile(), item_->GetDownloadItem())) {
           actions->push_back(DownloadCommands::REVIEW);
         } else {
           actions->push_back(DownloadCommands::KEEP);
@@ -1031,6 +1028,11 @@ std::u16string DownloadItemNotification::GetWarningStatusString() const {
     case download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_LOCAL_PASSWORD_SCANNING:
     case download::DOWNLOAD_DANGER_TYPE_ASYNC_LOCAL_PASSWORD_SCANNING: {
       // TODO(crbug.com/1491184): Implement UX for this danger type.
+      NOTREACHED();
+      break;
+    }
+    case download::DOWNLOAD_DANGER_TYPE_BLOCKED_SCAN_FAILED: {
+      // TODO(b/327392327): Implement UX for this danger type.
       NOTREACHED();
       break;
     }

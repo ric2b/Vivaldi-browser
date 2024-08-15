@@ -4,10 +4,8 @@
 
 #include "components/supervised_user/core/browser/proto_fetcher.h"
 
-#include "components/signin/public/identity_manager/primary_account_access_token_fetcher.h"
-#include "stddef.h"
-
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/functional/bind.h"
@@ -20,6 +18,7 @@
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
+#include "components/signin/public/identity_manager/primary_account_access_token_fetcher.h"
 #include "components/supervised_user/core/browser/fetcher_config.h"
 #include "components/supervised_user/core/browser/proto/test.pb.h"
 #include "components/supervised_user/test_support/kids_management_api_server_mock.h"
@@ -32,9 +31,9 @@
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "services/network/test/test_utils.h"
+#include "stddef.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace supervised_user {
 namespace {
@@ -45,8 +44,6 @@ using ::kids_chrome_management::ClassifyUrlRequest;
 using ::kids_chrome_management::ClassifyUrlResponse;
 using ::kids_chrome_management::CreatePermissionRequestResponse;
 using ::kids_chrome_management::FamilyRole;
-using ::kids_chrome_management::ListFamilyMembersRequest;
-using ::kids_chrome_management::ListFamilyMembersResponse;
 using ::kids_chrome_management::PermissionRequest;
 using ::network::GetUploadData;
 using ::network::TestURLLoaderFactory;
@@ -152,7 +149,7 @@ class Receiver {
   }
 
  private:
-  absl::optional<base::expected<std::unique_ptr<Response>, ProtoFetcherStatus>>
+  std::optional<base::expected<std::unique_ptr<Response>, ProtoFetcherStatus>>
       result_;
 };
 

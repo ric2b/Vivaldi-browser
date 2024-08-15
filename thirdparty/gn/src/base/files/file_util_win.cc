@@ -368,8 +368,7 @@ bool CreateDirectoryAndGetError(const FilePath& full_path, File::Error* error) {
       return true;
     }
     DLOG(WARNING) << "CreateDirectory(" << UTF16ToUTF8(full_path.value())
-                  << "), "
-                  << "conflicts with existing file.";
+                  << "), " << "conflicts with existing file.";
     if (error) {
       *error = File::FILE_ERROR_NOT_A_DIRECTORY;
     }

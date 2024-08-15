@@ -4,6 +4,8 @@
 
 #include "components/omnibox/browser/document_suggestions_service.h"
 
+#include <optional>
+
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/memory/scoped_refptr.h"
@@ -27,7 +29,6 @@
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace {
 
@@ -55,7 +56,7 @@ class DocumentSuggestionsServiceTest : public testing::Test {
             shared_url_loader_factory_)) {
     // Set up identity manager.
     identity_test_env_.SetPrimaryAccount("foo@gmail.com",
-                                         signin::ConsentLevel::kSync);
+                                         signin::ConsentLevel::kSignin);
     identity_test_env_.SetRefreshTokenForPrimaryAccount();
     identity_test_env_.SetAutomaticIssueOfAccessTokens(true);
 

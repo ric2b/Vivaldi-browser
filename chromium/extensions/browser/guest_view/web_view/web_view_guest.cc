@@ -41,6 +41,7 @@
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/input/native_web_keyboard_event.h"
 #include "content/public/common/result_codes.h"
@@ -65,7 +66,6 @@
 #include "extensions/browser/url_loader_factory_manager.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_features.h"
-#include "extensions/common/extension_messages.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/strings/grit/extensions_strings.h"
 #include "ipc/ipc_message_macros.h"
@@ -349,6 +349,8 @@ std::string WebViewGuest::GetPartitionID(
 
 // static
 const char WebViewGuest::Type[] = "webview";
+const guest_view::GuestViewHistogramValue WebViewGuest::HistogramValue =
+    guest_view::GuestViewHistogramValue::kWebView;
 
 // static
 int WebViewGuest::GetOrGenerateRulesRegistryID(int embedder_process_id,
@@ -546,7 +548,8 @@ void WebViewGuest::MaybeRecreateGuestContents(
   recreate_initial_nav_ = base::BindOnce(
       &WebViewGuest::LoadURLWithParams, weak_ptr_factory_.GetWeakPtr(),
       new_web_contents_create_params.initial_popup_url, content::Referrer(),
-      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, /*force_navigation=*/true, /*params=*/ absl::nullopt);
+      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, /*force_navigation=*/true,
+      /*params=*/std::nullopt);
 }
 
 void WebViewGuest::ClearCodeCache(base::Time remove_since,
@@ -1246,6 +1249,20 @@ void WebViewGuest::CanDownload(const GURL& url,
                                            std::move(callback));
 }
 
+void WebViewGuest::OnOwnerAudioMutedStateUpdated(bool muted) {
+  CHECK(web_contents());
+
+  // Mute the guest WebContents if the owner WebContents has been muted.
+  if (muted) {
+    web_contents()->SetAudioMuted(muted);
+    return;
+  }
+
+  // Apply the stored muted state of the guest WebContents if the owner
+  // WebContents is not muted.
+  web_contents()->SetAudioMuted(is_audio_muted_);
+}
+
 void WebViewGuest::SignalWhenReady(base::OnceClosure callback) {
   auto* manager = WebViewContentScriptManager::Get(browser_context());
   manager->SignalOnScriptsUpdated(std::move(callback));
@@ -1310,7 +1327,7 @@ content::JavaScriptDialogManager* WebViewGuest::GetJavaScriptDialogManager(
 void WebViewGuest::NavigateGuest(const std::string& src,
                                  bool force_navigation,
                                  ui::PageTransition transition_type,
-                                 absl::optional<content::OpenURLParams> params) {
+                                 std::optional<content::OpenURLParams> params) {
   if (src.empty())
     return;
 
@@ -1368,7 +1385,7 @@ bool WebViewGuest::HandleKeyboardShortcuts(
   // mouse if necessary.
   if ((event.windows_key_code == ui::VKEY_ESCAPE) &&
       !(event.GetModifiers() & blink::WebInputEvent::kInputModifiers)) {
-    return web_contents()->GotResponseToLockMouseRequest(
+    return web_contents()->GotResponseToPointerLockRequest(
         blink::mojom::PointerLockResult::kUserRejected);
   }
 
@@ -1540,6 +1557,24 @@ void WebViewGuest::SetAllowTransparency(bool allow) {
   allow_transparency_ = allow;
 
   SetTransparency(GetGuestMainFrame());
+}
+
+void WebViewGuest::SetAudioMuted(bool mute) {
+  CHECK(web_contents());
+  CHECK(owner_web_contents());
+
+  // Only update the muted state if the owner WebContents is not muted to
+  // prevent the guest frame from ignoring the muted state of the owner.
+  is_audio_muted_ = mute;
+  if (owner_web_contents()->IsAudioMuted()) {
+    return;
+  }
+  web_contents()->SetAudioMuted(is_audio_muted_);
+}
+
+bool WebViewGuest::IsAudioMuted() {
+  CHECK(web_contents());
+  return web_contents()->IsAudioMuted();
 }
 
 void WebViewGuest::SetTransparency(
@@ -1750,22 +1785,13 @@ bool WebViewGuest::IsFullscreenForTabOrPending(
   return is_guest_fullscreen_;
 }
 
-void WebViewGuest::RegisterProtocolHandler(
-    content::RenderFrameHost* requesting_frame,
-    const std::string& protocol,
-    const GURL& url,
-    bool user_gesture) {
-  web_view_permission_helper_->RegisterProtocolHandler(
-      requesting_frame, protocol, url, user_gesture);
-}
-
-void WebViewGuest::RequestToLockMouse(WebContents* web_contents,
+void WebViewGuest::RequestPointerLock(WebContents* web_contents,
                                       bool user_gesture,
                                       bool last_unlocked_by_target) {
   web_view_permission_helper_->RequestPointerLockPermission(
       user_gesture, last_unlocked_by_target,
       base::BindOnce(
-          base::IgnoreResult(&WebContents::GotLockMousePermissionResponse),
+          base::IgnoreResult(&WebContents::GotPointerLockPermissionResponse),
           base::Unretained(web_contents)));
 }
 
@@ -1773,7 +1799,7 @@ void WebViewGuest::LoadURLWithParams(const GURL& url,
                                      const content::Referrer& referrer,
                                      ui::PageTransition transition_type,
                                      bool force_navigation,
-                                     absl::optional<content::OpenURLParams> params) {
+                                     std::optional<content::OpenURLParams> params) {
   if (!url.is_valid()) {
     LoadAbort(true /* is_top_level */, url, net::ERR_INVALID_URL);
     NavigateGuest(url::kAboutBlankURL, false /* force_navigation */);

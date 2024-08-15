@@ -4,7 +4,9 @@
 
 #include "parsed_certificate.h"
 
+#include <openssl/bytestring.h>
 #include <openssl/pool.h>
+
 #include "cert_errors.h"
 #include "certificate_policies.h"
 #include "extended_key_usage.h"
@@ -49,14 +51,14 @@ DEFINE_CERT_ERROR_ID(kFailedParsingAuthorityKeyIdentifier,
 DEFINE_CERT_ERROR_ID(kFailedParsingSubjectKeyIdentifier,
                      "Failed parsing subject key identifier");
 
-[[nodiscard]] bool GetSequenceValue(const der::Input &tlv, der::Input *value) {
+[[nodiscard]] bool GetSequenceValue(der::Input tlv, der::Input *value) {
   der::Parser parser(tlv);
-  return parser.ReadTag(der::kSequence, value) && !parser.HasMore();
+  return parser.ReadTag(CBS_ASN1_SEQUENCE, value) && !parser.HasMore();
 }
 
 }  // namespace
 
-bool ParsedCertificate::GetExtension(const der::Input &extension_oid,
+bool ParsedCertificate::GetExtension(der::Input extension_oid,
                                      ParsedExtension *parsed_extension) const {
   if (!tbs_.extensions_tlv) {
     return false;
@@ -183,7 +185,7 @@ std::shared_ptr<const ParsedCertificate> ParsedCertificate::Create(
       // extension (e.g., a key bound only to an email address or URI), then the
       // subject name MUST be an empty sequence and the subjectAltName extension
       // MUST be critical.
-      if (subject_value.Length() == 0 &&
+      if (subject_value.empty() &&
           !result->subject_alt_names_extension_.critical) {
         errors->AddError(kSubjectAltNameNotCritical);
         return nullptr;

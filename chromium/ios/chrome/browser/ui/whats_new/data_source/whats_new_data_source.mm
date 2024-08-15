@@ -76,6 +76,8 @@ NSString* GetPrimaryActionTitle(WhatsNewPrimaryAction action) {
       return l10n_util::GetNSString(IDS_IOS_OPEN_IOS_SETTINGS);
     case WhatsNewPrimaryAction::kLens:
       return l10n_util::GetNSString(IDS_IOS_GO_TO_LENS);
+    case WhatsNewPrimaryAction::kSafeBrowsingSettings:
+      return l10n_util::GetNSString(IDS_IOS_OPEN_CHROME_SETTINGS);
     case WhatsNewPrimaryAction::kNoAction:
     case WhatsNewPrimaryAction::kError:
       return nil;
@@ -278,7 +280,7 @@ WhatsNewItem* ConstructWhatsNewItem(NSDictionary* entry) {
     GURL gurl(base::SysNSStringToUTF8(url));
     [whats_new_item setLearnMoreURL:gurl];
   } else {
-    [whats_new_item setLearnMoreURL:GURL::EmptyGURL()];
+    [whats_new_item setLearnMoreURL:GURL()];
   }
 
   // Load screenshot image.

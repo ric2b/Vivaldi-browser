@@ -92,7 +92,7 @@
     return NO;
 
   return [_forceDarkWebPagesEnabled value] &&
-      [self websiteAppearanceStyle] == VivaldiWebsiteAppearanceStyleDark;
+      [self websiteAppearanceStyle] != VivaldiWebsiteAppearanceStyleLight;
 }
 
 - (VivaldiWebsiteAppearanceStyle)websiteAppearanceStyle {

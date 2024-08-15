@@ -39,6 +39,14 @@ id<GREYMatcher> ButtonWithAccessibilityLabelId(int message_id);
 // `label` and accessibility trait UIAccessibilityTraitButton.
 id<GREYMatcher> ButtonWithAccessibilityLabel(NSString* label);
 
+// Returns a matcher for element with with foreground color corresponding to
+// `colorName` and accessibility trait UIAccessibilityTraitButton.
+id<GREYMatcher> ButtonWithForegroundColor(NSString* colorName);
+
+// Returns a matcher for element with with background color corresponding to
+// `colorName` and accessibility trait UIAccessibilityTraitButton.
+id<GREYMatcher> ButtonWithBackgroundColor(NSString* colorName);
+
 // Returns a matcher for context menu items with accessibility label
 // corresponding to `label`.
 id<GREYMatcher> ContextMenuItemWithAccessibilityLabel(NSString* label);
@@ -103,9 +111,6 @@ id<GREYMatcher> CancelButton();
 // Returns the matcher for an enabled cancel button in a navigation bar.
 id<GREYMatcher> NavigationBarCancelButton();
 
-// Returns a matcher for a close button.
-id<GREYMatcher> CloseButton();
-
 // Returns a matcher for close tab menu button.
 id<GREYMatcher> CloseTabMenuButton();
 
@@ -123,6 +128,12 @@ id<GREYMatcher> StopButton();
 
 // Returns a matcher for the omnibox.
 id<GREYMatcher> Omnibox();
+
+// Returns a matcher for the omnibox at the bottom.
+id<GREYMatcher> OmniboxAtBottom();
+
+// Returns a matcher for the omnibox on the top.
+id<GREYMatcher> OmniboxOnTop();
 
 // Returns matcher for the omnibox popup list row views.
 id<GREYMatcher> OmniboxPopupRow();
@@ -687,9 +698,6 @@ id<GREYMatcher> ManualFallbackOtherPasswordsDismissMatcher();
 // Returns a matcher for the a password in the manual fallback list.
 id<GREYMatcher> ManualFallbackPasswordButtonMatcher();
 
-// Returns a matcher for the PasswordTableView window.
-id<GREYMatcher> ManualFallbackPasswordTableViewWindowMatcher();
-
 // Returns a matcher for the profiles icon in the keyboard accessory bar.
 id<GREYMatcher> ManualFallbackProfilesIconMatcher();
 
@@ -711,13 +719,13 @@ id<GREYMatcher> ManualFallbackCreditCardIconMatcher();
 // Returns a matcher for the credit card table view in manual fallback.
 id<GREYMatcher> ManualFallbackCreditCardTableViewMatcher();
 
-// Returns a matcher for the button to open password settings in manual
+// Returns a matcher for the button to open payment method settings in manual
 // fallback.
-id<GREYMatcher> ManualFallbackManageCreditCardsMatcher();
+id<GREYMatcher> ManualFallbackManagePaymentMethodsMatcher();
 
-// Returns a matcher for the button to add credit cards settings in manual
+// Returns a matcher for the button to add a payment method in manual
 // fallback.
-id<GREYMatcher> ManualFallbackAddCreditCardsMatcher();
+id<GREYMatcher> ManualFallbackAddPaymentMethodMatcher();
 
 // Returns a matcher for the CreditCardTableView window.
 id<GREYMatcher> ManualFallbackCreditCardTableViewWindowMatcher();

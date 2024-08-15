@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
 
+#include "base/test/scoped_feature_list.h"
+#include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "components/viz/common/resources/release_callback.h"
 #include "components/viz/test/test_context_provider.h"
@@ -72,7 +74,8 @@ class CanvasResourceProviderTest : public Test {
   void TearDown() override { SharedGpuContext::ResetForTesting(); }
 
  protected:
-  test::TaskEnvironment task_environment_;
+  test::TaskEnvironment task_environment_{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   cc::StubDecodeCache image_decode_cache_;
   scoped_refptr<viz::TestContextProvider> test_context_provider_;
   base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper_;
@@ -160,6 +163,40 @@ TEST_F(CanvasResourceProviderTest, CanvasResourceProviderUnacceleratedOverlay) {
   EXPECT_FALSE(provider->IsSingleBuffered());
 }
 
+namespace {
+std::unique_ptr<CanvasResourceProvider> MakeCanvasResourceProvider(
+    RasterMode raster_mode,
+    base::WeakPtr<WebGraphicsContext3DProviderWrapper>
+        context_provider_wrapper) {
+  const SkImageInfo kInfo = SkImageInfo::MakeN32Premul(10, 10);
+  const uint32_t shared_image_usage_flags =
+      gpu::SHARED_IMAGE_USAGE_DISPLAY_READ | gpu::SHARED_IMAGE_USAGE_SCANOUT;
+
+  return CanvasResourceProvider::CreateSharedImageProvider(
+      kInfo, cc::PaintFlags::FilterQuality::kMedium,
+      CanvasResourceProvider::ShouldInitialize::kCallClear,
+      context_provider_wrapper, raster_mode, shared_image_usage_flags);
+}
+
+scoped_refptr<CanvasResource> UpdateResource(CanvasResourceProvider* provider) {
+  provider->ProduceCanvasResource(FlushReason::kTesting);
+  // Resource updated after draw.
+  provider->Canvas().clear(SkColors::kWhite);
+  return provider->ProduceCanvasResource(FlushReason::kTesting);
+}
+
+void EnsureResourceRecycled(CanvasResourceProvider* provider,
+                            scoped_refptr<CanvasResource>&& resource) {
+  viz::TransferableResource transferable_resource;
+  CanvasResource::ReleaseCallback release_callback;
+  auto sync_token = resource->GetSyncToken();
+  CHECK(resource->PrepareTransferableResource(
+      &transferable_resource, &release_callback, kUnverifiedSyncToken));
+  std::move(release_callback).Run(std::move(resource), sync_token, false);
+}
+
+}  // namespace
+
 TEST_F(CanvasResourceProviderTest,
        CanvasResourceProviderSharedImageResourceRecycling) {
   const gfx::Size kSize(10, 10);
@@ -195,24 +232,117 @@ TEST_F(CanvasResourceProviderTest,
   EXPECT_EQ(resource, provider->ProduceCanvasResource(FlushReason::kTesting));
   EXPECT_EQ(sync_token, resource->GetSyncToken());
 
-  // Resource updated after draw.
-  provider->Canvas()->clear(SkColors::kWhite);
-  auto new_resource = provider->ProduceCanvasResource(FlushReason::kTesting);
+  auto new_resource = UpdateResource(provider.get());
   EXPECT_NE(resource, new_resource);
-  EXPECT_NE(sync_token, new_resource->GetSyncToken());
-
-  // Resource recycled.
-  viz::TransferableResource transferable_resource;
-  CanvasResource::ReleaseCallback release_callback;
-  ASSERT_TRUE(resource->PrepareTransferableResource(
-      &transferable_resource, &release_callback, kUnverifiedSyncToken));
+  EXPECT_NE(resource->GetSyncToken(), new_resource->GetSyncToken());
   auto* resource_ptr = resource.get();
-  std::move(release_callback).Run(std::move(resource), sync_token, false);
 
-  provider->Canvas()->clear(SkColors::kBlack);
+  EnsureResourceRecycled(provider.get(), std::move(resource));
+
+  provider->Canvas().clear(SkColors::kBlack);
   auto resource_again = provider->ProduceCanvasResource(FlushReason::kTesting);
   EXPECT_EQ(resource_ptr, resource_again);
   EXPECT_NE(sync_token, resource_again->GetSyncToken());
+}
+
+TEST_F(CanvasResourceProviderTest, CanvasResourceProviderUnusedResources) {
+  base::test::ScopedFeatureList feature_list{kCanvas2DReclaimUnusedResources};
+
+  std::unique_ptr<CanvasResourceProvider> provider =
+      MakeCanvasResourceProvider(RasterMode::kGPU, context_provider_wrapper_);
+
+  auto resource = provider->ProduceCanvasResource(FlushReason::kTesting);
+  auto new_resource = UpdateResource(provider.get());
+  ASSERT_NE(resource, new_resource);
+  ASSERT_NE(resource->GetSyncToken(), new_resource->GetSyncToken());
+
+  EXPECT_FALSE(
+      provider->unused_resources_reclaim_timer_is_running_for_testing());
+  EnsureResourceRecycled(provider.get(), std::move(resource));
+  // The reclaim task has been posted.
+  EXPECT_TRUE(
+      provider->unused_resources_reclaim_timer_is_running_for_testing());
+
+  // There is a ready-to-reuse resource
+  EXPECT_EQ(1u, provider->CanvasResources().size());
+  task_environment_.FastForwardBy(
+      CanvasResourceProvider::kUnusedResourceExpirationTime);
+  // The resource is freed, don't repost the task.
+  EXPECT_EQ(0u, provider->CanvasResources().size());
+  EXPECT_FALSE(
+      provider->unused_resources_reclaim_timer_is_running_for_testing());
+}
+
+TEST_F(CanvasResourceProviderTest,
+       CanvasResourceProviderDontReclaimUnusedResourcesWhenFeatureIsDisabled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(kCanvas2DReclaimUnusedResources);
+
+  std::unique_ptr<CanvasResourceProvider> provider =
+      MakeCanvasResourceProvider(RasterMode::kGPU, context_provider_wrapper_);
+
+  auto resource = provider->ProduceCanvasResource(FlushReason::kTesting);
+  auto new_resource = UpdateResource(provider.get());
+  ASSERT_NE(resource, new_resource);
+  ASSERT_NE(resource->GetSyncToken(), new_resource->GetSyncToken());
+  EXPECT_FALSE(
+      provider->unused_resources_reclaim_timer_is_running_for_testing());
+  EnsureResourceRecycled(provider.get(), std::move(resource));
+  // There is a ready-to-reuse resource
+  EXPECT_EQ(1u, provider->CanvasResources().size());
+  // No task posted.
+  EXPECT_FALSE(
+      provider->unused_resources_reclaim_timer_is_running_for_testing());
+}
+
+TEST_F(CanvasResourceProviderTest,
+       CanvasResourceProviderUnusedResourcesAreNotCollectedWhenYoung) {
+  base::test::ScopedFeatureList feature_list{kCanvas2DReclaimUnusedResources};
+
+  std::unique_ptr<CanvasResourceProvider> provider =
+      MakeCanvasResourceProvider(RasterMode::kGPU, context_provider_wrapper_);
+
+  auto resource = provider->ProduceCanvasResource(FlushReason::kTesting);
+  auto new_resource = UpdateResource(provider.get());
+  ASSERT_NE(resource, new_resource);
+  ASSERT_NE(resource->GetSyncToken(), new_resource->GetSyncToken());
+  EXPECT_FALSE(
+      provider->unused_resources_reclaim_timer_is_running_for_testing());
+  EnsureResourceRecycled(provider.get(), std::move(resource));
+  EXPECT_TRUE(
+      provider->unused_resources_reclaim_timer_is_running_for_testing());
+
+  // There is a ready-to-reuse resource
+  EXPECT_EQ(1u, provider->CanvasResources().size());
+  task_environment_.FastForwardBy(
+      CanvasResourceProvider::kUnusedResourceExpirationTime - base::Seconds(1));
+  // The reclaim task hasn't run yet.
+  EXPECT_TRUE(
+      provider->unused_resources_reclaim_timer_is_running_for_testing());
+
+  resource = UpdateResource(provider.get());
+  EXPECT_EQ(0u, provider->CanvasResources().size());
+  new_resource = UpdateResource(provider.get());
+  ASSERT_NE(resource, new_resource);
+  ASSERT_NE(resource->GetSyncToken(), new_resource->GetSyncToken());
+
+  EnsureResourceRecycled(provider.get(), std::move(resource));
+  EXPECT_EQ(1u, provider->CanvasResources().size());
+  task_environment_.FastForwardBy(base::Seconds(1));
+
+  // Too young, no release yet.
+  EXPECT_EQ(1u, provider->CanvasResources().size());
+  // But re-post the task to free it.
+  EXPECT_TRUE(
+      provider->unused_resources_reclaim_timer_is_running_for_testing());
+
+  task_environment_.FastForwardBy(
+      CanvasResourceProvider::kUnusedResourceExpirationTime);
+  // Now it's collected.
+  EXPECT_EQ(0u, provider->CanvasResources().size());
+  // And no new task is posted.
+  EXPECT_FALSE(
+      provider->unused_resources_reclaim_timer_is_running_for_testing());
 }
 
 TEST_F(CanvasResourceProviderTest,
@@ -240,7 +370,7 @@ TEST_F(CanvasResourceProviderTest,
             image->GetMailboxHolder().mailbox);
 
   // Resource updated after draw.
-  provider->Canvas()->clear(SkColors::kWhite);
+  provider->Canvas().clear(SkColors::kWhite);
   provider->FlushCanvas(FlushReason::kTesting);
   new_image = provider->Snapshot(FlushReason::kTesting);
   EXPECT_NE(new_image->GetMailboxHolder().mailbox,
@@ -249,7 +379,7 @@ TEST_F(CanvasResourceProviderTest,
   // Resource recycled.
   auto original_mailbox = image->GetMailboxHolder().mailbox;
   image.reset();
-  provider->Canvas()->clear(SkColors::kBlack);
+  provider->Canvas().clear(SkColors::kBlack);
   provider->FlushCanvas(FlushReason::kTesting);
   EXPECT_EQ(
       original_mailbox,
@@ -280,7 +410,7 @@ TEST_F(CanvasResourceProviderTest, NoRecycleIfLastRefCallback) {
           base::BindOnce([](scoped_refptr<CanvasResource> resource) {}));
 
   // Resource updated after draw.
-  provider->Canvas()->clear(SkColors::kWhite);
+  provider->Canvas().clear(SkColors::kWhite);
   provider->FlushCanvas(FlushReason::kTesting);
   scoped_refptr<StaticBitmapImage> snapshot2 =
       provider->Snapshot(FlushReason::kTesting);
@@ -289,7 +419,7 @@ TEST_F(CanvasResourceProviderTest, NoRecycleIfLastRefCallback) {
 
   auto snapshot1_mailbox = snapshot1->GetMailboxHolder().mailbox;
   snapshot1.reset();  // resource not recycled due to LastUnrefCallback
-  provider->Canvas()->clear(SkColors::kBlack);
+  provider->Canvas().clear(SkColors::kBlack);
   provider->FlushCanvas(FlushReason::kTesting);
   scoped_refptr<StaticBitmapImage> snapshot3 =
       provider->Snapshot(FlushReason::kTesting);
@@ -565,26 +695,25 @@ TEST_F(CanvasResourceProviderTest, FlushForImage) {
       context_provider_wrapper_, RasterMode::kGPU,
       /*shared_image_usage_flags=*/0u);
 
-  MemoryManagedPaintCanvas* dst_canvas =
-      static_cast<MemoryManagedPaintCanvas*>(dst_provider->Canvas());
+  MemoryManagedPaintCanvas& dst_canvas = dst_provider->Canvas();
 
   PaintImage paint_image = src_provider->Snapshot(FlushReason::kTesting)
                                ->PaintImageForCurrentFrame();
   PaintImage::ContentId src_content_id = paint_image.GetContentIdForFrame(0u);
 
-  EXPECT_FALSE(dst_canvas->IsCachingImage(src_content_id));
+  EXPECT_FALSE(dst_canvas.IsCachingImage(src_content_id));
 
-  dst_canvas->drawImage(paint_image, 0, 0, SkSamplingOptions(), nullptr);
+  dst_canvas.drawImage(paint_image, 0, 0, SkSamplingOptions(), nullptr);
 
-  EXPECT_TRUE(dst_canvas->IsCachingImage(src_content_id));
+  EXPECT_TRUE(dst_canvas.IsCachingImage(src_content_id));
 
   // Modify the canvas to trigger OnFlushForImage
-  src_provider->Canvas()->clear(SkColors::kWhite);
+  src_provider->Canvas().clear(SkColors::kWhite);
   // So that all the cached draws are executed
   src_provider->ProduceCanvasResource(FlushReason::kTesting);
 
   // The paint canvas may have moved
-  dst_canvas = static_cast<MemoryManagedPaintCanvas*>(dst_provider->Canvas());
+  MemoryManagedPaintCanvas& new_dst_canvas = dst_provider->Canvas();
 
   // TODO(aaronhk): The resource on the src_provider should be the same before
   // and after the draw. Something about the program flow within
@@ -595,7 +724,7 @@ TEST_F(CanvasResourceProviderTest, FlushForImage) {
 
   // OnFlushForImage should detect the modification of the source resource and
   // clear the cache of the destination canvas to avoid a copy-on-write.
-  EXPECT_FALSE(dst_canvas->IsCachingImage(src_content_id));
+  EXPECT_FALSE(new_dst_canvas.IsCachingImage(src_content_id));
 }
 
 }  // namespace blink

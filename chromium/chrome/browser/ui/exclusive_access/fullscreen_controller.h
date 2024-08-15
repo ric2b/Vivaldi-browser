@@ -66,6 +66,8 @@ class FullscreenController : public ExclusiveAccessControllerBase {
   void AddObserver(FullscreenObserver* observer);
   void RemoveObserver(FullscreenObserver* observer);
 
+  static int64_t GetDisplayId(const content::WebContents& web_contents);
+
   // Browser/User Fullscreen ///////////////////////////////////////////////////
 
   // Returns true if the window is currently fullscreen and was initially
@@ -145,6 +147,9 @@ class FullscreenController : public ExclusiveAccessControllerBase {
   void OnTabDetachedFromView(content::WebContents* web_contents) override;
   void OnTabClosing(content::WebContents* web_contents) override;
   bool HandleUserPressedEscape() override;
+  void HandleUserHeldEscape() override;
+  void HandleUserReleasedEscapeEarly() override;
+  bool RequiresPressAndHoldEscToExit() const override;
 
   void ExitExclusiveAccessToPreviousState() override;
   GURL GetURLForExclusiveAccessBubble() const override;

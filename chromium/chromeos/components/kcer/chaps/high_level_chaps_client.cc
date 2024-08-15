@@ -6,10 +6,21 @@
 
 #include "base/sequence_checker.h"
 #include "chromeos/components/kcer/chaps/session_chaps_client.h"
+#include "chromeos/components/kcer/key_permissions.pb.h"
 #include "chromeos/constants/pkcs11_definitions.h"
 #include "third_party/cros_system_api/dbus/chaps/dbus-constants.h"
 
 namespace kcer {
+
+void AddAttribute(chaps::AttributeList& attr_list,
+                  chromeos::PKCS11_CK_ATTRIBUTE_TYPE type,
+                  base::span<const uint8_t> data) {
+  chaps::Attribute* new_attr = attr_list.add_attributes();
+  new_attr->set_type(type);
+  new_attr->set_value(std::string(data.begin(), data.end()));
+  new_attr->set_length(data.size());
+}
+
 namespace {
 
 using AttributeId = HighLevelChapsClient::AttributeId;
@@ -36,6 +47,18 @@ int GetDefaultLength(AttributeId attribute_id) {
       // An arbitrary length, label is just a user readable string. In same
       // cases it contains a GUID (38 characters).
       return 40;
+    case AttributeId::kKeyType:
+      return sizeof(chromeos::PKCS11_CK_KEY_TYPE);
+    case AttributeId::kValue:
+      return 800;
+    case AttributeId::kKeyInSoftware:
+      return sizeof(chromeos::PKCS11_CK_BBOOL);
+    case AttributeId::kKeyPermissions:
+      return sizeof(chaps::KeyPermissions);
+    case AttributeId::kCertProvisioningId:
+      // An arbitrary length, the id is just a user readable string. In same
+      // cases it contains a GUID (38 characters).
+      return 40;
   }
 }
 
@@ -45,6 +68,15 @@ HighLevelChapsClientImpl::HighLevelChapsClientImpl(
     SessionChapsClient* session_chaps_client)
     : session_chaps_client_(session_chaps_client) {}
 HighLevelChapsClientImpl::~HighLevelChapsClientImpl() = default;
+
+//==============================================================================
+
+void HighLevelChapsClientImpl::GetMechanismList(
+    SessionChapsClient::SlotId slot_id,
+    SessionChapsClient::GetMechanismListCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  session_chaps_client_->GetMechanismList(slot_id, std::move(callback));
+}
 
 //==============================================================================
 
@@ -189,6 +221,9 @@ void HighLevelChapsClientImpl::DidGetAttributeValue(
   }
 
   if (result_code != chromeos::PKCS11_CKR_BUFFER_TOO_SMALL) {
+    // If `result_code` is ok, then `decoded_attributes` should contain the
+    // result. If `result_code` is an error, just forward it to the caller
+    // together with all attributes that chaps managed to find (if any).
     return std::move(callback).Run(std::move(decoded_attributes), result_code);
   }
 

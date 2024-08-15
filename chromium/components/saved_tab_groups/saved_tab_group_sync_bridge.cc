@@ -33,6 +33,7 @@
 #include "components/sync/protocol/entity_data.h"
 #include "components/sync/protocol/saved_tab_group_specifics.pb.h"
 
+namespace tab_groups {
 namespace {
 
 // Discard orphaned tabs after 30 days if the associated group cannot be found.
@@ -68,7 +69,7 @@ SavedTabGroupSyncBridge::CreateMetadataChangeList() {
   return syncer::ModelTypeStore::WriteBatch::CreateMetadataChangeList();
 }
 
-absl::optional<syncer::ModelError> SavedTabGroupSyncBridge::MergeFullSyncData(
+std::optional<syncer::ModelError> SavedTabGroupSyncBridge::MergeFullSyncData(
     std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
     syncer::EntityChangeList entity_changes) {
   std::unique_ptr<syncer::ModelTypeStore::WriteBatch> write_batch =
@@ -106,7 +107,7 @@ absl::optional<syncer::ModelError> SavedTabGroupSyncBridge::MergeFullSyncData(
   return {};
 }
 
-absl::optional<syncer::ModelError>
+std::optional<syncer::ModelError>
 SavedTabGroupSyncBridge::ApplyIncrementalSyncChanges(
     std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
     syncer::EntityChangeList entity_changes) {
@@ -245,7 +246,7 @@ void SavedTabGroupSyncBridge::SavedTabGroupRemovedLocally(
 
 void SavedTabGroupSyncBridge::SavedTabGroupUpdatedLocally(
     const base::Uuid& group_guid,
-    const absl::optional<base::Uuid>& tab_guid) {
+    const std::optional<base::Uuid>& tab_guid) {
   std::unique_ptr<syncer::ModelTypeStore::WriteBatch> write_batch =
       store_->CreateWriteBatch();
 
@@ -466,7 +467,7 @@ void SavedTabGroupSyncBridge::SendToSync(
 }
 
 void SavedTabGroupSyncBridge::OnStoreCreated(
-    const absl::optional<syncer::ModelError>& error,
+    const std::optional<syncer::ModelError>& error,
     std::unique_ptr<syncer::ModelTypeStore> store) {
   if (error) {
     change_processor()->ReportError(*error);
@@ -479,7 +480,7 @@ void SavedTabGroupSyncBridge::OnStoreCreated(
 }
 
 void SavedTabGroupSyncBridge::OnDatabaseLoad(
-    const absl::optional<syncer::ModelError>& error,
+    const std::optional<syncer::ModelError>& error,
     std::unique_ptr<syncer::ModelTypeStore::RecordList> entries) {
   if (error) {
     change_processor()->ReportError(*error);
@@ -493,7 +494,7 @@ void SavedTabGroupSyncBridge::OnDatabaseLoad(
 
 void SavedTabGroupSyncBridge::OnReadAllMetadata(
     std::unique_ptr<syncer::ModelTypeStore::RecordList> entries,
-    const absl::optional<syncer::ModelError>& error,
+    const std::optional<syncer::ModelError>& error,
     std::unique_ptr<syncer::MetadataBatch> metadata_batch) {
   TRACE_EVENT0("ui", "SavedTabGroupSyncBridge::OnReadAllMetadata");
   if (error) {
@@ -521,7 +522,7 @@ void SavedTabGroupSyncBridge::OnReadAllMetadata(
 }
 
 void SavedTabGroupSyncBridge::OnDatabaseSave(
-    const absl::optional<syncer::ModelError>& error) {
+    const std::optional<syncer::ModelError>& error) {
   if (error) {
     change_processor()->ReportError({FROM_HERE, "Failed to save metadata."});
     return;
@@ -529,3 +530,5 @@ void SavedTabGroupSyncBridge::OnDatabaseSave(
 
   // TODO(dljames): React to store failures when a save is not successful.
 }
+
+}  // namespace tab_groups

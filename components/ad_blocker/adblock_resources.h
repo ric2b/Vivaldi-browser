@@ -43,7 +43,7 @@ class Resources {
   void RemoveObserver(Observer* observer);
 
 #if !BUILDFLAG(IS_IOS)
-  absl::optional<std::string> GetRedirect(
+  std::optional<std::string> GetRedirect(
       const std::string& name,
       flat::ResourceType resource_type) const;
 #endif  // !IS_IOS

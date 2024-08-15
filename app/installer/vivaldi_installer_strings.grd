@@ -52,9 +52,9 @@
     <output filename="vivaldi_installer_strings_jbo.pak" type="data_package" lang="jbo" />
     <output filename="vivaldi_installer_strings_ka.pak" type="data_package" lang="ka" />
     <output filename="vivaldi_installer_strings_kab.pak" type="data_package" lang="kab" />
+    <output filename="vivaldi_installer_strings_kmr.pak" type="data_package" lang="kmr" />
     <output filename="vivaldi_installer_strings_kn.pak" type="data_package" lang="kn" />
     <output filename="vivaldi_installer_strings_ko.pak" type="data_package" lang="ko" />
-    <output filename="vivaldi_installer_strings_ku.pak" type="data_package" lang="ku" />
     <output filename="vivaldi_installer_strings_lt.pak" type="data_package" lang="lt" />
     <output filename="vivaldi_installer_strings_lv.pak" type="data_package" lang="lv" />
     <output filename="vivaldi_installer_strings_mk.pak" type="data_package" lang="mk" />
@@ -139,9 +139,9 @@
     <file path="strings/vivaldi_installer_strings_kab.xtb" lang="kab" />
     <file path="strings/vivaldi_installer_strings_kk.xtb" lang="kk" />
     <file path="strings/vivaldi_installer_strings_km.xtb" lang="km" />
+    <file path="strings/vivaldi_installer_strings_kmr.xtb" lang="kmr" />
     <file path="strings/vivaldi_installer_strings_kn.xtb" lang="kn" />
     <file path="strings/vivaldi_installer_strings_ko.xtb" lang="ko" />
-    <file path="strings/vivaldi_installer_strings_ku.xtb" lang="ku" />
     <file path="strings/vivaldi_installer_strings_ky.xtb" lang="ky" />
     <file path="strings/vivaldi_installer_strings_lo.xtb" lang="lo" />
     <file path="strings/vivaldi_installer_strings_lt.xtb" lang="lt" />

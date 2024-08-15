@@ -111,7 +111,7 @@
       "-root",
       "[START_DIR]/cipd",
       "-ensure-file",
-      "infra/ninja/${platform} version:1.8.2\nfuchsia/third_party/clang/${platform} integration\n@Subdir sysroot\nfuchsia/third_party/sysroot/linux git_revision:c912d089c3d46d8982fdef76a50514cca79b6132",
+      "infra/ninja/${platform} version:1.8.2\nfuchsia/third_party/clang/${platform} integration\n@Subdir sysroot\nfuchsia/third_party/sysroot/linux git_revision:c912d089c3d46d8982fdef76a50514cca79b6132\n@Subdir sysroot-focal\nfuchsia/third_party/sysroot/focal git_revision:fa7a5a9710540f30ff98ae48b62f2cdf72ed2acd",
       "-max-threads",
       "0",
       "-json-output",
@@ -136,18 +136,24 @@
       "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
       "@@@STEP_LOG_LINE@json.output@    \"\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
-      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-integration-----\", @@@",
+      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-integration-----\",@@@",
       "@@@STEP_LOG_LINE@json.output@        \"package\": \"fuchsia/third_party/clang/resolved-platform\"@@@",
-      "@@@STEP_LOG_LINE@json.output@      }, @@@",
+      "@@@STEP_LOG_LINE@json.output@      },@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
-      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-version:1.8.2---\", @@@",
+      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-version:1.8.2---\",@@@",
       "@@@STEP_LOG_LINE@json.output@        \"package\": \"infra/ninja/resolved-platform\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }@@@",
-      "@@@STEP_LOG_LINE@json.output@    ], @@@",
+      "@@@STEP_LOG_LINE@json.output@    ],@@@",
       "@@@STEP_LOG_LINE@json.output@    \"sysroot\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
-      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-git_revision:c91\", @@@",
+      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-git_revision:c91\",@@@",
       "@@@STEP_LOG_LINE@json.output@        \"package\": \"fuchsia/third_party/sysroot/linux\"@@@",
+      "@@@STEP_LOG_LINE@json.output@      }@@@",
+      "@@@STEP_LOG_LINE@json.output@    ],@@@",
+      "@@@STEP_LOG_LINE@json.output@    \"sysroot-focal\": [@@@",
+      "@@@STEP_LOG_LINE@json.output@      {@@@",
+      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-git_revision:fa7\",@@@",
+      "@@@STEP_LOG_LINE@json.output@        \"package\": \"fuchsia/third_party/sysroot/focal\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }@@@",
       "@@@STEP_LOG_LINE@json.output@    ]@@@",
       "@@@STEP_LOG_LINE@json.output@  }@@@",
@@ -454,6 +460,104 @@
     ]
   },
   {
+    "cmd": [
+      "mkdir",
+      "-p",
+      "[START_DIR]/jemalloc/build-linux-riscv64"
+    ],
+    "luci_context": {
+      "realm": {
+        "name": "infra-internal:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
+    "name": "jemalloc.prepare linux-riscv64 build",
+    "~followup_annotations": [
+      "@@@STEP_NEST_LEVEL@1@@@"
+    ]
+  },
+  {
+    "cmd": [],
+    "name": "jemalloc.build jemalloc-linux-riscv64",
+    "~followup_annotations": [
+      "@@@STEP_NEST_LEVEL@1@@@"
+    ]
+  },
+  {
+    "cmd": [
+      "../configure",
+      "--build=x86_64-linux-gnu",
+      "--host=riscv64-linux-gnu",
+      "--disable-shared",
+      "--enable-static",
+      "--disable-syscall",
+      "--disable-stats"
+    ],
+    "cwd": "[START_DIR]/jemalloc/build-linux-riscv64",
+    "env": {
+      "AR": "[START_DIR]/cipd/bin/llvm-ar",
+      "CC": "[START_DIR]/cipd/bin/clang",
+      "CFLAGS": "--target=riscv64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot-focal -Wno-error",
+      "CXX": "[START_DIR]/cipd/bin/clang++",
+      "CXXFLAGS": "--target=riscv64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot-focal -Wno-error",
+      "LDFLAGS": "--target=riscv64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot-focal -static-libstdc++"
+    },
+    "luci_context": {
+      "realm": {
+        "name": "infra-internal:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
+    "name": "jemalloc.build jemalloc-linux-riscv64.configure",
+    "~followup_annotations": [
+      "@@@STEP_NEST_LEVEL@2@@@"
+    ]
+  },
+  {
+    "cmd": [
+      "make",
+      "-j8",
+      "build_lib_static"
+    ],
+    "cwd": "[START_DIR]/jemalloc/build-linux-riscv64",
+    "env": {
+      "AR": "[START_DIR]/cipd/bin/llvm-ar",
+      "CC": "[START_DIR]/cipd/bin/clang",
+      "CFLAGS": "--target=riscv64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot-focal -Wno-error",
+      "CXX": "[START_DIR]/cipd/bin/clang++",
+      "CXXFLAGS": "--target=riscv64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot-focal -Wno-error",
+      "LDFLAGS": "--target=riscv64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot-focal -static-libstdc++"
+    },
+    "luci_context": {
+      "realm": {
+        "name": "infra-internal:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
+    "name": "jemalloc.build jemalloc-linux-riscv64.build",
+    "~followup_annotations": [
+      "@@@STEP_NEST_LEVEL@2@@@"
+    ]
+  },
+  {
     "cmd": [],
     "name": "debug"
   },
@@ -706,7 +810,7 @@
       "@@@STEP_NEST_LEVEL@3@@@",
       "@@@STEP_LOG_LINE@json.output@{@@@",
       "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
-      "@@@STEP_LOG_LINE@json.output@    \"instance_id\": \"40-chars-fake-of-the-package-instance_id\", @@@",
+      "@@@STEP_LOG_LINE@json.output@    \"instance_id\": \"40-chars-fake-of-the-package-instance_id\",@@@",
       "@@@STEP_LOG_LINE@json.output@    \"package\": \"gn/gn/linux-amd64\"@@@",
       "@@@STEP_LOG_LINE@json.output@  }@@@",
       "@@@STEP_LOG_LINE@json.output@}@@@",
@@ -791,7 +895,7 @@
       "@@@STEP_NEST_LEVEL@3@@@",
       "@@@STEP_LOG_LINE@json.output@{@@@",
       "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
-      "@@@STEP_LOG_LINE@json.output@    \"instance_id\": \"40-chars-fake-of-the-package-instance_id\", @@@",
+      "@@@STEP_LOG_LINE@json.output@    \"instance_id\": \"40-chars-fake-of-the-package-instance_id\",@@@",
       "@@@STEP_LOG_LINE@json.output@    \"package\": \"gn/gn/linux-amd64\"@@@",
       "@@@STEP_LOG_LINE@json.output@  }@@@",
       "@@@STEP_LOG_LINE@json.output@}@@@",
@@ -916,7 +1020,7 @@
       "@@@STEP_NEST_LEVEL@3@@@",
       "@@@STEP_LOG_LINE@json.output@{@@@",
       "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
-      "@@@STEP_LOG_LINE@json.output@    \"instance_id\": \"40-chars-fake-of-the-package-instance_id\", @@@",
+      "@@@STEP_LOG_LINE@json.output@    \"instance_id\": \"40-chars-fake-of-the-package-instance_id\",@@@",
       "@@@STEP_LOG_LINE@json.output@    \"package\": \"gn/gn/linux-arm64\"@@@",
       "@@@STEP_LOG_LINE@json.output@  }@@@",
       "@@@STEP_LOG_LINE@json.output@}@@@",
@@ -959,7 +1063,7 @@
       "@@@STEP_LOG_LINE@json.output@{@@@",
       "@@@STEP_LOG_LINE@json.output@  \"result\": [@@@",
       "@@@STEP_LOG_LINE@json.output@    {@@@",
-      "@@@STEP_LOG_LINE@json.output@      \"instance_id\": \"40-chars-fake-of-the-package-instance_id\", @@@",
+      "@@@STEP_LOG_LINE@json.output@      \"instance_id\": \"40-chars-fake-of-the-package-instance_id\",@@@",
       "@@@STEP_LOG_LINE@json.output@      \"package\": \"gn/gn/linux-arm64\"@@@",
       "@@@STEP_LOG_LINE@json.output@    }@@@",
       "@@@STEP_LOG_LINE@json.output@  ]@@@",
@@ -970,6 +1074,181 @@
   {
     "cmd": [],
     "name": "release.linux-arm64.upload.Package is up-to-date",
+    "~followup_annotations": [
+      "@@@STEP_NEST_LEVEL@3@@@"
+    ]
+  },
+  {
+    "cmd": [],
+    "name": "release.linux-riscv64",
+    "~followup_annotations": [
+      "@@@STEP_NEST_LEVEL@1@@@"
+    ]
+  },
+  {
+    "cmd": [
+      "python3",
+      "-u",
+      "[START_DIR]/gn/build/gen.py",
+      "--use-lto",
+      "--use-icf",
+      "--link-lib=[START_DIR]/jemalloc/build-linux-riscv64/lib/libjemalloc.a"
+    ],
+    "cwd": "[START_DIR]/gn",
+    "env": {
+      "AR": "[START_DIR]/cipd/bin/llvm-ar",
+      "CC": "[START_DIR]/cipd/bin/clang",
+      "CFLAGS": "--target=riscv64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot-focal",
+      "CXX": "[START_DIR]/cipd/bin/clang++",
+      "LDFLAGS": "--target=riscv64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot-focal -static-libstdc++"
+    },
+    "luci_context": {
+      "realm": {
+        "name": "infra-internal:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
+    "name": "release.linux-riscv64.generate",
+    "~followup_annotations": [
+      "@@@STEP_NEST_LEVEL@2@@@"
+    ]
+  },
+  {
+    "cmd": [
+      "[START_DIR]/cipd/ninja",
+      "-C",
+      "[START_DIR]/gn/out"
+    ],
+    "cwd": "[START_DIR]/gn",
+    "env": {
+      "AR": "[START_DIR]/cipd/bin/llvm-ar",
+      "CC": "[START_DIR]/cipd/bin/clang",
+      "CFLAGS": "--target=riscv64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot-focal",
+      "CXX": "[START_DIR]/cipd/bin/clang++",
+      "LDFLAGS": "--target=riscv64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot-focal -static-libstdc++"
+    },
+    "luci_context": {
+      "realm": {
+        "name": "infra-internal:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
+    "name": "release.linux-riscv64.build",
+    "~followup_annotations": [
+      "@@@STEP_NEST_LEVEL@2@@@"
+    ]
+  },
+  {
+    "cmd": [],
+    "name": "release.linux-riscv64.upload",
+    "~followup_annotations": [
+      "@@@STEP_NEST_LEVEL@2@@@"
+    ]
+  },
+  {
+    "cmd": [
+      "cipd",
+      "pkg-build",
+      "-pkg-def",
+      "{\"data\": [{\"file\": \"gn\"}, {\"version_file\": \".versions/gn.cipd_version\"}], \"install_mode\": \"copy\", \"package\": \"gn/gn/linux-riscv64\", \"root\": \"[START_DIR]/gn/out\"}",
+      "-out",
+      "[CLEANUP]/gn.cipd",
+      "-hash-algo",
+      "sha256",
+      "-json-output",
+      "/path/to/tmp/json"
+    ],
+    "cwd": "[START_DIR]/gn",
+    "env": {
+      "AR": "[START_DIR]/cipd/bin/llvm-ar",
+      "CC": "[START_DIR]/cipd/bin/clang",
+      "CFLAGS": "--target=riscv64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot-focal",
+      "CXX": "[START_DIR]/cipd/bin/clang++",
+      "LDFLAGS": "--target=riscv64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot-focal -static-libstdc++"
+    },
+    "luci_context": {
+      "realm": {
+        "name": "infra-internal:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
+    "name": "release.linux-riscv64.upload.build gn/gn/linux-riscv64",
+    "~followup_annotations": [
+      "@@@STEP_NEST_LEVEL@3@@@",
+      "@@@STEP_LOG_LINE@json.output@{@@@",
+      "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
+      "@@@STEP_LOG_LINE@json.output@    \"instance_id\": \"40-chars-fake-of-the-package-instance_id\",@@@",
+      "@@@STEP_LOG_LINE@json.output@    \"package\": \"gn/gn/linux-riscv64\"@@@",
+      "@@@STEP_LOG_LINE@json.output@  }@@@",
+      "@@@STEP_LOG_LINE@json.output@}@@@",
+      "@@@STEP_LOG_END@json.output@@@"
+    ]
+  },
+  {
+    "cmd": [
+      "cipd",
+      "search",
+      "gn/gn/linux-riscv64",
+      "-tag",
+      "git_revision:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "-json-output",
+      "/path/to/tmp/json"
+    ],
+    "cwd": "[START_DIR]/gn",
+    "env": {
+      "AR": "[START_DIR]/cipd/bin/llvm-ar",
+      "CC": "[START_DIR]/cipd/bin/clang",
+      "CFLAGS": "--target=riscv64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot-focal",
+      "CXX": "[START_DIR]/cipd/bin/clang++",
+      "LDFLAGS": "--target=riscv64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot-focal -static-libstdc++"
+    },
+    "luci_context": {
+      "realm": {
+        "name": "infra-internal:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
+    "name": "release.linux-riscv64.upload.cipd search gn/gn/linux-riscv64 git_revision:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "~followup_annotations": [
+      "@@@STEP_NEST_LEVEL@3@@@",
+      "@@@STEP_LOG_LINE@json.output@{@@@",
+      "@@@STEP_LOG_LINE@json.output@  \"result\": [@@@",
+      "@@@STEP_LOG_LINE@json.output@    {@@@",
+      "@@@STEP_LOG_LINE@json.output@      \"instance_id\": \"40-chars-fake-of-the-package-instance_id\",@@@",
+      "@@@STEP_LOG_LINE@json.output@      \"package\": \"gn/gn/linux-riscv64\"@@@",
+      "@@@STEP_LOG_LINE@json.output@    }@@@",
+      "@@@STEP_LOG_LINE@json.output@  ]@@@",
+      "@@@STEP_LOG_LINE@json.output@}@@@",
+      "@@@STEP_LOG_END@json.output@@@"
+    ]
+  },
+  {
+    "cmd": [],
+    "name": "release.linux-riscv64.upload.Package is up-to-date",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@3@@@"
     ]

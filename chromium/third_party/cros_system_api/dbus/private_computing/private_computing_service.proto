@@ -32,6 +32,12 @@ message ChurnObservationStatus {
   optional bool is_active_current_period_minus_1 = 2;
   // The period  status of current month is the third month of the period.
   optional bool is_active_current_period_minus_2 = 3;
+
+  // Add deduplication field to fix device ping double-counting.
+  // This field is used by analysts to determine which observation ping
+  // was the first to attach the first active week and last powerwash
+  // week on a given device when determining new device churn.
+  optional bool is_first_powerwash_in_observation_period = 4;
 }
 
 // The preserved file will include the Daily, FirstActive, 28-Day

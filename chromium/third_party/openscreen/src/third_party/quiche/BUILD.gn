@@ -14,6 +14,7 @@ if (build_with_chromium) {
 
   config("quiche_internal_config") {
     cflags = [ "-Wno-sign-compare" ]
+    cflags_cc = []
     if (is_clang) {
       cflags += [
         "-Wno-implicit-int-float-conversion",
@@ -21,7 +22,11 @@ if (build_with_chromium) {
         "-Wno-shadow-field",
         "-Wno-unused-private-field",
         "-Wno-unreachable-code-return",
+        "-Wno-unreachable-code-break",
+        "-Wno-unreachable-code",
       ]
+
+      cflags_cc += [ "-Wno-exit-time-destructors" ]
     }
 
     defines = [ "IS_QUICHE_IMPL" ]

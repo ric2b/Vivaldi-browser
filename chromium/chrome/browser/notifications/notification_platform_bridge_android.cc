@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/check.h"
@@ -246,6 +247,34 @@ void NotificationPlatformBridgeAndroid::OnNotificationClosed(
                      GURL(ConvertJavaStringToUTF8(env, java_origin)),
                      notification_id, std::nullopt /* action index */,
                      std::nullopt /* reply */, by_user));
+}
+
+void NotificationPlatformBridgeAndroid::OnNotificationDisablePermission(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& java_object,
+    const JavaParamRef<jstring>& java_notification_id,
+    jint java_notification_type,
+    const JavaParamRef<jstring>& java_origin,
+    const JavaParamRef<jstring>& java_profile_id,
+    jboolean incognito) {
+  std::string profile_id = ConvertJavaStringToUTF8(env, java_profile_id);
+  std::string notification_id =
+      ConvertJavaStringToUTF8(env, java_notification_id);
+
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  DCHECK(profile_manager);
+
+  NotificationHandler::Type notification_type =
+      JavaToNotificationType(java_notification_type);
+
+  profile_manager->LoadProfile(
+      GetProfileBaseNameFromProfileId(profile_id), incognito,
+      base::BindOnce(&NotificationDisplayServiceImpl::ProfileLoadedCallback,
+                     NotificationOperation::kDisablePermission,
+                     notification_type,
+                     GURL(ConvertJavaStringToUTF8(env, java_origin)),
+                     notification_id, std::nullopt /* action index */,
+                     std::nullopt /* reply */, std::nullopt /* by_user */));
 }
 
 void NotificationPlatformBridgeAndroid::Display(

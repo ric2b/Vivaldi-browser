@@ -35,6 +35,7 @@
 #include "chrome/browser/ui/cocoa/browser_window_command_handler.h"
 #include "chrome/browser/ui/cocoa/chrome_command_dispatcher_delegate.h"
 #include "chrome/browser/ui/cocoa/main_menu_builder.h"
+#import "chrome/browser/ui/cocoa/renderer_context_menu/chrome_swizzle_services_menu_updater.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
@@ -181,6 +182,9 @@ AppShimController::AppShimController(const Params& params)
           [[ApplicationDockMenuTarget alloc] initWithController:this]) {
   screen_ = std::make_unique<display::ScopedNativeScreen>();
   NSApp.delegate = delegate_;
+
+  [ChromeSwizzleServicesMenuUpdater install];
+
   // Since this is early startup code, there is no guarantee that the state of
   // the features being tested for here matches the state from the eventualy
   // Chrome we connect to (although they will match the vast majority of the
@@ -196,6 +200,9 @@ AppShimController::AppShimController(const Params& params)
     notification_service_ =
         std::make_unique<mac_notifications::MacNotificationServiceUN>(
             std::move(notification_action_handler_remote_),
+            base::BindRepeating(
+                &AppShimController::NotificationPermissionStatusChanged,
+                base::Unretained(this)),
             UNUserNotificationCenter.currentNotificationCenter);
   }
 }
@@ -273,7 +280,8 @@ void AppShimController::PreInitFeatureState(
        "DcheckIsFatal", "MojoBindingsInlineSLS", "MojoInlineMessagePayloads",
        "MojoIpcz", "MojoTaskPerMessage", "StandardCompliantHostCharacters",
        "StandardCompliantNonSpecialSchemeURLParsing",
-       "UseAdHocSigningForWebAppShims", "UseIDNA2008NonTransitional"});
+       "UseAdHocSigningForWebAppShims", "UseIDNA2008NonTransitional",
+       "SonomaAccessibilityActivationRefinements"});
 }
 
 // static
@@ -574,11 +582,12 @@ void AppShimController::SendBootstrapOnShimConnected(
   // automatically launch the app as well. So do a kRegisterOnly launch
   // instead.
   app_shim_info->launch_type =
-      (launched_by_notification_action_ ||
-       (base::CommandLine::ForCurrentProcess()->HasSwitch(
-            app_mode::kLaunchedByChromeProcessId) &&
-        !base::CommandLine::ForCurrentProcess()->HasSwitch(
-            app_mode::kIsNormalLaunch)))
+      launched_by_notification_action_
+          ? chrome::mojom::AppShimLaunchType::kNotificationAction
+      : (base::CommandLine::ForCurrentProcess()->HasSwitch(
+             app_mode::kLaunchedByChromeProcessId) &&
+         !base::CommandLine::ForCurrentProcess()->HasSwitch(
+             app_mode::kIsNormalLaunch))
           ? chrome::mojom::AppShimLaunchType::kRegisterOnly
           : chrome::mojom::AppShimLaunchType::kNormal;
   app_shim_info->files = launch_files_;
@@ -765,6 +774,16 @@ void AppShimController::BindNotificationProvider(
   notifications_receiver_.Bind(std::move(provider));
 }
 
+void AppShimController::RequestNotificationPermission(
+    RequestNotificationPermissionCallback callback) {
+  if (!notification_service_un()) {
+    std::move(callback).Run(
+        mac_notifications::mojom::RequestPermissionResult::kRequestFailed);
+    return;
+  }
+  notification_service_un()->RequestPermission(std::move(callback));
+}
+
 void AppShimController::BindNotificationService(
     mojo::PendingReceiver<mac_notifications::mojom::MacNotificationService>
         service,
@@ -786,6 +805,9 @@ void AppShimController::BindNotificationService(
       notification_service_ =
           std::make_unique<mac_notifications::MacNotificationServiceUN>(
               std::move(notification_action_handler_remote_),
+              base::BindRepeating(
+                  &AppShimController::NotificationPermissionStatusChanged,
+                  base::Unretained(this)),
               UNUserNotificationCenter.currentNotificationCenter);
     }
     // Note that `handler` as passed in to this method is ignored. Notification
@@ -795,7 +817,7 @@ void AppShimController::BindNotificationService(
     // notification service.
     notification_service_un()->Bind(std::move(service));
     // TODO(crbug.com/938661): Determine when to ask for permissions.
-    notification_service_un()->RequestPermission();
+    notification_service_un()->RequestPermission(base::DoNothing());
   } else {
     notification_service_ =
         std::make_unique<mac_notifications::MacNotificationServiceNS>(
@@ -811,6 +833,11 @@ AppShimController::notification_service_un() {
   }
   return static_cast<mac_notifications::MacNotificationServiceUN*>(
       notification_service_.get());
+}
+
+void AppShimController::NotificationPermissionStatusChanged(
+    mac_notifications::mojom::PermissionStatus status) {
+  host_->NotificationPermissionStatusChanged(status);
 }
 
 void AppShimController::SetUserAttention(

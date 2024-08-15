@@ -160,12 +160,18 @@
       },
       {
         "args": [
-          "--test-launcher-print-test-stdio=always"
+          "--test-launcher-print-test-stdio=always",
+          "--git-revision=${got_revision}"
         ],
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
         "name": "blink_platform_unittests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
         "swarming": {
           "dimensions": {
             "os": "Ubuntu-22.04"
@@ -780,7 +786,7 @@
             "os": "Ubuntu-22.04"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 30
+          "shards": 31
         },
         "test": "interactive_ui_tests",
         "test_id_prefix": "ninja://chrome/test:interactive_ui_tests/"
@@ -1411,24 +1417,6 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "webkit_unit_tests_v2",
-        "swarming": {
-          "dimensions": {
-            "os": "Ubuntu-22.04"
-          },
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 2
-        },
-        "test": "blink_unittests_v2",
-        "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests_v2/"
-      },
-      {
-        "args": [
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "merge": {
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
         "name": "wm_unittests",
         "swarming": {
           "dimensions": {
@@ -1622,10 +1610,18 @@
         "test_id_prefix": "ninja://third_party/blink/renderer/platform/heap:blink_heap_unittests/"
       },
       {
+        "args": [
+          "--git-revision=${got_revision}"
+        ],
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
         "name": "blink_platform_unittests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
         "swarming": {
           "dimensions": {
             "os": "Ubuntu-22.04"
@@ -2651,20 +2647,6 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "webkit_unit_tests_v2",
-        "swarming": {
-          "dimensions": {
-            "os": "Ubuntu-22.04"
-          },
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "blink_unittests_v2",
-        "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests_v2/"
-      },
-      {
-        "merge": {
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
         "name": "wm_unittests",
         "swarming": {
           "dimensions": {
@@ -2960,12 +2942,18 @@
       },
       {
         "args": [
-          "--test-launcher-print-test-stdio=always"
+          "--test-launcher-print-test-stdio=always",
+          "--git-revision=${got_revision}"
         ],
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
         "name": "blink_platform_unittests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
         "swarming": {
           "dimensions": {
             "cpu": "x86-64",
@@ -4226,7 +4214,7 @@
             "os": "Ubuntu-22.04"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 2
+          "shards": 4
         },
         "test": "unit_tests",
         "test_id_prefix": "ninja://chrome/test:unit_tests/"
@@ -4357,24 +4345,6 @@
         },
         "test": "blink_unittests",
         "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests/"
-      },
-      {
-        "args": [
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "merge": {
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "webkit_unit_tests_v2",
-        "swarming": {
-          "dimensions": {
-            "cpu": "x86-64",
-            "os": "Ubuntu-22.04"
-          },
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "blink_unittests_v2",
-        "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests_v2/"
       },
       {
         "args": [
@@ -4654,12 +4624,18 @@
       },
       {
         "args": [
-          "--test-launcher-print-test-stdio=always"
+          "--test-launcher-print-test-stdio=always",
+          "--git-revision=${got_revision}"
         ],
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
         "name": "blink_platform_unittests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
         "swarming": {
           "dimensions": {
             "cpu": "x86-64",
@@ -4721,7 +4697,7 @@
             "os": "Ubuntu-20.04"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 70
+          "shards": 100
         },
         "test": "browser_tests",
         "test_id_prefix": "ninja://chrome/test:browser_tests/"
@@ -6062,24 +6038,6 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "webkit_unit_tests_v2",
-        "swarming": {
-          "dimensions": {
-            "cpu": "x86-64",
-            "os": "Ubuntu-20.04"
-          },
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "blink_unittests_v2",
-        "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests_v2/"
-      },
-      {
-        "args": [
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "merge": {
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
         "name": "wm_unittests",
         "swarming": {
           "dimensions": {
@@ -6296,12 +6254,18 @@
       },
       {
         "args": [
-          "--test-launcher-print-test-stdio=always"
+          "--test-launcher-print-test-stdio=always",
+          "--git-revision=${got_revision}"
         ],
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
         "name": "blink_platform_unittests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
         "swarming": {
           "dimensions": {
             "cpu": "x86-64",
@@ -7569,24 +7533,6 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "webkit_unit_tests_v2",
-        "swarming": {
-          "dimensions": {
-            "cpu": "x86-64",
-            "os": "Ubuntu-20.04"
-          },
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "blink_unittests_v2",
-        "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests_v2/"
-      },
-      {
-        "args": [
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "merge": {
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
         "name": "wm_unittests",
         "swarming": {
           "dimensions": {
@@ -7812,12 +7758,18 @@
       },
       {
         "args": [
-          "--test-launcher-print-test-stdio=always"
+          "--test-launcher-print-test-stdio=always",
+          "--git-revision=${got_revision}"
         ],
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
         "name": "blink_platform_unittests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
         "swarming": {
           "dimensions": {
             "os": "Ubuntu-22.04"
@@ -9062,28 +9014,10 @@
             "os": "Ubuntu-22.04"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 3
+          "shards": 4
         },
         "test": "blink_unittests",
         "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests/"
-      },
-      {
-        "args": [
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "merge": {
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "webkit_unit_tests_v2",
-        "swarming": {
-          "dimensions": {
-            "os": "Ubuntu-22.04"
-          },
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 3
-        },
-        "test": "blink_unittests_v2",
-        "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests_v2/"
       },
       {
         "args": [
@@ -9304,12 +9238,18 @@
       },
       {
         "args": [
-          "--test-launcher-print-test-stdio=always"
+          "--test-launcher-print-test-stdio=always",
+          "--git-revision=${got_revision}"
         ],
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
         "name": "blink_platform_unittests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
         "swarming": {
           "dimensions": {
             "cpu": "x86-64",
@@ -10527,24 +10467,6 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "webkit_unit_tests_v2",
-        "swarming": {
-          "dimensions": {
-            "cpu": "x86-64",
-            "os": "Mac-13"
-          },
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "blink_unittests_v2",
-        "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests_v2/"
-      },
-      {
-        "args": [
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "merge": {
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
         "name": "wtf_unittests",
         "swarming": {
           "dimensions": {
@@ -11101,7 +11023,8 @@
       {
         "args": [
           "--gs-results-bucket=chromium-result-details",
-          "--recover-devices"
+          "--recover-devices",
+          "--git-revision=${got_revision}"
         ],
         "merge": {
           "args": [
@@ -11113,6 +11036,11 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "name": "blink_platform_unittests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
         "resultdb": {
           "enable": true,
           "has_native_resultdb_integration": true
@@ -13132,48 +13060,6 @@
             "--bucket",
             "chromium-result-details",
             "--test-name",
-            "webkit_unit_tests_v2"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
-        },
-        "name": "webkit_unit_tests_v2",
-        "resultdb": {
-          "enable": true,
-          "has_native_resultdb_integration": true
-        },
-        "swarming": {
-          "dimensions": {
-            "device_os": "N2G48C",
-            "device_os_type": "userdebug",
-            "device_type": "bullhead",
-            "os": "Android"
-          },
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 6
-        },
-        "test": "blink_unittests_v2",
-        "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests_v2/"
-      },
-      {
-        "args": [
-          "--gs-results-bucket=chromium-result-details",
-          "--recover-devices"
-        ],
-        "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
             "wtf_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
@@ -13262,7 +13148,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -13283,11 +13169,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -13310,7 +13196,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -13331,11 +13217,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -13358,7 +13244,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -13379,11 +13265,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -13406,7 +13292,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -13427,11 +13313,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -13454,7 +13340,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -13475,11 +13361,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -13502,7 +13388,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -13523,11 +13409,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -13550,7 +13436,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -13571,11 +13457,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -13598,7 +13484,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -13619,11 +13505,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -13646,7 +13532,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -13667,11 +13553,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -13694,7 +13580,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -13715,11 +13601,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -13742,7 +13628,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -13763,11 +13649,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -13790,7 +13676,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -13811,11 +13697,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -13838,7 +13724,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -13859,11 +13745,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -13886,7 +13772,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -13907,11 +13793,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -13934,7 +13820,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -13955,11 +13841,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -13982,7 +13868,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14003,11 +13889,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14030,7 +13916,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14051,11 +13937,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14078,7 +13964,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14099,11 +13985,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14126,7 +14012,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14147,11 +14033,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14174,7 +14060,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14195,11 +14081,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14222,7 +14108,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14243,11 +14129,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14270,7 +14156,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14291,11 +14177,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14318,7 +14204,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14339,11 +14225,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14367,7 +14253,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14388,11 +14274,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14416,7 +14302,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14437,11 +14323,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14464,7 +14350,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14485,11 +14371,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14512,7 +14398,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14533,11 +14419,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14560,7 +14446,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14581,11 +14467,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14608,7 +14494,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14629,11 +14515,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14656,7 +14542,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14677,11 +14563,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14704,7 +14590,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14725,11 +14611,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14752,7 +14638,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14773,11 +14659,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14800,7 +14686,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14821,11 +14707,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14848,7 +14734,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14869,11 +14755,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14896,7 +14782,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14917,11 +14803,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14944,7 +14830,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -14965,11 +14851,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -14992,7 +14878,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -15013,11 +14899,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -15040,7 +14926,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -15061,11 +14947,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -15088,7 +14974,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -15109,11 +14995,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -15136,7 +15022,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -15157,11 +15043,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -15184,7 +15070,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -15205,11 +15091,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -15232,7 +15118,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -15253,11 +15139,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -15280,7 +15166,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -15301,11 +15187,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -15328,7 +15214,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -15349,11 +15235,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -15376,7 +15262,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -15397,11 +15283,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -15424,7 +15310,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -15445,11 +15331,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -15472,7 +15358,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -15493,11 +15379,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -15520,7 +15406,7 @@
           "--out-dir",
           "${ISOLATED_OUTDIR}",
           "--xcode-build-version",
-          "15a507",
+          "15c500b",
           "--xctest"
         ],
         "merge": {
@@ -15541,11 +15427,11 @@
           ],
           "dimensions": {
             "cpu": "x86-64",
-            "os": "Mac-13"
+            "os": "Mac-13|Mac-14"
           },
           "named_caches": [
             {
-              "name": "xcode_ios_15a507",
+              "name": "xcode_ios_15c500b",
               "path": "Xcode.app"
             },
             {
@@ -15739,13 +15625,19 @@
         "args": [
           "--test-launcher-print-test-stdio=always",
           "--combine-ash-logs-on-bots",
-          "--asan-symbolize-output"
+          "--asan-symbolize-output",
+          "--git-revision=${got_revision}"
         ],
         "isolate_profile_data": true,
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
         "name": "blink_platform_unittests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
         "swarming": {
           "dimensions": {
             "cpu": "x86-64",
@@ -16418,12 +16310,12 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/linux-lacros.interactive_ui_tests.filter;../../testing/buildbot/filters/linux-lacros.interactive_ui_tests.skew.filter",
-          "--ash-chrome-path-override=../../lacros_version_skew_tests_v120.0.6099.80/test_ash_chrome",
+          "--ash-chrome-path-override=../../lacros_version_skew_tests_v124.0.6367.66/test_ash_chrome",
           "--test-launcher-print-test-stdio=always",
           "--combine-ash-logs-on-bots",
           "--asan-symbolize-output"
         ],
-        "description": "Run with ash-chrome version 120.0.6099.80",
+        "description": "Run with ash-chrome version 124.0.6367.66",
         "isolate_profile_data": true,
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -16433,8 +16325,8 @@
           "cipd_packages": [
             {
               "cipd_package": "chromium/testing/linux-ash-chromium/x86_64/ash.zip",
-              "location": "lacros_version_skew_tests_v120.0.6099.80",
-              "revision": "version:120.0.6099.80"
+              "location": "lacros_version_skew_tests_v124.0.6367.66",
+              "revision": "version:124.0.6367.66"
             }
           ],
           "dimensions": {
@@ -16451,12 +16343,12 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/linux-lacros.interactive_ui_tests.filter;../../testing/buildbot/filters/linux-lacros.interactive_ui_tests.skew.filter",
-          "--ash-chrome-path-override=../../lacros_version_skew_tests_v123.0.6267.0/test_ash_chrome",
+          "--ash-chrome-path-override=../../lacros_version_skew_tests_v126.0.6434.0/test_ash_chrome",
           "--test-launcher-print-test-stdio=always",
           "--combine-ash-logs-on-bots",
           "--asan-symbolize-output"
         ],
-        "description": "Run with ash-chrome version 123.0.6267.0",
+        "description": "Run with ash-chrome version 126.0.6434.0",
         "isolate_profile_data": true,
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -16466,8 +16358,8 @@
           "cipd_packages": [
             {
               "cipd_package": "chromium/testing/linux-ash-chromium/x86_64/ash.zip",
-              "location": "lacros_version_skew_tests_v123.0.6267.0",
-              "revision": "version:123.0.6267.0"
+              "location": "lacros_version_skew_tests_v126.0.6434.0",
+              "revision": "version:126.0.6434.0"
             }
           ],
           "dimensions": {
@@ -16484,12 +16376,12 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/linux-lacros.interactive_ui_tests.filter;../../testing/buildbot/filters/linux-lacros.interactive_ui_tests.skew.filter",
-          "--ash-chrome-path-override=../../lacros_version_skew_tests_v122.0.6241.0/test_ash_chrome",
+          "--ash-chrome-path-override=../../lacros_version_skew_tests_v125.0.6422.5/test_ash_chrome",
           "--test-launcher-print-test-stdio=always",
           "--combine-ash-logs-on-bots",
           "--asan-symbolize-output"
         ],
-        "description": "Run with ash-chrome version 122.0.6241.0",
+        "description": "Run with ash-chrome version 125.0.6422.5",
         "isolate_profile_data": true,
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -16499,8 +16391,8 @@
           "cipd_packages": [
             {
               "cipd_package": "chromium/testing/linux-ash-chromium/x86_64/ash.zip",
-              "location": "lacros_version_skew_tests_v122.0.6241.0",
-              "revision": "version:122.0.6241.0"
+              "location": "lacros_version_skew_tests_v125.0.6422.5",
+              "revision": "version:125.0.6422.5"
             }
           ],
           "dimensions": {
@@ -16517,12 +16409,12 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/linux-lacros.interactive_ui_tests.filter;../../testing/buildbot/filters/linux-lacros.interactive_ui_tests.skew.filter",
-          "--ash-chrome-path-override=../../lacros_version_skew_tests_v120.0.6099.259/test_ash_chrome",
+          "--ash-chrome-path-override=../../lacros_version_skew_tests_v123.0.6312.132/test_ash_chrome",
           "--test-launcher-print-test-stdio=always",
           "--combine-ash-logs-on-bots",
           "--asan-symbolize-output"
         ],
-        "description": "Run with ash-chrome version 120.0.6099.259",
+        "description": "Run with ash-chrome version 123.0.6312.132",
         "isolate_profile_data": true,
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -16532,8 +16424,8 @@
           "cipd_packages": [
             {
               "cipd_package": "chromium/testing/linux-ash-chromium/x86_64/ash.zip",
-              "location": "lacros_version_skew_tests_v120.0.6099.259",
-              "revision": "version:120.0.6099.259"
+              "location": "lacros_version_skew_tests_v123.0.6312.132",
+              "revision": "version:123.0.6312.132"
             }
           ],
           "dimensions": {
@@ -16594,12 +16486,12 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/linux-lacros.lacros_chrome_browsertests.filter;../../testing/buildbot/filters/linux-lacros.lacros_chrome_browsertests.skew.filter",
-          "--ash-chrome-path-override=../../lacros_version_skew_tests_v120.0.6099.80/test_ash_chrome",
+          "--ash-chrome-path-override=../../lacros_version_skew_tests_v124.0.6367.66/test_ash_chrome",
           "--test-launcher-print-test-stdio=always",
           "--combine-ash-logs-on-bots",
           "--asan-symbolize-output"
         ],
-        "description": "Run with ash-chrome version 120.0.6099.80",
+        "description": "Run with ash-chrome version 124.0.6367.66",
         "isolate_profile_data": true,
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -16609,8 +16501,8 @@
           "cipd_packages": [
             {
               "cipd_package": "chromium/testing/linux-ash-chromium/x86_64/ash.zip",
-              "location": "lacros_version_skew_tests_v120.0.6099.80",
-              "revision": "version:120.0.6099.80"
+              "location": "lacros_version_skew_tests_v124.0.6367.66",
+              "revision": "version:124.0.6367.66"
             }
           ],
           "dimensions": {
@@ -16627,12 +16519,12 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/linux-lacros.lacros_chrome_browsertests.filter;../../testing/buildbot/filters/linux-lacros.lacros_chrome_browsertests.skew.filter",
-          "--ash-chrome-path-override=../../lacros_version_skew_tests_v123.0.6267.0/test_ash_chrome",
+          "--ash-chrome-path-override=../../lacros_version_skew_tests_v126.0.6434.0/test_ash_chrome",
           "--test-launcher-print-test-stdio=always",
           "--combine-ash-logs-on-bots",
           "--asan-symbolize-output"
         ],
-        "description": "Run with ash-chrome version 123.0.6267.0",
+        "description": "Run with ash-chrome version 126.0.6434.0",
         "isolate_profile_data": true,
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -16642,8 +16534,8 @@
           "cipd_packages": [
             {
               "cipd_package": "chromium/testing/linux-ash-chromium/x86_64/ash.zip",
-              "location": "lacros_version_skew_tests_v123.0.6267.0",
-              "revision": "version:123.0.6267.0"
+              "location": "lacros_version_skew_tests_v126.0.6434.0",
+              "revision": "version:126.0.6434.0"
             }
           ],
           "dimensions": {
@@ -16660,12 +16552,12 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/linux-lacros.lacros_chrome_browsertests.filter;../../testing/buildbot/filters/linux-lacros.lacros_chrome_browsertests.skew.filter",
-          "--ash-chrome-path-override=../../lacros_version_skew_tests_v122.0.6241.0/test_ash_chrome",
+          "--ash-chrome-path-override=../../lacros_version_skew_tests_v125.0.6422.5/test_ash_chrome",
           "--test-launcher-print-test-stdio=always",
           "--combine-ash-logs-on-bots",
           "--asan-symbolize-output"
         ],
-        "description": "Run with ash-chrome version 122.0.6241.0",
+        "description": "Run with ash-chrome version 125.0.6422.5",
         "isolate_profile_data": true,
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -16675,8 +16567,8 @@
           "cipd_packages": [
             {
               "cipd_package": "chromium/testing/linux-ash-chromium/x86_64/ash.zip",
-              "location": "lacros_version_skew_tests_v122.0.6241.0",
-              "revision": "version:122.0.6241.0"
+              "location": "lacros_version_skew_tests_v125.0.6422.5",
+              "revision": "version:125.0.6422.5"
             }
           ],
           "dimensions": {
@@ -16693,12 +16585,12 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/linux-lacros.lacros_chrome_browsertests.filter;../../testing/buildbot/filters/linux-lacros.lacros_chrome_browsertests.skew.filter",
-          "--ash-chrome-path-override=../../lacros_version_skew_tests_v120.0.6099.259/test_ash_chrome",
+          "--ash-chrome-path-override=../../lacros_version_skew_tests_v123.0.6312.132/test_ash_chrome",
           "--test-launcher-print-test-stdio=always",
           "--combine-ash-logs-on-bots",
           "--asan-symbolize-output"
         ],
-        "description": "Run with ash-chrome version 120.0.6099.259",
+        "description": "Run with ash-chrome version 123.0.6312.132",
         "isolate_profile_data": true,
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -16708,8 +16600,8 @@
           "cipd_packages": [
             {
               "cipd_package": "chromium/testing/linux-ash-chromium/x86_64/ash.zip",
-              "location": "lacros_version_skew_tests_v120.0.6099.259",
-              "revision": "version:120.0.6099.259"
+              "location": "lacros_version_skew_tests_v123.0.6312.132",
+              "revision": "version:123.0.6312.132"
             }
           ],
           "dimensions": {
@@ -16722,27 +16614,6 @@
         "test": "lacros_chrome_browsertests",
         "test_id_prefix": "ninja://chrome/test:lacros_chrome_browsertests/",
         "variant_id": "Lacros version skew testing ash stable"
-      },
-      {
-        "args": [
-          "--test-launcher-print-test-stdio=always",
-          "--combine-ash-logs-on-bots",
-          "--asan-symbolize-output"
-        ],
-        "isolate_profile_data": true,
-        "merge": {
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "lacros_chrome_unittests",
-        "swarming": {
-          "dimensions": {
-            "cpu": "x86-64",
-            "os": "Ubuntu-22.04"
-          },
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "lacros_chrome_unittests",
-        "test_id_prefix": "ninja://chrome/test:lacros_chrome_unittests/"
       },
       {
         "args": [
@@ -17472,27 +17343,6 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "webkit_unit_tests_v2",
-        "swarming": {
-          "dimensions": {
-            "cpu": "x86-64",
-            "os": "Ubuntu-22.04"
-          },
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "blink_unittests_v2",
-        "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests_v2/"
-      },
-      {
-        "args": [
-          "--test-launcher-print-test-stdio=always",
-          "--combine-ash-logs-on-bots",
-          "--asan-symbolize-output"
-        ],
-        "isolate_profile_data": true,
-        "merge": {
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
         "name": "wm_unittests",
         "swarming": {
           "dimensions": {
@@ -17678,10 +17528,18 @@
         "test_id_prefix": "ninja://third_party/blink/renderer/platform/heap:blink_heap_unittests/"
       },
       {
+        "args": [
+          "--git-revision=${got_revision}"
+        ],
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
         "name": "blink_platform_unittests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
         "swarming": {
           "dimensions": {
             "os": "Ubuntu-22.04"
@@ -18688,20 +18546,6 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "webkit_unit_tests_v2",
-        "swarming": {
-          "dimensions": {
-            "os": "Ubuntu-22.04"
-          },
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "blink_unittests_v2",
-        "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests_v2/"
-      },
-      {
-        "merge": {
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
         "name": "wm_unittests",
         "swarming": {
           "dimensions": {
@@ -18886,10 +18730,18 @@
         "test_id_prefix": "ninja://third_party/blink/renderer/platform/heap:blink_heap_unittests/"
       },
       {
+        "args": [
+          "--git-revision=${got_revision}"
+        ],
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
         "name": "blink_platform_unittests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
         "swarming": {
           "dimensions": {
             "os": "Windows-10-19045"
@@ -19473,7 +19325,7 @@
             "os": "Windows-10-19045"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 6
+          "shards": 9
         },
         "test": "interactive_ui_tests",
         "test_id_prefix": "ninja://chrome/test:interactive_ui_tests/"
@@ -20029,24 +19881,11 @@
           "dimensions": {
             "os": "Windows-10-19045"
           },
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 6
         },
         "test": "blink_unittests",
         "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests/"
-      },
-      {
-        "merge": {
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "webkit_unit_tests_v2",
-        "swarming": {
-          "dimensions": {
-            "os": "Windows-10-19045"
-          },
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "blink_unittests_v2",
-        "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests_v2/"
       },
       {
         "merge": {

@@ -263,7 +263,7 @@ base::CancelableTaskTracker::TaskId MailClientService::GetDBVersion(
       base::BindOnce(std::move(callback)));
 }
 
-base::CancelableTaskTracker::TaskId MailClientService::MigrateSerchDB(
+base::CancelableTaskTracker::TaskId MailClientService::MigrateSearchDB(
     ResultCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_)
@@ -273,6 +273,20 @@ base::CancelableTaskTracker::TaskId MailClientService::MigrateSerchDB(
   return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
       base::BindOnce(&MailClientBackend::MigrateSearchDB, mail_client_backend_),
+      base::BindOnce(std::move(callback)));
+}
+
+base::CancelableTaskTracker::TaskId MailClientService::DeleteMailSearchDB(
+    ResultCallback callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_)
+      << "MailClient service being called after cleanup";
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  return tracker->PostTaskAndReplyWithResult(
+      backend_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&MailClientBackend::DeleteMailSearchDB,
+                     mail_client_backend_),
       base::BindOnce(std::move(callback)));
 }
 

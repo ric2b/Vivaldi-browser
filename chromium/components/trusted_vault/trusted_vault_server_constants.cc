@@ -5,7 +5,6 @@
 #include "components/trusted_vault/trusted_vault_server_constants.h"
 
 #include "base/base64url.h"
-#include "base/containers/contains.h"
 #include "base/containers/fixed_flat_map.h"
 #include "base/strings/string_piece.h"
 #include "net/base/url_util.h"
@@ -34,18 +33,18 @@ GURL GetGetSecurityDomainMemberURL(const GURL& server_url,
 
 GURL GetGetSecurityDomainURL(const GURL& server_url,
                              SecurityDomainId security_domain) {
-  return GURL(server_url.spec() + GetSecurityDomainName(security_domain) +
+  return GURL(server_url.spec() + GetSecurityDomainPath(security_domain) +
               "?view=2");
 }
 
 GURL GetJoinSecurityDomainURL(const GURL& server_url,
                               SecurityDomainId security_domain) {
-  return GURL(server_url.spec() + GetSecurityDomainName(security_domain) +
+  return GURL(server_url.spec() + GetSecurityDomainPath(security_domain) +
               ":join");
 }
 
 GURL GetGetSecurityDomainMembersURLForTesting(
-    const absl::optional<std::string>& next_page_token,
+    const std::optional<std::string>& next_page_token,
     const GURL& server_url) {
   GURL url = GetGetSecurityDomainMembersURL(server_url);
   if (next_page_token) {
@@ -77,16 +76,17 @@ GURL GetFullGetSecurityDomainURLForTesting(const GURL& server_url,
       kQueryParameterAlternateOutputKey, kQueryParameterAlternateOutputProto);
 }
 
-std::string GetSecurityDomainName(SecurityDomainId domain) {
+std::string GetSecurityDomainPath(SecurityDomainId domain) {
   switch (domain) {
     case SecurityDomainId::kChromeSync:
-      return kSyncSecurityDomainName;
+      return std::string(kSecurityDomainPathPrefix) + kSyncSecurityDomainName;
     case SecurityDomainId::kPasskeys:
-      return kPasskeysSecurityDomainName;
+      return std::string(kSecurityDomainPathPrefix) +
+             kPasskeysSecurityDomainName;
   }
 }
 
-absl::optional<SecurityDomainId> GetSecurityDomainByName(
+std::optional<SecurityDomainId> GetSecurityDomainByName(
     base::StringPiece name) {
   static_assert(static_cast<int>(SecurityDomainId::kMaxValue) == 1,
                 "Update GetSecurityDomainByName when adding SecurityDomainId "
@@ -96,22 +96,9 @@ absl::optional<SecurityDomainId> GetSecurityDomainByName(
           {kSyncSecurityDomainName, SecurityDomainId::kChromeSync},
           {kPasskeysSecurityDomainName, SecurityDomainId::kPasskeys},
       });
-  return base::Contains(kSecurityDomainNames, name)
-             ? absl::make_optional(kSecurityDomainNames.at(name))
-             : absl::nullopt;
-}
-
-std::string GetSecurityDomainNameForHistograms(SecurityDomainId domain) {
-  switch (domain) {
-    // These strings get embedded in histogram names and so should not be
-    // changed.
-    case SecurityDomainId::kChromeSync:
-      return "ChromeSync";
-    case SecurityDomainId::kPasskeys:
-      return "HwProtected";
-      // If adding a new value, also update the variants for SecurityDomainId
-      // in tools/metrics/histograms/metadata/trusted_vault/histograms.xml.
-  }
+  return kSecurityDomainNames.contains(name)
+             ? std::make_optional(kSecurityDomainNames.at(name))
+             : std::nullopt;
 }
 
 }  // namespace trusted_vault

@@ -14,6 +14,7 @@ import {
   assertNotNullOrUndefined,
   click,
   clickElement,
+  clickMoreTabsButton,
   getBrowserAndPages,
   getPendingEvents,
   getTestServerPort,
@@ -52,7 +53,6 @@ export const TURNED_OFF_PAUSE_BUTTON_SELECTOR = 'button.toolbar-state-off';
 export const TURNED_ON_PAUSE_BUTTON_SELECTOR = 'button.toolbar-state-on';
 export const DEBUGGER_PAUSED_EVENT = 'DevTools.DebuggerPaused';
 const WATCH_EXPRESSION_VALUE_SELECTOR = '.watch-expression-tree-item .object-value-string.value';
-export const MORE_TABS_SELECTOR = '[aria-label="More tabs"]';
 export const OVERRIDES_TAB_SELECTOR = '[aria-label="Overrides"]';
 export const ENABLE_OVERRIDES_SELECTOR = '[aria-label="Select folder for overrides"]';
 const CLEAR_CONFIGURATION_SELECTOR = '[aria-label="Clear configuration"]';
@@ -112,7 +112,7 @@ export async function openFileInSourcesPanel(testInput: string) {
 
 export async function openRecorderSubPane() {
   const root = await waitFor('.navigator-tabbed-pane');
-  await click('[aria-label="More tabs"]', {root});
+  await clickMoreTabsButton(root);
   await click('[aria-label="Recordings"]');
   await waitFor('[aria-label="Add recording"]');
 }
@@ -130,7 +130,7 @@ export async function createNewRecording(recordingName: string) {
 
 export async function openSnippetsSubPane() {
   const root = await waitFor('.navigator-tabbed-pane');
-  await click('[aria-label="More tabs"]', {root});
+  await clickMoreTabsButton(root);
   await click('[aria-label="Snippets"]');
   await waitFor('[aria-label="New snippet"]');
 }
@@ -162,7 +162,7 @@ export async function createNewSnippet(snippetName: string, content?: string) {
 
 export async function openOverridesSubPane() {
   const root = await waitFor('.navigator-tabbed-pane');
-  await click('[aria-label="More tabs"]', {root});
+  await clickMoreTabsButton(root);
   await click('[aria-label="Overrides"]');
   await waitFor('[aria-label="Overrides panel"]');
 }
@@ -735,7 +735,7 @@ export async function refreshDevToolsAndRemoveBackendState(target: puppeteer.Pag
 }
 
 export async function enableLocalOverrides() {
-  await click(MORE_TABS_SELECTOR);
+  await clickMoreTabsButton();
   await click(OVERRIDES_TAB_SELECTOR);
   await click(ENABLE_OVERRIDES_SELECTOR);
   await waitFor(CLEAR_CONFIGURATION_SELECTOR);
@@ -805,11 +805,8 @@ export class WasmLocationLabels {
   }
 
   async checkLocationForLabel(label: string) {
-    const mappedLines = this.#mappings.get(label);
-    assertNotNullOrUndefined(mappedLines);
-
     const pauseLocation = await retrieveTopCallFrameWithoutResuming();
-    const pausedLine = mappedLines.find(
+    const pausedLine = this.#mappings.get(label)!.find(
         line => pauseLocation === `${path.basename(this.#wasm)}:0x${line.moduleOffset.toString(16)}` ||
             pauseLocation === `${path.basename(this.#source)}:${line.sourceLine}`);
     assertNotNullOrUndefined(pausedLine);
@@ -818,28 +815,18 @@ export class WasmLocationLabels {
 
   async addBreakpointsForLabelInSource(label: string) {
     const {frontend} = getBrowserAndPages();
-    const mappedLines = this.#mappings.get(label);
-    assertNotNullOrUndefined(mappedLines);
     await openFileInEditor(path.basename(this.#source));
-    for (const line of mappedLines) {
-      await addBreakpointForLine(frontend, line.sourceLine);
-    }
+    await Promise.all(this.#mappings.get(label)!.map(({sourceLine}) => addBreakpointForLine(frontend, sourceLine)));
   }
 
   async addBreakpointsForLabelInWasm(label: string) {
     const {frontend} = getBrowserAndPages();
-    const mappedLines = this.#mappings.get(label);
-    assertNotNullOrUndefined(mappedLines);
     await openFileInEditor(path.basename(this.#wasm));
     const visibleLines = await $$(CODE_LINE_SELECTOR);
     const lineNumbers = await Promise.all(visibleLines.map(line => line.evaluate(node => node.textContent)));
     const lineNumberLabels = new Map(lineNumbers.map(label => [Number(label), label]));
-
-    for (const line of mappedLines) {
-      const lineNumberLabel = lineNumberLabels.get(line.moduleOffset);
-      assertNotNullOrUndefined(lineNumberLabel);
-      await addBreakpointForLine(frontend, lineNumberLabel);
-    }
+    await Promise.all(this.#mappings.get(label)!.map(
+        ({moduleOffset}) => addBreakpointForLine(frontend, lineNumberLabels.get(moduleOffset)!)));
   }
 
   async setBreakpointInSourceAndRun(label: string, script: string) {

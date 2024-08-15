@@ -17,10 +17,8 @@ a result, there is little to be gained from filing a duplicate bug besides
 slowing down our ability to produce a great piece of software.
 
 Before you file any bug, search the bug tracker to see if your problem is a
-known issues ([Mac
-query](http://code.google.com/p/chromium/issues/list?can=2&q=os:mac&sort=-stars),
-[Linux
-query](http://code.google.com/p/chromium/issues/list?can=2&q=os:linux&sort=-stars)).
+known issues ([Mac query]https://issues.chromium.org/issues?q=status:open%20customfield1223084:%22Mac%22),
+[Linux query](https://issues.chromium.org/issues?q=status:open%20customfield1223084:%22Linux%22)).
 You can safely assume that huge holes in functionality (such as fullscreen not
 working) are well known and there's no need to file a bug. If you find the bug
 is already there, feel free to star it so you can find it later and indicate to
@@ -33,7 +31,7 @@ than willing to help you out.
 
 **Steps to take before filing a bug:**
 
-1. Try searching for the bug on the [Chromium bug tracker](http://crbug.com),
+1. Try searching for the bug on the [Chromium bug tracker](https://issues.chromium.org),
 someone may already have reported it.
 
 2. Try to formulate a reduction, i.e. the minimal set of steps to reproduce the

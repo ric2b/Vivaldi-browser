@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <tuple>
 #include <utility>
 
@@ -89,7 +90,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/boringssl/src/include/openssl/bio.h"
 #include "third_party/boringssl/src/include/openssl/evp.h"
 #include "third_party/boringssl/src/include/openssl/hpke.h"
@@ -772,12 +772,12 @@ class SSLClientSocketTest : public PlatformTest, public WithTaskEnvironment {
                                                    result);
   }
 
-  absl::optional<SSLInfo> LastSSLInfoFromServer() {
+  std::optional<SSLInfo> LastSSLInfoFromServer() {
     // EmbeddedTestServer callbacks run on another thread, so protect this
     // with a lock.
     base::AutoLock lock(server_ssl_info_lock_);
     auto result = server_ssl_info_;
-    server_ssl_info_ = absl::nullopt;
+    server_ssl_info_ = std::nullopt;
     return result;
   }
 
@@ -808,7 +808,7 @@ class SSLClientSocketTest : public PlatformTest, public WithTaskEnvironment {
 
   std::unique_ptr<EmbeddedTestServer> embedded_test_server_;
   base::Lock server_ssl_info_lock_;
-  absl::optional<SSLInfo> server_ssl_info_ GUARDED_BY(server_ssl_info_lock_);
+  std::optional<SSLInfo> server_ssl_info_ GUARDED_BY(server_ssl_info_lock_);
   TestCompletionCallback callback_;
   AddressList addr_;
   HostPortPair host_port_pair_;
@@ -2372,7 +2372,7 @@ TEST_F(SSLClientSocketTest, LegacyTLSVersions) {
     ASSERT_TRUE(CreateAndConnectSSLClientSocket(config, &rv));
     EXPECT_THAT(rv, IsError(ERR_UNEXPECTED));
 
-    config.version_min_override = absl::nullopt;
+    config.version_min_override = std::nullopt;
     config.version_max_override = version;
     ASSERT_TRUE(CreateAndConnectSSLClientSocket(config, &rv));
     EXPECT_THAT(rv, IsError(ERR_UNEXPECTED));
@@ -3223,14 +3223,10 @@ TEST_F(SSLClientSocketTest, SHA1) {
   ASSERT_TRUE(
       StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, server_config));
 
+  // SHA-1 server signatures are always disabled.
   int rv;
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
-  EXPECT_THAT(rv, IsOk());
-
-  SSLConfig config;
-  config.disable_sha1_server_signatures = true;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(config, &rv));
-  EXPECT_THAT(rv, IsError(ERR_SSL_PROTOCOL_ERROR));
+  EXPECT_THAT(rv, IsError(ERR_SSL_VERSION_OR_CIPHER_MISMATCH));
 }
 
 TEST_F(SSLClientSocketFalseStartTest, FalseStartEnabled) {
@@ -4124,10 +4120,7 @@ struct KeyUsageTest {
 class SSLClientSocketKeyUsageTest
     : public SSLClientSocketTest,
       public ::testing::WithParamInterface<
-          std::tuple<KeyUsageTest,
-                     bool /*known_root*/,
-                     bool /*rsa_key_usage_for_local_anchors_enabled*/,
-                     bool /*override_feature*/>> {};
+          std::tuple<KeyUsageTest, bool /*known_root*/>> {};
 
 const KeyUsageTest kKeyUsageTests[] = {
     // keyUsage matches cipher suite.
@@ -4143,38 +4136,13 @@ const KeyUsageTest kKeyUsageTests[] = {
 };
 
 TEST_P(SSLClientSocketKeyUsageTest, RSAKeyUsage) {
-  const auto& [test, known_root, rsa_key_usage_for_local_anchors_enabled,
-               override_feature] = GetParam();
-  bool enable_feature;
-  if (override_feature) {
-    // Configure the feature in the opposite way that we intend, to test that
-    // the configuration overrides it.
-    enable_feature = !rsa_key_usage_for_local_anchors_enabled;
-  } else {
-    enable_feature = rsa_key_usage_for_local_anchors_enabled;
-  }
-  base::test::ScopedFeatureList scoped_feature_list;
-  if (enable_feature) {
-    scoped_feature_list.InitAndEnableFeature(
-        features::kRSAKeyUsageForLocalAnchors);
-  } else {
-    scoped_feature_list.InitAndDisableFeature(
-        features::kRSAKeyUsageForLocalAnchors);
-  }
-
+  const auto& [test, known_root] = GetParam();
   SSLServerConfig server_config;
   server_config.version_max = SSL_PROTOCOL_VERSION_TLS1_2;
   server_config.cipher_suite_for_testing = test.cipher_suite;
   ASSERT_TRUE(StartEmbeddedTestServer(test.server_cert, server_config));
   scoped_refptr<X509Certificate> server_cert =
       embedded_test_server()->GetCertificate();
-
-  SSLContextConfig context_config;
-  if (override_feature) {
-    context_config.rsa_key_usage_for_local_anchors_override =
-        rsa_key_usage_for_local_anchors_enabled;
-  }
-  ssl_config_service_->UpdateSSLConfigAndNotify(context_config);
 
   // Certificate is trusted.
   CertVerifyResult verify_result;
@@ -4190,7 +4158,7 @@ TEST_P(SSLClientSocketKeyUsageTest, RSAKeyUsage) {
   SSLInfo ssl_info;
   ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
 
-  if (test.match || (!known_root && !rsa_key_usage_for_local_anchors_enabled)) {
+  if (test.match) {
     EXPECT_THAT(rv, IsOk());
     EXPECT_TRUE(sock_->IsConnected());
   } else {
@@ -4199,10 +4167,9 @@ TEST_P(SSLClientSocketKeyUsageTest, RSAKeyUsage) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    RSAKeyUsageInstantiation,
-    SSLClientSocketKeyUsageTest,
-    Combine(ValuesIn(kKeyUsageTests), Bool(), Bool(), Bool()));
+INSTANTIATE_TEST_SUITE_P(RSAKeyUsageInstantiation,
+                         SSLClientSocketKeyUsageTest,
+                         Combine(ValuesIn(kKeyUsageTests), Bool()));
 
 // Test that when CT is required (in this case, by the delegate), the
 // absence of CT information is a socket error.
@@ -5100,7 +5067,7 @@ TEST_P(SSLClientSocketReadTest, IdleAfterRead) {
   // Set up a TCP server.
   TCPServerSocket server_listener(nullptr, NetLogSource());
   ASSERT_THAT(server_listener.Listen(IPEndPoint(IPAddress::IPv4Localhost(), 0),
-                                     1, /*ipv6_only=*/absl::nullopt),
+                                     1, /*ipv6_only=*/std::nullopt),
               IsOk());
   IPEndPoint server_address;
   ASSERT_THAT(server_listener.GetLocalAddress(&server_address), IsOk());
@@ -5194,7 +5161,7 @@ TEST_F(SSLClientSocketTest, SSLOverSSLBadCertificate) {
   // Set up a TCP server.
   TCPServerSocket server_listener(nullptr, NetLogSource());
   ASSERT_THAT(server_listener.Listen(IPEndPoint(IPAddress::IPv4Localhost(), 0),
-                                     1, /*ipv6_only=*/absl::nullopt),
+                                     1, /*ipv6_only=*/std::nullopt),
               IsOk());
   IPEndPoint server_address;
   ASSERT_THAT(server_listener.GetLocalAddress(&server_address), IsOk());
@@ -5309,7 +5276,7 @@ TEST_F(SSLClientSocketTest, ECH) {
   // TLS 1.3 causes the ticket to arrive later. Use the socket to ensure we have
   // a ticket. This also populates the SSLInfo from the server.
   EXPECT_THAT(MakeHTTPRequest(sock_.get(), "/ssl-info"), IsOk());
-  absl::optional<SSLInfo> server_ssl_info = LastSSLInfoFromServer();
+  std::optional<SSLInfo> server_ssl_info = LastSSLInfoFromServer();
   ASSERT_TRUE(server_ssl_info);
   EXPECT_TRUE(server_ssl_info->encrypted_client_hello);
 
@@ -5850,10 +5817,10 @@ TEST_F(SSLClientSocketTest, CancelReadIfReady) {
 // Test that the server_name extension (SNI) is sent on DNS names, and not IP
 // literals.
 TEST_F(SSLClientSocketTest, ServerName) {
-  absl::optional<std::string> got_server_name;
+  std::optional<std::string> got_server_name;
   bool ran_callback = false;
   auto reset_callback_state = [&] {
-    got_server_name = absl::nullopt;
+    got_server_name = std::nullopt;
     ran_callback = false;
   };
 
@@ -5866,7 +5833,7 @@ TEST_F(SSLClientSocketTest, ServerName) {
         if (server_name) {
           got_server_name = server_name;
         } else {
-          got_server_name = absl::nullopt;
+          got_server_name = std::nullopt;
         }
         ran_callback = true;
         return true;
@@ -5890,21 +5857,21 @@ TEST_F(SSLClientSocketTest, ServerName) {
       SSLConfig(), HostPortPair("1.2.3.4", port), &rv));
   ASSERT_THAT(rv, IsOk());
   EXPECT_TRUE(ran_callback);
-  EXPECT_EQ(got_server_name, absl::nullopt);
+  EXPECT_EQ(got_server_name, std::nullopt);
 
   reset_callback_state();
   ASSERT_TRUE(CreateAndConnectSSLClientSocketWithHost(
       SSLConfig(), HostPortPair("::1", port), &rv));
   ASSERT_THAT(rv, IsOk());
   EXPECT_TRUE(ran_callback);
-  EXPECT_EQ(got_server_name, absl::nullopt);
+  EXPECT_EQ(got_server_name, std::nullopt);
 
   reset_callback_state();
   ASSERT_TRUE(CreateAndConnectSSLClientSocketWithHost(
       SSLConfig(), HostPortPair("2001:db8::42", port), &rv));
   ASSERT_THAT(rv, IsOk());
   EXPECT_TRUE(ran_callback);
-  EXPECT_EQ(got_server_name, absl::nullopt);
+  EXPECT_EQ(got_server_name, std::nullopt);
 }
 
 class SSLClientSocketAlpsTest

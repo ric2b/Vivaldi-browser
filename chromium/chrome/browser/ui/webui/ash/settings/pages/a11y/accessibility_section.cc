@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "ash/color_enhancement/color_enhancement_controller.h"
+#include "ash/constants/ash_constants.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/accessibility_controller_enums.h"
@@ -488,8 +489,16 @@ int GetDisplayAndMangificationLinkDescriptionResourceId() {
   return IDS_SETTINGS_ACCESSIBILITY_DISPLAY_AND_MAGNIFICATION_LINK_NEW_DESCRIPTION;
 }
 
+bool IsAccessibilityReducedAnimationsEnabled() {
+  return ::features::IsAccessibilityReducedAnimationsEnabled();
+}
+
 bool IsAccessibilityFaceGazeEnabled() {
   return ::features::IsAccessibilityFaceGazeEnabled();
+}
+
+bool IsAccessibilityMouseKeysEnabled() {
+  return ::features::IsAccessibilityMouseKeysEnabled();
 }
 
 bool IsAccessibilityExtraLargeCursorEnabled() {
@@ -618,6 +627,29 @@ void AccessibilitySection::AddLoadTimeData(
        IDS_SETTINGS_AUTOCLICK_REVERT_TO_LEFT_CLICK},
       {"autoclickStabilizeCursorPosition",
        IDS_SETTINGS_AUTOCLICK_STABILIZE_CURSOR_POSITION},
+      {"mouseKeysLabel", IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_LABEL},
+      {"mouseKeysDescription",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_DESCRIPTION},
+      {"mouseKeysShortcutToPause",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_SHORTCUT_TO_PAUSE},
+      {"mouseKeysDisableInTextFields",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_DISABLE_IN_TEXT_FIELDS},
+      {"mouseKeysAcceleration",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_ACCELERATION},
+      {"mouseKeysAccelerationMinLabel",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_ACCELERATION_MIN_LABEL},
+      {"mouseKeysAccelerationMaxLabel",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_ACCELERATION_MAX_LABEL},
+      {"mouseKeysMaxSpeed", IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_MAX_SPEED},
+      {"mouseKeysMaxSpeedMinLabel",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_MAX_SPEED_MIN_LABEL},
+      {"mouseKeysMaxSpeedMaxLabel",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_MAX_SPEED_MAX_LABEL},
+      {"mouseKeysDominantHand",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_DOMINANT_HAND},
+      {"mouseKeysRightHand",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_RIGHT_HAND},
+      {"mouseKeysLeftHand", IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_LEFT_HAND},
       {"cancel", IDS_CANCEL},
       {"caretBrowsingLabel",
        IDS_SETTINGS_ACCESSIBILITY_CARET_BROWSING_DESCRIPTION},
@@ -837,6 +869,29 @@ void AccessibilitySection::AddLoadTimeData(
        IDS_SETTINGS_COLOR_VISION_DEFICIENCY_TYPE_LABEL},
       {"colorVisionFilterIntensityLabel",
        IDS_SETTINGS_COLOR_VISION_FILTER_INTENSITY_LABEL},
+      {"reducedAnimationsLabel",
+       IDS_SETTINGS_ACCESSIBILITY_REDUCED_ANIMATIONS_LABEL},
+      {"reducedAnimationsDescription",
+       IDS_SETTINGS_ACCESSIBILITY_REDUCED_ANIMATIONS_DESCRIPTION},
+      {"caretBlinkIntervalLabel", IDS_SETTINGS_CARET_BLINK_INTERVAL_LABEL},
+      {"caretBlinkIntervalDescription",
+       IDS_SETTINGS_CARET_BLINK_INTERVAL_DESCRIPTION},
+      {"caretBlinkIntervalOff", IDS_SETTINGS_CARET_BLINK_INTERVAL_OFF},
+      {"caretBlinkIntervalNormal", IDS_SETTINGS_CARET_BLINK_INTERVAL_NORMAL},
+      {"caretBlinkIntervalSlow", IDS_SETTINGS_CARET_BLINK_INTERVAL_SLOW},
+      {"caretBlinkIntervalFast", IDS_SETTINGS_CARET_BLINK_INTERVAL_FAST},
+      {"faceGazeCursorAccelerationLabel",
+       IDS_OS_SETTINGS_ACCESSIBILITY_FACEGAZE_CURSOR_ACCELERATION_LABEL},
+      {"faceGazeCursorSmoothingLabel",
+       IDS_OS_SETTINGS_ACCESSIBILITY_FACEGAZE_CURSOR_SMOOTHING_LABEL},
+      {"faceGazeCursorDownSpeedLabel",
+       IDS_OS_SETTINGS_ACCESSIBILITY_FACEGAZE_CURSOR_SPEED_DOWN_LABEL},
+      {"faceGazeCursorLeftSpeedLabel",
+       IDS_OS_SETTINGS_ACCESSIBILITY_FACEGAZE_CURSOR_SPEED_LEFT_LABEL},
+      {"faceGazeCursorRightSpeedLabel",
+       IDS_OS_SETTINGS_ACCESSIBILITY_FACEGAZE_CURSOR_SPEED_RIGHT_LABEL},
+      {"faceGazeCursorUpSpeedLabel",
+       IDS_OS_SETTINGS_ACCESSIBILITY_FACEGAZE_CURSOR_SPEED_UP_LABEL},
       {"keyboardAndTextInputHeading",
        IDS_SETTINGS_ACCESSIBILITY_KEYBOARD_AND_TEXT_INPUT_HEADING},
       {"keyboardAndTextInputLinkDescription",
@@ -975,6 +1030,8 @@ void AccessibilitySection::AddLoadTimeData(
       {"selectToSpeakTitle", IDS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_TITLE},
       {"settingsSliderRoleDescription",
        IDS_SETTINGS_SLIDER_MIN_MAX_ARIA_ROLE_DESCRIPTION},
+      {"sliderLabel1", IDS_OS_SETTINGS_SLIDER_LABEL_1},
+      {"sliderLabel100", IDS_OS_SETTINGS_SLIDER_LABEL_100},
       {"startupSoundLabel", IDS_SETTINGS_STARTUP_SOUND_LABEL},
       {"stickyKeysDescription", IDS_SETTINGS_STICKY_KEYS_DESCRIPTION},
       {"stickyKeysLabel", IDS_SETTINGS_STICKY_KEYS_LABEL},
@@ -1153,6 +1210,9 @@ void AccessibilitySection::AddLoadTimeData(
       l10n_util::GetStringUTF16(
           GetDisplayAndMangificationLinkDescriptionResourceId()));
 
+  html_source->AddInteger("defaultCaretBlinkIntervalMs",
+                          ash::kDefaultCaretBlinkIntervalMs);
+
   html_source->AddBoolean(
       "showExperimentalAccessibilitySwitchAccessImprovedTextInput",
       IsSwitchAccessTextAllowed());
@@ -1166,11 +1226,21 @@ void AccessibilitySection::AddLoadTimeData(
   html_source->AddBoolean("pdfOcrEnabled",
                           base::FeatureList::IsEnabled(::features::kPdfOcr));
 
+  html_source->AddBoolean("isAccessibilityReducedAnimationsEnabled",
+                          IsAccessibilityReducedAnimationsEnabled());
+
   html_source->AddBoolean("isAccessibilityFaceGazeEnabled",
                           IsAccessibilityFaceGazeEnabled());
 
+  html_source->AddBoolean("isAccessibilityMouseKeysEnabled",
+                          IsAccessibilityMouseKeysEnabled());
+
   html_source->AddBoolean("isAccessibilityExtraLargeCursorEnabled",
                           IsAccessibilityExtraLargeCursorEnabled());
+
+  html_source->AddBoolean(
+      "isAccessibilityCaretBlinkIntervalSettingEnabled",
+      ::features::IsAccessibilityCaretBlinkIntervalSettingEnabled());
 
   ::settings::AddCaptionSubpageStrings(html_source);
 }
@@ -1321,6 +1391,12 @@ void AccessibilitySection::RegisterHierarchy(
       mojom::Setting::kEnableSwitchAccess,
       mojom::Setting::kHighlightTextCaret,
       mojom::Setting::kAutoClickWhenCursorStops,
+      mojom::Setting::kMouseKeysEnabled,
+      mojom::Setting::kMouseKeysShortcutToPauseEnabled,
+      mojom::Setting::kMouseKeysDisableInTextFields,
+      mojom::Setting::kMouseKeysAcceleration,
+      mojom::Setting::kMouseKeysMaxSpeed,
+      mojom::Setting::kMouseKeysDominantHand,
       mojom::Setting::kLargeCursor,
       mojom::Setting::kHighlightCursorWhileMoving,
       mojom::Setting::kTabletNavigationButtons,
@@ -1331,6 +1407,8 @@ void AccessibilitySection::RegisterHierarchy(
       mojom::Setting::kColorCorrectionEnabled,
       mojom::Setting::kColorCorrectionFilterType,
       mojom::Setting::kColorCorrectionFilterAmount,
+      mojom::Setting::kCaretBlinkInterval,
+      mojom::Setting::kReducedAnimationsEnabled,
   };
   RegisterNestedSettingBulk(mojom::Subpage::kManageAccessibility,
                             kManageAccessibilitySettings, generator);

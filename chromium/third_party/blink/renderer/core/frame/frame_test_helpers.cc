@@ -49,6 +49,7 @@
 #include "third_party/blink/public/common/frame/fenced_frame_sandbox_flags.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
 #include "third_party/blink/public/common/page/browsing_context_group_info.h"
+#include "third_party/blink/public/common/page/color_provider_color_maps.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame_replication_state.mojom-blink.h"
@@ -434,7 +435,7 @@ WebViewImpl* WebViewHelper::InitializeWithOpener(
     TestWebFrameClient* web_frame_client,
     WebViewClient* web_view_client,
     void (*update_settings_func)(WebSettings*),
-    absl::optional<blink::FencedFrame::DeprecatedFencedFrameMode>
+    std::optional<blink::FencedFrame::DeprecatedFencedFrameMode>
         fenced_frame_mode) {
   Reset();
 
@@ -539,7 +540,7 @@ WebViewHelper::InitializeRemoteWithOpenerAndAssociatedRemoteAndReceivers(
     mojo::PendingAssociatedReceiver<mojom::blink::RemoteFrame> receiver) {
   Reset();
 
-  InitializeWebView(web_view_client, nullptr, absl::nullopt);
+  InitializeWebView(web_view_client, nullptr, std::nullopt);
 
   if (!security_origin)
     security_origin = SecurityOrigin::CreateUniqueOpaque();
@@ -713,7 +714,7 @@ void WebViewHelper::Resize(const gfx::Size& size) {
 void WebViewHelper::InitializeWebView(
     WebViewClient* web_view_client,
     class WebView* opener,
-    absl::optional<blink::FencedFrame::DeprecatedFencedFrameMode>
+    std::optional<blink::FencedFrame::DeprecatedFencedFrameMode>
         fenced_frame_mode) {
   auto browsing_context_group_info = BrowsingContextGroupInfo::CreateUnique();
   if (opener) {
@@ -733,9 +734,10 @@ void WebViewHelper::InitializeWebView(
                       /*widgets_never_composited=*/false,
                       /*opener=*/opener, mojo::NullAssociatedReceiver(),
                       *agent_group_scheduler_,
-                      /*session_storage_namespace_id=*/base::EmptyString(),
-                      /*page_base_background_color=*/absl::nullopt,
-                      std::move(browsing_context_group_info)));
+                      /*session_storage_namespace_id=*/std::string(),
+                      /*page_base_background_color=*/std::nullopt,
+                      std::move(browsing_context_group_info),
+                      /*color_provider_colors=*/nullptr));
   // This property must be set at initialization time, it is not supported to be
   // changed afterward, and does nothing.
   web_view_->GetSettings()->SetViewportEnabled(viewport_enabled_);
@@ -771,13 +773,14 @@ WebViewImpl* WebViewHelper::CreateWebView(WebViewClient* web_view_client,
                       /*is_hidden=*/false,
                       /*is_prerendering=*/false,
                       /*is_inside_portal=*/false,
-                      /*fenced_frame_mode=*/absl::nullopt, compositing_enabled,
+                      /*fenced_frame_mode=*/std::nullopt, compositing_enabled,
                       /*widgets_never_composited=*/false,
                       /*opener=*/nullptr, mojo::NullAssociatedReceiver(),
                       *agent_group_scheduler_,
-                      /*session_storage_namespace_id=*/base::EmptyString(),
-                      /*page_base_background_color=*/absl::nullopt,
-                      BrowsingContextGroupInfo::CreateUnique()));
+                      /*session_storage_namespace_id=*/std::string(),
+                      /*page_base_background_color=*/std::nullopt,
+                      BrowsingContextGroupInfo::CreateUnique(),
+                      /*color_provider_colors=*/nullptr));
 }
 
 int TestWebFrameClient::loads_in_progress_ = 0;
@@ -943,8 +946,8 @@ WebView* TestWebFrameClient::CreateNewWindow(
     network::mojom::blink::WebSandboxFlags,
     const SessionStorageNamespaceId&,
     bool& consumed_user_gesture,
-    const absl::optional<Impression>&,
-    const absl::optional<WebPictureInPictureWindowOptions>&,
+    const std::optional<Impression>&,
+    const std::optional<WebPictureInPictureWindowOptions>&,
     const WebURL&) {
   auto webview_helper = std::make_unique<WebViewHelper>();
   WebView* result = webview_helper->InitializeWithOpener(frame_);
@@ -1009,7 +1012,14 @@ void TestWebFrameWidget::BindWidgetChannels(
   widget_host_ = CreateWidgetHost();
   widget_host_->BindWidgetHost(std::move(receiver), std::move(frame_receiver));
   mojo::Remote<mojom::blink::WidgetInputHandler> input_handler;
-  widget_remote->GetWidgetInputHandler(
+
+  mojo::PendingRemote<mojom::blink::RenderInputRouterClient> rir_client_remote;
+  // Setup RenderInputRouter mojo connections.
+  widget_remote->SetupRenderInputRouterConnections(
+      rir_client_remote.InitWithNewPipeAndPassReceiver());
+  widget_host_->BindRenderInputRouterInterfaces(std::move(rir_client_remote));
+
+  widget_host_->GetWidgetInputHandler(
       input_handler.BindNewPipeAndPassReceiver(),
       GetInputHandlerHost()->BindNewRemote());
 }
@@ -1100,6 +1110,18 @@ void TestWebFrameWidgetHost::BindWidgetHost(
   frame_receiver_.Bind(std::move(frame_receiver));
 }
 
+void TestWebFrameWidgetHost::BindRenderInputRouterInterfaces(
+    mojo::PendingRemote<mojom::blink::RenderInputRouterClient> remote) {
+  client_remote_.reset();
+  client_remote_.Bind(std::move(remote));
+}
+
+void TestWebFrameWidgetHost::GetWidgetInputHandler(
+    mojo::PendingReceiver<mojom::blink::WidgetInputHandler> request,
+    mojo::PendingRemote<mojom::blink::WidgetInputHandlerHost> host) {
+  client_remote_->GetWidgetInputHandler(std::move(request), std::move(host));
+}
+
 mojo::PendingRemote<mojom::blink::WidgetInputHandlerHost>
 TestWidgetInputHandlerHost::BindNewRemote() {
   receiver_.reset();
@@ -1121,8 +1143,8 @@ void TestWidgetInputHandlerHost::ImeCancelComposition() {}
 
 void TestWidgetInputHandlerHost::ImeCompositionRangeChanged(
     const gfx::Range& range,
-    const absl::optional<WTF::Vector<gfx::Rect>>& character_bounds,
-    const absl::optional<WTF::Vector<gfx::Rect>>& line_bounds) {}
+    const std::optional<WTF::Vector<gfx::Rect>>& character_bounds,
+    const std::optional<WTF::Vector<gfx::Rect>>& line_bounds) {}
 
 void TestWidgetInputHandlerHost::SetMouseCapture(bool capture) {}
 

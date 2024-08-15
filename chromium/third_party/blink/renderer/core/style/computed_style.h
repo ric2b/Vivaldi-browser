@@ -91,7 +91,6 @@ class BorderEdge;
 class ContentData;
 class CounterDirectives;
 class CSSAnimationData;
-class FloodColor;
 class CSSTransitionData;
 class CSSVariableData;
 class Font;
@@ -161,10 +160,11 @@ class WebkitTextStrokeColor;
 // ComputedStyle stores the computed value [1] for every CSS property on an
 // element and provides the interface between the style engine and the rest of
 // Blink. It acts as a container where the computed value of every CSS property
-// can be stored and retrieved:
+// can be retrieved after its created using a builder.
 //
-//   auto style = ComputedStyle::CreateInitialStyleSingleton();
-//   style->SetDisplay(EDisplay::kNone); //'display' keyword property
+//   ComputedStyleBuilder builder(*ComputedStyle::GetInitialStyleSingleton());
+//   builder.SetDisplay(EDisplay::kNone); //'display' keyword property
+//   auto style = builder.TakeStyle();
 //   style->Display();
 //
 // In addition to storing the computed value of every CSS property,
@@ -331,9 +331,11 @@ class ComputedStyle final : public ComputedStyleBase {
     ComputedStyleBase::TraceAfterDispatch(visitor);
   }
 
-  // Create the per-document/context singleton that is used for shallow-copying
-  // into new instances.
-  CORE_EXPORT static const ComputedStyle* CreateInitialStyleSingleton();
+  // Singletons to be used for StyleBuilder. The instances are
+  // context-independent and must always be used as `const` versions to avoid
+  // pollution of the style. Instances are allocated as per-thread singletons.
+  CORE_EXPORT static const ComputedStyle* GetInitialStyleSingleton();
+  CORE_EXPORT static const ComputedStyle* GetInitialStyleForImgSingleton();
 
   static const ComputedStyle* NullifyEnsured(const ComputedStyle* style) {
     if (!style) {
@@ -482,9 +484,9 @@ class ComputedStyle final : public ComputedStyleBase {
    * class, and be kept to a minimum.
    */
 
-  // anchor-default
-  bool AnchorDefaultDataEquivalent(const ComputedStyle& o) const {
-    return base::ValuesEquivalent(AnchorDefault(), o.AnchorDefault());
+  // position-anchor
+  bool PositionAnchorDataEquivalent(const ComputedStyle& o) const {
+    return base::ValuesEquivalent(PositionAnchor(), o.PositionAnchor());
   }
 
   // anchor-name
@@ -519,9 +521,7 @@ class ComputedStyle final : public ComputedStyleBase {
 
   // Returns true if the Element should stick to the viewport bottom as the URL
   // bar hides.
-  bool IsFixedToBottom() const {
-    return !UsedBottom().IsAuto() && UsedTop().IsAuto();
-  }
+  bool IsFixedToBottom() const { return !Bottom().IsAuto() && Top().IsAuto(); }
 
   // Border properties.
   // border-image-slice
@@ -660,7 +660,7 @@ class ComputedStyle final : public ComputedStyleBase {
 
   // https://drafts.csswg.org/css-anchor-position-1/#position-fallback-list
   bool MayHavePositionFallbackList() const {
-    return HasOutOfFlowPosition() && PositionFallback();
+    return HasOutOfFlowPosition() && GetPositionTryOptions();
   }
 
   // Scroll properties.
@@ -710,12 +710,7 @@ class ComputedStyle final : public ComputedStyleBase {
            ScrollbarColor().has_value();
   }
 
-  // Ignore non-standard ::-webkit-scrollbar when standard properties are in
-  // use.
-  bool HasCustomScrollbarStyle() const {
-    return HasPseudoElementStyle(kPseudoIdScrollbar) &&
-           !UsesStandardScrollbarStyle();
-  }
+  bool HasCustomScrollbarStyle(const Document& document) const;
 
   // shape-outside (aka -webkit-shape-outside)
   ShapeValue* ShapeOutside() const { return ShapeOutsideInternal().Get(); }
@@ -865,7 +860,7 @@ class ComputedStyle final : public ComputedStyleBase {
   }
 
   // font-palette
-  blink::FontPalette* FontPalette() const {
+  const FontPalette* GetFontPalette() const {
     return GetFontDescription().GetFontPalette();
   }
 
@@ -915,12 +910,12 @@ class ComputedStyle final : public ComputedStyleBase {
 
   // accent-color
   // An empty optional means the accent-color is 'auto'
-  absl::optional<blink::Color> AccentColorResolved() const;
+  std::optional<blink::Color> AccentColorResolved() const;
 
   // scrollbar-color
   // An empty optional means the scrollbar-color is 'auto'
-  absl::optional<blink::Color> ScrollbarThumbColorResolved() const;
-  absl::optional<blink::Color> ScrollbarTrackColorResolved() const;
+  std::optional<blink::Color> ScrollbarThumbColorResolved() const;
+  std::optional<blink::Color> ScrollbarTrackColorResolved() const;
 
   // Comparison operators
   // FIXME: Replace callers of operator== wth a named method instead, e.g.
@@ -1162,71 +1157,23 @@ class ComputedStyle final : public ComputedStyleBase {
   CORE_EXPORT LayoutUnit ComputedLineHeightAsFixed() const;
   LayoutUnit ComputedLineHeightAsFixed(const Font& font) const;
 
-  const Length& AdjustLengthForAnchorQueries(
-      const Length& original_value,
-      const Length& fallback_value) const {
-    if (LIKELY(!original_value.HasAnchorQueries())) {
-      return original_value;
-    }
-    return HasOutOfFlowPosition() ? original_value : fallback_value;
-  }
-
-  // Inset utility functions.
-  const Length& UsedLeft() const {
-    return AdjustLengthForAnchorQueries(Left(), Length::Auto());
-  }
-  const Length& UsedRight() const {
-    return AdjustLengthForAnchorQueries(Right(), Length::Auto());
-  }
-  const Length& UsedTop() const {
-    return AdjustLengthForAnchorQueries(Top(), Length::Auto());
-  }
-  const Length& UsedBottom() const {
-    return AdjustLengthForAnchorQueries(Bottom(), Length::Auto());
-  }
-  bool HasAutoAnchorPositioning() const {
-    return UsedLeft().HasAutoAnchorPositioning() ||
-           UsedRight().HasAutoAnchorPositioning() ||
-           UsedTop().HasAutoAnchorPositioning() ||
-           UsedBottom().HasAutoAnchorPositioning();
-  }
-
-  // Width/height utility functions.
-  const Length& UsedWidth() const {
-    return AdjustLengthForAnchorQueries(Width(), Length::Auto());
-  }
-  const Length& UsedHeight() const {
-    return AdjustLengthForAnchorQueries(Height(), Length::Auto());
-  }
-  const Length& UsedMinWidth() const {
-    return AdjustLengthForAnchorQueries(MinWidth(), Length::Auto());
-  }
-  const Length& UsedMinHeight() const {
-    return AdjustLengthForAnchorQueries(MinHeight(), Length::Auto());
-  }
-  const Length& UsedMaxWidth() const {
-    return AdjustLengthForAnchorQueries(MaxWidth(), Length::None());
-  }
-  const Length& UsedMaxHeight() const {
-    return AdjustLengthForAnchorQueries(MaxHeight(), Length::None());
-  }
   const Length& LogicalWidth() const {
-    return IsHorizontalWritingMode() ? UsedWidth() : UsedHeight();
+    return IsHorizontalWritingMode() ? Width() : Height();
   }
   const Length& LogicalHeight() const {
-    return IsHorizontalWritingMode() ? UsedHeight() : UsedWidth();
+    return IsHorizontalWritingMode() ? Height() : Width();
   }
   const Length& LogicalMaxWidth() const {
-    return IsHorizontalWritingMode() ? UsedMaxWidth() : UsedMaxHeight();
+    return IsHorizontalWritingMode() ? MaxWidth() : MaxHeight();
   }
   const Length& LogicalMaxHeight() const {
-    return IsHorizontalWritingMode() ? UsedMaxHeight() : UsedMaxWidth();
+    return IsHorizontalWritingMode() ? MaxHeight() : MaxWidth();
   }
   const Length& LogicalMinWidth() const {
-    return IsHorizontalWritingMode() ? UsedMinWidth() : UsedMinHeight();
+    return IsHorizontalWritingMode() ? MinWidth() : MinHeight();
   }
   const Length& LogicalMinHeight() const {
-    return IsHorizontalWritingMode() ? UsedMinHeight() : UsedMinWidth();
+    return IsHorizontalWritingMode() ? MinHeight() : MinWidth();
   }
 
   // Margin utility functions.
@@ -1468,8 +1415,8 @@ class ComputedStyle final : public ComputedStyleBase {
   }
   bool HasStickyConstrainedPosition() const {
     return GetPosition() == EPosition::kSticky &&
-           (!UsedTop().IsAuto() || !UsedLeft().IsAuto() ||
-            !UsedRight().IsAuto() || !UsedBottom().IsAuto());
+           (!Top().IsAuto() || !Left().IsAuto() || !Right().IsAuto() ||
+            !Bottom().IsAuto());
   }
   static EPosition GetPosition(EDisplay display, EPosition position_internal) {
     // Applied sticky position is static for table columns and column groups.
@@ -1525,17 +1472,17 @@ class ComputedStyle final : public ComputedStyleBase {
     return PhysicalBoundsToLogical().BlockEnd();
   }
   bool InsetsEqual(const ComputedStyle& other) const {
-    return UsedLeft() == other.UsedLeft() && UsedRight() == other.UsedRight() &&
-           UsedTop() == other.UsedTop() && UsedBottom() == other.UsedBottom();
+    return Left() == other.Left() && Right() == other.Right() &&
+           Top() == other.Top() && Bottom() == other.Bottom();
   }
 
   // Whether or not a positioned element requires normal flow x/y to be computed
   // to determine its position.
   bool HasAutoLeftAndRightIgnoringInsetArea() const {
-    return UsedLeft().IsAuto() && UsedRight().IsAuto();
+    return Left().IsAuto() && Right().IsAuto();
   }
   bool HasAutoTopAndBottomIgnoringInsetArea() const {
-    return UsedTop().IsAuto() && UsedBottom().IsAuto();
+    return Top().IsAuto() && Bottom().IsAuto();
   }
 
   // Content utility functions.
@@ -1767,12 +1714,24 @@ class ComputedStyle final : public ComputedStyleBase {
   }
 
   bool IsFocusable() const {
-    // TODO: Maybe `display: contents` shouldn't prevent focusability, see
-    // discussion in https://github.com/whatwg/html/issues/1837
     // TODO: `visibility: hidden` shouldn't prevent focusability, see
     // https://html.spec.whatwg.org/multipage/interaction.html#focusable-area
-    return !IsEnsuredInDisplayNone() && Display() != EDisplay::kContents &&
-           !IsInert() && Visibility() == EVisibility::kVisible;
+    return !IsEnsuredInDisplayNone() && !IsInert() &&
+           Visibility() == EVisibility::kVisible &&
+           (Display() != EDisplay::kContents ||
+            RuntimeEnabledFeatures::DisplayContentsFocusableEnabled());
+  }
+
+  // `text-box-trim` utility functions.
+  bool ShouldTextBoxTrimStart() const {
+    const ETextBoxTrim text_box_trim = TextBoxTrim();
+    return text_box_trim == ETextBoxTrim::kStart ||
+           text_box_trim == ETextBoxTrim::kBoth;
+  }
+  bool ShouldTextBoxTrimEnd() const {
+    const ETextBoxTrim text_box_trim = TextBoxTrim();
+    return text_box_trim == ETextBoxTrim::kEnd ||
+           text_box_trim == ETextBoxTrim::kBoth;
   }
 
   // Text decoration utility functions.
@@ -1815,11 +1774,11 @@ class ComputedStyle final : public ComputedStyleBase {
   }
 
   // Returns (by value) the last text decoration, if any.
-  absl::optional<AppliedTextDecoration> LastAppliedTextDecoration() const {
+  std::optional<AppliedTextDecoration> LastAppliedTextDecoration() const {
     if (HasAppliedTextDecorations()) {
       return AppliedTextDecorations().back();
     }
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   // Overflow utility functions.
@@ -2029,6 +1988,12 @@ class ComputedStyle final : public ComputedStyleBase {
                       ApplyTransformOrigin,
                       ApplyMotionPath,
                       ApplyIndependentTransformProperties) const;
+
+  enum class TransformBoxContext {
+    kLayoutBox,  // For elements with an associated CSS layout box.
+    kSvg,        // For SVG elements without an associated CSS layout box.
+  };
+  ETransformBox UsedTransformBox(TransformBoxContext) const;
 
   // Returns |true| if any property that renders using filter operations is
   // used (including, but not limited to, 'filter' and 'box-reflect').
@@ -2293,6 +2258,14 @@ class ComputedStyle final : public ComputedStyleBase {
   CORE_EXPORT blink::Color VisitedDependentColor(
       const Longhand& color_property,
       bool* is_current_color = nullptr) const;
+
+  // Used to resolve 'context-fill' and 'context-stroke' paints
+  CORE_EXPORT blink::Color VisitedDependentContextFill(
+      const SVGPaint& context_paint,
+      const ComputedStyle& context_style) const;
+  CORE_EXPORT blink::Color VisitedDependentContextStroke(
+      const SVGPaint& context_paint,
+      const ComputedStyle& context_style) const;
 
   // A faster version of VisitedDependentColor() that specializes on the
   // concrete property class; for the common case of not being inside a link,
@@ -2579,6 +2552,10 @@ class ComputedStyle final : public ComputedStyleBase {
   blink::Color GetInternalForcedVisitedCurrentColor(
       bool* is_current_color = nullptr) const;
 
+  blink::Color VisitedDependentContextPaint(
+      const SVGPaint& context_paint,
+      const SVGPaint& context_visited_paint) const;
+
   // Helper for resolving a StyleColor which may contain currentColor or a
   // system color keyword. This is intended for cases where a given property
   // consists of a StyleColor plus additional information. For <color>
@@ -2615,9 +2592,8 @@ class ComputedStyle final : public ComputedStyleBase {
   }
 
   PhysicalToLogical<const Length&> PhysicalBoundsToLogical() const {
-    return PhysicalToLogical<const Length&>(GetWritingDirection(), UsedTop(),
-                                            UsedRight(), UsedBottom(),
-                                            UsedLeft());
+    return PhysicalToLogical<const Length&>(GetWritingDirection(), Top(),
+                                            Right(), Bottom(), Left());
   }
 
   static Difference ComputeDifferenceIgnoringInheritedFirstLineStyle(
@@ -3047,20 +3023,6 @@ class ComputedStyleBuilder final : public ComputedStyleBuilderBase {
   }
   const Length& LineHeight() const { return LineHeightInternal(); }
 
-  // Sizing properties
-  const Length& UsedWidth() const {
-    if (LIKELY(!Width().HasAnchorQueries())) {
-      return Width();
-    }
-    return HasOutOfFlowPosition() ? Width() : Length::Auto();
-  }
-  const Length& UsedHeight() const {
-    if (LIKELY(!Height().HasAnchorQueries())) {
-      return Height();
-    }
-    return HasOutOfFlowPosition() ? Height() : Length::Auto();
-  }
-
   // margin-*
   void SetMarginTop(const Length& v) {
     if (MarginTop() != v) {
@@ -3318,9 +3280,9 @@ class ComputedStyleBuilder final : public ComputedStyleBuilderBase {
   // PaintImage
   void AddPaintImage(StyleImage* image) {
     if (!PaintImagesInternal()) {
-      SetPaintImagesInternal(std::make_unique<PaintImages>());
+      MutablePaintImagesInternal() = MakeGarbageCollected<PaintImages>();
     }
-    MutablePaintImagesInternal()->push_back(image);
+    MutablePaintImagesInternal()->Images().push_back(image);
   }
 
   // TextAutosizingMultiplier

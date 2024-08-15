@@ -4,6 +4,7 @@
 
 #include "ash/wm/desks/desk_bar_view_base.h"
 
+#include <algorithm>
 #include <vector>
 
 #include "ash/ash_element_identifiers.h"
@@ -20,10 +21,12 @@
 #include "ash/style/ash_color_id.h"
 #include "ash/style/typography.h"
 #include "ash/wm/desks/desk.h"
+#include "ash/wm/desks/desk_action_button.h"
 #include "ash/wm/desks/desk_action_view.h"
 #include "ash/wm/desks/desk_mini_view_animations.h"
 #include "ash/wm/desks/desk_name_view.h"
 #include "ash/wm/desks/desk_preview_view.h"
+#include "ash/wm/desks/desk_profiles_button.h"
 #include "ash/wm/desks/desks_constants.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/desks/templates/saved_desk_metrics_util.h"
@@ -172,16 +175,16 @@ class DeskBarScrollViewLayout : public views::LayoutManager {
 
     const ShelfAlignment shelf_alignment =
         Shelf::ForWindow(bar_view_->root_)->alignment();
-    const gfx::Rect perferred_bounds =
+    const gfx::Rect preferred_bounds =
         gfx::Rect(bar_view_->CalculatePreferredSize());
     const gfx::Rect current_bounds = gfx::Rect(bar_view_->size());
-    gfx::Rect new_bounds = perferred_bounds;
+    gfx::Rect new_bounds = preferred_bounds;
     if (shelf_alignment == ShelfAlignment::kBottom) {
       new_bounds = current_bounds;
-      new_bounds.ClampToCenteredSize(perferred_bounds.size());
+      new_bounds.ClampToCenteredSize(preferred_bounds.size());
     } else if ((shelf_alignment == ShelfAlignment::kLeft) ==
                base::i18n::IsRTL()) {
-      new_bounds.Offset(current_bounds.width() - perferred_bounds.width(), 0);
+      new_bounds.Offset(current_bounds.width() - preferred_bounds.width(), 0);
     }
     bar_view_->background_view_->SetBoundsRect(new_bounds);
   }
@@ -297,7 +300,7 @@ class DeskBarScrollViewLayout : public views::LayoutManager {
     // Update the size of the `host`, which is `scroll_view_contents_` here.
     // This is done to make sure its size can be updated on mini views' adding
     // or removing, then `scroll_view_` will know whether the contents need to
-    // be scolled or not.
+    // be scrolled or not.
     host->SetSize(gfx::Size(width_, contents_size.height()));
 
     const int increment = is_rtl ? -1 : 1;
@@ -328,7 +331,7 @@ class DeskBarScrollViewLayout : public views::LayoutManager {
       new_desk_button->SetBoundsRect(new_desk_button_bounds);
       LayoutDeskIconButtonLabel(bar_view_->new_desk_button_label(),
                                 new_desk_button_bounds, desk_name_view,
-                                IDS_ASH_DESKS_NEW_DESK_BUTTON);
+                                IDS_ASH_DESKS_NEW_DESK_BUTTON_LABEL);
       x +=
           (new_desk_button_size.width() + kDeskBarMiniViewsSpacing) * increment;
     };
@@ -472,7 +475,7 @@ class DeskBarHoverObserver : public ui::EventObserver {
 };
 
 DeskBarViewBase::DeskBarViewBase(aura::Window* root, Type type)
-    : type_(type), state_(GetPerferredState(type)), root_(root) {
+    : type_(type), state_(GetPreferredState(type)), root_(root) {
   CHECK(root && root->IsRootWindow());
 
   // Background layer is needed for desk bar animation.
@@ -538,7 +541,7 @@ DeskBarViewBase::DeskBarViewBase(aura::Window* root, Type type)
   new_desk_button_label_->SetPaintToLayer();
   new_desk_button_label_->layer()->SetFillsBoundsOpaquely(false);
 
-  if (saved_desk_util::IsSavedDesksEnabled()) {
+  if (saved_desk_util::ShouldShowSavedDesksButtons()) {
     int button_text_id = IDS_ASH_DESKS_TEMPLATES_DESKS_BAR_BUTTON_LIBRARY;
     if (!saved_desk_util::AreDesksTemplatesEnabled()) {
       button_text_id = IDS_ASH_DESKS_TEMPLATES_DESKS_BAR_BUTTON_SAVED_FOR_LATER;
@@ -609,11 +612,11 @@ int DeskBarViewBase::GetPreferredBarHeight(aura::Window* root,
 }
 
 // static
-DeskBarViewBase::State DeskBarViewBase::GetPerferredState(Type type) {
+DeskBarViewBase::State DeskBarViewBase::GetPreferredState(Type type) {
   State state = State::kZero;
   switch (type) {
     case Type::kDeskButton:
-      // Desk button desk bar is always expaneded.
+      // Desk button desk bar is always expanded.
       state = State::kExpanded;
       break;
     case Type::kOverview: {
@@ -685,7 +688,7 @@ std::unique_ptr<views::Widget> DeskBarViewBase::CreateDeskWidget(
   return widget;
 }
 
-void DeskBarViewBase::Layout() {
+void DeskBarViewBase::Layout(PassKey) {
   TRACE_EVENT0("ui", "DeskBarViewBase::Layout");
 
   if (pause_layout_) {
@@ -725,7 +728,7 @@ void DeskBarViewBase::Layout() {
   scroll_view_->SetBoundsRect(scroll_bounds);
   // When the bar reaches its max possible size, it's size does not change, but
   // we still need to layout child UIs to their right positions.
-  scroll_view_->Layout();
+  scroll_view_->DeprecatedLayoutImmediately();
 
   UpdateScrollButtonsVisibility();
   UpdateGradientMask();
@@ -777,6 +780,8 @@ void DeskBarViewBase::Init() {
 
   hover_observer_ = std::make_unique<DeskBarHoverObserver>(
       this, GetWidget()->GetNativeWindow());
+
+  RecordDeskProfileAdoption();
 }
 
 bool DeskBarViewBase::IsZeroState() const {
@@ -863,12 +868,6 @@ void DeskBarViewBase::NudgeDeskName(int desk_index) {
   auto* name_view = mini_views_[desk_index]->desk_name_view();
   name_view->RequestFocus();
 
-  // Set `name_view`'s accessible name if its text is cleared.
-  if (name_view->GetAccessibleName().empty()) {
-    name_view->SetAccessibleName(
-        l10n_util::GetStringUTF16(IDS_ASH_DESKS_DESK_NAME));
-  }
-
   if (type_ == Type::kOverview) {
     MoveFocusToView(name_view);
 
@@ -882,7 +881,7 @@ void DeskBarViewBase::NudgeDeskName(int desk_index) {
 }
 
 void DeskBarViewBase::UpdateButtonsForSavedDeskGrid() {
-  if (IsZeroState() || !saved_desk_util::IsSavedDesksEnabled()) {
+  if (IsZeroState() || !saved_desk_util::ShouldShowSavedDesksButtons()) {
     return;
   }
 
@@ -906,7 +905,7 @@ void DeskBarViewBase::UpdateDeskButtonsVisibility() {
 }
 
 void DeskBarViewBase::UpdateLibraryButtonVisibility() {
-  if (!saved_desk_util::IsSavedDesksEnabled()) {
+  if (!saved_desk_util::ShouldShowSavedDesksButtons()) {
     return;
   }
 
@@ -934,11 +933,11 @@ void DeskBarViewBase::UpdateLibraryButtonVisibility() {
   }
 
   const int begin_x = GetFirstMiniViewXOffset();
-  Layout();
+  DeprecatedLayoutImmediately();
 
-  // The mini views and new desk button are already laid out in the earlier
-  // `Layout()` call. This call shifts the transforms of the mini views and new
-  // desk button and then animates to the identity transform.
+  // The mini views and new desk button are already laid out due to the above
+  // `DeprecatedLayoutImmediately()`. This call shifts the transforms of the
+  // mini views and new desk button and then animates to the identity transform.
   PerformLibraryButtonVisibilityAnimation(mini_views_, new_desk_button_,
                                           begin_x - GetFirstMiniViewXOffset());
 }
@@ -956,7 +955,7 @@ void DeskBarViewBase::UpdateDeskIconButtonState(
   gfx::Rect current_bounds = button->GetBoundsInScreen();
 
   button->UpdateState(target_state);
-  Layout();
+  DeprecatedLayoutImmediately();
 
   gfx::RectF target_bounds = gfx::RectF(new_desk_button_->GetBoundsInScreen());
   gfx::Transform scale_transform;
@@ -987,7 +986,7 @@ void DeskBarViewBase::OnGestureTap(const gfx::Rect& screen_rect,
 bool DeskBarViewBase::ShouldShowLibraryUi() {
   // Only update visibility when needed. This will save a lot of repeated work.
   if (library_ui_visibility_ == LibraryUiVisibility::kToBeChecked) {
-    if (!saved_desk_util::IsSavedDesksEnabled() ||
+    if (!saved_desk_util::ShouldShowSavedDesksButtons() ||
         display::Screen::GetScreen()->InTabletMode()) {
       library_ui_visibility_ = LibraryUiVisibility::kHidden;
     } else {
@@ -1288,6 +1287,13 @@ void DeskBarViewBase::OnDeskRemoved(const Desk* desk) {
       // comes later in the focus order (See documentation of
       // `OnViewDestroyingOrDisabling()`).
       focus_cycler->OnViewDestroyingOrDisabling((*iter)->desk_name_view());
+      focus_cycler->OnViewDestroyingOrDisabling(
+          (*iter)->desk_action_view()->close_all_button());
+      focus_cycler->OnViewDestroyingOrDisabling(
+          (*iter)->desk_action_view()->combine_desks_button());
+      if (auto* desk_profiles_button = (*iter)->desk_profiles_button()) {
+        focus_cycler->OnViewDestroyingOrDisabling(desk_profiles_button);
+      }
       focus_cycler->OnViewDestroyingOrDisabling((*iter)->desk_preview());
     }
   }
@@ -1315,7 +1321,7 @@ void DeskBarViewBase::OnDeskRemoved(const Desk* desk) {
   // There is desk removal animation for overview bar but not for desk button
   // desk bar.
   if (type_ == Type::kOverview) {
-    Layout();
+    DeprecatedLayoutImmediately();
     // Overview bar desk removal will preform mini view removal animation, while
     // desk button bar removes mini view immediately.
     PerformRemoveDeskMiniViewAnimation(removed_mini_view);
@@ -1324,7 +1330,7 @@ void DeskBarViewBase::OnDeskRemoved(const Desk* desk) {
     // Desk button bar does not have mini view removal animation, mini view will
     // disappear immediately. Desk button bar will shrink during desk removal.
     removed_mini_view->parent()->RemoveChildViewT(removed_mini_view);
-    scroll_view_->Layout();
+    scroll_view_->DeprecatedLayoutImmediately();
     PerformDeskBarRemoveDeskAnimation(this, old_background_bounds);
   }
   PerformDeskBarChildViewShiftAnimation(this, views_previous_x_map);
@@ -1344,7 +1350,7 @@ void DeskBarViewBase::OnDeskReordered(int old_index, int new_index) {
   reordered_view->UpdateDeskButtonVisibility();
   mini_views_[old_index]->UpdateDeskButtonVisibility();
 
-  Layout();
+  DeprecatedLayoutImmediately();
 
   // Call the animation function after reorder the mini views.
   PerformReorderDeskMiniViewAnimation(old_index, new_index, mini_views_);
@@ -1424,7 +1430,7 @@ void DeskBarViewBase::UpdateNewMiniViews(bool initializing_bar_view,
   UpdateBarBounds();
   pause_layout_ = false;
 
-  Layout();
+  DeprecatedLayoutImmediately();
 
   if (initializing_bar_view) {
     return;
@@ -1542,11 +1548,14 @@ void DeskBarViewBase::UpdateGradientMask() {
   gfx::LinearGradient gradient_mask(/*angle=*/0);
 
   // Fraction of layer width that gradient will be applied to.
-  const float fade_position =
-      should_show_start_gradient || should_show_end_gradient
-          ? static_cast<float>(kDeskBarGradientZoneLength) /
-                scroll_view_->bounds().width()
-          : 0;
+  float fade_position = should_show_start_gradient || should_show_end_gradient
+                            ? static_cast<float>(kDeskBarGradientZoneLength) /
+                                  scroll_view_->bounds().width()
+                            : 0;
+
+  // Clamp the `fade_position` value to ensure that it fits within the range of
+  // linear gradient.
+  fade_position = std::clamp(fade_position, 0.0f, 1.0f);
 
   // Left fade in section.
   if (should_show_start_gradient) {
@@ -1663,7 +1672,7 @@ void DeskBarViewBase::MaybeUpdateCombineDesksTooltips() {
     if (mini_view->desk()->is_desk_being_removed()) {
       continue;
     }
-    mini_view->desk_action_view()->UpdateCombineDesksTooltip(
+    mini_view->desk_action_view()->combine_desks_button()->UpdateTooltip(
         DesksController::Get()->GetCombineDesksTargetName(mini_view->desk()));
   }
 }
@@ -1705,6 +1714,29 @@ bool DeskBarViewBase::MaybeScrollByDraggedDesk() {
   }
 
   return false;
+}
+
+void DeskBarViewBase::RecordDeskProfileAdoption() {
+  // With regards to desk profiles, the user can be in one of these buckets:
+  //  1. Conditions for selecting a user profile have not been met.
+  //  2. Conditions are met, but the user has not actively selected a profile.
+  //  3. The user has selected a profile.
+  DeskProfilesUsageStatus status = DeskProfilesUsageStatus::kConditionsNotMet;
+  if (DesksController::Get()->GetNumberOfDesks() > 1) {
+    for (const auto& mini_view : mini_views_) {
+      if (mini_view->desk() && mini_view->desk()->lacros_profile_id()) {
+        // The user has actively selected a profile for at least one desk.
+        status = DeskProfilesUsageStatus::kEnabled;
+        break;
+      }
+      if (mini_view->desk_profiles_button()) {
+        // The user has the option to pick a profile.
+        status = DeskProfilesUsageStatus::kConditionsMet;
+      }
+    }
+  }
+
+  base::UmaHistogramEnumeration(kDeskProfilesUsageStatusHistogramName, status);
 }
 
 BEGIN_METADATA(DeskBarViewBase)

@@ -54,7 +54,6 @@
 <translation id="3334610655141903168">(başlık yok)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> şu anki en son sürüm.</translation>
 <translation id="3383198080133834965">Güncelsiniz!</translation>
-<translation id="3402602684546832928">Opera yer imi dosyasını seçin</translation>
 <translation id="3451317331714872347">Manzara 8</translation>
 <translation id="3457498675806041407">Çıkmayı Onayla</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> zaten yüklü ve tarayıcıyı tekrar başlattığınızda aktifleşecek.</translation>
@@ -88,7 +87,6 @@
 <translation id="443008484043213881">Araçlar</translation>
 <translation id="4456211719108566931">Canavar 6</translation>
 <translation id="4512900838580567989">Bağlan&amp;tıyı Yeni Arka Plan Sekmesinde Aç</translation>
-<translation id="4515472507709384008">Opera sürüm 15+</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Resmi Yeni Arkaplan Sekmesinde Aç</translation>
 <translation id="4582480609585453144">Bağlantıyı Arka Plan Sekmesinde Aç</translation>
@@ -109,7 +107,6 @@
 <translation id="5416008465899576639">Vivaldi'nin yeni bir sürümü mevcut.</translation>
 <translation id="5497042274492038489">Pencereyi kapatmayı onayla</translation>
 <translation id="5594602170491763400">Canavar 5</translation>
-<translation id="5615637589913244581">Opera sürüm 15+ (Beta)</translation>
 <translation id="5648110075441906505">Resmi Yeni Pencerede Aç</translation>
 <translation id="5656371807944747581">Güncelleme Hatası!</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> sürümü var (kullandığınız sürüm <ph name="OLD_VERSION" />) Şimdi güncellemek istiyormusunuz?</translation>
@@ -120,7 +117,6 @@
 <translation id="6040143037577758943">Kapat</translation>
 <translation id="6229528619562190452">Vivaldi'yi güncellemek için buraya tıklayın.</translation>
 <translation id="6234173136417926046">Resmi Başlangıç Sayfası Arka Planı Olarak Kullan</translation>
-<translation id="630690498669249215">Opera Yer İmleri Dosyası</translation>
 <translation id="6339818817272922368">Yerel Hesap</translation>
 <translation id="6438786710866753178">Manzara 4</translation>
 <translation id="6477028720702061455">İçe aktarmak için Opera profili klasörünü seç</translation>
@@ -131,7 +127,6 @@
 <translation id="6635049669875534328">Sürüm notları:</translation>
 <translation id="6693585104974197539">İçeri aktarılacak Edge profil klasörünü seçin</translation>
 <translation id="6726279523566323394">İçeri aktarılacak Brave profil klasörünü seçin</translation>
-<translation id="6804831687363620480">Maalesef, tarayıcınız çalışıyorken Opera 15+ ayarlarınıza erişilemiyor. Ayarları Vivaldi içerisine almak için, işlerinizi kaydedin ve Opera 15+ pencerelerini kapatın.Daha sonra Devam düğmesine basın.</translation>
 <translation id="6892812721183419409">Bağlantıyı <ph name="USER" /> olarak aç</translation>
 <translation id="6896758677409633944">Kopyala</translation>
 <translation id="7086554968911045110">Manzara 7</translation>
@@ -162,7 +157,6 @@
 <translation id="8562339533180097902">Vivaldi'yi kapat ve hemen kur</translation>
 <translation id="8567452685425968223">Güncelleme açılıyor...</translation>
 <translation id="8624587806981488221">&amp;Resmi yeniden yükle</translation>
-<translation id="864444594187862076">Opera sürüm 15+ (Developer)</translation>
 <translation id="8651348004684669199">Etkin Sekmeyi Ekle</translation>
 <translation id="8669345741879513971">Canavar 10</translation>
 <translation id="867544375504146191">Yandex</translation>

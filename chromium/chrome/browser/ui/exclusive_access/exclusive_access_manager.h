@@ -9,13 +9,13 @@
 #include "chrome/browser/ui/exclusive_access/exclusive_access_bubble_type.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/exclusive_access/keyboard_lock_controller.h"
-#include "chrome/browser/ui/exclusive_access/mouse_lock_controller.h"
+#include "chrome/browser/ui/exclusive_access/pointer_lock_controller.h"
 
 class ExclusiveAccessContext;
 class FullscreenController;
 class GURL;
 class KeyboardLockController;
-class MouseLockController;
+class PointerLockController;
 
 namespace content {
 struct NativeWebKeyboardEvent;
@@ -23,8 +23,8 @@ class WebContents;
 }
 
 // This class combines the different exclusive access modes (like fullscreen and
-// mouse lock) which are each handled by respective controller. It also updates
-// the exit bubble to reflect the combined state.
+// pointer lock) which are each handled by respective controller. It also
+// updates the exit bubble to reflect the combined state.
 class ExclusiveAccessManager {
  public:
   explicit ExclusiveAccessManager(
@@ -43,8 +43,8 @@ class ExclusiveAccessManager {
     return &keyboard_lock_controller_;
   }
 
-  MouseLockController* mouse_lock_controller() {
-    return &mouse_lock_controller_;
+  PointerLockController* pointer_lock_controller() {
+    return &pointer_lock_controller_;
   }
 
   ExclusiveAccessContext* context() const { return exclusive_access_context_; }
@@ -81,14 +81,31 @@ class ExclusiveAccessManager {
   // Called by platform ExclusiveAccessExitBubble.
   void ExitExclusiveAccess();
 
+  base::flat_set<raw_ptr<ExclusiveAccessControllerBase>>&
+  exclusive_access_controllers_for_test() {
+    return exclusive_access_controllers_;
+  }
+
+  const base::OneShotTimer& esc_key_hold_timer_for_test() {
+    return esc_key_hold_timer_;
+  }
+
  private:
+  void HandleUserHeldEscape();
+
   void RecordLockStateOnEnteringFullscreen(const char histogram_name[]) const;
+
+  // The timer starts on Esc key down event and stops on Esc key up event. It
+  // invokes `HandleUserHeldEscape()` when the timer is fired.
+  base::OneShotTimer esc_key_hold_timer_;
 
   const raw_ptr<ExclusiveAccessContext, DanglingUntriaged>
       exclusive_access_context_;
   FullscreenController fullscreen_controller_;
   KeyboardLockController keyboard_lock_controller_;
-  MouseLockController mouse_lock_controller_;
+  PointerLockController pointer_lock_controller_;
+  base::flat_set<raw_ptr<ExclusiveAccessControllerBase>>
+      exclusive_access_controllers_;
 };
 
 #endif  // CHROME_BROWSER_UI_EXCLUSIVE_ACCESS_EXCLUSIVE_ACCESS_MANAGER_H_

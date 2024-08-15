@@ -45,6 +45,101 @@ namespace autofill {
 
 const base::Time kArbitraryTime = base::Time::FromTimeT(1234567890);
 
+// Test AutofillBubbleBase implementation which:
+// - Notifies the controller when the bubble hides (to match prod).
+// - Tracks the bubble's visibility.
+class ObserveHideTestAutofillBubble : public AutofillBubbleBase {
+ public:
+  explicit ObserveHideTestAutofillBubble(content::WebContents* web_contents)
+      : web_contents_(web_contents->GetWeakPtr()) {}
+  virtual ~ObserveHideTestAutofillBubble() = default;
+
+  void Show() { is_visible_ = true; }
+
+  void Hide() override {
+    // Call OnBubbleClosed() because the real implementation does so.
+    if (web_contents_) {
+      auto* controller = static_cast<SaveCardBubbleControllerImpl*>(
+          SaveCardBubbleControllerImpl::FromWebContents(web_contents_.get()));
+      controller->OnBubbleClosed(PaymentsBubbleClosedReason::kUnknown);
+    }
+
+    is_visible_ = false;
+  }
+
+  bool is_visible() { return is_visible_; }
+
+ private:
+  // WeakPtr because ObserveHideTestAutofillBubble outlives the WebContents in
+  // tests.
+  base::WeakPtr<content::WebContents> web_contents_;
+
+  bool is_visible_;
+};
+
+// TestAutofillBubbleHandler which provides access to bubbles it creates.
+class ExposeBubbleAutofillBubbleHandler : public TestAutofillBubbleHandler {
+ public:
+  ExposeBubbleAutofillBubbleHandler() = default;
+  ExposeBubbleAutofillBubbleHandler(const ExposeBubbleAutofillBubbleHandler&) =
+      delete;
+  ExposeBubbleAutofillBubbleHandler& operator=(
+      const ExposeBubbleAutofillBubbleHandler&) = delete;
+  ~ExposeBubbleAutofillBubbleHandler() override = default;
+
+  AutofillBubbleBase* ShowSaveCreditCardBubble(
+      content::WebContents* web_contents,
+      SaveCardBubbleController* controller,
+      bool is_use_gesture) override {
+    if (!save_card_bubble_) {
+      save_card_bubble_ =
+          std::make_unique<ObserveHideTestAutofillBubble>(web_contents);
+    }
+    save_card_bubble_->Show();
+    return save_card_bubble_.get();
+  }
+
+  AutofillBubbleBase* ShowSaveCardConfirmationBubble(
+      content::WebContents* web_contents,
+      SaveCardBubbleController* controller) override {
+    if (!confirmation_bubble_) {
+      confirmation_bubble_ =
+          std::make_unique<ObserveHideTestAutofillBubble>(web_contents);
+    }
+    confirmation_bubble_->Show();
+    return confirmation_bubble_.get();
+  }
+
+  bool is_save_card_bubble_visible() {
+    return save_card_bubble_ && save_card_bubble_->is_visible();
+  }
+
+  bool is_confirmation_bubble_visible() {
+    return confirmation_bubble_ && confirmation_bubble_->is_visible();
+  }
+
+ private:
+  std::unique_ptr<ObserveHideTestAutofillBubble> save_card_bubble_;
+  std::unique_ptr<ObserveHideTestAutofillBubble> confirmation_bubble_;
+};
+
+class TestBrowserWindowWithAutofillHandler : public TestBrowserWindow {
+ public:
+  TestBrowserWindowWithAutofillHandler() = default;
+  ~TestBrowserWindowWithAutofillHandler() override = default;
+  TestBrowserWindowWithAutofillHandler(
+      const TestBrowserWindowWithAutofillHandler&) = delete;
+  TestBrowserWindowWithAutofillHandler& operator=(
+      const TestBrowserWindowWithAutofillHandler&) = delete;
+
+  autofill::AutofillBubbleHandler* GetAutofillBubbleHandler() override {
+    return &handler_;
+  }
+
+ private:
+  ExposeBubbleAutofillBubbleHandler handler_;
+};
+
 class TestSaveCardBubbleControllerImpl : public SaveCardBubbleControllerImpl {
  public:
   static void CreateForTesting(content::WebContents* web_contents) {
@@ -70,10 +165,6 @@ class TestSaveCardBubbleControllerImpl : public SaveCardBubbleControllerImpl {
     DidFinishNavigation(&handle);
   }
 
-  void set_autofill_bubble_view(AutofillBubbleBase* bubble_view) {
-    set_bubble_view(bubble_view);
-  }
-
  protected:
   security_state::SecurityLevel GetSecurityLevel() const override {
     return security_level_;
@@ -90,7 +181,13 @@ class TestSaveCardBubbleControllerImpl : public SaveCardBubbleControllerImpl {
 
 class SaveCardBubbleControllerImplTest : public BrowserWithTestWindowTest {
  public:
-  SaveCardBubbleControllerImplTest() = default;
+  SaveCardBubbleControllerImplTest() {
+    scoped_feature_list_.InitWithFeatureStates({
+        {features::kAutofillEnableCvcStorageAndFilling, false},
+        {features::kAutofillEnableSaveCardLoadingAndConfirmation, false},
+    });
+  }
+
   SaveCardBubbleControllerImplTest(SaveCardBubbleControllerImplTest&) = delete;
   SaveCardBubbleControllerImplTest& operator=(
       SaveCardBubbleControllerImplTest&) = delete;
@@ -110,6 +207,27 @@ class SaveCardBubbleControllerImplTest : public BrowserWithTestWindowTest {
   void TearDown() override {
     mock_sentiment_service_ = nullptr;
     BrowserWithTestWindowTest::TearDown();
+  }
+
+  // BrowserWithTestWindowTest:
+  std::unique_ptr<BrowserWindow> CreateBrowserWindow() override {
+    std::unique_ptr<TestBrowserWindowWithAutofillHandler> window =
+        std::make_unique<TestBrowserWindowWithAutofillHandler>();
+    window->set_is_active(true);
+    return std::move(window);
+  }
+
+  ExposeBubbleAutofillBubbleHandler* GetAutofillBubbleHandler() {
+    return static_cast<ExposeBubbleAutofillBubbleHandler*>(
+        window()->GetAutofillBubbleHandler());
+  }
+
+  bool IsSaveCardBubbleVisible() {
+    return GetAutofillBubbleHandler()->is_save_card_bubble_visible();
+  }
+
+  bool IsConfirmationBubbleVisible() {
+    return GetAutofillBubbleHandler()->is_confirmation_bubble_visible();
   }
 
   void SetLegalMessage(
@@ -182,7 +300,6 @@ class SaveCardBubbleControllerImplTest : public BrowserWithTestWindowTest {
   }
 
   TestAutofillClock test_clock_;
-  base::test::ScopedFeatureList scoped_feature_list_;
   raw_ptr<MockTrustSafetySentimentService> mock_sentiment_service_ = nullptr;
 
  private:
@@ -192,6 +309,8 @@ class SaveCardBubbleControllerImplTest : public BrowserWithTestWindowTest {
           user_provided_card_details) {}
   static void LocalSaveCardCallback(
       AutofillClient::SaveCardOfferUserDecision user_decision) {}
+
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // Tests that the legal message lines vector is empty when doing a local save so
@@ -645,60 +764,6 @@ TEST_P(SaveCvcBubbleLoggingTest, Metrics_Unknown) {
       autofill_metrics::SaveCardPromptResult::kUnknown, 1);
 }
 
-TEST_F(SaveCardBubbleControllerImplTest, LocalCardSaveOnlyDialogContent) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillEnableCvcStorageAndFilling);
-
-  // Show the local card save bubble.
-  ShowLocalBubble(
-      /*card=*/nullptr,
-      /*options=*/AutofillClient::SaveCreditCardOptions()
-          .with_card_save_type(AutofillClient::CardSaveType::kCardSaveOnly)
-          .with_show_prompt(true));
-
-  ASSERT_EQ(BubbleType::LOCAL_SAVE, controller()->GetBubbleType());
-  ASSERT_NE(nullptr, controller()->GetPaymentBubbleView());
-  EXPECT_EQ(controller()->GetWindowTitle(), u"Save card?");
-  EXPECT_EQ(controller()->GetExplanatoryMessage(),
-            u"To pay faster next time, save your card to your device");
-}
-
-TEST_F(SaveCardBubbleControllerImplTest, LocalCardSaveWithCvcDialogContent) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillEnableCvcStorageAndFilling);
-
-  // Show the local card save with CVC bubble.
-  ShowLocalBubble(
-      /*card=*/nullptr,
-      /*options=*/AutofillClient::SaveCreditCardOptions()
-          .with_card_save_type(AutofillClient::CardSaveType::kCardSaveWithCvc)
-          .with_show_prompt(true));
-
-  ASSERT_EQ(BubbleType::LOCAL_SAVE, controller()->GetBubbleType());
-  ASSERT_NE(nullptr, controller()->GetPaymentBubbleView());
-  EXPECT_EQ(controller()->GetWindowTitle(), u"Save card?");
-  EXPECT_EQ(controller()->GetExplanatoryMessage(),
-            u"To pay faster next time, save your card and encrypted security "
-            u"code to your device");
-}
-
-TEST_F(SaveCardBubbleControllerImplTest, UploadCardSaveWithCvcDialogContent) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillEnableCvcStorageAndFilling);
-
-  // Show the server card save with CVC bubble.
-  ShowUploadBubble(
-      /*options=*/AutofillClient::SaveCreditCardOptions()
-          .with_card_save_type(AutofillClient::CardSaveType::kCardSaveWithCvc)
-          .with_show_prompt(true));
-
-  ASSERT_EQ(BubbleType::UPLOAD_SAVE, controller()->GetBubbleType());
-  ASSERT_NE(nullptr, controller()->GetPaymentBubbleView());
-  EXPECT_EQ(controller()->GetExplanatoryMessage(),
-            u"To pay faster next time, save your card, encrypted security "
-            u"code, and billing address in your Google Account");
-}
-
 TEST_F(SaveCardBubbleControllerImplTest, LocalCvcOnlySaveDialogContent) {
   // Show the local CVC save bubble.
   ShowLocalBubble(
@@ -715,35 +780,28 @@ TEST_F(SaveCardBubbleControllerImplTest, LocalCvcOnlySaveDialogContent) {
             u"faster checkout");
 }
 
-TEST_F(SaveCardBubbleControllerImplTest, UploadCardSaveDialogContent) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillEnableNewSaveCardBubbleUi);
-
-  // Show the server card save bubble.
-  ShowUploadBubble(
-      /*options=*/AutofillClient::SaveCreditCardOptions().with_show_prompt(
-          true));
-
-  ASSERT_EQ(BubbleType::UPLOAD_SAVE, controller()->GetBubbleType());
-  ASSERT_NE(nullptr, controller()->GetPaymentBubbleView());
-  EXPECT_EQ(controller()->GetWindowTitle(), u"Save card?");
-  EXPECT_EQ(controller()->GetExplanatoryMessage(),
-            u"Pay faster next time and protect your card with Google’s "
-            u"industry-leading security.");
-}
-
-TEST_F(SaveCardBubbleControllerImplTest, HideIconAndBubbleAfterUpload) {
+TEST_F(SaveCardBubbleControllerImplTest, UploadCardSaveBubbleType) {
   ShowUploadBubble();
-
+  EXPECT_EQ(controller()->GetBubbleType(), BubbleType::UPLOAD_SAVE);
   EXPECT_TRUE(controller()->IsIconVisible());
   EXPECT_NE(controller()->GetPaymentBubbleView(), nullptr);
 
-  controller()->HideIconAndBubbleAfterUpload();
-  CloseBubble();
+  // TODO(b/309627643): Change the bubble type when the
+  // AutofillEnableSaveCardLoadingAndConfirmation feature flag is enabled.
+  controller()->OnSaveButton({});
+  EXPECT_EQ(controller()->GetBubbleType(), BubbleType::UPLOAD_SAVE);
 
+  // ShowConfirmationBubbleView() should not change the bubble type or hide
+  // the bubble view if the AutofillEnableSaveCardLoadingAndConfirmation feature
+  // flag is not enabled.
+  controller()->ShowConfirmationBubbleView(/*card_saved=*/true);
+  EXPECT_EQ(controller()->GetBubbleType(), BubbleType::UPLOAD_SAVE);
+  EXPECT_NE(controller()->GetPaymentBubbleView(), nullptr);
+
+  CloseBubble(PaymentsBubbleClosedReason::kAccepted);
+  EXPECT_EQ(controller()->GetBubbleType(), BubbleType::INACTIVE);
   EXPECT_FALSE(controller()->IsIconVisible());
   EXPECT_EQ(controller()->GetPaymentBubbleView(), nullptr);
-  EXPECT_EQ(controller()->GetBubbleType(), BubbleType::INACTIVE);
 }
 
 TEST_F(SaveCardBubbleControllerImplTest, UploadCvcOnlySaveDialogContent) {
@@ -903,19 +961,79 @@ TEST_F(SaveCardBubbleControllerImplTest, Metrics_Upload_FirstShow_ManageCards) {
   histogram_tester.ExpectTotalCount("Autofill.ManageCardsPrompt.Upload", 1);
 }
 
-class MockAutofillBubbleBase final : public AutofillBubbleBase {
- public:
-  MOCK_METHOD(void, Hide, (), (override));
+// Test that the credit card upload loading and confirmation metrics are
+// recorded as false when the loading and confirmation views are not shown.
+TEST_F(SaveCardBubbleControllerImplTest, Metrics_Upload_LoadingConfirmation) {
+  base::HistogramTester histogram_tester;
+
+  ShowUploadBubble();
+  controller()->OnSaveButton({});
+  controller()->ShowConfirmationBubbleView(/*card_saved=*/true);
+  CloseBubble();
+
+  histogram_tester.ExpectUniqueSample("Autofill.CreditCardUpload.LoadingShown",
+                                      false, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.CreditCardUpload.ConfirmationShown.CardUploaded", false, 1);
+}
+
+class SaveCardBubbleControllerImplTestWithCvCStorageAndFilling
+    : public SaveCardBubbleControllerImplTest {
+  base::test::ScopedFeatureList scoped_feature_list_{
+      features::kAutofillEnableCvcStorageAndFilling};
 };
+
+TEST_F(SaveCardBubbleControllerImplTestWithCvCStorageAndFilling,
+       LocalCardSaveOnlyDialogContent) {
+  // Show the local card save bubble.
+  ShowLocalBubble(
+      /*card=*/nullptr,
+      /*options=*/AutofillClient::SaveCreditCardOptions()
+          .with_card_save_type(AutofillClient::CardSaveType::kCardSaveOnly)
+          .with_show_prompt(true));
+
+  ASSERT_EQ(BubbleType::LOCAL_SAVE, controller()->GetBubbleType());
+  ASSERT_NE(nullptr, controller()->GetPaymentBubbleView());
+  EXPECT_EQ(controller()->GetWindowTitle(), u"Save card?");
+  EXPECT_EQ(controller()->GetExplanatoryMessage(),
+            u"To pay faster next time, save your card to your device");
+}
+
+TEST_F(SaveCardBubbleControllerImplTestWithCvCStorageAndFilling,
+       LocalCardSaveWithCvcDialogContent) {
+  // Show the local card save with CVC bubble.
+  ShowLocalBubble(
+      /*card=*/nullptr,
+      /*options=*/AutofillClient::SaveCreditCardOptions()
+          .with_card_save_type(AutofillClient::CardSaveType::kCardSaveWithCvc)
+          .with_show_prompt(true));
+
+  ASSERT_EQ(BubbleType::LOCAL_SAVE, controller()->GetBubbleType());
+  ASSERT_NE(nullptr, controller()->GetPaymentBubbleView());
+  EXPECT_EQ(controller()->GetWindowTitle(), u"Save card?");
+  EXPECT_EQ(controller()->GetExplanatoryMessage(),
+            u"To pay faster next time, save your card and encrypted security "
+            u"code to your device");
+}
+
+TEST_F(SaveCardBubbleControllerImplTestWithCvCStorageAndFilling,
+       UploadCardSaveWithCvcDialogContent) {
+  // Show the server card save with CVC bubble.
+  ShowUploadBubble(
+      /*options=*/AutofillClient::SaveCreditCardOptions()
+          .with_card_save_type(AutofillClient::CardSaveType::kCardSaveWithCvc)
+          .with_show_prompt(true));
+
+  ASSERT_EQ(BubbleType::UPLOAD_SAVE, controller()->GetBubbleType());
+  ASSERT_NE(nullptr, controller()->GetPaymentBubbleView());
+  EXPECT_EQ(controller()->GetExplanatoryMessage(),
+            u"To pay faster next time, save your card, encrypted security "
+            u"code, and billing address in your Google Account");
+}
 
 class SaveCardBubbleControllerImplTestWithLoadingAndConfirmation
     : public SaveCardBubbleControllerImplTest {
  public:
-  SaveCardBubbleControllerImplTestWithLoadingAndConfirmation() {
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kAutofillEnableSaveCardLoadingAndConfirmation);
-  }
-
   void SetUp() override {
     SaveCardBubbleControllerImplTest::SetUp();
 
@@ -925,15 +1043,76 @@ class SaveCardBubbleControllerImplTestWithLoadingAndConfirmation
   }
 
  protected:
-  TabHandle tab_handle() {
+  tabs::TabHandle tab_handle() {
     return browser()->tab_strip_model()->GetTabHandleAt(
         browser()->tab_strip_model()->active_index());
   }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_{
+      features::kAutofillEnableSaveCardLoadingAndConfirmation};
 };
 
-// Test that `Accepted` metric is recorded on upload card save.
+// Test the entire upload save flow with the ShowConfirmationBubbleView()
+// callback.
 TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
-       Metrics_Upload_OnSave) {
+       Upload_OnSave_ShowConfirmationBubbleView) {
+  ShowUploadBubble();
+  EXPECT_EQ(controller()->GetBubbleType(), BubbleType::UPLOAD_SAVE);
+  EXPECT_TRUE(controller()->IsIconVisible());
+  EXPECT_TRUE(IsSaveCardBubbleVisible());
+
+  controller()->OnSaveButton({});
+  EXPECT_EQ(controller()->GetBubbleType(), BubbleType::UPLOAD_IN_PROGRESS);
+  EXPECT_TRUE(IsSaveCardBubbleVisible());
+  EXPECT_FALSE(IsConfirmationBubbleVisible());
+
+  controller()->ShowConfirmationBubbleView(/*card_saved=*/true);
+  EXPECT_EQ(controller()->GetBubbleType(), BubbleType::UPLOAD_COMPLETED);
+  EXPECT_FALSE(IsSaveCardBubbleVisible());
+  EXPECT_TRUE(IsConfirmationBubbleVisible());
+  EXPECT_TRUE(controller()->GetConfirmationUiParams().is_success);
+
+  controller()->HideSaveCardBubble();
+  EXPECT_EQ(controller()->GetBubbleType(), BubbleType::INACTIVE);
+  EXPECT_FALSE(IsConfirmationBubbleVisible());
+  EXPECT_FALSE(controller()->IsIconVisible());
+}
+
+// Test that when passing in "card_saved=false" for ShowConfirmationBubbleView()
+// the confirmation UI model has "is_success" set to false.
+TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
+       Upload_OnShowConfirmation_ShowFailureUIModel) {
+  controller()->ShowConfirmationBubbleView(/*card_saved=*/false);
+  EXPECT_FALSE(IsSaveCardBubbleVisible());
+  EXPECT_TRUE(IsConfirmationBubbleVisible());
+  EXPECT_EQ(controller()->GetBubbleType(), BubbleType::UPLOAD_COMPLETED);
+  EXPECT_FALSE(controller()->GetConfirmationUiParams().is_success);
+}
+
+// Test that when showing the upload bubble when the confirmation bubble view is
+// still up, the confirmation bubble view is closed and the upload bubble view
+// is still shown.
+TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
+       Upload_OnShowConfirmationBubbleView_ThenShowUploadView) {
+  controller()->ShowConfirmationBubbleView(/*card_saved=*/true);
+  EXPECT_EQ(controller()->GetBubbleType(), BubbleType::UPLOAD_COMPLETED);
+  EXPECT_TRUE(IsConfirmationBubbleVisible());
+  EXPECT_TRUE(controller()->GetConfirmationUiParams().is_success);
+
+  ShowUploadBubble();
+  EXPECT_EQ(controller()->GetBubbleType(), BubbleType::UPLOAD_SAVE);
+  EXPECT_TRUE(IsSaveCardBubbleVisible());
+  EXPECT_FALSE(IsConfirmationBubbleVisible());
+  EXPECT_TRUE(controller()->IsIconVisible());
+}
+
+// Test that the `Accepted` upload result metric is recorded on upload card save
+// and that upload result metrics are not recorded but the confirmation shown &
+// result metrics are recorded when the save card bubble is closed after the
+// save card upload completes.
+TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
+       Metrics_Upload_AfterSave_OnClose) {
   base::HistogramTester histogram_tester;
 
   ShowUploadBubble();
@@ -942,6 +1121,64 @@ TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveCreditCardPromptResult.Upload.FirstShow",
       autofill_metrics::SaveCardPromptResult::kAccepted, 1);
+
+  controller()->ShowConfirmationBubbleView(/*card_saved=*/true);
+  CloseBubble();
+
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.CreditCardUpload.ConfirmationShown.CardUploaded", true, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.CreditCardUpload.ConfirmationResult.CardUploaded",
+      autofill_metrics::SaveCardPromptResult::kNotInteracted, 1);
+  // Expect the metric not to change from the save button interaction.
+  histogram_tester.ExpectTotalCount(
+      "Autofill.SaveCreditCardPromptResult.Upload.FirstShow", 1);
+}
+
+// Test that the `CardNotUploaded` confirmation shown & result metrics are
+// recorded when the save card bubble is closed after the save card upload
+// completes without the card being saved.
+TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
+       Metrics_Upload_AfterFailedSave_OnClose) {
+  base::HistogramTester histogram_tester;
+
+  ShowUploadBubble();
+  controller()->OnSaveButton({});
+  controller()->ShowConfirmationBubbleView(/*card_saved=*/false);
+  CloseBubble();
+
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.CreditCardUpload.ConfirmationShown.CardNotUploaded", true, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.CreditCardUpload.ConfirmationResult.CardNotUploaded",
+      autofill_metrics::SaveCardPromptResult::kNotInteracted, 1);
+}
+
+// Test that the `Accepted` upload result metric is not recorded and the loading
+// view shown & closed metrics are recorded when the save card bubble is closed
+// before the save card upload completes.
+TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
+       Metrics_Upload_DuringSave_OnClose) {
+  base::HistogramTester histogram_tester;
+
+  ShowUploadBubble();
+  controller()->OnSaveButton({});
+
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.SaveCreditCardPromptResult.Upload.FirstShow",
+      autofill_metrics::SaveCardPromptResult::kAccepted, 1);
+
+  CloseBubble();
+
+  histogram_tester.ExpectUniqueSample("Autofill.CreditCardUpload.LoadingShown",
+                                      true, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.CreditCardUpload.LoadingResult",
+      autofill_metrics::SaveCardPromptResult::kNotInteracted, 1);
+  // Expect the upload result metric not to change from the save button
+  // interaction.
+  histogram_tester.ExpectTotalCount(
+      "Autofill.SaveCreditCardPromptResult.Upload.FirstShow", 1);
 }
 
 // Test that metrics are not recorded in
@@ -957,22 +1194,6 @@ TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
       "Autofill.SaveCreditCardPromptResult.Upload.FirstShow", 0);
 }
 
-// Test that metrics are not recorded when the save card bubble is
-// programmatically closed after the save card upload completes. They should be
-// recorded at the time save is accepted, because accepting save no longer
-// immediately closes the bubble.
-TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
-       Metrics_Upload_HideAfterUpload_CloseBubble) {
-  base::HistogramTester histogram_tester;
-
-  ShowUploadBubble();
-  controller()->HideIconAndBubbleAfterUpload();
-  CloseBubble();
-
-  histogram_tester.ExpectTotalCount(
-      "Autofill.SaveCreditCardPromptResult.Upload.FirstShow", 0);
-}
-
 // Test that after changing tabs, when returning to the tab with the save card,
 // the bubble view is no longer showing but can be accessed through the icon.
 TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
@@ -980,16 +1201,12 @@ TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
   base::HistogramTester histogram_tester;
 
   ShowUploadBubble();
-  EXPECT_NE(controller()->GetPaymentBubbleView(), nullptr);
-
-  MockAutofillBubbleBase save_card_bubble_view;
-  controller()->set_autofill_bubble_view(&save_card_bubble_view);
-  EXPECT_CALL(save_card_bubble_view, Hide);
+  EXPECT_TRUE(IsSaveCardBubbleVisible());
 
   // Simulate switching to a different tab.
   active_web_contents()->UpdateWebContentsVisibility(
       content::Visibility::HIDDEN);
-  controller()->OnBubbleClosed(PaymentsBubbleClosedReason::kUnknown);
+  EXPECT_FALSE(IsSaveCardBubbleVisible());
 
   histogram_tester.ExpectTotalCount(
       "Autofill.SaveCreditCardPromptResult.Upload.FirstShow", 1);
@@ -998,7 +1215,7 @@ TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
   active_web_contents()->UpdateWebContentsVisibility(
       content::Visibility::VISIBLE);
 
-  EXPECT_EQ(controller()->GetPaymentBubbleView(), nullptr);
+  EXPECT_FALSE(IsSaveCardBubbleVisible());
   EXPECT_TRUE(controller()->IsIconVisible());
 }
 
@@ -1007,22 +1224,10 @@ TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
 // re-shown without user prompt.
 TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
        VisibilityChange_Upload_ReshowAfterLinkClick) {
-  TabHandle tab = tab_handle();
+  tabs::TabHandle tab = tab_handle();
 
   ShowUploadBubble();
-
-  MockAutofillBubbleBase save_card_bubble_view;
-  testing::MockFunction<void(std::string check_point_name)> check_hide;
-  {
-    testing::InSequence s;
-
-    EXPECT_CALL(save_card_bubble_view, Hide);
-    EXPECT_CALL(check_hide, Call("1"));
-    EXPECT_CALL(save_card_bubble_view, Hide);
-    EXPECT_CALL(check_hide, Call("2"));
-  }
-
-  controller()->set_autofill_bubble_view(&save_card_bubble_view);
+  EXPECT_TRUE(IsSaveCardBubbleVisible());
 
   controller()->OnLegalMessageLinkClicked(GURL("about:blank"));
   // Change active web contents back to previous tab so that
@@ -1034,39 +1239,90 @@ TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
   // test so it needs to be simulated.
   active_web_contents()->UpdateWebContentsVisibility(
       content::Visibility::HIDDEN);
-  // Simulate AutofillBubbleBase::Hide() by calling
-  // SaveCardBubbleControllerImpl::OnBubbleClosed().
-  controller()->OnBubbleClosed(PaymentsBubbleClosedReason::kUnknown);
-  check_hide.Call("1");
+  EXPECT_FALSE(IsSaveCardBubbleVisible());
 
   // Check that the bubble is shown when returning to the tab which previously
   // showed the bubble.
   active_web_contents()->UpdateWebContentsVisibility(
       content::Visibility::VISIBLE);
-  controller()->set_autofill_bubble_view(&save_card_bubble_view);
-
-  EXPECT_NE(controller()->GetPaymentBubbleView(), nullptr);
+  EXPECT_TRUE(IsSaveCardBubbleVisible());
   EXPECT_TRUE(controller()->IsIconVisible());
 
   // Check that the WebContents showing a subsequent time does not show the
   // bubble view.
   active_web_contents()->UpdateWebContentsVisibility(
       content::Visibility::HIDDEN);
-  controller()->OnBubbleClosed(PaymentsBubbleClosedReason::kUnknown);
-  check_hide.Call("2");
+  EXPECT_FALSE(IsSaveCardBubbleVisible());
 
   active_web_contents()->UpdateWebContentsVisibility(
       content::Visibility::VISIBLE);
 
-  EXPECT_EQ(controller()->GetPaymentBubbleView(), nullptr);
+  EXPECT_FALSE(IsSaveCardBubbleVisible());
   EXPECT_TRUE(controller()->IsIconVisible());
+}
+
+// Test that while in the UPLOAD_IN_PROGRESS state, after changing tabs and
+// returning to the tab with the save card, the state will remain as
+// UPLOAD_IN_PROGRESS.
+TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
+       VisibilityChange_Upload_InProgressState_Retained) {
+  ShowUploadBubble();
+  controller()->OnSaveButton({});
+  EXPECT_TRUE(IsSaveCardBubbleVisible());
+  EXPECT_EQ(controller()->GetBubbleType(), BubbleType::UPLOAD_IN_PROGRESS);
+
+  // Simulate switching to a different tab and back to the original tab.
+  active_web_contents()->UpdateWebContentsVisibility(
+      content::Visibility::HIDDEN);
+  EXPECT_FALSE(IsSaveCardBubbleVisible());
+  active_web_contents()->UpdateWebContentsVisibility(
+      content::Visibility::VISIBLE);
+
+  EXPECT_EQ(controller()->GetBubbleType(), BubbleType::UPLOAD_IN_PROGRESS);
+}
+
+// Test that while in the UPLOAD_IN_PROGRESS state, if the tab is changed and
+// the upload is completed, upon returning to the original tab with the save
+// card, the confirmation bubble will be showing.
+TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
+       VisibilityChange_Upload_InProgressStateTransitionIntoCompletedState) {
+  tabs::TabHandle tab = tab_handle();
+
+  ShowUploadBubble();
+  controller()->OnSaveButton({});
+  EXPECT_TRUE(IsSaveCardBubbleVisible());
+
+  // Need to save a reference to the controller to call while on a different tab
+  // because controller() grabs the controller from active_web_contents()
+  // which is based on the active tab.
+  TestSaveCardBubbleControllerImpl* save_card_controller = controller();
+
+  // Switch to a different tab.
+  active_web_contents()->UpdateWebContentsVisibility(
+      content::Visibility::HIDDEN);
+  AddTab(browser(), GURL("about:blank"));
+  EXPECT_FALSE(IsSaveCardBubbleVisible());
+
+  // Simulate that the upload is completed.
+  save_card_controller->ShowConfirmationBubbleView(/*card_saved=*/true);
+  // Expect that the confirmation bubble doesn't show up on the other tab.
+  EXPECT_FALSE(IsConfirmationBubbleVisible());
+
+  // Return to the original tab.
+  browser()->tab_strip_model()->ActivateTabAt(
+      browser()->tab_strip_model()->GetIndexOfTab(tab));
+  active_web_contents()->UpdateWebContentsVisibility(
+      content::Visibility::VISIBLE);
+
+  // Expect that the confirmation bubble is visible.
+  EXPECT_TRUE(IsConfirmationBubbleVisible());
 }
 
 // Test the metrics for reshowing the bubble view after a link is clicked.
 TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
-       VisibilityChange_Metric_Upload_ReshowAfterLinkClick) {
+       Metrics_VisibilityChange_Upload_ReshowAfterLinkClick) {
   base::HistogramTester histogram_tester;
-  TabHandle tab = tab_handle();
+  tabs::TabHandle tab = tab_handle();
 
   ShowUploadBubble();
   histogram_tester.ExpectUniqueSample(
@@ -1084,7 +1340,6 @@ TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
   // test so it needs to be simulated.
   active_web_contents()->UpdateWebContentsVisibility(
       content::Visibility::HIDDEN);
-  controller()->OnBubbleClosed(PaymentsBubbleClosedReason::kUnknown);
 
   // Ensure that closing the bubble through clicking a link does not get logged
   // to the metrics.
@@ -1112,11 +1367,27 @@ TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
   // Ensure that metrics are recorded on a subsequent bubble close.
   active_web_contents()->UpdateWebContentsVisibility(
       content::Visibility::HIDDEN);
-  controller()->OnBubbleClosed(PaymentsBubbleClosedReason::kUnknown);
   histogram_tester.ExpectTotalCount(
       "Autofill.SaveCreditCardPromptResult.Upload.FirstShow", 0);
   histogram_tester.ExpectTotalCount(
       "Autofill.SaveCreditCardPromptResult.Upload.Reshows", 1);
+}
+
+// Test that `HideSaveCardBubble()` hides save card offer and confirmation
+// bubble.
+TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
+       HideSaveCardBubble) {
+  ShowUploadBubble();
+  EXPECT_NE(controller()->GetPaymentBubbleView(), nullptr);
+
+  controller()->HideSaveCardBubble();
+  EXPECT_EQ(controller()->GetPaymentBubbleView(), nullptr);
+
+  controller()->ShowConfirmationBubbleView(/*card_saved=*/true);
+  EXPECT_NE(controller()->GetPaymentBubbleView(), nullptr);
+
+  controller()->HideSaveCardBubble();
+  EXPECT_EQ(controller()->GetPaymentBubbleView(), nullptr);
 }
 
 }  // namespace autofill

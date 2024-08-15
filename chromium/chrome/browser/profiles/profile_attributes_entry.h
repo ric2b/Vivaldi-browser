@@ -38,6 +38,15 @@ enum class NameForm {
   kGaiaAndLocalName,
 };
 
+struct ProfileManagementOicdTokens {
+  std::string auth_token;
+  std::string id_token;
+
+  bool operator==(const ProfileManagementOicdTokens& other) const {
+    return auth_token == other.auth_token && id_token == other.id_token;
+  }
+};
+
 class ProfileAttributesEntry {
  public:
   static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
@@ -133,6 +142,9 @@ class ProfileAttributesEntry {
   bool IsUsingDefaultAvatar() const;
   // Indicates that profile was signed in through native OS credential provider.
   bool IsSignedInWithCredentialProvider() const;
+  // Returns true if the profile is managed by a third party identity that is
+  // not sync-ed to Google (i.e dasher-based).
+  bool IsDasherlessManagement() const;
   // Returns the index of the default icon used by the profile.
   size_t GetAvatarIconIndex() const;
   // Returns the colors specified by the profile theme, or default colors if no
@@ -154,6 +166,11 @@ class ProfileAttributesEntry {
 
   // Returns the enrollment token to get policies for a profile.
   std::string GetProfileManagementEnrollmentToken() const;
+
+  // Returns the Oauth token and Id token from the OIDC authentication response
+  // that created the profile. The existence of these tokens are also used to
+  // check whether the profile is created by an OIDC authentication response.
+  ProfileManagementOicdTokens GetProfileManagementOidcTokens() const;
 
   // Returns the signin id for a profile managed by a token. This may be empty
   // even if there is an enrollment token.
@@ -183,6 +200,7 @@ class ProfileAttributesEntry {
   void SetLastDownloadedGAIAPictureUrlWithSize(
       const std::string& image_url_with_size);
   void SetSignedInWithCredentialProvider(bool value);
+  void SetDasherlessManagement(bool value);
   // Only non-omitted profiles can be set as non-ephemeral. It's the
   // responsibility of the caller to make sure that the entry is set as
   // non-ephemeral only if prefs::kForceEphemeralProfiles is false.
@@ -199,6 +217,8 @@ class ProfileAttributesEntry {
   void SetHostedDomain(std::string hosted_domain);
 
   void SetProfileManagementEnrollmentToken(const std::string& enrollment_token);
+  void SetProfileManagementOidcTokens(
+      const ProfileManagementOicdTokens& oidc_tokens);
   void SetProfileManagementId(const std::string& id);
 
   void SetAuthInfo(const std::string& gaia_id,

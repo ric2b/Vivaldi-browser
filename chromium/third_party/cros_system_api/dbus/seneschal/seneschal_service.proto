@@ -8,7 +8,7 @@ option optimize_for = LITE_RUNTIME;
 // This file defines messages for starting, stopping, and managing 9p servers
 // with access to the user's home directory.
 package vm_tools.seneschal;
-option go_package = "chromiumos/system_api/seneschal_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/seneschal_proto";
 
 // Defines a path to be shared with a 9p server.
 message SharedPath {
@@ -127,7 +127,7 @@ message SharePathRequest {
   enum StorageLocation {
     // The user's Downloads/ directory /home/user/<owner_id>/Downloads.
     // Note: This field is deprecated.  MY_FILES should be used.
-    DOWNLOADS = 0;
+    DEPRECATED_DOWNLOADS = 0;
     // DriveFS directory /media/fuse/<drivefs_mount_name>/root.
     DRIVEFS_MY_DRIVE = 1;
     // DriveFS directory /media/fuse/<drivefs_mount_name>/team_drives.

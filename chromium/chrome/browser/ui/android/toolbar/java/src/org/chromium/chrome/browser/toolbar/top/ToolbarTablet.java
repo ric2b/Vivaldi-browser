@@ -41,6 +41,7 @@ import org.chromium.chrome.browser.omnibox.LocationBar;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.omnibox.NewTabPageDelegate;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
+import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.toolbar.ButtonData;
@@ -128,6 +129,11 @@ public class ToolbarTablet extends ToolbarLayout
      */
     private TrackerShieldButton mShieldButton;
 
+    /**
+     * Vivaldi reload button.
+     */
+    private ImageButton mVivaldiReloadButton;
+
     /** Vivaldi **/
     private ImageButton mModelSelectorButton;
     private Activity mActivity;
@@ -171,6 +177,8 @@ public class ToolbarTablet extends ToolbarLayout
 
         if (BuildConfig.IS_VIVALDI) {
             mReloadButton.setVisibility(View.GONE);
+            mVivaldiReloadButton = findViewById(R.id.reload_button);
+            mVivaldiReloadButton.setOnClickListener(view -> stopOrReloadCurrentTab());
             sPanelButton = findViewById(R.id.panel_button);
             mBackButton.setImageDrawable(getResources()
                     .getDrawable(R.drawable.vivaldi_bottom_nav_back_56dp));
@@ -527,10 +535,22 @@ public class ToolbarTablet extends ToolbarLayout
     }
 
     private TabletCaptureStateToken generateCaptureStateToken() {
-        UrlBarData urlBarData = getToolbarDataProvider().getUrlBarData();
-        @DrawableRes
-        int securityIconResource =
-                getToolbarDataProvider().getSecurityIconResource(/* isTablet= */ true);
+        UrlBarData urlBarData;
+        final @DrawableRes int securityIconResource;
+
+        if (ToolbarFeatures.shouldSuppressCaptures()) {
+            urlBarData = mLocationBar.getUrlBarData();
+            if (urlBarData == null) urlBarData = getToolbarDataProvider().getUrlBarData();
+            StatusCoordinator statusCoordinator = mLocationBar.getStatusCoordinator();
+            securityIconResource =
+                    statusCoordinator == null
+                            ? getToolbarDataProvider().getSecurityIconResource(false)
+                            : statusCoordinator.getSecurityIconResource();
+        } else {
+            urlBarData = getToolbarDataProvider().getUrlBarData();
+            securityIconResource = getToolbarDataProvider().getSecurityIconResource(false);
+        }
+
         VisibleUrlText visibleUrlText =
                 new VisibleUrlText(
                         urlBarData.displayText, mLocationBar.getOmniboxVisibleTextPrefixHint());
@@ -584,6 +604,7 @@ public class ToolbarTablet extends ToolbarLayout
         ImageViewCompat.setImageTintList(mShieldButton, tint);
         ImageViewCompat.setImageTintList(mModelSelectorButton, tint);
         ImageViewCompat.setImageTintList(sPanelButton, tint);
+        ImageViewCompat.setImageTintList(mVivaldiReloadButton, tint);
         // End Vivaldi
 
         mSwitcherButton.setBrandedColorScheme(brandedColorScheme);
@@ -599,12 +620,16 @@ public class ToolbarTablet extends ToolbarLayout
         final @ColorInt int textBoxColor =
                 ThemeUtils.getTextBoxColorForToolbarBackgroundInNonNativePage(
                         getContext(), color, isIncognito());
-        // Vivaldi (gabriel@vivaldi.com) We want to have same location bar background color on
-        // tablets and phones.
-        if (BuildConfig.IS_VIVALDI) return;
         mLocationBar.getTabletCoordinator().tintBackground(textBoxColor);
         mLocationBar.updateVisualsForState();
         setToolbarHairlineColor(color);
+
+        // Notify the StatusBarColorController of the toolbar color change. This is to match the
+        // status bar's color with the toolbar color when the tab strip is hidden on a tablet when
+        // DYNAMIC_TOP_CHROME is enabled.
+        if (ToolbarFeatures.shouldUseToolbarBgColorForStripTransitionScrim()) {
+            notifyToolbarColorChanged(color);
+        }
     }
 
     /** Called when the currently visible New Tab Page changes. */
@@ -629,6 +654,10 @@ public class ToolbarTablet extends ToolbarLayout
     void updateButtonVisibility() {
         // Vivaldi
         mShieldButton.updateVisibility(urlHasFocus());
+        getProgressBar() // Ref. VAB-8803 Progressbar is shown during TabSwitcher transition
+                .setVisibility(mIsInTabSwitcherMode ? INVISIBLE : VISIBLE);
+        if (getToolbarDataProvider().getTab() != null) mVivaldiReloadButton.setVisibility(
+                        getToolbarDataProvider().getTab().isNativePage() ? GONE : VISIBLE);
         mLocationBar.updateButtonVisibility();
     }
 

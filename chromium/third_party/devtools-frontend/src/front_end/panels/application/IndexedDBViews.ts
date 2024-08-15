@@ -29,10 +29,8 @@
  */
 
 import * as i18n from '../../core/i18n/i18n.js';
-import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
-import * as ComponentHelpers from '../../ui/components/helpers/helpers.js';
 import * as ReportView from '../../ui/components/report_view/report_view.js';
 import * as DataGrid from '../../ui/legacy/components/data_grid/data_grid.js';
 import * as ObjectUI from '../../ui/legacy/components/object_ui/object_ui.js';
@@ -185,14 +183,18 @@ export class IDBDatabaseView extends ApplicationComponents.StorageMetadataView.S
           aria-label=${i18nString(UIStrings.deleteDatabase)}
           .variant=${Buttons.Button.Variant.SECONDARY}
           @click=${this.deleteDatabase}
-          jslog=${VisualLogging.action().track({click: true}).context('delete-database')}>
+          jslog=${VisualLogging.action('delete-database').track({
+      click: true,
+    })}>
         ${i18nString(UIStrings.deleteDatabase)}
       </${Buttons.Button.Button.litTagName}>&nbsp;
       <${Buttons.Button.Button.litTagName}
           aria-label=${i18nString(UIStrings.refreshDatabase)}
           .variant=${Buttons.Button.Variant.SECONDARY}
           @click=${this.refreshDatabaseButtonClicked}
-          jslog=${VisualLogging.action().track({click: true}).context('refresh-database')}>
+          jslog=${VisualLogging.action('refresh-database').track({
+      click: true,
+    })}>
         ${i18nString(UIStrings.refreshDatabase)}
       </${Buttons.Button.Button.litTagName}>
       </${ReportView.ReportView.ReportSection.litTagName}>
@@ -224,7 +226,8 @@ export class IDBDatabaseView extends ApplicationComponents.StorageMetadataView.S
 
   private async deleteDatabase(): Promise<void> {
     const ok = await UI.UIUtils.ConfirmDialog.show(
-        i18nString(UIStrings.pleaseConfirmDeleteOfSDatabase, {PH1: this.database.databaseId.name}), this);
+        i18nString(UIStrings.pleaseConfirmDeleteOfSDatabase, {PH1: this.database.databaseId.name}), this,
+        {jslogContext: 'delete-database-confirmation'});
     if (ok) {
       void this.model.deleteDatabase(this.database.databaseId);
     }
@@ -234,10 +237,9 @@ export class IDBDatabaseView extends ApplicationComponents.StorageMetadataView.S
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-idb-database-view', IDBDatabaseView);
+customElements.define('devtools-idb-database-view', IDBDatabaseView);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-idb-database-view': IDBDatabaseView;
   }
@@ -280,26 +282,24 @@ export class IDBDataView extends UI.View.SimpleView {
     this.refreshObjectStoreCallback = refreshObjectStoreCallback;
 
     this.element.classList.add('indexed-db-data-view', 'storage-view');
-    this.element.setAttribute('jslog', `${VisualLogging.pane().context('indexed-db-data-view')}`);
+    this.element.setAttribute('jslog', `${VisualLogging.pane('indexed-db-data-view')}`);
 
     this.refreshButton = new UI.Toolbar.ToolbarButton(i18nString(UIStrings.refresh), 'refresh');
     this.refreshButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.refreshButtonClicked, this);
-    this.refreshButton.element.setAttribute(
-        'jslog', `${VisualLogging.action().track({click: true}).context('refresh')}`);
+    this.refreshButton.element.setAttribute('jslog', `${VisualLogging.action('refresh').track({click: true})}`);
 
     this.deleteSelectedButton = new UI.Toolbar.ToolbarButton(i18nString(UIStrings.deleteSelected), 'bin');
     this.deleteSelectedButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, _event => {
       void this.deleteButtonClicked(null);
     });
     this.deleteSelectedButton.element.setAttribute(
-        'jslog', `${VisualLogging.action().track({click: true}).context('delete-selected')}`);
+        'jslog', `${VisualLogging.action('delete-selected').track({click: true})}`);
 
     this.clearButton = new UI.Toolbar.ToolbarButton(i18nString(UIStrings.clearObjectStore), 'clear');
     this.clearButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, () => {
       void this.clearButtonClicked();
     }, this);
-    this.clearButton.element.setAttribute(
-        'jslog', `${VisualLogging.action().track({click: true}).context('clear-all')}`);
+    this.clearButton.element.setAttribute('jslog', `${VisualLogging.action('clear-all').track({click: true})}`);
 
     const refreshIcon = UI.UIUtils.createIconLabel({
       title: i18nString(UIStrings.dataMayBeStale),
@@ -326,7 +326,6 @@ export class IDBDataView extends UI.View.SimpleView {
     const keyPath = this.isIndex && this.index ? this.index.keyPath : this.objectStore.keyPath;
 
     const columns = ([] as DataGrid.DataGrid.ColumnDescriptor[]);
-    const k = Platform.StringUtilities.kebab;
 
     // Create column defaults so that we avoid repetition below.
     const columnDefaults = {
@@ -347,24 +346,24 @@ export class IDBDataView extends UI.View.SimpleView {
       defaultWeight: undefined,
     };
     columns.push(
-        ({...columnDefaults, id: k('number'), title: '#', sortable: false, width: '50px'} as
+        ({...columnDefaults, id: 'number', title: '#', sortable: false, width: '50px'} as
          DataGrid.DataGrid.ColumnDescriptor));
     columns.push(({
       ...columnDefaults,
-      id: k('key'),
+      id: 'key',
       titleDOMFragment: this.keyColumnHeaderFragment(i18nString(UIStrings.keyString), keyPath),
       sortable: false,
     } as DataGrid.DataGrid.ColumnDescriptor));
     if (this.isIndex) {
       columns.push(({
         ...columnDefaults,
-        id: k('primary-key'),
+        id: 'primary-key',
         titleDOMFragment: this.keyColumnHeaderFragment(i18nString(UIStrings.primaryKey), this.objectStore.keyPath),
         sortable: false,
       } as DataGrid.DataGrid.ColumnDescriptor));
     }
     const title = i18nString(UIStrings.valueString);
-    columns.push(({...columnDefaults, id: k('value'), title, sortable: false} as DataGrid.DataGrid.ColumnDescriptor));
+    columns.push(({...columnDefaults, id: 'value', title, sortable: false} as DataGrid.DataGrid.ColumnDescriptor));
 
     const dataGrid = new DataGrid.DataGrid.DataGridImpl({
       displayName: i18nString(UIStrings.indexedDb),
@@ -419,6 +418,7 @@ export class IDBDataView extends UI.View.SimpleView {
 
   private createEditorToolbar(): void {
     const editorToolbar = new UI.Toolbar.Toolbar('data-view-toolbar', this.element);
+    editorToolbar.element.setAttribute('jslog', `${VisualLogging.toolbar()}`);
 
     editorToolbar.appendToolbarItem(this.refreshButton);
     editorToolbar.appendToolbarItem(this.clearButton);
@@ -464,13 +464,13 @@ export class IDBDataView extends UI.View.SimpleView {
           return;
         }
         void node.valueObjectPresentation.objectTreeElement().expandRecursively();
-      });
+      }, {jslogContext: 'expand-recursively'});
       contextMenu.revealSection().appendItem(i18nString(UIStrings.collapse), () => {
         if (!node.valueObjectPresentation) {
           return;
         }
         node.valueObjectPresentation.objectTreeElement().collapse();
-      });
+      }, {jslogContext: 'collapse'});
     }
   }
 

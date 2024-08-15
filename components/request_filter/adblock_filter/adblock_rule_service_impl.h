@@ -84,26 +84,26 @@ class RuleServiceImpl : public RuleServiceContent,
   RuleSourceHandler::RulesCompiler rules_compiler_;
   std::string locale_;
 
-  std::array<absl::optional<RulesIndexManager>, kRuleGroupCount>
+  std::array<std::optional<RulesIndexManager>, kRuleGroupCount>
       index_managers_;
 
   // We can't have one injection manager per rule group, because they all use
   // the same resources and we only want to provide one copy of the static
   // injections to the content injection module.
-  absl::optional<ContentInjectionProvider> content_injection_provider_;
+  std::optional<ContentInjectionProvider> content_injection_provider_;
 
   // Keeps track of the request filters we have set up, to allow tearing them
   // down if needed. These pointers are not guaranteed to be valid at any time.
   std::array<AdBlockRequestFilter*, kRuleGroupCount> request_filters_ = {
       nullptr, nullptr};
 
-  absl::optional<BlockedUrlsReporter> blocked_urls_reporter_;
-  absl::optional<RuleServiceStorage> state_store_;
-  absl::optional<Resources> resources_;
+  std::optional<BlockedUrlsReporter> blocked_urls_reporter_;
+  std::optional<RuleServiceStorage> state_store_;
+  std::optional<Resources> resources_;
 
   bool is_loaded_ = false;
-  absl::optional<RuleManagerImpl> rule_manager_;
-  absl::optional<KnownRuleSourcesHandlerImpl> known_sources_handler_;
+  std::optional<RuleManagerImpl> rule_manager_;
+  std::optional<KnownRuleSourcesHandlerImpl> known_sources_handler_;
 
   scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
 

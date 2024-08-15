@@ -285,6 +285,7 @@ public class BaseJUnit4ClassRunner extends AndroidJUnit4ClassRunner {
             return;
         }
 
+        ResettersForTesting.beforeClassHooksWillExecute();
         runPreClassHooks(getDescription().getTestClass());
         assert CommandLine.isInitialized();
 
@@ -293,7 +294,7 @@ public class BaseJUnit4ClassRunner extends AndroidJUnit4ClassRunner {
         try {
             runPostClassHooks(getDescription().getTestClass());
         } finally {
-            ResettersForTesting.onAfterClass();
+            ResettersForTesting.afterClassHooksDidExecute();
         }
     }
 
@@ -304,13 +305,13 @@ public class BaseJUnit4ClassRunner extends AndroidJUnit4ClassRunner {
 
         long start = SystemClock.uptimeMillis();
 
-        ResettersForTesting.setMethodMode();
+        ResettersForTesting.beforeHooksWillExecute();
         runPreTestHooks(method);
 
         super.runChild(method, notifier);
-        ResettersForTesting.onAfterMethod();
 
         runPostTestHooks(method);
+        ResettersForTesting.afterHooksDidExecute();
 
         Bundle b = new Bundle();
         b.putLong(DURATION_BUNDLE_ID, SystemClock.uptimeMillis() - start);
@@ -367,17 +368,5 @@ public class BaseJUnit4ClassRunner extends AndroidJUnit4ClassRunner {
     @Override
     protected Statement withAfters(FrameworkMethod method, Object test, Statement base) {
         return super.withAfters(method, test, new ScreenshotOnFailureStatement(base));
-    }
-
-    /**
-     * This function replicates the androidx AndroidJUnit4ClassRunner version of this function.
-     * We can delete this override when we migrate to androidx.
-     */
-    @Override
-    protected Statement methodInvoker(FrameworkMethod method, Object test) {
-        if (UiThreadStatement.shouldRunOnUiThread(method)) {
-            return new UiThreadStatement(super.methodInvoker(method, test));
-        }
-        return super.methodInvoker(method, test);
     }
 }

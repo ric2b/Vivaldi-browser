@@ -24,8 +24,11 @@
 #include "core/fpdfapi/parser/fpdf_parser_utility.h"
 #include "core/fpdfapi/render/cpdf_devicebuffer.h"
 #include "core/fpdfapi/render/cpdf_renderoptions.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/fx_system.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/span_util.h"
 #include "core/fxcrt/unowned_ptr.h"
 #include "core/fxge/cfx_defaultrenderdevice.h"
@@ -33,9 +36,6 @@
 #include "core/fxge/cfx_path.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
 #include "core/fxge/dib/fx_dib.h"
-#include "third_party/base/check.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/containers/span.h"
 
 namespace {
 
@@ -46,7 +46,7 @@ uint32_t CountOutputsFromFunctions(
   FX_SAFE_UINT32 total = 0;
   for (const auto& func : funcs) {
     if (func)
-      total += func->CountOutputs();
+      total += func->OutputCount();
   }
   return total.ValueOrDefault(0);
 }
@@ -55,7 +55,7 @@ uint32_t GetValidatedOutputsCount(
     const std::vector<std::unique_ptr<CPDF_Function>>& funcs,
     const RetainPtr<CPDF_ColorSpace>& pCS) {
   uint32_t funcs_outputs = CountOutputsFromFunctions(funcs);
-  return funcs_outputs ? std::max(funcs_outputs, pCS->CountComponents()) : 0;
+  return funcs_outputs ? std::max(funcs_outputs, pCS->ComponentCount()) : 0;
 }
 
 std::array<FX_ARGB, kShadingSteps> GetShadingSteps(
@@ -65,8 +65,8 @@ std::array<FX_ARGB, kShadingSteps> GetShadingSteps(
     const RetainPtr<CPDF_ColorSpace>& pCS,
     int alpha,
     size_t results_count) {
-  DCHECK(results_count >= CountOutputsFromFunctions(funcs));
-  DCHECK(results_count >= pCS->CountComponents());
+  CHECK_GE(results_count, CountOutputsFromFunctions(funcs));
+  CHECK_GE(results_count, pCS->ComponentCount());
   std::array<FX_ARGB, kShadingSteps> shading_steps;
   std::vector<float> result_array(results_count);
   float diff = t_max - t_min;
@@ -76,7 +76,7 @@ std::array<FX_ARGB, kShadingSteps> GetShadingSteps(
     for (const auto& func : funcs) {
       if (!func)
         continue;
-      absl::optional<uint32_t> nresults =
+      std::optional<uint32_t> nresults =
           func->Call(pdfium::span_from_ref(input), result_span);
       if (nresults.has_value())
         result_span = result_span.subspan(nresults.value());
@@ -285,8 +285,8 @@ void DrawFuncShading(const RetainPtr<CFX_DIBitmap>& pBitmap,
   int width = pBitmap->GetWidth();
   int height = pBitmap->GetHeight();
 
-  DCHECK(total_results >= CountOutputsFromFunctions(funcs));
-  DCHECK(total_results >= pCS->CountComponents());
+  CHECK_GE(total_results, CountOutputsFromFunctions(funcs));
+  CHECK_GE(total_results, pCS->ComponentCount());
   std::vector<float> result_array(total_results);
   for (int row = 0; row < height; ++row) {
     uint32_t* dib_buf =
@@ -303,7 +303,7 @@ void DrawFuncShading(const RetainPtr<CFX_DIBitmap>& pBitmap,
       for (const auto& func : funcs) {
         if (!func)
           continue;
-        absl::optional<uint32_t> nresults = func->Call(input, result_span);
+        std::optional<uint32_t> nresults = func->Call(input, result_span);
         if (nresults.has_value())
           result_span = result_span.subspan(nresults.value());
       }
@@ -409,7 +409,7 @@ void DrawGouraud(const RetainPtr<CFX_DIBitmap>& pBitmap,
       r_result += r_unit;
       g_result += g_unit;
       b_result += b_unit;
-      FXARGB_SETDIB(dib_buf, ArgbEncode(alpha, static_cast<int>(r_result * 255),
+      FXARGB_SetDIB(dib_buf, ArgbEncode(alpha, static_cast<int>(r_result * 255),
                                         static_cast<int>(g_result * 255),
                                         static_cast<int>(b_result * 255)));
       dib_span = dib_span.subspan(4);
@@ -893,9 +893,9 @@ void CPDF_RenderShading::Draw(CFX_RenderDevice* pDevice,
       pPattern->GetShadingObject()->GetDict();
   if (!pPattern->IsShadingObject() && pDict->KeyExist("Background")) {
     RetainPtr<const CPDF_Array> pBackColor = pDict->GetArrayFor("Background");
-    if (pBackColor && pBackColor->size() >= pColorSpace->CountComponents()) {
+    if (pBackColor && pBackColor->size() >= pColorSpace->ComponentCount()) {
       std::vector<float> comps = ReadArrayElementsToVector(
-          pBackColor.Get(), pColorSpace->CountComponents());
+          pBackColor.Get(), pColorSpace->ComponentCount());
 
       float R = 0.0f;
       float G = 0.0f;
@@ -980,8 +980,9 @@ void CPDF_RenderShading::Draw(CFX_RenderDevice* pDevice,
       break;
     }
   }
-  if (bAlphaMode)
-    pBitmap->SetRedFromBitmap(pBitmap);
+  if (bAlphaMode) {
+    pBitmap->SetRedFromAlpha();
+  }
 
   if (options.ColorModeIs(CPDF_RenderOptions::kGray))
     pBitmap->ConvertColorScale(0, 0xffffff);

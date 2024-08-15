@@ -197,7 +197,7 @@ void VirtualConnectionRouter::OnError(CastSocket* socket, Error error) {
 
 void VirtualConnectionRouter::OnMessage(CastSocket* socket,
                                         CastMessage message) {
-  OSP_DCHECK(socket);
+  OSP_CHECK(socket);
 
   const std::string& local_id = message.destination_id();
   if (local_id == kBroadcastId) {

@@ -32,6 +32,7 @@
 #include "net/spdy/spdy_session_key.h"
 #include "net/spdy/spdy_session_pool.h"
 #include "net/ssl/ssl_config.h"
+#include "url/gurl.h"
 #include "url/scheme_host_port.h"
 
 namespace net {
@@ -113,7 +114,9 @@ class HttpStreamFactory::Job
         Job* job,
         const ConnectionAttempts& attempts) = 0;
 
-    // Invoked when |job| finishes initiating a connection.
+    // Invoked when |job| finishes initiating a connection. This may occur
+    // before the handshake is complete, and provides the delegate an
+    // early chance to handle any errors.
     virtual void OnConnectionInitialized(Job* job, int rv) = 0;
 
     // Return false if |job| can advance to the next state. Otherwise, |job|
@@ -340,13 +343,17 @@ class HttpStreamFactory::Job
                               bool is_websocket);
 
   // Called in Job constructor. Use |spdy_session_key_| after construction.
-  static SpdySessionKey GetSpdySessionKey(
-      const ProxyChain& proxy_chain,
-      const GURL& origin_url,
-      PrivacyMode privacy_mode,
-      const SocketTag& socket_tag,
-      const NetworkAnonymizationKey& network_anonymization_key,
-      SecureDnsPolicy secure_dns_policy);
+  static SpdySessionKey GetSpdySessionKey(const ProxyChain& proxy_chain,
+                                          const GURL& origin_url,
+                                          const HttpRequestInfo& request_info);
+
+  // Returns whether an appropriate SPDY session would correspond to either a
+  // connection to the last proxy server in the chain (for the traditional HTTP
+  // proxying behavior of sending a GET request to the proxy server) or a
+  // connection through the entire proxy chain (for tunneled requests). Note
+  // that for QUIC proxies we no longer support the former.
+  static bool IsGetToProxy(const ProxyChain& proxy_chain,
+                           const GURL& origin_url);
 
   // Returns true if the current request can use an existing spdy session.
   bool CanUseExistingSpdySession() const;

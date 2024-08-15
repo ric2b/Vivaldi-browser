@@ -42,7 +42,6 @@ import org.chromium.chrome.browser.omnibox.suggestions.entity.EntitySuggestionVi
 import org.chromium.chrome.browser.omnibox.suggestions.groupseparator.GroupSeparatorView;
 import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderView;
 import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderViewBinder;
-import org.chromium.chrome.browser.omnibox.suggestions.history_clusters.HistoryClustersProcessor.OpenHistoryClustersDelegate;
 import org.chromium.chrome.browser.omnibox.suggestions.tail.TailSuggestionView;
 import org.chromium.chrome.browser.omnibox.suggestions.tail.TailSuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
@@ -110,7 +109,6 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
             @NonNull BookmarkState bookmarkState,
             @NonNull OmniboxActionDelegate omniboxActionDelegate,
             @NonNull OmniboxSuggestionsDropdownScrollListener scrollListener,
-            @NonNull OpenHistoryClustersDelegate openHistoryClustersDelegate,
             boolean forcePhoneStyleOmnibox) {
         mParent = parent;
         mModalDialogManagerSupplier = modalDialogManagerSupplier;
@@ -141,8 +139,7 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
                         bringToForegroundCallback,
                         tabWindowManagerSupplier,
                         bookmarkState,
-                        omniboxActionDelegate,
-                        openHistoryClustersDelegate);
+                        omniboxActionDelegate);
         mMediator.initDefaultProcessors();
 
         mScrollListenerList.addObserver(scrollListener);
@@ -314,13 +311,6 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
                 OmniboxSuggestionUiType.HEADER,
                 parent -> new HeaderView(parent.getContext()),
                 HeaderViewBinder::bind);
-
-        adapter.registerType(
-                OmniboxSuggestionUiType.PEDAL_SUGGESTION,
-                parent ->
-                        new BaseSuggestionView<View>(
-                                parent.getContext(), R.layout.omnibox_basic_suggestion),
-                new BaseSuggestionViewBinder<View>(SuggestionViewViewBinder::bind));
 
         adapter.registerType(
                 OmniboxSuggestionUiType.GROUP_SEPARATOR,
@@ -520,6 +510,18 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
         for (OmniboxSuggestionsDropdownScrollListener listener : mScrollListenerList) {
             listener.onSuggestionDropdownOverscrolledToTop();
         }
+    }
+
+    /** Adds an observer for suggestions scroll events. */
+    public void addOmniboxSuggestionsDropdownScrollListener(
+            OmniboxSuggestionsDropdownScrollListener listener) {
+        mScrollListenerList.addObserver(listener);
+    }
+
+    /** Removes an observer for suggestions scroll events. */
+    public void removeOmniboxSuggestionsDropdownScrollListener(
+            OmniboxSuggestionsDropdownScrollListener listener) {
+        mScrollListenerList.removeObserver(listener);
     }
 
     /** Vivaldi */

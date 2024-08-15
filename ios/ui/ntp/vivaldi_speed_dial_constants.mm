@@ -7,10 +7,6 @@
 #endif
 
 #pragma mark - NOTIFICATION
-// Notification name for start page layout change
-NSString* vStartPageLayoutChangeDidChange =
-    @"vStartPageLayoutChangeDidChange";
-
 NSString* vSpeedDialPropertyDidChange = @"vSpeedDialPropertyDidChange";
 NSString* vSpeedDialIdentifierKey = @"vSpeedDialIdentifierKey";
 NSString* vSpeedDialThumbnailRefreshStateKey =
@@ -41,61 +37,11 @@ const CGSize vSpeedDialItemFaviconSizeRegularLayout = CGSizeMake(16.0, 16.0);
 // Speed Dial item favicon size for layout 'Small'
 const CGSize vSpeedDialItemFaviconSizeSmallLayout = CGSizeMake(28.0, 28.0);
 // Speed Dial item favicon size for layout 'Small' on tablet.
-const CGSize vSpeedDialItemFaviconSizeSmallLayoutTablet = CGSizeMake(20.0, 20.0);
+const CGSize vSpeedDialItemFaviconSizeSmallLayoutTablet = CGSizeMake(36.0, 36.0);
 // Speed Dial item favicon size for layout 'List'
 const CGSize vSpeedDialItemFaviconSizeListLayout = CGSizeMake(36.0, 36.0);
 // Speed Dial favicon corner radius
 const CGFloat vSpeedDialFaviconCornerRadius = 4.0;
-
-// LAYOUT --> Common
-// Speed dial container top padding
-const CGFloat vSDContainerTopPadding = 24.f;
-// Speed dial container bottom padding
-const CGFloat vSDContainerBottomPadding = 24.f;
-// Speed dial item height for layout style 'List'
-const CGFloat vSDItemHeightListLayout = 76.f;
-
-// LAYOUT --> IPhone
-// Speed dial item size multiplier for iPhone 'Large' style
-const CGFloat vSDWidthiPhoneLarge = 0.5;
-// Speed dial item size multiplier for iPhone 'Large' style landscape
-const CGFloat vSDWidthiPhoneLargeLand = 0.3333;
-// Speed dial item size multiplier for iPhone 'Medium' style
-const CGFloat vSDWidthiPhoneMedium = 0.3333;
-// Speed dial item size multiplier for iPhone 'Medium' style landscape
-const CGFloat vSDWidthiPhoneMediumLand = 0.2f;
-// Speed dial item size multiplier for iPhone 'Small' style
-const CGFloat vSDWidthiPhoneSmall = 0.25;
-// Speed dial item size multiplier for iPhone 'Small' style landscape
-const CGFloat vSDWidthiPhoneSmallLand = 0.1666;
-// Speed dial item size multiplier for iPhone 'List' style
-const CGFloat vSDWidthiPhoneList = 1.f;
-// Speed dial item size multiplier for iPhone 'List' style landscape
-const CGFloat vSDWidthiPhoneListLand = 0.5;
-
-// Speed dial section padding for iPhone portrait
-const CGFloat vSDSectionPaddingiPhonePortrait = 8.f;
-// Speed dial section padding for iPhone landscape
-const CGFloat vSDSectionPaddingiPhoneLandscape = 36.f;
-// Speed dial item padding for iPhone
-const CGFloat vSDPaddingiPhone = 8.f;
-
-// LAYOUT --> IPad
-// Speed dial item size multiplier for iPad 'Large' style
-const CGFloat vSDWidthiPadLarge = 0.25;
-// Speed dial item size multiplier for iPad 'Medium' style
-const CGFloat vSDWidthiPadMedium = 0.1666;
-// Speed dial item size multiplier for iPad 'Small' style
-const CGFloat vSDWidthiPadSmall = 0.125;
-// Speed dial item size multiplier for iPad 'List' style
-const CGFloat vSDWidthiPadList = 0.5;
-
-// Speed dial item padding for iPad
-const CGFloat vSDPaddingiPad = 12.f;
-// Speed dial section padding for iPad portrait
-const CGFloat vSDSectionPaddingiPadPortrait = 64.f;
-// Speed dial section padding for iPad landscape
-const CGFloat vSDSectionPaddingiPadLandscape = 250.f;
 
 #pragma mark - COLORS
 // Color for the shadow of the speed dial item

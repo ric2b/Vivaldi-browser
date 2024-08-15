@@ -6,9 +6,13 @@
 
 #include "base/win/sid.h"
 
-#include <windows.h>
+// clang-format off
+#include <windows.h>  // Must be in front of other Windows header files.
+// clang-format on
 
 #include <sddl.h>
+
+#include <optional>
 
 #include "base/ranges/algorithm.h"
 #include "base/win/atl.h"
@@ -17,13 +21,12 @@
 #include "base/win/win_util.h"
 #include "build/branding_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base::win {
 
 namespace {
 
-bool EqualSid(const absl::optional<Sid>& sid, const ATL::CSid& compare_sid) {
+bool EqualSid(const std::optional<Sid>& sid, const ATL::CSid& compare_sid) {
   if (!sid)
     return false;
   return sid->Equal(const_cast<SID*>(compare_sid.GetPSID()));
@@ -38,7 +41,7 @@ bool EqualSid(const Sid& sid, const std::wstring& sddl_sid) {
   return sid.Equal(sid_ptr.get());
 }
 
-bool EqualSid(const absl::optional<Sid>& sid, WELL_KNOWN_SID_TYPE known_sid) {
+bool EqualSid(const std::optional<Sid>& sid, WELL_KNOWN_SID_TYPE known_sid) {
   if (!sid)
     return false;
   char known_sid_buffer[SECURITY_MAX_SID_SIZE] = {};
@@ -49,7 +52,7 @@ bool EqualSid(const absl::optional<Sid>& sid, WELL_KNOWN_SID_TYPE known_sid) {
   return sid->Equal(known_sid_buffer);
 }
 
-bool TestSidVector(absl::optional<std::vector<Sid>> sids,
+bool TestSidVector(std::optional<std::vector<Sid>> sids,
                    const std::vector<std::wstring>& sddl) {
   return sids && ranges::equal(*sids, sddl,
                                [](const Sid& sid, const std::wstring& sddl) {
@@ -61,16 +64,31 @@ bool TestFromSddlStringVector(const std::vector<std::wstring> sddl) {
   return TestSidVector(Sid::FromSddlStringVector(sddl), sddl);
 }
 
-bool EqualNamedCapSid(const Sid& sid, const std::wstring& capability_name) {
-  typedef decltype(::DeriveCapabilitySidsFromName)*
-      DeriveCapabilitySidsFromNameFunc;
+typedef decltype(::DeriveCapabilitySidsFromName)*
+    DeriveCapabilitySidsFromNameFunc;
+
+// Get the DeriveCapabilitySidsFromName API dynamically. Versions of Windows 10
+// older than 1809 do not implement this method. By loading dynamically we can
+// skip tests when running on these older versions. Online documentation for
+// this API claims it's supported back to Windows 2003, however this is entirely
+// incorrect.
+DeriveCapabilitySidsFromNameFunc GetDeriveCapabilitySidsFromName() {
   static const DeriveCapabilitySidsFromNameFunc derive_capability_sids =
       []() -> DeriveCapabilitySidsFromNameFunc {
     HMODULE module = GetModuleHandle(L"api-ms-win-security-base-l1-2-2.dll");
-    CHECK(module);
+    if (!module) {
+      return nullptr;
+    }
     return reinterpret_cast<DeriveCapabilitySidsFromNameFunc>(
         ::GetProcAddress(module, "DeriveCapabilitySidsFromName"));
   }();
+
+  return derive_capability_sids;
+}
+
+bool EqualNamedCapSid(const Sid& sid, const std::wstring& capability_name) {
+  DeriveCapabilitySidsFromNameFunc derive_capability_sids =
+      GetDeriveCapabilitySidsFromName();
   CHECK(derive_capability_sids);
 
   // Pre-reserve some space for SID deleters.
@@ -117,13 +135,13 @@ TEST(SidTest, Initializers) {
   PSID sid_world_pointer = const_cast<SID*>(sid_world.GetPSID());
 
   // Check the PSID constructor.
-  absl::optional<Sid> sid_sid_star = Sid::FromPSID(sid_world_pointer);
+  std::optional<Sid> sid_sid_star = Sid::FromPSID(sid_world_pointer);
   ASSERT_TRUE(EqualSid(sid_sid_star, sid_world));
 
   char invalid_sid[16] = {};
   ASSERT_FALSE(Sid::FromPSID(invalid_sid));
 
-  absl::optional<Sid> sid_sddl = Sid::FromSddlString(L"S-1-1-0");
+  std::optional<Sid> sid_sddl = Sid::FromSddlString(L"S-1-1-0");
   ASSERT_TRUE(sid_sddl);
   ASSERT_TRUE(EqualSid(sid_sddl, sid_world));
 }
@@ -153,13 +171,11 @@ TEST(SidTest, KnownCapability) {
   }
 }
 
-// TODO(crbug.com/1518451): Disable flaky tests.
-#if defined(OFFICIAL_BUILD) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
-#define MAYBE_NamedCapability DISABLED_NamedCapability
-#else
-#define MAYBE_NamedCapability NamedCapability
-#endif
-TEST(SidTest, MAYBE_NamedCapability) {
+TEST(SidTest, NamedCapability) {
+  if (!GetDeriveCapabilitySidsFromName()) {
+    GTEST_SKIP()
+        << "Platform doesn't support DeriveCapabilitySidsFromName function.";
+  }
   const std::wstring capabilities[] = {L"",
                                        L"InternetClient",
                                        L"InternetClientServer",
@@ -225,9 +241,9 @@ TEST(SidTest, KnownSids) {
 }
 
 TEST(SidTest, SddlString) {
-  absl::optional<Sid> sid_sddl = Sid::FromSddlString(L"S-1-1-0");
+  std::optional<Sid> sid_sddl = Sid::FromSddlString(L"S-1-1-0");
   ASSERT_TRUE(sid_sddl);
-  absl::optional<std::wstring> sddl_str = sid_sddl->ToSddlString();
+  std::optional<std::wstring> sddl_str = sid_sddl->ToSddlString();
   ASSERT_TRUE(sddl_str);
   ASSERT_EQ(L"S-1-1-0", *sddl_str);
   ASSERT_FALSE(Sid::FromSddlString(L"X-1-1-0"));
@@ -266,13 +282,11 @@ TEST(SidTest, FromSddlStringVector) {
   ASSERT_TRUE(TestFromSddlStringVector({}));
 }
 
-// TODO(crbug.com/1518451): Disable flaky tests.
-#if defined(OFFICIAL_BUILD) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
-#define MAYBE_FromNamedCapabilityVector DISABLED_FromNamedCapabilityVector
-#else
-#define MAYBE_FromNamedCapabilityVector FromNamedCapabilityVector
-#endif
-TEST(SidTest, MAYBE_FromNamedCapabilityVector) {
+TEST(SidTest, FromNamedCapabilityVector) {
+  if (!GetDeriveCapabilitySidsFromName()) {
+    GTEST_SKIP()
+        << "Platform doesn't support DeriveCapabilitySidsFromName function.";
+  }
   std::vector<std::wstring> capabilities = {L"",
                                             L"InternetClient",
                                             L"InternetClientServer",

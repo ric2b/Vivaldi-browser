@@ -4,7 +4,7 @@
 
 import {assert} from 'chai';
 
-import {type Chrome} from '../../../extension-api/ExtensionAPI.js';  // eslint-disable-line rulesdir/es_modules_import
+import {type Chrome} from '../../../extension-api/ExtensionAPI.js';
 import {expectError} from '../../conductor/events.js';
 import {
   $,
@@ -79,7 +79,7 @@ function goToWasmResource(
 
 // This testcase reaches into DevTools internals to install the extension plugin. At this point, there is no sensible
 // alternative, because loading a real extension is not supported in our test setup.
-describe('The Debugger Language Plugins', async () => {
+describe('The Debugger Language Plugins', () => {
   // Load a simple wasm file and verify that the source file shows up in the file tree.
   it('can show C filenames after loading the module', async () => {
     const {target} = getBrowserAndPages();
@@ -788,7 +788,7 @@ describe('The Debugger Language Plugins', async () => {
   it('shows sensible error messages.', async () => {
     const {frontend} = getBrowserAndPages();
     // This test times out on mac-arm64 when watch expressions take some time to calculate.
-    await disableExperiment('evaluateExpressionsWithSourceMaps');
+    await disableExperiment('evaluate-expressions-with-source-maps');
 
     const extension = await loadExtension(
         'TestExtension', `${getResourcesPathWithDevToolsHostname()}/extensions/language_extensions.html`);
@@ -936,7 +936,7 @@ describe('The Debugger Language Plugins', async () => {
     await locationLabels.setBreakpointInWasmAndRun(
         'BREAK(can_access_wasm_data)', 'window.Module.instance.exports.exported_func(4)');
 
-    const mem = await extension.evaluate(async(): Promise<number[]> => {
+    const mem = await extension.evaluate(async () => {
       const buffer = await chrome.devtools.languageServices.getWasmLinearMemory(0, 10, 0n);
       if (buffer instanceof ArrayBuffer) {
         return Array.from(new Uint8Array(buffer));
@@ -1033,8 +1033,7 @@ describe('The Debugger Language Plugins', async () => {
     await locationLabels.setBreakpointInWasmAndRun('FIRST_PAUSE', 'window.Module.instance.exports.Main(16)');
     await waitFor('.paused-status');
     await locationLabels.checkLocationForLabel('FIRST_PAUSE');
-    const beforeStepCallFrame = (await retrieveTopCallFrameWithoutResuming())?.split(':');
-    assertNotNullOrUndefined(beforeStepCallFrame);
+    const beforeStepCallFrame = (await retrieveTopCallFrameWithoutResuming())!.split(':');
     const beforeStepFunctionNames = await getCallFrameNames();
 
     await stepOver();

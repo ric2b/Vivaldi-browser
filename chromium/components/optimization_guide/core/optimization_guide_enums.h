@@ -126,24 +126,6 @@ enum class PredictionModelDownloadStatus {
   kMaxValue = kFailedInvalidAdditionalFile,
 };
 
-// The status for the page content annotations being stored.
-//
-// Keep in sync with OptimizationGuidePageContentAnnotationsStorageStatus in
-// enums.xml.
-enum PageContentAnnotationsStorageStatus {
-  kUnknown = 0,
-  // The content annotations were requested to be stored in the History Service.
-  kSuccess = 1,
-  // There were no visits for the URL found in the History Service.
-  kNoVisitsForUrl = 2,
-  // The specific visit that we wanted to annotate could not be found in the
-  // History Service.
-  kSpecificVisitForUrlNotFound = 3,
-
-  // Add new values above this line.
-  kMaxValue = kSpecificVisitForUrlNotFound,
-};
-
 // Different events of the prediction model delivery lifecycle for an
 // OptimizationTarget.
 // Keep in sync with OptimizationGuideModelDeliveryEvent in enums.xml.
@@ -193,12 +175,12 @@ enum class ModelDeliveryEvent {
 // The various model quality user feedback.
 enum class ModelQualityUserFeedback {
   kUnknown = 0,
-  kThumbsUp = 1,
-  kThumbsDown = 2,
+  kThumbsDown = 1,
+  kThumbsUp = 2,
 
   // Keep in sync with OptimizationGuideUserFeedback in
   // tools/metrics/histograms/metadata/optimization/enums.xml.
-  kMaxValue = kThumbsDown,
+  kMaxValue = kThumbsUp,
 };
 
 // The various results of an access token request.
@@ -276,12 +258,14 @@ enum class OnDeviceModelEligibilityReason {
   kSafetyConfigNotAvailableForFeature = 9,
   // The on-device language detection model was required but not available.
   kLanguageDetectionModelNotAvailable = 10,
+  // On-device model execution for this feature was not enabled.
+  kFeatureExecutionNotEnabled = 11,
 
   // This must be kept in sync with
   // OptimizationGuideOnDeviceModelEligibilityReason in optimization/enums.xml.
 
   // Insert new values before this line.
-  kMaxValue = kLanguageDetectionModelNotAvailable,
+  kMaxValue = kFeatureExecutionNotEnabled,
 };
 
 // Status of the on-device model.

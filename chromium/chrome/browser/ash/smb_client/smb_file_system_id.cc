@@ -16,8 +16,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 
-namespace ash {
-namespace smb_client {
+namespace ash::smb_client {
 namespace {
 
 constexpr char kDelimiter[] = "@@";
@@ -36,11 +35,11 @@ std::vector<std::string> GetComponents(const std::string& file_system_id) {
 }
 
 std::string GenerateRandomId() {
-  char rand_bytes[kRandomIdBytes];
-  base::RandBytes(rand_bytes, sizeof(rand_bytes));
+  uint8_t rand_bytes[kRandomIdBytes];
+  base::RandBytes(rand_bytes);
   // Encoding to hex ensure that there are no non-alpha characters in the id
   // (i.e. no @ delimiters).
-  return base::HexEncode(rand_bytes, sizeof(rand_bytes));
+  return base::HexEncode(rand_bytes);
 }
 
 }  // namespace.
@@ -91,5 +90,4 @@ std::optional<std::string> GetUserFromFileSystemId(
   return components[2].substr(strlen(kUserPrefix));
 }
 
-}  // namespace smb_client
-}  // namespace ash
+}  // namespace ash::smb_client

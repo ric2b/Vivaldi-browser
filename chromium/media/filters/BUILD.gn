@@ -59,6 +59,8 @@ source_set("filters") {
     "source_buffer_stream.h",
     "stream_parser_factory.cc",
     "stream_parser_factory.h",
+    "temporal_scalability_id_extractor.cc",
+    "temporal_scalability_id_extractor.h",
     "video_cadence_estimator.cc",
     "video_cadence_estimator.h",
     "video_renderer_algorithm.cc",
@@ -233,7 +235,7 @@ source_set("filters") {
     }
   }
 
-  if (use_vaapi) {
+  if (is_win || use_vaapi) {
     sources += [
       "h264_bitstream_buffer.cc",
       "h264_bitstream_buffer.h",
@@ -242,8 +244,6 @@ source_set("filters") {
 
   if (enable_hls_demuxer) {
     sources += [
-      "hls_codec_detector.cc",
-      "hls_codec_detector.h",
       "hls_data_source_provider.cc",
       "hls_data_source_provider.h",
       "hls_data_source_provider_impl.cc",
@@ -319,7 +319,6 @@ source_set("unit_tests") {
     "pipeline_controller_unittest.cc",
     "source_buffer_state_unittest.cc",
     "source_buffer_stream_unittest.cc",
-    "stream_parser_factory_unittest.cc",
     "video_cadence_estimator_unittest.cc",
     "video_decoder_stream_unittest.cc",
     "video_renderer_algorithm_unittest.cc",
@@ -411,7 +410,6 @@ source_set("unit_tests") {
 
   if (enable_hls_demuxer) {
     sources += [
-      "hls_codec_detector_unittest.cc",
       "hls_data_source_provider_impl_unittest.cc",
       "hls_data_source_provider_unittest.cc",
       "hls_manifest_demuxer_engine_unittest.cc",
@@ -419,6 +417,7 @@ source_set("unit_tests") {
       "hls_test_helpers.cc",
       "hls_test_helpers.h",
       "manifest_demuxer_unittest.cc",
+      "stream_parser_factory_unittest.cc",
     ]
   }
 

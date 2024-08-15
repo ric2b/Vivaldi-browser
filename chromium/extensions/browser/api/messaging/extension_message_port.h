@@ -11,6 +11,7 @@
 #include <set>
 #include <string>
 #include <vector>
+
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -48,7 +49,7 @@ class ExtensionMessagePort : public MessagePort {
   // Create a port that is tied to frame(s) in a single tab.
   ExtensionMessagePort(base::WeakPtr<ChannelDelegate> channel_delegate,
                        const PortId& port_id,
-                       const std::string& extension_id,
+                       const ExtensionId& extension_id,
                        content::RenderFrameHost* render_frame_host,
                        bool include_child_frames);
 
@@ -57,7 +58,7 @@ class ExtensionMessagePort : public MessagePort {
   static std::unique_ptr<ExtensionMessagePort> CreateForExtension(
       base::WeakPtr<ChannelDelegate> channel_delegate,
       const PortId& port_id,
-      const std::string& extension_id,
+      const ExtensionId& extension_id,
       content::BrowserContext* browser_context);
 
   // Creates a port for any ChannelEndpoint which can be for a render frame or
@@ -65,7 +66,7 @@ class ExtensionMessagePort : public MessagePort {
   static std::unique_ptr<ExtensionMessagePort> CreateForEndpoint(
       base::WeakPtr<ChannelDelegate> channel_delegate,
       const PortId& port_id,
-      const std::string& extension_id,
+      const ExtensionId& extension_id,
       const ChannelEndpoint& endpoint,
       mojo::PendingAssociatedRemote<extensions::mojom::MessagePort> port,
       mojo::PendingAssociatedReceiver<extensions::mojom::MessagePortHost>
@@ -122,7 +123,9 @@ class ExtensionMessagePort : public MessagePort {
   // there are no registered frames any more, the port closes via
   // CloseChannel().
   // It returns if the port and the associated channel is closed.
-  bool UnregisterFramesUnderMainFrame(content::RenderFrameHost* main_frame);
+  bool UnregisterFramesUnderMainFrame(
+      content::RenderFrameHost* main_frame,
+      std::optional<std::string> error_message = std::nullopt);
 
   // Methods to register/unregister a Service Worker endpoint for this port.
   void RegisterWorker(const WorkerId& worker_id);
@@ -130,39 +133,10 @@ class ExtensionMessagePort : public MessagePort {
   void UnregisterWorker(int render_process_id, int worker_thread_id);
 
   // Immediately close the port and its associated channel.
-  void CloseChannel();
+  void CloseChannel(std::optional<std::string> error_message = std::nullopt);
 
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-  // Sends IPC messages to the renderer for all registered frames and/or service
-  // workers.
-  using IPCBuilderCallback =
-      base::RepeatingCallback<std::unique_ptr<IPC::Message>(const IPCTarget&)>;
-  void SendToPort(IPCBuilderCallback ipc_builder);
-  void SendToIPCTarget(const IPCTarget& target,
-                       std::unique_ptr<IPC::Message> message);
-
-  // Builds specific IPCs for a port, with correct frame or worker identifiers.
-  std::unique_ptr<IPC::Message> BuildDispatchOnConnectIPC(
-      mojom::ChannelType channel_type,
-      const std::string& channel_name,
-      const base::Value::Dict* source_tab,
-      const ExtensionApiFrameIdMap::FrameData& source_frame,
-      int guest_process_id,
-      int guest_render_frame_routing_id,
-      const MessagingEndpoint& source_endpoint,
-      const std::string& target_extension_id,
-      const GURL& source_url,
-      std::optional<url::Origin> source_origin,
-      const IPCTarget& target);
-  std::unique_ptr<IPC::Message> BuildDispatchOnDisconnectIPC(
-      const std::string& error_message,
-      const IPCTarget& target);
-  std::unique_ptr<IPC::Message> BuildDeliverMessageIPC(const Message& message,
-                                                       const IPCTarget& target);
-#else
   using SendCallback = base::RepeatingCallback<void(mojom::MessagePort*)>;
   void SendToPort(SendCallback send_callback);
-#endif
 
   // Check if this activity of this type on this port would keep servicer worker
   // alive.
@@ -170,10 +144,8 @@ class ExtensionMessagePort : public MessagePort {
 
   bool ShouldSkipFrameForBFCache(content::RenderFrameHost* render_frame_host);
 
-#if !BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
   void OnConnectResponse(bool success);
   void Prune();
-#endif
 
   ExtensionId extension_id_;
   raw_ptr<content::BrowserContext> browser_context_ = nullptr;

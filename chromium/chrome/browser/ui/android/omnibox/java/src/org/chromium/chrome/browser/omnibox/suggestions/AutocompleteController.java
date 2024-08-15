@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.omnibox.suggestions;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.Px;
 import androidx.annotation.VisibleForTesting;
 
 import org.jni_zero.CalledByNative;
@@ -20,6 +21,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.components.omnibox.AutocompleteResult;
 import org.chromium.components.omnibox.AutocompleteResult.VerificationPoint;
+import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.url.GURL;
 
@@ -310,6 +312,23 @@ public class AutocompleteController implements Destroyable {
     }
 
     /**
+     * Create a native navigation observser on native side.
+     *
+     * @param navigationHandle The NavigationHandle for the current navigation.
+     * @param match AutocompleteMatch that was selected by the user
+     */
+    void createNavigationObserver(NavigationHandle navigationHandle, AutocompleteMatch match) {
+        if (mNativeController == 0) return;
+        if (!hasValidNativeObjectRef(match, VerificationPoint.SELECT_MATCH)) return;
+
+        AutocompleteControllerJni.get()
+                .createNavigationObserver(
+                        mNativeController,
+                        navigationHandle.nativeNavigationHandlePtr(),
+                        match.getNativeObjectRef());
+    }
+
+    /**
      * Called when the user touches down on a suggestion. Only called for search suggestions.
      *
      * @param match the match that received the touch
@@ -377,6 +396,21 @@ public class AutocompleteController implements Destroyable {
         if (!hasValidNativeObjectRef(match, VerificationPoint.GET_MATCHING_TAB)) return null;
         return AutocompleteControllerJni.get()
                 .getMatchingTabForSuggestion(mNativeController, match.getNativeObjectRef());
+    }
+
+    /**
+     * Pass the UI specific measurement information to Native code to aid Adaptive Suggestions.
+     *
+     * @param dropdownHeightWithKeyboardActive the height of visible part of the suggestions
+     *     dropdown with software keyboard showing, expressed in pixels
+     * @param suggestionHeight the nominal height of a suggestion, expressed in pixels
+     */
+    void onSuggestionDropdownHeightChanged(
+            @Px int dropdownHeightWithKeyboardActive, @Px int suggestionHeight) {
+        if (mNativeController == 0) return;
+        AutocompleteControllerJni.get()
+                .onSuggestionDropdownHeightChanged(
+                        mNativeController, dropdownHeightWithKeyboardActive, suggestionHeight);
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
@@ -456,5 +490,18 @@ public class AutocompleteController implements Destroyable {
 
         // Create an instance of AutocompleteController associated with the supplied profile.
         long create(AutocompleteController controller, Profile profile, boolean isLowEndDevice);
+
+        // Create a navigation observser.
+        void createNavigationObserver(
+                long nativeAutocompleteControllerAndroid,
+                long mNativeNavigationHandle,
+                long nativeAutocompleteMatch);
+
+        // Pass the information about the height of the visible Omnibox Dropdown area and
+        // Suggestion Height expressed in Pixels.
+        void onSuggestionDropdownHeightChanged(
+                long nativeAutocompleteControllerAndroid,
+                @Px int dropdownHeightWithKeyboardActive,
+                @Px int suggestionHeight);
     }
 }

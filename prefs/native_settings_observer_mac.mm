@@ -16,16 +16,6 @@ NativeSettingsObserver* NativeSettingsObserver::Create(Profile* profile) {
   return new NativeSettingsObserverMac(profile);
 }
 
-void AquaColorChanged(CFNotificationCenterRef center,
-                      void* observer,
-                      CFStringRef name,
-                      const void* object,
-                      CFDictionaryRef userInfo) {
-  reinterpret_cast<NativeSettingsObserver*>(observer)->SetPref(
-      vivaldiprefs::kSystemMacAquaColorVariant,
-      getAquaColor());
-}
-
 void NoRedisplayChanged(CFNotificationCenterRef center,
                         void* observer,
                         CFStringRef name,
@@ -76,29 +66,8 @@ void ColorPreferencesChanged(CFNotificationCenterRef center,
     ->SetPref(vivaldiprefs::kSystemHighlightColor, getSystemHighlightColor());
 }
 
-void MenubarSettingChanged(CFNotificationCenterRef center,
-                           void* observer,
-                           CFStringRef name,
-                           const void* object,
-                           CFDictionaryRef userInfo) {
-  if (!observer) {
-    return;
-  }
-
-  reinterpret_cast<NativeSettingsObserver*>(observer)
-      ->SetPref(vivaldiprefs::kSystemMacMenubarVisibleInFullscreen,
-        getMenubarVisibleInFullscreen());
-  reinterpret_cast<NativeSettingsObserver*>(observer)
-      ->SetPref(vivaldiprefs::kSystemMacHideMenubar,
-        getHideMenubar());
-}
-
 NativeSettingsObserverMac::NativeSettingsObserverMac(Profile* profile)
     : NativeSettingsObserver(profile) {
-
-  // Initialize, in case the values are changed while Vivaldi is not running.
-  AquaColorChanged(CFNotificationCenterGetDistributedCenter(), this,
-    CFSTR("AppleAquaColorVariantChanged"), nullptr, nullptr);
 
   SwipeDirectionChanged(CFNotificationCenterGetDistributedCenter(), this,
     CFSTR("SwipeScrollDirectionDidChangeNotification"), nullptr, nullptr);
@@ -119,21 +88,10 @@ NativeSettingsObserverMac::NativeSettingsObserverMac(Profile* profile)
       CFSTR("AppleColorPreferencesChangedNotification"), nullptr, nullptr);
   }
 
-  if (@available(macos 12.0.1, *)) {
-    MenubarSettingChanged(CFNotificationCenterGetLocalCenter(), this,
-      CFSTR("NSApplicationDidChangeSafeVisibleFrameNotification"), nullptr,
-      nullptr);
-  }
-
   // NOTE(tomas@vivaldi.com): fix for VB-39486
   CFNotificationCenterRemoveEveryObserver(
       CFNotificationCenterGetDistributedCenter(), this);
 
-
-  CFNotificationCenterAddObserver(
-      CFNotificationCenterGetDistributedCenter(), this, AquaColorChanged,
-      CFSTR("AppleAquaColorVariantChanged"), NULL,
-      CFNotificationSuspensionBehaviorDeliverImmediately);
   CFNotificationCenterAddObserver(
       CFNotificationCenterGetDistributedCenter(), this,
       SwipeDirectionChanged, CFSTR("SwipeScrollDirectionDidChangeNotification"),
@@ -159,10 +117,6 @@ NativeSettingsObserverMac::NativeSettingsObserverMac(Profile* profile)
   if (@available(macos 12.0.1, *)) {
     CFNotificationCenterRemoveEveryObserver(
         CFNotificationCenterGetLocalCenter(), this);
-    CFNotificationCenterAddObserver(
-      CFNotificationCenterGetLocalCenter(), this, MenubarSettingChanged,
-      CFSTR("NSApplicationDidChangeSafeVisibleFrameNotification"), NULL,
-      CFNotificationSuspensionBehaviorDeliverImmediately);
   }
 }
 

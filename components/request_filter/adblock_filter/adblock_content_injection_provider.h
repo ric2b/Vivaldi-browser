@@ -43,7 +43,7 @@ class ContentInjectionProvider : public content_injection::Provider,
   std::array<RulesIndexManager*, kRuleGroupCount> index_managers_;
   const raw_ptr<Resources> resources_;
 
-  absl::optional<int> javascript_world_id_;
+  std::optional<int> javascript_world_id_;
   std::map<std::string, content_injection::StaticInjectionItem> static_content_;
 };
 }  // namespace adblock_filter

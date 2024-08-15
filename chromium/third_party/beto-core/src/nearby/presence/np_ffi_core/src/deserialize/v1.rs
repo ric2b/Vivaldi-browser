@@ -15,14 +15,14 @@
 
 use super::DeserializeAdvertisementError;
 use crate::common::*;
-use crate::credentials::credential_book::CredentialBook;
+use crate::credentials::CredentialBook;
 use crate::credentials::MatchedCredential;
-use crate::deserialize::DecryptMetadataError;
+use crate::deserialize::{allocate_decrypted_metadata_handle, DecryptMetadataResult};
 use crate::utils::*;
+use crate::v1::V1VerificationMode;
 use array_view::ArrayView;
 use crypto_provider_default::CryptoProviderImpl;
 use handle_map::{declare_handle_map, HandleLike, HandleMapDimensions};
-use legible_v1_sections::LegibleV1Sections;
 use np_adv::extended::deserialize::DataElementParseError;
 use np_adv::HasIdentityMatch;
 use std::vec::Vec;
@@ -150,12 +150,19 @@ fn get_legible_v1_sections_handle_map_dimensions() -> HandleMapDimensions {
     }
 }
 
-declare_handle_map! {
-    mod legible_v1_sections {
-        #[dimensions = super::get_legible_v1_sections_handle_map_dimensions()]
-        type LegibleV1Sections: HandleLike<Object = super::LegibleV1SectionsInternals>;
-    }
+/// A `#[repr(C)]` handle to a value of type `LegibleV1SectionsInternals`
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct LegibleV1Sections {
+    handle_id: u64,
 }
+
+declare_handle_map!(
+    legible_v1_sections,
+    super::get_legible_v1_sections_handle_map_dimensions(),
+    super::LegibleV1Sections,
+    super::LegibleV1SectionsInternals
+);
 
 impl LocksLongerThan<LegibleV1Sections> for CredentialBook {}
 
@@ -229,12 +236,15 @@ pub enum GetV1DE16ByteSaltResultKind {
 
 /// The result of attempting to get a derived 16-byte salt
 /// for a given DE within a section.
-#[derive(Copy, Clone)]
 #[repr(C)]
 #[allow(missing_docs)]
 pub enum GetV1DE16ByteSaltResult {
     Error,
-    Success([u8; 16]),
+    Success(FixedSizeArray<16>),
+}
+
+impl GetV1DE16ByteSaltResult {
+    declare_enum_cast! {into_success, Success, FixedSizeArray<16>}
 }
 
 impl FfiEnum for GetV1DE16ByteSaltResult {
@@ -258,6 +268,7 @@ impl DeserializedV1SectionInternals {
     fn num_des(&self) -> u8 {
         self.des.len() as u8
     }
+
     /// Gets the enum tag of the identity used for this section.
     fn identity_kind(&self) -> DeserializedV1IdentityKind {
         if self.identity.is_some() {
@@ -266,6 +277,7 @@ impl DeserializedV1SectionInternals {
             DeserializedV1IdentityKind::Plaintext
         }
     }
+
     /// Attempts to get the DE with the given index in this section.
     fn get_de(&self, index: u8) -> GetV1DEResult {
         match self.des.get(index as usize) {
@@ -273,6 +285,7 @@ impl DeserializedV1SectionInternals {
             None => GetV1DEResult::Error,
         }
     }
+
     /// Attempts to get the directly-transmissible details about
     /// the deserialized V1 identity for this section. Does
     /// not include decrypted metadata bytes nor the section salt.
@@ -282,16 +295,19 @@ impl DeserializedV1SectionInternals {
             None => GetV1IdentityDetailsResult::Error,
         }
     }
+
     /// Attempts to decrypt the metadata for the matched
     /// credential for this V1 section (if any).
-    pub(crate) fn decrypt_metadata(&self) -> Result<Vec<u8>, DecryptMetadataError> {
+    pub(crate) fn decrypt_metadata(&self) -> DecryptMetadataResult {
         match &self.identity {
-            None => Err(DecryptMetadataError::EncryptedMetadataNotAvailable),
-            Some(identity) => {
-                identity.decrypt_metadata().ok_or(DecryptMetadataError::DecryptionFailed)
-            }
+            None => DecryptMetadataResult::Error,
+            Some(identity) => match identity.decrypt_metadata() {
+                None => DecryptMetadataResult::Error,
+                Some(metadata) => allocate_decrypted_metadata_handle(metadata),
+            },
         }
     }
+
     /// Attempts to derive a 16-byte DE salt for a DE in this section
     /// with the given DE offset. This operation may fail if the
     /// passed offset is 255 (causes overflow) or if the section
@@ -411,32 +427,13 @@ impl DeserializedV1IdentityInternals {
     }
     /// For a given data-element offset, derives a 16-byte DE salt
     /// for a DE in that position within this section.
-    pub(crate) fn derive_16_byte_salt_for_offset(&self, de_offset: u8) -> Option<[u8; 16]> {
+    pub(crate) fn derive_16_byte_salt_for_offset(
+        &self,
+        de_offset: u8,
+    ) -> Option<FixedSizeArray<16>> {
         let section_salt = np_hkdf::v1_salt::V1Salt::<CryptoProviderImpl>::from(self.salt);
         let de_offset = np_hkdf::v1_salt::DataElementOffset::from(de_offset);
-        section_salt.derive::<16>(Some(de_offset))
-    }
-}
-
-/// Information about the verification scheme used
-/// for verifying the integrity of the contents
-/// of a decrypted section.
-#[derive(Clone, Copy)]
-#[repr(u8)]
-pub enum V1VerificationMode {
-    /// Message integrity code verification.
-    Mic = 0,
-    /// Signature verification.
-    Signature = 1,
-}
-
-impl From<np_adv::extended::deserialize::VerificationMode> for V1VerificationMode {
-    fn from(verification_mode: np_adv::extended::deserialize::VerificationMode) -> Self {
-        use np_adv::extended::deserialize::VerificationMode;
-        match verification_mode {
-            VerificationMode::Mic => Self::Mic,
-            VerificationMode::Signature => Self::Signature,
-        }
+        section_salt.derive::<16>(Some(de_offset)).map(FixedSizeArray::from_array)
     }
 }
 
@@ -550,23 +547,6 @@ impl DeserializedV1Section {
         self.identity_tag
     }
 
-    fn apply_to_section_internals<R>(
-        &self,
-        func: impl FnOnce(&DeserializedV1SectionInternals) -> R,
-        lookup_failure_result: R,
-    ) -> R {
-        // TODO: Once the `FromResidual` trait is stabilized, this can be simplified.
-        match self.legible_sections_handle.get() {
-            Ok(legible_sections_read_guard) => {
-                match legible_sections_read_guard.get_section_internals(self.legible_section_index)
-                {
-                    Some(section_ref) => func(section_ref),
-                    None => lookup_failure_result,
-                }
-            }
-            Err(_) => lookup_failure_result,
-        }
-    }
     /// Gets the DE with the given index in this section.
     pub fn get_de(&self, de_index: u8) -> GetV1DEResult {
         self.apply_to_section_internals(
@@ -587,10 +567,10 @@ impl DeserializedV1Section {
     /// Attempts to decrypt the metadata for the matched
     /// credential for the V1 section referenced by
     /// this handle (if any).
-    pub fn decrypt_metadata(&self) -> Result<Vec<u8>, DecryptMetadataError> {
+    pub fn decrypt_metadata(&self) -> DecryptMetadataResult {
         self.apply_to_section_internals(
             DeserializedV1SectionInternals::decrypt_metadata,
-            Err(DecryptMetadataError::EncryptedMetadataNotAvailable),
+            DecryptMetadataResult::Error,
         )
     }
     /// Attempts to derive a 16-byte DE salt for a DE in this section
@@ -603,6 +583,24 @@ impl DeserializedV1Section {
             move |section_ref| section_ref.derive_16_byte_salt_for_offset(de_offset),
             GetV1DE16ByteSaltResult::Error,
         )
+    }
+
+    fn apply_to_section_internals<R>(
+        &self,
+        func: impl FnOnce(&DeserializedV1SectionInternals) -> R,
+        lookup_failure_result: R,
+    ) -> R {
+        // TODO: Once the `FromResidual` trait is stabilized, this can be simplified.
+        match self.legible_sections_handle.get() {
+            Ok(legible_sections_read_guard) => {
+                match legible_sections_read_guard.get_section_internals(self.legible_section_index)
+                {
+                    Some(section_ref) => func(section_ref),
+                    None => lookup_failure_result,
+                }
+            }
+            Err(_) => lookup_failure_result,
+        }
     }
 }
 

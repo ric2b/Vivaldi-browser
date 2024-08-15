@@ -40,6 +40,8 @@ import org.chromium.components.browser_ui.widget.displaystyle.UiConfig;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
+import java.util.List;
+
 /** Coordinator of the single tab tab switcher. */
 public class SingleTabSwitcherCoordinator implements TabSwitcher, ModuleProvider {
 
@@ -56,6 +58,7 @@ public class SingleTabSwitcherCoordinator implements TabSwitcher, ModuleProvider
     @Nullable private final ViewGroup mContainer;
 
     @Nullable private final Runnable mSnapshotParentViewRunnable;
+    @Nullable private final ModuleDelegate mModuleDelegate;
 
     public SingleTabSwitcherCoordinator(
             @NonNull Activity activity,
@@ -77,6 +80,7 @@ public class SingleTabSwitcherCoordinator implements TabSwitcher, ModuleProvider
         mIsSurfacePolishEnabled = isSurfacePolishEnabled();
         PropertyModel propertyModel = new PropertyModel(SingleTabViewProperties.ALL_KEYS);
         mContainer = container;
+        mModuleDelegate = moduleDelegate;
 
         if (moduleDelegate == null) {
             SingleTabView singleTabView =
@@ -165,11 +169,6 @@ public class SingleTabSwitcherCoordinator implements TabSwitcher, ModuleProvider
                     }
 
                     @Override
-                    public void prepareTabGridView() {
-                        assert false : "should not reach here";
-                    }
-
-                    @Override
                     public boolean prepareTabSwitcherView() {
                         return true;
                     }
@@ -215,6 +214,9 @@ public class SingleTabSwitcherCoordinator implements TabSwitcher, ModuleProvider
                             mLastActiveTabObserver = null;
                             if (mSnapshotParentViewRunnable != null) {
                                 mSnapshotParentViewRunnable.run();
+                            }
+                            if (mModuleDelegate != null) {
+                                mModuleDelegate.removeModule(ModuleType.SINGLE_TAB);
                             }
                         }
                     }
@@ -263,6 +265,11 @@ public class SingleTabSwitcherCoordinator implements TabSwitcher, ModuleProvider
 
     @Override
     public void setTabSwitcherRecyclerViewPosition(RecyclerViewPosition recyclerViewPosition) {}
+
+    @Override
+    public void showQuickDeleteAnimation(Runnable onAnimationEnd, List<Tab> tabs) {
+        assert false : "should not reach here";
+    }
 
     /**
      * @see SingleTabSwitcherOnNtpMediator#setVisibility.
@@ -380,8 +387,9 @@ public class SingleTabSwitcherCoordinator implements TabSwitcher, ModuleProvider
     public void onContextMenuCreated() {}
 
     @Override
-    public String getModuleTitle(Context context) {
-        return context.getString(org.chromium.chrome.tab_ui.R.string.single_tab_module_title);
+    public String getModuleContextMenuHideText(Context context) {
+        return context.getResources()
+                .getQuantityString(R.plurals.home_modules_context_menu_hide_tab, 1);
     }
 
     @VisibleForTesting

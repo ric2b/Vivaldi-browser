@@ -13,7 +13,7 @@
 #include "components/performance_manager/public/resource_attribution/resource_contexts.h"
 #include "components/performance_manager/public/resource_attribution/resource_types.h"
 
-namespace performance_manager::resource_attribution {
+namespace resource_attribution {
 
 // The Resource Attribution result and metadata structs described in
 // https://bit.ly/resource-attribution-api#heading=h.k8fjwkwxxdj6.
@@ -41,6 +41,16 @@ struct ResultMetadata {
 
   // Method used to assign measurement results to the resource context.
   MeasurementAlgorithm algorithm;
+
+  // Constructor ensures both `measurement_time` and `algorithm` are set.
+  //
+  // Since there's no default constructor, any ResultType class containing
+  // metadata also can't be default-constructed. This ensures none of them have
+  // an invalid or uninitialized state. Use std::optional<ResultType> when
+  // default-construction is needed.
+  ResultMetadata(base::TimeTicks measurement_time,
+                 MeasurementAlgorithm algorithm)
+      : measurement_time(measurement_time), algorithm(algorithm) {}
 
   friend constexpr auto operator<=>(const ResultMetadata&,
                                     const ResultMetadata&) = default;
@@ -98,6 +108,6 @@ struct QueryResults {
 // A map from a ResourceContext to all query results received for that context.
 using QueryResultMap = std::map<ResourceContext, QueryResults>;
 
-}  // namespace performance_manager::resource_attribution
+}  // namespace resource_attribution
 
 #endif  // COMPONENTS_PERFORMANCE_MANAGER_PUBLIC_RESOURCE_ATTRIBUTION_QUERY_RESULTS_H_

@@ -11,9 +11,9 @@
 #include <dawn/wire/WireServer.h>
 
 #include <memory>
+#include <optional>
 #include <vector>
 
-#include <optional>
 #include "base/auto_reset.h"
 #include "base/bits.h"
 #include "base/containers/contains.h"
@@ -66,6 +66,10 @@
 #include <dawn/native/D3D12Backend.h>
 #include "ui/gl/gl_angle_util_win.h"
 #endif
+
+#if !BUILDFLAG(IS_ANDROID)
+#include "gpu/command_buffer/service/abstract_texture.h"
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 namespace gpu {
 namespace webgpu {
@@ -186,22 +190,18 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
   void PerformPollingWork() override {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("gpu.dawn"),
                  "WebGPUDecoderImpl::PerformPollingWork");
-    has_polling_work_ = false;
     if (known_device_metadata_.empty()) {
       wire_serializer_->Flush();
       return;
     }
 
-    // Call DeviceTick() on all known devices, and prune any that are no longer
-    // on the wire and do not need a tick.
+    has_polling_work_ =
+        dawn::native::InstanceProcessEvents(dawn_instance_->Get());
+
     for (auto it = known_device_metadata_.begin();
          it != known_device_metadata_.end();) {
       auto& device = it->first;
       const bool known = wire_server_->IsDeviceKnown(device.Get());
-      const bool needs_tick = dawn::native::DeviceTick(device.Get());
-      if (needs_tick) {
-        has_polling_work_ = true;
-      }
       if (!known) {
         // The client has dropped all references and the device has been
         // removed from the wire.
@@ -491,7 +491,7 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
       // Include list of formats this is tested to work with.
       // See gpu/command_buffer/tests/webgpu_mailbox_unittest.cc
       if (format != viz::SinglePlaneFormat::kBGRA_8888 &&
-// TODO(crbug.com/1241369): Handle additional formats.
+// TODO(crbug.com/40823053): Support "rgba8unorm" canvas context format on Mac
 #if !BUILDFLAG(IS_MAC)
           format != viz::SinglePlaneFormat::kRGBA_8888 &&
 #endif
@@ -1084,14 +1084,16 @@ WebGPUDecoderImpl::WebGPUDecoderImpl(
       memory_transfer_service_(new DawnServiceMemoryTransferService(this)),
       wire_serializer_(new DawnServiceSerializer(client)),
       isolation_key_provider_(isolation_key_provider) {
-  if (gpu_preferences.enable_webgpu_developer_features) {
+  if (gpu_preferences.enable_webgpu_developer_features ||
+      gpu_preferences.enable_webgpu_experimental_features) {
     safety_level_ = webgpu::SafetyLevel::kSafeExperimental;
   }
   if (gpu_preferences.enable_unsafe_webgpu) {
     safety_level_ = webgpu::SafetyLevel::kUnsafe;
   }
-  dawn_instance_ = DawnInstance::Create(dawn_platform_.get(), gpu_preferences,
-                                        safety_level_);
+  dawn_instance_ = DawnInstance::Create(
+      dawn_platform_.get(), gpu_preferences, safety_level_,
+      /*logging_callback=*/nullptr, /*logging_callback_userdata=*/nullptr);
 
   use_webgpu_adapter_ = gpu_preferences.use_webgpu_adapter;
   use_webgpu_power_preference_ = gpu_preferences.use_webgpu_power_preference;
@@ -1127,7 +1129,7 @@ WebGPUDecoderImpl::WebGPUDecoderImpl(
   wire_server_ = DawnWireServer::Create(
       this, wire_serializer_.get(), memory_transfer_service_.get(), wire_procs);
 
-  wire_server_->InjectInstance(dawn_instance_->Get(), 1, 0);
+  wire_server_->InjectInstance(dawn_instance_->Get(), {1, 0});
 
   // If there is no isolation key provider we don't want to wait for an
   // isolation key to come when processing device requests. Therefore, we can
@@ -1152,6 +1154,14 @@ void WebGPUDecoderImpl::Destroy(bool have_context) {
   queued_request_device_calls_.clear();
 
   associated_shared_image_map_.clear();
+
+  // Destroy all known devices to ensure that any service-side objects holding
+  // refs to these objects observe that the devices are lost and can drop their
+  // refs as well as any associated state they are holding.
+  for (auto& device_it : known_device_metadata_) {
+    device_it.first.Destroy();
+  }
+
   known_device_metadata_.clear();
   wire_server_ = nullptr;
 
@@ -1194,6 +1204,8 @@ bool WebGPUDecoderImpl::IsFeatureExposed(wgpu::FeatureName feature) const {
     case wgpu::FeatureName::ChromiumExperimentalSubgroups:
     case wgpu::FeatureName::ChromiumExperimentalSubgroupUniformControlFlow:
       return safety_level_ == webgpu::SafetyLevel::kUnsafe;
+    case wgpu::FeatureName::AdapterPropertiesD3D:
+    case wgpu::FeatureName::AdapterPropertiesVk:
     case wgpu::FeatureName::AdapterPropertiesMemoryHeaps:
       return safety_level_ == webgpu::SafetyLevel::kUnsafe ||
              safety_level_ == webgpu::SafetyLevel::kSafeExperimental;
@@ -1366,6 +1378,18 @@ void WebGPUDecoderImpl::RequestDeviceImpl(
     required_features.push_back(wgpu::FeatureName::SharedFenceMTLSharedEvent);
   }
 
+#if BUILDFLAG(IS_ANDROID)
+  if (adapter_obj.HasFeature(
+          wgpu::FeatureName::SharedTextureMemoryAHardwareBuffer)) {
+    required_features.push_back(
+        wgpu::FeatureName::SharedTextureMemoryAHardwareBuffer);
+  }
+  if (adapter_obj.HasFeature(wgpu::FeatureName::SharedFenceVkSemaphoreSyncFD)) {
+    required_features.push_back(
+        wgpu::FeatureName::SharedFenceVkSemaphoreSyncFD);
+  }
+#endif
+
 #if BUILDFLAG(USE_DAWN) && BUILDFLAG(DAWN_ENABLE_BACKEND_OPENGLES)
   // On Desktop GL via ANGLE, require GL texture sharing.
   if (use_webgpu_adapter_ == WebGPUAdapterName::kOpenGLES &&
@@ -1443,7 +1467,7 @@ void WebGPUDecoderImpl::RequestDeviceImpl(
 
         if (device) {
           // Intercept the response so we can add a device ref to the list of
-          // known devices that we may need to call DeviceTick on.
+          // known devices on.
           wgpu::AdapterProperties properties;
           adapter.GetProperties(&properties);
           decoder->known_device_metadata_.emplace(
@@ -1706,6 +1730,9 @@ wgpu::Adapter WebGPUDecoderImpl::CreatePreferredAdapter(
     // NOTE: These platforms should be switched to the corresponding
     // SharedTextureMemory feature check as they are converted to using
     // SharedTextureMemory.
+    // TODO(crbug.com/327111284): Change this to check for
+    // SharedTextureMemoryAHardwareBuffer on Android-Vulkan once we've made the
+    // switch there.
     supports_external_textures = adapter.SupportsExternalImages();
 #endif
     if (!(supports_external_textures || is_swiftshader)) {
@@ -2039,8 +2066,8 @@ error::Error WebGPUDecoderImpl::HandleAssociateMailboxImmediate(
   // Inject the texture in the dawn::wire::Server and remember which shared
   // image it is associated with.
   if (!wire_server_->InjectTexture(representation_and_access->texture().Get(),
-                                   id, generation, device_id,
-                                   device_generation)) {
+                                   {id, generation},
+                                   {device_id, device_generation})) {
     DLOG(ERROR) << "AssociateMailbox: Invalid texture ID";
     return error::kInvalidArguments;
   }
@@ -2191,6 +2218,18 @@ error::Error WebGPUDecoderImpl::HandleSetWebGPUExecutionContextToken(
         blink::DedicatedWorkerToken>(): {
       execution_context_token = blink::WebGPUExecutionContextToken(
           blink::DedicatedWorkerToken(unguessable_token.value()));
+      break;
+    }
+    case blink::WebGPUExecutionContextToken::IndexOf<
+        blink::SharedWorkerToken>(): {
+      execution_context_token = blink::WebGPUExecutionContextToken(
+          blink::SharedWorkerToken(unguessable_token.value()));
+      break;
+    }
+    case blink::WebGPUExecutionContextToken::IndexOf<
+        blink::ServiceWorkerToken>(): {
+      execution_context_token = blink::WebGPUExecutionContextToken(
+          blink::ServiceWorkerToken(unguessable_token.value()));
       break;
     }
     default:

@@ -9,7 +9,10 @@
 
 #include "base/check_op.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
+#include "third_party/blink/renderer/platform/text/emoji_segmentation_category.h"
+#include "third_party/blink/renderer/platform/text/emoji_segmentation_category_inline_header.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
+#include "third_party/blink/renderer/platform/wtf/text/character_names.h"
 
 namespace blink {
 
@@ -24,7 +27,11 @@ class PLATFORM_EXPORT UTF16RagelIterator {
   DISALLOW_NEW();
 
  public:
-  UTF16RagelIterator() : buffer_(nullptr), buffer_size_(0), cursor_(0) {}
+  UTF16RagelIterator()
+      : buffer_(nullptr),
+        buffer_size_(0),
+        cursor_(0),
+        cached_category_(EmojiSegmentationCategory::kInvalidCacheEntry) {}
 
   UTF16RagelIterator(const UChar* buffer,
                      unsigned buffer_size,
@@ -32,9 +39,7 @@ class PLATFORM_EXPORT UTF16RagelIterator {
       : buffer_(buffer),
         buffer_size_(buffer_size),
         cursor_(cursor),
-        cached_category_(kMaxEmojiScannerCategory) {
-    UpdateCachedCategory();
-  }
+        cached_category_(EmojiSegmentationCategory::kInvalidCacheEntry) {}
 
   UTF16RagelIterator end() {
     UTF16RagelIterator ret = *this;
@@ -42,7 +47,15 @@ class PLATFORM_EXPORT UTF16RagelIterator {
     return ret;
   }
 
-  UTF16RagelIterator& SetCursor(unsigned new_cursor);
+  unsigned size() { return buffer_size_; }
+
+  UTF16RagelIterator& SetCursor(unsigned new_cursor) {
+    DCHECK_GE(new_cursor, 0u);
+    DCHECK_LT(new_cursor, buffer_size_);
+    cursor_ = new_cursor;
+    InvalidateCache();
+    return *this;
+  }
 
   unsigned Cursor() { return cursor_; }
 
@@ -52,7 +65,7 @@ class PLATFORM_EXPORT UTF16RagelIterator {
     } else if (v < 0) {
       U16_BACK_N(buffer_, 0, cursor_, -v);
     }
-    UpdateCachedCategory();
+    InvalidateCache();
     return *this;
   }
 
@@ -73,14 +86,14 @@ class PLATFORM_EXPORT UTF16RagelIterator {
   UTF16RagelIterator& operator++() {
     DCHECK_LT(cursor_, buffer_size_);
     U16_FWD_1(buffer_, cursor_, buffer_size_);
-    UpdateCachedCategory();
+    InvalidateCache();
     return *this;
   }
 
   UTF16RagelIterator& operator--() {
     DCHECK_GT(cursor_, 0u);
     U16_BACK_1(buffer_, 0, cursor_);
-    UpdateCachedCategory();
+    InvalidateCache();
     return *this;
   }
 
@@ -105,9 +118,18 @@ class PLATFORM_EXPORT UTF16RagelIterator {
     return ret;
   }
 
-  UChar32 operator*() {
-    CHECK(buffer_size_);
+  EmojiSegmentationCategory operator*() {
+    DCHECK(buffer_size_);
+    if (cached_category_ == EmojiSegmentationCategory::kInvalidCacheEntry) {
+      UChar32 codepoint;
+      U16_GET(buffer_, 0, cursor_, buffer_size_, codepoint);
+      cached_category_ = GetEmojiSegmentationCategory(codepoint);
+    }
     return cached_category_;
+  }
+
+  inline void InvalidateCache() {
+    cached_category_ = EmojiSegmentationCategory::kInvalidCacheEntry;
   }
 
   bool operator==(const UTF16RagelIterator& other) const {
@@ -119,43 +141,31 @@ class PLATFORM_EXPORT UTF16RagelIterator {
     return !(*this == other);
   }
 
-  // Must match the categories defined in third-party/emoji-segmenter/.
-  // TODO(drott): Add static asserts once emoji-segmenter is imported to
-  // third-party.
-  enum EmojiScannerCharacterClass {
-    EMOJI = 0,
-    EMOJI_TEXT_PRESENTATION = 1,
-    EMOJI_EMOJI_PRESENTATION = 2,
-    EMOJI_MODIFIER_BASE = 3,
-    EMOJI_MODIFIER = 4,
-    EMOJI_VS_BASE = 5,
-    REGIONAL_INDICATOR = 6,
-    KEYCAP_BASE = 7,
-    COMBINING_ENCLOSING_KEYCAP = 8,
-    COMBINING_ENCLOSING_CIRCLE_BACKSLASH = 9,
-    ZWJ = 10,
-    VS15 = 11,
-    VS16 = 12,
-    TAG_BASE = 13,
-    TAG_SEQUENCE = 14,
-    TAG_TERM = 15,
-    kMaxEmojiScannerCategory = 16
-  };
-
- private:
-  UChar32 Codepoint() const {
-    DCHECK_GT(buffer_size_, 0u);
-    UChar32 output;
-    U16_GET(buffer_, 0, cursor_, buffer_size_, output);
+  // Peeks the next codepoint. Note: Does not peak the
+  // `EmojiSegmentationCategory` as does `operator*()`. For performance reasons,
+  // this method is simplified to return U+FFFD when the cursor is at the end of
+  // the stream, instead of using `std::optional` or similar.
+  //
+  // TODO(drott): Before moving to ICU UNSAFE functions, check
+  // InputMethodControllerTest.DeleteSurroundingTextInCodePointsWithInvalidSurrogatePair
+  // and DeleteSurroundingTextInCodePointsWithInvalidSurrogatePair which cause
+  // this code to encounter an unmatched lead surrogate as the last character in
+  // the buffer. (Potential issue with InputMethodController, or the tests?).
+  UChar32 PeekCodepoint() {
+    UChar32 output = kReplacementCharacter;
+    unsigned temp_cursor = cursor_;
+    U16_FWD_1(buffer_, temp_cursor, buffer_size_);
+    if (temp_cursor < buffer_size_) {
+      U16_GET(buffer_, 0, temp_cursor, buffer_size_, output);
+    }
     return output;
   }
 
-  void UpdateCachedCategory();
-
+ private:
   const UChar* buffer_;
   unsigned buffer_size_;
   unsigned cursor_;
-  unsigned char cached_category_;
+  EmojiSegmentationCategory cached_category_;
 };
 
 }  // namespace blink

@@ -19,7 +19,8 @@ namespace password_manager {
 class PasswordStoreAndroidBackendBridgeHelperImpl
     : public PasswordStoreAndroidBackendBridgeHelper {
  public:
-  PasswordStoreAndroidBackendBridgeHelperImpl();
+  explicit PasswordStoreAndroidBackendBridgeHelperImpl(
+      password_manager::IsAccountStore is_account_store);
   PasswordStoreAndroidBackendBridgeHelperImpl(
       base::PassKey<class PasswordStoreAndroidBackendBridgeHelperImplTest>,
       std::unique_ptr<PasswordStoreAndroidBackendReceiverBridge>
@@ -40,7 +41,6 @@ class PasswordStoreAndroidBackendBridgeHelperImpl
   // PasswordStoreAndroidBackendBridgeHelper implementation
   bool CanUseGetAffiliatedPasswordsAPI() override;
   bool CanUseGetAllLoginsWithBrandingInfoAPI() override;
-  bool CanRemoveUnenrollment() override;
   void SetConsumer(base::WeakPtr<Consumer> consumer) override;
   [[nodiscard]] JobId GetAllLogins(std::string account) override;
   [[nodiscard]] JobId GetAllLoginsWithBrandingInfo(

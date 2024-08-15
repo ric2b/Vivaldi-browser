@@ -21,8 +21,7 @@ use array_view::ArrayView;
 use rand::{Rng as _, SeedableRng as _};
 
 use crypto_provider::CryptoProvider;
-use crypto_provider_openssl::Openssl;
-use crypto_provider_rustcrypto::RustCrypto;
+use crypto_provider_default::CryptoProviderImpl;
 
 use np_hkdf::NpKeySeedHkdf;
 
@@ -57,7 +56,7 @@ fn ldt_adv_scan<C: CryptoProvider>(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, ldt_adv_scan::<RustCrypto>, ldt_adv_scan::<Openssl>);
+criterion_group!(benches, ldt_adv_scan::<CryptoProviderImpl>);
 criterion_main!(benches);
 
 fn find_matching_item<C: CryptoProvider>(

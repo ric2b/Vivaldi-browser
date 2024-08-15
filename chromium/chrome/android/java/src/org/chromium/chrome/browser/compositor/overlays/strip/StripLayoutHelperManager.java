@@ -24,7 +24,6 @@ import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.content.res.AppCompatResources;
 
 import org.chromium.base.supplier.ObservableSupplier;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
@@ -48,8 +47,10 @@ import org.chromium.chrome.browser.layouts.components.VirtualView;
 import org.chromium.chrome.browser.layouts.scene_layer.SceneOverlayLayer;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
+import org.chromium.chrome.browser.lifecycle.TopResumedActivityChangedObserver;
 import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.Tab.LoadUrlResult;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
@@ -67,7 +68,9 @@ import org.chromium.chrome.browser.tasks.tab_management.TabUiThemeUtil;
 import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.toolbar.top.TabStripTransitionCoordinator.TabStripHeightObserver;
+import org.chromium.chrome.browser.ui.system.StatusBarColorController;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
+import org.chromium.components.browser_ui.widget.scrim.ScrimProperties;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.base.PageTransition;
@@ -82,6 +85,7 @@ import org.chromium.url.GURL;
 import java.util.List;
 
 //Vivaldi
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -101,7 +105,10 @@ import android.widget.FrameLayout;
  * all input and model events to the proper destination.
  */
 public class StripLayoutHelperManager
-        implements SceneOverlay, PauseResumeWithNativeObserver, TabStripHeightObserver {
+        implements SceneOverlay,
+                PauseResumeWithNativeObserver,
+                TabStripHeightObserver,
+                TopResumedActivityChangedObserver {
 
     /**
      * POD type that contains the necessary tab model info on startup. Used in the startup flicker
@@ -133,13 +140,15 @@ public class StripLayoutHelperManager
     }
 
     // Model selector buttons constants.
-    private static final float MODEL_SELECTOR_BUTTON_BACKGROUND_Y_OFFSET_DP = 11.f; // Vivaldi
+    private static final float MODEL_SELECTOR_BUTTON_BACKGROUND_Y_OFFSET_DP = 10.f; // Vivaldi
     private static final float MODEL_SELECTOR_BUTTON_BACKGROUND_WIDTH_DP = 24.f; // Vivaldi
     private static final float MODEL_SELECTOR_BUTTON_BACKGROUND_HEIGHT_DP = 24.f; // Vivaldi
     private static final float MODEL_SELECTOR_BUTTON_HOVER_BACKGROUND_PRESSED_OPACITY = 0.12f;
     private static final float MODEL_SELECTOR_BUTTON_HOVER_BACKGROUND_DEFAULT_OPACITY = 0.08f;
     private static final float MODEL_SELECTOR_BUTTON_CLICK_SLOP_DP = 12.f;
     private static final float BUTTON_DESIRED_TOUCH_TARGET_SIZE = 48.f;
+    private static final float EXPERIMENT_LEFT_MARGIN_DP = 10f;
+    private static final float EXPERIMENT_RIGHT_MARGIN_DP = 20f;
 
     // Tab strip transition constants.
     @VisibleForTesting
@@ -169,6 +178,10 @@ public class StripLayoutHelperManager
     // UI State
     private float mWidth; // in dp units
     private final float mHeight; // in dp units
+    // Padding regions that tabs should remain untouchable.
+    private float mLeftPadding; // in dp units
+    private float mRightPadding; // in dp units
+    private final float mDensity;
     private int mOrientation;
     private TintedCompositorButton mModelSelectorButton;
     private Context mContext;
@@ -177,11 +190,15 @@ public class StripLayoutHelperManager
     private float mStripTransitionScrimOpacity;
     private boolean mIsTransitioning;
     private final ToolbarManager mToolbarManager;
+    private final StatusBarColorController mStatusBarColorController;
     private TabStripSceneLayer mTabStripTreeProvider;
     private TabStripEventHandler mTabStripEventHandler;
     private TabSwitcherLayoutObserver mTabSwitcherLayoutObserver;
     private final ViewStub mTabHoverCardViewStub;
     private float mModelSelectorWidth;
+    private float mLastVisibleViewportOffsetY;
+
+    private boolean mIsTopResumedActivity;
 
     // 3-dots menu button with tab strip end padding
     private float mStripEndPadding;
@@ -198,7 +215,7 @@ public class StripLayoutHelperManager
     private TabModelObserver mTabModelObserver;
     private final ActivityLifecycleDispatcher mLifecycleDispatcher;
     private final String mDefaultTitle;
-    private Supplier<LayerTitleCache> mLayerTitleCacheSupplier;
+    private ObservableSupplier<LayerTitleCache> mLayerTitleCacheSupplier; // Vivaldi not final
     private final BrowserControlsStateProvider mBrowserControlsStateProvider;
 
     // Vivaldi
@@ -379,7 +396,7 @@ public class StripLayoutHelperManager
             LayoutManagerHost managerHost,
             LayoutUpdateHost updateHost,
             LayoutRenderHost renderHost,
-            Supplier<LayerTitleCache> layerTitleCacheSupplier,
+            ObservableSupplier<LayerTitleCache> layerTitleCacheSupplier,
             ObservableSupplier<TabModelStartupInfo> tabModelStartupInfoSupplier,
             ActivityLifecycleDispatcher lifecycleDispatcher,
             MultiInstanceManager multiInstanceManager,
@@ -394,7 +411,8 @@ public class StripLayoutHelperManager
             @NonNull ToolbarManager toolbarManager) {
         mUpdateHost = updateHost;
         mLayerTitleCacheSupplier = layerTitleCacheSupplier;
-        mTabStripTreeProvider = new TabStripSceneLayer(context);
+        mDensity = context.getResources().getDisplayMetrics().density;
+        mTabStripTreeProvider = new TabStripSceneLayer(mDensity);
         mTabStripEventHandler = new TabStripEventHandler();
         mTabSwitcherLayoutObserver = new TabSwitcherLayoutObserver();
         mLifecycleDispatcher = lifecycleDispatcher;
@@ -458,12 +476,11 @@ public class StripLayoutHelperManager
 
         // y-offset for folio = lowered tab container + (tab container size - bg size)/2 -
         // folio tab title y-offset = 2 + (38 - 32)/2 - 2 = 3dp
-        mModelSelectorButton.setY(MODEL_SELECTOR_BUTTON_BACKGROUND_Y_OFFSET_DP);
+        mModelSelectorButton.setDrawY(MODEL_SELECTOR_BUTTON_BACKGROUND_Y_OFFSET_DP);
 
         // Use toolbar menu button padding to align MSB with menu button.
         mStripEndPadding =
-                context.getResources().getDimension(R.dimen.button_end_padding)
-                        / context.getResources().getDisplayMetrics().density;
+                context.getResources().getDimension(R.dimen.button_end_padding) / mDensity;
 
         mModelSelectorButton.setIncognito(false);
         mModelSelectorButton.setVisible(false);
@@ -471,7 +488,7 @@ public class StripLayoutHelperManager
         mModelSelectorButton.setClickSlop(MODEL_SELECTOR_BUTTON_CLICK_SLOP_DP);
 
         Resources res = context.getResources();
-        mHeight = res.getDimension(R.dimen.tab_strip_height) / res.getDisplayMetrics().density;
+        mHeight = res.getDimension(R.dimen.tab_strip_height) / mDensity;
         mModelSelectorButton.setAccessibilityDescription(
                 res.getString(R.string.accessibility_tabstrip_btn_incognito_toggle_standard),
                 res.getString(R.string.accessibility_tabstrip_btn_incognito_toggle_incognito));
@@ -495,6 +512,7 @@ public class StripLayoutHelperManager
         }
 
         mToolbarManager = toolbarManager;
+        mStatusBarColorController = mToolbarManager.getStatusBarColorController();
 
         mNormalHelper =
                 new StripLayoutHelper(
@@ -535,6 +553,23 @@ public class StripLayoutHelperManager
             }
         }
 
+        mLayerTitleCacheSupplier.addObserver(
+                (LayerTitleCache layerTitleCache) -> {
+                    layerTitleCache.addObserver(mNormalHelper);
+                    layerTitleCache.addObserver(mIncognitoHelper);
+                });
+
+        // TODO (crbug.com/326290073): Update this to check the actual activity resumption state
+        // because it is technically possible for the current activity to lose the top resumed
+        // activity status before the StripLayoutHelperManager instance is instantiated.
+        mIsTopResumedActivity = true;
+
+        if (TabUiFeatureUtilities.isTabStripWindowLayoutOptimizationEnabled()) {
+            // Add some large margins to tab strip when flag enabled.
+            // TODO(crbug/325351108): Introducing external callers and remove this call.
+            updateHorizontalPaddings(
+                    EXPERIMENT_LEFT_MARGIN_DP * mDensity, EXPERIMENT_RIGHT_MARGIN_DP * mDensity);
+        }
         onContextChanged(context);
 
         // Vivaldi
@@ -573,6 +608,11 @@ public class StripLayoutHelperManager
 
     /** Cleans up internal state. */
     public void destroy() {
+        LayerTitleCache layerTitleCache = mLayerTitleCacheSupplier.get();
+        if (layerTitleCache != null) {
+            layerTitleCache.removeObserver(mNormalHelper);
+            layerTitleCache.removeObserver(mIncognitoHelper);
+        }
         mTabStripTreeProvider.destroy();
         mTabStripTreeProvider = null;
         mIncognitoHelper.destroy();
@@ -593,6 +633,7 @@ public class StripLayoutHelperManager
     /** Mark whether tab strip |isHidden|. */
     public void setIsTabStripHidden(boolean isHidden) {
         mIsHidden = isHidden;
+        mStatusBarColorController.setTabStripHiddenOnTablet(mIsHidden);
     }
 
     @Override
@@ -694,6 +735,8 @@ public class StripLayoutHelperManager
             // The fade-out is implemented by adding a scrim layer on top of the tab strip, with the
             // same bg as the toolbar background color.
             scrimOpacity = calculateScrimOpacityDuringTransition(visibleHeight);
+            mStatusBarColorController.setTabStripColorOverlay(
+                    getStripTransitionScrimColor(), scrimOpacity);
 
             yOffset = 0;
         } else if (mIsHidden) {
@@ -706,16 +749,19 @@ public class StripLayoutHelperManager
                 mLayerTitleCacheSupplier.get(),
                 resourceManager,
                 getActiveStripLayoutHelper().getStripLayoutTabsToRender(),
+                getActiveStripLayoutHelper().getStripLayoutGroupTitlesToRender(),
                 yOffset,
                 selectedTabId,
                 hoveredTabId,
                 getStripTransitionScrimColor(),
-                scrimOpacity);
+                scrimOpacity,
+                mLeftPadding,
+                mRightPadding);
         return mTabStripTreeProvider;
     }
 
     private int getStripTransitionScrimColor() {
-        if (!ToolbarFeatures.USE_TOOLBAR_BG_COLOR_FOR_STRIP_TRANSITION_SCRIM.getValue()) {
+        if (!ToolbarFeatures.shouldUseToolbarBgColorForStripTransitionScrim()) {
             return getBackgroundColor();
         }
         return mToolbarManager.getPrimaryColor();
@@ -737,16 +783,20 @@ public class StripLayoutHelperManager
     public void onSizeChanged(
             float width, float height, float visibleViewportOffsetY, int orientation) {
         mWidth = width;
+        mLastVisibleViewportOffsetY = visibleViewportOffsetY;
         boolean orientationChanged = false;
         if (mOrientation != orientation) {
             mOrientation = orientation;
             orientationChanged = true;
         }
         if (!LocalizationUtils.isLayoutRtl()) {
-            mModelSelectorButton.setX(mWidth - getModelSelectorButtonWidthWithEndPadding());
+            mModelSelectorButton.setDrawX(
+                    mWidth - mRightPadding - getModelSelectorButtonWidthWithEndPadding());
         } else {
-            mModelSelectorButton.setX(
-                    getModelSelectorButtonWidthWithEndPadding() - mModelSelectorWidth);
+            mModelSelectorButton.setDrawX(
+                    mLeftPadding
+                            + getModelSelectorButtonWidthWithEndPadding()
+                            - mModelSelectorWidth);
         }
 
         // Note(david@vivaldi.com): We need to take the orientation into account.
@@ -755,10 +805,20 @@ public class StripLayoutHelperManager
             mIncognitoHelper.onSizeChanged(mWidth, mHeight, visibleViewportOffsetY, orientation);
         } else {
         mNormalHelper.onSizeChanged(
-                mWidth, getHeight(), orientationChanged, LayoutManagerImpl.time());
+                mWidth,
+                getHeight(),
+                orientationChanged,
+                LayoutManagerImpl.time(),
+                mLeftPadding,
+                mRightPadding);
         mIncognitoHelper.onSizeChanged(
-                mWidth, getHeight(), orientationChanged, LayoutManagerImpl.time());
-        }
+                mWidth,
+                getHeight(),
+                orientationChanged,
+                LayoutManagerImpl.time(),
+                mLeftPadding,
+                mRightPadding);
+        }// end Vivaldi
 
         // Note(david@vivaldi.com): Apply the correct clicking area for all possible scenarios.
         if (ChromeApplicationImpl.isVivaldi()) {
@@ -773,7 +833,11 @@ public class StripLayoutHelperManager
                     mStripFilterArea.set(0, 0, mWidth, getHeight());
             }
         } else
-        mStripFilterArea.set(0, 0, mWidth, Math.min(getHeight(), visibleViewportOffsetY));
+        mStripFilterArea.set(
+                mLeftPadding,
+                0,
+                mWidth - mRightPadding,
+                Math.min(getHeight(), visibleViewportOffsetY));
         mEventFilter.setEventArea(mStripFilterArea);
     }
 
@@ -784,12 +848,28 @@ public class StripLayoutHelperManager
         mIsTransitioning = true;
         mIsHidden = newHeight == 0;
         mStripTransitionScrimOpacity = mIsHidden ? 0f : 1f;
+        // Update the strip visibility state in StatusBarController just after the margins are
+        // updated during a hide->show transition so that the status bar assumes the base tab strip
+        // color for the remaining duration of the transition while a scrim is applied.
+        if (!mIsHidden) {
+            mStatusBarColorController.setTabStripHiddenOnTablet(false);
+        }
+        // Set the status bar color and scrim overlay at the start of the transition.
+        mStatusBarColorController.setTabStripColorOverlay(
+                getStripTransitionScrimColor(), mStripTransitionScrimOpacity);
     }
 
     @Override
     public void onTransitionFinished() {
         mIsTransitioning = false;
         mStripTransitionScrimOpacity = 0f;
+        //  Update the strip visibility state in StatusBarColorController only after a show->hide
+        // transition, so that the status bar assumes the toolbar color when the strip is hidden.
+        if (mIsHidden) {
+            mStatusBarColorController.setTabStripHiddenOnTablet(true);
+        }
+        mStatusBarColorController.setTabStripColorOverlay(
+                ScrimProperties.INVALID_COLOR, mStripTransitionScrimOpacity);
     }
 
     private boolean duringTabStripTransition() {
@@ -823,6 +903,15 @@ public class StripLayoutHelperManager
         return mStripTransitionScrimOpacity;
     }
 
+    @Override
+    public void onTopResumedActivityChanged(boolean isTopResumedActivity) {
+        // TODO (crbug.com/326290073): Update this to use the helper method from
+        // TabUiFeatureUtilities.
+        if (!ChromeFeatureList.sTabStripLayoutOptimization.isEnabled()) return;
+        mIsTopResumedActivity = isTopResumedActivity;
+        mUpdateHost.requestUpdate();
+    }
+
     private float getModelSelectorButtonWidthWithEndPadding() {
         return mModelSelectorWidth + mStripEndPadding;
     }
@@ -843,6 +932,10 @@ public class StripLayoutHelperManager
 
     public TintedCompositorButton getNewTabButton() {
         return getActiveStripLayoutHelper().getNewTabButton();
+    }
+
+    public boolean shouldShowTabOutline(StripLayoutTab tab) {
+        return getActiveStripLayoutHelper().shouldShowTabOutline(tab);
     }
 
     /**
@@ -920,9 +1013,9 @@ public class StripLayoutHelperManager
         @DrawableRes int rightFadeDrawable;
         if (!LocalizationUtils.isLayoutRtl()) {
             if (mModelSelectorButton.isVisible()) {
-                rightFadeDrawable = R.drawable.tab_strip_fade_long;
-                mNormalHelper.setRightFadeWidth(FADE_LONG_WIDTH_DP);
-                mIncognitoHelper.setRightFadeWidth(FADE_LONG_WIDTH_DP);
+                rightFadeDrawable = R.drawable.tab_strip_fade_short; // Vivaldi
+                mNormalHelper.setRightFadeWidth(FADE_SHORT_WIDTH_DP); // Vivaldi
+                mIncognitoHelper.setRightFadeWidth(FADE_SHORT_WIDTH_DP); // Vivaldi
             } else {
                 // Use fade_medium for right fade when model selector button not visible.
                 rightFadeDrawable = R.drawable.tab_strip_fade_medium;
@@ -1077,7 +1170,7 @@ public class StripLayoutHelperManager
                     @Override
                     public void tabClosureCommitted(Tab tab) {
                         if (mLayerTitleCacheSupplier.hasValue()) {
-                            mLayerTitleCacheSupplier.get().remove(tab.getId());
+                            mLayerTitleCacheSupplier.get().removeTabTitle(tab.getId());
                         }
                     }
 
@@ -1142,7 +1235,8 @@ public class StripLayoutHelperManager
         mTabModelSelectorTabObserver =
                 new TabModelSelectorTabObserver(modelSelector) {
                     @Override
-                    public void onLoadUrl(Tab tab, LoadUrlParams params, int loadType) {
+                    public void onLoadUrl(
+                            Tab tab, LoadUrlParams params, LoadUrlResult loadUrlResult) {
                         if (params.getTransitionType() == PageTransition.HOME_PAGE
                                 || (params.getTransitionType() & PageTransition.FROM_ADDRESS_BAR)
                                         == PageTransition.FROM_ADDRESS_BAR) {
@@ -1220,9 +1314,22 @@ public class StripLayoutHelperManager
                 new LayerTitleCache(mContext, mActivity.getLayoutManager().getResourceManager());
         mLayerTitleCache.setTabModelSelector(mTabModelSelector);
         mLayerTitleCache.setIsStackStrip(mIsStackStrip);
-        mLayerTitleCacheSupplier = () -> mLayerTitleCache;
+        ((ObservableSupplierImpl<LayerTitleCache>)mLayerTitleCacheSupplier).set(mLayerTitleCache);
         mNormalHelper.setTabModelSelector(mTabModelSelector);
         mIncognitoHelper.setTabModelSelector(mTabModelSelector);
+    }
+
+    /**
+     * Update the start / end padding for the tab strip.
+     *
+     * @param leftPaddingPx Left padding for the tab strip in px.
+     * @param rightPaddingPx Right padding for the tab strip in px.
+     */
+    public void updateHorizontalPaddings(float leftPaddingPx, float rightPaddingPx) {
+        mLeftPadding = leftPaddingPx / mDensity;
+        mRightPadding = rightPaddingPx / mDensity;
+
+        onSizeChanged(mWidth, mHeight, mLastVisibleViewportOffsetY, mOrientation);
     }
 
     public void updateTitleForTab(Tab tab) { // Vivaldi
@@ -1246,7 +1353,8 @@ public class StripLayoutHelperManager
     }
 
     public @ColorInt int getBackgroundColor() {
-        return TabUiThemeUtil.getTabStripBackgroundColor(mContext, mIsIncognito);
+        return TabUiThemeUtil.getTabStripBackgroundColor(
+                mContext, mIsIncognito, mIsTopResumedActivity);
     }
 
     /**
@@ -1302,15 +1410,15 @@ public class StripLayoutHelperManager
             mModelSelectorButton.setVisible(isVisible);
             }
 
-            // endMargin = msbEndPadding(8dp) + msbWidth(32dp) + msbStartPadding(8dp to create more
-            // gap between MSB and NTB so there is enough space for touch target).
-            float endMargin =
+            // msbTouchTargetSize = msbEndPadding(8dp) + msbWidth(32dp) + msbStartPadding(8dp to
+            // create more gap between MSB and NTB so there is enough space for touch target).
+            float msbTouchTargetSize =
                     isVisible
                             ? getModelSelectorButtonWidthWithEndPadding()
                                     + getButtonStartPaddingForTouchTarget()
                             : 0.0f;
-            mNormalHelper.setEndMargin(endMargin, isVisible);
-            mIncognitoHelper.setEndMargin(endMargin, true);
+            mNormalHelper.updateEndMarginForStripButtons(msbTouchTargetSize);
+            mIncognitoHelper.updateEndMarginForStripButtons(msbTouchTargetSize);
         }
     }
 
@@ -1359,6 +1467,10 @@ public class StripLayoutHelperManager
 
     public TabDragSource getTabDragSourceForTesting() {
         return mTabDragSource;
+    }
+
+    public void setIsIncognitoForTesting(boolean isIncognito) {
+        mIsIncognito = isIncognito;
     }
 
     /** Vivaldi **/

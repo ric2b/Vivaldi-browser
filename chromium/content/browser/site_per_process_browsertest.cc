@@ -43,6 +43,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/run_until.h"
 #include "base/test/test_future.h"
 #include "base/test/test_timeouts.h"
 #include "base/time/time.h"
@@ -5672,8 +5673,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // not loaded into the parent's SiteInstance.
   std::vector<std::unique_ptr<NavigationEntry>> entries;
   entries.push_back(std::move(restored_entry));
-  Shell* new_shell = Shell::CreateNewWindow(
-      controller.GetBrowserContext(), GURL::EmptyGURL(), nullptr, gfx::Size());
+  Shell* new_shell = Shell::CreateNewWindow(controller.GetBrowserContext(),
+                                            GURL(), nullptr, gfx::Size());
   FrameTreeNode* new_root =
       static_cast<WebContentsImpl*>(new_shell->web_contents())
           ->GetPrimaryFrameTree()
@@ -5780,8 +5781,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // URLs are not loaded into the parent's SiteInstance.
   std::vector<std::unique_ptr<NavigationEntry>> entries;
   entries.push_back(std::move(restored_entry));
-  Shell* new_shell = Shell::CreateNewWindow(
-      controller.GetBrowserContext(), GURL::EmptyGURL(), nullptr, gfx::Size());
+  Shell* new_shell = Shell::CreateNewWindow(controller.GetBrowserContext(),
+                                            GURL(), nullptr, gfx::Size());
   FrameTreeNode* new_root =
       static_cast<WebContentsImpl*>(new_shell->web_contents())
           ->GetPrimaryFrameTree()
@@ -5881,8 +5882,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // are still loaded into the parent's SiteInstance.
   std::vector<std::unique_ptr<NavigationEntry>> entries;
   entries.push_back(std::move(restored_entry));
-  Shell* new_shell = Shell::CreateNewWindow(
-      controller.GetBrowserContext(), GURL::EmptyGURL(), nullptr, gfx::Size());
+  Shell* new_shell = Shell::CreateNewWindow(controller.GetBrowserContext(),
+                                            GURL(), nullptr, gfx::Size());
   FrameTreeNode* new_root =
       static_cast<WebContentsImpl*>(new_shell->web_contents())
           ->GetPrimaryFrameTree()
@@ -12588,20 +12589,12 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   ASSERT_FALSE(frame_connector->IsHidden());
   ASSERT_TRUE(ExecJs(
       shell(), "document.querySelector('object').style.display = 'none';"));
-  while (!frame_connector->IsHidden()) {
-    base::RunLoop run_loop;
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
-    run_loop.Run();
-  }
+  EXPECT_TRUE(
+      base::test::RunUntil([&]() { return frame_connector->IsHidden(); }));
   ASSERT_TRUE(ExecJs(
       shell(), "document.querySelector('object').style.display = 'block';"));
-  while (frame_connector->IsHidden()) {
-    base::RunLoop run_loop;
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
-    run_loop.Run();
-  }
+  EXPECT_TRUE(
+      base::test::RunUntil([&]() { return !frame_connector->IsHidden(); }));
 }
 
 // Pending navigations must be canceled when a frame becomes pending deletion.
@@ -13164,6 +13157,165 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_TRUE(NavigateToURL(
       shell(), embedded_test_server()->GetURL("a.com", "/title1.html")));
   EXPECT_NE(js_process, web_contents()->GetPrimaryMainFrame()->GetProcess());
+}
+
+// Test that cross-site navigations clear user activation.
+IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, UserActivationCrossSite) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b)"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  // It is safe to obtain the root frame tree node here, as it doesn't change.
+  FrameTreeNode* root = web_contents()->GetPrimaryFrameTree().root();
+  FrameTreeNode* child = root->child_at(0);
+
+  // Sanity check that there is no sticky user activation at first.
+  EXPECT_FALSE(child->current_frame_host()->HasStickyUserActivation());
+  EXPECT_EQ(false, EvalJs(child->current_frame_host(),
+                          "navigator.userActivation.hasBeenActive",
+                          EXECUTE_SCRIPT_NO_USER_GESTURE));
+
+  // Load cross-site page into iframe and verify there is still no sticky user
+  // activation.
+  GURL first_http_url(embedded_test_server()->GetURL("d.com", "/title1.html"));
+  EXPECT_TRUE(
+      NavigateToURLFromRendererWithoutUserGesture(child, first_http_url));
+  EXPECT_FALSE(child->current_frame_host()->HasStickyUserActivation());
+  EXPECT_EQ(false, EvalJs(child->current_frame_host(),
+                          "navigator.userActivation.hasBeenActive",
+                          EXECUTE_SCRIPT_NO_USER_GESTURE));
+
+  // Give the child iframe user activation.
+  EXPECT_TRUE(ExecJs(child, "// No-op script"));
+  EXPECT_TRUE(child->current_frame_host()->HasStickyUserActivation());
+  EXPECT_EQ(true, EvalJs(child->current_frame_host(),
+                         "navigator.userActivation.hasBeenActive",
+                         EXECUTE_SCRIPT_NO_USER_GESTURE));
+
+  // Perform another cross-site navigation in the iframe.
+  GURL http_url(embedded_test_server()->GetURL("c.com", "/title1.html"));
+  EXPECT_TRUE(NavigateToURLFromRendererWithoutUserGesture(child, http_url));
+
+  // The cross-site navigation should have cleared the user activation.
+  EXPECT_FALSE(child->current_frame_host()->HasStickyUserActivation());
+  EXPECT_EQ(false, EvalJs(child->current_frame_host(),
+                          "navigator.userActivation.hasBeenActive",
+                          EXECUTE_SCRIPT_NO_USER_GESTURE));
+
+  // Ensure that a top-level navigation cannot happen.
+  EXPECT_TRUE(ExecJs(child->current_frame_host(),
+                     JsReplace("window.open($1, $2)", http_url, "_top"),
+                     EXECUTE_SCRIPT_NO_USER_GESTURE));
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+  EXPECT_NE(http_url, shell()->web_contents()->GetLastCommittedURL());
+}
+
+// Test that same-site cross-origin navigations keep user activation.
+// TODO(crbug.com/40228985): Find a way to reset activation here without
+// breaking sites in practice.
+IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, UserActivationSameSite) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b)"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  // It is safe to obtain the root frame tree node here, as it doesn't change.
+  FrameTreeNode* root = web_contents()->GetPrimaryFrameTree().root();
+  FrameTreeNode* child = root->child_at(0);
+
+  // Sanity check that there is no sticky user activation at first.
+  EXPECT_FALSE(child->current_frame_host()->HasStickyUserActivation());
+  EXPECT_EQ(false, EvalJs(child->current_frame_host(),
+                          "navigator.userActivation.hasBeenActive",
+                          EXECUTE_SCRIPT_NO_USER_GESTURE));
+
+  // Load cross-origin same-site page into iframe and verify there is still no
+  // sticky user activation.
+  GURL first_http_url(
+      embedded_test_server()->GetURL("subdomain.b.com", "/title1.html"));
+  EXPECT_TRUE(
+      NavigateToURLFromRendererWithoutUserGesture(child, first_http_url));
+  EXPECT_FALSE(child->current_frame_host()->HasStickyUserActivation());
+  EXPECT_EQ(false, EvalJs(child->current_frame_host(),
+                          "navigator.userActivation.hasBeenActive",
+                          EXECUTE_SCRIPT_NO_USER_GESTURE));
+
+  // Give the child iframe user activation.
+  EXPECT_TRUE(ExecJs(child, "// No-op script"));
+  EXPECT_TRUE(child->current_frame_host()->HasStickyUserActivation());
+  EXPECT_EQ(true, EvalJs(child->current_frame_host(),
+                         "navigator.userActivation.hasBeenActive",
+                         EXECUTE_SCRIPT_NO_USER_GESTURE));
+
+  // Perform another same-site navigation in the iframe.
+  GURL http_url(embedded_test_server()->GetURL("b.com", "/title1.html"));
+  EXPECT_TRUE(NavigateToURLFromRendererWithoutUserGesture(child, http_url));
+
+  // The cross-origin same-site navigation should keep the sticky user
+  // activation from the previous page.
+  EXPECT_TRUE(child->current_frame_host()->HasStickyUserActivation());
+  EXPECT_EQ(true, EvalJs(child->current_frame_host(),
+                         "navigator.userActivation.hasBeenActive",
+                         EXECUTE_SCRIPT_NO_USER_GESTURE));
+
+  // Ensure that top-level navigations can still happen.
+  EXPECT_TRUE(ExecJs(child->current_frame_host(),
+                     JsReplace("window.open($1, $2)", http_url, "_top"),
+                     EXECUTE_SCRIPT_NO_USER_GESTURE));
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+  EXPECT_EQ(http_url, shell()->web_contents()->GetLastCommittedURL());
+}
+
+// Test that same-origin navigations keep user activation.
+// TODO(crbug.com/40228985): Find a way to reset activation here without
+// breaking sites in practice.
+IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, UserActivationSameOrigin) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b)"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  // It is safe to obtain the root frame tree node here, as it doesn't change.
+  FrameTreeNode* root = web_contents()->GetPrimaryFrameTree().root();
+  FrameTreeNode* child = root->child_at(0);
+
+  // Sanity check that there is no sticky user activation at first.
+  EXPECT_FALSE(child->current_frame_host()->HasStickyUserActivation());
+  EXPECT_EQ(false, EvalJs(child->current_frame_host(),
+                          "navigator.userActivation.hasBeenActive",
+                          EXECUTE_SCRIPT_NO_USER_GESTURE));
+
+  // Load cross-site page into iframe and verify there is still no sticky user
+  // activation.
+  GURL first_http_url(embedded_test_server()->GetURL("c.com", "/title1.html"));
+  EXPECT_TRUE(NavigateIframeToURL(web_contents(), "child-0", first_http_url));
+  EXPECT_FALSE(child->current_frame_host()->HasStickyUserActivation());
+  EXPECT_EQ(false, EvalJs(child->current_frame_host(),
+                          "navigator.userActivation.hasBeenActive",
+                          EXECUTE_SCRIPT_NO_USER_GESTURE));
+
+  // Give the child iframe user activation.
+  EXPECT_TRUE(ExecJs(child, "// No-op script"));
+  EXPECT_TRUE(child->current_frame_host()->HasStickyUserActivation());
+  EXPECT_EQ(true, EvalJs(child->current_frame_host(),
+                         "navigator.userActivation.hasBeenActive",
+                         EXECUTE_SCRIPT_NO_USER_GESTURE));
+
+  // Load same-origin page into iframe.
+  GURL http_url(embedded_test_server()->GetURL("c.com", "/title2.html"));
+  EXPECT_TRUE(NavigateIframeToURL(web_contents(), "child-0", http_url));
+
+  // The same-origin navigation should keep the sticky user activation from the
+  // previous page.
+  EXPECT_TRUE(child->current_frame_host()->HasStickyUserActivation());
+  EXPECT_EQ(true, EvalJs(child->current_frame_host(),
+                         "navigator.userActivation.hasBeenActive",
+                         EXECUTE_SCRIPT_NO_USER_GESTURE));
+
+  // Ensure that top-level navigations can still happen.
+  EXPECT_TRUE(ExecJs(child->current_frame_host(),
+                     JsReplace("window.open($1, $2)", http_url, "_top"),
+                     EXECUTE_SCRIPT_NO_USER_GESTURE));
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+  EXPECT_EQ(http_url, shell()->web_contents()->GetLastCommittedURL());
 }
 
 // Tests that verify the feature disabling process reuse.

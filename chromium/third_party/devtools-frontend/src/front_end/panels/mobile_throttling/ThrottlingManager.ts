@@ -5,6 +5,7 @@
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as UI from '../../ui/legacy/legacy.js';
@@ -107,9 +108,10 @@ export class ThrottlingManager {
     this.cpuThrottlingManager = SDK.CPUThrottlingManager.CPUThrottlingManager.instance();
     this.cpuThrottlingControls = new Set();
     this.cpuThrottlingRates = ThrottlingPresets.cpuThrottlingPresets;
-    this.customNetworkConditionsSetting = Common.Settings.Settings.instance().moduleSetting('customNetworkConditions');
+    this.customNetworkConditionsSetting =
+        Common.Settings.Settings.instance().moduleSetting('custom-network-conditions');
     this.currentNetworkThrottlingConditionsSetting = Common.Settings.Settings.instance().createSetting(
-        'preferredNetworkCondition', SDK.NetworkManager.NoThrottlingConditions);
+        'preferred-network-condition', SDK.NetworkManager.NoThrottlingConditions);
 
     this.currentNetworkThrottlingConditionsSetting.setSerializer(new SDK.NetworkManager.ConditionsSerializer());
 
@@ -159,12 +161,18 @@ export class ThrottlingManager {
           const title = typeof conditions.title === 'function' ? conditions.title() : conditions.title;
           const option = new Option(title, title);
           UI.ARIAUtils.setLabel(option, i18nString(UIStrings.sS, {PH1: group.title, PH2: title}));
+          option.setAttribute(
+              'jslog',
+              `${VisualLogging.item(Platform.StringUtilities.toKebabCase(conditions.i18nTitleKey || title)).track({
+                click: true,
+              })}`);
           groupElement.appendChild(option);
           options.push(conditions);
         }
         if (i === groups.length - 1) {
           const option = new Option(i18nString(UIStrings.add), i18nString(UIStrings.add));
           UI.ARIAUtils.setLabel(option, i18nString(UIStrings.addS, {PH1: group.title}));
+          option.setAttribute('jslog', `${VisualLogging.action('add').track({click: true})}`);
           groupElement.appendChild(option);
           options.push(null);
         }
@@ -193,8 +201,7 @@ export class ThrottlingManager {
   createOfflineToolbarCheckbox(): UI.Toolbar.ToolbarCheckbox {
     const checkbox = new UI.Toolbar.ToolbarCheckbox(
         i18nString(UIStrings.offline), i18nString(UIStrings.forceDisconnectedFromNetwork), forceOffline.bind(this));
-    checkbox.element.setAttribute(
-        'jslog', `${VisualLogging.toggle().track({click: true}).context('disconnect-from-network')}`);
+    checkbox.element.setAttribute('jslog', `${VisualLogging.toggle('disconnect-from-network').track({click: true})}`);
     SDK.NetworkManager.MultitargetNetworkManager.instance().addEventListener(
         SDK.NetworkManager.MultitargetNetworkManager.Events.ConditionsChanged, networkConditionsChanged);
     checkbox.setChecked(SDK.NetworkManager.MultitargetNetworkManager.instance().isOffline());
@@ -220,7 +227,7 @@ export class ThrottlingManager {
   }
 
   createMobileThrottlingButton(): UI.Toolbar.ToolbarMenuButton {
-    const button = new UI.Toolbar.ToolbarMenuButton(appendItems, undefined, 'mobileThrottling');
+    const button = new UI.Toolbar.ToolbarMenuButton(appendItems, undefined, 'mobile-throttling');
     button.setTitle(i18nString(UIStrings.throttling));
     button.setGlyph('');
     button.turnIntoSelect();
@@ -242,8 +249,8 @@ export class ThrottlingManager {
           continue;
         }
         contextMenu.defaultSection().appendCheckboxItem(
-            conditions.title, selector.optionSelected.bind(selector, conditions as Conditions), selectedIndex === index,
-            undefined, undefined, undefined, conditions.jslogContext);
+            conditions.title, selector.optionSelected.bind(selector, conditions as Conditions),
+            {checked: selectedIndex === index, jslogContext: conditions.jslogContext});
       }
     }
 
@@ -357,7 +364,7 @@ export class ThrottlingManager {
       };
 
       inputElement.value = `${defaultValue}`;
-      inputElement.oninput = (): void => setHardwareConcurrency(Number(inputElement.value));
+      inputElement.oninput = () => setHardwareConcurrency(Number(inputElement.value));
       toggle.inputElement.disabled = false;
       toggle.inputElement.addEventListener('change', () => {
         this.#hardwareConcurrencyOverrideEnabled = toggle.checked();

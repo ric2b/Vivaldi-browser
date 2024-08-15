@@ -32,6 +32,11 @@ bool RenderWidgetHostDelegate::HandleKeyboardEvent(
   return false;
 }
 
+bool RenderWidgetHostDelegate::ShouldIgnoreWebInputEvents(
+    const blink::WebInputEvent& event) {
+  return false;
+}
+
 bool RenderWidgetHostDelegate::ShouldIgnoreInputEvents() {
   return false;
 }
@@ -90,6 +95,11 @@ ui::WindowShowState RenderWidgetHostDelegate::GetWindowShowState() {
   return ui::WindowShowState::SHOW_STATE_DEFAULT;
 }
 
+DevicePostureProviderImpl*
+RenderWidgetHostDelegate::GetDevicePostureProvider() {
+  return nullptr;
+}
+
 bool RenderWidgetHostDelegate::GetResizable() {
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   return false;
@@ -102,12 +112,12 @@ gfx::Rect RenderWidgetHostDelegate::GetWindowsControlsOverlayRect() const {
   return gfx::Rect();
 }
 
-bool RenderWidgetHostDelegate::HasMouseLock(
+bool RenderWidgetHostDelegate::HasPointerLock(
     RenderWidgetHostImpl* render_widget_host) {
   return false;
 }
 
-RenderWidgetHostImpl* RenderWidgetHostDelegate::GetMouseLockWidget() {
+RenderWidgetHostImpl* RenderWidgetHostDelegate::GetPointerLockWidget() {
   return nullptr;
 }
 
@@ -153,6 +163,10 @@ bool RenderWidgetHostDelegate::IsPortal() {
 
 int RenderWidgetHostDelegate::GetVirtualKeyboardResizeHeight() {
   return 0;
+}
+
+bool RenderWidgetHostDelegate::ShouldDoLearning() {
+  return true;
 }
 
 }  // namespace content

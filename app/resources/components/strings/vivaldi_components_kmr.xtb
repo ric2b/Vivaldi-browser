@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="kmr">
+<translation id="3830627370375585318">Di nav sazkariyên dîwarê parastinê an jî vîruskujê de
+          mafê bide Vivaldiyê da ku bigihîje torê.</translation>
+<translation id="4200102020577305737">Biçe
+          Rêza Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Sazkariyên LAN
+          û "Ji bo LAN a xwe rajekara nûnerê bi kar bîne" hilnebijêre.</translation>
+<translation id="4932161901409251843">Biçe
+           Rêza Vivaldi&gt;&gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          û piştrast bike, ka pevsaziya te wekî "nûner tune" an jî "rasterast" e</translation>
+<translation id="5248344925342018662">Tu rûpelekê ewledar a Vivaldiyê dibînî</translation>
+<translation id="7023871570427738255">Biçe
+          Rêza Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          Û "<ph name="NO_PREFETCH_DESCRIPTION" />." hilnebijêre
+          Heke ev pirsgirêk çareser nebû, em pêşniyaz dikin ku tu vê vebijêrkê dîsa hilbijêrî
+           ji bo performansa çêtir.</translation>
+<translation id="7496505986576158197">Vivaldi bi saya <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> a projeya çavkaniya vekirî û nermalavên çavkaniya vekirî<ph name="BEGIN_LINK_OSS" />yên din<ph name="END_LINK_OSS" /> ve hatiye çêkirin.</translation>
+<translation id="8187289872471304532">Biçe
+          Sepan &gt; Vebijêrkên pergalê &gt; Tor &gt; Pêşketî &gt; Nûner
+           û nûnerên ku hatine hilbijartin ji holê rake.</translation>
+</translationbundle>

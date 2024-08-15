@@ -39,7 +39,7 @@ public:
         // RasterPathAtlas is supported
         kRaster  = 0b010,
     };
-    SK_DECL_BITMASK_OPS_FRIENDS(PathAtlasFlags);
+    SK_DECL_BITMASK_OPS_FRIENDS(PathAtlasFlags)
     using PathAtlasFlagsBitMask = SkEnumBitMask<PathAtlasFlags>;
 
     // Query the supported path atlas algorithms based on device capabilities.
@@ -60,7 +60,7 @@ public:
     // Creates a new transient atlas handler that uses compute shaders to rasterize coverage masks
     // for path rendering. This method returns nullptr if compute shaders are not supported by the
     // owning Recorder's context.
-    std::unique_ptr<ComputePathAtlas> createComputePathAtlas() const;
+    std::unique_ptr<ComputePathAtlas> createComputePathAtlas(Recorder* recorder) const;
 
     // Gets the atlas handler that uses the CPU raster pipeline to create coverage masks
     // for path rendering.
@@ -74,7 +74,10 @@ public:
     void clearTexturePool();
 
     // Push any pending uploads to atlases onto the draw context
-    void recordUploads(DrawContext*, Recorder*);
+    void recordUploads(DrawContext*);
+
+    // Handle any post-flush work (garbage collection, e.g.)
+    void postFlush();
 
 private:
     std::unique_ptr<TextAtlasManager> fTextAtlasManager;

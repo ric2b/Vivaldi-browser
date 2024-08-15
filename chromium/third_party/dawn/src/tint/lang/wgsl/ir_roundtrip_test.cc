@@ -76,7 +76,7 @@ class IRToProgramRoundtripTest : public testing::Test {
         result.ir_pre_raise = core::ir::Disassemble(ir_module.Get());
 
         if (auto res = tint::wgsl::writer::Raise(ir_module.Get()); res != Success) {
-            result.err = res.Failure().reason.str();
+            result.err = res.Failure().reason.Str();
             return result;
         }
 
@@ -86,7 +86,7 @@ class IRToProgramRoundtripTest : public testing::Test {
         program_options.allowed_features = AllowedFeatures::Everything();
         auto output_program = wgsl::writer::IRToProgram(ir_module.Get(), program_options);
         if (!output_program.IsValid()) {
-            result.err = output_program.Diagnostics().str();
+            result.err = output_program.Diagnostics().Str();
             result.ast = Program::printer(output_program);
             return result;
         }
@@ -256,7 +256,7 @@ enable chromium_internal_dual_source_blending;
 
 struct S {
   a : i32,
-  @location(0u) @index(0u)
+  @location(0u) @blend_src(0u)
   b : u32,
   c : f32,
 }

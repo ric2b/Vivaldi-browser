@@ -58,7 +58,7 @@ void FakeLocalFrameHost::VisibilityChanged(
     mojom::blink::FrameVisibility visibility) {}
 
 void FakeLocalFrameHost::DidChangeThemeColor(
-    absl::optional<::SkColor> theme_color) {}
+    std::optional<::SkColor> theme_color) {}
 
 void FakeLocalFrameHost::DidChangeBackgroundColor(
     const SkColor4f& background_color,
@@ -106,7 +106,7 @@ void FakeLocalFrameHost::DispatchLoad() {}
 void FakeLocalFrameHost::GoToEntryAtOffset(
     int32_t offset,
     bool has_user_gesture,
-    absl::optional<blink::scheduler::TaskAttributionId>) {}
+    std::optional<blink::scheduler::TaskAttributionId>) {}
 
 void FakeLocalFrameHost::UpdateTitle(
     const WTF::String& title,
@@ -206,7 +206,7 @@ void FakeLocalFrameHost::DidChangeFrameOwnerProperties(
     mojom::blink::FrameOwnerPropertiesPtr frame_owner_properties) {}
 
 void FakeLocalFrameHost::DidChangeOpener(
-    const absl::optional<LocalFrameToken>& opener_frame) {}
+    const std::optional<LocalFrameToken>& opener_frame) {}
 
 void FakeLocalFrameHost::DidChangeIframeAttributes(
     const blink::FrameToken& child_frame_token,
@@ -274,6 +274,12 @@ void FakeLocalFrameHost::DisableUntrustedNetworkInFencedFrame(
   std::move(callback).Run();
 }
 
+void FakeLocalFrameHost::ExemptUrlFromNetworkRevocationForTesting(
+    const blink::KURL& exempted_url,
+    ExemptUrlFromNetworkRevocationForTestingCallback callback) {
+  std::move(callback).Run();
+}
+
 void FakeLocalFrameHost::SendLegacyTechEvent(
     const WTF::String& type,
     mojom::blink::LegacyTechEventCodeLocationPtr code_location) {}
@@ -293,6 +299,12 @@ void FakeLocalFrameHost::CreateFencedFrame(
                   "unit tests, so this path should not be hit";
 }
 
+void FakeLocalFrameHost::ForwardFencedFrameEventToEmbedder(
+    const WTF::String& event_type) {
+  NOTREACHED() << "ForwardFencedFrameEventToEmbedder is tested above the unit "
+                  "test layer";
+}
+
 void FakeLocalFrameHost::StartDragging(
     const blink::WebDragData& drag_data,
     blink::DragOperationsMask operations_allowed,
@@ -300,5 +312,9 @@ void FakeLocalFrameHost::StartDragging(
     const gfx::Vector2d& cursor_offset_in_dip,
     const gfx::Rect& drag_obj_rect_in_dip,
     mojom::blink::DragEventSourceInfoPtr event_info) {}
+
+void FakeLocalFrameHost::IssueKeepAliveHandle(
+    mojo::PendingReceiver<mojom::blink::NavigationStateKeepAliveHandle>
+        receiver) {}
 
 }  // namespace blink

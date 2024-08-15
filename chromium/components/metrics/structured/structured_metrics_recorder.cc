@@ -22,12 +22,13 @@
 #include "components/metrics/structured/structured_metrics_features.h"
 #include "components/metrics/structured/structured_metrics_validator.h"
 #include "third_party/metrics_proto/chrome_user_metrics_extension.pb.h"
+#include "third_party/metrics_proto/structured_data.pb.h"
 
 namespace metrics::structured {
 
 StructuredMetricsRecorder::StructuredMetricsRecorder(
     std::unique_ptr<KeyDataProvider> key_data_provider,
-    std::unique_ptr<EventStorage> event_storage)
+    std::unique_ptr<EventStorage<StructuredEventProto>> event_storage)
     : key_data_provider_(std::move(key_data_provider)),
       event_storage_(std::move(event_storage)) {
   CHECK(key_data_provider_);
@@ -56,6 +57,42 @@ void StructuredMetricsRecorder::DisableRecording() {
   recording_enabled_ = false;
   disallowed_projects_.clear();
 }
+void StructuredMetricsRecorder::ProvideUmaEventMetrics(
+    ChromeUserMetricsExtension& uma_proto) {
+  // no-op
+}
+
+void StructuredMetricsRecorder::ProvideEventMetrics(
+    ChromeUserMetricsExtension& uma_proto) {
+  if (!CanProvideMetrics()) {
+    return;
+  }
+
+  // Get the events from event storage.
+  auto events = event_storage_->TakeEvents();
+
+  if (events.size() == 0) {
+    return;
+  }
+
+  StructuredDataProto& structured_data = *uma_proto.mutable_structured_data();
+  *structured_data.mutable_events() = std::move(events);
+
+  LogUploadSizeBytes(structured_data.ByteSizeLong());
+  LogNumEventsInUpload(structured_data.events_size());
+
+  // Applies custom metadata providers.
+  Recorder::GetInstance()->OnProvideIndependentMetrics(&uma_proto);
+}
+
+bool StructuredMetricsRecorder::CanProvideMetrics() {
+  // We can provide metrics once device or profile keys have been loaded.
+  return recording_enabled() && (IsInitialized() || IsProfileInitialized());
+}
+
+bool StructuredMetricsRecorder::HasMetricsToProvide() {
+  return event_storage()->HasEvents();
+}
 
 void StructuredMetricsRecorder::OnKeyReady() {
   DCHECK(base::CurrentUIThread::IsSet());
@@ -64,11 +101,9 @@ void StructuredMetricsRecorder::OnKeyReady() {
   // is initialized.
   if (!init_state_.Has(State::kKeyDataInitialized)) {
     init_state_.Put(State::kKeyDataInitialized);
-  }
-
-  // If kKeyDataInitialized, then this is the second time this callback is being
-  // called, which must be the profile keys.
-  else if (init_state_.Has(State::kProfileAdded)) {
+  } else {
+    // If kKeyDataInitialized, then this is the second time this callback is
+    // being called, which must be the profile keys.
     init_state_.Put(State::kProfileKeyDataInitialized);
   }
 
@@ -88,61 +123,6 @@ void StructuredMetricsRecorder::AddEventsObserver(Observer* watcher) {
 
 void StructuredMetricsRecorder::RemoveEventsObserver(Observer* watcher) {
   watchers_.RemoveObserver(watcher);
-}
-
-void StructuredMetricsRecorder::ProvideUmaEventMetrics(
-    ChromeUserMetricsExtension& uma_proto) {
-  // no-op
-}
-
-void StructuredMetricsRecorder::ProvideEventMetrics(
-    ChromeUserMetricsExtension& uma_proto) {
-  if (!CanProvideMetrics()) {
-    return;
-  }
-
-  // Get the events from event storage.
-  event_storage_->MoveEvents(uma_proto);
-
-  const auto& structured_data = uma_proto.structured_data();
-  LogUploadSizeBytes(structured_data.ByteSizeLong());
-  LogNumEventsInUpload(structured_data.events_size());
-
-  // Applies custom metadata providers.
-  Recorder::GetInstance()->OnProvideIndependentMetrics(&uma_proto);
-}
-
-bool StructuredMetricsRecorder::IsInitialized() {
-  return init_state_.Has(State::kKeyDataInitialized);
-}
-
-bool StructuredMetricsRecorder::IsProfileInitialized() {
-  return init_state_.Has(State::kProfileKeyDataInitialized);
-}
-
-void StructuredMetricsRecorder::Purge() {
-  CHECK(event_storage_);
-  event_storage_->Purge();
-  key_data_provider_->Purge();
-
-  unhashed_events_.clear();
-  unhashed_profile_events_.clear();
-}
-
-void StructuredMetricsRecorder::OnProfileAdded(
-    const base::FilePath& profile_path) {
-  DCHECK(base::CurrentUIThread::IsSet());
-
-  // We do not handle multiprofile, instead initializing with the state stored
-  // in the first logged-in user's cryptohome. So if a second profile is added
-  // we should ignore it.
-  if (init_state_.Has(State::kProfileAdded)) {
-    return;
-  }
-  key_data_provider_->OnProfileAdded(profile_path);
-  init_state_.Put(State::kProfileAdded);
-
-  event_storage_->OnProfileAdded(profile_path);
 }
 
 void StructuredMetricsRecorder::OnEventRecord(const Event& event) {
@@ -167,18 +147,20 @@ void StructuredMetricsRecorder::OnEventRecord(const Event& event) {
   }
 
   RecordEvent(event);
+  test_callback_on_record_.Run();
 }
 
 bool StructuredMetricsRecorder::HasState(State state) const {
   return init_state_.Has(state);
 }
 
-void StructuredMetricsRecorder::SetOnReadyToRecord(base::OnceClosure callback) {
-  on_ready_callback_ = std::move(callback);
+void StructuredMetricsRecorder::Purge() {
+  CHECK(event_storage_);
+  event_storage_->Purge();
+  key_data_provider_->Purge();
 
-  if (IsInitialized()) {
-    std::move(on_ready_callback_).Run();
-  }
+  unhashed_events_.clear();
+  unhashed_profile_events_.clear();
 }
 
 void StructuredMetricsRecorder::RecordEventBeforeInitialization(
@@ -247,7 +229,7 @@ void StructuredMetricsRecorder::RecordEvent(const Event& event) {
   NotifyEventRecorded(event_proto);
 
   // Add new event to storage.
-  event_storage_->AddEvent(std::move(event_proto));
+  event_storage_->AddEvent(event_proto);
 
   test_callback_on_record_.Run();
 }
@@ -336,8 +318,11 @@ void StructuredMetricsRecorder::AddMetricsToProto(
       case Event::MetricType::kDouble:
         metric_proto->set_value_double(value.GetDouble());
         break;
-      // Not supported yet.
+      // Represents an enum.
       case Event::MetricType::kInt:
+        metric_proto->set_value_int64(value.GetInt());
+        break;
+      // Not supported yet.
       case Event::MetricType::kBoolean:
         break;
     }
@@ -348,14 +333,14 @@ void StructuredMetricsRecorder::HashUnhashedEventsAndPersist() {
   if (IsInitialized()) {
     LogNumEventsRecordedBeforeInit(unhashed_events_.size());
     while (!unhashed_events_.empty()) {
-      RecordEvent(unhashed_events_.front());
+      OnEventRecord(unhashed_events_.front());
       unhashed_events_.pop_front();
     }
   }
   if (IsProfileInitialized()) {
     LogNumEventsRecordedBeforeInit(unhashed_profile_events_.size());
     while (!unhashed_profile_events_.empty()) {
-      RecordEvent(unhashed_profile_events_.front());
+      OnEventRecord(unhashed_profile_events_.front());
       unhashed_profile_events_.pop_front();
     }
   }
@@ -383,18 +368,16 @@ void StructuredMetricsRecorder::CacheDisallowedProjectsSet() {
   }
 }
 
-void StructuredMetricsRecorder::AddDisallowedProjectForTest(
-    uint64_t project_name_hash) {
-  disallowed_projects_.insert(project_name_hash);
-}
-
 bool StructuredMetricsRecorder::IsKeyDataInitialized() {
   return key_data_provider_->IsReady();
 }
 
-void StructuredMetricsRecorder::SetEventRecordCallbackForTest(
-    base::RepeatingClosure callback) {
-  test_callback_on_record_ = std::move(callback);
+bool StructuredMetricsRecorder::IsInitialized() {
+  return init_state_.Has(State::kKeyDataInitialized);
+}
+
+bool StructuredMetricsRecorder::IsProfileInitialized() {
+  return init_state_.Has(State::kProfileKeyDataInitialized);
 }
 
 bool StructuredMetricsRecorder::CanForceRecord(const Event& event) const {
@@ -403,26 +386,6 @@ bool StructuredMetricsRecorder::CanForceRecord(const Event& event) const {
     return false;
   }
   return validators->second->can_force_record();
-}
-
-std::optional<std::pair<const ProjectValidator*, const EventValidator*>>
-StructuredMetricsRecorder::GetEventValidators(const Event& event) const {
-  auto maybe_project_validator =
-      validator::Validators::Get()->GetProjectValidator(event.project_name());
-
-  DCHECK(maybe_project_validator.has_value());
-  if (!maybe_project_validator.has_value()) {
-    return {};
-  }
-  const auto* project_validator = maybe_project_validator.value();
-  const auto maybe_event_validator =
-      project_validator->GetEventValidator(event.event_name());
-  DCHECK(maybe_event_validator.has_value());
-  if (!maybe_event_validator.has_value()) {
-    return {};
-  }
-  const auto* event_validator = maybe_event_validator.value();
-  return std::make_pair(project_validator, event_validator);
 }
 
 bool StructuredMetricsRecorder::IsDeviceEvent(const Event& event) const {
@@ -453,8 +416,41 @@ bool StructuredMetricsRecorder::IsProfileEvent(const Event& event) const {
          project_validator->id_scope() == IdScope::kPerProfile;
 }
 
-bool StructuredMetricsRecorder::CanProvideMetrics() {
-  return recording_enabled() && (IsInitialized() || IsProfileInitialized());
+std::optional<std::pair<const ProjectValidator*, const EventValidator*>>
+StructuredMetricsRecorder::GetEventValidators(const Event& event) const {
+  const auto* project_validator =
+      validator::Validators::Get()->GetProjectValidator(event.project_name());
+
+  if (!project_validator) {
+    return std::nullopt;
+  }
+
+  const auto* event_validator =
+      project_validator->GetEventValidator(event.event_name());
+
+  if (!event_validator) {
+    return std::nullopt;
+  }
+
+  return std::make_pair(project_validator, event_validator);
+}
+
+void StructuredMetricsRecorder::SetOnReadyToRecord(base::OnceClosure callback) {
+  on_ready_callback_ = std::move(callback);
+
+  if (IsInitialized()) {
+    std::move(on_ready_callback_).Run();
+  }
+}
+
+void StructuredMetricsRecorder::SetEventRecordCallbackForTest(
+    base::RepeatingClosure callback) {
+  test_callback_on_record_ = std::move(callback);
+}
+
+void StructuredMetricsRecorder::AddDisallowedProjectForTest(
+    uint64_t project_name_hash) {
+  disallowed_projects_.insert(project_name_hash);
 }
 
 void StructuredMetricsRecorder::NotifyEventRecorded(

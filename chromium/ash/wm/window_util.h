@@ -15,7 +15,10 @@
 #include "base/memory/raw_ptr.h"
 #include "chromeos/ui/base/window_state_type.h"
 #include "ui/aura/window.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/wm/core/window_util.h"
+
+class PrefRegistrySimple;
 
 namespace gfx {
 class Point;
@@ -32,6 +35,18 @@ class View;
 }  // namespace views
 
 namespace ash::window_util {
+
+ASH_EXPORT int GetMiniWindowRoundedCornerRadius();
+
+// Returns the rounded corners for a mini window representation of
+// `source_window`. It takes into account if the `source_window`
+// belongs to a snap group or not.
+// If `include_header_rounding` is false, function returns the radii of only
+// bottom two corners of mini window.
+ASH_EXPORT gfx::RoundedCornersF GetMiniWindowRoundedCorners(
+    const aura::Window* source_window,
+    bool include_header_rounding,
+    std::optional<float> scale = std::nullopt);
 
 // See ui/wm/core/window_util.h for ActivateWindow(), DeactivateWindow(),
 // IsActiveWindow() and CanActivateWindow().
@@ -52,7 +67,7 @@ ASH_EXPORT aura::Window* GetTopMostWindow(const aura::Window::Windows& windows);
 // window tree. Windows which are descendants of a different root window will be
 // returned in an arbitrary order relative to each-other.
 ASH_EXPORT std::vector<aura::Window*> SortWindowsBottomToTop(
-    std::set<aura::Window*> window_set);
+    std::set<raw_ptr<aura::Window, SetExperimental>> window_set);
 
 // Returns the window with capture, null if no window currently has capture.
 ASH_EXPORT aura::Window* GetCaptureWindow();
@@ -205,20 +220,27 @@ ASH_EXPORT bool ShouldRoundThumbnailWindow(
 // `chromeos::kDefaultSnapRatio` if the target snap ratio doesn't exist.
 float GetSnapRatioForWindow(aura::Window* window);
 
+// Registers the per-profile preferences for whether faster splitscreen setup is
+// enabled.
+void RegisterProfilePrefs(PrefRegistrySimple* registry);
+
 // Returns true if either `kFasterSplitScreenSetup` or `kSnapGroup` is enabled.
 // When this is true, snapping one window will automatically start
 // SplitViewOverviewSession.
 bool IsFasterSplitScreenOrSnapGroupEnabledInClamshell();
 
-// Returns the opposite snap type of a snapped `window`. This will be
-// `kPrimarySnapped` if `window` is `kSecondarySnapped`, or `kSecondarySnapped`
-// if `window` is `kPrimarySnapped`.
-chromeos::WindowStateType GetOppositeSnapType(aura::Window* window);
+// Returns true if `SplitViewOverviewSession` is created through faster split
+// screen setup, i.e. partial overview is started on the other side of the
+// screen when `window` is snapped.
+bool IsInFasterSplitScreenSetupSession(const aura::Window* window);
 
-// Decides whether to start `SplitViewOverviewSession` for `window`, if it
-// wasn't already active, or end Overview if it was.
-void MaybeStartSplitViewOverview(aura::Window* window,
-                                 WindowSnapActionSource snap_action_source);
+// Returns true if overview is in session in clamshell mode and any overview
+// grid is in faster splitview. This is a specific mode during which we don't
+// show the desk bar or save desk buttons.
+bool IsInFasterSplitScreenSetupSession();
+
+// Returns the target bounds of `window` in screen coordinates.
+ASH_EXPORT gfx::Rect GetTargetScreenBounds(aura::Window* window);
 
 }  // namespace ash::window_util
 

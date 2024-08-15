@@ -5,6 +5,9 @@
 #import "ios/chrome/browser/ui/ntp/feed_top_section/feed_top_section_coordinator.h"
 
 #import "base/feature_list.h"
+#import "base/metrics/histogram_functions.h"
+#import "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "components/sync/base/features.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_client_id.h"
@@ -15,6 +18,7 @@
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
@@ -26,13 +30,20 @@
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
 #import "ios/chrome/browser/ui/ntp/feed_top_section/feed_top_section_mediator.h"
 #import "ios/chrome/browser/ui/ntp/feed_top_section/feed_top_section_view_controller.h"
+#import "ios/chrome/browser/ui/ntp/feed_top_section/notifications_promo_view_constants.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_utils.h"
-#import "ios/chrome/browser/ui/push_notification/notifications_confirmation_presenter.h"
+#import "ios/chrome/browser/ui/push_notification/notifications_opt_in_alert_coordinator.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
-@interface FeedTopSectionCoordinator () <SigninPresenter>
+using base::RecordAction;
+using base::UmaHistogramEnumeration;
+using base::UserMetricsAction;
+
+@interface FeedTopSectionCoordinator () <
+    SigninPresenter,
+    NotificationsOptInAlertCoordinatorDelegate>
 
 @property(nonatomic, strong) FeedTopSectionMediator* feedTopSectionMediator;
 @property(nonatomic, strong)
@@ -47,7 +58,8 @@
 @property(nonatomic, assign) BOOL isSignInPromoEnabled;
 
 // Alert Coordinator used to display the notifications system prompt.
-@property(nonatomic, strong) AlertCoordinator* alertCoordinator;
+@property(nonatomic, strong)
+    NotificationsOptInAlertCoordinator* optInAlertCoordinator;
 
 @end
 
@@ -108,8 +120,7 @@
         self.signinPromoMediator;
   }
 
-  self.feedTopSectionMediator.messagePresenter = self;
-  self.feedTopSectionMediator.notificationsPresenter = self;
+  self.feedTopSectionMediator.presenter = self;
   self.feedTopSectionMediator.NTPDelegate = self.NTPDelegate;
   self.feedTopSectionViewController.delegate = self.feedTopSectionMediator;
   self.feedTopSectionViewController.feedTopSectionMutator =
@@ -169,73 +180,68 @@
 #pragma mark - NotificationsAlertPresenter
 
 - (void)presentPushNotificationPermissionAlert {
-  NSString* settingURL = UIApplicationOpenSettingsURLString;
-  if (@available(iOS 15.4, *)) {
-    settingURL = UIApplicationOpenNotificationSettingsURLString;
-  }
-  NSString* alertTitle = l10n_util::GetNSString(
-      IDS_IOS_CONTENT_NOTIFICATIONS_SETTINGS_ALERT_TITLE);
-  NSString* alertMessage = l10n_util::GetNSString(
+  [_optInAlertCoordinator stop];
+  _optInAlertCoordinator = [[NotificationsOptInAlertCoordinator alloc]
+      initWithBaseViewController:self.viewController
+                         browser:self.browser];
+  _optInAlertCoordinator.clientIds = std::vector{
+      PushNotificationClientId::kContent, PushNotificationClientId::kSports};
+  _optInAlertCoordinator.alertMessage = l10n_util::GetNSString(
       IDS_IOS_CONTENT_NOTIFICATIONS_SETTINGS_ALERT_MESSAGE);
-  NSString* cancelTitle = l10n_util::GetNSString(
-      IDS_IOS_CONTENT_NOTIFICATIONS_PERMISSION_REDIRECT_ALERT_CANCEL);
-  NSString* settingsTitle = l10n_util::GetNSString(
-      IDS_IOS_CONTENT_NOTIFICATIONS_PERMISSION_REDIRECT_ALERT_REDIRECT);
-
-  __weak FeedTopSectionCoordinator* weakSelf = self;
-  [_alertCoordinator stop];
-  _alertCoordinator =
-      [[AlertCoordinator alloc] initWithBaseViewController:_viewController
-                                                   browser:self.browser
-                                                     title:alertTitle
-                                                   message:alertMessage];
-  [_alertCoordinator addItemWithTitle:cancelTitle
-                               action:^{
-                                 [weakSelf dimissAlertCoordinator];
-                               }
-                                style:UIAlertActionStyleCancel];
-  [_alertCoordinator
-      addItemWithTitle:settingsTitle
-                action:^{
-                  [[UIApplication sharedApplication]
-                                openURL:[NSURL URLWithString:settingURL]
-                                options:{}
-                      completionHandler:nil];
-                  [weakSelf dimissAlertCoordinator];
-                }
-                 style:UIAlertActionStyleDefault];
-  [_alertCoordinator start];
+  _optInAlertCoordinator.confirmationMessage =
+      l10n_util::GetNSString(IDS_IOS_CONTENT_NOTIFICATION_SNACKBAR_TITLE);
+  _optInAlertCoordinator.delegate = self;
+  [_optInAlertCoordinator start];
 }
 
-#pragma mark - NotificationsConfirmationPresenter
+#pragma mark - NotificationsOptInAlertCoordinatorDelegate
 
-- (void)presentNotificationsConfirmationMessage {
-  id<SnackbarCommands> snackbarHandler = HandlerForProtocol(
-      self.browser->GetCommandDispatcher(), SnackbarCommands);
-  __weak __typeof(self) weakSelf = self;
-  [snackbarHandler
-      showSnackbarWithMessage:l10n_util::GetNSString(
-                                  IDS_IOS_CONTENT_NOTIFICATION_SNACKBAR_TITLE)
-                   buttonText:
-                       l10n_util::GetNSString(
-                           IDS_IOS_CONTENT_NOTIFICATION_SNACKBAR_ACTION_MANAGE)
-                messageAction:^{
-                  [weakSelf showNotificationSettings];
-                }
-             completionAction:nil];
+- (void)notificationsOptInAlertCoordinator:
+            (NotificationsOptInAlertCoordinator*)alertCoordinator
+                                    result:
+                                        (NotificationsOptInAlertResult)result {
+  CHECK_EQ(_optInAlertCoordinator, alertCoordinator);
+  std::vector<PushNotificationClientId> clientIds =
+      alertCoordinator.clientIds.value();
+  [_optInAlertCoordinator stop];
+  _optInAlertCoordinator = nil;
+  switch (result) {
+    case NotificationsOptInAlertResult::kPermissionDenied:
+      RecordAction(UserMetricsAction(
+          "ContentNotifications.Promo.TopOfFeed.Permission.Declined"));
+      [self logHistogramForAction:ContentNotificationTopOfFeedPromoAction::
+                                      kDecline];
+      break;
+    case NotificationsOptInAlertResult::kCanceled:
+      [self logHistogramForEvent:ContentNotificationTopOfFeedPromoEvent::
+                                     kCanceled];
+      break;
+    case NotificationsOptInAlertResult::kError:
+      [self
+          logHistogramForEvent:ContentNotificationTopOfFeedPromoEvent::kError];
+      break;
+    case NotificationsOptInAlertResult::kOpenedSettings:
+      [self logHistogramForEvent:ContentNotificationTopOfFeedPromoEvent::
+                                     kNotifActive];
+      break;
+    case NotificationsOptInAlertResult::kPermissionGranted:
+      RecordAction(UserMetricsAction(
+          "ContentNotifications.Promo.TopOfFeed.Permission.Accepted"));
+      [self logHistogramForAction:ContentNotificationTopOfFeedPromoAction::
+                                      kAccept];
+      break;
+  }
 }
 
-#pragma mark - Private
+#pragma mark - Metrics
 
-- (void)dimissAlertCoordinator {
-  [_alertCoordinator stop];
-  _alertCoordinator = nil;
+- (void)logHistogramForAction:(ContentNotificationTopOfFeedPromoAction)action {
+  UmaHistogramEnumeration("ContentNotifications.Promo.TopOfFeed.Action",
+                          action);
 }
 
-// Display the notification settings.
-- (void)showNotificationSettings {
-  [HandlerForProtocol(self.browser->GetCommandDispatcher(),
-                      ApplicationSettingsCommands) showNotificationsSettings];
+- (void)logHistogramForEvent:(ContentNotificationTopOfFeedPromoEvent)event {
+  UmaHistogramEnumeration("ContentNotifications.Promo.TopOfFeed.Event", event);
 }
 
 @end

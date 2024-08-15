@@ -32,7 +32,7 @@ the tasks in sequence. The tasks are grouped into the following sections:
 *   [Building ChromiumOS]
 *   [Installing ChromiumOS on your Device]
 *   [Making changes to packages whose source code is checked into ChromiumOS git repositories]
-*   [Making changes to non-cros_workon-able packages]
+*   [Making changes to non-cros-workon-able packages]
 *   [Local Debugging]
 *   [Remote Debugging]
 *   [Troubleshooting]
@@ -43,14 +43,12 @@ the tasks in sequence. The tasks are grouped into the following sections:
 
 *   **Commands** are shown with different labels to indicate whether they apply
     to (1) your build computer (the computer on which you're doing development),
-    (2) the [chroot] (ChromeOS SDK) on your build computer, or (3) your ChromiumOS computer (the
-    device on which you run the images you build):
+    or (2) your ChromiumOS computer (the device on which you run the images you
+    build):
 
 Label | Commands
 --- | ---
 `(outside)` | on your build computer, outside the chroot
-`(inside)` | inside the chroot on your build computer
-`(in/out)` | on your build computer, either inside or outside the chroot
 `(device)` | on your ChromiumOS computer
 
 Beneath the label, the command(s) you should type are prefixed with a generic
@@ -115,10 +113,10 @@ Linux distro, so the only official supported environment is listed below. If you
 encounter issues with other setups, patches are generally welcomed, but please
 do not expect us to figure out your distro.
 
-*   [Ubuntu] Linux (version 20.04 - Focal)
+*   [Ubuntu] Linux (version 22.04 - Jammy)
 
-    Most developers working on ChromiumOS are using Focal (the 20.04 LTS version
-    of Ubuntu) and Debian testing (Buster).
+    Most developers working on ChromiumOS are using Jammy (the 22.04 LTS version
+    of Ubuntu) and Debian testing (Trixie).
     Things might work if you're running a different Linux distribution, but you
     will probably find life easier if you're on one of these.
 
@@ -166,81 +164,18 @@ $ python3 -V
 If an error or a version lower than 3.8 is returned, proceed with the rest of
 the section. If not, skip this section.
 
-To install a specific Python version on your system, there are two options:
-- The first option is to install a new Python version via the system packages.
+If your system supports newer specific Python versions, you can install it.
+If an incompatible version is present, uninstall it:
+```bash
+(outside)
+$ sudo apt-get remove <current Python package>
+```
 
-  If an incompatible version is present, uninstall it:
-  ```bash
-  (outside)
-  $ sudo apt-get remove <current Python package>
-  ```
-  And install a new version:
-  ```bash
-  (outside)
-  $ sudo apt-get install python3.9
-  ```
-- The second option is to use pyenv. Pyenv has the advantage of allowing
-  multiple Python versions to co-exist on your system and each project can
-  specify individually specify which version to use.
-
-  To use pyenv, install pyenv according to the notes on
-  https://github.com/pyenv/pyenv . At this moment of writing on bash
-  based system it should be something like this:
-
-    ```bash
-    (outside)
-    $ git clone https://github.com/pyenv/pyenv.git ~/.pyenv
-    $ cd ~/.pyenv && src/configure && make -C src && cd ..
-    $ echo -e 'if shopt -q login_shell; then' \
-      '\n  export PYENV_ROOT="$HOME/.pyenv"' \
-      '\n  export PATH="$PYENV_ROOT/bin:$PATH"' \
-      '\n eval "$(pyenv init --path)"' \
-      '\nfi' >> ~/.bashrc
-    $ echo -e 'if [ -z "$BASH_VERSION" ]; then'\
-      '\n  export PYENV_ROOT="$HOME/.pyenv"'\
-      '\n  export PATH="$PYENV_ROOT/bin:$PATH"'\
-      '\n  eval "$(pyenv init --path)"'\
-      '\nfi' >>~/.profile
-    $ source ~/.profile
-    ```
-
-    To check that pyenv is properly installed:
-    ```bash
-    (outside)
-    $ pyenv
-    ```
-    This should not have returned any error. If an error was raised, check for
-    help at https://github.com/pyenv/pyenv
-
-    To install a Python version on your system and make it the default:
-
-    ```bash
-    (outside)
-    $ pyenv install 3.9.6
-    $ pyenv global 3.9.6
-    ```
-
-    To check if the version is correctly installed:
-    ```bash
-    (outside)
-    $ python3 -V
-    Python 3.9.6
-    ```
-
-    If `Python 3.9.6` is not displayed, please check pyenv documentation and
-    forums on how to solve the issue.
-
-    Useful commands:
-     - Check which versions can be installed: `pyenv install --list`
-     - Install an additional versions: `pyenv install <version>`.
-     - Check the versions installed on the current system: `pyenv versions`
-     - Check the version active in the current directory: `pyenv version`
-
-    In the previous step python 3.9.6 was define as the default python. If a
-    project needs a specific python version, include a .python-version file in
-    the root directory of the project with the required python version as
-    content and install the python version with `pyenv install` if it is not yet
-    present on your system.
+And install a new version:
+```bash
+(outside)
+$ sudo apt-get install python3.9
+```
 
 ### Install development tools
 
@@ -248,21 +183,12 @@ Some host OS tools are needed to manipulate code, bootstrap the development
 environment, and run preupload hooks later on.
 
 Install the git revision control system, the curl download helper, and more.
-On Ubuntu 20.04 Focal, the magic incantation is:
 
 ```bash
 (outside)
+# On Ubuntu, make sure to enable the universe repository.
 $ sudo add-apt-repository universe
-$ sudo apt-get install git gitk git-gui curl xz-utils \
-    python3-pkg-resources python3-virtualenv python3-oauth2client
-```
-
-On Debian Buster, the commands are similar:
-
-```bash
-(outside)
-$ sudo apt-get install git gitk git-gui curl xz-utils \
-    python3-pkg-resources python3-virtualenv python3-oauth2client
+$ sudo apt-get install git gitk git-gui curl xz-utils
 ```
 
 These commands also installs git's graphical front end (`git gui`) and revision
@@ -277,7 +203,7 @@ is for browser developers.
 This step is required so that you can use the `repo` to get/sync the source
 code, as well as other CrOS specific tools.
 
-### Optionally tweak your sudoers configuration
+### Tweak your sudoers configuration
 
 You can tweak your sudoers configuration to make `sudo` request your password
 less frequently as described in [Making sudo a little more permissive].
@@ -286,7 +212,7 @@ less frequently as described in [Making sudo a little more permissive].
 
 These may not be needed if you are building on a system that you
 already use, however if you have a clean instance on GCE, you'll need
-to set a better locale. For example, on Debian Buster on GCE, do:
+to set a better locale. For example, on Debian on GCE, do:
 
 ```bash
 (outside)
@@ -373,12 +299,33 @@ Create the directory for your source code with this command:
 $ mkdir -p ~/chromiumos
 ```
 
-**IMPORTANT NOTE:** If your home directory is on NFS, you **must** place your
-code somewhere else. Not only is it a bad idea to build directly from NFS for
-performance reasons, but builds won't actually work (builds use sudo, and root
-doesn't have access to your NFS mount, unless your NFS server has the
-`no_root_squash` option). Wherever you place your source, you can still add a
-symbolic link to it from your home directory (this is suggested), like so:
+**IMPORTANT NOTE:** Please ensure the backing filesystem for the ChromiumOS
+code is compatible, as detailed in the next section.
+
+### Compatible Filesystems
+
+Some filesystems are not compatible with the ChromiumOS build system, and as
+such, the code (and `chroot` and `out` directory) should not be hosted on such
+filesystems. Below lists the known compatibility issues:
+
+| Filesystem | Compatible                                                 |
+|------------|------------------------------------------------------------|
+| ext4       | Yes                                                        |
+| nfs        | No                                                         |
+| btrfs      | Yes, but only without compression or other features        |
+
+* nfs is not compatible because builds use sudo and root doesn't have access to
+    nfs mount, unless your nfs server has the `no_root_squash` option.
+    Furthermore, it is also a bad idea due to performance reasons.
+
+* btrfs generally works, but any features that introduce xattr on files may
+    cause issues with squashfs/erofs operations during the build process, and
+    as such, should be avoided. Particularly, the btrfs compression feature is
+    known to introduce xattr and cause build failures.
+
+If your home directory is not backed by a compatible filesystem, then wherever
+you place your source, you can still add a symbolic link to it from your home
+directory (this is suggested), like so:
 
 ```bash
 (outside)
@@ -392,11 +339,15 @@ ChromiumOS uses [repo] to sync down source code. `repo` is a wrapper for the
 [git] that helps deal with a large number of `git` repositories. You already
 installed `repo` when you [installed `depot_tools` above][install depot_tools].
 
+The `repo init` command below uses a feature known as [sync to stable]; the
+version of the source that you will sync to is 4-10 hours old but is verified
+by our CI system.
+
 **Public:**
 ```bash
 (outside)
 $ cd ~/chromiumos
-$ repo init -u https://chromium.googlesource.com/chromiumos/manifest -b main
+$ repo init -u https://chromium.googlesource.com/chromiumos/manifest -b stable
 $ repo sync -j4
 ```
 
@@ -411,7 +362,7 @@ https://www.chromium.org/chromium-os/licensing/building-a-distro/
 ```shell
 (outside)
 $ cd ~/chromiumos
-$ repo init -u https://chrome-internal.googlesource.com/chromeos/manifest-internal -b main
+$ repo init -u https://chrome-internal.googlesource.com/chromeos/manifest-internal -b stable
 $ repo sync -j4
 ```
 
@@ -428,6 +379,40 @@ source local, using -j16 or so is generally okay.)
 can use the `-g minilayout` option. This starts you out with a minimum
 amount of source code. This isn't a particularly well tested configuration and
 has been known to break from time-to-time, so we usually recommend against it.
+***
+
+#### Sync to stable
+
+As of October 2023, we recommend using `stable` (instead of
+tip-of-tree/ToT/`main`) for development. The `stable` ref points to a version
+of the source that is generally 4-10 hours old compared to ToT but is verified
+by our CI system.
+
+If you have previously run `repo init` without the `-b stable`, you can convert
+an existing checkout to sync to stable:
+
+```shell
+(outside)
+$ repo init -b stable
+$ repo sync
+```
+
+The `stable` ref updates anytime snapshot-orchestrator passes all build and
+unittest stages for all build targets (it ignores VM/hardware tests so that
+`stable` is updated more frequently). `stable` will not update anytime ToT is
+broken, so if ToT is broken for a long period of time, `stable` could be much
+older than 4-10 hours.
+
+*** note
+**Note:** Run `repo init -b main` to switch back to ToT. You would want to do
+this if you want to see a change that just landed on ToT and don't want to wait
+for the stable ref to be updated to include the change you are interested in
+building off of.
+***
+
+*** note
+**Note:** You can also sync to a specific version, for example, `R117-15550`.
+Please refer to [Switch repo to the snapshot](/recreating_a_snapshot_or_buildspec.md#switch-repo-to-the-buildspec).
 ***
 
 #### Optionally add Google API keys
@@ -464,6 +449,27 @@ the [chroot]. If you run [gsutil] inside the chroot, it will configure the key
 in the chroot version of `~/.boto`, but every time you re-run `cros_sdk`, it
 will overwrite the `~/.boto` file in the chroot.
 
+### Authenticate for remote Bazel caching with RBE, if applicable
+Some ChromiumOS packages use Bazel to build, which can interact with a remote
+cache such as RBE for faster builds. If your organization (Google, and maybe
+eventually others) has enabled remote caching in RBE for your Bazel-based
+builds, you'll need to install the `gcloud` CLI
+(https://cloud.google.com/sdk/docs/install, or
+[go/installgcloud](https://goto.google.com/installgcloud) for Googlers) and run:
+
+```bash
+(outside)
+$ gcloud auth application-default login
+$ gcloud auth application-default set-quota-project chromeos-bot
+```
+
+This will store authentication credentials in `~${HOME}/.config/gcloud` that
+will be mapped into the chroot, and which will allow Bazel executions within
+your builds to authenticate as you to RBE to access the remote cache it hosts.
+
+More details about configuring remote caching for non-Google organizations is
+available at [bazel_remote_caching].
+
 ## Building ChromiumOS
 
 ### Create a chroot
@@ -477,7 +483,7 @@ wherever your source lives), the command to download and install the chroot is:
 
 ```bash
 (outside)
-$ cros_sdk
+$ cros_sdk --create
 ```
 
 If this does not work, make sure you've added the depot_tools directory to your
@@ -501,65 +507,6 @@ machine. For example, the chroot has its own version of the `ls` utility. It
 will be very similar, but it is actually a different binary than the normal one
 you use on your machine.
 
-**SIDE NOTES:**
-
-*   You shouldn't have to create the chroot very often. Most developers create
-    it once and never touch it again unless someone explicitly sends out an
-    email telling them to recreate their chroot.
-*   The `cros_sdk` command currently doesn't work behind a proxy server, but
-    there is a [workaround][crosbug/10048].
-
-After `cros_sdk` is complete, it will enter the chroot and give you a shell.
-
-### Enter the chroot
-
-Most of the commands that ChromiumOS developers use on a day-to-day basis
-(including the commands to build a ChromiumOS image) expect to be run from
-within the chroot. You can enter the chroot by calling:
-
-```bash
-(outside)
-$ cros_sdk
-```
-
-This is the same command used to create the chroot, but if the chroot already
-exists, it will just enter.
-
-NOTE: if you want to run a single command in the chroot (rather than entering
-the chroot), prefix that command with `cros_sdk -- `.
-
-This command will probably prompt you for your password for the `sudo` command
-(entering the chroot requires root privileges). Once the command finishes, that
-terminal is in the chroot and you'll be in the `~/chromiumos/src/scripts`
-directory, where most build commands live. In the chroot you can only see a
-subset of the filesystem on your machine. However, through some trickery (bind
-mounts), you will have access to the whole `src` directory from within the
-chroot – this is so that you can build the software within the chroot.
-
-Note in particular that the `src/scripts` directory is the same `src/scripts`
-directory found within the ChromiumOS directory you were in before you entered
-the chroot, even though it looks like a different location. That's because when
-you enter the chroot, the `~/chromiumos` directory in the chroot is mounted such
-that it points to the main ChromiumOS directory `~/chromiumos` outside the
-chroot. That means that changes that you make to the source code outside of the
-chroot immediately take effect inside the chroot.
-
-Calling this will also install a chroot, if you don't have one yet, for example
-by not following the above.
-
-While in the chroot you will see a special "(cr)" prompt to remind you
-that you are there:
-
-```bash
-(cr) ((...)) johnnyrotten@flyingkite ~/chromiumos/src/scripts $
-```
-
-You generally cannot run programs on your filesystem from within the chroot. For
-example, if you are using eclipse as an IDE, or gedit to edit a text file, you
-will need to run those programs outside the chroot. As a consolation, you can
-use vim. If you are desperate for Emacs, try typing `sudo emerge emacs`. Of
-course this command will build Emacs from source so allow 5-10 minutes.
-
 **IMPORTANT NOTES**:
 
 *   **If you need to delete your chroot**, use `cros_sdk --delete` to delete it
@@ -568,15 +515,11 @@ course this command will build Emacs from source so allow 5-10 minutes.
 
 **SIDE NOTES:**
 
-*   If you need to share lots of files inside and outside chroot (for example,
-    settings for your favorite editor / tools, or files downloaded by browser
-    outside chroot, etc.), read [Tips and Tricks].
-*   There is a file system loop because inside `~/chromiumos` you will find the
-    chroot again. Don't think about this for too long. If you try to use `du -s
-    ~/chromiumos/chroot/home` you might get a message about a corrupted
-    file system. This is nothing to worry about, and just means that your
-    computer doesn't understand this loop either. (If you _can_ understand this
-    loop, try [something harder].)
+*   You shouldn't have to create the chroot very often. Most developers create
+    it once and never touch it again unless someone explicitly sends out an
+    email telling them to recreate their chroot.
+*   The `cros_sdk` command currently doesn't work behind a proxy server, but
+    there is a [workaround][crosbug/10048].
 
 ### Select a board
 
@@ -603,6 +546,13 @@ target "boards". The following are some example boards:
 *   **betty** - (Googlers only) builds an ARC++-enabled image for running in a
     VM
 
+To list all known boards in your checkout, run this command:
+
+```bash
+(outside)
+$ cros query boards
+```
+
 You need to choose a board for your first build. Be aware that the generic
 images may not work well (or not at all) when run on official hardware. Don't
 worry too much about this choice, though – you can always build for another
@@ -613,180 +563,126 @@ Each command in the build processes takes a `--board` parameter. To facilitate
 this, it can be helpful to keep the name of the board in a shell variable. This
 is not strictly necessary, but if you do this, you can simply copy and paste the
 commands below into your terminal program. Enter the following inside your
-chroot:
+shell:
 
 ```bash
-(inside)
-$ export BOARD=<your pick of board>
+(outside)
+$ BOARD=<your pick of board>
 ```
 
 This setting only holds while you stay in the chroot. If you leave and come
 back, you need to specify this setting again.
-
-**SIDE NOTES:**
-
-*   If you look at `~/chromiumos/src/overlays`, you may notice two different
-    naming patterns: `overlay-BOARD` and `overlay-variant-BOARD-VARIANT` (note
-    the dash here). If you intend to build for particular board variant, you'll
-    want to use `BOARD_VARIANT` pair (note the underscore here) as your board
-    name. E.g. for overlay-variant-peach-pi the correct value for `BOARD` would
-    be `peach_pi`.
-
-### Initialize the build for a board
-
-To start building for a given board, issue the following command inside your
-chroot (you should be in the `~/chromiumos/src/scripts` directory):
-
-```bash
-(inside)
-$ setup_board --board=${BOARD}
-```
-
-This command sets up the board target with a default sysroot of
-`/build/${BOARD}`. The command downloads a small amount of stuff and takes a few
-minutes to complete.
-`setup_board` also calls `update_chroot`, which will update the toolchain if
-`repo sync` has been run and the toolchain is out of date.
-
-**SIDE NOTES:**
-
-*   If you pass the `--default` flag to `setup_board`, the command writes the
-    board name in the file `~/chromiumos/src/scripts/.default_board` (it's the
-    same thing as `echo ${BOARD} > ~/chromiumos/src/scripts/.default_board`).
-    This makes it so that you don't need to specify a `--board` argument to
-    subsequent commands. These instructions do not use the `--default` flag so
-    that you can explicitly see what commands are board-specific.
-*   If you want to clobber your old board files and start fresh,
-    try passing the `--force` flag, which deletes the old `/build/${BOARD}`
-    directory for you. Like `cros_sdk`, most people only re-run `setup_board`
-    when told to (they don't re-run it even after a `repo sync`).
-*   You can delete the board sysroot at any time with: `sudo rm -rf
-    /build/${BOARD}`
-
-### Set the chronos user password
-
-On a ChromiumOS computer, you can get command line access (and root access
-through the `sudo` command) by logging in with the shared user account
-`"chronos"`. You should set a password for the `chronos` user by entering the
-command below from inside the `~/chromiumos/src/scripts` directory:
-
-```bash
-(inside)
-$ ./set_shared_user_password.sh
-```
-
-You will be prompted for a password, which will be stored in encrypted form in
-`/etc/shared_user_passwd.txt`.
-
-**SIDE NOTES:**
-
-*   The encrypted password is stored inside chroot. That means that if you
-    recreate your chroot, you have to run this command again.
-*   If you don't set a shared user password, the password for the chronos
-    account may end up being any number of things depending on some complicated
-    (and constantly evolving) formula that includes whether you build a
-    developer image, whether you boot into [Developer Mode], and the current
-    state of the scripts. The password might be empty, or a well-known string
-    (such as `"test0000"` on test images), or it might be impossible to login
-    with chronos. It is strongly recommended that you simply set a shared user
-    password. TODO: put a link to some place with more info about this.
 
 ### Build the packages for your board
 
 To build all the packages for your board, run the following command:
 
 ```bash
-(inside)
-$ build_packages --board=${BOARD}
+(outside)
+$ cros build-packages --board=${BOARD}
 ```
 
 This step is the rough equivalent of `make all` in a standard Makefile
 system. This command handles incremental builds; you should run it whenever you
 change something and need to rebuild it (or after you run `repo sync`).
 
-Normally, the build_packages command builds the stable version of a package
-(i.e. from committed git sources), unless you are working on a package (with
-`cros_workon`). If you are working on a package, build_packages will build using
-your local sources. See below for information about `cros_workon`.
+Normally, the `cros build-packages` command builds the stable version of a
+package (i.e. from committed git sources), unless you are working on a package
+(with `cros workon`).  If you are working on a package, `cros build-packages`
+will build using your local sources.  See below for information about
+`cros workon`.
 
 **SIDE NOTES:**
 
-*   The first time you run `build_packages`, you should use
+*   The first time you run `cros build-packages`, you should use
     `--autosetgov --autosetgov-sticky`.  If your system uses a power-saving
     [CPU
     governor](https://www.kernel.org/doc/Documentation/cpu-freq/governors.txt),
     these options will temporarily switch to `performance` for faster builds.
-    `--autosetgov-sticky` makes `build_packages` remember to always use
+    `--autosetgov-sticky` makes `cros build-packages` remember to always use
     `--autosetgov`.
-*   (For Googlers) `build_packages` is generally enough to include Chrome in
-    your image if you have included the internal manifest when initializing the
-    repo. However, there may be some cases where the build produces Chromium
-    instead. Running the command again including the flags `--internal` and
-    `--no-use-any-chrome` guarantees Chrome is included in the build.
-    `--no-use-any-chrome` creates a fresh build of Chromium/Chrome instead of
-    reusing an existing prebuilt, making the build process slower.
-*   Like `setup_board`, `build_packages` also calls `update_chroot`, which will
-    keep the SDK up-to-date with any possible changes.
+*   (For Googlers) By default, with an internal manifest synced,
+    `cros build-packages` will install either Chromium or Chrome, optimizing
+    for *any* binpkg usage, falling back to building Chromium when no binpkg is
+    available.
+    The default behavior aims to be fast, but should not be relied on in cases
+    where Chrome (or Chromium) is specifically required for your build.
+    Add the `--chrome` flag to guarantee Chrome is installed, or the
+    `--chromium` flag to guarantee Chromium.
+    In all cases, binpkgs will be used whenever available, and the build will
+    fall back to building from source if no matching binpkg is available.
+*   `cros build-packages` automatically calls `update_chroot`, which will keep
+    the SDK up-to-date with any possible changes.
 *   By default, packages other than Chrome will be compiled in debug mode; that
     is, with `NDEBUG` undefined and with debugging constructs like `DCHECK`,
     `DLOG`, and the red "Debug image" message present. If you supply
     `--no-withdebug`, then `NDEBUG` will be defined and the debugging constructs
     will be removed.
-*   The first time you run the `build_packages` command, it will take a long
-    time (around 90 minutes on a four core machine), as it must build every
+*   The first time you run the `cros build-packages` command, it will take a
+    long time (around 90 minutes on a four core machine), as it must build every
     package, and also download about 1.7GB of source packages and 1.3GB of
-    binary packages. [See here][What does build_packages actually do?] for more
-    information about what the build_packages command actually does. In short,
-    it tries to download existing binary packages to avoid building anything
-    (and puts them in `/build/${BOARD}/packages` for subsequent builds). Failing
-    that, it downloads source packages, puts them in
-    `/var/lib/portage/distfiles-target`, and builds them.
+    binary packages. [See here][What does cros build-packages actually do?]
+    for more information about what the `cros build-packages` command actually
+    does.  In short, it tries to download existing binary packages to avoid
+    building anything (and puts them in `/build/${BOARD}/packages` for
+    subsequent builds).  Failing that, it downloads source packages, puts them
+    in `/var/lib/portage/distfiles-target`, and builds them.
+*   Should you want a clean build, pass `--cleanbuild`.
+*   Use `--no-usepkg` to build packages from source (required if you want to
+    build a release buildspec). You may also want to set "USE=-cros-debug"
+    environment variable.
+*   If you don't want to have to pass `--board` to this and following
+    commands, you can set a default board by creating the file
+    `.default_board` in the `~/chromiumos/src/scripts` directory:
+
+    ```shellsession
+    (outside)
+    echo ${BOARD} > ~/chromiumos/src/scripts/.default_board
+    ```
 
 ### Build a disk image for your board
 
-Once the `build_packages` step is finished, you can build a ChromiumOS-base
-developer image by running the command below from inside the
-`~/chromiumos/src/scripts` directory:
+Once the `cros build-packages` step is finished, you can build a ChromiumOS-base
+developer image by running the command below:
 
 ```bash
-(inside)
-$ build_image --board=${BOARD} --no-enable-rootfs-verification test
+(outside)
+$ cros build-image --board=${BOARD} --no-enable-rootfs-verification test
 ```
 
-The arguments for `build_image` specify what type of build you want. A test
+The arguments for `cros build-image` specify what type of build you want. A test
 image (in the example above) has additional test-specific packages and also
 accepts incoming SSH connections. It is more convenient to use test images, but
 developers could also build developer images. A developer image provides a
 ChromiumOS-based image with additional developer packages. To build it use `dev`
-instead of `test`. If building a test image, the password set using
-`set_shared_user_password.sh` will be ignored and `"test0000"` will be the
-password instead. The `--no-enable-rootfs-verification` turns off verified boot
-allowing you to freely modify the root file system. The system is less secure
-using this flag, however, for rapid development you may want to set this flag.
-If you would like a more secure, locked-down version of ChromiumOS, then simply
-remove the `--no-enable-rootfs-verification` flag. Finally if you want just the
-pristine ChromiumOS-based image (closest to ChromeOS but not quite the same),
-pass in `base` rather than `test` or `dev`. Use `build_image --help` for more
+instead of `test`. If building a test image, the password will be `test0000`.
+The `--no-enable-rootfs-verification` turns off verified boot allowing you to
+freely modify the root file system. The system is less secure using this flag,
+however, for rapid development you may want to set this flag. If you would like
+a more secure, locked-down version of ChromiumOS, then simply remove the
+`--no-enable-rootfs-verification` flag. Finally if you want just the pristine
+ChromiumOS-based image (closest to ChromeOS but not quite the same), pass in
+`base` rather than `test` or `dev`. Use `cros build-image --help` for more
 information.
 
-The image produced by `build_image` will be located in
+The image produced by `cros build-image` will be located in
 `~/chromiumos/src/build/images/${BOARD}/versionNum/` (where `versionNum` will
 actually be a version number). The most recent image produced for a given board
 will be symlinked to `~/chromiumos/src/build/images/${BOARD}/latest`.
 
-At the end of `build_image`'s output, it will print a command you can run to
-start the image in a `cros_vm` virtual machine. It will print something like:
+At the end of `cros build-image`'s output, it will print a command you can run
+to start the image in a `cros vm` virtual machine. It will print something like:
 
 ```
 To run the image in a virtual machine, use:
-cros_vm --start --image-path=../build/images/amd64-generic/R111-15301.0.0-d2023_01_04_103804-a1/chromiumos_test_image.bin --board=amd64-generic
+cros vm --start --image-path=../build/images/amd64-generic/R111-15301.0.0-d2023_01_04_103804-a1/chromiumos_test_image.bin --board=amd64-generic
 ```
 
 Remember this command for future use; see [Running an image in a virtual
-machine](#running-an-image-in-a-virtual-machine).
+machine](#vm).
 
 **IMPORTANT NOTE:** It's up to you to delete old builds that you don't need.
-Every time you run `build_image`, the command creates files that take up to
+Every time you run `cros build-image`, the command creates files that take up to
 **8GB of space (!)**.
 
 ### Look at your disk image (optional)
@@ -794,8 +690,8 @@ Every time you run `build_image`, the command creates files that take up to
 The preferred way to mount the image you just built to look at its contents is:
 
 ```bash
-(inside)
-$ ./mount_gpt_image.sh --board=${BOARD} --safe --most_recent
+(outside)
+$ cros_sdk ./mount_gpt_image.sh --board=${BOARD} --safe --most_recent
 ```
 
 If you built a test image, also make sure to add `-i chromiumos_test_image.bin`
@@ -806,15 +702,15 @@ The `--safe` option ensures you do not make accidental changes to the Root FS.
 Again, don't forget to unmount the root filesystem when you're done:
 
 ```bash
-(inside)
-$ ./mount_gpt_image.sh --board=${BOARD} -u
+(outside)
+$ cros_sdk ./mount_gpt_image.sh --board=${BOARD} -u
 ```
 
 Optionally, you can unpack the partition as separate files and mount them
 directly:
 
 ```bash
-(inside)
+(outside)
 $ cd ~/chromiumos/src/build/images/${BOARD}/latest
 $ ./unpack_partitions.sh chromiumos_image.bin
 $ mkdir -p rootfs
@@ -831,7 +727,7 @@ If you built an x86 ChromiumOS image, you can probably even try chrooting into
 the image:
 
 ```bash
-(inside)
+(outside)
 $ sudo chroot ~/chromiumos/src/build/images/${BOARD}/latest/rootfs
 ```
 
@@ -842,7 +738,7 @@ chroot for your host machine), but it seems to work pretty well. Don't forget to
 When you're done, unmount the root filesystem:
 
 ```bash
-(inside)
+(outside)
 $ sudo umount ~/chromiumos/src/build/images/${BOARD}/latest/rootfs
 ```
 
@@ -872,7 +768,7 @@ on it**. Wait ~10 seconds for the USB disk to register, then type the following
 command:
 
 ```bash
-(inside)
+(outside)
 $ cros flash usb:// ${BOARD}/latest
 ```
 
@@ -921,13 +817,12 @@ plug-in the USB disk and press `Ctrl+U` ([Debug Button Shortcuts]).
 
 ### Getting to a command prompt on ChromiumOS
 
-Since you set the shared user password (with `set_shared_user_password.sh`) when
-you built your image, you have the ability to login as the chronos user:
+You have the ability to login as the chronos user:
 
 1.  After your computer has booted to the ChromiumOS login screen, press `[
-    Ctrl ] [ Alt ] [ F2 ]` to get a text-based login prompt. ( `[ F2 ]` may
-    appear as `[ → ]` on your Notebook keyboard.)
-2.  Log in with the chronos user and enter the password you set earlier.
+    Ctrl ] [ Alt ] [ F2 ]` to get a text-based login prompt. (On a Chromebook
+    keyboard, `[ F2 ]` will appear as `[ ⟳ ]` or `[ → ]`.)
+2.  Log in with the chronos user and enter the password (usually `test0000`).
 
 Because you built an image with developer tools, you also have an alternate way
 to get a terminal prompt. The alternate shell is a little nicer (in the very
@@ -958,7 +853,9 @@ HARD DISK CLEAN**.
 ### Running an image in a virtual machine
 
 Many times it is easier to simply run ChromiumOS in a virtual machine like QEMU.
-You can use the [cros_vm] command to start a VM with the previously built image.
+You can use the
+[cros_vm](https://www.chromium.org/chromium-os/developer-library/guides/containers/cros-vm)
+command to start a VM with the previously built image.
 
 When you start the VM, `cros_vm` will print out information about how to connect
 to the running image via SSH and VNC.
@@ -970,12 +867,14 @@ serving on localhost on the default VNC port (5900). You can connect to
 A good VNC client for Linux is the package tigervnc-viewer (available on at
 least Debian); its command line program is `vncviewer`. Note that before you use
 it, you should click **Options** → **Misc** → **Show dot when no cursor**.
+Other options include the VNC feature in [ChromiumIDE]'s device management, and
+[novnc], which makes the device accessible via a web browser.
 
 ***note
 **SIDE NOTES:**
 
-*   The output of the `build_image` command will also contain a full command
-    to start a VM with that image.
+*   The output of the `cros build-image` command will also contain a full
+    command to start a VM with that image.
 *   Only KVM/QEMU VMs are actively supported at the moment.
     *   Non-KVM VMs often "work", but are unbearably slow.
 *   If you're interested in creating a test image (used for integration
@@ -1034,22 +933,21 @@ system. Specifically, this is a package where:
 *   The ebuild has a `KEYWORDS` in the ebuild containing this architecture name
     (like "`x86`").
 
-You can see a list of all such packages by running the following command from
-inside the `~/chromiumos/src/scripts` directory:
+You can see a list of all such packages by running the following command:
 
 ```bash
-(inside)
-$ cros_workon --board=${BOARD} --all list
+(outside)
+$ cros workon --board=${BOARD} --all list
 ```
 
-### Run cros_workon start
+### Run cros workon start
 
 The first thing you need to do is to mark the package as active. Use the command
 below, replacing `${PACKAGE_NAME}` with your package name (e.g., `chromeos-wm`):
 
 ```bash
-(inside)
-$ cros_workon --board=${BOARD} start ${PACKAGE_NAME}
+(outside)
+$ cros workon --board=${BOARD} start ${PACKAGE_NAME}
 ```
 
 This command:
@@ -1064,7 +962,7 @@ This command:
 
 ### Run repo sync
 
-After running `cros_workon`, sync down the sources. This is critical if you're
+After running `cros workon`, sync down the sources. This is critical if you're
 using the `minilayout`, but is probably a good idea in any case to make sure
 that you're working with the latest code (it'll help avoid merge conflicts
 later). Run the command below anywhere under your `~/chromiumos` directory:
@@ -1083,21 +981,21 @@ tree.
 
 ### Find out which ebuilds map to which directories
 
-The `cros_workon` tool can help you find out what ebuilds map to each
+The `cros workon` tool can help you find out what ebuilds map to each
 directory. You can view a full list of ebuilds and directories using the
 following command:
 
 ```bash
-(inside)
-$ cros_workon --board=${BOARD} --all info
+(outside)
+$ cros workon --board=${BOARD} --all info
 ```
 
 If you want to find out which ebuilds use source code from a specific directory,
 you can use grep to find them. For example:
 
 ```bash
-(inside)
-$ cros_workon --board=${BOARD} --all info | grep platform/ec
+(outside)
+$ cros workon --board=${BOARD} --all info | grep platform/ec
 ```
 
 This returns the following output:
@@ -1118,8 +1016,8 @@ grepping for the ebuild name in the list.
 To find out where the ebuild lives:
 
 ```bash
-(inside)
-$ equery-${BOARD} which ${PACKAGE_NAME}
+(outside)
+$ cros_sdk equery-${BOARD} which ${PACKAGE_NAME}
 ```
 
 As an example, for `PACKAGE_NAME=ec-utils`, the above command might display:
@@ -1128,7 +1026,7 @@ As an example, for `PACKAGE_NAME=ec-utils`, the above command might display:
 /home/.../chromiumos/src/third_party/chromiumos-overlay/chromeos-base/ec-utils/ec-utils-9999.ebuild
 ```
 
-**SIDE NOTE:** If you run the same command **without** running `cros_workon`
+**SIDE NOTE:** If you run the same command **without** running `cros workon`
 first, you can see the difference:
 
 ```bash
@@ -1140,8 +1038,8 @@ first, you can see the difference:
 Since ChromiumOS uses `repo`/`git`, you should always create a local branch
 whenever you make changes.
 
-First, find the source directory for the project you just used `cros_workon` on.
-This isn't directly related to the project name you used with `cros_workon`.
+First, find the source directory for the project you just used `cros workon` on.
+This isn't directly related to the project name you used with `cros workon`.
 (TODO: This isn't very helpful - someone with more experience, actually tell us
 how to find it reliably? --Meredydd)
 
@@ -1151,7 +1049,7 @@ name that is meaningful to you and that describes your changes (nobody else will
 see this name):
 
 ```bash
-(in/out)
+(outside)
 $ repo start ${BRANCH_NAME} .
 ```
 
@@ -1166,8 +1064,8 @@ compile your changes, use either `cros_workon_make` or `emerge-${BOARD}`. To use
 `cros_workon_make`, run
 
 ```bash
-(inside)
-$ cros_workon_make --board=${BOARD} ${PACKAGE_NAME}
+(outside)
+$ cros_sdk cros_workon_make --board=${BOARD} ${PACKAGE_NAME}
 ```
 
 This will build your package inside your source directory. Change a single file,
@@ -1175,16 +1073,16 @@ and it will rebuild only that file and re-link. If your package contains test
 binaries, using
 
 ```bash
-(inside)
-$ cros_workon_make --board=${BOARD} ${PACKAGE_NAME} --test
+(outside)
+$ cros_sdk cros_workon_make --board=${BOARD} ${PACKAGE_NAME} --test
 ```
 
 will build and run those binaries as well. In case your tests have
 out-of-package dependencies, you'll first need to run
 
 ```bash
-(inside)
-$ USE=test emerge-${BOARD} ${PACKAGE_NAME}
+(outside)
+$ cros_sdk USE=test emerge-${BOARD} ${PACKAGE_NAME}
 ```
 
 to pull them in.
@@ -1195,11 +1093,11 @@ You probably want to get your changes onto your device now. You need to install
 the changes you made by using
 
 ```bash
-(inside)
-$ cros_workon_make --board=${BOARD} ${PACKAGE_NAME} --install
+(outside)
+$ cros_sdk cros_workon_make --board=${BOARD} ${PACKAGE_NAME} --install
 ```
 
-You can then rebuild an image with `build_image` and reimage your device.
+You can then rebuild an image with `cros build-image` and reimage your device.
 
 Alternatively, you can build your package using `emerge-${BOARD}` and quickly
 install it to the device by using [cros deploy].
@@ -1207,14 +1105,14 @@ install it to the device by using [cros deploy].
 For example, if you want to build `ec-utils` to test on your device, use
 
 ```bash
-(inside)
-$ emerge-${BOARD} ec-utils
+(outside)
+$ cros_sdk emerge-${BOARD} ec-utils
 ```
 
 To install the package to the device, use
 
 ```bash
-(inside)
+(outside)
 $ cros deploy ${IP} ec-utils
 ```
 
@@ -1253,7 +1151,7 @@ be able to commit your changes by running something like the command below from
 the project directory:
 
 ```bash
-(in/out)
+(outside)
 $ git commit -a
 ```
 
@@ -1270,26 +1168,26 @@ Check out our [Gerrit Workflow] guide for details on our review process.
 ### Clean up after you're done with your changes
 
 After you're done with your changes, you're ready to clean up. The most
-important thing to do is to tell `cros_workon` that you're done by running the
+important thing to do is to tell `cros workon` that you're done by running the
 following command:
 
 ```bash
-(inside)
-$ cros_workon --board=${BOARD} stop ${PACKAGE_NAME}
+(outside)
+$ cros workon --board=${BOARD} stop ${PACKAGE_NAME}
 ```
 
-This command tells `cros_workon` to stop forcing the `-9999.ebuild` and to stop
+This command tells `cros workon` to stop forcing the `-9999.ebuild` and to stop
 forcing a build from source every time.
 
-If you're using the `minilayout`, doing a `cros_workon` stop **will not** remove
+If you're using the `minilayout`, doing a `cros workon` stop **will not** remove
 your source code. The code will continue to stay on your hard disk and get
 synced down.
 
-## Making changes to non-cros_workon-able packages
+## Making changes to non-cros-workon-able packages
 
 If you want to make changes to something other than packages which source is
 checked into the ChromiumOS source control system, you can follow the
-instructions in the previous section, but skip the `cros_workon` step. Note
+instructions in the previous section, but skip the `cros workon` step. Note
 specifically that you still need to run `repo start` to [Create a branch for
 your changes].
 
@@ -1321,7 +1219,7 @@ The types of changes that fall into this category include:
 
 When you need to add small patches to existing packages whose source code is not
 checked into a ChromiumOS git repository (e.g. it comes from portage, and is
-not a `cros_workon`-able package), you need to do the following:
+not a `cros workon`-able package), you need to do the following:
 
 First, find the package ebuild file under `third_party/chromiumos-overlay`.
 
@@ -1360,7 +1258,7 @@ in. However, a few notes:
 *   Many of the commands that take a `--board=${BOARD}` parameter also take a
     `--host` parameter, which makes the commands affect the host (i.e. the
     chroot) rather than the board.
-    *   Most notably, `cros_workon --host` says that you want to build a package
+    *   Most notably, `cros workon --host` says that you want to build a package
         used in the chroot from source.
 
 ### Building an individual package
@@ -1373,8 +1271,8 @@ use `emerge-${BOARD}`.
 For example, if you want to build dash to test on your device:
 
 ```bash
-(inside)
-$ emerge-${BOARD} dash
+(outside)
+$ cros_sdk emerge-${BOARD} dash
 ```
 
 To install the package to the device, see [cros deploy].
@@ -1389,13 +1287,10 @@ To install the package to the device, see [cros deploy].
 ### Making changes to the Chromium web browser on ChromiumOS
 
 If you want to make modifications to the Chromium web browser and quickly deploy
-your changes to an already-built ChromiumOS image, see [Making changes to the
-Chromium web browser on ChromiumOS]. Or if you have a pending Chromium change
-that you'd like tested remotely on CrOS's CQ before submitting it, see the
-[chromeos-uprev-tester] trybot.
-
-There are other, historical/obsolete ways to build Chromium for ChromiumOS but
-they are unsupported and will break in confusing ways.
+your changes to an already-built ChromiumOS image, see the [Simple Chrome
+Workflow]. Or if you have a pending Chromium change that you'd like tested
+remotely on CrOS's CQ before submitting it, see the [chromeos-uprev-tester]
+trybot.
 
 ## Local Debugging
 
@@ -1413,11 +1308,11 @@ It should already be installed in your chroot. If you do not have the script,
 update your repository to get the latest changes, then re-build your packages:
 
 ```bash
-(in/out)
+(outside)
 $ repo sync
 
-(inside)
-$ build_packages --board=...
+(outside)
+$ cros build-packages --board=...
 ```
 
 This should install `gdb-${BOARD}` in the `/usr/local/bin` directory inside the
@@ -1462,8 +1357,8 @@ see this in the example below, where gdb-daisy does not actually stop at the
 breakpoint it appears to set, although it does correctly execute the program.
 
 ```bash
-(inside)
-(cr) $ gdb-daisy -h
+(outside)
+$ cros_sdk gdb-daisy -h
 
 usage: cros_gdb [-h]
                 [--log-level {fatal,critical,error,warning,notice,info,debug}]
@@ -1484,7 +1379,7 @@ positional arguments:
                         attaching to an already running program.
 ...
 
-(cr) $ gdb-daisy /bin/grep shebang /bin/ls
+$ cros_sdk gdb-daisy /bin/grep shebang /bin/ls
 15:51:06: INFO: run: file /build/daisy/bin/grep
 Reading symbols from /bin/grep...Reading symbols from /usr/lib/debug/bin/grep.debug...done.
 done.
@@ -1519,13 +1414,13 @@ and source file(s) to the appropriate sysroot and then start gdb with that
 binary (using the correct libraries, etc).
 
 ```bash
-(inside)
-(cr) $ cd /build/lumpy/tmp/portage
-(cr) $ mkdir shill-test
-(cr) $ cd shill-test
-(cr) $ cp <path-to-binary>/shill_unittest .
-(cr) $ cp <path-to-src>/shill_unittest.cc .
-(cr) $ gdb-lumpy
+(outside)
+$ cd ~/chromiumos/chroot/build/lumpy/tmp/portage
+$ mkdir shill-test
+$ cd shill-test
+$ cp <path-to-binary>/shill_unittest .
+$ cp <path-to-src>/shill_unittest.cc .
+$ cros_sdk gdb-lumpy
 (gdb-lumpy) directory /tmp/portage/shill-test # Tell gdb to add /tmp/portage/shill-test to the paths it searches for source files
 (gdb-lumpy) file ./shill_unittest
 ```
@@ -1554,11 +1449,11 @@ chroot. If you do not have the script, update your repository to get the latest
 changes, then re-build your packages:
 
 ```bash
-(in/out)
+(outside)
 $ repo sync
 
-(inside)
-$ build_packages --board=...
+(outside)
+$ cros build-packages --board=...
 ```
 
 This should install `gdb_remote` in the `/usr/bin` directory inside the
@@ -1592,8 +1487,8 @@ give the name of the binary, followed by any arguments for the binary, at the
 end of the command line:
 
 ```bash
-(inside)
-$ gdb-daisy --remote=123.45.67.809 /bin/grep "test" /tmp/myfile
+(outside)
+$ cros_sdk gdb-daisy --remote=123.45.67.809 /bin/grep "test" /tmp/myfile
 ```
 
 When doing remote debugging you \*must\* use the `--pid` or the `--attach`
@@ -1614,10 +1509,10 @@ gdb on your desktop to the gdbserver on the remote device.
 If you want to edit code and debug it on the DUT you can follow this procedure
 
 ```bash
-(inside)
-$ CFLAGS="-ggdb" FEATURES="noclean" emerge-${BOARD} -v sys-apps/mosys
+(outside)
+$ cros_sdk CFLAGS="-ggdb" FEATURES="noclean" emerge-${BOARD} -v sys-apps/mosys
 $ cros deploy --board=${BOARD} ${IP} sys-apps/mosys
-$ gdb-${BOARD} --cgdb --remote "${IP}" \
+$ cros_sdk gdb-${BOARD} --cgdb --remote "${IP}" \
   -g "--eval-command=directory /build/${BOARD}/tmp/portage/sys-apps/mosys-9999/work/" \
   /usr/sbin/mosys -V
 ```
@@ -1657,8 +1552,8 @@ running in a VM on the user's desktop. For debugging the VM, you can use either
 Example 1:
 
 ```bash
-(inside)
-$ gdb-lumpy --remote=123.45.67.809 --attach=gpu-process
+(outside)
+$ cros_sdk gdb-lumpy --remote=123.45.67.809 --attach=gpu-process
 
 14:50:07: INFO: run: ping -c 1 -w 20 123.45.67.809
 14:50:09: INFO: run: file /build/lumpy/opt/google/chrome/chrome
@@ -1685,8 +1580,8 @@ Reading symbols from /build/lumpy/opt/google/chrome/chrome...Reading symbols fro
 Example 2:
 
 ```bash
-(inside)
-$ gdb-daisy --pid=626 --remote=123.45.98.765
+(outside)
+$ cros_sdk gdb-daisy --pid=626 --remote=123.45.98.765
 14:50:07: INFO: run: ping -c 1 -w 20 123.45.98.765
 14:50:09: INFO: run: file /build/daisy/usr/sbin/cryptohomed
 14:50:10: INFO: run: armv7a-cros-linux-gnueabi-gdb --quiet '--eval-command=set sysroot /build/daisy' '--eval-command=set solib-absolute-prefix /build/daisy' '--eval-command=set solib-search-path /build/daisy' '--eval-command=set debug-file-directory /build/daisy/usr/lib/debug' '--eval-command=set prompt (daisy-gdb) ' '--eval-command=file /build/daisy/usr/sbin/cryptohomed' '--eval-command=target remote localhost:38080'
@@ -1697,8 +1592,8 @@ Reading symbols from /build/daisy/usr/sbin/cryptohomed...Reading symbols from/bu
 Example 3:
 
 ```bash
-(inside)
-$ gdb-lumpy --remote=:vm: --attach=browser
+(outside)
+$ cros_sdk gdb-lumpy --remote=:vm: --attach=browser
 15:18:28: INFO: run: ping -c 1 -w 20 localhost
 15:18:31: INFO: run: file /build/lumpy/opt/google/chrome/chrome
 15:18:33: INFO: run: x86_64-cros-linux-gnu-gdb --quiet '--eval-command=setsysroot /build/lumpy' '--eval-command=set solib-absolute-prefix /build/lumpy' '--eval-command=set solib-search-path /build/lumpy' '--eval-command=set debug-file-directory /build/lumpy/usr/lib/debug' '--eval-command=set prompt (lumpy-gdb) ' '--eval-command=file /build/lumpy/opt/google/chrome/chrome' '--eval-command=target remote localhost:48062'
@@ -1713,37 +1608,16 @@ If you find problems with the board-specific gdb scripts, please file a bug
 ([crbug.com/new]) and add 'build-toolchain' as one of the labels in the
 bug.
 
-## Building Chrome for ChromiumOS
-
-See [Simple Chrome Workflow].
-
 ## Troubleshooting
 
 ### I lost my developer tools on the stateful partition, can I get them back?
 
 This happens sometimes because the security system likes to wipe out the
-stateful partition and a lot of developer tools are in /usr/local/bin. But all
-is not lost because there is a tool for updating the stateful partition from an
-image created by the auto-update part of the dev_server. Sadly, it is normally
-found in /usr/local so will have been lost too and you need to copy it over
-manually. This works for me:
-
-```bash
-$ cd /tmp
-$ scp me@myworkstation:/path/to/chromiumos/chroot/build/x86-whatever/usr/bin/stateful_update .
-$ sudo sh stateful_update
-$ sudo reboot
-```
-
-Note you can clobber the stateful partition (remove user accounts etc and force
-OOBE) as part of this process by using a flag:
-
-```bash
-$ cd /tmp
-$ scp me@myworkstation:/path/to/chromiumos/chroot/build/x86-whatever/usr/bin/stateful_update .
-$ sudo sh stateful_update --stateful_change=clean
-$ sudo reboot
-```
+stateful partition and a lot of developer tools are in /usr/local/bin. You may
+be able restore some of them using the `dev-install` tool. See the
+[`dev-install`
+docs](https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/dev-install/README.md#supported-workflows-base-image)
+for more information about its "Base Image" workflow.
 
 ### Disabling Enterprise Enrollment
 
@@ -1830,12 +1704,12 @@ modifying a normal system image so that integration tests can be run on it.
 
 ### Creating a recovery image that has been modified for test
 
-After building a test image using `build_image test` as described above, you
-may wish to encapsulate it within a recovery image:
+After building a test image using `cros build-image test` as described above,
+you may wish to encapsulate it within a recovery image:
 
 ```bash
-(inside)
-$ ./mod_image_for_recovery.sh \
+(outside)
+$ cros_sdk ./mod_image_for_recovery.sh \
     --board=${BOARD} \
     --nominimize_image \
     --image ~/chromiumos/src/build/images/${BOARD}/latest/chromiumos_test_image.bin \
@@ -1848,7 +1722,7 @@ ${RECOVERY_KERNEL}`.
 You can write this recovery image out to the USB device like so:
 
 ```bash
-(inside)
+(outside)
 $ cros flash usb:// ~/chromiumos/src/build/images/${BOARD}/latest/recovery_test_image.bin
 ```
 
@@ -1865,17 +1739,73 @@ mind.
 
 ## Additional information
 
+### Entering a shell in the chroot
+
+For commands which need executed in the SDK, we've previously prefixed all them
+with `cros_sdk` in this guide.  However, you may find that getting a shell in
+the chroot is useful for debugging or some other advanced workflow.  You can do
+so by running `cros_sdk` without any arguments:
+
+```bash
+(outside)
+$ cros_sdk
+```
+
+This command will probably prompt you for your password for the `sudo` command
+(entering the chroot requires root privileges). Once the command finishes, that
+terminal is in the chroot and you'll be in the `~/chromiumos/src/scripts`
+directory, where most build commands live. In the chroot you can only see a
+subset of the filesystem on your machine. However, through some trickery (bind
+mounts), you will have access to the whole `src` directory from within the
+chroot – this is so that you can build the software within the chroot.
+
+Note in particular that the `src/scripts` directory is the same `src/scripts`
+directory found within the ChromiumOS directory you were in before you entered
+the chroot, even though it looks like a different location. That's because when
+you enter the chroot, the `~/chromiumos` directory in the chroot is mounted such
+that it points to the main ChromiumOS directory `~/chromiumos` outside the
+chroot. That means that changes that you make to the source code outside of the
+chroot immediately take effect inside the chroot.
+
+Calling this will also install a chroot, if you don't have one yet, for example
+by not following the above.
+
+While in the chroot you will see a special "(cr)" prompt to remind you
+that you are there:
+
+```bash
+(cr) ((...)) johnnyrotten@flyingkite ~/chromiumos/src/scripts $
+```
+
+You generally cannot run programs on your filesystem from within the chroot. For
+example, if you are using eclipse as an IDE, or gedit to edit a text file, you
+will need to run those programs outside the chroot.  For lightweight editing,
+`vi` (not `vim`) and `nano` are available.
+
+
+**SIDE NOTES:**
+
+*   If you need to share lots of files inside and outside chroot (for example,
+    settings for your favorite editor / tools, or files downloaded by browser
+    outside chroot, etc.), read [Tips and Tricks].
+*   There is a file system loop because inside `~/chromiumos` you will find the
+    chroot again. Don't think about this for too long. If you try to use `du -s
+    ~/chromiumos/chroot/home` you might get a message about a corrupted
+    file system. This is nothing to worry about, and just means that your
+    computer doesn't understand this loop either. (If you _can_ understand this
+    loop, try [something harder].)
+
 ### Updating the chroot
 
 You should run `update_chroot` after `repo sync`.
 `repo sync` only updates the source code, `update_chroot` is required to apply
 those changes to the chroot.
 `update_chroot` can be run manually, alternatively it is run as part of
-`setup_board` and `build_packages`.
+`cros build-packages`.
 
 ```bash
-(inside)
-$ ./update_chroot
+(outside)
+$ cros_sdk update_chroot
 ```
 
 ### Documentation on this site
@@ -1947,10 +1877,11 @@ Below are a few links to external sites that you might also find helpful
 [README.md]: README.md
 [Prerequisites]: #Prerequisites
 [Getting the source code]: #Get-the-Source
+[sync to stable]: #Sync-to-stable
 [Building ChromiumOS]: #Building-ChromiumOS
 [Installing ChromiumOS on your Device]: #Installing-ChromiumOS-on-your-Device
 [Making changes to packages whose source code is checked into ChromiumOS git repositories]: #Making-changes-to-packages-whose-source-code-is-checked-into-ChromiumOS-git-repositories
-[Making changes to non-cros_workon-able packages]: #Making-changes-to-non_cros_workon_able-packages
+[Making changes to non-cros-workon-able packages]: #Making-changes-to-non_cros-workon_able-packages
 [Local Debugging]: #Local-Debugging
 [Remote Debugging]: #Remote-Debugging
 [Troubleshooting]: #Troubleshooting
@@ -1970,25 +1901,25 @@ Below are a few links to external sites that you might also find helpful
 [working on a branch page]: work_on_branch.md
 [chroot]: https://en.wikipedia.org/wiki/Chroot
 [gsutil]: gsutil.md
+[bazel_remote_caching]: bazel_remote_caching.md
 [crosbug/10048]: https://crbug.com/192478
 [Tips And Tricks]: tips-and-tricks.md
 [something harder]: https://www.google.com/search?q=the+fourth+dimension
 [issues with virtual packages]: https://crbug.com/187712
-[What does build_packages actually do?]: portage/ebuild_faq.md#what-does-build-packages-do
+[What does cros build-packages actually do?]: portage/ebuild_faq.md#what-does-build-packages-do
 [CrOS Flash page]: cros_flash.md
-[Debug Button Shortcuts]: debug_buttons.md
+[Debug Button Shortcuts]: /chromium-os/developer-library/guides/debugging/debug-buttons
 [ChromeOS Devices]: https://dev.chromium.org/chromium-os/developer-information-for-chrome-os-devices
 [Developer Hardware]: https://dev.chromium.org/chromium-os/getting-dev-hardware/dev-hardware-list
 [crosh]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/crosh/
 [cros_vm]: cros_vm.md#launch-a-locally-built-vm-from-within-the-chroot
 [cros deploy]: cros_deploy.md
 [Create a branch for your changes]: #Create-a-branch-for-your-changes
-[Making changes to the Chromium web browser on ChromiumOS]: simple_chrome_workflow.md
 [chromeos-uprev-tester]: simple_chrome_workflow.md#testing-a-chromium-cl-remotely-on-cros-cq
 [Remote Debugging in ChromiumOS]: https://www.chromium.org/chromium-os/how-tos-and-troubleshooting/remote-debugging
 [cgdb]: https://cgdb.github.io/
 [crbug.com/new]: https://crbug.com/new
-[Simple Chrome Workflow]: simple_chrome_workflow.md
+[Simple Chrome Workflow]: https://www.chromium.org/chromium-os/developer-library/guides/development/simple-chrome-workflow
 [Tast]: https://chromium.googlesource.com/chromiumos/platform/tast/
 [Autotest]: https://autotest.github.io/
 [Tast Quickstart]: https://chromium.googlesource.com/chromiumos/platform/tast/+/HEAD/docs/quickstart.md
@@ -2035,3 +1966,5 @@ Below are a few links to external sites that you might also find helpful
 [Developer Mode]: ./developer_mode.md
 [./stack_traces.md]: stack_traces.md
 [build codelab]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/codelab/README.md
+[ChromiumIDE]: https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/ide_tooling/docs/quickstart.md
+[novnc]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/screen-capture-utils/README.md#kmsvnc

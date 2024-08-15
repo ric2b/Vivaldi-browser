@@ -7,6 +7,7 @@
 #include "chrome/browser/ui/autofill/autofill_bubble_base.h"
 #include "chrome/browser/ui/autofill/autofill_bubble_handler.h"
 #include "chrome/browser/ui/page_action/page_action_icon_type.h"
+#include "components/autofill/core/browser/metrics/payments/virtual_card_enrollment_metrics.h"
 #include "components/autofill/core/browser/payments/virtual_card_enroll_metrics_logger.h"
 #include "components/autofill/core/browser/payments/virtual_card_enrollment_flow.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
@@ -94,24 +95,75 @@ VirtualCardEnrollBubbleControllerImpl::GetVirtualCardEnrollmentBubbleSource()
 }
 
 AutofillBubbleBase*
-VirtualCardEnrollBubbleControllerImpl::GetVirtualCardEnrollBubbleView() const {
+VirtualCardEnrollBubbleControllerImpl::GetVirtualCardBubbleView() const {
   return bubble_view();
 }
 
 #if !BUILDFLAG(IS_ANDROID)
 void VirtualCardEnrollBubbleControllerImpl::HideIconAndBubble() {
   HideBubble();
-  bubble_state_ = BubbleState::kHidden;
+  ResetBubble();
   UpdatePageActionIcon();
+}
+
+bool VirtualCardEnrollBubbleControllerImpl::IsEnrollmentInProgress() const {
+  return enrollment_status_ == EnrollmentStatus::kPaymentsServerRequestInFlight;
+}
+
+bool VirtualCardEnrollBubbleControllerImpl::IsEnrollmentComplete() const {
+  return enrollment_status_ == EnrollmentStatus::kCompleted;
+}
+
+void VirtualCardEnrollBubbleControllerImpl::ShowConfirmationBubbleView(
+    bool is_vcn_enrolled) {
+  HideIconAndBubble();
+  enrollment_status_ = EnrollmentStatus::kCompleted;
+  confirmation_ui_params_ =
+      is_vcn_enrolled ? SaveCardAndVirtualCardEnrollConfirmationUiParams::
+                            CreateForVirtualCardSuccess()
+                      : SaveCardAndVirtualCardEnrollConfirmationUiParams::
+                            CreateForVirtualCardFailure(
+                                /*card_label=*/ui_model_.enrollment_fields
+                                    .credit_card.NetworkAndLastFourDigits());
+  // Show enrollment confirmation bubble.
+  Show();
 }
 #endif
 
-void VirtualCardEnrollBubbleControllerImpl::OnAcceptButton() {
+void VirtualCardEnrollBubbleControllerImpl::OnAcceptButton(
+    bool did_switch_to_loading_state) {
   std::move(accept_virtual_card_callback_).Run();
   decline_virtual_card_callback_.Reset();
 
 #if !BUILDFLAG(IS_ANDROID)
-  bubble_state_ = BubbleState::kHidden;
+  if (did_switch_to_loading_state) {
+    // When user clicks "Accept", the bubble closing is delayed since we wait
+    // for the enrollment to finish on the server.
+    enrollment_status_ = EnrollmentStatus::kPaymentsServerRequestInFlight;
+    LogVirtualCardEnrollmentLoadingViewShown(/*is_shown=*/true);
+
+    // Log metrics here instead of when the bubble is closed. When
+    // "did_switch_to_loading_state == true" we don't immediately close the
+    // bubble, so this ensures we don't have to wait for a future closure to log
+    // the user's acceptance.
+    if (base::FeatureList::IsEnabled(
+            features::kAutofillEnableVirtualCardEnrollMetricsLogger)) {
+      VirtualCardEnrollMetricsLogger::OnDismissed(
+          VirtualCardEnrollmentBubbleResult::
+              VIRTUAL_CARD_ENROLLMENT_BUBBLE_ACCEPTED,
+          ui_model_.enrollment_fields.virtual_card_enrollment_source,
+          is_user_gesture_, ui_model_.enrollment_fields.previously_declined);
+    } else {
+      LogVirtualCardEnrollmentBubbleResultMetric(
+          VirtualCardEnrollmentBubbleResult::
+              VIRTUAL_CARD_ENROLLMENT_BUBBLE_ACCEPTED,
+          GetVirtualCardEnrollmentBubbleSource(), is_user_gesture_,
+          ui_model_.enrollment_fields.previously_declined);
+    }
+  } else {
+    bubble_state_ = BubbleState::kHidden;
+    LogVirtualCardEnrollmentLoadingViewShown(/*is_shown=*/false);
+  }
 #endif
 }
 
@@ -152,48 +204,90 @@ void VirtualCardEnrollBubbleControllerImpl::OnBubbleClosed(
   set_bubble_view(nullptr);
   UpdatePageActionIcon();
 
-  VirtualCardEnrollmentBubbleResult result;
-  switch (closed_reason) {
-    case PaymentsBubbleClosedReason::kAccepted:
-      result = VirtualCardEnrollmentBubbleResult::
-          VIRTUAL_CARD_ENROLLMENT_BUBBLE_ACCEPTED;
-      break;
-    case PaymentsBubbleClosedReason::kClosed:
-      result = VirtualCardEnrollmentBubbleResult::
-          VIRTUAL_CARD_ENROLLMENT_BUBBLE_CLOSED;
-      break;
-    case PaymentsBubbleClosedReason::kNotInteracted:
-      result = VirtualCardEnrollmentBubbleResult::
-          VIRTUAL_CARD_ENROLLMENT_BUBBLE_NOT_INTERACTED;
-      break;
-    case PaymentsBubbleClosedReason::kLostFocus:
-      result = VirtualCardEnrollmentBubbleResult::
-          VIRTUAL_CARD_ENROLLMENT_BUBBLE_LOST_FOCUS;
-      break;
-    case PaymentsBubbleClosedReason::kCancelled:
-      result = VirtualCardEnrollmentBubbleResult::
-          VIRTUAL_CARD_ENROLLMENT_BUBBLE_CANCELLED;
-      break;
-    case PaymentsBubbleClosedReason::kUnknown:
-      NOTREACHED();
-      result = VirtualCardEnrollmentBubbleResult::
-          VIRTUAL_CARD_ENROLLMENT_BUBBLE_RESULT_UNKNOWN;
-  }
-
   // If the dialog is to be shown again because user clicked on links, do not
   // log metrics.
-  if (!reprompt_required_) {
+  if (reprompt_required_) {
+    return;
+  }
+
+  auto get_metric = [](PaymentsBubbleClosedReason reason) {
+    switch (reason) {
+      case PaymentsBubbleClosedReason::kAccepted:
+        return VirtualCardEnrollmentBubbleResult::
+            VIRTUAL_CARD_ENROLLMENT_BUBBLE_ACCEPTED;
+      case PaymentsBubbleClosedReason::kCancelled:
+        return VirtualCardEnrollmentBubbleResult::
+            VIRTUAL_CARD_ENROLLMENT_BUBBLE_CANCELLED;
+      case PaymentsBubbleClosedReason::kClosed:
+        return VirtualCardEnrollmentBubbleResult::
+            VIRTUAL_CARD_ENROLLMENT_BUBBLE_CLOSED;
+      case PaymentsBubbleClosedReason::kNotInteracted:
+        return VirtualCardEnrollmentBubbleResult::
+            VIRTUAL_CARD_ENROLLMENT_BUBBLE_NOT_INTERACTED;
+      case PaymentsBubbleClosedReason::kLostFocus:
+        return VirtualCardEnrollmentBubbleResult::
+            VIRTUAL_CARD_ENROLLMENT_BUBBLE_LOST_FOCUS;
+      case PaymentsBubbleClosedReason::kUnknown:
+        return VirtualCardEnrollmentBubbleResult::
+            VIRTUAL_CARD_ENROLLMENT_BUBBLE_RESULT_UNKNOWN;
+    }
+  };
+
+  const bool result_metric_already_recorded = [&] {
+#if BUILDFLAG(IS_ANDROID)
+    return false;
+#else
+    switch (enrollment_status_) {
+      case EnrollmentStatus::kPaymentsServerRequestInFlight:
+        LogVirtualCardEnrollmentLoadingViewResult(get_metric(closed_reason));
+        return true;
+      case EnrollmentStatus::kCompleted:
+        LogVirtualCardEnrollmentConfirmationViewResult(
+            get_metric(closed_reason), confirmation_ui_params_->is_success);
+        return true;
+      case EnrollmentStatus::kNone:
+        return false;
+    }
+    NOTREACHED_NORETURN();
+#endif
+  }();
+
+  // If the result metric wasn't already recorded, record it here.
+  if (!result_metric_already_recorded) {
     if (base::FeatureList::IsEnabled(
             features::kAutofillEnableVirtualCardEnrollMetricsLogger)) {
       VirtualCardEnrollMetricsLogger::OnDismissed(
-          result, ui_model_.enrollment_fields.virtual_card_enrollment_source,
+          get_metric(closed_reason),
+          ui_model_.enrollment_fields.virtual_card_enrollment_source,
           is_user_gesture_, ui_model_.enrollment_fields.previously_declined);
     } else {
       LogVirtualCardEnrollmentBubbleResultMetric(
-          result, GetVirtualCardEnrollmentBubbleSource(), is_user_gesture_,
-          ui_model_.enrollment_fields.previously_declined);
+          get_metric(closed_reason), GetVirtualCardEnrollmentBubbleSource(),
+          is_user_gesture_, ui_model_.enrollment_fields.previously_declined);
     }
   }
+
+#if !BUILDFLAG(IS_ANDROID)
+  // If the bubble is closed with the enrollment_status_ as
+  // kCompleted, hide the bubble and icon and reset bubble to its initial
+  // state.
+  if (enrollment_status_ == EnrollmentStatus::kCompleted) {
+    ResetBubble();
+    UpdatePageActionIcon();
+  }
+#endif
+}
+
+base::OnceCallback<void(PaymentsBubbleClosedReason)>
+VirtualCardEnrollBubbleControllerImpl::GetOnBubbleClosedCallback() {
+  return base::BindOnce(&VirtualCardEnrollBubbleControllerImpl::OnBubbleClosed,
+                        weak_ptr_factory_.GetWeakPtr());
+}
+
+const SaveCardAndVirtualCardEnrollConfirmationUiParams&
+VirtualCardEnrollBubbleControllerImpl::GetConfirmationUiParams() const {
+  CHECK(confirmation_ui_params_.has_value());
+  return confirmation_ui_params_.value();
 }
 
 bool VirtualCardEnrollBubbleControllerImpl::IsIconVisible() const {
@@ -255,12 +349,29 @@ void VirtualCardEnrollBubbleControllerImpl::DoShowBubble() {
   }
 
   Browser* browser = chrome::FindBrowserWithTab(web_contents());
-  // For reprompts after link clicks, |is_user_gesture| is set to false.
-  bool user_gesture_reprompt = reprompt_required_ ? false : is_user_gesture_;
-  set_bubble_view(browser->window()
-                      ->GetAutofillBubbleHandler()
-                      ->ShowVirtualCardEnrollBubble(web_contents(), this,
-                                                    user_gesture_reprompt));
+
+  if (enrollment_status_ == EnrollmentStatus::kCompleted) {
+    if (base::FeatureList::IsEnabled(
+            features::kAutofillEnableVcnEnrollLoadingAndConfirmation)) {
+      set_bubble_view(
+          browser->window()
+              ->GetAutofillBubbleHandler()
+              ->ShowVirtualCardEnrollConfirmationBubble(web_contents(), this));
+      LogVirtualCardEnrollmentConfirmationViewShown(
+          /*is_shown=*/true, confirmation_ui_params_->is_success);
+    } else {
+      LogVirtualCardEnrollmentConfirmationViewShown(
+          /*is_shown=*/false, confirmation_ui_params_->is_success);
+    }
+  } else {
+    // For reprompts after link clicks, `is_user_gesture` is set to false.
+    bool user_gesture_reprompt = reprompt_required_ ? false : is_user_gesture_;
+
+    set_bubble_view(browser->window()
+                        ->GetAutofillBubbleHandler()
+                        ->ShowVirtualCardEnrollBubble(web_contents(), this,
+                                                      user_gesture_reprompt));
+  }
   DCHECK(bubble_view());
   // Update |bubble_state_| after bubble is shown once. In OnVisibilityChanged()
   // we display the bubble if the the state is kShowingIconAndBubble. Once we
@@ -268,6 +379,13 @@ void VirtualCardEnrollBubbleControllerImpl::DoShowBubble() {
   // sure further OnVisibilityChanged() don't trigger opening the bubble because
   // we don't want to re-show it every time the web contents become visible.
   bubble_state_ = BubbleState::kShowingIcon;
+
+  // Metrics for showing virtual card enroll bubble are logged once when
+  // enrollment is offered, do not log the same metrics again while showing
+  // confirmation bubble.
+  if (enrollment_status_ == EnrollmentStatus::kCompleted) {
+    return;
+  }
 #endif  // BUILDFLAG(IS_ANDROID)
 
   // If the dialog is to be shown again because user clicked on links, do not
@@ -301,6 +419,12 @@ bool VirtualCardEnrollBubbleControllerImpl::IsWebContentsActive() {
 
   return active_browser->tab_strip_model()->GetActiveWebContents() ==
          web_contents();
+}
+
+void VirtualCardEnrollBubbleControllerImpl::ResetBubble() {
+  bubble_state_ = BubbleState::kHidden;
+  enrollment_status_ = EnrollmentStatus::kNone;
+  confirmation_ui_params_.reset();
 }
 #endif
 

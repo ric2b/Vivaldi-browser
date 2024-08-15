@@ -24,9 +24,9 @@ class AssistantWebViewDelegate;
 class COMPONENT_EXPORT(ASSISTANT_UI) AssistantWebContainerView
     : public views::WidgetDelegateView,
       public AshWebView::Observer {
- public:
-  METADATA_HEADER(AssistantWebContainerView);
+  METADATA_HEADER(AssistantWebContainerView, views::WidgetDelegateView)
 
+ public:
   explicit AssistantWebContainerView(
       AssistantWebViewDelegate* web_container_view_delegate);
 
@@ -44,7 +44,6 @@ class COMPONENT_EXPORT(ASSISTANT_UI) AssistantWebContainerView
   gfx::Size CalculatePreferredSize() const override;
   void ChildPreferredSizeChanged(views::View* child) override;
   views::ClientView* CreateClientView(views::Widget* widget) override;
-  void OnWidgetInitialized() override;
   void OnThemeChanged() override;
 
   // AssistantWebView::Observer:

@@ -25,7 +25,7 @@ struct SyncedFileData {
   std::string mimetype;
   bool has_content_locally = false;
   bool is_deleting = false;
-  absl::optional<std::vector<uint8_t>> content;
+  std::optional<std::vector<uint8_t>> content;
   std::vector<SyncedFileStore::GetFileCallback> pending_callbacks;
 };
 

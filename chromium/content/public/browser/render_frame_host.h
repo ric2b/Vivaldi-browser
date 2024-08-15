@@ -45,7 +45,7 @@
 #include "ui/gfx/native_widget_types.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "third_party/jni_zero/scoped_java_ref.h"
+#include "third_party/jni_zero/jni_zero.h"
 #endif
 
 class GURL;
@@ -740,7 +740,7 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // to this, IsActive() is preferred instead of using LifecycleState::kActive.
   // TODO(crbug.com/1177198): Make IsActive and GetLifecycleState() == kActive
   // always match.
-  virtual bool IsActive() = 0;
+  virtual bool IsActive() const = 0;
 
   // Checks that the RenderFrameHost is inactive (with some exceptions) and
   // ensures that it will be never activated if it is inactive when calling this

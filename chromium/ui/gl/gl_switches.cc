@@ -196,11 +196,6 @@ BASE_FEATURE(kDCompVisualTreeOptimization,
              "DCompVisualTreeOptimization",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Use presentation feedback event queries (must be enabled) to limit latency.
-BASE_FEATURE(kDirectCompositionLowLatencyPresentation,
-             "DirectCompositionLowLatencyPresentation",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Allow overlay swapchain to present on all GPUs even if they only support
 // software overlays. GPU deny lists limit it to NVIDIA only at the moment.
 BASE_FEATURE(kDirectCompositionSoftwareOverlays,
@@ -219,6 +214,14 @@ BASE_FEATURE(kDirectCompositionLetterboxVideoOptimization,
 // chain. This feature is intended for testing and debugging.
 BASE_FEATURE(kDirectCompositionUnlimitedOverlays,
              "DirectCompositionUnlimitedOverlays",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Allow overlay candidates to have resources that are not scanout. These
+// resources will be copied to DComp surfaces in the output device, as needed.
+// This allows testing delegated compositing on versions of Windows that do not
+// support directly scanning out textures.
+BASE_FEATURE(kCopyNonOverlayResourcesToDCompSurfaces,
+             "CopyNonOverlayResourcesToDCompSurfaces",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Allow dual GPU rendering through EGL where supported, i.e., allow a WebGL
@@ -255,7 +258,7 @@ BASE_FEATURE(kDefaultANGLEOpenGL,
 // Default to using ANGLE's Metal backend.
 BASE_FEATURE(kDefaultANGLEMetal,
              "DefaultANGLEMetal",
-#if BUILDFLAG(IS_IOS)
+#if BUILDFLAG(IS_IOS) || (BUILDFLAG(IS_MAC) && defined(ARCH_CPU_ARM64))
              base::FEATURE_ENABLED_BY_DEFAULT
 #else
              base::FEATURE_DISABLED_BY_DEFAULT

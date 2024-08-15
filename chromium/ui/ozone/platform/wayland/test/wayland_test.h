@@ -48,9 +48,18 @@ class WaylandTestBase {
 
   // Posts 'callback' or 'closure' to run on the server thread; blocks till the
   // callable is run and all pending Wayland requests and events are delivered.
+  // Note: This by default uses base::RunLoops which causes all posted tasks,
+  // including tasks posted with a delay, to run during this call before all
+  // server's events are processed by the client.
+  // The 'no_nested_runloops' parameter can be used to not use runloops for
+  // testing code that posts delayed tasks and the delay can be controlled in
+  // the test without them being executed unexpectedly during this call.
+  // TODO(https://crbug.com/328783999): Avoid nested runloops by default.
   void PostToServerAndWait(
-      base::OnceCallback<void(wl::TestWaylandServerThread* server)> callback);
-  void PostToServerAndWait(base::OnceClosure closure);
+      base::OnceCallback<void(wl::TestWaylandServerThread* server)> callback,
+      bool no_nested_runloops = false);
+  void PostToServerAndWait(base::OnceClosure closure,
+                           bool no_nested_runloops = false);
 
   // Similar to the two methods above, but provides the convenience of using a
   // capturing lambda directly.
@@ -59,8 +68,9 @@ class WaylandTestBase {
       typename = std::enable_if_t<
           std::is_invocable_r_v<void, Lambda, wl::TestWaylandServerThread*> ||
           std::is_invocable_r_v<void, Lambda>>>
-  void PostToServerAndWait(Lambda&& lambda) {
-    PostToServerAndWait(base::BindLambdaForTesting(std::move(lambda)));
+  void PostToServerAndWait(Lambda&& lambda, bool no_nested_runloops = false) {
+    PostToServerAndWait(base::BindLambdaForTesting(std::move(lambda)),
+                        no_nested_runloops);
   }
 
  protected:
@@ -76,14 +86,14 @@ class WaylandTestBase {
   void SendConfigureEvent(uint32_t surface_id,
                           const gfx::Size& size,
                           const wl::ScopedWlArray& states,
-                          absl::optional<uint32_t> serial = absl::nullopt);
+                          std::optional<uint32_t> serial = std::nullopt);
 
   // Sends XDG_TOPLEVEL_STATE_ACTIVATED to the surface that has |surface_id| and
   // has xdg surface role with width and height set to 0, which results in
   // asking the client to set the width and height of the surface. The client
   // test may pass |serial| that will be used to activate the surface.
   void ActivateSurface(uint32_t surface_id,
-                       absl::optional<uint32_t> serial = absl::nullopt);
+                       std::optional<uint32_t> serial = std::nullopt);
 
   // Initializes SurfaceAugmenter in |server_|.
   void InitializeSurfaceAugmenter();

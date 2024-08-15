@@ -25,10 +25,11 @@ void FakeIdentityRequestDialogController::ShowAccountsDialog(
     const std::vector<content::IdentityProviderData>& identity_provider_data,
     IdentityRequestAccount::SignInMode sign_in_mode,
     blink::mojom::RpMode rp_mode,
-    bool show_auto_reauthn_checkbox,
+    const std::optional<content::IdentityProviderData>& new_account_idp,
     AccountSelectionCallback on_selected,
     LoginToIdPCallback on_add_account,
-    DismissCallback dismiss_callback) {
+    DismissCallback dismiss_callback,
+    AccountsDisplayedCallback accounts_displayed_callback) {
   // TODO(crbug.com/1348262): Temporarily support only the first IDP, extend to
   // support multiple IDPs.
   std::vector<IdentityRequestAccount> accounts =
@@ -93,8 +94,19 @@ void FakeIdentityRequestDialogController::ShowErrorDialog(
     const std::optional<TokenError>& error,
     DismissCallback dismiss_callback,
     MoreDetailsCallback more_details_callback) {
-  DCHECK(dismiss_callback);
-  std::move(dismiss_callback).Run(DismissReason::kOther);
+  if (!is_interception_enabled_) {
+    DCHECK(dismiss_callback);
+    std::move(dismiss_callback).Run(DismissReason::kOther);
+  }
+}
+
+void FakeIdentityRequestDialogController::ShowLoadingDialog(
+    const std::string& top_frame_for_display,
+    const std::string& idp_for_display,
+    blink::mojom::RpContext rp_context,
+    blink::mojom::RpMode rp_mode,
+    DismissCallback dismiss_callback) {
+  title_ = "Loading";
 }
 
 std::string FakeIdentityRequestDialogController::GetTitle() const {
@@ -151,4 +163,11 @@ void FakeIdentityRequestDialogController::WebContentsDestroyed() {
   popup_window_ = nullptr;
 }
 
+void FakeIdentityRequestDialogController::RequestIdPRegistrationPermision(
+    const url::Origin& origin,
+    base::OnceCallback<void(bool accepted)> callback) {
+  if (!is_interception_enabled_) {
+    std::move(callback).Run(false);
+  }
+}
 }  // namespace content

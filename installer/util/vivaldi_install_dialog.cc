@@ -53,7 +53,7 @@ struct {
 #undef HANDLE_VIVALDI_LANGUAGE_NAME
 };
 
-absl::optional<vivaldi::InstallType> GetInstallTypeFromComboIndex(int i) {
+std::optional<vivaldi::InstallType> GetInstallTypeFromComboIndex(int i) {
   static const vivaldi::InstallType selection_type_map[] = {
       vivaldi::InstallType::kForAllUsers,
       vivaldi::InstallType::kForCurrentUser,
@@ -62,7 +62,7 @@ absl::optional<vivaldi::InstallType> GetInstallTypeFromComboIndex(int i) {
   if (0 <= i && static_cast<unsigned>(i) < std::size(selection_type_map)) {
     return selection_type_map[i];
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 DWORD ToComboIndex(vivaldi::InstallType install_type) {
@@ -128,7 +128,7 @@ VivaldiInstallDialog::VivaldiInstallDialog(HINSTANCE instance,
 
   if (!options_.install_dir.empty()) {
     // An existing type unconditionally overrides any option or registry.
-    absl::optional<vivaldi::InstallType> existing_install_type =
+    std::optional<vivaldi::InstallType> existing_install_type =
         vivaldi::FindInstallType(options_.install_dir);
     if (existing_install_type) {
       options_.install_type = *existing_install_type;
@@ -189,8 +189,8 @@ void VivaldiInstallDialog::ReadLastInstallValues() {
   base::FilePath registry_install_dir(vivaldi::ReadRegistryString(
       vivaldi::constants::kVivaldiInstallerDestinationFolder, key));
 
-  absl::optional<vivaldi::InstallType> registry_install_type;
-  if (absl::optional<uint32_t> value = vivaldi::ReadRegistryUint32(
+  std::optional<vivaldi::InstallType> registry_install_type;
+  if (std::optional<uint32_t> value = vivaldi::ReadRegistryUint32(
           vivaldi::constants::kVivaldiInstallerInstallType, key)) {
     registry_install_type = GetInstallTypeFromComboIndex(*value);
     if (!registry_install_type) {
@@ -228,19 +228,19 @@ void VivaldiInstallDialog::ReadLastInstallValues() {
   }
 
   if (!options_.given_register_browser) {
-    if (absl::optional<bool> bool_value = vivaldi::ReadRegistryBool(
+    if (std::optional<bool> bool_value = vivaldi::ReadRegistryBool(
             vivaldi::constants::kVivaldiInstallerDefaultBrowser, key)) {
       options_.register_browser = *bool_value;
       options_.given_register_browser = true;
     }
   }
 
-  if (absl::optional<bool> bool_value = vivaldi::ReadRegistryBool(
+  if (std::optional<bool> bool_value = vivaldi::ReadRegistryBool(
           vivaldi::constants::kVivaldiInstallerAdvancedMode, key)) {
     advanced_mode_ = *bool_value;
   }
 
-  if (absl::optional<bool> bool_value = vivaldi::ReadRegistryBool(
+  if (std::optional<bool> bool_value = vivaldi::ReadRegistryBool(
           vivaldi::constants::kVivaldiInstallerDisableStandaloneAutoupdate,
           key)) {
     disable_standalone_autoupdates_ = *bool_value;
@@ -497,7 +497,7 @@ void VivaldiInstallDialog::DoDialog() {
 
 void VivaldiInstallDialog::OnInstallTypeSelection() {
   int i = ComboBox_GetCurSel(GetDlgItem(hdlg_, IDC_COMBO_INSTALLTYPES));
-  absl::optional<vivaldi::InstallType> type = GetInstallTypeFromComboIndex(i);
+  std::optional<vivaldi::InstallType> type = GetInstallTypeFromComboIndex(i);
   if (!type || *type == options_.install_type)
     return;
 
@@ -875,7 +875,7 @@ INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
                           BM_GETCHECK, 0, 0) != 0;
           int i = SendMessage(GetDlgItem(hdlg, IDC_COMBO_INSTALLTYPES),
                               CB_GETCURSEL, 0, 0);
-          absl::optional<vivaldi::InstallType> type =
+          std::optional<vivaldi::InstallType> type =
               GetInstallTypeFromComboIndex(i);
           if (type) {
             this_->options_.install_type = *type;

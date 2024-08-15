@@ -22,6 +22,7 @@
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
+#include "third_party/blink/public/web/web_frame.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -53,6 +54,10 @@ class ContentSettingsAgentImpl
    public:
     virtual ~Delegate();
 
+    // Return true if this frame should be allowlisted for accessing storage.
+    virtual bool IsFrameAllowlistedForStorageAccess(
+        blink::WebFrame* frame) const;
+
     // Return true if this scheme should be allowlisted for content settings.
     virtual bool IsSchemeAllowlisted(const std::string& scheme);
 
@@ -61,8 +66,8 @@ class ContentSettingsAgentImpl
     virtual bool AllowReadFromClipboard();
     virtual bool AllowWriteToClipboard();
     // If an optional value is
-    // returned, return absl::nullopt to use the default logic.
-    virtual absl::optional<bool> AllowMutationEvents();
+    // returned, return std::nullopt to use the default logic.
+    virtual std::optional<bool> AllowMutationEvents();
   };
 
   // Set `should_allowlist` to true if `render_frame()` contains content that
@@ -87,11 +92,6 @@ class ContentSettingsAgentImpl
   void AllowStorageAccess(StorageType storage_type,
                           base::OnceCallback<void(bool)> callback) override;
   bool AllowStorageAccessSync(StorageType type) override;
-  bool AllowImage(bool enabled_per_settings,
-                  const blink::WebURL& image_url) override;
-  bool AllowScript(bool enabled_per_settings) override;
-  bool AllowScriptFromSource(bool enabled_per_settings,
-                             const blink::WebURL& script_url) override;
   bool AllowReadFromClipboard() override;
   bool AllowWriteToClipboard() override;
   bool AllowMutationEvents(bool default_value) override;
@@ -165,9 +165,6 @@ class ContentSettingsAgentImpl
   // Caches the result of AllowStorageAccess.
   using StoragePermissionsKey = std::pair<url::Origin, StorageType>;
   base::flat_map<StoragePermissionsKey, bool> cached_storage_permissions_;
-
-  // Caches the result of AllowScript.
-  base::flat_map<blink::WebFrame*, bool> cached_script_permissions_;
 
   bool mixed_content_autoupgrades_disabled_ = false;
 

@@ -3,11 +3,12 @@
 # found in the LICENSE file.
 
 import("//build_overrides/build.gni")
+import("../../gni/openscreen.gni")
 
 visibility = [ "./*" ]
 
 if (current_toolchain == host_toolchain) {
-  executable("cddl") {
+  openscreen_executable("cddl") {
     visibility += [ "../../*" ]
 
     public = []
@@ -25,7 +26,5 @@ if (current_toolchain == host_toolchain) {
     ]
 
     deps = [ "../../third_party/abseil" ]
-
-    configs += [ "../../build:openscreen_include_dirs" ]
   }
 }

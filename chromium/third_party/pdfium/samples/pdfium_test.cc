@@ -14,6 +14,7 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -22,6 +23,7 @@
 #define PDF_USE_SKIA
 #endif
 
+#include "core/fxcrt/check_op.h"
 #include "public/cpp/fpdf_scopers.h"
 #include "public/fpdf_annot.h"
 #include "public/fpdf_attachment.h"
@@ -44,8 +46,6 @@
 #include "testing/utils/file_util.h"
 #include "testing/utils/hash.h"
 #include "testing/utils/path_service.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/base/check_op.h"
 
 #ifdef _WIN32
 #include <crtdbg.h>
@@ -54,7 +54,6 @@
 #include <wingdi.h>
 
 #include "samples/helpers/win32/com_factory.h"
-#include "third_party/base/win/scoped_select_object.h"
 #else
 #include <unistd.h>
 #endif  // _WIN32
@@ -229,7 +228,7 @@ int PageRenderFlagsFromOptions(const Options& options) {
   return flags;
 }
 
-absl::optional<std::string> ExpandDirectoryPath(const std::string& path) {
+std::optional<std::string> ExpandDirectoryPath(const std::string& path) {
 #if defined(WORDEXP_AVAILABLE)
   wordexp_t expansion;
   if (wordexp(path.c_str(), &expansion, 0) != 0 || expansion.we_wordc < 1) {
@@ -238,7 +237,7 @@ absl::optional<std::string> ExpandDirectoryPath(const std::string& path) {
   }
   // Need to contruct the return value before hand, since wordfree will
   // deallocate |expansion|.
-  absl::optional<std::string> ret_val = {expansion.we_wordv[0]};
+  std::optional<std::string> ret_val = {expansion.we_wordv[0]};
   wordfree(&expansion);
   return ret_val;
 #else
@@ -246,7 +245,7 @@ absl::optional<std::string> ExpandDirectoryPath(const std::string& path) {
 #endif  // WORDEXP_AVAILABLE
 }
 
-absl::optional<const char*> GetCustomFontPath(const Options& options) {
+std::optional<const char*> GetCustomFontPath(const Options& options) {
 #if defined(__APPLE__) || (defined(__linux__) && !defined(__ANDROID__))
   // Set custom font path to an empty path. This avoids the fallback to default
   // font paths.
@@ -256,7 +255,7 @@ absl::optional<const char*> GetCustomFontPath(const Options& options) {
 
   // No custom font path. Use default.
   if (options.font_directory.empty())
-    return absl::nullopt;
+    return std::nullopt;
 
   // Set custom font path to |options.font_directory|.
   return options.font_directory.c_str();
@@ -608,7 +607,7 @@ bool ParseCommandLine(const std::vector<std::string>& args,
         return false;
       }
       std::string path = value;
-      absl::optional<std::string> expanded_path = ExpandDirectoryPath(path);
+      std::optional<std::string> expanded_path = ExpandDirectoryPath(path);
       if (!expanded_path.has_value()) {
         fprintf(stderr, "Failed to expand --font-dir, %s\n", path.c_str());
         return false;
@@ -663,7 +662,7 @@ bool ParseCommandLine(const std::vector<std::string>& args,
         return false;
       }
       std::string path = value;
-      absl::optional<std::string> expanded_path = ExpandDirectoryPath(path);
+      std::optional<std::string> expanded_path = ExpandDirectoryPath(path);
       if (!expanded_path.has_value()) {
         fprintf(stderr, "Failed to expand --bin-dir, %s\n", path.c_str());
         return false;
@@ -1181,14 +1180,21 @@ class GdiDisplayPageRenderer : public BitmapPageRenderer {
     if (!dib_.Get() || !InitializeBitmap(dib_pixels)) {
       return false;
     }
-    pdfium::base::win::ScopedSelectObject select_dib(dc_.Get(), dib_.Get());
+
+    HGDIOBJ old_obj = SelectObject(dc_.Get(), dib_.Get());
+    CHECK(old_obj);
+    CHECK_NE(old_obj, HGDI_ERROR);
 
     // Render into the in-memory DC.
     FPDF_RenderPage(dc_.Get(), page(), /*start_x=*/0, /*start_y=*/0,
                     /*size_x=*/width(), /*size_y=*/height(), /*rotate=*/0,
                     /*flags=*/flags());
 
-    return !!GdiFlush();
+    bool result = !!GdiFlush();
+    HGDIOBJ dib_obj = SelectObject(dc_.Get(), old_obj);
+    CHECK((GetObjectType(old_obj) != OBJ_REGION && dib_obj) ||
+          (GetObjectType(old_obj) == OBJ_REGION && dib_obj != HGDI_ERROR));
+    return result;
   }
 
   void Finish(FPDF_FORMHANDLE /*form*/) override {
@@ -1930,7 +1936,7 @@ int main(int argc, const char* argv[]) {
 #endif  // PDF_ENABLE_V8
 
   const char* path_array[2] = {nullptr, nullptr};
-  absl::optional<const char*> custom_font_path = GetCustomFontPath(options);
+  std::optional<const char*> custom_font_path = GetCustomFontPath(options);
   if (custom_font_path.has_value()) {
     path_array[0] = custom_font_path.value();
     config.m_pUserFontPaths = path_array;
@@ -1938,63 +1944,69 @@ int main(int argc, const char* argv[]) {
 
   FPDF_InitLibraryWithConfig(&config);
 
-  std::unique_ptr<FontRenamer> font_renamer;
-  if (options.croscore_font_names)
-    font_renamer = std::make_unique<FontRenamer>();
-
-  UNSUPPORT_INFO unsupported_info = {};
-  unsupported_info.version = 1;
-  unsupported_info.FSDK_UnSupport_Handler = ExampleUnsupportedHandler;
-
-  FSDK_SetUnSpObjProcessHandler(&unsupported_info);
-
-  if (options.time > -1) {
-    // This must be a static var to avoid explicit capture, so the lambda can be
-    // converted to a function ptr.
-    static time_t time_ret = options.time;
-    FSDK_SetTimeFunction([]() { return time_ret; });
-    FSDK_SetLocaltimeFunction([](const time_t* tp) { return gmtime(tp); });
-  }
-
-  Processor processor(&options, &idler);
-  for (const std::string& filename : files) {
-    std::vector<uint8_t> file_contents = GetFileContents(filename.c_str());
-    if (file_contents.empty()) {
-      continue;
+  {
+    std::unique_ptr<FontRenamer> font_renamer;
+    if (options.croscore_font_names) {
+      // Must be destroyed before FPDF_DestroyLibrary().
+      font_renamer = std::make_unique<FontRenamer>();
     }
-    fprintf(stderr, "Processing PDF file %s.\n", filename.c_str());
+
+    UNSUPPORT_INFO unsupported_info = {};
+    unsupported_info.version = 1;
+    unsupported_info.FSDK_UnSupport_Handler = ExampleUnsupportedHandler;
+
+    FSDK_SetUnSpObjProcessHandler(&unsupported_info);
+
+    if (options.time > -1) {
+      // This must be a static var to avoid explicit capture, so the lambda can
+      // be converted to a function ptr.
+      static time_t time_ret = options.time;
+      FSDK_SetTimeFunction([]() { return time_ret; });
+      FSDK_SetLocaltimeFunction([](const time_t* tp) { return gmtime(tp); });
+    }
+
+    Processor processor(&options, &idler);
+    for (const std::string& filename : files) {
+      std::vector<uint8_t> file_contents = GetFileContents(filename.c_str());
+      if (file_contents.empty()) {
+        continue;
+      }
+      fprintf(stderr, "Processing PDF file %s.\n", filename.c_str());
 
 #ifdef ENABLE_CALLGRIND
-    if (options.callgrind_delimiters)
-      CALLGRIND_START_INSTRUMENTATION;
+      if (options.callgrind_delimiters) {
+        CALLGRIND_START_INSTRUMENTATION;
+      }
 #endif  // ENABLE_CALLGRIND
 
-    std::string events;
-    if (options.send_events) {
-      std::string event_filename = filename;
-      size_t extension_pos = event_filename.find(".pdf");
-      if (extension_pos != std::string::npos) {
-        event_filename.replace(extension_pos, 4, ".evt");
-        if (access(event_filename.c_str(), R_OK) == 0) {
-          fprintf(stderr, "Using event file %s.\n", event_filename.c_str());
-          std::vector<uint8_t> event_contents =
-              GetFileContents(event_filename.c_str());
-          if (!event_contents.empty()) {
-            fprintf(stderr, "Sending events from: %s\n",
-                    event_filename.c_str());
-            std::copy(event_contents.begin(), event_contents.end(),
-                      std::back_inserter(events));
+      std::string events;
+      if (options.send_events) {
+        std::string event_filename = filename;
+        size_t extension_pos = event_filename.find(".pdf");
+        if (extension_pos != std::string::npos) {
+          event_filename.replace(extension_pos, 4, ".evt");
+          if (access(event_filename.c_str(), R_OK) == 0) {
+            fprintf(stderr, "Using event file %s.\n", event_filename.c_str());
+            std::vector<uint8_t> event_contents =
+                GetFileContents(event_filename.c_str());
+            if (!event_contents.empty()) {
+              fprintf(stderr, "Sending events from: %s\n",
+                      event_filename.c_str());
+              std::copy(event_contents.begin(), event_contents.end(),
+                        std::back_inserter(events));
+            }
           }
         }
       }
-    }
 
-    processor.ProcessPdf(filename, file_contents, events);
+      processor.ProcessPdf(filename, file_contents, events);
 
 #ifdef ENABLE_CALLGRIND
-    if (options.callgrind_delimiters)
-      CALLGRIND_STOP_INSTRUMENTATION;
+      if (options.callgrind_delimiters) {
+        CALLGRIND_STOP_INSTRUMENTATION;
+      }
 #endif  // ENABLE_CALLGRIND
+    }
   }
 
   FPDF_DestroyLibrary();

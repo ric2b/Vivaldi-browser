@@ -60,7 +60,11 @@ public:
 
     uint32_t uniqueID() const { return fUniqueID; }
 
+    virtual SkISize backingStoreDimensions() const = 0;
+
     virtual size_t getSize() const = 0;
+
+    bool isExactFit() const { return fSubset == SkIRect::MakeSize(this->backingStoreDimensions()); }
 
     const SkColorInfo& colorInfo() const { return fColorInfo; }
     SkAlphaType alphaType() const { return fColorInfo.alphaType(); }
@@ -86,7 +90,15 @@ public:
      */
     sk_sp<SkSpecialImage> makeSubset(const SkIRect& subset) const {
         SkIRect absolute = subset.makeOffset(this->subset().topLeft());
-        return this->onMakeSubset(absolute);
+        return this->onMakeBackingStoreSubset(absolute);
+    }
+
+    /**
+     * Return a special image with a 1px larger subset in the backing store compared to this image.
+     * This should only be used when it's externally known that those outer pixels are valid.
+     */
+    sk_sp<SkSpecialImage> makePixelOutset() const {
+        return this->onMakeBackingStoreSubset(this->subset().makeOutset(1, 1));
     }
 
     /**
@@ -132,8 +144,9 @@ protected:
                    const SkSurfaceProps&);
 
     // This subset is relative to the backing store's coordinate frame, it has already been mapped
-    // from the content rect by the non-virtual makeSubset().
-    virtual sk_sp<SkSpecialImage> onMakeSubset(const SkIRect& subset) const = 0;
+    // from the content rect by the non-virtual makeSubset(). The provided 'subset' is not
+    // necessarily contained within this special image's subset.
+    virtual sk_sp<SkSpecialImage> onMakeBackingStoreSubset(const SkIRect& subset) const = 0;
 
 private:
     const SkIRect        fSubset;

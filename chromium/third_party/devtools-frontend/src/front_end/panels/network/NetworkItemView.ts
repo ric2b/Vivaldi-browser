@@ -30,12 +30,14 @@
 
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as NetworkForward from '../../panels/network/forward/forward.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as LegacyWrapper from '../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import type * as SourceFrame from '../../ui/legacy/components/source_frame/source_frame.js';
 import * as UI from '../../ui/legacy/legacy.js';
+import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import * as NetworkComponents from './components/components.js';
 import {EventSourceMessagesView} from './EventSourceMessagesView.js';
@@ -155,10 +157,13 @@ export class NetworkItemView extends UI.TabbedPane.TabbedPane {
     super();
     this.requestInternal = request;
     this.element.classList.add('network-item-view');
+    this.headerElement().setAttribute('jslog', `${VisualLogging.toolbar('request-details').track({
+                                        keydown: 'ArrowUp|ArrowLeft|ArrowDown|ArrowRight|Enter|Space',
+                                      })}`);
 
     const headersTab = NetworkForward.UIRequestLocation.UIRequestTabs.HeadersComponent;
     this.resourceViewTabSetting = Common.Settings.Settings.instance().createSetting(
-        'resourceViewTab', NetworkForward.UIRequestLocation.UIRequestTabs.HeadersComponent);
+        'resource-view-tab', NetworkForward.UIRequestLocation.UIRequestTabs.HeadersComponent);
 
     this.headersViewComponent = new NetworkComponents.RequestHeadersView.RequestHeadersView(request);
     this.appendTab(
@@ -184,10 +189,15 @@ export class NetworkItemView extends UI.TabbedPane.TabbedPane {
       this.appendTab(
           NetworkForward.UIRequestLocation.UIRequestTabs.WsFrames, i18nString(UIStrings.messages), frameView,
           i18nString(UIStrings.websocketMessages));
-    } else if (request.mimeType === SDK.MimeType.MimeType.EVENTSTREAM) {
+    } else if (request.mimeType === Platform.MimeType.MimeType.EVENTSTREAM) {
       this.appendTab(
           NetworkForward.UIRequestLocation.UIRequestTabs.EventSource, i18nString(UIStrings.eventstream),
           new EventSourceMessagesView(request));
+
+      this.responseView = new RequestResponseView(request);
+      this.appendTab(
+          NetworkForward.UIRequestLocation.UIRequestTabs.Response, i18nString(UIStrings.response), this.responseView,
+          i18nString(UIStrings.rawResponseData));
     } else {
       this.responseView = new RequestResponseView(request);
       const previewView = new RequestPreviewView(request);
@@ -312,13 +322,13 @@ export class NetworkItemView extends UI.TabbedPane.TabbedPane {
     }
   }
 
-  private selectTabInternal(tabId: string): void {
+  private selectTabInternal(tabId: NetworkForward.UIRequestLocation.UIRequestTabs): void {
     if (!this.selectTab(tabId)) {
       // maybeAppendPayloadPanel might cause payload tab to appear asynchronously, so
       // it makes sense to retry on the next tick
       window.setTimeout(() => {
         if (!this.selectTab(tabId)) {
-          this.selectTab('headers');
+          this.selectTab(NetworkForward.UIRequestLocation.UIRequestTabs.HeadersComponent);
         }
       }, 0);
     }

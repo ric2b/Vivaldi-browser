@@ -71,6 +71,7 @@
 #include "third_party/blink/renderer/platform/bindings/v8_private_property.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
+#include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/weborigin/reporting_disposition.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_operators.h"
@@ -122,9 +123,17 @@ void LocalWindowProxy::DisposeContext(Lifecycle next_status,
                ToScriptWrappable(global->GetPrototype().As<v8::Object>()));
     }
     V8DOMWrapper::ClearNativeInfo(GetIsolate(), global);
-    DOMWrapperWorld::ClearWrapperIfEqualTo(GetFrame()->DomWindow(), global);
+    script_state_->World().DomDataStore().ClearIfEqualTo(
+        GetFrame()->DomWindow(), global);
+#if DCHECK_IS_ON()
+    HeapVector<Member<DOMWrapperWorld>> all_worlds;
+    DOMWrapperWorld::AllWorldsInIsolate(script_state_->GetIsolate(),
+                                        all_worlds);
+    for (auto& world : all_worlds) {
+      DCHECK(!world->DomDataStore().EqualTo(GetFrame()->DomWindow(), global));
+    }
+#endif  // DCHECK_IS_ON()
     script_state_->DetachGlobalObject();
-
 #if DCHECK_IS_ON()
     DidDetachGlobalObject();
 #endif
@@ -503,18 +512,29 @@ static void Getter(v8::Local<v8::Name> property,
   HTMLDocument* html_document =
       V8HTMLDocument::ToWrappableUnsafe(info.Holder());
   DCHECK(html_document);
-  v8::Local<v8::Value> result =
+  v8::Local<v8::Value> namedPropertyValue =
       GetNamedProperty(html_document, name, info.Holder(), isolate);
-  if (!result.IsEmpty()) {
-    V8SetReturnValue(info, result);
-    return;
-  }
-  v8::Local<v8::Value> value;
-  if (info.Holder()
+  bool hasNamedProperty = !namedPropertyValue.IsEmpty();
+
+  v8::Local<v8::Value> prototypeChainValue;
+  bool hasPropertyInPrototypeChain =
+      info.Holder()
           ->GetRealNamedPropertyInPrototypeChain(isolate->GetCurrentContext(),
                                                  property.As<v8::String>())
-          .ToLocal(&value)) {
-    V8SetReturnValue(info, value);
+          .ToLocal(&prototypeChainValue);
+
+  if (hasNamedProperty) {
+    V8SetReturnValue(info, namedPropertyValue);
+    UseCounter::Count(
+        html_document,
+        hasPropertyInPrototypeChain
+            ? WebFeature::kDOMClobberedShadowedDocumentPropertyAccessed
+            : WebFeature::kDOMClobberedNotShadowedDocumentPropertyAccessed);
+
+    return;
+  }
+  if (hasPropertyInPrototypeChain) {
+    V8SetReturnValue(info, prototypeChainValue);
   }
 }
 
@@ -533,7 +553,7 @@ void LocalWindowProxy::NamedItemAdded(HTMLDocument* document,
 
   ScriptState::Scope scope(script_state_);
   v8::Local<v8::Object> document_wrapper =
-      world_->DomDataStore().Get(document, GetIsolate());
+      world_->DomDataStore().Get(GetIsolate(), document).ToLocalChecked();
   // When a non-configurable own property (e.g. unforgeable attribute) already
   // exists, `SetAccessor` fails and throws. Ignore the exception because own
   // properties have priority over named properties.
@@ -560,7 +580,7 @@ void LocalWindowProxy::NamedItemRemoved(HTMLDocument* document,
     return;
   ScriptState::Scope scope(script_state_);
   v8::Local<v8::Object> document_wrapper =
-      world_->DomDataStore().Get(document, GetIsolate());
+      world_->DomDataStore().Get(GetIsolate(), document).ToLocalChecked();
   document_wrapper
       ->Delete(GetIsolate()->GetCurrentContext(), V8String(GetIsolate(), name))
       .ToChecked();
@@ -584,7 +604,7 @@ void LocalWindowProxy::SetAbortScriptExecution(
 
 LocalWindowProxy::LocalWindowProxy(v8::Isolate* isolate,
                                    LocalFrame& frame,
-                                   scoped_refptr<DOMWrapperWorld> world)
-    : WindowProxy(isolate, frame, std::move(world)) {}
+                                   DOMWrapperWorld* world)
+    : WindowProxy(isolate, frame, world) {}
 
 }  // namespace blink

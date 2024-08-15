@@ -227,6 +227,11 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   // disables ARC during a session, the swap configuration will also be updated.
   ash::ConfigureSwap(IsArcPlayStoreEnabledForProfile(profile));
 
+  // Record metrics for ARC status based on device affiliation
+  if (base::FeatureList::IsEnabled(kUnaffiliatedDeviceArcRestriction)) {
+    RecordArcStatusBasedOnDeviceAffiliationUMA(profile);
+  }
+
   if (arc_session_manager_->profile() != profile) {
     // Profile is not matched, so the given |profile| is not allowed to use
     // ARC.
@@ -297,9 +302,7 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
     arc_net_host_impl->SetPrefService(profile->GetPrefs());
     arc_net_host_impl->SetCertManager(
         std::make_unique<CertManagerImpl>(profile));
-    if (ash::features::IsPasspointARCSupportEnabled()) {
-      arc_net_url_opener_ = std::make_unique<BrowserUrlOpenerImpl>();
-    }
+    arc_net_url_opener_ = std::make_unique<BrowserUrlOpenerImpl>();
   }
   ArcOemCryptoBridge::GetForBrowserContext(profile);
   ArcPaymentAppBridge::GetForBrowserContext(profile);

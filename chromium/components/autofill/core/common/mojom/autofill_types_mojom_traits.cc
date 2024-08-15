@@ -205,8 +205,9 @@ bool StructTraits<
 
   out->properties_mask = data.properties_mask();
 
-  if (!data.ReadUniqueRendererId(&out->unique_renderer_id))
+  if (!data.ReadRendererId(&out->renderer_id)) {
     return false;
+  }
 
   if (!data.ReadHostFormId(&out->host_form_id))
     return false;
@@ -253,6 +254,28 @@ bool StructTraits<
 }
 
 // static
+bool StructTraits<autofill::mojom::FormFieldData_FillDataDataView,
+                  autofill::FormFieldData::FillData>::
+    Read(autofill::mojom::FormFieldData_FillDataDataView data,
+         autofill::FormFieldData::FillData* out) {
+  if (!data.ReadValue(&out->value)) {
+    return false;
+  }
+  if (!data.ReadSection(&out->section)) {
+    return false;
+  }
+  if (!data.ReadRendererId(&out->renderer_id)) {
+    return false;
+  }
+  if (!data.ReadHostFormId(&out->host_form_id)) {
+    return false;
+  }
+  out->is_autofilled = data.is_autofilled();
+  out->force_override = data.force_override();
+  return true;
+}
+
+// static
 bool StructTraits<autofill::mojom::ButtonTitleInfoDataView,
                   autofill::ButtonTitleInfo>::
     Read(autofill::mojom::ButtonTitleInfoDataView data,
@@ -276,10 +299,9 @@ bool StructTraits<autofill::mojom::FormDataDataView, autofill::FormData>::Read(
     return false;
   out->is_action_empty = data.is_action_empty();
 
-  out->is_form_tag = data.is_form_tag();
-
-  if (!data.ReadUniqueRendererId(&out->unique_renderer_id))
+  if (!data.ReadRendererId(&out->renderer_id)) {
     return false;
+  }
 
   if (!data.ReadChildFrames(&out->child_frames))
     return false;
@@ -421,6 +443,23 @@ bool StructTraits<autofill::mojom::PasswordGenerationUIDataDataView,
          data.ReadGenerationElement(&out->generation_element) &&
          data.ReadTextDirection(&out->text_direction) &&
          data.ReadFormData(&out->form_data);
+}
+
+// static
+bool StructTraits<autofill::mojom::PasswordSuggestionRequestDataView,
+                  autofill::PasswordSuggestionRequest>::
+    Read(autofill::mojom::PasswordSuggestionRequestDataView data,
+         autofill::PasswordSuggestionRequest* out) {
+  out->username_field_index = data.username_field_index();
+  out->password_field_index = data.password_field_index();
+  out->show_webauthn_credentials = data.show_webauthn_credentials();
+
+  return data.ReadElementId(&out->element_id) &&
+         data.ReadFormData(&out->form_data) &&
+         data.ReadTriggerSource(&out->trigger_source) &&
+         data.ReadTextDirection(&out->text_direction) &&
+         data.ReadTypedUsername(&out->typed_username) &&
+         data.ReadBounds(&out->bounds);
 }
 
 bool StructTraits<

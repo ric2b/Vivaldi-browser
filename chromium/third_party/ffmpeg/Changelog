@@ -2,9 +2,31 @@ Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
 version <next>:
+- DXV DXT1 encoder
 - LEAD MCMP decoder
 - EVC decoding using external library libxevd
 - EVC encoding using external library libxeve
+- QOA decoder and demuxer
+- aap filter
+- demuxing, decoding, filtering, encoding, and muxing in the
+  ffmpeg CLI now all run in parallel
+- enable gdigrab device to grab a window using the hwnd=HANDLER syntax
+- IAMF raw demuxer and muxer
+- D3D12VA hardware accelerated H264, HEVC, VP9, AV1, MPEG-2 and VC1 decoding
+- tiltandshift filter
+- qrencode filter and qrencodesrc source
+- quirc filter
+- lavu/eval: introduce randomi() function in expressions
+- VVC decoder
+- fsync filter
+- Raw Captions with Time (RCWT) closed caption muxer
+- ffmpeg CLI -bsf option may now be used for input as well as output
+- ffmpeg CLI options may now be used as -/opt <path>, which is equivalent
+  to -opt <contents of file <path>>
+- showinfo bitstream filter
+- a C11-compliant compiler is now required; note that this requirement
+  will be bumped to C17 in the near future, so consider updating your
+  build environment if it lacks C17 support
 
 version 6.1:
 - libaribcaption decoder

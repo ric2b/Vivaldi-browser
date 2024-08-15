@@ -14,16 +14,13 @@ import logging
 import os
 import pkgutil
 import re
-import sys
 import types
-from typing import (Any, Dict, Generator, List, Optional, Set, Tuple, Type,
-                    Union)
+from typing import Any, Dict, Generator, List, Optional, Set, Tuple, Type
 import unittest
 
 import dataclasses  # Built-in, but pylint gives an ordering false positive.
 
 from telemetry.internal.browser import browser_options as bo
-from telemetry.internal.platform import gpu_device
 from telemetry.internal.platform import system_info as si_module
 from telemetry.internal.results import artifact_compatibility_wrapper as acw
 from telemetry.testing import serially_executed_browser_test_case
@@ -36,7 +33,10 @@ import validate_tag_consistency
 
 from gpu_tests import common_browser_args as cba
 from gpu_tests import common_typing as ct
+from gpu_tests import constants
 from gpu_tests import gpu_helper
+from gpu_tests import overlay_support
+from gpu_tests.util import host_information
 
 TEST_WAS_SLOW = 'test_was_slow'
 
@@ -47,30 +47,19 @@ ResultType = json_results.ResultType
 
 
 # Please expand the following lists when we expand to new bot configs.
-_SUPPORTED_WIN_VERSIONS = ['win7', 'win10']
-_SUPPORTED_WIN_VERSIONS_WITH_DIRECT_COMPOSITION = ['win10']
+_SUPPORTED_WIN_VERSIONS = ['win7', 'win10', 'win11']
 _SUPPORTED_WIN_GPU_VENDORS = [
-    gpu_helper.GpuVendors.AMD,
-    gpu_helper.GpuVendors.INTEL,
-    gpu_helper.GpuVendors.NVIDIA,
-    gpu_helper.GpuVendors.QUALCOMM,
+    constants.GpuVendor.AMD,
+    constants.GpuVendor.INTEL,
+    constants.GpuVendor.NVIDIA,
+    constants.GpuVendor.QUALCOMM,
 ]
-_SUPPORTED_WIN_AMD_GPUS = [0x6613, 0x699f, 0x7340]
-_SUPPORTED_WIN_AMD_GPUS_WITH_NV12_OVERLAYS = [0x7340]
-_SUPPORTED_WIN_INTEL_GPUS = [0x5912, 0x3e92, 0x9bc5]
-_SUPPORTED_WIN_INTEL_GPUS_WITH_YUY2_OVERLAYS = [0x5912, 0x3e92, 0x9bc5]
-_SUPPORTED_WIN_INTEL_GPUS_WITH_NV12_OVERLAYS = [0x5912, 0x3e92, 0x9bc5]
-# Hardware overlays are disabled in 26.20.100.8141 per crbug.com/1079393#c105
-_UNSUPPORTED_WIN_INTEL_GPU_DRIVERS_WITH_NV12_OVERLAYS = ['5912-26.20.100.8141']
-_SUPPORTED_WIN_NVIDIA_GPUS_WITH_NV12_OVERLAYS = [0x2184]
-_SUPPORTED_WIN_NVIDIA_GPUS_WITH_YUY2_OVERLAYS = [0x2184]
-_MINIMUM_WIN_NVIDIA_DRIVER_WITH_NV12_OVERLAYS = '31.0.15.4601'
-_MINIMUM_WIN_NVIDIA_DRIVER_WITH_YUY2_OVERLAYS = '31.0.15.4601'
-_SUPPORTED_WIN_QUALCOMM_GPUS_WITH_NV12_OVERLAYS = [0x41333430]
 
 _ARGS_TO_CONSOLIDATE = frozenset([
     '--enable-features',
     '--disable-features',
+    '--enable-dawn-features',
+    '--disable-dawn-features',
 ])
 
 TestTuple = Tuple[str, ct.GeneratedTest]
@@ -109,7 +98,6 @@ class GpuIntegrationTest(
     serially_executed_browser_test_case.SeriallyExecutedBrowserTestCase):
 
   _disable_log_uploads = False
-  _extra_intel_device_id_with_overlays: Optional[str] = None
   _skip_post_test_cleanup_and_debug_info = False
   _skip_post_failure_browser_restart = False
   _enforce_browser_version = False
@@ -137,6 +125,10 @@ class GpuIntegrationTest(
   # Keeps track of the first test that is run on a shard for a flakiness
   # workaround. See crbug.com/1079244.
   _first_run_test: Optional[str] = None
+
+  # Keeps track of whether this is the first browser start on a shard for a
+  # flakiness workaround. See crbug.com/323927831.
+  _is_first_browser_start = True
 
   tab: Optional[ct.Tab] = None
 
@@ -203,14 +195,17 @@ class GpuIntegrationTest(
     cls._skip_post_failure_browser_restart =\
         options.no_browser_restart_on_failure
     cls._disable_log_uploads = options.disable_log_uploads
-    cls._extra_intel_device_id_with_overlays = (
-        options.extra_intel_device_id_with_overlays)
     cls._enforce_browser_version = options.enforce_browser_version
 
   @classmethod
   def SetUpProcess(cls) -> None:
     super(GpuIntegrationTest, cls).SetUpProcess()
     cls._SetClassVariablesFromOptions(cls._finder_options)
+    # Handled here instead of in _SetClassVariablesFromOptions since we only
+    # ever want to do this once per process.
+    if cls._finder_options.extra_overlay_config_json:
+      overlay_support.ParseOverlayJsonFile(
+          cls._finder_options.extra_overlay_config_json)
 
   @classmethod
   def AddCommandlineArgs(cls, parser: ct.CmdArgParser) -> None:
@@ -224,9 +219,11 @@ class GpuIntegrationTest(
         action='store_true',
         default=False,
         help='Disables uploads of logs to cloud storage')
-    parser.add_option('--extra-intel-device-id-with-overlays',
-                      dest='extra_intel_device_id_with_overlays',
-                      help='The extra Intel device id with overlays')
+    parser.add_option('--extra-overlay-config-json',
+                      help=('A path to a JSON file containing additional '
+                            'overlay configs to use. See '
+                            'overlay_support.ParseOverlayJsonFile() for more '
+                            'information on expected format.'))
     parser.add_option('--skip-post-test-cleanup-and-debug-info',
                       action='store_true',
                       help=('Disables the automatic cleanup of minidumps after '
@@ -555,6 +552,7 @@ class GpuIntegrationTest(
   # pylint: disable=no-self-use
   def _ShouldForceRetryOnFailureFirstTest(self) -> bool:
     return False
+
   # pylint: enable=no-self-use
 
   def _DetermineFirstTestRetryWorkaround(self, test_name: str) -> bool:
@@ -570,17 +568,30 @@ class GpuIntegrationTest(
     Returns:
       A boolean indicating whether a retry on failure should be forced.
     """
-    if self._ShouldForceRetryOnFailureFirstTest():
-      if GpuIntegrationTest._first_run_test is None:
-        GpuIntegrationTest._first_run_test = test_name
-      if GpuIntegrationTest._first_run_test == test_name:
-        logging.warning('Forcing RetryOnFailure in test %s', test_name)
-        # Notify typ that it should retry this test if necessary.
-        # pylint: disable=attribute-defined-outside-init
-        self.retryOnFailure = True
-        # pylint: enable=attribute-defined-outside-init
-        return True
+    if (GpuIntegrationTest._first_run_test == test_name
+        and self._ShouldForceRetryOnFailureFirstTest()):
+      logging.warning('Forcing RetryOnFailure in test %s', test_name)
+      # Notify typ that it should retry this test if necessary.
+      # pylint: disable=attribute-defined-outside-init
+      self.retryOnFailure = True
+      # pylint: enable=attribute-defined-outside-init
+      return True
     return False
+
+  # pylint: disable=no-self-use
+  def _DetermineFirstBrowserStartWorkaround(self) -> bool:
+    """Potentially allows retries for the first browser start on a shard.
+
+    This is a temporary workaround for crbug.com/323927831 and should be
+    removed once the root cause is fixed.
+    """
+    # The browser is assumed to be dead at this point, so we can't rely on
+    # GetPlatformTags() to restrict this to the flaking Mac configs.
+    if not GpuIntegrationTest._is_first_browser_start:
+      return False
+    return host_information.IsMac()
+
+  # pylint: enable=no-self-use
 
   # pylint: disable=no-self-use
   def _DetermineRetryWorkaround(self, exception: Exception) -> bool:
@@ -608,6 +619,9 @@ class GpuIntegrationTest(
           should_retry_on_failure
           or self._DetermineFirstTestRetryWorkaround(test_name))
       return expected_results, should_retry_on_failure
+
+    if GpuIntegrationTest._first_run_test is None:
+      GpuIntegrationTest._first_run_test = test_name
 
     expected_crashes = {}
     try:
@@ -753,7 +767,7 @@ class GpuIntegrationTest(
     return gpu_helper.IsIntel(gpu.devices[0].vendor_id)
 
   def IsDualGPUMacLaptop(self) -> bool:
-    if sys.platform != 'darwin':
+    if not host_information.IsMac():
       return False
     system_info = self.browser.GetSystemInfo()
     if not system_info:
@@ -859,103 +873,6 @@ class GpuIntegrationTest(
     """
     raise NotImplementedError
 
-  def _GetOverlayBotConfig(self) -> Dict[str, Any]:
-    """Returns expected bot config for DirectComposition and overlay support.
-
-    This is only meaningful on Windows platform.
-
-    The rules to determine bot config are:
-      1) Only win10 or newer supports DirectComposition
-      2) Only Intel supports hardware overlays with DirectComposition
-      3) Currently the Win/Intel GPU bot supports YUY2 and NV12 overlays
-    """
-    if self.browser is None:
-      raise Exception("Browser doesn't exist")
-    system_info = self.browser.GetSystemInfo()
-    if system_info is None:
-      raise Exception("Browser doesn't support GetSystemInfo")
-    gpu = system_info.gpu.devices[0]
-    if gpu is None:
-      raise Exception("System Info doesn't have a gpu")
-    os_version = self.browser.platform.GetOSVersionName()
-    if os_version is None:
-      raise Exception('browser.platform.GetOSVersionName() returns None')
-    os_version = os_version.lower()
-
-    config = {
-        'direct_composition': False,
-        'supports_overlays': False,
-        'yuy2_overlay_support': 'NONE',
-        'nv12_overlay_support': 'NONE',
-    }
-    assert os_version in _SUPPORTED_WIN_VERSIONS
-    assert gpu.vendor_id in _SUPPORTED_WIN_GPU_VENDORS
-    if os_version in _SUPPORTED_WIN_VERSIONS_WITH_DIRECT_COMPOSITION:
-      config['direct_composition'] = True
-      config['supports_overlays'] = True
-      config['yuy2_overlay_support'] = 'SOFTWARE'
-      config['nv12_overlay_support'] = 'SOFTWARE'
-      if gpu.vendor_id == gpu_helper.GpuVendors.AMD:
-        self._HandleAmdOverlays(gpu, config)
-      elif gpu.vendor_id == gpu_helper.GpuVendors.INTEL:
-        self._HandleIntelOverlays(gpu, config)
-      elif gpu.vendor_id == gpu_helper.GpuVendors.NVIDIA:
-        self._HandleNvidiaOverlays(gpu, config)
-      elif gpu.vendor_id == gpu_helper.GpuVendors.QUALCOMM:
-        self._HandleQualcommOverlays(gpu, config)
-    return config
-
-  # pylint: disable=no-self-use
-  def _HandleAmdOverlays(self, gpu: gpu_device.GPUDevice,
-                         config: Dict[str, Union[str, bool]]) -> None:
-    assert gpu.device_id in _SUPPORTED_WIN_AMD_GPUS
-    if gpu.device_id in _SUPPORTED_WIN_AMD_GPUS_WITH_NV12_OVERLAYS:
-      config['nv12_overlay_support'] = 'SCALING'
-
-  # pylint: enable=no-self-use
-
-  def _HandleIntelOverlays(self, gpu: gpu_device.GPUDevice,
-                           config: Dict[str, Union[str, bool]]) -> None:
-    if self._extra_intel_device_id_with_overlays:
-      extra_device_id = int(self._extra_intel_device_id_with_overlays, 16)
-      _SUPPORTED_WIN_INTEL_GPUS.append(extra_device_id)
-      _SUPPORTED_WIN_INTEL_GPUS_WITH_YUY2_OVERLAYS.append(extra_device_id)
-      _SUPPORTED_WIN_INTEL_GPUS_WITH_NV12_OVERLAYS.append(extra_device_id)
-
-    assert gpu.device_id in _SUPPORTED_WIN_INTEL_GPUS
-    gpu_device_and_driver = ('%x-' + gpu.driver_version) % gpu.device_id
-    if gpu.device_id in _SUPPORTED_WIN_INTEL_GPUS_WITH_YUY2_OVERLAYS:
-      config['yuy2_overlay_support'] = 'SCALING'
-    if (gpu.device_id in _SUPPORTED_WIN_INTEL_GPUS_WITH_NV12_OVERLAYS
-        and gpu_device_and_driver
-        not in _UNSUPPORTED_WIN_INTEL_GPU_DRIVERS_WITH_NV12_OVERLAYS):
-      config['nv12_overlay_support'] = 'SCALING'
-
-  # pylint: disable=no-self-use
-  def _HandleNvidiaOverlays(self, gpu: gpu_device.GPUDevice,
-                            config: Dict[str, Union[str, bool]]) -> None:
-    if (gpu.device_id in _SUPPORTED_WIN_NVIDIA_GPUS_WITH_YUY2_OVERLAYS
-        and gpu_helper.EvaluateVersionComparison(
-            gpu.driver_version, 'ge',
-            _MINIMUM_WIN_NVIDIA_DRIVER_WITH_YUY2_OVERLAYS)):
-      config['yuy2_overlay_support'] = 'SCALING'
-
-    if (gpu.device_id in _SUPPORTED_WIN_NVIDIA_GPUS_WITH_NV12_OVERLAYS
-        and gpu_helper.EvaluateVersionComparison(
-            gpu.driver_version, 'ge',
-            _MINIMUM_WIN_NVIDIA_DRIVER_WITH_NV12_OVERLAYS)):
-      config['nv12_overlay_support'] = 'SCALING'
-
-  # pylint: enable=no-self-use
-
-  # pylint: disable=no-self-use
-  def _HandleQualcommOverlays(self, gpu: gpu_device.GPUDevice,
-                              config: Dict[str, Union[str, bool]]) -> None:
-    if gpu.device_id in _SUPPORTED_WIN_QUALCOMM_GPUS_WITH_NV12_OVERLAYS:
-      config['nv12_overlay_support'] = 'SCALING'
-
-  # pylint: enable=no-self-use
-
   def _GetDx12VulkanBotConfig(self) -> Dict[str, bool]:
     """Returns expected bot config for DX12 and Vulkan support.
 
@@ -1042,8 +959,7 @@ class GpuIntegrationTest(
       tags.extend([re.sub('[ _]', '-', tag) for tag in gpu_tags])
 
       # Add tags based on GPU feature status.
-      startup_args = getattr(browser, 'startup_args', None)
-      skia_renderer = gpu_helper.GetSkiaRenderer(gpu_info, startup_args)
+      skia_renderer = gpu_helper.GetSkiaRenderer(gpu_info)
       tags.append(skia_renderer)
       tags.extend(cls._GetDriverVersionTags(browser, system_info))
     display_server = gpu_helper.GetDisplayServer(browser.browser_type)
@@ -1116,7 +1032,17 @@ class GpuIntegrationTest(
     return cls._original_finder_options
 
   def setUp(self) -> None:
-    self._EnsureTabIsAvailable()
+    # TODO(crbug.com/323927831): Remove this try/except logic once the root
+    # cause of flakes on Macs is resolved.
+    try:
+      self._EnsureTabIsAvailable()
+    except Exception:  # pylint: disable=broad-except
+      if self._DetermineFirstBrowserStartWorkaround():
+        self._EnsureTabIsAvailable()
+      else:
+        raise
+    finally:
+      GpuIntegrationTest._is_first_browser_start = False
 
   @staticmethod
   def GetJSONResultsDelimiter() -> str:

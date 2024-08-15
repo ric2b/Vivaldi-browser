@@ -62,6 +62,7 @@
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "skia/ext/image_operations.h"
+#include "third_party/icu/source/common/unicode/localebuilder.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_scale_factor.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -396,6 +397,13 @@ ash::LoginUnlockThroughputRecorder* GetLoginRecorder() {
              : nullptr;
 }
 
+// Validate |locale_tag| based on IETF BCP 47 language tag.
+bool IsLocaleTagValid(const std::string& locale_tag) {
+  UErrorCode error = U_ZERO_ERROR;
+  icu::LocaleBuilder().setLanguageTag(locale_tag.c_str()).build(error);
+  return error == U_ZERO_ERROR;
+}
+
 // In some cases when ARC is not ready (e.g. ARC hasn't booted / ARC failed to
 // boot), users are still allowed to change App Settings from ChromeOS Settings
 // page. Hence, there might be synchronization issue between ARC and ChromeOS
@@ -570,12 +578,10 @@ ArcAppListPrefs::ArcAppListPrefs(
   if (resize_lock_manager)
     resize_lock_manager->SetPrefDelegate(this);
 
-  if (ash::features::IsPasspointARCSupportEnabled()) {
-    arc::ArcNetHostImpl* net_host =
-        arc::ArcNetHostImpl::GetForBrowserContext(profile_);
-    if (net_host) {
-      net_host->SetArcAppMetadataProvider(this);
-    }
+  arc::ArcNetHostImpl* net_host =
+      arc::ArcNetHostImpl::GetForBrowserContext(profile_);
+  if (net_host) {
+    net_host->SetArcAppMetadataProvider(this);
   }
 
   if (base::FeatureList::IsEnabled(arc::kSyncInstallPriority)) {
@@ -1948,13 +1954,17 @@ void ArcAppListPrefs::AddOrUpdatePackagePrefs(
           *package.locale_info;
       for (const std::string& supported_locale :
            package_locale_info.supported_locales) {
-        supported_locales.Append(supported_locale);
+        if (IsLocaleTagValid(supported_locale)) {
+          supported_locales.Append(supported_locale);
+        }
       }
+      const auto& selected_locale = package_locale_info.selected_locale;
       package_dict.Set(
           kLocaleInfo,
           base::Value::Dict()
               .Set(kSupportedLocales, std::move(supported_locales))
-              .Set(kSelectedLocale, package_locale_info.selected_locale));
+              .Set(kSelectedLocale,
+                   IsLocaleTagValid(selected_locale) ? selected_locale : ""));
     }
   } else {
     package_dict.Remove(kLocaleInfo);
@@ -2383,18 +2393,6 @@ void ArcAppListPrefs::OnNotificationsEnabledChanged(
   }
   for (auto& observer : observer_list_)
     observer.OnNotificationsEnabledChanged(package_name, enabled);
-}
-
-bool ArcAppListPrefs::IsUnknownPackage(const std::string& package_name) const {
-  if (GetPackage(package_name))
-    return false;
-  if (sync_service_ && sync_service_->IsPackageSyncing(package_name))
-    return false;
-  if (default_apps_->HasPackage(package_name))
-    return false;
-  if (apps_installations_.count(package_name))
-    return false;
-  return true;
 }
 
 bool ArcAppListPrefs::IsDefaultPackage(const std::string& package_name) const {

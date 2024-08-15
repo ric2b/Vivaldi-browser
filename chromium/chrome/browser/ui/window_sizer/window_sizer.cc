@@ -351,6 +351,7 @@ void WindowSizer::AdjustBoundsToBeVisibleOnDisplay(
     const gfx::Rect& saved_work_area,
     gfx::Rect* bounds) const {
   DCHECK(bounds);
+
   // If |bounds| is empty, reset to the default size.
   if (bounds->IsEmpty()) {
     gfx::Rect default_bounds = GetDefaultWindowBounds(display);

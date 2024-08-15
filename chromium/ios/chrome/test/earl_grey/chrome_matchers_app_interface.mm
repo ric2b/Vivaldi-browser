@@ -47,8 +47,8 @@
 #import "ios/chrome/browser/ui/settings/autofill/autofill_profile_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/cells/clear_browsing_data_constants.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/clear_browsing_data_ui_constants.h"
-#import "ios/chrome/browser/ui/settings/google_services/accounts_table_view_controller_constants.h"
 #import "ios/chrome/browser/ui/settings/google_services/google_services_settings_constants.h"
+#import "ios/chrome/browser/ui/settings/google_services/manage_accounts/accounts_table_view_controller_constants.h"
 #import "ios/chrome/browser/ui/settings/import_data_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/notifications/notifications_constants.h"
 #import "ios/chrome/browser/ui/settings/notifications/tracking_price/tracking_price_constants.h"
@@ -174,6 +174,56 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 + (id<GREYMatcher>)buttonWithAccessibilityLabelID:(int)messageID {
   return [ChromeMatchersAppInterface
       buttonWithAccessibilityLabel:l10n_util::GetNSStringWithFixup(messageID)];
+}
+
++ (id<GREYMatcher>)buttonWithForegroundColor:(NSString*)colorName {
+  GREYMatchesBlock matches = ^BOOL(id element) {
+    if (![element isKindOfClass:UIButton.class]) {
+      return NO;
+    }
+    UIButton* button = base::apple::ObjCCastStrict<UIButton>(element);
+    return CGColorEqualToColor(
+        [UIColor colorNamed:colorName].CGColor,
+        button.configuration.baseForegroundColor.CGColor);
+  };
+
+  NSString* descriptionString =
+      [NSString stringWithFormat:@"Foreground color %@", colorName];
+
+  GREYDescribeToBlock describe = ^(id<GREYDescription> description) {
+    [description appendText:descriptionString];
+  };
+
+  id<GREYMatcher> foregroundColorMatcher =
+      [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
+                                           descriptionBlock:describe];
+  return grey_allOf(grey_accessibilityTrait(UIAccessibilityTraitButton),
+                    foregroundColorMatcher, nil);
+}
+
++ (id<GREYMatcher>)buttonWithBackgroundColor:(NSString*)colorName {
+  GREYMatchesBlock matches = ^BOOL(id element) {
+    if (![element isKindOfClass:UIButton.class]) {
+      return NO;
+    }
+    UIButton* button = base::apple::ObjCCastStrict<UIButton>(element);
+    return CGColorEqualToColor(
+        [UIColor colorNamed:colorName].CGColor,
+        button.configuration.background.backgroundColor.CGColor);
+  };
+
+  NSString* descriptionString =
+      [NSString stringWithFormat:@"Background color %@", colorName];
+
+  GREYDescribeToBlock describe = ^(id<GREYDescription> description) {
+    [description appendText:descriptionString];
+  };
+
+  id<GREYMatcher> backgroundColorMatcher =
+      [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
+                                           descriptionBlock:describe];
+  return grey_allOf(grey_accessibilityTrait(UIAccessibilityTraitButton),
+                    backgroundColorMatcher, nil);
 }
 
 + (id<GREYMatcher>)contextMenuItemWithAccessibilityLabel:(NSString*)label {
@@ -316,12 +366,6 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
       grey_not(grey_accessibilityTrait(UIAccessibilityTraitNotEnabled)), nil);
 }
 
-+ (id<GREYMatcher>)closeButton {
-  return grey_allOf(
-      [ChromeMatchersAppInterface buttonWithAccessibilityLabelID:(IDS_CLOSE)],
-      grey_not(grey_accessibilityTrait(UIAccessibilityTraitNotEnabled)), nil);
-}
-
 + (id<GREYMatcher>)closeTabMenuButton {
   return grey_allOf(
       [ChromeMatchersAppInterface contextMenuItemWithAccessibilityLabelID:
@@ -352,6 +396,19 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 + (id<GREYMatcher>)omnibox {
   return grey_allOf(grey_kindOfClass([OmniboxTextFieldIOS class]),
                     grey_userInteractionEnabled(), nil);
+}
+
++ (id<GREYMatcher>)omniboxAtBottom {
+  return grey_allOf(
+      [ChromeMatchersAppInterface defocusedLocationView],
+      grey_ancestor(grey_kindOfClassName(@"SecondaryToolbarView")),
+      grey_sufficientlyVisible(), nil);
+}
+
++ (id<GREYMatcher>)omniboxOnTop {
+  return grey_allOf([ChromeMatchersAppInterface defocusedLocationView],
+                    grey_ancestor(grey_kindOfClassName(@"PrimaryToolbarView")),
+                    grey_sufficientlyVisible(), nil);
 }
 
 + (id<GREYMatcher>)defocusedLocationView {
@@ -600,7 +657,9 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 }
 
 + (id<GREYMatcher>)omniboxPopupRow {
-  if (base::FeatureList::IsEnabled(kOmniboxSuggestionsRTLImprovements)) {
+  if (base::FeatureList::IsEnabled(kOmniboxPopupRowContentConfiguration)) {
+    return grey_kindOfClassName(@"UITableViewCell");
+  } else if (base::FeatureList::IsEnabled(kOmniboxSuggestionsRTLImprovements)) {
     return grey_kindOfClassName(@"OmniboxPopupRowCellExperimental");
   } else {
     return grey_kindOfClassName(@"OmniboxPopupRowCell");
@@ -1350,13 +1409,6 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
   return grey_buttonTitle(kMaskedPasswordTitle);
 }
 
-+ (id<GREYMatcher>)manualFallbackPasswordTableViewWindowMatcher {
-  id<GREYMatcher> classMatcher = grey_kindOfClass([UIWindow class]);
-  id<GREYMatcher> parentMatcher =
-      grey_descendant([self manualFallbackPasswordTableViewMatcher]);
-  return grey_allOf(classMatcher, parentMatcher, nil);
-}
-
 + (id<GREYMatcher>)manualFallbackProfilesIconMatcher {
   return grey_accessibilityID(
       manual_fill::AccessoryAddressAccessibilityIdentifier);
@@ -1389,13 +1441,14 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
       manual_fill::CardTableViewAccessibilityIdentifier);
 }
 
-+ (id<GREYMatcher>)manualFallbackManageCreditCardsMatcher {
-  return grey_accessibilityID(manual_fill::ManageCardsAccessibilityIdentifier);
++ (id<GREYMatcher>)manualFallbackManagePaymentMethodsMatcher {
+  return grey_accessibilityID(
+      manual_fill::kManagePaymentMethodsAccessibilityIdentifier);
 }
 
-+ (id<GREYMatcher>)manualFallbackAddCreditCardsMatcher {
++ (id<GREYMatcher>)manualFallbackAddPaymentMethodMatcher {
   return grey_accessibilityID(
-      manual_fill::kAddCreditCardsAccessibilityIdentifier);
+      manual_fill::kAddPaymentMethodAccessibilityIdentifier);
 }
 
 + (id<GREYMatcher>)manualFallbackCreditCardTableViewWindowMatcher {

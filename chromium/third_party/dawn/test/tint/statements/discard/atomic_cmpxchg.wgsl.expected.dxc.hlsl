@@ -24,7 +24,7 @@ int foo_inner() {
   if (!(tint_discarded)) {
     tint_symbol_1 = aatomicCompareExchangeWeak(0u, 0, 1);
   }
-  const atomic_compare_exchange_result_i32 result = tint_symbol_1;
+  atomic_compare_exchange_result_i32 result = tint_symbol_1;
   if (result.exchanged) {
     x = result.old_value;
   }
@@ -32,7 +32,7 @@ int foo_inner() {
 }
 
 tint_symbol foo() {
-  const int inner_result = foo_inner();
+  int inner_result = foo_inner();
   tint_symbol wrapper_result = (tint_symbol)0;
   wrapper_result.value = inner_result;
   if (tint_discarded) {

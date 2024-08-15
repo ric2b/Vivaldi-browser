@@ -251,11 +251,13 @@ void WorkspaceLayoutManager::OnKeyboardDisplacingBoundsChanged(
       const gfx::Point origin(window_bounds.x(), window_bounds.y() - shift);
       SetChildBounds(window, gfx::Rect(origin, window_bounds.size()));
     }
-  } else if (window_state->HasRestoreBounds()) {
+  } else if (window_state->IsNormalStateType() &&
+             window_state->HasRestoreBounds()) {
     // Keyboard hidden, restore original bounds if they exist. If the user has
     // resized or dragged the window in the meantime, WorkspaceWindowResizer
     // will have cleared the restore bounds and this code will not accidentally
-    // override user intent.
+    // override user intent. Only do this for normal window states that use the
+    // restore bounds.
     window_state->SetAndClearRestoreBounds();
   }
 }
@@ -589,7 +591,7 @@ void WorkspaceLayoutManager::MaybeUpdateA11yFloatingPanelOrPipBounds() const {
         ->accessibility_controller()
         ->UpdateFloatingPanelBoundsIfNeeded();
   }
-  for (auto* window : windows_) {
+  for (aura::Window* window : windows_) {
     WindowState* window_state = WindowState::Get(window);
     if (window_state->IsPip()) {
       Shell::Get()->pip_controller()->UpdatePipBounds();

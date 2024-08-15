@@ -13,9 +13,11 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/api/extension_action/test_extension_action_api_observer.h"
 #include "chrome/browser/extensions/api/extension_action/test_icon_image_observer.h"
 #include "chrome/browser/extensions/extension_apitest.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/extensions/extension_action_test_helper.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
@@ -34,11 +36,13 @@
 #include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_icon_image.h"
 #include "extensions/browser/process_manager.h"
+#include "extensions/browser/script_executor.h"
 #include "extensions/browser/service_worker/service_worker_test_utils.h"
 #include "extensions/browser/state_store.h"
 #include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/common/api/extension_action/action_info_test_util.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/common/features/feature_channel.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/test/extension_test_message_listener.h"
@@ -85,7 +89,7 @@ void RunTestAndWaitForSuccess(content::WebContents* web_contents,
 class TestStateStoreObserver : public StateStore::TestObserver {
  public:
   TestStateStoreObserver(content::BrowserContext* context,
-                         const std::string& extension_id)
+                         const ExtensionId& extension_id)
       : extension_id_(extension_id) {
     scoped_observation_.Observe(ExtensionSystem::Get(context)->state_store());
   }
@@ -95,7 +99,7 @@ class TestStateStoreObserver : public StateStore::TestObserver {
 
   ~TestStateStoreObserver() override {}
 
-  void WillSetExtensionValue(const std::string& extension_id,
+  void WillSetExtensionValue(const ExtensionId& extension_id,
                              const std::string& key) override {
     if (extension_id == extension_id_)
       ++updated_values_[key];

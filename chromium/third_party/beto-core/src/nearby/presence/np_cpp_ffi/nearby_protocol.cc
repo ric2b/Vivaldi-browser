@@ -12,29 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "include/nearby_protocol.h"
+#include "nearby_protocol.h"
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <iostream>
+#include <memory>
+#include <span>
+#include <utility>
+#include <vector>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "np_cpp_ffi_functions.h"
-
-#ifdef __FILE_NAME__
-#define __ASSERT_FILE_NAME __FILE_NAME__
-#else /* __FILE_NAME__ */
-#define __ASSERT_FILE_NAME __FILE__
-#endif /* __FILE_NAME__ */
+#include "np_cpp_ffi_types.h"
 
 namespace nearby_protocol {
 
-static void panic_handler(PanicReason reason);
+void panic_handler(PanicReason reason);
 
 struct PanicHandler {
   void (*handler)(PanicReason);
   bool set_by_client;
 };
 
-static PanicHandler gPanicHandler = PanicHandler{panic_handler, false};
+PanicHandler gPanicHandler = PanicHandler{panic_handler, false};
 
 // C++ layer internal panic handler
-static void panic_handler(PanicReason reason) {
+void panic_handler(PanicReason reason) {
   // Give clients a chance to use their own panic handler, but if they don't
   // terminate the process we will make sure it happens.
   if (gPanicHandler.set_by_client) {
@@ -43,8 +50,8 @@ static void panic_handler(PanicReason reason) {
   std::abort();
 }
 
-static void _assert_panic(bool condition, const char *func, const char *file,
-                          int line) {
+void _assert_panic(bool condition, const char* func, const char* file,
+                   int line) {
   if (!condition) {
     std::cout << "Assert failed: \n function: " << func << "\n file: " << file
               << "\n line: " << line << "\n";
@@ -52,7 +59,7 @@ static void _assert_panic(bool condition, const char *func, const char *file,
   }
 }
 
-#define assert_panic(e) _assert_panic(e, __func__, __ASSERT_FILE_NAME, __LINE__)
+#define assert_panic(e) _assert_panic(e, __func__, __FILE__, __LINE__)
 
 bool GlobalConfig::SetPanicHandler(void (*handler)(PanicReason)) {
   if (!gPanicHandler.set_by_client) {
@@ -63,32 +70,40 @@ bool GlobalConfig::SetPanicHandler(void (*handler)(PanicReason)) {
   return false;
 }
 
-void GlobalConfig::SetNumShards(uint8_t num_shards) {
+void GlobalConfig::SetNumShards(const uint8_t num_shards) {
   np_ffi::internal::np_ffi_global_config_set_num_shards(num_shards);
 }
 
-void GlobalConfig::SetMaxNumCredentialSlabs(uint32_t max_num_credential_slabs) {
+void GlobalConfig::SetMaxNumCredentialSlabs(
+    const uint32_t max_num_credential_slabs) {
   np_ffi::internal::np_ffi_global_config_set_max_num_credential_slabs(
       max_num_credential_slabs);
 }
 
-void GlobalConfig::SetMaxNumCredentialBooks(uint32_t max_num_credential_books) {
+void GlobalConfig::SetMaxNumCredentialBooks(
+    const uint32_t max_num_credential_books) {
   np_ffi::internal::np_ffi_global_config_set_max_num_credential_books(
       max_num_credential_books);
 }
 
 void GlobalConfig::SetMaxNumDeserializedV0Advertisements(
-    uint32_t max_num_deserialized_v0_advertisements) {
+    const uint32_t max_num_deserialized_v0_advertisements) {
   np_ffi::internal::
       np_ffi_global_config_set_max_num_deserialized_v0_advertisements(
           max_num_deserialized_v0_advertisements);
 }
 
 void GlobalConfig::SetMaxNumDeserializedV1Advertisements(
-    uint32_t max_num_deserialized_v1_advertisements) {
+    const uint32_t max_num_deserialized_v1_advertisements) {
   np_ffi::internal::
       np_ffi_global_config_set_max_num_deserialized_v1_advertisements(
           max_num_deserialized_v1_advertisements);
+}
+
+void GlobalConfig::SetMaxNumV0AdvertisementBuilders(
+    uint32_t max_num_v0_advertisement_builders) {
+  np_ffi::internal::np_ffi_global_config_set_max_num_v0_advertisement_builders(
+      max_num_v0_advertisement_builders);
 }
 
 absl::StatusOr<CredentialSlab> CredentialSlab::TryCreate() {
@@ -96,16 +111,16 @@ absl::StatusOr<CredentialSlab> CredentialSlab::TryCreate() {
   auto kind = np_ffi::internal::np_ffi_CreateCredentialSlabResult_kind(result);
 
   switch (kind) {
-  case CreateCredentialSlabResultKind::Success: {
-    auto slab = CredentialSlab(
-        np_ffi::internal::np_ffi_CreateCredentialSlabResult_into_SUCCESS(
-            result));
-    return slab;
-  }
-  case CreateCredentialSlabResultKind::NoSpaceLeft: {
-    return absl::ResourceExhaustedError(
-        "No space left to create credential slab");
-  }
+    case CreateCredentialSlabResultKind::Success: {
+      auto slab = CredentialSlab(
+          np_ffi::internal::np_ffi_CreateCredentialSlabResult_into_SUCCESS(
+              result));
+      return slab;
+    }
+    case CreateCredentialSlabResultKind::NoSpaceLeft: {
+      return absl::ResourceExhaustedError(
+          "No space left to create credential slab");
+    }
   }
 }
 
@@ -117,13 +132,13 @@ CredentialSlab::~CredentialSlab() {
   }
 }
 
-CredentialSlab::CredentialSlab(CredentialSlab &&other) noexcept
+CredentialSlab::CredentialSlab(CredentialSlab&& other) noexcept
     : credential_slab_(other.credential_slab_), moved_(other.moved_) {
   other.credential_slab_ = {};
   other.moved_ = true;
 }
 
-CredentialSlab &CredentialSlab::operator=(CredentialSlab &&other) noexcept {
+CredentialSlab& CredentialSlab::operator=(CredentialSlab&& other) noexcept {
   if (this != &other) {
     if (!this->moved_) {
       auto result = np_ffi::internal::np_ffi_deallocate_credential_slab(
@@ -140,58 +155,64 @@ CredentialSlab &CredentialSlab::operator=(CredentialSlab &&other) noexcept {
   return *this;
 }
 
-absl::Status CredentialSlab::AddV0Credential(V0MatchableCredential v0_cred) {
+absl::Status CredentialSlab::AddV0Credential(
+    const V0MatchableCredential v0_cred) {
   assert_panic(!this->moved_);
   auto result = np_ffi::internal::np_ffi_CredentialSlab_add_v0_credential(
       this->credential_slab_, v0_cred.internal_);
   switch (result) {
-  case AddCredentialToSlabResult::Success: {
-    return absl::OkStatus();
-  }
-  case AddCredentialToSlabResult::InvalidHandle: {
-    return absl::InvalidArgumentError(
-        "invalid credential slab handle provided");
-  }
+    case AddV0CredentialToSlabResult::Success: {
+      return absl::OkStatus();
+    }
+    case AddV0CredentialToSlabResult::InvalidHandle: {
+      return absl::InvalidArgumentError(
+          "invalid credential slab handle provided");
+    }
   }
 }
 
-absl::Status CredentialSlab::AddV1Credential(V1MatchableCredential v1_cred) {
+absl::Status CredentialSlab::AddV1Credential(
+    const V1MatchableCredential v1_cred) {
   assert_panic(!this->moved_);
   auto result = np_ffi::internal::np_ffi_CredentialSlab_add_v1_credential(
       this->credential_slab_, v1_cred.internal_);
   switch (result) {
-  case AddCredentialToSlabResult::Success: {
-    return absl::OkStatus();
-  }
-  case AddCredentialToSlabResult::InvalidHandle: {
-    return absl::InvalidArgumentError(
-        "invalid credential slab handle provided");
-  }
+    case AddV1CredentialToSlabResult::Success: {
+      return absl::OkStatus();
+    }
+    case AddV1CredentialToSlabResult::InvalidHandle: {
+      return absl::InvalidArgumentError(
+          "invalid credential slab handle provided");
+    }
+    case AddV1CredentialToSlabResult::InvalidPublicKeyBytes: {
+      return absl::InvalidArgumentError(
+          "Invalid public key bytes in credential");
+    }
   }
 }
 
-absl::StatusOr<CredentialBook>
-CredentialBook::TryCreateFromSlab(CredentialSlab &slab) {
+absl::StatusOr<CredentialBook> CredentialBook::TryCreateFromSlab(
+    CredentialSlab& slab) {
   assert_panic(!slab.moved_);
   auto result = np_ffi::internal::np_ffi_create_credential_book_from_slab(
       slab.credential_slab_);
   auto kind = np_ffi::internal::np_ffi_CreateCredentialBookResult_kind(result);
   switch (kind) {
-  case CreateCredentialBookResultKind::Success: {
-    auto book =
-        np_ffi::internal::np_ffi_CreateCredentialBookResult_into_SUCCESS(
-            result);
-    slab.moved_ = true;
-    return CredentialBook(book);
-  }
-  case CreateCredentialBookResultKind::NoSpaceLeft: {
-    return absl::ResourceExhaustedError(
-        "No space left to create credential book");
-  }
-  case CreateCredentialBookResultKind::InvalidSlabHandle: {
-    return absl::NotFoundError(
-        "The slab referenced by the given handle was not found.");
-  }
+    case CreateCredentialBookResultKind::Success: {
+      auto book =
+          np_ffi::internal::np_ffi_CreateCredentialBookResult_into_SUCCESS(
+              result);
+      slab.moved_ = true;
+      return CredentialBook(book);
+    }
+    case CreateCredentialBookResultKind::NoSpaceLeft: {
+      return absl::ResourceExhaustedError(
+          "No space left to create credential book");
+    }
+    case CreateCredentialBookResultKind::InvalidSlabHandle: {
+      return absl::NotFoundError(
+          "The slab referenced by the given handle was not found.");
+    }
   }
 }
 
@@ -203,13 +224,13 @@ CredentialBook::~CredentialBook() {
   }
 }
 
-CredentialBook::CredentialBook(CredentialBook &&other) noexcept
+CredentialBook::CredentialBook(CredentialBook&& other) noexcept
     : credential_book_(other.credential_book_), moved_(other.moved_) {
   other.credential_book_ = {};
   other.moved_ = true;
 }
 
-CredentialBook &CredentialBook::operator=(CredentialBook &&other) noexcept {
+CredentialBook& CredentialBook::operator=(CredentialBook&& other) noexcept {
   if (this != &other) {
     if (!this->moved_) {
       auto result = np_ffi::internal::np_ffi_deallocate_credential_book(
@@ -226,16 +247,17 @@ CredentialBook &CredentialBook::operator=(CredentialBook &&other) noexcept {
   return *this;
 }
 
-DeserializeAdvertisementResult
-Deserializer::DeserializeAdvertisement(RawAdvertisementPayload &payload,
-                                       const CredentialBook &credential_book) {
+DeserializeAdvertisementResult Deserializer::DeserializeAdvertisement(
+    const RawAdvertisementPayload& payload,
+    const CredentialBook& credential_book) {
   assert_panic(!credential_book.moved_);
   auto result = np_ffi::internal::np_ffi_deserialize_advertisement(
       {payload.buffer_.internal_}, credential_book.credential_book_);
   return DeserializeAdvertisementResult(result);
 }
 
-DeserializeAdvertisementResultKind DeserializeAdvertisementResult::GetKind() {
+DeserializeAdvertisementResultKind DeserializeAdvertisementResult::GetKind()
+    const {
   assert_panic(!this->moved_);
   return np_ffi::internal::np_ffi_DeserializeAdvertisementResult_kind(result_);
 }
@@ -266,14 +288,14 @@ DeserializeAdvertisementResult::~DeserializeAdvertisementResult() {
 }
 
 DeserializeAdvertisementResult::DeserializeAdvertisementResult(
-    DeserializeAdvertisementResult &&other) noexcept
+    DeserializeAdvertisementResult&& other) noexcept
     : result_(other.result_), moved_(other.moved_) {
   other.result_ = {};
   other.moved_ = true;
 }
 
-DeserializeAdvertisementResult &DeserializeAdvertisementResult::operator=(
-    DeserializeAdvertisementResult &&other) noexcept {
+DeserializeAdvertisementResult& DeserializeAdvertisementResult::operator=(
+    DeserializeAdvertisementResult&& other) noexcept {
   if (this != &other) {
     if (!this->moved_) {
       auto result =
@@ -292,14 +314,14 @@ DeserializeAdvertisementResult &DeserializeAdvertisementResult::operator=(
 
 // V0 Stuff
 DeserializedV0Advertisement::DeserializedV0Advertisement(
-    DeserializedV0Advertisement &&other) noexcept
+    DeserializedV0Advertisement&& other) noexcept
     : v0_advertisement_(other.v0_advertisement_), moved_(other.moved_) {
   other.v0_advertisement_ = {};
   other.moved_ = true;
 }
 
-DeserializedV0Advertisement &DeserializedV0Advertisement::operator=(
-    DeserializedV0Advertisement &&other) noexcept {
+DeserializedV0Advertisement& DeserializedV0Advertisement::operator=(
+    DeserializedV0Advertisement&& other) noexcept {
   if (this != &other) {
     if (!this->moved_) {
       auto result =
@@ -326,7 +348,7 @@ DeserializedV0Advertisement::~DeserializedV0Advertisement() {
 }
 
 np_ffi::internal::DeserializedV0AdvertisementKind
-DeserializedV0Advertisement::GetKind() {
+DeserializedV0Advertisement::GetKind() const {
   assert_panic(!this->moved_);
   return np_ffi::internal::np_ffi_DeserializedV0Advertisement_kind(
       v0_advertisement_);
@@ -343,16 +365,16 @@ LegibleDeserializedV0Advertisement DeserializedV0Advertisement::IntoLegible() {
 }
 
 LegibleDeserializedV0Advertisement::LegibleDeserializedV0Advertisement(
-    LegibleDeserializedV0Advertisement &&other) noexcept
+    LegibleDeserializedV0Advertisement&& other) noexcept
     : legible_v0_advertisement_(other.legible_v0_advertisement_),
       moved_(other.moved_) {
   other.moved_ = true;
   other.legible_v0_advertisement_ = {};
 }
 
-LegibleDeserializedV0Advertisement &
+LegibleDeserializedV0Advertisement&
 LegibleDeserializedV0Advertisement::operator=(
-    LegibleDeserializedV0Advertisement &&other) noexcept {
+    LegibleDeserializedV0Advertisement&& other) noexcept {
   if (this != &other) {
     if (!this->moved_) {
       auto result =
@@ -377,8 +399,8 @@ LegibleDeserializedV0Advertisement::~LegibleDeserializedV0Advertisement() {
   }
 }
 
-DeserializedV0IdentityKind
-LegibleDeserializedV0Advertisement::GetIdentityKind() {
+DeserializedV0IdentityKind LegibleDeserializedV0Advertisement::GetIdentityKind()
+    const {
   assert_panic(!this->moved_);
   auto result = np_ffi::internal::
       np_ffi_LegibleDeserializedV0Advertisement_get_identity_kind(
@@ -386,7 +408,7 @@ LegibleDeserializedV0Advertisement::GetIdentityKind() {
   return result;
 }
 
-uint8_t LegibleDeserializedV0Advertisement::GetNumberOfDataElements() {
+uint8_t LegibleDeserializedV0Advertisement::GetNumberOfDataElements() const {
   assert_panic(!this->moved_);
   return np_ffi::internal::
       np_ffi_LegibleDeserializedV0Advertisement_get_num_des(
@@ -401,13 +423,13 @@ V0Payload LegibleDeserializedV0Advertisement::IntoPayload() {
   return V0Payload(result);
 }
 
-V0Payload::V0Payload(V0Payload &&other) noexcept
+V0Payload::V0Payload(V0Payload&& other) noexcept
     : v0_payload_(other.v0_payload_), moved_(other.moved_) {
   other.v0_payload_ = {};
   other.moved_ = true;
 }
 
-V0Payload &V0Payload::operator=(V0Payload &&other) noexcept {
+V0Payload& V0Payload::operator=(V0Payload&& other) noexcept {
   if (this != &other) {
     if (!this->moved_) {
       auto result =
@@ -431,51 +453,199 @@ V0Payload::~V0Payload() {
   }
 }
 
-absl::StatusOr<V0DataElement> V0Payload::TryGetDataElement(uint8_t index) {
+absl::StatusOr<V0DataElement> V0Payload::TryGetDataElement(
+    const uint8_t index) const {
   assert_panic(!this->moved_);
   auto result = np_ffi::internal::np_ffi_V0Payload_get_de(v0_payload_, index);
   auto kind = np_ffi::internal::np_ffi_GetV0DEResult_kind(result);
   switch (kind) {
-  case GetV0DEResultKind::Success: {
-    auto de = np_ffi_GetV0DEResult_into_SUCCESS(result);
-    return V0DataElement(de);
-  }
-  case GetV0DEResultKind::Error: {
-    return absl::OutOfRangeError("Invalid Data Element index");
-  }
+    case GetV0DEResultKind::Success: {
+      auto de = np_ffi_GetV0DEResult_into_SUCCESS(result);
+      return V0DataElement(de);
+    }
+    case GetV0DEResultKind::Error: {
+      return absl::OutOfRangeError("Invalid Data Element index");
+    }
   }
 }
 
-V0DataElementKind V0DataElement::GetKind() {
+absl::StatusOr<std::vector<uint8_t>> MetadataResultToVec(
+    np_ffi::internal::DecryptMetadataResult decrypt_result) {
+  auto kind =
+      np_ffi::internal::np_ffi_DecryptMetadataResult_kind(decrypt_result);
+  switch (kind) {
+    case np_ffi::internal::DecryptMetadataResultKind::Success: {
+      auto metadata =
+          np_ffi::internal::np_ffi_DecryptMetadataResult_into_SUCCESS(
+              decrypt_result);
+      auto parts_result =
+          np_ffi::internal::np_ffi_DecryptedMetadata_get_metadata_buffer_parts(
+              metadata);
+      // The handle is guaranteed to be valid by the C++ wrapper so this should
+      // never fail
+      assert_panic(np_ffi::internal::np_ffi_GetMetadataBufferPartsResult_kind(
+                       parts_result) ==
+                   np_ffi::internal::GetMetadataBufferPartsResultKind::Success);
+      auto parts =
+          np_ffi::internal::np_ffi_GetMetadataBufferPartsResult_into_SUCCESS(
+              parts_result);
+      std::vector<uint8_t> result(parts.ptr, parts.ptr + parts.len);
+
+      // Now that the contents have been copied into the vec, the underlying
+      // handle can be de-allocated
+      auto deallocate_result =
+          np_ffi::internal::np_ffi_deallocate_DecryptedMetadata(metadata);
+      assert_panic(deallocate_result ==
+                   np_ffi::internal::DeallocateResult::Success);
+      return result;
+    }
+    case np_ffi::internal::DecryptMetadataResultKind::Error: {
+      return absl::InvalidArgumentError("Invalid V0 payload handle");
+    }
+  }
+}
+
+absl::StatusOr<DeserializedV0IdentityDetails> V0Payload::GetIdentityDetails()
+    const {
+  assert_panic(!this->moved_);
+  auto result = np_ffi::internal::np_ffi_V0Payload_get_identity_details(
+      this->v0_payload_);
+  auto kind = np_ffi::internal::np_ffi_GetV0IdentityDetailsResult_kind(result);
+  switch (kind) {
+    case np_ffi::internal::GetV0IdentityDetailsResultKind::Error: {
+      return absl::InvalidArgumentError("Invalid handle");
+    }
+    case np_ffi::internal::GetV0IdentityDetailsResultKind::Success: {
+      return np_ffi::internal::np_ffi_GetV0IdentityDetailsResult_into_SUCCESS(
+          result);
+    }
+  }
+}
+
+absl::StatusOr<std::vector<uint8_t>> V0Payload::DecryptMetadata() const {
+  assert_panic(!this->moved_);
+  auto decrypt_result =
+      np_ffi::internal::np_ffi_V0Payload_decrypt_metadata(this->v0_payload_);
+  return MetadataResultToVec(decrypt_result);
+}
+
+V0DataElementKind V0DataElement::GetKind() const {
   return np_ffi::internal::np_ffi_V0DataElement_kind(v0_data_element_);
 }
 
-TxPower V0DataElement::AsTxPower() {
-  return np_ffi::internal::np_ffi_V0DataElement_into_TX_POWER(v0_data_element_);
+TxPower V0DataElement::AsTxPower() const {
+  return TxPower(
+      np_ffi::internal::np_ffi_V0DataElement_into_TX_POWER(v0_data_element_));
 }
 
-V0Actions V0DataElement::AsActions() {
+V0Actions V0DataElement::AsActions() const {
   auto internal =
       np_ffi::internal::np_ffi_V0DataElement_into_ACTIONS(v0_data_element_);
   return V0Actions(internal);
 }
 
-uint32_t V0Actions::GetAsU32() {
+V0DataElement::V0DataElement(TxPower tx_power) {
+  v0_data_element_ =
+      np_ffi::internal::np_ffi_TxPower_into_V0DataElement(tx_power.tx_power_);
+}
+
+V0DataElement::V0DataElement(V0Actions actions) {
+  v0_data_element_ =
+      np_ffi::internal::np_ffi_V0Actions_into_V0DataElement(actions.actions_);
+}
+
+uint32_t V0Actions::GetAsU32() const {
   return np_ffi::internal::np_ffi_V0Actions_as_u32(actions_);
 }
 
-bool V0Actions::HasAction(BooleanActionType action) {
+bool V0Actions::HasAction(BooleanActionType action) const {
   return np_ffi::internal::np_ffi_V0Actions_has_action(actions_, action);
 }
 
-uint8_t V0Actions::GetContextSyncSequenceNumber() {
-  return np_ffi::internal::np_ffi_V0Actions_get_context_sync_sequence_number(
-      actions_);
+ContextSyncSeqNum V0Actions::GetContextSyncSequenceNumber() const {
+  return ContextSyncSeqNum(
+      np_ffi::internal::np_ffi_V0Actions_get_context_sync_sequence_number(
+          actions_));
 }
 
-// This is called after all references to the shared_ptr have gone out of scope
+absl::Status V0Actions::TrySetAction(BooleanActionType action, bool value) {
+  auto result =
+      np_ffi::internal::np_ffi_V0Actions_set_action(actions_, action, value);
+  auto kind = np_ffi::internal::np_ffi_SetV0ActionResult_kind(result);
+  switch (kind) {
+    case np_ffi::internal::SetV0ActionResultKind::Success: {
+      actions_ =
+          np_ffi::internal::np_ffi_SetV0ActionResult_into_SUCCESS(result);
+      return absl::OkStatus();
+    }
+    case np_ffi::internal::SetV0ActionResultKind::Error: {
+      actions_ = np_ffi::internal::np_ffi_SetV0ActionResult_into_ERROR(result);
+      return absl::InvalidArgumentError(
+          "The requested action bit may not be set for the requested adv "
+          "encoding");
+    }
+  }
+}
+
+void V0Actions::SetContextSyncSequenceNumber(ContextSyncSeqNum seq_num) {
+  actions_ =
+      np_ffi::internal::np_ffi_V0Actions_set_context_sync_sequence_number(
+          actions_, seq_num.seq_num_);
+}
+
+V0Actions V0Actions::BuildNewZeroed(AdvertisementBuilderKind kind) {
+  auto actions = np_ffi::internal::np_ffi_build_new_zeroed_V0Actions(kind);
+  return V0Actions(actions);
+}
+
+uint8_t ContextSyncSeqNum::GetAsU8() const {
+  return np_ffi::internal::np_ffi_ContextSyncSeqNum_as_unsigned_byte(seq_num_);
+}
+
+absl::StatusOr<ContextSyncSeqNum> ContextSyncSeqNum::TryBuildFromU8(
+    uint8_t value) {
+  auto result =
+      np_ffi::internal::np_ffi_ContextSyncSeqNum_build_from_unsigned_byte(
+          value);
+  auto kind =
+      np_ffi::internal::np_ffi_BuildContextSyncSeqNumResult_kind(result);
+  switch (kind) {
+    case np_ffi::internal::BuildContextSyncSeqNumResultKind::Success: {
+      return ContextSyncSeqNum(
+          np_ffi::internal::np_ffi_BuildContextSyncSeqNumResult_into_SUCCESS(
+              result));
+    }
+    case np_ffi::internal::BuildContextSyncSeqNumResultKind::OutOfRange: {
+      return absl::InvalidArgumentError(
+          "Attempted to build a context sync sequence number from a non-nibble "
+          "value.");
+    }
+  }
+}
+
+int8_t TxPower::GetAsI8() const {
+  return np_ffi::internal::np_ffi_TxPower_as_signed_byte(tx_power_);
+}
+
+absl::StatusOr<TxPower> TxPower::TryBuildFromI8(int8_t value) {
+  auto result = np_ffi::internal::np_ffi_TxPower_build_from_signed_byte(value);
+  auto kind = np_ffi::internal::np_ffi_BuildTxPowerResult_kind(result);
+  switch (kind) {
+    case np_ffi::internal::BuildTxPowerResultKind::Success: {
+      return TxPower(
+          np_ffi::internal::np_ffi_BuildTxPowerResult_into_SUCCESS(result));
+    }
+    case np_ffi::internal::BuildTxPowerResultKind::OutOfRange: {
+      return absl::InvalidArgumentError(
+          "Could not build a tx power for the requested byte value.");
+    }
+  }
+}
+
+// This is called after all references to the shared_ptr have gone out of
+// scope
 auto DeallocateV1Adv(
-    np_ffi::internal::DeserializedV1Advertisement *v1_advertisement) {
+    np_ffi::internal::DeserializedV1Advertisement* v1_advertisement) {
   auto result =
       np_ffi::internal::np_ffi_deallocate_deserialized_V1_advertisement(
           *v1_advertisement);
@@ -492,11 +662,11 @@ DeserializedV1Advertisement::DeserializedV1Advertisement(
 }
 
 DeserializedV1Advertisement::DeserializedV1Advertisement(
-    DeserializedV1Advertisement &&other) noexcept
+    DeserializedV1Advertisement&& other) noexcept
     : v1_advertisement_(std::move(other.v1_advertisement_)) {}
 
-DeserializedV1Advertisement &DeserializedV1Advertisement::operator=(
-    DeserializedV1Advertisement &&other) noexcept {
+DeserializedV1Advertisement& DeserializedV1Advertisement::operator=(
+    DeserializedV1Advertisement&& other) noexcept {
   if (this != &other) {
     this->v1_advertisement_ = std::move(other.v1_advertisement_);
   }
@@ -504,14 +674,14 @@ DeserializedV1Advertisement &DeserializedV1Advertisement::operator=(
 }
 
 // V1 Stuff
-uint8_t DeserializedV1Advertisement::GetNumLegibleSections() {
+uint8_t DeserializedV1Advertisement::GetNumLegibleSections() const {
   assert_panic(this->v1_advertisement_ != nullptr);
   return np_ffi::internal::
       np_ffi_DeserializedV1Advertisement_get_num_legible_sections(
           *v1_advertisement_);
 }
 
-uint8_t DeserializedV1Advertisement::GetNumUndecryptableSections() {
+uint8_t DeserializedV1Advertisement::GetNumUndecryptableSections() const {
   assert_panic(this->v1_advertisement_ != nullptr);
   return np_ffi::internal::
       np_ffi_DeserializedV1Advertisement_get_num_undecryptable_sections(
@@ -519,72 +689,127 @@ uint8_t DeserializedV1Advertisement::GetNumUndecryptableSections() {
 }
 
 absl::StatusOr<DeserializedV1Section>
-DeserializedV1Advertisement::TryGetSection(uint8_t section_index) {
+DeserializedV1Advertisement::TryGetSection(const uint8_t section_index) const {
   assert_panic(this->v1_advertisement_ != nullptr);
   auto result =
       np_ffi::internal::np_ffi_DeserializedV1Advertisement_get_section(
           *v1_advertisement_, section_index);
   auto kind = np_ffi::internal::np_ffi_GetV1SectionResult_kind(result);
   switch (kind) {
-  case np_ffi::internal::GetV1SectionResultKind::Error: {
-    return absl::OutOfRangeError("Invalid section index");
-  }
-  case np_ffi::internal::GetV1SectionResultKind::Success: {
-    auto section =
-        np_ffi::internal::np_ffi_GetV1SectionResult_into_SUCCESS(result);
-    return DeserializedV1Section(section, v1_advertisement_);
-  }
+    case np_ffi::internal::GetV1SectionResultKind::Error: {
+      return absl::OutOfRangeError("Invalid section index");
+    }
+    case np_ffi::internal::GetV1SectionResultKind::Success: {
+      auto section =
+          np_ffi::internal::np_ffi_GetV1SectionResult_into_SUCCESS(result);
+      return DeserializedV1Section(section, v1_advertisement_);
+    }
   }
 }
 
-uint8_t DeserializedV1Section::NumberOfDataElements() {
+uint8_t DeserializedV1Section::NumberOfDataElements() const {
   return np_ffi::internal::np_ffi_DeserializedV1Section_get_num_des(section_);
 }
 
-DeserializedV1IdentityKind DeserializedV1Section::GetIdentityKind() {
+DeserializedV1IdentityKind DeserializedV1Section::GetIdentityKind() const {
   return np_ffi::internal::np_ffi_DeserializedV1Section_get_identity_kind(
       section_);
 }
 
-absl::StatusOr<V1DataElement>
-DeserializedV1Section::TryGetDataElement(uint8_t index) {
+absl::StatusOr<V1DataElement> DeserializedV1Section::TryGetDataElement(
+    const uint8_t index) const {
   auto result =
       np_ffi::internal::np_ffi_DeserializedV1Section_get_de(section_, index);
   auto kind = np_ffi::internal::np_ffi_GetV1DEResult_kind(result);
   switch (kind) {
-  case np_ffi::internal::GetV1DEResultKind::Error: {
-    return absl::OutOfRangeError("Invalid data element index for this section");
+    case np_ffi::internal::GetV1DEResultKind::Error: {
+      return absl::OutOfRangeError(
+          "Invalid data element index for this section");
+    }
+    case np_ffi::internal::GetV1DEResultKind::Success: {
+      return V1DataElement(
+          np_ffi::internal::np_ffi_GetV1DEResult_into_SUCCESS(result));
+    }
   }
-  case np_ffi::internal::GetV1DEResultKind::Success: {
-    return V1DataElement(
-        np_ffi::internal::np_ffi_GetV1DEResult_into_SUCCESS(result));
+}
+
+absl::StatusOr<std::vector<uint8_t>> DeserializedV1Section::DecryptMetadata()
+    const {
+  assert_panic(this->owning_v1_advertisement_ != nullptr);
+  auto decrypt_result =
+      np_ffi::internal::np_ffi_DeserializedV1Section_decrypt_metadata(
+          this->section_);
+  return MetadataResultToVec(decrypt_result);
+}
+
+absl::StatusOr<DeserializedV1IdentityDetails>
+DeserializedV1Section::GetIdentityDetails() const {
+  assert_panic(this->owning_v1_advertisement_ != nullptr);
+  auto result =
+      np_ffi::internal::np_ffi_DeserializedV1Section_get_identity_details(
+          this->section_);
+  auto kind = np_ffi::internal::np_ffi_GetV1IdentityDetailsResult_kind(result);
+  switch (kind) {
+    case np_ffi::internal::GetV1IdentityDetailsResultKind::Error: {
+      return absl::InvalidArgumentError("Invalid handle");
+    }
+    case np_ffi::internal::GetV1IdentityDetailsResultKind::Success: {
+      return np_ffi::internal::np_ffi_GetV1IdentityDetailsResult_into_SUCCESS(
+          result);
+    }
   }
+}
+
+absl::StatusOr<std::array<uint8_t, DERIVED_SALT_SIZE>>
+DeserializedV1Section::DeriveSaltForOffset(const uint8_t offset) const {
+  auto result = np_ffi::internal::
+      np_ffi_DeserializedV1Section_derive_16_byte_salt_for_offset(
+          this->section_, offset);
+  auto kind = np_ffi::internal::np_ffi_GetV1DE16ByteSaltResult_kind(result);
+  switch (kind) {
+    case np_ffi::internal::GetV1DE16ByteSaltResultKind::Error: {
+      return absl::InvalidArgumentError("Failed to derive salt for offset");
+    }
+    case np_ffi::internal::GetV1DE16ByteSaltResultKind::Success: {
+      auto buffer =
+          np_ffi::internal::np_ffi_GetV1DE16ByteSaltResult_into_SUCCESS(result);
+      return std::to_array(buffer._0);
+    }
   }
 }
 
 uint32_t V1DataElement::GetDataElementTypeCode() const {
   return np_ffi::internal::np_ffi_V1DEType_to_uint32_t(
-      v1_data_element_.generic._0.de_type);
+      np_ffi::internal::np_ffi_V1DataElement_to_generic(this->v1_data_element_)
+          .de_type);
 }
 
-ByteBuffer<127> V1DataElement::GetPayload() const {
-  return ByteBuffer(v1_data_element_.generic._0.payload);
+ByteBuffer<MAX_V1_DE_PAYLOAD_SIZE> V1DataElement::GetPayload() const {
+  return ByteBuffer(
+      np_ffi::internal::np_ffi_V1DataElement_to_generic(this->v1_data_element_)
+          .payload);
+}
+
+uint8_t V1DataElement::GetOffset() const {
+  return np_ffi::internal::np_ffi_V1DataElement_to_generic(
+             this->v1_data_element_)
+      .offset;
 }
 
 MatchedCredentialData::MatchedCredentialData(
-    uint32_t cred_id, std::span<uint8_t> metadata_bytes) {
+    const uint32_t cred_id, std::span<const uint8_t> metadata_bytes) {
   this->data_ = {cred_id, metadata_bytes.data(), metadata_bytes.size()};
 }
 
 template <typename T, size_t N>
-static void CopyToRawArray(T (&dest)[N], const std::array<T, N> &src) {
+void CopyToRawArray(T (&dest)[N], const std::array<T, N>& src) {
   memcpy(dest, src.data(), sizeof(T) * N);
 }
 
 V0MatchableCredential::V0MatchableCredential(
-    std::array<uint8_t, 32> key_seed,
-    std::array<uint8_t, 32> legacy_metadata_key_hmac,
-    MatchedCredentialData matched_credential_data) {
+    const std::array<uint8_t, 32> key_seed,
+    const std::array<uint8_t, 32> legacy_metadata_key_hmac,
+    const MatchedCredentialData matched_credential_data) {
   np_ffi::internal::V0DiscoveryCredential discovery_cred{};
   CopyToRawArray(discovery_cred.key_seed, key_seed);
   CopyToRawArray(discovery_cred.legacy_metadata_key_hmac,
@@ -593,11 +818,11 @@ V0MatchableCredential::V0MatchableCredential(
 }
 
 V1MatchableCredential::V1MatchableCredential(
-    std::array<uint8_t, 32> key_seed,
-    std::array<uint8_t, 32> expected_unsigned_metadata_key_hmac,
-    std::array<uint8_t, 32> expected_signed_metadata_key_hmac,
-    std::array<uint8_t, 32> pub_key,
-    MatchedCredentialData matched_credential_data) {
+    const std::array<uint8_t, 32> key_seed,
+    const std::array<uint8_t, 32> expected_unsigned_metadata_key_hmac,
+    const std::array<uint8_t, 32> expected_signed_metadata_key_hmac,
+    const std::array<uint8_t, 32> pub_key,
+    const MatchedCredentialData matched_credential_data) {
   np_ffi::internal::V1DiscoveryCredential discovery_cred{};
   CopyToRawArray(discovery_cred.key_seed, key_seed);
   CopyToRawArray(discovery_cred.expected_unsigned_metadata_key_hmac,
@@ -607,4 +832,145 @@ V1MatchableCredential::V1MatchableCredential(
   CopyToRawArray(discovery_cred.pub_key, pub_key);
   this->internal_ = {discovery_cred, matched_credential_data.data_};
 }
-} // namespace nearby_protocol
+
+V0BroadcastCredential::V0BroadcastCredential(
+    std::array<uint8_t, 32> key_seed, std::array<uint8_t, 14> metadata_key) {
+  CopyToRawArray(internal_.key_seed, key_seed);
+  CopyToRawArray(internal_.metadata_key, metadata_key);
+}
+
+V0AdvertisementBuilder::~V0AdvertisementBuilder() {
+  if (!this->moved_) {
+    auto result = np_ffi::internal::np_ffi_deallocate_v0_advertisement_builder(
+        adv_builder_);
+    assert_panic(result == np_ffi::internal::DeallocateResult::Success);
+  }
+}
+
+V0AdvertisementBuilder::V0AdvertisementBuilder(
+    V0AdvertisementBuilder&& other) noexcept
+    : adv_builder_(other.adv_builder_), moved_(other.moved_) {
+  other.adv_builder_ = {};
+  other.moved_ = true;
+}
+
+V0AdvertisementBuilder& V0AdvertisementBuilder::operator=(
+    V0AdvertisementBuilder&& other) noexcept {
+  if (this != &other) {
+    if (!this->moved_) {
+      auto result =
+          np_ffi::internal::np_ffi_deallocate_v0_advertisement_builder(
+              this->adv_builder_);
+      assert_panic(result == np_ffi::internal::DeallocateResult::Success);
+    }
+
+    this->adv_builder_ = other.adv_builder_;
+    this->moved_ = other.moved_;
+
+    other.adv_builder_ = {};
+    other.moved_ = true;
+  }
+  return *this;
+}
+
+absl::Status V0AdvertisementBuilder::TryAddDE(V0DataElement de) {
+  assert_panic(!this->moved_);
+  auto result = np_ffi::internal::np_ffi_V0AdvertisementBuilder_add_de(
+      this->adv_builder_, de.v0_data_element_);
+  switch (result) {
+    case AddV0DEResult::Success: {
+      return absl::OkStatus();
+    }
+    case AddV0DEResult::InvalidAdvertisementBuilderHandle: {
+      return absl::InvalidArgumentError(
+          "invalid v0 advertisement builder handle provided");
+    }
+    case AddV0DEResult::InsufficientAdvertisementSpace: {
+      return absl::ResourceExhaustedError(
+          "insufficient advertisement space to add DE");
+    }
+    case AddV0DEResult::InvalidIdentityTypeForDataElement: {
+      return absl::InvalidArgumentError(
+          "the DE may not be added to this advertisement builder due to an "
+          "identity type mismatch");
+    }
+  }
+}
+
+[[nodiscard]] absl::StatusOr<ByteBuffer<24>>
+V0AdvertisementBuilder::TrySerialize() {
+  assert_panic(!this->moved_);
+  auto result =
+      np_ffi::internal::np_ffi_V0AdvertisementBuilder_into_advertisement(
+          this->adv_builder_);
+  auto kind =
+      np_ffi::internal::np_ffi_SerializeV0AdvertisementResult_kind(result);
+  // Regardless of what happens, we've invalidated the original adv builder.
+  this->moved_ = true;
+
+  switch (kind) {
+    case SerializeV0AdvertisementResultKind::Success: {
+      auto bytes =
+          np_ffi::internal::np_ffi_SerializeV0AdvertisementResult_into_SUCCESS(
+              result);
+      return ByteBuffer(bytes);
+    }
+    case SerializeV0AdvertisementResultKind::LdtError: {
+      return absl::OutOfRangeError(
+          "The advertisement contents were not of a proper size for LDT "
+          "encryption");
+    }
+    case SerializeV0AdvertisementResultKind::
+        InvalidAdvertisementBuilderHandle: {
+      return absl::InvalidArgumentError(
+          "The advertisement builder handle was invalid");
+    }
+  }
+}
+
+[[nodiscard]] absl::StatusOr<V0AdvertisementBuilder>
+V0AdvertisementBuilder::CreateV0AdvertisementBuilderResultToInternal(
+    np_ffi::internal::CreateV0AdvertisementBuilderResult result) {
+  auto kind =
+      np_ffi::internal::np_ffi_CreateV0AdvertisementBuilderResult_kind(result);
+  switch (kind) {
+    case CreateV0AdvertisementBuilderResultKind::Success: {
+      auto adv_builder = np_ffi::internal::
+          np_ffi_CreateV0AdvertisementBuilderResult_into_SUCCESS(result);
+      return V0AdvertisementBuilder(adv_builder);
+    }
+    case CreateV0AdvertisementBuilderResultKind::NoSpaceLeft: {
+      return absl::ResourceExhaustedError(
+          "No space left to create v0 advertisement builder");
+    }
+  }
+}
+
+[[nodiscard]] absl::StatusOr<V0AdvertisementBuilder>
+V0AdvertisementBuilder::TryCreatePublic() {
+  auto result =
+      np_ffi::internal::np_ffi_create_v0_public_advertisement_builder();
+  return V0AdvertisementBuilder::CreateV0AdvertisementBuilderResultToInternal(
+      result);
+}
+
+template <uintptr_t N>
+[[nodiscard]] np_ffi::internal::FixedSizeArray<N> ToFFIArray(
+    std::array<uint8_t, N> value) {
+  np_ffi::internal::FixedSizeArray<N> result;
+  std::copy(std::begin(value), std::end(value), result._0);
+  return result;
+}
+
+[[nodiscard]] absl::StatusOr<V0AdvertisementBuilder>
+V0AdvertisementBuilder::TryCreateEncrypted(V0BroadcastCredential broadcast_cred,
+                                           EncryptedIdentityType identity_type,
+                                           std::array<uint8_t, 2> salt) {
+  auto result =
+      np_ffi::internal::np_ffi_create_v0_encrypted_advertisement_builder(
+          broadcast_cred.internal_, identity_type, ToFFIArray(salt));
+  return V0AdvertisementBuilder::CreateV0AdvertisementBuilderResultToInternal(
+      result);
+}
+
+}  // namespace nearby_protocol

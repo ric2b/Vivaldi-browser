@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
@@ -41,7 +40,7 @@ export class ElementsPanelLink extends HTMLElement {
       LitHtml.render(LitHtml.html`
       <span
         class="element-reveal-icon"
-        jslog=${VisualLogging.link().track({click: true}).context('elements-panel-link')}
+        jslog=${VisualLogging.link('elements-panel').track({click: true})}
         @click=${this.#onElementRevealIconClick}
         @mouseenter=${this.#onElementRevealIconMouseEnter}
         @mouseleave=${this.#onElementRevealIconMouseLeave}></span>
@@ -50,10 +49,9 @@ export class ElementsPanelLink extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-elements-panel-link', ElementsPanelLink);
+customElements.define('devtools-elements-panel-link', ElementsPanelLink);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-elements-panel-link': ElementsPanelLink;
   }

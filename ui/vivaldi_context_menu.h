@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "base/memory/weak_ptr.h"
 #include "browser/menus/bookmark_sorter.h"
 #include "browser/menus/bookmark_support.h"
 #include "components/renderer_context_menu/render_view_context_menu_base.h"
@@ -170,7 +171,7 @@ class VivaldiContextMenu : public VivaldiMenu {
   virtual ~VivaldiContextMenu() {}
 
   virtual void Init(ui::SimpleMenuModel* menu_model,
-                    ContextMenuPostitionDelegate* delegate) = 0;
+                    base::WeakPtr<ContextMenuPostitionDelegate> delegate) = 0;
   virtual bool Show() = 0;
   virtual void SetIcon(const gfx::Image& icon, int id) {}
   virtual void UpdateMenu(ui::SimpleMenuModel* menu_model, int id) {}

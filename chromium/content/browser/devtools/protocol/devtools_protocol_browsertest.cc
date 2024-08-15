@@ -1407,6 +1407,37 @@ IN_PROC_BROWSER_TEST_F(CaptureScreenshotTest,
                     true);
 }
 
+IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest,
+                       NoCrashDeviceMetricsOverrideAutoResize) {
+  NavigateToURLBlockUntilNavigationsComplete(
+      shell(), GURL("data:text/html,<body></body>"), 1);
+
+  // Enable auto resize.
+  gfx::Size min_size(10, 10);
+  gfx::Size max_size(100, 100);
+
+  RenderWidgetHostImpl* rwh = static_cast<RenderWidgetHostImpl*>(
+      shell()->web_contents()->GetPrimaryMainFrame()->GetRenderWidgetHost());
+  rwh->GetView()->EnableAutoResize(min_size, max_size);
+
+  Attach();
+
+  // Send command.
+  auto params = base::Value::Dict();
+  params.Set("width", 50);
+  params.Set("height", 50);
+  params.Set("deviceScaleFactor", 1);
+  params.Set("mobile", false);
+  ASSERT_FALSE(
+      SendCommandSync("Emulation.setDeviceMetricsOverride", std::move(params)));
+
+  // Should not crash and should return an error.
+  EXPECT_EQ(*error()->FindInt("code"),
+            static_cast<int>(crdtp::DispatchCode::SERVER_ERROR));
+  EXPECT_EQ(*error()->FindString("message"),
+            "Target does not support metrics override");
+}
+
 #if BUILDFLAG(IS_ANDROID)
 // Disabled, see http://crbug.com/469947.
 IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, DISABLED_SynthesizePinchGesture) {
@@ -3358,8 +3389,8 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, TracingWithPerfettoConfig) {
       /*privacy_filtering_enabled=*/false,
       /*convert_to_legacy_json=*/false,
       perfetto::protos::gen::ChromeConfig::USER_INITIATED);
-  base::Base64Encode(perfetto_config.SerializeAsString(),
-                     &perfetto_config_encoded);
+  perfetto_config_encoded =
+      base::Base64Encode(perfetto_config.SerializeAsString());
 
   base::Value::Dict params;
   params.Set("perfettoConfig", perfetto_config_encoded);
@@ -3395,9 +3426,8 @@ class SystemTracingDevToolsProtocolTest : public DevToolsProtocolTest {
         /*convert_to_legacy_json=*/false,
         perfetto::protos::gen::ChromeConfig::USER_INITIATED);
 
-    std::string perfetto_config_encoded;
-    base::Base64Encode(perfetto_config.SerializeAsString(),
-                       &perfetto_config_encoded);
+    std::string perfetto_config_encoded =
+        base::Base64Encode(perfetto_config.SerializeAsString());
 
     base::Value::Dict params;
     params.Set("perfettoConfig", perfetto_config_encoded);
@@ -3471,8 +3501,16 @@ class InvalidSystemTracingDevToolsProtocolTest
   }
 };
 
+// TODO(https://crbug.com/328350104): Fails ASAN builds
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_StartTracingFailsWithInvalidSockets \
+  DISABLED_StartTracingFailsWithInvalidSockets
+#else
+#define MAYBE_StartTracingFailsWithInvalidSockets \
+  StartTracingFailsWithInvalidSockets
+#endif
 IN_PROC_BROWSER_TEST_F(InvalidSystemTracingDevToolsProtocolTest,
-                       StartTracingFailsWithInvalidSockets) {
+                       MAYBE_StartTracingFailsWithInvalidSockets) {
   EXPECT_FALSE(StartSystemTrace());
 }
 
@@ -3861,7 +3899,9 @@ class NetworkResponseProtocolECHTest : public NetworkResponseProtocolTest {
 };
 
 // Test SecurityDetails reports when Encrypted ClientHello was negotiated.
-IN_PROC_BROWSER_TEST_F(NetworkResponseProtocolECHTest, SecurityDetailsECH) {
+// Flaky: https://crbug.com/1521189
+IN_PROC_BROWSER_TEST_F(NetworkResponseProtocolECHTest,
+                       DISABLED_SecurityDetailsECH) {
   NavigateToURLBlockUntilNavigationsComplete(shell(), GetURL("/title1.html"),
                                              1);
 

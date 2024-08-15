@@ -206,6 +206,9 @@ class AccessorNode : public ParseNode {
                                     const Value* base_value,
                                     Err* err) const;
   Value ExecuteScopeAccess(Scope* scope, Err* err) const;
+  const Value* ExecuteScopeAccessForMember(Scope* scope,
+                                           std::string_view member_str,
+                                           Err* err) const;
 
   static constexpr const char* kDumpAccessorKind = "accessor_kind";
   static constexpr const char* kDumpAccessorKindSubscript = "subscript";

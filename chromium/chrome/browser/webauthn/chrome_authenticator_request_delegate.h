@@ -17,15 +17,17 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
-#include "components/signin/public/identity_manager/access_token_info.h"
-#include "components/signin/public/identity_manager/primary_account_access_token_fetcher.h"
+#include "components/trusted_vault/trusted_vault_connection.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
 #include "content/public/browser/global_routing_id.h"
 #include "device/fido/cable/cable_discovery_data.h"
+#include "device/fido/discoverable_credential_metadata.h"
 #include "device/fido/fido_request_handler_base.h"
 #include "device/fido/fido_transport_protocol.h"
+#include "device/fido/fido_types.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 
+class EnclaveManager;
 class PrefService;
 class Profile;
 
@@ -35,18 +37,28 @@ class RenderFrameHost;
 }  // namespace content
 
 namespace device {
+class FidoAuthenticator;
+class FidoDiscoveryFactory;
 class PublicKeyCredentialDescriptor;
 class PublicKeyCredentialUserEntity;
+enum class FidoRequestType : uint8_t;
+namespace enclave {
+struct ClaimedPIN;
+struct CredentialRequest;
+}
 }  // namespace device
+
+namespace signin {
+class PrimaryAccountAccessTokenFetcher;
+}  // namespace signin
+
+namespace sync_pb {
+class WebauthnCredentialSpecifics;
+}
 
 namespace user_prefs {
 class PrefRegistrySyncable;
 }
-
-namespace device {
-class FidoAuthenticator;
-class FidoDiscoveryFactory;
-}  // namespace device
 
 // ChromeWebAuthenticationDelegate is the //chrome layer implementation of
 // content::WebAuthenticationDelegate.
@@ -176,6 +188,7 @@ class ChromeAuthenticatorRequestDelegate
       RequestSource request_source,
       device::FidoRequestType request_type,
       std::optional<device::ResidentKeyRequirement> resident_key_requirement,
+      device::UserVerificationRequirement user_verification_requirement,
       base::span<const device::CableDiscoveryData> pairings_from_extension,
       bool is_enclave_authenticator_available,
       device::FidoDiscoveryFactory* discovery_factory) override;
@@ -214,6 +227,7 @@ class ChromeAuthenticatorRequestDelegate
   // AuthenticatorRequestDialogModel::Observer:
   void OnStartOver() override;
   void OnModelDestroyed(AuthenticatorRequestDialogModel* model) override;
+  void OnStepTransition() override;
   void OnCancelRequest() override;
   void OnManageDevicesClicked() override;
 
@@ -236,13 +250,57 @@ class ChromeAuthenticatorRequestDelegate
   FRIEND_TEST_ALL_PREFIXES(ChromeAuthenticatorRequestDelegatePrivateTest,
                            ShouldCreateInICloudKeychain);
 
+  class EnclaveManagerObserver;
+
   // GetRenderFrameHost returns a pointer to the RenderFrameHost that was given
   // to the constructor.
   content::RenderFrameHost* GetRenderFrameHost() const;
 
   content::BrowserContext* GetBrowserContext() const;
 
+  void ShowUI(device::FidoRequestHandlerBase::TransportAvailabilityInfo data);
+
   std::optional<device::FidoTransportProtocol> GetLastTransportUsed() const;
+
+  // Called when the EnclaveManager has finished loading its state from the
+  // disk.
+  void OnEnclaveLoaded();
+
+  // Called when MagicArch has provided keys to the EnclaveManager.
+  void OnKeysStored();
+
+  // Called when the current device has been added to the security domain.
+  void OnDeviceAdded(bool success);
+
+  // Called when the user selects an account from modal or conditional UI.
+  // Stores the credential ID in `preselected_cred_id_` then forwards to the
+  // `AccountPreselectedCallback` that was passed to
+  // `RegisterActionCallbacks`.
+  void OnAccountPreselected(device::DiscoverableCredentialMetadata);
+
+  // Called to start fetching the state of the primary account from the
+  // trusted vault service.
+  void DownloadAccountState();
+
+  // Tell `dialog_model_` that the enclave manager is ready.
+  void SetAccountStateReady();
+
+  // Called when the state of the trusted vault has been determined by
+  // `DownloadAccountState`.
+  void OnAccountStateDownloaded(
+      std::unique_ptr<trusted_vault::TrustedVaultConnection> unused,
+      trusted_vault::DownloadAuthenticationFactorsRegistrationStateResult
+          result);
+
+  // Called when the UI has reached a state where it needs to do an enclave
+  // operation, and an OAuth token for the enclave has been fetched.
+  void MaybeHashPinAndStartEnclaveTransaction(std::optional<std::string> token);
+
+  // Called when the UI has reached a state where it needs to do an enclave
+  // operation, an OAuth token for the enclave has been fetched, and any PIN
+  // hashing has been completed.
+  void StartEnclaveTransaction(std::optional<std::string> token,
+                               std::unique_ptr<device::enclave::ClaimedPIN>);
 
   // ShouldPermitCableExtension returns true if the given |origin| may set a
   // caBLE extension. This extension contains website-chosen BLE pairing
@@ -333,12 +391,56 @@ class ChromeAuthenticatorRequestDelegate
   // available that can service requests for synced GPM passkeys.
   bool can_use_synced_phone_passkeys_ = false;
 
-  // True when the cloud enclave authenticator is available for use.
-  bool is_enclave_authenticator_available_ = false;
+  // Non-null when the cloud enclave authenticator is available for use. The
+  // `EnclaveManager` is a `KeyedService` for the current profile and so
+  // outlives this object.
+  raw_ptr<EnclaveManager> enclave_manager_ = nullptr;
 
-  // Fetcher for OAuth access tokens needed to use the enclave authenticator.
+  // Used to observe `enclave_manager_` without implementing the Observer
+  // interface directly and thus needing to #include all of `enclave_manager.h`
+  // in this header file.
+  std::unique_ptr<EnclaveManagerObserver> enclave_manager_observer_;
+
+  // Stores the TransportAvailabilityInfo while we're waiting for the enclave
+  // state to load from the disk.
+  std::unique_ptr<device::FidoRequestHandlerBase::TransportAvailabilityInfo>
+      pending_transport_availability_info_;
+
+  std::optional<device::FidoRequestType> request_type_;
+
+  std::optional<device::UserVerificationRequirement>
+      user_verification_requirement_;
+
+  // The set of pertinent synced passkeys for this request. Persisted here
+  // so that a consistent set of passkeys is used throughout the transaction.
+  std::optional<std::vector<sync_pb::WebauthnCredentialSpecifics>>
+      gpm_credentials_;
+
+  // The pending request to fetch the state of the trusted vault.
+  std::unique_ptr<trusted_vault::TrustedVaultConnection::Request>
+      download_account_state_request_;
+
+  // The pending request to fetch an OAuth token for the enclave request.
   std::unique_ptr<signin::PrimaryAccountAccessTokenFetcher>
       access_token_fetcher_;
+
+  // The callback used to trigger a request to the enclave.
+  base::RepeatingCallback<void(
+      std::unique_ptr<device::enclave::CredentialRequest>)>
+      enclave_request_callback_;
+
+  // The credential ID of the last credential to be selected by the user in
+  // modal or conditional UI.
+  std::optional<std::vector<uint8_t>> preselected_cred_id_;
+
+  // Contains the bytes of a WrappedPIN structure, downloaded from the security
+  // domain service.
+  std::optional<std::string> serialized_wrapped_pin_;
+
+  // Hold the GPM PIN in the special case where we prompt for a PIN to add one
+  // to the account, but then immediately need it in order to satisfy UV for
+  // the request.
+  std::optional<std::string> gpm_pin_stashed_;
 
   base::WeakPtrFactory<ChromeAuthenticatorRequestDelegate> weak_ptr_factory_{
       this};

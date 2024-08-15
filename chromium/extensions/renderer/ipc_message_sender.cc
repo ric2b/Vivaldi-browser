@@ -6,6 +6,7 @@
 
 #include <optional>
 #include <utility>
+
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
@@ -13,8 +14,8 @@
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/worker_thread.h"
 #include "extensions/common/api/messaging/messaging_endpoint.h"
+#include "extensions/common/api/messaging/port_context.h"
 #include "extensions/common/constants.h"
-#include "extensions/common/extension_messages.h"
 #include "extensions/common/features/feature.h"
 #include "extensions/common/mojom/automation_registry.mojom.h"
 #include "extensions/common/mojom/context_type.mojom.h"
@@ -171,10 +172,6 @@ class MainThreadIPCMessageSender : public IPCMessageSender {
     DCHECK(render_frame);
     const Extension* extension = script_context->extension();
 
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-    PortContext frame_context =
-        PortContext::ForFrame(render_frame->GetRoutingID());
-#endif
     // TODO(https://crbug.com/1430999): We should just avoid passing a
     // channel name in at all for non-connect messages; we no longer need to.
     std::string channel_name_to_use =
@@ -182,11 +179,7 @@ class MainThreadIPCMessageSender : public IPCMessageSender {
                                                      : std::string();
     switch (target.type) {
       case MessageTarget::EXTENSION: {
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-        auto info = std::make_unique<ExtensionMsg_ExternalConnectionInfo>();
-#else
         auto info = mojom::ExternalConnectionInfo::New();
-#endif
         if (extension && !extension->is_hosted_app()) {
           switch (script_context->context_type()) {
             case mojom::ContextType::kPrivilegedExtension:
@@ -221,79 +214,34 @@ class MainThreadIPCMessageSender : public IPCMessageSender {
         TRACE_RENDERER_EXTENSION_EVENT(
             "MainThreadIPCMessageSender::SendOpenMessageChannel/extension",
             *target.extension_id);
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-        render_thread_->Send(new ExtensionHostMsg_OpenChannelToExtension(
-            frame_context, *info, channel_type, channel_name_to_use, port_id));
-#else
         ExtensionFrameHelper::Get(render_frame)
             ->GetLocalFrameHost()
             ->OpenChannelToExtension(std::move(info), channel_type,
                                      channel_name_to_use, port_id,
                                      std::move(port), std::move(port_host));
-#endif
         break;
       }
       case MessageTarget::TAB: {
         DCHECK(extension);
         DCHECK_NE(script_context->context_type(),
                   mojom::ContextType::kContentScript);
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-        ExtensionMsg_TabTargetConnectionInfo info;
-        info.tab_id = *target.tab_id;
-        info.frame_id = *target.frame_id;
-        if (target.document_id)
-          info.document_id = *target.document_id;
-        render_frame->Send(new ExtensionHostMsg_OpenChannelToTab(
-            frame_context, info, channel_type, channel_name_to_use, port_id));
-#else
         ExtensionFrameHelper::Get(render_frame)
             ->GetLocalFrameHost()
             ->OpenChannelToTab(*target.tab_id, *target.frame_id,
                                target.document_id, channel_type,
                                channel_name_to_use, port_id, std::move(port),
                                std::move(port_host));
-#endif
         break;
       }
       case MessageTarget::NATIVE_APP:
         CHECK_EQ(mojom::ChannelType::kNative, channel_type);
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-        render_frame->Send(new ExtensionHostMsg_OpenChannelToNativeApp(
-            frame_context, *target.native_application_name, port_id));
-#else
         ExtensionFrameHelper::Get(render_frame)
             ->GetLocalFrameHost()
             ->OpenChannelToNativeApp(*target.native_application_name, port_id,
                                      std::move(port), std::move(port_host));
-#endif
         break;
     }
   }
-
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-  void SendOpenMessagePort(int routing_id, const PortId& port_id) override {
-    render_thread_->Send(new ExtensionHostMsg_OpenMessagePort(
-        PortContext::ForFrame(routing_id), port_id));
-  }
-
-  void SendCloseMessagePort(int routing_id,
-                            const PortId& port_id,
-                            bool close_channel) override {
-    render_thread_->Send(new ExtensionHostMsg_CloseMessagePort(
-        PortContext::ForFrame(routing_id), port_id, close_channel));
-  }
-
-  void SendPostMessageToPort(const PortId& port_id,
-                             const Message& message) override {
-    render_thread_->Send(new ExtensionHostMsg_PostMessage(port_id, message));
-  }
-
-  void SendMessageResponsePending(int routing_id,
-                                  const PortId& port_id) override {
-    render_thread_->Send(new ExtensionHostMsg_ResponsePending(
-        PortContext::ForFrame(routing_id), port_id));
-  }
-#endif
 
   void SendActivityLogIPC(ScriptContext* context,
                           const ExtensionId& extension_id,
@@ -376,9 +324,6 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
     params->worker_thread_id = worker_thread_id;
     params->service_worker_version_id = service_worker_version_id_;
 
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-    dispatcher_->RequestWorker(std::move(params));
-#else
     const int request_id = params->request_id;
     WorkerThreadDispatcher::GetServiceWorkerData()
         ->GetServiceWorkerHost()
@@ -394,7 +339,6 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
                                                    std::move(extra_data));
                             },
                             request_id));
-#endif
   }
 
   void SendResponseAckIPC(ScriptContext* context,
@@ -403,13 +347,9 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
     CHECK(context->IsForServiceWorker());
     CHECK_NE(kMainThreadId, content::WorkerThread::GetCurrentId());
 
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-    dispatcher_->SendResponseAck(request_uuid);
-#else
     WorkerThreadDispatcher::GetServiceWorkerData()
         ->GetServiceWorkerHost()
         ->WorkerResponseAck(request_uuid);
-#endif
   }
 
   void SendAddUnfilteredEventListenerIPC(
@@ -427,13 +367,9 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
                                          context->service_worker_version_id(),
                                          content::WorkerThread::GetCurrentId()),
         /*event_filter=*/std::nullopt);
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-    dispatcher_->SendAddEventListener(std::move(event_listener));
-#else
     WorkerThreadDispatcher::GetServiceWorkerData()
         ->GetEventRouter()
         ->AddListenerForServiceWorker(std::move(event_listener));
-#endif
   }
 
   void SendRemoveUnfilteredEventListenerIPC(
@@ -452,13 +388,9 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
                                          content::WorkerThread::GetCurrentId()),
         /*event_filter=*/std::nullopt);
 
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-    dispatcher_->SendRemoveEventListener(std::move(event_listener));
-#else
     WorkerThreadDispatcher::GetServiceWorkerData()
         ->GetEventRouter()
         ->RemoveListenerForServiceWorker(std::move(event_listener));
-#endif
   }
 
   void SendAddUnfilteredLazyEventListenerIPC(
@@ -467,16 +399,11 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
     DCHECK(context->IsForServiceWorker());
     DCHECK_NE(kMainThreadId, content::WorkerThread::GetCurrentId());
 
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-    dispatcher_->SendAddEventLazyListener(
-        context->GetExtensionID(), context->service_worker_scope(), event_name);
-#else
     WorkerThreadDispatcher::GetServiceWorkerData()
         ->GetEventRouter()
         ->AddLazyListenerForServiceWorker(context->GetExtensionID(),
                                           context->service_worker_scope(),
                                           event_name);
-#endif
   }
 
   void SendRemoveUnfilteredLazyEventListenerIPC(
@@ -485,16 +412,11 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
     DCHECK(context->IsForServiceWorker());
     DCHECK_NE(kMainThreadId, content::WorkerThread::GetCurrentId());
 
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-    dispatcher_->SendRemoveEventLazyListener(
-        context->GetExtensionID(), context->service_worker_scope(), event_name);
-#else
     WorkerThreadDispatcher::GetServiceWorkerData()
         ->GetEventRouter()
         ->RemoveLazyListenerForServiceWorker(context->GetExtensionID(),
                                              context->service_worker_scope(),
                                              event_name);
-#endif
   }
 
   void SendAddFilteredEventListenerIPC(ScriptContext* context,
@@ -506,12 +428,6 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
     DCHECK_NE(blink::mojom::kInvalidServiceWorkerVersionId,
               context->service_worker_version_id());
 
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-    dispatcher_->SendAddEventFilteredListener(
-        context->GetExtensionID(), context->service_worker_scope(), event_name,
-        context->service_worker_version_id(),
-        content::WorkerThread::GetCurrentId(), filter.Clone(), is_lazy);
-#else
     WorkerThreadDispatcher::GetServiceWorkerData()
         ->GetEventRouter()
         ->AddFilteredListenerForServiceWorker(
@@ -521,7 +437,6 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
                 context->service_worker_version_id(),
                 content::WorkerThread::GetCurrentId()),
             filter.Clone(), is_lazy);
-#endif
   }
 
   void SendRemoveFilteredEventListenerIPC(ScriptContext* context,
@@ -533,13 +448,6 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
     DCHECK_NE(blink::mojom::kInvalidServiceWorkerVersionId,
               context->service_worker_version_id());
 
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-    dispatcher_->SendRemoveEventFilteredListener(
-        context->GetExtensionID(), context->service_worker_scope(), event_name,
-        context->service_worker_version_id(),
-        content::WorkerThread::GetCurrentId(), filter.Clone(),
-        remove_lazy_listener);
-#else
     WorkerThreadDispatcher::GetServiceWorkerData()
         ->GetEventRouter()
         ->RemoveFilteredListenerForServiceWorker(
@@ -549,7 +457,6 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
                 context->service_worker_version_id(),
                 content::WorkerThread::GetCurrentId()),
             filter.Clone(), remove_lazy_listener);
-#endif
   }
 
   void SendBindAutomationIPC(
@@ -557,13 +464,9 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
       mojo::PendingAssociatedRemote<ax::mojom::Automation> pending_remote)
       override {
     CHECK(context->IsForServiceWorker());
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-    dispatcher_->SendBindAutomation(std::move(pending_remote));
-#else
     WorkerThreadDispatcher::GetServiceWorkerData()
         ->GetAutomationRegistry()
         ->BindAutomation(std::move(pending_remote));
-#endif
   }
 
   void SendOpenMessageChannel(
@@ -587,11 +490,7 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
 
     switch (target.type) {
       case MessageTarget::EXTENSION: {
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-        auto info = std::make_unique<ExtensionMsg_ExternalConnectionInfo>();
-#else
         auto info = mojom::ExternalConnectionInfo::New();
-#endif
         if (extension && !extension->is_hosted_app()) {
           info->source_endpoint =
               MessagingEndpoint::ForExtension(extension->id());
@@ -601,81 +500,32 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
         TRACE_RENDERER_EXTENSION_EVENT(
             "WorkerThreadIPCMessageSender::SendOpenMessageChannel/extension",
             *target.extension_id);
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-        dispatcher_->Send(new ExtensionHostMsg_OpenChannelToExtension(
-            PortContextForCurrentWorker(), *info, channel_type,
-            channel_name_to_use, port_id));
-#else
         WorkerThreadDispatcher::GetServiceWorkerData()
             ->GetServiceWorkerHost()
             ->OpenChannelToExtension(std::move(info), channel_type,
                                      channel_name_to_use, port_id,
                                      std::move(port), std::move(port_host));
-#endif
         break;
       }
       case MessageTarget::TAB: {
         DCHECK(extension);
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-        ExtensionMsg_TabTargetConnectionInfo info;
-        info.tab_id = *target.tab_id;
-        info.frame_id = *target.frame_id;
-        dispatcher_->Send(new ExtensionHostMsg_OpenChannelToTab(
-            PortContextForCurrentWorker(), info, channel_type,
-            channel_name_to_use, port_id));
-#else
         WorkerThreadDispatcher::GetServiceWorkerData()
             ->GetServiceWorkerHost()
             ->OpenChannelToTab(*target.tab_id, *target.frame_id,
                                target.document_id, channel_type,
                                channel_name_to_use, port_id, std::move(port),
                                std::move(port_host));
-#endif
         break;
       }
       case MessageTarget::NATIVE_APP:
         CHECK_EQ(mojom::ChannelType::kNative, channel_type);
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-        dispatcher_->Send(new ExtensionHostMsg_OpenChannelToNativeApp(
-            PortContextForCurrentWorker(), *target.native_application_name,
-            port_id));
-#else
         WorkerThreadDispatcher::GetServiceWorkerData()
             ->GetServiceWorkerHost()
             ->OpenChannelToNativeApp(*target.native_application_name, port_id,
                                      std::move(port), std::move(port_host));
-#endif
         break;
     }
   }
-
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-  void SendOpenMessagePort(int routing_id, const PortId& port_id) override {
-    DCHECK_EQ(MSG_ROUTING_NONE, routing_id);
-    dispatcher_->Send(new ExtensionHostMsg_OpenMessagePort(
-        PortContextForCurrentWorker(), port_id));
-  }
-
-  void SendCloseMessagePort(int routing_id,
-                            const PortId& port_id,
-                            bool close_channel) override {
-    DCHECK_EQ(MSG_ROUTING_NONE, routing_id);
-    dispatcher_->Send(new ExtensionHostMsg_CloseMessagePort(
-        PortContextForCurrentWorker(), port_id, close_channel));
-  }
-
-  void SendPostMessageToPort(const PortId& port_id,
-                             const Message& message) override {
-    dispatcher_->Send(new ExtensionHostMsg_PostMessage(port_id, message));
-  }
-
-  void SendMessageResponsePending(int routing_id,
-                                  const PortId& port_id) override {
-    DCHECK_EQ(MSG_ROUTING_NONE, routing_id);
-    dispatcher_->Send(new ExtensionHostMsg_ResponsePending(
-        PortContextForCurrentWorker(), port_id));
-  }
-#endif
 
   void SendActivityLogIPC(ScriptContext* context,
                           const ExtensionId& extension_id,
@@ -711,7 +561,7 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
     return WorkerThreadDispatcher::GetServiceWorkerData()->GetRendererHost();
   }
 
-  const raw_ptr<WorkerThreadDispatcher, ExperimentalRenderer> dispatcher_;
+  const raw_ptr<WorkerThreadDispatcher> dispatcher_;
   const int64_t service_worker_version_id_;
   std::optional<ExtensionId> extension_id_;
 };

@@ -37,6 +37,7 @@ pub trait FfiEnum {
 ///
 /// If the enclosing enum turns out to not be the requested
 /// variant, the generated method will return `None`.
+#[macro_export]
 macro_rules! declare_enum_cast {
     ($projection_method_name:ident, $variant_enum_name:ident, $variant_type_name:ty) => {
         #[doc = concat!("Attempts to cast `self` to the `", stringify!($variant_enum_name),

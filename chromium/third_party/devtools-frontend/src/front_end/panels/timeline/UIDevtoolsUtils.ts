@@ -31,7 +31,7 @@
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Root from '../../core/root/root.js';
 
-import {TimelineCategory, TimelineRecordStyle} from './EventUICategory.js';
+import {type CategoryPalette, EventCategory, TimelineCategory, TimelineRecordStyle} from './EventUICategory.js';
 
 const UIStrings = {
   /**
@@ -66,20 +66,42 @@ const UIStrings = {
    *@description Text in Timeline UIUtils of the Performance panel
    */
   idle: 'Idle',
+  /**
+   *@description Category in the Summary view of the Performance panel to indicate time spent to load resources
+   */
+  loading: 'Loading',
+  /**
+   *@description Text in Timeline for the Experience title
+   */
+  experience: 'Experience',
+  /**
+   *@description Category in the Summary view of the Performance panel to indicate time spent in script execution
+   */
+  scripting: 'Scripting',
+  /**
+   *@description Category in the Summary view of the Performance panel to indicate time spent in rendering the web page
+   */
+  rendering: 'Rendering',
+  /**
+   *@description Event category in the Performance panel for time spent in the GPU
+   */
+  gpu: 'GPU',
+  /**
+   *@description Text in Timeline UIUtils of the Performance panel
+   */
+  async: 'Async',
+  /**
+   *@description Text in Timeline UIUtils of the Performance panel
+   */
+  messaging: 'Messaging',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/UIDevtoolsUtils.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
-// TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-// eslint-disable-next-line @typescript-eslint/naming-convention
-let _eventStylesMap: {
+
+let eventStylesMap: {
   [x: string]: TimelineRecordStyle,
 }|null = null;
-
-// TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-// eslint-disable-next-line @typescript-eslint/naming-convention
-let _categories: {
-  [x: string]: TimelineCategory,
-}|null = null;
+let categories: CategoryPalette|null = null;
 
 export class UIDevtoolsUtils {
   static isUiDevTools(): boolean {
@@ -89,8 +111,8 @@ export class UIDevtoolsUtils {
   static categorizeEvents(): {
     [x: string]: TimelineRecordStyle,
   } {
-    if (_eventStylesMap) {
-      return _eventStylesMap;
+    if (eventStylesMap) {
+      return eventStylesMap;
     }
 
     const type = RecordType;
@@ -132,31 +154,53 @@ export class UIDevtoolsUtils {
     // Other Categories
     eventStyles[type.ThreadControllerImplRunTask] = new TimelineRecordStyle('ThreadControllerImpl::RunTask', other);
 
-    _eventStylesMap = eventStyles;
+    eventStylesMap = eventStyles;
     return eventStyles;
   }
 
-  static categories(): {
-    [x: string]: TimelineCategory,
-  } {
-    if (_categories) {
-      return _categories;
+  static categories(): CategoryPalette {
+    if (categories) {
+      return categories;
     }
-    _categories = {
+    categories = {
       layout: new TimelineCategory(
-          'layout', i18nString(UIStrings.layout), true, '--app-color-loading-children', '--app-color-loading'),
+          EventCategory.LAYOUT, i18nString(UIStrings.layout), true, '--app-color-loading-children',
+          '--app-color-loading'),
       rasterizing: new TimelineCategory(
-          'rasterizing', i18nString(UIStrings.rasterizing), true, '--app-color-children', '--app-color-scripting'),
+          EventCategory.RASTERIZING, i18nString(UIStrings.rasterizing), true, '--app-color-children',
+          '--app-color-scripting'),
       drawing: new TimelineCategory(
-          'drawing', i18nString(UIStrings.drawing), true, '--app-color-rendering-children', '--app-color-rendering'),
+          EventCategory.DRAWING, i18nString(UIStrings.drawing), true, '--app-color-rendering-children',
+          '--app-color-rendering'),
       painting: new TimelineCategory(
-          'painting', i18nString(UIStrings.painting), true, '--app-color-painting-children', '--app-color-painting'),
+          EventCategory.PAINTING, i18nString(UIStrings.painting), true, '--app-color-painting-children',
+          '--app-color-painting'),
       other: new TimelineCategory(
-          'other', i18nString(UIStrings.system), false, '--app-color-system-children', '--app-color-system'),
+          EventCategory.OTHER, i18nString(UIStrings.system), false, '--app-color-system-children',
+          '--app-color-system'),
       idle: new TimelineCategory(
-          'idle', i18nString(UIStrings.idle), false, '--app-color-idle-children', '--app-color-idle'),
+          EventCategory.IDLE, i18nString(UIStrings.idle), false, '--app-color-idle-children', '--app-color-idle'),
+      loading: new TimelineCategory(
+          EventCategory.LOADING, i18nString(UIStrings.loading), false, '--app-color-loading-children',
+          '--app-color-loading'),
+      experience: new TimelineCategory(
+          EventCategory.EXPERIENCE, i18nString(UIStrings.experience), false, '--app-color-rendering-children',
+          '--pp-color-rendering'),
+      messaging: new TimelineCategory(
+          EventCategory.MESSAGING, i18nString(UIStrings.messaging), false, '--app-color-messaging-children',
+          '--pp-color-messaging'),
+      scripting: new TimelineCategory(
+          EventCategory.SCRIPTING, i18nString(UIStrings.scripting), false, '--app-color-scripting-children',
+          '--pp-color-scripting'),
+      rendering: new TimelineCategory(
+          EventCategory.RENDERING, i18nString(UIStrings.rendering), false, '--app-color-rendering-children',
+          '--pp-color-rendering'),
+      gpu: new TimelineCategory(
+          EventCategory.GPU, i18nString(UIStrings.gpu), false, '--app-color-painting-children', '--app-color-painting'),
+      async: new TimelineCategory(
+          EventCategory.ASYNC, i18nString(UIStrings.async), false, '--app-color-async-children', '--app-color-async'),
     };
-    return _categories;
+    return categories;
   }
 
   static getMainCategoriesList(): string[] {

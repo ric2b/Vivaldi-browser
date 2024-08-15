@@ -45,6 +45,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/background/background_contents_service.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/extensions/blocklist.h"
 #include "chrome/browser/extensions/chrome_app_sorting.h"
 #include "chrome/browser/extensions/chrome_extension_cookies.h"
@@ -80,6 +81,7 @@
 #include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/extensions/updater/extension_updater.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
+#include "chrome/browser/policy/policy_test_utils.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/global_error/global_error.h"
@@ -98,6 +100,7 @@
 #include "chrome/test/base/scoped_browser_locale.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/crx_file/id_util.h"
+#include "components/policy/core/common/management/scoped_management_service_override_for_testing.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -4009,6 +4012,8 @@ TEST_F(ExtensionServiceTest, BlockAndUnblockTerminatedExtension) {
 // Tests blocking then unblocking policy-forced extensions after the service has
 // been initialized.
 TEST_F(ExtensionServiceTest, BlockAndUnblockPolicyExtension) {
+  // Mark as enterprise managed.
+  policy::ScopedDomainEnterpriseManagement scoped_domain;
   InitializeEmptyExtensionServiceWithTestingPrefs();
 
   {
@@ -4255,6 +4260,8 @@ TEST_F(ExtensionServiceTest, ComponentExtensionAllowlistedPermission) {
 
 // Tests that policy-installed extensions are not blocklisted by policy.
 TEST_F(ExtensionServiceTest, PolicyInstalledExtensionsAllowlisted) {
+  // Mark as enterprise managed.
+  policy::ScopedDomainEnterpriseManagement scoped_domain;
   InitializeEmptyExtensionServiceWithTestingPrefs();
 
   {
@@ -8293,6 +8300,8 @@ TEST_F(ExtensionServiceTest, UserInstalledExtensionThenRequiredByPolicy) {
 // force installed extension.
 TEST_F(ExtensionServiceTest,
        UserInstalledExtensionThenRequiredByPolicyOnRestart) {
+  // Mark as enterprise managed.
+  policy::ScopedDomainEnterpriseManagement scoped_domain;
   InitializeEmptyExtensionServiceWithTestingPrefs();
 
   // Install an extension as if the user did it.

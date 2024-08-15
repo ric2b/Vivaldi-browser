@@ -17,6 +17,7 @@
 #include "net/base/load_timing_info.h"
 #include "net/base/proxy_chain.h"
 #include "net/base/proxy_server.h"
+#include "net/base/session_usage.h"
 #include "net/base/test_completion_callback.h"
 #include "net/base/winsock_init.h"
 #include "net/dns/mock_host_resolver.h"
@@ -105,11 +106,12 @@ base::WeakPtr<SpdySession> CreateSpdyProxySession(
       /*supported_alpns=*/base::flat_set<std::string>{"h2", "http/1.1"});
 
   SSLConfig ssl_config;
+  ssl_config.privacy_mode = key.privacy_mode();
   auto ssl_params = base::MakeRefCounted<SSLSocketParams>(
       transport_params, /*socks_proxy_params=*/nullptr,
       /*http_proxy_params=*/nullptr,
       HostPortPair::FromSchemeHostPort(destination), ssl_config,
-      key.privacy_mode(), key.network_anonymization_key());
+      key.network_anonymization_key());
   TestConnectJobDelegate connect_job_delegate;
   SSLConnectJob connect_job(MEDIUM, SocketTag(), common_connect_job_params,
                             ssl_params, &connect_job_delegate,
@@ -227,13 +229,15 @@ SpdyProxyClientSocketTest::SpdyProxyClientSocketTest()
       proxy_host_port_(kProxyHost, kProxyPort),
       endpoint_host_port_pair_(kOriginHost, kOriginPort),
       proxy_chain_(ProxyServer::SCHEME_HTTPS, proxy_host_port_),
-      endpoint_spdy_session_key_(endpoint_host_port_pair_,
-                                 proxy_chain_,
-                                 PRIVACY_MODE_DISABLED,
-                                 SpdySessionKey::IsProxySession::kFalse,
-                                 SocketTag(),
-                                 NetworkAnonymizationKey(),
-                                 SecureDnsPolicy::kAllow),
+      endpoint_spdy_session_key_(
+          endpoint_host_port_pair_,
+          PRIVACY_MODE_DISABLED,
+          proxy_chain_,
+          SessionUsage::kDestination,
+          SocketTag(),
+          NetworkAnonymizationKey(),
+          SecureDnsPolicy::kAllow,
+          /*disable_cert_verification_network_fetches=*/false),
       ssl_(SYNCHRONOUS, OK) {
   session_deps_.net_log = NetLog::Get();
 }

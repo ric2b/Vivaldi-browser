@@ -46,6 +46,7 @@
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/box_layout_view.h"
+#include "ui/views/layout/flex_layout_view.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/view_targeter.h"
 #include "ui/views/view_targeter_delegate.h"
@@ -152,6 +153,7 @@ void TrayDetailedView::CreateTitleRow(int string_id) {
     DCHECK(start_view->GetVisible());
     start_view->SetBorder(views::CreateEmptyBorder(
         gfx::Insets::TLBR(0, 0, 0, end_width - start_width)));
+    start_view->InvalidateLayout();
   } else {
     // Ensure the end container is visible, even if it has no buttons.
     tri_view_->SetContainerVisible(TriView::Container::END, true);
@@ -159,19 +161,20 @@ void TrayDetailedView::CreateTitleRow(int string_id) {
         gfx::Insets::TLBR(0, start_width - end_width, 0, 0)));
   }
 
-  Layout();
+  DeprecatedLayoutImmediately();
 }
 
 void TrayDetailedView::CreateScrollableList() {
   DCHECK(!scroller_);
-  auto scroll_content = std::make_unique<views::BoxLayoutView>();
-  scroll_content->SetOrientation(views::BoxLayout::Orientation::kVertical);
   scroller_ = AddChildView(std::make_unique<views::ScrollView>());
   scroller_->SetDrawOverflowIndicator(false);
-  scroll_content_ = scroller_->SetContents(std::move(scroll_content));
+  scroll_content_ = scroller_->SetContents(
+      views::Builder<views::FlexLayoutView>()
+          .SetOrientation(views::LayoutOrientation::kVertical)
+          .Build());
 
   auto vertical_scroll = std::make_unique<RoundedScrollBar>(
-      /*horizontal=*/false);
+      views::ScrollBar::Orientation::kVertical);
   vertical_scroll->SetInsets(kScrollBarInsets);
   scroller_->SetVerticalScrollBar(std::move(vertical_scroll));
   scroller_->SetProperty(views::kMarginsKey, delegate_->GetScrollViewMargin());
@@ -239,9 +242,10 @@ void TrayDetailedView::ShowProgress(double value, bool visible) {
     progress_bar_ = AddChildViewAt(std::make_unique<views::ProgressBar>(),
                                    kTitleRowProgressBarIndex + 1);
     progress_bar_->SetPreferredHeight(kTitleRowProgressBarHeight);
-    progress_bar_->GetViewAccessibility().OverrideName(
+    progress_bar_->GetViewAccessibility().SetName(
         progress_bar_accessible_name_.value_or(l10n_util::GetStringUTF16(
-            IDS_ASH_STATUS_TRAY_PROGRESS_BAR_ACCESSIBLE_NAME)));
+            IDS_ASH_STATUS_TRAY_PROGRESS_BAR_ACCESSIBLE_NAME)),
+        ax::mojom::NameFrom::kAttribute);
     progress_bar_->SetVisible(false);
     progress_bar_->SetForegroundColor(
         AshColorProvider::Get()->GetContentLayerColor(
@@ -313,8 +317,8 @@ void TrayDetailedView::CloseBubble() {
   delegate_->CloseBubble();
 }
 
-void TrayDetailedView::Layout() {
-  views::View::Layout();
+void TrayDetailedView::Layout(PassKey) {
+  LayoutSuperclass<views::View>(this);
   if (scroller_ && !scroller_->is_bounded()) {
     scroller_->ClipHeightTo(0, scroller_->height());
   }
@@ -331,7 +335,7 @@ int TrayDetailedView::GetHeightForWidth(int width) const {
   return height();
 }
 
-BEGIN_METADATA(TrayDetailedView, views::View)
+BEGIN_METADATA(TrayDetailedView)
 END_METADATA
 
 }  // namespace ash

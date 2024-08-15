@@ -62,6 +62,53 @@ ForceAllowedToBeDefault::ForceAllowedToBeDefault() {
 }
 
 // static
+BASE_FEATURE(LimitKeywordModeSuggestions::kLimitKeywordModeSuggestions,
+             "OmniboxLimitKeywordModeSuggestions",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+LimitKeywordModeSuggestions::LimitKeywordModeSuggestions() {
+  enabled = base::FeatureList::IsEnabled(kLimitKeywordModeSuggestions);
+
+  limit_document_suggestions =
+      base::FeatureParam<bool>(&kLimitKeywordModeSuggestions,
+                               "LimitDocumentSuggestions", true)
+          .Get();
+  limit_history_cluster_suggestions =
+      base::FeatureParam<bool>(&kLimitKeywordModeSuggestions,
+                               "LimitHistoryClusterSuggestions", true)
+          .Get();
+  limit_dse_suggestions =
+      base::FeatureParam<bool>(&kLimitKeywordModeSuggestions,
+                               "LimitDSESuggestions", true)
+          .Get();
+  limit_on_device_head_suggestions =
+      base::FeatureParam<bool>(&kLimitKeywordModeSuggestions,
+                               "LimitOnDeviceHeadSuggestions", true)
+          .Get();
+}
+
+// static
+BASE_FEATURE(RealboxContextualAndTrendingSuggestions::
+                 kRealboxContextualAndTrendingSuggestions,
+             "NTPRealboxContextualAndTrendingSuggestions",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+RealboxContextualAndTrendingSuggestions::
+    RealboxContextualAndTrendingSuggestions() {
+  enabled =
+      base::FeatureList::IsEnabled(kRealboxContextualAndTrendingSuggestions);
+  total_limit = base::FeatureParam<int>(
+                    &kRealboxContextualAndTrendingSuggestions, "TotalLimit", 4)
+                    .Get();
+  contextual_suggestions_limit =
+      base::FeatureParam<int>(&kRealboxContextualAndTrendingSuggestions,
+                              "ContextualSuggestionsLimit", 4)
+          .Get();
+  trending_suggestions_limit =
+      base::FeatureParam<int>(&kRealboxContextualAndTrendingSuggestions,
+                              "TrendingSuggestionsLimit", 4)
+          .Get();
+}
+
+// static
 BASE_FEATURE(ShortcutBoosting::kShortcutBoost,
              "OmniboxShortcutBoost",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -89,5 +136,23 @@ ShortcutBoosting::ShortcutBoosting() {
                                "ShortcutBoostGroupWithSearches", true)
           .Get();
 }
+
+// static
+BASE_FEATURE(VitalizeAutocompletedKeywords::kVitalizeAutocompletedKeywords,
+             "OmniboxVitalizeAutocompletedKeywords",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+VitalizeAutocompletedKeywords::VitalizeAutocompletedKeywords() {
+  enabled = base::FeatureList::IsEnabled(kVitalizeAutocompletedKeywords);
+  score = base::FeatureParam<int>(&kVitalizeAutocompletedKeywords,
+                                  "VitalizeAutocompletedKeywordsScore", 450)
+              .Get();
+}
+
+// static
+BASE_FEATURE(ReportNumZPSInSession::kReportNumZPSInSession,
+             "ReportNumZPSInSession",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+ReportNumZPSInSession::ReportNumZPSInSession()
+    : enabled(base::FeatureList::IsEnabled(kReportNumZPSInSession)) {}
 
 }  // namespace omnibox_feature_configs

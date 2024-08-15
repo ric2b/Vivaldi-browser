@@ -9,17 +9,21 @@
 #import "base/metrics/histogram_functions.h"
 #import "base/ranges/algorithm.h"
 #import "components/autofill/core/browser/form_structure.h"
+#import "components/autofill/core/browser/payments/card_unmask_challenge_option.h"
 #import "components/autofill/core/browser/personal_data_manager.h"
+#import "components/autofill/core/browser/ui/payments/card_unmask_authentication_selection_dialog_controller_impl.h"
+#import "components/autofill/core/browser/ui/payments/virtual_card_enroll_ui_model.h"
 #import "components/autofill/ios/browser/autofill_driver_ios.h"
 #import "components/autofill/ios/form_util/form_activity_params.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/password_manager/ios/password_account_storage_notice_handler.h"
+#import "components/plus_addresses/plus_address_types.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/autofill/model/bottom_sheet/autofill_bottom_sheet_java_script_feature.h"
 #import "ios/chrome/browser/autofill/model/bottom_sheet/autofill_bottom_sheet_observer.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
-#import "ios/chrome/browser/shared/public/commands/autofill_bottom_sheet_commands.h"
+#import "ios/chrome/browser/shared/public/commands/autofill_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/web/public/js_messaging/script_message.h"
@@ -65,6 +69,15 @@ AutofillBottomSheetTabHelper::AutofillBottomSheetTabHelper(
 
 // Public methods
 
+void AutofillBottomSheetTabHelper::ShowCardUnmaskAuthenticationSelection(
+    std::unique_ptr<
+        autofill::CardUnmaskAuthenticationSelectionDialogControllerImpl>
+        model_controller) {
+  card_unmask_authentication_selection_controller_ =
+      std::move(model_controller);
+  [commands_handler_ showCardUnmaskAuthentication];
+}
+
 void AutofillBottomSheetTabHelper::ShowPlusAddressesBottomSheet(
     const url::Origin& main_frame_origin,
     plus_addresses::PlusAddressCallback callback) {
@@ -72,8 +85,15 @@ void AutofillBottomSheetTabHelper::ShowPlusAddressesBottomSheet(
   [commands_handler_ showPlusAddressesBottomSheet];
 }
 
+void AutofillBottomSheetTabHelper::ShowVirtualCardEnrollmentBottomSheet(
+    autofill::VirtualCardEnrollUiModel model,
+    autofill::VirtualCardEnrollmentCallbacks callbacks) {
+  virtual_card_enrollment_callbacks_ = std::move(callbacks);
+  [commands_handler_ showVirtualCardEnrollmentBottomSheet:model];
+}
+
 void AutofillBottomSheetTabHelper::SetAutofillBottomSheetHandler(
-    id<AutofillBottomSheetCommands> commands_handler) {
+    id<AutofillCommands> commands_handler) {
   commands_handler_ = commands_handler;
 }
 
@@ -117,8 +137,7 @@ void AutofillBottomSheetTabHelper::ShowPasswordBottomSheet(
     return;
   }
 
-  __weak id<AutofillBottomSheetCommands> weak_commands_handler =
-      commands_handler_;
+  __weak id<AutofillCommands> weak_commands_handler = commands_handler_;
   [password_account_storage_notice_handler_ showAccountStorageNotice:^{
     [weak_commands_handler showPasswordBottomSheet:params];
   }];
@@ -225,8 +244,7 @@ void AutofillBottomSheetTabHelper::DetachPasswordListenersForAllFrames(
 void AutofillBottomSheetTabHelper::DetachPaymentsListeners(
     const std::string& frame_id,
     bool refocus) {
-  // Verify that the payments bottom sheet feature is enabled
-  if (!base::FeatureList::IsEnabled(kIOSPaymentsBottomSheet) || !web_state_) {
+  if (!web_state_) {
     return;
   }
 
@@ -241,11 +259,6 @@ void AutofillBottomSheetTabHelper::DetachPaymentsListeners(
 
 void AutofillBottomSheetTabHelper::DetachPaymentsListenersForAllFrames(
     bool refocus) {
-  // Verify that the payments bottom sheet feature is enabled
-  if (!base::FeatureList::IsEnabled(kIOSPaymentsBottomSheet)) {
-    return;
-  }
-
   for (auto& registered_renderer_ids : registered_payments_renderer_ids_) {
     DetachListenersForFrame(registered_renderer_ids.first,
                             registered_renderer_ids.second, refocus);
@@ -310,9 +323,6 @@ void AutofillBottomSheetTabHelper::OnFieldTypesDetermined(
     autofill::AutofillManager& manager,
     autofill::FormGlobalId form_id,
     FieldTypeSource source) {
-  if (!base::FeatureList::IsEnabled(kIOSPaymentsBottomSheet)) {
-    return;
-  }
   autofill::FormStructure* form_structure = manager.FindCachedFormById(form_id);
   if (!form_structure || !form_structure->IsCompleteCreditCardForm()) {
     return;
@@ -324,7 +334,7 @@ void AutofillBottomSheetTabHelper::OnFieldTypesDetermined(
   std::vector<autofill::FieldRendererId> renderer_ids;
   for (const auto& field : form_structure->fields()) {
     if (IsPaymentsBottomSheetTriggeringField(field->Type().GetStorableType())) {
-      renderer_ids.push_back(field->unique_renderer_id);
+      renderer_ids.push_back(field->renderer_id);
     }
   }
   if (renderer_ids.empty()) {
@@ -342,9 +352,20 @@ void AutofillBottomSheetTabHelper::OnFieldTypesDetermined(
                   frame_id, /*allow_autofocus=*/false);
 }
 
+std::unique_ptr<autofill::CardUnmaskAuthenticationSelectionDialogControllerImpl>
+AutofillBottomSheetTabHelper::
+    GetCardUnmaskAuthenticationSelectionDialogController() {
+  return std::move(card_unmask_authentication_selection_controller_);
+}
+
 plus_addresses::PlusAddressCallback
 AutofillBottomSheetTabHelper::GetPendingPlusAddressFillCallback() {
   return std::move(pending_plus_address_callback_);
+}
+
+autofill::VirtualCardEnrollmentCallbacks
+AutofillBottomSheetTabHelper::GetVirtualCardEnrollmentCallbacks() {
+  return std::move(virtual_card_enrollment_callbacks_);
 }
 
 // Private methods

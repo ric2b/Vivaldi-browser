@@ -72,9 +72,9 @@ gfx::Size GetTextSize(const std::u16string& text,
 // can have an associated sub menu container which it opens when pressed.
 class PieMenuButton : public views::Button,
                       public views::MaskedTargeterDelegate {
- public:
-  METADATA_HEADER(PieMenuButton);
+  METADATA_HEADER(PieMenuButton, views::Button)
 
+ public:
   PieMenuButton(int button_id,
                 const std::u16string& button_label_text,
                 const gfx::VectorIcon* icon)
@@ -288,7 +288,7 @@ class PieMenuButton : public views::Button,
   raw_ptr<PieSubMenuContainerView> associated_sub_menu_container_ = nullptr;
 };
 
-BEGIN_METADATA(PieMenuButton, views::Button)
+BEGIN_METADATA(PieMenuButton)
 END_METADATA
 
 // -----------------------------------------------------------------------------
@@ -327,7 +327,7 @@ PieSubMenuContainerView::PieSubMenuContainerView(PieMenuView* owner_menu_view)
   SetLayoutManager(std::make_unique<views::FillLayout>());
 }
 
-BEGIN_METADATA(PieSubMenuContainerView, views::View)
+BEGIN_METADATA(PieSubMenuContainerView)
 END_METADATA
 
 // -----------------------------------------------------------------------------
@@ -396,7 +396,7 @@ gfx::Point PieMenuView::GetButtonContentsCenterInScreen(int button_id) const {
   return gfx::Point();
 }
 
-void PieMenuView::Layout() {
+void PieMenuView::Layout(PassKey) {
   // All child views except the back button (i.e. all
   // `PieSubMenuContainerView`s) should fill the entire bounds of this view. The
   // back button however should be centered.
@@ -462,7 +462,7 @@ void PieMenuView::OpenSubMenu(PieSubMenuContainerView* sub_menu) {
   DCHECK(sub_menu);
   main_menu_container_->SetVisible(false);
   if (!active_sub_menus_stack_.empty()) {
-    auto* top_sub_menu = active_sub_menus_stack_.top();
+    auto* top_sub_menu = active_sub_menus_stack_.top().get();
     top_sub_menu->SetVisible(false);
   }
   active_sub_menus_stack_.push(sub_menu);
@@ -472,7 +472,7 @@ void PieMenuView::OpenSubMenu(PieSubMenuContainerView* sub_menu) {
 
 void PieMenuView::MaybePopSubMenu() {
   if (!active_sub_menus_stack_.empty()) {
-    auto* top_sub_menu = active_sub_menus_stack_.top();
+    auto* top_sub_menu = active_sub_menus_stack_.top().get();
     top_sub_menu->SetVisible(false);
     active_sub_menus_stack_.pop();
   }
@@ -490,7 +490,7 @@ PieMenuButton* PieMenuView::GetButtonById(int button_id) const {
   return iter == buttons_by_id_.end() ? nullptr : iter->second;
 }
 
-BEGIN_METADATA(PieMenuView, views::View)
+BEGIN_METADATA(PieMenuView)
 END_METADATA
 
 }  // namespace ash

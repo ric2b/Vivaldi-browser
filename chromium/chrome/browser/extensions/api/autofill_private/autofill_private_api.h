@@ -129,23 +129,6 @@ class AutofillPrivateRemoveEntryFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
-class AutofillPrivateMaskCreditCardFunction : public ExtensionFunction {
- public:
-  AutofillPrivateMaskCreditCardFunction() = default;
-  AutofillPrivateMaskCreditCardFunction(
-      const AutofillPrivateMaskCreditCardFunction&) = delete;
-  AutofillPrivateMaskCreditCardFunction& operator=(
-      const AutofillPrivateMaskCreditCardFunction&) = delete;
-  DECLARE_EXTENSION_FUNCTION("autofillPrivate.maskCreditCard",
-                             AUTOFILLPRIVATE_MASKCREDITCARD)
-
- protected:
-  ~AutofillPrivateMaskCreditCardFunction() override = default;
-
-  // ExtensionFunction overrides.
-  ResponseAction Run() override;
-};
-
 class AutofillPrivateGetCreditCardListFunction : public ExtensionFunction {
  public:
   AutofillPrivateGetCreditCardListFunction() = default;
@@ -398,6 +381,24 @@ class AutofillPrivateBulkDeleteAllCvcsFunction : public ExtensionFunction {
 
  protected:
   ~AutofillPrivateBulkDeleteAllCvcsFunction() override = default;
+
+  // ExtensionFunction overrides.
+  ResponseAction Run() override;
+};
+
+class AutofillPrivateSetAutofillSyncToggleEnabledFunction
+    : public ExtensionFunction {
+ public:
+  AutofillPrivateSetAutofillSyncToggleEnabledFunction() = default;
+  AutofillPrivateSetAutofillSyncToggleEnabledFunction(
+      const AutofillPrivateSetAutofillSyncToggleEnabledFunction&) = delete;
+  AutofillPrivateSetAutofillSyncToggleEnabledFunction& operator=(
+      const AutofillPrivateSetAutofillSyncToggleEnabledFunction&) = delete;
+  DECLARE_EXTENSION_FUNCTION("autofillPrivate.setAutofillSyncToggleEnabled",
+                             AUTOFILLPRIVATE_SETAUTOFILLSYNCTOGGLEENABLED)
+
+ protected:
+  ~AutofillPrivateSetAutofillSyncToggleEnabledFunction() override = default;
 
   // ExtensionFunction overrides.
   ResponseAction Run() override;

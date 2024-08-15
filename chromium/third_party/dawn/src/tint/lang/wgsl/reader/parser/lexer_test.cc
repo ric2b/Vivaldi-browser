@@ -769,7 +769,8 @@ TEST_F(LexerTest, IdentifierTest_DoesNotStartWithDoubleUnderscore) {
     ASSERT_FALSE(list.empty());
 
     auto& t = list[0];
-    EXPECT_FALSE(t.IsIdentifier());
+    EXPECT_TRUE(t.IsError());
+    EXPECT_EQ(t.to_str(), "identifiers must not start with two or more underscores");
 }
 
 TEST_F(LexerTest, IdentifierTest_DoesNotStartWithNumber) {
@@ -1123,7 +1124,6 @@ TEST_P(KeywordTest, Parses) {
 INSTANTIATE_TEST_SUITE_P(LexerTest,
                          KeywordTest,
                          testing::Values(TokenData{"alias", Token::Type::kAlias},
-                                         TokenData{"bitcast", Token::Type::kBitcast},
                                          TokenData{"break", Token::Type::kBreak},
                                          TokenData{"case", Token::Type::kCase},
                                          TokenData{"const", Token::Type::kConst},

@@ -66,7 +66,9 @@ constexpr base::TimeDelta kFullscreenLauncherTransitionDuration =
 // record UMA of input latency.
 void DidPresentCompositorFrame(base::TimeTicks event_time_stamp,
                                bool is_showing,
-                               base::TimeTicks presentation_timestamp) {
+                               const viz::FrameTimingDetails& details) {
+  base::TimeTicks presentation_timestamp =
+      details.presentation_feedback.timestamp;
   if (presentation_timestamp.is_null() || event_time_stamp.is_null() ||
       presentation_timestamp < event_time_stamp) {
     return;
@@ -691,7 +693,7 @@ void AppListPresenterImpl::OnTabletToClamshellTransitionAnimationDone(
 
   if (!aborted) {
     if (target_visibility) {
-      view_->Layout();
+      view_->DeprecatedLayoutImmediately();
     } else if (!target_visibility && !window->is_destroying()) {
       window->Hide();
       OnClosed();

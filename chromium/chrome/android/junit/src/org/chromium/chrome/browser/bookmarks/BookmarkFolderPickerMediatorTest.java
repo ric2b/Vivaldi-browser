@@ -252,15 +252,14 @@ public class BookmarkFolderPickerMediatorTest {
         mActivityScenarioRule.getScenario().onActivity((activity) -> mActivity = activity);
 
         // Setup profile-related factories.
-        Profile.setLastUsedProfileForTesting(mProfile);
         TrackerFactory.setTrackerForTests(mTracker);
 
         // Setup BookmarkModel.
+        doReturn(false).when(mBookmarkModel).areAccountBookmarkFoldersActive();
         doReturn(true).when(mBookmarkModel).isFolderVisible(any());
         doReturn(mRootFolderId).when(mBookmarkModel).getRootFolderId();
         doReturn(mRootFolderItem).when(mBookmarkModel).getBookmarkById(mRootFolderId);
         // Reading list folder
-        // TODO(crbug.com/1501998): Add account reading list folder support here.
         doReturn(mReadingListFolderId).when(mBookmarkModel).getLocalOrSyncableReadingListFolder();
         doReturn(mReadingListFolderItem).when(mBookmarkModel).getBookmarkById(mReadingListFolderId);
         // Mobile bookmarks folder
@@ -503,9 +502,9 @@ public class BookmarkFolderPickerMediatorTest {
     }
 
     @Test
-    @EnableFeatures(ChromeFeatureList.ENABLE_BOOKMARK_FOLDERS_FOR_ACCOUNT_STORAGE)
     public void testRootFolders_withAccount() {
-        BookmarkModel bookmarkModel = FakeBookmarkModel.createModel();
+        FakeBookmarkModel bookmarkModel = FakeBookmarkModel.createModel();
+        bookmarkModel.setAreAccountBookmarkFoldersActive(true);
         BookmarkId id =
                 bookmarkModel.addBookmark(
                         bookmarkModel.getMobileFolderId(),

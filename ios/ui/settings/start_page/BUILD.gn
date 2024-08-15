@@ -24,6 +24,7 @@ source_set("start_page_settings") {
     "//ios/chrome/browser/shared/model/prefs",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//vivaldi/ios/ui/settings/start_page/layout_settings",
+    "//vivaldi/ios/ui/settings/start_page/quick_settings",
     "//vivaldi/ios/ui/settings/start_page/wallpaper_settings",
     "//vivaldi/ios/ui/settings/start_page/wallpaper_settings:wallpaper_settings_swift"
   ]

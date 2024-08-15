@@ -94,9 +94,9 @@ DownloadShelfView::DownloadShelfView(Browser* browser, BrowserView* parent)
   }
 
   views::ViewAccessibility& accessibility = GetViewAccessibility();
-  accessibility.OverrideName(
-      l10n_util::GetStringUTF16(IDS_ACCNAME_DOWNLOADS_BAR));
-  accessibility.OverrideRole(ax::mojom::Role::kGroup);
+  accessibility.SetName(l10n_util::GetStringUTF16(IDS_ACCNAME_DOWNLOADS_BAR),
+                        ax::mojom::NameFrom::kAttribute);
+  accessibility.SetRole(ax::mojom::Role::kGroup);
 
   // Delay 5 seconds if the mouse leaves the shelf by way of entering another
   // window. This is much larger than the normal delay as opening a download is
@@ -143,7 +143,7 @@ gfx::Size DownloadShelfView::CalculatePreferredSize() const {
                                       gfx::Size(prefsize.width(), 0), prefsize);
 }
 
-void DownloadShelfView::Layout() {
+void DownloadShelfView::Layout(PassKey) {
   int x = kStartPadding;
   const int download_items_end =
       std::max(0, width() - kEndPadding - close_button_->width() -

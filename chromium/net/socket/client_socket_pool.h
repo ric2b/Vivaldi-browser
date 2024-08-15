@@ -6,7 +6,9 @@
 #define NET_SOCKET_CLIENT_SOCKET_POOL_H_
 
 #include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
@@ -24,7 +26,7 @@
 #include "net/log/net_log_capture_mode.h"
 #include "net/socket/connect_job.h"
 #include "net/socket/socket_tag.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "net/ssl/ssl_config.h"
 #include "url/scheme_host_port.h"
 
 namespace net {
@@ -174,8 +176,10 @@ class NET_EXPORT ClientSocketPool : public LowerLayeredPool {
   class NET_EXPORT_PRIVATE SocketParams
       : public base::RefCounted<SocketParams> {
    public:
-    // For non-SSL requests, `ssl_config_for_origin` argument may be nullptr.
-    explicit SocketParams(std::unique_ptr<SSLConfig> ssl_config_for_origin);
+    // For non-SSL requests, `allowed_bad_certs` argument will be ignored (and
+    // is likely empty, anyways).
+    explicit SocketParams(
+        const std::vector<SSLConfig::CertAndStatus>& allowed_bad_certs);
 
     SocketParams(const SocketParams&) = delete;
     SocketParams& operator=(const SocketParams&) = delete;
@@ -184,15 +188,15 @@ class NET_EXPORT ClientSocketPool : public LowerLayeredPool {
     // works for the HTTP case only.
     static scoped_refptr<SocketParams> CreateForHttpForTesting();
 
-    const SSLConfig* ssl_config_for_origin() const {
-      return ssl_config_for_origin_.get();
+    const std::vector<SSLConfig::CertAndStatus>& allowed_bad_certs() const {
+      return allowed_bad_certs_;
     }
 
    private:
     friend class base::RefCounted<SocketParams>;
     ~SocketParams();
 
-    std::unique_ptr<SSLConfig> ssl_config_for_origin_;
+    std::vector<SSLConfig::CertAndStatus> allowed_bad_certs_;
   };
 
   ClientSocketPool(const ClientSocketPool&) = delete;
@@ -241,7 +245,7 @@ class NET_EXPORT ClientSocketPool : public LowerLayeredPool {
   virtual int RequestSocket(
       const GroupId& group_id,
       scoped_refptr<SocketParams> params,
-      const absl::optional<NetworkTrafficAnnotationTag>& proxy_annotation_tag,
+      const std::optional<NetworkTrafficAnnotationTag>& proxy_annotation_tag,
       RequestPriority priority,
       const SocketTag& socket_tag,
       RespectLimits respect_limits,
@@ -265,7 +269,7 @@ class NET_EXPORT ClientSocketPool : public LowerLayeredPool {
   virtual int RequestSockets(
       const GroupId& group_id,
       scoped_refptr<SocketParams> params,
-      const absl::optional<NetworkTrafficAnnotationTag>& proxy_annotation_tag,
+      const std::optional<NetworkTrafficAnnotationTag>& proxy_annotation_tag,
       int num_sockets,
       CompletionOnceCallback callback,
       const NetLogWithSource& net_log) = 0;
@@ -361,7 +365,7 @@ class NET_EXPORT ClientSocketPool : public LowerLayeredPool {
       GroupId group_id,
       scoped_refptr<SocketParams> socket_params,
       const ProxyChain& proxy_chain,
-      const absl::optional<NetworkTrafficAnnotationTag>& proxy_annotation_tag,
+      const std::optional<NetworkTrafficAnnotationTag>& proxy_annotation_tag,
       RequestPriority request_priority,
       SocketTag socket_tag,
       ConnectJob::Delegate* delegate);

@@ -142,7 +142,7 @@ struct Dav1dContext {
         atomic_uint reset_task_cur;
         atomic_int cond_signaled;
         struct {
-            int exec;
+            int exec, finished;
             pthread_cond_t cond;
             const Dav1dPicture *in;
             Dav1dPicture *out;
@@ -289,7 +289,7 @@ struct Dav1dFrameContext {
         int prog_sz;
         int cbi_sz, pal_sz, pal_idx_sz, cf_sz;
         // start offsets per tile
-        int *tile_start_off;
+        unsigned *tile_start_off;
     } frame_thread;
 
     // loopfilter

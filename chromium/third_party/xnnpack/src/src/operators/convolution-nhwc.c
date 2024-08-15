@@ -114,8 +114,12 @@ static enum xnn_status create_vmulcaddc_path(
   pack_vmulcaddc_w(groups, vmulcaddc_config->channel_tile, kernel, bias, weights_ptr, packing_params);
 
   if (use_weights_cache(convolution_op)) {
-    convolution_op->packed_weights.offset = xnn_get_or_insert_weights_cache(
-        convolution_op->weights_cache, weights_ptr, aligned_total_weights_size);
+    struct xnn_weights_cache_look_up_key cache_key;
+    cache_key.seed = groups ^ vmulcaddc_config->channel_tile;
+    cache_key.kernel = kernel;
+    cache_key.bias = bias;
+    convolution_op->packed_weights.offset = xnn_look_up_or_insert_weights_cache(
+        convolution_op->weights_cache, &cache_key, weights_ptr, aligned_total_weights_size);
   }
 
   memcpy(&convolution_op->params, vmulcaddc_params, vmulcaddc_params_size);
@@ -243,9 +247,18 @@ static enum xnn_status create_dwconv_path(
                dwconv_ukernel->channel_tile * ((primary_tile << log2_filter_element_size) + bias_element_size)));
   }
 
+  uint32_t cache_seed = primary_tile ^ dwconv_ukernel->middle_tile ^ dwconv_ukernel->last_tile ^ kernel_height ^ kernel_width
+      ^ groups ^ dwconv_ukernel->channel_tile ^ dwconv_ukernel->channel_subtile ^ dwconv_ukernel->channel_round ^ extra_weights_bytes;
+  if (flags & XNN_FLAG_DEPTHWISE_CONVOLUTION) {
+    cache_seed = ~cache_seed;
+  }
   if (use_weights_cache(convolution_op)) {
-    convolution_op->packed_weights.offset = xnn_get_or_insert_weights_cache(
-        convolution_op->weights_cache, weights_ptr, aligned_total_weights_size);
+    struct xnn_weights_cache_look_up_key cache_key;
+    cache_key.seed = cache_seed;
+    cache_key.kernel = kernel;
+    cache_key.bias = bias;
+    convolution_op->packed_weights.offset = xnn_look_up_or_insert_weights_cache(
+        convolution_op->weights_cache, &cache_key, weights_ptr, aligned_total_weights_size);
   }
 
   const union xnn_dwconv_ukernel* ukernels = &dwconv_ukernel->minmax;
@@ -336,6 +349,7 @@ static enum xnn_status create_gemm_or_igemm(
   } else if (relu_activation && gemm_config->relu.gemm[mr - 1].function[XNN_UARCH_DEFAULT] != NULL) {
     gemm_ukernels = &gemm_config->relu;
   }
+  uint32_t cache_seed = groups ^ group_input_channels ^ group_output_channels ^ nr ^ kr ^ sr ^ ukernel_type;
   switch (ukernel_type) {
     case xnn_microkernel_type_gemm:
       pack_gemm_goi_w(
@@ -368,6 +382,7 @@ static enum xnn_status create_gemm_or_igemm(
             nr, kr, sr,
             kernel, bias, /*scale=*/NULL, weights_ptr, gemm_config->nr * extra_weights_bytes, packing_params);
       } else {
+        cache_seed = ~cache_seed;
         pack_conv_goki_w(
             groups, group_output_channels, kernel_size, group_input_channels,
             nr, kr, sr,
@@ -436,8 +451,12 @@ static enum xnn_status create_gemm_or_igemm(
   }
 
   if (use_weights_cache(convolution_op)) {
-    convolution_op->packed_weights.offset = xnn_get_or_insert_weights_cache(
-        convolution_op->weights_cache, weights_ptr, aligned_total_weights_size);
+    struct xnn_weights_cache_look_up_key cache_key;
+    cache_key.seed = cache_seed;
+    cache_key.kernel = kernel;
+    cache_key.bias = bias;
+    convolution_op->packed_weights.offset = xnn_look_up_or_insert_weights_cache(
+        convolution_op->weights_cache, &cache_key, weights_ptr, aligned_total_weights_size);
   }
 
   *zero_size = XNN_EXTRA_BYTES + (k_stride << log2_input_element_size);
@@ -882,9 +901,9 @@ enum xnn_status xnn_create_convolution2d_nhwc_qd8_f32_qc8w(
         xnn_operator_type_to_string(xnn_operator_type_convolution_nhwc_qd8_f32_qc8w));
     return xnn_status_invalid_parameter;
   }
-  if (output_min >= output_max) {
+  if (output_min > output_max) {
     xnn_log_error(
-        "failed to create %s operator with [%.7g, %7g] output range: range min must be below range max",
+      "failed to create %s operator with [%.7g, %.7g] output range: lower bound must be less than or equal to upper bound",
         xnn_operator_type_to_string(xnn_operator_type_convolution_nhwc_qd8_f32_qc8w), output_min, output_max);
     return xnn_status_invalid_parameter;
   }
@@ -995,9 +1014,9 @@ enum xnn_status xnn_create_convolution2d_nhwc_qu8(
     return xnn_status_invalid_parameter;
   }
 
-  if (output_min >= output_max) {
+  if (output_min > output_max) {
     xnn_log_error(
-      "failed to create %s operator with [%" PRIu8 ", %" PRIu8 "] output range: range min must be below range max",
+      "failed to create %s operator with [%" PRIu8 ", %" PRIu8 "] output range: lower bound must be less than or equal to upper bound",
       xnn_operator_type_to_string(xnn_operator_type_convolution_nhwc_qu8), output_min, output_max);
     return xnn_status_invalid_parameter;
   }
@@ -1134,9 +1153,9 @@ enum xnn_status xnn_create_convolution2d_nhwc_qs8(
     return xnn_status_invalid_parameter;
   }
 
-  if (output_min >= output_max) {
+  if (output_min > output_max) {
     xnn_log_error(
-      "failed to create %s operator with [%" PRId8 ", %" PRId8 "] output range: range min must be below range max",
+      "failed to create %s operator with [%" PRId8 ", %" PRId8 "] output range: lower bound must be less than or equal to upper bound",
       xnn_operator_type_to_string(xnn_operator_type_convolution_nhwc_qs8), output_min, output_max);
     return xnn_status_invalid_parameter;
   }
@@ -1151,29 +1170,41 @@ enum xnn_status xnn_create_convolution2d_nhwc_qs8(
     return xnn_status_unsupported_parameter;
   }
 
+  float* duplicated_requantization_scale = xnn_allocate_simd_memory(groups * group_output_channels * sizeof(float));
+  if (duplicated_requantization_scale == NULL) {
+    xnn_log_error(
+      "failed to allocate %zu bytes for %s operator packed weights",
+      groups * group_output_channels * sizeof(float),
+      xnn_operator_type_to_string(xnn_operator_type_convolution_nhwc_qc8));
+    return xnn_status_out_of_memory;
+  }
+  for (size_t output_channel = 0; output_channel < groups * group_output_channels; output_channel++) {
+    duplicated_requantization_scale[output_channel] = requantization_scale;
+  }
+
   const struct xnn_qs8_packing_params packing_params = { .input_zero_point = input_zero_point, };
 
-  const struct xnn_gemm_config* gemm_config = xnn_init_qs8_gemm_config();
+  const struct xnn_gemm_config* gemm_config = xnn_init_qs8_qc8w_gemm_config();
   assert(gemm_config != NULL);
 
-  union xnn_qs8_conv_minmax_params gemm_params;
-  if XNN_LIKELY(gemm_config->init.qs8 != NULL) {
-    gemm_config->init.qs8(&gemm_params,
-      requantization_scale, output_zero_point, output_min, output_max);
+  union xnn_qs8_qc8w_conv_minmax_params gemm_params;
+  if XNN_LIKELY(gemm_config->init.qs8_qc8w != NULL) {
+    gemm_config->init.qs8_qc8w(&gemm_params,
+      output_zero_point, output_min, output_max);
   }
 
-  const struct xnn_dwconv_config* dwconv_config = xnn_init_qs8_dwconv_config();
+  const struct xnn_dwconv_config* dwconv_config = xnn_init_qs8_qc8w_dwconv_config();
   assert(dwconv_config != NULL);
 
-  union xnn_qs8_conv_minmax_params dwconv_params;
+  union xnn_qs8_qc8w_conv_minmax_params dwconv_params;
   const struct xnn_dwconv_config* dwconv_ukernel =
-    find_dwconv_ukernel(kernel_height * kernel_width, dwconv_config, XNN_MAX_QS8_DWCONV_UKERNELS);
+    find_dwconv_ukernel(kernel_height * kernel_width, dwconv_config, XNN_MAX_QC8_DWCONV_UKERNELS);
   if XNN_LIKELY(dwconv_ukernel != NULL) {
-    dwconv_ukernel->init.qs8(&dwconv_params,
-      requantization_scale, output_zero_point, output_min, output_max);
+    dwconv_ukernel->init.qs8_qc8w(&dwconv_params,
+      output_zero_point, output_min, output_max);
   }
 
-  return create_convolution2d_nhwc(
+  enum xnn_status status = create_convolution2d_nhwc(
     input_padding_top, input_padding_right, input_padding_bottom, input_padding_left,
     kernel_height, kernel_width,
     subsampling_height, subsampling_width,
@@ -1193,9 +1224,9 @@ enum xnn_status xnn_create_convolution2d_nhwc_qs8(
     /*packing_params=*/&packing_params,
     /*input_padding_byte=*/input_zero_point,
     /*packed_weights_padding_byte=*/0,
-    /*extra_weights_bytes=*/0,
-    /*init_scale_params=*/NULL,
-    /*scale_params=*/NULL,
+    /*extra_weights_bytes=*/sizeof(float),
+    /*init_scale_params=*/xnn_init_qs8_qc8w_scale_fp32_params,
+    /*scale_params=*/duplicated_requantization_scale,
     /*init_kernel_scale_params=*/NULL,
     /*kernel_scale_params=*/NULL,
     /*gemm_params=*/&gemm_params,
@@ -1217,6 +1248,9 @@ enum xnn_status xnn_create_convolution2d_nhwc_qs8(
     /*code_cache=*/code_cache,
     /*weights_cache=*/weights_cache,
     convolution_op_out);
+
+  xnn_release_simd_memory(duplicated_requantization_scale);
+  return status;
 }
 
 enum xnn_status xnn_create_convolution2d_nhwc_qs8_qc8w(
@@ -1274,9 +1308,9 @@ enum xnn_status xnn_create_convolution2d_nhwc_qs8_qc8w(
     return xnn_status_invalid_parameter;
   }
 
-  if (output_min >= output_max) {
+  if (output_min > output_max) {
     xnn_log_error(
-      "failed to create %s operator with [%" PRId8 ", %" PRId8 "] output range: range min must be below range max",
+      "failed to create %s operator with [%" PRId8 ", %" PRId8 "] output range: lower bound must be less than or equal to upper bound",
       xnn_operator_type_to_string(xnn_operator_type_convolution_nhwc_qc8), output_min, output_max);
     return xnn_status_invalid_parameter;
   }
@@ -1570,9 +1604,9 @@ enum xnn_status xnn_create_convolution2d_nhwc_f32(
     return xnn_status_invalid_parameter;
   }
 
-  if (output_min >= output_max) {
+  if (output_min > output_max) {
     xnn_log_error(
-      "failed to create %s operator with [%.7g, %.7g] output range: lower bound must be below upper bound",
+      "failed to create %s operator with [%.7g, %.7g] output range: lower bound must be less than or equal to upper bound",
       xnn_operator_type_to_string(xnn_operator_type_convolution_nhwc_f32), output_min, output_max);
     return xnn_status_invalid_parameter;
   }
@@ -1864,19 +1898,24 @@ static enum xnn_status reshape_gemm(
   #endif  // XNN_PLATFORM_JIT
   struct xnn_hmp_gemm_ukernel gemm_ukernel = gemm_cases[mr - 1];
 
-  convolution_op->context.gemm = (struct gemm_context) {
+  convolution_op->context.gemm = (struct gemm_context){
       .k_scaled = group_input_channels << log2_input_element_size,
       .a_stride = convolution_op->input_pixel_stride << log2_input_element_size,
       .ga_stride = group_input_channels << log2_input_element_size,
       .packed_w = packed_weights(convolution_op),
       .w_stride = w_stride,
       .gw_stride = w_stride * round_up(group_output_channels, nr),
-      .cm_stride = convolution_op->output_pixel_stride << log2_output_element_size,
+      .cm_stride = convolution_op->output_pixel_stride
+                   << log2_output_element_size,
       .cn_stride = nr << log2_output_element_size,
       .gc_stride = group_output_channels << log2_output_element_size,
       .log2_csize = log2_output_element_size,
+      .num_batch_dims = 1,
       .ukernel = gemm_ukernel,
   };
+  convolution_op->context.gemm.batch_dims_a[0] = groups;
+  convolution_op->context.gemm.batch_dims_b[0] = groups;
+  convolution_op->context.gemm.batch_strides_c[0] = 1;
   memcpy(&convolution_op->context.gemm.params, &convolution_op->params, sizeof(convolution_op->context.gemm.params));
   if (convolution_op->num_post_operation_params == 0) {
     convolution_op->context.gemm.fused_params = &convolution_op->context.gemm.params;
@@ -2461,7 +2500,7 @@ static enum xnn_status reshape_convolution2d_nhwc(
   pthreadpool_t threadpool)
 {
   if (convolution_op->type != expected_operator_type) {
-    xnn_log_error("failed to setup operator: operator type mismatch (expected %s, got %s)",
+    xnn_log_error("failed to reshape operator: operator type mismatch (expected %s, got %s)",
       xnn_operator_type_to_string(expected_operator_type),
       xnn_operator_type_to_string(convolution_op->type));
     return xnn_status_invalid_parameter;
@@ -2469,14 +2508,14 @@ static enum xnn_status reshape_convolution2d_nhwc(
   convolution_op->state = xnn_run_state_invalid;
 
   if ((xnn_params.init_flags & XNN_INIT_FLAG_XNNPACK) == 0) {
-    xnn_log_error("failed to setup %s operator: XNNPACK is not initialized",
+    xnn_log_error("failed to reshape %s operator: XNNPACK is not initialized",
       xnn_operator_type_to_string(convolution_op->type));
     return xnn_status_uninitialized;
   }
 
   if (input_width == 0 || input_height == 0) {
     xnn_log_error(
-      "failed to setup %s operator with %zux%zu input: input dimensions must be non-zero",
+      "failed to reshape %s operator with %zux%zu input: input dimensions must be non-zero",
       xnn_operator_type_to_string(convolution_op->type), input_width, input_height);
     return xnn_status_invalid_parameter;
   }
@@ -2484,12 +2523,6 @@ static enum xnn_status reshape_convolution2d_nhwc(
   if (batch_size == 0) {
     convolution_op->state = xnn_run_state_skip;
     return xnn_status_success;
-  }
-
-  if (convolution_op->weights_cache != NULL && !xnn_weights_cache_is_finalized(convolution_op->weights_cache)) {
-    xnn_log_error("failed to setup %s operator: weights cache is not finalized",
-      xnn_operator_type_to_string(convolution_op->type));
-    return xnn_status_invalid_state;
   }
 
   convolution_op->batch_size = batch_size;
@@ -2683,7 +2716,7 @@ enum xnn_status xnn_reshape_convolution2d_nhwc_qs8(
     /*log2_input_element_size=*/XNN_LOG2_SIZEOF_INT8_T,
     /*log2_filter_element_size=*/XNN_LOG2_SIZEOF_INT8_T,
     /*log2_accumulator_element_size=*/XNN_LOG2_SIZEOF_INT32_T,
-    /*extra_weights_elements_size=*/sizeof(int32_t),
+    /*extra_weights_elements_size=*/sizeof(int32_t) + sizeof(float),
     /*log2_output_element_size=*/XNN_LOG2_SIZEOF_INT8_T,
     /*dynamic_quantization=*/false,
     workspace_size, workspace_alignment,
@@ -2885,6 +2918,12 @@ static enum xnn_status setup_convolution2d_nhwc(
     case xnn_run_state_ready:
       // Operator has been reshaped, and we are setting up with different pointers.
       break;
+  }
+
+  if (convolution_op->weights_cache != NULL && !xnn_weights_cache_is_finalized(convolution_op->weights_cache)) {
+    xnn_log_error("failed to setup %s operator: weights cache is not finalized",
+      xnn_operator_type_to_string(expected_operator_type));
+    return xnn_status_invalid_state;
   }
 
   convolution_op->input = input;

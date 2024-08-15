@@ -13,7 +13,9 @@
 // limitations under the License.
 
 use crate::{unwrap, PanicReason};
+use np_ffi_core::common::FixedSizeArray;
 use np_ffi_core::deserialize::v1::*;
+use np_ffi_core::deserialize::DecryptMetadataResult;
 use np_ffi_core::utils::FfiEnum;
 
 /// Gets the number of legible sections on a deserialized V1 advertisement.
@@ -86,29 +88,79 @@ pub extern "C" fn np_ffi_DeserializedV1Section_get_de(
     section.get_de(de_index)
 }
 
+/// Gets the identity details used to decrypt this V1 section, or returns an error if this payload
+/// does not have any associated identity (public advertisement)
+#[no_mangle]
+pub extern "C" fn np_ffi_DeserializedV1Section_get_identity_details(
+    section: DeserializedV1Section,
+) -> GetV1IdentityDetailsResult {
+    section.get_identity_details()
+}
+
+/// Gets the tag of a `GetV1IdentityDetailsResult` tagged-union. On success the wrapped identity
+/// details may be obtained via `GetV0IdentityDetailsResult#into_success`.
+#[no_mangle]
+pub extern "C" fn np_ffi_GetV1IdentityDetailsResult_kind(
+    result: GetV1IdentityDetailsResult,
+) -> GetV1IdentityDetailsResultKind {
+    result.kind()
+}
+
+/// Casts a `GetV1IdentityDetailsResult` to the `Success` variant, panicking in the
+/// case where the passed value is of a different enum variant.
+#[no_mangle]
+pub extern "C" fn np_ffi_GetV1IdentityDetailsResult_into_SUCCESS(
+    result: GetV1IdentityDetailsResult,
+) -> DeserializedV1IdentityDetails {
+    unwrap(result.into_success(), PanicReason::EnumCastFailed)
+}
+
+/// Attempts to decrypt the metadata for the matched credential for this V0 payload (if any)
+#[no_mangle]
+pub extern "C" fn np_ffi_DeserializedV1Section_decrypt_metadata(
+    section: DeserializedV1Section,
+) -> DecryptMetadataResult {
+    section.decrypt_metadata()
+}
+
+/// Attempts to derive a 16-byte DE salt for a DE in this section with the given DE offset. This
+/// operation may fail if the passed offset is 255 (causes overflow) or if the section
+/// is leveraging a public identity, and hence, doesn't have an associated salt.
+#[no_mangle]
+pub extern "C" fn np_ffi_DeserializedV1Section_derive_16_byte_salt_for_offset(
+    section: DeserializedV1Section,
+    offset: u8,
+) -> GetV1DE16ByteSaltResult {
+    section.derive_16_byte_salt_for_offset(offset)
+}
+
+/// Gets the tag of a `GetV1DE16ByteSaltResult` tagged-union. On success the wrapped identity
+/// details may be obtained via `GetV1DE16ByteSaltResult#into_success`.
+#[no_mangle]
+pub extern "C" fn np_ffi_GetV1DE16ByteSaltResult_kind(
+    result: GetV1DE16ByteSaltResult,
+) -> GetV1DE16ByteSaltResultKind {
+    result.kind()
+}
+
+/// Casts a `GetV1DE16ByteSaltResult` to the `Success` variant, panicking in the
+/// case where the passed value is of a different enum variant.
+#[no_mangle]
+pub extern "C" fn np_ffi_GetV1DE16ByteSaltResult_into_SUCCESS(
+    result: GetV1DE16ByteSaltResult,
+) -> FixedSizeArray<16> {
+    unwrap(result.into_success(), PanicReason::EnumCastFailed)
+}
+
 /// Gets the tag of the `GetV1DEResult` tagged-union.
 #[no_mangle]
 pub extern "C" fn np_ffi_GetV1DEResult_kind(result: GetV1DEResult) -> GetV1DEResultKind {
     result.kind()
 }
 
-/// Casts a `GetV1DEResult` to the `Success` vartiant, panicking in the
+/// Casts a `GetV1DEResult` to the `Success` variant, panicking in the
 /// case where the passed value is of a different enum variant.
 #[no_mangle]
 pub extern "C" fn np_ffi_GetV1DEResult_into_SUCCESS(result: GetV1DEResult) -> V1DataElement {
     unwrap(result.into_success(), PanicReason::EnumCastFailed)
-}
-
-/// Converts a `V1DataElement` to a `GenericV1DataElement` which
-/// only maintains information about the DE's type-code and payload.
-#[no_mangle]
-pub extern "C" fn np_ffi_V1DataElement_to_generic(de: V1DataElement) -> GenericV1DataElement {
-    de.to_generic()
-}
-
-/// Extracts the numerical value of the given V1 DE type code as
-/// an unsigned 32-bit integer.
-#[no_mangle]
-pub extern "C" fn np_ffi_V1DEType_to_uint32_t(de_type: V1DEType) -> u32 {
-    de_type.to_u32()
 }

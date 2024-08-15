@@ -74,14 +74,11 @@ class FakeDelegate : public blink::URLLoaderThrottle::Delegate {
   }
   void Resume() override { NOTREACHED(); }
 
-  void SetPriority(net::RequestPriority priority) override { NOTREACHED(); }
   void UpdateDeferredResponseHead(
       network::mojom::URLResponseHeadPtr new_response_head,
       mojo::ScopedDataPipeConsumerHandle body) override {
     NOTREACHED();
   }
-  void PauseReadingBodyFromNet() override { NOTREACHED(); }
-  void ResumeReadingBodyFromNet() override { NOTREACHED(); }
   void InterceptResponse(
       mojo::PendingRemote<network::mojom::URLLoader> new_loader,
       mojo::PendingReceiver<network::mojom::URLLoaderClient>

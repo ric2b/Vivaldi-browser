@@ -121,7 +121,7 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
   constructor(request: SDK.NetworkRequest.NetworkRequest) {
     super();
     this.#request = request;
-    this.setAttribute('jslog', `${VisualLogging.pane().context('headers')}`);
+    this.setAttribute('jslog', `${VisualLogging.pane('headers').track({resize: true})}`);
   }
 
   override wasShown(): void {
@@ -163,7 +163,7 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
     this.#workspace.addEventListener(
         Workspace.Workspace.Events.UISourceCodeRemoved, this.#uiSourceCodeAddedOrRemoved, this);
     Common.Settings.Settings.instance()
-        .moduleSetting('persistenceNetworkOverridesEnabled')
+        .moduleSetting('persistence-network-overrides-enabled')
         .addChangeListener(this.render, this);
   }
 
@@ -173,7 +173,7 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
     this.#workspace.removeEventListener(
         Workspace.Workspace.Events.UISourceCodeRemoved, this.#uiSourceCodeAddedOrRemoved, this);
     Common.Settings.Settings.instance()
-        .moduleSetting('persistenceNetworkOverridesEnabled')
+        .moduleSetting('persistence-network-overrides-enabled')
         .removeChangeListener(this.render, this);
   }
 
@@ -216,12 +216,13 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
       <${Category.litTagName}
         @togglerawevent=${toggleShowRaw}
         .data=${{
-          name: 'responseHeaders',
+          name: 'response-headers',
           title: i18nString(UIStrings.responseHeaders),
           headerCount: this.#request.sortedResponseHeaders.length,
           checked: this.#request.responseHeadersText ? this.#showResponseHeadersText : undefined,
           additionalContent: this.#renderHeaderOverridesLink(),
           forceOpen: this.#toReveal?.section === NetworkForward.UIRequestLocation.UIHeaderSection.Response,
+          loggingContext: 'response-headers',
         } as CategoryData}
         aria-label=${i18nString(UIStrings.responseHeaders)}
       >
@@ -230,7 +231,7 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
           <${ResponseHeaderSection.litTagName} .data=${{
             request: this.#request,
             toReveal: this.#toReveal,
-          } as ResponseHeaderSectionData}></${ResponseHeaderSection.litTagName}>
+          } as ResponseHeaderSectionData} jslog=${VisualLogging.section('response-headers')}></${ResponseHeaderSection.litTagName}>
         `}
       </${Category.litTagName}>
     `;
@@ -243,7 +244,7 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
     }
 
     const overridesSetting: Common.Settings.Setting<boolean> =
-        Common.Settings.Settings.instance().moduleSetting('persistenceNetworkOverridesEnabled');
+        Common.Settings.Settings.instance().moduleSetting('persistence-network-overrides-enabled');
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     const fileIcon = html`
@@ -271,7 +272,7 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
       <x-link
           href="https://goo.gle/devtools-override"
           class="link devtools-link"
-          jslog=${VisualLogging.link().track({click: true}).context('devtools-override')}
+          jslog=${VisualLogging.link('devtools-override').track({click: true})}
       >
         <${IconButton.Icon.Icon.litTagName} class="inline-icon" .data=${{
             iconName: 'help',
@@ -285,7 +286,7 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
           @click=${revealHeadersFile}
           class="link devtools-link"
           title=${UIStrings.revealHeaderOverrides}
-          jslog=${VisualLogging.link().track({click: true}).context('reveal-header-overrides')}
+          jslog=${VisualLogging.link('reveal-header-overrides').track({click: true})}
       >
         ${fileIcon}${Persistence.NetworkPersistenceManager.HEADERS_FILENAME}
       </x-link>
@@ -320,11 +321,12 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
       <${Category.litTagName}
         @togglerawevent=${toggleShowRaw}
         .data=${{
-          name: 'requestHeaders',
+          name: 'request-headers',
           title: i18nString(UIStrings.requestHeaders),
           headerCount: this.#request.requestHeaders().length,
           checked: requestHeadersText? this.#showRequestHeadersText : undefined,
           forceOpen: this.#toReveal?.section === NetworkForward.UIRequestLocation.UIHeaderSection.Request,
+          loggingContext: 'request-headers',
         } as CategoryData}
         aria-label=${i18nString(UIStrings.requestHeaders)}
       >
@@ -333,7 +335,7 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
           <${RequestHeaderSection.litTagName} .data=${{
             request: this.#request,
             toReveal: this.#toReveal,
-          } as RequestHeaderSectionData}></${RequestHeaderSection.litTagName}>
+          } as RequestHeaderSectionData} jslog=${VisualLogging.section('request-headers')}></${RequestHeaderSection.litTagName}>
         `}
       </${Category.litTagName}>
     `;
@@ -359,7 +361,7 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
       if (!showFull) {
         const contextMenu = new UI.ContextMenu.ContextMenu(event);
         const section = contextMenu.newSection();
-        section.appendItem(i18nString(UIStrings.showMore), showMore);
+        section.appendItem(i18nString(UIStrings.showMore), showMore, {jslogContext: 'show-more'});
         void contextMenu.show();
       }
     };
@@ -380,7 +382,7 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
             .size=${Buttons.Button.Size.SMALL}
             .variant=${Buttons.Button.Variant.SECONDARY}
             @click=${showMore}
-            jslog=${VisualLogging.action().track({click: true}).context('raw-headers-show-more')}
+            jslog=${VisualLogging.action('raw-headers-show-more').track({click: true})}
           >${i18nString(UIStrings.showMore)}</${Buttons.Button.Button.litTagName}>
         ` : LitHtml.nothing}
       </div>
@@ -431,14 +433,17 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
           name: 'general',
           title: i18nString(UIStrings.general),
           forceOpen: this.#toReveal?.section === NetworkForward.UIRequestLocation.UIHeaderSection.General,
+          loggingContext: 'general',
         } as CategoryData}
         aria-label=${i18nString(UIStrings.general)}
       >
+      <div jslog=${VisualLogging.section('general')}>
         ${this.#renderGeneralRow(i18nString(UIStrings.requestUrl), this.#request.url())}
         ${this.#request.statusCode? this.#renderGeneralRow(i18nString(UIStrings.requestMethod), this.#request.requestMethod) : LitHtml.nothing}
         ${this.#request.statusCode? this.#renderGeneralRow(i18nString(UIStrings.statusCode), statusText, statusClasses) : LitHtml.nothing}
         ${this.#request.remoteAddress()? this.#renderGeneralRow(i18nString(UIStrings.remoteAddress), this.#request.remoteAddress()) : LitHtml.nothing}
         ${this.#request.referrerPolicy()? this.#renderGeneralRow(i18nString(UIStrings.referrerPolicy), String(this.#request.referrerPolicy())) : LitHtml.nothing}
+      </div>
       </${Category.litTagName}>
     `;
     // clang-format on
@@ -452,7 +457,7 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
         <div class="header-name">${name}:</div>
         <div
           class="header-value ${classNames?.join(' ')}"
-          @copy=${(): void => Host.userMetrics.actionTaken(Host.UserMetrics.Action.NetworkPanelCopyValue)}
+          @copy=${() => Host.userMetrics.actionTaken(Host.UserMetrics.Action.NetworkPanelCopyValue)}
         >${value}</div>
       </div>
     `;
@@ -474,6 +479,7 @@ export interface CategoryData {
   checked?: boolean;
   additionalContent?: LitHtml.LitTemplate;
   forceOpen?: boolean;
+  loggingContext: string;
 }
 
 export class Category extends HTMLElement {
@@ -485,6 +491,7 @@ export class Category extends HTMLElement {
   #checked: boolean|undefined = undefined;
   #additionalContent: LitHtml.LitTemplate|undefined = undefined;
   #forceOpen: boolean|undefined = undefined;
+  #loggingContext = '';
 
   connectedCallback(): void {
     this.#shadow.adoptedStyleSheets = [requestHeadersViewStyles, Input.checkboxStyles];
@@ -498,6 +505,7 @@ export class Category extends HTMLElement {
     this.#checked = data.checked;
     this.#additionalContent = data.additionalContent;
     this.#forceOpen = data.forceOpen;
+    this.#loggingContext = data.loggingContext;
     this.#render();
   }
 
@@ -511,7 +519,11 @@ export class Category extends HTMLElement {
     // clang-format off
     render(html`
       <details ?open=${isOpen} @toggle=${this.#onToggle}>
-        <summary class="header" @keydown=${this.#onSummaryKeyDown}>
+        <summary
+          class="header"
+          @keydown=${this.#onSummaryKeyDown}
+          jslog=${VisualLogging.sectionHeader().track({click: true}).context(this.#loggingContext)}
+        >
           <div class="header-grid-container">
             <div>
               ${this.#title}${this.#headerCount !== undefined ?
@@ -525,7 +537,7 @@ export class Category extends HTMLElement {
                     type="checkbox"
                     .checked=${this.#checked}
                     @change=${this.#onCheckboxToggle}
-                    jslog=${VisualLogging.toggle().track({change: true}).context('raw-headers')}
+                    jslog=${VisualLogging.toggle('raw-headers').track({change: true})}
                 />${i18nString(UIStrings.raw)}</label>
               ` : LitHtml.nothing}
             </div>
@@ -561,11 +573,10 @@ export class Category extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-request-headers', RequestHeadersView);
-ComponentHelpers.CustomElements.defineComponent('devtools-request-headers-category', Category);
+customElements.define('devtools-request-headers', RequestHeadersView);
+customElements.define('devtools-request-headers-category', Category);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-request-headers': RequestHeadersView;
     'devtools-request-headers-category': Category;

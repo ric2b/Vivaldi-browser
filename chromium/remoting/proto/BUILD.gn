@@ -31,6 +31,22 @@ proto_library("proto") {
   ]
 }
 
+source_set("internal_structs") {
+  public = [
+    "logging_service.h",
+    "session_authz_service.h",
+  ]
+  sources = [
+    "logging_service.h",
+    "session_authz_service.cc",
+    "session_authz_service.h",
+  ]
+  deps = [
+    "//base",
+    "//remoting/base:errors",
+  ]
+}
+
 source_set("internal_stubs") {
   public = [ "internal_stubs.h" ]
 
@@ -40,7 +56,12 @@ source_set("internal_stubs") {
   ]
 
   deps = [
+    ":internal_structs",
     "//base",
     "//third_party/protobuf:protobuf_lite",
   ]
+}
+
+proto_library("error_code_proto") {
+  sources = [ "error_code.proto" ]
 }

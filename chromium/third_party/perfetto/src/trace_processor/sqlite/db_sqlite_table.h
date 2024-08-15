@@ -17,14 +17,28 @@
 #ifndef SRC_TRACE_PROCESSOR_SQLITE_DB_SQLITE_TABLE_H_
 #define SRC_TRACE_PROCESSOR_SQLITE_DB_SQLITE_TABLE_H_
 
+#include <cstdint>
+#include <functional>
+#include <limits>
 #include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include <sqlite3.h>
+
+#include "perfetto/base/compiler.h"
 #include "perfetto/base/status.h"
-#include "src/trace_processor/containers/bit_vector.h"
+#include "perfetto/trace_processor/basic_types.h"
+#include "src/trace_processor/db/column/types.h"
 #include "src/trace_processor/db/runtime_table.h"
 #include "src/trace_processor/db/table.h"
 #include "src/trace_processor/perfetto_sql/intrinsics/table_functions/static_table_function.h"
 #include "src/trace_processor/sqlite/query_cache.h"
+#include "src/trace_processor/sqlite/query_constraints.h"
 #include "src/trace_processor/sqlite/sqlite_table.h"
+#include "src/trace_processor/sqlite/sqlite_utils.h"
+#include "src/trace_processor/tp_metatrace.h"
 
 namespace perfetto {
 namespace trace_processor {
@@ -40,7 +54,9 @@ struct DbSqliteTableContext {
     // Table is defined in runtime.
     kRuntime
   };
-  DbSqliteTableContext(QueryCache* query_cache, const Table* table);
+  DbSqliteTableContext(QueryCache* query_cache,
+                       const Table* table,
+                       Table::Schema schema);
   DbSqliteTableContext(QueryCache* query_cache,
                        std::function<RuntimeTable*(std::string)> get_table,
                        std::function<void(std::string)> erase_table);
@@ -52,6 +68,7 @@ struct DbSqliteTableContext {
 
   // Only valid when computation == TableComputation::kStatic.
   const Table* static_table = nullptr;
+  Table::Schema static_schema;
 
   // Only valid when computation == TableComputation::kRuntime.
   // Those functions implement the interactions with
@@ -61,7 +78,7 @@ struct DbSqliteTableContext {
   std::function<void(std::string)> erase_runtime_table;
 
   // Only valid when computation == TableComputation::kTableFunction.
-  std::unique_ptr<StaticTableFunction> generator;
+  std::unique_ptr<StaticTableFunction> static_table_function;
 };
 
 // Implements the SQLite table interface for db tables.
@@ -77,16 +94,43 @@ class DbSqliteTable final
     Cursor(DbSqliteTable*, QueryCache*);
     ~Cursor() final;
 
-    Cursor(Cursor&&) noexcept = default;
-    Cursor& operator=(Cursor&&) = default;
+    Cursor(const Cursor&) = delete;
+    Cursor& operator=(const Cursor&) = delete;
+
+    Cursor(Cursor&&) noexcept = delete;
+    Cursor& operator=(Cursor&&) = delete;
 
     // Implementation of SqliteTable::Cursor.
     base::Status Filter(const QueryConstraints& qc,
                         sqlite3_value** argv,
                         FilterHistory);
-    base::Status Next();
-    bool Eof();
-    base::Status Column(sqlite3_context*, int N);
+
+    PERFETTO_ALWAYS_INLINE void Next() {
+      if (mode_ == Mode::kSingleRow) {
+        eof_ = true;
+      } else {
+        eof_ = !++*iterator_;
+      }
+    }
+
+    PERFETTO_ALWAYS_INLINE bool Eof() const { return eof_; }
+
+    PERFETTO_ALWAYS_INLINE void Column(sqlite3_context* ctx,
+                                       int raw_col) const {
+      auto column = static_cast<uint32_t>(raw_col);
+      SqlValue value = mode_ == Mode::kSingleRow
+                           ? SourceTable()->columns()[column].Get(*single_row_)
+                           : iterator_->Get(column);
+      // We can say kSqliteStatic for strings because all strings are expected
+      // to come from the string pool. Thus they will be valid for the lifetime
+      // of trace processor. Similarily, for bytes, we can also use
+      // kSqliteStatic because for our iterator will hold onto the pointer as
+      // long as we don't call Next(). However, that only happens when Next() is
+      // called on the Cursor itself, at which point SQLite no longer cares
+      // about the bytes pointer.
+      sqlite_utils::ReportSqlValue(ctx, value, sqlite_utils::kSqliteStatic,
+                                   sqlite_utils::kSqliteStatic);
+    }
 
    private:
     enum class Mode {
@@ -104,11 +148,16 @@ class DbSqliteTable final
       return sorted_cache_table_ ? &*sorted_cache_table_ : upstream_table_;
     }
 
-    Cursor(const Cursor&) = delete;
-    Cursor& operator=(const Cursor&) = delete;
+    base::Status PopulateConstraintsAndArguments(const QueryConstraints& qc,
+                                                 sqlite3_value** argv);
+
+    void PopulateOrderBys(const QueryConstraints& qc);
+
+    void FilterAndSortMetatrace(metatrace::Record* record);
 
     DbSqliteTable* db_sqlite_table_ = nullptr;
     QueryCache* cache_ = nullptr;
+    std::vector<uint32_t> argument_index_per_column_;
 
     const Table* upstream_table_ = nullptr;
 
@@ -120,7 +169,6 @@ class DbSqliteTable final
     std::optional<uint32_t> single_row_;
 
     // Only valid for Mode::kTable.
-    std::optional<Table> db_table_;
     std::optional<Table::Iterator> iterator_;
 
     bool eof_ = true;
@@ -138,6 +186,7 @@ class DbSqliteTable final
 
     std::vector<Constraint> constraints_;
     std::vector<Order> orders_;
+    std::vector<SqlValue> table_function_arguments_;
   };
   struct QueryCost {
     double cost;

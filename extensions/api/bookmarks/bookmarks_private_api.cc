@@ -111,8 +111,7 @@ VivaldiBookmarksAPI::GetFactoryInstance() {
   return g_factory_bookmark.Pointer();
 }
 
-void VivaldiBookmarksAPI::BookmarkMetaInfoChanged(BookmarkModel* model,
-                                                  const BookmarkNode* node) {
+void VivaldiBookmarksAPI::BookmarkMetaInfoChanged(const BookmarkNode* node) {
   bookmarks_private::OnMetaInfoChanged::ChangeInfo change_info;
   change_info.speeddial = vivaldi_bookmark_kit::GetSpeeddial(node);
   change_info.bookmarkbar = vivaldi_bookmark_kit::GetBookmarkbar(node);
@@ -127,11 +126,10 @@ void VivaldiBookmarksAPI::BookmarkMetaInfoChanged(BookmarkModel* model,
                             browser_context_);
 }
 
-void VivaldiBookmarksAPI::BookmarkNodeFaviconChanged(BookmarkModel* model,
-                                                     const BookmarkNode* node) {
+void VivaldiBookmarksAPI::BookmarkNodeFaviconChanged(const BookmarkNode* node) {
   if (!node->is_favicon_loaded() && !node->is_favicon_loading()) {
     // Forces loading the favicon
-    model->GetFavicon(node);
+    bookmark_model_->GetFavicon(node);
   }
   if (!node->icon_url()) {
     return;
@@ -147,7 +145,7 @@ ExtensionFunction::ResponseAction
 BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::Run() {
   using vivaldi::bookmarks_private::UpdateSpeedDialsForWindowsJumplist::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
 #if BUILDFLAG(IS_WIN)
@@ -159,6 +157,21 @@ BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::Run() {
   }
 #endif
   return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction BookmarksPrivateGetFolderIdsFunction::Run() {
+  namespace Results = vivaldi::bookmarks_private::GetFolderIds::Results;
+
+  vivaldi::bookmarks_private::FolderIds ids;
+
+  BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(
+      browser_context());
+  if (model) {
+    ids.bookmarks = base::NumberToString(model->bookmark_bar_node()->id());
+    ids.mobile = base::NumberToString(model->mobile_node()->id());
+    ids.trash = base::NumberToString(model->trash_node()->id());
+  }
+  return RespondNow(ArgumentList(Results::Create(ids)));
 }
 
 ExtensionFunction::ResponseValue
@@ -204,7 +217,7 @@ BookmarksPrivateIsCustomThumbnailFunction::RunOnReady() {
   using vivaldi::bookmarks_private::IsCustomThumbnail::Params;
   namespace Results = vivaldi::bookmarks_private::IsCustomThumbnail::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   if (!params)
     BadMessage();
 
@@ -283,7 +296,7 @@ ExtensionFunction::ResponseValue
 BookmarksPrivateExportFunction::RunOnReady() {
   using vivaldi::bookmarks_private::Export::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   if (!params)
     return BadMessage();
 

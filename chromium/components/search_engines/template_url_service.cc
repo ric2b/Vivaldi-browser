@@ -69,9 +69,7 @@
 #include <numeric>
 
 #include "app/vivaldi_apptools.h"
-#include "base/hash/hash.h"
-#include "components/sync/base/client_tag_hash.h"
-#include "components/search_engines/vivaldi_pref_names.h"
+#include "components/search_engines/vivaldi_template_url_service.h"
 
 typedef SearchHostToURLsMap::TemplateURLSet TemplateURLSet;
 typedef TemplateURLService::SyncDataMap SyncDataMap;
@@ -213,35 +211,6 @@ TemplateURL MergeEnterpriseSiteSearchEngines(const TemplateURL& existing_turl,
   merged_data.featured_by_policy = new_values.featured_by_policy();
   return TemplateURL(merged_data);
 }
-
-// Vivaldi
-std::string VivaldiGetPositionSuffix(const TemplateURL* template_url) {
-  return syncer::ClientTagHash::FromUnhashed(syncer::SEARCH_ENGINES,
-                                             template_url->sync_guid())
-      .value();
-}
-
-const char* VivaldiGetDefaultProviderGuidPrefForType(
-    TemplateURLService::DefaultSearchType type) {
-  switch (type) {
-    case TemplateURLService::kDefaultSearchMain:
-      return prefs::kSyncedDefaultSearchProviderGUID;
-    case TemplateURLService::kDefaultSearchPrivate:
-      return prefs::kSyncedDefaultPrivateSearchProviderGUID;
-    case TemplateURLService::kDefaultSearchField:
-      return prefs::kSyncedDefaultSearchFieldProviderGUID;
-    case TemplateURLService::kDefaultSearchFieldPrivate:
-      return prefs::kSyncedDefaultPrivateSearchFieldProviderGUID;
-    case TemplateURLService::kDefaultSearchSpeeddials:
-      return prefs::kSyncedDefaultSpeedDialsSearchProviderGUID;
-    case TemplateURLService::kDefaultSearchSpeeddialsPrivate:
-      return prefs::kSyncedDefaultSpeedDialsPrivateSearchProviderGUID;
-    case TemplateURLService::kDefaultSearchImage:
-      return prefs::kSyncedDefaultImageSearchProviderGUID;
-  }
-  return nullptr;
-}
-// End Vivaldi
 
 }  // namespace
 
@@ -433,93 +402,13 @@ TemplateURLService::TemplateURLService(
       client_(std::move(client)),
       dsp_change_callback_(dsp_change_callback),
       pre_loading_providers_(std::make_unique<PreLoadingProviders>()),
-      default_search_manager_{
-          {{prefs,
-            search_engine_choice_service,
-            DefaultSearchManager::kDefaultSearchProviderDataPrefName,
-            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
-                                base::Unretained(this),
-                                kDefaultSearchMain)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-            for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
-           },
-           {prefs,
-            search_engine_choice_service,
-            DefaultSearchManager::kDefaultPrivateSearchProviderDataPrefName,
-            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
-                                base::Unretained(this),
-                                kDefaultSearchPrivate)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-            for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
-           },
-           {prefs,
-            search_engine_choice_service,
-            DefaultSearchManager::kDefaultSearchFieldProviderDataPrefName,
-            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
-                                base::Unretained(this),
-                                kDefaultSearchField)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-            for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
-           },
-           {prefs,
-            search_engine_choice_service,
-            DefaultSearchManager::
-                kDefaultPrivateSearchFieldProviderDataPrefName,
-            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
-                                base::Unretained(this),
-                                kDefaultSearchFieldPrivate)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-            for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
-           },
-           {prefs,
-            search_engine_choice_service,
-            DefaultSearchManager::kDefaultSpeeddialsSearchProviderDataPrefName,
-            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
-                                base::Unretained(this),
-                                kDefaultSearchSpeeddials)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-            for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
-           },
-           {prefs,
-            search_engine_choice_service,
-            DefaultSearchManager::
-                kDefaultSpeeddialsPrivateSearchProviderDataPrefName,
-            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
-                                base::Unretained(this),
-                                kDefaultSearchSpeeddialsPrivate)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-            for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
-           },
-           {prefs,
-            search_engine_choice_service,
-            DefaultSearchManager::kDefaultImageSearchProviderDataPrefName,
-            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
-                                base::Unretained(this),
-                                kDefaultSearchImage)}
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-            for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
-           },
-},
+      default_search_manager_(
+          VivaldiGetDefaultSearchManagers(prefs, search_engine_choice_service)),
        enterprise_site_search_manager_(GetEnterpriseSiteSearchManager(prefs)) {
   if (!search_engine_choice_service_) {
     CHECK_IS_TEST();
     CHECK(!prefs);
   }
-
   DCHECK(search_terms_data_);
   Init();
 }
@@ -549,86 +438,7 @@ TemplateURLService::TemplateURLService(
 TemplateURLService::TemplateURLService(const Initializer* initializers,
                                        const size_t count)
     : pre_loading_providers_(std::make_unique<PreLoadingProviders>()),
-      default_search_manager_(
-          {{/*pref_service=*/nullptr,
-            /*search_engine_choice_service=*/nullptr,
-            DefaultSearchManager::kDefaultSearchProviderDataPrefName,
-            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
-                                base::Unretained(this),
-                                kDefaultSearchMain)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-            for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
-           },
-           {/*pref_service=*/nullptr,
-            /*search_engine_choice_service=*/nullptr,
-            DefaultSearchManager::kDefaultPrivateSearchProviderDataPrefName,
-            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
-                                base::Unretained(this),
-                                kDefaultSearchPrivate)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-            for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
-           },
-           {/*pref_service=*/nullptr,
-            /*search_engine_choice_service=*/nullptr,
-            DefaultSearchManager::kDefaultSearchFieldProviderDataPrefName,
-            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
-                                base::Unretained(this),
-                                kDefaultSearchField)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-            for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
-           },
-           {/*pref_service=*/nullptr,
-            /*search_engine_choice_service=*/nullptr,
-            DefaultSearchManager::
-                kDefaultPrivateSearchFieldProviderDataPrefName,
-            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
-                                base::Unretained(this),
-                                kDefaultSearchFieldPrivate)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-            for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
-           },
-           {/*pref_service=*/nullptr,
-            /*search_engine_choice_service=*/nullptr,
-            DefaultSearchManager::kDefaultSpeeddialsSearchProviderDataPrefName,
-            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
-                                base::Unretained(this),
-                                kDefaultSearchSpeeddials)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-            for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
-           },
-           {/*pref_service=*/nullptr,
-            /*search_engine_choice_service=*/nullptr,
-            DefaultSearchManager::
-                kDefaultSpeeddialsPrivateSearchProviderDataPrefName,
-            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
-                                base::Unretained(this),
-                                kDefaultSearchSpeeddialsPrivate)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-            for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
-           },
-           {/*pref_service=*/nullptr,
-            /*search_engine_choice_service=*/nullptr,
-            DefaultSearchManager::kDefaultImageSearchProviderDataPrefName,
-            base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
-                                base::Unretained(this),
-                                kDefaultSearchImage)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-            for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
-           }}),
+      default_search_manager_(VivaldiGetDefaultSearchManagers(nullptr, nullptr)),
       enterprise_site_search_manager_(
           GetEnterpriseSiteSearchManager(/*prefs=*/nullptr)) {
   CHECK_IS_TEST();
@@ -651,7 +461,7 @@ void TemplateURLService::RegisterProfilePrefs(
 #endif
   for (int i = 0; i < kDefaultSearchTypeCount; i++)
     registry->RegisterStringPref(
-        VivaldiGetDefaultProviderGuidPrefForType(DefaultSearchType(i)),
+        vivaldi::VivaldiGetDefaultProviderGuidPrefForType(DefaultSearchType(i)),
         std::string(), flags);
   registry->RegisterStringPref(prefs::kDefaultSearchProviderGUID,
                                std::string());
@@ -897,8 +707,8 @@ void TemplateURLService::Remove(const TemplateURL* template_url) {
   if (vivaldi_default_override_ == template_url)
     VivaldiResetDefaultOverride();
 
-  auto it = FindTemplateURL(&template_urls_, template_url);
-  if (it == template_urls_.end())
+  auto i = FindTemplateURL(&template_urls_, template_url);
+  if (i == template_urls_.end())
     return;
 
   Scoper scoper(this);
@@ -907,8 +717,8 @@ void TemplateURLService::Remove(const TemplateURL* template_url) {
   RemoveFromMaps(template_url);
 
   // Remove it from the vector containing all TemplateURLs.
-  std::unique_ptr<TemplateURL> scoped_turl = std::move(*it);
-  template_urls_.erase(it);
+  std::unique_ptr<TemplateURL> scoped_turl = std::move(*i);
+  template_urls_.erase(i);
 
   if (template_url->type() == TemplateURL::NORMAL) {
     if (web_data_service_) {
@@ -922,12 +732,12 @@ void TemplateURLService::Remove(const TemplateURL* template_url) {
     // be hidden by an extension or policy and then deleted. Clean up the user
     // prefs then.
     if (prefs_) {
-      for (int i = 0; i < kDefaultSearchTypeCount; i++) {
+      for (int j = 0; j < kDefaultSearchTypeCount; j++) {
         if (template_url->sync_guid() ==
-            prefs_->GetString(VivaldiGetDefaultProviderGuidPrefForType(
-                DefaultSearchType(i)))) {
-          prefs_->SetString(
-              VivaldiGetDefaultProviderGuidPrefForType(DefaultSearchType(i)),
+            prefs_->GetString(vivaldi::VivaldiGetDefaultProviderGuidPrefForType(
+                DefaultSearchType(j)))) {
+          prefs_->SetString(vivaldi::VivaldiGetDefaultProviderGuidPrefForType(
+                                DefaultSearchType(j)),
               std::string());
         }
       }
@@ -1098,42 +908,6 @@ void TemplateURLService::SetIsActiveTemplateURL(TemplateURL* url,
       BuiltinEngineType::KEYWORD_MODE_ENGINE_TYPE_MAX);
 }
 
-void TemplateURLService::VivaldiMoveTemplateURL(TemplateURL* url,
-                                                const TemplateURL* successor) {
-  DCHECK(!IsCreatedByExtension(url));
-  DCHECK(url != successor);
-  syncer::UniquePosition invalid;
-  syncer::UniquePosition after;
-  if (successor)
-    after = successor->data().vivaldi_position;
-  const syncer::UniquePosition before = std::accumulate(
-      template_urls_.begin(), template_urls_.end(), invalid,
-      [after](const auto& position, const auto& template_url) {
-        if (!template_url->data().vivaldi_position.IsValid())
-          return position;
-        if (position.IsValid() &&
-            template_url->data().vivaldi_position.LessThan(position))
-          return position;
-        if (!after.IsValid() ||
-            template_url->data().vivaldi_position.LessThan(after))
-          return template_url->data().vivaldi_position;
-        return position;
-      });
-  TemplateURLData data(url->data());
-  if (after.IsValid() && before.IsValid())
-    data.vivaldi_position = syncer::UniquePosition::Between(
-        before, after, VivaldiGetPositionSuffix(url));
-  else if (after.IsValid())
-    data.vivaldi_position =
-        syncer::UniquePosition::Before(after, VivaldiGetPositionSuffix(url));
-  else if (before.IsValid())
-    data.vivaldi_position =
-        syncer::UniquePosition::After(before, VivaldiGetPositionSuffix(url));
-  else  // We don't need to reorder if there is only one orderable item.
-    return;
-  Update(url, TemplateURL(data));
-}
-
 TemplateURL* TemplateURLService::CreatePlayAPISearchEngine(
     const std::u16string& title,
     const std::u16string& keyword,
@@ -1209,29 +983,20 @@ void TemplateURLService::UpdateProviderFavicons(
 }
 
 bool TemplateURLService::CanMakeDefault(const TemplateURL* url, DefaultSearchType type) const {
-  return
-      ((default_search_provider_source_[type] == DefaultSearchManager::FROM_USER) ||
-        default_search_provider_source_[type] ==
-            DefaultSearchManager::FROM_POLICY_RECOMMENDED ||
-       (default_search_provider_source_[type] ==
-            DefaultSearchManager::FROM_FALLBACK)) &&
-          (url != GetDefaultSearchProvider(type)) &&
-           url->url_ref().SupportsReplacement(search_terms_data()) &&
-          (url->type() == TemplateURL::NORMAL) &&
-          (url->starter_pack_id() != TemplateURLStarterPackData::kTabs);
+  return (default_search_provider_source_[type] == DefaultSearchManager::FROM_USER ||
+          default_search_provider_source_[type] ==
+              DefaultSearchManager::FROM_POLICY_RECOMMENDED ||
+          default_search_provider_source_[type] ==
+              DefaultSearchManager::FROM_FALLBACK) &&
+         (url != GetDefaultSearchProvider(type)) &&
+         url->url_ref().SupportsReplacement(search_terms_data()) &&
+         (url->type() == TemplateURL::NORMAL) && (url->starter_pack_id() == 0);
 }
 
 void TemplateURLService::SetUserSelectedDefaultSearchProvider(
     TemplateURL* url,
+    DefaultSearchType type,
     search_engines::ChoiceMadeLocation choice_made_location) {
-  Scoper scoper(this);
-
-  for (int i = 0; i < kDefaultSearchTypeCount; i++)
-    SetUserSelectedDefaultSearchProvider(url, DefaultSearchType(i), choice_made_location);
-}
-
-void TemplateURLService::SetUserSelectedDefaultSearchProvider(
-    TemplateURL* url, DefaultSearchType type, search_engines::ChoiceMadeLocation choice_made_location) {
   // Omnibox keywords cannot be made default. Extension-controlled search
   // engines can be made default only by the extension itself because they
   // aren't persisted.
@@ -1250,12 +1015,22 @@ void TemplateURLService::SetUserSelectedDefaultSearchProvider(
       ApplyDefaultSearchChange(type, url ? &url->data() : nullptr,
                                DefaultSearchManager::FROM_USER);
       selection_added = true;
+    } else {
+      // When we are setting the search engine choice from choice screens,
+      // the DSP source is expected to allow the search engine to be changed by
+      // the user. But theoretically there is a possibility that a policy
+      // kicked in after a choice screen was shown, that could be a way to
+      // enter this state
+      // TODO(crbug.com/328041262): Investigate mitigation options.
+      CHECK_NE(choice_made_location, search_engines::ChoiceMadeLocation::kOther,
+               base::NotFatalUntil::M127);
     }
   } else {
     // We rely on the DefaultSearchManager to call ApplyDefaultSearchChange if,
     // in fact, the effective DSE changes.
     if (url) {
-      default_search_manager_[type].SetUserSelectedDefaultSearchEngine(url->data());
+      default_search_manager_[type].SetUserSelectedDefaultSearchEngine(
+          url->data(), choice_made_location);
       selection_added = true;
     } else {
       default_search_manager_[type].ClearUserSelectedDefaultSearchEngine();
@@ -1317,11 +1092,11 @@ GURL TemplateURLService::GenerateSearchURLForDefaultSearchProvider(
                           : GURL();
 }
 
-absl::optional<TemplateURLService::SearchMetadata>
+std::optional<TemplateURLService::SearchMetadata>
 TemplateURLService::ExtractSearchMetadata(const GURL& url) const {
   const TemplateURL* template_url = GetTemplateURLForHost(url.host());
   if (!template_url) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   GURL normalized_url;
@@ -1334,7 +1109,7 @@ TemplateURLService::ExtractSearchMetadata(const GURL& url) const {
                           /*normalize_search_terms=*/true, &normalized_url,
                           &normalized_search_terms);
   if (!is_valid_search_url) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   return SearchMetadata{template_url, normalized_url, normalized_search_terms};
@@ -1456,7 +1231,8 @@ void TemplateURLService::RepairPrepopulatedSearchEngines() {
       // Write the fallback engine's GUID to prefs, which will cause
       // OnDefaultSearchProviderGUIDChanged() to set it as the new
       // user-selected engine.
-      prefs_->SetString(VivaldiGetDefaultProviderGuidPrefForType(DefaultSearchType(i)),
+      prefs_->SetString(vivaldi::VivaldiGetDefaultProviderGuidPrefForType(
+                            DefaultSearchType(i)),
                         fallback_engine->sync_guid());
     }
   } else {
@@ -1629,12 +1405,15 @@ void TemplateURLService::OnWebDataServiceRequestDone(
 
 std::u16string TemplateURLService::GetKeywordShortName(
     const std::u16string& keyword,
-    bool* is_omnibox_api_extension_keyword) const {
+    bool* is_omnibox_api_extension_keyword,
+    bool* is_ask_google_keyword) const {
   const TemplateURL* template_url = GetTemplateURLForKeyword(keyword);
 
   // TODO(sky): Once LocationBarView adds a listener to the TemplateURLService
   // to track changes to the model, this should become a DCHECK.
   if (template_url) {
+    *is_ask_google_keyword = template_url->starter_pack_id() ==
+                             TemplateURLStarterPackData::kAskGoogle;
     *is_omnibox_api_extension_keyword =
         template_url->type() == TemplateURL::OMNIBOX_API_EXTENSION;
     return template_url->AdjustedShortNameForLocaleDirection();
@@ -1703,7 +1482,7 @@ syncer::SyncDataList TemplateURLService::GetAllSyncData(
   return current_data;
 }
 
-absl::optional<syncer::ModelError> TemplateURLService::ProcessSyncChanges(
+std::optional<syncer::ModelError> TemplateURLService::ProcessSyncChanges(
     const base::Location& from_here,
     const syncer::SyncChangeList& change_list) {
   if (!models_associated_) {
@@ -1722,7 +1501,7 @@ absl::optional<syncer::ModelError> TemplateURLService::ProcessSyncChanges(
       &dsp_change_origin_, DSP_CHANGE_SYNC_UNINTENTIONAL);
 
   syncer::SyncChangeList new_changes;
-  absl::optional<syncer::ModelError> error;
+  std::optional<syncer::ModelError> error;
   for (auto iter = change_list.begin(); iter != change_list.end(); ++iter) {
     DCHECK_EQ(syncer::SEARCH_ENGINES, iter->sync_data().GetDataType());
 
@@ -1815,7 +1594,7 @@ base::WeakPtr<syncer::SyncableService> TemplateURLService::AsWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
-absl::optional<syncer::ModelError> TemplateURLService::MergeDataAndStartSyncing(
+std::optional<syncer::ModelError> TemplateURLService::MergeDataAndStartSyncing(
     syncer::ModelType type,
     const syncer::SyncDataList& initial_sync_data,
     std::unique_ptr<syncer::SyncChangeProcessor> sync_processor) {
@@ -1921,7 +1700,7 @@ absl::optional<syncer::ModelError> TemplateURLService::MergeDataAndStartSyncing(
   PruneSyncChanges(&sync_data_map, &new_changes);
 
   LogDuplicatesHistogram(GetTemplateURLs());
-  absl::optional<syncer::ModelError> error =
+  std::optional<syncer::ModelError> error =
       sync_processor_->ProcessSyncChanges(FROM_HERE, new_changes);
   if (!error.has_value()) {
     // The ACTION_DELETEs from this set are processed. Empty it so we don't try
@@ -2209,7 +1988,8 @@ void TemplateURLService::Init() {
             search_engines::ChoicePromo::kAny)) {
       for (int i = 0; i < kDefaultSearchTypeCount; i++) {
       pref_change_registrar_.Add(
-          VivaldiGetDefaultProviderGuidPrefForType(DefaultSearchType(i)),
+            vivaldi::VivaldiGetDefaultProviderGuidPrefForType(
+                DefaultSearchType(i)),
           base::BindRepeating(
               &TemplateURLService::OnDefaultSearchProviderGUIDChanged,
               base::Unretained(this), DefaultSearchType(i)));
@@ -2217,7 +1997,8 @@ void TemplateURLService::Init() {
     } else {
       for (int i = 0; i < kDefaultSearchTypeCount; i++) {
       pref_change_registrar_.Add(
-          VivaldiGetDefaultProviderGuidPrefForType(DefaultSearchType(i)),
+          vivaldi::VivaldiGetDefaultProviderGuidPrefForType(
+              DefaultSearchType(i)),
           base::BindRepeating(
               &TemplateURLService::OnDefaultSearchProviderGUIDChanged,
               base::Unretained(this), DefaultSearchType(i)));
@@ -2266,7 +2047,8 @@ void TemplateURLService::ApplyInitializersForTesting(
 
     // Set the first provided identifier to be the default.
     if (i == 0) {
-        default_search_manager_[kDefaultSearchMain].SetUserSelectedDefaultSearchEngine(data);
+      default_search_manager_[kDefaultSearchMain].SetUserSelectedDefaultSearchEngine(
+          data, search_engines::ChoiceMadeLocation::kOther);
     }
   }
 }
@@ -2460,9 +2242,10 @@ void TemplateURLService::UpdateTemplateURLIfPrepopulated(
 void TemplateURLService::MaybeUpdateDSEViaPrefs(DefaultSearchType type, TemplateURL* synced_turl) {
   if (prefs_ &&
       (synced_turl->sync_guid() ==
-          prefs_->GetString(VivaldiGetDefaultProviderGuidPrefForType(type)))) {
+       prefs_->GetString(
+           vivaldi::VivaldiGetDefaultProviderGuidPrefForType(type)))) {
     default_search_manager_[type].SetUserSelectedDefaultSearchEngine(
-        synced_turl->data());
+        synced_turl->data(), search_engines::ChoiceMadeLocation::kOther);
   }
 }
 
@@ -2529,8 +2312,6 @@ void TemplateURLService::UpdateKeywordSearchTermsForURL(
     if ((*i)->ExtractSearchTermsFromURL(details.url, search_terms_data(),
                                         &search_terms) &&
         !search_terms.empty()) {
-      // We don't really use these in Vivaldi and they can cause trouble with
-      // our single-letter keywords.
       if (details.is_keyword_transition) {
         // The visit is the result of the user entering a keyword, generate a
         // KEYWORD_GENERATED visit for the KEYWORD so that the keyword typed
@@ -2708,7 +2489,7 @@ bool TemplateURLService::ApplyDefaultSearchChangeNoMetrics(
           << "Add() to repair the DSE must never fail.";
     }
     if (default_search_provider_[type] && prefs_) {
-      prefs_->SetString(VivaldiGetDefaultProviderGuidPrefForType(type),
+      prefs_->SetString(vivaldi::VivaldiGetDefaultProviderGuidPrefForType(type),
                         default_search_provider_[type]->sync_guid());
     }
   }
@@ -2847,11 +2628,11 @@ TemplateURL* TemplateURLService::Add(std::unique_ptr<TemplateURL> template_url,
         });
     if (position.IsValid())
       template_url->data_.vivaldi_position = syncer::UniquePosition::After(
-          position, VivaldiGetPositionSuffix(template_url.get()));
+          position, vivaldi::VivaldiGetPositionSuffix(template_url.get()));
     else
       template_url->data_.vivaldi_position =
           syncer::UniquePosition::InitialPosition(
-              VivaldiGetPositionSuffix(template_url.get()));
+              vivaldi::VivaldiGetPositionSuffix(template_url.get()));
   }
 
   TemplateURL* template_url_ptr = template_url.get();
@@ -3068,7 +2849,8 @@ void TemplateURLService::MergeInSyncTemplateURL(
       if (default_search_provider != default_search_provider_.end()) {
         auto type = std::distance(default_search_provider_.begin(), default_search_provider);
         bool pref_matched =
-            prefs_->GetString(VivaldiGetDefaultProviderGuidPrefForType(DefaultSearchType(type))) ==
+            prefs_->GetString(vivaldi::VivaldiGetDefaultProviderGuidPrefForType(
+                DefaultSearchType(type))) ==
             (*default_search_provider)->sync_guid();
         // Update the existing engine in-place.
         Update(*default_search_provider, TemplateURL(sync_turl->data()));
@@ -3078,7 +2860,8 @@ void TemplateURLService::MergeInSyncTemplateURL(
         // a new search engine from Sync which just hasn't been added locally
         // yet, so leave it alone in that case.
         if (pref_matched) {
-          prefs_->SetString(VivaldiGetDefaultProviderGuidPrefForType(DefaultSearchType(type)),
+          prefs_->SetString(vivaldi::VivaldiGetDefaultProviderGuidPrefForType(
+                                DefaultSearchType(type)),
                             (*default_search_provider)->sync_guid());
         }
 
@@ -3124,16 +2907,18 @@ void TemplateURLService::OnDefaultSearchProviderGUIDChanged(DefaultSearchType ty
   base::AutoReset<DefaultSearchChangeOrigin> change_origin(
       &dsp_change_origin_, DSP_CHANGE_SYNC_PREF);
 
-  std::string new_guid =
-      prefs_->GetString(VivaldiGetDefaultProviderGuidPrefForType(type));
+  std::string new_guid = prefs_->GetString(
+      vivaldi::VivaldiGetDefaultProviderGuidPrefForType(type));
   if (new_guid.empty()) {
     default_search_manager_[type].ClearUserSelectedDefaultSearchEngine();
     return;
   }
 
   const TemplateURL* turl = GetTemplateURLForGUID(new_guid);
-  if (turl)
-    default_search_manager_[type].SetUserSelectedDefaultSearchEngine(turl->data());
+  if (turl) {
+    default_search_manager_[type].SetUserSelectedDefaultSearchEngine(
+        turl->data(), search_engines::ChoiceMadeLocation::kOther);
+  }
 }
 
 void TemplateURLService::MaybeSetIsActiveSearchEngines(
@@ -3323,7 +3108,7 @@ bool TemplateURLService::MatchesDefaultSearchProvider(TemplateURL* turl) const {
 std::unique_ptr<EnterpriseSiteSearchManager>
 TemplateURLService::GetEnterpriseSiteSearchManager(PrefService* prefs) {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_CHROMEOS_ASH)
+    BUILDFLAG(IS_CHROMEOS)
   return base::FeatureList::IsEnabled(omnibox::kSiteSearchSettingsPolicy)
              ? std::make_unique<EnterpriseSiteSearchManager>(
                    prefs, base::BindRepeating(
@@ -3382,85 +3167,11 @@ void TemplateURLService::LogSiteSearchPolicyConflict(
 }
 
 // Vivaldi
-void TemplateURLService::ResetTemplateURL(
+void TemplateURLService::SetUserSelectedDefaultSearchProvider(
     TemplateURL* url,
-    const std::u16string& title,
-    const std::u16string& keyword,
-    const std::string& search_url,
-    const std::string& search_post_params,
-    const std::string& suggest_url,
-    const std::string& suggest_post_params,
-    const std::string& image_url,
-    const std::string& image_post_params,
-    const GURL& favicon_url) {
-  DCHECK(!IsCreatedByExtension(url));
-  DCHECK(!keyword.empty());
-  DCHECK(!search_url.empty());
-  TemplateURLData data(url->data());
-  // If we change anything fundamental about a prepopulated engine,
-  // it needs to be removed and re-added as a new engine instead of
-  // simply updated
-  bool reset_prepopulated =
-      data.prepopulate_id > 0 &&
-      (search_url != data.url() ||
-       search_post_params != data.search_url_post_params ||
-       suggest_url != data.suggestions_url ||
-       suggest_post_params != data.suggestions_url_post_params ||
-       image_url != data.image_url ||
-       image_post_params != data.image_url_post_params);
+    search_engines::ChoiceMadeLocation choice_made_location) {
+  Scoper scoper(this);
 
-  data.SetShortName(title);
-  data.SetKeyword(keyword);
-  data.SetURL(search_url);
-  data.search_url_post_params = search_post_params;
-  data.suggestions_url = suggest_url;
-  data.suggestions_url_post_params = suggest_post_params;
-  data.image_url = image_url;
-  data.image_url_post_params = image_post_params;
-  data.favicon_url = favicon_url;
-  data.safe_for_autoreplace = false;
-  data.last_modified = clock_->Now();
-  data.is_active = TemplateURLData::ActiveStatus::kTrue;
-
-  if (!reset_prepopulated) {
-    Update(url, TemplateURL(data));
-    return;
-  }
-
-  data.prepopulate_id = 0;
-  // Using a new guid will cause sync to add this as a new turl instead of
-  // updating the existing one.
-  data.GenerateSyncGUID();
-
-  TemplateURLData prepopulate_data(url->data());
-  prepopulate_data.is_active = TemplateURLData::ActiveStatus::kFalse;
-  prepopulate_data.id = kInvalidTemplateURLID;
-
-  Update(url, TemplateURL(data));
-
-  for (int i = 0; i < kDefaultSearchTypeCount; i++) {
-    if (url == default_search_provider_[i] && prefs_)
-      prefs_->SetString(
-          VivaldiGetDefaultProviderGuidPrefForType(DefaultSearchType(i)),
-          data.sync_guid);
-  }
-
-  // Re-add a disabled version of the prepopulated turl. Sync will pick this up
-  // and disable it on other clients.
-  Add(std::make_unique<TemplateURL>(prepopulate_data));
+  for (int i = 0; i < kDefaultSearchTypeCount; i++)
+    SetUserSelectedDefaultSearchProvider(url, DefaultSearchType(i), choice_made_location);
 }
-
-void TemplateURLService::VivaldiSetDefaultOverride(TemplateURL* url) {
-  vivaldi_default_override_ = url;
-  for (auto& observer : model_observers_) {
-    observer.OnTemplateURLServiceChanged();
-  }
-}
-
-void TemplateURLService::VivaldiResetDefaultOverride() {
-  vivaldi_default_override_ = nullptr;
-  for (auto& observer : model_observers_) {
-    observer.OnTemplateURLServiceChanged();
-  }
-}
-// End Vivaldi

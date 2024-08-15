@@ -24,7 +24,7 @@ FeaturePromoSessionPolicy::FeaturePromoSessionPolicy() = default;
 FeaturePromoSessionPolicy::~FeaturePromoSessionPolicy() = default;
 
 void FeaturePromoSessionPolicy::Init(
-    const FeaturePromoSessionManager* session_manager,
+    FeaturePromoSessionManager* session_manager,
     FeaturePromoStorageService* storage_service) {
   session_manager_ = session_manager;
   storage_service_ = storage_service;
@@ -78,7 +78,7 @@ void FeaturePromoSessionPolicy::NotifyPromoEnded(
 
 FeaturePromoResult FeaturePromoSessionPolicy::CanShowPromo(
     PromoInfo to_show,
-    absl::optional<PromoInfo> currently_showing) const {
+    std::optional<PromoInfo> currently_showing) const {
   return (!currently_showing || to_show.priority > currently_showing->priority)
              ? FeaturePromoResult::Success()
              : FeaturePromoResult::kBlockedByPromo;
@@ -130,19 +130,21 @@ FeaturePromoSessionPolicy::SpecificationToPromoInfo(
 
 FeaturePromoResult FeaturePromoSessionPolicyV2::CanShowPromo(
     PromoInfo to_show,
-    absl::optional<PromoInfo> currently_showing) const {
+    std::optional<PromoInfo> currently_showing) const {
   const auto initial_result =
       FeaturePromoSessionPolicy::CanShowPromo(to_show, currently_showing);
   if (!initial_result) {
     return initial_result;
   }
 
-  if (!session_manager()->IsApplicationActive()) {
-    return FeaturePromoResult::kBlockedByUi;
-  }
-
   if (to_show.priority == PromoPriority::kLow &&
       to_show.weight == PromoWeight::kHeavy) {
+    // Ensure session state is current since there could be a new session.
+    session_manager()->MaybeUpdateSessionState();
+
+    // TODO(dfried): Sanity check to determine if our assumption that promos
+    // will not be shown in an idle browser is valid.
+
     const auto now = storage_service()->GetCurrentTime();
     const auto since_session_start =
         now - storage_service()->ReadSessionData().start_time;

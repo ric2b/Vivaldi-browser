@@ -971,6 +971,70 @@ uint64_t ffio_read_varlen(AVIOContext *bc){
     return val;
 }
 
+unsigned int ffio_read_leb(AVIOContext *s) {
+    int more, i = 0;
+    unsigned leb = 0;
+
+    do {
+        int byte = avio_r8(s);
+        unsigned bits = byte & 0x7f;
+        more = byte & 0x80;
+        if (i <= 4)
+            leb |= bits << (i * 7);
+        if (++i == 8)
+            break;
+    } while (more);
+
+    return leb;
+}
+
+void ffio_write_leb(AVIOContext *s, unsigned val)
+{
+    int len;
+    uint8_t byte;
+
+    len = (av_log2(val) + 7) / 7;
+
+    for (int i = 0; i < len; i++) {
+        byte = val >> (7 * i) & 0x7f;
+        if (i < len - 1)
+            byte |= 0x80;
+
+        avio_w8(s, byte);
+    }
+}
+
+void ffio_write_lines(AVIOContext *s, const unsigned char *buf, int size,
+                      const unsigned char *ending)
+{
+    int ending_len = ending ? strlen(ending) : 1;
+    if (!ending)
+        ending = "\n";
+    if (size < 0)
+        size = strlen(buf);
+
+    while (size > 0) {
+        size_t len = 0;
+        char last = 0;
+        for (; len < size; len++) {
+            last = buf[len];
+            if (last == '\r' || last == '\n')
+                break;
+        }
+
+        avio_write(s, buf, len);
+        avio_write(s, ending, ending_len);
+
+        buf += len + 1;
+        size -= len + 1;
+
+        if (size > 0 && last == '\r' && buf[0] == '\n') {
+            buf++;
+            size--;
+        }
+    }
+}
+
 int ffio_fdopen(AVIOContext **s, URLContext *h)
 {
     uint8_t *buffer = NULL;

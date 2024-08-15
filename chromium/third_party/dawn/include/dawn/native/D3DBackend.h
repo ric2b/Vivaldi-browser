@@ -51,12 +51,18 @@ struct DAWN_NATIVE_EXPORT RequestAdapterOptionsLUID : wgpu::ChainedStruct {
     ::LUID adapterLUID;
 };
 
+// Chrome uses 0 as acquire key.
+static constexpr UINT64 kDXGIKeyedMutexAcquireKey = 0;
+
 struct DAWN_NATIVE_EXPORT ExternalImageDescriptorDXGISharedHandle : ExternalImageDescriptor {
   public:
     ExternalImageDescriptorDXGISharedHandle();
 
     // Note: SharedHandle must be a handle to a texture object.
     HANDLE sharedHandle = nullptr;
+
+    // Whether the underlying texture has a keyed mutex which should be used for synchronization.
+    bool useKeyedMutex = false;
 };
 
 struct DAWN_NATIVE_EXPORT ExternalImageDescriptorD3D11Texture : ExternalImageDescriptor {

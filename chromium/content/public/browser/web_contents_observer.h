@@ -367,7 +367,9 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
 
   // These three methods correspond to the points in time when a document starts
   // loading for the first time (initiates outgoing requests), when incoming
-  // data subsequently starts arriving, and when it finishes loading.
+  // data subsequently starts arriving, and when it finishes loading. Note:
+  // There is no guarantee that calls to DidStartLoading/DidStopLoading are
+  // interleaved (e.g. there can be 2 calls to DidStartLoading in a row).
   virtual void DidStartLoading() {}
   virtual void DidStopLoading() {}
 
@@ -740,6 +742,10 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
 
   // Invoked when the beforeunload handler fires. |proceed| is set to true if
   // the beforeunload can safely proceed, otherwise it should be interrupted.
+  //
+  // Note: this is used to observe when the window/tab is being closed, or a
+  // GuestView is being attached to the current frame, and NOT used to observe
+  // the BeforeUnload events triggered by navigations.
   virtual void BeforeUnloadFired(bool proceed) {}
 
   // Invoked when a user cancels a before unload dialog.
@@ -886,6 +892,12 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
   // before its `WasDiscarded` is set to true and before it's attached to a tab
   // strip.
   virtual void AboutToBeDiscarded(WebContents* new_contents) {}
+
+  // Called when WebContents received a request to lock the keyboard.
+  virtual void KeyboardLockRequested() {}
+
+  // Called when WebContents received a request to lock the pointer.
+  virtual void PointerLockRequested() {}
 
   WebContents* web_contents() const;
 

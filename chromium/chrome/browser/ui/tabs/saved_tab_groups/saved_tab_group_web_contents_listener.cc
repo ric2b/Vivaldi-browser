@@ -13,6 +13,7 @@
 #include "content/public/browser/web_contents.h"
 #include "ui/base/page_transition_types.h"
 
+namespace tab_groups {
 namespace {
 
 bool IsSaveableNavigation(content::NavigationHandle* navigation_handle) {
@@ -27,6 +28,10 @@ bool IsSaveableNavigation(content::NavigationHandle* navigation_handle) {
     return false;
   }
   if (!ui::PageTransitionIsMainFrame(page_transition)) {
+    return false;
+  }
+
+  if (navigation_handle->IsSameDocument()) {
     return false;
   }
 
@@ -47,6 +52,11 @@ SavedTabGroupWebContentsListener::SavedTabGroupWebContentsListener(
 SavedTabGroupWebContentsListener::~SavedTabGroupWebContentsListener() = default;
 
 void SavedTabGroupWebContentsListener::NavigateToUrl(const GURL& url) {
+  if (web_contents_->GetURL().GetWithoutRef().spec() ==
+      url.GetWithoutRef().spec()) {
+    return;
+  }
+
   // Dont navigate to the new URL if its not valid for sync.
   if (!SavedTabGroupUtils::IsURLValidForSavedTabGroups(url)) {
     return;
@@ -84,3 +94,5 @@ void SavedTabGroupWebContentsListener::DidFinishNavigation(
   tab->SetFavicon(favicon::TabFaviconFromWebContents(web_contents_));
   model_->UpdateTabInGroup(group->saved_guid(), *tab);
 }
+
+}  // namespace tab_groups

@@ -9,8 +9,8 @@
 #include "testing/embedder_test.h"
 #include "testing/embedder_test_constants.h"
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
-#include "third_party/base/test/scoped_locale.h"
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#include "testing/scoped_locale.h"
 #endif
 
 using pdfium::RectanglesChecksum;
@@ -483,9 +483,9 @@ TEST_F(FPDFTransformEmbedderTest, TransFormWithClipAndSave) {
   }
 }
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 TEST_F(FPDFTransformEmbedderTest, TransFormWithClipAndSaveWithLocale) {
-  pdfium::base::ScopedLocale scoped_locale("da_DK.UTF-8");
+  pdfium::ScopedLocale scoped_locale("da_DK.UTF-8");
 
   {
     ASSERT_TRUE(OpenDocument("rectangles.pdf"));
@@ -542,5 +542,4 @@ TEST_F(FPDFTransformEmbedderTest, TransFormWithClipAndSaveWithLocale) {
     CloseSavedDocument();
   }
 }
-#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) ||
-        // BUILDFLAG(IS_FUCHSIA)
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)

@@ -12,7 +12,7 @@
     <output filename="values-ja-rKS/android_chrome_tab_ui_strings.xml" type="android" lang="ja-KS" />
     <output filename="values-jbo/android_chrome_tab_ui_strings.xml" type="android" lang="jbo" />
     <output filename="values-kab/android_chrome_tab_ui_strings.xml" type="android" lang="kab" />
-    <output filename="values-ku/android_chrome_tab_ui_strings.xml" type="android" lang="ku" />
+    <output filename="values-kmr/android_chrome_tab_ui_strings.xml" type="android" lang="kmr" />
     <output filename="values-nn/android_chrome_tab_ui_strings.xml" type="android" lang="nn" />
     <output filename="values-sc/android_chrome_tab_ui_strings.xml" type="android" lang="sc" />
   </outputs>
@@ -70,7 +70,7 @@
     <file path="strings/vivaldi_android_chrome_tab_ui_strings_km.xtb" lang="km" />
     <file path="strings/vivaldi_android_chrome_tab_ui_strings_kn.xtb" lang="kn" />
     <file path="strings/vivaldi_android_chrome_tab_ui_strings_ko.xtb" lang="ko" />
-    <file path="strings/vivaldi_android_chrome_tab_ui_strings_ku.xtb" lang="ku" />
+    <file path="strings/vivaldi_android_chrome_tab_ui_strings_kmr.xtb" lang="kmr" />
     <file path="strings/vivaldi_android_chrome_tab_ui_strings_ky.xtb" lang="ky" />
     <file path="strings/vivaldi_android_chrome_tab_ui_strings_lo.xtb" lang="lo" />
     <file path="strings/vivaldi_android_chrome_tab_ui_strings_lt.xtb" lang="lt" />

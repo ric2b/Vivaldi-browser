@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.browser.magic_stack;
 
-import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
-
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Canvas;
@@ -13,17 +11,18 @@ import android.graphics.Paint;
 import android.graphics.Paint.Style;
 import android.graphics.Rect;
 import android.view.View;
-import android.view.ViewGroup.MarginLayoutParams;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.core.text.TextUtilsCompat;
+import androidx.core.view.ViewCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import org.chromium.components.browser_ui.widget.displaystyle.UiConfig;
 import org.chromium.components.browser_ui.widget.displaystyle.UiConfig.DisplayStyle;
+
+import java.util.Locale;
 
 /** Circle pager indicator for recyclerview. */
 public class CirclePagerIndicatorDecoration extends RecyclerView.ItemDecoration {
@@ -46,8 +45,9 @@ public class CirclePagerIndicatorDecoration extends RecyclerView.ItemDecoration 
     private final float mIndicatorItemPaddingPx;
 
     private final Paint mPaint = new Paint();
-    private final UiConfig mUiConfig;
     private final boolean mIsTablet;
+
+    private final boolean mIsLeftToRight;
 
     /** The start margin of the recyclerview in pixel. */
     private int mStartMarginPx;
@@ -57,17 +57,14 @@ public class CirclePagerIndicatorDecoration extends RecyclerView.ItemDecoration 
 
     /**
      * @param context The {@link Context} that the application is running.
-     * @param uiConfig The instance of {@link UiConfig}.
      * @param startMarginPx The start margin of the first item of the recyclerview.
      */
     public CirclePagerIndicatorDecoration(
             @NonNull Context context,
-            @Nullable UiConfig uiConfig,
             int startMarginPx,
             int colorActive,
             int colorInactive,
             boolean isTablet) {
-        mUiConfig = uiConfig;
         mStartMarginPx = startMarginPx;
         mColorActive = colorActive;
         mColorInactive = colorInactive;
@@ -87,6 +84,10 @@ public class CirclePagerIndicatorDecoration extends RecyclerView.ItemDecoration 
         mIndicatorHeightPx =
                 (int) mIndicatorItemDiameterPx
                         + resources.getDimensionPixelSize(R.dimen.page_indicator_top_margin);
+
+        mIsLeftToRight =
+                TextUtilsCompat.getLayoutDirectionFromLocale(Locale.getDefault())
+                        == ViewCompat.LAYOUT_DIRECTION_LTR;
     }
 
     @Override
@@ -197,28 +198,20 @@ public class CirclePagerIndicatorDecoration extends RecyclerView.ItemDecoration 
         // they are hidden.
         outRect.bottom = itemCount <= mItemPerScreen ? 0 : mIndicatorHeightPx;
 
-        // Don't need to change the width of a child view on phones since there is only one item
-        // shown per screen, and it never changes.
-        if (!mIsTablet) return;
+        // If showing one card per screen, the view's width should match the parent recyclerview.
+        // Thus, we don't need to add extra padding on the left side of any card.
+        if (!mIsTablet || mItemPerScreen == 1 || itemCount == 1) return;
 
-        MarginLayoutParams marginLayoutParams = (MarginLayoutParams) view.getLayoutParams();
-        if (mItemPerScreen == 1 || itemCount == 1) {
-            // If showing one item per screen, the view's width should match the parent
-            // recyclerview.
-            marginLayoutParams.width = MATCH_PARENT;
-            return;
+        // On a wide screen, we will show 2 cards instead of 1 per screen. The card's width is
+        // calculated and doesn't match parent's width any more. Add a padding on the left side of
+        // any card except the first one if it is a left to right language; on the right side if it
+        // is a right to left language.
+        int padding = parent.getChildAdapterPosition(view) == 0 ? 0 : (int) mIndicatorItemPaddingPx;
+        if (mIsLeftToRight) {
+            outRect.left = padding;
+        } else {
+            outRect.right = padding;
         }
-
-        // On a wide screen, we will show 2 cards instead of 1 on the magic stack.
-        int position = parent.getChildAdapterPosition(view);
-        boolean isFirstPosition = position == 0;
-
-        // Updates the width of the view.
-        outRect.left = isFirstPosition ? 0 : (int) mIndicatorItemPaddingPx;
-        int width =
-                (int) (parent.getMeasuredWidth() - mIndicatorItemPaddingPx * (mItemPerScreen - 1))
-                        / mItemPerScreen;
-        marginLayoutParams.width = width;
     }
 
     void onDisplayStyleChanged(int startMarginPx, int itemPerScreen) {

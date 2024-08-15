@@ -5,9 +5,11 @@
 #include "components/gwp_asan/crash_handler/crash_analyzer.h"
 
 #include <stddef.h>
+
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -18,10 +20,8 @@
 #include "build/build_config.h"
 #include "components/gwp_asan/common/allocator_state.h"
 #include "components/gwp_asan/common/crash_key_name.h"
-#include "components/gwp_asan/common/lightweight_detector_state.h"
 #include "components/gwp_asan/common/pack_stack_trace.h"
 #include "components/gwp_asan/crash_handler/crash.pb.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/crashpad/crashpad/client/annotation.h"
 #include "third_party/crashpad/crashpad/snapshot/cpu_architecture.h"
 #include "third_party/crashpad/crashpad/snapshot/cpu_context.h"
@@ -212,6 +212,13 @@ bool CrashAnalyzer::AnalyzeLightweightDetectorCrash(
     return false;
   }
 
+  auto mode = LightweightDetectorModeToGwpAsanMode(valid_state.mode);
+  auto SetError = [proto, mode](const std::string& message) {
+    proto->set_mode(mode);
+    proto->set_missing_metadata(true);
+    proto->set_internal_error(message);
+  };
+
   auto* exception = process_snapshot.Exception();
   if (!exception->Context()->Is64Bit()) {
     // The lightweight detector isn't used on 32-bit platforms.
@@ -228,13 +235,12 @@ bool CrashAnalyzer::AnalyzeLightweightDetectorCrash(
     ReportHistogram(
         Crash_Allocator_PARTITIONALLOC,
         GwpAsanCrashAnalysisResult::kErrorFailedToReadLightweightSlotMetadata);
-    proto->set_missing_metadata(true);
-    proto->set_internal_error("Failed to read lightweight metadata.");
+    SetError("Failed to read lightweight metadata.");
     return true;
   }
 
   bool seen_candidate_id = false;
-  absl::optional<LightweightDetectorState::MetadataId> metadata_id;
+  std::optional<LightweightDetectorState::MetadataId> metadata_id;
   std::vector<uint64_t> candidate_addresses;
 
 #if defined(ARCH_CPU_X86_64)
@@ -292,9 +298,7 @@ bool CrashAnalyzer::AnalyzeLightweightDetectorCrash(
         ReportHistogram(Crash_Allocator_PARTITIONALLOC,
                         GwpAsanCrashAnalysisResult::
                             kErrorConflictingLightweightMetadataIds);
-        proto->set_missing_metadata(true);
-        proto->set_internal_error(
-            "Found conflicting lightweight metadata IDs.");
+        SetError("Found conflicting lightweight metadata IDs.");
         return true;
       }
     }
@@ -308,8 +312,7 @@ bool CrashAnalyzer::AnalyzeLightweightDetectorCrash(
     ReportHistogram(Crash_Allocator_PARTITIONALLOC,
                     GwpAsanCrashAnalysisResult::
                         kErrorInvalidOrOutdatedLightweightMetadataIndex);
-    proto->set_missing_metadata(true);
-    proto->set_internal_error(
+    SetError(
         "The computed lightweight metadata index was invalid or outdated.");
     return true;
   }
@@ -317,9 +320,10 @@ bool CrashAnalyzer::AnalyzeLightweightDetectorCrash(
   auto& metadata =
       valid_state.GetSlotMetadataById(*metadata_id, metadata_arr.get());
 
+  proto->set_mode(mode);
   proto->set_missing_metadata(false);
   proto->set_allocator(Crash_Allocator_PARTITIONALLOC);
-  proto->set_error_type(Crash_ErrorType_LIGHTWEIGHT_USE_AFTER_FREE);
+  proto->set_error_type(Crash_ErrorType_USE_AFTER_FREE);
   proto->set_allocation_address(metadata.alloc_ptr);
   proto->set_allocation_size(metadata.alloc_size);
   if (metadata.dealloc.tid != base::kInvalidThreadId ||
@@ -356,7 +360,7 @@ bool CrashAnalyzer::AnalyzeCrashedAllocator(
   // All errors that occur below happen for an exception known to be related to
   // GWP-ASan so we fill out the protobuf on error as well and include an error
   // string.
-
+  proto->set_mode(Crash_Mode_CLASSIC);
   proto->set_region_start(valid_state.pages_base_addr);
   proto->set_region_size(valid_state.pages_end_addr -
                          valid_state.pages_base_addr);
@@ -470,6 +474,18 @@ void CrashAnalyzer::ReadAllocationInfo(
   uint64_t* output = proto_info->mutable_stack_trace()->mutable_data();
   for (size_t i = 0; i < unpacked_len; i++)
     output[i] = unpacked_stack_trace[i];
+}
+
+Crash_Mode CrashAnalyzer::LightweightDetectorModeToGwpAsanMode(
+    LightweightDetectorMode mode) {
+  switch (mode) {
+    case LightweightDetectorMode::kBrpQuarantine:
+      return Crash_Mode_LIGHTWEIGHT_DETECTOR_BRP;
+    case LightweightDetectorMode::kRandom:
+      return Crash_Mode_LIGHTWEIGHT_DETECTOR_RANDOM;
+    default:
+      return Crash_Mode_UNSPECIFIED;
+  }
 }
 
 }  // namespace internal

@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {PrintPreviewModelElement, PrintPreviewPinSettingsElement, State} from 'chrome://print/print_preview.js';
+import type {PrintPreviewModelElement, PrintPreviewPinSettingsElement} from 'chrome://print/print_preview.js';
+import {State} from 'chrome://print/print_preview.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {fakeDataBind} from 'chrome://webui-test/polymer_test_util.js';
@@ -67,6 +68,7 @@ suite('PinSettingsTest', function() {
     assertEquals('', pinSection.getSettingValue('pinValue'));
 
     const input = pinSection.shadowRoot!.querySelector('cr-input')!;
+    await input.updateComplete;
     assertEquals('', input.value);
     assertFalse(pinSection.getSetting('pinValue').setFromUi);
 
@@ -164,7 +166,7 @@ suite('PinSettingsTest', function() {
 
   // Tests that if settings are enforced by enterprise policy the
   // appropriate UI is disabled.
-  test('disabled by policy', function() {
+  test('disabled by policy', async () => {
     const checkbox = pinSection.shadowRoot!.querySelector('cr-checkbox')!;
     assertFalse(checkbox.disabled);
 
@@ -173,6 +175,7 @@ suite('PinSettingsTest', function() {
     assertFalse(input.disabled);
 
     model.set('settings.pin.setByPolicy', true);
+    await input.updateComplete;
     assertTrue(checkbox.disabled);
     assertFalse(input.disabled);
   });

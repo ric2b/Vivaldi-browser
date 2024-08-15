@@ -79,6 +79,10 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
 
   void Install() const override { RunCommand("install"); }
 
+  void InstallEulaRequired() const override {
+    RunCommand("install_eula_required");
+  }
+
   void InstallUpdaterAndApp(const std::string& app_id,
                             const bool is_silent_install,
                             const std::string& tag,
@@ -136,8 +140,8 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
     updater::test::ExpectSelfUpdateSequence(updater_scope_, test_server);
   }
 
-  void ExpectUninstallPing(ScopedServer* test_server) const override {
-    updater::test::ExpectUninstallPing(updater_scope_, test_server);
+  void ExpectPing(ScopedServer* test_server, int event_type) const override {
+    updater::test::ExpectPing(updater_scope_, test_server, event_type);
   }
 
   void ExpectUpdateCheckRequest(ScopedServer* test_server) const override {
@@ -190,11 +194,12 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
   }
 
   void ExpectVersionActive(const std::string& version) const override {
-    RunCommand("expect_version_active", {Param("version", version)});
+    RunCommand("expect_version_active", {Param("updater_version", version)});
   }
 
   void ExpectVersionNotActive(const std::string& version) const override {
-    RunCommand("expect_version_not_active", {Param("version", version)});
+    RunCommand("expect_version_not_active",
+               {Param("updater_version", version)});
   }
 
   void ExpectActive(const std::string& app_id) const override {
@@ -247,8 +252,9 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
 
   void ExpectAppVersion(const std::string& app_id,
                         const base::Version& version) const override {
-    RunCommand("expect_app_version", {Param("app_id", app_id),
-                                      Param("version", version.GetString())});
+    RunCommand(
+        "expect_app_version",
+        {Param("app_id", app_id), Param("app_version", version.GetString())});
   }
 
   void SetActive(const std::string& app_id) const override {
@@ -310,7 +316,7 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
   void InstallApp(const std::string& app_id,
                   const base::Version& version) const override {
     RunCommand("install_app", {Param("app_id", app_id),
-                               Param("version", version.GetString())});
+                               Param("app_version", version.GetString())});
   }
 
   bool WaitForUpdaterExit() const override {
@@ -330,7 +336,8 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
       const std::string& app_id,
       AppBundleWebCreateMode app_bundle_web_create_mode,
       int expected_final_state,
-      int expected_error_code) const override {
+      int expected_error_code,
+      bool cancel_when_downloading) const override {
     RunCommand("expect_legacy_update3web_succeeds",
                {Param("app_id", app_id),
                 Param("app_bundle_web_create_mode",
@@ -339,7 +346,9 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
                 Param("expected_final_state",
                       base::NumberToString(expected_final_state)),
                 Param("expected_error_code",
-                      base::NumberToString(expected_error_code))});
+                      base::NumberToString(expected_error_code)),
+                Param("cancel_when_downloading",
+                      BoolToString(cancel_when_downloading))});
   }
 
   void ExpectLegacyProcessLauncherSucceeds() const override {
@@ -438,9 +447,9 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
 
   void RunRecoveryComponent(const std::string& app_id,
                             const base::Version& version) const override {
-    RunCommand(
-        "run_recovery_component",
-        {Param("app_id", app_id), Param("version", version.GetString())});
+    RunCommand("run_recovery_component",
+               {Param("app_id", app_id),
+                Param("browser_version", version.GetString())});
   }
 
   void SetLastChecked(const base::Time& time) const override {

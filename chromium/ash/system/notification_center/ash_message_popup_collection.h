@@ -54,7 +54,7 @@ class ASH_EXPORT AshMessagePopupCollection
   // All the types of surfaces that can make popup collection shift up. Used
   // inside of `NotifierCollisionHandler` for metrics collection. Make sure to
   // keep this in sync with `NotifierCollisionSurfaceType` in
-  // tools/metrics/histograms/enums.xml.
+  // tools/metrics/histograms/metadata/ash/enums.xml.
   enum class NotifierCollisionSurfaceType {
     // Default value. Ideally this should never be recorded in the metrics.
     kNone = 0,
@@ -222,7 +222,7 @@ class ASH_EXPORT AshMessagePopupCollection
   // Outlives this class.
   raw_ptr<Shelf> shelf_;
 
-  std::set<views::Widget*> tracked_widgets_;
+  std::set<raw_ptr<views::Widget, SetExperimental>> tracked_widgets_;
 
   // Tracks the smoothness of popup animation.
   std::optional<ui::ThroughputTracker> animation_tracker_;

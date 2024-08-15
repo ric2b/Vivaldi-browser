@@ -29,7 +29,6 @@
 #include "chrome/browser/component_updater/hyphenation_component_installer.h"
 #include "chrome/browser/component_updater/masked_domain_list_component_installer.h"
 #include "chrome/browser/component_updater/mei_preload_component_installer.h"
-#include "chrome/browser/component_updater/network_quality_observer.h"
 #include "chrome/browser/component_updater/pki_metadata_component_installer.h"
 #include "chrome/browser/component_updater/pnacl_component_installer.h"
 #include "chrome/browser/component_updater/privacy_sandbox_attestations_component_installer.h"
@@ -48,9 +47,9 @@
 #include "components/component_updater/url_param_filter_remover.h"
 #include "components/nacl/common/buildflags.h"
 #include "components/safe_browsing/core/common/features.h"
-#include "components/services/screen_ai/buildflags/buildflags.h"
 #include "device/vr/buildflags/buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
+#include "services/screen_ai/buildflags/buildflags.h"
 #include "third_party/widevine/cdm/buildflags.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -141,7 +140,7 @@ void RegisterComponentsForUpdate() {
   RegisterMaskedDomainListComponent(cus);
   RegisterPrivacySandboxAttestationsComponent(cus);
   if (base::FeatureList::IsEnabled(
-          features::kEnableNetworkServiceResourceBlockList)) {
+          features::kEnableFingerprintingProtectionBlocklist)) {
     RegisterAntiFingerprintingBlockedDomainListComponent(cus);
   }
 
@@ -155,7 +154,7 @@ void RegisterComponentsForUpdate() {
     // Clean up any existing versions of the blocklist if the feature is
     // disabled.
     if (!base::FeatureList::IsEnabled(
-            features::kEnableNetworkServiceResourceBlockList)) {
+            features::kEnableFingerprintingProtectionBlocklist)) {
       DeleteAntiFingerprintingBlockedDomainListComponent(path);
     }
 
@@ -227,9 +226,6 @@ void RegisterComponentsForUpdate() {
   RegisterCommerceHeuristicsComponent(cus);
 
   RegisterTpcdMetadataComponent(cus);
-
-  // TODO(crbug.com/1499359): Remove once the experiment has concluded.
-  EnsureNetworkQualityObserver();
 }
 
 }  // namespace component_updater

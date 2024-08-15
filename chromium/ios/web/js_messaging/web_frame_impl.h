@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/cancelable_callback.h"
+#import "base/memory/raw_ptr.h"
 #include "base/values.h"
 #include "ios/web/js_messaging/web_frame_internal.h"
 #include "ios/web/public/js_messaging/web_frame.h"
@@ -75,6 +76,10 @@ class WebFrameImpl : public WebFrame,
       JavaScriptContentWorld* content_world,
       base::OnceCallback<void(const base::Value*)> callback,
       base::TimeDelta timeout) override;
+  bool ExecuteJavaScriptInContentWorld(
+      const std::u16string& script,
+      JavaScriptContentWorld* content_world,
+      ExecuteJavaScriptCallbackWithError callback) override;
 
   // WebStateObserver:
   void WebStateDestroyed(web::WebState* web_state) override;
@@ -158,7 +163,7 @@ class WebFrameImpl : public WebFrame,
   // The security origin associated with this frame.
   GURL security_origin_;
   // The associated web state.
-  web::WebState* web_state_ = nullptr;
+  raw_ptr<web::WebState> web_state_ = nullptr;
 };
 
 }  // namespace web

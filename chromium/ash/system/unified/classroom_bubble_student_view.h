@@ -25,9 +25,9 @@ enum class StudentAssignmentsListType {
 
 // class ClassroomBubbleStudentView : public views::View {
 class ASH_EXPORT ClassroomBubbleStudentView : public ClassroomBubbleBaseView {
- public:
-  METADATA_HEADER(ClassroomBubbleStudentView);
+  METADATA_HEADER(ClassroomBubbleStudentView, ClassroomBubbleBaseView)
 
+ public:
   ClassroomBubbleStudentView();
   ClassroomBubbleStudentView(const ClassroomBubbleStudentView&) = delete;
   ClassroomBubbleStudentView& operator=(const ClassroomBubbleStudentView&) =
@@ -46,6 +46,9 @@ class ASH_EXPORT ClassroomBubbleStudentView : public ClassroomBubbleBaseView {
 
   // Handle switching between assignment lists.
   void SelectedAssignmentListChanged(bool initial_update);
+
+  // Time stamp of when the view was created.
+  const base::Time shown_time_;
 
   // The number of times that the selected list has changed during the lifetime
   // of this view.

@@ -32,8 +32,8 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierHeader = kSectionIdentifierEnumZero,
   SectionIdentifierUsernamePassword,
   SectionIdentifierSavePassword,
-  SectionIdentifierForgotUsernamePassword,
   SectionIdentifierLoginButton,
+  SectionIdentifierForgotUsernamePassword,
 };
 
 typedef NS_ENUM(NSInteger, ItemType) {
@@ -99,8 +99,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [model addSectionWithIdentifier:SectionIdentifierHeader];
   [model addSectionWithIdentifier:SectionIdentifierUsernamePassword];
   [model addSectionWithIdentifier:SectionIdentifierSavePassword];
-  [model addSectionWithIdentifier:SectionIdentifierForgotUsernamePassword];
   [model addSectionWithIdentifier:SectionIdentifierLoginButton];
+  [model addSectionWithIdentifier:SectionIdentifierForgotUsernamePassword];
 
   VivaldiTableViewIllustratedItem* title =
       [[VivaldiTableViewIllustratedItem alloc] initWithType:ItemTypeTitle];
@@ -168,21 +168,20 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [model addItem:self.switchItemSavePassword
       toSectionWithIdentifier:SectionIdentifierSavePassword];
 
-  // Add forgot username/password section. Order is important to keep this
-  // section below password field.
-  [self addForgotUsernamePasswordSection];
-
   TableViewTextButtonItem* loginButton =
       [[TableViewTextButtonItem alloc] initWithType:ItemTypeLoginButton];
   loginButton.buttonText =
       l10n_util::GetNSString(IDS_VIVALDI_ACCOUNT_LOG_IN);
   loginButton.textAlignment = NSTextAlignmentNatural;
-  loginButton.buttonBackgroundColor = [UIColor clearColor];
-  loginButton.buttonTextColor = [UIColor colorNamed:kBlueColor];
+  loginButton.buttonBackgroundColor = [UIColor colorNamed:kBlueColor];
+  loginButton.buttonTextColor = [UIColor colorNamed:kSolidButtonTextColor];
+  loginButton.cellBackgroundColor = loginButton.buttonBackgroundColor;
   loginButton.disableButtonIntrinsicWidth = YES;
 
   [self.tableViewModel addItem:loginButton
       toSectionWithIdentifier:SectionIdentifierLoginButton];
+
+  [self addForgotUsernamePasswordSection];
 }
 
 #pragma mark - UITableViewDelegate

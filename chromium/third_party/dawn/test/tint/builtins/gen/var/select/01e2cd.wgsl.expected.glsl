@@ -7,6 +7,7 @@ ivec3 tint_select(ivec3 param_0, ivec3 param_1, bvec3 param_2) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   ivec3 inner;
+  uint pad;
 } prevent_dce;
 
 void select_01e2cd() {
@@ -32,6 +33,7 @@ void main() {
 }
 #version 310 es
 precision highp float;
+precision highp int;
 
 ivec3 tint_select(ivec3 param_0, ivec3 param_1, bvec3 param_2) {
     return ivec3(param_2[0] ? param_1[0] : param_0[0], param_2[1] ? param_1[1] : param_0[1], param_2[2] ? param_1[2] : param_0[2]);
@@ -40,6 +42,7 @@ ivec3 tint_select(ivec3 param_0, ivec3 param_1, bvec3 param_2) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   ivec3 inner;
+  uint pad;
 } prevent_dce;
 
 void select_01e2cd() {
@@ -67,6 +70,7 @@ ivec3 tint_select(ivec3 param_0, ivec3 param_1, bvec3 param_2) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   ivec3 inner;
+  uint pad;
 } prevent_dce;
 
 void select_01e2cd() {

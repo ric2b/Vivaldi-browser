@@ -10,13 +10,13 @@
 #include <xf86drmMode.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/logging.h"
 #include "base/notreached.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/display/display_features.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/display/types/display_snapshot.h"
@@ -126,6 +126,17 @@ GetDisplayInfosAndInvalidCrtcs(const DrmWrapper& drm);
 // Returns the display infos parsed in |GetDisplayInfosAndInvalidCrtcs|
 HardwareDisplayControllerInfoList GetAvailableDisplayControllerInfos(
     const DrmWrapper& drm);
+
+// Returns a bitmask of possible CRTCs for at least one encoder in
+// |encoder_ids|. The index in the bitmask corresponds to drm_crtc_index().
+uint32_t GetPossibleCrtcsBitmaskFromEncoders(
+    const DrmWrapper& drm,
+    const std::vector<uint32_t>& encoder_ids);
+
+// Returns a list of all possible CRTCs for encoders with IDs in |encoder_ids|.
+std::vector<uint32_t> GetPossibleCrtcIdsFromBitmask(
+    const DrmWrapper& drm,
+    const uint32_t possible_crtcs_bitmask);
 
 bool SameMode(const drmModeModeInfo& lhs, const drmModeModeInfo& rhs);
 
@@ -274,8 +285,8 @@ const InternalType* GetInternalTypeValueFromDrmEnum(
 }
 
 // Get the DRM driver name.
-absl::optional<std::string> GetDrmDriverNameFromFd(int fd);
-absl::optional<std::string> GetDrmDriverNameFromPath(
+std::optional<std::string> GetDrmDriverNameFromFd(int fd);
+std::optional<std::string> GetDrmDriverNameFromPath(
     const char* device_file_name);
 
 // Get an ordered list of preferred DRM driver names for the

@@ -146,6 +146,9 @@ set(
   crypto/hpke/hpke_test_vectors.txt
   crypto/keccak/keccak_tests.txt
   crypto/kyber/kyber_tests.txt
+  crypto/pkcs8/test/bad1.p12
+  crypto/pkcs8/test/bad2.p12
+  crypto/pkcs8/test/bad3.p12
   crypto/pkcs8/test/empty_password.p12
   crypto/pkcs8/test/empty_password_ber.p12
   crypto/pkcs8/test/empty_password_ber_nested.p12
@@ -343,6 +346,7 @@ set(
   decrepit/blowfish/blowfish_test.cc
   decrepit/cast/cast_test.cc
   decrepit/cfb/cfb_test.cc
+  decrepit/des/des_test.cc
   decrepit/evp/evp_test.cc
   decrepit/ripemd/ripemd_test.cc
   decrepit/xts/xts_test.cc
@@ -355,6 +359,7 @@ set(
   pki/cert_error_params.cc
   pki/cert_errors.cc
   pki/cert_issuer_source_static.cc
+  pki/certificate.cc
   pki/certificate_policies.cc
   pki/common_cert_errors.cc
   pki/crl.cc
@@ -377,7 +382,6 @@ set(
   pki/signature_algorithm.cc
   pki/simple_path_builder_delegate.cc
   pki/string_util.cc
-  pki/tag.cc
   pki/trust_store_collection.cc
   pki/trust_store_in_memory.cc
   pki/trust_store.cc
@@ -391,6 +395,7 @@ set(
 
   crypto/test/gtest_main.cc
   pki/cert_issuer_source_static_unittest.cc
+  pki/certificate_unittest.cc
   pki/certificate_policies_unittest.cc
   pki/crl_unittest.cc
   pki/encode_values_unittest.cc
@@ -428,6 +433,7 @@ set(
 
   crypto/test/abi_test.cc
   crypto/test/file_test.cc
+  crypto/test/file_util.cc
   crypto/test/test_util.cc
   crypto/test/wycheproof_util.cc
 )
@@ -1426,6 +1432,8 @@ set(
   pki/testdata/path_builder_unittest/multi-root-D-by-D.pem
   pki/testdata/path_builder_unittest/multi-root-E-by-E.pem
   pki/testdata/path_builder_unittest/multi-root-F-by-E.pem
+  pki/testdata/path_builder_unittest/precertificate/precertificate.pem
+  pki/testdata/path_builder_unittest/precertificate/root.pem
   pki/testdata/path_builder_unittest/self_issued_prioritization/generate-certs.py
   pki/testdata/path_builder_unittest/self_issued_prioritization/keys/Root1.key
   pki/testdata/path_builder_unittest/self_issued_prioritization/keys/Root2.key
@@ -2268,4 +2276,6 @@ set(
   pki/testdata/verify_signed_data_unittest/rsa-pss-sha256.pem
   pki/testdata/verify_signed_data_unittest/rsa-using-ec-key.pem
   pki/testdata/verify_signed_data_unittest/rsa2048-pkcs1-sha512.pem
+  pki/testdata/verify_unittest/google-leaf.der
+  pki/testdata/verify_unittest/self-issued.pem
 )

@@ -21,15 +21,15 @@ const char kPriceTrackingIconColorsDescription[] =
     "Tonal colors for the expanded state of the price tracking chip on "
     "desktop.";
 
+const char kProductSpecificationsName[] = "Product Specifications";
+const char kProductSpecificationsDescription[] =
+    "Enable the Product Specifications feature.";
+
 const char kShoppingIconColorVariantName[] =
     "Enable color variant for shopping icons";
 const char kShoppingIconColorVariantDescription[] =
     "Enables a color variant for shopping page action icons (Price Insights & "
     "Price Tracking)";
-
-const char kShoppingCollectionName[] = "Shopping Collection";
-const char kShoppingCollectionDescription[] =
-    "Organize all products into an automatically created bookmark folder.";
 
 const char kShoppingListName[] = "Shopping List";
 const char kShoppingListDescription[] = "Enable shopping list in bookmarks.";
@@ -46,8 +46,20 @@ const char kParcelTrackingTestDataDescription[] =
 const char kPriceInsightsName[] = "Price Insights";
 const char kPriceInsightsDescription[] = "Enable price insights experiment.";
 
+#if BUILDFLAG(IS_IOS)
+extern const char kPriceInsightsIosName[] = "Price Insights";
+extern const char kPriceInsightsIosDescription[] =
+    "When enabled, the user will be able to get price insights on product "
+    "pages.";
+#endif
+
 const char kShoppingPageTypesName[] = "Shopping Page Types";
 const char kShoppingPageTypesDescription[] =
     "Enable shopping page types experiment.";
+
+const char kTrackByDefaultOnMobileName[] =
+    "Product Tracking by Default on Mobile";
+const char kTrackByDefaultOnMobileDescription[] =
+    "Enable tracking a product by default when bookmarking on mobile devices.";
 
 }  // namespace commerce::flag_descriptions

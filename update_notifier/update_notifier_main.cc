@@ -57,7 +57,7 @@ enum class Subaction {
   kUnregister,
 };
 
-absl::optional<Subaction> FindIfSubaction(
+std::optional<Subaction> FindIfSubaction(
     const base::CommandLine& command_line) {
   if (command_line.HasSwitch(kDisable))
     return Subaction::kDisable;
@@ -69,7 +69,7 @@ absl::optional<Subaction> FindIfSubaction(
     return Subaction::kLaunchIfEnabled;
   if (command_line.HasSwitch(kUnregister))
     return Subaction::kUnregister;
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 std::wstring TimeToSchedulerString(base::Time t) {
@@ -655,7 +655,7 @@ ExitCode WinMainImpl(HINSTANCE instance, HINSTANCE prev) {
         g_install_dir.empty() ? current_exe_path.DirName().DirName()
                               : g_install_dir;
 
-    absl::optional<vivaldi::InstallType> existing_install_type =
+    std::optional<vivaldi::InstallType> existing_install_type =
         vivaldi::FindInstallType(update_install_dir);
 #if defined(COMPONENT_BUILD)
     if (g_install_dir.empty()) {
@@ -682,7 +682,7 @@ ExitCode WinMainImpl(HINSTANCE instance, HINSTANCE prev) {
   if (g_mode == UpdateMode::kNetworkInstall && !g_install_dir.empty()) {
     // If the installation directory points to an existing installation, default
     // to the type of that installation.
-    absl::optional<vivaldi::InstallType> existing_install_type =
+    std::optional<vivaldi::InstallType> existing_install_type =
         vivaldi::FindInstallType(g_install_dir);
     if (existing_install_type) {
       g_install_type = *existing_install_type;
@@ -707,7 +707,7 @@ ExitCode WinMainImpl(HINSTANCE instance, HINSTANCE prev) {
     g_mode = UpdateMode::kManualCheck;
   }
 
-  absl::optional<Subaction> subaction = FindIfSubaction(command_line);
+  std::optional<Subaction> subaction = FindIfSubaction(command_line);
   if (subaction) {
     unique_switches++;
   }

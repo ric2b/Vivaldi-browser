@@ -64,6 +64,7 @@ import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdownScrollListener;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.toolbar.ButtonData;
@@ -106,6 +107,7 @@ import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarTabController;
 import org.chromium.chrome.browser.toolbar.top.NavigationPopup.HistoryDelegate;
 import org.chromium.ui.widget.ChromeImageButton;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 import org.chromium.url.GURL;
 import org.vivaldi.browser.toolbar.TrackerShieldButton;
@@ -1323,7 +1325,6 @@ public class ToolbarPhone extends ToolbarLayout
                                 mUrlFocusChangeFraction));
 
                 updateModernLocationBarCorners();
-                updateToolbarLayoutForUrlFocusChangeAnimation();
             }
         }
 
@@ -1332,27 +1333,6 @@ public class ToolbarPhone extends ToolbarLayout
         mLocationBar.getPhoneCoordinator().invalidate();
         invalidate();
         TraceEvent.end("ToolbarPhone.updateLocationBarLayoutForExpansionAnimation");
-    }
-
-    /** Updates the toolbar height and bottom padding during URL focus changing. */
-    private void updateToolbarLayoutForUrlFocusChangeAnimation() {
-        // With the smallest margins variant enabled, we still increase the height of the location
-        // bar bg but don't increase the height of the toolbar.
-        if (!OmniboxFeatures.shouldShowModernizeVisualUpdate(getContext())
-                || OmniboxFeatures.shouldShowSmallestMargins(getContext())) {
-            return;
-        }
-
-        int heightIncrease = calculateOnFocusHeightIncrease();
-
-        var layoutParams = getLayoutParams();
-        layoutParams.height =
-                getResources().getDimensionPixelSize(R.dimen.toolbar_height_no_shadow)
-                        + heightIncrease;
-        setLayoutParams(layoutParams);
-
-        // Apply extra bottom padding.
-        setPaddingRelative(getPaddingStart(), getPaddingTop(), getPaddingEnd(), heightIncrease);
     }
 
     /**
@@ -1939,7 +1919,9 @@ public class ToolbarPhone extends ToolbarLayout
         } else {
             PhoneCaptureStateToken newSnapshotState = generateToolbarSnapshotState();
             @ToolbarSnapshotDifference
-            int snapshotDifference = newSnapshotState.getAnyDifference(mPhoneCaptureStateToken);
+            int snapshotDifference =
+                    PhoneCaptureStateToken.getAnyDifference(
+                            mPhoneCaptureStateToken, newSnapshotState);
             if (snapshotDifference == ToolbarSnapshotDifference.NONE) {
                 return CaptureReadinessResult.notReady(TopToolbarBlockCaptureReason.SNAPSHOT_SAME);
             } else {
@@ -2047,7 +2029,6 @@ public class ToolbarPhone extends ToolbarLayout
             if (hideHomeButton) {
                 mHomeButton.setVisibility(View.GONE);
             } else {
-                mHomeButton.setVisibility(urlHasFocus() ? INVISIBLE : VISIBLE);
                 mHomeButton.setVisibility(urlHasFocus() ? INVISIBLE : VISIBLE);
             }
         }
@@ -2552,7 +2533,6 @@ public class ToolbarPhone extends ToolbarLayout
     }
 
     private void onTabCountChanged(int numberOfTabs) {
-        if (!BuildConfig.IS_VIVALDI)
         mHomeButton.setEnabled(true);
         if (mToggleTabStackButton == null) return;
 
@@ -2999,7 +2979,10 @@ public class ToolbarPhone extends ToolbarLayout
             View optionalButton = optionalButtonStub.inflate();
 
             UserEducationHelper userEducationHelper =
-                    new UserEducationHelper((Activity) getContext(), new Handler());
+                    new UserEducationHelper(
+                            (Activity) getContext(),
+                            ProfileManager.getLastUsedRegularProfile(),
+                            new Handler());
 
             BooleanSupplier isAnimationAllowedPredicate =
                     new BooleanSupplier() {
@@ -3020,7 +3003,7 @@ public class ToolbarPhone extends ToolbarLayout
                         }
                     };
 
-            Profile profile = Profile.getLastUsedRegularProfile();
+            Profile profile = ProfileManager.getLastUsedRegularProfile();
             Tracker featureEngagementTracker = TrackerFactory.getTrackerForProfile(profile);
             mOptionalButtonCoordinator =
                     new OptionalButtonCoordinator(
@@ -3426,12 +3409,12 @@ public class ToolbarPhone extends ToolbarLayout
         sPanelButton.setVisibility(visibility);
         mToggleTabStackButton.setVisibility(
                 isInMultiWindowMode && !isVisible ? VISIBLE : visibility);
+        mHomeButton.setVisibility(shouldShowStartPageIcon(orientation) ? VISIBLE: GONE);
         // For all other buttons we apply |GONE| when in portrait mode with toolbar at the bottom.
         if (orientation == Configuration.ORIENTATION_PORTRAIT && !isTopToolbarOn())
             visibility = GONE;
         mBackButton.setVisibility(visibility);
         mForwardButton.setVisibility(visibility);
-        sPanelButton.setVisibility(visibility);
         mToolbarButtonsContainer.requestLayout();
     }
 
@@ -3457,6 +3440,14 @@ public class ToolbarPhone extends ToolbarLayout
     }
 
     /** Vivaldi **/
+    public boolean shouldShowStartPageIcon(int orientation) {
+        if (!ChromeSharedPreferences.getInstance().readBoolean("homepage", true)) return false;
+        if (orientation == Configuration.ORIENTATION_LANDSCAPE) return true;
+        return !isTopToolbarOn()
+                && ChromeSharedPreferences.getInstance().readBoolean(
+                "show_start_page_icon", false);
+    }
+
     private void updateRefreshButtonVisibility(boolean hasUrlFocus) {
         if (!hasUrlFocus && UrlUtilities.isNtpUrl(getToolbarDataProvider().getCurrentGurl()))
             mReloadButton.setVisibility(GONE);

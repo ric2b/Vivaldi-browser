@@ -25,7 +25,6 @@
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/api/app_runtime.h"
-#include "extensions/common/extension_messages.h"
 #include "extensions/strings/grit/extensions_strings.h"
 #include "ipc/ipc_message_macros.h"
 
@@ -63,6 +62,8 @@ base::LazyInstance<PendingResponseMap>::DestructorAtExit
 
 // static.
 const char AppViewGuest::Type[] = "appview";
+const guest_view::GuestViewHistogramValue AppViewGuest::HistogramValue =
+    guest_view::GuestViewHistogramValue::kAppView;
 
 // static.
 bool AppViewGuest::CompletePendingRequest(

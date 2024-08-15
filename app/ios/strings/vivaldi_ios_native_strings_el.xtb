@@ -74,8 +74,10 @@
 <translation id="2448144008809286557">Ξεχάσατε το <ph name="BEGIN_LINK" />Όνομα χρήστη<ph name="END_LINK" /> ή τον <ph name="BEGIN_LINK" />Κωδικό<ph name="END_LINK" />?</translation>
 <translation id="2536780277491102902">ΕΞΑΙΡΕΣΕΙΣ</translation>
 <translation id="2558801801411970131">Αποκλεισμός Ιχνηλατών</translation>
+<translation id="2562040727226360285">Αφαίρεση ενοχλήσεων, πιθανή δυσλειτουργία ιστοτόπων (<ph name="ORIGIN" />)</translation>
 <translation id="2577446409661931381">Νέα Σημείωση</translation>
 <translation id="2619628557366098325">Πορτογαλικά (<ph name="ORIGIN" />)</translation>
+<translation id="2666092431469916601">Πάνω</translation>
 <translation id="2677862276555105603">Διαφήμιση
 αποκλείστηκε</translation>
 <translation id="2678542925523700624">Εσθονικά (<ph name="ORIGIN" />)</translation>
@@ -84,6 +86,7 @@
 <translation id="2745324713975967671">Κωδικός πρόσβασης κρυπτογράφησης</translation>
 <translation id="276436995507680929">Συγχρονίστε τη Λίστα Ανάγνωσης</translation>
 <translation id="2765217105034171413">Μικρό</translation>
+<translation id="2767124759205735526">Συγχρονισμός Ιστορικού και Πληκτρολογημένων Διευθύνσεων URL</translation>
 <translation id="2825232297853754349">Πρέπει να συμφωνήσετε με τους Όρους και τις Προϋποθέσεις.</translation>
 <translation id="2842985007712546952">Γονικός φάκελος</translation>
 <translation id="2843343418360315034">Ουγγρικά (<ph name="ORIGIN" />)</translation>
@@ -97,6 +100,7 @@
 <translation id="3073196329485613487">Συνδεθείτε στο λογαριασμό σας</translation>
 <translation id="307859903981308731">Συνεχίζοντας, συμφωνείτε με του Vivaldi</translation>
 <translation id="3086746722712840547">σημείωση</translation>
+<translation id="3087734570205094154">Κάτω</translation>
 <translation id="3091563570137981919">Αποκλεισμός Ιχνηλατών και Διαφημίσεων</translation>
 <translation id="3134385238404760368">Δεν υπάρχουν πρόσφατες καρτέλες</translation>
 <translation id="3157931365184549694">Επαναφορά</translation>
@@ -126,12 +130,14 @@
 <translation id="3699026013955941879">Ο κωδικός έχει λήξει. Παρακαλώ ζητήστε νέο κωδικό ενεργοποίησης.</translation>
 <translation id="3700829948786686853">Καλώς ήρθατε στο Vivaldi</translation>
 <translation id="3766350025418769949">Μπορείτε να χρησιμοποιήσετε τους κωδικούς πρόσβασης που έχετε αποθηκεύσει στον Διαχειριστή Κωδικών Πρόσβασης του Vivaldi σε άλλες εφαρμογές του iPad σας.</translation>
+<translation id="3842727926262967527">Επιλέξτε πού προτιμάτε να έχετε τη Γραμμή Καρτελών και το Πεδίο Διεύθυνσης.</translation>
 <translation id="3845564230651302310">Εφαρμογή Νέων Ρυθμίσεων Αποκλεισμού...</translation>
 <translation id="3858860766373142691">Όνομα</translation>
 <translation id="3866249974567520381">Περιγραφή</translation>
 <translation id="3872195896030547485">Παρακαλώ εισάγετε μια έγκυρη διεύθυνση ηλεκτρονικού ταχυδρομείου.</translation>
 <translation id="3894427358181296146">Προσθήκη φακέλου</translation>
 <translation id="3897092660631435901">Μενού</translation>
+<translation id="3921585859122905677">Θέση Γραμμής Διευθύνσεων</translation>
 <translation id="3953599441418463312">Ιαπωνικά (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">Ιχνηλάτης αποκλείστηκε</translation>
 <translation id="3958433364221339259">Αναζήτηση με <ph name="SEARCH_ENGINE" /></translation>
@@ -162,7 +168,9 @@
 <translation id="4394049700291259645">Απενεργοποίηση</translation>
 <translation id="4413780690230851155">Διαγραφή Ιστορικού Περιήγησης</translation>
 <translation id="4452878871193896747">Ινδονησιακά (<ph name="ORIGIN" />)</translation>
+<translation id="445620040230332178">Στυλ καρτέλας</translation>
 <translation id="4474581062946673155">Αυτήν τη στιγμή δεν έχετε συγχρονισμένες καρτέλες από άλλες συσκευές.</translation>
+<translation id="4488900295693536220">Ισχύει όταν η γραμμή διευθύνσεων βρίσκεται στο κάτω μέρος, διευκολύνει την πρόσβαση στις κορυφαίες προτάσεις.</translation>
 <translation id="4493850495402472953">και</translation>
 <translation id="4497115807425788318">Τοποθεσία</translation>
 <translation id="4507213865286211606">Προεπισκόπηση Μεγέθους</translation>
@@ -206,6 +214,7 @@
 <translation id="5238642303473095117">Διαγραφή Δεδομένων</translation>
 <translation id="5245732982828228444">Θα βρείτε τις σημειώσεις σας εδώ</translation>
 <translation id="5249199221558969362">Παρακαλώ εισαγάγετε έναν ρεαλιστικό αριθμό διάρκειας ζωής.</translation>
+<translation id="5271549068863921519">Αποθήκευση κωδικού</translation>
 <translation id="5290452628447338707">Δεν υπάρχουν σημειώσεις</translation>
 <translation id="5317780077021120954">Αποθήκευση</translation>
 <translation id="5349678548463426691">Κατά Περιγραφή</translation>
@@ -218,7 +227,6 @@
 <translation id="5439835075346716808">Η εγγραφή έχει αποκλειστεί προσωρινά από αυτήν την IP. Παρακαλώ προσπαθήστε ξανά αργότερα.</translation>
 <translation id="5486261815000869482">Επιβεβαίωση κωδικού</translation>
 <translation id="5494016731375030300">Καρτέλες που Έκλεισαν Πρόσφατα</translation>
-<translation id="5569279496588266002">Διάταξη Αρχικής Σελίδας</translation>
 <translation id="5639137028584114536">Ο οργανισμός σας απαιτεί από εσάς να κάνετε ιδιωτική περιήγηση. Οι καρτέλες δεν αποθηκεύονται στην Ιδιωτική λειτουργία.
          <ph name="BEGIN_LINK" />Μάθετε περισσότερα<ph name="END_LINK" /></translation>
 <translation id="5684277895745049190">Λίστα</translation>
@@ -316,6 +324,7 @@
 <translation id="8076492880354921740">Καρτέλες</translation>
 <translation id="8112996065264879835">Αυτός ο κωδικός δεν ταιριάζει με αυτόν που σας στείλαμε.
          Έχετε φτάσει το μέγιστο όριο λανθασμένων προσπαθειών. Ζητήστε νέο κωδικό χρησιμοποιώντας την επιλογή Επαναποστολή παρακάτω.</translation>
+<translation id="8142291334394582384">Αντίστροφη σειρά προτάσεων αναζήτησης</translation>
 <translation id="8147118677117542370">Παρακαλώ δώστε την ηλικία σας.</translation>
 <translation id="8165573437634525334">Τα δεδομένα προστατεύονται με κωδικό κρυπτογράφησης</translation>
 <translation id="8182979418912184986">Νέα ιδιωτική Καρτέλα</translation>
@@ -324,6 +333,7 @@
 <translation id="8273666073173891138">Η σημείωση αποθηκεύτηκε στο <ph name="FOLDER_TITLE" /></translation>
 <translation id="8275038454117074363">Εισαγωγή</translation>
 <translation id="8284356787013856231">Δεν επιτρέπεται το άνοιγμα του αρχείου</translation>
+<translation id="8289933454364510719">Πάνω ή κάτω</translation>
 <translation id="8326104954595890674">Νέα Ιδιωτική Καρτέλα</translation>
 <translation id="8329813750766387010">Ενημερώθηκε: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Κατάργηση προειδοποιήσεων cookie (<ph name="TYPE" />)</translation>
@@ -347,10 +357,11 @@
 <translation id="8684294196284714094">Είστε έτοιμοι να ορίσετε το Vivaldi ως το προεπιλεγμένο πρόγραμμα περιήγησής σας;</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> σημειώσεις διαγράφηκαν</translation>
 <translation id="8763006697839582351">Άνοιγμα στην Ιδιωτική Λειτουργία του Vivaldi</translation>
+<translation id="8765173886020357878">Προτάσεις Αναζήτησης</translation>
 <translation id="8804164990146287819">Πολιτική Απορρήτου</translation>
 <translation id="8819841443522803117">Ήρθε η ώρα να αλλάξετε το προεπιλεγμένο πρόγραμμα περιήγησής σας; Επιλέξτε Vivaldi.</translation>
 <translation id="8820817407110198400">Σελιδοδείκτες</translation>
-<translation id="8855707633300847215">Προβολή της Γραμμής Καρτελών</translation>
+<translation id="8855707633300847215">Εμφάνιση Γραμμής Καρτελών</translation>
 <translation id="8892354889971902600">Οι καρτέλες που κλείσατε πρόσφατα θα εμφανιστούν εδώ.</translation>
 <translation id="89390081013973080">Όλα έτοιμα! Ώρα να αποφασίσετε ποια δεδομένα θα συγχρονίσετε μεταξύ των συσκευών.</translation>
 <translation id="8965371804397726192">Έναρξη Συγχρονισμού Όλων των Δεδομένων</translation>

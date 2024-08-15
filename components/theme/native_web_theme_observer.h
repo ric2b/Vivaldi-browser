@@ -26,6 +26,12 @@ namespace vivaldi {
 class NativeWebThemeObserver : public extensions::BrowserContextKeyedAPI,
                                public ui::NativeThemeObserver {
  public:
+  enum PreferredColorScheme {
+    Auto = 0,
+    Light,
+    Dark,
+  };
+
   explicit NativeWebThemeObserver(content::BrowserContext* context);
 
   NativeWebThemeObserver(const NativeWebThemeObserver&) = delete;
@@ -42,7 +48,7 @@ class NativeWebThemeObserver : public extensions::BrowserContextKeyedAPI,
   void OnNativeThemeUpdated(ui::NativeTheme* observed_theme) override;
 
  private:
-  void OnPreferedColorSchemeChange(ui::NativeTheme* observed_theme);
+  void OnPreferredColorSchemeChange(ui::NativeTheme* observed_theme);
   void OnForceDarkThemeChange();
   void OnAboutFlagsStorageRecieved(
       std::unique_ptr<flags_ui::FlagsStorage> storage,
@@ -56,6 +62,7 @@ class NativeWebThemeObserver : public extensions::BrowserContextKeyedAPI,
   static const bool kServiceIsNULLWhileTesting = true;
 
   raw_ptr<Profile> profile_;
+  PrefChangeRegistrar local_state_change_registrar;
   PrefChangeRegistrar pref_change_registrar;
   base::ScopedObservation<ui::NativeTheme, ui::NativeThemeObserver>
       native_theme_observation_{this};

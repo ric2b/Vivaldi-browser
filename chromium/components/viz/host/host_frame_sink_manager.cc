@@ -4,10 +4,11 @@
 
 #include "components/viz/host/host_frame_sink_manager.h"
 
+#include <optional>
 #include <utility>
+#include <vector>
 
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/observer_list.h"
@@ -19,7 +20,6 @@
 #include "components/viz/host/renderer_settings_creation.h"
 #include "mojo/public/cpp/bindings/sync_call_restrictions.h"
 #include "services/viz/privileged/mojom/compositing/renderer_settings.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace viz {
 
@@ -174,7 +174,7 @@ void HostFrameSinkManager::CreateCompositorFrameSink(
     const FrameSinkId& frame_sink_id,
     mojo::PendingReceiver<mojom::CompositorFrameSink> receiver,
     mojo::PendingRemote<mojom::CompositorFrameSinkClient> client) {
-  CreateFrameSink(frame_sink_id, /*bundle_id=*/absl::nullopt,
+  CreateFrameSink(frame_sink_id, /*bundle_id=*/std::nullopt,
                   std::move(receiver), std::move(client));
 }
 
@@ -197,7 +197,7 @@ void HostFrameSinkManager::CreateBundledCompositorFrameSink(
 
 void HostFrameSinkManager::CreateFrameSink(
     const FrameSinkId& frame_sink_id,
-    absl::optional<FrameSinkBundleId> bundle_id,
+    std::optional<FrameSinkBundleId> bundle_id,
     mojo::PendingReceiver<mojom::CompositorFrameSink> receiver,
     mojo::PendingRemote<mojom::CompositorFrameSinkClient> client) {
   FrameSinkData& data = frame_sink_data_map_[frame_sink_id];
@@ -257,7 +257,7 @@ void HostFrameSinkManager::UnregisterFrameSinkHierarchy(
     const FrameSinkId& child_frame_sink_id) {
   // Unregister and clear the stored parent.
   FrameSinkData& parent_data = frame_sink_data_map_[parent_frame_sink_id];
-  size_t num_erased = base::Erase(parent_data.children, child_frame_sink_id);
+  size_t num_erased = std::erase(parent_data.children, child_frame_sink_id);
   CHECK_EQ(num_erased, 1u);
 
   if (parent_data.IsEmpty())
@@ -469,6 +469,18 @@ void HostFrameSinkManager::StopFrameCountingForTest(
     mojom::FrameSinkManager::StopFrameCountingForTestCallback callback) {
   frame_sink_manager_->StopFrameCountingForTest(  // IN-TEST
       std::move(callback));
+}
+
+void HostFrameSinkManager::ClearUnclaimedViewTransitionResources(
+    const NavigationId& navigation_id) {
+  frame_sink_manager_->ClearUnclaimedViewTransitionResources(navigation_id);
+}
+
+bool HostFrameSinkManager::HasUnclaimedViewTransitionResourcesForTest() {
+  bool has_resources = false;
+  frame_sink_manager_->HasUnclaimedViewTransitionResourcesForTest(
+      &has_resources);
+  return has_resources;
 }
 
 HostFrameSinkManager::FrameSinkData::FrameSinkData() = default;

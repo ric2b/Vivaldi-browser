@@ -4,13 +4,14 @@
 
 #include "extended_key_usage.h"
 
+#include <openssl/bytestring.h>
+
 #include "input.h"
 #include "parser.h"
-#include "tag.h"
 
 namespace bssl {
 
-bool ParseEKUExtension(const der::Input &extension_value,
+bool ParseEKUExtension(der::Input extension_value,
                        std::vector<der::Input> *eku_oids) {
   der::Parser extension_parser(extension_value);
   der::Parser sequence_parser;
@@ -27,7 +28,7 @@ bool ParseEKUExtension(const der::Input &extension_value,
   }
   while (sequence_parser.HasMore()) {
     der::Input eku_oid;
-    if (!sequence_parser.ReadTag(der::kOid, &eku_oid)) {
+    if (!sequence_parser.ReadTag(CBS_ASN1_OBJECT, &eku_oid)) {
       // The SEQUENCE OF must contain only KeyPurposeIds (OIDs).
       return false;
     }

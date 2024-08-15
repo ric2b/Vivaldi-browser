@@ -45,7 +45,8 @@ class BackForwardCacheMetrics
     : public base::RefCounted<BackForwardCacheMetrics> {
  public:
   // Please keep in sync with BackForwardCacheNotRestoredReason in
-  // tools/metrics/histograms/enums.xml. These values should not be renumbered.
+  // tools/metrics/histograms/metadata/navigation/enums.xml. These values should
+  // not be renumbered.
   enum class NotRestoredReason : uint8_t {
     kMinValue = 0,
     kNotPrimaryMainFrame = 0,
@@ -85,7 +86,7 @@ class BackForwardCacheMetrics
     kEnteredBackForwardCacheBeforeServiceWorkerHostAdded = 26,
     // 27: kRenderFrameHostReused_SameSite was removed.
     // 28: kRenderFrameHostReused_CrossSite was removed.
-    kNotMostRecentNavigationEntry = 29,
+    // 29: kNotMostRecentNavigationEntry was removed.
     kServiceWorkerClaim = 30,
     kIgnoreEventAndEvict = 31,
     kHaveInnerContents = 32,
@@ -117,14 +118,15 @@ class BackForwardCacheMetrics
     kCacheControlNoStore = 53,
     kCacheControlNoStoreCookieModified = 54,
     kCacheControlNoStoreHTTPOnlyCookieModified = 55,
-    kNoResponseHead = 56,
+    // 56: kNoResponseHead was fixed.
     // 57: kActivationNavigationsDisallowedForBug1234857 was fixed.
     kErrorDocument = 58,
-    kFencedFramesEmbedder = 59,
+    // 59: kFencedFramesEmbedder was removed.
     kCookieDisabled = 60,
     kHTTPAuthRequired = 61,
     kCookieFlushed = 62,
-    kMaxValue = kCookieFlushed,
+    kBroadcastChannelOnMessage = 63,
+    kMaxValue = kBroadcastChannelOnMessage,
   };
 
   using NotRestoredReasons =

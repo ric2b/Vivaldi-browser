@@ -95,7 +95,7 @@ import org.chromium.chrome.browser.permissions.PermissionTestRule;
 import org.chromium.chrome.browser.permissions.PermissionTestRule.PermissionUpdateWaiter;
 import org.chromium.chrome.browser.privacy_sandbox.FakeTrackingProtectionBridge;
 import org.chromium.chrome.browser.privacy_sandbox.TrackingProtectionBridgeJni;
-import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.tab.Tab;
@@ -132,7 +132,6 @@ import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.content_settings.CookieControlsMode;
 import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.components.location.LocationUtils;
-import org.chromium.components.permissions.PermissionsAndroidFeatureList;
 import org.chromium.components.permissions.nfc.NfcSystemLevelSetting;
 import org.chromium.components.policy.test.annotations.Policies;
 import org.chromium.components.prefs.PrefService;
@@ -266,7 +265,7 @@ public class SiteSettingsTest {
     }
 
     private static BrowserContextHandle getBrowserContextHandle() {
-        return Profile.getLastUsedRegularProfile();
+        return ProfileManager.getLastUsedRegularProfile();
     }
 
     private void initializeUpdateWaiter(final boolean expectGranted) {
@@ -305,11 +304,11 @@ public class SiteSettingsTest {
         CallbackHelper helper = new CallbackHelper();
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    BrowsingDataBridge.getInstance()
+                    BrowsingDataBridge.getForProfile(ProfileManager.getLastUsedRegularProfile())
                             .clearBrowsingData(
                                     helper::notifyCalled,
                                     new int[] {
-                                        BrowsingDataType.COOKIES, BrowsingDataType.SITE_SETTINGS
+                                        BrowsingDataType.SITE_DATA, BrowsingDataType.SITE_SETTINGS
                                     },
                                     TimePeriod.ALL_TIME);
                 });
@@ -484,7 +483,7 @@ public class SiteSettingsTest {
                     }
 
                     private boolean doesAcceptCookies() {
-                        return UserPrefs.get(Profile.getLastUsedRegularProfile())
+                        return UserPrefs.get(ProfileManager.getLastUsedRegularProfile())
                                         .getInteger(COOKIE_CONTROLS_MODE)
                                 == CookieControlsMode.OFF;
                     }
@@ -541,7 +540,7 @@ public class SiteSettingsTest {
                             "Third Party Cookie Blocking should be "
                                     + (expected ? "managed" : "unmanaged"),
                             expected,
-                            UserPrefs.get(Profile.getLastUsedRegularProfile())
+                            UserPrefs.get(ProfileManager.getLastUsedRegularProfile())
                                     .isManagedPreference(COOKIE_CONTROLS_MODE));
                 });
     }
@@ -667,7 +666,6 @@ public class SiteSettingsTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @DisabledTest(message = "TODO(crbug.com/1449833)")
     public void testCookiesNotBlocked() throws Exception {
         SettingsActivity settingsActivity =
                 SiteSettingsTestUtils.startSiteSettingsCategory(
@@ -1406,7 +1404,6 @@ public class SiteSettingsTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures({PermissionsAndroidFeatureList.PERMISSION_STORAGE_ACCESS})
     public void testOnlyExpectedPreferencesStorageAccess() {
         testExpectedPreferences(
                 SiteSettingsCategory.Type.STORAGE_ACCESS,
@@ -1417,7 +1414,6 @@ public class SiteSettingsTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures({PermissionsAndroidFeatureList.PERMISSION_STORAGE_ACCESS})
     public void testExpectedExceptionsStorageAccess() {
         createStorageAccessExceptions();
         SiteSettingsTestUtils.startSiteSettingsCategory(SiteSettingsCategory.Type.STORAGE_ACCESS);
@@ -1438,7 +1434,6 @@ public class SiteSettingsTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures({PermissionsAndroidFeatureList.PERMISSION_STORAGE_ACCESS})
     public void testResetExceptionGroupStorageAccess() {
         createStorageAccessExceptions();
         SiteSettingsTestUtils.startSiteSettingsCategory(SiteSettingsCategory.Type.STORAGE_ACCESS);
@@ -1482,7 +1477,6 @@ public class SiteSettingsTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures({PermissionsAndroidFeatureList.PERMISSION_STORAGE_ACCESS})
     public void testBlockExceptionGroupStorageAccess() {
         createStorageAccessExceptions();
         SiteSettingsTestUtils.startSiteSettingsCategory(SiteSettingsCategory.Type.STORAGE_ACCESS);
@@ -1524,7 +1518,6 @@ public class SiteSettingsTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures({PermissionsAndroidFeatureList.PERMISSION_STORAGE_ACCESS})
     public void testStorageAccessSubpage() {
         createStorageAccessExceptions();
         final SettingsActivity settingsActivity =
@@ -2633,7 +2626,6 @@ public class SiteSettingsTest {
     @Test
     @SmallTest
     @Feature({"RenderTest"})
-    @EnableFeatures({PermissionsAndroidFeatureList.PERMISSION_STORAGE_ACCESS})
     public void testRenderStorageAccessPage() throws Exception {
         createStorageAccessExceptions();
         renderCategoryPage(
@@ -2643,7 +2635,6 @@ public class SiteSettingsTest {
     @Test
     @SmallTest
     @Feature({"RenderTest"})
-    @EnableFeatures({PermissionsAndroidFeatureList.PERMISSION_STORAGE_ACCESS})
     public void testRenderStorageAccessSubpage() throws Exception {
         createStorageAccessExceptions();
         final SettingsActivity settingsActivity =
@@ -2949,7 +2940,7 @@ public class SiteSettingsTest {
 
             var delegate =
                     new ChromeSiteSettingsDelegate(
-                            toggle.getContext(), Profile.getLastUsedRegularProfile());
+                            toggle.getContext(), ProfileManager.getLastUsedRegularProfile());
 
             Assert.assertEquals(
                     "Preference title is not set correctly.",

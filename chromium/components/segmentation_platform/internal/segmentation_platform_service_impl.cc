@@ -97,7 +97,7 @@ SegmentationPlatformServiceImpl::SegmentationPlatformServiceImpl(
   // Construct signal processors.
   DCHECK(!init_params->profile_id.empty());
   signal_handler_.Initialize(
-      storage_service_.get(), init_params->history_service,
+      storage_service_.get(), init_params->history_service, profile_prefs_,
       config_holder->all_segment_ids(), init_params->profile_id,
       base::BindRepeating(
           &SegmentationPlatformServiceImpl::OnModelRefreshNeeded,
@@ -281,7 +281,7 @@ void SegmentationPlatformServiceImpl::OnDatabaseInitialized(bool success) {
 
 void SegmentationPlatformServiceImpl::OnSegmentationModelUpdated(
     proto::SegmentInfo segment_info,
-    absl::optional<int64_t> old_model_version) {
+    std::optional<int64_t> old_model_version) {
   CHECK(IsPlatformInitialized());
   if (!segment_info.has_model_metadata()) {
     signal_handler_.OnSignalListUpdated();
@@ -360,6 +360,8 @@ void SegmentationPlatformService::RegisterProfilePrefs(
   registry->RegisterDictionaryPref(kSegmentationResultPref);
   registry->RegisterStringPref(kSegmentationClientResultPrefs, std::string());
   registry->RegisterTimePref(kSegmentationLastDBCompactionTimePref,
+                             base::Time());
+  registry->RegisterTimePref(kSegmentationUmaSqlDatabaseStartTimePref,
                              base::Time());
 }
 

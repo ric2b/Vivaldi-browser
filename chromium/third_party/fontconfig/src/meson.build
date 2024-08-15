@@ -1,6 +1,6 @@
 project('fontconfig', 'c',
-  version: '2.14.2',
-  meson_version : '>= 0.57.0',
+  version: '2.15.0',
+  meson_version : '>= 0.60.0',
   default_options: [ 'buildtype=debugoptimized'],
 )
 
@@ -209,6 +209,20 @@ if cc.links(files('meson-cc-tests/solaris-atomic-operations.c'), name: 'Solaris 
 endif
 
 
+# Check iconv support
+iconv_dep = []
+found_iconv = 0
+if host_machine.system() != 'windows'
+  iconv_dep = dependency('iconv', required: get_option('iconv'))
+  found_iconv = iconv_dep.found().to_int()
+else
+  if get_option('iconv').enabled()
+    warning('-Diconv was set but this is not functional on Windows.')
+  endif
+endif
+conf.set('USE_ICONV', found_iconv)
+deps += [iconv_dep]
+
 prefix = get_option('prefix')
 
 fonts_conf = configuration_data()
@@ -288,7 +302,7 @@ endif
 
 fc_baseconfigdir = get_option('baseconfig-dir')
 if fc_baseconfigdir in ['default', 'yes', 'no']
-fc_baseconfigdir = prefix / get_option('sysconfdir') / 'fonts'
+  fc_baseconfigdir = prefix / get_option('sysconfdir') / 'fonts'
 endif
 
 fc_configdir = get_option('config-dir')
@@ -325,7 +339,7 @@ if gperf.found()
   @1@
   '''
   gperf_snippet = run_command(gperf, '-L', 'ANSI-C', files('meson-cc-tests/gperf.txt'),
-    check: true).stdout()
+                              check: true).stdout()
 
   foreach type : ['size_t', 'unsigned']
     if cc.compiles(gperf_test_format.format(type, gperf_snippet))
@@ -347,7 +361,7 @@ endif
 message('gperf len type is @0@'.format(gperf_len_type))
 
 conf.set('FC_GPERF_SIZE_T', gperf_len_type,
-  description : 'The type of gperf "len" parameter')
+         description : 'The type of gperf "len" parameter')
 
 conf.set('_GNU_SOURCE', true)
 
@@ -370,16 +384,16 @@ fcstdint_h = configure_file(
 makealias = files('src/makealias.py')[0]
 
 alias_headers = custom_target('alias_headers',
-  output: ['fcalias.h', 'fcaliastail.h'],
-  input: ['fontconfig/fontconfig.h', 'src/fcdeprecate.h', 'fontconfig/fcprivate.h'],
-  command: [python3, makealias, join_paths(meson.current_source_dir(), 'src'), '@OUTPUT@', '@INPUT@'],
-)
+                              output: ['fcalias.h', 'fcaliastail.h'],
+                              input: ['fontconfig/fontconfig.h', 'src/fcdeprecate.h', 'fontconfig/fcprivate.h'],
+                              command: [python3, makealias, join_paths(meson.current_source_dir(), 'src'), '@OUTPUT@', '@INPUT@'],
+                             )
 
 ft_alias_headers = custom_target('ft_alias_headers',
-  output: ['fcftalias.h', 'fcftaliastail.h'],
-  input: ['fontconfig/fcfreetype.h'],
-  command: [python3, makealias, join_paths(meson.current_source_dir(), 'src'), '@OUTPUT@', '@INPUT@']
-)
+                                 output: ['fcftalias.h', 'fcftaliastail.h'],
+                                 input: ['fontconfig/fcfreetype.h'],
+                                 command: [python3, makealias, join_paths(meson.current_source_dir(), 'src'), '@OUTPUT@', '@INPUT@']
+                                )
 
 tools_man_pages = []
 
@@ -420,14 +434,14 @@ endif
 configure_file(output: 'config.h', configuration: conf)
 
 configure_file(output: 'fonts.conf',
-  input: 'fonts.conf.in',
-  configuration: fonts_conf,
-  install_dir: fc_baseconfigdir,
-  install: true)
+               input: 'fonts.conf.in',
+               configuration: fonts_conf,
+               install_dir: fc_baseconfigdir,
+               install: true)
 
 install_data('fonts.dtd',
-  install_dir: join_paths(get_option('prefix'), get_option('datadir'), 'xml/fontconfig')
-)
+             install_dir: join_paths(get_option('prefix'), get_option('datadir'), 'xml/fontconfig')
+            )
 
 fc_headers = [
   'fontconfig/fontconfig.h',
@@ -441,20 +455,21 @@ install_headers(fc_headers, subdir: meson.project_name())
 doc_targets = get_variable('doc_targets', [])
 
 summary({
-       'Documentation': (doc_targets.length() > 0 ? doc_targets : false),
-       'NLS': not get_option('nls').disabled(),
-       'Tests': not get_option('tests').disabled(),
-       'Tools': not get_option('tools').disabled(),
-       }, section: 'General', bool_yn: true, list_sep: ', ')
+  'Documentation': (doc_targets.length() > 0 ? doc_targets : false),
+  'NLS': not get_option('nls').disabled(),
+  'Tests': not get_option('tests').disabled(),
+  'Tools': not get_option('tools').disabled(),
+  'iconv': found_iconv == 1,
+}, section: 'General', bool_yn: true, list_sep: ', ')
 summary({
-       'Hinting': preferred_hinting,
-       'Font directories': fc_fonts_paths,
-       'Additional font directories': fc_add_fonts,
-       }, section: 'Defaults', bool_yn: true, list_sep: ', ')
+  'Hinting': preferred_hinting,
+  'Font directories': fc_fonts_paths,
+  'Additional font directories': fc_add_fonts,
+}, section: 'Defaults', bool_yn: true, list_sep: ', ')
 summary({
-       'Cache directory': fc_cachedir,
-       'Template directory': fc_templatedir,
-       'Base config directory': fc_baseconfigdir,
-       'Config directory': fc_configdir,
-       'XML directory': fc_xmldir,
-       }, section: 'Paths', bool_yn: true, list_sep: ', ')
+  'Cache directory': fc_cachedir,
+  'Template directory': fc_templatedir,
+  'Base config directory': fc_baseconfigdir,
+  'Config directory': fc_configdir,
+  'XML directory': fc_xmldir,
+}, section: 'Paths', bool_yn: true, list_sep: ', ')

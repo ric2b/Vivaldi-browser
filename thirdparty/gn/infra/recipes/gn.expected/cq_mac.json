@@ -187,11 +187,11 @@
       "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
       "@@@STEP_LOG_LINE@json.output@    \"\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
-      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-integration-----\", @@@",
+      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-integration-----\",@@@",
       "@@@STEP_LOG_LINE@json.output@        \"package\": \"fuchsia/third_party/clang/resolved-platform\"@@@",
-      "@@@STEP_LOG_LINE@json.output@      }, @@@",
+      "@@@STEP_LOG_LINE@json.output@      },@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
-      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-version:1.8.2---\", @@@",
+      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-version:1.8.2---\",@@@",
       "@@@STEP_LOG_LINE@json.output@        \"package\": \"infra/ninja/resolved-platform\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }@@@",
       "@@@STEP_LOG_LINE@json.output@    ]@@@",
@@ -232,7 +232,7 @@
       "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
       "@@@STEP_LOG_LINE@json.output@    \"\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
-      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-git_revision:e9b\", @@@",
+      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-git_revision:e9b\",@@@",
       "@@@STEP_LOG_LINE@json.output@        \"package\": \"infra/tools/mac_toolchain/resolved-platform\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }@@@",
       "@@@STEP_LOG_LINE@json.output@    ]@@@",
@@ -667,7 +667,7 @@
       "ensure-directory",
       "--mode",
       "0777",
-      "[START_DIR]/cipd_tool/infra/tools/luci/cas/git_revision%3Amock_infra_git_revision"
+      "[START_DIR]/cipd_tool/infra/tools/luci/cas/33f9d887e5b8aeaaf9d65506acccfa8da2c480712e534a23a79e92c342c44bee"
     ],
     "cwd": "[START_DIR]/gn",
     "env": {
@@ -700,7 +700,7 @@
       "cipd",
       "ensure",
       "-root",
-      "[START_DIR]/cipd_tool/infra/tools/luci/cas/git_revision%3Amock_infra_git_revision",
+      "[START_DIR]/cipd_tool/infra/tools/luci/cas/33f9d887e5b8aeaaf9d65506acccfa8da2c480712e534a23a79e92c342c44bee",
       "-ensure-file",
       "infra/tools/luci/cas/${platform} git_revision:mock_infra_git_revision",
       "-max-threads",
@@ -736,7 +736,7 @@
       "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
       "@@@STEP_LOG_LINE@json.output@    \"\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
-      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-git_revision:moc\", @@@",
+      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-git_revision:moc\",@@@",
       "@@@STEP_LOG_LINE@json.output@        \"package\": \"infra/tools/luci/cas/resolved-platform\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }@@@",
       "@@@STEP_LOG_LINE@json.output@    ]@@@",
@@ -747,14 +747,16 @@
   },
   {
     "cmd": [
-      "[START_DIR]/cipd_tool/infra/tools/luci/cas/git_revision%3Amock_infra_git_revision/cas",
+      "[START_DIR]/cipd_tool/infra/tools/luci/cas/33f9d887e5b8aeaaf9d65506acccfa8da2c480712e534a23a79e92c342c44bee/cas",
       "archive",
+      "-log-level",
+      "info",
       "-cas-instance",
       "projects/example-cas-server/instances/default_instance",
       "-dump-digest",
       "/path/to/tmp/",
-      "-paths",
-      "[START_DIR]/gn/out:gn"
+      "-paths-json",
+      "[[\"[START_DIR]/gn/out\", \"gn\"]]"
     ],
     "cwd": "[START_DIR]/gn",
     "env": {
@@ -917,14 +919,16 @@
   },
   {
     "cmd": [
-      "[START_DIR]/cipd_tool/infra/tools/luci/cas/git_revision%3Amock_infra_git_revision/cas",
+      "[START_DIR]/cipd_tool/infra/tools/luci/cas/33f9d887e5b8aeaaf9d65506acccfa8da2c480712e534a23a79e92c342c44bee/cas",
       "archive",
+      "-log-level",
+      "info",
       "-cas-instance",
       "projects/example-cas-server/instances/default_instance",
       "-dump-digest",
       "/path/to/tmp/",
-      "-paths",
-      "[START_DIR]/gn/out:gn"
+      "-paths-json",
+      "[[\"[START_DIR]/gn/out\", \"gn\"]]"
     ],
     "cwd": "[START_DIR]/gn",
     "env": {

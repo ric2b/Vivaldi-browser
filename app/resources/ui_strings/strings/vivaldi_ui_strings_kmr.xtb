@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="kmr">
+<translation id="1127811143501539442">{DAYS, plural, = 1 {1 roj berê} other {# roj berê}}</translation>
+<translation id="1156623771253174079">{SECONDS, plural, = 1 {1 xulek berê} other {# xulek berê}}</translation>
+<translation id="1368832886055348810">Ji çepê ber bi rastê ve</translation>
+<translation id="1591184457164800433">{MINUTES, plural, = 1 {1 xuleke û} other {# xulek û}}</translation>
+<translation id="1752946267035950200">{MINUTES, plural, = 1 {1 xulek} other {# xulek}}</translation>
+<translation id="1761785978543082658"><ph name="QUANTITY" /> B</translation>
+<translation id="1801827354178857021">Serdem</translation>
+<translation id="1809410197924942083"><ph name="QUANTITY" /> MB/ç</translation>
+<translation id="1830179671306812954">{HOURS, plural, = 1 {1 demjimêr û} other {# demjimêr û}}</translation>
+<translation id="1859234291848436338">Beraliya nivîsandinê</translation>
+<translation id="2297836609126180313"><ph name="QUANTITY" /> TB/ç</translation>
+<translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
+<translation id="3291688615589870984">{DAYS, plural, = 1 {1 roj} other {# roj}}</translation>
+<translation id="335581015389089642">Axaftin</translation>
+<translation id="3600566671520689681">{DAYS, plural, = 1 {1 roj maye } other {# roj maye }}</translation>
+<translation id="3618849550573277856">“<ph name="LOOKUP_STRING" />”ê peyda bike</translation>
+<translation id="3740362395218339114"><ph name="QUANTITY" /> GB/ç</translation>
+<translation id="3757388668994797779"><ph name="QUANTITY" /> GB</translation>
+<translation id="3889424535448813030">Tîra rast</translation>
+<translation id="4289300219472526559">Axaftinê bide destpêkirin</translation>
+<translation id="4968171027979920686">{SECONDS, plural, = 1 {1 çirke} other {# çirke}}</translation>
+<translation id="5076340679995252485">&amp;Pêve bike</translation>
+<translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
+<translation id="5613020302032141669">Tîra çep</translation>
+<translation id="5754277640426581776">{MINUTES, plural, = 1 {1 xulek} other {# xulek}}</translation>
+<translation id="5768079895599174203">{DAYS, plural, = 1 {1 roj û } other {# roj û }}</translation>
+<translation id="5906667377645263094">{SECONDS, plural, = 1 {1 çirke maye} other {# çirke maye}}</translation>
+<translation id="5943826764092288734">{HOURS, plural, = 1 {1 demjimêr} other {# demjimêr}}</translation>
+<translation id="6142413573757616983"><ph name="QUANTITY" /> B/ç</translation>
+<translation id="6397363302884558537">Axaftinê bisekinîne</translation>
+<translation id="6404817160109697034">{SECONDS, plural, = 1 {1 çirke berê} other {# çirke berê}}</translation>
+<translation id="6483402905448010557">{SECONDS, plural, = 1 {1 çirke berê} other {# çirke berê}}</translation>
+<translation id="6863590663815976734">{HOURS, plural, = 1 {1 demjimêr maye} other {# demjimêr maye}}</translation>
+<translation id="6907759265145635167"><ph name="QUANTITY" /> PB/ç</translation>
+<translation id="6974053822202609517">Rast ber bi çepê ve</translation>
+<translation id="7238427729722629793">{MINUTES, plural, = 1 {1 xulek maye} other {# xulek maye}}</translation>
+<translation id="7365057348334984696">{MINUTES, plural, = 1 {1 xulek berê} other {# xulek berê}}</translation>
+<translation id="7410957453383678442">{MINUTES, plural, = 1 {1 xulek maye} other {# xulek maye}}</translation>
+<translation id="7460907917090416791"><ph name="QUANTITY" /> TB</translation>
+<translation id="8106081041558092062">{HOURS, plural, = 1 {1 demjimêrê berê} other {# demjimêr}}</translation>
+<translation id="8131263257437993507">{SECONDS, plural, = 1 {1 çirke maye} other {# çirke maye}}</translation>
+<translation id="8677655579646609597"><ph name="QUANTITY" /> KB/ç</translation>
+<translation id="8798099450830957504">Berdest</translation>
+<translation id="8901569739625249689"><ph name="QUANTITY" /> KB</translation>
+<translation id="9044832324875206639">{SECONDS, plural, =1 {1 çirke} other {# çirke}}</translation>
+</translationbundle>

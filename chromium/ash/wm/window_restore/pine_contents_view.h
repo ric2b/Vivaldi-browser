@@ -22,42 +22,50 @@ class MenuRunner;
 
 namespace ash {
 
+class PillButton;
 class PineContextMenuModel;
+class PineItemsContainerView;
+class PineScreenshotIconRowView;
 
 class ASH_EXPORT PineContentsView : public views::BoxLayoutView {
+  METADATA_HEADER(PineContentsView, views::BoxLayoutView)
+
  public:
-  METADATA_HEADER(PineContentsView);
-
-  // Temporary typedefs to describe a bunch of apps. An app is described by an
-  // app id and a vector of urls, which can be empty if the app is not Chrome.
-  using AppData = std::pair<std::string, std::vector<std::string>>;
-  using AppsData = std::vector<AppData>;
-
-  explicit PineContentsView(const gfx::ImageSkia& pine_image);
+  PineContentsView();
   PineContentsView(const PineContentsView&) = delete;
   PineContentsView& operator=(const PineContentsView&) = delete;
   ~PineContentsView() override;
 
   static std::unique_ptr<views::Widget> Create(
-      aura::Window* root,
-      const gfx::ImageSkia& pine_image);
+      const gfx::Rect& grid_bounds_in_screen);
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(PineTest, ShowContextMenuOnSettingsButtonClicked);
+  friend class PineContentsViewTestApi;
+  FRIEND_TEST_ALL_PREFIXES(PineContextMenuModelTest,
+                           ShowContextMenuOnSettingsButtonClicked);
 
+  // Callbacks for the buttons on the dialog.
+  void OnRestoreButtonPressed();
+  void OnCancelButtonPressed();
   void OnSettingsButtonPressed();
 
   // Called when the pine context menu is closed. Used as a callback for
   // `menu_model_adapter_`.
   void OnMenuClosed();
 
-  raw_ptr<views::ImageButton> settings_button_view_ = nullptr;
+  raw_ptr<views::ImageButton> settings_button_ = nullptr;
 
   // The context menu model and its adapter for `settings_button_view_`.
   std::unique_ptr<PineContextMenuModel> context_menu_model_;
   std::unique_ptr<views::MenuModelAdapter> menu_model_adapter_;
   // The menu runner that is responsible for the context menu.
   std::unique_ptr<views::MenuRunner> menu_runner_;
+
+  raw_ptr<PineItemsContainerView> items_container_view_ = nullptr;
+  raw_ptr<PineScreenshotIconRowView> screenshot_icon_row_view_ = nullptr;
+
+  raw_ptr<PillButton> restore_button_for_testing_ = nullptr;
+  raw_ptr<PillButton> cancel_button_for_testing_ = nullptr;
 
   base::WeakPtrFactory<PineContentsView> weak_ptr_factory_{this};
 };

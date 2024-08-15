@@ -95,8 +95,8 @@ class Menu_Node : public ui::TreeNode<Menu_Node> {
   }
   bool hasCustomTitle() const { return has_custom_title_; }
 
-  void SetShowShortcut(absl::optional<bool> show_shortcut);
-  absl::optional<bool> showShortcut() const { return show_shortcut_; }
+  void SetShowShortcut(std::optional<bool> show_shortcut);
+  std::optional<bool> showShortcut() const { return show_shortcut_; }
 
   // Returns the node in the tree of nodes that match the id.
   Menu_Node* GetById(int64_t id);
@@ -141,7 +141,7 @@ class Menu_Node : public ui::TreeNode<Menu_Node> {
   std::string container_edge_;
   std::string guid_;
   // Optional to avoid writing data to file/sync when not needed.
-  absl::optional<bool> show_shortcut_;
+  std::optional<bool> show_shortcut_;
   int64_t id_;
   bool has_custom_title_ = false;
 

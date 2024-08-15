@@ -91,8 +91,9 @@ class ScopedRawPtrExpectation {
     ~ScopedRawPtrExpectation() { Mock::VerifyAndClearExpectations(mPtr); }
 
   private:
-    // TODO(https://crbug.com/dawn/2346): Investigate `DanglingUntriaged` pointers in dawn/test.
-    raw_ptr<void, DanglingUntriaged> mPtr = nullptr;
+    // This pointer is explicitely meant to test expectations against a deleted
+    // object. So it is allowed to dangle.
+    raw_ptr<void, DisableDanglingPtrDetection> mPtr = nullptr;
 };
 
 class DestroyObjectTests : public DawnMockTest {
@@ -346,7 +347,7 @@ TEST_F(DestroyObjectTests, ComputePipelineImplicit) {
 
     // Compute pipelines are initialized during their creation via the device.
     Ref<ComputePipelineMock> computePipelineMock = ComputePipelineMock::Create(mDeviceMock, &desc);
-    EXPECT_CALL(*computePipelineMock.Get(), Initialize).Times(1);
+    EXPECT_CALL(*computePipelineMock.Get(), InitializeImpl).Times(1);
     EXPECT_CALL(*computePipelineMock.Get(), DestroyImpl).Times(1);
 
     {
@@ -571,7 +572,7 @@ TEST_F(DestroyObjectTests, RenderPipelineImplicit) {
 
     // Render pipelines are initialized during their creation via the device.
     Ref<RenderPipelineMock> renderPipelineMock = RenderPipelineMock::Create(mDeviceMock, &desc);
-    EXPECT_CALL(*renderPipelineMock.Get(), Initialize).Times(1);
+    EXPECT_CALL(*renderPipelineMock.Get(), InitializeImpl).Times(1);
     EXPECT_CALL(*renderPipelineMock.Get(), DestroyImpl).Times(1);
 
     {
@@ -885,7 +886,7 @@ TEST_F(DestroyObjectTests, DestroyObjectsApiExplicit) {
 
         ScopedRawPtrExpectation scoped(mDeviceMock);
         computePipelineMock = ComputePipelineMock::Create(mDeviceMock, &desc);
-        EXPECT_CALL(*computePipelineMock.Get(), Initialize).Times(1);
+        EXPECT_CALL(*computePipelineMock.Get(), InitializeImpl).Times(1);
         EXPECT_CALL(*mDeviceMock, CreateUninitializedComputePipelineImpl)
             .WillOnce(Return(computePipelineMock));
         computePipeline = device.CreateComputePipeline(ToCppAPI(&desc));
@@ -927,7 +928,7 @@ TEST_F(DestroyObjectTests, DestroyObjectsApiExplicit) {
 
         ScopedRawPtrExpectation scoped(mDeviceMock);
         renderPipelineMock = RenderPipelineMock::Create(mDeviceMock, &desc);
-        EXPECT_CALL(*renderPipelineMock.Get(), Initialize).Times(1);
+        EXPECT_CALL(*renderPipelineMock.Get(), InitializeImpl).Times(1);
         EXPECT_CALL(*mDeviceMock, CreateUninitializedRenderPipelineImpl)
             .WillOnce(Return(renderPipelineMock));
         renderPipeline = device.CreateRenderPipeline(ToCppAPI(&desc));
@@ -1076,6 +1077,23 @@ TEST_F(DestroyObjectRegressionTests, LastRefInCommandComputePipeline) {
     wgpu::ComputePipelineDescriptor pipelineDesc;
     pipelineDesc.compute.module = ::dawn::utils::CreateShaderModule(device, kComputeShader.data());
     computeEncoder.SetPipeline(device.CreateComputePipeline(&pipelineDesc));
+
+    device.Destroy();
+}
+
+// Tests that when a BindGroup's last reference is held in a command in an unfinished
+// CommandEncoder, that destroying the device still works as expected (and does not cause
+// double-free).
+TEST_F(DestroyObjectRegressionTests, LastRefInCommandBindGroup) {
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    wgpu::ComputePassEncoder computeEncoder = encoder.BeginComputePass();
+
+    wgpu::Sampler sampler = device.CreateSampler();
+    wgpu::BindGroupLayout layout = ::dawn::utils::MakeBindGroupLayout(
+        device, {{0, wgpu::ShaderStage::Compute, wgpu::SamplerBindingType::Filtering}});
+    wgpu::BindGroup bindGroup = ::dawn::utils::MakeBindGroup(device, layout, {{0, sampler}});
+
+    computeEncoder.SetBindGroup(0, bindGroup);
 
     device.Destroy();
 }

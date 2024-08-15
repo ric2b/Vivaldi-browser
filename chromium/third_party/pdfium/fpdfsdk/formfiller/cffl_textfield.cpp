@@ -11,11 +11,11 @@
 #include "constants/ascii.h"
 #include "constants/form_flags.h"
 #include "core/fpdfdoc/cpdf_bafontmap.h"
+#include "core/fxcrt/check.h"
 #include "fpdfsdk/cpdfsdk_widget.h"
 #include "fpdfsdk/formfiller/cffl_perwindowdata.h"
 #include "fpdfsdk/pwl/cpwl_edit.h"
 #include "public/fpdf_fwlevent.h"
-#include "third_party/base/check.h"
 
 namespace {
 
@@ -97,7 +97,7 @@ std::unique_ptr<CPWL_Wnd> CFFL_TextField::NewPWLWindow(
     }
   }
   pWnd->SetText(swValue);
-  return std::move(pWnd);
+  return pWnd;
 }
 
 bool CFFL_TextField::OnChar(CPDFSDK_Widget* pWidget,

@@ -3,13 +3,15 @@
 // found in the LICENSE file.
 
 import {LAST_NETWORK_REQUEST_TABLE_ID, LAST_NETWORK_RESPONSE_TABLE_ID, POSITION_CACHE_TABLE_ID, WIFI_DATA_TABLE_ID, WIFI_POLLING_POLICY_TABLE_ID} from 'chrome://location-internals/diagnose_info_view.js';
-import {AccessPointData, GeolocationDiagnostics, GeolocationInternalsInterface, GeolocationInternalsObserverRemote, GeolocationInternalsPendingReceiver, GeolocationInternalsReceiver, INVALID_CHANNEL, INVALID_RADIO_SIGNAL_STRENGTH, INVALID_SIGNAL_TO_NOISE, NetworkLocationResponse} from 'chrome://location-internals/geolocation_internals.mojom-webui.js';
+import type {AccessPointData, GeolocationDiagnostics, GeolocationInternalsInterface, GeolocationInternalsObserverRemote, GeolocationInternalsPendingReceiver, NetworkLocationResponse} from 'chrome://location-internals/geolocation_internals.mojom-webui.js';
+import {GeolocationInternalsReceiver, INVALID_CHANNEL, INVALID_RADIO_SIGNAL_STRENGTH, INVALID_SIGNAL_TO_NOISE} from 'chrome://location-internals/geolocation_internals.mojom-webui.js';
 import {BAD_ACCURACY, BAD_ALTITUDE, BAD_HEADING, BAD_LATITUDE_LONGITUDE, BAD_SPEED} from 'chrome://location-internals/geoposition.mojom-webui.js';
 import {DIAGNOSE_INFO_VIEW_ID, initializeMojo, REFRESH_FINISH_EVENT, REFRESH_STATUS_ID, REFRESH_STATUS_SUCCESS, REFRESH_STATUS_UNINITIALIZED, WATCH_BUTTON_ID} from 'chrome://location-internals/location_internals.js';
-import {LocationInternalsHandler, LocationInternalsHandlerInterface, LocationInternalsHandlerReceiver} from 'chrome://location-internals/location_internals.mojom-webui.js';
+import type {LocationInternalsHandlerInterface} from 'chrome://location-internals/location_internals.mojom-webui.js';
+import {LocationInternalsHandler, LocationInternalsHandlerReceiver} from 'chrome://location-internals/location_internals.mojom-webui.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {getRequiredElement} from 'chrome://resources/js/util.js';
-import {Time, TimeDelta} from 'chrome://resources/mojo/mojo/public/mojom/base/time.mojom-webui.js';
+import type {Time, TimeDelta} from 'chrome://resources/mojo/mojo/public/mojom/base/time.mojom-webui.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
@@ -67,7 +69,7 @@ function checkTableHidden(tableId: string) {
       getRequiredElement<HTMLElement>(DIAGNOSE_INFO_VIEW_ID);
   assert(diagnoseInfoView);
   const diagnoseInfoTable =
-      diagnoseInfoView.shadowRoot!.querySelector(`#${tableId}`) as HTMLElement;
+      diagnoseInfoView.shadowRoot!.querySelector<HTMLElement>(`#${tableId}`);
   assert(diagnoseInfoTable);
   assert(diagnoseInfoTable.style.display === 'none');
 }
@@ -83,7 +85,7 @@ function checkTableContents(
       getRequiredElement<HTMLElement>(DIAGNOSE_INFO_VIEW_ID);
   assert(diagnoseInfoView);
   const diagnoseInfoTable =
-      diagnoseInfoView.shadowRoot!.querySelector(`#${tableId}`) as HTMLElement;
+      diagnoseInfoView.shadowRoot!.querySelector<HTMLElement>(`#${tableId}`);
   assert(diagnoseInfoTable);
   assert(diagnoseInfoTable.style.display !== 'none');
   const tableElement = diagnoseInfoTable.shadowRoot!.querySelector('table');
@@ -221,7 +223,12 @@ suite('LocationInternalsUITest', function() {
     assert(refreshStatus.textContent!.includes(REFRESH_STATUS_UNINITIALIZED));
 
     // Simulate an update and check that the status message indicates success.
-    await simulateDiagnosticsUpdate({providerState: 0});
+    await simulateDiagnosticsUpdate({
+      providerState: 0,
+      networkLocationDiagnostics: null,
+      positionCacheDiagnostics: null,
+      wifiPollingPolicyDiagnostics: null,
+    });
     assert(refreshStatus.textContent!.includes(REFRESH_STATUS_SUCCESS));
   });
 
@@ -230,7 +237,12 @@ suite('LocationInternalsUITest', function() {
     checkTableHidden(WIFI_DATA_TABLE_ID);
 
     // Simulate network location provider not initialized.
-    await simulateDiagnosticsUpdate({providerState: 0});
+    await simulateDiagnosticsUpdate({
+      providerState: 0,
+      networkLocationDiagnostics: null,
+      positionCacheDiagnostics: null,
+      wifiPollingPolicyDiagnostics: null,
+    });
     checkTableHidden(WIFI_DATA_TABLE_ID);
   });
 
@@ -238,7 +250,9 @@ suite('LocationInternalsUITest', function() {
     // Simulate network provider created but no data received yet.
     await simulateDiagnosticsUpdate({
       providerState: 1,
-      networkLocationDiagnostics: {accessPointData: []},
+      networkLocationDiagnostics: {accessPointData: [], wifiTimestamp: null},
+      positionCacheDiagnostics: null,
+      wifiPollingPolicyDiagnostics: null,
     });
     checkTableContents(
         WIFI_DATA_TABLE_ID, WIFI_DATA_TABLE_ID,
@@ -275,6 +289,8 @@ suite('LocationInternalsUITest', function() {
         ],
         wifiTimestamp: dateToMojoTime(new Date('2020-01-12T22:27:00')),
       },
+      wifiPollingPolicyDiagnostics: null,
+      positionCacheDiagnostics: null,
     });
     checkTableContents(
         WIFI_DATA_TABLE_ID, WIFI_DATA_TABLE_ID,
@@ -314,10 +330,12 @@ suite('LocationInternalsUITest', function() {
           radioSignalStrength: INVALID_RADIO_SIGNAL_STRENGTH,
           channel: INVALID_CHANNEL,
           signalToNoise: INVALID_SIGNAL_TO_NOISE,
-          timestamp: undefined,
+          timestamp: null,
         }],
         wifiTimestamp: dateToMojoTime(new Date('2020-01-12T22:27:00')),
       },
+      wifiPollingPolicyDiagnostics: null,
+      positionCacheDiagnostics: null,
     });
     checkTableContents(
         WIFI_DATA_TABLE_ID, WIFI_DATA_TABLE_ID,
@@ -337,7 +355,12 @@ suite('LocationInternalsUITest', function() {
     checkTableHidden(POSITION_CACHE_TABLE_ID);
 
     // Simulate uninitialized position cache.
-    await simulateDiagnosticsUpdate({providerState: 0});
+    await simulateDiagnosticsUpdate({
+      providerState: 0,
+      networkLocationDiagnostics: null,
+      positionCacheDiagnostics: null,
+      wifiPollingPolicyDiagnostics: null,
+    });
     checkTableHidden(POSITION_CACHE_TABLE_ID);
   });
 
@@ -345,7 +368,15 @@ suite('LocationInternalsUITest', function() {
     // Simulate position cache created but no cached data yet.
     await simulateDiagnosticsUpdate({
       providerState: 1,
-      positionCacheDiagnostics: {cacheSize: 0},
+      positionCacheDiagnostics: {
+        cacheSize: 0,
+        hitRate: null,
+        lastMiss: null,
+        lastHit: null,
+        lastNetworkResult: null,
+      },
+      networkLocationDiagnostics: null,
+      wifiPollingPolicyDiagnostics: null,
     });
     checkTableContents(
         POSITION_CACHE_TABLE_ID, POSITION_CACHE_TABLE_ID,
@@ -364,6 +395,7 @@ suite('LocationInternalsUITest', function() {
     // `Geoposition`.
     await simulateDiagnosticsUpdate({
       providerState: 1,
+      networkLocationDiagnostics: null,
       positionCacheDiagnostics: {
         cacheSize: 1,
         lastHit: dateToMojoTime(new Date('2020-01-12T22:27:00')),
@@ -382,6 +414,7 @@ suite('LocationInternalsUITest', function() {
           },
         },
       },
+      wifiPollingPolicyDiagnostics: null,
     });
     checkTableContents(
         POSITION_CACHE_TABLE_ID, POSITION_CACHE_TABLE_ID,
@@ -408,6 +441,9 @@ suite('LocationInternalsUITest', function() {
       providerState: 1,
       positionCacheDiagnostics: {
         cacheSize: 0,
+        hitRate: null,
+        lastHit: null,
+        lastMiss: null,
         lastNetworkResult: {
           position: {
             latitude: BAD_LATITUDE_LONGITUDE,
@@ -421,6 +457,9 @@ suite('LocationInternalsUITest', function() {
           },
         },
       },
+      networkLocationDiagnostics: null,
+      wifiPollingPolicyDiagnostics: null,
+
     });
     checkTableContents(
         POSITION_CACHE_TABLE_ID, POSITION_CACHE_TABLE_ID,
@@ -457,7 +496,12 @@ suite('LocationInternalsUITest', function() {
             timestamp: dateToMojoTime(new Date('2020-01-12T22:27:00')),
           },
         },
+        hitRate: null,
+        lastHit: null,
+        lastMiss: null,
       },
+      networkLocationDiagnostics: null,
+      wifiPollingPolicyDiagnostics: null,
     });
     checkTableContents(
         POSITION_CACHE_TABLE_ID, POSITION_CACHE_TABLE_ID,
@@ -490,7 +534,12 @@ suite('LocationInternalsUITest', function() {
             errorTechnical: 'error-technical',
           },
         },
+        hitRate: null,
+        lastHit: null,
+        lastMiss: null,
       },
+      networkLocationDiagnostics: null,
+      wifiPollingPolicyDiagnostics: null,
     });
     checkTableContents(
         POSITION_CACHE_TABLE_ID, POSITION_CACHE_TABLE_ID,
@@ -515,7 +564,12 @@ suite('LocationInternalsUITest', function() {
     checkTableHidden(WIFI_POLLING_POLICY_TABLE_ID);
 
     // Simulate wifi polling policy not initialized.
-    await simulateDiagnosticsUpdate({providerState: 0});
+    await simulateDiagnosticsUpdate({
+      providerState: 0,
+      networkLocationDiagnostics: null,
+      positionCacheDiagnostics: null,
+      wifiPollingPolicyDiagnostics: null,
+    });
     checkTableHidden(WIFI_POLLING_POLICY_TABLE_ID);
   });
 
@@ -523,6 +577,8 @@ suite('LocationInternalsUITest', function() {
     // Simulate valid wifi polling policy data is populated.
     await simulateDiagnosticsUpdate({
       providerState: 1,
+      positionCacheDiagnostics: null,
+      networkLocationDiagnostics: null,
       wifiPollingPolicyDiagnostics: {
         intervalStart: dateToMojoTime(new Date('2020-01-12T22:27:00')),
         intervalDuration:
@@ -565,7 +621,12 @@ suite('LocationInternalsUITest', function() {
     checkTableHidden(LAST_NETWORK_REQUEST_TABLE_ID);
 
     // Updating diagnostics does not display the network request table.
-    await simulateDiagnosticsUpdate({providerState: 0});
+    await simulateDiagnosticsUpdate({
+      providerState: 0,
+      networkLocationDiagnostics: null,
+      positionCacheDiagnostics: null,
+      wifiPollingPolicyDiagnostics: null,
+    });
     checkTableHidden(LAST_NETWORK_REQUEST_TABLE_ID);
   });
 
@@ -626,7 +687,12 @@ suite('LocationInternalsUITest', function() {
     checkTableHidden(LAST_NETWORK_RESPONSE_TABLE_ID);
 
     // Updating diagnostics does not display the network response table.
-    await simulateDiagnosticsUpdate({providerState: 0});
+    await simulateDiagnosticsUpdate({
+      providerState: 0,
+      networkLocationDiagnostics: null,
+      positionCacheDiagnostics: null,
+      wifiPollingPolicyDiagnostics: null,
+    });
     checkTableHidden(LAST_NETWORK_RESPONSE_TABLE_ID);
   });
 
@@ -667,6 +733,7 @@ suite('LocationInternalsUITest', function() {
     await simulateNetworkLocationResponse({
       latitude: 37.0,
       longitude: -112.0,
+      accuracy: null,
     });
     checkTableContents(
         LAST_NETWORK_RESPONSE_TABLE_ID, LAST_NETWORK_RESPONSE_TABLE_ID,

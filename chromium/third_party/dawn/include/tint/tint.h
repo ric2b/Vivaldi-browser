@@ -35,7 +35,6 @@
 //                headers will need to be moved to include/tint/.
 
 #include "src/tint/api/common/binding_point.h"
-#include "src/tint/api/options/array_length_from_uniform.h"
 #include "src/tint/api/options/binding_remapper.h"
 #include "src/tint/api/options/external_texture.h"
 #include "src/tint/api/options/pixel_local.h"
@@ -51,7 +50,7 @@
 #include "src/tint/lang/wgsl/helpers/flatten_bindings.h"
 #include "src/tint/lang/wgsl/inspector/inspector.h"
 #include "src/tint/utils/diagnostic/formatter.h"
-#include "src/tint/utils/diagnostic/printer.h"
+#include "src/tint/utils/text/styled_text.h"
 
 #if TINT_BUILD_SPV_READER
 #include "src/tint/lang/spirv/reader/reader.h"

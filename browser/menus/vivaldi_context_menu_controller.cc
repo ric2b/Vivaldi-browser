@@ -34,7 +34,7 @@ bool ContextMenuPostitionDelegate::CanSetPosition() const {
 ContextMenuController::ContextMenuController(
     content::WebContents* window_web_contents,
     VivaldiRenderViewContextMenu* rv_context_menu,
-    absl::optional<Params> params)
+    std::optional<Params> params)
     : window_web_contents_(window_web_contents),
       rv_context_menu_(rv_context_menu),
       with_developer_tools_(!rv_context_menu_ ||
@@ -103,7 +103,7 @@ bool ContextMenuController::Show() {
     return false;
   }
 
-  menu_->Init(root_menu_model_, this);
+  menu_->Init(root_menu_model_, weak_factory_.GetWeakPtr());
 
   has_shown_ = menu_->Show();
   if (!has_shown_) {

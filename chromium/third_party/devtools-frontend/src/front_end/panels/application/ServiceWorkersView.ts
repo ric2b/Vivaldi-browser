@@ -205,10 +205,10 @@ export class ServiceWorkersView extends UI.Widget.VBox implements
     this.currentWorkersView = new UI.ReportView.ReportView(i18n.i18n.lockedString('Service workers'));
     this.currentWorkersView.setBodyScrollable(false);
     this.contentElement.classList.add('service-worker-list');
-    this.contentElement.setAttribute('jslog', `${VisualLogging.pane().context('service-workers')}`);
+    this.contentElement.setAttribute('jslog', `${VisualLogging.pane('service-workers')}`);
     this.currentWorkersView.show(this.contentElement);
     this.currentWorkersView.element.classList.add('service-workers-this-origin');
-    this.currentWorkersView.element.setAttribute('jslog', `${VisualLogging.section().context('this-origin')}`);
+    this.currentWorkersView.element.setAttribute('jslog', `${VisualLogging.section('this-origin')}`);
 
     this.toolbar = this.currentWorkersView.createToolbar();
 
@@ -220,7 +220,7 @@ export class ServiceWorkersView extends UI.Widget.VBox implements
     this.sectionToRegistration = new WeakMap();
 
     const othersDiv = this.contentElement.createChild('div', 'service-workers-other-origin');
-    othersDiv.setAttribute('jslog', `${VisualLogging.section().context('other-origin')}`);
+    othersDiv.setAttribute('jslog', `${VisualLogging.section('other-origin')}`);
     // TODO(crbug.com/1156978): Replace UI.ReportView.ReportView with ReportView.ts web component.
     const othersView = new UI.ReportView.ReportView();
     othersView.setHeaderVisible(false);
@@ -231,7 +231,7 @@ export class ServiceWorkersView extends UI.Widget.VBox implements
         UI.Fragment
             .html`<a class="devtools-link" role="link" tabindex="0" href="chrome://serviceworker-internals" target="_blank" style="display: inline; cursor: pointer;">${
                 i18nString(UIStrings.seeAllRegistrations)}</a>`;
-    seeOthers.setAttribute('jslog', `${VisualLogging.link().track({click: true}).context('see-all-registrations')}`);
+    seeOthers.setAttribute('jslog', `${VisualLogging.link('view-all').track({click: true})}`);
     self.onInvokeElement(seeOthers, event => {
       const rootTarget = SDK.TargetManager.TargetManager.instance().rootTarget();
       rootTarget &&
@@ -243,12 +243,13 @@ export class ServiceWorkersView extends UI.Widget.VBox implements
     this.toolbar.appendToolbarItem(
         MobileThrottling.ThrottlingManager.throttlingManager().createOfflineToolbarCheckbox());
     const updateOnReloadSetting =
-        Common.Settings.Settings.instance().createSetting('serviceWorkerUpdateOnReload', false);
+        Common.Settings.Settings.instance().createSetting('service-worker-update-on-reload', false);
     updateOnReloadSetting.setTitle(i18nString(UIStrings.updateOnReload));
     const forceUpdate =
         new UI.Toolbar.ToolbarSettingCheckbox(updateOnReloadSetting, i18nString(UIStrings.onPageReloadForceTheService));
     this.toolbar.appendToolbarItem(forceUpdate);
-    const bypassServiceWorkerSetting = Common.Settings.Settings.instance().createSetting('bypassServiceWorker', false);
+    const bypassServiceWorkerSetting =
+        Common.Settings.Settings.instance().createSetting('bypass-service-worker', false);
     bypassServiceWorkerSetting.setTitle(i18nString(UIStrings.bypassForNetwork));
     const fallbackToNetwork = new UI.Toolbar.ToolbarSettingCheckbox(
         bypassServiceWorkerSetting, i18nString(UIStrings.bypassTheServiceWorkerAndLoad));
@@ -509,11 +510,11 @@ export class Section {
     this.registration = registration;
     this.fingerprint = null;
     this.pushNotificationDataSetting = Common.Settings.Settings.instance().createLocalSetting(
-        'pushData', i18nString(UIStrings.testPushMessageFromDevtools));
+        'push-data', i18nString(UIStrings.testPushMessageFromDevtools));
     this.syncTagNameSetting =
-        Common.Settings.Settings.instance().createLocalSetting('syncTagName', 'test-tag-from-devtools');
+        Common.Settings.Settings.instance().createLocalSetting('sync-tag-name', 'test-tag-from-devtools');
     this.periodicSyncTagNameSetting =
-        Common.Settings.Settings.instance().createLocalSetting('periodicSyncTagName', 'test-tag-from-devtools');
+        Common.Settings.Settings.instance().createLocalSetting('periodic-sync-tag-name', 'test-tag-from-devtools');
 
     this.toolbar = section.createToolbar();
     this.toolbar.renderAsLinks();
@@ -524,18 +525,17 @@ export class Section {
         i18nString(UIStrings.networkRequests), undefined, i18nString(UIStrings.networkRequests));
     this.networkRequests.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.networkRequestsClicked, this);
     this.networkRequests.element.setAttribute(
-        'jslog', `${VisualLogging.action().track({click: true}).context('show-network-requests')}`);
+        'jslog', `${VisualLogging.action('show-network-requests').track({click: true})}`);
     this.toolbar.appendToolbarItem(this.networkRequests);
     this.updateButton =
         new UI.Toolbar.ToolbarButton(i18nString(UIStrings.update), undefined, i18nString(UIStrings.update));
     this.updateButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.updateButtonClicked, this);
-    this.updateButton.element.setAttribute('jslog', `${VisualLogging.action().track({click: true}).context('update')}`);
+    this.updateButton.element.setAttribute('jslog', `${VisualLogging.action('update').track({click: true})}`);
     this.toolbar.appendToolbarItem(this.updateButton);
     this.deleteButton = new UI.Toolbar.ToolbarButton(
         i18nString(UIStrings.unregisterServiceWorker), undefined, i18nString(UIStrings.unregister));
     this.deleteButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.unregisterButtonClicked, this);
-    this.deleteButton.element.setAttribute(
-        'jslog', `${VisualLogging.action().track({click: true}).context('unregister')}`);
+    this.deleteButton.element.setAttribute('jslog', `${VisualLogging.action('unregister').track({click: true})}`);
     this.toolbar.appendToolbarItem(this.deleteButton);
 
     // Preserve the order.
@@ -629,7 +629,7 @@ export class Section {
     const link = Components.Linkifier.Linkifier.linkifyURL(
         version.scriptURL, ({text: fileName} as Components.Linkifier.LinkifyURLOptions));
     link.tabIndex = 0;
-    link.setAttribute('jslog', `${VisualLogging.link().track({click: true}).context('source-location')}`);
+    link.setAttribute('jslog', `${VisualLogging.link('source-location').track({click: true})}`);
     name.appendChild(link);
     if (this.registration.errors.length) {
       const errorsLabel = UI.UIUtils.createIconLabel({
@@ -685,14 +685,14 @@ export class Section {
       if (active.isRunning() || active.isStarting()) {
         const stopLink = this.createLink(
             activeEntry, i18nString(UIStrings.stopString), this.stopButtonClicked.bind(this, active.id));
-        stopLink.setAttribute('jslog', `${VisualLogging.action().track({click: true}).context('stop')}`);
+        stopLink.setAttribute('jslog', `${VisualLogging.action('stop').track({click: true})}`);
         if (!this.targetForVersionId(active.id)) {
           this.createLink(activeEntry, i18nString(UIStrings.inspect), this.inspectButtonClicked.bind(this, active.id));
         }
       } else if (active.isStartable()) {
         const startLink =
             this.createLink(activeEntry, i18nString(UIStrings.startString), this.startButtonClicked.bind(this));
-        startLink.setAttribute('jslog', `${VisualLogging.action().track({click: true}).context('start')}`);
+        startLink.setAttribute('jslog', `${VisualLogging.action('start').track({click: true})}`);
       }
       this.updateClientsField(active);
       this.maybeCreateRouterField();
@@ -856,7 +856,7 @@ export class Section {
     const focusLink = this.createLink(
         element, i18nString(UIStrings.focus), this.activateTarget.bind(this, targetInfo.targetId),
         'service-worker-client-focus-link');
-    focusLink.setAttribute('jslog', `${VisualLogging.action().track({click: true}).context('client-focus')}`);
+    focusLink.setAttribute('jslog', `${VisualLogging.action('client-focus').track({click: true})}`);
   }
 
   private activateTarget(targetId: Protocol.Target.TargetID): void {

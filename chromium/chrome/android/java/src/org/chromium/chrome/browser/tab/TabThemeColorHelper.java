@@ -22,20 +22,18 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /** Monitor changes that indicate a theme color change may be needed from tab contents. */
 public class TabThemeColorHelper extends EmptyTabObserver {
-    private final Tab mTab;
-    private final Callback mUpdateCallback;
+    private final Callback<Integer> mUpdateCallback;
 
     // Vivaldi
     private SharedPreferences.OnSharedPreferenceChangeListener mPrefsListener;
 
     TabThemeColorHelper(Tab tab, Callback<Integer> updateCallback) {
-        mTab = tab;
         mUpdateCallback = updateCallback;
         tab.addObserver(this);
 
         // Vivaldi
         mPrefsListener = (sharedPrefs, key) -> {
-            if (VivaldiPreferences.UI_ACCENT_COLOR_SETTING.equals(key)) updateIfNeeded(mTab, false);
+            if (VivaldiPreferences.UI_ACCENT_COLOR_SETTING.equals(key)) updateIfNeeded(tab, false);
         };
         ContextUtils.getAppSharedPreferences()
                 .registerOnSharedPreferenceChangeListener(mPrefsListener);

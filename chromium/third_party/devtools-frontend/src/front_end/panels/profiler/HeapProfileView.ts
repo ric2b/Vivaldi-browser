@@ -152,7 +152,7 @@ export class HeapProfileView extends ProfileView implements UI.SearchableView.Se
 
     this.timelineOverview = new HeapTimelineOverview();
 
-    if (Root.Runtime.experiments.isEnabled('samplingHeapProfilerTimeline')) {
+    if (Root.Runtime.experiments.isEnabled('sampling-heap-profiler-timeline')) {
       this.timelineOverview.addEventListener(Events.IdsRangeChanged, this.onIdsRangeChanged.bind(this));
       this.timelineOverview.show(this.element, this.element.firstChild);
       this.timelineOverview.start();
@@ -288,7 +288,7 @@ export class SamplingHeapProfileTypeBase extends
     profileHeader.updateStatus(i18nString(UIStrings.recording));
 
     const warnings = [i18nString(UIStrings.heapProfilerIsRecording)];
-    UI.InspectorView.InspectorView.instance().setPanelWarnings('heap_profiler', warnings);
+    UI.InspectorView.InspectorView.instance().setPanelWarnings('heap-profiler', warnings);
 
     this.recording = true;
     this.startSampling();
@@ -311,7 +311,7 @@ export class SamplingHeapProfileTypeBase extends
       recordedProfile.updateStatus('');
       this.setProfileBeingRecorded(null);
     }
-    UI.InspectorView.InspectorView.instance().setPanelWarnings('heap_profiler', []);
+    UI.InspectorView.InspectorView.instance().setPanelWarnings('heap-profiler', []);
 
     // If the data was cleared during the middle of the recording we no
     // longer treat the profile as being completed. This means we avoid
@@ -376,7 +376,7 @@ export class SamplingHeapProfileType extends SamplingHeapProfileTypeBase {
   }
 
   override hasTemporaryView(): boolean {
-    return Root.Runtime.experiments.isEnabled('samplingHeapProfilerTimeline');
+    return Root.Runtime.experiments.isEnabled('sampling-heap-profiler-timeline');
   }
 
   override startSampling(): void {
@@ -386,7 +386,7 @@ export class SamplingHeapProfileType extends SamplingHeapProfileTypeBase {
     }
 
     void heapProfilerModel.startSampling();
-    if (Root.Runtime.experiments.isEnabled('samplingHeapProfilerTimeline')) {
+    if (Root.Runtime.experiments.isEnabled('sampling-heap-profiler-timeline')) {
       this.updateTimer = window.setTimeout(() => {
         void this.updateStats();
       }, this.updateIntervalMs);
@@ -626,7 +626,6 @@ export class NodeFormatter implements Formatter {
 export class HeapFlameChartDataProvider extends ProfileFlameChartDataProvider {
   readonly profile: CPUProfile.ProfileTreeModel.ProfileTreeModel;
   readonly heapProfilerModel: SDK.HeapProfilerModel.HeapProfilerModel|null;
-  timelineDataInternal?: PerfUI.FlameChart.FlameChartTimelineData;
 
   constructor(
       profile: CPUProfile.ProfileTreeModel.ProfileTreeModel,

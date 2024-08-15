@@ -96,7 +96,7 @@ source_set("sync") {
     "//ios/chrome/browser/browser_state/model",
     "//ios/chrome/browser/complex_tasks/model",
     "//ios/chrome/browser/dom_distiller/model",
-    "//ios/chrome/browser/favicon",
+    "//ios/chrome/browser/favicon/model",
     "//ios/chrome/browser/history/model",
     "//ios/chrome/browser/passwords/model:store_factory",
     "//ios/chrome/browser/policy/model",

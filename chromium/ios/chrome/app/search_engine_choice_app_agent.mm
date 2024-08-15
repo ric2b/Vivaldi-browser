@@ -103,6 +103,8 @@
   // The application needs to be ready (i.e. the Browser created, ...) before
   // the choice screen can be presented. Assert this is the case.
   DCHECK_GT(self.appState.initStage, InitStageFirstRun);
+  // TODO(crbug.com/326035954): Evaluate if this is correct for multiple browser
+  // states.
   BOOL hasPreRestoreAccountInfo =
       GetPreRestoreIdentity(GetApplicationContext()->GetLocalState())
           .has_value();
@@ -114,9 +116,12 @@
   if (_searchEngineChoiceCoordinator) {
     return;
   }
-  Browser* browser =
-      sceneState.browserProviderInterface.mainBrowserProvider.browser;
-  if (ShouldDisplaySearchEngineChoiceScreen(browser)) {
+  // Using main browser so that, even in incognito mode, the user is not
+  // re-asked which search engine to use.
+  if (ShouldDisplaySearchEngineChoiceScreen(
+          *sceneState.browserProviderInterface.mainBrowserProvider.browser
+               ->GetBrowserState(),
+          search_engines::ChoicePromo::kDialog)) {
     DCHECK(!_searchEngineChoiceUIBlocker);
     DCHECK(!_searchEngineChoiceSceneStateID);
     _searchEngineChoiceUIBlocker =

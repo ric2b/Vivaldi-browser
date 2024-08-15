@@ -175,8 +175,8 @@ AccountReconcilorDelegate::GetChromeAccountsForReconcile(
   return std::vector<CoreAccountId>();
 }
 
-void AccountReconcilorDelegate::RevokeSecondaryTokensBeforeReconcileIfNeeded() {
-}
+void AccountReconcilorDelegate::RevokeSecondaryTokensForReconcileIfNeeded(
+    const std::vector<gaia::ListedAccount>& gaia_accounts) {}
 
 void AccountReconcilorDelegate::OnAccountsCookieDeletedByUserAction(
     bool synced_data_deletion_in_progress) {}

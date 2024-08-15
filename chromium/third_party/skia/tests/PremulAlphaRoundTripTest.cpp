@@ -240,3 +240,4 @@ DEF_TEST(PremulAlphaRoundTripSkConvertPixels, reporter) {
         }
     }
 }
+

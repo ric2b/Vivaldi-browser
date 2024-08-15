@@ -1,5 +1,11 @@
-load("//bazel:cc_test_with_flags.bzl", "cc_test_with_flags")
-load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_library", "skia_filegroup")
+load(
+    "//bazel:skia_rules.bzl",
+    "exports_files_legacy",
+    "skia_cc_library",
+    "skia_cc_test",
+    "skia_filegroup",
+    "supports_platforms",
+)
 load("//tools/testrunners/benchmark:android_benchmark_test.bzl", "android_benchmark_test")
 
 licenses(["notice"])
@@ -18,76 +24,148 @@ skia_cc_library(
     hdrs = ["Benchmark.h"],
     visibility = ["//tools/testrunners/benchmark:__subpackages__"],
     deps = [
-        "//:skia_internal",
+        "//:core",
         "//tools:registry",
     ],
 )
 
-skia_cc_library(
-    name = "benchmarks_base",
-    testonly = True,
-    deps = [
-        ":benchmark",
-        "//:skia_internal",
-        "//tools/testrunners/benchmark:testrunner",
-    ],
-)
+COMMON_DEPS = [
+    "//:core",
+    "//:png_encode_codec",
+    "//bench:benchmark",
+    "//src/base",
+    "//src/utils:json",
+    "//tools:autorelease_pool",
+    "//tools:registry",
+    "//tools:resources",
+    "//tools:stats",
+    "//tools:tool_utils",
+    "//tools/flags:cmd_flags",
+    "//tools/fonts:font_tool_utils",
+    "//tools/testrunners/common:testrunner",
+    "//tools/testrunners/common/compilation_mode_keys",
+    "//tools/timer",
+]
 
-cc_test_with_flags(
+skia_cc_test(
     name = "cpu_nonrendering_test",
     srcs = [
         "GradientBench.cpp",
         "TextBlobBench.cpp",
+        "//tools/testrunners/benchmark:BazelBenchmarkTestRunner.cpp",
     ],
     args = [
         "--surfaceConfig",
         "nonrendering",
         "--autoTuneLoops",
     ],
-    set_flags = {
-        "include_encoder": [
-            "png_encode_codec",
-        ],
-    },
-    deps = [":benchmarks_base"],
+    target_compatible_with = supports_platforms(
+        "@platforms//os:linux",
+        "@platforms//os:windows",
+        "@platforms//os:macos",
+    ),
+    deps = COMMON_DEPS + [
+        "//tools/testrunners/benchmark/target:raster",
+    ],
 )
 
-cc_test_with_flags(
+skia_cc_test(
     name = "cpu_8888_test",
     srcs = [
         "GradientBench.cpp",
         "TextBlobBench.cpp",
+        "//tools/testrunners/benchmark:BazelBenchmarkTestRunner.cpp",
     ],
     args = [
         "--surfaceConfig",
         "8888",
         "--autoTuneLoops",
     ],
-    set_flags = {
-        "include_encoder": [
-            "png_encode_codec",
-        ],
-    },
-    deps = [":benchmarks_base"],
+    target_compatible_with = supports_platforms(
+        "@platforms//os:linux",
+        "@platforms//os:windows",
+        "@platforms//os:macos",
+    ),
+    deps = COMMON_DEPS + [
+        "//tools/testrunners/benchmark/target:raster",
+    ],
 )
 
-cc_test_with_flags(
-    name = "gpu_gles_test",
+# Vulkan benchmarks.
+[
+    skia_cc_test(
+        name = name,
+        srcs = [
+            "GradientBench.cpp",
+            "TextBlobBench.cpp",
+            "//tools/testrunners/benchmark:BazelBenchmarkTestRunner.cpp",
+        ],
+        args = [
+            "--surfaceConfig",
+            surfaceConfig,
+            "--autoTuneLoops",
+        ],
+        target_compatible_with = supports_platforms(
+            "@platforms//os:linux",
+            "@platforms//os:windows",
+            "@platforms//os:macos",
+        ),
+        deps = COMMON_DEPS + [
+            "//tools/testrunners/benchmark/target:ganesh_vulkan",
+        ],
+    )
+    for name, surfaceConfig in [
+        [
+            "ganesh_vk_test",
+            "vk",
+        ],
+        [
+            "ganesh_vk_1010102_test",
+            "vk_1010102",
+        ],
+        [
+            "ganesh_vk_msaa4_test",
+            "vk_msaa4",
+        ],
+        [
+            "ganesh_vk_msaa8_test",
+            "vk_msaa8",
+        ],
+        [
+            "ganesh_vk_dmsaa_test",
+            "vk_dmsaa",
+        ],
+        [
+            "ganesh_vk_betex_test",
+            "vk_betex",
+        ],
+        [
+            "ganesh_vk_bert_test",
+            "vk_bert",
+        ],
+    ]
+]
+
+skia_cc_test(
+    name = "ganesh_gles_test",
     srcs = [
         "GradientBench.cpp",
         "TextBlobBench.cpp",
+        "//tools/testrunners/benchmark:BazelBenchmarkTestRunner.cpp",
     ],
     args = [
         "--surfaceConfig",
         "gles",
         "--autoTuneLoops",
     ],
-    set_flags = {
-        "include_encoder": [
-            "png_encode_codec",
-        ],
-    },
-    deps = [":benchmarks_base"],
+    target_compatible_with = supports_platforms(
+        "@platforms//os:linux",
+        "@platforms//os:windows",
+        "@platforms//os:macos",
+    ),
+    deps = COMMON_DEPS + [
+        "//tools/testrunners/benchmark/target:ganesh_gl",
+    ],
 )
 
 android_benchmark_test(
@@ -95,12 +173,16 @@ android_benchmark_test(
     srcs = [
         "GradientBench.cpp",
         "TextBlobBench.cpp",
+        "//tools/testrunners/benchmark:BazelBenchmarkTestRunner.cpp",
     ],
-    extra_args = [
+    args = [
+        "--surfaceConfig",
+        "nonrendering",
         "--autoTuneLoops",
     ],
-    surface_config = "nonrendering",
-    deps = [":benchmarks_base"],
+    deps = COMMON_DEPS + [
+        "//tools/testrunners/benchmark/target:raster",
+    ],
 )
 
 android_benchmark_test(
@@ -108,23 +190,48 @@ android_benchmark_test(
     srcs = [
         "GradientBench.cpp",
         "TextBlobBench.cpp",
+        "//tools/testrunners/benchmark:BazelBenchmarkTestRunner.cpp",
     ],
-    extra_args = [
+    args = [
+        "--surfaceConfig",
+        "8888",
         "--autoTuneLoops",
     ],
-    surface_config = "8888",
-    deps = [":benchmarks_base"],
+    deps = COMMON_DEPS + [
+        "//tools/testrunners/benchmark/target:raster",
+    ],
 )
 
 android_benchmark_test(
-    name = "gpu_gles_android_test",
+    name = "ganesh_gles_android_test",
     srcs = [
         "GradientBench.cpp",
         "TextBlobBench.cpp",
+        "//tools/testrunners/benchmark:BazelBenchmarkTestRunner.cpp",
     ],
-    extra_args = [
+    args = [
+        "--surfaceConfig",
+        "gles",
         "--autoTuneLoops",
     ],
-    surface_config = "gles",
-    deps = [":benchmarks_base"],
+    deps = COMMON_DEPS + [
+        "//tools/testrunners/benchmark/target:ganesh_gl",
+    ],
+)
+
+android_benchmark_test(
+    name = "ganesh_vk_android_test",
+    srcs = [
+        "GradientBench.cpp",
+        "TextBlobBench.cpp",
+        "//tools/testrunners/benchmark:BazelBenchmarkTestRunner.cpp",
+    ],
+    args = [
+        "--surfaceConfig",
+        "vk",
+        "--autoTuneLoops",
+    ],
+    deps = COMMON_DEPS + [
+        "//tools/testrunners/benchmark/target:ganesh_vulkan",
+    ],
 )

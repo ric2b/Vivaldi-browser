@@ -34,12 +34,12 @@ class VivaldiImageStore;
 namespace vivaldi_image_store {
 // preserve order!
 enum class ImageFormat {
-  kBMP  = 1,
-  kGIF  = 2,
+  kBMP = 1,
+  kGIF = 2,
   kJPEG = 3,
-  kPNG  = 4,
+  kPNG = 4,
   kWEBP = 5,
-  kSVG  = 6,
+  kSVG = 6,
   kTIFF = 7
 };
 
@@ -49,16 +49,19 @@ enum class BatchItemState {
   kError,
 };
 
+const base::FilePath::StringPieceType kDirectMatchImageDirectory =
+    FILE_PATH_LITERAL("VivaldiDirectMatchIcons");
+
 struct BatchItem {
   using State = vivaldi_image_store::BatchItemState;
 
   explicit BatchItem(std::string url);
   BatchItem();
   ~BatchItem();
-  BatchItem(BatchItem &&);
+  BatchItem(BatchItem&&);
 
-  BatchItem(const BatchItem &) = delete;
-  BatchItem & operator=(const BatchItem&) = delete;
+  BatchItem(const BatchItem&) = delete;
+  BatchItem& operator=(const BatchItem&) = delete;
 
   State state;
   ImageFormat format;
@@ -69,7 +72,7 @@ struct BatchItem {
 using Batch = std::vector<BatchItem>;
 
 class ImageStoreDataProvider {
-public:
+ public:
   virtual scoped_refptr<base::RefCountedMemory> GetData() = 0;
   virtual ImageFormat GetImageType() = 0;
   virtual BatchItemState GetState() = 0;
@@ -77,15 +80,16 @@ public:
 
 // Prevents thumbnails GC from running twice at the same time
 class GCGuard {
-  public:
-    ~GCGuard();
-    static std::unique_ptr<GCGuard> Create(VivaldiImageStore *api);
-  private:
-    explicit GCGuard(scoped_refptr<VivaldiImageStore> api);
-    scoped_refptr<VivaldiImageStore> api_;
+ public:
+  ~GCGuard();
+  static std::unique_ptr<GCGuard> Create(VivaldiImageStore* api);
+
+ private:
+  explicit GCGuard(scoped_refptr<VivaldiImageStore> api);
+  scoped_refptr<VivaldiImageStore> api_;
 };
 
-} // namespace vivaldi_image_store
+}  // namespace vivaldi_image_store
 
 // This is used to setup and control the mapping between local images and the
 // images exposed to the UI using the chrome://vivaldi-data/ protocol.
@@ -95,20 +99,23 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
   VivaldiImageStore(const VivaldiImageStore&) = delete;
   VivaldiImageStore& operator=(const VivaldiImageStore&) = delete;
 
-  // /local-image/id and /thumbnail/id urls
+  // Those paths are related to vivaldi_data_url_utils::kTypeNames
   enum UrlKind {
+    // /local-image/id
     kPathMappingUrl = 0,
+    // /thumbnail/id
     kImageUrl = 1,
+    // /direct-match/id
+    kDirectMatchImageUrl = 2,
   };
 
-  static constexpr int kUrlKindCount = kImageUrl + 1;
+  static constexpr int kUrlKindCount = kDirectMatchImageUrl + 1;
 
   using ImageFormat = vivaldi_image_store::ImageFormat;
   using BatchItem = vivaldi_image_store::BatchItem;
   using Batch = vivaldi_image_store::Batch;
 
   friend class vivaldi_image_store::GCGuard;
-
 
   // Location where to store or update the image.
   class ImagePlace {
@@ -169,15 +176,15 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
 
   static std::vector<base::FilePath::StringType> GetAllowedImageExtensions();
 
-  static absl::optional<ImageFormat> FindFormatForMimeType(
+  static std::optional<ImageFormat> FindFormatForMimeType(
       base::StringPiece mime_type);
 
   // Find the format for the given file_extension. The extension may
   // start with a dot.
-  static absl::optional<ImageFormat> FindFormatForExtension(
+  static std::optional<ImageFormat> FindFormatForExtension(
       base::StringPiece file_extension);
 
-  static absl::optional<ImageFormat> FindFormatForPath(
+  static std::optional<ImageFormat> FindFormatForPath(
       const base::FilePath& path);
 
   static void InitFactory();
@@ -235,14 +242,13 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
                            std::string id,
                            content::URLDataSource::GotDataCallback callback);
 
-
   static void BatchRead(content::BrowserContext* browser_context,
-      const std::vector<std::string> &ids, StoreImageBatchReadCallback);
+                        const std::vector<std::string>& ids,
+                        StoreImageBatchReadCallback);
   // Read data for the given UrlKind. This can be called from any thread.
   void GetDataForId(UrlKind url_kind,
                     std::string id,
                     content::URLDataSource::GotDataCallback callback);
-
 
   void Start();
 
@@ -260,8 +266,8 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
   void ForgetNewbornUrl(std::string data_url);
 
  private:
-
-  void BatchRead(const std::vector<std::string> &ids, StoreImageBatchReadCallback);
+  void BatchRead(const std::vector<std::string>& ids,
+                 StoreImageBatchReadCallback);
 
   friend class base::RefCountedThreadSafe<VivaldiImageStore>;
   friend class VivaldiImageStoreHolder;
@@ -291,7 +297,8 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
 
   // Use std::array, not plain C array to get proper move semantics.
   using UsedIds = std::array<std::vector<std::string>, kUrlKindCount>;
-  void RemoveUnusedUrlDataOnFileThread(UsedIds used_ids,
+  void RemoveUnusedUrlDataOnFileThread(
+      UsedIds used_ids,
       std::unique_ptr<vivaldi_image_store::GCGuard> guard,
       std::vector<base::FilePath> ids);
 
@@ -301,19 +308,18 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
       std::vector<std::pair<base::Uuid, std::string>> ids_to_migrate);
 
   void FinishCustomBookmarkThumbnailMigrationOnUIThread(
-    base::Uuid bookmark_uuid,
+      base::Uuid bookmark_uuid,
       std::vector<uint8_t> content);
 
   scoped_refptr<base::RefCountedMemory> GetDataForIdOnFileThread(
       UrlKind url_kind,
       std::string id);
 
-  bool GetDataForIdToVectorOnFileThread(
-      UrlKind url_kind,
-      std::string id,
-      std::vector<unsigned char> &buffer);
+  bool GetDataForIdToVectorOnFileThread(UrlKind url_kind,
+                                        std::string id,
+                                        std::vector<unsigned char>& buffer);
 
-  void ReadBatchOnFileThread(Batch &batch);
+  void ReadBatchOnFileThread(Batch& batch);
 
   void StoreImageUIThread(ImagePlace place,
                           StoreImageCallback ui_thread_callback,
@@ -336,6 +342,7 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
 
   base::FilePath GetFileMappingFilePath();
   base::FilePath GetImagePath(base::StringPiece thumbnail_id);
+  base::FilePath GetDirectMatchImagePath(base::StringPiece thumbnail_id);
 
   void AddNewbornUrlOnFileThread(base::StringPiece data_url);
   void ForgetNewbornUrlOnFileThread(std::string data_url);

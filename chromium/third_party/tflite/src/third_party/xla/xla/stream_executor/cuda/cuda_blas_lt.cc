@@ -1,4 +1,4 @@
-/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2022 The OpenXLA Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,20 +15,27 @@ limitations under the License.
 
 #include "xla/stream_executor/cuda/cuda_blas_lt.h"
 
+#include <Eigen/Core>
 #include <algorithm>
 #include <any>
 #include <climits>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
-#include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
 
+#include "absl/log/log.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/synchronization/mutex.h"
+#include "absl/time/time.h"
 #include "third_party/gpus/cuda/include/cublasLt.h"
 #include "third_party/gpus/cuda/include/cublas_v2.h"
+#include "third_party/gpus/cuda/include/cuda.h"
+#include "third_party/gpus/cuda/include/library_types.h"
 #include "xla/primitive_util.h"
 #include "xla/status_macros.h"
 #include "xla/stream_executor/blas.h"
@@ -41,7 +48,11 @@ limitations under the License.
 #include "xla/stream_executor/gpu/gpu_timer.h"
 #include "xla/stream_executor/scratch_allocator.h"
 #include "xla/stream_executor/stream.h"
+#include "xla/types.h"
 #include "xla/util.h"
+#include "tsl/platform/errors.h"
+#include "tsl/platform/ml_dtypes.h"
+#include "tsl/platform/statusor.h"
 
 #define SET_ATTR(setter, handle, attr, value) \
   ToStatus(setter(handle, attr, &value, sizeof(decltype(value))), #setter)
@@ -162,8 +173,7 @@ absl::Status BlasLt::Init() {
 
   VLOG(2) << "MatrixLayout::Create: num_rows: " << m.num_rows
           << " num_cols:" << (int)m.num_cols << ", order: " << (int)m.order
-          << ","
-          << " batchsz " << m.batch_size
+          << "," << " batchsz " << m.batch_size
           << " leaddimstride: " << m.leading_dim_stride
           << " batch_stride: " << m.batch_stride;
 
@@ -290,11 +300,11 @@ auto BlasLt::GetMatmulPlan(const gpu::GemmConfig& cfg,
 
   if (xla::primitive_util::IsF8Type(lhs_layout.dtype) &&
       lhs_layout.order == gpu::MatrixLayout::Order::kColumnMajor) {
-    return xla::InternalError("The F8 LHS must be column-major");
+    return xla::Internal("The F8 LHS must be column-major");
   }
   if (xla::primitive_util::IsF8Type(rhs_layout.dtype) &&
       rhs_layout.order == gpu::MatrixLayout::Order::kRowMajor) {
-    return xla::InternalError("The F8 RHS must be row-major");
+    return xla::Internal("The F8 RHS must be row-major");
   }
 
   TF_ASSIGN_OR_RETURN(auto output_dtype,
@@ -376,9 +386,8 @@ absl::Status BlasLt::MatmulPlan::DoMatmul(
     DeviceMemoryBase b_scale, DeviceMemoryBase c_scale,
     DeviceMemoryBase d_scale, DeviceMemoryBase d_amax,
     blas::ProfileResult* profile_result) const {
-  TF_ASSIGN_OR_RETURN(
-      std::optional<gpu::GpuTimer> timer,
-      gpu::GpuTimer::CreateIfNeeded(gpu::AsGpuStream(stream), profile_result));
+  TF_ASSIGN_OR_RETURN(std::optional<gpu::GpuTimer> timer,
+                      gpu::GpuTimer::CreateIfNeeded(stream, profile_result));
 
   void* workspace = nullptr;
   if (algorithm.workspace_size > 0) {
@@ -599,7 +608,7 @@ absl::Status BlasLt::MatmulPlan::ExecuteOnStream(
 
 #undef TYPED_MATMUL
 
-  return xla::InternalError("Unexpected dtype");
+  return xla::Internal("Unexpected dtype");
 }
 
 }  // namespace cuda

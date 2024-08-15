@@ -53,7 +53,7 @@ class MockDnsSdService : public DnsSdService {
   class MockQuerier : public DnsSdQuerier {
    public:
     explicit MockQuerier(MockDnsSdService* service) : mock_service_(service) {
-      OSP_DCHECK(service);
+      OSP_CHECK(service);
     }
 
     void StartQuery(const std::string& service,

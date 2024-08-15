@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 import * as i18n from '../../../core/i18n/i18n.js';
-import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
@@ -100,7 +99,7 @@ export class LinearMemoryHighlightChipList extends HTMLElement {
     return html`
       <div class=${LitHtml.Directives.classMap(classMap)}>
         <button class="jump-to-highlight-button" title=${i18nString(UIStrings.jumpToAddress)}
-            jslog=${VisualLogging.action().track({click:true}).context('linear-memory-inspector.jump-to-highlight')}
+            jslog=${VisualLogging.action('linear-memory-inspector.jump-to-highlight').track({click:true})}
             @click=${():void => this.#onJumpToHighlightClick(highlightInfo.startAddress)}>
           <span class="source-code">
             <span class="value">${expressionName}</span><span class="separator">: </span><span>${expressionType}</span>
@@ -108,7 +107,7 @@ export class LinearMemoryHighlightChipList extends HTMLElement {
         </button>
         <div class="delete-highlight-container">
           <button class="delete-highlight-button" title=${i18nString(UIStrings.deleteHighlight)}
-              jslog=${VisualLogging.action().track({click:true}).context('linear-memory-inspector.delete-highlight')}
+              jslog=${VisualLogging.action('linear-memory-inspector.delete-highlight').track({click:true})}
               @click=${():void => this.#onDeleteHighlightClick(highlightInfo)}>
             <${IconButton.Icon.Icon.litTagName} .data=${{
               iconName: 'cross',
@@ -132,11 +131,11 @@ export class LinearMemoryHighlightChipList extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent(
+customElements.define(
     'devtools-linear-memory-highlight-chip-list', LinearMemoryHighlightChipList);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
   interface HTMLElementTagNameMap {
     'devtools-linear-memory-highlight-chip-list': LinearMemoryHighlightChipList;
   }

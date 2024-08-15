@@ -6,6 +6,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -24,7 +25,7 @@
 
 namespace {
 
-const char kRecoveryHistogram[] = "Enterprise.EnrollementRecoveryOnBoot";
+const char kRecoveryHistogram[] = "EnterpriseCheck.EnrollementRecoveryOnBoot";
 
 // Do not reorder or delete entries because it is used in UMA.
 enum class EnrollmentRecoveryOnBootUma {
@@ -34,7 +35,7 @@ enum class EnrollmentRecoveryOnBootUma {
   kMaxValue = kNoSerialNumber,
 };
 
-std::string GetString(const base::Value::Dict& dict, base::StringPiece key) {
+std::string GetString(const base::Value::Dict& dict, std::string_view key) {
   const std::string* value = dict.FindString(key);
   return value ? *value : std::string();
 }

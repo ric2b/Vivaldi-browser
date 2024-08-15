@@ -28,6 +28,7 @@
 #ifndef SRC_DAWN_NATIVE_TEXTURE_H_
 #define SRC_DAWN_NATIVE_TEXTURE_H_
 
+#include <string>
 #include <vector>
 
 #include "dawn/common/WeakRef.h"
@@ -39,6 +40,7 @@
 #include "dawn/native/ObjectBase.h"
 #include "dawn/native/SharedTextureMemory.h"
 #include "dawn/native/Subresource.h"
+#include "partition_alloc/pointers/raw_ref.h"
 
 #include "dawn/native/dawn_platform.h"
 
@@ -83,6 +85,7 @@ class TextureBase : public ApiObjectBase {
     static Ref<TextureBase> MakeError(DeviceBase* device, const TextureDescriptor* descriptor);
 
     ObjectType GetType() const override;
+    void FormatLabel(absl::FormatSink* s) const override;
 
     wgpu::TextureDimension GetDimension() const;
     wgpu::TextureViewDimension GetCompatibilityTextureBindingViewDimension() const;
@@ -183,10 +186,12 @@ class TextureBase : public ApiObjectBase {
 
     TextureBase(DeviceBase* device, const TextureDescriptor* descriptor, ObjectBase::ErrorTag tag);
 
+    std::string GetSizeLabel() const;
+
     wgpu::TextureDimension mDimension;
     wgpu::TextureViewDimension
         mCompatibilityTextureBindingViewDimension;  // only used for compatibility mode
-    const Format& mFormat;
+    const raw_ref<const Format> mFormat;
     FormatSet mViewFormats;
     Extent3D mBaseSize;
     uint32_t mMipLevelCount;
@@ -239,7 +244,7 @@ class TextureViewBase : public ApiObjectBase {
 
     Ref<TextureBase> mTexture;
 
-    const Format& mFormat;
+    const raw_ref<const Format> mFormat;
     wgpu::TextureViewDimension mDimension;
     SubresourceRange mRange;
 };

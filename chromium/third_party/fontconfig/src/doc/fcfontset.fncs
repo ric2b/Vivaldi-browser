@@ -106,7 +106,7 @@ change at any time.
 @TYPE5@         FcBool%                         @ARG5@          trim
 @TYPE6@         FcCharSet **                    @ARG6@          csp
 @TYPE7@         FcResult *                      @ARG7@          result
-@PURPOSE@       Add to a font set
+@PURPOSE@       Return list of matching fonts
 @DESC@
 Returns the list of fonts from <parameter>sets</parameter>
 sorted by closeness to <parameter>pattern</parameter>.

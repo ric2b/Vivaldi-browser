@@ -30,8 +30,9 @@ class CORE_EXPORT ScrollbarThemeFluent : public ScrollbarThemeAura {
   // When scrollbars are main threaded the thumb size returned by ThumbRect()
   // is the expanded thumb size. This function shrinks the thumb and displaces
   // it to be near the correct Edge of the scrollable area.
-  gfx::Rect ShrinkMainThreadedMinimalModeThumbRect(Scrollbar&, gfx::Rect& rect)
-      const override;
+  gfx::Rect ShrinkMainThreadedMinimalModeThumbRect(
+      const Scrollbar&,
+      const gfx::Rect& rect) const override;
 
  protected:
   ScrollbarThemeFluent();
@@ -46,8 +47,15 @@ class CORE_EXPORT ScrollbarThemeFluent : public ScrollbarThemeAura {
                    const Scrollbar& scrollbar,
                    const gfx::Rect& rect,
                    ScrollbarPart part) override;
+  WebThemeEngine::ScrollbarThumbExtraParams BuildScrollbarThumbExtraParams(
+      const Scrollbar&) override;
   base::TimeDelta OverlayScrollbarFadeOutDelay() const override;
   base::TimeDelta OverlayScrollbarFadeOutDuration() const override;
+
+  ScrollbarPart PartsToInvalidateOnThumbPositionChange(
+      const Scrollbar&,
+      float old_position,
+      float new_position) const override;
 
  private:
   friend class ScrollbarThemeFluentMock;

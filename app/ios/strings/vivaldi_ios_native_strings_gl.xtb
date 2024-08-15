@@ -1,4 +1,19 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="gl">
+<translation id="1123707809902612118">Bloquear rastrexadores e anuncios</translation>
+<translation id="2677862276555105603">Anuncio
+bloqueado</translation>
+<translation id="4032606071208172574">(Por defecto)</translation>
+<translation id="6517411226162529295">Chave de cifrado da copia de seguranza</translation>
+<translation id="659351303388691480">Limpar datos de navegación...</translation>
+<translation id="6614744450826097546">Detalles do anuncio</translation>
+<translation id="6690955457036363013">Xestionar o nivel de bloqueo por páxina web</translation>
+<translation id="7041964446309059643">Manual</translation>
+<translation id="7388525939184421699">Engadir fonte nova</translation>
+<translation id="7574321014880720413">Engadir dominio novo</translation>
+<translation id="89390081013973080">Todo preparado! Hora de decidir que datos sincronizar entre dispositivos.</translation>
+<translation id="9043882097999887291">Anuncios
+bloqueados</translation>
+<translation id="9218693288527810093">Bloquear rastrexadores</translation>
 </translationbundle>

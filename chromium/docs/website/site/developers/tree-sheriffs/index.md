@@ -6,7 +6,7 @@ page_name: tree-sheriffs
 title: Tree Sheriffs
 ---
 
-#### For Chromium OS Sheriffing see [Sheriff FAQ: Chromium OS](/developers/tree-sheriffs/sheriff-details-chromium-os)
+#### For Chromium OS Sheriffing see [Sheriff FAQ: Chromium OS](/chromium-os/developer-library/reference/rotations/sheriff-details-chromium-os)
 
 ## Contacting Sheriffs
 

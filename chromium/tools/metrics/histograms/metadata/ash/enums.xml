@@ -47,6 +47,21 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Keyboard"/>
 </enum>
 
+<enum name="AmbientDlcError">
+<!-- This enum needs to match DlcError in
+ash/ambient/util/time_of_day_utils.h -->
+
+  <summary>List of all the error types that DLC Service returns.</summary>
+  <int value="0" label="Unknown"/>
+  <int value="1" label="None"/>
+  <int value="2" label="Internal"/>
+  <int value="3" label="Busy"/>
+  <int value="4" label="Need reboot"/>
+  <int value="5" label="Invalid DLC"/>
+  <int value="6" label="Allocation"/>
+  <int value="7" label="No image found"/>
+</enum>
+
 <enum name="AmbientModeAnimationTheme">
   <int value="0" label="Slide Show"/>
   <int value="1" label="Feel The Breeze"/>
@@ -281,6 +296,11 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Opened"/>
 </enum>
 
+<enum name="BooleanThumbsUp">
+  <int value="0" label="Thumbs down"/>
+  <int value="1" label="Thumbs up"/>
+</enum>
+
 <enum name="BrowserDataBackMigratorFinalStatus">
   <int value="0" label="Succeeded"/>
   <int value="1" label="PreMigrationCleanUpDeleteTmpDirFailed"/>
@@ -342,6 +362,24 @@ chromium-metrics-reviews@google.com.
 <enum name="CalendarKeyboardNavigationSource">
   <int value="0" label="Tab"/>
   <int value="1" label="Arrow Keys"/>
+</enum>
+
+<enum name="CalendarUserAction">
+  <int value="0" label="Date cell"/>
+  <int value="1" label="Month down arrow"/>
+  <int value="2" label="Month up arrow"/>
+  <int value="3" label="Scrolled"/>
+  <int value="4" label="Keyboard navigation"/>
+  <int value="5" label="Event list item"/>
+  <int value="6" label="Item in up next list"/>
+  <int value="7" label="Join button in event list"/>
+  <int value="8" label="Join button in up next"/>
+  <int value="9" label="Reset to today button"/>
+  <int value="10" label="Open today's events from up next list"/>
+  <int value="11" label="Scrolled within up next list"/>
+  <int value="12" label="Launched calendar from empty event list"/>
+  <int value="13" label="Event list closed"/>
+  <int value="14" label="Settings button pressed"/>
 </enum>
 
 <enum name="CalendarViewScrollSource">
@@ -419,6 +457,8 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Root drive folder"/>
   <int value="2" label="Customized folder in drive"/>
   <int value="3" label="Local customized folder"/>
+  <int value="4" label="Root OneDrive folder"/>
+  <int value="5" label="Customized folder in OneDrive"/>
 </enum>
 
 <enum name="CaptureModeSwitchToDefaultReason">
@@ -434,6 +474,13 @@ chromium-metrics-reviews@google.com.
   <int value="0" label="Edit file in backlight"/>
   <int value="1" label="Go to file location"/>
   <int value="2" label="Delete file"/>
+  <int value="3" label="Open file with default handler"/>
+</enum>
+
+<enum name="ClassroomUserAction">
+  <int value="0" label="Assignment list selected"/>
+  <int value="1" label="Header icon pressed"/>
+  <int value="2" label="Student assignment pressed"/>
 </enum>
 
 <enum name="DataFetchEventSource">
@@ -459,6 +506,18 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="Invalid argument (e.g. wrong ID format)"/>
   <int value="3" label="Exceeed maximum number of templates"/>
   <int value="4" label="Desk template is too large"/>
+</enum>
+
+<enum name="DeskProfilesSelectProfileSource">
+  <int value="0" label="Profile button"/>
+  <int value="1" label="Desk action context menu"/>
+  <int value="2" label="New desk button drop"/>
+</enum>
+
+<enum name="DeskProfilesUsageStatus">
+  <int value="0" label="Conditions are not met"/>
+  <int value="1" label="Conditions are met"/>
+  <int value="2" label="Desk profiles are enabled"/>
 </enum>
 
 <enum name="DesksAssignToAllDesksSource">
@@ -509,6 +568,7 @@ chromium-metrics-reviews@google.com.
   <int value="15"
       label="Desk switch by clicking on a mini view in the desk button desk
              bar"/>
+  <int value="16" label="Desk switch due to session restore"/>
 </enum>
 
 <enum name="DockedAction">
@@ -1020,6 +1080,18 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="Quick Settings Passed"/>
 </enum>
 
+<enum name="EssentialSearchStatus">
+  <int value="0" label="Ok"/>
+  <int value="1" label="Failed to serialize request body"/>
+  <int value="2" label="Server error"/>
+  <int value="3" label="Empty response"/>
+  <int value="4" label="Failed to parse the response"/>
+  <int value="5" label="Response is not a JSON dictionary"/>
+  <int value="6" label="Response does not contain cookie header"/>
+  <int value="7" label="Invalid cookie header"/>
+  <int value="8" label="Failed to add SOCS cookie to user profile"/>
+</enum>
+
 <enum name="ExpandButtonClickAction">
   <int value="0" label="Expand Individual"/>
   <int value="1" label="Collapse Individual"/>
@@ -1058,6 +1130,11 @@ chromium-metrics-reviews@google.com.
   <int value="0" label="Focus panel"/>
   <int value="1" label="Contextual panel"/>
   <int value="2" label="Feature pod"/>
+</enum>
+
+<enum name="FocusModeStartSessionSource">
+  <int value="0" label="Focus panel"/>
+  <int value="1" label="Feature pod"/>
 </enum>
 
 <enum name="GlanceableStudentAssignmentList">
@@ -1234,6 +1311,25 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="Slider Bubble And Extended Hotseat"/>
 </enum>
 
+<enum name="NssDbClientCertsRollbackEvent">
+  <summary>List of events generated by the KcerRollbackHelper routine.</summary>
+  <int value="0" label="Rollback scheduled"/>
+  <int value="1" label="Rollback started"/>
+  <int value="2" label="Rollback successful"/>
+  <int value="3" label="Rollback failed, not all objects were deleted"/>
+  <int value="4" label="Rollback flag is present in preferences"/>
+  <int value="5" label="Rollback flag is not present in preferences"/>
+  <int value="6" label="List of objects for deletion has length 0"/>
+  <int value="7" label="List of objects for deletion has length 1"/>
+  <int value="8" label="List of objects for deletion has length 2"/>
+  <int value="9" label="List of objects for deletion has length 3"/>
+  <int value="10" label="List of objects for deletion has length great than 3"/>
+  <int value="11" label="Rollback failed, not slot info was found"/>
+  <int value="12" label="Rollback failed, not user account id was found"/>
+  <int value="13"
+      label="Rollback failed, failed to reset rollback required flag"/>
+</enum>
+
 <enum name="NudgeCatalogName">
 <!-- Defined in ash/constants/notifier_catalogs.h -->
 
@@ -1267,6 +1363,12 @@ chromium-metrics-reviews@google.com.
   <int value="22" label="Capture Mode Education Shortcut Nudge"/>
   <int value="23" label="Capture Mode Education Shortcut Tutorial"/>
   <int value="24" label="Capture Mode Education Quick Settings Nudge"/>
+  <int value="25" label="Game Dashboard Controls Nudge"/>
+  <int value="26"
+      label="Website Telemetry Reporting Nudge (deprecated 01/2024)"/>
+  <int value="27" label="Standalone Window Migration Ux"/>
+  <int value="28" label="Focus Mode Ending Moment Nudge"/>
+  <int value="29" label="Pine Education Nudge"/>
 </enum>
 
 <enum name="OnDeviceToServerSpeechRecognitionFallbackReason">
@@ -1361,6 +1463,7 @@ chromium-metrics-reviews@google.com.
   <int value="12" label="Entering overview with the faster split screen setup"/>
   <int value="13"
       label="After user login, if full restore settings is ask everytime"/>
+  <int value="14" label="Entering overview by clicking on wallpaper."/>
 </enum>
 
 <enum name="PaletteModeCancelType">
@@ -1454,12 +1557,21 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   <int value="5" label="Wallpaper Local Collection"/>
   <int value="6" label="Root"/>
   <int value="7" label="Avatar"/>
+  <int value="8" label="SeaPen Collection"/>
+  <int value="9" label="SeaPen Results"/>
 </enum>
 
 <enum name="PersonalizationThemeColorMode">
   <int value="0" label="Light mode"/>
   <int value="1" label="Dark mode"/>
   <int value="2" label="Auto mode"/>
+</enum>
+
+<enum name="PickerSessionOutcome">
+  <summary>The outcome of a Picker session.</summary>
+  <int value="0" label="Unknown"/>
+  <int value="1" label="User inserts or copies a result."/>
+  <int value="2" label="User abandons the session."/>
 </enum>
 
 <enum name="PinAutosubmitBackfillEvent">
@@ -1664,6 +1776,10 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   <int value="6" label="kDreamscapes"/>
   <int value="7" label="kTranslucent"/>
   <int value="8" label="kScifi"/>
+  <int value="9" label="kLetters"/>
+  <int value="10" label="kGlowscapes"/>
+  <int value="11" label="kSurreal"/>
+  <int value="12" label="kTerrainAlternate"/>
   <int value="100" label="kVcBackgroundSimple"/>
   <int value="101" label="kVcBackgroundOffice"/>
   <int value="102" label="kVcBackgroundTerrainVc"/>
@@ -1671,6 +1787,7 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   <int value="104" label="kVcBackgroundArt"/>
   <int value="105" label="kVcBackgroundDreamscapesVc"/>
   <int value="106" label="kVcBackgroundCharacters"/>
+  <int value="107" label="kVcBackgroundGlowscapes"/>
 </enum>
 
 <enum name="SetWallpaperResult">
@@ -1792,6 +1909,7 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   <int value="2" label="Session exit due to window destruction"/>
   <int value="3" label="Session exit due to shutdown"/>
   <int value="4" label="Session exit due to unspecified reasons"/>
+  <int value="5" label="Session exit due to converting to tablet mode"/>
 </enum>
 
 <enum name="SplitViewSwapWindowsSource">
@@ -1803,6 +1921,18 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   <int value="0" label="Remained on the home screen"/>
   <int value="1" label="Transitioned to overview"/>
   <int value="2" label="Went back on the home screen"/>
+</enum>
+
+<enum name="TasksUserAction">
+  <int value="0" label="Active task list changed"/>
+  <int value="1" label="Task marked complete"/>
+  <int value="2" label="Task marked incomplete"/>
+  <int value="3" label="Add task started"/>
+  <int value="4" label="Modify task started"/>
+  <int value="5" label="Header button clicked"/>
+  <int value="6" label="Add new task button clicked"/>
+  <int value="7" label="Footer button clicked"/>
+  <int value="8" label="Edit in Google Tasks button clicked"/>
 </enum>
 
 <enum name="TimeManagementGlanceablesFeatureStatus">
@@ -1864,6 +1994,7 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   <int value="46" label="Battery Saver Enabled"/>
   <int value="47" label="Dictation Mic Muted"/>
   <int value="48" label="Video Conference Speak On Mute Opt In Confirmation"/>
+  <int value="50" label="Game Dashboard Disabled In Tablet Mode"/>
 </enum>
 
 <enum name="TrayBackgroundViewCatalogName">
@@ -2405,7 +2536,7 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
 <enum name="WindowSnapActionSource">
   <int value="0" label="Not specified"/>
   <int value="1" label="Drag window to screen edge to snap"/>
-  <int value="2" label="Use window caption button to snap"/>
+  <int value="2" label="Long press window caption button to snap"/>
   <int value="3" label="Use keyboard shortcut to snap"/>
   <int value="4" label="Drag or select overview window to snap"/>
   <int value="5" label="Long press overview button to snap"/>
@@ -2424,6 +2555,9 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   <int value="15"
       label="Window is snapped when updating a window in snap group"/>
   <int value="16" label="Window is snapped in test"/>
+  <int value="17"
+      label="Window is snapped by long pressing lacros window caption button
+             or window layout menu"/>
 </enum>
 
 <enum name="WindowSplittingDragType">

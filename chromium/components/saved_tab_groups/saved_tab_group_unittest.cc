@@ -9,7 +9,9 @@
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
+namespace tab_groups {
 namespace {
+
 base::Uuid MakeUniqueGUID() {
   static uint64_t unique_value = 0;
   unique_value++;
@@ -26,18 +28,18 @@ base::Token MakeUniqueToken() {
 
 SavedTabGroup CreateDefaultEmptySavedTabGroup() {
   return SavedTabGroup(std::u16string(u"default_group"),
-                       tab_groups::TabGroupColorId::kGrey, {}, absl::nullopt);
+                       tab_groups::TabGroupColorId::kGrey, {}, std::nullopt);
 }
 
 SavedTabGroupTab CreateDefaultSavedTabGroupTab(const base::Uuid& group_guid) {
   return SavedTabGroupTab(GURL("www.google.com"), u"Default Title", group_guid,
-                          /*position=*/absl::nullopt);
+                          /*position=*/std::nullopt);
 }
 
 void AddTabToEndOfGroup(
     SavedTabGroup& group,
-    absl::optional<base::Uuid> saved_guid = absl::nullopt,
-    absl::optional<base::Token> local_tab_id = absl::nullopt) {
+    std::optional<base::Uuid> saved_guid = std::nullopt,
+    std::optional<base::Token> local_tab_id = std::nullopt) {
   group.AddTabLocally(SavedTabGroupTab(
       GURL(url::kAboutBlankURL), std::u16string(u"default_title"),
       group.saved_guid(), /*position=*/group.saved_tabs().size(), saved_guid,
@@ -68,8 +70,8 @@ TEST(SavedTabGroupTest, GetTabByToken) {
 
   // create a group with a couple tabs
   SavedTabGroup group = CreateDefaultEmptySavedTabGroup();
-  AddTabToEndOfGroup(group, absl::nullopt, tab_1_local_id);
-  AddTabToEndOfGroup(group, absl::nullopt, tab_2_local_id);
+  AddTabToEndOfGroup(group, std::nullopt, tab_1_local_id);
+  AddTabToEndOfGroup(group, std::nullopt, tab_2_local_id);
   ASSERT_EQ(2u, group.saved_tabs().size());
 
   SavedTabGroupTab* tab_1 = group.GetTab(tab_1_local_id);
@@ -213,3 +215,5 @@ TEST(SavedTabGroupTest, RemoveTabFromSyncMaintainsPositions) {
     EXPECT_EQ(second_tab->position(), 1u);
   }
 }
+
+}  // namespace tab_groups

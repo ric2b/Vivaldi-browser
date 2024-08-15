@@ -244,13 +244,13 @@ export class HeaderSectionRow extends HTMLElement {
       ${this.#header.isResponseHeader && !this.#header.isDeleted ? html`
         <${Buttons.Button.Button.litTagName}
           title=${i18nString(UIStrings.editHeader)}
-          .size=${Buttons.Button.Size.TINY}
+          .size=${Buttons.Button.Size.SMALL}
           .iconUrl=${editIconUrl}
           .variant=${Buttons.Button.Variant.ROUND}
-          @click=${(): void => {
+          @click=${() => {
             this.dispatchEvent(new EnableHeaderEditingEvent());
           }}
-          jslog=${VisualLogging.action().track({click: true}).context('enable-header-overrides')}
+          jslog=${VisualLogging.action('enable-header-overrides').track({click: true})}
           class="enable-editing inline-button"
         ></${Buttons.Button.Button.litTagName}>
       ` : LitHtml.nothing}
@@ -267,12 +267,12 @@ export class HeaderSectionRow extends HTMLElement {
       ${this.#maybeRenderHeaderValueSuffix(this.#header)}
       <${Buttons.Button.Button.litTagName}
         title=${i18nString(UIStrings.removeOverride)}
-        .size=${Buttons.Button.Size.TINY}
+        .size=${Buttons.Button.Size.SMALL}
         .iconUrl=${trashIconUrl}
         .variant=${Buttons.Button.Variant.ROUND}
         class="remove-header inline-button"
         @click=${this.#onRemoveOverrideClick}
-        jslog=${VisualLogging.action().track({click: true}).context('remove-header-override')}
+        jslog=${VisualLogging.action('remove-header-override').track({click: true})}
       ></${Buttons.Button.Button.litTagName}>
     `;
     // clang-format on
@@ -469,7 +469,7 @@ export class HeaderSectionRow extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-header-section-row', HeaderSectionRow);
+customElements.define('devtools-header-section-row', HeaderSectionRow);
 
 declare global {
   interface HTMLElementTagNameMap {

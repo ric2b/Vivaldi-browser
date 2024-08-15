@@ -43,14 +43,14 @@
 #include "extensions/buildflags/buildflags.h"
 #include "media/media_buildflags.h"
 #include "printing/buildflags/buildflags.h"
-#include "services/device/public/cpp/geolocation/geolocation_manager.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/test/test_network_connection_tracker.h"
 #include "services/network/test/test_network_quality_tracker.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS)
-#include "services/device/public/cpp/test/fake_geolocation_manager.h"
+#include "services/device/public/cpp/geolocation/geolocation_system_permission_manager.h"
+#include "services/device/public/cpp/test/fake_geolocation_system_permission_manager.h"
 #endif
 
 #if BUILDFLAG(ENABLE_BACKGROUND_MODE)
@@ -110,11 +110,12 @@ void TestingBrowserProcess::CreateInstance() {
   process->Init();
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS)
-  auto fake_geolocation_manager =
-      std::make_unique<device::FakeGeolocationManager>();
-  fake_geolocation_manager->SetSystemPermission(
+  auto fake_geolocation_system_permission_manager =
+      std::make_unique<device::FakeGeolocationSystemPermissionManager>();
+  fake_geolocation_system_permission_manager->SetSystemPermission(
       device::LocationSystemPermissionStatus::kAllowed);
-  device::GeolocationManager::SetInstance(std::move(fake_geolocation_manager));
+  device::GeolocationSystemPermissionManager::SetInstance(
+      std::move(fake_geolocation_system_permission_manager));
 #endif
 }
 
@@ -482,7 +483,7 @@ TestingBrowserProcess::network_time_tracker() {
     network_time_tracker_ = std::make_unique<network_time::NetworkTimeTracker>(
         std::unique_ptr<base::Clock>(new base::DefaultClock()),
         std::unique_ptr<base::TickClock>(new base::DefaultTickClock()),
-        local_state_, nullptr);
+        local_state_, nullptr, std::nullopt);
   }
   return network_time_tracker_.get();
 }
@@ -579,7 +580,7 @@ void TestingBrowserProcess::SetLocalState(PrefService* local_state) {
 
 void TestingBrowserProcess::ShutdownBrowserPolicyConnector() {
   if (browser_policy_connector_) {
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
     // Initial cleanup for ChromeBrowserCloudManagement, shutdown components
     // that depend on profile and notification system. For example,
     // ProfileManager observer and KeyServices observer need to be removed

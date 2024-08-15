@@ -14,7 +14,7 @@ set(AVIF_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 # Specify search path for CMake modules to be loaded by include() and find_package()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
 
-project(libavif LANGUAGES C VERSION 1.0.3)
+project(libavif LANGUAGES C VERSION 1.0.4)
 
 # Set C99 as the default
 set(CMAKE_C_STANDARD 99)
@@ -28,7 +28,7 @@ set(CMAKE_C_STANDARD 99)
 #     Increment PATCH.
 set(LIBRARY_VERSION_MAJOR 16)
 set(LIBRARY_VERSION_MINOR 0)
-set(LIBRARY_VERSION_PATCH 3)
+set(LIBRARY_VERSION_PATCH 4)
 set(LIBRARY_VERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}.${LIBRARY_VERSION_PATCH}")
 set(LIBRARY_SOVERSION ${LIBRARY_VERSION_MAJOR})
 
@@ -201,7 +201,7 @@ if(AVIF_JPEG STREQUAL "LOCAL")
     include(LocalJpeg)
 endif()
 
-set_local_or_system_option("LIBYUV" "OFF" "Use libyuv.")
+set_local_or_system_option("LIBYUV" "SYSTEM" "Use libyuv.")
 check_avif_option(AVIF_LIBYUV TARGET yuv::yuv PKG_NAME libyuv)
 if(AVIF_LIBYUV_ENABLED)
     # libyuv 1755 exposed all of the I*Matrix() functions, which libavif relies on.
@@ -866,7 +866,7 @@ if(WIN32)
         avif_exclude_safe(minigzip)
     endif()
     if(AVIF_LOCAL_JPEG)
-        avif_set_folder_safe(jpeg "ext/libjpeg")
+        avif_set_folder_safe(JPEG::JPEG "ext/libjpeg-turbo")
     endif()
     if(AVIF_LOCAL_LIBXML2)
         avif_set_folder_safe(xml2 "ext/libxml2")

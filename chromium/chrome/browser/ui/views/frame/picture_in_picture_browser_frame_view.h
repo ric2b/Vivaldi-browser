@@ -24,6 +24,7 @@
 #include "ui/gfx/animation/multi_animation.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/views/controls/image_view.h"
+#include "ui/views/layout/flex_layout_view.h"
 #include "ui/views/widget/widget_observer.h"
 
 #if BUILDFLAG(IS_LINUX)
@@ -47,9 +48,9 @@
 #endif  // RESIZE_DOCUMENT_PICTURE_IN_PICTURE_TO_DIALOG
 
 namespace views {
-class FlexLayoutView;
 class FrameBackground;
 class Label;
+class View;
 }  // namespace views
 
 namespace {
@@ -97,7 +98,7 @@ class PictureInPictureBrowserFrameView
   gfx::Size GetMinimumSize() const override;
   gfx::Size GetMaximumSize() const override;
   void OnThemeChanged() override;
-  void Layout() override;
+  void Layout(PassKey) override;
   void AddedToWidget() override;
   void RemovedFromWidget() override;
 #if BUILDFLAG(IS_LINUX)
@@ -178,9 +179,6 @@ class PictureInPictureBrowserFrameView
   // Returns the insets of the window frame borders.
   gfx::Insets FrameBorderInsets() const;
 
-  // Returns the insets of the window frame borders for resizing.
-  gfx::Insets ResizeBorderInsets() const;
-
   // Returns the height of the top bar area, including the window top border.
   int GetTopAreaHeight() const;
 
@@ -195,9 +193,6 @@ class PictureInPictureBrowserFrameView
   bool IsOverlayViewVisible() const;
 
 #if BUILDFLAG(IS_LINUX)
-  // Sets the window frame provider so that it will be used for drawing.
-  void SetWindowFrameProvider(ui::WindowFrameProvider* window_frame_provider);
-
   // Returns whether a client-side shadow should be drawn for the window.
   bool ShouldDrawFrameShadow() const;
 
@@ -233,6 +228,12 @@ class PictureInPictureBrowserFrameView
   AutoPipSettingOverlayView* get_auto_pip_setting_overlay_view_for_testing() {
     return auto_pip_setting_overlay_;
   }
+
+ protected:
+  views::View* top_bar_container_view() { return top_bar_container_view_; }
+
+  // Returns the insets of the window frame borders for resizing.
+  virtual gfx::Insets ResizeBorderInsets() const;
 
  private:
   CloseReason close_reason_ = CloseReason::kOther;
@@ -303,7 +304,8 @@ class PictureInPictureBrowserFrameView
         child_dialog_observations_{this};
 
     // Tracks child dialogs that have not yet been shown.
-    base::flat_set<views::Widget*> invisible_child_dialogs_;
+    base::flat_set<raw_ptr<views::Widget, CtnExperimental>>
+        invisible_child_dialogs_;
 
     // The bounds that we forced the window to be in response to a child dialog
     // opening.

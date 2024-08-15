@@ -111,7 +111,15 @@ export class TimelineDetailsView extends UI.Widget.VBox {
     return this.defaultDetailsContentElement;
   }
 
-  #onTraceBoundsChange(event: TraceBounds.TraceBounds.StateChangedEvent): void {
+  async #onTraceBoundsChange(event: TraceBounds.TraceBounds.StateChangedEvent): Promise<void> {
+    if (event.updateType === 'MINIMAP_BOUNDS') {
+      // If new minimap bounds are set, we might need to update the selected entry summary because
+      // the links to other entries (ex. initiator) might be outside of the new breadcrumb.
+      if (this.selection) {
+        await this.setSelection(this.selection);
+      }
+    }
+
     if (event.updateType === 'RESET' || event.updateType === 'VISIBLE_WINDOW') {
       // If the update type was a changing of the minimap bounds, we do not
       // need to redraw.
@@ -365,10 +373,10 @@ export class TimelineDetailsView extends UI.Widget.VBox {
 }
 
 export enum Tab {
-  Details = 'Details',
-  EventLog = 'EventLog',
-  CallTree = 'CallTree',
-  BottomUp = 'BottomUp',
-  PaintProfiler = 'PaintProfiler',
-  LayerViewer = 'LayerViewer',
+  Details = 'details',
+  EventLog = 'event-log',
+  CallTree = 'call-tree',
+  BottomUp = 'bottom-up',
+  PaintProfiler = 'paint-profiler',
+  LayerViewer = 'layer-viewer',
 }

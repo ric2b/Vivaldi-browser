@@ -107,6 +107,7 @@ libvpx::VP9RateControlRtcConfig CreateRateControlConfig(
       rc_cfg.buf_optimal_sz, encode_params.framerate);
   rc_cfg.framerate = encode_params.framerate;
   rc_cfg.frame_drop_thresh = encode_params.drop_frame_thresh;
+  rc_cfg.is_screen = encode_params.is_screen;
 
   // Fill spatial/temporal layers variables.
   rc_cfg.ss_number_layers = num_spatial_layers;
@@ -314,6 +315,7 @@ bool VP9VaapiVideoEncoderDelegate::Initialize(
       VideoEncodeAccelerator::Config::ContentType::kDisplay) {
     current_params_.min_qp = kScreenMinQP;
     current_params_.max_qp = kScreenMaxQP;
+    current_params_.is_screen = true;
   }
 
   reference_frames_.Clear();
@@ -379,9 +381,7 @@ bool VP9VaapiVideoEncoderDelegate::Initialize(
 
   DCHECK(!pending_update_rates_);
   pending_update_rates_ =
-      std::make_pair(initial_bitrate_allocation,
-                     config.initial_framerate.value_or(
-                         VideoEncodeAccelerator::kDefaultFramerate));
+      std::make_pair(initial_bitrate_allocation, config.framerate);
 
   return ApplyPendingUpdateRates();
 }

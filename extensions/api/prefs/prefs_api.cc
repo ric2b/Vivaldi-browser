@@ -195,7 +195,7 @@ ExtensionFunction::ResponseAction PrefsGetFunction::Run() {
   using vivaldi::prefs::Get::Params;
   namespace Results = vivaldi::prefs::Get::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const std::string& path = params->path;
@@ -212,7 +212,7 @@ ExtensionFunction::ResponseAction PrefsGetFunction::Run() {
 ExtensionFunction::ResponseAction PrefsSetFunction::Run() {
   using vivaldi::prefs::Set::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const std::string& path = params->new_value.path;
@@ -253,7 +253,7 @@ ExtensionFunction::ResponseAction PrefsSetFunction::Run() {
                               base::Value::GetTypeName(value->type()) +
                               " value to an enumerated preference: " + path));
     }
-    absl::optional<int> enum_value =
+    std::optional<int> enum_value =
         properties->definition->enum_values->FindValue(value->GetString());
     if (!enum_value) {
       return RespondNow(
@@ -350,7 +350,7 @@ PrefsSetLanguagePairToAlwaysTranslateFunction::Run() {
   using vivaldi::prefs::SetLanguagePairToAlwaysTranslate::Params;
   namespace Results = vivaldi::prefs::SetLanguagePairToAlwaysTranslate::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
@@ -382,7 +382,7 @@ PrefsSetLanguageToNeverTranslateFunction::Run() {
   using vivaldi::prefs::SetLanguageToNeverTranslate::Params;
   namespace Results = vivaldi::prefs::SetLanguageToNeverTranslate::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
@@ -410,7 +410,7 @@ ExtensionFunction::ResponseAction PrefsGetTranslateSettingsFunction::Run() {
   using vivaldi::prefs::GetTranslateSettings::Params;
   namespace Results = vivaldi::prefs::GetTranslateSettings::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
@@ -441,7 +441,7 @@ ExtensionFunction::ResponseAction PrefsSetSiteToNeverTranslateFunction::Run() {
   using vivaldi::prefs::SetSiteToNeverTranslate::Params;
   namespace Results = vivaldi::prefs::SetSiteToNeverTranslate::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
@@ -467,7 +467,7 @@ ExtensionFunction::ResponseAction PrefsSetTranslationDeclinedFunction::Run() {
   using vivaldi::prefs::SetTranslationDeclined::Params;
   namespace Results = vivaldi::prefs::SetTranslationDeclined::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
@@ -516,7 +516,7 @@ void PrefsResetAllToDefaultFunction::HandlePrefValue(const std::string& key,
 ExtensionFunction::ResponseAction PrefsResetAllToDefaultFunction::Run() {
   using vivaldi::prefs::ResetAllToDefault::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   Profile* profile = Profile::FromBrowserContext(browser_context());
   PrefService* prefs = profile->GetPrefs();

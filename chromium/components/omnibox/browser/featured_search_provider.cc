@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
@@ -22,6 +23,8 @@
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/page_transition_types.h"
+
+constexpr bool kIsDesktop = !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS);
 
 // Scored higher than history URL provider suggestions since inputs like '@b'
 // would default 'bing.com' instead (history URL provider seems to ignore '@'
@@ -61,6 +64,13 @@ void FeaturedSearchProvider::DoStarterPackAutocompletion(
     for (TemplateURL* match : matches) {
       if (match->starter_pack_id() > 0 &&
           match->is_active() == TemplateURLData::ActiveStatus::kTrue) {
+        // Don't add the expanded set of starter pack engines unless the feature
+        // is enabled.
+        if (!OmniboxFieldTrial::IsStarterPackExpansionEnabled() &&
+            match->starter_pack_id() > TemplateURLStarterPackData::kTabs) {
+          continue;
+        }
+
         AddStarterPackMatch(*match, input);
       }
     }
@@ -93,12 +103,25 @@ void FeaturedSearchProvider::AddStarterPackMatch(
       match.fill_into_edit.substr(input.text().length());
   match.destination_url = GURL(destination_url);
   match.transition = ui::PAGE_TRANSITION_GENERATED;
-  if (OmniboxFieldTrial::IsKeywordModeRefreshEnabled() &&
+  if (kIsDesktop &&
       input.current_page_classification() !=
           metrics::OmniboxEventProto::NTP_REALBOX &&
       template_url.keyword().starts_with(u'@')) {
-    match.description = l10n_util::GetStringFUTF16(
-        IDS_OMNIBOX_INSTANT_KEYWORD_SEARCH_TEXT, template_url.short_name());
+    // The AskGoogle provider doesn't follow the "Search X" pattern and should
+    // also be ranked first.
+    // TODO(b/41494524): Currently templateurlservice returns the keywords in
+    //  alphabetical order, which is the order we rank them. There should be a
+    //  more sustainable way for specifying the order they should appear in the
+    //  omnibox.
+    if (OmniboxFieldTrial::IsStarterPackExpansionEnabled() &&
+        template_url.starter_pack_id() ==
+            TemplateURLStarterPackData::kAskGoogle) {
+      match.description = template_url.short_name();
+      match.relevance += 10;
+    } else {
+      match.description = l10n_util::GetStringFUTF16(
+          IDS_OMNIBOX_INSTANT_KEYWORD_SEARCH_TEXT, template_url.short_name());
+    }
     match.description_class.emplace_back(0, ACMatchClassification::NONE);
     match.contents =
         l10n_util::GetStringUTF16(IDS_OMNIBOX_INSTANT_KEYWORD_HELP);

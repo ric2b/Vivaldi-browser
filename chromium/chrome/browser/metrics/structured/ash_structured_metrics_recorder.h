@@ -7,11 +7,16 @@
 
 #include <memory>
 
-#include "base/files/file_path.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/browser/metrics/structured/profile_observer.h"
 #include "components/metrics/metrics_provider.h"
 #include "components/metrics/structured/external_metrics.h"
 #include "components/metrics/structured/structured_metrics_recorder.h"
+#include "third_party/metrics_proto/structured_data.pb.h"
+
+namespace base {
+class FilePath;
+}
 
 namespace metrics::structured {
 
@@ -31,7 +36,8 @@ namespace metrics::structured {
 //
 // 3. Once both keys and events are loaded then AshStructuredMetricsRecorder is
 // considered fully initialized.
-class AshStructuredMetricsRecorder : public StructuredMetricsRecorder {
+class AshStructuredMetricsRecorder : public StructuredMetricsRecorder,
+                                     public ProfileObserver {
  public:
   explicit AshStructuredMetricsRecorder(
       metrics::MetricsProvider* system_profile_provider);
@@ -54,15 +60,16 @@ class AshStructuredMetricsRecorder : public StructuredMetricsRecorder {
 
   void SetExternalMetricsDirForTest(const base::FilePath& dir);
 
+  // ProfileObserver:
+  void ProfileAdded(const Profile& profile) override;
+
  private:
   friend class AshStructuredMetricsRecorderTest;
 
   AshStructuredMetricsRecorder(
       std::unique_ptr<KeyDataProvider> key_provider,
-      std::unique_ptr<EventStorage> event_storage,
+      std::unique_ptr<EventStorage<StructuredEventProto>> event_storage,
       metrics::MetricsProvider* system_profile_provider);
-
-  void OnProfileAdded(const base::FilePath& profile_path) override;
 
   void ProvideSystemProfile(SystemProfileProto* system_profile);
 

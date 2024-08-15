@@ -9,7 +9,9 @@
 #include "base/metrics/histogram_functions.h"
 #include "components/page_image_service/features.h"
 #include "components/page_image_service/metrics_util.h"
+#include "components/sync/base/features.h"
 #include "components/sync/service/sync_service.h"
+#include "components/sync/service/sync_service_utils.h"
 #include "components/unified_consent/consent_throttle.h"
 #include "components/unified_consent/url_keyed_data_collection_consent_helper.h"
 
@@ -25,7 +27,7 @@ void RunConsentThrottleCallback(
 }
 
 PageImageServiceConsentStatus ConsentStatusToUmaStatus(
-    absl::optional<bool> consent_status) {
+    std::optional<bool> consent_status) {
   if (!consent_status) {
     return PageImageServiceConsentStatus::kTimedOut;
   }
@@ -47,12 +49,14 @@ ImageServiceConsentHelper::ImageServiceConsentHelper(
   if (base::FeatureList::IsEnabled(kImageServiceObserveSyncDownloadStatus)) {
     sync_service_observer_.Observe(sync_service);
   } else if (model_type == syncer::ModelType::BOOKMARKS) {
-    // TODO(crbug.com/1463438): Migrate to require_sync_feature_enabled = false.
     consent_throttle_ = std::make_unique<unified_consent::ConsentThrottle>(
         unified_consent::UrlKeyedDataCollectionConsentHelper::
             NewPersonalizedBookmarksDataCollectionConsentHelper(
                 sync_service,
-                /*require_sync_feature_enabled=*/true),
+                /*require_sync_feature_enabled=*/!base::FeatureList::IsEnabled(
+                    syncer::kReplaceSyncPromosWithSignInPromos) &&
+                    !base::FeatureList::IsEnabled(
+                        syncer::kEnableBookmarkFoldersForAccountStorage)),
         timeout_duration_);
   } else if (model_type == syncer::ModelType::HISTORY_DELETE_DIRECTIVES) {
     consent_throttle_ = std::make_unique<unified_consent::ConsentThrottle>(
@@ -76,7 +80,7 @@ void ImageServiceConsentHelper::EnqueueRequest(
     return;
   }
 
-  absl::optional<bool> consent_status = GetConsentStatus();
+  std::optional<bool> consent_status = GetConsentStatus();
   if (consent_status.has_value()) {
     std::move(callback).Run(*consent_status
                                 ? PageImageServiceConsentStatus::kSuccess
@@ -98,7 +102,7 @@ void ImageServiceConsentHelper::OnStateChanged(
   CHECK_EQ(sync_service_, sync_service);
   CHECK(base::FeatureList::IsEnabled(kImageServiceObserveSyncDownloadStatus));
 
-  absl::optional<bool> consent_status = GetConsentStatus();
+  std::optional<bool> consent_status = GetConsentStatus();
   if (!consent_status.has_value()) {
     return;
   }
@@ -127,18 +131,31 @@ void ImageServiceConsentHelper::OnSyncShutdown(
   sync_service_ = nullptr;
 }
 
-absl::optional<bool> ImageServiceConsentHelper::GetConsentStatus() {
+std::optional<bool> ImageServiceConsentHelper::GetConsentStatus() {
   CHECK(base::FeatureList::IsEnabled(kImageServiceObserveSyncDownloadStatus));
 
   if (!sync_service_) {
     return false;
   }
 
+  // If upload of the given ModelType is disabled (or inactive due to an
+  // error), then consent must be assumed to be NOT given.
+  // Note that the "INITIALIZING" state is good enough: It means the data
+  // type is enabled in principle, Sync just hasn't fully finished
+  // initializing yet. This case is handled by the DownloadStatus check
+  // below.
+  if (syncer::GetUploadToGoogleState(sync_service_, model_type_) ==
+      syncer::UploadState::NOT_ACTIVE) {
+    return false;
+  }
+
+  // Ensure Sync has downloaded all relevant updates (i.e. any deletions from
+  // other devices are known).
   syncer::SyncService::ModelTypeDownloadStatus download_status =
       sync_service_->GetDownloadStatusFor(model_type_);
   switch (download_status) {
     case syncer::SyncService::ModelTypeDownloadStatus::kWaitingForUpdates:
-      return absl::nullopt;
+      return std::nullopt;
     case syncer::SyncService::ModelTypeDownloadStatus::kUpToDate:
       return true;
     case syncer::SyncService::ModelTypeDownloadStatus::kError:

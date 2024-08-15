@@ -177,10 +177,7 @@ UIEdgeInsets parentFolderViewPadding = UIEdgeInsetsMake(24, 24, 12, 18);
 
 /// Set up the header view
 - (void)setUpNavBarView {
-  self.title = !self.editingExistingFolder ?
-    l10n_util::GetNSString(IDS_IOS_ADD_FOLDER) :
-    l10n_util::GetNSString(IDS_IOS_EDIT_FOLDER);
-
+  self.title = [self titleForViewController];
   // Add Done button.
   UIBarButtonItem* doneItem = [[UIBarButtonItem alloc]
       initWithBarButtonSystemItem:UIBarButtonSystemItemDone
@@ -199,6 +196,14 @@ UIEdgeInsets parentFolderViewPadding = UIEdgeInsetsMake(24, 24, 12, 18);
     cancelItem.accessibilityIdentifier = @"Cancel";
     self.navigationItem.leftBarButtonItem = cancelItem;
   }
+}
+
+- (NSString*)titleForViewController {
+  std::u16string title = base::SysNSStringToUTF16(
+      l10n_util::GetNSString(IDS_IOS_ITEM_TYPE_FOLDER));
+  return self.editingExistingFolder ?
+      l10n_util::GetNSStringF(IDS_IOS_EDIT_ITEM_WITH_TYPE, title) :
+      l10n_util::GetNSStringF(IDS_IOS_ADD_ITEM_WITH_TYPE, title);
 }
 
 /// Set up the content view

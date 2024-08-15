@@ -260,6 +260,7 @@ ARCH_EXT_LIST_AARCH64="
     neon_dotprod
     neon_i8mm
     sve
+    sve2
 "
 
 ARCH_EXT_LIST_X86="
@@ -376,6 +377,7 @@ CMDLINE_SELECT="
     install_libs
     install_srcs
     debug
+    profile
     gprof
     gcov
     pic
@@ -659,6 +661,7 @@ process_toolchain() {
         check_add_cflags -Wmissing-declarations
         check_add_cflags -Wmissing-prototypes
         check_add_cflags -Wshadow
+        check_add_cflags -Wstrict-prototypes
         check_add_cflags -Wuninitialized
         check_add_cflags -Wunreachable-code-aggressive
         check_add_cflags -Wunused

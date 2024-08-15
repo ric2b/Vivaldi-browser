@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/bin/bash
 # Copyright 2020 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,25 +36,51 @@
 #     avif_fuzztest_enc_dec_incr@EncodeDecodeAvifFuzzTest.EncodeDecodeGridValid \
 #     --sanitizer address
 
-# Add asan as a dependency by default to fix builds.
-export CXXFLAGS="${CXXFLAGS} -fsanitize=address"
-export CFLAGS="${CFLAGS} -fsanitize=address"
+set -eu
 
-# build dependencies
-cd ext && bash aom.cmd && bash dav1d.cmd && bash fuzztest.cmd && bash libjpeg.cmd && \
+# Build dav1d with sanitizer flags.
+# Adds extra flags: -Db_sanitize=$SANITIZER -Db_lundef=false, and -Denable_asm=false for msan
+DAV1D_EXTRA_FLAGS=""
+if [ "$SANITIZER" != "coverage" ] && [ "$SANITIZER" != "introspector" ]
+then
+  DAV1D_EXTRA_FLAGS="${DAV1D_EXTRA_FLAGS} -Db_sanitize=$SANITIZER -Db_lundef=false"
+fi
+if [ "$SANITIZER" == "memory" ]
+then
+  DAV1D_EXTRA_FLAGS="${DAV1D_EXTRA_FLAGS} -Denable_asm=false"
+fi
+sed -i 's/meson setup \(.*\) \.\./meson setup \1 '"${DAV1D_EXTRA_FLAGS}"' ../g' ./ext/dav1d.cmd
+
+# Build libaom with sanitizer flags.
+# Adds extra flags: -DAOM_TARGET_CPU=generic for msan.
+if [ "$SANITIZER" == "memory" ]
+then
+  sed -i 's/cmake \(.*\) \.\./cmake \1 -DAOM_TARGET_CPU=generic ../g' ./ext/aom.cmd
+fi
+
+# Build libjpeg-turbo with sanitizer flags. Add extra flag -DWITH_SIMD=0 for msan.
+# See https://github.com/libjpeg-turbo/libjpeg-turbo/blob/main/README.md#memory-debugger-pitfalls
+if [ "$SANITIZER" == "memory" ]
+then
+  sed -i 's/cmake -S libjpeg-turbo \(.*\)/cmake -S libjpeg-turbo \1 -DWITH_SIMD=0/g' ./ext/libjpeg.cmd
+fi
+
+# Prepare dependencies.
+cd ext && bash aom.cmd && bash dav1d.cmd && bash fuzztest.cmd && bash libjpeg.cmd &&
       bash libsharpyuv.cmd && bash libyuv.cmd && bash zlibpng.cmd && cd ..
 
 # build libavif
 mkdir build
 cd build
+EXTRA_CMAKE_FLAGS=""
 if [ "$FUZZING_ENGINE" == "libfuzzer" ]
 then
-  export CXXFLAGS="${CXXFLAGS} -DFUZZTEST_COMPATIBILITY_MODE"
-  export EXTRA_CMAKE_FLAGS="-DAVIF_ENABLE_FUZZTEST=ON -DFUZZTEST_COMPATIBILITY_MODE=libfuzzer"
+  CXXFLAGS="${CXXFLAGS} -DFUZZTEST_COMPATIBILITY_MODE"
+  EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -DAVIF_ENABLE_FUZZTEST=ON -DFUZZTEST_COMPATIBILITY_MODE=libfuzzer"
 fi
 cmake .. -G Ninja -DBUILD_SHARED_LIBS=OFF -DAVIF_CODEC_AOM=LOCAL -DAVIF_CODEC_DAV1D=LOCAL \
       -DAVIF_CODEC_AOM_DECODE=ON -DAVIF_CODEC_AOM_ENCODE=ON \
-      -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DAVIF_ENABLE_WERROR=OFF \
+      -DAVIF_ENABLE_WERROR=OFF \
       -DAVIF_LOCAL_FUZZTEST=ON \
       -DAVIF_LOCAL_GTEST=OFF -DAVIF_LOCAL_JPEG=ON -DAVIF_LOCAL_LIBSHARPYUV=ON \
       -DAVIF_LIBYUV=LOCAL -DAVIF_LOCAL_ZLIBPNG=ON \
@@ -101,10 +127,9 @@ chmod -x \$this_dir/$fuzz_basename" > $OUT/$TARGET_FUZZER
   done
 fi
 
-# copy seed corpus for fuzztest tests
-mkdir $OUT/corpus
-unzip $SRC/avif_decode_seed_corpus.zip -d $OUT/corpus
-cp $SRC/libavif/tests/data/* $OUT/corpus
-
 # create a bigger seed corpus for avif_decode_fuzzer
-zip -j $OUT/avif_decode_fuzzer_seed_corpus.zip $OUT/corpus/*
+cp $SRC/avif_decode_seed_corpus.zip $OUT/avif_decode_fuzzer_seed_corpus.zip
+zip -j $OUT/avif_decode_fuzzer_seed_corpus.zip \
+  $(find $SRC/libavif/tests/data -maxdepth 1 -type f)
+# copy seed corpus for fuzztest tests
+unzip $OUT/avif_decode_fuzzer_seed_corpus.zip -d $OUT/corpus

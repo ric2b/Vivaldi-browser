@@ -4,14 +4,16 @@
 
 #import "ios/chrome/browser/ui/browser_view/key_commands_provider.h"
 
+#import "base/memory/raw_ptr.h"
 #import "base/test/metrics/user_action_tester.h"
 #import "base/test/task_environment.h"
-#import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/browser/bookmark_node.h"
 #import "components/bookmarks/common/bookmark_metrics.h"
-#import "components/bookmarks/test/bookmark_test_helpers.h"
 #import "components/policy/core/common/policy_pref_names.h"
 #import "components/sync_preferences/testing_pref_service_syncable.h"
+#import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
+#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model_test_helpers.h"
 #import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/find_in_page/model/find_tab_helper.h"
 #import "ios/chrome/browser/find_in_page/model/java_script_find_tab_helper.h"
@@ -29,8 +31,12 @@
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/bookmarks_commands.h"
+#import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
+#import "ios/chrome/browser/shared/public/commands/find_in_page_commands.h"
+#import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/shared/public/commands/reading_list_add_command.h"
+#import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/ui/util/url_with_title.h"
 #import "ios/chrome/browser/tabs/model/closing_web_state_observer_browser_agent.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
@@ -59,6 +65,8 @@ class KeyCommandsProviderTest : public PlatformTest {
     TestChromeBrowserState::Builder builder;
     builder.AddTestingFactory(IOSChromeTabRestoreServiceFactory::GetInstance(),
                               FakeTabRestoreService::GetTestingFactory());
+    builder.AddTestingFactory(ios::BookmarkModelFactory::GetInstance(),
+                              ios::BookmarkModelFactory::GetDefaultFactory());
     builder.AddTestingFactory(
         ios::LocalOrSyncableBookmarkModelFactory::GetInstance(),
         ios::LocalOrSyncableBookmarkModelFactory::GetDefaultFactory());
@@ -71,7 +79,7 @@ class KeyCommandsProviderTest : public PlatformTest {
     bookmark_model_ =
         ios::LocalOrSyncableBookmarkModelFactory::GetForBrowserState(
             browser_state_.get());
-    bookmarks::test::WaitForBookmarkModelToLoad(bookmark_model_);
+    WaitForLegacyBookmarkModelToLoad(bookmark_model_);
     provider_ = [[KeyCommandsProvider alloc] initWithBrowser:browser_.get()];
   }
   ~KeyCommandsProviderTest() override {}
@@ -80,8 +88,8 @@ class KeyCommandsProviderTest : public PlatformTest {
     auto web_state = std::make_unique<web::FakeWebState>();
     web_state->SetBrowserState(browser_state_.get());
     int insertedIndex = web_state_list_->InsertWebState(
-        index, std::move(web_state), WebStateList::INSERT_ACTIVATE,
-        WebStateOpener());
+        std::move(web_state),
+        WebStateList::InsertionParams::AtIndex(index).Activate());
     return static_cast<web::FakeWebState*>(
         web_state_list_->GetWebStateAt(insertedIndex));
   }
@@ -120,8 +128,8 @@ class KeyCommandsProviderTest : public PlatformTest {
     web_state->SetBrowserState(browser_state_.get());
 
     int insertedIndex = web_state_list_->InsertWebState(
-        index, std::move(web_state), WebStateList::INSERT_ACTIVATE,
-        WebStateOpener());
+        std::move(web_state),
+        WebStateList::InsertionParams::AtIndex(index).Activate());
     return static_cast<web::FakeWebState*>(
         web_state_list_->GetWebStateAt(insertedIndex));
   }
@@ -154,9 +162,9 @@ class KeyCommandsProviderTest : public PlatformTest {
   web::WebTaskEnvironment task_environment_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
   std::unique_ptr<TestBrowser> browser_;
-  WebStateList* web_state_list_;
+  raw_ptr<WebStateList> web_state_list_;
   base::UserActionTester user_action_tester_;
-  bookmarks::BookmarkModel* bookmark_model_;
+  raw_ptr<LegacyBookmarkModel> bookmark_model_;
   KeyCommandsProvider* provider_;
 };
 
@@ -463,17 +471,14 @@ TEST_F(KeyCommandsProviderTest, CanPerform_ReopenLastClosedTab) {
 
   // Add three new tabs.
   auto web_state1 = CreateFakeWebStateWithURL(GURL("https://test/url1"));
-  browser_->GetWebStateList()->InsertWebState(0, std::move(web_state1),
-                                              WebStateList::INSERT_FORCE_INDEX,
-                                              WebStateOpener());
+  browser_->GetWebStateList()->InsertWebState(
+      std::move(web_state1), WebStateList::InsertionParams::AtIndex(0));
   auto web_state2 = CreateFakeWebStateWithURL(GURL("https://test/url2"));
-  browser_->GetWebStateList()->InsertWebState(1, std::move(web_state2),
-                                              WebStateList::INSERT_FORCE_INDEX,
-                                              WebStateOpener());
+  browser_->GetWebStateList()->InsertWebState(
+      std::move(web_state2), WebStateList::InsertionParams::AtIndex(1));
   auto web_state3 = CreateFakeWebStateWithURL(GURL("https://test/url3"));
-  browser_->GetWebStateList()->InsertWebState(2, std::move(web_state3),
-                                              WebStateList::INSERT_FORCE_INDEX,
-                                              WebStateOpener());
+  browser_->GetWebStateList()->InsertWebState(
+      std::move(web_state3), WebStateList::InsertionParams::AtIndex(2));
   browser_->GetWebStateList()->ActivateWebStateAt(0);
   EXPECT_FALSE(CanPerform(@"keyCommand_reopenLastClosedTab"));
 
@@ -949,7 +954,8 @@ TEST_F(KeyCommandsProviderTest, ValidateBookmarkCommand) {
   GURL url = GURL("https://test/url");
   auto web_state = CreateFakeWebStateWithURL(url);
   browser_->GetWebStateList()->InsertWebState(
-      0, std::move(web_state), WebStateList::INSERT_ACTIVATE, WebStateOpener());
+      std::move(web_state),
+      WebStateList::InsertionParams::Automatic().Activate());
 
   for (UIKeyCommand* command in provider_.keyCommands) {
     [provider_ validateCommand:command];

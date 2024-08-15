@@ -15,6 +15,7 @@
 #include "base/time/time.h"
 #include "base/types/optional_util.h"
 #include "content/browser/child_process_security_policy_impl.h"
+#include "content/browser/interest_group/interest_group_features.h"
 #include "content/browser/process_lock.h"
 #include "content/browser/renderer_host/debug_urls.h"
 #include "content/browser/renderer_host/frame_tree.h"
@@ -49,6 +50,7 @@
 #include "content/public/common/content_constants.h"
 #include "content/public/common/url_utils.h"
 #include "net/base/net_errors.h"
+#include "net/base/schemeful_site.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -470,7 +472,7 @@ void Navigator::DidNavigate(
       frame_tree_node->render_manager()->current_frame_host()->GetWeakPtr();
 
   // Save the activation status of the previous page here before it gets reset
-  // in FrameTreeNode::ResetForNavigation. Look at the root since the
+  // in FrameTreeNode::UpdateUserActivationState. Look at the root since the
   // activation status for all frames on the page is aggregated in the main
   // frame of the current frame tree (but not across nested frame trees).
   bool previous_document_history_intervention_activation =
@@ -508,7 +510,7 @@ void Navigator::DidNavigate(
 
   if (ui::PageTransitionIsMainFrame(params.transition)) {
     // Run tasks that must execute just before the commit.
-    delegate_->DidNavigateMainFramePreCommit(frame_tree_node,
+    delegate_->DidNavigateMainFramePreCommit(navigation_request.get(),
                                              was_within_same_document);
   }
 
@@ -517,6 +519,9 @@ void Navigator::DidNavigate(
   // the NavigationRequest.
   navigation_request->set_previous_render_frame_host_id(
       old_frame_host->GetGlobalId());
+
+  // Store this information before DidNavigateFrame() potentially swaps RFHs.
+  url::Origin old_frame_origin = old_frame_host->GetLastCommittedOrigin();
 
   // DidNavigateFrame() must be called before replicating the new origin and
   // other properties to proxies.  This is because it destroys the subframes of
@@ -530,6 +535,37 @@ void Navigator::DidNavigate(
           .ShouldClearProxiesOnCommit(),
       navigation_request->commit_params().frame_policy);
 
+  // Reset the old frame host's weak pointer to auction initiator page when it
+  // is a cross-document navigation and the frame does not go into bfcache.
+  if ((base::FeatureList::IsEnabled(features::kDetectInconsistentPageImpl)) &&
+      !was_within_same_document && old_frame_host &&
+      !old_frame_host->IsInBackForwardCache()) {
+    old_frame_host->set_auction_initiator_page(nullptr);
+  }
+
+  // The main frame, same site, and cross-site navigation checks for user
+  // activation mirror the checks in DocumentLoader::CommitNavigation() (note:
+  // CommitNavigation() is not called for same-document navigations, which is
+  // why we have the !was_within_same_document check). This is done to prevent
+  // newly navigated pages from re-using the sticky user activation state from
+  // the previously navigated page in the frame. We persist user activation
+  // across same-site navigations for compatibility reasons with user
+  // activation, and does not need to match the same-site checks used in the
+  // process model. See: crbug.com/736415, and crbug.com/40228985 for the
+  // specific regression that resulted in this requirement.
+  if (!was_within_same_document) {
+    if (!navigation_request->commit_params()
+             .should_have_sticky_user_activation) {
+      frame_tree_node->UpdateUserActivationState(
+          blink::mojom::UserActivationUpdateType::kClearActivation,
+          blink::mojom::UserActivationNotificationType::kNone);
+    } else {
+      frame_tree_node->UpdateUserActivationState(
+          blink::mojom::UserActivationUpdateType::kNotifyActivationStickyOnly,
+          blink::mojom::UserActivationNotificationType::kNone);
+    }
+  }
+
   // Save the new page's origin and other properties, and replicate them to
   // proxies, including the proxy created in DidNavigateFrame() to replace the
   // old frame in cross-process navigation cases.
@@ -539,12 +575,6 @@ void Navigator::DidNavigate(
       params.insecure_request_policy);
   render_frame_host->browsing_context_state()->SetInsecureNavigationsSet(
       params.insecure_navigations_set);
-
-  if (!was_within_same_document) {
-    // Navigating to a new location means a new, fresh set of http headers
-    // and/or <meta> elements - we need to reset Permissions Policy.
-    frame_tree_node->ResetForNavigation();
-  }
 
   // If the committing URL requires the SiteInstance's site to be assigned,
   // that site assignment should've already happened at ReadyToCommit time. We
@@ -1239,7 +1269,11 @@ void Navigator::RecordNavigationMetrics(
   DCHECK(site_instance->HasProcess());
 
   if (!details.is_main_frame || !metrics_data_ ||
-      metrics_data_->url_ != original_request_url) {
+      metrics_data_->url_ != original_request_url ||
+      metrics_data_->ukm_source_id_ == ukm::kInvalidSourceId) {
+    // The source ID will be invalid for prerendered pages. See
+    // `GetPageUkmSourceId()`.
+    metrics_data_.reset();
     return;
   }
 

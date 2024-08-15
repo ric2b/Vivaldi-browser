@@ -127,7 +127,7 @@ class CONTENT_EXPORT RenderFrameObserver
       blink::WebDocumentLoader* document_loader) {}
 
   // Called when a RenderFrame's page lifecycle state gets updated.
-  virtual void DidSetPageLifecycleState() {}
+  virtual void DidSetPageLifecycleState(bool restoring_from_bfcache) {}
 
   // These match the Blink API notifications. These will not be called for the
   // initial empty document, since that already exists before an observer for a
@@ -212,13 +212,15 @@ class CONTENT_EXPORT RenderFrameObserver
   // user interaction can be built up from multiple input events (e.g. keydown
   // then keyup). Each of these events has an input to next frame latency. This
   // reports the timings of the max input-to-frame latency for each interaction.
-  // `max_event_start` is when input was received, and `max_event_end` is when
-  // the next frame was presented. See
+  // `max_event_start` is when input was received, `max_event_end` is when
+  // the next frame was presented, and `max_event_queued_main_thread` is when
+  // input was queued on main thread. See
   // https://web.dev/inp/#whats-in-an-interaction for more detailed motivation
   // and explanation.
   virtual void DidObserveUserInteraction(
       base::TimeTicks max_event_start,
       base::TimeTicks max_event_end,
+      base::TimeTicks max_event_queued_main_thread,
       blink::UserInteractionType interaction_type,
       uint64_t interaction_offset) {}
 
@@ -407,7 +409,7 @@ class CONTENT_EXPORT RenderFrameObserver
   // can null out its pointer.
   void RenderFrameGone();
 
-  raw_ptr<RenderFrame, ExperimentalRenderer> render_frame_;
+  raw_ptr<RenderFrame> render_frame_;
 
 #if BUILDFLAG(CONTENT_ENABLE_LEGACY_IPC)
   // The routing ID of the associated RenderFrame.

@@ -84,7 +84,7 @@ class VivaldiVirtualDesktopHelper
   // last we checked. This is used to tell if the window has moved to a
   // different desktop, and notify listeners. It will only be set if
   // we created |virtual_desktop_helper_|.
-  absl::optional<std::string> workspace_;
+  std::optional<std::string> workspace_;
 
   bool initial_workspace_remembered_ = false;
 
@@ -425,7 +425,7 @@ void VivaldiDesktopWindowTreeHostWin::UpdateWindowBorderColor(
   // If the system has accent_color set, this overrides everything.
   if (has_accent_set_) {
     if (is_inactive) {
-      absl::optional<SkColor> accent_color_inactive =
+      std::optional<SkColor> accent_color_inactive =
           ui::AccentColorObserver::Get()->accent_color_inactive();
 
       if (accent_color_inactive) {
@@ -436,7 +436,7 @@ void VivaldiDesktopWindowTreeHostWin::UpdateWindowBorderColor(
         window_border_color_ = GetSysColor(CTLCOLOR_STATIC);
       }
     } else {
-      absl::optional<SkColor> accent_color =
+      std::optional<SkColor> accent_color =
           ui::AccentColorObserver::Get()->accent_color();
       window_border_color_ =
           RGB(SkColorGetR(*accent_color), SkColorGetG(*accent_color),

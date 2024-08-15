@@ -136,11 +136,11 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
       mojo::PendingRemote<mojom::blink::BlobURLToken>,
       base::TimeTicks input_start_time,
       const String& href_translate,
-      const absl::optional<Impression>& impression,
+      const std::optional<Impression>& impression,
       const LocalFrameToken* initiator_frame_token,
       std::unique_ptr<SourceLocation> source_location,
-      mojo::PendingRemote<mojom::blink::PolicyContainerHostKeepAliveHandle>
-          initiator_policy_container_keep_alive_handle,
+      mojo::PendingRemote<mojom::blink::NavigationStateKeepAliveHandle>
+          initiator_navigation_state_keep_alive_handle,
       bool is_container_initiated,
       bool is_fullscreen_requested) override;
   void DispatchWillSendSubmitEvent(HTMLFormElement*) override;
@@ -148,12 +148,13 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
   void DidStopLoading() override;
   bool NavigateBackForward(
       int offset,
-      absl::optional<scheduler::TaskAttributionId>
+      std::optional<scheduler::TaskAttributionId>
           soft_navigation_heuristics_task_id) const override;
   void DidDispatchPingLoader(const KURL&) override;
   void DidChangePerformanceTiming() override;
   void DidObserveUserInteraction(base::TimeTicks max_event_start,
                                  base::TimeTicks max_event_end,
+                                 base::TimeTicks max_event_queued_main_thread,
                                  UserInteractionType interaction_type,
                                  uint64_t interaction_offset) override;
   void DidChangeCpuTiming(base::TimeDelta) override;
@@ -175,7 +176,7 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
 
   String UserAgentOverride() override;
   WTF::String UserAgent() override;
-  absl::optional<blink::UserAgentMetadata> UserAgentMetadata() override;
+  std::optional<blink::UserAgentMetadata> UserAgentMetadata() override;
   WTF::String DoNotTrackValue() override;
   void TransitionToCommittedForNewPage() override;
   LocalFrame* CreateFrame(const WTF::AtomicString& name,

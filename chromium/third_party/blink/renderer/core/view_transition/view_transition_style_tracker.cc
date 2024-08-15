@@ -236,14 +236,14 @@ float ComputeStartForSide(float start,
 // that should be painted. The return value is relative to the element's border
 // box.
 // Returns null if the complete ink overflow rect should be painted.
-absl::optional<gfx::RectF> ComputeCaptureRect(
+std::optional<gfx::RectF> ComputeCaptureRect(
     const int max_capture_size,
     const PhysicalRect& ink_overflow_rect_in_border_box_space,
     const gfx::Transform& element_to_snapshot_root,
     const gfx::Size& snapshot_root_size) {
   if (ink_overflow_rect_in_border_box_space.Width() <= max_capture_size &&
       ink_overflow_rect_in_border_box_space.Height() <= max_capture_size) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   // Compute the matrix to map the element's ink overflow rectangle to snapshot
@@ -288,7 +288,7 @@ absl::optional<gfx::RectF> ComputeCaptureRect(
 }
 
 int ComputeMaxCaptureSize(Document& document,
-                          absl::optional<int> max_texture_size,
+                          std::optional<int> max_texture_size,
                           const gfx::Size& snapshot_root_size) {
   // If the max texture size is not known yet, use the size of the snapshot
   // root.
@@ -427,14 +427,28 @@ class ViewTransitionStyleTracker::ImageWrapperPseudoElement
   }
 };
 
-ViewTransitionStyleTracker::ViewTransitionStyleTracker(Document& document)
+ViewTransitionStyleTracker::ViewTransitionStyleTracker(
+    Document& document,
+    const viz::TransitionId& transition_id)
     : document_(document),
-      device_pixel_ratio_(DevicePixelRatioFromDocument(document)) {}
+      transition_id_(transition_id),
+      device_pixel_ratio_(DevicePixelRatioFromDocument(document)) {
+  CHECK(!transition_id.is_empty());
+}
 
 ViewTransitionStyleTracker::ViewTransitionStyleTracker(
     Document& document,
     ViewTransitionState transition_state)
-    : document_(document), state_(State::kCaptured), deserialized_(true) {
+    : document_(document),
+      state_(State::kCaptured),
+      transition_id_(transition_state.transition_id),
+      deserialized_(true) {
+  CHECK(!transition_id_.is_empty());
+  auto* supplement = ViewTransitionSupplement::FromIfExists(document);
+  CHECK(supplement);
+  supplement->InitializeResourceIdSequence(
+      transition_state.next_element_resource_id);
+
   device_pixel_ratio_ = transition_state.device_pixel_ratio;
   captured_name_count_ = static_cast<int>(transition_state.elements.size());
   snapshot_root_layout_size_at_capture_ =
@@ -478,6 +492,11 @@ ViewTransitionStyleTracker::ViewTransitionStyleTracker(
     }
     element_data->captured_css_properties =
         std::move(css_property_builder).Finish();
+
+    for (const auto& class_name : transition_state_element.class_list) {
+      element_data->class_list.push_back(
+          AtomicString::FromUTF8(class_name.c_str()));
+    }
 
     element_data->CacheStateForOldSnapshot();
 
@@ -691,10 +710,6 @@ bool ViewTransitionStyleTracker::FlattenAndVerifyElements(
 
     transition_names.push_back(name);
     elements.push_back(element);
-
-    if (name.LowerASCII() == "auto") {
-      UseCounter::Count(document_, WebFeature::kViewTransitionNameAuto);
-    }
   }
   return true;
 }
@@ -732,7 +747,7 @@ bool ViewTransitionStyleTracker::Capture() {
             .insert(element, viz::ViewTransitionElementResourceId())
             .stored_value->value;
     if (!snapshot_id.IsValid()) {
-      snapshot_id = viz::ViewTransitionElementResourceId::Generate();
+      snapshot_id = GenerateResourceId();
       capture_resource_ids_.push_back(snapshot_id);
     }
 
@@ -740,6 +755,8 @@ bool ViewTransitionStyleTracker::Capture() {
     element_data->target_element = element;
     element_data->element_index = next_index++;
     element_data->old_snapshot_id = snapshot_id;
+    element_data->class_list =
+        element->ComputedStyleRef().ViewTransitionClass();
     element_data_map_.insert(name, std::move(element_data));
 
     if (element->IsDocumentElement()) {
@@ -810,6 +827,13 @@ VectorOf<Element> ViewTransitionStyleTracker::GetTransitioningElements() const {
   return result;
 }
 
+const Vector<AtomicString>&
+ViewTransitionStyleTracker::GetViewTransitionClassList(
+    const AtomicString& name) const {
+  CHECK(element_data_map_.Contains(name));
+  return element_data_map_.at(name)->class_list;
+}
+
 bool ViewTransitionStyleTracker::Start() {
   DCHECK_EQ(state_, State::kCaptured);
 
@@ -857,13 +881,17 @@ bool ViewTransitionStyleTracker::Start() {
         element_snapshot_ids
             .insert(element, viz::ViewTransitionElementResourceId())
             .stored_value->value;
-    if (!snapshot_id.IsValid())
-      snapshot_id = viz::ViewTransitionElementResourceId::Generate();
+    if (!snapshot_id.IsValid()) {
+      snapshot_id = GenerateResourceId();
+    }
 
     auto& element_data = element_data_map_.find(name)->value;
     DCHECK(!element_data->target_element);
     element_data->target_element = element;
     element_data->new_snapshot_id = snapshot_id;
+    element_data->class_list =
+        element->ComputedStyleRef().ViewTransitionClass();
+
     // Verify that the element_index assigned in Capture is less than next_index
     // here, just as a sanity check.
     DCHECK_LT(element_data->element_index, next_index);
@@ -1113,7 +1141,7 @@ bool ViewTransitionStyleTracker::RunPostPrePaintSteps() {
 
     ContainerProperties container_properties;
     PhysicalRect visual_overflow_rect_in_layout_space;
-    absl::optional<gfx::RectF> captured_rect_in_layout_space;
+    std::optional<gfx::RectF> captured_rect_in_layout_space;
 
     if (element_data->target_element->IsDocumentElement()) {
       auto layout_view_size = PhysicalSize(GetSnapshotRootSize());
@@ -1135,7 +1163,7 @@ bool ViewTransitionStyleTracker::RunPostPrePaintSteps() {
           CSSProperty::Get(id).CSSValueFromComputedStyle(
               layout_object->StyleRef(),
               /*layout_object=*/nullptr,
-              /*allow_visited_style=*/false);
+              /*allow_visited_style=*/false, CSSValuePhase::kComputedValue);
 
       if (!css_value) {
         continue;
@@ -1215,7 +1243,7 @@ void ViewTransitionStyleTracker::ComputeLiveElementGeometry(
     LayoutObject& layout_object,
     ContainerProperties& container_properties,
     PhysicalRect& visual_overflow_rect_in_layout_space,
-    absl::optional<gfx::RectF>& captured_rect_in_layout_space) const {
+    std::optional<gfx::RectF>& captured_rect_in_layout_space) const {
   DCHECK(!layout_object.IsLayoutView());
 
   // TODO(bokan): This doesn't account for the local offset of an inline
@@ -1261,11 +1289,7 @@ void ViewTransitionStyleTracker::ComputeLiveElementGeometry(
                            LayoutUnit(entry_size->inlineSize()));
   } else if (auto* layout_inline = DynamicTo<LayoutInline>(layout_object)) {
     border_box_size_in_css_space =
-        RuntimeEnabledFeatures::ReferenceBoxNoPixelSnappingEnabled()
-            ? layout_inline->PhysicalLinesBoundingBox().size
-            : PhysicalSize(
-                  ToEnclosingRect(layout_inline->PhysicalLinesBoundingBox())
-                      .size());
+        layout_inline->PhysicalLinesBoundingBox().size;
     // Convert to CSS pixels instead of layout pixels.
     border_box_size_in_css_space.Scale(1.f / device_pixel_ratio_);
   }
@@ -1592,7 +1616,6 @@ ViewTransitionState ViewTransitionStyleTracker::GetViewTransitionState() const {
            "phase";
 
     auto& element = transition_state.elements.emplace_back();
-    // TODO(khushalsagar): What about non utf8 strings?
     element.tag_name = entry.key.Utf8();
     element.border_box_size_in_css_space = gfx::SizeF(
         element_data->container_properties[0].border_box_size_in_css_space);
@@ -1611,12 +1634,46 @@ ViewTransitionState ViewTransitionStyleTracker::GetViewTransitionState() const {
       css_property_builder.Insert(ToTranstionPropertyId(id), value.Utf8());
     }
     element.captured_css_properties = std::move(css_property_builder).Finish();
+    for (const auto& class_name : element_data->class_list) {
+      element.class_list.push_back(class_name.Utf8());
+    }
   }
+
+  // Preserve the transition id for the new document.
+  transition_state.transition_id = transition_id_;
+
+  // To ensure the any new resources generated by the new document don't
+  // collide in id with this document's resources, pass the next sequence id so
+  // the new document can continue the sequence.
+  transition_state.next_element_resource_id = GenerateResourceId().local_id();
+
+  state_extracted_ = true;
 
   // TODO(khushalsagar): Need to send offsets to retain positioning of
   // ::view-transition.
 
   return transition_state;
+}
+
+bool ViewTransitionStyleTracker::SnapshotRootDidChangeSize() const {
+  if (!snapshot_root_layout_size_at_capture_.has_value()) {
+    return false;
+  }
+
+  gfx::Size current_size = GetSnapshotRootSize();
+
+  // Allow 1px of diff since the snapshot root can be adjusted by
+  // viewport-resizing UI (e.g. the virtual keyboard insets the viewport but
+  // then outsets the viewport rect to get the snapshot root). These
+  // adjustments can be off by a pixel due to different pixel snapping.
+  if (std::abs(snapshot_root_layout_size_at_capture_->width() -
+               current_size.width()) <= 1 &&
+      std::abs(snapshot_root_layout_size_at_capture_->height() -
+               current_size.height()) <= 1) {
+    return false;
+  }
+
+  return true;
 }
 
 void ViewTransitionStyleTracker::InvalidateStyle() {
@@ -1942,27 +1999,6 @@ PhysicalRect ViewTransitionStyleTracker::ComputeVisualOverflowRect(
   return result;
 }
 
-bool ViewTransitionStyleTracker::SnapshotRootDidChangeSize() const {
-  if (!snapshot_root_layout_size_at_capture_.has_value()) {
-    return false;
-  }
-
-  gfx::Size current_size = GetSnapshotRootSize();
-
-  // Allow 1px of diff since the snapshot root can be adjusted by
-  // viewport-resizing UI (e.g. the virtual keyboard insets the viewport but
-  // then outsets the viewport rect to get the snapshot root). These
-  // adjustments can be off by a pixel due to different pixel snapping.
-  if (std::abs(snapshot_root_layout_size_at_capture_->width() -
-               current_size.width()) <= 1 &&
-      std::abs(snapshot_root_layout_size_at_capture_->height() -
-               current_size.height()) <= 1) {
-    return false;
-  }
-
-  return true;
-}
-
 const char* ViewTransitionStyleTracker::StateToString(State state) {
   switch (state) {
     case State::kIdle:
@@ -1978,6 +2014,16 @@ const char* ViewTransitionStyleTracker::StateToString(State state) {
   }
   NOTREACHED();
   return "???";
+}
+
+viz::ViewTransitionElementResourceId
+ViewTransitionStyleTracker::GenerateResourceId() const {
+  // If we've already send the state to the incoming document, generating a new
+  // ID now would collide with IDs generated by that document.
+  CHECK(!state_extracted_);
+  auto* supplement = ViewTransitionSupplement::FromIfExists(*document_);
+  CHECK(supplement);
+  return supplement->GenerateResourceId(transition_id_);
 }
 
 }  // namespace blink

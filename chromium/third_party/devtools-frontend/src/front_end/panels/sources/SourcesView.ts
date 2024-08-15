@@ -13,6 +13,7 @@ import * as Workspace from '../../models/workspace/workspace.js';
 import * as QuickOpen from '../../ui/legacy/components/quick_open/quick_open.js';
 import * as SourceFrame from '../../ui/legacy/components/source_frame/source_frame.js';
 import * as UI from '../../ui/legacy/legacy.js';
+import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import * as Components from './components/components.js';
 import {EditingLocationHistoryManager} from './EditingLocationHistoryManager.js';
@@ -62,7 +63,6 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
   private readonly scriptViewToolbar: UI.Toolbar.Toolbar;
   private readonly bottomToolbarInternal: UI.Toolbar.Toolbar;
   private toolbarChangedListener: Common.EventTarget.EventDescriptor|null;
-  private readonly shortcuts: Map<number, () => boolean>;
   private readonly focusedPlaceholderElement?: HTMLElement;
   private searchView?: UISourceCodeFrame;
   private searchConfig?: UI.SearchableView.SearchConfig;
@@ -71,20 +71,21 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
     super();
 
     this.element.id = 'sources-panel-sources-view';
+    this.element.setAttribute('jslog', `${VisualLogging.pane('editor')}`);
     this.setMinimumAndPreferredSizes(88, 52, 150, 100);
 
     this.selectedIndex = 0;
 
     const workspace = Workspace.Workspace.WorkspaceImpl.instance();
 
-    this.searchableViewInternal = new UI.SearchableView.SearchableView(this, this, 'sourcesViewSearchConfig');
+    this.searchableViewInternal = new UI.SearchableView.SearchableView(this, this, 'sources-view-search-config');
     this.searchableViewInternal.setMinimalSearchQuerySize(0);
     this.searchableViewInternal.show(this.element);
 
     this.sourceViewByUISourceCode = new Map();
 
     this.editorContainer = new TabbedEditorContainer(
-        this, Common.Settings.Settings.instance().createLocalSetting('previouslyViewedFiles', []),
+        this, Common.Settings.Settings.instance().createLocalSetting('previously-viewed-files', []),
         this.placeholderElement(), this.focusedPlaceholderElement);
     this.editorContainer.show(this.searchableViewInternal.element);
     this.editorContainer.addEventListener(TabbedEditorContainerEvents.EditorSelected, this.editorSelected, this);
@@ -93,6 +94,7 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
     this.historyManager = new EditingLocationHistoryManager(this);
 
     this.toolbarContainerElementInternal = this.element.createChild('div', 'sources-toolbar');
+    this.toolbarContainerElementInternal.setAttribute('jslog', `${VisualLogging.toolbar('bottom')}`);
     this.scriptViewToolbar = new UI.Toolbar.Toolbar('', this.toolbarContainerElementInternal);
     this.scriptViewToolbar.element.style.flex = 'auto';
     this.bottomToolbarInternal = new UI.Toolbar.Toolbar('', this.toolbarContainerElementInternal);
@@ -138,9 +140,6 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
     if (!window.opener) {
       window.addEventListener('beforeunload', handleBeforeUnload, true);
     }
-
-    this.shortcuts = new Map();
-    this.element.addEventListener('keydown', this.handleKeyDown.bind(this), false);
   }
 
   private placeholderElement(): Element {
@@ -217,21 +216,6 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
 
   bottomToolbar(): UI.Toolbar.Toolbar {
     return this.bottomToolbarInternal;
-  }
-
-  private registerShortcuts(keys: UI.KeyboardShortcut.Descriptor[], handler: (arg0?: Event|undefined) => boolean):
-      void {
-    for (let i = 0; i < keys.length; ++i) {
-      this.shortcuts.set(keys[i].key, handler);
-    }
-  }
-
-  private handleKeyDown(event: Event): void {
-    const shortcutKey = UI.KeyboardShortcut.KeyboardShortcut.makeKeyFromEvent((event as KeyboardEvent));
-    const handler = this.shortcuts.get(shortcutKey);
-    if (handler && handler()) {
-      event.consume(true);
-    }
   }
 
   override wasShown(): void {

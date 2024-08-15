@@ -4,8 +4,11 @@
 
 package org.chromium.chrome.browser.toolbar.bottom;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.base.CallbackController;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsSizer;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
@@ -13,6 +16,8 @@ import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider.LayoutStateObserver;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.tab.TabObscuringHandler;
+import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
+import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeSupplier.ChangeObserver;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -31,6 +36,8 @@ class BottomControlsMediator
                 KeyboardVisibilityDelegate.KeyboardVisibilityListener,
                 LayoutStateObserver,
                 TabObscuringHandler.Observer {
+    private static final String TAG = "BotControlsMediator";
+
     /** The model for the bottom controls component that holds all of its view state. */
     private final PropertyModel mModel;
 
@@ -43,6 +50,10 @@ class BottomControlsMediator
     private final TabObscuringHandler mTabObscuringHandler;
 
     private final CallbackController mCallbackController;
+
+    private final ObservableSupplier<EdgeToEdgeController> mEdgeToEdgeControllerSupplier;
+
+    private final Supplier<Boolean> mReadAloudRestoringSupplier;
 
     /** The height of the bottom bar in pixels, not including the top shadow. */
     private int mBottomControlsHeight;
@@ -64,17 +75,25 @@ class BottomControlsMediator
 
     private LayoutStateProvider mLayoutStateProvider;
 
+    @Nullable private ChangeObserver mEdgeToEdgeChangeObserver;
+    private int mEdgeToEdgePaddingPx;
+
     /**
      * Build a new mediator that handles events from outside the bottom controls component.
+     *
      * @param windowAndroid A {@link WindowAndroid} for watching keyboard visibility events.
      * @param model The {@link BottomControlsProperties} that holds all the view state for the
-     *         bottom controls component.
+     *     bottom controls component.
      * @param controlsSizer The {@link BrowserControlsSizer} to manipulate browser controls.
      * @param fullscreenManager A {@link FullscreenManager} for events related to the browser
-     *                          controls.
+     *     controls.
      * @param tabObscuringHandler Delegate object handling obscuring views.
      * @param bottomControlsHeight The height of the bottom bar in pixels.
      * @param overlayPanelVisibilitySupplier Notifies overlay panel visibility event.
+     * @param edgeToEdgeControllerSupplier Supplies an {@link EdgeToEdgeController} to adjust the
+     *     height of the bottom controls when drawing all the way to the edge of the screen.
+     * @param readAloudRestoringSupplier Supplier that returns true if Read Aloud is currently
+     *     restoring its player, e.g. after theme change.
      */
     BottomControlsMediator(
             WindowAndroid windowAndroid,
@@ -83,7 +102,9 @@ class BottomControlsMediator
             FullscreenManager fullscreenManager,
             TabObscuringHandler tabObscuringHandler,
             int bottomControlsHeight,
-            ObservableSupplier<Boolean> overlayPanelVisibilitySupplier) {
+            ObservableSupplier<Boolean> overlayPanelVisibilitySupplier,
+            ObservableSupplier<EdgeToEdgeController> edgeToEdgeControllerSupplier,
+            Supplier<Boolean> readAloudRestoringSupplier) {
         mModel = model;
 
         mFullscreenManager = fullscreenManager;
@@ -104,6 +125,16 @@ class BottomControlsMediator
         // Watch for keyboard events so we can hide the bottom toolbar when the keyboard is showing.
         mWindowAndroid = windowAndroid;
         mWindowAndroid.getKeyboardDelegate().addKeyboardVisibilityListener(this);
+
+        mEdgeToEdgeControllerSupplier = edgeToEdgeControllerSupplier;
+        if (mEdgeToEdgeControllerSupplier.get() != null) {
+            mEdgeToEdgeChangeObserver =
+                    (bottomInset) -> {
+                        onEdgeToEdgeChanged(bottomInset);
+                    };
+            mEdgeToEdgeControllerSupplier.get().registerObserver(mEdgeToEdgeChangeObserver);
+        }
+        mReadAloudRestoringSupplier = readAloudRestoringSupplier;
     }
 
     void setLayoutStateProvider(LayoutStateProvider layoutStateProvider) {
@@ -126,6 +157,10 @@ class BottomControlsMediator
             mLayoutStateProvider.removeObserver(this);
             mLayoutStateProvider = null;
         }
+        if (mEdgeToEdgeControllerSupplier.get() != null && mEdgeToEdgeChangeObserver != null) {
+            mEdgeToEdgeControllerSupplier.get().unregisterObserver(mEdgeToEdgeChangeObserver);
+            mEdgeToEdgeChangeObserver = null;
+        }
         mTabObscuringHandler.removeObserver(this);
     }
 
@@ -139,12 +174,22 @@ class BottomControlsMediator
         int minHeight = mBrowserControlsSizer.getBottomControlsMinHeight();
         mModel.set(BottomControlsProperties.Y_OFFSET, bottomOffset - minHeight);
 
-        // Translate Android view at the end of the bottom controls min height
-        // animation.
-        if (minHeight == bottomControlsMinHeightOffset) {
-            mModel.set(BottomControlsProperties.ANDROID_VIEW_TRANSLATE_Y, -minHeight);
-        }
+        // This call also updates the view's position if the animation has just finished.
         updateAndroidViewVisibility();
+    }
+
+    @Override
+    public void onBottomControlsHeightChanged(
+            int bottomControlsHeight, int bottomControlsMinHeight) {
+        // TODO(331829509): Set position in a way that doesn't rely on browser controls size system.
+        // Normally our Android view is translated at the end of bottom controls min height
+        // animations to place its bottom edge at the min height. This doesn't work during theme
+        // change because onControlsOffsetChanged() is never called in that case. Instead we have
+        // this special case to make sure the bottom controls aren't covered by the Read Aloud
+        // player when it is shown again following browser UI being recreated.
+        if (mReadAloudRestoringSupplier.get()) {
+            mModel.set(BottomControlsProperties.ANDROID_VIEW_TRANSLATE_Y, -bottomControlsMinHeight);
+        }
     }
 
     @Override
@@ -160,6 +205,17 @@ class BottomControlsMediator
     public void onStartedShowing(@LayoutType int layoutType) {
         mIsInSwipeLayout = layoutType == LayoutType.TOOLBAR_SWIPE;
         updateAndroidViewVisibility();
+    }
+
+    private void onEdgeToEdgeChanged(int bottomInset) {
+        mEdgeToEdgePaddingPx = bottomInset;
+
+        updateBrowserControlsHeight();
+
+        int androidViewHeight = getAndroidViewHeight();
+        if (androidViewHeight != mModel.get(BottomControlsProperties.ANDROID_VIEW_HEIGHT)) {
+            mModel.set(BottomControlsProperties.ANDROID_VIEW_HEIGHT, androidViewHeight);
+        }
     }
 
     /**
@@ -179,13 +235,34 @@ class BottomControlsMediator
     private void updateCompositedViewVisibility() {
         final boolean isCompositedViewVisible = isCompositedViewVisible();
         mModel.set(BottomControlsProperties.COMPOSITED_VIEW_VISIBLE, isCompositedViewVisible);
-        int minHeight = mBrowserControlsSizer.getBottomControlsMinHeight();
+        updateBrowserControlsHeight();
+    }
 
+    private int getBrowserControlsHeight() {
+        int minHeight = mBrowserControlsSizer.getBottomControlsMinHeight();
+        int androidViewHeight = getAndroidViewHeight();
+
+        return isCompositedViewVisible() ? androidViewHeight + minHeight : minHeight;
+    }
+
+    private int getAndroidViewHeight() {
+        int edgeToEdgePadding = 0;
+
+        if (mEdgeToEdgeControllerSupplier.get() != null) {
+            // TODO(https://crbug.com/327274751): Account for presence of Read Aloud when
+            // determining bottom controls height.
+            edgeToEdgePadding = mEdgeToEdgePaddingPx;
+        }
+
+        return mBottomControlsHeight + edgeToEdgePadding;
+    }
+
+    private void updateBrowserControlsHeight() {
         // Note(david@vivaldi.com): The bottom controls height will be set in the
         // |VivaldiTopToolbarCoordinator|
         if (!BuildConfig.IS_VIVALDI)
         mBrowserControlsSizer.setBottomControlsHeight(
-                isCompositedViewVisible ? mBottomControlsHeight + minHeight : minHeight, minHeight);
+                getBrowserControlsHeight(), mBrowserControlsSizer.getBottomControlsMinHeight());
     }
 
     boolean isCompositedViewVisible() {
@@ -194,10 +271,9 @@ class BottomControlsMediator
 
     /**
      * The Android View is the interactive view. The composited view should always be behind the
-     * Android view which means we hide the Android view whenever the composited view is hidden.
-     * We also hide the Android view as we are scrolling the bottom controls off screen this is
-     * done by checking if {@link BrowserControlsSizer#getBottomControlOffset()} is
-     * non-zero.
+     * Android view which means we hide the Android view whenever the composited view is hidden. We
+     * also hide the Android view as we are scrolling the bottom controls off screen this is done by
+     * checking if {@link BrowserControlsSizer#getBottomControlOffset()} is non-zero.
      */
     private void updateAndroidViewVisibility() {
         // Note(david@vivaldi.com): Don't show android view when controls are off screen.
@@ -206,16 +282,30 @@ class BottomControlsMediator
             return;
         }
 
-        mModel.set(
-                BottomControlsProperties.ANDROID_VIEW_VISIBLE,
+        final boolean visible =
                 isCompositedViewVisible()
                         && !mIsOverlayPanelShowing
                         && !mIsInSwipeLayout
-                        && mBrowserControlsSizer.getBottomControlOffset() == 0);
+                        && mBrowserControlsSizer.getBottomControlOffset() == 0;
+        if (visible) {
+            // Translate view so that its bottom is aligned with browser controls min height.
+            mModel.set(
+                    BottomControlsProperties.ANDROID_VIEW_TRANSLATE_Y,
+                    -mBrowserControlsSizer.getBottomControlsMinHeight());
+        }
+        mModel.set(BottomControlsProperties.ANDROID_VIEW_VISIBLE, visible);
     }
 
     @Override
     public void updateObscured(boolean obscureTabContent, boolean obscureToolbar) {
         mModel.set(BottomControlsProperties.IS_OBSCURED, obscureToolbar);
+    }
+
+    ChangeObserver getEdgeToEdgeChangeObserverForTesting() {
+        return mEdgeToEdgeChangeObserver;
+    }
+
+    void simulateEdgeToEdgeChangeForTesting(int bottomInset) {
+        onEdgeToEdgeChanged(bottomInset);
     }
 }

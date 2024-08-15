@@ -19,12 +19,12 @@ namespace {
 // blobs. It makes a copy of the der::Inputs.
 class CertErrorParams2Der : public CertErrorParams {
  public:
-  CertErrorParams2Der(const char *name1, const der::Input &der1,
-                      const char *name2, const der::Input &der2)
+  CertErrorParams2Der(const char *name1, der::Input der1, const char *name2,
+                      der::Input der2)
       : name1_(name1),
-        der1_(der1.AsString()),
+        der1_(BytesAsStringView(der1)),
         name2_(name2),
-        der2_(der2.AsString()) {}
+        der2_(BytesAsStringView(der2)) {}
 
   CertErrorParams2Der(const CertErrorParams2Der &) = delete;
   CertErrorParams2Der &operator=(const CertErrorParams2Der &) = delete;
@@ -43,9 +43,11 @@ class CertErrorParams2Der : public CertErrorParams {
   static void AppendDer(const char *name, const std::string &der,
                         std::string *out) {
     *out += name;
+    // TODO(crbug.com/boringssl/661): Introduce a convenience function to go
+    // from a Span<const char> to a Span<const uint8_t>.
     *out +=
-        ": " + bssl::string_util::HexEncode(
-                   reinterpret_cast<const uint8_t *>(der.data()), der.size());
+        ": " + bssl::string_util::HexEncode(MakeConstSpan(
+                   reinterpret_cast<const uint8_t *>(der.data()), der.size()));
   }
 
   const char *name1_;
@@ -104,16 +106,17 @@ class CertErrorParams2SizeT : public CertErrorParams {
 CertErrorParams::CertErrorParams() = default;
 CertErrorParams::~CertErrorParams() = default;
 
-std::unique_ptr<CertErrorParams> CreateCertErrorParams1Der(
-    const char *name, const der::Input &der) {
+std::unique_ptr<CertErrorParams> CreateCertErrorParams1Der(const char *name,
+                                                           der::Input der) {
   BSSL_CHECK(name);
   return std::make_unique<CertErrorParams2Der>(name, der, nullptr,
                                                der::Input());
 }
 
-std::unique_ptr<CertErrorParams> CreateCertErrorParams2Der(
-    const char *name1, const der::Input &der1, const char *name2,
-    const der::Input &der2) {
+std::unique_ptr<CertErrorParams> CreateCertErrorParams2Der(const char *name1,
+                                                           der::Input der1,
+                                                           const char *name2,
+                                                           der::Input der2) {
   BSSL_CHECK(name1);
   BSSL_CHECK(name2);
   return std::make_unique<CertErrorParams2Der>(name1, der1, name2, der2);

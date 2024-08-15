@@ -27,6 +27,7 @@
 #include "content/browser/contacts/contacts_manager_impl.h"
 #include "content/browser/content_index/content_index_service_impl.h"
 #include "content/browser/cookie_store/cookie_store_manager.h"
+#include "content/browser/device_posture/device_posture_provider_impl.h"
 #include "content/browser/eye_dropper_chooser_impl.h"
 #include "content/browser/handwriting/handwriting_recognition_service_factory.h"
 #include "content/browser/image_capture/image_capture_impl.h"
@@ -180,6 +181,7 @@
 #include "third_party/blink/public/mojom/webaudio/audio_context_manager.mojom.h"
 #include "third_party/blink/public/mojom/webauthn/authenticator.mojom.h"
 #include "third_party/blink/public/mojom/webauthn/virtual_authenticator.mojom.h"
+#include "third_party/blink/public/mojom/webid/digital_identity_request.mojom.h"
 #include "third_party/blink/public/mojom/webid/federated_auth_request.mojom.h"
 #include "third_party/blink/public/mojom/websockets/websocket_connector.mojom.h"
 #include "third_party/blink/public/mojom/webtransport/web_transport_connector.mojom.h"
@@ -687,11 +689,6 @@ void BindPressureManager(
       std::move(receiver));
 }
 
-void BindDevicePostureProvider(
-    mojo::PendingReceiver<device::mojom::DevicePostureProvider> receiver) {
-  GetDeviceService().BindDevicePostureProvider(std::move(receiver));
-}
-
 VibrationManagerBinder& GetVibrationManagerBinderOverride() {
   static base::NoDestructor<VibrationManagerBinder> binder;
   return *binder;
@@ -722,6 +719,14 @@ void BindSocketManager(
       ->BindP2PSocketManager(
           frame->GetIsolationInfoForSubresources().network_anonymization_key(),
           std::move(receiver), frame->GetGlobalId());
+}
+
+void BindDevicePostureProvider(
+    RenderFrameHost* frame_host,
+    mojo::PendingReceiver<blink::mojom::DevicePostureProvider> receiver) {
+  DevicePostureProviderImpl::GetOrCreate(
+      WebContents::FromRenderFrameHost(frame_host))
+      ->Bind(std::move(receiver));
 }
 
 }  // namespace
@@ -767,6 +772,9 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
   map->Add<blink::mojom::DedicatedWorkerHostFactory>(base::BindRepeating(
       &RenderFrameHostImpl::CreateDedicatedWorkerHostFactory,
       base::Unretained(host)));
+
+  map->Add<blink::mojom::DevicePostureProvider>(
+      base::BindRepeating(&BindDevicePostureProvider, base::Unretained(host)));
 
   map->Add<blink::mojom::FeatureObserver>(base::BindRepeating(
       &RenderFrameHostImpl::GetFeatureObserver, base::Unretained(host)));
@@ -856,6 +864,10 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
                             base::Unretained(host)));
   }
 
+  map->Add<blink::mojom::DigitalIdentityRequest>(base::BindRepeating(
+      &RenderFrameHostImpl::BindDigitalIdentityRequestReceiver,
+      base::Unretained(host)));
+
   map->Add<blink::mojom::FederatedAuthRequest>(base::BindRepeating(
       &RenderFrameHostImpl::BindFederatedAuthRequestReceiver,
       base::Unretained(host)));
@@ -938,9 +950,6 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
   map->Add<blink::test::mojom::VirtualAuthenticatorManager>(
       base::BindRepeating(&RenderFrameHostImpl::GetVirtualAuthenticatorManager,
                           base::Unretained(host)));
-
-  map->Add<device::mojom::DevicePostureProvider>(
-      base::BindRepeating(&BindDevicePostureProvider));
 
   // BrowserMainLoop::GetInstance() may be null on unit tests.
   if (BrowserMainLoop::GetInstance()) {

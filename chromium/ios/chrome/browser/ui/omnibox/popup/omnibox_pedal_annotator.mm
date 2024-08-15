@@ -15,6 +15,7 @@
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/ui/symbols/colorful_background_symbol_view.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/ui/omnibox/popup/popup_swift.h"
@@ -48,7 +49,7 @@ const CGFloat kSymbolSize = 18;
     return nil;
   }
   __weak id<ApplicationCommands> applicationHandler = self.applicationHandler;
-  __weak id<ApplicationSettingsCommands> settingsHandler = self.settingsHandler;
+  __weak id<SettingsCommands> settingsHandler = self.settingsHandler;
   __weak id<OmniboxCommands> omniboxHandler = self.omniboxHandler;
 
   NSString* hint =
@@ -107,13 +108,12 @@ const CGFloat kSymbolSize = 18;
       UIImage* image = DefaultSymbolTemplateWithPointSize(kDefaultBrowserSymbol,
                                                           kSymbolSize);
 #endif  // BUILDFLAG(IOS_USE_BRANDED_SYMBOLS)
+      DefaultBrowserSettingsPageSource source =
+          DefaultBrowserSettingsPageSource::kOmnibox;
       ProceduralBlock action = ^{
         [omniboxHandler cancelOmniboxEdit];
-        [settingsHandler
-            showDefaultBrowserSettingsFromViewController:nil
-                                            sourceForUMA:
-                                                DefaultBrowserPromoSource::
-                                                    kOmnibox];
+        [settingsHandler showDefaultBrowserSettingsFromViewController:nil
+                                                         sourceForUMA:source];
       };
       return [[OmniboxPedalData alloc]
               initWithTitle:hint

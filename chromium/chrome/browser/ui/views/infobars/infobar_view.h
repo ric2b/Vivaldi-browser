@@ -38,7 +38,7 @@ class InfoBarView : public infobars::InfoBar,
   void RecalculateHeight();
 
   // views::View:
-  void Layout() override;
+  void Layout(PassKey) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   gfx::Size CalculatePreferredSize() const override;
   void ViewHierarchyChanged(
@@ -47,6 +47,8 @@ class InfoBarView : public infobars::InfoBar,
 
   // views::ExternalFocusTracker:
   void OnWillChangeFocus(View* focused_before, View* focused_now) override;
+
+  views::ImageButton* dismiss_button_for_testing() { return close_button_; }
 
  protected:
   using Labels = std::vector<views::Label*>;

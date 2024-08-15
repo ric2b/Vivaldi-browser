@@ -72,10 +72,10 @@ TEST_F(StatisticsCollectorTest, CanCollectPacketSentEvents) {
       0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20};
 
   collector_.CollectPacketSentEvent(
-      ByteView(kPacketOne.begin(), kPacketOne.size()),
+      ByteView(kPacketOne),
       PacketMetadata{StreamType::kAudio, RtpTimeTicks(1234)});
   collector_.CollectPacketSentEvent(
-      ByteView(kPacketTwo.begin(), kPacketTwo.size()),
+      ByteView(kPacketTwo),
       PacketMetadata{StreamType::kVideo, RtpTimeTicks(2234)});
 
   const std::vector<PacketEvent> events = collector_.TakeRecentPacketEvents();

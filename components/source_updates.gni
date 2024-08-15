@@ -25,6 +25,7 @@ update_template_instance("//third_party/blink/renderer/core:core") {
     "//vivaldi/components/blink/vivaldi_add_search_context_menu.cc",
     "//vivaldi/components/blink/vivaldi_add_search_context_menu.h",
     "//vivaldi/components/blink/vivaldi_data_transfer.cc",
+    "//vivaldi/components/blink/vivaldi_local_frame.cc",
     "//vivaldi/components/blink/vivaldi_web_frame_widget_impl.cc",
     "//vivaldi/components/blink/vivaldi_web_settings_impl.cc",
     "//vivaldi/components/blink/vivaldi_web_view_impl.cc",
@@ -65,7 +66,7 @@ if (vivaldi_build_tests) {
     deps += [
       "//base/test:test_support",
       "//testing/gtest",
-      "//vivaldi/components:adverse_adblocking"
+      "//vivaldi/components:adverse_adblocking",
     ]
   }
 
@@ -179,11 +180,21 @@ update_target("//chrome/browser:browser") {
   }
 }
 
+update_target("//components/sessions:shared") {
+  deps += [
+    "//vivaldi/components:panel",
+  ]
+}
+
 if (!is_android) {
   update_target("//chrome/browser/extensions:extensions") {
     sources += [
       "//vivaldi/components/browser/vivaldi_component_loader.cc",
       "//vivaldi/components/browser/vivaldi_tabs_event_router.cc",
+    ]
+    deps += [
+      "//vivaldi/components:panel_utils",
+      "//vivaldi/components:panel",
     ]
   }
 

@@ -117,7 +117,7 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
-#import "ios/ui/ntp/vivaldi_speed_dial_base_controller.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_home_coordinator.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -261,6 +261,11 @@ using vivaldi::IsVivaldiRunning;
 @implementation NewTabPageCoordinator {
   // Coordinator in charge of handling sharing use cases.
   SharingCoordinator* _sharingCoordinator;
+
+  // Vivaldi
+  VivaldiSpeedDialHomeCoordinator* _speedDialHomeCoordinator;
+  // End Vivaldi
+
 }
 
 // Synthesize NewTabPageConfiguring properties.
@@ -314,6 +319,11 @@ using vivaldi::IsVivaldiRunning;
 
   if (IsVivaldiRunning()) {
     [self initializeServices];
+    _speedDialHomeCoordinator =
+        [[VivaldiSpeedDialHomeCoordinator alloc]
+            initWithBaseViewController:nil
+                               browser:self.browser];
+    [_speedDialHomeCoordinator start];
     [self configureVivaldiNTPViewController];
   } else {
   self.selectedFeed = NewTabPageTabHelper::FromWebState(self.webState)
@@ -420,6 +430,11 @@ using vivaldi::IsVivaldiRunning;
 
   [_sharingCoordinator stop];
   _sharingCoordinator = nil;
+
+  // Vivaldi
+  [_speedDialHomeCoordinator stop];
+  _speedDialHomeCoordinator = nil;
+  // End Vivaldi
 
   self.started = NO;
 }
@@ -746,6 +761,10 @@ using vivaldi::IsVivaldiRunning;
 - (void)configureNTPViewController {
   DCHECK(self.NTPViewController);
 
+  if (IsIOSMagicStackCollectionViewEnabled()) {
+    self.NTPViewController.magicStackCollectionView =
+        self.contentSuggestionsCoordinator.magicStackCollectionView;
+  }
   self.NTPViewController.contentSuggestionsViewController =
       self.contentSuggestionsCoordinator.viewController;
 
@@ -819,7 +838,6 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (void)fakeboxTapped {
-  RecordHomeAction(IOSHomeActionType::kFakebox, [self isStartSurface]);
   [self focusFakebox];
 }
 
@@ -1144,11 +1162,6 @@ using vivaldi::IsVivaldiRunning;
          !IsStickyHeaderDisabledForFollowingFeed();
 }
 
-- (BOOL)isRecentTabTileVisible {
-  return [self.contentSuggestionsCoordinator.contentSuggestionsMediator
-              mostRecentTabStartSurfaceTileIsShowing];
-}
-
 - (void)signinPromoHasChangedVisibility:(BOOL)visible {
   [self.feedTopSectionCoordinator signinPromoHasChangedVisibility:visible];
 }
@@ -1172,8 +1185,7 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (void)refreshNTPContent {
-  [self.contentSuggestionsCoordinator
-          .contentSuggestionsMediator refreshMostVisitedTiles];
+  [self.contentSuggestionsCoordinator refresh];
   self.discoverFeedService->RefreshFeed(
       FeedRefreshTrigger::kForegroundFeedVisibleOther);
 }
@@ -1487,7 +1499,9 @@ using vivaldi::IsVivaldiRunning;
 - (void)updateStartForVisibilityChange:(BOOL)visible {
   if (visible && NewTabPageTabHelper::FromWebState(self.webState)
                      ->ShouldShowStartSurface()) {
-    [self.contentSuggestionsCoordinator configureStartSurfaceIfNeeded];
+    DiscoverFeedServiceFactory::GetForBrowserState(
+        self.browser->GetBrowserState())
+        ->SetIsShownOnStartSurface(true);
   }
   if (!visible && NewTabPageTabHelper::FromWebState(self.webState)
                       ->ShouldShowStartSurface()) {
@@ -1730,19 +1744,16 @@ using vivaldi::IsVivaldiRunning;
 
 #pragma mark - VIVALDI
 - (void)configureVivaldiNTPViewController {
-  VivaldiSpeedDialBaseController* baseController =
-      [[VivaldiSpeedDialBaseController alloc] initWithBrowser:self.browser];
-  UINavigationController *newVC =
-        [[UINavigationController alloc]
-          initWithRootViewController:baseController];
-  [newVC
+  UINavigationController *speedDialHomeController =
+      _speedDialHomeCoordinator.navigationController;
+  [speedDialHomeController
       willMoveToParentViewController:self.containerViewController];
-  [self.containerViewController addChildViewController:newVC];
-  [self.containerViewController.view addSubview:newVC.view];
-  [newVC
+  [self.containerViewController addChildViewController:speedDialHomeController];
+  [self.containerViewController.view addSubview:speedDialHomeController.view];
+  [speedDialHomeController
       didMoveToParentViewController:self.containerViewController];
-  [newVC.view fillSuperview];
-  self.containedViewController = newVC;
+  [speedDialHomeController.view fillSuperview];
+  self.containedViewController = speedDialHomeController;
 }
 
 @end

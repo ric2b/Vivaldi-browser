@@ -19,14 +19,7 @@ namespace autofill {
 
 namespace {
 
-using UserDecision = AutofillClient::SaveAddressProfileOfferUserDecision;
-
-// Returns a unique import id.
-AutofillProfileImportId GetImportId() {
-  static AutofillProfileImportId next_import_id(0);
-  next_import_id.value()++;
-  return next_import_id;
-}
+using UserDecision = AutofillClient::AddressPromptUserDecision;
 
 // When the profile is observed without explicit country information, Autofill
 // guesses it's country. Detecting a profile as a duplicate can fail if we guess
@@ -60,8 +53,7 @@ ProfileImportProcess::ProfileImportProcess(
     PersonalDataManager* personal_data_manager,
     bool allow_only_silent_updates,
     ProfileImportMetadata import_metadata)
-    : import_id_(GetImportId()),
-      observed_profile_(observed_profile),
+    : observed_profile_(observed_profile),
       app_locale_(app_locale),
       form_source_url_(form_source_url),
       personal_data_manager_(personal_data_manager),
@@ -101,8 +93,8 @@ void ProfileImportProcess::DetermineProfileImportType() {
 
   DCHECK(personal_data_manager_);
   new_profiles_suppressed_for_domain_ =
-      personal_data_manager_->IsNewProfileImportBlockedForDomain(
-          form_source_url_);
+      personal_data_manager_->address_data_manager()
+          .IsNewProfileImportBlockedForDomain(form_source_url_);
 
   int number_of_unchanged_profiles = 0;
   std::optional<AutofillProfile> migration_candidate;
@@ -163,7 +155,7 @@ void ProfileImportProcess::DetermineProfileImportType() {
       // If the personal data manager is not available the profile is considered
       // as not blocked. Also, updates can be disabled by a feature flag.
       bool is_blocked_for_update =
-          personal_data_manager_->IsProfileUpdateBlocked(
+          personal_data_manager_->address_data_manager().IsProfileUpdateBlocked(
               existing_profile->guid()) ||
           base::FeatureList::IsEnabled(
               features::test::kAutofillDisableProfileUpdates);
@@ -388,7 +380,7 @@ void ProfileImportProcess::AcceptWithoutEdits() {
 
 void ProfileImportProcess::AcceptWithEdits(AutofillProfile edited_profile) {
   SetUserDecision(UserDecision::kEditAccepted,
-                  absl::make_optional(edited_profile));
+                  std::make_optional(edited_profile));
 }
 
 void ProfileImportProcess::Declined() {

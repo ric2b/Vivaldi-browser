@@ -99,6 +99,17 @@ gpu_android_builder(
 )
 
 gpu_android_builder(
+    name = "gpu-fyi-try-android-pixel-6-64-exp",
+    description_html = "Runs standard GPU tests on experimental Pixel 6 configs",
+    mirrors = [
+        "ci/GPU FYI Android arm64 Builder",
+        "ci/Android FYI Experimental Release (Pixel 6)",
+    ],
+    gn_args = "ci/GPU FYI Android arm64 Builder",
+    pool = "luci.chromium.gpu.android.pixel6.try",
+)
+
+gpu_android_builder(
     name = "gpu-try-android-m-nexus-5x-64",
     mirrors = [
         "ci/Android Release (Nexus 5X)",
@@ -204,6 +215,17 @@ gpu_linux_builder(
     ],
     gn_args = "ci/GPU FYI Linux Builder",
     pool = "luci.chromium.gpu.linux.intel.try",
+)
+
+gpu_linux_builder(
+    name = "gpu-fyi-try-linux-intel-uhd770-rel",
+    description_html = "Runs GPU tests on 12th gen Intel CPUs with UHD 770 GPUs",
+    mirrors = [
+        "ci/GPU FYI Linux Builder",
+        "ci/Linux FYI Release (Intel UHD 770)",
+    ],
+    gn_args = "ci/GPU FYI Linux Builder",
+    pool = "luci.chromium.gpu.linux.intel.uhd770.try",
 )
 
 gpu_linux_builder(
@@ -352,6 +374,17 @@ gpu_mac_builder(
     ],
     gn_args = "ci/GPU FYI Mac arm64 Builder",
     pool = "luci.chromium.gpu.mac.arm64.apple.m1.try",
+)
+
+gpu_mac_builder(
+    name = "gpu-fyi-try-mac-arm64-apple-m2-exp",
+    description_html = "Runs standard GPU tests on experimental M2 configs",
+    mirrors = [
+        "ci/GPU FYI Mac arm64 Builder",
+        "ci/Mac FYI Experimental Retina Release (Apple M2)",
+    ],
+    gn_args = "ci/GPU FYI Mac arm64 Builder",
+    pool = "luci.chromium.gpu.mac.arm64.apple.m2.try",
 )
 
 gpu_mac_builder(
@@ -547,6 +580,17 @@ gpu_win_builder(
     ],
     gn_args = "ci/GPU FYI Win x64 Builder",
     pool = "luci.chromium.gpu.win10.nvidia.try",
+)
+
+gpu_win_builder(
+    name = "gpu-fyi-try-win11-qualcomm-rel-64",
+    description_html = "Triggers GPU tests on Windows arm64 devices",
+    mirrors = [
+        "ci/GPU FYI Win arm64 Builder",
+        "ci/Win11 FYI arm64 Release (Qualcomm Adreno 690)",
+    ],
+    gn_args = "ci/GPU FYI Win arm64 Builder",
+    pool = "luci.chromium.gpu.win11.qualcomm.try",
 )
 
 gpu_win_builder(

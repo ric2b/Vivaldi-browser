@@ -57,7 +57,7 @@ bool TH_Codec::DecodeNode(NodeList& list, const base::Value& value) {
     return false;
   }
 
-  absl::optional<base::Time> date_added =
+  std::optional<base::Time> date_added =
       ValueToTime(value.GetDict().Find("date_added"));
   if (!date_added) {
     LOG(ERROR) << "Translate History Codec: Date added missing or not valid";

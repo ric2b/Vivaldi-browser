@@ -46,7 +46,6 @@
 #include "third_party/skia/include/core/SkTypes.h"
 #import "third_party/skia/include/ports/SkTypeface_mac.h"
 
-using base::apple::NSToCFPtrCast;
 using base::apple::ScopedCFTypeRef;
 
 namespace {
@@ -102,19 +101,17 @@ bool VariableAxisChangeEffective(SkTypeface* typeface,
   return false;
 }
 
-static bool CanLoadInProcess(ScopedCFTypeRef<CTFontRef> ct_font) {
+static bool CanLoadInProcess(CTFontRef ct_font) {
   ScopedCFTypeRef<CGFontRef> cg_font(
-      CTFontCopyGraphicsFont(ct_font.get(), /*attributes=*/nullptr));
+      CTFontCopyGraphicsFont(ct_font, /*attributes=*/nullptr));
   ScopedCFTypeRef<CFStringRef> font_name(
       CGFontCopyPostScriptName(cg_font.get()));
-  ScopedCFTypeRef<CFStringRef> last_resort_font_name(CFStringCreateWithCString(
-      kCFAllocatorDefault, "LastResort", kCFStringEncodingUTF8));
-  return CFStringCompare(font_name.get(), last_resort_font_name.get(), 0) !=
+  return CFStringCompare(font_name.get(), CFSTR("LastResort"), 0) !=
          kCFCompareEqualTo;
 }
 
-std::unique_ptr<FontPlatformData> FontPlatformDataFromCTFont(
-    ScopedCFTypeRef<CTFontRef> ct_font,
+const FontPlatformData* FontPlatformDataFromCTFont(
+    CTFontRef ct_font,
     float size,
     float specified_size,
     bool synthetic_bold,
@@ -123,20 +120,20 @@ std::unique_ptr<FontPlatformData> FontPlatformDataFromCTFont(
     ResolvedFontFeatures resolved_font_features,
     FontOrientation orientation,
     OpticalSizing optical_sizing,
-    FontVariationSettings* variation_settings) {
+    const FontVariationSettings* variation_settings) {
   DCHECK(ct_font);
 
   // fontd automatically issues a sandbox extension to permit reading
   // activated fonts that would otherwise be restricted by the sandbox.
   DCHECK(CanLoadInProcess(ct_font));
 
-  sk_sp<SkTypeface> typeface = SkMakeTypefaceFromCTFont(ct_font.get());
+  sk_sp<SkTypeface> typeface = SkMakeTypefaceFromCTFont(ct_font);
 
   auto make_typeface_fontplatformdata = [&typeface, &size, &synthetic_bold,
                                          &synthetic_italic, &text_rendering,
                                          resolved_font_features,
                                          &orientation]() {
-    return std::make_unique<FontPlatformData>(
+    return MakeGarbageCollected<FontPlatformData>(
         std::move(typeface), std::string(), size, synthetic_bold,
         synthetic_italic, text_rendering, resolved_font_features, orientation);
   };

@@ -11,12 +11,13 @@
 
 #include <algorithm>
 #include <iterator>
+#include <optional>
 #include <type_traits>
 
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_system.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/base/containers/span.h"
+#include "core/fxcrt/span.h"
 
 namespace fxcrt {
 
@@ -159,12 +160,14 @@ class StringViewTemplate {
     return strid << ((4 - size) * 8);
   }
 
-  pdfium::span<const UnsignedType> raw_span() const { return m_Span; }
+  pdfium::span<const UnsignedType> unsigned_span() const { return m_Span; }
   pdfium::span<const CharType> span() const {
     return pdfium::make_span(reinterpret_cast<const CharType*>(m_Span.data()),
                              m_Span.size());
   }
-  const UnsignedType* raw_str() const { return m_Span.data(); }
+  const UnsignedType* unterminated_unsigned_str() const {
+    return m_Span.data();
+  }
   const CharType* unterminated_c_str() const {
     return reinterpret_cast<const CharType*>(m_Span.data());
   }
@@ -174,25 +177,29 @@ class StringViewTemplate {
   bool IsValidIndex(size_t index) const { return index < m_Span.size(); }
   bool IsValidLength(size_t length) const { return length <= m_Span.size(); }
 
+  // CHECK() if index is out of range (via span's operator[]).
   const UnsignedType& operator[](const size_t index) const {
     return m_Span[index];
   }
 
-  UnsignedType Front() const { return !m_Span.empty() ? m_Span[0] : 0; }
-  UnsignedType Back() const {
-    return !m_Span.empty() ? m_Span[m_Span.size() - 1] : 0;
-  }
-
+  // CHECK() if index is out of range (via span's operator[]).
   CharType CharAt(const size_t index) const {
     return static_cast<CharType>(m_Span[index]);
   }
 
-  absl::optional<size_t> Find(CharType ch) const {
+  // Unlike std::string_view::front(), this is always safe and returns a
+  // NUL char when the string is empty.
+  UnsignedType Front() const { return !m_Span.empty() ? m_Span.front() : 0; }
+
+  // Unlike std::string_view::back(), this is always safe and returns a
+  // NUL char when the string is empty.
+  UnsignedType Back() const { return !m_Span.empty() ? m_Span.back() : 0; }
+
+  std::optional<size_t> Find(CharType ch) const {
     const auto* found = reinterpret_cast<const UnsignedType*>(FXSYS_chr(
         reinterpret_cast<const CharType*>(m_Span.data()), ch, m_Span.size()));
 
-    return found ? absl::optional<size_t>(found - m_Span.data())
-                 : absl::nullopt;
+    return found ? std::optional<size_t>(found - m_Span.data()) : std::nullopt;
   }
 
   bool Contains(CharType ch) const { return Find(ch).has_value(); }
@@ -216,7 +223,8 @@ class StringViewTemplate {
     if (!IsValidIndex(first + count - 1))
       return StringViewTemplate();
 
-    return StringViewTemplate(m_Span.subspan(first, count));
+    // SAFETY: performance-sensitive, checks above equivalent to subspan()'s.
+    return UNSAFE_BUFFERS(StringViewTemplate(m_Span.data() + first, count));
   }
 
   StringViewTemplate First(size_t count) const {
@@ -260,6 +268,9 @@ class StringViewTemplate {
   }
 
  protected:
+  // This is not a raw_span<> because StringViewTemplates must be passed by
+  // value without introducing BackupRefPtr churn. Also, repeated re-assignment
+  // of substrings of a StringViewTemplate to itself must avoid the same issue.
   pdfium::span<const UnsignedType> m_Span;
 
  private:

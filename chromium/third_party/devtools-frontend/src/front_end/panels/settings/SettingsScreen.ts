@@ -112,8 +112,6 @@ export class SettingsScreen extends UI.Widget.VBox implements UI.View.ViewLocati
   private constructor() {
     super(true);
 
-    this.element.setAttribute('jslog', `${VisualLogging.panel().context('settings')}`);
-
     this.contentElement.classList.add('settings-window-main');
     this.contentElement.classList.add('vbox');
 
@@ -162,7 +160,7 @@ export class SettingsScreen extends UI.Widget.VBox implements UI.View.ViewLocati
     }
 
     settingsScreen.reportTabOnReveal = true;
-    const dialog = new UI.Dialog.Dialog();
+    const dialog = new UI.Dialog.Dialog('settings');
     dialog.contentElement.tabIndex = -1;
     dialog.addCloseButton();
     dialog.setOutsideClickCallback(() => {});
@@ -269,13 +267,13 @@ abstract class SettingsTab extends UI.Widget.VBox {
 }
 
 export class GenericSettingsTab extends SettingsTab {
-  private readonly syncSection: PanelComponents.SyncSection.SyncSection = new PanelComponents.SyncSection.SyncSection();
+  private readonly syncSection = new PanelComponents.SyncSection.SyncSection();
   private readonly settingToControl = new Map<Common.Settings.Setting<unknown>, HTMLElement>();
 
   constructor() {
     super(i18nString(UIStrings.preferences), 'preferences-tab-content');
 
-    this.element.setAttribute('jslog', `${VisualLogging.pane().context('preferences')}`);
+    this.element.setAttribute('jslog', `${VisualLogging.pane('preferences')}`);
 
     // GRID, MOBILE, EMULATION, and RENDERING are intentionally excluded from this list.
     const explicitSectionOrder: Common.Settings.SettingCategory[] = [
@@ -328,10 +326,7 @@ export class GenericSettingsTab extends SettingsTab {
   }
 
   static isSettingVisible(setting: Common.Settings.SettingRegistration): boolean {
-    const titleMac = setting.titleMac && setting.titleMac();
-    const defaultTitle = setting.title && setting.title();
-    const title = titleMac || defaultTitle;
-    return Boolean(title && setting.category);
+    return Boolean(setting.title?.()) && Boolean(setting.category);
   }
 
   override wasShown(): void {
@@ -349,7 +344,7 @@ export class GenericSettingsTab extends SettingsTab {
     Host.InspectorFrontendHost.InspectorFrontendHostInstance.getSyncInformation(syncInfo => {
       this.syncSection.data = {
         syncInfo,
-        syncSetting: Common.Settings.moduleSetting('sync_preferences') as Common.Settings.Setting<boolean>,
+        syncSetting: Common.Settings.moduleSetting('sync-preferences') as Common.Settings.Setting<boolean>,
       };
     });
   }
@@ -412,7 +407,7 @@ export class ExperimentsSettingsTab extends SettingsTab {
     const filterSection = this.appendSection();
     filterSection.classList.add('experiments-filter');
 
-    this.element.setAttribute('jslog', `${VisualLogging.pane().context('experiments')}`);
+    this.element.setAttribute('jslog', `${VisualLogging.pane('experiments')}`);
 
     const labelElement = filterSection.createChild('label');
     labelElement.textContent = i18nString(UIStrings.filterExperimentsLabel);
@@ -457,6 +452,7 @@ export class ExperimentsSettingsTab extends SettingsTab {
       this.#experimentsSection = this.appendSection();
       const warning = this.#experimentsSection.createChild('span');
       warning.textContent = i18nString(UIStrings.noResults);
+      UI.ARIAUtils.alert(warning.textContent);
     }
   }
 
@@ -493,7 +489,7 @@ export class ExperimentsSettingsTab extends SettingsTab {
 
     if (experiment.docLink) {
       const link = UI.XLink.XLink.create(
-          experiment.docLink, undefined, undefined, undefined, `${experiment.name}:documentation`);
+          experiment.docLink, undefined, undefined, undefined, `${experiment.name}-documentation`);
       link.textContent = '';
       link.setAttribute('aria-label', i18nString(UIStrings.learnMore));
 
@@ -507,7 +503,7 @@ export class ExperimentsSettingsTab extends SettingsTab {
 
     if (experiment.feedbackLink) {
       const link = UI.XLink.XLink.create(
-          experiment.feedbackLink, undefined, undefined, undefined, `${experiment.name}:feedback`);
+          experiment.feedbackLink, undefined, undefined, undefined, `${experiment.name}-feedback`);
       link.textContent = i18nString(UIStrings.sendFeedback);
       link.classList.add('feedback-link');
 

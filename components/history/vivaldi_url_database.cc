@@ -6,23 +6,64 @@
 
 #include "base/i18n/case_conversion.h"
 #include "base/strings/utf_string_conversions.h"
-#include "url/gurl.h"
 #include "db/vivaldi_history_types.h"
 
 namespace history {
 
-URLDatabase::TypedUrlResult::TypedUrlResult() {}
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
-URLDatabase::TypedUrlResult& URLDatabase::TypedUrlResult::operator=(
-    const TypedUrlResult&) = default;
+history::DetailedUrlResults URLDatabase::GetVivaldiDetailedHistory(
+    const std::string query,
+    int max_results) {
+  history::DetailedUrlResults results;
 
-URLDatabase::TypedUrlResult::TypedUrlResult(const TypedUrlResult&) = default;
+  results.clear();
+  const char* sql_str =
+      "SELECT u.id, u.url, u.title, u.typed_count, u.visit_count, "
+      "	 u.last_visit_time, v.transition "
+      "  FROM "
+      "  ( "
+      "    SELECT "
+      "      id, url, title, typed_count,	visit_count, last_visit_time "
+      "      FROM urls "
+      "	     WHERE "
+      "		   hidden = 0 "
+      "		   AND (urls.url LIKE ? OR urls.title LIKE ?) "
+      "	   ORDER BY "
+      "		 last_visit_time DESC "
+      "	   LIMIT ? "
+      "  ) u "
+      "  JOIN visits v ON v.url = u.id "
+      "    AND v.visit_time = u.last_visit_time ";
 
-bool URLDatabase::GetVivaldiTypedHistory(const std::string query,
-                                         KeywordID prefix_keyword,
-                                         int max_results,
-                                         TypedUrlResults* results) {
-  results->clear();
+  std::u16string lower_query(base::i18n::ToLower(base::UTF8ToUTF16(query)));
+  sql::Statement statement(GetDB().GetUniqueStatement(sql_str));
+  const std::string wild8("%");
+  statement.BindString(0, wild8 + query + wild8);
+  statement.BindString(1, wild8 + query + wild8);
+  statement.BindInt(2, max_results);
+
+  while (statement.Step()) {
+    DetailedUrlResult result;
+    result.id = statement.ColumnString(0);
+    result.url = GURL(statement.ColumnString(1));
+    result.title = statement.ColumnString(2);
+    result.typed_count = statement.ColumnInt(3);
+    result.visit_count = statement.ColumnInt(4);
+    result.last_visit_time = statement.ColumnTime(5);
+    result.transition_type = ui::PageTransitionFromInt(statement.ColumnInt(6));
+    results.push_back(result);
+  }
+
+  return results;
+}
+
+history::TypedUrlResults URLDatabase::GetVivaldiTypedHistory(
+    const std::string query,
+    KeywordID prefix_keyword,
+    int max_results) {
+  history::TypedUrlResults results;
+  results.clear();
 
   std::string sql("SELECT u.url, u.title, u.typed_count, ");
   sql.append("k.url_id IS NOT NULL, k.keyword_id, k.normalized_term ");
@@ -62,45 +103,18 @@ bool URLDatabase::GetVivaldiTypedHistory(const std::string query,
     } else {
       result.keyword_id = -1;
     }
-    results->push_back(result);
+    results.push_back(result);
   }
 
-  return !results->empty();
+  return results;
 }
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-bool URLDatabase::GetDetailedMatchesWStatement(
-                                const char* sql_statement,
-                                const std::string& search_string,
-                                int max_hits,
-                                DetailedHistory::DetailedHistoryList* results) {
-  results->clear();
-  sql::Statement statement(
-      GetDB().GetCachedStatement(SQL_FROM_HERE, sql_statement));
-
-  statement.BindString(0, search_string);
-  statement.BindString(1, search_string);
-  statement.BindInt(2, max_hits);
-
-  while (statement.Step()) {
-    DetailedHistory info;
-    info.id = statement.ColumnString(0);
-    info.url = GURL(statement.ColumnString(1));
-    info.title = statement.ColumnString(2);
-    info.visit_count = statement.ColumnInt(3);
-    info.typed_count = statement.ColumnInt(4);
-    info.last_visit_time = statement.ColumnTime(5);
-    info.transition_type = ui::PageTransitionFromInt(statement.ColumnInt(6));
-    // The source is optional so far. Prevents crash in the debug build.
-    if (statement.ColumnCount() >= 8) {
-      info.source = statement.ColumnInt(7);
-    }
-
-    if (info.url.is_valid())
-      results->push_back(info);
-  }
-  return !results->empty();
+bool URLDatabase::CreateVivaldiURLsLastVisitIndex() {
+  return GetDB().Execute(
+      "CREATE INDEX IF NOT EXISTS urls_idx_last_visit_time ON "
+      "urls(last_visit_time desc);");
 }
+
 #endif
 
 }  // namespace history

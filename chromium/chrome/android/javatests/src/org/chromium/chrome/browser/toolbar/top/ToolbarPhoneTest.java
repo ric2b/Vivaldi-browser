@@ -68,12 +68,11 @@ import org.chromium.chrome.browser.layouts.LayoutTestUtils;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.night_mode.ChromeNightModeTestUtils;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
-import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
-import org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ButtonData;
 import org.chromium.chrome.browser.toolbar.ButtonDataImpl;
@@ -147,7 +146,7 @@ public class ToolbarPhoneTest {
                 TestThreadUtils.runOnUiThreadBlockingNoException(
                         () ->
                                 TemplateUrlServiceFactory.getForProfile(
-                                        Profile.getLastUsedRegularProfile()));
+                                        ProfileManager.getLastUsedRegularProfile()));
         mTemplateUrlService = Mockito.spy(originalService);
         TemplateUrlServiceFactory.setInstanceForTesting(mTemplateUrlService);
         mToolbar = mActivityTestRule.getActivity().findViewById(R.id.toolbar);
@@ -497,9 +496,6 @@ public class ToolbarPhoneTest {
 
         // When the Start surface refactoring is enabled, the ToolbarPhone is shown on the grid tab
         // switcher rather than the Start surface toolbar.
-        if (!TabUiTestHelper.getIsStartSurfaceRefactorEnabledFromUIThread(cta)) {
-            CriteriaHelper.pollUiThread(() -> mToolbar.getVisibility() != View.VISIBLE);
-        }
         LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.TAB_SWITCHER);
         CriteriaHelper.pollUiThread(
                 () -> {
@@ -546,9 +542,6 @@ public class ToolbarPhoneTest {
 
         // When the Start surface refactoring is enabled, the ToolbarPhone is shown on the grid tab
         // switcher rather than the Start surface toolbar.
-        if (!TabUiTestHelper.getIsStartSurfaceRefactorEnabledFromUIThread(cta)) {
-            CriteriaHelper.pollUiThread(() -> mToolbar.getVisibility() != View.VISIBLE);
-        }
         LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.TAB_SWITCHER);
         CriteriaHelper.pollUiThread(
                 () -> {
@@ -748,7 +741,11 @@ public class ToolbarPhoneTest {
     @Test
     @MediumTest
     @EnableFeatures(ChromeFeatureList.TAB_TO_GTS_ANIMATION)
-    @DisableFeatures({ChromeFeatureList.START_SURFACE_ANDROID, ChromeFeatureList.ANDROID_HUB})
+    @DisableFeatures({
+        ChromeFeatureList.START_SURFACE_ANDROID,
+        ChromeFeatureList.ANDROID_HUB,
+        ChromeFeatureList.DEFER_TAB_SWITCHER_LAYOUT_CREATION
+    })
     @DisableAnimationsTestRule.EnsureAnimationsOn
     public void testToolbarTabSwitcherButtonNotClickableDuringTransition_startSurfaceDisabled() {
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();

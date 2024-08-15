@@ -17,6 +17,8 @@
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/extensions/extension_action_test_helper.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/test/browser_test.h"
@@ -37,7 +39,9 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/offscreen_document_host.h"
 #include "extensions/browser/process_manager.h"
+#include "extensions/browser/script_executor.h"
 #include "extensions/browser/test_extension_registry_observer.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
 #include "extensions/test/test_extension_dir.h"
@@ -77,7 +81,7 @@ IN_PROC_BROWSER_TEST_P(RuntimeApiTest, ChromeRuntimeUnprivileged) {
       LoadExtension(test_data_dir_.AppendASCII("runtime/content_script")));
 
   // The content script runs on this page.
-  extensions::ResultCatcher catcher;
+  ResultCatcher catcher;
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
   EXPECT_TRUE(catcher.GetNextResult()) << message_;
@@ -85,8 +89,7 @@ IN_PROC_BROWSER_TEST_P(RuntimeApiTest, ChromeRuntimeUnprivileged) {
 
 IN_PROC_BROWSER_TEST_P(RuntimeApiTest, ChromeRuntimeUninstallURL) {
   // Auto-confirm the uninstall dialog.
-  extensions::ScopedTestDialogAutoConfirm auto_confirm(
-      extensions::ScopedTestDialogAutoConfirm::ACCEPT);
+  ScopedTestDialogAutoConfirm auto_confirm(ScopedTestDialogAutoConfirm::ACCEPT);
   ExtensionTestMessageListener ready_listener("ready");
   ASSERT_TRUE(LoadExtension(test_data_dir_.AppendASCII("runtime")
                                 .AppendASCII("uninstall_url")
@@ -144,7 +147,7 @@ class RuntimeAPIUpdateTest : public ExtensionApiTest {
     }
   }
 
-  bool CrashEnabledExtension(const std::string& extension_id) {
+  bool CrashEnabledExtension(const ExtensionId& extension_id) {
     ExtensionHost* background_host =
         ProcessManager::Get(browser()->profile())
             ->GetBackgroundHostForExtension(extension_id);
@@ -230,7 +233,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ExtensionTerminatedForRapidReloads) {
   // time, to avoid interfering with the developer work flow.
   const Extension* extension = LoadExtension(dir.Pack());
   ASSERT_TRUE(extension);
-  const std::string extension_id = extension->id();
+  const ExtensionId extension_id = extension->id();
 
   // The current limit for fast reload is 5, so the loop limit of 10
   // be enough to trigger termination. If the extension manages to
@@ -285,7 +288,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ChromeRuntimeReload) {
                                                      ReplyBehavior::kWillReply);
   const Extension* extension = LoadExtension(dir.UnpackedPath());
   ASSERT_TRUE(extension);
-  const std::string extension_id = extension->id();
+  const ExtensionId extension_id = extension->id();
   EXPECT_TRUE(ready_listener_reload.WaitUntilSatisfied());
 
   // This listener will respond to the ready message from the
@@ -507,7 +510,7 @@ IN_PROC_BROWSER_TEST_P(RuntimeApiTest,
                        DoNotOpenUninstallUrlForBlocklistedExtensions) {
   ExtensionTestMessageListener ready_listener("ready");
   // Load an extension that has set an uninstall url.
-  scoped_refptr<const extensions::Extension> extension =
+  scoped_refptr<const Extension> extension =
       LoadExtension(test_data_dir_.AppendASCII("runtime")
                         .AppendASCII("uninstall_url")
                         .AppendASCII("sets_uninstall_url"));
@@ -518,7 +521,7 @@ IN_PROC_BROWSER_TEST_P(RuntimeApiTest,
 
   // Uninstall the extension and expect its uninstall url to open.
   extension_service()->UninstallExtension(
-      extension->id(), extensions::UNINSTALL_REASON_USER_INITIATED, nullptr);
+      extension->id(), UNINSTALL_REASON_USER_INITIATED, nullptr);
   TabStripModel* tabs = browser()->tab_strip_model();
 
   EXPECT_EQ(2, tabs->count());
@@ -541,15 +544,15 @@ IN_PROC_BROWSER_TEST_P(RuntimeApiTest,
   ASSERT_TRUE(extension_service()->IsExtensionEnabled(extension->id()));
 
   // Blocklist extension.
-  extensions::blocklist_prefs::SetSafeBrowsingExtensionBlocklistState(
-      extension->id(), extensions::BitMapBlocklistState::BLOCKLISTED_MALWARE,
-      extensions::ExtensionPrefs::Get(profile()));
+  blocklist_prefs::SetSafeBrowsingExtensionBlocklistState(
+      extension->id(), BitMapBlocklistState::BLOCKLISTED_MALWARE,
+      ExtensionPrefs::Get(profile()));
 
   // Uninstalling a blocklisted extension should not open its uninstall url.
   TestExtensionRegistryObserver observer(ExtensionRegistry::Get(profile()),
                                          extension->id());
   extension_service()->UninstallExtension(
-      extension->id(), extensions::UNINSTALL_REASON_USER_INITIATED, nullptr);
+      extension->id(), UNINSTALL_REASON_USER_INITIATED, nullptr);
   observer.WaitForExtensionUninstalled();
 
   EXPECT_EQ(1, tabs->count());
@@ -1232,6 +1235,37 @@ IN_PROC_BROWSER_TEST_F(RuntimeGetContextsApiTest,
                               GetFrameMatcher(api::runtime::ContextType::kTab,
                                               regular_url)));
   }
+}
+
+// This is a manifest V2 test meant to ensure test coverage for
+// chrome.extension.getURL, which is deprecated and unavailable
+// in MV3.
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, GetExtensionURL) {
+  static constexpr char kManifest[] = R"(
+      {
+        "name": "chrome.extension.getURL",
+        "version": "1.0",
+        "background": {
+          "scripts": ["background.js"]
+        },
+        "manifest_version": 2
+      })";
+
+  static constexpr char kScript[] = R"(
+    chrome.test.assertEq(
+        chrome.extension.getURL('foo.html'),
+        chrome.runtime.getURL('foo.html'));
+    chrome.test.notifyPass();
+  )";
+
+  ResultCatcher catcher;
+  TestExtensionDir dir;
+  dir.WriteManifest(kManifest);
+  dir.WriteFile(FILE_PATH_LITERAL("background.js"), kScript);
+
+  const Extension* extension = LoadExtension(dir.UnpackedPath());
+  ASSERT_TRUE(extension);
+  EXPECT_TRUE(catcher.GetNextResult());
 }
 
 }  // namespace extensions

@@ -20,8 +20,11 @@
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_test_util.h"
 #include "ash/wm/overview/overview_utils.h"
+#include "base/run_loop.h"
 #include "ui/compositor/layer.h"
 #include "ui/views/background.h"
+#include "ui/views/controls/menu/menu_item_view.h"
+#include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/menu_runner.h"
 
 namespace ash {
@@ -132,6 +135,21 @@ bool DesksTestApi::IsDeskShortcutViewVisible(DeskMiniView* mini_view) {
   // nullptr.
   return mini_view->desk_shortcut_view_ &&
          mini_view->desk_shortcut_view_->GetVisible();
+}
+
+// static
+DeskProfilesButton* DesksTestApi::GetDeskProfileButton(
+    DeskMiniView* mini_view) {
+  return mini_view->desk_profile_button_;
+}
+
+// static
+views::MenuItemView* DesksTestApi::GetDeskActionContextMenuItem(
+    DeskActionContextMenu* menu,
+    int command_id) {
+  // Verify that the menu is active.
+  CHECK(menu->context_menu_runner_);
+  return menu->root_menu_item_view_->GetMenuItemByID(command_id);
 }
 
 // static

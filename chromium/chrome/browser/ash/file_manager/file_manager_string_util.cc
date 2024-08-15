@@ -906,7 +906,6 @@ void AddStringsGeneric(base::Value::Dict* dict) {
   SET_STRING("TASKS_BUTTON_LABEL", IDS_FILE_BROWSER_TASKS_BUTTON_LABEL);
   SET_STRING("TOGGLE_HIDDEN_FILES_COMMAND_LABEL",
              IDS_FILE_BROWSER_TOGGLE_HIDDEN_FILES_COMMAND_LABEL);
-  SET_STRING("SHARE_BUTTON_LABEL", IDS_FILE_BROWSER_SHARE_BUTTON_LABEL);
   SET_STRING("MANAGE_TOAST_BUTTON_LABEL",
              IDS_FILE_BROWSER_MANAGE_TOAST_BUTTON_LABEL);
   SET_STRING("MANAGE_IN_DRIVE_BUTTON_LABEL",
@@ -1381,6 +1380,9 @@ void AddFileManagerFeatureStrings(const std::string& locale,
 
   dict->Set("NEW_DIRECTORY_TREE", base::FeatureList::IsEnabled(
                                       ash::features::kFilesNewDirectoryTree));
+
+  dict->Set("MATERIALIZED_VIEWS", base::FeatureList::IsEnabled(
+                                      ash::features::kFilesMaterializedViews));
 
   if (base::FeatureList::IsEnabled(features::kDataLeakPreventionPolicy) &&
       base::FeatureList::IsEnabled(

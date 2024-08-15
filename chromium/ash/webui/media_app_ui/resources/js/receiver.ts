@@ -363,6 +363,9 @@ const DELEGATE: ClientApiDelegate = {
     }
     await ocrUntrustedPageHandler?.pageMetadataUpdated(metadata);
   },
+  async pageContentsUpdated(dirtyPageId: string) {
+    await ocrUntrustedPageHandler?.pageContentsUpdated(dirtyPageId);
+  },
   async viewportUpdated(viewportBox: Rect, scaleFactor: number) {
     await ocrUntrustedPageHandler?.viewportUpdated(
         {
@@ -379,7 +382,8 @@ const DELEGATE: ClientApiDelegate = {
  * Returns the media app if it can find it in the DOM.
  */
 function getApp(): ClientApi {
-  return document.querySelector('backlight-app') as unknown as ClientApi;
+  const app = document.querySelector('backlight-app')!;
+  return app as unknown as ClientApi;
 }
 
 /**

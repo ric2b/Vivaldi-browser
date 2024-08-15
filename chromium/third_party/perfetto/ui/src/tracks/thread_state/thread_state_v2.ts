@@ -55,7 +55,8 @@ export class ThreadStateTrack extends BaseSliceTrack<ThreadStateTrackTypes> {
   }
 
   getSqlSource(): string {
-    // Do not display states 'x' and 'S' (dead & sleeping).
+    // Do not display states:
+    //   'x' (dead), 'S' (sleeping), 'I' (idle kernel thread).
     // Note: Thread state tracks V1 basically ignores incomplete slices, faking
     // their duration as 1 instead. Let's just do this here as well for now to
     // achieve feature parity with tracks V1 and tackle the issue of overlapping
@@ -64,7 +65,7 @@ export class ThreadStateTrack extends BaseSliceTrack<ThreadStateTrackTypes> {
       select
         id,
         ts,
-        max(dur, 1) as dur,
+        dur,
         cpu,
         state,
         io_wait as ioWait,
@@ -72,13 +73,13 @@ export class ThreadStateTrack extends BaseSliceTrack<ThreadStateTrackTypes> {
       from thread_state
       where
         utid = ${this.utid} and
-        state != 'x' and
-        state != 'S'
+        state not in ('x', 'S', 'I')
     `;
   }
 
-  rowToSlice(row: ThreadStateTrackTypes['row']):
-      ThreadStateTrackTypes['slice'] {
+  rowToSlice(
+    row: ThreadStateTrackTypes['row'],
+  ): ThreadStateTrackTypes['slice'] {
     const baseSlice = super.rowToSlice(row);
     const ioWait = row.ioWait === null ? undefined : !!row.ioWait;
     const title = translateState(row.state, ioWait);
@@ -88,15 +89,17 @@ export class ThreadStateTrack extends BaseSliceTrack<ThreadStateTrackTypes> {
 
   onUpdatedSlices(slices: ThreadStateTrackTypes['slice'][]) {
     for (const slice of slices) {
-      slice.isHighlighted = (slice === this.hoveredSlice);
+      slice.isHighlighted = slice === this.hoveredSlice;
     }
   }
 
   onSliceClick(args: OnSliceClickArgs<ThreadStateTrackTypes['slice']>) {
-    globals.makeSelection(Actions.selectThreadState({
-      id: args.slice.id,
-      trackKey: this.trackKey,
-    }));
+    globals.makeSelection(
+      Actions.selectThreadState({
+        id: args.slice.id,
+        trackKey: this.trackKey,
+      }),
+    );
   }
 
   protected isSelectionHandled(selection: Selection): boolean {

@@ -188,8 +188,8 @@ std::u16string AlterEnvironment(const char16_t* env,
 
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 
-std::unique_ptr<char* []> AlterEnvironment(const char* const* const env,
-                                           const EnvironmentMap& changes) {
+std::unique_ptr<char*[]> AlterEnvironment(const char* const* const env,
+                                          const EnvironmentMap& changes) {
   std::string value_storage;  // Holds concatenated null-terminated strings.
   std::vector<size_t> result_indices;  // Line indices into value_storage.
 

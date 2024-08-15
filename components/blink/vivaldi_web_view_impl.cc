@@ -33,7 +33,7 @@ void WebViewImpl::SetImagesEnabled(const bool images_enabled) {
   Document* document = main_local_frame->GetDocument();
 
   if (document) {
-    document->Fetcher()->SetImagesEnabled(images_enabled);
+    web_settings_->SetImagesEnabled(images_enabled);
 
     // NOTE(andre@vivaldi.com): This is all images, but images with data-urls
     // will load without this.

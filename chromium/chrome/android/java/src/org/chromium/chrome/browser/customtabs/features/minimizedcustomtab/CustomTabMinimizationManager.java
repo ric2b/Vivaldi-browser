@@ -20,7 +20,6 @@ import android.os.SystemClock;
 import android.util.Rational;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.RequiresApi;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.PictureInPictureModeChangedInfo;
@@ -56,7 +55,6 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /** Class that manages minimizing a Custom Tab into picture-in-picture. */
-@RequiresApi(VERSION_CODES.O)
 public class CustomTabMinimizationManager
         implements CustomTabMinimizeDelegate,
                 Consumer<PictureInPictureModeChangedInfo>,
@@ -183,7 +181,6 @@ public class CustomTabMinimizationManager
             mMinimized = mActivity.enterPictureInPictureMode(builder.build());
             recordMinimizeSuccess(/* success= */ true);
         } catch (NullPointerException e) {
-            recordMinimizeSuccess(/* success= */ false);
             if (doesExceptionMatch(e, TASK_DISPLAY_AREA_NPE_STR)) {
                 String msg = "NullPointerException";
                 incrementExceptionImpressionAndReport(TASK_DISPLAY_AREA_NPE_STR, msg, e);
@@ -191,7 +188,6 @@ public class CustomTabMinimizationManager
                 throw e;
             }
         } catch (IllegalStateException e) {
-            recordMinimizeSuccess(/* success= */ false);
             if (doesExceptionMatch(e, DEVICE_DOES_NOT_SUPPORT_ISE_STR)) {
                 String msg = "Device doesn't support picture-in-picture mode.";
                 incrementExceptionImpressionAndReport(DEVICE_DOES_NOT_SUPPORT_ISE_STR, msg, e);
@@ -204,7 +200,6 @@ public class CustomTabMinimizationManager
                 throw e;
             }
         } catch (IllegalArgumentException e) {
-            recordMinimizeSuccess(/* success= */ false);
             if (doesExceptionMatch(e, ROOT_TASK_IAE_STR)) {
                 String msg = "IllegalArgumentException";
                 incrementExceptionImpressionAndReport(ROOT_TASK_IAE_STR, msg, e);
@@ -276,7 +271,6 @@ public class CustomTabMinimizationManager
                     MinimizationEvents.MINIMIZE,
                     MinimizationEvents.COUNT);
         } else {
-            mMinimized = false;
             mActivity.removeOnPictureInPictureModeChangedListener(this);
             notifyObservers(false);
             maybeClearLastMinimizedTabRef();
@@ -298,6 +292,7 @@ public class CustomTabMinimizationManager
                 return;
             }
 
+            mMinimized = false;
             updateTabForMaximization(tab);
             CustomTabsConnection.getInstance().onUnminimized(mIntentData.getSession());
             RecordHistogram.recordEnumeratedHistogram(

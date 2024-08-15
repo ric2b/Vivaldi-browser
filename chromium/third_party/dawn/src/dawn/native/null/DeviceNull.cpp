@@ -37,6 +37,7 @@
 #include "dawn/native/Instance.h"
 #include "dawn/native/Surface.h"
 #include "dawn/native/TintUtils.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 
 #include "tint/tint.h"
 
@@ -152,7 +153,7 @@ struct CopyFromStagingToBufferOperation : PendingOperation {
         destination->CopyFromStaging(staging, sourceOffset, destinationOffset, size);
     }
 
-    BufferBase* staging;
+    raw_ptr<BufferBase> staging;
     Ref<Buffer> destination;
     uint64_t sourceOffset;
     uint64_t destinationOffset;
@@ -333,7 +334,7 @@ BindGroupDataHolder::BindGroupDataHolder(size_t size)
 {}
 
 BindGroupDataHolder::~BindGroupDataHolder() {
-    free(mBindingDataAllocation);
+    free(mBindingDataAllocation.ExtractAsDangling());
 }
 
 // BindGroup
@@ -443,6 +444,10 @@ bool Queue::HasPendingCommands() const {
     return false;
 }
 
+MaybeError Queue::SubmitPendingCommands() {
+    return {};
+}
+
 ResultOrError<bool> Queue::WaitForQueueSerial(ExecutionSerial serial, Nanoseconds timeout) {
     return true;
 }
@@ -453,7 +458,7 @@ MaybeError Queue::WaitForIdleForDestruction() {
 }
 
 // ComputePipeline
-MaybeError ComputePipeline::Initialize() {
+MaybeError ComputePipeline::InitializeImpl() {
     const ProgrammableStage& computeStage = GetStage(SingleShaderStage::Compute);
 
     tint::Program transformedProgram;
@@ -472,9 +477,9 @@ MaybeError ComputePipeline::Initialize() {
             BuildSubstituteOverridesTransformConfig(computeStage));
     }
 
-    DAWN_TRY_ASSIGN(transformedProgram,
-                    RunTransforms(&transformManager, computeStage.module->GetTintProgram(),
-                                  transformInputs, nullptr, nullptr));
+    auto tintProgram = computeStage.module->GetTintProgram();
+    DAWN_TRY_ASSIGN(transformedProgram, RunTransforms(&transformManager, &(tintProgram->program),
+                                                      transformInputs, nullptr, nullptr));
 
     // Do the workgroup size validation, although different backend will have different
     // fullSubgroups parameter.
@@ -492,7 +497,7 @@ MaybeError ComputePipeline::Initialize() {
 }
 
 // RenderPipeline
-MaybeError RenderPipeline::Initialize() {
+MaybeError RenderPipeline::InitializeImpl() {
     return {};
 }
 

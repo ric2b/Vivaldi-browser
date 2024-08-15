@@ -38,6 +38,7 @@
 #include "chrome/browser/ash/app_list/test/chrome_app_list_test_support.h"
 #include "chrome/browser/ash/extensions/default_app_order.h"
 #include "chrome/browser/ash/file_manager/file_manager_test_util.h"
+#include "chrome/browser/ash/file_manager/volume.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/ash/system_web_apps/test_support/system_web_app_browsertest_base.h"
 #include "chrome/browser/ash/system_web_apps/test_support/test_system_web_app_installation.h"
@@ -85,6 +86,7 @@
 #include "extensions/browser/browsertest_util.h"
 #include "extensions/common/constants.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/mojom/context_menu/context_menu.mojom.h"
 #include "ui/base/idle/idle.h"
 #include "ui/base/idle/scoped_set_idle_state.h"
 #include "ui/display/display.h"
@@ -263,6 +265,34 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerBrowserTest, UpdatesLaunchStats) {
         EXPECT_GE(update.LastLaunchTime(), launch_start_time);
       }))
       << "Expect app to exist";
+}
+
+class SystemWebAppManagerLaunchWithUrlBrowserTest
+    : public TestProfileTypeMixin<SystemWebAppBrowserTestBase> {
+ public:
+  SystemWebAppManagerLaunchWithUrlBrowserTest() {
+    SetSystemWebAppInstallation(
+        TestSystemWebAppInstallation::SetUpAppLaunchWithUrl());
+  }
+};
+
+IN_PROC_BROWSER_TEST_P(SystemWebAppManagerLaunchWithUrlBrowserTest,
+                       LaunchWithCallback) {
+  WaitForTestSystemAppInstall();
+  content::TestNavigationObserver navigation_observer(GetStartUrl());
+  navigation_observer.StartWatchingNewWebContents();
+  ash::SystemAppLaunchParams params;
+  params.launch_source = apps::LaunchSource::kFromOtherApp;
+  params.url = GetStartUrl();
+  bool is_called = false;
+  LaunchSystemWebAppAsync(
+      browser()->profile(), GetAppType(), params, nullptr,
+      base::BindLambdaForTesting(
+          [&is_called](apps::LaunchResult&& callback_result) {
+            is_called = true;
+          }));
+  navigation_observer.Wait();
+  EXPECT_TRUE(is_called);
 }
 
 class SystemWebAppManagerFileHandlingBrowserTestBase
@@ -904,6 +934,7 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerHasTabStripTest, HasTabStrip) {
   Browser* browser;
   EXPECT_TRUE(LaunchApp(GetAppType(), &browser));
   EXPECT_TRUE(browser->app_controller()->has_tab_strip());
+  EXPECT_FALSE(browser->app_controller()->ShouldHideNewTabButton());
 }
 
 class SystemWebAppManagerHasNoTabStripTest
@@ -1756,10 +1787,10 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppAccessibilityTest,
 
   // Launcher-B to find minimize button.
   speech_monitor_.Call([&]() {
-    // F6 to switch pane.
+    // Search+B to switch pane.
     ui::test::EventGenerator generator(app_window->GetRootWindow());
-    generator.PressAndReleaseKey(ui::VKEY_B,
-                                 ui::EF_COMMAND_DOWN | ui::EF_FINAL);
+    generator.PressAndReleaseKeyAndModifierKeys(
+        ui::VKEY_B, ui::EF_COMMAND_DOWN | ui::EF_FINAL);
   });
   speech_monitor_.ExpectSpeech("Minimize");
   speech_monitor_.ExpectSpeech("Button");
@@ -1943,5 +1974,8 @@ INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
 
 INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
     SystemWebAppManagerContextMenuBrowserTest);
+
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
+    SystemWebAppManagerLaunchWithUrlBrowserTest);
 
 }  // namespace ash

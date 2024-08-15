@@ -12,12 +12,12 @@ import './cups_printer_types.js';
 import './cups_printers_browser_proxy.js';
 import './cups_printers_entry.js';
 
-import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+import {WebUiListenerMixin} from 'chrome://resources/ash/common/cr_elements/web_ui_listener_mixin.js';
 import {IronListElement} from 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {recordSettingChange} from '../metrics_recorder.js';
+import {Setting} from '../mojom-webui/setting.mojom-webui.js';
 
 import {getTemplate} from './cups_nearby_printers.html.js';
 import {matchesSearchTerm, sortPrinters} from './cups_printer_dialog_util.js';
@@ -98,18 +98,6 @@ export class SettingsCupsNearbyPrintersElement extends
         type: Boolean,
         value: false,
       },
-
-      /**
-       * True when the "printer-settings-revamp" feature flag is enabled.
-       */
-      isPrinterSettingsRevampEnabled_: {
-        type: Boolean,
-        value: () => {
-          return loadTimeData.getBoolean('isPrinterSettingsRevampEnabled');
-        },
-        readOnly: true,
-        reflectToAttribute: true,
-      },
     };
   }
 
@@ -184,7 +172,6 @@ export class SettingsCupsNearbyPrintersElement extends
             this.onAddNearbyPrintersSucceeded_.bind(
                 this, item.printerInfo.printerName),
             this.onAddNearbyPrinterFailed_.bind(this));
-    recordSettingChange();
   }
 
   private onAddPrintServerPrinter_(e: CustomEvent<{item: PrinterListEntry}>):
@@ -213,7 +200,6 @@ export class SettingsCupsNearbyPrintersElement extends
             this.onQueryDiscoveredPrinterSucceeded_.bind(
                 this, item.printerInfo.printerName),
             this.onQueryDiscoveredPrinterFailed_.bind(this));
-    recordSettingChange();
   }
 
   /**
@@ -250,6 +236,7 @@ export class SettingsCupsNearbyPrintersElement extends
       printerName: string, result: PrinterSetupResult): void {
     this.savingPrinter_ = false;
     this.showCupsPrinterToast_(result, printerName);
+    recordSettingChange(Setting.kAddPrinter);
   }
 
   /**
@@ -271,6 +258,7 @@ export class SettingsCupsNearbyPrintersElement extends
     chrome.metricsPrivate.recordEnumerationValue(
         'Printing.CUPS.PrinterSetupResult.SettingsDiscoveredPrinters', result,
         Object.keys(PrinterSetupResult).length);
+    recordSettingChange(Setting.kAddPrinter);
   }
 
   /**

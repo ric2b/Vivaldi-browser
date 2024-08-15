@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -47,7 +48,6 @@
 #include "gpu/skia_bindings/grcontext_for_gles2_interface.h"
 #include "services/viz/public/cpp/gpu/command_buffer_metrics.h"
 #include "skia/buildflags.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkTraceMemoryDump.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "ui/gl/trace_util.h"
@@ -546,8 +546,13 @@ bool ContextProviderCommandBuffer::OnMemoryDump(
   helper_->OnMemoryDump(args, pmd);
 
   if (gr_context_) {
-    gpu::raster::DumpGrMemoryStatistics(gr_context_->get(), pmd,
-                                        gles2_impl_->ShareGroupTracingGUID());
+    if (args.level_of_detail ==
+        base::trace_event::MemoryDumpLevelOfDetail::kBackground) {
+      gpu::raster::DumpBackgroundGrMemoryStatistics(gr_context_->get(), pmd);
+    } else {
+      gpu::raster::DumpGrMemoryStatistics(gr_context_->get(), pmd,
+                                          gles2_impl_->ShareGroupTracingGUID());
+    }
   }
   return true;
 }

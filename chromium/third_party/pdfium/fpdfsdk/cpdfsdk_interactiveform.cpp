@@ -25,6 +25,7 @@
 #include "core/fpdfdoc/cpdf_formcontrol.h"
 #include "core/fpdfdoc/cpdf_interactiveform.h"
 #include "core/fxcrt/autorestorer.h"
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/fx_string_wrappers.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxge/cfx_graphstatedata.h"
@@ -37,7 +38,6 @@
 #include "fpdfsdk/formfiller/cffl_formfield.h"
 #include "fxjs/ijs_event_context.h"
 #include "fxjs/ijs_runtime.h"
-#include "third_party/base/check.h"
 
 namespace {
 
@@ -73,7 +73,7 @@ bool IsFormFieldTypeXFA(FormFieldType fieldType) {
 
 ByteString FDFToURLEncodedData(ByteString buffer) {
   std::unique_ptr<CFDF_Document> pFDF =
-      CFDF_Document::ParseMemory(buffer.raw_span());
+      CFDF_Document::ParseMemory(buffer.unsigned_span());
   if (!pFDF)
     return buffer;
 
@@ -94,7 +94,7 @@ ByteString FDFToURLEncodedData(ByteString buffer) {
     WideString name = pField->GetUnicodeTextFor("T");
     ByteString name_b = name.ToDefANSI();
     ByteString csBValue = pField->GetByteStringFor("V");
-    WideString csWValue = PDF_DecodeText(csBValue.raw_span());
+    WideString csWValue = PDF_DecodeText(csBValue.unsigned_span());
     ByteString csValue_b = csWValue.ToDefANSI();
     encoded_data << name_b << "=" << csValue_b;
     if (i != pFields->size() - 1)
@@ -281,16 +281,16 @@ void CPDFSDK_InteractiveForm::OnCalculate(CPDF_FormField* pFormField) {
     IJS_Runtime::ScopedEventContext pContext(pRuntime);
     pContext->OnField_Calculate(pFormField, pField, &sValue, &bRC);
 
-    absl::optional<IJS_Runtime::JS_Error> err = pContext->RunScript(csJS);
+    std::optional<IJS_Runtime::JS_Error> err = pContext->RunScript(csJS);
     if (!err.has_value() && bRC && sValue != sOldValue)
       pField->SetValue(sValue, NotificationOption::kNotify);
   }
 }
 
-absl::optional<WideString> CPDFSDK_InteractiveForm::OnFormat(
+std::optional<WideString> CPDFSDK_InteractiveForm::OnFormat(
     CPDF_FormField* pFormField) {
   if (!m_pFormFillEnv->IsJSPlatformPresent())
-    return absl::nullopt;
+    return std::nullopt;
 
   WideString sValue = pFormField->GetValue();
   IJS_Runtime* pRuntime = m_pFormFillEnv->GetIJSRuntime();
@@ -309,18 +309,18 @@ absl::optional<WideString> CPDFSDK_InteractiveForm::OnFormat(
       if (!script.IsEmpty()) {
         IJS_Runtime::ScopedEventContext pContext(pRuntime);
         pContext->OnField_Format(pFormField, &sValue);
-        absl::optional<IJS_Runtime::JS_Error> err = pContext->RunScript(script);
+        std::optional<IJS_Runtime::JS_Error> err = pContext->RunScript(script);
         if (!err.has_value())
           return sValue;
       }
     }
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 void CPDFSDK_InteractiveForm::ResetFieldAppearance(
     CPDF_FormField* pFormField,
-    absl::optional<WideString> sValue) {
+    std::optional<WideString> sValue) {
   for (int i = 0, sz = pFormField->CountControls(); i < sz; i++) {
     CPDF_FormControl* pFormCtrl = pFormField->GetControl(i);
     DCHECK(pFormCtrl);
@@ -452,7 +452,7 @@ bool CPDFSDK_InteractiveForm::SubmitFields(
       return false;
   }
 
-  m_pFormFillEnv->SubmitForm(text_buf.raw_span(), csDestination);
+  m_pFormFillEnv->SubmitForm(text_buf.unsigned_span(), csDestination);
   return true;
 }
 
@@ -478,7 +478,7 @@ bool CPDFSDK_InteractiveForm::SubmitForm(const WideString& sDestination) {
   if (fdf_buffer.IsEmpty())
     return false;
 
-  m_pFormFillEnv->SubmitForm(fdf_buffer.raw_span(), sDestination);
+  m_pFormFillEnv->SubmitForm(fdf_buffer.unsigned_span(), sDestination);
   return true;
 }
 
@@ -554,7 +554,7 @@ void CPDFSDK_InteractiveForm::AfterSelectionChange(CPDF_FormField* pField) {
     return;
 
   OnCalculate(pField);
-  ResetFieldAppearance(pField, absl::nullopt);
+  ResetFieldAppearance(pField, std::nullopt);
   UpdateField(pField);
 }
 

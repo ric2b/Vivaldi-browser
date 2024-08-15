@@ -2,8 +2,8 @@ import { FP } from '../../../../../util/floating_point.js';
 import { linearRange } from '../../../../../util/math.js';
 import { makeCaseCache } from '../../case_cache.js';
 
-// Cases: [f32|f16]
-const cases = (['f32', 'f16'] as const)
+// Cases: [f32|f16|abstract]
+const cases = (['f32', 'f16', 'abstract'] as const)
   .map(trait => ({
     [`${trait}`]: () => {
       return FP[trait].generateScalarToIntervalCases(
@@ -12,8 +12,9 @@ const cases = (['f32', 'f16'] as const)
           ...linearRange(-Math.PI, Math.PI, 100),
           ...FP[trait].scalarRange(),
         ],
-        'unfiltered',
-        FP[trait].sinInterval
+        trait === 'abstract' ? 'finite' : 'unfiltered',
+        // sin has an inherited accuracy, so is only expected to be as accurate as f32
+        FP[trait !== 'abstract' ? trait : 'f32'].sinInterval
       );
     },
   }))

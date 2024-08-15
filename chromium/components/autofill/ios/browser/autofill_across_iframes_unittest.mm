@@ -41,8 +41,8 @@ namespace autofill {
 // providing the right inputs to the parsing process.
 class TestAutofillManager : public BrowserAutofillManager {
  public:
-  TestAutofillManager(AutofillDriverIOS* driver, AutofillClient* client)
-      : BrowserAutofillManager(driver, client, "en-US") {}
+  explicit TestAutofillManager(AutofillDriverIOS* driver)
+      : BrowserAutofillManager(driver, "en-US") {}
 
   [[nodiscard]] testing::AssertionResult WaitForFormsSeen(
       int min_num_awaited_calls) {
@@ -226,7 +226,7 @@ TEST_F(AutofillAcrossIframesTest, WithChildFrames) {
 
   // Get the frame tokens from the registrar. Wrap this in a block because the
   // registrar receives these from each frame in a separate JS message.
-  __block absl::optional<LocalFrameToken> local_token1, local_token2;
+  __block std::optional<LocalFrameToken> local_token1, local_token2;
   ASSERT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
       base::test::ios::kWaitForJSCompletionTimeout, ^bool {
         local_token1 = registrar->LookupChildFrame(
@@ -265,7 +265,7 @@ TEST_F(AutofillAcrossIframesTest, WithChildFrames) {
   EXPECT_EQ(form.fields.size(), 2u);
   for (const FormFieldData& field : form.fields) {
     EXPECT_EQ(field.host_frame, form.host_frame);
-    EXPECT_EQ(field.host_form_id, form.unique_renderer_id);
+    EXPECT_EQ(field.host_form_id, form.renderer_id);
     EXPECT_EQ(field.origin, url::Origin::Create(form.url));
     EXPECT_EQ(field.host_form_signature, form_signature);
   }

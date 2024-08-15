@@ -28,6 +28,7 @@
 #include "components/content_settings/core/browser/content_settings_mock_observer.h"
 #include "components/content_settings/core/browser/content_settings_pref_provider.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
+#include "components/content_settings/core/browser/content_settings_rule.h"
 #include "components/content_settings/core/browser/content_settings_uma_util.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
@@ -41,6 +42,7 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
 #include "components/content_settings/core/common/features.h"
+#include "components/content_settings/core/common/host_indexed_content_settings.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/content_settings/core/test/content_settings_test_utils.h"
 #include "components/permissions/features.h"
@@ -1041,6 +1043,45 @@ TEST_P(IndexedHostContentSettingsMapTest, IncognitoPartialInheritDefault) {
       otr_map->GetContentSetting(host, host, ContentSettingsType::GEOLOCATION));
 }
 
+TEST_P(IndexedHostContentSettingsMapTest, IncognitoInheritCookies) {
+  TestingProfile profile;
+  Profile* otr_profile =
+      profile.GetPrimaryOTRProfile(/*create_if_needed=*/true);
+  HostContentSettingsMap* map =
+      HostContentSettingsMapFactory::GetForProfile(&profile);
+  HostContentSettingsMap* otr_map =
+      HostContentSettingsMapFactory::GetForProfile(otr_profile);
+
+  GURL url("http://example.com/");
+
+  map->SetContentSettingCustomScope(
+      ContentSettingsPattern::FromURLNoWildcard(url),
+      ContentSettingsPattern::FromURLNoWildcard(url),
+      ContentSettingsType::COOKIES, CONTENT_SETTING_SESSION_ONLY);
+
+  otr_map->SetContentSettingCustomScope(ContentSettingsPattern::FromURL(url),
+                                        ContentSettingsPattern::FromURL(url),
+                                        ContentSettingsType::COOKIES,
+                                        CONTENT_SETTING_BLOCK);
+
+  EXPECT_EQ(CONTENT_SETTING_SESSION_ONLY,
+            map->GetContentSetting(url, url, ContentSettingsType::COOKIES));
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            otr_map->GetContentSetting(url, url, ContentSettingsType::COOKIES));
+
+  auto indices = content_settings::HostIndexedContentSettings::Create(
+      otr_map->GetSettingsForOneType(ContentSettingsType::COOKIES));
+  ContentSetting result = CONTENT_SETTING_ALLOW;
+  for (const auto& index : indices) {
+    auto* found = index.Find(url, url);
+    if (found) {
+      result = content_settings::ValueToContentSetting(found->second.value);
+      break;
+    }
+  }
+  EXPECT_EQ(CONTENT_SETTING_BLOCK, result);
+}
+
 TEST_P(IndexedHostContentSettingsMapTest, IncognitoDontInheritSetting) {
   // Website settings marked DONT_INHERIT_IN_INCOGNITO in
   // WebsiteSettingsRegistry (e.g. usb chooser data) don't inherit any values
@@ -1904,7 +1945,7 @@ TEST_P(IndexedHostContentSettingsMapTest, GetPatternsFromScopingType) {
   }
 }
 
-TEST_F(HostContentSettingsMapTest, GetPatternsForContentSettingsType) {
+TEST_P(IndexedHostContentSettingsMapTest, GetPatternsForContentSettingsType) {
   const GURL primary_url("http://a.b.example1.com:8080");
   const GURL secondary_url("http://a.b.example2.com:8080");
 
@@ -2081,7 +2122,8 @@ TEST_P(IndexedHostContentSettingsMapTest, MixedScopeSettings) {
   // Set a Session only permission for our second url and we expect it should
   // co-exist with the other permission just fine.
   content_settings::ContentSettingConstraints constraints;
-  constraints.set_session_model(content_settings::SessionModel::UserSession);
+  constraints.set_session_model(
+      content_settings::mojom::SessionModel::USER_SESSION);
   map->SetContentSettingDefaultScope(example_url2, example_url2,
                                      persistent_type, CONTENT_SETTING_ALLOW,
                                      constraints);
@@ -2137,11 +2179,12 @@ TEST_P(IndexedHostContentSettingsMapTest,
 
   // Set permissions in two different scopes.
   content_settings::ContentSettingConstraints constraints;
-  constraints.set_session_model(content_settings::SessionModel::Durable);
+  constraints.set_session_model(content_settings::mojom::SessionModel::DURABLE);
   map->SetContentSettingDefaultScope(example_url1, example_url1,
                                      persistent_type, CONTENT_SETTING_BLOCK,
                                      constraints);
-  constraints.set_session_model(content_settings::SessionModel::UserSession);
+  constraints.set_session_model(
+      content_settings::mojom::SessionModel::USER_SESSION);
   map->SetContentSettingDefaultScope(example_url2, example_url2,
                                      persistent_type, CONTENT_SETTING_ALLOW,
                                      constraints);
@@ -2160,11 +2203,11 @@ TEST_P(IndexedHostContentSettingsMapTest,
   // specific scope without getting any of the other results. For Durable we
   // should see our set value and the default value.
   settings = map->GetSettingsForOneType(
-      persistent_type, content_settings::SessionModel::Durable);
+      persistent_type, content_settings::mojom::SessionModel::DURABLE);
   ASSERT_EQ(2u, settings.size());
 
   settings = map->GetSettingsForOneType(
-      persistent_type, content_settings::SessionModel::UserSession);
+      persistent_type, content_settings::mojom::SessionModel::USER_SESSION);
   ASSERT_EQ(1u, settings.size());
 
   // Reload to clear our session settings.
@@ -2173,7 +2216,7 @@ TEST_P(IndexedHostContentSettingsMapTest,
   // If a scope is specified that has no settings, we should get an empty set
   // returned.
   settings = map->GetSettingsForOneType(
-      persistent_type, content_settings::SessionModel::UserSession);
+      persistent_type, content_settings::mojom::SessionModel::USER_SESSION);
   ASSERT_EQ(0u, settings.size());
 }
 
@@ -2245,7 +2288,8 @@ TEST_P(HostContentSettingsMapActiveExpirationTest,
   // third with no expiration.
   content_settings::ContentSettingConstraints constraints;
   constraints.set_lifetime(base::Seconds(100));
-  constraints.set_session_model(content_settings::SessionModel::UserSession);
+  constraints.set_session_model(
+      content_settings::mojom::SessionModel::USER_SESSION);
   map->SetContentSettingDefaultScope(example_url1, example_url1,
                                      persistent_type, CONTENT_SETTING_BLOCK,
                                      constraints);
@@ -2261,7 +2305,7 @@ TEST_P(HostContentSettingsMapActiveExpirationTest,
   // Validate that we can retrieve all our settings and none of them are
   // expired.
   ContentSettingsForOneType settings = map->GetSettingsForOneType(
-      persistent_type, content_settings::SessionModel::UserSession);
+      persistent_type, content_settings::mojom::SessionModel::USER_SESSION);
   ASSERT_EQ(3u, settings.size());
 
   // None of our current settings should be expired, but we'll keep each one to
@@ -2294,7 +2338,7 @@ TEST_P(HostContentSettingsMapActiveExpirationTest,
   ASSERT_FALSE(url2_setting.IsExpired());
   ASSERT_FALSE(url3_setting.IsExpired());
   settings = map->GetSettingsForOneType(
-      persistent_type, content_settings::SessionModel::UserSession);
+      persistent_type, content_settings::mojom::SessionModel::USER_SESSION);
   ASSERT_EQ(2u, settings.size());
 
   t.ExpectTotalCount(kActiveExpiryHistogramName, GetParam() ? 1 : 0);
@@ -2313,7 +2357,7 @@ TEST_P(HostContentSettingsMapActiveExpirationTest,
   ASSERT_TRUE(url2_setting.IsExpired());
   ASSERT_FALSE(url3_setting.IsExpired());
   settings = map->GetSettingsForOneType(
-      persistent_type, content_settings::SessionModel::UserSession);
+      persistent_type, content_settings::mojom::SessionModel::USER_SESSION);
   ASSERT_EQ(1u, settings.size());
 
   t.ExpectTotalCount(kActiveExpiryHistogramName, GetParam() ? 2 : 0);
@@ -2333,7 +2377,7 @@ TEST_P(HostContentSettingsMapActiveExpirationTest,
   ASSERT_TRUE(url2_setting.IsExpired());
   ASSERT_FALSE(url3_setting.IsExpired());
   settings = map->GetSettingsForOneType(
-      persistent_type, content_settings::SessionModel::UserSession);
+      persistent_type, content_settings::mojom::SessionModel::USER_SESSION);
   ASSERT_EQ(1u, settings.size());
 
   t.ExpectTotalCount(kActiveExpiryHistogramName, GetParam() ? 2 : 0);
@@ -2464,7 +2508,7 @@ TEST_P(IndexedHostContentSettingsMapTest, IncognitoInheritSaaAndRenew) {
   EXPECT_EQ(CONTENT_SETTING_ASK, otr_map->GetContentSetting(host, host, type));
 }
 
-TEST_F(HostContentSettingsMapTest, ShutdownDuringExpirationAsanTest) {
+TEST_P(IndexedHostContentSettingsMapTest, ShutdownDuringExpirationAsanTest) {
   TestingProfile profile;
 
   auto host_content_settings_map = base::MakeRefCounted<HostContentSettingsMap>(

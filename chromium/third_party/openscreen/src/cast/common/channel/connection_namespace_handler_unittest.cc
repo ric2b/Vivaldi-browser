@@ -62,7 +62,7 @@ CastMessage MakeVersionedConnectMessage(
     message[kMessageKeyProtocolVersionList] = std::move(list);
   }
   ErrorOr<std::string> result = json::Stringify(message);
-  OSP_DCHECK(result);
+  OSP_CHECK(result);
   connect_message.set_payload_utf8(std::move(result.value()));
   return connect_message;
 }

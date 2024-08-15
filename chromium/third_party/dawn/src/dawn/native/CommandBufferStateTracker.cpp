@@ -100,7 +100,7 @@ using WritableBindingAliasingResult = std::variant<std::monostate, BufferAliasin
 
 template <typename Return>
 Return FindStorageBufferBindingAliasing(const PipelineLayoutBase* pipelineLayout,
-                                        const PerBindGroup<BindGroupBase*>& bindGroups,
+                                        const PerBindGroup<raw_ptr<BindGroupBase>>& bindGroups,
                                         const PerBindGroup<std::vector<uint32_t>>& dynamicOffsets) {
     // If true, returns detailed validation error info. Otherwise simply returns if any binding
     // aliasing is found.
@@ -124,11 +124,12 @@ Return FindStorageBufferBindingAliasing(const PipelineLayoutBase* pipelineLayout
         for (BindingIndex bindingIndex{0}; bindingIndex < bgl->GetBufferCount(); ++bindingIndex) {
             const BindingInfo& bindingInfo = bgl->GetBindingInfo(bindingIndex);
             // Buffer bindings are sorted to have smallest of bindingIndex.
-            DAWN_ASSERT(bindingInfo.bindingType == BindingInfoType::Buffer);
+            const BufferBindingLayout& layout =
+                std::get<BufferBindingLayout>(bindingInfo.bindingLayout);
 
             // BindGroup validation already guarantees the buffer usage includes
             // wgpu::BufferUsage::Storage
-            if (bindingInfo.buffer.type != wgpu::BufferBindingType::Storage) {
+            if (layout.type != wgpu::BufferBindingType::Storage) {
                 continue;
             }
 
@@ -141,7 +142,7 @@ Return FindStorageBufferBindingAliasing(const PipelineLayoutBase* pipelineLayout
 
             uint64_t adjustedOffset = bufferBinding.offset;
             // Apply dynamic offset if any.
-            if (bindingInfo.buffer.hasDynamicOffset) {
+            if (layout.hasDynamicOffset) {
                 // SetBindGroup validation already guarantees offsets and sizes don't overflow.
                 adjustedOffset += dynamicOffsets[groupIndex][static_cast<uint32_t>(bindingIndex)];
             }
@@ -162,11 +163,13 @@ Return FindStorageBufferBindingAliasing(const PipelineLayoutBase* pipelineLayout
              bindingIndex < bgl->GetBindingCount(); ++bindingIndex) {
             const BindingInfo& bindingInfo = bgl->GetBindingInfo(bindingIndex);
 
-            if (bindingInfo.bindingType != BindingInfoType::StorageTexture) {
+            const auto* layout =
+                std::get_if<StorageTextureBindingLayout>(&bindingInfo.bindingLayout);
+            if (layout == nullptr) {
                 continue;
             }
 
-            switch (bindingInfo.storageTexture.access) {
+            switch (layout->access) {
                 case wgpu::StorageTextureAccess::WriteOnly:
                 case wgpu::StorageTextureAccess::ReadWrite:
                     break;
@@ -359,8 +362,8 @@ MaybeError CommandBufferStateTracker::ValidateNoDifferentTextureViewsOnSameTextu
 
         for (BindingIndex bindingIndex{0}; bindingIndex < bgl->GetBindingCount(); ++bindingIndex) {
             const BindingInfo& bindingInfo = bgl->GetBindingInfo(bindingIndex);
-            if (bindingInfo.bindingType != BindingInfoType::Texture &&
-                bindingInfo.bindingType != BindingInfoType::StorageTexture) {
+            if (!std::holds_alternative<TextureBindingLayout>(bindingInfo.bindingLayout) &&
+                !std::holds_alternative<StorageTextureBindingLayout>(bindingInfo.bindingLayout)) {
                 continue;
             }
 
@@ -522,7 +525,8 @@ void CommandBufferStateTracker::RecomputeLazyAspects(ValidationAspects aspects) 
 
         for (BindGroupIndex i : IterateBitSet(mLastPipelineLayout->GetBindGroupLayoutsMask())) {
             if (mBindgroups[i] == nullptr ||
-                mLastPipelineLayout->GetBindGroupLayout(i) != mBindgroups[i]->GetLayout() ||
+                !mLastPipelineLayout->GetFrontendBindGroupLayout(i)->IsLayoutEqual(
+                    mBindgroups[i]->GetFrontendLayout()) ||
                 FindFirstUndersizedBuffer(mBindgroups[i]->GetUnverifiedBufferSizes(),
                                           (*mMinBufferSizes)[i])
                     .has_value()) {
@@ -672,11 +676,12 @@ MaybeError CommandBufferStateTracker::CheckMissingAspects(ValidationAspects aspe
                     mBindgroups[i]->GetUnverifiedBufferSizes()[packedIndex.value()];
                 uint64_t minBufferSize = (*mMinBufferSizes)[i][packedIndex.value()];
 
+                const auto& layout = std::get<BufferBindingLayout>(bindingInfo.bindingLayout);
                 return DAWN_VALIDATION_ERROR(
                     "%s bound with size %u at group %u, binding %u is too small. The pipeline (%s) "
                     "requires a buffer binding which is at least %u bytes.%s",
                     buffer, bufferSize, i, bindingNumber, mLastPipeline, minBufferSize,
-                    (bindingInfo.buffer.type == wgpu::BufferBindingType::Uniform
+                    (layout.type == wgpu::BufferBindingType::Uniform
                          ? " This binding is a uniform buffer binding. It is padded to a multiple "
                            "of 16 bytes, and as a result may be larger than the associated data in "
                            "the shader source."
@@ -749,10 +754,13 @@ void CommandBufferStateTracker::SetBindGroup(BindGroupIndex index,
     mAspects.reset(VALIDATION_ASPECT_BIND_GROUPS);
 }
 
-void CommandBufferStateTracker::SetIndexBuffer(wgpu::IndexFormat format, uint64_t size) {
+void CommandBufferStateTracker::SetIndexBuffer(wgpu::IndexFormat format,
+                                               uint64_t offset,
+                                               uint64_t size) {
     mIndexBufferSet = true;
     mIndexFormat = format;
     mIndexBufferSize = size;
+    mIndexBufferOffset = offset;
 }
 
 void CommandBufferStateTracker::UnsetVertexBuffer(VertexBufferSlot slot) {
@@ -810,6 +818,17 @@ wgpu::IndexFormat CommandBufferStateTracker::GetIndexFormat() const {
 
 uint64_t CommandBufferStateTracker::GetIndexBufferSize() const {
     return mIndexBufferSize;
+}
+
+uint64_t CommandBufferStateTracker::GetIndexBufferOffset() const {
+    return mIndexBufferOffset;
+}
+
+void CommandBufferStateTracker::End() {
+    mLastPipelineLayout = nullptr;
+    mLastPipeline = nullptr;
+    mMinBufferSizes = nullptr;
+    mBindgroups.fill(nullptr);
 }
 
 }  // namespace dawn::native

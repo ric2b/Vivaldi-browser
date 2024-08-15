@@ -167,6 +167,8 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
         extra_bootstrap_args.append("--no-last-commit-position")
       if is_windows:
         extra_bootstrap_args.extend(["--platform", "msvc"])
+      elif is_linux:
+        extra_bootstrap_args.append("--allow-warnings")
       if subprocess.call(["python3",
         os.path.join(sourcedir, "thirdparty", "gn", "build",
                      "gen.py"),

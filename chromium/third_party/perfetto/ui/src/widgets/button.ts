@@ -54,7 +54,7 @@ interface LabelButtonAttrs extends CommonAttrs {
   icon?: string;
 }
 
-export type ButtonAttrs = LabelButtonAttrs|IconButtonAttrs;
+export type ButtonAttrs = LabelButtonAttrs | IconButtonAttrs;
 
 export class Button implements m.ClassComponent<ButtonAttrs> {
   view({attrs}: m.CVnode<ButtonAttrs>) {
@@ -72,23 +72,32 @@ export class Button implements m.ClassComponent<ButtonAttrs> {
     const label = 'label' in attrs ? attrs.label : undefined;
 
     const classes = classNames(
-        active && 'pf-active',
-        compact && 'pf-compact',
-        minimal && 'pf-minimal',
-        (icon && !label) && 'pf-icon-only',
-        dismissPopup && Popup.DISMISS_POPUP_GROUP_CLASS,
-        className,
+      active && 'pf-active',
+      compact && 'pf-compact',
+      minimal && 'pf-minimal',
+      icon && !label && 'pf-icon-only',
+      dismissPopup && Popup.DISMISS_POPUP_GROUP_CLASS,
+      className,
     );
 
     return m(
-        'button.pf-button',
-        {
-          ...htmlAttrs,
-          className: classes,
-        },
-        icon && m(Icon, {className: 'pf-left-icon', icon}),
-        rightIcon && m(Icon, {className: 'pf-right-icon', icon: rightIcon}),
-        label || '\u200B',  // Zero width space keeps button in-flow
+      'button.pf-button',
+      {
+        ...htmlAttrs,
+        className: classes,
+      },
+      icon && m(Icon, {className: 'pf-left-icon', icon}),
+      rightIcon && m(Icon, {className: 'pf-right-icon', icon: rightIcon}),
+      label || '\u200B', // Zero width space keeps button in-flow
     );
+  }
+}
+
+/**
+ * Space buttons out with a little gap between each one.
+ */
+export class ButtonBar implements m.ClassComponent {
+  view({children}: m.CVnode): m.Children {
+    return m('.pf-button-bar', children);
   }
 }

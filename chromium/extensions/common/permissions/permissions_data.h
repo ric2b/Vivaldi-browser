@@ -99,7 +99,7 @@ class PermissionsData {
   // Returns true if the "all_urls" meta-pattern should include access to
   // URLs with the "chrome" scheme. Access to these URLs is limited as they
   // are sensitive.
-  static bool AllUrlsIncludesChromeUrls(const std::string& extension_id);
+  static bool AllUrlsIncludesChromeUrls(const ExtensionId& extension_id);
 
   // Is this extension using the default scope for policy_blocked_hosts and
   // policy_allowed_hosts of the ExtensionSettings policy.
@@ -152,6 +152,10 @@ class PermissionsData {
 
   // Clears the tab-specific permissions of |tab_id|.
   void ClearTabSpecificPermissions(int tab_id) const;
+
+  // Returns whether the extension has tab-specific permissions for the security
+  // origin of `url` on `tab_id`.
+  bool HasTabPermissionsForSecurityOrigin(int tab_id, const GURL& url) const;
 
   // Returns true if the |extension| has the given |permission|. Prefer
   // IsExtensionWithPermissionOrSuggestInConsole when developers may be using an

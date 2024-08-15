@@ -820,6 +820,10 @@ void Context::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const {
     // used bytes here (see Ganesh implementation).
 }
 
+bool Context::isDeviceLost() const {
+    return fSharedContext->isDeviceLost();
+}
+
 bool Context::supportsProtectedContent() const {
     return fSharedContext->isProtected() == Protected::kYes;
 }
@@ -889,6 +893,7 @@ bool ContextPriv::supportsPathRendererStrategy(PathRendererStrategy strategy) {
         case PathRendererStrategy::kDefault:
             return true;
         case PathRendererStrategy::kComputeAnalyticAA:
+        case PathRendererStrategy::kComputeMSAA16:
             return SkToBool(pathAtlasFlags & AtlasProvider::PathAtlasFlags::kCompute);
         case PathRendererStrategy::kRasterAA:
             return SkToBool(pathAtlasFlags & AtlasProvider::PathAtlasFlags::kRaster);

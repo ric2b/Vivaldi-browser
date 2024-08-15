@@ -68,7 +68,7 @@ struct SamplerTexturePair {
     }
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-    TINT_REFLECT(sampler_binding_point, texture_binding_point);
+    TINT_REFLECT(SamplerTexturePair, sampler_binding_point, texture_binding_point);
 };
 
 /// Prints the SamplerTexturePair @p stp to @p o

@@ -19,10 +19,7 @@ import {
   PluginDescriptor,
 } from '../../public';
 
-import {
-  ActiveCPUCountTrack,
-  addActiveCPUCountTrack,
-} from './active_cpu_count';
+import {ActiveCPUCountTrack, addActiveCPUCountTrack} from './active_cpu_count';
 import {
   addRunnableThreadCountTrack,
   RunnableThreadCountTrack,
@@ -32,12 +29,15 @@ class SchedPlugin implements Plugin {
   async onTraceLoad(ctx: PluginContextTrace) {
     ctx.registerTrack({
       uri: RunnableThreadCountTrack.kind,
-      track: (trackCtx) => new RunnableThreadCountTrack(
-          {engine: ctx.engine, trackKey: trackCtx.trackKey}),
+      trackFactory: (trackCtx) =>
+        new RunnableThreadCountTrack({
+          engine: ctx.engine,
+          trackKey: trackCtx.trackKey,
+        }),
     });
     ctx.registerTrack({
       uri: ActiveCPUCountTrack.kind,
-      track: (trackCtx) => new ActiveCPUCountTrack(trackCtx, ctx.engine),
+      trackFactory: (trackCtx) => new ActiveCPUCountTrack(trackCtx, ctx.engine),
     });
   }
 

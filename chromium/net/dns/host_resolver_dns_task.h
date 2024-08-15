@@ -65,7 +65,8 @@ class NET_EXPORT_PRIVATE HostResolverDnsTask
   };
 
   HostResolverDnsTask(DnsClient* client,
-                      absl::variant<url::SchemeHostPort, std::string> host,
+                      HostResolver::Host host,
+                      NetworkAnonymizationKey anonymization_key,
                       DnsQueryTypeSet query_types,
                       ResolveContext* resolve_context,
                       bool secure,
@@ -153,6 +154,16 @@ class NET_EXPORT_PRIVATE HostResolverDnsTask
                                  const TransactionInfo& transaction_info,
                                  const DnsResponse* response);
 
+  void SortTransactionAndHandleResults(TransactionInfo transaction_info,
+                                       Results transaction_results);
+  void OnTransactionSorted(
+      std::set<TransactionInfo>::iterator transaction_info_it,
+      Results transaction_results,
+      bool success,
+      std::vector<IPEndPoint> sorted);
+  void HandleTransactionResults(TransactionInfo transaction_info,
+                                Results transaction_results);
+
   void OnTransactionsFinished();
 
   void OnSortComplete(base::TimeTicks sort_start_time,
@@ -185,7 +196,8 @@ class NET_EXPORT_PRIVATE HostResolverDnsTask
 
   const raw_ptr<DnsClient> client_;
 
-  absl::variant<url::SchemeHostPort, std::string> host_;
+  HostResolver::Host host_;
+  NetworkAnonymizationKey anonymization_key_;
 
   base::SafeRef<ResolveContext> resolve_context_;
 

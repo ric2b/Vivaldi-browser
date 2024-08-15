@@ -24,6 +24,7 @@
 #include "base/check_op.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/partition_allocator.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
+#include "third_party/blink/renderer/platform/wtf/type_traits.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace WTF {
@@ -49,6 +50,7 @@ class HashCountedSet {
   typedef typename ImplType::AddResult AddResult;
 
   HashCountedSet() {
+    static_assert(!IsStackAllocatedType<Value>);
     static_assert(Allocator::kIsGarbageCollected ||
                       !IsPointerToGarbageCollectedType<Value>::value,
                   "Cannot put raw pointers to garbage-collected classes into "
@@ -56,8 +58,8 @@ class HashCountedSet {
                   "HeapHashCountedSet<Member<T>> instead.");
   }
 
-  HashCountedSet(const HashCountedSet&) = delete;
-  HashCountedSet& operator=(const HashCountedSet&) = delete;
+  HashCountedSet(const HashCountedSet&) = default;
+  HashCountedSet& operator=(const HashCountedSet&) = default;
 
   void swap(HashCountedSet& other) { impl_.swap(other.impl_); }
 

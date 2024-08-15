@@ -6,14 +6,15 @@
 
 #import "base/test/metrics/user_action_tester.h"
 #import "base/test/scoped_feature_list.h"
-#import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/common/bookmark_features.h"
 #import "components/sync/base/features.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_ios_unit_test_support.h"
+#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_model.h"
 #import "ios/chrome/browser/ui/bookmarks/home/bookmarks_home_mediator.h"
@@ -31,21 +32,20 @@ TEST_F(BookmarksHomeViewControllerTest,
         OCMProtocolMock(@protocol(SnackbarCommands));
 
     // Set up ApplicationCommands mock. Because ApplicationCommands conforms
-    // to ApplicationSettingsCommands, that needs to be mocked and dispatched
+    // to SettingsCommands, that needs to be mocked and dispatched
     // as well.
     id mockApplicationCommandHandler =
         OCMProtocolMock(@protocol(ApplicationCommands));
-    id mockApplicationSettingsCommandHandler =
-        OCMProtocolMock(@protocol(ApplicationSettingsCommands));
+    id mockSettingsCommandHandler =
+        OCMProtocolMock(@protocol(SettingsCommands));
 
     CommandDispatcher* dispatcher = browser_->GetCommandDispatcher();
     [dispatcher startDispatchingToTarget:mockSnackbarCommandHandler
                              forProtocol:@protocol(SnackbarCommands)];
     [dispatcher startDispatchingToTarget:mockApplicationCommandHandler
                              forProtocol:@protocol(ApplicationCommands)];
-    [dispatcher
-        startDispatchingToTarget:mockApplicationSettingsCommandHandler
-                     forProtocol:@protocol(ApplicationSettingsCommands)];
+    [dispatcher startDispatchingToTarget:mockSettingsCommandHandler
+                             forProtocol:@protocol(SettingsCommands)];
 
     BookmarksHomeViewController* controller =
         [[BookmarksHomeViewController alloc] initWithBrowser:browser_.get()];
@@ -95,21 +95,20 @@ TEST_F(BookmarksHomeViewControllerTest,
         OCMProtocolMock(@protocol(SnackbarCommands));
 
     // Set up ApplicationCommands mock. Because ApplicationCommands conforms
-    // to ApplicationSettingsCommands, that needs to be mocked and dispatched
+    // to SettingsCommands, that needs to be mocked and dispatched
     // as well.
     id mockApplicationCommandHandler =
         OCMProtocolMock(@protocol(ApplicationCommands));
-    id mockApplicationSettingsCommandHandler =
-        OCMProtocolMock(@protocol(ApplicationSettingsCommands));
+    id mockSettingsCommandHandler =
+        OCMProtocolMock(@protocol(SettingsCommands));
 
     CommandDispatcher* dispatcher = browser_->GetCommandDispatcher();
     [dispatcher startDispatchingToTarget:mockSnackbarCommandHandler
                              forProtocol:@protocol(SnackbarCommands)];
     [dispatcher startDispatchingToTarget:mockApplicationCommandHandler
                              forProtocol:@protocol(ApplicationCommands)];
-    [dispatcher
-        startDispatchingToTarget:mockApplicationSettingsCommandHandler
-                     forProtocol:@protocol(ApplicationSettingsCommands)];
+    [dispatcher startDispatchingToTarget:mockSettingsCommandHandler
+                             forProtocol:@protocol(SettingsCommands)];
 
     BookmarksHomeViewController* controller =
         [[BookmarksHomeViewController alloc] initWithBrowser:browser_.get()];
@@ -117,7 +116,8 @@ TEST_F(BookmarksHomeViewControllerTest,
     controller.snackbarCommandsHandler = mockSnackbarCommandHandler;
 
     const bookmarks::BookmarkNode* rootNode =
-        local_or_syncable_bookmark_model_->root_node();
+        local_or_syncable_bookmark_model_
+            ->subtle_root_node_with_unspecified_children();
     const bookmarks::BookmarkNode* mobileNode =
         local_or_syncable_bookmark_model_->mobile_node();
     AddBookmark(mobileNode, u"foo");  // Ensure there are bookmarks
@@ -167,21 +167,20 @@ TEST_F(BookmarksHomeViewControllerTest, Metrics) {
         OCMProtocolMock(@protocol(SnackbarCommands));
 
     // Set up ApplicationCommands mock. Because ApplicationCommands conforms
-    // to ApplicationSettingsCommands, that needs to be mocked and dispatched
+    // to SettingsCommands, that needs to be mocked and dispatched
     // as well.
     id mockApplicationCommandHandler =
         OCMProtocolMock(@protocol(ApplicationCommands));
-    id mockApplicationSettingsCommandHandler =
-        OCMProtocolMock(@protocol(ApplicationSettingsCommands));
+    id mockSettingsCommandHandler =
+        OCMProtocolMock(@protocol(SettingsCommands));
 
     CommandDispatcher* dispatcher = browser_->GetCommandDispatcher();
     [dispatcher startDispatchingToTarget:mockSnackbarCommandHandler
                              forProtocol:@protocol(SnackbarCommands)];
     [dispatcher startDispatchingToTarget:mockApplicationCommandHandler
                              forProtocol:@protocol(ApplicationCommands)];
-    [dispatcher
-        startDispatchingToTarget:mockApplicationSettingsCommandHandler
-                     forProtocol:@protocol(ApplicationSettingsCommands)];
+    [dispatcher startDispatchingToTarget:mockSettingsCommandHandler
+                             forProtocol:@protocol(SettingsCommands)];
 
     BookmarksHomeViewController* controller =
         [[BookmarksHomeViewController alloc] initWithBrowser:browser_.get()];

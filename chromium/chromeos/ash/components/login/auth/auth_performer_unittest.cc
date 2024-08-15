@@ -35,6 +35,7 @@ namespace {
 
 using ::cryptohome::KeyLabel;
 using ::testing::_;
+using ::testing::UnorderedElementsAre;
 
 void SetupUserWithLegacyPasswordFactor(UserContext* context) {
   std::vector<cryptohome::AuthFactor> factors;
@@ -124,7 +125,7 @@ TEST_F(AuthPerformerTest, StartWithUntypedPasswordKey) {
 TEST_F(AuthPerformerTest, StartWithUntypedKioskKey) {
   // Arrange: user is kiosk, and cryptohome replies with a key that has no
   // |type| set.
-  context_ = std::make_unique<UserContext>(user_manager::USER_TYPE_KIOSK_APP,
+  context_ = std::make_unique<UserContext>(user_manager::UserType::kKioskApp,
                                            AccountId());
   EXPECT_CALL(mock_client_, StartAuthSession(_, _))
       .WillOnce([](const ::user_data_auth::StartAuthSessionRequest& request,
@@ -173,7 +174,8 @@ TEST_F(AuthPerformerTest, KnowledgeKeyCorrectLabelFallback) {
       .WillOnce(
           [](const ::user_data_auth::AuthenticateAuthFactorRequest& request,
              UserDataAuthClient::AuthenticateAuthFactorCallback callback) {
-            EXPECT_EQ(request.auth_factor_label(), "legacy-0");
+            EXPECT_THAT(request.auth_factor_labels(),
+                        UnorderedElementsAre("legacy-0"));
             EXPECT_TRUE(request.has_auth_input());
             EXPECT_TRUE(request.auth_input().has_password_input());
             ReplyAsSuccess(std::move(callback));
@@ -207,7 +209,8 @@ TEST_F(AuthPerformerTest, KnowledgeKeyNoFallbackOnPin) {
       .WillOnce(
           [](const ::user_data_auth::AuthenticateAuthFactorRequest& request,
              UserDataAuthClient::AuthenticateAuthFactorCallback callback) {
-            EXPECT_EQ(request.auth_factor_label(), "pin");
+            EXPECT_THAT(request.auth_factor_labels(),
+                        UnorderedElementsAre("pin"));
             EXPECT_TRUE(request.has_auth_input());
             EXPECT_TRUE(request.auth_input().has_pin_input());
             ReplyAsKeyMismatch(std::move(callback));
@@ -235,7 +238,8 @@ TEST_F(AuthPerformerTest, AuthenticateWithPasswordCorrectLabel) {
       .WillOnce(
           [](const ::user_data_auth::AuthenticateAuthFactorRequest& request,
              UserDataAuthClient::AuthenticateAuthFactorCallback callback) {
-            EXPECT_EQ(request.auth_factor_label(), "legacy-0");
+            EXPECT_THAT(request.auth_factor_labels(),
+                        UnorderedElementsAre("legacy-0"));
             EXPECT_TRUE(request.has_auth_input());
             EXPECT_TRUE(request.auth_input().has_password_input());
             EXPECT_FALSE(
@@ -294,7 +298,8 @@ TEST_F(AuthPerformerTest, AuthenticateWithPinSuccess) {
       .WillOnce(
           [](const ::user_data_auth::AuthenticateAuthFactorRequest& request,
              UserDataAuthClient::AuthenticateAuthFactorCallback callback) {
-            EXPECT_EQ(request.auth_factor_label(), "pin");
+            EXPECT_THAT(request.auth_factor_labels(),
+                        UnorderedElementsAre("pin"));
             EXPECT_TRUE(request.has_auth_input());
             EXPECT_TRUE(request.auth_input().has_pin_input());
             EXPECT_FALSE(request.auth_input().pin_input().secret().empty());

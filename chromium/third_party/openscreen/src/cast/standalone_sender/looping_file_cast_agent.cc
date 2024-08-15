@@ -53,16 +53,16 @@ LoopingFileCastAgent::~LoopingFileCastAgent() {
 void LoopingFileCastAgent::Connect(ConnectionSettings settings) {
   TRACE_DEFAULT_SCOPED(TraceCategory::kStandaloneSender);
 
-  OSP_DCHECK(!connection_settings_);
+  OSP_CHECK(!connection_settings_);
   connection_settings_ = std::move(settings);
   const auto policy = connection_settings_->should_include_video
                           ? DeviceMediaPolicy::kIncludesVideo
                           : DeviceMediaPolicy::kAudioOnly;
 
   task_runner_.PostTask([this, policy] {
-#if defined(MAC_OSX)
+#if defined(__APPLE__)
     wake_lock_ = ScopedWakeLock::Create(task_runner_);
-#endif  // defined(MAC_OSX)
+#endif  // defined(__APPLE__)
     socket_factory_.Connect(connection_settings_->receiver_endpoint, policy,
                             &router_);
   });
@@ -117,7 +117,7 @@ void LoopingFileCastAgent::OnMessage(VirtualConnectionRouter* router,
   if (message_port_.GetSocketId() == ToCastSocketId(socket) &&
       !message_port_.source_id().empty() &&
       message_port_.source_id() == message.destination_id()) {
-    OSP_DCHECK(message.destination_id() != kPlatformSenderId);
+    OSP_CHECK_NE(message.destination_id(), kPlatformSenderId);
     message_port_.OnMessage(router, socket, std::move(message));
     return;
   }
@@ -256,8 +256,8 @@ void LoopingFileCastAgent::OnRemoteMessagingOpened(bool success) {
 
 void LoopingFileCastAgent::OnReceiverMessagingOpened(bool success) {
   // We established a platform connection and now need to launch.
-  OSP_DCHECK(platform_remote_connection_);
-  OSP_DCHECK(!remote_connection_);
+  OSP_CHECK(platform_remote_connection_);
+  OSP_CHECK(!remote_connection_);
   if (!success) {
     OSP_LOG_INFO << "Failed to establish messaging to the Cast Receiver.";
     Shutdown();
@@ -277,7 +277,7 @@ void LoopingFileCastAgent::OnReceiverMessagingOpened(bool success) {
 void LoopingFileCastAgent::CreateAndStartSession() {
   TRACE_DEFAULT_SCOPED(TraceCategory::kStandaloneSender);
 
-  OSP_DCHECK(remote_connection_.has_value());
+  OSP_CHECK(remote_connection_.has_value());
   environment_ =
       std::make_unique<Environment>(&Clock::now, task_runner_, IPEndpoint{});
 
@@ -291,7 +291,7 @@ void LoopingFileCastAgent::CreateAndStartSession() {
       connection_settings_->use_android_rtp_hack};
   current_session_ = std::make_unique<SenderSession>(std::move(config));
   current_session_->SetStatsClient(this);
-  OSP_DCHECK(!message_port_.source_id().empty());
+  OSP_CHECK(!message_port_.source_id().empty());
 
   AudioCaptureConfig audio_config;
   // Opus does best at 192kbps, so we cap that here.
@@ -356,7 +356,7 @@ void LoopingFileCastAgent::OnStatisticsUpdated(
 }
 
 void LoopingFileCastAgent::OnReady() {
-  OSP_DCHECK(cast_mode_ == CastMode::kRemoting);
+  OSP_CHECK_EQ(cast_mode_, CastMode::kRemoting);
   is_ready_for_remoting_ = true;
   if (current_negotiation_) {
     StartFileSender();
@@ -368,7 +368,7 @@ void LoopingFileCastAgent::OnPlaybackRateChange(double rate) {
 }
 
 void LoopingFileCastAgent::StartFileSender() {
-  OSP_DCHECK(current_negotiation_);
+  OSP_CHECK(current_negotiation_);
   file_sender_ = std::make_unique<LoopingFileSender>(
       environment_.get(), connection_settings_.value(), current_session_.get(),
       std::move(*current_negotiation_), [this]() { shutdown_callback_(); });
@@ -389,7 +389,7 @@ void LoopingFileCastAgent::Shutdown() {
                    << last_reported_statistics_->ToString();
     }
   }
-  OSP_DCHECK(message_port_.source_id().empty());
+  OSP_CHECK(message_port_.source_id().empty());
   environment_.reset();
 
   if (platform_remote_connection_) {

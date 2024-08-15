@@ -26,6 +26,7 @@
 #import "components/password_manager/core/browser/password_store/password_store_interface.h"
 #import "components/password_manager/core/browser/sharing/password_receiver_service.h"
 #import "components/password_manager/core/browser/sharing/password_sender_service.h"
+#import "components/plus_addresses/webdata/plus_address_webdata_service.h"
 #import "components/reading_list/core/dual_reading_list_model.h"
 #import "components/reading_list/core/reading_list_model.h"
 #import "components/supervised_user/core/common/buildflags.h"
@@ -42,7 +43,7 @@
 #import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_sync_service_factory.h"
 #import "ios/chrome/browser/consent_auditor/model/consent_auditor_factory.h"
 #import "ios/chrome/browser/dom_distiller/model/dom_distiller_service_factory.h"
-#import "ios/chrome/browser/favicon/favicon_service_factory.h"
+#import "ios/chrome/browser/favicon/model/favicon_service_factory.h"
 #import "ios/chrome/browser/history/model/history_service_factory.h"
 #import "ios/chrome/browser/metrics/model/google_groups_updater_service_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_account_password_store_factory.h"
@@ -124,6 +125,8 @@ IOSChromeSyncClient::IOSChromeSyncClient(ChromeBrowserState* browser_state)
           account_bookmark_sync_service,
           PowerBookmarkServiceFactory::GetForBrowserState(browser_state_),
           supervised_user_settings_service,
+          ios::WebDataServiceFactory::GetPlusAddressWebDataForBrowserState(
+              browser_state_, ServiceAccessType::IMPLICIT_ACCESS),
           vivaldi::NoteSyncServiceFactory::GetForBrowserState(browser_state_));
 
   local_data_query_helper_ =
@@ -317,6 +320,15 @@ void IOSChromeSyncClient::OnLocalSyncTransportDataCleared() {
   if (google_groups_updater != nullptr) {
     google_groups_updater->ClearSigninScopedState();
   }
+}
+
+bool IOSChromeSyncClient::IsPasswordSyncAllowed() {
+  return true;
+}
+
+void IOSChromeSyncClient::SetPasswordSyncAllowedChangeCb(
+    const base::RepeatingClosure& cb) {
+  // IsPasswordSyncAllowed() doesn't change on //ios/chrome.
 }
 
 void IOSChromeSyncClient::GetLocalDataDescriptions(

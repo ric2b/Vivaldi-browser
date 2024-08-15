@@ -4,14 +4,16 @@
 
 module compose.mojom;
 
-// Interface for setting up connection to allow calls between the compose dialog
-// web page and native code.
-interface ComposeSessionPageHandlerFactory {
-  // Called from dialog compose JS to set up native handler.
-  CreateComposeSessionPageHandler(
-      pending_receiver<ComposeClientPageHandler> client_handler,
-      pending_receiver<ComposeSessionPageHandler> handler,
-      pending_remote<ComposeDialog> dialog);
+import "components/compose/core/browser/compose_enums.mojom";
+
+// Interface for setting up connection to allow calls between the untrusted
+// compose dialog web page and native code.
+interface ComposeSessionUntrustedPageHandlerFactory {
+  // Called from untrusted dialog compose JS to set up native handler.
+  CreateComposeSessionUntrustedPageHandler(
+      pending_receiver<ComposeClientUntrustedPageHandler> client_handler,
+      pending_receiver<ComposeSessionUntrustedPageHandler> handler,
+      pending_remote<ComposeUntrustedDialog> dialog);
 };
 
 // Configuration parameter used in compose requests.
@@ -26,48 +28,6 @@ enum Length {
   kUnset,
   kShorter,
   kLonger,
-};
-
-// Status code used in compose responses.
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused. Keep in sync with
-// ComposeResponseStatus in tools/metrics/histograms/metadata/compose/enums.xml.
-enum ComposeStatus {
-  kOk = 0,
-  // Generic client error, not specified.
-  kClientError = 1,
-
-  // kNotSuccessful = 2,  // no longer used, separated into several errors.
-  // kTryAgain = 3,  // no longer used, separated into several errors.
-  // kTryAgainLater = 4,  // no longer used, separated into several errors.
-
-  // If the feature is somehow disabled.
-  kMisconfiguration = 5,
-  // If permission is denied (e.g. user is not logged in.)
-  kPermissionDenied = 6,
-  // Generic server error, not specified.
-  kServerError = 7,
-  // Invalid request sent, likely a client issue where ComposeRequest is
-  // incorrect.
-  kInvalidRequest = 8,
-  // Request was throttled.
-  kRequestThrottled = 9,
-  // Retryable error occurred in the server.
-  kRetryableError = 10,
-  // Non-retryable error occurred in the server (eg. server down).
-  kNonRetryableError = 11,
-  // Unsupported language used.
-  kUnsupportedLanguage = 12,
-  // Request was filtered (eg. due to T&S).
-  kFiltered = 13,
-  // Compose service was disabled.
-  kDisabled = 14,
-  // Request was cancelled.
-  kCancelled = 15,
-  // No response received from the server.
-  kNoResponse = 16,
-  // If the user is offline.
-  kOffline = 17,
 };
 
 // Configuration parameters used in rewrite requests, specifying how the
@@ -146,22 +106,24 @@ enum CloseReason {
   kInsertButton,
   // The MSBB dialog was shown and dismissed.
   kMSBBCloseButton,
-  // The main app dialog lost focus.
-  kLostFocus,
 };
 
 //TODO(b/311697865) move this to a common location.
 enum UserFeedback {
   // Unspecified.
   kUserFeedbackUnspecified,
-  // A thumbs up.
-  kUserFeedbackPositive,
   // A thumbs down.
   kUserFeedbackNegative,
+  // A thumbs up.
+  kUserFeedbackPositive,
 };
 
-// Interface for calls from Compose dialog JS into the Browser process.
-interface ComposeSessionPageHandler {
+// Interface for calls from the untrusted Compose dialog JS into the Browser
+// process.
+interface ComposeSessionUntrustedPageHandler {
+  // Asks the browser to track a cancel edit action for logging purposes.
+  LogCancelEdit();
+
   // Asks the Browser to compose `input`, informing the Browser if the compose
   // call was based on the user input being 'edited' in the dialog after the
   // initial compose response.
@@ -171,6 +133,9 @@ interface ComposeSessionPageHandler {
   // response should be changed. A null `style` requests a rewrite without
   // changes to the tone or length.
   Rewrite(StyleModifiers? style);
+
+  // Asks the browser to track an edit input action for logging purposes.
+  LogEditInput();
 
   // Asks the native handler to store `webui_state` for the last field the user
   // selected compose on.
@@ -217,8 +182,9 @@ interface ComposeSessionPageHandler {
   SetUserFeedback(UserFeedback feedback);
 };
 
-// Interface for calls from Compose dialog JS into the Browser process.
-interface ComposeClientPageHandler {
+// Interface for calls from the untrusted Compose dialog JS into the Browser
+// process.
+interface ComposeClientUntrustedPageHandler {
   // Asks the receiver to show the compose dialog.
   ShowUI();
   // Asks the receiver to close the compose dialog. `reason` describes
@@ -231,8 +197,9 @@ interface ComposeClientPageHandler {
   OpenComposeSettings();
 };
 
-// Interface for calls from the Browser process into Compose dialog JS.
-interface ComposeDialog {
+// Interface for calls from the Browser process into the untrusted Compose
+// dialog JS.
+interface ComposeUntrustedDialog {
   // Called when a compose request is fulfilled, either by the model execution
   // service or due to an error. Because compose requests can outlive this
   // WebUI, this is an event rather than a callback on the original `Compose`

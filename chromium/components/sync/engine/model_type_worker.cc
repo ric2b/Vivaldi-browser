@@ -10,7 +10,6 @@
 #include <set>
 #include <utility>
 
-#include "base/containers/contains.h"
 #include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/format_macros.h"
@@ -63,10 +62,6 @@ const char kPasswordNotesStateHistogramName[] =
     "Sync.PasswordNotesStateInUpdate";
 constexpr char kEntityEncryptionResultHistogramName[] =
     "Sync.EntityEncryptionSucceeded";
-
-BASE_FEATURE(kSyncKeepGcDirectiveDuringSyncCycle,
-             "SyncKeepGcDirectiveDuringSyncCycle",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
@@ -241,9 +236,6 @@ bool DecryptPasswordSpecifics(const Cryptographer& cryptographer,
     LogPasswordNotesState(PasswordNotesStateForUMA::kUnset);
     return true;
   }
-  if (!base::FeatureList::IsEnabled(syncer::kPasswordNotesWithBackup)) {
-    return true;
-  }
   // It is guaranteed that if `encrypted()` is decryptable, then
   // `encrypted_notes_backup()` must be decryptable too. Failure to decrypt
   // `encrypted_notes_backup()` indicates a data corruption.
@@ -273,7 +265,7 @@ bool DecryptIncomingPasswordSharingInvitationSpecifics(
     return false;
   }
 
-  absl::optional<std::vector<uint8_t>> decrypted =
+  std::optional<std::vector<uint8_t>> decrypted =
       cryptographer.AuthDecryptForCrossUserSharing(
           base::as_bytes(base::make_span(
               invitation.encrypted_password_sharing_invitation_data())),
@@ -343,9 +335,9 @@ ModelTypeWorker::ModelTypeWorker(ModelType type,
             std::make_unique<SyncInvalidationAdapter>(
                 model_type_state_.invalidations(i).hint(),
                 model_type_state_.invalidations(i).has_version()
-                    ? absl::optional<int64_t>(
+                    ? std::optional<int64_t>(
                           model_type_state_.invalidations(i).version())
-                    : absl::nullopt),
+                    : std::nullopt),
             false);
       }
 
@@ -506,12 +498,35 @@ void ModelTypeWorker::ProcessGetUpdatesResponse(
   // TODO(rlarocque): Handle data type context conflicts.
   *model_type_state_.mutable_type_context() = mutated_context;
 
-  if (progress_marker.has_gc_directive() &&
-      base::FeatureList::IsEnabled(kSyncKeepGcDirectiveDuringSyncCycle)) {
-    // Clean up all the pending updates because a new GC directive has been
-    // received which means that all existing data should be cleaned up.
-    pending_updates_.clear();
-    entries_pending_decryption_.clear();
+  if (progress_marker.has_gc_directive()) {
+    if (progress_marker.gc_directive().has_version_watermark()) {
+      // Clean up all the pending updates because a new GC directive has been
+      // received which means that all existing data should be cleaned up.
+      pending_updates_.clear();
+      entries_pending_decryption_.clear();
+    }
+
+    // Ignore collaboration GC for non-shared types.
+    if (progress_marker.gc_directive().has_collaboration_gc() &&
+        SharedTypes().Has(type_)) {
+      // Clean up all the pending updates related to inactive collaborations for
+      // the shared types.
+      auto active_collaborations =
+          base::MakeFlatSet<std::string>(progress_marker.gc_directive()
+                                             .collaboration_gc()
+                                             .active_collaboration_ids());
+      std::erase_if(pending_updates_, [&active_collaborations](
+                                          const UpdateResponseData& update) {
+        return !active_collaborations.contains(update.entity.collaboration_id);
+      });
+      std::erase_if(entries_pending_decryption_,
+                    [&active_collaborations](const auto& pending_decryption) {
+                      const sync_pb::SyncEntity& entity =
+                          pending_decryption.second;
+                      return !active_collaborations.contains(
+                          entity.collaboration().collaboration_id());
+                    });
+    }
   }
 
   *model_type_state_.mutable_progress_marker() = progress_marker;
@@ -555,7 +570,7 @@ void ModelTypeWorker::ProcessGetUpdatesResponse(
           // |server_id|, don't clear it: outdated data is better than nothing.
           // Such entry should be encrypted with another key, since |key_name|'s
           // queued updates would've have been dropped by now.
-          DCHECK(!base::Contains(entries_pending_decryption_, server_id) ||
+          DCHECK(!entries_pending_decryption_.contains(server_id) ||
                  GetEncryptionKeyName(entries_pending_decryption_[server_id]) !=
                      key_name);
           SyncRecordModelTypeUpdateDropReason(
@@ -674,6 +689,11 @@ ModelTypeWorker::DecryptionStatus ModelTypeWorker::PopulateUpdateResponseData(
   data.name = update_entity.name();
   data.legacy_parent_id = update_entity.parent_id_string();
   data.server_defined_unique_tag = update_entity.server_defined_unique_tag();
+
+  // Populate shared type fields.
+  if (SharedTypes().Has(model_type)) {
+    data.collaboration_id = update_entity.collaboration().collaboration_id();
+  }
 
   // Populate |originator_cache_guid| and |originator_client_item_id|. This is
   // currently relevant only for bookmarks.
@@ -898,7 +918,7 @@ std::unique_ptr<CommitContribution> ModelTypeWorker::GetContribution(
                      weak_ptr_factory_.GetWeakPtr()),
       base::BindOnce(&ModelTypeWorker::OnFullCommitFailure,
                      weak_ptr_factory_.GetWeakPtr()),
-      passphrase_type_, CommitOnlyTypes().Has(type_));
+      passphrase_type_);
 }
 
 bool ModelTypeWorker::HasLocalChanges() const {
@@ -1132,7 +1152,7 @@ void ModelTypeWorker::DeduplicatePendingUpdatesBasedOnOriginatorClientItemId() {
 
 bool ModelTypeWorker::ShouldIgnoreUpdatesEncryptedWith(
     const std::string& key_name) {
-  if (!base::Contains(unknown_encryption_keys_by_name_, key_name)) {
+  if (!unknown_encryption_keys_by_name_.contains(key_name)) {
     return false;
   }
   if (unknown_encryption_keys_by_name_.at(key_name)
@@ -1177,15 +1197,15 @@ ModelTypeWorker::RemoveKeysNoLongerUnknown() {
   }
 
   std::vector<ModelTypeWorker::UnknownEncryptionKeyInfo> removed_keys;
-  std::erase_if(
-      unknown_encryption_keys_by_name_, [&](const auto& key_and_info) {
-        if (base::Contains(keys_blocking_updates, key_and_info.first)) {
-          return false;
-        }
-        removed_keys.push_back(key_and_info.second);
-        return true;
-      });
-
+  for (const auto& [key_name, info] : unknown_encryption_keys_by_name_) {
+    if (!keys_blocking_updates.contains(key_name)) {
+      removed_keys.push_back(info);
+    }
+  }
+  std::erase_if(unknown_encryption_keys_by_name_,
+                [&](const auto& key_and_info) {
+                  return !keys_blocking_updates.contains(key_and_info.first);
+                });
   return removed_keys;
 }
 
@@ -1225,16 +1245,13 @@ void ModelTypeWorker::ExtractGcDirective() {
 
   if (model_type_state_.progress_marker().has_gc_directive()) {
     // Keep a new GC directive if received.
+    // TODO(b/325917757): cover the case when a collaboration was removed and
+    // then added in the next GetUpdates request again. All the previous
+    // entities should be removed from the tracker (it's expected that the
+    // server returns all the entities anyway and some entities could be removed
+    // in the meantime).
     pending_gc_directive_ = model_type_state_.progress_marker().gc_directive();
     model_type_state_.mutable_progress_marker()->clear_gc_directive();
-    return;
-  }
-
-  if (pending_gc_directive_.has_value() &&
-      !base::FeatureList::IsEnabled(kSyncKeepGcDirectiveDuringSyncCycle)) {
-    // Remove the GC directive if not present in the response, to mimic the
-    // previous behavior.
-    pending_gc_directive_.reset();
     return;
   }
 
@@ -1393,19 +1410,19 @@ void ModelTypeWorker::EncryptPasswordSpecificsData(
         password_data,
         encrypted_password.mutable_password()->mutable_encrypted());
     LogEncryptionResult(type_, result);
-    if (base::FeatureList::IsEnabled(syncer::kPasswordNotesWithBackup)) {
-      // `encrypted_notes_backup` field needs to be populated regardless of
-      // whether or not there are any notes.
-      result = cryptographer_->Encrypt(password_data.notes(),
-                                       encrypted_password.mutable_password()
-                                           ->mutable_encrypted_notes_backup());
-      DCHECK(result);
-      // When encrypting both blobs succeeds, both encrypted blobs must use the
-      // key name.
-      DCHECK_EQ(
-          encrypted_password.password().encrypted().key_name(),
-          encrypted_password.password().encrypted_notes_backup().key_name());
-    }
+
+    // `encrypted_notes_backup` field needs to be populated regardless of
+    // whether or not there are any notes.
+    result = cryptographer_->Encrypt(password_data.notes(),
+                                     encrypted_password.mutable_password()
+                                         ->mutable_encrypted_notes_backup());
+    CHECK(result);
+
+    // When encrypting both blobs succeeds, both encrypted blobs must use the
+    // key name.
+    CHECK_EQ(encrypted_password.password().encrypted().key_name(),
+             encrypted_password.password().encrypted_notes_backup().key_name());
+
     // Replace the entire specifics, among other things to ensure that any
     // client-only fields are cleared.
     entity_data->specifics = std::move(encrypted_password);
@@ -1430,7 +1447,7 @@ void ModelTypeWorker::EncryptOutgoingPasswordSharingInvitations(
     specifics->clear_client_only_unencrypted_data();
     CHECK(success);
 
-    absl::optional<std::vector<uint8_t>> encrypted_data =
+    std::optional<std::vector<uint8_t>> encrypted_data =
         cryptographer_->AuthEncryptForCrossUserSharing(
             base::as_bytes(base::make_span(serialized_password_data)),
             base::as_bytes(base::make_span(

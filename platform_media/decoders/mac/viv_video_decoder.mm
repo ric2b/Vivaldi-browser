@@ -497,7 +497,7 @@ void VivVideoDecoder::DecodeTask(scoped_refptr<DecoderBuffer> buffer,
 
           // Compute and store frame properties. |image_size| gets filled in
           // later, since it comes from the decoder configuration.
-          absl::optional<int32_t> pic_order_cnt =
+          std::optional<int32_t> pic_order_cnt =
               poc_.ComputePicOrderCnt(sps, slice_hdr);
           if (!pic_order_cnt.has_value()) {
             NotifyError("UNREADABLE_INPUT, SFT_INVALID_STREAM");

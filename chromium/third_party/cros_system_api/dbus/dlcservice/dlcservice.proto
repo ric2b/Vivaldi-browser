@@ -7,7 +7,7 @@ syntax = "proto3";
 option optimize_for = LITE_RUNTIME;
 
 package dlcservice;
-option go_package = "chromiumos/system_api/dlcservice_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/dlcservice_proto";
 
 // This is the message that is passed into installation
 message InstallRequest {
@@ -19,6 +19,40 @@ message InstallRequest {
   // The DLC will reserve space on installation success/failure.
   // This field is optional.
   bool reserve = 3;
+
+  // Temporary flags, put at end of 2-byte boundary to avoid collisions with
+  // long-term values.
+
+  // This DLC will use the newer infrastructure, only works for legacy DLCs.
+  // TODO(b/306737055): deprecate after pseudo-scaled termina-dlc is fully
+  // launched.
+  bool force_ota = 2047;
+}
+
+// DLCs that have the selected manifest fields set to true.
+message SelectDlc {
+  bool user_tied = 1;
+  bool scaled = 2;
+}
+
+// This is the message that is passed into unload.
+message UnloadRequest {
+  oneof DlcInfo {
+    // Specify a DLC by ID.
+    string id = 1;
+
+    // Select DLCs that have any of the given manifest fields.
+    SelectDlc select = 2;
+  }
+}
+
+// This is the message that is passed to methods for listing DLCs.
+message ListRequest {
+  // Check mount point instead rely on the state kept by dlcservice.
+  bool check_mount = 1;
+
+  // Select DLCs base on manifest fields.
+  SelectDlc select = 2;
 }
 
 // This message is used to query the DLCs that have data on disk. This allows
@@ -72,4 +106,13 @@ message DlcState {
   // Indicates whether DLC is marked verified. Can be used to determine
   // whether DLC is available on disk and can be mounted immediately.
   bool is_verified = 6;
+
+  // The location where the active DLC image is stored (if installed).
+  string image_path = 7;
+}
+
+// This is the message that is returned from DLC Service via |GetInstalled|
+// method.
+message DlcStateList {
+  repeated DlcState states = 1;
 }

@@ -327,11 +327,11 @@ NotRestoredReasons* PerformanceNavigationTiming::BuildNotRestoredReasons(
   HeapVector<Member<NotRestoredReasons>> children;
   for (const auto& reason : nrr->reasons) {
     NotRestoredReasonDetails* detail =
-        MakeGarbageCollected<NotRestoredReasonDetails>(reason);
+        MakeGarbageCollected<NotRestoredReasonDetails>(reason->name);
     reasons.push_back(detail);
   }
   if (nrr->same_origin_details) {
-    url = nrr->same_origin_details->url;
+    url = nrr->same_origin_details->url.GetString();
     for (const auto& child : nrr->same_origin_details->children) {
       NotRestoredReasons* nrr_child = BuildNotRestoredReasons(child);
       // Reasons in children vector should never be null.

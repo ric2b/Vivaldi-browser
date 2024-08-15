@@ -20,13 +20,8 @@ const base::Version& GetVivaldiVersion() {
   return *version;
 }
 
-bool IsBetaOrFinal() {
-#if defined(OFFICIAL_BUILD) && \
-    (BUILD_VERSION(VIVALDI_RELEASE) == VIVALDI_BUILD_PUBLIC_RELEASE)
-  return true;
-#else
-  return false;
-#endif
+Release ReleaseKind() {
+  return BUILD_RELEASE_KIND(VIVALDI_RELEASE);
 }
 
 }  // namespace vivaldi

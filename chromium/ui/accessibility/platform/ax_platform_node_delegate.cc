@@ -146,13 +146,13 @@ gfx::NativeViewAccessible AXPlatformNodeDelegate::GetParent() const {
   return nullptr;
 }
 
-absl::optional<size_t> AXPlatformNodeDelegate::GetIndexInParent() const {
+std::optional<size_t> AXPlatformNodeDelegate::GetIndexInParent() const {
   if (node_)
     return node_->GetUnignoredIndexInParent();
 
   AXPlatformNodeDelegate* parent = GetParentDelegate();
   if (!parent)
-    return absl::nullopt;
+    return std::nullopt;
 
   for (size_t i = 0; i < parent->GetChildCount(); i++) {
     AXPlatformNode* child_node =
@@ -160,7 +160,7 @@ absl::optional<size_t> AXPlatformNodeDelegate::GetIndexInParent() const {
     if (child_node && child_node->GetDelegate() == this)
       return i;
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 size_t AXPlatformNodeDelegate::GetChildCount() const {
@@ -514,8 +514,7 @@ std::vector<AXPlatformNode*> AXPlatformNodeDelegate::GetTargetNodesForRelation(
   std::vector<ui::AXPlatformNode*> nodes;
   for (int32_t target_id : target_ids) {
     ui::AXPlatformNode* target = GetFromNodeID(target_id);
-    if (target && IsValidRelationTarget(target) &&
-        !base::Contains(nodes, target)) {
+    if (IsValidRelationTarget(target) && !base::Contains(nodes, target)) {
       nodes.push_back(target);
     }
   }
@@ -547,7 +546,7 @@ AXPlatformNodeDelegate::GetNodesFromRelationIdSet(
 
   for (AXNodeID node_id : ids) {
     ui::AXPlatformNode* node = GetFromNodeID(node_id);
-    if (node && IsValidRelationTarget(node)) {
+    if (IsValidRelationTarget(node)) {
       nodes.push_back(node);
     }
   }
@@ -556,6 +555,13 @@ AXPlatformNodeDelegate::GetNodesFromRelationIdSet(
 
 bool AXPlatformNodeDelegate::IsValidRelationTarget(
     AXPlatformNode* target) const {
+  if (!target) {
+    // This can occur when the target of the relation was not included in the
+    // tree, e.g. it was display:none or role="none".
+    // By returning false here, the relation will not be included in the
+    // relations reported via platform APIs.
+    return false;
+  }
   DCHECK_GT(GetUniqueId(), kInvalidAXUniqueId);
   DCHECK(target);
   DCHECK_GT(target->GetUniqueId(), kInvalidAXUniqueId);
@@ -954,42 +960,42 @@ bool AXPlatformNodeDelegate::IsTable() const {
   return ui::IsTableLike(GetRole());
 }
 
-absl::optional<int> AXPlatformNodeDelegate::GetTableRowCount() const {
+std::optional<int> AXPlatformNodeDelegate::GetTableRowCount() const {
   if (node_)
     return node_->GetTableRowCount();
   return GetIntAttribute(ax::mojom::IntAttribute::kTableRowCount);
 }
 
-absl::optional<int> AXPlatformNodeDelegate::GetTableColCount() const {
+std::optional<int> AXPlatformNodeDelegate::GetTableColCount() const {
   if (node_)
     return node_->GetTableColCount();
   return GetIntAttribute(ax::mojom::IntAttribute::kTableColumnCount);
 }
 
-absl::optional<int> AXPlatformNodeDelegate::GetTableCellCount() const {
+std::optional<int> AXPlatformNodeDelegate::GetTableCellCount() const {
   if (node_)
     return node_->GetTableCellCount();
-  return absl::nullopt;
+  return std::nullopt;
 }
 
-absl::optional<int> AXPlatformNodeDelegate::GetTableAriaColCount() const {
+std::optional<int> AXPlatformNodeDelegate::GetTableAriaColCount() const {
   int aria_column_count;
   if (node_)
     return node_->GetTableAriaColCount();
   if (!GetIntAttribute(ax::mojom::IntAttribute::kAriaColumnCount,
                        &aria_column_count)) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   return aria_column_count;
 }
 
-absl::optional<int> AXPlatformNodeDelegate::GetTableAriaRowCount() const {
+std::optional<int> AXPlatformNodeDelegate::GetTableAriaRowCount() const {
   if (node_)
     return node_->GetTableAriaRowCount();
   int aria_row_count;
   if (!GetIntAttribute(ax::mojom::IntAttribute::kAriaRowCount,
                        &aria_row_count)) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   return aria_row_count;
 }
@@ -1030,7 +1036,7 @@ bool AXPlatformNodeDelegate::IsTableRow() const {
   return ui::IsTableRow(GetRole());
 }
 
-absl::optional<int> AXPlatformNodeDelegate::GetTableRowRowIndex() const {
+std::optional<int> AXPlatformNodeDelegate::GetTableRowRowIndex() const {
   if (node_)
     return node_->GetTableRowRowIndex();
   return GetIntAttribute(ax::mojom::IntAttribute::kTableRowIndex);
@@ -1042,72 +1048,86 @@ bool AXPlatformNodeDelegate::IsTableCellOrHeader() const {
   return ui::IsCellOrTableHeader(GetRole());
 }
 
-absl::optional<int> AXPlatformNodeDelegate::GetTableCellIndex() const {
+std::optional<int> AXPlatformNodeDelegate::GetTableCellIndex() const {
   if (node_)
     return node_->GetTableCellIndex();
-  return absl::nullopt;
+  return std::nullopt;
 }
 
-absl::optional<int> AXPlatformNodeDelegate::GetTableCellColIndex() const {
+std::optional<int> AXPlatformNodeDelegate::GetTableCellColIndex() const {
   if (node_)
     return node_->GetTableCellColIndex();
   return GetIntAttribute(ax::mojom::IntAttribute::kTableCellColumnIndex);
 }
 
-absl::optional<int> AXPlatformNodeDelegate::GetTableCellRowIndex() const {
+std::optional<int> AXPlatformNodeDelegate::GetTableCellRowIndex() const {
   if (node_)
     return node_->GetTableCellRowIndex();
   return GetIntAttribute(ax::mojom::IntAttribute::kTableCellRowIndex);
 }
 
-absl::optional<int> AXPlatformNodeDelegate::GetTableCellColSpan() const {
+std::optional<int> AXPlatformNodeDelegate::GetTableCellColSpan() const {
   if (node_)
     return node_->GetTableCellColSpan();
   return GetIntAttribute(ax::mojom::IntAttribute::kTableCellColumnSpan);
 }
 
-absl::optional<int> AXPlatformNodeDelegate::GetTableCellRowSpan() const {
+std::optional<int> AXPlatformNodeDelegate::GetTableCellRowSpan() const {
   if (node_)
     return node_->GetTableCellRowSpan();
   return GetIntAttribute(ax::mojom::IntAttribute::kTableCellRowSpan);
 }
 
-absl::optional<int> AXPlatformNodeDelegate::GetTableCellAriaColIndex() const {
+std::optional<int> AXPlatformNodeDelegate::GetTableCellAriaColIndex() const {
   if (node_)
     return node_->GetTableCellAriaColIndex();
   if (HasIntAttribute(ax::mojom::IntAttribute::kAriaCellColumnIndex))
     return GetIntAttribute(ax::mojom::IntAttribute::kAriaCellColumnIndex);
-  return absl::nullopt;
+  return std::nullopt;
 }
 
-absl::optional<int> AXPlatformNodeDelegate::GetTableCellAriaRowIndex() const {
+std::optional<int> AXPlatformNodeDelegate::GetTableCellAriaRowIndex() const {
   if (node_)
     return node_->GetTableCellAriaRowIndex();
   if (HasIntAttribute(ax::mojom::IntAttribute::kAriaCellRowIndex))
     return GetIntAttribute(ax::mojom::IntAttribute::kAriaCellRowIndex);
-  return absl::nullopt;
+  return std::nullopt;
 }
 
-absl::optional<int32_t> AXPlatformNodeDelegate::GetCellId(int row_index,
-                                                          int col_index) const {
+std::optional<int32_t> AXPlatformNodeDelegate::GetCellId(int row_index,
+                                                         int col_index) const {
   if (node_) {
     AXNode* cell = node()->GetTableCellFromCoords(row_index, col_index);
     if (!cell)
-      return absl::nullopt;
+      return std::nullopt;
     return cell->id();
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
-absl::optional<int32_t> AXPlatformNodeDelegate::CellIndexToId(
+std::optional<int32_t> AXPlatformNodeDelegate::GetCellIdAriaCoords(
+    int aria_row_index,
+    int aria_col_index) const {
+  if (node_) {
+    AXNode* cell =
+        node()->GetTableCellFromAriaCoords(aria_row_index, aria_col_index);
+    if (!cell) {
+      return std::nullopt;
+    }
+    return cell->id();
+  }
+  return std::nullopt;
+}
+
+std::optional<int32_t> AXPlatformNodeDelegate::CellIndexToId(
     int cell_index) const {
   if (node_) {
     ui::AXNode* cell = node()->GetTableCellFromIndex(cell_index);
     if (!cell)
-      return absl::nullopt;
+      return std::nullopt;
     return cell->id();
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 bool AXPlatformNodeDelegate::IsCellOrHeaderOfAriaGrid() const {
@@ -1139,12 +1159,12 @@ bool AXPlatformNodeDelegate::IsOrderedSet() const {
   return false;
 }
 
-absl::optional<int> AXPlatformNodeDelegate::GetPosInSet() const {
-  return absl::nullopt;
+std::optional<int> AXPlatformNodeDelegate::GetPosInSet() const {
+  return std::nullopt;
 }
 
-absl::optional<int> AXPlatformNodeDelegate::GetSetSize() const {
-  return absl::nullopt;
+std::optional<int> AXPlatformNodeDelegate::GetSetSize() const {
+  return std::nullopt;
 }
 
 SkColor AXPlatformNodeDelegate::GetColor() const {

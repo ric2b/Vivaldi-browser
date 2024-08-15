@@ -157,14 +157,12 @@ TEST_F(InstallPlaceholderJobTest, InstallPlaceholder) {
   EXPECT_TRUE(last_install_options->add_to_desktop);
   EXPECT_TRUE(last_install_options->add_to_quick_launch_bar);
   EXPECT_FALSE(last_install_options->os_hooks[OsHookType::kRunOnOsLogin]);
-  if (AreOsIntegrationSubManagersEnabled()) {
-    std::optional<proto::WebAppOsIntegrationState> os_state =
-        provider()->registrar_unsafe().GetAppCurrentOsIntegrationState(app_id);
-    ASSERT_TRUE(os_state.has_value());
-    EXPECT_TRUE(os_state->has_shortcut());
-    EXPECT_EQ(os_state->run_on_os_login().run_on_os_login_mode(),
-              proto::RunOnOsLoginMode::NOT_RUN);
-  }
+  std::optional<proto::WebAppOsIntegrationState> os_state =
+      provider()->registrar_unsafe().GetAppCurrentOsIntegrationState(app_id);
+  ASSERT_TRUE(os_state.has_value());
+  EXPECT_TRUE(os_state->has_shortcut());
+  EXPECT_EQ(os_state->run_on_os_login().run_on_os_login_mode(),
+            proto::RunOnOsLoginMode::NOT_RUN);
 }
 
 TEST_F(InstallPlaceholderJobTest, InstallPlaceholderWithOverrideIconUrl) {
@@ -184,14 +182,14 @@ TEST_F(InstallPlaceholderJobTest, InstallPlaceholderWithOverrideIconUrl) {
   bitmap.allocN32Pixels(kIconSize, kIconSize);
   bitmap.eraseColor(SK_ColorRED);
   IconsMap icons = {{icon_url, {bitmap}}};
+  const IconUrlWithSize icon_metadata =
+      IconUrlWithSize::CreateForUnspecifiedSize(icon_url);
   DownloadedIconsHttpResults http_result = {
-      {icon_url, net::HttpStatusCode::HTTP_OK}};
-  EXPECT_CALL(
-      *data_retriever,
-      GetIcons(testing::_,
-               testing::ElementsAre(std::make_tuple(icon_url, gfx::Size())),
-               skip_page_favicons, fail_all_if_any_fail,
-               base::test::IsNotNullCallback()))
+      {icon_metadata, net::HttpStatusCode::HTTP_OK}};
+  EXPECT_CALL(*data_retriever,
+              GetIcons(testing::_, testing::ElementsAre(icon_metadata),
+                       skip_page_favicons, fail_all_if_any_fail,
+                       base::test::IsNotNullCallback()))
       .WillOnce(base::test::RunOnceCallback<4>(
           IconsDownloadedResult::kCompleted, std::move(icons), http_result));
 
@@ -204,12 +202,10 @@ TEST_F(InstallPlaceholderJobTest, InstallPlaceholderWithOverrideIconUrl) {
   EXPECT_TRUE(provider()->registrar_unsafe().IsPlaceholderApp(
       app_id, WebAppManagement::kPolicy));
   EXPECT_EQ(fake_os_integration_manager().num_create_shortcuts_calls(), 1u);
-  if (AreOsIntegrationSubManagersEnabled()) {
-    std::optional<proto::WebAppOsIntegrationState> os_state =
-        provider()->registrar_unsafe().GetAppCurrentOsIntegrationState(app_id);
-    ASSERT_TRUE(os_state.has_value());
-    EXPECT_TRUE(os_state->has_shortcut());
-  }
+  std::optional<proto::WebAppOsIntegrationState> os_state =
+      provider()->registrar_unsafe().GetAppCurrentOsIntegrationState(app_id);
+  ASSERT_TRUE(os_state.has_value());
+  EXPECT_TRUE(os_state->has_shortcut());
 }
 
 }  // namespace

@@ -20,6 +20,14 @@ bool DoCanonicalizeNonSpecialURL(const URLComponentSource<CHAR>& source,
   // The implementation is similar to `DoCanonicalizeStandardURL()`, but there
   // are many subtle differences. So we have a different function for
   // canonicalizing non-special URLs.
+  //
+  // Since canonicalization is also used from url::ReplaceComponents(),
+  // we have to handle an invalid URL replacement here, such as:
+  //
+  // > const url = "git:///";
+  // > url.username = "x";
+  // > url.href
+  // "git:///" (this should not be "git://x@").
 
   DCHECK(!parsed.has_opaque_path);
 
@@ -45,24 +53,44 @@ bool DoCanonicalizeNonSpecialURL(const URLComponentSource<CHAR>& source,
       output.push_back('/');
     }
 
-    // User info: the canonicalizer will handle the : and @.
-    success &= CanonicalizeUserInfo(source.username, parsed.username,
-                                    source.password, parsed.password, &output,
-                                    &new_parsed.username, &new_parsed.password);
+    // Username and Password
+    //
+    // URL Standard:
+    // - https://url.spec.whatwg.org/#cannot-have-a-username-password-port
+    // - https://url.spec.whatwg.org/#dom-url-username
+    // - https://url.spec.whatwg.org/#dom-url-password
+    if (parsed.host.is_nonempty()) {
+      // User info: the canonicalizer will handle the : and @.
+      success &= CanonicalizeUserInfo(
+          source.username, parsed.username, source.password, parsed.password,
+          &output, &new_parsed.username, &new_parsed.password);
+    } else {
+      new_parsed.username.reset();
+      new_parsed.password.reset();
+    }
 
     // Host
     if (parsed.host.is_valid()) {
       success &= CanonicalizeNonSpecialHost(source.host, parsed.host, output,
                                             new_parsed.host);
     } else {
+      new_parsed.host.reset();
       // URL is invalid if `have_authority` is true, but `parsed.host` is
       // invalid. Example: "git://@/".
       success = false;
     }
 
     // Port
-    success &= CanonicalizePort(source.port, parsed.port, PORT_UNSPECIFIED,
-                                &output, &new_parsed.port);
+    //
+    // URL Standard:
+    // - https://url.spec.whatwg.org/#cannot-have-a-username-password-port
+    // - https://url.spec.whatwg.org/#dom-url-port
+    if (parsed.host.is_nonempty()) {
+      success &= CanonicalizePort(source.port, parsed.port, PORT_UNSPECIFIED,
+                                  &output, &new_parsed.port);
+    } else {
+      new_parsed.port.reset();
+    }
   } else {
     // No authority, clear the components.
     new_parsed.host.reset();
@@ -73,9 +101,63 @@ bool DoCanonicalizeNonSpecialURL(const URLComponentSource<CHAR>& source,
 
   // Path
   if (parsed.path.is_valid()) {
-    success &=
-        CanonicalizePath(source.path, parsed.path, CanonMode::kNonSpecialURL,
-                         &output, &new_parsed.path);
+    if (!parsed.host.is_valid() && parsed.path.is_empty()) {
+      // Handle an edge case: Replacing non-special path-only URL's pathname
+      // with an empty path.
+      //
+      // Path-only non-special URLs cannot have their paths erased.
+      //
+      // Example:
+      //
+      // > const url = new URL("git:/a");
+      // > url.pathname = '';
+      // > url.href
+      // => The result should be "git:/", instead of "git:".
+      // > url.pathname
+      // => The result should be "/", instead of "".
+      //
+      // URL Standard is https://url.spec.whatwg.org/#dom-url-pathname, however,
+      // it would take some time to understand why url.pathname ends up as "/"
+      // in this case. Please read the URL Standard carefully to understand
+      // that.
+      new_parsed.path.begin = output.length();
+      output.push_back('/');
+      new_parsed.path.len = output.length() - new_parsed.path.begin;
+    } else {
+      success &=
+          CanonicalizePath(source.path, parsed.path, CanonMode::kNonSpecialURL,
+                           &output, &new_parsed.path);
+      if (!parsed.host.is_valid() && new_parsed.path.is_valid() &&
+          new_parsed.path.as_string_view_on(output.view().data())
+              .starts_with("//")) {
+        // To avoid path being treated as the host, prepend "/." to the path".
+        //
+        // Examples:
+        //
+        // > const url = new URL("git:/.//a");
+        // > url.href
+        // => The result should be "git:/.//a", instead of "git://a".
+        //
+        // > const url = new URL("git:/");
+        // > url.pathname = "/.//a"
+        // > url.href
+        // => The result should be "git:/.//a", instead of "git://a".
+        //
+        // URL Standard: https://url.spec.whatwg.org/#concept-url-serializer
+        //
+        // > 3. If url’s host is null, url does not have an opaque path, url’s
+        // > path’s size is greater than 1, and url’s path[0] is the empty
+        // > string, then append U+002F (/) followed by U+002E (.) to output.
+        //
+        // Since the path length is unknown in advance, we post-process the new
+        // path here. This case is likely to be infrequent, so the performance
+        // impact should be minimal.
+        size_t prior_output_length = output.length();
+        output.Insert(new_parsed.path.begin, "/.");
+        // Adjust path.
+        new_parsed.path.begin += output.length() - prior_output_length;
+      }
+    }
   } else {
     new_parsed.path.reset();
   }
@@ -127,6 +209,45 @@ bool CanonicalizeNonSpecialURL(const char16_t* spec,
   }
   return DoCanonicalizeNonSpecialURL(URLComponentSource(spec), parsed,
                                      query_converter, output, new_parsed);
+}
+
+bool ReplaceNonSpecialURL(const char* base,
+                          const Parsed& base_parsed,
+                          const Replacements<char>& replacements,
+                          CharsetConverter* query_converter,
+                          CanonOutput& output,
+                          Parsed& new_parsed) {
+  if (base_parsed.has_opaque_path) {
+    return ReplacePathURL(base, base_parsed, replacements, &output,
+                          &new_parsed);
+  }
+
+  URLComponentSource<char> source(base);
+  Parsed parsed(base_parsed);
+  SetupOverrideComponents(base, replacements, &source, &parsed);
+  return DoCanonicalizeNonSpecialURL(source, parsed, query_converter, output,
+                                     new_parsed);
+}
+
+// For 16-bit replacements, we turn all the replacements into UTF-8 so the
+// regular code path can be used.
+bool ReplaceNonSpecialURL(const char* base,
+                          const Parsed& base_parsed,
+                          const Replacements<char16_t>& replacements,
+                          CharsetConverter* query_converter,
+                          CanonOutput& output,
+                          Parsed& new_parsed) {
+  if (base_parsed.has_opaque_path) {
+    return ReplacePathURL(base, base_parsed, replacements, &output,
+                          &new_parsed);
+  }
+
+  RawCanonOutput<1024> utf8;
+  URLComponentSource<char> source(base);
+  Parsed parsed(base_parsed);
+  SetupUTF16OverrideComponents(base, replacements, &utf8, &source, &parsed);
+  return DoCanonicalizeNonSpecialURL(source, parsed, query_converter, output,
+                                     new_parsed);
 }
 
 }  // namespace url

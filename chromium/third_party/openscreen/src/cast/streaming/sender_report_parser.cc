@@ -14,7 +14,7 @@ SenderReportParser::SenderReportWithId::~SenderReportWithId() = default;
 
 SenderReportParser::SenderReportParser(RtcpSession* session)
     : session_(session) {
-  OSP_DCHECK(session_);
+  OSP_CHECK(session_);
 }
 
 SenderReportParser::~SenderReportParser() = default;

@@ -12,7 +12,6 @@ import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
-import {DatabaseModel} from './DatabaseModel.js';
 import {DOMStorageModel} from './DOMStorageModel.js';
 import {IndexedDBModel} from './IndexedDBModel.js';
 import storageViewStyles from './storageView.css.js';
@@ -171,7 +170,7 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
     super(true, 1000);
 
     this.contentElement.classList.add('clear-storage-container');
-    this.contentElement.setAttribute('jslog', `${VisualLogging.pane().context('clear-storage')}`);
+    this.contentElement.setAttribute('jslog', `${VisualLogging.pane('clear-storage')}`);
     this.pieColors = new Map([
       [Protocol.Storage.StorageType.Appcache, 'rgb(110, 161, 226)'],        // blue
       [Protocol.Storage.StorageType.Cache_storage, 'rgb(229, 113, 113)'],   // red
@@ -193,14 +192,17 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
 
     this.settings = new Map();
     for (const type of AllStorageTypes) {
-      this.settings.set(type, Common.Settings.Settings.instance().createSetting('clear-storage-' + type, true));
+      this.settings.set(
+          type,
+          Common.Settings.Settings.instance().createSetting(
+              'clear-storage-' + Platform.StringUtilities.toKebabCase(type), true));
     }
 
     this.includeThirdPartyCookiesSetting =
         Common.Settings.Settings.instance().createSetting('clear-storage-include-third-party-cookies', false);
 
     const quota = this.reportView.appendSection(i18nString(UIStrings.usage));
-    quota.element.setAttribute('jslog', `${VisualLogging.section().context('usage')}`);
+    quota.element.setAttribute('jslog', `${VisualLogging.section('usage')}`);
     this.quotaRow = quota.appendSelectableRow();
     this.quotaRow.classList.add('quota-usage-row');
     const learnMoreRow = quota.appendRow();
@@ -221,14 +223,14 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
     this.quotaOverrideCheckbox =
         UI.UIUtils.CheckboxLabel.create(i18nString(UIStrings.simulateCustomStorage), false, '');
     this.quotaOverrideCheckbox.setAttribute(
-        'jslog', `${VisualLogging.toggle().track({change: true}).context('simulate-custom-quota')}`);
+        'jslog', `${VisualLogging.toggle('simulate-custom-quota').track({change: true})}`);
     quotaOverrideCheckboxRow.appendChild(this.quotaOverrideCheckbox);
     this.quotaOverrideCheckbox.checkboxElement.addEventListener('click', this.onClickCheckbox.bind(this), false);
     this.quotaOverrideControlRow = quota.appendRow();
     this.quotaOverrideEditor =
         this.quotaOverrideControlRow.createChild('input', 'quota-override-notification-editor') as HTMLInputElement;
     this.quotaOverrideEditor.setAttribute(
-        'jslog', `${VisualLogging.textField().track({keydown: true}).context('quota-override')}`);
+        'jslog', `${VisualLogging.textField('quota-override').track({keydown: true})}`);
     this.quotaOverrideControlRow.appendChild(UI.UIUtils.createLabel(i18nString(UIStrings.mb)));
     this.quotaOverrideControlRow.classList.add('hidden');
     this.quotaOverrideEditor.addEventListener('keyup', event => {
@@ -257,13 +259,13 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
     clearButtonSection.appendChild(includeThirdPartyCookiesCheckbox);
 
     const application = this.reportView.appendSection(i18nString(UIStrings.application));
-    application.element.setAttribute('jslog', `${VisualLogging.section().context('application')}`);
+    application.element.setAttribute('jslog', `${VisualLogging.section('application')}`);
     this.appendItem(
         application, i18nString(UIStrings.unregisterServiceWorker), Protocol.Storage.StorageType.Service_workers);
     application.markFieldListAsGroup();
 
     const storage = this.reportView.appendSection(i18nString(UIStrings.storageTitle));
-    storage.element.setAttribute('jslog', `${VisualLogging.section().context('storage')}`);
+    storage.element.setAttribute('jslog', `${VisualLogging.section('storage')}`);
     this.appendItem(storage, i18nString(UIStrings.localAndSessionStorage), Protocol.Storage.StorageType.Local_storage);
     this.appendItem(storage, i18nString(UIStrings.indexDB), Protocol.Storage.StorageType.Indexeddb);
     this.appendItem(storage, i18nString(UIStrings.webSql), Protocol.Storage.StorageType.Websql);
@@ -477,14 +479,6 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
       const cookieModel = target.model(SDK.CookieModel.CookieModel);
       if (cookieModel) {
         void cookieModel.clear(undefined, includeThirdPartyCookies ? undefined : originForCookies);
-      }
-    }
-
-    if (set.has(Protocol.Storage.StorageType.Websql) || hasAll) {
-      const databaseModel = target.model(DatabaseModel);
-      if (databaseModel) {
-        databaseModel.disable();
-        databaseModel.enable();
       }
     }
 

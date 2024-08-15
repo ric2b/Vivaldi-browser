@@ -5,6 +5,7 @@
 #include "ash/system/holding_space/holding_space_tray.h"
 
 #include <memory>
+#include <vector>
 
 #include "ash/accessibility/accessibility_controller.h"
 #include "ash/ash_element_identifiers.h"
@@ -36,7 +37,6 @@
 #include "base/check.h"
 #include "base/containers/adapters.h"
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/ranges/algorithm.h"
@@ -101,7 +101,7 @@ std::vector<base::FilePath> ExtractUnpinnedFilePaths(
                                            /*fallback_to_filenames=*/true);
 
   HoldingSpaceModel* const model = HoldingSpaceController::Get()->model();
-  base::EraseIf(unpinned_file_paths, [model](const base::FilePath& file_path) {
+  std::erase_if(unpinned_file_paths, [model](const base::FilePath& file_path) {
     return model->ContainsItem(HoldingSpaceItem::Type::kPinnedFile, file_path);
   });
 
@@ -300,7 +300,7 @@ void HoldingSpaceTray::Initialize() {
     OnHoldingSpaceModelAttached(HoldingSpaceController::Get()->model());
 }
 
-void HoldingSpaceTray::ClickedOutsideBubble() {
+void HoldingSpaceTray::ClickedOutsideBubble(const ui::LocatedEvent& event) {
   CloseBubble();
 }
 
@@ -453,14 +453,16 @@ void HoldingSpaceTray::PerformDrop(
   holding_space_metrics::RecordPodAction(
       holding_space_metrics::PodAction::kDragAndDropToPin);
 
-  HoldingSpaceController::Get()->client()->PinFiles(unpinned_file_paths);
-  did_drop_to_pin_ = true;
+  HoldingSpaceController::Get()->client()->PinFiles(
+      unpinned_file_paths,
+      holding_space_metrics::EventSource::kHoldingSpaceTray);
 
+  did_drop_to_pin_ = true;
   output_drag_op = DragOperation::kCopy;
 }
 
-void HoldingSpaceTray::Layout() {
-  TrayBackgroundView::Layout();
+void HoldingSpaceTray::Layout(PassKey) {
+  LayoutSuperclass<TrayBackgroundView>(this);
 
   // The `drop_target_overlay_` should always fill this view's bounds as they
   // are perceived by the user. Note that the user perceives the bounds of this
@@ -947,7 +949,7 @@ void HoldingSpaceTray::SetShouldAnimate(bool should_animate) {
   }
 }
 
-BEGIN_METADATA(HoldingSpaceTray, TrayBackgroundView)
+BEGIN_METADATA(HoldingSpaceTray)
 END_METADATA
 
 }  // namespace ash

@@ -34,6 +34,7 @@
 #include "ash/wallpaper/wallpaper_file_manager.h"
 #include "ash/wallpaper/wallpaper_time_of_day_scheduler.h"
 #include "ash/wallpaper/wallpaper_utils/wallpaper_calculated_colors.h"
+#include "ash/webui/common/mojom/sea_pen.mojom.h"
 #include "ash/webui/personalization_app/mojom/personalization_app.mojom-forward.h"
 #include "ash/wm/overview/overview_observer.h"
 #include "base/containers/flat_map.h"
@@ -297,24 +298,15 @@ class ASH_EXPORT WallpaperControllerImpl
                               const std::string& file_name,
                               WallpaperLayout layout,
                               const gfx::ImageSkia& image) override;
-  void SetSeaPenWallpaper(const AccountId& account_id,
-                          const SeaPenImage& sea_pen_image,
-                          const std::string& query_info,
-                          SetWallpaperCallback callback) override;
+  void SetSeaPenWallpaper(
+      const AccountId& account_id,
+      const SeaPenImage& sea_pen_image,
+      const personalization_app::mojom::SeaPenQueryPtr& query,
+      SetWallpaperCallback callback) override;
 
   void SetSeaPenWallpaperFromFile(const AccountId& account_id,
-                                  const base::FilePath& file_path,
+                                  uint32_t id,
                                   SetWallpaperCallback callback) override;
-
-  void GetSeaPenMetadata(const AccountId& account_id,
-                         const base::FilePath& file_path,
-                         GetSeaPenMetadataCallback callback) override;
-
-  void DeleteRecentSeaPenImage(
-      const AccountId& account_id,
-      const base::FilePath& file_path,
-      DeleteRecentSeaPenImageCallback callback) override;
-
   void ConfirmPreviewWallpaper() override;
   void CancelPreviewWallpaper() override;
   void UpdateCurrentWallpaperLayout(const AccountId& account_id,
@@ -574,7 +566,7 @@ class ASH_EXPORT WallpaperControllerImpl
   // Used as the callback of SeaPen wallpaper decoding. Shows the wallpaper
   // immediately if `account_id` is for the active user.
   void OnSeaPenWallpaperDecoded(const AccountId& account_id,
-                                const base::FilePath& file_path,
+                                uint32_t sea_pen_image_id,
                                 SetWallpaperCallback callback,
                                 const gfx::ImageSkia& image_skia);
 

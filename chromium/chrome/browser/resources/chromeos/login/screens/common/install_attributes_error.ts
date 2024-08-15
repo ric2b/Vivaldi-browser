@@ -6,7 +6,7 @@
  * @fileoverview Polymer element for install attributes error screen.
  */
 
-import '//resources/cr_elements/cr_shared_vars.css.js';
+import '//resources/ash/common/cr_elements/cr_shared_vars.css.js';
 import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '../../components/oobe_icons.html.js';
 import '../../components/buttons/oobe_text_button.js';
@@ -17,13 +17,13 @@ import {PolymerElementProperties} from '//resources/polymer/v3_0/polymer/interfa
 import {mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {LoginScreenBehavior, LoginScreenBehaviorInterface} from '../../components/behaviors/login_screen_behavior.js';
-import {OobeI18nBehavior, OobeI18nBehaviorInterface} from '../../components/behaviors/oobe_i18n_behavior.js';
+import {OobeI18nMixin, OobeI18nMixinInterface} from '../../components/mixins/oobe_i18n_mixin.js';
 
 import {getTemplate} from './install_attributes_error.html.js';
 
 const InstallAttributesErrorMessageElementBase =
-    mixinBehaviors([OobeI18nBehavior, LoginScreenBehavior], PolymerElement) as {
-      new (): PolymerElement & OobeI18nBehaviorInterface &
+    mixinBehaviors([LoginScreenBehavior], OobeI18nMixin(PolymerElement)) as {
+      new (): PolymerElement & OobeI18nMixinInterface &
           LoginScreenBehaviorInterface,
     };
 

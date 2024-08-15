@@ -48,7 +48,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
-#include "components/omnibox/browser/location_bar_model.h"
 #include "components/omnibox/browser/omnibox_client.h"
 #include "components/omnibox/browser/omnibox_controller.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
@@ -477,20 +476,7 @@ bool OmniboxViewViews::IsImeComposing() const {
 }
 
 gfx::Size OmniboxViewViews::GetMinimumSize() const {
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // TODO(crbug.com/1338087): The minimum size of Lacros toolbar is set too wide
-  // to use split view in tablet mode. Temporally making the minimum size of
-  // omnibox smaller for Lacros to align the behavior with Ash. Responsive
-  // Toolbar is supposed to fix this. Remove the temporal solution when
-  // Responsive Toolbar is launched.
-  const int kMinCharacters =
-      display::Screen::GetScreen()->InTabletMode() &&
-              !base::FeatureList::IsEnabled(features::kResponsiveToolbar)
-          ? 8
-          : 20;
-#else
   const int kMinCharacters = 20;
-#endif
   return gfx::Size(
       GetFontList().GetExpectedTextWidth(kMinCharacters) + GetInsets().width(),
       GetPreferredSize().height());
@@ -507,7 +493,9 @@ void OmniboxViewViews::OnPaint(gfx::Canvas* canvas) {
         base::BindOnce(
             [](base::TimeTicks insert_timestamp,
                base::TimeTicks paint_timestamp,
-               base::TimeTicks presentation_timestamp) {
+               const viz::FrameTimingDetails& frame_timing_details) {
+              base::TimeTicks presentation_timestamp =
+                  frame_timing_details.presentation_feedback.timestamp;
               UMA_HISTOGRAM_TIMES(
                   "Omnibox.CharTypedToRepaintLatency.PaintToPresent",
                   presentation_timestamp - paint_timestamp);
@@ -607,14 +595,14 @@ void OmniboxViewViews::UpdateSchemeStyle(const gfx::Range& range) {
   // in about:blank URLs. Or in blob: or filesystem: URLs, which have an inner
   // origin, the URL is likely too syntax-y to be able to meaningfully draw
   // attention to any part of it.
-  auto* const location_bar_model = GetLocationBarModel();
-  if (!location_bar_model->GetURL().SchemeIsHTTPOrHTTPS())
+  if (!controller()->client()->GetNavigationEntryURL().SchemeIsHTTPOrHTTPS()) {
     return;
+  }
 
-  if (net::IsCertStatusError(location_bar_model->GetCertStatus())) {
+  if (net::IsCertStatusError(controller()->client()->GetCertStatus())) {
     if (location_bar_view_) {
       ApplyColor(location_bar_view_->GetSecurityChipColor(
-                     GetLocationBarModel()->GetSecurityLevel()),
+                     controller()->client()->GetSecurityLevel()),
                  range);
     }
     ApplyStyle(gfx::TEXT_STYLE_STRIKE, true, range);
@@ -1140,7 +1128,7 @@ bool OmniboxViewViews::OnMousePressed(const ui::MouseEvent& event) {
       if (IsSelectAll()) {
         SelectWordAt(event.location());
         std::u16string shown_url = GetText();
-        std::u16string full_url = GetLocationBarModel()->GetFormattedFullURL();
+        std::u16string full_url = controller()->client()->GetFormattedFullURL();
         size_t offset = full_url.find(shown_url);
         if (offset != std::u16string::npos) {
           next_double_click_selection_len_ = GetSelectedText().length();
@@ -1370,9 +1358,14 @@ void OmniboxViewViews::OnFocus() {
 
   GetRenderText()->SetElideBehavior(gfx::NO_ELIDE);
 
+#if BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
+  // The text offsets are no longer valid when the elide behavior changes.
+  SetNeedsAccessibleTextOffsetsUpdate();
+#endif  // BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
+
   // Focus changes can affect the visibility of any keyword hint.
   if (location_bar_view_ && model()->is_keyword_hint())
-    location_bar_view_->Layout();
+    location_bar_view_->DeprecatedLayoutImmediately();
 
   if (location_bar_view_)
     location_bar_view_->OnOmniboxFocused();
@@ -1437,6 +1430,11 @@ void OmniboxViewViews::OnBlur() {
   gfx::RenderText* render_text = GetRenderText();
   render_text->SetElideBehavior(gfx::ELIDE_TAIL);
 
+#if BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
+  // The text offsets are no longer valid when the elide behavior changes.
+  SetNeedsAccessibleTextOffsetsUpdate();
+#endif  // BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
+
   // In cases where there's a lot of whitespace in the text being shown, we want
   // the elision marker to be at the right of the text field, so don't elide
   // whitespace to the left of the elision point.
@@ -1447,7 +1445,7 @@ void OmniboxViewViews::OnBlur() {
   // |location_bar_view_| can be null in tests.
   if (location_bar_view_) {
     if (model()->is_keyword_hint())
-      location_bar_view_->Layout();
+      location_bar_view_->DeprecatedLayoutImmediately();
 
     location_bar_view_->OnOmniboxBlurred();
 
@@ -1910,15 +1908,13 @@ void OmniboxViewViews::PerformDrop(
 
   const ui::OSExchangeData& data = event.data();
   std::u16string text;
-  if (data.HasURL(ui::FilenameToURLPolicy::CONVERT_FILENAMES)) {
-    GURL url;
-    std::u16string title;
-    if (data.GetURLAndTitle(ui::FilenameToURLPolicy::CONVERT_FILENAMES, &url,
-                            &title)) {
-      text = StripJavascriptSchemas(base::UTF8ToUTF16(url.spec()));
-    }
-  } else if (data.HasString() && data.GetString(&text)) {
-    text = StripJavascriptSchemas(base::CollapseWhitespace(text, true));
+  if (std::optional<ui::OSExchangeData::UrlInfo> url_result =
+          data.GetURLAndTitle(ui::FilenameToURLPolicy::CONVERT_FILENAMES);
+      url_result.has_value()) {
+    text = StripJavascriptSchemas(base::UTF8ToUTF16(url_result->url.spec()));
+  } else if (std::optional<std::u16string> text_result = data.GetString();
+             text_result.has_value()) {
+    text = StripJavascriptSchemas(base::CollapseWhitespace(*text_result, true));
   } else {
     output_drag_op = DragOperation::kNone;
     return;

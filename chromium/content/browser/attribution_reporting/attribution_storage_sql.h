@@ -47,11 +47,11 @@ enum class RateLimitResult : int;
 class CONTENT_EXPORT AttributionStorageSql : public AttributionStorage {
  public:
   // Version number of the database.
-  static constexpr int kCurrentVersionNumber = 57;
+  static constexpr int kCurrentVersionNumber = 58;
 
   // Earliest version which can use a `kCurrentVersionNumber` database
   // without failing.
-  static constexpr int kCompatibleVersionNumber = 57;
+  static constexpr int kCompatibleVersionNumber = 58;
 
   // Latest version of the database that cannot be upgraded to
   // `kCurrentVersionNumber` without razing the database.
@@ -109,13 +109,14 @@ class CONTENT_EXPORT AttributionStorageSql : public AttributionStorage {
     kSourceInvalidFilterData = 20,
     kSourceInvalidActiveState = 21,
     kSourceInvalidReadOnlySourceData = 22,
-    kSourceInvalidEventReportWindows = 23,
+    // Obsolete: kSourceInvalidEventReportWindows = 23,
     kSourceInvalidMaxEventLevelReports = 24,
     kSourceInvalidEventLevelEpsilon = 25,
     kSourceDestinationSitesQueryFailed = 26,
     kSourceInvalidDestinationSites = 27,
     kStoredSourceConstructionFailed = 28,
-    kMaxValue = kStoredSourceConstructionFailed,
+    kSourceInvalidTriggerSpecs = 29,
+    kMaxValue = kSourceInvalidTriggerSpecs,
   };
 
   struct DeletionCounts {
@@ -157,14 +158,12 @@ class CONTENT_EXPORT AttributionStorageSql : public AttributionStorage {
   // AttributionStorage:
   StoreSourceResult StoreSource(const StorableSource& source,
                                 bool debug_cookie_set) override;
-  CreateReportResult MaybeCreateAndStoreReport(
-      const AttributionTrigger& trigger) override;
+  CreateReportResult MaybeCreateAndStoreReport(AttributionTrigger) override;
   std::vector<AttributionReport> GetAttributionReports(
       base::Time max_report_time,
       int limit = -1) override;
   std::optional<base::Time> GetNextReportTime(base::Time time) override;
-  std::vector<AttributionReport> GetReports(
-      const std::vector<AttributionReport::Id>& ids) override;
+  std::optional<AttributionReport> GetReport(AttributionReport::Id) override;
   std::vector<StoredSource> GetActiveSources(int limit = -1) override;
   std::set<AttributionDataModel::DataKey> GetAllDataKeys() override;
   void DeleteByDataKey(const AttributionDataModel::DataKey& datakey) override;
@@ -247,7 +246,7 @@ class CONTENT_EXPORT AttributionStorageSql : public AttributionStorage {
       std::optional<AttributionReport>& replaced_report)
       VALID_CONTEXT_REQUIRED(sequence_checker_);
 
-  std::optional<AttributionReport> GetReport(AttributionReport::Id report_id)
+  std::optional<AttributionReport> GetReportInternal(AttributionReport::Id)
       VALID_CONTEXT_REQUIRED(sequence_checker_);
 
   [[nodiscard]] bool ReadDedupKeys(StoredSource&)

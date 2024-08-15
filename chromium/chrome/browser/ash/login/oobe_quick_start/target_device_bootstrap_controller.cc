@@ -50,7 +50,7 @@ TargetDeviceBootstrapController::TargetDeviceBootstrapController(
       accessibility_manager_wrapper_(std::move(accessibility_manager_wrapper)),
       quick_start_connectivity_service_(quick_start_connectivity_service) {
   connection_broker_ = TargetDeviceConnectionBrokerFactory::Create(
-      session_context_, quick_start_connectivity_service_);
+      &session_context_, quick_start_connectivity_service_);
 }
 
 TargetDeviceBootstrapController::~TargetDeviceBootstrapController() {
@@ -91,9 +91,10 @@ void TargetDeviceBootstrapController::StartAdvertisingAndMaybeGetQRCode() {
   CHECK(connection_broker_->GetFeatureSupportStatus() ==
         TargetDeviceConnectionBroker::FeatureSupportStatus::kSupported);
   CHECK_EQ(status_.step, Step::NONE);
+  session_context_.FillOrResetSession();
 
   bool use_pin_authentication =
-      accessibility_manager_wrapper_->IsSpokenFeedbackEnabled();
+      !accessibility_manager_wrapper_->AllowQRCodeUX();
 
   if (use_pin_authentication || session_context_.is_resume_after_update()) {
     status_.step = Step::ADVERTISING_WITHOUT_QR_CODE;
@@ -130,7 +131,9 @@ void TargetDeviceBootstrapController::CloseOpenConnections(
 }
 
 void TargetDeviceBootstrapController::PrepareForUpdate() {
-  if (status_.step != Step::WIFI_CREDENTIALS_RECEIVED ||
+  constexpr Step kPossibleSteps[] = {Step::EMPTY_WIFI_CREDENTIALS_RECEIVED,
+                                     Step::WIFI_CREDENTIALS_RECEIVED};
+  if (!base::Contains(kPossibleSteps, status_.step) ||
       !authenticated_connection_) {
     return;
   }
@@ -157,6 +160,12 @@ void TargetDeviceBootstrapController::OnConnectionAuthenticated(
                                      Step::PIN_VERIFICATION};
   CHECK(base::Contains(kPossibleSteps, status_.step));
   authenticated_connection_ = authenticated_connection;
+
+  if (session_context_.is_resume_after_update()) {
+    UpdateStatus(/*step=*/Step::CONNECTED, /*payload=*/absl::monostate());
+    return;
+  }
+
   WaitForUserVerification();
 }
 
@@ -174,10 +183,14 @@ void TargetDeviceBootstrapController::OnConnectionClosed(
             WifiTransferResultFailureReason::kConnectionDroppedDuringAttempt);
   }
 
-  // UI observer will automatically exit the QuickStartScreen if there's an
-  // error. We want the user to manually exit the Quick Start screen when the
-  // setup is complete, so don't update the status to Step::Error in this case.
-  if (status_.step != Step::SETUP_COMPLETE) {
+  if (reason == ConnectionClosedReason::kUserAborted) {
+    UpdateStatus(/*step=*/Step::FLOW_ABORTED,
+                 /*payload=*/absl::monostate());
+  } else if (status_.step != Step::SETUP_COMPLETE) {
+    // UI observer will automatically exit the QuickStartScreen if there's an
+    // error. We want the user to manually exit the Quick Start screen when the
+    // setup is complete, so don't update the status to Step::Error in this
+    // case.
     UpdateStatus(/*step=*/Step::ERROR,
                  /*payload=*/ErrorCode::CONNECTION_CLOSED);
   }
@@ -425,6 +438,7 @@ void TargetDeviceBootstrapController::OnAuthCodeReceived(
             GaiaCredentials gaia_creds;
             gaia_creds.auth_code = res.auth_code;
             gaia_creds.email = fido_assertion_.email;
+            gaia_creds.gaia_id = res.gaia_id;
             UpdateStatus(/*step=*/Step::TRANSFERRED_GOOGLE_ACCOUNT_DETAILS,
                          /*payload=*/gaia_creds);
             is_error = false;
@@ -507,6 +521,9 @@ std::ostream& operator<<(std::ostream& stream,
       break;
     case TargetDeviceBootstrapController::Step::SETUP_COMPLETE:
       stream << "[setup complete]";
+      break;
+    case TargetDeviceBootstrapController::Step::FLOW_ABORTED:
+      stream << "[flow aborted]";
       break;
   }
 

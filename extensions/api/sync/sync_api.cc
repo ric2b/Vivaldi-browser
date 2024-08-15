@@ -164,7 +164,7 @@ vivaldi::sync::DataType ToVivaldiSyncDataType(
   }
 }
 
-absl::optional<syncer::UserSelectableType> FromVivaldiSyncDataType(
+std::optional<syncer::UserSelectableType> FromVivaldiSyncDataType(
     vivaldi::sync::DataType data_type) {
   switch (data_type) {
     case vivaldi::sync::DataType::kBookmarks:
@@ -189,7 +189,7 @@ absl::optional<syncer::UserSelectableType> FromVivaldiSyncDataType(
       return syncer::UserSelectableType::kNotes;
     default:
       NOTREACHED();
-      return absl::nullopt;
+      return std::nullopt;
   }
 }
 
@@ -305,11 +305,16 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
   std::vector<vivaldi::sync::DataType> data_types;
   for (const syncer::UserSelectableType data_type :
        syncer::UserSelectableTypeSet::All()) {
-    // We do not use chrome themes and the saved tab groups feature is currently
-    // disabled
+    // We do not use chrome themes. The saved tab groups feature is currently
+    // not used either. SharedTabGroups and Payments rely on server-side
+    // implementation which we don't have for privacy reasons.
+    // Compare is part of the Google shopping features and we do not expose
+    // those on desktop.
     if (data_type == syncer::UserSelectableType::kThemes ||
         data_type == syncer::UserSelectableType::kSavedTabGroups ||
-        data_type == syncer::UserSelectableType::kPayments) {
+        data_type == syncer::UserSelectableType::kSharedTabGroupData ||
+        data_type == syncer::UserSelectableType::kPayments ||
+        data_type == syncer::UserSelectableType::kCompare) {
       continue;
     }
 
@@ -413,7 +418,7 @@ ExtensionFunction::ResponseAction SyncStopFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction SyncSetEncryptionPasswordFunction::Run() {
-  absl::optional<vivaldi::sync::SetEncryptionPassword::Params> params(
+  std::optional<vivaldi::sync::SetEncryptionPassword::Params> params(
       vivaldi::sync::SetEncryptionPassword::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -435,7 +440,7 @@ ExtensionFunction::ResponseAction SyncSetEncryptionPasswordFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction SyncBackupEncryptionTokenFunction::Run() {
-  absl::optional<vivaldi::sync::BackupEncryptionToken::Params> params(
+  std::optional<vivaldi::sync::BackupEncryptionToken::Params> params(
       vivaldi::sync::BackupEncryptionToken::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -475,7 +480,7 @@ void SyncBackupEncryptionTokenFunction::OnBackupDone(bool result) {
 }
 
 ExtensionFunction::ResponseAction SyncRestoreEncryptionTokenFunction::Run() {
-  absl::optional<vivaldi::sync::RestoreEncryptionToken::Params> params(
+  std::optional<vivaldi::sync::RestoreEncryptionToken::Params> params(
       vivaldi::sync::RestoreEncryptionToken::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -544,7 +549,7 @@ void SyncGetDefaultSessionNameFunction::OnGetDefaultSessionName(
 }
 
 ExtensionFunction::ResponseAction SyncSetTypesFunction::Run() {
-  absl::optional<vivaldi::sync::SetTypes::Params> params(
+  std::optional<vivaldi::sync::SetTypes::Params> params(
       vivaldi::sync::SetTypes::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);

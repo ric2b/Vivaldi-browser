@@ -44,26 +44,6 @@ bool BleV2Medium::StartAdvertising(
 bool BleV2Medium::StopAdvertising() { return impl_->StopAdvertising(); }
 
 std::unique_ptr<api::ble_v2::BleMedium::AdvertisingSession>
-BleV2Medium::StartAdvertisingTmp(
-    const api::ble_v2::BleAdvertisementData& advertising_data,
-    api::ble_v2::AdvertiseParameters advertise_set_parameters,
-    api::ble_v2::BleMedium::AdvertisingCallback callback) {
-  if (impl_->StartAdvertising(advertising_data, advertise_set_parameters)) {
-    callback.start_advertising_result(absl::OkStatus());
-  } else {
-    callback.start_advertising_result(
-        absl::InternalError("Failed to start advertising"));
-    return nullptr;
-  }
-  return std::make_unique<api::ble_v2::BleMedium::AdvertisingSession>(
-      api::ble_v2::BleMedium::AdvertisingSession{.stop_advertising = [this] {
-        return impl_->StopAdvertising()
-                   ? absl::OkStatus()
-                   : absl::InternalError("Failed to stop advertising");
-      }});
-}
-
-std::unique_ptr<api::ble_v2::BleMedium::AdvertisingSession>
 BleV2Medium::StartAdvertising(
     const api::ble_v2::BleAdvertisementData& advertising_data,
     api::ble_v2::AdvertiseParameters advertise_set_parameters,
@@ -130,42 +110,6 @@ bool BleV2Medium::StopScanning() {
   return impl_->StopScanning();
 }
 
-std::unique_ptr<api::ble_v2::BleMedium::ScanningSession>
-BleV2Medium::StartScanningTmp(
-    const Uuid& service_uuid, api::ble_v2::TxPowerLevel tx_power_level,
-    api::ble_v2::BleMedium::ScanningCallback callback) {
-  MutexLock lock(&mutex_);
-
-  if (impl_->StartScanning(
-          service_uuid, tx_power_level,
-          api::ble_v2::BleMedium::ScanCallback{
-              .advertisement_found_cb =
-                  [this,
-                   found_callback = std::move(callback.advertisement_found_cb)](
-                      api::ble_v2::BlePeripheral& peripheral,
-                      BleAdvertisementData advertisement_data) mutable {
-                    MutexLock lock(&mutex_);
-                    if (!peripherals_.contains(&peripheral)) {
-                      NEARBY_LOGS(INFO)
-                          << "Peripheral impl=" << &peripheral
-                          << " does not exist; add it to the map.";
-                      peripherals_.insert(&peripheral);
-                    }
-                    found_callback(peripheral, advertisement_data);
-                  },
-          })) {
-    callback.start_scanning_result(absl::OkStatus());
-  } else {
-    callback.start_scanning_result(absl::InternalError("Failed to start scan"));
-    return nullptr;
-  }
-  return std::make_unique<api::ble_v2::BleMedium::ScanningSession>(
-      api::ble_v2::BleMedium::ScanningSession{.stop_scanning = [this]() {
-        return impl_->StopScanning()
-                   ? absl::OkStatus()
-                   : absl::InternalError("Failed to stop advertising");
-      }});
-}
 std::unique_ptr<api::ble_v2::BleMedium::ScanningSession>
 BleV2Medium::StartScanning(const Uuid& service_uuid,
                            api::ble_v2::TxPowerLevel tx_power_level,

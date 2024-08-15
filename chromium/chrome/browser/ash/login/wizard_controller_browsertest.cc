@@ -106,10 +106,10 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/ash/components/audio/cras_audio_handler.h"
+#include "chromeos/ash/components/dbus/device_management/fake_install_attributes_client.h"
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
 #include "chromeos/ash/components/dbus/shill/fake_shill_manager_client.h"
 #include "chromeos/ash/components/dbus/system_clock/system_clock_client.h"
-#include "chromeos/ash/components/dbus/userdataauth/fake_install_attributes_client.h"
 #include "chromeos/ash/components/geolocation/simple_geolocation_provider.h"
 #include "chromeos/ash/components/install_attributes/stub_install_attributes.h"
 #include "chromeos/ash/components/network/network_state.h"
@@ -194,6 +194,9 @@ constexpr policy::AutoEnrollmentState kAutoEnrollmentConnectionError =
 constexpr policy::AutoEnrollmentState kAutoEnrollmentServerError =
     base::unexpected(policy::AutoEnrollmentDMServerError{
         .dm_error = policy::DM_STATUS_TEMPORARY_UNAVAILABLE});
+
+constexpr policy::AutoEnrollmentState kAutoEnrollmentStateKeysRetrievalError =
+    base::unexpected(policy::AutoEnrollmentStateKeysRetrievalError{});
 
 // Matches on the mode parameter of an EnrollmentConfig object.
 MATCHER_P(EnrollmentModeMatches, mode, "") {
@@ -1599,6 +1602,24 @@ IN_PROC_BROWSER_TEST_F(WizardControllerUnifiedEnrollmentTest, NoEnrollment) {
   EXPECT_EQ(policy::AutoEnrollmentTypeChecker::CheckType::
                 kForcedReEnrollmentExplicitlyRequired,
             auto_enrollment_controller()->auto_enrollment_check_type());
+}
+
+// Tests that when EnrollmentStateFetcher reports state keys retrieval error, we
+// show an error on enrollment check screen and that it is not possible to enter
+// guest mode.
+IN_PROC_BROWSER_TEST_F(WizardControllerUnifiedEnrollmentTest,
+                       BlockedByCommunicationErrorOnStateKeysRetrieval) {
+  ScopedEnrollmentStateFetcherFactory fetcher_factory(
+      auto_enrollment_controller());
+  ProgressUntilAutoEnrollmentCheckScreen();
+  fetcher_factory.WaitUntilEnrollmentStateFetcherCreated();
+
+  fetcher_factory.ReportEnrollmentState(kAutoEnrollmentStateKeysRetrievalError);
+
+  CheckCurrentScreen(AutoEnrollmentCheckScreenView::kScreenId);
+  EXPECT_EQ(AutoEnrollmentCheckScreenView::kScreenId.AsId(),
+            GetErrorScreen()->GetParentScreen());
+  test::OobeJS().ExpectHiddenPath(kGuestSessionLink);
 }
 
 // Tests that when EnrollmentStateFetcher reports kServerError, we show an error
@@ -3235,7 +3256,6 @@ IN_PROC_BROWSER_TEST_F(WizardControllerGaiaTest,
 
   WizardController::default_controller()->AdvanceToScreen(
       GaiaInfoScreenView::kScreenId);
-  test::OobeJS().ClickOnPath({"gaia-info", "nextButton"});
   OobeScreenWaiter(GaiaView::kScreenId).Wait();
 
   test::OobeJS().ClickOnPath(

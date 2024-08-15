@@ -75,7 +75,7 @@ class SessionsPrivateAddFunction : public ExtensionFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  absl::optional<vivaldi::sessions_private::Add::Params> params;
+  std::optional<vivaldi::sessions_private::Add::Params> params;
   sessions::WriteSessionOptions ctl_;
 };
 

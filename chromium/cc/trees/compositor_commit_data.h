@@ -6,9 +6,9 @@
 #define CC_TREES_COMPOSITOR_COMMIT_DATA_H_
 
 #include <memory>
+#include <optional>
 #include <vector>
 
-#include <optional>
 #include "cc/cc_export.h"
 #include "cc/input/browser_controls_state.h"
 #include "cc/input/scroll_snap_data.h"
@@ -103,6 +103,7 @@ struct CC_EXPORT CompositorCommitData {
     bool scroll_gesture_did_end = false;
 
     bool gesture_affects_outer_viewport_scroll = false;
+    bool gesture_affects_inner_viewport_scroll = false;
   };
   ScrollEndInfo scroll_end_data;
 

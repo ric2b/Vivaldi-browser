@@ -118,8 +118,8 @@ const bookmarks::BookmarkNode* BookmarkModelView::AddFolder(
     size_t index,
     const std::u16string& title,
     const bookmarks::BookmarkNode::MetaInfoMap* meta_info,
-    absl::optional<base::Time> creation_time,
-    absl::optional<base::Uuid> uuid) {
+    std::optional<base::Time> creation_time,
+    std::optional<base::Uuid> uuid) {
   return bookmark_model_->AddFolder(parent, index, title, meta_info,
                                     creation_time, uuid);
 }
@@ -130,8 +130,8 @@ const bookmarks::BookmarkNode* BookmarkModelView::AddURL(
     const std::u16string& title,
     const GURL& url,
     const bookmarks::BookmarkNode::MetaInfoMap* meta_info,
-    absl::optional<base::Time> creation_time,
-    absl::optional<base::Uuid> uuid) {
+    std::optional<base::Time> creation_time,
+    std::optional<base::Uuid> uuid) {
   return bookmark_model_->AddURL(parent, index, title, url, meta_info,
                                  creation_time, uuid);
 }
@@ -186,9 +186,22 @@ void BookmarkModelViewUsingLocalOrSyncableNodes::EnsurePermanentNodesExist() {
 }
 
 void BookmarkModelViewUsingLocalOrSyncableNodes::RemoveAllSyncableNodes() {
-  // Relevant on iOS only, to delete all account bookmarks in a dedicated
-  // BookmarkModel instance.
-  underlying_model()->RemoveAllUserBookmarks();
+  underlying_model()->BeginExtensiveChanges();
+
+  for (const auto& permanent_node : root_node()->children()) {
+    if (!IsNodeSyncable(permanent_node.get())) {
+      continue;
+    }
+
+    for (int i = static_cast<int>(permanent_node->children().size() - 1);
+         i >= 0; --i) {
+      underlying_model()->Remove(
+          permanent_node->children()[i].get(),
+          bookmarks::metrics::BookmarkEditSource::kOther);
+    }
+  }
+
+  underlying_model()->EndExtensiveChanges();
 }
 
 const bookmarks::BookmarkNode*

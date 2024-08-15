@@ -4,6 +4,8 @@
 
 #include "components/policy/core/browser/policy_conversions_client.h"
 
+#include <optional>
+
 #include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
 #include "base/json/json_writer.h"
@@ -23,7 +25,6 @@
 #include "components/policy/policy_constants.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/strings/grit/components_strings.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using base::Value;
@@ -36,6 +37,12 @@ const char* DEVICE_SCOPE = "machine";
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 const char* ALL_USERS_SCOPE = "allUsers";
 #endif
+
+// Return true if machine policy information needs to be hidden.
+bool IsMachineInfoHidden(PolicyScope scope, bool show_machine_values) {
+  return !show_machine_values && scope == PolicyScope::POLICY_SCOPE_MACHINE;
+}
+
 }  // namespace
 
 PolicyConversionsClient::PolicyConversionsClient() = default;
@@ -67,6 +74,10 @@ void PolicyConversionsClient::EnableUserPolicies(bool enabled) {
 
 void PolicyConversionsClient::SetDropDefaultValues(bool enabled) {
   drop_default_values_enabled_ = enabled;
+}
+
+void PolicyConversionsClient::EnableShowMachineValues(bool enabled) {
+  show_machine_values_ = enabled;
 }
 
 std::string PolicyConversionsClient::ConvertValueToJSON(
@@ -219,10 +230,17 @@ base::Value::List PolicyConversionsClient::GetPrecedenceOrder() {
 
 Value PolicyConversionsClient::CopyAndMaybeConvert(
     const Value& value,
-    const absl::optional<Schema>& schema) const {
+    const std::optional<Schema>& schema,
+    PolicyScope scope) const {
+  if (IsMachineInfoHidden(scope, show_machine_values_)) {
+    return base::Value(kSensitiveValueMask);
+  }
+
   Value value_copy = value.Clone();
-  if (schema.has_value())
+  if (schema.has_value()) {
     schema->MaskSensitiveValues(&value_copy);
+  }
+
   if (!convert_values_enabled_)
     return value_copy;
   if (value_copy.is_dict())
@@ -249,13 +267,13 @@ Value::Dict PolicyConversionsClient::GetPolicyValue(
     const PoliciesSet& deprecated_policies,
     const PoliciesSet& future_policies,
     PolicyErrorMap* errors,
-    const absl::optional<PolicyConversions::PolicyToSchemaMap>&
+    const std::optional<PolicyConversions::PolicyToSchemaMap>&
         known_policy_schemas) const {
-  absl::optional<Schema> known_policy_schema =
+  std::optional<Schema> known_policy_schema =
       GetKnownPolicySchema(known_policy_schemas, policy_name);
   Value::Dict value;
-  value.Set("value",
-            CopyAndMaybeConvert(*policy.value_unsafe(), known_policy_schema));
+  value.Set("value", CopyAndMaybeConvert(*policy.value_unsafe(),
+                                         known_policy_schema, policy.scope));
   if (convert_types_enabled_) {
     value.Set("scope", GetPolicyScope(policy_name, policy.scope));
     value.Set("level", (policy.level == POLICY_LEVEL_RECOMMENDED)
@@ -291,38 +309,23 @@ Value::Dict PolicyConversionsClient::GetPolicyValue(
               (policy.conflicts.size() <= 1 || !policy_has_unmerged_source));
   }
 
-  std::u16string error;
-  if (!known_policy_schema.has_value()) {
-    // We don't know what this policy is. This is an important error to
-    // show.
-    error = l10n_util::GetStringUTF16(IDS_POLICY_UNKNOWN);
-  } else {
-    // The PolicyMap contains errors about retrieving the policy, while the
-    // PolicyErrorMap contains validation errors. Concat the errors.
-    auto policy_map_errors = policy.GetLocalizedMessages(
-        PolicyMap::MessageType::kError,
-        base::BindRepeating(&l10n_util::GetStringUTF16));
-    auto error_map_errors =
-        errors ? errors->GetErrorMessages(policy_name) : std::u16string();
-    if (policy_map_errors.empty())
-      error = error_map_errors;
-    else if (error_map_errors.empty())
-      error = policy_map_errors;
-    else
-      error = base::JoinString(
-          {policy_map_errors, errors->GetErrorMessages(policy_name)}, u"\n");
-  }
+  std::u16string error =
+      GetPolicyError(policy_name, policy, errors, known_policy_schema);
+
   if (!error.empty()) {
     value.Set("error", error);
     LOG_POLICY(ERROR, POLICY_PROCESSING)
         << policy_name << " has an error of type: " << error;
   }
 
-  std::u16string warning = policy.GetLocalizedMessages(
-      PolicyMap::MessageType::kWarning,
-      base::BindRepeating(&l10n_util::GetStringUTF16));
-  if (!warning.empty())
-    value.Set("warning", warning);
+  if (!IsMachineInfoHidden(policy.scope, show_machine_values_)) {
+    std::u16string warning = policy.GetLocalizedMessages(
+        PolicyMap::MessageType::kWarning,
+        base::BindRepeating(&l10n_util::GetStringUTF16));
+    if (!warning.empty()) {
+      value.Set("warning", warning);
+    }
+  }
 
   std::u16string info = policy.GetLocalizedMessages(
       PolicyMap::MessageType::kInfo,
@@ -378,7 +381,7 @@ Value::Dict PolicyConversionsClient::GetPolicyValues(
     PolicyErrorMap* errors,
     const PoliciesSet& deprecated_policies,
     const PoliciesSet& future_policies,
-    const absl::optional<PolicyConversions::PolicyToSchemaMap>&
+    const std::optional<PolicyConversions::PolicyToSchemaMap>&
         known_policy_schemas) const {
   DVLOG_POLICY(2, POLICY_PROCESSING) << "Retrieving map of policy values";
 
@@ -398,26 +401,26 @@ Value::Dict PolicyConversionsClient::GetPolicyValues(
   return values;
 }
 
-absl::optional<Schema> PolicyConversionsClient::GetKnownPolicySchema(
-    const absl::optional<PolicyConversions::PolicyToSchemaMap>&
+std::optional<Schema> PolicyConversionsClient::GetKnownPolicySchema(
+    const std::optional<PolicyConversions::PolicyToSchemaMap>&
         known_policy_schemas,
     const std::string& policy_name) const {
   if (!known_policy_schemas.has_value())
-    return absl::nullopt;
+    return std::nullopt;
   auto known_policy_iterator = known_policy_schemas->find(policy_name);
   if (known_policy_iterator == known_policy_schemas->end())
-    return absl::nullopt;
+    return std::nullopt;
   return known_policy_iterator->second;
 }
 
-absl::optional<PolicyConversions::PolicyToSchemaMap>
+std::optional<PolicyConversions::PolicyToSchemaMap>
 PolicyConversionsClient::GetKnownPolicies(
     const scoped_refptr<SchemaMap> schema_map,
     const PolicyNamespace& policy_namespace) const {
   const Schema* schema = schema_map->GetSchema(policy_namespace);
   // There is no policy name verification without valid schema.
   if (!schema || !schema->valid())
-    return absl::nullopt;
+    return std::nullopt;
 
   // Build a vector first and construct the PolicyToSchemaMap (which is a
   // |flat_map|) from that. The reason is that insertion into a |flat_map| is
@@ -446,7 +449,7 @@ bool PolicyConversionsClient::GetUserPoliciesEnabled() const {
 #if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 Value::Dict PolicyConversionsClient::ConvertUpdaterPolicies(
     PolicyMap updater_policies,
-    absl::optional<PolicyConversions::PolicyToSchemaMap>
+    std::optional<PolicyConversions::PolicyToSchemaMap>
         updater_policy_schemas) {
   return GetPolicyValues(updater_policies, nullptr, PoliciesSet(),
                          PoliciesSet(), updater_policy_schemas);
@@ -499,5 +502,38 @@ void PolicyConversionsClient::PopulatePerProfileMap() {
   }
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
+std::u16string PolicyConversionsClient::GetPolicyError(
+    const std::string& policy_name,
+    const PolicyMap::Entry& policy,
+    PolicyErrorMap* errors,
+    std::optional<Schema> known_policy_schema) const {
+  if (IsMachineInfoHidden(policy.scope, show_machine_values_)) {
+    return u"";
+  }
+  if (!known_policy_schema.has_value()) {
+    // We don't know what this policy is. This is an important error to
+    // show.
+    return l10n_util::GetStringUTF16(IDS_POLICY_UNKNOWN);
+  }
+
+  // The PolicyMap contains errors about retrieving the policy, while the
+  // PolicyErrorMap contains validation errors. Concat the errors.
+  auto policy_map_errors = policy.GetLocalizedMessages(
+      PolicyMap::MessageType::kError,
+      base::BindRepeating(&l10n_util::GetStringUTF16));
+  auto error_map_errors =
+      errors ? errors->GetErrorMessages(policy_name) : std::u16string();
+  if (policy_map_errors.empty()) {
+    return error_map_errors;
+  }
+
+  if (error_map_errors.empty()) {
+    return policy_map_errors;
+  }
+
+  return base::JoinString(
+      {policy_map_errors, errors->GetErrorMessages(policy_name)}, u"\n");
+}
 
 }  // namespace policy

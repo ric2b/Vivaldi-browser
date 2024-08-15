@@ -16,6 +16,7 @@
 #import "base/metrics/histogram_functions.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/sessions/core/session_id.h"
+#import "components/sessions/core/session_id_generator.h"
 #import "ios/chrome/browser/sessions/features.h"
 #import "ios/chrome/browser/sessions/proto/storage.pb.h"
 #import "ios/chrome/browser/sessions/session_constants.h"
@@ -276,14 +277,6 @@ std::unique_ptr<web::WebState> DeserializeFromProto::RestoreTabAt(
       item_storage.metadata());
 }
 
-// Returns the flags used to insert a WebState at `index`, possibly marking
-// it as `pinned` or `active`.
-int WebStateInsertionFlags(int index, bool pinned, bool active) {
-  return WebStateList::INSERT_FORCE_INDEX |
-         (pinned ? WebStateList::INSERT_PINNED : 0) |
-         (active ? WebStateList::INSERT_ACTIVATE : 0);
-}
-
 // Helper function that deserialize into a WebStateList using a deserializer.
 // Used by the two implementation of `DeserializeWebStateList(...)`.
 std::vector<web::WebState*> DeserializeWebStateListInternal(
@@ -318,7 +311,7 @@ std::vector<web::WebState*> DeserializeWebStateListInternal(
   // the WebState as active during the insertion, if restored.
   const int active_index = deserializer.GetActiveIndex();
 
-  int32_t max_identifier = -1;
+  SessionID max_identifier = SessionID::InvalidValue();
 
   // Restore all items directly at their correct position in the WebStateList.
   // The opener-opened relationship is not restored yet, as some WebState may
@@ -331,26 +324,24 @@ std::vector<web::WebState*> DeserializeWebStateListInternal(
             session::features::kSessionRestorationSessionIDCheck)) {
       web::WebStateID web_state_id = web_state->GetUniqueIdentifier();
       CHECK(web_state_id.valid(), base::NotFatalUntil::M125);
-      max_identifier = std::max(max_identifier, web_state_id.identifier());
+      if (!max_identifier.is_valid() ||
+          max_identifier.id() < web_state_id.identifier()) {
+        max_identifier = web_state_id.ToSessionID();
+      }
     }
 
-    const int insertion_flags = WebStateInsertionFlags(
-        index, index < restored_pinned_tabs_count, index == active_index);
-
     const int inserted_index = web_state_list->InsertWebState(
-        index, std::move(web_state), insertion_flags, WebStateOpener{});
+        std::move(web_state), WebStateList::InsertionParams::AtIndex(index)
+                                  .Pinned(index < restored_pinned_tabs_count)
+                                  .Activate(index == active_index));
 
     DCHECK_EQ(inserted_index, index);
   }
 
   if (base::FeatureList::IsEnabled(
           session::features::kSessionRestorationSessionIDCheck)) {
-    int32_t next_id = SessionID::NewUnique().id();
-    if (next_id > max_identifier - 10000000) {
-      // In case the ID went over the max int value, make sure that we only
-      // compare them if they are not too far.
-      CHECK_LT(max_identifier, next_id, base::NotFatalUntil::M125);
-    }
+    sessions::SessionIdGenerator::GetInstance()->SetHighestRestoredID(
+        max_identifier);
   }
 
   // Check that all WebStates have been restored.
@@ -428,8 +419,9 @@ SessionWindowIOS* SerializeWebStateList(const WebStateList* web_state_list) {
 
   OrderControllerSourceFromWebStateList source(*web_state_list);
   OrderController order_controller(source);
-  const int active_index = order_controller.DetermineNewActiveIndex(
-      web_state_list->active_index(), std::move(removing_indexes));
+  const int active_index = removing_indexes.IndexAfterRemoval(
+      order_controller.DetermineNewActiveIndex(web_state_list->active_index(),
+                                               removing_indexes));
 
   NSUInteger selectedIndex = active_index != WebStateList::kInvalidIndex
                                  ? static_cast<NSUInteger>(active_index)
@@ -493,8 +485,9 @@ void SerializeWebStateList(const WebStateList& web_state_list,
 
   OrderControllerSourceFromWebStateList source(web_state_list);
   OrderController order_controller(source);
-  const int active_index = order_controller.DetermineNewActiveIndex(
-      web_state_list.active_index(), std::move(removing_indexes));
+  const int active_index = removing_indexes.IndexAfterRemoval(
+      order_controller.DetermineNewActiveIndex(web_state_list.active_index(),
+                                               removing_indexes));
   DCHECK_LT(active_index, web_state_list.count());
   storage.set_active_index(active_index);
 }

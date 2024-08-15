@@ -76,8 +76,8 @@ class MODULES_EXPORT ProcessedLocalAudioSource final
     return audio_processing_properties_;
   }
 
-  absl::optional<blink::AudioProcessingProperties>
-  GetAudioProcessingProperties() const final;
+  std::optional<blink::AudioProcessingProperties> GetAudioProcessingProperties()
+      const final;
 
   // Valid after the source is started (when the first track is connected). Will
   // return nullptr if WebRTC stats are no available for the current
@@ -108,6 +108,7 @@ class MODULES_EXPORT ProcessedLocalAudioSource final
   void OnCaptureStarted() override;
   void Capture(const media::AudioBus* audio_source,
                base::TimeTicks audio_capture_time,
+               const media::AudioGlitchInfo& glitch_info,
                double volume,
                bool key_pressed) override;
   void OnCaptureError(media::AudioCapturerSource::ErrorCode code,
@@ -121,7 +122,7 @@ class MODULES_EXPORT ProcessedLocalAudioSource final
   // Capture().
   void DeliverProcessedAudio(const media::AudioBus& processed_audio,
                              base::TimeTicks audio_capture_time,
-                             absl::optional<double> new_volume);
+                             std::optional<double> new_volume);
 
   // Update the device (source) mic volume.
   void SetVolume(double volume);

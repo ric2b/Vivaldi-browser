@@ -1,5 +1,5 @@
 import { keysOf } from '../common/util/data_tables.js';
-import { assert } from '../common/util/util.js';
+import { assert, unreachable } from '../common/util/util.js';
 
 import { align } from './util/math.js';
 import { ImageCopyType } from './util/texture/layout.js';
@@ -13,25 +13,26 @@ import { ImageCopyType } from './util/texture/layout.js';
  * `formatTableWithDefaults`. This ensures keys are never missing, always explicitly `undefined`.
  *
  * All top-level keys must be defined here, or they won't be exposed at all.
+ * Documentation is also written here; this makes it propagate through to the end types.
  */
 const kFormatUniversalDefaults = {
+  /** Texel block width. */
   blockWidth: undefined,
+  /** Texel block height. */
   blockHeight: undefined,
   color: undefined,
   depth: undefined,
   stencil: undefined,
   colorRender: undefined,
+  /** Whether the format can be used in a multisample texture. */
   multisample: undefined,
+  /** Optional feature required to use this format, or `undefined` if none. */
   feature: undefined,
+  /** The base format for srgb formats. Specified on both srgb and equivalent non-srgb formats. */
   baseFormat: undefined,
 
-  sampleType: undefined,
-  copySrc: undefined,
-  copyDst: undefined,
+  /** @deprecated Use `.color.bytes`, `.depth.bytes`, or `.stencil.bytes`. */
   bytesPerBlock: undefined,
-  renderable: false,
-  renderTargetPixelByteCost: undefined,
-  renderTargetComponentAlignment: undefined,
 
   // IMPORTANT:
   // Add new top-level keys both here and in TextureFormatInfo_TypeCheck.
@@ -67,7 +68,7 @@ function formatTableWithDefaults<Defaults extends {}, Table extends { readonly [
 
 /** "plain color formats", plus rgb9e5ufloat. */
 const kRegularTextureFormatInfo = formatTableWithDefaults({
-  defaults: { blockWidth: 1, blockHeight: 1, copySrc: true, copyDst: true },
+  defaults: { blockWidth: 1, blockHeight: 1 },
   table: {
     // plain, 8 bits per component
 
@@ -81,11 +82,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 1,
       },
       colorRender: { blend: true, resolve: true, byteCost: 1, alignment: 1 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     r8snorm: {
@@ -98,7 +95,6 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 1,
       },
       multisample: false,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     r8uint: {
@@ -111,11 +107,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 1,
       },
       colorRender: { blend: false, resolve: false, byteCost: 1, alignment: 1 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     r8sint: {
@@ -128,11 +120,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 1,
       },
       colorRender: { blend: false, resolve: false, byteCost: 1, alignment: 1 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
@@ -146,11 +134,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 2,
       },
       colorRender: { blend: true, resolve: true, byteCost: 2, alignment: 1 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rg8snorm: {
@@ -163,7 +147,6 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 2,
       },
       multisample: false,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rg8uint: {
@@ -176,11 +159,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 2,
       },
       colorRender: { blend: false, resolve: false, byteCost: 2, alignment: 1 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rg8sint: {
@@ -193,11 +172,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 2,
       },
       colorRender: { blend: false, resolve: false, byteCost: 2, alignment: 1 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
@@ -211,12 +186,8 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 4,
       },
       colorRender: { blend: true, resolve: true, byteCost: 8, alignment: 1 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
       baseFormat: 'rgba8unorm',
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'rgba8unorm-srgb': {
@@ -229,12 +200,8 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 4,
       },
       colorRender: { blend: true, resolve: true, byteCost: 8, alignment: 1 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
       baseFormat: 'rgba8unorm',
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rgba8snorm: {
@@ -247,7 +214,6 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 4,
       },
       multisample: false,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rgba8uint: {
@@ -260,11 +226,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 4,
       },
       colorRender: { blend: false, resolve: false, byteCost: 4, alignment: 1 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rgba8sint: {
@@ -277,11 +239,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 4,
       },
       colorRender: { blend: false, resolve: false, byteCost: 4, alignment: 1 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     bgra8unorm: {
@@ -294,12 +252,8 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 4,
       },
       colorRender: { blend: true, resolve: true, byteCost: 8, alignment: 1 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
       baseFormat: 'bgra8unorm',
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'bgra8unorm-srgb': {
@@ -312,12 +266,8 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 4,
       },
       colorRender: { blend: true, resolve: true, byteCost: 8, alignment: 1 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
       baseFormat: 'bgra8unorm',
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
@@ -333,11 +283,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 2,
       },
       colorRender: { blend: false, resolve: false, byteCost: 2, alignment: 2 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     r16sint: {
@@ -350,11 +296,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 2,
       },
       colorRender: { blend: false, resolve: false, byteCost: 2, alignment: 2 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     r16float: {
@@ -367,11 +309,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 2,
       },
       colorRender: { blend: true, resolve: true, byteCost: 2, alignment: 2 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
@@ -385,11 +323,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 4,
       },
       colorRender: { blend: false, resolve: false, byteCost: 4, alignment: 2 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rg16sint: {
@@ -402,11 +336,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 4,
       },
       colorRender: { blend: false, resolve: false, byteCost: 4, alignment: 2 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rg16float: {
@@ -419,11 +349,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 4,
       },
       colorRender: { blend: true, resolve: true, byteCost: 4, alignment: 2 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
@@ -437,11 +363,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 8,
       },
       colorRender: { blend: false, resolve: false, byteCost: 8, alignment: 2 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rgba16sint: {
@@ -454,11 +376,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 8,
       },
       colorRender: { blend: false, resolve: false, byteCost: 8, alignment: 2 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rgba16float: {
@@ -471,11 +389,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 8,
       },
       colorRender: { blend: true, resolve: true, byteCost: 8, alignment: 2 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
@@ -491,11 +405,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 4,
       },
       colorRender: { blend: false, resolve: false, byteCost: 4, alignment: 4 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: false,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     r32sint: {
@@ -508,11 +418,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 4,
       },
       colorRender: { blend: false, resolve: false, byteCost: 4, alignment: 4 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: false,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     r32float: {
@@ -525,11 +431,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 4,
       },
       colorRender: { blend: false, resolve: false, byteCost: 4, alignment: 4 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
@@ -543,11 +445,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 8,
       },
       colorRender: { blend: false, resolve: false, byteCost: 8, alignment: 4 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: false,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rg32sint: {
@@ -560,11 +458,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 8,
       },
       colorRender: { blend: false, resolve: false, byteCost: 8, alignment: 4 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: false,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rg32float: {
@@ -577,11 +471,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 8,
       },
       colorRender: { blend: false, resolve: false, byteCost: 8, alignment: 4 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: false,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
@@ -595,11 +485,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 16,
       },
       colorRender: { blend: false, resolve: false, byteCost: 16, alignment: 4 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: false,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rgba32sint: {
@@ -612,11 +498,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 16,
       },
       colorRender: { blend: false, resolve: false, byteCost: 16, alignment: 4 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: false,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rgba32float: {
@@ -629,11 +511,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 16,
       },
       colorRender: { blend: false, resolve: false, byteCost: 16, alignment: 4 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: false,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
@@ -649,11 +527,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 4,
       },
       colorRender: { blend: false, resolve: false, byteCost: 8, alignment: 4 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rgb10a2unorm: {
@@ -666,11 +540,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 4,
       },
       colorRender: { blend: true, resolve: true, byteCost: 8, alignment: 4 },
-      renderable: true,
-      /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
-      /*prettier-ignore*/ get renderTargetPixelByteCost() { return this.colorRender.byteCost; },
       multisample: true,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rg11b10ufloat: {
@@ -683,10 +553,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 4,
       },
       multisample: false,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
-      renderTargetPixelByteCost: 8,
-      renderTargetComponentAlignment: 4,
     },
 
     // packed
@@ -701,7 +568,6 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
         bytes: 4,
       },
       multisample: false,
-      /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
   },
@@ -711,7 +577,7 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
 // because one aspect can be sized and one can be unsized. This should be cleaned up, but is kept
 // this way during a migration phase.
 const kSizedDepthStencilFormatInfo = formatTableWithDefaults({
-  defaults: { blockWidth: 1, blockHeight: 1, multisample: true, copySrc: true, renderable: true },
+  defaults: { blockWidth: 1, blockHeight: 1, multisample: true },
   table: {
     stencil8: {
       stencil: {
@@ -722,8 +588,6 @@ const kSizedDepthStencilFormatInfo = formatTableWithDefaults({
         readWriteStorage: false,
         bytes: 1,
       },
-      sampleType: 'uint',
-      copyDst: true,
       bytesPerBlock: 1,
     },
     depth16unorm: {
@@ -735,8 +599,6 @@ const kSizedDepthStencilFormatInfo = formatTableWithDefaults({
         readWriteStorage: false,
         bytes: 2,
       },
-      sampleType: 'depth',
-      copyDst: true,
       bytesPerBlock: 2,
     },
     depth32float: {
@@ -748,8 +610,6 @@ const kSizedDepthStencilFormatInfo = formatTableWithDefaults({
         readWriteStorage: false,
         bytes: 4,
       },
-      sampleType: 'depth',
-      copyDst: false,
       bytesPerBlock: 4,
     },
   },
@@ -766,10 +626,6 @@ const kUnsizedDepthStencilFormatInfo = formatTableWithDefaults({
         readWriteStorage: false,
         bytes: undefined,
       },
-      copySrc: false,
-      copyDst: false,
-      sampleType: 'depth',
-      renderable: true,
     },
     'depth24plus-stencil8': {
       depth: {
@@ -788,10 +644,6 @@ const kUnsizedDepthStencilFormatInfo = formatTableWithDefaults({
         readWriteStorage: false,
         bytes: 1,
       },
-      copySrc: false,
-      copyDst: false,
-      sampleType: 'depth',
-      renderable: true,
     },
     'depth32float-stencil8': {
       depth: {
@@ -811,10 +663,6 @@ const kUnsizedDepthStencilFormatInfo = formatTableWithDefaults({
         bytes: 1,
       },
       feature: 'depth32float-stencil8',
-      copySrc: false,
-      copyDst: false,
-      sampleType: 'depth',
-      renderable: true,
     },
   },
 } as const);
@@ -825,9 +673,6 @@ const kBCTextureFormatInfo = formatTableWithDefaults({
     blockHeight: 4,
     multisample: false,
     feature: 'texture-compression-bc',
-    sampleType: 'float',
-    copySrc: true,
-    copyDst: true,
   },
   table: {
     'bc1-rgba-unorm': {
@@ -1007,9 +852,6 @@ const kETC2TextureFormatInfo = formatTableWithDefaults({
     blockHeight: 4,
     multisample: false,
     feature: 'texture-compression-etc2',
-    sampleType: 'float',
-    copySrc: true,
-    copyDst: true,
   },
   table: {
     'etc2-rgb8unorm': {
@@ -1139,9 +981,6 @@ const kASTCTextureFormatInfo = formatTableWithDefaults({
   defaults: {
     multisample: false,
     feature: 'texture-compression-astc',
-    sampleType: 'float',
-    copySrc: true,
-    copyDst: true,
   },
   table: {
     'astc-4x4-unorm': {
@@ -1600,13 +1439,6 @@ const kASTCTextureFormatInfo = formatTableWithDefaults({
 export const kRenderableColorTextureFormats = kRegularTextureFormats.filter(
   v => kColorTextureFormatInfo[v].colorRender
 );
-assert(
-  kRenderableColorTextureFormats.every(
-    f =>
-      kAllTextureFormatInfo[f].renderTargetComponentAlignment !== undefined &&
-      kAllTextureFormatInfo[f].renderTargetPixelByteCost !== undefined
-  )
-);
 
 /** Per-GPUTextureFormat-per-aspect info. */
 interface TextureFormatAspectInfo {
@@ -1643,34 +1475,15 @@ interface TextureFormatStencilAspectInfo extends TextureFormatAspectInfo {
  * This is not actually the type of values in kTextureFormatInfo; that type is fully const
  * so that it can be narrowed very precisely at usage sites by the compiler.
  * This type exists only as a type check on the inferred type of kTextureFormatInfo.
- * Documentation is also written here, but not actually visible to the IDE.
  */
 type TextureFormatInfo_TypeCheck = {
-  /** Texel block width. */
   blockWidth: number;
-  /** Texel block height. */
   blockHeight: number;
-  /** Whether the format can be used in a multisample texture. */
   multisample: boolean;
-  /** The base format for srgb formats. Specified on both srgb and equivalent non-srgb formats. */
   baseFormat: GPUTextureFormat | undefined;
-  /** Optional feature required to use this format, or `undefined` if none. */
   feature: GPUFeatureName | undefined;
 
-  /** @deprecated */
-  sampleType: GPUTextureSampleType;
-  /** @deprecated */
-  copySrc: boolean;
-  /** @deprecated */
-  copyDst: boolean;
-  /** @deprecated */
   bytesPerBlock: number | undefined;
-  /** @deprecated */
-  renderable: boolean;
-  /** @deprecated */
-  renderTargetPixelByteCost: number | undefined;
-  /** @deprecated */
-  renderTargetComponentAlignment: number | undefined;
 
   // IMPORTANT:
   // Add new top-level keys both here and in kUniversalDefaults.
@@ -1723,10 +1536,6 @@ export const kTextureFormatInfo = {
 const kTextureFormatInfo_TypeCheck: {
   readonly [F in GPUTextureFormat]: TextureFormatInfo_TypeCheck;
 } = kTextureFormatInfo;
-
-/** List of all GPUTextureFormat values. */
-// MAINTENANCE_TODO: dedup with kAllTextureFormats
-export const kTextureFormats: readonly GPUTextureFormat[] = keysOf(kAllTextureFormatInfo);
 
 /** Valid GPUTextureFormats for `copyExternalImageToTexture`, by spec. */
 export const kValidTextureFormatsForCopyE2T = [
@@ -1851,6 +1660,35 @@ export function resolvePerAspectFormat(
 }
 
 /**
+ * @returns the sample type of the specified aspect of the specified format.
+ */
+export function sampleTypeForFormatAndAspect(
+  format: GPUTextureFormat,
+  aspect: GPUTextureAspect
+): 'uint' | 'depth' | 'float' | 'sint' | 'unfilterable-float' {
+  const info = kTextureFormatInfo[format];
+  if (info.color) {
+    assert(aspect === 'all', `color format ${format} used with aspect ${aspect}`);
+    return info.color.type;
+  } else if (info.depth && info.stencil) {
+    if (aspect === 'depth-only') {
+      return info.depth.type;
+    } else if (aspect === 'stencil-only') {
+      return info.stencil.type;
+    } else {
+      unreachable(`depth-stencil format ${format} used with aspect ${aspect}`);
+    }
+  } else if (info.depth) {
+    assert(aspect !== 'stencil-only', `depth-only format ${format} used with aspect ${aspect}`);
+    return info.depth.type;
+  } else if (info.stencil) {
+    assert(aspect !== 'depth-only', `stencil-only format ${format} used with aspect ${aspect}`);
+    return info.stencil.type;
+  }
+  unreachable();
+}
+
+/**
  * Gets all copyable aspects for copies between texture and buffer for specified depth/stencil format and copy type, by spec.
  */
 export function depthStencilFormatCopyableAspects(
@@ -1910,8 +1748,12 @@ export function textureDimensionAndFormatCompatible(
  *
  * This function may need to be generalized to use `baseFormat` from `kTextureFormatInfo`.
  */
-export function viewCompatible(a: GPUTextureFormat, b: GPUTextureFormat): boolean {
-  return a === b || a + '-srgb' === b || b + '-srgb' === a;
+export function viewCompatible(
+  compatibilityMode: boolean,
+  a: GPUTextureFormat,
+  b: GPUTextureFormat
+): boolean {
+  return compatibilityMode ? a === b : a === b || a + '-srgb' === b || b + '-srgb' === a;
 }
 
 export function getFeaturesForFormats<T>(
@@ -1949,11 +1791,11 @@ export function isTextureFormatUsableAsStorageFormat(
   return !!kTextureFormatInfo[format].color?.storage;
 }
 
-export function isEncodableTextureformat(format: GPUTextureFormat) {
-  return format in kEncodableTextureFormatInfo;
+export function isRegularTextureFormat(format: GPUTextureFormat) {
+  return format in kRegularTextureFormatInfo;
 }
 
-export const kFeaturesForFormats = getFeaturesForFormats(kTextureFormats);
+export const kFeaturesForFormats = getFeaturesForFormats(kAllTextureFormats);
 
 /**
  * Given an array of texture formats return the number of bytes per sample.

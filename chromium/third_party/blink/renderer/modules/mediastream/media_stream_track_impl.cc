@@ -160,8 +160,10 @@ bool ConstraintsHaveImageCapture(const MediaTrackConstraints* constraints) {
 // Caller must take the ownership of the returned |WebAudioSourceProvider|
 // object.
 std::unique_ptr<WebAudioSourceProvider>
-CreateWebAudioSourceFromMediaStreamTrack(MediaStreamComponent* component,
-                                         int context_sample_rate) {
+CreateWebAudioSourceFromMediaStreamTrack(
+    MediaStreamComponent* component,
+    int context_sample_rate,
+    base::TimeDelta platform_buffer_duration) {
   MediaStreamTrackPlatform* media_stream_track = component->GetPlatformTrack();
   if (!media_stream_track) {
     DLOG(ERROR) << "Native track missing for webaudio source.";
@@ -171,8 +173,8 @@ CreateWebAudioSourceFromMediaStreamTrack(MediaStreamComponent* component,
   MediaStreamSource* source = component->Source();
   DCHECK_EQ(source->GetType(), MediaStreamSource::kTypeAudio);
 
-  return std::make_unique<WebAudioMediaStreamAudioSink>(component,
-                                                        context_sample_rate);
+  return std::make_unique<WebAudioMediaStreamAudioSink>(
+      component, context_sample_rate, platform_buffer_duration);
 }
 
 void DidCloneMediaStreamTrack(MediaStreamComponent* clone) {
@@ -186,13 +188,13 @@ void DidCloneMediaStreamTrack(MediaStreamComponent* clone) {
 }
 
 // Returns the DisplayCaptureSurfaceType for display-capture tracks,
-// absl::nullopt for non-display-capture tracks.
-absl::optional<media::mojom::DisplayCaptureSurfaceType> GetDisplayCaptureType(
+// std::nullopt for non-display-capture tracks.
+std::optional<media::mojom::DisplayCaptureSurfaceType> GetDisplayCaptureType(
     const MediaStreamComponent* component) {
   const MediaStreamTrackPlatform* const platform_track =
       component->GetPlatformTrack();
   if (!platform_track) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   MediaStreamTrackPlatform::Settings settings;
@@ -222,7 +224,7 @@ MediaStreamTrack* MediaStreamTrackImpl::Create(ExecutionContext* context,
   DCHECK(context);
   DCHECK(component);
 
-  const absl::optional<media::mojom::DisplayCaptureSurfaceType>
+  const std::optional<media::mojom::DisplayCaptureSurfaceType>
       display_surface_type = GetDisplayCaptureType(component);
   const bool is_tab_capture =
       (display_surface_type ==
@@ -556,7 +558,7 @@ MediaTrackCapabilities* MediaStreamTrackImpl::getCapabilities() const {
     capabilities->setFacingMode(facing_mode);
     capabilities->setResizeMode({WebMediaStreamTrack::kResizeModeNone,
                                  WebMediaStreamTrack::kResizeModeRescale});
-    const absl::optional<const MediaStreamDevice> source_device = device();
+    const std::optional<const MediaStreamDevice> source_device = device();
     if (source_device && source_device->display_media_info) {
       capabilities->setDisplaySurface(GetDisplaySurfaceString(
           source_device->display_media_info->display_surface));
@@ -685,7 +687,7 @@ MediaStreamTrackVideoStats* MediaStreamTrackImpl::stats() {
       // `MediaStreamTrack.stats` is not supported for audio tracks.
       return nullptr;
     case MediaStreamSource::kTypeVideo: {
-      absl::optional<const MediaStreamDevice> source_device = device();
+      std::optional<const MediaStreamDevice> source_device = device();
       if (!source_device.has_value() ||
           source_device->type == mojom::blink::MediaStreamType::NO_SERVICE) {
         // If the track is backed by a getUserMedia or getDisplayMedia device,
@@ -733,15 +735,17 @@ CaptureHandle* MediaStreamTrackImpl::getCaptureHandle() const {
   return capture_handle;
 }
 
-ScriptPromise MediaStreamTrackImpl::applyConstraints(
+ScriptPromiseTyped<IDLUndefined> MediaStreamTrackImpl::applyConstraints(
     ScriptState* script_state,
     const MediaTrackConstraints* constraints) {
   if (!script_state->ContextIsValid()) {
-    return ScriptPromise();
+    return ScriptPromiseTyped<IDLUndefined>();
   }
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
-  ScriptPromise promise = resolver->Promise();
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolverTyped<IDLUndefined>>(
+          script_state);
+  auto promise = resolver->Promise();
   applyConstraints(resolver, constraints);
   return promise;
 }
@@ -774,7 +778,7 @@ void MediaStreamTrackImpl::SetConstraintsInternal(
 }
 
 void MediaStreamTrackImpl::applyConstraints(
-    ScriptPromiseResolver* resolver,
+    ScriptPromiseResolverTyped<IDLUndefined>* resolver,
     const MediaTrackConstraints* constraints) {
   String error_message;
   ExecutionContext* execution_context =
@@ -927,19 +931,16 @@ void MediaStreamTrackImpl::SendWheel(
     double relative_y,
     int wheel_delta_x,
     int wheel_delta_y,
-    base::OnceCallback<void(bool, const String&)> callback) {
-  std::move(callback).Run(false, "Unsupported.");
-}
-
-void MediaStreamTrackImpl::GetZoomLevel(
-    base::OnceCallback<void(absl::optional<int>, const String&)> callback) {
-  std::move(callback).Run(absl::nullopt, "Unsupported.");
+    base::OnceCallback<void(DOMException*)> callback) {
+  std::move(callback).Run(MakeGarbageCollected<DOMException>(
+      DOMExceptionCode::kNotSupportedError, "Unsupported."));
 }
 
 void MediaStreamTrackImpl::SetZoomLevel(
     int zoom_level,
-    base::OnceCallback<void(bool, const String&)> callback) {
-  std::move(callback).Run(false, "Unsupported.");
+    base::OnceCallback<void(DOMException*)> callback) {
+  std::move(callback).Run(MakeGarbageCollected<DOMException>(
+      DOMExceptionCode::kNotSupportedError, "Unsupported."));
 }
 #endif
 
@@ -960,15 +961,16 @@ bool MediaStreamTrackImpl::HasPendingActivity() const {
 }
 
 std::unique_ptr<AudioSourceProvider> MediaStreamTrackImpl::CreateWebAudioSource(
-    int context_sample_rate) {
+    int context_sample_rate,
+    base::TimeDelta platform_buffer_duration) {
   return std::make_unique<MediaStreamWebAudioSource>(
-      CreateWebAudioSourceFromMediaStreamTrack(Component(),
-                                               context_sample_rate));
+      CreateWebAudioSourceFromMediaStreamTrack(Component(), context_sample_rate,
+                                               platform_buffer_duration));
 }
 
-absl::optional<const MediaStreamDevice> MediaStreamTrackImpl::device() const {
+std::optional<const MediaStreamDevice> MediaStreamTrackImpl::device() const {
   if (!component_->Source()->GetPlatformSource()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   return component_->Source()->GetPlatformSource()->device();
 }

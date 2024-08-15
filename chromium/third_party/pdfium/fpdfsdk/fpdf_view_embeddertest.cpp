@@ -1000,12 +1000,6 @@ TEST_F(FPDFViewEmbedderTest, FPDF_RenderPageBitmapWithMatrix) {
     }
     return "f11a11137c8834389e31cf555a4a6979";
   }();
-  const char* hori_stretched_checksum = []() {
-    if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
-      return "6d3776d7bb21cbb7195126b8e95dfba2";
-    }
-    return "48ef9205941ed19691ccfa00d717187e";
-  }();
   const char* rotated_90_clockwise_checksum = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
       return "b4baa001d201baed576cd6d5d0d5a160";
@@ -1044,7 +1038,7 @@ TEST_F(FPDFViewEmbedderTest, FPDF_RenderPageBitmapWithMatrix) {
   }();
   const char* larger_rotated_diagonal_checksum = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
-      return "85c41bb892c1a09882f432aa2f4a5ef6";
+      return "a7179bc24e329341a1a1f6d6be20a1e9";
     }
     return "3d62417468bdaff0eb14391a0c30a3b1";
   }();
@@ -1054,6 +1048,7 @@ TEST_F(FPDFViewEmbedderTest, FPDF_RenderPageBitmapWithMatrix) {
     }
     return "0a190003c97220bf8877684c8d7e89cf";
   }();
+  const char kHoriStretchedChecksum[] = "48ef9205941ed19691ccfa00d717187e";
   const char kLargerChecksum[] = "c806145641c3e6fc4e022c7065343749";
   const char kLargerClippedChecksum[] = "091d3b1c7933c8f6945eb2cb41e588e9";
   const char kLargerRotatedChecksum[] = "115f13353ebfc82ddb392d1f0059eb12";
@@ -1097,7 +1092,7 @@ TEST_F(FPDFViewEmbedderTest, FPDF_RenderPageBitmapWithMatrix) {
   FS_MATRIX stretch_x_matrix{2, 0, 0, 1, 0, 0};
   TestRenderPageBitmapWithMatrix(page, page_width, page_height,
                                  stretch_x_matrix, page_rect,
-                                 hori_stretched_checksum);
+                                 kHoriStretchedChecksum);
 
   // Try a 90 degree rotation clockwise but with the same bitmap size, so part
   // will be clipped.
@@ -1314,8 +1309,8 @@ TEST_F(FPDFViewEmbedderTest, GetXFAArrayData) {
     EXPECT_TRUE(FPDF_GetXFAPacketContent(document(), i, data_buffer.data(),
                                          data_buffer.size(), &buflen));
     EXPECT_EQ(kExpectedResults[i].content_length, buflen);
-    EXPECT_STREQ(kExpectedResults[i].content_checksum,
-                 GenerateMD5Base16(data_buffer).c_str());
+    EXPECT_EQ(kExpectedResults[i].content_checksum,
+              GenerateMD5Base16(data_buffer));
   }
 
   // Test bad parameters.
@@ -1355,8 +1350,7 @@ TEST_F(FPDFViewEmbedderTest, GetXFAStreamData) {
   EXPECT_TRUE(FPDF_GetXFAPacketContent(document(), 0, data_buffer.data(),
                                        data_buffer.size(), &buflen));
   EXPECT_EQ(121u, buflen);
-  EXPECT_STREQ("8f912eaa1e66c9341cb3032ede71e147",
-               GenerateMD5Base16(data_buffer).c_str());
+  EXPECT_EQ("8f912eaa1e66c9341cb3032ede71e147", GenerateMD5Base16(data_buffer));
 }
 
 TEST_F(FPDFViewEmbedderTest, GetXFADataForNoForm) {
@@ -1795,7 +1789,7 @@ TEST_F(PostScriptLevel2EmbedderTest, Rectangles) {
 
   std::vector<uint8_t> emf_normal = RenderPageWithFlagsToEmf(page, 0);
   std::string ps_data = GetPostScriptFromEmf(emf_normal);
-  EXPECT_STREQ(kExpectedRectanglePostScript, ps_data.c_str());
+  EXPECT_EQ(kExpectedRectanglePostScript, ps_data);
 
   // FPDF_REVERSE_BYTE_ORDER is ignored since PostScript is not bitmap-based.
   std::vector<uint8_t> emf_reverse_byte_order =
@@ -1812,7 +1806,7 @@ TEST_F(PostScriptLevel3EmbedderTest, Rectangles) {
 
   std::vector<uint8_t> emf_normal = RenderPageWithFlagsToEmf(page, 0);
   std::string ps_data = GetPostScriptFromEmf(emf_normal);
-  EXPECT_STREQ(kExpectedRectanglePostScript, ps_data.c_str());
+  EXPECT_EQ(kExpectedRectanglePostScript, ps_data);
 
   // FPDF_REVERSE_BYTE_ORDER is ignored since PostScript is not bitmap-based.
   std::vector<uint8_t> emf_reverse_byte_order =
@@ -1890,7 +1884,7 @@ TEST_F(PostScriptLevel2EmbedderTest, Image) {
 
   std::vector<uint8_t> emf = RenderPageWithFlagsToEmf(page, 0);
   std::string ps_data = GetPostScriptFromEmf(emf);
-  EXPECT_STREQ(kExpected, ps_data.c_str());
+  EXPECT_EQ(kExpected, ps_data);
 
   UnloadPage(page);
 }
@@ -1934,7 +1928,7 @@ restore
 
   std::vector<uint8_t> emf = RenderPageWithFlagsToEmf(page, 0);
   std::string ps_data = GetPostScriptFromEmf(emf);
-  EXPECT_STREQ(kExpected, ps_data.c_str());
+  EXPECT_EQ(kExpected, ps_data);
 
   UnloadPage(page);
 }
@@ -2089,36 +2083,34 @@ TEST_F(FPDFViewEmbedderTest, Bug2087) {
   FPDF_DestroyLibrary();
 
   std::string agg_checksum;
+  const FPDF_LIBRARY_CONFIG kAggConfig = {
+      .version = 4,
+      .m_pUserFontPaths = nullptr,
+      .m_pIsolate = nullptr,
+      .m_v8EmbedderSlot = 0,
+      .m_pPlatform = nullptr,
+      .m_RendererType = FPDF_RENDERERTYPE_AGG,
+  };
+  FPDF_InitLibraryWithConfig(&kAggConfig);
   {
-    FPDF_LIBRARY_CONFIG config = {
-        .version = 4,
-        .m_pUserFontPaths = nullptr,
-        .m_pIsolate = nullptr,
-        .m_v8EmbedderSlot = 0,
-        .m_pPlatform = nullptr,
-        .m_RendererType = FPDF_RENDERERTYPE_AGG,
-    };
-    FPDF_InitLibraryWithConfig(&config);
-
     ASSERT_TRUE(OpenDocument("rectangles.pdf"));
     FPDF_PAGE page = LoadPage(0);
     ScopedFPDFBitmap bitmap = RenderPage(page);
     agg_checksum = HashBitmap(bitmap.get());
     UnloadPage(page);
     CloseDocument();
-    FPDF_DestroyLibrary();
   }
+  FPDF_DestroyLibrary();
 
   std::string skia_checksum;
+  const FPDF_LIBRARY_CONFIG kSkiaConfig = {
+      .version = 2,
+      .m_pUserFontPaths = nullptr,
+      .m_pIsolate = nullptr,
+      .m_v8EmbedderSlot = 0,
+  };
+  FPDF_InitLibraryWithConfig(&kSkiaConfig);
   {
-    FPDF_LIBRARY_CONFIG config = {
-        .version = 2,
-        .m_pUserFontPaths = nullptr,
-        .m_pIsolate = nullptr,
-        .m_v8EmbedderSlot = 0,
-    };
-    FPDF_InitLibraryWithConfig(&config);
-
     ASSERT_TRUE(OpenDocument("rectangles.pdf"));
     FPDF_PAGE page = LoadPage(0);
     ScopedFPDFBitmap bitmap = RenderPage(page);

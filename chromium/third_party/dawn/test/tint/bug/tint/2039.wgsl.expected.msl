@@ -1,0 +1,36 @@
+#include <metal_stdlib>
+
+using namespace metal;
+
+#define TINT_ISOLATE_UB(VOLATILE_NAME) \
+  volatile bool VOLATILE_NAME = true; \
+  if (VOLATILE_NAME)
+
+kernel void tint_symbol() {
+  uint out = 0u;
+  bool tint_continue = false;
+  TINT_ISOLATE_UB(tint_volatile_true) while(true) {
+    tint_continue = false;
+    switch(2) {
+      case 1: {
+        tint_continue = true;
+        break;
+      }
+      default: {
+        break;
+      }
+    }
+    if (tint_continue) {
+      {
+        if (true) { break; }
+      }
+      continue;
+    }
+    out = (out + 1u);
+    {
+      if (true) { break; }
+    }
+  }
+  return;
+}
+

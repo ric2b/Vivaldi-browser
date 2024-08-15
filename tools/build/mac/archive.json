@@ -10,10 +10,6 @@
     "file_globs": [ "Vivaldi*.dmg" ],
     "archive_type": "ARCHIVE_TYPE_FILES"
   },
-  "Vivaldi*.tar.xz": {
-    "file_globs": [ "Vivaldi*.tar.xz" ],
-    "archive_type": "ARCHIVE_TYPE_FILES"
-  },
   "dump_syms": {},
   "minidump_stackwalk": {},
   "Vivaldi.dSYM.tar.bz2": {},

@@ -51,12 +51,18 @@ class MEDIA_EXPORT HlsRenditionHost {
                           HlsDataSourceProvider::ReadCb cb) = 0;
 
   // Fetch a new playlist for live content at the requested URI.
-  virtual void UpdateRenditionManifestUri(std::string role,
-                                          GURL uri,
-                                          base::OnceClosure cb) = 0;
+  virtual void UpdateRenditionManifestUri(
+      std::string role,
+      GURL uri,
+      base::OnceCallback<void(bool)> cb) = 0;
 
   // Used to set network speed (bits per second) for the adaptation selector.
   virtual void UpdateNetworkSpeed(uint64_t bps) = 0;
+
+  // Notifies the rendition host that this rendition's ended state has changed.
+  // When all renditions are ended, the rendition host can notify the engine
+  // host as well.
+  virtual void SetEndOfStream(bool ended);
 };
 
 class MEDIA_EXPORT HlsRendition {
@@ -78,7 +84,7 @@ class MEDIA_EXPORT HlsRendition {
   virtual void StartWaitingForSeek() = 0;
 
   // Live renditions should return a nullopt for duration.
-  virtual absl::optional<base::TimeDelta> GetDuration() = 0;
+  virtual std::optional<base::TimeDelta> GetDuration() = 0;
 
   // Stop the rendition, including canceling pending seeks. After stopping,
   // `CheckState` and `Seek` should be no-ops.

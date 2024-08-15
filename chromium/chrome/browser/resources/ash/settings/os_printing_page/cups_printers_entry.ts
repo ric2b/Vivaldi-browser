@@ -6,13 +6,13 @@
  * @fileoverview 'settings-cups-printers-entry' is a component that holds a
  * printer.
  */
-import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/ash/common/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '../settings_shared.css.js';
 import './cups_printer_types.js';
 
-import {FocusRowMixin} from 'chrome://resources/cr_elements/focus_row_mixin.js';
-import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
+import {FocusRowMixin} from 'chrome://resources/ash/common/cr_elements/focus_row_mixin.js';
+import {I18nMixin} from 'chrome://resources/ash/common/cr_elements/i18n_mixin.js';
 import {assertNotReached} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -67,44 +67,6 @@ export class SettingsCupsPrintersEntryElement extends
 
       /** Number of printers in the respective list this row is part of. */
       numPrinters: Number,
-
-      /**
-       * True when the "printer-settings-printer-status" feature flag is
-       * enabled.
-       */
-      isPrinterSettingsPrinterStatusEnabled_: {
-        type: Boolean,
-        value: () => {
-          return loadTimeData.getBoolean(
-              'isPrinterSettingsPrinterStatusEnabled');
-        },
-        readOnly: true,
-      },
-
-      /**
-       * True when the "printer-settings-revamp" feature flag is enabled.
-       */
-      isPrinterSettingsRevampEnabled_: {
-        type: Boolean,
-        value: () => {
-          return loadTimeData.getBoolean('isPrinterSettingsRevampEnabled');
-        },
-        readOnly: true,
-        reflectToAttribute: true,
-      },
-
-      /**
-       * True when the "print-preview-discovered-printers" feature flag is
-       * enabled.
-       */
-      isPrintPreviewDiscoveredPrintersEnabled_: {
-        type: Boolean,
-        value: () => {
-          return loadTimeData.getBoolean(
-              'isPrintPreviewDiscoveredPrintersEnabled');
-        },
-        readOnly: true,
-      },
     };
   }
 
@@ -114,9 +76,6 @@ export class SettingsCupsPrintersEntryElement extends
   printerStatusReasonCache: Map<string, PrinterStatusReason>;
   numPrinters: number;
   private hasHighSeverityError_: boolean;
-  private isPrinterSettingsRevampEnabled_: boolean;
-  private isPrinterSettingsPrinterStatusEnabled_: boolean;
-  private isPrintPreviewDiscoveredPrintersEnabled_: boolean;
 
   /**
    * Fires a custom event when the menu button is clicked. Sends the details of
@@ -204,31 +163,6 @@ export class SettingsCupsPrintersEntryElement extends
         'setupPrinterAria', this.printerEntry.printerInfo.printerName);
   }
 
-  // The standard printer icon shows for printer entries classified as nearby
-  // printers. An exception is enterprise printers which display the managed
-  // icon.
-  private showNearbyPrinterIcon_(): boolean {
-    return !this.isSavedPrinter_() && !this.isEnterprisePrinter_() &&
-        this.isPrinterSettingsRevampEnabled_;
-  }
-
-  // Printer status icons are only shown for saved printers.
-  private showPrinterStatusIcon_(): boolean {
-    return this.isSavedPrinter_() &&
-        this.isPrinterSettingsPrinterStatusEnabled_;
-  }
-
-  private showPrinterIcon_(): boolean {
-    return this.showNearbyPrinterIcon_() || this.showPrinterStatusIcon_();
-  }
-
-  // True if a printer or managed icon needs to be shown.
-  // TODO(b/278621575): Remove this function once Printer Settings Revamp flag
-  // is enabled because every entry will show either a printer or managed icon.
-  private showAnyIcon_(): boolean {
-    return this.showPrinterIcon_() || this.printerEntry.printerInfo.isManaged;
-  }
-
   private getPrinterIcon_(): string {
     // Only saved printers need to display an icon with printer status.
     if (!this.isSavedPrinter_()) {
@@ -294,15 +228,6 @@ export class SettingsCupsPrintersEntryElement extends
         'printerEntryAriaLabel', this.printerEntry.printerInfo.printerName,
         this.getStatusReasonString_().toString(), this.focusRowIndex + 1,
         this.numPrinters);
-  }
-
-  // When the "print-preview-discovered-printers" flag is enabled, discovered
-  // printers should be treated like automatic printers. So show "Save" button
-  // instead of "Setup".
-  private getSetupButtonLabel_(): string {
-    return this.i18n(
-        this.isPrintPreviewDiscoveredPrintersEnabled_ ? 'savePrinter' :
-                                                        'setupPrinter');
   }
 }
 

@@ -11,6 +11,7 @@
 
 #include <openssl/base.h>
 #include <openssl/sha.h>
+
 #include "cert_issuer_source.h"
 #include "certificate_policies.h"
 #include "common_cert_errors.h"
@@ -18,7 +19,6 @@
 #include "parse_name.h"  // For CertDebugString.
 #include "parser.h"
 #include "string_util.h"
-#include "tag.h"
 #include "trust_store.h"
 #include "verify_certificate_chain.h"
 #include "verify_name_match.h"
@@ -32,8 +32,8 @@ using CertIssuerSources = std::vector<CertIssuerSource *>;
 // Returns a hex-encoded sha256 of the DER-encoding of |cert|.
 std::string FingerPrintParsedCertificate(const bssl::ParsedCertificate *cert) {
   uint8_t digest[SHA256_DIGEST_LENGTH];
-  SHA256(cert->der_cert().UnsafeData(), cert->der_cert().Length(), digest);
-  return bssl::string_util::HexEncode(digest, sizeof(digest));
+  SHA256(cert->der_cert().data(), cert->der_cert().size(), digest);
+  return bssl::string_util::HexEncode(digest);
 }
 
 // TODO(mattm): decide how much debug logging to keep.
@@ -295,11 +295,11 @@ void CertIssuersIter::GetNextIssuer(IssuerEntry *out) {
 
 void CertIssuersIter::AddIssuers(ParsedCertificateList new_issuers) {
   for (std::shared_ptr<const ParsedCertificate> &issuer : new_issuers) {
-    if (present_issuers_.find(issuer->der_cert().AsStringView()) !=
+    if (present_issuers_.find(BytesAsStringView(issuer->der_cert())) !=
         present_issuers_.end()) {
       continue;
     }
-    present_issuers_.insert(issuer->der_cert().AsStringView());
+    present_issuers_.insert(BytesAsStringView(issuer->der_cert()));
 
     // Look up the trust for this issuer.
     IssuerEntry entry;
@@ -423,9 +423,9 @@ class CertIssuerIterPath {
     // Note that subject_alt_names_extension().value will be empty if the cert
     // had no SubjectAltName extension, so there is no need for a condition on
     // has_subject_alt_names().
-    return Key(cert->normalized_subject().AsStringView(),
-               cert->subject_alt_names_extension().value.AsStringView(),
-               cert->tbs().spki_tlv.AsStringView());
+    return Key(BytesAsStringView(cert->normalized_subject()),
+               BytesAsStringView(cert->subject_alt_names_extension().value),
+               BytesAsStringView(cert->tbs().spki_tlv));
   }
 
   std::vector<std::unique_ptr<CertIssuersIter>> cur_path_;
@@ -621,7 +621,8 @@ bool CertPathIter::GetNextPath(ParsedCertificateList *out_certs,
         // trusted root.
         if (!cur_path_.Empty()) {
           if (delegate->IsDebugLogEnabled()) {
-            delegate->DebugLog("Issuer is a trust leaf, considering as UNSPECIFIED");
+            delegate->DebugLog(
+                "Issuer is a trust leaf, considering as UNSPECIFIED");
           }
           next_issuer_.trust = CertificateTrust::ForUnspecified();
         }
@@ -692,7 +693,8 @@ bool CertPathIter::GetNextPath(ParsedCertificateList *out_certs,
             std::move(next_issuer_.cert), &cert_issuer_sources_, trust_store_));
         next_issuer_ = IssuerEntry();
         if (delegate->IsDebugLogEnabled()) {
-          delegate->DebugLog("CertPathIter cur_path_ =\n" + cur_path_.PathDebugString());
+          delegate->DebugLog("CertPathIter cur_path_ =\n" +
+                             cur_path_.PathDebugString());
         }
         // Continue descending the tree.
         continue;

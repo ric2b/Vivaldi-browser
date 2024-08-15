@@ -149,9 +149,9 @@ class CheckboxControl : public Checkbox {
     AddChildView(std::move(label));
   }
 
-  void Layout() override {
+  void Layout(PassKey) override {
     // Skip LabelButton to use LayoutManager.
-    View::Layout();
+    LayoutSuperclass<View>(this);
   }
 
   gfx::Size CalculatePreferredSize() const override {
@@ -168,9 +168,11 @@ class CheckboxControl : public Checkbox {
     Checkbox::OnThemeChanged();
     // This offsets the image to align with the first line of text. See
     // LabelButton::Layout().
-    image()->SetBorder(CreateEmptyBorder(gfx::Insets::TLBR(
-        (label_line_height_ - image()->GetPreferredSize().height()) / 2, 0, 0,
-        0)));
+    image_container_view()->SetBorder(CreateEmptyBorder(gfx::Insets::TLBR(
+        (label_line_height_ -
+         image_container_view()->GetPreferredSize().height()) /
+            2,
+        0, 0, 0)));
   }
 
   const int label_line_height_;
@@ -183,13 +185,13 @@ struct DialogModelHostField {
   raw_ptr<ui::DialogModelField> dialog_model_field = nullptr;
 
   // View representing the entire field.
-  raw_ptr<View> field_view = nullptr;
+  raw_ptr<View, DanglingUntriaged> field_view = nullptr;
 
   // Child view to |field_view|, if any, that's used for focus. For instance,
   // a textfield row would be a container that contains both a
   // views::Textfield and a descriptive label. In this case |focusable_view|
   // would refer to the views::Textfield which is also what would gain focus.
-  raw_ptr<View> focusable_view = nullptr;
+  raw_ptr<View, DanglingUntriaged> focusable_view = nullptr;
 };
 
 View* GetTargetView(const DialogModelHostField& field_view_info) {
@@ -210,7 +212,7 @@ class LayoutConsensusGroup {
     children_.insert(view);
     // Because this may change the max preferred/min size, invalidate all child
     // layouts.
-    for (auto* child : children_) {
+    for (View* child : children_) {
       child->InvalidateLayout();
     }
   }
@@ -220,7 +222,7 @@ class LayoutConsensusGroup {
   // Get the union of all preferred sizes within the group.
   gfx::Size GetMaxPreferredSize() const {
     gfx::Size size;
-    for (auto* child : children_) {
+    for (View* child : children_) {
       DCHECK_EQ(1u, child->children().size());
       size.SetToMax(child->children().front()->GetPreferredSize());
     }
@@ -230,7 +232,7 @@ class LayoutConsensusGroup {
   // Get the union of all minimum sizes within the group.
   gfx::Size GetMaxMinimumSize() const {
     gfx::Size size;
-    for (auto* child : children_) {
+    for (View* child : children_) {
       DCHECK_EQ(1u, child->children().size());
       size.SetToMax(child->children().front()->GetMinimumSize());
     }
@@ -238,7 +240,7 @@ class LayoutConsensusGroup {
   }
 
  private:
-  base::flat_set<View*> children_;
+  base::flat_set<raw_ptr<View, CtnExperimental>> children_;
 };
 
 class LayoutConsensusView : public View {
@@ -277,7 +279,7 @@ class LayoutConsensusView : public View {
   const raw_ptr<LayoutConsensusGroup> group_;
 };
 
-BEGIN_METADATA(LayoutConsensusView, View)
+BEGIN_METADATA(LayoutConsensusView)
 END_METADATA
 
 }  // namespace
@@ -705,7 +707,7 @@ class BubbleDialogModelHostContentsView final : public DialogModelSectionHost {
   LayoutConsensusGroup textfield_second_column_group_;
 };
 
-BEGIN_METADATA(BubbleDialogModelHostContentsView, DialogModelSectionHost)
+BEGIN_METADATA(BubbleDialogModelHostContentsView)
 END_METADATA
 
 std::unique_ptr<DialogModelSectionHost> DialogModelSectionHost::Create(
@@ -715,7 +717,7 @@ std::unique_ptr<DialogModelSectionHost> DialogModelSectionHost::Create(
       section, initially_focused_field_id);
 }
 
-BEGIN_METADATA(DialogModelSectionHost, BoxLayoutView)
+BEGIN_METADATA(DialogModelSectionHost)
 END_METADATA
 
 BubbleDialogModelHost::ThemeChangedObserver::ThemeChangedObserver(
@@ -965,7 +967,7 @@ void BubbleDialogModelHost::OnWidgetInitialized() {
         base::BindRepeating(&views::BubbleDialogDelegate::GetBackgroundColor,
                             base::Unretained(this)));
     // The banner is supposed to be purely decorative.
-    banner_view->GetViewAccessibility().OverrideIsIgnored(true);
+    banner_view->GetViewAccessibility().SetIsIgnored(true);
     GetBubbleFrameView()->SetHeaderView(std::move(banner_view));
     SizeToContents();
   }
@@ -1066,15 +1068,6 @@ void BubbleDialogModelHost::UpdateSpacingAndMargins() {
   dialog_side_insets.set_top(0);
   dialog_side_insets.set_bottom(0);
 
-  // If there is a Main Image, the left dialog inset value is no longer the
-  // correct metric. Use the related control metric instead.
-  // TODO(kylixrd): Investigate whether this should be a unique distance metric
-  // or if the related control metric is valid.
-  if (!GetMainImage().IsEmpty()) {
-    dialog_side_insets.set_left(layout_provider->GetDistanceMetric(
-        DISTANCE_RELATED_CONTROL_HORIZONTAL));
-  }
-
   ui::DialogModelField* first_field = nullptr;
   ui::DialogModelField* last_field = nullptr;
 
@@ -1144,6 +1137,7 @@ void BubbleDialogModelHost::UpdateDialogButtons() {
   if (ui::DialogModel::Button* const ok_button =
           model_->ok_button(DialogModelHost::GetPassKey())) {
     SetButtonLabel(ui::DIALOG_BUTTON_OK, ok_button->label());
+    SetButtonEnabled(ui::DIALOG_BUTTON_OK, ok_button->is_enabled());
     MdTextButton* const ok_button_view = GetOkButton();
     ok_button_view->SetVisible(ok_button->is_visible());
     ok_button_view->SetProperty(kElementIdentifierKey, ok_button->id());
@@ -1151,6 +1145,7 @@ void BubbleDialogModelHost::UpdateDialogButtons() {
   if (ui::DialogModel::Button* const cancel_button =
           model_->cancel_button(DialogModelHost::GetPassKey())) {
     SetButtonLabel(ui::DIALOG_BUTTON_CANCEL, cancel_button->label());
+    SetButtonEnabled(ui::DIALOG_BUTTON_CANCEL, cancel_button->is_enabled());
     MdTextButton* const cancel_button_view = GetCancelButton();
     cancel_button_view->SetVisible(cancel_button->is_visible());
     cancel_button_view->SetProperty(kElementIdentifierKey, cancel_button->id());
@@ -1160,6 +1155,7 @@ void BubbleDialogModelHost::UpdateDialogButtons() {
     auto* const extra_button_view = static_cast<MdTextButton*>(GetExtraView());
     extra_button_view->SetText(extra_button->label());
     extra_button_view->SetVisible(extra_button->is_visible());
+    extra_button_view->SetEnabled(extra_button->is_enabled());
     extra_button_view->SetProperty(kElementIdentifierKey, extra_button->id());
   }
 }

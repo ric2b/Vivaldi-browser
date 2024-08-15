@@ -512,7 +512,7 @@ static bool SetSelectionToDragCaret(LocalFrame* frame,
                                     const SelectionInDOMTree& drag_caret,
                                     Range*& range,
                                     const PhysicalOffset& point) {
-  frame->Selection().SetSelectionAndEndTyping(drag_caret);
+  frame->Selection().SetSelection(drag_caret, SetSelectionOptions());
   // TODO(editing-dev): The use of
   // UpdateStyleAndLayout
   // needs to be audited.  See http://crbug.com/590369 for more details.
@@ -527,8 +527,9 @@ static bool SetSelectionToDragCaret(LocalFrame* frame,
   if (!position.IsConnected())
     return false;
 
-  frame->Selection().SetSelectionAndEndTyping(
-      SelectionInDOMTree::Builder().Collapse(position).Build());
+  frame->Selection().SetSelection(
+      SelectionInDOMTree::Builder().Collapse(position).Build(),
+      SetSelectionOptions());
   // TODO(editing-dev): The use of
   // UpdateStyleAndLayout
   // needs to be audited.  See http://crbug.com/590369 for more details.
@@ -651,7 +652,7 @@ bool DragController::ConcludeEditDrag(DragData* drag_data) {
       MakeGarbageCollected<DragAndDropCommand>(*inner_frame->GetDocument()));
 
   if (DragIsMove(inner_frame->Selection(), drag_data) ||
-      IsRichlyEditablePosition(drag_caret.Base())) {
+      IsRichlyEditablePosition(drag_caret.Anchor())) {
     DragSourceType drag_source_type = DragSourceType::kHTMLSource;
     DocumentFragment* fragment = DocumentFragmentFromDragData(
         drag_data, inner_frame, range, true, drag_source_type);
@@ -678,13 +679,15 @@ bool DragController::ConcludeEditDrag(DragData* drag_data) {
                   *inner_frame,
                   inner_frame->Selection()
                       .ComputeVisibleSelectionInDOMTreeDeprecated()),
-              delete_mode, drag_caret.Base()))
+              delete_mode, drag_caret.Anchor())) {
         return false;
+      }
 
-      inner_frame->Selection().SetSelectionAndEndTyping(
+      inner_frame->Selection().SetSelection(
           SelectionInDOMTree::Builder()
               .SetBaseAndExtent(EphemeralRange(range))
-              .Build());
+              .Build(),
+          SetSelectionOptions());
       if (inner_frame->Selection().IsAvailable()) {
         DCHECK(document_under_mouse_);
         if (!inner_frame->GetEditor().ReplaceSelectionAfterDraggingWithEvents(
@@ -942,10 +945,11 @@ static void PrepareDataTransferForImageDrag(LocalFrame* source,
     // TODO(editing-dev): We should use |EphemeralRange| instead of |Range|.
     Range* range = source->GetDocument()->createRange();
     range->selectNode(node, ASSERT_NO_EXCEPTION);
-    source->Selection().SetSelectionAndEndTyping(
+    source->Selection().SetSelection(
         SelectionInDOMTree::Builder()
             .SetBaseAndExtent(EphemeralRange(range))
-            .Build());
+            .Build(),
+        SetSelectionOptions());
   }
   data_transfer->DeclareAndWriteDragImage(node, link_url, image_url, label);
 }
@@ -1132,13 +1136,8 @@ gfx::Rect DragRectForImage(const DragImage* drag_image,
 
 std::unique_ptr<DragImage> DragImageForLink(const KURL& link_url,
                                             const String& link_text,
-                                            float device_scale_factor,
-                                            const Document* document) {
-  FontDescription font_description;
-  LayoutTheme::GetTheme().SystemFont(blink::CSSValueID::kNone, font_description,
-                                     document);
-  return DragImage::Create(link_url, link_text, font_description,
-                           device_scale_factor);
+                                            float device_scale_factor) {
+  return DragImage::Create(link_url, link_text, device_scale_factor);
 }
 
 gfx::Rect DragRectForLink(const DragImage* link_image,
@@ -1185,9 +1184,9 @@ std::unique_ptr<DragImage> DragController::DragImageForSelection(
   PaintFlags paint_flags =
       PaintFlag::kSelectionDragImageOnly | PaintFlag::kOmitCompositingInfo;
 
-  auto* builder = MakeGarbageCollected<PaintRecordBuilder>();
+  PaintRecordBuilder builder;
   frame.View()->PaintOutsideOfLifecycle(
-      builder->Context(), paint_flags,
+      builder.Context(), paint_flags,
       CullRect(gfx::ToEnclosingRect(painting_rect)));
 
   auto property_tree_state = frame.View()
@@ -1197,7 +1196,7 @@ std::unique_ptr<DragImage> DragController::DragImageForSelection(
                                  .Unalias();
   return DataTransfer::CreateDragImageForFrame(
       frame, opacity, painting_rect.size(), painting_rect.OffsetFromOrigin(),
-      *builder, property_tree_state);
+      builder, property_tree_state);
 }
 
 namespace {
@@ -1215,9 +1214,10 @@ void SelectEnclosingAnchorIfContentEditable(LocalFrame* frame) {
     if (Node* anchor = EnclosingAnchorElement(
             frame->Selection()
                 .ComputeVisibleSelectionInDOMTreeDeprecated()
-                .Base())) {
-      frame->Selection().SetSelectionAndEndTyping(
-          SelectionInDOMTree::Builder().SelectAllChildren(*anchor).Build());
+                .Anchor())) {
+      frame->Selection().SetSelection(
+          SelectionInDOMTree::Builder().SelectAllChildren(*anchor).Build(),
+          SetSelectionOptions());
     }
   }
 }
@@ -1285,7 +1285,7 @@ std::unique_ptr<DragImage> DetermineDragImageAndRect(
     if (!drag_image) {
       DCHECK(frame->GetPage());
       drag_image = DragImageForLink(link_url, hit_test_result.TextContent(),
-                                    device_scale_factor, frame->GetDocument());
+                                    device_scale_factor);
       drag_obj_rect = DragRectForLink(drag_image.get(), mouse_dragged_point,
                                       device_scale_factor,
                                       frame->GetPage()->PageScaleFactor());

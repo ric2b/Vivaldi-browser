@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -25,7 +26,6 @@
 #include "net/websockets/websocket_event_interface.h"
 #include "net/websockets/websocket_handshake_stream_create_helper.h"
 #include "net/websockets/websocket_stream.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace url {
 class Origin;
@@ -204,13 +204,15 @@ class DummyConnectDelegate : public WebSocketStream::ConnectDelegate {
  public:
   DummyConnectDelegate() = default;
   ~DummyConnectDelegate() override = default;
+  void OnURLRequestConnected(URLRequest* request,
+                             const TransportInfo& info) override;
   void OnCreateRequest(URLRequest* url_request) override {}
   void OnSuccess(
       std::unique_ptr<WebSocketStream> stream,
       std::unique_ptr<WebSocketHandshakeResponseInfo> response) override {}
   void OnFailure(const std::string& message,
                  int net_error,
-                 absl::optional<int> response_code) override {}
+                 std::optional<int> response_code) override {}
   void OnStartOpeningHandshake(
       std::unique_ptr<WebSocketHandshakeRequestInfo> request) override {}
   void OnSSLCertificateError(
@@ -223,7 +225,7 @@ class DummyConnectDelegate : public WebSocketStream::ConnectDelegate {
                      scoped_refptr<HttpResponseHeaders> response_headers,
                      const IPEndPoint& remote_endpoint,
                      base::OnceCallback<void(const AuthCredentials*)> callback,
-                     absl::optional<AuthCredentials>* credentials) override;
+                     std::optional<AuthCredentials>* credentials) override;
 };
 
 // WebSocketStreamRequestAPI implementation that sets the value of
@@ -240,7 +242,7 @@ class TestWebSocketStreamRequestAPI : public WebSocketStreamRequestAPI {
       WebSocketHttp3HandshakeStream* handshake_stream) override;
   void OnFailure(const std::string& message,
                  int net_error,
-                 absl::optional<int> response_code) override {}
+                 std::optional<int> response_code) override {}
 };
 
 // A sub-class of WebSocketHandshakeStreamCreateHelper which sets a

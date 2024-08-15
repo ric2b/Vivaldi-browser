@@ -68,6 +68,8 @@
 #import "ios/ui/notes/note_path_cache.h"
 #import "ios/ui/notes/note_ui_constants.h"
 #import "ios/ui/notes/note_utils_ios.h"
+#import "ios/ui/notes/note_sorting_mode.h"
+#import "ios/ui/notes/vivaldi_notes_pref.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/navigation/referrer.h"
 #import "ui/base/l10n/l10n_util_mac.h"
@@ -131,6 +133,14 @@ const int kRowsHiddenByNavigationBar = 3;
   // The root node, whose child nodes are shown in the note table view.
   const vivaldi::NoteNode* _rootNode;
 }
+// Sort button
+@property(nonatomic, weak) UIButton* sortButton;
+
+// Array to hold the sort button context menu options
+@property (strong, nonatomic) NSMutableArray *notesSortActions;
+
+// Array to hold ascendeing decending buttons for sort context menu options
+@property (strong, nonatomic) NSMutableArray *sortOrderActions;
 
 // Shared state between NoteHome classes.  Used as a temporary refactoring
 // aid.
@@ -210,10 +220,26 @@ const int kRowsHiddenByNavigationBar = 3;
 // Custom tableHeaderView to host search bar.
 @property(nonatomic, strong) VivaldiSearchBarView* vivaldiSearchBarView;
 
+// Sorting actions
+@property(nonatomic, strong) UIAction* manualSortAction;
+@property(nonatomic, strong) UIAction* titleSortAction;
+@property(nonatomic, strong) UIAction* dateCreatedSortAction;
+@property(nonatomic, strong) UIAction* dateEditedSortAction;
+
+// The current sort order Action
+@property(nonatomic, strong) UIAction* ascendingSortAction;
+@property(nonatomic, strong) UIAction* descendingSortAction;
+
 @end
 
 @implementation NoteHomeViewController
-
+// synthesized properties
+@synthesize manualSortAction = _manualSortAction;
+@synthesize titleSortAction = _titleSortAction;
+@synthesize dateCreatedSortAction = _dateCreatedSortAction;
+@synthesize dateEditedSortAction = _dateEditedSortAction;
+@synthesize ascendingSortAction = _ascendingSortAction;
+@synthesize descendingSortAction = _descendingSortAction;
 #pragma mark - Initializer
 
 - (instancetype)initWithBrowser:(Browser*)browser {
@@ -225,6 +251,7 @@ const int kRowsHiddenByNavigationBar = 3;
     _browser = browser;
     _browserState =
         _browser->GetBrowserState()->GetOriginalChromeBrowserState();
+    [VivaldiNotesPrefs setPrefService:_browserState->GetPrefs()];
     _webStateList = _browser->GetWebStateList();
     _notes = vivaldi::NotesModelFactory::GetForBrowserState(_browserState);
     _bridge.reset(new notes::NoteModelBridge(self, _notes));
@@ -1397,7 +1424,6 @@ const int kRowsHiddenByNavigationBar = 3;
   if ([self isAnyControllerPresenting]) {
     return;
   }
-
   // Toggle edit mode.
   [self setTableViewEditing:!self.sharedState.currentlyInEditMode];
 }
@@ -1453,25 +1479,23 @@ const int kRowsHiddenByNavigationBar = 3;
 }
 
 - (void)setNotesContextBarButtonsDefaultState {
-  // Set New Folder button
-  NSString* titleString = GetNSString(IDS_IOS_NOTE_CONTEXT_BAR_NEW_FOLDER);
-  UIBarButtonItem* newFolderButton =
-      [[UIBarButtonItem alloc] initWithTitle:titleString
-                                       style:UIBarButtonItemStylePlain
-                                      target:self
-                                      action:@selector(leadingButtonClicked)];
-  newFolderButton.accessibilityIdentifier =
-      kNoteHomeLeadingButtonIdentifier;
-  newFolderButton.enabled = [self allowsNewFolder];
+  // Set Context Menu button for sorting and new folder
+  UIImage* dotsIcon = [UIImage imageNamed:@"context_menu_icon"];
+  UIBarButtonItem* contextMenu =
+  [[UIBarButtonItem alloc]
+   initWithImage:dotsIcon
+           style:UIBarButtonItemStyleDone
+          target:self
+          action:nil];
+  contextMenu.menu = [self contextMenuForNotesSortButton];
 
-  // Spacer button.
   UIBarButtonItem* spaceButton = [[UIBarButtonItem alloc]
       initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
                            target:nil
                            action:nil];
 
   // Set Edit button.
-  titleString = GetNSString(IDS_IOS_NOTE_CONTEXT_BAR_EDIT);
+  NSString* titleString = GetNSString(IDS_IOS_NOTE_CONTEXT_BAR_EDIT);
   UIBarButtonItem* editButton =
       [[UIBarButtonItem alloc] initWithTitle:titleString
                                        style:UIBarButtonItemStylePlain
@@ -1492,7 +1516,7 @@ const int kRowsHiddenByNavigationBar = 3;
         style:UIBarButtonItemStyleDone
         target:self
         action:@selector(handleAddBarButtonTap)];
-      [self setToolbarItems:@[ newFolderButton, spaceButton,
+      [self setToolbarItems:@[ contextMenu, spaceButton,
                              plusButton, spaceButton, editButton ]
                              animated:NO];
   } else {
@@ -1510,6 +1534,248 @@ const int kRowsHiddenByNavigationBar = 3;
     [self setToolbarItems:@[ spaceButton, spaceButton,
                            spaceButton, spaceButton, emptyTrashButton ]
                            animated:NO];
+  }
+}
+
+/// Returns the context menu actions for notes sort button action
+- (UIMenu*)contextMenuForNotesSortButton {
+  //New Folder action Button
+  NSString* titleString = GetNSString(IDS_IOS_NOTE_CONTEXT_BAR_NEW_FOLDER);
+  UIAction* newFolderAction =
+      [UIAction actionWithTitle:titleString
+                          image:nil
+                     identifier:nil
+                        handler:^(__kindof UIAction*_Nonnull
+                                  action) {
+    [self leadingButtonClicked];
+  }];
+
+  // Sort by manual action button
+  titleString = GetNSString(IDS_IOS_NOTE_SORTING_MANUAL);
+  UIAction* manualSortAction =
+      [UIAction actionWithTitle:titleString
+                          image:nil
+                     identifier:nil
+                        handler:^(__kindof UIAction*_Nonnull
+                                 action) {
+    [self sortNotesWithMode:NotesSortingModeManual];
+  }];
+  self.manualSortAction = manualSortAction;
+
+  // Sort by title action button
+  titleString = GetNSString(IDS_IOS_NOTE_SORTING_BY_TITLE);
+  UIAction* titleSortAction =
+      [UIAction actionWithTitle:titleString
+                          image:nil
+                     identifier:nil
+                        handler:^(__kindof UIAction*_Nonnull
+                                  action) {
+    [self sortNotesWithMode:NotesSortingModeTitle];
+  }];
+  self.titleSortAction = titleSortAction;
+
+  // Sort by date created action button
+  titleString = GetNSString(IDS_IOS_NOTE_SORTING_DATE_CREATED);
+  UIAction* dateCreatedSortAction =
+      [UIAction actionWithTitle:titleString
+                          image:nil
+                     identifier:nil
+                        handler:^(__kindof UIAction*_Nonnull
+                                  action) {
+    [self sortNotesWithMode:NotesSortingModeDateCreated];
+  }];
+  self.dateCreatedSortAction = dateCreatedSortAction;
+
+  // Sort by date edited action button
+  titleString = GetNSString(IDS_IOS_NOTE_SORTING_DATE_EDITED);
+  UIAction* dateEditedSortAction =
+      [UIAction actionWithTitle:titleString
+                          image:nil
+                     identifier:nil
+                        handler:^(__kindof UIAction*_Nonnull
+                                 action) {
+    [self sortNotesWithMode:NotesSortingModeDateEdited];
+  }];
+  self.dateEditedSortAction = dateEditedSortAction;
+
+  // Ascending sort action button
+  titleString = GetNSString(IDS_IOS_NOTE_ASCENDING_SORT_ORDER);
+  UIAction* ascendingSortAction =
+      [UIAction actionWithTitle:titleString
+                          image:nil
+                      identifier:nil
+                         handler:^(__kindof UIAction*_Nonnull
+                                  action) {
+        [self refreshSortOrder:NotesSortingOrderAscending];
+      }];
+  self.ascendingSortAction = ascendingSortAction;
+
+  // Descending sort action button
+  titleString = GetNSString(IDS_IOS_NOTE_DESCENDING_SORT_ORDER);
+  UIAction* descendingSortAction =
+      [UIAction actionWithTitle:titleString
+                          image:nil
+                      identifier:nil
+                        handler:^(__kindof UIAction*_Nonnull
+                                  action) {
+        [self refreshSortOrder:NotesSortingOrderDescending];
+      }];
+  self.descendingSortAction = descendingSortAction;
+
+  if (!self.isSortedByManual) {
+    _sortOrderActions = [[NSMutableArray alloc] initWithArray:@[
+      ascendingSortAction, descendingSortAction]
+    ];
+  } else {
+    _sortOrderActions = nil;
+  }
+
+  // Refresh actions buttons states
+  [self updateSortOrderStateOnContextMenuOption];
+
+  UIMenu *sortMenu =
+      [UIMenu menuWithTitle:@""
+                      image:nil
+                  identifier:nil
+                    options:UIMenuOptionsDisplayInline
+                   children:_sortOrderActions];
+
+  _notesSortActions = [[NSMutableArray alloc] initWithArray:@[
+    manualSortAction, titleSortAction,
+    dateCreatedSortAction, dateEditedSortAction]
+  ];
+
+  // Refresh actions buttons states
+  [self setSortingStateOnContextMenuOption];
+
+  titleString = GetNSString(IDS_IOS_NOTE_SORTING_SORT_ORDER);
+  UIMenu *sortOrderMenu =
+    [UIMenu menuWithTitle:@""
+                    image:nil
+               identifier:nil
+                  options:UIMenuOptionsDisplayInline
+                 children:_notesSortActions];
+
+  UIMenuOptions options = UIMenuOptionsDisplayInline;
+
+  // iOS allowed multiple selection from iOS17 onwords
+  // see https://developer.apple.com/documentation/uikit/uimenu/options/4195440-displayaspalette
+  // for fallback users it will show as inline (in single list format not the collapsable list format)
+  if (@available(iOS 17.0, *)) {
+    options = UIMenuOptionsDisplayAsPalette;
+  }
+
+  UIMenu* subMenu =
+    [UIMenu menuWithTitle:titleString
+                    image:[UIImage imageNamed:@"sort_order_icon"]
+               identifier:nil
+                  options:options
+                 children:@[sortOrderMenu, sortMenu]];
+  UIMenu* menu = [UIMenu menuWithTitle:@""
+                              children:@[subMenu, newFolderAction]];
+  return menu;
+}
+
+-(void)refreshSortOrder: (NotesSortingOrder) order {
+  if (self.currentSortingOrder == order)
+    return;
+  [self setSortingOrder:order];
+  [self refreshSortingViewWith:self.currentSortingMode];
+}
+
+/// Sets current sorting mode selected by the user on the pref and calls the mediator to handle the sorting
+/// and refreshes the UI with sorted items.
+- (void)sortNotesWithMode:(NotesSortingMode)mode {
+  if (self.currentSortingMode == mode)
+    return;
+  // Reset the sorting order to ascending
+  [self setSortingOrder:NotesSortingOrderAscending];
+  [self refreshSortingViewWith: mode];
+}
+
+-(void)refreshSortingViewWith: (NotesSortingMode)mode {
+  // Set new mode to the pref.
+  [self setCurrentSortingMode:mode];
+
+  // Refresh context bar
+  [self handleRefreshContextBar];
+   // Restore current list.
+  [self.mediator computeNoteTableViewData];
+  [self.sharedState.tableView reloadData];
+}
+
+/// Returns current sorting mode
+- (NotesSortingMode)currentSortingMode {
+  return [VivaldiNotesPrefs getNotesSortingMode];
+}
+
+/// Sets the user selected sorting mode on the prefs
+- (void)setCurrentSortingMode:(NotesSortingMode)mode {
+  // need to initalize the prefs first
+  [VivaldiNotesPrefs setNotesSortingMode:mode];
+}
+
+/// Returns YES if the current sorting mode is manual
+- (BOOL)isSortedByManual {
+  return self.currentSortingMode == NotesSortingModeManual;
+}
+
+/// Gets the sorting mode from prefs and update the selection state on the context menu.
+- (void)setSortingStateOnContextMenuOption {
+  switch (self.currentSortingMode) {
+    case NotesSortingModeManual:
+      [self updateSortActionButtonState:self.manualSortAction];
+      break;
+    case NotesSortingModeTitle:
+      [self updateSortActionButtonState:self.titleSortAction];
+      break;
+    case NotesSortingModeDateCreated:
+      [self updateSortActionButtonState:self.dateCreatedSortAction];
+      break;
+    case NotesSortingModeDateEdited:
+      [self updateSortActionButtonState:self.dateEditedSortAction];
+      break;
+  }
+}
+
+/// Updates the state on the context menu actions by unchecking the all apart from the selected one.
+- (void)updateSortActionButtonState:(UIAction*)settable {
+  for (UIAction* action in self.notesSortActions) {
+    if (action == settable) {
+      [action setState:UIMenuElementStateOn];
+    } else {
+      [action setState:UIMenuElementStateOff];
+    }
+  }
+}
+
+// Updates the state on the context menu actions for sorting order
+// by unchecking the all apart from the selected one.
+- (void) updateSortOrderStateOnContextMenuOption {
+  if (self.currentSortingOrder == NotesSortingOrderAscending) {
+    [self updateSortOrderActionButtonState:self.ascendingSortAction];
+  } else {
+    [self updateSortOrderActionButtonState:self.descendingSortAction];
+  }
+}
+
+/// set sorting order on the prefs
+- (void) setSortingOrder: (NotesSortingOrder) order {
+  [VivaldiNotesPrefs setNotesSortingOrder:order];
+}
+
+/// Returns current sorting order
+- (NotesSortingOrder)currentSortingOrder {
+  return [VivaldiNotesPrefs getNotesSortingOrder];
+}
+
+- (void)updateSortOrderActionButtonState:(UIAction*)settable {
+  for (UIAction* action in self.sortOrderActions) {
+    if (action == settable) {
+      [action setState:UIMenuElementStateOn];
+    } else {
+      [action setState:UIMenuElementStateOff];
+    }
   }
 }
 
@@ -1578,7 +1844,7 @@ const int kRowsHiddenByNavigationBar = 3;
                   if (!strongSelf)
                     return;
 
-                  absl::optional<std::set<const NoteNode*>> nodesFromIds =
+                  std::optional<std::set<const NoteNode*>> nodesFromIds =
                       note_utils_ios::FindNodesByIds(strongSelf.notes,
                                                          nodeIds);
                   if (nodesFromIds)
@@ -1626,7 +1892,7 @@ const int kRowsHiddenByNavigationBar = 3;
                     if (!strongSelf)
                       return;
 
-                    absl::optional<std::set<const NoteNode*>> nodesFromIds =
+                    std::optional<std::set<const NoteNode*>> nodesFromIds =
                         note_utils_ios::FindNodesByIds(strongSelf.notes,
                                                            nodeIds);
                     if (nodesFromIds)
@@ -1729,7 +1995,7 @@ const int kRowsHiddenByNavigationBar = 3;
                   NoteHomeViewController* strongSelf = weakSelf;
                   if (!strongSelf)
                     return;
-                  absl::optional<std::set<const vivaldi::NoteNode*>>
+                  std::optional<std::set<const vivaldi::NoteNode*>>
                       nodesFromIds = note_utils_ios::FindNodesByIds(
                           strongSelf.notes, nodeIds);
                   if (nodesFromIds) {
@@ -1907,6 +2173,10 @@ const int kRowsHiddenByNavigationBar = 3;
 
 - (BOOL)tableView:(UITableView*)tableView
     canMoveRowAtIndexPath:(NSIndexPath*)indexPath {
+  // Can only move nodes if the current sorting mode is manual.
+  if(self.currentSortingMode != NotesSortingModeManual) {
+    return NO;
+  }
   // No reorering with filtered results or when displaying the top-most
   // Notes node.
   if (self.sharedState.currentlyShowingSearchResults ||

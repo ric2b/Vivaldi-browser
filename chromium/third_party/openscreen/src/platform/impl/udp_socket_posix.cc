@@ -30,7 +30,7 @@ namespace openscreen {
 namespace {
 
 // 64 KB is the maximum possible UDP datagram size.
-#if !defined(OS_LINUX)
+#if !defined(__linux__)
 constexpr int kMaxUdpBufferSize = 64 << 10;
 #endif
 
@@ -70,8 +70,6 @@ UdpSocketPosix::UdpSocketPosix(TaskRunner& task_runner,
       handle_(handle),
       local_endpoint_(local_endpoint),
       platform_client_(platform_client) {
-  OSP_DCHECK(local_endpoint_.address.IsV4() || local_endpoint_.address.IsV6());
-
   if (handle_.fd >= 0) {
     if (platform_client_) {
       platform_client_->udp_socket_reader()->OnCreate(this);
@@ -94,7 +92,7 @@ ErrorOr<std::unique_ptr<UdpSocket>> UdpSocket::Create(
     const IPEndpoint& endpoint) {
   static std::atomic_bool in_create{false};
   const bool in_create_local = in_create.exchange(true);
-  OSP_DCHECK_EQ(in_create_local, false)
+  OSP_CHECK(!in_create_local)
       << "Another UdpSocket::Create call is in progress. Calls to this method "
          "must be seralized.";
 
@@ -142,7 +140,7 @@ IPEndpoint UdpSocketPosix::GetLocalEndpoint() const {
         if (getsockname(handle_.fd,
                         reinterpret_cast<struct sockaddr*>(&address),
                         &address_len) == 0) {
-          OSP_DCHECK_EQ(address.sin_family, AF_INET);
+          OSP_CHECK_EQ(address.sin_family, AF_INET);
           local_endpoint_.address =
               IPAddress(IPAddress::Version::kV4,
                         reinterpret_cast<uint8_t*>(&address.sin_addr.s_addr));
@@ -157,7 +155,7 @@ IPEndpoint UdpSocketPosix::GetLocalEndpoint() const {
         if (getsockname(handle_.fd,
                         reinterpret_cast<struct sockaddr*>(&address),
                         &address_len) == 0) {
-          OSP_DCHECK_EQ(address.sin6_family, AF_INET6);
+          OSP_CHECK_EQ(address.sin6_family, AF_INET6);
           local_endpoint_.address =
               IPAddress(IPAddress::Version::kV6,
                         reinterpret_cast<uint8_t*>(&address.sin6_addr));
@@ -379,13 +377,13 @@ bool IsPacketInfo<in6_pktinfo>(cmsghdr* cmh) {
 template <class SockAddrType, class PktInfoType>
 ErrorOr<UdpPacket> ReceiveMessageInternal(int fd) {
   int upper_bound_bytes;
-#if defined(OS_LINUX)
+#if defined(__linux__)
   // This should return the exact size of the next message.
   upper_bound_bytes = recv(fd, nullptr, 0, MSG_PEEK | MSG_TRUNC);
   if (upper_bound_bytes == -1) {
     return ChooseError(errno, Error::Code::kSocketReadFailure);
   }
-#elif defined(MAC_OSX)
+#elif defined(__APPLE__)
   // Can't use MSG_TRUNC in recv(). Use the FIONREAD ioctl() to get an
   // upper-bound.
   if (ioctl(fd, FIONREAD, &upper_bound_bytes) == -1 || upper_bound_bytes < 0) {
@@ -394,6 +392,8 @@ ErrorOr<UdpPacket> ReceiveMessageInternal(int fd) {
   upper_bound_bytes = std::min(upper_bound_bytes, kMaxUdpBufferSize);
 #else  // Other POSIX platforms (neither MSG_TRUNC nor FIONREAD available).
   upper_bound_bytes = kMaxUdpBufferSize;
+  OSP_LOG_ERROR << __func__
+                << ": POSIX upper bound bytes=" << upper_bound_bytes;
 #endif
 
   UdpPacket packet(upper_bound_bytes);
@@ -407,8 +407,8 @@ ErrorOr<UdpPacket> ReceiveMessageInternal(int fd) {
 
   // Although we don't do anything with the control buffer, on Linux
   // it is required for the message to be properly read.
-#if defined(OS_LINUX)
-  alignas(alignof(cmsghdr)) uint8_t control_buffer[1024];
+#if defined(__linux__)
+  alignas(alignof(cmsghdr)) uint8_t control_buffer[2048];
   msg.msg_control = control_buffer;
   msg.msg_controllen = sizeof(control_buffer);
 #endif
@@ -418,7 +418,7 @@ ErrorOr<UdpPacket> ReceiveMessageInternal(int fd) {
     return ChooseError(errno, Error::Code::kSocketReadFailure);
   }
   // We may not populate the entire packet.
-  OSP_DCHECK_LE(static_cast<size_t>(bytes_received), packet.size());
+  OSP_CHECK_LE(static_cast<size_t>(bytes_received), packet.size());
   packet.resize(bytes_received);
 
   IPEndpoint source_endpoint = {.address = GetIPAddressFromSockAddr(sa),
@@ -431,9 +431,12 @@ ErrorOr<UdpPacket> ReceiveMessageInternal(int fd) {
   // specifically, mDNSResponder requires this information to work properly.
 
   socklen_t sa_len = sizeof(sa);
-  if (((msg.msg_flags & MSG_CTRUNC) != 0) ||
-      (getsockname(fd, reinterpret_cast<sockaddr*>(&sa), &sa_len) == -1)) {
-    return Error::Code::kNone;
+  if (((msg.msg_flags & MSG_CTRUNC) != 0)) {
+    return Error(Error::Code::kSocketReadFailure, "Packet was truncated");
+  }
+
+  if ((getsockname(fd, reinterpret_cast<sockaddr*>(&sa), &sa_len) == -1)) {
+    return Error(Error::Code::kSocketReadFailure, "Failed to get socket name");
   }
   for (cmsghdr* cmh = CMSG_FIRSTHDR(&msg); cmh; cmh = CMSG_NXTHDR(&msg, cmh)) {
     if (IsPacketInfo<PktInfoType>(cmh)) {
@@ -543,7 +546,7 @@ void UdpSocketPosix::SendMessage(const void* data,
   }
 
   // Sanity-check: UDP datagram sendmsg() is all or nothing.
-  OSP_DCHECK_EQ(static_cast<size_t>(num_bytes_sent), length);
+  OSP_CHECK_EQ(static_cast<size_t>(num_bytes_sent), length);
 }
 
 void UdpSocketPosix::SetDscp(UdpSocket::DscpMode state) {

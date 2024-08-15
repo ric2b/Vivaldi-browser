@@ -129,17 +129,13 @@ bool RequestFilterManager::ProxyURLLoaderFactory(
     int render_process_id,
     URLLoaderFactoryType type,
     std::optional<int64_t> navigation_id,
-    mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
+    network::URLLoaderFactoryBuilder& factory_builder,
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
         header_client,
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
         forwarding_header_client,
     scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  auto proxied_receiver = std::move(*factory_receiver);
-  mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory_remote;
-  *factory_receiver = target_factory_remote.InitWithNewPipeAndPassReceiver();
 
   mojo::PendingReceiver<network::mojom::TrustedURLLoaderHeaderClient>
       header_client_receiver;
@@ -159,9 +155,9 @@ bool RequestFilterManager::ProxyURLLoaderFactory(
       frame ? frame->GetRoutingID() : MSG_ROUTING_NONE,
       frame ? frame->GetRenderViewHost()->GetRoutingID() : MSG_ROUTING_NONE,
       &request_handler_, &request_id_generator_, std::move(navigation_id),
-      std::move(proxied_receiver), std::move(target_factory_remote),
-      std::move(header_client_receiver), std::move(forwarding_header_client),
-      proxies_.get(), type, std::move(navigation_response_task_runner));
+      factory_builder, std::move(header_client_receiver),
+      std::move(forwarding_header_client), proxies_.get(), type,
+      std::move(navigation_response_task_runner));
   return true;
 }
 
@@ -567,7 +563,8 @@ int RequestFilterManager::RequestHandler::OnHeadersReceived(
     net::CompletionOnceCallback callback,
     const net::HttpResponseHeaders* original_response_headers,
     scoped_refptr<net::HttpResponseHeaders>* override_response_headers,
-    GURL* preserve_fragment_on_redirect_url) {
+    GURL* preserve_fragment_on_redirect_url,
+    bool* collapse) {
   if (GetAndSetSignaled(request->id, kOnHeadersReceived))
     return net::OK;
 
@@ -580,6 +577,7 @@ int RequestFilterManager::RequestHandler::OnHeadersReceived(
   pending_request.all_response_header_changes.resize(
       filter_manager_->request_filters_.size());
   pending_request.new_url = preserve_fragment_on_redirect_url;
+  pending_request.collapse = collapse;
 
   int num_filters_handling = 0;
   int priority = 0;
@@ -600,6 +598,8 @@ int RequestFilterManager::RequestHandler::OnHeadersReceived(
   DCHECK_GE(pending_request.num_filters_blocking, 0);
 
   if (pending_request.num_filters_blocking != 0) {
+    // We do not allow collapsing asynchronously
+    pending_request.collapse = nullptr;
     return net::ERR_IO_PENDING;
   }
 
@@ -614,6 +614,7 @@ void RequestFilterManager::RequestHandler::OnHeadersReceivedHandled(
     int64_t request_id,
     size_t filter_priority,
     bool cancel,
+    bool collapse,
     const GURL& new_url,
     RequestFilter::ResponseHeaderChanges header_changes) {
   auto pending_request_it = pending_requests_.find(request_id);
@@ -621,8 +622,13 @@ void RequestFilterManager::RequestHandler::OnHeadersReceivedHandled(
     return;
   PendingRequest& pending_request = pending_request_it->second;
 
-  if (cancel)
+  DCHECK(!collapse || cancel);
+
+  if (cancel) {
     pending_request.cancel_request = true;
+    if (collapse && pending_request.collapse)
+      *pending_request.collapse = true;
+  }
 
   if (filter_priority > pending_request.new_url_priority &&
       new_url.is_valid()) {

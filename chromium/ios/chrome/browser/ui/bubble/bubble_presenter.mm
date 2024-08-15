@@ -4,7 +4,9 @@
 
 #import "ios/chrome/browser/ui/bubble/bubble_presenter.h"
 
+#import "base/apple/foundation_util.h"
 #import "base/functional/bind.h"
+#import "base/memory/raw_ptr.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
@@ -23,12 +25,14 @@
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/url/url_util.h"
+#import "ios/chrome/browser/shared/model/utils/first_run_util.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/tab_strip_commands.h"
 #import "ios/chrome/browser/shared/public/commands/toolbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
+#import "ios/chrome/browser/shared/ui/elements/custom_highlight_button.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/named_guide.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
@@ -37,11 +41,12 @@
 #import "ios/chrome/browser/ui/bubble/bubble_presenter_delegate.h"
 #import "ios/chrome/browser/ui/bubble/bubble_util.h"
 #import "ios/chrome/browser/ui/bubble/bubble_view_controller_presenter.h"
-#import "ios/chrome/browser/ui/bubble/side_swipe_bubble/side_swipe_bubble_view.h"
+#import "ios/chrome/browser/ui/bubble/gesture_iph/gesture_in_product_help_view.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
 #import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/ui/crw_web_view_proxy.h"
 #import "ios/web/public/ui/crw_web_view_scroll_view_proxy.h"
 #import "ios/web/public/web_state.h"
@@ -53,8 +58,8 @@ namespace {
 // Returns whether `view` could display and animate correctly within `guide`. If
 // NO, elements in `view` may be hidden or overlap with each other during the
 // animation.
-BOOL CanSideSwipeBubbleViewFitInGuide(SideSwipeBubbleView* view,
-                                      UILayoutGuide* guide) {
+BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
+                                           UILayoutGuide* guide) {
   CGSize guide_size = guide.layoutFrame.size;
   CGSize view_fitting_size =
       [view systemLayoutSizeFittingSize:UILayoutFittingCompressedSize];
@@ -96,7 +101,9 @@ BOOL CanSideSwipeBubbleViewFitInGuide(SideSwipeBubbleView* view,
     BubbleViewControllerPresenter* lensKeyboardPresenter;
 @property(nonatomic, strong)
     BubbleViewControllerPresenter* parcelTrackingTipBubblePresenter;
-@property(nonatomic, strong) SideSwipeBubbleView* pullToRefreshSideSwipeBubble;
+@property(nonatomic, strong) GestureInProductHelpView* pullToRefreshGestureIPH;
+@property(nonatomic, strong)
+    GestureInProductHelpView* swipeBackForwardGestureIPH;
 @property(nonatomic, assign) WebStateList* webStateList;
 @property(nonatomic, assign) feature_engagement::Tracker* engagementTracker;
 @property(nonatomic, assign) HostContentSettingsMap* settingsMap;
@@ -106,10 +113,10 @@ BOOL CanSideSwipeBubbleViewFitInGuide(SideSwipeBubbleView* view,
 @end
 
 @implementation BubblePresenter {
-  segmentation_platform::DeviceSwitcherResultDispatcher*
+  raw_ptr<segmentation_platform::DeviceSwitcherResultDispatcher>
       _deviceSwitcherResultDispatcher;
 
-  PrefService* _prefService;
+  raw_ptr<PrefService> _prefService;
 
   id<TabStripCommands> _tabStripCommandsHandler;
 }
@@ -152,6 +159,7 @@ BOOL CanSideSwipeBubbleViewFitInGuide(SideSwipeBubbleView* view,
 }
 
 - (void)hideAllHelpBubbles {
+  [self.sharePageIPHBubblePresenter dismissAnimated:NO];
   [self.openNewTabIPHBubblePresenter dismissAnimated:NO];
   [self.tabGridIPHBubblePresenter dismissAnimated:NO];
   [self.bottomToolbarTipBubblePresenter dismissAnimated:NO];
@@ -163,8 +171,13 @@ BOOL CanSideSwipeBubbleViewFitInGuide(SideSwipeBubbleView* view,
   [self.lensKeyboardPresenter dismissAnimated:NO];
   [self.defaultPageModeTipBubblePresenter dismissAnimated:NO];
   [self.parcelTrackingTipBubblePresenter dismissAnimated:NO];
-  [self.pullToRefreshSideSwipeBubble
-      dismissWithReason:IPHDismissalReasonType::kUnknown];
+  [self hideAllGestureInProductHelpViewsForReason:IPHDismissalReasonType::
+                                                      kUnknown];
+}
+
+- (void)handleTapOutsideOfVisibleGestureInProductHelp {
+  [self hideAllGestureInProductHelpViewsForReason:
+            IPHDismissalReasonType::kTappedOutsideIPHAndAnchorView];
 }
 
 - (void)presentShareButtonHelpBubbleIfEligible {
@@ -180,9 +193,11 @@ BOOL CanSideSwipeBubbleViewFitInGuide(SideSwipeBubbleView* view,
     return;
   }
 
+  // DCHECK if the type is not `CustomHighlightableButton`.
+  __weak CustomHighlightableButton* shareButton =
+      base::apple::ObjCCastStrict<CustomHighlightableButton>(shareButtonView);
+
   // Do not present if button is disabled.
-  CHECK([shareButtonView isKindOfClass:[UIButton class]]);
-  UIButton* shareButton = (UIButton*)shareButtonView;
   if (![shareButton isEnabled]) {
     return;
   }
@@ -197,15 +212,27 @@ BOOL CanSideSwipeBubbleViewFitInGuide(SideSwipeBubbleView* view,
       isBottomOmnibox ? BubbleArrowDirectionDown : BubbleArrowDirectionUp;
   NSString* text =
       l10n_util::GetNSStringWithFixup(IDS_IOS_SHARE_THIS_PAGE_IPH_TEXT);
+  NSString* announcement =
+      l10n_util::GetNSString(IDS_IOS_SHARE_THIS_PAGE_IPH_ANNOUNCEMENT);
   CGPoint shareButtonAnchor = [self anchorPointToGuide:kShareButtonGuide
                                              direction:arrowDirection];
+
+  auto presentAction = ^() {
+    [shareButton setCustomHighlighted:YES];
+  };
+  auto dismissAction = ^() {
+    [shareButton setCustomHighlighted:NO];
+  };
 
   BubbleViewControllerPresenter* presenter = [self
       presentBubbleForFeature:feature_engagement::kIPHiOSShareToolbarItemFeature
                     direction:arrowDirection
+                    alignment:BubbleAlignmentBottomOrTrailing
                          text:text
-        voiceOverAnnouncement:nil
-                  anchorPoint:shareButtonAnchor];
+        voiceOverAnnouncement:announcement
+                  anchorPoint:shareButtonAnchor
+                presentAction:presentAction
+                dismissAction:dismissAction];
   if (!presenter) {
     return;
   }
@@ -457,6 +484,7 @@ BOOL CanSideSwipeBubbleViewFitInGuide(SideSwipeBubbleView* view,
   __weak id<TabStripCommands> weakTabStripCommandsHandler =
       _tabStripCommandsHandler;
 
+  // TODO(crbug.com/1439920): refactor to use CustomHighlightableButton API.
   ProceduralBlock presentAction = ^{
     [weakTabStripCommandsHandler setNewTabButtonOnTabStripIPHHighlighted:YES];
     [weakToolbarCommandsHandler setNewTabButtonIPHHighlighted:YES];
@@ -526,6 +554,7 @@ BOOL CanSideSwipeBubbleViewFitInGuide(SideSwipeBubbleView* view,
 
   __weak id<ToolbarCommands> weakToolbarCommandsHandler =
       _toolbarCommandsHandler;
+  // TODO(crbug.com/1439920): refactor to use CustomHighlightableButton API.
   auto presentAction = ^() {
     [weakToolbarCommandsHandler setTabGridButtonIPHHighlighted:YES];
   };
@@ -553,30 +582,78 @@ BOOL CanSideSwipeBubbleViewFitInGuide(SideSwipeBubbleView* view,
   self.tabGridIPHBubblePresenter = presenter;
 }
 
-- (void)presentPullToRefreshSideSwipeBubble {
+- (void)presentPullToRefreshGestureInProductHelp {
   if (UIAccessibilityIsVoiceOverRunning() || (![self canPresentBubble])) {
+    // TODO(crbug.com/1521489): Add voice over announcement once fixed.
+    return;
+  }
+  const base::Feature& pullToRefreshFeature =
+      feature_engagement::kIPHiOSPullToRefreshFeature;
+  BOOL userEligibleForPullToRefreshIPH =
+      iph_for_new_chrome_user::IsUserNewSafariSwitcher(
+          _deviceSwitcherResultDispatcher) &&
+      self.engagementTracker->WouldTriggerHelpUI(pullToRefreshFeature);
+  if (!userEligibleForPullToRefreshIPH) {
     return;
   }
   __weak BubblePresenter* weakSelf = self;
-  NamedGuide* guide = [NamedGuide guideWithName:kContentAreaGuide
-                                           view:self.rootViewController.view];
   NSString* text = l10n_util::GetNSString(IDS_IOS_PULL_TO_REFRESH_IPH);
-  ProceduralBlock resetPullToRefreshSideSwipeBubble = ^{
-    weakSelf.pullToRefreshSideSwipeBubble = nil;
+  ProceduralBlock resetPullToRefreshGestureIPH = ^{
+    weakSelf.pullToRefreshGestureIPH = nil;
   };
-  self.pullToRefreshSideSwipeBubble =
-      [self presentSideSwipeBubbleForFeature:feature_engagement::
-                                                 kIPHiOSPullToRefreshFeature
-                                   direction:BubbleArrowDirectionUp
-                                        text:text
-                               dismissAction:resetPullToRefreshSideSwipeBubble
-                                     toGuide:guide];
+  self.pullToRefreshGestureIPH =
+      [self presentGestureInProductHelpForFeature:pullToRefreshFeature
+                                        direction:BubbleArrowDirectionUp
+                                             text:text
+                                    dismissAction:resetPullToRefreshGestureIPH];
+  [self.pullToRefreshGestureIPH startAnimation];
 }
 
-- (void)removePullToRefreshSideSwipeBubble {
-  // TODO(crbug.com/1467873): Add a new reason type and use that.
-  [self.pullToRefreshSideSwipeBubble
-      dismissWithReason:IPHDismissalReasonType::kUnknown];
+- (void)presentBackForwardSwipeGestureInProductHelp {
+  if (UIAccessibilityIsVoiceOverRunning() ||
+      (![self canPresentBubbleWithCheckTabScrolledToTop:NO])) {
+    return;
+  }
+  const base::Feature& backForwardSwipeFeature =
+      feature_engagement::kIPHiOSSwipeBackForwardFeature;
+  BOOL userEligible =
+      IsFirstRunRecent(base::Days(60)) &&
+      self.engagementTracker->WouldTriggerHelpUI(backForwardSwipeFeature);
+  if (!userEligible) {
+    return;
+  }
+
+  web::WebState* currentWebState = self.webStateList->GetActiveWebState();
+  if (currentWebState->GetVisibleURL() == kChromeUINewTabURL) {
+    return;
+  }
+
+  // Retrieve swipe-able directions.
+  const web::NavigationManager* navigationManager =
+      currentWebState->GetNavigationManager();
+  BOOL back = navigationManager->CanGoBack();
+  BOOL forward = navigationManager->CanGoForward();
+  int textId = IDS_IOS_BACK_FORWARD_SWIPE_IPH_BACK_ONLY;
+  if (forward) {
+    textId = back ? IDS_IOS_BACK_FORWARD_SWIPE_IPH
+                  : IDS_IOS_BACK_FORWARD_SWIPE_IPH_FORWARD_ONLY;
+  }
+
+  __weak BubblePresenter* weakSelf = self;
+  ProceduralBlock resetSwipeBackForwardGestureIPH = ^{
+    weakSelf.swipeBackForwardGestureIPH = nil;
+  };
+  self.swipeBackForwardGestureIPH = [self
+      presentGestureInProductHelpForFeature:backForwardSwipeFeature
+                                  direction:back ? BubbleArrowDirectionLeading
+                                                 : BubbleArrowDirectionTrailing
+                                       text:l10n_util::GetNSString(textId)
+                              dismissAction:resetSwipeBackForwardGestureIPH];
+  if (back && forward) {
+    self.swipeBackForwardGestureIPH.animationRepeatCount = 4;
+    self.swipeBackForwardGestureIPH.bidirectional = YES;
+  }
+  [self.swipeBackForwardGestureIPH startAnimation];
 }
 
 #pragma mark - Private
@@ -633,6 +710,16 @@ BOOL CanSideSwipeBubbleViewFitInGuide(SideSwipeBubbleView* view,
     }
   }
   return presenter;
+}
+
+// If any gesture IPH visible, remove it and log the `reason` why it should be
+// removed on UMA. Otherwise, do nothing. The presenter of any gesture IPH
+// should make sure it's called when the user leaves the refreshed website,
+// especially while the IPH is still visible.
+- (void)hideAllGestureInProductHelpViewsForReason:
+    (IPHDismissalReasonType)reason {
+  [self.pullToRefreshGestureIPH dismissWithReason:reason];
+  [self.swipeBackForwardGestureIPH dismissWithReason:reason];
 }
 
 #pragma mark - Private Utils
@@ -709,59 +796,93 @@ BOOL CanSideSwipeBubbleViewFitInGuide(SideSwipeBubbleView* view,
                          text:(NSString*)text
                 dismissAction:(ProceduralBlock)dismissAction {
   DCHECK(self.engagementTracker);
-  if ([self shouldForcePresentBubbleForFeature:feature] ||
-      self.engagementTracker->WouldTriggerHelpUI(feature)) {
-    // Capture `weakSelf` instead of the feature engagement tracker object
-    // because `weakSelf` will safely become `nil` if it is deallocated, whereas
-    // the feature engagement tracker will remain pointing to invalid memory if
-    // its owner (the ChromeBrowserState) is deallocated.
-    __weak BubblePresenter* weakSelf = self;
-    CallbackWithIPHDismissalReasonType dismissalCallbackWithSnoozeAction =
-        ^(IPHDismissalReasonType IPHDismissalReasonType,
-          feature_engagement::Tracker::SnoozeAction snoozeAction) {
-          if (dismissAction) {
-            dismissAction();
-          }
-          [weakSelf featureDismissed:feature withSnooze:snoozeAction];
-        };
+  // Capture `weakSelf` instead of the feature engagement tracker object
+  // because `weakSelf` will safely become `nil` if it is deallocated, whereas
+  // the feature engagement tracker will remain pointing to invalid memory if
+  // its owner (the ChromeBrowserState) is deallocated.
+  __weak BubblePresenter* weakSelf = self;
+  CallbackWithIPHDismissalReasonType dismissalCallbackWithSnoozeAction =
+      ^(IPHDismissalReasonType IPHDismissalReasonType,
+        feature_engagement::Tracker::SnoozeAction snoozeAction) {
+        if (dismissAction) {
+          dismissAction();
+        }
+        [weakSelf featureDismissed:feature withSnooze:snoozeAction];
+      };
 
-    BubbleViewControllerPresenter* bubbleViewControllerPresenter =
-        [[BubbleViewControllerPresenter alloc]
-            initDefaultBubbleWithText:text
-                       arrowDirection:direction
-                            alignment:alignment
-                 isLongDurationBubble:[self isLongDurationBubble:feature]
-                    dismissalCallback:dismissalCallbackWithSnoozeAction];
+  BubbleViewControllerPresenter* bubbleViewControllerPresenter =
+      [[BubbleViewControllerPresenter alloc]
+          initDefaultBubbleWithText:text
+                     arrowDirection:direction
+                          alignment:alignment
+               isLongDurationBubble:[self isLongDurationBubble:feature]
+                  dismissalCallback:dismissalCallbackWithSnoozeAction];
 
-    return bubbleViewControllerPresenter;
-  }
-  return nil;
+  return bubbleViewControllerPresenter;
 }
 
+// If an in-product help message should be shown for `feature`, presents an IPH
+// view covering the content area and return the view, otherwise return `nil`
+// and do nothing. `direction` is the direction the bubble's arrow is pointing.
+// `text` is the text displayed by the bubble. `dismissAction` is the callback
+// function invoked when the IPH is dismissed.
 //
-// TODO(crbug.com/1450600): Once kContentAreaGuide is moved to
-// LayoutGuideCenter, replace the parameter `guide` with a string `guideName`.
-- (SideSwipeBubbleView*)
-    presentSideSwipeBubbleForFeature:(const base::Feature&)feature
-                           direction:(BubbleArrowDirection)direction
-                                text:(NSString*)text
-                       dismissAction:(ProceduralBlock)dismissAction
-                             toGuide:(UILayoutGuide*)guide {
+// Note that this method does NOT start the animation. The caller should start
+// the animation of the returned `GestureInProductHelpView` accordingly. This
+// allows the caller to make modifications to the view before animating.
+- (GestureInProductHelpView*)
+    presentGestureInProductHelpForFeature:(const base::Feature&)feature
+                                direction:(BubbleArrowDirection)direction
+                                     text:(NSString*)text
+                            dismissAction:(ProceduralBlock)dismissAction {
   DCHECK(self.engagementTracker);
-  BOOL userEligibleForPullToRefreshIPH =
-      iph_for_new_chrome_user::IsUserNewSafariSwitcher(
-          _deviceSwitcherResultDispatcher) &&
-      self.engagementTracker->WouldTriggerHelpUI(
-          feature_engagement::kIPHiOSPullToRefreshFeature);
-  if (!(userEligibleForPullToRefreshIPH && guide)) {
+  NamedGuide* contentAreaGuide =
+      [NamedGuide guideWithName:kContentAreaGuide
+                           view:self.rootViewController.view];
+  if (!contentAreaGuide) {
     return nil;
   }
-  SideSwipeBubbleView* sideSwipeBubbleView =
-      [[SideSwipeBubbleView alloc] initWithText:text
-                             bubbleBoundingSize:guide.layoutFrame.size
-                                 arrowDirection:direction];
-  [sideSwipeBubbleView setTranslatesAutoresizingMaskIntoConstraints:NO];
-  if (CanSideSwipeBubbleViewFitInGuide(sideSwipeBubbleView, guide) &&
+  UILayoutGuide* boundingSizeGuide = [[UILayoutGuide alloc] init];
+  UILayoutGuide* safeAreaGuide =
+      self.rootViewController.view.safeAreaLayoutGuide;
+  [self.rootViewController.view addLayoutGuide:boundingSizeGuide];
+  switch (direction) {
+    case BubbleArrowDirectionUp:
+      AddSameConstraintsToSides(boundingSizeGuide, contentAreaGuide,
+                                LayoutSides::kLeading | LayoutSides::kTrailing |
+                                    LayoutSides::kBottom);
+      AddSameConstraintsToSides(boundingSizeGuide, safeAreaGuide,
+                                LayoutSides::kTop);
+      break;
+    case BubbleArrowDirectionDown:
+      AddSameConstraintsToSides(
+          boundingSizeGuide, contentAreaGuide,
+          LayoutSides::kLeading | LayoutSides::kTrailing | LayoutSides::kTop);
+      AddSameConstraintsToSides(boundingSizeGuide, safeAreaGuide,
+                                LayoutSides::kBottom);
+      break;
+    case BubbleArrowDirectionLeading:
+      AddSameConstraintsToSides(
+          boundingSizeGuide, contentAreaGuide,
+          LayoutSides::kTop | LayoutSides::kBottom | LayoutSides::kTrailing);
+      AddSameConstraintsToSides(boundingSizeGuide, safeAreaGuide,
+                                LayoutSides::kLeading);
+      break;
+    case BubbleArrowDirectionTrailing:
+      AddSameConstraintsToSides(
+          boundingSizeGuide, contentAreaGuide,
+          LayoutSides::kTop | LayoutSides::kBottom | LayoutSides::kLeading);
+      AddSameConstraintsToSides(boundingSizeGuide, safeAreaGuide,
+                                LayoutSides::kTrailing);
+      break;
+  }
+  GestureInProductHelpView* gestureIPHView = [[GestureInProductHelpView alloc]
+            initWithText:text
+      bubbleBoundingSize:boundingSizeGuide.layoutFrame.size
+          arrowDirection:direction];
+  [gestureIPHView setTranslatesAutoresizingMaskIntoConstraints:NO];
+  if (CanGestureInProductHelpViewFitInGuide(gestureIPHView,
+                                            boundingSizeGuide) &&
       self.engagementTracker->ShouldTriggerHelpUI(feature)) {
     __weak BubblePresenter* weakSelf = self;
     CallbackWithIPHDismissalReasonType dismissalCallbackWithSnoozeAction =
@@ -772,11 +893,10 @@ BOOL CanSideSwipeBubbleViewFitInGuide(SideSwipeBubbleView* view,
           }
           [weakSelf featureDismissed:feature withSnooze:snoozeAction];
         };
-    sideSwipeBubbleView.dismissCallback = dismissalCallbackWithSnoozeAction;
-    [self.rootViewController.view addSubview:sideSwipeBubbleView];
-    AddSameConstraints(sideSwipeBubbleView, guide);
-    [sideSwipeBubbleView startAnimation];
-    return sideSwipeBubbleView;
+    gestureIPHView.dismissCallback = dismissalCallbackWithSnoozeAction;
+    [self.rootViewController.view addSubview:gestureIPHView];
+    AddSameConstraints(gestureIPHView, contentAreaGuide);
+    return gestureIPHView;
   }
   return nil;
 }

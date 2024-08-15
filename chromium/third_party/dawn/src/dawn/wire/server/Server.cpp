@@ -30,16 +30,21 @@
 
 namespace dawn::wire::server {
 
-CallbackUserdata::CallbackUserdata(Server* server, const std::shared_ptr<bool>& serverIsAlive)
-    : server(server), serverIsAlive(serverIsAlive) {}
+CallbackUserdata::CallbackUserdata(const std::weak_ptr<Server>& server) : server(server) {}
+
+// static
+std::shared_ptr<Server> Server::Create(const DawnProcTable& procs,
+                                       CommandSerializer* serializer,
+                                       MemoryTransferService* memoryTransferService) {
+    auto server = std::shared_ptr<Server>(new Server(procs, serializer, memoryTransferService));
+    server->mSelf = server;
+    return server;
+}
 
 Server::Server(const DawnProcTable& procs,
                CommandSerializer* serializer,
                MemoryTransferService* memoryTransferService)
-    : mSerializer(serializer),
-      mProcs(procs),
-      mMemoryTransferService(memoryTransferService),
-      mIsAlive(std::make_shared<bool>(true)) {
+    : mSerializer(serializer), mProcs(procs), mMemoryTransferService(memoryTransferService) {
     if (mMemoryTransferService == nullptr) {
         // If a MemoryTransferService is not provided, fallback to inline memory.
         mOwnedMemoryTransferService = CreateInlineMemoryTransferService();
@@ -57,22 +62,20 @@ Server::~Server() {
 }
 
 WireResult Server::InjectTexture(WGPUTexture texture,
-                                 uint32_t id,
-                                 uint32_t generation,
-                                 uint32_t deviceId,
-                                 uint32_t deviceGeneration) {
+                                 const Handle& handle,
+                                 const Handle& deviceHandle) {
     DAWN_ASSERT(texture != nullptr);
     Known<WGPUDevice> device;
-    WIRE_TRY(DeviceObjects().Get(deviceId, &device));
-    if (device->generation != deviceGeneration) {
+    WIRE_TRY(DeviceObjects().Get(deviceHandle.id, &device));
+    if (device->generation != deviceHandle.generation) {
         return WireResult::FatalError;
     }
 
     Known<WGPUTexture> data;
-    WIRE_TRY(TextureObjects().Allocate(&data, ObjectHandle{id, generation}));
+    WIRE_TRY(TextureObjects().Allocate(&data, handle));
 
     data->handle = texture;
-    data->generation = generation;
+    data->generation = handle.generation;
     data->state = AllocationState::Allocated;
 
     // The texture is externally owned so it shouldn't be destroyed when we receive a destroy
@@ -83,22 +86,20 @@ WireResult Server::InjectTexture(WGPUTexture texture,
 }
 
 WireResult Server::InjectSwapChain(WGPUSwapChain swapchain,
-                                   uint32_t id,
-                                   uint32_t generation,
-                                   uint32_t deviceId,
-                                   uint32_t deviceGeneration) {
+                                   const Handle& handle,
+                                   const Handle& deviceHandle) {
     DAWN_ASSERT(swapchain != nullptr);
     Known<WGPUDevice> device;
-    WIRE_TRY(DeviceObjects().Get(deviceId, &device));
-    if (device->generation != deviceGeneration) {
+    WIRE_TRY(DeviceObjects().Get(deviceHandle.id, &device));
+    if (device->generation != deviceHandle.generation) {
         return WireResult::FatalError;
     }
 
     Known<WGPUSwapChain> data;
-    WIRE_TRY(SwapChainObjects().Allocate(&data, ObjectHandle{id, generation}));
+    WIRE_TRY(SwapChainObjects().Allocate(&data, handle));
 
     data->handle = swapchain;
-    data->generation = generation;
+    data->generation = handle.generation;
     data->state = AllocationState::Allocated;
 
     // The texture is externally owned so it shouldn't be destroyed when we receive a destroy
@@ -108,33 +109,13 @@ WireResult Server::InjectSwapChain(WGPUSwapChain swapchain,
     return WireResult::Success;
 }
 
-WireResult Server::InjectDevice(WGPUDevice device, uint32_t id, uint32_t generation) {
-    DAWN_ASSERT(device != nullptr);
-    Known<WGPUDevice> data;
-    WIRE_TRY(DeviceObjects().Allocate(&data, ObjectHandle{id, generation}));
-
-    data->handle = device;
-    data->generation = generation;
-    data->state = AllocationState::Allocated;
-    data->info->server = this;
-    data->info->self = data.AsHandle();
-
-    // The device is externally owned so it shouldn't be destroyed when we receive a destroy
-    // message from the client. Add a reference to counterbalance the eventual release.
-    mProcs.deviceReference(device);
-
-    // Set callbacks to forward errors to the client.
-    SetForwardingDeviceCallbacks(data);
-    return WireResult::Success;
-}
-
-WireResult Server::InjectInstance(WGPUInstance instance, uint32_t id, uint32_t generation) {
+WireResult Server::InjectInstance(WGPUInstance instance, const Handle& handle) {
     DAWN_ASSERT(instance != nullptr);
     Known<WGPUInstance> data;
-    WIRE_TRY(InstanceObjects().Allocate(&data, ObjectHandle{id, generation}));
+    WIRE_TRY(InstanceObjects().Allocate(&data, handle));
 
     data->handle = instance;
-    data->generation = generation;
+    data->generation = handle.generation;
     data->state = AllocationState::Allocated;
 
     // The instance is externally owned so it shouldn't be destroyed when we receive a destroy

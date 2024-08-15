@@ -116,14 +116,9 @@ class BreadcrumbManagerTabHelperSecurityStateBrowserTest
 };
 
 // Broken authentication.
-// Fails on Linux and Windows. http://crbug.com/1516817
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-#define MAYBE_BrokenAuthentication DISABLED_BrokenAuthentication
-#else
-#define MAYBE_BrokenAuthentication BrokenAuthentication
-#endif
+// Fails on Linux, ChromeOS Lacros, Mac, and Windows. http://crbug.com/1516817
 IN_PROC_BROWSER_TEST_F(BreadcrumbManagerTabHelperSecurityStateBrowserTest,
-                       MAYBE_BrokenAuthentication) {
+                       DISABLED_BrokenAuthentication) {
   SetUpMockCertVerifierForHttpsServer(net::CERT_STATUS_DATE_INVALID,
                                       net::ERR_CERT_DATE_INVALID);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(

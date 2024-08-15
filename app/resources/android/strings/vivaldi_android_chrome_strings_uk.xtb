@@ -16,6 +16,7 @@
 <translation id="2433507940547922241">Зовнішній вигляд</translation>
 <translation id="2501278716633472235">Перейти назад</translation>
 <translation id="2633278372998075009">Приватні вкладки</translation>
+<translation id="272026394418727548">Головна сторінка Vivaldi</translation>
 <translation id="2951071800649516099">Додавайте сторінки в список читання, щоб переглядати їх пізніше</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> закладка}
@@ -26,6 +27,7 @@
 <translation id="3504699618187058974">Групувати вкладки</translation>
 <translation id="3518985090088779359">Прийняти та продовжити</translation>
 <translation id="3571177741182643350">Непрочитані статті - Доступно офлайн:</translation>
+<translation id="3602290021589620013">Превью</translation>
 <translation id="3700829948786686853">Вітаємо у Vivaldi</translation>
 <translation id="3719826155360621982">Домашня сторінка</translation>
 <translation id="385051799172605136">Назад</translation>
@@ -65,7 +67,6 @@
 <translation id="7427132068601343474">Про браузер Vivaldi</translation>
 <translation id="7465104139234185284">Закрити всі приватні вкладки</translation>
 <translation id="7481312909269577407">Вперед</translation>
-<translation id="7583262514280211622">Тут ви знайдете список читання</translation>
 <translation id="7968014550143838305">Додано в список читання</translation>
 <translation id="804786196054284061">Умови використання Vivaldi</translation>
 <translation id="8127542551745560481">Редагувати головну сторінку</translation>

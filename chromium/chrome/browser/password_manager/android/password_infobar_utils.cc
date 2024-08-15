@@ -4,6 +4,8 @@
 
 #include "chrome/browser/password_manager/android/password_infobar_utils.h"
 
+#include <optional>
+
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/sync_service_factory.h"
@@ -14,14 +16,14 @@
 
 namespace password_manager {
 
-AccountInfo GetAccountInfoForPasswordMessages(Profile* profile) {
+std::optional<AccountInfo> GetAccountInfoForPasswordMessages(Profile* profile) {
   DCHECK(profile);
 
-  // TODO(crbug.com/1466445): Migrate away from `ConsentLevel::kSync` on
+  // TODO(crbug.com/40067770): Migrate away from `ConsentLevel::kSync` on
   // Android.
   if (!sync_util::IsSyncFeatureEnabledIncludingPasswords(
           SyncServiceFactory::GetForProfile(profile))) {
-    return AccountInfo();
+    return std::nullopt;
   }
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForProfile(profile);

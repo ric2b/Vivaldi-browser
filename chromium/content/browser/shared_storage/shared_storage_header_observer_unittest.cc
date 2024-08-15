@@ -53,7 +53,7 @@ using OperationPtr = network::mojom::SharedStorageOperationPtr;
 using OperationType = network::mojom::SharedStorageOperationType;
 using OperationResult = storage::SharedStorageManager::OperationResult;
 using GetResult = storage::SharedStorageManager::GetResult;
-using ContextType = StoragePartitionImpl::URLLoaderNetworkContext::Type;
+using ContextType = StoragePartitionImpl::ContextType;
 
 enum class TestCaseType {
   kNavigationRequestContextIframePermissionEnabled = 0,
@@ -149,17 +149,20 @@ enum class TestCaseType {
 
 class MockContentBrowserClient : public ContentBrowserClient {
  public:
-  bool IsSharedStorageAllowed(content::BrowserContext* browser_context,
-                              content::RenderFrameHost* rfh,
-                              const url::Origin& top_frame_origin,
-                              const url::Origin& accessing_origin) override {
+  bool IsSharedStorageAllowed(
+      content::BrowserContext* browser_context,
+      content::RenderFrameHost* rfh,
+      const url::Origin& top_frame_origin,
+      const url::Origin& accessing_origin,
+      std::string* out_debug_message = nullptr) override {
     if (bypass_shared_storage_allowed_count_ > 0) {
       bypass_shared_storage_allowed_count_--;
       return true;
     }
 
     return ContentBrowserClient::IsSharedStorageAllowed(
-        browser_context, rfh, top_frame_origin, accessing_origin);
+        browser_context, rfh, top_frame_origin, accessing_origin,
+        out_debug_message);
   }
 
   void set_bypass_shared_storage_allowed_count(int count) {
@@ -830,7 +833,7 @@ TEST_P(SharedStorageHeaderObserverTest, SkipInvalidParams) {
   set_bypass_shared_storage_allowed_count(1);
 
   const url::Origin kOrigin1 = url::Origin::Create(GURL(kTestOrigin1));
-  const std::string kLong(1025, 'x');
+  const std::string kLong(2621441, 'x');
 
   std::vector<OperationPtr> operations = MakeOperationVector({
       std::make_tuple(OperationType::kClear, /*key*/ std::nullopt,

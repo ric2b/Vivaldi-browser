@@ -332,7 +332,7 @@ class UserTypeByDeviceTypeMetricsProviderTest
     auto* controller = ash::ExistingUserController::current_controller();
     ASSERT_TRUE(controller);
 
-    ash::UserContext user_context(user_manager::USER_TYPE_PUBLIC_ACCOUNT,
+    ash::UserContext user_context(user_manager::UserType::kPublicAccount,
                                   account_id_1_);
     user_context.SetPublicSessionLocale(std::string());
     user_context.SetPublicSessionInputMethod(std::string());
@@ -414,7 +414,7 @@ class UserTypeByDeviceTypeMetricsProviderTest
           kAppInstallUrl,
           policy::DeviceLocalAccount::TYPE_WEB_KIOSK_APP));
   // Not strictly necessary, but makes kiosk tests run much faster.
-  std::unique_ptr<base::AutoReset<bool>> skip_splash_wait_override_ =
+  base::AutoReset<bool> skip_splash_wait_override_ =
       KioskLaunchController::SkipSplashScreenWaitForTesting();
   std::unique_ptr<ScopedDeviceSettings> settings_;
 };

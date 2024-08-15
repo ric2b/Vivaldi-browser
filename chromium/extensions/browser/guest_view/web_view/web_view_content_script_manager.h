@@ -10,6 +10,7 @@
 #include <set>
 #include <string>
 #include <vector>
+
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -17,14 +18,13 @@
 #include "extensions/common/mojom/host_id.mojom-forward.h"
 #include "extensions/common/user_script.h"
 
-struct HostID;
-
 namespace content {
 class BrowserContext;
 class RenderFrameHost;
 }
 
 namespace extensions {
+
 class UserScriptLoader;
 
 // WebViewContentScriptManager manages the content scripts that each webview

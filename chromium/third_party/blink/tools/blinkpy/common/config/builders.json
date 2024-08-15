@@ -44,7 +44,7 @@
         "port_name": "win-win11",
         "specifiers": ["Win11", "Release"]
     },
-    "fuchsia-x64-rel": {
+    "fuchsia-x64-cast-receiver-rel": {
         "main": "tryserver.chromium.linux",
         "port_name": "fuchsia",
         "specifiers": ["Fuchsia", "Release"],
@@ -61,7 +61,9 @@
         "specifiers": ["Chrome", "Release"],
         "is_try_builder": true,
         "steps": {
-            "chrome_wpt_tests (with patch)": {}
+            "chrome_wpt_tests (with patch)": {
+                "product": "chrome"
+            }
         }
     },
     "linux-blink-rel": {
@@ -176,10 +178,43 @@
         },
         "is_try_builder": true
     },
+    "mac14-blink-rel": {
+        "main": "tryserver.blink",
+        "port_name": "mac-mac14",
+        "specifiers": ["Mac14", "Release"],
+        "steps": {
+            "blink_web_tests (with patch)": {},
+            "blink_wpt_tests (with patch)": {}
+        },
+        "is_try_builder": true
+    },
+    "mac14.arm64-blink-rel": {
+        "main": "tryserver.blink",
+        "port_name": "mac-mac14-arm64",
+        "specifiers": ["Mac14-arm64", "Release"],
+        "steps": {
+            "blink_web_tests (with patch)": {},
+            "blink_wpt_tests (with patch)": {}
+        },
+        "is_try_builder": true
+    },
     "win10.20h2-blink-rel": {
         "main": "tryserver.blink",
         "port_name": "win-win10.20h2",
         "specifiers": ["Win10.20h2", "Release"],
+        "steps": {
+            "blink_web_tests (with patch)": {},
+            "blink_wpt_tests (with patch)": {}
+        },
+        "is_try_builder": true
+    },
+    "win11-arm64-blink-rel": {
+        "main": "tryserver.blink",
+        "port_name": "win-win11-arm64",
+        "specifiers": [
+            "Win11-arm64",
+            "Release"
+        ],
         "steps": {
             "blink_web_tests (with patch)": {},
             "blink_wpt_tests (with patch)": {}
@@ -201,11 +236,11 @@
         "port_name": "linux",
         "specifiers": ["Linux", "Release"],
         "steps": {
+            "blink_web_tests (with patch)": {},
+            "blink_wpt_tests (with patch)": {},
             "chrome_wpt_tests (with patch)": {
                 "product": "chrome"
             },
-            "blink_web_tests (with patch)": {},
-            "blink_wpt_tests (with patch)": {},
             "high_dpi_blink_web_tests (with patch)": {
                 "flag_specific": "highdpi"
             },

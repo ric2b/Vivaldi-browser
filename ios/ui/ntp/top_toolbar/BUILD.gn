@@ -1,0 +1,39 @@
+# Copyright 2024 Vivaldi Technologies AS. All rights reserved.
+
+import("//build/config/ios/swift_source_set.gni")
+
+source_set("top_toolbar") {
+  sources = [
+    "vivaldi_ntp_top_toolbar_view_consumer.h",
+  ]
+
+  frameworks = [
+    "UIKit.framework",
+  ]
+
+  deps = [
+    "//base",
+    "//ui/base",
+    ":top_toolbar_swift"
+  ]
+}
+
+swift_source_set("top_toolbar_swift") {
+  bridge_header = "vivaldi_ntp_top_toolbar_view_swift_bridge.h"
+  sources = [
+    "vivaldi_ntp_top_toolbar_view.swift",
+    "vivaldi_ntp_top_toolbar_child_view.swift",
+    "vivaldi_ntp_top_toolbar_child_view_cell.swift",
+    "vivaldi_ntp_top_toolbar_view_provider.swift",
+  ]
+
+  deps = [
+    "//base",
+    "//ui/base",
+  ]
+
+  frameworks = [
+    "UIKit.framework",
+    "SwiftUI.framework",
+  ]
+}

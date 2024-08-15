@@ -6,6 +6,12 @@
 
 set -e -o pipefail
 
+# Run custom-built cipd client. This is useful when cipd is not available upstream
+# (i.e. unsupported platform).
+if [ ! -z "${CUSTOM_CIPD_CLIENT}" ]; then
+  exec "${CUSTOM_CIPD_CLIENT}" "${@}"
+fi
+
 # Export for other depot_tools scripts to re-use.
 export DEPOT_TOOLS_DIR="${DEPOT_TOOLS_DIR:-$(dirname "${BASH_SOURCE[0]}")}"
 export DEPOT_TOOLS_UNAME_S="${DEPOT_TOOLS_UNAME_S:-$(uname -s | tr '[:upper:]' '[:lower:]')}"

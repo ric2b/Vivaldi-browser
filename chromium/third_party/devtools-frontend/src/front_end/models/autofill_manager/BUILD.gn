@@ -4,6 +4,7 @@
 
 import("../../../scripts/build/ninja/devtools_entrypoint.gni")
 import("../../../scripts/build/ninja/devtools_module.gni")
+import("../../../third_party/typescript/typescript.gni")
 import("../visibility.gni")
 
 devtools_module("autofill_manager") {
@@ -23,10 +24,22 @@ devtools_entrypoint("bundle") {
 
   visibility = [
     ":*",
-    "../../../test/unittests/front_end/models/autofill_manager/*",
     "../../entrypoints/main/*",
     "../../panels/autofill/*",
   ]
 
   visibility += devtools_models_visibility
+}
+
+ts_library("unittests") {
+  testonly = true
+
+  sources = [ "AutofillManager.test.ts" ]
+
+  deps = [
+    ":bundle",
+    "../../core/common:bundle",
+    "../../core/sdk:bundle",
+    "../../testing",
+  ]
 }

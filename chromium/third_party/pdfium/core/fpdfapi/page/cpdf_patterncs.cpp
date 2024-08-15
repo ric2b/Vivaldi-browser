@@ -6,10 +6,12 @@
 
 #include "core/fpdfapi/page/cpdf_patterncs.h"
 
+#include <optional>
+
 #include "core/fpdfapi/page/cpdf_docpagedata.h"
 #include "core/fpdfapi/parser/cpdf_array.h"
 #include "core/fpdfapi/parser/cpdf_document.h"
-#include "third_party/base/notreached.h"
+#include "core/fxcrt/notreached.h"
 
 CPDF_PatternCS::CPDF_PatternCS() : CPDF_BasedCS(Family::kPattern) {}
 
@@ -35,10 +37,11 @@ uint32_t CPDF_PatternCS::v_Load(CPDF_Document* pDoc,
   if (m_pBaseCS->GetFamily() == Family::kPattern)
     return 0;
 
-  if (m_pBaseCS->CountComponents() > kMaxPatternColorComps)
+  if (m_pBaseCS->ComponentCount() > kMaxPatternColorComps) {
     return 0;
+  }
 
-  return m_pBaseCS->CountComponents() + 1;
+  return m_pBaseCS->ComponentCount() + 1;
 }
 
 bool CPDF_PatternCS::GetRGB(pdfium::span<const float> pBuf,
@@ -52,15 +55,11 @@ const CPDF_PatternCS* CPDF_PatternCS::AsPatternCS() const {
   return this;
 }
 
-bool CPDF_PatternCS::GetPatternRGB(const PatternValue& value,
-                                   float* R,
-                                   float* G,
-                                   float* B) const {
-  if (m_pBaseCS && m_pBaseCS->GetRGB(value.GetComps(), R, G, B))
-    return true;
+std::optional<FX_COLORREF> CPDF_PatternCS::GetPatternColorRef(
+    const PatternValue& value) const {
+  if (!m_pBaseCS) {
+    return std::nullopt;
+  }
 
-  *R = 0.75f;
-  *G = 0.75f;
-  *B = 0.75f;
-  return false;
+  return m_pBaseCS->GetColorRef(value.GetComps());
 }

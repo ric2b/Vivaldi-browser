@@ -484,8 +484,8 @@ if (enable_scrambled_message_ids) {
 #             traits for the type must define IsNull and SetToNull methods.
 #
 #             When false, nullable fields are represented by wrapping the C++
-#             type with absl::optional, and null values are simply
-#             absl::nullopt.
+#             type with std::optional, and null values are simply
+#             std::nullopt.
 #
 # Additional typemap scope parameters:
 #
@@ -750,6 +750,10 @@ template("mojom") {
 
     action(parser_target_name) {
       # allow_remote = true
+
+      # Use large worker to avoid OOM (b/325844324) and make it faster with
+      # multiple cores.
+      # remote_worker = "large"
       # custom_processor = "mojom_parser"
       script = mojom_parser_script
       inputs = mojom_parser_sources + ply_sources + [ build_metadata_filename ]

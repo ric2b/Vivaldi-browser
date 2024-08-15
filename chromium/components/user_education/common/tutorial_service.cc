@@ -46,7 +46,8 @@ TutorialService::~TutorialService() = default;
 void TutorialService::StartTutorial(TutorialIdentifier id,
                                     ui::ElementContext context,
                                     CompletedCallback completed_callback,
-                                    AbortedCallback aborted_callback) {
+                                    AbortedCallback aborted_callback,
+                                    RestartedCallback restarted_callback) {
   CancelTutorialIfRunning();
 
   // Get the description from the tutorial registry.
@@ -61,6 +62,7 @@ void TutorialService::StartTutorial(TutorialIdentifier id,
   // Set the external callbacks.
   completed_callback_ = std::move(completed_callback);
   aborted_callback_ = std::move(aborted_callback);
+  restarted_callback_ = std::move(restarted_callback);
 
   // Save the params for creating the tutorial to be used when restarting.
   running_tutorial_creation_params_ =
@@ -83,7 +85,7 @@ void TutorialService::StartTutorial(TutorialIdentifier id,
 }
 
 bool TutorialService::CancelTutorialIfRunning(
-    absl::optional<TutorialIdentifier> id) {
+    std::optional<TutorialIdentifier> id) {
   if (!running_tutorial_) {
     return false;
   }
@@ -156,10 +158,12 @@ bool TutorialService::RestartTutorial() {
   running_tutorial_was_restarted_ = true;
   running_tutorial_->Start();
 
+  restarted_callback_.Run();
+
   return true;
 }
 
-void TutorialService::AbortTutorial(absl::optional<int> abort_step) {
+void TutorialService::AbortTutorial(std::optional<int> abort_step) {
   // For various reasons, we could get called here while e.g. tearing down the
   // interaction sequence. We only want to actually run AbortTutorial() or
   // CompleteTutorial() exactly once, so we won't continue if the tutorial has
@@ -253,7 +257,7 @@ void TutorialService::HideCurrentBubbleIfShowing() {
 }
 
 bool TutorialService::IsRunningTutorial(
-    absl::optional<TutorialIdentifier> id) const {
+    std::optional<TutorialIdentifier> id) const {
   if (!running_tutorial_) {
     return false;
   }

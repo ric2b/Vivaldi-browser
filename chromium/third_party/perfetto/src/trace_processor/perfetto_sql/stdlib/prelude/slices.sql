@@ -29,4 +29,4 @@ SELECT
 FROM slice ancestor
 JOIN slice descendant
 WHERE ancestor.id = $ancestor_id
-  AND descendant.id = $descendant_id
+  AND descendant.id = $descendant_id;

@@ -99,6 +99,9 @@ class Target : public Item {
   // increases parallelism.
   bool IsDataOnly() const;
 
+  // Return true if this target should be generated in the final build graph.
+  bool ShouldGenerate() const;
+
   // Will be the empty string to use the target label as the output name.
   // See GetComputedOutputName().
   const std::string& output_name() const { return output_name_; }

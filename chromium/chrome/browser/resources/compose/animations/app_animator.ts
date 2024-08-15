@@ -119,11 +119,11 @@ export class ComposeAppAnimator extends Animator {
       this.fadeIn('#resultOptions', {delay: 200, duration: 200}),
 
       this.slideIn(
-          '#resultContainer .result-text', -16,
+          '#resultText', -16,
           {delay: 100, duration: 400, easing: EMPHASIZED_DECELERATE}),
-      this.fadeIn('#resultContainer .result-text', {delay: 100, duration: 300}),
+      this.fadeIn('#resultText', {delay: 100, duration: 300}),
       this.animate(
-          '#resultContainer .result-text',
+          '#resultText',
           [
             {color: 'var(--compose-result-text-color-while-loading)'},
             {color: 'var(--compose-result-text-color)'},
@@ -228,6 +228,48 @@ export class ComposeAppAnimator extends Animator {
       // Fade in edit form.
       this.fadeIn('#editContainer', {duration: 200}),
       this.fadeIn('#editContainer .footer', {delay: 100, duration: 100}),
+    ].flat();
+  }
+
+  transitionFromEditingToResult(resultContainerHeight: number): Animation[] {
+    const bodyGapHeightAnimation = this.animate(
+        '#body',
+        [
+          {gap: '0px'},
+          {gap: '8px'},
+        ],
+        {duration: 200, easing: STANDARD_EASING});
+
+    const resultContainerHeightAnimation = this.animate(
+        '#resultContainer',
+        [
+          {
+            height: '0px',
+            overflow: 'hidden',
+            alignItems: 'flex-end',
+          },
+          {
+            height: `${resultContainerHeight}px`,
+            overflow: 'hidden',
+            alignItems: 'flex-end',
+          },
+        ],
+        {duration: 200, easing: STANDARD_EASING});
+
+    return [
+      bodyGapHeightAnimation,
+      resultContainerHeightAnimation,
+
+      // Fade out edit form.
+      this.fadeOutAndHide('#editContainer', 'flex', {duration: 200}),
+      this.fadeOutAndHide('#editContainer .footer', 'flex', {duration: 100}),
+      this.maintainStyles(
+          '#editContainer .footer', {opacity: 0},
+          {delay: 100, duration: 100, fill: 'none'}),
+
+      // Fade in result UI.
+      this.fadeIn(
+          '#resultContainer, #resultFooter', {delay: 100, duration: 100}),
     ].flat();
   }
 }

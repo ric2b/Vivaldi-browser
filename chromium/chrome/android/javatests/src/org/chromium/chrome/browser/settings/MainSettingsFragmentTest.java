@@ -14,7 +14,6 @@ import static androidx.test.espresso.intent.Intents.intended;
 import static androidx.test.espresso.matcher.PreferenceMatchers.withKey;
 import static androidx.test.espresso.matcher.ViewMatchers.hasDescendant;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static androidx.test.espresso.matcher.ViewMatchers.thatMatchesFirst;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
@@ -60,12 +59,14 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.chrome.browser.about_settings.AboutChromeSettings;
+import org.chromium.chrome.browser.accessibility.settings.AccessibilitySettings;
 import org.chromium.chrome.browser.autofill.settings.AutofillPaymentMethodsFragment;
 import org.chromium.chrome.browser.autofill.settings.AutofillProfilesFragment;
 import org.chromium.chrome.browser.download.settings.DownloadSettings;
@@ -74,9 +75,8 @@ import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.homepage.HomepageTestRule;
 import org.chromium.chrome.browser.homepage.settings.HomepageSettings;
 import org.chromium.chrome.browser.language.settings.LanguageSettings;
-import org.chromium.chrome.browser.magic_stack.ModuleDelegate.ModuleType;
-import org.chromium.chrome.browser.magic_stack.ModuleProviderBuilder;
-import org.chromium.chrome.browser.magic_stack.ModuleRegistry;
+import org.chromium.chrome.browser.magic_stack.HomeModulesConfigManager;
+import org.chromium.chrome.browser.magic_stack.HomeModulesConfigSettings;
 import org.chromium.chrome.browser.night_mode.NightModeMetrics.ThemeSettingsEntry;
 import org.chromium.chrome.browser.night_mode.NightModeUtils;
 import org.chromium.chrome.browser.night_mode.settings.ThemeSettingsFragment;
@@ -85,12 +85,13 @@ import org.chromium.chrome.browser.password_check.PasswordCheckFactory;
 import org.chromium.chrome.browser.password_manager.settings.PasswordSettings;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
-import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
 import org.chromium.chrome.browser.privacy.settings.PrivacySettings;
 import org.chromium.chrome.browser.safety_check.SafetyCheckSettingsFragment;
+import org.chromium.chrome.browser.safety_hub.SafetyHubFragment;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.search_engines.settings.SearchEngineSettings;
 import org.chromium.chrome.browser.signin.SyncConsentActivityLauncherImpl;
+import org.chromium.chrome.browser.sync.FakeSyncServiceImpl;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.browser.sync.SyncTestRule;
 import org.chromium.chrome.browser.sync.settings.AccountManagementFragment;
@@ -100,7 +101,6 @@ import org.chromium.chrome.browser.sync.settings.SyncPromoPreference.State;
 import org.chromium.chrome.browser.tracing.settings.DeveloperSettings;
 import org.chromium.chrome.browser.ui.signin.SyncConsentActivityLauncher;
 import org.chromium.chrome.browser.ui.signin.SyncPromoController;
-import org.chromium.chrome.features.magic_stack.ChromeHomeModulesConfigSettings;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
@@ -108,7 +108,7 @@ import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
 import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
-import org.chromium.components.browser_ui.accessibility.AccessibilitySettings;
+import org.chromium.components.autofill.AutofillFeatures;
 import org.chromium.components.browser_ui.site_settings.SiteSettings;
 import org.chromium.components.policy.test.annotations.Policies;
 import org.chromium.components.search_engines.TemplateUrl;
@@ -126,12 +126,13 @@ import java.util.HashSet;
 /** Test for {@link MainSettings}. Main purpose is to have a quick confidence check on the xml. */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "show-autofill-signatures"})
-@DisableFeatures(ChromeFeatureList.TANGIBLE_SYNC)
 @DoNotBatch(reason = "Tests cannot run batched because they launch a Settings activity.")
 public class MainSettingsFragmentTest {
     private static final String SEARCH_ENGINE_SHORT_NAME = "Google";
 
-    private static final int RENDER_TEST_REVISION = 10;
+    private static final int RENDER_TEST_REVISION = 11;
+    private static final String RENDER_TEST_DESCRIPTION =
+            "Alert icon on identity error for signed in users";
 
     private final HomepageTestRule mHomepageTestRule = new HomepageTestRule();
 
@@ -152,6 +153,7 @@ public class MainSettingsFragmentTest {
     public ChromeRenderTestRule mRenderTestRule =
             ChromeRenderTestRule.Builder.withPublicCorpus()
                     .setRevision(RENDER_TEST_REVISION)
+                    .setDescription(RENDER_TEST_DESCRIPTION)
                     .setBugComponent(ChromeRenderTestRule.Component.UI_BROWSER_MOBILE_SETTINGS)
                     .build();
 
@@ -161,7 +163,7 @@ public class MainSettingsFragmentTest {
     @Mock private PasswordCheck mPasswordCheck;
 
     @Mock private SyncConsentActivityLauncher mMockSyncConsentActivityLauncher;
-    @Mock private ModuleProviderBuilder mMockModuleProviderBuilder;
+    @Mock private HomeModulesConfigManager mHomeModulesConfigManager;
 
     private MainSettings mMainSettings;
 
@@ -190,6 +192,7 @@ public class MainSettingsFragmentTest {
     @Test
     @LargeTest
     @Feature({"RenderTest"})
+    @DisabledTest(message = "http://b/issues/41491395")
     public void testRenderDifferentSignedInStates() throws IOException {
         launchSettingsActivity();
         waitForOptionsMenu();
@@ -214,12 +217,13 @@ public class MainSettingsFragmentTest {
     /**
      * Test for the "Account" section.
      *
-     * <p>TODO(crbug.com/1098205): remove code to explicitly enable Safety Check and Password check,
-     * once the flags are on by default.
+     * <p>TODO(b/324562205): update to check for Safety Hub instead of Safety Check once it's fully
+     * launched.
      */
     @Test
     @SmallTest
-    @EnableFeatures(ChromeFeatureList.AUTOFILL_VIRTUAL_VIEW_STRUCTURE_ANDROID)
+    @EnableFeatures(AutofillFeatures.AUTOFILL_VIRTUAL_VIEW_STRUCTURE_ANDROID)
+    @DisableFeatures(ChromeFeatureList.SAFETY_HUB)
     public void testStartup() {
         launchSettingsActivity();
 
@@ -327,12 +331,108 @@ public class MainSettingsFragmentTest {
                         eq(accountInfo.getEmail()));
     }
 
+    // Tests that no alert icon is visible if there are no identity errors.
+    @Test
+    @SmallTest
+    @EnableFeatures(ChromeFeatureList.SYNC_SHOW_IDENTITY_ERRORS_FOR_SIGNED_IN_USERS)
+    public void testSigninRowShowsNoAlertWhenNoIdentityErrors() {
+        // Sign-in and open settings.
+        mSyncTestRule.setUpAccountAndSignInForTesting();
+        launchSettingsActivity();
+
+        assertSettingsExists(MainSettings.PREF_SIGN_IN, AccountManagementFragment.class);
+        onView(allOf(withId(R.id.alert_icon), isDisplayed())).check(doesNotExist());
+    }
+
+    // Tests that no alert icon is shown on the account row for syncing users, even if there exists
+    // an identity error.
+    @Test
+    @SmallTest
+    @EnableFeatures(ChromeFeatureList.SYNC_SHOW_IDENTITY_ERRORS_FOR_SIGNED_IN_USERS)
+    public void testSigninRowShowsNoAlertForIdentityErrorsForSyncingUsers() {
+        FakeSyncServiceImpl fakeSyncService =
+                TestThreadUtils.runOnUiThreadBlockingNoException(
+                        () -> {
+                            FakeSyncServiceImpl fakeSyncServiceImpl = new FakeSyncServiceImpl();
+                            SyncServiceFactory.setInstanceForTesting(fakeSyncServiceImpl);
+                            return fakeSyncServiceImpl;
+                        });
+        // Fake an identity error.
+        fakeSyncService.setRequiresClientUpgrade(true);
+        // Sign-in and enable sync. Open settings.
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
+        launchSettingsActivity();
+
+        assertSettingsExists(MainSettings.PREF_SIGN_IN, AccountManagementFragment.class);
+        onView(allOf(withId(R.id.alert_icon), isDisplayed())).check(doesNotExist());
+    }
+
+    // Tests that an alert icon is shown on the account row in case of an identity error for a
+    // signed-in non-syncing user.
+    @Test
+    @SmallTest
+    @EnableFeatures(ChromeFeatureList.SYNC_SHOW_IDENTITY_ERRORS_FOR_SIGNED_IN_USERS)
+    public void testSigninRowShowsAlertForIdentityErrors() {
+        FakeSyncServiceImpl fakeSyncService =
+                TestThreadUtils.runOnUiThreadBlockingNoException(
+                        () -> {
+                            FakeSyncServiceImpl fakeSyncServiceImpl = new FakeSyncServiceImpl();
+                            SyncServiceFactory.setInstanceForTesting(fakeSyncServiceImpl);
+                            return fakeSyncServiceImpl;
+                        });
+        // Fake an identity error.
+        fakeSyncService.setRequiresClientUpgrade(true);
+        // Sign in and open settings.
+        mSyncTestRule.setUpAccountAndSignInForTesting();
+        launchSettingsActivity();
+
+        assertSettingsExists(MainSettings.PREF_SIGN_IN, AccountManagementFragment.class);
+        onView(allOf(withId(R.id.alert_icon), isDisplayed())).check(matches(isDisplayed()));
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"RenderTest"})
+    @EnableFeatures(ChromeFeatureList.SYNC_SHOW_IDENTITY_ERRORS_FOR_SIGNED_IN_USERS)
+    public void testRenderOnIdentityErrorForSignedInUsers() throws IOException {
+        FakeSyncServiceImpl fakeSyncService =
+                TestThreadUtils.runOnUiThreadBlockingNoException(
+                        () -> {
+                            FakeSyncServiceImpl fakeSyncServiceImpl = new FakeSyncServiceImpl();
+                            SyncServiceFactory.setInstanceForTesting(fakeSyncServiceImpl);
+                            return fakeSyncServiceImpl;
+                        });
+        // Fake an identity error.
+        fakeSyncService.setRequiresClientUpgrade(true);
+        // Sign in and wait for sync machinery to be active.
+        CoreAccountInfo accountInfo = mSyncTestRule.setUpAccountAndSignInForTesting();
+        SyncTestUtil.waitForSyncTransportActive();
+
+        launchSettingsActivity();
+
+        // Population of profile data is flaky. Thus, wait till it's populated.
+        // TODO(crbug.com/1503649): Check if there exists an alternate way out.
+        SignInPreference signInPreference = mMainSettings.findPreference(MainSettings.PREF_SIGN_IN);
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    return signInPreference
+                            .getProfileDataCache()
+                            .hasProfileDataForTesting(accountInfo.getEmail());
+                });
+
+        View view =
+                mSettingsActivityTestRule
+                        .getActivity()
+                        .findViewById(android.R.id.content)
+                        .getRootView();
+        mRenderTestRule.render(view, "main_settings_signed_in_identity_error");
+    }
+
     @Test
     @SmallTest
     public void testSyncRowSummaryWhenNoDataTypeSynced() {
         CoreAccountInfo account = mSyncTestRule.addTestAccount();
-        final SyncService syncService =
-                TestThreadUtils.runOnUiThreadBlockingNoException(SyncServiceFactory::get);
+        final SyncService syncService = SyncTestUtil.getSyncServiceForLastUsedProfile();
         SigninTestUtil.signinAndEnableSync(account, syncService);
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -387,6 +487,7 @@ public class MainSettingsFragmentTest {
 
     @Test
     @SmallTest
+    @DisabledTest(message = "http://b/issues/41491395")
     public void testAccountSignIn() throws InterruptedException {
         launchSettingsActivity();
 
@@ -425,6 +526,44 @@ public class MainSettingsFragmentTest {
 
     @Test
     @SmallTest
+    @EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    public void
+            testManageSyncRowIsNotShownWhenReplaceSyncPromosWithSignInPromosEnabledWithoutSyncConsent()
+                    throws InterruptedException {
+        launchSettingsActivity();
+
+        Assert.assertFalse(
+                "Sync preference should be hidden when the user is signed out.",
+                mMainSettings.findPreference(MainSettings.PREF_MANAGE_SYNC).isVisible());
+
+        mSyncTestRule.setUpAccountAndSignInForTesting();
+        Assert.assertFalse(
+                "Sync preference should not be shown when the user is signed in.",
+                mMainSettings.findPreference(MainSettings.PREF_MANAGE_SYNC).isVisible());
+    }
+
+    @Test
+    @SmallTest
+    @EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    @DisabledTest(message = "http://b/issues/41491395")
+    public void
+            testManageSyncRowIsShownWhenReplaceSyncPromosWithSignInPromosEnabledWithSyncConsent()
+                    throws InterruptedException {
+        launchSettingsActivity();
+
+        Assert.assertFalse(
+                "Sync preference should be hidden when the user is signed out.",
+                mMainSettings.findPreference(MainSettings.PREF_MANAGE_SYNC).isVisible());
+
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
+        SyncTestUtil.waitForSyncFeatureActive();
+        Assert.assertTrue(
+                "Sync preference should be shown when the user is syncing.",
+                mMainSettings.findPreference(MainSettings.PREF_MANAGE_SYNC).isVisible());
+    }
+
+    @Test
+    @SmallTest
     public void testAccountManagementRowForChildAccountWithNonDisplayableAccountEmail()
             throws InterruptedException {
         launchSettingsActivity();
@@ -452,7 +591,8 @@ public class MainSettingsFragmentTest {
         TestThreadUtils.runOnUiThreadBlocking(signInPreference::syncStateChanged);
 
         mSettingsActivityTestRule.startSettingsActivity();
-        onView(thatMatchesFirst(withText(accountInfo.getFullName()))).check(matches(isDisplayed()));
+        onView(allOf(withText(accountInfo.getFullName()), isDisplayed()))
+                .check(matches(isDisplayed()));
         onView(withText(accountInfo.getEmail())).check(matches(not(isDisplayed())));
     }
 
@@ -488,7 +628,7 @@ public class MainSettingsFragmentTest {
 
         mSettingsActivityTestRule.startSettingsActivity();
         onView(withText(accountInfo.getEmail())).check(matches(not(isDisplayed())));
-        onView(thatMatchesFirst(withText(R.string.default_google_account_username)))
+        onView(allOf(withText(R.string.default_google_account_username), isDisplayed()))
                 .check(matches(isDisplayed()));
     }
 
@@ -664,49 +804,20 @@ public class MainSettingsFragmentTest {
 
     @Test
     @SmallTest
-    @EnableFeatures({
-        ChromeFeatureList.SURFACE_POLISH,
-        ChromeFeatureList.START_SURFACE_REFACTOR,
-        ChromeFeatureList.MAGIC_STACK_ANDROID,
-        ChromeFeatureList.PRICE_CHANGE_MODULE
-    })
-    public void testHomeModulesConfigSettingsEnabled_MagicStackAndPriceChangeEnabled() {
-        ModuleRegistry moduleRegistry = ModuleRegistry.getInstance();
-        PriceTrackingFeatures.setIsSignedInAndSyncEnabledForTesting(true);
-        PriceTrackingFeatures.setPriceTrackingEnabledForTesting(true);
+    public void testHomeModulesConfigSettingsWithCustomizableModule() {
+        when(mHomeModulesConfigManager.hasModuleShownInSettings()).thenReturn(true);
+        HomeModulesConfigManager.setInstanceForTesting(mHomeModulesConfigManager);
         launchSettingsActivity();
-        Assert.assertTrue(moduleRegistry.hasCustomizableModule());
         assertSettingsExists(
-                MainSettings.PREF_HOME_MODULES_CONFIG, ChromeHomeModulesConfigSettings.class);
+                MainSettings.PREF_HOME_MODULES_CONFIG, HomeModulesConfigSettings.class);
     }
 
     @Test
     @SmallTest
-    @DisableFeatures({ChromeFeatureList.MAGIC_STACK_ANDROID, ChromeFeatureList.PRICE_CHANGE_MODULE})
-    public void testHomeModulesConfigSettingsEnabled_MagicStackAndPriceChangeDisabled() {
-        ModuleRegistry moduleRegistry = ModuleRegistry.getInstance();
-        when(mMockModuleProviderBuilder.isEligible()).thenReturn(true);
-        moduleRegistry.registerModule(ModuleType.PRICE_CHANGE, mMockModuleProviderBuilder);
+    public void testHomeModulesConfigSettingsWithoutCustomizableModule() {
+        when(mHomeModulesConfigManager.hasModuleShownInSettings()).thenReturn(false);
+        HomeModulesConfigManager.setInstanceForTesting(mHomeModulesConfigManager);
         launchSettingsActivity();
-        Assert.assertTrue(moduleRegistry.hasCustomizableModule());
-        assertSettingsExists(
-                MainSettings.PREF_HOME_MODULES_CONFIG, ChromeHomeModulesConfigSettings.class);
-    }
-
-    @Test
-    @SmallTest
-    @EnableFeatures({
-        ChromeFeatureList.SURFACE_POLISH,
-        ChromeFeatureList.START_SURFACE_REFACTOR,
-        ChromeFeatureList.MAGIC_STACK_ANDROID,
-        ChromeFeatureList.PRICE_CHANGE_MODULE
-    })
-    public void testHomeModulesConfigSettingsDisabled_MagicStackAndPriceChangeEnabled() {
-        ModuleRegistry moduleRegistry = ModuleRegistry.getInstance();
-        PriceTrackingFeatures.setIsSignedInAndSyncEnabledForTesting(true);
-        PriceTrackingFeatures.setPriceTrackingEnabledForTesting(false);
-        launchSettingsActivity();
-        Assert.assertFalse(moduleRegistry.hasCustomizableModule());
         Assert.assertNull(
                 "Home modules config setting should not be shown on automotive",
                 mMainSettings.findPreference(MainSettings.PREF_HOME_MODULES_CONFIG));
@@ -714,16 +825,44 @@ public class MainSettingsFragmentTest {
 
     @Test
     @SmallTest
-    @DisableFeatures({ChromeFeatureList.MAGIC_STACK_ANDROID, ChromeFeatureList.PRICE_CHANGE_MODULE})
-    public void testHomeModulesConfigSettingsDisabled_MagicStackAndPriceChangeDisabled() {
-        ModuleRegistry moduleRegistry = ModuleRegistry.getInstance();
-        when(mMockModuleProviderBuilder.isEligible()).thenReturn(false);
-        moduleRegistry.registerModule(ModuleType.PRICE_CHANGE, mMockModuleProviderBuilder);
+    @EnableFeatures(ChromeFeatureList.SAFETY_HUB)
+    public void testSafetyHubFlagOn() {
         launchSettingsActivity();
-        Assert.assertFalse(moduleRegistry.hasCustomizableModule());
-        Assert.assertNull(
-                "Home modules config setting should not be shown on automotive",
-                mMainSettings.findPreference(MainSettings.PREF_HOME_MODULES_CONFIG));
+        if (BuildInfo.getInstance().isAutomotive) {
+            Assert.assertNull(
+                    "Safety hub should not be shown on automotive",
+                    mMainSettings.findPreference(MainSettings.PREF_SAFETY_HUB));
+            Assert.assertNull(
+                    "Safety check should not be shown on automotive",
+                    mMainSettings.findPreference(MainSettings.PREF_SAFETY_CHECK));
+        } else {
+            assertSettingsExists(MainSettings.PREF_SAFETY_HUB, SafetyHubFragment.class);
+            // Safety check should be hidden when safety hub is enabled.
+            Assert.assertNull(
+                    "Safety check setting should be hidden",
+                    mMainSettings.findPreference(MainSettings.PREF_SAFETY_CHECK));
+        }
+    }
+
+    @Test
+    @SmallTest
+    @DisableFeatures(ChromeFeatureList.SAFETY_HUB)
+    public void testSafetyHubFlagOff() {
+        launchSettingsActivity();
+        if (BuildInfo.getInstance().isAutomotive) {
+            Assert.assertNull(
+                    "Safety hub should not be shown on automotive",
+                    mMainSettings.findPreference(MainSettings.PREF_SAFETY_HUB));
+            Assert.assertNull(
+                    "Safety check should not be shown on automotive",
+                    mMainSettings.findPreference(MainSettings.PREF_SAFETY_CHECK));
+        } else {
+            assertSettingsExists(MainSettings.PREF_SAFETY_CHECK, SafetyCheckSettingsFragment.class);
+            // Safety hub should be hidden when the flag is disabled.
+            Assert.assertNull(
+                    "Safety hub setting should be hidden",
+                    mMainSettings.findPreference(MainSettings.PREF_SAFETY_HUB));
+        }
     }
 
     private void launchSettingsActivity() {

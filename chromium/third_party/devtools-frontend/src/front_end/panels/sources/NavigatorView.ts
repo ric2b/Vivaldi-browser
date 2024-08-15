@@ -197,7 +197,7 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
 
     this.scriptsTree.setComparator(NavigatorView.treeElementsCompare);
     this.scriptsTree.setFocusable(false);
-    this.contentElement.setAttribute('jslog', `${VisualLogging.pane().context(jslogContext)}`);
+    this.contentElement.setAttribute('jslog', `${VisualLogging.pane(jslogContext).track({resize: true})}`);
     this.contentElement.appendChild(this.scriptsTree.element);
     this.setDefaultFocusedElement(this.scriptsTree.element);
 
@@ -213,7 +213,7 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
     UI.ShortcutRegistry.ShortcutRegistry.instance().addShortcutListener(
         this.contentElement, {'sources.rename': this.renameShortcut.bind(this)});
 
-    this.navigatorGroupByFolderSetting = Common.Settings.Settings.instance().moduleSetting('navigatorGroupByFolder');
+    this.navigatorGroupByFolderSetting = Common.Settings.Settings.instance().moduleSetting('navigator-group-by-folder');
     this.navigatorGroupByFolderSetting.addChangeListener(this.groupingChanged.bind(this));
     if (enableAuthoredGrouping) {
       this.navigatorGroupByAuthoredExperiment = Root.Runtime.ExperimentName.AUTHORED_DEPLOYED_GROUPING;
@@ -269,7 +269,9 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
   static appendSearchItem(contextMenu: UI.ContextMenu.ContextMenu, path: string): void {
     const searchLabel = path ? i18nString(UIStrings.searchInFolder) : i18nString(UIStrings.searchInAllFiles);
     const searchSources = new SearchSources(path && `file:${path}`);
-    contextMenu.viewSection().appendItem(searchLabel, () => Common.Revealer.reveal(searchSources));
+    contextMenu.viewSection().appendItem(
+        searchLabel, () => Common.Revealer.reveal(searchSources),
+        {jslogContext: path ? 'search-in-folder' : 'search-in-all-files'});
   }
 
   private static treeElementsCompare(
@@ -946,7 +948,8 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
 
   private async handleContextMenuExclude(
       project: Workspace.Workspace.Project, path: Platform.DevToolsPath.EncodedPathString): Promise<void> {
-    const shouldExclude = await UI.UIUtils.ConfirmDialog.show(i18nString(UIStrings.areYouSureYouWantToExcludeThis));
+    const shouldExclude = await UI.UIUtils.ConfirmDialog.show(
+        i18nString(UIStrings.areYouSureYouWantToExcludeThis), undefined, {jslogContext: 'exclude-folder-confirmation'});
     if (shouldExclude) {
       UI.UIUtils.startBatchUpdate();
       project.excludeFolder(
@@ -956,7 +959,8 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
   }
 
   private async handleContextMenuDelete(uiSourceCode: Workspace.UISourceCode.UISourceCode): Promise<void> {
-    const shouldDelete = await UI.UIUtils.ConfirmDialog.show(i18nString(UIStrings.areYouSureYouWantToDeleteThis));
+    const shouldDelete = await UI.UIUtils.ConfirmDialog.show(
+        i18nString(UIStrings.areYouSureYouWantToDeleteThis), undefined, {jslogContext: 'delete-file-confirmation'});
     if (shouldDelete) {
       uiSourceCode.project().deleteFile(uiSourceCode);
     }
@@ -969,12 +973,15 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
 
     const project = uiSourceCode.project();
     if (project.type() === Workspace.Workspace.projectTypes.FileSystem) {
-      contextMenu.editSection().appendItem(i18nString(UIStrings.rename), this.handleContextMenuRename.bind(this, node));
+      contextMenu.editSection().appendItem(
+          i18nString(UIStrings.rename), this.handleContextMenuRename.bind(this, node), {jslogContext: 'rename'});
       contextMenu.editSection().appendItem(
           i18nString(UIStrings.makeACopy),
-          this.handleContextMenuCreate.bind(this, project, Platform.DevToolsPath.EmptyEncodedPathString, uiSourceCode));
+          this.handleContextMenuCreate.bind(this, project, Platform.DevToolsPath.EmptyEncodedPathString, uiSourceCode),
+          {jslogContext: 'make-a-copy'});
       contextMenu.editSection().appendItem(
-          i18nString(UIStrings.delete), this.handleContextMenuDelete.bind(this, uiSourceCode));
+          i18nString(UIStrings.delete), this.handleContextMenuDelete.bind(this, uiSourceCode),
+          {jslogContext: 'delete'});
     }
 
     void contextMenu.show();
@@ -983,7 +990,8 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
   private async handleDeleteFolder(node: NavigatorTreeNode): Promise<void> {
     const warningMsg =
         `${i18nString(UIStrings.areYouSureYouWantToDeleteFolder)}\n${i18nString(UIStrings.actionCannotBeUndone)}`;
-    const shouldRemove = await UI.UIUtils.ConfirmDialog.show(warningMsg);
+    const shouldRemove =
+        await UI.UIUtils.ConfirmDialog.show(warningMsg, undefined, {jslogContext: 'delete-folder-confirmation'});
     if (shouldRemove) {
       Host.userMetrics.actionTaken(Host.UserMetrics.Action.OverrideTabDeleteFolderContextMenu);
       const topNode = this.findTopNonMergedNode(node);
@@ -1045,11 +1053,12 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
           Host.Platform.isWin());
       contextMenu.revealSection().appendItem(
           i18nString(UIStrings.openFolder),
-          () => Host.InspectorFrontendHost.InspectorFrontendHostInstance.showItemInFolder(folderPath));
+          () => Host.InspectorFrontendHost.InspectorFrontendHostInstance.showItemInFolder(folderPath),
+          {jslogContext: 'open-folder'});
       if (project.canCreateFile()) {
         contextMenu.defaultSection().appendItem(i18nString(UIStrings.newFile), () => {
           this.handleContextMenuCreate(project, path, undefined);
-        });
+        }, {jslogContext: 'new-file'});
       }
     } else if (node.origin && node.folderPath) {
       const url = Common.ParsedURL.ParsedURL.concatenate(node.origin, '/', node.folderPath);
@@ -1058,15 +1067,16 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
         isKnownThirdParty: node.recursiveProperties.exclusivelyThirdParty || false,
         isCurrentlyIgnoreListed: node.recursiveProperties.exclusivelyIgnored || false,
       };
-      for (const {text, callback} of Bindings.IgnoreListManager.IgnoreListManager.instance()
+      for (const {text, callback, jslogContext} of Bindings.IgnoreListManager.IgnoreListManager.instance()
                .getIgnoreListFolderContextMenuItems(url, options)) {
-        contextMenu.defaultSection().appendItem(text, callback);
+        contextMenu.defaultSection().appendItem(text, callback, {jslogContext});
       }
     }
 
     if (project.canExcludeFolder(path)) {
       contextMenu.defaultSection().appendItem(
-          i18nString(UIStrings.excludeFolder), this.handleContextMenuExclude.bind(this, project, path));
+          i18nString(UIStrings.excludeFolder), this.handleContextMenuExclude.bind(this, project, path),
+          {jslogContext: 'exclude-folder'});
     }
 
     if (project.type() === Workspace.Workspace.projectTypes.FileSystem) {
@@ -1081,16 +1091,17 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
             })}\n${i18nString(UIStrings.workspaceStopSyncing)}`;
             const shouldRemove = await UI.UIUtils.ConfirmDialog.show(warningMessage, undefined, {
               okButtonLabel: i18nString(UIStrings.remove),
+              jslogContext: 'remove-folder-from-workspace-confirmation',
             });
             if (shouldRemove) {
               project.remove();
             }
-          });
+          }, {jslogContext: 'remove-folder-from-workspace'});
         }
       } else {
         if (!(node instanceof NavigatorGroupTreeNode)) {
           contextMenu.defaultSection().appendItem(
-              i18nString(UIStrings.delete), this.handleDeleteFolder.bind(this, node));
+              i18nString(UIStrings.delete), this.handleDeleteFolder.bind(this, node), {jslogContext: 'delete'});
         }
       }
     }

@@ -803,9 +803,9 @@ bool UpdateAppShortcutsSubdirLocalizedName(
   std::string locale = l10n_util::NormalizeLocale(
       l10n_util::GetApplicationLocale(std::string()));
 
-  NSString* strings_path =
-      base::apple::FilePathToNSString(localized.Append(locale + ".strings"));
-  [strings_dict writeToFile:strings_path atomically:YES];
+  NSURL* strings_url =
+      base::apple::FilePathToNSURL(localized.Append(locale + ".strings"));
+  [strings_dict writeToURL:strings_url error:nil];
 
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE, base::BindOnce(&GetImageResourcesOnUIThread,
@@ -843,10 +843,17 @@ std::list<BundleInfoPlist> SearchForBundlesById(const std::string& bundle_id) {
   std::list<BundleInfoPlist> infos;
 
   // First search using LaunchServices.
-  NSArray* bundle_urls =
-      base::apple::CFToNSOwnershipCast(LSCopyApplicationURLsForBundleIdentifier(
-          base::SysUTF8ToCFStringRef(bundle_id).get(), /*outError=*/nullptr));
-  for (NSURL* url : bundle_urls) {
+  NSArray* bundle_urls;
+  if (@available(macOS 12.0, *)) {
+    bundle_urls = [NSWorkspace.sharedWorkspace
+        URLsForApplicationsWithBundleIdentifier:base::SysUTF8ToNSString(
+                                                    bundle_id)];
+  } else {
+    bundle_urls = base::apple::CFToNSOwnershipCast(
+        LSCopyApplicationURLsForBundleIdentifier(
+            base::SysUTF8ToCFStringRef(bundle_id).get(), /*outError=*/nullptr));
+  }
+  for (NSURL* url in bundle_urls) {
     base::FilePath bundle_path = base::apple::NSURLToFilePath(url);
     BundleInfoPlist info(bundle_path);
     if (!info.IsForCurrentUserDataDir())
@@ -1419,6 +1426,38 @@ base::Lock& GetUpdateShortcutsLock() {
   return *lock;
 }
 
+bool CopyStagingBundleToDestination(base::FilePath staging_path,
+                                    base::FilePath dst_app_path) {
+  if (!app_mode::UseAdHocSigningForWebAppShims()) {
+    return base::CopyDirectory(staging_path, dst_app_path, true);
+  }
+
+  // When using ad-hoc signing for web app shims, the final app shim must be
+  // written to disk by a separate helper tool. This helper tool is used
+  // so that binary authorization tools, such as Santa, can transitively trust
+  // app shims that it creates without trusting all files written by Chrome.
+  // This allows app shims to be trusted by the binary authorization tool
+  // despite having only ad-hoc code signatures.
+
+  base::FilePath web_app_shortcut_copier_path =
+      base::apple::FrameworkBundlePath().Append("Helpers").Append(
+          "web_app_shortcut_copier");
+  base::CommandLine command_line(web_app_shortcut_copier_path);
+  command_line.AppendArgPath(staging_path);
+  command_line.AppendArgPath(dst_app_path);
+
+  // Synchronously wait for the copy to complete to match the semantics of
+  // `base::CopyDirectory`.
+  std::string command_output;
+  int exit_code;
+  if (base::GetAppOutputWithExitCode(command_line, &command_output,
+                                     &exit_code)) {
+    return !exit_code;
+  }
+
+  return false;
+}
+
 void WebAppShortcutCreator::CreateShortcutsAt(
     const std::vector<base::FilePath>& dst_app_paths,
     std::vector<base::FilePath>* updated_paths) const {
@@ -1465,7 +1504,7 @@ void WebAppShortcutCreator::CreateShortcutsAt(
     base::DeletePathRecursively(dst_app_path);
 
     // Copy the bundle to |dst_app_path|.
-    if (!base::CopyDirectory(staging_path, dst_app_path, true)) {
+    if (!CopyStagingBundleToDestination(staging_path, dst_app_path)) {
       RecordCreateShortcut(CreateShortcutResult::kFailToCopyApp);
       LOG(ERROR) << "Copying app to dst dir: " << dst_parent_dir.value()
                  << " failed";
@@ -1746,9 +1785,9 @@ bool WebAppShortcutCreator::UpdateDisplayName(
     app_mode::kCFBundleDisplayNameKey : display_name
   };
 
-  NSString* localized_path = base::apple::FilePathToNSString(
-      localized_dir.Append("InfoPlist.strings"));
-  return [strings_plist writeToFile:localized_path atomically:YES];
+  NSURL* localized_url =
+      base::apple::FilePathToNSURL(localized_dir.Append("InfoPlist.strings"));
+  return [strings_plist writeToURL:localized_url error:nil];
 }
 
 bool WebAppShortcutCreator::UpdateIcon(const base::FilePath& app_path) const {

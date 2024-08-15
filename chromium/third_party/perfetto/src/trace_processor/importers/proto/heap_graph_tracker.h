@@ -28,6 +28,7 @@
 
 #include "protos/perfetto/trace/profiling/heap_graph.pbzero.h"
 #include "src/trace_processor/storage/trace_storage.h"
+#include "src/trace_processor/tables/profiler_tables_py.h"
 #include "src/trace_processor/types/trace_processor_context.h"
 
 namespace perfetto {
@@ -133,7 +134,7 @@ class HeapGraphTracker : public Destructible {
     return field_to_rows_.Find(field_name);
   }
 
-  std::unique_ptr<tables::ExperimentalFlamegraphNodesTable> BuildFlamegraph(
+  std::unique_ptr<tables::ExperimentalFlamegraphTable> BuildFlamegraph(
       const int64_t current_ts,
       const UniquePid current_upid);
 
@@ -225,9 +226,10 @@ class HeapGraphTracker : public Destructible {
   // all the other tables have been fully populated.
   void PopulateNativeSize(const SequenceState& seq);
 
-  base::FlatSet<tables::HeapGraphObjectTable::Id> GetChildren(
-      tables::HeapGraphObjectTable::RowReference);
+  void GetChildren(tables::HeapGraphObjectTable::RowReference,
+                   std::vector<tables::HeapGraphObjectTable::Id>&);
   void MarkRoot(tables::HeapGraphObjectTable::RowReference, StringId type);
+  size_t RankRoot(StringId type);
   void UpdateShortestPaths(tables::HeapGraphObjectTable::RowReference row_ref);
   void FindPathFromRoot(tables::HeapGraphObjectTable::RowReference,
                         PathFromRoot* path);

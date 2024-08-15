@@ -95,9 +95,10 @@
         "emscripten_no_enum_table": true,
         "values": [
             {"value": 0, "name": "success"},
-            {"value": 1, "name": "unavailable"},
-            {"value": 2, "name": "error"},
-            {"value": 3, "name": "unknown"}
+            {"value": 1, "name": "instance dropped"},
+            {"value": 2, "name": "unavailable"},
+            {"value": 3, "name": "error"},
+            {"value": 4, "name": "unknown"}
         ]
     },
     "adapter": {
@@ -214,13 +215,39 @@
             {"name": "disabled toggles", "type": "char", "annotation": "const*const*", "length": "disabled toggle count"}
         ]
     },
+    "dawn load cache data function": {
+        "tags": ["dawn", "native"],
+        "category": "function pointer",
+        "returns": "size_t",
+        "args": [
+            {"name": "key", "type": "void const *"},
+            {"name": "key size", "type": "size_t"},
+            {"name": "value", "type": "void *"},
+            {"name": "value size", "type": "size_t"},
+            {"name": "userdata", "type": "void *"}
+        ]
+    },
+    "dawn store cache data function": {
+        "tags": ["dawn", "native"],
+        "category": "function pointer",
+        "args": [
+            {"name": "key", "type": "void const *"},
+            {"name": "key size", "type": "size_t"},
+            {"name": "value", "type": "void const *"},
+            {"name": "value size", "type": "size_t"},
+            {"name": "userdata", "type": "void *"}
+        ]
+    },
     "dawn cache device descriptor" : {
         "tags": ["dawn", "native"],
         "category": "structure",
         "chained": "in",
         "chain roots": ["device descriptor"],
         "members": [
-            {"name": "isolation key", "type": "char", "annotation": "const*", "length": "strlen", "default": "\"\""}
+            {"name": "isolation key", "type": "char", "annotation": "const*", "length": "strlen", "default": "\"\""},
+            {"name": "load data function", "type": "dawn load cache data function", "default": "nullptr"},
+            {"name": "store data function", "type": "dawn store cache data function", "default": "nullptr"},
+            {"name": "function userdata", "type": "void *", "default": "nullptr"}
         ]
     },
     "dawn WGSL blocklist": {
@@ -618,14 +645,15 @@
         "emscripten_no_enum_table": true,
         "values": [
             {"value": 0, "name": "success"},
-            {"value": 1, "name": "validation error"},
-            {"value": 2, "name": "unknown"},
-            {"value": 3, "name": "device lost"},
-            {"value": 4, "name": "destroyed before callback"},
-            {"value": 5, "name": "unmapped before callback"},
-            {"value": 6, "name": "mapping already pending"},
-            {"value": 7, "name": "offset out of range"},
-            {"value": 8, "name": "size out of range"}
+            {"value": 1, "name": "instance dropped"},
+            {"value": 2, "name": "validation error"},
+            {"value": 3, "name": "unknown"},
+            {"value": 4, "name": "device lost"},
+            {"value": 5, "name": "destroyed before callback"},
+            {"value": 6, "name": "unmapped before callback"},
+            {"value": 7, "name": "mapping already pending"},
+            {"value": 8, "name": "offset out of range"},
+            {"value": 9, "name": "size out of range"}
         ]
     },
     "buffer map state": {
@@ -865,13 +893,23 @@
             {"name": "userdata", "type": "void *"}
         ]
     },
+    "compilation info callback info": {
+        "category": "structure",
+        "extensible": "in",
+        "members": [
+            {"name": "mode", "type": "callback mode"},
+            {"name": "callback", "type": "compilation info callback"},
+            {"name": "userdata", "type": "void *", "default": "nullptr"}
+        ]
+    },
     "compilation info request status": {
         "category": "enum",
         "values": [
             {"value": 0, "name": "success"},
-            {"value": 1, "name": "error"},
-            {"value": 2, "name": "device lost"},
-            {"value": 3, "name": "unknown"}
+            {"value": 1, "name": "instance dropped"},
+            {"value": 2, "name": "error"},
+            {"value": 3, "name": "device lost"},
+            {"value": 4, "name": "unknown"}
         ]
     },
     "compilation message": {
@@ -1068,16 +1106,26 @@
             {"name": "userdata", "type": "void *"}
         ]
     },
+    "create compute pipeline async callback info": {
+        "category": "structure",
+        "extensible": "in",
+        "members": [
+            {"name": "mode", "type": "callback mode"},
+            {"name": "callback", "type": "create compute pipeline async callback"},
+            {"name": "userdata", "type": "void *"}
+        ]
+    },
     "create pipeline async status": {
         "category": "enum",
         "emscripten_no_enum_table": true,
         "values": [
             {"value": 0, "name": "success"},
-            {"value": 1, "name": "validation error"},
-            {"value": 2, "name": "internal error"},
-            {"value": 3, "name": "device lost"},
-            {"value": 4, "name": "device destroyed"},
-            {"value": 5, "name": "unknown"}
+            {"value": 1, "name": "instance dropped"},
+            {"value": 2, "name": "validation error"},
+            {"value": 3, "name": "internal error"},
+            {"value": 4, "name": "device lost"},
+            {"value": 5, "name": "device destroyed"},
+            {"value": 6, "name": "unknown"}
         ]
     },
     "create render pipeline async callback": {
@@ -1086,6 +1134,15 @@
             {"name": "status", "type": "create pipeline async status"},
             {"name": "pipeline", "type": "render pipeline", "optional": true},
             {"name": "message", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "userdata", "type": "void *"}
+        ]
+    },
+    "create render pipeline async callback info": {
+        "category": "structure",
+        "extensible": "in",
+        "members": [
+            {"name": "mode", "type": "callback mode"},
+            {"name": "callback", "type": "create render pipeline async callback"},
             {"name": "userdata", "type": "void *"}
         ]
     },
@@ -1117,6 +1174,7 @@
             },
             {
                 "name": "create buffer",
+                "no autolock": true,
                 "returns": "buffer",
                 "args": [
                     {"name": "descriptor", "type": "buffer descriptor", "annotation": "const*"}
@@ -1139,6 +1197,7 @@
             },
             {
                 "name": "create compute pipeline",
+                "no autolock": true,
                 "returns": "compute pipeline",
                 "args": [
                     {"name": "descriptor", "type": "compute pipeline descriptor", "annotation": "const*"}
@@ -1151,6 +1210,16 @@
                     {"name": "descriptor", "type": "compute pipeline descriptor", "annotation": "const*"},
                     {"name": "callback", "type": "create compute pipeline async callback"},
                     {"name": "userdata", "type": "void *"}
+                ]
+            },
+            {
+                "name": "create compute pipeline async f",
+                "_comment": "TODO(crbug.com/dawn/2021): This is dawn/emscripten-only until we rename it to replace the old API. See bug for details.",
+                "tags": ["dawn", "emscripten"],
+                "returns": "future",
+                "args": [
+                    {"name": "descriptor", "type": "compute pipeline descriptor", "annotation": "const*"},
+                    {"name": "callback info", "type": "create compute pipeline async callback info"}
                 ]
             },
             {
@@ -1190,6 +1259,16 @@
                 ]
             },
             {
+                "name": "create render pipeline async f",
+                "_comment": "TODO(crbug.com/dawn/2021): This is dawn/emscripten-only until we rename it to replace the old API. See bug for details.",
+                "tags": ["dawn", "emscripten"],
+                "returns": "future",
+                "args": [
+                    {"name": "descriptor", "type": "render pipeline descriptor", "annotation": "const*"},
+                    {"name": "callback info", "type": "create render pipeline async callback info"}
+                ]
+            },
+            {
                 "name": "create render bundle encoder",
                 "returns": "render bundle encoder",
                 "args": [
@@ -1198,6 +1277,7 @@
             },
             {
                 "name": "create render pipeline",
+                "no autolock": true,
                 "returns": "render pipeline",
                 "args": [
                     {"name": "descriptor", "type": "render pipeline descriptor", "annotation": "const*"}
@@ -1212,6 +1292,7 @@
             },
             {
                 "name": "create shader module",
+                "no autolock": true,
                 "returns": "shader module",
                 "args": [
                     {"name": "descriptor", "type": "shader module descriptor", "annotation": "const*"}
@@ -1240,6 +1321,14 @@
                 "returns": "texture",
                 "args": [
                     {"name": "descriptor", "type": "texture descriptor", "annotation": "const*"}
+                ]
+            },
+            {
+                "name": "import shared buffer memory",
+                "returns": "shared buffer memory",
+                "tags": ["dawn", "native"],
+                "args": [
+                    {"name": "descriptor", "type": "shared buffer memory descriptor", "annotation": "const*"}
                 ]
             },
             {
@@ -1354,9 +1443,19 @@
             },
             {
                 "name": "pop error scope",
+                "no autolock": true,
                 "args": [
-                    {"name": "callback", "type": "error callback"},
+                    {"name": "old callback", "type": "error callback"},
                     {"name": "userdata", "type": "void *"}
+                ]
+            },
+            {
+                "name": "pop error scope f",
+                "_comment": "TODO(crbug.com/dawn/2021): This is dawn/emscripten-only until we rename it to replace the old API. See bug for details.",
+                "tags": ["dawn", "emscripten"],
+                "returns": "future",
+                "args": [
+                    {"name": "callback info", "type": "pop error scope callback info"}
                 ]
             },
             {
@@ -1408,6 +1507,33 @@
             {"name": "type", "type": "error type"},
             {"name": "message", "type": "char", "annotation": "const*", "length": "strlen"},
             {"name": "userdata", "type": "void *"}
+        ]
+    },
+    "pop error scope status": {
+        "category": "enum",
+        "emscripten_no_enum_table": true,
+        "values": [
+            {"value": 0, "name": "success"},
+            {"value": 1, "name": "instance dropped"}
+        ]
+    },
+    "pop error scope callback": {
+        "category": "function pointer",
+        "args": [
+            {"name": "status", "type": "pop error scope status"},
+            {"name": "type", "type": "error type"},
+            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen"},
+            {"name": "userdata", "type": "void *"}
+        ]
+    },
+    "pop error scope callback info": {
+        "category": "structure",
+        "extensible": "in",
+        "members": [
+            {"name": "mode", "type": "callback mode"},
+            {"name": "callback", "type": "pop error scope callback"},
+            {"name": "old callback", "type": "error callback", "_comment": "TODO(crbug.com/dawn/2021) Deprecate this field once we have moved callers to use the new callback signature."},
+            {"name": "userdata", "type": "void *", "default": "nullptr"}
         ]
     },
     "limits": {
@@ -1566,6 +1692,7 @@
         "category": "structure",
         "extensible": "in",
         "tags": ["dawn"],
+        "_comment": "TODO(crbug.com/1514732): deprecate flipY",
         "members": [
             {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
             {"name": "plane 0", "type": "texture view"},
@@ -1581,8 +1708,74 @@
                 "length": 7},
             {"name": "gamut conversion matrix", "type": "float", "annotation": "const*",
                 "length": 9},
-            {"name": "flip y", "type": "bool", "default": "false"},
+            {"name": "flip y", "type": "bool", "default": "false", "tags": ["deprecated"]},
+            {"name": "mirrored", "type": "bool", "default": "false"},
             {"name": "rotation", "type": "external texture rotation", "default": "rotate 0 degrees"}
+        ]
+    },
+    "shared buffer memory": {
+        "category": "object",
+        "tags": ["dawn", "native"],
+        "methods": [
+            {
+                "name": "set label",
+                "returns": "void",
+                "args": [
+                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
+                ]
+            },
+            {
+                "name": "get properties",
+                "returns": "void",
+                "args": [
+                    {"name": "properties", "type": "shared buffer memory properties", "annotation": "*"}
+                ]
+            },
+            {
+                "name": "create buffer",
+                "returns": "buffer",
+                "args": [
+                    {"name": "descriptor", "type": "buffer descriptor", "annotation": "const*", "optional": true, "default": "nullptr"}
+                ]
+            },
+            {
+                "name": "begin access",
+                "returns": "bool",
+                "args": [
+                    {"name": "buffer", "type": "buffer"},
+                    {"name": "descriptor", "type": "shared buffer memory begin access descriptor", "annotation": "const*"}
+                ]
+            },
+            {
+                "name": "end access",
+                "returns": "bool",
+                "args": [
+                    {"name": "buffer", "type": "buffer"},
+                    {"name": "descriptor", "type": "shared buffer memory end access state", "annotation": "*"}
+                ]
+            },
+            {
+                "name": "is device lost",
+                "returns": "bool",
+                "args": []
+            }
+        ]
+    },
+    "shared buffer memory properties": {
+        "category": "structure",
+        "extensible": "out",
+        "tags": ["dawn", "native"],
+        "members": [
+            {"name": "usage", "type": "buffer usage"},
+            {"name": "size", "type": "uint64_t"}
+        ]
+    },
+    "shared buffer memory descriptor": {
+        "category": "structure",
+        "extensible": "in",
+        "tags": ["dawn", "native"],
+        "members": [
+            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true}
         ]
     },
     "shared texture memory": {
@@ -1649,6 +1842,28 @@
         "tags": ["dawn", "native"],
         "members": [
             {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true}
+        ]
+    },
+    "shared buffer memory begin access descriptor": {
+        "category": "structure",
+        "extensible": "in",
+        "tags": ["dawn", "native"],
+        "members": [
+            {"name": "initialized", "type": "bool"},
+            {"name": "fence count", "type": "size_t"},
+            {"name": "fences", "type": "shared fence", "annotation": "const*", "length": "fence count"},
+            {"name": "signaled values", "type": "uint64_t", "annotation": "const*", "length": "fence count"}
+        ]
+    },
+    "shared buffer memory end access state": {
+        "category": "structure",
+        "extensible": "out",
+        "tags": ["dawn", "native"],
+        "members": [
+            {"name": "initialized", "type": "bool"},
+            {"name": "fence count", "type": "size_t"},
+            {"name": "fences", "type": "shared fence", "annotation": "const*", "length": "fence count"},
+            {"name": "signaled values", "type": "uint64_t", "annotation": "const*", "length": "fence count"}
         ]
     },
     "shared texture memory vk image descriptor": {
@@ -1732,7 +1947,8 @@
         "tags": ["dawn", "native"],
         "_comment": "TODO(crbug.com/dawn/1745): improve type safety",
         "members": [
-            {"name": "handle", "type": "void *"}
+            {"name": "handle", "type": "void *"},
+            {"name": "use keyed mutex", "type": "bool"}
         ]
     },
     "shared texture memory IO surface descriptor": {
@@ -1974,6 +2190,8 @@
             {"value": 1026, "name": "buffer map extended usages", "tags": ["dawn"]},
             {"value": 1027, "name": "adapter properties memory heaps", "tags": ["dawn"]},
             {"value": 1028, "name": "adapter properties D3D", "tags": ["dawn"]},
+            {"value": 1029, "name": "adapter properties vk", "tags": ["dawn"]},
+            {"value": 1030, "name": "r8 unorm storage", "tags": ["dawn"]},
 
             {"value": 1100, "name": "shared texture memory vk dedicated allocation", "tags": ["dawn", "native"]},
             {"value": 1101, "name": "shared texture memory a hardware buffer", "tags": ["dawn", "native"]},
@@ -1988,7 +2206,8 @@
             {"value": 1201, "name": "shared fence vk semaphore sync FD", "tags": ["dawn", "native"]},
             {"value": 1202, "name": "shared fence vk semaphore zircon handle", "tags": ["dawn", "native"]},
             {"value": 1203, "name": "shared fence DXGI shared handle", "tags": ["dawn", "native"]},
-            {"value": 1204, "name": "shared fence MTL shared event", "tags": ["dawn", "native"]}
+            {"value": 1204, "name": "shared fence MTL shared event", "tags": ["dawn", "native"]},
+            {"value": 1205, "name": "shared buffer memory D3D12 resource", "tags": ["dawn", "native"]}
         ]
     },
     "filter mode": {
@@ -2482,9 +2701,10 @@
         "emscripten_no_enum_table": true,
         "values": [
             {"value": 0, "name": "success"},
-            {"value": 1, "name": "error"},
-            {"value": 2, "name": "unknown"},
-            {"value": 3, "name": "device lost"}
+            {"value": 1, "name": "instance dropped"},
+            {"value": 2, "name": "error"},
+            {"value": 3, "name": "unknown"},
+            {"value": 4, "name": "device lost"}
         ]
     },
 
@@ -2917,8 +3137,9 @@
         "emscripten_no_enum_table": true,
         "values": [
             {"value": 0, "name": "success"},
-            {"value": 1, "name": "error"},
-            {"value": 2, "name": "unknown"}
+            {"value": 1, "name": "instance dropped"},
+            {"value": 2, "name": "error"},
+            {"value": 3, "name": "unknown"}
         ]
     },
 
@@ -3086,6 +3307,15 @@
                 ]
             },
             {
+                "name": "get compilation info f",
+                "_comment": "TODO(crbug.com/dawn/2021): This is dawn/emscripten-only until we rename it to replace the old API. See bug for details.",
+                "tags": ["dawn", "emscripten"],
+                "returns": "future",
+                "args": [
+                    {"name": "callback info", "type": "compilation info callback info"}
+                ]
+            },
+            {
                 "name": "set label",
                 "returns": "void",
                 "args": [
@@ -3203,7 +3433,6 @@
             {
                 "name": "get preferred format",
                 "returns": "texture format",
-                "tags": ["upstream", "emscripten"],
                 "args": [
                     {"name": "adapter", "type": "adapter"}
                 ]
@@ -3385,9 +3614,10 @@
             {"value": 1018, "name": "dawn experimental subgroup limits", "tags": ["dawn"]},
             {"value": 1019, "name": "adapter properties memory heaps", "tags": ["dawn"]},
             {"value": 1020, "name": "adapter properties D3D", "tags": ["dawn"]},
-            {"value": 1021, "name": "dawn compute pipeline full subgroups", "tags": ["dawn"]},
-            {"value": 1022, "name": "dawn wire WGSL control", "tags": ["dawn"]},
-            {"value": 1023, "name": "dawn WGSL blocklist", "tags": ["dawn", "native"]},
+            {"value": 1021, "name": "adapter properties vk", "tags": ["dawn"]},
+            {"value": 1022, "name": "dawn compute pipeline full subgroups", "tags": ["dawn"]},
+            {"value": 1023, "name": "dawn wire WGSL control", "tags": ["dawn"]},
+            {"value": 1024, "name": "dawn WGSL blocklist", "tags": ["dawn", "native"]},
 
             {"value": 1100, "name": "shared texture memory vk image descriptor", "tags": ["dawn", "native"]},
             {"value": 1101, "name": "shared texture memory vk dedicated allocation descriptor", "tags": ["dawn", "native"]},
@@ -3412,7 +3642,8 @@
             {"value": 1210, "name": "shared fence DXGI shared handle descriptor", "tags": ["dawn", "native"]},
             {"value": 1211, "name": "shared fence DXGI shared handle export info", "tags": ["dawn", "native"]},
             {"value": 1212, "name": "shared fence MTL shared event descriptor", "tags": ["dawn", "native"]},
-            {"value": 1213, "name": "shared fence MTL shared event export info", "tags": ["dawn", "native"]}
+            {"value": 1213, "name": "shared fence MTL shared event export info", "tags": ["dawn", "native"]},
+            {"value": 1214, "name": "shared buffer memory D3D12 resource descriptor", "tags": ["dawn", "native"]}
         ]
     },
     "texture": {
@@ -3919,6 +4150,15 @@
         "members": [
             {"name": "shader model", "type": "uint32_t"}
         ]
+    },
+    "adapter properties vk": {
+      "category": "structure",
+      "chained": "out",
+      "chain roots": ["adapter properties"],
+      "tags": ["dawn"],
+      "members": [
+          {"name": "driver version", "type": "uint32_t"}
+      ]
     },
     "dawn buffer descriptor error info from wire client": {
         "category": "structure",

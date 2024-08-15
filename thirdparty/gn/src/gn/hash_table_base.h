@@ -497,8 +497,7 @@ class HashTableBase {
 #if defined(__GNUC__) || defined(__clang__)
   [[gnu::noinline]]
 #endif
-  void
-  GrowBuckets() {
+  void GrowBuckets() {
     size_t size = size_;
     size_t new_size = (size == 1) ? 8 : size * 2;
     size_t new_mask = new_size - 1;

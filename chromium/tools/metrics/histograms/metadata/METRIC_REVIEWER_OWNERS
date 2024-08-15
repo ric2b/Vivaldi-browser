@@ -36,7 +36,9 @@ michelefan@chromium.org
 xiaohuic@chromium.org
 # autofill
 jihadghanna@google.com
+jkeitel@google.com
 jsaul@google.com
+schwering@google.com
 vidhanj@google.com
 vsemeniuk@google.com
 # auto
@@ -49,12 +51,14 @@ schenney@chromium.org
 mlippautz@chromium.org
 toyoshim@chromium.org
 yigu@chromium.org
+npm@chromium.org
 # bluetooth
 chadduffin@chromium.org
 crisrael@google.com
 jiajunz@google.com
 julietlevesque@google.com
 khorimoto@chromium.org
+nikhilcn@google.com
 reillyg@chromium.org
 # bookmarks
 emshack@chromium.org
@@ -81,10 +85,12 @@ azeemarshad@chromium.org
 chadduffin@chromium.org
 crisrael@google.com
 enlightened@chromium.org
+hsuregan@google.com
 jiajunz@google.com
 jorgelo@chromium.org
 julietlevesque@google.com
 khorimoto@chromium.org
+nikhilcn@google.com
 tsergeant@chromium.org
 zentaro@chromium.org
 # chromeos_settings
@@ -244,9 +250,12 @@ toyoshim@chromium.org
 # network
 azeemarshad@chromium.org
 chadduffin@chromium.org
+hsuregan@google.com
 jiajunz@google.com
 khorimoto@chromium.org
+matthewmwang@chromium.org
 nidhijaju@chromium.org
+nikhilcn@google.com
 toyoshim@chromium.org
 # new_tab_page
 dewittj@chromium.org
@@ -330,10 +339,6 @@ spelchat@chromium.org
 awscreen@chromium.org
 jimmyxgong@chromium.org
 zentaro@chromium.org
-# print
-awscreen@chromium.org
-jimmyxgong@chromium.org
-zentaro@chromium.org
 # privacy_budget
 antoniosartori@chromium.org
 # privacy
@@ -342,6 +347,7 @@ dullweber@chromium.org
 harrisonsean@chromium.org
 csharrison@chromium.org
 johnidel@chromium.org
+boujane@google.com
 # profile
 alexilin@chromium.org
 # quick_answers

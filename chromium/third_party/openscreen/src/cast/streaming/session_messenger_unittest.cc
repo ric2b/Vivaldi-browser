@@ -404,7 +404,7 @@ TEST_F(SessionMessengerTest, ErrorMessageLoggedIfTimeout) {
 
 // Make sure that we don't SEGFAULT if we cause the messenger to get deleted or
 // its replies cleared as part of executing an error callback on timeout.
-// See https://issuetracker.google.com/250957657 for more context.
+// See issuetracker.google.com/250957657 for more context.
 TEST_F(SessionMessengerTest, SenderHandlesTimeoutThatCausesDelete) {
   auto reply_callback = [this, message_cb = message_store_.GetReplyCallback()](
                             ErrorOr<ReceiverMessage> reply_result) mutable {

@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.sync;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.notNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import androidx.test.filters.MediumTest;
@@ -21,6 +22,9 @@ import org.mockito.junit.MockitoRule;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DoNotBatch;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.signin.base.CoreAccountInfo;
@@ -31,11 +35,15 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 /**
  * Integration test for ExplicitPassphrasePlatformClient.
  *
- * <p>TODO(crbug.com/1511304): Implement and test the case where the passphrase was already entered.
+ * <p>TODO(crbug.com/329409293): Test the case where the passphrase was already entered.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @DoNotBatch(reason = "TODO(crbug.com/1168590): SyncTestRule doesn't support batching.")
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@CommandLineFlags.Add({
+    ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
+    // Keep in sync with the corresponding string in sync_service_impl.cc.
+    "ignore-min-gms-version-with-passphrase-support-for-test"
+})
 public class ExplicitPassphrasePlatformClientTest {
     @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
 
@@ -50,6 +58,23 @@ public class ExplicitPassphrasePlatformClientTest {
 
     @Test
     @MediumTest
+    @DisableFeatures({ChromeFeatureList.PASS_EXPLICIT_SYNC_PASSPHRASE_TO_GMS_CORE})
+    public void testDoNotInvokeIfFlagDisabled() throws Exception {
+        mSyncTestRule.getFakeServerHelper().setCustomPassphraseNigori("passphrase");
+        CoreAccountInfo account = mSyncTestRule.setUpAccountAndEnableSyncForTesting();
+        SyncService syncService = mSyncTestRule.getSyncService();
+        CriteriaHelper.pollUiThread(() -> syncService.isPassphraseRequiredForPreferredDataTypes());
+
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> syncService.setDecryptionPassphrase("passphrase"));
+
+        verify(mExplicitPassphrasePlatformClient, never())
+                .setExplicitDecryptionPassphrase(eq(account), notNull());
+    }
+
+    @Test
+    @MediumTest
+    @EnableFeatures({ChromeFeatureList.PASS_EXPLICIT_SYNC_PASSPHRASE_TO_GMS_CORE})
     public void testInvokeIfCorrectDecryptionPassphraseSet() throws Exception {
         mSyncTestRule.getFakeServerHelper().setCustomPassphraseNigori("passphrase");
         CoreAccountInfo account = mSyncTestRule.setUpAccountAndEnableSyncForTesting();
@@ -63,10 +88,11 @@ public class ExplicitPassphrasePlatformClientTest {
                 .setExplicitDecryptionPassphrase(eq(account), notNull());
     }
 
-    // TODO(crbug.com/1511304): Change the behavior to *not* invoke the API if the passphrase is
+    // TODO(crbug.com/329409290): Change the behavior to *not* invoke the API if the passphrase is
     // wrong.
     @Test
     @MediumTest
+    @EnableFeatures({ChromeFeatureList.PASS_EXPLICIT_SYNC_PASSPHRASE_TO_GMS_CORE})
     public void testInvokeIfWrongDecryptionPassphraseSet() throws Exception {
         mSyncTestRule.getFakeServerHelper().setCustomPassphraseNigori("correctPassphrase");
         CoreAccountInfo account = mSyncTestRule.setUpAccountAndEnableSyncForTesting();

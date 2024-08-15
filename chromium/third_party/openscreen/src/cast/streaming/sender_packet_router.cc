@@ -43,16 +43,16 @@ SenderPacketRouter::SenderPacketRouter(Environment* environment,
                                                 max_packets_per_burst_,
                                                 burst_interval_)),
       alarm_(environment_->now_function(), environment_->task_runner()) {
-  OSP_DCHECK(environment_);
-  OSP_DCHECK_GT(packet_buffer_size_, kRequiredNetworkPacketSize);
+  OSP_CHECK(environment_);
+  OSP_CHECK_GT(packet_buffer_size_, kRequiredNetworkPacketSize);
 }
 
 SenderPacketRouter::~SenderPacketRouter() {
-  OSP_DCHECK(senders_.empty());
+  OSP_CHECK(senders_.empty());
 }
 
 void SenderPacketRouter::OnSenderCreated(Ssrc receiver_ssrc, Sender* sender) {
-  OSP_DCHECK(FindEntry(receiver_ssrc) == senders_.end());
+  OSP_CHECK(FindEntry(receiver_ssrc) == senders_.end());
   senders_.push_back(SenderEntry{receiver_ssrc, sender, kNever, kNever});
 
   if (senders_.size() == 1) {
@@ -65,7 +65,7 @@ void SenderPacketRouter::OnSenderCreated(Ssrc receiver_ssrc, Sender* sender) {
 
 void SenderPacketRouter::OnSenderDestroyed(Ssrc receiver_ssrc) {
   const auto it = FindEntry(receiver_ssrc);
-  OSP_DCHECK(it != senders_.end());
+  OSP_CHECK(it != senders_.end());
   senders_.erase(it);
 
   // If there are no longer any Senders, suspend receiving RTCP packets.
@@ -76,14 +76,14 @@ void SenderPacketRouter::OnSenderDestroyed(Ssrc receiver_ssrc) {
 
 void SenderPacketRouter::RequestRtcpSend(Ssrc receiver_ssrc) {
   const auto it = FindEntry(receiver_ssrc);
-  OSP_DCHECK(it != senders_.end());
+  OSP_CHECK(it != senders_.end());
   it->next_rtcp_send_time = Alarm::kImmediately;
   ScheduleNextBurst();
 }
 
 void SenderPacketRouter::RequestRtpSend(Ssrc receiver_ssrc) {
   const auto it = FindEntry(receiver_ssrc);
-  OSP_DCHECK(it != senders_.end());
+  OSP_CHECK(it != senders_.end());
   it->next_rtp_send_time = Alarm::kImmediately;
   ScheduleNextBurst();
 }
@@ -92,7 +92,7 @@ void SenderPacketRouter::OnReceivedPacket(const IPEndpoint& source,
                                           Clock::time_point arrival_time,
                                           std::vector<uint8_t> packet) {
   // If the packet did not come from the expected endpoint, ignore it.
-  OSP_DCHECK_NE(source.port, uint16_t{0});
+  OSP_CHECK_NE(source.port, uint16_t{0});
   if (source != environment_->remote_endpoint()) {
     return;
   }
@@ -236,10 +236,10 @@ constexpr auto kOneSecondInMilliseconds = to_milliseconds(seconds(1));
 int SenderPacketRouter::ComputeMaxPacketsPerBurst(int max_burst_bitrate,
                                                   int packet_size,
                                                   milliseconds burst_interval) {
-  OSP_DCHECK_GT(max_burst_bitrate, 0);
-  OSP_DCHECK_GT(packet_size, 0);
-  OSP_DCHECK_GT(burst_interval, milliseconds(0));
-  OSP_DCHECK_LE(burst_interval, kOneSecondInMilliseconds);
+  OSP_CHECK_GT(max_burst_bitrate, 0);
+  OSP_CHECK_GT(packet_size, 0);
+  OSP_CHECK_GT(burst_interval, milliseconds(0));
+  OSP_CHECK_LE(burst_interval, kOneSecondInMilliseconds);
 
   const int max_packets_per_second =
       max_burst_bitrate / kBitsPerByte / packet_size;
@@ -251,10 +251,10 @@ int SenderPacketRouter::ComputeMaxPacketsPerBurst(int max_burst_bitrate,
 int SenderPacketRouter::ComputeMaxBurstBitrate(int packet_size,
                                                int max_packets_per_burst,
                                                milliseconds burst_interval) {
-  OSP_DCHECK_GT(packet_size, 0);
-  OSP_DCHECK_GT(max_packets_per_burst, 0);
-  OSP_DCHECK_GT(burst_interval, milliseconds(0));
-  OSP_DCHECK_LE(burst_interval, kOneSecondInMilliseconds);
+  OSP_CHECK_GT(packet_size, 0);
+  OSP_CHECK_GT(max_packets_per_burst, 0);
+  OSP_CHECK_GT(burst_interval, milliseconds(0));
+  OSP_CHECK_LE(burst_interval, kOneSecondInMilliseconds);
 
   const int64_t max_bits_per_burst =
       int64_t{packet_size} * kBitsPerByte * max_packets_per_burst;

@@ -1081,10 +1081,10 @@ class LayerTreeHostPresentationDuringAnimation
   }
 
  private:
-  void OnPresentation(base::TimeTicks presentation_timestamp) { EndTest(); }
+  void OnPresentation(const viz::FrameTimingDetails& details) { EndTest(); }
 
   // Disable sub-sampling to deterministically record histograms under test.
-  base::MetricsSubSampler::ScopedDisableForTesting no_subsampling_;
+  base::MetricsSubSampler::ScopedAlwaysSampleForTesting no_subsampling_;
 
   FakeContentLayerClient client_;
   scoped_refptr<FakePictureLayer> scroll_layer_;
@@ -1730,9 +1730,8 @@ class LayerTreeHostAnimationTestIsAnimating
   FakeContentLayerClient client_;
 };
 
-// Disabled on ChromeOS ASAN due to test flakiness. See
-// https://crbug.com/1517464
-#if BUILDFLAG(IS_CHROMEOS) && defined(ADDRESS_SANITIZER)
+// TODO(https://issues.chromium.org/41490442): Flaky on Linux/ASAN/debug.
+#if BUILDFLAG(IS_LINUX) || defined(ADDRESS_SANITIZER) || !defined(NDEBUG)
 SINGLE_THREAD_TEST_F(LayerTreeHostAnimationTestIsAnimating);
 #else
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostAnimationTestIsAnimating);

@@ -26,15 +26,15 @@ which the bug’s owner should be able to convey. For risky fixes you should
 consider bumping it to a later milestone. Generally, you should consider merging
 the following:
 
-*   [Critical or High severity bugs](/developers/severity-guidelines)
-*   [Medium severity bugs](/developers/severity-guidelines) if they're
+*   [Critical (S0) or High (S1) severity bugs](/developers/severity-guidelines)
+*   [Medium (S2) severity bugs](/developers/severity-guidelines) if they're
             particularly worrisome (e.g. info leak) or have significant
             non-security impact (e.g. top crasher).
-*   [Low severity bugs](/developers/severity-guidelines) where the fixes
+*   [Low (S3) severity bugs](/developers/severity-guidelines) where the fixes
             are very low risk.
 
-For Critical and High bugs, we aim to fix users fast and work directly with
-Chrome TPMs to make sure any merge or release is done safely. The following are
+For Critical (S0) and High (S1) severity bugs, we aim to fix users fast and work directly
+with Chrome TPMs to make sure any merge or release is done safely. The following are
 general recommendations on when / where to merge:
 
 *   ==Released Critical vulnerability==: Emergency, out of band release,
@@ -75,25 +75,26 @@ Other factors to consider in your merge vs. no-merge calculation are:
 Your worklist for merges is defined by the following bug database criteria:
 
 *   All Issues
-*   Type-Bug-Security
-*   Merge=Request,Review
+*   Type=Vulnerability
+*   customfield1223134:&lt;Milestone&gt; (Merge-Request) or
+customfield1223087:Review-&lt;Milestone&gt;
 
 (Note: beware of querying on the milestone. At this stage in the bug's life, the
 milestone label represents the earliest affected release at the time the bug was
-filed. So if current stable is M27, there might still be bugs in this list which
-are M25, M26, etc., if we've been a little slow in fixing them. Conversely,
-anything marked M28 denotes a regression since M27 stable, so it only needs to
-be merged to the M28 beta.)
+filed. So if current stable is M122, there might still be bugs in this list which
+are M121, M120, etc., if we've been a little slow in fixing them. Conversely,
+anything marked M122 denotes a regression since M121 stable, so it only needs to
+be merged to the M122 beta.)
 
 ### **TODO(bug owner): Merging a security patch.**
 
 When a security merge has been approved, please go ahead and merge.
 
 To avoid accidentally losing a fix for a Chrome release, branch merges should be
-done in a "newer first" manner. For example, if you're merging a fix to M27
-stable and M28 is branched and affected, then merge to M28 first. Such a
-strategy can also be used to bake a fix on the M28 branch in order to gain
-confidence about an M27 stable channel merge.
+done in a "newer first" manner. For example, if you're merging a fix to M121
+stable and M122 is branched and affected, then merge to M122 first. Such a
+strategy can also be used to bake a fix on the M122 branch in order to gain
+confidence about an M121 stable channel merge.
 
 #### **How to merge**
 
@@ -119,19 +120,19 @@ Once the fix is successfully merged you will need to:
 For every new release, we include notes from security bugs that match the
 following search criteria:
 
-*   Type=Bug-Security
-*   M=? (Milestone)
-*   Release-x-Myy
-*   -Security_Severity=None
-*   Security_Impact=Stable
+*   Type=Vulnerability
+*   M=? (Milestone, customfield1223085:yyy)
+*   Security_Release=x-Myyy (customfield1223088:x-Myyy)
+*   -Severity=S4
+*   Security_Impact-Stable (hotlistid:5432902)
 
 For example, [this
-link](https://code.google.com/p/chromium/issues/list?can=1&q=Type%3DBug-Security+M%3D26+Release%3D0+-Security_Severity%3DNone+-OS%3DChrome+-OS%3DAndroid&colspec=ID+Pri+M+Iteration+ReleaseBlock+Cr+Status+Owner+Summary+OS+Modified&x=m&y=releaseblock&cells=tiles)
+link](https://issues.chromium.org/issues?q=Type%3DVulnerability%20customfield1223085:122%20Release%3D0-M122%20-Severity:S4%20--customfield1223084:Android)
 shows the security fixes that went into the initial Beta -&gt; Stable promotion
-of Chrome 26, and [this
-link](https://code.google.com/p/chromium/issues/list?can=1&q=Type%3DBug-Security+M%3D24+Release%3D1+-Security_Severity%3DNone+-OS%3DChrome+-OS%3DAndroid&colspec=ID+Pri+M+Iteration+ReleaseBlock+Cr+Status+Owner+Summary+OS+Modified&x=m&y=releaseblock&cells=tiles)
+of Chrome 122, and [this
+link](https://issues.chromium.org/issues?q=Type%3DVulnerability%20customfield1223085:122%20Release%3D1-M122%20-Severity:S4%20--customfield1223084:Android)
 shows the security fixes that went into the first post-stable patch of the
-Chrome 24 branch.
+Chrome 122 branch.
 
 Every externally reported issue gets assigned a CVE ID per MITRE's [CVE Counting
 Rules](https://cve.mitre.org/cve/editorial_policies/counting_rules.html).
@@ -145,9 +146,9 @@ the excellent contributions and rewards of external researchers.
 
 CVEs are allocated when the stable release that contains the fix is released,
 and they are then placed into the bug tracker using the CVE label, and copied
-into the release notes. An example of how it looks is [here for the Chrome 27
+into the release notes. An example of how it looks is [here for the Chrome 121
 release
-notes](http://googlechromereleases.blogspot.com/2013/05/stable-channel-release.html).
+notes](https://chromereleases.googleblog.com/2024/01/stable-channel-update-for-desktop_23.html).
 
 ### **security-notify@chromium.org**
 

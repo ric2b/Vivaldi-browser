@@ -16,6 +16,7 @@
 <translation id="2433507940547922241">Megjelenés</translation>
 <translation id="2501278716633472235">Visszalépés</translation>
 <translation id="2633278372998075009">Privát lapok</translation>
+<translation id="272026394418727548">Vivaldi kezdőlap</translation>
 <translation id="2951071800649516099">Oldalak felvétele az olvasólistára, későbbi elolvasáshoz</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> könyvjelző}
@@ -26,6 +27,7 @@
 <translation id="3504699618187058974">Lapok csoportosítása</translation>
 <translation id="3518985090088779359">Elfogadás és tovább</translation>
 <translation id="3571177741182643350">Olvasatlan cikkek - Offline elérhető:</translation>
+<translation id="3602290021589620013">Előnézet</translation>
 <translation id="3700829948786686853">Üdvözöl a Vivaldi</translation>
 <translation id="3719826155360621982">Kezdőlap</translation>
 <translation id="385051799172605136">Vissza</translation>
@@ -65,7 +67,6 @@ A keresési kifejezés módosításához tarts hosszan nyomva. A keresés finom�
 <translation id="7427132068601343474">A Vivaldi névjegye</translation>
 <translation id="7465104139234185284">Minden privát lap bezárása</translation>
 <translation id="7481312909269577407">Előre</translation>
-<translation id="7583262514280211622">Itt találod majd az Olvasási listádat</translation>
 <translation id="7968014550143838305">Hozzáadva az Olvasási listához</translation>
 <translation id="804786196054284061">Általános Szerződési Feltételek</translation>
 <translation id="8127542551745560481">Kezdőlap szerkesztése</translation>

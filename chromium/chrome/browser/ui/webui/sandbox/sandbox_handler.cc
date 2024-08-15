@@ -85,16 +85,12 @@ base::Value::List FetchSandboxFeatures() {
       FeatureToValue(sandbox::policy::features::kNetworkServiceSandbox));
   features.Append(
       FeatureToValue(sandbox::policy::features::kRendererAppContainer));
-  features.Append(
-      FeatureToValue(sandbox::policy::features::kWinSboxRendererCloseKsecDD));
   features.Append(FeatureToValue(
       sandbox::policy::features::kWinSboxDisableExtensionPoints));
   features.Append(
-      FeatureToValue(sandbox::policy::features::kWinSboxWarmupProcessPrng));
-  features.Append(
       FeatureToValue(sandbox::policy::features::kWinSboxZeroAppShim));
   features.Append(
-      FeatureToValue(sandbox::policy::features::kWinSboxFsctlLockdown));
+      FeatureToValue(sandbox::policy::features::kWinSboxNoFakeGdiInit));
   return features;
 }
 

@@ -10,7 +10,6 @@ workspace = true
 [features]
 default = []
 test_rustcrypto = ["crypto_provider_default/rustcrypto"]
-test_openssl = ["crypto_provider_default/openssl"]
 test_boringssl = ["crypto_provider_default/boringssl"]
 
 [dependencies]
@@ -19,7 +18,7 @@ rand.workspace = true
 ukey2_proto.workspace = true
 log.workspace = true
 
-num-bigint = "0.4.3"
+num-bigint = "0.4.4"
 
 [dev-dependencies]
 rand = { workspace = true, features = ["std_rng", "getrandom"] }

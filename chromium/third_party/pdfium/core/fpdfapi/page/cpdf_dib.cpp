@@ -33,13 +33,13 @@
 #include "core/fxcodec/jpeg/jpegmodule.h"
 #include "core/fxcodec/jpx/cjpx_decoder.h"
 #include "core/fxcodec/scanlinedecoder.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/span_util.h"
 #include "core/fxge/calculate_pitch.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
-#include "third_party/base/check.h"
-#include "third_party/base/check_op.h"
 
 namespace {
 
@@ -248,7 +248,7 @@ bool CPDF_DIB::ContinueInternal() {
     m_Format = MakeRGBFormat(CalculateBitsPerPixel(m_bpc, m_nComponents));
   }
 
-  absl::optional<uint32_t> pitch =
+  std::optional<uint32_t> pitch =
       fxge::CalculatePitch32(GetBppFromFormat(m_Format), m_Width);
   if (!pitch.has_value())
     return false;
@@ -384,7 +384,7 @@ CPDF_DIB::LoadState CPDF_DIB::ContinueLoadDIBBase(PauseIndicatorIface* pPause) {
 
 bool CPDF_DIB::LoadColorInfo(const CPDF_Dictionary* pFormResources,
                              const CPDF_Dictionary* pPageResources) {
-  absl::optional<DecoderArray> decoder_array = GetDecoderArray(m_pDict);
+  std::optional<DecoderArray> decoder_array = GetDecoderArray(m_pDict);
   if (!decoder_array.has_value())
     return false;
 
@@ -426,7 +426,7 @@ bool CPDF_DIB::LoadColorInfo(const CPDF_Dictionary* pFormResources,
   // |m_nComponents| does not get reached, then a decoder can try to set
   // |m_nComponents| based on the number of channels in the image being
   // decoded.
-  m_nComponents = m_pColorSpace->CountComponents();
+  m_nComponents = m_pColorSpace->ComponentCount();
   m_Family = m_pColorSpace->GetFamily();
   if (m_Family == CPDF_ColorSpace::Family::kICCBased && pCSObj->IsName()) {
     ByteString cs = pCSObj->GetString();
@@ -543,11 +543,11 @@ CPDF_DIB::LoadState CPDF_DIB::CreateDecoder(uint8_t resolution_levels_to_skip) {
   if (!m_pDecoder)
     return LoadState::kFail;
 
-  const absl::optional<uint32_t> requested_pitch =
+  const std::optional<uint32_t> requested_pitch =
       fxge::CalculatePitch8(m_bpc, m_nComponents, m_Width);
   if (!requested_pitch.has_value())
     return LoadState::kFail;
-  const absl::optional<uint32_t> provided_pitch = fxge::CalculatePitch8(
+  const std::optional<uint32_t> provided_pitch = fxge::CalculatePitch8(
       m_pDecoder->GetBPC(), m_pDecoder->CountComps(), m_pDecoder->GetWidth());
   if (!provided_pitch.has_value())
     return LoadState::kFail;
@@ -564,7 +564,7 @@ bool CPDF_DIB::CreateDCTDecoder(pdfium::span<const uint8_t> src_span,
   if (m_pDecoder)
     return true;
 
-  absl::optional<JpegModule::ImageInfo> info_opt =
+  std::optional<JpegModule::ImageInfo> info_opt =
       JpegModule::LoadInfo(src_span);
   if (!info_opt.has_value())
     return false;
@@ -588,7 +588,7 @@ bool CPDF_DIB::CreateDCTDecoder(pdfium::span<const uint8_t> src_span,
   m_nComponents = static_cast<uint32_t>(info.num_components);
   m_CompData.clear();
   if (m_pColorSpace) {
-    uint32_t colorspace_comps = m_pColorSpace->CountComponents();
+    uint32_t colorspace_comps = m_pColorSpace->ComponentCount();
     switch (m_Family) {
       case CPDF_ColorSpace::Family::kDeviceGray:
       case CPDF_ColorSpace::Family::kDeviceRGB:
@@ -791,9 +791,6 @@ bool CPDF_DIB::LoadInternal(const CPDF_Dictionary* pFormResources,
     return false;
 
   m_pDict = m_pStream->GetDict();
-  if (!m_pDict)
-    return false;
-
   m_Width = m_pDict->GetIntegerFor("Width");
   m_Height = m_pDict->GetIntegerFor("Height");
   if (!IsValidDimension(m_Width) || !IsValidDimension(m_Height))
@@ -805,7 +802,7 @@ bool CPDF_DIB::LoadInternal(const CPDF_Dictionary* pFormResources,
   if (m_bDoBpcCheck && (m_bpc == 0 || m_nComponents == 0))
     return false;
 
-  const absl::optional<uint32_t> maybe_size =
+  const std::optional<uint32_t> maybe_size =
       fxge::CalculatePitch8(m_bpc, m_nComponents, m_Width);
   if (!maybe_size.has_value())
     return false;
@@ -846,7 +843,7 @@ CPDF_DIB::LoadState CPDF_DIB::StartLoadMask() {
   if (pMatte && m_pColorSpace &&
       m_Family != CPDF_ColorSpace::Family::kPattern &&
       pMatte->size() == m_nComponents &&
-      m_pColorSpace->CountComponents() <= m_nComponents) {
+      m_pColorSpace->ComponentCount() <= m_nComponents) {
     std::vector<float> colors =
         ReadArrayElementsToVector(pMatte.Get(), m_nComponents);
 
@@ -922,7 +919,7 @@ void CPDF_DIB::LoadPalette() {
                              m_Family == CPDF_ColorSpace::Family::kDeviceRGB)) {
       return;
     }
-    if (m_pColorSpace->CountComponents() > 3) {
+    if (m_pColorSpace->ComponentCount() > 3) {
       return;
     }
     float color_values[3];
@@ -979,8 +976,8 @@ void CPDF_DIB::LoadPalette() {
     float G = 0;
     float B = 0;
     if (m_nComponents == 1 && m_Family == CPDF_ColorSpace::Family::kICCBased &&
-        m_pColorSpace->CountComponents() > 1) {
-      int nComponents = m_pColorSpace->CountComponents();
+        m_pColorSpace->ComponentCount() > 1) {
+      int nComponents = m_pColorSpace->ComponentCount();
       std::vector<float> temp_buf(nComponents);
       for (int k = 0; k < nComponents; ++k)
         temp_buf[k] = color_values[0];
@@ -1079,7 +1076,7 @@ bool CPDF_DIB::TranslateScanline24bppDefaultDecode(
     if (m_bpc != 8)
       return false;
 
-    if (m_nComponents == m_pColorSpace->CountComponents()) {
+    if (m_nComponents == m_pColorSpace->ComponentCount()) {
       m_pColorSpace->TranslateImageLine(dest_scan, src_scan, m_Width, m_Width,
                                         m_Height, TransMask());
     }
@@ -1136,7 +1133,7 @@ pdfium::span<const uint8_t> CPDF_DIB::GetScanline(int line) const {
   if (m_bpc == 0)
     return pdfium::span<const uint8_t>();
 
-  const absl::optional<uint32_t> src_pitch =
+  const std::optional<uint32_t> src_pitch =
       fxge::CalculatePitch8(m_bpc, m_nComponents, m_Width);
   if (!src_pitch.has_value())
     return pdfium::span<const uint8_t>();

@@ -5,11 +5,9 @@
 #import <UIKit/UIKit.h>
 
 #import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
-#import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
+#import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/ui/bookmarks_editor/vivaldi_bookmark_add_edit_folder_view_controller.h"
-#import "ios/ui/bookmarks_editor/vivaldi_bookmark_add_edit_url_view_controller.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_constants.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
@@ -29,7 +27,7 @@
 // The background Image for Speed Dial
 @property(nonatomic, strong) UIImageView* backgroundImageView;
 // Bookmark Model that holds the bookmark data
-@property(assign,nonatomic) BookmarkModel* bookmarks;
+@property(assign,nonatomic) LegacyBookmarkModel* bookmarks;
 // FaviconLoader is a keyed service that uses LargeIconService to retrieve
 // favicon images.
 @property(assign,nonatomic) FaviconLoader* faviconLoader;
@@ -65,7 +63,7 @@
 #pragma mark - INITIALIZERS
 + (instancetype)initWithItem:(VivaldiSpeedDialItem*)item
                       parent:(VivaldiSpeedDialItem*)parent
-                   bookmarks:(BookmarkModel*)bookmarks
+                   bookmarks:(LegacyBookmarkModel*)bookmarks
                      browser:(Browser*)browser
                faviconLoader:(FaviconLoader*)faviconLoader
              backgroundImage:(UIImage*)backgroundImage {
@@ -83,7 +81,7 @@
   return controller;
 }
 
-- (instancetype)initWithBookmarks:(BookmarkModel*)bookmarks
+- (instancetype)initWithBookmarks:(LegacyBookmarkModel*)bookmarks
                           browser:(Browser*)browser {
   self = [super init];
   if (self) {
@@ -183,7 +181,8 @@
 
 /// Device orientation change handler
 - (void)handleDeviceOrientationChange:(NSNotification*)note {
-  [self.speedDialContainerView reloadLayoutWithStyle:[self currentLayoutStyle]];
+  [self.speedDialContainerView reloadLayoutWithStyle:[self currentLayoutStyle]
+                                        layoutColumn:[self currentLayoutColumn]];
 }
 
 /// Refresh the UI when data source is updated.
@@ -206,7 +205,16 @@
   return [VivaldiStartPagePrefsHelper getStartPageLayoutStyle];
 }
 
+/// Returns current layout column for start page
+- (VivaldiStartPageLayoutColumn)currentLayoutColumn {
+  return [VivaldiStartPagePrefsHelper getStartPageSpeedDialMaximumColumns];
+}
+
 #pragma mark - SPEED DIAL HOME CONSUMER
+
+- (void)bookmarkModelLoaded {
+  // No op.
+}
 
 - (void)refreshContents {
   BOOL loadable = self.bookmarks->loaded() &&
@@ -225,7 +233,8 @@
                    userInfo:userInfo];
 }
 
-- (void)refreshMenuItems:(NSArray*)items {
+- (void)refreshMenuItems:(NSArray*)items
+               SDFolders:(NSArray*)SDFolders {
   // No op here since there's no menu in this view.
 }
 
@@ -236,11 +245,23 @@
   [self.speedDialContainerView configureWith:items
                                       parent:self.currentItem
                                faviconLoader:self.faviconLoader
-                                 layoutStyle:[self currentLayoutStyle]];
+                                 layoutStyle:[self currentLayoutStyle]
+                                layoutColumn:[self currentLayoutColumn]
+                                showAddGroup:NO
+                           verticalSizeClass:self.view.traitCollection.verticalSizeClass];
+}
+
+- (void)setSpeedDialsEnabled:(BOOL)enabled {
+  // No op. Handled in base view controller.
+}
+
+- (void)setShowCustomizeStartPageButtonEnabled:(BOOL)enabled {
+  // No op. Handled in base view controller.
 }
 
 - (void)reloadLayout {
-  [self.speedDialContainerView reloadLayoutWithStyle:[self currentLayoutStyle]];
+  [self.speedDialContainerView reloadLayoutWithStyle:[self currentLayoutStyle]
+                                        layoutColumn:[self currentLayoutColumn]];
 }
 
 #pragma mark - VIVALDI_SPEED_DIAL_CONTAINER_VIEW_DELEGATE
@@ -302,6 +323,11 @@
                           parent:(VivaldiSpeedDialItem*)parent {
   if (self.delegate)
     [self.delegate didSelectAddNewSpeedDial:isFolder parent:parent];
+}
+
+- (void)didSelectAddNewGroupForParent:(VivaldiSpeedDialItem*)parent {
+  if (self.delegate)
+    [self.delegate didSelectAddNewGroupForParent:parent];
 }
 
 @end

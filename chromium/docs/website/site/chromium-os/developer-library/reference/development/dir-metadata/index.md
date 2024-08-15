@@ -30,7 +30,7 @@ Here's an example:
 # Metadata information for this directory.
 #
 # For more information on DIR_METADATA files, see:
-#   https://chromium.googlesource.com/chromiumos/docs/+/HEAD/dir_metadata.md
+#   https://www.chromium.org/chromium-os/developer-library/reference/development/dir-metadata/
 #
 # For the schema of this file, see Metadata message:
 #   https://source.chromium.org/chromium/infra/infra/+/HEAD:go/src/infra/tools/dirmd/proto/dir_metadata.proto

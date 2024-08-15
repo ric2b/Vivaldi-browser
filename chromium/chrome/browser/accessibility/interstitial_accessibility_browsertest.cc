@@ -13,6 +13,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/scoped_accessibility_mode_override.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
@@ -59,8 +60,7 @@ class InterstitialAccessibilityBrowserTest : public InProcessBrowserTest {
 
 // TODO(crbug.com/1453221): flakily times out on ChromeOS MSAN and Lacros ASAN
 // builders. Deflake and re-enable.
-#if (defined(MEMORY_SANITIZER) && BUILDFLAG(IS_CHROMEOS)) || \
-    (defined(ADDRESS_SANITIZER) && BUILDFLAG(IS_CHROMEOS_LACROS))
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #define MAYBE_TestSSLInterstitialAccessibility \
   DISABLED_TestSSLInterstitialAccessibility
 #else
@@ -72,7 +72,8 @@ IN_PROC_BROWSER_TEST_F(InterstitialAccessibilityBrowserTest,
 
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  content::EnableAccessibilityForWebContents(web_contents);
+  content::ScopedAccessibilityModeOverride scoped_accessibility_mode(
+      web_contents, ui::kAXModeComplete);
 
   ASSERT_TRUE(https_server_mismatched_.Start());
 

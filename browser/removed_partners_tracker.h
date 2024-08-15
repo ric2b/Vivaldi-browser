@@ -23,6 +23,10 @@ class BookmarkModel;
 class BookmarkNode;
 }  // namespace bookmarks
 
+#if BUILDFLAG(IS_IOS)
+class LegacyBookmarkModel;
+#endif
+
 namespace vivaldi_partners {
 class RemovedPartnersTracker : public bookmarks::BookmarkModelObserver
 #if !BUILDFLAG(IS_IOS)
@@ -33,7 +37,7 @@ class RemovedPartnersTracker : public bookmarks::BookmarkModelObserver
 #if !BUILDFLAG(IS_IOS)
   static void Create(Profile* profile, bookmarks::BookmarkModel* model);
 #else
-  static void Create(PrefService* prefs, bookmarks::BookmarkModel* model);
+  static void Create(PrefService* prefs, LegacyBookmarkModel* model);
 #endif
   static std::set<base::Uuid> ReadRemovedPartners(
       const base::Value::List& deleted_partners,
@@ -45,7 +49,7 @@ class RemovedPartnersTracker : public bookmarks::BookmarkModelObserver
 #if !BUILDFLAG(IS_IOS)
   RemovedPartnersTracker(Profile* profile, bookmarks::BookmarkModel* model);
 #else
-  RemovedPartnersTracker(PrefService* prefs, bookmarks::BookmarkModel* model);
+  RemovedPartnersTracker(PrefService* prefs, LegacyBookmarkModel* model);
 #endif
   ~RemovedPartnersTracker() override;
   RemovedPartnersTracker(const RemovedPartnersTracker&) = delete;
@@ -56,52 +60,45 @@ class RemovedPartnersTracker : public bookmarks::BookmarkModelObserver
   void OnProfileMarkedForPermanentDeletion(Profile* profile) override;
 #endif //!BUILDFLAG(IS_IOS)
   // Implementing BookmarkModelObserver
-  void BookmarkNodeChanged(bookmarks::BookmarkModel* model,
-                           const bookmarks::BookmarkNode* node) override;
+  void BookmarkNodeChanged(const bookmarks::BookmarkNode* node) override;
   void BookmarkNodeRemoved(
-      bookmarks::BookmarkModel* model,
       const bookmarks::BookmarkNode* parent,
       size_t old_index,
       const bookmarks::BookmarkNode* node,
       const std::set<GURL>& no_longer_bookmarked) override {}
-  void OnWillRemoveBookmarks(bookmarks::BookmarkModel* model,
-                             const bookmarks::BookmarkNode* parent,
+  void OnWillRemoveBookmarks(const bookmarks::BookmarkNode* parent,
                              size_t old_index,
                              const bookmarks::BookmarkNode* node) override;
   void OnWillChangeBookmarkMetaInfo(
-      bookmarks::BookmarkModel* model,
       const bookmarks::BookmarkNode* node) override;
-  void BookmarkMetaInfoChanged(bookmarks::BookmarkModel* model,
-                               const bookmarks::BookmarkNode* node) override;
-  void BookmarkModelLoaded(bookmarks::BookmarkModel* model,
-                           bool ids_reassigned) override;
-  void BookmarkModelBeingDeleted(bookmarks::BookmarkModel* model) override;
+  void BookmarkMetaInfoChanged(const bookmarks::BookmarkNode* node) override;
+  void BookmarkModelLoaded(bool ids_reassigned) override;
+  void BookmarkModelBeingDeleted() override;
 
   // Unused overrides from BookmarkModelObserver
-  void BookmarkNodeMoved(bookmarks::BookmarkModel* model,
-                         const bookmarks::BookmarkNode* old_parent,
+  void BookmarkNodeMoved(const bookmarks::BookmarkNode* old_parent,
                          size_t old_index,
                          const bookmarks::BookmarkNode* new_parent,
                          size_t new_index) override {}
-  void BookmarkNodeAdded(bookmarks::BookmarkModel* model,
-                         const bookmarks::BookmarkNode* parent,
+  void BookmarkNodeAdded(const bookmarks::BookmarkNode* parent,
                          size_t index,
                          bool added_by_user) override {}
   void BookmarkNodeFaviconChanged(
-      bookmarks::BookmarkModel* model,
       const bookmarks::BookmarkNode* node) override {}
   void BookmarkNodeChildrenReordered(
-      bookmarks::BookmarkModel* model,
       const bookmarks::BookmarkNode* node) override {}
   void BookmarkAllUserNodesRemoved(
-      bookmarks::BookmarkModel* model,
       const std::set<GURL>& removed_urls) override {}
 
   void SaveRemovedPartners();
   void TrackRemovals(const bookmarks::BookmarkNode* node, bool recursive);
   void DoTrackRemovals(const bookmarks::BookmarkNode* node, bool recursive);
 
+#if !BUILDFLAG(IS_IOS)
   const raw_ptr<bookmarks::BookmarkModel> model_;
+#else
+  const raw_ptr<LegacyBookmarkModel> model_;
+#endif
   const raw_ptr<PrefService> prefs_;
   std::set<base::Uuid> removed_partners_;
 #if !BUILDFLAG(IS_IOS)

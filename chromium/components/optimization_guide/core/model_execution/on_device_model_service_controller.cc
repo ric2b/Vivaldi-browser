@@ -17,6 +17,7 @@
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/optimization_guide/core/optimization_guide_switches.h"
 #include "components/optimization_guide/core/optimization_guide_util.h"
+#include "components/optimization_guide/proto/model_execution.pb.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "services/on_device_model/public/cpp/model_assets.h"
@@ -117,7 +118,7 @@ void OnDeviceModelServiceController::Init() {
         on_device_component_state_manager_->GetState();
     if (state) {
       SetModelPath(state->GetInstallDirectory(),
-                   state->GetVersion().GetString());
+                   state->GetComponentVersion().GetString());
     }
   }
 }
@@ -144,7 +145,10 @@ std::unique_ptr<OptimizationGuideModelExecutor::Session>
 OnDeviceModelServiceController::CreateSession(
     proto::ModelExecutionFeature feature,
     ExecuteRemoteFn execute_remote_fn,
-    OptimizationGuideLogger* optimization_guide_logger) {
+    OptimizationGuideLogger* optimization_guide_logger,
+    base::WeakPtr<ModelQualityLogsUploaderService>
+        model_quality_uploader_service,
+    const std::optional<SessionConfigParams>& config_params) {
   if (on_device_component_state_manager_) {
     on_device_component_state_manager_->OnDeviceEligibleFeatureUsed();
   }
@@ -165,44 +169,54 @@ OnDeviceModelServiceController::CreateSession(
   model_paths.weights = model_path_->Append(kWeightsFile);
 
   std::optional<proto::FeatureTextSafetyConfiguration> safety_config;
-  if (features::GetOnDeviceModelMustUseSafetyModel()) {
-    if (!safety_model_info_) {
-      logger.set_reason(
-          OnDeviceModelEligibilityReason::kSafetyModelNotAvailable);
-      return nullptr;
-    }
-
+  if (!safety_model_info_ && features::GetOnDeviceModelMustUseSafetyModel()) {
+    logger.set_reason(OnDeviceModelEligibilityReason::kSafetyModelNotAvailable);
+    return nullptr;
+  }
+  if (safety_model_info_) {
     safety_config = GetFeatureTextSafetyConfigForFeature(feature);
-    if (!safety_config) {
+    if (!safety_config && features::GetOnDeviceModelMustUseSafetyModel()) {
       logger.set_reason(
           OnDeviceModelEligibilityReason::kSafetyConfigNotAvailableForFeature);
       return nullptr;
     }
 
-    model_paths.ts_data =
-        *(safety_model_info_->model_info.GetAdditionalFileWithBaseName(
-            kTsDataFile));
-    model_paths.ts_sp_model =
-        *(safety_model_info_->model_info.GetAdditionalFileWithBaseName(
-            kTsSpModelFile));
+    if (safety_config) {
+      model_paths.ts_data =
+          *(safety_model_info_->model_info.GetAdditionalFileWithBaseName(
+              kTsDataFile));
+      model_paths.ts_sp_model =
+          *(safety_model_info_->model_info.GetAdditionalFileWithBaseName(
+              kTsSpModelFile));
 
-    if (!safety_config->allowed_languages().empty()) {
-      if (!language_detection_model_path_) {
-        logger.set_reason(OnDeviceModelEligibilityReason::
-                              kLanguageDetectionModelNotAvailable);
-        return nullptr;
+      if (!safety_config->allowed_languages().empty()) {
+        if (language_detection_model_path_) {
+          model_paths.language_detection_model =
+              *language_detection_model_path_;
+        } else if (features::GetOnDeviceModelMustUseSafetyModel()) {
+          logger.set_reason(OnDeviceModelEligibilityReason::
+                                kLanguageDetectionModelNotAvailable);
+          return nullptr;
+        }
       }
-
-      model_paths.language_detection_model = *language_detection_model_path_;
     }
   }
 
-  if (!config_interpreter_->HasConfigForFeature(feature)) {
+  scoped_refptr<const OnDeviceModelFeatureAdapter> adapter =
+      config_interpreter_->GetAdapter(feature);
+  if (!adapter) {
     logger.set_reason(
         OnDeviceModelEligibilityReason::kConfigNotAvailableForFeature);
     return nullptr;
   }
 
+  if (feature == proto::MODEL_EXECUTION_FEATURE_COMPOSE &&
+      !base::FeatureList::IsEnabled(
+          features::kOptimizationGuideComposeOnDeviceEval)) {
+    logger.set_reason(
+        OnDeviceModelEligibilityReason::kFeatureExecutionNotEnabled);
+    return nullptr;
+  }
   OnDeviceModelEligibilityReason reason =
       access_controller_->ShouldStartNewSession();
   logger.set_reason(reason);
@@ -214,9 +228,10 @@ OnDeviceModelServiceController::CreateSession(
   return std::make_unique<SessionImpl>(
       base::BindRepeating(&OnDeviceModelServiceController::StartMojoSession,
                           weak_ptr_factory_.GetWeakPtr(), model_paths),
-      feature, model_versions_, config_interpreter_.get(),
+      feature, model_versions_, std::move(adapter),
       weak_ptr_factory_.GetWeakPtr(), safety_config,
-      std::move(execute_remote_fn), optimization_guide_logger);
+      std::move(execute_remote_fn), optimization_guide_logger,
+      model_quality_uploader_service, config_params);
 }
 
 void OnDeviceModelServiceController::GetEstimatedPerformanceClass(
@@ -258,9 +273,8 @@ void OnDeviceModelServiceController::OnModelAssetsLoaded(
     on_device_model::ModelAssets assets) {
   if (!service_remote_) {
     // Close the files on a background thread.
-    base::ThreadPool::PostTask(
-        FROM_HERE, {base::MayBlock()},
-        base::DoNothingWithBoundArgs(std::move(assets)));
+    base::ThreadPool::PostTask(FROM_HERE, {base::MayBlock()},
+                               base::DoNothingWithBoundArgs(std::move(assets)));
     return;
   }
   // TODO(b/302402959): Choose max_tokens based on device.
@@ -310,7 +324,8 @@ void OnDeviceModelServiceController::StateChanged(
   }
 
   if (state) {
-    SetModelPath(state->GetInstallDirectory(), state->GetVersion().GetString());
+    SetModelPath(state->GetInstallDirectory(),
+                 state->GetComponentVersion().GetString());
   } else {
     ClearModelPath();
   }

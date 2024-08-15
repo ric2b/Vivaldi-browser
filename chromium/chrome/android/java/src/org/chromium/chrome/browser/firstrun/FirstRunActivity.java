@@ -26,15 +26,18 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.back_press.SecondaryActivityBackPressUma.SecondaryActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fonts.FontPreloader;
 import org.chromium.chrome.browser.metrics.UmaUtils;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.signin.SigninCheckerProvider;
 import org.chromium.chrome.browser.signin.SigninFirstRunFragment;
+import org.chromium.chrome.browser.ui.signin.history_sync.HistorySyncUtils;
 import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.metrics.LowEntropySource;
+import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -166,14 +169,13 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
         // Initialize SigninChecker, to kick off sign-in for child accounts as early as possible.
         //
         // TODO(b/245912657): explicitly sign in supervised users in {@link
-        // SigninFirstRunMediator#handleContinueWithNative} rather than relying on SigninChecker.
+        // FullscreenSigninMediator#handleContinueWithNative} rather than relying on SigninChecker.
         SigninCheckerProvider.get(getProfileProviderSupplier().get().getOriginalProfile());
 
         mFirstRunFlowSequencer.updateFirstRunProperties(mFreProperties);
 
         BooleanSupplier showSearchEnginePromo =
                 () -> mFreProperties.getBoolean(SHOW_SEARCH_ENGINE_PAGE);
-        BooleanSupplier showSyncConsent = () -> mFreProperties.getBoolean(SHOW_SYNC_CONSENT_PAGE);
 
         // An optional page to select a default search engine.
         if (showSearchEnginePromo.getAsBoolean()) {
@@ -185,7 +187,21 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
 
         // An optional sync consent page, the visibility of this page will be decided on the fly
         // according to the situation.
-        mPages.add(new FirstRunPage<>(SyncConsentFirstRunFragment.class, showSyncConsent));
+        if (ChromeFeatureList.isEnabled(
+                ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)) {
+            BooleanSupplier showHistorySync =
+                    () -> mFreProperties.getBoolean(SHOW_HISTORY_SYNC_PAGE);
+            if (!showHistorySync.getAsBoolean()) {
+                HistorySyncUtils.recordHistorySyncNotShown(
+                        getProfileProviderSupplier().get().getOriginalProfile(),
+                        SigninAccessPoint.START_PAGE);
+            }
+            mPages.add(new FirstRunPage<>(HistorySyncFirstRunFragment.class, showHistorySync));
+        } else {
+            BooleanSupplier showSyncConsent =
+                    () -> mFreProperties.getBoolean(SHOW_SYNC_CONSENT_PAGE);
+            mPages.add(new FirstRunPage<>(SyncConsentFirstRunFragment.class, showSyncConsent));
+        }
         mFreProgressStates.add(MobileFreProgress.SYNC_CONSENT_SHOWN);
 
         if (mPagerAdapter != null) {
@@ -249,7 +265,7 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
 
         mFirstRunFlowSequencer =
                 new FirstRunFlowSequencer(
-                        this, getProfileProviderSupplier(), getChildAccountStatusSupplier()) {
+                        getProfileProviderSupplier(), getChildAccountStatusSupplier()) {
                     @Override
                     public void onFlowIsKnown(Bundle freProperties) {
                         assert freProperties != null;
@@ -579,8 +595,8 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
 
         // Vivaldi: Set default prefs & initialize adblocker
         if (ChromeApplicationImpl.isVivaldi()) {
-            VivaldiUtils.setDefaultPreferencesOnFirstRun();
             AdblockManager.getInstance().initialize();
+            VivaldiUtils.setDefaultPreferencesOnFirstRun();
         }
     }
 

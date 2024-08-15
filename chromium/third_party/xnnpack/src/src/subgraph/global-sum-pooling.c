@@ -23,18 +23,10 @@ static enum xnn_status create_global_sum_pooling_operator(
   size_t num_values,
   struct xnn_operator_data* opdata,
   struct xnn_code_cache* code_cache,
-  struct xnn_weights_cache* weights_cache)
+  xnn_weights_cache_t weights_cache)
 {
   assert(node->num_inputs == 1);
-  const uint32_t input_id = node->inputs[0];
-  assert(input_id != XNN_INVALID_VALUE_ID);
-  assert(input_id < num_values);
-
   assert(node->num_outputs == 1);
-
-  const size_t num_input_dims = values[input_id].shape.num_dims;
-  assert(num_input_dims >= 1);
-  const size_t channel_dim = values[input_id].shape.dim[num_input_dims - 1];
 
   enum xnn_status status;
   assert(values[node->inputs[0]].layout == xnn_layout_type_nhwc);
@@ -42,7 +34,6 @@ static enum xnn_status create_global_sum_pooling_operator(
   switch (node->compute_type) {
     case xnn_compute_type_fp32:
       status = xnn_create_global_sum_pooling_nwc_f32(
-          channel_dim /* channels */, channel_dim /* input stride */, channel_dim /* output stride */,
           node->activation.output_min,
           node->activation.output_max,
           node->flags,
@@ -50,7 +41,6 @@ static enum xnn_status create_global_sum_pooling_operator(
       break;
     case xnn_compute_type_fp16:
       status = xnn_create_global_sum_pooling_nwc_f16(
-          channel_dim /* channels */, channel_dim /* input stride */, channel_dim /* output stride */,
           node->activation.output_min,
           node->activation.output_max,
           node->flags,
@@ -71,39 +61,84 @@ static enum xnn_status reshape_global_sum_pooling_operator(
   const uint32_t input_id = opdata->inputs[0];
   assert(input_id < num_values);
   const size_t num_input_dims = values[input_id].shape.num_dims;
-  size_t batch_size, input_width;
+  assert(num_input_dims >= 1);
+  size_t batch_size, input_width, num_batch_dims;
   switch (opdata->type) {
     case xnn_node_type_global_sum_pooling_1d:
+      num_batch_dims = num_input_dims - 2;
       batch_size = xnn_shape_multiply_batch_dims(&values[input_id].shape, 2);
       input_width = values[input_id].shape.dim[num_input_dims - 2];
       break;
     case xnn_node_type_global_sum_pooling_2d:
+      num_batch_dims = num_input_dims - 3;
       batch_size = xnn_shape_multiply_batch_dims(&values[input_id].shape, 3);
       input_width = values[input_id].shape.dim[num_input_dims - 3] * values[input_id].shape.dim[num_input_dims - 2];
       break;
     default:
       XNN_UNREACHABLE;
   }
+  const size_t channel_dim = values[input_id].shape.dim[num_input_dims - 1];
+  enum xnn_status status = xnn_status_invalid_state;
+  const size_t old_workspace_size = opdata->workspace_size;
   switch (opdata->operator_objects[0]->type) {
     case xnn_operator_type_global_sum_pooling_nwc_f32:
-      return xnn_reshape_global_sum_pooling_nwc_f32(
+      status = xnn_reshape_global_sum_pooling_nwc_f32(
         opdata->operator_objects[0],
         batch_size,
         input_width,
+        /*channels=*/channel_dim,
+        /*input_stride=*/channel_dim,
+        /*output_stride=*/channel_dim,
         &opdata->workspace_size, &opdata->workspace_alignment,
         threadpool);
       break;
     case xnn_operator_type_global_sum_pooling_nwc_f16:
-      return xnn_reshape_global_sum_pooling_nwc_f16(
+      status = xnn_reshape_global_sum_pooling_nwc_f16(
         opdata->operator_objects[0],
         batch_size,
         input_width,
+        /*channels=*/channel_dim,
+        /*input_stride=*/channel_dim,
+        /*output_stride=*/channel_dim,
         &opdata->workspace_size, &opdata->workspace_alignment,
         threadpool);
       break;
     default:
       XNN_UNREACHABLE;
   }
+  if (status != xnn_status_success) {
+    return status;
+  }
+  const uint32_t output_id = opdata->outputs[0];
+  assert(output_id != XNN_INVALID_VALUE_ID);
+  assert(output_id < num_values);
+  struct xnn_value* output_value = values + output_id;
+
+  memcpy(&output_value->shape.dim[0], &values[input_id].shape.dim[0], num_batch_dims);
+  if (opdata->operator_objects[0]->flags & XNN_FLAG_KEEP_DIMS) {
+    output_value->shape.num_dims = num_input_dims;
+    output_value->shape.dim[num_input_dims - 1] = channel_dim;
+    switch (opdata->type) {
+      case xnn_node_type_global_sum_pooling_1d:
+        output_value->shape.dim[num_batch_dims] = 1;
+        break;
+      case xnn_node_type_global_sum_pooling_2d:
+        output_value->shape.dim[num_batch_dims] = 1;
+        output_value->shape.dim[num_batch_dims + 1] = 1;
+        break;
+      default:
+        XNN_UNREACHABLE;
+    }
+  } else {
+    output_value->shape.dim[num_batch_dims] = channel_dim;
+    output_value->shape.num_dims = num_batch_dims + 1;
+  }
+  const size_t new_size = xnn_tensor_get_size(output_value);
+  if (new_size > output_value->size || opdata->workspace_size > old_workspace_size) {
+    output_value->size = new_size;
+    return xnn_status_reallocation_required;
+  }
+  return xnn_status_success;
 }
 
 static enum xnn_status setup_global_sum_pooling_operator(
@@ -179,6 +214,8 @@ static enum xnn_status define_global_sum_pooling_nd(
   }
 
   switch (input_value->datatype) {
+    case xnn_datatype_fp16:
+      break;
     case xnn_datatype_fp32:
       break;
     default:
@@ -202,6 +239,9 @@ static enum xnn_status define_global_sum_pooling_nd(
 
   enum xnn_compute_type compute_type = xnn_compute_type_invalid;
   switch (output_value->datatype) {
+    case xnn_datatype_fp16:
+      compute_type = xnn_compute_type_fp16;
+      break;
     case xnn_datatype_fp32:
       compute_type = xnn_compute_type_fp32;
       break;

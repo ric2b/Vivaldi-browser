@@ -656,59 +656,58 @@
         "name": "getBlockedCounters",
         "type": "function",
         "description": "Retrieves the amount of requests blocked since the last time the counters got reset.",
-        "parameters": [
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name": "reporting_start",
-                "type": "number",
-                "description": "The time at which the counters have been initialized or reset."
-              },
-              {
-                "name": "counters",
-                "type": "object",
-                "properties": {
-                  "blocked_domains": {
-                    "type": "object",
-                    "properties": {
-                      "tracking": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "BlockedCounter"
-                        }
-                      },
-                      "ad_blocking": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "BlockedCounter"
-                        }
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "does_not_support_promises": "vivaldi",
+          "parameters": [
+            {
+              "name": "reporting_start",
+              "type": "number",
+              "description": "The time at which the counters have been initialized or reset."
+            },
+            {
+              "name": "counters",
+              "type": "object",
+              "properties": {
+                "blocked_domains": {
+                  "type": "object",
+                  "properties": {
+                    "tracking": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "BlockedCounter"
+                      }
+                    },
+                    "ad_blocking": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "BlockedCounter"
                       }
                     }
-                  },
-                  "blocked_for_origin": {
-                    "type": "object",
-                    "properties": {
-                      "tracking": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "BlockedCounter"
-                        }
-                      },
-                      "ad_blocking": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "BlockedCounter"
-                        }
+                  }
+                },
+                "blocked_for_origin": {
+                  "type": "object",
+                  "properties": {
+                    "tracking": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "BlockedCounter"
+                      }
+                    },
+                    "ad_blocking": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "BlockedCounter"
                       }
                     }
                   }
                 }
               }
-            ]
-          }
-        ]
+            }
+          ]
+        }
       },
       {
         "name": "clearBlockedCounters",

@@ -53,6 +53,13 @@ wheel: <
 >
 
 # Used by:
+#    presubmit_canned_checks.py (via zoneinfo)
+wheel: <
+  name: "infra/python/wheels/tzdata-py2_py3"
+  version: "version:2023.4"
+>
+
+# Used by:
 #   my_activity.py
 wheel: <
   name: "infra/python/wheels/python-dateutil-py2_py3"

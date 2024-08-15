@@ -147,7 +147,7 @@ views::View* BluetoothDetailedViewImpl::AddDeviceListSubHeader(
 
 void BluetoothDetailedViewImpl::NotifyDeviceListChanged() {
   device_list_->InvalidateLayout();
-  Layout();
+  DeprecatedLayoutImmediately();
 }
 
 views::View* BluetoothDetailedViewImpl::device_list() {
@@ -219,8 +219,8 @@ void BluetoothDetailedViewImpl::CreateTopContainer() {
   toggle_row_->tri_view()->SetInsets(kToggleRowTriViewInsets);
 
   // ChromeVox users will just use the `toggle_button_` to toggle.
-  toggle_icon_->GetViewAccessibility().OverrideIsIgnored(true);
-  toggle_row_->text_label()->GetViewAccessibility().OverrideIsIgnored(true);
+  toggle_icon_->GetViewAccessibility().SetIsIgnored(true);
+  toggle_row_->text_label()->GetViewAccessibility().SetIsIgnored(true);
 }
 
 void BluetoothDetailedViewImpl::CreateMainContainer() {
@@ -281,7 +281,7 @@ void BluetoothDetailedViewImpl::ToggleBluetoothState(bool new_state) {
   UpdateBluetoothEnabledState(new_system_state);
 }
 
-BEGIN_METADATA(BluetoothDetailedViewImpl, TrayDetailedView)
+BEGIN_METADATA(BluetoothDetailedViewImpl)
 END_METADATA
 
 }  // namespace ash

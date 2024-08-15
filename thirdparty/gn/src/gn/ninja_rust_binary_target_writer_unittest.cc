@@ -60,6 +60,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RustExecutable) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
@@ -88,7 +89,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibDeps) {
   Err err;
   TestWithScope setup;
 
-  Target private_rlib(setup.settings(), Label(SourceDir("//baz/"), "privatelib"));
+  Target private_rlib(setup.settings(),
+                      Label(SourceDir("//baz/"), "privatelib"));
   private_rlib.set_output_type(Target::RUST_LIBRARY);
   private_rlib.visibility().SetPublic();
   SourceFile bazlib("//baz/lib.rs");
@@ -113,6 +115,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibDeps) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/baz\n"
         "target_out_dir = obj/baz\n"
         "target_output_name = libprivatelib\n"
         "\n"
@@ -154,6 +157,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibDeps) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/far\n"
         "target_out_dir = obj/far\n"
         "target_output_name = libfarlib\n"
         "\n"
@@ -195,6 +199,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibDeps) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/bar\n"
         "target_out_dir = obj/bar\n"
         "target_output_name = libpubliclib\n"
         "\n"
@@ -250,6 +255,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibDeps) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/main\n"
         "target_out_dir = obj/main\n"
         "target_output_name = main\n"
         "\n"
@@ -275,11 +281,13 @@ TEST_F(NinjaRustBinaryTargetWriterTest, DylibDeps) {
   Err err;
   TestWithScope setup;
 
-  Target private_inside_dylib(setup.settings(), Label(SourceDir("//faz/"), "private_inside"));
+  Target private_inside_dylib(setup.settings(),
+                              Label(SourceDir("//faz/"), "private_inside"));
   private_inside_dylib.set_output_type(Target::RUST_LIBRARY);
   private_inside_dylib.visibility().SetPublic();
   SourceFile fazlib("//faz/lib.rs");
-  private_inside_dylib.sources().push_back(SourceFile("//faz/private_inside.rs"));
+  private_inside_dylib.sources().push_back(
+      SourceFile("//faz/private_inside.rs"));
   private_inside_dylib.sources().push_back(fazlib);
   private_inside_dylib.source_types_used().Set(SourceFile::SOURCE_RS);
   private_inside_dylib.rust_values().set_crate_root(fazlib);
@@ -300,6 +308,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, DylibDeps) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/faz\n"
         "target_out_dir = obj/faz\n"
         "target_output_name = libprivate_inside\n"
         "\n"
@@ -340,6 +349,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, DylibDeps) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/baz\n"
         "target_out_dir = obj/baz\n"
         "target_output_name = libinside\n"
         "\n"
@@ -383,6 +393,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, DylibDeps) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/bar\n"
         "target_out_dir = obj/bar\n"
         "target_output_name = libmylib\n"
         "\n"
@@ -400,7 +411,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, DylibDeps) {
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
 
-  Target private_dylib(setup.settings(), Label(SourceDir("//private_dylib/"), "private_dylib"));
+  Target private_dylib(setup.settings(),
+                       Label(SourceDir("//private_dylib/"), "private_dylib"));
   private_dylib.set_output_type(Target::SHARED_LIBRARY);
   private_dylib.visibility().SetPublic();
   SourceFile private_dyliblib("//private_dylib/lib.rs");
@@ -454,6 +466,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, DylibDeps) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
@@ -505,6 +518,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibDepsAcrossGroups) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/bar\n"
         "target_out_dir = obj/bar\n"
         "target_output_name = libmymacro\n"
         "\n"
@@ -564,6 +578,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibDepsAcrossGroups) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/bar\n"
         "target_out_dir = obj/bar\n"
         "target_output_name = libmylib\n"
         "\n"
@@ -606,6 +621,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibDepsAcrossGroups) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
@@ -697,6 +713,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RenamedDeps) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
@@ -799,6 +816,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, NonRustDeps) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
@@ -846,6 +864,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, NonRustDeps) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
@@ -887,6 +906,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, NonRustDeps) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/baz\n"
         "target_out_dir = obj/baz\n"
         "target_output_name = libbaz\n"
         "\n"
@@ -1046,7 +1066,6 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibInLibrary) {
   target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
-
   std::ostringstream out;
   NinjaRustBinaryTargetWriter writer(&target, out);
   writer.Run();
@@ -1059,6 +1078,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibInLibrary) {
       "rustflags =\n"
       "rustenv =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/exe\n"
       "target_out_dir = obj/exe\n"
       "target_output_name = exe\n"
       "\n"
@@ -1126,6 +1146,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RustOutputExtensionAndDir) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
@@ -1169,8 +1190,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, LibsAndLibDirs) {
   target.sources().push_back(main);
   target.source_types_used().Set(SourceFile::SOURCE_RS);
   target.set_output_dir(SourceDir("//out/Debug/foo/"));
-  target.config_values().libs().push_back(
-      LibFile(SourceFile("//dir1/ar.a")));
+  target.config_values().libs().push_back(LibFile(SourceFile("//dir1/ar.a")));
   target.config_values().libs().push_back(LibFile("binlib"));
   target.config_values().lib_dirs().push_back(SourceDir("//binlibdir/"));
   target.config_values().framework_dirs().push_back(SourceDir("//binfwdir/"));
@@ -1193,6 +1213,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, LibsAndLibDirs) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
@@ -1292,6 +1313,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibWithLibDeps) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = librlibcrate\n"
         "\n"
@@ -1375,6 +1397,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RustProcMacro) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/bar\n"
         "target_out_dir = obj/bar\n"
         "target_output_name = libmymacro\n"
         "\n"
@@ -1421,6 +1444,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RustProcMacro) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
@@ -1466,6 +1490,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, GroupDeps) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/bar\n"
         "target_out_dir = obj/bar\n"
         "target_output_name = libmylib\n"
         "\n"
@@ -1514,6 +1539,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, GroupDeps) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
@@ -1568,6 +1594,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, Externs) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
@@ -1618,6 +1645,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, Inputs) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
@@ -1662,6 +1690,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, CdylibDeps) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/bar\n"
         "target_out_dir = obj/bar\n"
         "target_output_name = libmylib\n"
         "\n"
@@ -1702,6 +1731,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, CdylibDeps) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
@@ -1779,6 +1809,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, TransitivePublicNonRustDeps) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
@@ -1815,7 +1846,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, TransitiveRustDepsThroughSourceSet) {
   ASSERT_TRUE(rlib_pub.OnResolved(&err));
 
   Target rlib_priv(setup.settings(),
-                  Label(SourceDir("//private/"), "behind_sourceset_private"));
+                   Label(SourceDir("//private/"), "behind_sourceset_private"));
   rlib_priv.set_output_type(Target::RUST_LIBRARY);
   rlib_priv.visibility().SetPublic();
   SourceFile rlib_priv_root("//private/lib.rs");
@@ -1863,6 +1894,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, TransitiveRustDepsThroughSourceSet) {
         "rustflags =\n"
         "rustenv =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/linked\n"
         "target_out_dir = obj/linked\n"
         "target_output_name = exe\n"
         "\n"
@@ -1916,6 +1948,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, Pool) {
       "rustflags =\n"
       "rustenv =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/foo\n"
       "target_out_dir = obj/foo\n"
       "target_output_name = bar\n"
       "\n"

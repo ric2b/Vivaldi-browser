@@ -13,8 +13,8 @@
 #include "components/crx_file/id_util.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
-#include "extensions/common/extension_messages.h"
 #include "extensions/common/mojom/context_type.mojom.h"
+#include "extensions/common/mojom/frame.mojom.h"
 #include "extensions/common/mojom/message_port.mojom-shared.h"
 #include "extensions/renderer/api/messaging/message_target.h"
 #include "extensions/renderer/api/messaging/native_renderer_messaging_service.h"
@@ -101,7 +101,7 @@ class RuntimeHooksDelegateTest : public NativeExtensionBindingsSystemUnittest {
  private:
   std::unique_ptr<NativeRendererMessagingService> messaging_service_;
 
-  raw_ptr<ScriptContext, ExperimentalRenderer> script_context_ = nullptr;
+  raw_ptr<ScriptContext> script_context_ = nullptr;
   scoped_refptr<const Extension> extension_;
 };
 

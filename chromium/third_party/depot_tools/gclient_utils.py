@@ -13,10 +13,10 @@ import io
 import logging
 import operator
 import os
-import pipes
 import platform
 import queue
 import re
+import shlex
 import stat
 import subprocess
 import sys
@@ -369,7 +369,7 @@ def safe_makedirs(tree):
 
 def CommandToStr(args):
     """Converts an arg list into a shell escaped string."""
-    return ' '.join(pipes.quote(arg) for arg in args)
+    return ' '.join(shlex.quote(arg) for arg in args)
 
 
 class Wrapper(object):
@@ -632,7 +632,7 @@ def CheckCallAndFilter(args,
         # subprocess when filtering its output. This makes the subproc believe
         # it was launched from a terminal, which will preserve ANSI color codes.
         os_type = GetOperatingSystem()
-        if sys.stdout.isatty() and os_type != 'win' and os_type != 'aix':
+        if sys.stdout.isatty() and os_type not in ['win', 'aix', 'zos']:
             pipe_reader, pipe_writer = os.openpty()
         else:
             pipe_reader, pipe_writer = os.pipe()

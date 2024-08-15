@@ -5,10 +5,10 @@
 #include "content/browser/webid/federated_auth_request_impl.h"
 
 #include <random>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/functional/callback.h"
 #include "base/json/json_writer.h"
 #include "base/metrics/histogram_macros.h"
@@ -23,7 +23,6 @@
 #include "content/browser/devtools/devtools_instrumentation.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/browser/webid/digital_credentials/digital_credential_provider.h"
 #include "content/browser/webid/fake_identity_request_dialog_controller.h"
 #include "content/browser/webid/federated_auth_disconnect_request.h"
 #include "content/browser/webid/federated_auth_request_page_data.h"
@@ -96,6 +95,7 @@ std::string ComputeUrlEncodedTokenPostData(
     const std::string& account_id,
     bool is_sign_in,
     bool is_auto_reauthn,
+    const RpMode& rp_mode,
     const std::vector<std::string>& scope,
     const std::vector<std::string>& responseType,
     const base::flat_map<std::string, std::string>& params) {
@@ -138,6 +138,19 @@ std::string ComputeUrlEncodedTokenPostData(
       query += "&";
     }
     query += "is_auto_selected=" + is_auto_selected;
+  }
+
+  // TODO(crbug.com/40284792): ButtonMode is enabled by default on the browser
+  // side to support origin trials. To avoid sending "mode=widget" for all
+  // existing traffic, we restrict it to traffic that uses the button mode for
+  // now. We should remove this restriction before shipping the button flow.
+  if (IsFedCmButtonModeEnabled() && rp_mode == RpMode::kButton) {
+    // Shares with IdP the type of the request.
+    std::string rp_mode_str = rp_mode == RpMode::kButton ? "button" : "widget";
+    if (!query.empty()) {
+      query += "&";
+    }
+    query += "mode=" + rp_mode_str;
   }
 
   if (IsFedCmAuthzEnabled()) {
@@ -316,16 +329,6 @@ std::string FormatOriginForDisplay(const url::Origin& origin) {
                                     /*for_display=*/true);
 }
 
-bool ShouldSuppressIdpSigninFailureDialog(
-    std::optional<TokenStatus> token_status) {
-  if (!token_status) {
-    return false;
-  }
-
-  return token_status == TokenStatus::kAborted ||
-         token_status == TokenStatus::kUnhandledRequest;
-}
-
 FederatedAuthRequestPageData* GetPageData(RenderFrameHost* render_frame_host) {
   return FederatedAuthRequestPageData::GetOrCreateForPage(
       render_frame_host->GetPage());
@@ -356,7 +359,7 @@ void FilterAccountsWithLoginHint(
   auto filter = [&login_hint](const IdentityRequestAccount& account) {
     return !base::Contains(account.login_hints, login_hint);
   };
-  base::EraseIf(accounts, filter);
+  std::erase_if(accounts, filter);
   FedCmMetrics::NumAccounts num_matching = ComputeNumMatchingAccounts(accounts);
   base::UmaHistogramEnumeration("Blink.FedCm.LoginHint.NumMatchingAccounts",
                                 num_matching);
@@ -373,12 +376,12 @@ void FilterAccountsWithDomainHint(
     auto filter = [](const IdentityRequestAccount& account) {
       return account.domain_hints.empty();
     };
-    base::EraseIf(accounts, filter);
+    std::erase_if(accounts, filter);
   } else {
     auto filter = [&domain_hint](const IdentityRequestAccount& account) {
       return !base::Contains(account.domain_hints, domain_hint);
     };
-    base::EraseIf(accounts, filter);
+    std::erase_if(accounts, filter);
   }
   FedCmMetrics::NumAccounts num_matching = ComputeNumMatchingAccounts(accounts);
   base::UmaHistogramEnumeration("Blink.FedCm.DomainHint.NumMatchingAccounts",
@@ -386,11 +389,10 @@ void FilterAccountsWithDomainHint(
 }
 
 std::unique_ptr<FedCmMetrics> CreateFedCmMetrics(
-    const GURL& provider_config_url,
-    const ukm::SourceId& source_id,
-    bool is_disabled) {
-  return std::make_unique<FedCmMetrics>(provider_config_url, source_id,
-                                        base::RandInt(1, 1 << 30), is_disabled);
+    const GURL& provider,
+    const ukm::SourceId& source_id) {
+  return std::make_unique<FedCmMetrics>(provider, source_id,
+                                        base::RandInt(1, 1 << 30));
 }
 
 std::string GetTopFrameOriginForDisplay(const url::Origin& top_frame_origin) {
@@ -419,6 +421,10 @@ std::optional<std::string> GetIframeOriginForDisplay(
   }
 
   return iframe_for_display;
+}
+
+bool IsFrameActive(RenderFrameHost* frame) {
+  return frame && frame->IsActive();
 }
 
 bool IsFrameVisible(RenderFrameHost* frame) {
@@ -549,8 +555,9 @@ FederatedAuthRequestImpl::~FederatedAuthRequestImpl() {
   // Since FederatedAuthRequestImpl is a subclass of
   // DocumentService<blink::mojom::FederatedAuthRequest>, it only lives as long
   // as the current document.
-  if (num_requests_ > 0 && fedcm_metrics_) {
-    fedcm_metrics_->RecordNumRequestsPerDocument(num_requests_);
+  if (num_requests_ > 0) {
+    FedCmMetrics::RecordNumRequestsPerDocument(
+        render_frame_host().GetPageUkmSourceId(), num_requests_);
   }
 }
 
@@ -598,87 +605,10 @@ FederatedAuthRequestImpl& FederatedAuthRequestImpl::CreateForTesting(
       permission_context, identity_registry, std::move(receiver));
 }
 
-void FederatedAuthRequestImpl::CompleteDigitalCredentialRequest(
-    std::string response) {
-  if (!digital_credential_provider_) {
-    std::move(digital_credential_request_callback_)
-        .Run(RequestTokenStatus::kError, std::nullopt, "", /*error=*/nullptr,
-             /*is_auto_selected=*/false);
-    return;
-  }
-
-  if (!response.empty()) {
-    std::move(digital_credential_request_callback_)
-        .Run(RequestTokenStatus::kSuccess, std::nullopt, response,
-             /*error=*/nullptr,
-             /*is_auto_selected=*/false);
-  } else {
-    std::move(digital_credential_request_callback_)
-        .Run(RequestTokenStatus::kError, std::nullopt, "", /*error=*/nullptr,
-             /*is_auto_selected=*/false);
-  }
-}
-
-base::Value::Dict BuildDigitalCredentialRequest(
-    blink::mojom::DigitalCredentialProviderPtr provider) {
-  auto result = Value::Dict();
-
-  if (provider->params) {
-    auto params = Value::Dict();
-    for (const auto& pair : *provider->params) {
-      params.Set(pair.first, pair.second);
-    }
-    result.Set("params", std::move(params));
-  }
-
-  if (provider->selector) {
-    auto formats = Value::List();
-    for (auto& format : provider->selector->format) {
-      formats.Append(format);
-    }
-
-    auto fields = Value::List();
-
-    if (provider->selector->doctype) {
-      auto doctype = Value::Dict();
-      doctype.Set("name", "doctype");
-      doctype.Set("equals", provider->selector->doctype.value());
-      fields.Append(std::move(doctype));
-    }
-
-    for (auto& value : provider->selector->fields) {
-      auto field = Value::Dict();
-      field.Set("name", value->name);
-      if (value->equals) {
-        field.Set("equals", value->equals.value());
-      }
-      fields.Append(std::move(field));
-    }
-
-    result.Set("selector", Value::Dict().Set("fields", std::move(fields)));
-    result.Set("responseFormat", std::move(formats));
-  }
-
-  if (provider->protocol) {
-    result.Set("protocol", *provider->protocol);
-  }
-
-  if (provider->request) {
-    result.Set("request", *provider->request);
-  }
-
-  if (provider->publicKey) {
-    result.Set("publicKey", *provider->publicKey);
-  }
-
-  return Value::Dict().Set("providers",
-                           Value::List().Append(std::move(result)));
-}
-
-std::vector<blink::mojom::IdentityProviderPtr>
+std::vector<blink::mojom::IdentityProviderRequestOptionsPtr>
 FederatedAuthRequestImpl::MaybeAddRegisteredProviders(
-    std::vector<blink::mojom::IdentityProviderPtr>& providers) {
-  std::vector<blink::mojom::IdentityProviderPtr> result;
+    std::vector<blink::mojom::IdentityProviderRequestOptionsPtr>& providers) {
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> result;
 
   std::vector<GURL> registered_config_urls =
       permission_delegate_->GetRegisteredIdPs();
@@ -691,16 +621,15 @@ FederatedAuthRequestImpl::MaybeAddRegisteredProviders(
   std::reverse(registered_config_urls.begin(), registered_config_urls.end());
 
   for (auto& provider : providers) {
-    if (!provider->is_federated() ||
-        !provider->get_federated()->config->use_registered_config_urls) {
+    if (!provider->config->use_registered_config_urls) {
       result.emplace_back(provider->Clone());
       continue;
     }
 
     for (auto& configURL : registered_config_urls) {
-      blink::mojom::IdentityProviderPtr idp = provider->Clone();
-      idp->get_federated()->config->use_registered_config_urls = false;
-      idp->get_federated()->config->config_url = configURL;
+      blink::mojom::IdentityProviderRequestOptionsPtr idp = provider->Clone();
+      idp->config->use_registered_config_urls = false;
+      idp->config->config_url = configURL;
       result.emplace_back(std::move(idp));
     }
   }
@@ -719,7 +648,7 @@ void FederatedAuthRequestImpl::RequestToken(
   // Expand the providers list with registered providers.
   if (IsFedCmIdPRegistrationEnabled()) {
     for (auto& idp_get_params_ptr : idp_get_params_ptrs) {
-      std::vector<blink::mojom::IdentityProviderPtr> providers =
+      std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> providers =
           MaybeAddRegisteredProviders(idp_get_params_ptr->providers);
       idp_get_params_ptr->providers = std::move(providers);
     }
@@ -777,7 +706,7 @@ void FederatedAuthRequestImpl::RequestToken(
         break;
     };
     RecordLifecycleStateFailureReason(reason);
-    std::move(callback).Run(RequestTokenStatus::kError, absl::nullopt, "",
+    std::move(callback).Run(RequestTokenStatus::kError, std::nullopt, "",
                             /*error=*/nullptr,
                             /*is_auto_selected=*/false);
     return;
@@ -795,91 +724,61 @@ void FederatedAuthRequestImpl::RequestToken(
     return;
   }
 
-  if (idp_get_params_ptrs[0]->providers[0]->is_holder()) {
-    if (!IsWebIdentityDigitalCredentialsEnabled() ||
-        IsFedCmMultipleIdentityProvidersEnabled()) {
-      // TODO(https://crbug.com/1416939): Support calling the Digital
-      // Credentials
-      //  API with the Multi IdP API support.
-      std::move(callback).Run(RequestTokenStatus::kError, std::nullopt, "",
-                              /*error=*/nullptr,
-                              /*is_auto_selected=*/false);
-      return;
-    }
+  MaybeCreateFedCmMetrics(
+      idp_get_params_ptrs[0]->providers[0]->config->config_url);
 
-    if (digital_credential_request_callback_) {
-      // Similar to the token request, only allow one in-flight wallet request.
-      // TODO(https://crbug.com/1416939): Reconcile with federated identity
-      // requests.
+  had_transient_user_activation_ =
+      render_frame_host().HasTransientUserActivation();
+
+  if (HasPendingRequest()) {
+    FederatedAuthRequestImpl* pending_request =
+        GetPageData(&render_frame_host())->PendingWebIdentityRequest();
+
+    RpMode pending_request_rp_mode = pending_request->GetRpMode();
+    bool can_replace_pending_request =
+        IsFedCmButtonModeEnabled() &&
+        idp_get_params_ptrs[0]->mode == RpMode::kButton &&
+        had_transient_user_activation_ &&
+        pending_request_rp_mode != RpMode::kButton;
+
+    // TODO(crbug.com/326587232): We should add metrics to capture
+    // 1. how often a button flow is triggered while a widget flow is pending
+    // 2. how often a button flow is triggered while a button flow is pending
+    // 3. how often a widget flow is triggered while a button flow is pending
+    if (!can_replace_pending_request) {
+      fedcm_metrics_->RecordRequestTokenStatus(TokenStatus::kTooManyRequests,
+                                               requirement);
+
+      AddDevToolsIssue(
+          blink::mojom::FederatedAuthRequestResult::kErrorTooManyRequests);
+      AddConsoleErrorMessage(
+          blink::mojom::FederatedAuthRequestResult::kErrorTooManyRequests);
+
       std::move(callback).Run(RequestTokenStatus::kErrorTooManyRequests,
                               std::nullopt, "", /*error=*/nullptr,
                               /*is_auto_selected=*/false);
+      if (pending_request != this) {
+        // fedcm_metrics_ is the only member that's initialized at this point so
+        // we should reset it.
+        fedcm_metrics_.reset();
+      }
       return;
     }
+    // Cancel the pending request before starting the new button flow request.
+    // TODO(crbug.com/326587232): Use specific error type.
+    pending_request->CompleteRequestWithError(
+        FederatedAuthRequestResult::kError,
+        /*token_status=*/std::nullopt,
+        /*token_error=*/std::nullopt,
+        /*should_delay_callback=*/false);
+    CHECK(!auth_request_token_callback_);
 
-    digital_credential_request_callback_ = std::move(callback);
-    // digital_credential_provider_ is not destroyed after a successful wallet
-    // request so we need to have the nullcheck to avoid duplicated creation.
-    if (!digital_credential_provider_) {
-      digital_credential_provider_ = CreateDigitalCredentialProvider();
-    }
-    if (!digital_credential_provider_) {
-      std::move(digital_credential_request_callback_)
-          .Run(RequestTokenStatus::kError, std::nullopt, "", /*error=*/nullptr,
-               /*is_auto_selected=*/false);
-      return;
-    }
-
-    auto digital_credential =
-        std::move(idp_get_params_ptrs[0]->providers[0]->get_holder());
-
-    auto request = BuildDigitalCredentialRequest(std::move(digital_credential));
-
-    digital_credential_provider_->RequestDigitalCredential(
-        WebContents::FromRenderFrameHost(&render_frame_host()), origin(),
-        request,
-        base::BindOnce(
-            &FederatedAuthRequestImpl::CompleteDigitalCredentialRequest,
-            weak_ptr_factory_.GetWeakPtr()));
-
-    // TODO(https://crbug.com/1416939): rather than returning early,
-    // we would ultimately like to make the wallet response reconcile with the
-    // federated identities, so that they can be presented to the user in an
-    // unified manner.
-    return;
-  }
-
-  if (!fedcm_metrics_) {
-    // Ensure the lifecycle state as GetPageUkmSourceId doesn't support the
-    // prerendering page. As FederatedAithRequest runs behind the
-    // BrowserInterfaceBinders, the service doesn't receive any request while
-    // prerendering, and the CHECK should always meet the condition.
-    CHECK(!render_frame_host().IsInLifecycleState(
-        RenderFrameHost::LifecycleState::kPrerendering));
-
-    // TODO(crbug.com/1307709): Handle FedCmMetrics for multiple IDPs.
-    fedcm_metrics_ =
-        CreateFedCmMetrics(idp_get_params_ptrs[0]
-                               ->providers[0]
-                               ->get_federated()
-                               ->config->config_url,
-                           render_frame_host().GetPageUkmSourceId(),
-                           /*is_disabled=*/idp_get_params_ptrs.size() > 1);
-  }
-
-  if (HasPendingRequest()) {
-    fedcm_metrics_->RecordRequestTokenStatus(TokenStatus::kTooManyRequests,
-                                             requirement);
-
-    AddDevToolsIssue(
-        blink::mojom::FederatedAuthRequestResult::kErrorTooManyRequests);
-    AddConsoleErrorMessage(
-        blink::mojom::FederatedAuthRequestResult::kErrorTooManyRequests);
-
-    std::move(callback).Run(RequestTokenStatus::kErrorTooManyRequests,
-                            std::nullopt, "", /*error=*/nullptr,
-                            /*is_auto_selected=*/false);
-    return;
+    // This was reset to false during CleanUp when replacing a widget flow
+    // from the same frame so we need to change it back to true.
+    had_transient_user_activation_ = true;
+    // This was also possibly reset during cleanup.
+    MaybeCreateFedCmMetrics(
+        idp_get_params_ptrs[0]->providers[0]->config->config_url);
   }
 
   bool intercept = false;
@@ -898,9 +797,21 @@ void FederatedAuthRequestImpl::RequestToken(
   start_time_ = base::TimeTicks::Now();
   // TODO(crbug.com/1307709): handle button mode with multiple IdP.
   if (IsFedCmButtonModeEnabled() &&
-      idp_get_params_ptrs[0]->mode == blink::mojom::RpMode::kButton &&
-      render_frame_host().HasTransientUserActivation()) {
+      idp_get_params_ptrs[0]->mode == blink::mojom::RpMode::kButton) {
     rp_mode_ = RpMode::kButton;
+    if (!had_transient_user_activation_) {
+      render_frame_host().AddMessageToConsole(
+          blink::mojom::ConsoleMessageLevel::kError,
+          "FedCM button mode requires transient user activation");
+      // TODO(crbug.com/1487270): use a more specific error.
+      CompleteRequestWithError(FederatedAuthRequestResult::kError,
+                               TokenStatus::kUnhandledRequest,
+                               /*token_error=*/std::nullopt,
+                               /*should_delay_callback=*/false);
+      return;
+    }
+  } else {
+    rp_mode_ = RpMode::kWidget;
   }
 
   FederatedApiPermissionStatus permission_status = GetApiPermissionStatus();
@@ -936,21 +847,14 @@ void FederatedAuthRequestImpl::RequestToken(
     return;
   }
 
-  // This counter measures the number of requests made to FedCM in a document to
-  // identify RPs calling FedCM in quick succession. Requests made when FedCM is
-  // disabled, when there is a pending FedCM request or for the purpose of
-  // wallets or multi-IDP are not counted.
-  if (!IsFedCmMultipleIdentityProvidersEnabled()) {
-    ++num_requests_;
-  }
+  ++num_requests_;
 
   std::set<GURL> unique_idps;
   for (auto& idp_get_params_ptr : idp_get_params_ptrs) {
     for (auto& idp_ptr : idp_get_params_ptr->providers) {
       // Throw an error if duplicate IDPs are specified.
       const bool is_unique_idp =
-          unique_idps.insert(idp_ptr->get_federated()->config->config_url)
-              .second;
+          unique_idps.insert(idp_ptr->config->config_url).second;
       if (!is_unique_idp) {
         CompleteRequestWithError(FederatedAuthRequestResult::kError,
                                  /*token_status=*/std::nullopt,
@@ -959,8 +863,7 @@ void FederatedAuthRequestImpl::RequestToken(
         return;
       }
 
-      url::Origin idp_origin =
-          url::Origin::Create(idp_ptr->get_federated()->config->config_url);
+      url::Origin idp_origin = url::Origin::Create(idp_ptr->config->config_url);
       if (!network::IsOriginPotentiallyTrustworthy(idp_origin)) {
         CompleteRequestWithError(FederatedAuthRequestResult::kError,
                                  TokenStatus::kIdpNotPotentiallyTrustworthy,
@@ -973,15 +876,14 @@ void FederatedAuthRequestImpl::RequestToken(
 
   for (auto& idp_get_params_ptr : idp_get_params_ptrs) {
     for (auto& idp_ptr : idp_get_params_ptr->providers) {
-      idp_order_.push_back(idp_ptr->get_federated()->config->config_url);
+      idp_order_.push_back(idp_ptr->config->config_url);
 
       bool has_failing_idp_signin_status =
           webid::ShouldFailAccountsEndpointRequestBecauseNotSignedInWithIdp(
-              render_frame_host(), idp_ptr->get_federated()->config->config_url,
+              render_frame_host(), idp_ptr->config->config_url,
               permission_delegate_);
 
-      url::Origin idp_origin =
-          url::Origin::Create(idp_ptr->get_federated()->config->config_url);
+      url::Origin idp_origin = url::Origin::Create(idp_ptr->config->config_url);
       if (has_failing_idp_signin_status &&
           webid::GetIdpSigninStatusMode(render_frame_host(), idp_origin) ==
               FedCmIdpSigninStatusMode::ENABLED) {
@@ -990,7 +892,7 @@ void FederatedAuthRequestImpl::RequestToken(
             // In the multi IDP case, we do not want to complete the request
             // right away as there are other IDPs which may be logged in. But we
             // also do not want to fetch this IDP.
-            unique_idps.erase(idp_ptr->get_federated()->config->config_url);
+            unique_idps.erase(idp_ptr->config->config_url);
             continue;
           }
           // If the user is known to be signed-out and the RP is request
@@ -1009,24 +911,22 @@ void FederatedAuthRequestImpl::RequestToken(
             mojo::ReportBadMessage("FedCM button mode is not enabled.");
             return;
           }
-          if (!render_frame_host().HasTransientUserActivation()) {
-            // The button flow requires user activation and a valid login_url.
+          if (!had_transient_user_activation_) {
             // TODO(crbug.com/1487270): use a more specific error.
             CompleteRequestWithError(FederatedAuthRequestResult::kError,
                                      TokenStatus::kUnhandledRequest,
                                      /*token_error=*/std::nullopt,
-                                     /*should_delay_callback=*/true);
+                                     /*should_delay_callback=*/false);
             return;
           }
         }
       }
-      if (ShouldFailBeforeFetchingAccounts(
-              idp_ptr->get_federated()->config->config_url)) {
+      if (ShouldFailBeforeFetchingAccounts(idp_ptr->config->config_url)) {
         if (IsFedCmMultipleIdentityProvidersEnabled()) {
           // In the multi IDP case, we do not want to complete the request right
           // away as there are other IDPs which may be logged in. But we also do
           // not want to fetch this IDP.
-          unique_idps.erase(idp_ptr->get_federated()->config->config_url);
+          unique_idps.erase(idp_ptr->config->config_url);
           continue;
         }
         CompleteRequestWithError(
@@ -1039,11 +939,10 @@ void FederatedAuthRequestImpl::RequestToken(
 
       blink::mojom::RpContext rp_context = idp_get_params_ptr->context;
       blink::mojom::RpMode rp_mode = idp_get_params_ptr->mode;
-      const GURL& idp_config_url = idp_ptr->get_federated()->config->config_url;
+      const GURL& idp_config_url = idp_ptr->config->config_url;
       token_request_get_infos_.emplace(
           idp_config_url,
-          IdentityProviderGetInfo(std::move(idp_ptr->get_federated()),
-                                  rp_context, rp_mode));
+          IdentityProviderGetInfo(std::move(idp_ptr), rp_context, rp_mode));
     }
   }
 
@@ -1051,11 +950,29 @@ void FederatedAuthRequestImpl::RequestToken(
     // At this point either all IDPs are signed out or mediation:silent was used
     // and there are no returning accounts. For now reject with a generic error.
     // TODO(crbug.com/1307709): Handle FedCmMetrics properly for multiple IDPs.
+    bool should_delay_callback =
+        mediation_requirement_ == MediationRequirement::kSilent ? false : true;
     CompleteRequestWithError(
         FederatedAuthRequestResult::kError, TokenStatus::kNotSignedInWithIdp,
-        /*token_error=*/std::nullopt, /*should_delay_callback=*/false);
+        /*token_error=*/std::nullopt, should_delay_callback);
     return;
   }
+
+  // Show loading dialog while fetching endpoints if it is a button flow.
+  if (rp_mode_ == RpMode::kButton) {
+    CHECK(idp_order_.size() > 0);
+    // TODO(crbug.com/1307709): Handle button mode with multiple IdP.
+    const GURL& idp_config_url = idp_order_[0];
+    auto get_info_it = token_request_get_infos_.find(idp_config_url);
+    CHECK(get_info_it != token_request_get_infos_.end());
+    request_dialog_controller_->ShowLoadingDialog(
+        GetTopFrameOriginForDisplay(GetEmbeddingOrigin()),
+        FormatOriginForDisplay(url::Origin::Create(idp_config_url)),
+        get_info_it->second.rp_context, rp_mode_,
+        base::BindOnce(&FederatedAuthRequestImpl::OnDialogDismissed,
+                       weak_ptr_factory_.GetWeakPtr()));
+  }
+
   CHECK(!unique_idps.empty());
   FetchEndpointsForIdps(std::move(unique_idps), /*for_idp_signin=*/false);
 }
@@ -1069,17 +986,7 @@ void FederatedAuthRequestImpl::RequestUserInfo(
     return;
   }
 
-  if (!fedcm_metrics_) {
-    // Ensure the lifecycle state as GetPageUkmSourceId doesn't support the
-    // prerendering page. As FederatedAithRequest runs behind the
-    // BrowserInterfaceBinders, the service doesn't receive any request while
-    // prerendering, and the CHECK should always meet the condition.
-    CHECK(!render_frame_host().IsInLifecycleState(
-        RenderFrameHost::LifecycleState::kPrerendering));
-    fedcm_metrics_ = CreateFedCmMetrics(
-        provider->config_url, render_frame_host().GetPageUkmSourceId(),
-        /*is_disabled=*/false);
-  }
+  MaybeCreateFedCmMetrics(provider->config_url);
 
   auto network_manager = IdpNetworkRequestManager::Create(
       static_cast<RenderFrameHostImpl*>(&render_frame_host()));
@@ -1141,11 +1048,11 @@ void FederatedAuthRequestImpl::SetIdpSigninStatus(
     return;
   }
   // We only allow setting the IDP signin status when the subresource is loaded
-  // from the same origin as the document, and the document is same-origin with
+  // from the same site as the document, and the document is same site with
   // all ancestors. This is to protect from an RP embedding a tracker resource
   // that would set this signin status for the tracker, enabling the FedCM
   // request.
-  if (!webid::IsSameOriginWithAncestors(idp_origin, &render_frame_host())) {
+  if (!webid::IsSameSiteWithAncestors(idp_origin, &render_frame_host())) {
     RecordSetLoginStatusIgnoredReason(
         FedCmSetLoginStatusIgnoredReason::kCrossOrigin);
     return;
@@ -1160,13 +1067,35 @@ void FederatedAuthRequestImpl::RegisterIdP(const GURL& idp,
     std::move(callback).Run(false);
     return;
   }
+
   if (!origin().IsSameOriginWith(url::Origin::Create(idp))) {
     std::move(callback).Run(false);
     return;
   }
-  // TODO(crbug.com/1406698): prompt the user for permission.
-  permission_delegate_->RegisterIdP(idp);
-  std::move(callback).Run(true);
+
+  if (!render_frame_host().HasTransientUserActivation()) {
+    std::move(callback).Run(false);
+    return;
+  }
+
+  if (!request_dialog_controller_) {
+    request_dialog_controller_ = CreateDialogController();
+  }
+
+  request_dialog_controller_->RequestIdPRegistrationPermision(
+      origin(),
+      base::BindOnce(&FederatedAuthRequestImpl::OnRegisterIdPPermissionResponse,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback), idp));
+}
+
+void FederatedAuthRequestImpl::OnRegisterIdPPermissionResponse(
+    RegisterIdPCallback callback,
+    const GURL& idp,
+    bool accepted) {
+  if (accepted) {
+    permission_delegate_->RegisterIdP(idp);
+  }
+  std::move(callback).Run(accepted);
 }
 
 void FederatedAuthRequestImpl::UnregisterIdP(const GURL& idp,
@@ -1262,9 +1191,9 @@ void FederatedAuthRequestImpl::OnAllConfigAndWellKnownFetched(
             blink::mojom::ConsoleMessageLevel::kError,
             *fetch_error.additional_console_error_message);
       }
-      OnFetchDataForIdpFailed(std::move(idp_info), fetch_error.result,
-                              fetch_error.token_status,
-                              /*should_delay_callback=*/true);
+      OnFetchDataForIdpFailed(
+          std::move(idp_info), fetch_error.result, fetch_error.token_status,
+          /*should_delay_callback=*/rp_mode_ == RpMode::kWidget);
       continue;
     }
     // The login url should be valid unless IdP login status API is disabled.
@@ -1286,21 +1215,9 @@ void FederatedAuthRequestImpl::OnAllConfigAndWellKnownFetched(
             FedCmIdpSigninStatusMode::ENABLED) {
       // If the user is logged out and we are in a button-mode, allow the user
       // to sign-in to the IdP and return early.
-      // TODO(https://crbug.com/1490611): handle the "unknown" status and button
-      // flows.
-      if (IsFedCmButtonModeEnabled() &&
-          idp_info->rp_mode == blink::mojom::RpMode::kButton &&
-          idp_info->metadata.idp_login_url.is_valid()) {
-        // We fail sooner before, but just to double check, we assert that
-        // we are inside a user gesture here again.
-        CHECK(render_frame_host().HasTransientUserActivation());
-        // TODO(crbug.com/1487270): we should probably make idp_login_url
-        // optional instead of empty.
-        LoginToIdP(/*can_append_hints=*/false,
-                   idp_info->metadata.idp_login_url);
-        // TODO(https://crbug.com/1487268): handle the button flow and the
-        // Multi IdP API (what should happen if you are logged in to some
-        // IdPs but not to others).
+      if (rp_mode_ == blink::mojom::RpMode::kButton) {
+        MaybeShowButtonModeModalDialog(identity_provider_config_url,
+                                       idp_info->metadata.idp_login_url);
         return;
       }
       // Do not send metrics for IDP where the user is not signed-in in order
@@ -1349,6 +1266,27 @@ void FederatedAuthRequestImpl::OnClientMetadataResponseReceived(
     IdpNetworkRequestManager::ClientMetadata client_metadata) {
   // TODO(yigu): Clean up the client metadata related errors for metrics and
   // console logs.
+  if (!idp_info->metadata.brand_background_color &&
+      idp_info->metadata.brand_text_color) {
+    idp_info->metadata.brand_text_color = std::nullopt;
+    render_frame_host().AddMessageToConsole(
+        blink::mojom::ConsoleMessageLevel::kWarning,
+        "The FedCM text color is ignored because background color was not "
+        "provided");
+  }
+  if (idp_info->metadata.brand_background_color &&
+      idp_info->metadata.brand_text_color) {
+    float text_contrast_ratio = color_utils::GetContrastRatio(
+        *idp_info->metadata.brand_background_color,
+        *idp_info->metadata.brand_text_color);
+    if (text_contrast_ratio < color_utils::kMinimumReadableContrastRatio) {
+      idp_info->metadata.brand_text_color = std::nullopt;
+      render_frame_host().AddMessageToConsole(
+          blink::mojom::ConsoleMessageLevel::kWarning,
+          "The FedCM text color is ignored because it does not contrast enough "
+          "with the provided background color");
+    }
+  }
   OnFetchDataForIdpSucceeded(std::move(idp_info), accounts, client_metadata);
 }
 
@@ -1378,6 +1316,25 @@ bool FederatedAuthRequestImpl::ShouldMediateAuthz(
   }
 
   return false;
+}
+
+bool FederatedAuthRequestImpl::CanShowContinueOnPopup() const {
+  if (mediation_requirement_ == MediationRequirement::kSilent) {
+    return false;
+  }
+
+  if (mediation_requirement_ == MediationRequirement::kRequired) {
+    // In this case, we always have a user gesture (the user had to choose
+    // an account), so we can show a popup.
+    return true;
+  }
+
+  if (identity_selection_type_ == kExplicit ||
+      identity_selection_type_ == kAutoButton) {
+    return true;
+  }
+  DCHECK_EQ(identity_selection_type_, kAutoWidget);
+  return had_transient_user_activation_;
 }
 
 void FederatedAuthRequestImpl::OnFetchDataForIdpSucceeded(
@@ -1459,12 +1416,31 @@ void FederatedAuthRequestImpl::MaybeShowAccountsDialog() {
   // Account" flow or the IDP login mismatch in multiple IDP case.
   idp_data_for_display_.clear();
 
+  // If this method call occurs after a login, we'd like to show the account
+  // that was logged in.
+  std::optional<IdentityProviderData> new_account_idp;
   for (const auto& idp : idp_order_) {
     auto idp_info_it = idp_infos_.find(idp);
     if (idp_info_it != idp_infos_.end() && idp_info_it->second->data) {
       idp_data_for_display_.push_back(*idp_info_it->second->data);
     }
+    if (IsFedCmUseOtherAccountEnabled(rp_mode_ == RpMode::kButton)) {
+      if (!login_url_.is_empty() &&
+          login_url_ == idp_info_it->second->metadata.idp_login_url) {
+        for (const auto& account : idp_info_it->second->data->accounts) {
+          if (!account_ids_before_login_.contains(account.id)) {
+            // Even though it is theoretically possible for more than one
+            // account to be new, just show the first one we encounter.
+            new_account_idp = idp_info_it->second->data;
+            new_account_idp->accounts = {account};
+            break;
+          }
+        }
+        account_ids_before_login_.clear();
+      }
+    }
   }
+
   // We want to show IDPs in the following order in the UI:
   // 1. IDPs for which there was a mismatch.
   // 2. IDPs for which there were returning accounts.
@@ -1583,8 +1559,7 @@ void FederatedAuthRequestImpl::MaybeShowAccountsDialog() {
   // The RenderFrameHost may be alive but not visible in the following
   // situations:
   // Situation #1: User switched tabs
-  // Situation #2: User navigated the page. The RenderFrameHost is still
-  //   alive thanks to the BFCache.
+  // Situation #2: User navigated the page with bfcache
   //
   // - If this fetch is as a result of an IdP sign-in status change, the FedCM
   // dialog is either visible or temporarily hidden. Update the contents of
@@ -1593,11 +1568,11 @@ void FederatedAuthRequestImpl::MaybeShowAccountsDialog() {
   // if the RenderFrameHost is hidden because the user does not seem interested
   // in the contents of the current page.
   if (!fetch_data_.for_idp_signin) {
-    bool is_visible = IsFrameVisible(render_frame_host().GetMainFrame());
-    fedcm_metrics_->RecordWebContentsVisibilityUponReadyToShowDialog(
-        is_visible);
+    bool is_active = IsFrameActive(render_frame_host().GetMainFrame());
+    fedcm_metrics_->RecordWebContentsStatusUponReadyToShowDialog(
+        IsFrameVisible(render_frame_host().GetMainFrame()), is_active);
 
-    if (!is_visible) {
+    if (!is_active) {
       CompleteRequestWithError(
           FederatedAuthRequestResult::kErrorRpPageNotVisible,
           TokenStatus::kRpPageNotVisible,
@@ -1606,19 +1581,16 @@ void FederatedAuthRequestImpl::MaybeShowAccountsDialog() {
       return;
     }
 
-    show_accounts_dialog_time_ = base::TimeTicks::Now();
-    fedcm_metrics_->RecordShowAccountsDialogTime(show_accounts_dialog_time_ -
-                                                 start_time_);
+    ready_to_display_accounts_dialog_time_ = base::TimeTicks::Now();
+    fedcm_metrics_->RecordShowAccountsDialogTime(
+        idp_data_for_display_,
+        ready_to_display_accounts_dialog_time_ - start_time_);
   }
 
   fetch_data_ = FetchData();
 
   // RenderFrameHost should be in the primary page (ex not in the BFCache).
   DCHECK(render_frame_host().GetPage().IsPrimary());
-
-  // TODO(crbug.com/1408520): opt-out affordance is not included in the origin
-  // trial. Should revisit based on the OT feedback.
-  bool show_auto_reauthn_checkbox = false;
 
   bool intercept = false;
   // In tests (content_shell or when --use-fake-ui-for-fedcm is used), the
@@ -1643,18 +1615,26 @@ void FederatedAuthRequestImpl::MaybeShowAccountsDialog() {
 
   // TODO(crbug.com/1382863): Handle UI where some IDPs are successful and some
   // IDPs are failing in the multi IDP case.
+  // Note that ShowAccountsDialog() may result in the request being completed
+  // immediately (for instance on Android when we cannot create a BottomSheet),
+  // so invocations after this method should assume that the members may have
+  // been cleaned up.
+  // TODO(crbug.com/329261790): Make ShowAccountsDialog() return a boolean and
+  // use that to know when to bail out early from this method.
   request_dialog_controller_->ShowAccountsDialog(
       GetTopFrameOriginForDisplay(GetEmbeddingOrigin()), iframe_for_display,
       idp_data_for_display_,
       identity_selection_type_ == kExplicit ? SignInMode::kExplicit
                                             : SignInMode::kAuto,
-      rp_mode_, show_auto_reauthn_checkbox,
+      rp_mode_, new_account_idp,
       base::BindOnce(&FederatedAuthRequestImpl::OnAccountSelected,
                      weak_ptr_factory_.GetWeakPtr()),
       base::BindOnce(&FederatedAuthRequestImpl::LoginToIdP,
                      weak_ptr_factory_.GetWeakPtr(),
                      /*can_append_hints=*/false),
       base::BindOnce(&FederatedAuthRequestImpl::OnDialogDismissed,
+                     weak_ptr_factory_.GetWeakPtr()),
+      base::BindOnce(&FederatedAuthRequestImpl::OnAccountsDisplayed,
                      weak_ptr_factory_.GetWeakPtr()));
   devtools_instrumentation::DidShowFedCmDialog(render_frame_host());
 
@@ -1668,8 +1648,15 @@ void FederatedAuthRequestImpl::MaybeShowAccountsDialog() {
 
   // Note that accounts dialog shown after mismatch dialog is also recorded.
   // Although not useful for catching malicious IDPs, it should only be a very
-  // small percentage of the samples recorded.
-  fedcm_metrics_->RecordAccountsDialogShown();
+  // small percentage of the samples recorded. However, if the request was
+  // completed right away, we do not record as no dialog was shown.
+  if (fedcm_metrics_) {
+    fedcm_metrics_->RecordAccountsDialogShown();
+  }
+}
+
+void FederatedAuthRequestImpl::OnAccountsDisplayed() {
+  accounts_dialog_display_time_ = base::TimeTicks::Now();
 }
 
 void FederatedAuthRequestImpl::HandleAccountsFetchFailure(
@@ -1689,12 +1676,17 @@ void FederatedAuthRequestImpl::HandleAccountsFetchFailure(
 
   if (!old_idp_signin_status.has_value() ||
       signin_status_mode == FedCmIdpSigninStatusMode::METRICS_ONLY) {
+    if (rp_mode_ == blink::mojom::RpMode::kButton) {
+      MaybeShowButtonModeModalDialog(idp_info->provider->config->config_url,
+                                     idp_info->metadata.idp_login_url);
+      return;
+    }
     OnFetchDataForIdpFailed(std::move(idp_info), result, token_status,
                             /*should_delay_callback=*/true);
     return;
   }
 
-  if (!IsFrameVisible(render_frame_host().GetMainFrame())) {
+  if (!IsFrameActive(render_frame_host().GetMainFrame())) {
     CompleteRequestWithError(FederatedAuthRequestResult::kErrorRpPageNotVisible,
                              TokenStatus::kRpPageNotVisible,
                              /*token_error=*/std::nullopt,
@@ -1746,6 +1738,12 @@ void FederatedAuthRequestImpl::OnIdpMismatch(
     return;
   }
 
+  if (rp_mode_ == RpMode::kButton) {
+    MaybeShowButtonModeModalDialog(
+        idp_config_url, idp_infos_[idp_config_url]->metadata.idp_login_url);
+    return;
+  }
+
   ShowSingleIdpFailureDialog();
 }
 
@@ -1768,7 +1766,16 @@ void FederatedAuthRequestImpl::ShowSingleIdpFailureDialog() {
   // ShowFailureDialog() a 2nd time should notify the user that login
   // failed.
   dialog_type_ = kConfirmIdpLogin;
+  config_url_ = idp_info->provider->config->config_url;
   login_url_ = idp_info->metadata.idp_login_url;
+
+  // Store variables used in RecordMismatchDialogShown since they may be cleaned
+  // up in ShowFailureDialog().
+  bool has_shown_mismatch = has_shown_mismatch_;
+  bool has_hints = !idp_info->provider->login_hint.empty() ||
+                   !idp_info->provider->domain_hint.empty();
+  // TODO(crbug.com/329261790): Make ShowFailureDialog() return boolean and use
+  // the value to know when to bail out of this method.
   request_dialog_controller_->ShowFailureDialog(
       GetTopFrameOriginForDisplay(GetEmbeddingOrigin()), iframe_for_display,
       FormatOriginForDisplay(idp_origin), idp_info->rp_context, rp_mode_,
@@ -1778,9 +1785,14 @@ void FederatedAuthRequestImpl::ShowSingleIdpFailureDialog() {
       base::BindOnce(&FederatedAuthRequestImpl::LoginToIdP,
                      weak_ptr_factory_.GetWeakPtr(),
                      /*can_append_hints=*/true));
-  fedcm_metrics_->RecordMismatchDialogShown(
-      has_shown_mismatch_, !idp_info->provider->login_hint.empty() ||
-                               !idp_info->provider->domain_hint.empty());
+
+  // ShowFailureDialog() may have completed the request synchronously, in which
+  // case `fedcm_metrics_` is reset, and hence we did not really show any
+  // failure dialog. Thus, we skip the remaining steps.
+  if (!fedcm_metrics_) {
+    return;
+  }
+  fedcm_metrics_->RecordMismatchDialogShown(has_shown_mismatch, has_hints);
   mismatch_dialog_shown_time_ = base::TimeTicks::Now();
   has_shown_mismatch_ = true;
   devtools_instrumentation::DidShowFedCmDialog(render_frame_host());
@@ -1788,9 +1800,9 @@ void FederatedAuthRequestImpl::ShowSingleIdpFailureDialog() {
 
 void FederatedAuthRequestImpl::CloseModalDialogView() {
 #if BUILDFLAG(IS_ANDROID)
-  // On android, invoke NotifyClose on the modal dialog, as the UI code needs to
+  // On android, invoke OnClose on the modal dialog, as the UI code needs to
   // then notify the opener.
-  NotifyClose();
+  OnClose();
 #else
   // On desktop, invoke NotifyClose on the opener.
   if (identity_registry_) {
@@ -1855,6 +1867,7 @@ void FederatedAuthRequestImpl::OnAccountsResponseReceived(
       return;
     }
     case IdpNetworkRequestManager::ParseStatus::kSuccess: {
+      RecordRawAccountsSize(accounts.size());
       FilterAccountsWithLoginHint(idp_info->provider->login_hint, accounts);
       if (accounts.empty()) {
         render_frame_host().AddMessageToConsole(
@@ -1885,6 +1898,7 @@ void FederatedAuthRequestImpl::OnAccountsResponseReceived(
           return;
         }
       }
+      RecordReadyToShowAccountsSize(accounts.size());
       ComputeLoginStateAndReorderAccounts(
           url::Origin::Create(idp_info->provider->config->config_url),
           accounts);
@@ -2011,14 +2025,14 @@ void FederatedAuthRequestImpl::OnAccountSelected(const GURL& idp_config_url,
   account_id_ = account_id;
   select_account_time_ = base::TimeTicks::Now();
   fedcm_metrics_->RecordContinueOnDialogTime(select_account_time_ -
-                                             show_accounts_dialog_time_);
+                                             accounts_dialog_display_time_);
 
   network_manager_->SendTokenRequest(
       idp_info.endpoints.token, account_id_,
       ComputeUrlEncodedTokenPostData(
           idp_info.provider->config->client_id, idp_info.provider->nonce,
           account_id, is_sign_in, identity_selection_type_ != kExplicit,
-          idp_info.provider->scope, idp_info.provider->responseType,
+          rp_mode_, idp_info.provider->scope, idp_info.provider->responseType,
           idp_info.provider->params),
       base::BindOnce(&FederatedAuthRequestImpl::OnTokenResponseReceived,
                      weak_ptr_factory_.GetWeakPtr(),
@@ -2116,7 +2130,7 @@ void FederatedAuthRequestImpl::OnDialogDismissed(
   if (should_embargo) {
     base::TimeTicks dismiss_dialog_time = base::TimeTicks::Now();
     fedcm_metrics_->RecordCancelOnDialogTime(dismiss_dialog_time -
-                                             show_accounts_dialog_time_);
+                                             accounts_dialog_display_time_);
   }
   fedcm_metrics_->RecordCancelReason(dismiss_reason);
 
@@ -2137,7 +2151,8 @@ void FederatedAuthRequestImpl::OnDialogDismissed(
                            /*should_delay_callback=*/false);
 }
 
-void FederatedAuthRequestImpl::ShowModalDialog(const GURL& url) {
+void FederatedAuthRequestImpl::ShowModalDialog(const GURL& idp_config_url,
+                                               const GURL& url_to_show) {
   // Reset dialog type since we are not showing a fedcm dialog while the
   // popup window is open.
   if (dialog_type_ != kNone) {
@@ -2149,13 +2164,13 @@ void FederatedAuthRequestImpl::ShowModalDialog(const GURL& url) {
   dialog_type_ = kNone;
 
   WebContents* web_contents = request_dialog_controller_->ShowModalDialog(
-      url, base::BindOnce(&FederatedAuthRequestImpl::OnDialogDismissed,
-                          weak_ptr_factory_.GetWeakPtr()));
+      url_to_show, base::BindOnce(&FederatedAuthRequestImpl::OnDialogDismissed,
+                                  weak_ptr_factory_.GetWeakPtr()));
   // This may be null on Android, as the method cannot return the WebContents of
   // the CCT that will be created.
   if (web_contents) {
     IdentityRegistry::CreateForWebContents(
-        web_contents, weak_ptr_factory_.GetWeakPtr(), url::Origin::Create(url));
+        web_contents, weak_ptr_factory_.GetWeakPtr(), idp_config_url);
   }
 
   // Samples are at most 10 minutes. This metric is used to determine a
@@ -2183,17 +2198,17 @@ void FederatedAuthRequestImpl::OnContinueOnResponseReceived(
       url::Origin::Create(continue_on)
           .IsSameOriginWith(url::Origin::Create(idp->config->config_url));
 
-  if (!IsFedCmAuthzEnabled() || !is_same_origin) {
+  if (!IsFedCmAuthzEnabled() || !is_same_origin || !CanShowContinueOnPopup()) {
     CompleteRequestWithError(
         FederatedAuthRequestResult::kErrorFetchingIdTokenInvalidResponse,
         TokenStatus::kIdTokenInvalidResponse,
         /*token_error=*/std::nullopt,
-        /*should_delay_callback=*/true);
+        /*should_delay_callback=*/false);
     return;
   }
 
   // TODO(crbug.com/1429083): record the appropriate metrics.
-  ShowModalDialog(continue_on);
+  ShowModalDialog(idp->config->config_url, continue_on);
 }
 
 void FederatedAuthRequestImpl::ShowErrorDialog(
@@ -2223,7 +2238,8 @@ void FederatedAuthRequestImpl::ShowErrorDialog(
                      token_error),
       token_error && !token_error->url.is_empty()
           ? base::BindOnce(&FederatedAuthRequestImpl::ShowModalDialog,
-                           weak_ptr_factory_.GetWeakPtr(), token_error->url)
+                           weak_ptr_factory_.GetWeakPtr(), config_url_,
+                           token_error->url)
           : base::NullCallback());
   devtools_instrumentation::DidShowFedCmDialog(render_frame_host());
 }
@@ -2247,18 +2263,17 @@ void FederatedAuthRequestImpl::OnTokenResponseReceived(
                            weak_ptr_factory_.GetWeakPtr(),
                            idp->config->config_url, status, result.token,
                            /*token_error=*/std::nullopt,
-                           /*should_delay_callback=*/true);
+                           /*should_delay_callback=*/false);
 
   // When fetching id tokens we show a "Verify" sheet to users in case fetching
   // takes a long time due to latency etc. In case that the fetching process is
   // fast, we still want to show the "Verify" sheet for at least
   // `kTokenRequestDelay` seconds for better UX.
-  // Note that for auto reauthn in the button flow, we can complete without
-  // delay since we skip the UI for streamlined sign-in experience.
+  // Note that for button flow we can complete without delay because the UI
+  // difference between the verifying UI and its predecessors are minor.
   token_response_time_ = base::TimeTicks::Now();
   base::TimeDelta fetch_time = token_response_time_ - select_account_time_;
-  if (should_complete_request_immediately_ ||
-      identity_selection_type_ == kAutoButton ||
+  if (should_complete_request_immediately_ || rp_mode_ == RpMode::kButton ||
       fetch_time >= kTokenRequestDelay) {
     std::move(complete_request_callback).Run();
     return;
@@ -2345,7 +2360,9 @@ void FederatedAuthRequestImpl::CompleteTokenRequest(
 
       fedcm_metrics_->RecordTokenResponseAndTurnaroundTime(
           token_response_time_ - select_account_time_,
-          token_response_time_ - start_time_);
+          token_response_time_ - start_time_ -
+              (accounts_dialog_display_time_ -
+               ready_to_display_accounts_dialog_time_));
 
       if (IsFedCmMetricsEndpointEnabled()) {
         for (const auto& metrics_endpoint_kv : metrics_endpoints_) {
@@ -2356,10 +2373,13 @@ void FederatedAuthRequestImpl::CompleteTokenRequest(
 
           if (metrics_endpoint_kv.first == idp_config_url) {
             network_manager_->SendSuccessfulTokenRequestMetrics(
-                metrics_endpoint, show_accounts_dialog_time_ - start_time_,
-                select_account_time_ - show_accounts_dialog_time_,
+                metrics_endpoint,
+                ready_to_display_accounts_dialog_time_ - start_time_,
+                select_account_time_ - accounts_dialog_display_time_,
                 token_response_time_ - select_account_time_,
-                token_response_time_ - start_time_);
+                token_response_time_ - start_time_ -
+                    (accounts_dialog_display_time_ -
+                     ready_to_display_accounts_dialog_time_));
           } else {
             // Send kUserFailure so that IDP cannot tell difference between user
             // selecting a different IDP and user dismissing dialog without
@@ -2415,19 +2435,6 @@ void FederatedAuthRequestImpl::CompleteRequest(
     return;
   }
 
-  if (result != FederatedAuthRequestResult::kSuccess &&
-      fetch_data_.for_idp_signin &&
-      !ShouldSuppressIdpSigninFailureDialog(token_status)) {
-    fetch_data_ = FetchData();
-
-    request_dialog_controller_->ShowIdpSigninFailureDialog(base::BindOnce(
-        &FederatedAuthRequestImpl::CompleteRequest,
-        weak_ptr_factory_.GetWeakPtr(), result, std::move(token_status),
-        std::move(token_error), selected_idp_config_url, id_token,
-        should_delay_callback));
-    return;
-  }
-
   if (token_status) {
     fedcm_metrics_->RecordRequestTokenStatus(*token_status,
                                              mediation_requirement_);
@@ -2454,9 +2461,9 @@ void FederatedAuthRequestImpl::CompleteRequest(
     devtools_instrumentation::DidCloseFedCmDialog(render_frame_host());
   }
 
-  CleanUp();
 
   if (!should_delay_callback || should_complete_request_immediately_) {
+    CleanUp();
     GetPageData(&render_frame_host())->SetPendingWebIdentityRequest(nullptr);
     errors_logged_to_console_ = false;
 
@@ -2504,9 +2511,11 @@ void FederatedAuthRequestImpl::CleanUp() {
   // Given that |request_dialog_controller_| has reference to this web content
   // instance we destroy that first.
   provider_fetcher_.reset();
+  fedcm_metrics_.reset();
   account_id_ = std::string();
   start_time_ = base::TimeTicks();
-  show_accounts_dialog_time_ = base::TimeTicks();
+  ready_to_display_accounts_dialog_time_ = base::TimeTicks();
+  accounts_dialog_display_time_ = base::TimeTicks();
   select_account_time_ = base::TimeTicks();
   token_response_time_ = base::TimeTicks();
   accounts_dialog_shown_time_ = std::nullopt;
@@ -2515,6 +2524,7 @@ void FederatedAuthRequestImpl::CleanUp() {
   idp_login_infos_.clear();
   idp_infos_.clear();
   idp_data_for_display_.clear();
+  account_ids_before_login_.clear();
   fetch_data_ = FetchData();
   idp_order_.clear();
   metrics_endpoints_.clear();
@@ -2524,6 +2534,8 @@ void FederatedAuthRequestImpl::CleanUp() {
   token_error_ = std::nullopt;
   dialog_type_ = kNone;
   identity_selection_type_ = kExplicit;
+  had_transient_user_activation_ = false;
+  rp_mode_ = RpMode::kWidget;
 }
 
 void FederatedAuthRequestImpl::AddDevToolsIssue(
@@ -2630,18 +2642,6 @@ FederatedAuthRequestImpl::CreateDialogController() {
       web_contents);
 }
 
-std::unique_ptr<DigitalCredentialProvider>
-FederatedAuthRequestImpl::CreateDigitalCredentialProvider() {
-  // A provider may only be created in browser tests by this moment.
-  std::unique_ptr<DigitalCredentialProvider> provider =
-      GetContentClient()->browser()->CreateDigitalCredentialProvider();
-
-  if (!provider) {
-    return DigitalCredentialProvider::Create();
-  }
-  return provider;
-}
-
 void FederatedAuthRequestImpl::SetNetworkManagerForTests(
     std::unique_ptr<IdpNetworkRequestManager> manager) {
   mock_network_manager_ = std::move(manager);
@@ -2652,7 +2652,7 @@ void FederatedAuthRequestImpl::SetDialogControllerForTests(
   mock_dialog_controller_ = std::move(controller);
 }
 
-void FederatedAuthRequestImpl::NotifyClose() {
+void FederatedAuthRequestImpl::OnClose() {
 #if BUILDFLAG(IS_ANDROID)
   // We invoke this method on the modal dialog on Android, so we may need to
   // create the controller at this point.
@@ -2664,15 +2664,17 @@ void FederatedAuthRequestImpl::NotifyClose() {
   request_dialog_controller_->CloseModalDialog();
 }
 
-bool FederatedAuthRequestImpl::NotifyResolve(const std::string& token) {
+bool FederatedAuthRequestImpl::OnResolve(GURL idp_config_url,
+                                         const std::string& token) {
   // Close the pop-up window post user permission.
-  NotifyClose();
+  OnClose();
 
-  // TODO(crbug.com/1429083): handle the multi-idp case when there are
-  // more than one config_urls hanging.
+  permission_delegate_->GrantSharingPermission(
+      origin(), GetEmbeddingOrigin(), url::Origin::Create(idp_config_url),
+      account_id_);
+
   CompleteRequest(FederatedAuthRequestResult::kSuccess, TokenStatus::kSuccess,
-                  /*token_error=*/std::nullopt,
-                  /*selected_idp_config_url=*/std::nullopt, token,
+                  /*token_error=*/std::nullopt, idp_config_url, token,
                   /*should_delay_callback=*/false);
   // TODO(crbug.com/1429083): handle the corner cases where CompleteRequest
   // can't actually fulfill the request.
@@ -2717,13 +2719,23 @@ void FederatedAuthRequestImpl::DismissAccountsDialogForDevtools(
 
 void FederatedAuthRequestImpl::AcceptConfirmIdpLoginDialogForDevtools() {
   DCHECK(login_url_.is_valid());
-  LoginToIdP(/*can_append_hints=*/true, login_url_);
+  LoginToIdP(/*can_append_hints=*/true, config_url_, login_url_);
 }
 
 void FederatedAuthRequestImpl::DismissConfirmIdpLoginDialogForDevtools() {
   // These values match what HandleAccountsFetchFailure passes.
   OnDismissFailureDialog(
       IdentityRequestDialogController::DismissReason::kOther);
+}
+
+bool FederatedAuthRequestImpl::UseAnotherAccountForDevtools(
+    const IdentityProviderData& provider) {
+  if (!provider.idp_metadata.supports_add_account) {
+    return false;
+  }
+  LoginToIdP(/*can_append_hints=*/true, provider.idp_metadata.config_url,
+             provider.idp_metadata.idp_login_url);
+  return true;
 }
 
 bool FederatedAuthRequestImpl::HasMoreDetailsButtonForDevtools() {
@@ -2739,7 +2751,7 @@ void FederatedAuthRequestImpl::ClickErrorDialogGotItForDevtools() {
 
 void FederatedAuthRequestImpl::ClickErrorDialogMoreDetailsForDevtools() {
   DCHECK(token_error_ && token_error_->url.is_valid());
-  ShowModalDialog(token_error_->url);
+  ShowModalDialog(config_url_, token_error_->url);
   OnDismissErrorDialog(
       config_url_, token_request_status_, token_error_,
       IdentityRequestDialogController::DismissReason::kMoreDetailsButton);
@@ -2871,6 +2883,7 @@ void FederatedAuthRequestImpl::SetRequiresUserMediation(
 }
 
 void FederatedAuthRequestImpl::LoginToIdP(bool can_append_hints,
+                                          const GURL& idp_config_url,
                                           GURL login_url) {
   const auto& it = idp_login_infos_.find(login_url);
   CHECK(it != idp_login_infos_.end());
@@ -2880,7 +2893,42 @@ void FederatedAuthRequestImpl::LoginToIdP(bool can_append_hints,
     MaybeAppendQueryParameters(it->second, &login_url);
   }
   permission_delegate_->AddIdpSigninStatusObserver(this);
-  ShowModalDialog(login_url);
+
+  if (IsFedCmUseOtherAccountEnabled(rp_mode_ == RpMode::kButton)) {
+    account_ids_before_login_.clear();
+    for (const auto& idp_data : idp_data_for_display_) {
+      if (idp_data.idp_metadata.idp_login_url == login_url) {
+        for (const auto& account : idp_data.accounts) {
+          account_ids_before_login_.insert(account.id);
+        }
+        break;
+      }
+    }
+  }
+
+  login_url_ = login_url;
+  ShowModalDialog(idp_config_url, login_url);
+}
+
+void FederatedAuthRequestImpl::MaybeShowButtonModeModalDialog(
+    const GURL& idp_config_url,
+    const GURL& idp_login_url) {
+  if (IsFedCmMultipleIdentityProvidersEnabled() && idp_infos_.size() > 1) {
+    // TODO(https://crbug.com/1487268): handle the button flow and the
+    // Multi IdP API (what should happen if you are logged in to some
+    // IdPs but not to others).
+    // TODO(crbug.com/326987150): This is temporary so we should degrade
+    // gracefully.
+    return;
+  }
+
+  // We fail sooner before, but just to double check, we assert that
+  // we are inside a user gesture here again.
+  CHECK(had_transient_user_activation_);
+  // TODO(crbug.com/1487270): we should probably make idp_login_url
+  // optional instead of empty.
+  LoginToIdP(/*can_append_hints=*/false, idp_config_url, idp_login_url);
+  return;
 }
 
 void FederatedAuthRequestImpl::PreventSilentAccess(
@@ -2904,17 +2952,7 @@ void FederatedAuthRequestImpl::Disconnect(
     std::move(callback).Run(DisconnectStatus::kError);
     return;
   }
-  if (!fedcm_metrics_) {
-    // Ensure the lifecycle state as GetPageUkmSourceId doesn't support the
-    // prerendering page. As FederatedAuthRequest runs behind the
-    // BrowserInterfaceBinders, the service doesn't receive any request while
-    // prerendering, and the CHECK should always meet the condition.
-    CHECK(!render_frame_host().IsInLifecycleState(
-        RenderFrameHost::LifecycleState::kPrerendering));
-    fedcm_metrics_ = CreateFedCmMetrics(
-        options->config->config_url, render_frame_host().GetPageUkmSourceId(),
-        /*is_disabled=*/false);
-  }
+  MaybeCreateFedCmMetrics(options->config->config_url);
   if (disconnect_request_) {
     // Since we do not send any fetches in this case, consider the request to be
     // instant, e.g. duration is 0.
@@ -2957,17 +2995,7 @@ void FederatedAuthRequestImpl::RecordErrorMetrics(
     return;
   }
 
-  if (!fedcm_metrics_) {
-    // Ensure the lifecycle state as GetPageUkmSourceId doesn't support the
-    // prerendering page. As FederatedAuthRequest runs behind the
-    // BrowserInterfaceBinders, the service doesn't receive any request while
-    // prerendering, and the CHECK should always meet the condition.
-    CHECK(!render_frame_host().IsInLifecycleState(
-        RenderFrameHost::LifecycleState::kPrerendering));
-    fedcm_metrics_ = CreateFedCmMetrics(
-        idp->config->config_url, render_frame_host().GetPageUkmSourceId(),
-        /*is_disabled=*/false);
-  }
+  MaybeCreateFedCmMetrics(idp->config->config_url);
 
   fedcm_metrics_->RecordTokenResponseTypeMetrics(token_response_type);
 
@@ -2980,6 +3008,20 @@ void FederatedAuthRequestImpl::RecordErrorMetrics(
     // devtools issue when failing the request.
     error_url_type_ = error_url_type;
     fedcm_metrics_->RecordErrorUrlTypeMetrics(*error_url_type);
+  }
+}
+
+void FederatedAuthRequestImpl::MaybeCreateFedCmMetrics(const GURL& provider) {
+  if (!fedcm_metrics_) {
+    // Ensure the lifecycle state as GetPageUkmSourceId doesn't support the
+    // prerendering page. As FederatedAithRequest runs behind the
+    // BrowserInterfaceBinders, the service doesn't receive any request while
+    // prerendering, and the CHECK should always meet the condition.
+    CHECK(!render_frame_host().IsInLifecycleState(
+        RenderFrameHost::LifecycleState::kPrerendering));
+
+    fedcm_metrics_ =
+        CreateFedCmMetrics(provider, render_frame_host().GetPageUkmSourceId());
   }
 }
 

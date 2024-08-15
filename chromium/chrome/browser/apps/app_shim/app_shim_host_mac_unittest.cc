@@ -71,6 +71,8 @@ class TestingAppShim : public chrome::mojom::AppShim {
   void BindNotificationProvider(
       mojo::PendingReceiver<mac_notifications::mojom::MacNotificationProvider>
           provider) override {}
+  void RequestNotificationPermission(
+      RequestNotificationPermissionCallback callback) override {}
 
   bool received_launch_done_result_ = false;
   chrome::mojom::AppShimLaunchResult launch_done_result_ =
@@ -195,6 +197,9 @@ class AppShimHostTest : public testing::Test,
   void OnShimOpenAppWithOverrideUrl(AppShimHost* host,
                                     const GURL& override_url) override {}
   void OnShimWillTerminate(AppShimHost* host) override {}
+  void OnNotificationPermissionStatusChanged(
+      AppShimHost* host,
+      mac_notifications::mojom::PermissionStatus status) override {}
 
   chrome::mojom::AppShimLaunchResult launch_result_ =
       chrome::mojom::AppShimLaunchResult::kSuccess;

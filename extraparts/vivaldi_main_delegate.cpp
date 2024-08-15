@@ -35,7 +35,7 @@ VivaldiMainDelegate::CreateContentBrowserClient() {
   return chrome_content_browser_client_.get();
 }
 
-absl::optional<int> VivaldiMainDelegate::BasicStartupComplete() {
+std::optional<int> VivaldiMainDelegate::BasicStartupComplete() {
   constexpr const char chromium_version_switch[] = "chromium-version";
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();

@@ -29,6 +29,34 @@ const uint32_t kReplacementCodePoint = 0xFFFD;
 // Used below in EscapeSpecialCodePoint().
 static_assert('<' == 0x3C, "less than sign must be 0x3c");
 
+template <typename S>
+bool IsAscii(const S& str) {
+  for (auto ch : str) {
+    if (ch > 126)
+      return false;
+  }
+  return true;
+}
+
+size_t ComputeAsciiEscapedSize(char ch) {
+  switch (ch) {
+    case '\b':
+    case '\f':
+    case '\n':
+    case '\r':
+    case '\t':
+    case '\\':
+    case '"':
+      return 2;
+    case '<':  // Special case, consistent with EscapeSpecialCodePoint below.
+      return 6;
+    default:
+      if (ch < 32)
+        return 6;
+      return 0;
+  }
+}
+
 // Try to escape the |code_point| if it is a known special character. If
 // successful, returns true and appends the escape sequence to |dest|. This
 // isn't required by the spec, but it's more readable by humans.
@@ -72,7 +100,10 @@ bool EscapeSpecialCodePoint(uint32_t code_point, std::string* dest) {
       dest->append("\\u2029");
       break;
     default:
-      return false;
+      if (code_point >= 32)
+        return false;
+      // Escape non-printing characters.
+      base::StringAppendF(dest, kU16EscapeFormat, code_point);
   }
   return true;
 }
@@ -84,28 +115,40 @@ bool EscapeJSONStringImpl(const S& str, bool put_in_quotes, std::string* dest) {
   if (put_in_quotes)
     dest->push_back('"');
 
-  // Casting is necessary because ICU uses int32_t. Try and do so safely.
-  CHECK_LE(str.length(),
-           static_cast<size_t>(std::numeric_limits<int32_t>::max()));
-  const int32_t length = static_cast<int32_t>(str.length());
+  // Most input strings are ASCII only and do not need UTF-8 parsing or
+  // even escaping at all.
+  if (IsAscii(str)) {
+    size_t escapes_size = 0;
+    for (auto ch : str)
+      escapes_size += ComputeAsciiEscapedSize(ch);
 
-  for (int32_t i = 0; i < length; ++i) {
-    uint32_t code_point;
-    if (!ReadUnicodeCharacter(str.data(), length, &i, &code_point) ||
-        code_point == static_cast<decltype(code_point)>(CBU_SENTINEL) ||
-        !IsValidCharacter(code_point)) {
-      code_point = kReplacementCodePoint;
-      did_replacement = true;
+    if (escapes_size == 0) {
+      dest->append(str.begin(), str.end());
+    } else {
+      dest->reserve(dest->size() + str.size() + escapes_size);
+      for (auto ch : str) {
+        if (!EscapeSpecialCodePoint(ch, dest))
+          dest->push_back(ch);
+      }
     }
+  } else {
+    // Casting is necessary because ICU uses int32_t. Try and do so safely.
+    CHECK_LE(str.length(),
+             static_cast<size_t>(std::numeric_limits<int32_t>::max()));
+    const int32_t length = static_cast<int32_t>(str.length());
 
-    if (EscapeSpecialCodePoint(code_point, dest))
-      continue;
+    for (int32_t i = 0; i < length; ++i) {
+      uint32_t code_point;
+      if (!ReadUnicodeCharacter(str.data(), length, &i, &code_point) ||
+          code_point == static_cast<decltype(code_point)>(CBU_SENTINEL) ||
+          !IsValidCharacter(code_point)) {
+        code_point = kReplacementCodePoint;
+        did_replacement = true;
+      }
 
-    // Escape non-printing characters.
-    if (code_point < 32)
-      base::StringAppendF(dest, kU16EscapeFormat, code_point);
-    else
-      WriteUnicodeCharacter(code_point, dest);
+      if (!EscapeSpecialCodePoint(code_point, dest))
+        WriteUnicodeCharacter(code_point, dest);
+    }
   }
 
   if (put_in_quotes)

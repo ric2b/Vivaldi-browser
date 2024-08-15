@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "base/memory/scoped_refptr.h"
@@ -22,7 +23,6 @@
 #include "media/muxers/webm_muxer.h"
 #include "media/renderers/paint_canvas_video_renderer.h"
 #include "media/video/video_encode_accelerator.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/media/video_capture.h"
 #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
 #include "third_party/blink/public/web/modules/mediastream/encoded_video_frame.h"
@@ -95,7 +95,7 @@ class VideoTrackRecorder : public TrackRecorder<MediaStreamVideoSink> {
         const media::Muxer::VideoParameters& params,
         std::string encoded_data,
         std::string encoded_alpha,
-        absl::optional<media::VideoEncoder::CodecDescription> codec_description,
+        std::optional<media::VideoEncoder::CodecDescription> codec_description,
         base::TimeTicks timestamp,
         bool is_key_frame) = 0;
 
@@ -112,13 +112,13 @@ class VideoTrackRecorder : public TrackRecorder<MediaStreamVideoSink> {
   // Video codec and its encoding profile/level.
   struct MODULES_EXPORT CodecProfile {
     CodecId codec_id;
-    absl::optional<media::VideoCodecProfile> profile;
-    absl::optional<media::VideoCodecLevel> level;
+    std::optional<media::VideoCodecProfile> profile;
+    std::optional<media::VideoCodecLevel> level;
 
     explicit CodecProfile(CodecId codec_id);
     CodecProfile(CodecId codec_id,
-                 absl::optional<media::VideoCodecProfile> opt_profile,
-                 absl::optional<media::VideoCodecLevel> opt_level);
+                 std::optional<media::VideoCodecProfile> opt_profile,
+                 std::optional<media::VideoCodecLevel> opt_level);
     CodecProfile(CodecId codec_id,
                  media::VideoCodecProfile profile,
                  media::VideoCodecLevel level);
@@ -128,7 +128,7 @@ class VideoTrackRecorder : public TrackRecorder<MediaStreamVideoSink> {
       const media::Muxer::VideoParameters& params,
       std::string encoded_data,
       std::string encoded_alpha,
-      absl::optional<media::VideoEncoder::CodecDescription> codec_description,
+      std::optional<media::VideoEncoder::CodecDescription> codec_description,
       base::TimeTicks capture_timestamp,
       bool is_key_frame)>;
   using OnErrorCB = base::RepeatingClosure;
@@ -334,9 +334,12 @@ class MODULES_EXPORT VideoTrackRecorderImpl : public VideoTrackRecorder {
 
   // Returns true if the device has a hardware accelerated encoder which can
   // encode video of the given |width|x|height| and |framerate| to specific
-  // |codec|.
-  // Note: default framerate value means no restriction.
-  static bool CanUseAcceleratedEncoder(CodecId codec,
+  // |codec_profile.codec_id|. If |codec_profile.profile| is set, then this
+  // returns false if and only if the hardware encoder can encode in the
+  // profile. If |codec_profile.profile| is not set, this sets
+  // |codec_profile.profile| to the first profile supported by the hardware
+  // encoder. Note: default framerate value means no restriction.
+  static bool CanUseAcceleratedEncoder(CodecProfile& codec_profile,
                                        size_t width,
                                        size_t height,
                                        double framerate = 0.0);

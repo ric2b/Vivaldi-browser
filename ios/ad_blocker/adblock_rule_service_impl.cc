@@ -258,6 +258,9 @@ void RuleServiceImpl::OnDoneApplyingRules(RuleGroup group) {
   // AdBlockerContentRuleListProvider. We block the signal when that happens.
   if (IsApplyingIosRules(group))
     return;
+
+  state_store_->ScheduleSave();
+
   for (RuleService::Observer& observer : observers_) {
     observer.OnDoneApplyingIosRules(group);
   }

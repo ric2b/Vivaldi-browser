@@ -6,6 +6,7 @@ the reclient lifecycle safely. It will automatically start
 reproxy before running ninja and stop reproxy when build stops
 for any reason e.g. build completion, keyboard interrupt etc."""
 
+import atexit
 import contextlib
 import datetime
 import hashlib
@@ -166,6 +167,12 @@ def datetime_now():
     return datetime.datetime.utcnow()
 
 
+# Deletes the tree at dir if it exists.
+def rmtree_if_exists(rm_dir):
+    if os.path.exists(rm_dir) and os.path.isdir(rm_dir):
+        shutil.rmtree(rm_dir)
+
+
 def set_reproxy_path_flags(out_dir, make_dirs=True):
     """Helper to setup the logs and cache directories for reclient.
 
@@ -195,14 +202,17 @@ def set_reproxy_path_flags(out_dir, make_dirs=True):
         RBE_server_address=pipe://md5(out_dir/.reproxy_tmp)/reproxy.pipe
     """
     os.environ.setdefault("AUTONINJA_BUILD_ID", str(uuid.uuid4()))
+    run_sub_dir = datetime_now().strftime(
+        '%Y%m%dT%H%M%S.%f') + "_" + os.environ["AUTONINJA_BUILD_ID"]
     tmp_dir = os.path.abspath(os.path.join(out_dir, '.reproxy_tmp'))
     log_dir = os.path.join(tmp_dir, 'logs')
-    run_log_dir = os.path.join(
-        log_dir,
-        datetime_now().strftime('%Y%m%dT%H%M%S.%f') + "_" +
-        os.environ["AUTONINJA_BUILD_ID"])
+    run_log_dir = os.path.join(log_dir, run_sub_dir)
     racing_dir = os.path.join(tmp_dir, 'racing')
+    run_racing_dir = os.path.join(racing_dir, run_sub_dir)
     cache_dir = find_cache_dir(tmp_dir)
+
+    atexit.register(rmtree_if_exists, run_racing_dir)
+
     if make_dirs:
         if os.path.isfile(os.path.join(log_dir, "rbe_metrics.txt")):
             try:
@@ -219,6 +229,8 @@ def set_reproxy_path_flags(out_dir, make_dirs=True):
         os.makedirs(run_log_dir, exist_ok=True)
         os.makedirs(cache_dir, exist_ok=True)
         os.makedirs(racing_dir, exist_ok=True)
+        os.makedirs(run_racing_dir, exist_ok=True)
+
     old_log_dirs = [
         d for d in os.listdir(log_dir)
         if os.path.isdir(os.path.join(log_dir, d))
@@ -233,9 +245,9 @@ def set_reproxy_path_flags(out_dir, make_dirs=True):
     os.environ.setdefault("RBE_proxy_log_dir", run_log_dir)
     os.environ.setdefault("RBE_log_dir", run_log_dir)
     os.environ.setdefault("RBE_cache_dir", cache_dir)
-    os.environ.setdefault("RBE_racing_tmp_dir", racing_dir)
+    os.environ.setdefault("RBE_racing_tmp_dir", run_racing_dir)
     if sys.platform.startswith('win'):
-        pipe_dir = hashlib.md5(tmp_dir.encode()).hexdigest()
+        pipe_dir = hashlib.sha256(run_log_dir.encode()).hexdigest()
         os.environ.setdefault("RBE_server_address",
                               "pipe://%s/reproxy.pipe" % pipe_dir)
     else:
@@ -243,7 +255,7 @@ def set_reproxy_path_flags(out_dir, make_dirs=True):
         # ref: https://www.man7.org/linux/man-pages/man7/unix.7.html
         os.environ.setdefault(
             "RBE_server_address", "unix:///tmp/reproxy_%s.sock" %
-            hashlib.sha256(tmp_dir.encode()).hexdigest())
+            hashlib.sha256(run_log_dir.encode()).hexdigest())
 
 
 def set_racing_defaults():
@@ -256,6 +268,33 @@ def set_mac_defaults():
     # performance when on high-speed connection, but does show improvements
     # on easily congested networks.
     os.environ.setdefault("RBE_cas_concurrency", "100")
+    # Enable the deps cache on macs.  Mac needs a larger deps cache as it
+    # seems to have larger dependency sets per action.
+    os.environ.setdefault("RBE_enable_deps_cache", "true")
+    os.environ.setdefault("RBE_deps_cache_max_mb", "1024")
+
+
+def set_win_defaults():
+    # Enable the deps cache on windows.  This makes a notable improvement
+    # in performance at the cost of a ~200MB cache file.
+    os.environ.setdefault("RBE_enable_deps_cache", "true")
+    # Reduce local resource fraction used to do local compile actions on
+    # windows, to try and prevent machine saturation.
+    os.environ.setdefault("RBE_local_resource_fraction", "0.05")
+
+
+def workspace_is_cog():
+    return sys.platform == "linux" and os.path.realpath(
+        os.getcwd()).startswith("/google/cog")
+
+
+# pylint: disable=line-too-long
+def reclient_setup_docs_url():
+    if sys.platform == "darwin":
+        return "https://chromium.googlesource.com/chromium/src/+/main/docs/mac_build_instructions.md#use-reclient"
+    if sys.platform.startswith("win"):
+        return "https://chromium.googlesource.com/chromium/src/+/main/docs/windows_build_instructions.md#use-reclient"
+    return "https://chromium.googlesource.com/chromium/src/+/main/docs/linux/build_instructions.md#use-reclient"
 
 
 @contextlib.contextmanager
@@ -294,9 +333,15 @@ def build_context(argv, tool):
 
     remote_disabled = os.environ.get('RBE_remote_disabled')
     if remote_disabled not in ('1', 't', 'T', 'true', 'TRUE', 'True'):
+        # If we are building inside a Cog workspace, racing is likely not a
+        # performance improvement, so we disable it by default.
+        if workspace_is_cog():
+            os.environ.setdefault("RBE_exec_strategy", "remote_local_fallback")
         set_racing_defaults()
         if sys.platform == "darwin":
             set_mac_defaults()
+        if sys.platform.startswith("win"):
+            set_win_defaults()
 
     # TODO(b/292523514) remove this once a fix is landed in reproxy
     remove_mdproxy_from_path()
@@ -307,6 +352,11 @@ def build_context(argv, tool):
         elapsed = time.time() - start
         print('%1.3f s to start reproxy' % elapsed)
     if reproxy_ret_code != 0:
+        print(f'''Failed to start reproxy!
+See above error message for details.
+Ensure you have completed the reproxy setup instructions:
+{reclient_setup_docs_url()}''',
+              file=sys.stderr)
         yield reproxy_ret_code
         return
     try:

@@ -469,6 +469,12 @@ def AddGTestOptions(parser):
       help='Do not push new files to the device, instead using existing APK '
       'and test data. Only use when running the same test for multiple '
       'iterations.')
+  # This is currently only implemented for gtests tests.
+  parser.add_argument('--gtest_also_run_pre_tests',
+                      '--gtest-also-run-pre-tests',
+                      dest='run_pre_tests',
+                      action='store_true',
+                      help='Also run PRE_ tests if applicable.')
 
 
 def AddInstrumentationTestOptions(parser):
@@ -1458,7 +1464,7 @@ def main():
     if e.is_infra_error:
       return constants.INFRA_EXIT_CODE
     return constants.ERROR_EXIT_CODE
-  except: # pylint: disable=W0702
+  except Exception:  # pylint: disable=W0703
     logging.exception('Unrecognized error occurred.')
     return constants.ERROR_EXIT_CODE
 

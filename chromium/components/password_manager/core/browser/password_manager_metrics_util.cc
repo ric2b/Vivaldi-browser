@@ -213,12 +213,8 @@ void LogPasswordReuse(int saved_passwords,
                                 PasswordType::PASSWORD_TYPE_COUNT);
 }
 
-void LogPasswordDropdownShown(PasswordDropdownState state,
-                              bool off_the_record) {
+void LogPasswordDropdownShown(PasswordDropdownState state) {
   base::UmaHistogramEnumeration("PasswordManager.PasswordDropdownShown", state);
-
-  base::UmaHistogramBoolean("PasswordManager.DropdownShown.OffTheRecord",
-                            off_the_record);
 }
 
 void LogPasswordDropdownItemSelected(PasswordDropdownSelectedOption type,
@@ -423,57 +419,19 @@ void LogGroupedPasswordsResults(
 }
 
 #if BUILDFLAG(IS_ANDROID)
+void LogLocalPwdMigrationProgressState(
+    LocalPwdMigrationProgressState scheduling_state) {
+  base::UmaHistogramEnumeration(
+      "PasswordManager.UnifiedPasswordManager.MigrationForLocalUsers."
+      "ProgressState",
+      scheduling_state);
+}
+
 void LogTouchToFillPasswordGenerationTriggerOutcome(
     TouchToFillPasswordGenerationTriggerOutcome outcome) {
   base::UmaHistogramEnumeration(
       "PasswordManager.TouchToFill.PasswordGeneration.TriggerOutcome", outcome);
 }
 #endif
-
-#if BUILDFLAG(IS_IOS)
-void RecordMigrationToOSCryptLatency(bool success,
-                                     base::TimeDelta latency,
-                                     base::StringPiece store_infix) {
-  if (success) {
-    base::UmaHistogramLongTimes(
-        base::StrCat({"PasswordManager.MigrationToOSCrypt.", store_infix,
-                      ".SuccessLatency"}),
-        latency);
-    return;
-  }
-  base::UmaHistogramLongTimes(
-      base::StrCat({"PasswordManager.MigrationToOSCrypt.", store_infix,
-                    ".ErrorLatency"}),
-      latency);
-}
-
-void RecordMigrationToOSCryptStatus(base::TimeTicks migration_start_time,
-                                    bool is_account_store,
-                                    MigrationToOSCrypt status) {
-  base::StringPiece infix_for_store =
-      is_account_store ? "AccountStore" : "ProfileStore";
-  if (status != MigrationToOSCrypt::kStarted) {
-    RecordMigrationToOSCryptLatency(
-        status == MigrationToOSCrypt::kSuccess,
-        base::TimeTicks::Now() - migration_start_time, infix_for_store);
-  }
-
-  base::UmaHistogramEnumeration("PasswordManager.MigrationToOSCrypt", status);
-  base::UmaHistogramEnumeration(
-      base::StrCat({"PasswordManager.MigrationToOSCrypt.", infix_for_store}),
-      status);
-}
-
-void RecordPasswordNotesMigrationToOSCryptStatus(
-    bool is_account_store,
-    PasswordNotesMigrationToOSCrypt status) {
-  base::UmaHistogramEnumeration(
-      "PasswordManager.PasswordNotesMigrationToOSCrypt", status);
-  base::UmaHistogramEnumeration(
-      base::StrCat({"PasswordManager.PasswordNotesMigrationToOSCrypt.",
-                    is_account_store ? "AccountStore" : "ProfileStore"}),
-      status);
-}
-#endif  // BUILDFLAG(IS_IOS)
 
 }  // namespace password_manager::metrics_util

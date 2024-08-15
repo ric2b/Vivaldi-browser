@@ -34,6 +34,10 @@
 #include "extensions/common/extension_builder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/crosapi/browser_util.h"
+#endif
+
 using extensions::api::odfs_config_private::Mount;
 using testing::ElementsAreArray;
 
@@ -212,9 +216,8 @@ IN_PROC_BROWSER_TEST_F(OneDrivePrefObserverBrowserTest,
           .SetID(extension_misc::kODFSExtensionId)
           .Build();
   extension_service()->AddExtension(extension.get());
-  ASSERT_TRUE(extension_registry()->GetExtensionById(
-      extension_misc::kODFSExtensionId,
-      extensions::ExtensionRegistry::IncludeFlag::ENABLED));
+  ASSERT_TRUE(extension_registry()->enabled_extensions().Contains(
+      extension_misc::kODFSExtensionId));
 
   SetOneDriveMount(ToString(Mount::kDisallowed));
   ASSERT_FALSE(extension_registry()->GetExtensionById(
@@ -231,9 +234,8 @@ IN_PROC_BROWSER_TEST_F(OneDrivePrefObserverBrowserTest,
           .SetID(extension_misc::kODFSExtensionId)
           .Build();
   extension_service()->AddExtension(extension.get());
-  ASSERT_TRUE(extension_registry()->GetExtensionById(
-      extension_misc::kODFSExtensionId,
-      extensions::ExtensionRegistry::IncludeFlag::ENABLED));
+  ASSERT_TRUE(extension_registry()->enabled_extensions().Contains(
+      extension_misc::kODFSExtensionId));
 
   SetOneDriveMount(ToString(Mount::kDisallowed));
   ASSERT_TRUE(extension_registry()->GetExtensionById(

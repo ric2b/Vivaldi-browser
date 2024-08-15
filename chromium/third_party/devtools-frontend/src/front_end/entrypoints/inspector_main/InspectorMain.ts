@@ -191,13 +191,13 @@ export class NodeIndicator implements UI.Toolbar.Provider {
 export class SourcesPanelIndicator {
   constructor() {
     Common.Settings.Settings.instance()
-        .moduleSetting('javaScriptDisabled')
+        .moduleSetting('java-script-disabled')
         .addChangeListener(javaScriptDisabledChanged);
     javaScriptDisabledChanged();
 
     function javaScriptDisabledChanged(): void {
       const warnings = [];
-      if (Common.Settings.Settings.instance().moduleSetting('javaScriptDisabled').get()) {
+      if (Common.Settings.Settings.instance().moduleSetting('java-script-disabled').get()) {
         warnings.push(i18nString(UIStrings.javascriptIsDisabled));
       }
       UI.InspectorView.InspectorView.instance().setPanelWarnings('sources', warnings);
@@ -211,14 +211,14 @@ export class BackendSettingsSync implements SDK.TargetManager.Observer {
   readonly #emulatePageFocusSetting: Common.Settings.Setting<boolean>;
 
   constructor() {
-    this.#autoAttachSetting = Common.Settings.Settings.instance().moduleSetting('autoAttachToCreatedPages');
+    this.#autoAttachSetting = Common.Settings.Settings.instance().moduleSetting('auto-attach-to-created-pages');
     this.#autoAttachSetting.addChangeListener(this.#updateAutoAttach, this);
     this.#updateAutoAttach();
 
-    this.#adBlockEnabledSetting = Common.Settings.Settings.instance().moduleSetting('network.adBlockingEnabled');
+    this.#adBlockEnabledSetting = Common.Settings.Settings.instance().moduleSetting('network.ad-blocking-enabled');
     this.#adBlockEnabledSetting.addChangeListener(this.#update, this);
 
-    this.#emulatePageFocusSetting = Common.Settings.Settings.instance().moduleSetting('emulatePageFocus');
+    this.#emulatePageFocusSetting = Common.Settings.Settings.instance().moduleSetting('emulate-page-focus');
     this.#emulatePageFocusSetting.addChangeListener(this.#update, this);
 
     SDK.TargetManager.TargetManager.instance().observeTargets(this);

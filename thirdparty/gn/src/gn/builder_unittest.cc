@@ -211,7 +211,8 @@ TEST_F(BuilderTest, SortedUnresolvedDeps) {
   a_record->AddDep(d_record);
   a_record->AddDep(c_record);
 
-  std::vector<const BuilderRecord*> a_unresolved = a_record->GetSortedUnresolvedDeps();
+  std::vector<const BuilderRecord*> a_unresolved =
+      a_record->GetSortedUnresolvedDeps();
   EXPECT_EQ(3u, a_unresolved.size()) << a_unresolved.size();
   EXPECT_EQ(b_record, a_unresolved[0]);
   EXPECT_EQ(c_record, a_unresolved[1]);

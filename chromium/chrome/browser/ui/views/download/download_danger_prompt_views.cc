@@ -48,8 +48,9 @@ namespace {
 class DownloadDangerPromptViews : public DownloadDangerPrompt,
                                   public download::DownloadItem::Observer,
                                   public views::DialogDelegateView {
+  METADATA_HEADER(DownloadDangerPromptViews, views::DialogDelegateView)
+
  public:
-  METADATA_HEADER(DownloadDangerPromptViews);
   DownloadDangerPromptViews(download::DownloadItem* item,
                             Profile* profile,
                             bool show_context,
@@ -235,6 +236,7 @@ std::u16string DownloadDangerPromptViews::GetMessageBody() const {
       case download::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
       case download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
       case download::DOWNLOAD_DANGER_TYPE_ALLOWLISTED_BY_POLICY:
+      case download::DOWNLOAD_DANGER_TYPE_BLOCKED_SCAN_FAILED:
       case download::DOWNLOAD_DANGER_TYPE_MAX: {
         break;
       }
@@ -315,7 +317,7 @@ void DownloadDangerPromptViews::RunDone(Action action) {
     std::move(done).Run(action);
 }
 
-BEGIN_METADATA(DownloadDangerPromptViews, views::DialogDelegateView)
+BEGIN_METADATA(DownloadDangerPromptViews)
 ADD_READONLY_PROPERTY_METADATA(std::u16string, MessageBody)
 END_METADATA
 

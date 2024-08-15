@@ -53,6 +53,7 @@ import {
   type InspectorFrontendHostAPI,
   type KeyDownEvent,
   type LoadNetworkResourceResult,
+  type ResizeEvent,
   type ShowSurveyResult,
   type SyncInformation,
 } from './InspectorFrontendHostAPI.js';
@@ -185,6 +186,11 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
 
   openInNewTab(url: Platform.DevToolsPath.UrlString): void {
     window.open(url, '_blank');
+  }
+
+  openSearchResultsInNewTab(query: string): void {
+    Common.Console.Console.instance().error(
+        'Search is not enabled in hosted mode. Please inspect using chrome://inspect');
   }
 
   showItemInFolder(fileSystemPath: Platform.DevToolsPath.RawPathString): void {
@@ -468,13 +474,18 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
     return null;
   }
 
-  doAidaConversation(request: string, callback: (result: DoAidaConversationResult) => void): void {
+  doAidaConversation(request: string, streamId: number, callback: (result: DoAidaConversationResult) => void): void {
     callback({
-      response: '{}',
+      error: 'Not implemened',
     });
   }
 
+  registerAidaClientEvent(request: string): void {
+  }
+
   recordImpression(event: ImpressionEvent): void {
+  }
+  recordResize(event: ResizeEvent): void {
   }
   recordClick(event: ClickEvent): void {
   }
@@ -543,6 +554,12 @@ function initializeInspectorFrontendHost(): void {
           (globalThis as unknown as {
             doAidaConversationForTesting: typeof InspectorFrontendHostInstance['doAidaConversation'],
           }).doAidaConversationForTesting;
+    }
+    if ('getSyncInformationForTesting' in globalThis) {
+      InspectorFrontendHostInstance['getSyncInformation'] =
+          (globalThis as unknown as {
+            getSyncInformationForTesting: typeof InspectorFrontendHostInstance['getSyncInformation'],
+          }).getSyncInformationForTesting;
     }
   } else {
     // Otherwise add stubs for missing methods that are declared in the interface.

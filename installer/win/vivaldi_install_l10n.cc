@@ -26,7 +26,7 @@ struct LanguageState {
 
   // We need to change the selector, but it does not support assignments, so go
   // via Optional and explicit emplace.
-  absl::optional<base::win::i18n::LanguageSelector> selector;
+  std::optional<base::win::i18n::LanguageSelector> selector;
   std::wstring language_code;
 };
 

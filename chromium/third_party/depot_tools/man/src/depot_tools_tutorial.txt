@@ -124,7 +124,7 @@ code, including msysgit and python.
 * After running gclient open a command prompt and type `where python` and confirm that
   the depot_tools python.bat comes ahead of any copies of python.exe. Failing to ensure
   this can lead to overbuilding when using gn - see
-  link:https://bugs.chromium.org/p/chromium/issues/detail?id=611087[crbug.com/611087].
+  link:https://issues.chromium.org/issues/41253477[crbug.com/41253477].
 =====
 endif::backend-xhtml11[]
 

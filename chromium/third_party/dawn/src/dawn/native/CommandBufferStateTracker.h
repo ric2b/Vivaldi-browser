@@ -36,6 +36,7 @@
 #include "dawn/native/BindingInfo.h"
 #include "dawn/native/Error.h"
 #include "dawn/native/Forward.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 
 namespace dawn::native {
 
@@ -67,9 +68,10 @@ class CommandBufferStateTracker {
                       BindGroupBase* bindgroup,
                       uint32_t dynamicOffsetCount,
                       const uint32_t* dynamicOffsets);
-    void SetIndexBuffer(wgpu::IndexFormat format, uint64_t size);
+    void SetIndexBuffer(wgpu::IndexFormat format, uint64_t offset, uint64_t size);
     void UnsetVertexBuffer(VertexBufferSlot slot);
     void SetVertexBuffer(VertexBufferSlot slot, uint64_t size);
+    void End();
 
     static constexpr size_t kNumAspects = 4;
     using ValidationAspects = std::bitset<kNumAspects>;
@@ -82,6 +84,7 @@ class CommandBufferStateTracker {
     PipelineLayoutBase* GetPipelineLayout() const;
     wgpu::IndexFormat GetIndexFormat() const;
     uint64_t GetIndexBufferSize() const;
+    uint64_t GetIndexBufferOffset() const;
 
   private:
     MaybeError ValidateOperation(ValidationAspects requiredAspects);
@@ -92,7 +95,7 @@ class CommandBufferStateTracker {
 
     ValidationAspects mAspects;
 
-    PerBindGroup<BindGroupBase*> mBindgroups = {};
+    PerBindGroup<raw_ptr<BindGroupBase>> mBindgroups = {};
     PerBindGroup<std::vector<uint32_t>> mDynamicOffsets = {};
 
     VertexBufferMask mVertexBuffersUsed;
@@ -101,11 +104,11 @@ class CommandBufferStateTracker {
     bool mIndexBufferSet = false;
     wgpu::IndexFormat mIndexFormat;
     uint64_t mIndexBufferSize = 0;
+    uint64_t mIndexBufferOffset = 0;
 
-    PipelineLayoutBase* mLastPipelineLayout = nullptr;
-    PipelineBase* mLastPipeline = nullptr;
-
-    const RequiredBufferSizes* mMinBufferSizes = nullptr;
+    raw_ptr<PipelineLayoutBase> mLastPipelineLayout = nullptr;
+    raw_ptr<PipelineBase> mLastPipeline = nullptr;
+    raw_ptr<const RequiredBufferSizes> mMinBufferSizes = nullptr;
 };
 
 }  // namespace dawn::native

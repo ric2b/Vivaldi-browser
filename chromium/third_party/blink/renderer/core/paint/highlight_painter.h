@@ -5,7 +5,8 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_PAINT_HIGHLIGHT_PAINTER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_PAINT_HIGHLIGHT_PAINTER_H_
 
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include <optional>
+
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/editing/markers/document_marker.h"
@@ -13,8 +14,8 @@
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
 #include "third_party/blink/renderer/core/layout/inline/text_offset_range.h"
 #include "third_party/blink/renderer/core/layout/selection_state.h"
-#include "third_party/blink/renderer/core/paint/line_relative_rect.h"
 #include "third_party/blink/renderer/core/paint/highlight_overlay.h"
+#include "third_party/blink/renderer/core/paint/line_relative_rect.h"
 #include "third_party/blink/renderer/core/paint/text_decoration_info.h"
 #include "third_party/blink/renderer/core/paint/text_paint_style.h"
 #include "third_party/blink/renderer/platform/graphics/dom_node_id.h"
@@ -38,6 +39,9 @@ struct PaintInfo;
 struct PhysicalOffset;
 struct TextFragmentPaintInfo;
 
+using HighlightLayer = HighlightOverlay::HighlightLayer;
+using HighlightPart = HighlightOverlay::HighlightPart;
+
 // Highlight overlay painter for LayoutNG. Operates on a FragmentItem that
 // IsText(). Delegates to TextPainter to paint the text itself.
 class CORE_EXPORT HighlightPainter {
@@ -53,11 +57,11 @@ class CORE_EXPORT HighlightPainter {
     explicit SelectionPaintState(
         const InlineCursor& containing_block,
         const PhysicalOffset& box_offset,
-        const absl::optional<AffineTransform> writing_mode_rotation = {});
+        const std::optional<AffineTransform> writing_mode_rotation = {});
     explicit SelectionPaintState(
         const InlineCursor& containing_block,
         const PhysicalOffset& box_offset,
-        const absl::optional<AffineTransform> writing_mode_rotation,
+        const std::optional<AffineTransform> writing_mode_rotation,
         const FrameSelection&);
 
     const LayoutSelectionStatus& Status() const { return selection_status_; }
@@ -88,7 +92,7 @@ class CORE_EXPORT HighlightPainter {
         Node* node,
         const Document& document,
         const ComputedStyle& style,
-        const absl::optional<AffineTransform>& rotation);
+        const std::optional<AffineTransform>& rotation);
 
     void PaintSelectedText(TextPainter& text_painter,
                            const TextFragmentPaintInfo&,
@@ -119,8 +123,8 @@ class CORE_EXPORT HighlightPainter {
     const SelectionState state_;
     const InlineCursor& containing_block_;
     const PhysicalOffset& box_offset_;
-    const absl::optional<AffineTransform> writing_mode_rotation_;
-    absl::optional<SelectionRect> selection_rect_;
+    const std::optional<AffineTransform> writing_mode_rotation_;
+    std::optional<SelectionRect> selection_rect_;
     TextPaintStyle selection_style_;
     bool paint_selected_text_only_;
   };
@@ -131,12 +135,10 @@ class CORE_EXPORT HighlightPainter {
                    const PaintInfo& paint_info,
                    const InlineCursor& cursor,
                    const FragmentItem& fragment_item,
-                   const absl::optional<AffineTransform> writing_mode_rotation,
                    const PhysicalOffset& box_origin,
                    const ComputedStyle& style,
                    const TextPaintStyle& text_style,
-                   SelectionPaintState*,
-                   bool is_printing);
+                   SelectionPaintState*);
 
   enum Phase { kBackground, kForeground };
 
@@ -191,14 +193,14 @@ class CORE_EXPORT HighlightPainter {
   void PaintHighlightOverlays(const TextPaintStyle&,
                               DOMNodeId,
                               bool paint_marker_backgrounds,
-                              absl::optional<AffineTransform> rotation);
+                              std::optional<AffineTransform> rotation);
 
   static void PaintHighlightBackground(
       GraphicsContext& context,
       const ComputedStyle& style,
       Color color,
       const PhysicalRect& rect,
-      const absl::optional<AffineTransform>& rotation);
+      const std::optional<AffineTransform>& rotation);
 
   // Query various style pieces for the given marker type
   static PseudoId PseudoFor(DocumentMarker::MarkerType type);
@@ -206,28 +208,6 @@ class CORE_EXPORT HighlightPainter {
   static Color ColorFor(DocumentMarker::MarkerType type);
 
   SelectionPaintState* Selection() { return selection_; }
-
-  struct LayerPaintState {
-    DISALLOW_NEW();
-
-   public:
-    LayerPaintState(HighlightOverlay::HighlightLayer id,
-                    const ComputedStyle* style,
-                    TextPaintStyle text_style);
-
-    void Trace(Visitor* visitor) const { visitor->Trace(style); }
-
-    // Equality on HighlightLayer id only, for Vector::Find.
-    bool operator==(const LayerPaintState&) const = delete;
-    bool operator!=(const LayerPaintState&) const = delete;
-    bool operator==(const HighlightOverlay::HighlightLayer&) const;
-    bool operator!=(const HighlightOverlay::HighlightLayer&) const;
-
-    const HighlightOverlay::HighlightLayer id;
-    const Member<const ComputedStyle> style;
-    const TextPaintStyle text_style;
-    const TextDecorationLine decorations_in_effect;
-  };
 
  private:
   struct HighlightEdgeInfo {
@@ -240,7 +220,7 @@ class CORE_EXPORT HighlightPainter {
   const PhysicalRect ComputeBackgroundRect(StringView text,
                                            unsigned start_offset,
                                            unsigned end_offset);
-  Vector<LayoutSelectionStatus> GetHighlights(const LayerPaintState& layer);
+  Vector<LayoutSelectionStatus> GetHighlights(const HighlightLayer& layer);
   void FastPaintSpellingGrammarDecorations(const Text& text_node,
                                            const StringView& text,
                                            const DocumentMarkerVector& markers);
@@ -258,15 +238,14 @@ class CORE_EXPORT HighlightPainter {
       const AppliedTextDecoration* decoration_override);
   LineRelativeRect LineRelativeWorldRect(
       const HighlightOverlay::HighlightRange&);
-  void ClipToPartDecorations(const LineRelativeRect&);
   LineRelativeRect LocalRectInWritingModeSpace(unsigned from,
                                                unsigned to) const;
+  void ClipToPartDecorations(const LineRelativeRect& part_rect);
   void PaintDecorationsExceptLineThrough(
       const HighlightOverlay::HighlightPart&);
   void PaintDecorationsExceptLineThrough(const HighlightOverlay::HighlightPart&,
                                          TextDecorationLine lines_to_paint);
   void PaintDecorationsOnlyLineThrough(const HighlightOverlay::HighlightPart&);
-  void PaintSpellingGrammarDecorations(const HighlightOverlay::HighlightPart&);
 
   // Paints text with a highlight color. For composition markers, omit the last
   // two arguments. For PseudoHighlightMarkers, include both the PseudoId and
@@ -284,7 +263,7 @@ class CORE_EXPORT HighlightPainter {
   // the fragment is generated text (or there are no markers). Used to reject
   // markers outside the target range in dom space, without converting the
   // marker's offsets to the fragment space.
-  absl::optional<TextOffsetRange> fragment_dom_offsets_{};
+  std::optional<TextOffsetRange> fragment_dom_offsets_{};
 
   TextPainter& text_painter_;
   TextDecorationPainter& decoration_painter_;
@@ -304,16 +283,12 @@ class CORE_EXPORT HighlightPainter {
   DocumentMarkerVector spelling_;
   DocumentMarkerVector grammar_;
   DocumentMarkerVector custom_;
-  HeapVector<LayerPaintState> layers_;
-  Vector<HighlightOverlay::HighlightPart> parts_;
+  HeapVector<HighlightLayer> layers_;
+  Vector<HighlightPart> parts_;
   Vector<HighlightEdgeInfo> edges_info_;
-  const bool skip_backgrounds_;
   Case paint_case_;
 };
 
 }  // namespace blink
-
-WTF_ALLOW_CLEAR_UNUSED_SLOTS_WITH_MEM_FUNCTIONS(
-    blink::HighlightPainter::LayerPaintState)
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_PAINT_HIGHLIGHT_PAINTER_H_

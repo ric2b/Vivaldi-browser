@@ -34,6 +34,11 @@ class HttpResponseHeaders;
 class SiteForCookies;
 }  // namespace net
 
+
+namespace network {
+class URLLoaderFactoryBuilder;
+}  // namespace network
+
 namespace vivaldi {
 
 struct FilteredRequestInfo;
@@ -164,7 +169,8 @@ class RequestFilterManager : public KeyedService {
         net::CompletionOnceCallback callback,
         const net::HttpResponseHeaders* original_response_headers,
         scoped_refptr<net::HttpResponseHeaders>* override_response_headers,
-        GURL* preserve_fragment_on_redirect_url);
+        GURL* preserve_fragment_on_redirect_url,
+        bool* collapse);
 
     // Dispatches the onBeforeRedirect event. This is fired for HTTP(s) requests
     // only.
@@ -217,6 +223,7 @@ class RequestFilterManager : public KeyedService {
         int64_t request_id,
         size_t filter_priorty,
         bool cancel,
+        bool collapse,
         const GURL& new_url,
         RequestFilter::ResponseHeaderChanges header_changes);
 
@@ -267,7 +274,7 @@ class RequestFilterManager : public KeyedService {
       int render_process_id,
       content::ContentBrowserClient::URLLoaderFactoryType type,
       std::optional<int64_t> navigation_id,
-      mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
+      network::URLLoaderFactoryBuilder& factory_builder,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>

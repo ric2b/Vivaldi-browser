@@ -27,8 +27,8 @@ constexpr int kBubbleCornerRadius = 24;
 }  // namespace
 
 GlanceableTrayChildBubble::GlanceableTrayChildBubble(
-    bool for_glanceables_container) {
-  if (for_glanceables_container) {
+    bool use_glanceables_container_style) {
+  if (use_glanceables_container_style) {
     SetAccessibleRole(ax::mojom::Role::kGroup);
 
     SetPaintToLayer();
@@ -51,24 +51,22 @@ GlanceableTrayChildBubble::GlanceableTrayChildBubble(
   }
 }
 
-void GlanceableTrayChildBubble::Layout() {
-  views::View::Layout();
+void GlanceableTrayChildBubble::Layout(PassKey) {
+  LayoutSuperclass<views::View>(this);
   if (error_message_) {
     error_message_->UpdateBoundsToContainer(GetLocalBounds());
   }
 }
 
 void GlanceableTrayChildBubble::ShowErrorMessage(
-    const std::u16string& error_message) {
+    const std::u16string& error_message,
+    views::Button::PressedCallback callback,
+    GlanceablesErrorMessageView::ButtonActionType type) {
   MaybeDismissErrorMessage();
 
   error_message_ = AddChildView(std::make_unique<GlanceablesErrorMessageView>(
-      base::BindRepeating(&GlanceableTrayChildBubble::MaybeDismissErrorMessage,
-                          base::Unretained(this)),
-      error_message));
+      std::move(callback), error_message, type));
   error_message_->SetProperty(views::kViewIgnoredByLayoutKey, true);
-  error_message_->SetID(
-      base::to_underlying(GlanceablesViewId::kGlanceablesErrorMessageView));
 }
 
 void GlanceableTrayChildBubble::MaybeDismissErrorMessage() {
@@ -79,7 +77,7 @@ void GlanceableTrayChildBubble::MaybeDismissErrorMessage() {
   RemoveChildViewT(std::exchange(error_message_, nullptr));
 }
 
-BEGIN_METADATA(GlanceableTrayChildBubble, views::View)
+BEGIN_METADATA(GlanceableTrayChildBubble)
 END_METADATA
 
 }  // namespace ash

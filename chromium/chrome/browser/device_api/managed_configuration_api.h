@@ -33,7 +33,7 @@ class ManagedConfigurationAPI : public KeyedService {
   class Observer : public base::CheckedObserver {
    public:
     virtual void OnManagedConfigurationChanged() = 0;
-    virtual const url::Origin& GetOrigin() = 0;
+    virtual const url::Origin& GetOrigin() const = 0;
   };
 
   static const char kOriginKey[];
@@ -114,7 +114,7 @@ class ManagedConfigurationAPI : public KeyedService {
   // loaded).
   std::set<url::Origin> managed_origins_;
 
-  std::set<Observer*> unmanaged_observers_;
+  std::set<raw_ptr<Observer, SetExperimental>> unmanaged_observers_;
 
   // Observes changes to WebAppInstallForceList.
   std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;

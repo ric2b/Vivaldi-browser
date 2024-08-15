@@ -58,7 +58,8 @@ export class ListWidget<T> extends VBox {
   private editItem: T|null;
   private editElement: Element|null;
   private emptyPlaceholder: Element|null;
-  constructor(delegate: Delegate<T>, delegatesFocus: boolean|undefined = true) {
+  private isTable: boolean;
+  constructor(delegate: Delegate<T>, delegatesFocus: boolean|undefined = true, isTable: boolean = false) {
     super(true, delegatesFocus);
     this.registerRequiredCSS(listWidgetStyles);
     this.delegate = delegate;
@@ -75,6 +76,11 @@ export class ListWidget<T> extends VBox {
     this.editElement = null;
 
     this.emptyPlaceholder = null;
+
+    this.isTable = isTable;
+    if (isTable) {
+      this.list.role = 'table';
+    }
 
     this.updatePlaceholder();
   }
@@ -93,6 +99,9 @@ export class ListWidget<T> extends VBox {
     if (this.lastSeparator && this.items.length) {
       const element = document.createElement('div');
       element.classList.add('list-separator');
+      if (this.isTable) {
+        element.role = 'rowgroup';
+      }
       this.list.appendChild(element);
     }
     this.lastSeparator = false;
@@ -101,8 +110,14 @@ export class ListWidget<T> extends VBox {
     this.editable.push(editable);
 
     const element = this.list.createChild('div', 'list-item');
-    element.setAttribute('jslog', `${VisualLogging.item()}`);
-    element.appendChild(this.delegate.renderItem(item, editable));
+    if (this.isTable) {
+      element.role = 'rowgroup';
+    }
+    const content = this.delegate.renderItem(item, editable);
+    if (!content.hasAttribute('jslog')) {
+      content.setAttribute('jslog', `${VisualLogging.item()}`);
+    }
+    element.appendChild(content);
     if (editable) {
       element.classList.add('editable');
       element.tabIndex = 0;
@@ -322,7 +337,7 @@ export class Editor<T> {
       jslogContext: 'cancel',
       primary: true,
     });
-    this.cancelButton.setAttribute('jslog', `${VisualLogging.action().track({click: true}).context('cancel')}`);
+    this.cancelButton.setAttribute('jslog', `${VisualLogging.action('cancel').track({click: true})}`);
     buttonsRow.appendChild(this.cancelButton);
 
     this.errorMessageContainer = this.element.createChild('div', 'list-widget-input-validation-error');
@@ -355,7 +370,7 @@ export class Editor<T> {
     const input = (createInput('', type) as HTMLInputElement);
     input.placeholder = title;
     input.addEventListener('input', this.validateControls.bind(this, false), false);
-    input.setAttribute('jslog', `${VisualLogging.textField().track({keydown: true}).context(name)}`);
+    input.setAttribute('jslog', `${VisualLogging.textField().track({change: true, keydown: 'Enter'}).context(name)}`);
     ARIAUtils.setLabel(input, title);
     this.controlByName.set(name, input);
     this.controls.push(input);
@@ -373,6 +388,8 @@ export class Editor<T> {
       const option = (select.createChild('option') as HTMLOptionElement);
       option.value = options[index];
       option.textContent = options[index];
+      option.setAttribute(
+          'jslog', `${VisualLogging.item(Platform.StringUtilities.toKebabCase(options[index])).track({click: true})}`);
     }
     if (title) {
       Tooltip.install(select, title);

@@ -20,6 +20,8 @@
 #include "core/fpdfapi/parser/cpdf_string.h"
 #include "core/fpdfdoc/cpdf_interactiveform.h"
 #include "core/fpdfdoc/cpdf_nametree.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/span.h"
 #include "fpdfsdk/cpdfsdk_annotiteration.h"
 #include "fpdfsdk/cpdfsdk_formfillenvironment.h"
 #include "fpdfsdk/cpdfsdk_interactiveform.h"
@@ -31,8 +33,6 @@
 #include "fxjs/cjs_field.h"
 #include "fxjs/cjs_icon.h"
 #include "fxjs/js_resources.h"
-#include "third_party/base/check.h"
-#include "third_party/base/containers/span.h"
 #include "v8/include/v8-container.h"
 
 const JSPropertySpec CJS_Document::PropertySpecs[] = {
@@ -394,8 +394,8 @@ CJS_Result CJS_Document::mailForm(CJS_Runtime* pRuntime,
     cMsg = pRuntime->ToWideString(newParams[5]);
 
   pRuntime->BeginBlock();
-  m_pFormFillEnv->JS_docmailForm(sTextBuf.raw_span(), bUI, cTo, cSubject, cCc,
-                                 cBcc, cMsg);
+  m_pFormFillEnv->JS_docmailForm(sTextBuf.unsigned_span(), bUI, cTo, cSubject,
+                                 cCc, cBcc, cMsg);
   pRuntime->EndBlock();
   return CJS_Result::Success();
 }
@@ -1246,7 +1246,7 @@ CJS_Result CJS_Document::getPageNthWord(
   }
 
   if (bStrip)
-    swRet.Trim();
+    swRet.TrimWhitespace();
   return CJS_Result::Success(pRuntime->NewString(swRet.AsStringView()));
 }
 

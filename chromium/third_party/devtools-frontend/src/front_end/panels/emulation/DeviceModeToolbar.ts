@@ -5,12 +5,12 @@
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
-import type * as Platform from '../../core/platform/platform.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as EmulationModel from '../../models/emulation/emulation.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as MobileThrottling from '../mobile_throttling/mobile_throttling.js';
-import * as EmulationComponents from './components/components.js';
 
+import * as EmulationComponents from './components/components.js';
 import deviceModeToolbarStyles from './deviceModeToolbar.css.legacy.js';
 
 const UIStrings = {
@@ -235,14 +235,15 @@ export class DeviceModeToolbar {
 
     this.deviceOutlineSetting = this.model.deviceOutlineSetting();
     this.showDeviceScaleFactorSetting =
-        Common.Settings.Settings.instance().createSetting('emulation.showDeviceScaleFactor', false);
+        Common.Settings.Settings.instance().createSetting('emulation.show-device-scale-factor', false);
     this.showDeviceScaleFactorSetting.addChangeListener(this.updateDeviceScaleFactorVisibility, this);
 
     this.showUserAgentTypeSetting =
-        Common.Settings.Settings.instance().createSetting('emulation.showUserAgentType', false);
+        Common.Settings.Settings.instance().createSetting('emulation.show-user-agent-type', false);
     this.showUserAgentTypeSetting.addChangeListener(this.updateUserAgentTypeVisibility, this);
 
-    this.autoAdjustScaleSetting = Common.Settings.Settings.instance().createSetting('emulation.autoAdjustScale', true);
+    this.autoAdjustScaleSetting =
+        Common.Settings.Settings.instance().createSetting('emulation.auto-adjust-scale', true);
 
     this.lastMode = new Map();
 
@@ -287,7 +288,7 @@ export class DeviceModeToolbar {
         EmulationModel.EmulatedDevices.Events.StandardDevicesUpdated, this.deviceListChanged, this);
 
     this.persistenceSetting = Common.Settings.Settings.instance().createSetting(
-        'emulation.deviceModeValue', {device: '', orientation: '', mode: ''});
+        'emulation.device-mode-value', {device: '', orientation: '', mode: ''});
 
     this.model.toolbarControlsEnabledSetting().addChangeListener(updateToolbarsEnabled);
     updateToolbarsEnabled();
@@ -351,7 +352,7 @@ export class DeviceModeToolbar {
     toolbar.appendToolbarItem(this.deviceScaleItem);
 
     toolbar.appendToolbarItem(this.wrapToolbarItem(this.createEmptyToolbarElement()));
-    this.uaItem = new UI.Toolbar.ToolbarMenuButton(this.appendUserAgentMenuItems.bind(this));
+    this.uaItem = new UI.Toolbar.ToolbarMenuButton(this.appendUserAgentMenuItems.bind(this), undefined, 'device-type');
     this.uaItem.setVisible(this.showUserAgentTypeSetting.get());
     setTitleForButton(this.uaItem, i18nString(UIStrings.deviceType));
     this.uaItem.setGlyph('');
@@ -418,8 +419,8 @@ export class DeviceModeToolbar {
   private appendDevicePostureItems(contextMenu: UI.ContextMenu.ContextMenu): void {
     for (const title of ['Continuous', 'Folded']) {
       contextMenu.defaultSection().appendCheckboxItem(
-          title, this.spanClicked.bind(this), title === this.currentDevicePosture(), false, undefined, undefined,
-          title);
+          title, this.spanClicked.bind(this),
+          {checked: title === this.currentDevicePosture(), jslogContext: title.toLowerCase()});
     }
   }
 
@@ -441,7 +442,7 @@ export class DeviceModeToolbar {
     }
     contextMenu.footerSection().appendCheckboxItem(
         i18nString(UIStrings.autoadjustZoom), this.onAutoAdjustScaleChanged.bind(this),
-        this.autoAdjustScaleSetting.get(), undefined, undefined, undefined, 'auto-adjust-zoom');
+        {checked: this.autoAdjustScaleSetting.get(), jslogContext: 'auto-adjust-zoom'});
     const boundAppendScaleItem = appendScaleItem.bind(this);
     boundAppendScaleItem('50%', 0.5);
     boundAppendScaleItem('75%', 0.75);
@@ -452,8 +453,8 @@ export class DeviceModeToolbar {
 
     function appendScaleItem(this: DeviceModeToolbar, title: string, value: number): void {
       contextMenu.defaultSection().appendCheckboxItem(
-          title, this.onScaleMenuChanged.bind(this, value), this.model.scaleSetting().get() === value, false, undefined,
-          undefined, title);
+          title, this.onScaleMenuChanged.bind(this, value),
+          {checked: this.model.scaleSetting().get() === value, jslogContext: title});
     }
   }
 
@@ -472,16 +473,16 @@ export class DeviceModeToolbar {
         EmulationModel.DeviceModeModel.defaultMobileScaleFactor :
         window.devicePixelRatio;
     appendDeviceScaleFactorItem(
-        contextMenu.headerSection(), i18nString(UIStrings.defaultF, {PH1: defaultValue}), 0, 'DPR: default');
-    appendDeviceScaleFactorItem(contextMenu.defaultSection(), '1', 1, 'DPR: 1');
-    appendDeviceScaleFactorItem(contextMenu.defaultSection(), '2', 2, 'DPR: 2');
-    appendDeviceScaleFactorItem(contextMenu.defaultSection(), '3', 3, 'DPR: 3');
+        contextMenu.headerSection(), i18nString(UIStrings.defaultF, {PH1: defaultValue}), 0, 'dpr-default');
+    appendDeviceScaleFactorItem(contextMenu.defaultSection(), '1', 1, 'dpr-1');
+    appendDeviceScaleFactorItem(contextMenu.defaultSection(), '2', 2, 'dpr-2');
+    appendDeviceScaleFactorItem(contextMenu.defaultSection(), '3', 3, 'dpr-3');
 
     function appendDeviceScaleFactorItem(
         section: UI.ContextMenu.Section, title: string, value: number, jslogContext: string): void {
       section.appendCheckboxItem(
           title, deviceScaleFactorSetting.set.bind(deviceScaleFactorSetting, value),
-          deviceScaleFactorSetting.get() === value, undefined, undefined, undefined, jslogContext);
+          {checked: deviceScaleFactorSetting.get() === value, jslogContext});
     }
   }
 
@@ -494,8 +495,8 @@ export class DeviceModeToolbar {
 
     function appendUAItem(title: string, value: EmulationModel.DeviceModeModel.UA): void {
       contextMenu.defaultSection().appendCheckboxItem(
-          title, uaSetting.set.bind(uaSetting, value), uaSetting.get() === value, undefined, undefined, undefined,
-          value);
+          title, uaSetting.set.bind(uaSetting, value),
+          {checked: uaSetting.get() === value, jslogContext: Platform.StringUtilities.toKebabCase(value)});
     }
   }
 
@@ -591,8 +592,7 @@ export class DeviceModeToolbar {
   private appendDeviceMenuItems(contextMenu: UI.ContextMenu.ContextMenu): void {
     contextMenu.headerSection().appendCheckboxItem(
         i18nString(UIStrings.responsive), this.switchToResponsive.bind(this),
-        this.model.type() === EmulationModel.DeviceModeModel.Type.Responsive, false, undefined, undefined,
-        'responsive');
+        {checked: this.model.type() === EmulationModel.DeviceModeModel.Type.Responsive, jslogContext: 'responsive'});
     appendGroup.call(this, this.standardDevices());
     appendGroup.call(this, this.customDevices());
     contextMenu.footerSection().appendItem(
@@ -605,9 +605,10 @@ export class DeviceModeToolbar {
       }
       const section = contextMenu.section();
       for (const device of devices) {
-        section.appendCheckboxItem(
-            device.title, this.emulateDevice.bind(this, device), this.model.device() === device, false, undefined,
-            undefined, device.title);
+        section.appendCheckboxItem(device.title, this.emulateDevice.bind(this, device), {
+          checked: this.model.device() === device,
+          jslogContext: Platform.StringUtilities.toKebabCase(device.title),
+        });
       }
     }
   }
@@ -733,7 +734,8 @@ export class DeviceModeToolbar {
     }
 
     function addMode(mode: EmulationModel.EmulatedDevices.Mode, title: string): void {
-      contextMenu.defaultSection().appendCheckboxItem(title, applyMode.bind(null, mode), model.mode() === mode, false);
+      contextMenu.defaultSection().appendCheckboxItem(
+          title, applyMode.bind(null, mode), {checked: model.mode() === mode, jslogContext: 'device-mode'});
     }
 
     function applyMode(mode: EmulationModel.EmulatedDevices.Mode): void {

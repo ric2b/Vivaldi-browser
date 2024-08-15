@@ -6,10 +6,10 @@
 #define CC_LAYERS_TEXTURE_LAYER_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
-#include <optional>
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -125,9 +125,7 @@ class CC_EXPORT TextureLayer : public Layer, SharedBitmapIdRegistrar {
   // Code path for plugins which supply their own mailbox.
   void SetTransferableResource(const viz::TransferableResource& resource,
                                viz::ReleaseCallback release_callback);
-
-  // Set or unset HDR metadata.
-  void SetHdrMetadata(const gfx::HDRMetadata& hdr_metadata);
+  void SetNeedsSetTransferableResource();
 
   void SetLayerTreeHost(LayerTreeHost* layer_tree_host) override;
   bool RequiresSetNeedsDisplayOnHdrHeadroomChange() const override;
@@ -152,6 +150,10 @@ class CC_EXPORT TextureLayer : public Layer, SharedBitmapIdRegistrar {
     if (const auto& resource_holder = resource_holder_.Read(*this))
       return resource_holder->resource();
     return viz::TransferableResource();
+  }
+
+  bool needs_set_resource_for_testing() const {
+    return needs_set_resource_.Read(*this);
   }
 
  protected:
@@ -184,7 +186,6 @@ class CC_EXPORT TextureLayer : public Layer, SharedBitmapIdRegistrar {
   ProtectedSequenceReadable<bool> premultiplied_alpha_;
   ProtectedSequenceReadable<bool> blend_background_color_;
   ProtectedSequenceReadable<bool> force_texture_to_opaque_;
-  ProtectedSequenceWritable<gfx::HDRMetadata> hdr_metadata_;
 
   ProtectedSequenceWritable<scoped_refptr<TransferableResourceHolder>>
       resource_holder_;

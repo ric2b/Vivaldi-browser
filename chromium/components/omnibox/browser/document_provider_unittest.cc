@@ -387,7 +387,7 @@ TEST_F(DocumentProviderTest, ParseDocumentSearchResults) {
      })",
       kSampleOriginalURL);
 
-  absl::optional<base::Value> response =
+  std::optional<base::Value> response =
       base::JSONReader::Read(kGoodJSONResponse);
   ASSERT_TRUE(response);
   ASSERT_TRUE(response->is_dict());
@@ -475,7 +475,7 @@ TEST_F(DocumentProviderTest,
      })",
       kSampleOriginalURL);
 
-  absl::optional<base::Value> response =
+  std::optional<base::Value> response =
       base::JSONReader::Read(kGoodJSONResponseWithMimeTypes);
   ASSERT_TRUE(response);
   ASSERT_TRUE(response->is_dict());
@@ -568,7 +568,7 @@ TEST_F(DocumentProviderTest, MatchDescriptionString) {
     })",
       kSampleOriginalURL);
 
-  absl::optional<base::Value> response =
+  std::optional<base::Value> response =
       base::JSONReader::Read(kGoodJSONResponseWithMimeTypes);
   ASSERT_TRUE(response);
   ASSERT_TRUE(response->is_dict());
@@ -618,7 +618,7 @@ TEST_F(DocumentProviderTest, ParseDocumentSearchResultsBreakTies) {
      })",
       kSampleOriginalURL);
 
-  absl::optional<base::Value> response =
+  std::optional<base::Value> response =
       base::JSONReader::Read(kGoodJSONResponseWithTies);
   ASSERT_TRUE(response);
   ASSERT_TRUE(response->is_dict());
@@ -676,7 +676,7 @@ TEST_F(DocumentProviderTest, ParseDocumentSearchResultsBreakTiesCascade) {
      })",
       kSampleOriginalURL);
 
-  absl::optional<base::Value> response =
+  std::optional<base::Value> response =
       base::JSONReader::Read(kGoodJSONResponseWithTies);
   ASSERT_TRUE(response);
   ASSERT_TRUE(response->is_dict());
@@ -736,7 +736,7 @@ TEST_F(DocumentProviderTest, ParseDocumentSearchResultsBreakTiesZeroLimit) {
      })",
       kSampleOriginalURL);
 
-  absl::optional<base::Value> response =
+  std::optional<base::Value> response =
       base::JSONReader::Read(kGoodJSONResponseWithTies);
   ASSERT_TRUE(response);
   ASSERT_TRUE(response->is_dict());
@@ -785,7 +785,7 @@ TEST_F(DocumentProviderTest, ParseDocumentSearchResultsWithBadResponse) {
   ACMatches matches;
   ASSERT_FALSE(provider_->backoff_for_session_);
 
-  absl::optional<base::Value> bad_response = base::JSONReader::Read(
+  std::optional<base::Value> bad_response = base::JSONReader::Read(
       kMismatchedMessageJSON, base::JSON_ALLOW_TRAILING_COMMAS);
   ASSERT_TRUE(bad_response);
   ASSERT_TRUE(bad_response->is_dict());
@@ -1047,6 +1047,60 @@ TEST_F(DocumentProviderTest, CachingForSyncMatches) {
                            Summary{u"Document 1 longer title", 0, true}));
 }
 
+TEST_F(DocumentProviderTest, MaxMatches) {
+  InitClient();
+
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeaturesAndParameters(
+      /*enabled_features=*/{{omnibox::kUrlScoringModel, {}},
+                            {omnibox::kMlUrlScoring,
+                             {{"MlUrlScoringUnlimitedNumCandidates", "true"}}}},
+      /*disabled_feature=*/{});
+
+  OmniboxFieldTrial::ScopedMLConfigForTesting scoped_ml_config;
+
+  AutocompleteInput input(u"document", metrics::OmniboxEventProto::OTHER,
+                          TestSchemeClassifier());
+  input.set_omit_asynchronous_matches(true);
+
+  // Sync matches should have scores.
+  // Sync matches beyond |provider_max_matches_| should NOT have scores set to 0
+  // (since the "unlimited candidate matches" param is enabled).
+  provider_->input_ = input;
+  provider_->UpdateResults(MakeTestResponse({"0", "1", "2", "3", "4"}, 1000));
+  provider_->Start(input, false);
+  EXPECT_THAT(
+      ExtractMatchSummary(provider_->matches_),
+      testing::ElementsAre(Summary{u"Document 0 longer title", 1000, true},
+                           Summary{u"Document 1 longer title", 999, true},
+                           Summary{u"Document 2 longer title", 998, true},
+                           Summary{u"Document 3 longer title", 997, true}));
+
+  // Sync matches from the latest response should have scores.
+  // Sync matches from previous responses should not have scores.
+  provider_->UpdateResults(MakeTestResponse({"4", "5"}, 600));
+  provider_->Start(input, false);
+  EXPECT_THAT(
+      ExtractMatchSummary(provider_->matches_),
+      testing::ElementsAre(Summary{u"Document 4 longer title", 600, true},
+                           Summary{u"Document 5 longer title", 599, true},
+                           Summary{u"Document 0 longer title", 0, true},
+                           Summary{u"Document 1 longer title", 0, true}));
+
+  // Unlimited matches should ignore the provider max matches, even if the
+  // `kMlUrlScoringMaxMatchesByProvider` param is set.
+  scoped_ml_config.GetMLConfig().ml_url_scoring_max_matches_by_provider = "*:2";
+
+  provider_->UpdateResults(MakeTestResponse({"6", "7", "8", "9"}, 2000));
+  provider_->Start(input, false);
+  EXPECT_THAT(
+      ExtractMatchSummary(provider_->matches_),
+      testing::ElementsAre(Summary{u"Document 6 longer title", 2000, true},
+                           Summary{u"Document 7 longer title", 1999, true},
+                           Summary{u"Document 8 longer title", 1998, true},
+                           Summary{u"Document 9 longer title", 1997, true}));
+}
+
 TEST_F(DocumentProviderTest, StartCallsStop) {
   // Test that a call to ::Start will stop old requests to prevent their results
   // from appearing with the new input
@@ -1142,7 +1196,7 @@ TEST_F(DocumentProviderTest, LowQualitySuggestions) {
   auto test = [&](const std::string& response_str,
                   const std::string& input_text,
                   const std::vector<int> expected_scores) {
-    absl::optional<base::Value> response = base::JSONReader::Read(response_str);
+    std::optional<base::Value> response = base::JSONReader::Read(response_str);
     provider_->input_.UpdateText(base::UTF8ToUTF16(input_text), 0, {});
     ACMatches matches = provider_->ParseDocumentSearchResults(*response);
 

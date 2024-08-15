@@ -7,7 +7,7 @@ syntax = "proto3";
 option optimize_for = LITE_RUNTIME;
 
 package imageloader;
-option go_package = "chromiumos/system_api/imageloader_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/imageloader_proto";
 
 // This is the message that is passed into load a DLC.
 message LoadDlcRequest {

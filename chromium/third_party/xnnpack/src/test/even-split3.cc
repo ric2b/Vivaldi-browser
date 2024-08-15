@@ -14,12 +14,13 @@
 #include <random>
 #include <vector>
 
+#include <fp16/fp16.h>
+#include <gtest/gtest.h>
+
 #include <xnnpack.h>
 #include <xnnpack/node-type.h>
 #include <xnnpack/operator.h>
 #include <xnnpack/subgraph.h>
-
-#include <gtest/gtest.h>
 
 template <typename T> class EvenSplit3Test : public ::testing::Test {
 protected:
@@ -123,6 +124,7 @@ protected:
 
 using EvenSplit3TestQS8 = EvenSplit3Test<int8_t>;
 using EvenSplit3TestQU8 = EvenSplit3Test<uint8_t>;
+using EvenSplit3TestF16 = EvenSplit3Test<uint16_t>;
 using EvenSplit3TestF32 = EvenSplit3Test<float>;
 
 TEST_F(EvenSplit3TestQS8, define)
@@ -231,6 +233,60 @@ TEST_F(EvenSplit3TestQU8, define)
   const struct xnn_node* node = &subgraph->nodes[0];
   ASSERT_EQ(node->type, xnn_node_type_even_split3);
   ASSERT_EQ(node->compute_type, xnn_compute_type_qu8);
+  ASSERT_EQ(node->params.even_split.axis, axis);
+  ASSERT_EQ(node->num_inputs, 1);
+  ASSERT_EQ(node->inputs[0], input_id);
+  ASSERT_EQ(node->num_outputs, 3);
+  ASSERT_EQ(node->outputs[0], output1_id);
+  ASSERT_EQ(node->outputs[1], output2_id);
+  ASSERT_EQ(node->outputs[2], output3_id);
+  ASSERT_EQ(node->flags, 0);
+}
+
+TEST_F(EvenSplit3TestF16, define)
+{
+  ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));
+
+  xnn_subgraph_t subgraph = nullptr;
+  ASSERT_EQ(xnn_status_success, xnn_create_subgraph(/*external_value_ids=*/4, /*flags=*/0, &subgraph));
+  std::unique_ptr<xnn_subgraph, decltype(&xnn_delete_subgraph)> auto_subgraph(subgraph, xnn_delete_subgraph);
+
+  input_id = XNN_INVALID_NODE_ID;
+  ASSERT_EQ(
+    xnn_status_success, xnn_define_tensor_value(
+                          subgraph, xnn_datatype_fp16, input_dims.size(), input_dims.data(), nullptr, 0,
+                          /*flags=*/XNN_VALUE_FLAG_EXTERNAL_INPUT, &input_id));
+  ASSERT_NE(input_id, XNN_INVALID_NODE_ID);
+
+  output1_id = XNN_INVALID_NODE_ID;
+  ASSERT_EQ(
+    xnn_status_success, xnn_define_tensor_value(
+                          subgraph, xnn_datatype_fp16, output1_dims.size(), output1_dims.data(), nullptr, 1,
+                          /*flags=*/XNN_VALUE_FLAG_EXTERNAL_OUTPUT, &output1_id));
+  ASSERT_NE(output1_id, XNN_INVALID_NODE_ID);
+
+  output2_id = XNN_INVALID_NODE_ID;
+  ASSERT_EQ(
+    xnn_status_success, xnn_define_tensor_value(
+                          subgraph, xnn_datatype_fp16, output2_dims.size(), output2_dims.data(), nullptr, 2,
+                          /*flags=*/XNN_VALUE_FLAG_EXTERNAL_OUTPUT, &output2_id));
+  ASSERT_NE(output2_id, XNN_INVALID_NODE_ID);
+
+  output3_id = XNN_INVALID_NODE_ID;
+  ASSERT_EQ(
+    xnn_status_success, xnn_define_tensor_value(
+                          subgraph, xnn_datatype_fp16, output3_dims.size(), output3_dims.data(), nullptr, 3,
+                          /*flags=*/XNN_VALUE_FLAG_EXTERNAL_OUTPUT, &output3_id));
+  ASSERT_NE(output3_id, XNN_INVALID_NODE_ID);
+
+  ASSERT_EQ(
+    xnn_status_success,
+    xnn_define_even_split3(subgraph, axis, input_id, output1_id, output2_id, output3_id, /*flags=*/0));
+
+  ASSERT_EQ(subgraph->num_nodes, 1);
+  const struct xnn_node* node = &subgraph->nodes[0];
+  ASSERT_EQ(node->type, xnn_node_type_even_split3);
+  ASSERT_EQ(node->compute_type, xnn_compute_type_fp16);
   ASSERT_EQ(node->params.even_split.axis, axis);
   ASSERT_EQ(node->num_inputs, 1);
   ASSERT_EQ(node->inputs[0], input_id);
@@ -497,6 +553,103 @@ TEST_F(EvenSplit3TestQU8, matches_operator_api)
   ASSERT_EQ(subgraph_output3, operator_output3);
 }
 
+TEST_F(EvenSplit3TestF16, matches_operator_api)
+{
+  std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
+  std::fill(operator_output1.begin(), operator_output1.end(), UINT16_C(0x7E00) /* NaN */);
+  std::fill(operator_output2.begin(), operator_output2.end(), UINT16_C(0x7E00) /* NaN */);
+  std::fill(operator_output3.begin(), operator_output3.end(), UINT16_C(0x7E00) /* NaN */);
+  std::fill(subgraph_output1.begin(), subgraph_output1.end(), UINT16_C(0x7E00) /* NaN */);
+  std::fill(subgraph_output2.begin(), subgraph_output2.end(), UINT16_C(0x7E00) /* NaN */);
+  std::fill(subgraph_output3.begin(), subgraph_output3.end(), UINT16_C(0x7E00) /* NaN */);
+
+  ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));
+
+  xnn_operator_t op1 = nullptr;
+  xnn_operator_t op2 = nullptr;
+  xnn_operator_t op3 = nullptr;
+
+  // Call operator API.
+  ASSERT_EQ(xnn_status_success, xnn_create_copy_nc_x16(/*flags=*/0, &op1));
+  std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_op1(op1, xnn_delete_operator);
+  ASSERT_EQ(xnn_status_success, xnn_create_copy_nc_x16(/*flags=*/0, &op2));
+  std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_op2(op2, xnn_delete_operator);
+  ASSERT_EQ(xnn_status_success, xnn_create_copy_nc_x16(/*flags=*/0, &op3));
+  std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_op3(op3, xnn_delete_operator);
+
+  ASSERT_EQ(xnn_status_success, xnn_reshape_copy_nc_x16(op1, batch_size, channels, input_stride, channels, /*threadpool=*/nullptr));
+  ASSERT_EQ(xnn_status_success, xnn_reshape_copy_nc_x16(op2, batch_size, channels, input_stride, channels, /*threadpool=*/nullptr));
+  ASSERT_EQ(xnn_status_success, xnn_reshape_copy_nc_x16(op3, batch_size, channels, input_stride, channels, /*threadpool=*/nullptr));
+
+  ASSERT_EQ(
+    xnn_status_success,
+    xnn_setup_copy_nc_x16(op1, input.data(), operator_output1.data()));
+  ASSERT_EQ(
+    xnn_status_success,
+    xnn_setup_copy_nc_x16(op2, (uint16_t*) input.data() + op1->channels, operator_output2.data()));
+  ASSERT_EQ(
+    xnn_status_success,
+    xnn_setup_copy_nc_x16(op3, (uint16_t*) input.data() + op1->channels * 2, operator_output3.data()));
+
+  ASSERT_EQ(xnn_status_success, xnn_run_operator(op1, /*threadpool=*/nullptr));
+  ASSERT_EQ(xnn_status_success, xnn_run_operator(op2, /*threadpool=*/nullptr));
+  ASSERT_EQ(xnn_status_success, xnn_run_operator(op3, /*threadpool=*/nullptr));
+
+  // Call subgraph API.
+  xnn_subgraph_t subgraph = nullptr;
+  ASSERT_EQ(xnn_status_success, xnn_create_subgraph(/*external_value_ids=*/4, /*flags=*/0, &subgraph));
+  std::unique_ptr<xnn_subgraph, decltype(&xnn_delete_subgraph)> auto_subgraph(subgraph, xnn_delete_subgraph);
+
+  input_id = XNN_INVALID_NODE_ID;
+  ASSERT_EQ(
+    xnn_status_success, xnn_define_tensor_value(
+                          subgraph, xnn_datatype_fp16, input_dims.size(), input_dims.data(), nullptr, 0,
+                          /*flags=*/XNN_VALUE_FLAG_EXTERNAL_INPUT, &input_id));
+  ASSERT_NE(input_id, XNN_INVALID_NODE_ID);
+
+  output1_id = XNN_INVALID_NODE_ID;
+  ASSERT_EQ(
+    xnn_status_success, xnn_define_tensor_value(
+                          subgraph, xnn_datatype_fp16, output1_dims.size(), output1_dims.data(), nullptr, 1,
+                          /*flags=*/XNN_VALUE_FLAG_EXTERNAL_OUTPUT, &output1_id));
+  ASSERT_NE(output1_id, XNN_INVALID_NODE_ID);
+
+  output2_id = XNN_INVALID_NODE_ID;
+  ASSERT_EQ(
+    xnn_status_success, xnn_define_tensor_value(
+                          subgraph, xnn_datatype_fp16, output2_dims.size(), output2_dims.data(), nullptr, 2,
+                          /*flags=*/XNN_VALUE_FLAG_EXTERNAL_OUTPUT, &output2_id));
+  ASSERT_NE(output2_id, XNN_INVALID_NODE_ID);
+
+  output3_id = XNN_INVALID_NODE_ID;
+  ASSERT_EQ(
+    xnn_status_success, xnn_define_tensor_value(
+                          subgraph, xnn_datatype_fp16, output3_dims.size(), output3_dims.data(), nullptr, 3,
+                          /*flags=*/XNN_VALUE_FLAG_EXTERNAL_OUTPUT, &output3_id));
+  ASSERT_NE(output3_id, XNN_INVALID_NODE_ID);
+
+  ASSERT_EQ(
+    xnn_status_success,
+    xnn_define_even_split3(subgraph, axis, input_id, output1_id, output2_id, output3_id, /*flags=*/0));
+
+  xnn_runtime_t runtime = nullptr;
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_NE(nullptr, runtime);
+  std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
+  std::array<xnn_external_value, 4> external = {
+    xnn_external_value{input_id, input.data()},
+    xnn_external_value{output1_id, subgraph_output1.data()},
+    xnn_external_value{output2_id, subgraph_output2.data()},
+    xnn_external_value{output3_id, subgraph_output3.data()},
+  };
+  ASSERT_EQ(xnn_status_success, xnn_setup_runtime(runtime, external.size(), external.data()));
+  ASSERT_EQ(xnn_status_success, xnn_invoke_runtime(runtime));
+
+  ASSERT_EQ(subgraph_output1, operator_output1);
+  ASSERT_EQ(subgraph_output2, operator_output2);
+  ASSERT_EQ(subgraph_output3, operator_output3);
+}
+
 TEST_F(EvenSplit3TestF32, matches_operator_api)
 {
   std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
@@ -592,4 +745,84 @@ TEST_F(EvenSplit3TestF32, matches_operator_api)
   ASSERT_EQ(subgraph_output1, operator_output1);
   ASSERT_EQ(subgraph_output2, operator_output2);
   ASSERT_EQ(subgraph_output3, operator_output3);
+}
+
+TEST_F(EvenSplit3TestF32, reshape_output)
+{
+  ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));
+
+  // Call subgraph API.
+  xnn_subgraph_t subgraph = nullptr;
+  ASSERT_EQ(xnn_status_success, xnn_create_subgraph(/*external_value_ids=*/4, /*flags=*/0, &subgraph));
+  std::unique_ptr<xnn_subgraph, decltype(&xnn_delete_subgraph)> auto_subgraph(subgraph, xnn_delete_subgraph);
+
+  input_id = XNN_INVALID_NODE_ID;
+  ASSERT_EQ(
+    xnn_status_success, xnn_define_tensor_value(
+                          subgraph, xnn_datatype_fp32, input_dims.size(), input_dims.data(), nullptr, 0,
+                          /*flags=*/XNN_VALUE_FLAG_EXTERNAL_INPUT, &input_id));
+  ASSERT_NE(input_id, XNN_INVALID_NODE_ID);
+
+  output1_id = XNN_INVALID_NODE_ID;
+  ASSERT_EQ(
+    xnn_status_success, xnn_define_tensor_value(
+                          subgraph, xnn_datatype_fp32, output1_dims.size(), output1_dims.data(), nullptr, 1,
+                          /*flags=*/XNN_VALUE_FLAG_EXTERNAL_OUTPUT, &output1_id));
+  ASSERT_NE(output1_id, XNN_INVALID_NODE_ID);
+
+  output2_id = XNN_INVALID_NODE_ID;
+  ASSERT_EQ(
+    xnn_status_success, xnn_define_tensor_value(
+                          subgraph, xnn_datatype_fp32, output2_dims.size(), output2_dims.data(), nullptr, 2,
+                          /*flags=*/XNN_VALUE_FLAG_EXTERNAL_OUTPUT, &output2_id));
+  ASSERT_NE(output2_id, XNN_INVALID_NODE_ID);
+
+  output3_id = XNN_INVALID_NODE_ID;
+  ASSERT_EQ(
+    xnn_status_success, xnn_define_tensor_value(
+                          subgraph, xnn_datatype_fp32, output3_dims.size(), output3_dims.data(), nullptr, 3,
+                          /*flags=*/XNN_VALUE_FLAG_EXTERNAL_OUTPUT, &output3_id));
+  ASSERT_NE(output3_id, XNN_INVALID_NODE_ID);
+
+  ASSERT_EQ(
+    xnn_status_success,
+    xnn_define_even_split3(subgraph, axis, input_id, output1_id, output2_id, output3_id, /*flags=*/0));
+
+  xnn_runtime_t runtime = nullptr;
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_NE(nullptr, runtime);
+  std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
+  std::array<xnn_external_value, 4> external = {
+    xnn_external_value{input_id, input.data()},
+    xnn_external_value{output1_id, subgraph_output1.data()},
+    xnn_external_value{output2_id, subgraph_output2.data()},
+    xnn_external_value{output3_id, subgraph_output3.data()},
+  };
+  ASSERT_EQ(xnn_status_success, xnn_setup_runtime(runtime, external.size(), external.data()));
+  ASSERT_EQ(xnn_status_success, xnn_invoke_runtime(runtime));
+
+  input_dims[axis] += 3;
+  ASSERT_EQ(xnn_status_success, xnn_reshape_external_value(runtime, input_id, input_dims.size(), input_dims.data()));
+  const struct xnn_node* node = &subgraph->nodes[0];
+  ASSERT_EQ(node->reshape(&runtime->opdata[0], runtime->values, runtime->num_values, /*threadpool=*/nullptr), xnn_status_reallocation_required);
+  for (size_t i = 0; i < 3; ++i) {
+    const xnn_shape* output_n_shape = &runtime->values[node->outputs[i]].shape;
+    ASSERT_EQ(output_n_shape->dim[axis], input_dims[axis] / 3);
+    for (size_t i = 0; i < input_dims.size(); ++i) {
+      if (i == axis) continue;
+      ASSERT_EQ(output_n_shape->dim[i], input_dims[i]);
+    }
+  }
+
+  input_dims[axis] -= 6;
+  ASSERT_EQ(xnn_status_success, xnn_reshape_external_value(runtime, input_id, input_dims.size(), input_dims.data()));
+  ASSERT_EQ(node->reshape(&runtime->opdata[0], runtime->values, runtime->num_values, /*threadpool=*/nullptr), xnn_status_success);
+  for (size_t i = 0; i < 3; ++i) {
+    const xnn_shape* output_n_shape = &runtime->values[node->outputs[i]].shape;
+    ASSERT_EQ(output_n_shape->dim[axis], input_dims[axis] / 3);
+    for (size_t i = 0; i < input_dims.size(); ++i) {
+      if (i == axis) continue;
+      ASSERT_EQ(output_n_shape->dim[i], input_dims[i]);
+    }
+  }
 }

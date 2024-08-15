@@ -21,6 +21,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "components/sync/base/model_type.h"
 #include "components/sync/protocol/data_type_progress_marker.pb.h"
 #include "components/sync/protocol/proto_value_conversions.h"
 #include "components/sync/protocol/sync_entity.pb.h"
@@ -299,6 +300,21 @@ net::HttpStatusCode FakeServer::HandleParsedCommand(
       PopulateFullUpdateTypeResults(offer_entities_, *offer_marker,
                                     response->mutable_get_updates());
     }
+
+    for (sync_pb::DataTypeProgressMarker& progress_marker :
+         *response->mutable_get_updates()->mutable_new_progress_marker()) {
+      ModelType type = syncer::GetModelTypeFromSpecificsFieldNumber(
+          progress_marker.data_type_id());
+      if (!syncer::SharedTypes().Has(type)) {
+        continue;
+      }
+      sync_pb::GarbageCollectionDirective::CollaborationGarbageCollection*
+          collaboration_gc = progress_marker.mutable_gc_directive()
+                                 ->mutable_collaboration_gc();
+      for (const std::string& collaboration_id : collaborations_) {
+        collaboration_gc->add_active_collaboration_ids(collaboration_id);
+      }
+    }
   }
 
   if (http_status_code == net::HTTP_OK &&
@@ -528,7 +544,7 @@ void FakeServer::SetHttpError(net::HttpStatusCode http_status_code) {
 
 void FakeServer::ClearHttpError() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  http_error_status_code_ = absl::nullopt;
+  http_error_status_code_ = std::nullopt;
 }
 
 void FakeServer::SetClientCommand(
@@ -646,6 +662,16 @@ void FakeServer::SetBagOfChips(const sync_pb::ChipBag& bag_of_chips) {
 void FakeServer::TriggerMigrationDoneError(syncer::ModelTypeSet types) {
   DCHECK(thread_checker_.CalledOnValidThread());
   loopback_server_->TriggerMigrationForTesting(types);
+}
+
+void FakeServer::AddCollaboration(const std::string& collaboration_id) {
+  collaborations_.push_back(collaboration_id);
+  // TODO(b/325917757): update collaboration data type.
+}
+
+void FakeServer::RemoveCollaboration(const std::string& collaboration_id) {
+  std::erase(collaborations_, collaboration_id);
+  // TODO(b/325917757): update collaboration data type.
 }
 
 const std::set<std::string>& FakeServer::GetCommittedHistoryURLs() const {

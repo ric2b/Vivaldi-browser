@@ -5,7 +5,7 @@
 syntax = "proto3";
 
 option optimize_for = LITE_RUNTIME;
-option go_package = "chromiumos/system_api/update_engine_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/update_engine_proto";
 
 package update_engine;
 
@@ -116,6 +116,12 @@ message StatusResult {
 
   // If true, the update will be downloaded but deferred.
   bool will_defer_update = 15;
+
+  // The extended date of the device in the number of days since Unix Epoch.
+  int64 extended_date = 16;
+
+  // The extended opt in requirement for the device.
+  bool extended_opt_in_required = 17;
 }
 
 // This is the message flags that influences how updates are performed.

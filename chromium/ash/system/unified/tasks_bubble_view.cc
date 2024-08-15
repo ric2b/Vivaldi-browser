@@ -95,8 +95,8 @@ std::unique_ptr<views::LabelButton> CreateAddNewTaskButton(
 
 }  // namespace
 
-TasksBubbleView::TasksBubbleView(
-    const ui::ListModel<api::TaskList>* task_lists) {
+TasksBubbleView::TasksBubbleView(const ui::ListModel<api::TaskList>* task_lists)
+    : GlanceablesTasksViewBase(/*use_glanceables_container_style=*/true) {
   auto* layout_manager =
       SetLayoutManager(std::make_unique<views::FlexLayout>());
   layout_manager
@@ -161,8 +161,6 @@ TasksBubbleView::TasksBubbleView(
                                views::MaximumFlexSizeRule::kPreferred));
   combobox_view_observation_.Observe(task_list_combo_box_view_);
 
-  task_list_combo_box_view_->SetTooltipText(l10n_util::GetStringUTF16(
-      IDS_GLANCEABLES_TASKS_DROPDOWN_ACCESSIBLE_NAME));
   task_list_combo_box_view_->SetAccessibleDescription(u"");
   task_list_combo_box_view_->SetSelectionChangedCallback(base::BindRepeating(
       &TasksBubbleView::SelectedTasksListChanged, base::Unretained(this)));
@@ -230,7 +228,7 @@ void TasksBubbleView::ScheduleUpdateTasksList(bool initial_update) {
       task_list_combo_box_view_->GetSelectedIndex().value());
   tasks_combobox_model_->SaveLastSelectedTaskList(active_task_list->id);
   Shell::Get()->glanceables_controller()->GetTasksClient()->GetTasks(
-      active_task_list->id,
+      active_task_list->id, /*force_fetch=*/false,
       base::BindOnce(&TasksBubbleView::UpdateTasksList,
                      weak_ptr_factory_.GetWeakPtr(), active_task_list->id,
                      active_task_list->title, initial_update));
@@ -239,6 +237,7 @@ void TasksBubbleView::ScheduleUpdateTasksList(bool initial_update) {
 void TasksBubbleView::UpdateTasksList(const std::string& task_list_id,
                                       const std::string& task_list_title,
                                       bool initial_update,
+                                      bool fetch_success,
                                       const ui::ListModel<api::Task>* tasks) {
   if (initial_update) {
     base::UmaHistogramCounts100(
@@ -286,6 +285,9 @@ void TasksBubbleView::UpdateTasksList(const std::string& task_list_id,
   list_footer_view_->UpdateItemsCount(num_tasks_shown_, num_tasks_);
   list_footer_view_->SetVisible(num_tasks_shown_ > 0);
 
+  task_list_combo_box_view_->SetTooltipText(
+      l10n_util::GetStringFUTF16(IDS_GLANCEABLES_TASKS_DROPDOWN_ACCESSIBLE_NAME,
+                                 base::UTF8ToUTF16(task_list_title)));
   task_items_container_view_->SetAccessibleName(l10n_util::GetStringFUTF16(
       IDS_GLANCEABLES_TASKS_SELECTED_LIST_ACCESSIBLE_NAME,
       base::UTF8ToUTF16(task_list_title)));
@@ -337,7 +339,7 @@ void TasksBubbleView::MarkTaskAsCompleted(const std::string& task_list_id,
       task_list_id, task_id, completed);
 }
 
-BEGIN_METADATA(TasksBubbleView, views::View)
+BEGIN_METADATA(TasksBubbleView)
 END_METADATA
 
 }  // namespace ash

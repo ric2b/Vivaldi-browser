@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
+import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Workspace from '../../models/workspace/workspace.js';
@@ -575,7 +576,7 @@ Common.Settings.registerSettingExtension({
   category: Common.Settings.SettingCategory.APPEARANCE,
   storageType: Common.Settings.SettingStorageType.Synced,
   title: i18nLazyString(UIStrings.theme),
-  settingName: 'uiTheme',
+  settingName: 'ui-theme',
   settingType: Common.Settings.SettingType.ENUM,
   defaultValue: 'systemPreferred',
   reloadRequired: false,
@@ -606,7 +607,7 @@ Common.Settings.registerSettingExtension({
   category: Common.Settings.SettingCategory.APPEARANCE,
   storageType: Common.Settings.SettingStorageType.Synced,
   title: i18nLazyString(UIStrings.panelLayout),
-  settingName: 'sidebarPosition',
+  settingName: 'sidebar-position',
   settingType: Common.Settings.SettingType.ENUM,
   defaultValue: 'auto',
   options: [
@@ -649,9 +650,9 @@ Common.Settings.registerSettingExtension({
 Common.Settings.registerSettingExtension({
   category: Common.Settings.SettingCategory.APPEARANCE,
   storageType: Common.Settings.SettingStorageType.Synced,
-  title: i18nLazyString(UIStrings.enableCtrlShortcutToSwitchPanels),
-  titleMac: i18nLazyString(UIStrings.enableShortcutToSwitchPanels),
-  settingName: 'shortcutPanelSwitch',
+  title: Host.Platform.platform() === 'mac' ? i18nLazyString(UIStrings.enableShortcutToSwitchPanels) :
+                                              i18nLazyString(UIStrings.enableCtrlShortcutToSwitchPanels),
+  settingName: 'shortcut-panel-switch',
   settingType: Common.Settings.SettingType.BOOLEAN,
   defaultValue: false,
 });
@@ -687,7 +688,7 @@ Common.Settings.registerSettingExtension({
 
 Common.Settings.registerSettingExtension({
   storageType: Common.Settings.SettingStorageType.Synced,
-  settingName: 'activeKeybindSet',
+  settingName: 'active-keybind-set',
   settingType: Common.Settings.SettingType.ENUM,
   defaultValue: 'devToolsDefault',
   options: [
@@ -720,7 +721,7 @@ function createOptionForLocale(localeString: string): Common.Settings.SettingExt
 Common.Settings.registerSettingExtension({
   category: Common.Settings.SettingCategory.SYNC,
   // This name must be kept in sync with DevToolsSettings::kSyncDevToolsPreferencesFrontendName.
-  settingName: 'sync_preferences',
+  settingName: 'sync-preferences',
   settingType: Common.Settings.SettingType.BOOLEAN,
   title: i18nLazyString(UIStrings.enableSync),
   defaultValue: false,
@@ -729,7 +730,7 @@ Common.Settings.registerSettingExtension({
 
 Common.Settings.registerSettingExtension({
   storageType: Common.Settings.SettingStorageType.Synced,
-  settingName: 'userShortcuts',
+  settingName: 'user-shortcuts',
   settingType: Common.Settings.SettingType.ARRAY,
   defaultValue: [],
 });
@@ -738,7 +739,7 @@ Common.Settings.registerSettingExtension({
   category: Common.Settings.SettingCategory.GLOBAL,
   storageType: Common.Settings.SettingStorageType.Local,
   title: i18nLazyString(UIStrings.searchAsYouTypeSetting),
-  settingName: 'searchAsYouType',
+  settingName: 'search-as-you-type',
   settingType: Common.Settings.SettingType.BOOLEAN,
   order: 3,
   defaultValue: true,
@@ -820,20 +821,12 @@ UI.Toolbar.registerToolbarItem({
   separator: true,
   location: UI.Toolbar.ToolbarItemLocation.MAIN_TOOLBAR_LEFT,
   order: 100,
-  showLabel: undefined,
-  actionId: undefined,
-  condition: undefined,
-  loadItem: undefined,
 });
 
 UI.Toolbar.registerToolbarItem({
   separator: true,
   order: 97,
   location: UI.Toolbar.ToolbarItemLocation.MAIN_TOOLBAR_RIGHT,
-  showLabel: undefined,
-  actionId: undefined,
-  condition: undefined,
-  loadItem: undefined,
 });
 
 UI.Toolbar.registerToolbarItem({
@@ -843,10 +836,6 @@ UI.Toolbar.registerToolbarItem({
   },
   order: 99,
   location: UI.Toolbar.ToolbarItemLocation.MAIN_TOOLBAR_RIGHT,
-  showLabel: undefined,
-  condition: undefined,
-  separator: undefined,
-  actionId: undefined,
 });
 
 UI.Toolbar.registerToolbarItem({
@@ -856,10 +845,6 @@ UI.Toolbar.registerToolbarItem({
   },
   order: 100,
   location: UI.Toolbar.ToolbarItemLocation.MAIN_TOOLBAR_RIGHT,
-  showLabel: undefined,
-  condition: undefined,
-  separator: undefined,
-  actionId: undefined,
 });
 
 UI.Toolbar.registerToolbarItem({
@@ -868,10 +853,6 @@ UI.Toolbar.registerToolbarItem({
   },
   order: 101,
   location: UI.Toolbar.ToolbarItemLocation.MAIN_TOOLBAR_RIGHT,
-  showLabel: undefined,
-  condition: undefined,
-  separator: undefined,
-  actionId: undefined,
 });
 
 Common.AppProvider.registerAppProvider({
@@ -880,5 +861,4 @@ Common.AppProvider.registerAppProvider({
     return Main.SimpleApp.SimpleAppProvider.instance();
   },
   order: 10,
-  condition: undefined,
 });

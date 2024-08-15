@@ -83,7 +83,7 @@ class MODULES_EXPORT MojoAudioInputIPC
           stream_client_receiver,
       media::mojom::blink::ReadOnlyAudioDataPipePtr data_pipe,
       bool initially_muted,
-      const absl::optional<base::UnguessableToken>& stream_id) override;
+      const std::optional<base::UnguessableToken>& stream_id) override;
   void OnError(media::mojom::InputStreamErrorCode code) override;
   void OnMutedStateChanged(bool is_muted) override;
 
@@ -100,12 +100,11 @@ class MODULES_EXPORT MojoAudioInputIPC
   mojo::Remote<media::mojom::blink::AudioProcessorControls> processor_controls_;
 
   // Initialized on StreamCreated.
-  absl::optional<base::UnguessableToken> stream_id_;
+  std::optional<base::UnguessableToken> stream_id_;
   mojo::Receiver<AudioInputStreamClient> stream_client_receiver_{this};
   mojo::Receiver<mojom::blink::RendererAudioInputStreamFactoryClient>
       factory_client_receiver_{this};
-  raw_ptr<media::AudioInputIPCDelegate, ExperimentalRenderer> delegate_ =
-      nullptr;
+  raw_ptr<media::AudioInputIPCDelegate> delegate_ = nullptr;
 
   base::WeakPtrFactory<MojoAudioInputIPC> weak_factory_{this};
 };

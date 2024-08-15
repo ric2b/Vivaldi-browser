@@ -35,7 +35,7 @@ ServiceInstance::ServiceInstance(TaskRunner& task_runner,
 }
 
 ServiceInstance::~ServiceInstance() {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 }
 
 }  // namespace openscreen::discovery

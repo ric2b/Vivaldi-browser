@@ -6,7 +6,7 @@ import * as Common from '../../core/common/common.js';
 import * as FormatterActions from '../../entrypoints/formatter_worker/FormatterActions.js';  // eslint-disable-line rulesdir/es_modules_import
 export {DefinitionKind, type ScopeTreeNode} from '../../entrypoints/formatter_worker/FormatterActions.js';
 
-const MAX_WORKERS = Math.min(2, navigator.hardwareConcurrency - 1);
+const MAX_WORKERS = Math.max(2, navigator.hardwareConcurrency - 1);
 
 let formatterWorkerPoolInstance: FormatterWorkerPool;
 
@@ -55,9 +55,7 @@ export class FormatterWorkerPool {
     }
   }
 
-  // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private onWorkerMessage(worker: Common.Worker.WorkerWrapper, event: MessageEvent<any>): void {
+  private onWorkerMessage(worker: Common.Worker.WorkerWrapper, event: MessageEvent): void {
     const task = this.workerTasks.get(worker);
     if (!task) {
       return;

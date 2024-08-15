@@ -797,7 +797,7 @@ Google ड्राइव्ह मधील फाइल अपडेट के
 <translation id="7135561821015524160">कन्नड फोनेटिक</translation>
 <translation id="714034171374937760">Chromebase</translation>
 <translation id="7162080671816799010">ऑथेंटिकेशन सर्व्हर ओळख प्रमाणित करण्यासाठी 'विषयाच्या पर्यायी नावाची जुळणी' किंवा 'डोमेन सफिक्स जुळणी' उपलब्ध नाही</translation>
-<translation id="7165320105431587207">नेटवर्क कॉंफिगर करण्यात अयशस्वी</translation>
+<translation id="7165320105431587207">नेटवर्क कॉन्फिगर करता आले नाही</translation>
 <translation id="7170041865419449892">रेंजच्या बाहेर</translation>
 <translation id="7179579940054351344"><ph name="NON_RESTRICTED_DESTINATIONS" /> वगळता सर्व वेबसाइट आणि URLs ना फाइलचा अ‍ॅक्सेस आहे</translation>
 <translation id="7180611975245234373">रिफ्रेश करा</translation>
@@ -852,6 +852,7 @@ Google ड्राइव्ह मधील फाइल अपडेट के
 <translation id="7589661784326793847">फक्त एक सेकंद प्रतीक्षा करा</translation>
 <translation id="7600126690270271294">सर्बियन</translation>
 <translation id="7603724359189955920">ग्रिड</translation>
+<translation id="7624010287655004652">दुसऱ्या मोबाइल पुरवठादाराने लॉक केले आहे</translation>
 <translation id="7627790789328695202">अरेरे, <ph name="FILE_NAME" /> आधीपासून अस्तित्वात आहे. हे पुनर्नामित करा आणि पुन्हा प्रयत्न करा.</translation>
 <translation id="7628656427739290098"><ph name="PERCENT" />% पूर्ण झाले.</translation>
 <translation id="7649070708921625228">मदत</translation>
@@ -1018,7 +1019,6 @@ Google ड्राइव्ह मधील फाइल अपडेट के
 <translation id="8698877009525468705">ही फाइल गोपनीय आहे आणि अ‍ॅडमिनिस्ट्रेटर धोरणाच्या निर्बंधांच्या अधीन आहे.</translation>
 <translation id="8712637175834984815">समजले</translation>
 <translation id="8713112442029511308">माल्टीज</translation>
-<translation id="8714138378966541668">पुरवठादाराने लॉक केले आहे</translation>
 <translation id="8714406895390098252">सायकल</translation>
 <translation id="8719721339511222681"><ph name="ENTRY_NAME" /> निवडले.</translation>
 <translation id="872537912056138402">क्रोएशियन</translation>

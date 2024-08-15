@@ -12,6 +12,7 @@
 #include "ash/style/icon_button.h"
 #include "ash/style/style_util.h"
 #include "ash/style/typography.h"
+#include "base/scoped_observation.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ash/arc/input_overlay/actions/action.h"
 #include "chrome/browser/ash/arc/input_overlay/display_overlay_controller.h"
@@ -37,8 +38,8 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/layout_types.h"
-#include "ui/views/layout/table_layout.h"
 #include "ui/views/style/typography.h"
+#include "ui/views/widget/widget.h"
 
 namespace arc::input_overlay {
 
@@ -60,7 +61,8 @@ constexpr int kHeaderLeftMarginSpacing = 6;
 // ----------------------------
 // | |Name tag|        |keys| |
 // ----------------------------
-class ButtonOptionsActionEdit : public ActionEditView {
+class ButtonOptionsActionEdit : public ActionEditView,
+                                public views::WidgetObserver {
   METADATA_HEADER(ButtonOptionsActionEdit, ActionEditView)
 
  public:
@@ -71,7 +73,6 @@ class ButtonOptionsActionEdit : public ActionEditView {
     name_tag_->SetTitle(l10n_util::GetStringUTF16(
         action_->is_new() ? IDS_INPUT_OVERLAY_BUTTON_OPTIONS_ASSIGN_NEW_KEY
                           : IDS_INPUT_OVERLAY_BUTTON_OPTIONS_ASSIGNED_KEY));
-    labels_view_->set_should_update_title(false);
   }
   ButtonOptionsActionEdit(const ButtonOptionsActionEdit&) = delete;
   ButtonOptionsActionEdit& operator=(const ButtonOptionsActionEdit&) = delete;
@@ -90,6 +91,22 @@ class ButtonOptionsActionEdit : public ActionEditView {
 
   // ActionEditView:
   void ClickCallback() override { labels_view_->FocusLabel(); }
+
+  // views::View:
+  void AddedToWidget() override { observation_.Observe(GetWidget()); }
+
+  void RemovedFromWidget() override { observation_.Reset(); }
+
+  // views::WidgetObserver:
+  void OnWidgetActivationChanged(views::Widget* widget, bool active) override {
+    if (active) {
+      DCHECK(!for_editing_list_);
+      labels_view_->FocusLabel();
+    }
+  }
+
+  base::ScopedObservation<views::Widget, views::WidgetObserver> observation_{
+      this};
 };
 
 BEGIN_METADATA(ButtonOptionsActionEdit)
@@ -108,8 +125,8 @@ class DoneButton : public views::LabelButton {
       : LabelButton(std::move(pressed_callback),
                     l10n_util::GetStringUTF16(
                         IDS_INPUT_OVERLAY_EDITING_DONE_BUTTON_LABEL)) {
-    // TODO(b/279117180): Replace with proper accessible name.
-    SetAccessibleName(u"done");
+    SetAccessibleName(
+        l10n_util::GetStringUTF16(IDS_INPUT_OVERLAY_EDITING_DONE_BUTTON_LABEL));
 
     SetBackground(views::CreateThemedRoundedRectBackground(
         cros_tokens::kCrosSysSystemOnBase,
@@ -126,29 +143,20 @@ class DoneButton : public views::LabelButton {
     views::HighlightPathGenerator::Install(
         this, std::make_unique<views::RoundRectHighlightPathGenerator>(
                   gfx::Insets(), /*corner_radius=*/kDoneButtonCornerRadius));
+
+    // Set up highlight and focus ring for `DoneButton`.
+    ash::StyleUtil::SetUpInkDropForButton(this, gfx::Insets(),
+                                          /*highlight_on_hover=*/false,
+                                          /*highlight_on_focus=*/false);
+    auto* focus_ring = views::FocusRing::Get(this);
+    focus_ring->SetHaloInset(kDoneButtonHaloInset);
+    focus_ring->SetHaloThickness(kDoneButtonHaloThickness);
   }
 
   DoneButton(const DoneButton&) = delete;
   DoneButton& operator=(const DoneButton&) = delete;
 
   ~DoneButton() override = default;
-
- private:
-  void OnThemeChanged() override {
-    views::LabelButton::OnThemeChanged();
-
-    // Set up highlight and focus ring for `DoneButton`.
-    ash::StyleUtil::SetUpInkDropForButton(this, gfx::Insets(),
-                                          /*highlight_on_hover=*/true,
-                                          /*highlight_on_focus=*/false);
-
-    // `StyleUtil::SetUpInkDropForButton()` reinstalls the focus ring, so it
-    // needs to set the focus ring size after calling
-    // `StyleUtil::SetUpInkDropForButton()`.
-    auto* focus_ring = views::FocusRing::Get(this);
-    focus_ring->SetHaloInset(kDoneButtonHaloInset);
-    focus_ring->SetHaloThickness(kDoneButtonHaloThickness);
-  }
 };
 
 BEGIN_METADATA(DoneButton)
@@ -198,34 +206,24 @@ void ButtonOptionsMenu::AddHeader() {
   // ||"Button options"|          |icon||
   // ------------------------------------
   auto* container = AddChildView(std::make_unique<views::View>());
-  container->SetLayoutManager(std::make_unique<views::TableLayout>())
-      ->AddColumn(views::LayoutAlignment::kStart,
-                  views::LayoutAlignment::kCenter,
-                  /*horizontal_resize=*/1.0f,
-                  views::TableLayout::ColumnSize::kUsePreferred,
-                  /*fixed_width=*/0, /*min_width=*/0)
-      .AddColumn(views::LayoutAlignment::kEnd, views::LayoutAlignment::kCenter,
-                 /*horizontal_resize=*/1.0f,
-                 views::TableLayout::ColumnSize::kUsePreferred,
-                 /*fixed_width=*/0, /*min_width=*/0)
-      .AddRows(1, views::TableLayout::kFixedSize, 0);
+  auto* layout = container->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kHorizontal));
   container->SetProperty(views::kMarginsKey,
                          gfx::Insets::TLBR(0, kHeaderLeftMarginSpacing, 12, 0));
 
   action_name_label_ = container->AddChildView(ash::bubble_utils::CreateLabel(
       // TODO(b/274690042): Replace placeholder text with localized strings.
       ash::TypographyToken::kCrosTitle1, u"", cros_tokens::kCrosSysOnSurface));
+  action_name_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  action_name_label_->SetMultiLine(true);
+  // Flex `action_name_label_` to fill empty space.
+  layout->SetFlexForView(action_name_label_, /*flex=*/1);
 
   trash_button_ = container->AddChildView(std::make_unique<ash::IconButton>(
       base::BindRepeating(&ButtonOptionsMenu::OnTrashButtonPressed,
                           base::Unretained(this)),
       ash::IconButton::Type::kMedium, &kGameControlsDeleteIcon,
       IDS_INPUT_OVERLAY_BUTTON_OPTIONS_DELETE_TOOLTIP_TEXT));
-
-  action_name_label_->SetMultiLine(true);
-  action_name_label_->SetMaximumWidth(
-      kButtonOptionsMenuWidth - 2 * kArrowContainerHorizontalBorderInset -
-      kHeaderLeftMarginSpacing - trash_button_->GetPreferredSize().width());
 }
 
 void ButtonOptionsMenu::AddEditTitle() {
@@ -253,7 +251,7 @@ void ButtonOptionsMenu::AddActionSelection() {
   auto* container = AddChildView(std::make_unique<views::View>());
   container->SetBackground(views::CreateThemedRoundedRectBackground(
       cros_tokens::kCrosSysSystemOnBase, /*top_radius=*/16.0f,
-      /*bottom_radius=*/0.0f, /*for_border_thickness=*/0.0f));
+      /*bottom_radius=*/0.0f));
   container->SetUseDefaultFillLayout(true);
   container->SetProperty(views::kMarginsKey, gfx::Insets::TLBR(0, 0, 2, 0));
   container->SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -281,7 +279,7 @@ void ButtonOptionsMenu::AddActionEdit() {
   // ------------------------------
   action_edit_ = AddChildView(
       std::make_unique<ButtonOptionsActionEdit>(controller_, action_));
-  action_name_label_->SetText(action_edit_->GetActionName());
+  action_name_label_->SetText(action_edit_->CalculateActionName());
 }
 
 void ButtonOptionsMenu::AddDoneButton() {
@@ -319,19 +317,15 @@ void ButtonOptionsMenu::OnActionTypeChanged(Action* action,
   RemoveChildViewT(action_edit_);
   action_edit_ = AddChildViewAt(
       std::make_unique<ButtonOptionsActionEdit>(controller_, action_), *index);
-  action_name_label_->SetText(action_edit_->GetActionName());
+  action_name_label_->SetText(action_edit_->CalculateActionName());
   UpdateWidget();
 }
 
 void ButtonOptionsMenu::OnActionInputBindingUpdated(const Action& action) {
   if (action_ == &action) {
     action_edit_->OnActionInputBindingUpdated();
-    action_name_label_->SetText(action_edit_->GetActionName());
+    action_name_label_->SetText(action_edit_->CalculateActionName());
   }
-}
-
-void ButtonOptionsMenu::OnActionNameUpdated(const Action& action) {
-  NOTIMPLEMENTED();
 }
 
 void ButtonOptionsMenu::OnActionNewStateRemoved(const Action& action) {
@@ -340,7 +334,7 @@ void ButtonOptionsMenu::OnActionNewStateRemoved(const Action& action) {
   }
 }
 
-BEGIN_METADATA(ButtonOptionsMenu, views::View)
+BEGIN_METADATA(ButtonOptionsMenu)
 END_METADATA
 
 }  // namespace arc::input_overlay

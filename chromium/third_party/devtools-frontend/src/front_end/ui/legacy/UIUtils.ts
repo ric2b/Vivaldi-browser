@@ -536,6 +536,7 @@ export function handleElementValueModifications(
   if (!isElementValueModification(event)) {
     return false;
   }
+  void VisualLogging.logKeyDown(event.currentTarget, event, 'element-value-modification');
 
   const selection = element.getComponentSelection();
   if (!selection || !selection.rangeCount) {
@@ -951,7 +952,7 @@ export function animateFunction(
     }
   }
 
-  return (): void => window.cancelAnimationFrame(raf);
+  return () => window.cancelAnimationFrame(raf);
 }
 
 export class LongClickController {
@@ -1107,7 +1108,8 @@ export function createInput(className?: string, type?: string, jslogContext?: st
     element.type = type;
   }
   if (jslogContext) {
-    element.setAttribute('jslog', `${VisualLogging.textField().track({keydown: true}).context(jslogContext)}`);
+    element.setAttribute(
+        'jslog', `${VisualLogging.textField().track({keydown: 'Enter', change: true}).context(jslogContext)}`);
   }
   return element;
 }
@@ -1123,15 +1125,23 @@ export function createSelect(name: string, options: string[]|Map<string, string[
         optGroup.label = key;
         for (const child of value) {
           if (typeof child === 'string') {
-            optGroup.appendChild(new Option(child, child));
+            optGroup.appendChild(createOption(child, child, Platform.StringUtilities.toKebabCase(child)));
           }
         }
       }
     } else if (typeof option === 'string') {
-      select.add(new Option(option, option));
+      select.add(createOption(option, option, Platform.StringUtilities.toKebabCase(option)));
     }
   }
   return select;
+}
+
+export function createOption(title: string, value?: string, jslogContext?: string): HTMLOptionElement {
+  const result = new Option(title, value || title);
+  if (jslogContext) {
+    result.setAttribute('jslog', `${VisualLogging.item(jslogContext).track({click: true})}`);
+  }
+  return result;
 }
 
 export function createLabel(title: string, className?: string, associatedControl?: Element): Element {
@@ -1340,6 +1350,7 @@ export class DevToolsCloseButton extends HTMLDivElement {
     super();
     const root = Utils.createShadowRootWithCoreStyles(this, {cssFile: closeButtonStyles, delegatesFocus: undefined});
     this.buttonElement = (root.createChild('div', 'close-button') as HTMLElement);
+    this.buttonElement.setAttribute('jslog', `${VisualLogging.close().track({click: true})}`);
     Tooltip.install(this.buttonElement, i18nString(UIStrings.close));
     ARIAUtils.setLabel(this.buttonElement, i18nString(UIStrings.close));
     ARIAUtils.markAsButton(this.buttonElement);
@@ -1532,7 +1543,7 @@ export function createFileSelectorElement(callback: (arg0: File) => void): HTMLI
   fileSelectorElement.type = 'file';
   fileSelectorElement.style.display = 'none';
   fileSelectorElement.tabIndex = -1;
-  fileSelectorElement.onchange = (): void => {
+  fileSelectorElement.onchange = () => {
     if (fileSelectorElement.files) {
       callback(fileSelectorElement.files[0]);
     }
@@ -1544,8 +1555,8 @@ export function createFileSelectorElement(callback: (arg0: File) => void): HTMLI
 export const MaxLengthForDisplayedURLs = 150;
 
 export class MessageDialog {
-  static async show(message: string, where?: Element|Document): Promise<void> {
-    const dialog = new Dialog();
+  static async show(message: string, where?: Element|Document, jslogContext?: string): Promise<void> {
+    const dialog = new Dialog(jslogContext);
     dialog.setSizeBehavior(SizeBehavior.MeasureContent);
     dialog.setDimmed(true);
     const shadowRoot = Utils.createShadowRootWithCoreStyles(
@@ -1568,7 +1579,7 @@ export class MessageDialog {
 
 export class ConfirmDialog {
   static async show(message: string, where?: Element|Document, options?: ConfirmDialogOptions): Promise<boolean> {
-    const dialog = new Dialog();
+    const dialog = new Dialog(options?.jslogContext);
     dialog.setSizeBehavior(SizeBehavior.MeasureContent);
     dialog.setDimmed(true);
     ARIAUtils.setLabel(dialog.contentElement, message);
@@ -1744,7 +1755,5 @@ export interface RendererRegistration {
 export interface ConfirmDialogOptions {
   okButtonLabel?: string;
   cancelButtonLabel?: string;
+  jslogContext?: string;
 }
-
-VisualLogging.registerContextProvider(
-    'elementValueModification', e => Promise.resolve(isElementValueModification(e as Event) ? 1 : 0));

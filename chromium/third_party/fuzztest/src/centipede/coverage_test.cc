@@ -31,20 +31,14 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "absl/container/flat_hash_set.h"
-#include "absl/log/check.h"
-#include "absl/strings/str_cat.h"
 #include "./centipede/binary_info.h"
-#include "./centipede/centipede_callbacks.h"
 #include "./centipede/control_flow.h"
-#include "./centipede/defs.h"
 #include "./centipede/environment.h"
 #include "./centipede/feature.h"
-#include "./centipede/mutation_input.h"
 #include "./centipede/pc_info.h"
-#include "./centipede/runner_result.h"
 #include "./centipede/symbol_table.h"
+#include "./centipede/test_coverage_util.h"
 #include "./centipede/test_util.h"
-#include "./centipede/util.h"
 
 namespace centipede {
 namespace {
@@ -176,12 +170,6 @@ TEST(Coverage, CoverageLogger) {
   t2.join();
 }
 
-// Returns a path for i-th temporary file.
-static std::string GetTempFilePath(size_t i) {
-  return std::filesystem::path(GetTestTempDir())
-      .append(absl::StrCat("coverage_test", i, "-", getpid()));
-}
-
 // Returns path to test_fuzz_target.
 static std::string GetTargetPath() {
   return GetDataDependencyFilepath("centipede/testing/test_fuzz_target");
@@ -190,45 +178,6 @@ static std::string GetTargetPath() {
 // Returns path to threaded_fuzz_target.
 static std::string GetThreadedTargetPath() {
   return GetDataDependencyFilepath("centipede/testing/threaded_fuzz_target");
-}
-
-// A simple CentipedeCallbacks derivative for this test.
-class TestCallbacks : public CentipedeCallbacks {
- public:
-  explicit TestCallbacks(const Environment &env) : CentipedeCallbacks(env) {}
-  bool Execute(std::string_view binary, const std::vector<ByteArray> &inputs,
-               BatchResult &batch_result) override {
-    int result =
-        ExecuteCentipedeSancovBinaryWithShmem(binary, inputs, batch_result);
-    CHECK_EQ(EXIT_SUCCESS, result);
-    return true;
-  }
-  void Mutate(const std::vector<MutationInputRef> &inputs, size_t num_mutants,
-              std::vector<ByteArray> &mutants) override {}
-};
-
-// Runs all `inputs`, returns FeatureVec for every input.
-// `env` defines what target is executed and with what flags.
-static std::vector<FeatureVec> RunInputsAndCollectCoverage(
-    const Environment &env, const std::vector<std::string> &inputs) {
-  TestCallbacks CBs(env);
-  std::filesystem::create_directories(TemporaryLocalDirPath());
-
-  // Repackage string inputs into ByteArray inputs.
-  std::vector<ByteArray> byte_array_inputs;
-  for (auto &string_input : inputs) {
-    byte_array_inputs.emplace_back(string_input.begin(), string_input.end());
-  }
-  BatchResult batch_result;
-  // Run.
-  CBs.Execute(env.binary, byte_array_inputs, batch_result);
-
-  // Repackage execution results into a vector of FeatureVec.
-  std::vector<FeatureVec> res;
-  for (const auto &er : batch_result.results()) {
-    res.push_back(er.features());
-  }
-  return res;
 }
 
 // Tests coverage collection on test_fuzz_target
@@ -243,9 +192,9 @@ TEST(Coverage, CoverageFeatures) {
   // Get pc_table and symbols.
   bool uses_legacy_trace_pc_instrumentation = {};
   BinaryInfo binary_info;
-  binary_info.InitializeFromSanCovBinary(GetTargetPath(), GetObjDumpPath(),
-                                         GetLLVMSymbolizerPath(),
-                                         GetTestTempDir());
+  binary_info.InitializeFromSanCovBinary(
+      GetTargetPath(), GetObjDumpPath(), GetLLVMSymbolizerPath(),
+      GetTestTempDir(test_info_->name()).string());
   const auto &pc_table = binary_info.pc_table;
   EXPECT_FALSE(uses_legacy_trace_pc_instrumentation);
   const SymbolTable &symbols = binary_info.symbols;
@@ -464,16 +413,16 @@ TEST(Coverage, PathFeatures) {
 TEST(Coverage, FunctionFilter) {
   // Initialize coverage data.
   BinaryInfo binary_info;
-  binary_info.InitializeFromSanCovBinary(GetTargetPath(), GetObjDumpPath(),
-                                         GetLLVMSymbolizerPath(),
-                                         GetTestTempDir());
+  binary_info.InitializeFromSanCovBinary(
+      GetTargetPath(), GetObjDumpPath(), GetLLVMSymbolizerPath(),
+      GetTestTempDir(test_info_->name()).string());
 
   const PCTable &pc_table = binary_info.pc_table;
   EXPECT_FALSE(binary_info.uses_legacy_trace_pc_instrumentation);
   const DsoTable dso_table = {{GetTargetPath(), pc_table.size()}};
   SymbolTable symbols;
   symbols.GetSymbolsFromBinary(pc_table, dso_table, GetLLVMSymbolizerPath(),
-                               GetTempFilePath(0), GetTempFilePath(1));
+                               GetTestTempDir(test_info_->name()).string());
   // Empty filter.
   FunctionFilter empty_filter("", symbols);
   EXPECT_EQ(empty_filter.count(), 0);

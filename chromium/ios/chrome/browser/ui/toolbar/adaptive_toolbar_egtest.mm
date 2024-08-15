@@ -13,7 +13,6 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
-#import "ios/chrome/test/earl_grey/chrome_earl_grey_app_interface.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/chrome/test/scoped_eg_synchronization_disabler.h"
@@ -689,19 +688,13 @@ id<GREYMatcher> FormInputAccessoryOmniboxTypingShield() {
 
 @end
 
-#pragma mark - Bottom omnibox enabled tests
+#pragma mark - Bottom omnibox tests
 
 // AdaptiveToolbarTestCase with a bottom default omnibox position.
 @interface AdaptiveToolbarBottomOmniboxTestCase : AdaptiveToolbarTestCase
 @end
 
 @implementation AdaptiveToolbarBottomOmniboxTestCase
-
-- (AppLaunchConfiguration)appConfigurationForTestCase {
-  AppLaunchConfiguration config;
-  config.features_enabled.push_back(kBottomOmniboxSteadyState);
-  return config;
-}
 
 - (void)setUp {
   [super setUp];
@@ -714,10 +707,6 @@ id<GREYMatcher> FormInputAccessoryOmniboxTypingShield() {
   if ([ChromeEarlGrey isIPadIdiom]) {
     EARL_GREY_TEST_SKIPPED(@"Bottom address bar is only available on iPhone.");
   }
-  [[AppLaunchManager sharedManager]
-      ensureAppLaunchedWithFeaturesEnabled:{kBottomOmniboxSteadyState}
-                                  disabled:{}
-                            relaunchPolicy:NoForceRelaunchAndResetState];
 
   // Load a page to have the toolbar visible (hidden on NTP).
   [ChromeEarlGrey loadURL:GURL("chrome://version")];

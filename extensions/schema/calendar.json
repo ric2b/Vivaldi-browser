@@ -1782,23 +1782,18 @@
             "type": "string",
             "name": "toCreate",
             "$ref": "createdAccount"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "createAccount",
-                "$ref": "Account"
-              },
-              {
-                "name": "result",
-                "type": "boolean"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "createAccount",
+              "$ref": "Account"
+            }
+          ]
+        }
       },
       {
         "name": "updateAccount",
@@ -1812,24 +1807,18 @@
           {
             "name": "changes",
             "$ref": "updatedAccount"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "Account"
-              },
-              {
-                "name": "res",
-                "type": "string",
-                "optional": true
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "Account"
+            }
+          ]
+        }
       },
       {
         "name": "deleteAccount",

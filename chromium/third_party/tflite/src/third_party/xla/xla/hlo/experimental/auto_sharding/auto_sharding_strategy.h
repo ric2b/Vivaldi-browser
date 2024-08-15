@@ -1,4 +1,4 @@
-/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2022 The OpenXLA Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -129,6 +129,10 @@ using NodeStrategyIdx = int64_t;  // An index into a node's strategy vector.
 using EdgeStrategyIdx = int64_t;  // An index into an edge's strategy vector.
 using LivenessIdx = int64_t;      // An index into the liveness vector.
 using AliasIdx = int64_t;         // An index into the alias vector.
+
+// Various classes needed to support strategy shaving.
+using NodeStrategy = std::pair<NodeIdx, NodeStrategyIdx>;
+using NodeStrategies = StableHashSet<NodeStrategy>;
 
 // A group of strategy choices (along with details like index values)
 // for each instruction.

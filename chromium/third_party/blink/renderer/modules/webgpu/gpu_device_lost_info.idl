@@ -10,7 +10,7 @@ enum GPUDeviceLostReason {
 };
 
 [
-    Exposed=(Window, DedicatedWorker),
+    Exposed=(Window, Worker),
     SecureContext
 ] interface GPUDeviceLostInfo {
     readonly attribute GPUDeviceLostReason reason;

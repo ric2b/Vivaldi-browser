@@ -17,12 +17,15 @@
 //! local machine. It keeps state in two files in the working directory:
 //! "state.transparent" and "state.confidential".
 
-extern crate base64url;
+extern crate alloc;
+extern crate base64;
+extern crate cbor;
 extern crate crypto;
 extern crate handshake;
 extern crate hex;
 extern crate processor;
 
+use cbor::{cbor, Value};
 use crypto::P256Scalar;
 use processor::{ClientState, StateUpdate};
 use std::io::{Read, Write};
@@ -31,6 +34,7 @@ use std::net::{TcpListener, TcpStream};
 // Frame types from https://datatracker.ietf.org/doc/html/rfc6455#section-5.2
 const BINARY: u8 = 2;
 const CONTINUATION: u8 = 2;
+const WEBSOCKET_PROTOCOL: &str = "cloudauthenticator";
 
 /// Completly fills `buf` with data from `conn` and returns true iff successful.
 fn read_all(mut conn: &TcpStream, buf: &mut [u8]) -> bool {
@@ -59,19 +63,39 @@ fn write_all(mut conn: &TcpStream, buf: &[u8]) -> bool {
     true
 }
 
+/// `next_line` recognises TLS handshakes and returns them as a special error.
+enum NextLineError {
+    /// The client probably sent a TLS handshake, not an HTTP request.
+    TlsHandshake,
+    /// Some other I/O or UTF-8 error.
+    OtherError,
+}
+
+impl<E> From<E> for NextLineError
+where
+    E: std::error::Error,
+{
+    fn from(_: E) -> NextLineError {
+        Self::OtherError
+    }
+}
+
 /// Reads a "\r\n"-terminated line from `conn` and returns it without that
 /// terminator. (Inefficient, but we don't mind in this context.)
-fn next_line(mut conn: &TcpStream) -> Option<String> {
+fn next_line(mut conn: &TcpStream) -> Result<String, NextLineError> {
     let mut ret = Vec::with_capacity(32);
     let mut seen_cr = false;
     loop {
         let mut buf = [0u8; 1];
-        if conn.read(&mut buf).ok()? == 0 {
-            return None;
+        if conn.read(&mut buf)? == 0 {
+            return Err(NextLineError::OtherError);
+        }
+        if ret.is_empty() && buf[0] == 0x16 {
+            return Err(NextLineError::TlsHandshake);
         }
         if seen_cr && buf[0] == b'\n' {
             ret.pop();
-            return String::from_utf8(ret).ok();
+            return Ok(String::from_utf8(ret)?);
         }
         seen_cr = buf[0] == b'\r';
         ret.push(buf[0]);
@@ -176,11 +200,7 @@ fn write_msg(conn: &TcpStream, msg: &[u8]) -> bool {
 /// connection. See https://datatracker.ietf.org/doc/html/rfc6455#section-1.3
 fn calculate_websocket_accept(key: &[u8]) -> String {
     let digest = crypto::sha1_two_part(key, b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
-    let mut encoded = base64url::base64url_encode(&digest).replace('-', "+").replace('_', "/");
-    while encoded.len() % 4 != 0 {
-        encoded.push('=');
-    }
-    encoded
+    base64::encode(digest)
 }
 
 struct EnclaveServer {
@@ -193,9 +213,14 @@ impl EnclaveServer {
 
         let mut seen_first_line = false;
         let mut websocket_key: Option<String> = None;
+        let mut websocket_protocol: Option<String> = None;
         loop {
-            let Some(line) = next_line(&conn) else {
-                return;
+            let line = match next_line(&conn) {
+                Ok(line) => line,
+                Err(NextLineError::OtherError) => return,
+                Err(NextLineError::TlsHandshake) => panic!(
+                    "TLS handshake received. This server only speaks plaintext. Ensure that you have specified the address with ws://, not wss://"
+                ),
             };
             if line.is_empty() {
                 break;
@@ -210,8 +235,10 @@ impl EnclaveServer {
                 return;
             };
             let key = key.trim();
-            if key.to_lowercase() == "sec-websocket-key" {
-                websocket_key = Some(String::from(value.trim()))
+            match key.to_lowercase().as_str() {
+                "sec-websocket-key" => websocket_key = Some(String::from(value.trim())),
+                "sec-websocket-protocol" => websocket_protocol = Some(String::from(value.trim())),
+                _ => (),
             }
         }
 
@@ -220,12 +247,25 @@ impl EnclaveServer {
             return;
         };
 
+        match websocket_protocol {
+            Some(protocol) if protocol.as_str() == WEBSOCKET_PROTOCOL => (),
+            _ => {
+                eprintln!("missing expected WebSocket protocol");
+                return;
+            }
+        }
+
         const RESPONSE : &[u8] = b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ";
         let accept_value = calculate_websocket_accept(websocket_key.as_bytes());
-        const TERMINATOR: &[u8] = b"\r\n\r\n";
+        const PROTOCOL_HEADER: &[u8] = b"Sec-WebSocket-Protocol: ";
+        const NEWLINE: &[u8] = b"\r\n";
         if !write_all(&conn, RESPONSE)
             || !write_all(&conn, accept_value.as_bytes())
-            || !write_all(&conn, TERMINATOR)
+            || !write_all(&conn, NEWLINE)
+            || !write_all(&conn, PROTOCOL_HEADER)
+            || !write_all(&conn, WEBSOCKET_PROTOCOL.as_bytes())
+            || !write_all(&conn, NEWLINE)
+            || !write_all(&conn, NEWLINE)
         {
             return;
         }
@@ -264,31 +304,41 @@ impl EnclaveServer {
             })
             .unwrap_or(ClientState::Initial);
 
-        let (result_array, state_update) = match processor::process_client_msg(
+        let cbor_response = match processor::process_client_msg(
             client_state,
-            /* current_time= */ 100,
+            // This timestamp is fixed so that any XML files submitted by tests will be considered
+            // unexpired.
+            1707344402000,
             &handshake_response.handshake_hash,
             commands,
         ) {
-            Ok(result) => result,
-            Err(e) => {
-                eprintln!("{:?}", e);
-                return;
+            Ok((result_array, state_update)) => {
+                let state_data = match state_update {
+                    StateUpdate::Major(data) => Some(data),
+                    StateUpdate::Minor(data) => Some(data),
+                    StateUpdate::None => None,
+                };
+
+                if let Some(state_data) = state_data {
+                    std::fs::write(CONFIDENTIAL_PATH, &state_data.confidential).unwrap();
+                    std::fs::write(TRANSPARENT_PATH, &state_data.transparent).unwrap();
+                }
+
+                cbor!({"ok": result_array})
+            }
+            Err(err) => {
+                eprintln!("{:?}", err);
+
+                let err = match err {
+                    processor::Error::UnknownClient => Value::Int(0),
+                    processor::Error::Str(s) => Value::String(String::from(s)),
+                    _ => Value::String(format!("{:?}", err)),
+                };
+                cbor!({"err": err})
             }
         };
 
-        let state_data = match state_update {
-            StateUpdate::Major(data) => Some(data),
-            StateUpdate::Minor(data) => Some(data),
-            StateUpdate::None => None,
-        };
-
-        if let Some(state_data) = state_data {
-            std::fs::write(CONFIDENTIAL_PATH, &state_data.confidential).unwrap();
-            std::fs::write(TRANSPARENT_PATH, &state_data.transparent).unwrap();
-        }
-
-        let cmd_response = handshake_response.crypter.encrypt(&result_array.to_bytes()).unwrap();
+        let cmd_response = handshake_response.crypter.encrypt(&cbor_response.to_bytes()).unwrap();
         write_msg(&conn, &cmd_response);
     }
 }
@@ -307,7 +357,7 @@ fn main() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let local_addr = listener.local_addr().unwrap();
     println!("{}", local_addr.port());
-    eprintln!("Listening on {}", local_addr);
+    eprintln!("Listening on ws://{}", local_addr);
     for stream in listener.incoming() {
         let stream = stream.unwrap();
         stream.set_nodelay(true).unwrap();

@@ -37,9 +37,9 @@
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
-#include "./fuzztest/domain.h"
 #include "./fuzztest/internal/configuration.h"
 #include "./fuzztest/internal/coverage.h"
+#include "./fuzztest/internal/domains/domain.h"
 #include "./fuzztest/internal/fixture_driver.h"
 #include "./fuzztest/internal/io.h"
 #include "./fuzztest/internal/logging.h"
@@ -142,6 +142,8 @@ class Runtime {
     return termination_requested_.load(std::memory_order_relaxed);
   }
 
+  void StartWatchdog();
+
   void SetRunMode(RunMode run_mode) { run_mode_ = run_mode; }
   RunMode run_mode() const { return run_mode_; }
 
@@ -161,10 +163,19 @@ class Runtime {
 
   struct Args {
     const GenericDomainCorpusType& corpus_value;
-    UntypedDomainInterface& domain;
+    UntypedDomain& domain;
   };
 
-  void SetCurrentTest(const FuzzTest* test) { current_test_ = test; }
+  void SetCurrentTest(const FuzzTest* test,
+                      const Configuration* configuration) {
+    current_test_ = test;
+    current_configuration_ = configuration;
+  }
+  void OnTestIterationStart(const absl::Time& start_time) {
+    current_iteration_start_time_ = start_time;
+    test_iteration_started_ = true;
+  }
+  void OnTestIterationEnd();
 
   void SetCurrentArgs(Args* args) { current_args_ = args; }
   void UnsetCurrentArgs() { current_args_ = nullptr; }
@@ -176,6 +187,9 @@ class Runtime {
 
  private:
   Runtime() = default;
+
+  void CheckWatchdogLimits();
+  void Watchdog();
 
   void DumpReproducer(absl::string_view outdir) const;
 
@@ -199,10 +213,15 @@ class Runtime {
 
   RunMode run_mode_ = RunMode::kUnitTest;
   absl::Duration fuzz_time_limit_ = absl::InfiniteDuration();
+  std::atomic<bool> watchdog_thread_started = false;
 
   bool reporter_enabled_ = false;
   Args* current_args_ = nullptr;
   const FuzzTest* current_test_ = nullptr;
+  const Configuration* current_configuration_;
+  absl::Time current_iteration_start_time_;
+  std::atomic<bool> test_iteration_started_ = false;
+  std::atomic_flag watchdog_spinlock_;
   const RuntimeStats* stats_ = nullptr;
   absl::Time (*clock_fn_)() = nullptr;
 };
@@ -301,7 +320,7 @@ class FuzzTestFuzzerImpl : public FuzzTestFuzzer {
 
   const FuzzTest& test_;
   std::unique_ptr<UntypedFixtureDriver> fixture_driver_;
-  std::unique_ptr<UntypedDomainInterface> params_domain_;
+  UntypedDomain params_domain_;
   std::seed_seq seed_sequence_ = GetFromEnvOrMakeSeedSeq(std::cerr);
   ExecutionCoverage* execution_coverage_;
   CorpusCoverage corpus_coverage_;
@@ -325,6 +344,8 @@ class FuzzTestFuzzerImpl : public FuzzTestFuzzer {
   friend class CentipedeAdaptorRunnerCallbacks;
   friend class CentipedeAdaptorEngineCallbacks;
 };
+
+size_t GetStackLimitFromEnvOrConfiguration(const Configuration& configuration);
 
 }  // namespace internal
 }  // namespace fuzztest

@@ -38,6 +38,7 @@
 #include "ui/views/controls/tabbed_pane/tabbed_pane.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/interaction/element_tracker_views.h"
+#include "ui/views/test/widget_activation_waiter.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/view.h"
 #include "ui/views/view_observer.h"
@@ -255,7 +256,7 @@ class DropdownItemSelector {
   const size_t item_index_;
   base::RunLoop run_loop_{base::RunLoop::Type::kNestableTasksAllowed};
   AnyWidgetObserver observer_{views::test::AnyWidgetTestPasskey()};  // IN-TEST
-  absl::optional<ui::test::ActionResult> result_;
+  std::optional<ui::test::ActionResult> result_;
   raw_ptr<Widget> widget_ = nullptr;
   base::WeakPtrFactory<DropdownItemSelector> weak_ptr_factory_{this};
 };
@@ -671,9 +672,8 @@ ui::test::ActionResult InteractionTestUtilSimulatorViews::ActivateWidget(
   }
 #endif  // HANDLE_WAYLAND_FAILURE
 
-  views::test::WidgetActivationWaiter waiter(widget, true);
   widget->Activate();
-  waiter.Wait();
+  views::test::WaitForWidgetActive(widget, true);
   return ui::test::ActionResult::kSucceeded;
 }
 

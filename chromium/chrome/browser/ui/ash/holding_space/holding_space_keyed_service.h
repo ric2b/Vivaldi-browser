@@ -77,14 +77,16 @@ class HoldingSpaceKeyedService : public crosapi::mojom::HoldingSpaceService,
   // Adds multiple pinned file items identified by the provided file system
   // URLs. NOTE: No-op if the service has not been initialized.
   void AddPinnedFiles(
-      const std::vector<storage::FileSystemURL>& file_system_urls);
+      const std::vector<storage::FileSystemURL>& file_system_urls,
+      holding_space_metrics::EventSource event_source);
 
   // Removes multiple pinned file items identified by the provided file system
   // URLs. NOTE: No-ops if:
   // 1. The specified files are not present in the holding space; OR
   // 2. The service has not been initialized.
   void RemovePinnedFiles(
-      const std::vector<storage::FileSystemURL>& file_system_urls);
+      const std::vector<storage::FileSystemURL>& file_system_urls,
+      holding_space_metrics::EventSource event_source);
 
   // Returns whether the holding space contains a pinned file identified by a
   // file system URL.
@@ -123,6 +125,9 @@ class HoldingSpaceKeyedService : public crosapi::mojom::HoldingSpaceService,
       const HoldingSpaceProgress& progress = HoldingSpaceProgress(),
       HoldingSpaceImage::PlaceholderImageSkiaResolver
           placeholder_image_skia_resolver = base::NullCallback());
+
+  // Returns whether a holding space item exists for the specified `id`.
+  bool ContainsItem(const std::string& id) const;
 
   // Returns an object which, upon its destruction, performs an atomic update to
   // the holding space item associated with the specified `id`. Returns

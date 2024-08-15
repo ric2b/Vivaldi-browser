@@ -28,9 +28,10 @@
 #include "third_party/blink/renderer/core/html/parser/html_preload_scanner.h"
 
 #include <memory>
+#include <optional>
 
 #include "base/task/sequenced_task_runner.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "base/trace_event/trace_event.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/script/script_type.mojom-blink.h"
@@ -249,15 +250,16 @@ class TokenPreloadScanner::StartTagScanner {
       bool is_potentially_lcp_element) {
     PreloadRequest::RequestType request_type =
         PreloadRequest::kRequestTypePreload;
-    absl::optional<ResourceType> type;
+    std::optional<ResourceType> type;
     if (ShouldPreconnect()) {
       request_type = PreloadRequest::kRequestTypePreconnect;
     } else {
       if (IsLinkRelPreload()) {
         request_type = PreloadRequest::kRequestTypeLinkRelPreload;
         type = ResourceTypeForLinkPreload();
-        if (type == absl::nullopt)
+        if (type == std::nullopt) {
           return nullptr;
+        }
       } else if (IsLinkRelModulePreload()) {
         request_type = PreloadRequest::kRequestTypeLinkRelPreload;
         type = ResourceType::kScript;
@@ -284,8 +286,9 @@ class TokenPreloadScanner::StartTagScanner {
       resource_width_ = source_size;
     }
 
-    if (type == absl::nullopt)
+    if (type == std::nullopt) {
       type = GetResourceType();
+    }
 
     // The element's 'referrerpolicy' attribute (if present) takes precedence
     // over the document's referrer policy.
@@ -326,12 +329,15 @@ class TokenPreloadScanner::StartTagScanner {
               : (is_async_ ? RenderBlockingBehavior::kPotentiallyBlocking
                            : RenderBlockingBehavior::kNonBlocking);
     } else if (is_script || type == ResourceType::kCSSStyleSheet) {
-      // CSS here is render blocking, as non blocking doesn't get preloaded.
-      // JS here is a blocking one, as others would've been caught by the
-      // previous condition.
+      // CSS here is render blocking unless it's disabled, as non blocking
+      // doesn't get preloaded. JS here is a blocking one, as others would've
+      // been caught by the previous condition.
       render_blocking_behavior =
-          treat_links_as_in_body ? RenderBlockingBehavior::kInBodyParserBlocking
-                                 : RenderBlockingBehavior::kBlocking;
+          type == ResourceType::kCSSStyleSheet && disabled_attr_set_
+              ? RenderBlockingBehavior::kNonBlocking
+          : treat_links_as_in_body
+              ? RenderBlockingBehavior::kInBodyParserBlocking
+              : RenderBlockingBehavior::kBlocking;
     }
     request->SetRenderBlockingBehavior(render_blocking_behavior);
 
@@ -520,6 +526,8 @@ class TokenPreloadScanner::StartTagScanner {
       SetFetchPriorityHint(attribute_value);
     } else if (Match(attribute_name, html_names::kBlockingAttr)) {
       blocking_attribute_value_ = attribute_value;
+    } else if (Match(attribute_name, html_names::kDisabledAttr)) {
+      disabled_attr_set_ = true;
     }
   }
 
@@ -634,7 +642,7 @@ class TokenPreloadScanner::StartTagScanner {
     return charset_;
   }
 
-  absl::optional<ResourceType> ResourceTypeForLinkPreload() const {
+  std::optional<ResourceType> ResourceTypeForLinkPreload() const {
     DCHECK(link_is_preload_);
     return PreloadHelper::GetResourceTypeFromAsAttribute(as_attribute_value_);
   }
@@ -669,7 +677,7 @@ class TokenPreloadScanner::StartTagScanner {
            !url_to_load_.empty();
   }
 
-  bool ShouldPreloadLink(absl::optional<ResourceType>& type) const {
+  bool ShouldPreloadLink(std::optional<ResourceType>& type) const {
     if (link_is_style_sheet_) {
       return type_attribute_value_.empty() ||
              MIMETypeRegistry::IsSupportedStyleSheetMIMEType(
@@ -696,7 +704,7 @@ class TokenPreloadScanner::StartTagScanner {
     return false;
   }
 
-  bool ShouldPreload(absl::optional<ResourceType>& type) const {
+  bool ShouldPreload(std::optional<ResourceType>& type) const {
     if (url_to_load_.empty())
       return false;
     if (!matched_)
@@ -801,6 +809,7 @@ class TokenPreloadScanner::StartTagScanner {
       network::mojom::ReferrerPolicy::kDefault;
   bool integrity_attr_set_ = false;
   bool is_async_ = false;
+  bool disabled_attr_set_ = false;
   IntegrityMetadataSet integrity_metadata_;
   SubresourceIntegrity::IntegrityFeatures integrity_features_;
   LoadingAttributeValue loading_attr_value_ = LoadingAttributeValue::kAuto;
@@ -809,8 +818,8 @@ class TokenPreloadScanner::StartTagScanner {
   const HashSet<String>* disabled_image_types_;
   bool attributionsrc_attr_set_ = false;
   bool shared_storage_writable_opted_in_ = false;
-  absl::optional<float> resource_width_;
-  absl::optional<float> resource_height_;
+  std::optional<float> resource_width_;
+  std::optional<float> resource_height_;
   features::LcppPreloadLazyLoadImageType preload_lazy_load_image_type_;
   bool use_data_src_attr_match_for_image_ = false;
 };
@@ -850,7 +859,7 @@ static void HandleMetaViewport(
     const String& attribute_value,
     const CachedDocumentParameters* document_parameters,
     MediaValuesCached* media_values,
-    absl::optional<ViewportDescription>* viewport) {
+    std::optional<ViewportDescription>* viewport) {
   if (!document_parameters->viewport_meta_enabled)
     return;
   ViewportDescription description(ViewportDescription::kViewportMeta);
@@ -884,7 +893,7 @@ static void HandleMetaReferrer(const String& attribute_value,
 void TokenPreloadScanner::HandleMetaNameAttribute(
     const HTMLToken& token,
     MetaCHValues& meta_ch_values,
-    absl::optional<ViewportDescription>* viewport) {
+    std::optional<ViewportDescription>* viewport) {
   const HTMLToken::Attribute* name_attribute =
       token.GetAttributeItem(html_names::kNameAttr);
   if (!name_attribute)
@@ -913,7 +922,7 @@ void TokenPreloadScanner::Scan(const HTMLToken& token,
                                const SegmentedString& source,
                                PreloadRequestStream& requests,
                                MetaCHValues& meta_ch_values,
-                               absl::optional<ViewportDescription>* viewport,
+                               std::optional<ViewportDescription>* viewport,
                                bool* is_csp_meta_tag) {
   if (!document_parameters_->do_html_preload_scanning)
     return;
@@ -1055,6 +1064,19 @@ void TokenPreloadScanner::Scan(const HTMLToken& token,
         seen_body_ = true;
       } else if (Match(tag_impl, html_names::kImgTag)) {
         seen_img_ = true;
+        if (base::FeatureList::IsEnabled(
+                features::kSimplifyLoadingTransparentPlaceholderImage)) {
+          // Skip trying to create a preload request if we know the image is a
+          // data URI, as we do not preload data URIs anyway.
+          const HTMLToken::Attribute* source_attribute =
+              token.GetAttributeItem(html_names::kSrcAttr);
+          if (source_attribute) {
+            String source_attribute_value(source_attribute->Value());
+            if (source_attribute_value.StartsWithIgnoringASCIICase("data:")) {
+              return;
+            }
+          }
+        }
       } else if (Match(tag_impl, html_names::kPictureTag)) {
         in_picture_ = true;
         picture_data_ = PictureData();
@@ -1174,11 +1196,20 @@ HTMLPreloadScanner::HTMLPreloadScanner(
                std::move(locators)),
       tokenizer_(std::move(tokenizer)),
       script_token_scanner_(std::move(script_token_scanner)),
-      take_preload_(std::move(take_preload)) {}
+      take_preload_(std::move(take_preload)) {
+  TRACE_EVENT_WITH_FLOW0("blink", "HTMLPreloadScanner::HTMLPreloadScanner",
+                         TRACE_ID_LOCAL(this), TRACE_EVENT_FLAG_FLOW_OUT);
+}
 
-HTMLPreloadScanner::~HTMLPreloadScanner() = default;
+HTMLPreloadScanner::~HTMLPreloadScanner() {
+  TRACE_EVENT_WITH_FLOW0("blink", "HTMLPreloadScanner::~HTMLPreloadScanner",
+                         TRACE_ID_LOCAL(this), TRACE_EVENT_FLAG_FLOW_IN);
+}
 
 void HTMLPreloadScanner::AppendToEnd(const SegmentedString& source) {
+  TRACE_EVENT_WITH_FLOW0("blink", "HTMLPreloadScanner::AppendToEnd",
+                         TRACE_ID_LOCAL(this),
+                         TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   source_.Append(source);
 }
 
@@ -1186,8 +1217,10 @@ std::unique_ptr<PendingPreloadData> HTMLPreloadScanner::Scan(
     const KURL& starting_base_element_url) {
   auto pending_data = std::make_unique<PendingPreloadData>();
 
-  TRACE_EVENT1("blink", "HTMLPreloadScanner::scan", "source_length",
-               source_.length());
+  TRACE_EVENT_WITH_FLOW1("blink", "HTMLPreloadScanner::scan",
+                         TRACE_ID_LOCAL(this),
+                         TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
+                         "source_length", source_.length());
 
   // When we start scanning, our best prediction of the baseElementURL is the
   // real one!
@@ -1237,6 +1270,9 @@ std::unique_ptr<PendingPreloadData> HTMLPreloadScanner::Scan(
 void HTMLPreloadScanner::ScanInBackground(
     const String& source,
     const KURL& document_base_element_url) {
+  TRACE_EVENT_WITH_FLOW0("blink", "HTMLPreloadScanner::ScanInBackground",
+                         TRACE_ID_LOCAL(this),
+                         TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   source_.Append(source);
   take_preload_.Run(Scan(document_base_element_url));
 }

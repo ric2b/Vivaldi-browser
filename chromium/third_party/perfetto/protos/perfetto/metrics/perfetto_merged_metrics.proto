@@ -20,7 +20,7 @@ message AdServicesUiMetric {
   optional double common_service_initialization_latency = 1;
   optional double common_service_permission_check_latency = 2;
   optional double common_service_ux_engine_flow_latency = 3;
-  optional double main_actitivity_creation_latency = 4;
+  optional double main_activity_creation_latency = 4;
   optional double consent_manager_initialization_latency = 5;
   optional double consent_manager_read_latency = 6;
   optional double consent_manager_write_latency = 7;
@@ -36,11 +36,20 @@ message AdServicesAppSetIdMetric {
   optional double latency = 1;
 }
 
-// Next: 4
+// Next: 5
+message OnDevicePersonalizationMetric {
+  optional double managing_service_initialization_latency = 1;
+  optional double service_delegate_execute_flow_latency = 2;
+  optional double service_delegate_request_surface_package_latency = 3;
+  optional double service_delegate_register_web_trigger_latency = 4;
+}
+
+// Next: 5
 message AdServicesMetric {
   repeated AdServicesUiMetric ui_metric = 1;
   repeated AdServicesAdIdMetric ad_id_metric = 2;
   repeated AdServicesAppSetIdMetric app_set_id_metric = 3;
+  repeated OnDevicePersonalizationMetric odp_metric = 4;
 }
 // End of protos/perfetto/metrics/android/ad_services_metric.proto
 
@@ -138,7 +147,8 @@ message AndroidBlockingCallsCujMetric {
 
 // Begin of protos/perfetto/metrics/android/android_boot.proto
 
-// This metric computes how much time processes spend in UNINTERRUPTIBLE_SLEEP state
+// This metric computes how much time processes spend in UNINTERRUPTIBLE_SLEEP
+// state
 message ProcessStateDurations {
   optional int64 total_dur = 2;
   optional int64 uninterruptible_sleep_dur = 3;
@@ -155,9 +165,117 @@ message AndroidBootMetric {
     optional int64 cold_start_dur = 1;
   }
   optional LauncherBreakdown launcher_breakdown = 5;
+
+  message ProcessStartAggregation {
+    optional int64 total_start_sum = 1;
+    optional int64 num_of_processes = 2;
+    optional double average_start_time = 3;
+  }
+  message GarbageCollectionAggregation {
+    optional int64 total_gc_count = 1;
+    optional int64 num_of_processes_with_gc = 2;
+    optional int64 num_of_threads_with_gc = 3;
+    optional double avg_gc_duration = 4;
+    optional double avg_running_gc_duration = 5;
+    optional int64 full_gc_count = 6;
+    optional int64 collector_transition_gc_count = 7;
+    optional int64 young_gc_count = 8;
+    optional int64 native_alloc_gc_count = 9;
+    optional int64 explicit_gc_count = 10;
+    optional int64 alloc_gc_count = 11;
+    optional double mb_per_ms_of_gc = 12;
+  }
+  optional ProcessStartAggregation full_trace_process_start_aggregation = 6;
+  optional ProcessStartAggregation post_boot_process_start_aggregation = 7;
+  optional GarbageCollectionAggregation full_trace_gc_aggregation = 8;
+  optional GarbageCollectionAggregation post_boot_gc_aggregation = 9;
 }
 
 // End of protos/perfetto/metrics/android/android_boot.proto
+
+// Begin of protos/perfetto/metrics/android/android_garbage_collection_unagg_metric.proto
+
+message AndroidGarbageCollectionUnaggMetric {
+  message GarbageCollectionEvent {
+    // Name of thread running garbage collection.
+    optional string thread_name = 1;
+    // Name of process running garbage collection.
+    optional string process_name = 2;
+    // Type of garbage collection.
+    optional string gc_type = 3;
+    // Whether gargage collection is mark compact or copying.
+    optional int64 is_mark_compact = 4;
+    // MB reclaimed after garbage collection.
+    optional double reclaimed_mb = 5;
+    // Minimum heap size in MB during garbage collection.
+    optional double min_heap_mb = 6;
+    // Maximum heap size in MB during garbage collection.
+    optional double max_heap_mb = 7;
+    // Memory reclaimed per ms of running time.
+    optional double mb_per_ms_of_running_gc = 8;
+    // Memory reclaimed per ms of wall time.
+    optional double mb_per_ms_of_wall_gc = 9;
+    // Garbage collection wall duration.
+    optional int64 gc_dur = 10;
+    // Garbage collection duration spent executing on CPU.
+    optional int64 gc_running_dur = 11;
+    // Garbage collection duration spent waiting for CPU.
+    optional int64 gc_runnable_dur = 12;
+    // Garbage collection duration spent waiting in the Linux kernel on IO.
+    optional int64 gc_unint_io_dur = 13;
+    // Garbage collection duration spent waiting in the Linux kernel without IO.
+    optional int64 gc_unint_non_io_dur = 14;
+    // Garbage collection duration spent waiting in interruptible sleep.
+    optional int64 gc_int_dur = 15;
+    // ts of the event in trace.
+    optional int64 gc_ts = 16;
+    // pid of the event in trace.
+    optional int64 pid = 17;
+    // tid of the event in trace.
+    optional int64 tid = 18;
+    // monotonic duration of event.
+    optional int64 gc_monotonic_dur = 19;
+  }
+  repeated GarbageCollectionEvent gc_events = 1;
+}
+// End of protos/perfetto/metrics/android/android_garbage_collection_unagg_metric.proto
+
+// Begin of protos/perfetto/metrics/android/app_process_starts_metric.proto
+
+message AndroidAppProcessStartsMetric {
+  // Next id : 4
+  message ProcessStart {
+    optional string process_name = 1;
+    optional string intent = 2;
+    optional string reason = 3;
+    optional int64 proc_start_dur = 4;
+    optional int64 bind_app_dur = 5;
+    optional int64 intent_dur = 6;
+    optional int64 total_dur = 7;
+  }
+  // Provides java process startup information for
+  // all processes starting after Boot completed broadcast in a trace.
+  repeated ProcessStart all_apps = 1;
+  // Provides java process startup information for all
+  // processes started from a broadcast after Boot Complete broadcasts.
+  repeated ProcessStart started_by_broadcast = 2;
+  // Provides java process startup information for all
+  // processes started from a service after Boot Complete broadcasts.
+  repeated ProcessStart started_by_service = 3;
+}
+
+// End of protos/perfetto/metrics/android/app_process_starts_metric.proto
+
+// Begin of protos/perfetto/metrics/android/android_boot_unagg.proto
+
+message AndroidBootUnagg {
+  // Looks at all apps started after boot complete broadcast.
+  optional AndroidAppProcessStartsMetric android_app_process_start_metric = 1;
+  // Looks at all GC that occurs after boot complete broadcast.
+  optional AndroidGarbageCollectionUnaggMetric android_post_boot_gc_metric = 2;
+}
+
+// End of protos/perfetto/metrics/android/android_boot_unagg.proto
 
 // Begin of protos/perfetto/metrics/android/android_frame_timeline_metric.proto
 
@@ -331,7 +449,7 @@ message AndroidBinderMetric {
     optional uint32 count = 4;
   }
 
-  // Next field id: 24
+  // Next field id: 30
   message UnaggregatedTxnBreakdown {
     // General
     optional string aidl_name = 1;
@@ -346,7 +464,10 @@ message AndroidBinderMetric {
     optional bool is_main_thread = 5;
     optional int64 client_ts = 6;
     optional int64 client_dur = 7;
+    optional int64 client_monotonic_dur = 28;
     optional int64 client_oom_score = 19;
+    optional int64 client_package_version_code = 24;
+    optional bool is_client_package_debuggable = 25;
     // Server
     // Removed: was binder_reply_id
     reserved 8;
@@ -354,7 +475,10 @@ message AndroidBinderMetric {
     optional string server_thread = 10;
     optional int64 server_ts = 11;
     optional int64 server_dur = 12;
+    optional int64 server_monotonic_dur = 29;
     optional int64 server_oom_score = 20;
+    optional int64 server_package_version_code = 26;
+    optional bool is_server_package_debuggable = 27;
     // Aggregations
     repeated ThreadStateBreakdown thread_states = 13;
     repeated BlockedFunctionBreakdown blocked_functions = 14;
@@ -1462,7 +1586,7 @@ message AndroidMonitorContentionAggMetric {
 // This metric provides information about the monitor contention graph in a
 // trace
 message AndroidMonitorContentionMetric {
-  // Next field id: 25
+  // Next field id: 26
   message Node {
     // Global context
     optional int64 node_parent_id = 1;
@@ -1470,6 +1594,7 @@ message AndroidMonitorContentionMetric {
     optional int64 node_id = 2;
     optional int64 ts = 3;
     optional int64 dur = 4;
+    optional int64 monotonic_dur = 25;
     optional string process_name = 14;
     optional uint32 pid = 23;
     optional uint32 waiter_count = 11;
@@ -2395,7 +2520,7 @@ message TraceAnalysisStats {
 
 // Root message for all Perfetto-based metrics.
 //
-// Next id: 61
+// Next id: 63
 message TraceMetrics {
   reserved 4, 10, 13, 14, 16, 19;
 
@@ -2559,6 +2684,16 @@ message TraceMetrics {
   optional SysuiNotifShadeListBuilderMetric sysui_notif_shade_list_builder_metric = 59;
 
   optional SysuiUpdateNotifOnUiModeChangedMetric sysui_update_notif_on_ui_mode_changed_metric = 60;
+
+  // Metrics for Process starts.
+  optional AndroidAppProcessStartsMetric android_app_process_starts = 61;
+
+  // Android boot unaggregated metrics.
+  optional AndroidBootUnagg android_boot_unagg = 62;
+
+  // Android garbage collection metrics
+  optional AndroidGarbageCollectionUnaggMetric android_garbage_collection_unagg = 63;
+
   // Demo extensions.
   extensions 450 to 499;
 

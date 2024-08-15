@@ -14,7 +14,6 @@
 #include <vector>
 
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
@@ -212,11 +211,11 @@ void PictureLayerTilingSet::VerifyTilings(
 #if DCHECK_IS_ON()
   for (const auto& tiling : tilings_) {
     DCHECK(tiling->tile_size() ==
-           client_->CalculateTileSize(tiling->tiling_size()))
+           client_->CalculateTileSize(tiling->tiling_rect().size()))
         << "tile_size: " << tiling->tile_size().ToString()
-        << " tiling_size: " << tiling->tiling_size().ToString()
+        << " tiling_size: " << tiling->tiling_rect().ToString()
         << " CalculateTileSize: "
-        << client_->CalculateTileSize(tiling->tiling_size()).ToString();
+        << client_->CalculateTileSize(tiling->tiling_rect().size()).ToString();
   }
 
   if (!tilings_.empty()) {
@@ -268,7 +267,7 @@ void PictureLayerTilingSet::CleanUpTilings(
 }
 
 void PictureLayerTilingSet::RemoveNonIdealTilings() {
-  base::EraseIf(tilings_, [](const std::unique_ptr<PictureLayerTiling>& t) {
+  std::erase_if(tilings_, [](const std::unique_ptr<PictureLayerTiling>& t) {
     return t->resolution() == NON_IDEAL_RESOLUTION;
   });
 }
@@ -345,7 +344,7 @@ PictureLayerTiling* PictureLayerTilingSet::FindTilingWithNearestScaleKey(
 
 void PictureLayerTilingSet::RemoveTilingsBelowScaleKey(
     float minimum_scale_key) {
-  base::EraseIf(
+  std::erase_if(
       tilings_,
       [minimum_scale_key](const std::unique_ptr<PictureLayerTiling>& tiling) {
         return tiling->contents_scale_key() < minimum_scale_key;
@@ -354,7 +353,7 @@ void PictureLayerTilingSet::RemoveTilingsBelowScaleKey(
 
 void PictureLayerTilingSet::RemoveTilingsAboveScaleKey(
     float maximum_scale_key) {
-  base::EraseIf(
+  std::erase_if(
       tilings_,
       [maximum_scale_key](const std::unique_ptr<PictureLayerTiling>& tiling) {
         return tiling->contents_scale_key() > maximum_scale_key;
@@ -502,7 +501,7 @@ void PictureLayerTilingSet::UpdatePriorityRects(
     eventually_rectf.Inset(-tiling_interest_area_padding_ /
                            ideal_contents_scale);
     if (eventually_rectf.Intersects(
-            gfx::RectF(gfx::SizeF(raster_source_->GetSize())))) {
+            gfx::RectF(raster_source_->recorded_bounds()))) {
       visible_rect_in_layer_space_ = visible_rect_in_layer_space;
       eventually_rect_in_layer_space_ = gfx::ToEnclosingRect(eventually_rectf);
     }

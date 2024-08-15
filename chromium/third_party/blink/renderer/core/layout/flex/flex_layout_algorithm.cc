@@ -5,7 +5,8 @@
 #include "third_party/blink/renderer/core/layout/flex/flex_layout_algorithm.h"
 
 #include <memory>
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include <optional>
+
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/layout/baseline_utils.h"
 #include "third_party/blink/renderer/core/layout/block_break_token.h"
@@ -92,14 +93,14 @@ class BaselineAccumulator {
     }
   }
 
-  absl::optional<LayoutUnit> FirstBaseline() const {
+  std::optional<LayoutUnit> FirstBaseline() const {
     if (first_major_baseline_)
       return *first_major_baseline_;
     if (first_minor_baseline_)
       return *first_minor_baseline_;
     return first_fallback_baseline_;
   }
-  absl::optional<LayoutUnit> LastBaseline() const {
+  std::optional<LayoutUnit> LastBaseline() const {
     if (last_minor_baseline_)
       return *last_minor_baseline_;
     if (last_major_baseline_)
@@ -110,13 +111,13 @@ class BaselineAccumulator {
  private:
   FontBaseline font_baseline_;
 
-  absl::optional<LayoutUnit> first_major_baseline_;
-  absl::optional<LayoutUnit> first_minor_baseline_;
-  absl::optional<LayoutUnit> first_fallback_baseline_;
+  std::optional<LayoutUnit> first_major_baseline_;
+  std::optional<LayoutUnit> first_minor_baseline_;
+  std::optional<LayoutUnit> first_fallback_baseline_;
 
-  absl::optional<LayoutUnit> last_major_baseline_;
-  absl::optional<LayoutUnit> last_minor_baseline_;
-  absl::optional<LayoutUnit> last_fallback_baseline_;
+  std::optional<LayoutUnit> last_major_baseline_;
+  std::optional<LayoutUnit> last_minor_baseline_;
+  std::optional<LayoutUnit> last_fallback_baseline_;
 };
 
 bool ContainsNonWhitespace(const LayoutBox* box) {
@@ -170,14 +171,11 @@ LayoutUnit FlexLayoutAlgorithm::MainAxisContentExtent(
     // the term "content".
     const LayoutUnit border_scrollbar_padding =
         BorderScrollbarPadding().BlockSum();
-    absl::optional<LayoutUnit> inline_size;
-    if (container_builder_.InlineSize() != kIndefiniteSize)
-      inline_size = container_builder_.InlineSize();
     return ComputeBlockSizeForFragment(
                GetConstraintSpace(), Style(), BorderPadding(),
                sum_hypothetical_main_size.ClampNegativeToZero() +
                    border_scrollbar_padding,
-               inline_size) -
+               container_builder_.InlineSize()) -
            border_scrollbar_padding;
   }
   return ChildAvailableSize().inline_size;
@@ -296,9 +294,8 @@ void FlexLayoutAlgorithm::HandleOutOfFlowPositionedItems(
       const auto& style = Style();
       const auto& child_style = child.Style();
       const PhysicalToLogical<Length> insets_in_flexbox_writing_mode(
-          Style().GetWritingDirection(), child_style.UsedTop(),
-          child_style.UsedRight(), child_style.UsedBottom(),
-          child_style.UsedLeft());
+          Style().GetWritingDirection(), child_style.Top(), child_style.Right(),
+          child_style.Bottom(), child_style.Left());
       if (is_column_) {
         const ItemPosition normalized_alignment =
             FlexibleBoxAlgorithm::AlignmentForChild(style, child_style);
@@ -417,6 +414,8 @@ bool FlexLayoutAlgorithm::IsUsedFlexBasisDefinite(
   const Length& flex_basis = GetUsedFlexBasis(child);
   if (out_flex_basis)
     *out_flex_basis = flex_basis;
+  // TODO(https://crbug.com/313072): This (and surrounding) tests should
+  // be HasAuto rather than IsAuto to account for calc-size().
   if (flex_basis.IsAuto() || flex_basis.IsContent())
     return false;
   const ConstraintSpace& space = BuildSpaceForFlexBasis(child);
@@ -430,6 +429,8 @@ bool FlexLayoutAlgorithm::IsItemCrossAxisLengthDefinite(
     const Length& length) const {
   // We don't consider inline value of 'auto' for the cross-axis min/main/max
   // size to be definite. Block value of 'auto' is always indefinite.
+  // TODO(https://crbug.com/313072): This (and surrounding) tests should
+  // be HasAuto rather than IsAuto to account for calc-size().
   if (length.IsAuto())
     return false;
   if (MainAxisIsInlineAxis(child))
@@ -441,16 +442,15 @@ bool FlexLayoutAlgorithm::DoesItemCrossSizeComputeToAuto(
     const BlockNode& child) const {
   const ComputedStyle& child_style = child.Style();
   if (is_horizontal_flow_) {
-    return child_style.UsedHeight().IsAuto();
+    return child_style.Height().IsAuto();
   }
-  return child_style.UsedWidth().IsAuto();
+  return child_style.Width().IsAuto();
 }
 
 bool FlexLayoutAlgorithm::AspectRatioProvidesMainSize(
     const BlockNode& child) const {
-  const Length& cross_axis_length = is_horizontal_flow_
-                                        ? child.Style().UsedHeight()
-                                        : child.Style().UsedWidth();
+  const Length& cross_axis_length =
+      is_horizontal_flow_ ? child.Style().Height() : child.Style().Width();
   return child.HasAspectRatio() &&
          (IsItemCrossAxisLengthDefinite(child, cross_axis_length) ||
           WillChildCrossSizeBeContainerCrossSize(child));
@@ -477,7 +477,7 @@ ConstraintSpace FlexLayoutAlgorithm::BuildSpaceForIntrinsicInlineSize(
 
 ConstraintSpace FlexLayoutAlgorithm::BuildSpaceForIntrinsicBlockSize(
     const BlockNode& flex_item,
-    absl::optional<LayoutUnit> override_inline_size) const {
+    std::optional<LayoutUnit> override_inline_size) const {
   const ComputedStyle& child_style = flex_item.Style();
   ConstraintSpaceBuilder space_builder(GetConstraintSpace(),
                                        child_style.GetWritingDirection(),
@@ -534,7 +534,7 @@ ConstraintSpace FlexLayoutAlgorithm::BuildSpaceForFlexBasis(
 Length FlexLayoutAlgorithm::GetUsedFlexBasis(const BlockNode& child) const {
   const ComputedStyle& child_style = child.Style();
   const Length& specified_length_in_main_axis =
-      is_horizontal_flow_ ? child_style.UsedWidth() : child_style.UsedHeight();
+      is_horizontal_flow_ ? child_style.Width() : child_style.Height();
   const Length& specified_flex_basis = child_style.FlexBasis();
 
   if (specified_flex_basis.IsAuto()) {
@@ -553,9 +553,9 @@ Length FlexLayoutAlgorithm::GetUsedFlexBasis(const BlockNode& child) const {
 ConstraintSpace FlexLayoutAlgorithm::BuildSpaceForLayout(
     const BlockNode& flex_item_node,
     LayoutUnit item_main_axis_final_size,
-    absl::optional<LayoutUnit> override_inline_size,
-    absl::optional<LayoutUnit> line_cross_size_for_stretch,
-    absl::optional<LayoutUnit> block_offset_for_fragmentation,
+    std::optional<LayoutUnit> override_inline_size,
+    std::optional<LayoutUnit> line_cross_size_for_stretch,
+    std::optional<LayoutUnit> block_offset_for_fragmentation,
     bool min_block_size_should_encompass_intrinsic_size) const {
   const ComputedStyle& child_style = flex_item_node.Style();
   ConstraintSpaceBuilder space_builder(GetConstraintSpace(),
@@ -674,7 +674,7 @@ void FlexLayoutAlgorithm::ConstructAndAppendFlexItems(
       continue;
     }
 
-    absl::optional<LayoutUnit> max_content_contribution;
+    std::optional<LayoutUnit> max_content_contribution;
     if (phase == Phase::kColumnWrapIntrinsicSize) {
       auto space = BuildSpaceForIntrinsicInlineSize(child);
       MinMaxSizesResult child_contributions =
@@ -722,12 +722,11 @@ void FlexLayoutAlgorithm::ConstructAndAppendFlexItems(
         is_horizontal_flow_ ? physical_border_padding.VerticalSum()
                             : physical_border_padding.HorizontalSum();
 
-    const Length& cross_axis_length = is_horizontal_flow_
-                                          ? child.Style().UsedHeight()
-                                          : child.Style().UsedWidth();
+    const Length& cross_axis_length =
+        is_horizontal_flow_ ? child.Style().Height() : child.Style().Width();
     all_items_have_non_auto_cross_sizes &= !cross_axis_length.IsAuto();
 
-    absl::optional<MinMaxSizesResult> min_max_sizes;
+    std::optional<MinMaxSizesResult> min_max_sizes;
     auto MinMaxSizesFunc = [&](MinMaxSizesType type) -> MinMaxSizesResult {
       if (!min_max_sizes) {
         // We want the child's intrinsic inline sizes in its writing mode, so
@@ -745,9 +744,9 @@ void FlexLayoutAlgorithm::ConstructAndAppendFlexItems(
                                                      LayoutUnit::Max()};
     MinMaxSizes min_max_sizes_in_cross_axis_direction{LayoutUnit(),
                                                       LayoutUnit::Max()};
-    const Length& max_property_in_main_axis =
-        is_horizontal_flow_ ? child.Style().UsedMaxWidth()
-                            : child.Style().UsedMaxHeight();
+    const Length& max_property_in_main_axis = is_horizontal_flow_
+                                                  ? child.Style().MaxWidth()
+                                                  : child.Style().MaxHeight();
     if (MainAxisIsInlineAxis(child)) {
       min_max_sizes_in_main_axis_direction.max_size = ResolveMaxInlineLength(
           flex_basis_space, child_style, border_padding_in_child_writing_mode,
@@ -778,8 +777,12 @@ void FlexLayoutAlgorithm::ConstructAndAppendFlexItems(
       if (MainAxisIsInlineAxis(child)) {
         cross_size = ResolveMainBlockLength(
             flex_basis_space, child_style, border_padding_in_child_writing_mode,
-            cross_axis_length_to_resolve, kIndefiniteSize);
+            cross_axis_length_to_resolve, /* auto_length */ nullptr,
+            kIndefiniteSize);
       } else {
+        // TODO(https://crbug.com/313072): This test should be moved
+        // into ResolveInlineLengthInternal so that it works with
+        // calc-size(fit-content, ...).
         if (cross_axis_length_to_resolve.IsFitContent() &&
             flex_basis_space.AvailableSize().inline_size == kIndefiniteSize) {
           // TODO(dgrogan): Figure out if orthogonal items require a similar
@@ -790,7 +793,7 @@ void FlexLayoutAlgorithm::ConstructAndAppendFlexItems(
           cross_size = ResolveMainInlineLength(
               flex_basis_space, child_style,
               border_padding_in_child_writing_mode, MinMaxSizesFunc,
-              cross_axis_length_to_resolve);
+              cross_axis_length_to_resolve, /* auto_length */ nullptr);
         }
       }
 
@@ -808,27 +811,7 @@ void FlexLayoutAlgorithm::ConstructAndAppendFlexItems(
     };
 
     const LayoutResult* layout_result = nullptr;
-    auto IntrinsicBlockSizeFunc =
-        [&](MinMaxSizesType type = MinMaxSizesType::kIntrinsic) -> LayoutUnit {
-      if (type == MinMaxSizesType::kContent && child.HasAspectRatio() &&
-          !child.IsReplaced()) {
-        // We don't enter here for replaced children because (a) this block
-        // doesn't account for natural sizes so wouldn't work for replaced
-        // elements, and (b) IntrinsicBlockSize() below already returns the
-        // kContent block size for replaced elements.
-        DCHECK(!AspectRatioProvidesMainSize(child))
-            << "We only ever call IntrinsicBlockSizeFunc with kContent for "
-               "determing flex base size in case E. If "
-               "AspectRatioProvidesMainSize==true, we would have fallen into "
-               "case B, not case E.";
-        DCHECK(!MainAxisIsInlineAxis(child))
-            << "We assume that the main axis is block axis in the call to "
-               "BlockSum() below.";
-        return AdjustMainSizeForAspectRatioCrossAxisMinAndMax(
-            child, ComputeTransferredMainSize(),
-            min_max_sizes_in_cross_axis_direction,
-            border_padding_in_child_writing_mode);
-      }
+    auto IntrinsicBlockSizeFunc = [&]() -> LayoutUnit {
       if (!layout_result) {
         ConstraintSpace child_space =
             BuildSpaceForIntrinsicBlockSize(child, max_content_contribution);
@@ -843,6 +826,27 @@ void FlexLayoutAlgorithm::ConstructAndAppendFlexItems(
         DCHECK(layout_result);
       }
       return layout_result->IntrinsicBlockSize();
+    };
+    auto ContentBlockSizeFunc = [&]() -> LayoutUnit {
+      if (child.HasAspectRatio() && !child.IsReplaced()) {
+        // We don't enter here for replaced children because (a) this block
+        // doesn't account for natural sizes so wouldn't work for replaced
+        // elements, and (b) IntrinsicBlockSize() below already returns the
+        // kContent block size for replaced elements.
+        DCHECK(!AspectRatioProvidesMainSize(child))
+            << "We only ever call ContentBlockSizeFunc for "
+               "determing flex base size in case E. If "
+               "AspectRatioProvidesMainSize==true, we would have fallen into "
+               "case B, not case E.";
+        DCHECK(!MainAxisIsInlineAxis(child))
+            << "We assume that the main axis is block axis in the call to "
+               "BlockSum() below.";
+        return AdjustMainSizeForAspectRatioCrossAxisMinAndMax(
+            child, ComputeTransferredMainSize(),
+            min_max_sizes_in_cross_axis_direction,
+            border_padding_in_child_writing_mode);
+      }
+      return IntrinsicBlockSizeFunc();
     };
 
     Length flex_basis_length;
@@ -867,23 +871,25 @@ void FlexLayoutAlgorithm::ConstructAndAppendFlexItems(
             MinMaxSizesFunc(MinMaxSizesType::kContent).sizes.max_size;
       } else {
         // Parts C, D, and E for what are usually column flex containers.
-        flex_base_border_box =
-            IntrinsicBlockSizeFunc(MinMaxSizesType::kContent);
+        flex_base_border_box = ContentBlockSizeFunc();
       }
     } else {
+      // TODO(https://crbug.com/313072): Rewrite these (and related)
+      // tests for calc-size().
       DCHECK(!flex_basis_length.IsAuto());
       DCHECK(!flex_basis_length.IsContent());
       // Part A of 9.2.3 https://drafts.csswg.org/css-flexbox/#algo-main-item
       if (MainAxisIsInlineAxis(child)) {
         flex_base_border_box = ResolveMainInlineLength(
             flex_basis_space, child_style, border_padding_in_child_writing_mode,
-            MinMaxSizesFunc, flex_basis_length);
+            MinMaxSizesFunc, flex_basis_length, /* auto_length */ nullptr);
       } else {
         // Flex container's main axis is in child's block direction. Child's
         // flex basis is in child's block direction.
         flex_base_border_box = ResolveMainBlockLength(
             flex_basis_space, child_style, border_padding_in_child_writing_mode,
-            flex_basis_length, IntrinsicBlockSizeFunc);
+            flex_basis_length, /* auto_length */ nullptr,
+            IntrinsicBlockSizeFunc);
         if (const auto* table_child = DynamicTo<TableNode>(&child)) {
           // (1) A table interprets forced block size as the height of its
           // captions + rows.
@@ -907,8 +913,8 @@ void FlexLayoutAlgorithm::ConstructAndAppendFlexItems(
     LayoutUnit flex_base_content_size =
         flex_base_border_box - main_axis_border_padding;
 
-    const Length& min = is_horizontal_flow_ ? child.Style().UsedMinWidth()
-                                            : child.Style().UsedMinHeight();
+    const Length& min = is_horizontal_flow_ ? child.Style().MinWidth()
+                                            : child.Style().MinHeight();
     if (algorithm_.ShouldApplyMinSizeAutoForChild(*child.GetLayoutBox())) {
       LayoutUnit content_size_suggestion;
       if (MainAxisIsInlineAxis(child)) {
@@ -927,31 +933,31 @@ void FlexLayoutAlgorithm::ConstructAndAppendFlexItems(
                 border_padding_in_child_writing_mode);
       }
 
-      LayoutUnit specified_size_suggestion = LayoutUnit::Max();
-      const Length& specified_length_in_main_axis =
-          is_horizontal_flow_ ? child_style.UsedWidth()
-                              : child_style.UsedHeight();
-      // If the item’s computed main size property is definite, then the
-      // specified size suggestion is that size.
-      if (MainAxisIsInlineAxis(child)) {
-        if (!specified_length_in_main_axis.IsAuto() &&
-            !InlineLengthUnresolvable(flex_basis_space,
-                                      specified_length_in_main_axis)) {
-          // Note: we may have already resolved specified_length_in_main_axis
-          // when calculating flex basis. Reusing that in the current code
-          // structure is a lot of work, so just recalculate here.
-          specified_size_suggestion = ResolveMainInlineLength(
-              flex_basis_space, child_style,
-              border_padding_in_child_writing_mode, MinMaxSizesFunc,
-              specified_length_in_main_axis);
+      const LayoutUnit specified_size_suggestion = ([&]() -> LayoutUnit {
+        const Length& specified_length_in_main_axis =
+            is_horizontal_flow_ ? child_style.Width() : child_style.Height();
+        // TODO(https://crbug.com/313072): This (and surrounding) tests
+        // should be HasAuto rather than IsAuto to account for
+        // calc-size().
+        if (specified_length_in_main_axis.IsAuto()) {
+          return LayoutUnit::Max();
         }
-      } else if (!BlockLengthUnresolvable(flex_basis_space,
-                                          specified_length_in_main_axis)) {
-        specified_size_suggestion = ResolveMainBlockLength(
-            flex_basis_space, child_style, border_padding_in_child_writing_mode,
-            specified_length_in_main_axis, IntrinsicBlockSizeFunc);
-        DCHECK_NE(specified_size_suggestion, kIndefiniteSize);
-      }
+        const LayoutUnit resolved_size =
+            MainAxisIsInlineAxis(child)
+                ? ResolveMainInlineLength(
+                      flex_basis_space, child_style,
+                      border_padding_in_child_writing_mode, MinMaxSizesFunc,
+                      specified_length_in_main_axis, /* auto_length */ nullptr)
+                : ResolveMainBlockLength(flex_basis_space, child_style,
+                                         border_padding_in_child_writing_mode,
+                                         specified_length_in_main_axis,
+                                         /* auto_length */ nullptr,
+                                         IntrinsicBlockSizeFunc);
+
+        // Coerce an indefinite size to LayoutUnit::Max().
+        return resolved_size == kIndefiniteSize ? LayoutUnit::Max()
+                                                : resolved_size;
+      })();
 
       LayoutUnit transferred_size_suggestion = LayoutUnit::Max();
       if (specified_size_suggestion == LayoutUnit::Max() &&
@@ -1099,7 +1105,7 @@ const LayoutResult* FlexLayoutAlgorithm::RelayoutAndBreakEarlierForFlex(
 const LayoutResult* FlexLayoutAlgorithm::LayoutInternal() {
   // Freezing the scrollbars for the sub-tree shouldn't be strictly necessary,
   // but we do this just in case we trigger an unstable layout.
-  absl::optional<PaintLayerScrollableArea::FreezeScrollbarsScope>
+  std::optional<PaintLayerScrollableArea::FreezeScrollbarsScope>
       freeze_scrollbars;
   if (ignore_child_scrollbar_changes_)
     freeze_scrollbars.emplace();
@@ -1468,7 +1474,7 @@ LayoutResult::EStatus FlexLayoutAlgorithm::GiveItemsFinalPositionAndSize(
       if (DoesItemStretch(flex_item.ng_input_node)) {
         ConstraintSpace child_space = BuildSpaceForLayout(
             flex_item.ng_input_node, flex_item.main_axis_final_size,
-            /* override_inline_size */ absl::nullopt,
+            /* override_inline_size */ std::nullopt,
             line_output.line_cross_size);
         layout_result =
             flex_item.ng_input_node.Layout(child_space,
@@ -1775,10 +1781,10 @@ FlexLayoutAlgorithm::GiveItemsFinalPositionAndSizeForFragmentation(
       }
     }
 
-    absl::optional<LayoutUnit> line_cross_size_for_stretch =
+    std::optional<LayoutUnit> line_cross_size_for_stretch =
         DoesItemStretch(flex_item->ng_input_node)
-            ? absl::optional<LayoutUnit>(line_output.line_cross_size)
-            : absl::nullopt;
+            ? std::optional<LayoutUnit>(line_output.line_cross_size)
+            : std::nullopt;
 
     // If an item broke, its offset may have expanded (as the result of a
     // current or previous break before), in which case, we shouldn't expand by
@@ -1798,7 +1804,7 @@ FlexLayoutAlgorithm::GiveItemsFinalPositionAndSizeForFragmentation(
         MinBlockSizeShouldEncompassIntrinsicSize(*flex_item);
     ConstraintSpace child_space = BuildSpaceForLayout(
         flex_item->ng_input_node, flex_item->main_axis_final_size,
-        /* override_inline_size */ absl::nullopt, line_cross_size_for_stretch,
+        /* override_inline_size */ std::nullopt, line_cross_size_for_stretch,
         offset.block_offset, min_block_size_should_encompass_intrinsic_size);
     const LayoutResult* layout_result = flex_item->ng_input_node.Layout(
         child_space, item_break_token, early_break_in_child);
@@ -2131,7 +2137,7 @@ void FlexLayoutAlgorithm::AdjustButtonBaseline(
       container_builder_.Children();
   if (children.size() < 1) {
     const LayoutBlock* layout_block = To<LayoutBlock>(Node().GetLayoutBox());
-    absl::optional<LayoutUnit> baseline = layout_block->BaselineForEmptyLine();
+    std::optional<LayoutUnit> baseline = layout_block->BaselineForEmptyLine();
     if (container_builder_.FirstBaseline() != baseline) {
       UseCounter::Count(Node().GetDocument(),
                         WebFeature::kWrongBaselineOfEmptyLineButton);
@@ -2144,7 +2150,7 @@ void FlexLayoutAlgorithm::AdjustButtonBaseline(
   const auto& space = GetConstraintSpace();
   LogicalBoxFragment fragment(space.GetWritingDirection(),
                               To<PhysicalBoxFragment>(*child.fragment));
-  absl::optional<LayoutUnit> child_baseline =
+  std::optional<LayoutUnit> child_baseline =
       space.GetBaselineAlgorithmType() == BaselineAlgorithmType::kDefault
           ? fragment.FirstBaseline()
           : fragment.LastBaseline();
@@ -2526,7 +2532,7 @@ const LayoutResult* FlexLayoutAlgorithm::RelayoutWithNewRowSizes() {
   FlexLayoutAlgorithm algorithm_with_row_cross_sizes(params,
                                                      &row_cross_size_updates_);
   auto& new_builder = algorithm_with_row_cross_sizes.container_builder_;
-  new_builder.SetBoxType(container_builder_.BoxType());
+  new_builder.SetBoxType(container_builder_.GetBoxType());
   algorithm_with_row_cross_sizes.ignore_child_scrollbar_changes_ =
       ignore_child_scrollbar_changes_;
 
@@ -2574,14 +2580,15 @@ bool FlexLayoutAlgorithm::MinBlockSizeShouldEncompassIntrinsicSize(
 
     // Only allow growth if the item's block-size is auto and either the item
     // can't shrink or its min-height is auto.
-    if (item_style.LogicalHeight().IsAutoOrContentOrIntrinsic() &&
+    if (item_style.LogicalHeight().HasAutoOrContentOrIntrinsic() &&
         (!can_shrink || algorithm_.ShouldApplyMinSizeAutoForChild(
-                            *item.ng_input_node.GetLayoutBox())))
+                            *item.ng_input_node.GetLayoutBox()))) {
       return true;
+    }
   } else {
     // Don't grow if the item's block-size should be the same as its container.
     if (WillChildCrossSizeBeContainerCrossSize(item.ng_input_node) &&
-        !Style().LogicalHeight().IsAutoOrContentOrIntrinsic()) {
+        !Style().LogicalHeight().HasAutoOrContentOrIntrinsic()) {
       return false;
     }
 

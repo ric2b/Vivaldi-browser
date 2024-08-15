@@ -207,7 +207,7 @@ D. Local Modifications
      windowsZones.txt
      zoneinfo64.txt
 
-  As of Mar 31, 2023, the latest version is 2023c
+  As of Mar 5, 2024, the latest version is 2024a
   and the above files are available at the ICU github repos.
 
 4. Build-related changes
@@ -272,3 +272,7 @@ D. Local Modifications
     patches/revert_realpath.patch
   - https://bugs.chromium.org/p/chromium/issues/detail?id=1473422
   - https://unicode-org.atlassian.net/browse/ICU-22541
+
+13. Patch fix of uloc_tag.cpp
+    patches/uloc_tag_buffer_overflow.patch
+  - https://github.com/unicode-org/icu/pull/2600/files

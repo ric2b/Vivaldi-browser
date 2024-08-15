@@ -79,8 +79,9 @@ void JankMetrics::AddFrameWithNoUpdate(uint32_t sequence_number,
 
   // This prevents the no-update frame queue from growing infinitely on an idle
   // page.
-  if (queue_frame_id_and_interval_.size() > kMaxNoUpdateFrameQueueLength)
+  if (queue_frame_id_and_interval_.size() > kMaxNoUpdateFrameQueueLength) {
     queue_frame_id_and_interval_.pop();
+  }
 }
 
 void JankMetrics::AddPresentedFrame(
@@ -111,8 +112,9 @@ void JankMetrics::AddPresentedFrame(
   // If for any reason the sequence number associated with the
   // presented_frame_token cannot be identified, then ignore this frame
   // presentation.
-  if (presented_frame_id == 0)
+  if (presented_frame_id == 0) {
     return;
+  }
 
   base::TimeDelta no_update_time;  // The frame time spanned by the frames that
                                    // have no updates
@@ -162,8 +164,9 @@ void JankMetrics::AddPresentedFrame(
   // A, whereas Presentation B occurs in the same vsync cycle as BeginFrame B.
   // In this situation, the physical presentation interval is shorter than 5
   // vsync cycles and will result in a negative |current_frame_delta|.
-  if (current_frame_delta < zero_delta)
+  if (current_frame_delta < zero_delta) {
     current_frame_delta = zero_delta;
+  }
 
   // Only start tracking jank if this function has already been
   // called at least once (so that |last_presentation_timestamp_|
@@ -176,8 +179,9 @@ void JankMetrics::AddPresentedFrame(
   // fluctuations.
   if (!last_presentation_timestamp_.is_null()) {
     base::TimeDelta staleness = current_frame_delta - frame_interval;
-    if (staleness < zero_delta)
+    if (staleness < zero_delta) {
       staleness = zero_delta;
+    }
 
     if (tracker_type_ != FrameSequenceTrackerType::kCustom) {
       STATIC_HISTOGRAM_POINTER_GROUP(
@@ -188,8 +192,9 @@ void JankMetrics::AddPresentedFrame(
               GetStaleHistogramName(tracker_type_), kStaleHistogramMin,
               kStaleHistogramMax, kStaleHistogramBucketCount,
               base::HistogramBase::kUmaTargetedHistogramFlag));
-      if (staleness > max_staleness_)
+      if (staleness > max_staleness_) {
         max_staleness_ = staleness;
+      }
     }
 
     if (!prev_frame_delta_.is_zero() &&
@@ -203,8 +208,9 @@ void JankMetrics::AddPresentedFrame(
 }
 
 void JankMetrics::ReportJankMetrics(int frames_expected) {
-  if (tracker_type_ == FrameSequenceTrackerType::kCustom)
+  if (tracker_type_ == FrameSequenceTrackerType::kCustom) {
     return;
+  }
 
   // Report the max staleness metrics
   STATIC_HISTOGRAM_POINTER_GROUP(

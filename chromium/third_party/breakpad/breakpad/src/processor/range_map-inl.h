@@ -250,7 +250,7 @@ bool RangeMap<AddressType, EntryType>::RetrieveNearestRange(
 
 template<typename AddressType, typename EntryType>
 bool RangeMap<AddressType, EntryType>::RetrieveRangeAtIndex(
-    int index, EntryType* entry, AddressType* entry_base,
+    int64_t index, EntryType* entry, AddressType* entry_base,
     AddressType* entry_delta, AddressType* entry_size) const {
   BPLOG_IF(ERROR, !entry) << "RangeMap::RetrieveRangeAtIndex requires |entry|";
   assert(entry);
@@ -263,7 +263,7 @@ bool RangeMap<AddressType, EntryType>::RetrieveRangeAtIndex(
   // Walk through the map.  Although it's ordered, it's not a vector, so it
   // can't be addressed directly by index.
   MapConstIterator iterator = map_.begin();
-  for (int this_index = 0; this_index < index; ++this_index)
+  for (int64_t this_index = 0; this_index < index; ++this_index)
     ++iterator;
 
   *entry = iterator->second.entry();
@@ -279,8 +279,8 @@ bool RangeMap<AddressType, EntryType>::RetrieveRangeAtIndex(
 
 
 template<typename AddressType, typename EntryType>
-int RangeMap<AddressType, EntryType>::GetCount() const {
-  return static_cast<int>(map_.size());
+int64_t RangeMap<AddressType, EntryType>::GetCount() const {
+  return static_cast<int64_t>(map_.size());
 }
 
 

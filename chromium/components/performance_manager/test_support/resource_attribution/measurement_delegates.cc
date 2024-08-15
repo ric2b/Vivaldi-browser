@@ -13,7 +13,10 @@
 #include "components/performance_manager/public/graph/process_node.h"
 #include "content/public/common/process_type.h"
 
-namespace performance_manager::resource_attribution {
+namespace resource_attribution {
+
+using Graph = performance_manager::Graph;
+using ProcessNode = performance_manager::ProcessNode;
 
 SimulatedCPUMeasurementDelegateFactory::
     SimulatedCPUMeasurementDelegateFactory() = default;
@@ -118,17 +121,10 @@ void SimulatedCPUMeasurementDelegate::SetCPUUsage(SimulatedCPUUsage usage,
   });
 }
 
-void SimulatedCPUMeasurementDelegate::SetError(base::TimeDelta usage_error) {
-  usage_error_ = usage_error;
-}
-
-void SimulatedCPUMeasurementDelegate::ClearError() {
-  usage_error_ = absl::nullopt;
-}
-
-base::TimeDelta SimulatedCPUMeasurementDelegate::GetCumulativeCPUUsage() {
-  if (usage_error_.has_value()) {
-    return usage_error_.value();
+std::optional<base::TimeDelta>
+SimulatedCPUMeasurementDelegate::GetCumulativeCPUUsage() {
+  if (has_error_) {
+    return std::nullopt;
   }
   base::TimeDelta cumulative_usage;
   for (const auto& usage_period : cpu_usage_periods_) {
@@ -168,4 +164,4 @@ void FakeMemoryMeasurementDelegate::RequestMemorySummary(
   std::move(callback).Run(factory_->memory_summaries());
 }
 
-}  // namespace performance_manager::resource_attribution
+}  // namespace resource_attribution

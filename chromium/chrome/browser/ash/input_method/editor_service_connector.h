@@ -13,6 +13,8 @@
 #include "mojo/public/cpp/bindings/remote.h"
 
 namespace ash::input_method {
+
+// TODO(b/328330399): Modify this class to make testing easier and add tests.
 class EditorServiceConnector {
  public:
   EditorServiceConnector();
@@ -23,7 +25,8 @@ class EditorServiceConnector {
           editor_client_connector,
       mojo::PendingAssociatedReceiver<orca::mojom::EditorEventSink>
           editor_event_sink,
-      mojo::PendingAssociatedRemote<orca::mojom::TextActuator> text_actuator,
+      mojo::PendingAssociatedRemote<orca::mojom::SystemActuator>
+          system_actuator,
       mojo::PendingAssociatedRemote<orca::mojom::TextQueryProvider>
           text_query_provider);
 

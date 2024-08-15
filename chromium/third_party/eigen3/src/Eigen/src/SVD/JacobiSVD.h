@@ -105,7 +105,7 @@ class qr_preconditioner_impl<MatrixType, Options, FullPivHouseholderQRPreconditi
     ColsAtCompileTime = MatrixType::ColsAtCompileTime,
     MaxRowsAtCompileTime = MatrixType::MaxRowsAtCompileTime,
     MaxColsAtCompileTime = MatrixType::MaxColsAtCompileTime,
-    MatrixOptions = MatrixType::Options
+    MatrixOptions = traits<MatrixType>::Options
   };
 
   typedef typename internal::make_proper_matrix_type<Scalar, ColsAtCompileTime, RowsAtCompileTime, MatrixOptions,
@@ -202,7 +202,7 @@ class qr_preconditioner_impl<MatrixType, Options, ColPivHouseholderQRPreconditio
     ColsAtCompileTime = MatrixType::ColsAtCompileTime,
     MaxRowsAtCompileTime = MatrixType::MaxRowsAtCompileTime,
     MaxColsAtCompileTime = MatrixType::MaxColsAtCompileTime,
-    MatrixOptions = MatrixType::Options,
+    MatrixOptions = internal::traits<MatrixType>::Options,
     WorkspaceSize = internal::traits<SVDType>::MatrixVColsAtCompileTime,
     MaxWorkspaceSize = internal::traits<SVDType>::MatrixVMaxColsAtCompileTime
   };
@@ -310,7 +310,7 @@ class qr_preconditioner_impl<MatrixType, Options, HouseholderQRPreconditioner, P
     ColsAtCompileTime = MatrixType::ColsAtCompileTime,
     MaxRowsAtCompileTime = MatrixType::MaxRowsAtCompileTime,
     MaxColsAtCompileTime = MatrixType::MaxColsAtCompileTime,
-    MatrixOptions = MatrixType::Options,
+    MatrixOptions = internal::traits<MatrixType>::Options,
     WorkspaceSize = internal::traits<SVDType>::MatrixVColsAtCompileTime,
     MaxWorkspaceSize = internal::traits<SVDType>::MatrixVMaxColsAtCompileTime
   };

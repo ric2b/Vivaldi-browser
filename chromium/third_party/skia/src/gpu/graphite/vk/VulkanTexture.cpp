@@ -141,8 +141,8 @@ bool VulkanTexture::MakeVkImage(const VulkanSharedContext* sharedContext,
     }
 
     outInfo->fImage = image;
-    outInfo->fMutableState = sk_make_sp<MutableTextureState>(initialLayout,
-                                                                VK_QUEUE_FAMILY_IGNORED);
+    outInfo->fMutableState = sk_make_sp<MutableTextureState>(
+            skgpu::MutableTextureStates::MakeVulkan(initialLayout, VK_QUEUE_FAMILY_IGNORED));
     return true;
 }
 
@@ -330,6 +330,10 @@ void VulkanTexture::freeGpuData() {
                     DestroyImage(sharedContext->device(), fImage, nullptr));
         skgpu::VulkanMemory::FreeImageMemory(sharedContext->memoryAllocator(), fMemoryAlloc);
     }
+}
+
+void VulkanTexture::updateImageLayout(VkImageLayout newLayout) {
+    skgpu::MutableTextureStates::SetVkImageLayout(this->mutableState(), newLayout);
 }
 
 VkImageLayout VulkanTexture::currentLayout() const {

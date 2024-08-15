@@ -31,14 +31,15 @@ SyncManager::SyncManager(ServiceWorkerRegistration* registration,
       background_sync_service_.BindNewPipeAndPassReceiver(task_runner));
 }
 
-ScriptPromise SyncManager::registerFunction(ScriptState* script_state,
-                                            const String& tag,
-                                            ExceptionState& exception_state) {
+ScriptPromiseTyped<IDLUndefined> SyncManager::registerFunction(
+    ScriptState* script_state,
+    const String& tag,
+    ExceptionState& exception_state) {
   if (!registration_->active()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
         "Registration failed - no active Service Worker");
-    return ScriptPromise();
+    return ScriptPromiseTyped<IDLUndefined>();
   }
 
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
@@ -46,12 +47,13 @@ ScriptPromise SyncManager::registerFunction(ScriptState* script_state,
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotAllowedError,
         "Background Sync is not allowed in fenced frames.");
-    return ScriptPromise();
+    return ScriptPromiseTyped<IDLUndefined>();
   }
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
-      script_state, exception_state.GetContext());
-  ScriptPromise promise = resolver->Promise();
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolverTyped<IDLUndefined>>(
+          script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
 
   mojom::blink::SyncRegistrationOptionsPtr sync_registration =
       mojom::blink::SyncRegistrationOptions::New();
@@ -65,17 +67,20 @@ ScriptPromise SyncManager::registerFunction(ScriptState* script_state,
   return promise;
 }
 
-ScriptPromise SyncManager::getTags(ScriptState* script_state) {
+ScriptPromiseTyped<IDLSequence<IDLString>> SyncManager::getTags(
+    ScriptState* script_state) {
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   if (execution_context->IsInFencedFrame()) {
-    return ScriptPromise::RejectWithDOMException(
+    return ScriptPromiseTyped<IDLSequence<IDLString>>::RejectWithDOMException(
         script_state, MakeGarbageCollected<DOMException>(
                           DOMExceptionCode::kNotAllowedError,
                           "Background Sync is not allowed in fenced frames."));
   }
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
-  ScriptPromise promise = resolver->Promise();
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolverTyped<IDLSequence<IDLString>>>(
+          script_state);
+  auto promise = resolver->Promise();
 
   background_sync_service_->GetRegistrations(
       registration_->RegistrationId(),
@@ -86,18 +91,17 @@ ScriptPromise SyncManager::getTags(ScriptState* script_state) {
 }
 
 void SyncManager::RegisterCallback(
-    ScriptPromiseResolver* resolver,
+    ScriptPromiseResolverTyped<IDLUndefined>* resolver,
     mojom::blink::BackgroundSyncError error,
     mojom::blink::SyncRegistrationOptionsPtr options) {
   DCHECK(resolver);
   // TODO(iclelland): Determine the correct error message to return in each case
   switch (error) {
     case mojom::blink::BackgroundSyncError::NONE:
+      resolver->Resolve();
       if (!options) {
-        resolver->Resolve(v8::Null(resolver->GetScriptState()->GetIsolate()));
         break;
       }
-      resolver->Resolve();
       // Let the service know that the registration promise is resolved so that
       // it can fire the event.
 
@@ -137,7 +141,7 @@ void SyncManager::RegisterCallback(
 
 // static
 void SyncManager::GetRegistrationsCallback(
-    ScriptPromiseResolver* resolver,
+    ScriptPromiseResolverTyped<IDLSequence<IDLString>>* resolver,
     mojom::blink::BackgroundSyncError error,
     WTF::Vector<mojom::blink::SyncRegistrationOptionsPtr> registrations) {
   DCHECK(resolver);
@@ -148,7 +152,7 @@ void SyncManager::GetRegistrationsCallback(
       for (const auto& r : registrations) {
         tags.push_back(r->tag);
       }
-      resolver->Resolve<IDLSequence<IDLString>>(tags);
+      resolver->Resolve(tags);
       break;
     }
     case mojom::blink::BackgroundSyncError::NOT_FOUND:

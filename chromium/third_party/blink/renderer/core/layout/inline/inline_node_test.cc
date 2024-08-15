@@ -82,7 +82,7 @@ class InlineNodeForTest : public InlineNode {
   void SegmentText() {
     InlineNodeData* data = MutableData();
     data->is_bidi_enabled_ = true;
-    InlineNode::SegmentText(data);
+    InlineNode::SegmentText(data, nullptr);
   }
 
   void CollectInlines() { InlineNode::CollectInlines(MutableData()); }
@@ -627,10 +627,7 @@ TEST_F(InlineNodeTest, AssociatedItemsWithControlItem) {
   SetBodyInnerHTML(
       "<pre id=t style='-webkit-rtl-ordering:visual'>ab\nde</pre>");
   auto* const layout_text =
-      To<LayoutText>(GetDocument()
-                         .getElementById(AtomicString("t"))
-                         ->firstChild()
-                         ->GetLayoutObject());
+      To<LayoutText>(GetElementById("t")->firstChild()->GetLayoutObject());
   ASSERT_TRUE(layout_text->HasValidInlineItems());
   Vector<const InlineItem*> items;
   for (const InlineItem& item : layout_text->InlineItems()) {
@@ -675,6 +672,20 @@ TEST_F(InlineNodeTest, NeedsCollectInlinesOnSetText) {
   EXPECT_FALSE(next->GetLayoutObject()->NeedsCollectInlines());
 }
 
+// crbug.com/325306591
+// We had a crash in OffsetMapping building during SetTextWithOffset().
+TEST_F(InlineNodeTest, SetTextWithOffsetWithTextTransform) {
+  SetBodyInnerHTML(R"HTML(
+    <div id="container" style="text-transform:uppercase">&#xdf;X</div>)HTML");
+
+  Element* container = GetElementById("container");
+  auto* text = To<Text>(container->firstChild());
+
+  text->deleteData(1, 1, ASSERT_NO_EXCEPTION);
+  UpdateAllLifecyclePhasesForTest();
+  // Pass if no crash in InlineItemsBuilder.
+}
+
 struct StyleChangeData {
   const char* css;
   enum ChangedElements {
@@ -688,8 +699,8 @@ struct StyleChangeData {
     kAll = kText | kParentAndAbove,
   };
   unsigned needs_collect_inlines;
-  absl::optional<bool> is_line_dirty;
-  absl::optional<bool> invalidate_ink_overflow;
+  std::optional<bool> is_line_dirty;
+  std::optional<bool> invalidate_ink_overflow;
 } style_change_data[] = {
     // Changing color, text-decoration, outline, etc. should not re-run
     // |CollectInlines()|.

@@ -811,6 +811,8 @@ std::vector<VideoCodec> WebRtcVideoEngine::recv_codecs(bool include_rtx) const {
 std::vector<webrtc::RtpHeaderExtensionCapability>
 WebRtcVideoEngine::GetRtpHeaderExtensions() const {
   std::vector<webrtc::RtpHeaderExtensionCapability> result;
+  // id is *not* incremented for non-default extensions, UsedIds needs to
+  // resolve conflicts.
   int id = 1;
   for (const auto& uri :
        {webrtc::RtpExtension::kTimestampOffsetUri,
@@ -825,27 +827,26 @@ WebRtcVideoEngine::GetRtpHeaderExtensions() const {
     result.emplace_back(uri, id++, webrtc::RtpTransceiverDirection::kSendRecv);
   }
   for (const auto& uri : {webrtc::RtpExtension::kAbsoluteCaptureTimeUri}) {
-    result.emplace_back(uri, id++, webrtc::RtpTransceiverDirection::kStopped);
+    result.emplace_back(uri, id, webrtc::RtpTransceiverDirection::kStopped);
   }
-  result.emplace_back(webrtc::RtpExtension::kGenericFrameDescriptorUri00, id++,
+  result.emplace_back(webrtc::RtpExtension::kGenericFrameDescriptorUri00, id,
                       IsEnabled(trials_, "WebRTC-GenericDescriptorAdvertised")
                           ? webrtc::RtpTransceiverDirection::kSendRecv
                           : webrtc::RtpTransceiverDirection::kStopped);
   result.emplace_back(
-      webrtc::RtpExtension::kDependencyDescriptorUri, id++,
+      webrtc::RtpExtension::kDependencyDescriptorUri, id,
       IsEnabled(trials_, "WebRTC-DependencyDescriptorAdvertised")
           ? webrtc::RtpTransceiverDirection::kSendRecv
           : webrtc::RtpTransceiverDirection::kStopped);
-
   result.emplace_back(
-      webrtc::RtpExtension::kVideoLayersAllocationUri, id++,
+      webrtc::RtpExtension::kVideoLayersAllocationUri, id,
       IsEnabled(trials_, "WebRTC-VideoLayersAllocationAdvertised")
           ? webrtc::RtpTransceiverDirection::kSendRecv
           : webrtc::RtpTransceiverDirection::kStopped);
 
   // VideoFrameTrackingId is a test-only extension.
   if (IsEnabled(trials_, "WebRTC-VideoFrameTrackingIdAdvertised")) {
-    result.emplace_back(webrtc::RtpExtension::kVideoFrameTrackingIdUri, id++,
+    result.emplace_back(webrtc::RtpExtension::kVideoFrameTrackingIdUri, id,
                         webrtc::RtpTransceiverDirection::kSendRecv);
   }
   return result;
@@ -1965,8 +1966,7 @@ WebRtcVideoSendChannel::WebRtcVideoSendStream::SetRtpParameters(
   webrtc::RTCError error = CheckRtpParametersInvalidModificationAndValues(
       rtp_parameters_, new_parameters);
   if (!error.ok()) {
-    // Error is propagated to the callback at a higher level
-    return error;
+    return webrtc::InvokeSetParametersCallback(callback, error);
   }
 
   bool new_param = false;
@@ -2013,6 +2013,7 @@ WebRtcVideoSendChannel::WebRtcVideoSendStream::SetRtpParameters(
       new_send_state = true;
     }
   }
+
   rtp_parameters_ = new_parameters;
   // Codecs are currently handled at the WebRtcVideoSendChannel level.
   rtp_parameters_.codecs.clear();
@@ -2020,9 +2021,6 @@ WebRtcVideoSendChannel::WebRtcVideoSendStream::SetRtpParameters(
     // Callback responsibility is delegated to ReconfigureEncoder()
     ReconfigureEncoder(std::move(callback));
     callback = nullptr;
-  }
-  if (new_send_state) {
-    UpdateSendState();
   }
   if (new_degradation_preference) {
     if (source_ && stream_) {
@@ -2082,27 +2080,9 @@ void WebRtcVideoSendChannel::WebRtcVideoSendStream::UpdateSendState() {
   RTC_DCHECK_RUN_ON(&thread_checker_);
   if (sending_) {
     RTC_DCHECK(stream_ != nullptr);
-    size_t num_layers = rtp_parameters_.encodings.size();
-    if (parameters_.encoder_config.number_of_streams == 1) {
-      // SVC is used. Only one simulcast layer is present.
-      num_layers = 1;
-    }
-    std::vector<bool> active_layers(num_layers);
-    for (size_t i = 0; i < num_layers; ++i) {
-      active_layers[i] = IsLayerActive(rtp_parameters_.encodings[i]);
-    }
-    if (parameters_.encoder_config.number_of_streams == 1 &&
-        rtp_parameters_.encodings.size() > 1) {
-      // SVC is used.
-      // The only present simulcast layer should be active if any of the
-      // configured SVC layers is active.
-      active_layers[0] =
-          absl::c_any_of(rtp_parameters_.encodings,
-                         [](const auto& encoding) { return encoding.active; });
-    }
-    // This updates what simulcast layers are sending, and possibly starts
-    // or stops the VideoSendStream.
-    stream_->StartPerRtpStream(active_layers);
+    // This allows the the Stream to be used. Ie, DTLS is connected and the
+    // RtpTransceiver direction allows sending.
+    stream_->Start();
   } else {
     if (stream_ != nullptr) {
       stream_->Stop();
@@ -2244,7 +2224,6 @@ WebRtcVideoSendChannel::WebRtcVideoSendStream::CreateVideoEncoderConfig(
     case webrtc::kVideoCodecVP9:
     case webrtc::kVideoCodecAV1:
     case webrtc::kVideoCodecGeneric:
-    case webrtc::kVideoCodecMultiplex:
       max_qp = kDefaultVideoMaxQpVpx;
       break;
   }
@@ -3136,15 +3115,12 @@ bool WebRtcVideoReceiveChannel::MaybeCreateDefaultReceiveStream(
     absl::optional<uint32_t> current_default_ssrc = GetUnsignaledSsrc();
     if (current_default_ssrc) {
       FindReceiveStream(*current_default_ssrc)->UpdateRtxSsrc(packet.Ssrc());
-    } else {
-      // Received unsignaled RTX packet before a media packet. Create a default
-      // stream with a "random" SSRC and the RTX SSRC from the packet.  The
-      // stream will be recreated on the first media packet, unless we are
-      // extremely lucky and used the right media SSRC.
-      ReCreateDefaultReceiveStream(/*ssrc =*/14795, /*rtx_ssrc=*/packet.Ssrc());
+      return true;
     }
-    return true;
-  } else {
+    // Default media SSRC not known yet. Drop the packet.
+    // BWE has already been notified of this received packet.
+    return false;
+  }
     // Ignore unknown ssrcs if we recently created an unsignalled receive
     // stream since this shouldn't happen frequently. Getting into a state
     // of creating decoders on every packet eats up processing time (e.g.
@@ -3161,7 +3137,7 @@ bool WebRtcVideoReceiveChannel::MaybeCreateDefaultReceiveStream(
         return false;
       }
     }
-  }
+
   // RTX SSRC not yet known.
   ReCreateDefaultReceiveStream(packet.Ssrc(), absl::nullopt);
   last_unsignalled_ssrc_creation_time_ms_ = rtc::TimeMillis();

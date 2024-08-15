@@ -152,7 +152,7 @@ UrlIndex::~UrlIndex() = default;
 bool UrlIndex::IsBookmarkedNoLock(const GURL& url) {
   url_lock_.AssertAcquired();
 
-#if BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   if (vivaldi::IsVivaldiRunning()) {
     if (const auto iter = nodes_ordered_by_url_set_.find(url);
         iter != nodes_ordered_by_url_set_.end()) {

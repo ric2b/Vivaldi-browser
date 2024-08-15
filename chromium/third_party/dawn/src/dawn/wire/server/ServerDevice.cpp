@@ -74,10 +74,13 @@ void Server::OnLogging(ObjectHandle device, WGPULoggingType type, const char* me
     SerializeCommand(cmd);
 }
 
-WireResult Server::DoDevicePopErrorScope(Known<WGPUDevice> device, uint64_t requestSerial) {
+WireResult Server::DoDevicePopErrorScope(Known<WGPUDevice> device,
+                                         ObjectHandle eventManager,
+                                         WGPUFuture future) {
     auto userdata = MakeUserdata<ErrorScopeUserdata>();
-    userdata->requestSerial = requestSerial;
     userdata->device = device.AsHandle();
+    userdata->eventManager = eventManager;
+    userdata->future = future;
 
     mProcs.devicePopErrorScope(device->handle, ForwardToServer<&Server::OnDevicePopErrorScope>,
                                userdata.release());
@@ -88,8 +91,8 @@ void Server::OnDevicePopErrorScope(ErrorScopeUserdata* userdata,
                                    WGPUErrorType type,
                                    const char* message) {
     ReturnDevicePopErrorScopeCallbackCmd cmd;
-    cmd.device = userdata->device;
-    cmd.requestSerial = userdata->requestSerial;
+    cmd.eventManager = userdata->eventManager;
+    cmd.future = userdata->future;
     cmd.type = type;
     cmd.message = message;
 
@@ -98,7 +101,8 @@ void Server::OnDevicePopErrorScope(ErrorScopeUserdata* userdata,
 
 WireResult Server::DoDeviceCreateComputePipelineAsync(
     Known<WGPUDevice> device,
-    uint64_t requestSerial,
+    ObjectHandle eventManager,
+    WGPUFuture future,
     ObjectHandle pipelineObjectHandle,
     const WGPUComputePipelineDescriptor* descriptor) {
     Known<WGPUComputePipeline> pipeline;
@@ -107,7 +111,8 @@ WireResult Server::DoDeviceCreateComputePipelineAsync(
 
     auto userdata = MakeUserdata<CreatePipelineAsyncUserData>();
     userdata->device = device.AsHandle();
-    userdata->requestSerial = requestSerial;
+    userdata->eventManager = eventManager;
+    userdata->future = future;
     userdata->pipelineObjectID = pipeline.id;
 
     mProcs.deviceCreateComputePipelineAsync(
@@ -124,9 +129,9 @@ void Server::OnCreateComputePipelineAsyncCallback(CreatePipelineAsyncUserData* d
                                                                    status, pipeline, data);
 
     ReturnDeviceCreateComputePipelineAsyncCallbackCmd cmd;
-    cmd.device = data->device;
+    cmd.eventManager = data->eventManager;
+    cmd.future = data->future;
     cmd.status = status;
-    cmd.requestSerial = data->requestSerial;
     cmd.message = message;
 
     SerializeCommand(cmd);
@@ -134,7 +139,8 @@ void Server::OnCreateComputePipelineAsyncCallback(CreatePipelineAsyncUserData* d
 
 WireResult Server::DoDeviceCreateRenderPipelineAsync(
     Known<WGPUDevice> device,
-    uint64_t requestSerial,
+    ObjectHandle eventManager,
+    WGPUFuture future,
     ObjectHandle pipelineObjectHandle,
     const WGPURenderPipelineDescriptor* descriptor) {
     Known<WGPURenderPipeline> pipeline;
@@ -143,7 +149,8 @@ WireResult Server::DoDeviceCreateRenderPipelineAsync(
 
     auto userdata = MakeUserdata<CreatePipelineAsyncUserData>();
     userdata->device = device.AsHandle();
-    userdata->requestSerial = requestSerial;
+    userdata->eventManager = eventManager;
+    userdata->future = future;
     userdata->pipelineObjectID = pipeline.id;
 
     mProcs.deviceCreateRenderPipelineAsync(
@@ -160,9 +167,9 @@ void Server::OnCreateRenderPipelineAsyncCallback(CreatePipelineAsyncUserData* da
                                                                   pipeline, data);
 
     ReturnDeviceCreateRenderPipelineAsyncCallbackCmd cmd;
-    cmd.device = data->device;
+    cmd.eventManager = data->eventManager;
+    cmd.future = data->future;
     cmd.status = status;
-    cmd.requestSerial = data->requestSerial;
     cmd.message = message;
 
     SerializeCommand(cmd);

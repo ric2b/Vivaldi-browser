@@ -2,17 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chromeos/components/onc/onc_validator.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
 #include <optional>
+#include <string_view>
 
 #include "base/json/json_reader.h"
 #include "base/logging.h"
-#include "base/strings/string_piece.h"
 #include "base/values.h"
 #include "chromeos/components/onc/onc_signature.h"
-#include "chromeos/components/onc/onc_validator.h"
 
 namespace chromeos {
 namespace onc {
@@ -34,7 +35,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   static Environment env;
 
   std::optional<base::Value> parsed_json = base::JSONReader::Read(
-      base::StringPiece(reinterpret_cast<const char*>(data), size));
+      std::string_view(reinterpret_cast<const char*>(data), size));
   if (!parsed_json || !parsed_json->is_dict())
     return 0;
 

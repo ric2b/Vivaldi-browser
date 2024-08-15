@@ -1,5 +1,5 @@
 load("//bazel:flags.bzl", "selects")
-load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup", "split_srcs_and_hdrs")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_library", "skia_filegroup", "split_srcs_and_hdrs")
 
 licenses(["notice"])
 
@@ -20,7 +20,6 @@ split_srcs_and_hdrs(
 )
 
 UTIL_FILES = [
-    "SkAnimCodecPlayer.cpp",
     "SkBitSet.h",
     "SkCallableTraits.h",
     "SkCamera.cpp",
@@ -186,6 +185,7 @@ skia_filegroup(
         "SkShadowTessellator.cpp",
         "SkShadowTessellator.h",
         "SkShadowUtils.cpp",
+        "SkTextUtils.cpp",
     ],
     visibility = ["//src/core:__pkg__"],
 )
@@ -213,4 +213,43 @@ skia_filegroup(
         "SkShaderUtils.cpp",
     ],
     visibility = ["//src/gpu:__subpackages__"],
+)
+
+skia_cc_library(
+    name = "json",
+    srcs = [
+        "SkJSON.cpp",
+        "SkJSONWriter.cpp",
+    ],
+    hdrs = [
+        "SkJSON.h",
+        "SkJSONWriter.h",
+    ],
+    visibility = [
+        "//bench:__pkg__",
+        "//gm:__pkg__",
+    ],
+    deps = [
+        "//:core",
+        "//src/base",
+    ],
+)
+
+skia_cc_library(
+    name = "multi_picture_document",
+    srcs = [
+        "SkMultiPictureDocument.cpp",
+        "SkMultiPictureDocument.h",
+        "SkMultiPictureDocumentPriv.h",
+    ],
+    hdrs = [
+        "//include/docs:multi_picture_document_hdrs",
+    ],
+    visibility = [
+        "//tools/debugger:__pkg__",
+    ],
+    deps = [
+        "//:core",
+        "//src/base",
+    ],
 )

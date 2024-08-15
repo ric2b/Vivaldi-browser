@@ -9,7 +9,6 @@
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_accessory_view_controller_delegate.h"
-#import "ios/chrome/common/button_configuration_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -202,7 +201,7 @@ static NSTimeInterval MFAnimationDuration = 0.2;
 
     if (IsVivaldiRunning()) {
       self.keyboardButton = [self
-          manualFillButtonWithAction:@selector(keyboardButtonPressed)
+          manualFillButtonWithAction:@selector(keyboardButtonPressed:)
                          symbolNamed:@"vivaldi_autofill_keyboards"
                        defaultSymbol:NO
              accessibilityIdentifier:manual_fill::
@@ -211,7 +210,7 @@ static NSTimeInterval MFAnimationDuration = 0.2;
                                          IDS_IOS_MANUAL_FALLBACK_SHOW_KEYBOARD)];
     } else {
     self.keyboardButton = [self
-        manualFillButtonWithAction:@selector(keyboardButtonPressed)
+        manualFillButtonWithAction:@selector(keyboardButtonPressed:)
                        symbolNamed:kKeyboardSymbol
                      defaultSymbol:YES
            accessibilityIdentifier:manual_fill::
@@ -361,40 +360,41 @@ static NSTimeInterval MFAnimationDuration = 0.2;
                    }];
 }
 
-- (void)keyboardButtonPressed {
+- (void)keyboardButtonPressed:(UIButton*)keyboardButton {
   base::RecordAction(base::UserMetricsAction("ManualFallback_Close"));
   [self resetAnimated:YES];
-  [self.delegate manualFillAccessoryViewControllerKeyboardButtonPressed:self];
+  [self.delegate manualFillAccessoryViewController:self
+                            didPressKeyboardButton:keyboardButton];
 }
 
-- (void)passwordButtonPressed:(UIButton*)sender {
+- (void)passwordButtonPressed:(UIButton*)passwordButton {
   base::RecordAction(base::UserMetricsAction("ManualFallback_OpenPassword"));
   [self setKeyboardButtonHidden:NO animated:YES];
   [self resetIcons];
   self.passwordButton.userInteractionEnabled = NO;
   self.passwordButton.tintColor = IconHighlightTintColor();
-  [self.delegate manualFillAccessoryViewControllerPasswordButtonPressed:self
-                                                                 sender:sender];
+  [self.delegate manualFillAccessoryViewController:self
+                            didPressPasswordButton:passwordButton];
 }
 
-- (void)cardButtonPressed:(UIButton*)sender {
+- (void)cardButtonPressed:(UIButton*)creditCardButton {
   base::RecordAction(base::UserMetricsAction("ManualFallback_OpenCreditCard"));
   [self setKeyboardButtonHidden:NO animated:YES];
   [self resetIcons];
   self.cardsButton.userInteractionEnabled = NO;
   self.cardsButton.tintColor = IconHighlightTintColor();
-  [self.delegate manualFillAccessoryViewControllerCardButtonPressed:self
-                                                             sender:sender];
+  [self.delegate manualFillAccessoryViewController:self
+                          didPressCreditCardButton:creditCardButton];
 }
 
-- (void)accountButtonPressed:(UIButton*)sender {
+- (void)accountButtonPressed:(UIButton*)accountButton {
   base::RecordAction(base::UserMetricsAction("ManualFallback_OpenProfile"));
   [self setKeyboardButtonHidden:NO animated:YES];
   [self resetIcons];
   self.accountButton.userInteractionEnabled = NO;
   self.accountButton.tintColor = IconHighlightTintColor();
-  [self.delegate manualFillAccessoryViewControllerAccountButtonPressed:self
-                                                                sender:sender];
+  [self.delegate manualFillAccessoryViewController:self
+                             didPressAccountButton:accountButton];
 }
 
 @end

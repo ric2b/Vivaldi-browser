@@ -36,6 +36,8 @@ constexpr int kMaxFrames = 5;
 constexpr size_t kMaxDataSize = 200 * 1024;
 #endif
 
+constexpr int kFrequencyParseOnly = 10;
+
 void Decode(const uint8_t* const data, const size_t size,
             libgav1::Decoder* const decoder) {
   decoder->EnqueueFrame(data, size, /*user_private_data=*/0,
@@ -58,6 +60,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // We use both nibbles of the lower byte as this results in values != 1 much
   // more quickly than using the lower nibble alone.
   settings.threads = (size >= 13) ? ((data[12] >> 4 | data[12]) & 0xF) + 1 : 1;
+  settings.parse_only = size % kFrequencyParseOnly == 0;
   if (decoder.Init(&settings) != libgav1::kStatusOk) return 0;
 
   // Treat the input as a raw OBU stream.

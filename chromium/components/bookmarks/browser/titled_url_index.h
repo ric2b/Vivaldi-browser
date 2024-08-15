@@ -9,15 +9,17 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
+#include "base/memory/raw_ptr.h"
 #include "components/bookmarks/browser/titled_url_node_sorter.h"
 #include "components/query_parser/query_parser.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace bookmarks {
 
@@ -32,7 +34,8 @@ struct TitledUrlMatch;
 // TitledUrlNodes that contain that string in their title or URL.
 class TitledUrlIndex {
  public:
-  using TitledUrlNodeSet = base::flat_set<const TitledUrlNode*>;
+  using TitledUrlNodeSet =
+      base::flat_set<raw_ptr<const TitledUrlNode, CtnExperimental>>;
 
   // Constructs a TitledUrlIndex. |sorter| is used to construct a sorted list
   // of matches when matches are returned from the index. If null, matches are
@@ -70,12 +73,13 @@ class TitledUrlIndex {
 
   // Returns a normalized version of the UTF16 string `text`.  If it fails to
   // normalize the string, returns `text` itself as a best-effort.
-  static std::u16string Normalize(const std::u16string& text);
+  static std::u16string Normalize(std::u16string_view text);
 
  private:
   friend class TitledUrlIndexFake;
 
-  using TitledUrlNodes = std::vector<const TitledUrlNode*>;
+  using TitledUrlNodes =
+      std::vector<raw_ptr<const TitledUrlNode, CtnExperimental>>;
   using Index = std::map<std::u16string, TitledUrlNodeSet>;
 
   // Constructs |sorted_nodes| by copying the matches in |matches| and sorting
@@ -93,7 +97,7 @@ class TitledUrlIndex {
 
   // Finds |query_nodes| matches in |node| and returns a TitledUrlMatch
   // containing |node| and the matches.
-  absl::optional<TitledUrlMatch> MatchTitledUrlNodeWithQuery(
+  std::optional<TitledUrlMatch> MatchTitledUrlNodeWithQuery(
       const TitledUrlNode* node,
       const query_parser::QueryNodeVector& query_nodes,
       const std::vector<std::u16string>& query_terms);

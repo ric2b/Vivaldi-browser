@@ -53,6 +53,11 @@ static_library("browser") {
       "//ui/views",
     ]
   }
+  if (is_ios) {
+    deps += [
+      "//ios/chrome/browser/bookmarks/model",
+    ]
+  }
   if (enable_extensions) {
     deps += [
       "//chrome/browser/web_applications/extensions",
@@ -82,6 +87,8 @@ static_library("browser") {
     "translate/vivaldi_translate_client.h",
     "translate/vivaldi_translate_frame_binder.cc",
     "translate/vivaldi_translate_frame_binder.h",
+    "search_engines/vivaldi_search_engines_updater.cc",
+    "search_engines/vivaldi_search_engines_updater.h",
     "vivaldi_default_bookmarks_updater_client_impl.cc",
     "vivaldi_default_bookmarks_updater_client_impl.h",
     "vivaldi_gitignore.cc",

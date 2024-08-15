@@ -6,9 +6,11 @@
 import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {MetricsBrowserProxyImpl, Route, Router, routes, SafetyCheckIconStatus, SafetyCheckInteractions, SettingsRoutes, SettingsSafetyCheckNotificationPermissionsElement, SettingsSafetyCheckPageElement, SettingsSafetyCheckUnusedSitePermissionsElement} from 'chrome://settings/settings.js';
+import type {SettingsRoutes, SettingsSafetyCheckNotificationPermissionsElement, SettingsSafetyCheckPageElement, SettingsSafetyCheckUnusedSitePermissionsElement} from 'chrome://settings/settings.js';
+import {MetricsBrowserProxyImpl, Route, Router, routes, SafetyCheckIconStatus, SafetyCheckInteractions} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {ContentSettingsTypes, NotificationPermission, UnusedSitePermissions, SafetyHubBrowserProxyImpl, SafetyHubEvent} from 'chrome://settings/lazy_load.js';
+import type {NotificationPermission, UnusedSitePermissions} from 'chrome://settings/lazy_load.js';
+import {ContentSettingsTypes, SafetyHubBrowserProxyImpl, SafetyHubEvent} from 'chrome://settings/lazy_load.js';
 import {PluralStringProxyImpl} from 'chrome://resources/js/plural_string_proxy.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 import {isVisible} from 'chrome://webui-test/test_util.js';
@@ -294,20 +296,6 @@ suite('SafetyCheckPagePermissionModulesTest', function() {
 
     assertFalse(
         isVisible(page.shadowRoot!.querySelector(notificationElementName)));
-  });
-
-  test('notificationPermissionModuleFeatureDisabled', async () => {
-    loadTimeData.overrideValues(
-        {safetyCheckNotificationPermissionsEnabled: false});
-    await createPageForNotificationPermissions(notificationMockData);
-
-    assertFalse(
-        isVisible(page.shadowRoot!.querySelector(notificationElementName)));
-    assertFalse(await metricsBrowserProxy.whenCalled(
-        'recordSafetyCheckNotificationsModuleEntryPointShown'));
-    // Re-enable the notification permission feature.
-    loadTimeData.overrideValues(
-        {safetyCheckNotificationPermissionsEnabled: true});
   });
 
   test('notificationPermissionModuleEmptyList', async () => {

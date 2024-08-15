@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <optional>
+
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/types/optional_util.h"
@@ -16,8 +17,9 @@
 #include "extensions/browser/bad_message.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/script_injection_tracker.h"
+#include "extensions/common/constants.h"
+#include "extensions/common/extension.h"
 #include "extensions/common/extension_features.h"
-#include "extensions/common/extension_messages.h"
 #include "extensions/common/trace_util.h"
 
 using content::BrowserThread;

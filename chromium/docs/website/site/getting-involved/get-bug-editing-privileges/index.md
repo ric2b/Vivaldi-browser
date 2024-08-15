@@ -20,11 +20,6 @@ permissions comes with an expectation of responsibility.
 
 ## How do I get bug-editing privileges?
 
-***Note:** The instructions below are for someone who is getting involved
-specifically through triage. If you need bug editing permissions for some other
-reason, and someone on the Chromium team can vouch for you, that person should
-nominate you directly via the committers@chromium.org list.*
-
 First, spend at least a few weeks triaging bugs as described in the [triage
 guidelines](/getting-involved/bug-triage), doing the parts that don't require
 extra permissions and aiming to make significant contributions to at least 20-30
@@ -33,12 +28,10 @@ you understand the triage process, and that you can work with the rest of the
 Chromium community.
 Once you’ve done that, email a Chromium contributor who is familiar with your
 triage work (for instance, a developer who has worked with some of the bugs you
-have triaged) and ask them to review your triage contributions; include a
-reference to this page since they may not be familiar with the process. They
-should either provide feedback, or start the formal nomination process with the
-committers list (if they aren't sure how to evaluate, or nominate, they can
-email accounts@ to ask for help). As with becoming a committer, the final
-decision will be made by the committers@chromium.org list.
+have triaged) and ask them to review your triage contributions.  Once you feel comfortable,
+you can request bug-editing privileges by emailing accounts@chromium.org and provide a
+reason why you want it.
+
 A few things to keep in mind while you are getting started with triage, which
 will help ensure that the nomination process goes smoothly:
 
@@ -57,4 +50,4 @@ Once your nomination is approved, you will receive a follow-up email with
 instructions for enabling your new permissions.
 
 **Googler?** You can request a Chromium account or join the
-*chromium-bug-access* group.
+*edit-bug-access* group.

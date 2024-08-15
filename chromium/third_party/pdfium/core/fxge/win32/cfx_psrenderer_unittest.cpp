@@ -4,6 +4,7 @@
 
 #include "core/fxge/win32/cfx_psrenderer.h"
 
+#include <optional>
 #include <utility>
 
 #include "core/fxcrt/bytestring.h"
@@ -11,12 +12,11 @@
 #include "core/fxcrt/fx_coordinates.h"
 #include "core/fxcrt/fx_stream.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
 #include "core/fxge/dib/fx_dib.h"
 #include "core/fxge/win32/cfx_psfonttracker.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/base/containers/span.h"
 
 namespace {
 
@@ -43,7 +43,7 @@ class TestWriteStream final : public IFX_RetainableWriteStream {
 }  // namespace
 
 TEST(PSRendererTest, GenerateType42SfntData) {
-  absl::optional<ByteString> result;
+  std::optional<ByteString> result;
 
   result = CFX_PSRenderer::GenerateType42SfntDataForTesting("empty", {});
   EXPECT_FALSE(result.has_value());
@@ -58,7 +58,7 @@ TEST(PSRendererTest, GenerateType42SfntData) {
   result = CFX_PSRenderer::GenerateType42SfntDataForTesting(
       "odd", kOddByteCountTestData);
   ASSERT_TRUE(result.has_value());
-  EXPECT_STREQ(kExpectedOddByteCountResult, result.value().c_str());
+  EXPECT_EQ(kExpectedOddByteCountResult, result.value());
 
   // Requires padding.
   constexpr uint8_t kEvenByteCountTestData[] = {0, 32, 66, 77};
@@ -71,7 +71,7 @@ TEST(PSRendererTest, GenerateType42SfntData) {
   result = CFX_PSRenderer::GenerateType42SfntDataForTesting(
       "even", kEvenByteCountTestData);
   ASSERT_TRUE(result.has_value());
-  EXPECT_STREQ(kExpectedEvenByteCountResult, result.value().c_str());
+  EXPECT_EQ(kExpectedEvenByteCountResult, result.value());
 }
 
 TEST(PSRendererTest, GenerateType42FontDictionary) {
@@ -113,7 +113,7 @@ FontName currentdict end definefont pop
   result = CFX_PSRenderer::GenerateType42FontDictionaryForTesting(
       "1descendant", FX_RECT(1, 2, 3, 4), /*num_glyphs=*/3,
       /*glyphs_per_descendant_font=*/3);
-  EXPECT_STREQ(kExpected1DescendantFontResult, result.c_str());
+  EXPECT_EQ(kExpected1DescendantFontResult, result);
 
   static constexpr char kExpected2DescendantFontResult[] = R"(8 dict begin
 /FontType 42 def
@@ -170,7 +170,7 @@ FontName currentdict end definefont pop
   result = CFX_PSRenderer::GenerateType42FontDictionaryForTesting(
       "2descendant", FX_RECT(12, -5, 34, 199), /*num_glyphs=*/5,
       /*glyphs_per_descendant_font=*/3);
-  EXPECT_STREQ(kExpected2DescendantFontResult, result.c_str());
+  EXPECT_EQ(kExpected2DescendantFontResult, result);
 }
 
 TEST(PSRendererTest, DrawDIBits) {
@@ -211,5 +211,5 @@ restore
   }
 
   ByteString output(output_stream->GetSpan());
-  EXPECT_STREQ(output.c_str(), kExpectedOutput);
+  EXPECT_EQ(output, kExpectedOutput);
 }

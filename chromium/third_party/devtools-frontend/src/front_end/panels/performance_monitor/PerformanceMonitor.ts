@@ -7,7 +7,6 @@ import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
-import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
@@ -79,7 +78,7 @@ export class PerformanceMonitorImpl extends UI.Widget.HBox implements
   constructor(pollIntervalMs: number = 500) {
     super(true);
 
-    this.element.setAttribute('jslog', `${VisualLogging.panel().context('performance-monitor')}`);
+    this.element.setAttribute('jslog', `${VisualLogging.panel('performance.monitor').track({resize: true})}`);
 
     this.contentElement.classList.add('perfmon-pane');
     this.metricsBuffer = [];
@@ -449,7 +448,7 @@ export class ControlPane extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
     this.element = parent.createChild('div', 'perfmon-control-pane');
 
     this.enabledChartsSetting = Common.Settings.Settings.instance().createSetting(
-        'perfmonActiveIndicators2', ['TaskDuration', 'JSHeapTotalSize', 'Nodes']);
+        'perfmon-active-indicators2', ['TaskDuration', 'JSHeapTotalSize', 'Nodes']);
     this.enabledCharts = new Set(this.enabledChartsSetting.get());
   }
 
@@ -576,7 +575,11 @@ export class ControlPane extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
       const active = this.enabledCharts.has(chartName);
       const indicator = new MetricIndicator(this.element, chartInfo, active, this.onToggle.bind(this, chartName));
       indicator.element.setAttribute(
-          'jslog', `${VisualLogging.toggle().track({click: true, keydown: 'Enter'}).context(chartName)}`);
+          'jslog',
+          `${
+              VisualLogging.toggle()
+                  .track({click: true, keydown: 'Enter'})
+                  .context(Platform.StringUtilities.toKebabCase(chartName))}`);
       this.indicators.set(chartName, indicator);
     }
   }
@@ -625,32 +628,25 @@ let percentFormatter: Intl.NumberFormat;
 
 export class MetricIndicator {
   private info: ChartInfo;
-  private active: boolean;
-  private readonly onToggle: (arg0: boolean) => void;
   element: HTMLElement;
-  private readonly swatchElement: IconButton.Icon.Icon;
+  private readonly swatchElement: UI.UIUtils.CheckboxLabel;
   private valueElement: HTMLElement;
   private color: string;
 
   constructor(parent: Element, info: ChartInfo, active: boolean, onToggle: (arg0: boolean) => void) {
     this.color = info.color || info.metrics[0].color;
     this.info = info;
-    this.active = active;
-    this.onToggle = onToggle;
     this.element = parent.createChild('div', 'perfmon-indicator') as HTMLElement;
-    this.swatchElement = new IconButton.Icon.Icon();
-    this.swatchElement.classList.add('perfmon-indicator-swatch');
-    this.updateSwatchElement();
+    const chartName = info.metrics[0].name;
+    this.swatchElement = UI.UIUtils.CheckboxLabel.create(info.title, active, undefined, chartName);
     this.element.appendChild(this.swatchElement);
-    this.element.createChild('div', 'perfmon-indicator-title').textContent = info.title;
+    this.swatchElement.checkboxElement.addEventListener('change', () => {
+      onToggle(this.swatchElement.checkboxElement.checked);
+      this.element.classList.toggle('active');
+    });
     this.valueElement = this.element.createChild('div', 'perfmon-indicator-value') as HTMLElement;
     this.valueElement.style.color = this.color;
-    this.element.addEventListener('click', () => this.toggleIndicator());
-    this.element.addEventListener('keypress', event => this.handleKeypress(event));
     this.element.classList.toggle('active', active);
-    UI.ARIAUtils.markAsCheckbox(this.element);
-    UI.ARIAUtils.setChecked(this.element, this.active);
-    this.element.tabIndex = 0;
   }
 
   static formatNumber(value: number, info: ChartInfo): string {
@@ -670,26 +666,6 @@ export class MetricIndicator {
 
   setValue(value: number): void {
     this.valueElement.textContent = MetricIndicator.formatNumber(value, this.info);
-  }
-
-  private updateSwatchElement(): void {
-    const color = this.active ? this.color : 'var(--icon-disabled)';
-    this.swatchElement.data = {iconName: 'checkmark', color, width: '16px', height: '14px'};
-  }
-
-  private toggleIndicator(): void {
-    this.active = !this.active;
-    this.updateSwatchElement();
-    this.element.classList.toggle('active', this.active);
-    UI.ARIAUtils.setChecked(this.element, this.active);
-    this.onToggle(this.active);
-  }
-
-  private handleKeypress(event: Event): void {
-    const keyboardEvent = event as KeyboardEvent;
-    if (keyboardEvent.key === ' ' || keyboardEvent.key === 'Enter') {
-      this.toggleIndicator();
-    }
   }
 }
 

@@ -5,6 +5,7 @@ import { assert } from '../util/assert.js';
  * @internal
  */
 export class CdpHTTPRequest extends HTTPRequest {
+    id;
     #client;
     #isNavigationRequest;
     #allowInterception;
@@ -12,6 +13,7 @@ export class CdpHTTPRequest extends HTTPRequest {
     #url;
     #resourceType;
     #method;
+    #hasPostData = false;
     #postData;
     #headers = {};
     #frame;
@@ -29,7 +31,7 @@ export class CdpHTTPRequest extends HTTPRequest {
     constructor(client, frame, interceptionId, allowInterception, data, redirectChain) {
         super();
         this.#client = client;
-        this._requestId = data.requestId;
+        this.id = data.requestId;
         this.#isNavigationRequest =
             data.requestId === data.loaderId && data.type === 'Document';
         this._interceptionId = interceptionId;
@@ -38,6 +40,7 @@ export class CdpHTTPRequest extends HTTPRequest {
         this.#resourceType = (data.type || 'other').toLowerCase();
         this.#method = data.request.method;
         this.#postData = data.request.postData;
+        this.#hasPostData = data.request.hasPostData ?? false;
         this.#frame = frame;
         this._redirectChain = redirectChain;
         this.#continueRequestOverrides = {};
@@ -102,6 +105,21 @@ export class CdpHTTPRequest extends HTTPRequest {
     }
     postData() {
         return this.#postData;
+    }
+    hasPostData() {
+        return this.#hasPostData;
+    }
+    async fetchPostData() {
+        try {
+            const result = await this.#client.send('Network.getRequestPostData', {
+                requestId: this.id,
+            });
+            return result.postData;
+        }
+        catch (err) {
+            debugError(err);
+            return;
+        }
     }
     headers() {
         return this.#headers;

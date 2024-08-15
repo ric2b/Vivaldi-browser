@@ -5,26 +5,21 @@
 <translation id="1137850887415122856">要锁定“隐身”标签，请设置 Touch ID、Face ID 或密码。</translation>
 <translation id="1310184829257917508">要求隐身打开其他应用程序的链接</translation>
 <translation id="1512201558627495343">新建隐身标签</translation>
-<translation id="1786453623676543866">在新的Vivaldi标签中启动搜索。</translation>
 <translation id="207677936531967364">新隐身标签</translation>
 <translation id="2899836479226240291">将 Vivaldi 设为默认浏览器应用即可自动打开链接。</translation>
-<translation id="3171582312249481866">打开Vivaldi设置</translation>
-<translation id="3372807273343182542">在Vivaldi中以隐身模式打开 URL</translation>
-<translation id="3379322781901918214">1. 打开 Vivaldi 设置</translation>
+<translation id="3365529507898144230">保存在相册中</translation>
 <translation id="3473652525653758699">新建隐身窗口</translation>
 <translation id="3501504415290398157">使用 <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> 解锁您的隐身标签。</translation>
 <translation id="3692650606013198282">隐身模式打开</translation>
-<translation id="3709782636417497984">在新的隐身标签中打开</translation>
+<translation id="3709782636417497984">在新的隐身标签页中打开</translation>
 <translation id="3981599532037327317">以隐身模式打开 ${url}</translation>
+<translation id="398477389655464998">复制链接到突出显示</translation>
 <translation id="4620246317052452550">您浏览过的网页</translation>
-<translation id="4755216899422789286">在Vivaldi中打开 URL</translation>
-<translation id="6233792867654386826">在 Vivaldi 中打开输入的 URL。</translation>
+<translation id="4755216899422789286">在Vivaldi中打开链接</translation>
+<translation id="6233792867654386826">在 Vivaldi 中打开输入的链接。</translation>
 <translation id="6827597288286078054">隐身搜索</translation>
-<translation id="7175743738896712454">在 Vivaldi 中以隐身模式打开输入的 URL。</translation>
 <translation id="7307970171564921489">使用 <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> 解锁隐身标签</translation>
 <translation id="7347289093190902150">隐身模式打开？</translation>
 <translation id="7549299604720382000">新建隐身标签</translation>
 <translation id="8326104954595890674">新隐身标签</translation>
-<translation id="8763006697839582351">以Vivaldi隐身模式打开</translation>
-<translation id="9060728682512999830">用Vivaldi搜索</translation>
 </translationbundle>

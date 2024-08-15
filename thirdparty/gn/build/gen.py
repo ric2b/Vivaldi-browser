@@ -148,7 +148,11 @@ class ArgumentsList:
           result.append('%s=%s' % (long_option, item))
       else:
         assert action is None, "Unsupported action " + action
-    return ' '.join(shell_quote(item) for item in result)
+
+    if platform.system() == "Windows":
+      return ' '.join(result)
+    else:
+      return ' '.join(shell_quote(item) for item in result)
 
 
 def main(argv):
@@ -175,7 +179,8 @@ def main(argv):
                     help='Enable the use of UndefinedBehaviorSanitizer')
   args_list.add('--no-last-commit-position', action='store_true',
                     help='Do not generate last_commit_position.h.')
-  args_list.add('--out-path',
+  args_list.add('--out-path', type=str,
+                    default=os.path.join(REPO_ROOT, 'out'),
                     help='The path to generate the build files in.')
   args_list.add('--no-strip', action='store_true',
                     help='Don\'t strip release build. Useful for profiling.')
@@ -214,7 +219,7 @@ def main(argv):
   else:
     host = platform
 
-  out_dir = options.out_path or os.path.join(REPO_ROOT, 'out')
+  out_dir = options.out_path
   if not os.path.isdir(out_dir):
     os.makedirs(out_dir)
   if not options.no_last_commit_position:
@@ -223,6 +228,17 @@ def main(argv):
   WriteGNNinja(os.path.join(out_dir, 'build.ninja'), platform, host, options, args_list)
   return 0
 
+
+def is_gcc(cxx):
+  """Return True iff the compiler at `cxx` is GCC based."""
+  ret = subprocess.run(
+      f'{cxx} -dM -E -',
+      shell=True,
+      stdin=subprocess.DEVNULL,
+      text=True,
+      capture_output=True)
+
+  return ret.returncode == 0 and "#define __GNUC__" in ret.stdout and not "#define __clang__" in ret.stdout
 
 def GenerateLastCommitPosition(host, header):
   ROOT_TAG = 'initial-commit'
@@ -407,6 +423,12 @@ def WriteGNNinja(path, platform, host, options, args_list):
   if not platform.is_msvc():
     if options.debug:
       cflags.extend(['-O0', '-g'])
+      # Enable libc++ or libstdc++ assertions in debug mode.
+      # Just set both macros to avoid detecting the C++ runtime being used.
+      # Currently disabled on MacOS since this results in linking errors at the
+      # moment, due to what looks like an XCode-specific Clang packaging error.
+      if not platform.is_darwin():
+        cflags.extend(['-D_LIBCPP_DEBUG=1', '-D_GLIBCXX_DEBUG=1'])
     else:
       cflags.append('-DNDEBUG')
       cflags.append('-O3')
@@ -470,11 +492,15 @@ def WriteGNNinja(path, platform, host, options, args_list):
         '-Wextra-semi',
         '-Wundef',
 
-        '-std=c++17'
+        '-std=c++20'
     ])
 
+    if is_gcc(cxx):
+      cflags.append('-Wno-redundant-move')
+      # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=104336
+      cflags.append('-Wno-restrict')
     # flags not supported by gcc/g++.
-    if cxx == 'clang++':
+    else:
       cflags.extend(['-Wrange-loop-analysis', '-Wextra-semi-stmt'])
 
     if platform.is_linux() or platform.is_mingw() or platform.is_msys():
@@ -484,7 +510,7 @@ def WriteGNNinja(path, platform, host, options, args_list):
         ldflags.append('-static-libstdc++')
 
       if platform.is_mingw() or platform.is_msys():
-        cflags.remove('-std=c++17')
+        cflags.remove('-std=c++20')
         cflags.extend([
           '-Wno-deprecated-copy',
           '-Wno-implicit-fallthrough',
@@ -493,7 +519,7 @@ def WriteGNNinja(path, platform, host, options, args_list):
           '-Wno-format',             # Use of %llx, which is supported by _UCRT, false positive
           '-Wno-strict-aliasing',    # Dereferencing punned pointer
           '-Wno-cast-function-type', # Casting FARPROC to RegDeleteKeyExPtr
-          '-std=gnu++17',
+          '-std=gnu++20',
         ])
       else:
         # This is needed by libc++.
@@ -513,6 +539,7 @@ def WriteGNNinja(path, platform, host, options, args_list):
       cflags.append('-Wno-unused-function')
       cflags.append('-D_OPEN_SYS_FILE_EXT')
       cflags.append('-DPATH_MAX=1024')
+      cflags.append('-DZOSLIB_OVERRIDE_CLIB')
 
     if platform.is_posix() and not platform.is_haiku():
       ldflags.append('-pthread')
@@ -563,12 +590,15 @@ def WriteGNNinja(path, platform, host, options, args_list):
         '/wd4505',
         '/wd4838',
         '/wd4996',
-        '/std:c++17',
+        '/std:c++20',
         '/GR-',
         '/D_HAS_EXCEPTIONS=0',
     ])
 
-    ldflags.extend(['/DEBUG', '/MACHINE:x64'])
+    win_manifest = os.path.relpath(
+      os.path.join(REPO_ROOT, "build/windows.manifest.xml"), options.out_path)
+    ldflags.extend(['/DEBUG', '/MACHINE:x64', '/MANIFEST:EMBED',
+                    f'/MANIFESTINPUT:{win_manifest}'])
 
   static_libraries = {
       'base': {'sources': [
@@ -651,11 +681,13 @@ def WriteGNNinja(path, platform, host, options, args_list):
         'src/gn/frameworks_utils.cc',
         'src/gn/function_exec_script.cc',
         'src/gn/function_filter.cc',
+        'src/gn/function_filter_labels.cc',
         'src/gn/function_foreach.cc',
         'src/gn/function_forward_variables_from.cc',
         'src/gn/function_get_label_info.cc',
         'src/gn/function_get_path_info.cc',
         'src/gn/function_get_target_outputs.cc',
+        'src/gn/function_label_matches.cc',
         'src/gn/function_process_file_template.cc',
         'src/gn/function_read_file.cc',
         'src/gn/function_rebase_path.cc',
@@ -674,6 +706,7 @@ def WriteGNNinja(path, platform, host, options, args_list):
         'src/gn/input_conversion.cc',
         'src/gn/input_file.cc',
         'src/gn/input_file_manager.cc',
+        'src/gn/invoke_python.cc',
         'src/gn/item.cc',
         'src/gn/json_project_writer.cc',
         'src/gn/label.cc',
@@ -692,6 +725,7 @@ def WriteGNNinja(path, platform, host, options, args_list):
         'src/gn/ninja_create_bundle_target_writer.cc',
         'src/gn/ninja_generated_file_target_writer.cc',
         'src/gn/ninja_group_target_writer.cc',
+        'src/gn/ninja_outputs_writer.cc',
         'src/gn/ninja_rust_binary_target_writer.cc',
         'src/gn/ninja_target_command_util.cc',
         'src/gn/ninja_target_writer.cc',
@@ -784,11 +818,13 @@ def WriteGNNinja(path, platform, host, options, args_list):
         'src/gn/file_writer_unittest.cc',
         'src/gn/frameworks_utils_unittest.cc',
         'src/gn/function_filter_unittest.cc',
+        'src/gn/function_filter_labels_unittest.cc',
         'src/gn/function_foreach_unittest.cc',
         'src/gn/function_forward_variables_from_unittest.cc',
         'src/gn/function_get_label_info_unittest.cc',
         'src/gn/function_get_path_info_unittest.cc',
         'src/gn/function_get_target_outputs_unittest.cc',
+        'src/gn/function_label_matches_unittest.cc',
         'src/gn/function_process_file_template_unittest.cc',
         'src/gn/function_rebase_path_unittest.cc',
         'src/gn/function_template_unittest.cc',
@@ -817,6 +853,7 @@ def WriteGNNinja(path, platform, host, options, args_list):
         'src/gn/ninja_create_bundle_target_writer_unittest.cc',
         'src/gn/ninja_generated_file_target_writer_unittest.cc',
         'src/gn/ninja_group_target_writer_unittest.cc',
+        'src/gn/ninja_outputs_writer_unittest.cc',
         'src/gn/ninja_rust_binary_target_writer_unittest.cc',
         'src/gn/ninja_target_command_util_unittest.cc',
         'src/gn/ninja_target_writer_unittest.cc',

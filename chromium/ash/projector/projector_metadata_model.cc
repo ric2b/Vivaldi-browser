@@ -3,13 +3,14 @@
 // found in the LICENSE file.
 
 #include "ash/projector/projector_metadata_model.h"
+
+#include <string_view>
 #include <vector>
 
 #include "ash/constants/ash_features.h"
 #include "base/containers/contains.h"
 #include "base/containers/fixed_flat_set.h"
 #include "base/json/json_writer.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 
@@ -19,27 +20,17 @@ namespace {
 constexpr std::array<char, 3> kSentenceEndPunctuations = {'.', '?', '!'};
 constexpr std::array<char16_t, 6> kCJKSentenceEndPunctuations = {
     u'。', u'？', u'！', u'.', u'?', u'!'};
-constexpr base::StringPiece kStartOffsetKey = "startOffset";
-constexpr base::StringPiece kEndOffsetKey = "endOffset";
-constexpr base::StringPiece kTextKey = "text";
-constexpr base::StringPiece kHypothesisPartsKey = "hypothesisParts";
-constexpr base::StringPiece kCaptionLanguage = "captionLanguage";
-constexpr base::StringPiece kCaptionsKey = "captions";
-constexpr base::StringPiece kKeyIdeasKey = "tableOfContent";
-constexpr base::StringPiece kOffset = "offset";
-constexpr base::StringPiece kRecognitionStatus = "recognitionStatus";
-constexpr base::StringPiece kMetadataVersionNumber = "version";
-constexpr base::StringPiece kGroupIdKey = "groupId";
-
-constexpr auto kLanguagesWithoutWhiteSpaces =
-    base::MakeFixedFlatSet<base::StringPiece>({
-        "ja",     // Japanese
-        "ko_KR",  // Korean
-        "th",     // Thai
-        "zh",     // Chinese
-        "zh_CN",  // Chinese Simplified
-        "zh_TW",  // Chinese Traditional
-    });
+constexpr std::string_view kStartOffsetKey = "startOffset";
+constexpr std::string_view kEndOffsetKey = "endOffset";
+constexpr std::string_view kTextKey = "text";
+constexpr std::string_view kHypothesisPartsKey = "hypothesisParts";
+constexpr std::string_view kCaptionLanguage = "captionLanguage";
+constexpr std::string_view kCaptionsKey = "captions";
+constexpr std::string_view kKeyIdeasKey = "tableOfContent";
+constexpr std::string_view kOffset = "offset";
+constexpr std::string_view kRecognitionStatus = "recognitionStatus";
+constexpr std::string_view kMetadataVersionNumber = "version";
+constexpr std::string_view kGroupIdKey = "groupId";
 
 // Source of common English abbreviations: icu's sentence break exception list
 // https://source.chromium.org/chromium/chromium/src/+/main:third_party/icu/source/data/brkitr/en.txt.
@@ -79,19 +70,6 @@ base::Value::Dict HypothesisPartsToDict(
       kOffset, static_cast<int>(
                    hypothesis_parts.hypothesis_part_offset.InMilliseconds()));
   return hypothesis_part_dict;
-}
-
-std::string GetSentenceText(const std::vector<media::HypothesisParts>& sentence,
-                            const std::string& caption_language) {
-  std::vector<base::StringPiece> sentence_text;
-  for (const auto& hypothesisPart : sentence) {
-    sentence_text.push_back(hypothesisPart.text[0]);
-  }
-  return base::JoinString(
-      sentence_text,
-      /*separator=*/kLanguagesWithoutWhiteSpaces.contains(caption_language)
-          ? ""
-          : " ");
 }
 
 std::vector<media::HypothesisParts> recalculateHypothesisPartTimeStamps(
@@ -176,6 +154,9 @@ std::vector<std::unique_ptr<ProjectorTranscript>> SplitTranscriptIntoSentences(
                                       caption_language);
   base::TimeDelta sentence_start_time = paragraph_start_time;
   base::TimeDelta sentence_end_time;
+  const std::u16string full_text =
+      base::UTF8ToUTF16(paragraph_transcript->text());
+  size_t previous_sentence_end_pos = 0;
   for (uint i = 0; i < sentence_hypothesis_parts.size(); ++i) {
     std::vector<media::HypothesisParts> current_sentence_hypothesis_parts =
         recalculateHypothesisPartTimeStamps(
@@ -189,12 +170,26 @@ std::vector<std::unique_ptr<ProjectorTranscript>> SplitTranscriptIntoSentences(
             ? sentence_hypothesis_parts[i + 1][0].hypothesis_part_offset +
                   paragraph_start_time
             : paragraph_end_time;
-    const std::string sentence_text =
-        GetSentenceText(current_sentence_hypothesis_parts, caption_language);
+    std::u16string sentence_text = u"";
+    if (current_sentence_hypothesis_parts.size() > 0) {
+      std::u16string sentence_end_word =
+          base::UTF8ToUTF16(current_sentence_hypothesis_parts.back().text[0]);
+
+      // Remove the delimiter character sometimes added by the speech service.
+      base::RemoveChars(sentence_end_word, u"\u2581", &sentence_end_word);
+      const size_t current_sentence_end_pos =
+          full_text.find(sentence_end_word, previous_sentence_end_pos) +
+          sentence_end_word.length();
+      sentence_text = full_text.substr(
+          previous_sentence_end_pos,
+          (current_sentence_end_pos - previous_sentence_end_pos));
+      base::TrimString(sentence_text, u" ", &sentence_text);
+      previous_sentence_end_pos = current_sentence_end_pos;
+    }
     sentence_transcripts.push_back(std::make_unique<ProjectorTranscript>(
         sentence_start_time, sentence_end_time,
-        /*group_id=*/paragraph_start_time.InMilliseconds(), sentence_text,
-        current_sentence_hypothesis_parts));
+        /*group_id=*/paragraph_start_time.InMilliseconds(),
+        base::UTF16ToUTF8(sentence_text), current_sentence_hypothesis_parts));
     // Next sentence's start timestamp is current sentence's end timestamp.
     sentence_start_time = sentence_end_time;
   }

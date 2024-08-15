@@ -13,6 +13,7 @@
 #include "base/memory/raw_ref.h"
 #include "base/types/optional_ref.h"
 #include "build/build_config.h"
+#include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/content/common/mojom/autofill_agent.mojom.h"
 #include "components/autofill/content/common/mojom/autofill_driver.mojom.h"
 #include "components/autofill/core/browser/autofill_driver.h"
@@ -121,18 +122,13 @@ class ContentAutofillDriver : public AutofillDriver,
   static ContentAutofillDriver* GetForRenderFrameHost(
       content::RenderFrameHost* render_frame_host);
 
-  // Partially constructs the ContentAutofillDriver: afterwards, the caller
-  // *must* set a non-null AutofillManager with set_autofill_manager().
-  // Outside of unittests, this is done by ContentAutofillDriverFactory.
+  // Part of the initialization may be embedder-specific, implemented in
+  // ContentAutofillClient::CreateManager().
   ContentAutofillDriver(content::RenderFrameHost* render_frame_host,
                         ContentAutofillDriverFactory* owner);
   ContentAutofillDriver(const ContentAutofillDriver&) = delete;
   ContentAutofillDriver& operator=(const ContentAutofillDriver&) = delete;
   ~ContentAutofillDriver() override;
-
-  void set_autofill_manager(std::unique_ptr<AutofillManager> autofill_manager) {
-    autofill_manager_ = std::move(autofill_manager);
-  }
 
   content::RenderFrameHost* render_frame_host() { return &*render_frame_host_; }
   const content::RenderFrameHost* render_frame_host() const {
@@ -161,39 +157,18 @@ class ContentAutofillDriver : public AutofillDriver,
   LocalFrameToken GetFrameToken() const override;
   std::optional<LocalFrameToken> Resolve(FrameToken query) override;
   ContentAutofillDriver* GetParent() override;
+  ContentAutofillClient& GetAutofillClient() override;
   AutofillManager& GetAutofillManager() override;
   bool IsInActiveFrame() const override;
   bool IsInAnyMainFrame() const override;
   bool IsPrerendering() const override;
   bool HasSharedAutofillPermission() const override;
   bool CanShowAutofillUi() const override;
-  void HandleParsedForms(const std::vector<FormData>& forms) override {}
   void PopupHidden() override;
   net::IsolationInfo IsolationInfo() override;
 
-  // Indicates that the `potentially_submitted_form_` has probably been
-  // submitted if the feature AutofillProbableFormSubmissionInBrowser is
-  // enabled.
-  void ProbablyFormSubmitted(base::PassKey<ContentAutofillDriverFactory>);
-
   // Called on certain types of navigations by ContentAutofillDriverFactory.
   void Reset();
-
-  // Called to inform the browser that in the field with `form_global_id` and
-  // `field_global_id`, the context menu was triggered. This is different from
-  // the usual Autofill flow where the renderer calls the browser or the browser
-  // informs the renderer of some event.
-  //
-  // This is tricky because the context-menu event may refer to a renderer form
-  // in a certain frame, but the form is managed by the AutofillManager of
-  // another frame.
-  //
-  // TODO(crbug.com/1490899): Let callers call AutofillManager directly once
-  // AutofillManager is per-tab.
-  //
-  // Virtual for testing.
-  virtual void OnContextMenuShownInField(const FormGlobalId& form_global_id,
-                                         const FieldGlobalId& field_global_id);
 
   // Vivaldi
   void set_browser_autofill_manager(
@@ -241,13 +216,13 @@ class ContentAutofillDriver : public AutofillDriver,
   // Group (1b): browser -> renderer events, routed (see comment above).
   // autofill::AutofillDriver:
   base::flat_set<FieldGlobalId> ApplyFormAction(
-      mojom::ActionType action_type,
+      mojom::FormActionType action_type,
       mojom::ActionPersistence action_persistence,
       const FormData& data,
       const url::Origin& triggered_origin,
       const base::flat_map<FieldGlobalId, FieldType>& field_type_map) override;
-  void ApplyFieldAction(mojom::ActionPersistence action_persistence,
-                        mojom::TextReplacement text_replacement,
+  void ApplyFieldAction(mojom::FieldActionType action_type,
+                        mojom::ActionPersistence action_persistence,
                         const FieldGlobalId& field_id,
                         const std::u16string& value) override;
   void ExtractForm(FormGlobalId form,
@@ -305,8 +280,6 @@ class ContentAutofillDriver : public AutofillDriver,
                               const FormFieldData& field,
                               const gfx::RectF& bounding_box) override;
   void SelectOrSelectListFieldOptionsDidChange(const FormData& form) override;
-  void SetFormToBeProbablySubmitted(
-      const std::optional<FormData>& form) override;
   void TextFieldDidChange(const FormData& form,
                           const FormFieldData& field,
                           const gfx::RectF& bounding_box,
@@ -315,14 +288,13 @@ class ContentAutofillDriver : public AutofillDriver,
                           const FormFieldData& field,
                           const gfx::RectF& bounding_box) override;
 
-  // Sets parameters of |form| and |optional_field| that can be extracted from
-  // |render_frame_host_|. |optional_field| is treated as if it is a field of
-  // |form|.
+  // Sets parameters of |form| and |field| that can be extracted from
+  // |render_frame_host_|. |field| is treated as if it is a field of |form|.
   //
   // These functions must be called for every FormData and FormFieldData
   // received from the renderer.
   void SetFrameAndFormMetaData(FormData& form,
-                               FormFieldData* optional_field) const;
+                               base::optional_ref<FormFieldData> field) const;
   // Returns a copy of `form` after applying `SetFormAndFormMetaData` to it.
   [[nodiscard]] FormData GetFormWithFrameAndFormMetaData(FormData form) const;
   [[nodiscard]] std::optional<FormData> GetFormWithFrameAndFormMetaData(
@@ -350,20 +322,11 @@ class ContentAutofillDriver : public AutofillDriver,
   // The factory that created this driver. Outlives `this`.
   const raw_ref<ContentAutofillDriverFactory> owner_;
 
-  // The form pushed from the AutofillAgent to the AutofillDriver. When the
-  // ProbablyFormSubmitted() event is fired, this form is considered the
-  // submitted one.
-  std::optional<FormData> potentially_submitted_form_;
-
-  // Keeps track of the forms for which FormSubmitted() event has been triggered
-  // to avoid duplicates fired by AutofillAgent.
-  std::set<FormGlobalId> submitted_forms_;
-
-  std::unique_ptr<AutofillManager> autofill_manager_ = nullptr;
-
   mojo::AssociatedReceiver<mojom::AutofillDriver> receiver_{this};
 
   mojo::AssociatedRemote<mojom::AutofillAgent> autofill_agent_;
+
+  std::unique_ptr<AutofillManager> autofill_manager_ = nullptr;
 
   // Vivaldi
   std::unique_ptr<BrowserAutofillManager> android_browser_autofill_manager_ =

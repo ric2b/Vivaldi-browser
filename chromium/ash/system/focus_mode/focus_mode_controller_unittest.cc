@@ -10,13 +10,18 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/ash_prefs.h"
+#include "ash/shell.h"
 #include "ash/system/focus_mode/focus_mode_controller.h"
 #include "ash/system/focus_mode/focus_mode_session.h"
+#include "ash/system/focus_mode/focus_mode_tray.h"
 #include "ash/system/focus_mode/focus_mode_util.h"
+#include "ash/system/status_area_widget_test_helper.h"
+#include "ash/system/toast/anchored_nudge_manager_impl.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
+#include "url/gurl.h"
 
 namespace ash {
 
@@ -24,6 +29,11 @@ namespace {
 
 constexpr char kUser1Email[] = "user1@focusmode";
 constexpr char kUser2Email[] = "user2@focusmode";
+
+bool IsEndingMomentNudgeShown() {
+  return Shell::Get()->anchored_nudge_manager()->IsNudgeShown(
+      focus_mode_util::kFocusModeEndingMomentNudgeId);
+}
 
 }  // namespace
 
@@ -57,12 +67,12 @@ class FocusModeControllerMultiUserTest : public NoSessionAshTestBase {
     RegisterUserProfilePrefs(user_2_prefs_->registry(), /*country=*/"",
                              /*for_test=*/true);
     session_controller->AddUserSession(kUser1Email,
-                                       user_manager::USER_TYPE_REGULAR,
+                                       user_manager::UserType::kRegular,
                                        /*provide_pref_service=*/false);
     session_controller->SetUserPrefService(GetUser1AccountId(),
                                            std::move(user_1_prefs));
     session_controller->AddUserSession(kUser2Email,
-                                       user_manager::USER_TYPE_REGULAR,
+                                       user_manager::UserType::kRegular,
                                        /*provide_pref_service=*/false);
     session_controller->SetUserPrefService(GetUser2AccountId(),
                                            std::move(user_2_prefs));
@@ -187,11 +197,12 @@ TEST_F(FocusModeControllerMultiUserTest, TasksFlow) {
   const std::string title = "Focus Task";
   controller->SetSelectedTask(std::make_unique<api::Task>(
                                   /*id=*/base::NumberToString(id), title,
-                                  /*completed=*/false,
-                                  /*due=*/absl::nullopt, /*has_subtasks=*/false,
+                                  /*due=*/std::nullopt, /*completed=*/false,
+                                  /*has_subtasks=*/false,
                                   /*has_email_link=*/false,
                                   /*has_notes=*/false,
-                                  /*updated=*/base::Time::Now())
+                                  /*updated=*/base::Time::Now(),
+                                  /*web_view_link=*/GURL())
                                   .get());
   EXPECT_TRUE(controller->HasSelectedTask());
   EXPECT_EQ(base::NumberToString(id), controller->selected_task_id());
@@ -258,6 +269,45 @@ TEST_F(FocusModeControllerMultiUserTest, StartNewSessionDuringEndingMoment) {
   controller->ToggleFocusMode();
   EXPECT_TRUE(controller->current_session().has_value());
   EXPECT_TRUE(controller->in_focus_session());
+}
+
+// Tests basic ending moment nudge functionality. Includes the nudge appearing
+// and disappearing.
+TEST_F(FocusModeControllerMultiUserTest, EndingMomentNudgeTest) {
+  SimulateUserLogin(GetUser1AccountId());
+  base::TimeDelta kSessionDuration = base::Minutes(20);
+
+  auto* controller = FocusModeController::Get();
+  controller->SetInactiveSessionDuration(kSessionDuration);
+
+  auto trigger_ending_moment = [this, controller, kSessionDuration]() {
+    // Toggling focus mode on and verify that we are not in the ending moment.
+    controller->ToggleFocusMode();
+    EXPECT_TRUE(controller->in_focus_session());
+
+    // Once the session expires, the ending moment should start.
+    AdvanceClock(kSessionDuration);
+    EXPECT_TRUE(controller->in_ending_moment());
+  };
+
+  // Verify that the nudge is visible when the ending moment is triggered.
+  trigger_ending_moment();
+  EXPECT_TRUE(IsEndingMomentNudgeShown());
+
+  // Verify that the ending moment terminating also hides the nudge.
+  AdvanceClock(focus_mode_util::kEndingMomentDuration);
+  EXPECT_FALSE(controller->current_session().has_value());
+  EXPECT_FALSE(IsEndingMomentNudgeShown());
+
+  // Trigger the ending moment, then check that the notification disappears when
+  // we open the tray bubble.
+  trigger_ending_moment();
+  EXPECT_TRUE(IsEndingMomentNudgeShown());
+  FocusModeTray* focus_mode_tray =
+      StatusAreaWidgetTestHelper::GetStatusAreaWidget()->focus_mode_tray();
+  LeftClickOn(focus_mode_tray);
+  EXPECT_TRUE(controller->in_ending_moment());
+  EXPECT_FALSE(IsEndingMomentNudgeShown());
 }
 
 }  // namespace ash

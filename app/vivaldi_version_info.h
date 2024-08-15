@@ -15,6 +15,16 @@
 #define S(s) BUILD_VERSION_##s
 #define BUILD_VERSION(s) S(s)
 
+// Based on parsing the branch name; only official can be non-normal
+#define BUILD_RELEASE_normal Release::kSopranos
+#define BUILD_RELEASE_snapshot Release::kSnapshot
+#define BUILD_RELEASE_preview Release::kTechnologyPreview
+#define BUILD_RELEASE_beta Release::kBeta
+#define BUILD_RELEASE_final Release::kFinal
+
+#define S1(s) BUILD_RELEASE_##s
+#define BUILD_RELEASE_KIND(s) S1(s)
+
 #define VIVALDI_BUILD_PUBLIC_RELEASE 1
 
 namespace base {
@@ -23,14 +33,33 @@ class Version;
 
 namespace vivaldi {
 
+enum class Release {
+  // Internal dev builds are also sopranos builds, uses the green icon
+  kInternal,
+  kSopranos = kInternal,
+
+  // Kinds listed below are only set for Official builds
+
+  // Snapshots are Official builds, using the black icon
+  kSnapshot,
+
+  // Currently not used. Used for Technology previews. Official build
+  kTechnologyPreview,
+
+  // Currently not used Betas are Official builds
+  kBeta,
+
+  // Final are Official builds to be shipped to general users. Red Icon
+  kFinal,
+};
+
 // Returns a version string to be displayed in "About Vivaldi" dialog.
 std::string GetVivaldiVersionString();
 
 // Return the Vivaldi build version as base::Version instance.
 const base::Version& GetVivaldiVersion();
 
-// Returns true when running a build that is a beta or a final.
-bool IsBetaOrFinal();
+Release ReleaseKind();
 
 }  // namespace vivaldi
 

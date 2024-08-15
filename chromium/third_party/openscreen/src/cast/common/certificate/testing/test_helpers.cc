@@ -26,7 +26,7 @@ SignatureTestData::~SignatureTestData() {
 
 SignatureTestData ReadSignatureTestData(std::string_view filename) {
   FILE* fp = fopen(filename.data(), "r");
-  OSP_DCHECK(fp);
+  OSP_CHECK(fp);
   SignatureTestData result = {};
   char* name;
   char* header;
@@ -34,13 +34,13 @@ SignatureTestData ReadSignatureTestData(std::string_view filename) {
   long length;  // NOLINT
   while (PEM_read(fp, &name, &header, &data, &length) == 1) {
     if (std::strcmp(name, "MESSAGE") == 0) {
-      OSP_DCHECK(result.message.empty());
+      OSP_CHECK(result.message.empty());
       result.message = ByteBuffer(data, length);
     } else if (std::strcmp(name, "SIGNATURE SHA1") == 0) {
-      OSP_DCHECK(result.sha1.empty());
+      OSP_CHECK(result.sha1.empty());
       result.sha1 = ByteBuffer(data, length);
     } else if (std::strcmp(name, "SIGNATURE SHA256") == 0) {
-      OSP_DCHECK(result.sha256.empty());
+      OSP_CHECK(result.sha256.empty());
       result.sha256 = ByteBuffer(data, length);
     } else {
       OPENSSL_free(data);
@@ -48,9 +48,9 @@ SignatureTestData ReadSignatureTestData(std::string_view filename) {
     OPENSSL_free(name);
     OPENSSL_free(header);
   }
-  OSP_DCHECK(!result.message.empty());
-  OSP_DCHECK(!result.sha1.empty());
-  OSP_DCHECK(!result.sha256.empty());
+  OSP_CHECK(!result.message.empty());
+  OSP_CHECK(!result.sha1.empty());
+  OSP_CHECK(!result.sha256.empty());
 
   return result;
 }

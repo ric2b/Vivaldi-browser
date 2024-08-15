@@ -191,8 +191,12 @@ static enum xnn_status create_conv2d_hwc2chw_path(
     kernel, bias, weights_ptr, NULL);
 
   if (use_weights_cache(convolution_op)) {
-    convolution_op->packed_weights.offset = xnn_get_or_insert_weights_cache(
-        convolution_op->weights_cache, weights_ptr, aligned_total_weights_size);
+    struct xnn_weights_cache_look_up_key cache_key;
+    cache_key.seed = group_input_channels ^ group_output_channels ^ output_channel_tile;
+    cache_key.kernel = kernel;
+    cache_key.bias = bias;
+    convolution_op->packed_weights.offset = xnn_look_up_or_insert_weights_cache(
+        convolution_op->weights_cache, &cache_key, weights_ptr, aligned_total_weights_size);
   }
 
   convolution_op->ukernel.conv2d = (struct xnn_ukernel_conv2d) {
@@ -233,19 +237,25 @@ static enum xnn_status create_dwconv_path(
   xnn_log_debug("allocated %zu bytes for packed weights in %s operator",
                 aligned_total_weights_size, xnn_operator_type_to_string(operator_type));
 
+  uint32_t cache_seed = kernel_height ^ kernel_width ^ groups;
   if (flags & XNN_FLAG_DEPTHWISE_CONVOLUTION) {
     pack_chw_dwconv_hwg_w(
       kernel_height * kernel_width, groups,
       kernel, bias, weights_ptr, NULL);
   } else {
+    cache_seed = ~cache_seed;
     pack_chw_dwconv_ghw_w(
       kernel_height * kernel_width, groups,
       kernel, bias, weights_ptr, NULL);
   }
 
   if (use_weights_cache(convolution_op)) {
-    convolution_op->packed_weights.offset = xnn_get_or_insert_weights_cache(
-        convolution_op->weights_cache, weights_ptr, aligned_total_weights_size);
+    struct xnn_weights_cache_look_up_key cache_key;
+    cache_key.seed = cache_seed;
+    cache_key.kernel = kernel;
+    cache_key.bias = bias;
+    convolution_op->packed_weights.offset = xnn_look_up_or_insert_weights_cache(
+        convolution_op->weights_cache, &cache_key, weights_ptr, aligned_total_weights_size);
   }
 
   convolution_op->ukernel.dwconv2d = (struct xnn_ukernel_dwconv2d) {
@@ -714,9 +724,9 @@ enum xnn_status xnn_create_convolution2d_nchw_f32(
     goto error;
   }
 
-  if (output_min >= output_max) {
+  if (output_min > output_max) {
     xnn_log_error(
-      "failed to create %s operator with [%.7g, %.7g] output range: lower bound must be below upper bound",
+      "failed to create %s operator with [%.7g, %.7g] output range: lower bound must be less than or equal to upper bound",
       xnn_operator_type_to_string(operator_type), output_min, output_max);
     goto error;
   }
@@ -975,12 +985,6 @@ static enum xnn_status reshape_convolution2d_nchw(
     return xnn_status_success;
   }
 
-  if (convolution_op->weights_cache != NULL && !xnn_weights_cache_is_finalized(convolution_op->weights_cache)) {
-    xnn_log_error("failed to reshape %s operator: weights cache is not finalized",
-      xnn_operator_type_to_string(convolution_op->type));
-    return xnn_status_invalid_state;
-  }
-
   convolution_op->batch_size = batch_size;
   convolution_op->input_height = input_height;
   convolution_op->input_width = input_width;
@@ -1226,6 +1230,12 @@ static enum xnn_status setup_convolution2d_nchw(
       xnn_operator_type_to_string(expected_operator_type),
       xnn_operator_type_to_string(convolution_op->type));
     return xnn_status_invalid_parameter;
+  }
+
+  if (convolution_op->weights_cache != NULL && !xnn_weights_cache_is_finalized(convolution_op->weights_cache)) {
+    xnn_log_error("failed to setup %s operator: weights cache is not finalized",
+      xnn_operator_type_to_string(expected_operator_type));
+    return xnn_status_invalid_state;
   }
 
   switch (convolution_op->state) {

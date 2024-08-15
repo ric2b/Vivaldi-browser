@@ -31,6 +31,10 @@ extern const char kRustEdition[];
 extern const char kRustEdition_HelpShort[];
 extern const char kRustEdition_Help[];
 
+extern const char kRustflags[];
+extern const char kRustflags_HelpShort[];
+extern const char kRustflags_Help[];
+
 void InsertRustVariables(VariableInfoMap* info_map);
 
 }  // namespace variables

@@ -36,7 +36,7 @@ type serverHandshakeState struct {
 	finishedHash    finishedHash
 	masterSecret    []byte
 	certsFromClient [][]byte
-	cert            *Certificate
+	cert            *Credential
 	finishedBytes   []byte
 	echHPKEContext  *hpke.Context
 	echConfigID     uint8
@@ -449,7 +449,7 @@ func (hs *serverHandshakeState) readClientHello() error {
 
 func applyBugsToClientHello(clientHello *clientHelloMsg, config *Config) {
 	if config.Bugs.IgnorePeerSignatureAlgorithmPreferences {
-		clientHello.signatureAlgorithms = config.signSignatureAlgorithms()
+		clientHello.signatureAlgorithms = config.Credential.signatureAlgorithms()
 	}
 	if config.Bugs.IgnorePeerCurvePreferences {
 		clientHello.supportedCurves = config.curvePreferences()
@@ -1168,15 +1168,14 @@ ResendHelloRetryRequest:
 		}
 
 		// Determine the hash to sign.
-		privKey := hs.cert.PrivateKey
-
 		var err error
-		certVerify.signatureAlgorithm, err = selectSignatureAlgorithm(c.vers, privKey, config, hs.clientHello.signatureAlgorithms)
+		certVerify.signatureAlgorithm, err = selectSignatureAlgorithm(c.vers, hs.cert, config, hs.clientHello.signatureAlgorithms)
 		if err != nil {
 			c.sendAlert(alertInternalError)
 			return err
 		}
 
+		privKey := hs.cert.PrivateKey
 		input := hs.finishedHash.certificateVerifyInput(serverCertificateVerifyContextTLS13)
 		certVerify.signature, err = signMessage(c.vers, privKey, c.config, certVerify.signatureAlgorithm, input)
 		if err != nil {
@@ -1587,14 +1586,11 @@ func (hs *serverHandshakeState) processClientExtensions(serverExtensions *server
 	if len(hs.clientHello.serverName) > 0 {
 		c.serverName = hs.clientHello.serverName
 	}
-	if len(config.Certificates) == 0 {
+	if config.Credential == nil {
 		c.sendAlert(alertInternalError)
 		return errors.New("tls: no certificates configured")
 	}
-	hs.cert = &config.Certificates[0]
-	if len(hs.clientHello.serverName) > 0 {
-		hs.cert = config.getCertificateForName(hs.clientHello.serverName)
-	}
+	hs.cert = config.Credential
 	if expected := c.config.Bugs.ExpectServerName; expected != "" && expected != hs.clientHello.serverName {
 		return fmt.Errorf("tls: unexpected server name: wanted %q, got %q", expected, hs.clientHello.serverName)
 	}
@@ -1973,10 +1969,7 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 			certificateTypes: config.ClientCertificateTypes,
 		}
 		if certReq.certificateTypes == nil {
-			certReq.certificateTypes = []byte{
-				byte(CertTypeRSASign),
-				byte(CertTypeECDSASign),
-			}
+			certReq.certificateTypes = []byte{CertTypeRSASign, CertTypeECDSASign}
 		}
 		if c.vers >= VersionTLS12 {
 			certReq.hasSignatureAlgorithm = true

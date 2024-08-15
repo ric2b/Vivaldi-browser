@@ -15,6 +15,8 @@
 #include "components/manta/features.h"
 #include "components/manta/manta_service.h"
 #include "components/manta/manta_status.h"
+#include "ui/base/ime/ash/extension_ime_util.h"
+#include "ui/base/ime/ash/input_method_manager.h"
 
 namespace ash::input_method {
 
@@ -41,6 +43,16 @@ std::map<std::string, std::string> CreateProviderRequest(
     orca::mojom::TextQueryRequestPtr request) {
   auto& params = request->parameters;
   std::map<std::string, std::string> provider_request;
+
+  InputMethodManager* input_method_manager = InputMethodManager::Get();
+
+  if (input_method_manager != nullptr &&
+      input_method_manager->GetActiveIMEState() != nullptr) {
+    provider_request["ime"] = extension_ime_util::GetComponentIDByInputMethodID(
+        input_method_manager->GetActiveIMEState()
+            ->GetCurrentInputMethod()
+            .id());
+  }
 
   for (auto it = params.begin(); it != params.end(); ++it) {
     provider_request[it->first] = it->second;
@@ -105,6 +117,20 @@ std::vector<orca::mojom::TextQueryResultPtr> ParseSuccessResponse(
   return results;
 }
 
+std::optional<size_t> GetLengthOfLongestResponse(
+    const std::vector<orca::mojom::TextQueryResultPtr>& responses) {
+  if (responses.size() == 0) {
+    return std::nullopt;
+  }
+  size_t max_response_length = 0;
+  for (const auto& response : responses) {
+    if (response->text.length() > max_response_length) {
+      max_response_length = response->text.length();
+    }
+  }
+  return max_response_length;
+}
+
 }  // namespace
 
 TextQueryProviderForOrca::TextQueryProviderForOrca(
@@ -129,6 +155,8 @@ void TextQueryProviderForOrca::Process(orca::mojom::TextQueryRequestPtr request,
     return;
   }
 
+  metrics_recorder_->LogEditorState(EditorStates::kRequest);
+
   ++request_id_;
   orca_provider_->Call(
       CreateProviderRequest(std::move(request)),
@@ -140,6 +168,8 @@ void TextQueryProviderForOrca::Process(orca::mojom::TextQueryRequestPtr request,
             if (status.status_code == manta::MantaStatusCode::kOk) {
               auto responses = ParseSuccessResponse(request_id, dict);
               int number_of_responses = responses.size();
+              std::optional<size_t> max_response_length =
+                  GetLengthOfLongestResponse(responses);
 
               std::move(process_callback)
                   .Run(orca::mojom::TextQueryResponse::NewResults(
@@ -148,6 +178,10 @@ void TextQueryProviderForOrca::Process(orca::mojom::TextQueryRequestPtr request,
               metrics_recorder->LogEditorState(EditorStates::kSuccessResponse);
               metrics_recorder->LogNumberOfResponsesFromServer(
                   number_of_responses);
+              if (max_response_length.has_value()) {
+                metrics_recorder->LogLengthOfLongestResponseFromServer(
+                    *max_response_length);
+              }
               return;
             }
 

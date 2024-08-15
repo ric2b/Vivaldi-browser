@@ -12,7 +12,6 @@
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
@@ -61,10 +60,8 @@ void ReportEvent(GURL url,
   DlpRulesManager::RuleMetadata rule_metadata;
   const std::string src_pattern = rules_manager->GetSourceUrlPattern(
       url, restriction, level, &rule_metadata);
-  if (src_pattern.empty()) {
-    LOG(ERROR) << "DlpContentManager failed to get the source URL pattern.";
-  }
-  reporting_manager->ReportEvent(src_pattern, restriction, level,
+  const std::string src_url = url.is_empty() ? src_pattern : url.spec();
+  reporting_manager->ReportEvent(src_url, restriction, level,
                                  rule_metadata.name,
                                  rule_metadata.obfuscated_id);
 }
@@ -540,12 +537,9 @@ void DlpContentManager::ReportWarningProceededEvent(
     DlpRulesManager::RuleMetadata rule_metadata;
     const std::string src_pattern = rules_manager->GetSourceUrlPattern(
         url, restriction, DlpRulesManager::Level::kWarn, &rule_metadata);
-    if (src_pattern.empty()) {
-      LOG(ERROR) << "DlpContentManager failed to get the source URL pattern.";
-    }
-    reporting_manager->ReportWarningProceededEvent(src_pattern, restriction,
-                                                   rule_metadata.name,
-                                                   rule_metadata.obfuscated_id);
+    const std::string src_url = url.is_empty() ? src_pattern : url.spec();
+    reporting_manager->ReportWarningProceededEvent(
+        src_url, restriction, rule_metadata.name, rule_metadata.obfuscated_id);
   }
 }
 
@@ -740,7 +734,7 @@ void DlpContentManager::AddOrUpdateScreenShare(
 void DlpContentManager::RemoveScreenShare(
     const std::string& label,
     const content::DesktopMediaID& media_id) {
-  base::EraseIf(
+  std::erase_if(
       running_screen_shares_,
       [=](const std::unique_ptr<ScreenShareInfo>& screen_share_info) -> bool {
         return screen_share_info->label() == label &&

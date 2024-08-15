@@ -142,8 +142,8 @@ if (build_with_chromium) {
 ###############################################################################
 
 # When building with chromium under Windows, we need to copy the DXC from
-# Windows SDK into build folder, in order to ensure a DXC of verison 1.6 is
-# avaliable when running end-to-end tests in Chromium. Note that currently DXC
+# Windows SDK into build folder, in order to ensure a DXC of version 1.6 is
+# available when running end-to-end tests in Chromium. Note that currently DXC
 # only provided for x86 and x64 in Windows SDK 20348.
 if (!dawn_use_built_dxc && build_with_chromium && is_win &&
     (target_cpu == "x64" || target_cpu == "x86")) {
@@ -435,7 +435,6 @@ dawn_test("dawn_unittests") {
     "unittests/wire/WireExtensionTests.cpp",
     "unittests/wire/WireFutureTest.cpp",
     "unittests/wire/WireFutureTest.h",
-    "unittests/wire/WireInjectDeviceTests.cpp",
     "unittests/wire/WireInjectInstanceTests.cpp",
     "unittests/wire/WireInjectSwapChainTests.cpp",
     "unittests/wire/WireInjectTextureTests.cpp",
@@ -574,6 +573,7 @@ source_set("end2end_tests_sources") {
     "end2end/AdapterCreationTests.cpp",
     "end2end/AdapterEnumerationTests.cpp",
     "end2end/AdapterPropertiesD3DTests.cpp",
+    "end2end/AdapterPropertiesVkTests.cpp",
     "end2end/BasicTests.cpp",
     "end2end/BindGroupTests.cpp",
     "end2end/BufferHostMappedPointerTests.cpp",
@@ -672,6 +672,7 @@ source_set("end2end_tests_sources") {
   if (dawn_enable_d3d11 || dawn_enable_d3d12) {
     libs += [
       "d3d11.lib",
+      "d3d12.lib",
       "dxgi.lib",
     ]
 
@@ -746,6 +747,9 @@ source_set("white_box_tests_sources") {
   ]
 
   sources = [
+    "white_box/ShaderModuleTests.cpp",
+    "white_box/SharedBufferMemoryTests.cpp",
+    "white_box/SharedBufferMemoryTests.h",
     "white_box/SharedTextureMemoryTests.cpp",
     "white_box/SharedTextureMemoryTests.h",
   ]
@@ -756,7 +760,10 @@ source_set("white_box_tests_sources") {
   }
 
   if (is_win) {
-    sources += [ "white_box/SharedTextureMemoryTests_win.cpp" ]
+    sources += [
+      "white_box/SharedBufferMemoryTests_win.cpp",
+      "white_box/SharedTextureMemoryTests_win.cpp",
+    ]
   }
 
   if (dawn_enable_vulkan) {
@@ -816,6 +823,7 @@ source_set("white_box_tests_sources") {
       "white_box/GPUTimestampCalibrationTests.h",
       "white_box/GPUTimestampCalibrationTests_Metal.mm",
       "white_box/MetalAutoreleasePoolTests.mm",
+      "white_box/MetalBackendTests.cpp",
     ]
 
     # If a "build with ARC" config is present, remove it.
@@ -878,8 +886,10 @@ dawn_test("dawn_perf_tests") {
     "perf_tests/DawnPerfTestPlatform.cpp",
     "perf_tests/DawnPerfTestPlatform.h",
     "perf_tests/DrawCallPerf.cpp",
+    "perf_tests/MatrixVectorMultiplyPerf.cpp",
     "perf_tests/ShaderRobustnessPerf.cpp",
     "perf_tests/SubresourceTrackingPerf.cpp",
+    "perf_tests/UniformBufferUpdatePerf.cpp",
     "perf_tests/VulkanZeroInitializeWorkgroupMemoryPerf.cpp",
   ]
 

@@ -90,7 +90,7 @@ const CSSValue* ParseCSSValue(const ExecutionContext* context,
 
 CSSFontFace* CreateCSSFontFace(FontFace* font_face,
                                const CSSValue* unicode_range) {
-  Vector<UnicodeRange> ranges;
+  HeapVector<UnicodeRange> ranges;
   if (const auto* range_list = To<CSSValueList>(unicode_range)) {
     unsigned num_ranges = range_list->length();
     for (unsigned i = 0; i < num_ranges; i++) {
@@ -100,7 +100,7 @@ CSSFontFace* CreateCSSFontFace(FontFace* font_face,
     }
   }
 
-  return MakeGarbageCollected<CSSFontFace>(font_face, ranges);
+  return MakeGarbageCollected<CSSFontFace>(font_face, std::move(ranges));
 }
 
 const CSSValue* ConvertFontMetricOverrideValue(const CSSValue* parsed_value) {
@@ -551,7 +551,8 @@ void FontFace::SetError(DOMException* error) {
   SetLoadStatus(kError);
 }
 
-ScriptPromise FontFace::FontStatusPromise(ScriptState* script_state) {
+ScriptPromiseTyped<FontFace> FontFace::FontStatusPromise(
+    ScriptState* script_state) {
   if (!loaded_property_) {
     loaded_property_ = MakeGarbageCollected<LoadedProperty>(
         ExecutionContext::From(script_state));
@@ -564,7 +565,7 @@ ScriptPromise FontFace::FontStatusPromise(ScriptState* script_state) {
   return loaded_property_->Promise(script_state->World());
 }
 
-ScriptPromise FontFace::load(ScriptState* script_state) {
+ScriptPromiseTyped<FontFace> FontFace::load(ScriptState* script_state) {
   if (status_ == kUnloaded) {
     css_font_face_->Load();
   }

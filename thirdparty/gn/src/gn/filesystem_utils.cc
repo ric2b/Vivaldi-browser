@@ -13,9 +13,11 @@
 #include "gn/location.h"
 #include "gn/settings.h"
 #include "gn/source_dir.h"
+#include "gn/target.h"
 #include "util/build_config.h"
 
 #if defined(OS_WIN)
+#include <direct.h>
 #include <windows.h>
 #endif
 
@@ -178,8 +180,7 @@ void AppendFixedAbsolutePathSuffix(const BuildSettings* build_settings,
                                    OutputFile* result) {
   const std::string& build_dir = build_settings->build_dir().value();
 
-  if (base::StartsWith(source_dir.value(), build_dir,
-                       base::CompareCase::SENSITIVE)) {
+  if (source_dir.value().starts_with(build_dir)) {
     size_t build_dir_size = build_dir.size();
     result->value().append(&source_dir.value()[build_dir_size],
                            source_dir.value().size() - build_dir_size);
@@ -639,38 +640,75 @@ void ConvertPathToSystem(std::string* path) {
 #endif
 }
 
-std::string MakeRelativePath(const std::string& input,
-                             const std::string& dest) {
 #if defined(OS_WIN)
-  // Make sure that absolute |input| path starts with a slash if |dest| path
-  // does. Otherwise skipping common prefixes won't work properly. Ensure the
-  // same for |dest| path too.
-  if (IsPathAbsolute(input) && !IsSlash(input[0]) && IsSlash(dest[0])) {
-    std::string corrected_input(1, dest[0]);
-    corrected_input.append(input);
-    return MakeRelativePath(corrected_input, dest);
-  }
-  if (IsPathAbsolute(dest) && !IsSlash(dest[0]) && IsSlash(input[0])) {
-    std::string corrected_dest(1, input[0]);
-    corrected_dest.append(dest);
-    return MakeRelativePath(input, corrected_dest);
+std::string GetPathWithDriveLetter(std::string_view path) {
+  if (!IsPathAbsolute(path) || !IsSlash(path[0]))
+    return std::string(path);
+
+  int drive = _getdrive();
+  DCHECK(drive > 0 && drive <= 26);
+
+  std::string ret;
+  ret.reserve(2 + path.size());
+  ret.push_back('A' + drive - 1);
+  ret.push_back(':');
+  ret += path;
+  return ret;
+}
+
+// Regulate path if it is an absolute path.
+std::string RegulatePathIfAbsolute(std::string_view path) {
+  CHECK(!path.empty());
+  bool is_start_slash = IsSlash(path[0]);
+
+  // 1. /C:/ -> C:/
+  if (path.size() > 3 && is_start_slash &&
+        base::IsAsciiAlpha(path[1]) && path[2] == ':') {
+    return RegulatePathIfAbsolute(path.substr(1));
   }
 
-  // Make sure that both absolute paths use the same drive letter case.
+  bool is_path_absolute = IsPathAbsolute(path);
+
+  // 2. /Path -> ($PWD's Drive):/Path
+  if (is_path_absolute && is_start_slash) {
+    return GetPathWithDriveLetter(path);
+  }
+
+  // 3. c:/ -> C:/
+  std::string ret(path);
+  if (is_path_absolute && !is_start_slash) {
+    ret[0] = base::ToUpperASCII(path[0]);
+  }
+
+  return ret;
+}
+#endif
+
+std::string MakeRelativePath(std::string_view input,
+                             std::string_view dest) {
+#if defined(OS_WIN)
+  // Regulate the paths.
+  std::string input_regulated = RegulatePathIfAbsolute(input);
+  std::string dest_regulated = RegulatePathIfAbsolute(dest);
+
+  input = input_regulated;
+  dest = dest_regulated;
+
+  // On Windows, it is invalid to make a relative path across different
+  // drive letters. A relative path cannot span over different drives.
+  // For example:
+  //    Input          : D:/Path/Any/Where
+  //    Dest           : C:/Path/In/Another/Drive
+  //    Invalid Result : ../../../../../D:/Path/Any/Where
+  //    Correct Result : D:/Path/Any/Where
+  // It will at least make ninja fail.
+  // See: https://bugs.chromium.org/p/gn/issues/detail?id=317
   if (IsPathAbsolute(input) && IsPathAbsolute(dest) && input.size() > 1 &&
       dest.size() > 1) {
-    int letter_pos = base::IsAsciiAlpha(input[0]) ? 0 : 1;
-    if (input[letter_pos] != dest[letter_pos] &&
-        input[letter_pos + 1] == dest[letter_pos + 1] &&
-        input[letter_pos + 1] == ':') {
-      if (base::ToUpperASCII(input[letter_pos]) ==
-          base::ToUpperASCII(dest[letter_pos])) {
-        std::string corrected_input = input;
-        corrected_input[letter_pos] = dest[letter_pos];
-        return MakeRelativePath(corrected_input, dest);
-      } else {
-        return input.substr(letter_pos);
-      }
+    if (input[0] != dest[0]) {
+      // If the drive letters are differnet, we have no choice but use
+      // the absolute path of input for correctness.
+      return input_regulated;
     }
   }
 #endif
@@ -684,9 +722,11 @@ std::string MakeRelativePath(const std::string& input,
   size_t common_prefix_len = 0;
   size_t max_common_length = std::min(input.size(), dest.size());
   for (size_t i = common_prefix_len; i <= max_common_length; i++) {
-    if ((IsSlash(input[i]) || input[i] == '\0') && IsSlash(dest[i]))
+    if (dest.size() == i)
+      break;
+    if ((input.size() == i || IsSlash(input[i])) && IsSlash(dest[i]))
       common_prefix_len = i + 1;
-    else if (input[i] != dest[i])
+    else if (input.size() == i || input[i] != dest[i])
       break;
   }
 
@@ -698,7 +738,7 @@ std::string MakeRelativePath(const std::string& input,
 
   // Append any remaining unique input.
   if (common_prefix_len <= input.size())
-    ret.append(&input[common_prefix_len], input.size() - common_prefix_len);
+    ret.append(input.begin() + common_prefix_len, input.end());
   else if (input.back() != '/' && !ret.empty())
     ret.pop_back();
 
@@ -713,8 +753,7 @@ std::string RebasePath(const std::string& ainput,
                        const SourceDir& dest_dir,
                        std::string_view source_root) {
   std::string ret;
-  DCHECK(source_root.empty() ||
-         !base::EndsWith(source_root, "/", base::CompareCase::SENSITIVE));
+  DCHECK(source_root.empty() || !source_root.ends_with("/"));
   std::string input = BuildSettings::RemapSourcePathToActual(ainput);
 
   bool input_is_source_path =

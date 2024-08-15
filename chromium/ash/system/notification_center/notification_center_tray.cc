@@ -164,7 +164,8 @@ void NotificationCenterTray::HideBubble(const TrayBubbleView* bubble_view) {
   CloseBubble();
 }
 
-void NotificationCenterTray::ClickedOutsideBubble() {
+void NotificationCenterTray::ClickedOutsideBubble(
+    const ui::LocatedEvent& event) {
   CloseBubble();
 }
 
@@ -247,7 +248,7 @@ void NotificationCenterTray::UpdateVisibility() {
   }
 }
 
-BEGIN_METADATA(NotificationCenterTray, TrayBackgroundView)
+BEGIN_METADATA(NotificationCenterTray)
 END_METADATA
 
 }  // namespace ash

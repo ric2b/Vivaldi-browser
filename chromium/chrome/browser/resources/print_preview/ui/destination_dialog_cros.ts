@@ -4,7 +4,6 @@
 
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
-import 'chrome://resources/cr_elements/cr_searchable_drop_down/cr_searchable_drop_down.js';
 import 'chrome://resources/cr_elements/cr_hidden_style.css.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
 import 'chrome://resources/cr_elements/icons.html.js';
@@ -20,8 +19,9 @@ import './provisional_destination_resolver.js';
 import '../strings.m.js';
 import './throbber.css.js';
 import './destination_list_item_cros.js';
+import './searchable_drop_down_cros.js';
 
-import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
+import type {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import {ListPropertyUpdateMixin} from 'chrome://resources/cr_elements/list_property_update_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {assert} from 'chrome://resources/js/assert.js';
@@ -29,18 +29,20 @@ import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement, timeOut} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {Destination, GooglePromotedDestinationId} from '../data/destination.js';
-import {DestinationStore, DestinationStoreEventType} from '../data/destination_store.js';
+import type {Destination} from '../data/destination.js';
+import {GooglePromotedDestinationId} from '../data/destination.js';
+import type {DestinationStore} from '../data/destination_store.js';
+import {DestinationStoreEventType} from '../data/destination_store.js';
 import {PrintServerStore, PrintServerStoreEventType} from '../data/print_server_store.js';
 import {MetricsContext, PrintPreviewLaunchSourceBucket} from '../metrics.js';
 import {NativeLayerImpl} from '../native_layer.js';
 import {NativeLayerCrosImpl} from '../native_layer_cros.js';
 
 import {getTemplate} from './destination_dialog_cros.html.js';
-import {PrintPreviewDestinationListItemElement} from './destination_list_item_cros.js';
-import {PrintPreviewSearchBoxElement} from './print_preview_search_box.js';
-import {PrinterSetupInfoMessageType, PrinterSetupInfoMetricsSource} from './printer_setup_info_cros.js';
-import {PrintPreviewProvisionalDestinationResolverElement} from './provisional_destination_resolver.js';
+import type {PrintPreviewDestinationListItemElement} from './destination_list_item_cros.js';
+import type {PrintPreviewSearchBoxElement} from './print_preview_search_box.js';
+import {PrinterSetupInfoInitiator, PrinterSetupInfoMessageType} from './printer_setup_info_cros.js';
+import type {PrintPreviewProvisionalDestinationResolverElement} from './provisional_destination_resolver.js';
 
 interface PrintServersChangedEventDetail {
   printServerNames: string[];
@@ -157,9 +159,9 @@ export class PrintPreviewDestinationDialogCrosElement extends
         readOnly: true,
       },
 
-      destinationDialogCrosSource_: {
+      destinationDialogCrosInitiator_: {
         type: Number,
-        value: PrinterSetupInfoMetricsSource.DESTINATION_DIALOG_CROS,
+        value: PrinterSetupInfoInitiator.DESTINATION_DIALOG_CROS,
         readOnly: true,
       },
 

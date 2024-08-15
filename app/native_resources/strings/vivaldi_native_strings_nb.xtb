@@ -54,7 +54,6 @@
 <translation id="3334610655141903168">(ingen tittel)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> er nyeste tilgjengelige versjon.</translation>
 <translation id="3383198080133834965">Du er oppdatert!</translation>
-<translation id="3402602684546832928">Velg Opera bokmerkefil</translation>
 <translation id="3451317331714872347">Landskap 8</translation>
 <translation id="3457498675806041407">Bekreft avslutning</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> er allerede installert, og vil bli aktivert etter en omstart av nettleseren.</translation>
@@ -88,7 +87,6 @@
 <translation id="443008484043213881">Verktøy</translation>
 <translation id="4456211719108566931">Monster 6</translation>
 <translation id="4512900838580567989">Åpne lenken i ny bakgrunnsfane</translation>
-<translation id="4515472507709384008">Opera versjon 15+</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Åpne bilde i ny bakgrunnsfane</translation>
 <translation id="4582480609585453144">Åpne lenken i bakgrunnsfane</translation>
@@ -109,7 +107,6 @@
 <translation id="5416008465899576639">En ny versjon av Vivaldi er tilgjengelig.</translation>
 <translation id="5497042274492038489">Bekreft lukking av vindu</translation>
 <translation id="5594602170491763400">Monster 5</translation>
-<translation id="5615637589913244581">Opera versjon 15+ (beta)</translation>
 <translation id="5648110075441906505">Åpne bilde i nytt vindu</translation>
 <translation id="5656371807944747581">Oppdateringsfeil!</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> er nå tilgjengelig (du har <ph name="OLD_VERSION" />). Vil du laste ned nå?</translation>
@@ -120,7 +117,6 @@
 <translation id="6040143037577758943">Lukk</translation>
 <translation id="6229528619562190452">Klikk her for å oppdatere Vivaldi.</translation>
 <translation id="6234173136417926046">Bruk bildet som startsidebakgrunn</translation>
-<translation id="630690498669249215">Opera bokmerkefil</translation>
 <translation id="6339818817272922368">Lokal konto</translation>
 <translation id="6438786710866753178">Landskap 4</translation>
 <translation id="6477028720702061455">Velg Opera profilkatalog for import</translation>
@@ -131,7 +127,6 @@
 <translation id="6635049669875534328">Versjonsmerknader:</translation>
 <translation id="6693585104974197539">Velg mappen for Edge-profilen som skal importeres</translation>
 <translation id="6726279523566323394">Velg mappen for Brave-profilen som skal importeres</translation>
-<translation id="6804831687363620480">Opera 15+ innstillingene er ikke tilgjengelige når nettleseren kjører. Hvis du vil importere disse innstillingene til Vivaldi, lagre arbeidet ditt og lukk alle Opera-vinduer. Deretter klikker du på Fortsett.</translation>
 <translation id="6892812721183419409">Åpne lenken som <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopier</translation>
 <translation id="7086554968911045110">Landskap 7</translation>
@@ -162,7 +157,6 @@
 <translation id="8562339533180097902">Lukk Vivaldi og installer nå</translation>
 <translation id="8567452685425968223">Pakker ut oppdatering...</translation>
 <translation id="8624587806981488221">&amp;Last inn bildet på nytt</translation>
-<translation id="864444594187862076">Opera versjon 15+ (utvikler)</translation>
 <translation id="8651348004684669199">Legg til aktiv fane</translation>
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>

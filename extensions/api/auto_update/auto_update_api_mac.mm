@@ -12,7 +12,7 @@ namespace extensions {
 ExtensionFunction::ResponseAction AutoUpdateCheckForUpdatesFunction::Run() {
   using vivaldi::auto_update::CheckForUpdates::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   AppController* controller =
@@ -67,7 +67,7 @@ AutoUpdateSetAutoInstallUpdatesFunction::Run() {
   using vivaldi::auto_update::SetAutoInstallUpdates::Params;
   using ::vivaldi::kSparkleAutoInstallSettingName;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   NSString* key =
       [NSString stringWithUTF8String:kSparkleAutoInstallSettingName];
@@ -95,7 +95,7 @@ AutoUpdateGetLastCheckTimeFunction::Run() {
 ExtensionFunction::ResponseAction AutoUpdateGetUpdateStatusFunction::Run() {
   AppController* controller =
     base::apple::ObjCCastStrict<AppController>([NSApp delegate]);
-  absl::optional<AutoUpdateStatus> status = [controller getUpdateStatus];
+  std::optional<AutoUpdateStatus> status = [controller getUpdateStatus];
   std::string version_string = [controller getUpdateVersion];
   std::string release_notes_url = [controller getUpdateReleaseNotesUrl];
 
@@ -106,6 +106,11 @@ ExtensionFunction::ResponseAction AutoUpdateGetUpdateStatusFunction::Run() {
 bool AutoUpdateHasAutoUpdatesFunction::HasAutoUpdates() {
   // Auto updates are always supported on Mac
   return true;
+}
+
+ExtensionFunction::ResponseAction AutoUpdateNeedsCodecRestartFunction::Run() {
+  namespace Results = vivaldi::auto_update::NeedsCodecRestart::Results;
+  return RespondNow(ArgumentList(Results::Create(false)));
 }
 
 }  // namespace extensions

@@ -49,15 +49,18 @@ export class SqlTable implements m.ClassComponent<SqlTableConfig> {
   renderFilters(): m.Children {
     const filters: m.Child[] = [];
     for (const filter of this.state.getFilters()) {
-      const label =
-          isString(filter) ? filter : `Arg(${filter.argName}) ${filter.op}`;
-      filters.push(m(Button, {
-        label,
-        icon: 'close',
-        onclick: () => {
-          this.state.removeFilter(filter);
-        },
-      }));
+      const label = isString(filter)
+        ? filter
+        : `Arg(${filter.argName}) ${filter.op}`;
+      filters.push(
+        m(Button, {
+          label,
+          icon: 'close',
+          onclick: () => {
+            this.state.removeFilter(filter);
+          },
+        }),
+      );
     }
     return filters;
   }
@@ -78,72 +81,84 @@ export class SqlTable implements m.ClassComponent<SqlTableConfig> {
       if (existingColumns.has(column.name)) continue;
       if (isArgSetIdColumn(column)) {
         result.push(
-            m(MenuItem,
-              {
-                label: column.name,
+          m(
+            MenuItem,
+            {
+              label: column.name,
+            },
+            m(ArgumentSelector, {
+              engine: this.engine,
+              argSetId: column,
+              tableName: this.table.name,
+              constraints: this.state.getQueryConstraints(),
+              alreadySelectedColumns: existingColumns,
+              onArgumentSelected: (argument: string) => {
+                addColumn(argColumn(this.table.name, column, argument));
               },
-              m(ArgumentSelector, {
-                engine: this.engine,
-                argSetId: column,
-                tableName: this.table.name,
-                constraints: this.state.getQueryConstraints(),
-                alreadySelectedColumns: existingColumns,
-                onArgumentSelected: (argument: string) => {
-                  addColumn(argColumn(this.table.name, column, argument));
-                },
-              })));
+            }),
+          ),
+        );
         continue;
       }
-      result.push(m(MenuItem, {
-        label: column.name,
-        onclick: () => addColumn(
-            columnFromSqlTableColumn(column),
-            ),
-      }));
+      result.push(
+        m(MenuItem, {
+          label: column.name,
+          onclick: () => addColumn(columnFromSqlTableColumn(column)),
+        }),
+      );
     }
     return result;
   }
 
   renderColumnHeader(column: Column, index: number) {
     const sorted = this.state.isSortedBy(column);
-    const icon = sorted === 'ASC' ?
-        Icons.SortedAsc :
-        sorted === 'DESC' ? Icons.SortedDesc : Icons.ContextMenu;
+    const icon =
+      sorted === 'ASC'
+        ? Icons.SortedAsc
+        : sorted === 'DESC'
+        ? Icons.SortedDesc
+        : Icons.ContextMenu;
     return m(
-        PopupMenu2,
-        {
-          trigger: m(Anchor, {icon}, column.title),
-        },
-        sorted !== 'DESC' && m(MenuItem, {
+      PopupMenu2,
+      {
+        trigger: m(Anchor, {icon}, column.title),
+      },
+      sorted !== 'DESC' &&
+        m(MenuItem, {
           label: 'Sort: highest first',
           icon: Icons.SortedDesc,
           onclick: () => {
             this.state.sortBy({column, direction: 'DESC'});
           },
         }),
-        sorted !== 'ASC' && m(MenuItem, {
+      sorted !== 'ASC' &&
+        m(MenuItem, {
           label: 'Sort: lowest first',
           icon: Icons.SortedAsc,
           onclick: () => {
             this.state.sortBy({column, direction: 'ASC'});
           },
         }),
-        sorted !== undefined && m(MenuItem, {
+      sorted !== undefined &&
+        m(MenuItem, {
           label: 'Unsort',
           icon: Icons.Close,
           onclick: () => this.state.unsort(),
         }),
-        this.state.getSelectedColumns().length > 1 && m(MenuItem, {
+      this.state.getSelectedColumns().length > 1 &&
+        m(MenuItem, {
           label: 'Hide',
           icon: Icons.Hide,
           onclick: () => this.state.hideColumnAtIndex(index),
         }),
-        m(MenuDivider),
-        m(MenuItem,
-          {label: 'Add column', icon: Icons.AddColumn},
-          this.renderAddColumnOptions((column) => {
-            this.state.addColumn(column, index);
-          })),
+      m(MenuDivider),
+      m(
+        MenuItem,
+        {label: 'Add column', icon: Icons.AddColumn},
+        this.renderAddColumnOptions((column) => {
+          this.state.addColumn(column, index);
+        }),
+      ),
     );
   }
 
@@ -154,17 +169,16 @@ export class SqlTable implements m.ClassComponent<SqlTableConfig> {
       m('div', this.renderFilters()),
       m(BasicTable, {
         data: rows,
-        columns: this.state.getSelectedColumns().map(
-            (column, i) => ({
-              title: this.renderColumnHeader(column, i),
-              render: (row: Row) => renderCell(column, row, this.state),
-            })),
+        columns: this.state.getSelectedColumns().map((column, i) => ({
+          title: this.renderColumnHeader(column, i),
+          render: (row: Row) => renderCell(column, row, this.state),
+        })),
       }),
       this.state.isLoading() && m(Spinner),
       this.state.getQueryError() !== undefined &&
-          m('.query-error', this.state.getQueryError()),
+        m('.query-error', this.state.getQueryError()),
     ];
   }
-};
+}
 
 export {SqlTableDescription};

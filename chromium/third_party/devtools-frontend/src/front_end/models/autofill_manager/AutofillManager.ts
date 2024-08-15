@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
+import * as Host from '../../core/host/host.js';
+import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
 import * as UI from '../../ui/legacy/legacy.js';
@@ -21,7 +23,8 @@ export class AutofillManager extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     SDK.TargetManager.TargetManager.instance().addModelListener(
         SDK.AutofillModel.AutofillModel, SDK.AutofillModel.Events.AddressFormFilled, this.#addressFormFilled, this,
         {scoped: true});
-    this.#autoOpenViewSetting = Common.Settings.Settings.instance().createSetting('autoOpenAutofillViewOnEvent', true);
+    this.#autoOpenViewSetting =
+        Common.Settings.Settings.instance().createSetting('auto-open-autofill-view-on-event', true);
   }
 
   static instance(opts: {forceNew: boolean|null} = {forceNew: null}): AutofillManager {
@@ -35,8 +38,12 @@ export class AutofillManager extends Common.ObjectWrapper.ObjectWrapper<EventTyp
   async #addressFormFilled(
       {data}: Common.EventTarget
           .EventTargetEvent<SDK.AutofillModel.EventTypes[SDK.AutofillModel.Events.AddressFormFilled]>): Promise<void> {
-    if (this.#autoOpenViewSetting.get()) {
+    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.AUTOFILL_VIEW) &&
+        this.#autoOpenViewSetting.get()) {
       await UI.ViewManager.ViewManager.instance().showView('autofill-view');
+      Host.userMetrics.actionTaken(Host.UserMetrics.Action.AutofillReceivedAndTabAutoOpened);
+    } else {
+      Host.userMetrics.actionTaken(Host.UserMetrics.Action.AutofillReceived);
     }
     this.#autofillModel = data.autofillModel;
     this.#processAddressFormFilledData(data.event);

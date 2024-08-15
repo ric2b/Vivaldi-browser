@@ -4,9 +4,12 @@
 
 #include "ash/picker/views/picker_gif_view.h"
 
+#include <optional>
+
 #include "ash/public/cpp/image_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -34,20 +37,36 @@ constexpr base::TimeDelta kAdjustedDurationForShortFrames =
 }  // namespace
 
 PickerGifView::PickerGifView(FramesFetcher frames_fetcher,
-                             const gfx::Size& image_size)
-    : image_size_(image_size) {
+                             PreviewImageFetcher preview_image_fetcher,
+                             const gfx::Size& original_dimensions,
+                             std::u16string accessible_name)
+    : original_dimensions_(original_dimensions) {
   // Show a placeholder rect while the gif loads.
-  SetBackground(views::CreateThemedRoundedRectBackground(
-      cros_tokens::kCrosSysAppBaseShaded, kPickerGifCornerRadius));
-  SetImage(
-      ui::ImageModel::FromImageSkia(image_util::CreateEmptyImage(image_size)));
+  views::Builder<PickerGifView>(this)
+      .SetBackground(views::CreateThemedRoundedRectBackground(
+          cros_tokens::kCrosSysAppBaseShaded, kPickerGifCornerRadius))
+      .SetImage(ui::ImageModel::FromImageSkia(
+          image_util::CreateEmptyImage(original_dimensions)))
+      .SetAccessibleName(std::move(accessible_name))
+      .BuildChildren();
 
+  fetch_frames_start_time_ = base::TimeTicks::Now();
+  std::move(preview_image_fetcher)
+      .Run(base::BindOnce(&PickerGifView::OnPreviewImageFetched,
+                          weak_factory_.GetWeakPtr()));
   std::move(frames_fetcher)
       .Run(base::BindOnce(&PickerGifView::OnFramesFetched,
                           weak_factory_.GetWeakPtr()));
 }
 
 PickerGifView::~PickerGifView() = default;
+
+int PickerGifView::GetHeightForWidth(int width) const {
+  return original_dimensions_.width() == 0
+             ? 0
+             : (width * original_dimensions_.height()) /
+                   original_dimensions_.width();
+}
 
 void PickerGifView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   views::ImageView::OnBoundsChanged(previous_bounds);
@@ -79,8 +98,6 @@ void PickerGifView::OnFramesFetched(
 
   frames_.reserve(frames.size());
   for (auto& frame : frames) {
-    frame.image = gfx::ImageSkiaOperations::CreateResizedImage(
-        frame.image, skia::ImageOperations::RESIZE_BEST, image_size_);
     if (frame.duration <= kShortFrameDurationThreshold) {
       frame.duration = kAdjustedDurationForShortFrames;
     }
@@ -90,9 +107,31 @@ void PickerGifView::OnFramesFetched(
   // Start gif from the first frame.
   next_frame_index_ = 0;
   UpdateFrame();
+  RecordFetchFramesTime();
 }
 
-BEGIN_METADATA(PickerGifView, views::ImageView)
+void PickerGifView::OnPreviewImageFetched(const gfx::ImageSkia& preview_image) {
+  // Only show preview image if gif frames have not already been fetched.
+  if (frames_.empty()) {
+    SetImage(ui::ImageModel::FromImageSkia(preview_image));
+
+    if (!preview_image.isNull()) {
+      RecordFetchFramesTime();
+    }
+  }
+}
+
+void PickerGifView::RecordFetchFramesTime() {
+  if (fetch_frames_start_time_.has_value()) {
+    UmaHistogramCustomTimes("Ash.Picker.TimeToFirstGifFrame",
+                            base::TimeTicks::Now() - *fetch_frames_start_time_,
+                            base::Milliseconds(0), base::Seconds(1),
+                            /*buckets=*/50);
+    fetch_frames_start_time_ = std::nullopt;
+  }
+}
+
+BEGIN_METADATA(PickerGifView)
 END_METADATA
 
 }  // namespace ash

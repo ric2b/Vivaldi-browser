@@ -38,7 +38,7 @@ MdnsReader::MdnsReader(const Config& config,
   // TODO(issuetracker.google.com/281739775): Validate
   // |maximum_valid_rdata_size| > MaxWireSize() for rdata types A, AAAA, SRV,
   // PTR.
-  OSP_DCHECK_GT(config.maximum_valid_rdata_size, 0);
+  OSP_CHECK_GT(config.maximum_valid_rdata_size, 0);
 }
 
 bool MdnsReader::Read(TxtRecordRdata::Entry* out) {
@@ -60,7 +60,7 @@ bool MdnsReader::Read(TxtRecordRdata::Entry* out) {
 // RFC 1035: https://www.ietf.org/rfc/rfc1035.txt
 // See section 4.1.4. Message compression.
 bool MdnsReader::Read(DomainName* out) {
-  OSP_DCHECK(out);
+  OSP_CHECK(out);
   const uint8_t* position = current();
   // The number of bytes consumed reading from the starting position to either
   // the first label pointer or the final termination byte, including the
@@ -104,7 +104,7 @@ bool MdnsReader::Read(DomainName* out) {
       position = begin() + label_offset;
     } else if (IsDirectLabel(label_type)) {
       const uint8_t label_length = GetDirectLabelLength(label_type);
-      OSP_DCHECK_GT(label_length, 0);
+      OSP_CHECK_GT(label_length, 0);
       bytes_processed += sizeof(uint8_t);
       position += sizeof(uint8_t);
       if (position + label_length >= end()) {
@@ -128,7 +128,7 @@ bool MdnsReader::Read(DomainName* out) {
 }
 
 bool MdnsReader::Read(RawRecordRdata* out) {
-  OSP_DCHECK(out);
+  OSP_CHECK(out);
   Cursor cursor(this);
   uint16_t record_length;
   if (Read(&record_length)) {
@@ -152,7 +152,7 @@ bool MdnsReader::Read(RawRecordRdata* out) {
 }
 
 bool MdnsReader::Read(SrvRecordRdata* out) {
-  OSP_DCHECK(out);
+  OSP_CHECK(out);
   Cursor cursor(this);
   uint16_t record_length;
   uint16_t priority;
@@ -170,7 +170,7 @@ bool MdnsReader::Read(SrvRecordRdata* out) {
 }
 
 bool MdnsReader::Read(ARecordRdata* out) {
-  OSP_DCHECK(out);
+  OSP_CHECK(out);
   Cursor cursor(this);
   uint16_t record_length;
   IPAddress address;
@@ -184,7 +184,7 @@ bool MdnsReader::Read(ARecordRdata* out) {
 }
 
 bool MdnsReader::Read(AAAARecordRdata* out) {
-  OSP_DCHECK(out);
+  OSP_CHECK(out);
   Cursor cursor(this);
   uint16_t record_length;
   IPAddress address;
@@ -198,7 +198,7 @@ bool MdnsReader::Read(AAAARecordRdata* out) {
 }
 
 bool MdnsReader::Read(PtrRecordRdata* out) {
-  OSP_DCHECK(out);
+  OSP_CHECK(out);
   Cursor cursor(this);
   uint16_t record_length;
   DomainName ptr_domain;
@@ -212,7 +212,7 @@ bool MdnsReader::Read(PtrRecordRdata* out) {
 }
 
 bool MdnsReader::Read(TxtRecordRdata* out) {
-  OSP_DCHECK(out);
+  OSP_CHECK(out);
   Cursor cursor(this);
   uint16_t record_length;
   if (!Read(&record_length)) {
@@ -227,7 +227,7 @@ bool MdnsReader::Read(TxtRecordRdata* out) {
     if (!Read(&entry)) {
       return false;
     }
-    OSP_DCHECK(entry.size() <= kTXTMaxEntrySize);
+    OSP_CHECK_LE(entry.size(), kTXTMaxEntrySize);
     if (!entry.empty()) {
       texts.emplace_back(entry);
     }
@@ -245,7 +245,7 @@ bool MdnsReader::Read(TxtRecordRdata* out) {
 }
 
 bool MdnsReader::Read(NsecRecordRdata* out) {
-  OSP_DCHECK(out);
+  OSP_CHECK(out);
   Cursor cursor(this);
 
   const uint8_t* start_position = current();
@@ -280,7 +280,7 @@ bool MdnsReader::Read(NsecRecordRdata* out) {
 }
 
 bool MdnsReader::Read(MdnsRecord* out) {
-  OSP_DCHECK(out);
+  OSP_CHECK(out);
   Cursor cursor(this);
   DomainName name;
   uint16_t type;
@@ -304,7 +304,7 @@ bool MdnsReader::Read(MdnsRecord* out) {
 }
 
 bool MdnsReader::Read(MdnsQuestion* out) {
-  OSP_DCHECK(out);
+  OSP_CHECK(out);
   Cursor cursor(this);
   DomainName name;
   uint16_t type;
@@ -359,7 +359,7 @@ ErrorOr<MdnsMessage> MdnsReader::Read() {
 }
 
 bool MdnsReader::Read(IPAddress::Version version, IPAddress* out) {
-  OSP_DCHECK(out);
+  OSP_CHECK(out);
   size_t ipaddress_size = (version == IPAddress::Version::kV6)
                               ? IPAddress::kV6Size
                               : IPAddress::kV4Size;
@@ -372,7 +372,7 @@ bool MdnsReader::Read(IPAddress::Version version, IPAddress* out) {
 }
 
 bool MdnsReader::Read(DnsType type, Rdata* out) {
-  OSP_DCHECK(out);
+  OSP_CHECK(out);
   switch (type) {
     case DnsType::kSRV:
       return Read<SrvRecordRdata>(out);
@@ -387,13 +387,13 @@ bool MdnsReader::Read(DnsType type, Rdata* out) {
     case DnsType::kNSEC:
       return Read<NsecRecordRdata>(out);
     default:
-      OSP_DCHECK(!Contains(kSupportedDnsTypes, type));
+      OSP_CHECK(!Contains(kSupportedDnsTypes, type));
       return Read<RawRecordRdata>(out);
   }
 }
 
 bool MdnsReader::Read(Header* out) {
-  OSP_DCHECK(out);
+  OSP_CHECK(out);
   Cursor cursor(this);
   if (Read(&out->id) && Read(&out->flags) && Read(&out->question_count) &&
       Read(&out->answer_count) && Read(&out->authority_record_count) &&
@@ -405,7 +405,7 @@ bool MdnsReader::Read(Header* out) {
 }
 
 bool MdnsReader::Read(std::vector<DnsType>* out, int remaining_size) {
-  OSP_DCHECK(out);
+  OSP_CHECK(out);
   Cursor cursor(this);
 
   // Continue reading bitmaps until the entire input is read. If we have gone
@@ -446,7 +446,7 @@ bool MdnsReader::Read(std::vector<DnsType>* out, int remaining_size) {
 }
 
 bool MdnsReader::Read(NsecBitMapField* out) {
-  OSP_DCHECK(out);
+  OSP_CHECK(out);
   Cursor cursor(this);
 
   // Read the window and bitmap length, then one byte for each byte called out

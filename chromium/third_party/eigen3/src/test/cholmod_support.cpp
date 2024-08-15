@@ -54,6 +54,13 @@ void test_cholmod_ST() {
   check_sparse_spd_determinant(llt_colmajor_upper);
   check_sparse_spd_determinant(ldlt_colmajor_lower);
   check_sparse_spd_determinant(ldlt_colmajor_upper);
+
+  check_sparse_zero_matrix(chol_colmajor_lower);
+  check_sparse_zero_matrix(chol_colmajor_upper);
+  check_sparse_zero_matrix(llt_colmajor_lower);
+  check_sparse_zero_matrix(llt_colmajor_upper);
+  check_sparse_zero_matrix(ldlt_colmajor_lower);
+  check_sparse_zero_matrix(ldlt_colmajor_upper);
 }
 
 template <typename T, int flags, typename IdxType>

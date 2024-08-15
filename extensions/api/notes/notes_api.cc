@@ -51,7 +51,7 @@ vivaldi::notes::NodeType ToJSAPINodeType(NoteNode::Type type) {
   }
 }
 
-absl::optional<NoteNode::Type> FromJSAPINodeType(
+std::optional<NoteNode::Type> FromJSAPINodeType(
     vivaldi::notes::NodeType type) {
   switch (type) {
     case vivaldi::notes::NodeType::kNote:
@@ -69,7 +69,7 @@ absl::optional<NoteNode::Type> FromJSAPINodeType(
     case vivaldi::notes::NodeType::kTrash:
       return NoteNode::TRASH;
     default:
-      return absl::nullopt;
+      return std::nullopt;
   }
 }
 
@@ -248,7 +248,7 @@ void NotesAPI::ExtensiveNotesChangesEnded(NotesModel* model) {
 }
 
 ExtensionFunction::ResponseAction NotesGetFunction::Run() {
-  absl::optional<vivaldi::notes::Get::Params> params(
+  std::optional<vivaldi::notes::Get::Params> params(
       vivaldi::notes::Get::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -317,7 +317,7 @@ void NotesGetTreeFunction::NotesModelBeingDeleted(NotesModel* model) {
 }
 
 ExtensionFunction::ResponseAction NotesCreateFunction::Run() {
-  absl::optional<vivaldi::notes::Create::Params> params(
+  std::optional<vivaldi::notes::Create::Params> params(
       vivaldi::notes::Create::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -350,13 +350,13 @@ ExtensionFunction::ResponseAction NotesCreateFunction::Run() {
     url = GURL(*params->note.url);
   }
 
-  absl::optional<base::Time> creation_time;
+  std::optional<base::Time> creation_time;
   if (params->note.date) {
     creation_time =
         base::Time::FromMillisecondsSinceUnixEpoch(*params->note.date);
   }
 
-  absl::optional<base::Time> last_modified_time;
+  std::optional<base::Time> last_modified_time;
   if (params->note.lastmod) {
     last_modified_time =
         base::Time::FromMillisecondsSinceUnixEpoch(*params->note.lastmod);
@@ -401,7 +401,7 @@ ExtensionFunction::ResponseAction NotesCreateFunction::Run() {
       new_node = model->AddSeparator(parent, newIndex, title, creation_time);
       break;
     case NoteNode::ATTACHMENT: {
-      absl::optional<std::vector<uint8_t>> decoded_content =
+      std::optional<std::vector<uint8_t>> decoded_content =
           base::Base64Decode(content);
       if (!decoded_content || decoded_content->empty()) {
         new_node = model->AddAttachmentFromChecksum(
@@ -427,7 +427,7 @@ ExtensionFunction::ResponseAction NotesCreateFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction NotesUpdateFunction::Run() {
-  absl::optional<vivaldi::notes::Update::Params> params(
+  std::optional<vivaldi::notes::Update::Params> params(
       vivaldi::notes::Update::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -475,7 +475,7 @@ ExtensionFunction::ResponseAction NotesUpdateFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction NotesRemoveFunction::Run() {
-  absl::optional<vivaldi::notes::Remove::Params> params(
+  std::optional<vivaldi::notes::Remove::Params> params(
       vivaldi::notes::Remove::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -521,7 +521,7 @@ ExtensionFunction::ResponseAction NotesRemoveFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction NotesSearchFunction::Run() {
-  absl::optional<vivaldi::notes::Search::Params> params(
+  std::optional<vivaldi::notes::Search::Params> params(
       vivaldi::notes::Search::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -569,7 +569,7 @@ ExtensionFunction::ResponseAction NotesSearchFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction NotesMoveFunction::Run() {
-  absl::optional<vivaldi::notes::Move::Params> params(
+  std::optional<vivaldi::notes::Move::Params> params(
       vivaldi::notes::Move::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 

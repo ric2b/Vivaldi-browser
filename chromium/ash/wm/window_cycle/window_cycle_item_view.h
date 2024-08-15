@@ -6,6 +6,7 @@
 #define ASH_WM_WINDOW_CYCLE_WINDOW_CYCLE_ITEM_VIEW_H_
 
 #include "ash/ash_export.h"
+#include "ash/wm/scoped_layer_tree_synchronizer.h"
 #include "ash/wm/window_mini_view.h"
 #include "base/memory/raw_ptr.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -30,13 +31,13 @@ class WindowCycleController;
 // This view represents a single aura::Window by displaying a title and a
 // thumbnail of the window's contents.
 class ASH_EXPORT WindowCycleItemView : public WindowMiniView {
- public:
-  METADATA_HEADER(WindowCycleItemView);
+  METADATA_HEADER(WindowCycleItemView, WindowMiniView)
 
+ public:
   explicit WindowCycleItemView(aura::Window* window);
   WindowCycleItemView(const WindowCycleItemView&) = delete;
   WindowCycleItemView& operator=(const WindowCycleItemView&) = delete;
-  ~WindowCycleItemView() override = default;
+  ~WindowCycleItemView() override;
 
   // All previews are the same height (this is achieved via a combination of
   // scaling and padding).
@@ -46,7 +47,7 @@ class ASH_EXPORT WindowCycleItemView : public WindowMiniView {
   void OnMouseEntered(const ui::MouseEvent& event) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   gfx::Size GetPreviewViewSize() const override;
-  void Layout() override;
+  void Layout(PassKey) override;
   gfx::Size CalculatePreferredSize() const override;
   bool HandleAccessibleAction(const ui::AXActionData& action_data) override;
 
@@ -54,15 +55,16 @@ class ASH_EXPORT WindowCycleItemView : public WindowMiniView {
   void RefreshItemVisuals() override;
 
  private:
+  std::unique_ptr<ScopedLayerTreeSynchronizer> layer_tree_synchronizer_;
   const raw_ptr<WindowCycleController> window_cycle_controller_;
 };
 
 // Container view used to host multiple `WindowCycleItemView`s and be the focus
 // target for window groups while tabbing in window cycle view.
 class GroupContainerCycleView : public WindowMiniViewBase {
- public:
-  METADATA_HEADER(GroupContainerCycleView);
+  METADATA_HEADER(GroupContainerCycleView, WindowMiniViewBase)
 
+ public:
   explicit GroupContainerCycleView(SnapGroup* snap_group);
   GroupContainerCycleView(const GroupContainerCycleView&) = delete;
   GroupContainerCycleView& operator=(const GroupContainerCycleView&) = delete;

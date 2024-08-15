@@ -98,7 +98,7 @@
 #if BUILDFLAG(IS_MAC)
 #include "base/apple/scoped_nsautorelease_pool.h"
 #include "chrome/test/base/scoped_bundle_swizzler_mac.h"
-#include "services/device/public/cpp/test/fake_geolocation_manager.h"
+#include "services/device/public/cpp/test/fake_geolocation_system_permission_manager.h"
 #endif
 
 #if BUILDFLAG(IS_WIN)
@@ -157,10 +157,10 @@
 #include "base/version.h"
 #include "chrome/browser/lacros/browser_test_util.h"
 #include "chrome/browser/lacros/cert/cert_db_initializer_factory.h"
-#include "chrome/browser/ui/lacros/window_utility.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "chromeos/crosapi/mojom/test_controller.mojom-test-utils.h"
 #include "chromeos/lacros/lacros_service.h"
+#include "chromeos/startup/browser_params_proxy.h"
 #include "components/account_manager_core/chromeos/account_manager.h"
 #include "components/account_manager_core/chromeos/account_manager_facade_factory.h"  // nogncheck
 #include "components/account_manager_core/chromeos/fake_account_manager_ui.h"  // nogncheck
@@ -207,17 +207,17 @@ class ChromeBrowserMainExtraPartsBrowserProcessInjection
 
   // ChromeBrowserMainExtraParts implementation
   void PreCreateMainMessageLoop() override {
-    // The real GeolocationManager initializes a CLLocationManager. It has
-    // been observed that when thousands of instances of this object are
-    // created, as happens when running browser tests, the CoreLocationAgent
-    // process uses lots of CPU. This makes test execution slower and causes
-    // jobs to time out. We therefore insert a fake.
-    auto fake_geolocation_manager =
-        std::make_unique<device::FakeGeolocationManager>();
-    fake_geolocation_manager->SetSystemPermission(
+    // The real GeolocationSystemPermissionManager initializes a
+    // CLLocationManager. It has been observed that when thousands of instances
+    // of this object are created, as happens when running browser tests, the
+    // CoreLocationAgent process uses lots of CPU. This makes test execution
+    // slower and causes jobs to time out. We therefore insert a fake.
+    auto fake_geolocation_system_permission_manager =
+        std::make_unique<device::FakeGeolocationSystemPermissionManager>();
+    fake_geolocation_system_permission_manager->SetSystemPermission(
         device::LocationSystemPermissionStatus::kAllowed);
-    device::GeolocationManager::SetInstance(
-        std::move(fake_geolocation_manager));
+    device::GeolocationSystemPermissionManager::SetInstance(
+        std::move(fake_geolocation_system_permission_manager));
   }
 
   ChromeBrowserMainExtraPartsBrowserProcessInjection(
@@ -291,18 +291,11 @@ void EnsureBrowserContextKeyedServiceFactoriesForTestingBuilt() {
 // Try to find a better name.
 bool WaitForWindowCreation(Browser* browser) {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // TODO(crbug.com/1508245): Get rid of the IsTestControllerAvailable condition
-  // by making it always true (when crosapi is enabled). Moreover, propagate the
-  // WaitForWindowCreation return value. This requires fixing some tests that
-  // improperly override init params.
-  if (InProcessBrowserTest::IsCrosapiEnabled() && IsTestControllerAvailable()) {
+  if (!chromeos::BrowserParamsProxy::IsCrosapiDisabledForTesting()) {
+    CHECK(IsTestControllerAvailable());
     // Wait for window creation to complete in Ash in order to avoid
     // wayland-crosapi race conditions in subsequent test steps.
-    aura::Window* window = browser->window()->GetNativeWindow();
-    std::string id =
-        lacros_window_utility::GetRootWindowUniqueId(window->GetRootWindow());
-    std::ignore = browser_test_util::WaitForWindowCreation(id);
-    return true;
+    return browser_test_util::WaitForWindowCreation(browser);
   }
 #endif
   return true;
@@ -331,6 +324,14 @@ InProcessBrowserTest::InProcessBrowserTest(
 }
 #endif
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+void InProcessBrowserTest::set_launch_browser_for_testing(
+    std::unique_ptr<ash::full_restore::ScopedLaunchBrowserForTesting>
+        launch_browser_for_testing) {
+  launch_browser_for_testing_ = std::move(launch_browser_for_testing);
+}
+#endif
+
 void InProcessBrowserTest::RunScheduledLayouts() {
 #if defined(TOOLKIT_VIEWS)
   views::Widget::Widgets widgets_to_layout;
@@ -353,12 +354,6 @@ void InProcessBrowserTest::RunScheduledLayouts() {
 FakeAccountManagerUI* InProcessBrowserTest::GetFakeAccountManagerUI() const {
   return static_cast<FakeAccountManagerUI*>(
       MaybeGetAshAccountManagerUIForTests());
-}
-
-bool InProcessBrowserTest::IsCrosapiEnabled() {
-  return !base::CommandLine::ForCurrentProcess()
-              ->GetSwitchValuePath("lacros-mojo-socket-for-testing")
-              .empty();
 }
 
 base::Version InProcessBrowserTest::GetAshChromeVersion() {
@@ -478,10 +473,6 @@ void InProcessBrowserTest::Initialize() {
   launch_browser_for_testing_ =
       std::make_unique<ash::full_restore::ScopedLaunchBrowserForTesting>();
 #endif
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  CertDbInitializerFactory::GetInstance()
-      ->SetCreateWithBrowserContextForTesting(/*should_create=*/false);
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 }
 
 InProcessBrowserTest::~InProcessBrowserTest() {
@@ -934,7 +925,8 @@ void InProcessBrowserTest::PreRunTestOnMainThread() {
   content::NetworkConnectionChangeSimulator network_change_simulator;
   network_change_simulator.InitializeChromeosConnectionType();
 
-  if (IsCrosapiEnabled() && IsTestControllerAvailable()) {
+  if (!chromeos::BrowserParamsProxy::IsCrosapiDisabledForTesting()) {
+    CHECK(IsTestControllerAvailable());
     // There should NOT be any open ash browser window UI at this point.
     VerifyNoAshBrowserWindowOpenRightNow();
   }
@@ -1010,7 +1002,8 @@ void InProcessBrowserTest::PostRunTestOnMainThread() {
   CHECK(BrowserList::GetInstance()->empty());
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-  if (IsCrosapiEnabled() && IsTestControllerAvailable()) {
+  if (!chromeos::BrowserParamsProxy::IsCrosapiDisabledForTesting()) {
+    CHECK(IsTestControllerAvailable());
     // At this point, there should NOT be any ash browser UIs(e.g. SWA, etc)
     // open; otherwise, the tests running after the current one could be
     // polluted if the tests are running against the shared Ash (by default).
@@ -1079,10 +1072,10 @@ void InProcessBrowserTest::StartUniqueAshChrome(
     const std::vector<std::string>& additional_cmdline_switches,
     const std::string& bug_number_and_reason) {
   DCHECK(!bug_number_and_reason.empty());
-  base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
-  CHECK(IsCrosapiEnabled())
+  CHECK(!chromeos::BrowserParamsProxy::IsCrosapiDisabledForTesting())
       << "You can only start unique ash chrome when crosapi is enabled. "
       << "It should not be necessary otherwise.";
+  base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
   base::FilePath ash_dir_holder = cmdline->GetSwitchValuePath("unique-ash-dir");
   CHECK(!ash_dir_holder.empty());
   CHECK(unique_ash_user_data_dir_.CreateUniqueTempDirUnderPath(ash_dir_holder));

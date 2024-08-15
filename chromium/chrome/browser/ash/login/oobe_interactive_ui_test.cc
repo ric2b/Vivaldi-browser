@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <optional>
+#include <string_view>
 
 #include "ash/components/arc/session/arc_service_manager.h"
 #include "ash/components/arc/session/arc_session_runner.h"
@@ -80,6 +81,7 @@
 #include "chromeos/ash/components/system/fake_statistics_provider.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
+#include "components/policy/core/common/policy_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
@@ -236,7 +238,7 @@ void HandleRecommendAppsScreen() {
   test::OobeJS().ClickOnPath(
       {"recommend-apps", "appsList", R"(test\\.package)"});
 
-  const std::initializer_list<base::StringPiece> install_button = {
+  const std::initializer_list<std::string_view> install_button = {
       "recommend-apps", "installButton"};
   test::OobeJS().CreateEnabledWaiter(true, install_button)->Wait();
   test::OobeJS().TapOnPath(install_button);
@@ -274,7 +276,7 @@ void HandleAppDownloadingScreen() {
   EXPECT_FALSE(LoginScreenTestApi::IsGuestButtonShown());
   EXPECT_FALSE(LoginScreenTestApi::IsAddUserButtonShown());
 
-  const std::initializer_list<base::StringPiece> continue_button = {
+  const std::initializer_list<std::string_view> continue_button = {
       "app-downloading", "continue-setup-button"};
   test::OobeJS().TapOnPath(continue_button);
 
@@ -302,7 +304,7 @@ void HandleAssistantOptInScreen() {
       .CreateVisibilityWaiter(true, {"assistant-optin-flow", "card", "loading"})
       ->Wait();
 
-  std::initializer_list<base::StringPiece> skip_button_path = {
+  std::initializer_list<std::string_view> skip_button_path = {
       "assistant-optin-flow", "card", "loading", "skip-button"};
   test::OobeJS().CreateEnabledWaiter(true, skip_button_path)->Wait();
   test::OobeJS().TapOnPath(skip_button_path);
@@ -600,6 +602,13 @@ class OobeEndToEndTestSetupMixin : public InProcessBrowserTestMixin {
     if (params_.arc_state != ArcState::kNotAvailable) {
       arc::SetArcAvailableCommandLineForTesting(command_line);
     }
+
+    // This will change the verification key to be used by the
+    // CloudPolicyValidator. It will allow for the policy provided by the
+    // PolicyBuilder to pass the signature validation.
+    command_line->AppendSwitchASCII(
+        policy::switches::kPolicyVerificationKey,
+        policy::PolicyBuilder::GetEncodedPolicyVerificationKey());
   }
 
   void SetUpInProcessBrowserTestFixture() override {
@@ -1168,6 +1177,13 @@ class OobeFlexInteractiveUITest
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(switches::kTpmIsDynamic);
     OobeBaseTest::SetUpCommandLine(command_line);
+
+    // This will change the verification key to be used by the
+    // CloudPolicyValidator. It will allow for the policy provided by the
+    // PolicyBuilder to pass the signature validation.
+    command_line->AppendSwitchASCII(
+        policy::switches::kPolicyVerificationKey,
+        policy::PolicyBuilder::GetEncodedPolicyVerificationKey());
   }
 
   test::EnrollmentUIMixin enrollment_ui_{&mixin_host_};

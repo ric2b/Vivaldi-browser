@@ -18,6 +18,7 @@
 #include "chrome/browser/new_tab_page/modules/history_clusters/history_clusters_test_support.h"
 #include "chrome/browser/new_tab_page/modules/history_clusters/ranking/history_clusters_category_metrics.h"
 #include "chrome/browser/new_tab_page/modules/history_clusters/ranking/history_clusters_module_ranking_signals.h"
+#include "chrome/browser/new_tab_page/modules/test_support.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/history_clusters/core/clustering_test_utils.h"
 #include "components/history_clusters/core/history_clusters_util.h"
@@ -38,6 +39,7 @@
 
 namespace {
 
+using ntp::MockHistoryService;
 using segmentation_platform::DatabaseClient;
 using FeaturesCallback =
     segmentation_platform::DatabaseClient::FeaturesCallback;
@@ -102,10 +104,17 @@ class HistoryClustersModuleRankerTest : public testing::Test {
                std::vector<history::Cluster>* out_clusters,
                base::flat_map<int64_t, HistoryClustersModuleRankingSignals>*
                    out_ranking_signals,
-               std::vector<history::Cluster> clusters,
+               std::vector<std::pair<history::Cluster, std::optional<float>>>
+                   clusters_with_scores,
                base::flat_map<int64_t, HistoryClustersModuleRankingSignals>
                    ranking_signals) {
-              *out_clusters = std::move(clusters);
+              std::transform(
+                  clusters_with_scores.cbegin(), clusters_with_scores.cend(),
+                  std::back_inserter(*out_clusters),
+                  [](std::pair<history::Cluster, std::optional<float>>
+                         cluster_and_score) {
+                    return cluster_and_score.first;
+                  });
               *out_ranking_signals = std::move(ranking_signals);
               run_loop->Quit();
             },
@@ -183,10 +192,11 @@ TEST_F(HistoryClustersModuleRankerTest, RecencyOnly) {
   }
 
   auto& history_service = mock_history_service();
-  EXPECT_CALL(history_service, GetAnnotatedVisits(_, _, _, _))
+  EXPECT_CALL(history_service, GetAnnotatedVisits(_, _, _, _, _))
       .WillOnce(Invoke(
           [](const history::QueryOptions& options,
              bool compute_redirect_chain_start_properties,
+             bool get_unclustered_visits_only,
              history::HistoryService::GetAnnotatedVisitsCallback callback,
              base::CancelableTaskTracker* tracker)
               -> base::CancelableTaskTracker::TaskId {
@@ -302,10 +312,11 @@ TEST_F(HistoryClustersModuleRankerTest, WithCategoryBoosting) {
   }
 
   auto& history_service = mock_history_service();
-  EXPECT_CALL(history_service, GetAnnotatedVisits(_, _, _, _))
+  EXPECT_CALL(history_service, GetAnnotatedVisits(_, _, _, _, _))
       .WillOnce(Invoke(
           [](const history::QueryOptions& options,
              bool compute_redirect_chain_start_properties,
+             bool get_unclustered_visits_only,
              history::HistoryService::GetAnnotatedVisitsCallback callback,
              base::CancelableTaskTracker* tracker)
               -> base::CancelableTaskTracker::TaskId {
@@ -397,11 +408,12 @@ TEST_P(HistoryClustersModuleRankerWithMetricsTest,
   }
 
   auto& history_service = mock_history_service();
-  EXPECT_CALL(history_service, GetAnnotatedVisits(_, false, _, _))
+  EXPECT_CALL(history_service, GetAnnotatedVisits(_, false, false, _, _))
       .WillOnce(Invoke(
           [&cluster1_visit, &cluster2_visit](
               const history::QueryOptions& options,
               bool compute_redirect_chain_start_properties,
+              bool get_unclustered_visits_only,
               history::HistoryService::GetAnnotatedVisitsCallback callback,
               base::CancelableTaskTracker* tracker)
               -> base::CancelableTaskTracker::TaskId {
@@ -532,10 +544,11 @@ TEST_F(HistoryClustersModuleRankerCartTest,
             std::move(callback).Run(true, carts);
           })));
   auto& history_service = mock_history_service();
-  EXPECT_CALL(history_service, GetAnnotatedVisits(_, _, _, _))
+  EXPECT_CALL(history_service, GetAnnotatedVisits(_, _, _, _, _))
       .WillOnce(Invoke(
           [](const history::QueryOptions& options,
              bool compute_redirect_chain_start_properties,
+             bool get_unclustered_visits_only,
              history::HistoryService::GetAnnotatedVisitsCallback callback,
              base::CancelableTaskTracker* tracker)
               -> base::CancelableTaskTracker::TaskId {
@@ -677,10 +690,11 @@ TEST_F(HistoryClustersModuleRankerWithModelTest,
   }
 
   auto& history_service = mock_history_service();
-  EXPECT_CALL(history_service, GetAnnotatedVisits(_, _, _, _))
+  EXPECT_CALL(history_service, GetAnnotatedVisits(_, _, _, _, _))
       .WillOnce(Invoke(
           [](const history::QueryOptions& options,
              bool compute_redirect_chain_start_properties,
+             bool get_unclustered_visits_only,
              history::HistoryService::GetAnnotatedVisitsCallback callback,
              base::CancelableTaskTracker* tracker)
               -> base::CancelableTaskTracker::TaskId {
@@ -803,10 +817,11 @@ TEST_F(HistoryClustersModuleRankerWithModelTest, ModelAvailable) {
   cart_db::ChromeCartContentProto cart_proto;
   std::vector<CartDB::KeyAndValue> carts = {{"amazon.com", cart_proto}};
   auto& history_service = mock_history_service();
-  EXPECT_CALL(history_service, GetAnnotatedVisits(_, _, _, _))
+  EXPECT_CALL(history_service, GetAnnotatedVisits(_, _, _, _, _))
       .WillOnce(Invoke(
           [](const history::QueryOptions& options,
              bool compute_redirect_chain_start_properties,
+             bool get_unclustered_visits_only,
              history::HistoryService::GetAnnotatedVisitsCallback callback,
              base::CancelableTaskTracker* tracker)
               -> base::CancelableTaskTracker::TaskId {
@@ -875,16 +890,20 @@ TEST_F(HistoryClustersModuleRankerWithModelTest, ModelAvailableScoreThreshold) {
   visit.content_annotations.model_annotations.categories = {
       {"category1", 90}, {"boostedbuthidden", 84}};
   cluster1.visits = {history_clusters::testing::CreateClusterVisit(
-      visit, /*normalized_url=*/absl::nullopt, 0.0)};
+      visit, /*normalized_url=*/std::nullopt, 0.0)};
 
   history::Cluster cluster2 = cluster1;
   cluster2.cluster_id = 2;
 
+  history::Cluster cluster3 = cluster1;
+  cluster2.cluster_id = 3;
+
   auto& history_service = mock_history_service();
-  EXPECT_CALL(history_service, GetAnnotatedVisits(_, _, _, _))
+  EXPECT_CALL(history_service, GetAnnotatedVisits(_, _, _, _, _))
       .WillOnce(Invoke(
           [](const history::QueryOptions& options,
              bool compute_redirect_chain_start_properties,
+             bool get_unclustered_visits_only,
              history::HistoryService::GetAnnotatedVisitsCallback callback,
              base::CancelableTaskTracker* tracker)
               -> base::CancelableTaskTracker::TaskId {
@@ -906,17 +925,22 @@ TEST_F(HistoryClustersModuleRankerWithModelTest, ModelAvailableScoreThreshold) {
           [&](std::vector<HistoryClustersModuleRankingSignals>* inputs,
               HistoryClustersModuleRankingModelHandler::ExecuteBatchCallback
                   callback) {
-            std::vector<float> outputs = {-0.6, -0.4};
+            std::vector<float> outputs = {-0.6, -0.4, 1.0};
             std::move(callback).Run(outputs);
           }));
   module_ranker->OverrideModelHandlerForTesting(std::move(model_handler));
   base::flat_map<int64_t, HistoryClustersModuleRankingSignals> ranking_signals;
 
-  std::vector<history::Cluster> clusters =
-      RankClusters(module_ranker.get(), {cluster1, cluster2}, &ranking_signals);
+  std::vector<history::Cluster> clusters = RankClusters(
+      module_ranker.get(), {cluster1, cluster2, cluster3}, &ranking_signals);
 
   ASSERT_EQ(clusters.size(), 1u);
   ASSERT_EQ(clusters[0].cluster_id, 1);
+
+  histogram_tester_.ExpectBucketCount("NewTabPage.HistoryClusters.ValidScore",
+                                      1, 2);
+  histogram_tester_.ExpectBucketCount("NewTabPage.HistoryClusters.ValidScore",
+                                      0, 1);
 }
 
 #endif  // BUILDFLAG(BUILD_WITH_TFLITE_LIB)

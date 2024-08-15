@@ -17,6 +17,7 @@
 #include "base/sequence_checker.h"
 #include "base/task/sequenced_task_runner.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/trusted_vault/recovery_key_store_controller.h"
 #include "components/trusted_vault/trusted_vault_access_token_fetcher_frontend.h"
 #include "components/trusted_vault/trusted_vault_client.h"
 
@@ -53,6 +54,16 @@ class StandaloneTrustedVaultClient : public TrustedVaultClient {
   // |base_dir| is the directory in which to create snapshot
   // files. |identity_manager| must not be null and must outlive this object.
   // |url_loader_factory| must not be null.
+  // |recovery_key_provider| may be null, in which case
+  // |SetRecoveryKeyStoreUploadEnabled()| must not be called.
+  StandaloneTrustedVaultClient(
+      SecurityDomainId security_domain,
+      const base::FilePath& base_dir,
+      signin::IdentityManager* identity_manager,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      std::unique_ptr<RecoveryKeyStoreController::RecoveryKeyProvider>
+          recovery_key_provider);
+
   StandaloneTrustedVaultClient(
       SecurityDomainId security_domain,
       const base::FilePath& base_dir,
@@ -88,7 +99,7 @@ class StandaloneTrustedVaultClient : public TrustedVaultClient {
   // Runs |cb| when all requests have completed.
   void WaitForFlushForTesting(base::OnceClosure cb) const;
   void FetchBackendPrimaryAccountForTesting(
-      base::OnceCallback<void(const absl::optional<CoreAccountInfo>&)> callback)
+      base::OnceCallback<void(const std::optional<CoreAccountInfo>&)> callback)
       const;
   void FetchIsDeviceRegisteredForTesting(
       const std::string& gaia_id,

@@ -21,6 +21,7 @@
 #include "base/containers/adapters.h"
 #include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/animation/tween.h"
@@ -159,22 +160,18 @@ void StatusAreaWidgetDelegate::GetAccessibleNodeData(
   // otherwise it should be LockScreen.
   if (!!LoginScreen::Get()->GetLoginWindowWidget() &&
       LoginScreen::Get()->GetLoginWindowWidget()->IsVisible()) {
-    GetViewAccessibility().OverrideNextFocus(
+    GetViewAccessibility().SetNextFocus(
         LoginScreen::Get()->GetLoginWindowWidget());
   } else if (LockScreen::HasInstance()) {
-    GetViewAccessibility().OverrideNextFocus(LockScreen::Get()->widget());
+    GetViewAccessibility().SetNextFocus(LockScreen::Get()->widget());
   }
   Shelf* shelf = Shelf::ForWindow(GetWidget()->GetNativeWindow());
-  GetViewAccessibility().OverridePreviousFocus(shelf->shelf_widget());
+  GetViewAccessibility().SetPreviousFocus(shelf->shelf_widget());
 }
 
 views::View* StatusAreaWidgetDelegate::GetDefaultFocusableChild() {
   return default_last_focusable_child_ ? GetLastFocusableChild()
                                        : GetFirstFocusableChild();
-}
-
-const char* StatusAreaWidgetDelegate::GetClassName() const {
-  return "ash/StatusAreaWidgetDelegate";
 }
 
 views::Widget* StatusAreaWidgetDelegate::GetWidget() {
@@ -240,9 +237,9 @@ gfx::Rect StatusAreaWidgetDelegate::GetTargetBounds() const {
 void StatusAreaWidgetDelegate::UpdateLayout(bool animate) {
   if (animate) {
     StatusAreaWidgetDelegateAnimationSettings settings(layer());
-    Layout();
+    DeprecatedLayoutImmediately();
   } else {
-    Layout();
+    DeprecatedLayoutImmediately();
   }
 }
 
@@ -311,7 +308,10 @@ void StatusAreaWidgetDelegate::SetBorderOnChild(views::View* child,
   // Layout on |child| needs to be updated based on new border value before
   // displaying; otherwise |child| will be showing with old border size.
   // Fix for crbug.com/623438.
-  child->Layout();
+  child->DeprecatedLayoutImmediately();
 }
+
+BEGIN_METADATA(StatusAreaWidgetDelegate)
+END_METADATA
 
 }  // namespace ash

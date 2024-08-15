@@ -86,7 +86,7 @@ import { EventEmitter } from '../common/EventEmitter.js';
 import { getQueryHandlerAndSelector } from '../common/GetQueryHandler.js';
 import { transposeIterableHandle } from '../common/HandleIterator.js';
 import { LazyArg } from '../common/LazyArg.js';
-import { getPageContent, importFSPromises, withSourcePuppeteerURLIfNone, } from '../common/util.js';
+import { importFSPromises, withSourcePuppeteerURLIfNone, } from '../common/util.js';
 import { assert } from '../util/assert.js';
 import { throwIfDisposed } from '../util/decorators.js';
 import { FunctionLocator, NodeLocator, } from './locators/locators.js';
@@ -176,9 +176,7 @@ let Frame = (() => {
     let _$$_decorators;
     let _$eval_decorators;
     let _$$eval_decorators;
-    let _$x_decorators;
     let _waitForSelector_decorators;
-    let _waitForXPath_decorators;
     let _waitForFunction_decorators;
     let _content_decorators;
     let _addScriptTag_decorators;
@@ -201,9 +199,7 @@ let Frame = (() => {
             _$$_decorators = [throwIfDetached];
             _$eval_decorators = [throwIfDetached];
             _$$eval_decorators = [throwIfDetached];
-            _$x_decorators = [throwIfDetached];
             _waitForSelector_decorators = [throwIfDetached];
-            _waitForXPath_decorators = [throwIfDetached];
             _waitForFunction_decorators = [throwIfDetached];
             _content_decorators = [throwIfDetached];
             _addScriptTag_decorators = [throwIfDetached];
@@ -223,9 +219,7 @@ let Frame = (() => {
             __esDecorate(this, null, _$$_decorators, { kind: "method", name: "$$", static: false, private: false, access: { has: obj => "$$" in obj, get: obj => obj.$$ }, metadata: _metadata }, null, _instanceExtraInitializers);
             __esDecorate(this, null, _$eval_decorators, { kind: "method", name: "$eval", static: false, private: false, access: { has: obj => "$eval" in obj, get: obj => obj.$eval }, metadata: _metadata }, null, _instanceExtraInitializers);
             __esDecorate(this, null, _$$eval_decorators, { kind: "method", name: "$$eval", static: false, private: false, access: { has: obj => "$$eval" in obj, get: obj => obj.$$eval }, metadata: _metadata }, null, _instanceExtraInitializers);
-            __esDecorate(this, null, _$x_decorators, { kind: "method", name: "$x", static: false, private: false, access: { has: obj => "$x" in obj, get: obj => obj.$x }, metadata: _metadata }, null, _instanceExtraInitializers);
             __esDecorate(this, null, _waitForSelector_decorators, { kind: "method", name: "waitForSelector", static: false, private: false, access: { has: obj => "waitForSelector" in obj, get: obj => obj.waitForSelector }, metadata: _metadata }, null, _instanceExtraInitializers);
-            __esDecorate(this, null, _waitForXPath_decorators, { kind: "method", name: "waitForXPath", static: false, private: false, access: { has: obj => "waitForXPath" in obj, get: obj => obj.waitForXPath }, metadata: _metadata }, null, _instanceExtraInitializers);
             __esDecorate(this, null, _waitForFunction_decorators, { kind: "method", name: "waitForFunction", static: false, private: false, access: { has: obj => "waitForFunction" in obj, get: obj => obj.waitForFunction }, metadata: _metadata }, null, _instanceExtraInitializers);
             __esDecorate(this, null, _content_decorators, { kind: "method", name: "content", static: false, private: false, access: { has: obj => "content" in obj, get: obj => obj.content }, metadata: _metadata }, null, _instanceExtraInitializers);
             __esDecorate(this, null, _addScriptTag_decorators, { kind: "method", name: "addScriptTag", static: false, private: false, access: { has: obj => "addScriptTag" in obj, get: obj => obj.addScriptTag }, metadata: _metadata }, null, _instanceExtraInitializers);
@@ -247,10 +241,6 @@ let Frame = (() => {
          * @internal
          */
         _parentId;
-        /**
-         * @internal
-         */
-        worlds;
         /**
          * @internal
          */
@@ -300,14 +290,14 @@ let Frame = (() => {
                     return null;
                 }
                 const list = __addDisposableResource(env_1, await parentFrame.isolatedRealm().evaluateHandle(() => {
-                    return document.querySelectorAll('iframe');
+                    return document.querySelectorAll('iframe,frame');
                 }), false);
                 for await (const iframe_1 of transposeIterableHandle(list)) {
                     const env_2 = { stack: [], error: void 0, hasError: false };
                     try {
                         const iframe = __addDisposableResource(env_2, iframe_1, false);
                         const frame = await iframe.contentFrame();
-                        if (frame._id === this._id) {
+                        if (frame?._id === this._id) {
                             return iframe.move();
                         }
                     }
@@ -437,21 +427,6 @@ let Frame = (() => {
             return await document.$$eval(selector, pageFunction, ...args);
         }
         /**
-         * @deprecated Use {@link Frame.$$} with the `xpath` prefix.
-         *
-         * Example: `await frame.$$('xpath/' + xpathExpression)`
-         *
-         * This method evaluates the given XPath expression and returns the results.
-         * If `xpath` starts with `//` instead of `.//`, the dot will be appended
-         * automatically.
-         * @param expression - the XPath expression to evaluate.
-         */
-        async $x(expression) {
-            // eslint-disable-next-line rulesdir/use-using -- This is cached.
-            const document = await this.#document();
-            return await document.$x(expression);
-        }
-        /**
          * Waits for an element matching the given selector to appear in the frame.
          *
          * This method works across navigations.
@@ -489,34 +464,6 @@ let Frame = (() => {
         async waitForSelector(selector, options = {}) {
             const { updatedSelector, QueryHandler } = getQueryHandlerAndSelector(selector);
             return (await QueryHandler.waitFor(this, updatedSelector, options));
-        }
-        /**
-         * @deprecated Use {@link Frame.waitForSelector} with the `xpath` prefix.
-         *
-         * Example: `await frame.waitForSelector('xpath/' + xpathExpression)`
-         *
-         * The method evaluates the XPath expression relative to the Frame.
-         * If `xpath` starts with `//` instead of `.//`, the dot will be appended
-         * automatically.
-         *
-         * Wait for the `xpath` to appear in page. If at the moment of calling the
-         * method the `xpath` already exists, the method will return immediately. If
-         * the xpath doesn't appear after the `timeout` milliseconds of waiting, the
-         * function will throw.
-         *
-         * For a code example, see the example for {@link Frame.waitForSelector}. That
-         * function behaves identically other than taking a CSS selector rather than
-         * an XPath.
-         *
-         * @param xpath - the XPath expression to wait for.
-         * @param options - options to configure the visibility of the element and how
-         * long to wait before timing out.
-         */
-        async waitForXPath(xpath, options = {}) {
-            if (xpath.startsWith('//')) {
-                xpath = `.${xpath}`;
-            }
-            return await this.waitForSelector(`xpath/${xpath}`, options);
         }
         /**
          * @example
@@ -558,7 +505,20 @@ let Frame = (() => {
          * The full HTML contents of the frame, including the DOCTYPE.
          */
         async content() {
-            return await this.evaluate(getPageContent);
+            return await this.evaluate(() => {
+                let content = '';
+                for (const node of document.childNodes) {
+                    switch (node) {
+                        case document.documentElement:
+                            content += document.documentElement.outerHTML;
+                            break;
+                        default:
+                            content += new XMLSerializer().serializeToString(node);
+                            break;
+                    }
+                }
+                return content;
+            });
         }
         /**
          * @internal
@@ -850,31 +810,6 @@ let Frame = (() => {
             finally {
                 __disposeResources(env_8);
             }
-        }
-        /**
-         * @deprecated Replace with `new Promise(r => setTimeout(r, milliseconds));`.
-         *
-         * Causes your script to wait for the given number of milliseconds.
-         *
-         * @remarks
-         * It's generally recommended to not wait for a number of seconds, but instead
-         * use {@link Frame.waitForSelector}, {@link Frame.waitForXPath} or
-         * {@link Frame.waitForFunction} to wait for exactly the conditions you want.
-         *
-         * @example
-         *
-         * Wait for 1 second:
-         *
-         * ```ts
-         * await frame.waitForTimeout(1000);
-         * ```
-         *
-         * @param milliseconds - the number of milliseconds to wait.
-         */
-        async waitForTimeout(milliseconds) {
-            return await new Promise(resolve => {
-                setTimeout(resolve, milliseconds);
-            });
         }
         /**
          * The frame's title.

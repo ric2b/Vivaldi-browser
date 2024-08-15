@@ -95,7 +95,7 @@ SavedpasswordsRemoveFunction::~SavedpasswordsRemoveFunction() {}
 ExtensionFunction::ResponseAction SavedpasswordsRemoveFunction::Run() {
   using vivaldi::savedpasswords::Remove::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   if (!base::StringToSizeT(params->id, &id_to_remove_)) {
@@ -131,7 +131,7 @@ void SavedpasswordsRemoveFunction::OnGetPasswordStoreResults(
 ExtensionFunction::ResponseAction SavedpasswordsAddFunction::Run() {
   using vivaldi::savedpasswords::Add::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   if (!params->password_form.password.has_value()) {
@@ -171,7 +171,7 @@ SavedpasswordsGetFunction::~SavedpasswordsGetFunction() {}
 ExtensionFunction::ResponseAction SavedpasswordsGetFunction::Run() {
   using vivaldi::savedpasswords::Get::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   // EXPLICIT_ACCESS used as this is a read operation that must work in
@@ -237,7 +237,7 @@ ExtensionFunction::ResponseAction SavedpasswordsCreateDelegateFunction::Run() {
 ExtensionFunction::ResponseAction SavedpasswordsDeleteFunction::Run() {
   using vivaldi::savedpasswords::Delete::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
@@ -264,7 +264,7 @@ ExtensionFunction::ResponseAction SavedpasswordsDeleteFunction::Run() {
 ExtensionFunction::ResponseAction SavedpasswordsAuthenticateFunction::Run() {
   using vivaldi::savedpasswords::Authenticate::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =

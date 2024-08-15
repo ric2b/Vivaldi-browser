@@ -3,13 +3,14 @@
 // found in the LICENSE file.
 
 #include "base/profiler/stack_sampling_profiler_test_util.h"
-#include "base/memory/raw_ptr.h"
 
+#include <string_view>
 #include <utility>
 
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/profiler/native_unwinder_android_map_delegate.h"
 #include "base/profiler/native_unwinder_android_memory_regions_map.h"
@@ -364,7 +365,7 @@ void ExpectStackContains(const std::vector<Frame>& stack,
   for (; frame_it != stack.end() && function_it != functions.end();
        ++frame_it) {
     if (frame_it->instruction_pointer >=
-            reinterpret_cast<uintptr_t>(function_it->start) &&
+            reinterpret_cast<uintptr_t>(function_it->start.get()) &&
         frame_it->instruction_pointer <=
             reinterpret_cast<uintptr_t>(function_it->end.get())) {
       ++function_it;
@@ -410,7 +411,7 @@ void ExpectStackDoesNotContain(
   for (const auto& frame : stack) {
     for (const auto& function : functions) {
       if (frame.instruction_pointer >=
-              reinterpret_cast<uintptr_t>(function.start) &&
+              reinterpret_cast<uintptr_t>(function.start.get()) &&
           frame.instruction_pointer <=
               reinterpret_cast<uintptr_t>(function.end.get())) {
         seen_functions.insert(function);
@@ -425,7 +426,7 @@ void ExpectStackDoesNotContain(
   }
 }
 
-NativeLibrary LoadTestLibrary(StringPiece library_name) {
+NativeLibrary LoadTestLibrary(std::string_view library_name) {
   // The lambda gymnastics works around the fact that we can't use ASSERT_*
   // macros in a function returning non-null.
   const auto load = [&](NativeLibrary* library) {

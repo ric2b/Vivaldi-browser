@@ -43,7 +43,7 @@ void CastAppAvailabilityTracker::UnregisterSource(
 
   for (const std::string& app_id : it->second.app_ids()) {
     auto count_it = registration_count_by_app_id_.find(app_id);
-    OSP_DCHECK(count_it != registration_count_by_app_id_.end());
+    OSP_CHECK(count_it != registration_count_by_app_id_.end());
     if (--(count_it->second) == 0) {
       registration_count_by_app_id_.erase(count_it);
     }

@@ -14,7 +14,9 @@
 
 extern crate alloc;
 
+use alloc::vec;
 use bssl_crypto::ecdh::{PrivateKey, PublicKey};
+use core::fmt::{Debug, Formatter};
 use crypto_provider::{
     elliptic_curve::{EcdhProvider, EphemeralSecret, PublicKey as _},
     p256::{PointCompression, P256},
@@ -31,13 +33,25 @@ impl EcdhProvider<P256> for P256Ecdh {
 }
 
 /// A NIST-P256 public key.
-#[derive(Debug, PartialEq, Eq)]
-pub struct P256PublicKey(PublicKey<bssl_crypto::ecdh::P256>);
+pub struct P256PublicKey(PublicKey<bssl_crypto::ec::P256>);
+
+impl PartialEq for P256PublicKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.to_x962_uncompressed().as_ref() == other.0.to_x962_uncompressed().as_ref()
+    }
+}
+
+impl Debug for P256PublicKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "X9.62 bytes: {:?}", self.0.to_x962_uncompressed().as_ref())
+    }
+}
+
 impl crypto_provider::p256::P256PublicKey for P256PublicKey {
-    type Error = bssl_crypto::ecdh::Error;
+    type Error = Error;
 
     fn from_sec1_bytes(bytes: &[u8]) -> Result<Self, Self::Error> {
-        PublicKey::try_from(bytes).map(Self)
+        PublicKey::from_x962_uncompressed(bytes).map(P256PublicKey).ok_or(Error::ConversionFailed)
     }
 
     fn to_sec1_bytes(&self, point_compression: PointCompression) -> ArrayVec<[u8; 65]> {
@@ -45,29 +59,37 @@ impl crypto_provider::p256::P256PublicKey for P256PublicKey {
             PointCompression::Compressed => unimplemented!(),
             PointCompression::Uncompressed => {
                 let mut bytes = ArrayVec::<[u8; 65]>::new();
-                bytes.extend_from_slice(&self.0.to_vec());
+                bytes.extend_from_slice(self.0.to_x962_uncompressed().as_ref());
                 bytes
             }
         }
     }
 
-    #[allow(clippy::expect_used)]
+    #[allow(clippy::expect_used, clippy::indexing_slicing)]
     fn to_affine_coordinates(&self) -> Result<([u8; 32], [u8; 32]), Self::Error> {
-        Ok(self.0.to_affine_coordinates())
+        let raw_key = self.0.to_x962_uncompressed();
+        let x = raw_key.as_ref()[1..33].try_into().map_err(|_| Error::ConversionFailed)?;
+        let y = raw_key.as_ref()[33..65].try_into().map_err(|_| Error::ConversionFailed)?;
+        Ok((x, y))
     }
     fn from_affine_coordinates(x: &[u8; 32], y: &[u8; 32]) -> Result<Self, Self::Error> {
-        PublicKey::<bssl_crypto::ecdh::P256>::from_affine_coordinates(x, y).map(Self)
+        let mut point = vec![0x04];
+        point.extend_from_slice(x);
+        point.extend_from_slice(y);
+        PublicKey::<bssl_crypto::ec::P256>::from_x962_uncompressed(&point)
+            .map(Self)
+            .ok_or(Error::ConversionFailed)
     }
 }
 
-/// Ephemeral secrect for use in a P256 Diffie-Hellman
+/// Ephemeral secret for use in a P256 Diffie-Hellman exchange.
 pub struct P256EphemeralSecret {
-    secret: PrivateKey<bssl_crypto::ecdh::P256>,
+    secret: PrivateKey<bssl_crypto::ec::P256>,
 }
 
 impl EphemeralSecret<P256> for P256EphemeralSecret {
     type Impl = P256Ecdh;
-    type Error = bssl_crypto::ecdh::Error;
+    type Error = Error;
     type Rng = ();
     type EncodedPublicKey =
         <P256PublicKey as crypto_provider::elliptic_curve::PublicKey<P256>>::EncodedPublicKey;
@@ -77,17 +99,25 @@ impl EphemeralSecret<P256> for P256EphemeralSecret {
     }
 
     fn public_key_bytes(&self) -> Self::EncodedPublicKey {
-        P256PublicKey((&self.secret).into()).to_bytes()
+        P256PublicKey(self.secret.to_public_key()).to_bytes()
     }
 
     fn diffie_hellman(
         self,
         other_pub: &P256PublicKey,
     ) -> Result<<Self::Impl as EcdhProvider<P256>>::SharedSecret, Self::Error> {
-        let shared_secret = self.secret.diffie_hellman(&other_pub.0)?;
-        let bytes: <Self::Impl as EcdhProvider<P256>>::SharedSecret = shared_secret.to_bytes();
-        Ok(bytes)
+        let shared_secret = self.secret.compute_shared_key(&other_pub.0);
+        shared_secret.try_into().map_err(|_| Error::DiffieHellmanFailed)
     }
+}
+
+/// Error type for ECDH operations.
+#[derive(Debug)]
+pub enum Error {
+    /// Failed when trying to convert between representations.
+    ConversionFailed,
+    /// The Diffie-Hellman key exchange failed.
+    DiffieHellmanFailed,
 }
 
 #[cfg(test)]
@@ -97,7 +127,7 @@ impl crypto_provider_test::elliptic_curve::EphemeralSecretForTesting<P256> for P
         private_bytes: &[u8; 32],
         _public_key: &P256PublicKey,
     ) -> Result<Self, Self::Error> {
-        Ok(Self { secret: PrivateKey::from_private_bytes(private_bytes).unwrap() })
+        Ok(Self { secret: PrivateKey::from_big_endian(private_bytes).unwrap() })
     }
 }
 
@@ -109,7 +139,7 @@ mod tests {
 
     #[apply(p256_test_cases)]
     fn p256_tests(testcase: CryptoProviderTestCase<P256Ecdh>, name: &str) {
-        if name == "to_bytes_compressed" {
+        if name.contains("compressed") {
             return; // EC point compression not supported by bssl-crypto yet
         }
         testcase(PhantomData::<P256Ecdh>)

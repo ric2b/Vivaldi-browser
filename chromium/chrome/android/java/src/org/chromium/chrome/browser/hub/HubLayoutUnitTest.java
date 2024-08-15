@@ -61,6 +61,7 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.SyncOneshotSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
+import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.Layout.ViewportMode;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
@@ -82,6 +83,7 @@ import org.chromium.ui.base.TestActivity;
 import org.chromium.ui.resources.ResourceManager;
 
 import java.util.Collections;
+import java.util.function.DoubleConsumer;
 
 /**
  * Unit tests for {@link HubLayout}.
@@ -129,6 +131,9 @@ public class HubLayoutUnitTest {
     @Mock private TabContentManager mTabContentManager;
     @Mock private TabModelSelector mTabModelSelector;
     @Mock private Tab mTab;
+    @Mock private DoubleConsumer mOnAlphaChange;
+
+    private UserActionTester mActionTester;
 
     private Activity mActivity;
     private FrameLayout mFrameLayout;
@@ -144,6 +149,10 @@ public class HubLayoutUnitTest {
         mJniMocker.mock(SceneLayerJni.TEST_HOOKS, mSceneLayerJni);
         mJniMocker.mock(StaticTabSceneLayerJni.TEST_HOOKS, mStaticTabSceneLayerJni);
         mJniMocker.mock(SolidColorSceneLayerJni.TEST_HOOKS, mSolidColorSceneLayerJni);
+
+        mActionTester = new UserActionTester();
+        ShadowLooper.runUiThreadTasks();
+
         when(mTabSwitcherPane.getPaneId()).thenReturn(PaneId.TAB_SWITCHER);
         when(mTabSwitcherPane.getColorScheme()).thenReturn(HubColorScheme.DEFAULT);
         when(mTabSwitcherPane.createShowHubLayoutAnimatorProvider(any()))
@@ -264,7 +273,7 @@ public class HubLayoutUnitTest {
                 LazyOneshotSupplier.fromValue(mFrameLayout);
         HubLayoutDependencyHolder dependencyHolder =
                 new HubLayoutDependencyHolder(
-                        hubManagerSupplier, rootViewSupplier, mScrimController);
+                        hubManagerSupplier, rootViewSupplier, mScrimController, mOnAlphaChange);
 
         mHubLayout =
                 spy(
@@ -282,6 +291,7 @@ public class HubLayoutUnitTest {
     @After
     public void tearDown() {
         mHubLayout.destroy();
+        mActionTester.tearDown();
     }
 
     @Test
@@ -662,6 +672,7 @@ public class HubLayoutUnitTest {
         assertFalse(mHubLayout.isRunningAnimations());
         assertFalse(mHubLayout.onUpdateAnimation(FAKE_TIME, false));
         verify(mHubLayout).doneShowing();
+        assertEquals(1, mActionTester.getActionCount("MobileToolbarShowStackView"));
         verify(mTab).hide(eq(TabHidingType.TAB_SWITCHER_SHOWN));
         if (fromLayout == LayoutType.START_SURFACE) {
             verify(mScrimController).forceAnimationToFinish();
@@ -697,6 +708,7 @@ public class HubLayoutUnitTest {
         verify(mHubController, times(1)).onHubLayoutDoneHiding();
         assertEquals(0, mFrameLayout.getChildCount());
         verify(mHubLayout).doneHiding();
+        assertEquals(1, mActionTester.getActionCount("MobileExitStackView"));
 
         if (nextLayout == LayoutType.START_SURFACE) {
             verify(mScrimController).forceAnimationToFinish();

@@ -5,7 +5,6 @@
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as Protocol from '../../../generated/protocol.js';
 import * as Adorners from '../../../ui/components/adorners/adorners.js';
-import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as TreeOutline from '../../../ui/components/tree_outline/tree_outline.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
@@ -104,7 +103,7 @@ export class Badge extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-resources-origin-trial-tree-view-badge', Badge);
+customElements.define('devtools-resources-origin-trial-tree-view-badge', Badge);
 
 type TreeNode<DataType> = TreeOutline.TreeOutlineUtils.TreeNode<DataType>;
 
@@ -119,10 +118,10 @@ function constructOriginTrialTree(originTrial: Protocol.Page.OriginTrial): TreeN
   return {
     treeNodeData: originTrial,
     id: 'OriginTrialTreeNode#' + originTrial.trialName,
-    children: async(): Promise<TreeNode<OriginTrialTreeNodeData>[]> => originTrial.tokensWithStatus.length > 1 ?
+    children: async () => originTrial.tokensWithStatus.length > 1 ?
         originTrial.tokensWithStatus.map(constructTokenNode) :
         constructTokenDetailsNodes(originTrial.tokensWithStatus[0]),
-    renderer: (node: TreeNode<OriginTrialTreeNodeData>): LitHtml.TemplateResult => {
+    renderer: (node: TreeNode<OriginTrialTreeNodeData>) => {
       const trial = node.treeNodeData as Protocol.Page.OriginTrial;
       const tokenCountBadge = LitHtml.html`
         <${Badge.litTagName} .data=${{
@@ -147,8 +146,8 @@ function constructTokenNode(token: Protocol.Page.OriginTrialTokenWithStatus): Tr
   return {
     treeNodeData: token.status,
     id: 'TokenNode#' + token.rawTokenText,
-    children: async(): Promise<TreeNode<OriginTrialTreeNodeData>[]> => constructTokenDetailsNodes(token),
-    renderer: (node: TreeNode<OriginTrialTreeNodeData>, state: {isExpanded: boolean}): LitHtml.TemplateResult => {
+    children: async () => constructTokenDetailsNodes(token),
+    renderer: (node: TreeNode<OriginTrialTreeNodeData>, state: {isExpanded: boolean}) => {
       const tokenStatus = node.treeNodeData as string;
       const statusBadge = LitHtml.html`
         <${Badge.litTagName} .data=${{
@@ -190,10 +189,10 @@ function constructRawTokenTextNode(tokenText: string): TreeNode<OriginTrialTreeN
   return {
     treeNodeData: i18nString(UIStrings.rawTokenText),
     id: 'TokenRawTextContainerNode#' + tokenText,
-    children: async(): Promise<TreeNode<OriginTrialTreeNodeData>[]> => [{
+    children: async () => [{
       treeNodeData: tokenText,
       id: 'TokenRawTextNode#' + tokenText,
-      renderer: (data: TreeNode<OriginTrialTreeNodeData>): LitHtml.TemplateResult => {
+      renderer: (data: TreeNode<OriginTrialTreeNodeData>) => {
         const tokenText = data.treeNodeData as string;
         return LitHtml.html`
         <div style="overflow-wrap: break-word;">
@@ -297,7 +296,7 @@ export class OriginTrialTokenRows extends HTMLElement {
       ...this.#parsedTokenDetails,
     ];
 
-    const tokenDetailRows = tokenDetails.map((field: TokenField): LitHtml.TemplateResult => {
+    const tokenDetailRows = tokenDetails.map((field: TokenField) => {
       return LitHtml.html`
           <div class="key">${field.name}</div>
           <div class="value">${field.value}</div>
@@ -314,7 +313,7 @@ export class OriginTrialTokenRows extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-resources-origin-trial-token-rows', OriginTrialTokenRows);
+customElements.define('devtools-resources-origin-trial-token-rows', OriginTrialTokenRows);
 
 export interface OriginTrialTreeViewData {
   trials: Protocol.Page.OriginTrial[];
@@ -364,7 +363,7 @@ export class OriginTrialTreeView extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-resources-origin-trial-tree-view', OriginTrialTreeView);
+customElements.define('devtools-resources-origin-trial-tree-view', OriginTrialTreeView);
 
 declare global {
   interface HTMLElementTagNameMap {

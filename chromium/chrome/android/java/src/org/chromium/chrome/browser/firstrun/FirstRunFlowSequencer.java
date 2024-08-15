@@ -21,6 +21,7 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
@@ -28,7 +29,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileProvider;
 import org.chromium.chrome.browser.search_engines.SearchEnginePromoType;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
-import org.chromium.chrome.browser.signin.services.SigninManager;
+import org.chromium.chrome.browser.ui.signin.history_sync.HistorySyncUtils;
 import org.chromium.components.crash.CrashKeyIndex;
 import org.chromium.components.crash.CrashKeys;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -71,16 +72,30 @@ public abstract class FirstRunFlowSequencer {
             }
             assert mProfileSupplier.get() != null;
             Profile profile = mProfileSupplier.get().getOriginalProfile();
-
             final IdentityManager identityManager =
                     IdentityServicesProvider.get().getIdentityManager(profile);
-            if (identityManager.hasPrimaryAccount(ConsentLevel.SYNC) || !isSyncAllowed()) {
-                // No need to show the sync consent page if users already consented to sync or
-                // if sync is not allowed.
+            if (identityManager.getPrimaryAccountInfo(ConsentLevel.SYNC) != null) {
+                // No need to show the sync consent page if users already consented to sync.
                 return false;
             }
             // Show the sync consent page only to the signed-in users.
             return identityManager.hasPrimaryAccount(ConsentLevel.SIGNIN);
+        }
+
+        boolean shouldShowHistorySyncOptIn(boolean isChild) {
+            assert mProfileSupplier.get() != null;
+            Profile profile = mProfileSupplier.get().getOriginalProfile();
+            if (isChild) {
+                return !HistorySyncUtils.isHistorySyncDisabledByCustodian(profile);
+            }
+            if (HistorySyncUtils.isHistorySyncDisabledByPolicy(profile)
+                    || HistorySyncUtils.didAlreadyOptIn(profile)) {
+                return false;
+            }
+            // Show the page only to signed-in users.
+            return IdentityServicesProvider.get()
+                    .getIdentityManager(profile)
+                    .hasPrimaryAccount(ConsentLevel.SIGNIN);
         }
 
         /** @return true if the Search Engine promo page should be shown. */
@@ -91,16 +106,6 @@ public abstract class FirstRunFlowSequencer {
             return searchPromoType == SearchEnginePromoType.SHOW_NEW
                     || searchPromoType == SearchEnginePromoType.SHOW_EXISTING;
         }
-
-        /** @return true if Sync is allowed for the current user. */
-        @VisibleForTesting
-        protected boolean isSyncAllowed() {
-            Profile profile = mProfileSupplier.get().getOriginalProfile();
-            SigninManager signinManager = IdentityServicesProvider.get().getSigninManager(profile);
-            return FirstRunUtils.canAllowSync()
-                    && !signinManager.isSigninDisabledByPolicy()
-                    && signinManager.isSigninSupported(/* requireUpdatedPlayServices= */ false);
-        }
     }
 
     /** Factory that provides Delegate instances for testing. */
@@ -110,7 +115,6 @@ public abstract class FirstRunFlowSequencer {
                 OneshotSupplier<ProfileProvider> profileSupplier);
     }
 
-    private final Activity mActivity;
 
     /**
      * The delegate to be used by the Sequencer. By default, it's an instance of
@@ -134,10 +138,8 @@ public abstract class FirstRunFlowSequencer {
     public abstract void onFlowIsKnown(Bundle freProperties);
 
     public FirstRunFlowSequencer(
-            Activity activity,
             OneshotSupplier<ProfileProvider> profileSupplier,
             OneshotSupplier<Boolean> childAccountStatusSupplier) {
-        mActivity = activity;
 
         mDelegate =
                 sDelegateFactoryForTesting != null
@@ -178,6 +180,10 @@ public abstract class FirstRunFlowSequencer {
         return mDelegate.shouldShowSyncConsentPage(mIsChild);
     }
 
+    private boolean shouldShowHistorySyncOptIn() {
+        return mDelegate.shouldShowHistorySyncOptIn(mIsChild);
+    }
+
     private void setChildAccountStatus(boolean isChild) {
         assert mIsChild == null;
         mIsChild = isChild;
@@ -198,14 +204,25 @@ public abstract class FirstRunFlowSequencer {
     }
 
     /**
-     * Will be called either when policies are initialized, or when native is initialized if we have
-     * no on-device policies.
+     * Will be called when native is initialized and on-device policies are initialized (if any).
+     *
      * @param freProperties Resulting FRE properties bundle.
      */
     public void updateFirstRunProperties(Bundle freProperties) {
         if (!BuildConfig.IS_VIVALDI) {
-        freProperties.putBoolean(
-                FirstRunActivity.SHOW_SYNC_CONSENT_PAGE, shouldShowSyncConsentPage());
+        boolean isHistorySyncEnabled =
+                ChromeFeatureList.isEnabled(
+                        ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS);
+        if (isHistorySyncEnabled) {
+            freProperties.putBoolean(FirstRunActivity.SHOW_SYNC_CONSENT_PAGE, false);
+            freProperties.putBoolean(
+                    FirstRunActivity.SHOW_HISTORY_SYNC_PAGE, shouldShowHistorySyncOptIn());
+        } else {
+            freProperties.putBoolean(
+                    FirstRunActivity.SHOW_SYNC_CONSENT_PAGE, shouldShowSyncConsentPage());
+            freProperties.putBoolean(FirstRunActivity.SHOW_HISTORY_SYNC_PAGE, false);
+        }
+
         freProperties.putBoolean(
                 FirstRunActivity.SHOW_SEARCH_ENGINE_PAGE, shouldShowSearchEnginePage());
         }

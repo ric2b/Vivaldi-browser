@@ -25,6 +25,7 @@ class VivaldiAppObserver : public extensions::BrowserContextKeyedAPI {
   static VivaldiAppObserver* Get(content::BrowserContext* browser_context);
 
   void SetCommand(int tag, Browser* browser);
+  void SetUrlsToOpen(const std::vector<GURL>& urls);
 
   // Called by VivaldiBrowserWindowCocoa when the window has been shown.
   void OnWindowShown(VivaldiBrowserWindow* window, bool was_hidden);
@@ -39,6 +40,7 @@ class VivaldiAppObserver : public extensions::BrowserContextKeyedAPI {
 
   int tag_ = 0;
   Browser* browser_ = nullptr;
+  std::vector<GURL> urls_;
   content::BrowserContext* browser_context_;
 };
 

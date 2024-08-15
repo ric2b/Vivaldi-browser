@@ -11,6 +11,7 @@
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/metrics/payments/virtual_card_enrollment_metrics.h"
+#include "components/autofill/core/browser/payments/autofill_payments_feature_availability.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/autofill/core/browser/payments/payments_util.h"
 #include "components/autofill/core/browser/payments/virtual_card_enrollment_flow.h"
@@ -19,7 +20,6 @@
 #include "components/autofill/core/browser/strike_databases/strike_database.h"
 #include "components/autofill/core/browser/strike_databases/strike_database_base.h"
 #include "components/autofill/core/common/autofill_clock.h"
-#include "components/autofill/core/common/autofill_payments_features.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
 
@@ -53,9 +53,8 @@ VirtualCardEnrollmentManager::VirtualCardEnrollmentManager(
       payments_network_interface_(payments_network_interface) {
   // |autofill_client_| does not exist on Clank settings page where this flow
   // can also be triggered.
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillEnableUpdateVirtualCardEnrollment) &&
-      autofill_client_ && autofill_client_->GetStrikeDatabase()) {
+  if (VirtualCardFeatureEnabled() && autofill_client_ &&
+      autofill_client_->GetStrikeDatabase()) {
     virtual_card_enrollment_strike_database_ =
         std::make_unique<VirtualCardEnrollmentStrikeDatabase>(
             autofill_client_->GetStrikeDatabase());
@@ -75,8 +74,7 @@ void VirtualCardEnrollmentManager::InitVirtualCardEnroll(
     VirtualCardEnrollmentFieldsLoadedCallback
         virtual_card_enrollment_fields_loaded_callback) {
   // If at strike limit, exit enrollment flow.
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillEnableUpdateVirtualCardEnrollment) &&
+  if (VirtualCardFeatureEnabled() &&
       ShouldBlockVirtualCardEnrollment(
           base::NumberToString(credit_card.instrument_id()),
           virtual_card_enrollment_source)) {
@@ -112,18 +110,6 @@ void VirtualCardEnrollmentManager::InitVirtualCardEnroll(
           weak_ptr_factory_.GetWeakPtr()));
 }
 
-void VirtualCardEnrollmentManager::OnCardSavedAnimationComplete() {
-  if (state_.virtual_card_enrollment_fields.virtual_card_enrollment_source ==
-      VirtualCardEnrollmentSource::kUpstream) {
-    avatar_animation_complete_ = true;
-
-    if (enroll_response_details_received_) {
-      EnsureCardArtImageIsSetBeforeShowingUI();
-      ShowVirtualCardEnrollBubble();
-    }
-  }
-}
-
 void VirtualCardEnrollmentManager::Enroll(
     std::optional<VirtualCardEnrollmentUpdateResponseCallback>
         virtual_card_enrollment_update_response_callback) {
@@ -151,8 +137,7 @@ void VirtualCardEnrollmentManager::Enroll(
                          OnDidGetUpdateVirtualCardEnrollmentResponse,
                      weak_ptr_factory_.GetWeakPtr(),
                      VirtualCardEnrollmentRequestType::kEnroll));
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillEnableUpdateVirtualCardEnrollment)) {
+  if (VirtualCardFeatureEnabled()) {
     RemoveAllStrikesToBlockOfferingVirtualCardEnrollment(base::NumberToString(
         state_.virtual_card_enrollment_fields.credit_card.instrument_id()));
   }
@@ -274,25 +259,33 @@ void VirtualCardEnrollmentManager::OnDidGetUpdateVirtualCardEnrollmentResponse(
         state_.virtual_card_enrollment_fields.credit_card.instrument_id()));
   }
 
-  LogUpdateVirtualCardEnrollmentRequestResult(
-      state_.virtual_card_enrollment_fields.virtual_card_enrollment_source,
-      type, result == AutofillClient::PaymentsRpcResult::kSuccess);
-  Reset();
   // Relay the response to the server card editor page. This also destroys the
   // payments delegate if the editor was already closed.
   if (virtual_card_enrollment_update_response_callback_.has_value()) {
     std::move(virtual_card_enrollment_update_response_callback_.value())
         .Run(result == AutofillClient::PaymentsRpcResult::kSuccess);
   }
-  virtual_card_enrollment_update_response_callback_.reset();
+
+  LogUpdateVirtualCardEnrollmentRequestResult(
+      state_.virtual_card_enrollment_fields.virtual_card_enrollment_source,
+      type, result == AutofillClient::PaymentsRpcResult::kSuccess);
+  Reset();
+}
+
+void VirtualCardEnrollmentManager::OnVirtualCardEnrollCompleted(
+    bool is_vcn_enrolled) {
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  autofill_client_->GetPaymentsAutofillClient()->VirtualCardEnrollCompleted(
+      /*is_vcn_enrolled=*/is_vcn_enrolled);
+#endif
 }
 
 void VirtualCardEnrollmentManager::Reset() {
   payments_network_interface_->CancelRequest();
   weak_ptr_factory_.InvalidateWeakPtrs();
   state_ = VirtualCardEnrollmentProcessState();
-  avatar_animation_complete_ = false;
   enroll_response_details_received_ = false;
+  virtual_card_enrollment_update_response_callback_.reset();
 }
 
 VirtualCardEnrollmentStrikeDatabase*
@@ -348,15 +341,17 @@ void VirtualCardEnrollmentManager::ShowVirtualCardEnrollBubble() {
       state_.virtual_card_enrollment_fields,
       base::BindOnce(
           &VirtualCardEnrollmentManager::Enroll, weak_ptr_factory_.GetWeakPtr(),
-          /*virtual_card_enrollment_update_response_callback=*/std::nullopt),
+          /*virtual_card_enrollment_update_response_callback=*/
+          base::BindOnce(
+              &VirtualCardEnrollmentManager::OnVirtualCardEnrollCompleted,
+              weak_ptr_factory_.GetWeakPtr())),
       base::BindOnce(
           &VirtualCardEnrollmentManager::OnVirtualCardEnrollmentBubbleCancelled,
           weak_ptr_factory_.GetWeakPtr()));
 }
 
 void VirtualCardEnrollmentManager::OnVirtualCardEnrollmentBubbleCancelled() {
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillEnableUpdateVirtualCardEnrollment)) {
+  if (VirtualCardFeatureEnabled()) {
     AddStrikeToBlockOfferingVirtualCardEnrollment(base::NumberToString(
         state_.virtual_card_enrollment_fields.credit_card.instrument_id()));
   }

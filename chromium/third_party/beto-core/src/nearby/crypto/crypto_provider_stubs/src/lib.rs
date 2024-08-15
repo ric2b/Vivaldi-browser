@@ -29,7 +29,7 @@ use crypto_provider::{
         Aes, Aes128Key, Aes256Key, AesBlock, AesCipher, AesDecryptCipher, AesEncryptCipher,
     },
     ed25519::{
-        self, Ed25519Provider, InvalidBytes, KeyPair, RawPrivateKey, RawPrivateKeyPermit,
+        self, Ed25519Provider, InvalidPublicKeyBytes, KeyPair, RawPrivateKey, RawPrivateKeyPermit,
         RawPublicKey, RawSignature, Signature, SignatureError,
     },
     elliptic_curve::{EcdhProvider, EphemeralSecret, PublicKey},
@@ -480,7 +480,7 @@ impl Ed25519Provider for Ed25519Stubs {
 impl ed25519::PublicKey for PublicKeyStubs {
     type Signature = SignatureStubs;
 
-    fn from_bytes(bytes: &RawPublicKey) -> Result<Self, InvalidBytes>
+    fn from_bytes(bytes: &RawPublicKey) -> Result<Self, InvalidPublicKeyBytes>
     where
         Self: Sized,
     {

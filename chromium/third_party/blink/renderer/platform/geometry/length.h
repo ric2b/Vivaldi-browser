@@ -25,14 +25,20 @@
 
 #include <cmath>
 #include <cstring>
+#include <optional>
 
 #include "base/check_op.h"
+#include "base/functional/function_ref.h"
+#include "base/memory/stack_allocated.h"
 #include "base/notreached.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/platform/geometry/layout_unit.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
+
+namespace WTF {
+class String;
+}  // namespace WTF
 
 namespace blink {
 
@@ -83,7 +89,6 @@ struct PixelsAndPercent {
   bool has_explicit_percent;
 };
 
-class CalculationExpressionNode;
 class CalculationValue;
 class Length;
 
@@ -257,36 +262,19 @@ class PLATFORM_EXPORT Length {
 
     return !value_;
   }
-  bool IsPositive() const {
-    if (IsNone())
-      return false;
-    if (IsCalculated())
-      return true;
-
-    return GetFloatValue() > 0;
-  }
-  bool IsNegative() const {
-    if (IsNone() || IsCalculated())
-      return false;
-
-    return GetFloatValue() < 0;
-  }
 
   // For the layout purposes, if this |Length| is a block-axis size, see
-  // |IsAutoOrContentOrIntrinsic()|, it is usually a better choice.
+  // |HasAutoOrContentOrIntrinsic()|, it is usually a better choice.
   bool IsAuto() const { return GetType() == kAuto; }
   bool IsFixed() const { return GetType() == kFixed; }
 
   // For the block axis, intrinsic sizes such as `min-content` behave the same
   // as `auto`. https://www.w3.org/TR/css-sizing-3/#valdef-width-min-content
-  bool IsContentOrIntrinsic() const {
-    return GetType() == kMinContent || GetType() == kMaxContent ||
-           GetType() == kFitContent || GetType() == kMinIntrinsic ||
-           GetType() == kContent;
-  }
-  bool IsAutoOrContentOrIntrinsic() const {
-    return GetType() == kAuto || IsContentOrIntrinsic();
-  }
+  // This includes content-based sizes in calc-size().
+  bool HasAuto() const;
+  bool HasContentOrIntrinsic() const;
+  bool HasAutoOrContentOrIntrinsic() const;
+  bool HasPercent() const;
 
   bool IsSpecified() const {
     return GetType() == kFixed || GetType() == kPercent ||
@@ -303,9 +291,14 @@ class PLATFORM_EXPORT Length {
   bool IsFitContent() const { return GetType() == kFitContent; }
   bool IsPercent() const { return GetType() == kPercent; }
   bool IsPercentOrCalc() const {
+    // TODO(https://crbug.com/313072): Not all calc()s have percentages;
+    // many callers may want HasPercent, above.
     return GetType() == kPercent || GetType() == kCalculated;
   }
   bool IsPercentOrCalcOrStretch() const {
+    // TODO(https://crbug.com/313072): Not all calc()s have percentages;
+    // many callers may want a function like HasPercent, above (but that
+    // doesn't exist yet).
     return GetType() == kPercent || GetType() == kCalculated ||
            GetType() == kFillAvailable;
   }
@@ -313,8 +306,6 @@ class PLATFORM_EXPORT Length {
   bool IsExtendToZoom() const { return GetType() == kExtendToZoom; }
   bool IsDeviceWidth() const { return GetType() == kDeviceWidth; }
   bool IsDeviceHeight() const { return GetType() == kDeviceHeight; }
-  bool HasAnchorQueries() const;
-  bool HasAutoAnchorPositioning() const;
 
   Length Blend(const Length& from, double progress, ValueRange range) const {
     DCHECK(IsSpecified());
@@ -344,16 +335,17 @@ class PLATFORM_EXPORT Length {
     return value_;
   }
 
-  class PLATFORM_EXPORT AnchorEvaluator {
+  using IntrinsicLengthEvaluator = base::FunctionRef<LayoutUnit(const Length&)>;
+
+  struct EvaluationInput {
+    STACK_ALLOCATED();
+
    public:
-    // Evaluates an anchor() or anchor-size() function given by the
-    // CalculationExpressionNode. Returns |nullopt| if the query is invalid
-    // (e.g., no targets or wrong axis.)
-    virtual absl::optional<LayoutUnit> Evaluate(
-        const CalculationExpressionNode&) const = 0;
+    std::optional<float> size_keyword_basis = std::nullopt;
+    std::optional<IntrinsicLengthEvaluator> intrinsic_evaluator = std::nullopt;
   };
-  float NonNanCalculatedValue(float max_value,
-                              const AnchorEvaluator* = nullptr) const;
+
+  float NonNanCalculatedValue(float max_value, const EvaluationInput&) const;
 
   Length SubtractFromOneHundredPercent() const;
 
@@ -361,7 +353,7 @@ class PLATFORM_EXPORT Length {
 
   Length Zoom(double factor) const;
 
-  String ToString() const;
+  WTF::String ToString() const;
 
  private:
   Length BlendMixedTypes(const Length& from, double progress, ValueRange) const;

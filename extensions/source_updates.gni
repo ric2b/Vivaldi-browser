@@ -18,6 +18,7 @@ if (!is_android) {
 
 update_target("//extensions/renderer:renderer") {
   sources += [
+    "//vivaldi/extensions/renderer/vivaldi_extension_frame_helper.cc",
     "//vivaldi/extensions/renderer/vivaldi_guest_view_internal_custom_bindings.cc",
     "//vivaldi/extensions/renderer/vivaldi_script_dispatcher.cpp",
     "//vivaldi/extensions/renderer/vivaldi_script_dispatcher.h",
@@ -45,6 +46,7 @@ update_template_instance("//chrome/common/extensions/api:manifest_features") {
 
 update_target("//extensions/browser:browser_sources") {
   sources += [
+    "//vivaldi/extensions/vivaldi_extensions_guest_view.cc",
     "//vivaldi/extensions/vivaldi_extension_prefs.cc",
     "//vivaldi/extensions/api/guest_view/vivaldi_web_view_guest.cpp",
   ]

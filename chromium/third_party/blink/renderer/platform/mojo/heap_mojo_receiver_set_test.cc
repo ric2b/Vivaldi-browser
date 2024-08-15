@@ -55,9 +55,7 @@ class GCOwner final : public GarbageCollected<GCOwner<Mode, ContextType>>,
  private:
   HeapMojoReceiverSet<sample::blink::Service, GCOwner, Mode, ContextType>
       receiver_set_;
-  raw_ptr<HeapMojoReceiverSetGCBaseTest<Mode, ContextType>,
-          ExperimentalRenderer>
-      test_;
+  raw_ptr<HeapMojoReceiverSetGCBaseTest<Mode, ContextType>> test_;
 };
 
 template <HeapMojoWrapperMode Mode, typename ContextType>
@@ -123,10 +121,10 @@ template <HeapMojoWrapperMode Mode, typename ContextType>
 class HeapMojoReceiverSetDisconnectWithReasonHandlerBaseTest
     : public HeapMojoReceiverSetDisconnectHandlerBaseTest<Mode, ContextType> {
  public:
-  absl::optional<uint32_t>& disconnected_reason_code() {
+  std::optional<uint32_t>& disconnected_reason_code() {
     return disconnected_reason_code_;
   }
-  absl::optional<std::string>& disconnected_description() {
+  std::optional<std::string>& disconnected_description() {
     return disconnected_description_;
   }
 
@@ -151,8 +149,8 @@ class HeapMojoReceiverSetDisconnectWithReasonHandlerBaseTest
         WTF::Unretained(this)));
   }
 
-  absl::optional<uint32_t> disconnected_reason_code_;
-  absl::optional<std::string> disconnected_description_;
+  std::optional<uint32_t> disconnected_reason_code_;
+  std::optional<std::string> disconnected_description_;
 };
 
 }  // namespace

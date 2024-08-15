@@ -14,6 +14,7 @@ import type * as CodeMirror from '../../third_party/codemirror.next/codemirror.n
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as ColorPicker from '../../ui/legacy/components/color_picker/color_picker.js';
 import * as InlineEditor from '../../ui/legacy/components/inline_editor/inline_editor.js';
+import * as Components from '../../ui/legacy/components/utils/utils.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
@@ -21,18 +22,43 @@ import {
   BezierPopoverIcon,
   ColorSwatchPopoverIcon,
   ColorSwatchPopoverIconEvents,
+  ShadowEvents,
   ShadowSwatchPopoverHelper,
 } from './ColorSwatchPopoverIcon.js';
 import * as ElementsComponents from './components/components.js';
 import {cssRuleValidatorsMap, type Hint} from './CSSRuleValidator.js';
 import {ElementsPanel} from './ElementsPanel.js';
+import {ImagePreviewPopover} from './ImagePreviewPopover.js';
 import {
-  type BottomUpTreeMatching,
-  children,
+  AngleMatch,
+  AngleMatcher,
+  ASTUtils,
+  BezierMatch,
+  BezierMatcher,
+  BottomUpTreeMatching,
   ColorMatch,
   ColorMatcher,
+  ColorMixMatch,
+  ColorMixMatcher,
+  type CSSControlMap,
+  FontMatch,
+  FontMatcher,
+  GridTemplateMatch,
+  GridTemplateMatcher,
+  LinkableNameMatch,
+  LinkableNameMatcher,
+  LinkableNameProperties,
+  type Match,
   Renderer,
-  type RenderingContext,
+  RenderingContext,
+  ShadowMatch,
+  ShadowMatcher,
+  ShadowType,
+  StringMatch,
+  StringMatcher,
+  tokenizeDeclaration,
+  URLMatch,
+  URLMatcher,
   VariableMatch,
   VariableMatcher,
 } from './PropertyParser.js';
@@ -44,6 +70,7 @@ import {
   REGISTERED_PROPERTY_SECTION_NAME,
   StylesSidebarPane,
   StylesSidebarPropertyRenderer,
+  unescapeCssString,
 } from './StylesSidebarPane.js';
 
 const FlexboxEditor = ElementsComponents.StylePropertyEditor.FlexboxEditor;
@@ -120,6 +147,7 @@ const parentMap = new WeakMap<StylesSidebarPane, StylePropertyTreeElement>();
 
 interface StylePropertyTreeElementParams {
   stylesPane: StylesSidebarPane;
+  section: StylePropertiesSection;
   matchedStyles: SDK.CSSMatchedStyles.CSSMatchedStyles;
   property: SDK.CSSProperty.CSSProperty;
   isShorthand: boolean;
@@ -184,13 +212,11 @@ export class VariableRenderer extends VariableMatch {
     }
 
     if (varSwatch.link) {
-      this.#pane.addPopover(
-          varSwatch.link, () => this.#treeElement.getVariablePopoverContents(this.name, variableValue ?? null));
+      this.#pane.addPopover(varSwatch.link, {
+        contents: () => this.#treeElement.getVariablePopoverContents(this.name, variableValue ?? null),
+        jslogContext: 'elements.css-var',
+      });
     }
-
-    const innerSwatches =
-        renderedFallback?.cssControls?.get('color')?.filter(InlineEditor.ColorSwatch.ColorSwatch.isColorSwatch);
-    innerSwatches?.forEach(swatch => swatch.setReadonly(true));
 
     if (!computedValue || !Common.Color.parse(computedValue)) {
       return [varSwatch];
@@ -239,20 +265,40 @@ export class ColorRenderer extends ColorMatch {
     return new ColorMatcher(text => new ColorRenderer(treeElement, text));
   }
 
-  #getValueChild(node: CodeMirror.SyntaxNode, context: RenderingContext): HTMLSpanElement {
+  #getValueChild(node: CodeMirror.SyntaxNode, context: RenderingContext):
+      {valueChild: HTMLSpanElement, cssControls?: CSSControlMap} {
     const valueChild = document.createElement('span');
     if (node.name === 'ColorLiteral' || (node.name === 'ValueName' && Common.Color.Nicknames.has(this.text))) {
       valueChild.appendChild(document.createTextNode(this.text));
-    } else {
-      Renderer.renderInto(children(node), context, valueChild);
+      return {valueChild};
     }
-    return valueChild;
+    const {cssControls} = Renderer.renderInto(ASTUtils.children(node), context, valueChild);
+    return {valueChild, cssControls};
   }
 
   render(node: CodeMirror.SyntaxNode, context: RenderingContext): Node[] {
-    const swatch =
-        this.renderColorSwatch(this.#getValueChild(node, context), context.matchedResult.getComputedText(node));
+    const {valueChild, cssControls} = this.#getValueChild(node, context);
+    const swatch = this.renderColorSwatch(valueChild, context.matchedResult.getComputedText(node));
     context.addControl('color', swatch);
+
+    if (cssControls && node.name === 'CallExpression' &&
+        context.ast.text(node.getChild('Callee')).match(/^(hsla?|hwba?)/)) {
+      const angles = cssControls.get('angle');
+      if (angles?.length === 1 && angles[0] instanceof InlineEditor.CSSAngle.CSSAngle) {
+        angles[0].addEventListener(InlineEditor.InlineEditorUtils.ValueChangedEvent.eventName, ev => {
+          const hue = Common.Color.parseHueNumeric(ev.data.value);
+          const color = swatch.getColor();
+          if (!hue || !color) {
+            return;
+          }
+          if (color.is(Common.Color.Format.HSL) || color.is(Common.Color.Format.HSLA)) {
+            swatch.renderColor(new Common.Color.HSL(hue, color.s, color.l, color.alpha));
+          } else if (color.is(Common.Color.Format.HWB) || color.is(Common.Color.Format.HWBA)) {
+            swatch.renderColor(new Common.Color.HWB(hue, color.w, color.b, color.alpha));
+          }
+        });
+      }
+    }
     return [swatch];
   }
 
@@ -321,6 +367,646 @@ export class ColorRenderer extends ColorMatch {
   }
 }
 
+export class ColorMixRenderer extends ColorMixMatch {
+  #pane: StylesSidebarPane;
+  constructor(
+      pane: StylesSidebarPane, text: string, space: CodeMirror.SyntaxNode[], color1: CodeMirror.SyntaxNode[],
+      color2: CodeMirror.SyntaxNode[]) {
+    super(text, space, color1, color2);
+    this.#pane = pane;
+  }
+
+  override render(node: CodeMirror.SyntaxNode, context: RenderingContext): Node[] {
+    const hookUpColorArg = (node: Node, onChange: (newColorText: string) => void): boolean => {
+      if (node instanceof InlineEditor.ColorMixSwatch.ColorMixSwatch ||
+          node instanceof InlineEditor.ColorSwatch.ColorSwatch) {
+        if (node instanceof InlineEditor.ColorSwatch.ColorSwatch) {
+          node.addEventListener(InlineEditor.ColorSwatch.ColorChangedEvent.eventName, ev => onChange(ev.data.text));
+        } else {
+          node.addEventListener(InlineEditor.ColorMixSwatch.Events.ColorChanged, ev => onChange(ev.data.text));
+        }
+        const color = node.getText();
+        if (color) {
+          onChange(color);
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const contentChild = document.createElement('span');
+    contentChild.appendChild(document.createTextNode('color-mix('));
+    Renderer.renderInto(this.space, context, contentChild);
+    contentChild.appendChild(document.createTextNode(', '));
+    const color1 = Renderer.renderInto(this.color1, context, contentChild).cssControls.get('color') ?? [];
+    contentChild.appendChild(document.createTextNode(', '));
+    const color2 = Renderer.renderInto(this.color2, context, contentChild).cssControls.get('color') ?? [];
+    contentChild.appendChild(document.createTextNode(')'));
+
+    if (context.matchedResult.hasUnresolvedVars(node) || color1.length !== 1 || color2.length !== 1) {
+      return [contentChild];
+    }
+
+    const swatch = new InlineEditor.ColorMixSwatch.ColorMixSwatch();
+    if (!hookUpColorArg(color1[0], text => swatch.setFirstColor(text)) ||
+        !hookUpColorArg(color2[0], text => swatch.setSecondColor(text))) {
+      return [contentChild];
+    }
+
+    const space = this.space.map(space => context.matchedResult.getComputedText(space)).join(' ');
+    const color1Text = this.color1.map(color => context.matchedResult.getComputedText(color)).join(' ');
+    const color2Text = this.color2.map(color => context.matchedResult.getComputedText(color)).join(' ');
+    swatch.appendChild(contentChild);
+    swatch.setColorMixText(`color-mix(${space}, ${color1Text}, ${color2Text})`);
+    swatch.setRegisterPopoverCallback(swatch => {
+      if (swatch.icon) {
+        this.#pane.addPopover(swatch.icon, {
+          contents: () => {
+            const color = swatch.mixedColor();
+            if (!color) {
+              return undefined;
+            }
+            const span = document.createElement('span');
+            span.style.padding = '11px 7px';
+            const rgb = color.as(Common.Color.Format.HEX);
+            const text = rgb.isGamutClipped() ? color.asString() : rgb.asString();
+            if (!text) {
+              return undefined;
+            }
+            span.appendChild(document.createTextNode(text));
+            return span;
+          },
+          jslogContext: 'elements.css-color-mix',
+        });
+      }
+    });
+
+    context.addControl('color', swatch);
+    return [swatch];
+  }
+
+  static matcher(pane: StylesSidebarPane): ColorMixMatcher {
+    return new ColorMixMatcher(
+        (text, space, color1, color2) => new ColorMixRenderer(pane, text, space, color1, color2));
+  }
+}
+
+export class URLRenderer extends URLMatch {
+  constructor(
+      private readonly rule: SDK.CSSRule.CSSRule|null, private readonly node: SDK.DOMModel.DOMNode|null,
+      url: Platform.DevToolsPath.UrlString, text: string) {
+    super(unescapeCssString(url) as Platform.DevToolsPath.UrlString, text);
+  }
+  override render(): Node[] {
+    const container = document.createDocumentFragment();
+    UI.UIUtils.createTextChild(container, 'url(');
+    let hrefUrl: Platform.DevToolsPath.UrlString|null = null;
+    if (this.rule && this.rule.resourceURL()) {
+      hrefUrl = Common.ParsedURL.ParsedURL.completeURL(this.rule.resourceURL(), this.url);
+    } else if (this.node) {
+      hrefUrl = this.node.resolveURL(this.url);
+    }
+    const link = ImagePreviewPopover.setImageUrl(
+        Components.Linkifier.Linkifier.linkifyURL(hrefUrl || this.url, {
+          text: this.url,
+          preventClick: false,
+          // crbug.com/1027168
+          // We rely on CSS text-overflow: ellipsis to hide long URLs in the Style panel,
+          // so that we don't have to keep two versions (original vs. trimmed) of URL
+          // at the same time, which complicates both StylesSidebarPane and StylePropertyTreeElement.
+          bypassURLTrimming: true,
+          showColumnNumber: false,
+          inlineFrameIndex: 0,
+        }),
+        hrefUrl || this.url);
+    container.appendChild(link);
+    UI.UIUtils.createTextChild(container, ')');
+    return [container];
+  }
+
+  static matcher(rule: SDK.CSSRule.CSSRule|null, node: SDK.DOMModel.DOMNode|null): URLMatcher {
+    return new URLMatcher((url, text) => new URLRenderer(rule, node, url, text));
+  }
+}
+
+export class AngleRenderer extends AngleMatch {
+  #treeElement: StylePropertyTreeElement;
+  constructor(text: string, treeElement: StylePropertyTreeElement) {
+    super(text);
+    this.#treeElement = treeElement;
+  }
+
+  override render(_: unknown, context: RenderingContext): Node[] {
+    const angleText = this.text;
+    if (!this.#treeElement.editable()) {
+      return [document.createTextNode(angleText)];
+    }
+    const cssAngle = new InlineEditor.CSSAngle.CSSAngle();
+    cssAngle.setAttribute('jslog', `${VisualLogging.showStyleEditor().track({click: true}).context('css-angle')}`);
+    const valueElement = document.createElement('span');
+    valueElement.textContent = angleText;
+    const computedPropertyValue = this.#treeElement.matchedStyles().computeValue(
+                                      this.#treeElement.property.ownerStyle, this.#treeElement.property.value) ||
+        '';
+    cssAngle.data = {
+      propertyName: this.#treeElement.property.name,
+      propertyValue: computedPropertyValue,
+      angleText,
+      containingPane:
+          (this.#treeElement.parentPane().element.enclosingNodeOrSelfWithClass('style-panes-wrapper') as HTMLElement),
+    };
+    cssAngle.append(valueElement);
+
+    cssAngle.addEventListener('popovertoggled', ({data}) => {
+      const section = this.#treeElement.section();
+      if (!section) {
+        return;
+      }
+
+      if (data.open) {
+        this.#treeElement.parentPane().hideAllPopovers();
+        this.#treeElement.parentPane().activeCSSAngle = cssAngle;
+        Host.userMetrics.swatchActivated(Host.UserMetrics.SwatchType.Angle);
+      }
+
+      section.element.classList.toggle('has-open-popover', data.open);
+      this.#treeElement.parentPane().setEditingStyle(data.open);
+
+      // Commit the value as a major change after the angle popover is closed.
+      if (!data.open) {
+        void this.#treeElement.applyStyleText(this.#treeElement.renderedPropertyText(), true);
+      }
+    });
+    cssAngle.addEventListener('valuechanged', async ({data}) => {
+      valueElement.textContent = data.value;
+      await this.#treeElement.applyStyleText(this.#treeElement.renderedPropertyText(), false);
+      const computedPropertyValue = this.#treeElement.matchedStyles().computeValue(
+                                        this.#treeElement.property.ownerStyle, this.#treeElement.property.value) ||
+          '';
+      cssAngle.updateProperty(this.#treeElement.property.name, computedPropertyValue);
+    });
+    cssAngle.addEventListener('unitchanged', ({data}) => {
+      valueElement.textContent = data.value;
+    });
+
+    context.addControl('angle', cssAngle);
+    return [cssAngle];
+  }
+
+  static matcher(treeElement: StylePropertyTreeElement): AngleMatcher {
+    return new AngleMatcher(text => new AngleRenderer(text, treeElement));
+  }
+}
+
+export class LinkableNameRenderer extends LinkableNameMatch {
+  readonly #treeElement: StylePropertyTreeElement;
+  constructor(treeElement: StylePropertyTreeElement, text: string, propertyName: LinkableNameProperties) {
+    super(text, propertyName);
+    this.#treeElement = treeElement;
+  }
+
+  #getLinkData():
+      {jslogContext: string, metric: null|Host.UserMetrics.SwatchType, ruleBlock: string, isDefined: boolean} {
+    switch (this.properyName) {
+      case LinkableNameProperties.Animation:
+      case LinkableNameProperties.AnimationName:
+        return {
+          jslogContext: 'css-animation-name',
+          metric: Host.UserMetrics.SwatchType.AnimationNameLink,
+          ruleBlock: '@keyframes',
+          isDefined: Boolean(this.#treeElement.matchedStyles().keyframes().find(kf => kf.name().text === this.text)),
+        };
+      case LinkableNameProperties.FontPalette:
+        return {
+          jslogContext: 'css-font-palette',
+          metric: null,
+          ruleBlock: '@font-palette-values',
+          isDefined: this.#treeElement.matchedStyles().fontPaletteValuesRule()?.name().text === this.text,
+        };
+      case LinkableNameProperties.PositionFallback:
+        return {
+          jslogContext: 'css-position-fallback',
+          metric: Host.UserMetrics.SwatchType.PositionFallbackLink,
+          ruleBlock: '@position-fallback',
+          isDefined: Boolean(
+              this.#treeElement.matchedStyles().positionFallbackRules().find(pf => pf.name().text === this.text)),
+        };
+      case LinkableNameProperties.PositionTry:
+      case LinkableNameProperties.PositionTryOptions:
+        return {
+          jslogContext: 'css-position-try',
+          metric: Host.UserMetrics.SwatchType.PositionTryLink,
+          ruleBlock: '@position-try',
+          isDefined:
+              Boolean(this.#treeElement.matchedStyles().positionTryRules().find(pt => pt.name().text === this.text)),
+        };
+    }
+  }
+
+  override render(): Node[] {
+    const swatch = new InlineEditor.LinkSwatch.LinkSwatch();
+    UI.UIUtils.createTextChild(swatch, this.text);
+    const {metric, jslogContext, ruleBlock, isDefined} = this.#getLinkData();
+    swatch.data = {
+      text: this.text,
+      isDefined,
+      onLinkActivate: (): void => {
+        metric && Host.userMetrics.swatchActivated(metric);
+        this.#treeElement.parentPane().jumpToSectionBlock(`${ruleBlock} ${this.text}`);
+      },
+      jslogContext,
+    };
+
+    return [swatch];
+  }
+
+  static matcher(treeElement: StylePropertyTreeElement): LinkableNameMatcher {
+    return new LinkableNameMatcher((text, propertyName) => new LinkableNameRenderer(treeElement, text, propertyName));
+  }
+}
+
+export class BezierRenderer extends BezierMatch {
+  readonly #treeElement: StylePropertyTreeElement;
+  constructor(treeElement: StylePropertyTreeElement, text: string) {
+    super(text);
+    this.#treeElement = treeElement;
+  }
+
+  override render(): Node[] {
+    return [this.renderSwatch()];
+  }
+
+  renderSwatch(): Node {
+    if (!this.#treeElement.editable()) {
+      return document.createTextNode(this.text);
+    }
+    const swatchPopoverHelper = this.#treeElement.parentPane().swatchPopoverHelper();
+    const swatch = InlineEditor.Swatches.BezierSwatch.create();
+    swatch.iconElement().addEventListener('click', () => {
+      Host.userMetrics.swatchActivated(Host.UserMetrics.SwatchType.AnimationTiming);
+    });
+    swatch.setBezierText(this.text);
+    new BezierPopoverIcon({treeElement: this.#treeElement, swatchPopoverHelper, swatch});
+    return swatch;
+  }
+
+  static matcher(treeElement: StylePropertyTreeElement): BezierMatcher {
+    return new BezierMatcher(text => new BezierRenderer(treeElement, text));
+  }
+}
+
+export class StringRenderer extends StringMatch {
+  override render(): Node[] {
+    const element = document.createElement('span');
+    element.innerText = this.text;
+    UI.Tooltip.Tooltip.install(element, unescapeCssString(this.text));
+    return [element];
+  }
+
+  static matcher(): StringMatcher {
+    return new StringMatcher(text => new StringRenderer(text));
+  }
+}
+
+export const enum ShadowPropertyType {
+  X = 'x',
+  Y = 'y',
+  Spread = 'spread',
+  Blur = 'blur',
+  Inset = 'inset',
+  Color = 'color',
+}
+
+type ShadowProperty = {
+  value: string|CodeMirror.SyntaxNode,
+  source: CodeMirror.SyntaxNode|null,
+  expansionContext: RenderingContext|null,
+  propertyType: ShadowPropertyType,
+};
+
+type ShadowLengthProperty = ShadowProperty&{
+  length: InlineEditor.CSSShadowEditor.CSSLength,
+  propertyType: Exclude<ShadowPropertyType, ShadowPropertyType.Inset|ShadowPropertyType.Color>,
+};
+
+// The shadow model is an abstraction over the various shadow properties on the one hand and the order they were defined
+// in on the other, so that modifications through the shadow editor can retain the property order in the authored text.
+// The model also looks through var()s by keeping a mapping between individual properties and any var()s they are coming
+// from, replacing the var() functions as needed with concrete values when edited.
+export class ShadowModel implements InlineEditor.CSSShadowEditor.CSSShadowModel {
+  readonly #properties: ShadowProperty[];
+  readonly #shadowType: ShadowType;
+  readonly #context: RenderingContext;
+
+  constructor(shadowType: ShadowType, properties: ShadowProperty[], context: RenderingContext) {
+    this.#shadowType = shadowType;
+    this.#properties = properties;
+    this.#context = context;
+  }
+  isBoxShadow(): boolean {
+    return this.#shadowType === ShadowType.BoxShadow;
+  }
+  inset(): boolean {
+    return Boolean(this.#properties.find(property => property.propertyType === ShadowPropertyType.Inset));
+  }
+  #length(lengthType: ShadowLengthProperty['propertyType']): InlineEditor.CSSShadowEditor.CSSLength {
+    return this.#properties.find((property): property is ShadowLengthProperty => property.propertyType === lengthType)
+               ?.length ??
+        InlineEditor.CSSShadowEditor.CSSLength.zero();
+  }
+  offsetX(): InlineEditor.CSSShadowEditor.CSSLength {
+    return this.#length(ShadowPropertyType.X);
+  }
+  offsetY(): InlineEditor.CSSShadowEditor.CSSLength {
+    return this.#length(ShadowPropertyType.Y);
+  }
+  blurRadius(): InlineEditor.CSSShadowEditor.CSSLength {
+    return this.#length(ShadowPropertyType.Blur);
+  }
+  spreadRadius(): InlineEditor.CSSShadowEditor.CSSLength {
+    return this.#length(ShadowPropertyType.Spread);
+  }
+
+  #needsExpansion(property: ShadowProperty): boolean {
+    return Boolean(property.expansionContext && property.source);
+  }
+
+  #expandPropertyIfNeeded(property: ShadowProperty): void {
+    if (this.#needsExpansion(property)) {
+      // Rendering prefers `source` if present. It's sufficient to clear it in order to switch rendering to render the
+      // individual properties directly.
+      const source = property.source;
+      this.#properties.filter(property => property.source === source).forEach(property => {
+        property.source = null;
+      });
+    }
+  }
+
+  #expandOrGetProperty(propertyType: Exclude<ShadowPropertyType, ShadowLengthProperty['propertyType']>):
+      {property: ShadowProperty|undefined, index: number};
+  #expandOrGetProperty(propertyType: ShadowLengthProperty['propertyType']):
+      {property: ShadowLengthProperty|undefined, index: number};
+  #expandOrGetProperty(propertyType: ShadowPropertyType): {property: ShadowProperty|undefined, index: number} {
+    const index = this.#properties.findIndex(property => property.propertyType === propertyType);
+    const property = index >= 0 ? this.#properties[index] : undefined;
+    property && this.#expandPropertyIfNeeded(property);
+    return {property, index};
+  }
+
+  setInset(inset: boolean): void {
+    if (!this.isBoxShadow()) {
+      return;
+    }
+
+    const {property, index} = this.#expandOrGetProperty(ShadowPropertyType.Inset);
+    if (property) {
+      // For `inset`, remove the entry if value is false, otherwise don't touch it.
+      if (!inset) {
+        this.#properties.splice(index, 1);
+      }
+    } else {
+      this.#properties.unshift(
+          {value: 'inset', source: null, expansionContext: null, propertyType: ShadowPropertyType.Inset});
+    }
+  }
+  #setLength(value: InlineEditor.CSSShadowEditor.CSSLength, propertyType: ShadowLengthProperty['propertyType']): void {
+    const {property} = this.#expandOrGetProperty(propertyType);
+    if (property) {
+      property.value = value.asCSSText();
+      property.length = value;
+      property.source = null;
+    } else {
+      // Lengths are ordered X, Y, Blur, Spread, with the latter two being optional. When inserting an optional property
+      // we need to insert it after Y or after Blur, depending on what's being inserted and which properties are
+      // present.
+      const insertionIdx = 1 +
+          this.#properties.findLastIndex(
+              property => property.propertyType === ShadowPropertyType.Y ||
+                  (propertyType === ShadowPropertyType.Spread && property.propertyType === ShadowPropertyType.Blur));
+      if (insertionIdx > 0 && insertionIdx < this.#properties.length &&
+          this.#needsExpansion(this.#properties[insertionIdx]) &&
+          this.#properties[insertionIdx - 1].source === this.#properties[insertionIdx].source) {
+        // This prevents the edge case where insertion after the last length would break up a group of values that
+        // require expansion.
+        this.#expandPropertyIfNeeded(this.#properties[insertionIdx]);
+      }
+      this.#properties.splice(
+          insertionIdx, 0,
+          {value: value.asCSSText(), length: value, source: null, expansionContext: null, propertyType} as
+              ShadowLengthProperty);
+    }
+  }
+  setOffsetX(value: InlineEditor.CSSShadowEditor.CSSLength): void {
+    this.#setLength(value, ShadowPropertyType.X);
+  }
+  setOffsetY(value: InlineEditor.CSSShadowEditor.CSSLength): void {
+    this.#setLength(value, ShadowPropertyType.Y);
+  }
+  setBlurRadius(value: InlineEditor.CSSShadowEditor.CSSLength): void {
+    this.#setLength(value, ShadowPropertyType.Blur);
+  }
+  setSpreadRadius(value: InlineEditor.CSSShadowEditor.CSSLength): void {
+    if (this.isBoxShadow()) {
+      this.#setLength(value, ShadowPropertyType.Spread);
+    }
+  }
+
+  renderContents(parent: HTMLElement): void {
+    parent.removeChildren();
+    const span = parent.createChild('span');
+    let previousSource = null;
+    for (const property of this.#properties) {
+      if (!property.source || property.source !== previousSource) {
+        if (property !== this.#properties[0]) {
+          span.append(' ');
+        }
+        // If `source` is present on the property that means it came from a var() and we'll use that to render.
+        if (property.source) {
+          span.append(...Renderer.render(property.source, this.#context).nodes);
+        } else if (typeof property.value === 'string') {
+          span.append(property.value);
+        } else {
+          span.append(...Renderer.render(property.value, property.expansionContext ?? this.#context).nodes);
+        }
+      }
+      previousSource = property.source;
+    }
+  }
+}
+
+export class ShadowRenderer extends ShadowMatch {
+  readonly #treeElement: StylePropertyTreeElement;
+  constructor(text: string, type: ShadowType, treeElement: StylePropertyTreeElement) {
+    super(text, type);
+    this.#treeElement = treeElement;
+  }
+
+  shadowModel(shadow: CodeMirror.SyntaxNode[], context: RenderingContext): null|ShadowModel {
+    const properties: Array<ShadowProperty|ShadowLengthProperty> = [];
+    const missingLengths: ShadowLengthProperty['propertyType'][] =
+        [ShadowPropertyType.Spread, ShadowPropertyType.Blur, ShadowPropertyType.Y, ShadowPropertyType.X];
+    let stillAcceptsLengths = true;
+
+    // We're parsing the individual shadow properties into an array here retaining the ordering. This also looks through
+    // var() functions by re-parsing the variable values on the fly. For properties coming from a var() we're keeping
+    // track of their origin to allow for adhoc expansion when one of those properties is edited.
+
+    const queue: {
+      value: CodeMirror.SyntaxNode,
+      source: CodeMirror.SyntaxNode,
+      match: Match|undefined,
+      expansionContext: RenderingContext|null,
+    }[] =
+        shadow.map(
+            value => ({value, source: value, match: context.matchedResult.getMatch(value), expansionContext: null}));
+    for (let item = queue.shift(); item; item = queue.shift()) {
+      const {value, source, match, expansionContext} = item;
+      const text = (expansionContext ?? context).ast.text(value);
+      if (value.name === 'NumberLiteral') {
+        if (!stillAcceptsLengths) {
+          return null;
+        }
+        const propertyType = missingLengths.pop();
+        if (propertyType === undefined ||
+            (propertyType === ShadowPropertyType.Spread && this.shadowType === ShadowType.TextShadow)) {
+          return null;
+        }
+        const length = InlineEditor.CSSShadowEditor.CSSLength.parse(text);
+        if (!length) {
+          return null;
+        }
+        properties.push({value, source, length, propertyType, expansionContext});
+      } else if (match?.type === 'var') {
+        // This doesn't come from any computed text, so we can rely on context here
+        const computedValue = context.matchedResult.getComputedText(value);
+        const computedValueAst = tokenizeDeclaration('--property', computedValue);
+        if (!computedValueAst) {
+          return null;
+        }
+        const matches =
+            BottomUpTreeMatching.walkExcludingSuccessors(computedValueAst, [ColorRenderer.matcher(this.#treeElement)]);
+        if (matches.hasUnresolvedVars(matches.ast.tree)) {
+          return null;
+        }
+        queue.unshift(...ASTUtils.siblings(ASTUtils.declValue(matches.ast.tree))
+                          .map(matchedNode => ({
+                                 value: matchedNode,
+                                 source: value,
+                                 match: matches.getMatch(matchedNode),
+                                 expansionContext: new RenderingContext(computedValueAst, matches),
+                               })));
+      } else {
+        // The length properties must come in one block, so if there were any lengths before, followed by a non-length
+        // property, we will not allow any future lengths.
+        stillAcceptsLengths = missingLengths.length === 4;
+        if (value.name === 'ValueName' && text.toLowerCase() === 'inset') {
+          if (this.shadowType === ShadowType.TextShadow ||
+              properties.find(({propertyType}) => propertyType === ShadowPropertyType.Inset)) {
+            return null;
+          }
+          properties.push({value, source, propertyType: ShadowPropertyType.Inset, expansionContext});
+        } else if (match?.type === 'color' || match?.type === 'color-mix') {
+          if (properties.find(({propertyType}) => propertyType === ShadowPropertyType.Color)) {
+            return null;
+          }
+          properties.push({value, source, propertyType: ShadowPropertyType.Color, expansionContext});
+        } else if (value.name !== 'Comment' && value.name !== 'Important') {
+          return null;
+        }
+      }
+    }
+    if (missingLengths.length > 2) {
+      // X and Y are mandatory
+      return null;
+    }
+    return new ShadowModel(this.shadowType, properties, context);
+  }
+
+  override render(node: CodeMirror.SyntaxNode, context: RenderingContext): Node[] {
+    const shadows = ASTUtils.split(ASTUtils.siblings(ASTUtils.declValue(node)));
+    const result: Node[] = [];
+
+    for (const shadow of shadows) {
+      const model = this.shadowModel(shadow, context);
+      const isImportant = shadow.find(node => node.name === 'Important');
+
+      if (shadow !== shadows[0]) {
+        result.push(document.createTextNode(', '));
+      }
+
+      if (!model) {
+        const {nodes} = Renderer.render(shadow, context);
+        result.push(...nodes);
+        continue;
+      }
+
+      const swatch = new InlineEditor.Swatches.CSSShadowSwatch(model);
+      swatch.setAttribute('jslog', `${VisualLogging.showStyleEditor('css-shadow').track({click: true})}`);
+      swatch.iconElement().addEventListener('click', () => {
+        Host.userMetrics.swatchActivated(Host.UserMetrics.SwatchType.Shadow);
+      });
+      model.renderContents(swatch);
+      const popoverHelper = new ShadowSwatchPopoverHelper(
+          this.#treeElement, this.#treeElement.parentPane().swatchPopoverHelper(), swatch);
+      popoverHelper.addEventListener(ShadowEvents.ShadowChanged, () => {
+        model.renderContents(swatch);
+        void this.#treeElement.applyStyleText(this.#treeElement.renderedPropertyText(), false);
+      });
+      result.push(swatch);
+
+      if (isImportant) {
+        result.push(...[document.createTextNode(' '), ...Renderer.render(isImportant, context).nodes]);
+      }
+    }
+
+    return result;
+  }
+
+  static matcher(treeElement: StylePropertyTreeElement): ShadowMatcher {
+    return new ShadowMatcher((text, type) => new ShadowRenderer(text, type, treeElement));
+  }
+}
+
+export class FontRenderer extends FontMatch {
+  constructor(readonly treeElement: StylePropertyTreeElement, text: string) {
+    super(text);
+  }
+
+  override render(): Node[] {
+    this.treeElement.section().registerFontProperty(this.treeElement);
+    return [document.createTextNode(this.text)];
+  }
+
+  static matcher(treeElement: StylePropertyTreeElement): FontMatcher {
+    return new FontMatcher(text => new FontRenderer(treeElement, text));
+  }
+}
+
+export class GridTemplateRenderer extends GridTemplateMatch {
+  constructor(text: string, lines: CodeMirror.SyntaxNode[][]) {
+    super(text, lines);
+  }
+
+  override render(node: CodeMirror.SyntaxNode, context: RenderingContext): Node[] {
+    if (this.lines.length <= 1) {
+      return Renderer.render(ASTUtils.siblings(ASTUtils.declValue(node)), context).nodes;
+    }
+
+    const indent = Common.Settings.Settings.instance().moduleSetting('text-editor-indent').get();
+    const container = document.createDocumentFragment();
+    for (const line of this.lines) {
+      const value = Renderer.render(line, context);
+      const lineBreak = UI.Fragment.html`<br /><span class='styles-clipboard-only'>${indent.repeat(2)}</span>`;
+      container.append(lineBreak, ...value.nodes);
+    }
+    return [container];
+  }
+
+  static matcher(): GridTemplateMatcher {
+    return new GridTemplateMatcher((text, lines) => new GridTemplateRenderer(text, lines));
+  }
+}
+
 export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
   private readonly style: SDK.CSSStyleDeclaration.CSSStyleDeclaration;
   private matchedStylesInternal: SDK.CSSMatchedStyles.CSSMatchedStyles;
@@ -328,6 +1014,7 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
   private readonly inheritedInternal: boolean;
   private overloadedInternal: boolean;
   private parentPaneInternal: StylesSidebarPane;
+  #parentSection: StylePropertiesSection;
   isShorthand: boolean;
   private readonly applyStyleThrottler: Common.Throttler.Throttler;
   private newProperty: boolean;
@@ -345,11 +1032,11 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
   #propertyTextFromSource: string;
 
   constructor(
-      {stylesPane, matchedStyles, property, isShorthand, inherited, overloaded, newProperty}:
+      {stylesPane, section, matchedStyles, property, isShorthand, inherited, overloaded, newProperty}:
           StylePropertyTreeElementParams,
   ) {
     // Pass an empty title, the title gets made later in onattach.
-    super('', isShorthand);
+    super('', isShorthand, property.name);
     this.style = property.ownerStyle;
     this.matchedStylesInternal = matchedStyles;
     this.property = property;
@@ -357,6 +1044,7 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
     this.overloadedInternal = overloaded;
     this.selectable = false;
     this.parentPaneInternal = stylesPane;
+    this.#parentSection = section;
     this.isShorthand = isShorthand;
     this.applyStyleThrottler = new Common.Throttler.Throttler(0);
     this.newProperty = newProperty;
@@ -449,444 +1137,11 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
     return matches;
   }
 
-  private processAnimationName(animationNamePropertyText: string): Node {
-    const animationNames = animationNamePropertyText.split(',').map(name => name.trim());
-    const contentChild = document.createElement('span');
-    for (let i = 0; i < animationNames.length; i++) {
-      const animationName = animationNames[i];
-      const swatch = new InlineEditor.LinkSwatch.LinkSwatch();
-      UI.UIUtils.createTextChild(swatch, animationName);
-      const isDefined = Boolean(this.matchedStylesInternal.keyframes().find(kf => kf.name().text === animationName));
-      swatch.data = {
-        text: animationName,
-        isDefined,
-        onLinkActivate: (): void => {
-          Host.userMetrics.swatchActivated(Host.UserMetrics.SwatchType.AnimationNameLink);
-          this.parentPaneInternal.jumpToSectionBlock(`@keyframes ${animationName}`);
-        },
-        jslogContext: 'css-animation-name',
-      };
-      contentChild.appendChild(swatch);
-
-      if (i !== animationNames.length - 1) {
-        contentChild.appendChild(document.createTextNode(', '));
-      }
-    }
-
-    return contentChild;
-  }
-
-  private processAnimation(animationPropertyValue: string): Node {
-    const animationNameProperty =
-        this.property.getLonghandProperties().find(longhand => longhand.name === 'animation-name');
-    if (!animationNameProperty) {
-      return document.createTextNode(animationPropertyValue);
-    }
-
-    const animationNames = animationNameProperty.value.split(',').map(name => name.trim());
-    const cssAnimationModel =
-        InlineEditor.CSSAnimationModel.CSSAnimationModel.parse(animationPropertyValue, animationNames);
-    const contentChild = document.createElement('span');
-    for (let i = 0; i < cssAnimationModel.parts.length; i++) {
-      const part = cssAnimationModel.parts[i];
-      switch (part.type) {
-        case InlineEditor.CSSAnimationModel.PartType.Text:
-          contentChild.appendChild(document.createTextNode(part.value));
-          break;
-        case InlineEditor.CSSAnimationModel.PartType.EasingFunction:
-          contentChild.appendChild(this.processBezier(part.value));
-          break;
-        case InlineEditor.CSSAnimationModel.PartType.AnimationName:
-          contentChild.appendChild(this.processAnimationName(part.value));
-          break;
-        case InlineEditor.CSSAnimationModel.PartType.Variable:
-          contentChild.appendChild(this.processVar(part.value));
-          break;
-      }
-
-      if (cssAnimationModel.parts[i + 1]?.value !== ',' && i !== cssAnimationModel.parts.length - 1) {
-        contentChild.appendChild(document.createTextNode(' '));
-      }
-    }
-
-    return contentChild;
-  }
-
-  private processPositionFallback(propertyText: string): Node {
-    const contentChild = document.createElement('span');
-    const swatch = new InlineEditor.LinkSwatch.LinkSwatch();
-    UI.UIUtils.createTextChild(swatch, propertyText);
-    const isDefined =
-        Boolean(this.matchedStylesInternal.positionFallbackRules().find(pf => pf.name().text === propertyText));
-    swatch.data = {
-      text: propertyText,
-      isDefined,
-      onLinkActivate: (): void => {
-        Host.userMetrics.swatchActivated(Host.UserMetrics.SwatchType.PositionFallbackLink);
-        this.parentPaneInternal.jumpToSectionBlock(`@position-fallback ${propertyText}`);
-      },
-      jslogContext: 'css-position-fallback',
-    };
-    contentChild.appendChild(swatch);
-
-    return contentChild;
-  }
-
-  private processFontPalette(propertyText: string): Node {
-    const contentChild = document.createElement('span');
-    const swatch = new InlineEditor.LinkSwatch.LinkSwatch();
-    UI.UIUtils.createTextChild(swatch, propertyText);
-    const isDefined = this.matchedStylesInternal.fontPaletteValuesRule()?.name().text === propertyText;
-    swatch.data = {
-      text: propertyText,
-      isDefined,
-      onLinkActivate: (): void => {
-        this.parentPaneInternal.jumpToSectionBlock(`@font-palette-values ${propertyText}`);
-      },
-      jslogContext: 'css-font-palette',
-    };
-    contentChild.appendChild(swatch);
-
-    return contentChild;
-  }
-
-  private processColorMix(text: string): Node {
-    let colorMixText = text;
-    let interpolationMethodResolvedCorrectly = false;
-    const paramColorValues: string[] = [];
-    const colorMixModel = InlineEditor.ColorMixModel.ColorMixModel.parse(text);
-    if (!colorMixModel) {
-      return document.createTextNode(text);
-    }
-
-    const handleInterpolationMethod = (interpolationMethod: string): void => {
-      const matches =
-          TextUtils.TextUtils.Utils.splitStringByRegexes(interpolationMethod, [SDK.CSSMetadata.VariableRegex]);
-      for (const match of matches) {
-        if (match.regexIndex === 0) {
-          const computedSingleValue = this.matchedStylesInternal.computeSingleVariableValue(this.style, match.value);
-          if (!computedSingleValue || !computedSingleValue.computedValue) {
-            return;
-          }
-
-          colorMixText = colorMixText.replace(match.value, computedSingleValue.computedValue);
-          const varSwatch = this.processVar(match.value);
-          contentChild.appendChild(varSwatch);
-        } else {
-          contentChild.appendChild(document.createTextNode(match.value));
-        }
-      }
-
-      interpolationMethodResolvedCorrectly = true;
-      return;
-    };
-
-    const handleValue = (value: string, onChange: (newColorText: string) => void): void => {
-      // Parameter is a CSS variable
-      if (value.match(SDK.CSSMetadata.VariableRegex)) {
-        const computedSingleValue = this.matchedStylesInternal.computeSingleVariableValue(this.style, value);
-        // The variable is not defined or it is not a color
-        if (!computedSingleValue || !computedSingleValue.computedValue ||
-            !Common.Color.parse(computedSingleValue.computedValue)) {
-          return;
-        }
-
-        const {computedValue} = computedSingleValue;
-        // Update `var` reference in the color mix text with the variable's
-        // computed value since the same variable is not defined in DevTools
-        // reference to that in the CSS will result in undefined color.
-        colorMixText = colorMixText.replace(value, computedValue);
-        const varSwatch = this.processVar(value);
-        if (varSwatch instanceof InlineEditor.ColorSwatch.ColorSwatch) {
-          varSwatch.addEventListener(
-              InlineEditor.ColorSwatch.ColorChangedEvent.eventName,
-              (ev: InlineEditor.ColorSwatch.ColorChangedEvent) => {
-                onChange(ev.data.text);
-              });
-        }
-        contentChild.appendChild(varSwatch);
-        paramColorValues.push(computedSingleValue.computedValue);
-        return;
-      }
-
-      // Parameter is specified as an actual color (i.e. #000)
-      if (value.match(Common.Color.Regex)) {
-        const colorSwatch = new ColorRenderer(this, value).renderColorSwatch();
-        if (colorSwatch instanceof InlineEditor.ColorSwatch.ColorSwatch) {
-          colorSwatch.addEventListener(
-              InlineEditor.ColorSwatch.ColorChangedEvent.eventName,
-              (ev: InlineEditor.ColorSwatch.ColorChangedEvent) => {
-                onChange(ev.data.text);
-              });
-        }
-
-        contentChild.appendChild(colorSwatch);
-        paramColorValues.push(value);
-      }
-    };
-
-    const handleParam =
-        (paramParts: InlineEditor.ColorMixModel.ParamPart[], onChange: (newColorText: string) => void): void => {
-          for (let i = 0; i < paramParts.length; i++) {
-            const part = paramParts[i];
-            if (part.name === InlineEditor.ColorMixModel.PartName.Value) {
-              handleValue(part.value, onChange);
-            } else {
-              contentChild.appendChild(document.createTextNode(part.value));
-            }
-
-            if (i !== paramParts.length - 1) {
-              contentChild.appendChild(document.createTextNode(' '));
-            }
-          }
-        };
-
-    const [interpolationMethod, firstParam, secondParam] = colorMixModel.parts;
-    const swatch = new InlineEditor.ColorMixSwatch.ColorMixSwatch();
-    const contentChild = document.createElement('span');
-    contentChild.appendChild(document.createTextNode('color-mix('));
-    handleInterpolationMethod(interpolationMethod.value);
-    contentChild.appendChild(document.createTextNode(', '));
-    handleParam(firstParam.value, (color: string) => {
-      swatch.setFirstColor(color);
-    });
-    contentChild.appendChild(document.createTextNode(', '));
-    handleParam(secondParam.value, (color: string) => {
-      swatch.setSecondColor(color);
-    });
-    contentChild.appendChild(document.createTextNode(')'));
-
-    if (paramColorValues.length !== 2 || !interpolationMethodResolvedCorrectly) {
-      return document.createTextNode(text);
-    }
-    swatch.appendChild(contentChild);
-    swatch.setFirstColor(paramColorValues[0]);
-    swatch.setSecondColor(paramColorValues[1]);
-    swatch.setColorMixText(colorMixText);
-
-    return swatch;
-  }
-
-  // TODO(chromium:1504820) Delete once callers are migrated
-  private processVar(text: string, {shouldShowColorSwatch = true}: {shouldShowColorSwatch?: boolean} = {}): HTMLElement
-      |Text {
-    // The regex that matches to variables in `StylesSidebarPropertyRenderer`
-    // uses a lazy match. Because of this, when there are multiple right parantheses inside the
-    // var() function, it stops the match. So, for a match like `var(--a, var(--b))`, the text
-    // corresponds to `var(--a, var(--b)`; before processing it, we make sure that parantheses
-    // are matched.
-    const parenthesesBalancedText = text + ')'.repeat(Platform.StringUtilities.countUnmatchedLeftParentheses(text));
-    const computedSingleValue =
-        this.matchedStylesInternal.computeSingleVariableValue(this.style, parenthesesBalancedText);
-    const {variableName, fallback} = SDK.CSSMatchedStyles.parseCSSVariableNameAndFallback(parenthesesBalancedText);
-    if (!computedSingleValue || !variableName) {
-      return document.createTextNode(parenthesesBalancedText);
-    }
-
-    const {declaration} = this.matchedStylesInternal.computeCSSVariable(this.style, variableName) ?? {};
-    const {computedValue, fromFallback} = computedSingleValue;
-    let fallbackHtml: Array<HTMLElement|Text>|null = null;
-    if (fromFallback && fallback?.startsWith('var(')) {
-      fallbackHtml = [this.processVar(fallback, {shouldShowColorSwatch: false})];
-    } else if (fallback) {
-      fallbackHtml = [document.createTextNode(fallback)];
-    }
-
-    const varSwatch = new InlineEditor.LinkSwatch.CSSVarSwatch();
-    varSwatch.data = {
-      computedValue,
-      variableName,
-      fromFallback,
-      fallbackText: fallbackHtml ? fallbackHtml[0].textContent : null,
-      onLinkActivate: name => this.handleVarDefinitionActivate(declaration ?? name),
-    };
-
-    if (varSwatch.link?.linkElement) {
-      const {textContent} = varSwatch.link.linkElement;
-      if (textContent) {
-        const computedValueOfLink = textContent ?
-            this.matchedStylesInternal.computeSingleVariableValue(this.style, `var(${textContent})`) :
-            null;
-        this.parentPaneInternal.addPopover(
-            varSwatch.link,
-            () => this.getVariablePopoverContents(textContent, computedValueOfLink?.computedValue ?? null));
-      }
-    }
-
-    if (fallbackHtml) {
-      // When slotting someting into the fallback slot, also emit text children so that .textContent produces the
-      // correct var value.
-      varSwatch.appendChild(document.createTextNode(`var(${this.name}`));
-      const span = varSwatch.appendChild(document.createElement('span'));
-      span.appendChild(document.createTextNode(', '));
-      span.slot = 'fallback';
-      span.appendChild(fallbackHtml[0]);
-      varSwatch.appendChild(document.createTextNode(')'));
-    } else {
-      UI.UIUtils.createTextChild(varSwatch, text);
-    }
-
-    if (!computedValue || !Common.Color.parse(computedValue) || !shouldShowColorSwatch) {
-      return varSwatch;
-    }
-
-    return new ColorRenderer(this, computedValue).renderColorSwatch(varSwatch);
-  }
-
-  private handleVarDefinitionActivate(variable: string|SDK.CSSProperty.CSSProperty|
-                                      SDK.CSSMatchedStyles.CSSRegisteredProperty): void {
-    Host.userMetrics.actionTaken(Host.UserMetrics.Action.CustomPropertyLinkClicked);
-    Host.userMetrics.swatchActivated(Host.UserMetrics.SwatchType.VarLink);
-    if (variable instanceof SDK.CSSProperty.CSSProperty) {
-      this.parentPaneInternal.revealProperty(variable);
-    } else if (variable instanceof SDK.CSSMatchedStyles.CSSRegisteredProperty) {
-      this.parentPaneInternal.jumpToProperty(
-          'initial-value', variable.propertyName(), REGISTERED_PROPERTY_SECTION_NAME);
-    } else {
-      this.parentPaneInternal.jumpToProperty(variable) ||
-          this.parentPaneInternal.jumpToProperty('initial-value', variable, REGISTERED_PROPERTY_SECTION_NAME);
-    }
-  }
-
   renderedPropertyText(): string {
     if (!this.nameElement || !this.valueElement) {
       return '';
     }
     return this.nameElement.textContent + ': ' + this.valueElement.textContent;
-  }
-
-  private processBezier(text: string): Node {
-    if (!this.editable() || !InlineEditor.AnimationTimingModel.AnimationTimingModel.parse(text)) {
-      return document.createTextNode(text);
-    }
-    const swatchPopoverHelper = this.parentPaneInternal.swatchPopoverHelper();
-    const swatch = InlineEditor.Swatches.BezierSwatch.create();
-    swatch.iconElement().addEventListener('click', () => {
-      Host.userMetrics.swatchActivated(Host.UserMetrics.SwatchType.AnimationTiming);
-    });
-    swatch.setBezierText(text);
-    new BezierPopoverIcon({treeElement: this, swatchPopoverHelper, swatch});
-    return swatch;
-  }
-
-  private processFont(text: string): Node {
-    const section = this.section();
-    if (section) {
-      section.registerFontProperty(this);
-    }
-    return document.createTextNode(text);
-  }
-
-  private processShadow(propertyValue: string, propertyName: string): Node {
-    if (!this.editable()) {
-      return document.createTextNode(propertyValue);
-    }
-    let shadows;
-    if (propertyName === 'text-shadow') {
-      shadows = InlineEditor.CSSShadowModel.CSSShadowModel.parseTextShadow(propertyValue);
-    } else {
-      shadows = InlineEditor.CSSShadowModel.CSSShadowModel.parseBoxShadow(propertyValue);
-    }
-    if (!shadows.length) {
-      return document.createTextNode(propertyValue);
-    }
-    const container = document.createDocumentFragment();
-    const swatchPopoverHelper = this.parentPaneInternal.swatchPopoverHelper();
-    for (let i = 0; i < shadows.length; i++) {
-      if (i !== 0) {
-        container.appendChild(document.createTextNode(', '));
-      }  // Add back commas and spaces between each shadow.
-      // TODO(flandy): editing the property value should use the original value with all spaces.
-      const cssShadowSwatch = InlineEditor.Swatches.CSSShadowSwatch.create();
-      cssShadowSwatch.setAttribute(
-          'jslog', `${VisualLogging.showStyleEditor().context('css-shadow').track({click: true})}`);
-      cssShadowSwatch.setCSSShadow(shadows[i]);
-      cssShadowSwatch.iconElement().addEventListener('click', () => {
-        Host.userMetrics.swatchActivated(Host.UserMetrics.SwatchType.Shadow);
-      });
-      new ShadowSwatchPopoverHelper(this, swatchPopoverHelper, cssShadowSwatch);
-      const colorSwatch = cssShadowSwatch.colorSwatch();
-      if (colorSwatch) {
-        colorSwatch.addEventListener(InlineEditor.ColorSwatch.ClickEvent.eventName, () => {
-          Host.userMetrics.swatchActivated(Host.UserMetrics.SwatchType.Color);
-        });
-        const swatchIcon = new ColorSwatchPopoverIcon(this, swatchPopoverHelper, colorSwatch);
-        swatchIcon.addEventListener(ColorSwatchPopoverIconEvents.ColorChanged, ev => {
-          // TODO(crbug.com/1402233): Is it really okay to dispatch an event from `Swatch` here?
-          colorSwatch.dispatchEvent(new InlineEditor.ColorSwatch.ColorChangedEvent(ev.data));
-        });
-        colorSwatch.addEventListener(InlineEditor.ColorSwatch.ColorChangedEvent.eventName, () => {
-          void this.applyStyleText(this.renderedPropertyText(), false);
-        });
-      }
-      container.appendChild(cssShadowSwatch);
-    }
-    return container;
-  }
-
-  private processGrid(propertyValue: string, _propertyName: string): Node {
-    const splitResult =
-        TextUtils.TextUtils.Utils.splitStringByRegexes(propertyValue, [SDK.CSSMetadata.GridAreaRowRegex]);
-    if (splitResult.length <= 1) {
-      return document.createTextNode(propertyValue);
-    }
-
-    const indent = Common.Settings.Settings.instance().moduleSetting('textEditorIndent').get();
-    const container = document.createDocumentFragment();
-    for (const result of splitResult) {
-      const value = result.value.trim();
-      const content = UI.Fragment.html`<br /><span class='styles-clipboard-only'>${indent.repeat(2)}</span>${value}`;
-      container.appendChild(content);
-    }
-    return container;
-  }
-
-  private processAngle(angleText: string): Text|InlineEditor.CSSAngle.CSSAngle {
-    if (!this.editable()) {
-      return document.createTextNode(angleText);
-    }
-    const cssAngle = new InlineEditor.CSSAngle.CSSAngle();
-    cssAngle.setAttribute('jslog', `${VisualLogging.showStyleEditor().track({click: true}).context('css-angle')}`);
-    const valueElement = document.createElement('span');
-    valueElement.textContent = angleText;
-    const computedPropertyValue =
-        this.matchedStylesInternal.computeValue(this.property.ownerStyle, this.property.value) || '';
-    cssAngle.data = {
-      propertyName: this.property.name,
-      propertyValue: computedPropertyValue,
-      angleText,
-      containingPane:
-          (this.parentPaneInternal.element.enclosingNodeOrSelfWithClass('style-panes-wrapper') as HTMLElement),
-    };
-    cssAngle.append(valueElement);
-
-    cssAngle.addEventListener('popovertoggled', ({data}) => {
-      const section = this.section();
-      if (!section) {
-        return;
-      }
-
-      if (data.open) {
-        this.parentPaneInternal.hideAllPopovers();
-        this.parentPaneInternal.activeCSSAngle = cssAngle;
-        Host.userMetrics.swatchActivated(Host.UserMetrics.SwatchType.Angle);
-      }
-
-      section.element.classList.toggle('has-open-popover', data.open);
-      this.parentPaneInternal.setEditingStyle(data.open);
-    });
-    cssAngle.addEventListener('valuechanged', async ({data}) => {
-      valueElement.textContent = data.value;
-      await this.applyStyleText(this.renderedPropertyText(), false);
-      const computedPropertyValue =
-          this.matchedStylesInternal.computeValue(this.property.ownerStyle, this.property.value) || '';
-      cssAngle.updateProperty(this.property.name, computedPropertyValue);
-    });
-    cssAngle.addEventListener('unitchanged', ({data}) => {
-      valueElement.textContent = data.value;
-    });
-
-    return cssAngle;
   }
 
   private processLength(lengthText: string): Text|InlineEditor.CSSLength.CSSLength {
@@ -967,20 +1222,12 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
     return this.parentPaneInternal;
   }
 
-  section(): StylePropertiesSection|null {
-    if (!this.treeOutline) {
-      return null;
-    }
-    // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (this.treeOutline as any).section;
+  section(): StylePropertiesSection {
+    return this.#parentSection;
   }
 
   private updatePane(): void {
-    const section = this.section();
-    if (section) {
-      section.refreshUpdate(this);
-    }
+    this.#parentSection.refreshUpdate(this);
   }
 
   private async toggleDisabled(disabled: boolean): Promise<void> {
@@ -1023,12 +1270,8 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
       let inherited = false;
       let overloaded = false;
 
-      const section = this.section();
-      if (section) {
-        inherited = section.isPropertyInherited(name);
-        overloaded =
-            this.matchedStylesInternal.propertyState(property) === SDK.CSSMatchedStyles.PropertyState.Overloaded;
-      }
+      inherited = this.#parentSection.isPropertyInherited(name);
+      overloaded = this.matchedStylesInternal.propertyState(property) === SDK.CSSMatchedStyles.PropertyState.Overloaded;
 
       const leadingProperty = leadingProperties.find(property => property.name === name && property.activeInStyle());
       if (leadingProperty) {
@@ -1037,6 +1280,7 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
 
       const item = new StylePropertyTreeElement({
         stylesPane: this.parentPaneInternal,
+        section: this.#parentSection,
         matchedStyles: this.matchedStylesInternal,
         property,
         isShorthand: false,
@@ -1127,46 +1371,46 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
     this.updateState();
     if (this.isExpandable()) {
       this.expandElement = IconButton.Icon.create('triangle-right', 'expand-icon');
-      this.expandElement.setAttribute('jslog', `${VisualLogging.treeItemExpand().track({click: true})}`);
+      this.expandElement.setAttribute('jslog', `${VisualLogging.expand().track({click: true})}`);
     }
 
     const propertyRenderer =
         new StylesSidebarPropertyRenderer(this.style.parentRule, this.node(), this.name, this.value, [
           VariableRenderer.matcher(this, this.style),
           ColorRenderer.matcher(this),
+          ColorMixRenderer.matcher(this.parentPaneInternal),
+          URLRenderer.matcher(this.style.parentRule, this.node()),
+          AngleRenderer.matcher(this),
+          LinkableNameRenderer.matcher(this),
+          BezierRenderer.matcher(this),
+          StringRenderer.matcher(),
+          ShadowRenderer.matcher(this),
+          FontRenderer.matcher(this),
+          GridTemplateRenderer.matcher(),
         ]);
     if (this.property.parsedOk) {
-      propertyRenderer.setAnimationNameHandler(this.processAnimationName.bind(this));
-      propertyRenderer.setAnimationHandler(this.processAnimation.bind(this));
-      propertyRenderer.setColorMixHandler(this.processColorMix.bind(this));
-      propertyRenderer.setBezierHandler(this.processBezier.bind(this));
-      propertyRenderer.setFontHandler(this.processFont.bind(this));
-      propertyRenderer.setShadowHandler(this.processShadow.bind(this));
-      propertyRenderer.setGridHandler(this.processGrid.bind(this));
-      propertyRenderer.setAngleHandler(this.processAngle.bind(this));
       propertyRenderer.setLengthHandler(this.processLength.bind(this));
-      propertyRenderer.setPositionFallbackHandler(this.processPositionFallback.bind(this));
-      propertyRenderer.setFontPaletteHandler(this.processFontPalette.bind(this));
     }
 
     this.listItemElement.removeChildren();
     this.nameElement = (propertyRenderer.renderName() as HTMLElement);
     if (this.property.name.startsWith('--') && this.nameElement) {
-      this.parentPaneInternal.addPopover(
-          this.nameElement,
-          () => this.getVariablePopoverContents(
-              this.property.name,
-              this.matchedStylesInternal.computeCSSVariable(this.style, this.property.name)?.value ?? null));
+      this.parentPaneInternal.addPopover(this.nameElement, {
+        contents: () => this.getVariablePopoverContents(
+            this.property.name,
+            this.matchedStylesInternal.computeCSSVariable(this.style, this.property.name)?.value ?? null),
+        jslogContext: 'elements.css-var',
+      });
     }
     this.valueElement = (propertyRenderer.renderValue() as HTMLElement);
     if (!this.treeOutline) {
       return;
     }
 
-    const indent = Common.Settings.Settings.instance().moduleSetting('textEditorIndent').get();
+    const indent = Common.Settings.Settings.instance().moduleSetting('text-editor-indent').get();
     UI.UIUtils.createTextChild(
         this.listItemElement.createChild('span', 'styles-clipboard-only'),
-        indent + (this.property.disabled ? '/* ' : ''));
+        indent.repeat(this.section().nestingLevel + 1) + (this.property.disabled ? '/* ' : ''));
     if (this.nameElement) {
       this.listItemElement.appendChild(this.nameElement);
     }
@@ -1187,19 +1431,18 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
       }
     }
 
-    const section = this.section();
-    if (this.valueElement && section && section.editable && this.property.name === 'display') {
+    if (this.valueElement && this.#parentSection.editable && this.property.name === 'display') {
       const propertyValue = this.property.trimmedValueWithoutImportant();
       const isFlex = propertyValue === 'flex' || propertyValue === 'inline-flex';
       const isGrid = propertyValue === 'grid' || propertyValue === 'inline-grid';
       if (isFlex || isGrid) {
-        const key = `${section.getSectionIdx()}_${section.nextEditorTriggerButtonIdx}`;
+        const key = `${this.#parentSection.getSectionIdx()}_${this.#parentSection.nextEditorTriggerButtonIdx}`;
         const button = StyleEditorWidget.createTriggerButton(
-            this.parentPaneInternal, section, isFlex ? FlexboxEditor : GridEditor,
+            this.parentPaneInternal, this.#parentSection, isFlex ? FlexboxEditor : GridEditor,
             isFlex ? i18nString(UIStrings.flexboxEditorButton) : i18nString(UIStrings.gridEditorButton), key);
         button.setAttribute(
             'jslog', `${VisualLogging.showStyleEditor().track({click: true}).context(isFlex ? 'flex' : 'grid')}`);
-        section.nextEditorTriggerButtonIdx++;
+        this.#parentSection.nextEditorTriggerButtonIdx++;
         button.addEventListener('click', () => {
           Host.userMetrics.swatchActivated(
               isFlex ? Host.UserMetrics.SwatchType.Flex : Host.UserMetrics.SwatchType.Grid);
@@ -1239,7 +1482,7 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
     }
     this.updateFilter();
 
-    if (this.property.parsedOk && this.section() && this.parent && this.parent.root) {
+    if (this.property.parsedOk && this.parent && this.parent.root) {
       const enabledCheckboxElement = document.createElement('input');
       enabledCheckboxElement.className = 'enabled-button';
       enabledCheckboxElement.type = 'checkbox';
@@ -1328,9 +1571,8 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
       return;
     }
 
-    const section = this.section();
     let selectedElement = event.target as Element;
-    if (UI.KeyboardShortcut.KeyboardShortcut.eventHasCtrlEquivalentKey(event) && section && section.navigable) {
+    if (UI.KeyboardShortcut.KeyboardShortcut.eventHasCtrlEquivalentKey(event) && this.#parentSection.navigable) {
       this.navigateToSource(selectedElement);
       return;
     }
@@ -1339,7 +1581,7 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
       return;
     }
 
-    if (section && !section.editable) {
+    if (!this.#parentSection.editable) {
       return;
     }
 
@@ -1355,7 +1597,7 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
 
   private handleContextMenuEvent(context: Context, event: Event): void {
     const contextMenu = new UI.ContextMenu.ContextMenu(event);
-    if (this.property.parsedOk && this.section() && this.parent && this.parent.root) {
+    if (this.property.parsedOk && this.parent && this.parent.root) {
       const sectionIndex = this.parentPaneInternal.focusedSectionIndex();
       contextMenu.defaultSection().appendCheckboxItem(
           i18nString(UIStrings.togglePropertyAndContinueEditing), async () => {
@@ -1367,10 +1609,11 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
               event.consume();
               this.parentPaneInternal.continueEditingElement(sectionIndex, propertyIndex);
             }
-          }, !this.property.disabled);
+          }, {checked: !this.property.disabled, jslogContext: 'toggle-property-and-continue-editing'});
     }
     const revealCallback = this.navigateToSource.bind(this) as () => void;
-    contextMenu.defaultSection().appendItem(i18nString(UIStrings.revealInSourcesPanel), revealCallback);
+    contextMenu.defaultSection().appendItem(
+        i18nString(UIStrings.revealInSourcesPanel), revealCallback, {jslogContext: 'reveal-in-sources-panel'});
     void contextMenu.show();
   }
 
@@ -1391,48 +1634,48 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
       const propertyText = `${this.property.name}: ${this.property.value};`;
       Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(propertyText);
       Host.userMetrics.styleTextCopied(Host.UserMetrics.StyleTextCopied.DeclarationViaContextMenu);
-    });
+    }, {jslogContext: 'copy-declaration'});
 
     contextMenu.headerSection().appendItem(i18nString(UIStrings.copyProperty), () => {
       Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(this.property.name);
       Host.userMetrics.styleTextCopied(Host.UserMetrics.StyleTextCopied.PropertyViaContextMenu);
-    });
+    }, {jslogContext: 'copy-property'});
 
     contextMenu.headerSection().appendItem(i18nString(UIStrings.copyValue), () => {
       Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(this.property.value);
       Host.userMetrics.styleTextCopied(Host.UserMetrics.StyleTextCopied.ValueViaContextMenu);
-    });
+    }, {jslogContext: 'copy-value'});
 
     contextMenu.headerSection().appendItem(i18nString(UIStrings.copyRule), () => {
-      const section = (this.section() as StylePropertiesSection);
-      const ruleText = StylesSidebarPane.formatLeadingProperties(section).ruleText;
+      const ruleText = StylesSidebarPane.formatLeadingProperties(this.#parentSection).ruleText;
       Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(ruleText);
       Host.userMetrics.styleTextCopied(Host.UserMetrics.StyleTextCopied.RuleViaContextMenu);
-    });
+    }, {jslogContext: 'copy-rule'});
 
     contextMenu.headerSection().appendItem(
-        i18nString(UIStrings.copyCssDeclarationAsJs), this.copyCssDeclarationAsJs.bind(this));
+        i18nString(UIStrings.copyCssDeclarationAsJs), this.copyCssDeclarationAsJs.bind(this),
+        {jslogContext: 'copy-css-declaration-as-js'});
 
     contextMenu.clipboardSection().appendItem(i18nString(UIStrings.copyAllDeclarations), () => {
-      const section = (this.section() as StylePropertiesSection);
-      const allDeclarationText = StylesSidebarPane.formatLeadingProperties(section).allDeclarationText;
+      const allDeclarationText = StylesSidebarPane.formatLeadingProperties(this.#parentSection).allDeclarationText;
       Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(allDeclarationText);
       Host.userMetrics.styleTextCopied(Host.UserMetrics.StyleTextCopied.AllDeclarationsViaContextMenu);
-    });
+    }, {jslogContext: 'copy-all-declarations'});
 
     contextMenu.clipboardSection().appendItem(
-        i18nString(UIStrings.copyAllCssDeclarationsAsJs), this.copyAllCssDeclarationAsJs.bind(this));
+        i18nString(UIStrings.copyAllCssDeclarationsAsJs), this.copyAllCssDeclarationAsJs.bind(this),
+        {jslogContext: 'copy-all-css-declarations-as-js'});
 
     // TODO(changhaohan): conditionally add this item only when there are changes to copy
     contextMenu.defaultSection().appendItem(i18nString(UIStrings.copyAllCSSChanges), async () => {
       const allChanges = await this.parentPane().getFormattedChanges();
       Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(allChanges);
       Host.userMetrics.styleTextCopied(Host.UserMetrics.StyleTextCopied.AllChangesViaStylesPane);
-    });
+    }, {jslogContext: 'copy-all-css-changes'});
 
     contextMenu.footerSection().appendItem(i18nString(UIStrings.viewComputedValue), () => {
       void this.viewComputedValue();
-    });
+    }, {jslogContext: 'view-computed-value'});
 
     return contextMenu;
   }
@@ -1464,8 +1707,7 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
   }
 
   private copyAllCssDeclarationAsJs(): void {
-    const section = this.section() as StylePropertiesSection;
-    const leadingProperties = (section.style()).leadingProperties();
+    const leadingProperties = this.#parentSection.style().leadingProperties();
     const cssDeclarationsAsJsProperties =
         leadingProperties.filter(property => !property.disabled).map(getCssDeclarationAsJavascriptProperty);
     Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(cssDeclarationsAsJsProperties.join(',\n'));
@@ -1473,8 +1715,7 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
   }
 
   private navigateToSource(element: Element, omitFocus?: boolean): void {
-    const section = this.section();
-    if (!section || !section.navigable) {
+    if (!this.#parentSection.navigable) {
       return;
     }
     const propertyNameClicked = element === this.nameElement;
@@ -1860,7 +2101,6 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
     const shouldCommitNewProperty = this.newProperty &&
         (isPropertySplitPaste || moveToOther || (!moveDirection && !isEditingName) || (isEditingName && blankInput) ||
          nameValueEntered);
-    const section = (this.section() as StylePropertiesSection);
     if (((userInput !== context.previousContent || isDirtyViaPaste) && !this.newProperty) || shouldCommitNewProperty) {
       let propertyText;
       if (nameValueEntered) {
@@ -1877,7 +2117,7 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
         }
       }
       await this.applyStyleText(propertyText || '', true);
-      moveToNextCallback.call(this, this.newProperty, !blankInput, section);
+      moveToNextCallback.call(this, this.newProperty, !blankInput, this.#parentSection);
     } else {
       if (isEditingName) {
         this.property.name = userInput;
@@ -1887,7 +2127,7 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
       if (!isDataPasted && !this.newProperty) {
         this.updateTitle();
       }
-      moveToNextCallback.call(this, this.newProperty, false, section);
+      moveToNextCallback.call(this, this.newProperty, false, this.#parentSection);
     }
 
     /**
@@ -2061,9 +2301,8 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
     // This occurs when deleting the last index of a StylePropertiesSection as this.style._allProperties array gets updated
     // before we index it when setting the value for updatedProperty
     const deleteProperty = majorChange && !styleText.length;
-    const section = this.section();
-    if (deleteProperty && section) {
-      section.resetToolbars();
+    if (deleteProperty) {
+      this.#parentSection.resetToolbars();
     } else if (!deleteProperty && updatedProperty) {
       this.property = updatedProperty;
     }

@@ -38,7 +38,7 @@ SDLVideoPlayer::SDLVideoPlayer(ClockNowFunctionPtr now_function,
                     std::move(error_callback),
                     kVideoMediaType),
       renderer_(renderer) {
-  OSP_DCHECK(renderer_);
+  OSP_CHECK(renderer_);
 }
 
 SDLVideoPlayer::~SDLVideoPlayer() = default;
@@ -76,7 +76,7 @@ bool SDLVideoPlayer::RenderWhileIdle(
 ErrorOr<Clock::time_point> SDLVideoPlayer::RenderNextFrame(
     const SDLPlayerBase::PresentableFrame& frame) {
   TRACE_DEFAULT_SCOPED(TraceCategory::kStandaloneReceiver);
-  OSP_DCHECK(frame.decoded_frame);
+  OSP_CHECK(frame.decoded_frame);
   const AVFrame& picture = *frame.decoded_frame;
 
   // Punt if the |picture| format is not compatible with those supported by SDL.

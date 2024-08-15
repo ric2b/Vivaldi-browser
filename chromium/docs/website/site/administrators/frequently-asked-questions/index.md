@@ -189,12 +189,12 @@ platforms?**
 > Google Chrome has a full [help
 > center](http://www.google.com/support/chrome/?hl=en-US), along with a [help
 > forum](http://www.google.com/support/forum/p/Chrome?hl=en&utm_source=HC&utm_medium=leftnav&utm_campaign=chrome),
-> and [public bug tracker](http://code.google.com/p/chromium/issues/list).
+> and [public bug tracker](https://issues.chromium.org/).
 
 **I found a bug in Chrome that I need fixed. Who should I contact and when can I
 expect it fixed?**
 
-> [Please file a bug](http://code.google.com/p/chromium/issues/entry) in our
+> [Please file a bug](https://issues.chromium.org/new) in our
 > public issue tracker. You may want to search for any other similar bugs to
 > make sure the issue isn't already being resolved.
 
@@ -216,7 +216,7 @@ fix this?**
 
 > Of course, if you do find issues that are true bugs in Google Chrome (pages
 > crash, it shows web pages differently than Safari, etc.), then [please let us
-> know](http://code.google.com/p/chromium/issues/entry) by filing a bug.
+> know](https://issues.chromium.org/new) by filing a bug.
 
 **We want to deploy Google Chrome, but we have legacy applications that don't
 work in it. What can we do?**

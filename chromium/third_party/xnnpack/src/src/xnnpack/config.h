@@ -26,6 +26,7 @@ struct xnn_hardware_config {
   bool use_arm_neon_fp16;
   bool use_arm_neon_fma;
   bool use_arm_neon_v8;
+  bool use_arm_neon_udot;  // Allow udot for armv7 to be disabled.
 #endif  // XNN_ARCH_ARM
 #if XNN_ARCH_ARM || XNN_ARCH_ARM64
   bool use_arm_fp16_arith;
@@ -46,10 +47,13 @@ struct xnn_hardware_config {
   bool use_x86_avx512vbmi;
   bool use_x86_avx512skx;
   bool use_x86_avx512vnni;
+  bool use_x86_avx512vnnigfni;
+  bool use_x86_avx512amx;
   bool use_x86_avxvnni;
 #endif
 #if XNN_ARCH_RISCV
   bool use_riscv_vector;
+  bool use_riscv_vector_fp16_arith;
   // vlenb CSR (VLEN/8). 0 if vector extension is unsupported.
   uint32_t vlenb;
 #endif
@@ -225,6 +229,7 @@ struct xnn_unary_elementwise_config {
     xnn_init_f32_qs8_cvt_params_fn f32_qs8_cvt;
     xnn_init_f32_qu8_cvt_params_fn f32_qu8_cvt;
     xnn_init_f32_rnd_params_fn f32_rnd;
+    xnn_init_f32_rsqrt_params_fn f32_rsqrt;
     xnn_init_f32_sigmoid_params_fn f32_sigmoid;
     xnn_init_f32_sqrt_params_fn f32_sqrt;
     xnn_init_f32_tanh_params_fn f32_tanh;
@@ -275,6 +280,8 @@ XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_f32_rndd_config
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_f32_rndne_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_f32_rndu_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_f32_rndz_config();
+XNN_INTERNAL const struct xnn_unary_elementwise_config*
+xnn_init_f32_rsqrt_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_f32_sigmoid_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_f32_sqr_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_f32_sqrt_config();
@@ -743,7 +750,6 @@ XNN_INTERNAL struct xnn_gemm_config* xnn_init_qd8_f16_qc8w_gemm_config();
 XNN_INTERNAL struct xnn_gemm_config* xnn_init_qd8_f32_qc4w_gemm_config();
 XNN_INTERNAL struct xnn_gemm_config* xnn_init_qd8_f32_qc8w_gemm_config();
 XNN_INTERNAL struct xnn_gemm_config* xnn_init_qs8_qc8w_gemm_config();
-XNN_INTERNAL struct xnn_gemm_config* xnn_init_qs8_gemm_config();
 XNN_INTERNAL struct xnn_gemm_config* xnn_init_qu8_gemm_config();
 
 struct xnn_maxpool_config {

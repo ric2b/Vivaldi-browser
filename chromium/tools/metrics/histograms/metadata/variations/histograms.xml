@@ -23,7 +23,7 @@ chromium-metrics-reviews@google.com.
 <histograms>
 
 <histogram name="Variations.AppliedSeed.Size" units="bytes"
-    expires_after="2024-06-30">
+    expires_after="2024-09-01">
   <owner>caitlinfischer@google.com</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -35,7 +35,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Variations.AppliedSeed.StudyCount" units="studies"
-    expires_after="2024-06-30">
+    expires_after="2024-09-01">
   <owner>caitlinfischer@google.com</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -80,7 +80,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Variations.ExtendedSafeMode.BeaconFileStateAtStartup"
-    enum="BeaconFileState" expires_after="2024-06-30">
+    enum="BeaconFileState" expires_after="2024-09-01">
   <owner>caitlinfischer@google.com</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <component>Internals&gt;Metrics&gt;Variations</component>
@@ -97,7 +97,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Variations.ExtendedSafeMode.BeaconFileWrite"
-    enum="BooleanSuccess" expires_after="2024-02-04">
+    enum="BooleanSuccess" expires_after="2025-02-04">
   <owner>caitlinfischer@google.com</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <component>Internals&gt;Metrics&gt;Variations</component>
@@ -225,7 +225,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Variations.Headers.HasLowEntropySourceValue"
-    enum="BooleanPresent" expires_after="2024-05-19">
+    enum="BooleanPresent" expires_after="2024-07-21">
   <owner>mpearson@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -235,7 +235,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Variations.Headers.RequestContextCategory"
-    enum="VariationsHeadersRequestContextCategory" expires_after="2024-06-02">
+    enum="VariationsHeadersRequestContextCategory" expires_after="2024-08-04">
   <owner>asvitkine@chromium.org</owner>
   <owner>jwd@chromium.org</owner>
   <owner>caitlinfischer@google.com</owner>
@@ -286,6 +286,29 @@ chromium-metrics-reviews@google.com.
   <summary>
     Records the reason for rejecting an invalid study. Recorded when processing
     the variations seed at startup and when simulating a new seed.
+  </summary>
+</histogram>
+
+<histogram name="Variations.LimitedEntropy.SeedRejectionReason"
+    enum="VariationsLimitedEntropySeedRejectionReason"
+    expires_after="2025-01-10">
+  <owner>yulunz@chromium.org</owner>
+  <owner>src/base/metrics/OWNERS</owner>
+  <summary>
+    Records the reason for rejecting a variations seed that contains a layer
+    with LIMITED entropy mode. This is recorded when calculating the entropy
+    usage for the studies constrained to the layer with LIMITED entropy mode.
+  </summary>
+</histogram>
+
+<histogram name="Variations.LimitedEntropyTrial.AshSeedIsValid.OnSyncToLacros"
+    enum="BooleanValid" expires_after="2025-01-07">
+  <owner>yulunz@chromium.org</owner>
+  <owner>src/base/metrics/OWNERS</owner>
+  <summary>
+    Whether the seed value to randomize the limited entropy synthetic trial is
+    valid. This is only emitted from LaCrOS clients when reading the seed value
+    from the Ash Chrome client.
   </summary>
 </histogram>
 
@@ -366,7 +389,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Variations.SafeMode.LoadSafeSeed.Result"
-    enum="VariationsSeedLoadResult" expires_after="2024-06-30">
+    enum="VariationsSeedLoadResult" expires_after="2024-09-01">
   <owner>isherman@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
@@ -394,7 +417,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Variations.SafeMode.StoreSafeSeed.Result"
-    enum="VariationsSeedStoreResult" expires_after="2024-05-19">
+    enum="VariationsSeedStoreResult" expires_after="2024-07-21">
   <owner>isherman@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
@@ -420,7 +443,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Variations.SafeMode.Streak.Crashes" units="crashes"
-    expires_after="2024-06-30">
+    expires_after="2024-09-01">
   <owner>isherman@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
@@ -434,7 +457,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Variations.SafeMode.Streak.FetchFailures" units="failures"
-    expires_after="2024-06-30">
+    expires_after="2024-09-01">
   <owner>isherman@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
@@ -446,7 +469,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Variations.SafeModeCachedFlags.Streak.Crashes" units="crashes"
-    expires_after="2024-05-26">
+    expires_after="2024-07-28">
   <owner>hnakashima@chromium.org</owner>
   <owner>src/chrome/browser/flags/OWNERS</owner>
   <summary>
@@ -459,7 +482,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Variations.SafeModeCachedFlags.{Event}"
-    enum="VariationsSafeModeCachedFlagsBehavior" expires_after="2024-05-26">
+    enum="VariationsSafeModeCachedFlagsBehavior" expires_after="2024-07-28">
   <owner>hnakashima@chromium.org</owner>
   <owner>src/chrome/browser/flags/OWNERS</owner>
   <summary>
@@ -574,7 +597,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Variations.SeedFreshnessDiff" units="minutes"
-    expires_after="2024-03-03">
+    expires_after="2025-03-03">
   <owner>dogancanemek@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
@@ -699,7 +722,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Variations.UserChannel" enum="UserChannels"
-    expires_after="2024-06-30">
+    expires_after="2024-09-01">
   <owner>asvitkine@chromium.org</owner>
   <owner>rkaplow@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
@@ -731,7 +754,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Variations.{Mode}CreateTrials.SeedExpiry"
-    enum="VariationsSeedExpiry" expires_after="2024-06-30">
+    enum="VariationsSeedExpiry" expires_after="2024-09-01">
   <owner>asvitkine@chromium.org</owner>
   <owner>rkaplow@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>

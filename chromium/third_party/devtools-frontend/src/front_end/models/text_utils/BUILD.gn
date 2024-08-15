@@ -4,13 +4,16 @@
 
 import("../../../scripts/build/ninja/devtools_entrypoint.gni")
 import("../../../scripts/build/ninja/devtools_module.gni")
+import("../../../third_party/typescript/typescript.gni")
 import("../visibility.gni")
 
 devtools_module("text_utils") {
   sources = [
     "CodeMirrorUtils.ts",
+    "ContentData.ts",
     "ContentProvider.ts",
     "StaticContentProvider.ts",
+    "StreamingContentData.ts",
     "Text.ts",
     "TextCursor.ts",
     "TextRange.ts",
@@ -21,12 +24,8 @@ devtools_module("text_utils") {
     "../../core/common:bundle",
     "../../core/platform:bundle",
     "../../core/root:bundle",
-    "../../third_party/codemirror",
     "../../third_party/codemirror.next:bundle",
   ]
-
-  visibility =
-      [ "../../../test/unittests/front_end/models/text_utils:text_utils" ]
 }
 
 devtools_entrypoint("bundle") {
@@ -37,15 +36,11 @@ devtools_entrypoint("bundle") {
   visibility = [
     ":*",
     "../*",
-    "../../../test/unittests/front_end/helpers/*",
-    "../../../test/unittests/front_end/helpers/*",
-    "../../../test/unittests/front_end/models/text_utils/*",
-    "../../../test/unittests/front_end/panels/coverage/*",
-    "../../../test/unittests/front_end/panels/search/*",
     "../../core/sdk/*",
     "../../entrypoints/*",
     "../../legacy_test_runner/test_runner/*",
     "../../panels/*",
+    "../../testing/*",
     "../../ui/components/data_grid/*",
     "../../ui/components/docs/data_grid_controller/*",
     "../../ui/components/highlighting/*",
@@ -54,4 +49,23 @@ devtools_entrypoint("bundle") {
   ]
 
   visibility += devtools_models_visibility
+}
+
+ts_library("unittests") {
+  testonly = true
+
+  sources = [
+    "ContentData.test.ts",
+    "StaticContentProvider.test.ts",
+    "StreamingContentData.test.ts",
+    "Text.test.ts",
+    "TextCursor.test.ts",
+    "TextRange.test.ts",
+    "TextUtils.test.ts",
+  ]
+
+  deps = [
+    ":bundle",
+    "../../core/platform:bundle",
+  ]
 }

@@ -31,7 +31,6 @@
 #include <unordered_map>
 
 #include "src/tint/api/common/binding_point.h"
-#include "src/tint/api/options/array_length_from_uniform.h"
 #include "src/tint/api/options/pixel_local.h"
 #include "src/tint/utils/reflection/reflection.h"
 
@@ -52,9 +51,13 @@ struct BindingInfo {
     /// @returns true if this BindingInfo is not equal to `rhs`
     inline bool operator!=(const BindingInfo& rhs) const { return !(*this == rhs); }
 
+    /// @returns the hash code of the BindingInfo
+    tint::HashCode HashCode() const { return Hash(binding); }
+
     /// Reflect the fields of this class so taht it can be used by tint::ForeachField()
-    TINT_REFLECT(binding);
+    TINT_REFLECT(BindingInfo, binding);
 };
+
 using Uniform = BindingInfo;
 using Storage = BindingInfo;
 using Texture = BindingInfo;
@@ -71,7 +74,7 @@ struct ExternalTexture {
     BindingInfo plane1{};
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-    TINT_REFLECT(metadata, plane0, plane1);
+    TINT_REFLECT(ExternalTexture, metadata, plane0, plane1);
 };
 
 }  // namespace binding
@@ -105,7 +108,20 @@ struct Bindings {
     ExternalTextureBindings external_texture{};
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-    TINT_REFLECT(uniform, storage, texture, storage_texture, sampler, external_texture);
+    TINT_REFLECT(Bindings, uniform, storage, texture, storage_texture, sampler, external_texture);
+};
+
+/// Options used to specify a mapping of binding points to indices into a UBO
+/// from which to load buffer sizes.
+struct ArrayLengthFromUniformOptions {
+    /// The MSL binding point to use to generate a uniform buffer from which to read buffer sizes.
+    uint32_t ubo_binding;
+    /// The mapping from the storage buffer binding points in WGSL binding-point space to the index
+    /// into the uniform buffer where the length of the buffer is stored.
+    std::unordered_map<BindingPoint, uint32_t> bindpoint_to_size_index;
+
+    /// Reflect the fields of this class so that it can be used by tint::ForeachField()
+    TINT_REFLECT(ArrayLengthFromUniformOptions, ubo_binding, bindpoint_to_size_index);
 };
 
 /// Configuration options used for generating MSL.
@@ -152,7 +168,8 @@ struct Options {
     Bindings bindings;
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-    TINT_REFLECT(disable_robustness,
+    TINT_REFLECT(Options,
+                 disable_robustness,
                  disable_workgroup_init,
                  emit_vertex_point_size,
                  disable_polyfill_integer_div_mod,

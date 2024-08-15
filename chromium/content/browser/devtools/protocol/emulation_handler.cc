@@ -30,6 +30,7 @@
 #include "services/device/public/mojom/geoposition.mojom.h"
 #include "services/device/public/mojom/sensor.mojom-shared.h"
 #include "services/network/public/cpp/client_hints.h"
+#include "third_party/blink/public/mojom/device_posture/device_posture_provider.mojom.h"
 #include "ui/display/mojom/screen_orientation.mojom.h"
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
 
@@ -69,12 +70,12 @@ DisplayFeatureOrientationTypeFromString(const std::string& type) {
   return std::nullopt;
 }
 
-base::expected<device::mojom::DevicePostureType, protocol::Response>
+base::expected<blink::mojom::DevicePostureType, protocol::Response>
 DevicePostureTypeFromString(const std::string& type) {
   if (type == Emulation::DevicePosture::TypeEnum::Continuous) {
-    return device::mojom::DevicePostureType::kContinuous;
+    return blink::mojom::DevicePostureType::kContinuous;
   } else if (type == Emulation::DevicePosture::TypeEnum::Folded) {
-    return device::mojom::DevicePostureType::kFolded;
+    return blink::mojom::DevicePostureType::kFolded;
   } else {
     return base::unexpected(
         protocol::Response::InvalidParams("Invalid posture type"));
@@ -505,8 +506,9 @@ Response EmulationHandler::SetDeviceMetricsOverride(
   const static double max_scale = 10;
   const static int max_orientation_angle = 360;
 
-  if (!host_)
+  if (!host_ || host_->GetRenderWidgetHost()->auto_resize_enabled()) {
     return Response::ServerError("Target does not support metrics override");
+  }
 
   if (host_->GetParentOrOuterDocument())
     return Response::ServerError(kCommandIsOnlyAvailableAtTopTarget);
@@ -582,10 +584,10 @@ Response EmulationHandler::SetDeviceMetricsOverride(
           return Response::InvalidParams("Negative display feature parameters");
         case content::DisplayFeature::ParamErrorEnum::kOutsideScreenWidth:
           return Response::InvalidParams(
-              "Display feature window segments outside screen width");
+              "Display feature viewport segments outside screen width");
         case content::DisplayFeature::ParamErrorEnum::kOutsideScreenHeight:
           return Response::InvalidParams(
-              "Display feature window segments outside screen height");
+              "Display feature viewport segments outside screen height");
       }
     }
   }
@@ -606,8 +608,8 @@ Response EmulationHandler::SetDeviceMetricsOverride(
   params.screen_orientation_angle = orientationAngle;
 
   if (content_display_feature) {
-    params.window_segments =
-        content_display_feature->ComputeWindowSegments(params.view_size);
+    params.viewport_segments =
+        content_display_feature->ComputeViewportSegments(params.view_size);
   }
 
   if (device_posture.has_value()) {

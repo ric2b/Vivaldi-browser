@@ -11,6 +11,7 @@
 #include <string>
 #include <utility>
 
+#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "quiche/http2/hpack/huffman/hpack_huffman_encoder.h"
 #include "quiche/common/platform/api/quiche_bug_tracker.h"
@@ -85,7 +86,8 @@ HpackEncoder::HpackEncoder()
       listener_(NoOpListener),
       should_index_(DefaultPolicy),
       enable_compression_(true),
-      should_emit_table_size_(false) {}
+      should_emit_table_size_(false),
+      crumble_cookies_(true) {}
 
 HpackEncoder::~HpackEncoder() = default;
 
@@ -100,7 +102,11 @@ std::string HpackEncoder::EncodeHeaderBlock(
       // Note that there can only be one "cookie" header, because header_set is
       // a map.
       found_cookie = true;
-      CookieToCrumbs(header, &regular_headers);
+      if (crumble_cookies_) {
+        CookieToCrumbs(header, &regular_headers);
+      } else {
+        DecomposeRepresentation(header, &regular_headers);
+      }
     } else if (!header.first.empty() &&
                header.first[0] == kPseudoHeaderPrefix) {
       DecomposeRepresentation(header, &pseudo_headers);
@@ -259,15 +265,11 @@ void HpackEncoder::CookieToCrumbs(const Representation& cookie,
 // static
 void HpackEncoder::DecomposeRepresentation(const Representation& header_field,
                                            Representations* out) {
-  size_t pos = 0;
-  size_t end = 0;
-  while (end != absl::string_view::npos) {
-    end = header_field.second.find('\0', pos);
-    out->push_back(std::make_pair(
-        header_field.first,
-        header_field.second.substr(
-            pos, end == absl::string_view::npos ? end : end - pos)));
-    pos = end + 1;
+  std::vector<absl::string_view> pieces =
+      absl::StrSplit(header_field.second, '\0');
+  out->reserve(pieces.size());
+  for (absl::string_view piece : pieces) {
+    out->push_back(std::make_pair(header_field.first, piece));
   }
 }
 
@@ -305,7 +307,11 @@ HpackEncoder::Encoderator::Encoderator(const Http2HeaderBlock& header_set,
       // Note that there can only be one "cookie" header, because header_set
       // is a map.
       found_cookie = true;
-      CookieToCrumbs(header, &regular_headers_);
+      if (encoder_->crumble_cookies_) {
+        CookieToCrumbs(header, &regular_headers_);
+      } else {
+        DecomposeRepresentation(header, &regular_headers_);
+      }
     } else if (!header.first.empty() &&
                header.first[0] == kPseudoHeaderPrefix) {
       DecomposeRepresentation(header, &pseudo_headers_);
@@ -324,7 +330,11 @@ HpackEncoder::Encoderator::Encoderator(const Representations& representations,
     : encoder_(encoder), has_next_(true) {
   for (const auto& header : representations) {
     if (header.first == "cookie") {
-      CookieToCrumbs(header, &regular_headers_);
+      if (encoder_->crumble_cookies_) {
+        CookieToCrumbs(header, &regular_headers_);
+      } else {
+        DecomposeRepresentation(header, &regular_headers_);
+      }
     } else if (!header.first.empty() &&
                header.first[0] == kPseudoHeaderPrefix) {
       pseudo_headers_.push_back(header);

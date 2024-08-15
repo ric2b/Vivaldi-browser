@@ -32,7 +32,6 @@ the repo would be moved to a more appropriate path.
 *   [`chromite/`][chromite]: All of CrOS's build tools live here.
 *   [`crostools/`][crostools]: *(non-standard)* Signing instructions for
     builders.
-*   [`docs/`][docs]: Public documentation.
 *   [`docs-internal/`][docs-internal]: Internal documentation.
 *   `infra/`: Projects for various CrOS infra systems.
 *   `infra_internal/`: Internal projects for various CrOS infra systems.
@@ -192,7 +191,6 @@ build/infra team first using [chromium-os-dev@chromium.org][Contact].
         projects that don't integrate directly into CrOS builds, otherwise the
         projects are stored under `platform2/vm_tools/`.
         *   `$PROJECT/`: Each project gets its own repo.
-    *   [`docs/`][docs]: General project documentation repo.
     *   `infra/`: Projects for various CrOS infra systems.
     *   [`manifest/`][manifest]: The manifest use by `repo init` and `repo sync`
         to get a public ChromiumOS checkout.
@@ -684,7 +682,6 @@ See the previous questions in this FAQ for more details.
 [crosutils]: https://chromium.googlesource.com/chromiumos/platform/crosutils/
 [dev-util]: https://chromium.googlesource.com/chromiumos/platform/dev-util/
 [docs-internal]: https://chrome-internal.googlesource.com/chromeos/docs/
-[docs]: https://chromium.googlesource.com/chromiumos/docs/
 [eclass-overlay]: https://chromium.googlesource.com/chromiumos/overlays/eclass-overlay/
 [Forking upstream projects]: #forking-upstream
 [Infra>Git>Admin rotation]: https://bugs.chromium.org/p/chromium/issues/entry?template=Infra-Git

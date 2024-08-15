@@ -6,9 +6,10 @@ import '//resources/cr_elements/cr_button/cr_button.js';
 import '//resources/cr_elements/cr_checkbox/cr_checkbox.js';
 import '//resources/cr_elements/cr_input/cr_input.js';
 import '//resources/cr_elements/cr_toast/cr_toast.js';
+import '//resources/cr_elements/cr_toast/cr_toast_manager.js';
 import '../demo.css.js';
 
-import {CrToastElement} from '//resources/cr_elements/cr_toast/cr_toast.js';
+import type {CrToastElement} from '//resources/cr_elements/cr_toast/cr_toast.js';
 import {getToastManager} from '//resources/cr_elements/cr_toast/cr_toast_manager.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 

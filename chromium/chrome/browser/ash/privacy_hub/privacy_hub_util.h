@@ -7,6 +7,8 @@
 
 #include <string>
 
+#include "base/time/time.h"
+
 class AppAccessNotifier;
 
 namespace ash {
@@ -35,6 +37,11 @@ void TrackGeolocationAttempted(const std::string& name);
 // Notifies the Privacy Hub controller.
 void TrackGeolocationRelinquished(const std::string& name);
 
+// Checks if the user can modify the ChromeOS system location toggle in the OOBE
+// consents screen. Returns true, if the underlying pref is not managed.
+// Returns false if the Privacy Hub Location feature flag is not enabled.
+bool IsCrosLocationOobeNegotiationNeeded();
+
 // Checks if we use the fallback solution for the camera LED
 // (go/privacy-hub:camera-led-fallback).
 // TODO(b/289510726): remove when all cameras fully support the software
@@ -53,6 +60,9 @@ class ScopedCameraLedFallbackForTesting {
 
 // Sets an AppAccessNotifier instance to be used by the privacy hub
 void SetAppAccessNotifier(AppAccessNotifier* app_access_notifier);
+
+// Returns a pair with sunrise and sunset time.
+std::pair<base::Time, base::Time> SunriseSunsetSchedule();
 
 }  // namespace privacy_hub_util
 

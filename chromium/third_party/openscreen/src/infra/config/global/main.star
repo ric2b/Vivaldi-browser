@@ -6,7 +6,10 @@ Open Screen's LUCI configuration for post-submit and pre-submit builders.
 REPO_URL = "https://chromium.googlesource.com/openscreen"
 CHROMIUM_REPO_URL = "https://chromium.googlesource.com/chromium/src"
 MAC_VERSION = "Mac-13"
+WINDOWS_VERSION = "Windows-10"
 REF = "refs/heads/main"
+
+RECLIENT_PROPERTY = "$build/reclient"
 
 # Use LUCI Scheduler BBv2 names and add Scheduler realms configs.
 lucicfg.enable_experiment("crbug.com/1182002")
@@ -121,12 +124,11 @@ def get_properties(
         is_gcc = False,
         is_asan = False,
         is_tsan = False,
+        is_msan = False,
         use_coverage = False,
-        sysroot_platform = None,
         target_cpu = "x64",
-        cast_standalone = False,
+        cast_receiver = False,
         chromium = False,
-        reclient_instance = None,
         is_presubmit = False,
         is_ci = None):
     """Property generator method, used to configure the build system.
@@ -135,17 +137,14 @@ def get_properties(
       is_release: if True, the build mode is release instead of debug.
       is_gcc: if True, the GCC compiler is used instead of clang.
       is_asan: if True, this is an address sanitizer build.
+      is_msan: if True, this is a memory sanitizer build.
       is_tsan: if True, this is a thread sanitizer build.
       use_coverage: if True, this is a code coverage build.
-      sysroot_platform: if not None, the platform (e.g. "bullseye") to be
-        used for cross compilation.
       target_cpu: the target CPU. May differ from current_cpu or host_cpu
         if cross compiling.
-      cast_standalone: if True, this build should include the cast standalone
-        sender and receiver libraries.
+      cast_receiver: if True, this build should include the cast standalone
+        sender and receiver binaries.
       chromium: if True, the build is for use in an embedder, such as Chrome.
-      reclient_instance: a string indicating the GCP project hosting the RBE
-        instance for re-client to use.
       is_presubmit: if True, this is a presubmit run.
       is_ci: If set, it adds is_ci flag to the properties.
 
@@ -153,6 +152,7 @@ def get_properties(
         A collection of GN properties for the build system.
     """
     properties = {
+        "clang_use_chrome_plugins": False,
         "target_cpu": target_cpu,
         "$depot_tools/bot_update": {
             "apply_patch_on_gclient": True,
@@ -164,16 +164,16 @@ def get_properties(
     if not is_release:
         properties["is_debug"] = True
     if is_gcc:
-        properties["is_gcc"] = True
+        properties["is_clang"] = False
     if is_asan:
         properties["is_asan"] = True
+    if is_msan:
+        properties["is_msan"] = True
     if is_tsan:
         properties["is_tsan"] = True
     if use_coverage:
         properties["use_coverage"] = True
-    if sysroot_platform:
-        properties["sysroot_platform"] = sysroot_platform
-    if cast_standalone:
+    if cast_receiver:
         properties["have_ffmpeg"] = True
         properties["have_libsdl2"] = True
         properties["have_libopus"] = True
@@ -181,9 +181,8 @@ def get_properties(
         properties["cast_allow_developer_certificate"] = True
     if chromium:
         properties["builder_group"] = "client.openscreen.chromium"
-    if reclient_instance:
-        properties["$build/reclient"] = {
-            "instance": reclient_instance,
+        properties[RECLIENT_PROPERTY] = {
+            "instance": _reclient.instance.DEFAULT_UNTRUSTED,
             "metrics_project": "chromium-reclient-metrics",
             "scandeps_server": True,
         }
@@ -252,7 +251,15 @@ def builder(builder_type, name, properties, os, cpu):
     if builder_type == "try":
         # We mark some bots as experimental to not block the build.
         experiment_percentage = None
-        if name in ["linux_arm64_cast_debug", "linux64_coverage_debug"]:
+        if name in [
+            "linux_arm64",
+            "linux_arm64_cast_receiver",
+            "linux_x64_coverage",
+            "linux_x64_msan_rel",
+            "linux_x64_tsan_rel",
+            "win_x64",
+            "chromium_win_x64",
+        ]:
             experiment_percentage = 100
 
         luci.cq_tryjob_verifier(
@@ -301,65 +308,62 @@ def try_and_ci_builders(name, properties, os = "Ubuntu-20.04", cpu = "x86-64"):
     """
     try_builder(name, properties, os, cpu)
 
-    # NOTE: properties is immutable at this point and must be copied.
     ci_properties = dict(properties)
     ci_properties["is_ci"] = True
+    RECLIENT_PROPERTY = "$build/reclient"
+    if RECLIENT_PROPERTY in ci_properties:
+        ci_properties[RECLIENT_PROPERTY] = dict(ci_properties[RECLIENT_PROPERTY])
+        ci_properties[RECLIENT_PROPERTY]["instance"] = _reclient.instance.DEFAULT_TRUSTED
     ci_builder(name, ci_properties, os, cpu)
 
 # BUILDER CONFIGURATIONS
+# Follow the pattern: <platform>_<arch>
+# For builders other than the generic debug config, use <platform>_<arch>_<config>
+# For Chromium builders, use chromium_<platform>_<arch>_<config>
+
 try_builder(
     "openscreen_presubmit",
     get_properties(is_presubmit = True, is_release = True),
 )
 try_and_ci_builders(
-    "linux_arm64_cast_debug",
-    get_properties(cast_standalone = True, target_cpu = "arm64", sysroot_platform = "bullseye"),
+    "linux_arm64_cast_receiver",
+    get_properties(cast_receiver = True, target_cpu = "arm64"),
 )
-try_and_ci_builders("linux64_coverage_debug", get_properties(use_coverage = True))
-try_and_ci_builders("linux64_debug", get_properties(is_asan = True))
+try_and_ci_builders("linux_x64_coverage", get_properties(use_coverage = True))
+try_and_ci_builders("linux_x64", get_properties(is_asan = True))
 try_and_ci_builders(
-    "linux64_gcc_debug",
+    "linux_x64_gcc",
     get_properties(is_gcc = True),
 )
 try_and_ci_builders(
-    "linux64_tsan",
+    "linux_x64_msan_rel",
+    get_properties(is_release = True, is_msan = True),
+)
+try_and_ci_builders(
+    "linux_x64_tsan_rel",
     get_properties(is_release = True, is_tsan = True),
 )
 try_and_ci_builders(
-    "linux_arm64_debug",
-    get_properties(target_cpu = "arm64", sysroot_platform = "bullseye"),
+    "linux_arm64",
+    get_properties(target_cpu = "arm64"),
 )
-try_and_ci_builders("mac_debug", get_properties(), os = MAC_VERSION)
-
-try_builder(
-    "chromium_linux64_debug",
-    get_properties(chromium = True, reclient_instance = _reclient.instance.DEFAULT_UNTRUSTED),
+try_and_ci_builders("mac_x64", get_properties(), os = MAC_VERSION)
+try_and_ci_builders(
+    "win_x64",
+    get_properties(),
+    os = WINDOWS_VERSION,
 )
-
-ci_builder(
-    "chromium_linux64_debug",
-    get_properties(
-        chromium = True,
-        is_ci = True,
-        reclient_instance = _reclient.instance.DEFAULT_TRUSTED,
-    ),
+try_and_ci_builders(
+    "chromium_linux_x64",
+    get_properties(chromium = True),
 )
-
-try_builder(
-    "chromium_mac_debug",
-    get_properties(
-        chromium = True,
-        reclient_instance = _reclient.instance.DEFAULT_UNTRUSTED,
-    ),
+try_and_ci_builders(
+    "chromium_mac_x64",
+    get_properties(chromium = True),
     os = MAC_VERSION,
 )
-
-ci_builder(
-    "chromium_mac_debug",
-    get_properties(
-        chromium = True,
-        is_ci = True,
-        reclient_instance = _reclient.instance.DEFAULT_TRUSTED,
-    ),
-    os = MAC_VERSION,
+try_and_ci_builders(
+    "chromium_win_x64",
+    get_properties(chromium = True),
+    os = WINDOWS_VERSION,
 )

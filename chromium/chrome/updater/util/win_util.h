@@ -36,6 +36,7 @@
 #include "base/win/win_util.h"
 #include "base/win/windows_types.h"
 #include "chrome/updater/updater_scope.h"
+#include "chrome/updater/win/scoped_handle.h"
 
 namespace base {
 class FilePath;
@@ -294,6 +295,10 @@ HResultOr<DWORD> RunElevated(const base::FilePath& file_path,
 // spawned process.
 HRESULT RunDeElevated(const std::wstring& path, const std::wstring& parameters);
 
+// Runs `cmd_line` de-elevated.The function does not wait for the spawned
+// process.
+HRESULT RunDeElevatedCmdLine(const std::wstring& cmd_line);
+
 std::optional<base::FilePath> GetGoogleUpdateExePath(UpdaterScope scope);
 
 // Causes the COM runtime not to handle exceptions. Failing to set this
@@ -424,6 +429,10 @@ std::optional<std::wstring> GetRegKeyContents(const std::wstring& reg_key);
 // thread is set, otherwise, the function uses the user/system default LANGID,
 // or it defaults to US English.
 std::wstring GetTextForSystemError(int error);
+
+// Retrieves the logged on user token for the active explorer process if one
+// exists.
+HResultOr<ScopedKernelHANDLE> GetLoggedOnUserToken();
 
 }  // namespace updater
 

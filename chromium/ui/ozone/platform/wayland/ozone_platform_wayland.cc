@@ -12,6 +12,7 @@
 #include <components/exo/wayland/protocol/aura-shell-client-protocol.h>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_pump_type.h"
@@ -342,6 +343,15 @@ class OzonePlatformWayland : public OzonePlatform,
       // arbitrary position.
       properties->supports_global_screen_coordinates =
           kDefaultScreenCoordinateEnabled;
+
+#if BUILDFLAG(IS_LINUX)
+      // TODO(crbug.com/40800718): Revisit (and maybe remove) once proper
+      // support, probably backed by org.freedesktop.portal.Screenshot.PickColor
+      // API is implemented. Note: this is restricted to Linux Desktop as Lacros
+      // implements it at a higher level layer using ChromeOS' mojo croapi.
+      properties->supports_color_picker_dialog = false;
+#endif
+
       initialised = true;
     }
 
@@ -455,10 +465,18 @@ class OzonePlatformWayland : public OzonePlatform,
     connection_->SetShutdownCb(std::move(shutdown_cb));
   }
 
+  void PostMainMessageLoopRun() override {
+    // TODO(b/324294360): This will cause a lot of dangling pointers, which
+    // breaks linux wayland bot. Fix them and enable on linux as well.
+#if BUILDFLAG(IS_CHROMEOS) || !BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS)
+    connection_.reset();
+#endif
+  }
+
   std::unique_ptr<PlatformKeyboardHook> CreateKeyboardHook(
       PlatformKeyboardHookTypes type,
       base::RepeatingCallback<void(KeyEvent* event)> callback,
-      absl::optional<base::flat_set<DomCode>> dom_codes,
+      std::optional<base::flat_set<DomCode>> dom_codes,
       gfx::AcceleratedWidget accelerated_widget) override {
     DCHECK(connection_);
     auto* seat = connection_->seat();

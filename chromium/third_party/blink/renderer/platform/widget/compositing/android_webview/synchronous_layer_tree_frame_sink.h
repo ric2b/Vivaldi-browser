@@ -60,8 +60,8 @@ class SynchronousLayerTreeFrameSinkClient {
   virtual void SubmitCompositorFrame(
       uint32_t layer_tree_frame_sink_id,
       const viz::LocalSurfaceId& local_surface_id,
-      absl::optional<viz::CompositorFrame> frame,
-      absl::optional<viz::HitTestRegionList> hit_test_region_list) = 0;
+      std::optional<viz::CompositorFrame> frame,
+      std::optional<viz::HitTestRegionList> hit_test_region_list) = 0;
   virtual void SetNeedsBeginFrames(bool needs_begin_frames) = 0;
   virtual void SinkDestroyed() = 0;
 
@@ -159,12 +159,10 @@ class SynchronousLayerTreeFrameSink
   void DeliverMessages();
 
   const uint32_t layer_tree_frame_sink_id_;
-  const raw_ptr<SynchronousCompositorRegistry, ExperimentalRenderer>
-      registry_;  // Not owned.
+  const raw_ptr<SynchronousCompositorRegistry> registry_;  // Not owned.
 
   // Not owned.
-  raw_ptr<SynchronousLayerTreeFrameSinkClient, ExperimentalRenderer>
-      sync_client_ = nullptr;
+  raw_ptr<SynchronousLayerTreeFrameSinkClient> sync_client_ = nullptr;
 
   // Used to allocate bitmaps in the software Display.
   // TODO(crbug.com/692814): The Display never sends its resources out of
@@ -229,8 +227,7 @@ class SynchronousLayerTreeFrameSink
   // Uses frame_sink_manager_.
   std::unique_ptr<viz::Display> display_;
   // Owned by |display_|.
-  raw_ptr<SoftwareOutputSurface, ExperimentalRenderer>
-      software_output_surface_ = nullptr;
+  raw_ptr<SoftwareOutputSurface> software_output_surface_ = nullptr;
   std::unique_ptr<viz::BeginFrameSource> synthetic_begin_frame_source_;
   std::unique_ptr<viz::ExternalBeginFrameSource> external_begin_frame_source_;
 

@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 TEST(Spanset, Fits) {
@@ -29,57 +30,91 @@ TEST(Spanset, Empty) {
 TEST(Spancpy, FitsEntirely) {
   std::vector<char> src(4, 'A');
   std::vector<char> dst(4, 'B');
-  fxcrt::spancpy(pdfium::make_span(dst), pdfium::make_span(src));
+  auto remain = fxcrt::spancpy(pdfium::make_span(dst), pdfium::make_span(src));
   EXPECT_EQ(dst[0], 'A');
   EXPECT_EQ(dst[1], 'A');
   EXPECT_EQ(dst[2], 'A');
   EXPECT_EQ(dst[3], 'A');
+  EXPECT_TRUE(remain.empty());
 }
 
 TEST(Spancpy, FitsWithin) {
   std::vector<char> src(2, 'A');
   std::vector<char> dst(4, 'B');
   // Also show that a const src argument is acceptable.
-  fxcrt::spancpy(pdfium::make_span(dst).subspan(1),
-                 pdfium::span<const char>(src));
+  auto remain = fxcrt::spancpy(pdfium::make_span(dst).subspan(1),
+                               pdfium::span<const char>(src));
   EXPECT_EQ(dst[0], 'B');
   EXPECT_EQ(dst[1], 'A');
   EXPECT_EQ(dst[2], 'A');
   EXPECT_EQ(dst[3], 'B');
+  EXPECT_EQ(remain.size(), 1u);
+  EXPECT_EQ(remain.data(), &dst[3]);
 }
 
 TEST(Spancpy, EmptyCopyWithin) {
   std::vector<char> src(2, 'A');
   std::vector<char> dst(4, 'B');
-  fxcrt::spancpy(pdfium::make_span(dst).subspan(1),
-                 pdfium::make_span(src).subspan(2));
+  auto remain = fxcrt::spancpy(pdfium::make_span(dst).subspan(1),
+                               pdfium::make_span(src).subspan(2));
   EXPECT_EQ(dst[0], 'B');
   EXPECT_EQ(dst[1], 'B');
   EXPECT_EQ(dst[2], 'B');
   EXPECT_EQ(dst[3], 'B');
+  EXPECT_EQ(remain.size(), 3u);
+  EXPECT_EQ(remain.data(), &dst[1]);
 }
 
 TEST(Spancpy, EmptyCopyToEmpty) {
   std::vector<char> src(2, 'A');
   std::vector<char> dst(4, 'B');
-  fxcrt::spancpy(pdfium::make_span(dst).subspan(4),
-                 pdfium::make_span(src).subspan(2));
+  auto remain = fxcrt::spancpy(pdfium::make_span(dst).subspan(4),
+                               pdfium::make_span(src).subspan(2));
   EXPECT_EQ(dst[0], 'B');
   EXPECT_EQ(dst[1], 'B');
   EXPECT_EQ(dst[2], 'B');
   EXPECT_EQ(dst[3], 'B');
+  EXPECT_TRUE(remain.empty());
 }
 
 TEST(Spanmove, FitsWithin) {
   std::vector<char> src(2, 'A');
   std::vector<char> dst(4, 'B');
   // Also show that a const src argument is acceptable.
-  fxcrt::spanmove(pdfium::make_span(dst).subspan(1),
-                  pdfium::span<const char>(src));
+  auto remain = fxcrt::spanmove(pdfium::make_span(dst).subspan(1),
+                                pdfium::span<const char>(src));
   EXPECT_EQ(dst[0], 'B');
   EXPECT_EQ(dst[1], 'A');
   EXPECT_EQ(dst[2], 'A');
   EXPECT_EQ(dst[3], 'B');
+  EXPECT_EQ(remain.size(), 1u);
+  EXPECT_EQ(remain.data(), &dst[3]);
+}
+
+TEST(SpanEquals, Empty) {
+  std::vector<int> vec = {1, 2};
+  std::vector<int> vec2 = {3, 4};
+  pdfium::span<int> empty;
+  pdfium::span<int> some = pdfium::make_span(vec);
+  pdfium::span<int> some2 = pdfium::make_span(vec2);
+  EXPECT_FALSE(fxcrt::span_equals(empty, some));
+  EXPECT_FALSE(fxcrt::span_equals(some, empty));
+  EXPECT_TRUE(fxcrt::span_equals(empty, empty));
+  EXPECT_TRUE(fxcrt::span_equals(empty, some.first(0)));
+  EXPECT_TRUE(fxcrt::span_equals(some.first(0), empty));
+  EXPECT_TRUE(fxcrt::span_equals(some2.first(0), some.first(0)));
+  EXPECT_TRUE(fxcrt::span_equals(some.first(0), some2.first(0)));
+}
+
+TEST(SpanEquals, NonEmpty) {
+  std::vector<int> vec = {1, 2, 3};
+  std::vector<int> vec2 = {1, 2, 4};
+  pdfium::span<int> some = pdfium::make_span(vec);
+  pdfium::span<int> some2 = pdfium::make_span(vec2);
+  EXPECT_FALSE(fxcrt::span_equals(some, some2));
+  EXPECT_FALSE(fxcrt::span_equals(some.first(2), some2));
+  EXPECT_FALSE(fxcrt::span_equals(some, some2.first(2)));
+  EXPECT_TRUE(fxcrt::span_equals(some.first(2), some2.first(2)));
 }
 
 TEST(Span, AssignOverOnePastEnd) {
@@ -118,4 +153,31 @@ TEST(ReinterpretSpan, BadAlignment) {
   EXPECT_DEATH(fxcrt::reinterpret_span<uint32_t>(
                    pdfium::make_span(abcabc).subspan(1, 4)),
                "");
+}
+
+TEST(Spanpos, Empty) {
+  pdfium::span<const uint32_t> kEmpty;
+  const uint32_t kHaystack[] = {0, 1, 2, 3, 4, 5};
+  const uint32_t kNeedle[] = {1, 2};
+  EXPECT_FALSE(fxcrt::spanpos(kEmpty, kEmpty));
+  EXPECT_FALSE(fxcrt::spanpos(pdfium::make_span(kHaystack), kEmpty));
+  EXPECT_FALSE(fxcrt::spanpos(kEmpty, pdfium::make_span(kNeedle)));
+}
+
+TEST(Spanpos, NotEmpty) {
+  const uint32_t kHaystack[] = {0, 1, 2, 3, 4, 5};
+  const uint32_t kStartMatch[] = {0, 1};
+  const uint32_t kEndMatch[] = {4, 5};
+  const uint32_t kNotFound[] = {256, 512};  // test byte-shifted {1,2}.
+  const uint32_t kTooLong[] = {0, 1, 2, 3, 4, 5, 6};
+  EXPECT_THAT(fxcrt::spanpos(pdfium::make_span(kHaystack),
+                             pdfium::make_span(kStartMatch)),
+              testing::Optional(0u));
+  EXPECT_THAT(fxcrt::spanpos(pdfium::make_span(kHaystack),
+                             pdfium::make_span(kEndMatch)),
+              testing::Optional(4u));
+  EXPECT_FALSE(fxcrt::spanpos(pdfium::make_span(kHaystack),
+                              pdfium::make_span(kNotFound)));
+  EXPECT_FALSE(fxcrt::spanpos(pdfium::make_span(kHaystack),
+                              pdfium::make_span(kTooLong)));
 }

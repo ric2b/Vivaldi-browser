@@ -490,7 +490,7 @@ void EncryptionMigrationScreen::OnMountExistingVault(
                                       IsArcKiosk());
     UpdateUIState(EncryptionMigrationScreenView::MIGRATION_FAILED);
     LOG(ERROR) << "Mount existing vault failed. Error: "
-               << error->get_cryptohome_code();
+               << error->get_cryptohome_error();
     return;
   }
 
@@ -546,7 +546,7 @@ void EncryptionMigrationScreen::OnRemoveCryptohome(
                                         IsArcKiosk());
   } else {
     LOG(ERROR) << "Removing cryptohome failed. return code: "
-               << error->get_cryptohome_code();
+               << error->get_cryptohome_error();
     RecordRemoveCryptohomeResultFailure(IsResumingIncompleteMigration(),
                                         IsArcKiosk());
   }
@@ -555,7 +555,7 @@ void EncryptionMigrationScreen::OnRemoveCryptohome(
 }
 
 bool EncryptionMigrationScreen::IsArcKiosk() const {
-  return user_context_->GetUserType() == user_manager::USER_TYPE_ARC_KIOSK_APP;
+  return user_context_->GetUserType() == user_manager::UserType::kArcKioskApp;
 }
 
 void EncryptionMigrationScreen::DircryptoMigrationProgress(

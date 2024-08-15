@@ -46,7 +46,7 @@ class ToolkitDelegateViews : public RenderViewContextMenuBase::ToolkitDelegate {
   views::MenuItemView* menu_view() { return menu_view_; }
 
   views::MenuItemView* VivaldiInit(ui::SimpleMenuModel* menu_model,
-      vivaldi::ContextMenuPostitionDelegate* delegate);
+      base::WeakPtr<vivaldi::ContextMenuPostitionDelegate> delegate);
   void VivaldiUpdateMenu(views::MenuItemView* view,
                          ui::SimpleMenuModel* menu_model);
   void VivaldiSetMenu(views::MenuItemView* view,

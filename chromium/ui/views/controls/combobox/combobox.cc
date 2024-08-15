@@ -180,10 +180,7 @@ Combobox::Combobox(ui::ComboboxModel* model) {
                                                   GetCornerRadius());
   }
 
-  // `ax::mojom::Role::kComboBox` is for UI elements with a dropdown and
-  // an editable text field, which `views::Combobox` does not have. Use
-  // `ax::mojom::Role::kPopUpButton` to match an HTML <select> element.
-  SetAccessibilityProperties(ax::mojom::Role::kPopUpButton);
+  SetAccessibilityProperties(ax::mojom::Role::kComboBoxSelect);
 }
 
 Combobox::~Combobox() {
@@ -197,7 +194,7 @@ const gfx::FontList& Combobox::GetFontList() const {
   return TypographyProvider::Get().GetFont(kContext, kStyle);
 }
 
-void Combobox::SetSelectedIndex(absl::optional<size_t> index) {
+void Combobox::SetSelectedIndex(std::optional<size_t> index) {
   if (selected_index_ == index)
     return;
   // TODO(pbos): Add (D)CHECKs to validate the selected index.
@@ -330,12 +327,12 @@ size_t Combobox::GetRowCount() {
   return GetModel()->GetItemCount();
 }
 
-absl::optional<size_t> Combobox::GetSelectedRow() {
+std::optional<size_t> Combobox::GetSelectedRow() {
   return selected_index_;
 }
 
-void Combobox::SetSelectedRow(absl::optional<size_t> row) {
-  absl::optional<size_t> prev_index = selected_index_;
+void Combobox::SetSelectedRow(std::optional<size_t> row) {
+  std::optional<size_t> prev_index = selected_index_;
   SetSelectedIndex(row);
   if (selected_index_ != prev_index)
     OnPerformAction();
@@ -390,10 +387,13 @@ bool Combobox::SkipDefaultKeyEventProcessing(const ui::KeyEvent& e) {
 
 bool Combobox::OnKeyPressed(const ui::KeyEvent& e) {
   // TODO(oshima): handle IME.
-  DCHECK_EQ(e.type(), ui::ET_KEY_PRESSED);
+  CHECK_EQ(e.type(), ui::ET_KEY_PRESSED);
 
-  DCHECK(selected_index_.has_value());
-  DCHECK_LT(selected_index_.value(), GetModel()->GetItemCount());
+  if (!selected_index_.has_value()) {
+    CHECK_EQ(model_->GetItemCount(), 0u);
+    return false;
+  }
+  CHECK_LT(selected_index_.value(), GetModel()->GetItemCount());
 
 #if BUILDFLAG(IS_MAC)
   if (e.key_code() != ui::VKEY_DOWN && e.key_code() != ui::VKEY_UP &&
@@ -405,24 +405,24 @@ bool Combobox::OnKeyPressed(const ui::KeyEvent& e) {
   return true;
 #else
   const auto index_at_or_after = [](ui::ComboboxModel* model,
-                                    size_t index) -> absl::optional<size_t> {
+                                    size_t index) -> std::optional<size_t> {
     for (; index < model->GetItemCount(); ++index) {
       if (!model->IsItemSeparatorAt(index) && model->IsItemEnabledAt(index))
         return index;
     }
-    return absl::nullopt;
+    return std::nullopt;
   };
   const auto index_before = [](ui::ComboboxModel* model,
-                               size_t index) -> absl::optional<size_t> {
+                               size_t index) -> std::optional<size_t> {
     for (; index > 0; --index) {
       const auto prev = index - 1;
       if (!model->IsItemSeparatorAt(prev) && model->IsItemEnabledAt(prev))
         return prev;
     }
-    return absl::nullopt;
+    return std::nullopt;
   };
 
-  absl::optional<size_t> new_index;
+  std::optional<size_t> new_index;
   switch (e.key_code()) {
     // Show the menu on F4 without modifiers.
     case ui::VKEY_F4:
@@ -507,12 +507,15 @@ void Combobox::GetAccessibleNodeData(ui::AXNodeData* node_data) {
     node_data->AddState(ax::mojom::State::kCollapsed);
   }
 
-  node_data->SetValue(model_->GetItemAt(selected_index_.value()));
   if (GetEnabled()) {
     node_data->SetDefaultActionVerb(ax::mojom::DefaultActionVerb::kOpen);
   }
-  node_data->AddIntAttribute(ax::mojom::IntAttribute::kPosInSet,
-                             base::checked_cast<int>(selected_index_.value()));
+  if (selected_index_.has_value()) {
+    node_data->SetValue(model_->GetItemAt(selected_index_.value()));
+    node_data->AddIntAttribute(
+        ax::mojom::IntAttribute::kPosInSet,
+        base::checked_cast<int>(selected_index_.value()));
+  }
   node_data->AddIntAttribute(ax::mojom::IntAttribute::kSetSize,
                              base::checked_cast<int>(model_->GetItemCount()));
 }
@@ -540,7 +543,8 @@ void Combobox::OnComboboxModelChanged(ui::ComboboxModel* model) {
 
   // If the selection is no longer valid (or the model is empty), restore the
   // default index.
-  if (selected_index_ >= model_->GetItemCount() ||
+  if (!selected_index_.has_value() ||
+      selected_index_ >= model_->GetItemCount() ||
       model_->GetItemCount() == 0 ||
       model_->IsItemSeparatorAt(selected_index_.value())) {
     SetSelectedIndex(model_->GetDefaultIndex());
@@ -587,6 +591,11 @@ void Combobox::AdjustBoundsForRTLUI(gfx::Rect* rect) const {
 }
 
 void Combobox::PaintIconAndText(gfx::Canvas* canvas) {
+  if (!selected_index_.has_value()) {
+    return;
+  }
+  CHECK_LT(selected_index_.value(), GetModel()->GetItemCount());
+
   gfx::Insets insets = GetInsets();
   insets += gfx::Insets::VH(0, LayoutProvider::Get()->GetDistanceMetric(
                                    DISTANCE_TEXTFIELD_HORIZONTAL_TEXT_PADDING));
@@ -597,9 +606,6 @@ void Combobox::PaintIconAndText(gfx::Canvas* canvas) {
   int x = insets.left();
   int y = insets.top();
   int contents_height = height() - insets.height();
-
-  DCHECK(selected_index_.has_value());
-  DCHECK_LT(selected_index_.value(), GetModel()->GetItemCount());
 
   // Draw the icon.
   ui::ImageModel icon = GetModel()->GetIconAt(selected_index_.value());
@@ -807,7 +813,7 @@ BEGIN_METADATA(Combobox)
 ADD_PROPERTY_METADATA(base::RepeatingClosure, Callback)
 ADD_PROPERTY_METADATA(std::unique_ptr<ui::ComboboxModel>, OwnedModel)
 ADD_PROPERTY_METADATA(ui::ComboboxModel*, Model)
-ADD_PROPERTY_METADATA(absl::optional<size_t>, SelectedIndex)
+ADD_PROPERTY_METADATA(std::optional<size_t>, SelectedIndex)
 ADD_PROPERTY_METADATA(bool, Invalid)
 ADD_PROPERTY_METADATA(bool, SizeToLargestLabel)
 ADD_PROPERTY_METADATA(std::u16string, TooltipTextAndAccessibleName)

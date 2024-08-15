@@ -212,7 +212,6 @@ patchpanel::SocketConnectionEvent::QosCategory TranslateQosCategory(
       return patchpanel::SocketConnectionEvent::QosCategory::
           SocketConnectionEvent_QosCategory_MULTIMEDIA_CONFERENCING;
     case arc::mojom::QosCategory::kUnknown:
-      NET_LOG(ERROR) << "Unknown QoS category";
       return patchpanel::SocketConnectionEvent::QosCategory::
           SocketConnectionEvent_QosCategory_UNKNOWN_CATEGORY;
   }
@@ -311,14 +310,14 @@ void FillConfigurationsFromDevice(const patchpanel::NetworkDevice& device,
   mojo->arc_ipv4_prefix_length = device.ipv4_subnet().prefix_len();
   // Fill in DNS proxy addresses.
   mojo->dns_proxy_addresses = std::vector<std::string>();
-  auto dns_proxy_ipv4_addr =
-      PackedIPAddressToString(AF_INET, device.dns_proxy_ipv4_addr());
-  if (!dns_proxy_ipv4_addr.empty()) {
+  if (!device.dns_proxy_ipv4_addr().empty()) {
+    auto dns_proxy_ipv4_addr =
+        PackedIPAddressToString(AF_INET, device.dns_proxy_ipv4_addr());
     mojo->dns_proxy_addresses->emplace_back(dns_proxy_ipv4_addr);
   }
-  auto dns_proxy_ipv6_addr =
-      PackedIPAddressToString(AF_INET6, device.dns_proxy_ipv6_addr());
-  if (!dns_proxy_ipv6_addr.empty()) {
+  if (!device.dns_proxy_ipv6_addr().empty()) {
+    auto dns_proxy_ipv6_addr =
+        PackedIPAddressToString(AF_INET6, device.dns_proxy_ipv6_addr());
     mojo->dns_proxy_addresses->emplace_back(dns_proxy_ipv6_addr);
   }
   // Assign the technology of the physical device the virtual device is tied to.
@@ -480,8 +479,7 @@ arc::mojom::ConnectionStateType TranslateConnectionState(
   }
 
   // The remaining cases defined in shill dbus-constants are legacy values from
-  // Flimflam and are not expected to be encountered. These are: kStateCarrier,
-  // and kStateOffline.
+  // Flimflam and are not expected to be encountered.
   NOTREACHED() << "Unknown connection state: " << state;
   return arc::mojom::ConnectionStateType::NOT_CONNECTED;
 }
@@ -670,15 +668,8 @@ TranslateSocketConnectionEvent(const mojom::SocketConnectionEventPtr& mojom) {
     return nullptr;
   }
 
-  if (const auto category = TranslateQosCategory(mojom->qos_category);
-      category != patchpanel::SocketConnectionEvent::QosCategory::
-                      SocketConnectionEvent_QosCategory_UNKNOWN_CATEGORY) {
+  if (const auto category = TranslateQosCategory(mojom->qos_category)) {
     msg->set_category(category);
-  } else {
-    NET_LOG(ERROR) << "QoS category is unknown, translate socket connection "
-                      "event failed. QoS category is: "
-                   << mojom->qos_category;
-    return nullptr;
   }
 
   return msg;

@@ -150,7 +150,7 @@ keyboard::KeyboardUIController* GetKeyboardControllerForWidget(
 }
 
 bool IsPublicAccountUser(const LoginUserInfo& user) {
-  return user.basic_user_info.type == user_manager::USER_TYPE_PUBLIC_ACCOUNT;
+  return user.basic_user_info.type == user_manager::UserType::kPublicAccount;
 }
 
 //
@@ -550,15 +550,15 @@ void LockContentsView::SetHasKioskApp(bool has_kiosk_apps) {
   UpdateKioskDefaultMessageVisibility();
 }
 
-void LockContentsView::Layout() {
-  View::Layout();
+void LockContentsView::Layout(PassKey) {
+  LayoutSuperclass<View>(this);
   LayoutTopHeader();
   LayoutBottomStatusIndicator();
   LayoutUserAddingScreenIndicator();
   LayoutPublicSessionView();
 
   if (users_list_) {
-    users_list_->Layout();
+    users_list_->DeprecatedLayoutImmediately();
   }
 }
 
@@ -618,8 +618,8 @@ void LockContentsView::AboutToRequestFocusFromTabTraversal(bool reverse) {
 void LockContentsView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   Shelf* shelf = Shelf::ForWindow(GetWidget()->GetNativeWindow());
   ShelfWidget* shelf_widget = shelf->shelf_widget();
-  GetViewAccessibility().OverrideNextFocus(shelf_widget);
-  GetViewAccessibility().OverridePreviousFocus(shelf->GetStatusAreaWidget());
+  GetViewAccessibility().SetNextFocus(shelf_widget);
+  GetViewAccessibility().SetPreviousFocus(shelf->GetStatusAreaWidget());
   node_data->role = ax::mojom::Role::kWindow;
   node_data->SetName(
       l10n_util::GetStringUTF16(screen_type_ == LockScreen::ScreenType::kLogin
@@ -737,7 +737,7 @@ void LockContentsView::ApplyUserChanges(
 
   // Force layout.
   PreferredSizeChanged();
-  Layout();
+  DeprecatedLayoutImmediately();
 
   // If one of the child views had focus before we deleted them, then this view
   // will get focused. Move focus back to the primary big view.
@@ -774,6 +774,11 @@ void LockContentsView::OnPinEnabledForUserChanged(const AccountId& user,
   UserState* state = FindStateForUser(user);
   if (!state) {
     LOG(ERROR) << "Unable to find user when changing PIN state to " << enabled;
+    return;
+  }
+  if (state->show_pin == enabled) {
+    LOG(WARNING)
+        << "Unexpected call to OnPinEnabledForUserChanged; state unchanged.";
     return;
   }
 
@@ -813,6 +818,12 @@ void LockContentsView::OnFingerprintStateChanged(const AccountId& account_id,
                                                  FingerprintState state) {
   UserState* user_state = FindStateForUser(account_id);
   if (!user_state) {
+    LOG(ERROR) << "Unable to find user when changing fingerprint state.";
+    return;
+  }
+  if (user_state->fingerprint_state == state) {
+    LOG(WARNING)
+        << "Unexpected call to OnFingerprintStateChanged; state unchanged.";
     return;
   }
 
@@ -1328,12 +1339,9 @@ void LockContentsView::FocusNextWidget(bool reverse) {
         ->status_area_widget_delegate()
         ->set_default_last_focusable_child(reverse);
     Shell::Get()->focus_cycler()->FocusWidget(shelf->GetStatusAreaWidget());
-  } else if (features::IsUseLoginShelfWidgetEnabled()) {
+  } else {
     shelf->login_shelf_widget()->SetDefaultLastFocusableChild(reverse);
     Shell::Get()->focus_cycler()->FocusWidget(shelf->login_shelf_widget());
-  } else {
-    shelf->shelf_widget()->set_default_last_focusable_child(reverse);
-    Shell::Get()->focus_cycler()->FocusWidget(shelf->shelf_widget());
   }
 }
 
@@ -1406,7 +1414,7 @@ void LockContentsView::HideMediaControlsLayout() {
   // Don't allow media keys to be used on lock screen since controls are hidden.
   Shell::Get()->media_controller()->SetMediaControlsDismissed(true);
 
-  Layout();
+  DeprecatedLayoutImmediately();
 }
 
 void LockContentsView::CreateMediaControlsLayout() {
@@ -1424,7 +1432,7 @@ void LockContentsView::CreateMediaControlsLayout() {
   AddDisplayLayoutAction(base::BindRepeating(
       &LockContentsView::SetMediaControlsSpacing, base::Unretained(this)));
 
-  Layout();
+  DeprecatedLayoutImmediately();
 }
 
 void LockContentsView::OnWillChangeFocus(View* focused_before,
@@ -1671,7 +1679,7 @@ void LockContentsView::DoLayout() {
     action.Run(landscape);
   }
 
-  // SizeToPreferredSize will call Layout().
+  // SizeToPreferredSize will trigger layout.
   SizeToPreferredSize();
 }
 
@@ -1682,7 +1690,7 @@ void LockContentsView::LayoutTopHeader() {
                                   note_action_->GetPreferredSize().height());
   top_header_->SetPreferredSize(gfx::Size(preferred_width, preferred_height));
   top_header_->SizeToPreferredSize();
-  top_header_->Layout();
+  top_header_->DeprecatedLayoutImmediately();
   // Position the top header - the origin is offset to the left from the top
   // right corner of the entire view by the width of this top header view.
   top_header_->SetPosition(GetLocalBounds().top_right() -
@@ -1703,7 +1711,7 @@ void LockContentsView::LayoutBottomStatusIndicator() {
   // If the management bubble is currently displayed, we need to re-layout it as
   // the bottom status indicator is its anchor view.
   if (management_bubble_->GetVisible()) {
-    management_bubble_->Layout();
+    management_bubble_->DeprecatedLayoutImmediately();
   }
 }
 
@@ -1927,7 +1935,7 @@ void LockContentsView::LayoutAuth(LoginBigUserView* to_update,
   capture_animation_state_pre_layout(opt_to_hide);
   enable_auth(to_update);
   disable_auth(opt_to_hide);
-  Layout();
+  DeprecatedLayoutImmediately();
   apply_animation_post_layout(to_update);
   apply_animation_post_layout(opt_to_hide);
   ongoing_auth_layout_ = false;
@@ -2166,7 +2174,7 @@ void LockContentsView::SetDisplayStyle(DisplayStyle style) {
   main_view_->SetVisible(!show_expanded_view);
   top_header_->SetVisible(!show_expanded_view);
   bottom_status_indicator_->SetVisible(!show_expanded_view);
-  Layout();
+  DeprecatedLayoutImmediately();
 }
 
 bool LockContentsView::OnKeyPressed(const ui::KeyEvent& event) {
@@ -2332,7 +2340,7 @@ void LockContentsView::RecordAndResetPasswordAttempts(
   unlock_attempt_by_user_[account_id] = 0;
 }
 
-BEGIN_METADATA(LockContentsView, NonAccessibleView)
+BEGIN_METADATA(LockContentsView)
 END_METADATA
 
 }  // namespace ash

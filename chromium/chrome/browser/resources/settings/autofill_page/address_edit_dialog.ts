@@ -16,8 +16,8 @@ import 'chrome://resources/cr_elements/md_select.css.js';
 import '../settings_shared.css.js';
 import '../settings_vars.css.js';
 
-import {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
-import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
+import type {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import type {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {flush, microTask, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -301,8 +301,7 @@ export class SettingsAddressEditDialogElement extends
           this.address.metadata.source === AddressSource.ACCOUNT;
     }
 
-    return this.accountInfo !== undefined &&
-        this.accountInfo.isEligibleForAddressAccountStorage;
+    return !!this.accountInfo?.isEligibleForAddressAccountStorage;
   }
 
   private getAccountAddressSourceNotice_(): string|undefined {
@@ -351,6 +350,9 @@ export class SettingsAddressEditDialogElement extends
   }
 
   private onCancelClick_(): void {
+    chrome.metricsPrivate.recordBoolean(
+        'Autofill.Settings.EditAddress',
+        /*confirmed=*/ false);
     this.$.dialog.cancel();
   }
 
@@ -370,6 +372,9 @@ export class SettingsAddressEditDialogElement extends
       this.address.fields.push({type: key, value: value});
     });
 
+    chrome.metricsPrivate.recordBoolean(
+        'Autofill.Settings.EditAddress',
+        /*confirmed=*/ true);
     this.fire_('save-address', this.address);
     this.$.dialog.close();
   }

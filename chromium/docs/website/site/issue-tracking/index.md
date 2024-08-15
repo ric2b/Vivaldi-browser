@@ -4,26 +4,19 @@ page_name: issue-tracking
 title: Issue Tracking
 ---
 
-Building this section back out, pulling in and re-writing all the existing bug
-related documentation under here.
-
 Topics
 
-*   [Auto-triage Rules for Bugs](/issue-tracking/autotriage)
-*   [Creating a Bug Template
-            URL](/issue-tracking/creating-a-bug-template-url)
 *   [Requesting a Component or
             Label](/issue-tracking/requesting-a-component-or-label)
 *   [Triage Best
             Practices](/for-testers/bug-reporting-guidelines/triage-best-practices)
-*   [How to Bulk Edit](/issue-tracking/how-to-bulk-edit)
+*   [How to Bulk Edit](https://developers.google.com/issue-tracker/guides/edit-issue-bulk)
 *   [Editing Components](/issue-tracking/editing-components)
-*   [Migrating Issue
-            Components](/issue-tracking/migrating-issue-components)
-*   [Monorail (Issue Tracker)
-            API](https://chromium.googlesource.com/infra/infra/+/HEAD/appengine/monorail/doc/api.md)
-*   [Tips and Tricks](/issue-tracking/tips-and-tricks)
+*   [Frequently Asked Questions](/for-testers/faq)
+*   [Issue Tracker Query Syntax for Monorail users](/for-testers/query-syntax)
+*   [Guidelines for Google Employees](/issue-tracking/googler-guidelines)
+
 
 Process
 
-*   [Release Block Guidelines](/issue-tracking/release-block-guidelines)
+*   [Release Block Guidelines](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/process/release_blockers.md)

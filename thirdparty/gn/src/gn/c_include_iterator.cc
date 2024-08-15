@@ -42,12 +42,11 @@ std::string_view TrimLeadingWhitespace(std::string_view str) {
 // We assume the line has leading whitespace trimmed. We also assume that empty
 // lines have already been filtered out.
 bool ShouldCountTowardNonIncludeLines(std::string_view line) {
-  if (base::StartsWith(line, "//", base::CompareCase::SENSITIVE))
+  if (line.starts_with("//"))
     return false;  // Don't count comments.
-  if (base::StartsWith(line, "/*", base::CompareCase::SENSITIVE) ||
-      base::StartsWith(line, " *", base::CompareCase::SENSITIVE))
+  if (line.starts_with("/*") || line.starts_with(" *"))
     return false;  // C-style comment blocks with stars along the left side.
-  if (base::StartsWith(line, "#", base::CompareCase::SENSITIVE))
+  if (line.starts_with("#"))
     return false;  // Don't count preprocessor.
   if (base::ContainsOnlyChars(line, base::kWhitespaceASCII))
     return false;  // Don't count whitespace lines.
@@ -78,11 +77,9 @@ IncludeType ExtractInclude(std::string_view line,
   trimmed = TrimLeadingWhitespace(trimmed.substr(1));
 
   std::string_view contents;
-  if (base::StartsWith(trimmed, std::string_view(kInclude, kIncludeLen),
-                       base::CompareCase::SENSITIVE))
+  if (trimmed.starts_with(std::string_view(kInclude, kIncludeLen)))
     contents = TrimLeadingWhitespace(trimmed.substr(kIncludeLen));
-  else if (base::StartsWith(trimmed, std::string_view(kImport, kImportLen),
-                            base::CompareCase::SENSITIVE))
+  else if (trimmed.starts_with(std::string_view(kImport, kImportLen)))
     contents = TrimLeadingWhitespace(trimmed.substr(kImportLen));
 
   if (contents.empty())

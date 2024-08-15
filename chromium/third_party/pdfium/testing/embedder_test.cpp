@@ -11,6 +11,12 @@
 #include <vector>
 
 #include "core/fdrm/fx_crypt.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
+#include "core/fxcrt/containers/contains.h"
+#include "core/fxcrt/notreached.h"
+#include "core/fxcrt/numerics/checked_math.h"
+#include "core/fxcrt/numerics/safe_conversions.h"
 #include "public/cpp/fpdf_scopers.h"
 #include "public/fpdf_dataavail.h"
 #include "public/fpdf_edit.h"
@@ -23,12 +29,6 @@
 #include "testing/utils/file_util.h"
 #include "testing/utils/hash.h"
 #include "testing/utils/path_service.h"
-#include "third_party/base/check.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/containers/contains.h"
-#include "third_party/base/notreached.h"
-#include "third_party/base/numerics/checked_math.h"
-#include "third_party/base/numerics/safe_conversions.h"
 
 namespace {
 
@@ -227,9 +227,9 @@ FPDF_FILEHANDLER* DownloadFromURLStub(FPDF_FORMFILLINFO* pThis,
   static FPDF_FILEHANDLER kFakeFileHandler = {
       nullptr,
       [](void*) -> void {},
-      [](void*) -> FPDF_DWORD { return sizeof(kString); },
+      [](void*) -> FPDF_DWORD { return sizeof(kString) - 1; },
       [](void*, FPDF_DWORD off, void* buffer, FPDF_DWORD size) -> FPDF_RESULT {
-        memcpy(buffer, kString, std::min<size_t>(size, sizeof(kString)));
+        memcpy(buffer, kString, std::min<size_t>(size, sizeof(kString) - 1));
         return 0;
       },
       [](void*, FPDF_DWORD, const void*, FPDF_DWORD) -> FPDF_RESULT {
@@ -343,7 +343,7 @@ bool EmbedderTest::OpenDocumentWithOptions(const std::string& filename,
 
   memset(&file_access_, 0, sizeof(file_access_));
   file_access_.m_FileLen =
-      pdfium::base::checked_cast<unsigned long>(file_contents_.size());
+      pdfium::checked_cast<unsigned long>(file_contents_.size());
   file_access_.m_GetBlock = TestLoader::GetBlock;
   file_access_.m_Param = loader_.get();
 
@@ -632,7 +632,7 @@ std::string EmbedderTest::GetPostScriptFromEmf(
     pdfium::span<const uint8_t> emf_data) {
   // This comes from Emf::InitFromData() in Chromium.
   HENHMETAFILE emf = SetEnhMetaFileBits(
-      pdfium::base::checked_cast<UINT>(emf_data.size()), emf_data.data());
+      pdfium::checked_cast<UINT>(emf_data.size()), emf_data.data());
   if (!emf)
     return std::string();
 
@@ -686,7 +686,7 @@ FPDF_DOCUMENT EmbedderTest::OpenSavedDocumentWithPassword(
     const char* password) {
   memset(&saved_file_access_, 0, sizeof(saved_file_access_));
   saved_file_access_.m_FileLen =
-      pdfium::base::checked_cast<unsigned long>(data_string_.size());
+      pdfium::checked_cast<unsigned long>(data_string_.size());
   saved_file_access_.m_GetBlock = GetBlockFromString;
   // Copy data to prevent clearing it before saved document close.
   saved_document_file_data_ = data_string_;
@@ -849,7 +849,7 @@ int EmbedderTest::GetBlockFromString(void* param,
   std::string* new_file = static_cast<std::string*>(param);
   CHECK(new_file);
 
-  pdfium::base::CheckedNumeric<size_t> end = pos;
+  pdfium::CheckedNumeric<size_t> end = pos;
   end += size;
   CHECK_LE(end.ValueOrDie(), new_file->size());
 

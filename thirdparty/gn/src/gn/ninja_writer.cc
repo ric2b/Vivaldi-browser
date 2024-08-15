@@ -32,7 +32,7 @@ bool NinjaWriter::WriteToolchains(const PerToolchainRules& per_toolchain_rules,
                                   Err* err) {
   if (per_toolchain_rules.empty()) {
     *err = Err(Location(), "No targets.",
-        "I could not find any targets to write, so I'm doing nothing.");
+               "I could not find any targets to write, so I'm doing nothing.");
     return false;
   }
 

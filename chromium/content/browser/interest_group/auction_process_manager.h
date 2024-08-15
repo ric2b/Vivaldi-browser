@@ -137,7 +137,8 @@ class CONTENT_EXPORT AuctionProcessManager {
 
     // Entry in the corresponding PendingRequestQueue if the handle has yet to
     // be assigned a process.
-    std::list<ProcessHandle*>::iterator queued_request_;
+    std::list<raw_ptr<ProcessHandle, CtnExperimental>>::iterator
+        queued_request_;
 
     base::WeakPtrFactory<ProcessHandle> weak_ptr_factory_{this};
   };
@@ -228,14 +229,16 @@ class CONTENT_EXPORT AuctionProcessManager {
   // bidder further up the queue with a matching owner receives a process).
   // ProcessHandles are owned by consumers, and destroyed when they no longer
   // need to keep their processes alive.
-  using PendingRequestQueue = std::list<ProcessHandle*>;
+  using PendingRequestQueue =
+      std::list<raw_ptr<ProcessHandle, CtnExperimental>>;
 
   // Contains ProcessHandles for bidder or seller requests which have not yet
   // been assigned processes, indexed by origin. When the request in the
   // PendingRequestQueue is assigned a process, all requests that can use the
   // same process are assigned the same process. This map is used to manage that
   // without searching through the entire queue.
-  using PendingRequestMap = std::map<url::Origin, std::set<ProcessHandle*>>;
+  using PendingRequestMap =
+      std::map<url::Origin, std::set<raw_ptr<ProcessHandle, SetExperimental>>>;
 
   // Contains running processes. Worklet processes are refcounted, and
   // automatically remove themselves from this list when destroyed.

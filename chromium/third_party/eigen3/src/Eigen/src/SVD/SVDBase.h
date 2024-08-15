@@ -139,7 +139,7 @@ class SVDBase : public SolverBase<SVDBase<Derived> > {
     MaxRowsAtCompileTime = MatrixType::MaxRowsAtCompileTime,
     MaxColsAtCompileTime = MatrixType::MaxColsAtCompileTime,
     MaxDiagSizeAtCompileTime = internal::min_size_prefer_fixed(MaxRowsAtCompileTime, MaxColsAtCompileTime),
-    MatrixOptions = MatrixType::Options,
+    MatrixOptions = internal::traits<MatrixType>::Options,
     MatrixUColsAtCompileTime = internal::traits<Derived>::MatrixUColsAtCompileTime,
     MatrixVColsAtCompileTime = internal::traits<Derived>::MatrixVColsAtCompileTime,
     MatrixUMaxColsAtCompileTime = internal::traits<Derived>::MatrixUMaxColsAtCompileTime,

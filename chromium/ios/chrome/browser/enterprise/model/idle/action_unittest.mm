@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/enterprise/model/idle/action.h"
 
+#import "base/memory/raw_ptr.h"
 #import "base/test/gmock_callback_support.h"
 #import "base/test/metrics/histogram_tester.h"
 #import "base/test/mock_callback.h"
@@ -102,11 +103,10 @@ class IdleActionTest : public PlatformTest {
       auto web_state = CreateFakeWebStateWithURL(GURL(urls[i]));
       auto incognito_web_state = CreateFakeWebStateWithURL(GURL(urls[i]));
       browser_->GetWebStateList()->InsertWebState(
-          i, std::move(web_state), WebStateList::INSERT_FORCE_INDEX,
-          WebStateOpener());
+          std::move(web_state), WebStateList::InsertionParams::AtIndex(i));
       incognito_browser_->GetWebStateList()->InsertWebState(
-          i, std::move(incognito_web_state), WebStateList::INSERT_FORCE_INDEX,
-          WebStateOpener());
+          std::move(incognito_web_state),
+          WebStateList::InsertionParams::AtIndex(i));
     }
   }
 
@@ -140,7 +140,7 @@ class IdleActionTest : public PlatformTest {
 
  protected:
   web::WebTaskEnvironment task_environment_;
-  AuthenticationService* authentication_service_;
+  raw_ptr<AuthenticationService> authentication_service_;
   // ScopedTestingLocalState needed for the authentication service.
   IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   std::unique_ptr<ActionFactory> action_factory_;

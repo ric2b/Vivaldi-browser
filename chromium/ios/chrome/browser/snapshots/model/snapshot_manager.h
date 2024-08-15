@@ -9,7 +9,7 @@
 
 class SnapshotID;
 @class SnapshotStorage;
-@class SnapshotGenerator;
+@class LegacySnapshotGenerator;
 @protocol SnapshotGeneratorDelegate;
 
 // A class that takes care of creating, storing and returning snapshots of a
@@ -18,7 +18,7 @@ class SnapshotID;
 
 // Strong reference to the snapshot generator which is used to generate
 // snapshots.
-@property(nonatomic, readonly) SnapshotGenerator* snapshotGenerator;
+@property(nonatomic, readonly) LegacySnapshotGenerator* snapshotGenerator;
 
 // Weak reference to the snapshot storage which is used to store and retrieve
 // snapshots. SnapshotStorage is owned by SnapshotBrowserAgent.
@@ -28,7 +28,7 @@ class SnapshotID;
 @property(nonatomic, readonly) SnapshotID snapshotID;
 
 // Designated initializer.
-- (instancetype)initWithGenerator:(SnapshotGenerator*)generator
+- (instancetype)initWithGenerator:(LegacySnapshotGenerator*)generator
                        snapshotID:(SnapshotID)snapshotID
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
@@ -49,15 +49,6 @@ class SnapshotID;
 // Generates and returns a new snapshot image with UIKit-based snapshot API.
 // This does not update the snapshot storage.
 - (UIImage*)generateUIViewSnapshot;
-
-// Hints that the snapshot will likely be saved to disk when the application is
-// backgrounded.  The snapshot is then saved in memory, so it does not need to
-// be read off disk.
-- (void)willBeSavedGreyWhenBackgrounding;
-
-// Writes a grey copy of the snapshot to disk, but if and only if a color
-// version of the snapshot already exists in memory or on disk.
-- (void)saveGreyInBackground;
 
 // Requests deletion of the current page snapshot from disk and memory.
 - (void)removeSnapshot;

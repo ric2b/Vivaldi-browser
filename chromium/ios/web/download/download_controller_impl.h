@@ -9,6 +9,7 @@
 
 #include <set>
 
+#import "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
 #include "base/supports_user_data.h"
@@ -38,14 +39,6 @@ class DownloadControllerImpl : public DownloadController,
   ~DownloadControllerImpl() override;
 
   // DownloadController overrides:
-  void CreateDownloadTask(WebState* web_state,
-                          NSString* identifier,
-                          const GURL& original_url,
-                          NSString* http_method,
-                          const std::string& content_disposition,
-                          int64_t total_bytes,
-                          const std::string& mime_type) override;
-
   void CreateNativeDownloadTask(WebState* web_state,
                                 NSString* identifier,
                                 const GURL& original_url,
@@ -54,6 +47,10 @@ class DownloadControllerImpl : public DownloadController,
                                 int64_t total_bytes,
                                 const std::string& mime_type,
                                 DownloadNativeTaskBridge* download) override;
+
+  void CreateWebStateDownloadTask(WebState* web_state,
+                                  NSString* identifier,
+                                  int64_t total_bytes) override;
 
   void SetDelegate(DownloadControllerDelegate* delegate) override;
   DownloadControllerDelegate* GetDelegate() const override;
@@ -68,7 +65,7 @@ class DownloadControllerImpl : public DownloadController,
   // Set of tasks which are currently alive.
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   std::set<DownloadTask*> alive_tasks_;
-  DownloadControllerDelegate* delegate_ = nullptr;
+  raw_ptr<DownloadControllerDelegate> delegate_ = nullptr;
 
   SEQUENCE_CHECKER(sequence_checker_);
 };

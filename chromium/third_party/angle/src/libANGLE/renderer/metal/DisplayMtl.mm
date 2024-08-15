@@ -422,7 +422,7 @@ ExternalImageSiblingImpl *DisplayMtl::createExternalImageSibling(const gl::Conte
     switch (target)
     {
         case EGL_METAL_TEXTURE_ANGLE:
-            return new TextureImageSiblingMtl(buffer);
+            return new TextureImageSiblingMtl(buffer, attribs);
 
         default:
             UNREACHABLE();
@@ -682,16 +682,11 @@ egl::Error DisplayMtl::validateImageClientBuffer(const gl::Context *context,
     switch (target)
     {
         case EGL_METAL_TEXTURE_ANGLE:
-            if (!TextureImageSiblingMtl::ValidateClientBuffer(this, clientBuffer))
-            {
-                return egl::EglBadAttribute();
-            }
-            break;
+            return TextureImageSiblingMtl::ValidateClientBuffer(this, clientBuffer, attribs);
         default:
             UNREACHABLE();
             return egl::EglBadAttribute();
     }
-    return egl::NoError();
 }
 
 gl::Caps DisplayMtl::getNativeCaps() const
@@ -1243,8 +1238,8 @@ void DisplayMtl::initializeFeatures()
     bool isSimulator = TARGET_OS_SIMULATOR;
     bool isARM       = ANGLE_APPLE_IS_ARM;
 
-    ApplyFeatureOverrides(&mFeatures, getState());
-    if (mState.featuresAllDisabled)
+    ApplyFeatureOverrides(&mFeatures, getState().featureOverrides);
+    if (mState.featureOverrides.allDisabled)
     {
         return;
     }
@@ -1371,6 +1366,12 @@ void DisplayMtl::initializeFeatures()
     // anyway, so this feature would have no benefit besides adding additional resolve step and
     // memory overhead of the hidden single-sampled textures.
     ANGLE_FEATURE_CONDITION((&mFeatures), alwaysResolveMultisampleRenderBuffers, isARM);
+
+    // Metal compiler optimizations may remove infinite loops causing crashes later in shader
+    // execution. http://crbug.com/1513738
+    // Disabled on Mac11 due to test failures. http://crbug.com/1522730
+    ANGLE_FEATURE_CONDITION((&mFeatures), injectAsmStatementIntoLoopBodies,
+                            GetMacOSVersion() >= OSVersion(12, 0, 0));
 }
 
 angle::Result DisplayMtl::initializeShaderLibrary()

@@ -214,11 +214,6 @@ class LayerTreeHostImplForTesting : public LayerTreeHostImpl {
     test_hooks_->WillSendBeginMainFrameOnThread(this);
   }
 
-  void DidSendBeginMainFrame(const viz::BeginFrameArgs& args) override {
-    LayerTreeHostImpl::DidSendBeginMainFrame(args);
-    test_hooks_->DidSendBeginMainFrameOnThread(this);
-  }
-
   void BeginMainFrameAborted(
       CommitEarlyOutReason reason,
       std::vector<std::unique_ptr<SwapPromise>> swap_promises,
@@ -511,7 +506,7 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
   void BeginMainFrameNotExpectedUntil(base::TimeTicks time) override {}
   void DidPresentCompositorFrame(
       uint32_t frame_token,
-      const gfx::PresentationFeedback& feedback) override {}
+      const viz::FrameTimingDetails& frame_timing_details) override {}
 
  private:
   explicit LayerTreeHostClientForTesting(TestHooks* test_hooks)

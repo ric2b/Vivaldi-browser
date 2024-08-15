@@ -231,7 +231,7 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//include/utils/mac:public_hdrs"}},
 		{Var: "skia_utils_chromium",
 			Rules: []string{
-				"//include/docs:chromium_hdrs",
+				"//include/docs:multi_picture_document_hdrs",
 				"//src/utils:chromium_hdrs"}},
 		{Var: "skia_utils_private",
 			Rules: []string{
@@ -342,7 +342,8 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			}},
 		{Var: "skia_gpu_vk_public",
 			Rules: []string{
-				"//include/gpu/vk:public_hdrs",
+				"//include/gpu/vk:ganesh_public_hdrs",
+				"//include/gpu/vk:shared_public_hdrs",
 				"//include/gpu/ganesh/vk:public_hdrs",
 			}},
 		{Var: "skia_gpu_vk_chromium_public",
@@ -372,6 +373,7 @@ var gniExportDescs = []exporter.GNIExportDesc{
 		{Var: "skia_gpu_metal_public",
 			Rules: []string{
 				"//include/gpu/mtl:public_hdrs",
+				"//include/gpu/ganesh/mtl:public_hdrs",
 			}},
 		{Var: "skia_gpu_metal_private",
 			Rules: []string{
@@ -386,9 +388,11 @@ var gniExportDescs = []exporter.GNIExportDesc{
 		{Var: "skia_native_gpu_sources",
 			Rules: []string{
 				"//include/gpu/gl/egl:public_hdrs",
+				"//include/gpu/gl/epoxy:public_hdrs",
 				"//include/gpu/gl/glx:public_hdrs",
 				"//src/gpu/ganesh/gl/android:srcs",
 				"//src/gpu/ganesh/gl/egl:srcs",
+				"//src/gpu/ganesh/gl/epoxy:srcs",
 				"//src/gpu/ganesh/gl/glx:srcs",
 				"//src/gpu/ganesh/gl/iOS:srcs",
 				"//src/gpu/ganesh/gl/mac:srcs",
@@ -410,7 +414,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			}},
 		{Var: "skia_shared_vk_sources",
 			Rules: []string{
-				"//include/gpu/vk:shared_public_hdrs",
 				"//include/private/gpu/vk:private_hdrs",
 				"//src/gpu/vk:vk_hdrs",
 				"//src/gpu/vk:vk_srcs"}},
@@ -525,6 +528,7 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//modules/skottie/src/layers:srcs",
 				"//modules/skottie/src/layers/shapelayer:srcs",
 				"//modules/skottie/src/text:srcs",
+				"//modules/skottie/src/text:text_shaper_srcs",
 			}},
 	}},
 	{GNI: "modules/skcms/skcms.gni", Vars: []exporter.GNIFileListExportDesc{

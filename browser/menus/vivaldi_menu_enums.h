@@ -41,6 +41,12 @@
 #define IDC_VIV_OPEN_IMAGE_IN_PROFILE_FIRST 56050
 #define IDC_VIV_OPEN_IMAGE_IN_PROFILE_LAST 56150
 // Menu ids starts from this base. Some may be overriden by those above.
+// For clarity: Items in a menu spec from JS have ids starting from 0. An id
+// number is added to IDC_VIV_MENU_FIRST when we prepare the menu.
+// IDC_VIV_MENU_FIRST is picked so that it (and all the way up to
+// IDC_VIVALDI_MENU_ENUMS_END) will not conflict with hardcoded chromium ids.
+// When a menu action is executed - and if action is to be handled in JS - the
+// id will be subtracted by IDC_VIV_MENU_FIRST before notifying JS.
 #define IDC_VIV_MENU_FIRST 56160
 
 #define IDC_VIVALDI_MENU_ENUMS_END 57000

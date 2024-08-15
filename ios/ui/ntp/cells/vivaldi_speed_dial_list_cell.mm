@@ -133,7 +133,8 @@ const UIEdgeInsets faviconFallbackLabelPadding =
   UILabel* titleLabel = [[UILabel alloc] init];
   _titleLabel = titleLabel;
   titleLabel.textColor = [UIColor colorNamed:vNTPSpeedDialDomainTextColor];
-  titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+  titleLabel.font =
+      [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
   titleLabel.numberOfLines = 1;
   titleLabel.textAlignment = NSTextAlignmentLeft;
 

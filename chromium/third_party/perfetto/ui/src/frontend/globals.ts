@@ -14,13 +14,7 @@
 
 import {BigintMath} from '../base/bigint_math';
 import {assertExists} from '../base/logging';
-import {
-  duration,
-  Span,
-  Time,
-  time,
-  TimeSpan,
-} from '../base/time';
+import {duration, Span, Time, time, TimeSpan} from '../base/time';
 import {Actions, DeferredAction} from '../common/actions';
 import {AggregateData} from '../common/aggregation_data';
 import {Args} from '../common/arg_types';
@@ -29,6 +23,7 @@ import {
   ConversionJobName,
   ConversionJobStatus,
 } from '../common/conversion_jobs';
+import {createEmptyState} from '../common/empty_state';
 import {
   HighPrecisionTime,
   HighPrecisionTimeSpan,
@@ -43,7 +38,10 @@ import {
   RESOLUTION_DEFAULT,
   State,
 } from '../common/state';
+import {TabManager} from '../common/tab_registry';
 import {TimestampFormat, timestampFormat} from '../common/timestamp_format';
+import {TrackManager} from '../common/track_cache';
+import {TABS_V2_FLAG} from '../core/feature_flags';
 import {setPerfHooks} from '../core/perf';
 import {raf} from '../core/raf_scheduler';
 import {Engine} from '../trace_processor/engine';
@@ -64,7 +62,7 @@ const INCOMPLETE_SLICE_DURATION = 30_000n;
 
 type Dispatch = (action: DeferredAction) => void;
 type TrackDataStore = Map<string, {}>;
-type QueryResultsStore = Map<string, {}|undefined>;
+type QueryResultsStore = Map<string, {} | undefined>;
 type AggregateDataStore = Map<string, AggregateData>;
 type Description = Map<string, string>;
 
@@ -75,7 +73,7 @@ export interface SliceDetails {
   threadTs?: time;
   threadDur?: duration;
   priority?: number;
-  endState?: string|null;
+  endState?: string | null;
   cpu?: number;
   id?: number;
   threadStateId?: number;
@@ -194,15 +192,15 @@ export interface FtraceEvent {
   ts: time;
   name: string;
   cpu: number;
-  thread: string|null;
-  process: string|null;
+  thread: string | null;
+  process: string | null;
   args: string;
 }
 
 export interface FtracePanelData {
   events: FtraceEvent[];
   offset: number;
-  numEvents: number;  // Number of events in the visible window
+  numEvents: number; // Number of events in the visible window
 }
 
 export interface FtraceStat {
@@ -227,15 +225,12 @@ function getRoot() {
 
 // Options for globals.makeSelection().
 export interface MakeSelectionOpts {
-  // The ID of the next tab to reveal, or null to keep the current tab.
-  // If undefined, the 'current_selection' tab will be revealed.
-  tab?: string|null;
+  // Whether to switch to the current selection tab or not. Default = true.
+  switchToCurrentSelectionTab?: boolean;
 
   // Whether to cancel the current search selection. Default = true.
   clearSearch?: boolean;
 }
-
-type OpenQueryHandler = (query: string, title: string, tag?: string) => void;
 
 /**
  * Global accessors for state/dispatch in the frontend.
@@ -247,11 +242,11 @@ class Globals {
 
   private _testing = false;
   private _dispatch?: Dispatch = undefined;
-  private _store?: Store<State>;
+  private _store = createStore(createEmptyState());
   private _timeline?: Timeline = undefined;
   private _serviceWorkerController?: ServiceWorkerController = undefined;
   private _logging?: Analytics = undefined;
-  private _isInternalUser: boolean|undefined = undefined;
+  private _isInternalUser: boolean | undefined = undefined;
 
   // TODO(hjd): Unify trackDataStore, queryResults, overviewStore, threads.
   private _trackDataStore?: TrackDataStore = undefined;
@@ -279,13 +274,14 @@ class Globals {
   private _hideSidebar?: boolean = undefined;
   private _ftraceCounters?: FtraceStat[] = undefined;
   private _ftracePanelData?: FtracePanelData = undefined;
-  private _cmdManager?: CommandManager = undefined;
+  private _cmdManager = new CommandManager();
   private _realtimeOffset = Time.ZERO;
   private _utcOffset = Time.ZERO;
   private _traceTzOffset = Time.ZERO;
-  private _openQueryHandler?: OpenQueryHandler;
+  private _tabManager = new TabManager();
+  private _trackManager = new TrackManager(this._store);
 
-  scrollToTrackKey?: string|number;
+  scrollToTrackKey?: string | number;
   httpRpcState: HttpRpcState = {connected: false};
   newVersionAvailable = false;
   showPanningHint = false;
@@ -309,23 +305,20 @@ class Globals {
 
   engines = new Map<string, Engine>();
 
-  initialize(
-      dispatch: Dispatch, router: Router, initialState: State,
-      cmdManager: CommandManager) {
+  initialize(dispatch: Dispatch, router: Router) {
     this._dispatch = dispatch;
     this._router = router;
-    this._store = createStore(initialState);
-    this._cmdManager = cmdManager;
     this._timeline = new Timeline();
 
     setPerfHooks(
-        () => this.state.perfDebug,
-        () => this.dispatch(Actions.togglePerfDebug({})));
+      () => this.state.perfDebug,
+      () => this.dispatch(Actions.togglePerfDebug({})),
+    );
 
     this._serviceWorkerController = new ServiceWorkerController();
     this._testing =
-        /* eslint-disable @typescript-eslint/strict-boolean-expressions */
-        self.location && self.location.search.indexOf('testing=1') >= 0;
+      /* eslint-disable @typescript-eslint/strict-boolean-expressions */
+      self.location && self.location.search.indexOf('testing=1') >= 0;
     /* eslint-enable */
     this._logging = initAnalytics();
 
@@ -531,11 +524,11 @@ class Globals {
     return Boolean(this._ftraceCounters && this._ftraceCounters.length > 0);
   }
 
-  get ftraceCounters(): FtraceStat[]|undefined {
+  get ftraceCounters(): FtraceStat[] | undefined {
     return this._ftraceCounters;
   }
 
-  set ftraceCounters(value: FtraceStat[]|undefined) {
+  set ftraceCounters(value: FtraceStat[] | undefined) {
     this._ftraceCounters = value;
   }
 
@@ -614,33 +607,38 @@ class Globals {
     return BigintMath.bitFloor(timePerPx.toTime('floor'));
   }
 
-  getCurrentEngine(): EngineConfig|undefined {
+  getCurrentEngine(): EngineConfig | undefined {
     return this.state.engine;
   }
 
-  get ftracePanelData(): FtracePanelData|undefined {
+  get ftracePanelData(): FtracePanelData | undefined {
     return this._ftracePanelData;
   }
 
-  set ftracePanelData(data: FtracePanelData|undefined) {
+  set ftracePanelData(data: FtracePanelData | undefined) {
     this._ftracePanelData = data;
   }
 
   makeSelection(action: DeferredAction<{}>, opts: MakeSelectionOpts = {}) {
-    const {
-      tab = 'current_selection',
-      clearSearch = true,
-    } = opts;
+    const {switchToCurrentSelectionTab = true, clearSearch = true} = opts;
 
     const previousState = this.state;
+
+    const currentSelectionTabUri = 'current_selection';
 
     // A new selection should cancel the current search selection.
     clearSearch && globals.dispatch(Actions.setSearchIndex({index: -1}));
 
-    if (action.type === 'deselect') {
-      globals.dispatch(Actions.setCurrentTab({tab: undefined}));
-    } else if (tab !== null) {
-      globals.dispatch(Actions.setCurrentTab({tab}));
+    if (TABS_V2_FLAG.get()) {
+      if (action.type !== 'deselect' && switchToCurrentSelectionTab) {
+        globals.dispatch(Actions.showTab({uri: currentSelectionTabUri}));
+      }
+    } else {
+      if (action.type === 'deselect') {
+        globals.dispatch(Actions.setCurrentTab({tab: undefined}));
+      } else if (switchToCurrentSelectionTab) {
+        globals.dispatch(Actions.setCurrentTab({tab: currentSelectionTabUri}));
+      }
     }
     globals.dispatch(action);
 
@@ -651,14 +649,14 @@ class Globals {
       // the set of selected tracks via toggling per-track checkboxes.
       // Fix that.
       onSelectionChanged(
-          this.state.currentSelection ?? undefined,
-          tab === 'current_selection');
+        this.state.currentSelection ?? undefined,
+        switchToCurrentSelectionTab,
+      );
     }
   }
 
   resetForTesting() {
     this._dispatch = undefined;
-    this._store = undefined;
     this._timeline = undefined;
     this._serviceWorkerController = undefined;
 
@@ -746,7 +744,6 @@ class Globals {
     return assertExists(this._cmdManager);
   }
 
-
   // This is the ts value at the time of the Unix epoch.
   // Normally some large negative value, because the unix epoch is normally in
   // the past compared to ts=0.
@@ -778,6 +775,14 @@ class Globals {
     this._traceTzOffset = offset;
   }
 
+  get tabManager() {
+    return this._tabManager;
+  }
+
+  get trackManager() {
+    return this._trackManager;
+  }
+
   // Offset between t=0 and the configured time domain.
   timestampOffset(): time {
     const fmt = timestampFormat();
@@ -803,14 +808,16 @@ class Globals {
     return Time.sub(ts, this.timestampOffset());
   }
 
-  findTimeRangeOfSelection(): {start: time, end: time} {
+  findTimeRangeOfSelection(): {start: time; end: time} {
     const selection = this.state.currentSelection;
     let start = Time.INVALID;
     let end = Time.INVALID;
     if (selection === null) {
       return {start, end};
     } else if (
-        selection.kind === 'SLICE' || selection.kind === 'CHROME_SLICE') {
+      selection.kind === 'SLICE' ||
+      selection.kind === 'CHROME_SLICE'
+    ) {
       const slice = this.sliceDetails;
       if (slice.ts && slice.dur !== undefined && slice.dur > 0) {
         start = slice.ts;
@@ -820,8 +827,10 @@ class Globals {
         // This will handle either:
         // a)slice.dur === -1 -> unfinished slice
         // b)slice.dur === 0  -> instant event
-        end = slice.dur === -1n ? Time.add(start, INCOMPLETE_SLICE_DURATION) :
-                                  Time.add(start, INSTANT_FOCUS_DURATION);
+        end =
+          slice.dur === -1n
+            ? Time.add(start, INCOMPLETE_SLICE_DURATION)
+            : Time.add(start, INSTANT_FOCUS_DURATION);
       }
     } else if (selection.kind === 'THREAD_STATE') {
       const threadState = this.threadStateDetails;
@@ -861,22 +870,6 @@ class Globals {
     }
 
     return {start, end};
-  }
-
-  // The implementation of the query results tab is not part of the core so we
-  // decouple globals from the implementation using this registration interface.
-  // Once we move the implementation to a plugin, this decoupling will be
-  // simpler as we just need to call a command with a well-known ID, and a
-  // plugin will provide the implementation.
-  registerOpenQueryHandler(cb: OpenQueryHandler) {
-    this._openQueryHandler = cb;
-  }
-
-  // Runs a query and displays results in a new tab.
-  // Queries will override previously opened queries with the same tag.
-  // If the tag is omitted, the results will always open in a new tab.
-  openQuery(query: string, title: string, tag?: string) {
-    assertExists(this._openQueryHandler)(query, title, tag);
   }
 
   panToTimestamp(ts: time): void {

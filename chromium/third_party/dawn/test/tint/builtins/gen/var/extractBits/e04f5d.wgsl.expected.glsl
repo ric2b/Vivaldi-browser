@@ -8,6 +8,7 @@ ivec3 tint_extract_bits(ivec3 v, uint offset, uint count) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   ivec3 inner;
+  uint pad;
 } prevent_dce;
 
 void extractBits_e04f5d() {
@@ -33,6 +34,7 @@ void main() {
 }
 #version 310 es
 precision highp float;
+precision highp int;
 
 ivec3 tint_extract_bits(ivec3 v, uint offset, uint count) {
   uint s = min(offset, 32u);
@@ -42,6 +44,7 @@ ivec3 tint_extract_bits(ivec3 v, uint offset, uint count) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   ivec3 inner;
+  uint pad;
 } prevent_dce;
 
 void extractBits_e04f5d() {
@@ -70,6 +73,7 @@ ivec3 tint_extract_bits(ivec3 v, uint offset, uint count) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   ivec3 inner;
+  uint pad;
 } prevent_dce;
 
 void extractBits_e04f5d() {

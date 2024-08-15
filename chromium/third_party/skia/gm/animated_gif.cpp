@@ -16,7 +16,7 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/utils/SkAnimCodecPlayer.h"
+#include "modules/skresources/src/SkAnimCodecPlayer.h"
 #include "src/core/SkOSFile.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
@@ -26,6 +26,8 @@
 #include <memory>
 #include <utility>
 #include <vector>
+
+#if defined(SK_ENABLE_SKOTTIE)
 
 static DEFINE_string(animatedGif, "images/test640x479.gif", "Animated gif in resources folder");
 
@@ -294,3 +296,5 @@ public:
 DEF_GM(return new AnimCodecPlayerExifGM("images/required.webp");)
 DEF_GM(return new AnimCodecPlayerExifGM("images/required.gif");)
 DEF_GM(return new AnimCodecPlayerExifGM("images/stoplight_h.webp");)
+
+#endif

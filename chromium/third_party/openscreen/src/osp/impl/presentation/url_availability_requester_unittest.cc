@@ -80,12 +80,12 @@ class UrlAvailabilityRequesterTest : public Test {
   }
 
   void ExpectStreamMessage(MockMessageCallback* mock_callback,
-                           msgs::PresentationUrlAvailabilityRequest* request) {
+                           msgs::PresentationUrlAvailabilityRequest& request) {
     EXPECT_CALL(*mock_callback, OnStreamMessage(_, _, _, _, _, _))
         .WillOnce(
-            Invoke([request](uint64_t endpoint_id, uint64_t cid,
-                             msgs::Type message_type, const uint8_t* buffer,
-                             size_t buffer_size, Clock::time_point now) {
+            Invoke([&request](uint64_t endpoint_id, uint64_t cid,
+                              msgs::Type message_type, const uint8_t* buffer,
+                              size_t buffer_size, Clock::time_point now) {
               ssize_t request_result_size =
                   msgs::DecodePresentationUrlAvailabilityRequest(
                       buffer, buffer_size, request);
@@ -143,7 +143,7 @@ TEST_F(UrlAvailabilityRequesterTest, AvailableObserverFirst) {
   listener_.AddReceiver(info1_);
 
   msgs::PresentationUrlAvailabilityRequest request;
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
 
   std::unique_ptr<ProtocolConnection> stream = ExpectIncomingConnection();
   ASSERT_TRUE(stream);
@@ -167,7 +167,7 @@ TEST_F(UrlAvailabilityRequesterTest, AvailableReceiverFirst) {
   listener_.AddObserver({url1_}, &mock_observer);
 
   msgs::PresentationUrlAvailabilityRequest request;
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
 
   std::unique_ptr<ProtocolConnection> stream = ExpectIncomingConnection();
   ASSERT_TRUE(stream);
@@ -191,7 +191,7 @@ TEST_F(UrlAvailabilityRequesterTest, Unavailable) {
   listener_.AddObserver({url1_}, &mock_observer);
 
   msgs::PresentationUrlAvailabilityRequest request;
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
 
   std::unique_ptr<ProtocolConnection> stream = ExpectIncomingConnection();
   ASSERT_TRUE(stream);
@@ -214,7 +214,7 @@ TEST_F(UrlAvailabilityRequesterTest, AvailabilityIsCached) {
   listener_.AddObserver({url1_}, &mock_observer1);
 
   msgs::PresentationUrlAvailabilityRequest request;
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
 
   std::unique_ptr<ProtocolConnection> stream = ExpectIncomingConnection();
   ASSERT_TRUE(stream);
@@ -242,7 +242,7 @@ TEST_F(UrlAvailabilityRequesterTest, AvailabilityCacheIsTransient) {
   listener_.AddObserver({url1_}, &mock_observer1);
 
   msgs::PresentationUrlAvailabilityRequest request;
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
 
   std::unique_ptr<ProtocolConnection> stream = ExpectIncomingConnection();
   ASSERT_TRUE(stream);
@@ -272,7 +272,7 @@ TEST_F(UrlAvailabilityRequesterTest, PartiallyCachedAnswer) {
   listener_.AddObserver({url1_}, &mock_observer1);
 
   msgs::PresentationUrlAvailabilityRequest request;
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
 
   std::unique_ptr<ProtocolConnection> stream = ExpectIncomingConnection();
   ASSERT_TRUE(stream);
@@ -292,7 +292,7 @@ TEST_F(UrlAvailabilityRequesterTest, PartiallyCachedAnswer) {
   EXPECT_CALL(mock_observer2, OnReceiverUnavailable(url1_, service_id_));
   listener_.AddObserver({url1_, url2_}, &mock_observer2);
 
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
   quic_bridge_.RunTasksUntilIdle();
 
   EXPECT_EQ(std::vector<std::string>{url2_}, request.urls);
@@ -313,7 +313,7 @@ TEST_F(UrlAvailabilityRequesterTest, MultipleOverlappingObservers) {
   listener_.AddObserver({url1_}, &mock_observer1);
 
   msgs::PresentationUrlAvailabilityRequest request;
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
 
   std::unique_ptr<ProtocolConnection> stream = ExpectIncomingConnection();
   ASSERT_TRUE(stream);
@@ -332,7 +332,7 @@ TEST_F(UrlAvailabilityRequesterTest, MultipleOverlappingObservers) {
   MockReceiverObserver mock_observer2;
   EXPECT_CALL(mock_observer2, OnReceiverAvailable(url1_, service_id_));
   listener_.AddObserver({url1_, url2_}, &mock_observer2);
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
   quic_bridge_.RunTasksUntilIdle();
 
   EXPECT_EQ(std::vector<std::string>{url2_}, request.urls);
@@ -354,7 +354,7 @@ TEST_F(UrlAvailabilityRequesterTest, RemoveObserverUrls) {
   listener_.AddObserver({url1_}, &mock_observer1);
 
   msgs::PresentationUrlAvailabilityRequest request;
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
   std::unique_ptr<ProtocolConnection> stream = ExpectIncomingConnection();
   ASSERT_TRUE(stream);
 
@@ -375,7 +375,7 @@ TEST_F(UrlAvailabilityRequesterTest, RemoveObserverUrls) {
   EXPECT_CALL(mock_observer2, OnReceiverAvailable(url1_, service_id_));
   listener_.AddObserver({url1_, url2_}, &mock_observer2);
 
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
   quic_bridge_.RunTasksUntilIdle();
   Mock::VerifyAndClearExpectations(&mock_observer2);
 
@@ -413,7 +413,7 @@ TEST_F(UrlAvailabilityRequesterTest, RemoveObserver) {
   listener_.AddObserver({url1_}, &mock_observer1);
 
   msgs::PresentationUrlAvailabilityRequest request;
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
 
   std::unique_ptr<ProtocolConnection> stream = ExpectIncomingConnection();
   ASSERT_TRUE(stream);
@@ -436,7 +436,7 @@ TEST_F(UrlAvailabilityRequesterTest, RemoveObserver) {
   EXPECT_CALL(mock_observer2, OnReceiverAvailable(url1_, service_id_));
   listener_.AddObserver({url1_, url2_}, &mock_observer2);
 
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
   quic_bridge_.RunTasksUntilIdle();
   Mock::VerifyAndClearExpectations(&mock_observer2);
 
@@ -493,7 +493,7 @@ TEST_F(UrlAvailabilityRequesterTest, EventUpdate) {
   listener_.AddObserver({url1_, url2_}, &mock_observer1);
 
   msgs::PresentationUrlAvailabilityRequest request;
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
 
   std::unique_ptr<ProtocolConnection> stream = ExpectIncomingConnection();
   ASSERT_TRUE(stream);
@@ -528,7 +528,7 @@ TEST_F(UrlAvailabilityRequesterTest, RefreshWatches) {
   listener_.AddObserver({url1_}, &mock_observer1);
 
   msgs::PresentationUrlAvailabilityRequest request;
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
 
   std::unique_ptr<ProtocolConnection> stream = ExpectIncomingConnection();
   ASSERT_TRUE(stream);
@@ -545,7 +545,7 @@ TEST_F(UrlAvailabilityRequesterTest, RefreshWatches) {
 
   fake_clock_.Advance(std::chrono::seconds(60));
 
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
   listener_.RefreshWatches();
   quic_bridge_.RunTasksUntilIdle();
 
@@ -566,7 +566,7 @@ TEST_F(UrlAvailabilityRequesterTest, ResponseAfterRemoveObserver) {
   listener_.AddObserver({url1_}, &mock_observer1);
 
   msgs::PresentationUrlAvailabilityRequest request;
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
 
   std::unique_ptr<ProtocolConnection> stream = ExpectIncomingConnection();
   ASSERT_TRUE(stream);
@@ -598,7 +598,7 @@ TEST_F(UrlAvailabilityRequesterTest,
   listener_.AddObserver({url1_}, &mock_observer1);
 
   msgs::PresentationUrlAvailabilityRequest request;
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
 
   std::unique_ptr<ProtocolConnection> stream = ExpectIncomingConnection();
   ASSERT_TRUE(stream);
@@ -630,7 +630,7 @@ TEST_F(UrlAvailabilityRequesterTest, RemoveObserverInSteps) {
   listener_.AddObserver({url1_, url2_}, &mock_observer1);
 
   msgs::PresentationUrlAvailabilityRequest request;
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
 
   std::unique_ptr<ProtocolConnection> stream = ExpectIncomingConnection();
   ASSERT_TRUE(stream);
@@ -659,7 +659,7 @@ TEST_F(UrlAvailabilityRequesterTest, RemoveObserverInSteps) {
   // NOTE: This message was generated between the two RemoveObserverUrls calls
   // above.  So even though the request is internally cancelled almost
   // immediately, this still went out on the wire.
-  ExpectStreamMessage(&mock_callback_, &request);
+  ExpectStreamMessage(&mock_callback_, request);
 
   quic_bridge_.RunTasksUntilIdle();
   EXPECT_EQ((std::vector<std::string>{url2_}), request.urls);

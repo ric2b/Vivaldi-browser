@@ -67,6 +67,7 @@ import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -83,6 +84,7 @@ import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
 import org.chromium.chrome.test.util.BookmarkTestUtil;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
+import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.test.util.UiRestriction;
@@ -154,7 +156,7 @@ public class SelectableTabListEditorTest {
         boolean isTabSwitcherReady =
                 TestThreadUtils.runOnUiThreadBlockingNoException(
                         () -> {
-                            return cta.getTabSwitcherForTesting() != null;
+                            return cta.getTabSwitcherSupplierForTesting().get() != null;
                         });
         if (!isTabSwitcherReady) {
             TabUiTestHelper.enterTabSwitcher(cta);
@@ -242,6 +244,16 @@ public class SelectableTabListEditorTest {
                     true);
             sActivityTestRule.loadUrl("about:blank");
         }
+    }
+
+    private void createNewTab(@TabLaunchType int launchType, boolean isIncognito) {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    sActivityTestRule
+                            .getActivity()
+                            .getTabCreator(isIncognito)
+                            .createNewTab(new LoadUrlParams("about:blank"), launchType, null);
+                });
     }
 
     private void prepareBlankTabWithThumbnail(int num, boolean isIncognito) {
@@ -366,6 +378,25 @@ public class SelectableTabListEditorTest {
         mRobot.resultRobot.verifyTabListEditorIsHidden();
 
         verify(mSetRecyclerViewPosition, times(1)).onResult(isNotNull());
+    }
+
+    @Test
+    @MediumTest
+    public void testHideOnNewTab() {
+        prepareBlankTab(2, false);
+        List<Tab> tabs = getTabsInCurrentTabModel();
+        showSelectionEditor(tabs);
+        mRobot.resultRobot.verifyTabListEditorIsVisible();
+
+        createNewTab(TabLaunchType.FROM_STARTUP, false);
+        mRobot.resultRobot.verifyTabListEditorIsHidden();
+
+        tabs = getTabsInCurrentTabModel();
+        showSelectionEditor(tabs);
+        mRobot.resultRobot.verifyTabListEditorIsVisible();
+
+        createNewTab(TabLaunchType.FROM_RESTORE, false);
+        mRobot.resultRobot.verifyTabListEditorIsHidden();
     }
 
     @Test
@@ -1013,7 +1044,8 @@ public class SelectableTabListEditorTest {
                     Snackbar currentSnackbar = mSnackbarManager.getCurrentSnackbarForTesting();
                     Assert.assertEquals(
                             Snackbar.UMA_BOOKMARK_ADDED, currentSnackbar.getIdentifierForTesting());
-                    Assert.assertEquals("Bookmarked", currentSnackbar.getTextForTesting());
+                    Assert.assertEquals(
+                            "Bookmarked to Mobile bookmarks", currentSnackbar.getTextForTesting());
                     currentSnackbar.getController().onAction(null);
                 });
         BookmarkEditActivity activity = BookmarkTestUtil.waitForEditActivity();

@@ -111,17 +111,29 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
 #endif
       public mojom::GpuService {
  public:
-  GpuServiceImpl(const gpu::GPUInfo& gpu_info,
-                 std::unique_ptr<gpu::GpuWatchdogThread> watchdog,
-                 scoped_refptr<base::SingleThreadTaskRunner> io_runner,
+  struct VIZ_SERVICE_EXPORT InitParams {
+    InitParams();
+    InitParams(InitParams&& other);
+    InitParams& operator=(InitParams&& other);
+    ~InitParams();
+
+    std::unique_ptr<gpu::GpuWatchdogThread> watchdog_thread;
+    scoped_refptr<base::SingleThreadTaskRunner> io_runner;
+    raw_ptr<gpu::VulkanImplementation> vulkan_implementation = nullptr;
+#if BUILDFLAG(SKIA_USE_DAWN)
+    std::unique_ptr<gpu::DawnContextProvider> dawn_context_provider;
+#endif
+    base::OnceCallback<void(ExitCode)> exit_callback;
+  };
+
+  GpuServiceImpl(const gpu::GpuPreferences& gpu_preferences,
+                 const gpu::GPUInfo& gpu_info,
                  const gpu::GpuFeatureInfo& gpu_feature_info,
-                 const gpu::GpuPreferences& gpu_preferences,
-                 const absl::optional<gpu::GPUInfo>& gpu_info_for_hardware_gpu,
-                 const absl::optional<gpu::GpuFeatureInfo>&
+                 const std::optional<gpu::GPUInfo>& gpu_info_for_hardware_gpu,
+                 const std::optional<gpu::GpuFeatureInfo>&
                      gpu_feature_info_for_hardware_gpu,
                  const gfx::GpuExtraInfo& gpu_extra_info,
-                 gpu::VulkanImplementation* vulkan_implementation,
-                 base::OnceCallback<void(ExitCode)> exit_callback);
+                 InitParams init_params);
 
   GpuServiceImpl(const GpuServiceImpl&) = delete;
   GpuServiceImpl& operator=(const GpuServiceImpl&) = delete;
@@ -556,8 +568,8 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
 
   // What we would have gotten if we haven't fallen back to SwiftShader or
   // pure software (in the viz case).
-  absl::optional<gpu::GPUInfo> gpu_info_for_hardware_gpu_;
-  absl::optional<gpu::GpuFeatureInfo> gpu_feature_info_for_hardware_gpu_;
+  std::optional<gpu::GPUInfo> gpu_info_for_hardware_gpu_;
+  std::optional<gpu::GpuFeatureInfo> gpu_feature_info_for_hardware_gpu_;
 
   // Information about the GPU process populated on creation.
   gfx::GpuExtraInfo gpu_extra_info_;

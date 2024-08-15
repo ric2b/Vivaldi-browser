@@ -32,14 +32,15 @@ public abstract class TransitStation extends ConditionalState {
         TrafficControl.notifyCreatedStation(this);
     }
 
-    List<Condition> getActiveFacilityExitConditions() {
-        List<Condition> conditions = new ArrayList<>();
+    Elements getElementsIncludingFacilitiesWithPhase(@Phase int phase) {
+        Elements.Builder allElements = Elements.newBuilder();
+        allElements.addAll(getElements());
         for (StationFacility facility : mFacilities) {
-            if (facility.getPhase() == Phase.ACTIVE) {
-                conditions.addAll(facility.getExitConditions());
+            if (facility.getPhase() == phase) {
+                allElements.addAll(facility.getElements());
             }
         }
-        return conditions;
+        return allElements.build();
     }
 
     void registerFacility(StationFacility facility) {
@@ -56,5 +57,45 @@ public abstract class TransitStation extends ConditionalState {
      */
     public int getId() {
         return mId;
+    }
+
+    @Override
+    void setStateTransitioningTo() {
+        super.setStateTransitioningTo();
+
+        for (StationFacility facility : mFacilities) {
+            facility.setStateTransitioningTo();
+        }
+    }
+
+    @Override
+    void setStateActive() {
+        super.setStateActive();
+
+        for (StationFacility facility : mFacilities) {
+            facility.setStateActive();
+        }
+    }
+
+    @Override
+    void setStateTransitioningFrom() {
+        super.setStateTransitioningFrom();
+
+        for (StationFacility facility : mFacilities) {
+            if (facility.getPhase() == Phase.ACTIVE) {
+                facility.setStateTransitioningFrom();
+            }
+        }
+    }
+
+    @Override
+    void setStateFinished() {
+        super.setStateFinished();
+
+        for (StationFacility facility : mFacilities) {
+            if (facility.getPhase() == Phase.TRANSITIONING_FROM) {
+                facility.setStateFinished();
+            }
+        }
     }
 }

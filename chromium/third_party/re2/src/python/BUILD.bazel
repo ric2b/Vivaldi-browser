@@ -12,14 +12,14 @@ pybind_extension(
     srcs = ["_re2.cc"],
     deps = [
         "//:re2",
-        "@com_google_absl//absl/strings",
+        "@abseil-cpp//absl/strings",
     ],
 )
 
 py_library(
     name = "re2",
     srcs = ["re2.py"],
-    data = [":_re2.so"],
+    data = [":_re2"],
     imports = ["."],
     visibility = ["//visibility:public"],
 )

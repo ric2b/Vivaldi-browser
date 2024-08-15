@@ -12,11 +12,11 @@
 
 namespace feature_engagement {
 
-absl::optional<GroupConfig> GetClientSideGroupConfig(
+std::optional<GroupConfig> GetClientSideGroupConfig(
     const base::Feature* group) {
 #if BUILDFLAG(IS_IOS)
   if (kiOSFullscreenPromosGroup.name == group->name) {
-    absl::optional<GroupConfig> config = GroupConfig();
+    std::optional<GroupConfig> config = GroupConfig();
     config->valid = true;
     config->session_rate = Comparator(EQUAL, 0);
     // Only show a fullscreen promo once every two days.
@@ -29,7 +29,7 @@ absl::optional<GroupConfig> GetClientSideGroupConfig(
   }
 
   if (kiOSDefaultBrowserPromosGroup.name == group->name) {
-    absl::optional<GroupConfig> config = GroupConfig();
+    std::optional<GroupConfig> config = GroupConfig();
     config->valid = true;
     config->session_rate = Comparator(EQUAL, 0);
     // Default browser promos should be at least 14 days apart.
@@ -48,12 +48,25 @@ absl::optional<GroupConfig> GetClientSideGroupConfig(
 
     return config;
   }
+
+  if (kiOSTailoredDefaultBrowserPromosGroup.name == group->name) {
+    std::optional<GroupConfig> config = GroupConfig();
+    config->valid = true;
+    config->session_rate = Comparator(EQUAL, 0);
+
+    // Only one of the tailored promos ever can be shown.
+    config->trigger =
+        EventConfig("tailored_default_browser_promos_group_trigger",
+                    Comparator(EQUAL, 0), feature_engagement::kMaxStoragePeriod,
+                    feature_engagement::kMaxStoragePeriod);
+    return config;
+  }
 #endif  // BUILDFLAG(IS_IOS)
 
   if (kIPHDummyGroup.name == group->name) {
     // Only used for tests. Various magic tricks are used below to ensure this
     // config is invalid and unusable.
-    absl::optional<GroupConfig> config = GroupConfig();
+    std::optional<GroupConfig> config = GroupConfig();
     config->valid = true;
     config->session_rate = Comparator(LESS_THAN, 0);
     config->trigger =
@@ -61,7 +74,7 @@ absl::optional<GroupConfig> GetClientSideGroupConfig(
     return config;
   }
 
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 }  // namespace feature_engagement

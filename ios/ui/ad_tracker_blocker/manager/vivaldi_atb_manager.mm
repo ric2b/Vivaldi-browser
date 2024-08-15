@@ -343,7 +343,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   if (!_ruleSourceHandler || !_ruleManager)
     return nil;
 
-  absl::optional<KnownRuleSource> knownSource = _ruleSourceHandler->GetSource(
+  std::optional<KnownRuleSource> knownSource = _ruleSourceHandler->GetSource(
       sourceType == ATBSourceAds ?
       RuleGroup::kAdBlockingRules : RuleGroup::kTrackingRules,
       key);
@@ -560,7 +560,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
   // Check if the source is enabled. If 'Yes' get more info from the engine.
   if (isEnabled) {
-    absl::optional<RuleSource> ruleSource =
+    std::optional<RuleSource> ruleSource =
         _ruleManager->GetRuleSource(
             sourceType == ATBSourceAds ?
             RuleGroup::kAdBlockingRules : RuleGroup::kTrackingRules,

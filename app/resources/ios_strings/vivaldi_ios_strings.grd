@@ -26,7 +26,7 @@ locale.  The strings in this file are specific to iOS.
     <output filename="ios_strings_jbo.pak" type="data_package" lang="jbo" />
     <output filename="ios_strings_ka.pak" type="data_package" lang="ka" />
     <output filename="ios_strings_kab.pak" type="data_package" lang="kab" />
-    <output filename="ios_strings_ku.pak" type="data_package" lang="ku" />
+    <output filename="ios_strings_kmr.pak" type="data_package" lang="kmr" />
     <output filename="ios_strings_mk.pak" type="data_package" lang="mk" />
     <output filename="ios_strings_nn.pak" type="data_package" lang="nn" />
     <output filename="ios_strings_pa.pak" type="data_package" lang="pa" />
@@ -85,7 +85,7 @@ locale.  The strings in this file are specific to iOS.
     <file path="strings/vivaldi_ios_strings_km.xtb" lang="km" />
     <file path="strings/vivaldi_ios_strings_kn.xtb" lang="kn" />
     <file path="strings/vivaldi_ios_strings_ko.xtb" lang="ko" />
-    <file path="strings/vivaldi_ios_strings_ku.xtb" lang="ku" />
+    <file path="strings/vivaldi_ios_strings_kmr.xtb" lang="kmr" />
     <file path="strings/vivaldi_ios_strings_ky.xtb" lang="ky" />
     <file path="strings/vivaldi_ios_strings_lo.xtb" lang="lo" />
     <file path="strings/vivaldi_ios_strings_lt.xtb" lang="lt" />
@@ -190,6 +190,9 @@ locale.  The strings in this file are specific to iOS.
         You can open links in Vivaldi automatically by making it your Default Browser App.
       </message>
       <!-- END DEFAULT BROWSER -->
+      <message name="IDS_IOS_SHARE_LINK_TO_TEXT" desc="Option that appears in the iOS Edit Menu when highlighting text (alongside options like Copy, Paste, and Share). When selected, this generates a special URL that will open the current page and jump to/highlight the user's current selection. The user will then have the chance to share this special URL through the normal iOS sharing menu.">
+        Copy Link to Highlight
+      </message>
     </messages>
   </release>
 </grit>

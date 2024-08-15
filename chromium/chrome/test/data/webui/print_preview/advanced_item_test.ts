@@ -4,7 +4,7 @@
 
 import 'chrome://print/print_preview.js';
 
-import {PrintPreviewAdvancedSettingsItemElement, PrintPreviewModelElement} from 'chrome://print/print_preview.js';
+import type {PrintPreviewAdvancedSettingsItemElement, PrintPreviewModelElement} from 'chrome://print/print_preview.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {fakeDataBind} from 'chrome://webui-test/polymer_test_util.js';
@@ -107,7 +107,7 @@ suite('AdvancedItemTest', function() {
 
   // Test that an input capability updates correctly when the setting is
   // updated (e.g. when sticky settings are set).
-  test('UpdateInput', function() {
+  test('UpdateInput', async () => {
     // Create capability
     item.capability = getCddTemplateWithAdvancedSettings(3, 'FooDevice')
                           .capabilities!.printer.vendor_capability![2]!;
@@ -119,6 +119,7 @@ suite('AdvancedItemTest', function() {
 
     // Update the setting.
     item.set('settings.vendorItems.value', {watermark: 'ABCD'});
+    await input.updateComplete;
     assertEquals('ABCD', input.inputElement.value);
   });
 

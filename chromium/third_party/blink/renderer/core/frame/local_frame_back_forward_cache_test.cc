@@ -49,7 +49,8 @@ class TestLocalFrameBackForwardCacheClient
   ~TestLocalFrameBackForwardCacheClient() override = default;
 
   void EvictFromBackForwardCache(
-      mojom::blink::RendererEvictionReason) override {
+      mojom::blink::RendererEvictionReason,
+      mojom::blink::ScriptSourceLocationPtr) override {
     quit_closure_.Run();
   }
 

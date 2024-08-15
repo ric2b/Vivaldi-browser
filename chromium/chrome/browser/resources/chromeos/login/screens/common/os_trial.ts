@@ -6,10 +6,10 @@
  * @fileoverview Polymer element for OS trial screen.
  */
 
-import '//resources/cr_elements/chromeos/cros_color_overrides.css.js';
-import '//resources/cr_elements/cr_radio_button/cr_radio_button.js';
-import '//resources/cr_elements/cr_radio_group/cr_radio_group.js';
-import '//resources/cr_elements/cr_shared_vars.css.js';
+import '//resources/ash/common/cr_elements/cros_color_overrides.css.js';
+import '//resources/ash/common/cr_elements/cr_radio_button/cr_radio_button.js';
+import '//resources/ash/common/cr_elements/cr_radio_group/cr_radio_group.js';
+import '//resources/ash/common/cr_elements/cr_shared_vars.css.js';
 import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '../../components/oobe_icons.html.js';
 import '../../components/common_styles/oobe_common_styles.css.js';
@@ -25,7 +25,7 @@ import {mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/p
 
 import {LoginScreenBehavior, LoginScreenBehaviorInterface} from '../../components/behaviors/login_screen_behavior.js';
 import {OobeDialogHostBehavior, OobeDialogHostBehaviorInterface} from '../../components/behaviors/oobe_dialog_host_behavior.js';
-import {OobeI18nBehavior, OobeI18nBehaviorInterface} from '../../components/behaviors/oobe_i18n_behavior.js';
+import {OobeI18nMixin, OobeI18nMixinInterface} from '../../components/mixins/oobe_i18n_mixin.js';
 
 import {getTemplate} from './os_trial.html.js';
 
@@ -40,9 +40,9 @@ enum TrialOption {
 
 const OsTrialScreenElementBase =
     mixinBehaviors(
-        [OobeI18nBehavior, LoginScreenBehavior, OobeDialogHostBehavior],
-        PolymerElement) as {
-      new (): PolymerElement & OobeI18nBehaviorInterface &
+        [LoginScreenBehavior, OobeDialogHostBehavior],
+        OobeI18nMixin(PolymerElement)) as {
+      new (): PolymerElement & OobeI18nMixinInterface &
           LoginScreenBehaviorInterface & OobeDialogHostBehaviorInterface,
     };
 
@@ -82,7 +82,7 @@ export class OsTrial extends OsTrialScreenElementBase {
    * This is the 'on-click' event handler for the 'next' button.
    */
   private onNextButtonClick(): void {
-    if (this.selectedTrialOption == TrialOption.TRY) {
+    if (this.selectedTrialOption === TrialOption.TRY) {
       this.userActed('os-trial-try');
     } else {
       this.userActed('os-trial-install');

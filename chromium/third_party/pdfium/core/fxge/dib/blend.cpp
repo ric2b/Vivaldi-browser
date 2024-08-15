@@ -7,10 +7,11 @@
 #include "core/fxge/dib/blend.h"
 
 #include <algorithm>
+#include <cmath>
 
+#include "core/fxcrt/check_op.h"
+#include "core/fxcrt/notreached.h"
 #include "core/fxge/dib/fx_dib.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/notreached.h"
 
 namespace fxge {
 

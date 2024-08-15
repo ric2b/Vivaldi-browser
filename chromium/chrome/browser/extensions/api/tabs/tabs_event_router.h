@@ -137,7 +137,8 @@ class TabsEventRouter : public TabStripModelObserver,
                      events::HistogramValue histogram_value,
                      const std::string& event_name,
                      base::Value::List args,
-                     EventRouter::UserGestureState user_gesture);
+                     EventRouter::UserGestureState user_gesture,
+                     Event::VivFilter);
 
   // Packages |changed_property_names| as a tab updated event for the tab
   // |contents| and dispatches the event to the extension.

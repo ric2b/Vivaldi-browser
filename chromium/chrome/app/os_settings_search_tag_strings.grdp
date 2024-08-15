@@ -786,6 +786,9 @@
   </message>
 
   <!-- Personalization section. -->
+  <message name="IDS_OS_SETTINGS_TAG_WALLPAPER_AND_STYLE" desc="Text for search result item which, when clicked, navigates the user to the Wallpaper and style section.">
+    Wallpaper and style
+  </message>
   <message name="IDS_OS_SETTINGS_TAG_CHANGE_DEVICE_ACCOUNT_IMAGE" desc="Text for search result item which, when clicked, navigates the user to the settings page page where they can change their device account image (visible on log-in screen). Alternate phrase for: 'Sign-in image', 'Login image', 'Profile picture', 'Profile image'">
     Change device account image
   </message>
@@ -925,6 +928,15 @@
   <message name="IDS_OS_SETTINGS_TAG_ANDROID_TURN_ON_PLAY_STORE_ALT1" desc="Text for search result item which, when clicked, navigates the user to apps settings, with a button to turn on the Play Store (Android app store). Alternate phrase for: 'Turn on Play Store'">
     Enable Play Store
   </message>
+  <message name="IDS_OS_SETTINGS_TAG_MANAGE_ISOLATED_WEB_APPS" desc="Text for search result item which, when clicked, navigates the user to manage isolated web apps settings.">
+    Manage isolated web apps
+  </message>
+  <message name="IDS_OS_SETTINGS_TAG_TURN_ON_ISOLATED_WEB_APPS" desc="Text for search result item which, when clicked, navigates the user to manage isolated web apps settings with turn on isolated web apps toggle. Alternate phrase for: 'Enable isolated web apps'">
+    Turn on isolated web apps
+  </message>
+  <message name="IDS_OS_SETTINGS_TAG_TURN_ON_ISOLATED_WEB_APPS_ALT1" desc="Text for search result item which, when clicked, navigates the user to manage isolated web apps settings with turn on isolated web apps toggle. Alternate phrase for: 'Turn on isolated web apps'">
+    Enable isolated web apps
+  </message>
 
   <!-- Crostini section. -->
   <message name="IDS_OS_SETTINGS_TAG_CROSTINI" desc="Text for search result item which, when clicked, navigates the user to Linux (a.k.a. Crostini) settings. Alternate phrase for: 'Crostini, Developers'">
@@ -1042,6 +1054,9 @@
   <message name="IDS_OS_SETTINGS_TAG_SECURITY_AND_PRIVACY" desc="Text for search result item which, when clicked, navigates the user to the Security and Privacy section.">
     Security and Privacy
   </message>
+  <message name="IDS_OS_SETTINGS_TAG_PRIVACY_AND_SECURITY" desc="Text for search result item which, when clicked, navigates the user to the Privacy and security section.">
+    Privacy and security
+  </message>
   <message name="IDS_OS_SETTINGS_TAG_PRIVACY_VERIFIED_ACCESS" desc="Text for search result item which, when clicked, navigates the user to privacy settings, with a toggle to enable/disable verified access.">
     Verified access
   </message>
@@ -1092,6 +1107,9 @@
   </message>
   <message name="IDS_OS_SETTINGS_TAG_GEOLOCATION" desc="Text for search result item which, when clicked, navigates the user to Location access settings.">
     Location access
+  </message>
+  <message name="IDS_OS_SETTINGS_TAG_GEOLOCATION_ACCURACY" desc="Text for search result item which, when clicked, navigates the user to Location accuracy settings under location settings page.">
+    Location accuracy
   </message>
   <message name="IDS_OS_SETTINGS_TAG_MICROPHONE" desc="Text for search result item which, when clicked, navigates the user to Microphone access settings.">
     Microphone access
@@ -1567,5 +1585,27 @@
   </message>
   <message name="IDS_OS_SETTINGS_TAG_RESTORE_APPS_AND_PAGES" desc="Text for search result item which, when clicked, navigates the user to On Startup settings, with a radio group to configure the restore apps and pages options">
     Restore apps and pages
+  </message>
+
+  <!-- Multitasking section. -->
+  <message name="IDS_OS_SETTINGS_TAG_MULTITASKING_SNAP_WINDOW" desc="Text for search result item which, when clicked, navigates the user to Multitasking settings, with a toggle to enable/disable snap window suggestions. Alternate phrase for 'Split screen set up', 'Dock window', 'Snap window', 'Split screen overview'">
+    Split screen window suggestion
+  </message>
+  <message name="IDS_OS_SETTINGS_TAG_MULTITASKING_SNAP_WINDOW_ALT1" desc="Text for search result item which, when clicked, navigates the user to Multitasking settings, with a toggle to enable/disable snap window suggestions. Alternate phrase for 'Split screen window suggestion', 'Dock window', 'Snap window', 'Split screen overview'">
+    Split screen set up
+  </message>
+  <message name="IDS_OS_SETTINGS_TAG_MULTITASKING_SNAP_WINDOW_ALT2" desc="Text for search result item which, when clicked, navigates the user to Multitasking settings, with a toggle to enable/disable snap window suggestions. Alternate phrase for 'Split screen window suggestion', 'Split screen set up', 'Snap window', 'Split screen overview'">
+    Dock window
+  </message>
+  <message name="IDS_OS_SETTINGS_TAG_MULTITASKING_SNAP_WINDOW_ALT3" desc="Text for search result item which, when clicked, navigates the user to Multitasking settings, with a toggle to enable/disable snap window suggestions. Alternate phrase for 'Split screen window suggestion', 'Split screen set up', 'Dock window', 'Split screen overview'">
+    Snap window
+  </message>
+  <message name="IDS_OS_SETTINGS_TAG_MULTITASKING_SNAP_WINDOW_ALT4" desc="Text for search result item which, when clicked, navigates the user to Multitasking settings, with a toggle to enable/disable snap window suggestions. Alternate phrase for 'Split screen window suggestion', 'Split screen set up', 'Dock window', 'Snap window'">
+    Split screen overview
+  </message>
+
+  <!-- System preferences section. -->
+  <message name="IDS_OS_SETTINGS_TAG_SYSTEM_PREFERENCES" desc="Text for search result item which, when clicked, navigates the user to the System preferences section.">
+    System preferences
   </message>
 </grit-part>

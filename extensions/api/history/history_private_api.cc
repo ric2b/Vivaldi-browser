@@ -201,7 +201,7 @@ void HistoryPrivateEventRouter::DispatchEvent(Profile* profile,
 }
 
 ExtensionFunction::ResponseAction HistoryPrivateSearchFunction::Run() {
-  absl::optional<Search::Params> params(Search::Params::Create(args()));
+  std::optional<Search::Params> params(Search::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::u16string search_text = base::UTF8ToUTF16(params->query.text);
@@ -220,11 +220,12 @@ ExtensionFunction::ResponseAction HistoryPrivateSearchFunction::Run() {
   if (params->query.result_grouping !=
       vivaldi::history_private::HistoryResultSetGrouping::kNone) {
     if (params->query.result_grouping ==
-        vivaldi::history_private::HistoryResultSetGrouping::kKeepAllDuplicates) {
+        vivaldi::history_private::HistoryResultSetGrouping::
+            kKeepAllDuplicates) {
       options.duplicate_policy = history::QueryOptions::KEEP_ALL_DUPLICATES;
     } else if (params->query.result_grouping ==
-               vivaldi::history_private::
-                   HistoryResultSetGrouping::kRemoveDuplicatesPerDay) {
+               vivaldi::history_private::HistoryResultSetGrouping::
+                   kRemoveDuplicatesPerDay) {
       options.duplicate_policy =
           history::QueryOptions::REMOVE_DUPLICATES_PER_DAY;
     }
@@ -281,7 +282,7 @@ void HistoryPrivateSearchFunction::SearchComplete(
 }
 
 ExtensionFunction::ResponseAction HistoryPrivateDeleteVisitsFunction::Run() {
-  absl::optional<vivaldi::history_private::DeleteVisits::Params> params(
+  std::optional<vivaldi::history_private::DeleteVisits::Params> params(
       vivaldi::history_private::DeleteVisits::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -330,7 +331,7 @@ void HistoryPrivateDeleteVisitsFunction::DeleteVisitComplete() {
 
 ExtensionFunction::ResponseAction
 HistoryPrivateGetTopUrlsPerDayFunction::Run() {
-  absl::optional<GetTopUrlsPerDay::Params> params(
+  std::optional<GetTopUrlsPerDay::Params> params(
       GetTopUrlsPerDay::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -403,7 +404,7 @@ std::unique_ptr<HistoryPrivateItem> GetVisitsItem(
 }
 
 ExtensionFunction::ResponseAction HistoryPrivateVisitSearchFunction::Run() {
-  absl::optional<VisitSearch::Params> params(
+  std::optional<VisitSearch::Params> params(
       VisitSearch::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -443,11 +444,11 @@ void HistoryPrivateVisitSearchFunction::VisitsComplete(
 }
 
 ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
-  absl::optional<vivaldi::history_private::GetTypedHistory::Params> params(
+  std::optional<vivaldi::history_private::GetTypedHistory::Params> params(
       vivaldi::history_private::GetTypedHistory::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  history::URLDatabase::TypedUrlResults results;
+  history::TypedUrlResults results;
   history::KeywordID prefix_keyword_id;
   base::StringToInt64(params->prefix_keyword_id, &prefix_keyword_id);
 
@@ -456,13 +457,20 @@ ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
     NOTREACHED();
     return RespondNow(NoArguments());
   }
-  if (!hs->InMemoryDatabase()) {
-    LOG(ERROR) << "Unable to open database.";
-    return RespondNow(NoArguments());
-  }
-  hs->InMemoryDatabase()->GetVivaldiTypedHistory(
-      params->query, prefix_keyword_id, params->max_results, &results);
 
+  hs->GetVivaldiTypedHistory(
+      params->query, prefix_keyword_id, params->max_results,
+      base::BindOnce(
+          &HistoryPrivateGetTypedHistoryFunction::TypedHistorySearchComplete,
+          this),
+
+      &task_tracker_);
+
+  return RespondLater();
+}
+
+void HistoryPrivateGetTypedHistoryFunction::TypedHistorySearchComplete(
+    const history::TypedUrlResults& results) {
   std::vector<vivaldi::history_private::TypedHistoryItem> response;
   for (const auto& result : results) {
     vivaldi::history_private::TypedHistoryItem item;
@@ -474,48 +482,35 @@ ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
     response.push_back(std::move(item));
   }
 
-  return RespondNow(ArgumentList(
+  Respond(ArgumentList(
       vivaldi::history_private::GetTypedHistory::Results::Create(response)));
 }
 
 ExtensionFunction::ResponseAction
 HistoryPrivateGetDetailedHistoryFunction::Run() {
-  absl::optional<Search::Params> params(Search::Params::Create(args()));
+  std::optional<vivaldi::history_private::GetDetailedHistory::Params> params(
+      vivaldi::history_private::GetDetailedHistory::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
-
-  int max_hits = 100;
-
-  if (params->query.max_results.has_value())
-    max_hits = params->query.max_results.value();
-
-  const char* sql_statement =
-      "SELECT urls.id, urls.url, urls.title, urls.visit_count, "
-      "urls.typed_count, urls.last_visit_time, visits.transition "
-      "FROM urls "
-      "JOIN visits "
-      "ON (visits.url = urls.id AND visits.visit_time = urls.last_visit_time) "
-      "WHERE hidden = 0 "
-      "AND urls.url LIKE ? OR urls.title LIKE ? "
-      "ORDER BY urls.last_visit_time DESC LIMIT ?";
-  const std::string search_text = "%" + params->query.text + "%";
-
   history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
   if (!hs) {
     NOTREACHED();
     return RespondNow(NoArguments());
   }
 
-  hs->QueryDetailedHistoryWStatement(
-      sql_statement, search_text, max_hits,
+  hs->GetVivaldiDetailedHistory(
+      params->query, params->max_results,
       base::BindOnce(&HistoryPrivateGetDetailedHistoryFunction::SearchComplete,
                      this),
       &task_tracker_);
   return RespondLater();
 }
-
 void HistoryPrivateGetDetailedHistoryFunction::SearchComplete(
-    const history::DetailedHistory::DetailedHistoryList& results) {
+    const history::DetailedUrlResults& results) {
   std::vector<vivaldi::history_private::DetailedHistoryItem> response;
+  Profile* profile = GetFunctionCallerProfile(*this);
+  HistoryItemList history_item_vec;
+  BookmarkModel* bookmark_model =
+      BookmarkModelFactory::GetForBrowserContext(profile);
   for (const auto& result : results) {
     vivaldi::history_private::DetailedHistoryItem item;
     bool has_chain_start =
@@ -531,7 +526,7 @@ void HistoryPrivateGetDetailedHistoryFunction::SearchComplete(
         result.last_visit_time.InMillisecondsFSinceUnixEpoch();
     item.visit_count = result.visit_count;
     item.typed_count = result.typed_count;
-    item.is_bookmarked = result.is_bookmarked;
+    item.is_bookmarked = bookmark_model->IsBookmarked(result.url);
     item.transition_type =
         HistoryPrivateAPI::UiTransitionToPrivateHistoryTransition(
             result.transition_type);
@@ -540,8 +535,7 @@ void HistoryPrivateGetDetailedHistoryFunction::SearchComplete(
 
     response.push_back(std::move(item));
   }
-
-  Respond(ArgumentList(
+  return Respond(ArgumentList(
       vivaldi::history_private::GetDetailedHistory::Results::Create(response)));
 }
 

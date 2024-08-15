@@ -20,24 +20,14 @@
 namespace autofill {
 
 class AutofillProvider;
-class ContentAutofillDriver;
 class FormEventLoggerWeblayerAndroid;
-
-// Creates an AndroidAutofillManager and attaches it to the `driver`.
-//
-// This hook is to be passed to CreateForWebContentsAndDelegate().
-// It is the glue between ContentAutofillDriver[Factory] and
-// AndroidAutofillManager.
-//
-// Other embedders (which don't want to use AndroidAutofillManager) shall use
-// other implementations.
-void AndroidDriverInitHook(AutofillClient* client,
-                           ContentAutofillDriver* driver);
 
 // This class forwards AutofillManager calls to AutofillProvider.
 class AndroidAutofillManager : public AutofillManager,
                                public AutofillManager::Observer {
  public:
+  explicit AndroidAutofillManager(AutofillDriver* driver);
+
   AndroidAutofillManager(const AndroidAutofillManager&) = delete;
   AndroidAutofillManager& operator=(const AndroidAutofillManager&) = delete;
 
@@ -62,8 +52,6 @@ class AndroidAutofillManager : public AutofillManager,
       const FormData& form) override {}
 
   void Reset() override;
-  void OnContextMenuShownInField(const FormGlobalId& form_global_id,
-                                 const FieldGlobalId& field_global_id) override;
 
   void ReportAutofillWebOTPMetrics(bool used_web_otp) override {}
 
@@ -80,16 +68,11 @@ class AndroidAutofillManager : public AutofillManager,
   // triggered; this affects the security policy for cross-frame fills. See
   // AutofillDriver::FillOrPreviewForm() for further details.
   void FillOrPreviewForm(mojom::ActionPersistence action_persistence,
-                         const FormData& form,
+                         FormData form,
                          const FieldTypeGroup field_type_group,
                          const url::Origin& triggered_origin);
 
  protected:
-  friend void AndroidDriverInitHook(AutofillClient* client,
-                                    ContentAutofillDriver* driver);
-
-  AndroidAutofillManager(AutofillDriver* driver, AutofillClient* client);
-
   void OnFormSubmittedImpl(const FormData& form,
                            bool known_success,
                            mojom::SubmissionSource source) override;

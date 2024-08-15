@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {EnhancedNetworkTtsAdapter} from './mojo_bindings_externs';
+import {TestImportManager} from '/common/testing/test_import_manager.js';
 
 type AudioBuffer = chrome.ttsEngine.AudioBuffer;
 type AudioStreamOptions = chrome.ttsEngine.AudioStreamOptions;
@@ -328,3 +328,5 @@ export class EnhancedNetworkTts {
     }
   }
 }
+
+TestImportManager.exportForTesting(EnhancedNetworkTts);

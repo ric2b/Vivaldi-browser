@@ -372,7 +372,7 @@ Ref<RenderPipeline> RenderPipeline::CreateUninitialized(
     return AcquireRef(new RenderPipeline(device, descriptor));
 }
 
-MaybeError RenderPipeline::Initialize() {
+MaybeError RenderPipeline::InitializeImpl() {
     Device* device = ToBackend(GetDevice());
     const PipelineLayout* layout = ToBackend(GetLayout());
 
@@ -385,13 +385,13 @@ MaybeError RenderPipeline::Initialize() {
     uint32_t stageCount = 0;
 
     auto AddShaderStage = [&](SingleShaderStage stage, VkShaderStageFlagBits vkStage,
-                              bool clampFragDepth) -> MaybeError {
+                              bool clampFragDepth, bool emitPointSize) -> MaybeError {
         const ProgrammableStage& programmableStage = GetStage(stage);
         ShaderModule::ModuleAndSpirv moduleAndSpirv;
-        DAWN_TRY_ASSIGN(moduleAndSpirv,
-                        ToBackend(programmableStage.module)
-                            ->GetHandleAndSpirv(stage, programmableStage, layout, clampFragDepth,
-                                                /* fullSubgroups */ {}));
+        DAWN_TRY_ASSIGN(moduleAndSpirv, ToBackend(programmableStage.module)
+                                            ->GetHandleAndSpirv(stage, programmableStage, layout,
+                                                                clampFragDepth, emitPointSize,
+                                                                /* fullSubgroups */ {}));
         // Record cache key for each shader since it will become inaccessible later on.
         StreamIn(&mCacheKey, stream::Iterable(moduleAndSpirv.spirv, moduleAndSpirv.wordCount));
 
@@ -411,13 +411,14 @@ MaybeError RenderPipeline::Initialize() {
 
     // Add the vertex stage that's always present.
     DAWN_TRY(AddShaderStage(SingleShaderStage::Vertex, VK_SHADER_STAGE_VERTEX_BIT,
-                            /*clampFragDepth*/ false));
+                            /*clampFragDepth*/ false,
+                            GetPrimitiveTopology() == wgpu::PrimitiveTopology::PointList));
 
     // Add the fragment stage if present.
     if (GetStageMask() & wgpu::ShaderStage::Fragment) {
         bool clampFragDepth = UsesFragDepth() && !HasUnclippedDepth();
         DAWN_TRY(AddShaderStage(SingleShaderStage::Fragment, VK_SHADER_STAGE_FRAGMENT_BIT,
-                                clampFragDepth));
+                                clampFragDepth, /*emitPointSize*/ false));
     }
 
     PipelineVertexInputStateCreateInfoTemporaryAllocations tempAllocations;

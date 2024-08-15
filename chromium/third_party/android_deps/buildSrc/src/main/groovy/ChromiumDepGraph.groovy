@@ -118,6 +118,9 @@ class ChromiumDepGraph {
             licenseName: 'Apache 2.0',
             // Both -jre and -android versions are listed. Filter to only the -android ones.
             versionFilter: '-android'),
+        com_squareup_wire_wire_runtime_jvm: new PropertyOverride(
+            licenseUrl: 'https://www.apache.org/licenses/LICENSE-2.0.txt',
+            licenseName: 'Apache 2.0'),
         org_bouncycastle_bcprov_jdk18on: new PropertyOverride(
             cpePrefix: 'cpe:/a:bouncycastle:legion-of-the-bouncy-castle:1.72',
             url: 'https://github.com/bcgit/bc-java',
@@ -266,6 +269,8 @@ class ChromiumDepGraph {
             resolveVersion: '1.6.4'),
         org_jetbrains_kotlinx_kotlinx_coroutines_guava: new PropertyOverride(
             resolveVersion: '1.6.4'),
+        org_jetbrains_kotlinx_atomicfu_jvm: new PropertyOverride(
+            overrideLatest: true),
         org_jetbrains_kotlin_kotlin_stdlib_jdk8: new PropertyOverride(
             resolveVersion: '1.8.20'),
         org_jetbrains_kotlin_kotlin_stdlib_jdk7: new PropertyOverride(
@@ -274,6 +279,8 @@ class ChromiumDepGraph {
             resolveVersion: '1.8.20'),
         org_jetbrains_kotlin_kotlin_stdlib_common: new PropertyOverride(
             resolveVersion: '1.8.20'),
+        org_jetbrains_kotlin_kotlin_parcelize_runtime: new PropertyOverride(
+            overrideLatest: true),
         io_grpc_grpc_binder: new PropertyOverride(
             licenseUrl: 'https://www.apache.org/licenses/LICENSE-2.0.txt',
             licenseName: 'Apache 2.0'),

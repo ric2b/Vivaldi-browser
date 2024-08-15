@@ -146,13 +146,14 @@ const (
 
 // IntrinsicDecl describes a builtin or operator declaration
 type IntrinsicDecl struct {
-	Source         tok.Source
-	Kind           IntrinsicKind
-	Name           string
-	Attributes     Attributes
-	TemplateParams TemplateParams
-	Parameters     Parameters
-	ReturnType     *TemplatedName
+	Source                 tok.Source
+	Kind                   IntrinsicKind
+	Name                   string
+	Attributes             Attributes
+	ImplicitTemplateParams []TemplateParam
+	ExplicitTemplateParams []TemplateParam
+	Parameters             Parameters
+	ReturnType             *TemplatedName
 }
 
 // Format implements the fmt.Formatter interface
@@ -167,8 +168,18 @@ func (i IntrinsicDecl) Format(w fmt.State, verb rune) {
 	case Converter:
 		fmt.Fprintf(w, "conv ")
 	}
+
 	fmt.Fprintf(w, "%v", i.Name)
-	i.TemplateParams.Format(w, verb)
+	if len(i.ExplicitTemplateParams) > 0 {
+		fmt.Fprintf(w, "<")
+		formatList(w, i.ExplicitTemplateParams)
+		fmt.Fprintf(w, ">")
+	}
+	if len(i.ImplicitTemplateParams) > 0 {
+		fmt.Fprintf(w, "[")
+		formatList(w, i.ImplicitTemplateParams)
+		fmt.Fprintf(w, "]")
+	}
 	i.Parameters.Format(w, verb)
 	if i.ReturnType != nil {
 		fmt.Fprintf(w, " -> ")
@@ -238,12 +249,7 @@ type TemplatedNames []TemplatedName
 
 // Format implements the fmt.Formatter interface
 func (l TemplatedNames) Format(w fmt.State, verb rune) {
-	for i, n := range l {
-		if i > 0 {
-			fmt.Fprintf(w, ", ")
-		}
-		n.Format(w, verb)
-	}
+	formatList(w, l)
 }
 
 // TemplatedName is an identifier with optional templated arguments
@@ -274,12 +280,7 @@ type MemberNames []MemberName
 
 // Format implements the fmt.Formatter interface
 func (l MemberNames) Format(w fmt.State, verb rune) {
-	for i, n := range l {
-		if i > 0 {
-			fmt.Fprintf(w, ", ")
-		}
-		n.Format(w, verb)
-	}
+	formatList(w, l)
 }
 
 // MemberName is two identifiers separated by a dot (Owner.Member)
@@ -299,7 +300,7 @@ type TypeDecl struct {
 	Source         tok.Source
 	Attributes     Attributes
 	Name           string
-	TemplateParams TemplateParams
+	TemplateParams []TemplateParam
 }
 
 // Format implements the fmt.Formatter interface
@@ -309,25 +310,9 @@ func (p TypeDecl) Format(w fmt.State, verb rune) {
 		fmt.Fprintf(w, " type %v", p.Name)
 	}
 	fmt.Fprintf(w, "type %v", p.Name)
-	p.TemplateParams.Format(w, verb)
-}
-
-// TemplateParams is a list of TemplateParam
-// Example:
-//
-//	<A, B : TyB>
-type TemplateParams []TemplateParam
-
-// Format implements the fmt.Formatter interface
-func (p TemplateParams) Format(w fmt.State, verb rune) {
-	if len(p) > 0 {
+	if len(p.TemplateParams) > 0 {
 		fmt.Fprintf(w, "<")
-		for i, tp := range p {
-			if i > 0 {
-				fmt.Fprintf(w, ", ")
-			}
-			tp.Format(w, verb)
-		}
+		formatList(w, p.TemplateParams)
 		fmt.Fprintf(w, ">")
 	}
 }
@@ -395,12 +380,16 @@ func (d Attribute) Format(w fmt.State, verb rune) {
 	fmt.Fprintf(w, "%v", d.Name)
 	if len(d.Values) > 0 {
 		fmt.Fprintf(w, "(")
-		for i, v := range d.Values {
-			if i > 0 {
-				fmt.Fprint(w, ", ")
-			}
-			fmt.Fprintf(w, "%v", v)
-		}
+		formatList(w, d.Values)
 		fmt.Fprintf(w, ")")
+	}
+}
+
+func formatList[T any](w fmt.State, list []T) {
+	for i, v := range list {
+		if i > 0 {
+			fmt.Fprint(w, ", ")
+		}
+		fmt.Fprintf(w, "%v", v)
 	}
 }

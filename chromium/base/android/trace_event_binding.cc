@@ -8,10 +8,16 @@
 
 #include "base/android/jni_string.h"
 #include "base/android/trace_event_binding.h"
-#include "base/base_jni/TraceEvent_jni.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/base_tracing.h"
 #include "base/tracing_buildflags.h"
+#include "build/robolectric_buildflags.h"
+
+#if BUILDFLAG(IS_ROBOLECTRIC)
+#include "base/base_robolectric_jni/TraceEvent_jni.h"  // nogncheck
+#else
+#include "base/base_jni/TraceEvent_jni.h"
+#endif
 
 #if BUILDFLAG(ENABLE_BASE_TRACING)
 #include "base/trace_event/trace_event_impl.h"  // no-presubmit-check
@@ -47,7 +53,7 @@ class TraceEnabledObserver : public perfetto::TrackEventSessionObserver {
   }
 
   void OnStart(const perfetto::DataSourceBase::StartArgs&) override {
-    JNIEnv* env = base::android::AttachCurrentThread();
+    JNIEnv* env = jni_zero::AttachCurrentThread();
     base::android::Java_TraceEvent_setEnabled(env, true);
     base::android::Java_TraceEvent_setEventNameFilteringEnabled(
         env, EventNameFilteringEnabled());
@@ -56,7 +62,7 @@ class TraceEnabledObserver : public perfetto::TrackEventSessionObserver {
   void OnStop(const perfetto::DataSourceBase::StopArgs& args) override {
     event_name_filtering_per_session_.erase(args.internal_instance_index);
 
-    JNIEnv* env = base::android::AttachCurrentThread();
+    JNIEnv* env = jni_zero::AttachCurrentThread();
     base::android::Java_TraceEvent_setEnabled(
         env, !event_name_filtering_per_session_.empty());
     base::android::Java_TraceEvent_setEventNameFilteringEnabled(
@@ -92,7 +98,7 @@ class TraceEnabledObserver
 
   // trace_event::TraceLog::EnabledStateObserver:
   void OnTraceLogEnabled() override {
-    JNIEnv* env = base::android::AttachCurrentThread();
+    JNIEnv* env = jni_zero::AttachCurrentThread();
     base::android::Java_TraceEvent_setEnabled(env, true);
     if (base::trace_event::TraceLog::GetInstance()
             ->GetCurrentTraceConfig()
@@ -102,7 +108,7 @@ class TraceEnabledObserver
   }
 
   void OnTraceLogDisabled() override {
-    JNIEnv* env = base::android::AttachCurrentThread();
+    JNIEnv* env = jni_zero::AttachCurrentThread();
     base::android::Java_TraceEvent_setEnabled(env, false);
     base::android::Java_TraceEvent_setEventNameFilteringEnabled(env, false);
   }

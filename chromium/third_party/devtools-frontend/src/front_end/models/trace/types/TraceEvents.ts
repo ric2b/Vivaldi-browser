@@ -185,6 +185,24 @@ export interface TraceEventFireIdleCallback extends TraceEventComplete {
   };
 }
 
+export interface TraceEventSchedulePostMessage extends TraceEventInstant {
+  name: KnownEventName.SchedulePostMessage;
+  args: TraceEventArgs&{
+    data: TraceEventArgsData & {
+      traceId: string,
+    },
+  };
+}
+
+export interface TraceEventHandlePostMessage extends TraceEventComplete {
+  name: KnownEventName.HandlePostMessage;
+  args: TraceEventArgs&{
+    data: TraceEventArgsData & {
+      traceId: string,
+    },
+  };
+}
+
 export interface TraceEventDispatch extends TraceEventComplete {
   name: 'EventDispatch';
   args: TraceEventArgs&{
@@ -305,6 +323,7 @@ export interface SyntheticNetworkRequest extends TraceEventComplete {
       encodedDataLength: number,
       frame: string,
       fromServiceWorker: boolean,
+      isLinkPreload: boolean,
       host: string,
       mimeType: string,
       pathname: string,
@@ -317,8 +336,12 @@ export interface SyntheticNetworkRequest extends TraceEventComplete {
       requestId: string,
       requestingFrameUrl: string,
       statusCode: number,
+      resourceType: Protocol.Network.ResourceType,
+      responseHeaders: Array<{name: string, value: string}>,
+      fetchPriorityHint: FetchPriorityHint,
       url: string,
       // Optional fields
+      initiator?: Initiator,
       requestMethod?: string,
       timing?: TraceEventResourceReceiveResponseTimingData,
     },
@@ -765,7 +788,17 @@ export interface SyntheticLayoutShift extends TraceEventLayoutShift {
 }
 
 export type Priority = 'Low'|'High'|'Medium'|'VeryHigh'|'Highest';
+export type FetchPriorityHint = 'low'|'high'|'auto';
 export type RenderBlocking = 'blocking'|'non_blocking'|'in_body_parser_blocking'|'potentially_blocking';
+
+export interface Initiator {
+  type: Protocol.Network.InitiatorType;
+  fetchType: string;
+  columnNumber?: number;
+  lineNumber?: number;
+  url?: string;
+}
+
 export interface TraceEventResourceSendRequest extends TraceEventInstant {
   name: 'ResourceSendRequest';
   args: TraceEventArgs&{
@@ -774,9 +807,12 @@ export interface TraceEventResourceSendRequest extends TraceEventInstant {
       requestId: string,
       url: string,
       priority: Priority,
+      resourceType: Protocol.Network.ResourceType,
+      fetchPriorityHint: FetchPriorityHint,
       // TODO(crbug.com/1457985): change requestMethod to enum when confirm in the backend code.
       requestMethod?: string,
       renderBlocking?: RenderBlocking,
+      initiator?: Initiator,
     },
   };
 }
@@ -834,6 +870,7 @@ interface TraceEventResourceReceiveResponseTimingData {
   pushEnd: MilliSeconds;
   pushStart: MilliSeconds;
   receiveHeadersEnd: MilliSeconds;
+  receiveHeadersStart: MilliSeconds;
   requestTime: Seconds;
   sendEnd: MilliSeconds;
   sendStart: MilliSeconds;
@@ -856,6 +893,8 @@ export interface TraceEventResourceReceiveResponse extends TraceEventInstant {
       responseTime: MilliSeconds,
       statusCode: number,
       timing: TraceEventResourceReceiveResponseTimingData,
+      isLinkPreload?: boolean,
+      headers?: Array<{name: string, value: string}>,
     },
   };
 }
@@ -971,47 +1010,53 @@ export interface TraceEventPrePaint extends TraceEventComplete {
   name: 'PrePaint';
 }
 
-export type TraceEventNestableAsync = TraceEventNestableAsyncBegin|TraceEventNestableAsyncEnd;
-export interface TraceEventNestableAsyncBegin extends TraceEventData {
-  ph: Phase.ASYNC_NESTABLE_START;
+export interface TraceEventPairableAsync extends TraceEventData {
+  ph: Phase.ASYNC_NESTABLE_START|Phase.ASYNC_NESTABLE_END;
   // The id2 field gives flexibility to explicitly specify if an event
   // id is global among processes or process local. However not all
   // events use it, so both kind of ids need to be marked as optional.
   id2?: {local?: string, global?: string};
   id?: string;
 }
+export interface TraceEventPairableAsyncBegin extends TraceEventPairableAsync {
+  ph: Phase.ASYNC_NESTABLE_START;
+}
 
-export interface TraceEventNestableAsyncEnd extends TraceEventData {
+export interface TraceEventPairableAsyncEnd extends TraceEventPairableAsync {
   ph: Phase.ASYNC_NESTABLE_END;
+}
+
+export interface TraceEventUserTiming extends TraceEventData {
   id2?: {local?: string, global?: string};
   id?: string;
-}
-
-export type TraceEventAsyncPerformanceMeasure = TraceEventPerformanceMeasureBegin|TraceEventPerformanceMeasureEnd;
-
-export interface TraceEventPerformanceMeasureBegin extends TraceEventNestableAsyncBegin {
   cat: 'blink.user_timing';
-  id: string;
 }
 
-export interface TraceEventPerformanceMeasureEnd extends TraceEventNestableAsyncEnd {
-  cat: 'blink.user_timing';
-  id: string;
-}
+export type TraceEventPairableUserTiming = TraceEventUserTiming&TraceEventPairableAsync;
 
-export interface TraceEventConsoleTimeBegin extends TraceEventNestableAsyncBegin {
-  cat: 'blink.console';
-  id2: {
-    local: string,
+export interface TraceEventPerformanceMeasureBegin extends TraceEventPairableUserTiming {
+  args: TraceEventArgs&{
+    detail?: string,
   };
+  ph: Phase.ASYNC_NESTABLE_START;
 }
 
-export interface TraceEventConsoleTimeEnd extends TraceEventNestableAsyncEnd {
-  cat: 'blink.console';
-  id2: {
-    local: string,
-  };
+export type TraceEventPerformanceMeasureEnd = TraceEventPairableUserTiming&TraceEventPairableAsyncEnd;
+export type TraceEventPerformanceMeasure = TraceEventPerformanceMeasureBegin|TraceEventPerformanceMeasureEnd;
+
+export interface TraceEventPerformanceMark extends TraceEventUserTiming {
+  ph: Phase.INSTANT|Phase.MARK;
 }
+
+export interface TraceEventConsoleTimeBegin extends TraceEventPairableAsyncBegin {
+  cat: 'blink.console';
+}
+
+export interface TraceEventConsoleTimeEnd extends TraceEventPairableAsyncEnd {
+  cat: 'blink.console';
+}
+
+export type TraceEventConsoleTime = TraceEventConsoleTimeBegin|TraceEventConsoleTimeEnd;
 
 export interface TraceEventTimeStamp extends TraceEventData {
   cat: 'devtools.timeline';
@@ -1026,11 +1071,20 @@ export interface TraceEventTimeStamp extends TraceEventData {
   };
 }
 
-export interface TraceEventPerformanceMark extends TraceEventData {
-  cat: 'blink.user_timing';
-  ph: Phase.INSTANT|Phase.MARK;
-  id: string;
+export interface TraceEventExtensionMeasureBegin extends TraceEventPerformanceMeasureBegin {
+  name: `devtools-entry-${string}`;
 }
+
+export interface TraceEventExtensionMeasureEnd extends TraceEventPerformanceMeasureEnd {
+  name: `devtools-entry-${string}`;
+}
+
+export interface TraceEventExtensionMark extends TraceEventPerformanceMark {
+  name: `devtools-entry-${string}`;
+  ph: Phase.INSTANT|Phase.MARK;
+}
+
+export type TraceEventExtensionMeasure = TraceEventExtensionMeasureBegin|TraceEventExtensionMeasureEnd;
 
 /** ChromeFrameReporter args for PipelineReporter event.
     Matching proto: https://source.chromium.org/chromium/chromium/src/+/main:third_party/perfetto/protos/perfetto/trace/track_event/chrome_frame_reporter.proto
@@ -1133,50 +1187,29 @@ export function isTraceEventPipelineReporter(event: TraceEventData): event is Tr
 // Nestable async events with a duration are made up of two distinct
 // events: the begin, and the end. We need both of them to be able to
 // display the right information, so we create these synthetic events.
-export interface SyntheticNestableAsyncEvent extends TraceEventData {
+export interface SyntheticEventPair<T extends TraceEventPairableAsync = TraceEventPairableAsync> extends
+    TraceEventData {
+  cat: T['cat'];
   id?: string;
   id2?: {local?: string, global?: string};
   dur: MicroSeconds;
   args: TraceEventArgs&{
-    data: TraceEventArgsData & {
-      beginEvent: TraceEventNestableAsyncBegin,
-      endEvent: TraceEventNestableAsyncEnd,
+    data: {
+      beginEvent: T & TraceEventPairableAsyncBegin,
+      endEvent: T&TraceEventPairableAsyncEnd,
     },
   };
 }
 
-export interface SyntheticPipelineReporter extends SyntheticNestableAsyncEvent {
-  args: TraceEventArgs&{
-    data: SyntheticNestableAsyncEvent['args']['data'] & {
-      beginEvent: TraceEventPipelineReporter,
-      endEvent: TraceEventPipelineReporter,
-    },
-  };
-}
+export type SyntheticPipelineReporterPair = SyntheticEventPair<TraceEventPipelineReporter>;
 
-export interface SyntheticUserTiming extends SyntheticNestableAsyncEvent {
-  id: string;
-  dur: MicroSeconds;
-  args: TraceEventArgs&{
-    data: TraceEventArgsData & {
-      beginEvent: TraceEventPerformanceMeasureBegin,
-      endEvent: TraceEventPerformanceMeasureEnd,
-    },
-  };
-}
+export type SyntheticUserTimingPair = SyntheticEventPair<TraceEventPerformanceMeasure>;
 
-export interface SyntheticConsoleTiming extends SyntheticNestableAsyncEvent {
-  id2: {local: string};
-  dur: MicroSeconds;
-  args: TraceEventArgs&{
-    data: TraceEventArgsData & {
-      beginEvent: TraceEventConsoleTimeBegin,
-      endEvent: TraceEventConsoleTimeEnd,
-    },
-  };
-}
+export type SyntheticConsoleTimingPair = SyntheticEventPair<TraceEventConsoleTime>;
 
-export interface SyntheticInteractionEvent extends SyntheticNestableAsyncEvent {
+export type SyntheticAnimationPair = SyntheticEventPair<TraceEventAnimation>;
+
+export interface SyntheticInteractionPair extends SyntheticEventPair<TraceEventEventTiming> {
   // InteractionID and type are available within the beginEvent's data, but we
   // put them on the top level for ease of access.
   interactionId: number;
@@ -1199,19 +1232,13 @@ export interface SyntheticInteractionEvent extends SyntheticNestableAsyncEvent {
   mainThreadHandling: MicroSeconds;
   // 3. presentationDelay: delay between the event being processed and the frame being rendered
   presentationDelay: MicroSeconds;
-  args: TraceEventArgs&{
-    data: TraceEventArgsData & {
-      beginEvent: TraceEventEventTimingBegin,
-      endEvent: TraceEventEventTimingEnd,
-    },
-  };
 }
 
 /**
  * An event created synthetically in the frontend that has a self time
  * (the time spent running the task itself).
  */
-export interface SyntheticEventWithSelfTime extends TraceEventData {
+export interface SyntheticTraceEntry extends TraceEventData {
   selfTime?: MicroSeconds;
 }
 
@@ -1219,7 +1246,7 @@ export interface SyntheticEventWithSelfTime extends TraceEventData {
  * A profile call created in the frontend from samples disguised as a
  * trace event.
  */
-export interface SyntheticProfileCall extends SyntheticEventWithSelfTime {
+export interface SyntheticProfileCall extends SyntheticTraceEntry {
   callFrame: Protocol.Runtime.CallFrame;
   nodeId: Protocol.integer;
 }
@@ -1228,16 +1255,14 @@ export interface SyntheticProfileCall extends SyntheticEventWithSelfTime {
  * A trace event augmented synthetically in the frontend to contain
  * its self time.
  */
-export type SyntheticRendererEvent = TraceEventRendererEvent&SyntheticEventWithSelfTime;
+export type SyntheticRendererEvent = TraceEventRendererEvent&SyntheticTraceEntry;
 
-export type SyntheticTraceEntry = SyntheticRendererEvent|SyntheticProfileCall;
-
-export function isSyntheticInteractionEvent(event: TraceEventData): event is SyntheticInteractionEvent {
+export function isSyntheticInteractionEvent(event: TraceEventData): event is SyntheticInteractionPair {
   return Boolean(
       'interactionId' in event && event.args?.data && 'beginEvent' in event.args.data && 'endEvent' in event.args.data);
 }
 
-export function isRendererEvent(event: TraceEventData): event is SyntheticTraceEntry {
+export function isSyntheticTraceEntry(event: TraceEventData): event is SyntheticTraceEntry {
   return isTraceEventRendererEvent(event) || isProfileCall(event);
 }
 
@@ -1516,6 +1541,14 @@ export function isTraceEventFireIdleCallback(event: TraceEventData): event is Tr
   return event.name === 'FireIdleCallback';
 }
 
+export function isTraceEventSchedulePostMessage(event: TraceEventData): event is TraceEventSchedulePostMessage {
+  return event.name === KnownEventName.SchedulePostMessage;
+}
+
+export function isTraceEventHandlePostMessage(event: TraceEventData): event is TraceEventHandlePostMessage {
+  return event.name === KnownEventName.HandlePostMessage;
+}
+
 export function isTraceEventUpdateCounters(event: TraceEventData): event is TraceEventUpdateCounters {
   return event.name === 'UpdateCounters';
 }
@@ -1701,7 +1734,7 @@ export function isTraceEventMainFrameViewport(
   return traceEventData.name === 'PaintTimingVisualizer::Viewport';
 }
 
-export function isSyntheticUserTiming(traceEventData: TraceEventData): traceEventData is SyntheticUserTiming {
+export function isSyntheticUserTiming(traceEventData: TraceEventData): traceEventData is SyntheticUserTimingPair {
   if (traceEventData.cat !== 'blink.user_timing') {
     return false;
   }
@@ -1712,7 +1745,7 @@ export function isSyntheticUserTiming(traceEventData: TraceEventData): traceEven
   return 'beginEvent' in data && 'endEvent' in data;
 }
 
-export function isSyntheticConsoleTiming(traceEventData: TraceEventData): traceEventData is SyntheticConsoleTiming {
+export function isSyntheticConsoleTiming(traceEventData: TraceEventData): traceEventData is SyntheticConsoleTimingPair {
   if (traceEventData.cat !== 'blink.console') {
     return false;
   }
@@ -1724,7 +1757,7 @@ export function isSyntheticConsoleTiming(traceEventData: TraceEventData): traceE
 }
 
 export function isTraceEventPerformanceMeasure(traceEventData: TraceEventData):
-    traceEventData is TraceEventPerformanceMeasureBegin|TraceEventPerformanceMeasureEnd {
+    traceEventData is TraceEventPerformanceMeasure {
   return traceEventData.cat === 'blink.user_timing' && isTraceEventAsyncPhase(traceEventData);
 }
 
@@ -1734,8 +1767,7 @@ export function isTraceEventPerformanceMark(traceEventData: TraceEventData):
       (traceEventData.ph === Phase.MARK || traceEventData.ph === Phase.INSTANT);
 }
 
-export function isTraceEventConsoleTime(traceEventData: TraceEventData): traceEventData is TraceEventConsoleTimeBegin|
-    TraceEventConsoleTimeEnd {
+export function isTraceEventConsoleTime(traceEventData: TraceEventData): traceEventData is TraceEventConsoleTime {
   return traceEventData.cat === 'blink.console' && isTraceEventAsyncPhase(traceEventData);
 }
 
@@ -2256,4 +2288,7 @@ export const enum KnownEventName {
   InputLatencyMouseMove = 'InputLatency::MouseMove',
   InputLatencyMouseWheel = 'InputLatency::MouseWheel',
   ImplSideFling = 'InputHandlerProxy::HandleGestureFling::started',
+
+  SchedulePostMessage = 'SchedulePostMessage',
+  HandlePostMessage = 'HandlePostMessage',
 }

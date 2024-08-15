@@ -13,10 +13,6 @@ import "mojo/public/mojom/base/uuid.mojom";
 import "url/mojom/origin.mojom";
 import "url/mojom/url.mojom";
 
-struct AdKeywordReplacement {
-  string match;
-  string replacement;
-};
 
 // Represents which AuctionConfig is getting concrete value filled in after a
 // promise param resolved --- either the top-level auction (if `main_auction`)
@@ -83,6 +79,12 @@ interface AbortableAdAuction {
       AuctionAdConfigAuctionId auction,
       string? direct_from_seller_signals_header_ad_slot);
 
+  // Used to provide result of resolving a promise specifying
+  // `deprecated_render_url_replacements` field of an AuctionConfig.
+  ResolvedDeprecatedRenderURLReplacementsPromise(
+    AuctionAdConfigAuctionId auction,
+    array<AdKeywordReplacement> deprecated_render_url_replacements);
+
   // Used to provide result of resolving a promise specifying the Server
   // Response for an AuctionConfig that uses AuctionAdServerResponseConfig.
   // `result` is an encrypted payload containing the response from the bidding
@@ -132,6 +134,10 @@ interface AdAuctionService {
   // only needed for auctions that use additional bids, for which the auction
   // nonce will be included in each additional bid as a way of ensuring that
   // those bids are only used in the auctions for which they were intended.
+  // This is only called when
+  // blink::features::kFledgeCreateAuctionNonceSynchronousResolution is *not*
+  // enabled, since synchronous resolution enables the Renderer process to
+  // independently create new auction nonces.
   CreateAuctionNonce() => (mojo_base.mojom.Uuid nonce);
 
   // Triggers the ad auction to run in a sandboxed JavaScript process. The

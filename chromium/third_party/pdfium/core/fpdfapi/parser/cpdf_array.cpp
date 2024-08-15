@@ -16,10 +16,10 @@
 #include "core/fpdfapi/parser/cpdf_reference.h"
 #include "core/fpdfapi/parser/cpdf_stream.h"
 #include "core/fpdfapi/parser/cpdf_string.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/fx_stream.h"
-#include "third_party/base/check.h"
-#include "third_party/base/containers/contains.h"
-#include "third_party/base/notreached.h"
+#include "core/fxcrt/notreached.h"
 
 CPDF_Array::CPDF_Array() = default;
 
@@ -81,12 +81,12 @@ CFX_Matrix CPDF_Array::GetMatrix() const {
                     GetFloatAt(4), GetFloatAt(5));
 }
 
-absl::optional<size_t> CPDF_Array::Find(const CPDF_Object* pThat) const {
+std::optional<size_t> CPDF_Array::Find(const CPDF_Object* pThat) const {
   for (size_t i = 0; i < size(); ++i) {
     if (GetDirectObjectAt(i) == pThat)
       return i;
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 bool CPDF_Array::Contains(const CPDF_Object* pThat) const {
@@ -231,6 +231,7 @@ CPDF_Object* CPDF_Array::SetAtInternal(size_t index,
   CHECK(!IsLocked());
   CHECK(pObj);
   CHECK(pObj->IsInline());
+  CHECK(!pObj->IsStream());
   if (index >= m_Objects.size())
     return nullptr;
 
@@ -244,6 +245,7 @@ CPDF_Object* CPDF_Array::InsertAtInternal(size_t index,
   CHECK(!IsLocked());
   CHECK(pObj);
   CHECK(pObj->IsInline());
+  CHECK(!pObj->IsStream());
   if (index > m_Objects.size())
     return nullptr;
 
@@ -256,6 +258,7 @@ CPDF_Object* CPDF_Array::AppendInternal(RetainPtr<CPDF_Object> pObj) {
   CHECK(!IsLocked());
   CHECK(pObj);
   CHECK(pObj->IsInline());
+  CHECK(!pObj->IsStream());
   CPDF_Object* pRet = pObj.Get();
   m_Objects.push_back(std::move(pObj));
   return pRet;

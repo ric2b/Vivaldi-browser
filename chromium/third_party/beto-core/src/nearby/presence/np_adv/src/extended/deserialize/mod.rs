@@ -48,7 +48,7 @@ use crate::{
             DeserializationError, EncryptedSectionContents, MicEncryptedSection,
             MicVerificationError, SignatureEncryptedSection, SignatureVerificationError,
         },
-        DeLength, ENCRYPTION_INFO_DE_TYPE, METADATA_KEY_LEN, NP_ADV_MAX_SECTION_LEN,
+        DeLength, ENCRYPTION_INFO_DE_TYPE, NP_ADV_MAX_SECTION_LEN,
     },
     HasIdentityMatch, MetadataKey, PlaintextIdentityMode, V1Header,
 };
@@ -170,7 +170,7 @@ impl<'a> IntermediateSection<'a> {
                         // should be trivially true since section length was checked above,
                         // but this is an invariant for EncryptedSection, so we double check
                         |(identity_and_ciphertext, _tuple)| {
-                            (METADATA_KEY_LEN..=NP_ADV_MAX_SECTION_LEN)
+                            (EncryptedIdentityMetadata::TOTAL_DE_LEN..=NP_ADV_MAX_SECTION_LEN)
                                 .contains(&identity_and_ciphertext.len())
                         },
                     ),
@@ -206,7 +206,8 @@ impl<'a> IntermediateSection<'a> {
                         // but this is an invariant for MicEncryptedSection, so we double check.
                         // Also verify that there is enough space at the end to contain a valid-length MIC.
                         |(identity_ciphertext_and_mic, _tuple)| {
-                            (METADATA_KEY_LEN + SectionMic::CONTENTS_LEN..=NP_ADV_MAX_SECTION_LEN)
+                            (EncryptedIdentityMetadata::TOTAL_DE_LEN + SectionMic::CONTENTS_LEN
+                                ..=NP_ADV_MAX_SECTION_LEN)
                                 .contains(&identity_ciphertext_and_mic.len())
                         },
                     ),
@@ -325,7 +326,7 @@ impl<'adv> Section<'adv, DataElementParseError> for PlaintextSection<'adv> {
 
 /// A byte buffer the size of a V1 salt.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct RawV1Salt([u8; 16]);
+pub struct RawV1Salt(pub(crate) [u8; 16]);
 
 impl RawV1Salt {
     /// Returns the raw salt bytes as a vec.
@@ -901,6 +902,8 @@ impl PublicIdentity {
     }
 }
 
+pub(crate) const IDENTITY_HEADER_LEN: usize = 2;
+
 /// Parsed form of an encrypted identity DE before its contents are decrypted.
 /// Metadata key is stored in the enclosing section.
 #[derive(PartialEq, Eq, Debug)]
@@ -908,7 +911,7 @@ pub(crate) struct EncryptedIdentityMetadata {
     pub(crate) offset: v1_salt::DataElementOffset,
     /// The original DE header from the advertisement.
     /// Encrypted identity should always be a len=2 header.
-    pub(crate) header_bytes: [u8; 2],
+    pub(crate) header_bytes: [u8; IDENTITY_HEADER_LEN],
     pub(crate) identity_type: EncryptedIdentityDataElementType,
 }
 

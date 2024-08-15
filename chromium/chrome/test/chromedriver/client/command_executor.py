@@ -210,6 +210,10 @@ class Command(object):
   SET_USER_VERIFIED = (
       _Method.POST,
       '/session/:sessionId/webauthn/authenticator/:authenticatorId/uv')
+  SET_CREDENTIAL_PROPERTIES = (
+      _Method.POST,
+      '/session/:sessionId/webauthn/authenticator/:authenticatorId/credentials/'
+      ':credentialId/props')
   SET_SPC_TRANSACTION_MODE = (
       _Method.POST,
       '/session/:sessionId/secure-payment-confirmation/set-mode')
@@ -258,13 +262,15 @@ class Command(object):
   IS_LOADING = (_Method.GET, '/session/:sessionId/is_loading')
 
 class CommandExecutor(object):
-  def __init__(self, server_url):
+  def __init__(self, server_url, http_timeout=None):
     self._server_url = server_url
     parsed_url = urlparse(server_url)
     self._http_timeout = 10
     # see https://crbug.com/1045241: short timeout seems to introduce flakiness
     if util.IsMac() or util.IsWindows():
       self._http_timeout = 30
+    if http_timeout is not None:
+      self._http_timeout = http_timeout
     self._http_client = http.client.HTTPConnection(
       parsed_url.hostname, parsed_url.port, timeout=self._http_timeout)
 

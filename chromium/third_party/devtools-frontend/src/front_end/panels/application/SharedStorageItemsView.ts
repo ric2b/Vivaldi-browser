@@ -9,6 +9,7 @@ import * as LegacyWrapper from '../../ui/components/legacy_wrapper/legacy_wrappe
 import * as DataGrid from '../../ui/legacy/components/data_grid/data_grid.js';
 import * as SourceFrame from '../../ui/legacy/components/source_frame/source_frame.js';
 import * as UI from '../../ui/legacy/legacy.js';
+import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import * as ApplicationComponents from './components/components.js';
 import {SharedStorageForOrigin} from './SharedStorageModel.js';
@@ -135,7 +136,7 @@ export class SharedStorageItemsView extends StorageItemsView {
       void this.#previewEntry(null);
     });
     this.dataGrid.setStriped(true);
-    this.dataGrid.setName('SharedStorageItemsView');
+    this.dataGrid.setName('shared-storage-items-view');
 
     const dataGridWidget = this.dataGrid.asWidget();
     dataGridWidget.setMinimumSize(0, 100);
@@ -148,17 +149,18 @@ export class SharedStorageItemsView extends StorageItemsView {
     const innerResizer = this.#metadataView.element.createChild('div', 'metadata-view-resizer');
 
     this.innerSplitWidget = new UI.SplitWidget.SplitWidget(
-        /* isVertical: */ false, /* secondIsSidebar: */ false, 'sharedStorageInnerSplitViewState');
+        /* isVertical: */ false, /* secondIsSidebar: */ false, 'shared-storage-inner-split-view-state');
     this.innerSplitWidget.setSidebarWidget(this.#metadataView);
     this.innerSplitWidget.setMainWidget(dataGridWidget);
     this.innerSplitWidget.installResizer(innerResizer);
 
     this.#noDisplayView = new UI.Widget.VBox();
     this.#noDisplayView.setMinimumSize(0, 25);
+    this.#noDisplayView.element.setAttribute('jslog', `${VisualLogging.pane('preview').track({resize: true})}`);
     const outerResizer = this.#noDisplayView.element.createChild('div', 'preview-panel-resizer');
 
     this.outerSplitWidget = new UI.SplitWidget.SplitWidget(
-        /* isVertical: */ false, /* secondIsSidebar: */ true, 'sharedStorageOuterSplitViewState');
+        /* isVertical: */ false, /* secondIsSidebar: */ true, 'shared-storage-outer-split-view-state');
     this.outerSplitWidget.show(this.element);
     this.outerSplitWidget.setMainWidget(this.innerSplitWidget);
     this.outerSplitWidget.setSidebarWidget(this.#noDisplayView);
@@ -307,6 +309,7 @@ export class SharedStorageItemsView extends StorageItemsView {
       // Selection could've changed while the preview was loaded
       if (entry.selected) {
         this.outerSplitWidget.setSidebarWidget(preview);
+        preview.element.setAttribute('jslog', `${VisualLogging.pane('preview').track({resize: true})}`);
       }
     } else {
       this.outerSplitWidget.setSidebarWidget(this.#noDisplayView);

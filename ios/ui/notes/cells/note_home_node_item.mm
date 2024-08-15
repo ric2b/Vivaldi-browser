@@ -42,7 +42,7 @@ using l10n_util::GetNSString;
     TableViewNoteFolderCell* noteCell =
         base::apple::ObjCCastStrict<TableViewNoteFolderCell>(cell);
     noteCell.folderTitleTextField.text =
-        note_utils_ios::TitleForNoteNode(_noteNode);
+        [self noteTitle];
     if (self.shouldShowTrashIcon) {
       noteCell.folderImageView.image =
           [UIImage imageNamed:vNotesTrashFolderIcon];
@@ -53,7 +53,7 @@ using l10n_util::GetNSString;
     noteCell.noteAccessoryType =
         TableViewNoteFolderAccessoryTypeDisclosureIndicator;
     noteCell.accessibilityIdentifier =
-        note_utils_ios::TitleForNoteNode(_noteNode);
+        [self noteTitle];
     noteCell.accessibilityTraits |= UIAccessibilityTraitButton;
 
     // Folder items count
@@ -69,13 +69,26 @@ using l10n_util::GetNSString;
   } else {
     TableViewNoteCell* noteCell =
         base::apple::ObjCCastStrict<TableViewNoteCell>(cell);
-    [noteCell
-        configureNoteWithTitle:note_utils_ios::TitleForNoteNode(_noteNode)
-                     createdAt:note_utils_ios::createdAtForNoteNode(_noteNode)];
+    [noteCell configureNoteWithTitle:[self noteTitle]
+                     createdAt:[self createdAt]];
     noteCell.accessibilityLabel = [noteCell accessibilityLabelString];
     noteCell.accessibilityTraits |= UIAccessibilityTraitButton;
     noteCell.imageView.image = [UIImage imageNamed:vNotesIcon];
   }
+}
+
+#pragma mark - Helpers
+
+- (NSString*)noteTitle {
+  return note_utils_ios::TitleForNoteNode(_noteNode);
+}
+
+- (NSDate*)createdAt {
+  return note_utils_ios::createdAtForNoteNode(_noteNode);
+}
+
+- (NSDate*)lastModified {
+  return note_utils_ios::lastModificationTimeForNoteNode(_noteNode);
 }
 
 @end

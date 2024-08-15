@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/* eslint-disable rulesdir/es_modules_import */
-
 import {assert} from 'chai';
 import {type Target} from 'puppeteer-core';
 
@@ -499,8 +497,7 @@ describe('Recorder', function() {
       await waitFor('[aria-label="Performance panel"]');
     });
 
-    // Flaky
-    it.skip('[crbug.com/1403915]: should be able to replay actions with popups', async () => {
+    it('should be able to replay actions with popups', async () => {
       const {browser} = getBrowserAndPages();
       const events: Array<{type: string, url: string}> = [];
       // We can't import 'puppeteer' here because its not listed in the tsconfig.json of

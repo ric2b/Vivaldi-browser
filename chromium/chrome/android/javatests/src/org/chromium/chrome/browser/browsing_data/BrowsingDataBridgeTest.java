@@ -14,22 +14,23 @@ import static org.junit.Assert.assertTrue;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 
-import junit.framework.Assert;
-
 import org.hamcrest.Matchers;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabState;
 import org.chromium.chrome.browser.tab.TabStateExtractor;
@@ -85,13 +86,18 @@ public class BrowsingDataBridgeTest {
         mActionTester.tearDown();
     }
 
+    private BrowsingDataBridge getBrowsingDataBridge() {
+        return ThreadUtils.runOnUiThreadBlockingNoException(
+                () -> BrowsingDataBridge.getForProfile(ProfileManager.getLastUsedRegularProfile()));
+    }
+
     /** Test no clear browsing data calls. */
     @Test
     @SmallTest
     public void testNoCalls() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    BrowsingDataBridge.getInstance()
+                    getBrowsingDataBridge()
                             .clearBrowsingData(mListener, new int[] {}, TimePeriod.ALL_TIME);
                 });
         mCallbackHelper.waitForCallback(0);
@@ -107,10 +113,10 @@ public class BrowsingDataBridgeTest {
     public void testCookiesDeleted() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    BrowsingDataBridge.getInstance()
+                    getBrowsingDataBridge()
                             .clearBrowsingData(
                                     mListener,
-                                    new int[] {BrowsingDataType.COOKIES},
+                                    new int[] {BrowsingDataType.SITE_DATA},
                                     TimePeriod.LAST_HOUR);
                 });
         mCallbackHelper.waitForCallback(0);
@@ -143,7 +149,7 @@ public class BrowsingDataBridgeTest {
     public void testHistoryDeleted() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    BrowsingDataBridge.getInstance()
+                    getBrowsingDataBridge()
                             .clearBrowsingData(
                                     mListener,
                                     new int[] {BrowsingDataType.HISTORY},
@@ -165,7 +171,7 @@ public class BrowsingDataBridgeTest {
     public void testClearingSiteSettingsAndCache() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    BrowsingDataBridge.getInstance()
+                    getBrowsingDataBridge()
                             .clearBrowsingData(
                                     mListener,
                                     new int[] {
@@ -191,7 +197,7 @@ public class BrowsingDataBridgeTest {
     public void testClearingSiteSettingsAndCacheWithImportantSites() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    BrowsingDataBridge.getInstance()
+                    getBrowsingDataBridge()
                             .clearBrowsingDataExcludingDomains(
                                     mListener,
                                     new int[] {
@@ -224,12 +230,12 @@ public class BrowsingDataBridgeTest {
     public void testClearingAll() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    BrowsingDataBridge.getInstance()
+                    getBrowsingDataBridge()
                             .clearBrowsingData(
                                     mListener,
                                     new int[] {
                                         BrowsingDataType.CACHE,
-                                        BrowsingDataType.COOKIES,
+                                        BrowsingDataType.SITE_DATA,
                                         BrowsingDataType.FORM_DATA,
                                         BrowsingDataType.HISTORY,
                                         BrowsingDataType.PASSWORDS,
@@ -289,7 +295,7 @@ public class BrowsingDataBridgeTest {
 
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    BrowsingDataBridge.getInstance()
+                    getBrowsingDataBridge()
                             .clearBrowsingData(
                                     mListener,
                                     new int[] {
@@ -349,7 +355,7 @@ public class BrowsingDataBridgeTest {
 
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    BrowsingDataBridge.getInstance()
+                    getBrowsingDataBridge()
                             .clearBrowsingData(
                                     mListener,
                                     new int[] {
@@ -378,12 +384,12 @@ public class BrowsingDataBridgeTest {
 
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    BrowsingDataBridge.getInstance()
+                    getBrowsingDataBridge()
                             .clearBrowsingData(
                                     mListener,
                                     new int[] {
                                         org.chromium.chrome.browser.browsing_data.BrowsingDataType
-                                                .COOKIES,
+                                                .SITE_DATA,
                                     },
                                     TimePeriod.LAST_WEEK);
                 });
@@ -411,7 +417,7 @@ public class BrowsingDataBridgeTest {
 
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    BrowsingDataBridge.getInstance()
+                    getBrowsingDataBridge()
                             .clearBrowsingData(
                                     mListener,
                                     new int[] {

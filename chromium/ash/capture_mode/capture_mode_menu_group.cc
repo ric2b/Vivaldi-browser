@@ -16,7 +16,6 @@
 #include "ash/style/ash_color_id.h"
 #include "ash/style/color_util.h"
 #include "ash/style/style_util.h"
-#include "base/containers/cxx20_erase_vector.h"
 #include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
 #include "ui/accessibility/ax_enums.mojom-shared.h"
@@ -71,9 +70,9 @@ void ConfigureIconView(views::ImageView* icon_view, bool is_visible) {
 class CaptureModeMenuHeader
     : public views::View,
       public CaptureModeSessionFocusCycler::HighlightableView {
- public:
-  METADATA_HEADER(CaptureModeMenuHeader);
+  METADATA_HEADER(CaptureModeMenuHeader, views::View)
 
+ public:
   CaptureModeMenuHeader(const gfx::VectorIcon& icon,
                         std::u16string header_laber,
                         bool managed_by_policy)
@@ -132,7 +131,7 @@ class CaptureModeMenuHeader
   raw_ptr<views::ImageView> managed_icon_view_;
 };
 
-BEGIN_METADATA(CaptureModeMenuHeader, views::View)
+BEGIN_METADATA(CaptureModeMenuHeader)
 END_METADATA
 
 // -----------------------------------------------------------------------------
@@ -143,16 +142,17 @@ END_METADATA
 class CaptureModeMenuItem
     : public views::Button,
       public CaptureModeSessionFocusCycler::HighlightableView {
- public:
-  METADATA_HEADER(CaptureModeMenuItem);
+  METADATA_HEADER(CaptureModeMenuItem, views::Button)
 
+ public:
   // If `indented` is true, the content of this menu item will have some extra
   // padding from the left so that it appears indented. This is useful when this
   // item is added to a group that has a header, and it's desired to make it
   // appear to be pushed inside under the header.
   CaptureModeMenuItem(views::Button::PressedCallback callback,
                       std::u16string item_label,
-                      bool indented)
+                      bool indented,
+                      bool enabled)
       : views::Button(std::move(callback)),
         label_view_(AddChildView(
             std::make_unique<views::Label>(std::move(item_label)))) {
@@ -163,6 +163,7 @@ class CaptureModeMenuItem
     SetInkDropForButton(this);
     GetViewAccessibility().OverrideIsLeaf(true);
     SetAccessibleName(label_view_->GetText());
+    SetEnabled(enabled);
   }
 
   CaptureModeMenuItem(const CaptureModeMenuItem&) = delete;
@@ -176,7 +177,7 @@ class CaptureModeMenuItem
   raw_ptr<views::Label> label_view_;
 };
 
-BEGIN_METADATA(CaptureModeMenuItem, views::Button)
+BEGIN_METADATA(CaptureModeMenuItem)
 END_METADATA
 
 // -----------------------------------------------------------------------------
@@ -189,9 +190,9 @@ END_METADATA
 class CaptureModeOption
     : public views::Button,
       public CaptureModeSessionFocusCycler::HighlightableView {
- public:
-  METADATA_HEADER(CaptureModeOption);
+  METADATA_HEADER(CaptureModeOption, views::Button)
 
+ public:
   // If `indented` is true, the content of this option will have some extra
   // padding from the left so that it appears indented. This is useful when this
   // option is added to a group that has a header, and it's desired to make it
@@ -341,7 +342,7 @@ class CaptureModeOption
   const int id_;
 };
 
-BEGIN_METADATA(CaptureModeOption, views::Button)
+BEGIN_METADATA(CaptureModeOption)
 END_METADATA
 
 // -----------------------------------------------------------------------------
@@ -418,15 +419,16 @@ void CaptureModeMenuGroup::RemoveOptionIfAny(int option_id) {
     return;
 
   options_container_->RemoveChildViewT(option);
-  base::Erase(options_, option);
+  std::erase(options_, option);
 }
 
 void CaptureModeMenuGroup::AddMenuItem(views::Button::PressedCallback callback,
-                                       std::u16string item_label) {
+                                       std::u16string item_label,
+                                       bool enabled) {
   menu_items_.push_back(
       views::View::AddChildView(std::make_unique<CaptureModeMenuItem>(
           std::move(callback), std::move(item_label),
-          /*indented=*/!!menu_header_)));
+          /*indented=*/!!menu_header_, enabled)));
 }
 
 bool CaptureModeMenuGroup::IsOptionChecked(int option_id) const {
@@ -505,7 +507,7 @@ void CaptureModeMenuGroup::HandleOptionClick(int option_id) {
   RefreshOptionsSelections();
 }
 
-BEGIN_METADATA(CaptureModeMenuGroup, views::View)
+BEGIN_METADATA(CaptureModeMenuGroup)
 END_METADATA
 
 }  // namespace ash

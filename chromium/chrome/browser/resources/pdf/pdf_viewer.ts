@@ -38,14 +38,27 @@ import type {ViewerToolbarElement} from './elements/viewer-toolbar.js';
 import {InkController, InkControllerEventType} from './ink_controller.js';
 //</if>
 import {LocalStorageProxyImpl} from './local_storage_proxy.js';
-import {record, UserAction} from './metrics.js';
+import {record, recordEnumeration, UserAction} from './metrics.js';
 import {NavigatorDelegateImpl, PdfNavigator, WindowOpenDisposition} from './navigator.js';
 import {deserializeKeyEvent, LoadState} from './pdf_scripting_api.js';
 import {getTemplate} from './pdf_viewer.html.js';
 import type {KeyEventData} from './pdf_viewer_base.js';
 import {PdfViewerBaseElement} from './pdf_viewer_base.js';
+import {PdfViewerPrivateProxyImpl} from './pdf_viewer_private_proxy.js';
 import type {DestinationMessageData, DocumentDimensionsMessageData} from './pdf_viewer_utils.js';
 import {hasCtrlModifier, hasCtrlModifierOnly, shouldIgnoreKeyEvents} from './pdf_viewer_utils.js';
+
+/**
+ * Keep in sync with the values for enum PDFPostMessageDataType in
+ * tools/metrics/histograms/metadata/pdf/enums.xml.
+ * These values are persisted to logs. Entries should not be renumbered, removed
+ * or reused.
+ */
+enum PostMessageDataType {
+  GET_SELECTED_TEXT = 0,
+  PRINT = 1,
+  SELECT_ALL = 2,
+}
 
 interface EmailMessageData {
   type: string;
@@ -352,6 +365,12 @@ export class PdfViewerElement extends PdfViewerBaseElement {
     }
 
     this.embedded_ = this.browserApi!.getStreamInfo().embedded;
+
+    if (this.pdfOopifEnabled && !this.embedded_) {
+      // Give the full page PDF viewer focus so it can handle keyboard events
+      // immediately.
+      window.focus();
+    }
   }
 
   handleKeyEvent(e: KeyboardEvent) {
@@ -626,6 +645,11 @@ export class PdfViewerElement extends PdfViewerBaseElement {
     return this.bookmarks_;
   }
 
+  /** @return The title. Used for testing. */
+  get pdfTitle(): string {
+    return this.title_;
+  }
+
   override setLoadState(loadState: LoadState) {
     super.setLoadState(loadState);
     if (loadState === LoadState.FAILED) {
@@ -710,20 +734,28 @@ export class PdfViewerElement extends PdfViewerBaseElement {
       return true;
     }
 
+    let messageType;
     switch (message.data.type.toString()) {
       case 'getSelectedText':
+        messageType = PostMessageDataType.GET_SELECTED_TEXT;
         this.pluginController_!.getSelectedText().then(
             this.handleSelectedTextReply.bind(this));
         break;
       case 'print':
+        messageType = PostMessageDataType.PRINT;
         this.pluginController_!.print();
         break;
       case 'selectAll':
+        messageType = PostMessageDataType.SELECT_ALL;
         this.pluginController_!.selectAll();
         break;
       default:
         return false;
     }
+
+    recordEnumeration(
+        'PDF.PostMessageDataType', messageType,
+        Object.keys(PostMessageDataType).length);
     return true;
   }
 
@@ -874,7 +906,18 @@ export class PdfViewerElement extends PdfViewerBaseElement {
   private setDocumentMetadata_(metadata: DocumentMetadata) {
     this.documentMetadata_ = metadata;
     this.title_ = this.documentMetadata_.title || this.fileName_;
-    document.title = this.title_;
+
+    // Tab title is updated only when document.title is called in a
+    // top-level document (`main_frame` of `WebContents`). For OOPIF PDF viewer,
+    // the current document is the child of a top-level document, hence using a
+    // private API to set the tab title.
+    // NOTE: Title should only be set for full-page PDFs.
+    if (this.pdfOopifEnabled && !this.embedded_) {
+      PdfViewerPrivateProxyImpl.getInstance().setPdfDocumentTitle(this.title_);
+    } else {
+      document.title = this.title_;
+    }
+
     this.canSerializeDocument_ = this.documentMetadata_.canSerializeDocument;
   }
 

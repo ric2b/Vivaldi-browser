@@ -6,7 +6,7 @@ syntax = "proto3";
 option optimize_for = LITE_RUNTIME;
 
 package vm_tools.apps;
-option go_package = "chromiumos/system_api/vm_applications_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/vm_applications_proto";
 
 // Corresponds to a .desktop file from the Desktop Entry Spec:
 // https://www.freedesktop.org/wiki/Specifications/desktop-entry-spec/

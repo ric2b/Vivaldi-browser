@@ -96,7 +96,7 @@ bool TryEncoding(const std::u16string& terms,
                  bool is_in_query,
                  bool force_encode,
                  std::u16string* escaped_terms,
-                 std::u16string* escaped_original_query) {
+                 std::u16string* escaped_original_query, bool is_in_post = false) {
   DCHECK(escaped_terms);
   DCHECK(escaped_original_query);
 
@@ -117,8 +117,9 @@ bool TryEncoding(const std::u16string& terms,
     return false;
   }
   *escaped_terms = base::UTF8ToUTF16(
+      is_in_post ? encoded_terms : (
       is_in_query ? base::EscapeQueryParamValue(encoded_terms, true)
-                  : base::EscapePath(encoded_terms));
+                  : base::EscapePath(encoded_terms)));
   if (original_query.empty())
     return true;
   std::string encoded_original_query;
@@ -145,8 +146,7 @@ class SearchTermLocation {
              (url_component_type == url::Parsed::REF));
       url::Component query, key, value;
       query.len = static_cast<int>(url_component.size());
-      while (url::ExtractQueryKeyValue(url_component.data(), &query, &key,
-                                       &value)) {
+      while (url::ExtractQueryKeyValue(url_component, &query, &key, &value)) {
         if (key.is_nonempty() && value.is_nonempty()) {
           const base::StringPiece value_string =
               url_component.substr(value.begin, value.len);
@@ -443,8 +443,9 @@ bool TemplateURLRef::SupportsReplacement(
 std::string TemplateURLRef::ReplaceSearchTerms(
     const SearchTermsArgs& search_terms_args,
     const SearchTermsData& search_terms_data,
-    PostContent* post_content) const {
-  ParseIfNecessary(search_terms_data);
+    PostContent* post_content,
+    std::string url_override) const {
+  ParseIfNecessary(search_terms_data, url_override);
   if (!valid_)
     return std::string();
 
@@ -641,7 +642,7 @@ bool TemplateURLRef::ExtractSearchTermsFromURL(
     url::Component query, key, value;
     query.len = static_cast<int>(source.size());
     bool key_found = false;
-    while (url::ExtractQueryKeyValue(source.data(), &query, &key, &value)) {
+    while (url::ExtractQueryKeyValue(source, &query, &key, &value)) {
       if (key.is_nonempty()) {
         if (source.substr(key.begin, key.len) == search_term_key_) {
           // Fail if search term key is found twice.
@@ -796,11 +797,7 @@ bool TemplateURLRef::ParseParameter(size_t start,
   } else if (parameter == "google:sessionToken") {
     replacements->push_back(Replacement(GOOGLE_SESSION_TOKEN, start));
   } else if (parameter == "google:sourceId") {
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
-    url->insert(start, "sourceid=chrome-mobile&");
-#else
-    url->insert(start, "sourceid=chrome&");
-#endif
+    replacements->push_back(Replacement(GOOGLE_SEARCH_SOURCE_ID, start));
   } else if (parameter == "google:suggestAPIKeyParameter") {
     url->insert(start,
                 base::EscapeQueryParamValue(google_apis::GetAPIKey(), false));
@@ -836,28 +833,6 @@ bool TemplateURLRef::ParseParameter(size_t start,
     url->insert(start, "t=vivaldim");
 #else
     url->insert(start, "t=vivaldi");
-#endif
-  } else if (base::StartsWith(parameter, "ecosia:Referral_") &&
-             parameter.length() ==
-                 std::string("ecosia:Referral_").length() + 2) {
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
-    url->insert(start, "tt=vivaldi");
-#else
-    if (base::EndsWith(parameter, "by")) {
-      url->insert(start, "tt=9cfaef8c");
-    } else if (base::EndsWith(parameter, "de")) {
-      url->insert(start, "tt=831a0a48");
-    } else if (base::EndsWith(parameter, "ca")) {
-      url->insert(start, "tt=c76366b9");
-    } else if (base::EndsWith(parameter, "gb")) {
-      url->insert(start, "tt=a1b7da50");
-    } else if (base::EndsWith(parameter, "us")) {
-      url->insert(start, "tt=0e30b125");
-    } else if (base::EndsWith(parameter, "fr")) {
-      url->insert(start, "tt=a5bc69ad");
-    } else {
-      url->insert(start, "tt=dccf112d");
-    }
 #endif
   } else if (parameter == "yandex:vivaldiReferralID") {
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
@@ -941,12 +916,14 @@ std::string TemplateURLRef::ParseURL(const std::string& url,
   return parsed_url;
 }
 
-void TemplateURLRef::ParseIfNecessary(
-    const SearchTermsData& search_terms_data) const {
-  if (!parsed_) {
+void TemplateURLRef::ParseIfNecessary(const SearchTermsData& search_terms_data,
+                                      std::string url_override) const {
+  bool url_override_is_valid = GURL(url_override).is_valid();
+  if (!parsed_ || url_override_is_valid) {
     InvalidateCachedValues();
     parsed_ = true;
-    parsed_url_ = ParseURL(GetURL(), &replacements_, &post_params_, &valid_);
+    parsed_url_ = ParseURL(url_override_is_valid ? url_override : GetURL(),
+                           &replacements_, &post_params_, &valid_);
     supports_replacements_ = false;
     if (valid_) {
       bool has_only_one_search_term = false;
@@ -1069,10 +1046,13 @@ std::string TemplateURLRef::HandleReplacements(
   // space as '+' in the former case and as '%20' in the latter case.
   bool is_in_query = true;
 
+  bool is_in_post = false;
+
   auto search_terms =
       base::ranges::find(replacements_, SEARCH_TERMS, &Replacement::type);
 
   if (search_terms != replacements_.end()) {
+    is_in_post = search_terms->is_post_param;
     std::u16string::size_type query_start = parsed_url_.find('?');
     is_in_query = query_start != std::u16string::npos &&
                   (static_cast<std::u16string::size_type>(search_terms->index) >
@@ -1083,7 +1063,7 @@ std::string TemplateURLRef::HandleReplacements(
   std::u16string encoded_terms;
   std::u16string encoded_original_query;
   owner_->EncodeSearchTerms(search_terms_args, is_in_query, &input_encoding,
-                            &encoded_terms, &encoded_original_query);
+                            &encoded_terms, &encoded_original_query, is_in_post);
 
   std::string url = parsed_url_;
 
@@ -1321,6 +1301,16 @@ std::string TemplateURLRef::HandleReplacements(
         // url.insert(replacement.index, used_www ? "gcx=w&" : "gcx=c&");
         break;
 
+      case GOOGLE_SEARCH_SOURCE_ID: {
+        DCHECK(!replacement.is_post_param);
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+        HandleReplacement("sourceid", "chrome-mobile", replacement, &url);
+#else
+        HandleReplacement("sourceid", "chrome", replacement, &url);
+#endif
+        break;
+      }
+
       case GOOGLE_SEARCH_VERSION:
         HandleReplacement("gs_rn", "42", replacement, &url);
         break;
@@ -1382,9 +1372,8 @@ std::string TemplateURLRef::HandleReplacements(
         break;
 
       case GOOGLE_IMAGE_THUMBNAIL_BASE64: {
-        std::string base64_thumbnail_content;
-        base::Base64Encode(search_terms_args.image_thumbnail_content,
-                           &base64_thumbnail_content);
+        std::string base64_thumbnail_content =
+            base::Base64Encode(search_terms_args.image_thumbnail_content);
         HandleReplacement(std::string(), base64_thumbnail_content, replacement,
                           &url);
         if (replacement.is_post_param) {
@@ -1725,6 +1714,8 @@ BuiltinEngineType TemplateURL::GetBuiltinEngineType() const {
         return KEYWORD_MODE_STARTER_PACK_HISTORY;
       case TemplateURLStarterPackData::kTabs:
         return KEYWORD_MODE_STARTER_PACK_TABS;
+      case TemplateURLStarterPackData::kAskGoogle:
+        return KEYWORD_MODE_STARTER_PACK_ASK_GOOGLE;
       default:
         // In theory, this code path should never be reached.  However, it's
         // possible that when expanding the starter pack, a new entry may
@@ -1854,7 +1845,7 @@ void TemplateURL::EncodeSearchTerms(
     bool is_in_query,
     std::string* input_encoding,
     std::u16string* encoded_terms,
-    std::u16string* encoded_original_query) const {
+    std::u16string* encoded_original_query, bool is_in_post) const {
   std::vector<std::string> encodings(input_encodings());
   if (!base::Contains(encodings, "UTF-8"))
     encodings.push_back("UTF-8");
@@ -1862,7 +1853,7 @@ void TemplateURL::EncodeSearchTerms(
     if (TryEncoding(search_terms_args.search_terms,
                     search_terms_args.original_query, i->c_str(), is_in_query,
                     std::next(i) == encodings.end(), encoded_terms,
-                    encoded_original_query)) {
+                    encoded_original_query, is_in_post)) {
       *input_encoding = *i;
       return;
     }
@@ -1918,7 +1909,7 @@ GURL TemplateURL::RemoveSideSearchParamFromURL(
   if (!IsSideSearchSupported())
     return side_search_url;
   return net::AppendOrReplaceQueryParameter(side_search_url,
-                                            side_search_param(), absl::nullopt);
+                                            side_search_param(), std::nullopt);
 }
 
 GURL TemplateURL::GenerateSideImageSearchURL(const GURL& image_search_url,
@@ -1939,7 +1930,7 @@ GURL TemplateURL::RemoveSideImageSearchParamFromURL(
   if (!IsSideImageSearchSupported())
     return image_search_url;
   return net::AppendOrReplaceQueryParameter(
-      image_search_url, side_image_search_param(), absl::nullopt);
+      image_search_url, side_image_search_param(), std::nullopt);
 }
 
 void TemplateURL::CopyFrom(const TemplateURL& other) {

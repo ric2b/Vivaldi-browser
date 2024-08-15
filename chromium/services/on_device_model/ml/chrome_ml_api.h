@@ -32,6 +32,12 @@ enum ContextMode {
   kIgnoreContext = 1 << 2,
 };
 
+#if defined(_WIN32)
+using PlatformFile = void*;
+#else
+using PlatformFile = int;
+#endif
+
 // Opaque handle to an instance of a ChromeML model.
 using ChromeMLModel = uintptr_t;
 
@@ -49,15 +55,9 @@ struct ChromeMLModelData {
   // Called when the model_proto data is no longer needed.
   const ChromeMLDisposeFn* model_proto_dispose;
 
-  // Points to raw tensor weight data, indexed by fields encoded in the above
-  // proto. This memory must be mutable.
-  void* weights_data;
-
-  // The size in bytes of the data at `weights_data`.
-  size_t weights_size;
-
-  // Called when the weights data is no longer needed.
-  const ChromeMLDisposeFn* weights_dispose;
+  // File holding the weights data. The file will be owned by the inference
+  // library and closed once weight loading is complete.
+  PlatformFile weights_file;
 };
 
 // Describes a model to use with ChromeML.
@@ -87,6 +87,19 @@ struct ChromeMLModelDescriptor {
   const void* ts_spm_data;
   size_t ts_spm_size;
   size_t ts_dimension;
+
+  const uint32_t* adaptation_ranks;
+  size_t adaptation_ranks_size;
+
+  bool prefer_texture_weights;
+  bool enable_host_mapped_pointer;
+  bool use_low_power;
+};
+
+// Describes an adaptation for a model.
+struct ChromeMLAdaptationDescriptor {
+  // The model data to use.
+  const ChromeMLModelData* model_data;
 };
 
 // A status value included with each output chunk.
@@ -178,6 +191,10 @@ struct ChromeMLExecuteOptions {
   const ChromeMLContextSavedFn* context_saved_fn;
   const ChromeMLCompletionFn* completion_fn;
   const ChromeMLExecutionOutputFn* execution_output_fn;
+  // Optional adaptation ID for this request.
+  uint32_t* adaptation_id;
+  uint32_t top_k;
+  float temperature;
 };
 
 // Performance data filled out by GetEstimatedPerformance().
@@ -231,7 +248,7 @@ struct ChromeMLAPI {
 
   // Sets an error handling function for fatal errors in the GPU. See also
   // SetFatalErrorNonGpuFn.
-  void (*SetFatalErrorFn)(ChromeMLFatalErrorFn error_fn) = nullptr;
+  void (*SetFatalErrorFn)(ChromeMLFatalErrorFn error_fn);
 
   // Creates a new ChromeML model instance as described by `model`. The returned
   // object can be destroyed by passing it to DestroyModel(). `context` is
@@ -260,7 +277,12 @@ struct ChromeMLAPI {
 
   // Same as SetFatalErrorFn(), but for fatal errors that occur outside of the
   // gpu.
-  void (*SetFatalErrorNonGpuFn)(ChromeMLFatalErrorFn error_fn) = nullptr;
+  void (*SetFatalErrorNonGpuFn)(ChromeMLFatalErrorFn error_fn);
+
+  // Loads an adaptation and outputs an identifier for this adaptation in `id`.
+  bool (*CreateAdaptation)(ChromeMLModel model,
+                           const ChromeMLAdaptationDescriptor* descriptor,
+                           uint32_t& id);
 };
 
 // Signature of the GetChromeMLAPI() function which the shared library exports.

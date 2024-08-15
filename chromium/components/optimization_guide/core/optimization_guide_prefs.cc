@@ -133,6 +133,14 @@ const char kOnDeviceModelTimeoutCount[] =
 const char kOnDevicePerformanceClass[] =
     "optimization_guide.on_device.performance_class";
 
+// Stores the version of the last downloaded on-device model.
+const char kOnDeviceBaseModelVersion[] =
+    "optimization_guide.on_device.base_model_version";
+
+// Stores the name of the last downloaded on-device model.
+const char kOnDeviceBaseModelName[] =
+    "optimization_guide.on_device.base_model_name";
+
 // A dictionary pref that stores the file paths that need to be deleted as keys.
 // The value will not be used.
 const char kStoreFilePathsToDelete[] =
@@ -151,6 +159,11 @@ const char kLastTimeEligibleForOnDeviceModelDownload[] =
 // An integer pref that contains the user's client id.
 const char kModelQualityLogggingClientId[] =
     "optimization_guide.model_quality_logging_client_id";
+
+// An integer pref for the on-device GenAI foundational model enterprise policy
+// settings.
+const char kGenAILocalFoundationalModelEnterprisePolicySettings[] =
+    "optimization_guide.gen_ai_local_foundational_model_settings";
 
 }  // namespace localstate
 
@@ -188,6 +201,10 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(localstate::kOnDeviceModelCrashCount, 0);
   registry->RegisterIntegerPref(localstate::kOnDeviceModelTimeoutCount, 0);
   registry->RegisterIntegerPref(localstate::kOnDevicePerformanceClass, 0);
+  registry->RegisterStringPref(localstate::kOnDeviceBaseModelVersion,
+                               std::string());
+  registry->RegisterStringPref(localstate::kOnDeviceBaseModelName,
+                               std::string());
   registry->RegisterDictionaryPref(localstate::kStoreFilePathsToDelete);
   registry->RegisterTimePref(
       localstate::kLastTimeOnDeviceEligibleFeatureWasUsed, base::Time::Min());
@@ -195,6 +212,8 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
       localstate::kLastTimeEligibleForOnDeviceModelDownload, base::Time::Min());
   registry->RegisterInt64Pref(localstate::kModelQualityLogggingClientId, 0,
                               PrefRegistry::LOSSY_PREF);
+  registry->RegisterIntegerPref(
+      localstate::kGenAILocalFoundationalModelEnterprisePolicySettings, 0);
 }
 
 }  // namespace prefs

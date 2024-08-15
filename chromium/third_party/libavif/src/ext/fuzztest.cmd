@@ -9,8 +9,10 @@
 
 git clone https://github.com/google/fuzztest.git
 cd fuzztest
-: # There is no tagged release as of 2024/01/22. Pick the earliest commit that contains a needed bug fix.
-git checkout 8f82f46e14cc2484ddecf6d55e46243923f9a036
+: # There is no tagged release as of 2024/02/23. Pick the last commit that works.
+git checkout b39227cb001a46ed007fa37e40507d777652ede9
+sed -i 's/-fsanitize=address//g' ./cmake/FuzzTestFlagSetup.cmake
+sed -i 's/-DADDRESS_SANITIZER//g' ./cmake/FuzzTestFlagSetup.cmake
 
 : # fuzztest is built by the main CMake project through add_subdirectory as recommended at:
 : # https://github.com/google/fuzztest/blob/main/doc/quickstart-cmake.md

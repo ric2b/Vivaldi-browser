@@ -40,6 +40,7 @@
 #include "dawn/native/PerStage.h"
 #include "dawn/native/PipelineLayout.h"
 #include "dawn/native/ShaderModule.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 
 #include "dawn/native/dawn_platform.h"
 
@@ -60,7 +61,7 @@ struct ProgrammableStage {
     std::string entryPoint;
 
     // The metadata lives as long as module, that's ref-ed in the same structure.
-    const EntryPointMetadata* metadata = nullptr;
+    raw_ptr<const EntryPointMetadata> metadata = nullptr;
 
     PipelineConstantEntries constants;
 };
@@ -86,8 +87,11 @@ class PipelineBase : public ApiObjectBase, public CachedObject {
     // Implementation of the API entrypoint. Do not use in a reentrant manner.
     BindGroupLayoutBase* APIGetBindGroupLayout(uint32_t groupIndex);
 
+    using ScopedUseShaderPrograms = PerStage<ShaderModuleBase::ScopedUseTintProgram>;
+    ScopedUseShaderPrograms UseShaderPrograms();
+
     // Initialize() should only be called once by the frontend.
-    virtual MaybeError Initialize() = 0;
+    MaybeError Initialize(std::optional<ScopedUseShaderPrograms> scopedUsePrograms = std::nullopt);
 
   protected:
     PipelineBase(DeviceBase* device,
@@ -98,6 +102,8 @@ class PipelineBase : public ApiObjectBase, public CachedObject {
 
   private:
     MaybeError ValidateGetBindGroupLayout(BindGroupIndex group);
+
+    virtual MaybeError InitializeImpl() = 0;
 
     wgpu::ShaderStage mStageMask = wgpu::ShaderStage::None;
     PerStage<ProgrammableStage> mStages;

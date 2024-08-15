@@ -5,6 +5,7 @@
 #include "services/network/public/cpp/resource_request.h"
 
 #include "base/strings/string_number_conversions.h"
+#include "base/trace_event/typed_macros.h"
 #include "base/types/optional_util.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/load_flags.h"
@@ -99,21 +100,21 @@ mojo::PendingRemote<mojom::SharedDictionaryAccessObserver> Clone(
 //  - neither is nullopt and they both contain equal values
 //
 bool OptionalTrustedParamsEqualsForTesting(
-    const absl::optional<ResourceRequest::TrustedParams>& lhs,
-    const absl::optional<ResourceRequest::TrustedParams>& rhs) {
+    const std::optional<ResourceRequest::TrustedParams>& lhs,
+    const std::optional<ResourceRequest::TrustedParams>& rhs) {
   return (!lhs && !rhs) || (lhs && rhs && lhs->EqualsForTesting(*rhs));
 }
 
 bool OptionalWebBundleTokenParamsEqualsForTesting(  // IN-TEST
-    const absl::optional<ResourceRequest::WebBundleTokenParams>& lhs,
-    const absl::optional<ResourceRequest::WebBundleTokenParams>& rhs) {
+    const std::optional<ResourceRequest::WebBundleTokenParams>& lhs,
+    const std::optional<ResourceRequest::WebBundleTokenParams>& rhs) {
   return (!lhs && !rhs) ||
          (lhs && rhs && lhs->EqualsForTesting(*rhs));  // IN-TEST
 }
 
 bool OptionalNetLogInfoEqualsForTesting(
-    const absl::optional<net::NetLogSource>& lhs,
-    const absl::optional<net::NetLogSource>& rhs) {
+    const std::optional<net::NetLogSource>& lhs,
+    const std::optional<net::NetLogSource>& rhs) {
   bool equal_members = lhs && rhs && lhs.value() == rhs.value();
   return (!lhs && !rhs) || equal_members;
 }
@@ -241,7 +242,10 @@ ResourceRequest::ResourceRequest(const base::Location& location)
 #else
 ResourceRequest::ResourceRequest() = default;
 #endif
-ResourceRequest::ResourceRequest(const ResourceRequest& request) = default;
+ResourceRequest::ResourceRequest(const ResourceRequest& request) {
+  TRACE_EVENT("loading", "ResourceRequest::ResourceRequest.copy_constructor");
+  *this = request;
+}
 ResourceRequest::~ResourceRequest() = default;
 
 bool ResourceRequest::EqualsForTesting(const ResourceRequest& request) const {
@@ -265,7 +269,7 @@ bool ResourceRequest::EqualsForTesting(const ResourceRequest& request) const {
          originated_from_service_worker ==
              request.originated_from_service_worker &&
          skip_service_worker == request.skip_service_worker &&
-         corb_detachable == request.corb_detachable && mode == request.mode &&
+         mode == request.mode &&
          required_ip_address_space == request.required_ip_address_space &&
          credentials_mode == request.credentials_mode &&
          redirect_mode == request.redirect_mode &&

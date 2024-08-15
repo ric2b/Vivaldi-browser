@@ -33,6 +33,7 @@
 #include "net/base/proxy_server.h"
 #include "net/base/proxy_string_util.h"
 #include "net/base/schemeful_site.h"
+#include "net/base/session_usage.h"
 #include "net/base/test_completion_callback.h"
 #include "net/base/test_proxy_delegate.h"
 #include "net/cert/mock_cert_verifier.h"
@@ -87,10 +88,11 @@
 // This file can be included from net/http even though
 // it is in net/websockets because it doesn't
 // introduce any link dependency to net/websockets.
+#include <optional>
+
 #include "net/websockets/websocket_handshake_stream_base.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 #include "url/scheme_host_port.h"
 #include "url/url_constants.h"
@@ -445,7 +447,7 @@ class CapturePreconnectsTransportSocketPool : public TransportClientSocketPool {
   int RequestSocket(
       const ClientSocketPool::GroupId& group_id,
       scoped_refptr<ClientSocketPool::SocketParams> socket_params,
-      const absl::optional<NetworkTrafficAnnotationTag>& proxy_annotation_tag,
+      const std::optional<NetworkTrafficAnnotationTag>& proxy_annotation_tag,
       RequestPriority priority,
       const SocketTag& socket_tag,
       ClientSocketPool::RespectLimits respect_limits,
@@ -460,7 +462,7 @@ class CapturePreconnectsTransportSocketPool : public TransportClientSocketPool {
   int RequestSockets(
       const ClientSocketPool::GroupId& group_id,
       scoped_refptr<ClientSocketPool::SocketParams> socket_params,
-      const absl::optional<NetworkTrafficAnnotationTag>& proxy_annotation_tag,
+      const std::optional<NetworkTrafficAnnotationTag>& proxy_annotation_tag,
       int num_sockets,
       CompletionOnceCallback callback,
       const NetLogWithSource& net_log) override {
@@ -590,10 +592,11 @@ TEST_F(HttpStreamFactoryTest, PreconnectDirectWithExistingSpdySession) {
 
     // Put a SpdySession in the pool.
     HostPortPair host_port_pair("www.google.com", 443);
-    SpdySessionKey key(host_port_pair, ProxyChain::Direct(),
-                       PRIVACY_MODE_DISABLED,
-                       SpdySessionKey::IsProxySession::kFalse, SocketTag(),
-                       NetworkAnonymizationKey(), SecureDnsPolicy::kAllow);
+    SpdySessionKey key(host_port_pair, PRIVACY_MODE_DISABLED,
+                       ProxyChain::Direct(), SessionUsage::kDestination,
+                       SocketTag(), NetworkAnonymizationKey(),
+                       SecureDnsPolicy::kAllow,
+                       /*disable_cert_verification_network_fetches=*/false);
     std::ignore = CreateFakeSpdySession(session->spdy_session_pool(), key);
 
     CommonConnectJobParams common_connect_job_params =
@@ -848,11 +851,12 @@ const int quic_proxy_test_mock_errors[] = {
 // Tests that a bad QUIC proxy is added to the list of bad proxies.
 TEST_F(HttpStreamFactoryTest, QuicProxyMarkedAsBad) {
   for (int quic_proxy_test_mock_error : quic_proxy_test_mock_errors) {
+    auto quic_proxy_chain =
+        ProxyChain::ForIpProtection({ProxyServer::FromSchemeHostAndPort(
+            ProxyServer::SCHEME_QUIC, "bad", 99)});
     std::unique_ptr<ProxyResolutionService> proxy_resolution_service =
         ConfiguredProxyResolutionService::CreateFixedFromProxyChainsForTest(
-            {ProxyChain::FromSchemeHostAndPort(ProxyServer::SCHEME_QUIC, "bad",
-                                               99),
-             ProxyChain::Direct()},
+            {quic_proxy_chain, ProxyChain::Direct()},
             TRAFFIC_ANNOTATION_FOR_TESTS);
 
     HttpNetworkSessionParams session_params;
@@ -916,8 +920,7 @@ TEST_F(HttpStreamFactoryTest, QuicProxyMarkedAsBad) {
     EXPECT_EQ(1u, retry_info.size()) << quic_proxy_test_mock_error;
     EXPECT_TRUE(waiter.used_proxy_info().is_direct());
 
-    auto iter = retry_info.find(ProxyChain(
-        ProxyUriToProxyServer("quic://bad:99", ProxyServer::SCHEME_QUIC)));
+    auto iter = retry_info.find(quic_proxy_chain);
     EXPECT_TRUE(iter != retry_info.end()) << quic_proxy_test_mock_error;
   }
 }
@@ -1774,18 +1777,15 @@ TEST_F(HttpStreamFactoryTest, NewSpdySessionCloseIdleH2Sockets) {
   for (size_t i = 0; i < kNumIdleSockets; i++) {
     auto connection = std::make_unique<ClientSocketHandle>();
     TestCompletionCallback callback;
-
-    auto ssl_config_for_origin = std::make_unique<SSLConfig>();
-    ssl_config_for_origin->alpn_protos = session->GetAlpnProtos();
     scoped_refptr<ClientSocketPool::SocketParams> socket_params =
         base::MakeRefCounted<ClientSocketPool::SocketParams>(
-            std::move(ssl_config_for_origin));
+            /*allowed_bad_certs=*/std::vector<SSLConfig::CertAndStatus>());
     ClientSocketPool::GroupId group_id(
         destination, PrivacyMode::PRIVACY_MODE_DISABLED,
         NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
         /*disable_cert_network_fetches=*/false);
     int rv = connection->Init(
-        group_id, socket_params, absl::nullopt /* proxy_annotation_tag */,
+        group_id, socket_params, std::nullopt /* proxy_annotation_tag */,
         MEDIUM, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
         callback.callback(), ClientSocketPool::ProxyAuthCallback(),
         session->GetSocketPool(HttpNetworkSession::NORMAL_SOCKET_POOL,

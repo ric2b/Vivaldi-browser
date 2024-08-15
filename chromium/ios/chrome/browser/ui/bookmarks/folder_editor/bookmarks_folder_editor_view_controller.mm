@@ -10,18 +10,20 @@
 #import "base/auto_reset.h"
 #import "base/check_op.h"
 #import "base/i18n/rtl.h"
+#import "base/memory/raw_ptr.h"
 #import "base/memory/weak_ptr.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "base/notreached.h"
 #import "base/strings/sys_string_conversions.h"
-#import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/browser/bookmark_node.h"
 #import "components/bookmarks/common/bookmark_features.h"
 #import "components/bookmarks/common/bookmark_metrics.h"
 #import "components/sync/base/features.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_bridge_observer.h"
+#import "ios/chrome/browser/bookmarks/model/bookmark_model_type.h"
 #import "ios/chrome/browser/bookmarks/model/bookmarks_utils.h"
+#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
@@ -41,7 +43,6 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
-using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
 
 namespace {
@@ -66,25 +67,27 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 @implementation BookmarksFolderEditorViewController {
   // Model object for localOrSyncable bookmarks.
-  base::WeakPtr<BookmarkModel> _localOrSyncableBookmarkModel;
+  base::WeakPtr<LegacyBookmarkModel> _localOrSyncableBookmarkModel;
   // Observer for `_localOrSyncableBookmarkModel` changes.
   std::unique_ptr<BookmarkModelBridge> _localOrSyncableModelBridge;
   // Model object for account bookmarks.
-  base::WeakPtr<BookmarkModel> _accountBookmarkModel;
+  base::WeakPtr<LegacyBookmarkModel> _accountBookmarkModel;
   // Observer for `_accountBookmarkModel` changes.
   std::unique_ptr<BookmarkModelBridge> _accountModelBridge;
+  // The authentication service.
+  raw_ptr<AuthenticationService> _authService;
   // Observer for signin status changes.
   std::unique_ptr<AuthenticationServiceObserverBridge> _authServiceBridge;
-  syncer::SyncService* _syncService;
+  raw_ptr<syncer::SyncService> _syncService;
   std::unique_ptr<SyncObserverBridge> _syncObserverModelBridge;
   // The browser for this view controller.
   base::WeakPtr<Browser> _browser;
-  ChromeBrowserState* _browserState;
+  raw_ptr<ChromeBrowserState> _browserState;
   // Parent folder to `_folder`. Should never be `nullptr`.
-  const BookmarkNode* _parentFolder;
+  raw_ptr<const BookmarkNode> _parentFolder;
   // If `_folderNode` is `nullptr`, the user is adding a new folder. Otherwise
   // the user is editing an existing folder.
-  const BookmarkNode* _folder;
+  raw_ptr<const BookmarkNode> _folder;
 
   BOOL _edited;
   BOOL _editingExistingFolder;
@@ -105,8 +108,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (instancetype)
     initWithLocalOrSyncableBookmarkModel:
-        (BookmarkModel*)localOrSyncableBookmarkModel
-                    accountBookmarkModel:(BookmarkModel*)accountBookmarkModel
+        (LegacyBookmarkModel*)localOrSyncableBookmarkModel
+                    accountBookmarkModel:
+                        (LegacyBookmarkModel*)accountBookmarkModel
                               folderNode:(const BookmarkNode*)folder
                         parentFolderNode:(const BookmarkNode*)parentFolder
                    authenticationService:(AuthenticationService*)authService
@@ -118,8 +122,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
   DCHECK(accountBookmarkModel->loaded());
   DCHECK(parentFolder);
   if (folder) {
-    BookmarkModel* modelForFolder = bookmark_utils_ios::GetBookmarkModelForNode(
-        folder, localOrSyncableBookmarkModel, accountBookmarkModel);
+    LegacyBookmarkModel* modelForFolder =
+        bookmark_utils_ios::GetBookmarkModelForNode(
+            folder, localOrSyncableBookmarkModel, accountBookmarkModel);
     DCHECK(!modelForFolder->is_permanent_node(folder));
   }
   DCHECK(browser);
@@ -140,6 +145,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     _editingExistingFolder = _folder != nullptr;
     _browser = browser->AsWeakPtr();
     _browserState = browser->GetBrowserState()->GetOriginalChromeBrowserState();
+    _authService = authService;
     _authServiceBridge = std::make_unique<AuthenticationServiceObserverBridge>(
         authService, self);
     _syncService = syncService;
@@ -302,9 +308,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
       base::UserMetricsAction("MobileBookmarksFolderEditorDeletedFolder"));
   std::set<const BookmarkNode*> editedNodes;
   editedNodes.insert(_folder);
-  BookmarkModel* modelForFolder = bookmark_utils_ios::GetBookmarkModelForNode(
-      _folder, _localOrSyncableBookmarkModel.get(),
-      _accountBookmarkModel.get());
+  LegacyBookmarkModel* modelForFolder =
+      bookmark_utils_ios::GetBookmarkModelForNode(
+          _folder, _localOrSyncableBookmarkModel.get(),
+          _accountBookmarkModel.get());
   [self.snackbarCommandsHandler
       showSnackbarMessage:bookmark_utils_ios::DeleteBookmarksWithUndoToast(
                               editedNodes, {modelForFolder}, _browserState)];
@@ -313,7 +320,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)saveFolder {
   DCHECK(_parentFolder);
-  BookmarkModel* modelForParentFolder =
+  LegacyBookmarkModel* modelForParentFolder =
       bookmark_utils_ios::GetBookmarkModelForNode(
           _parentFolder, _localOrSyncableBookmarkModel.get(),
           _accountBookmarkModel.get());
@@ -330,9 +337,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [self.delegate bookmarksFolderEditorWillCommitTitleChange:self];
     }
 
-    BookmarkModel* modelForFolder = bookmark_utils_ios::GetBookmarkModelForNode(
-        _folder, _localOrSyncableBookmarkModel.get(),
-        _accountBookmarkModel.get());
+    LegacyBookmarkModel* modelForFolder =
+        bookmark_utils_ios::GetBookmarkModelForNode(
+            _folder, _localOrSyncableBookmarkModel.get(),
+            _accountBookmarkModel.get());
     modelForFolder->SetTitle(_folder, folderTitle,
                              bookmarks::metrics::BookmarkEditSource::kUser);
     if (_folder->parent() != _parentFolder) {
@@ -343,7 +351,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
                                   bookmarksVector,
                                   _localOrSyncableBookmarkModel.get(),
                                   _accountBookmarkModel.get(), _parentFolder,
-                                  _browserState)];
+                                  _browserState, _authService->GetWeakPtr(),
+                                  _syncService)];
       // Move might change the pointer, grab the updated value.
       CHECK_EQ(bookmarksVector.size(), 1u);
       _folder = bookmarksVector[0];
@@ -355,7 +364,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   }
 
   if (_manuallyChangedTheFolder) {
-    bookmarks::StorageType type = bookmark_utils_ios::GetBookmarkModelType(
+    BookmarkModelType type = bookmark_utils_ios::GetBookmarkModelType(
         _parentFolder, _localOrSyncableBookmarkModel.get(),
         _accountBookmarkModel.get());
     SetLastUsedBookmarkFolder(_browserState->GetPrefs(), _parentFolder, type);
@@ -383,24 +392,24 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 #pragma mark - BookmarkModelBridgeObserver
 
-- (void)bookmarkModelLoaded:(BookmarkModel*)model {
+- (void)bookmarkModelLoaded:(LegacyBookmarkModel*)model {
   // The bookmark model is assumed to be loaded when this controller is created.
   NOTREACHED();
 }
 
-- (void)bookmarkModel:(BookmarkModel*)model
+- (void)bookmarkModel:(LegacyBookmarkModel*)model
         didChangeNode:(const BookmarkNode*)bookmarkNode {
   if (bookmarkNode == _parentFolder) {
     [self updateParentFolderState];
   }
 }
 
-- (void)bookmarkModel:(BookmarkModel*)model
+- (void)bookmarkModel:(LegacyBookmarkModel*)model
     didChangeChildrenForNode:(const BookmarkNode*)bookmarkNode {
   // No-op.
 }
 
-- (void)bookmarkModel:(BookmarkModel*)model
+- (void)bookmarkModel:(LegacyBookmarkModel*)model
           didMoveNode:(const BookmarkNode*)bookmarkNode
            fromParent:(const BookmarkNode*)oldParent
              toParent:(const BookmarkNode*)newParent {
@@ -414,7 +423,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   }
 }
 
-- (void)bookmarkModel:(bookmarks::BookmarkModel*)model
+- (void)bookmarkModel:(LegacyBookmarkModel*)model
        willDeleteNode:(const bookmarks::BookmarkNode*)node
            fromFolder:(const bookmarks::BookmarkNode*)folder {
   if (_folder->HasAncestor(node)) {
@@ -428,19 +437,26 @@ typedef NS_ENUM(NSInteger, ItemType) {
     // This might happen when the user has changed `_parentFolder` but has not
     // commited the changes by pressing done. And in the background the chosen
     // folder was deleted.
-    _parentFolder = model->mobile_node();
+    if (model->mobile_node()) {
+      _parentFolder = model->mobile_node();
+    } else {
+      // When dealing with account bookmarks, it is possible that permanent
+      // folders no longer exist (e.g. the user signed out). In this case, fall
+      // back to the local model.
+      _parentFolder = _localOrSyncableBookmarkModel->mobile_node();
+    }
     [self updateParentFolderState];
   }
 }
 
-- (void)bookmarkModel:(BookmarkModel*)model
+- (void)bookmarkModel:(LegacyBookmarkModel*)model
         didDeleteNode:(const BookmarkNode*)node
            fromFolder:(const BookmarkNode*)folder {
   // No-op. Bookmark deletion handled in
   // `bookmarkModel:willDeleteNode:fromFolder:`
 }
 
-- (void)bookmarkModelRemovedAllNodes:(BookmarkModel*)model {
+- (void)bookmarkModelRemovedAllNodes:(LegacyBookmarkModel*)model {
   if (model->is_permanent_node(_parentFolder)) {
     return;  // The current parent folder is still valid.
   }
@@ -490,7 +506,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 // `accountBookmarkModel` becomes unavailable, this method will cancel folder
 // editor. Returns whether folder editor was cancelled or not.
 - (BOOL)cancelIfParentFolderIsUnavailable {
-  BookmarkModel* parentFolderModel =
+  LegacyBookmarkModel* parentFolderModel =
       bookmark_utils_ios::GetBookmarkModelForNode(
           _parentFolder, _localOrSyncableBookmarkModel.get(),
           _accountBookmarkModel.get());
@@ -523,15 +539,15 @@ typedef NS_ENUM(NSInteger, ItemType) {
   CHECK(_parentFolderItem);
   _parentFolderItem.title =
       bookmark_utils_ios::TitleForBookmarkNode(_parentFolder);
-  bookmarks::StorageType type = bookmark_utils_ios::GetBookmarkModelType(
+  BookmarkModelType type = bookmark_utils_ios::GetBookmarkModelType(
       _parentFolder, _localOrSyncableBookmarkModel.get(),
       _accountBookmarkModel.get());
   switch (type) {
-    case bookmarks::StorageType::kLocalOrSyncable:
+    case BookmarkModelType::kLocalOrSyncable:
       _parentFolderItem.shouldDisplayCloudSlashIcon =
           bookmark_utils_ios::IsAccountBookmarkStorageOptedIn(_syncService);
       break;
-    case bookmarks::StorageType::kAccount:
+    case BookmarkModelType::kAccount:
       _parentFolderItem.shouldDisplayCloudSlashIcon = NO;
       break;
   }

@@ -310,7 +310,7 @@ void AppTestHelper::FirstTaskRun() {
                                         WithSystemScope(Wrap(&ExpectAppTag))))},
           {"expect_app_version",
            WithSwitch(
-               "version",
+               "app_version",
                WithSwitch("app_id", WithSystemScope(Wrap(&ExpectAppVersion))))},
           {"expect_candidate_uninstalled",
            WithSystemScope(Wrap(&ExpectCandidateUninstalled))},
@@ -323,14 +323,17 @@ void AppTestHelper::FirstTaskRun() {
            WithSystemScope(Wrap(&ExpectMarshalInterfaceSucceeds))},
           {"expect_legacy_update3web_succeeds",
            WithSwitch(
-               "expected_error_code",
+               "cancel_when_downloading",
                WithSwitch(
-                   "expected_final_state",
+                   "expected_error_code",
                    WithSwitch(
-                       "app_bundle_web_create_mode",
-                       WithSwitch("app_id",
-                                  WithSystemScope(Wrap(
-                                      &ExpectLegacyUpdate3WebSucceeds))))))},
+                       "expected_final_state",
+                       WithSwitch(
+                           "app_bundle_web_create_mode",
+                           WithSwitch(
+                               "app_id",
+                               WithSystemScope(
+                                   Wrap(&ExpectLegacyUpdate3WebSucceeds)))))))},
           {"expect_legacy_process_launcher_succeeds",
            WithSystemScope(Wrap(&ExpectLegacyProcessLauncherSucceeds))},
           {"expect_legacy_app_command_web_succeeds",
@@ -351,11 +354,14 @@ void AppTestHelper::FirstTaskRun() {
            WithSwitch("app_id", WithSystemScope(Wrap(&RunHandoff)))},
 #endif  // BUILDFLAG(IS_WIN)
           {"expect_version_active",
-           WithSwitch("version", WithSystemScope(Wrap(&ExpectVersionActive)))},
+           WithSwitch("updater_version",
+                      WithSystemScope(Wrap(&ExpectVersionActive)))},
           {"expect_version_not_active",
-           WithSwitch("version",
+           WithSwitch("updater_version",
                       WithSystemScope(Wrap(&ExpectVersionNotActive)))},
           {"install", WithSystemScope(Wrap(&Install))},
+          {"install_eula_required",
+           WithSystemScope(Wrap(&InstallEulaRequired))},
           {"install_updater_and_app",
            WithSwitch(
                "always_launch_cmd",
@@ -392,8 +398,8 @@ void AppTestHelper::FirstTaskRun() {
           {"delete_file",
            (WithSwitch("path", WithSystemScope(Wrap(&DeleteFile))))},
           {"install_app",
-           WithSwitch("version", WithSwitch("app_id", WithSystemScope(
-                                                          Wrap(&InstallApp))))},
+           WithSwitch("app_version", WithSwitch("app_id", WithSystemScope(Wrap(
+                                                              &InstallApp))))},
           {"install_app_via_service",
            WithSwitch("expected_final_values",
                       WithSwitch("app_id", WithSystemScope(
@@ -438,7 +444,7 @@ void AppTestHelper::FirstTaskRun() {
           {"expect_legacy_updater_migrated",
            WithSystemScope(Wrap(&ExpectLegacyUpdaterMigrated))},
           {"run_recovery_component",
-           WithSwitch("version",
+           WithSwitch("browser_version",
                       WithSwitch("app_id", WithSystemScope(
                                                Wrap(&RunRecoveryComponent))))},
           {"set_last_checked",

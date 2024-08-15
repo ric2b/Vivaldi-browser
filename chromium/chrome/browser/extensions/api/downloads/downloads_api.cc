@@ -68,6 +68,7 @@
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/warning_service.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/common/mojom/event_dispatcher.mojom-forward.h"
 #include "extensions/common/permissions/permissions_data.h"
@@ -221,6 +222,8 @@ extensions::api::downloads::DangerType ConvertDangerType(
     case download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_LOCAL_PASSWORD_SCANNING:
       return extensions::api::downloads::DangerType::
           kPromptForLocalPasswordScanning;
+    case download::DOWNLOAD_DANGER_TYPE_BLOCKED_SCAN_FAILED:
+      return extensions::api::downloads::DangerType::kBlockedScanFailed;
     case download::DOWNLOAD_DANGER_TYPE_MAX:
       NOTREACHED();
       return extensions::api::downloads::DangerType::kMaxValue;
@@ -231,9 +234,9 @@ extensions::api::downloads::InsecureStatusType
 InsecureStateString(download::DownloadItem::InsecureDownloadStatus insecure_state) {
   switch (insecure_state) {
   case download::DownloadItem::UNKNOWN:
-    return extensions::api::downloads::InsecureStatusType::kNone;
-  case download::DownloadItem::SAFE:
     return extensions::api::downloads::InsecureStatusType::kUnknown;
+  case download::DownloadItem::SAFE:
+    return extensions::api::downloads::InsecureStatusType::kSafe;
   case download::DownloadItem::VALIDATED:
     return extensions::api::downloads::InsecureStatusType::kValidated;
   case download::DownloadItem::WARN:
@@ -864,7 +867,7 @@ class ExtensionDownloadsEventRouterData : public base::SupportsUserData::Data {
     determiners_.clear();
   }
 
-  void DeterminerRemoved(const std::string& extension_id) {
+  void DeterminerRemoved(const ExtensionId& extension_id) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     for (auto iter = determiners_.begin(); iter != determiners_.end();) {
       if (iter->extension_id == extension_id) {
@@ -878,7 +881,7 @@ class ExtensionDownloadsEventRouterData : public base::SupportsUserData::Data {
     CheckAllDeterminersCalled();
   }
 
-  void AddPendingDeterminer(const std::string& extension_id,
+  void AddPendingDeterminer(const ExtensionId& extension_id,
                             const base::Time& installed) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     for (auto& determiner : determiners_) {
@@ -890,7 +893,7 @@ class ExtensionDownloadsEventRouterData : public base::SupportsUserData::Data {
     determiners_.push_back(DeterminerInfo(extension_id, installed));
   }
 
-  bool DeterminerAlreadyReported(const std::string& extension_id) {
+  bool DeterminerAlreadyReported(const ExtensionId& extension_id) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     for (auto& determiner : determiners_) {
       if (determiner.extension_id == extension_id) {
@@ -926,7 +929,7 @@ class ExtensionDownloadsEventRouterData : public base::SupportsUserData::Data {
   // |extension_id| has already reported. The caller is responsible for
   // validating |filename|.
   bool DeterminerCallback(content::BrowserContext* browser_context,
-                          const std::string& extension_id,
+                          const ExtensionId& extension_id,
                           const base::FilePath& filename,
                           downloads::FilenameConflictAction conflict_action) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -943,7 +946,7 @@ class ExtensionDownloadsEventRouterData : public base::SupportsUserData::Data {
         if (!filename.empty() ||
             (conflict_action != downloads::FilenameConflictAction::kUniquify)) {
           WarningSet warnings;
-          std::string winner_extension_id;
+          ExtensionId winner_extension_id;
           ExtensionDownloadsEventRouter::DetermineFilenameInternal(
               filename, conflict_action, determiner.extension_id,
               determiner.install_time, determiner_.extension_id,
@@ -968,10 +971,10 @@ class ExtensionDownloadsEventRouterData : public base::SupportsUserData::Data {
 
   struct DeterminerInfo {
     DeterminerInfo();
-    DeterminerInfo(const std::string& e_id, const base::Time& installed);
+    DeterminerInfo(const ExtensionId& e_id, const base::Time& installed);
     ~DeterminerInfo();
 
-    std::string extension_id;
+    ExtensionId extension_id;
     base::Time install_time;
     bool reported;
   };
@@ -1031,7 +1034,7 @@ class ExtensionDownloadsEventRouterData : public base::SupportsUserData::Data {
 int ExtensionDownloadsEventRouterData::determine_filename_timeout_s_ = 15;
 
 ExtensionDownloadsEventRouterData::DeterminerInfo::DeterminerInfo(
-    const std::string& e_id,
+    const ExtensionId& e_id,
     const base::Time& installed)
     : extension_id(e_id), install_time(installed), reported(false) {}
 
@@ -1092,7 +1095,7 @@ DownloadedByExtension* DownloadedByExtension::Get(
 }
 
 DownloadedByExtension::DownloadedByExtension(download::DownloadItem* item,
-                                             const std::string& id,
+                                             const ExtensionId& id,
                                              const std::string& name)
     : id_(id), name_(name) {
   item->SetUserData(kKey, base::WrapUnique(this));
@@ -1856,11 +1859,11 @@ void ExtensionDownloadsEventRouter::OnDeterminingFilename(
 void ExtensionDownloadsEventRouter::DetermineFilenameInternal(
     const base::FilePath& filename,
     downloads::FilenameConflictAction conflict_action,
-    const std::string& suggesting_extension_id,
+    const ExtensionId& suggesting_extension_id,
     const base::Time& suggesting_install_time,
-    const std::string& incumbent_extension_id,
+    const ExtensionId& incumbent_extension_id,
     const base::Time& incumbent_install_time,
-    std::string* winner_extension_id,
+    ExtensionId* winner_extension_id,
     base::FilePath* determined_filename,
     downloads::FilenameConflictAction* determined_conflict_action,
     WarningSet* warnings) {
@@ -1894,7 +1897,7 @@ void ExtensionDownloadsEventRouter::DetermineFilenameInternal(
 bool ExtensionDownloadsEventRouter::DetermineFilename(
     content::BrowserContext* browser_context,
     bool include_incognito,
-    const std::string& ext_id,
+    const ExtensionId& ext_id,
     int download_id,
     const base::FilePath& const_filename,
     downloads::FilenameConflictAction conflict_action,
@@ -2165,7 +2168,7 @@ DownloadsAcceptMixedFunction::~DownloadsAcceptMixedFunction() {
 
 ExtensionFunction::ResponseAction DownloadsAcceptMixedFunction::Run() {
 
-  absl::optional<downloads::AcceptMixed::Params> params(
+  std::optional<downloads::AcceptMixed::Params> params(
       downloads::AcceptMixed::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
   DownloadItem* download_item = GetDownload(
@@ -2175,8 +2178,9 @@ ExtensionFunction::ResponseAction DownloadsAcceptMixedFunction::Run() {
     return RespondNow(Error(std::move(error)));
   }
 
-  download_item->ValidateInsecureDownload();
-
+  if (download_item->IsInsecure()) {
+    download_item->ValidateInsecureDownload();
+  }
   return RespondNow(NoArguments());
 }
 

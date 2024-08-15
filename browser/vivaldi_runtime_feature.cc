@@ -49,12 +49,12 @@ Profile* ProfileFromBrowserContext(content::BrowserContext* browser_context) {
   return static_cast<Profile*>(browser_context);
 }
 
-absl::optional<FeatureMap> ParseFeatures(base::Value json) {
+std::optional<FeatureMap> ParseFeatures(base::Value json) {
   if (!json.is_dict())
-    return absl::nullopt;
+    return std::nullopt;
   base::Value* flags_dict = json.GetDict().Find("flags");
   if (!flags_dict || !flags_dict->is_dict())
-    return absl::nullopt;
+    return std::nullopt;
 
   std::vector<std::pair<std::string, Feature>> features;
   for (auto feature_iter : flags_dict->GetDict()) {
@@ -72,18 +72,19 @@ absl::optional<FeatureMap> ParseFeatures(base::Value json) {
     if (std::string* value = dict.GetDict().FindString("friendly_name")) {
       feature.friendly_name = std::move(*value);
     }
-    if (absl::optional<bool> value = dict.GetDict().FindBool("value")) {
+    if (std::optional<bool> value = dict.GetDict().FindBool("value")) {
       if (*value) {
         feature.default_value = true;
       }
     }
 #if !defined(OFFICIAL_BUILD)
-    if (absl::optional<bool> value = dict.GetDict().FindBool("internal_value")) {
+    if (std::optional<bool> value = dict.GetDict().FindBool("internal_value")) {
       if (*value) {
         feature.default_value = true;
       }
     }
-    if (absl::optional<bool> value = dict.GetDict().FindBool("internal_locked")) {
+    if (std::optional<bool> value =
+            dict.GetDict().FindBool("internal_locked")) {
       if (*value) {
         feature.locked = true;
       }
@@ -210,12 +211,12 @@ void Init() {
   if (!vivaldi::IsVivaldiRunning())
     return;
 
-  absl::optional<base::Value> json =
+  std::optional<base::Value> json =
       ResourceReader::ReadJSON("", kRuntimeFeaturesFilename);
   if (!json) {
     return;
   }
-  absl::optional<FeatureMap> feature_map = ParseFeatures(std::move(*json));
+  std::optional<FeatureMap> feature_map = ParseFeatures(std::move(*json));
   if (!feature_map) {
     LOG(ERROR) << "Invalid structure of JSON in " << kRuntimeFeaturesFilename;
     return;

@@ -290,7 +290,8 @@ void SkBitmapDevice::replaceBitmapBackendForRasterSurface(const SkBitmap& bm) {
 }
 
 sk_sp<SkDevice> SkBitmapDevice::createDevice(const CreateInfo& cinfo, const SkPaint* layerPaint) {
-    const SkSurfaceProps surfaceProps(this->surfaceProps().flags(), cinfo.fPixelGeometry);
+    const SkSurfaceProps surfaceProps =
+        this->surfaceProps().cloneWithPixelGeometry(cinfo.fPixelGeometry);
 
     // Need to force L32 for now if we have an image filter.
     // If filters ever support other colortypes, e.g. F16, we can modify this check.
@@ -530,10 +531,9 @@ void SkBitmapDevice::drawImageRect(const SkImage* image, const SkRect* src, cons
 
 void SkBitmapDevice::onDrawGlyphRunList(SkCanvas* canvas,
                                         const sktext::GlyphRunList& glyphRunList,
-                                        const SkPaint& initialPaint,
-                                        const SkPaint& drawingPaint) {
+                                        const SkPaint& paint) {
     SkASSERT(!glyphRunList.hasRSXForm());
-    LOOP_TILER( drawGlyphRunList(canvas, &fGlyphPainter, glyphRunList, drawingPaint), nullptr )
+    LOOP_TILER( drawGlyphRunList(canvas, &fGlyphPainter, glyphRunList, paint), nullptr )
 }
 
 void SkBitmapDevice::drawVertices(const SkVertices* vertices,

@@ -121,10 +121,8 @@ repo launcher version 2.4       <-- ... this line!
 
 Here are all the places you'll want to update.
 
-*   [dev-vcs/repo]: Gentoo package installed into the SDK/chroot and onto some
-    DUTs for easy access.  [cros_portage_upgrade] can help automate the update.
-*   [depot_tools]: When copying in the new version, make sure to retain the
-    `REPO_URL` customization to point users to the CrOS repo fork!
+*   [depot_tools]: Copy `repo` from external/repo to `repo_launcher` in
+    depot_tools.
     NB: Update the `repo_launcher` file instead of `repo` in here.
 *   Pinned depot_tools checkouts: Once [depot_tools] is updated with the new
     launcher, update the pinned commits to the new version.

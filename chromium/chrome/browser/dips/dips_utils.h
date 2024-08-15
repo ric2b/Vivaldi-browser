@@ -156,6 +156,16 @@ struct PopupWithTime {
   base::Time last_popup_time;
 };
 
+enum class OptionalBool {
+  kUnknown = 0,
+  kFalse = 1,
+  kTrue = 2,
+};
+
+inline OptionalBool ToOptionalBool(bool b) {
+  return b ? OptionalBool::kTrue : OptionalBool::kFalse;
+}
+
 inline bool operator==(const StateValue& lhs, const StateValue& rhs) {
   return std::tie(lhs.site_storage_times, lhs.user_interaction_times,
                   lhs.stateful_bounce_times, lhs.bounce_times,
@@ -178,8 +188,14 @@ std::string GetSiteForDIPS(const GURL& url);
 // belongs to the same site as `url`.
 bool HasSameSiteIframe(content::WebContents* web_contents, const GURL& url);
 
-// Returns `True` iff the `navigation_handle` represents a navigation happening
-// in an iframe of the primary frame tree.
+// Returns whether the provided cookie access was ad-tagged, based on the cookie
+// settings overrides. Returns Unknown if kSkipTpcdMitigationsForAdsHeuristics
+// is false and the override is not set regardless.
+OptionalBool IsAdTaggedCookieForHeuristics(
+    const content::CookieAccessDetails& details);
+
+// Returns `True` iff the `navigation_handle` represents a navigation
+// happening in an iframe of the primary frame tree.
 inline bool IsInPrimaryPageIFrame(
     content::NavigationHandle* navigation_handle) {
   return navigation_handle && navigation_handle->GetParentFrame()
@@ -228,6 +244,14 @@ inline std::optional<GURL> GetFirstPartyURL(content::RenderFrameHost* rfh) {
   return rfh ? std::optional<GURL>(rfh->GetMainFrame()->GetLastCommittedURL())
              : std::nullopt;
 }
+
+// The amount of time since a page last received user interaction before a
+// subsequent user interaction event may be recorded to DIPS Storage for the
+// same page.
+extern const base::TimeDelta kDIPSTimestampUpdateInterval;
+
+[[nodiscard]] bool UpdateTimestamp(std::optional<base::Time>& last_time,
+                                   base::Time now);
 
 enum class DIPSRecordedEvent {
   kStorage,

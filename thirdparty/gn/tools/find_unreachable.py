@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright 2020 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -71,7 +71,7 @@ def main():
   result = find_source_targets_from(unreachable, targets_graph) \
     if cmd_args.no_refs else unreachable
 
-  print '\n'.join(sorted(result))
+  print('\n'.join(sorted(result)))
 
 
 if __name__ == '__main__':

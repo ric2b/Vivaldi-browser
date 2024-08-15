@@ -35,6 +35,8 @@ OBJS-$(HAVE_LIBC_MSVCRT)                 += file_open.o
 
 # subsystems
 OBJS-$(CONFIG_ISO_MEDIA)                 += isom.o
+OBJS-$(CONFIG_IAMFDEC)                   += iamf_reader.o iamf_parse.o iamf.o
+OBJS-$(CONFIG_IAMFENC)                   += iamf_writer.o iamf.o
 OBJS-$(CONFIG_NETWORK)                   += network.o
 OBJS-$(CONFIG_RIFFDEC)                   += riffdec.o
 OBJS-$(CONFIG_RIFFENC)                   += riffenc.o
@@ -258,6 +260,8 @@ OBJS-$(CONFIG_EVC_MUXER)                 += rawenc.o
 OBJS-$(CONFIG_HLS_DEMUXER)               += hls.o hls_sample_encryption.o
 OBJS-$(CONFIG_HLS_MUXER)                 += hlsenc.o hlsplaylist.o avc.o
 OBJS-$(CONFIG_HNM_DEMUXER)               += hnm.o
+OBJS-$(CONFIG_IAMF_DEMUXER)              += iamfdec.o
+OBJS-$(CONFIG_IAMF_MUXER)                += iamfenc.o
 OBJS-$(CONFIG_ICO_DEMUXER)               += icodec.o
 OBJS-$(CONFIG_ICO_MUXER)                 += icoenc.o
 OBJS-$(CONFIG_IDCIN_DEMUXER)             += idcin.o
@@ -341,7 +345,7 @@ OBJS-$(CONFIG_MATROSKA_DEMUXER)          += matroskadec.o matroska.o  \
                                             oggparsevorbis.o vorbiscomment.o \
                                             qtpalette.o replaygain.o dovi_isom.o
 OBJS-$(CONFIG_MATROSKA_MUXER)            += matroskaenc.o matroska.o \
-                                            av1.o avc.o hevc.o \
+                                            av1.o avc.o hevc.o vvc.o\
                                             flacenc_header.o avlanguage.o \
                                             vorbiscomment.o wv.o dovi_isom.o
 OBJS-$(CONFIG_MCA_DEMUXER)               += mca.o
@@ -363,7 +367,7 @@ OBJS-$(CONFIG_MODS_DEMUXER)              += mods.o
 OBJS-$(CONFIG_MOFLEX_DEMUXER)            += moflex.o
 OBJS-$(CONFIG_MOV_DEMUXER)               += mov.o mov_chan.o mov_esds.o \
                                             qtpalette.o replaygain.o dovi_isom.o
-OBJS-$(CONFIG_MOV_MUXER)                 += movenc.o av1.o avc.o hevc.o vpcc.o \
+OBJS-$(CONFIG_MOV_MUXER)                 += movenc.o av1.o avc.o hevc.o vvc.o vpcc.o \
                                             movenchint.o mov_chan.o rtp.o \
                                             movenccenc.o movenc_ttml.o rawutils.o \
                                             dovi_isom.o evc.o
@@ -484,9 +488,11 @@ OBJS-$(CONFIG_PP_BNK_DEMUXER)            += pp_bnk.o
 OBJS-$(CONFIG_PVA_DEMUXER)               += pva.o
 OBJS-$(CONFIG_PVF_DEMUXER)               += pvfdec.o pcm.o
 OBJS-$(CONFIG_QCP_DEMUXER)               += qcp.o
+OBJS-$(CONFIG_QOA_DEMUXER)               += qoadec.o
 OBJS-$(CONFIG_R3D_DEMUXER)               += r3d.o
 OBJS-$(CONFIG_RAWVIDEO_DEMUXER)          += rawvideodec.o
 OBJS-$(CONFIG_RAWVIDEO_MUXER)            += rawenc.o
+OBJS-$(CONFIG_RCWT_MUXER)                += rcwtenc.o subtitles.o
 OBJS-$(CONFIG_REALTEXT_DEMUXER)          += realtextdec.o subtitles.o
 OBJS-$(CONFIG_REDSPARK_DEMUXER)          += redspark.o
 OBJS-$(CONFIG_RKA_DEMUXER)               += rka.o apetag.o img2.o
@@ -516,7 +522,7 @@ OBJS-$(CONFIG_RTP_MUXER)                 += rtp.o         \
                                             rtpenc_vp8.o  \
                                             rtpenc_vp9.o                \
                                             rtpenc_xiph.o \
-                                            avc.o hevc.o
+                                            avc.o hevc.o vvc.o
 OBJS-$(CONFIG_RTSP_DEMUXER)              += rtsp.o rtspdec.o httpauth.o \
                                             urldecode.o
 OBJS-$(CONFIG_RTSP_MUXER)                += rtsp.o rtspenc.o httpauth.o \
@@ -710,7 +716,7 @@ OBJS-$(CONFIG_LIBRTMPS_PROTOCOL)         += librtmp.o
 OBJS-$(CONFIG_LIBRTMPT_PROTOCOL)         += librtmp.o
 OBJS-$(CONFIG_LIBRTMPTE_PROTOCOL)        += librtmp.o
 OBJS-$(CONFIG_LIBSMBCLIENT_PROTOCOL)     += libsmbclient.o
-OBJS-$(CONFIG_LIBSRT_PROTOCOL)           += libsrt.o
+OBJS-$(CONFIG_LIBSRT_PROTOCOL)           += libsrt.o urldecode.o
 OBJS-$(CONFIG_LIBSSH_PROTOCOL)           += libssh.o
 OBJS-$(CONFIG_LIBZMQ_PROTOCOL)           += libzmq.o
 

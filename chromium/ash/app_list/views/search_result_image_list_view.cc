@@ -255,7 +255,8 @@ int SearchResultImageListView::DoUpdate() {
   if (notifier) {
     std::vector<AppListNotifier::Result> notifier_results;
     for (const auto* result : display_results) {
-      notifier_results.emplace_back(result->id(), result->metrics_type());
+      notifier_results.emplace_back(result->id(), result->metrics_type(),
+                                    result->continue_file_suggestion_type());
     }
     notifier->NotifyResultsUpdated(SearchResultDisplayType::kImage,
                                    notifier_results);
@@ -282,7 +283,7 @@ std::vector<views::View*> SearchResultImageListView::GetViewsToAnimate() {
   return {image_view_container_};
 }
 
-BEGIN_METADATA(SearchResultImageListView, SearchResultContainerView)
+BEGIN_METADATA(SearchResultImageListView)
 END_METADATA
 
 }  // namespace ash

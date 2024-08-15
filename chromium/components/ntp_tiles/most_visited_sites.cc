@@ -8,6 +8,7 @@
 #include <iterator>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
@@ -565,7 +566,7 @@ NTPTilesVector MostVisitedSites::CreatePopularSitesTiles(
 
 void MostVisitedSites::OnHomepageTitleDetermined(
     NTPTilesVector tiles,
-    const absl::optional<std::u16string>& title) {
+    const std::optional<std::u16string>& title) {
   if (!title.has_value())
     return;  // If there is no title, the most recent tile was already sent out.
 
@@ -750,7 +751,7 @@ bool MostVisitedSites::WasNtpAppMigratedToWebApp(PrefService* prefs, GURL url) {
 
 NTPTilesVector MostVisitedSites::RemoveInvalidPreinstallApps(
     NTPTilesVector new_tiles) {
-  base::EraseIf(new_tiles, [this](NTPTile ntp_tile) {
+  std::erase_if(new_tiles, [this](NTPTile ntp_tile) {
     return MostVisitedSites::IsNtpTileFromPreinstalledApp(ntp_tile.url) &&
            MostVisitedSites::WasNtpAppMigratedToWebApp(prefs_, ntp_tile.url);
   });

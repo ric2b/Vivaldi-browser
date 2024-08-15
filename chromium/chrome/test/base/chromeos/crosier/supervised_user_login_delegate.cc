@@ -9,9 +9,8 @@
 #include "base/strings/strcat.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/ash/login/test/js_checker.h"
-#include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
+#include "chrome/browser/ash/login/test/test_predicate_waiter.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
-#include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
 #include "chrome/test/base/chromeos/crosier/chromeos_integration_login_mixin.h"
 #include "chrome/test/base/chromeos/crosier/test_accounts.h"
 
@@ -64,19 +63,21 @@ void TypePassword(std::string& password) {
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 }  // namespace
 
+SupervisedUserLoginDelegate::SupervisedUserLoginDelegate() {
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  {
+    // Allows reading account pool json file.
+    base::ScopedAllowBlockingForTesting allow_blocking;
+
+    test_data_ = crosier::GetFamilyTestData();
+  }
+#endif
+}
+
 void SupervisedUserLoginDelegate::DoCustomGaiaLogin(std::string& username) {
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   // Skip to login screen.
-  ash::WizardController::default_controller()->SkipToLoginForTesting();
-  ash::OobeScreenWaiter(ash::GaiaView::kScreenId).Wait();
-
-  // Wait for Gaia page to load.
-  while (!crosier::GetGaiaHost()) {
-    base::RunLoop run_loop;
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitClosure(), base::Milliseconds(500));
-    run_loop.Run();
-  }
+  crosier::SkipToGaiaScreenAndWait();
 
   std::string child_email;
   std::string child_password;
@@ -84,30 +85,24 @@ void SupervisedUserLoginDelegate::DoCustomGaiaLogin(std::string& username) {
   std::string parent_email;
   std::string parent_password;
 
-  {
-    // Allows reading account pool json file.
-    base::ScopedAllowBlockingForTesting allow_blocking;
-
-    crosier::FamilyAccounts account_pool = crosier::GetFamilyTestAccounts();
-    switch (user_type_) {
-      case (SupervisedUserType::kUnicorn):
-        child_email = account_pool.unicorn.email;
-        child_password = account_pool.unicorn.password;
-        break;
-      case (SupervisedUserType::kGeller):
-        child_email = account_pool.geller.email;
-        child_password = account_pool.geller.password;
-        break;
-      case (SupervisedUserType::kGriffin):
-        child_email = account_pool.griffin.email;
-        child_password = account_pool.griffin.password;
-        break;
-    }
-
-    username = child_email;
-    parent_email = account_pool.parent.email;
-    parent_password = account_pool.parent.password;
+  switch (user_type_) {
+    case (SupervisedUserType::kUnicorn):
+      child_email = test_data_.unicorn.email;
+      child_password = test_data_.unicorn.password;
+      break;
+    case (SupervisedUserType::kGeller):
+      child_email = test_data_.geller.email;
+      child_password = test_data_.geller.password;
+      break;
+    case (SupervisedUserType::kGriffin):
+      child_email = test_data_.griffin.email;
+      child_password = test_data_.griffin.password;
+      break;
   }
+
+  username = child_email;
+  parent_email = test_data_.parent.email;
+  parent_password = test_data_.parent.password;
 
   // Enter child email.
   crosier::GaiaFrameJS()

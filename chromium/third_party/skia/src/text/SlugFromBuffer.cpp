@@ -11,14 +11,13 @@
 #include "include/private/chromium/Slug.h"
 #include "src/core/SkReadBuffer.h"
 
-class SkStrikeClient;
+#include <atomic>
+#include <cstdint>
+
+// This file contains Slug methods that need to be defined on CPU and GPU builds, even though
+// Slugs aren't fully implemented in the CPU backend (yet?)
 
 namespace sktext::gpu {
-
-#if !defined(SK_SLUG_DISABLE_LEGACY_DESERIALIZE) && (defined(SK_GANESH) || defined(SK_GRAPHITE))
-// This is implemented in SlugImpl.cpp
-sk_sp<Slug> SkMakeSlugFromBuffer(SkReadBuffer& buffer, const SkStrikeClient* client);
-#endif
 
 sk_sp<Slug> Slug::MakeFromBuffer(SkReadBuffer& buffer) {
     auto procs = buffer.getDeserialProcs();
@@ -26,11 +25,12 @@ sk_sp<Slug> Slug::MakeFromBuffer(SkReadBuffer& buffer) {
         return procs.fSlugProc(buffer, procs.fSlugCtx);
     }
     SkDEBUGFAIL("Should have set serial procs");
-#if !defined(SK_SLUG_DISABLE_LEGACY_DESERIALIZE) && (defined(SK_GANESH) || defined(SK_GRAPHITE))
-    return SkMakeSlugFromBuffer(buffer, nullptr);
-#else
     return nullptr;
-#endif
+}
+
+uint32_t Slug::NextUniqueID() {
+    static std::atomic<uint32_t> nextUnique = 1;
+    return nextUnique++;
 }
 
 }  // namespace sktext::gpu

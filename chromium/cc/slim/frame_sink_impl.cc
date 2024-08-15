@@ -164,25 +164,31 @@ void FrameSinkImpl::UploadUIResource(cc::UIResourceId resource_id,
       break;
   }
 
+  // CreateSharedImage() with initial pixels doesn't support specifying
+  // non-standard stride so data must be exactly the minimum size required to
+  // hold all pixels.
+  DCHECK_EQ(format.EstimatedSizeInBytes(size), resource_bitmap.SizeInBytes());
+
   UploadedUIResource uploaded_resource;
   auto* sii = context_provider_->SharedImageInterface();
   constexpr gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
   uint32_t shared_image_usage = gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
   uploaded_resource.shared_image = sii->CreateSharedImage(
-      format, resource_bitmap.GetSize(), color_space, kTopLeft_GrSurfaceOrigin,
-      kPremul_SkAlphaType, shared_image_usage, "SlimCompositorUIResource",
+      {format, resource_bitmap.GetSize(), color_space, shared_image_usage,
+       "SlimCompositorUIResource"},
       base::span<const uint8_t>(resource_bitmap.GetPixels(),
                                 resource_bitmap.SizeInBytes()));
   CHECK(uploaded_resource.shared_image);
   gpu::SyncToken sync_token = sii->GenUnverifiedSyncToken();
 
-  GLenum texture_target = gpu::GetBufferTextureTarget(
-      gfx::BufferUsage::SCANOUT,
-      viz::SinglePlaneSharedImageFormatToBufferFormat(format), caps);
+  // NOTE: This resource will never be used as an overlay, as we we hardcode
+  // `is_overlay_candidate` to false. Hence, the texture target should always be
+  // GL_TEXTURE_2D (other texture targets are needed only for overlays).
   uploaded_resource.viz_resource_id = resource_provider_.ImportResource(
       viz::TransferableResource::MakeGpu(
-          uploaded_resource.shared_image, texture_target, sync_token,
-          resource_bitmap.GetSize(), format, /*is_overlay_candidate=*/false,
+          uploaded_resource.shared_image, /*texture_target=*/GL_TEXTURE_2D,
+          sync_token, resource_bitmap.GetSize(), format,
+          /*is_overlay_candidate=*/false,
           viz::TransferableResource::ResourceSource::kUI),
       base::BindOnce(&FrameSinkImpl::UIResourceReleased, base::Unretained(this),
                      resource_id));

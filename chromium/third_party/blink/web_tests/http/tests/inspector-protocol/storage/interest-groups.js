@@ -22,15 +22,23 @@
 
   let nextAuctionId = 1;
   let auctionIdMap = new Map();
-  function normalizeAuctionId(event) {
-    if ('uniqueAuctionId' in event) {
-      if (!auctionIdMap.has(event.uniqueAuctionId)) {
-        auctionIdMap.set(event.uniqueAuctionId, nextAuctionId);
+  function normalizeAuctionId(uniqueAuctionId) {
+    if (uniqueAuctionId) {
+      if (!auctionIdMap.has(uniqueAuctionId)) {
+        auctionIdMap.set(uniqueAuctionId, nextAuctionId);
         ++nextAuctionId;
       }
-      return auctionIdMap.get(event.uniqueAuctionId);
+      return auctionIdMap.get(uniqueAuctionId);
     } else {
       return 'global';
+    }
+  }
+
+  function keepOnlyFields(object, keepFields) {
+    for (let fieldName of Object.getOwnPropertyNames(object)) {
+      if (!keepFields.has(fieldName)) {
+        delete object[fieldName];
+      }
     }
   }
 
@@ -41,6 +49,13 @@
     return (aTypeOrder - bTypeOrder) ||
         a.ownerOrigin.localeCompare(b.ownerOrigin, 'en') ||
         a.name.localeCompare(b.name, 'en');
+  }
+
+  // Helper for sorting auction <-> network events. Only cares about types
+  // since it's good enough for this application, and everything else is
+  // a random ID.
+  function compareNetEvents(a, b) {
+    return a.type.localeCompare(b.type, 'en');
   }
 
   async function joinInterestGroups(id) {
@@ -73,59 +88,89 @@
     return session.evaluateAsync(auctionJs);
   }
 
-  events = [];
-  auctionEvents = [];
+  let networkRequestUrls = new Map();
+
+  let events = [];
+  let auctionEvents = [];
+  let auctionNetworkEvents = [];
   async function logAndClearEvents() {
     testRunner.log('Logged IG events:');
     // We expect only one auction event, so no ordering issue to worry about.
     for (let event of auctionEvents) {
-      event.uniqueAuctionId = normalizeAuctionId(event);
+      event.uniqueAuctionId = normalizeAuctionId(event.uniqueAuctionId);
 
       // Only some of auctionConfig fields are kept so this doesn't have to be
       // changed every time something new is added that shows up by default.
       const keepConfigFields =
-          new Set(['decisionLogicUrl', 'seller', 'interestGroupBuyers']);
-      for (let fieldName of Object.getOwnPropertyNames(event.auctionConfig)) {
-        if (!keepConfigFields.has(fieldName)) {
-          delete event.auctionConfig[fieldName];
-        }
-      }
+          new Set(['decisionLogicURL', 'seller', 'interestGroupBuyers']);
+      keepOnlyFields(event.auctionConfig, keepConfigFields);
       testRunner.log(
           event, 'interestGroupAuctionEventOccurred ', ['eventTime']);
+    }
+
+    auctionNetworkEvents.sort(compareNetEvents);
+    for (let event of auctionNetworkEvents) {
+      event.auctions = event.auctions.map((a) => normalizeAuctionId(a));
+      event.url = networkRequestUrls.get(event.requestId);
+      testRunner.log(event, 'interestGroupAuctionNetworkRequestCreated ');
     }
 
     // We need to sort IG events before dumping since ordering of bids is not
     // deterministic.
     events.sort(compareEvents);
     for (let event of events) {
-      event.uniqueAuctionId = normalizeAuctionId(event);
+      event.uniqueAuctionId = normalizeAuctionId(event.uniqueAuctionId);
       testRunner.log(event, 'interestGroupAccessed ', ['accessTime']);
       data = await dp.Storage.getInterestGroupDetails(
         {ownerOrigin: event.ownerOrigin, name: event.name});
       const details = data.result.details;
-      details.expirationTime = 0;
+      const keepIgFields =
+          new Set(['adComponents', 'ads', 'biddingLogicURL',
+                   'executionMode', 'joiningOrigin', 'name',
+                   'ownerOrigin', 'priority', 'trustedBiddingSignalsKeys',
+                   'trustedBiddingSignalsURL']);
+      keepOnlyFields(details, keepIgFields);
       testRunner.log(details, 'interestGroupDetails ');
     }
-    auctionEvents = [];
     events = [];
+    auctionEvents = [];
+    auctionNetworkEvents = [];
+    initWaitForReportingComplete();
   }
 
-  let resolveWaitForWinPromise;
-  const waitForWinPromise = new Promise((resolve, reject) => {
-    resolveWaitForWinPromise = resolve;
-  });
+  let waitForReportingPromise, resolveWaitForReportingCompletePromise;
+  function initWaitForReportingComplete() {
+    waitForReportingPromise = new Promise((resolve, reject) => {
+      resolveWaitForReportingCompletePromise = resolve;
+    });
+  }
+  initWaitForReportingComplete();
 
   dp.Storage.onInterestGroupAuctionEventOccurred(messageObject => {
     auctionEvents.push(messageObject.params);
   });
 
+  dp.Storage.onInterestGroupAuctionNetworkRequestCreated(messageObject => {
+    auctionNetworkEvents.push(messageObject.params);
+  });
+
   dp.Storage.onInterestGroupAccessed(messageObject => {
     events.push(messageObject.params);
-    if (messageObject.params.type == 'win') {
-      resolveWaitForWinPromise();
+  });
+
+  dp.Network.onRequestWillBeSent(messageObject => {
+    networkRequestUrls.set(
+        messageObject.params.requestId, messageObject.params.request.url);
+    if (messageObject.params.request.url ===
+        'https://a.test:8443/echoall?report_bidder') {
+      resolveWaitForReportingCompletePromise();
     }
   });
+
   await page.navigate(base + 'empty.html');
+
+  // Enable network events, to check cross-referencing of them.
+  await dp.Network.enable();
 
   // Start tracking, join interest groups, and run an auction.
   await dp.Storage.setInterestGroupTracking({enable: true});
@@ -136,12 +181,12 @@
   // Need to navigate a fenced frame to the winning ad for the bids to be
   // recorded.
   await runAdAuctionAndNavigateFencedFrame();
-  // Have to wait for the win to be received, which happens after commit
-  // (which also can't be waited for). Only do this if FLEDGE is enabled
-  // and has sent events already, to avoid waiting for events that will
-  // never occur.
-  if (events.length > 0)
-    await waitForWinPromise;
+  // Wait for reporting to finish. This will:
+  // 1) Guarantee that all the events we expect to have happened, since they
+  //    happen-before reporting.
+  // 2) Make sure that the bidding worklet is released before the second run
+  //    and does not get shared.
+  await waitForReportingPromise;
   await logAndClearEvents();
 
   // Disable interest group logging, and run the same set of events. No new
@@ -156,6 +201,7 @@
   await joinInterestGroups(0);
   await joinInterestGroups(1);
   await runAdAuctionAndNavigateFencedFrame();
+  await waitForReportingPromise;
   logAndClearEvents();
 
   testRunner.log('Stop Tracking Auction Events');

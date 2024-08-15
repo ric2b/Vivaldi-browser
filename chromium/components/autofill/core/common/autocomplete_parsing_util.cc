@@ -60,6 +60,10 @@ static constexpr auto kStandardizedAttributes =
         {"transaction-currency", HtmlFieldType::kTransactionCurrency},
     });
 
+// If an autocomplete attribute length is larger than this cap, there is no need
+// to bother checking if the developer made an honest mistake.
+static constexpr int kMaxAutocompleteLengthToCheckForWellIntendedUsage = 70;
+
 static constexpr std::string_view kWellIntendedAutocompleteValuesKeywords[] = {
     "street", "password", "address", "bday",     "cc-",         "family",
     "name",   "country",  "tel",     "phone",    "transaction", "code",
@@ -106,7 +110,7 @@ bool ContactTypeHintMatchesFieldType(const std::string& token,
 // `value` matches any of them.
 std::optional<HtmlFieldType> ParseStandardizedAutocompleteAttribute(
     std::string_view value) {
-  auto* it = kStandardizedAttributes.find(value);
+  auto it = kStandardizedAttributes.find(value);
   return it != kStandardizedAttributes.end()
              ? std::optional<HtmlFieldType>(it->second)
              : std::nullopt;
@@ -124,7 +128,7 @@ std::optional<HtmlFieldType> ParseProposedAutocompleteAttribute(
           {"username", HtmlFieldType::kEmail},
       });
 
-  auto* it = proposed_attributes.find(value);
+  auto it = proposed_attributes.find(value);
   return it != proposed_attributes.end()
              ? std::optional<HtmlFieldType>(it->second)
              : std::nullopt;
@@ -150,21 +154,10 @@ std::optional<HtmlFieldType> ParseNonStandarizedAutocompleteAttribute(
           {"upi-vpa", HtmlFieldType::kUpiVpa},
       });
 
-  auto* it = non_standardized_attributes.find(value);
+  auto it = non_standardized_attributes.find(value);
   return it != non_standardized_attributes.end()
              ? std::optional<HtmlFieldType>(it->second)
              : std::nullopt;
-}
-
-// If the autocomplete `value` doesn't match any of Autofill's supported values,
-// Autofill should remain enabled for good intended values. This function checks
-// if there is reason to believe so, by matching `value` against patterns like
-// "address".
-// Ignoring autocomplete="off" and alike is treated separately in
-// `ParseAutocompleteAttribute()`.
-bool ShouldIgnoreAutocompleteValue(std::string_view value) {
-  static constexpr char16_t kRegex[] = u"address";
-  return MatchesRegex<kRegex>(base::UTF8ToUTF16(value));
 }
 
 }  // namespace
@@ -204,14 +197,7 @@ HtmlFieldType FieldTypeFromAutocompleteAttributeValue(std::string value) {
 
   // `value` cannot be mapped to any HtmlFieldType. By classifying the field
   // as HtmlFieldType::kUnrecognized Autofill is effectively disabled.
-  // Instead, check if we have reason to ignore the value and treat the field as
-  // HtmlFieldType::kUnspecified. This makes us ignore the autocomplete
-  // value.
-  return ShouldIgnoreAutocompleteValue(value) &&
-                 base::FeatureList::IsEnabled(
-                     features::kAutofillIgnoreUnmappableAutocompleteValues)
-             ? HtmlFieldType::kUnspecified
-             : HtmlFieldType::kUnrecognized;
+  return HtmlFieldType::kUnrecognized;
 }
 
 std::optional<AutocompleteParsingResult> ParseAutocompleteAttribute(
@@ -283,6 +269,10 @@ std::optional<AutocompleteParsingResult> ParseAutocompleteAttribute(
 
 bool IsAutocompleteTypeWrongButWellIntended(
     std::string_view autocomplete_attribute) {
+  if (autocomplete_attribute.size() >=
+      kMaxAutocompleteLengthToCheckForWellIntendedUsage) {
+    return false;
+  }
   std::vector<std::string> tokens =
       LowercaseAndTokenizeAttributeString(autocomplete_attribute);
 

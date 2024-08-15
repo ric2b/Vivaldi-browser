@@ -19,6 +19,10 @@ sys.path.append(scripts_path)
 import test_helpers
 import devtools_paths
 
+sys.path.append(os.path.join(scripts_path, 'deps'))
+
+from set_lpac_acls import set_lpac_acls
+
 LOG_LEVELS = ['debug', 'info', 'warn', 'error']
 
 
@@ -32,7 +36,7 @@ def run_tests(chrome_binary, target, no_text_coverage, no_html_coverage,
               coverage, expanded_reporting, cwd, log_level, mocha_fgrep,
               shuffle, karma_args):
     karmaconfig_path = os.path.join(cwd, 'out', target, 'gen', 'test',
-                                    'unittests', 'karma.conf.js')
+                                    'karma.conf.js')
 
     if not os.path.exists(karmaconfig_path):
         log_message('Unable to find Karma config at ' + karmaconfig_path,
@@ -109,6 +113,11 @@ def run_unit_tests_on_ninja_build_target(target,
 
     log_message('Using Chromium binary (%s)' % chrome_binary, 'info',
                 log_level)
+
+    # On Windows we have to setup LPAC ACLs for the binary.
+    # See https://bit.ly/31yqMJR.
+    if os.name == 'nt':
+        set_lpac_acls(os.path.dirname(chrome_binary))
 
     if not cwd:
         cwd = devtools_paths.devtools_root_path()

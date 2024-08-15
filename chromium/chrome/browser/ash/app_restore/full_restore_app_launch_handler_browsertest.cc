@@ -17,6 +17,7 @@
 #include "ash/wm/desks/templates/saved_desk_test_util.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_test_util.h"
+#include "ash/wm/window_restore/window_restore_util.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/wm_event.h"
 #include "base/check_op.h"
@@ -25,7 +26,6 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/timer/timer.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
@@ -265,41 +265,16 @@ void ClickTemplateItem(int index) {
 
 }  // namespace
 
-class AppLaunchInfoSaveWaiter {
- public:
-  static void Wait(bool allow_save = true) {
-    ::full_restore::FullRestoreSaveHandler* save_handler =
-        ::full_restore::FullRestoreSaveHandler::GetInstance();
-
-    if (allow_save) {
-      save_handler->AllowSave();
-    }
-
-    base::OneShotTimer* timer = save_handler->GetTimerForTesting();
-    if (timer->IsRunning()) {
-      // Simulate timeout, and the launch info is saved.
-      timer->FireNow();
-    }
-    content::RunAllTasksUntilIdle();
-
-    ::full_restore::FullRestoreReadHandler::GetInstance()
-        ->profile_path_to_restore_data_.clear();
-  }
-};
-
-class FullRestoreAppLaunchHandlerBrowserTest
+class FullRestoreAppLaunchHandlerTestBase
     : public extensions::PlatformAppBrowserTest {
  public:
-  FullRestoreAppLaunchHandlerBrowserTest()
+  FullRestoreAppLaunchHandlerTestBase()
       : faster_animations_(
             ui::ScopedAnimationDurationScaleMode::ZERO_DURATION) {
     scoped_restore_for_testing_ = std::make_unique<ScopedRestoreForTesting>();
     set_launch_browser_for_testing(nullptr);
-    scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{features::kDesksTemplates},
-        /*disabled_features=*/{features::kDeskTemplateSync});
   }
-  ~FullRestoreAppLaunchHandlerBrowserTest() override = default;
+  ~FullRestoreAppLaunchHandlerTestBase() override = default;
 
   void SetUpOnMainThread() override {
     extensions::PlatformAppBrowserTest::SetUpOnMainThread();
@@ -349,7 +324,7 @@ class FullRestoreAppLaunchHandlerBrowserTest
     auto app_launch_info = std::make_unique<::app_restore::AppLaunchInfo>(
         app_constants::kChromeAppId, window_id);
     if (app_type_browser) {
-      app_launch_info->app_type_browser = app_type_browser;
+      app_launch_info->browser_extra_info.app_type_browser = app_type_browser;
     }
     ::full_restore::SaveAppLaunchInfo(profile()->GetPath(),
                                       std::move(app_launch_info));
@@ -398,11 +373,22 @@ class FullRestoreAppLaunchHandlerBrowserTest
 
   void ResetRestoreForTesting() { scoped_restore_for_testing_.reset(); }
 
- private:
+ protected:
   ui::ScopedAnimationDurationScaleMode faster_animations_;
   std::unique_ptr<ScopedRestoreForTesting> scoped_restore_for_testing_;
   std::unique_ptr<NotificationDisplayServiceTester> display_service_;
   base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+class FullRestoreAppLaunchHandlerBrowserTest
+    : public FullRestoreAppLaunchHandlerTestBase {
+ public:
+  FullRestoreAppLaunchHandlerBrowserTest() {
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{features::kDesksTemplates},
+        /*disabled_features=*/{features::kDeskTemplateSync});
+  }
+  ~FullRestoreAppLaunchHandlerBrowserTest() override = default;
 };
 
 IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
@@ -624,7 +610,7 @@ IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
   ::full_restore::FullRestoreSaveHandler::GetInstance()->ClearForTesting();
 
   // Set the restore pref setting as 'Always restore'.
-  profile()->GetPrefs()->SetInteger(kRestoreAppsAndPagesPrefName,
+  profile()->GetPrefs()->SetInteger(prefs::kRestoreAppsAndPagesPrefName,
                                     static_cast<int>(RestoreOption::kAlways));
 
   // Create FullRestoreAppLaunchHandler to simulate the system startup.
@@ -671,7 +657,7 @@ IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
 
   // Set the restore pref setting as 'Ask every time'.
   profile()->GetPrefs()->SetInteger(
-      kRestoreAppsAndPagesPrefName,
+      prefs::kRestoreAppsAndPagesPrefName,
       static_cast<int>(RestoreOption::kAskEveryTime));
 
   // Create FullRestoreAppLaunchHandler to simulate the system startup.
@@ -723,7 +709,7 @@ IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
 
   // Set the restore pref setting as 'Ask every time'.
   profile()->GetPrefs()->SetInteger(
-      kRestoreAppsAndPagesPrefName,
+      prefs::kRestoreAppsAndPagesPrefName,
       static_cast<int>(RestoreOption::kAskEveryTime));
   // Set the pref for showing post reboot notification.
   profile()->GetPrefs()->SetBoolean(prefs::kShowPostRebootNotification, true);
@@ -1086,6 +1072,43 @@ IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
   EXPECT_LT(browser_from_template->window()->GetNativeWindow()->GetProperty(
                 ::app_restore::kRestoreWindowIdKey),
             -1);
+}
+
+class FullRestoreAppLaunchHandlerWithFloatingWorkspaceBrowserTest
+    : public FullRestoreAppLaunchHandlerTestBase {
+ public:
+  FullRestoreAppLaunchHandlerWithFloatingWorkspaceBrowserTest() {
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{features::kFloatingWorkspaceV2,
+                              features::kDeskTemplateSync},
+        /*disabled_features=*/{});
+  }
+  ~FullRestoreAppLaunchHandlerWithFloatingWorkspaceBrowserTest() override =
+      default;
+};
+
+IN_PROC_BROWSER_TEST_F(
+    FullRestoreAppLaunchHandlerWithFloatingWorkspaceBrowserTest,
+    AddAppAndNotRestoreWithFloatingWorkspaceEnabled) {
+  // Add app launch infos.
+  SaveBrowserAppLaunchInfo(kWindowId1);
+  SaveDefaultAppLaunchInfo();
+  AppLaunchInfoSaveWaiter::Wait();
+
+  size_t count = BrowserList::GetInstance()->size();
+
+  // Create FullRestoreAppLaunchHandler.
+  auto app_launch_handler =
+      std::make_unique<FullRestoreAppLaunchHandler>(profile());
+  app_launch_handler->LaunchBrowserWhenReady(/*first_run_full_restore=*/false);
+
+  CreateWebApp();
+
+  content::RunAllTasksUntilIdle();
+
+  // Verify there is no new browser launched.
+  EXPECT_EQ(count, BrowserList::GetInstance()->size());
+  EXPECT_FALSE(FindWebAppWindow());
 }
 
 class FullRestoreAppLaunchHandlerChromeAppBrowserTest

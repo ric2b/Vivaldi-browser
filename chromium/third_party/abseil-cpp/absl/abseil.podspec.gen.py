@@ -30,6 +30,9 @@ Pod::Spec.new do |s|
     :git => 'https://github.com/abseil/abseil-cpp.git',
     :tag => '${tag}',
   }
+  s.resource_bundles = {
+    s.module_name => 'PrivacyInfo.xcprivacy',
+  }
   s.module_name = 'absl'
   s.header_mappings_dir = 'absl'
   s.header_dir = 'absl'
@@ -41,7 +44,7 @@ Pod::Spec.new do |s|
     'ALWAYS_SEARCH_USER_PATHS' => 'NO',
   }
   s.ios.deployment_target = '9.0'
-  s.osx.deployment_target = '10.10'
+  s.osx.deployment_target = '10.11'
   s.tvos.deployment_target = '9.0'
   s.watchos.deployment_target = '2.0'
 """

@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/* eslint-disable rulesdir/es_modules_import */
-
 import {assert} from 'chai';
 
 import {type StepChanged} from '../../../front_end/panels/recorder/components/StepView.js';
@@ -67,9 +65,8 @@ describe('Recorder', function() {
     await target.bringToFront();
 
     const element = await target.waitForSelector('#test');
-    assertNotNullOrUndefined(element);
 
-    const point = await element.clickablePoint();
+    const point = await element!.clickablePoint();
     await target.mouse.move(point.x, point.y);
 
     await target.mouse.down();
@@ -84,8 +81,6 @@ describe('Recorder', function() {
     const steps = (recording as UserFlow).steps.slice(2);
     assert.strictEqual(steps.length, 2);
     for (const step of steps) {
-      assertNotNullOrUndefined(step);
-
       assert.strictEqual(step.type, 'click');
       assert.isTrue('duration' in step && step.duration && step.duration > 350);
     }
@@ -310,11 +305,10 @@ describe('Recorder', function() {
     const {target} = getBrowserAndPages();
     await target.bringToFront();
     const color = await target.waitForSelector('#color');
-    assertNotNullOrUndefined(color);
-    await color.click();
+    await color!.click();
 
     // Imitating an input event.
-    await color.evaluate(el => {
+    await color!.evaluate(el => {
       const element = el as HTMLInputElement;
       element.value = '#333333';
       element.dispatchEvent(new Event('input', {bubbles: true}));
@@ -574,13 +568,11 @@ describe('Recorder', function() {
     const step = steps.pop();
     assertNotNullOrUndefined(step);
     const title = await step.waitForSelector(':scope >>>> .main-title');
-    assertNotNullOrUndefined(title);
-    await title.click();
+    await title!.click();
 
     const input = await step.waitForSelector(
         ':scope >>>> devtools-recorder-step-editor >>>> div:nth-of-type(1) > devtools-suggestion-input');
-    assertNotNullOrUndefined(input);
-    await input.focus();
+    await input!.focus();
 
     const eventPromise = step.evaluate(element => {
       return new Promise(resolve => {

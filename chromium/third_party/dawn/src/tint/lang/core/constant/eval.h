@@ -93,13 +93,6 @@ class Eval {
     /// @return the constructed value, or null if the value cannot be calculated
     Result ArrayOrStructCtor(const core::type::Type* ty, VectorRef<const Value*> args);
 
-    /// @param ty the target type
-    /// @param value the value being converted
-    /// @param source the source location
-    /// @return the bit-cast of the given expression to the given type, or null if the value cannot
-    ///         be calculated
-    Result Bitcast(const core::type::Type* ty, const Value* value, const Source& source);
-
     /// @param obj the object being indexed. May be null, in which case Index() will still validate
     /// the index is in bounds for the type.
     /// @param obj_ty the type of the object being indexed.
@@ -457,6 +450,13 @@ class Eval {
     /// @param source the source location
     /// @return the result value, or null if the value cannot be calculated
     Result atan2(const core::type::Type* ty, VectorRef<const Value*> args, const Source& source);
+
+    /// bitcast builtin
+    /// @param ty the expression type
+    /// @param args the input arguments
+    /// @param source the source location
+    /// @return the result value, or null if the value cannot be calculated
+    Result bitcast(const core::type::Type* ty, VectorRef<const Value*> args, const Source& source);
 
     /// ceil builtin
     /// @param ty the expression type
@@ -1025,14 +1025,14 @@ class Eval {
                          const Source& source);
 
   private:
-    /// Adds the given error message to the diagnostics
-    void AddError(const std::string& msg, const Source& source) const;
+    /// @returns a new error diagnostic
+    diag::Diagnostic& AddError(const Source& source) const;
 
-    /// Adds the given warning message to the diagnostics
-    void AddWarning(const std::string& msg, const Source& source) const;
+    /// @returns a new warning diagnostic
+    diag::Diagnostic& AddWarning(const Source& source) const;
 
-    /// Adds the given note message to the diagnostics
-    void AddNote(const std::string& msg, const Source& source) const;
+    /// @returns a new note diagnostic
+    diag::Diagnostic& AddNote(const Source& source) const;
 
     /// CreateScalar constructs and returns a constant::Scalar<T>.
     /// @param source the source location

@@ -11,7 +11,6 @@
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/ntp/feed_top_section/feed_top_section_mutator.h"
 #import "ios/chrome/browser/ui/ntp/feed_top_section/notifications_promo_view_constants.h"
-#import "ios/chrome/common/button_configuration_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
@@ -169,9 +168,7 @@ constexpr CGSize kMainImageSize = {56.0, 56.0};
       button.pointerStyleProvider = CreateOpaqueButtonPointerStyleProvider();
 
       button.backgroundColor = [UIColor colorNamed:kBackgroundColor];
-      // TODO(b/287118358): Cleanup IsMagicStackEnabled() code from the sync
-      // promo after experiment.
-      if (IsMagicStackEnabled() && !IsFeedContainmentEnabled()) {
+      if (!IsFeedContainmentEnabled()) {
         button.backgroundColor = [UIColor colorNamed:kBlueHaloColor];
       }
       // Button layout and constraints.

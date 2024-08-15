@@ -101,7 +101,7 @@ command_bash("build_dmg") {
     "--icon", ".fseventsd", "1100", "152",
     "--icon", ".VolumeIcon.icns", "1200", "152",
     "--app-drop-link", "412", "152",
-    "--format", "UDBZ",
+    "--format", "ULMO",
     "--no-internet-enable",
     dmg_name,
     rebase_path(input_app_folder_for_dmg, root_build_dir),

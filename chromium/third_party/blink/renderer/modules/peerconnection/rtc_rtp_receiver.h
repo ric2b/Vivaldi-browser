@@ -5,9 +5,10 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_PEERCONNECTION_RTC_RTP_RECEIVER_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_PEERCONNECTION_RTC_RTP_RECEIVER_H_
 
+#include <optional>
+
 #include "base/synchronization/lock.h"
 #include "base/task/single_thread_task_runner.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_rtp_contributing_source.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_rtp_receive_parameters.h"
@@ -36,6 +37,7 @@ class RTCInsertableStreams;
 class RTCPeerConnection;
 class RTCRtpCapabilities;
 class RTCRtpTransceiver;
+class RTCStatsReport;
 
 // https://w3c.github.io/webrtc-pc/#rtcrtpreceiver-interface
 class RTCRtpReceiver final : public ScriptWrappable,
@@ -67,8 +69,10 @@ class RTCRtpReceiver final : public ScriptWrappable,
   MediaStreamTrack* track() const;
   RTCDtlsTransport* transport();
   RTCDtlsTransport* rtcpTransport();
-  absl::optional<double> playoutDelayHint() const;
-  void setPlayoutDelayHint(absl::optional<double>, ExceptionState&);
+  std::optional<double> playoutDelayHint() const;
+  void setPlayoutDelayHint(std::optional<double>, ExceptionState&);
+  std::optional<double> jitterBufferTarget() const;
+  void setJitterBufferTarget(std::optional<double>, ExceptionState&);
   RTCRtpReceiveParameters* getParameters();
   HeapVector<Member<RTCRtpSynchronizationSource>> getSynchronizationSources(
       ScriptState*,
@@ -76,7 +80,7 @@ class RTCRtpReceiver final : public ScriptWrappable,
   HeapVector<Member<RTCRtpContributingSource>> getContributingSources(
       ScriptState*,
       ExceptionState&);
-  ScriptPromise getStats(ScriptState*);
+  ScriptPromiseTyped<RTCStatsReport> getStats(ScriptState*);
   RTCInsertableStreams* createEncodedStreams(ScriptState*, ExceptionState&);
   // TODO(crbug.com/1069295): Make these methods private.
   RTCInsertableStreams* createEncodedAudioStreams(ScriptState*,
@@ -139,7 +143,8 @@ class RTCRtpReceiver final : public ScriptWrappable,
   // Hint to the WebRTC Jitter Buffer about desired playout delay. Actual
   // observed delay may differ depending on the congestion control. |nullopt|
   // means default value must be used.
-  absl::optional<double> playout_delay_hint_;
+  std::optional<double> playout_delay_hint_;
+  std::optional<double> jitter_buffer_target_;
 
   THREAD_CHECKER(thread_checker_);
 

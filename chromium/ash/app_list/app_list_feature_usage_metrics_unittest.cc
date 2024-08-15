@@ -9,6 +9,7 @@
 #include "ash/constants/ash_switches.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/command_line.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -103,7 +104,7 @@ TEST_F(AppListFeatureUsageMetricsTest, InitialMetricsWithTabletModeSupport) {
 }
 
 TEST_F(AppListFeatureUsageMetricsTest, NotEligibleInKioskMode) {
-  SimulateKioskMode(user_manager::USER_TYPE_KIOSK_APP);
+  SimulateKioskMode(user_manager::UserType::kKioskApp);
   FastForwardPastMetricsReportingInterval();
 
   histograms_.ExpectBucketCount(kClamshellMetric, kEligible, 0);

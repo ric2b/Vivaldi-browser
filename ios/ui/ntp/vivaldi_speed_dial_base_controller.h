@@ -6,13 +6,23 @@
 #import <UIKit/UIKit.h>
 
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/ui/ntp/vivaldi_speed_dial_item.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_home_consumer.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_view_controller_delegate.h"
+
+class LegacyBookmarkModel;
 
 // The controller that contains the speed dial folder menu and the child pages.
 @interface VivaldiSpeedDialBaseController : UIViewController
+    <SpeedDialHomeConsumer>
+
+// DELEGATE
+@property (nonatomic, weak) id<SpeedDialViewControllerDelegate> delegate;
 
 // INITIALIZER
-- (instancetype)initWithBrowser:(Browser*)browser;
+- (instancetype)initWithBrowser:(Browser*)browser
+                  bookmarkModel:(LegacyBookmarkModel*)bookmarkModel;
+
+- (void)invalidate;
 
 @end
 

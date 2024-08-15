@@ -12,6 +12,7 @@
 #include "ash/game_dashboard/game_dashboard_context.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/dark_light_mode_controller_impl.h"
 #include "ash/style/rounded_container.h"
 #include "ash/style/typography.h"
 #include "base/check.h"
@@ -22,7 +23,6 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_id.h"
-#include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
@@ -40,34 +40,25 @@ namespace ash {
 
 namespace {
 
+constexpr float kContainerCornerRadius = 13.0f;
+constexpr int kBorderThickness = 1;
 constexpr int kIconHeight = 20;
-constexpr gfx::RoundedCornersF kRoundedCornerRadius =
-    gfx::RoundedCornersF(12.0f);
 constexpr gfx::Insets kArrowMargins = gfx::Insets::TLBR(0, 6, 0, 0);
 constexpr gfx::Insets kButtonBorderInsets = gfx::Insets::TLBR(0, 12, 0, 8);
 constexpr gfx::Insets kGamepadIconMargins = gfx::Insets::TLBR(0, 0, 0, 8);
 
-// 30% opacity for disabled state.
-constexpr SkAlpha kAlphaForDisabled =
-    base::saturated_cast<SkAlpha>(std::numeric_limits<SkAlpha>::max() * 0.3);
+// 8% opacity for button border.
+constexpr SkAlpha kAlphaForButtonBorder =
+    base::saturated_cast<SkAlpha>(std::numeric_limits<SkAlpha>::max() * 0.08);
 
 ui::ColorId GetBackgroundEnabledColorId(bool is_recording) {
   return is_recording ? cros_tokens::kCrosSysSystemNegativeContainer
-                      : cros_tokens::kCrosSysHighlightShape;
+                      : cros_tokens::kCrosSysPrimaryContainer;
 }
 
 ui::ColorId GetIconAndLabelEnabledColorId(bool is_recording) {
   return is_recording ? cros_tokens::kCrosSysSystemOnNegativeContainer
                       : cros_tokens::kCrosSysOnPrimaryContainer;
-}
-
-SkColor GetColor(ui::ColorProvider* color_provider,
-                 ui::ColorId color_id,
-                 bool is_enabled) {
-  DCHECK(color_provider);
-
-  SkColor color = color_provider->GetColor(color_id);
-  return is_enabled ? color : SkColorSetA(color, kAlphaForDisabled);
 }
 
 }  // namespace
@@ -78,10 +69,10 @@ GameDashboardButton::GameDashboardButton(PressedCallback callback)
   layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kCenter);
   layout->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kCenter);
+  layout->set_inside_border_insets(kButtonBorderInsets);
 
-  SetBorder(views::CreateEmptyBorder(kButtonBorderInsets));
   SetPaintToLayer();
-  layer()->SetRoundedCornerRadius(kRoundedCornerRadius);
+  layer()->SetRoundedCornerRadius(gfx::RoundedCornersF(kContainerCornerRadius));
   layer()->SetFillsBoundsOpaquely(false);
 
   // Add the gamepad icon view.
@@ -153,11 +144,11 @@ void GameDashboardButton::UpdateArrowIcon() {
   DCHECK(arrow_icon_view_);
   const gfx::VectorIcon& arrow_icon =
       toggled_ ? kGdButtonUpArrowIcon : kGdButtonDownArrowIcon;
-  const SkColor icon_color =
-      GetColor(GetColorProvider(), GetIconAndLabelEnabledColorId(is_recording_),
-               GetEnabled());
-  arrow_icon_view_->SetImage(
-      ui::ImageModel::FromVectorIcon(arrow_icon, icon_color, kIconHeight));
+  arrow_icon_view_->SetImage(ui::ImageModel::FromVectorIcon(
+      arrow_icon,
+      GetEnabled() ? GetIconAndLabelEnabledColorId(is_recording_)
+                   : cros_tokens::kCrosSysDisabled,
+      kIconHeight));
 }
 
 void GameDashboardButton::UpdateViews() {
@@ -170,18 +161,24 @@ void GameDashboardButton::UpdateViews() {
         IDS_ASH_GAME_DASHBOARD_GAME_DASHBOARD_BUTTON_TITLE));
   }
 
-  auto* color_provider = GetColorProvider();
-  DCHECK(color_provider);
+  SetBorder(views::CreateRoundedRectBorder(
+      kBorderThickness, kContainerCornerRadius, gfx::Insets(),
+      SkColorSetA(DarkLightModeControllerImpl::Get()->IsDarkModeEnabled()
+                      ? cros_tokens::kCrosSysWhite
+                      : cros_tokens::kCrosSysBlack,
+                  kAlphaForButtonBorder)));
 
   const bool enabled = GetEnabled();
-  SetBackground(views::CreateSolidBackground(GetColor(
-      color_provider, GetBackgroundEnabledColorId(is_recording_), enabled)));
+  SetBackground(views::CreateThemedSolidBackground(
+      enabled ? GetBackgroundEnabledColorId(is_recording_)
+              : cros_tokens::kCrosSysDisabledContainer));
 
-  const SkColor icon_and_label_color = GetColor(
-      color_provider, GetIconAndLabelEnabledColorId(is_recording_), enabled);
+  const auto icon_and_label_color =
+      enabled ? GetIconAndLabelEnabledColorId(is_recording_)
+              : cros_tokens::kCrosSysDisabled;
   gamepad_icon_view_->SetImage(ui::ImageModel::FromVectorIcon(
       chromeos::kGameDashboardGamepadIcon, icon_and_label_color, kIconHeight));
-  title_view_->SetEnabledColor(icon_and_label_color);
+  title_view_->SetEnabledColorId(icon_and_label_color);
   UpdateArrowIcon();
 }
 
@@ -190,7 +187,7 @@ void GameDashboardButton::SetTitle(const std::u16string& title_text) {
   title_view_->SetText(title_text);
 }
 
-BEGIN_METADATA(GameDashboardButton, views::Button)
+BEGIN_METADATA(GameDashboardButton)
 END_METADATA
 
 }  // namespace ash

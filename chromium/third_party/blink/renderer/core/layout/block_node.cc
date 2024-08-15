@@ -266,12 +266,12 @@ bool CanUseCachedIntrinsicInlineSizes(const ConstraintSpace& constraint_space,
   return true;
 }
 
-absl::optional<LayoutUnit> ContentMinimumInlineSize(
+std::optional<LayoutUnit> ContentMinimumInlineSize(
     const BlockNode& block_node,
     const BoxStrut& border_padding) {
   // Table layout is never allowed to go below the min-intrinsic size.
   if (block_node.IsTable())
-    return absl::nullopt;
+    return std::nullopt;
 
   const auto* node = block_node.GetDOMNode();
   const auto* marquee_element = DynamicTo<HTMLMarqueeElement>(node);
@@ -282,7 +282,7 @@ absl::optional<LayoutUnit> ContentMinimumInlineSize(
   const auto& main_inline_size = style.LogicalWidth();
 
   if (!main_inline_size.IsPercentOrCalc())
-    return absl::nullopt;
+    return std::nullopt;
 
   // Manually resolve the main-length against zero. calc() expressions may
   // resolve to something greater than "zero".
@@ -309,7 +309,7 @@ absl::optional<LayoutUnit> ContentMinimumInlineSize(
       return inline_size;
     }
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 }  // namespace
@@ -334,7 +334,7 @@ const LayoutResult* BlockNode::Layout(
 
   // We may be able to hit the cache without calculating fragment geometry
   // (calculating that isn't necessarily very cheap). So, start off without it.
-  absl::optional<FragmentGeometry> fragment_geometry;
+  std::optional<FragmentGeometry> fragment_geometry;
 
   // CachedLayoutResult() might clear flags, so remember the need for layout
   // before attempting to hit the cache.
@@ -468,7 +468,7 @@ const LayoutResult* BlockNode::Layout(
   // clamping the offset.
   PaintLayerScrollableArea::DelayScrollOffsetClampScope delay_clamp_scope;
 
-  absl::optional<PhysicalSize> optional_old_box_size;
+  std::optional<PhysicalSize> optional_old_box_size;
   if (layout_result->Status() == LayoutResult::kSuccess &&
       !layout_result->GetPhysicalFragment().GetBreakToken()) {
     optional_old_box_size = box_->Size();
@@ -708,55 +708,6 @@ void BlockNode::FinishRepeatableRoot() const {
   }
 }
 
-const LayoutResult* BlockNode::CachedLayoutResultForOutOfFlowPositioned(
-    LogicalSize container_content_size) const {
-  DCHECK(IsOutOfFlowPositioned());
-
-  if (box_->NeedsLayout())
-    return nullptr;
-
-  // If there are multiple fragments, we wouldn't know which one to use, since
-  // no break token is passed.
-  if (box_->PhysicalFragmentCount() > 1)
-    return nullptr;
-
-  const LayoutResult* cached_layout_result =
-      box_->GetSingleCachedLayoutResult();
-  if (!cached_layout_result)
-    return nullptr;
-
-  // The containing-block may have borders/scrollbars which might change
-  // between passes affecting the final position.
-  if (!cached_layout_result->CanUseOutOfFlowPositionedFirstTierCache())
-    return nullptr;
-
-  // TODO(layout-dev): There are potentially more cases where we can reuse this
-  // layout result.
-  // E.g. when we have a fixed-length top position constraint (top: 5px), we
-  // are in the correct writing mode (htb-ltr), and we have a fixed width.
-  const ConstraintSpace& space =
-      cached_layout_result->GetConstraintSpaceForCaching();
-  if (space.PercentageResolutionSize() != container_content_size)
-    return nullptr;
-
-  // We currently don't keep the static-position around to determine if it is
-  // the same as the previous layout pass. As such, only reuse the result when
-  // we know it doesn't depend on the static-position.
-  //
-  // TODO(layout-dev): We might be able to determine what the previous
-  // static-position was based on |LayoutResult::OutOfFlowPositionedOffset|.
-  // TODO(crbug.com/1477314): This unnecessarily defeats caching when inset-area
-  // is applied.
-  bool depends_on_static_position =
-      Style().HasAutoLeftAndRightIgnoringInsetArea() ||
-      Style().HasAutoTopAndBottomIgnoringInsetArea();
-
-  if (depends_on_static_position) {
-    return nullptr;
-  }
-  return cached_layout_result;
-}
-
 void BlockNode::PrepareForLayout() const {
   auto* block = DynamicTo<LayoutBlock>(box_.Get());
   if (block && block->IsScrollContainer()) {
@@ -776,13 +727,11 @@ void BlockNode::FinishLayout(
     const ConstraintSpace& constraint_space,
     const BlockBreakToken* break_token,
     const LayoutResult* layout_result,
-    const absl::optional<PhysicalSize>& old_box_size) const {
+    const std::optional<PhysicalSize>& old_box_size) const {
   // Computing MinMax after layout. Do not modify the |LayoutObject| tree, paint
   // properties, and other global states.
   if (DisableLayoutSideEffectsScope::IsDisabled()) {
-    if (RuntimeEnabledFeatures::LayoutNewMeasureCacheEnabled()) {
-      box_->AddMeasureLayoutResult(layout_result);
-    }
+    box_->AddMeasureLayoutResult(layout_result);
     return;
   }
 
@@ -932,7 +881,7 @@ MinMaxSizesResult BlockNode::ComputeMinMaxSizes(
     // If we're computing MinMax after layout, we need to disable side effects
     // so that |Layout| does not update the |LayoutObject| tree and other global
     // states.
-    absl::optional<DisableLayoutSideEffectsScope> disable_side_effects;
+    std::optional<DisableLayoutSideEffectsScope> disable_side_effects;
     if (!GetLayoutBox()->NeedsLayout())
       disable_side_effects.emplace();
 
@@ -958,8 +907,10 @@ MinMaxSizesResult BlockNode::ComputeMinMaxSizes(
             constraint_space.IsBlockAutoBehaviorStretch());
   };
 
-  if (!Style().AspectRatio().IsAuto() && !IsReplaced() &&
-      type == MinMaxSizesType::kContent) {
+  const bool has_aspect_ratio = !Style().AspectRatio().IsAuto();
+  const bool is_replaced = IsReplaced();
+
+  if (has_aspect_ratio && !is_replaced && type == MinMaxSizesType::kContent) {
     const FragmentGeometry fragment_geometry =
         CalculateInitialFragmentGeometry(constraint_space, *this,
                                          /* break_token */ nullptr,
@@ -1020,10 +971,10 @@ MinMaxSizesResult BlockNode::ComputeMinMaxSizes(
   bool depends_on_block_constraints =
       (DependsOnBlockConstraints() ||
        UseParentPercentageResolutionBlockSizeForChildren()) &&
-      result.depends_on_block_constraints;
+      (result.depends_on_block_constraints || has_aspect_ratio || is_replaced);
 
-  if (!Style().AspectRatio().IsAuto() &&
-      BlockLengthUnresolvable(constraint_space, Style().LogicalHeight())) {
+  if (has_aspect_ratio && !is_replaced &&
+      initial_block_size == kIndefiniteSize) {
     // If the block size will be computed from the aspect ratio, we need
     // to take the max-block-size into account.
     // https://drafts.csswg.org/css-sizing-4/#aspect-ratio
@@ -1031,10 +982,6 @@ MinMaxSizesResult BlockNode::ComputeMinMaxSizes(
         constraint_space, Style(), border_padding);
     result.sizes.min_size = min_max.ClampSizeToMinAndMax(result.sizes.min_size);
     result.sizes.max_size = min_max.ClampSizeToMinAndMax(result.sizes.max_size);
-    depends_on_block_constraints =
-        depends_on_block_constraints ||
-        Style().LogicalMinHeight().IsPercentOrCalcOrStretch() ||
-        Style().LogicalMaxHeight().IsPercentOrCalcOrStretch();
   }
 
   box_->SetIntrinsicLogicalWidths(
@@ -1494,16 +1441,16 @@ LogicalSize BlockNode::GetAspectRatio() const {
   return LogicalSize();
 }
 
-absl::optional<gfx::Transform> BlockNode::GetTransformForChildFragment(
+std::optional<gfx::Transform> BlockNode::GetTransformForChildFragment(
     const PhysicalBoxFragment& child_fragment,
     PhysicalSize size) const {
   const auto* child_layout_object = child_fragment.GetLayoutObject();
   DCHECK(child_layout_object);
 
   if (!child_layout_object->ShouldUseTransformFromContainer(box_))
-    return absl::nullopt;
+    return std::nullopt;
 
-  absl::optional<gfx::Transform> fragment_transform;
+  std::optional<gfx::Transform> fragment_transform;
   if (!child_fragment.IsOnlyForNode()) {
     // If we're fragmented, there's no correct transform stored for
     // us. Calculate it now.

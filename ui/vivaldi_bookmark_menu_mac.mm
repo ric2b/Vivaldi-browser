@@ -65,7 +65,7 @@ void SortFlags::InitFromPrefs() {
       else if (*sortField == "description")
         field_ = ::vivaldi::BookmarkSorter::FIELD_DESCRIPTION;
     }
-    if (absl::optional<int> sortOrder = dict.FindInt("sortOrder")) {
+    if (std::optional<int> sortOrder = dict.FindInt("sortOrder")) {
       if (*sortOrder == 1)
         order_ = ::vivaldi::BookmarkSorter::ORDER_NONE;
       else if (*sortOrder == 2)

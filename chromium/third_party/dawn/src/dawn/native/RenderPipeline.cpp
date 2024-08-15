@@ -974,6 +974,11 @@ RenderPipelineBase::RenderPipelineBase(DeviceBase* device,
         mUsesFragDepth = GetStage(SingleShaderStage::Fragment).metadata->usesFragDepth;
     }
 
+    if (HasStage(SingleShaderStage::Vertex)) {
+        mUsesVertexIndex = GetStage(SingleShaderStage::Vertex).metadata->usesVertexIndex;
+        mUsesInstanceIndex = GetStage(SingleShaderStage::Vertex).metadata->usesInstanceIndex;
+    }
+
     SetContentHash(ComputeContentHash());
     GetObjectTrackingList()->Track(this);
 
@@ -1003,7 +1008,7 @@ Ref<RenderPipelineBase> RenderPipelineBase::MakeError(DeviceBase* device, const 
         explicit ErrorRenderPipeline(DeviceBase* device, const char* label)
             : RenderPipelineBase(device, ObjectBase::kError, label) {}
 
-        MaybeError Initialize() override {
+        MaybeError InitializeImpl() override {
             DAWN_UNREACHABLE();
             return {};
         }
@@ -1166,6 +1171,16 @@ bool RenderPipelineBase::WritesStencil() const {
 bool RenderPipelineBase::UsesFragDepth() const {
     DAWN_ASSERT(!IsError());
     return mUsesFragDepth;
+}
+
+bool RenderPipelineBase::UsesVertexIndex() const {
+    DAWN_ASSERT(!IsError());
+    return mUsesVertexIndex;
+}
+
+bool RenderPipelineBase::UsesInstanceIndex() const {
+    DAWN_ASSERT(!IsError());
+    return mUsesInstanceIndex;
 }
 
 size_t RenderPipelineBase::ComputeContentHash() {

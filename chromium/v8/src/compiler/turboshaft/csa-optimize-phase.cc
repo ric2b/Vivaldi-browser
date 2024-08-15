@@ -22,25 +22,23 @@
 
 namespace v8::internal::compiler::turboshaft {
 
-void CsaLoadEliminationPhase::Run(Zone* temp_zone) {
-  CopyingPhase<VariableReducer, MachineOptimizationReducer,
-               RequiredOptimizationReducer,
-               ValueNumberingReducer>::Run(temp_zone);
+void CsaEarlyMachineOptimizationPhase::Run(Zone* temp_zone) {
+  CopyingPhase<MachineOptimizationReducer, ValueNumberingReducer>::Run(
+      temp_zone);
+}
 
-  CopyingPhase<VariableReducer, LateLoadEliminationReducer,
-               MachineOptimizationReducer, RequiredOptimizationReducer,
+void CsaLoadEliminationPhase::Run(Zone* temp_zone) {
+  CopyingPhase<LateLoadEliminationReducer, MachineOptimizationReducer,
                ValueNumberingReducer>::Run(temp_zone);
 }
 
 void CsaLateEscapeAnalysisPhase::Run(Zone* temp_zone) {
-  CopyingPhase<VariableReducer, LateEscapeAnalysisReducer,
-               MachineOptimizationReducer, RequiredOptimizationReducer,
+  CopyingPhase<LateEscapeAnalysisReducer, MachineOptimizationReducer,
                ValueNumberingReducer>::Run(temp_zone);
 }
 
 void CsaBranchEliminationPhase::Run(Zone* temp_zone) {
-  CopyingPhase<VariableReducer, MachineOptimizationReducer,
-               BranchEliminationReducer, RequiredOptimizationReducer,
+  CopyingPhase<MachineOptimizationReducer, BranchEliminationReducer,
                ValueNumberingReducer>::Run(temp_zone);
 }
 
@@ -48,9 +46,8 @@ void CsaOptimizePhase::Run(Zone* temp_zone) {
   UnparkedScopeIfNeeded scope(PipelineData::Get().broker(),
                               v8_flags.turboshaft_trace_reduction);
 
-  CopyingPhase<VariableReducer, PretenuringPropagationReducer,
-               MachineOptimizationReducer, MemoryOptimizationReducer,
-               RequiredOptimizationReducer,
+  CopyingPhase<PretenuringPropagationReducer, MachineOptimizationReducer,
+               MemoryOptimizationReducer,
                ValueNumberingReducer>::Run(temp_zone);
 }
 

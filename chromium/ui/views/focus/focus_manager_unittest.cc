@@ -26,12 +26,16 @@
 #include "ui/views/accessible_pane_view.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/buildflags.h"
+#include "ui/views/controls/focus_ring.h"
 #include "ui/views/focus/focus_manager_delegate.h"
 #include "ui/views/focus/focus_manager_factory.h"
 #include "ui/views/focus/widget_focus_manager.h"
+#include "ui/views/layout/flex_layout.h"
 #include "ui/views/test/focus_manager_test.h"
 #include "ui/views/test/native_widget_factory.h"
 #include "ui/views/test/test_platform_native_widget.h"
+#include "ui/views/test/test_views.h"
+#include "ui/views/test/views_test_utils.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/widget/unique_widget_ptr.h"
@@ -1106,6 +1110,33 @@ TEST_F(FocusManagerTest, AnchoredDialogInPane) {
   EXPECT_TRUE(bubble_child->HasFocus());
 }
 
+// Test that a focused view has a visible focus ring.
+// This test uses FlexLayout intentionally because it had issues showing focus
+// rings.
+TEST_F(FocusManagerTest, FocusRing) {
+  GetContentsView()->SetLayoutManager(std::make_unique<FlexLayout>());
+  View* view = GetContentsView()->AddChildView(
+      std::make_unique<StaticSizedView>(gfx::Size(10, 10)));
+  GetContentsView()->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  view->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  FocusRing::Install(GetContentsView());
+  FocusRing::Install(view);
+
+  GetContentsView()->RequestFocus();
+  test::RunScheduledLayout(GetWidget());
+  EXPECT_TRUE(GetContentsView()->HasFocus());
+  EXPECT_TRUE(FocusRing::Get(GetContentsView())->GetVisible());
+  EXPECT_FALSE(view->HasFocus());
+  EXPECT_FALSE(FocusRing::Get(view)->GetVisible());
+
+  view->RequestFocus();
+  test::RunScheduledLayout(GetWidget());
+  EXPECT_FALSE(GetContentsView()->HasFocus());
+  EXPECT_FALSE(FocusRing::Get(GetContentsView())->GetVisible());
+  EXPECT_TRUE(view->HasFocus());
+  EXPECT_TRUE(FocusRing::Get(view)->GetVisible());
+}
+
 #if BUILDFLAG(ENABLE_DESKTOP_AURA)
 // This test is specifically for the permutation where the main widget is a
 // DesktopNativeWidgetAura and the bubble is a NativeWidgetAura. When focus
@@ -1154,16 +1185,18 @@ TEST_F(DesktopWidgetFocusManagerTest, AnchoredDialogInDesktopNativeWidgetAura) {
 
   // In order to pass the accessibility paint checks, focusable views must have
   // a valid role.
-  parent1->GetViewAccessibility().OverrideRole(ax::mojom::Role::kGroup);
-  parent2->GetViewAccessibility().OverrideRole(ax::mojom::Role::kGroup);
-  child->GetViewAccessibility().OverrideRole(ax::mojom::Role::kButton);
+  parent1->GetViewAccessibility().SetRole(ax::mojom::Role::kGroup);
+  parent2->GetViewAccessibility().SetRole(ax::mojom::Role::kGroup);
+  child->GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
 
   // In order to pass the accessibility paint checks, focusable views must have
   // a non-empty accessible name, or have their name set to explicitly empty.
-  parent1->GetViewAccessibility().OverrideName(u"Parent 1");
-  parent2->GetViewAccessibility().OverrideName(
+  parent1->GetViewAccessibility().SetName(u"Parent 1",
+                                          ax::mojom::NameFrom::kAttribute);
+  parent2->GetViewAccessibility().SetName(
       u"", ax::mojom::NameFrom::kAttributeExplicitlyEmpty);
-  child->GetViewAccessibility().OverrideName("uChild");
+  child->GetViewAccessibility().SetName("uChild",
+                                        ax::mojom::NameFrom::kAttribute);
 
   widget->Activate();
   parent1->RequestFocus();

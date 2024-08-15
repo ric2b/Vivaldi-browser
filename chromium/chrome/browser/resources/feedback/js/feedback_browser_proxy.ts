@@ -29,11 +29,6 @@ export interface FeedbackBrowserProxy {
   // Send a message to close the WebDialog
   closeDialog(): void;
 
-  // <if expr="chromeos_ash">
-  showAssistantLogsInfo(): void;
-  showBluetoothLogsInfo(): void;
-  // </if>
-
   showSystemInfo(): void;
   showMetrics(): void;
   showAutofillMetadataInfo(autofillMetadata: string): void;
@@ -54,7 +49,7 @@ export class FeedbackBrowserProxyImpl implements FeedbackBrowserProxy {
   }
 
   getUserMedia(params: any): Promise<MediaStream|undefined> {
-    return new Promise(function(resolve, reject) {
+    return new Promise((resolve, reject) => {
       navigator.webkitGetUserMedia(
           params, stream => resolve(stream), error => reject(error));
     });
@@ -74,16 +69,6 @@ export class FeedbackBrowserProxyImpl implements FeedbackBrowserProxy {
   closeDialog() {
     chrome.send('dialogClose');
   }
-
-  // <if expr="chromeos_ash">
-  showAssistantLogsInfo() {
-    chrome.send('showAssistantLogsInfo');
-  }
-
-  showBluetoothLogsInfo() {
-    chrome.send('showBluetoothLogsInfo');
-  }
-  // </if>
 
   showSystemInfo() {
     chrome.send('showSystemInfo');

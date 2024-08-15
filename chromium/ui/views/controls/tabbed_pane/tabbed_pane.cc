@@ -138,6 +138,14 @@ gfx::Size TabbedPaneTab::CalculatePreferredSize() const {
   return gfx::Size(width, 32);
 }
 
+int TabbedPaneTab::GetHeightForWidth(int w) const {
+  // Because we set the LayoutManager, it will use
+  // LayoutManager::GetPreferredHeightForWidth by default, but this is not
+  // consistent with the fixed height desired by CalculatePreferredSize, so we
+  // override it and call it manually.
+  return CalculatePreferredSize().height();
+}
+
 void TabbedPaneTab::GetAccessibleNodeData(ui::AXNodeData* data) {
   data->role = ax::mojom::Role::kTab;
   data->SetName(title_->GetText());
@@ -314,7 +322,7 @@ TabbedPaneTabStrip::TabbedPaneTabStrip(TabbedPane::Orientation orientation,
   }
   SetLayoutManager(std::move(layout));
 
-  GetViewAccessibility().OverrideRole(ax::mojom::Role::kNone);
+  GetViewAccessibility().SetRole(ax::mojom::Role::kNone);
 
   // These durations are taken from the Paper Tabs source:
   // https://github.com/PolymerElements/paper-tabs/blob/master/paper-tabs.html
@@ -555,9 +563,10 @@ void TabbedPane::AddTabInternal(size_t index,
                                 std::unique_ptr<View> contents) {
   DCHECK_LE(index, GetTabCount());
   contents->SetVisible(false);
-  contents->GetViewAccessibility().OverrideRole(ax::mojom::Role::kTabPanel);
+  contents->GetViewAccessibility().SetRole(ax::mojom::Role::kTabPanel);
   if (!title.empty()) {
-    contents->GetViewAccessibility().OverrideName(title);
+    contents->GetViewAccessibility().SetName(title,
+                                             ax::mojom::NameFrom::kAttribute);
   }
 
   tab_strip_->AddChildViewAt(

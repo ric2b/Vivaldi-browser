@@ -15,7 +15,6 @@ typedef struct {
 typedef struct {
   doublereal r, i;
 } doublecomplex;
-typedef int ftnlen;
 typedef int logical;
 
 #define abs(x) ((x) >= 0 ? (x) : -(x))

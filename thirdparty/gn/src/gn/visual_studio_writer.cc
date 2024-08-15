@@ -677,9 +677,8 @@ bool VisualStudioWriter::WriteProjectFileContents(
         project.SubElement("Target", XmlAttributes("Name", "Clean"));
     clean->SubElement(
         "Exec",
-        XmlAttributes("Command",
-                      "call " + ninja_exe + " -C $(OutDir) -tclean " +
-                      ninja_target));
+        XmlAttributes("Command", "call " + ninja_exe +
+                                     " -C $(OutDir) -tclean " + ninja_target));
   }
 
   return true;
@@ -917,8 +916,7 @@ void VisualStudioWriter::ResolveSolutionFolders() {
   std::vector<SolutionEntry*> parents;
   for (const std::unique_ptr<SolutionEntry>& folder : folders_) {
     while (!parents.empty()) {
-      if (base::StartsWith(folder->path, parents.back()->path,
-                           base::CompareCase::SENSITIVE)) {
+      if (folder->path.starts_with(parents.back()->path)) {
         folder->parent_folder = parents.back();
         break;
       } else {

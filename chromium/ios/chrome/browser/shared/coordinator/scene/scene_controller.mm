@@ -31,6 +31,9 @@
 #import "components/signin/public/base/signin_metrics.h"
 #import "components/signin/public/base/signin_pref_names.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
+#import "components/supervised_user/core/browser/proto/kidschromemanagement_messages.pb.h"
+#import "components/supervised_user/core/browser/proto_fetcher.h"
+#import "components/supervised_user/core/browser/supervised_user_utils.h"
 #import "components/url_formatter/url_formatter.h"
 #import "components/version_info/version_info.h"
 #import "components/web_resource/web_resource_pref_names.h"
@@ -61,6 +64,7 @@
 #import "ios/chrome/browser/mailto_handler/model/mailto_handler_service.h"
 #import "ios/chrome/browser/mailto_handler/model/mailto_handler_service_factory.h"
 #import "ios/chrome/browser/main/model/browser_util.h"
+#import "ios/chrome/browser/metrics/model/tab_usage_recorder_browser_agent.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_check_manager.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_check_manager_factory.h"
@@ -69,8 +73,8 @@
 #import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/policy/model/policy_watcher_browser_agent.h"
 #import "ios/chrome/browser/policy/model/policy_watcher_browser_agent_observer_bridge.h"
-#import "ios/chrome/browser/promos_manager/features.h"
-#import "ios/chrome/browser/promos_manager/promos_manager_factory.h"
+#import "ios/chrome/browser/promos_manager/model/features.h"
+#import "ios/chrome/browser/promos_manager/model/promos_manager_factory.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_browser_agent.h"
 #import "ios/chrome/browser/screenshot/model/screenshot_delegate.h"
 #import "ios/chrome/browser/sessions/session_restoration_service.h"
@@ -146,6 +150,7 @@
 #import "ios/chrome/browser/ui/policy/user_policy_scene_agent.h"
 #import "ios/chrome/browser/ui/policy/user_policy_util.h"
 #import "ios/chrome/browser/ui/promos_manager/promos_manager_scene_agent.h"
+#import "ios/chrome/browser/ui/promos_manager/utils.h"
 #import "ios/chrome/browser/ui/scoped_ui_blocker/scoped_ui_blocker.h"
 #import "ios/chrome/browser/ui/settings/password/password_checkup/password_checkup_coordinator.h"
 #import "ios/chrome/browser/ui/settings/password/passwords_coordinator.h"
@@ -180,12 +185,12 @@
 #import "ios/web/public/thread/web_task_traits.h"
 #import "ios/web/public/thread/web_thread.h"
 #import "ios/web/public/web_state.h"
-#import "net/base/mac/url_conversions.h"
+#import "net/base/apple/url_conversions.h"
+#import "services/network/public/cpp/shared_url_loader_factory.h"
 #import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/panel/panel_interaction_controller.h"
 // End Vivaldi
 
 namespace {
@@ -262,11 +267,9 @@ void InjectUnrealizedWebStates(Browser* browser, int count) {
     // will not be saved with the legacy session storage.
     int index = browser->GetWebStateList()->count();
     web_state_list->InsertWebState(
-        index, std::move(web_state),
-        (index == 0 && !web_state_list->GetActiveWebState())
-            ? WebStateList::INSERT_ACTIVATE
-            : WebStateList::INSERT_NO_FLAGS,
-        WebStateOpener());
+        std::move(web_state),
+        WebStateList::InsertionParams::Automatic().Activate(
+            index == 0 && !web_state_list->GetActiveWebState()));
   }
 }
 #endif  // !BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -302,10 +305,30 @@ void InjectNTP(Browser* browser) {
   web_state->GetNavigationManager()->Restore(0, std::move(items));
   NewTabPageTabHelper::CreateForWebState(web_state.get());
   NewTabPageTabHelper::FromWebState(web_state.get())->SetShowStartSurface(true);
-  int index = browser->GetWebStateList()->count();
-  browser->GetWebStateList()->InsertWebState(index, std::move(web_state),
-                                             WebStateList::INSERT_ACTIVATE,
-                                             WebStateOpener());
+  browser->GetWebStateList()->InsertWebState(
+      std::move(web_state),
+      WebStateList::InsertionParams::Automatic().Activate());
+}
+
+// Updates `data` with the Family Link member role associated to the primary
+// signed-in account, no-op if the account is not enrolled in Family Link.
+void OnListFamilyMembersResponse(
+    const std::string& primary_account_gaia,
+    UserFeedbackData* data,
+    const supervised_user::ProtoFetcherStatus& status,
+    std::unique_ptr<kids_chrome_management::ListMembersResponse>
+        response) {
+  if (!status.IsOk()) {
+    return;
+  }
+  for (const kids_chrome_management::FamilyMember& member :
+       response->members()) {
+    if (member.user_id() == primary_account_gaia) {
+      data.familyMemberRole = base::SysUTF8ToNSString(
+          supervised_user::FamilyRoleToString(member.role()));
+      break;
+    }
+  }
 }
 
 }  // namespace
@@ -341,6 +364,11 @@ void InjectNTP(Browser* browser) {
   // Map recording the number of tabs in WebStateList before the batch
   // operation started.
   std::map<WebStateList*, int> _tabCountBeforeBatchOperation;
+
+  // Fetches the Family Link member role asynchronously from KidsManagement API.
+  std::unique_ptr<supervised_user::ProtoFetcher<
+      kids_chrome_management::ListMembersResponse>>
+      _family_members_fetcher;
 }
 
 // Navigation View controller for the settings.
@@ -353,11 +381,6 @@ void InjectNTP(Browser* browser) {
 
 // Coordinator for displaying history.
 @property(nonatomic, strong) HistoryCoordinator* historyCoordinator;
-
-// Vivaldi
-@property(nonatomic, strong) PanelInteractionController*
-                                panelInteractionController;
-// End Vivaldi
 
 // Coordinates the creation of PDF screenshots with the window's content.
 @property(nonatomic, strong) ScreenshotDelegate* screenshotDelegate;
@@ -904,7 +927,7 @@ void InjectNTP(Browser* browser) {
   // sync promos and displays the sign-in promo if possible.
   __weak SceneController* weakSelf = self;
   base::Time fetch_start = base::Time::Now();
-  system_identity_manager->CanOfferExtendedSyncPromos(
+  system_identity_manager->CanShowHistorySyncOptInsWithoutMinorModeRestrictions(
       defaultIdentity, base::BindOnce(^(CapabilityResult result) {
         base::TimeDelta fetch_duration = (base::Time::Now() - fetch_start);
         base::UmaHistogramTimes(
@@ -935,6 +958,9 @@ void InjectNTP(Browser* browser) {
   DCHECK(self.sceneState.appState.mainBrowserState);
 
   SceneState* sceneState = self.sceneState;
+
+  // TODO(b/326184192): startUpChromeUI should use the browser state associated
+  // to the scene.
   ChromeBrowserState* browserState = sceneState.appState.mainBrowserState;
   self.browserViewWrangler = [[BrowserViewWrangler alloc]
       initWithBrowserState:browserState
@@ -946,21 +972,20 @@ void InjectNTP(Browser* browser) {
   // Create and start the BVC.
   [self.browserViewWrangler createMainCoordinatorAndInterface];
   Browser* mainBrowser = self.browserViewWrangler.mainInterface.browser;
-  CommandDispatcher* mainCommandDispatcher =
-      mainBrowser->GetCommandDispatcher();
 
   PromosManager* promosManager =
       PromosManagerFactory::GetForBrowserState(browserState);
 
-  // Add scene agents that require CommandDispatcher.
   DefaultBrowserPromoSceneAgent* defaultBrowserAgent =
-      [[DefaultBrowserPromoSceneAgent alloc]
-          initWithCommandDispatcher:mainCommandDispatcher];
+      [[DefaultBrowserPromoSceneAgent alloc] init];
   defaultBrowserAgent.promosManager = promosManager;
   [sceneState addAgent:defaultBrowserAgent];
   [sceneState
       addAgent:[[NonModalDefaultBrowserPromoSchedulerSceneAgent alloc] init]];
 
+  // Add scene agents that require CommandDispatcher.
+  CommandDispatcher* mainCommandDispatcher =
+      mainBrowser->GetCommandDispatcher();
   id<ApplicationCommands> applicationCommandsHandler =
       HandlerForProtocol(mainCommandDispatcher, ApplicationCommands);
   id<PolicyChangeCommands> policyChangeCommandsHandler =
@@ -1026,6 +1051,7 @@ void InjectNTP(Browser* browser) {
       initWithBrowserProviderInterface:self.browserViewWrangler];
   [sceneState.scene.screenshotService setDelegate:self.screenshotDelegate];
 
+  [self activateBVCAndMakeCurrentBVCPrimary];
   [self.browserViewWrangler loadSession];
   [self createInitialUI:[self initialUIMode]];
 
@@ -1033,8 +1059,10 @@ void InjectNTP(Browser* browser) {
   // events.
   [GeolocationLogger sharedInstance];
 
-  [sceneState addAgent:[[PromosManagerSceneAgent alloc]
-                           initWithCommandDispatcher:mainCommandDispatcher]];
+  if (ShouldDisplayPromos()) {
+    [sceneState addAgent:[[PromosManagerSceneAgent alloc]
+                             initWithCommandDispatcher:mainCommandDispatcher]];
+  }
 
   if (IsAppStoreRatingEnabled()) {
     [sceneState addAgent:[[AppStoreRatingSceneAgent alloc]
@@ -1208,8 +1236,6 @@ void InjectNTP(Browser* browser) {
         feature_engagement::TrackerFactory::GetForBrowserState(browserState);
 
     tracker->NotifyEvent(feature_engagement::events::kBlueDotPromoCriterionMet);
-    tracker->NotifyEvent(
-        feature_engagement::events::kDefaultBrowserVideoPromoConditionsMet);
   }
 }
 
@@ -1228,10 +1254,6 @@ void InjectNTP(Browser* browser) {
 
   [self.historyCoordinator stop];
   self.historyCoordinator = nil;
-
-  // Vivaldi
-  self.panelInteractionController = nil;
-  // End Vivaldi
 
   // Force close the settings if open. This gives Settings the opportunity to
   // unregister observers and destroy C++ objects before the application is
@@ -1380,6 +1402,7 @@ void InjectNTP(Browser* browser) {
   if (!signin::ShouldPresentUserSigninUpgrade(
           self.sceneState.browserProviderInterface.mainBrowserProvider.browser
               ->GetBrowserState(),
+          GetApplicationContext()->GetLocalState(),
           version_info::GetVersion())) {
     return NO;
   }
@@ -1472,25 +1495,24 @@ void InjectNTP(Browser* browser) {
 }
 
 - (void)showHistory {
+
+  if (vivaldi::IsVivaldiRunning()){
+    id<BrowserCoordinatorCommands> browserCoordinatorCommandsHandler =
+        HandlerForProtocol(self.currentInterface.browser->GetCommandDispatcher(),
+                           BrowserCoordinatorCommands);
+    [browserCoordinatorCommandsHandler showHistoryPanel];
+  } else {
   CHECK(!self.currentInterface.incognito)
       << "Current interface is incognito and should NOT show history. Call "
          "this on regular interface.";
-
-  // Vivaldi
-  if (vivaldi::IsVivaldiRunning()){
-      [self initializePanelInteractionController];
-      [_panelInteractionController presentPanel:PanelPage::HistoryPage
-                               withSearchString:nil];
-      return;
-  }
-  // End Vivaldi
-
   self.historyCoordinator = [[HistoryCoordinator alloc]
       initWithBaseViewController:self.currentInterface.viewController
                          browser:self.mainInterface.browser];
   self.historyCoordinator.loadStrategy = UrlLoadStrategy::NORMAL;
   self.historyCoordinator.delegate = self;
   [self.historyCoordinator start];
+  } // End Vivaldi
+
 }
 
 // Opens an url from a link in the settings UI.
@@ -1582,16 +1604,42 @@ void InjectNTP(Browser* browser) {
   // disappear before taking a screenshot.
   __weak SceneController* weakSelf = self;
   dispatch_async(dispatch_get_main_queue(), ^{
+    // Set the delay timeout to capture about 85% of users (approx. 2 seconds),
+    // see Signin.ListFamilyMembersRequest.OverallLatency.
     [weakSelf presentReportAnIssueViewController:baseViewController
                                           sender:sender
-                             specificProductData:specificProductData];
+                             specificProductData:specificProductData
+                                         timeout:base::Seconds(2)
+                                      completion:base::DoNothing()];
   });
 }
+
+using UserFeedbackDataCallback =
+    base::RepeatingCallback<void(UserFeedbackData*)>;
 
 - (void)presentReportAnIssueViewController:(UIViewController*)baseViewController
                                     sender:(UserFeedbackSender)sender
                        specificProductData:(NSDictionary<NSString*, NSString*>*)
-                                               specificProductData {
+                                               specificProductData
+                                   timeout:(base::TimeDelta)timeout
+                                completion:
+                                    (UserFeedbackDataCallback)completion {
+  UserFeedbackData* userFeedbackData =
+      [self createUserFeedbackDataForSender:sender
+                        specificProductData:specificProductData];
+  [self presentReportAnIssueViewController:baseViewController
+                                    sender:sender
+                          userFeedbackData:userFeedbackData
+                                   timeout:timeout
+                                completion:std::move(completion)];
+}
+
+- (void)presentReportAnIssueViewController:(UIViewController*)baseViewController
+                                    sender:(UserFeedbackSender)sender
+                          userFeedbackData:(UserFeedbackData*)data
+                                   timeout:(base::TimeDelta)timeout
+                                completion:
+                                    (UserFeedbackDataCallback)completion {
   DCHECK(!self.signinCoordinator)
       << "self.signinCoordinator: "
       << base::SysNSStringToUTF8([self.signinCoordinator description]);
@@ -1599,11 +1647,56 @@ void InjectNTP(Browser* browser) {
     return;
   }
 
-  UserFeedbackData* data =
-      [self createUserFeedbackDataForSender:sender
-                        specificProductData:specificProductData];
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForBrowserState(
+          self.mainInterface.browserState);
+  CoreAccountInfo primary_account =
+      identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin);
+
+  // Retrieves the Family Link member role for the signed-in account and
+  // populates the corresponding `UserFeedbackData` property.
+  if (!primary_account.IsEmpty()) {
+    __weak SceneController* weakSelf = self;
+    _family_members_fetcher = supervised_user::FetchListFamilyMembers(
+        *identity_manager,
+        self.mainInterface.browserState->GetSharedURLLoaderFactory(),
+        base::BindOnce(&OnListFamilyMembersResponse, primary_account.gaia, data)
+            .Then(base::BindOnce(^{
+              [weakSelf presentUserFeedbackViewController:baseViewController
+                                     withUserFeedbackData:data
+                                 cancelFamilyMembersFetch:NO
+                                               completion:completion];
+            })));
+
+    // Timeout the request to list family members.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE, base::BindOnce(^{
+          [weakSelf presentUserFeedbackViewController:baseViewController
+                                 withUserFeedbackData:data
+                             cancelFamilyMembersFetch:YES
+                                           completion:completion];
+        }),
+        timeout);
+    return;
+  }
+
+  [self presentUserFeedbackViewController:baseViewController
+                     withUserFeedbackData:data
+                 cancelFamilyMembersFetch:NO
+                               completion:completion];
+}
+
+- (void)presentUserFeedbackViewController:(UIViewController*)baseViewController
+                     withUserFeedbackData:(UserFeedbackData*)data
+                 cancelFamilyMembersFetch:(BOOL)cancelFamilyMembersFetch
+                               completion:(UserFeedbackDataCallback)completion {
+  // Cancel any list family member requests in progress.
+  if (cancelFamilyMembersFetch) {
+    _family_members_fetcher.reset();
+  }
 
   Browser* browser = self.mainInterface.browser;
+
   id<ApplicationCommands> handler =
       HandlerForProtocol(browser->GetCommandDispatcher(), ApplicationCommands);
 
@@ -1629,6 +1722,7 @@ void InjectNTP(Browser* browser) {
                                      animated:YES
                                    completion:nil];
   }
+  std::move(completion).Run(data);
 }
 
 - (UserFeedbackData*)createUserFeedbackDataForSender:(UserFeedbackSender)sender
@@ -1640,16 +1734,7 @@ void InjectNTP(Browser* browser) {
   data.currentPageIsIncognito = self.currentInterface.incognito;
 
   CGFloat scale = 0.0;
-  if (!self.mainCoordinator.isTabGridActive) {
-    web::WebState* webState =
-        self.currentInterface.browser->GetWebStateList()->GetActiveWebState();
-    if (webState) {
-      // Record URL of browser tab that is currently showing
-      GURL url = webState->GetVisibleURL();
-      std::u16string urlText = url_formatter::FormatUrl(url);
-      data.currentPageDisplayURL = base::SysUTF16ToNSString(urlText);
-    }
-  } else {
+  if (self.mainCoordinator.isTabGridActive) {
     // For screenshots of the tab switcher we need to use a scale of 1.0 to
     // avoid spending too much time since the tab switcher can have lots of
     // subviews.
@@ -1898,8 +1983,8 @@ void InjectNTP(Browser* browser) {
   DCHECK(infoBarManager);
   CommandDispatcher* dispatcher =
       self.mainInterface.browser->GetCommandDispatcher();
-  id<ApplicationSettingsCommands> settingsHandler =
-      HandlerForProtocol(dispatcher, ApplicationSettingsCommands);
+  id<SettingsCommands> settingsHandler =
+      HandlerForProtocol(dispatcher, SettingsCommands);
   SigninNotificationInfoBarDelegate::Create(
       infoBarManager, self.mainInterface.browser->GetBrowserState(),
       settingsHandler, baseViewController);
@@ -1976,6 +2061,19 @@ void InjectNTP(Browser* browser) {
   }
 }
 
+- (void)prepareToPresentModal:(ProceduralBlock)completion {
+  if (self.mainCoordinator.isTabGridActive ||
+      (self.currentInterface.incognito && ![self isIncognitoForced])) {
+    __weak __typeof(self) weakSelf = self;
+    [self closePresentedViews:YES
+                   completion:^{
+                     [weakSelf openNonIncognitoTab:completion];
+                   }];
+    return;
+  }
+  [self dismissModalDialogsWithCompletion:completion];
+}
+
 // Returns YES if the current Tab is available to present a view controller.
 - (BOOL)isTabAvailableToPresentViewController {
   if (self.signinCoordinator) {
@@ -1996,7 +2094,7 @@ void InjectNTP(Browser* browser) {
   return YES;
 }
 
-#pragma mark - ApplicationSettingsCommands
+#pragma mark - SettingsCommands
 
 // TODO(crbug.com/779791) : Remove show settings from MainController.
 - (void)showAccountsSettingsFromViewController:
@@ -2089,6 +2187,12 @@ void InjectNTP(Browser* browser) {
 // TODO(crbug.com/779791) : Remove show settings commands from MainController.
 - (void)showSyncPassphraseSettingsFromViewController:
     (UIViewController*)baseViewController {
+
+  if (vivaldi::IsVivaldiRunning()) {
+    [self showVivaldiSyncWithCreateAccountFlow:NO];
+    return;
+  } // End Vivaldi
+
   DCHECK(!self.signinCoordinator)
       << "self.signinCoordinator: "
       << base::SysNSStringToUTF8([self.signinCoordinator description]);
@@ -2247,7 +2351,8 @@ void InjectNTP(Browser* browser) {
 - (void)showDefaultBrowserSettingsFromViewController:
             (UIViewController*)baseViewController
                                         sourceForUMA:
-                                            (DefaultBrowserPromoSource)source {
+                                            (DefaultBrowserSettingsPageSource)
+                                                source {
   if (!baseViewController) {
     baseViewController = self.currentInterface.viewController;
   }
@@ -2313,8 +2418,15 @@ void InjectNTP(Browser* browser) {
                                  completion:nil];
 }
 
+// TODO(crbug.com/330562969): Remove the deprecated function and its
+// invocations.
 - (void)showSafeBrowsingSettings {
   UIViewController* baseViewController = self.currentInterface.viewController;
+  [self showSafeBrowsingSettingsFromViewController:baseViewController];
+}
+
+- (void)showSafeBrowsingSettingsFromViewController:
+    (UIViewController*)baseViewController {
   if (self.settingsNavigationController) {
     [self.settingsNavigationController showSafeBrowsingSettings];
     return;
@@ -2504,7 +2616,7 @@ void InjectNTP(Browser* browser) {
     case SHOW_DEFAULT_BROWSER_SETTINGS:
       return ^{
         [weakSelf showDefaultBrowserSettingsWithSourceForUMA:
-                      DefaultBrowserPromoSource::kExternalIntent];
+                      DefaultBrowserSettingsPageSource::kExternalIntent];
       };
     case SEARCH_PASSWORDS:
       return ^{
@@ -2529,7 +2641,7 @@ void InjectNTP(Browser* browser) {
     case SET_CHROME_DEFAULT_BROWSER:
       return ^{
         [weakSelf showDefaultBrowserSettingsWithSourceForUMA:
-                      DefaultBrowserPromoSource::kExternalIntent];
+                      DefaultBrowserSettingsPageSource::kExternalIntent];
       };
     case VIEW_HISTORY:
       return ^{
@@ -2575,7 +2687,7 @@ void InjectNTP(Browser* browser) {
     case EXTERNAL_ACTION_SHOW_BROWSER_SETTINGS:
       return ^{
         [weakSelf showDefaultBrowserSettingsWithSourceForUMA:
-                      DefaultBrowserPromoSource::kExternalAction];
+                      DefaultBrowserSettingsPageSource::kExternalAction];
       };
     default:
       return nil;
@@ -2629,16 +2741,14 @@ void InjectNTP(Browser* browser) {
 }
 
 - (void)showDefaultBrowserSettingsWithSourceForUMA:
-    (DefaultBrowserPromoSource)sourceForUMA {
+    (DefaultBrowserSettingsPageSource)sourceForUMA {
   if (!self.currentInterface.browser) {
     return;
   }
-  id<ApplicationSettingsCommands> applicationSettingsCommandsHandler =
-      HandlerForProtocol(self.currentInterface.browser->GetCommandDispatcher(),
-                         ApplicationSettingsCommands);
-  [applicationSettingsCommandsHandler
-      showDefaultBrowserSettingsFromViewController:nil
-                                      sourceForUMA:sourceForUMA];
+  id<SettingsCommands> settingsHandler = HandlerForProtocol(
+      self.currentInterface.browser->GetCommandDispatcher(), SettingsCommands);
+  [settingsHandler showDefaultBrowserSettingsFromViewController:nil
+                                                   sourceForUMA:sourceForUMA];
 }
 
 - (void)startPasswordSearch {
@@ -2654,10 +2764,9 @@ void InjectNTP(Browser* browser) {
         feature_engagement::events::kPasswordManagerWidgetPromoUsed);
   }
 
-  id<ApplicationSettingsCommands> applicationSettingsCommandsHandler =
-      HandlerForProtocol(browser->GetCommandDispatcher(),
-                         ApplicationSettingsCommands);
-  [applicationSettingsCommandsHandler showPasswordSearchPage];
+  id<SettingsCommands> settingsHandler =
+      HandlerForProtocol(browser->GetCommandDispatcher(), SettingsCommands);
+  [settingsHandler showPasswordSearchPage];
 }
 
 - (void)openReadingList {
@@ -2695,9 +2804,8 @@ void InjectNTP(Browser* browser) {
     return;
   }
 
-  id<ApplicationSettingsCommands> settingsHandler =
-      HandlerForProtocol(self.currentInterface.browser->GetCommandDispatcher(),
-                         ApplicationSettingsCommands);
+  id<SettingsCommands> settingsHandler = HandlerForProtocol(
+      self.currentInterface.browser->GetCommandDispatcher(), SettingsCommands);
   [settingsHandler showCreditCardSettings];
 }
 
@@ -2706,9 +2814,8 @@ void InjectNTP(Browser* browser) {
     return;
   }
 
-  id<ApplicationSettingsCommands> settingsHandler =
-      HandlerForProtocol(self.currentInterface.browser->GetCommandDispatcher(),
-                         ApplicationSettingsCommands);
+  id<SettingsCommands> settingsHandler = HandlerForProtocol(
+      self.currentInterface.browser->GetCommandDispatcher(), SettingsCommands);
   [settingsHandler showClearBrowsingDataSettings];
 }
 
@@ -3582,6 +3689,39 @@ void InjectNTP(Browser* browser) {
   }
 }
 
+// Open a non-incognito tab, if one exists. If one doesn't exist, open a new
+// one. If incognito is forced, an incognito tab will be opened.
+- (void)openNonIncognitoTab:(ProceduralBlock)completion {
+  if (self.mainInterface.browser->GetWebStateList()->GetActiveWebState()) {
+    // Reuse an existing tab, if one exists.
+    ApplicationMode mode = [self isIncognitoForced] ? ApplicationMode::INCOGNITO
+                                                    : ApplicationMode::NORMAL;
+    [self setCurrentInterfaceForMode:mode];
+    if (self.mainCoordinator.isTabGridActive) {
+      [self.mainCoordinator
+          showTabViewController:self.currentInterface.viewController
+                      incognito:self.currentInterface.incognito
+                     completion:completion];
+      [self setIncognitoContentVisible:self.currentInterface.incognito];
+    } else {
+      if (completion) {
+        completion();
+      }
+    }
+  } else {
+    // Open a new NTP.
+    UrlLoadParams params = UrlLoadParams::InNewTab(GURL(kChromeUINewTabURL));
+    params.web_params.transition_type = ui::PAGE_TRANSITION_TYPED;
+    ApplicationModeForTabOpening mode =
+        [self isIncognitoForced] ? ApplicationModeForTabOpening::INCOGNITO
+                                 : ApplicationModeForTabOpening::NORMAL;
+    [self dismissModalsAndMaybeOpenSelectedTabInMode:mode
+                                   withUrlLoadParams:params
+                                      dismissOmnibox:YES
+                                          completion:completion];
+  }
+}
+
 #pragma mark - IncognitoInterstitialCoordinatorDelegate
 
 - (void)shouldStopIncognitoInterstitial:
@@ -3695,7 +3835,15 @@ void InjectNTP(Browser* browser) {
       ->SetWebUsageEnabled(true);
   WebUsageEnablerBrowserAgent::FromBrowser(self.incognitoInterface.browser)
       ->SetWebUsageEnabled(true);
-  [self.currentInterface setPrimary:YES];
+
+  if (self.currentInterface) {
+    TabUsageRecorderBrowserAgent* tabUsageRecorder =
+        TabUsageRecorderBrowserAgent::FromBrowser(
+            self.currentInterface.browser);
+    if (tabUsageRecorder) {
+      tabUsageRecorder->RecordPrimaryBrowserChange(true);
+    }
+  }
 }
 
 // Shows the tab switcher UI.
@@ -3939,18 +4087,6 @@ void InjectNTP(Browser* browser) {
 }
 
 #pragma mark - Vivaldi
-
-// Initializes the panel interaction controller if not already initialized.
-- (void)initializePanelInteractionController {
-  if (_panelInteractionController) {
-    return;
-  }
-  _panelInteractionController =
-      [[PanelInteractionController alloc] initWithBrowser:
-           self.mainInterface.browser];
-  _panelInteractionController.parentController =
-        self.mainInterface.viewController;
-}
 
 - (void)showVivaldiSyncWithCreateAccountFlow:(BOOL)showCreateAccountFlow {
   [[DeferredInitializationRunner sharedInstance]

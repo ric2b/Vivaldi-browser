@@ -776,7 +776,7 @@ TEST(SchemaValidatingPolicyHandlerTest, CheckAndGetValueUnknown) {
                   testing::_, PolicyMap::MessageType::kWarning)));
 
   // Test that CheckAndGetValue() actually dropped unknown properties.
-  const absl::optional<int> one_two_three = output.FindInt("OneToThree");
+  const std::optional<int> one_two_three = output.FindInt("OneToThree");
   ASSERT_TRUE(one_two_three);
   int int_value = one_two_three.value();
   EXPECT_EQ(2, int_value);
@@ -1092,6 +1092,37 @@ TEST(SimpleDeprecatingPolicyHandlerTest, CheckDeprecatedUsedWhenNoNewValue) {
   prefs.Clear();
   handler.ApplyPolicySettingsWithParameters(policy_map, params, &prefs);
   expected = std::make_unique<base::Value>(1337);
+  EXPECT_TRUE(prefs.GetValue(kTestPref, &value));
+  EXPECT_EQ(*expected, *value);
+}
+
+TEST(URLPolicyHandler, CheckOnlyValidURLApplied) {
+  PolicyMap policy_map;
+  PrefValueMap prefs;
+  std::unique_ptr<base::Value> expected;
+  const base::Value* value;
+  PolicyErrorMap errors;
+  PolicyHandlerParameters params;
+
+  URLPolicyHandler handler(kTestPolicy, kTestPref);
+
+  // Check that invalid url returns error.
+  policy_map.Set(kTestPolicy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD, base::Value("not_a_url"), nullptr);
+  EXPECT_FALSE(handler.CheckPolicySettings(policy_map, &errors));
+  EXPECT_FALSE(errors.empty());
+  errors.Clear();
+  prefs.Clear();
+
+  // Check that valid url returns no error.
+  policy_map.Set(kTestPolicy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD, base::Value("https://www.example.com/"),
+                 nullptr);
+  EXPECT_TRUE(handler.CheckPolicySettings(policy_map, &errors));
+  EXPECT_TRUE(errors.empty());
+
+  handler.ApplyPolicySettingsWithParameters(policy_map, params, &prefs);
+  expected = std::make_unique<base::Value>("https://www.example.com/");
   EXPECT_TRUE(prefs.GetValue(kTestPref, &value));
   EXPECT_EQ(*expected, *value);
 }

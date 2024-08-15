@@ -153,23 +153,23 @@ void TabRestoreServiceHelper::RemoveObserver(
   observer_list_.RemoveObserver(observer);
 }
 
-absl::optional<SessionID> TabRestoreServiceHelper::CreateHistoricalTab(
+std::optional<SessionID> TabRestoreServiceHelper::CreateHistoricalTab(
     LiveTab* live_tab,
     int index) {
   if (restoring_)
-    return absl::nullopt;
+    return std::nullopt;
 
   // If an entire window or group is being closed than all of the tabs have
   // already been persisted via "BrowserClosing" or "CreateHistoricalGroup".
   // Ignore the subsequent tab closing notifications.
   LiveTabContext* context = client_->FindLiveTabContextForTab(live_tab);
   if (closing_contexts_.find(context) != closing_contexts_.end())
-    return absl::nullopt;
-  absl::optional<tab_groups::TabGroupId> group =
-      context ? context->GetTabGroupForTab(index) : absl::nullopt;
+    return std::nullopt;
+  std::optional<tab_groups::TabGroupId> group =
+      context ? context->GetTabGroupForTab(index) : std::nullopt;
   if (group.has_value() &&
       closing_groups_.find(group.value()) != closing_groups_.end()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   // Save the Window as well as the Tab if this is the last tab of an app
@@ -177,13 +177,13 @@ absl::optional<SessionID> TabRestoreServiceHelper::CreateHistoricalTab(
   if (context && context->GetTabCount() == 1 &&
       !context->GetAppName().empty()) {
     BrowserClosing(context);
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   auto local_tab = std::make_unique<Tab>();
   PopulateTab(local_tab.get(), index, context, live_tab);
   if (local_tab->navigations.empty())
-    return absl::nullopt;
+    return std::nullopt;
 
   SessionID id = local_tab->id;
   AddEntry(std::move(local_tab), true, true);
@@ -211,18 +211,20 @@ void TabRestoreServiceHelper::BrowserClosing(LiveTabContext* context) {
     auto tab = std::make_unique<Tab>();
     PopulateTab(tab.get(), tab_index, context,
                 context->GetLiveTabAt(tab_index));
-    if (!tab->navigations.empty()) {
-      if (tab->group.has_value())
-        seen_groups.insert(tab->group.value());
-      tab->browser_id = context->GetSessionID().id();
-      window->tabs.push_back(std::move(tab));
+    if (tab->navigations.empty()) {
+      continue;
     }
-  }
 
-  for (const tab_groups::TabGroupId& group : seen_groups) {
-    const tab_groups::TabGroupVisualData* visual_data =
-        context->GetVisualDataForGroup(group);
-    window->tab_groups.emplace(group, std::move(*visual_data));
+    if (tab->group.has_value() && !seen_groups.contains(tab->group.value())) {
+      // Add new groups to the mapping if we haven't already.
+      seen_groups.insert(tab->group.value());
+      const tab_groups::TabGroupVisualData* visual_data =
+          context->GetVisualDataForGroup(tab->group.value());
+      window->tab_groups.emplace(tab->group.value(), *visual_data);
+    }
+
+    tab->browser_id = context->GetSessionID().id();
+    window->tabs.push_back(std::move(tab));
   }
 
   if (window->tabs.size() == 1 && window->app_name.empty()) {
@@ -493,7 +495,7 @@ std::vector<LiveTab*> TabRestoreServiceHelper::RestoreEntryById(
           // Relabel group IDs to prevent duplicating groups, e.g. if the same
           // window is restored twice or a tab of the same ID is restored
           // elsewhere. See crbug.com/1202102.
-          absl::optional<tab_groups::TabGroupId> new_group;
+          std::optional<tab_groups::TabGroupId> new_group;
           if (tab.group) {
             auto it = new_group_ids.find(*tab.group);
             if (it == new_group_ids.end()) {
@@ -548,7 +550,7 @@ std::vector<LiveTab*> TabRestoreServiceHelper::RestoreEntryById(
             context = RestoreTab(tab, context, disposition, &restored_tab);
             live_tabs.push_back(restored_tab);
             DCHECK(ValidateWindow(window));
-            const absl::optional<tab_groups::TabGroupId> tab_group = tab.group;
+            const std::optional<tab_groups::TabGroupId> tab_group = tab.group;
             window.tabs.erase(window.tabs.begin() + tab_i);
             if (tab_group.has_value()) {
               bool group_is_referenced = false;
@@ -843,11 +845,11 @@ void TabRestoreServiceHelper::PopulateTab(Tab* tab,
     tab->group = context->GetTabGroupForTab(tab->tabstrip_index);
     tab->group_visual_data =
         tab->group.has_value()
-            ? absl::optional<
+            ? std::optional<
                   tab_groups::TabGroupVisualData>{*context
                                                        ->GetVisualDataForGroup(
                                                            tab->group.value())}
-            : absl::nullopt;
+            : std::nullopt;
     tab->extra_data = context->GetExtraDataForTab(tab->tabstrip_index);
   }
 }
@@ -860,7 +862,7 @@ LiveTabContext* TabRestoreServiceHelper::RestoreTab(
   LiveTab* restored_tab;
   if (disposition == WindowOpenDisposition::CURRENT_TAB && context) {
     restored_tab = context->ReplaceRestoredTab(
-        tab.navigations, absl::nullopt, tab.current_navigation_index,
+        tab.navigations, std::nullopt, tab.current_navigation_index,
         tab.extension_app_id, tab.platform_data.get(), tab.user_agent_override,
         tab.extra_data, tab.viv_page_action_overrides, tab.viv_ext_data);
   } else {

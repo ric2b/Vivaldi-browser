@@ -31,37 +31,29 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
 
  private:
   // bookmarks::BookmarkModelObserver
-  void BookmarkModelLoaded(BookmarkModel* model, bool ids_reassigned) override {
+  void BookmarkModelLoaded(bool ids_reassigned) override {
   }
 
-  void BookmarkNodeMoved(BookmarkModel* model,
-                         const BookmarkNode* old_parent,
+  void BookmarkNodeMoved(const BookmarkNode* old_parent,
                          size_t old_index,
                          const BookmarkNode* new_parent,
                          size_t new_index) override {}
   void BookmarkNodeRemoved(
-      BookmarkModel* model,
       const BookmarkNode* parent,
       size_t old_index,
       const BookmarkNode* node,
       const std::set<GURL>& no_longer_bookmarked) override {}
 
-  void BookmarkNodeAdded(BookmarkModel* model,
-                         const BookmarkNode* parent,
+  void BookmarkNodeAdded(const BookmarkNode* parent,
                          size_t index,
                          bool added_by_user) override {}
 
   // Invoked when the title or url of a node changes.
-  void BookmarkNodeChanged(BookmarkModel* model,
-                           const BookmarkNode* node) override {}
-  void BookmarkMetaInfoChanged(BookmarkModel* model,
-                               const BookmarkNode* node) override;
-  void BookmarkNodeFaviconChanged(BookmarkModel* model,
-                                  const BookmarkNode* node) override;
-  void BookmarkNodeChildrenReordered(BookmarkModel* model,
-                                     const BookmarkNode* node) override {}
+  void BookmarkNodeChanged(const BookmarkNode* node) override {}
+  void BookmarkMetaInfoChanged(const BookmarkNode* node) override;
+  void BookmarkNodeFaviconChanged(const BookmarkNode* node) override;
+  void BookmarkNodeChildrenReordered(const BookmarkNode* node) override {}
   void BookmarkAllUserNodesRemoved(
-      BookmarkModel* model,
       const std::set<GURL>& removed_urls) override {}
 
   friend class BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI>;
@@ -88,6 +80,20 @@ class BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction
  private:
   ~BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction() override =
       default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+};
+
+class BookmarksPrivateGetFolderIdsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("bookmarksPrivate.getFolderIds",
+                             BOOKMARKSPRIVATE_GET_FOLDER_IDS)
+
+  BookmarksPrivateGetFolderIdsFunction() = default;
+
+ private:
+  ~BookmarksPrivateGetFolderIdsFunction() override = default;
 
   // ExtensionFunction:
   ResponseAction Run() override;

@@ -12,6 +12,7 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabSwitcherConsta
 import android.content.Context;
 import android.graphics.Rect;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
@@ -21,6 +22,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Log;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
@@ -28,6 +30,7 @@ import org.chromium.base.supplier.Supplier;
 import org.chromium.base.supplier.SyncOneshotSupplier;
 import org.chromium.base.supplier.SyncOneshotSupplierImpl;
 import org.chromium.base.supplier.TransitiveObservableSupplier;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.DisplayButtonData;
 import org.chromium.chrome.browser.hub.FadeHubLayoutAnimationFactory;
 import org.chromium.chrome.browser.hub.FullButtonData;
@@ -48,6 +51,7 @@ import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController.
 import org.chromium.ui.base.DeviceFormFactor;
 
 import java.util.List;
+import java.util.function.DoubleConsumer;
 
 /**
  * An abstract {@link Pane} representing a tab switcher for shared logic between the normal and
@@ -98,25 +102,30 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcherResetHandl
     private final FrameLayout mRootView;
     private final TabSwitcherPaneCoordinatorFactory mFactory;
     private final boolean mIsIncognito;
+    private final DoubleConsumer mOnToolbarAlphaChange;
 
     private boolean mNativeInitialized;
     private @Nullable PaneHubController mPaneHubController;
+    private @Nullable Long mWaitForTabStateInitializedStartTimeMs;
 
     /**
      * @param context The activity context.
      * @param factory The factory used to construct {@link TabSwitcherPaneCoordinator}s.
      * @param isIncognito Whether the pane is incognito.
+     * @param onToolbarAlphaChange Observer to notify when alpha changes during animations.
      */
     TabSwitcherPaneBase(
             @NonNull Context context,
             @NonNull TabSwitcherPaneCoordinatorFactory factory,
-            boolean isIncognito) {
+            boolean isIncognito,
+            @NonNull DoubleConsumer onToolbarAlphaChange) {
         mFactory = factory;
         mIsIncognito = isIncognito;
 
         mRootView = new FrameLayout(context);
         mIsVisibleSupplier.set(false);
         mIsAnimatingSupplier.set(false);
+        mOnToolbarAlphaChange = onToolbarAlphaChange;
     }
 
     @Override
@@ -156,6 +165,8 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcherResetHandl
             // need to know an animation is going to play and when it is finished (possibly using
             // the isAnimatingSupplier?).
             requestAccessibilityFocusOnCurrentTab();
+        } else {
+            cancelWaitForTabStateInitializedTimer();
         }
 
         if (loadHint == LoadHint.WARM) {
@@ -192,7 +203,7 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcherResetHandl
         int tabId = getCurrentTabId();
         if (getTabListMode() == TabListMode.LIST || tabId == Tab.INVALID_TAB_ID) {
             return FadeHubLayoutAnimationFactory.createFadeInAnimatorProvider(
-                    hubContainerView, HubLayoutConstants.FADE_DURATION_MS);
+                    hubContainerView, HubLayoutConstants.FADE_DURATION_MS, mOnToolbarAlphaChange);
         }
 
         @ColorInt int backgroundColor = getAnimationBackgroundColor();
@@ -202,7 +213,8 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcherResetHandl
                 hubContainerView,
                 animationDataSupplier,
                 backgroundColor,
-                SHRINK_EXPAND_DURATION_MS);
+                SHRINK_EXPAND_DURATION_MS,
+                mOnToolbarAlphaChange);
     }
 
     @Override
@@ -212,7 +224,7 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcherResetHandl
         int tabId = getCurrentTabId();
         if (getTabListMode() == TabListMode.LIST || tabId == Tab.INVALID_TAB_ID) {
             return FadeHubLayoutAnimationFactory.createFadeOutAnimatorProvider(
-                    hubContainerView, HubLayoutConstants.FADE_DURATION_MS);
+                    hubContainerView, HubLayoutConstants.FADE_DURATION_MS, mOnToolbarAlphaChange);
         }
 
         @ColorInt int backgroundColor = getAnimationBackgroundColor();
@@ -222,7 +234,8 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcherResetHandl
                 hubContainerView,
                 animationDataSupplier,
                 backgroundColor,
-                SHRINK_EXPAND_DURATION_MS);
+                SHRINK_EXPAND_DURATION_MS,
+                mOnToolbarAlphaChange);
     }
 
     private @ColorInt int getAnimationBackgroundColor() {
@@ -247,16 +260,27 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcherResetHandl
                     hubContainerView.getGlobalVisibleRect(hubRect);
                     Rect initialRect;
                     Rect finalRect;
+
+                    Rect recyclerViewRect = coordinator.getRecyclerViewRect();
+                    if (ChromeFeatureList.sDrawEdgeToEdge.isEnabled()) {
+                        // Extend the recyclerViewRect to include the bottom nav bar area on
+                        // edge-to-edge to align the animation with the start / end state.
+                        Rect rootViewRect = new Rect();
+                        mRootView.getRootView().getGlobalVisibleRect(rootViewRect);
+                        recyclerViewRect.bottom = rootViewRect.bottom;
+                    }
+
                     int leftOffset = 0;
                     if (isShrink) {
-                        initialRect = coordinator.getRecyclerViewRect();
+                        initialRect = recyclerViewRect;
                         finalRect = coordinator.getTabThumbnailRect(tabId);
                         leftOffset = initialRect.left;
                     } else {
                         initialRect = coordinator.getTabThumbnailRect(tabId);
-                        finalRect = coordinator.getRecyclerViewRect();
+                        finalRect = recyclerViewRect;
                         leftOffset = finalRect.left;
                     }
+
                     boolean useFallbackAnimation = false;
                     if (initialRect.isEmpty() || finalRect.isEmpty()) {
                         Log.d(TAG, "Geometry not ready using fallback animation.");
@@ -345,6 +369,17 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcherResetHandl
         coordinator.setTabSwitcherRecyclerViewPosition(position);
     }
 
+    /** Show the Quick Delete animation on the tab list . */
+    public void showQuickDeleteAnimation(Runnable onAnimationEnd, List<Tab> tabs) {
+        @Nullable
+        TabSwitcherPaneCoordinator coordinator = mTabSwitcherPaneCoordinatorSupplier.get();
+        if (coordinator == null) {
+            onAnimationEnd.run();
+            return;
+        }
+        coordinator.showQuickDeleteAnimation(onAnimationEnd, tabs);
+    }
+
     /**
      * Request to show all the tabs in the pane. Subclasses should override this method to invoke
      * {@link TabSwitcherResetHandler#resetWithTabList} with their available tabs.
@@ -366,9 +401,12 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcherResetHandl
         return mFactory.getTabListMode();
     }
 
-    /** Returns whether the pane is visible onscreen. Note this is not the same as being focused. */
-    protected boolean isVisible() {
-        return mIsVisibleSupplier.get();
+    /**
+     * Returns a supplier for whether the pane is visible onscreen. Note this is not the same as
+     * being focused.
+     */
+    protected ObservableSupplier<Boolean> getIsVisibleSupplier() {
+        return mIsVisibleSupplier;
     }
 
     /** Returns whether the pane is focused. */
@@ -423,6 +461,26 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcherResetHandl
         mRootView.removeAllViews();
         mTabSwitcherCustomViewManager.setDelegate(null);
         coordinator.destroy();
+    }
+
+    protected void startWaitForTabStateInitializedTimer() {
+        if (mWaitForTabStateInitializedStartTimeMs != null) return;
+
+        mWaitForTabStateInitializedStartTimeMs = SystemClock.elapsedRealtime();
+    }
+
+    protected void finishWaitForTabStateInitializedTimer() {
+        if (mWaitForTabStateInitializedStartTimeMs != null) {
+            RecordHistogram.recordTimesHistogram(
+                    "Android.GridTabSwitcher.TimeToTabStateInitializedFromShown",
+                    SystemClock.elapsedRealtime()
+                            - mWaitForTabStateInitializedStartTimeMs.longValue());
+            mWaitForTabStateInitializedStartTimeMs = null;
+        }
+    }
+
+    protected void cancelWaitForTabStateInitializedTimer() {
+        mWaitForTabStateInitializedStartTimeMs = null;
     }
 
     private void onTabClick(int tabId) {

@@ -415,12 +415,12 @@ OffsetMapping::GetMappingUnitsForTextContentOffsetRange(unsigned start,
   return base::make_span(result_begin, result_end);
 }
 
-absl::optional<unsigned> OffsetMapping::GetTextContentOffset(
+std::optional<unsigned> OffsetMapping::GetTextContentOffset(
     const Position& position) const {
   DCHECK(OffsetMapping::AcceptsPosition(position)) << position;
   const OffsetMappingUnit* unit = GetMappingUnitForPosition(position);
   if (!unit)
-    return absl::nullopt;
+    return std::nullopt;
   return unit->ConvertDOMOffsetToTextContent(ToNodeOffsetPair(position).second);
 }
 
@@ -492,12 +492,12 @@ bool OffsetMapping::IsAfterNonCollapsedContent(const Position& position) const {
          unit->GetType() != OffsetMappingUnitType::kCollapsed;
 }
 
-absl::optional<UChar> OffsetMapping::GetCharacterBefore(
+std::optional<UChar> OffsetMapping::GetCharacterBefore(
     const Position& position) const {
   DCHECK(OffsetMapping::AcceptsPosition(position));
-  absl::optional<unsigned> text_content_offset = GetTextContentOffset(position);
+  std::optional<unsigned> text_content_offset = GetTextContentOffset(position);
   if (!text_content_offset || !*text_content_offset)
-    return absl::nullopt;
+    return std::nullopt;
   return text_[*text_content_offset - 1];
 }
 
@@ -595,6 +595,21 @@ bool OffsetMapping::HasBidiControlCharactersOnly(unsigned start,
       return false;
   }
   return true;
+}
+
+unsigned OffsetMapping::LayoutObjectConverter::TextContentOffset(
+    unsigned offset) const {
+  auto iter = offset >= last_offset_ ? last_unit_ : units_.begin();
+  if (offset >= iter->DOMEnd()) {
+    iter = base::ranges::find_if(
+        iter, units_.end(), [offset](const OffsetMappingUnit& unit) {
+          return unit.DOMStart() <= offset && offset < unit.DOMEnd();
+        });
+  }
+  CHECK(iter != units_.end());
+  last_unit_ = iter;
+  last_offset_ = offset;
+  return iter->ConvertDOMOffsetToTextContent(offset);
 }
 
 void OffsetMappingUnit::Trace(Visitor* visitor) const {

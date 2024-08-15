@@ -262,7 +262,7 @@ void VideoCaptureDeviceFuchsia::InitializeBufferCollection(
   // need to be specified explicitly.
   fuchsia::sysmem::BufferCollectionConstraints constraints =
       VmoBuffer::GetRecommendedConstraints(kMaxUsedOutputFrames,
-                                           /*min_buffer_size=*/absl::nullopt,
+                                           /*min_buffer_size=*/std::nullopt,
                                            /*writable=*/false);
   buffer_collection_ = sysmem_allocator_.BindSharedCollection(std::move(token));
   buffer_collection_->Initialize(std::move(constraints), "CrVideoCaptureDevice",
@@ -432,7 +432,7 @@ void VideoCaptureDeviceFuchsia::ProcessNewFrame(
 
   client_->OnIncomingCapturedBufferExt(
       std::move(buffer), capture_format, gfx::ColorSpace(), reference_time,
-      timestamp, gfx::Rect(visible_size), VideoFrameMetadata());
+      timestamp, std::nullopt, gfx::Rect(visible_size), VideoFrameMetadata());
 
   // Frame buffer is returned to the device by dropping the |frame_info|.
 }

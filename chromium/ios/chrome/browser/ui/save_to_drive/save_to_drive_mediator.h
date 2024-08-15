@@ -9,10 +9,19 @@
 
 #import "ios/chrome/browser/ui/save_to_drive/file_destination_picker_action_delegate.h"
 
+@protocol AccountPickerCommands;
 @protocol AccountPickerConsumer;
+@protocol ApplicationCommands;
+class ChromeAccountManagerService;
 @protocol FileDestinationPickerConsumer;
+@protocol ManageStorageAlertCommands;
+class PrefService;
 @protocol SaveToDriveCommands;
 @protocol SystemIdentity;
+
+namespace drive {
+class DriveService;
+}
 
 namespace web {
 class DownloadTask;
@@ -27,16 +36,31 @@ class DownloadTask;
 
 // Initialization
 - (instancetype)initWithDownloadTask:(web::DownloadTask*)downloadTask
-          saveToDriveCommandsHandler:
-              (id<SaveToDriveCommands>)saveToDriveCommandsHandler
+                  saveToDriveHandler:(id<SaveToDriveCommands>)saveToDriveHandler
+           manageStorageAlertHandler:
+               (id<ManageStorageAlertCommands>)manageStorageAlertHandler
+                  applicationHandler:(id<ApplicationCommands>)applicationHandler
+                accountPickerHandler:
+                    (id<AccountPickerCommands>)accountPickerHandler
+                         prefService:(PrefService*)prefService
+               accountManagerService:
+                   (ChromeAccountManagerService*)accountManagerService
+                        driveService:(drive::DriveService*)driveService
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 
 - (void)disconnect;
 
-// Starts the current download task and prepare to save the downloaded file to
+// Opens the "Manage Storage" page in a new tab for the given identity.
+- (void)showManageStorageForIdentity:(id<SystemIdentity>)identity;
+
+// Called when the user taps "Save" in the account picker view. If the selected
+// file destination is Drive then `identity` will be used to upload the file to
 // Drive.
-- (void)startDownloadWithIdentity:(id<SystemIdentity>)identity;
+- (void)saveWithSelectedIdentity:(id<SystemIdentity>)identity;
+
+// Called when the user taps "Cancel" in the account picker view.
+- (void)cancelSaveToDrive;
 
 @end
 

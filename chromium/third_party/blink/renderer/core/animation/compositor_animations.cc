@@ -265,7 +265,15 @@ CompositorAnimations::CheckCanStartEffectOnCompositor(
     reasons |= kTargetHasInvalidCompositingState;
   }
 
-  PropertyHandleSet properties = keyframe_effect.Properties();
+  PropertyHandleSet properties = keyframe_effect.DynamicProperties();
+  if (RuntimeEnabledFeatures::StaticAnimationOptimizationEnabled()) {
+    // If all properties are static, we don't need to composite. The animation
+    // can only change at a phase boundary.
+    if (properties.empty()) {
+      reasons |= kAnimationHasNoVisibleChange;
+    }
+  }
+
   for (const auto& property : properties) {
     if (!property.IsCSSProperty()) {
       // None of the below reasons make any sense if |property| isn't CSS, so we
@@ -447,7 +455,7 @@ CompositorAnimations::CheckCanStartEffectOnCompositor(
                  ElementAnimations::CompositedPaintStatus::kComposited);
     }
 #endif
-    reasons |= kCompositorPropertyAnimationsHaveNoEffect;
+    reasons |= kAnimationHasNoVisibleChange;
   }
 
   if (animation_to_add &&
@@ -647,7 +655,7 @@ void CompositorAnimations::CancelIncompatibleAnimationsOnCompositor(
 void CompositorAnimations::StartAnimationOnCompositor(
     const Element& element,
     int group,
-    absl::optional<double> start_time,
+    std::optional<double> start_time,
     base::TimeDelta time_offset,
     const Timing& timing,
     const Timing::NormalizedTiming& normalized_timing,
@@ -956,7 +964,7 @@ void CompositorAnimations::GetAnimationOnCompositor(
     const Timing& timing,
     const Timing::NormalizedTiming& normalized_timing,
     int group,
-    absl::optional<double> start_time,
+    std::optional<double> start_time,
     base::TimeDelta time_offset,
     const KeyframeEffectModelBase& effect,
     Vector<std::unique_ptr<cc::KeyframeModel>>& keyframe_models,
@@ -969,7 +977,7 @@ void CompositorAnimations::GetAnimationOnCompositor(
       timing, normalized_timing, time_offset, compositor_timing,
       animation_playback_rate, is_monotonic_timeline, is_boundary_aligned);
 
-  PropertyHandleSet properties = effect.Properties();
+  PropertyHandleSet properties = effect.DynamicProperties();
   DCHECK(!properties.empty());
   for (const auto& property : properties) {
     // If the animation duration is infinite, it doesn't make sense to scale
@@ -984,8 +992,8 @@ void CompositorAnimations::GetAnimationOnCompositor(
 
     std::unique_ptr<gfx::AnimationCurve> curve;
     DCHECK(timing.timing_function);
-    absl::optional<cc::KeyframeModel::TargetPropertyId> target_property_id =
-        absl::nullopt;
+    std::optional<cc::KeyframeModel::TargetPropertyId> target_property_id =
+        std::nullopt;
     CSSPropertyID css_property_id = property.GetCSSProperty().PropertyID();
     switch (css_property_id) {
       case CSSPropertyID::kOpacity: {
@@ -1129,20 +1137,28 @@ void CompositorAnimations::GetAnimationOnCompositor(
   DCHECK(!keyframe_models.empty());
 }
 
-bool CompositorAnimations::CheckUsesCompositedScrolling(Node* target) {
-  if (!target)
+bool CompositorAnimations::CanStartScrollTimelineOnCompositor(Node* target) {
+  if (!target) {
     return false;
-  DCHECK(target->GetDocument().Lifecycle().GetState() >=
-         DocumentLifecycle::kPrePaintClean);
+  }
+  if (!RuntimeEnabledFeatures::ScrollTimelineOnCompositorEnabled()) {
+    return false;
+  }
+  DCHECK_GE(target->GetDocument().Lifecycle().GetState(),
+            DocumentLifecycle::kPrePaintClean);
+  auto* layout_box = target->GetLayoutBox();
+  if (!layout_box) {
+    return false;
+  }
+  if (RuntimeEnabledFeatures::ScrollTimelineAlwaysOnCompositorEnabled()) {
+    return layout_box->FirstFragment().PaintProperties() &&
+           layout_box->FirstFragment().PaintProperties()->Scroll();
+  }
   if (RuntimeEnabledFeatures::CompositeBGColorAnimationEnabled() &&
       target->GetDocument().Lifecycle().GetState() <
           DocumentLifecycle::kPaintClean) {
     // TODO(crbug.com/1434728): This happens when we paint a scroll-driven
     // animating background.
-    return false;
-  }
-  auto* layout_box = target->GetLayoutBox();
-  if (!layout_box) {
     return false;
   }
   return layout_box->UsesCompositedScrolling();

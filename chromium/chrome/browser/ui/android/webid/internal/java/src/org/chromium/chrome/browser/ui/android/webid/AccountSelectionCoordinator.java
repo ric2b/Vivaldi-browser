@@ -28,7 +28,6 @@ import org.chromium.base.IntentUtils;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.app.ChromeActivity;
-import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.android.webid.data.Account;
 import org.chromium.chrome.browser.ui.android.webid.data.ClientIdMetadata;
@@ -102,14 +101,10 @@ public class AccountSelectionCoordinator
                 new AccountSelectionBottomSheetContent(
                         contentView, mSheetItemListView::computeVerticalScrollOffset);
 
-        // TODO(crbug.com/1199088): This is currently using the regular profile which is incorrect
-        // if the API is being used in an incognito tabs. We should instead use the profile
-        // associated with the RP's web contents.
-        Profile profile = Profile.getLastUsedRegularProfile();
         ImageFetcher imageFetcher =
                 ImageFetcherFactory.createImageFetcher(
                         ImageFetcherConfig.IN_MEMORY_ONLY,
-                        profile.getProfileKey(),
+                        tab.getProfile().getProfileKey(),
                         GlobalDiscardableReferencePool.getReferencePool(),
                         MAX_IMAGE_CACHE_SIZE);
 
@@ -184,7 +179,8 @@ public class AccountSelectionCoordinator
             IdentityProviderMetadata idpMetadata,
             ClientIdMetadata clientMetadata,
             boolean isAutoReauthn,
-            String rpContext) {
+            String rpContext,
+            boolean requestPermission) {
         mMediator.showAccounts(
                 topFrameEtldPlusOne,
                 iframeEtldPlusOne,
@@ -193,7 +189,8 @@ public class AccountSelectionCoordinator
                 idpMetadata,
                 clientMetadata,
                 isAutoReauthn,
-                rpContext);
+                rpContext,
+                requestPermission);
     }
 
     @Override

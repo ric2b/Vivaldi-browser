@@ -11,7 +11,7 @@ namespace openscreen {
 
 std::array<uint8_t, 16> GenerateRandomBytes16() {
   std::array<uint8_t, 16> result;
-  GenerateRandomBytes(result.begin(), result.size());
+  GenerateRandomBytes(result.data(), result.size());
   return result;
 }
 

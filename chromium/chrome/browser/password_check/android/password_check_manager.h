@@ -10,10 +10,10 @@
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/strings/string_piece.h"
+#include "chrome/browser/affiliations/affiliation_service_factory.h"
 #include "chrome/browser/password_check/android/password_check_ui_status.h"
 #include "chrome/browser/password_entry_edit/android/credential_edit_bridge.h"
 #include "chrome/browser/password_manager/account_password_store_factory.h"
-#include "chrome/browser/password_manager/affiliation_service_factory.h"
 #include "chrome/browser/password_manager/bulk_leak_check_service_factory.h"
 #include "chrome/browser/password_manager/profile_password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -95,6 +95,9 @@ class PasswordCheckManager
   // Called by java to remove the given compromised `credential` and trigger a
   // UI update on completion.
   void RemoveCredential(const password_manager::CredentialUIEntry& credential);
+
+  // Checks if user is signed into their account to perform the check.
+  bool HasAccountForRequest();
 
   // Not copyable or movable
   PasswordCheckManager(const PasswordCheckManager&) = delete;

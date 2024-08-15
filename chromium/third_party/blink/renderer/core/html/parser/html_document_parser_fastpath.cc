@@ -113,7 +113,6 @@ uint32_t TagnameHash(const String& s) {
 #define SUPPORTED_TAGS(V) \
   V(A)                    \
   V(B)                    \
-  V(Body)                 \
   V(Br)                   \
   V(Button)               \
   V(Div)                  \
@@ -220,7 +219,7 @@ class HTMLFastPathParser {
   HTMLFastPathParser(Span source, Document& document, ContainerNode& root_node)
       : source_(source), document_(document), root_node_(root_node) {}
 
-  bool Run(Element& context_element) {
+  bool Run(Element& context_element, HTMLFragmentParsingBehaviorSet behavior) {
     QualifiedName context_tag = context_element.TagQName();
     DCHECK(!context_tag.LocalName().empty());
 
@@ -233,6 +232,16 @@ class HTMLFastPathParser {
     // If this switch has duplicate cases, then `TagnameHash()` needs to be
     // updated.
     switch (TagnameHash(context_tag.LocalName())) {
+      case TagnameHash(TagInfo::Body::tagname):
+        if (context_tag == html_names::kBodyTag) {
+          if (behavior.Has(HTMLFragmentParsingBehavior::
+                               kStripInitialWhitespaceForBody)) {
+            SkipWhitespace();
+          }
+          ParseCompleteInput<typename TagInfo::Body>();
+          return !failed_;
+        }
+        break;
 #define TAG_CASE(Tagname)                                     \
   case TagnameHash(TagInfo::Tagname::tagname):                \
     DCHECK(html_names::k##Tagname##Tag.LocalName().Ascii() == \
@@ -264,8 +273,6 @@ class HTMLFastPathParser {
 
   HtmlFastPathResult parse_result() const { return parse_result_; }
 
-  bool bulk_insert_notify() const { return bulk_insert_notify_; }
-
  private:
   Span source_;
   Document& document_;
@@ -274,8 +281,6 @@ class HTMLFastPathParser {
   const Char* const end_ = source_.data() + source_.size();
   const Char* pos_ = source_.data();
 
-  const bool bulk_insert_notify_ =
-      RuntimeEnabledFeatures::HTMLParserFastPathBulkInsertNotifyEnabled();
   bool failed_ = false;
   bool inside_of_tag_a_ = false;
   bool inside_of_tag_li_ = false;
@@ -916,24 +921,14 @@ class HTMLFastPathParser {
         if (text.size() >= Text::kDefaultLengthLimit) {
           return Fail(HtmlFastPathResult::kFailedBigText);
         }
-        if (bulk_insert_notify_) {
-          parent->ParserAppendChildInDocumentFragment(
-              Text::Create(document_, scanned_text.TryCanonicalizeString()));
-        } else {
-          parent->ParserAppendChild(
-              Text::Create(document_, scanned_text.TryCanonicalizeString()));
-        }
+        parent->ParserAppendChildInDocumentFragment(
+            Text::Create(document_, scanned_text.TryCanonicalizeString()));
       } else if (scanned_text.escaped_text) {
         if (scanned_text.escaped_text->size() >= Text::kDefaultLengthLimit) {
           return Fail(HtmlFastPathResult::kFailedBigText);
         }
-        if (bulk_insert_notify_) {
-          parent->ParserAppendChildInDocumentFragment(
-              Text::Create(document_, scanned_text.escaped_text->AsString()));
-        } else {
-          parent->ParserAppendChild(Text::Create(
-              document_, String(scanned_text.escaped_text->AsString())));
-        }
+        parent->ParserAppendChildInDocumentFragment(
+            Text::Create(document_, scanned_text.escaped_text->AsString()));
       }
       if (pos_ == end_) {
         return;
@@ -954,11 +949,7 @@ class HTMLFastPathParser {
         if (failed_) {
           return;
         }
-        if (bulk_insert_notify_) {
-          parent->ParserAppendChildInDocumentFragment(child);
-        } else {
-          parent->ParserAppendChild(child);
-        }
+        parent->ParserAppendChildInDocumentFragment(child);
       }
     }
   }
@@ -1209,8 +1200,8 @@ void LogFastPathResult(HtmlFastPathResult result) {
 bool CanUseFastPath(Document& document,
                     Element& context_element,
                     ParserContentPolicy policy,
-                    bool include_shadow_roots) {
-  if (include_shadow_roots) {
+                    HTMLFragmentParsingBehaviorSet behavior) {
+  if (behavior.Has(HTMLFragmentParsingBehavior::kIncludeShadowRoots)) {
     LogFastPathResult(HtmlFastPathResult::kFailedShadowRoots);
     return false;
   }
@@ -1426,18 +1417,17 @@ bool TryParsingHTMLFragmentImpl(const base::span<const Char>& source,
                                 Document& document,
                                 ContainerNode& root_node,
                                 Element& context_element,
+                                HTMLFragmentParsingBehaviorSet behavior,
                                 bool* failed_because_unsupported_tag) {
   base::ElapsedTimer parse_timer;
   int number_of_bytes_parsed;
   HTMLFastPathParser<Char> parser{source, document, root_node};
-  const bool success = parser.Run(context_element);
+  const bool success = parser.Run(context_element, behavior);
   LogFastPathResult(parser.parse_result());
   number_of_bytes_parsed = parser.NumberOfBytesParsed();
   // The time needed to parse is typically < 1ms (even at the 99%).
   if (success) {
-    if (parser.bulk_insert_notify()) {
-      root_node.ParserFinishedBuildingDocumentFragment();
-    }
+    root_node.ParserFinishedBuildingDocumentFragment();
     UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
         "Blink.HTMLFastPathParser.SuccessfulParseTime2", parse_timer.Elapsed(),
         base::Microseconds(1), base::Milliseconds(10), 100);
@@ -1482,18 +1472,18 @@ bool TryParsingHTMLFragment(const String& source,
                             ContainerNode& parent,
                             Element& context_element,
                             ParserContentPolicy policy,
-                            bool include_shadow_roots,
+                            HTMLFragmentParsingBehaviorSet behavior,
                             bool* failed_because_unsupported_tag) {
-  if (!CanUseFastPath(document, context_element, policy,
-                      include_shadow_roots)) {
+  if (!CanUseFastPath(document, context_element, policy, behavior)) {
     return false;
   }
-  return source.Is8Bit() ? TryParsingHTMLFragmentImpl<LChar>(
-                               source.Span8(), document, parent,
-                               context_element, failed_because_unsupported_tag)
-                         : TryParsingHTMLFragmentImpl<UChar>(
-                               source.Span16(), document, parent,
-                               context_element, failed_because_unsupported_tag);
+  return source.Is8Bit()
+             ? TryParsingHTMLFragmentImpl<LChar>(
+                   source.Span8(), document, parent, context_element, behavior,
+                   failed_because_unsupported_tag)
+             : TryParsingHTMLFragmentImpl<UChar>(
+                   source.Span16(), document, parent, context_element, behavior,
+                   failed_because_unsupported_tag);
 }
 
 void LogTagsForUnsupportedTagTypeFailure(DocumentFragment& fragment) {

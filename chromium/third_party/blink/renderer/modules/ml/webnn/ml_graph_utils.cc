@@ -6,6 +6,7 @@
 
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph_utils.h"
 
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_gemm_options.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_operand.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_operator.h"
@@ -54,7 +55,7 @@ HeapVector<Member<const MLOperator>>* GetOperatorsInTopologicalOrder(
       // operators are visited or not.
       bool skip_visit = false;
       for (const auto& operand : current_operator->Inputs()) {
-        if (operand->Kind() == MLOperand::OperandKind::kOutput) {
+        if (operand->Kind() == webnn::mojom::blink::Operand::Kind::kOutput) {
           const auto* dependent_operator = operand->Operator();
           CHECK(dependent_operator);
           if (!visited_operators.Contains(dependent_operator)) {
@@ -83,12 +84,12 @@ HeapVector<Member<const MLOperator>>* GetOperatorsInTopologicalOrder(
   return toposorted_operators;
 }
 
-absl::optional<ArrayBufferViewInfo> TransferArrayBufferView(
+std::optional<ArrayBufferViewInfo> TransferArrayBufferView(
     v8::Isolate* isolate,
     NotShared<DOMArrayBufferView> source_view,
     ExceptionState& exception_state) {
   // A detached ArrayBufferView should be caught by
-  // `ValidateNamedArrayBufferViews()` called in `MLGraph::ComputeAsync()`.
+  // `ValidateNamedArrayBufferViews()` called in `MLGraph::Compute()`.
   CHECK(!source_view->IsDetached());
 
   // Avoid transferring a non-detachable ArrayBuffer.
@@ -99,7 +100,7 @@ absl::optional<ArrayBufferViewInfo> TransferArrayBufferView(
   if (!source_view->buffer()->IsDetachable(isolate)) {
     exception_state.ThrowDOMException(DOMExceptionCode::kDataError,
                                       "The ArrayBuffer is not detachable.");
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   // Get the offset and length of the source view before transferring it.
@@ -113,7 +114,7 @@ absl::optional<ArrayBufferViewInfo> TransferArrayBufferView(
   // detach key of the ArrayBuffer is not `undefined`.
   if (!source_view->buffer()->Transfer(isolate, view_info.contents,
                                        exception_state)) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   return view_info;
@@ -203,18 +204,6 @@ MLNamedArrayBufferViews* CreateNamedArrayBufferViews(
   return target_views;
 }
 
-webnn::AutoPad BlinkAutoPadToComponent(blink::V8MLAutoPad::Enum type) {
-  switch (type) {
-    case blink::V8MLAutoPad::Enum::kExplicit:
-      return webnn::AutoPad::kExplicit;
-    case blink::V8MLAutoPad::Enum::kSameUpper:
-      return webnn::AutoPad::kSameUpper;
-    case blink::V8MLAutoPad::Enum::kSameLower:
-      return webnn::AutoPad::kSameLower;
-  }
-  NOTREACHED_NORETURN();
-}
-
 Vector<uint32_t> CreateDefaultPermutation(const wtf_size_t rank) {
   Vector<uint32_t> default_permutation(rank);
   for (wtf_size_t i = 0; i < rank; ++i) {
@@ -236,12 +225,6 @@ Vector<uint32_t> CreateLayerNormalizationDefaultAxes(const wtf_size_t rank) {
     std::iota(default_axes.begin(), default_axes.end(), 1);
   }
   return default_axes;
-}
-
-bool IsDepthwiseConv2d(uint32_t input_channels,
-                       uint32_t output_channels,
-                       uint32_t groups) {
-  return groups == input_channels && groups == output_channels && groups != 1;
 }
 
 base::expected<void, String> ValidateFilterLayout(
@@ -277,53 +260,38 @@ base::expected<void, String> ValidateFilterLayout(
   return base::ok();
 }
 
-webnn::Padding2d CalculateConvTransposePadding2D(
-    const blink::MLConvTranspose2dOptions* options,
-    uint32_t input_height,
-    uint32_t input_width,
-    uint32_t filter_height,
-    uint32_t filter_width,
-    uint32_t stride_height,
-    uint32_t stride_width,
-    uint32_t dilation_height,
-    uint32_t dilation_width,
-    uint32_t output_padding_height,
-    uint32_t output_padding_width) {
-  webnn::Padding2d padding;
-  switch (options->autoPad().AsEnum()) {
-    case V8MLAutoPad::Enum::kExplicit: {
-      // Set the padding from WebNN explicit padding that is in
-      // [beginning_height, ending_height, beginning_width, ending_width],
-      // default to 0.
-      auto ml_padding = options->getPaddingOr({0, 0, 0, 0});
-      CHECK_EQ(ml_padding.size(), 4u);
-      padding.beginning.height = ml_padding[0];
-      padding.ending.height = ml_padding[1];
-      padding.beginning.width = ml_padding[2];
-      padding.ending.width = ml_padding[3];
-      break;
-    }
-    case V8MLAutoPad::Enum::kSameUpper:
-    case V8MLAutoPad::Enum::kSameLower: {
-      webnn::AutoPad auto_pad =
-          BlinkAutoPadToComponent(options->autoPad().AsEnum());
-      // Calculate padding based on WebNN auto padding mode and sizes.
-      auto padding_sizes_height = webnn::CalculateConvTranspose2dPadding(
-          auto_pad, input_height, filter_height, stride_height, dilation_height,
-          output_padding_height);
-      CHECK(padding_sizes_height);
-      padding.beginning.height = padding_sizes_height.value().begin;
-      padding.ending.height = padding_sizes_height.value().end;
-      auto padding_sizes_width = webnn::CalculateConvTranspose2dPadding(
-          auto_pad, input_width, filter_width, stride_width, dilation_width,
-          output_padding_width);
-      CHECK(padding_sizes_width);
-      padding.beginning.width = padding_sizes_width.value().begin;
-      padding.ending.width = padding_sizes_width.value().end;
-      break;
+base::expected<void, String> ValidateGemmOptions(const MLGemmOptions* options,
+                                                 uint32_t output_channels) {
+  CHECK(options);
+  if (options->hasC()) {
+    // Both XNNPACK and TFLite fully connected operator only supports 1-D bias
+    // tensor (operand c of WebNN gemm operator) with [output_channels]
+    // dimensions.
+    const auto* bias = options->c();
+    if (bias->Dimensions().size() != 1u ||
+        bias->Dimensions()[0] != output_channels) {
+      // TODO(crbug.com/1273291): Support the bias with other dimensions by
+      // element-wise addition operator.
+      return base::unexpected(String::Format(
+          "The dimensions of bias must be [%u].", output_channels));
     }
   }
-  return padding;
+  if (options->alpha() != 1.0f) {
+    // TODO(crbug.com/1273291): Support alpha by using element-wise
+    // multiplication operator.
+    return base::unexpected("gemm doesn't support alpha option.");
+  }
+  if (options->beta() != 1.0f) {
+    // TODO(crbug.com/1273291): Support beta by using element-wise
+    // multiplication operator.
+    return base::unexpected("gemm doesn't support beta option.");
+  }
+  if (options->aTranspose()) {
+    // TODO(crbug.com/1273291): Support aTranspose by using transpose operator.
+    return base::unexpected("gemm doesn't support aTranspose option.");
+  }
+
+  return base::ok();
 }
 
 webnn::Size2d<uint32_t> CalculateConvTransposeOutputSize2D(
@@ -338,10 +306,16 @@ webnn::Size2d<uint32_t> CalculateConvTransposeOutputSize2D(
     uint32_t dilation_width,
     uint32_t output_padding_height,
     uint32_t output_padding_width) {
-  const auto padding = CalculateConvTransposePadding2D(
-      options, input_height, input_width, filter_height, filter_width,
-      stride_height, stride_width, dilation_height, dilation_width,
-      output_padding_height, output_padding_width);
+  // Set the padding from WebNN explicit padding that is in
+  // [beginning_height, ending_height, beginning_width, ending_width],
+  // default to 0.
+  auto ml_padding = options->getPaddingOr({0, 0, 0, 0});
+  CHECK_EQ(ml_padding.size(), 4u);
+  const webnn::Padding2d padding{
+      .beginning = webnn::Size2d<uint32_t>{.height = ml_padding[0],
+                                           .width = ml_padding[2]},
+      .ending = webnn::Size2d<uint32_t>{.height = ml_padding[1],
+                                        .width = ml_padding[3]}};
   const auto output_height = webnn::CalculateConvTranspose2dOutputSize(
       input_height, filter_height, padding.beginning.height,
       padding.ending.height, stride_height, dilation_height,

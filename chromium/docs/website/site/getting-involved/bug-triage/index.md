@@ -22,23 +22,20 @@ so that you can do even more.
 ## Finding duplicates
 
 Many of the bugs that are filed are duplicates of existing bugs. Look through
-the [unconfirmed
-bugs](http://code.google.com/p/chromium/issues/list?can=2&q=status:unconfirmed&sort=-id&colspec=ID%20Stars%20Area%20Feature%20Status%20Summary%20Modified%20OS)
+the [unconfirmed bugs](https://issues.chromium.org/hotlists/5437934)
 for any that are already filed.
 
 *   If you can edit bugs: Close the new bug as a duplicate of the
             existing bug. If there are several new duplicates of each other with
             no established bug, use the one with the most information.
-*   If you can’t edit bugs, leave a comment with the number of the bug
-            it’s a duplicate of. Be sure to say “bug 12345” or “issue 12345”
-            instead of just the number, so the bug system will make it a link.
+*   If you can’t edit bugs, leave a comment with the link to the existing bug.
+          Be sure to say “bug 12345” or “issue 12345” instead of just the number,
+          so the bug system will make it a link.
 
 The more you triage bugs, the more duplicates you will recognize immediately. If
 you suspect something might be a duplicate but aren’t sure (such as with a
 feature request that seems likely to have been made before), search for as many
-of the variants of the key words in the bug as you can think of. Be sure to
-search “All issues”, not the default of “Open issues” so that you can find
-WontFixed bugs and other duplicates.
+of the variants of the key words in the bug as you can think of.
 
 ## Clarifying and/or reproducing bugs
 
@@ -48,8 +45,7 @@ the steps are missing, unclear, or just don’t work for everyone. Note that if
 something is clearly a feature request, rather than a bug report, you should
 skip this step.
 
-Look through the [unconfirmed
-bugs](http://code.google.com/p/chromium/issues/list?can=2&q=status:unconfirmed&sort=-id&colspec=ID%20Stars%20Area%20Feature%20Status%20Summary%20Modified%20OS)
+Look through the [unconfirmed bugs](https://issues.chromium.org/hotlists/5437934)
 for reports that nobody has tried to reproduce.
 
 *   If you can reproduce the bug:
@@ -63,8 +59,9 @@ for reports that nobody has tried to reproduce.
     *   If the bug is with web content, and you have access to browsers
                 that the reporter didn’t test, try with those browsers and
                 report your results.
-    *   If you can edit bugs, and have tried to make sure that it’s not
-                a duplicate, change it from Unconfirmed to Untriaged.
+    *   If you can edit bugs, and have tried to make sure that it's not a duplicate
+                and it's in the [Unconfirmed hotlist](https://g-issues.chromium.org/savedsearches/6680973)
+                move it to the [Available hotlist](https://g-issues.chromium.org/savedsearches/6681397)
 *   If you feel that the steps were clear but you couldn’t reproduce the
             bug:
     *   Leave a comment saying that you couldn’t reproduce it, including
@@ -87,7 +84,7 @@ for reports that nobody has tried to reproduce.
                 people often leave out steps without realizing it because
                 something is obvious to them.
     *   If it would be helpful, ask for a screenshot of the bug.
-    *   If you can edit bugs: Add the Needs-Feedback label.
+    *   If you can edit bugs: Add the [Needs-Feedback hotlist](https://g-issues.chromium.org/issues?q=hotlistid:5433459%20status:open).
 
 ## Cleaning up old bugs
 
@@ -102,8 +99,7 @@ extra things to consider with old bugs:
 *   For feature requests, if the request is about feature that has
             changed enough that the request no longer applies, add a comment
             saying so.
-    *   If you can edit bugs: Close the bug as WontFix (which we use for
-                obsolete bugs)
+    *   If you can edit bugs: Close the bug as "Won't Fix (Obsolete)"
 *   If the bug doesn’t contain enough information to be confirmed and
             someone has asked for clarifying information that was never
             provided, politely ask again for that information.
@@ -113,9 +109,8 @@ extra things to consider with old bugs:
                     a comment saying that the bug is being closed due to lack of
                     response and that a new bug should be filed with the
                     requested information if it’s still reproducible, then close
-                    the bug as WontFix.
-        *   Otherwise, add the Needs-Feedback label if it’s not already
-                    there.
+                    the bug as "Won't Fix (Obsolete)".
+        *   Otherwise, add the Needs-Feedback hotlist if it’s not already there
 
 ## Creating reduced test cases
 
@@ -123,35 +118,25 @@ For bugs that are about compatibility with specific sites, creating a reduced
 test case is extremely helpful. If you are familiar with HTML, CSS, and/or
 Javascript, this is a great way to use your skills to help improve Chromium.
 
-Look through the
-[Compat](http://code.google.com/p/chromium/issues/list?can=2&q=area:compat&sort=-id&colspec=ID%20Stars%20Pri%20Area%20Feature%20Type%20Status%20Summary%20Modified%20Owner%20Mstone%20OS)
-bugs for issues that haven’t already been tracked down to a specific problem—the
-Needs-Reduction label is helpful in finding these, but it doesn’t always get
-added. Once you can reproduce a problem, [try to
-isolate](/system/errors/NodeNotFound) exactly what in the
-HTML/CSS/JavaScript/etc. is responsible for the failure.
-
 *   If the problem is that the site is doing something wrong:
     *   Explain in detail what is causing the problem.
     *   Suggest that the bug reporter contact the site to let them know
                 about the problem.
-    *   If you can edit bugs: Add the **Needs-**Evangelism label.
 *   If the problem is due to a bug in Chromium:
     *   Explain in detail what is isn’t working right.
     *   If possible, attach a minimal test case that demonstrates the
                 underlying bug.
     *   If possible, test with Safari as well to see if the bug happens
                 there, and report your results
-    *   If you can edit bugs: change the component field to Blink. If
-                its status is Unconfirmed, change it to Untriaged.
+    *   If you can edit bugs: change the component field to Blink.
 
 ## Categorizing bugs
 
 Once you can [edit bugs](/getting-involved/get-bug-editing-privileges), giving
 bugs the correct labels helps them move through the triage process faster. There
-are a lot of labels, here are the most important for incoming bugs:
+are a lot of hotlists, here are the most important for incoming bugs:
 
-*   If the bug has no Components, please assign it to a bucket:
+*   If the bug has no Components, please assign it to a chromium component:
     *   Blink == Web Content
     *   Internals == Internals (Network stack, plugins, etc...)
     *   Platform == Chrome's Developer Platform and Tools (Ext, AppsV2,
@@ -163,21 +148,9 @@ are a lot of labels, here are the most important for incoming bugs:
     *   OS&gt;Systems
     *   If the bug/feature is about specific web technology, add the
                 appropriate Blink&gt;\* sub component instead.
-    *   If the bug is about a web site not working correctly, and hasn’t
-                been narrowed down to a specific cause, use Type-Compat, and add
-                **Needs-Reduction**.
     *   Try to find the best match; if it’s borderline, use your best
                 guess.
-*   If the bug is about a crash or hang, add the **Stability-**Crash or
-            **Stability-Hang** label.
+*   If the bug is about a crash or hang, add the **Stability-Crash** or
+            **Stability-Hang** hotlist.
 *   If the bug is about a language translation, add the
             **UI&gt;Localization** component.
-*   If the bug is in an area that tends to be OS-specific (browser
-            chrome, plugins), and the report includes the OS (or you can tell
-            from a screenshot), add the appropriate OS-\* label. If there’s no
-            reason to believe the bug is OS-specific, or if it’s a feature
-            request, it’s best not to add an OS label.
-
-Most of the remaining labels are very specialized, and it’s best not to use them
-unless you know otherwise. Never add or change ReleaseBlock-\* or Milestone-\*
-labels.

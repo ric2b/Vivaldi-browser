@@ -12,6 +12,8 @@ import android.view.View.OnClickListener;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.chromium.base.Callback;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.hub.DelegateButtonData;
@@ -22,15 +24,32 @@ import org.chromium.chrome.browser.hub.PaneId;
 import org.chromium.chrome.browser.hub.ResourceButtonData;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingUtilities;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileProvider;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabSelectionType;
+import org.chromium.chrome.browser.tab.state.ShoppingPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.TabList;
+import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
+import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListMode;
 import org.chromium.chrome.tab_ui.R;
 
+import java.util.function.DoubleConsumer;
+
 /** A {@link Pane} representing the regular tab switcher. */
 public class TabSwitcherPane extends TabSwitcherPaneBase {
+    private final TabModelObserver mTabModelObserver =
+            new TabModelObserver() {
+                @Override
+                public void didSelectTab(Tab tab, @TabSelectionType int type, int lastId) {
+                    onTabSelected(tab);
+                }
+            };
+
+    private final Callback<Boolean> mVisibilityObserver = this::onVisibilityChanged;
     private final @NonNull SharedPreferences mSharedPreferences;
     private final @NonNull Supplier<TabModelFilter> mTabModelFilterSupplier;
     private final @NonNull TabSwitcherPaneDrawableCoordinator mTabSwitcherPaneDrawableCoordinator;
@@ -45,6 +64,7 @@ public class TabSwitcherPane extends TabSwitcherPaneBase {
      * @param tabModelFilterSupplier The supplier of the regular {@link TabModelFilter}.
      * @param newTabButtonClickListener The {@link OnClickListener} for the new tab button.
      * @param tabSwitcherDrawableCoordinator The drawable to represent the pane.
+     * @param onToolbarAlphaChange Observer to notify when alpha changes during animations.
      */
     TabSwitcherPane(
             @NonNull Context context,
@@ -53,11 +73,9 @@ public class TabSwitcherPane extends TabSwitcherPaneBase {
             @NonNull TabSwitcherPaneCoordinatorFactory factory,
             @NonNull Supplier<TabModelFilter> tabModelFilterSupplier,
             @NonNull OnClickListener newTabButtonClickListener,
-            @NonNull TabSwitcherPaneDrawableCoordinator tabSwitcherDrawableCoordinator) {
-        super(
-                context,
-                factory,
-                /* isIncognito= */ false);
+            @NonNull TabSwitcherPaneDrawableCoordinator tabSwitcherDrawableCoordinator,
+            @NonNull DoubleConsumer onToolbarAlphaChange) {
+        super(context, factory, /* isIncognito= */ false, onToolbarAlphaChange);
         mSharedPreferences = sharedPreferences;
         mTabModelFilterSupplier = tabModelFilterSupplier;
         mTabSwitcherPaneDrawableCoordinator = tabSwitcherDrawableCoordinator;
@@ -79,6 +97,8 @@ public class TabSwitcherPane extends TabSwitcherPaneBase {
                         () -> newTabButtonClickListener.onClick(null)));
 
         profileProviderSupplier.onAvailable(this::onProfileProviderAvailable);
+
+        getIsVisibleSupplier().addObserver(mVisibilityObserver);
     }
 
     @Override
@@ -93,11 +113,17 @@ public class TabSwitcherPane extends TabSwitcherPaneBase {
 
     @Override
     public void destroy() {
+        // Do this before super.destroy() since the visibility supplier is owned by the base class.
+        getIsVisibleSupplier().removeObserver(mVisibilityObserver);
         super.destroy();
         mTabSwitcherPaneDrawableCoordinator.destroy();
         if (mPriceAnnotationsPrefListener != null) {
             mSharedPreferences.unregisterOnSharedPreferenceChangeListener(
                     mPriceAnnotationsPrefListener);
+        }
+        TabModelFilter filter = mTabModelFilterSupplier.get();
+        if (filter != null) {
+            filter.getTabModel().removeObserver(mTabModelObserver);
         }
     }
 
@@ -114,14 +140,32 @@ public class TabSwitcherPane extends TabSwitcherPaneBase {
     @Override
     public boolean resetWithTabList(@Nullable TabList tabList, boolean quickMode) {
         @Nullable TabSwitcherPaneCoordinator coordinator = getTabSwitcherPaneCoordinator();
-        if (coordinator == null) return false;
+        if (coordinator == null) {
+            return false;
+        }
+
+        @Nullable TabModelFilter filter = mTabModelFilterSupplier.get();
+        if (filter == null || !filter.isTabModelRestored()) {
+            // The tab list is trying to show without the filter being ready. This happens when
+            // first trying to show a the pane. If this happens an attempt to show will be made
+            // when the filter's restoreCompleted() method is invoked in TabSwitcherPaneMediator.
+            // Start a timer to measure how long it takes for tab state to be initialized and for
+            // this UI to show i.e. isTabModelRestored becomes true. This timer will emit a
+            // histogram when we successfully show. This timer is cancelled if: 1) the pane becomes
+            // invisible in TabSwitcherPaneBase#notifyLoadHint, or 2) the filter becomes ready and
+            // nothing gets shown.
+            startWaitForTabStateInitializedTimer();
+            return false;
+        }
 
         boolean isNotVisibleOrSelected =
-                !isVisible() || !mTabModelFilterSupplier.get().isCurrentlySelectedFilter();
+                !getIsVisibleSupplier().get() || !filter.isCurrentlySelectedFilter();
 
         if (isNotVisibleOrSelected) {
+            cancelWaitForTabStateInitializedTimer();
             coordinator.resetWithTabList(null);
         } else {
+            finishWaitForTabStateInitializedTimer();
             coordinator.resetWithTabList(tabList);
         }
         return true;
@@ -134,7 +178,8 @@ public class TabSwitcherPane extends TabSwitcherPaneBase {
         }
         mPriceAnnotationsPrefListener =
                 (sharedPrefs, key) -> {
-                    if (!PriceTrackingUtilities.TRACK_PRICES_ON_TABS.equals(key) || !isVisible()) {
+                    if (!PriceTrackingUtilities.TRACK_PRICES_ON_TABS.equals(key)
+                            || !getIsVisibleSupplier().get()) {
                         return;
                     }
                     TabModelFilter filter = mTabModelFilterSupplier.get();
@@ -147,5 +192,32 @@ public class TabSwitcherPane extends TabSwitcherPaneBase {
                     }
                 };
         mSharedPreferences.registerOnSharedPreferenceChangeListener(mPriceAnnotationsPrefListener);
+    }
+
+    private void onVisibilityChanged(boolean visible) {
+        TabModelFilter filter = mTabModelFilterSupplier.get();
+        if (filter == null) return;
+
+        TabModel model = filter.getTabModel();
+        if (visible) {
+            model.addObserver(mTabModelObserver);
+        } else {
+            model.removeObserver(mTabModelObserver);
+        }
+    }
+
+    private void onTabSelected(@Nullable Tab tab) {
+        if (tab == null) return;
+
+        Profile profile = tab.getProfile();
+        if (getTabListMode() == TabListCoordinator.TabListMode.GRID
+                && !profile.isOffTheRecord()
+                && PriceTrackingUtilities.isTrackPricesOnTabsEnabled(profile)) {
+            RecordUserAction.record(
+                    "Commerce.TabGridSwitched."
+                            + (ShoppingPersistedTabData.hasPriceDrop(tab)
+                                    ? "HasPriceDrop"
+                                    : "NoPriceDrop"));
+        }
     }
 }

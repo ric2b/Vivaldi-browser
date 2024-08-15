@@ -54,8 +54,11 @@ export interface ActualFrameTrackTypes extends NamedSliceTrackTypes {
 
 export class ActualFramesTrack extends NamedSliceTrack<ActualFrameTrackTypes> {
   constructor(
-      engine: EngineProxy, maxDepth: number, trackKey: string,
-      private trackIds: number[]) {
+    engine: EngineProxy,
+    maxDepth: number,
+    trackKey: string,
+    private trackIds: number[],
+  ) {
     super({engine, trackKey});
     this.sliceLayout = {
       ...SLICE_LAYOUT_FIT_CONTENT_DEFAULTS,
@@ -95,7 +98,9 @@ export class ActualFramesTrack extends NamedSliceTrack<ActualFrameTrackTypes> {
 }
 
 function getColorSchemeForJank(
-    jankTag: string|null, jankSeverityType: string|null): ColorScheme {
+  jankTag: string | null,
+  jankSeverityType: string | null,
+): ColorScheme {
   if (jankSeverityType === 'Partial') {
     switch (jankTag) {
       case 'Self Jank':
@@ -107,7 +112,7 @@ function getColorSchemeForJank(
       case 'Buffer Stuffing':
       case 'SurfaceFlinger Stuffing':
         return LIGHT_GREEN_100;
-      case 'No Jank':  // should not happen
+      case 'No Jank': // should not happen
         return GREEN_200;
       default:
         return PINK_200;

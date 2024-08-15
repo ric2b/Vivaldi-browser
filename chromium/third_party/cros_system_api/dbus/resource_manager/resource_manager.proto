@@ -8,7 +8,7 @@ option optimize_for = LITE_RUNTIME;
 
 package resource_manager;
 
-option go_package = "chromiumos/system_api/resource_manager_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/resource_manager_proto";
 
 message ReportBackgroundProcesses {
   // The component reporting the background processes.

@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Domček (Krajina 12)</translation>
 <translation id="1158503667684816647">Nepýtať sa znova</translation>
 <translation id="1222195720020481779">Spúštanie inštalátora...</translation>
+<translation id="1270785070369717623">Bohužiaľ, nastavenia Opera GX nie sú dostupné, keď je tento prehliadač spustený. Ak chcete tieto nastavenia importovať do prehliadača Vivaldi, uložte svoju prácu a zatvorte všetky okná Opera GX. Potom kliknite na tlačidlo Pokračovať.</translation>
 <translation id="1276145862619442150">Rýchly prístup</translation>
 <translation id="1281950884873973195">Mačka (Zviera 6)</translation>
 <translation id="1411638389238344450">Odoslať odkaz prostredníctvom pošty</translation>
@@ -12,13 +13,14 @@
 <translation id="1462666970065907900">Naozaj chcete zatvoriť toto okno?</translation>
 <translation id="1480046233931937785">Autorské práva</translation>
 <translation id="1526344461589023948">Počas uloženia stiahnutej aktualizácie došlo k chybe. Skontrolujte si prosím, či váš počítač disponuje dostatkom ukladacieho priestoru a skúste to znova neskôr.</translation>
+<translation id="1635542496948266458">Prepnúť profily</translation>
 <translation id="1657174850639146440">Zlostník (Príšerka 9)</translation>
 <translation id="1676595396635191120">Nové súkromné okno</translation>
 <translation id="1702758681952953055">Ak chyba pretrváva, prosíme nahláste to a priložte nasledujúce detaily:</translation>
 <translation id="1728549374069268714">Prilepiť a prejsť</translation>
 <translation id="1756026472674246267">Otvoriť odkaz v novom liste</translation>
 <translation id="1759842336958782510">Google Chrome</translation>
-<translation id="1769904678986817931">Vlastnosti obrázka</translation>
+<translation id="1769904678986817931">Vlastnosti obrázka...</translation>
 <translation id="1920297417712412573">Kopírovať výber do novej poznámky</translation>
 <translation id="1921101374471252440">&amp;Znova načítať obrázok</translation>
 <translation id="1924750141060565109">Sahara (Krajina 15)</translation>
@@ -27,12 +29,14 @@
 <translation id="1985669426322966465">Aktualizácia programu</translation>
 <translation id="2079036669923635404">Kliknutím sem aktualizujete prehliadač Vivaldi na verziu <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Pri sťahovaní aktualizácie došlo k chybe. Skontrolujte si prosím svoje internetové pripojenie a skúste to znova neskôr.</translation>
+<translation id="2226825946708954262">⚠ Pokračovať so stratou údajov</translation>
 <translation id="2339641773402824483">Kontrola dostupných aktualizácií...</translation>
 <translation id="2441056087170876076">Zajačí zúbok (Príšerka 2)</translation>
 <translation id="2444387452209867610">Vložiť poznámku</translation>
 <translation id="2486841023299517366">Pes (Zviera 4)</translation>
 <translation id="2612127540243995147">Pripravené na inštaláciu. Prehliadač Vivaldi bude zatvorený a znova spustený.</translation>
 <translation id="2613387515621326337">Zobraziť stránku aktualizácie</translation>
+<translation id="2645477450146475243">Bohužiaľ, nastavenia Opera nie sú dostupné, keď je tento prehliadač spustený. Ak chcete tieto nastavenia importovať do prehliadača Vivaldi, uložte svoju prácu a zatvorte všetky okná Opera. Potom kliknite na tlačidlo Pokračovať.</translation>
 <translation id="2647368062414805334">Ľutujeme, ale nemôžeme získať nastavenia prehliadača Edge, ak je práve spustený. Pre importovanie týchto nastavení do prehliadača Vivaldi si najprv uložte všetku prácu a zatvorte všetky okná prehliadača Edge. Potom kliknite na Pokračovať.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Panda červená (Zviera 3)</translation>
@@ -41,11 +45,14 @@
 <translation id="2923448633003185837">Prilepiť a prejsť</translation>
 <translation id="2953943267837858202">Nie je povolené automaticky prehrávať video</translation>
 <translation id="2977472760057091832">Otvoriť odkaz v novom súkromnom okne</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Otvoriť v novom liste</translation>
 <translation id="3027988479108856431">Ľutujeme, nastavenia prehliadača Yandex nie sú k dispozícii, kým je tento prehliadač otvorený. Ak chcete importovať tieto nastavenia do prehliadača Vivaldi, uložte svoju prácu a zatvorte všetky okná prehliadača Yandex. Potom kliknite na tlačidlo Pokračovať.</translation>
 <translation id="3084011186245865060">Potok (Krajina 6)</translation>
+<translation id="3085906383264247940">Opera (Beta)</translation>
 <translation id="3093931836425623631">Prehliadač Vivaldi je vytvorený pomocou open source kódu projektu Chromium a iných softvérov typu open source.</translation>
 <translation id="3127383884976966729">Panda (Zviera 7)</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">Nová záložka</translation>
 <translation id="3255747772218936245">Nainštalovať aktualizáciu</translation>
 <translation id="3259769196742189631">Skontrolovať správnosť HTML stránky</translation>
@@ -54,7 +61,6 @@
 <translation id="3334610655141903168">(žiadny názov)</translation>
 <translation id="3372505110412186107">Verzia <ph name="VERSION" /> prehliadača Vivaldi je aktuálne najnovšia dostupná verzia.</translation>
 <translation id="3383198080133834965">Váš prehliadač je aktuálny!</translation>
-<translation id="3402602684546832928">Vybrať súbor záložiek prehliadača Opera</translation>
 <translation id="3451317331714872347">Lesné úpätie (Krajina 8)</translation>
 <translation id="3457498675806041407">Potvrdenie ukončenia</translation>
 <translation id="3470981972195599598">Verzia <ph name="VERSION" /> prehliadača Vivaldi je už nainštalovaná a bude aktivovaná po reštartovaní prehliadača.</translation>
@@ -65,6 +71,7 @@
 <translation id="3588820906588687999">Otvoriť obrázok v novom liste</translation>
 <translation id="3601066750251199488">Mimozemšťan (Príšerka 3)</translation>
 <translation id="3620979700683094848">Webové stránky môžu automaticky prehrávať videá</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Je dostupná nová verzia prehliadača Vivaldi!</translation>
 <translation id="3708982624815781692">Sťahovanie bolo prerušené.</translation>
 <translation id="3732157130969736834">Pridať odkaz do záložiek</translation>
@@ -76,37 +83,43 @@
 <translation id="3914946330804881301">Importované z prehliadača Opera</translation>
 <translation id="3921292902397893431">Nafúkanec (Príšerka 8)</translation>
 <translation id="3943857333388298514">Prilepiť</translation>
+<translation id="3974783668264968389">Aplikácia Vivaldi nemohla odomknúť vaše zabezpečené úložisko kľúčov. Bez úložiska kľúčov stratíte uložené prihlasovacie údaje, zabezpečené súbory cookie a niektoré funkcie, ako napríklad synchronizácia, pošta a kalendár, prestanú fungovať.
+
+    Teraz ukončite prácu, odomknite alebo opravte svoje úložisko kľúčov a potom to skúste znova. Ak naozaj chcete pokračovať, kliknite na začiarkavacie políčko a stlačte tlačidlo "Pokračovať so stratou údajov".</translation>
 <translation id="4005270918754737597">Prekočiť túto verziu</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4074744496918018786">Otvoriť obrázok v novom súkromnom okne</translation>
 <translation id="410351446219883937">Automatické prehrávanie</translation>
+<translation id="4281844954008187215">Podmienky použitia</translation>
 <translation id="4324492550286218827">Mestečko (Krajina 2)</translation>
 <translation id="4406101500523955324">Otvoriť v novom súkromnom okne</translation>
 <translation id="4420816922321010053">Naozaj chcete ukončiť prehliadač Vivaldi?</translation>
+<translation id="4430019312045809116">Hlasitosť</translation>
 <translation id="443008484043213881">Nástroje</translation>
 <translation id="4456211719108566931">Nešťastná kôpka... (Príšerka 6)</translation>
 <translation id="4512900838580567989">Otvoriť odkaz v novom liste na pozadí</translation>
-<translation id="4515472507709384008">Opera 15+</translation>
 <translation id="4545097004879999966">Opera pošta</translation>
 <translation id="4548358047305717967">Otvoriť obrázok v novom liste na pozadí</translation>
 <translation id="4582480609585453144">Otvoriť odkaz v liste na pozadí</translation>
 <translation id="4636708767492582204">Odoslať poštou</translation>
 <translation id="4677434526832593569">Vlk (Zviera 8)</translation>
 <translation id="474217410105706308">Stlmiť zvuk listu</translation>
+<translation id="4861715717329665002">Automaticky uložené relácie</translation>
 <translation id="4881695831933465202">Otvoriť v súčasnom liste</translation>
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> z <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Importovaný Rýchly prístup</translation>
 <translation id="5092656712000637858">Pridať stránku na webový panel</translation>
+<translation id="5106275083540628394">Dešifrovanie zlyhalo: Risk straty údajov</translation>
 <translation id="5177818338935286353">Ananásová lady (Príšerka 7)</translation>
 <translation id="5213743983876949565">Lev (Zviera 1)</translation>
 <translation id="5238244642230426581">Importované záložky</translation>
 <translation id="527605719918376753">Stlmiť zvuk listu</translation>
 <translation id="5305569355661722298">Potvrdenie zatvorenia</translation>
+<translation id="5322922669477407077">Opera (Developer)</translation>
 <translation id="5388358297987318779">Otvoriť obrázok v súčasnom liste</translation>
 <translation id="5416008465899576639">Nová verzia prehliadača Vivaldi je k dispozícií.</translation>
 <translation id="5497042274492038489">Potvrdenie k zatvoreniu okna</translation>
 <translation id="5594602170491763400">„Milá mačička“ (Príšerka 1)</translation>
-<translation id="5615637589913244581">Opera 15+ (Beta)</translation>
 <translation id="5648110075441906505">Otvoriť obrázok v novom okne</translation>
 <translation id="5656371807944747581">Chyba aktualizácie!</translation>
 <translation id="5732584064771442623">Verzia prehliadača Vivaldi <ph name="NEW_VERSION" /> je k dispozícii (vy máte verziu <ph name="OLD_VERSION" />). Chcete stiahnuť aktualizácie teraz?</translation>
@@ -117,8 +130,8 @@
 <translation id="6040143037577758943">Zatvoriť</translation>
 <translation id="6229528619562190452">Kliknite sem, pre aktualizáciu prehliadača Vivaldi.</translation>
 <translation id="6234173136417926046">Použiť obrázok ako pozadie rýchleho prístupu</translation>
-<translation id="630690498669249215">Súbor záložiek prehliadača Opera</translation>
 <translation id="6339818817272922368">Miestny účet</translation>
+<translation id="6398710281890660037">Zabezpečenie môjho profilu</translation>
 <translation id="6438786710866753178">Ihličnaté stromy (Krajina 4)</translation>
 <translation id="6477028720702061455">Vybrať profilový priečinok prehliadača Opera pre import</translation>
 <translation id="6510706699590490869">&amp;Aktualizovať Vivaldi</translation>
@@ -128,11 +141,13 @@
 <translation id="6635049669875534328">Čo je nové:</translation>
 <translation id="6693585104974197539">Zvoľte profilový priečinok prehliadača Edge pre import</translation>
 <translation id="6726279523566323394">Zvoľte profilový priečinok prehliadača Brave pre import</translation>
-<translation id="6804831687363620480">Ľutujeme, nastavenia prehliadača Opera 15+ nie sú k dispozícii, kým je tento prehliadač otvorený. Ak chcete importovať tieto nastavenia do prehliadača Vivaldi, uložte svoju prácu a zatvorte všetky okná prehliadača Opera 15+. Potom kliknite na tlačidlo Pokračovať.</translation>
 <translation id="6892812721183419409">Otvoriť odkaz ako <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopírovať</translation>
+<translation id="6960139763942959188">Tento profil je v súčasnosti uložený nezabezpečene v nešifrovanom formáte. Vivaldi sa chystá aktualizovať váš profil na bezpečnejší šifrovaný formát. Pred pokračovaním by ste mali ukončiť prácu a zálohovať svoj profil.</translation>
 <translation id="7086554968911045110">Noc v horách (Krajina 7)</translation>
+<translation id="7099506190679014195">Zabezpečená aktualizácia úložiska kľúčov</translation>
 <translation id="7111492742514999492">Veterný mlyn (Krajina 9)</translation>
+<translation id="7208252576848052204">Bohužiaľ, nastavenia Arc nie sú dostupné, keď je tento prehliadač spustený. Ak chcete tieto nastavenia importovať do prehliadača Vivaldi, uložte svoju prácu a zatvorte všetky okná Arc. Potom kliknite na tlačidlo Pokračovať.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Chyba pri spustení inštalátora aktualizácie. Skontrolujte si prosím, či váš počítač disponuje dostatočným ukladacím priestorom alebo ukladacou pamäťou a skúste to znova neskôr.</translation>
 <translation id="7658239707568436148">Zrušiť</translation>
@@ -159,7 +174,6 @@
 <translation id="8562339533180097902">Zatvoriť prehliadač a nainštalovať teraz</translation>
 <translation id="8567452685425968223">Rozbaľovanie aktualizácie...</translation>
 <translation id="8624587806981488221">&amp;Znova načítať obrázok</translation>
-<translation id="864444594187862076">Opera 15+ (Vývojár)</translation>
 <translation id="8651348004684669199">Pridať aktívny list</translation>
 <translation id="8669345741879513971">Prasiatko Babe (Príšerka 10)</translation>
 <translation id="867544375504146191">Yandex</translation>
@@ -175,6 +189,7 @@
 <translation id="9048058608784130603">Čakajúca aktualizácia <ph name="VERSION" /></translation>
 <translation id="9048224371732578627">Povolené automatické prehrávanie videa</translation>
 <translation id="9065203028668620118">Upraviť</translation>
+<translation id="9090254883741610153">Dovoľte mi pokračovať</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Otvoriť obrázok ako <ph name="USER" /></translation>
 <translation id="9157539936604258187">Otvoriť odkaz v súčasnom liste</translation>

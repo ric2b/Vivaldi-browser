@@ -13,13 +13,13 @@
 #include "core/fxcrt/cfx_memorystream.h"
 #include "core/fxcrt/cfx_read_only_string_stream.h"
 #include "core/fxcrt/fx_codepage.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/xml/cfx_xmldocument.h"
 #include "core/fxcrt/xml/cfx_xmlelement.h"
 #include "core/fxcrt/xml/cfx_xmlparser.h"
 #include "fxjs/fxv8.h"
 #include "fxjs/js_resources.h"
 #include "fxjs/xfa/cfxjse_engine.h"
-#include "third_party/base/containers/span.h"
 #include "v8/include/v8-object.h"
 #include "xfa/fxfa/cxfa_eventparam.h"
 #include "xfa/fxfa/cxfa_ffdoc.h"
@@ -175,7 +175,7 @@ CJS_Result CJX_Node::isPropertySpecified(
     return CJS_Result::Failure(JSMessage::kParamError);
 
   WideString expression = runtime->ToWideString(params[0]);
-  absl::optional<XFA_ATTRIBUTEINFO> attr =
+  std::optional<XFA_ATTRIBUTEINFO> attr =
       XFA_GetAttributeByName(expression.AsStringView());
   if (attr.has_value() && HasAttribute(attr.value().attribute))
     return CJS_Result::Success(runtime->NewBoolean(true));

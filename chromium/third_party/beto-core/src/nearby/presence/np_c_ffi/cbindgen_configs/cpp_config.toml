@@ -16,7 +16,13 @@ header = """
  See the License for the specific language governing permissions and
  limitations under the License.
 */
+
+// clang-format off
 """
+trailer = """
+// clang-format on
+"""
+
 pragma_once = true
 autogen_warning = """
 /*
@@ -38,7 +44,3 @@ rename_variants = "None"
 [parse]
 parse_deps = true
 include = ["np_c_ffi", "np_ffi_core"]
-
-[parse.expand]
-crates = ["np_ffi_core"]
-default_features = true

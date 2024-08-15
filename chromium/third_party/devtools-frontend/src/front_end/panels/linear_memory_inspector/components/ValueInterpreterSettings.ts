@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import * as i18n from '../../../core/i18n/i18n.js';
-import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
+import * as Platform from '../../../core/platform/platform.js';
 import * as Input from '../../../ui/components/input/input.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
@@ -79,7 +79,7 @@ export class ValueInterpreterSettings extends HTMLElement {
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     render(html`
-      <div class="settings" jslog=${VisualLogging.section().context('settings')}>
+      <div class="settings" jslog=${VisualLogging.pane('settings')}>
        ${[...GROUP_TO_TYPES.keys()].map(group => {
         return html`
           <div class="value-types-selection">
@@ -100,7 +100,7 @@ export class ValueInterpreterSettings extends HTMLElement {
       ${types.map(type => {
         return html`
           <label class="type-label" title=${valueTypeToLocalizedString(type)}>
-            <input data-input="true" type="checkbox" .checked=${this.#valueTypes.has(type)} @change=${(e: Event): void => this.#onTypeToggle(type, e)} jslog=${VisualLogging.toggle().track({change: true}).context(type)}>
+            <input data-input="true" type="checkbox" .checked=${this.#valueTypes.has(type)} @change=${(e: Event) => this.#onTypeToggle(type, e)} jslog=${VisualLogging.toggle().track({change: true}).context(Platform.StringUtilities.toKebabCase(type))}>
             <span data-title="true">${valueTypeToLocalizedString(type)}</span>
           </label>
      `;})}`;
@@ -112,10 +112,10 @@ export class ValueInterpreterSettings extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-linear-memory-inspector-interpreter-settings', ValueInterpreterSettings);
+customElements.define('devtools-linear-memory-inspector-interpreter-settings', ValueInterpreterSettings);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
 interface HTMLElementTagNameMap {
     'devtools-linear-memory-inspector-interpreter-settings': ValueInterpreterSettings;
   }

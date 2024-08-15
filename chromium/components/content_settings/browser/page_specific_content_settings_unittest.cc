@@ -4,6 +4,7 @@
 
 #include "components/content_settings/browser/page_specific_content_settings.h"
 
+#include <optional>
 #include <string>
 
 #include "base/strings/utf_string_conversions.h"
@@ -32,7 +33,6 @@
 #include "services/network/public/mojom/shared_dictionary_access_observer.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 
@@ -151,8 +151,8 @@ TEST_F(PageSpecificContentSettingsTest, BlockedContent) {
   // popup.
   GURL origin("http://google.com");
   std::unique_ptr<net::CanonicalCookie> cookie1(net::CanonicalCookie::Create(
-      origin, "A=B", base::Time::Now(), absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */));
+      origin, "A=B", base::Time::Now(), std::nullopt /* server_time */,
+      std::nullopt /* cookie_partition_key */));
   ASSERT_TRUE(cookie1);
   GetHandle()->OnCookiesAccessed(web_contents()->GetPrimaryMainFrame(),
                                  {content::CookieAccessDetails::Type::kChange,
@@ -200,8 +200,8 @@ TEST_F(PageSpecificContentSettingsTest, BlockedContent) {
 
   // Block a cookie.
   std::unique_ptr<net::CanonicalCookie> cookie2(net::CanonicalCookie::Create(
-      origin, "C=D", base::Time::Now(), absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */));
+      origin, "C=D", base::Time::Now(), std::nullopt /* server_time */,
+      std::nullopt /* cookie_partition_key */));
   ASSERT_TRUE(cookie2);
   GetHandle()->OnCookiesAccessed(web_contents()->GetPrimaryMainFrame(),
                                  {content::CookieAccessDetails::Type::kChange,
@@ -262,14 +262,14 @@ TEST_F(PageSpecificContentSettingsTest, BlockedFileSystems) {
       PageSpecificContentSettings::GetForFrame(rfh);
   auto google_storage_key = rfh->GetStorageKey();
   // Access a file system.
-  content_settings->OnStorageAccessed(StorageType::FILE_SYSTEM,
-                                      google_storage_key, false);
+  PageSpecificContentSettings::StorageAccessed(
+      StorageType::FILE_SYSTEM, rfh->GetGlobalId(), google_storage_key, false);
   EXPECT_FALSE(
       content_settings->IsContentBlocked(ContentSettingsType::COOKIES));
 
   // Block access to a file system.
-  content_settings->OnStorageAccessed(StorageType::FILE_SYSTEM,
-                                      google_storage_key, true);
+  PageSpecificContentSettings::StorageAccessed(
+      StorageType::FILE_SYSTEM, rfh->GetGlobalId(), google_storage_key, true);
   EXPECT_TRUE(content_settings->IsContentBlocked(ContentSettingsType::COOKIES));
 }
 
@@ -293,8 +293,8 @@ TEST_F(PageSpecificContentSettingsTest, AllowedContent) {
   // Record a cookie.
   GURL origin("http://google.com");
   std::unique_ptr<net::CanonicalCookie> cookie1(net::CanonicalCookie::Create(
-      origin, "A=B", base::Time::Now(), absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */));
+      origin, "A=B", base::Time::Now(), std::nullopt /* server_time */,
+      std::nullopt /* cookie_partition_key */));
   ASSERT_TRUE(cookie1);
   GetHandle()->OnCookiesAccessed(web_contents()->GetPrimaryMainFrame(),
                                  {content::CookieAccessDetails::Type::kChange,
@@ -309,8 +309,8 @@ TEST_F(PageSpecificContentSettingsTest, AllowedContent) {
 
   // Record a blocked cookie.
   std::unique_ptr<net::CanonicalCookie> cookie2(net::CanonicalCookie::Create(
-      origin, "C=D", base::Time::Now(), absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */));
+      origin, "C=D", base::Time::Now(), std::nullopt /* server_time */,
+      std::nullopt /* cookie_partition_key */));
   ASSERT_TRUE(cookie2);
   GetHandle()->OnCookiesAccessed(web_contents()->GetPrimaryMainFrame(),
                                  {content::CookieAccessDetails::Type::kChange,
@@ -415,16 +415,14 @@ TEST_F(PageSpecificContentSettingsTest, EmptyCookieList) {
 TEST_F(PageSpecificContentSettingsTest, SiteDataObserver) {
   NavigateAndCommit(GURL("http://google.com"));
   auto* rfh = web_contents()->GetPrimaryMainFrame();
-  PageSpecificContentSettings* content_settings =
-      PageSpecificContentSettings::GetForFrame(rfh);
   MockSiteDataObserver mock_observer(web_contents());
   EXPECT_CALL(mock_observer, OnSiteDataAccessed).Times(6);
 
   bool blocked_by_policy = false;
   GURL origin("http://google.com");
   std::unique_ptr<net::CanonicalCookie> cookie(net::CanonicalCookie::Create(
-      origin, "A=B", base::Time::Now(), absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */));
+      origin, "A=B", base::Time::Now(), std::nullopt /* server_time */,
+      std::nullopt /* cookie_partition_key */));
   ASSERT_TRUE(cookie);
   GetHandle()->OnCookiesAccessed(web_contents()->GetPrimaryMainFrame(),
                                  {content::CookieAccessDetails::Type::kChange,
@@ -438,8 +436,8 @@ TEST_F(PageSpecificContentSettingsTest, SiteDataObserver) {
   std::unique_ptr<net::CanonicalCookie> other_cookie(
       net::CanonicalCookie::Create(GURL("http://google.com"),
                                    "CookieName=CookieValue", base::Time::Now(),
-                                   absl::nullopt /* server_time */,
-                                   absl::nullopt /* cookie_partition_key */));
+                                   std::nullopt /* server_time */,
+                                   std::nullopt /* cookie_partition_key */));
   ASSERT_TRUE(other_cookie);
 
   cookie_list.push_back(*other_cookie);
@@ -449,17 +447,26 @@ TEST_F(PageSpecificContentSettingsTest, SiteDataObserver) {
        GURL("http://google.com"), cookie_list, 1u, blocked_by_policy});
 
   auto google_storage_key = rfh->GetStorageKey();
-  content_settings->OnStorageAccessed(StorageType::FILE_SYSTEM,
-                                      google_storage_key, blocked_by_policy);
-  content_settings->OnStorageAccessed(StorageType::INDEXED_DB,
-                                      google_storage_key, blocked_by_policy);
-  content_settings->OnStorageAccessed(StorageType::LOCAL_STORAGE,
-                                      google_storage_key, blocked_by_policy);
-  content_settings->OnStorageAccessed(StorageType::DATABASE, google_storage_key,
-                                      blocked_by_policy);
+  PageSpecificContentSettings::StorageAccessed(
+      StorageType::FILE_SYSTEM, rfh->GetGlobalId(), google_storage_key,
+      blocked_by_policy);
+  PageSpecificContentSettings::StorageAccessed(
+      StorageType::INDEXED_DB, rfh->GetGlobalId(), google_storage_key,
+      blocked_by_policy);
+  PageSpecificContentSettings::StorageAccessed(
+      StorageType::LOCAL_STORAGE, rfh->GetGlobalId(), google_storage_key,
+      blocked_by_policy);
+  PageSpecificContentSettings::StorageAccessed(
+      StorageType::DATABASE, rfh->GetGlobalId(), google_storage_key,
+      blocked_by_policy);
 }
 
 TEST_F(PageSpecificContentSettingsTest, LocalSharedObjectsContainer) {
+  if (base::FeatureList::IsEnabled(
+          browsing_data::features::kDeprecateCookiesTreeModel)) {
+    GTEST_SKIP() << "kDeprecateCookiesTreeModel is enabled skipping "
+                    "CookiesTreeModel tests";
+  }
   NavigateAndCommit(GURL("http://google.com"));
   content::RenderFrameHost* rfh = web_contents()->GetPrimaryMainFrame();
   PageSpecificContentSettings* content_settings =
@@ -467,8 +474,7 @@ TEST_F(PageSpecificContentSettingsTest, LocalSharedObjectsContainer) {
   bool blocked_by_policy = false;
   auto cookie = net::CanonicalCookie::Create(
       GURL("http://google.com"), "k=v", base::Time::Now(),
-      absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */);
+      std::nullopt /* server_time */, std::nullopt /* cookie_partition_key */);
   GetHandle()->OnCookiesAccessed(web_contents()->GetPrimaryMainFrame(),
                                  {content::CookieAccessDetails::Type::kRead,
                                   GURL("http://google.com"),
@@ -476,53 +482,18 @@ TEST_F(PageSpecificContentSettingsTest, LocalSharedObjectsContainer) {
                                   {*cookie},
                                   1u,
                                   blocked_by_policy});
-  content_settings->OnStorageAccessed(
-      StorageType::FILE_SYSTEM,
-      CreateUnpartitionedStorageKey(GURL("https://www.google.com")),
-      blocked_by_policy);
-  content_settings->OnStorageAccessed(
-      StorageType::INDEXED_DB,
-      CreateUnpartitionedStorageKey(GURL("https://localhost")),
-      blocked_by_policy);
-  content_settings->OnStorageAccessed(
-      StorageType::LOCAL_STORAGE,
-      CreateUnpartitionedStorageKey(GURL("http://maps.google.com:8080")),
-      blocked_by_policy);
-  content_settings->OnStorageAccessed(
-      StorageType::LOCAL_STORAGE,
-      CreateUnpartitionedStorageKey(GURL("http://example.com")),
-      blocked_by_policy);
-  content_settings->OnStorageAccessed(
-      StorageType::DATABASE,
-      CreateUnpartitionedStorageKey(GURL("http://192.168.0.1")),
-      blocked_by_policy);
-  content_settings->OnSharedWorkerAccessed(
-      GURL("http://youtube.com/worker.js"), "worker",
-      blink::StorageKey::CreateFromStringForTesting("https://youtube.com"),
-      blocked_by_policy);
 
   const auto& objects = content_settings->allowed_local_shared_objects();
-  EXPECT_EQ(7u, objects.GetObjectCount());
-  EXPECT_EQ(3u, objects.GetObjectCountForDomain(GURL("http://google.com")));
-  EXPECT_EQ(1u, objects.GetObjectCountForDomain(GURL("http://youtube.com")));
-  EXPECT_EQ(1u, objects.GetObjectCountForDomain(GURL("http://localhost")));
-  EXPECT_EQ(1u, objects.GetObjectCountForDomain(GURL("http://example.com")));
-  EXPECT_EQ(1u, objects.GetObjectCountForDomain(GURL("http://192.168.0.1")));
-  // google.com, www.google.com, localhost, maps.google.com, example.com,
-  // youtube.com, 192.168.0.1 should be counted as hosts.
-  EXPECT_EQ(7u, objects.GetHostCount());
-
-  // The localStorage storage keys (http://maps.google.com:8080 and
-  // http://example.com) should be ignored since they are empty.
-  base::RunLoop run_loop;
-  objects.UpdateIgnoredEmptyStorageKeys(run_loop.QuitClosure());
-  run_loop.Run();
-  EXPECT_EQ(5u, objects.GetObjectCount());
-  EXPECT_EQ(2u, objects.GetObjectCountForDomain(GURL("http://google.com")));
-  EXPECT_EQ(0u, objects.GetObjectCountForDomain(GURL("http://example.com")));
+  EXPECT_EQ(1u, objects.GetObjectCount());
+  EXPECT_EQ(1u, objects.GetObjectCountForDomain(GURL("http://google.com")));
 }
 
 TEST_F(PageSpecificContentSettingsTest, LocalSharedObjectsContainerCookie) {
+  if (base::FeatureList::IsEnabled(
+          browsing_data::features::kDeprecateCookiesTreeModel)) {
+    GTEST_SKIP() << "kDeprecateCookiesTreeModel is enabled skipping "
+                    "CookiesTreeModel tests";
+  }
   NavigateAndCommit(GURL("http://google.com"));
   PageSpecificContentSettings* content_settings =
       PageSpecificContentSettings::GetForFrame(
@@ -530,20 +501,19 @@ TEST_F(PageSpecificContentSettingsTest, LocalSharedObjectsContainerCookie) {
   bool blocked_by_policy = false;
   auto cookie1 = net::CanonicalCookie::Create(
       GURL("http://google.com"), "k1=v", base::Time::Now(),
-      absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */);
+      std::nullopt /* server_time */, std::nullopt /* cookie_partition_key */);
   auto cookie2 = net::CanonicalCookie::Create(
       GURL("http://www.google.com"), "k2=v; Domain=google.com",
-      base::Time::Now(), absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */);
+      base::Time::Now(), std::nullopt /* server_time */,
+      std::nullopt /* cookie_partition_key */);
   auto cookie3 = net::CanonicalCookie::Create(
       GURL("http://www.google.com"), "k3=v; Domain=.google.com",
-      base::Time::Now(), absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */);
+      base::Time::Now(), std::nullopt /* server_time */,
+      std::nullopt /* cookie_partition_key */);
   auto cookie4 = net::CanonicalCookie::Create(
       GURL("http://www.google.com"), "k4=v; Domain=.www.google.com",
-      base::Time::Now(), absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */);
+      base::Time::Now(), std::nullopt /* server_time */,
+      std::nullopt /* cookie_partition_key */);
   GetHandle()->OnCookiesAccessed(web_contents()->GetPrimaryMainFrame(),
                                  {content::CookieAccessDetails::Type::kRead,
                                   GURL("http://www.google.com"),
@@ -553,8 +523,7 @@ TEST_F(PageSpecificContentSettingsTest, LocalSharedObjectsContainerCookie) {
 
   auto cookie5 = net::CanonicalCookie::Create(
       GURL("https://www.google.com"), "k5=v", base::Time::Now(),
-      absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */);
+      std::nullopt /* server_time */, std::nullopt /* cookie_partition_key */);
   GetHandle()->OnCookiesAccessed(web_contents()->GetPrimaryMainFrame(),
                                  {content::CookieAccessDetails::Type::kRead,
                                   GURL("https://www.google.com"),
@@ -787,6 +756,11 @@ TEST_F(PageSpecificContentSettingsTest,
 }
 
 TEST_F(PageSpecificContentSettingsTest, LocalSharedObjectsContainerHostsCount) {
+  if (base::FeatureList::IsEnabled(
+          browsing_data::features::kDeprecateCookiesTreeModel)) {
+    GTEST_SKIP() << "kDeprecateCookiesTreeModel is enabled skipping "
+                    "CookiesTreeModel tests";
+  }
   NavigateAndCommit(GURL("http://google.com"));
   PageSpecificContentSettings* content_settings =
       PageSpecificContentSettings::GetForFrame(
@@ -794,20 +768,16 @@ TEST_F(PageSpecificContentSettingsTest, LocalSharedObjectsContainerHostsCount) {
   bool blocked_by_policy = false;
   auto cookie1 = net::CanonicalCookie::Create(
       GURL("http://google.com"), "k1=v", base::Time::Now(),
-      absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */);
+      std::nullopt /* server_time */, std::nullopt /* cookie_partition_key */);
   auto cookie2 = net::CanonicalCookie::Create(
       GURL("https://example.com"), "k2=v", base::Time::Now(),
-      absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */);
+      std::nullopt /* server_time */, std::nullopt /* cookie_partition_key */);
   auto cookie3 = net::CanonicalCookie::Create(
       GURL("https://example.com"), "k3=v", base::Time::Now(),
-      absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */);
+      std::nullopt /* server_time */, std::nullopt /* cookie_partition_key */);
   auto cookie4 = net::CanonicalCookie::Create(
       GURL("http://example.com"), "k4=v", base::Time::Now(),
-      absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */);
+      std::nullopt /* server_time */, std::nullopt /* cookie_partition_key */);
   GetHandle()->OnCookiesAccessed(web_contents()->GetPrimaryMainFrame(),
                                  {content::CookieAccessDetails::Type::kRead,
                                   GURL("http://google.com"),
@@ -836,37 +806,12 @@ TEST_F(PageSpecificContentSettingsTest, LocalSharedObjectsContainerHostsCount) {
                                   {*cookie4},
                                   1u,
                                   blocked_by_policy});
-  content_settings->OnStorageAccessed(
-      StorageType::FILE_SYSTEM,
-      CreateUnpartitionedStorageKey(GURL("https://www.google.com")),
-      blocked_by_policy);
-  content_settings->OnStorageAccessed(
-      StorageType::INDEXED_DB,
-      CreateUnpartitionedStorageKey(GURL("https://localhost")),
-      blocked_by_policy);
-  content_settings->OnStorageAccessed(
-      StorageType::LOCAL_STORAGE,
-      CreateUnpartitionedStorageKey(GURL("http://maps.google.com:8080")),
-      blocked_by_policy);
-  content_settings->OnStorageAccessed(
-      StorageType::LOCAL_STORAGE,
-      CreateUnpartitionedStorageKey(GURL("http://example.com")),
-      blocked_by_policy);
-  content_settings->OnStorageAccessed(
-      StorageType::DATABASE,
-      CreateUnpartitionedStorageKey(GURL("http://192.168.0.1")),
-      blocked_by_policy);
-  content_settings->OnSharedWorkerAccessed(
-      GURL("http://youtube.com/worker.js"), "worker",
-      blink::StorageKey::CreateFromStringForTesting("https://youtube.com"),
-      blocked_by_policy);
 
   const auto& objects = content_settings->allowed_local_shared_objects();
-  EXPECT_EQ(10u, objects.GetObjectCount());
-  EXPECT_EQ(7u, objects.GetHostCount());
-  EXPECT_EQ(3u, objects.GetHostCountForDomain(GURL("http://google.com")));
-  EXPECT_EQ(1u, objects.GetHostCountForDomain(GURL("http://youtube.com")));
-  EXPECT_EQ(3u, objects.GetHostCountForDomain(GURL("http://a.google.com")));
+  EXPECT_EQ(4u, objects.GetObjectCount());
+  EXPECT_EQ(2u, objects.GetHostCount());
+  EXPECT_EQ(1u, objects.GetHostCountForDomain(GURL("http://google.com")));
+  EXPECT_EQ(1u, objects.GetHostCountForDomain(GURL("http://a.google.com")));
   EXPECT_EQ(1u, objects.GetHostCountForDomain(GURL("http://a.example.com")));
 }
 
@@ -921,11 +866,11 @@ TEST_F(PageSpecificContentSettingsTest, AllowedSitesCountedFromBothModels) {
   auto googleURL = GURL("http://google.com");
   auto exampleURL = GURL("https://example.com");
   auto cookie1 = net::CanonicalCookie::Create(
-      googleURL, "k1=v", base::Time::Now(), absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */);
+      googleURL, "k1=v", base::Time::Now(), std::nullopt /* server_time */,
+      std::nullopt /* cookie_partition_key */);
   auto cookie2 = net::CanonicalCookie::Create(
-      exampleURL, "k2=v", base::Time::Now(), absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */);
+      exampleURL, "k2=v", base::Time::Now(), std::nullopt /* server_time */,
+      std::nullopt /* cookie_partition_key */);
   GetHandle()->OnCookiesAccessed(web_contents()->GetPrimaryMainFrame(),
                                  {content::CookieAccessDetails::Type::kRead,
                                   googleURL,
@@ -961,8 +906,7 @@ class PageSpecificContentSettingsWithBDMTest
   PageSpecificContentSettingsWithBDMTest() {
     scoped_feature_list_.InitWithFeaturesAndParameters(
         /*enabled_features=*/
-        {{browsing_data::features::kMigrateStorageToBDM, {}},
-         {browsing_data::features::kDeprecateCookiesTreeModel, {}}},
+        {{browsing_data::features::kDeprecateCookiesTreeModel, {}}},
         /*disabled_features=*/{});
   }
 
@@ -1037,8 +981,8 @@ TEST_F(PageSpecificContentSettingsWithPrerenderTest, SiteDataAccessed) {
     // a popup.
     GURL origin("http://google.com");
     std::unique_ptr<net::CanonicalCookie> cookie1(net::CanonicalCookie::Create(
-        origin, "A=B", base::Time::Now(), absl::nullopt /* server_time */,
-        absl::nullopt /* cookie_partition_key */));
+        origin, "A=B", base::Time::Now(), std::nullopt /* server_time */,
+        std::nullopt /* cookie_partition_key */));
     ASSERT_TRUE(cookie1);
     pscs->OnCookiesAccessed({content::CookieAccessDetails::Type::kChange,
                              origin,
@@ -1080,17 +1024,18 @@ TEST_F(PageSpecificContentSettingsWithPrerenderTest,
 
   const GURL url = GURL("http://google.com");
   auto cookie = net::CanonicalCookie::Create(
-      url, "k=v", base::Time::Now(), absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */);
+      url, "k=v", base::Time::Now(), std::nullopt /* server_time */,
+      std::nullopt /* cookie_partition_key */);
   pscs->OnCookiesAccessed({content::CookieAccessDetails::Type::kRead,
                            url,
                            url,
                            {*cookie},
                            1u,
                            /*blocked_by_policy=*/false});
-  pscs->OnStorageAccessed(StorageType::INDEXED_DB,
-                          prerender_frame->GetStorageKey(),
-                          /*blocked_by_policy=*/true);
+  PageSpecificContentSettings::StorageAccessed(StorageType::INDEXED_DB,
+                                               prerender_frame->GetGlobalId(),
+                                               prerender_frame->GetStorageKey(),
+                                               /*blocked_by_policy=*/true);
 
   EXPECT_CALL(*mock_delegate, OnContentAllowed(ContentSettingsType::COOKIES))
       .Times(1);
@@ -1224,8 +1169,8 @@ TEST_F(PageSpecificContentSettingsWithFencedFrameTest, SiteDataAccessed) {
     // a popup.
     GURL origin("http://google.com");
     std::unique_ptr<net::CanonicalCookie> cookie1(net::CanonicalCookie::Create(
-        origin, "A=B", base::Time::Now(), absl::nullopt /* server_time */,
-        absl::nullopt /* cookie_partition_key */));
+        origin, "A=B", base::Time::Now(), std::nullopt /* server_time */,
+        std::nullopt /* cookie_partition_key */));
     ASSERT_TRUE(cookie1);
     ff_pscs->OnCookiesAccessed({content::CookieAccessDetails::Type::kChange,
                                 origin,
@@ -1256,17 +1201,18 @@ TEST_F(PageSpecificContentSettingsWithFencedFrameTest, DelegateUpdatesSent) {
       .Times(1);
 
   auto cookie = net::CanonicalCookie::Create(
-      ff_url, "k=v", base::Time::Now(), absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */);
+      ff_url, "k=v", base::Time::Now(), std::nullopt /* server_time */,
+      std::nullopt /* cookie_partition_key */);
   ff_pscs->OnCookiesAccessed({content::CookieAccessDetails::Type::kRead,
                               ff_url,
                               ff_url,
                               {*cookie},
                               1u,
                               /*blocked_by_policy=*/false});
-  ff_pscs->OnStorageAccessed(StorageType::INDEXED_DB,
-                             fenced_frame_root->GetStorageKey(),
-                             /*blocked_by_policy=*/true);
+  PageSpecificContentSettings::StorageAccessed(
+      StorageType::INDEXED_DB, fenced_frame_root->GetGlobalId(),
+      fenced_frame_root->GetStorageKey(),
+      /*blocked_by_policy=*/true);
 }
 
 TEST_F(PageSpecificContentSettingsWithFencedFrameTest,
@@ -1288,6 +1234,35 @@ TEST_F(PageSpecificContentSettingsWithFencedFrameTest,
 
   ff_pscs->OnContentBlocked(ContentSettingsType::JAVASCRIPT);
   ff_pscs->OnContentAllowed(ContentSettingsType::COOKIES);
+}
+
+TEST_F(PageSpecificContentSettingsTest,
+       MediaIndicatorsBlockedDoNotOverrideInUse) {
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitAndEnableFeature(
+      content_settings::features::kLeftHandSideActivityIndicators);
+
+  NavigateAndCommit(GURL("http://google.com"));
+
+  PageSpecificContentSettings* pscs = PageSpecificContentSettings::GetForFrame(
+      web_contents()->GetPrimaryMainFrame());
+  ASSERT_NE(pscs, nullptr);
+
+  pscs->OnMediaStreamPermissionSet(
+      web_contents()->GetLastCommittedURL(),
+      {PageSpecificContentSettings::kCameraAccessed});
+
+  EXPECT_TRUE(pscs->GetMicrophoneCameraState().Has(
+      PageSpecificContentSettings::kCameraAccessed));
+
+  pscs->OnMediaStreamPermissionSet(
+      web_contents()->GetLastCommittedURL(),
+      {PageSpecificContentSettings::kMicrophoneAccessed,
+       PageSpecificContentSettings::kMicrophoneBlocked});
+
+  EXPECT_FALSE(pscs->GetMicrophoneCameraState().HasAny(
+      {PageSpecificContentSettings::kMicrophoneAccessed,
+       PageSpecificContentSettings::kMicrophoneBlocked}));
 }
 
 TEST_F(PageSpecificContentSettingsTest, MediaIndicatorsMinHoldDurationDelay) {
@@ -1600,6 +1575,36 @@ TEST_F(PageSpecificContentSettingsTest,
       ContentSettingsType::MEDIASTREAM_MIC));
   EXPECT_FALSE(pscs->GetMicrophoneCameraState().Has(
       PageSpecificContentSettings::kMicrophoneAccessed));
+  EXPECT_FALSE(pscs->GetMicrophoneCameraState().Has(
+      PageSpecificContentSettings::kMicrophoneBlocked));
+}
+
+// Tests that a permission blocked state is reset after media started to be
+// used.
+TEST_F(PageSpecificContentSettingsTest, MediaBlockedStateIsResetIfMediaUsed) {
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitAndEnableFeature(
+      content_settings::features::kLeftHandSideActivityIndicators);
+
+  NavigateAndCommit(GURL("http://google.com"));
+
+  PageSpecificContentSettings* pscs = PageSpecificContentSettings::GetForFrame(
+      web_contents()->GetPrimaryMainFrame());
+  ASSERT_NE(pscs, nullptr);
+
+  PageSpecificContentSettings::MicrophoneCameraState
+      blocked_microphone_camera_state = {
+          PageSpecificContentSettings::kMicrophoneAccessed,
+          PageSpecificContentSettings::kMicrophoneBlocked};
+  pscs->OnMediaStreamPermissionSet(GURL("http://google.com"),
+                                   blocked_microphone_camera_state);
+
+  EXPECT_TRUE(pscs->GetMicrophoneCameraState().Has(
+      PageSpecificContentSettings::kMicrophoneBlocked));
+
+  // Camera is capturing, it should reset blocked microphone state.
+  pscs->OnCapturingStateChanged(ContentSettingsType::MEDIASTREAM_CAMERA, true);
+
   EXPECT_FALSE(pscs->GetMicrophoneCameraState().Has(
       PageSpecificContentSettings::kMicrophoneBlocked));
 }

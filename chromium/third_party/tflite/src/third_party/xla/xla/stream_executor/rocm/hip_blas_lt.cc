@@ -1,4 +1,4 @@
-/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2023 The OpenXLA Authors.
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -110,6 +110,14 @@ static absl::StatusOr<hipblasLtEpilogue_t> AsHipblasLtEpilogue(
       return HIPBLASLT_EPILOGUE_RELU_BIAS;
     case gpu::BlasLt::Epilogue::kGELU:
       return HIPBLASLT_EPILOGUE_GELU;
+#if TF_ROCM_VERSION >= 60000
+    case gpu::BlasLt::Epilogue::kGELUWithAux:
+      return HIPBLASLT_EPILOGUE_GELU_AUX;
+    case gpu::BlasLt::Epilogue::kBiasThenGELU:
+      return HIPBLASLT_EPILOGUE_GELU_BIAS;
+    case gpu::BlasLt::Epilogue::kBiasThenGELUWithAux:
+      return HIPBLASLT_EPILOGUE_GELU_AUX_BIAS;
+#endif
     default:
       return absl::InternalError("Unsupported epilogue: " +
                                  std::to_string((int)epilogue));
@@ -267,11 +275,11 @@ auto BlasLt::GetMatmulPlan(const gpu::GemmConfig& cfg, Epilogue epilogue) const
 
   if (xla::primitive_util::IsF8Type(lhs_layout.dtype) &&
       lhs_layout.order == gpu::MatrixLayout::Order::kColumnMajor) {
-    return xla::InternalError("The F8 LHS must be column-major");
+    return xla::Internal("The F8 LHS must be column-major");
   }
   if (xla::primitive_util::IsF8Type(rhs_layout.dtype) &&
       rhs_layout.order == gpu::MatrixLayout::Order::kRowMajor) {
-    return xla::InternalError("The F8 RHS must be row-major");
+    return xla::Internal("The F8 RHS must be row-major");
   }
 
   TF_ASSIGN_OR_RETURN(auto output_dtype,
@@ -357,9 +365,8 @@ absl::Status BlasLt::MatmulPlan::DoMatmul(
     DeviceMemoryBase b_scale, DeviceMemoryBase c_scale,
     DeviceMemoryBase d_scale, DeviceMemoryBase d_amax,
     blas::ProfileResult* profile_result) const {
-  TF_ASSIGN_OR_RETURN(
-      std::optional<gpu::GpuTimer> timer,
-      gpu::GpuTimer::CreateIfNeeded(gpu::AsGpuStream(stream), profile_result));
+  TF_ASSIGN_OR_RETURN(std::optional<gpu::GpuTimer> timer,
+                      gpu::GpuTimer::CreateIfNeeded(stream, profile_result));
 
   void* workspace = nullptr;
   if (algorithm.workspace_size > 0) {
@@ -485,7 +492,7 @@ absl::Status BlasLt::MatmulPlan::ExecuteOnStream(
 
 #undef TYPED_MATMUL
 
-  return xla::InternalError("Unexpected dtype");
+  return xla::Internal("Unexpected dtype");
 }
 
 }  // namespace rocm

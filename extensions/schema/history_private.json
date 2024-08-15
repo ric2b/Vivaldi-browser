@@ -306,9 +306,9 @@
             "description": "A number identifying a possible keyword prefixing the query or -1 if none."
           },
           {
-            "name": "max_results",
+            "name": "maxResults",
             "type": "integer",
-            "description": "The number of items to return"
+            "description": "The maximum number of items to return"
           }
         ],
         "returns_async": {
@@ -329,29 +329,13 @@
         "parameters": [
           {
             "name": "query",
-            "type": "object",
-            "properties": {
-              "text": {
-                "type": "string",
-                "description": "A free-text query to the history service.  Leave empty to retrieve all pages."
-              },
-              "startTime": {
-                "type": "number",
-                "optional": true,
-                "description": "Limit results to those visited after this date, represented in milliseconds since the epoch."
-              },
-              "endTime": {
-                "type": "number",
-                "optional": true,
-                "description": "Limit results to those visited before this date, represented in milliseconds since the epoch."
-              },
-              "maxResults": {
-                "type": "integer",
-                "optional": true,
-                "minimum": 0,
-                "description": "The maximum number of results to retrieve.  Defaults to 100."
-              }
-            }
+            "type": "string",
+            "description": "A piece of text that the results should contain"
+          },
+          {
+            "name": "maxResults",
+            "type": "integer",
+            "description": "The maximum number of items to return"
           }
         ],
         "returns_async": {

@@ -66,6 +66,8 @@ class Device final : public DeviceBase {
 
     const GLFormat& GetGLFormat(const Format& format);
 
+    int GetMaxTextureMaxAnisotropy() const;
+
     MaybeError ValidateTextureCanBeWrapped(const UnpackedPtr<TextureDescriptor>& descriptor);
     Ref<TextureBase> CreateTextureWrappingEGLImage(const ExternalImageDescriptor* descriptor,
                                                    ::EGLImage image);
@@ -93,6 +95,9 @@ class Device final : public DeviceBase {
     uint64_t GetOptimalBufferToTextureCopyOffsetAlignment() const override;
 
     float GetTimestampPeriodInNS() const override;
+
+    bool MayRequireDuplicationOfIndirectParameters() const override;
+    bool ShouldApplyIndexBufferOffsetToFirstIndex() const override;
 
     class Context {
       public:
@@ -146,6 +151,7 @@ class Device final : public DeviceBase {
 
     GLFormatTable mFormatTable;
     std::unique_ptr<Context> mContext = nullptr;
+    int mMaxTextureMaxAnisotropy = 0;
 };
 
 }  // namespace dawn::native::opengl

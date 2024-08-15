@@ -51,6 +51,8 @@
 #include "dawn/native/d3d12/ShaderVisibleDescriptorAllocatorD3D12.h"
 #include "dawn/native/d3d12/StagingDescriptorAllocatorD3D12.h"
 #include "dawn/native/d3d12/UtilsD3D12.h"
+#include "partition_alloc/pointers/raw_ptr.h"
+#include "partition_alloc/pointers/raw_ptr_exclusion.h"
 
 namespace dawn::native::d3d12 {
 
@@ -522,8 +524,7 @@ class BindGroupStateTracker : public BindGroupTrackerBase<false, uint64_t> {
                 D3D12_GPU_VIRTUAL_ADDRESS bufferLocation =
                     ToBackend(binding.buffer)->GetVA() + offset;
 
-                DAWN_ASSERT(bindingInfo.bindingType == BindingInfoType::Buffer);
-                switch (bindingInfo.buffer.type) {
+                switch (std::get<BufferBindingLayout>(bindingInfo.bindingLayout).type) {
                     case wgpu::BufferBindingType::Uniform:
                         if (mInCompute) {
                             commandList->SetComputeRootConstantBufferView(parameterIndex,
@@ -612,15 +613,17 @@ class BindGroupStateTracker : public BindGroupTrackerBase<false, uint64_t> {
         }
     }
 
-    Device* mDevice;
-    DescriptorHeapState* mHeapState;
+    raw_ptr<Device> mDevice;
+    raw_ptr<DescriptorHeapState> mHeapState;
 
     bool mInCompute = false;
 
     PerBindGroup<D3D12_GPU_DESCRIPTOR_HANDLE> mBoundRootSamplerTables = {};
 
-    MutexProtected<ShaderVisibleDescriptorAllocator>& mViewAllocator;
-    MutexProtected<ShaderVisibleDescriptorAllocator>& mSamplerAllocator;
+    // TODO(https://crbug.com/dawn/2361): Rewrite those members with raw_ref<T>.
+    // This is currently failing with MSVC cl.exe compiler.
+    RAW_PTR_EXCLUSION MutexProtected<ShaderVisibleDescriptorAllocator>& mViewAllocator;
+    RAW_PTR_EXCLUSION MutexProtected<ShaderVisibleDescriptorAllocator>& mSamplerAllocator;
 };
 
 class DescriptorHeapState {
@@ -651,7 +654,7 @@ class DescriptorHeapState {
     BindGroupStateTracker* GetGraphicsBindingTracker() { return &mGraphicsBindingTracker; }
 
   private:
-    Device* mDevice;
+    raw_ptr<Device> mDevice;
     BindGroupStateTracker mComputeBindingTracker;
     BindGroupStateTracker mGraphicsBindingTracker;
 };
@@ -714,7 +717,7 @@ class VertexBufferTracker {
     // If there are multiple calls to SetVertexBuffer, the start and end
     // represent the union of the dirty ranges (the union may have non-dirty
     // data in the middle of the range).
-    const RenderPipeline* mLastAppliedRenderPipeline = nullptr;
+    raw_ptr<const RenderPipeline> mLastAppliedRenderPipeline = nullptr;
     VertexBufferSlot mStartSlot{kMaxVertexBuffers};
     VertexBufferSlot mEndSlot{};
     PerVertexBuffer<D3D12_VERTEX_BUFFER_VIEW> mD3D12BufferViews = {};

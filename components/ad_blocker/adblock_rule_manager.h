@@ -57,7 +57,7 @@ class RuleManager {
   virtual void DeleteRuleSource(const KnownRuleSource& known_source) = 0;
 
   // Returns the rule source matching the given ID, if it is an existing ID.
-  virtual absl::optional<RuleSource> GetRuleSource(RuleGroup group,
+  virtual std::optional<RuleSource> GetRuleSource(RuleGroup group,
                                                    uint32_t source_id) = 0;
   virtual std::map<uint32_t, RuleSource> GetRuleSources(
       RuleGroup group) const = 0;

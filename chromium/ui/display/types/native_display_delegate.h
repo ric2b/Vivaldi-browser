@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <optional>
 #include <vector>
 
 #include "base/functional/callback.h"
@@ -34,6 +35,8 @@ using GetHDCPStateCallback =
 using SetHDCPStateCallback = base::OnceCallback<void(bool)>;
 using DisplayControlCallback = base::OnceCallback<void(bool)>;
 using SetPrivacyScreenCallback = base::OnceCallback<void(bool)>;
+using GetSeamlessRefreshRatesCallback =
+    base::OnceCallback<void(const std::optional<RefreshRange>&)>;
 
 // Interface for classes that perform display configuration actions on behalf
 // of DisplayConfigurator.
@@ -64,7 +67,7 @@ class DISPLAY_TYPES_EXPORT NativeDisplayDelegate {
   virtual void Configure(
       const std::vector<display::DisplayConfigurationParams>& config_requests,
       ConfigureCallback callback,
-      uint32_t modeset_flag) = 0;
+      display::ModesetFlags modeset_flags) = 0;
 
   // Sets the HDCP Key Property.
   virtual void SetHdcpKeyProp(int64_t display_id,
@@ -112,6 +115,12 @@ class DISPLAY_TYPES_EXPORT NativeDisplayDelegate {
   virtual void SetPrivacyScreen(int64_t display_id,
                                 bool enabled,
                                 SetPrivacyScreenCallback callback) = 0;
+
+  // Get a description of supported seamless refresh rates for the display with
+  // |display_id|.
+  virtual void GetSeamlessRefreshRates(
+      int64_t display_id,
+      GetSeamlessRefreshRatesCallback callback) const = 0;
 
   virtual void AddObserver(NativeDisplayObserver* observer) = 0;
 

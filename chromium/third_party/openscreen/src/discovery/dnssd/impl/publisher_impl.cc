@@ -88,15 +88,15 @@ PublisherImpl::PublisherImpl(MdnsService* publisher,
       reporting_client_(reporting_client),
       task_runner_(task_runner),
       network_config_(network_config) {
-  OSP_DCHECK(mdns_publisher_);
-  OSP_DCHECK(reporting_client_);
+  OSP_CHECK(mdns_publisher_);
+  OSP_CHECK(reporting_client_);
 }
 
 PublisherImpl::~PublisherImpl() = default;
 
 Error PublisherImpl::Register(const DnsSdInstance& instance, Client* client) {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
-  OSP_DCHECK(client != nullptr);
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(client);
 
   if (published_instances_.find(instance) != published_instances_.end()) {
     UpdateRegistration(instance);
@@ -106,7 +106,7 @@ Error PublisherImpl::Register(const DnsSdInstance& instance, Client* client) {
 
   InstanceKey key(instance);
   const IPAddress& address = network_config_->GetAddress();
-  OSP_DCHECK(address);
+  OSP_CHECK(address);
   pending_instances_.emplace(CreateEndpoint(instance, *network_config_),
                              client);
 
@@ -116,7 +116,7 @@ Error PublisherImpl::Register(const DnsSdInstance& instance, Client* client) {
 }
 
 Error PublisherImpl::UpdateRegistration(const DnsSdInstance& instance) {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 
   // Check if the instance is still pending publication.
   auto it = FindKey(&pending_instances_, InstanceKey(instance));
@@ -141,7 +141,7 @@ Error PublisherImpl::UpdateRegistration(const DnsSdInstance& instance) {
 
 Error PublisherImpl::UpdatePublishedRegistration(
     const DnsSdInstance& instance) {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 
   auto published_instance_it =
       FindKey(&published_instances_, InstanceKey(instance));
@@ -172,7 +172,7 @@ Error PublisherImpl::UpdatePublishedRegistration(
   // Populate the first part of each pair in |changed_instances|.
   for (size_t i = 0; i < old_records.size(); i++) {
     const auto key = old_records[i].dns_type();
-    OSP_DCHECK(changed_records.find(key) == changed_records.end());
+    OSP_CHECK(changed_records.find(key) == changed_records.end());
     auto value = std::make_pair(std::move(old_records[i]), std::nullopt);
     changed_records.emplace(key, std::move(value));
   }
@@ -193,8 +193,8 @@ Error PublisherImpl::UpdatePublishedRegistration(
   // Apply changes called out in |changed_records|.
   Error total_result = Error::None();
   for (const auto& pair : changed_records) {
-    OSP_DCHECK(pair.second.first != std::nullopt ||
-               pair.second.second != std::nullopt);
+    OSP_CHECK(pair.second.first != std::nullopt ||
+              pair.second.second != std::nullopt);
     if (pair.second.first == std::nullopt) {
       TRACE_SCOPED(TraceCategory::kDiscovery, "mdns.RegisterRecord");
       auto error = mdns_publisher_->RegisterRecord(pair.second.second.value());
@@ -228,7 +228,7 @@ Error PublisherImpl::UpdatePublishedRegistration(
 }
 
 ErrorOr<int> PublisherImpl::DeregisterAll(const std::string& service) {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 
   OSP_DVLOG << "Deregistering all instances";
 
@@ -264,7 +264,7 @@ ErrorOr<int> PublisherImpl::DeregisterAll(const std::string& service) {
 void PublisherImpl::OnDomainFound(const DomainName& requested_name,
                                   const DomainName& confirmed_name) {
   TRACE_DEFAULT_SCOPED(TraceCategory::kDiscovery);
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 
   OSP_DVLOG << "Domain successfully claimed: '" << confirmed_name
             << "' based on requested name: '" << requested_name << "'";

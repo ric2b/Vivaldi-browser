@@ -22,6 +22,7 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
 #include "base/task/single_thread_task_runner.h"
@@ -48,6 +49,7 @@
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 #include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "chromeos/components/mgs/managed_guest_session_utils.h"
 #include "components/embedder_support/user_agent_utils.h"
 #include "components/prefs/pref_service.h"
@@ -70,6 +72,54 @@
 namespace arc {
 
 namespace {
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// Status of ARC based on device affiliation.
+enum class DeviceAffiliationBasedArcStatus {
+  // ARC allowed on affiliated device
+  kAllowedOnAffiliatedDevice,
+
+  // ARC allowed on unaffiliated device
+  kAllowedOnUnaffiliatedDevice,
+
+  // ARC not allowed on unaffiliated device
+  kDisallowedOnUnaffiliatedDevice,
+
+  kMaxValue = kDisallowedOnUnaffiliatedDevice,
+};
+
+enum class ArcStatus {
+  // ARC disallowed for testing
+  kDisallowedForTesting,
+
+  // ARC is not available
+  kNotAvailable,
+
+  // Non-primary users are not supported in ARC
+  kNonPrimaryUsersNotSupported,
+
+  // ARC is disabled by flag for managed user
+  kDisabledByFlagForManagedUser,
+
+  // ARC is not allowed for the user
+  kDisallowedForUser,
+
+  // Device admin disallowed ARC for unaffiliated user
+  kDisallowedByDevicePolicyRestriction,
+
+  // ARC disallowed for unaffiliated users
+  kDisallowedByUserPolicyRestriction,
+
+  // ARC allowed on affiliated device
+  kAllowedOnAffiliatedDevice,
+
+  // ARC allowed on unaffilated device
+  kAllowedOnUnaffiliatedDevice,
+
+  // ARC allowed
+  kAllowed,
+};
 
 // Contains map of profile to check result of ARC allowed. Contains true if ARC
 // allowed check was performed and ARC is allowed. If map does not contain
@@ -106,6 +156,7 @@ bool IsArcCompatibleFilesystem(const base::FilePath& path) {
   // If it can be verified it is not on ecryptfs, then it is ok.
   struct statfs statfs_buf;
   if (statfs(path.value().c_str(), &statfs_buf) < 0) {
+    VLOG(1) << "statfs failed, errno=" << errno;
     return false;
   }
   return statfs_buf.f_type != ECRYPTFS_SUPER_MAGIC;
@@ -114,9 +165,29 @@ bool IsArcCompatibleFilesystem(const base::FilePath& path) {
 FileSystemCompatibilityState GetFileSystemCompatibilityPref(
     const AccountId& account_id) {
   user_manager::KnownUser known_user(g_browser_process->local_state());
-  return static_cast<FileSystemCompatibilityState>(
-      known_user.FindIntPath(account_id, prefs::kArcCompatibleFilesystemChosen)
-          .value_or(kFileSystemIncompatible));
+  if (auto pref = known_user.FindIntPath(account_id,
+                                         prefs::kArcCompatibleFilesystemChosen);
+      pref) {
+    return static_cast<FileSystemCompatibilityState>(pref.value());
+  }
+  VLOG(1) << "arc.compatible_filesystem.chosen not set. Assuming incompatible.";
+  return kFileSystemIncompatible;
+}
+
+// Similar to GetFileSystemCompatibilityPref, but when the pref is not found,
+// it optimistically assumes that the file system is compatible. This is for
+// the mitigation of issues like b/327969092 that unexpectedly clears the pref
+// during the initial sign-in.
+FileSystemCompatibilityState GetFileSystemCompatibilityPrefOptimistic(
+    const AccountId& account_id) {
+  user_manager::KnownUser known_user(g_browser_process->local_state());
+  if (auto pref = known_user.FindIntPath(account_id,
+                                         prefs::kArcCompatibleFilesystemChosen);
+      pref) {
+    return static_cast<FileSystemCompatibilityState>(pref.value());
+  }
+  VLOG(1) << "arc.compatible_filesystem.chosen not set. Assuming compatible.";
+  return kFileSystemCompatible;
 }
 
 // Stores the result of IsArcCompatibleFilesystem posted back from the blocking
@@ -165,11 +236,11 @@ bool IsUnaffiliatedArcAllowed() {
   return true;
 }
 
-bool IsArcAllowedForProfileInternal(const Profile* profile,
-                                    bool should_report_reason) {
+ArcStatus GetArcStatusForProfile(const Profile* profile,
+                                 bool should_report_reason) {
   if (g_disallow_for_testing) {
     VLOG_IF(1, should_report_reason) << "ARC is disallowed for testing.";
-    return false;
+    return ArcStatus::kDisallowedForTesting;
   }
 
   // ARC Kiosk can be enabled even if ARC is not yet supported on the device.
@@ -177,20 +248,20 @@ bool IsArcAllowedForProfileInternal(const Profile* profile,
   // created.
   if (!IsArcAvailable() && !(IsArcKioskMode() && IsArcKioskAvailable())) {
     VLOG_IF(1, should_report_reason) << "ARC is not available.";
-    return false;
+    return ArcStatus::kNotAvailable;
   }
 
   if (!ash::ProfileHelper::IsPrimaryProfile(profile)) {
     VLOG_IF(1, should_report_reason)
         << "Non-primary users are not supported in ARC.";
-    return false;
+    return ArcStatus::kNonPrimaryUsersNotSupported;
   }
 
   if (policy_util::IsArcDisabledForEnterprise() &&
       policy_util::IsAccountManaged(profile)) {
     VLOG_IF(1, should_report_reason)
         << "ARC is disabled by flag for managed users.";
-    return false;
+    return ArcStatus::kDisabledByFlagForManagedUser;
   }
 
   // Play Store requires an appropriate application install mechanism. Normal
@@ -201,26 +272,48 @@ bool IsArcAllowedForProfileInternal(const Profile* profile,
       ash::ProfileHelper::Get()->GetUserByProfile(profile);
   if (!IsArcAllowedForUser(user)) {
     VLOG_IF(1, should_report_reason) << "ARC is not allowed for the user.";
-    return false;
+    return ArcStatus::kDisallowedForUser;
   }
 
   if (!user->IsAffiliated() && !IsUnaffiliatedArcAllowed()) {
     VLOG_IF(1, should_report_reason)
         << "Device admin disallowed ARC for unaffiliated users.";
-    return false;
+    return ArcStatus::kDisallowedByDevicePolicyRestriction;
   }
 
   if (base::FeatureList::IsEnabled(kUnaffiliatedDeviceArcRestriction)) {
-    if (policy_util::IsAccountManaged(profile) && !user->IsAffiliated() &&
-        !(profile->GetPrefs()->GetBoolean(
-            prefs::kUnaffiliatedDeviceArcAllowed))) {
+    if (!user->IsAffiliated() &&
+        !profile->GetPrefs()->GetBoolean(
+            prefs::kUnaffiliatedDeviceArcAllowed) &&
+        policy_util::IsAccountManaged(profile)) {
       VLOG_IF(1, should_report_reason)
-        << "ARC disallowed for unaffiliated users";
-      return false;
+          << "ARC disallowed for unaffiliated users";
+      return arc::ArcStatus::kDisallowedByUserPolicyRestriction;
     }
   }
 
-  return true;
+  // Please add any condition that disallows ARC above this check.
+  if (base::FeatureList::IsEnabled(kUnaffiliatedDeviceArcRestriction)) {
+    const bool is_arc_allowed_on_unaffiliated_devices =
+        profile->GetPrefs()->GetBoolean(prefs::kUnaffiliatedDeviceArcAllowed);
+    if (user->IsAffiliated() && !is_arc_allowed_on_unaffiliated_devices) {
+      return ArcStatus::kAllowedOnAffiliatedDevice;
+    }
+    if (!user->IsAffiliated() && is_arc_allowed_on_unaffiliated_devices) {
+      return ArcStatus::kAllowedOnUnaffiliatedDevice;
+    }
+  }
+
+  return ArcStatus::kAllowed;
+}
+
+bool IsArcAllowedForProfileInternal(const Profile* profile,
+                                    bool should_report_reason) {
+  const ArcStatus status =
+      GetArcStatusForProfile(profile, should_report_reason);
+  return status == ArcStatus::kAllowed ||
+         status == ArcStatus::kAllowedOnAffiliatedDevice ||
+         status == ArcStatus::kAllowedOnUnaffiliatedDevice;
 }
 
 void ShowContactAdminDialog() {
@@ -273,6 +366,33 @@ void SharePathIfRequired(ConvertToContentUrlsAndShareCallback callback,
 }
 
 }  // namespace
+
+void RecordArcStatusBasedOnDeviceAffiliationUMA(Profile* profile) {
+  if (!policy_util::IsAccountManaged(profile) ||
+      !profile->GetPrefs()->GetBoolean(prefs::kArcEnabled)) {
+    return;
+  }
+
+  switch (GetArcStatusForProfile(profile, /*should_report_reason=*/false)) {
+    case arc::ArcStatus::kAllowedOnAffiliatedDevice:
+      base::UmaHistogramEnumeration(
+          "Arc.Provisioning.DeviceAffiliationAction",
+          arc::DeviceAffiliationBasedArcStatus::kAllowedOnAffiliatedDevice);
+      break;
+    case arc::ArcStatus::kAllowedOnUnaffiliatedDevice:
+      base::UmaHistogramEnumeration(
+          "Arc.Provisioning.DeviceAffiliationAction",
+          arc::DeviceAffiliationBasedArcStatus::kAllowedOnUnaffiliatedDevice);
+      break;
+    case arc::ArcStatus::kDisallowedByUserPolicyRestriction:
+      base::UmaHistogramEnumeration("Arc.Provisioning.DeviceAffiliationAction",
+                                    arc::DeviceAffiliationBasedArcStatus::
+                                        kDisallowedOnUnaffiliatedDevice);
+      break;
+    default:
+      break;
+  }
+}
 
 bool IsRealUserProfile(const Profile* profile) {
   // Return false for signin, lock screen and incognito profiles.
@@ -327,8 +447,8 @@ bool IsArcBlockedDueToIncompatibleFileSystem(const Profile* profile) {
   // for ARC kiosk as migration to ext4 should always be triggered.
   // Without this check it fails to start after browser crash as
   // compatibility info is stored in RAM.
-  if (user && (user->GetType() == user_manager::USER_TYPE_PUBLIC_ACCOUNT ||
-               user->GetType() == user_manager::USER_TYPE_ARC_KIOSK_APP)) {
+  if (user && (user->GetType() == user_manager::UserType::kPublicAccount ||
+               user->GetType() == user_manager::UserType::kArcKioskApp)) {
     return false;
   }
 
@@ -355,7 +475,7 @@ bool IsArcCompatibleFileSystemUsedForUser(const user_manager::User* user) {
   // ash::UserSessionManager does the actual file system check and stores
   // the result to prefs, so that it survives crash-restart.
   FileSystemCompatibilityState filesystem_compatibility =
-      GetFileSystemCompatibilityPref(user->GetAccountId());
+      GetFileSystemCompatibilityPrefOptimistic(user->GetAccountId());
   const bool is_filesystem_compatible =
       filesystem_compatibility != kFileSystemIncompatible ||
       g_known_compatible_users.Get().count(user->GetAccountId()) != 0;
@@ -414,7 +534,8 @@ bool SetArcPlayStoreEnabledForProfile(Profile* profile, bool enabled) {
       return false;
     }
     if (enabled) {
-      arc_session_manager->AllowActivation();
+      arc_session_manager->AllowActivation(
+          ArcSessionManager::AllowActivationReason::kUserEnableAction);
       arc_session_manager->RequestEnable();
     } else {
       arc_session_manager->RequestDisableWithArcDataRemoval();
@@ -430,8 +551,15 @@ bool AreArcAllOptInPreferencesIgnorableForProfile(const Profile* profile) {
   // The preferences are ignorable iff both backup&restore and location services
   // are set by policy.
   const PrefService* prefs = profile->GetPrefs();
-  return prefs->IsManagedPreference(prefs::kArcBackupRestoreEnabled) &&
-         prefs->IsManagedPreference(prefs::kArcLocationServiceEnabled);
+
+  if (ash::features::IsCrosPrivacyHubLocationEnabled()) {
+    // When PH is enabled, location toggle is no longer ARC specific (applies to
+    // entire ChromeOS);
+    return prefs->IsManagedPreference(prefs::kArcBackupRestoreEnabled);
+  } else {
+    return prefs->IsManagedPreference(prefs::kArcBackupRestoreEnabled) &&
+           prefs->IsManagedPreference(prefs::kArcLocationServiceEnabled);
+  }
 }
 
 bool IsArcOobeOptInActive() {

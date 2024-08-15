@@ -37,6 +37,7 @@ class UIBindingsDelegate : public DevToolsUIBindings::Delegate {
   void InspectElementCompleted() override;
   void SetIsDocked(bool is_docked) override;
   void OpenInNewTab(const std::string& url) override;
+  void OpenSearchResultsInNewTab(const std::string& query) override;
   void SetWhitelistedShortcuts(const std::string& message) override;
   void InspectedContentsClosing() override;
   void OnLoadCompleted() override;

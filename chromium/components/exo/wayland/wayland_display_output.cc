@@ -9,7 +9,6 @@
 #include <wayland-server-core.h>
 #include <wayland-server-protocol-core.h>
 
-#include "base/containers/cxx20_erase.h"
 #include "base/task/single_thread_task_runner.h"
 #include "components/exo/surface.h"
 #include "components/exo/wayland/server_util.h"
@@ -48,7 +47,8 @@ void DoDelete(WaylandDisplayOutput* output, int retry_count) {
 
 }  // namespace
 
-WaylandDisplayOutput::WaylandDisplayOutput(int64_t id) : id_(id) {}
+WaylandDisplayOutput::WaylandDisplayOutput(const display::Display& display)
+    : id_(display.id()), metrics_(display) {}
 
 WaylandDisplayOutput::~WaylandDisplayOutput() {
   // Empty the output_ids_ so that Unregister will be no op.
@@ -91,14 +91,6 @@ void WaylandDisplayOutput::OnDisplayRemoved() {
   }
 }
 
-int64_t WaylandDisplayOutput::id() const {
-  return id_;
-}
-
-void WaylandDisplayOutput::set_global(wl_global* global) {
-  global_ = global;
-}
-
 void WaylandDisplayOutput::UnregisterOutput(wl_resource* output_resource) {
   base::EraseIf(output_ids_, [output_resource](auto& pair) {
     return pair.second == output_resource;
@@ -135,6 +127,28 @@ wl_resource* WaylandDisplayOutput::GetOutputResourceForClient(
     return nullptr;
   }
   return iter->second;
+}
+
+void WaylandDisplayOutput::SendDisplayMetricsChanges(
+    const display::Display& display,
+    uint32_t changed_metrics) {
+  CHECK_EQ(display.id(), id_);
+  // Update output metrics before propagating display changes.
+  metrics_ = OutputMetrics(display);
+
+  for (auto& pair : output_ids_) {
+    if (auto* handler = GetUserDataAs<WaylandDisplayHandler>(pair.second)) {
+      handler->SendDisplayMetricsChanges(display, changed_metrics);
+    }
+  }
+}
+
+void WaylandDisplayOutput::SendOutputActivated() {
+  for (auto& pair : output_ids_) {
+    auto* handler = GetUserDataAs<WaylandDisplayHandler>(pair.second);
+    CHECK(handler);
+    handler->SendDisplayActivated();
+  }
 }
 
 }  // namespace wayland

@@ -83,14 +83,19 @@ ResultExpr RestrictGetSockoptForNetworkService() {
   ResultExpr socket_optname_switch =
       Switch(optname).Case(SO_ERROR, Allow()).Default(CrashSIGSYSSockopt());
   ResultExpr ipv6_optname_switch =
-      Switch(optname).Case(IPV6_V6ONLY, Allow()).Default(CrashSIGSYSSockopt());
+      Switch(optname)
+          .Cases({IPV6_V6ONLY, IPV6_TCLASS}, Allow())
+          .Default(CrashSIGSYSSockopt());
   ResultExpr tcp_optname_switch =
       Switch(optname).Case(TCP_INFO, Allow()).Default(CrashSIGSYSSockopt());
+  ResultExpr ip_optname_switch =
+      Switch(optname).Case(IP_TOS, Allow()).Default(CrashSIGSYSSockopt());
 
   return Switch(level)
       .Case(SOL_SOCKET, socket_optname_switch)
       .Case(SOL_IPV6, ipv6_optname_switch)
       .Case(SOL_TCP, tcp_optname_switch)
+      .Case(SOL_IP, ip_optname_switch)
       .Default(CrashSIGSYSSockopt());
 }
 
@@ -119,16 +124,16 @@ ResultExpr RestrictSetSockoptForNetworkService() {
   // IP_TOS and IPV6_TCLASS are for P2P sockets.
   ResultExpr ipv4_optname_switch =
       Switch(optname)
-          .Cases(
-              {IP_RECVERR, IP_MTU_DISCOVER, IP_MULTICAST_LOOP, IP_MULTICAST_TTL,
-               IP_MULTICAST_IF, IP_ADD_MEMBERSHIP, IP_DROP_MEMBERSHIP, IP_TOS},
-              Allow())
+          .Cases({IP_RECVERR, IP_MTU_DISCOVER, IP_MULTICAST_LOOP,
+                  IP_MULTICAST_TTL, IP_MULTICAST_IF, IP_ADD_MEMBERSHIP,
+                  IP_DROP_MEMBERSHIP, IP_TOS, IP_RECVTOS},
+                 Allow())
           .Default(CrashSIGSYSSockopt());
   ResultExpr ipv6_optname_switch =
       Switch(optname)
           .Cases({IPV6_RECVERR, IPV6_MTU_DISCOVER, IPV6_MULTICAST_LOOP,
                   IPV6_MULTICAST_HOPS, IPV6_MULTICAST_IF, IPV6_JOIN_GROUP,
-                  IPV6_LEAVE_GROUP, IPV6_TCLASS, IPV6_V6ONLY},
+                  IPV6_LEAVE_GROUP, IPV6_TCLASS, IPV6_V6ONLY, IPV6_RECVTCLASS},
                  Allow())
           .Default(CrashSIGSYSSockopt());
   ResultExpr tcp_optname_switch =

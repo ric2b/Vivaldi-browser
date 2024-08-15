@@ -21,7 +21,7 @@ struct NonZero {
 
 TEST(RandomBytesTest, CanGenerateRandomBytes) {
   std::array<uint8_t, 4> bytes;
-  GenerateRandomBytes(bytes.begin(), bytes.size());
+  GenerateRandomBytes(bytes.data(), bytes.size());
 
   NonZero pred;
   ASSERT_TRUE(std::any_of(bytes.begin(), bytes.end(), pred));
@@ -39,7 +39,7 @@ TEST(RandomBytesTest, KeysAreNotIdentical) {
   constexpr int kKeyLength = 100;
   std::array<std::array<uint8_t, kKeyLength>, kNumKeys> keys;
   for (int i = 0; i < kNumKeys; ++i) {
-    GenerateRandomBytes(keys[i].begin(), kKeyLength);
+    GenerateRandomBytes(keys[i].data(), kKeyLength);
   }
 
   std::sort(std::begin(keys), std::end(keys));

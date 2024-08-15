@@ -203,7 +203,7 @@ void ImagePainter::PaintReplaced(const PaintInfo& paint_info,
 
   // Disable cache in under-invalidation checking mode for animated image
   // because it may change before it's actually invalidated.
-  absl::optional<DisplayItemCacheSkipper> cache_skipper;
+  std::optional<DisplayItemCacheSkipper> cache_skipper;
   if (RuntimeEnabledFeatures::PaintUnderInvalidationCheckingEnabled() &&
       layout_image_.ImageResource() &&
       layout_image_.ImageResource()->MaybeAnimated())
@@ -213,11 +213,11 @@ void ImagePainter::PaintReplaced(const PaintInfo& paint_info,
     // Draw an outline rect where the image should be.
     BoxDrawingRecorder recorder(context, layout_image_, paint_info.phase,
                                 paint_offset);
-    context.SetStrokeStyle(kSolidStroke);
     context.SetStrokeColor(Color::kLightGray);
+    context.SetStrokeThickness(1);
     gfx::RectF outline_rect(ToPixelSnappedRect(content_rect));
     outline_rect.Inset(0.5f);
-    context.StrokeRect(outline_rect, 1,
+    context.StrokeRect(outline_rect,
                        PaintAutoDarkMode(layout_image_.StyleRef(),
                                          DarkModeFilter::ElementRole::kBorder));
     return;

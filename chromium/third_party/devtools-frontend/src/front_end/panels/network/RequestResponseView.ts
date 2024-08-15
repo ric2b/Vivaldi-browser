@@ -31,7 +31,7 @@
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
-import * as SDK from '../../core/sdk/sdk.js';
+import type * as SDK from '../../core/sdk/sdk.js';
 import * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as SourceFrame from '../../ui/legacy/components/source_frame/source_frame.js';
 import * as UI from '../../ui/legacy/legacy.js';
@@ -56,7 +56,7 @@ export class RequestResponseView extends UI.Widget.VBox {
   constructor(request: SDK.NetworkRequest.NetworkRequest) {
     super();
     this.element.classList.add('request-view');
-    this.element.setAttribute('jslog', `${VisualLogging.pane().context('response')}`);
+    this.element.setAttribute('jslog', `${VisualLogging.pane('response').track({resize: true})}`);
     this.request = request;
     this.contentViewPromise = null;
   }
@@ -67,9 +67,9 @@ export class RequestResponseView extends UI.Widget.VBox {
       return sourceView;
     }
 
-    const contentData = await request.contentData();
+    const contentData = await request.requestStreamingContent();
     // Note: Even though WASM is binary data, the source view will disassemble it and show a text representation.
-    if (SDK.ContentData.ContentData.isError(contentData) ||
+    if (TextUtils.StreamingContentData.isError(contentData) ||
         !(contentData.isTextContent || contentData.mimeType === 'application/wasm')) {
       requestToSourceView.delete(request);
       return null;
@@ -84,8 +84,9 @@ export class RequestResponseView extends UI.Widget.VBox {
       mimeType = request.resourceType().canonicalMimeType() || request.mimeType;
     }
 
-    const isMinified =
-        contentData.mimeType === 'application/wasm' ? false : TextUtils.TextUtils.isMinified(contentData.text);
+    const isMinified = contentData.mimeType === 'application/wasm' ?
+        false :
+        TextUtils.TextUtils.isMinified(contentData.content().text);
     const mediaType = Common.ResourceType.ResourceType.mediaTypeForMetrics(
         mimeType, request.resourceType().isFromSourceMap(), isMinified);
 
@@ -113,13 +114,13 @@ export class RequestResponseView extends UI.Widget.VBox {
   }
 
   async createPreview(): Promise<UI.Widget.Widget> {
-    const contentData = await this.request.contentData();
-    if (SDK.ContentData.ContentData.isError(contentData)) {
+    const contentData = await this.request.requestStreamingContent();
+    if (TextUtils.StreamingContentData.isError(contentData)) {
       return new UI.EmptyWidget.EmptyWidget(i18nString(UIStrings.failedToLoadResponseData) + ': ' + contentData.error);
     }
 
     const sourceView = await RequestResponseView.sourceViewForRequest(this.request);
-    if (contentData.isEmpty || !sourceView || this.request.statusCode === 204) {
+    if (contentData.content().isEmpty || !sourceView || this.request.statusCode === 204) {
       return new UI.EmptyWidget.EmptyWidget(i18nString(UIStrings.thisRequestHasNoResponseData));
     }
 

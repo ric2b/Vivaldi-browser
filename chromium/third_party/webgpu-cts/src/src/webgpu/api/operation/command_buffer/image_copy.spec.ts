@@ -23,8 +23,9 @@ export const description = `writeTexture + copyBufferToTexture + copyTextureToBu
 * copy_with_no_image_or_slice_padding_and_undefined_values: test that when copying a single row we can set any bytesPerRow value and when copying a single\
  slice we can set rowsPerImage to 0. Also test setting offset, rowsPerImage, mipLevel, origin, origin.{x,y,z} to undefined.
 
+Note: more coverage of memory synchronization for different read and write texture methods are in same_subresource.spec.ts.
+
 * TODO:
-  - add another initMethod which renders the texture [3]
   - test copyT2B with buffer size not divisible by 4 (not done because expectContents 4-byte alignment)
   - Convert the float32 values in initialData into the ones compatible to the depth aspect of
     depthFormats when depth16unorm is supported by the browsers in
@@ -86,7 +87,7 @@ type InitMethod = 'WriteTexture' | 'CopyB2T';
  * - PartialCopyT2B: do CopyT2B to check that the part of the texture we copied to with InitMethod
  *   matches the data we were copying and that we don't overwrite any data in the target buffer that
  *   we're not supposed to - that's primarily for testing CopyT2B functionality.
- * - FullCopyT2B: do CopyT2B on the whole texture and check wether the part we copied to matches
+ * - FullCopyT2B: do CopyT2B on the whole texture and check whether the part we copied to matches
  *   the data we were copying and that the nothing else was modified - that's primarily for testing
  *   WriteTexture and CopyB2T.
  *
@@ -1357,8 +1358,6 @@ class ImageCopyTest extends TextureTestMixin(GPUTest) {
 
 /**
  * This is a helper function used for filtering test parameters
- *
- * [3]: Modify this after introducing tests with rendering.
  */
 function formatCanBeTested({ format }: { format: ColorTextureFormat }): boolean {
   return kTextureFormatInfo[format].color.copyDst && kTextureFormatInfo[format].color.copySrc;
@@ -1596,7 +1595,7 @@ works for every format with 2d and 2d-array textures.
     };
     let textureHeight = 4 * info.blockHeight;
     let rowsPerImage = rowsPerImageEqualsCopyHeight ? copyHeight : copyHeight + 1;
-    const bytesPerRow = align(copyWidth * info.bytesPerBlock, 256);
+    const bytesPerRow = align(copyWidth * info.color.bytes, 256);
 
     if (dimension === '1d') {
       copySize.height = 1;

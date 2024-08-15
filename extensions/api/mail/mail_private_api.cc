@@ -39,7 +39,8 @@ bool deleteFile(base::FilePath file_path,
   return base::DeleteFile(file_path);
 }
 
-bool renameFile(base::FilePath file_path, base::FilePath::StringType file_name,
+bool renameFile(base::FilePath file_path,
+                base::FilePath::StringType file_name,
                 base::FilePath::StringType new_file_name) {
   if (file_name.length() == 0) {
     return false;
@@ -194,7 +195,7 @@ void MailAPI::OnListenerAdded(const EventListenerInfo& details) {
 }
 
 ExtensionFunction::ResponseAction MailPrivateGetFilePathsFunction::Run() {
-  absl::optional<mail_private::GetFilePaths::Params> params(
+  std::optional<mail_private::GetFilePaths::Params> params(
       mail_private::GetFilePaths::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -219,7 +220,7 @@ ExtensionFunction::ResponseAction MailPrivateGetFilePathsFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction MailPrivateGetFullPathFunction::Run() {
-  absl::optional<mail_private::GetFullPath::Params> params(
+  std::optional<mail_private::GetFullPath::Params> params(
       mail_private::GetFullPath::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -359,7 +360,7 @@ GetDirectoryResult CreateDirectory(base::FilePath file_path,
 
 ExtensionFunction::ResponseAction
 MailPrivateWriteTextToMessageFileFunction::Run() {
-  absl::optional<mail_private::WriteTextToMessageFile::Params> params(
+  std::optional<mail_private::WriteTextToMessageFile::Params> params(
       mail_private::WriteTextToMessageFile::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -394,7 +395,7 @@ void MailPrivateWriteTextToMessageFileFunction::OnFinished(bool result) {
 
 ExtensionFunction::ResponseAction
 MailPrivateWriteBufferToMessageFileFunction::Run() {
-  absl::optional<mail_private::WriteBufferToMessageFile::Params> params(
+  std::optional<mail_private::WriteBufferToMessageFile::Params> params(
       mail_private::WriteBufferToMessageFile::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -431,7 +432,7 @@ bool Delete(base::FilePath file_path, base::FilePath::StringType file_name) {
 }
 
 ExtensionFunction::ResponseAction MailPrivateDeleteMessageFileFunction::Run() {
-  absl::optional<mail_private::DeleteMessageFile::Params> params(
+  std::optional<mail_private::DeleteMessageFile::Params> params(
       mail_private::DeleteMessageFile::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -466,14 +467,14 @@ void MailPrivateDeleteMessageFileFunction::OnFinished(bool result) {
 }
 
 ExtensionFunction::ResponseAction MailPrivateRenameMessageFileFunction::Run() {
-  absl::optional<mail_private::RenameMessageFile::Params> params(
+  std::optional<mail_private::RenameMessageFile::Params> params(
       mail_private::RenameMessageFile::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::vector<std::string>& string_paths = params->paths;
   base::FilePath::StringType file_name = StringToStringType(params->file_name);
-  base::FilePath::StringType new_file_name = StringToStringType(
-    params->new_file_name);
+  base::FilePath::StringType new_file_name =
+      StringToStringType(params->new_file_name);
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
   base::FilePath file_path = profile->GetPath();
@@ -495,7 +496,8 @@ ExtensionFunction::ResponseAction MailPrivateRenameMessageFileFunction::Run() {
 }
 
 void MailPrivateRenameMessageFileFunction::OnFinished(bool result) {
-  Respond(ArgumentList(mail_private::RenameMessageFile::Results::Create(result)));
+  Respond(
+      ArgumentList(mail_private::RenameMessageFile::Results::Create(result)));
 }
 
 ReadFileResult Read(base::FilePath file_path) {
@@ -518,7 +520,7 @@ ReadFileResult Read(base::FilePath file_path) {
 }
 
 ExtensionFunction::ResponseAction MailPrivateReadFileToBufferFunction::Run() {
-  absl::optional<mail_private::ReadFileToBuffer::Params> params(
+  std::optional<mail_private::ReadFileToBuffer::Params> params(
       mail_private::ReadFileToBuffer::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -551,7 +553,7 @@ void MailPrivateReadFileToBufferFunction::OnFinished(ReadFileResult result) {
   }
 }
 ExtensionFunction::ResponseAction MailPrivateMessageFileExistsFunction::Run() {
-  absl::optional<mail_private::MessageFileExists::Params> params(
+  std::optional<mail_private::MessageFileExists::Params> params(
       mail_private::MessageFileExists::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -579,7 +581,7 @@ ExtensionFunction::ResponseAction MailPrivateMessageFileExistsFunction::Run() {
 
 ExtensionFunction::ResponseAction
 MailPrivateReadMessageFileToBufferFunction::Run() {
-  absl::optional<mail_private::ReadMessageFileToBuffer::Params> params(
+  std::optional<mail_private::ReadMessageFileToBuffer::Params> params(
       mail_private::ReadMessageFileToBuffer::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -621,7 +623,7 @@ void MailPrivateReadMessageFileToBufferFunction::OnFinished(
 }
 
 ExtensionFunction::ResponseAction MailPrivateReadFileToTextFunction::Run() {
-  absl::optional<mail_private::ReadFileToText::Params> params(
+  std::optional<mail_private::ReadFileToText::Params> params(
       mail_private::ReadFileToText::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -662,7 +664,7 @@ GetDirectoryResult GetDirectory(base::FilePath file_path) {
 }
 
 ExtensionFunction::ResponseAction MailPrivateGetFileDirectoryFunction::Run() {
-  absl::optional<mail_private::GetFileDirectory::Params> params(
+  std::optional<mail_private::GetFileDirectory::Params> params(
       mail_private::GetFileDirectory::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -695,7 +697,7 @@ void MailPrivateGetFileDirectoryFunction::OnFinished(
 
 ExtensionFunction::ResponseAction
 MailPrivateCreateFileDirectoryFunction::Run() {
-  absl::optional<mail_private::CreateFileDirectory::Params> params(
+  std::optional<mail_private::CreateFileDirectory::Params> params(
       mail_private::CreateFileDirectory::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -738,7 +740,7 @@ mail_client::MessageRow GetMessageRow(const mail_private::Message& message) {
 }
 
 ExtensionFunction::ResponseAction MailPrivateCreateMessagesFunction::Run() {
-  absl::optional<mail_private::CreateMessages::Params> params(
+  std::optional<mail_private::CreateMessages::Params> params(
       mail_private::CreateMessages::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -773,7 +775,7 @@ void MailPrivateCreateMessagesFunction::CreateMessagesComplete(bool result) {
 }
 
 ExtensionFunction::ResponseAction MailPrivateDeleteMessagesFunction::Run() {
-  absl::optional<mail_private::DeleteMessages::Params> params(
+  std::optional<mail_private::DeleteMessages::Params> params(
       mail_private::DeleteMessages::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -800,7 +802,7 @@ void MailPrivateDeleteMessagesFunction::DeleteMessagesComplete(bool result) {
 }
 
 ExtensionFunction::ResponseAction MailPrivateUpdateMessageFunction::Run() {
-  absl::optional<mail_private::UpdateMessage::Params> params(
+  std::optional<mail_private::UpdateMessage::Params> params(
       mail_private::UpdateMessage::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -830,7 +832,7 @@ void MailPrivateUpdateMessageFunction::UpdateMessageComplete(
 }
 
 ExtensionFunction::ResponseAction MailPrivateSearchMessagesFunction::Run() {
-  absl::optional<mail_private::SearchMessages::Params> params(
+  std::optional<mail_private::SearchMessages::Params> params(
       mail_private::SearchMessages::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -863,7 +865,7 @@ void MailPrivateSearchMessagesFunction::MessagesSearchComplete(
 }
 
 ExtensionFunction::ResponseAction MailPrivateMatchMessageFunction::Run() {
-  absl::optional<mail_private::MatchMessage::Params> params(
+  std::optional<mail_private::MatchMessage::Params> params(
       mail_private::MatchMessage::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -913,7 +915,7 @@ ExtensionFunction::ResponseAction MailPrivateStartMigrationFunction::Run() {
   MailClientService* service =
       MailClientServiceFactory::GetForProfile(GetProfile());
 
-  service->MigrateSerchDB(
+  service->MigrateSearchDB(
       base::BindOnce(&MailPrivateStartMigrationFunction::OnMigrationFinished,
                      this),
       &task_tracker_);
@@ -922,6 +924,22 @@ ExtensionFunction::ResponseAction MailPrivateStartMigrationFunction::Run() {
 
 void MailPrivateStartMigrationFunction::OnMigrationFinished(bool success) {
   Respond(ArgumentList(mail_private::StartMigration::Results::Create(success)));
+}
+
+ExtensionFunction::ResponseAction MailPrivateDeleteMailSearchDBFunction::Run() {
+  MailClientService* service =
+      MailClientServiceFactory::GetForProfile(GetProfile());
+
+  service->DeleteMailSearchDB(
+      base::BindOnce(&MailPrivateDeleteMailSearchDBFunction::OnDeleteFinished,
+                     this),
+      &task_tracker_);
+  return RespondLater();
+}
+
+void MailPrivateDeleteMailSearchDBFunction::OnDeleteFinished(bool success) {
+  Respond(
+      ArgumentList(mail_private::DeleteMailSearchDB::Results::Create(success)));
 }
 
 }  //  namespace extensions

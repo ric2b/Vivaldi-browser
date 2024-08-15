@@ -140,10 +140,22 @@ export interface PDFOptions {
     omitBackground?: boolean;
     /**
      * Generate tagged (accessible) PDF.
-     * @defaultValue `false`
+     * @defaultValue `true`
      * @experimental
      */
     tagged?: boolean;
+    /**
+     * Generate document outline.
+     *
+     * @remarks
+     * If this is enabled the PDF will also be tagged (accessible)
+     * Currently only works in old Headless (headless = 'shell')
+     * crbug/840455#c47
+     *
+     * @defaultValue `false`
+     * @experimental
+     */
+    outline?: boolean;
     /**
      * Timeout in milliseconds. Pass `0` to disable timeout.
      * @defaultValue `30_000`
@@ -173,7 +185,7 @@ export interface ParsedPDFOptionsInterface {
 /**
  * @internal
  */
-export type ParsedPDFOptions = Required<Omit<PDFOptions, 'path' | 'format'> & ParsedPDFOptionsInterface>;
+export type ParsedPDFOptions = Required<Omit<PDFOptions, 'path' | 'format' | 'timeout'> & ParsedPDFOptionsInterface>;
 /**
  * @internal
  */

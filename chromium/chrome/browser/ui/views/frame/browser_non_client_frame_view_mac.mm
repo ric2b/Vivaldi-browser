@@ -139,8 +139,8 @@ void BrowserNonClientFrameViewMac::OnFullscreenStateChanged() {
         browser_view()->IsFullscreen());
     UpdateFullscreenTopUI();
 
-    // browser_view()->Layout() is not needed since top chrome is in another
-    // widget.
+    // browser_view()->DeprecatedLayoutImmediately() is not needed since top
+    // chrome is in another widget.
     return;
   }
 
@@ -154,7 +154,7 @@ void BrowserNonClientFrameViewMac::OnFullscreenStateChanged() {
     UpdateFullscreenTopUI();
     [fullscreen_toolbar_controller_ exitFullscreenMode];
   }
-  browser_view()->Layout();
+  browser_view()->DeprecatedLayoutImmediately();
 }
 
 bool BrowserNonClientFrameViewMac::CaptionButtonsOnLeadingEdge() const {
@@ -175,8 +175,16 @@ gfx::Rect BrowserNonClientFrameViewMac::GetBoundsForTabStripRegion(
   gfx::Rect bounds(0, GetTopInset(restored), width(),
                    tabstrip_minimum_size.height());
 
-  // Do not draw caption buttons on fullscreen.
-  if (!frame()->IsFullscreen()) {
+  // If we do not inset, the leftmost tab doesn't blend well with the bottom of
+  // the tab strip. Normally, we would naturally have an inset from either the
+  // caption buttons or the tab search button.
+  if (frame()->IsFullscreen()) {
+    if (features::IsChromeRefresh2023() &&
+        !browser_view()->UsesImmersiveFullscreenMode()) {
+      bounds.Inset(
+          gfx::Insets::TLBR(0, GetLayoutConstant(TOOLBAR_CORNER_RADIUS), 0, 0));
+    }
+  } else {
     bounds.Inset(GetCaptionButtonInsets());
   }
 
@@ -288,12 +296,26 @@ void BrowserNonClientFrameViewMac::UpdateFullscreenTopUI() {
               remote_cocoa::mojom::ToolbarVisibilityStyle::kAutohide},
              {FullscreenToolbarStyle::TOOLBAR_NONE,
               remote_cocoa::mojom::ToolbarVisibilityStyle::kNone}});
-    const auto* it = kStyleMap.find(new_style);
+    const auto it = kStyleMap.find(new_style);
     remote_cocoa::mojom::ToolbarVisibilityStyle mapped_style =
         it != kStyleMap.end()
             ? it->second
             : remote_cocoa::mojom::ToolbarVisibilityStyle::kAutohide;
+    std::optional<remote_cocoa::mojom::ToolbarVisibilityStyle> old_style =
+        std::exchange(current_toolbar_style_, mapped_style);
     ns_window_mojo->UpdateToolbarVisibility(mapped_style);
+
+    // Update the immersive controller about content fullscreen changes.
+    if (mapped_style == remote_cocoa::mojom::ToolbarVisibilityStyle::kNone) {
+      browser_view()->immersive_mode_controller()->OnContentFullscreenChanged(
+          true);
+    } else if (old_style.has_value() &&
+               old_style ==
+                   remote_cocoa::mojom::ToolbarVisibilityStyle::kNone) {
+      browser_view()->immersive_mode_controller()->OnContentFullscreenChanged(
+          false);
+    }
+
     // The layout changes further down are not needed in immersive fullscreen.
     return;
   }
@@ -312,7 +334,7 @@ void BrowserNonClientFrameViewMac::UpdateFullscreenTopUI() {
 
   // Re-layout if toolbar style changes in fullscreen mode.
   if (frame()->IsFullscreen()) {
-    browser_view()->Layout();
+    browser_view()->DeprecatedLayoutImmediately();
   }
 }
 
@@ -469,10 +491,10 @@ void BrowserNonClientFrameViewMac::OnPaint(gfx::Canvas* canvas) {
     PaintThemedFrame(canvas);
 }
 
-void BrowserNonClientFrameViewMac::Layout() {
+void BrowserNonClientFrameViewMac::Layout(PassKey) {
   if (browser_view()->IsWindowControlsOverlayEnabled())
     LayoutWindowControlsOverlay();
-  NonClientFrameView::Layout();
+  LayoutSuperclass<NonClientFrameView>(this);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -286,14 +286,16 @@ bool HeadlessContentBrowserClient::IsSharedStorageAllowed(
     content::BrowserContext* browser_context,
     content::RenderFrameHost* rfh,
     const url::Origin& top_frame_origin,
-    const url::Origin& accessing_origin) {
+    const url::Origin& accessing_origin,
+    std::string* out_debug_message) {
   return true;
 }
 
 bool HeadlessContentBrowserClient::IsSharedStorageSelectURLAllowed(
     content::BrowserContext* browser_context,
     const url::Origin& top_frame_origin,
-    const url::Origin& accessing_origin) {
+    const url::Origin& accessing_origin,
+    std::string* out_debug_message) {
   return true;
 }
 
@@ -337,10 +339,10 @@ bool HeadlessContentBrowserClient::CanAcceptUntrustedExchangesIfNeeded() {
       switches::kUserDataDir);
 }
 
-device::GeolocationManager*
-HeadlessContentBrowserClient::GetGeolocationManager() {
+device::GeolocationSystemPermissionManager*
+HeadlessContentBrowserClient::GetGeolocationSystemPermissionManager() {
 #if BUILDFLAG(IS_MAC)
-  return browser_->GetGeolocationManager();
+  return browser_->GetGeolocationSystemPermissionManager();
 #else
   return nullptr;
 #endif

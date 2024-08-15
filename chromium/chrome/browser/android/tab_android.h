@@ -153,6 +153,7 @@ class TabAndroid : public base::SupportsUserData {
       const base::android::JavaParamRef<jobject>& jweb_contents_delegate,
       const base::android::JavaParamRef<jobject>&
           jcontext_menu_populator_factory);
+  void InitializeAutofillIfNecessary(JNIEnv* env);
   void UpdateDelegates(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jweb_contents_delegate,
@@ -210,9 +211,6 @@ class TabAndroid : public base::SupportsUserData {
       const base::android::JavaParamRef<jobject>& j_new_web_contents,
       jboolean did_start_load,
       jboolean did_finish_load);
-
-  // Vivaldi: Init the autofill driver.
-  void InitializeAutofillDriver(JNIEnv* env);
 };
 
 #endif  // CHROME_BROWSER_ANDROID_TAB_ANDROID_H_

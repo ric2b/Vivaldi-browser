@@ -42,7 +42,13 @@ class InputListenerImpl : public test::InputListener {
 
 }  // namespace
 
-TEST_F(DataDeviceManagerTest, Mouse) {
+// TODO(crbug.com/1521845): enable the flaky test.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_Mouse DISABLED_Mouse
+#else
+#define MAYBE_Mouse Mouse
+#endif
+TEST_F(DataDeviceManagerTest, MAYBE_Mouse) {
   test::ResourceKey surface_key;
   InputListenerImpl* input_listener = nullptr;
 
@@ -136,7 +142,13 @@ TEST_F(DataDeviceManagerTest, Mouse) {
   }
 }
 
-TEST_F(DataDeviceManagerTest, Touch) {
+// TODO(crbug.com/1521845): enable the flaky test.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_Touch DISABLED_Touch
+#else
+#define MAYBE_Touch Touch
+#endif
+TEST_F(DataDeviceManagerTest, MAYBE_Touch) {
   test::ResourceKey surface_key;
   InputListenerImpl* input_listener = nullptr;
 

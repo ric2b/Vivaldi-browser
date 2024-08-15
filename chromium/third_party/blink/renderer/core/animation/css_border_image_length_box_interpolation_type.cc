@@ -12,6 +12,8 @@
 #include "third_party/blink/renderer/core/animation/list_interpolation_functions.h"
 #include "third_party/blink/renderer/core/animation/side_index.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
+#include "third_party/blink/renderer/core/css/css_math_function_value.h"
+#include "third_party/blink/renderer/core/css/css_numeric_literal_value.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_quad_value.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
@@ -283,7 +285,7 @@ CSSBorderImageLengthBoxInterpolationType::MaybeConvertNeutral(
     ConversionCheckers& conversion_checkers) const {
   SideTypes underlying_side_types(underlying);
   conversion_checkers.push_back(
-      std::make_unique<UnderlyingSideTypesChecker>(underlying_side_types));
+      MakeGarbageCollected<UnderlyingSideTypesChecker>(underlying_side_types));
   return InterpolationValue(underlying.interpolable_value->CloneAndZero(),
                             underlying.non_interpolable_value);
 }
@@ -304,7 +306,7 @@ CSSBorderImageLengthBoxInterpolationType::MaybeConvertInherit(
     ConversionCheckers& conversion_checkers) const {
   const BorderImageLengthBox& inherited =
       GetBorderImageLengthBox(CssProperty(), *state.ParentStyle());
-  conversion_checkers.push_back(std::make_unique<InheritedSideTypesChecker>(
+  conversion_checkers.push_back(MakeGarbageCollected<InheritedSideTypesChecker>(
       CssProperty(), SideTypes(inherited)));
   return ConvertBorderImageLengthBox(inherited,
                                      state.ParentStyle()->EffectiveZoom());
@@ -332,8 +334,18 @@ InterpolationValue CSSBorderImageLengthBoxInterpolationType::MaybeConvertValue(
 
         auto* side_primitive_value = DynamicTo<CSSPrimitiveValue>(side);
         if (side_primitive_value && side_primitive_value->IsNumber()) {
-          return ConvertBorderImageNumberSide(
-              side_primitive_value->GetDoubleValue());
+          if (auto* side_numeric_value =
+                  DynamicTo<CSSNumericLiteralValue>(side)) {
+            return ConvertBorderImageNumberSide(
+                side_numeric_value->GetDoubleValue());
+          }
+          CHECK(side_primitive_value->IsMathFunctionValue());
+          return InterpolationValue(
+              MakeGarbageCollected<InterpolableNumber>(
+                  *To<CSSMathFunctionValue>(side_primitive_value)
+                       ->ExpressionNode()),
+              CSSBorderImageLengthBoxSideNonInterpolableValue::Create(
+                  SideType::kNumber));
         }
 
         auto* side_identifier_value = DynamicTo<CSSIdentifierValue>(side);
@@ -374,10 +386,8 @@ void CSSBorderImageLengthBoxInterpolationType::Composite(
   ListInterpolationFunctions::Composite(
       underlying_value_owner, underlying_fraction, *this, value,
       ListInterpolationFunctions::LengthMatchingStrategy::kEqual,
-      WTF::BindRepeating(
-          ListInterpolationFunctions::InterpolableValuesKnownCompatible),
-      WTF::BindRepeating(NonInterpolableSidesAreCompatible),
-      WTF::BindRepeating(CompositeSide));
+      ListInterpolationFunctions::InterpolableValuesKnownCompatible,
+      NonInterpolableSidesAreCompatible, CompositeSide);
 }
 
 void CSSBorderImageLengthBoxInterpolationType::ApplyStandardPropertyValue(
@@ -391,7 +401,8 @@ void CSSBorderImageLengthBoxInterpolationType::ApplyStandardPropertyValue(
                               &state](wtf_size_t index) -> BorderImageLength {
     switch (GetSideType(non_interpolable_list.Get(index))) {
       case SideType::kNumber:
-        return ClampTo<double>(To<InterpolableNumber>(list.Get(index))->Value(),
+        return ClampTo<double>(To<InterpolableNumber>(list.Get(index))
+                                   ->Value(state.CssToLengthConversionData()),
                                0);
       case SideType::kAuto:
         return Length::Auto();

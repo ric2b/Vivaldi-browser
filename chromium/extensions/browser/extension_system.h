@@ -7,6 +7,7 @@
 
 #include <optional>
 #include <string>
+
 #include "base/functional/callback.h"
 #include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
@@ -14,6 +15,7 @@
 #include "extensions/browser/install/crx_install_error.h"
 #include "extensions/buildflags/buildflags.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_id.h"
 
 #if !BUILDFLAG(ENABLE_EXTENSIONS)
 #error "Extensions must be enabled"
@@ -123,7 +125,7 @@ class ExtensionSystem : public KeyedService {
   // the given extension immediately instead of waiting until idle. Ownership
   // of |unpacked_dir| in the filesystem is transferred and implementors of
   // this function are responsible for cleaning it up on errors, etc.
-  virtual void InstallUpdate(const std::string& extension_id,
+  virtual void InstallUpdate(const ExtensionId& extension_id,
                              const std::string& public_key,
                              const base::FilePath& unpacked_dir,
                              bool install_immediately,
@@ -131,7 +133,7 @@ class ExtensionSystem : public KeyedService {
 
   // Perform various actions depending on the Omaga attributes on the extension.
   virtual void PerformActionBasedOnOmahaAttributes(
-      const std::string& extension_id,
+      const ExtensionId& extension_id,
       const base::Value::Dict& attributes) = 0;
 
   // Attempts finishing installation of an update for an extension with the
@@ -139,7 +141,7 @@ class ExtensionSystem : public KeyedService {
   // |install_immediately| - Install the extension should be installed if it is
   // currently in use.
   // Returns whether the extension installation was finished.
-  virtual bool FinishDelayedInstallationIfReady(const std::string& extension_id,
+  virtual bool FinishDelayedInstallationIfReady(const ExtensionId& extension_id,
                                                 bool install_immediately) = 0;
 };
 

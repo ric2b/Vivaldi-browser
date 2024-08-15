@@ -11,6 +11,8 @@
 #include "ash/app_list/app_list_bubble_event_filter.h"
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/app_list/app_list_event_targeter.h"
+#include "ash/app_list/apps_collections_controller.h"
+#include "ash/app_list/views/app_list_bubble_apps_collections_page.h"
 #include "ash/app_list/views/app_list_bubble_apps_page.h"
 #include "ash/app_list/views/app_list_bubble_view.h"
 #include "ash/app_list/views/app_list_drag_and_drop_host.h"
@@ -190,7 +192,10 @@ void AppListBubblePresenter::Show(int64_t display_id) {
     bubble_view_->AbortAllAnimations();
 
   is_target_visibility_show_ = true;
-  target_page_ = AppListBubblePage::kApps;
+
+  target_page_ = AppsCollectionsController::Get()->ShouldShowAppsCollection()
+                     ? AppListBubblePage::kAppsCollections
+                     : AppListBubblePage::kApps;
 
   controller_->OnVisibilityWillChange(/*visible=*/true, display_id);
 
@@ -458,7 +463,8 @@ void AppListBubblePresenter::OnShelfShuttingDown() {
     bubble_view_->SetDragAndDropHostOfCurrentAppList(nullptr);
 }
 
-void AppListBubblePresenter::OnPressOutsideBubble() {
+void AppListBubblePresenter::OnPressOutsideBubble(
+    const ui::LocatedEvent& event) {
   // Presses outside the bubble could be activating a shelf item. Record the
   // app list state prior to dismissal.
   controller_->RecordAppListState();

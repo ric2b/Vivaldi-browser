@@ -66,6 +66,7 @@ constexpr char kDiscoverableTimeoutProperty[] = "DiscoverableTimeout";
 constexpr char kDiscoveringProperty[] = "Discovering";
 constexpr char kUUIDsProperty[] = "UUIDs";
 constexpr char kModaliasProperty[] = "Modalias";
+constexpr char kRolesProperty[] = "Roles";
 constexpr char kStackSyncQuittingProperty[] = "StackSyncQuitting";
 constexpr char kUseSuspendNotifierProperty[] = "UseSuspendNotifier";
 
@@ -613,7 +614,10 @@ constexpr char kSetAdvertisingIntervals[] = "SetAdvertisingIntervals";
 constexpr char kResetAdvertising[] = "ResetAdvertising";
 
 // Bluetooth LE Advertising Manager properties.
-constexpr char kIsTXPowerSupportedProperty[] = "IsTXPowerSupported";
+constexpr char kSupportedFeatures[] = "SupportedFeatures";
+
+// Possible values for the "SupportedFeatures" property.
+constexpr char kSupportedFeaturesHardwareOffload[] = "HardwareOffload";
 
 // Bluetooth LE Advertising Manager errors.
 constexpr char kErrorAlreadyExists[] = "org.bluez.Error.AlreadyExists";
@@ -645,5 +649,34 @@ constexpr char kSetServiceAllowList[] = "SetServiceAllowList";
 constexpr char kServiceAllowListProperty[] = "ServiceAllowList";
 constexpr char kIsBlockedByPolicyProperty[] = "AffectedByPolicy";
 }  // namespace bluetooth_admin_policy
+
+// Bluetooth manager.
+namespace bluetooth_manager {
+constexpr char kBluetoothManagerInterface[] = "org.chromium.bluetooth.Manager";
+constexpr char kBluetoothManagerServicePath[] =
+    "/org/chromium/bluetooth/Manager";
+constexpr char kBluetoothManagerServiceName[] =
+    "org.chromium.bluetooth.Manager";
+constexpr char kBluetoothManagerCallbackInterface[] =
+    "org.chromium.bluetooth.ManagerCallback";
+
+// Methods.
+constexpr char kBluetoothManagerRegisterCallback[] = "RegisterCallback";
+
+// Callback Methods.
+constexpr char kBluetoothManagerOnHciEnabledChanged[] = "OnHciEnabledChanged";
+}  // namespace bluetooth_manager
+
+// Floss's battery manager.
+namespace battery_manager {
+constexpr char kFlossBatteryProviderManagerInterface[] =
+    "org.chromium.bluetooth.BatteryProviderManager";
+constexpr char kFlossBatteryProviderManagerServicePath[] =
+    "/org/chromium/bluetooth/hci0/battery_provider_manager";
+constexpr char kFlossBatteryProviderManagerServiceName[] =
+    "org.chromium.bluetooth";
+constexpr char kFlossBatteryProviderManagerCallbackInterface[] =
+    "org.chromium.bluetooth.BatteryProviderCallback";
+}  // namespace battery_manager
 
 #endif  // SYSTEM_API_DBUS_BLUETOOTH_DBUS_CONSTANTS_H_

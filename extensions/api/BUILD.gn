@@ -6,70 +6,73 @@ config("delay_load_mf") {
   ]
 }
 
-if (vivaldi_task_api_key != "") {
-  defines = [
-    "VIVALDI_GOOGLE_TASKS_API_KEY=\"$vivaldi_task_api_key\""
-  ]
-}
+config("api_keys") {
+  defines = []
+  if (vivaldi_task_api_key != "") {
+    defines += [
+      "VIVALDI_GOOGLE_TASKS_API_KEY=\"$vivaldi_task_api_key\""
+    ]
+  }
 
-if (vivaldi_oauth_client_id != "") {
-  defines += [
-    "VIVALDI_GOOGLE_OAUTH_API_CLIENT_ID=\"$vivaldi_oauth_client_id\""
-  ]
-}
+  if (vivaldi_oauth_client_id != "") {
+    defines += [
+      "VIVALDI_GOOGLE_OAUTH_API_CLIENT_ID=\"$vivaldi_oauth_client_id\""
+    ]
+  }
 
-if (vivaldi_oauth_client_secret != "") {
-  defines += [
-    "VIVALDI_GOOGLE_OAUTH_API_CLIENT_SECRET=\"$vivaldi_oauth_client_secret\""
-  ]
-}
+  if (vivaldi_oauth_client_secret != "") {
+    defines += [
+      "VIVALDI_GOOGLE_OAUTH_API_CLIENT_SECRET=\"$vivaldi_oauth_client_secret\""
+    ]
+  }
 
-if (vivaldi_microsoft_oauth_client_id != "") {
-  defines += [
-    "VIVALDI_MICROSOFT_OAUTH_API_CLIENT_ID=\"$vivaldi_microsoft_oauth_client_id\""
-  ]
-}
+  if (vivaldi_microsoft_oauth_client_id != "") {
+    defines += [
+      "VIVALDI_MICROSOFT_OAUTH_API_CLIENT_ID=\"$vivaldi_microsoft_oauth_client_id\""
+    ]
+  }
 
-if (vivaldi_yahoo_oauth_client_id != "") {
-  defines += [
-    "VIVALDI_YAHOO_OAUTH_API_CLIENT_ID=\"$vivaldi_yahoo_oauth_client_id\""
-  ]
-}
+  if (vivaldi_yahoo_oauth_client_id != "") {
+    defines += [
+      "VIVALDI_YAHOO_OAUTH_API_CLIENT_ID=\"$vivaldi_yahoo_oauth_client_id\""
+    ]
+  }
 
-if (vivaldi_yahoo_oauth_client_secret != "") {
-  defines += [
-    "VIVALDI_YAHOO_OAUTH_API_CLIENT_SECRET=\"$vivaldi_yahoo_oauth_client_secret\""
-  ]
-}
+  if (vivaldi_yahoo_oauth_client_secret != "") {
+    defines += [
+      "VIVALDI_YAHOO_OAUTH_API_CLIENT_SECRET=\"$vivaldi_yahoo_oauth_client_secret\""
+    ]
+  }
 
-if (vivaldi_aol_oauth_client_id != "") {
-  defines += [
-    "VIVALDI_AOL_OAUTH_API_CLIENT_ID=\"$vivaldi_aol_oauth_client_id\""
-  ]
-}
+  if (vivaldi_aol_oauth_client_id != "") {
+    defines += [
+      "VIVALDI_AOL_OAUTH_API_CLIENT_ID=\"$vivaldi_aol_oauth_client_id\""
+    ]
+  }
 
-if (vivaldi_aol_oauth_client_secret != "") {
-  defines += [
-    "VIVALDI_AOL_OAUTH_API_CLIENT_SECRET=\"$vivaldi_aol_oauth_client_secret\""
-  ]
-}
+  if (vivaldi_aol_oauth_client_secret != "") {
+    defines += [
+      "VIVALDI_AOL_OAUTH_API_CLIENT_SECRET=\"$vivaldi_aol_oauth_client_secret\""
+    ]
+  }
 
-if (vivaldi_net_oauth_client_secret != "") {
-  defines += [
-    "VIVALDI_NET_OAUTH_CLIENT_SECRET=\"$vivaldi_net_oauth_client_secret\""
-  ]
-}
+  if (vivaldi_net_oauth_client_secret != "") {
+    defines += [
+      "VIVALDI_NET_OAUTH_CLIENT_SECRET=\"$vivaldi_net_oauth_client_secret\""
+    ]
+  }
 
-if (vivaldi_net_oauth_client_id != "") {
-  defines += [
-    "VIVALDI_NET_OAUTH_CLIENT_ID=\"$vivaldi_net_oauth_client_id\""
-  ]
-}
+  if (vivaldi_net_oauth_client_id != "") {
+    defines += [
+      "VIVALDI_NET_OAUTH_CLIENT_ID=\"$vivaldi_net_oauth_client_id\""
+    ]
+  }
 
-if (vivaldi_fastmail_oauth_client_id != "") {
-  defines += [
-    "VIVALDI_FASTMAIL_OAUTH_CLIENT_ID=\"$vivaldi_fastmail_oauth_client_id\""
-  ]
+  if (vivaldi_fastmail_oauth_client_id != "") {
+    defines += [
+      "VIVALDI_FASTMAIL_OAUTH_CLIENT_ID=\"$vivaldi_fastmail_oauth_client_id\""
+    ]
+  }
 }
 
 static_library("apis") {
@@ -88,7 +91,6 @@ static_library("apis") {
     "//chrome/common:buildflags",
     "//chrome/common/apps/platform_apps",
     "//chrome/common/extensions/api",
-    "//chrome/services/qrcode_generator/public/mojom",
     "//components/autofill/core/common",
     "//components/bookmarks/browser",
     "//components/browser_sync",
@@ -101,6 +103,7 @@ static_library("apis") {
     "//components/password_manager/core/browser",
     "//components/permissions",
     "//components/pref_registry",
+    "//components/qr_code_generator:bitmap_generator",
     "//components/sessions",
     "//components/search_engines",
     "//components/sync",
@@ -264,5 +267,7 @@ static_library("apis") {
     ]
   }
 
-  configs += [ "//vivaldi/proxy:relayproxy_config" ]
+  configs += [
+    ":api_keys",
+    "//vivaldi/proxy:relayproxy_config" ]
 }

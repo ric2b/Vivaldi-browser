@@ -72,6 +72,7 @@ class MockBidderWorklet : public auction_worklet::mojom::BidderWorklet,
       auction_worklet::mojom::BiddingBrowserSignalsPtr bidding_browser_signals,
       base::Time auction_start_time,
       const std::optional<blink::AdSize>& requested_ad_size,
+      uint16_t multi_bid_limit,
       uint64_t trace_id,
       mojo::PendingAssociatedRemote<auction_worklet::mojom::GenerateBidClient>
           generate_bid_client,
@@ -106,6 +107,7 @@ class MockBidderWorklet : public auction_worklet::mojom::BidderWorklet,
       uint8_t browser_signal_recency,
       const url::Origin& browser_signal_seller_origin,
       const std::optional<url::Origin>& browser_signal_top_level_seller_origin,
+      const std::optional<base::TimeDelta> browser_signal_reporting_timeout,
       std::optional<uint32_t> bidding_signals_data_version,
       uint64_t trace_id,
       ReportWinCallback report_win_callback) override;
@@ -146,8 +148,10 @@ class MockBidderWorklet : public auction_worklet::mojom::BidderWorklet,
       std::optional<double> bid,
       const std::optional<blink::AdCurrency>& bid_currency = std::nullopt,
       const blink::AdDescriptor& ad_descriptor = blink::AdDescriptor(),
-      auction_worklet::mojom::BidderWorkletKAnonEnforcedBidPtr mojo_kanon_bid =
-          auction_worklet::mojom::BidderWorkletKAnonEnforcedBidPtr(),
+      auction_worklet::mojom::BidRole bid_role =
+          auction_worklet::mojom::BidRole::kUnenforcedKAnon,
+      std::vector<auction_worklet::mojom::BidderWorkletBidPtr> further_bids =
+          std::vector<auction_worklet::mojom::BidderWorkletBidPtr>(),
       std::optional<std::vector<blink::AdDescriptor>> ad_component_descriptors =
           std::nullopt,
       base::TimeDelta duration = base::TimeDelta(),
@@ -292,8 +296,7 @@ class MockSellerWorklet : public auction_worklet::mojom::SellerWorklet {
           browser_signal_highest_scoring_other_bid_currency,
       auction_worklet::mojom::ComponentAuctionReportResultParamsPtr
           browser_signals_component_auction_report_result_params,
-      uint32_t browser_signal_data_version,
-      bool browser_signal_has_data_version,
+      std::optional<uint32_t> browser_signal_data_version,
       uint64_t trace_id,
       ReportResultCallback report_result_callback) override;
   void ConnectDevToolsAgent(
@@ -397,8 +400,7 @@ class MockAuctionProcessManager
       const url::Origin& top_window_origin,
       auction_worklet::mojom::AuctionWorkletPermissionsPolicyStatePtr
           permissions_policy_state,
-      bool has_experiment_group_id,
-      uint16_t experiment_group_id) override;
+      std::optional<uint16_t> experiment_group_id) override;
   void LoadSellerWorklet(
       mojo::PendingReceiver<auction_worklet::mojom::SellerWorklet>
           seller_worklet_receiver,
@@ -414,8 +416,7 @@ class MockAuctionProcessManager
       const url::Origin& top_window_origin,
       auction_worklet::mojom::AuctionWorkletPermissionsPolicyStatePtr
           permissions_policy_state,
-      bool has_experiment_group_id,
-      uint16_t experiment_group_id) override;
+      std::optional<uint16_t> experiment_group_id) override;
 
   // Set the expected timeout for an interest group with the specified name,
   // when it's received by a bidder worklet's FinishGenerateBid() method. Must

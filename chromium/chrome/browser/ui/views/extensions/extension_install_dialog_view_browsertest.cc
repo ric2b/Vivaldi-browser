@@ -25,6 +25,7 @@
 #include "chrome/browser/extensions/extension_install_prompt_test_helper.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/platform_util.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -60,9 +61,6 @@ using extensions::PermissionMessages;
 using extensions::PermissionSet;
 
 namespace {
-
-constexpr char kCloudExtensionRequestMetricsName[] =
-    "Enterprise.CloudExtensionRequestDialogAction";
 
 void CloseAndWait(views::Widget* widget) {
   views::test::WidgetDestroyedWaiter waiter(widget);
@@ -778,10 +776,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionInstallDialogViewRequestTest, NotifyDelegate) {
     delegate_view->AcceptDialog();
     EXPECT_EQ(ExtensionInstallPrompt::Result::ACCEPTED, helper.result());
     EXPECT_EQ(std::string(), helper.justification());
-    histogram_tester.ExpectTotalCount(kCloudExtensionRequestMetricsName, 1);
-    histogram_tester.ExpectBucketCount(kCloudExtensionRequestMetricsName,
-                                       /*sent*/ 1,
-                                       /*expected_count*/ 1);
   }
   {
     // User presses cancel.
@@ -792,10 +786,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionInstallDialogViewRequestTest, NotifyDelegate) {
     delegate_view->CancelDialog();
     EXPECT_EQ(ExtensionInstallPrompt::Result::USER_CANCELED, helper.result());
     EXPECT_EQ(std::string(), helper.justification());
-    histogram_tester.ExpectTotalCount(kCloudExtensionRequestMetricsName, 2);
-    histogram_tester.ExpectBucketCount(kCloudExtensionRequestMetricsName,
-                                       /*not_sent*/ 0,
-                                       /*expected_count*/ 1);
   }
   {
     // Dialog is closed without the user explicitly choosing to proceed or
@@ -811,10 +801,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionInstallDialogViewRequestTest, NotifyDelegate) {
     // TODO(devlin): Should this be ABORTED?
     EXPECT_EQ(ExtensionInstallPrompt::Result::USER_CANCELED, helper.result());
     EXPECT_EQ(std::string(), helper.justification());
-    histogram_tester.ExpectTotalCount(kCloudExtensionRequestMetricsName, 3);
-    histogram_tester.ExpectBucketCount(kCloudExtensionRequestMetricsName,
-                                       /*not_sent*/ 0,
-                                       /*expected_count*/ 2);
   }
 }
 

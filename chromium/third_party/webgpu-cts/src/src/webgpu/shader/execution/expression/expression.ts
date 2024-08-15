@@ -5,18 +5,20 @@ import { Comparator, ComparatorImpl } from '../../../util/compare.js';
 import { kValue } from '../../../util/constants.js';
 import {
   MatrixType,
-  Scalar,
+  ScalarValue,
   ScalarType,
   Type,
-  TypeU32,
-  TypeVec,
-  Value,
-  Vector,
   VectorType,
+  Value,
+  VectorValue,
+  isAbstractType,
   scalarTypeOf,
+  ArrayType,
+  elementTypeOf,
 } from '../../../util/conversion.js';
+import { align } from '../../../util/math.js';
 
-import { Case, CaseList } from './case.js';
+import { Case } from './case.js';
 import { toComparator } from './expectation.js';
 
 /** The input value source */
@@ -32,6 +34,9 @@ export const allInputSources: InputSource[] = ['const', 'uniform', 'storage_r', 
 /** Just constant input source */
 export const onlyConstInputSource: InputSource[] = ['const'];
 
+/** All input sources except const */
+export const allButConstInputSource: InputSource[] = ['uniform', 'storage_r', 'storage_rw'];
+
 /** Configuration for running a expression test */
 export type Config = {
   // Where the input values are read from
@@ -45,119 +50,137 @@ export type Config = {
   vectorize?: number;
 };
 
-// Helper for returning the stride for a given Type
-function valueStride(ty: Type): number {
-  // AbstractFloats are passed out of the shader via a struct of 2x u32s and
-  // unpacking containers as arrays
-  if (scalarTypeOf(ty).kind === 'abstract-float') {
-    if (ty instanceof ScalarType) {
-      return 16;
+/**
+ * @returns the size and alignment in bytes of the type 'ty', taking into
+ * consideration storage alignment constraints and abstract numerics, which are
+ * encoded as a struct of holding two u32s.
+ */
+function sizeAndAlignmentOf(ty: Type, source: InputSource): { size: number; alignment: number } {
+  if (ty instanceof ScalarType) {
+    if (ty.kind === 'abstract-float' || ty.kind === 'abstract-int') {
+      // AbstractFloats and AbstractInts are passed out of the shader via structs of
+      // 2x u32s and unpacking containers as arrays
+      return { size: 8, alignment: 8 };
     }
-    if (ty instanceof VectorType) {
-      if (ty.width === 2) {
-        return 16;
-      }
-      // vec3s have padding to make them the same size as vec4s
-      return 32;
-    }
-    if (ty instanceof MatrixType) {
-      switch (ty.cols) {
-        case 2:
-          switch (ty.rows) {
-            case 2:
-              return 32;
-            case 3:
-              return 64;
-            case 4:
-              return 64;
-          }
-          break;
-        case 3:
-          switch (ty.rows) {
-            case 2:
-              return 48;
-            case 3:
-              return 96;
-            case 4:
-              return 96;
-          }
-          break;
-        case 4:
-          switch (ty.rows) {
-            case 2:
-              return 64;
-            case 3:
-              return 128;
-            case 4:
-              return 128;
-          }
-          break;
-      }
-    }
-    unreachable(`AbstractFloats have not yet been implemented for ${ty.toString()}`);
+    return { size: ty.size, alignment: ty.alignment };
+  }
+
+  if (ty instanceof VectorType) {
+    const out = sizeAndAlignmentOf(ty.elementType, source);
+    const n = ty.width === 3 ? 4 : ty.width;
+    out.size *= n;
+    out.alignment *= n;
+    return out;
   }
 
   if (ty instanceof MatrixType) {
-    switch (ty.cols) {
-      case 2:
-        switch (ty.rows) {
-          case 2:
-            return 16;
-          case 3:
-            return 32;
-          case 4:
-            return 32;
-        }
-        break;
-      case 3:
-        switch (ty.rows) {
-          case 2:
-            return 32;
-          case 3:
-            return 64;
-          case 4:
-            return 64;
-        }
-        break;
-      case 4:
-        switch (ty.rows) {
-          case 2:
-            return 32;
-          case 3:
-            return 64;
-          case 4:
-            return 64;
-        }
-        break;
-    }
-    unreachable(
-      `Attempted to get stride length for a matrix with dimensions (${ty.cols}x${ty.rows}), which isn't currently handled`
-    );
+    const out = sizeAndAlignmentOf(ty.elementType, source);
+    const n = ty.rows === 3 ? 4 : ty.rows;
+    out.size *= n * ty.cols;
+    out.alignment *= n;
+    return out;
   }
 
-  // Handles scalars and vectors
-  return 16;
+  if (ty instanceof ArrayType) {
+    const out = sizeAndAlignmentOf(ty.elementType, source);
+    if (source === 'uniform') {
+      out.alignment = align(out.alignment, 16);
+    }
+    out.size *= ty.count;
+    return out;
+  }
+
+  unreachable(`unhandled type: ${ty}`);
 }
 
-// Helper for summing up all of the stride values for an array of Types
-function valueStrides(tys: Type[]): number {
-  return tys.map(valueStride).reduce((sum, c) => sum + c);
+/**
+ * @returns the stride in bytes of the type 'ty', taking into consideration abstract numerics,
+ * which are encoded as a struct of 2 x u32.
+ */
+function strideOf(ty: Type, source: InputSource): number {
+  const sizeAndAlign = sizeAndAlignmentOf(ty, source);
+  return align(sizeAndAlign.size, sizeAndAlign.alignment);
+}
+
+/**
+ * Calls 'callback' with the layout information of each structure member with the types 'members'.
+ * @returns the byte size, stride and alignment of the structure.
+ */
+function structLayout(
+  members: Type[],
+  source: InputSource,
+  callback?: (m: {
+    index: number;
+    type: Type;
+    size: number;
+    alignment: number;
+    offset: number;
+  }) => void
+): { size: number; stride: number; alignment: number } {
+  let offset = 0;
+  let alignment = 1;
+  for (let i = 0; i < members.length; i++) {
+    const member = members[i];
+    const sizeAndAlign = sizeAndAlignmentOf(member, source);
+    offset = align(offset, sizeAndAlign.alignment);
+    if (callback) {
+      callback({
+        index: i,
+        type: member,
+        size: sizeAndAlign.size,
+        alignment: sizeAndAlign.alignment,
+        offset,
+      });
+    }
+    offset += sizeAndAlign.size;
+    alignment = Math.max(alignment, sizeAndAlign.alignment);
+  }
+
+  if (source === 'uniform') {
+    alignment = align(alignment, 16);
+  }
+
+  const size = offset;
+  const stride = align(size, alignment);
+  return { size, stride, alignment };
+}
+
+/** @returns the stride in bytes between two consecutive structures with the given members */
+function structStride(members: Type[], source: InputSource): number {
+  return structLayout(members, source).stride;
+}
+
+/** @returns the WGSL to describe the structure members in 'members' */
+function wgslMembers(members: Type[], source: InputSource, memberName: (i: number) => string) {
+  const lines: string[] = [];
+  const layout = structLayout(members, source, m => {
+    lines.push(`  @size(${m.size}) ${memberName(lines.length)} : ${m.type},`);
+  });
+  const padding = layout.stride - layout.size;
+  if (padding > 0) {
+    // Pad with a 'f16' if the padding requires an odd multiple of 2 bytes.
+    // This is required as 'i32' has an alignment and size of 4 bytes.
+    const ty = (padding & 2) !== 0 ? 'f16' : 'i32';
+    lines.push(`  @size(${padding}) padding : ${ty},`);
+  }
+  return lines.join('\n');
 }
 
 // Helper for returning the WGSL storage type for the given Type.
 function storageType(ty: Type): Type {
   if (ty instanceof ScalarType) {
     assert(ty.kind !== 'f64', `No storage type defined for 'f64' values`);
+    assert(ty.kind !== 'abstract-int', `Custom handling is implemented for 'abstract-int' values`);
     assert(
       ty.kind !== 'abstract-float',
       `Custom handling is implemented for 'abstract-float' values`
     );
     if (ty.kind === 'bool') {
-      return TypeU32;
+      return Type.u32;
     }
   }
   if (ty instanceof VectorType) {
-    return TypeVec(ty.width, storageType(ty.elementType) as ScalarType);
+    return Type.vec(ty.width, storageType(ty.elementType) as ScalarType);
   }
   return ty;
 }
@@ -165,7 +188,8 @@ function storageType(ty: Type): Type {
 // Helper for converting a value of the type 'ty' from the storage type.
 function fromStorage(ty: Type, expr: string): string {
   if (ty instanceof ScalarType) {
-    assert(ty.kind !== 'abstract-float', `AbstractFloat values should not be in input storage`);
+    assert(ty.kind !== 'abstract-int', `'abstract-int' values should not be in input storage`);
+    assert(ty.kind !== 'abstract-float', `'abstract-float' values should not be in input storage`);
     assert(ty.kind !== 'f64', `'No storage type defined for 'f64' values`);
     if (ty.kind === 'bool') {
       return `${expr} != 0u`;
@@ -173,8 +197,12 @@ function fromStorage(ty: Type, expr: string): string {
   }
   if (ty instanceof VectorType) {
     assert(
+      ty.elementType.kind !== 'abstract-int',
+      `'abstract-int' values cannot appear in input storage`
+    );
+    assert(
       ty.elementType.kind !== 'abstract-float',
-      `AbstractFloat values cannot appear in input storage`
+      `'abstract-float' values cannot appear in input storage`
     );
     assert(ty.elementType.kind !== 'f64', `'No storage type defined for 'f64' values`);
     if (ty.elementType.kind === 'bool') {
@@ -188,8 +216,12 @@ function fromStorage(ty: Type, expr: string): string {
 function toStorage(ty: Type, expr: string): string {
   if (ty instanceof ScalarType) {
     assert(
+      ty.kind !== 'abstract-int',
+      `'abstract-int' values have custom code for writing to storage`
+    );
+    assert(
       ty.kind !== 'abstract-float',
-      `AbstractFloat values have custom code for writing to storage`
+      `'abstract-float' values have custom code for writing to storage`
     );
     assert(ty.kind !== 'f64', `No storage type defined for 'f64' values`);
     if (ty.kind === 'bool') {
@@ -198,8 +230,12 @@ function toStorage(ty: Type, expr: string): string {
   }
   if (ty instanceof VectorType) {
     assert(
+      ty.elementType.kind !== 'abstract-int',
+      `'abstract-int' values have custom code for writing to storage`
+    );
+    assert(
       ty.elementType.kind !== 'abstract-float',
-      `AbstractFloat values have custom code for writing to storage`
+      `'abstract-float' values have custom code for writing to storage`
     );
     assert(ty.elementType.kind !== 'f64', `'No storage type defined for 'f64' values`);
     if (ty.elementType.kind === 'bool') {
@@ -249,7 +285,7 @@ export async function run(
   parameterTypes: Array<Type>,
   resultType: Type,
   cfg: Config = { inputSource: 'storage_r' },
-  cases: CaseList,
+  cases: Case[],
   batch_size?: number
 ) {
   // If the 'vectorize' config option was provided, pack the cases into vectors.
@@ -278,12 +314,13 @@ export async function run(
         // 2k appears to be a sweet-spot when benchmarking.
         return Math.floor(
           Math.min(1024 * 2, t.device.limits.maxUniformBufferBindingSize) /
-            valueStrides(parameterTypes)
+            structStride(parameterTypes, cfg.inputSource)
         );
       case 'storage_r':
       case 'storage_rw':
         return Math.floor(
-          t.device.limits.maxStorageBufferBindingSize / valueStrides(parameterTypes)
+          t.device.limits.maxStorageBufferBindingSize /
+            structStride(parameterTypes, cfg.inputSource)
         );
     }
   })();
@@ -306,7 +343,7 @@ export async function run(
     }
   };
 
-  const processBatch = async (batchCases: CaseList) => {
+  const processBatch = async (batchCases: Case[]) => {
     const checkBatch = await submitBatch(
       t,
       shaderBuilder,
@@ -357,12 +394,13 @@ async function submitBatch(
   shaderBuilder: ShaderBuilder,
   parameterTypes: Array<Type>,
   resultType: Type,
-  cases: CaseList,
+  cases: Case[],
   inputSource: InputSource,
   pipelineCache: PipelineCache
 ): Promise<() => void> {
   // Construct a buffer to hold the results of the expression tests
-  const outputBufferSize = cases.length * valueStride(resultType);
+  const outputStride = structStride([resultType], 'storage_rw');
+  const outputBufferSize = align(cases.length * outputStride, 4);
   const outputBuffer = t.device.createBuffer({
     size: outputBufferSize,
     usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE,
@@ -397,7 +435,7 @@ async function submitBatch(
       // Read the outputs from the output buffer
       const outputs = new Array<Value>(cases.length);
       for (let i = 0; i < cases.length; i++) {
-        outputs[i] = resultType.read(outputData, i * valueStride(resultType));
+        outputs[i] = resultType.read(outputData, i * outputStride);
       }
 
       // The list of expectation failures
@@ -451,7 +489,7 @@ function map<T, U>(v: T | readonly T[], fn: (value: T, index?: number) => U): U[
 export type ShaderBuilder = (
   parameterTypes: Array<Type>,
   resultType: Type,
-  cases: CaseList,
+  cases: Case[],
   inputSource: InputSource
 ) => string;
 
@@ -460,10 +498,13 @@ export type ShaderBuilder = (
  */
 function wgslOutputs(resultType: Type, count: number): string {
   let output_struct = undefined;
-  if (scalarTypeOf(resultType).kind !== 'abstract-float') {
+  if (
+    scalarTypeOf(resultType).kind !== 'abstract-float' &&
+    scalarTypeOf(resultType).kind !== 'abstract-int'
+  ) {
     output_struct = `
 struct Output {
-  @size(${valueStride(resultType)}) value : ${storageType(resultType)}
+  @size(${strideOf(resultType, 'storage_rw')}) value : ${storageType(resultType)}
 };`;
   } else {
     if (resultType instanceof ScalarType) {
@@ -473,7 +514,7 @@ struct Output {
 };
 
 struct Output {
-  @size(${valueStride(resultType)}) value: AF,
+  @size(${strideOf(resultType, 'storage_rw')}) value: AF,
 };`;
     }
     if (resultType instanceof VectorType) {
@@ -484,7 +525,7 @@ struct Output {
 };
 
 struct Output {
-  @size(${valueStride(resultType)}) value: array<AF, ${dim}>,
+  @size(${strideOf(resultType, 'storage_rw')}) value: array<AF, ${dim}>,
 };`;
     }
 
@@ -497,7 +538,7 @@ struct Output {
 };
 
 struct Output {
-   @size(${valueStride(resultType)}) value: array<array<AF, ${rows}>, ${cols}>,
+   @size(${strideOf(resultType, 'storage_rw')}) value: array<array<AF, ${rows}>, ${cols}>,
 };`;
     }
 
@@ -515,7 +556,7 @@ struct Output {
 function wgslValuesArray(
   parameterTypes: Array<Type>,
   resultType: Type,
-  cases: CaseList,
+  cases: Case[],
   expressionBuilder: ExpressionBuilder
 ): string {
   return `
@@ -565,19 +606,23 @@ function basicExpressionShaderBody(
   expressionBuilder: ExpressionBuilder,
   parameterTypes: Array<Type>,
   resultType: Type,
-  cases: CaseList,
+  cases: Case[],
   inputSource: InputSource
 ): string {
   assert(
+    scalarTypeOf(resultType).kind !== 'abstract-int',
+    `abstractIntShaderBuilder should be used when result type is 'abstract-int'`
+  );
+  assert(
     scalarTypeOf(resultType).kind !== 'abstract-float',
-    `abstractFloatShaderBuilder should be used when result type is 'abstract-float`
+    `abstractFloatShaderBuilder should be used when result type is 'abstract-float'`
   );
   if (inputSource === 'const') {
     //////////////////////////////////////////////////////////////////////////
     // Constant eval
     //////////////////////////////////////////////////////////////////////////
     let body = '';
-    if (parameterTypes.some(ty => scalarTypeOf(ty).kind === 'abstract-float')) {
+    if (parameterTypes.some(ty => isAbstractType(elementTypeOf(ty)))) {
       // Directly assign the expression to the output, to avoid an
       // intermediate store, which will concretize the value early
       body = cases
@@ -603,10 +648,16 @@ function basicExpressionShaderBody(
   }`;
     }
 
+    // If params are abstract, we will assign them directly to the storage array, so skip the values array.
+    let valuesArray = '';
+    if (!parameterTypes.some(isAbstractType)) {
+      valuesArray = wgslValuesArray(parameterTypes, resultType, cases, expressionBuilder);
+    }
+
     return `
 ${wgslOutputs(resultType, cases.length)}
 
-${wgslValuesArray(parameterTypes, resultType, cases, expressionBuilder)}
+${valuesArray}
 
 @compute @workgroup_size(1)
 fn main() {
@@ -625,10 +676,8 @@ ${body}
 
     return `
 struct Input {
-${parameterTypes
-  .map((ty, i) => `  @size(${valueStride(ty)}) param${i} : ${storageType(ty)},`)
-  .join('\n')}
-};
+${wgslMembers(parameterTypes.map(storageType), inputSource, i => `param${i}`)}
+}
 
 ${wgslOutputs(resultType, cases.length)}
 
@@ -652,7 +701,7 @@ export function basicExpressionBuilder(expressionBuilder: ExpressionBuilder): Sh
   return (
     parameterTypes: Array<Type>,
     resultType: Type,
-    cases: CaseList,
+    cases: Case[],
     inputSource: InputSource
   ) => {
     return `\
@@ -675,7 +724,7 @@ export function basicExpressionWithPredeclarationBuilder(
   return (
     parameterTypes: Array<Type>,
     resultType: Type,
-    cases: CaseList,
+    cases: Case[],
     inputSource: InputSource
   ) => {
     return `\
@@ -695,7 +744,7 @@ export function compoundAssignmentBuilder(op: string): ShaderBuilder {
   return (
     parameterTypes: Array<Type>,
     resultType: Type,
-    cases: CaseList,
+    cases: Case[],
     inputSource: InputSource
   ) => {
     //////////////////////////////////////////////////////////////////////////
@@ -760,8 +809,7 @@ ${wgslHeader(parameterTypes, resultType)}
 ${wgslOutputs(resultType, cases.length)}
 
 struct Input {
-  @size(${valueStride(lhsType)}) lhs : ${storageType(lhsType)},
-  @size(${valueStride(rhsType)}) rhs : ${storageType(rhsType)},
+${wgslMembers([lhsType, rhsType].map(storageType), inputSource, i => ['lhs', 'rhs'][i])}
 }
 
 ${wgslInputVar(inputSource, cases.length)}
@@ -922,10 +970,10 @@ export function abstractFloatShaderBuilder(expressionBuilder: ExpressionBuilder)
   return (
     parameterTypes: Array<Type>,
     resultType: Type,
-    cases: CaseList,
+    cases: Case[],
     inputSource: InputSource
   ) => {
-    assert(inputSource === 'const', 'AbstractFloat results are only defined for const-eval');
+    assert(inputSource === 'const', `'abstract-float' results are only defined for const-eval`);
     assert(
       scalarTypeOf(resultType).kind === 'abstract-float',
       `Expected resultType of 'abstract-float', received '${scalarTypeOf(resultType).kind}' instead`
@@ -935,6 +983,90 @@ export function abstractFloatShaderBuilder(expressionBuilder: ExpressionBuilder)
       .map((c, i) => {
         const expr = `${expressionBuilder(map(c.input, v => v.wgsl()))}`;
         return abstractFloatCaseBody(expr, resultType, i);
+      })
+      .join('\n  ');
+
+    return `
+${wgslHeader(parameterTypes, resultType)}
+
+${wgslOutputs(resultType, cases.length)}
+
+@compute @workgroup_size(1)
+fn main() {
+${body}
+}`;
+  };
+}
+
+/**
+ * @returns a string that extracts the value of an AbstractInt into an output
+ *          destination
+ * @param expr expression for an AbstractInt value, if working with vectors,
+ *             this string needs to include indexing into the container.
+ * @param case_idx index in the case output array to assign the result
+ * @param accessor string representing how access to the AbstractInt that needs
+ *                 to be operated on.
+ *                 For scalars this should be left as ''.
+ *                 For vectors this will be an indexing operation,
+ *                 i.e. '[i]'
+ */
+function abstractIntSnippet(expr: string, case_idx: number, accessor: string = ''): string {
+  // AbstractInts are i64s under the hood. WebGPU does not support
+  // putting i64s in buffers, or any 64-bit simple types, so the result needs to
+  // be split up into u32 bitfields
+  //
+  // Since there is no 64-bit data type that can be used as an element for a
+  // vector or a matrix in WGSL, the testing framework needs to pass the u32s
+  // via a struct with two u32s, and deconstruct vectors into arrays.
+  //
+  // This is complicated by the fact that user defined functions cannot
+  // take/return AbstractInts, and AbstractInts cannot be stored in
+  // variables, so the code cannot just inject a simple utility function
+  // at the top of the shader, instead this snippet needs to be inlined
+  // everywhere the test needs to return an AbstractInt.
+  return `  {
+    outputs[${case_idx}].value${accessor}.high = bitcast<u32>(i32(${expr}${accessor} >> 32)) & 0xFFFFFFFF;
+    const low_sign = (${expr}${accessor} & (1 << 31));
+    outputs[${case_idx}].value${accessor}.low = bitcast<u32>((${expr}${accessor} & 0x7FFFFFFF)) | low_sign;
+  }`;
+}
+
+/** @returns a string for a specific case that has a AbstractInt result */
+function abstractIntCaseBody(expr: string, resultType: Type, i: number): string {
+  if (resultType instanceof ScalarType) {
+    return abstractIntSnippet(expr, i);
+  }
+
+  if (resultType instanceof VectorType) {
+    return [...Array(resultType.width).keys()]
+      .map(idx => abstractIntSnippet(expr, i, `[${idx}]`))
+      .join('  \n');
+  }
+
+  unreachable(`Results of type '${resultType}' not yet implemented`);
+}
+
+/**
+ * @returns a ShaderBuilder that builds a test shader hands AbstractInt results.
+ * @param expressionBuilder an expression builder that will return AbstractInts
+ */
+export function abstractIntShaderBuilder(expressionBuilder: ExpressionBuilder): ShaderBuilder {
+  return (
+    parameterTypes: Array<Type>,
+    resultType: Type,
+    cases: Case[],
+    inputSource: InputSource
+  ) => {
+    assert(inputSource === 'const', `'abstract-int' results are only defined for const-eval`);
+    assert(
+      scalarTypeOf(resultType).kind === 'abstract-int',
+      `Expected resultType of 'abstract-int', received '${scalarTypeOf(resultType).kind}' instead`
+    );
+
+    const body = cases
+      .map((c, i) => {
+        const expr = `${expressionBuilder(map(c.input, v => v.wgsl()))}`;
+        return abstractIntCaseBody(expr, resultType, i);
       })
       .join('\n  ');
 
@@ -969,7 +1101,7 @@ async function buildPipeline(
   shaderBuilder: ShaderBuilder,
   parameterTypes: Array<Type>,
   resultType: Type,
-  cases: CaseList,
+  cases: Case[],
   inputSource: InputSource,
   outputBuffer: GPUBuffer,
   pipelineCache: PipelineCache
@@ -1013,27 +1145,23 @@ async function buildPipeline(
       // Input values come from a uniform or storage buffer
 
       // size in bytes of the input buffer
-      const inputSize = cases.length * valueStrides(parameterTypes);
+      const caseStride = structStride(parameterTypes, inputSource);
+      const inputSize = align(cases.length * caseStride, 4);
 
       // Holds all the parameter values for all cases
       const inputData = new Uint8Array(inputSize);
 
       // Pack all the input parameter values into the inputData buffer
-      {
-        const caseStride = valueStrides(parameterTypes);
-        for (let caseIdx = 0; caseIdx < cases.length; caseIdx++) {
-          const caseBase = caseIdx * caseStride;
-          let offset = caseBase;
-          for (let paramIdx = 0; paramIdx < parameterTypes.length; paramIdx++) {
-            const params = cases[caseIdx].input;
-            if (params instanceof Array) {
-              params[paramIdx].copyTo(inputData, offset);
-            } else {
-              params.copyTo(inputData, offset);
-            }
-            offset += valueStride(parameterTypes[paramIdx]);
+      for (let caseIdx = 0; caseIdx < cases.length; caseIdx++) {
+        const offset = caseIdx * caseStride;
+        structLayout(parameterTypes, inputSource, m => {
+          const arg = cases[caseIdx].input;
+          if (arg instanceof Array) {
+            arg[m.index].copyTo(inputData, offset + m.offset);
+          } else {
+            arg.copyTo(inputData, offset + m.offset);
           }
-        }
+        });
       }
 
       // build the compute pipeline, if the shader hasn't been compiled already.
@@ -1079,9 +1207,9 @@ async function buildPipeline(
 function packScalarsToVector(
   parameterTypes: Array<Type>,
   resultType: Type,
-  cases: CaseList,
+  cases: Case[],
   vectorWidth: number
-): { cases: CaseList; parameterTypes: Array<Type>; resultType: Type } {
+): { cases: Case[]; parameterTypes: Array<Type>; resultType: Type } {
   // Validate that the parameters and return type are all vectorizable
   for (let i = 0; i < parameterTypes.length; i++) {
     const ty = parameterTypes[i];
@@ -1098,22 +1226,22 @@ function packScalarsToVector(
   }
 
   const packedCases: Array<Case> = [];
-  const packedParameterTypes = parameterTypes.map(p => TypeVec(vectorWidth, p as ScalarType));
-  const packedResultType = new VectorType(vectorWidth, resultType);
+  const packedParameterTypes = parameterTypes.map(p => Type.vec(vectorWidth, p as ScalarType));
+  const packedResultType = Type.vec(vectorWidth, resultType);
 
   const clampCaseIdx = (idx: number) => Math.min(idx, cases.length - 1);
 
   let caseIdx = 0;
   while (caseIdx < cases.length) {
     // Construct the vectorized inputs from the scalar cases
-    const packedInputs = new Array<Vector>(parameterTypes.length);
+    const packedInputs = new Array<VectorValue>(parameterTypes.length);
     for (let paramIdx = 0; paramIdx < parameterTypes.length; paramIdx++) {
-      const inputElements = new Array<Scalar>(vectorWidth);
+      const inputElements = new Array<ScalarValue>(vectorWidth);
       for (let i = 0; i < vectorWidth; i++) {
         const input = cases[clampCaseIdx(caseIdx + i)].input;
-        inputElements[i] = (input instanceof Array ? input[paramIdx] : input) as Scalar;
+        inputElements[i] = (input instanceof Array ? input[paramIdx] : input) as ScalarValue;
       }
-      packedInputs[paramIdx] = new Vector(inputElements);
+      packedInputs[paramIdx] = new VectorValue(inputElements);
     }
 
     // Gather the comparators for the packed cases
@@ -1127,7 +1255,7 @@ function packScalarsToVector(
         const gElements = new Array<string>(vectorWidth);
         const eElements = new Array<string>(vectorWidth);
         for (let i = 0; i < vectorWidth; i++) {
-          const d = cmp_impls[i]((got as Vector).elements[i]);
+          const d = cmp_impls[i]((got as VectorValue).elements[i]);
           matched = matched && d.matched;
           gElements[i] = d.got;
           eElements[i] = d.expected;

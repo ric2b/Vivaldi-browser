@@ -98,7 +98,7 @@ std::string GetSessionTagWithPrefs(const std::string& cache_guid,
 }
 
 void ForwardError(syncer::OnceModelErrorHandler error_handler,
-                  const absl::optional<syncer::ModelError>& error) {
+                  const std::optional<syncer::ModelError>& error) {
   if (error) {
     std::move(error_handler).Run(*error);
   }
@@ -106,7 +106,7 @@ void ForwardError(syncer::OnceModelErrorHandler error_handler,
 
 // Parses the content of |record_list| into |*initial_data|. The output
 // parameters are first for binding purposes.
-absl::optional<syncer::ModelError> ParseInitialDataOnBackendSequence(
+std::optional<syncer::ModelError> ParseInitialDataOnBackendSequence(
     std::map<std::string, sync_pb::SessionSpecifics>* initial_data,
     std::string* session_name,
     std::unique_ptr<ModelTypeStore::RecordList> record_list) {
@@ -128,7 +128,7 @@ absl::optional<syncer::ModelError> ParseInitialDataOnBackendSequence(
 
   *session_name = syncer::GetPersonalizableDeviceNameBlocking();
 
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 }  // namespace
@@ -329,7 +329,7 @@ std::string SessionStore::GetTabClientTagForTest(const std::string& session_tag,
 // static
 void SessionStore::OnStoreCreated(
     std::unique_ptr<Builder> builder,
-    const absl::optional<syncer::ModelError>& error,
+    const std::optional<syncer::ModelError>& error,
     std::unique_ptr<ModelTypeStore> underlying_store) {
   DCHECK(builder);
 
@@ -351,7 +351,7 @@ void SessionStore::OnStoreCreated(
 // static
 void SessionStore::OnReadAllMetadata(
     std::unique_ptr<Builder> builder,
-    const absl::optional<syncer::ModelError>& error,
+    const std::optional<syncer::ModelError>& error,
     std::unique_ptr<syncer::MetadataBatch> metadata_batch) {
   TRACE_EVENT0("sync", "sync_sessions::SessionStore::OnReadAllMetadata");
   DCHECK(builder);
@@ -378,7 +378,7 @@ void SessionStore::OnReadAllMetadata(
 // static
 void SessionStore::OnReadAllData(
     std::unique_ptr<Builder> builder,
-    const absl::optional<syncer::ModelError>& error) {
+    const std::optional<syncer::ModelError>& error) {
   TRACE_EVENT0("sync", "sync_sessions::SessionStore::OnReadAllData");
   DCHECK(builder);
 
@@ -413,7 +413,7 @@ void SessionStore::OnReadAllData(
       builder->sessions_client.get()));
 
   std::move(builder->callback)
-      .Run(/*error=*/absl::nullopt, std::move(session_store),
+      .Run(/*error=*/std::nullopt, std::move(session_store),
            std::move(builder->metadata_batch));
 }
 

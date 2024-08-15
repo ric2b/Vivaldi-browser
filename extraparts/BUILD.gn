@@ -5,6 +5,8 @@ source_set("extraparts") {
     "vivaldi_browser_main_extra_parts.h",
     "vivaldi_content_browser_client.cc",
     "vivaldi_content_browser_client.h",
+    "vivaldi_keystore_checker.cc",
+    "vivaldi_keystore_checker.h",
   ]
   if (is_linux) {
     sources += [
@@ -44,6 +46,7 @@ source_set("extraparts") {
     "//extensions/buildflags",
     "//skia",
     "//third_party/blink/public:blink_headers",
+    "//vivaldi/app:resources",
     "//vivaldi/browser",
     "//vivaldi/browser:stats_reporter",
     "//vivaldi/calendar",
@@ -54,6 +57,7 @@ source_set("extraparts") {
     "//vivaldi/prefs",
     "//vivaldi/components/notes:browser",
     "//vivaldi/ui",
+    "//vivaldi/components/direct_match:browser",
   ]
   if (!is_android) {
     deps += [

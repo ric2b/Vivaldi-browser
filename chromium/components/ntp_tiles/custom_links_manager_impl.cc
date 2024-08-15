@@ -7,9 +7,9 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/auto_reset.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/functional/bind.h"
 #include "base/ranges/algorithm.h"
 #include "components/ntp_tiles/constants.h"
@@ -173,7 +173,7 @@ bool CustomLinksManagerImpl::UndoAction() {
 
   // Replace the current links with the previous state.
   current_links_ = *previous_links_;
-  previous_links_ = absl::nullopt;
+  previous_links_ = std::nullopt;
   StoreLinks();
   return true;
 }
@@ -184,7 +184,7 @@ void CustomLinksManagerImpl::ClearLinks() {
     store_.ClearLinks();
   }
   current_links_.clear();
-  previous_links_ = absl::nullopt;
+  previous_links_ = std::nullopt;
 }
 
 void CustomLinksManagerImpl::StoreLinks() {
@@ -230,7 +230,7 @@ void CustomLinksManagerImpl::OnURLsDeleted(
 
   size_t initial_size = current_links_.size();
   if (deletion_info.IsAllHistory()) {
-    base::EraseIf(current_links_,
+    std::erase_if(current_links_,
                   [](auto& link) { return link.is_most_visited; });
   } else {
     for (const history::URLRow& row : deletion_info.deleted_rows()) {
@@ -240,7 +240,7 @@ void CustomLinksManagerImpl::OnURLsDeleted(
     }
   }
   StoreLinks();
-  previous_links_ = absl::nullopt;
+  previous_links_ = std::nullopt;
 
   // Alert MostVisitedSites that some links have been deleted.
   if (initial_size != current_links_.size())
@@ -261,7 +261,7 @@ void CustomLinksManagerImpl::OnPreferenceChanged() {
     current_links_ = store_.RetrieveLinks();
   else
     current_links_.clear();
-  previous_links_ = absl::nullopt;
+  previous_links_ = std::nullopt;
   closure_list_.Notify();
 }
 

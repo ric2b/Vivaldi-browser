@@ -47,6 +47,11 @@
 /// a folder, and parent of the 'New'item.
 - (void)didSelectAddNewSpeedDial:(BOOL)isFolder
                           parent:(VivaldiSpeedDialItem*)parent;
+
+/// Triggers when Add Group button is tapped from the Add new Group
+/// dialog visible when there's no SD item, or user is beyond the last page
+/// of SD.
+- (void)didSelectAddNewGroupForParent:(VivaldiSpeedDialItem*)parent;
 @end
 
 #endif  // IOS_UI_NTP_VIVALDI_SPEED_DIAL_CONTAINER_DELEGATE_H_

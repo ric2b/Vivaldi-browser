@@ -51,6 +51,7 @@ std::chrono::seconds GetWallTimeSinceUnixEpoch() noexcept {
   // about it here.
   const std::time_t since_epoch = system_clock::to_time_t(system_clock::now());
 
+#if OSP_DCHECK_IS_ON()
   // std::time_t is unspecified by the spec. If it's only a 32-bit integer, it's
   // possible that values will overflow in early 2038. Warn future developers a
   // year ahead of time.
@@ -60,6 +61,7 @@ std::chrono::seconds GetWallTimeSinceUnixEpoch() noexcept {
         to_seconds(365 * hours(24)).count();
     OSP_DCHECK_LE(since_epoch, a_year_before_overflow);
   }
+#endif
 
   return std::chrono::seconds(since_epoch);
 }

@@ -25,27 +25,12 @@ namespace cc {
 // display list.
 class FakeRecordingSource : public RecordingSource {
  public:
-  static std::unique_ptr<FakeRecordingSource> CreateRecordingSource(
-      const gfx::Rect& recorded_viewport,
+  static std::unique_ptr<FakeRecordingSource> Create(
       const gfx::Size& layer_bounds) {
-    std::unique_ptr<FakeRecordingSource> recording_source(
-        new FakeRecordingSource);
-    recording_source->SetRecordedViewport(recorded_viewport);
+    auto recording_source = std::make_unique<FakeRecordingSource>();
+    recording_source->SetCanUseRecordedBounds(true);
     recording_source->SetLayerBounds(layer_bounds);
     return recording_source;
-  }
-
-  static std::unique_ptr<FakeRecordingSource> CreateFilledRecordingSource(
-      const gfx::Size& layer_bounds) {
-    std::unique_ptr<FakeRecordingSource> recording_source(
-        new FakeRecordingSource);
-    recording_source->SetRecordedViewport(gfx::Rect(layer_bounds));
-    recording_source->SetLayerBounds(layer_bounds);
-    return recording_source;
-  }
-
-  void SetRecordedViewport(const gfx::Rect& recorded_viewport) {
-    recorded_viewport_ = recorded_viewport;
   }
 
   void SetLayerBounds(const gfx::Size& layer_bounds) {
@@ -68,7 +53,7 @@ class FakeRecordingSource : public RecordingSource {
   void set_has_draw_text_op() { client_.set_has_draw_text_op(); }
 
   void Rerecord() {
-    SetNeedsDisplayRect(recorded_viewport_);
+    SetNeedsDisplayRect(gfx::Rect(size_));
     Region invalidation;
     Update(size_, recording_scale_factor_, client_, invalidation);
   }
@@ -124,12 +109,8 @@ class FakeRecordingSource : public RecordingSource {
     recording_scale_factor_ = recording_scale_factor;
   }
 
-  const scoped_refptr<DisplayItemList> GetDisplayItemList() const {
-    return display_list_;
-  }
-
  private:
-  FakeRecordingSource() = default;
+  using RecordingSource::RecordingSource;
 
   FakeContentLayerClient client_;
   PaintFlags default_flags_;

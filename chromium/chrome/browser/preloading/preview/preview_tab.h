@@ -14,9 +14,14 @@
 #include "ui/base/accelerators/accelerator.h"
 #include "url/gurl.h"
 
+namespace blink {
+class WebInputEvent;
+}  // namespace blink
+
 namespace content {
 class WebContents;
 class PrerenderHandle;
+class PreviewCancelReason;
 }  // namespace content
 
 namespace views {
@@ -54,6 +59,9 @@ class PreviewTab final : public content::WebContentsDelegate,
   // This is not fully implemented, and the progress is tracked at b:305000959.
   void Activate(base::WeakPtr<content::WebContents> web_contents);
 
+  // content::WebContentsDelegate implementation:
+  void CancelPreview(content::PreviewCancelReason reason) override;
+
   base::WeakPtr<content::WebContents> GetWebContents();
 
  private:
@@ -63,12 +71,11 @@ class PreviewTab final : public content::WebContentsDelegate,
 
   void InitWindow(content::WebContents& parent);
 
-  // content::WebCopntentsDelegate implementation:
+  bool AuditWebInputEvent(const blink::WebInputEvent& event);
+
+  // content::WebContentsDelegate implementation:
   content::PreloadingEligibility IsPrerender2Supported(
       content::WebContents& web_contents) override;
-  bool IsInPreviewMode() const override;
-  void CancelPreviewByMojoBinderPolicy(
-      const std::string& interface_name) override;
 
   void RegisterKeyboardAccelerators();
 
@@ -77,6 +84,8 @@ class PreviewTab final : public content::WebContentsDelegate,
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
 
   std::unique_ptr<content::WebContents> web_contents_;
+  std::optional<content::WebContents::ScopedIgnoreInputEvents>
+      scoped_ignore_web_inputs_;
   std::unique_ptr<PreviewWidget> widget_;
   std::unique_ptr<views::WebView> view_;
   std::unique_ptr<PreviewZoomController> preview_zoom_controller_;
@@ -84,6 +93,7 @@ class PreviewTab final : public content::WebContentsDelegate,
   // PrerenderManager.
   std::unique_ptr<content::PrerenderHandle> prerender_handle_;
   GURL url_;
+  std::optional<content::PreviewCancelReason> cancel_reason_ = std::nullopt;
   // A mapping between accelerators and command IDs.
   base::flat_map<ui::Accelerator, int> accelerator_table_;
 };

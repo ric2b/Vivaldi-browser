@@ -1,47 +1,15 @@
 /**
- * Copyright 2023 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2023 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 import type * as Bidi from 'chromium-bidi/lib/cjs/protocol/protocol.js';
 
-import {PuppeteerURL, debugError} from '../common/util.js';
+import {ProtocolError, TimeoutError} from '../common/Errors.js';
+import {PuppeteerURL} from '../common/util.js';
 
 import {BidiDeserializer} from './Deserializer.js';
-import type {BidiRealm} from './Realm.js';
-
-/**
- * @internal
- */
-export async function releaseReference(
-  client: BidiRealm,
-  remoteReference: Bidi.Script.RemoteReference
-): Promise<void> {
-  if (!remoteReference.handle) {
-    return;
-  }
-  await client.connection
-    .send('script.disown', {
-      target: client.target,
-      handles: [remoteReference.handle],
-    })
-    .catch((error: any) => {
-      // Exceptions might happen in case of a page been navigated or closed.
-      // Swallow these since they are harmless and we don't leak anything in this case.
-      debugError(error);
-    });
-}
 
 /**
  * @internal
@@ -88,4 +56,21 @@ export function createEvaluationError(
 
   error.stack = [details.text, ...stackLines].join('\n');
   return error;
+}
+
+/**
+ * @internal
+ */
+export function rewriteNavigationError(
+  message: string,
+  ms: number
+): (error: unknown) => never {
+  return error => {
+    if (error instanceof ProtocolError) {
+      error.message += ` at ${message}`;
+    } else if (error instanceof TimeoutError) {
+      error.message = `Navigation timeout of ${ms} ms exceeded`;
+    }
+    throw error;
+  };
 }

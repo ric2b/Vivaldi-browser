@@ -6,11 +6,10 @@
 
 #import "base/check.h"
 #import "base/metrics/histogram_functions.h"
-#import "components/bookmarks/browser/bookmark_model.h"
+#import "components/bookmarks/browser/core_bookmark_model.h"
 #import "components/bookmarks/common/bookmark_pref_names.h"
 #import "components/prefs/pref_service.h"
-#import "ios/chrome/browser/bookmarks/model/account_bookmark_model_factory.h"
-#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
@@ -19,7 +18,6 @@
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/tabs/model/features.h"
 #import "ios/chrome/browser/tabs/model/tab_title_util.h"
-#import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/menu/action_factory.h"
 #import "ios/chrome/browser/ui/menu/tab_context_menu_delegate.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_context_menu/tab_cell.h"
@@ -76,6 +74,30 @@ using PinnedState = WebStateSearchCriteria::PinnedState;
                                                actionProvider:actionProvider];
 }
 
+- (UIContextMenuConfiguration*)
+    contextMenuConfigurationForTabGroupCell:(TabCell*)cell
+                               menuScenario:(MenuScenarioHistogram)scenario {
+  __weak __typeof(self) weakSelf = self;
+
+  UIContextMenuActionProvider actionProvider =
+      ^(NSArray<UIMenuElement*>* suggestedActions) {
+        TabContextMenuHelper* strongSelf = weakSelf;
+        if (!strongSelf) {
+          // Return an empty menu.
+          return [UIMenu menuWithTitle:@"" children:@[]];
+        }
+
+        NSArray<UIMenuElement*>* menuElements =
+            [strongSelf menuElementsForTabGroupCell:cell menuScenario:scenario];
+        return [UIMenu menuWithTitle:@"" children:menuElements];
+      };
+
+  return
+      [UIContextMenuConfiguration configurationWithIdentifier:nil
+                                              previewProvider:nil
+                                               actionProvider:actionProvider];
+}
+
 - (NSArray<UIMenuElement*>*)menuElementsForTabCell:(TabCell*)cell
                                       menuScenario:
                                           (MenuScenarioHistogram)scenario {
@@ -114,12 +136,35 @@ using PinnedState = WebStateSearchCriteria::PinnedState;
     }
   }
 
-  if (base::FeatureList::IsEnabled(kTabGroupsInGrid)) {
-    [menuElements addObject:[actionFactory actionToAddTabToNewGroupWithBlock:^{
-                    [self.contextMenuDelegate
-                        createNewTabGroupWithIdentifier:cell.itemIdentifier
-                                              incognito:self.incognito];
-                  }]];
+  if (IsTabGroupInGridEnabled()) {
+    // The `groupTitleAndIdentifiers`is for demo purposes only, it will be
+    // replaced when the group tab model is available.
+    GroupTitleAndIdentifier* firstGroupTitleAndIdentifier =
+        [[GroupTitleAndIdentifier alloc] init];
+    GroupTitleAndIdentifier* secondGroupTitleAndIdentifier =
+        [[GroupTitleAndIdentifier alloc] init];
+
+    firstGroupTitleAndIdentifier.groupTitle = @"Group 1";
+    firstGroupTitleAndIdentifier.groupID = @"Group 1";
+
+    secondGroupTitleAndIdentifier.groupTitle = @"Group 2";
+    secondGroupTitleAndIdentifier.groupID = @"Group 2";
+
+    NSArray<GroupTitleAndIdentifier*>* groupTitleAndIdentifiers =
+        @[ firstGroupTitleAndIdentifier, secondGroupTitleAndIdentifier ];
+    UIMenu* addTabToGroupMenu = [actionFactory
+        menuToAddTabToGroupWithGroupTitleAndIdentifiers:groupTitleAndIdentifiers
+                                                  block:^(NSString* title) {
+                                                    if (!title) {
+                                                      [self.contextMenuDelegate
+                                                          createNewTabGroupWithIdentifier:
+                                                              cell.itemIdentifier
+                                                                                incognito:
+                                                                                    self.incognito];
+                                                    }
+                                                  }];
+
+    [menuElements addObject:addTabToGroupMenu];
   }
 
   if (!IsURLNewTabPage(item.URL)) {
@@ -195,18 +240,52 @@ using PinnedState = WebStateSearchCriteria::PinnedState;
   return menuElements;
 }
 
+- (NSArray<UIMenuElement*>*)menuElementsForTabGroupCell:(TabCell*)cell
+                                           menuScenario:
+                                               (MenuScenarioHistogram)scenario {
+  // Record that this context menu was shown to the user.
+  RecordMenuShown(scenario);
+
+  ActionFactory* actionFactory =
+      [[ActionFactory alloc] initWithScenario:scenario];
+
+  TabItem* item = [self tabItemForIdentifier:cell.itemIdentifier];
+
+  if (!item) {
+    return @[];
+  }
+
+  __weak __typeof(self) weakSelf = self;
+
+  NSMutableArray<UIMenuElement*>* menuElements = [[NSMutableArray alloc] init];
+
+  // TODO(crbug.com/1501837): Add the blocks to every action in the tab group
+  // context menu.
+
+  // `Rename Group` is an entry point to the create group view controller for
+  // now, it will be replaced once the model and the methods are available for
+  // tab groups.
+  [menuElements addObject:[actionFactory actionToRenameTabGroupWithBlock:^{
+                  [weakSelf.contextMenuDelegate
+                      createNewTabGroupWithIdentifier:cell.itemIdentifier
+                                            incognito:weakSelf.incognito];
+                }]];
+
+  [menuElements
+      addObject:[actionFactory actionToAddNewTabInGroupWithBlock:nil]];
+  [menuElements addObject:[actionFactory actionToUngroupTabGroupWithBlock:nil]];
+  [menuElements addObject:[actionFactory actionToCloseTabGroupWithBlock:nil]];
+
+  return menuElements;
+}
+
 #pragma mark - Private
 
 // Returns `YES` if the tab `item` is already bookmarked.
 - (BOOL)isTabItemBookmarked:(TabItem*)item {
-  bookmarks::BookmarkModel* localOrSyncableBookmarkModel =
-      ios::LocalOrSyncableBookmarkModelFactory::GetForBrowserState(
-          _browserState);
-  bookmarks::BookmarkModel* accountBookmarkModel =
-      ios::AccountBookmarkModelFactory::GetForBrowserState(_browserState);
-  return item &&
-         bookmark_utils_ios::IsBookmarked(
-             item.URL, localOrSyncableBookmarkModel, accountBookmarkModel);
+  bookmarks::CoreBookmarkModel* bookmarkModel =
+      ios::BookmarkModelFactory::GetForBrowserState(_browserState);
+  return item && bookmarkModel->IsBookmarked(item.URL);
 }
 
 // Returns `YES` if the tab for the given `identifier` is pinned.

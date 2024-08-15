@@ -140,6 +140,8 @@ class SyncServiceImpl : public SyncService,
   void TriggerRefresh(const ModelTypeSet& types) override;
   void DataTypePreconditionChanged(ModelType type) override;
   void SetInvalidationsForSessionsEnabled(bool enabled) override;
+  bool SupportsExplicitPassphrasePlatformClient() override;
+  void SendExplicitPassphraseToPlatformClient() override;
   void AddObserver(SyncServiceObserver* observer) override;
   void RemoveObserver(SyncServiceObserver* observer) override;
   bool HasObserver(const SyncServiceObserver* observer) const override;
@@ -192,7 +194,7 @@ class SyncServiceImpl : public SyncService,
   void CryptoRequiredUserActionChanged() override;
   void ReconfigureDataTypesDueToCrypto() override;
   void PassphraseTypeChanged(PassphraseType passphrase_type) override;
-  absl::optional<PassphraseType> GetPassphraseType() const override;
+  std::optional<PassphraseType> GetPassphraseType() const override;
   void SetEncryptionBootstrapToken(const std::string& bootstrap_token) override;
   std::string GetEncryptionBootstrapToken() const override;
 
@@ -223,8 +225,7 @@ class SyncServiceImpl : public SyncService,
   void OnFirstSetupCompletePrefChange(
       bool is_initial_sync_feature_setup_complete) override;
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
-  void OnPreferredDataTypesPrefChange(
-      bool payments_integration_enabled_changed) override;
+  void OnSelectedTypesPrefChange() override;
 
   // KeyedService implementation.  This must be called exactly
   // once (before this object is destroyed).
@@ -413,6 +414,8 @@ class SyncServiceImpl : public SyncService,
       ModelType type,
       const std::string& waiting_for_updates_histogram_name) const;
 
+  void OnPasswordSyncAllowedChanged();
+
   // This profile's SyncClient, which abstracts away non-Sync dependencies and
   // the Sync API component factory.
   const std::unique_ptr<SyncClient> sync_client_;
@@ -481,8 +484,8 @@ class SyncServiceImpl : public SyncService,
   bool sync_disabled_by_admin_ = false;
 
   // Information describing an unrecoverable error.
-  absl::optional<UnrecoverableErrorReason> unrecoverable_error_reason_ =
-      absl::nullopt;
+  std::optional<UnrecoverableErrorReason> unrecoverable_error_reason_ =
+      std::nullopt;
   std::string unrecoverable_error_message_;
   base::Location unrecoverable_error_location_;
 
@@ -491,8 +494,8 @@ class SyncServiceImpl : public SyncService,
 
   // Note: This is an Optional so that we can control its destruction - in
   // particular, to trigger the "check_empty" test in Shutdown().
-  absl::optional<base::ObserverList<SyncServiceObserver,
-                                    /*check_empty=*/true>::Unchecked>
+  std::optional<base::ObserverList<SyncServiceObserver,
+                                   /*check_empty=*/true>::Unchecked>
       observers_;
 
   base::ObserverList<ProtocolEventObserver>::Unchecked

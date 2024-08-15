@@ -181,13 +181,11 @@ class TitleView : public views::View {
                                           *title_label);
     layout_ptr->SetFlexForView(title_label, 1);
 
-    if (ash::features::IsStylusBatteryStatusEnabled()) {
-      AddChildView(std::make_unique<BatteryView>());
+    AddChildView(std::make_unique<BatteryView>());
 
-      auto* separator = AddChildView(std::make_unique<views::Separator>());
-      separator->SetPreferredLength(GetPreferredSize().height());
-      separator->SetColorId(ui::kColorAshSystemUIMenuSeparator);
-    }
+    auto* separator = AddChildView(std::make_unique<views::Separator>());
+    separator->SetPreferredLength(GetPreferredSize().height());
+    separator->SetColorId(ui::kColorAshSystemUIMenuSeparator);
 
     help_button_ = AddChildView(std::make_unique<IconButton>(
         base::BindRepeating(
@@ -452,7 +450,7 @@ void PaletteTray::OnDisplayConfigurationChanged() {
   UpdateIconVisibility();
 }
 
-void PaletteTray::ClickedOutsideBubble() {
+void PaletteTray::ClickedOutsideBubble(const ui::LocatedEvent& event) {
   if (num_actions_in_bubble_ == 0) {
     RecordPaletteOptionsUsage(PaletteTrayOptions::PALETTE_CLOSED_NO_ACTION,
                               PaletteInvocationMethod::MENU);
@@ -688,10 +686,6 @@ TrayBubbleView* PaletteTray::GetBubbleView() {
 
 views::Widget* PaletteTray::GetBubbleWidget() const {
   return bubble_ ? bubble_->GetBubbleWidget() : nullptr;
-}
-
-const char* PaletteTray::GetClassName() const {
-  return "PaletteTray";
 }
 
 void PaletteTray::InitializeWithLocalState() {

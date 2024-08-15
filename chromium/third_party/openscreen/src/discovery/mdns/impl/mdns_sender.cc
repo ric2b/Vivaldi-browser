@@ -14,7 +14,7 @@
 namespace openscreen::discovery {
 
 MdnsSender::MdnsSender(UdpSocket* socket) : socket_(socket) {
-  OSP_DCHECK(socket_ != nullptr);
+  OSP_CHECK(socket_);
 }
 
 MdnsSender::~MdnsSender() = default;

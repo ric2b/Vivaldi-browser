@@ -44,12 +44,14 @@ void NinjaBinaryTargetWriter::Run() {
   if (target_->source_types_used().RustSourceUsed()) {
     NinjaRustBinaryTargetWriter writer(target_, out_);
     writer.SetResolvedTargetData(GetResolvedTargetData());
+    writer.SetNinjaOutputs(ninja_outputs_);
     writer.Run();
     return;
   }
 
   NinjaCBinaryTargetWriter writer(target_, out_);
   writer.SetResolvedTargetData(GetResolvedTargetData());
+  writer.SetNinjaOutputs(ninja_outputs_);
   writer.Run();
 }
 
@@ -72,7 +74,7 @@ std::vector<OutputFile> NinjaBinaryTargetWriter::WriteInputsStampAndGetDep(
   // file for it.
   if (inputs.size() == 1) {
     return std::vector<OutputFile>{
-      OutputFile(settings_->build_settings(), *inputs[0])};
+        OutputFile(settings_->build_settings(), *inputs[0])};
   }
 
   std::vector<OutputFile> outs;
@@ -91,7 +93,8 @@ std::vector<OutputFile> NinjaBinaryTargetWriter::WriteInputsStampAndGetDep(
   stamp_file.value().append(".inputs.stamp");
 
   out_ << "build ";
-  path_output_.WriteFile(out_, stamp_file);
+  WriteOutput(stamp_file);
+
   out_ << ": " << GetNinjaRulePrefixForToolchain(settings_)
        << GeneralTool::kGeneralToolStamp;
 
@@ -203,12 +206,8 @@ void NinjaBinaryTargetWriter::AddSourceSetFiles(
   // Swift files may generate one object file per module or one per source file
   // depending on how the compiler is invoked (whole module optimization).
   if (source_set->source_types_used().SwiftSourceUsed()) {
-    const Tool* tool = source_set->toolchain()->GetToolForSourceTypeAsC(
-        SourceFile::SOURCE_SWIFT);
-
     std::vector<OutputFile> outputs;
-    SubstitutionWriter::ApplyListToLinkerAsOutputFile(
-        source_set, tool, tool->outputs(), &outputs);
+    source_set->swift_values().GetOutputs(source_set, &outputs);
 
     for (const OutputFile& output : outputs) {
       SourceFile output_as_source =
@@ -261,9 +260,10 @@ void NinjaBinaryTargetWriter::WriteCompilerBuildLine(
     const std::vector<OutputFile>& order_only_deps,
     const char* tool_name,
     const std::vector<OutputFile>& outputs,
-    bool can_write_source_info) {
+    bool can_write_source_info,
+    bool restat_output_allowed) {
   out_ << "build";
-  path_output_.WriteFiles(out_, outputs);
+  WriteOutputs(outputs);
 
   out_ << ": " << rule_prefix_ << tool_name;
   path_output_.WriteFiles(out_, sources);
@@ -280,20 +280,20 @@ void NinjaBinaryTargetWriter::WriteCompilerBuildLine(
   out_ << std::endl;
 
   if (!sources.empty() && can_write_source_info) {
-    out_ << "  "
-         << "source_file_part = " << sources[0].GetName();
+    out_ << "  " << "source_file_part = " << sources[0].GetName();
     out_ << std::endl;
-    out_ << "  "
-         << "source_name_part = "
+    out_ << "  " << "source_name_part = "
          << FindFilenameNoExtension(&sources[0].value());
     out_ << std::endl;
   }
+
+  if (restat_output_allowed) {
+    out_ << "  restat = 1" << std::endl;
+  }
 }
 
-void NinjaBinaryTargetWriter::WriteCustomLinkerFlags(
-    std::ostream& out,
-    const Tool* tool) {
-
+void NinjaBinaryTargetWriter::WriteCustomLinkerFlags(std::ostream& out,
+                                                     const Tool* tool) {
   if (tool->AsC() || (tool->AsRust() && tool->AsRust()->MayLink())) {
     // First the ldflags from the target and its config.
     RecursiveTargetConfigStringsToStream(kRecursiveWriterKeepDuplicates,
@@ -302,9 +302,8 @@ void NinjaBinaryTargetWriter::WriteCustomLinkerFlags(
   }
 }
 
-void NinjaBinaryTargetWriter::WriteLibrarySearchPath(
-    std::ostream& out,
-    const Tool* tool) {
+void NinjaBinaryTargetWriter::WriteLibrarySearchPath(std::ostream& out,
+                                                     const Tool* tool) {
   // Write library search paths that have been recursively pushed
   // through the dependency tree.
   const auto& all_lib_dirs = resolved().GetLinkedLibraryDirs(target_);
@@ -355,9 +354,9 @@ void NinjaBinaryTargetWriter::WriteLibs(std::ostream& out, const Tool* tool) {
   // Libraries that have been recursively pushed through the dependency tree.
   // Since we're passing these on the command line to the linker and not
   // to Ninja, we need to do shell escaping.
-  PathOutput lib_path_output(
-      path_output_.current_dir(), settings_->build_settings()->root_path_utf8(),
-      ESCAPE_NINJA_COMMAND);
+  PathOutput lib_path_output(path_output_.current_dir(),
+                             settings_->build_settings()->root_path_utf8(),
+                             ESCAPE_NINJA_COMMAND);
   EscapeOptions lib_escape_opts;
   lib_escape_opts.mode = ESCAPE_NINJA_COMMAND;
   const auto& all_libs = resolved().GetLinkedLibraries(target_);

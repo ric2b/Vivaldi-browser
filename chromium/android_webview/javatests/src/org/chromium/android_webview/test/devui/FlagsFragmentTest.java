@@ -153,6 +153,17 @@ public class FlagsFragmentTest {
         ViewUtils.waitForVisibleView(withId(R.id.flags_list));
         ViewUtils.waitForVisibleView(withId(R.id.reset_flags_button));
 
+        // For some reasons, the blinking Text Cursor can make the UI thread very busy.
+        // This leads to AppNotIdleException and flaky tests, because Espresso could not find a 15ms
+        // gap between calls to update UI thread. To fix this, we should just hide the edit text
+        // cursor. It does not change the test functionality, but will eliminate one source of
+        // flakiness.
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    EditText searchBar = mRule.getActivity().findViewById(R.id.flag_search_bar);
+                    searchBar.setCursorVisible(false);
+                });
+
         // Always close the soft keyboard when the activity is launched which is sometimes shown
         // because flags search TextView has input focus by default. The keyboard may cover up some
         // Views causing test flakiness/failures.

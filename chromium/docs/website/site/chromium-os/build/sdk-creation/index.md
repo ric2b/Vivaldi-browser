@@ -46,18 +46,39 @@ bucket. So with the information above, we know to fetch the file:
 
 <https://storage.googleapis.com/chromiumos-sdk/cros-sdk-2022.03.17.105954.tar.xz>
 
+With the `--update` flag enabled, `cros_sdk` will ensure your chroot was built
+from the file in `sdk_version.conf`, and otherwise re-builds your chroot from
+that version.  This behavior is soon to become the default.
+
 ## Bootstrap Flow
 
 The question might arise: How is the prebuilt SDK tarball created in the first
 place? There is a pipeline of builders (a.k.a. the "SDK builders") that builds a
 new version of the SDK tarball, tests it, and updates the SDK version file so
 that developers and other builders will use the new tarball. The SDK builder
-pipeline runs twice per day and takes ~9 hours for a successful run.
+pipeline runs twice per day and takes ~4 hours for a successful run.
 
 For a bootstrap starting point, to avoid the case where the SDK itself may have
 been broken by a commit, the builder uses a pinned known "good" version from
 which to build the next SDK version. This version is manually moved forward as
 needed.
+
+We download a copy of the SDK tarball to bootstrap with and setup the chroot
+environment. This is just using the standard `cros_sdk` command with its
+`--bootstrap` option.
+
+As with the latest SDK version, the bootstrap version of the SDK to use is
+stored in
+[sdk_version.conf](https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/chromeos/binhost/host/sdk_version.conf):
+
+```
+BOOTSTRAP_FROZEN_VERSION="2020.11.09.170314
+```
+
+This is used to look up the tarball in the chromiumos-sdk Google Storage bucket.
+So with the information above, `cros_sdk` knows to fetch the file:
+
+<https://storage.googleapis.com/chromiumos-sdk/cros-sdk-2020.11.09.170314.tar.xz>
 
 The SDK builder pipeline also creates binpkgs (prebuilt versions of software
 packages) for all toolchain packages. These are uprevved simultaneously with the
@@ -97,8 +118,8 @@ The SDK builder does the following:
 *   Downloads the bootstrap version of the SDK and sets up the chroot
     environment.
 *   Builds the SDK board (amd64-host) by entering the chroot and running
-    `./build_sdk_board`
-*   Builds and installs the cross-compiler toolchains, as well as standalone copies of the cross-compilers, by entering the chroot and running `./cros_setup_toolchains`
+    `./build_sdk_board`.
+*   Builds and installs the cross-compiler toolchains, as well as standalone copies of the cross-compilers, by entering the chroot and running `cros_setup_toolchains`.
 *   Packages the freshly built SDK into a tarball, and uploads it to Google
     Storage.
 *   Uploads amd64-host binpkgs and toolchain binpkgs to Google Storage.
@@ -166,28 +187,11 @@ That file simply reads the new SDK version, and updates the Google Storage file
 `gs://chromiumos-sdk/cros-sdk-latest.conf`. Some workflows within Google3 read
 that file to figure out which SDK to download.
 
-### SDK bootstrap version
+### Reverting an SDK uprev
 
-We download a copy of the SDK tarball to bootstrap with and setup the chroot
-environment. This is just using the standard `cros_sdk` command with its
-`--bootstrap` option.
-
-As with the latest SDK version, the bootstrap version of the SDK to use is
-stored in
-[sdk_version.conf](https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/chromeos/binhost/host/sdk_version.conf):
-
-```
-BOOTSTRAP_FROZEN_VERSION="2020.11.09.170314
-```
-
-This is used to look up the tarball in the chromiumos-sdk Google Storage bucket.
-So with the information above, `cros_sdk` knows to fetch the file:
-
-<https://storage.googleapis.com/chromiumos-sdk/cros-sdk-2020.11.09.170314.tar.xz>
-
-`cros_sdk` continues its normal process of running
-[`update_chroot.sh`](https://chromium.googlesource.com/chromiumos/platform/crosutils/+/HEAD/update_chroot.sh)
-and setting up the chroot SDK environment.
+If the SDK uprev lands but causes issues, the correct action for the on-caller
+is to revert the uprev CLs.  Please be aware of the `Cq-Depend`s during the
+revert.
 
 ## Running the SDK builder as a developer
 

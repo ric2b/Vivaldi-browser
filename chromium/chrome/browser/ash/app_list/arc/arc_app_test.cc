@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ash/app_list/arc/arc_app_test.h"
 
+#include <vector>
+
 #include "ash/components/arc/arc_util.h"
 #include "ash/components/arc/mojom/app.mojom-shared.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
@@ -17,7 +19,6 @@
 #include "ash/constants/ash_features.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/ranges/algorithm.h"
@@ -88,7 +89,10 @@ std::vector<arc::mojom::AppInfoPtr> ArcAppTest::CloneApps(
   return result;
 }
 
-ArcAppTest::ArcAppTest() {
+ArcAppTest::ArcAppTest(UserManagerMode user_manager_mode)
+    : fake_user_manager_(user_manager_mode == UserManagerMode::kDoNothing
+                             ? nullptr
+                             : std::make_unique<ash::FakeChromeUserManager>()) {
   CreateFakeAppsAndPackages();
 }
 
@@ -104,14 +108,21 @@ void ArcAppTest::SetUp(Profile* profile) {
   DCHECK(!profile_);
   profile_ = profile;
 
+  if (!session_manager::SessionManager::Get()) {
+    session_manager_ = std::make_unique<session_manager::SessionManager>();
+  }
+
   arc::ResetArcAllowedCheckForTesting(profile_);
 
-  const user_manager::User* user = CreateUserAndLogin();
+  if (fake_user_manager_.Get()) {
+    const user_manager::User* user = CreateUserAndLogin();
 
-  // If for any reason the garbage collector kicks in while we are waiting for
-  // an icon, have the user-to-profile mapping ready to avoid using the real
-  // profile manager (which is null).
-  ash::ProfileHelper::Get()->SetUserToProfileMappingForTesting(user, profile_);
+    // If for any reason the garbage collector kicks in while we are waiting for
+    // an icon, have the user-to-profile mapping ready to avoid using the real
+    // profile manager (which is null).
+    ash::ProfileHelper::Get()->SetUserToProfileMappingForTesting(user,
+                                                                 profile_);
+  }
 
   // A valid |arc_app_list_prefs_| is needed for the ARC bridge service and the
   // ARC auth service.
@@ -342,6 +353,7 @@ void ArcAppTest::TearDown() {
     concierge_client_initialized_ = false;
   }
   profile_ = nullptr;
+  session_manager_.reset();
 }
 
 void ArcAppTest::StopArcInstance() {
@@ -391,7 +403,7 @@ void ArcAppTest::UpdatePackage(arc::mojom::ArcPackageInfoPtr updated_package) {
 }
 
 void ArcAppTest::RemovePackage(const std::string& package_name) {
-  base::EraseIf(fake_packages_, [package_name](const auto& package) {
+  std::erase_if(fake_packages_, [package_name](const auto& package) {
     return package->package_name == package_name;
   });
 }

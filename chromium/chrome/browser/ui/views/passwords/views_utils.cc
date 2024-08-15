@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/passwords/views_utils.h"
 
+#include <vector>
+
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/passwords/ui_utils.h"
@@ -220,7 +222,7 @@ std::unique_ptr<views::EditableCombobox> CreateUsernameEditableCombobox(
       usernames.push_back(other_possible_username.value);
     }
   }
-  base::EraseIf(usernames, [](const std::u16string& username) {
+  std::erase_if(usernames, [](const std::u16string& username) {
     return username.empty();
   });
   const bool kDisplayArrow = usernames.size() > 1;
@@ -249,7 +251,7 @@ std::unique_ptr<views::EditablePasswordCombobox> CreateEditablePasswordCombobox(
       form.all_alternative_passwords.empty()
           ? std::vector<std::u16string>(/*n=*/1, form.password_value)
           : ToValues(form.all_alternative_passwords);
-  base::EraseIf(passwords, [](const std::u16string& password) {
+  std::erase_if(passwords, [](const std::u16string& password) {
     return password.empty();
   });
   const bool kDisplayArrow = passwords.size() > 1;
@@ -307,8 +309,8 @@ std::unique_ptr<views::Combobox> CreateDestinationCombobox(
 std::unique_ptr<views::View> CreateTitleView(const std::u16string& title) {
   const ChromeLayoutProvider* layout_provider = ChromeLayoutProvider::Get();
   auto header = std::make_unique<views::BoxLayoutView>();
-  // Set the space between the icon and title similar to the default behavior in
-  // BubbleFrameView::Layout().
+  // Set the space between the icon and title similar to the default
+  // BubbleFrameView layout.
   header->SetBetweenChildSpacing(
       layout_provider->GetInsetsMetric(views::INSETS_DIALOG_TITLE).left());
   header->AddChildView(

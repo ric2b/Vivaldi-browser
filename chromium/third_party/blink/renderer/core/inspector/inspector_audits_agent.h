@@ -14,7 +14,10 @@
 
 namespace blink {
 
+namespace protocol::Audits {
 class InspectorIssue;
+}  // namespace protocol::Audits
+
 class InspectorIssueStorage;
 class WebAutofillClient;
 

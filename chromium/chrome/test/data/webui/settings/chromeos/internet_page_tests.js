@@ -19,11 +19,14 @@ import {ESimManagerRemote} from 'chrome://resources/mojo/chromeos/ash/services/c
 import {CrosNetworkConfigRemote, InhibitReason, MAX_NUM_CUSTOM_APNS, VpnType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
 import {ConnectionStateType, DeviceStateType, NetworkType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {FakeNetworkConfig} from 'chrome://webui-test/chromeos/fake_network_config_mojom.js';
 import {FakePasspointService} from 'chrome://webui-test/chromeos/fake_passpoint_service_mojom.js';
 import {FakeESimManagerRemote} from 'chrome://webui-test/cr_components/chromeos/cellular_setup/fake_esim_manager_remote.js';
 import {waitAfterNextRender, waitBeforeNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {eventToPromise, isVisible} from 'chrome://webui-test/test_util.js';
+
+import {clearBody} from './utils.js';
 
 suite('InternetPage', function() {
   /** @type {?InternetPageElement} */
@@ -220,7 +223,7 @@ suite('InternetPage', function() {
     hotspotConfig = new FakeHotspotConfig();
     setHotspotConfigForTesting(hotspotConfig);
 
-    PolymerTest.clearBody();
+    clearBody();
   });
 
   teardown(function() {
@@ -315,7 +318,7 @@ suite('InternetPage', function() {
           'Toggle WiFi should be focused for settingId=4.');
     });
 
-    test('Deep link to + New APN Button', async () => {
+    test('Deep link to APN menu button', async () => {
       loadTimeData.overrideValues({isApnRevampEnabled: true});
       await init();
 
@@ -333,13 +336,13 @@ suite('InternetPage', function() {
       await flushAsync();
 
       const deepLinkElement =
-          internetPage.shadowRoot.querySelector('#createCustomApnButton');
+          internetPage.shadowRoot.querySelector('#apnActionMenuButton');
       assertTrue(!!deepLinkElement);
 
       await waitAfterNextRender(deepLinkElement);
       assertEquals(
           deepLinkElement, getDeepActiveElement(),
-          `+ New APN Button be focused for settingId=${
+          `APN menu button be focused for settingId=${
               settingMojom.Setting.kCellularAddApn.toString()}.`);
     });
 
@@ -790,6 +793,93 @@ suite('InternetPage', function() {
     assertTrue(simLockDialogs.isDialogOpen);
   });
 
+  test('Show carrier lock sub header when locked', async () => {
+    loadTimeData.overrideValues({isCellularCarrierLockEnabled: true});
+    await init();
+
+    const params = new URLSearchParams();
+    params.append('type', OncMojo.getNetworkTypeString(NetworkType.kCellular));
+
+    // Pretend that we initially started on the INTERNET_NETWORKS route with the
+    // params.
+    Router.getInstance().navigateTo(routes.INTERNET_NETWORKS, params);
+    internetPage.currentRouteChanged(routes.INTERNET_NETWORKS, undefined);
+
+    // Update the device state here to trigger an onDeviceStatesChanged_() call.
+    mojoApi_.setDeviceStateForTest({
+      type: NetworkType.kCellular,
+      deviceState: DeviceStateType.kEnabled,
+      inhibitReason: InhibitReason.kNotInhibited,
+      isCarrierLocked: true,
+    });
+    await flushAsync();
+
+    const cellularSubtitle =
+        internetPage.shadowRoot.querySelector('#cellularSubtitle');
+    assertTrue(!!cellularSubtitle);
+  });
+
+  test(
+      'Verify carrier lock sub header not displayed when unlocked',
+      async () => {
+        loadTimeData.overrideValues({isCellularCarrierLockEnabled: true});
+        await init();
+
+        const params = new URLSearchParams();
+        params.append(
+            'type', OncMojo.getNetworkTypeString(NetworkType.kCellular));
+
+        // Pretend that we initially started on the INTERNET_NETWORKS route with
+        // the params.
+        Router.getInstance().navigateTo(routes.INTERNET_NETWORKS, params);
+        internetPage.currentRouteChanged(routes.INTERNET_NETWORKS, undefined);
+
+        // Update the device state here to trigger an onDeviceStatesChanged_()
+        // call.
+        mojoApi_.setDeviceStateForTest({
+          type: NetworkType.kCellular,
+          deviceState: DeviceStateType.kEnabled,
+          inhibitReason: InhibitReason.kNotInhibited,
+          isCarrierLocked: false,
+        });
+        await flushAsync();
+
+        const cellularSubtitle =
+            internetPage.shadowRoot.querySelector('#cellularSubtitle');
+        assertFalse(!!cellularSubtitle);
+      });
+
+  test(
+      'Verify carrier lock sub header not displayed when feature disabled',
+      async () => {
+        loadTimeData.overrideValues({isCellularCarrierLockEnabled: false});
+        await init();
+
+        const params = new URLSearchParams();
+        params.append(
+            'type', OncMojo.getNetworkTypeString(NetworkType.kCellular));
+
+        // Pretend that we initially started on the INTERNET_NETWORKS route with
+        // the params.
+        Router.getInstance().navigateTo(routes.INTERNET_NETWORKS, params);
+        internetPage.currentRouteChanged(routes.INTERNET_NETWORKS, undefined);
+
+        // Update the device state here to trigger an onDeviceStatesChanged_()
+        // call.
+        mojoApi_.setDeviceStateForTest({
+          type: NetworkType.kCellular,
+          deviceState: DeviceStateType.kEnabled,
+          inhibitReason: InhibitReason.kNotInhibited,
+          isCarrierLocked: true,
+        });
+        await flushAsync();
+
+        const cellularSubtitle =
+            internetPage.shadowRoot.querySelector('#cellularSubtitle');
+        assertFalse(!!cellularSubtitle);
+      });
+
+
   test(
       'Show no connection toast if receive show-cellular-setup' +
           'event and not connected to non-cellular network',
@@ -932,12 +1022,20 @@ suite('InternetPage', function() {
             apnList.shadowRoot.querySelector('apn-detail-dialog');
 
         assertFalse(!!getApnDetailDialog());
+        const apnMenuButton =
+            internetPage.shadowRoot.querySelector('#apnActionMenuButton');
+        assertTrue(!!apnMenuButton);
+        apnMenuButton.click();
+        await flushAsync();
+
+        assertTrue(internetPage.shadowRoot.querySelector('#apnDotsMenu').open);
         const createCustomApnButton =
             internetPage.shadowRoot.querySelector('#createCustomApnButton');
         assertTrue(!!createCustomApnButton);
         createCustomApnButton.click();
         await flushAsync();
 
+        assertFalse(internetPage.shadowRoot.querySelector('#apnDotsMenu').open);
         assertTrue(!!getApnDetailDialog());
         const onCloseEventPromise = eventToPromise('close', apnList);
         const cancelBtn = getApnDetailDialog().shadowRoot.querySelector(
@@ -946,6 +1044,45 @@ suite('InternetPage', function() {
         await onCloseEventPromise;
 
         assertFalse(!!getApnDetailDialog());
+      });
+
+  test(
+      'Discover more apns button opens dialog and clicking cancel button ' +
+          'removes it',
+      async function() {
+        loadTimeData.overrideValues({isApnRevampEnabled: true});
+        await navigateToApnSubpage();
+        const subpage = internetPage.shadowRoot.querySelector('apn-subpage');
+        assertTrue(!!subpage);
+        const apnList = subpage.shadowRoot.querySelector('apn-list');
+        assertTrue(!!apnList);
+        const getApnSelectionDialog = () =>
+            apnList.shadowRoot.querySelector('apn-selection-dialog');
+
+        assertFalse(!!getApnSelectionDialog());
+        const apnMenuButton =
+            internetPage.shadowRoot.querySelector('#apnActionMenuButton');
+        assertTrue(!!apnMenuButton);
+        assertEquals(apnMenuButton.title, internetPage.i18n('moreActions'));
+        apnMenuButton.click();
+        await flushAsync();
+
+        assertTrue(internetPage.shadowRoot.querySelector('#apnDotsMenu').open);
+        const discoverMoreApnsButton =
+            internetPage.shadowRoot.querySelector('#discoverMoreApnsButton');
+        assertTrue(!!discoverMoreApnsButton);
+        discoverMoreApnsButton.click();
+        await flushAsync();
+
+        assertFalse(internetPage.shadowRoot.querySelector('#apnDotsMenu').open);
+        assertTrue(!!getApnSelectionDialog());
+        const onCloseEventPromise = eventToPromise('close', apnList);
+        const cancelBtn =
+            getApnSelectionDialog().shadowRoot.querySelector('.cancel-button');
+        cancelBtn.click();
+        await onCloseEventPromise;
+
+        assertFalse(!!getApnSelectionDialog());
       });
 
   test(
@@ -981,51 +1118,60 @@ suite('InternetPage', function() {
       });
 
   test(
-      'Disable and show tooltip for New APN button when custom APNs limit is' +
+      'Disable and show tooltip for APN buttons when custom APNs limit is' +
           'reached',
       async function() {
         loadTimeData.overrideValues({isApnRevampEnabled: true});
         await navigateToApnSubpage();
-        const getApnButton = () =>
+        const getCreateCustomApnButton = () =>
             internetPage.shadowRoot.querySelector('#createCustomApnButton');
-        const getApnTooltip = () =>
-            internetPage.shadowRoot.querySelector('#apnTooltip');
+        const getCreateCustomApnTooltip = () =>
+            internetPage.shadowRoot.querySelector('#createCustomApnTooltip');
+        const getDiscoverMoreApnsButton = () =>
+            internetPage.shadowRoot.querySelector('#discoverMoreApnsButton');
+        const getDiscoverMoreApnsTooltip = () =>
+            internetPage.shadowRoot.querySelector('#discoverMoreApnsTooltip');
 
-        assertTrue(!!getApnButton());
-        assertFalse(!!getApnTooltip());
-        assertFalse(getApnButton().disabled);
+        assertTrue(!!getCreateCustomApnButton());
+        assertTrue(!!getDiscoverMoreApnsButton());
+        assertFalse(!!getCreateCustomApnTooltip());
+        assertFalse(!!getDiscoverMoreApnsTooltip());
+        assertFalse(getCreateCustomApnButton().disabled);
+        assertFalse(getDiscoverMoreApnsButton().disabled);
 
         let properties = OncMojo.getDefaultManagedProperties(
             NetworkType.kCellular, 'cellular1', 'cellular');
         // We're setting the list of APNs to the max number
-        properties.typeProperties.cellular = {
-          customApnList:
-              Array.apply(null, {length: MAX_NUM_CUSTOM_APNS}).map(_ => {
-                return {
-                  accessPointName: 'apn',
-                };
-              }),
-        };
+        properties.typeProperties.cellular.customApnList =
+            Array.apply(null, {length: MAX_NUM_CUSTOM_APNS}).map(_ => {
+              return {
+                accessPointName: 'apn',
+              };
+            });
         mojoApi_.setManagedPropertiesForTest(properties);
         await flushAsync();
 
-        assertTrue(!!getApnTooltip());
-        assertTrue(getApnButton().disabled);
-        assertTrue(getApnTooltip().innerHTML.includes(
+        assertTrue(!!getCreateCustomApnTooltip());
+        assertTrue(getCreateCustomApnTooltip().innerHTML.includes(
             internetPage.i18n('customApnLimitReached')));
+        assertTrue(!!getDiscoverMoreApnsTooltip());
+        assertTrue(getDiscoverMoreApnsTooltip().innerHTML.includes(
+            internetPage.i18n('customApnLimitReached')));
+        assertTrue(getCreateCustomApnButton().disabled);
+        assertTrue(getDiscoverMoreApnsButton().disabled);
 
         properties = OncMojo.getDefaultManagedProperties(
             NetworkType.kCellular, 'cellular1', 'cellular');
-        properties.typeProperties.cellular = {
-          customApnList: [],
-        };
+        properties.typeProperties.cellular.customApnList = [];
         mojoApi_.setManagedPropertiesForTest(properties);
         await flushAsync();
-        assertFalse(!!getApnTooltip());
-        assertFalse(getApnButton().disabled);
+        assertFalse(!!getCreateCustomApnTooltip());
+        assertFalse(!!getDiscoverMoreApnsTooltip());
+        assertFalse(getCreateCustomApnButton().disabled);
+        assertFalse(getDiscoverMoreApnsButton().disabled);
       });
 
-  test('Nagivate to Passpoint detail page', async () => {
+  test('Navigate to Passpoint detail page', async () => {
     const subId = 'a_passpoint_id';
     const sub = {
       id: subId,

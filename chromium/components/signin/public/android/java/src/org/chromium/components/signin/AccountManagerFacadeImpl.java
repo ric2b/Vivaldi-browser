@@ -39,6 +39,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /** AccountManagerFacade wraps our access of AccountManager in Android. */
@@ -74,15 +75,16 @@ public class AccountManagerFacadeImpl implements AccountManagerFacade {
     private final AtomicReference<List<PatternMatcher>> mAccountRestrictionPatterns =
             new AtomicReference<>();
 
-    private @NonNull List<Account> mAccounts = new ArrayList<>();
-
     private @NonNull Promise<List<CoreAccountInfo>> mCoreAccountInfosPromise = new Promise<>();
 
     private @Nullable AsyncTask<List<String>> mFetchGaiaIdsTask;
 
     private int mNumberOfRetries;
+    private boolean mDidAccountFetchSucceed;
 
-    /** @param delegate the AccountManagerDelegate to use as a backend */
+    /**
+     * @param delegate the AccountManagerDelegate to use as a backend
+     */
     public AccountManagerFacadeImpl(AccountManagerDelegate delegate) {
         ThreadUtils.assertOnUiThread();
         mDelegate = delegate;
@@ -172,18 +174,20 @@ public class AccountManagerFacadeImpl implements AccountManagerFacade {
     }
 
     @Override
-    public void checkChildAccountStatus(Account account, ChildAccountStatusListener listener) {
+    public void checkChildAccountStatus(
+            CoreAccountInfo coreAccountInfo, ChildAccountStatusListener listener) {
         ThreadUtils.assertOnUiThread();
         new AsyncTask<Boolean>() {
             @Override
             public Boolean doInBackground() {
+                Account account = AccountUtils.createAccountFromName(coreAccountInfo.getEmail());
                 return mDelegate.hasFeature(account, FEATURE_IS_USM_ACCOUNT_KEY);
             }
 
             @Override
             protected void onPostExecute(Boolean isChild) {
                 // TODO(crbug.com/1258563): rework this interface to avoid passing a null account.
-                listener.onStatusReady(isChild, isChild ? account : null);
+                listener.onStatusReady(isChild, isChild ? coreAccountInfo : null);
             }
         }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
@@ -193,7 +197,7 @@ public class AccountManagerFacadeImpl implements AccountManagerFacade {
      * @return Set of supported account capability values.
      */
     @Override
-    public Promise<AccountCapabilities> getAccountCapabilities(Account account) {
+    public Promise<AccountCapabilities> getAccountCapabilities(CoreAccountInfo coreAccountInfo) {
         ThreadUtils.assertOnUiThread();
         Promise<AccountCapabilities> accountCapabilitiesPromise = new Promise<>();
         new AsyncTask<AccountCapabilities>() {
@@ -205,7 +209,8 @@ public class AccountManagerFacadeImpl implements AccountManagerFacade {
                     @CapabilityResponse
                     int capability =
                             mDelegate.hasCapability(
-                                    account, getAndroidCapabilityName(capabilityName));
+                                    CoreAccountInfo.getAndroidAccountFrom(coreAccountInfo),
+                                    getAndroidCapabilityName(capabilityName));
                     capabilitiesResponse.put(capabilityName, capability);
                 }
                 return AccountCapabilities.parseFromCapabilitiesResponse(capabilitiesResponse);
@@ -260,6 +265,11 @@ public class AccountManagerFacadeImpl implements AccountManagerFacade {
         mDelegate.confirmCredentials(account, activity, callback);
     }
 
+    @Override
+    public boolean didAccountFetchSucceed() {
+        return mDidAccountFetchSucceed;
+    }
+
     /**
      * Fetches gaia ids, wraps them into {@link CoreAccountInfo} and updates {@link
      * #mCoreAccountInfosPromise}.
@@ -273,7 +283,7 @@ public class AccountManagerFacadeImpl implements AccountManagerFacade {
             mFetchGaiaIdsTask = null;
         }
 
-        List<String> emails = toAccountEmails(mAccounts);
+        List<String> emails = getFilteredAccountEmails();
         mFetchGaiaIdsTask =
                 new AsyncTask<List<String>>() {
                     @Override
@@ -339,8 +349,9 @@ public class AccountManagerFacadeImpl implements AccountManagerFacade {
 
             @Override
             protected void onPostExecute(@Nullable List<Account> allAccounts) {
-                boolean didBackoffSucceed = true;
+                mDidAccountFetchSucceed = true;
                 if (allAccounts == null) {
+                    mDidAccountFetchSucceed = false;
                     if (shouldRetry()) {
                         // Wait for a fixed amount of time then try to fetch the accounts again.
                         PostTask.postDelayedTask(
@@ -354,14 +365,13 @@ public class AccountManagerFacadeImpl implements AccountManagerFacade {
                         // We shouldn't wait indefinitely for the account fetching to succeed, at it
                         // might block certain features. Fall back to an empty list to allow the
                         // user to proceed.
-                        allAccounts = List.of();
-                        didBackoffSucceed = false;
+                        allAccounts = mAllAccounts.get() == null ? mAllAccounts.get() : List.of();
                     }
                 }
                 if (mNumberOfRetries != 0) {
                     RecordHistogram.recordBooleanHistogram(
-                            "Signin.GetAccountsBackoffSuccess", didBackoffSucceed);
-                    if (didBackoffSucceed) {
+                            "Signin.GetAccountsBackoffSuccess", mDidAccountFetchSucceed);
+                    if (mDidAccountFetchSucceed) {
                         RecordHistogram.recordExactLinearHistogram(
                                 "Signin.GetAccountsBackoffRetries",
                                 mNumberOfRetries,
@@ -393,28 +403,24 @@ public class AccountManagerFacadeImpl implements AccountManagerFacade {
         if (mAllAccounts.get() == null || mAccountRestrictionPatterns.get() == null) {
             return;
         }
-        mAccounts = getFilteredAccounts();
         fetchGaiaIdsAndUpdateCoreAccountInfos();
     }
 
-    private List<Account> getFilteredAccounts() {
-        if (mAccountRestrictionPatterns.get().isEmpty()) {
-            return mAllAccounts.get();
-        }
-        final List<Account> filteredAccounts = new ArrayList<>();
-        for (Account account : mAllAccounts.get()) {
-            for (PatternMatcher pattern : mAccountRestrictionPatterns.get()) {
-                if (pattern.matches(account.name)) {
-                    filteredAccounts.add(account);
-                    break; // Don't check other patterns
-                }
-            }
-        }
-        return Collections.unmodifiableList(filteredAccounts);
-    }
-
-    private static List<String> toAccountEmails(final List<Account> accounts) {
-        return accounts.stream().map(account -> account.name).collect(Collectors.toList());
+    private List<String> getFilteredAccountEmails() {
+        Predicate<String> emailMatcher =
+                email -> {
+                    if (mAccountRestrictionPatterns.get().isEmpty()) {
+                        // If there are no restriction patterns then all emails will pass this
+                        // matcher.
+                        return true;
+                    }
+                    return mAccountRestrictionPatterns.get().stream()
+                            .anyMatch(pattern -> pattern.matches(email));
+                };
+        return mAllAccounts.get().stream()
+                .map(account -> account.name)
+                .filter(emailMatcher)
+                .collect(Collectors.toList());
     }
 
     /**

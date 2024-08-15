@@ -6,10 +6,10 @@
 
 #include <tuple>
 #include <utility>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
@@ -47,7 +47,6 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/content_client.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/filename_util.h"
 #include "net/base/url_util.h"
@@ -64,6 +63,14 @@
 #include "url/url_constants.h"
 
 #include "app/vivaldi_apptools.h"
+
+namespace features {
+// TODO(https://crbug.com/324934416): Remove this killswitch once the new
+// CanCommitURL restrictions finish rolling out.
+BASE_FEATURE(kAdditionalNavigationCommitChecks,
+             "AdditionalNavigationCommitChecks",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+}  // namespace features
 
 namespace content {
 
@@ -346,7 +353,7 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
         can_send_midi_sysex_(false),
         browser_context_(browser_context),
         resource_context_(GetResourceContext(browser_context)) {
-    if (!base::FeatureList::IsEnabled(features::kBlockMidiByDefault)) {
+    if (!base::FeatureList::IsEnabled(blink::features::kBlockMidiByDefault)) {
       can_send_midi_ = true;
     }
   }
@@ -629,7 +636,7 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
   }
 
   bool CanSendMidi() const {
-    if (base::FeatureList::IsEnabled(features::kBlockMidiByDefault)) {
+    if (base::FeatureList::IsEnabled(blink::features::kBlockMidiByDefault)) {
       // Ensure the flags are in a consistent state: we can only send SysEx
       // messages if we can also send non-SysEx messages
       CHECK(can_send_midi_ || !can_send_midi_sysex_);
@@ -640,7 +647,7 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
   }
 
   bool CanSendMidiSysEx() const {
-    if (base::FeatureList::IsEnabled(features::kBlockMidiByDefault)) {
+    if (base::FeatureList::IsEnabled(blink::features::kBlockMidiByDefault)) {
       // Ensure the flags are in a consistent state: we can only send SysEx
       // messages if we can also send non-SysEx messages
       CHECK(can_send_midi_ || !can_send_midi_sysex_);
@@ -1118,7 +1125,7 @@ void ChildProcessSecurityPolicyImpl::GrantDeleteFromFileSystem(
 }
 
 void ChildProcessSecurityPolicyImpl::GrantSendMidiMessage(int child_id) {
-  if (base::FeatureList::IsEnabled(features::kBlockMidiByDefault)) {
+  if (base::FeatureList::IsEnabled(blink::features::kBlockMidiByDefault)) {
     base::AutoLock lock(lock_);
 
     auto state = security_state_.find(child_id);
@@ -1226,8 +1233,6 @@ bool ChildProcessSecurityPolicyImpl::CanRequestURL(
   // requestable by any child process.  Also, this case covers
   // <javascript:...>, which should be handled internally by the process and
   // not kicked up to the browser.
-  // TODO(dcheng): Figure out why this check is different from CanCommitURL,
-  // which checks for direct equality with kAboutBlankURL.
   if (IsPseudoScheme(scheme))
     return url.IsAboutBlank() || url.IsAboutSrcdoc();
 
@@ -1326,6 +1331,12 @@ bool ChildProcessSecurityPolicyImpl::CanCommitURL(int child_id,
 
     url::Origin origin = url::Origin::Create(url);
     return origin.opaque() || CanCommitURL(child_id, GURL(origin.Serialize()));
+  }
+
+  // Allow data URLs to commit in any process. Note that the precursor origin
+  // should be checked separately.
+  if (url.SchemeIs(url::kDataScheme)) {
+    return true;
   }
 
   // With site isolation, a URL from a site may only be committed in a process
@@ -1609,6 +1620,20 @@ CanCommitStatus ChildProcessSecurityPolicyImpl::CanCommitOriginAndUrl(
     int child_id,
     const IsolationContext& isolation_context,
     const UrlInfo& url_info) {
+  // First check whether the URL is allowed to commit, without considering the
+  // origin. This involves scheme checks as well as CanAccessDataForOrigin.
+  if (base::FeatureList::IsEnabled(
+          features::kAdditionalNavigationCommitChecks) &&
+      !CanCommitURL(child_id, url_info.url)) {
+    // This enforcement is currently skipped on Android WebView due to crashes.
+    // TODO(https://crbug.com/326250356): Diagnose and enable for Android
+    // WebView as well.
+    if (GetContentClient()->browser()->ShouldEnforceNewCanCommitUrlChecks()) {
+      return CanCommitStatus::CANNOT_COMMIT_URL;
+    }
+  }
+
+  // Next check whether the origin resolved from the URL is allowed to commit.
   DCHECK(url_info.origin.has_value());
   const url::Origin url_origin =
       url::Origin::Resolve(url_info.url, *url_info.origin);
@@ -1628,6 +1653,7 @@ CanCommitStatus ChildProcessSecurityPolicyImpl::CanCommitOriginAndUrl(
     return CanCommitStatus::CANNOT_COMMIT_URL;
   }
 
+  // Finally check the origin on its own.
   if (!CanAccessDataForOrigin(child_id, *url_info.origin))
     return CanCommitStatus::CANNOT_COMMIT_ORIGIN;
 
@@ -1979,11 +2005,54 @@ bool ChildProcessSecurityPolicyImpl::CanAccessDataForMaybeOpaqueOrigin(
           if (url_is_precursor_of_opaque_origin) {
             failure_reason += "for_precursor ";
           }
+
+          // TODO(crbug.com/326251583): Log additional information for
+          // diagnosing the bug. Remove once the investigation is complete.
+          if (site_info.RequiresDedicatedProcess(isolation_context)) {
+            failure_reason += "dedicated ";
+            if (SiteIsolationPolicy::UseDedicatedProcessesForAllSites()) {
+              failure_reason += "spp ";
+            }
+            if (site_info.does_site_request_dedicated_process_for_coop()) {
+              failure_reason += "coop ";
+            }
+            if (site_info.requires_origin_keyed_process()) {
+              failure_reason += "oac ";
+            }
+            if (site_info.is_sandboxed()) {
+              failure_reason += "sandbox ";
+            }
+            if (site_info.is_error_page()) {
+              failure_reason += "error ";
+            }
+            if (site_info.is_pdf()) {
+              failure_reason += "pdf ";
+            }
+            if (IsIsolatedOrigin(isolation_context,
+                                 url::Origin::Create(site_info.site_url()),
+                                 site_info.requires_origin_keyed_process())) {
+              failure_reason += "io ";
+            }
+          }
+          failure_reason +=
+              "site=" + site_info.site_url().possibly_invalid_spec();
+          failure_reason +=
+              " next_bi=" +
+              base::NumberToString(
+                  SiteInstanceImpl::NextBrowsingInstanceId().GetUnsafeValue());
+          failure_reason +=
+              " dis_oac=" +
+              base::NumberToString(
+                  default_isolation_state.is_origin_agent_cluster());
+          failure_reason +=
+              " dis_rokp=" +
+              base::NumberToString(
+                  default_isolation_state.requires_origin_keyed_process()) +
+              " ";
         }
       }
     }
   }
-
   // Record the duration of KeepAlive requests to include in the crash keys.
   std::string keep_alive_durations;
   std::string shutdown_delay_ref_count;
@@ -2239,7 +2308,7 @@ void ChildProcessSecurityPolicyImpl::RemoveStateForBrowserContext(
     base::AutoLock isolated_origins_lock(isolated_origins_lock_);
 
     for (auto& iter : isolated_origins_) {
-      base::EraseIf(iter.second,
+      std::erase_if(iter.second,
                     [&browser_context](const IsolatedOriginEntry& entry) {
                       // Remove if BrowserContext matches.
                       return (entry.browser_context() == &browser_context);
@@ -2640,7 +2709,7 @@ void ChildProcessSecurityPolicyImpl::
   {
     base::AutoLock isolated_origins_lock(isolated_origins_lock_);
     for (auto& iter : isolated_origins_) {
-      base::EraseIf(iter.second, [&browsing_instance_id](
+      std::erase_if(iter.second, [&browsing_instance_id](
                                      const IsolatedOriginEntry& entry) {
         // Remove entries that are specific to `browsing_instance_id` and
         // do not apply to future BrowsingInstances.
@@ -2766,7 +2835,7 @@ void ChildProcessSecurityPolicyImpl::RemoveIsolatedOriginForTesting(
     const url::Origin& origin) {
   GURL key(SiteInfo::GetSiteForOrigin(origin));
   base::AutoLock isolated_origins_lock(isolated_origins_lock_);
-  base::EraseIf(isolated_origins_[key],
+  std::erase_if(isolated_origins_[key],
                 [&origin](const IsolatedOriginEntry& entry) {
                   // Remove if origin matches.
                   return (entry.origin() == origin);

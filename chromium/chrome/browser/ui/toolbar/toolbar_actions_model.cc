@@ -7,9 +7,9 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/metrics/histogram_base.h"
@@ -234,9 +234,51 @@ bool ToolbarActionsModel::IsRestrictedUrl(const GURL& url) const {
   // saying "No extensions can run..." is inaccurate). Other extensions
   // will still be properly attributed in UI.
   return base::ranges::all_of(action_ids(), [this, url](ActionId id) {
-    return GetExtensionById(id)->permissions_data()->IsRestrictedUrl(
-        url, /*error=*/nullptr);
+    // action_ids() could include disabled extensions that haven't been removed
+    // yet from the set due to race conditions. Thus, we don't consider them in
+    // the restricted url computation.
+    auto* extension = GetExtensionById(id);
+    if (!extension) {
+      return true;
+    }
+
+    return extension->permissions_data()->IsRestrictedUrl(url,
+                                                          /*error=*/nullptr);
   });
+}
+
+bool ToolbarActionsModel::IsPolicyBlockedHost(const GURL& url) const {
+  extensions::ManagementPolicy* policy =
+      extensions::ExtensionSystem::Get(profile_)->management_policy();
+  auto is_enterprise_extension =
+      [policy](const extensions::Extension& extension) {
+        return !policy->UserMayModifySettings(&extension, nullptr) ||
+               policy->MustRemainInstalled(&extension, nullptr);
+      };
+
+  // `url` is NOT a policy-blockedsite when there are no extensions installed.
+  if (action_ids().empty()) {
+    return false;
+  }
+
+  for (auto& action_id : action_ids()) {
+    // Skip enterprise extensions since they could still access policy-blocked
+    // sites.
+    const extensions::Extension* extension = GetExtensionById(action_id);
+    if (is_enterprise_extension(*extension)) {
+      continue;
+    }
+
+    // `url` is NOT a policy-blocked sit when it's allowed for any
+    // non-enterprise extension.
+    if (!extension->permissions_data()->IsPolicyBlockedHost(url)) {
+      return false;
+    }
+  }
+
+  // `url` is a policy-blocked site when it's blocked for every non-enterprise
+  // extension.
+  return true;
 }
 
 bool ToolbarActionsModel::IsActionPinned(const ActionId& action_id) const {
@@ -438,7 +480,7 @@ void ToolbarActionsModel::SetActionVisibility(const ActionId& action_id,
   if (is_now_visible) {
     stored_pinned_action_ids.push_back(action_id);
   } else {
-    base::Erase(stored_pinned_action_ids, action_id);
+    std::erase(stored_pinned_action_ids, action_id);
   }
   extension_prefs_->SetPinnedExtensions(stored_pinned_action_ids);
   // The |pinned_action_ids_| should be updated as a result of updating the

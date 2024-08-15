@@ -85,6 +85,10 @@ struct EntityData {
   // true. Relevant only for bookmarks.
   bool is_bookmark_unique_position_in_specifics_preprocessed = false;
 
+  // Collaboration with which the current entity is associated. Empty for
+  // non-shared types.
+  std::string collaboration_id;
+
   // Indicate whether note's |unique_position| was missing in the original
   // specifics during GetUpdates. If the |unique_position| in specifics was
   // evaluated by AdaptUniquePositionForNote(), this field will be set to

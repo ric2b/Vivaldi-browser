@@ -20,7 +20,8 @@ class SubstitutionPattern {
  public:
   struct Subrange {
     Subrange();
-    explicit Subrange(const Substitution* t, const std::string& l = std::string());
+    explicit Subrange(const Substitution* t,
+                      const std::string& l = std::string());
     ~Subrange();
 
     inline bool operator==(const Subrange& other) const {

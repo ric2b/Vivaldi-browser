@@ -48,6 +48,7 @@
 #define CDXA_TYPE_DATA     0x08
 #define CDXA_TYPE_AUDIO    0x04
 #define CDXA_TYPE_VIDEO    0x02
+#define CDXA_TYPE_EMPTY    0x00
 
 #define STR_MAGIC (0x80010160)
 
@@ -165,8 +166,12 @@ static int str_read_packet(AVFormatContext *s,
     AVStream *st;
 
     while (1) {
+        int read = avio_read(pb, sector, RAW_CD_SECTOR_SIZE);
 
-        if (avio_read(pb, sector, RAW_CD_SECTOR_SIZE) != RAW_CD_SECTOR_SIZE)
+        if (read == AVERROR_EOF)
+            return AVERROR_EOF;
+
+        if (read != RAW_CD_SECTOR_SIZE)
             return AVERROR(EIO);
 
         channel = sector[0x11];
@@ -270,6 +275,10 @@ static int str_read_packet(AVFormatContext *s,
                 str->channels[channel].audio_stream_index;
             pkt->duration = 1;
             return 0;
+        case CDXA_TYPE_EMPTY: /* CD-ROM XA, May 1991, 4.3.2.3 */
+            /* NOTE this also catches 0x80 (EOF bit) because of CDXA_TYPE_MASK */
+            /* TODO consider refactoring so as to explicitly handle each case? */
+            break;
         default:
             av_log(s, AV_LOG_WARNING, "Unknown sector type %02X\n", sector[0x12]);
             /* drop the sector and move on */

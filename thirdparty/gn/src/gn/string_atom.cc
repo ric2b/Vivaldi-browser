@@ -219,7 +219,8 @@ StringAtom::StringAtom() : value_(kEmptyString) {}
 
 StringAtom::StringAtom(std::string_view str) noexcept
 #ifndef OS_ZOS
-    : value_(*s_local_cache.find(str)) {}
+    : value_(*s_local_cache.find(str)){}
 #else
-    : value_(*s_local_cache->find(str)) {}
+    : value_(*s_local_cache->find(str)) {
+}
 #endif

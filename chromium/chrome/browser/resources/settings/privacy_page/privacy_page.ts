@@ -15,7 +15,7 @@ import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/cr_elements/cr_hidden_style.css.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
-import '/shared/settings/controls/settings_toggle_button.js';
+import '../controls/settings_toggle_button.js';
 import '../safety_hub/safety_hub_module.js';
 import '../settings_page/settings_animated_pages.js';
 import '../settings_page/settings_subpage.js';
@@ -23,10 +23,10 @@ import '../settings_shared.css.js';
 import '../site_settings/settings_category_default_radio_group.js';
 import './privacy_guide/privacy_guide_dialog.js';
 
-import {SettingsToggleButtonElement} from '/shared/settings/controls/settings_toggle_button.js';
-import {PrivacyPageBrowserProxy, PrivacyPageBrowserProxyImpl} from '/shared/settings/privacy_page/privacy_page_browser_proxy.js';
+import type {PrivacyPageBrowserProxy} from '/shared/settings/privacy_page/privacy_page_browser_proxy.js';
+import {PrivacyPageBrowserProxyImpl} from '/shared/settings/privacy_page/privacy_page_browser_proxy.js';
 import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
-import {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
+import type {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
@@ -35,15 +35,19 @@ import {PluralStringProxyImpl} from 'chrome://resources/js/plural_string_proxy.j
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BaseMixin} from '../base_mixin.js';
-import {FocusConfig} from '../focus_config.js';
+import type {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
+import type {FocusConfig} from '../focus_config.js';
 import {HatsBrowserProxyImpl, TrustSafetyInteraction} from '../hats_browser_proxy.js';
 import {loadTimeData} from '../i18n_setup.js';
-import {MetricsBrowserProxy, MetricsBrowserProxyImpl, PrivacyGuideInteractions, SafetyHubEntryPoint} from '../metrics_browser_proxy.js';
+import type {MetricsBrowserProxy} from '../metrics_browser_proxy.js';
+import {MetricsBrowserProxyImpl, PrivacyGuideInteractions, SafetyHubEntryPoint} from '../metrics_browser_proxy.js';
 import {routes} from '../route.js';
 import {RouteObserverMixin, Router} from '../router.js';
-import {NotificationPermission, SafetyHubBrowserProxy, SafetyHubBrowserProxyImpl, SafetyHubEvent} from '../safety_hub/safety_hub_browser_proxy.js';
+import type {NotificationPermission, SafetyHubBrowserProxy} from '../safety_hub/safety_hub_browser_proxy.js';
+import {SafetyHubBrowserProxyImpl, SafetyHubEvent} from '../safety_hub/safety_hub_browser_proxy.js';
 import {ChooserType, ContentSetting, ContentSettingsTypes, CookieControlsMode, SettingsState} from '../site_settings/constants.js';
-import {SiteSettingsPrefsBrowserProxy, SiteSettingsPrefsBrowserProxyImpl} from '../site_settings/site_settings_prefs_browser_proxy.js';
+import type {SiteSettingsPrefsBrowserProxy} from '../site_settings/site_settings_prefs_browser_proxy.js';
+import {SiteSettingsPrefsBrowserProxyImpl} from '../site_settings/site_settings_prefs_browser_proxy.js';
 
 import {PrivacyGuideAvailabilityMixin} from './privacy_guide/privacy_guide_availability_mixin.js';
 import {getTemplate} from './privacy_page.html.js';
@@ -184,12 +188,6 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         value: () => loadTimeData.getBoolean('privateStateTokensEnabled'),
       },
 
-      enablePermissionStorageAccessApi_: {
-        type: Boolean,
-        value: () =>
-            loadTimeData.getBoolean('enablePermissionStorageAccessApi'),
-      },
-
       autoPictureInPictureEnabled_: {
         type: Boolean,
         value: () => loadTimeData.getBoolean('autoPictureInPictureEnabled'),
@@ -207,15 +205,16 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         },
       },
 
-      blockMidiByDefault_: {
-        type: Boolean,
-        value: () => loadTimeData.getBoolean('blockMidiByDefault'),
-      },
-
       isProactiveTopicsBlockingEnabled_: {
         type: Boolean,
         value: () =>
             loadTimeData.getBoolean('isProactiveTopicsBlockingEnabled'),
+      },
+
+      enableAutomaticFullscreenContentSetting_: {
+        type: Boolean,
+        value: () =>
+            loadTimeData.getBoolean('enableAutomaticFullscreenContentSetting'),
       },
 
       focusConfig_: {
@@ -295,20 +294,6 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         value: ChooserType,
       },
 
-      safetyCheckNotificationPermissionsEnabled_: {
-        type: Boolean,
-        value() {
-          return loadTimeData.getBoolean(
-              'safetyCheckNotificationPermissionsEnabled');
-        },
-      },
-
-      notificationsDefaultBehaviorLabel_: {
-        type: String,
-        computed:
-            'computeNotificationsDefaultBehaviorLabel_(safetyCheckNotificationPermissionsEnabled_)',
-      },
-
       enableSafetyHub_: {
         type: Boolean,
         value() {
@@ -338,7 +323,6 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   private enableSafeBrowsingSubresourceFilter_: boolean;
   private enableBlockAutoplayContentSetting_: boolean;
   private blockAutoplayStatus_: BlockAutoplayStatus;
-  private blockMidiByDefault_: boolean;
   private enableFederatedIdentityApiContentSetting_: boolean;
   private enablePaymentHandlerContentSetting_: boolean;
   private enableExperimentalWebPlatformFeatures_: boolean;
@@ -349,11 +333,10 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   private isPrivacySandboxRestricted_: boolean;
   private isPrivacySandboxRestrictedNoticeEnabled_: boolean;
   private isProactiveTopicsBlockingEnabled_: boolean;
+  private enableAutomaticFullscreenContentSetting_: boolean;
   private is3pcdRedesignEnabled_: boolean;
   private privateStateTokensEnabled_: boolean;
   private autoPictureInPictureEnabled_: boolean;
-  private safetyCheckNotificationPermissionsEnabled_: boolean;
-  private enablePermissionStorageAccessApi_: boolean;
   private enableSafetyHub_: boolean;
   private focusConfig_: FocusConfig;
   private searchFilter_: string;
@@ -388,7 +371,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         (status: BlockAutoplayStatus) =>
             this.onBlockAutoplayStatusChanged_(status));
 
-    if (this.safetyCheckNotificationPermissionsEnabled_ && !this.isGuest_) {
+    if (!this.isGuest_) {
       this.addWebUiListener(
           SafetyHubEvent.NOTIFICATION_PERMISSIONS_MAYBE_CHANGED,
           (sites: NotificationPermission[]) =>
@@ -557,7 +540,6 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
       return;
     }
     this.showNotificationPermissionsReview_ = !this.isGuest_ &&
-        this.safetyCheckNotificationPermissionsEnabled_ &&
         permissions.length > 0;
 
     this.notificationPermissionsReviewHeader_ =
@@ -581,12 +563,6 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         this.isPrivacySandboxRestrictedNoticeEnabled_;
     return restricted ? this.i18n('adPrivacyRestrictedLinkRowSubLabel') :
                         this.i18n('adPrivacyLinkRowSubLabel');
-  }
-
-  private computeNotificationsDefaultBehaviorLabel_(): string {
-    return this.safetyCheckNotificationPermissionsEnabled_ ?
-        this.i18n('siteSettingsNotificationsDefaultBehaviorDescription') :
-        this.i18n('siteSettingsDefaultBehaviorDescription');
   }
 
   private computeThirdPartyCookiesSublabel_(): string {

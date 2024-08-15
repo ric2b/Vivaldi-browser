@@ -54,7 +54,7 @@ struct PixelLocalOptions {
     uint32_t pixel_local_group_index = 0;
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-    TINT_REFLECT(attachments, attachment_formats, pixel_local_group_index);
+    TINT_REFLECT(PixelLocalOptions, attachments, attachment_formats, pixel_local_group_index);
 };
 
 /// Reflect valid value ranges for the PixelLocalOptions::TexelFormat enum.

@@ -8,13 +8,11 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "base/test/bind.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
 #include "cc/base/region.h"
 #include "cc/paint/filter_operation.h"
 #include "cc/paint/filter_operations.h"
-#include "cc/slim/features.h"
 #include "cc/slim/layer.h"
 #include "cc/slim/nine_patch_layer.h"
 #include "cc/slim/solid_color_layer.h"
@@ -51,7 +49,6 @@ using testing::ElementsAre;
 class SlimLayerTreeCompositorFrameTest : public testing::Test {
  public:
   void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(features::kSlimCompositor);
     layer_tree_ = std::make_unique<TestLayerTreeImpl>(&client_);
     layer_tree_->SetVisible(true);
 
@@ -78,7 +75,7 @@ class SlimLayerTreeCompositorFrameTest : public testing::Test {
 
   viz::CompositorFrame ProduceFrame(
       std::optional<viz::HitTestRegionList>* out_list = nullptr) {
-    layer_tree_->SetNeedsRedraw();
+    layer_tree_->SetNeedsAnimate();
     EXPECT_TRUE(layer_tree_->NeedsBeginFrames());
     base::TimeTicks frame_time = base::TimeTicks::Now();
     base::TimeDelta interval = viz::BeginFrameArgs::DefaultInterval();
@@ -120,7 +117,6 @@ class SlimLayerTreeCompositorFrameTest : public testing::Test {
   }
 
  protected:
-  base::test::ScopedFeatureList scoped_feature_list_;
   TestLayerTreeClient client_;
   std::unique_ptr<TestLayerTreeImpl> layer_tree_;
   base::WeakPtr<TestFrameSinkImpl> frame_sink_;
@@ -241,7 +237,7 @@ TEST_F(SlimLayerTreeCompositorFrameTest, LayerTransform) {
   check_child_quad(gfx::Rect(10, 30, 20, 10));
 
   // Rotate about the center.
-  child->SetTransformOrigin(gfx::Point3F(5.0f, 10.0f, 0.0f));
+  child->SetTransformOrigin(gfx::PointF(5.0f, 10.0f));
   check_child_quad(gfx::Rect(25, 35, 20, 10));
 }
 
@@ -425,11 +421,13 @@ TEST_F(SlimLayerTreeCompositorFrameTest, SuccessPresentationCallback) {
   std::optional<base::TimeTicks> feedback_time_opt_1;
   std::optional<base::TimeTicks> feedback_time_opt_2;
   layer_tree_->RequestSuccessfulPresentationTimeForNextFrame(
-      base::BindLambdaForTesting(
-          [&](base::TimeTicks timeticks) { feedback_time_opt_1 = timeticks; }));
+      base::BindLambdaForTesting([&](const viz::FrameTimingDetails& details) {
+        feedback_time_opt_1 = details.presentation_feedback.timestamp;
+      }));
   layer_tree_->RequestSuccessfulPresentationTimeForNextFrame(
-      base::BindLambdaForTesting(
-          [&](base::TimeTicks timeticks) { feedback_time_opt_2 = timeticks; }));
+      base::BindLambdaForTesting([&](const viz::FrameTimingDetails& details) {
+        feedback_time_opt_2 = details.presentation_feedback.timestamp;
+      }));
   viz::CompositorFrame frame1 = ProduceFrame();
 
   viz::FrameTimingDetailsMap timing_map;
@@ -454,15 +452,17 @@ TEST_F(SlimLayerTreeCompositorFrameTest,
 
   std::optional<base::TimeTicks> feedback_time_opt_1;
   layer_tree_->RequestSuccessfulPresentationTimeForNextFrame(
-      base::BindLambdaForTesting(
-          [&](base::TimeTicks timeticks) { feedback_time_opt_1 = timeticks; }));
+      base::BindLambdaForTesting([&](const viz::FrameTimingDetails& details) {
+        feedback_time_opt_1 = details.presentation_feedback.timestamp;
+      }));
   viz::CompositorFrame frame1 = ProduceFrame();
   viz::CompositorFrame frame2 = ProduceFrame();
 
   std::optional<base::TimeTicks> feedback_time_opt_2;
   layer_tree_->RequestSuccessfulPresentationTimeForNextFrame(
-      base::BindLambdaForTesting(
-          [&](base::TimeTicks timeticks) { feedback_time_opt_2 = timeticks; }));
+      base::BindLambdaForTesting([&](const viz::FrameTimingDetails& details) {
+        feedback_time_opt_2 = details.presentation_feedback.timestamp;
+      }));
   viz::CompositorFrame frame3 = ProduceFrame();
 
   // Frame 1 failed. Should not run either callback.
@@ -597,10 +597,6 @@ TEST_F(SlimLayerTreeCompositorFrameTest, UIResourceLayerAppendQuads) {
     EXPECT_NE(viz::kInvalidResourceId, texture_quad->resource_id());
     EXPECT_EQ(gfx::PointF(0.0f, 0.0f), texture_quad->uv_top_left);
     EXPECT_EQ(gfx::PointF(1.0f, 1.0f), texture_quad->uv_bottom_right);
-    EXPECT_EQ(1.0f, texture_quad->vertex_opacity[0]);
-    EXPECT_EQ(1.0f, texture_quad->vertex_opacity[1]);
-    EXPECT_EQ(1.0f, texture_quad->vertex_opacity[2]);
-    EXPECT_EQ(1.0f, texture_quad->vertex_opacity[3]);
 
     ASSERT_EQ(frame.resource_list.size(), 1u);
     EXPECT_EQ(frame.resource_list[0].id, texture_quad->resource_id());
@@ -614,7 +610,6 @@ TEST_F(SlimLayerTreeCompositorFrameTest, UIResourceLayerAppendQuads) {
 
   ui_resource_layer->SetUV(gfx::PointF(0.25f, 0.25f),
                            gfx::PointF(0.75f, 0.75f));
-  ui_resource_layer->SetVertexOpacity(0.1f, 0.2f, 0.3f, 0.4f);
   {
     auto image_info =
         SkImageInfo::Make(2, 2, kN32_SkColorType, kPremul_SkAlphaType);
@@ -636,10 +631,6 @@ TEST_F(SlimLayerTreeCompositorFrameTest, UIResourceLayerAppendQuads) {
     EXPECT_NE(viz::kInvalidResourceId, texture_quad->resource_id());
     EXPECT_EQ(gfx::PointF(0.25f, 0.25f), texture_quad->uv_top_left);
     EXPECT_EQ(gfx::PointF(0.75f, 0.75f), texture_quad->uv_bottom_right);
-    EXPECT_EQ(0.1f, texture_quad->vertex_opacity[0]);
-    EXPECT_EQ(0.2f, texture_quad->vertex_opacity[1]);
-    EXPECT_EQ(0.3f, texture_quad->vertex_opacity[2]);
-    EXPECT_EQ(0.4f, texture_quad->vertex_opacity[3]);
 
     ASSERT_EQ(frame.resource_list.size(), 1u);
     EXPECT_EQ(frame.resource_list[0].id, texture_quad->resource_id());
@@ -897,7 +888,7 @@ TEST_F(SlimLayerTreeCompositorFrameTest, SimpleHitTestRegionList) {
   child_surface_layer->SetBounds(gfx::Size(10, 10));
   child_surface_layer->SetIsDrawable(true);
   child_surface_layer->SetPosition(gfx::PointF(10.0f, 10.0f));
-  child_surface_layer->SetTransformOrigin(gfx::Point3F(5.0f, 5.0f, 0.0f));
+  child_surface_layer->SetTransformOrigin(gfx::PointF(5.0f, 5.0f));
   gfx::Transform transform;
   transform.Rotate(45.0);
   child_surface_layer->SetTransform(transform);
@@ -1063,7 +1054,7 @@ TEST_F(SlimLayerTreeCompositorFrameTest, NonAxisAlignedClip) {
   auto clip_layer = cc::slim::Layer::Create();
   clip_layer->SetMasksToBounds(true);
   clip_layer->SetBounds(gfx::Size(50, 50));
-  clip_layer->SetTransformOrigin(gfx::Point3F(25.0f, 25.0f, 0.0f));
+  clip_layer->SetTransformOrigin(gfx::PointF(25.0f, 25.0f));
   gfx::Transform transform;
   transform.Rotate(45);
   clip_layer->SetTransform(transform);
@@ -1118,7 +1109,7 @@ TEST_F(SlimLayerTreeCompositorFrameTest, ChildPassOutputRect) {
   auto clip_layer = cc::slim::Layer::Create();
   clip_layer->SetMasksToBounds(true);
   clip_layer->SetBounds(gfx::Size(50, 50));
-  clip_layer->SetTransformOrigin(gfx::Point3F(25.0f, 25.0f, 0.0f));
+  clip_layer->SetTransformOrigin(gfx::PointF(25.0f, 25.0f));
   gfx::Transform transform;
   transform.Rotate(45);
   clip_layer->SetTransform(transform);
@@ -1734,7 +1725,7 @@ TEST_F(SlimLayerTreeCompositorFrameTest, PropertyChangeFromParentDamage) {
   check_frame(gfx::Rect(10, 10, 50, 50));
 
   // Rotate about center, which does not change visible rect.
-  parent->SetTransformOrigin(gfx::Point3F(25.0f, 25.0f, 0.0f));
+  parent->SetTransformOrigin(gfx::PointF(25.0f, 25.0f));
   parent->SetTransform(gfx::Transform::Make90degRotation());
   check_frame(gfx::Rect(10, 10, 50, 50));
 
@@ -2006,7 +1997,7 @@ TEST_F(SlimLayerTreeCompositorFrameTest, NonAxisAlignedRoundedCorner) {
   auto rounded_corner_layer =
       CreateSolidColorLayer(gfx::Size(50, 50), SkColors::kRed);
   rounded_corner_layer->SetRoundedCorner(gfx::RoundedCornersF(20.0f));
-  rounded_corner_layer->SetTransformOrigin(gfx::Point3F(25.0f, 25.0f, 0.0f));
+  rounded_corner_layer->SetTransformOrigin(gfx::PointF(25.0f, 25.0f));
   gfx::Transform transform;
   transform.Rotate(45);
   rounded_corner_layer->SetTransform(transform);

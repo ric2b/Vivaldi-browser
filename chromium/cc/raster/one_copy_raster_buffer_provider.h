@@ -22,10 +22,6 @@ namespace base {
 class WaitableEvent;
 }
 
-namespace gpu {
-class GpuMemoryBufferManager;
-}
-
 namespace viz {
 class RasterContextProvider;
 }  // namespace viz
@@ -40,7 +36,6 @@ class CC_EXPORT OneCopyRasterBufferProvider : public RasterBufferProvider {
       scoped_refptr<base::SequencedTaskRunner> task_runner,
       viz::RasterContextProvider* compositor_context_provider,
       viz::RasterContextProvider* worker_context_provider,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       int max_copy_texture_chromium_size,
       bool use_partial_raster,
       int max_staging_buffer_usage_in_bytes,
@@ -74,7 +69,6 @@ class CC_EXPORT OneCopyRasterBufferProvider : public RasterBufferProvider {
   // Playback raster source and copy result into |resource|.
   gpu::SyncToken PlaybackAndCopyOnWorkerThread(
       scoped_refptr<gpu::ClientSharedImage>& shared_image,
-      GLenum mailbox_texture_target,
       bool mailbox_texture_is_overlay_candidate,
       const gpu::SyncToken& sync_token,
       const RasterSource* raster_source,
@@ -98,7 +92,6 @@ class CC_EXPORT OneCopyRasterBufferProvider : public RasterBufferProvider {
   class RasterBufferImpl : public RasterBuffer {
    public:
     RasterBufferImpl(OneCopyRasterBufferProvider* client,
-                     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
                      const ResourcePool::InUsePoolResource& in_use_resource,
                      OneCopyGpuBacking* backing,
                      uint64_t previous_content_id);
@@ -129,7 +122,6 @@ class CC_EXPORT OneCopyRasterBufferProvider : public RasterBufferProvider {
     const uint64_t previous_content_id_;
     const gpu::SyncToken before_raster_sync_token_;
     scoped_refptr<gpu::ClientSharedImage> shared_image_;
-    const GLenum mailbox_texture_target_;
     const bool mailbox_texture_is_overlay_candidate_;
     // A SyncToken to be returned from the worker thread, and waited on before
     // using the rastered resource.
@@ -156,14 +148,12 @@ class CC_EXPORT OneCopyRasterBufferProvider : public RasterBufferProvider {
       viz::SharedImageFormat format,
       const gfx::Size& resource_size,
       scoped_refptr<gpu::ClientSharedImage>& shared_image,
-      GLenum mailbox_texture_target,
       bool mailbox_texture_is_overlay_candidate,
       const gpu::SyncToken& sync_token,
       const gfx::ColorSpace& color_space);
 
   const raw_ptr<viz::RasterContextProvider> compositor_context_provider_;
   const raw_ptr<viz::RasterContextProvider> worker_context_provider_;
-  const raw_ptr<gpu::GpuMemoryBufferManager> gpu_memory_buffer_manager_;
   raw_ptr<base::WaitableEvent> shutdown_event_ = nullptr;
   const int max_bytes_per_copy_operation_;
   const bool use_partial_raster_;
@@ -173,7 +163,6 @@ class CC_EXPORT OneCopyRasterBufferProvider : public RasterBufferProvider {
 
   const viz::SharedImageFormat tile_format_;
   const bool tile_overlay_candidate_;
-  const uint32_t tile_texture_target_;
 
   StagingBufferPool staging_pool_;
 };

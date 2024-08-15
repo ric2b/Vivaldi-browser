@@ -9,6 +9,7 @@
 #import <vector>
 
 #import "base/functional/bind.h"
+#import "base/memory/raw_ptr.h"
 #import "base/memory/scoped_refptr.h"
 #import "base/strings/strcat.h"
 #import "base/strings/string_number_conversions.h"
@@ -19,8 +20,8 @@
 #import "base/test/metrics/histogram_tester.h"
 #import "base/test/scoped_feature_list.h"
 #import "base/time/time.h"
+#import "components/affiliations/core/browser/fake_affiliation_service.h"
 #import "components/keyed_service/core/service_access_type.h"
-#import "components/password_manager/core/browser/affiliation/fake_affiliation_service.h"
 #import "components/password_manager/core/browser/leak_detection/bulk_leak_check_service.h"
 #import "components/password_manager/core/browser/leak_detection/mock_bulk_leak_check_service.h"
 #import "components/password_manager/core/browser/password_form.h"
@@ -30,7 +31,7 @@
 #import "components/password_manager/core/common/password_manager_pref_names.h"
 #import "components/prefs/pref_registry_simple.h"
 #import "components/prefs/testing_pref_service.h"
-#import "ios/chrome/browser/passwords/model/ios_chrome_affiliation_service_factory.h"
+#import "ios/chrome/browser/affiliations/model/ios_chrome_affiliation_service_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_bulk_leak_check_service_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_check_manager_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
@@ -127,7 +128,7 @@ class IOSChromePasswordCheckManagerTest : public PlatformTest {
         IOSChromeAffiliationServiceFactory::GetInstance(),
         base::BindRepeating(base::BindLambdaForTesting([](web::BrowserState*) {
           return std::unique_ptr<KeyedService>(
-              std::make_unique<password_manager::FakeAffiliationService>());
+              std::make_unique<affiliations::FakeAffiliationService>());
         })));
 
     browser_state_ = builder.Build();
@@ -157,7 +158,7 @@ class IOSChromePasswordCheckManagerTest : public PlatformTest {
       web::WebTaskEnvironment::Options::DEFAULT,
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   std::unique_ptr<ChromeBrowserState> browser_state_;
-  MockBulkLeakCheckService* bulk_leak_check_service_;
+  raw_ptr<MockBulkLeakCheckService> bulk_leak_check_service_;
   scoped_refptr<TestPasswordStore> store_;
   scoped_refptr<IOSChromePasswordCheckManager> manager_;
 };

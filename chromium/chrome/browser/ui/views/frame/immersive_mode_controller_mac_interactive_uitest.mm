@@ -13,14 +13,15 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
-#include "chrome/browser/ui/exclusive_access/exclusive_access_test.h"
 #include "chrome/browser/ui/find_bar/find_bar_host_unittest_util.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/ui_test_utils.h"
 #include "content/public/test/browser_test.h"
+#include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
 #import "ui/views/cocoa/native_widget_mac_ns_window_host.h"
 #include "ui/views/widget/any_widget_observer.h"
 #include "ui/views/widget/native_widget_mac.h"
@@ -62,15 +63,6 @@ class ImmersiveModeControllerMacInteractiveTest : public InProcessBrowserTest {
   // Convenience function to get the NSWindow from the browser window.
   NSWindow* browser_window() {
     return browser()->window()->GetNativeWindow().GetNativeNSWindow();
-  }
-
-  void ToggleBrowserWindowFullscreen() {
-    // The fullscreen change notification is sent asynchronously. The
-    // notification is used to trigger changes in whether the shelf is auto
-    // hidden.
-    FullscreenNotificationObserver waiter(browser());
-    chrome::ToggleFullscreenMode(browser());
-    waiter.Wait();
   }
 
   // Creates a new widget as a child of the first browser window and brings it
@@ -160,7 +152,7 @@ IN_PROC_BROWSER_TEST_F(ImmersiveModeControllerMacInteractiveTest,
   NSWindow* overlay_widget_window = [overlay_widget_content_view window];
 
   EXPECT_EQ(GetMovedContentViewForWidget(overlay_widget), nullptr);
-  ToggleBrowserWindowFullscreen();
+  ui_test_utils::ToggleFullscreenModeAndWait(browser());
 
   FullscreenController* fullscreen_controller =
       browser()->exclusive_access_manager()->fullscreen_controller();
@@ -175,7 +167,7 @@ IN_PROC_BROWSER_TEST_F(ImmersiveModeControllerMacInteractiveTest,
     EXPECT_NE([overlay_widget_window contentView], overlay_widget_content_view);
   }
 
-  ToggleBrowserWindowFullscreen();
+  ui_test_utils::ToggleFullscreenModeAndWait(browser());
 
   EXPECT_FALSE(fullscreen_controller->IsFullscreenForBrowser());
   EXPECT_EQ(GetMovedContentViewForWidget(overlay_widget), nullptr);
@@ -198,7 +190,7 @@ IN_PROC_BROWSER_TEST_F(ImmersiveModeControllerMacInteractiveTest,
 
     {
       views::NamedWidgetShownWaiter shown_waiter(
-          views::test::AnyWidgetTestPasskey{}, "DropdownBarHost");
+          views::test::AnyWidgetTestPasskey{}, "FindBarHost");
       chrome::Find(browser());
       std::ignore = shown_waiter.WaitIfNeededAndGet();
       EXPECT_GT(controller->GetMinimumContentOffset(), 0);
@@ -212,7 +204,7 @@ IN_PROC_BROWSER_TEST_F(ImmersiveModeControllerMacInteractiveTest,
     ScopedAlwaysShowToolbar scoped_always_show(browser(), true);
     {
       views::NamedWidgetShownWaiter shown_waiter(
-          views::test::AnyWidgetTestPasskey{}, "DropdownBarHost");
+          views::test::AnyWidgetTestPasskey{}, "FindBarHost");
       chrome::Find(browser());
       std::ignore = shown_waiter.WaitIfNeededAndGet();
       EXPECT_EQ(controller->GetMinimumContentOffset(), 0);
@@ -264,7 +256,7 @@ IN_PROC_BROWSER_TEST_F(ImmersiveModeControllerMacInteractiveTest,
   CreateSecondBrowserWindow();
 
   // Move the original browser window into its own fullscreen space.
-  ToggleBrowserWindowFullscreen();
+  ui_test_utils::ToggleFullscreenModeAndWait(browser());
 
   // Add a widget to the original browser window.
   CreateAndShowWidgetOnFirstBrowserWindow();
@@ -372,4 +364,37 @@ IN_PROC_BROWSER_TEST_F(ImmersiveModeControllerMacInteractiveTest,
 
   // Cleanup
   [testWindow close];
+}
+
+IN_PROC_BROWSER_TEST_F(ImmersiveModeControllerMacInteractiveTest,
+                       ContentFullscreenChildren) {
+  chrome::DisableFindBarAnimationsDuringTesting(true);
+
+  // Enter browser fullscreen.
+  ui_test_utils::ToggleFullscreenModeAndWait(browser());
+
+  // Open the find bar
+  views::NamedWidgetShownWaiter shown_waiter(
+      views::test::AnyWidgetTestPasskey{}, "FindBarHost");
+  chrome::Find(browser());
+  views::Widget* find_bar = shown_waiter.WaitIfNeededAndGet();
+
+  // The find bar should be a child of the overlay widget.
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+  EXPECT_EQ(browser_view->overlay_widget(), find_bar->parent());
+
+  // Enter content fullscreen. The find bar should move to become a child of the
+  // browser widget.
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  tab->GetDelegate()->EnterFullscreenModeForTab(tab->GetPrimaryMainFrame(), {});
+  EXPECT_EQ(browser_view->GetWidget(), find_bar->parent());
+
+  // Leave content fullscreen (back to browser fullscreen), the find bar should
+  // move back to the overlay widget.
+  tab->GetDelegate()->ExitFullscreenModeForTab(tab);
+  EXPECT_EQ(browser_view->overlay_widget(), find_bar->parent());
+
+  chrome::CloseFind(browser());
+  chrome::DisableFindBarAnimationsDuringTesting(false);
 }

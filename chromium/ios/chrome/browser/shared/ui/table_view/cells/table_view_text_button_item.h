@@ -47,6 +47,10 @@
 // button will maintain its intrinsic size based on its title. NO by default.
 @property(nonatomic, assign) BOOL disableButtonIntrinsicWidth;
 
+
+// Vivaldi
+@property(nonatomic, strong) UIColor* cellBackgroundColor;
+
 @end
 
 // TableViewTextButtonCell contains a textLabel and a UIbutton

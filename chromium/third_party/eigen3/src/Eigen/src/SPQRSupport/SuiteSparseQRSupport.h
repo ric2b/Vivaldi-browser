@@ -142,8 +142,8 @@ class SPQR : public SparseSolverBase<SPQR<MatrixType_> > {
     cholmod_sparse A;
     A = viewAsCholmod(mat);
     m_rows = matrix.rows();
-    Index col = matrix.cols();
-    m_rank = SuiteSparseQR<Scalar>(m_ordering, pivotThreshold, col, &A, &m_cR, &m_E, &m_H, &m_HPinv, &m_HTau, &m_cc);
+    m_rank = SuiteSparseQR<Scalar>(m_ordering, pivotThreshold, internal::convert_index<StorageIndex>(matrix.cols()), &A,
+                                   &m_cR, &m_E, &m_H, &m_HPinv, &m_HTau, &m_cc);
 
     if (!m_cR) {
       m_info = NumericalIssue;
@@ -196,7 +196,7 @@ class SPQR : public SparseSolverBase<SPQR<MatrixType_> > {
   const MatrixType matrixR() const {
     eigen_assert(m_isInitialized && " The QR factorization should be computed first, call compute()");
     if (!m_isRUpToDate) {
-      m_R = viewAsEigen<Scalar, ColMajor, typename MatrixType::StorageIndex>(*m_cR);
+      m_R = viewAsEigen<Scalar, StorageIndex>(*m_cR);
       m_isRUpToDate = true;
     }
     return m_R;

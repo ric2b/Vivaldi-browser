@@ -30,6 +30,7 @@
 #include "ash/wm/splitview/split_view_observer.h"
 #include "ash/wm/wm_default_layout_manager.h"
 #include "ash/wm/workspace/workspace_types.h"
+#include "base/cancelable_callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -381,7 +382,7 @@ class ASH_EXPORT ShelfLayoutManager : public AppListControllerObserver,
       const gfx::Insets& in_session_shelf_insets);
 
   // Called from the scrollable shelf container when it updates its bounds.
-  void HandleScrollableShelfContainerBoundsChange() const;
+  void HandleScrollableShelfContainerBoundsChange();
 
  private:
   void UpdateWorkAreaInsetsAndNotifyObserversInternal(
@@ -610,6 +611,9 @@ class ASH_EXPORT ShelfLayoutManager : public AppListControllerObserver,
   void UpdateVisibilityStateForTrayBubbleChange(bool bubble_shown);
 
   bool IsShelfContainerAnimating() const;
+
+  // Calculates target bounds for the hotseat widget and the desk button widget.
+  void CalculateDeskButtonAndHotseatTargetBounds();
 
   bool in_shutdown_ = false;
 

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 import m from 'mithril';
 
 import {Disposable} from '../base/disposable';
@@ -24,11 +23,10 @@ import {EngineProxy} from '../trace_processor/engine';
 import {Callout} from '../widgets/callout';
 import {Editor} from '../widgets/editor';
 
-import {addTab} from './bottom_tab';
 import {globals} from './globals';
 import {createPage} from './pages';
 import {QueryHistoryComponent, queryHistoryStorage} from './query_history';
-import {QueryResultTab} from './query_result_tab';
+import {addQueryResultsTab} from './query_result_tab';
 import {QueryTable} from './query_table';
 
 interface QueryPageState {
@@ -50,30 +48,30 @@ function runManualQuery(query: string) {
   state.queryResult = undefined;
   const engine = getEngine();
   if (engine) {
-    runQuery(undoCommonChatAppReplacements(query), engine)
-        .then((resp: QueryResponse) => {
-          addTab({
-            kind: QueryResultTab.kind,
-            tag: 'analyze_page_query',
-            config: {
-              query: query,
-              title: 'Standalone Query',
-              prefetchedResponse: resp,
-            },
-          });
-          // We might have started to execute another query. Ignore it in that
-          // case.
-          if (state.executedQuery !== query) {
-            return;
-          }
-          state.queryResult = resp;
-          raf.scheduleFullRedraw();
-        });
+    runQuery(undoCommonChatAppReplacements(query), engine).then(
+      (resp: QueryResponse) => {
+        addQueryResultsTab(
+          {
+            query: query,
+            title: 'Standalone Query',
+            prefetchedResponse: resp,
+          },
+          'analyze_page_query',
+        );
+        // We might have started to execute another query. Ignore it in that
+        // case.
+        if (state.executedQuery !== query) {
+          return;
+        }
+        state.queryResult = resp;
+        raf.scheduleFullRedraw();
+      },
+    );
   }
   raf.scheduleDelayedFullRedraw();
 }
 
-function getEngine(): EngineProxy|undefined {
+function getEngine(): EngineProxy | undefined {
   const engineId = globals.getCurrentEngine()?.id;
   if (engineId === undefined) {
     return undefined;
@@ -115,7 +113,6 @@ class QueryInput implements m.ClassComponent {
       onUpdate: (text: string) => {
         state.enteredText = text;
       },
-
     });
   }
 }
@@ -123,26 +120,29 @@ class QueryInput implements m.ClassComponent {
 export const QueryPage = createPage({
   view() {
     return m(
-        '.query-page',
-        m(Callout, 'Enter query and press Cmd/Ctrl + Enter'),
-        m(QueryInput),
-        state.executedQuery === undefined ? null : m(QueryTable, {
-          query: state.executedQuery,
-          resp: state.queryResult,
-          onClose: () => {
-            state.executedQuery = undefined;
-            state.queryResult = undefined;
-            raf.scheduleFullRedraw();
-          },
-          fillParent: false,
-        }),
-        m(QueryHistoryComponent, {
-          runQuery: runManualQuery,
-          setQuery: (q: string) => {
-            state.enteredText = q;
-            state.generation++;
-            raf.scheduleFullRedraw();
-          },
-        }));
+      '.query-page',
+      m(Callout, 'Enter query and press Cmd/Ctrl + Enter'),
+      m(QueryInput),
+      state.executedQuery === undefined
+        ? null
+        : m(QueryTable, {
+            query: state.executedQuery,
+            resp: state.queryResult,
+            onClose: () => {
+              state.executedQuery = undefined;
+              state.queryResult = undefined;
+              raf.scheduleFullRedraw();
+            },
+            fillParent: false,
+          }),
+      m(QueryHistoryComponent, {
+        runQuery: runManualQuery,
+        setQuery: (q: string) => {
+          state.enteredText = q;
+          state.generation++;
+          raf.scheduleFullRedraw();
+        },
+      }),
+    );
   },
 });

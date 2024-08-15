@@ -162,13 +162,8 @@ void LogSigninAccountReconciliationDuration(base::TimeDelta duration,
   }
 }
 
-void LogSignout(ProfileSignout source_metric, SignoutDelete delete_metric) {
+void LogSignout(ProfileSignout source_metric) {
   base::UmaHistogramEnumeration("Signin.SignoutProfile", source_metric);
-  if (delete_metric != SignoutDelete::kIgnoreMetric) {
-    UMA_HISTOGRAM_BOOLEAN(
-        "Signin.SignoutDeleteProfile",
-        delete_metric == SignoutDelete::kDeleted ? true : false);
-  }
 }
 
 void LogExternalCcResultFetches(
@@ -288,7 +283,7 @@ void RecordSigninAccountType(signin::ConsentLevel consent_level,
       base::UmaHistogramEnumeration("Signin.AccountType.SigninConsent",
                                     account_type);
       break;
-    // TODO(crbug.com/1462552): Remove kSync usage after phase 3 migration. See
+    // TODO(crbug.com/40066949): Remove kSync usage after phase 3 migration. See
     // ConsentLevel::kSync documentation for more details.
     case signin::ConsentLevel::kSync:
       base::UmaHistogramEnumeration("Signin.AccountType.SyncConsent",
@@ -348,10 +343,6 @@ void RecordSigninUserActionForAccessPoint(AccessPoint access_point) {
     case AccessPoint::ACCESS_POINT_DEVICES_PAGE:
       base::RecordAction(
           base::UserMetricsAction("Signin_Signin_FromDevicesPage"));
-      break;
-    case AccessPoint::ACCESS_POINT_CLOUD_PRINT:
-      base::RecordAction(
-          base::UserMetricsAction("Signin_Signin_FromCloudPrint"));
       break;
     case AccessPoint::ACCESS_POINT_SIGNIN_PROMO:
       base::RecordAction(
@@ -488,6 +479,14 @@ void RecordSigninUserActionForAccessPoint(AccessPoint access_point) {
       base::RecordAction(
           base::UserMetricsAction("Signin_Signin_FromTabOrganization"));
       break;
+    case AccessPoint::ACCESS_POINT_TIPS_NOTIFICATION:
+      base::RecordAction(
+          base::UserMetricsAction("Signin_Signin_FromTipsNotification"));
+      break;
+    case AccessPoint::ACCESS_POINT_NOTIFICATIONS_OPT_IN_SCREEN_CONTENT_TOGGLE:
+      base::RecordAction(base::UserMetricsAction(
+          "Signin_Signin_FromNotificationsOptInScreenContentToggle"));
+      break;
     case AccessPoint::ACCESS_POINT_MAX:
       NOTREACHED();
       break;
@@ -537,10 +536,6 @@ void RecordSigninImpressionUserActionForAccessPoint(AccessPoint access_point) {
     case AccessPoint::ACCESS_POINT_DEVICES_PAGE:
       base::RecordAction(
           base::UserMetricsAction("Signin_Impression_FromDevicesPage"));
-      break;
-    case AccessPoint::ACCESS_POINT_CLOUD_PRINT:
-      base::RecordAction(
-          base::UserMetricsAction("Signin_Impression_FromCloudPrint"));
       break;
     case AccessPoint::ACCESS_POINT_SIGNIN_PROMO:
       base::RecordAction(
@@ -621,6 +616,14 @@ void RecordSigninImpressionUserActionForAccessPoint(AccessPoint access_point) {
     case AccessPoint::ACCESS_POINT_CHROME_SIGNIN_INTERCEPT_BUBBLE:
       base::RecordAction(base::UserMetricsAction(
           "Signin_Impression_FromChromeSigninInterceptBubble"));
+      break;
+    case AccessPoint::ACCESS_POINT_TIPS_NOTIFICATION:
+      base::RecordAction(
+          base::UserMetricsAction("Signin_Impression_FromTipsNotification"));
+      break;
+    case AccessPoint::ACCESS_POINT_NOTIFICATIONS_OPT_IN_SCREEN_CONTENT_TOGGLE:
+      base::RecordAction(base::UserMetricsAction(
+          "Signin_Impression_FromNotificationsOptInScreenContentToggle"));
       break;
     case AccessPoint::ACCESS_POINT_ENTERPRISE_SIGNOUT_COORDINATOR:
     case AccessPoint::ACCESS_POINT_EXTENSIONS:
@@ -744,6 +747,13 @@ void RecordConsistencyPromoUserAction(AccountConsistencyPromoAction action,
       histogram =
           "Signin.AccountConsistencyPromoAction."
           "AddAccountStartedWithNoDeviceAccount";
+      break;
+    case AccountConsistencyPromoAction::CONFIRM_MANAGEMENT_SHOWN:
+      histogram = "Signin.AccountConsistencyPromoAction.ConfirmManagementShown";
+      break;
+    case AccountConsistencyPromoAction::CONFIRM_MANAGEMENT_ACCEPTED:
+      histogram =
+          "Signin.AccountConsistencyPromoAction.ConfirmManagementAccepted";
       break;
   }
 

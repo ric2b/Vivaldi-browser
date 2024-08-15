@@ -43,10 +43,10 @@ void StatisticsCollector::CollectPacketSentEvent(ByteView packet,
   static_assert(static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) <=
                     static_cast<uint64_t>(std::numeric_limits<size_t>::max()),
                 "invalid type cast assumption");
-  OSP_DCHECK_LE(packet.size(),
-                static_cast<size_t>(std::numeric_limits<uint32_t>::max()));
+  OSP_CHECK_LE(packet.size(),
+               static_cast<size_t>(std::numeric_limits<uint32_t>::max()));
   event.size = static_cast<uint32_t>(packet.size());
-  OSP_DCHECK(success);
+  OSP_CHECK(success);
 
   recent_packet_events_.emplace_back(event);
 }

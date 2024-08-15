@@ -17,3 +17,19 @@ imageset("single_note_icon") {
     "single_note_icon.imageset/single_note_icon_dark.pdf",
     ]
 }
+
+imageset("context_menu_icon") {
+  sources = [
+    "context_menu_icon.imageset/Contents.json",
+    "context_menu_icon.imageset/context_menu_icon.pdf",
+    "context_menu_icon.imageset/context_menu_icon_dark.pdf",
+    ]
+}
+
+imageset("sort_order_icon") {
+  sources = [
+    "sort_order_icon.imageset/Contents.json",
+    "sort_order_icon.imageset/sort_order_icon.pdf",
+    "sort_order_icon.imageset/sort_order_icon_dark.pdf",
+    ]
+}

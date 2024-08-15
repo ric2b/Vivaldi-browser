@@ -72,7 +72,7 @@ SDLAudioPlayer::~SDLAudioPlayer() {
 ErrorOr<Clock::time_point> SDLAudioPlayer::RenderNextFrame(
     const SDLPlayerBase::PresentableFrame& next_frame) {
   TRACE_DEFAULT_SCOPED(TraceCategory::kStandaloneReceiver);
-  OSP_DCHECK(next_frame.decoded_frame);
+  OSP_CHECK(next_frame.decoded_frame);
   const AVFrame& frame = *next_frame.decoded_frame;
 
   pending_audio_spec_ = device_spec_;
@@ -115,7 +115,7 @@ ErrorOr<Clock::time_point> SDLAudioPlayer::RenderNextFrame(
     constexpr auto kOneSecond = seconds(1);
     const auto required_samples = static_cast<int>(
         pending_audio_spec_.freq * kMinBufferDuration / kOneSecond);
-    OSP_DCHECK_GE(required_samples, 1);
+    OSP_CHECK_GE(required_samples, 1);
     pending_audio_spec_.samples = 1 << av_log2(required_samples);
     if (pending_audio_spec_.samples < required_samples) {
       pending_audio_spec_.samples *= 2;
@@ -199,7 +199,7 @@ void SDLAudioPlayer::Present() {
       OnFatalError(error.str());
       return;
     }
-    OSP_DCHECK(!SDLAudioSpecsAreDifferent(pending_audio_spec_, device_spec_));
+    OSP_CHECK(!SDLAudioSpecsAreDifferent(pending_audio_spec_, device_spec_));
 
     constexpr int kSdlResumePlaybackCommand = 0;
     SDL_PauseAudioDevice(device_, kSdlResumePlaybackCommand);

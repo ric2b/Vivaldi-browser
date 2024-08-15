@@ -59,14 +59,14 @@ class DnsSdServiceWatcher : public DnsSdQuerier::Callback {
         service_name_(std::move(service_name)),
         callback_(std::move(callback)),
         querier_(service ? service->GetQuerier() : nullptr) {
-    OSP_DCHECK(querier_);
+    OSP_CHECK(querier_);
   }
 
   ~DnsSdServiceWatcher() = default;
 
   // Starts service discovery.
   void StartDiscovery() {
-    OSP_DCHECK(!is_running_);
+    OSP_CHECK(!is_running_);
     is_running_ = true;
 
     querier_->StartQuery(service_name_, this);
@@ -74,7 +74,7 @@ class DnsSdServiceWatcher : public DnsSdQuerier::Callback {
 
   // Stops service discovery.
   void StopDiscovery() {
-    OSP_DCHECK(is_running_);
+    OSP_CHECK(is_running_);
     is_running_ = false;
 
     querier_->StopQuery(service_name_, this);

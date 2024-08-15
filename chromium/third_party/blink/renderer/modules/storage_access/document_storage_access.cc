@@ -14,36 +14,40 @@ namespace blink {
 
 namespace {
 
-class RequestExtendedStorageAccess final : public ScriptFunction::Callable,
-                                           public Supplement<LocalDOMWindow> {
+class RequestExtendedStorageAccess final : public ScriptFunction::Callable {
  public:
-  explicit RequestExtendedStorageAccess(
+  RequestExtendedStorageAccess(
       LocalDOMWindow& window,
-      const StorageAccessTypes* storage_access_types)
-      : Supplement<LocalDOMWindow>(window),
-        storage_access_types_(storage_access_types) {}
+      const StorageAccessTypes* storage_access_types,
+      ScriptPromiseResolverTyped<StorageAccessHandle>* resolver)
+      : window_(&window),
+        storage_access_types_(storage_access_types),
+        resolver_(resolver) {}
 
   ScriptValue Call(ScriptState* script_state, ScriptValue) override {
-    ScriptPromiseResolver* resolver =
-        MakeGarbageCollected<ScriptPromiseResolver>(script_state);
-    ScriptPromise promise = resolver->Promise();
-    StorageAccessHandle* handle = MakeGarbageCollected<StorageAccessHandle>(
-        *GetSupplementable(), storage_access_types_);
-    resolver->Resolve(handle);
-    return promise.AsScriptValue();
+    resolver_->Resolve(MakeGarbageCollected<StorageAccessHandle>(
+        *window_, storage_access_types_));
+    return ScriptValue();
   }
 
   void Trace(Visitor* visitor) const override {
+    visitor->Trace(window_);
     visitor->Trace(storage_access_types_);
+    visitor->Trace(resolver_);
     ScriptFunction::Callable::Trace(visitor);
-    Supplement<LocalDOMWindow>::Trace(visitor);
   }
 
  private:
+  Member<LocalDOMWindow> window_;
   Member<const StorageAccessTypes> storage_access_types_;
+  Member<ScriptPromiseResolverTyped<StorageAccessHandle>> resolver_;
 };
 
 }  // namespace
+
+// static
+const char DocumentStorageAccess::kNoAccessRequested[] =
+    "You must request access for at least one storage/communication medium.";
 
 // static
 const char DocumentStorageAccess::kSupplementName[] = "DocumentStorageAccess";
@@ -60,12 +64,20 @@ DocumentStorageAccess& DocumentStorageAccess::From(Document& document) {
 }
 
 // static
-ScriptPromise DocumentStorageAccess::requestStorageAccess(
+ScriptPromiseTyped<StorageAccessHandle>
+DocumentStorageAccess::requestStorageAccess(
     ScriptState* script_state,
     Document& document,
     const StorageAccessTypes* storage_access_types) {
   return From(document).requestStorageAccess(script_state,
                                              storage_access_types);
+}
+
+// static
+ScriptPromise DocumentStorageAccess::hasUnpartitionedCookieAccess(
+    ScriptState* script_state,
+    Document& document) {
+  return From(document).hasUnpartitionedCookieAccess(script_state);
 }
 
 DocumentStorageAccess::DocumentStorageAccess(Document& document)
@@ -75,15 +87,44 @@ void DocumentStorageAccess::Trace(Visitor* visitor) const {
   Supplement<Document>::Trace(visitor);
 }
 
-ScriptPromise DocumentStorageAccess::requestStorageAccess(
+ScriptPromiseTyped<StorageAccessHandle>
+DocumentStorageAccess::requestStorageAccess(
     ScriptState* script_state,
     const StorageAccessTypes* storage_access_types) {
-  return GetSupplementable()
-      ->requestStorageAccess(script_state)
-      .Then(MakeGarbageCollected<ScriptFunction>(
+  if (!storage_access_types->all() && !storage_access_types->cookies() &&
+      !storage_access_types->sessionStorage() &&
+      !storage_access_types->localStorage() &&
+      !storage_access_types->indexedDB() && !storage_access_types->locks() &&
+      !storage_access_types->caches() &&
+      !storage_access_types->getDirectory() &&
+      !storage_access_types->estimate() &&
+      !storage_access_types->createObjectURL() &&
+      !storage_access_types->revokeObjectURL() &&
+      !storage_access_types->broadcastChannel() &&
+      !storage_access_types->sharedWorker()) {
+    return ScriptPromiseTyped<StorageAccessHandle>::RejectWithDOMException(
+        script_state, MakeGarbageCollected<DOMException>(
+                          DOMExceptionCode::kSecurityError,
+                          DocumentStorageAccess::kNoAccessRequested));
+  }
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolverTyped<StorageAccessHandle>>(
+          script_state);
+  auto promise = resolver->Promise();
+  GetSupplementable()
+      ->RequestStorageAccessImpl(
           script_state,
-          MakeGarbageCollected<RequestExtendedStorageAccess>(
-              *GetSupplementable()->domWindow(), storage_access_types)));
+          storage_access_types->all() || storage_access_types->cookies())
+      .Then(MakeGarbageCollected<ScriptFunction>(
+          script_state, MakeGarbageCollected<RequestExtendedStorageAccess>(
+                            *GetSupplementable()->domWindow(),
+                            storage_access_types, resolver)));
+  return promise;
+}
+
+ScriptPromise DocumentStorageAccess::hasUnpartitionedCookieAccess(
+    ScriptState* script_state) {
+  return GetSupplementable()->hasStorageAccess(script_state);
 }
 
 }  // namespace blink

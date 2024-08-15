@@ -4,6 +4,7 @@
 
 #include "net/websockets/websocket_handshake_stream_create_helper.h"
 
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -26,8 +27,10 @@
 #include "net/base/network_anonymization_key.h"
 #include "net/base/network_handle.h"
 #include "net/base/privacy_mode.h"
+#include "net/base/proxy_chain.h"
 #include "net/base/proxy_server.h"
 #include "net/base/request_priority.h"
+#include "net/base/session_usage.h"
 #include "net/base/test_completion_callback.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/dns/public/host_resolver_results.h"
@@ -95,7 +98,6 @@
 #include "net/websockets/websocket_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "url/scheme_host_port.h"
@@ -171,7 +173,7 @@ class MockClientSocketHandleFactory {
             PrivacyMode::PRIVACY_MODE_DISABLED, NetworkAnonymizationKey(),
             SecureDnsPolicy::kAllow, /*disable_cert_network_fetches=*/false),
         scoped_refptr<ClientSocketPool::SocketParams>(),
-        absl::nullopt /* proxy_annotation_tag */, MEDIUM, SocketTag(),
+        std::nullopt /* proxy_annotation_tag */, MEDIUM, SocketTag(),
         ClientSocketPool::RespectLimits::ENABLED, CompletionOnceCallback(),
         ClientSocketPool::ProxyAuthCallback(), &pool_, NetLogWithSource());
     return socket_handle;
@@ -188,12 +190,14 @@ class TestConnectDelegate : public WebSocketStream::ConnectDelegate {
   ~TestConnectDelegate() override = default;
 
   void OnCreateRequest(URLRequest* request) override {}
+  void OnURLRequestConnected(URLRequest* request,
+                             const TransportInfo& info) override {}
   void OnSuccess(
       std::unique_ptr<WebSocketStream> stream,
       std::unique_ptr<WebSocketHandshakeResponseInfo> response) override {}
   void OnFailure(const std::string& failure_message,
                  int net_error,
-                 absl::optional<int> response_code) override {}
+                 std::optional<int> response_code) override {}
   void OnStartOpeningHandshake(
       std::unique_ptr<WebSocketHandshakeRequestInfo> request) override {}
   void OnSSLCertificateError(
@@ -206,8 +210,8 @@ class TestConnectDelegate : public WebSocketStream::ConnectDelegate {
                      scoped_refptr<HttpResponseHeaders> response_headers,
                      const IPEndPoint& host_port_pair,
                      base::OnceCallback<void(const AuthCredentials*)> callback,
-                     absl::optional<AuthCredentials>* credentials) override {
-    *credentials = absl::nullopt;
+                     std::optional<AuthCredentials>* credentials) override {
+    *credentials = std::nullopt;
     return OK;
   }
 };
@@ -225,7 +229,7 @@ class MockWebSocketStreamRequestAPI : public WebSocketStreamRequestAPI {
   MOCK_METHOD3(OnFailure,
                void(const std::string& message,
                     int net_error,
-                    absl::optional<int> response_code));
+                    std::optional<int> response_code));
 };
 
 class WebSocketHandshakeStreamCreateHelperTest
@@ -346,9 +350,10 @@ class WebSocketHandshakeStreamCreateHelperTest
         std::unique_ptr<HttpNetworkSession> http_network_session =
             SpdySessionDependencies::SpdyCreateSession(&session_deps);
         const SpdySessionKey key(
-            HostPortPair::FromURL(url), ProxyChain::Direct(),
-            PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
-            SocketTag(), NetworkAnonymizationKey(), SecureDnsPolicy::kAllow);
+            HostPortPair::FromURL(url), PRIVACY_MODE_DISABLED,
+            ProxyChain::Direct(), SessionUsage::kDestination, SocketTag(),
+            NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
+            /*disable_cert_verification_network_fetches=*/false);
         base::WeakPtr<SpdySession> spdy_session =
             CreateSpdySession(http_network_session.get(), key, net_log);
         std::unique_ptr<WebSocketHandshakeStreamBase> handshake =
@@ -481,6 +486,7 @@ class WebSocketHandshakeStreamCreateHelperTest
             &transport_security_state, &ssl_config_service,
             /*server_info=*/nullptr,
             QuicSessionKey("mail.example.org", 80, PRIVACY_MODE_DISABLED,
+                           ProxyChain::Direct(), SessionUsage::kDestination,
                            SocketTag(), NetworkAnonymizationKey(),
                            SecureDnsPolicy::kAllow,
                            /*require_dns_https_alpn=*/false),
@@ -500,7 +506,8 @@ class WebSocketHandshakeStreamCreateHelperTest
                 kQuicYieldAfterDurationMilliseconds),
             /*cert_verify_flags=*/0, quic::test::DefaultQuicConfig(),
             std::make_unique<TestQuicCryptoClientConfigHandle>(&crypto_config),
-            dns_start, dns_end, base::DefaultTickClock::GetInstance(),
+            "CONNECTION_UNKNOWN", dns_start, dns_end,
+            base::DefaultTickClock::GetInstance(),
             base::SingleThreadTaskRunner::GetCurrentDefault().get(),
             /*socket_performance_watcher=*/nullptr,
             HostResolverEndpointResult(), NetLog::Get());

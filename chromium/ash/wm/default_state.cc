@@ -508,10 +508,8 @@ void DefaultState::EnterToNextState(
   gfx::Rect restore_bounds_in_screen;
   if (window_state->window()->parent()) {
     // Save the current bounds as the restore bounds if changing from normal
-    // state (not horizontal/vertical maximized) to other non-minimized window
-    // states.
-    if (is_previous_normal_type && !window_state->IsMinimized() &&
-        !window_state->IsNormalStateType()) {
+    // state (not horizontal/vertical maximized) to other window states.
+    if (is_previous_normal_type && !window_state->IsNormalStateType()) {
       window_state->SaveCurrentBoundsForRestore();
     }
 
@@ -666,10 +664,24 @@ void DefaultState::UpdateBoundsFromState(
       if (previous_state_type == WindowStateType::kMinimized) {
         bounds_in_parent = window->bounds();
       } else {
+        // Default state can be used for always on top windows in tablet mode,
+        // which are not managed by the tablet mode window manager. Float state
+        // is not allowed for always on top but this may be called when a
+        // floated window has been put into always on top and we have not yet
+        // exited float state yet. See http://b/317064996 for more details.
+        // TODO(http://b/325282588): `DefaultState` should be for clamshell
+        // (non-ARC apps) only. See if `TabletModeWindowState` can handle
+        // always-on-top window gracefully.
         bounds_in_parent =
-            Shell::Get()->float_controller()->GetFloatWindowClamshellBounds(
-                window, float_start_location.value_or(
-                            chromeos::FloatStartLocation::kBottomRight));
+            window->GetProperty(aura::client::kZOrderingKey) !=
+                    ui::ZOrderLevel::kNormal
+                ? window->bounds()
+                : Shell::Get()
+                      ->float_controller()
+                      ->GetFloatWindowClamshellBounds(
+                          window,
+                          float_start_location.value_or(
+                              chromeos::FloatStartLocation::kBottomRight));
       }
       break;
     }

@@ -57,9 +57,9 @@ locale.  The strings in this file are specific to iOS.
     <output filename="vivaldi_ios_native_strings_jbo.pak" type="data_package" lang="jbo" />
     <output filename="vivaldi_ios_native_strings_ka.pak" type="data_package" lang="ka" />
     <output filename="vivaldi_ios_native_strings_kab.pak" type="data_package" lang="kab" />
+    <output filename="vivaldi_ios_native_strings_kmr.pak" type="data_package" lang="kmr" />
     <output filename="vivaldi_ios_native_strings_kn.pak" type="data_package" lang="kn" />
     <output filename="vivaldi_ios_native_strings_ko.pak" type="data_package" lang="ko" />
-    <output filename="vivaldi_ios_native_strings_ku.pak" type="data_package" lang="ku" />
     <output filename="vivaldi_ios_native_strings_lt.pak" type="data_package" lang="lt" />
     <output filename="vivaldi_ios_native_strings_lv.pak" type="data_package" lang="lv" />
     <output filename="vivaldi_ios_native_strings_mk.pak" type="data_package" lang="mk" />
@@ -142,9 +142,9 @@ locale.  The strings in this file are specific to iOS.
     <file path="strings/vivaldi_ios_native_strings_kab.xtb" lang="kab" />
     <file path="strings/vivaldi_ios_native_strings_kk.xtb" lang="kk" />
     <file path="strings/vivaldi_ios_native_strings_km.xtb" lang="km" />
+    <file path="strings/vivaldi_ios_native_strings_kmr.xtb" lang="kmr" />
     <file path="strings/vivaldi_ios_native_strings_kn.xtb" lang="kn" />
     <file path="strings/vivaldi_ios_native_strings_ko.xtb" lang="ko" />
-    <file path="strings/vivaldi_ios_native_strings_ku.xtb" lang="ku" />
     <file path="strings/vivaldi_ios_native_strings_ky.xtb" lang="ky" />
     <file path="strings/vivaldi_ios_native_strings_lo.xtb" lang="lo" />
     <file path="strings/vivaldi_ios_native_strings_lt.xtb" lang="lt" />
@@ -263,8 +263,29 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_NOTE_CONTEXT_BAR_EDIT" desc="The iOS context bar item for edit note. ">
         Edit
       </message>
-      <message name="IDS_IOS_NOTE_CONTEXT_BAR_NEW_FOLDER" desc="The iOS context bar item for adding new note folder. ">
+      <message name="IDS_IOS_NOTE_CONTEXT_BAR_NEW_FOLDER" desc="The iOS context bar item for adding new note folder.">
         New Folder
+      </message>
+      <message name="IDS_IOS_NOTE_SORTING_MANUAL" desc="Title for sorting notes when sort by manual.">
+        Manual
+      </message>
+      <message name="IDS_IOS_NOTE_SORTING_DATE_CREATED" desc="Title for sorting notes when sort by date created.">
+        Date Created
+      </message>
+      <message name="IDS_IOS_NOTE_SORTING_DATE_EDITED" desc="Title for sorting notes when sort by date edited. ">
+        Date Edited
+      </message>
+      <message name="IDS_IOS_NOTE_SORTING_BY_TITLE" desc="Title for sorting notes when sort by title. ">
+        Title
+      </message>
+      <message name="IDS_IOS_NOTE_SORTING_SORT_ORDER" desc="Title for sorting context menu.">
+        Sort Order
+      </message>
+       <message name="IDS_IOS_NOTE_ASCENDING_SORT_ORDER" desc="Title for ascending order context menu.">
+        Ascending
+      </message>
+       <message name="IDS_IOS_NOTE_DESCENDING_SORT_ORDER" desc="Title for descending order context menu.">
+        Descending
       </message>
       <message name="IDS_IOS_SEARCH_WITH_VIVALDI" desc="Menu item for search with Vivaldi functionality in context menu. [Length: 35em]">
         Search with Vivaldi
@@ -471,8 +492,8 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_UPDATE_SPEED_DIAL_THUMBNAIL" desc="The string title describing the context menu option for updating thumbnail of a speed dial.">
         Update thumbnail
       </message>
-      <message name="IDS_IOS_NEW_SPEED_DIAL_FOLDER" desc="The string title describing the context menu option for adding a new speed dial folder.">
-        New Speed Dial Folder
+      <message name="IDS_IOS_NEW_FOLDER" desc="The string title describing the context menu option for adding a new folder.">
+        New Folder
       </message>
       <message name="IDS_IOS_MOVE_ITEM" desc='The string describing moving the dial. [CHAR-LIMIT=30]'>
         Move out of folder
@@ -501,8 +522,26 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_SORT_BY_CREATED" desc="Description of sort order by created">
         By Created
       </message>
-      <message name="IDS_IOS_SORT_BY_CONTENT" desc="Description of sort order by content">
-        By Content
+      <message name="IDS_IOS_SORT_BY_KIND" desc="Description of sort order by kind">
+        By Kind
+      </message>
+      <message name="IDS_IOS_START_PAGE_CUSTOMIZE_TITLE" desc="The title for the start page customize action on context menu action">
+        Customize Start Page
+      </message>
+      <message name="IDS_IOS_START_PAGE_ADD_GROUP_TITLE" desc="The title for the start page add group action on context menu action">
+        Add Group
+      </message>
+      <message name="IDS_IOS_START_PAGE_SORTING_TITLE" desc="The title for the start page sorting action on context menu action">
+        Sorting
+      </message>
+      <message name="IDS_IOS_START_PAGE_PROMO_CREATE_NEW_GROUP_TITLE" desc="The title for the start page create new group promo">
+        Create a new Group?
+      </message>
+      <message name="IDS_IOS_START_PAGE_PROMO_CREATE_NEW_GROUP_DESCRIPTION" desc="The description for the start page create new group promo">
+        Speed Dial Groups is a great way to organize your bookmarks.
+      </message>
+      <message name="IDS_IOS_START_PAGE_PROMO_ADD_NEW_GROUP_TITLE" desc="The title for the start page create new group promo add new group button">
+        Add New Group
       </message>
       <!-- END START PAGE AND SPEED DIAL -->
       <message name="IDS_IOS_SEARCH_OR_TYPE_WEB_ADDRESS" desc="Prompt to enter text into the text field that will either perform web searches or navigate to a website. [CHAR_LIMIT=38]">
@@ -512,14 +551,11 @@ locale.  The strings in this file are specific to iOS.
         Search with <ph name="SEARCH_ENGINE">$1</ph>
       </message>
       <!-- BOOKMARK EDITOR -->
+      <message name="IDS_IOS_USE_AS_GROUP" desc="Description for the bookmark folder editor 'Use as Group' option">
+        Use as Group
+      </message>
       <message name="IDS_IOS_USE_AS_SPEED_DIAL_FOLDER" desc="Description for the bookmark folder editor 'Use as Speed Dial Folder' option">
         Use as Speed Dial Folder
-      </message>
-      <message name="IDS_IOS_ADD_FOLDER" desc='Title of the "Add Folder" form dialog. [CHAR_LIMIT=30]'>
-        Add folder
-      </message>
-      <message name="IDS_IOS_EDIT_FOLDER" desc='Title of the "Edit Folder" form dialog. [CHAR_LIMIT=30]'>
-        Edit folder
       </message>
       <message name="IDS_IOS_DELETE_FOLDER" desc='Title of the "Delete Folder" form dialog. [CHAR_LIMIT=30]'>
         Delete folder
@@ -533,15 +569,6 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_BOOKMARK_LOCATION" desc="Label specifying the location of the bookmark. [CHAR_LIMIT=32]" meaning="Name of an inanimate object">
         Location
       </message>
-      <message name="IDS_IOS_ADD_BOOKMARK" desc="Title of the bookmark editor dialog when a new item is creating.">
-        Add bookmark
-      </message>
-      <message name="IDS_IOS_EDIT_BOOKMARK" desc="Title of the bookmark editor dialog when an exiting item is editing">
-        Edit bookmark
-      </message>
-      <message name="IDS_IOS_DELETE_BOOKMARK" desc="Title of the delete bookmark button in the bookmark editor dialog">
-        Delete bookmark
-      </message>
       <message name="IDS_IOS_BOOKMARK_NAME" desc="Label specifying the title of the bookmark. [CHAR_LIMIT=32]" meaning="Name of an inanimate object">
         Name
       </message>
@@ -554,6 +581,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_BOOKMARK_DESCRIPTION" desc="Label specifying the description of the bookmark. [CHAR_LIMIT=32]">
         Description
       </message>
+      <message name="IDS_IOS_BOOKMARK_SHOW_ONLY_GROUPS" desc="Description for the bookmark folder selection 'Show only Groups' option">
+        Show only Groups
+      </message>
       <message name="IDS_IOS_BOOKMARK_SHOW_ONLY_SD_FOLDERS" desc="Description for the bookmark folder selection 'Show only Speed Dial folders' option">
         Show only Speed Dial folders
       </message>
@@ -562,6 +592,30 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_BOOKMARKED_IN" desc="Title of the snacback message for new bookmark">
         Bookmarked in
+      </message>
+      <message name="IDS_IOS_ADD_ITEM_WITH_TYPE" desc='Title of the Add item with a provided type in editor'>
+        Add <ph name="ITEM_TYPE">$1</ph>
+      </message>
+      <message name="IDS_IOS_EDIT_ITEM_WITH_TYPE" desc='Title of the Edit item with a provided type in editor'>
+        Edit <ph name="ITEM_TYPE">$1</ph>
+      </message>
+      <message name="IDS_IOS_DELETE_ITEM_WITH_TYPE" desc='Title of the Delete item with a provided type in editor'>
+        Delete <ph name="ITEM_TYPE">$1</ph>
+      </message>
+      <message name="IDS_IOS_ITEM_TYPE_GROUP" desc='Title of the type Group'>
+        Group
+      </message>
+      <message name="IDS_IOS_ITEM_TYPE_FOLDER" desc='Title of the type Folder'>
+        Folder
+      </message>
+      <message name="IDS_IOS_ITEM_TYPE_SPEED_DIAL" desc='Title of the type Speed Dial'>
+        Speed Dial
+      </message>
+      <message name="IDS_IOS_ITEM_TYPE_BOOKMARK" desc='Title of the type Bookmark'>
+        Bookmark
+      </message>
+      <message name="IDS_IOS_BOOKMARK_GROUP_NAME_TITLE" desc="Label specifying the title of the bookmark group name title for bookmark editor.">
+        Group Name
       </message>
       <!-- END BOOKMARK EDITOR -->
       <message name="IDS_IOS_OPEN_IN_PRIVATE_ACTION_TITLE" desc="Title of the action used to open an URL in a new Private tab. [iOS only]">
@@ -943,6 +997,10 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_ACCOUNT_ERROR_CREDENTIALS_MISSING" desc="(Vivaldi) Text indicating what prevented login to a vivaldi account">
         Failed to retrieve your credentials. Please log in again.
       </message>
+      <message name="IDS_IOS_IDENTITY_ERROR_INFOBAR_KEEP_USING_YOUR_VIVALDI_DATA_MESSAGE" desc="Text letting user know that Vivaldi can not decrypt data without the passphrase">
+        Keep using the synced data in your Vivaldi Account
+      </message>
+
       <!-- End Sync -->
       <!-- AD AND TRACKER BLOCKER -->
       <message name="IDS_IOS_PREFS_VIVALDI_AD_AND_TRACKER_BLOCKER" desc="Title for the ad and tracker blocker settings">
@@ -1257,6 +1315,26 @@ locale.  The strings in this file are specific to iOS.
         Cancel
       </message>
       <!-- END START PAGE SETTINGS -->
+      <!-- START PAGE QUICK SETTINGS -->
+      <message name="IDS_IOS_START_PAGE_QUICK_SETTINGS_SPEED_DIALS_TITLE" desc="Title for the speed dial toggle on start page quick settings">
+        Display Speed Dials
+      </message>
+      <message name="IDS_IOS_START_PAGE_QUICK_SETTINGS_SPEED_DIAL_SIZE_TITLE" desc="Title for the speed dial size menu on start page quick settings">
+        Speed Dial Size
+      </message>
+      <message name="IDS_IOS_START_PAGE_QUICK_SETTINGS_SPEED_DIAL_COLUMN_TITLE" desc="Title for the speed dial size maximum column on start page quick settings">
+        Maximum Columns
+      </message>
+      <message name="IDS_IOS_START_PAGE_QUICK_SETTINGS_BACKGROUND_IMAGE_TITLE" desc="Title for the background image settings on start page quick settings">
+        Background Image
+      </message>
+      <message name="IDS_IOS_SHOW_START_PAGE_QUICK_SETTINGS_CUSTOMIZE_TITLE" desc="Title for the show start page customize button toggle on start page quick settings">
+        Customize Start Page button
+      </message>
+      <message name="IDS_IOS_START_PAGE_SPEED_DIAL_QUICK_SETTINGS_COLUMN_UNLIMITED_TITLE" desc="Title for the speed dial size maximum column unlimited option on start page quick settings">
+        Unlimited
+      </message>
+      <!-- END START PAGE QUICK SETTINGS -->
       <!--TABS SETTINGS -->
       <message name="IDS_IOS_PREFS_VIVALDI_TABS" desc="Title for the tabs settings">
         Tabs

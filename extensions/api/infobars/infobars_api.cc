@@ -3,6 +3,7 @@
 #include "extensions/api/infobars/infobars_api.h"
 
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/tab_sharing/tab_sharing_infobar_delegate.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
@@ -15,7 +16,7 @@ namespace extensions {
 ExtensionFunction::ResponseAction InfobarsSendButtonActionFunction::Run() {
   using vivaldi::infobars::SendButtonAction::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   int identifier = params->identifier;
@@ -31,8 +32,30 @@ ExtensionFunction::ResponseAction InfobarsSendButtonActionFunction::Run() {
 
   auto* service = infobars::ContentInfoBarManager::FromWebContents(contents);
   for (infobars::InfoBar* infobar : service->infobars()) {
+    // TODO this cannot be a confirminfobardelegate directly so check the type
+    // first.
+
     if (infobar->delegate()->GetIdentifier() ==
-        static_cast<infobars::InfoBarDelegate::InfoBarIdentifier>(identifier)) {
+        infobars::InfoBarDelegate::TAB_SHARING_INFOBAR_DELEGATE) {
+      TabSharingInfoBarDelegate* delegate =
+          static_cast<TabSharingInfoBarDelegate*>(infobar->delegate());
+
+      if (action == extensions::vivaldi::infobars::ToString(
+                        extensions::vivaldi::infobars::ButtonAction::kAccept)) {
+        delegate->ShareThisTabInstead();
+      } else if (action ==
+                 extensions::vivaldi::infobars::ToString(
+                     extensions::vivaldi::infobars::ButtonAction::kCancel)) {
+        delegate->Stop();
+      } else if (action ==
+                 extensions::vivaldi::infobars::ToString(
+                     extensions::vivaldi::infobars::ButtonAction::kDismiss)) {
+        //Note: TabSharingInfoBarDelegate::IsCloseable is false.
+      }
+
+    } else if (infobar->delegate()->GetIdentifier() ==
+               static_cast<infobars::InfoBarDelegate::InfoBarIdentifier>(
+                   identifier)) {
       ConfirmInfoBarDelegate* delegate =
           infobar->delegate()->AsConfirmInfoBarDelegate();
       DCHECK(delegate);
@@ -44,21 +67,23 @@ ExtensionFunction::ResponseAction InfobarsSendButtonActionFunction::Run() {
             extensions::vivaldi::infobars::OnInfobarRemoved::kEventName,
             std::move(args), browser_context());
 
-        if (action == extensions::vivaldi::infobars::ToString(
-                          extensions::vivaldi::infobars::ButtonAction::kAccept)) {
+        if (action ==
+            extensions::vivaldi::infobars::ToString(
+                extensions::vivaldi::infobars::ButtonAction::kAccept)) {
           delegate->Accept();
-        } else if (action == extensions::vivaldi::infobars::ToString(
-                                 extensions::vivaldi::infobars::ButtonAction::kCancel)) {
+        } else if (action ==
+                   extensions::vivaldi::infobars::ToString(
+                       extensions::vivaldi::infobars::ButtonAction::kCancel)) {
           delegate->Cancel();
-        } else if (action == extensions::vivaldi::infobars::ToString(
-                                 extensions::vivaldi::infobars::ButtonAction::kDismiss)) {
+        } else if (action ==
+                   extensions::vivaldi::infobars::ToString(
+                       extensions::vivaldi::infobars::ButtonAction::kDismiss)) {
           delegate->InfoBarDismissed();
         }
         infobar->RemoveSelf();
       }
     }
   }
-
   return RespondNow(NoArguments());
 }
 

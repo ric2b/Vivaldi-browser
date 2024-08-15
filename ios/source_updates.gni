@@ -97,12 +97,6 @@ update_target("//ios/chrome/browser/ui/popup_menu/overflow_menu:overflow_menu_sw
   ]
 }
 
-update_template_instance("//ios/chrome/app:info_plist") {
-  info_plists += [
-    "//vivaldi/ios/app/Disable-Multiscreen.plist",
-  ]
- }
-
 update_template_instance("//ios/chrome/credential_provider_extension/ui/resources:consent_view_controller") {
   sources -= [
     "consent_view_controller.imageset/Contents.json",
@@ -118,7 +112,7 @@ update_template_instance("//ios/chrome/credential_provider_extension/ui/resource
   ]
 }
 
-update_target("//ios/chrome/browser/ui/webui:webui") {
+update_target("//ios/chrome/browser/webui/ui_bundled:coordinator") {
     sources += [
       "//vivaldi/ios/ui/about/vivaldi_ios_about_version.mm",
       "//vivaldi/ios/ui/about/vivaldi_ios_about_version.h",

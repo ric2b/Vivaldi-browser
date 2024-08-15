@@ -200,6 +200,7 @@ public:
     void drawImageRect(const SkImage*, const SkRect* src, const SkRect& dst,
                        const SkSamplingOptions&, const SkPaint&,
                        SkCanvas::SrcRectConstraint) override;
+    bool shouldDrawAsTiledImageRect() const override { return true; }
     bool drawAsTiledImageRect(SkCanvas*,
                               const SkImage*,
                               const SkRect* src,
@@ -241,12 +242,10 @@ public:
                          const SkMatrix& srcToDst,
                          SkTileMode);
 
-    sk_sp<sktext::gpu::Slug> convertGlyphRunListToSlug(
-            const sktext::GlyphRunList& glyphRunList,
-            const SkPaint& initialPaint,
-            const SkPaint& drawingPaint) override;
+    sk_sp<sktext::gpu::Slug> convertGlyphRunListToSlug(const sktext::GlyphRunList& glyphRunList,
+                                                       const SkPaint& paint) override;
 
-    void drawSlug(SkCanvas*, const sktext::gpu::Slug* slug, const SkPaint& drawingPaint) override;
+    void drawSlug(SkCanvas*, const sktext::gpu::Slug* slug, const SkPaint& paint) override;
 
     sk_sp<SkSpecialImage> makeSpecial(const SkBitmap&) override;
     sk_sp<SkSpecialImage> makeSpecial(const SkImage*) override;
@@ -325,10 +324,7 @@ private:
 
     Device(std::unique_ptr<SurfaceDrawContext>, DeviceFlags);
 
-    void onDrawGlyphRunList(SkCanvas*,
-                            const sktext::GlyphRunList&,
-                            const SkPaint& initialPaint,
-                            const SkPaint& drawingPaint) override;
+    void onDrawGlyphRunList(SkCanvas*, const sktext::GlyphRunList&, const SkPaint& paint) override;
 
     bool onReadPixels(const SkPixmap&, int, int) override;
     bool onWritePixels(const SkPixmap&, int, int) override;

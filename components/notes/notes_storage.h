@@ -46,7 +46,7 @@ class NotesStorage : public base::ImportantFileWriter::DataSerializer {
   void NotesModelDeleted();
 
   // ImportantFileWriter::DataSerializer implementation.
-  absl::optional<std::string> SerializeData() override;
+  std::optional<std::string> SerializeData() override;
 
  private:
   // The model. The model is NULL once NotesModelDeleted has been invoked.

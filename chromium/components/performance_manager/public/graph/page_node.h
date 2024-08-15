@@ -5,11 +5,13 @@
 #ifndef COMPONENTS_PERFORMANCE_MANAGER_PUBLIC_GRAPH_PAGE_NODE_H_
 #define COMPONENTS_PERFORMANCE_MANAGER_PUBLIC_GRAPH_PAGE_NODE_H_
 
+#include <optional>
 #include <ostream>
 #include <string>
 
 #include "base/containers/flat_set.h"
 #include "base/functional/function_ref.h"
+#include "base/memory/raw_ptr.h"
 #include "components/performance_manager/public/freezing/freezing.h"
 #include "components/performance_manager/public/graph/node.h"
 #include "components/performance_manager/public/mojom/coordination_unit.mojom.h"
@@ -17,7 +19,7 @@
 #include "components/performance_manager/public/resource_attribution/page_context.h"
 #include "components/performance_manager/public/web_contents_proxy.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/permissions/permission_utils.h"
 
 class GURL;
 
@@ -151,7 +153,7 @@ class PageNode : public Node {
   // GetTimeSinceLastVisibilityChange(), this returns nullopt for a node which
   // has never been audible. If a node is audible when created, it is considered
   // to change from inaudible to audible at that point.
-  virtual absl::optional<base::TimeDelta> GetTimeSinceLastAudibleChange()
+  virtual std::optional<base::TimeDelta> GetTimeSinceLastAudibleChange()
       const = 0;
 
   // Returns true if this page is displaying content in a picture-in-picture
@@ -184,9 +186,13 @@ class PageNode : public Node {
   // See PageNodeObserver::OnMainFrameNavigationCommitted.
   virtual int64_t GetNavigationID() const = 0;
 
-  // Returns the MIME type of the contents associated with the last committed
-  // navigation event for the main frame of this page.
+  // Returns the MIME type for the last committed main frame navigation.
   virtual const std::string& GetContentsMimeType() const = 0;
+
+  // Returns the notification permission status for the last committed main
+  // frame navigation (nullopt if it wasn't retrieved).
+  virtual std::optional<blink::mojom::PermissionStatus>
+  GetNotificationPermissionStatus() const = 0;
 
   // Returns "zero" if no navigation has happened, otherwise returns the time
   // since the last navigation commit.
@@ -206,7 +212,8 @@ class PageNode : public Node {
   // are no main frames at the moment, returns the empty set. Note that this
   // incurs a full container copy of all main frame nodes. Please use
   // VisitMainFrameNodes when that makes sense.
-  virtual const base::flat_set<const FrameNode*> GetMainFrameNodes() const = 0;
+  virtual const base::flat_set<raw_ptr<const FrameNode, CtnExperimental>>
+  GetMainFrameNodes() const = 0;
 
   // Returns the URL the main frame last committed a navigation to, or the
   // initial URL of the page before navigation. The latter case is distinguished
@@ -235,12 +242,12 @@ class PageNode : public Node {
 
   // Indicates if there's a freezing vote for this page node. This has 3
   // possible values:
-  //   - absl::nullopt: There's no active freezing vote for this page.
+  //   - std::nullopt: There's no active freezing vote for this page.
   //   - freezing::FreezingVoteValue::kCanFreeze: There's one or more positive
   //     freezing vote for this page and no negative vote.
   //   - freezing::FreezingVoteValue::kCannotFreeze: There's at least one
   //     negative freezing vote for this page.
-  virtual const absl::optional<freezing::FreezingVote>& GetFreezingVote()
+  virtual const std::optional<freezing::FreezingVote>& GetFreezingVote()
       const = 0;
 
   // Returns the current page state. See "PageNodeObserver::OnPageStateChanged".
@@ -374,7 +381,7 @@ class PageNodeObserver {
   // Called every time the aggregated freezing vote changes or gets invalidated.
   virtual void OnFreezingVoteChanged(
       const PageNode* page_node,
-      absl::optional<freezing::FreezingVote> previous_vote) = 0;
+      std::optional<freezing::FreezingVote> previous_vote) = 0;
 };
 
 // Default implementation of observer that provides dummy versions of each
@@ -423,7 +430,7 @@ class PageNode::ObserverDefaultImpl : public PageNodeObserver {
                             const PageNode* new_page_node) override {}
   void OnFreezingVoteChanged(
       const PageNode* page_node,
-      absl::optional<freezing::FreezingVote> previous_vote) override {}
+      std::optional<freezing::FreezingVote> previous_vote) override {}
 };
 
 // std::ostream support for PageNode::EmbeddingType.

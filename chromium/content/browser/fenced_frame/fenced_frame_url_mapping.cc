@@ -10,14 +10,11 @@
 #include <string>
 
 #include "base/containers/contains.h"
-#include "base/debug/crash_logging.h"
-#include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/types/id_type.h"
 #include "content/browser/fenced_frame/fenced_frame_reporter.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/fenced_frame/fenced_frame_utils.h"
@@ -91,9 +88,7 @@ GURL SubstituteSizeIntoURL(const blink::AdDescriptor& ad_descriptor) {
 
 }  // namespace
 
-FencedFrameURLMapping::FencedFrameURLMapping() : unique_id_(GetNextId()) {
-  CHECK(unique_id_);
-}
+FencedFrameURLMapping::FencedFrameURLMapping() = default;
 
 FencedFrameURLMapping::~FencedFrameURLMapping() = default;
 
@@ -328,21 +323,17 @@ void FencedFrameURLMapping::ConvertFencedFrameURNToURL(
 void FencedFrameURLMapping::RemoveObserverForURN(
     const GURL& urn_uuid,
     MappingResultObserver* observer) {
-  // TODO(crbug.com/1488795): Change these `DumpWithoutCrashing` to CHECK when
-  // we identify and fix the root cause. (Or just remove them if it is a
-  // harmless race condition.)
   auto it = pending_urn_uuid_to_url_map_.find(urn_uuid);
   if (it == pending_urn_uuid_to_url_map_.end()) {
-    SCOPED_CRASH_KEY_STRING32("RemoveObserverForURN", "dump_location", "urn");
-    base::debug::DumpWithoutCrashing();
+    // A harmless race condition may occur that the pending urn to url map has
+    // changed out from under the place that is calling this function (so the
+    // destructors were already called), so it's empty.
     return;
   }
 
   auto observer_it = it->second.find(observer);
   if (observer_it == it->second.end()) {
-    SCOPED_CRASH_KEY_STRING32("RemoveObserverForURN", "dump_location",
-                              "observer");
-    base::debug::DumpWithoutCrashing();
+    // Similarly, the observer may not be associated with the urn.
     return;
   }
 
@@ -435,12 +426,6 @@ void FencedFrameURLMapping::SubstituteMappedURL(
     }
   }
   it->second = std::move(info);
-}
-
-// static
-FencedFrameURLMapping::Id FencedFrameURLMapping::GetNextId() {
-  static Id::Generator generator;
-  return generator.GenerateNextId();
 }
 
 bool FencedFrameURLMapping::IsMapped(const GURL& urn_uuid) const {

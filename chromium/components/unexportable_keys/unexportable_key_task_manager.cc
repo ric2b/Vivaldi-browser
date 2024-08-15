@@ -5,6 +5,7 @@
 #include "components/unexportable_keys/unexportable_key_task_manager.h"
 
 #include <memory>
+#include <optional>
 
 #include "base/containers/span.h"
 #include "base/feature_list.h"
@@ -26,7 +27,6 @@
 #include "components/unexportable_keys/unexportable_key_tasks.h"
 #include "crypto/signature_verifier.h"
 #include "crypto/unexportable_key.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace unexportable_keys {
 
@@ -46,7 +46,7 @@ MakeSigningKeyRefCounted(std::unique_ptr<crypto::UnexportableSigningKey> key) {
 }
 
 ServiceErrorOr<std::vector<uint8_t>> OptionalToServiceErrorOr(
-    absl::optional<std::vector<uint8_t>> result) {
+    std::optional<std::vector<uint8_t>> result) {
   if (!result) {
     return base::unexpected(ServiceError::kCryptoApiFailed);
   }
@@ -80,26 +80,29 @@ WrapCallbackWithMetrics(
 
 }  // namespace
 
-UnexportableKeyTaskManager::UnexportableKeyTaskManager()
+UnexportableKeyTaskManager::UnexportableKeyTaskManager(
+    crypto::UnexportableKeyProvider::Config config)
     : task_scheduler_(base::ThreadPool::CreateSingleThreadTaskRunner(
           {base::MayBlock(), base::TaskPriority::USER_BLOCKING,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
           base::SingleThreadTaskRunnerThreadMode::
               DEDICATED  // Using a dedicated thread to run long and blocking
                          // TPM tasks.
-          )) {}
+          )),
+      config_(std::move(config)) {}
 
 UnexportableKeyTaskManager::~UnexportableKeyTaskManager() = default;
 
 // static
 std::unique_ptr<crypto::UnexportableKeyProvider>
-UnexportableKeyTaskManager::GetUnexportableKeyProvider() {
+UnexportableKeyTaskManager::GetUnexportableKeyProvider(
+    crypto::UnexportableKeyProvider::Config config) {
   if (base::FeatureList::IsEnabled(
           kEnableBoundSessionCredentialsSoftwareKeysForManualTesting)) {
     return crypto::GetSoftwareUnsecureUnexportableKeyProvider();
   }
 
-  return crypto::GetUnexportableKeyProvider();
+  return crypto::GetUnexportableKeyProvider(std::move(config));
 }
 
 void UnexportableKeyTaskManager::GenerateSigningKeySlowlyAsync(
@@ -113,7 +116,7 @@ void UnexportableKeyTaskManager::GenerateSigningKeySlowlyAsync(
       BackgroundTaskType::kGenerateKey, std::move(callback));
 
   std::unique_ptr<crypto::UnexportableKeyProvider> key_provider =
-      GetUnexportableKeyProvider();
+      GetUnexportableKeyProvider(config_);
 
   if (!key_provider) {
     std::move(callback_wrapper)
@@ -144,7 +147,7 @@ void UnexportableKeyTaskManager::FromWrappedSigningKeySlowlyAsync(
       BackgroundTaskType::kFromWrappedKey, std::move(callback));
 
   std::unique_ptr<crypto::UnexportableKeyProvider> key_provider =
-      GetUnexportableKeyProvider();
+      GetUnexportableKeyProvider(config_);
 
   if (!key_provider) {
     std::move(callback_wrapper)

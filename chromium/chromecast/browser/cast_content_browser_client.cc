@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <string_view>
 #include <utility>
 
 #include "base/base_switches.h"
@@ -692,7 +693,7 @@ bool CastContentBrowserClient::IsBufferingEnabled() {
 
 std::optional<service_manager::Manifest>
 CastContentBrowserClient::GetServiceManifestOverlay(
-    base::StringPiece service_name) {
+    std::string_view service_name) {
   if (service_name == ServiceManagerContext::kBrowserServiceName) {
     return GetCastContentBrowserOverlayManifest();
   }
@@ -820,10 +821,6 @@ CastContentBrowserClient::CreateThrottlesForNavigation(
   return throttles;
 }
 
-void CastContentBrowserClient::RegisterNonNetworkNavigationURLLoaderFactories(
-    int frame_tree_node_id,
-    NonNetworkURLLoaderFactoryMap* factories) {}
-
 void CastContentBrowserClient::RegisterNonNetworkSubresourceURLLoaderFactories(
     int render_process_id,
     int render_frame_id,
@@ -889,7 +886,7 @@ CastContentBrowserClient::CreateURLLoaderThrottles(
     const base::RepeatingCallback<content::WebContents*()>& wc_getter,
     content::NavigationUIData* navigation_ui_data,
     int frame_tree_node_id,
-    absl::optional<int64_t> navigation_id) {
+    std::optional<int64_t> navigation_id) {
   std::vector<std::unique_ptr<blink::URLLoaderThrottle>> throttles;
   if (frame_tree_node_id == content::RenderFrameHost::kNoFrameTreeNodeId) {
     // No support for service workers.

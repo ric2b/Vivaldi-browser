@@ -9,6 +9,7 @@ group("resources") {
     ":vivaldi_bookmark_folder_selection_chevron",
     ":vivaldi_bookmark_folder_selection_checkmark",
     ":vivaldi_bookmark_add_new_folder",
+    ":vivaldi_bookmark_add_group_illustration",
     ":vivaldi_trash_folder",
   ]
 }
@@ -45,6 +46,14 @@ imageset("vivaldi_bookmark_add_new_folder") {
   sources = [
     "vivaldi_bookmark_add_new_folder.imageset/Contents.json",
     "vivaldi_bookmark_add_new_folder.imageset/vivaldi_bookmark_add_new_folder.pdf",
+  ]
+}
+
+imageset("vivaldi_bookmark_add_group_illustration") {
+  sources = [
+    "vivaldi_bookmark_add_group_illustration.imageset/Contents.json",
+    "vivaldi_bookmark_add_group_illustration.imageset/vivaldi_bookmark_add_group_illustration.pdf",
+    "vivaldi_bookmark_add_group_illustration.imageset/vivaldi_bookmark_add_group_illustration_dark.pdf",
   ]
 }
 

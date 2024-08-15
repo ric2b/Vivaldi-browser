@@ -47,14 +47,14 @@ std::string ReplacePlaceholders(base::StringPiece format_string,
   return result;
 }
 
-absl::optional<mojom::ItemRunTime> GetNextRunTime(mojom::ItemRunTime current) {
+std::optional<mojom::ItemRunTime> GetNextRunTime(mojom::ItemRunTime current) {
   switch (current) {
     case mojom::ItemRunTime::kDocumentStart:
       return mojom::ItemRunTime::kDocumentEnd;
     case mojom::ItemRunTime::kDocumentEnd:
       return mojom::ItemRunTime::kDocumentIdle;
     case mojom::ItemRunTime::kDocumentIdle:
-      return absl::nullopt;
+      return std::nullopt;
   }
 }
 }  // namespace
@@ -189,7 +189,7 @@ void FrameHandler::InjectScriptsForRunTime(mojom::ItemRunTime run_time) {
   //   reported run time.
   // We don't want to run injected scripts because they may have requirements
   // that the scripts for an earlier run time have run. Better to just not run.
-  absl::optional<mojom::ItemRunTime> next_run_time =
+  std::optional<mojom::ItemRunTime> next_run_time =
       last_run_time_ ? GetNextRunTime(last_run_time_.value())
                      : mojom::ItemRunTime::kDocumentStart;
   if (!next_run_time || run_time != next_run_time.value()) {

@@ -11,6 +11,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
+#include "chrome/browser/ash/accessibility/api_test_config.h"
 #include "chrome/browser/ash/accessibility/dictation_bubble_test_helper.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/extensions/extension_apitest.h"
@@ -21,6 +22,7 @@
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/webui_url_constants.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/browser_test_utils.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
 #include "ui/accessibility/accessibility_features.h"
@@ -34,9 +36,9 @@ using ContextType = ::extensions::ExtensionBrowserTest::ContextType;
 
 class AccessibilityPrivateApiTest
     : public extensions::ExtensionApiTest,
-      public testing::WithParamInterface<ContextType> {
+      public testing::WithParamInterface<ApiTestConfig> {
  public:
-  AccessibilityPrivateApiTest() : ExtensionApiTest(GetParam()) {}
+  AccessibilityPrivateApiTest() : ExtensionApiTest(GetParam().context_type()) {}
   ~AccessibilityPrivateApiTest() override = default;
   AccessibilityPrivateApiTest& operator=(const AccessibilityPrivateApiTest&) =
       delete;
@@ -57,7 +59,14 @@ class AccessibilityPrivateApiTest
   }
 
   [[nodiscard]] bool RunSubtest(const char* subtest) {
-    return RunExtensionTest("accessibility_private", {.custom_arg = subtest});
+    std::string path;
+    if (GetParam().version() == ManifestVersion::kTwo) {
+      path = "accessibility_private";
+    } else {
+      path = "accessibility_private/mv3";
+    }
+
+    return RunExtensionTest(path.c_str(), {.custom_arg = subtest});
   }
 
   DictationBubbleTestHelper* dictation_bubble_test_helper() {
@@ -478,23 +487,41 @@ IN_PROC_BROWSER_TEST_P(AccessibilityPrivateApiTest,
   ASSERT_TRUE(RunSubtest("testInstallFaceGazeAssetsSuccess")) << message_;
 }
 
-INSTANTIATE_TEST_SUITE_P(PersistentBackground,
-                         AccessibilityPrivateApiTest,
-                         ::testing::Values(ContextType::kPersistentBackground));
-INSTANTIATE_TEST_SUITE_P(PersistentBackground,
-                         AccessibilityPrivateApiFeatureDisabledTest,
-                         ::testing::Values(ContextType::kPersistentBackground));
-INSTANTIATE_TEST_SUITE_P(PersistentBackground,
-                         AccessibilityPrivateApiFeatureEnabledTest,
-                         ::testing::Values(ContextType::kPersistentBackground));
-INSTANTIATE_TEST_SUITE_P(ServiceWorker,
-                         AccessibilityPrivateApiTest,
-                         ::testing::Values(ContextType::kServiceWorker));
-INSTANTIATE_TEST_SUITE_P(ServiceWorker,
-                         AccessibilityPrivateApiFeatureDisabledTest,
-                         ::testing::Values(ContextType::kServiceWorker));
-INSTANTIATE_TEST_SUITE_P(ServiceWorker,
-                         AccessibilityPrivateApiFeatureEnabledTest,
-                         ::testing::Values(ContextType::kServiceWorker));
+INSTANTIATE_TEST_SUITE_P(
+    PersistentBackground,
+    AccessibilityPrivateApiTest,
+    ::testing::Values(ApiTestConfig(ContextType::kPersistentBackground,
+                                    ManifestVersion::kTwo)));
+INSTANTIATE_TEST_SUITE_P(
+    PersistentBackground,
+    AccessibilityPrivateApiFeatureDisabledTest,
+    ::testing::Values(ApiTestConfig(ContextType::kPersistentBackground,
+                                    ManifestVersion::kTwo)));
+INSTANTIATE_TEST_SUITE_P(
+    PersistentBackground,
+    AccessibilityPrivateApiFeatureEnabledTest,
+    ::testing::Values(ApiTestConfig(ContextType::kPersistentBackground,
+                                    ManifestVersion::kTwo)));
+INSTANTIATE_TEST_SUITE_P(
+    ServiceWorker,
+    AccessibilityPrivateApiTest,
+    ::testing::Values(ApiTestConfig(ContextType::kServiceWorker,
+                                    ManifestVersion::kTwo)));
+INSTANTIATE_TEST_SUITE_P(
+    ServiceWorker,
+    AccessibilityPrivateApiFeatureDisabledTest,
+    ::testing::Values(ApiTestConfig(ContextType::kServiceWorker,
+                                    ManifestVersion::kTwo)));
+INSTANTIATE_TEST_SUITE_P(
+    ServiceWorker,
+    AccessibilityPrivateApiFeatureEnabledTest,
+    ::testing::Values(ApiTestConfig(ContextType::kServiceWorker,
+                                    ManifestVersion::kTwo)));
+
+INSTANTIATE_TEST_SUITE_P(
+    ManifestV3,
+    AccessibilityPrivateApiTest,
+    ::testing::Values(ApiTestConfig(ContextType::kNone,
+                                    ManifestVersion::kThree)));
 
 }  // namespace ash

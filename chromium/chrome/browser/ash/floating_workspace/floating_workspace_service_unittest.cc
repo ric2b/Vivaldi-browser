@@ -365,12 +365,22 @@ class FloatingWorkspaceServiceTest : public testing::Test {
     base::ScopedTempDir temp_dir;
     ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
     fake_user_manager_.Reset(std::make_unique<user_manager::FakeUserManager>());
+    account_id_ = AccountId::FromUserEmail(kTestAccount);
+    const std::string username_hash =
+        user_manager::FakeUserManager::GetFakeUsernameHash(account_id_);
+    fake_user_manager()->AddUser(account_id_);
+    fake_user_manager()->UserLoggedIn(account_id_, username_hash,
+                                      /*browser_restart=*/false,
+                                      /*is_child=*/false);
+
     auto prefs =
         std::make_unique<sync_preferences::TestingPrefServiceSyncable>();
     RegisterUserProfilePrefs(prefs->registry());
+    auto* prefs_ptr = prefs.get();
     profile_ = profile_manager_->CreateTestingProfile(
         kTestAccount, std::move(prefs), std::u16string(), /*avatar_id=*/0,
         TestingProfile::TestingFactories());
+    fake_user_manager()->OnUserProfileCreated(account_id_, prefs_ptr);
     fake_desk_sync_service_ =
         std::make_unique<desks_storage::FakeDeskSyncService>(
             /*skip_engine_connection=*/true);
@@ -382,14 +392,6 @@ class FloatingWorkspaceServiceTest : public testing::Test {
     user_activity_detector()->set_last_activity_time_for_test(
         base::TimeTicks::Now());
     cache_ = std::make_unique<apps::AppRegistryCache>();
-    account_id_ = AccountId::FromUserEmail(kTestAccount);
-    const std::string username_hash =
-        user_manager::FakeUserManager::GetFakeUsernameHash(account_id_);
-    fake_user_manager()->AddUser(account_id_);
-
-    fake_user_manager()->UserLoggedIn(account_id_, username_hash,
-                                      /*browser_restart=*/false,
-                                      /*is_child=*/false);
     apps::AppRegistryCacheWrapper::Get().AddAppRegistryCache(account_id_,
                                                              cache_.get());
     mock_desks_client_ = std::make_unique<MockDesksClient>();
@@ -401,6 +403,7 @@ class FloatingWorkspaceServiceTest : public testing::Test {
     if (floating_workspace_service) {
       floating_workspace_service->ShutDownServicesAndObservers();
     }
+    fake_user_manager()->OnUserProfileWillBeDestroyed(account_id_);
     profile_ = nullptr;
     profile_manager_ = nullptr;
     mock_desks_client_ = nullptr;
@@ -727,6 +730,52 @@ TEST_F(
 
   task_environment().RunUntilIdle();
   EXPECT_TRUE(HasNotificationFor(kNotificationForNoNetworkConnection));
+  AddTestNetworkDevice();
+  network_handler_test_helper()->ResetDevicesAndServices();
+  network_handler_test_helper()->ConfigureService(
+      R"({"GUID": "wifi1_guid", "Type": "wifi", "State": "online",
+            "Strength": 50, "AutoConnect": true, "WiFi.HiddenSSID":
+            false})");
+  task_environment().RunUntilIdle();
+  floating_workspace_service->DefaultNetworkChanged(
+      NetworkHandler::Get()->network_state_handler()->DefaultNetwork());
+  EXPECT_FALSE(HasNotificationFor(kNotificationForNoNetworkConnection));
+}
+
+TEST_F(FloatingWorkspaceServiceV2Test,
+       PreventNetworkIssueNotifFromFiringAfterRestoreAttemptOrRestoreHappened) {
+  PopulateAppsCache();
+  const std::string template_name = "floating_workspace_template";
+  base::RunLoop loop;
+  fake_desk_sync_service()->GetDeskModel()->AddOrUpdateEntry(
+      MakeTestFloatingWorkspaceDeskTemplate(template_name, base::Time::Now()),
+      base::BindLambdaForTesting(
+          [&](desks_storage::DeskModel::AddOrUpdateEntryStatus status,
+              std::unique_ptr<ash::DeskTemplate> new_entry) {
+            EXPECT_EQ(desks_storage::DeskModel::AddOrUpdateEntryStatus::kOk,
+                      status);
+            loop.Quit();
+          }));
+  loop.Run();
+  CreateFloatingWorkspaceServiceForTesting(profile());
+  auto* floating_workspace_service =
+      FloatingWorkspaceService::GetForProfile(profile());
+  floating_workspace_service->Init(test_sync_service(),
+                                   fake_desk_sync_service());
+
+  test_sync_service()->SetDownloadStatusFor(
+      {syncer::ModelType::WORKSPACE_DESK},
+      syncer::SyncService::ModelTypeDownloadStatus::kUpToDate);
+  test_sync_service()->FireStateChanged();
+  ASSERT_TRUE(mock_desks_client()->restored_desk_template());
+  EXPECT_EQ(mock_desks_client()->restored_desk_template()->template_name(),
+            base::UTF8ToUTF16(template_name));
+  // Disconnect from internet. Make sure no notification is sent since restore
+  // happened already.
+  CleanUpTestNetworkDevices();
+  task_environment().RunUntilIdle();
+  EXPECT_FALSE(HasNotificationFor(kNotificationForNoNetworkConnection));
+  // Sanity check. Add network back and make sure notification is still gone.
   AddTestNetworkDevice();
   network_handler_test_helper()->ResetDevicesAndServices();
   network_handler_test_helper()->ConfigureService(

@@ -56,7 +56,7 @@ class WorkerMainScriptLoaderTest : public testing::Test {
 
    public:
     // Implements WorkerMainScriptLoaderClient.
-    void DidReceiveData(base::span<const char> data) override {
+    void DidReceiveDataWorkerMainScript(base::span<const char> data) override {
       if (!data_)
         data_ = SharedBuffer::Create(data.data(), data.size());
       else
@@ -95,7 +95,7 @@ class WorkerMainScriptLoaderTest : public testing::Test {
     void FollowRedirect(const std::vector<std::string>&,
                         const net::HttpRequestHeaders&,
                         const net::HttpRequestHeaders&,
-                        const absl::optional<GURL>&) override {}
+                        const std::optional<GURL>&) override {}
     void SetPriority(net::RequestPriority priority,
                      int32_t intra_priority_value) override {}
     void PauseReadingBodyFromNet() override {}

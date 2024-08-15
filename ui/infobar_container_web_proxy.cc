@@ -11,13 +11,15 @@
 #include "extensions/tools/vivaldi_tools.h"
 #include "vivaldi/extensions/schema/infobars.h"
 
+#include "chrome/browser/ui/tab_sharing/tab_sharing_infobar_delegate.h"
+
 namespace vivaldi {
 
 using extensions::vivaldi::infobars::ButtonAction;
 using extensions::vivaldi::infobars::InfobarButton;
 
 ConfirmInfoBarWebProxy::ConfirmInfoBarWebProxy(
-    std::unique_ptr<ConfirmInfoBarDelegate> delegate)
+    std::unique_ptr<infobars::InfoBarDelegate> delegate)
     : InfoBarView(std::move(delegate)) {}
 
 ConfirmInfoBarWebProxy::~ConfirmInfoBarWebProxy() {}
@@ -29,7 +31,6 @@ void ConfirmInfoBarWebProxy::PlatformSpecificShow(bool animate) {
   // to handle that case.  See also VB-85190.
   InfoBarView::PlatformSpecificShow(animate);
 
-  ConfirmInfoBarDelegate* delegate = GetDelegate();
   content::WebContents* web_contents =
       infobars::ContentInfoBarManager::WebContentsFromInfoBar(this);
   profile_ = Profile::FromBrowserContext(web_contents->GetBrowserContext());
@@ -37,33 +38,67 @@ void ConfirmInfoBarWebProxy::PlatformSpecificShow(bool animate) {
 
   extensions::vivaldi::infobars::Infobar infobar;
 
-  infobar.message_text = base::UTF16ToUTF8(delegate->GetMessageText());
-  infobar.link_text = base::UTF16ToUTF8(delegate->GetLinkText());
+  if (delegate()->GetIdentifier() ==
+      infobars::InfoBarDelegate::TAB_SHARING_INFOBAR_DELEGATE) {
+    TabSharingInfoBarDelegate* delegate =
+        static_cast<TabSharingInfoBarDelegate*>(this->delegate());
 
-  if (delegate->GetButtons() & ConfirmInfoBarDelegate::BUTTON_OK) {
-    InfobarButton button[1] = {};
+    infobar.message_text = base::UTF16ToUTF8(delegate->GetMessageText());
+    infobar.link_text = base::UTF16ToUTF8(delegate->GetLinkText());
 
-    button->action = ButtonAction::kAccept;
-    button->prominent = true;
-    button->text = base::UTF16ToUTF8(
-        delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_OK));
-    infobar.buttons.push_back(std::move(*button));
-  }
-  if (delegate->GetButtons() & ConfirmInfoBarDelegate::BUTTON_CANCEL) {
-    InfobarButton button[1] = {};
+    if (delegate->GetButtons() & TabSharingInfoBarDelegate::kShareThisTabInstead) {
+      InfobarButton button[1] = {};
 
-    button->action = ButtonAction::kCancel;
-    button->text = base::UTF16ToUTF8(
-        delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_CANCEL));
-
-    if (delegate->GetButtons() == ConfirmInfoBarDelegate::BUTTON_CANCEL) {
-      // Apply prominent styling only if the cancel button is the only button.
+      button->action = ButtonAction::kAccept;
       button->prominent = true;
+      button->text = base::UTF16ToUTF8(delegate->GetButtonLabel(
+          TabSharingInfoBarDelegate::kShareThisTabInstead));
+      infobar.buttons.push_back(std::move(*button));
     }
-    infobar.buttons.push_back(std::move(*button));
+    if (delegate->GetButtons() & TabSharingInfoBarDelegate::kStop) {
+      InfobarButton button[1] = {};
+
+      button->action = ButtonAction::kCancel;
+      button->text = base::UTF16ToUTF8(
+          delegate->GetButtonLabel(TabSharingInfoBarDelegate::kStop));
+
+      if (delegate->GetButtons() == TabSharingInfoBarDelegate::kStop) {
+        // Apply prominent styling only if the cancel button is the only button.
+        button->prominent = true;
+      }
+      infobar.buttons.push_back(std::move(*button));
+    }
+  } else {
+    ConfirmInfoBarDelegate* delegate = GetDelegate();
+
+    infobar.message_text = base::UTF16ToUTF8(delegate->GetMessageText());
+    infobar.link_text = base::UTF16ToUTF8(delegate->GetLinkText());
+
+    if (delegate->GetButtons() & ConfirmInfoBarDelegate::BUTTON_OK) {
+      InfobarButton button[1] = {};
+
+      button->action = ButtonAction::kAccept;
+      button->prominent = true;
+      button->text = base::UTF16ToUTF8(
+          delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_OK));
+      infobar.buttons.push_back(std::move(*button));
+    }
+    if (delegate->GetButtons() & ConfirmInfoBarDelegate::BUTTON_CANCEL) {
+      InfobarButton button[1] = {};
+
+      button->action = ButtonAction::kCancel;
+      button->text = base::UTF16ToUTF8(
+          delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_CANCEL));
+
+      if (delegate->GetButtons() == ConfirmInfoBarDelegate::BUTTON_CANCEL) {
+        // Apply prominent styling only if the cancel button is the only button.
+        button->prominent = true;
+      }
+      infobar.buttons.push_back(std::move(*button));
+    }
   }
   infobar.tab_id = tab_id_;
-  infobar.identifier = delegate->GetIdentifier();
+  infobar.identifier = delegate()->GetIdentifier();
 
   base::Value::List args(
       extensions::vivaldi::infobars::OnInfobarCreated::Create(infobar));
@@ -96,6 +131,20 @@ void InfoBarContainerWebProxy::PlatformSpecificRemoveInfoBar(
   }
   ConfirmInfoBarWebProxy* infobar_proxy =
       static_cast<ConfirmInfoBarWebProxy*>(infobar);
+
+  if (infobar->delegate()->GetIdentifier() ==
+      infobars::InfoBarDelegate::TAB_SHARING_INFOBAR_DELEGATE) {
+    // Can't handle this right now
+    base::Value::List args(
+        extensions::vivaldi::infobars::OnInfobarRemoved::Create(
+            infobar_proxy->tab_id(),
+            infobar_proxy->delegate()->GetIdentifier()));
+    ::vivaldi::BroadcastEvent(
+        extensions::vivaldi::infobars::OnInfobarRemoved::kEventName,
+        std::move(args), infobar_proxy->profile());
+    return;
+  }
+
   ConfirmInfoBarDelegate* delegate = infobar_proxy->GetDelegate();
 
   base::Value::List args(

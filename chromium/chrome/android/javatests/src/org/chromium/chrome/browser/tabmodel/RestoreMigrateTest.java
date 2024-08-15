@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.tabmodel;
 
 import android.content.Context;
 
+import androidx.test.annotation.UiThreadTest;
 import androidx.test.filters.SmallTest;
 import androidx.test.platform.app.InstrumentationRegistry;
 
@@ -21,7 +22,6 @@ import org.mockito.MockitoAnnotations;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.FileUtils;
 import org.chromium.base.StreamUtil;
-import org.chromium.base.test.UiThreadTest;
 import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.Feature;
@@ -51,7 +51,6 @@ public class RestoreMigrateTest {
     @Mock private Profile mProfile;
     @Mock private Profile mIncognitoProfile;
 
-    private Context mAppContextToRestore;
     private Context mAppContext;
 
     private void writeStateFile(final TabModelSelector selector, int index) throws IOException {
@@ -95,7 +94,6 @@ public class RestoreMigrateTest {
         MockitoAnnotations.initMocks(this);
         Mockito.when(mIncognitoProfile.isOffTheRecord()).thenReturn(true);
 
-        mAppContextToRestore = ContextUtils.getApplicationContext();
         mAppContext =
                 new AdvancedMockContextWithTestDir(
                         InstrumentationRegistry.getInstrumentation()
@@ -130,7 +128,6 @@ public class RestoreMigrateTest {
                 .writeBoolean(ChromePreferenceKeys.TABMODEL_HAS_RUN_FILE_MIGRATION, false);
         TabbedModeTabPersistencePolicy.resetMigrationTaskForTesting();
         TabWindowManagerSingleton.resetTabModelSelectorFactoryForTesting();
-        ContextUtils.initApplicationContextForTests(mAppContextToRestore);
     }
 
     private TabPersistentStore buildTabPersistentStore(

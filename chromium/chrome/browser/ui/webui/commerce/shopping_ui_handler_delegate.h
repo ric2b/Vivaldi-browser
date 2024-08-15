@@ -6,7 +6,8 @@
 #define CHROME_BROWSER_UI_WEBUI_COMMERCE_SHOPPING_UI_HANDLER_DELEGATE_H_
 
 #include "base/memory/raw_ptr.h"
-#include "components/commerce/core/webui/shopping_list_handler.h"
+#include "components/commerce/core/webui/shopping_service_handler.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 
 class ShoppingInsightsSidePanelUI;
 
@@ -19,7 +20,7 @@ class Profile;
 
 namespace commerce {
 
-class ShoppingUiHandlerDelegate : public ShoppingListHandler::Delegate {
+class ShoppingUiHandlerDelegate : public ShoppingServiceHandler::Delegate {
  public:
   ShoppingUiHandlerDelegate(ShoppingInsightsSidePanelUI* insights_side_panel_ui,
                             Profile* profile);
@@ -39,6 +40,9 @@ class ShoppingUiHandlerDelegate : public ShoppingListHandler::Delegate {
   void ShowBookmarkEditorForCurrentUrl() override;
 
   void ShowFeedback() override;
+
+  // Get the main frame source id from the page load.
+  ukm::SourceId GetCurrentTabUkmSourceId() override;
 
  private:
   // This delegate is owned by |insights_side_panel_ui_| so we expect

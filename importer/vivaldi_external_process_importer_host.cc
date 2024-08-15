@@ -35,6 +35,12 @@ void ExternalProcessImporterHost::ShowChromeWarningDialog() {
   } else if (source_profile_.importer_type == importer::TYPE_EDGE_CHROMIUM) {
     importerLockString =
         l10n_util::GetStringUTF16(IDS_EDGE_CHROMIUM_IMPORTER_LOCK_TEXT);
+  } else if (source_profile_.importer_type == importer::TYPE_ARC) {
+    importerLockString =
+        l10n_util::GetStringUTF16(IDS_ARC_IMPORTER_LOCK_TEXT);
+  } else if (source_profile_.importer_type == importer::TYPE_OPERA_GX) {
+    importerLockString =
+        l10n_util::GetStringUTF16(IDS_OPERA_GX_IMPORTER_LOCK_TEXT);
   }
 
   DCHECK(!headless_);

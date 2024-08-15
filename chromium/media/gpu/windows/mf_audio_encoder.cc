@@ -769,7 +769,7 @@ void MFAudioEncoder::TryProcessOutput(FlushCB flush_cb) {
       return;
     }
 
-    absl::optional<CodecDescription> desc;
+    std::optional<CodecDescription> desc;
     if (!codec_desc_.empty()) {
       desc = codec_desc_;
       codec_desc_.clear();
@@ -981,6 +981,23 @@ void MFAudioEncoder::OnError() {
         .Run(EncoderStatus::Codes::kEncoderFailedEncode);
     pending_inputs_.pop_front();
   }
+}
+
+// static.
+uint32_t MFAudioEncoder::ClampAccCodecBitrate(uint32_t bitrate) {
+  // 0 audio bitrate could mean multiple things such as no audio, use
+  // default, etc. So, the client should handle the case by itself.
+  CHECK_GT(bitrate, 0u);
+
+  auto it = std::lower_bound(std::begin(kSupportedBitrates),
+                             std::end(kSupportedBitrates), bitrate);
+  if (it != std::end(kSupportedBitrates)) {
+    return *it;
+  }
+
+  return kSupportedBitrates[sizeof(kSupportedBitrates) /
+                                sizeof(kSupportedBitrates[0]) -
+                            1];
 }
 
 }  // namespace media

@@ -17,8 +17,8 @@ TEST(Functions, Assert) {
 
   // Verify cases where the assertion passes.
   std::vector<std::string> assert_pass_examples = {
-    R"gn(assert(true))gn",
-    R"gn(assert(true, "This message is ignored for passed assertions."))gn",
+      R"gn(assert(true))gn",
+      R"gn(assert(true, "This message is ignored for passed assertions."))gn",
   };
   for (const auto& assert_pass_example : assert_pass_examples) {
     TestParseInput input(assert_pass_example);
@@ -51,15 +51,15 @@ TEST(Functions, Assert) {
 
   // Verify usage errors are detected.
   std::vector<std::string> bad_usage_examples = {
-    // Number of arguments.
-    R"gn(assert())gn",
-    R"gn(assert(1, 2, 3))gn",
+      // Number of arguments.
+      R"gn(assert())gn",
+      R"gn(assert(1, 2, 3))gn",
 
-    // Argument types.
-    R"gn(assert(1))gn",
-    R"gn(assert("oops"))gn",
-    R"gn(assert(true, 1))gn",
-    R"gn(assert(true, []))gn",
+      // Argument types.
+      R"gn(assert(1))gn",
+      R"gn(assert("oops"))gn",
+      R"gn(assert(true, 1))gn",
+      R"gn(assert(true, []))gn",
   };
   for (const auto& bad_usage_example : bad_usage_examples) {
     TestParseInput input(bad_usage_example);
@@ -245,25 +245,26 @@ TEST(Functions, StringJoin) {
         "xyz\n"
         "xx\n"
         "\n",
-        setup.print_output()) << setup.print_output();
+        setup.print_output())
+        << setup.print_output();
   }
 
   // Verify usage errors are detected.
   std::vector<std::string> bad_usage_examples = {
-    // Number of arguments.
-    R"gn(string_join())gn",
-    R"gn(string_join(["oops"]))gn",
-    R"gn(string_join("kk", [], "oops"))gn",
+      // Number of arguments.
+      R"gn(string_join())gn",
+      R"gn(string_join(["oops"]))gn",
+      R"gn(string_join("kk", [], "oops"))gn",
 
-    // Argument types.
-    R"gn(string_join(1, []))gn",
-    R"gn(string_join("kk", "oops"))gn",
-    R"gn(string_join(["oops"], []))gn",
+      // Argument types.
+      R"gn(string_join(1, []))gn",
+      R"gn(string_join("kk", "oops"))gn",
+      R"gn(string_join(["oops"], []))gn",
 
-    // Non-string elements in list of strings.
-    R"gn(string_join("kk", [1]))gn",
-    R"gn(string_join("kk", ["hello", 1]))gn",
-    R"gn(string_join("kk", ["hello", []]))gn",
+      // Non-string elements in list of strings.
+      R"gn(string_join("kk", [1]))gn",
+      R"gn(string_join("kk", ["hello", 1]))gn",
+      R"gn(string_join("kk", ["hello", []]))gn",
   };
   for (const auto& bad_usage_example : bad_usage_examples) {
     TestParseInput input(bad_usage_example);
@@ -376,36 +377,37 @@ TEST(Functions, StringSplit) {
         "[\"a\", \"b\", \"cc\", \"ddd\"]\n"
 
         // Split on string.
-        "[\"\"]\n"                   // Empty string (like Python)
-        "[\"\", \"\"]\n"             // Only a separator
-        "[\"\", \"\", \"\"]\n"       // Only separators
-        "[\"ab\"]\n"                 // String is missing separator
-        "[\"a\", \"b\"]\n"           // Two elements
-        "[\"\", \"a\", \"b\"]\n"     // Leading
-        "[\"a\", \"b\", \"\"]\n"     // Trailing
-        "[\"\", \"\", \"x\"]\n"      // Leading consecutive separators
-        "[\"x\", \"\", \"\"]\n"      // Trailing consecutive separators
-        "[\"a\", \"bb\", \"ccc\"]\n" // Multiple elements
-        "[\"\", \"x\", \"\"]\n"      // Self-overlapping separators 1
-        "[\"x\", \"x.\"]\n"          // Self-overlapping separators 2
+        "[\"\"]\n"                    // Empty string (like Python)
+        "[\"\", \"\"]\n"              // Only a separator
+        "[\"\", \"\", \"\"]\n"        // Only separators
+        "[\"ab\"]\n"                  // String is missing separator
+        "[\"a\", \"b\"]\n"            // Two elements
+        "[\"\", \"a\", \"b\"]\n"      // Leading
+        "[\"a\", \"b\", \"\"]\n"      // Trailing
+        "[\"\", \"\", \"x\"]\n"       // Leading consecutive separators
+        "[\"x\", \"\", \"\"]\n"       // Trailing consecutive separators
+        "[\"a\", \"bb\", \"ccc\"]\n"  // Multiple elements
+        "[\"\", \"x\", \"\"]\n"       // Self-overlapping separators 1
+        "[\"x\", \"x.\"]\n"           // Self-overlapping separators 2
         ,
-        setup.print_output()) << setup.print_output();
+        setup.print_output())
+        << setup.print_output();
   }
 
   // Verify usage errors are detected.
   std::vector<std::string> bad_usage_examples = {
-    // Number of arguments.
-    R"gn(string_split())gn",
-    R"gn(string_split("a", "b", "c"))gn",
+      // Number of arguments.
+      R"gn(string_split())gn",
+      R"gn(string_split("a", "b", "c"))gn",
 
-    // Argument types.
-    R"gn(string_split(1))gn",
-    R"gn(string_split(["oops"]))gn",
-    R"gn(string_split("kk", 1))gn",
-    R"gn(string_split("kk", ["oops"]))gn",
+      // Argument types.
+      R"gn(string_split(1))gn",
+      R"gn(string_split(["oops"]))gn",
+      R"gn(string_split("kk", 1))gn",
+      R"gn(string_split("kk", ["oops"]))gn",
 
-    // Empty separator argument.
-    R"gn(string_split("kk", ""))gn",
+      // Empty separator argument.
+      R"gn(string_split("kk", ""))gn",
   };
   for (const auto& bad_usage_example : bad_usage_examples) {
     TestParseInput input(bad_usage_example);
@@ -491,12 +493,13 @@ TEST(Template, PrintStackTraceWithOneTemplate) {
   ASSERT_FALSE(err.has_error()) << err.message();
 
   EXPECT_EQ(
-    "lala\n"
-    "42\n"
-    "print_stack_trace() initiated at:  //test:4  using: //toolchain:default\n"
-    "  foo(\"lala\")  //test:6\n"
-    "  print_stack_trace()  //test:4\n",
-    setup.print_output());
+      "lala\n"
+      "42\n"
+      "print_stack_trace() initiated at:  //test:4  using: "
+      "//toolchain:default\n"
+      "  foo(\"lala\")  //test:6\n"
+      "  print_stack_trace()  //test:4\n",
+      setup.print_output());
 }
 
 TEST(Template, PrintStackTraceWithNoTemplates) {
@@ -509,11 +512,11 @@ TEST(Template, PrintStackTraceWithNoTemplates) {
   ASSERT_FALSE(err.has_error()) << err.message() << "\n\n" << err.help_text();
 
   EXPECT_EQ(
-    "print_stack_trace() initiated at:  //test:1  using: //toolchain:default\n"
-    "  print_stack_trace()  //test:1\n",
-    setup.print_output());
+      "print_stack_trace() initiated at:  //test:1  using: "
+      "//toolchain:default\n"
+      "  print_stack_trace()  //test:1\n",
+      setup.print_output());
 }
-
 
 TEST(Template, PrintStackTraceWithNestedTemplates) {
   TestWithScope setup;
@@ -538,13 +541,14 @@ TEST(Template, PrintStackTraceWithNestedTemplates) {
   ASSERT_FALSE(err.has_error()) << err.message() << "\n\n" << err.help_text();
 
   EXPECT_EQ(
-    "lala.foo\n"
-    "42\n"
-    "print_stack_trace() initiated at:  //test:4  using: //toolchain:default\n"
-    "  baz(\"lala\")  //test:11\n"
-    "  foo(\"lala.foo\")  //test:7\n"
-    "  print_stack_trace()  //test:4\n",
-    setup.print_output());
+      "lala.foo\n"
+      "42\n"
+      "print_stack_trace() initiated at:  //test:4  using: "
+      "//toolchain:default\n"
+      "  baz(\"lala\")  //test:11\n"
+      "  foo(\"lala.foo\")  //test:7\n"
+      "  print_stack_trace()  //test:4\n",
+      setup.print_output());
 }
 
 TEST(Template, PrintStackTraceWithNonTemplateScopes) {
@@ -572,13 +576,14 @@ TEST(Template, PrintStackTraceWithNonTemplateScopes) {
   ASSERT_FALSE(err.has_error()) << err.message() << "\n\n" << err.help_text();
 
   EXPECT_EQ(
-    "lala.foo\n"
-    "42\n"
-    "print_stack_trace() initiated at:  //test:5  using: //toolchain:default\n"
-    "  baz(\"lala\")  //test:13\n"
-    "  foo(\"lala.foo\")  //test:9\n"
-    "  print_stack_trace()  //test:5\n",
-    setup.print_output());
+      "lala.foo\n"
+      "42\n"
+      "print_stack_trace() initiated at:  //test:5  using: "
+      "//toolchain:default\n"
+      "  baz(\"lala\")  //test:13\n"
+      "  foo(\"lala.foo\")  //test:9\n"
+      "  print_stack_trace()  //test:5\n",
+      setup.print_output());
 }
 
 TEST(Template, PrintStackTraceWithNonTemplateScopesBetweenTemplateInvocations) {
@@ -607,13 +612,14 @@ TEST(Template, PrintStackTraceWithNonTemplateScopesBetweenTemplateInvocations) {
   ASSERT_FALSE(err.has_error()) << err.message() << "\n\n" << err.help_text();
 
   EXPECT_EQ(
-    "lala.foo\n"
-    "42\n"
-    "print_stack_trace() initiated at:  //test:5  using: //toolchain:default\n"
-    "  baz(\"lala\")  //test:15\n"
-    "  foo(\"lala.foo\")  //test:10\n"
-    "  print_stack_trace()  //test:5\n",
-    setup.print_output());
+      "lala.foo\n"
+      "42\n"
+      "print_stack_trace() initiated at:  //test:5  using: "
+      "//toolchain:default\n"
+      "  baz(\"lala\")  //test:15\n"
+      "  foo(\"lala.foo\")  //test:10\n"
+      "  print_stack_trace()  //test:5\n",
+      setup.print_output());
 }
 
 TEST(Template, PrintStackTraceWithTemplateDefinedWithinATemplate) {
@@ -648,15 +654,16 @@ TEST(Template, PrintStackTraceWithTemplateDefinedWithinATemplate) {
   ASSERT_FALSE(err.has_error()) << err.message() << "\n\n" << err.help_text();
 
   EXPECT_EQ(
-    "lala.foo\n"
-    "lala.foo.internal\n"
-    "42\n"
-    "print_stack_trace() initiated at:  //test:6  using: //toolchain:default\n"
-    "  baz(\"lala\")  //test:19\n"
-    "  foo(\"lala.foo\")  //test:14\n"
-    "  foo_internal(\"lala.foo.internal\")  //test:8\n"
-    "  print_stack_trace()  //test:6\n",
-    setup.print_output());
+      "lala.foo\n"
+      "lala.foo.internal\n"
+      "42\n"
+      "print_stack_trace() initiated at:  //test:6  using: "
+      "//toolchain:default\n"
+      "  baz(\"lala\")  //test:19\n"
+      "  foo(\"lala.foo\")  //test:14\n"
+      "  foo_internal(\"lala.foo.internal\")  //test:8\n"
+      "  print_stack_trace()  //test:6\n",
+      setup.print_output());
 }
 
 TEST(Functions, DeclareOverrides) {

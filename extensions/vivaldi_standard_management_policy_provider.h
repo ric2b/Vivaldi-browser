@@ -17,7 +17,8 @@ class VivaldiStandardManagementPolicyProvider
     : public StandardManagementPolicyProvider {
  public:
   explicit VivaldiStandardManagementPolicyProvider(
-      ExtensionManagement* settings);
+      ExtensionManagement* settings,
+      Profile* profile);
 
   ~VivaldiStandardManagementPolicyProvider() override;
 

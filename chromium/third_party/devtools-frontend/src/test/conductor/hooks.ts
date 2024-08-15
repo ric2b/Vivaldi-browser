@@ -64,20 +64,31 @@ let targetTab: TargetTab;
 const envChromeBinary = getTestRunnerConfigSetting<string>('chrome-binary-path', process.env['CHROME_BIN'] || '');
 const envChromeFeatures = getTestRunnerConfigSetting<string>('chrome-features', process.env['CHROME_FEATURES'] || '');
 
-export async function watchForHang<T>(stepFn: () => Promise<T>): Promise<T> {
+export async function watchForHang<T>(
+    currentTest: string|undefined, stepFn: (currentTest: string|undefined) => Promise<T>): Promise<T> {
+  const stepName = stepFn.name || stepFn.toString();
   const stackTrace = new Error().stack;
-  const timeout =
-      setTimeout(() => console.error(`Hung at step ${stepFn.name || stepFn.toString()}\nTrace: ${stackTrace}`), 10000);
-  let isException = true;
+  function logTime(label: string) {
+    const end = performance.now();
+    console.error(`\n${stepName} ${label} ${end - start}ms\nTrace: ${stackTrace}\nTest: ${currentTest}\n`);
+  }
+  let tripped = false;
+  const timerId = setTimeout(() => {
+    logTime('takes at least');
+    tripped = true;
+  }, 10000);
+  const start = performance.now();
   try {
-    const result = await stepFn();
-    isException = false;
-    return result;
-  } finally {
-    clearTimeout(timeout);
-    if (isException) {
-      console.error(`Exception thrown during step ${stepFn.name || stepFn.toString()}\nTrace: ${stackTrace}`);
+    const result = await stepFn(currentTest);
+    if (tripped) {
+      logTime('succeded after');
     }
+    return result;
+  } catch (err) {
+    logTime('errored after');
+    throw err;
+  } finally {
+    clearTimeout(timerId);
   }
 }
 
@@ -100,9 +111,10 @@ function launchChrome() {
     '--site-per-process',  // Default on Desktop anyway, but ensure that we always use out-of-process frames when we intend to.
     '--host-resolver-rules=MAP *.test 127.0.0.1', '--disable-gpu',
     '--enable-blink-features=CSSContainerQueries,HighlightInheritance',  // TODO(crbug.com/1218390) Remove globally enabled flags and conditionally enable them
+    '--disable-blink-features=WebAssemblyJSPromiseIntegration',  // TODO(crbug.com/325123665) Remove once heap snapshots work again with JSPI
   ];
   const opts: puppeteer.LaunchOptions&puppeteer.BrowserLaunchArgumentOptions&puppeteer.BrowserConnectOptions = {
-    headless: headless ? 'new' : false,
+    headless,
     executablePath: envChromeBinary,
     dumpio: !headless || Boolean(process.env['LUCI_CONTEXT']),
     slowMo: envSlowMo,
@@ -172,21 +184,21 @@ export async function unregisterAllServiceWorkers() {
   });
 }
 
-export async function resetPages() {
+export async function resetPages(currentTest: string|undefined) {
   const {frontend, target} = getBrowserAndPages();
 
-  await watchForHang(() => target.bringToFront());
-  await watchForHang(() => targetTab.reset());
+  await watchForHang(currentTest, () => target.bringToFront());
+  await watchForHang(currentTest, () => targetTab.reset());
 
-  await watchForHang(() => frontend.bringToFront());
-  await watchForHang(() => throttleCPUIfRequired(frontend));
-  await watchForHang(() => delayPromisesIfRequired(frontend));
+  await watchForHang(currentTest, () => frontend.bringToFront());
+  await watchForHang(currentTest, () => throttleCPUIfRequired(frontend));
+  await watchForHang(currentTest, () => delayPromisesIfRequired(frontend));
 
   if (TEST_SERVER_TYPE === 'hosted-mode') {
-    await watchForHang(() => frontendTab.reset());
+    await watchForHang(currentTest, () => frontendTab.reset());
   } else if (TEST_SERVER_TYPE === 'component-docs') {
     // Reset the frontend back to an empty page for the component docs server.
-    await watchForHang(() => loadEmptyPageAndWaitForContent(frontend));
+    await watchForHang(currentTest, () => loadEmptyPageAndWaitForContent(frontend));
   }
 }
 

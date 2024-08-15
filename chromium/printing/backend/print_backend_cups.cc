@@ -11,6 +11,7 @@
 #include <pthread.h>
 
 #include <string>
+#include <string_view>
 
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -18,7 +19,6 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/synchronization/lock.h"
 #include "build/build_config.h"
 #include "printing/backend/cups_helper.h"
@@ -110,6 +110,13 @@ mojom::ResultCode PrintBackendCUPS::PrinterBasicInfoFromCUPS(
   // "printer-make-and-model" specifies the printer description.
   if (info)
     printer_info->display_name = info;
+
+  // It is possible to create a printer with a blank display name, so just
+  // use the printer name in such a case.
+  if (printer_info->display_name.empty()) {
+    printer_info->display_name = printer.name;
+  }
+
   if (drv_info)
     printer_info->printer_description = drv_info;
 #else
@@ -125,9 +132,9 @@ mojom::ResultCode PrintBackendCUPS::PrinterBasicInfoFromCUPS(
 // static
 std::string PrintBackendCUPS::PrinterDriverInfoFromCUPS(
     const cups_dest_t& printer) {
-  // base::StringPiece will correctly handle nullptrs from cupsGetOption(),
+  // std::string_view will correctly handle nullptrs from cupsGetOption(),
   // whereas std::string will not. Thus do not directly assign to `result`.
-  base::StringPiece info(
+  std::string_view info(
       cupsGetOption(kDriverNameTagName, printer.num_options, printer.options));
   return std::string(info);
 }

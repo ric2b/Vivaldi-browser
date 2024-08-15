@@ -18,6 +18,7 @@
 #include "components/search_engines/util.h"
 
 #include "chrome/browser/browser_process.h"
+#include "components/search_engines/search_engines_manager.h"
 
 using base::android::JavaParamRef;
 using base::android::ScopedJavaGlobalRef;
@@ -195,7 +196,7 @@ LocaleTemplateUrlLoader::GetLocalPrepopulatedEngines() {
 }
 
 int LocaleTemplateUrlLoader::GetDesignatedSearchEngineForChina() {
-  return TemplateURLPrepopulateData::bing.id;
+  return SearchEnginesManager::GetInstance()->GetBingEngine()->id;
 }
 
 LocaleTemplateUrlLoader::~LocaleTemplateUrlLoader() {}

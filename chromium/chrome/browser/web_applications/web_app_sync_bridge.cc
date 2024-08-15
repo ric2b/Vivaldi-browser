@@ -124,15 +124,13 @@ BASE_FEATURE(kDeleteBadWebAppSyncEntitites,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 namespace {
-// Get the UserDisplayMode for the app on the current platform (may be absent
-// for not-yet-migrated apps loaded from the database). Use
-// `WebApp::user_display_mode` instead for migrated apps.
-absl::optional<mojom::UserDisplayMode> GetCurrentPlatformUserDisplayMode(
-    const WebApp& app) {
+// Return whether `app` has a UserDisplayMode set for the current platform.
+// May be false for not-yet-migrated apps loaded from the database.
+bool HasCurrentPlatformUserDisplayMode(const WebApp& app) {
 #if BUILDFLAG(IS_CHROMEOS)
-  return app.user_display_mode_cros();
+  return app.user_display_mode_cros().has_value();
 #else
-  return app.user_display_mode_non_cros();
+  return app.user_display_mode_default().has_value();
 #endif  // BUILDFLAG(IS_CHROMEOS)
 }
 }  // namespace
@@ -164,10 +162,10 @@ void ApplySyncDataToApp(const sync_pb::WebAppSpecifics& sync_data,
           CreateUserDisplayModeFromWebAppSpecificsUserDisplayMode(
               sync_data.user_display_mode_cros()));
     }
-    if (sync_data.has_user_display_mode_non_cros()) {
-      app->SetUserDisplayModeNonCrOS(
+    if (sync_data.has_user_display_mode_default()) {
+      app->SetUserDisplayModeDefault(
           CreateUserDisplayModeFromWebAppSpecificsUserDisplayMode(
-              sync_data.user_display_mode_non_cros()));
+              sync_data.user_display_mode_default()));
     }
   }
 
@@ -176,7 +174,7 @@ void ApplySyncDataToApp(const sync_pb::WebAppSpecifics& sync_data,
     // Conditional to avoid clobbering a valid UDM with an absent one, for the
     // case of old clients clearing the CrOS UDM value or non-sync-installed
     // apps.
-    if (!GetCurrentPlatformUserDisplayMode(*app)) {
+    if (!HasCurrentPlatformUserDisplayMode(*app)) {
       app->SetUserDisplayMode(
           ResolvePlatformSpecificUserDisplayMode(sync_data));
     }
@@ -184,7 +182,7 @@ void ApplySyncDataToApp(const sync_pb::WebAppSpecifics& sync_data,
     // Always overwrite the original UserDisplayMode with sync data.
     app->SetUserDisplayMode(
         CreateUserDisplayModeFromWebAppSpecificsUserDisplayMode(
-            sync_data.user_display_mode_non_cros()));
+            sync_data.user_display_mode_default()));
   }
 
   app->SetUserPageOrdinal(syncer::StringOrdinal(sync_data.user_page_ordinal()));
@@ -615,11 +613,12 @@ void WebAppSyncBridge::OnDatabaseOpened(
 void WebAppSyncBridge::EnsureAppsHaveUserDisplayModeForCurrentPlatform() {
   web_app::ScopedRegistryUpdate update = BeginUpdate();
   for (const WebApp& app : registrar().GetAppsIncludingStubs()) {
-    if (!GetCurrentPlatformUserDisplayMode(app).has_value()) {
-      // Use the other platform's UDM if set, or standalone.
-      mojom::UserDisplayMode udm = app.user_display_mode_cros().value_or(
-          app.user_display_mode_non_cros().value_or(
-              mojom::UserDisplayMode::kStandalone));
+    if (!HasCurrentPlatformUserDisplayMode(app)) {
+      // On CrOS, populate the UDM-CrOS value by copying from the default value
+      // (falling back to Standalone). On non-CrOS, populate the UDM-Default
+      // value with Standalone.
+      mojom::UserDisplayMode udm = app.user_display_mode_default().value_or(
+          mojom::UserDisplayMode::kStandalone);
       update->UpdateApp(app.app_id())->SetUserDisplayMode(udm);
     }
   }
@@ -795,7 +794,7 @@ void WebAppSyncBridge::ApplyIncrementalSyncChangesToRegistrar(
           apps_to_delete, callback);
     } else {
       for (const webapps::AppId& app_id : apps_to_delete) {
-        command_scheduler_->UninstallWebApp(
+        command_scheduler_->RemoveUserUninstallableManagements(
             app_id, webapps::WebappUninstallSource::kSync,
             base::BindOnce(callback, app_id));
       }
@@ -992,9 +991,9 @@ void WebAppSyncBridge::MaybeUninstallAppsPendingUninstall() {
         base::BindRepeating(&WebAppSyncBridge::OnWebAppUninstallComplete,
                             weak_ptr_factory_.GetWeakPtr());
     for (const auto& app_id : apps_uninstalling) {
-      command_scheduler_->UninstallWebApp(app_id,
-                                          webapps::WebappUninstallSource::kSync,
-                                          base::BindOnce(callback, app_id));
+      command_scheduler_->RemoveUserUninstallableManagements(
+          app_id, webapps::WebappUninstallSource::kSync,
+          base::BindOnce(callback, app_id));
     }
   }
 }

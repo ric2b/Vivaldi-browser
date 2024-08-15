@@ -7,10 +7,11 @@ const kSmallMagnitudeTestValues = [0.1, 0.9, 1.0, 1.1, 1.9, -0.1, -0.9, -1.0, -1
 const kIssue2766Value = {
   f32: 0x8000_0000,
   f16: 0x8000,
+  abstract: 0x8000_0000_0000_0000,
 };
 
 // Cases: [f32|f16]
-const cases = (['f32', 'f16'] as const)
+const cases = (['f32', 'f16', 'abstract'] as const)
   .map(trait => ({
     [`${trait}`]: () => {
       return FP[trait].generateScalarToIntervalCases(

@@ -23,6 +23,16 @@ BASE_FEATURE(kCapReferrerToOriginOnCrossOrigin,
              "CapReferrerToOriginOnCrossOrigin",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kAsyncDns,
+             "AsyncDns",
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_ANDROID) || \
+    BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
+
 BASE_FEATURE(kDnsTransactionDynamicTimeouts,
              "DnsTransactionDynamicTimeouts",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -67,6 +77,10 @@ BASE_FEATURE(kUseDnsHttpsSvcbAlpn,
              "UseDnsHttpsSvcbAlpn",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kUseHostResolverCache,
+             "UseHostResolverCache",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 const base::FeatureParam<int> kAlternativePortForGloballyReachableCheck{
     &kUseAlternativePortForGloballyReachableCheck,
     "AlternativePortForGloballyReachableCheck", 443};
@@ -82,10 +96,6 @@ BASE_FEATURE(kEnableIPv6ReachabilityOverride,
 BASE_FEATURE(kEnableTLS13EarlyData,
              "EnableTLS13EarlyData",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kRSAKeyUsageForLocalAnchors,
-             "RSAKeyUsageForLocalAnchors",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kNetworkQualityEstimator,
              "NetworkQualityEstimator",
@@ -143,7 +153,11 @@ BASE_FEATURE(kPermuteTLSExtensions,
 
 BASE_FEATURE(kPostQuantumKyber,
              "PostQuantumKyber",
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
              base::FEATURE_DISABLED_BY_DEFAULT);
+#else
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif
 
 BASE_FEATURE(kNetUnusedIdleSocketTimeout,
              "NetUnusedIdleSocketTimeout",
@@ -156,17 +170,6 @@ BASE_FEATURE(kShortLaxAllowUnsafeThreshold,
 BASE_FEATURE(kSameSiteDefaultChecksMethodRigorously,
              "SameSiteDefaultChecksMethodRigorously",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-#if BUILDFLAG(CHROME_ROOT_STORE_OPTIONAL)
-BASE_FEATURE(kChromeRootStoreUsed,
-             "ChromeRootStoreUsed",
-#if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
-#else
-             base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-);
-#endif  // BUILDFLAG(CHROME_ROOT_STORE_OPTIONAL)
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(USE_NSS_CERTS) || BUILDFLAG(IS_WIN)
 BASE_FEATURE(kTrustStoreTrustedLeafSupport,
@@ -242,9 +245,9 @@ extern const base::FeatureParam<base::TimeDelta>
         "kWaitForFirstPartySetsInitNavigationThrottleTimeout",
         base::Seconds(0)};
 
-BASE_FEATURE(kPartitionedCookies,
-             "PartitionedCookies",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kAncestorChainBitEnabledInPartitionedCookies,
+             "AncestorChainBitEnabledInPartitionedCookies",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kBlockTruncatedCookies,
              "BlockTruncatedCookies",
@@ -396,17 +399,9 @@ const base::FeatureParam<bool> kIpPrivacyDirectOnly{
     &kEnableIpProtectionProxy, /*name=*/"IpPrivacyDirectOnly",
     /*default_value=*/false};
 
-const base::FeatureParam<bool> kIpPrivacyBsaEnablePrivacyPass{
-    &kEnableIpProtectionProxy, /*name=*/"IpPrivacyBsaEnablePrivacyPass",
-    /*default_value=*/false};
-
 const base::FeatureParam<std::string> kIpPrivacyProxyBPsk{
     &kEnableIpProtectionProxy, /*name=*/"IpPrivacyProxyBPsk",
     /*default_value=*/""};
-
-const base::FeatureParam<bool> kIpPrivacyUseProxyChains{
-    &kEnableIpProtectionProxy, /*name=*/"IpPrivacyUseProxyChains",
-    /*default_value=*/false};
 
 const base::FeatureParam<bool> kIpPrivacyIncludeOAuthTokenInGetProxyConfig{
     &kEnableIpProtectionProxy,
@@ -424,6 +419,15 @@ const base::FeatureParam<std::string> kIpPrivacyProxyBHostnameOverride{
 const base::FeatureParam<bool> kIpPrivacyAddHeaderToProxiedRequests{
     &kEnableIpProtectionProxy, /*name=*/"IpPrivacyAddHeaderToProxiedRequests",
     /*default_value=*/false};
+
+const base::FeatureParam<base::TimeDelta> kIpPrivacyExpirationFuzz{
+    &kEnableIpProtectionProxy, /*name=*/"IpPrivacyExpirationFuzz",
+    /*default_value=*/base::Minutes(15)};
+
+const base::FeatureParam<bool> kIpPrivacyRestrictTopLevelSiteSchemes{
+    &kEnableIpProtectionProxy,
+    /*name=*/"IpPrivacyRestrictTopLevelSiteSchemes",
+    /*default_value=*/true};
 
 // Network-change migration requires NetworkHandle support, which are currently
 // only supported on Android (see
@@ -483,7 +487,7 @@ BASE_FEATURE(kEnableWebTransportDraft07,
 
 BASE_FEATURE(kZstdContentEncoding,
              "ZstdContentEncoding",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, partitioned storage will be allowed even if third-party cookies
 // are disabled by default. Partitioned storage will not be allowed if
@@ -494,7 +498,7 @@ BASE_FEATURE(kThirdPartyPartitionedStorageAllowedByDefault,
 
 BASE_FEATURE(kPriorityHeader,
              "PriorityHeader",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSpdyHeadersToHttpResponseUseBuilder,
              "SpdyHeadersToHttpResponseUseBuilder",
@@ -519,5 +523,15 @@ BASE_FEATURE(kUseNewAlpsCodepointQUIC,
 BASE_FEATURE(kTreatHTTPExpiresHeaderValueZeroAsExpired,
              "TreatHTTPExpiresHeaderValueZeroAsExpired",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kTruncateBodyToContentLength,
+             "TruncateBodyToContentLength",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_MAC)
+BASE_FEATURE(kReduceIPAddressChangeNotification,
+             "ReduceIPAddressChangeNotification",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_MAC)
 
 }  // namespace net::features

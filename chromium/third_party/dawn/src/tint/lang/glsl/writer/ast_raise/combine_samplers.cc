@@ -191,8 +191,8 @@ struct CombineSamplers::State {
         if (IsGlobal(pair)) {
             // Both texture and sampler are global; add a new global variable
             // to represent the combined sampler (if not already created).
-            GetOrCreate(global_combined_texture_samplers_, pair,
-                        [&] { return CreateCombinedGlobal(texture_var, sampler_var, name); });
+            GetOrAdd(global_combined_texture_samplers_, pair,
+                     [&] { return CreateCombinedGlobal(texture_var, sampler_var, name); });
         } else {
             // Either texture or sampler (or both) is a function parameter;
             // add a new function parameter to represent the combined sampler.
@@ -441,8 +441,8 @@ ast::transform::Transform::ApplyResult CombineSamplers::Apply(const Program& src
     auto* binding_info = inputs.Get<BindingInfo>();
     if (!binding_info) {
         ProgramBuilder b;
-        b.Diagnostics().add_error(diag::System::Transform,
-                                  "missing transform data for " + std::string(TypeInfo().name));
+        b.Diagnostics().AddError(diag::System::Transform, Source{})
+            << "missing transform data for " << TypeInfo().name;
         return resolver::Resolve(b);
     }
 

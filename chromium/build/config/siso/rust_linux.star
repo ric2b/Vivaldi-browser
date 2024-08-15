@@ -4,15 +4,29 @@
 # found in the LICENSE file.
 """Siso configuration for rust/linux."""
 
+load("@builtin//path.star", "path")
 load("@builtin//struct.star", "module")
+load("./fuchsia.star", "fuchsia")
+
+# TODO: b/323091468 - Propagate fuchsia arch and version from GN,
+# and remove the hardcoded filegroups.
+fuchsia_archs = [
+    "arm64",
+    "riscv64",
+    "x64",
+]
+
+fuchsia_versions = [12, 14, 15, 16, 17, 18]
 
 def __filegroups(ctx):
-    return {
+    fg = {
         "third_party/rust-toolchain:toolchain": {
             "type": "glob",
             "includes": [
                 "bin/rustc",
                 "lib/*.so",
+                "lib/rustlib/src/rust/library/std/src/lib.rs",
+                "lib/rustlib/x86_64-unknown-linux-gnu/lib/*",
             ],
         },
         "build/linux/debian_bullseye_amd64-sysroot:rustlink": {
@@ -33,28 +47,53 @@ def __filegroups(ctx):
                 "libclang*.a",
             ],
         },
-        "third_party/fuchsia-sdk/sdk/arch/x64/lib:rustlink": {
-            "type": "glob",
-            "includes": [
-                "*",
-            ],
-        },
-        "third_party/fuchsia-sdk/sdk/arch/x64/sysroot:rustlink": {
-            "type": "glob",
-            "includes": [
-                "lib/*",
-            ],
-        },
     }
+    if fuchsia.enabled(ctx):
+        for arch in fuchsia_archs:
+            group = "third_party/fuchsia-sdk/sdk/arch/%s:rustlink" % arch
+            fg[group] = {
+                "type": "glob",
+                "includes": [
+                    "lib/*",
+                    "sysroot/lib/*",
+                ],
+            }
+            for ver in fuchsia_versions:
+                group = "third_party/fuchsia-sdk/sdk/obj/%s-api-%s:rustlink" % (arch, ver)
+                fg[group] = {
+                    "type": "glob",
+                    "includes": [
+                        "lib/*",
+                        "sysroot/lib/*",
+                    ],
+                }
+    return fg
 
 def __rust_bin_handler(ctx, cmd):
     inputs = []
+    use_android_toolchain = None
+    target = None
     for i, arg in enumerate(cmd.args):
-        if arg.startswith("--sysroot=../../third_party/fuchsia-sdk/sdk/arch/x64/sysroot"):
-            inputs.extend([
-                "third_party/fuchsia-sdk/sdk/arch/x64/lib:rustlink",
-                "third_party/fuchsia-sdk/sdk/arch/x64/sysroot:rustlink",
-            ])
+        if arg.startswith("--sysroot=../../third_party/fuchsia-sdk/sdk"):
+            # Get the corresponding sdk filegroup from --sysroot.
+            # e.g. --sysroot=../../third_party/fuchsia-sdk/sdk/obj/x64-api-16/sysroot -> third_party/fuchsia-sdk/sdk/obj/x64-api-16:rustlink
+            filegroup = "%s:rustlink" % path.dir(ctx.fs.canonpath(arg.removeprefix("--sysroot=")))
+            inputs.append(filegroup)
+        elif arg.startswith("--sysroot=../../third_party/android_toolchain/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot"):
+            use_android_toolchain = True
+        if arg.startswith("--target="):
+            target = arg.removeprefix("--target=")
+    if use_android_toolchain and target:
+        # e.g. target=aarch64-linux-android26
+        android_ver = ""
+        i = target.find("android")
+        if i >= 0:
+            android_ver = target[i:].removeprefix("android").removeprefix("eabi")
+        if android_ver:
+            android_arch = target.removesuffix(android_ver)
+            filegroup = "third_party/android_toolchain/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/%s/%s:link" % (android_arch, android_ver)
+            inputs.append(filegroup)
+
     ctx.actions.fix(inputs = cmd.inputs + inputs)
 
 __handlers = {

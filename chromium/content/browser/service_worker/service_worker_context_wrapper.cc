@@ -17,7 +17,6 @@
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
-#include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -31,6 +30,7 @@
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
 #include "content/browser/loader/navigation_url_loader_impl.h"
+#include "content/browser/loader/url_loader_factory_utils.h"
 #include "content/browser/service_worker/service_worker_container_host.h"
 #include "content/browser/service_worker/service_worker_host.h"
 #include "content/browser/service_worker/service_worker_object_host.h"
@@ -45,6 +45,7 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/service_worker_context_observer.h"
+#include "content/public/browser/service_worker_running_info.h"
 #include "content/public/browser/storage_usage_info.h"
 #include "content/public/browser/web_ui_url_loader_factory.h"
 #include "content/public/browser/webui_config.h"
@@ -58,6 +59,7 @@
 #include "net/base/url_util.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
+#include "services/network/public/cpp/url_loader_factory_builder.h"
 #include "services/network/public/mojom/client_security_state.mojom.h"
 #include "storage/browser/quota/quota_client_type.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
@@ -74,6 +76,27 @@ namespace content {
 
 namespace {
 
+// Translate a ServiceWorkerVersion::Status to a
+// ServiceWorkerRunningInfo::ServiceWorkerVersionStatus.
+ServiceWorkerRunningInfo::ServiceWorkerVersionStatus
+GetRunningInfoVersionStatusForStatus(
+    ServiceWorkerVersion::Status version_status) {
+  switch (version_status) {
+    case ServiceWorkerVersion::Status::NEW:
+      return ServiceWorkerRunningInfo::ServiceWorkerVersionStatus::kNew;
+    case ServiceWorkerVersion::Status::INSTALLING:
+      return ServiceWorkerRunningInfo::ServiceWorkerVersionStatus::kInstalling;
+    case ServiceWorkerVersion::Status::INSTALLED:
+      return ServiceWorkerRunningInfo::ServiceWorkerVersionStatus::kInstalled;
+    case ServiceWorkerVersion::Status::ACTIVATING:
+      return ServiceWorkerRunningInfo::ServiceWorkerVersionStatus::kActivating;
+    case ServiceWorkerVersion::Status::ACTIVATED:
+      return ServiceWorkerRunningInfo::ServiceWorkerVersionStatus::kActivated;
+    case ServiceWorkerVersion::Status::REDUNDANT:
+      return ServiceWorkerRunningInfo::ServiceWorkerVersionStatus::kRedundant;
+  }
+}
+
 #if BUILDFLAG(IS_ANDROID)
 // Enables running ServiceWorkerStorageControl on IO thread instead of UI thread
 // on Android.
@@ -88,9 +111,6 @@ BASE_FEATURE(kServiceWorkerStorageControlOnThreadPool,
 
 const base::FeatureParam<int> kUpdateDelayParam{
     &blink::features::kServiceWorkerUpdateDelay, "update_delay_in_ms", 1000};
-
-base::LazyInstance<ServiceWorkerContextWrapper::URLLoaderFactoryInterceptor>::
-    Leaky g_loader_factory_interceptor = LAZY_INSTANCE_INITIALIZER;
 
 void DidFindRegistrationForStartActiveWorker(
     ServiceWorkerContextWrapper::StatusCallback callback,
@@ -461,9 +481,13 @@ void ServiceWorkerContextWrapper::OnStarted(
   if (is_deleting_and_starting_over_)
     return;
 
+  ServiceWorkerVersion* version = GetLiveVersion(version_id);
+  ServiceWorkerRunningInfo::ServiceWorkerVersionStatus version_status =
+      version ? GetRunningInfoVersionStatusForStatus(version->status())
+              : ServiceWorkerRunningInfo::ServiceWorkerVersionStatus::kUnknown;
   auto insertion_result = running_service_workers_.insert(std::make_pair(
-      version_id,
-      ServiceWorkerRunningInfo(script_url, scope, key, process_id, token)));
+      version_id, ServiceWorkerRunningInfo(script_url, scope, key, process_id,
+                                           token, version_status)));
   DCHECK(insertion_result.second);
 
   const auto& running_info = insertion_result.first->second;
@@ -501,6 +525,11 @@ void ServiceWorkerContextWrapper::OnVersionStateChanged(
     const blink::StorageKey& key,
     ServiceWorkerVersion::Status status) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  auto it = running_service_workers_.find(version_id);
+  if (it != running_service_workers_.end()) {
+    it->second.version_status = GetRunningInfoVersionStatusForStatus(status);
+  }
 
   if (status == ServiceWorkerVersion::Status::ACTIVATED) {
     for (auto& observer : observer_list_)
@@ -1680,7 +1709,17 @@ void ServiceWorkerContextWrapper::DidFindRegistrationForWarmUp(
       registration->active_version()->running_status() ==
           blink::EmbeddedWorkerStatus::kRunning) {
     std::move(callback).Run();
-    MaybeProcessPendingWarmUpRequest();
+
+    // This code can be called from `ServiceWorkerVersion::FinishStartWorker`
+    // and `ServiceWorkerVersion::OnTimeoutTimer` just before stopping service
+    // worker. To avoid start warming up the next warm-up candidate,
+    // `MaybeProcessPendingWarmUpRequest` needs to be asynchronously called to
+    // wait for stopping the current service worker. (see: http://b/40874535)
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &ServiceWorkerContextWrapper::MaybeProcessPendingWarmUpRequest,
+            this));
     return;
   }
 
@@ -1700,7 +1739,16 @@ void ServiceWorkerContextWrapper::DidWarmUpServiceWorker(
 
   std::move(callback).Run();
 
-  MaybeProcessPendingWarmUpRequest();
+  // This code can be called from `ServiceWorkerVersion::FinishStartWorker` and
+  // `ServiceWorkerVersion::OnTimeoutTimer` just before stopping service worker.
+  // To avoid start warming up the next warm-up candidate,
+  // `MaybeProcessPendingWarmUpRequest` needs to be asynchronously called to
+  // wait for stopping the current service worker. (see: http://b/40874535)
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &ServiceWorkerContextWrapper::MaybeProcessPendingWarmUpRequest,
+          this));
 }
 
 ServiceWorkerContextCore* ServiceWorkerContextWrapper::context() {
@@ -1825,14 +1873,6 @@ ServiceWorkerContextWrapper::GetLoaderFactoryForUpdateCheck(
       /*version_id=*/std::nullopt, std::move(client_security_state));
 }
 
-// static
-void ServiceWorkerContextWrapper::SetURLLoaderFactoryInterceptorForTesting(
-    const URLLoaderFactoryInterceptor& interceptor) {
-  DCHECK(!BrowserThread::IsThreadInitialized(BrowserThread::UI) ||
-         BrowserThread::CurrentlyOn(BrowserThread::UI));
-  g_loader_factory_interceptor.Get() = interceptor;
-}
-
 scoped_refptr<network::SharedURLLoaderFactory>
 ServiceWorkerContextWrapper::GetLoaderFactoryForMainScriptFetch(
     const GURL& scope,
@@ -1861,21 +1901,20 @@ ServiceWorkerContextWrapper::GetLoaderFactoryForBrowserInitiatedRequest(
   const url::Origin scope_origin = url::Origin::Create(scope);
 
   mojo::PendingRemote<network::mojom::URLLoaderFactory> remote;
-  mojo::PendingReceiver<network::mojom::URLLoaderFactory> pending_receiver =
-      remote.InitWithNewPipeAndPassReceiver();
+  network::URLLoaderFactoryBuilder factory_builder;
   mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
       header_client;
   bool bypass_redirect_checks = false;
   // Here we give nullptr for |factory_override|, because CORS is no-op for
   // requests for this factory.
   // TODO(yhirano): Use |factory_override| because someday not just CORS but
-  // CORB/CORP will use the factory and those are not no-ops for it
+  // ORB/CORP will use the factory and those are not no-ops for it
   GetContentClient()->browser()->WillCreateURLLoaderFactory(
       storage_partition_->browser_context(), /*frame=*/nullptr,
       ChildProcessHost::kInvalidUniqueID,
       ContentBrowserClient::URLLoaderFactoryType::kServiceWorkerScript,
       scope_origin, /*navigation_id=*/std::nullopt, ukm::kInvalidSourceIdObj,
-      &pending_receiver, &header_client, &bypass_redirect_checks,
+      factory_builder, &header_client, &bypass_redirect_checks,
       /*disable_secure_dns=*/nullptr,
       /*factory_override=*/nullptr,
       /*navigation_response_task_runner=*/nullptr);
@@ -1883,36 +1922,41 @@ ServiceWorkerContextWrapper::GetLoaderFactoryForBrowserInitiatedRequest(
   // If we have a version_id, we are fetching a worker main script. We have a
   // DevtoolsAgentHost ready for the worker and we can add the devtools override
   // before instantiating the URLFactoryLoader.
-  if (version_id.has_value()) {
-    devtools_instrumentation::
-        WillCreateURLLoaderFactoryForServiceWorkerMainScript(
-            this, version_id.value(), &pending_receiver);
+  if (auto params = devtools_instrumentation::WillCreateURLLoaderFactoryParams::
+          ForServiceWorkerMainScript(this, version_id)) {
+    params->Run(
+        /*is_navigation=*/true, /*is_download=*/false, factory_builder,
+        /*factory_override=*/nullptr);
   }
 
   bool use_client_header_factory = header_client.is_valid();
   if (use_client_header_factory) {
-    NavigationURLLoaderImpl::CreateURLLoaderFactoryWithHeaderClient(
-        std::move(header_client), std::move(pending_receiver),
+    remote = NavigationURLLoaderImpl::CreateURLLoaderFactoryWithHeaderClient(
+        std::move(header_client), std::move(factory_builder),
         storage_partition());
   } else {
     DCHECK(storage_partition());
     if (base::FeatureList::IsEnabled(
             features::kPrivateNetworkAccessForWorkers)) {
-      if (g_loader_factory_interceptor.Get()) {
-        g_loader_factory_interceptor.Get().Run(&pending_receiver);
+      if (url_loader_factory::GetTestingInterceptor()) {
+        url_loader_factory::GetTestingInterceptor().Run(
+            network::mojom::kBrowserProcessId, factory_builder);
       }
 
       network::mojom::URLLoaderFactoryParamsPtr params =
           storage_partition_->CreateURLLoaderFactoryParams();
       params->client_security_state = std::move(client_security_state);
-      storage_partition_->GetNetworkContext()->CreateURLLoaderFactory(
-          std::move(pending_receiver), std::move(params));
+      remote =
+          std::move(factory_builder)
+              .Finish<mojo::PendingRemote<network::mojom::URLLoaderFactory>>(
+                  storage_partition_->GetNetworkContext(), std::move(params));
     } else {
       // Set up a Mojo connection to the network loader factory if it's not been
       // created yet.
-      scoped_refptr<network::SharedURLLoaderFactory> network_factory =
-          storage_partition_->GetURLLoaderFactoryForBrowserProcess();
-      network_factory->Clone(std::move(pending_receiver));
+      remote =
+          std::move(factory_builder)
+              .Finish<mojo::PendingRemote<network::mojom::URLLoaderFactory>>(
+                  storage_partition_->GetURLLoaderFactoryForBrowserProcess());
     }
   }
 

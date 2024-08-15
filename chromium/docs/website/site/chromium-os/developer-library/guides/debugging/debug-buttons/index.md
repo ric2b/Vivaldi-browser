@@ -130,7 +130,7 @@ Note: If the tablet has a detachable keyboard, remember to detach it before tryi
 
 Functionality       | Shortcut
 ------------------- | ----------------------------------------------------------
-Screen off          | Power button, short press 
+Screen off          | Power button, short press
 Clean shutdown      | Power button, hold for 3 seconds, select option in menu
 Hard shutdown       | Power button, hold for 10 seconds
 Screenshot capture  | `Power + Volume-Down`, short press
@@ -212,6 +212,30 @@ Warm reset         | `DU`
 
 Debug mode is cancelled when a sequence finishes, or after 10 seconds without a
 volume button press.
+
+## Firmware Log Viewer
+For boards launched after Oct 2020 (such as puff, zork, volteer), the firmware
+menu UI supports viewing debug info/firmware logs (by selecting "Advanced options"
+then "Debug info"/"Firmware log"). Navigation is as easy as selecting "Page up",
+"Page down" buttons from the menu.
+
+For boards launched after Nov 2023 (such as rex, geralt), the text area in the
+log viewer is enlarged, and the screen becomes menu-less (see the screenshot
+below).
+
+![Firmware log viewer](https://storage.googleapis.com/chromium-website-lob-storage/74207681de753053172f723f3c793183c3f29cd8)
+
+The following on-device buttons and keyboard shortcuts are supported for navigation.
+
+Functionality       | Shortcut for Devices With Keyboards | Shortcut for Devices Without Keyboards
+------------------- | ----------------------------------- | --------------------------------------
+Page up             | `Up-Arrow`                          | `Volume-Up`
+Page down           | `Down-Arrow`                        | `Volume-Down`
+Back                | `Enter`                             | Power button, short press
+First page          | `Left-Arrow`
+Last page           | `Right-Arrow`
+Previous boot stage | `Ctrl + Z`
+Next boot stage     | `Ctrl + X`
 
 
 [official support page]: https://support.google.com/chromebook/answer/183101

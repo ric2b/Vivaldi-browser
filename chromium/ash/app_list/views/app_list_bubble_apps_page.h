@@ -61,9 +61,9 @@ class ASH_EXPORT AppListBubbleAppsPage
       public AppListModelProvider::Observer,
       public AppListToastContainerView::Delegate,
       public AppListViewProvider {
- public:
-  METADATA_HEADER(AppListBubbleAppsPage);
+  METADATA_HEADER(AppListBubbleAppsPage, views::View)
 
+ public:
   AppListBubbleAppsPage(AppListViewDelegate* view_delegate,
                         ApplicationDragAndDropHost* drag_and_drop_host,
                         AppListConfig* app_list_config,
@@ -113,7 +113,7 @@ class ASH_EXPORT AppListBubbleAppsPage
   bool MaybeScrollToShowToast();
 
   // views::View:
-  void Layout() override;
+  void Layout(PassKey) override;
   void VisibilityChanged(views::View* starting_from, bool is_visible) override;
   void OnBoundsChanged(const gfx::Rect& old_bounds) override;
 
@@ -136,6 +136,9 @@ class ASH_EXPORT AppListBubbleAppsPage
 
   // Updates the visibility of the continue section based on user preference.
   void UpdateContinueSectionVisibility();
+
+  // Invoked when the `scroll_view_` received an scrolling event.
+  void OnPageScrolled();
 
   views::ScrollView* scroll_view() { return scroll_view_; }
   IconButton* toggle_continue_section_button() {
@@ -250,6 +253,9 @@ class ASH_EXPORT AppListBubbleAppsPage
 
   // A closure that runs at the end of the reorder animation.
   base::OnceClosure reorder_animation_done_closure_;
+
+  // Subscription to notify of scrolling events.
+  base::CallbackListSubscription on_contents_scrolled_subscription_;
 
   base::WeakPtrFactory<AppListBubbleAppsPage> weak_factory_{this};
 };

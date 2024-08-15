@@ -14,13 +14,13 @@
     Yandex
   </message>
   <message name="IDS_IMPORT_FROM_OPERA_OPIUM" desc="Name of import profile from Chromium based Opera">
-    Opera version 15+
+    Opera
   </message>
   <message name="IDS_IMPORT_FROM_OPERA_OPIUM_BETA" desc="Name of import profile from Chromium based Opera beta">
-    Opera version 15+ (Beta)
+    Opera (Beta)
   </message>
   <message name="IDS_IMPORT_FROM_OPERA_OPIUM_DEV" desc="Name of import profile from Chromium based Opera developer">
-    Opera version 15+ (Developer)
+    Opera (Developer)
   </message>
   <message name="IDS_IMPORT_FROM_VIVALDI" desc="Name of import profile from Vivaldi">
     Vivaldi
@@ -34,8 +34,11 @@
   <message name="IDS_IMPORT_FROM_CHROMIUM" desc="Name of import profile from Chromium">
     Chromium
   </message>
-  <message name="IDS_OPERA_IMPORT_FROM_BOOKMARKS_HTML_FILE" desc="browser combo box: Opera Bookmarks HTML File">
-    Opera Bookmarks File
+  <message name="IDS_IMPORT_FROM_ARC" desc="Name of import profile from Arc">
+    Arc
+  </message>
+  <message name="IDS_IMPORT_FROM_OPERA_GX" desc="Name of import profile from Opera GX">
+    Opera GX
   </message>
   <message name="IDS_CHROME_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
     Sadly, your Chrome settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Chrome windows. Then click Continue.
@@ -50,7 +53,13 @@
     Sadly, your Edge settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Edge windows. Then click Continue.
   </message>
   <message name="IDS_OPIUM_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
-    Sadly, your Opera 15+ settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Opera 15+ windows. Then click Continue.
+    Sadly, your Opera settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Opera windows. Then click Continue.
+  </message>
+  <message name="IDS_OPERA_GX_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
+    Sadly, your Opera GX settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Opera GX windows. Then click Continue.
+  </message>
+   <message name="IDS_ARC_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
+    Sadly, your Arc settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Arc windows. Then click Continue.
   </message>
   <message name="IDS_IMPORT_FROM_THUNDERBIRD" desc="browser combo box: Thunderbird email">
     Thunderbird

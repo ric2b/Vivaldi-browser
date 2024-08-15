@@ -8,6 +8,7 @@
 #include <memory>
 #include <unordered_map>
 
+#import "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_multi_source_observation.h"
 #include "components/omnibox/browser/autocomplete_match.h"
@@ -47,7 +48,7 @@ class ChromeOmniboxClientIOS final : public OmniboxClient,
   bool IsDefaultSearchProviderEnabled() const override;
   SessionID GetSessionID() const override;
   PrefService* GetPrefs() override;
-  bookmarks::BookmarkModel* GetBookmarkModel() override;
+  bookmarks::CoreBookmarkModel* GetBookmarkModel() override;
   AutocompleteControllerEmitter* GetAutocompleteControllerEmitter() override;
   TemplateURLService* GetTemplateURLService() override;
   const AutocompleteSchemeClassifier& GetSchemeClassifier() const override;
@@ -57,6 +58,15 @@ class ChromeOmniboxClientIOS final : public OmniboxClient,
   bool IsUsingFakeHttpsForHttpsUpgradeTesting() const override;
   gfx::Image GetIconIfExtensionMatch(
       const AutocompleteMatch& match) const override;
+  std::u16string GetFormattedFullURL() const override;
+  std::u16string GetURLForDisplay() const override;
+  GURL GetNavigationEntryURL() const override;
+  metrics::OmniboxEventProto::PageClassification GetPageClassification(
+      OmniboxFocusSource focus_source,
+      bool is_prefetch) override;
+  security_state::SecurityLevel GetSecurityLevel() const override;
+  net::CertStatus GetCertStatus() const override;
+  const gfx::VectorIcon& GetVectorIcon() const override;
   bool ProcessExtensionKeyword(const std::u16string& text,
                                const TemplateURL* template_url,
                                const AutocompleteMatch& match,
@@ -85,7 +95,6 @@ class ChromeOmniboxClientIOS final : public OmniboxClient,
       const AutocompleteMatch& match,
       const AutocompleteMatch& alternative_nav_match,
       IDNA2008DeviationCharacter deviation_char_in_hostname) override;
-  LocationBarModel* GetLocationBarModel() override;
   base::WeakPtr<OmniboxClient> AsWeakPtr() override;
 
   // web::WebStateObserver.
@@ -100,10 +109,10 @@ class ChromeOmniboxClientIOS final : public OmniboxClient,
     std::u16string text;
     AutocompleteMatch match;
   };
-  WebLocationBar* location_bar_;
-  ChromeBrowserState* browser_state_;
+  raw_ptr<WebLocationBar> location_bar_;
+  raw_ptr<ChromeBrowserState> browser_state_;
   AutocompleteSchemeClassifierImpl scheme_classifier_;
-  feature_engagement::Tracker* engagement_tracker_;
+  raw_ptr<feature_engagement::Tracker> engagement_tracker_;
   // Stores observed navigations from the omnibox. Items are removed once
   // navigation finishes or when it's destroyed.
   std::unordered_map<int32_t, ShortcutElement> web_state_tracker_;

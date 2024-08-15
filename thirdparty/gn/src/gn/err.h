@@ -27,7 +27,9 @@ class Value;
 class Err {
  private:
   struct ErrInfo {
-    ErrInfo(const Location& loc, const std::string& msg, const std::string& help)
+    ErrInfo(const Location& loc,
+            const std::string& msg,
+            const std::string& help)
         : location(loc), message(msg), help_text(help) {}
 
     Location location;
@@ -85,7 +87,9 @@ class Err {
   const std::string& message() const { return info_->message; }
   const std::string& help_text() const { return info_->help_text; }
 
-  void AppendRange(const LocationRange& range) { info_->ranges.push_back(range); }
+  void AppendRange(const LocationRange& range) {
+    info_->ranges.push_back(range);
+  }
   const RangeList& ranges() const { return info_->ranges; }
 
   void set_toolchain_label(const Label& toolchain_label) {

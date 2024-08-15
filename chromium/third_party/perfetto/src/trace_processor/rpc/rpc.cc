@@ -24,11 +24,11 @@
 #include "perfetto/base/time.h"
 #include "perfetto/ext/base/utils.h"
 #include "perfetto/ext/base/version.h"
+#include "perfetto/ext/protozero/proto_ring_buffer.h"
 #include "perfetto/ext/trace_processor/rpc/query_result_serializer.h"
 #include "perfetto/protozero/scattered_heap_buffer.h"
 #include "perfetto/protozero/scattered_stream_writer.h"
 #include "perfetto/trace_processor/trace_processor.h"
-#include "src/protozero/proto_ring_buffer.h"
 #include "src/trace_processor/tp_metatrace.h"
 
 #include "protos/perfetto/trace_processor/trace_processor.pbzero.h"
@@ -491,6 +491,10 @@ std::vector<uint8_t> Rpc::GetStatus() {
   protozero::HeapBuffered<protos::pbzero::StatusResult> status;
   status->set_loaded_trace_name(trace_processor_->GetCurrentTraceName());
   status->set_human_readable_version(base::GetVersionString());
+  const char* version_code = base::GetVersionCode();
+  if (version_code) {
+    status->set_version_code(version_code);
+  }
   status->set_api_version(protos::pbzero::TRACE_PROCESSOR_CURRENT_API_VERSION);
   return status.SerializeAsArray();
 }

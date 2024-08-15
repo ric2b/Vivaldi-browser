@@ -107,15 +107,12 @@ var __disposeResources = (this && this.__disposeResources) || (function (Suppres
     return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
 });
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.unitToPixels = exports.supportedMetrics = exports.Page = exports.setDefaultScreenshotOptions = void 0;
+exports.supportedMetrics = exports.Page = exports.setDefaultScreenshotOptions = void 0;
 const rxjs_js_1 = require("../../third_party/rxjs/rxjs.js");
 const Errors_js_1 = require("../common/Errors.js");
 const EventEmitter_js_1 = require("../common/EventEmitter.js");
-const NetworkManagerEvents_js_1 = require("../common/NetworkManagerEvents.js");
-const PDFOptions_js_1 = require("../common/PDFOptions.js");
 const TimeoutSettings_js_1 = require("../common/TimeoutSettings.js");
 const util_js_1 = require("../common/util.js");
-const assert_js_1 = require("../util/assert.js");
 const decorators_js_1 = require("../util/decorators.js");
 const disposable_js_1 = require("../util/disposable.js");
 const locators_js_1 = require("./locators/locators.js");
@@ -200,11 +197,25 @@ let Page = (() => {
          */
         _timeoutSettings = new TimeoutSettings_js_1.TimeoutSettings();
         #requestHandlers = new WeakMap();
+        #inflight$ = new rxjs_js_1.ReplaySubject(1);
         /**
          * @internal
          */
         constructor() {
             super();
+            (0, util_js_1.fromEmitterEvent)(this, "request" /* PageEvent.Request */)
+                .pipe((0, rxjs_js_1.mergeMap)(originalRequest => {
+                return (0, rxjs_js_1.concat)((0, rxjs_js_1.of)(1), (0, rxjs_js_1.merge)((0, util_js_1.fromEmitterEvent)(this, "requestfailed" /* PageEvent.RequestFailed */), (0, util_js_1.fromEmitterEvent)(this, "requestfinished" /* PageEvent.RequestFinished */), (0, util_js_1.fromEmitterEvent)(this, "response" /* PageEvent.Response */).pipe((0, rxjs_js_1.map)(response => {
+                    return response.request();
+                }))).pipe((0, rxjs_js_1.filter)(request => {
+                    return request.id === originalRequest.id;
+                }), (0, rxjs_js_1.take)(1), (0, rxjs_js_1.map)(() => {
+                    return -1;
+                })));
+            }), (0, rxjs_js_1.mergeScan)((acc, addend) => {
+                return (0, rxjs_js_1.of)(acc + addend);
+            }, 0), (0, rxjs_js_1.takeUntil)((0, util_js_1.fromEmitterEvent)(this, "close" /* PageEvent.Close */)), (0, rxjs_js_1.startWith)(0))
+                .subscribe(this.#inflight$);
         }
         /**
          * Listen to page events.
@@ -475,19 +486,6 @@ let Page = (() => {
             return await this.mainFrame().$$eval(selector, pageFunction, ...args);
         }
         /**
-         * The method evaluates the XPath expression relative to the page document as
-         * its context node. If there are no such elements, the method resolves to an
-         * empty array.
-         *
-         * @remarks
-         * Shortcut for {@link Frame.$x | Page.mainFrame().$x(expression) }.
-         *
-         * @param expression - Expression to evaluate
-         */
-        async $x(expression) {
-            return await this.mainFrame().$x(expression);
-        }
-        /**
          * Adds a `<script>` tag into the page with the desired URL or content.
          *
          * @remarks
@@ -623,14 +621,103 @@ let Page = (() => {
             return await this.mainFrame().waitForNavigation(options);
         }
         /**
+         * @param urlOrPredicate - A URL or predicate to wait for
+         * @param options - Optional waiting parameters
+         * @returns Promise which resolves to the matched request
+         * @example
+         *
+         * ```ts
+         * const firstRequest = await page.waitForRequest(
+         *   'https://example.com/resource'
+         * );
+         * const finalRequest = await page.waitForRequest(
+         *   request => request.url() === 'https://example.com'
+         * );
+         * return finalRequest.response()?.ok();
+         * ```
+         *
+         * @remarks
+         * Optional Waiting Parameters have:
+         *
+         * - `timeout`: Maximum wait time in milliseconds, defaults to `30` seconds, pass
+         *   `0` to disable the timeout. The default value can be changed by using the
+         *   {@link Page.setDefaultTimeout} method.
+         */
+        waitForRequest(urlOrPredicate, options = {}) {
+            const { timeout: ms = this._timeoutSettings.timeout() } = options;
+            if (typeof urlOrPredicate === 'string') {
+                const url = urlOrPredicate;
+                urlOrPredicate = (request) => {
+                    return request.url() === url;
+                };
+            }
+            const observable$ = (0, util_js_1.fromEmitterEvent)(this, "request" /* PageEvent.Request */).pipe((0, util_js_1.filterAsync)(urlOrPredicate), (0, rxjs_js_1.raceWith)((0, util_js_1.timeout)(ms), (0, util_js_1.fromEmitterEvent)(this, "close" /* PageEvent.Close */).pipe((0, rxjs_js_1.map)(() => {
+                throw new Errors_js_1.TargetCloseError('Page closed!');
+            }))));
+            return (0, rxjs_js_1.firstValueFrom)(observable$);
+        }
+        /**
+         * @param urlOrPredicate - A URL or predicate to wait for.
+         * @param options - Optional waiting parameters
+         * @returns Promise which resolves to the matched response.
+         * @example
+         *
+         * ```ts
+         * const firstResponse = await page.waitForResponse(
+         *   'https://example.com/resource'
+         * );
+         * const finalResponse = await page.waitForResponse(
+         *   response =>
+         *     response.url() === 'https://example.com' && response.status() === 200
+         * );
+         * const finalResponse = await page.waitForResponse(async response => {
+         *   return (await response.text()).includes('<html>');
+         * });
+         * return finalResponse.ok();
+         * ```
+         *
+         * @remarks
+         * Optional Parameter have:
+         *
+         * - `timeout`: Maximum wait time in milliseconds, defaults to `30` seconds,
+         *   pass `0` to disable the timeout. The default value can be changed by using
+         *   the {@link Page.setDefaultTimeout} method.
+         */
+        waitForResponse(urlOrPredicate, options = {}) {
+            const { timeout: ms = this._timeoutSettings.timeout() } = options;
+            if (typeof urlOrPredicate === 'string') {
+                const url = urlOrPredicate;
+                urlOrPredicate = (response) => {
+                    return response.url() === url;
+                };
+            }
+            const observable$ = (0, util_js_1.fromEmitterEvent)(this, "response" /* PageEvent.Response */).pipe((0, util_js_1.filterAsync)(urlOrPredicate), (0, rxjs_js_1.raceWith)((0, util_js_1.timeout)(ms), (0, util_js_1.fromEmitterEvent)(this, "close" /* PageEvent.Close */).pipe((0, rxjs_js_1.map)(() => {
+                throw new Errors_js_1.TargetCloseError('Page closed!');
+            }))));
+            return (0, rxjs_js_1.firstValueFrom)(observable$);
+        }
+        /**
+         * Waits for the network to be idle.
+         *
+         * @param options - Options to configure waiting behavior.
+         * @returns A promise which resolves once the network is idle.
+         */
+        waitForNetworkIdle(options = {}) {
+            return (0, rxjs_js_1.firstValueFrom)(this.waitForNetworkIdle$(options));
+        }
+        /**
          * @internal
          */
-        _waitForNetworkIdle(networkManager, idleTime, requestsInFlight = 0) {
-            return (0, rxjs_js_1.merge)((0, rxjs_js_1.fromEvent)(networkManager, NetworkManagerEvents_js_1.NetworkManagerEvent.Request), (0, rxjs_js_1.fromEvent)(networkManager, NetworkManagerEvents_js_1.NetworkManagerEvent.Response), (0, rxjs_js_1.fromEvent)(networkManager, NetworkManagerEvents_js_1.NetworkManagerEvent.RequestFailed)).pipe((0, rxjs_js_1.startWith)(undefined), (0, rxjs_js_1.filter)(() => {
-                return networkManager.inFlightRequestsCount() <= requestsInFlight;
-            }), (0, rxjs_js_1.switchMap)(v => {
-                return (0, rxjs_js_1.of)(v).pipe((0, rxjs_js_1.delay)(idleTime));
-            }));
+        waitForNetworkIdle$(options = {}) {
+            const { timeout: ms = this._timeoutSettings.timeout(), idleTime = util_js_1.NETWORK_IDLE_TIME, concurrency = 0, } = options;
+            return this.#inflight$.pipe((0, rxjs_js_1.switchMap)(inflight => {
+                if (inflight > concurrency) {
+                    return rxjs_js_1.EMPTY;
+                }
+                return (0, rxjs_js_1.timer)(idleTime);
+            }), (0, rxjs_js_1.map)(() => { }), (0, rxjs_js_1.raceWith)((0, util_js_1.timeout)(ms), (0, util_js_1.fromEmitterEvent)(this, "close" /* PageEvent.Close */).pipe((0, rxjs_js_1.map)(() => {
+                throw new Errors_js_1.TargetCloseError('Page closed!');
+            }))));
         }
         /**
          * Waits for a frame matching the given conditions to appear.
@@ -650,7 +737,7 @@ let Page = (() => {
                     return urlOrPredicate === frame.url();
                 };
             }
-            return await (0, rxjs_js_1.firstValueFrom)((0, rxjs_js_1.merge)((0, rxjs_js_1.fromEvent)(this, "frameattached" /* PageEvent.FrameAttached */), (0, rxjs_js_1.fromEvent)(this, "framenavigated" /* PageEvent.FrameNavigated */), (0, rxjs_js_1.from)(this.frames())).pipe((0, rxjs_js_1.filterAsync)(urlOrPredicate), (0, rxjs_js_1.first)(), (0, rxjs_js_1.raceWith)((0, util_js_1.timeout)(ms), (0, rxjs_js_1.fromEvent)(this, "close" /* PageEvent.Close */).pipe((0, rxjs_js_1.map)(() => {
+            return await (0, rxjs_js_1.firstValueFrom)((0, rxjs_js_1.merge)((0, util_js_1.fromEmitterEvent)(this, "frameattached" /* PageEvent.FrameAttached */), (0, util_js_1.fromEmitterEvent)(this, "framenavigated" /* PageEvent.FrameNavigated */), (0, rxjs_js_1.from)(this.frames())).pipe((0, util_js_1.filterAsync)(urlOrPredicate), (0, rxjs_js_1.first)(), (0, rxjs_js_1.raceWith)((0, util_js_1.timeout)(ms), (0, util_js_1.fromEmitterEvent)(this, "close" /* PageEvent.Close */).pipe((0, rxjs_js_1.map)(() => {
                 throw new Errors_js_1.TargetCloseError('Page closed.');
             })))));
         }
@@ -1023,50 +1110,6 @@ let Page = (() => {
             }
         }
         /**
-         * @internal
-         */
-        _getPDFOptions(options = {}, lengthUnit = 'in') {
-            const defaults = {
-                scale: 1,
-                displayHeaderFooter: false,
-                headerTemplate: '',
-                footerTemplate: '',
-                printBackground: false,
-                landscape: false,
-                pageRanges: '',
-                preferCSSPageSize: false,
-                omitBackground: false,
-                timeout: 30000,
-                tagged: false,
-            };
-            let width = 8.5;
-            let height = 11;
-            if (options.format) {
-                const format = PDFOptions_js_1.paperFormats[options.format.toLowerCase()];
-                (0, assert_js_1.assert)(format, 'Unknown paper format: ' + options.format);
-                width = format.width;
-                height = format.height;
-            }
-            else {
-                width = convertPrintParameterToInches(options.width, lengthUnit) ?? width;
-                height =
-                    convertPrintParameterToInches(options.height, lengthUnit) ?? height;
-            }
-            const margin = {
-                top: convertPrintParameterToInches(options.margin?.top, lengthUnit) || 0,
-                left: convertPrintParameterToInches(options.margin?.left, lengthUnit) || 0,
-                bottom: convertPrintParameterToInches(options.margin?.bottom, lengthUnit) || 0,
-                right: convertPrintParameterToInches(options.margin?.right, lengthUnit) || 0,
-            };
-            return {
-                ...defaults,
-                ...options,
-                width,
-                height,
-                margin,
-            };
-        }
-        /**
          * The page's title
          *
          * @remarks
@@ -1216,30 +1259,6 @@ let Page = (() => {
             return this.mainFrame().type(selector, text, options);
         }
         /**
-         * @deprecated Replace with `new Promise(r => setTimeout(r, milliseconds));`.
-         *
-         * Causes your script to wait for the given number of milliseconds.
-         *
-         * @remarks
-         *
-         * It's generally recommended to not wait for a number of seconds, but instead
-         * use {@link Frame.waitForSelector}, {@link Frame.waitForXPath} or
-         * {@link Frame.waitForFunction} to wait for exactly the conditions you want.
-         *
-         * @example
-         *
-         * Wait for 1 second:
-         *
-         * ```ts
-         * await page.waitForTimeout(1000);
-         * ```
-         *
-         * @param milliseconds - the number of milliseconds to wait.
-         */
-        waitForTimeout(milliseconds) {
-            return this.mainFrame().waitForTimeout(milliseconds);
-        }
-        /**
          * Wait for the `selector` to appear in page. If at the moment of calling the
          * method the `selector` already exists, the method will return immediately. If
          * the `selector` doesn't appear after the `timeout` milliseconds of waiting, the
@@ -1293,60 +1312,6 @@ let Page = (() => {
          */
         async waitForSelector(selector, options = {}) {
             return await this.mainFrame().waitForSelector(selector, options);
-        }
-        /**
-         * Wait for the `xpath` to appear in page. If at the moment of calling the
-         * method the `xpath` already exists, the method will return immediately. If
-         * the `xpath` doesn't appear after the `timeout` milliseconds of waiting, the
-         * function will throw.
-         *
-         * @example
-         * This method works across navigation
-         *
-         * ```ts
-         * import puppeteer from 'puppeteer';
-         * (async () => {
-         *   const browser = await puppeteer.launch();
-         *   const page = await browser.newPage();
-         *   let currentURL;
-         *   page
-         *     .waitForXPath('//img')
-         *     .then(() => console.log('First URL with image: ' + currentURL));
-         *   for (currentURL of [
-         *     'https://example.com',
-         *     'https://google.com',
-         *     'https://bbc.com',
-         *   ]) {
-         *     await page.goto(currentURL);
-         *   }
-         *   await browser.close();
-         * })();
-         * ```
-         *
-         * @param xpath - A
-         * {@link https://developer.mozilla.org/en-US/docs/Web/XPath | xpath} of an
-         * element to wait for
-         * @param options - Optional waiting parameters
-         * @returns Promise which resolves when element specified by xpath string is
-         * added to DOM. Resolves to `null` if waiting for `hidden: true` and xpath is
-         * not found in DOM, otherwise resolves to `ElementHandle`.
-         * @remarks
-         * The optional Argument `options` have properties:
-         *
-         * - `visible`: A boolean to wait for element to be present in DOM and to be
-         *   visible, i.e. to not have `display: none` or `visibility: hidden` CSS
-         *   properties. Defaults to `false`.
-         *
-         * - `hidden`: A boolean wait for element to not be found in the DOM or to be
-         *   hidden, i.e. have `display: none` or `visibility: hidden` CSS properties.
-         *   Defaults to `false`.
-         *
-         * - `timeout`: A number which is maximum time to wait for in milliseconds.
-         *   Defaults to `30000` (30 seconds). Pass `0` to disable timeout. The default
-         *   value can be changed by using the {@link Page.setDefaultTimeout} method.
-         */
-        waitForXPath(xpath, options) {
-            return this.mainFrame().waitForXPath(xpath, options);
         }
         /**
          * Waits for the provided function, `pageFunction`, to return a truthy value when
@@ -1440,46 +1405,6 @@ exports.supportedMetrics = new Set([
     'JSHeapUsedSize',
     'JSHeapTotalSize',
 ]);
-/**
- * @internal
- */
-exports.unitToPixels = {
-    px: 1,
-    in: 96,
-    cm: 37.8,
-    mm: 3.78,
-};
-function convertPrintParameterToInches(parameter, lengthUnit = 'in') {
-    if (typeof parameter === 'undefined') {
-        return undefined;
-    }
-    let pixels;
-    if ((0, util_js_1.isNumber)(parameter)) {
-        // Treat numbers as pixel values to be aligned with phantom's paperSize.
-        pixels = parameter;
-    }
-    else if ((0, util_js_1.isString)(parameter)) {
-        const text = parameter;
-        let unit = text.substring(text.length - 2).toLowerCase();
-        let valueText = '';
-        if (unit in exports.unitToPixels) {
-            valueText = text.substring(0, text.length - 2);
-        }
-        else {
-            // In case of unknown unit try to parse the whole parameter as number of pixels.
-            // This is consistent with phantom's paperSize behavior.
-            unit = 'px';
-            valueText = text;
-        }
-        const value = Number(valueText);
-        (0, assert_js_1.assert)(!isNaN(value), 'Failed to parse parameter value: ' + text);
-        pixels = value * exports.unitToPixels[unit];
-    }
-    else {
-        throw new Error('page.pdf() Cannot handle parameter type: ' + typeof parameter);
-    }
-    return pixels / exports.unitToPixels[lengthUnit];
-}
 /** @see https://w3c.github.io/webdriver-bidi/#normalize-rect */
 function normalizeRectangle(clip) {
     return {

@@ -59,6 +59,7 @@ class ExecutionContext;
 class ExceptionState;
 class LocalDOMWindow;
 class ServiceWorkerErrorForUpdate;
+class ServiceWorkerRegistration;
 
 class MODULES_EXPORT ServiceWorkerContainer final
     : public EventTarget,
@@ -85,13 +86,18 @@ class MODULES_EXPORT ServiceWorkerContainer final
   void Trace(Visitor*) const override;
 
   ServiceWorker* controller() { return controller_.Get(); }
-  ScriptPromise ready(ScriptState*, ExceptionState&);
+  ScriptPromiseTyped<ServiceWorkerRegistration> ready(ScriptState*,
+                                                      ExceptionState&);
 
-  ScriptPromise registerServiceWorker(ScriptState*,
-                                      const String& pattern,
-                                      const RegistrationOptions*);
-  ScriptPromise getRegistration(ScriptState*, const String& document_url);
-  ScriptPromise getRegistrations(ScriptState*);
+  ScriptPromiseTyped<ServiceWorkerRegistration> registerServiceWorker(
+      ScriptState*,
+      const String& pattern,
+      const RegistrationOptions*);
+  ScriptPromiseTyped<ServiceWorkerRegistration> getRegistration(
+      ScriptState*,
+      const String& document_url);
+  ScriptPromiseTyped<IDLSequence<ServiceWorkerRegistration>> getRegistrations(
+      ScriptState*);
 
   void startMessages();
 
@@ -130,16 +136,15 @@ class MODULES_EXPORT ServiceWorkerContainer final
   void RegisterServiceWorkerInternal(
       const KURL& scope_url,
       const KURL& script_url,
-      absl::optional<mojom::blink::ScriptType> script_type,
+      std::optional<mojom::blink::ScriptType> script_type,
       mojom::blink::ServiceWorkerUpdateViaCache update_via_cache,
       WebFetchClientSettingsObject fetch_client_settings_object,
       std::unique_ptr<CallbackPromiseAdapter<ServiceWorkerRegistration,
                                              ServiceWorkerErrorForUpdate>>
           callbacks);
 
-  using ReadyProperty =
-      ScriptPromiseProperty<Member<ServiceWorkerRegistration>,
-                            Member<ServiceWorkerRegistration>>;
+  using ReadyProperty = ScriptPromiseProperty<ServiceWorkerRegistration,
+                                              ServiceWorkerRegistration>;
   ReadyProperty* CreateReadyProperty();
 
   void EnableClientMessageQueue();

@@ -64,6 +64,7 @@
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/resource/resource_scale_factor.h"
@@ -365,7 +366,9 @@ IN_PROC_BROWSER_TEST_F(RemoteAppsManagerBrowsertest, DISABLED_AddApp) {
 
 // Adds an app with an empty icon URL and checks if the app gets assigned the
 // default placeholder icon.
-IN_PROC_BROWSER_TEST_F(RemoteAppsManagerBrowsertest, AddAppPlaceholderIcon) {
+// Flaky (b/41483673)
+IN_PROC_BROWSER_TEST_F(RemoteAppsManagerBrowsertest,
+                       DISABLED_AddAppPlaceholderIcon) {
   // Show launcher UI so that app icons are loaded.
   ShowLauncherAppsGrid(/*wait_for_opening_animation=*/true);
 

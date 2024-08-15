@@ -169,6 +169,30 @@
 #endif
 
 #if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  #define TEST_REQUIRES_X86_AVX512AMX \
+    do { \
+      const struct xnn_hardware_config* hardware_config = xnn_init_hardware_config(); \
+      if (hardware_config == nullptr || !hardware_config->use_x86_avx512amx) { \
+        GTEST_SKIP(); \
+      } \
+    } while (0)
+#else
+  #define TEST_REQUIRES_X86_AVX512AMX
+#endif
+
+#if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  #define TEST_REQUIRES_X86_AVX512VNNIGFNI \
+    do { \
+      const struct xnn_hardware_config* hardware_config = xnn_init_hardware_config(); \
+      if (hardware_config == nullptr || !hardware_config->use_x86_avx512vnnigfni) { \
+        GTEST_SKIP(); \
+      } \
+    } while (0)
+#else
+  #define TEST_REQUIRES_X86_AVX512VNNIGFNI
+#endif
+
+#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   #define TEST_REQUIRES_X86_AVXVNNI \
     do { \
       const struct xnn_hardware_config* hardware_config = xnn_init_hardware_config(); \
@@ -322,6 +346,18 @@
     } while (0)
 #else
   #define TEST_REQUIRES_RISCV_VECTOR
+#endif
+
+#if XNN_ARCH_RISCV
+  #define TEST_REQUIRES_RISCV_VECTOR_FP16_ARITH \
+    do { \
+      const struct xnn_hardware_config* hardware_config = xnn_init_hardware_config(); \
+      if (hardware_config == nullptr || !hardware_config->use_riscv_vector_fp16_arith) { \
+        GTEST_SKIP(); \
+      } \
+    } while (0)
+#else
+  #define TEST_REQUIRES_RISCV_VECTOR_FP16_ARITH
 #endif
 
 #if XNN_ARCH_WASMRELAXEDSIMD

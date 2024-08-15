@@ -28,10 +28,6 @@ namespace syncer {
 
 namespace {
 
-BASE_FEATURE(kSyncPollIfTimerNotRunning,
-             "SyncPollIfTimerNotRunning",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 constexpr base::TimeDelta kLocalChangeNudgeDelayForTest = base::Milliseconds(1);
 
 bool IsConfigRelatedUpdateOriginValue(
@@ -672,21 +668,13 @@ void SyncSchedulerImpl::TrySyncCycleJobImpl(
       SDVLOG(2) << "Found pending nudge job";
       DoNudgeSyncCycleJob();
     } else {
-      bool should_poll = false;
-      if (base::FeatureList::IsEnabled(kSyncPollIfTimerNotRunning)) {
-        // If the poll timer isn't running, that means a poll is pending.
-        // Most likely this was called from PollTimerCallback(), but it's also
-        // possible that the poll was triggered earlier while the scheduler was
-        // in an error state, and now it has exited the error state.
-        // Note: At most one of the two poll timers can be running (which one
-        // depends on the state of kSyncSchedulerUseWallClockTimer).
-        should_poll =
-            !poll_timer_ticks_.IsRunning() && !poll_timer_wall_.IsRunning();
-      } else {
-        should_poll =
-            (TimeTicks::Now() - last_poll_reset_ticks_) >= GetPollInterval();
-      }
-      if (should_poll) {
+      // If the poll timer isn't running, that means a poll is pending.
+      // Most likely this was called from PollTimerCallback(), but it's also
+      // possible that the poll was triggered earlier while the scheduler was
+      // in an error state, and now it has exited the error state.
+      // Note: At most one of the two poll timers can be running (which one
+      // depends on the state of kSyncSchedulerUseWallClockTimer).
+      if (!poll_timer_ticks_.IsRunning() && !poll_timer_wall_.IsRunning()) {
         SDVLOG(2) << "Found pending poll";
         DoPollSyncCycleJob();
       }
@@ -905,9 +893,9 @@ void SyncSchedulerImpl::OnReceivedMigrationRequest(ModelTypeSet types) {
 }
 
 void SyncSchedulerImpl::OnReceivedQuotaParamsForExtensionTypes(
-    absl::optional<int> max_tokens,
-    absl::optional<base::TimeDelta> refill_interval,
-    absl::optional<base::TimeDelta> depleted_quota_nudge_delay) {
+    std::optional<int> max_tokens,
+    std::optional<base::TimeDelta> refill_interval,
+    std::optional<base::TimeDelta> depleted_quota_nudge_delay) {
   nudge_tracker_.SetQuotaParamsForExtensionTypes(max_tokens, refill_interval,
                                                  depleted_quota_nudge_delay);
 }

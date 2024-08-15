@@ -10,11 +10,11 @@
 
 #include "constants/ascii.h"
 #include "core/fpdfdoc/cpdf_formcontrol.h"
+#include "core/fxcrt/check.h"
 #include "fpdfsdk/cpdfsdk_widget.h"
 #include "fpdfsdk/formfiller/cffl_formfield.h"
 #include "fpdfsdk/pwl/cpwl_special_button.h"
 #include "public/fpdf_fwlevent.h"
-#include "third_party/base/check.h"
 
 CFFL_CheckBox::CFFL_CheckBox(CFFL_InteractiveFormFiller* pFormFiller,
                              CPDFSDK_Widget* pWidget)
@@ -28,7 +28,7 @@ std::unique_ptr<CPWL_Wnd> CFFL_CheckBox::NewPWLWindow(
   auto pWnd = std::make_unique<CPWL_CheckBox>(cp, std::move(pAttachedData));
   pWnd->Realize();
   pWnd->SetCheck(m_pWidget->IsChecked());
-  return std::move(pWnd);
+  return pWnd;
 }
 
 bool CFFL_CheckBox::OnKeyDown(FWL_VKEYCODE nKeyCode,

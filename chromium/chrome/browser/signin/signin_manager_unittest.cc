@@ -19,7 +19,6 @@
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
 #include "components/supervised_user/core/common/buildflags.h"
-#include "components/supervised_user/core/common/features.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -160,10 +159,13 @@ class SigninManagerTest : public testing::Test,
       const std::string& email,
       signin_metrics::AccessPoint access_point =
           signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN) {
-    AccountInfo account = identity_test_env_.MakeAccountAvailable(email);
-    EXPECT_FALSE(account.IsEmpty());
-    account.access_point = access_point;
-    identity_test_env_.UpdateAccountInfoForAccount(account);
+    AccountAvailabilityOptionsBuilder builder =
+        identity_test_env()
+            ->CreateAccountAvailabilityOptionsBuilder()
+            .WithAccessPoint(access_point);
+
+    AccountInfo account =
+        identity_test_env_.MakeAccountAvailable(builder.Build(email));
     signin::CookieParamsForTest cookie_params = {account.email, account.gaia};
     identity_test_env_.SetCookieAccounts({cookie_params});
     EXPECT_TRUE(identity_manager()->HasPrimaryAccount(ConsentLevel::kSignin));
@@ -530,10 +532,14 @@ TEST_P(SigninManagerTest,
 
 TEST_P(SigninManagerTest, UnconsentedPrimaryAccountUpdatedOnHandleDestroyed) {
   base::HistogramTester histogram_tester;
+  AccountAvailabilityOptionsBuilder builder =
+      identity_test_env()
+          ->CreateAccountAvailabilityOptionsBuilder()
+          .WithAccessPoint(signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
   AccountInfo first_account =
-      identity_test_env()->MakeAccountAvailable(kTestEmail);
+      identity_test_env()->MakeAccountAvailable(builder.Build(kTestEmail));
   AccountInfo second_account =
-      identity_test_env()->MakeAccountAvailable(kTestEmail2);
+      identity_test_env()->MakeAccountAvailable(builder.Build(kTestEmail2));
   identity_test_env()->SetCookieAccounts(
       {{first_account.email, first_account.gaia},
        {second_account.email, second_account.gaia}});
@@ -649,11 +655,6 @@ TEST_F(SigninManagerTest, SigninCompletedMetric) {
   AccountInfo account =
       MakeAccountAvailableWithCookies(kTestEmail, access_point);
   ExpectUnconsentedPrimaryAccountSetEvent(account);
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // Lacros always records `ACCESS_POINT_DESKTOP_SIGNIN_MANAGER`.
-  access_point =
-      signin_metrics::AccessPoint::ACCESS_POINT_DESKTOP_SIGNIN_MANAGER;
-#endif
   histogram_tester.ExpectUniqueSample("Signin.SignIn.Completed", access_point,
                                       1);
   histogram_tester.ExpectUniqueSample("Signin.SigninManager.SigninAccessPoint",
@@ -684,9 +685,7 @@ class SigninManagerSupervisedUserTest : public SigninManagerTest {
 
 TEST_F(SigninManagerSupervisedUserTest, SignoutOnCookiesDeletedNotAllowed) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      {supervised_user::kClearingCookiesKeepsSupervisedUsersSignedIn},
-      {kPreventSignoutIfAccountValid});
+  scoped_feature_list.InitWithFeatures({}, {kPreventSignoutIfAccountValid});
   AddSupervisedAccount(ConsentLevel::kSignin);
   ASSERT_TRUE(identity_manager()->HasPrimaryAccount(ConsentLevel::kSignin));
   ASSERT_EQ(1U, observer().events().size());
@@ -696,22 +695,6 @@ TEST_F(SigninManagerSupervisedUserTest, SignoutOnCookiesDeletedNotAllowed) {
   identity_test_env()->SetCookieAccounts({});
   EXPECT_EQ(0U, observer().events().size());
   EXPECT_TRUE(identity_manager()->HasPrimaryAccount(ConsentLevel::kSignin));
-}
-
-TEST_F(SigninManagerSupervisedUserTest, SignoutOnCookiesDeletedAllowed) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      {}, {supervised_user::kClearingCookiesKeepsSupervisedUsersSignedIn,
-           kPreventSignoutIfAccountValid});
-  AddSupervisedAccount(ConsentLevel::kSignin);
-  ASSERT_TRUE(identity_manager()->HasPrimaryAccount(ConsentLevel::kSignin));
-  ASSERT_EQ(1U, observer().events().size());
-  observer().Reset();
-
-  // Remove the cookie, the account should be cleared.
-  identity_test_env()->SetCookieAccounts({});
-  EXPECT_EQ(1U, observer().events().size());
-  EXPECT_FALSE(identity_manager()->HasPrimaryAccount(ConsentLevel::kSignin));
 }
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT) && BUILDFLAG(ENABLE_SUPERVISED_USERS)
 

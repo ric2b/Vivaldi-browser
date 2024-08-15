@@ -30,8 +30,8 @@ export interface ColumnConfig {
 }
 
 export type Columns = {
-  [columnName: string]: ColumnConfig
-}
+  [columnName: string]: ColumnConfig;
+};
 
 export interface GenericSliceDetailsTabConfigBase {
   sqlTableName: string;
@@ -40,33 +40,35 @@ export interface GenericSliceDetailsTabConfigBase {
   columns?: Columns;
 }
 
-export type GenericSliceDetailsTabConfig = GenericSliceDetailsTabConfigBase&{
+export type GenericSliceDetailsTabConfig = GenericSliceDetailsTabConfigBase & {
   id: number;
-}
+};
 
 // A details tab, which fetches slice-like object from a given SQL table by id
 // and renders it according to the provided config, specifying which columns
 // need to be rendered and how.
-export class GenericSliceDetailsTab extends
-    BottomTab<GenericSliceDetailsTabConfig> {
+export class GenericSliceDetailsTab extends BottomTab<GenericSliceDetailsTabConfig> {
   static readonly kind = 'dev.perfetto.GenericSliceDetailsTab';
 
-  data: {[key: string]: ColumnType}|undefined;
+  data: {[key: string]: ColumnType} | undefined;
 
-  static create(args: NewBottomTabArgs): GenericSliceDetailsTab {
+  static create(
+    args: NewBottomTabArgs<GenericSliceDetailsTabConfig>,
+  ): GenericSliceDetailsTab {
     return new GenericSliceDetailsTab(args);
   }
 
-  constructor(args: NewBottomTabArgs) {
+  constructor(args: NewBottomTabArgs<GenericSliceDetailsTabConfig>) {
     super(args);
 
     this.engine
-        .query(`select * from ${this.config.sqlTableName} where id = ${
-            this.config.id}`)
-        .then((queryResult) => {
-          this.data = queryResult.firstRow({});
-          raf.scheduleFullRedraw();
-        });
+      .query(
+        `select * from ${this.config.sqlTableName} where id = ${this.config.id}`,
+      )
+      .then((queryResult) => {
+        this.data = queryResult.firstRow({});
+        raf.scheduleFullRedraw();
+      });
   }
 
   viewTab() {
@@ -92,28 +94,27 @@ export class GenericSliceDetailsTab extends
     const details = dictToTree(args);
 
     return m(
-        DetailsShell,
-        {
-          title: this.config.title,
-        },
+      DetailsShell,
+      {
+        title: this.config.title,
+      },
+      m(
+        GridLayout,
+        m(Section, {title: 'Details'}, m(Tree, details)),
         m(
-            GridLayout,
-            m(
-                Section,
-                {title: 'Details'},
-                m(Tree, details),
-            ),
-            m(
-                Section,
-                {title: 'Metadata'},
-                m(Tree, [m(TreeNode, {
-                  left: 'SQL ID',
-                  right: m(SqlRef, {
-                    table: this.config.sqlTableName,
-                    id: this.config.id}),
-                })]),
-            ),
+          Section,
+          {title: 'Metadata'},
+          m(Tree, [
+            m(TreeNode, {
+              left: 'SQL ID',
+              right: m(SqlRef, {
+                table: this.config.sqlTableName,
+                id: this.config.id,
+              }),
+            }),
+          ]),
         ),
+      ),
     );
   }
 

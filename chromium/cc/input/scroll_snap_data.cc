@@ -8,6 +8,7 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <optional>
 
 #include "base/auto_reset.h"
 #include "base/check.h"
@@ -47,12 +48,12 @@ bool IsMutualVisible(const SnapSearchResult& a, const SnapSearchResult& b) {
 }
 
 void SetOrUpdateResult(const SnapSearchResult& candidate,
-                       std::optional<SnapSearchResult>* result,
-                       const ElementId& active_element_id) {
+                       std::optional<SnapSearchResult>* result) {
   if (result->has_value()) {
     result->value().Union(candidate);
-    if (candidate.element_id() == active_element_id)
-      result->value().set_element_id(active_element_id);
+    if (candidate.has_focus_within()) {
+      result->value().set_element_id(candidate.element_id());
+    }
   } else {
     *result = candidate;
   }
@@ -148,28 +149,25 @@ bool CanCoverSnapportOnAxis(SearchAxis axis,
 
 }  // namespace
 
-SnapSearchResult::SnapSearchResult(float offset, const gfx::RangeF& range)
-    : snap_offset_(offset) {
-  set_visible_range(range);
-}
+SnapSearchResult::SnapSearchResult(float offset,
+                                   SearchAxis axis,
+                                   gfx::RangeF snapport_visible_range,
+                                   float snapport_max_visible)
+    : snap_offset_(offset),
+      axis_(axis),
+      snapport_visible_range_(snapport_visible_range),
+      snapport_max_visible_(snapport_max_visible) {}
 
-void SnapSearchResult::set_visible_range(const gfx::RangeF& range) {
-  DCHECK(range.start() <= range.end());
-  visible_range_ = range;
-}
-
-void SnapSearchResult::Clip(float max_snap, float max_visible) {
+void SnapSearchResult::Clip(float max_snap) {
   snap_offset_ = std::clamp(snap_offset_, 0.0f, max_snap);
-  visible_range_ =
-      gfx::RangeF(std::clamp(visible_range_.start(), 0.0f, max_visible),
-                  std::clamp(visible_range_.end(), 0.0f, max_visible));
 }
 
 void SnapSearchResult::Union(const SnapSearchResult& other) {
   DCHECK(snap_offset_ == other.snap_offset_);
-  visible_range_ = gfx::RangeF(
-      std::min(visible_range_.start(), other.visible_range_.start()),
-      std::max(visible_range_.end(), other.visible_range_.end()));
+  DCHECK(rect_.has_value() && other.rect().has_value());
+  if (rect_ && other.rect().has_value()) {
+    rect_->Union(other.rect().value());
+  }
 }
 
 SnapContainerData::SnapContainerData()
@@ -215,8 +213,7 @@ SnapPositionData SnapContainerData::FindSnapPositionWithViewportAdjustment(
 }
 
 SnapPositionData SnapContainerData::FindSnapPosition(
-    const SnapSelectionStrategy& strategy,
-    const ElementId& active_element_id) const {
+    const SnapSelectionStrategy& strategy) const {
   SnapPositionData result;
   result.target_element_ids = TargetSnapAreaElementIds();
   if (scroll_snap_type_.is_none)
@@ -245,28 +242,28 @@ SnapPositionData SnapContainerData::FindSnapPosition(
     // we cannot always assume that the incoming value fits this criteria we
     // clamp it to the bounds to ensure this variant.
     SnapSearchResult initial_snap_position_y = {
-        std::clamp(base_position.y(), 0.f, max_position_.y()),
-        gfx::RangeF(0, max_position_.x())};
+        std::clamp(base_position.y(), 0.f, max_position_.y()), SearchAxis::kY,
+        gfx::RangeF(rect_.x(), rect_.right()), max_position_.x()};
     if (should_prioritize_x_target) {
       selected_x = GetTargetSnapAreaSearchResult(strategy, SearchAxis::kX,
                                                  initial_snap_position_y);
     }
     if (!selected_x) {
-      selected_x = FindClosestValidArea(
-          SearchAxis::kX, strategy, initial_snap_position_y, active_element_id);
+      selected_x = FindClosestValidArea(SearchAxis::kX, strategy,
+                                        initial_snap_position_y);
     }
   }
   if (should_snap_on_y) {
     SnapSearchResult initial_snap_position_x = {
-        std::clamp(base_position.x(), 0.f, max_position_.x()),
-        gfx::RangeF(0, max_position_.y())};
+        std::clamp(base_position.x(), 0.f, max_position_.x()), SearchAxis::kX,
+        gfx::RangeF(rect_.y(), rect_.bottom()), max_position_.y()};
     if (should_prioritize_y_target) {
       selected_y = GetTargetSnapAreaSearchResult(strategy, SearchAxis::kY,
                                                  initial_snap_position_x);
     }
     if (!selected_y) {
-      selected_y = FindClosestValidArea(
-          SearchAxis::kY, strategy, initial_snap_position_x, active_element_id);
+      selected_y = FindClosestValidArea(SearchAxis::kY, strategy,
+                                        initial_snap_position_x);
     }
   }
 
@@ -298,16 +295,41 @@ SnapPositionData SnapContainerData::FindSnapPosition(
           std::abs(selected_y.value().snap_offset() - base_position.y());
     }
     if (keep_candidate_on_x) {
-      selected_y = FindClosestValidArea(SearchAxis::kY, strategy,
-                                        selected_x.value(), active_element_id);
+      selected_y =
+          FindClosestValidArea(SearchAxis::kY, strategy, selected_x.value());
     } else {
-      selected_x = FindClosestValidArea(SearchAxis::kX, strategy,
-                                        selected_y.value(), active_element_id);
+      selected_x =
+          FindClosestValidArea(SearchAxis::kX, strategy, selected_y.value());
     }
+  }
+
+  // For each axis, the alternative makes a better selection if it is also
+  // aligned in the cross axis.
+  if (selected_y && selected_y->alternative()) {
+    SelectAlternativeIdForSearchResult(*selected_y, selected_x,
+                                       strategy.current_position().x(),
+                                       max_position_.x());
+  }
+  if (selected_x && selected_x->alternative()) {
+    SelectAlternativeIdForSearchResult(*selected_x, selected_y,
+                                       strategy.current_position().y(),
+                                       max_position_.y());
   }
 
   result.type = SnapPositionData::Type::kAligned;
   result.position = strategy.current_position();
+  // Make sure that |result| retains what we are currently snapped to in each
+  // axis in case this search had no result for one axis. This ensures we don't
+  // incorrectly trigger a snap event. Don't retain ids of areas that may no
+  // longer exist.
+  for (const auto& area : snap_area_list_) {
+    if (area.element_id == target_snap_area_element_ids_.x) {
+      result.target_element_ids.x = target_snap_area_element_ids_.x;
+    }
+    if (area.element_id == target_snap_area_element_ids_.y) {
+      result.target_element_ids.y = target_snap_area_element_ids_.y;
+    }
+  }
 
   if (selected_x) {
     result.position.set_x(selected_x->snap_offset());
@@ -381,21 +403,6 @@ bool SnapContainerData::FindSnapPositionForMutualSnap(
   return found;
 }
 
-std::set<ElementId> SnapContainerData::FindSnappedTargetsAtScrollOffset(
-    const SnapContainerData* container_data,
-    const gfx::PointF& scroll_offset) {
-  std::set<ElementId> snapped_target_ids;
-  if (container_data) {
-    for (size_t i = 0; i < container_data->size(); i++) {
-      const auto& area = container_data->at(i);
-      if (container_data->IsSnappedToArea(area, scroll_offset)) {
-        snapped_target_ids.insert(area.element_id);
-      }
-    }
-  }
-  return snapped_target_ids;
-}
-
 std::optional<SnapSearchResult>
 SnapContainerData::GetTargetSnapAreaSearchResult(
     const SnapSelectionStrategy& strategy,
@@ -420,9 +427,8 @@ SnapContainerData::GetTargetSnapAreaSearchResult(
             axis == SearchAxis::kX
                 ? gfx::RangeF(area.rect.x(), area.rect.right())
                 : gfx::RangeF(area.rect.y(), area.rect.bottom());
-        auto covering_result =
-            FindClosestValidAreaInternal(axis, strategy, cross_axis_snap_result,
-                                         target_id, true, area_range);
+        auto covering_result = FindClosestValidAreaInternal(
+            axis, strategy, cross_axis_snap_result, true, area_range);
         return covering_result.has_value() ? covering_result.value()
                                            : aligned_result;
       }
@@ -458,10 +464,9 @@ bool SnapContainerData::SetTargetSnapAreaElementIds(
 std::optional<SnapSearchResult> SnapContainerData::FindClosestValidArea(
     SearchAxis axis,
     const SnapSelectionStrategy& strategy,
-    const SnapSearchResult& cross_axis_snap_result,
-    const ElementId& active_element_id) const {
-  std::optional<SnapSearchResult> result = FindClosestValidAreaInternal(
-      axis, strategy, cross_axis_snap_result, active_element_id);
+    const SnapSearchResult& cross_axis_snap_result) const {
+  std::optional<SnapSearchResult> result =
+      FindClosestValidAreaInternal(axis, strategy, cross_axis_snap_result);
 
   // For EndAndDirectionStrategy, if there is a snap area with snap-stop:always,
   // and is between the starting position and the above result, we should choose
@@ -478,8 +483,7 @@ std::optional<SnapSearchResult> SnapContainerData::FindClosestValidArea(
             strategy.UsingFractionalOffsets(), SnapStopAlwaysFilter::kRequire);
     std::optional<SnapSearchResult> must_only_result =
         FindClosestValidAreaInternal(axis, *must_only_strategy,
-                                     cross_axis_snap_result, active_element_id,
-                                     false);
+                                     cross_axis_snap_result, false);
     result = ClosestSearchResult(strategy.current_position(), axis, result,
                                  must_only_result);
   }
@@ -498,15 +502,14 @@ std::optional<SnapSearchResult> SnapContainerData::FindClosestValidArea(
       SnapSelectionStrategy::CreateForEndPosition(strategy.current_position(),
                                                   strategy.ShouldSnapOnX(),
                                                   strategy.ShouldSnapOnY());
-  return FindClosestValidAreaInternal(
-      axis, *relaxed_strategy, cross_axis_snap_result, active_element_id);
+  return FindClosestValidAreaInternal(axis, *relaxed_strategy,
+                                      cross_axis_snap_result);
 }
 
 std::optional<SnapSearchResult> SnapContainerData::FindClosestValidAreaInternal(
     SearchAxis axis,
     const SnapSelectionStrategy& strategy,
     const SnapSearchResult& cross_axis_snap_result,
-    const ElementId& active_element_id,
     bool should_consider_covering,
     std::optional<gfx::RangeF> active_element_range) const {
   bool horiz = axis == SearchAxis::kX;
@@ -533,7 +536,8 @@ std::optional<SnapSearchResult> SnapContainerData::FindClosestValidAreaInternal(
 
   float smallest_distance = horiz ? proximity_range_.x() : proximity_range_.y();
 
-  auto evaluate = [&](const SnapSearchResult& candidate) {
+  auto evaluate = [&](const SnapSearchResult& candidate,
+                      const SnapAreaData& area) {
     if (!IsMutualVisible(candidate, cross_axis_snap_result)) {
       return;
     }
@@ -544,10 +548,41 @@ std::optional<SnapSearchResult> SnapContainerData::FindClosestValidAreaInternal(
     if (distance > smallest_distance) {
       return;
     }
-    if (distance < smallest_distance ||
-        candidate.element_id() == active_element_id) {
+    // Aligned snap areas that have focus should be given preference when
+    // selecting snap targets.
+    if (distance < smallest_distance || candidate.has_focus_within()) {
       smallest_distance = distance;
       closest = candidate;
+    } else if (closest && !closest->has_focus_within()) {
+      if (closest->element_id() == targeted_area_id_) {
+        return;
+      }
+      if (candidate.element_id() == targeted_area_id_) {
+        closest = candidate;
+        return;
+      }
+      const auto candidate_rect = candidate.rect();
+      const auto closest_rect = closest->rect();
+      // Prefer snapping to innermost elements when nesting snap areas.
+      // RectF::Contains allows equality but the candidate should only prevail
+      // if it is smaller.
+      DCHECK(closest_rect && candidate_rect);
+      if (closest_rect && candidate_rect &&
+          closest_rect->Contains(candidate_rect.value()) &&
+          closest_rect != candidate_rect) {
+        smallest_distance = distance;
+        closest = candidate;
+      } else if ((scroll_snap_type_.axis == SnapAxis::kBoth) &&
+                 (area.scroll_snap_align.alignment_block !=
+                  SnapAlignment::kNone) &&
+                 (area.scroll_snap_align.alignment_inline !=
+                  SnapAlignment::kNone)) {
+        // This candidate is equally aligned with the current closest. Since it
+        // can be snapped to in both axes, designate it a potential alternative
+        // if we don't already have a potential alternative or it is a better
+        // alternative than the current one.
+        UpdateSearchAlternative(*closest, candidate, area, strategy);
+      }
     }
   };
 
@@ -565,22 +600,24 @@ std::optional<SnapSearchResult> SnapContainerData::FindClosestValidAreaInternal(
     }
 
     SnapSearchResult candidate = GetSnapSearchResult(axis, area);
-    evaluate(candidate);
+    evaluate(candidate, area);
     if (should_consider_covering &&
         (base::FeatureList::IsEnabled(features::kScrollSnapPreferCloserCovering)
              ? CanCoverSnapportOnAxis(axis, snapport(), area.rect)
              : IsSnapportCoveredOnAxis(axis, intended_position, area.rect))) {
       if (std::optional<SnapSearchResult> covering =
               FindCoveringCandidate(area, axis, candidate, intended_position)) {
+        covering->set_has_focus_within(area.has_focus_within);
+        covering->set_rect(area.rect);
         if (covering->snap_offset() == intended_position) {
-          SetOrUpdateResult(*covering, &covering_intended, active_element_id);
+          SetOrUpdateResult(*covering, &covering_intended);
         } else {
           // A covering candidate that is displaced from the intended position
           // should behave similarly to an aligned snap position, competing on
           // distance with other aligned snap positions - unlike a covering
           // candidate at the intended position which may be given a higher
           // priority in ScrollSnapStrategy::PickBestResult.
-          evaluate(*covering);
+          evaluate(*covering, area);
         }
       }
     }
@@ -603,8 +640,6 @@ SnapSearchResult SnapContainerData::GetSnapSearchResult(
   SnapSearchResult result;
   gfx::RectF rect = snapport();
   if (axis == SearchAxis::kX) {
-    result.set_visible_range(gfx::RangeF(area.rect.y() - rect.bottom(),
-                                         area.rect.bottom() - rect.y()));
     // https://www.w3.org/TR/css-scroll-snap-1/#scroll-snap-align
     // Snap alignment has been normalized for a horizontal left to right and top
     // to bottom writing mode.
@@ -622,10 +657,10 @@ SnapSearchResult SnapContainerData::GetSnapSearchResult(
       default:
         NOTREACHED();
     }
-    result.Clip(max_position_.x(), max_position_.y());
+    result.Clip(max_position_.x());
+    result.set_snapport_max_visible(max_position_.y());
+    result.set_snapport_visible_range(gfx::RangeF(rect.y(), rect.bottom()));
   } else {
-    result.set_visible_range(gfx::RangeF(area.rect.x() - rect.right(),
-                                         area.rect.right() - rect.x()));
     switch (area.scroll_snap_align.alignment_block) {
       case SnapAlignment::kStart:
         result.set_snap_offset(area.rect.y() - rect.y());
@@ -640,8 +675,13 @@ SnapSearchResult SnapContainerData::GetSnapSearchResult(
       default:
         NOTREACHED();
     }
-    result.Clip(max_position_.y(), max_position_.x());
+    result.Clip(max_position_.y());
+    result.set_snapport_max_visible(max_position_.x());
+    result.set_snapport_visible_range(gfx::RangeF(rect.x(), rect.right()));
   }
+  result.set_axis(axis);
+  result.set_rect(area.rect);
+  result.set_has_focus_within(area.has_focus_within);
   result.set_element_id(area.element_id);
   return result;
 }
@@ -853,11 +893,74 @@ gfx::RectF SnapContainerData::snapport() const {
   return adjusted;
 }
 
-SnappedTargetData::SnappedTargetData() = default;
-SnappedTargetData::SnappedTargetData(const SnappedTargetData& other) = default;
-SnappedTargetData::SnappedTargetData(const std::set<ElementId>& ids)
-    : snapped_target_ids_(std::move(ids)) {}
-SnappedTargetData::~SnappedTargetData() = default;
+void SnapContainerData::UpdateSearchAlternative(
+    SnapSearchResult& current_result,
+    const SnapSearchResult& candidate_result,
+    const SnapAreaData& candidate_area,
+    const SnapSelectionStrategy& strategy) const {
+  bool horiz = current_result.axis() == SearchAxis::kX;
+  const auto candidate_cross_axis_aligned_result = GetSnapSearchResult(
+      horiz ? SearchAxis::kY : SearchAxis::kX, candidate_area);
+  const auto candidate_rect = candidate_result.rect();
+  const auto current_result_rect = current_result.rect();
+  DCHECK(candidate_rect && current_result_rect);
+  if (!candidate_rect || !current_result_rect ||
+      candidate_rect->Contains(*current_result_rect)) {
+    return;
+  }
+  if (auto alt = current_result.alternative()) {
+    float cross_axis_base_position =
+        horiz ? strategy.base_position().y() : strategy.base_position().x();
+    float candidate_cross_axis_distance =
+        std::abs(cross_axis_base_position -
+                 candidate_cross_axis_aligned_result.snap_offset());
+    float alt_cross_axis_distance =
+        std::abs(cross_axis_base_position - alt->cross_axis_snap_offset);
+    if (candidate_cross_axis_distance > alt_cross_axis_distance) {
+      return;
+    }
+    const auto alt_rect = alt->area_rect;
+    // This candidate beats our current alternative if it is closer to the
+    // base position in the cross axis than our current alternative,
+    // or if it is tied with the current alternative and is nested within
+    // the current alternative (inner targets are preferred to outer targets).
+    if (candidate_cross_axis_distance < alt_cross_axis_distance ||
+        (alt_rect != *candidate_rect && alt_rect.Contains(*candidate_rect))) {
+      current_result.set_alternative(
+          candidate_area.element_id, *candidate_rect,
+          candidate_cross_axis_aligned_result.snap_offset());
+    }
+  } else {
+    // We did not have an alternative before now, make the current
+    // candidate our alternative.
+    current_result.set_alternative(
+        candidate_area.element_id, *candidate_rect,
+        candidate_cross_axis_aligned_result.snap_offset());
+  }
+}
+
+void SnapContainerData::SelectAlternativeIdForSearchResult(
+    SnapSearchResult& selection,
+    const std::optional<SnapSearchResult>& cross_selection,
+    float cross_current_position,
+    float cross_max_position) const {
+  const auto within_snapped_tolerance = [](float v1, float v2) {
+    return std::abs(v1 - v2) <= kSnappedToTolerance;
+  };
+  if (cross_selection) {
+    if (within_snapped_tolerance(
+            cross_selection->snap_offset(),
+            selection.alternative()->cross_axis_snap_offset)) {
+      selection.set_element_id(selection.alternative()->element_id);
+    }
+  } else {
+    if (within_snapped_tolerance(
+            std::clamp(cross_current_position, 0.0f, cross_max_position),
+            selection.alternative()->cross_axis_snap_offset)) {
+      selection.set_element_id(selection.alternative()->element_id);
+    }
+  }
+}
 
 std::ostream& operator<<(std::ostream& ostream, const SnapAreaData& area_data) {
   return ostream << area_data.rect.ToString();

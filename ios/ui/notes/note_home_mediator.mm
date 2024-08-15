@@ -23,10 +23,13 @@
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/notes/cells/note_home_node_item.h"
 #import "ios/ui/notes/note_home_consumer.h"
 #import "ios/ui/notes/note_home_shared_state.h"
 #import "ios/ui/notes/note_model_bridge_observer.h"
+#import "ios/ui/notes/note_sorting_mode.h"
+#import "ios/ui/notes/vivaldi_notes_pref.h"
 #import "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -34,6 +37,7 @@
 #endif
 
 using vivaldi::NoteNode;
+using l10n_util::GetNSString;
 
 namespace {
 // Maximum number of entries to fetch when searching.
@@ -141,7 +145,7 @@ class NoteModelBridge;
     [self updateTableViewBackground];
     return;
   }
-  [self generateTableViewData];
+  [self generateSortedTableViewData];
   [self updateTableViewBackground];
 }
 
@@ -160,6 +164,81 @@ class NoteModelBridge;
                         addItem:nodeItem
         toSectionWithIdentifier:NoteHomeSectionIdentifierNotes];
   }
+}
+
+/// Returns current sorting mode
+- (NotesSortingMode)currentSortingMode {
+  return [VivaldiNotesPrefs getNotesSortingMode];
+}
+
+/// Returns current sorting order
+- (NotesSortingOrder)currentSortingOrder {
+  return [VivaldiNotesPrefs getNotesSortingOrder];
+}
+
+// sort the data for the table view
+- (void)generateSortedTableViewData {
+  if (!self.sharedState.tableViewDisplayedRootNode) {
+    return;
+  }
+
+  NSMutableArray<NoteHomeNodeItem*> *nodeItems = [NSMutableArray array];
+
+  // Add all notes and folders of the current root node to the table.
+  for (const auto& child :
+     self.sharedState.tableViewDisplayedRootNode->children()) {
+    NoteHomeNodeItem* nodeItem =
+      [[NoteHomeNodeItem alloc]
+        initWithType:NoteHomeItemTypeNote
+            noteNode:child.get()];
+    [nodeItems addObject:nodeItem];
+  }
+
+  // Sort the nodeItems array based on the current sorting mode
+  switch (self.currentSortingMode) {
+    case NotesSortingModeManual:
+      // Doesn't need to apply any sorting in manual sort mode
+      break;
+    case NotesSortingModeTitle:
+      [nodeItems sortUsingComparator:
+          ^NSComparisonResult(NoteHomeNodeItem* a, NoteHomeNodeItem* b) {
+        return [a.noteTitle compare:b.noteTitle];
+      }];
+      break;
+    case NotesSortingModeDateCreated:
+      [nodeItems sortUsingComparator:
+          ^NSComparisonResult(NoteHomeNodeItem* a, NoteHomeNodeItem* b) {
+        return [a.createdAt compare:b.createdAt];
+      }];
+      break;
+    case NotesSortingModeDateEdited:
+      [nodeItems sortUsingComparator:
+          ^NSComparisonResult(NoteHomeNodeItem* a, NoteHomeNodeItem* b) {
+        return [b.lastModified compare:a.lastModified];
+      }];
+      break;
+    default:
+      break;
+  }
+
+  // If the current sorting order is descending
+  // Reverse the array & check it is not sort by NotesSortingModeManual
+  if (self.currentSortingOrder == NotesSortingOrderDescending &&
+      self.currentSortingMode != NotesSortingModeManual) {
+    nodeItems = [[[nodeItems reverseObjectEnumerator] allObjects] mutableCopy];
+  }
+
+  // Add all the nodes to tableViewModel
+  for (NoteHomeNodeItem* nodeItem in nodeItems) {
+    [self.sharedState.tableViewModel addItem:nodeItem
+                     toSectionWithIdentifier:NoteHomeSectionIdentifierNotes];
+  }
+}
+
+/// Returns sorted result from two provided NSString keys.
+- (NSComparisonResult)compare:(NSString*)first
+             second:(NSString*)second {
+  return [VivaldiGlobalHelpers compare:first second:second];
 }
 
 // Generate the table view data when the current root node is the outermost

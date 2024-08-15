@@ -96,7 +96,7 @@ class COMPONENT_EXPORT(CHROMEOS_UI_FRAME) HeaderView
   void SetHeaderCornerRadius(int radius);
 
   // views::View:
-  void Layout() override;
+  void Layout(PassKey) override;
   void ChildPreferredSizeChanged(views::View* child) override;
   bool IsDrawn() const override;
 
@@ -186,6 +186,8 @@ class COMPONENT_EXPORT(CHROMEOS_UI_FRAME) HeaderView
   // Observes property changes to |target_widget_|'s window.
   base::ScopedObservation<aura::Window, aura::WindowObserver>
       window_observation_{this};
+
+  std::optional<display::ScopedDisplayObserver> display_observer_;
 };
 
 }  // namespace chromeos

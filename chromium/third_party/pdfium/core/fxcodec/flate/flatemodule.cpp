@@ -16,17 +16,18 @@
 #include <vector>
 
 #include "core/fxcodec/scanlinedecoder.h"
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fixed_size_data_vector.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_memory_wrappers.h"
 #include "core/fxcrt/fx_safe_types.h"
+#include "core/fxcrt/notreached.h"
+#include "core/fxcrt/numerics/safe_conversions.h"
+#include "core/fxcrt/raw_span.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/span_util.h"
 #include "core/fxge/calculate_pitch.h"
-#include "third_party/base/check.h"
-#include "third_party/base/containers/span.h"
-#include "third_party/base/notreached.h"
-#include "third_party/base/numerics/safe_conversions.h"
 
 #if defined(USE_SYSTEM_ZLIB)
 #include <zlib.h>
@@ -55,12 +56,12 @@ namespace {
 static constexpr uint32_t kMaxTotalOutSize = 1024 * 1024 * 1024;  // 1 GiB
 
 uint32_t FlateGetPossiblyTruncatedTotalOut(z_stream* context) {
-  return std::min(pdfium::base::saturated_cast<uint32_t>(context->total_out),
+  return std::min(pdfium::saturated_cast<uint32_t>(context->total_out),
                   kMaxTotalOutSize);
 }
 
 uint32_t FlateGetPossiblyTruncatedTotalIn(z_stream* context) {
-  return pdfium::base::saturated_cast<uint32_t>(context->total_in);
+  return pdfium::saturated_cast<uint32_t>(context->total_in);
 }
 
 bool FlateCompress(unsigned char* dest_buf,
@@ -131,7 +132,7 @@ class CLZWDecoder {
   void DecodeString(uint32_t code);
   void ExpandDestBuf(uint32_t additional_size);
 
-  pdfium::span<const uint8_t> const src_span_;
+  pdfium::raw_span<const uint8_t> const src_span_;
   std::unique_ptr<uint8_t, FxFreeDeleter> dest_buf_;
   uint32_t src_bit_pos_ = 0;
   uint32_t dest_buf_size_ = 0;  // Actual allocated size.
@@ -489,7 +490,7 @@ void TIFF_PredictLine(uint8_t* dest_buf,
                       int Columns) {
   if (BitsPerComponent == 1) {
     int row_bits = std::min(BitsPerComponent * Colors * Columns,
-                            pdfium::base::checked_cast<int>(row_size * 8));
+                            pdfium::checked_cast<int>(row_size * 8));
     int index_pre = 0;
     int col_pre = 0;
     for (int i = 1; i < row_bits; i++) {
@@ -561,7 +562,7 @@ void FlateUncompress(pdfium::span<const uint8_t> src_buf,
   const uint32_t kMaxInitialAllocSize = 10000000;
   uint32_t guess_size =
       orig_size ? orig_size
-                : pdfium::base::checked_cast<uint32_t>(src_buf.size() * 2);
+                : pdfium::checked_cast<uint32_t>(src_buf.size() * 2);
   guess_size = std::min(guess_size, kMaxInitialAllocSize);
 
   uint32_t buf_size = guess_size;
@@ -641,7 +642,7 @@ class FlateScanlineDecoder : public ScanlineDecoder {
 
  protected:
   std::unique_ptr<z_stream, FlateDeleter> m_pFlate;
-  const pdfium::span<const uint8_t> m_SrcBuf;
+  const pdfium::raw_span<const uint8_t> m_SrcBuf;
   DataVector<uint8_t> m_Scanline;
 };
 
@@ -886,8 +887,8 @@ uint32_t FlateModule::FlateOrLZWDecode(
 // static
 DataVector<uint8_t> FlateModule::Encode(pdfium::span<const uint8_t> src_span) {
   const unsigned long src_size =
-      pdfium::base::checked_cast<unsigned long>(src_span.size());
-  pdfium::base::CheckedNumeric<unsigned long> safe_dest_size = src_size;
+      pdfium::checked_cast<unsigned long>(src_span.size());
+  pdfium::CheckedNumeric<unsigned long> safe_dest_size = src_size;
   safe_dest_size += src_size / 1000;
   safe_dest_size += 12;
   unsigned long dest_size = safe_dest_size.ValueOrDie();
@@ -895,7 +896,7 @@ DataVector<uint8_t> FlateModule::Encode(pdfium::span<const uint8_t> src_span) {
   if (!FlateCompress(dest_buf.data(), &dest_size, src_span.data(), src_size))
     return {};
 
-  dest_buf.resize(pdfium::base::checked_cast<size_t>(dest_size));
+  dest_buf.resize(pdfium::checked_cast<size_t>(dest_size));
   return dest_buf;
 }
 

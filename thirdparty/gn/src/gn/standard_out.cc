@@ -129,6 +129,10 @@ void OutputString(const std::string& output,
       case DECORATION_YELLOW:
         ::SetConsoleTextAttribute(hstdout, FOREGROUND_RED | FOREGROUND_GREEN);
         break;
+      case DECORATION_MAGENTA:
+        ::SetConsoleTextAttribute(
+            hstdout, FOREGROUND_RED | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+        break;
     }
   }
 
@@ -182,6 +186,9 @@ void OutputString(const std::string& output,
         break;
       case DECORATION_YELLOW:
         WriteToStdOut("\e[33m");
+        break;
+      case DECORATION_MAGENTA:
+        WriteToStdOut("\e[35m\e[1m");
         break;
     }
   }

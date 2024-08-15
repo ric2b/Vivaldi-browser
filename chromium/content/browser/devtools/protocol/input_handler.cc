@@ -992,6 +992,10 @@ void InputHandler::DragController::EndDragging(
     RenderWidgetHostImpl* host_hint,
     std::unique_ptr<blink::WebMouseEvent> event,
     std::unique_ptr<FailSafe<DispatchMouseEventCallback>> callback) {
+  if (!drag_state_) {
+    // Dragging already ended.
+    return;
+  }
   if (drag_state_->updating > 0) {
     auto update_callback = base::BindOnce(
         &InputHandler::DragController::EndDragging, weak_factory_.GetWeakPtr(),
@@ -1075,7 +1079,8 @@ void InputHandler::SetRenderer(int process_host_id,
 
   if (ignore_input_events_ && old_web_contents != web_contents_) {
     if (web_contents_) {
-      scoped_ignore_input_events_ = web_contents_->IgnoreInputEvents();
+      scoped_ignore_input_events_ =
+          web_contents_->IgnoreInputEvents(std::nullopt);
     } else {
       scoped_ignore_input_events_.reset();
     }
@@ -1973,7 +1978,8 @@ Response InputHandler::SetIgnoreInputEvents(bool ignore) {
   if (!ignore) {
     scoped_ignore_input_events_.reset();
   } else if (web_contents_) {
-    scoped_ignore_input_events_ = web_contents_->IgnoreInputEvents();
+    scoped_ignore_input_events_ =
+        web_contents_->IgnoreInputEvents(std::nullopt);
   }
   return Response::Success();
 }

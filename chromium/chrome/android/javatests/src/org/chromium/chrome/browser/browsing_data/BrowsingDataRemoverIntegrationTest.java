@@ -62,7 +62,8 @@ public class BrowsingDataRemoverIntegrationTest {
     /**
      * Tests that web apps are unregistered after clearing with the "cookies and site data" option.
      * TODO(msramek): Expose more granular datatypes to the Java code, so we can directly test
-     * BrowsingDataRemover::RemoveDataMask::REMOVE_WEBAPP_DATA instead of BrowsingDataType.COOKIES.
+     * BrowsingDataRemover::RemoveDataMask::REMOVE_WEBAPP_DATA instead of
+     * BrowsingDataType.SITE_DATA.
      */
     @Test
     @MediumTest
@@ -82,7 +83,7 @@ public class BrowsingDataRemoverIntegrationTest {
         // Clear cookies and site data excluding the registrable domain "google.com".
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    BrowsingDataBridge.getInstance()
+                    BrowsingDataBridge.getForProfile(mActivityTestRule.getProfile(false))
                             .clearBrowsingDataExcludingDomains(
                                     new OnClearBrowsingDataListener() {
                                         @Override
@@ -90,7 +91,7 @@ public class BrowsingDataRemoverIntegrationTest {
                                             dataClearedExcludingDomainHelper.notifyCalled();
                                         }
                                     },
-                                    new int[] {BrowsingDataType.COOKIES},
+                                    new int[] {BrowsingDataType.SITE_DATA},
                                     TimePeriod.ALL_TIME,
                                     new String[] {"google.com"},
                                     new int[] {1},
@@ -108,7 +109,7 @@ public class BrowsingDataRemoverIntegrationTest {
         // Clear cookies and site data with no url filter.
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    BrowsingDataBridge.getInstance()
+                    BrowsingDataBridge.getForProfile(mActivityTestRule.getProfile(false))
                             .clearBrowsingData(
                                     new OnClearBrowsingDataListener() {
                                         @Override
@@ -116,7 +117,7 @@ public class BrowsingDataRemoverIntegrationTest {
                                             dataClearedNoUrlFilterHelper.notifyCalled();
                                         }
                                     },
-                                    new int[] {BrowsingDataType.COOKIES},
+                                    new int[] {BrowsingDataType.SITE_DATA},
                                     TimePeriod.ALL_TIME);
                 });
         dataClearedNoUrlFilterHelper.waitForFirst();
@@ -143,7 +144,7 @@ public class BrowsingDataRemoverIntegrationTest {
 
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    BrowsingDataBridge.getInstance()
+                    BrowsingDataBridge.getForProfile(mActivityTestRule.getProfile(false))
                             .clearBrowsingData(
                                     callbackHelper::notifyCalled,
                                     new int[] {BrowsingDataType.HISTORY},

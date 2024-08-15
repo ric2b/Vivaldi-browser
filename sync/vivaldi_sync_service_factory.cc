@@ -37,7 +37,7 @@
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "chrome/browser/web_applications/web_app_provider_factory.h"
-#include "chrome/browser/web_data_service_factory.h"
+#include "chrome/browser/webdata_services/web_data_service_factory.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/channel_info.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
@@ -74,6 +74,7 @@
         // BUILDFLAG(IS_WIN)
 
 #if !BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_service_factory.h"
 #include "chrome/browser/webauthn/passkey_model_factory.h"
 #endif  // !BUILDFLAG(IS_ANDROID)
 
@@ -141,7 +142,7 @@ VivaldiSyncServiceFactory::VivaldiSyncServiceFactory() : SyncServiceFactory() {
 #endif  // !BUILDFLAG(IS_ANDROID)
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
     BUILDFLAG(IS_WIN)
-  DependsOn(SavedTabGroupServiceFactory::GetInstance());
+  DependsOn(tab_groups::SavedTabGroupServiceFactory::GetInstance());
 #endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) ||
         // BUILDFLAG(IS_WIN)
   DependsOn(WebDataServiceFactory::GetInstance());

@@ -6,6 +6,7 @@
 #define COMPONENTS_SYNC_BOOKMARKS_SYNCED_BOOKMARK_TRACKER_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -16,7 +17,6 @@
 #include "base/uuid.h"
 #include "components/sync/base/client_tag_hash.h"
 #include "components/sync/protocol/model_type_state.pb.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace sync_pb {
 class BookmarkModelMetadata;
@@ -207,8 +207,8 @@ class SyncedBookmarkTracker {
   // unsupported permanent folder).
   void RecordIgnoredServerUpdateDueToMissingParent(int64_t server_version);
 
-  absl::optional<int64_t> GetNumIgnoredUpdatesDueToMissingParentForTest() const;
-  absl::optional<int64_t>
+  std::optional<int64_t> GetNumIgnoredUpdatesDueToMissingParentForTest() const;
+  std::optional<int64_t>
   GetMaxVersionAmongIgnoredUpdatesDueToMissingParentForTest() const;
 
   void set_vivaldi_synced_file_store(
@@ -244,8 +244,8 @@ class SyncedBookmarkTracker {
   SyncedBookmarkTracker(
       sync_pb::ModelTypeState model_type_state,
       bool bookmarks_reuploaded,
-      absl::optional<int64_t> num_ignored_updates_due_to_missing_parent,
-      absl::optional<int64_t>
+      std::optional<int64_t> num_ignored_updates_due_to_missing_parent,
+      std::optional<int64_t>
           max_version_among_ignored_updates_due_to_missing_parent);
 
   // Add entities to |this| tracker based on the content of |*model| and
@@ -308,8 +308,8 @@ class SyncedBookmarkTracker {
   bool bookmarks_reuploaded_ = false;
 
   // See corresponding proto fields in BookmarkModelMetadata.
-  absl::optional<int64_t> num_ignored_updates_due_to_missing_parent_;
-  absl::optional<int64_t>
+  std::optional<int64_t> num_ignored_updates_due_to_missing_parent_;
+  std::optional<int64_t>
       max_version_among_ignored_updates_due_to_missing_parent_;
 
   raw_ptr<file_sync::SyncedFileStore> vivaldi_synced_file_store_ = nullptr;

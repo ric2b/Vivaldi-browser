@@ -4,39 +4,42 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {Readable} from 'stream';
-
 import type {Protocol} from 'devtools-protocol';
 
 import {
-  delay,
+  concat,
+  EMPTY,
   filter,
-  filterAsync,
   first,
   firstValueFrom,
   from,
-  fromEvent,
   map,
   merge,
+  mergeMap,
+  mergeScan,
   of,
   raceWith,
+  ReplaySubject,
   startWith,
   switchMap,
+  take,
+  takeUntil,
+  timer,
   type Observable,
 } from '../../third_party/rxjs/rxjs.js';
 import type {HTTPRequest} from '../api/HTTPRequest.js';
 import type {HTTPResponse} from '../api/HTTPResponse.js';
-import type {BidiNetworkManager} from '../bidi/NetworkManager.js';
 import type {Accessibility} from '../cdp/Accessibility.js';
 import type {Coverage} from '../cdp/Coverage.js';
 import type {DeviceRequestPrompt} from '../cdp/DeviceRequestPrompt.js';
-import type {
-  NetworkManager as CdpNetworkManager,
-  Credentials,
-  NetworkConditions,
-} from '../cdp/NetworkManager.js';
+import type {Credentials, NetworkConditions} from '../cdp/NetworkManager.js';
 import type {Tracing} from '../cdp/Tracing.js';
 import type {ConsoleMessage} from '../common/ConsoleMessage.js';
+import type {
+  Cookie,
+  CookieParam,
+  DeleteCookiesRequest,
+} from '../common/Cookie.js';
 import type {Device} from '../common/Device.js';
 import {TargetCloseError} from '../common/Errors.js';
 import {
@@ -46,16 +49,11 @@ import {
   type Handler,
 } from '../common/EventEmitter.js';
 import type {FileChooser} from '../common/FileChooser.js';
-import {NetworkManagerEvent} from '../common/NetworkManagerEvents.js';
-import {
-  paperFormats,
-  type LowerCasePaperFormat,
-  type ParsedPDFOptions,
-  type PDFOptions,
-} from '../common/PDFOptions.js';
+import type {PDFOptions} from '../common/PDFOptions.js';
 import {TimeoutSettings} from '../common/TimeoutSettings.js';
 import type {
   Awaitable,
+  AwaitablePredicate,
   EvaluateFunc,
   EvaluateFuncWith,
   HandleFor,
@@ -63,15 +61,16 @@ import type {
 } from '../common/types.js';
 import {
   debugError,
+  fromEmitterEvent,
+  filterAsync,
   importFSPromises,
-  isNumber,
   isString,
+  NETWORK_IDLE_TIME,
   timeout,
   withSourcePuppeteerURLIfNone,
 } from '../common/util.js';
 import type {Viewport} from '../common/Viewport.js';
 import type {ScreenRecorder} from '../node/ScreenRecorder.js';
-import {assert} from '../util/assert.js';
 import {guarded} from '../util/decorators.js';
 import {
   AsyncDisposableStack,
@@ -130,6 +129,24 @@ export interface Metrics {
   TaskDuration?: number;
   JSHeapUsedSize?: number;
   JSHeapTotalSize?: number;
+}
+
+/**
+ * @public
+ */
+export interface WaitForNetworkIdleOptions extends WaitTimeoutOptions {
+  /**
+   * Time (in milliseconds) the network should be idle.
+   *
+   * @defaultValue `500`
+   */
+  idleTime?: number;
+  /**
+   * Maximum number concurrent of network connections to be considered inactive.
+   *
+   * @defaultValue `0`
+   */
+  concurrency?: number;
 }
 
 /**
@@ -465,15 +482,6 @@ export const enum PageEvent {
   WorkerDestroyed = 'workerdestroyed',
 }
 
-export {
-  /**
-   * All the events that a page instance may emit.
-   *
-   * @deprecated Use {@link PageEvent}.
-   */
-  PageEvent as PageEmittedEvents,
-};
-
 /**
  * Denotes the objects received by callback functions for page events.
  *
@@ -503,13 +511,6 @@ export interface PageEvents extends Record<EventType, unknown> {
   [PageEvent.WorkerCreated]: WebWorker;
   [PageEvent.WorkerDestroyed]: WebWorker;
 }
-
-export type {
-  /**
-   * @deprecated Use {@link PageEvents}.
-   */
-  PageEvents as PageEventObject,
-};
 
 /**
  * @public
@@ -592,11 +593,45 @@ export abstract class Page extends EventEmitter<PageEvents> {
 
   #requestHandlers = new WeakMap<Handler<HTTPRequest>, Handler<HTTPRequest>>();
 
+  #inflight$ = new ReplaySubject<number>(1);
+
   /**
    * @internal
    */
   constructor() {
     super();
+
+    fromEmitterEvent(this, PageEvent.Request)
+      .pipe(
+        mergeMap(originalRequest => {
+          return concat(
+            of(1),
+            merge(
+              fromEmitterEvent(this, PageEvent.RequestFailed),
+              fromEmitterEvent(this, PageEvent.RequestFinished),
+              fromEmitterEvent(this, PageEvent.Response).pipe(
+                map(response => {
+                  return response.request();
+                })
+              )
+            ).pipe(
+              filter(request => {
+                return request.id === originalRequest.id;
+              }),
+              take(1),
+              map(() => {
+                return -1;
+              })
+            )
+          );
+        }),
+        mergeScan((acc, addend) => {
+          return of(acc + addend);
+        }, 0),
+        takeUntil(fromEmitterEvent(this, PageEvent.Close)),
+        startWith(0)
+      )
+      .subscribe(this.#inflight$);
   }
 
   /**
@@ -609,7 +644,7 @@ export abstract class Page extends EventEmitter<PageEvents> {
    *
    * @deprecated We no longer support intercepting drag payloads. Use the new
    * drag APIs found on {@link ElementHandle} to drag (or just use the
-   * {@link Page.mouse}).
+   * {@link Page | Page.mouse}).
    */
   abstract isDragInterceptionEnabled(): boolean;
 
@@ -722,6 +757,8 @@ export abstract class Page extends EventEmitter<PageEvents> {
 
   /**
    * A target this page was created from.
+   *
+   * @deprecated Use {@link Page.createCDPSession} directly.
    */
   abstract target(): Target;
 
@@ -838,7 +875,7 @@ export abstract class Page extends EventEmitter<PageEvents> {
    *
    * @deprecated We no longer support intercepting drag payloads. Use the new
    * drag APIs found on {@link ElementHandle} to drag (or just use the
-   * {@link Page.mouse}).
+   * {@link Page | Page.mouse}).
    */
   abstract setDragInterception(enabled: boolean): Promise<void>;
 
@@ -1238,28 +1275,12 @@ export abstract class Page extends EventEmitter<PageEvents> {
   }
 
   /**
-   * The method evaluates the XPath expression relative to the page document as
-   * its context node. If there are no such elements, the method resolves to an
-   * empty array.
-   *
-   * @remarks
-   * Shortcut for {@link Frame.$x | Page.mainFrame().$x(expression) }.
-   *
-   * @param expression - Expression to evaluate
-   */
-  async $x(expression: string): Promise<Array<ElementHandle<Node>>> {
-    return await this.mainFrame().$x(expression);
-  }
-
-  /**
    * If no URLs are specified, this method returns cookies for the current page
    * URL. If URLs are specified, only cookies for those URLs are returned.
    */
-  abstract cookies(...urls: string[]): Promise<Protocol.Network.Cookie[]>;
+  abstract cookies(...urls: string[]): Promise<Cookie[]>;
 
-  abstract deleteCookie(
-    ...cookies: Protocol.Network.DeleteCookiesRequest[]
-  ): Promise<void>;
+  abstract deleteCookie(...cookies: DeleteCookiesRequest[]): Promise<void>;
 
   /**
    * @example
@@ -1268,7 +1289,7 @@ export abstract class Page extends EventEmitter<PageEvents> {
    * await page.setCookie(cookieObject1, cookieObject2);
    * ```
    */
-  abstract setCookie(...cookies: Protocol.Network.CookieParam[]): Promise<void>;
+  abstract setCookie(...cookies: CookieParam[]): Promise<void>;
 
   /**
    * Adds a `<script>` tag into the page with the desired URL or content.
@@ -1627,10 +1648,30 @@ export abstract class Page extends EventEmitter<PageEvents> {
    *   `0` to disable the timeout. The default value can be changed by using the
    *   {@link Page.setDefaultTimeout} method.
    */
-  abstract waitForRequest(
-    urlOrPredicate: string | ((req: HTTPRequest) => boolean | Promise<boolean>),
-    options?: {timeout?: number}
-  ): Promise<HTTPRequest>;
+  waitForRequest(
+    urlOrPredicate: string | AwaitablePredicate<HTTPRequest>,
+    options: WaitTimeoutOptions = {}
+  ): Promise<HTTPRequest> {
+    const {timeout: ms = this._timeoutSettings.timeout()} = options;
+    if (typeof urlOrPredicate === 'string') {
+      const url = urlOrPredicate;
+      urlOrPredicate = (request: HTTPRequest) => {
+        return request.url() === url;
+      };
+    }
+    const observable$ = fromEmitterEvent(this, PageEvent.Request).pipe(
+      filterAsync(urlOrPredicate),
+      raceWith(
+        timeout(ms),
+        fromEmitterEvent(this, PageEvent.Close).pipe(
+          map(() => {
+            throw new TargetCloseError('Page closed!');
+          })
+        )
+      )
+    );
+    return firstValueFrom(observable$);
+  }
 
   /**
    * @param urlOrPredicate - A URL or predicate to wait for.
@@ -1659,51 +1700,69 @@ export abstract class Page extends EventEmitter<PageEvents> {
    *   pass `0` to disable the timeout. The default value can be changed by using
    *   the {@link Page.setDefaultTimeout} method.
    */
-  abstract waitForResponse(
-    urlOrPredicate:
-      | string
-      | ((res: HTTPResponse) => boolean | Promise<boolean>),
-    options?: {timeout?: number}
-  ): Promise<HTTPResponse>;
+  waitForResponse(
+    urlOrPredicate: string | AwaitablePredicate<HTTPResponse>,
+    options: WaitTimeoutOptions = {}
+  ): Promise<HTTPResponse> {
+    const {timeout: ms = this._timeoutSettings.timeout()} = options;
+    if (typeof urlOrPredicate === 'string') {
+      const url = urlOrPredicate;
+      urlOrPredicate = (response: HTTPResponse) => {
+        return response.url() === url;
+      };
+    }
+    const observable$ = fromEmitterEvent(this, PageEvent.Response).pipe(
+      filterAsync(urlOrPredicate),
+      raceWith(
+        timeout(ms),
+        fromEmitterEvent(this, PageEvent.Close).pipe(
+          map(() => {
+            throw new TargetCloseError('Page closed!');
+          })
+        )
+      )
+    );
+    return firstValueFrom(observable$);
+  }
 
   /**
-   * @param options - Optional waiting parameters
-   * @returns Promise which resolves when network is idle
+   * Waits for the network to be idle.
+   *
+   * @param options - Options to configure waiting behavior.
+   * @returns A promise which resolves once the network is idle.
    */
-  abstract waitForNetworkIdle(options?: {
-    idleTime?: number;
-    timeout?: number;
-  }): Promise<void>;
+  waitForNetworkIdle(options: WaitForNetworkIdleOptions = {}): Promise<void> {
+    return firstValueFrom(this.waitForNetworkIdle$(options));
+  }
 
   /**
    * @internal
    */
-  _waitForNetworkIdle(
-    networkManager: BidiNetworkManager | CdpNetworkManager,
-    idleTime: number,
-    requestsInFlight = 0
+  waitForNetworkIdle$(
+    options: WaitForNetworkIdleOptions = {}
   ): Observable<void> {
-    return merge(
-      fromEvent(
-        networkManager,
-        NetworkManagerEvent.Request as unknown as string
-      ) as Observable<void>,
-      fromEvent(
-        networkManager,
-        NetworkManagerEvent.Response as unknown as string
-      ) as Observable<void>,
-      fromEvent(
-        networkManager,
-        NetworkManagerEvent.RequestFailed as unknown as string
-      ) as Observable<void>
-    ).pipe(
-      startWith(undefined),
-      filter(() => {
-        return networkManager.inFlightRequestsCount() <= requestsInFlight;
+    const {
+      timeout: ms = this._timeoutSettings.timeout(),
+      idleTime = NETWORK_IDLE_TIME,
+      concurrency = 0,
+    } = options;
+
+    return this.#inflight$.pipe(
+      switchMap(inflight => {
+        if (inflight > concurrency) {
+          return EMPTY;
+        }
+        return timer(idleTime);
       }),
-      switchMap(v => {
-        return of(v).pipe(delay(idleTime));
-      })
+      map(() => {}),
+      raceWith(
+        timeout(ms),
+        fromEmitterEvent(this, PageEvent.Close).pipe(
+          map(() => {
+            throw new TargetCloseError('Page closed!');
+          })
+        )
+      )
     );
   }
 
@@ -1732,15 +1791,15 @@ export abstract class Page extends EventEmitter<PageEvents> {
 
     return await firstValueFrom(
       merge(
-        fromEvent(this, PageEvent.FrameAttached) as Observable<Frame>,
-        fromEvent(this, PageEvent.FrameNavigated) as Observable<Frame>,
+        fromEmitterEvent(this, PageEvent.FrameAttached),
+        fromEmitterEvent(this, PageEvent.FrameNavigated),
         from(this.frames())
       ).pipe(
         filterAsync(urlOrPredicate),
         first(),
         raceWith(
           timeout(ms),
-          fromEvent(this, PageEvent.Close).pipe(
+          fromEmitterEvent(this, PageEvent.Close).pipe(
             map(() => {
               throw new TargetCloseError('Page closed.');
             })
@@ -2057,7 +2116,7 @@ export abstract class Page extends EventEmitter<PageEvents> {
    *
    * This is either the viewport set with the previous {@link Page.setViewport}
    * call or the default viewport set via
-   * {@link BrowserConnectOptions.defaultViewport}.
+   * {@link BrowserConnectOptions | BrowserConnectOptions.defaultViewport}.
    */
   abstract viewport(): Viewport | null;
 
@@ -2500,60 +2559,6 @@ export abstract class Page extends EventEmitter<PageEvents> {
   abstract _screenshot(options: Readonly<ScreenshotOptions>): Promise<string>;
 
   /**
-   * @internal
-   */
-  _getPDFOptions(
-    options: PDFOptions = {},
-    lengthUnit: 'in' | 'cm' = 'in'
-  ): ParsedPDFOptions {
-    const defaults: Omit<ParsedPDFOptions, 'width' | 'height' | 'margin'> = {
-      scale: 1,
-      displayHeaderFooter: false,
-      headerTemplate: '',
-      footerTemplate: '',
-      printBackground: false,
-      landscape: false,
-      pageRanges: '',
-      preferCSSPageSize: false,
-      omitBackground: false,
-      timeout: 30000,
-      tagged: false,
-    };
-
-    let width = 8.5;
-    let height = 11;
-    if (options.format) {
-      const format =
-        paperFormats[options.format.toLowerCase() as LowerCasePaperFormat];
-      assert(format, 'Unknown paper format: ' + options.format);
-      width = format.width;
-      height = format.height;
-    } else {
-      width = convertPrintParameterToInches(options.width, lengthUnit) ?? width;
-      height =
-        convertPrintParameterToInches(options.height, lengthUnit) ?? height;
-    }
-
-    const margin = {
-      top: convertPrintParameterToInches(options.margin?.top, lengthUnit) || 0,
-      left:
-        convertPrintParameterToInches(options.margin?.left, lengthUnit) || 0,
-      bottom:
-        convertPrintParameterToInches(options.margin?.bottom, lengthUnit) || 0,
-      right:
-        convertPrintParameterToInches(options.margin?.right, lengthUnit) || 0,
-    };
-
-    return {
-      ...defaults,
-      ...options,
-      width,
-      height,
-      margin,
-    };
-  }
-
-  /**
    * Generates a PDF of the page with the `print` CSS media type.
    *
    * @param options - options for generating the PDF.
@@ -2569,7 +2574,9 @@ export abstract class Page extends EventEmitter<PageEvents> {
    * {@link https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-print-color-adjust | `-webkit-print-color-adjust`}
    * property to force rendering of exact colors.
    */
-  abstract createPDFStream(options?: PDFOptions): Promise<Readable>;
+  abstract createPDFStream(
+    options?: PDFOptions
+  ): Promise<ReadableStream<Uint8Array>>;
 
   /**
    * {@inheritDoc Page.createPDFStream}
@@ -2750,31 +2757,6 @@ export abstract class Page extends EventEmitter<PageEvents> {
   }
 
   /**
-   * @deprecated Replace with `new Promise(r => setTimeout(r, milliseconds));`.
-   *
-   * Causes your script to wait for the given number of milliseconds.
-   *
-   * @remarks
-   *
-   * It's generally recommended to not wait for a number of seconds, but instead
-   * use {@link Frame.waitForSelector}, {@link Frame.waitForXPath} or
-   * {@link Frame.waitForFunction} to wait for exactly the conditions you want.
-   *
-   * @example
-   *
-   * Wait for 1 second:
-   *
-   * ```ts
-   * await page.waitForTimeout(1000);
-   * ```
-   *
-   * @param milliseconds - the number of milliseconds to wait.
-   */
-  waitForTimeout(milliseconds: number): Promise<void> {
-    return this.mainFrame().waitForTimeout(milliseconds);
-  }
-
-  /**
    * Wait for the `selector` to appear in page. If at the moment of calling the
    * method the `selector` already exists, the method will return immediately. If
    * the `selector` doesn't appear after the `timeout` milliseconds of waiting, the
@@ -2831,64 +2813,6 @@ export abstract class Page extends EventEmitter<PageEvents> {
     options: WaitForSelectorOptions = {}
   ): Promise<ElementHandle<NodeFor<Selector>> | null> {
     return await this.mainFrame().waitForSelector(selector, options);
-  }
-
-  /**
-   * Wait for the `xpath` to appear in page. If at the moment of calling the
-   * method the `xpath` already exists, the method will return immediately. If
-   * the `xpath` doesn't appear after the `timeout` milliseconds of waiting, the
-   * function will throw.
-   *
-   * @example
-   * This method works across navigation
-   *
-   * ```ts
-   * import puppeteer from 'puppeteer';
-   * (async () => {
-   *   const browser = await puppeteer.launch();
-   *   const page = await browser.newPage();
-   *   let currentURL;
-   *   page
-   *     .waitForXPath('//img')
-   *     .then(() => console.log('First URL with image: ' + currentURL));
-   *   for (currentURL of [
-   *     'https://example.com',
-   *     'https://google.com',
-   *     'https://bbc.com',
-   *   ]) {
-   *     await page.goto(currentURL);
-   *   }
-   *   await browser.close();
-   * })();
-   * ```
-   *
-   * @param xpath - A
-   * {@link https://developer.mozilla.org/en-US/docs/Web/XPath | xpath} of an
-   * element to wait for
-   * @param options - Optional waiting parameters
-   * @returns Promise which resolves when element specified by xpath string is
-   * added to DOM. Resolves to `null` if waiting for `hidden: true` and xpath is
-   * not found in DOM, otherwise resolves to `ElementHandle`.
-   * @remarks
-   * The optional Argument `options` have properties:
-   *
-   * - `visible`: A boolean to wait for element to be present in DOM and to be
-   *   visible, i.e. to not have `display: none` or `visibility: hidden` CSS
-   *   properties. Defaults to `false`.
-   *
-   * - `hidden`: A boolean wait for element to not be found in the DOM or to be
-   *   hidden, i.e. have `display: none` or `visibility: hidden` CSS properties.
-   *   Defaults to `false`.
-   *
-   * - `timeout`: A number which is maximum time to wait for in milliseconds.
-   *   Defaults to `30000` (30 seconds). Pass `0` to disable timeout. The default
-   *   value can be changed by using the {@link Page.setDefaultTimeout} method.
-   */
-  waitForXPath(
-    xpath: string,
-    options?: WaitForSelectorOptions
-  ): Promise<ElementHandle<Node> | null> {
-    return this.mainFrame().waitForXPath(xpath, options);
   }
 
   /**
@@ -3016,50 +2940,6 @@ export const supportedMetrics = new Set<string>([
   'JSHeapUsedSize',
   'JSHeapTotalSize',
 ]);
-
-/**
- * @internal
- */
-export const unitToPixels = {
-  px: 1,
-  in: 96,
-  cm: 37.8,
-  mm: 3.78,
-};
-
-function convertPrintParameterToInches(
-  parameter?: string | number,
-  lengthUnit: 'in' | 'cm' = 'in'
-): number | undefined {
-  if (typeof parameter === 'undefined') {
-    return undefined;
-  }
-  let pixels;
-  if (isNumber(parameter)) {
-    // Treat numbers as pixel values to be aligned with phantom's paperSize.
-    pixels = parameter;
-  } else if (isString(parameter)) {
-    const text = parameter;
-    let unit = text.substring(text.length - 2).toLowerCase();
-    let valueText = '';
-    if (unit in unitToPixels) {
-      valueText = text.substring(0, text.length - 2);
-    } else {
-      // In case of unknown unit try to parse the whole parameter as number of pixels.
-      // This is consistent with phantom's paperSize behavior.
-      unit = 'px';
-      valueText = text;
-    }
-    const value = Number(valueText);
-    assert(!isNaN(value), 'Failed to parse parameter value: ' + text);
-    pixels = value * unitToPixels[unit as keyof typeof unitToPixels];
-  } else {
-    throw new Error(
-      'page.pdf() Cannot handle parameter type: ' + typeof parameter
-    );
-  }
-  return pixels / unitToPixels[lengthUnit];
-}
 
 /** @see https://w3c.github.io/webdriver-bidi/#normalize-rect */
 function normalizeRectangle<BoundingBoxType extends BoundingBox>(

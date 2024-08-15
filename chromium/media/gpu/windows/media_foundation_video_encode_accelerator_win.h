@@ -31,15 +31,12 @@
 #include "media/base/win/dxgi_device_manager.h"
 #include "media/gpu/media_gpu_export.h"
 #include "media/gpu/windows/d3d11_com_defs.h"
-#include "media/video/h264_parser.h"
-#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
-#include "media/video/h265_nalu_parser.h"
-#endif
 #include "media/video/video_encode_accelerator.h"
 
 namespace media {
 
 class VideoRateControlWrapper;
+class TemporalScalabilityIdExtractor;
 
 // Media Foundation implementation of the VideoEncodeAccelerator interface for
 // Windows.
@@ -75,11 +72,11 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
   void RequestEncodingParametersChange(
       const Bitrate& bitrate,
       uint32_t framerate,
-      const absl::optional<gfx::Size>& size) override;
+      const std::optional<gfx::Size>& size) override;
   void RequestEncodingParametersChange(
       const VideoBitrateAllocation& bitrate_allocation,
       uint32_t framerate,
-      const absl::optional<gfx::Size>& size) override;
+      const std::optional<gfx::Size>& size) override;
   void Destroy() override;
   void Flush(FlushCallback flush_callback) override;
   bool IsFlushSupported() override;
@@ -118,7 +115,7 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
   struct OutOfBandMetadata {
     gfx::ColorSpace color_space;
     bool discard_output = false;
-    absl::optional<int> qp;
+    std::optional<int> qp;
     uint32_t frame_id;
   };
 
@@ -177,9 +174,6 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
   HRESULT PopulateInputSampleBuffer(const PendingInput& input);
   HRESULT PopulateInputSampleBufferGpu(scoped_refptr<VideoFrame> frame);
   HRESULT CopyInputSampleBufferFromGpu(const VideoFrame& frame);
-
-  // Assign TemporalID by state machine(based on SVC Spec).
-  int AssignTemporalIdBySvcSpec(uint32_t frame_id);
 
   bool IsTemporalScalabilityCoding() const { return num_temporal_layers_ > 1; }
 
@@ -242,8 +236,8 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
   // True if keyframe was requested for the last frame.
   bool last_frame_was_keyframe_request_ = false;
 
-  // This helper is used for parsing bitstream and assign metadata.
-  std::unique_ptr<BitstreamParserHelper> parser_;
+  // This helper is used for parsing bitstream and assign SVC metadata.
+  std::unique_ptr<TemporalScalabilityIdExtractor> svc_parser_;
 
   gfx::Size input_visible_size_;
   size_t bitstream_buffer_size_ = 0u;
@@ -331,7 +325,7 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
 
   // Enumerating supported profiles takes time, so cache the result here for
   // future requests.
-  absl::optional<SupportedProfiles> supported_profiles_;
+  std::optional<SupportedProfiles> supported_profiles_;
 
   // Declared last to ensure that all weak pointers are invalidated before
   // other destructors run.

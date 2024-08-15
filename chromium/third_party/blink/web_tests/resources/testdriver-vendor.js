@@ -510,20 +510,38 @@
     return internals.getNamedCookie(name);
   }
 
+  window.test_driver_internal.get_computed_label = function(element) {
+    return internals.getComputedLabel(element);
+  }
+
+  window.test_driver_internal.get_computed_role = function(element) {
+    return internals.getComputedRole(element);
+  }
+
   window.test_driver_internal.minimize_window = async () => {
-    window.testRunner.setMainWindowHidden(true);
+    window.testRunner.setFrameWindowHidden(true);
     // Wait until the new state is reflected in the document
     while (!document.hidden) {
       await new Promise(resolve => setTimeout(resolve, 0));
     }
   };
 
-  window.test_driver_internal.set_window_rect = async () => {
-    window.testRunner.setMainWindowHidden(false);
+  window.test_driver_internal.set_window_rect = async (rect, context) => {
+    window.testRunner.setFrameWindowHidden(false);
     // Wait until the new state is reflected in the document
     while (document.hidden) {
       await new Promise(resolve => setTimeout(resolve, 0));
     }
+    if (rect !== undefined)
+        window.testRunner.setWindowRect(rect);
+  };
+
+  window.test_driver_internal.get_window_rect = async function() {
+      return {'x': window.screenX, 'y': window.screenY, 'width': window.outerWidth, 'height': window.outerHeight};
+  }
+
+  window.test_driver_internal.set_rph_registration_mode = async function (mode, context) {
+      window.testRunner.setRphRegistrationMode(mode);
   };
 
   window.test_driver_internal.get_fedcm_dialog_type = async function() {

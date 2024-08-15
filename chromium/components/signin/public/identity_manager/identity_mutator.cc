@@ -46,26 +46,20 @@ jint JniIdentityMutator::SetPrimaryAccount(
   return static_cast<jint>(error);
 }
 
-bool JniIdentityMutator::ClearPrimaryAccount(JNIEnv* env,
-                                             jint source_metric,
-                                             jint delete_metric) {
+bool JniIdentityMutator::ClearPrimaryAccount(JNIEnv* env, jint source_metric) {
   PrimaryAccountMutator* primary_account_mutator =
       identity_mutator_->GetPrimaryAccountMutator();
   DCHECK(primary_account_mutator);
   return primary_account_mutator->ClearPrimaryAccount(
-      static_cast<signin_metrics::ProfileSignout>(source_metric),
-      static_cast<signin_metrics::SignoutDelete>(delete_metric));
+      static_cast<signin_metrics::ProfileSignout>(source_metric));
 }
 
-void JniIdentityMutator::RevokeSyncConsent(JNIEnv* env,
-                                           jint source_metric,
-                                           jint delete_metric) {
+void JniIdentityMutator::RevokeSyncConsent(JNIEnv* env, jint source_metric) {
   PrimaryAccountMutator* primary_account_mutator =
       identity_mutator_->GetPrimaryAccountMutator();
   DCHECK(primary_account_mutator);
   return primary_account_mutator->RevokeSyncConsent(
-      static_cast<signin_metrics::ProfileSignout>(source_metric),
-      static_cast<signin_metrics::SignoutDelete>(delete_metric));
+      static_cast<signin_metrics::ProfileSignout>(source_metric));
 }
 
 void JniIdentityMutator::ReloadAllAccountsFromSystemWithPrimaryAccount(
@@ -74,7 +68,7 @@ void JniIdentityMutator::ReloadAllAccountsFromSystemWithPrimaryAccount(
   DeviceAccountsSynchronizer* device_accounts_synchronizer =
       identity_mutator_->GetDeviceAccountsSynchronizer();
   DCHECK(device_accounts_synchronizer);
-  absl::optional<CoreAccountId> primary_account_id;
+  std::optional<CoreAccountId> primary_account_id;
   if (j_primary_account_id) {
     primary_account_id =
         ConvertFromJavaCoreAccountId(env, j_primary_account_id);
@@ -96,12 +90,12 @@ void JniIdentityMutator::SeedAccountsThenReloadAllAccountsWithPrimaryAccount(
         ConvertFromJavaCoreAccountInfo(env, core_account_info_java));
   }
 
-  absl::optional<CoreAccountId> primary_account_id;
+  std::optional<CoreAccountId> primary_account_id;
   if (j_primary_account_id) {
     primary_account_id =
         ConvertFromJavaCoreAccountId(env, j_primary_account_id);
   } else {
-    primary_account_id = absl::nullopt;
+    primary_account_id = std::nullopt;
   }
 
   DeviceAccountsSynchronizer* device_accounts_synchronizer =

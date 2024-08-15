@@ -70,7 +70,7 @@ def IsIOSEnabled():
     return True
   return os.access(os.path.join(SRC,".enable_ios"), os.F_OK)
 
-def get_variables(a_checkout_os=None):
+def get_variables(a_checkout_os=None, a_target_cpu=None):
   host_os = VivaldiBaseDeps.DEPS_OS_CHOICES.get(sys.platform, 'linux')
   if host_os == "unix":
     host_os = "linux"
@@ -86,6 +86,9 @@ def get_variables(a_checkout_os=None):
   gnvars = GetGNVars()
   if "target_cpu" in gnvars:
     checkout_cpu = [gnvars["target_cpu"]]
+  elif a_target_cpu:
+    gnvars["target_cpu"] = a_target_cpu
+    checkout_cpu = [a_target_cpu]
   else:
     if checkout_os == "win":
       checkout_cpu.append("x86")
@@ -109,9 +112,9 @@ def get_variables(a_checkout_os=None):
   for x in checkout_cpu:
     global_vars["checkout_"+x] = True
 
-  if checkout_os in ["checkout_android"] :
+  if checkout_os in ["checkout_android", "checkout_linux"] :
     global_vars["checkout_linux"]= True # Always checking out android on linux systems
-    global_vars["checkout_x64"]= True # Always checking out android on linux x64 systems
+    global_vars["checkout_x64"]= True # Always checking out android on linux x64 systems (also Linux arm builds)
 
   for an_os in ["telemetry_dependencies"]:
     global_vars.setdefault("checkout_"+an_os, False)
@@ -141,10 +144,10 @@ def get_chromium_variables():
 class VivaldiBaseDeps(gclient.GitDependency):
   DEPS_OS_CHOICES = gclient.GClient.DEPS_OS_CHOICES
 
-  def __init__(self, root_dir, target_os=None, variables={}, name=None, preloaded_content=None, preloaded_subdeps=None):
+  def __init__(self, root_dir, target_os=None, variables={}, name=None, preloaded_content=None, preloaded_subdeps=None, gn_vars={}):
     self._root_dir = root_dir
     self._target_os = target_os or [self.DEPS_OS_CHOICES.get(sys.platform, 'unix')]
-    self._target_cpu = detect_host_arch.HostArch()
+    self._target_cpu = [gn_vars.get("target_cpu")] if "target_cpu" in gn_vars else detect_host_arch.HostArch()
     self._cipd_root = None
     self._preloaded_deps_content = preloaded_content
     self._preloaded_subdeps = preloaded_subdeps
@@ -309,9 +312,9 @@ class VivaldiBaseDeps(gclient.GitDependency):
     return modules
 
 class VivaldiDeps(VivaldiBaseDeps):
-  def __init__(self, root_dir=SRC, variables=get_variables(), **kwargs):
-    return super(VivaldiDeps, self).__init__(root_dir = root_dir, variables=variables, **kwargs)
+  def __init__(self, root_dir=SRC, variables=get_variables()[0], gn_vars=get_variables()[1], **kwargs):
+    return super(VivaldiDeps, self).__init__(root_dir = root_dir, variables=variables, gn_vars=gn_vars, **kwargs)
 
 class ChromiumDeps(VivaldiBaseDeps):
-  def __init__(self, root_dir=os.path.join(SRC, "chromium"), variables=get_chromium_variables(), **kwargs):
-    return super(ChromiumDeps, self).__init__(root_dir = root_dir, variables=variables, **kwargs)
+  def __init__(self, root_dir=os.path.join(SRC, "chromium"), variables=get_chromium_variables(), gn_vars=get_variables()[1],  **kwargs):
+    return super(ChromiumDeps, self).__init__(root_dir = root_dir, variables=variables, gn_vars=gn_vars, **kwargs)

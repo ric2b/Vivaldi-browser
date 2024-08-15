@@ -131,11 +131,9 @@ AutofillKeyboardAccessoryAdapter::CreateSubPopupView(
 
 // AutofillPopupController implementation.
 
-void AutofillKeyboardAccessoryAdapter::AcceptSuggestion(
-    int index,
-    base::TimeTicks event_time) {
+void AutofillKeyboardAccessoryAdapter::AcceptSuggestion(int index) {
   if (controller_) {
-    controller_->AcceptSuggestion(OffsetIndexFor(index), event_time);
+    controller_->AcceptSuggestion(OffsetIndexFor(index));
   }
 }
 
@@ -172,11 +170,6 @@ AutofillKeyboardAccessoryAdapter::GetSuggestionLabelsAt(int row) const {
   CHECK(controller_) << "Call GetSuggestionLabelAt only from its owner!";
   CHECK(static_cast<size_t>(row) < labels_.size());
   return {{Suggestion::Text(labels_[OffsetIndexFor(row)])}};
-}
-
-PopupType AutofillKeyboardAccessoryAdapter::GetPopupType() const {
-  CHECK(controller_) << "Call GetPopupType only from its owner!";
-  return controller_->GetPopupType();
 }
 
 FillingProduct AutofillKeyboardAccessoryAdapter::GetMainFillingProduct() const {

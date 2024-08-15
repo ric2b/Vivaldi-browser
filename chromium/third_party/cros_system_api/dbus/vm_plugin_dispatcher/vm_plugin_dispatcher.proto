@@ -6,7 +6,7 @@ syntax = "proto3";
 option optimize_for = LITE_RUNTIME;
 
 package vm_tools.plugin_dispatcher;
-option go_package = "chromiumos/system_api/vm_plugin_dispatcher_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/vm_plugin_dispatcher_proto";
 
 // Request to shut down the dispatcher service.
 message ShutdownDispatcherRequest {

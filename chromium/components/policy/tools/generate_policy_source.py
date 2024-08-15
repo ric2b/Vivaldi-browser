@@ -29,6 +29,7 @@ from xml.sax.saxutils import escape as xml_escape
 
 VIVALDI_POLICY_KEY = 'SOFTWARE\\\\Policies\\\\Vivaldi'
 CHROME_POLICY_KEY = 'SOFTWARE\\\\Policies\\\\Google\\\\Chrome'
+CHROME_FOR_TESTING_POLICY_KEY = CHROME_POLICY_KEY + ' for Testing'
 CHROMIUM_POLICY_KEY = 'SOFTWARE\\\\Policies\\\\Chromium'
 PLATFORM_STRINGS = {
     'chrome_frame': ['win'],
@@ -1122,6 +1123,9 @@ namespace policy {
             '#elif defined(GOOGLE_CHROME_BUILD_BRANDING)\n'
             'const wchar_t kRegistryChromePolicyKey[] = '
             'L"' + CHROME_POLICY_KEY + '";\n'
+            '#elif BUILDFLAG(GOOGLE_CHROME_FOR_TESTING_BRANDING)\n'
+            'const wchar_t kRegistryChromePolicyKey[] = '
+            'L"' + CHROME_FOR_TESTING_POLICY_KEY + '";\n'
             '#else\n'
             'const wchar_t kRegistryChromePolicyKey[] = '
             'L"' + CHROMIUM_POLICY_KEY + '";\n'

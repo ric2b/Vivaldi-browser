@@ -96,10 +96,9 @@ class MODULES_EXPORT MediaRecorderEncoderWrapper final
   void EncodeDone(media::EncoderStatus status);
   void OutputEncodeData(
       media::VideoEncoderOutput output,
-      absl::optional<media::VideoEncoder::CodecDescription> description);
+      std::optional<media::VideoEncoder::CodecDescription> description);
 
-  const raw_ptr<media::GpuVideoAcceleratorFactories, ExperimentalRenderer>
-      gpu_factories_;
+  const raw_ptr<media::GpuVideoAcceleratorFactories> gpu_factories_;
 
   const media::VideoCodecProfile profile_;
   const media::VideoCodec codec_;

@@ -18,15 +18,21 @@
 //! See the _Using BoringSSL_ section in `crypto/README.md` for instructions on
 //! how to test against BoringSSL, or see the subcommands in the top level crate.
 
-use bssl_crypto::digest::Md;
+use bssl_crypto::digest::Algorithm;
+use bssl_crypto::hkdf::Salt;
+use core::marker::PhantomData;
 use crypto_provider::hkdf::InvalidLength;
 
 /// Struct providing BoringSSL implemented Hkdf operations.
-pub struct Hkdf<M: Md>(bssl_crypto::hkdf::Hkdf<M>);
+pub struct Hkdf<M: Algorithm>(bssl_crypto::hkdf::Prk, PhantomData<M>);
 
-impl<M: Md> crypto_provider::hkdf::Hkdf for Hkdf<M> {
+impl<M: Algorithm> crypto_provider::hkdf::Hkdf for Hkdf<M> {
     fn new(salt: Option<&[u8]>, ikm: &[u8]) -> Self {
-        Self(bssl_crypto::hkdf::Hkdf::<M>::new(salt, ikm))
+        let bssl_salt = match salt {
+            None => Salt::None,
+            Some(raw_salt) => Salt::NonEmpty(raw_salt),
+        };
+        Self(bssl_crypto::hkdf::Hkdf::<M>::extract(ikm, bssl_salt), PhantomData)
     }
 
     fn expand_multi_info(
@@ -37,14 +43,14 @@ impl<M: Md> crypto_provider::hkdf::Hkdf for Hkdf<M> {
         if okm.is_empty() {
             return Ok(());
         }
-        self.0.expand_multi_info(info_components, okm).map_err(|_| InvalidLength)
+        self.0.expand_into(&info_components.concat(), okm).map_err(|_| InvalidLength)
     }
 
     fn expand(&self, info: &[u8], okm: &mut [u8]) -> Result<(), InvalidLength> {
         if okm.is_empty() {
             return Ok(());
         }
-        self.0.expand(info, okm).map_err(|_| InvalidLength)
+        self.0.expand_into(info, okm).map_err(|_| InvalidLength)
     }
 }
 

@@ -167,7 +167,7 @@ static constexpr FeatureEnumAndInfo kFeatureInfo[] = {
       FeatureInfo::FeatureState::Stable}},
     {Feature::DualSourceBlending,
      {"Support dual source blending. Enables Src1, OneMinusSrc1, Src1Alpha, and OneMinusSrc1Alpha "
-      "blend factors along with @index WGSL output attribute.",
+      "blend factors along with @blend_src WGSL output attribute.",
       "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
       "dual_source_blending.md",
       FeatureInfo::FeatureState::Experimental}},
@@ -295,6 +295,20 @@ static constexpr FeatureEnumAndInfo kFeatureInfo[] = {
       "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
       "adapter_properties.md",
       FeatureInfo::FeatureState::Stable}},
+    {Feature::AdapterPropertiesVk,
+     {"Support querying Vulkan info from the adapter.",
+      "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
+      "adapter_properties.md",
+      FeatureInfo::FeatureState::Stable}},
+    {Feature::SharedBufferMemoryD3D12Resource,
+     {"Support importing ID3D12Resource as shared buffer memory.",
+      "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/shared_buffer.md",
+      FeatureInfo::FeatureState::Experimental}},
+    {Feature::R8UnormStorage,
+     {"Supports using r8unorm texture as storage texture.",
+      "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
+      "r8unorm_storage.md",
+      FeatureInfo::FeatureState::Experimental}},
 };
 
 }  // anonymous namespace

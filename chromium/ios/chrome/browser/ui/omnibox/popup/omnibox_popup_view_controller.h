@@ -69,6 +69,12 @@ class LargeIconService;
 /// Toggle visibility of the omnibox debugger view.
 - (void)toggleOmniboxDebuggerView;
 
+// Vivaldi
+/// Flag that controls whether the search results should be reversed.
+/// Only available when omnibox is at the bottom.
+@property(nonatomic, assign) BOOL shouldReverseSearchResults;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_OMNIBOX_POPUP_OMNIBOX_POPUP_VIEW_CONTROLLER_H_

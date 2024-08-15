@@ -31,6 +31,7 @@
 #include "base/test/gtest_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
+#include "base/test/run_until.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_run_loop_timeout.h"
 #include "base/test/test_future.h"
@@ -55,6 +56,7 @@
 #include "content/public/browser/document_user_data.h"
 #include "content/public/browser/javascript_dialog_manager.h"
 #include "content/public/browser/origin_trials_controller_delegate.h"
+#include "content/public/browser/page_user_data.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -116,7 +118,6 @@
 #include "third_party/blink/public/common/switches.h"
 #include "third_party/blink/public/mojom/browser_interface_broker.mojom-test-utils.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-test-utils.h"
-#include "ui/snapshot/snapshot.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "url/url_canon.h"
@@ -185,19 +186,23 @@ class FirstPartySchemeContentBrowserClient
     return scheme == "trustme";
   }
 
-  void RegisterNonNetworkNavigationURLLoaderFactories(
-      int frame_tree_node_id,
-      NonNetworkURLLoaderFactoryMap* factories) override {
-    mojo::PendingRemote<network::mojom::URLLoaderFactory> trustme_remote;
-    trustme_factory_->Clone(trustme_remote.InitWithNewPipeAndPassReceiver());
-    factories->emplace("trustme", std::move(trustme_remote));
+  mojo::PendingRemote<network::mojom::URLLoaderFactory>
+  CreateNonNetworkNavigationURLLoaderFactory(const std::string& scheme,
+                                             int frame_tree_node_id) override {
+    if (scheme == "trustme") {
+      mojo::PendingRemote<network::mojom::URLLoaderFactory> trustme_remote;
+      trustme_factory_->Clone(trustme_remote.InitWithNewPipeAndPassReceiver());
+      return trustme_remote;
+    }
 
-    mojo::PendingRemote<network::mojom::URLLoaderFactory>
-        trustmeifembeddingsecure_remote;
-    trustmeifembeddingsecure_factory_->Clone(
-        trustmeifembeddingsecure_remote.InitWithNewPipeAndPassReceiver());
-    factories->emplace("trustmeifembeddingsecure",
-                       std::move(trustmeifembeddingsecure_remote));
+    if (scheme == "trustmeifembeddingsecure") {
+      mojo::PendingRemote<network::mojom::URLLoaderFactory>
+          trustmeifembeddingsecure_remote;
+      trustmeifembeddingsecure_factory_->Clone(
+          trustmeifembeddingsecure_remote.InitWithNewPipeAndPassReceiver());
+      return trustmeifembeddingsecure_remote;
+    }
+    return {};
   }
 
  private:
@@ -1748,12 +1753,8 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBeforeUnloadBrowserTest,
   // callback from the second frame. Wait for that beforeunload completion
   // callback. After it's received, there will be one ACK remaining for the
   // frame that's currently showing the dialog.
-  while (main_frame->beforeunload_pending_replies_.size() > 1) {
-    base::RunLoop run_loop;
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
-    run_loop.Run();
-  }
+  EXPECT_TRUE(base::test::RunUntil(
+      [&]() { return main_frame->beforeunload_pending_replies_.size() <= 1; }));
 
   // Ensure that the beforeunload timer hasn't been restarted, since the first
   // beforeunload dialog is still up at this point.
@@ -5368,10 +5369,8 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
                                 "/set-header?"
                                 "Cross-Origin-Opener-Policy: same-origin&"
                                 "Cross-Origin-Embedder-Policy: require-corp")));
-  // Status can be kIsolated or kMaybeIsolated.
-  EXPECT_LT(WebExposedIsolationLevel::kNotIsolated,
-            root_frame_host()->GetWebExposedIsolationLevel());
-  EXPECT_GT(WebExposedIsolationLevel::kMaybeIsolatedApplication,
+  // Status is kIsolated.
+  EXPECT_EQ(WebExposedIsolationLevel::kIsolated,
             root_frame_host()->GetWebExposedIsolationLevel());
 }
 
@@ -5450,7 +5449,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTestWithRestrictedApis,
                              "Cross-Origin-Embedder-Policy: require-corp&"
                              "Cross-Origin-Resource-Policy: cross-origin");
   EXPECT_TRUE(NavigateToURL(shell(), non_app_url));
-  EXPECT_EQ(WebExposedIsolationLevel::kMaybeIsolated,
+  EXPECT_EQ(WebExposedIsolationLevel::kIsolated,
             root_frame_host()->GetProcess()->GetWebExposedIsolationLevel());
   EXPECT_EQ(WebExposedIsolationLevel::kIsolated,
             root_frame_host()->GetWebExposedIsolationLevel());
@@ -5468,7 +5467,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTestWithRestrictedApis,
   )";
   EXPECT_TRUE(ExecJs(shell(), JsReplace(create_iframe, non_app_url, "")));
   RenderFrameHost* non_app_child_frame = ChildFrameAt(root_frame_host(), 0);
-  EXPECT_EQ(WebExposedIsolationLevel::kMaybeIsolated,
+  EXPECT_EQ(WebExposedIsolationLevel::kIsolated,
             non_app_child_frame->GetProcess()->GetWebExposedIsolationLevel());
   EXPECT_EQ(WebExposedIsolationLevel::kIsolated,
             non_app_child_frame->GetWebExposedIsolationLevel());
@@ -5478,7 +5477,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTestWithRestrictedApis,
   EXPECT_TRUE(ExecJs(shell(), JsReplace(create_iframe, non_app_url,
                                         "cross-origin-isolated 'none'")));
   non_app_child_frame = ChildFrameAt(root_frame_host(), 1);
-  EXPECT_EQ(WebExposedIsolationLevel::kMaybeIsolated,
+  EXPECT_EQ(WebExposedIsolationLevel::kIsolated,
             non_app_child_frame->GetProcess()->GetWebExposedIsolationLevel());
   EXPECT_EQ(WebExposedIsolationLevel::kNotIsolated,
             non_app_child_frame->GetWebExposedIsolationLevel());
@@ -5496,7 +5495,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTestWithRestrictedApis,
       /*site_instance=*/nullptr, gfx::Size());
   EXPECT_TRUE(NavigateToURL(app_shell, app_url));
   RenderFrameHost* app_frame = app_shell->web_contents()->GetPrimaryMainFrame();
-  EXPECT_EQ(WebExposedIsolationLevel::kMaybeIsolatedApplication,
+  EXPECT_EQ(WebExposedIsolationLevel::kIsolatedApplication,
             app_frame->GetProcess()->GetWebExposedIsolationLevel());
   EXPECT_EQ(WebExposedIsolationLevel::kIsolatedApplication,
             app_frame->GetWebExposedIsolationLevel());
@@ -5506,7 +5505,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTestWithRestrictedApis,
   EXPECT_TRUE(ExecJs(
       app_shell, JsReplace(create_iframe, app_url, "cross-origin-isolated")));
   RenderFrameHost* app_child_frame = ChildFrameAt(app_frame, 0);
-  EXPECT_EQ(WebExposedIsolationLevel::kMaybeIsolatedApplication,
+  EXPECT_EQ(WebExposedIsolationLevel::kIsolatedApplication,
             app_child_frame->GetProcess()->GetWebExposedIsolationLevel());
   EXPECT_EQ(WebExposedIsolationLevel::kIsolatedApplication,
             app_child_frame->GetWebExposedIsolationLevel());
@@ -5516,7 +5515,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTestWithRestrictedApis,
   EXPECT_TRUE(ExecJs(app_shell, JsReplace(create_iframe, app_url,
                                           "cross-origin-isolated 'none'")));
   app_child_frame = ChildFrameAt(app_frame, 1);
-  EXPECT_EQ(WebExposedIsolationLevel::kMaybeIsolatedApplication,
+  EXPECT_EQ(WebExposedIsolationLevel::kIsolatedApplication,
             app_child_frame->GetProcess()->GetWebExposedIsolationLevel());
   EXPECT_EQ(WebExposedIsolationLevel::kNotIsolated,
             app_child_frame->GetWebExposedIsolationLevel());
@@ -5529,7 +5528,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTestWithRestrictedApis,
   EXPECT_TRUE(ExecJs(app_shell, JsReplace(create_iframe, non_app_url,
                                           "cross-origin-isolated")));
   non_app_child_frame = ChildFrameAt(app_frame, 2);
-  EXPECT_EQ(WebExposedIsolationLevel::kMaybeIsolated,
+  EXPECT_EQ(WebExposedIsolationLevel::kIsolated,
             non_app_child_frame->GetProcess()->GetWebExposedIsolationLevel());
   EXPECT_EQ(WebExposedIsolationLevel::kIsolated,
             non_app_child_frame->GetWebExposedIsolationLevel());
@@ -5539,7 +5538,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTestWithRestrictedApis,
   EXPECT_TRUE(ExecJs(app_shell, JsReplace(create_iframe, non_app_url,
                                           "cross-origin-isolated 'none'")));
   non_app_child_frame = ChildFrameAt(app_frame, 3);
-  EXPECT_EQ(WebExposedIsolationLevel::kMaybeIsolated,
+  EXPECT_EQ(WebExposedIsolationLevel::kIsolated,
             non_app_child_frame->GetProcess()->GetWebExposedIsolationLevel());
   EXPECT_EQ(WebExposedIsolationLevel::kNotIsolated,
             non_app_child_frame->GetWebExposedIsolationLevel());
@@ -6493,6 +6492,88 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   EXPECT_TRUE(document_user_data_was_destroyed);
 }
 
+class DestructorLifetimePageUserData
+    : public PageUserData<DestructorLifetimePageUserData> {
+ public:
+  explicit DestructorLifetimePageUserData(Page& page, bool& was_destroyed)
+      : PageUserData<DestructorLifetimePageUserData>(page),
+        page_(page.GetWeakPtr()),
+        was_destroyed_(was_destroyed) {}
+
+  ~DestructorLifetimePageUserData() override {
+    *was_destroyed_ = true;
+
+    // The destructor should run before WeakPtr<Page> is invalidated.
+    EXPECT_TRUE(page_);
+    if (!page_) {
+      return;
+    }
+    // Check Page is still accessible through RenderFrameHost::GetPage. Such
+    // access can happen in PageUserData implementations with a complicated
+    // destructor.
+    auto& render_frame_host = page_->GetMainDocument();
+    auto& page = render_frame_host.GetPage();
+    // Check returned Page reference is valid.
+    EXPECT_EQ(page_.get(), &page);
+    // The page is considered as primary if its RenderFrameHost is active. This
+    // will be true unless we changed RenderFrameHosts.
+    EXPECT_EQ(page.IsPrimary(), !ShouldCreateNewHostForAllFrames());
+    if (ShouldCreateNewHostForAllFrames()) {
+      EXPECT_EQ(render_frame_host.GetLifecycleState(),
+                RenderFrameHost::LifecycleState::kPendingDeletion);
+    }
+  }
+
+ private:
+  friend PageUserData;
+  PAGE_USER_DATA_KEY_DECL();
+
+  const base::WeakPtr<Page> page_;
+  const raw_ref<bool> was_destroyed_;
+};
+
+PAGE_USER_DATA_KEY_IMPL(DestructorLifetimePageUserData);
+
+// Tests that when DocumentAssociatedData is destroyed, destructors of
+// PageUserData run while Page and DocumentAssociatedData are still in a
+// reasonable state.
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
+                       PageUserDataDestructorLifetime) {
+  // The test assumes that the Page will get destructed after navigation.
+  DisableBackForwardCacheForTesting(shell()->web_contents(),
+                                    BackForwardCache::TEST_REQUIRES_NO_CACHING);
+
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("a.com", "/title1.html")));
+
+  RenderFrameHostImpl* main_frame = web_contents()->GetPrimaryMainFrame();
+  ASSERT_TRUE(main_frame);
+
+  bool page_user_data_was_destroyed = false;
+
+  DestructorLifetimePageUserData::CreateForPage(main_frame->GetPage(),
+                                                page_user_data_was_destroyed);
+
+  RenderFrameHostWrapper main_frame_wrapper(main_frame);
+  ASSERT_FALSE(main_frame_wrapper.IsDestroyed());
+
+  // Perform a same-site navigation in the main frame.
+  EXPECT_TRUE(NavigateToURLFromRenderer(
+      main_frame, embedded_test_server()->GetURL("a.com", "/title2.html")));
+
+  // The navigation should reuse the same RenderFrameHost, except when
+  // RenderDocument is enabled.
+  if (ShouldCreateNewHostForAllFrames()) {
+    EXPECT_TRUE(main_frame_wrapper.WaitUntilRenderFrameDeleted());
+  } else {
+    EXPECT_EQ(web_contents()->GetPrimaryMainFrame(), main_frame_wrapper.get());
+  }
+
+  // The destructor of DestructorLifetimePageUserData also perform googletest
+  // assertions to validate invariants.
+  EXPECT_TRUE(page_user_data_was_destroyed);
+}
+
 class RenderFrameHostImplCredentiallessIframeBrowserTest
     : public RenderFrameHostImplBrowserTest {
  public:
@@ -6650,7 +6731,8 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplCredentiallessIframeNikBrowserTest,
         ->GetBrowserContext()
         ->GetDefaultStoragePartition()
         ->GetNetworkContext()
-        ->PreconnectSockets(1, fetch_url.DeprecatedGetOriginAsURL(), true,
+        ->PreconnectSockets(1, fetch_url.DeprecatedGetOriginAsURL(),
+                            network::mojom::CredentialsMode::kInclude,
                             main_rfh->GetIsolationInfoForSubresources()
                                 .network_anonymization_key());
 
@@ -7790,6 +7872,7 @@ class RenderFrameHostImplBrowserTestWithBFCacheAndViewTransition
             /*ignore_outstanding_network_request=*/false);
     enabled_features.push_back(
         {blink::features::kViewTransitionOnNavigation, {{}}});
+    enabled_features.push_back({blink::features::kPageSwapEvent, {{}}});
     enabled_features.push_back(
         {features::kInvalidateLocalSurfaceIdPreCommit, {{}}});
     scoped_feature_list_.InitWithFeaturesAndParameters(
@@ -7804,17 +7887,6 @@ class RenderFrameHostImplBrowserTestWithBFCacheAndViewTransition
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
-
-void AssertBitmapOfColor(const SkBitmap& bitmap, SkColor color) {
-  for (int r = 0; r < bitmap.height(); ++r) {
-    for (int c = 0; c < bitmap.width(); ++c) {
-// TODO(https://crbug.com/1452223): Re-enable the color comparison for Mac.
-#if !BUILDFLAG(IS_MAC)
-      ASSERT_EQ(bitmap.getColor(c, r), color);
-#endif
-    }
-  }
-}
 
 bool IsChildFrame(RenderWidgetHostView* view) {
   CHECK(view);
@@ -7869,13 +7941,9 @@ viz::SurfaceId GetFirstSurfaceIdAfterNavigation(RenderWidgetHostView* view) {
 // https://crbug.com/1415340: For a page with ViewTransition being restored from
 // BFCache, we explicitly set its fallback surface to the current View to avoid
 // visual glitches.
-//
-// This test is disabled because it's flaky on Windows, fails on iOS, and when
-// updated to use correct APIs, started failing consistently on Android and
-// Linux. TODO(https://crbug.com/1472026): Investigate and re-enable.
 IN_PROC_BROWSER_TEST_F(
     RenderFrameHostImplBrowserTestWithBFCacheAndViewTransition,
-    DISABLED_NewContentTimeoutIsSetWhenLeavingBFCacheWithViewTransition) {
+    NewContentTimeoutIsSetWhenLeavingBFCacheWithViewTransition) {
   // "red_jank_second_pageshow.html" janks the renderer on the second pageshow
   // event.
   const GURL url_red(embedded_test_server()->GetURL(
@@ -7898,6 +7966,15 @@ IN_PROC_BROWSER_TEST_F(
       RenderWidgetHostImpl::From(rfh_red->GetView()->GetRenderWidgetHost());
   // The BFCached `RenderWidgetHostImpl` must have a stopped timer.
   ASSERT_FALSE(rwhi_red->IsContentRenderingTimeoutRunning());
+  // Set the timeout to a max value, such that we can guarantee to manually
+  // force the timer to fire via
+  // `RenderWidgetHostImpl::ForceFirstFrameAfterNavigationTimeout()`. Deflake
+  // the tests.
+  rwhi_red->SetNewContentRenderingTimeoutForTesting(base::TimeDelta::Max());
+
+  // Ensure the first frame in the green page is rendered, so that the
+  // transition is not skipped.
+  WaitForCopyableViewInWebContents(web_contents());
 
   // Navigate back to Red.
   ASSERT_TRUE(HistoryGoBack(web_contents()));
@@ -7918,29 +7995,18 @@ IN_PROC_BROWSER_TEST_F(
       GetCurrentSurfaceIdOnDelegatedFrameHost(rfh_red->GetView())
           .IsSameOrNewerThan(first_surface_id_after_nav_after_bfcache_restore));
 
-  {
-    base::test::TestFuture<gfx::Image> future;
-    ui::GrabViewSnapshotAsync(web_contents()->GetView()->GetNativeView(),
-                              gfx::Rect(web_contents()->GetSize()),
-                              future.GetCallback());
-    AssertBitmapOfColor(future.Take().AsBitmap(), SK_ColorGREEN);
-  }
-
+  // Manually force the timer to fire, since the timeout is infinity.
   ASSERT_TRUE(rwhi_red->IsContentRenderingTimeoutRunning());
   rwhi_red->ForceFirstFrameAfterNavigationTimeout();
+  ASSERT_FALSE(rwhi_red->IsContentRenderingTimeoutRunning());
+  ASSERT_EQ(first_surface_id_after_nav_after_bfcache_restore,
+            GetDelegatedFrameHost(rfh_red->GetView())
+                ->GetFallbackSurfaceIdForTesting());
 
-  WaitForBrowserCompositorFramePresented(web_contents());
-
-  // `ForceFirstFrameAfterNavigationTimeout` resets the fallback surface id to
-  // `first_surface_id_after_nav_` of the `DelegatedFrameHost{Android}`. This
-  // should have no effects on the screen.
-  {
-    base::test::TestFuture<gfx::Image> future;
-    ui::GrabViewSnapshotAsync(web_contents()->GetView()->GetNativeView(),
-                              gfx::Rect(web_contents()->GetSize()),
-                              future.GetCallback());
-    AssertBitmapOfColor(future.Take().AsBitmap(), SK_ColorGREEN);
-  }
+  // TODO(https://crbug.com/1472026): If the red page's renderer still hasn't
+  // submitted a new frame after the ContentRenderingTimeout is up, we should
+  // abort the transition. Expand this test to cover that behavior when we have
+  // a way to abort the transition.
 }
 
 // Tests that when a RenderFrameHost is stored in BFCache, that the visibility

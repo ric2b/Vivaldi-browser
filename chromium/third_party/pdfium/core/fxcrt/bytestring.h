@@ -15,36 +15,35 @@
 #include <functional>
 #include <iosfwd>
 #include <iterator>
+#include <optional>
 #include <utility>
 
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/fx_string_wrappers.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/string_data_template.h"
+#include "core/fxcrt/string_template.h"
 #include "core/fxcrt/string_view_template.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/base/check.h"
-#include "third_party/base/containers/span.h"
 
 namespace fxcrt {
 
 // A mutable string with shared buffers using copy-on-write semantics that
 // avoids the cost of std::string's iterator stability guarantees.
-class ByteString {
+class ByteString : public StringTemplate<char> {
  public:
-  using CharType = char;
-  using const_iterator = const CharType*;
-  using const_reverse_iterator = std::reverse_iterator<const_iterator>;
-
   [[nodiscard]] static ByteString FormatInteger(int i);
   [[nodiscard]] static ByteString FormatFloat(float f);
   [[nodiscard]] static ByteString Format(const char* pFormat, ...);
   [[nodiscard]] static ByteString FormatV(const char* pFormat, va_list argList);
 
-  ByteString();
-  ByteString(const ByteString& other);
+  ByteString() = default;
+  ByteString(const ByteString& other) = default;
 
   // Move-construct a ByteString. After construction, |other| is empty.
-  ByteString(ByteString&& other) noexcept;
+  ByteString(ByteString&& other) noexcept = default;
+
+  ~ByteString() = default;
 
   // Make a one-character string from a char.
   explicit ByteString(char ch);
@@ -65,60 +64,14 @@ class ByteString {
   ByteString(const std::initializer_list<ByteStringView>& list);
   explicit ByteString(const fxcrt::ostringstream& outStream);
 
-  ~ByteString();
-
-  // Holds on to buffer if possible for later re-use. Assign ByteString()
-  // to force immediate release if desired.
-  void clear();
-
-  // Explicit conversion to C-style string.
+  // Explicit conversion to C-style string. The result is never nullptr,
+  // and is always NUL terminated.
   // Note: Any subsequent modification of |this| will invalidate the result.
   const char* c_str() const { return m_pData ? m_pData->m_String : ""; }
 
-  // Explicit conversion to uint8_t*.
-  // Note: Any subsequent modification of |this| will invalidate the result.
-  const uint8_t* raw_str() const {
-    return m_pData ? reinterpret_cast<const uint8_t*>(m_pData->m_String)
-                   : nullptr;
-  }
-
-  // Explicit conversion to ByteStringView.
-  // Note: Any subsequent modification of |this| will invalidate the result.
-  ByteStringView AsStringView() const {
-    return ByteStringView(raw_str(), GetLength());
-  }
-
-  // Explicit conversion to span.
-  // Note: Any subsequent modification of |this| will invalidate the result.
-  pdfium::span<const char> span() const {
-    return pdfium::make_span(m_pData ? m_pData->m_String : nullptr,
-                             GetLength());
-  }
-  pdfium::span<const uint8_t> raw_span() const {
-    return pdfium::make_span(raw_str(), GetLength());
-  }
-
-  // Note: Any subsequent modification of |this| will invalidate iterators.
-  const_iterator begin() const { return m_pData ? m_pData->m_String : nullptr; }
-  const_iterator end() const {
-    return m_pData ? m_pData->m_String + m_pData->m_nDataLength : nullptr;
-  }
-
-  // Note: Any subsequent modification of |this| will invalidate iterators.
-  const_reverse_iterator rbegin() const {
-    return const_reverse_iterator(end());
-  }
-  const_reverse_iterator rend() const {
-    return const_reverse_iterator(begin());
-  }
-
-  size_t GetLength() const { return m_pData ? m_pData->m_nDataLength : 0; }
   size_t GetStringLength() const {
     return m_pData ? strlen(m_pData->m_String) : 0;
   }
-  bool IsEmpty() const { return !GetLength(); }
-  bool IsValidIndex(size_t index) const { return index < GetLength(); }
-  bool IsValidLength(size_t length) const { return length <= GetLength(); }
 
   int Compare(ByteStringView str) const;
   bool EqualNoCase(ByteStringView str) const;
@@ -147,82 +100,23 @@ class ByteString {
   ByteString& operator+=(const ByteString& str);
   ByteString& operator+=(ByteStringView str);
 
-  CharType operator[](const size_t index) const {
-    CHECK(IsValidIndex(index));
-    return m_pData->m_String[index];
-  }
-
-  CharType Front() const { return GetLength() ? (*this)[0] : 0; }
-  CharType Back() const { return GetLength() ? (*this)[GetLength() - 1] : 0; }
-
-  void SetAt(size_t index, char c);
-
-  size_t Insert(size_t index, char ch);
-  size_t InsertAtFront(char ch) { return Insert(0, ch); }
-  size_t InsertAtBack(char ch) { return Insert(GetLength(), ch); }
-  size_t Delete(size_t index, size_t count = 1);
-
-  void Reserve(size_t len);
-
-  // Increase the backing store of the string so that it is capable of storing
-  // at least `nMinBufLength` chars. Returns a span to the entire buffer,
-  // which may be larger than `nMinBufLength` due to rounding by allocators.
-  // Note: any modification of the string (including ReleaseBuffer()) may
-  // invalidate the span, which must not outlive its buffer.
-  pdfium::span<char> GetBuffer(size_t nMinBufLength);
-
-  // Sets the size of the string to `nNewLength` chars. Call this after a call
-  // to GetBuffer(), to indicate how much of the buffer was actually used.
-  void ReleaseBuffer(size_t nNewLength);
-
   ByteString Substr(size_t offset) const;
   ByteString Substr(size_t first, size_t count) const;
   ByteString First(size_t count) const;
   ByteString Last(size_t count) const;
 
-  absl::optional<size_t> Find(ByteStringView subStr, size_t start = 0) const;
-  absl::optional<size_t> Find(char ch, size_t start = 0) const;
-  absl::optional<size_t> ReverseFind(char ch) const;
-
-  bool Contains(ByteStringView lpszSub, size_t start = 0) const {
-    return Find(lpszSub, start).has_value();
-  }
-
-  bool Contains(char ch, size_t start = 0) const {
-    return Find(ch, start).has_value();
-  }
-
   void MakeLower();
   void MakeUpper();
 
-  void Trim();
-  void Trim(char target);
-  void Trim(ByteStringView targets);
-
-  void TrimLeft();
-  void TrimLeft(char target);
-  void TrimLeft(ByteStringView targets);
-
-  void TrimRight();
-  void TrimRight(char target);
-  void TrimRight(ByteStringView targets);
-
-  size_t Replace(ByteStringView pOld, ByteStringView pNew);
-  size_t Remove(char ch);
+  // Remove a canonical set of characters from the string.
+  void TrimWhitespace();
+  void TrimWhitespaceBack();
+  void TrimWhitespaceFront();
 
   uint32_t GetID() const { return AsStringView().GetID(); }
 
  protected:
-  using StringData = StringDataTemplate<char>;
-
-  void ReallocBeforeWrite(size_t nNewLen);
-  void AllocBeforeWrite(size_t nNewLen);
-  void AllocCopy(ByteString& dest, size_t nCopyLen, size_t nCopyIndex) const;
-  void AssignCopy(const char* pSrcData, size_t nSrcLen);
-  void Concat(const char* pSrcData, size_t nSrcLen);
   intptr_t ReferenceCountForTesting() const;
-
-  RetainPtr<StringData> m_pData;
 
   friend class ByteString_Assign_Test;
   friend class ByteString_Concat_Test;

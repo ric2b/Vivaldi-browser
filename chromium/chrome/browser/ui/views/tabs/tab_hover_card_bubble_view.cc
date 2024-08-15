@@ -18,6 +18,7 @@
 #include "base/strings/string_piece.h"
 #include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/tabs/tab_renderer_data.h"
 #include "chrome/browser/ui/tabs/tab_style.h"
@@ -29,8 +30,9 @@
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_hover_card_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_style_views.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/performance_manager/public/features.h"
+#include "components/prefs/pref_service.h"
 #include "components/url_formatter/url_formatter.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -69,25 +71,13 @@ constexpr int kHoverCardTitleMaxLines = 2;
 
 constexpr int kHorizontalMargin = 18;
 constexpr int kVerticalMargin = 10;
+constexpr int kTitleDomainSpacing = 4;
 constexpr int kFootnoteVerticalMargin = 8;
 constexpr auto kTitleMargins =
     gfx::Insets::VH(kVerticalMargin, kHorizontalMargin);
 constexpr auto kAlertMargins =
     gfx::Insets::VH(kFootnoteVerticalMargin, kHorizontalMargin);
 constexpr auto kTextAreaRefreshMargins = gfx::Insets::VH(12, 12);
-
-std::unique_ptr<views::Label> CreateAlertView(const TabAlertState& state) {
-  const int text_style = features::IsChromeRefresh2023()
-                             ? views::style::STYLE_BODY_4
-                             : views::style::STYLE_PRIMARY;
-  auto alert_state_label = std::make_unique<views::Label>(
-      std::u16string(), views::style::CONTEXT_DIALOG_BODY_TEXT, text_style);
-  alert_state_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  alert_state_label->SetMultiLine(true);
-  alert_state_label->SetVisible(true);
-  alert_state_label->SetText(chrome::GetTabAlertStateText(state));
-  return alert_state_label;
-}
 
 // Calculates an appropriate size to display a preview image in the hover card.
 // For the vast majority of images, the |preferred_size| is used, but extremely
@@ -350,7 +340,7 @@ class TabHoverCardBubbleView::ThumbnailView
   ImageType image_type_ = ImageType::kNone;
 };
 
-BEGIN_METADATA(TabHoverCardBubbleView, ThumbnailView, views::View)
+BEGIN_METADATA(TabHoverCardBubbleView, ThumbnailView)
 END_METADATA
 
 // TabHoverCardBubbleView:
@@ -366,11 +356,7 @@ TabHoverCardBubbleView::TabHoverCardBubbleView(Tab* tab)
     : BubbleDialogDelegateView(tab,
                                views::BubbleBorder::TOP_LEFT,
                                views::BubbleBorder::STANDARD_SHADOW),
-      tab_style_(TabStyle::Get()),
-      discard_tab_treatment_enabled_(base::FeatureList::IsEnabled(
-          performance_manager::features::kDiscardedTabTreatment)),
-      memory_usage_in_hovercards_enabled_(base::FeatureList::IsEnabled(
-          performance_manager::features::kMemoryUsageInHovercards)) {
+      tab_style_(TabStyle::Get()) {
   SetButtons(ui::DIALOG_BUTTON_NONE);
 
   // Remove the accessible role so that hover cards are not read when they
@@ -412,14 +398,20 @@ TabHoverCardBubbleView::TabHoverCardBubbleView(Tab* tab)
     thumbnail_view_->SetRoundedCorners(true, corner_radius_);
   }
 
-  if (discard_tab_treatment_enabled_ || memory_usage_in_hovercards_enabled_) {
-    footer_view_ = AddChildView(std::make_unique<FooterView>());
-    footer_view_->SetProperty(
-        views::kFlexBehaviorKey,
-        views::FlexSpecification(
-            footer_view_->flex_layout()->GetDefaultFlexRule())
-            .WithWeight(0));
-  }
+  footer_view_ = AddChildView(std::make_unique<FooterView>());
+  footer_view_->SetProperty(
+      views::kFlexBehaviorKey,
+      views::FlexSpecification(
+          footer_view_->flex_layout()->GetDefaultFlexRule())
+          .WithWeight(0));
+
+  OnMemoryUsageInHovercardsPrefChanged();
+  pref_change_registrar_.Init(g_browser_process->local_state());
+  pref_change_registrar_.Add(
+      prefs::kHoverCardMemoryUsageEnabled,
+      base::BindRepeating(
+          &TabHoverCardBubbleView::OnMemoryUsageInHovercardsPrefChanged,
+          base::Unretained(this)));
 
   // Set up layout.
 
@@ -440,8 +432,9 @@ TabHoverCardBubbleView::TabHoverCardBubbleView(Tab* tab)
       features::IsChromeRefresh2023() ? kTextAreaRefreshMargins : kTitleMargins;
   domain_label_->SetVisible(show_domain);
   if (show_domain) {
-    const gfx::Insets domain_margins = gfx::Insets::TLBR(
-        0, title_margins.left(), title_margins.bottom(), title_margins.right());
+    gfx::Insets domain_margins = title_margins;
+    domain_margins.set_top(features::IsChromeRefresh2023() ? kTitleDomainSpacing
+                                                           : 0);
     domain_label_->SetProperty(views::kMarginsKey, domain_margins);
     title_margins.set_bottom(0);
   }
@@ -504,7 +497,6 @@ void TabHoverCardBubbleView::UpdateCardContent(const Tab* tab) {
   }
 
   std::u16string title;
-  std::optional<TabAlertState> old_alert_state = alert_state_;
   const TabRendererData& tab_data = tab->data();
   GURL domain_url;
   // Use committed URL to determine if no page has yet loaded, since the title
@@ -557,29 +549,28 @@ void TabHoverCardBubbleView::UpdateCardContent(const Tab* tab) {
   title_label_->SetData({title, is_filename});
   domain_label_->SetData({domain, false});
 
-  bool show_footer = alert_state_.has_value();
-  if (discard_tab_treatment_enabled_ || memory_usage_in_hovercards_enabled_) {
-    const bool show_discard_status =
-        tab_data.should_show_discard_status && discard_tab_treatment_enabled_;
-    const uint64_t tab_memory_usage_in_bytes =
-        tab_data.tab_resource_usage
-            ? tab_data.tab_resource_usage->memory_usage_in_bytes()
-            : 0;
-    show_footer =
-        show_footer || show_discard_status || tab_memory_usage_in_bytes > 0;
-    footer_view_->SetAlertData({alert_state_});
+  const bool show_discard_status = tab_data.should_show_discard_status;
+  const uint64_t tab_memory_usage_in_bytes =
+      tab_data.tab_resource_usage
+          ? tab_data.tab_resource_usage->memory_usage_in_bytes()
+          : 0;
+  const bool is_high_memory_usage =
+      tab_data.tab_resource_usage
+          ? tab_data.tab_resource_usage->is_high_memory_usage()
+          : false;
+  // High memory usage notification is considered a tab alert. Show it even
+  // if the memory usage in hovercards pref is disabled.
+  const bool show_memory_usage =
+      (memory_usage_in_hovercards_setting_ && tab_memory_usage_in_bytes > 0) ||
+      is_high_memory_usage;
+  bool show_footer =
+      alert_state_.has_value() || show_discard_status || show_memory_usage;
 
-    footer_view_->SetPerformanceData(
-        {show_discard_status, tab_data.discarded_memory_savings_in_bytes,
-         tab_memory_usage_in_bytes});
+  footer_view_->SetAlertData({alert_state_, show_discard_status,
+                              tab_data.discarded_memory_savings_in_bytes});
 
-  } else {
-    if (alert_state_ != old_alert_state) {
-      std::unique_ptr<views::Label> alert_label =
-          alert_state_.has_value() ? CreateAlertView(*alert_state_) : nullptr;
-      GetBubbleFrameView()->SetFootnoteView(std::move(alert_label));
-    }
-  }
+  footer_view_->SetPerformanceData(
+      {show_memory_usage, is_high_memory_usage, tab_memory_usage_in_bytes});
 
   if (thumbnail_view_) {
     // We only clip the corners of the fade image when there isn't a footer.
@@ -619,6 +610,10 @@ views::View* TabHoverCardBubbleView::GetThumbnailViewForTesting() {
   return thumbnail_view_;
 }
 
+FooterView* TabHoverCardBubbleView::GetFooterViewForTesting() {
+  return footer_view_;
+}
+
 // static
 std::optional<double> TabHoverCardBubbleView::GetPreviewImageCrossfadeStart() {
   // For consistency, always bail out with a "don't crossfade" response if
@@ -633,6 +628,12 @@ std::optional<double> TabHoverCardBubbleView::GetPreviewImageCrossfadeStart() {
   return start_percent >= 0.0
              ? std::make_optional(std::clamp(start_percent, 0.0, 1.0))
              : std::nullopt;
+}
+
+void TabHoverCardBubbleView::OnMemoryUsageInHovercardsPrefChanged() {
+  PrefService* const pref_service = g_browser_process->local_state();
+  memory_usage_in_hovercards_setting_ =
+      pref_service->GetBoolean(prefs::kHoverCardMemoryUsageEnabled);
 }
 
 gfx::Size TabHoverCardBubbleView::CalculatePreferredSize() const {

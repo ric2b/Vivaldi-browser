@@ -27,6 +27,9 @@ import org.chromium.components.content_settings.CookieControlsMode;
 import org.chromium.device.DeviceFeatureList;
 import org.chromium.device.DeviceFeatureMap;
 
+//Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * A class with utility functions that get the appropriate string and icon resources for the
  * Android UI that allows managing content settings.
@@ -291,16 +294,6 @@ public class ContentSettingsResources {
                         0,
                         R.string.website_settings_category_mic_a11y);
 
-            case ContentSettingsType.MIDI:
-                return new ResourceItem(
-                        R.drawable.gm_filled_piano_24,
-                        R.string.midi_permission_title,
-                        null,
-                        null,
-                        0,
-                        0,
-                        0);
-
             case ContentSettingsType.MIDI_SYSEX:
                 return new ResourceItem(
                         R.drawable.gm_filled_piano_24,
@@ -498,6 +491,15 @@ public class ContentSettingsResources {
                 isIncognito
                         ? R.color.default_icon_color_blue_light
                         : R.color.default_icon_color_accent1_tint_list;
+        // Vivaldi (gabriel@vivaldi.com) We need to provide different colors here for notification
+        //  blocking icon because DrawableCompat.setTint() doesn't work well on BitmapDrawables
+        //  on older versions. (Ref. VAB-8539)
+        if (BuildConfig.IS_VIVALDI) {
+            color =
+                    isIncognito
+                            ? R.color.default_icon_color_light_tint_list
+                            : R.color.default_icon_color_white_tint_list;
+        }
         Drawable icon =
                 SettingsUtils.getTintedIcon(context, getIcon(contentSettingsType, null), color);
         if (value != null && value == ContentSettingValues.BLOCK) {

@@ -4,6 +4,9 @@
 
 #include "cc/metrics/scroll_jank_ukm_reporter.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/test/simple_test_tick_clock.h"
 #include "cc/metrics/predictor_jank_tracker.h"
 #include "cc/metrics/scroll_jank_dropped_frame_tracker.h"
@@ -78,8 +81,8 @@ class ScrollJankUkmReporterTest : public testing::Test {
 
  protected:
   base::TimeTicks base_time_;
-  raw_ptr<ukm::TestUkmRecorder, DanglingUntriaged> test_ukm_recorder_;
   std::unique_ptr<UkmManager> ukm_manager_;
+  raw_ptr<ukm::TestUkmRecorder> test_ukm_recorder_;
   std::unique_ptr<ScrollJankUkmReporter> scroll_jank_ukm_reporter_;
   std::unique_ptr<ScrollJankDroppedFrameTracker>
       scroll_jank_dropped_frame_tracker_;
@@ -284,21 +287,7 @@ TEST_F(ScrollJankUkmReporterTest, NoPredictorJank) {
 
   auto predictor_entries = test_ukm_recorder_->GetEntriesByName(
       ukm::builders::Event_ScrollJank_PredictorJank::kEntryName);
-  EXPECT_EQ(1u, predictor_entries.size());
-
-  test_ukm_recorder_->ExpectEntryMetric(
-      predictor_entries.back(),
-      ukm::builders::Event_ScrollJank_PredictorJank::kMaxDeltaName, 0);
-  test_ukm_recorder_->ExpectEntryMetric(
-      predictor_entries.back(),
-      ukm::builders::Event_ScrollJank_PredictorJank::
-          kScrollUpdate_MissedVsync_FrameAboveJankyThreshold2Name,
-      0);
-  test_ukm_recorder_->ExpectEntryMetric(
-      predictor_entries.back(),
-      ukm::builders::Event_ScrollJank_PredictorJank::
-          kScrollUpdate_NoMissedVsync_FrameAboveJankyThreshold2Name,
-      0);
+  EXPECT_EQ(0u, predictor_entries.size());
 }
 
 TEST_F(ScrollJankUkmReporterTest, PredictorJankMissedVsync) {

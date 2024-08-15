@@ -9,9 +9,12 @@
 #import <memory>
 #import <optional>
 
+#import "base/memory/raw_ptr.h"
+#import "base/memory/weak_ptr.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/scoped_observation.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/autofill/core/browser/payments/autofill_error_dialog_context.h"
 #import "components/commerce/core/shopping_service.h"
 #import "components/content_settings/core/browser/host_content_settings_map.h"
 #import "components/feature_engagement/public/event_constants.h"
@@ -25,13 +28,11 @@
 #import "components/profile_metrics/browser_profile_type.h"
 #import "components/safe_browsing/core/common/features.h"
 #import "components/segmentation_platform/embedder/default_model/device_switcher_result_dispatcher.h"
-#import "components/signin/ios/browser/active_state_manager.h"
 #import "components/translate/core/browser/translate_manager.h"
 #import "ios/chrome/browser/app_launcher/model/app_launcher_tab_helper_browser_presentation_provider.h"
 #import "ios/chrome/browser/commerce/model/push_notification/push_notification_feature.h"
 #import "ios/chrome/browser/commerce/model/shopping_service_factory.h"
 #import "ios/chrome/browser/content_settings/model/host_content_settings_map_factory.h"
-#import "ios/chrome/browser/credential_provider_promo/model/features.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/docking_promo/coordinator/docking_promo_coordinator.h"
 #import "ios/chrome/browser/download/model/download_directory_util.h"
@@ -60,7 +61,8 @@
 #import "ios/chrome/browser/prerender/model/preload_controller_delegate.h"
 #import "ios/chrome/browser/prerender/model/prerender_service.h"
 #import "ios/chrome/browser/prerender/model/prerender_service_factory.h"
-#import "ios/chrome/browser/promos_manager/features.h"
+#import "ios/chrome/browser/promos_manager/model/features.h"
+#import "ios/chrome/browser/qr_scanner/ui_bundled/qr_scanner_legacy_coordinator.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_browser_agent.h"
 #import "ios/chrome/browser/segmentation_platform/model/segmentation_platform_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/alert/repost_form_coordinator.h"
@@ -75,7 +77,7 @@
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/public/commands/activity_service_commands.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
-#import "ios/chrome/browser/shared/public/commands/autofill_bottom_sheet_commands.h"
+#import "ios/chrome/browser/shared/public/commands/autofill_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/feed_commands.h"
@@ -83,6 +85,7 @@
 #import "ios/chrome/browser/shared/public/commands/load_query_commands.h"
 #import "ios/chrome/browser/shared/public/commands/mini_map_commands.h"
 #import "ios/chrome/browser/shared/public/commands/new_tab_page_commands.h"
+#import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/shared/public/commands/page_info_commands.h"
 #import "ios/chrome/browser/shared/public/commands/parcel_tracking_opt_in_commands.h"
 #import "ios/chrome/browser/shared/public/commands/password_breach_commands.h"
@@ -98,6 +101,7 @@
 #import "ios/chrome/browser/shared/public/commands/save_image_to_photos_command.h"
 #import "ios/chrome/browser/shared/public/commands/save_to_drive_commands.h"
 #import "ios/chrome/browser/shared/public/commands/save_to_photos_commands.h"
+#import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/commands/share_highlight_command.h"
 #import "ios/chrome/browser/shared/public/commands/show_signin_command.h"
 #import "ios/chrome/browser/shared/public/commands/text_zoom_commands.h"
@@ -105,6 +109,7 @@
 #import "ios/chrome/browser/shared/public/commands/unit_conversion_commands.h"
 #import "ios/chrome/browser/shared/public/commands/web_content_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/public/features/features_utils.h"
 #import "ios/chrome/browser/shared/ui/elements/activity_overlay_coordinator.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/page_animation_util.h"
@@ -112,9 +117,9 @@
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/signin/model/account_consistency_browser_agent.h"
 #import "ios/chrome/browser/signin/model/account_consistency_service_factory.h"
-#import "ios/chrome/browser/snapshots/model/snapshot_browser_agent.h"
-#import "ios/chrome/browser/snapshots/model/snapshot_generator_delegate.h"
+#import "ios/chrome/browser/snapshots/model/model_swift.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
+#import "ios/chrome/browser/snapshots/model/web_state_snapshot_info.h"
 #import "ios/chrome/browser/store_kit/model/store_kit_coordinator.h"
 #import "ios/chrome/browser/store_kit/model/store_kit_coordinator_delegate.h"
 #import "ios/chrome/browser/sync/model/sync_error_browser_agent.h"
@@ -125,7 +130,10 @@
 #import "ios/chrome/browser/ui/authentication/enterprise/enterprise_prompt/enterprise_prompt_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/enterprise/enterprise_prompt/enterprise_prompt_type.h"
 #import "ios/chrome/browser/ui/authentication/signin_presenter.h"
+#import "ios/chrome/browser/ui/autofill/authentication/card_unmask_authentication_coordinator.h"
 #import "ios/chrome/browser/ui/autofill/bottom_sheet/payments_suggestion_bottom_sheet_coordinator.h"
+#import "ios/chrome/browser/ui/autofill/bottom_sheet/virtual_card_enrollment_bottom_sheet_coordinator.h"
+#import "ios/chrome/browser/ui/autofill/error_dialog/autofill_error_dialog_coordinator.h"
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_coordinator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_password_coordinator.h"
 #import "ios/chrome/browser/ui/bookmarks/home/bookmarks_coordinator.h"
@@ -185,7 +193,6 @@
 #import "ios/chrome/browser/ui/price_notifications/price_notifications_view_coordinator.h"
 #import "ios/chrome/browser/ui/print/print_coordinator.h"
 #import "ios/chrome/browser/ui/promos_manager/promos_manager_coordinator.h"
-#import "ios/chrome/browser/ui/qr_scanner/qr_scanner_legacy_coordinator.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_coordinator.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_coordinator.h"
@@ -214,7 +221,6 @@
 #import "ios/chrome/browser/ui/unit_conversion/unit_conversion_coordinator.h"
 #import "ios/chrome/browser/ui/voice/text_to_speech_playback_controller.h"
 #import "ios/chrome/browser/ui/voice/text_to_speech_playback_controller_factory.h"
-#import "ios/chrome/browser/ui/webui/net_export_coordinator.h"
 #import "ios/chrome/browser/ui/whats_new/whats_new_coordinator.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_notifier_browser_agent.h"
@@ -232,6 +238,7 @@
 #import "ios/chrome/browser/web_state_list/model/web_usage_enabler/web_usage_enabler_browser_agent.h"
 #import "ios/chrome/browser/web_state_list/model/web_usage_enabler/web_usage_enabler_browser_agent_observer_bridge.h"
 #import "ios/chrome/browser/webui/model/net_export_tab_helper_delegate.h"
+#import "ios/chrome/browser/webui/ui_bundled/net_export_coordinator.h"
 #import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/fullscreen/fullscreen_api.h"
@@ -244,7 +251,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/promos_manager/promos_manager_factory.h"
+#import "ios/chrome/browser/promos_manager/model/promos_manager_factory.h"
 #import "ios/chrome/browser/ui/whats_new/vivaldi_whats_new_util.h"
 #import "ios/chrome/browser/web/model/web_navigation_browser_agent.h"
 #import "ios/panel/panel_interaction_controller.h"
@@ -370,8 +377,15 @@ enum class ToolbarKind {
 @property(nonatomic, strong) PaymentsSuggestionBottomSheetCoordinator*
     paymentsSuggestionBottomSheetCoordinator;
 
+// Coordinator for the authentication when unmasking card during autofill.
+@property(nonatomic, strong)
+    CardUnmaskAuthenticationCoordinator* cardUnmaskAuthenticationCoordinator;
+
 @property(nonatomic, strong)
     PlusAddressBottomSheetCoordinator* plusAddressBottomSheetCoordinator;
+
+@property(nonatomic, strong) VirtualCardEnrollmentBottomSheetCoordinator*
+    virtualCardEnrollmentBottomSheetCoordinator;
 
 // Coordinator for the choice screen.
 @property(nonatomic, strong) ChromeCoordinator* choiceCoordinator;
@@ -391,6 +405,10 @@ enum class ToolbarKind {
 // The coordinator that manages enterprise prompts.
 @property(nonatomic, strong)
     EnterprisePromptCoordinator* enterprisePromptCoordinator;
+
+// Coordinator to show the Autofill error dialog.
+@property(nonatomic, strong)
+    AutofillErrorDialogCoordinator* autofillErrorDialogCoordinator;
 
 // Coordinator for the find bar.
 @property(nonatomic, strong) FindBarCoordinator* findBarCoordinator;
@@ -548,7 +566,7 @@ enum class ToolbarKind {
   TabStripCoordinator* _tabStripCoordinator;
   TabStripLegacyCoordinator* _legacyTabStripCoordinator;
   SideSwipeMediator* _sideSwipeMediator;
-  FullscreenController* _fullscreenController;
+  raw_ptr<FullscreenController> _fullscreenController;
   // The coordinator that shows the Send Tab To Self UI.
   SendTabToSelfCoordinator* _sendTabToSelfCoordinator;
   BookmarksCoordinator* _bookmarksCoordinator;
@@ -557,12 +575,12 @@ enum class ToolbarKind {
   DockingPromoCoordinator* _dockingPromoCoordinator;
   // Used to display the Voice Search UI.  Nil if not visible.
   id<VoiceSearchController> _voiceSearchController;
-  UrlLoadingNotifierBrowserAgent* _urlLoadingNotifierBrowserAgent;
+  raw_ptr<UrlLoadingNotifierBrowserAgent> _urlLoadingNotifierBrowserAgent;
   id<LoadQueryCommands> _loadQueryCommandsHandler;
   id<OmniboxCommands> _omniboxCommandsHandler;
   LayoutGuideCenter* _layoutGuideCenter;
-  WebNavigationBrowserAgent* _webNavigationBrowserAgent;
-  UrlLoadingBrowserAgent* _urlLoadingBrowserAgent;
+  raw_ptr<WebNavigationBrowserAgent> _webNavigationBrowserAgent;
+  raw_ptr<UrlLoadingBrowserAgent> _urlLoadingBrowserAgent;
   AddContactsCoordinator* _addContactsCoordinator;
   OmniboxPositionChoiceCoordinator* _omniboxPositionChoiceCoordinator;
   std::unique_ptr<WebUsageEnablerBrowserAgentObserverBridge>
@@ -664,11 +682,6 @@ enum class ToolbarKind {
 
   ChromeBrowserState* browserState = self.browser->GetBrowserState();
   if (browserState) {
-    // TODO(crbug.com/1272520): Refactor ActiveStateManager for multiwindow.
-    ActiveStateManager* active_state_manager =
-        ActiveStateManager::FromBrowserState(browserState);
-    active_state_manager->SetActive(active);
-
     TextToSpeechPlaybackControllerFactory::GetInstance()
         ->GetForBrowserState(browserState)
         ->SetEnabled(active);
@@ -727,6 +740,11 @@ enum class ToolbarKind {
 
   [self.plusAddressBottomSheetCoordinator stop];
   self.plusAddressBottomSheetCoordinator = nil;
+
+  [self.virtualCardEnrollmentBottomSheetCoordinator stop];
+  self.virtualCardEnrollmentBottomSheetCoordinator = nil;
+
+  [self dismissAutofillErrorDialog];
 
   [_sendTabToSelfCoordinator stop];
   _sendTabToSelfCoordinator = nil;
@@ -877,7 +895,7 @@ enum class ToolbarKind {
   // handlers.
   NSArray<Protocol*>* protocols = @[
     @protocol(ActivityServiceCommands),
-    @protocol(AutofillBottomSheetCommands),
+    @protocol(AutofillCommands),
     @protocol(BrowserCoordinatorCommands),
     @protocol(DefaultBrowserPromoNonModalCommands),
     @protocol(FeedCommands),
@@ -913,7 +931,7 @@ enum class ToolbarKind {
   _keyCommandsProvider.applicationHandler =
       HandlerForProtocol(_dispatcher, ApplicationCommands);
   _keyCommandsProvider.settingsHandler =
-      HandlerForProtocol(_dispatcher, ApplicationSettingsCommands);
+      HandlerForProtocol(_dispatcher, SettingsCommands);
   _keyCommandsProvider.findInPageHandler =
       HandlerForProtocol(_dispatcher, FindInPageCommands);
   _keyCommandsProvider.browserCoordinatorHandler =
@@ -960,7 +978,7 @@ enum class ToolbarKind {
         kLegacyFullscreenControllerToolbarAnimationDuration.InSecondsF();
   } else {
   if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
-    if (base::FeatureList::IsEnabled(kModernTabStrip)) {
+    if (IsModernTabStripOrRaccoonEnabled()) {
       _tabStripCoordinator =
           [[TabStripCoordinator alloc] initWithBrowser:self.browser];
     } else {
@@ -998,14 +1016,13 @@ enum class ToolbarKind {
   _toolbarAccessoryPresenter.toolbarLayoutGuide =
       [_layoutGuideCenter makeLayoutGuideNamed:kPrimaryToolbarGuide];
 
-  SnapshotBrowserAgent* snapshotBrowserAgent =
-      SnapshotBrowserAgent::FromBrowser(self.browser);
   _sideSwipeMediator = [[SideSwipeMediator alloc]
       initWithFullscreenController:_fullscreenController
-              snapshotBrowserAgent:snapshotBrowserAgent
                       webStateList:self.browser->GetWebStateList()];
   _sideSwipeMediator.toolbarInteractionHandler = _toolbarCoordinator;
   _sideSwipeMediator.toolbarSnapshotProvider = _toolbarCoordinator;
+  _sideSwipeMediator.engagementTracker = engagementTracker;
+
   // Vivaldi
   if (vivaldi::IsVivaldiRunning()) {
       _panelInteractionController =
@@ -1013,7 +1030,7 @@ enum class ToolbarKind {
     [_sideSwipeMediator setTabStripDelegate:_legacyTabStripCoordinator];
   } else {
   if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET &&
-      !base::FeatureList::IsEnabled(kModernTabStrip)) {
+      !IsModernTabStripOrRaccoonEnabled()) {
     [_sideSwipeMediator setTabStripDelegate:_legacyTabStripCoordinator];
   }
   }// End Vivaldi
@@ -1280,6 +1297,12 @@ enum class ToolbarKind {
   /* paymentsSuggestionBottomSheetCoordinator is created and started by a
    * BrowserCommand */
 
+  /* virtualCardEnrollmentBottomSheetCoordinator is created and started by a
+   * BrowserCommand */
+
+  /* autofillErrorDialogCoordinator is created and started by a BrowserCommand
+   */
+
   /* PriceNotificationsViewCoordinator is created and started by a
    * BrowserCommand */
 
@@ -1409,8 +1432,16 @@ enum class ToolbarKind {
   [self.paymentsSuggestionBottomSheetCoordinator stop];
   self.paymentsSuggestionBottomSheetCoordinator = nil;
 
+  [self.cardUnmaskAuthenticationCoordinator stop];
+  self.cardUnmaskAuthenticationCoordinator = nil;
+
   [self.plusAddressBottomSheetCoordinator stop];
   self.plusAddressBottomSheetCoordinator = nil;
+
+  [self.virtualCardEnrollmentBottomSheetCoordinator stop];
+  self.virtualCardEnrollmentBottomSheetCoordinator = nil;
+
+  [self dismissAutofillErrorDialog];
 
   [self.printCoordinator stop];
   self.printCoordinator = nil;
@@ -1654,7 +1685,7 @@ enum class ToolbarKind {
   [self.sharingCoordinator start];
 }
 
-#pragma mark - AutofillBottomSheetCommands
+#pragma mark - AutofillCommands
 
 - (void)showPasswordBottomSheet:(const autofill::FormActivityParams&)params {
   self.passwordSuggestionBottomSheetCoordinator =
@@ -1667,14 +1698,6 @@ enum class ToolbarKind {
   [self.passwordSuggestionBottomSheetCoordinator start];
 }
 
-- (void)showPlusAddressesBottomSheet {
-  self.plusAddressBottomSheetCoordinator =
-      [[PlusAddressBottomSheetCoordinator alloc]
-          initWithBaseViewController:self.viewController
-                             browser:self.browser];
-  [self.plusAddressBottomSheetCoordinator start];
-}
-
 - (void)showPaymentsBottomSheet:(const autofill::FormActivityParams&)params {
   if (self.paymentsSuggestionBottomSheetCoordinator) {
     return;
@@ -1684,13 +1707,61 @@ enum class ToolbarKind {
           initWithBaseViewController:self.viewController
                              browser:self.browser
                               params:params];
-  self.paymentsSuggestionBottomSheetCoordinator
-      .applicationSettingsCommandsHandler =
-      HandlerForProtocol(self.dispatcher, ApplicationSettingsCommands);
+  self.paymentsSuggestionBottomSheetCoordinator.settingsHandler =
+      HandlerForProtocol(self.dispatcher, SettingsCommands);
   self.paymentsSuggestionBottomSheetCoordinator
       .browserCoordinatorCommandsHandler =
       HandlerForProtocol(self.dispatcher, BrowserCoordinatorCommands);
   [self.paymentsSuggestionBottomSheetCoordinator start];
+}
+
+- (void)showCardUnmaskAuthentication {
+  self.cardUnmaskAuthenticationCoordinator =
+      [[CardUnmaskAuthenticationCoordinator alloc]
+          initWithBaseViewController:self.viewController
+                             browser:self.browser];
+  [self.cardUnmaskAuthenticationCoordinator start];
+}
+
+- (void)showPlusAddressesBottomSheet {
+  self.plusAddressBottomSheetCoordinator =
+      [[PlusAddressBottomSheetCoordinator alloc]
+          initWithBaseViewController:self.viewController
+                             browser:self.browser];
+  [self.plusAddressBottomSheetCoordinator start];
+}
+
+- (void)showVirtualCardEnrollmentBottomSheet:
+    (const autofill::VirtualCardEnrollUiModel&)model {
+  if (self.virtualCardEnrollmentBottomSheetCoordinator) {
+    [self.virtualCardEnrollmentBottomSheetCoordinator stop];
+  }
+  self.virtualCardEnrollmentBottomSheetCoordinator =
+      [[VirtualCardEnrollmentBottomSheetCoordinator alloc]
+             initWithUIModel:model
+          baseViewController:self.viewController
+                     browser:self.browser];
+  [self.virtualCardEnrollmentBottomSheetCoordinator start];
+}
+
+- (void)showAutofillErrorDialog:
+    (autofill::AutofillErrorDialogContext)errorContext {
+  if (self.autofillErrorDialogCoordinator) {
+    [self.autofillErrorDialogCoordinator stop];
+  }
+
+  self.autofillErrorDialogCoordinator = [[AutofillErrorDialogCoordinator alloc]
+      initWithBaseViewController:self.viewController
+                         browser:self.browser
+                    errorContext:std::move(errorContext)];
+  self.autofillErrorDialogCoordinator.autofillCommandsHandler =
+      HandlerForProtocol(self.dispatcher, AutofillCommands);
+  [self.autofillErrorDialogCoordinator start];
+}
+
+- (void)dismissAutofillErrorDialog {
+  [self.autofillErrorDialogCoordinator stop];
+  self.autofillErrorDialogCoordinator = nil;
 }
 
 #pragma mark - BrowserCoordinatorCommands
@@ -1755,6 +1826,11 @@ enum class ToolbarKind {
 
 - (void)showPanel {
   [self showBookmarksManager];
+}
+
+- (void)showHistoryPanel {
+  [_panelInteractionController presentPanel:PanelPage::HistoryPage
+                           withSearchString:nil];
 }
 
 - (void)dismissPanel {
@@ -1854,8 +1930,6 @@ enum class ToolbarKind {
 }
 
 - (void)showSendTabToSelfUI:(const GURL&)url title:(NSString*)title {
-  CHECK(!_sendTabToSelfCoordinator);
-
   _sendTabToSelfCoordinator = [[SendTabToSelfCoordinator alloc]
       initWithBaseViewController:self.viewController
                          browser:self.browser
@@ -1919,20 +1993,15 @@ enum class ToolbarKind {
 }
 
 - (void)showWhatsNew {
-  if (IsVivaldiRunning()) {
-    if (!WasVivaldiWhatsNewShown()) {
-      [self.viewController openWhatsNewTab];
-      setVivaldiWhatsNewShown(
-          PromosManagerFactory::GetForBrowserState(
-              self.browser->GetBrowserState()));
-    }
-  } else {
+
+  // Vivaldi: Let's not show any chrome whats' new promo.
+  if (IsVivaldiRunning())
+    return; // End Vivaldi
+
   self.whatsNewCoordinator = [[WhatsNewCoordinator alloc]
       initWithBaseViewController:self.viewController
                          browser:self.browser];
   [self.whatsNewCoordinator start];
-  } // End Vivaldi
-
 }
 
 - (void)dismissWhatsNew {
@@ -1970,18 +2039,19 @@ enum class ToolbarKind {
   self.paymentsSuggestionBottomSheetCoordinator = nil;
 }
 
+- (void)dismissCardUnmaskAuthentication {
+  [self.cardUnmaskAuthenticationCoordinator stop];
+  self.cardUnmaskAuthenticationCoordinator = nil;
+}
+
 - (void)dismissPlusAddressBottomSheet {
   [self.plusAddressBottomSheetCoordinator stop];
   self.plusAddressBottomSheetCoordinator = nil;
 }
 
-- (void)showPlusAddressManagementPage {
-  GURL managementUrl(plus_addresses::kPlusAddressManagementUrl.Get());
-  UrlLoadParams params = UrlLoadParams::InNewTab(managementUrl);
-  params.append_to = OpenPosition::kCurrentTab;
-  params.user_initiated = NO;
-  params.in_incognito = self.browser->GetBrowserState()->IsOffTheRecord();
-  _urlLoadingBrowserAgent->Load(params);
+- (void)dismissVirtualCardEnrollmentBottomSheet {
+  [self.virtualCardEnrollmentBottomSheetCoordinator stop];
+  self.virtualCardEnrollmentBottomSheetCoordinator = nil;
 }
 
 - (void)showOmniboxPositionChoice {
@@ -2291,17 +2361,10 @@ enum class ToolbarKind {
   self.pageInfoCoordinator = nil;
 }
 
-- (void)showSecurityHelpPage {
-  UrlLoadParams params = UrlLoadParams::InNewTab(GURL(kPageInfoHelpCenterURL));
-  params.in_incognito = self.browser->GetBrowserState()->IsOffTheRecord();
-  _urlLoadingBrowserAgent->Load(params);
-  [self hidePageInfo];
-}
-
 #pragma mark - FormInputAccessoryCoordinatorNavigator
 
 - (void)openPasswordManager {
-  [HandlerForProtocol(self.dispatcher, ApplicationSettingsCommands)
+  [HandlerForProtocol(self.dispatcher, SettingsCommands)
       showSavedPasswordsSettingsFromViewController:self.viewController
                                   showCancelButton:YES];
 }
@@ -2322,12 +2385,12 @@ enum class ToolbarKind {
 }
 
 - (void)openAddressSettings {
-  [HandlerForProtocol(self.dispatcher, ApplicationSettingsCommands)
+  [HandlerForProtocol(self.dispatcher, SettingsCommands)
       showProfileSettingsFromViewController:self.viewController];
 }
 
 - (void)openCreditCardSettings {
-  [HandlerForProtocol(self.dispatcher, ApplicationSettingsCommands)
+  [HandlerForProtocol(self.dispatcher, SettingsCommands)
       showCreditCardSettings];
 }
 
@@ -2945,17 +3008,17 @@ enum class ToolbarKind {
 }
 
 - (void)showSyncPassphraseSettings {
-  [HandlerForProtocol(self.dispatcher, ApplicationSettingsCommands)
+  [HandlerForProtocol(self.dispatcher, SettingsCommands)
       showSyncPassphraseSettingsFromViewController:self.viewController];
 }
 
 - (void)showGoogleServicesSettings {
-  [HandlerForProtocol(self.dispatcher, ApplicationSettingsCommands)
+  [HandlerForProtocol(self.dispatcher, SettingsCommands)
       showGoogleServicesSettingsFromViewController:self.viewController];
 }
 
 - (void)showAccountSettings {
-  [HandlerForProtocol(self.dispatcher, ApplicationSettingsCommands)
+  [HandlerForProtocol(self.dispatcher, SettingsCommands)
       showAccountsSettingsFromViewController:self.viewController
                         skipIfUINotAvailable:NO];
 }
@@ -2995,22 +3058,41 @@ enum class ToolbarKind {
 // mediator with a narrowly-defined API to get UI-layer information from the
 // BVC.
 
-- (BOOL)snapshotGenerator:(SnapshotGenerator*)snapshotGenerator
-    canTakeSnapshotForWebState:(web::WebState*)webState {
-  DCHECK(webState);
+- (BOOL)canTakeSnapshotWithWebStateInfo:(WebStateSnapshotInfo*)webStateInfo {
+  DCHECK(webStateInfo);
+  web::WebState* webState = webStateInfo.webState;
+  if (!webState) {
+    return NO;
+  }
   PagePlaceholderTabHelper* pagePlaceholderTabHelper =
       PagePlaceholderTabHelper::FromWebState(webState);
   return !pagePlaceholderTabHelper->displaying_placeholder() &&
          !pagePlaceholderTabHelper->will_add_placeholder_for_next_navigation();
 }
 
-- (UIEdgeInsets)snapshotGenerator:(SnapshotGenerator*)snapshotGenerator
-    snapshotEdgeInsetsForWebState:(web::WebState*)webState {
-  DCHECK(webState);
+- (void)willUpdateSnapshotWithWebStateInfo:(WebStateSnapshotInfo*)webStateInfo {
+  DCHECK(webStateInfo);
+  web::WebState* webState = webStateInfo.webState;
+  if (!webState) {
+    return;
+  }
+
+  if ([self isNTPActiveForCurrentWebState]) {
+    [_NTPCoordinator willUpdateSnapshot];
+  }
+  OverscrollActionsTabHelper::FromWebState(webState)->Clear();
+}
+
+- (UIEdgeInsets)snapshotEdgeInsetsWithWebStateInfo:
+    (WebStateSnapshotInfo*)webStateInfo {
+  DCHECK(webStateInfo);
+  web::WebState* webState = webStateInfo.webState;
+  if (!webState) {
+    return UIEdgeInsetsZero;
+  }
 
   if (IsVivaldiRunning())
-    return [self vivaldiSnapshotGenerator:snapshotGenerator
-                snapshotEdgeInsetsForWebState:webState]; // End Vivaldi
+    return [self snapshotEdgeInsetsForWebState:webState]; // End Vivaldi
 
   UIEdgeInsets maxViewportInsets =
       _fullscreenController->GetMaxViewportInsets();
@@ -3042,9 +3124,14 @@ enum class ToolbarKind {
   }
 }
 
-- (NSArray<UIView*>*)snapshotGenerator:(SnapshotGenerator*)snapshotGenerator
-           snapshotOverlaysForWebState:(web::WebState*)webState {
-  DCHECK(webState);
+- (NSArray<UIView*>*)snapshotOverlaysWithWebStateInfo:
+    (WebStateSnapshotInfo*)webStateInfo {
+  DCHECK(webStateInfo);
+  web::WebState* webState = webStateInfo.webState;
+  if (!webState) {
+    return @[];
+  }
+
   WebStateList* webStateList = self.browser->GetWebStateList();
   DCHECK_NE(webStateList->GetIndexOfWebState(webState),
             WebStateList::kInvalidIndex);
@@ -3102,18 +3189,12 @@ enum class ToolbarKind {
   return overlays;
 }
 
-- (void)snapshotGenerator:(SnapshotGenerator*)snapshotGenerator
-    willUpdateSnapshotForWebState:(web::WebState*)webState {
-  DCHECK(webState);
-
-  if ([self isNTPActiveForCurrentWebState]) {
-    [_NTPCoordinator willUpdateSnapshot];
+- (UIView*)baseViewWithWebStateInfo:(WebStateSnapshotInfo*)webStateInfo {
+  DCHECK(webStateInfo);
+  web::WebState* webState = webStateInfo.webState;
+  if (!webState) {
+    return nil;
   }
-  OverscrollActionsTabHelper::FromWebState(webState)->Clear();
-}
-
-- (UIView*)snapshotGenerator:(SnapshotGenerator*)snapshotGenerator
-         baseViewForWebState:(web::WebState*)webState {
   NewTabPageTabHelper* NTPHelper = NewTabPageTabHelper::FromWebState(webState);
   if (NTPHelper && NTPHelper->IsActive()) {
     // If NTPCoordinator is not started yet, fall back to using the
@@ -3300,6 +3381,11 @@ enum class ToolbarKind {
   OverscrollActionsTabHelper* activeTabHelper =
       OverscrollActionsTabHelper::FromWebState(activeWebState);
   if (controller == activeTabHelper->GetOverscrollActionsController()) {
+
+    if (IsVivaldiRunning())
+      return self.viewController.headerInsetForOverscroll;
+    // End Vivaldi
+
     return self.viewController.headerHeight;
   } else {
     return 0.0;
@@ -3348,8 +3434,8 @@ enum class ToolbarKind {
 }
 
 - (void)displaySavedPasswordList {
-  id<ApplicationSettingsCommands> settingsHandler =
-      HandlerForProtocol(_dispatcher, ApplicationSettingsCommands);
+  id<SettingsCommands> settingsHandler =
+      HandlerForProtocol(_dispatcher, SettingsCommands);
   [settingsHandler
       showSavedPasswordsSettingsFromViewController:self.viewController
                                   showCancelButton:YES];
@@ -3357,8 +3443,8 @@ enum class ToolbarKind {
 
 - (void)showPasswordDetailsForCredential:
     (password_manager::CredentialUIEntry)credential {
-  id<ApplicationSettingsCommands> settingsHandler =
-      HandlerForProtocol(_dispatcher, ApplicationSettingsCommands);
+  id<SettingsCommands> settingsHandler =
+      HandlerForProtocol(_dispatcher, SettingsCommands);
   [settingsHandler showPasswordDetailsForCredential:credential
                                    showCancelButton:YES];
 }
@@ -3469,8 +3555,7 @@ enum class ToolbarKind {
 
 #pragma mark - Vivaldi
 
-- (UIEdgeInsets)vivaldiSnapshotGenerator:(SnapshotGenerator*)snapshotGenerator
-           snapshotEdgeInsetsForWebState:(web::WebState*)webState {
+- (UIEdgeInsets)snapshotEdgeInsetsForWebState:(web::WebState*)webState {
   DCHECK(webState);
 
   UIEdgeInsets maxViewportInsets =

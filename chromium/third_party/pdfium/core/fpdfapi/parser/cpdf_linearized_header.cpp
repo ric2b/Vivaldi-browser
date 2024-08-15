@@ -15,9 +15,9 @@
 #include "core/fpdfapi/parser/cpdf_number.h"
 #include "core/fpdfapi/parser/cpdf_parser.h"
 #include "core/fpdfapi/parser/cpdf_syntax_parser.h"
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/fx_safe_types.h"
-#include "third_party/base/check.h"
-#include "third_party/base/memory/ptr_util.h"
+#include "core/fxcrt/ptr_util.h"
 
 namespace {
 
@@ -35,8 +35,9 @@ bool IsValidNumericDictionaryValue(const CPDF_Dictionary* pDict,
   if (!pNum || !pNum->IsInteger())
     return false;
   const int raw_value = pNum->GetInteger();
-  if (!pdfium::base::IsValueInRangeForNumericType<T>(raw_value))
+  if (!pdfium::IsValueInRangeForNumericType<T>(raw_value)) {
     return false;
+  }
   return static_cast<T>(raw_value) >= min_value;
 }
 

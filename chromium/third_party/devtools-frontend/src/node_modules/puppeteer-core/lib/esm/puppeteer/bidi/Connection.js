@@ -1,23 +1,14 @@
 /**
- * Copyright 2017 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2017 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 import { CallbackRegistry } from '../common/CallbackRegistry.js';
 import { debug } from '../common/Debug.js';
 import { EventEmitter } from '../common/EventEmitter.js';
 import { debugError } from '../common/util.js';
-import { cdpSessions } from './BrowsingContext.js';
+import { assert } from '../util/assert.js';
+import { BidiCdpSession } from './CDPSession.js';
 const debugProtocolSend = debug('puppeteer:webDriverBiDi:SEND ►');
 const debugProtocolReceive = debug('puppeteer:webDriverBiDi:RECV ◀');
 /**
@@ -30,7 +21,7 @@ export class BidiConnection extends EventEmitter {
     #timeout = 0;
     #closed = false;
     #callbacks = new CallbackRegistry();
-    #browsingContexts = new Map();
+    #emitters = [];
     constructor(url, transport, delay = 0, timeout) {
         super();
         this.#url = url;
@@ -38,7 +29,7 @@ export class BidiConnection extends EventEmitter {
         this.#timeout = timeout ?? 180000;
         this.#transport = transport;
         this.#transport.onmessage = this.onMessage.bind(this);
-        this.#transport.onclose = this.#onClose.bind(this);
+        this.#transport.onclose = this.unbind.bind(this);
     }
     get closed() {
         return this.#closed;
@@ -46,7 +37,17 @@ export class BidiConnection extends EventEmitter {
     get url() {
         return this.#url;
     }
+    pipeTo(emitter) {
+        this.#emitters.push(emitter);
+    }
+    emit(type, event) {
+        for (const emitter of this.#emitters) {
+            emitter.emit(type, event);
+        }
+        return super.emit(type, event);
+    }
     send(method, params) {
+        assert(!this.#closed, 'Protocol error: Connection closed.');
         return this.#callbacks.create(method, this.#timeout, id => {
             const stringifiedMessage = JSON.stringify({
                 id,
@@ -80,60 +81,30 @@ export class BidiConnection extends EventEmitter {
                     this.#callbacks.reject(object.id, createProtocolError(object), object.message);
                     return;
                 case 'event':
-                    this.#maybeEmitOnContext(object);
+                    if (isCdpEvent(object)) {
+                        BidiCdpSession.sessions
+                            .get(object.params.session)
+                            ?.emit(object.params.event, object.params.params);
+                        return;
+                    }
                     // SAFETY: We know the method and parameter still match here.
                     this.emit(object.method, object.params);
                     return;
             }
         }
+        // Even if the response in not in BiDi protocol format but `id` is provided, reject
+        // the callback. This can happen if the endpoint supports CDP instead of BiDi.
+        if ('id' in object) {
+            this.#callbacks.reject(object.id, `Protocol Error. Message is not in BiDi protocol format: '${message}'`, object.message);
+        }
         debugError(object);
     }
-    #maybeEmitOnContext(event) {
-        let context;
-        // Context specific events
-        if ('context' in event.params && event.params.context !== null) {
-            context = this.#browsingContexts.get(event.params.context);
-            // `log.entryAdded` specific context
-        }
-        else if ('source' in event.params &&
-            event.params.source.context !== undefined) {
-            context = this.#browsingContexts.get(event.params.source.context);
-        }
-        else if (isCdpEvent(event)) {
-            cdpSessions
-                .get(event.params.session)
-                ?.emit(event.params.event, event.params.params);
-        }
-        context?.emit(event.method, event.params);
-    }
-    registerBrowsingContexts(context) {
-        this.#browsingContexts.set(context.id, context);
-    }
-    getBrowsingContext(contextId) {
-        const currentContext = this.#browsingContexts.get(contextId);
-        if (!currentContext) {
-            throw new Error(`BrowsingContext ${contextId} does not exist.`);
-        }
-        return currentContext;
-    }
-    getTopLevelContext(contextId) {
-        let currentContext = this.#browsingContexts.get(contextId);
-        if (!currentContext) {
-            throw new Error(`BrowsingContext ${contextId} does not exist.`);
-        }
-        while (currentContext.parent) {
-            contextId = currentContext.parent;
-            currentContext = this.#browsingContexts.get(contextId);
-            if (!currentContext) {
-                throw new Error(`BrowsingContext ${contextId} does not exist.`);
-            }
-        }
-        return currentContext;
-    }
-    unregisterBrowsingContexts(id) {
-        this.#browsingContexts.delete(id);
-    }
-    #onClose() {
+    /**
+     * Unbinds the connection, but keeps the transport open. Useful when the transport will
+     * be reused by other connection e.g. with different protocol.
+     * @internal
+     */
+    unbind() {
         if (this.#closed) {
             return;
         }
@@ -143,9 +114,15 @@ export class BidiConnection extends EventEmitter {
         this.#transport.onclose = () => { };
         this.#callbacks.clear();
     }
+    /**
+     * Unbinds the connection and closes the transport.
+     */
     dispose() {
-        this.#onClose();
+        this.unbind();
         this.#transport.close();
+    }
+    getPendingProtocolErrors() {
+        return this.#callbacks.getPendingProtocolErrors();
     }
 }
 /**

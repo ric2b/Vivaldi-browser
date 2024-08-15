@@ -10,6 +10,7 @@
 #include "chrome/browser/ui/views/autofill/popup/popup_row_view.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_row_with_button_view.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_view_utils.h"
+#include "chrome/browser/user_education/user_education_service.h"
 #include "components/autofill/core/browser/filling_product.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
@@ -49,7 +50,8 @@ constexpr auto kPopupItemTypesUsingLeadingIcons =
          PopupItemId::kPasswordAccountStorageEmpty,
          PopupItemId::kPasswordAccountStorageOptIn,
          PopupItemId::kPasswordAccountStorageReSignin,
-         PopupItemId::kPasswordAccountStorageOptInAndGenerate});
+         PopupItemId::kPasswordAccountStorageOptInAndGenerate,
+         PopupItemId::kViewPasswordDetails});
 
 // Max width for the username and masked password.
 constexpr int kAutofillPopupUsernameMaxWidth = 272;
@@ -105,6 +107,9 @@ std::unique_ptr<PopupRowContentView> CreateFooterPopupRowContentView(
           suggestion.main_text, ShouldApplyNewAutofillPopupStyle()
                                     ? views::style::TextStyle::STYLE_BODY_3
                                     : views::style::TextStyle::STYLE_SECONDARY);
+  if (ShouldApplyNewAutofillPopupStyle()) {
+    main_text_label->SetEnabledColorId(ui::kColorLabelForegroundSecondary);
+  }
   main_text_label->SetEnabled(!suggestion.is_loading);
   view->TrackLabel(view->AddChildView(std::move(main_text_label)));
 
@@ -326,29 +331,19 @@ std::unique_ptr<PopupRowView> CreatePopupRowView(
     case PopupItemId::kMixedFormMessage:
     case PopupItemId::kInsecureContextPaymentDisabledMessage:
       NOTREACHED_NORETURN();
-    case PopupItemId::kUsernameEntry:
     case PopupItemId::kPasswordEntry:
-    case PopupItemId::kAccountStorageUsernameEntry:
     case PopupItemId::kAccountStoragePasswordEntry:
       return std::make_unique<PopupRowView>(
           a11y_selection_delegate, selection_delegate, controller, line_number,
           CreatePasswordPopupRowContentView(suggestion));
     case PopupItemId::kCompose: {
-      auto tracker = std::make_unique<ScopedNewBadgeTracker>(
-          controller->GetWebContents()->GetBrowserContext());
-      const bool show_new_badge = tracker->TryShowNewBadge(
-          feature_engagement::kIPHComposeNewBadgeFeature,
-          &compose::features::kEnableComposeNudge);
-      auto new_badge_tracker =
-          PopupRowView::ScopedNewBadgeTrackerWithAcceptAction(
-              std::move(tracker),
-              /*action_name=*/"compose_activated");
-      auto row_view = std::make_unique<PopupRowView>(
+      const bool show_new_badge = UserEducationService::MaybeShowNewBadge(
+          controller->GetWebContents()->GetBrowserContext(),
+          compose::features::kEnableComposeNudge);
+      return std::make_unique<PopupRowView>(
           a11y_selection_delegate, selection_delegate, controller, line_number,
           CreateComposePopupRowContentView(suggestion, show_new_badge));
-      row_view->set_new_badge_tracker(std::move(new_badge_tracker));
-      return row_view;
-    };
+    }
     default:
       return std::make_unique<PopupRowView>(
           a11y_selection_delegate, selection_delegate, controller, line_number,

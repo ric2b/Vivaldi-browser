@@ -22,12 +22,12 @@
 #include "core/fpdfapi/parser/cpdf_reference.h"
 #include "core/fpdfapi/parser/cpdf_stream.h"
 #include "core/fxcrt/fx_string_wrappers.h"
+#include "core/fxcrt/numerics/safe_conversions.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
 #include "core/fxge/cfx_path.h"
 #include "fpdfsdk/cpdfsdk_helpers.h"
-#include "third_party/base/containers/span.h"
-#include "third_party/base/numerics/safe_conversions.h"
 
 namespace {
 
@@ -233,7 +233,7 @@ FPDFPage_TransFormWithClip(FPDF_PAGE page,
 
   auto pEndStream =
       pDoc->NewIndirect<CPDF_Stream>(pDoc->New<CPDF_Dictionary>());
-  pEndStream->SetData(ByteStringView(" Q").raw_span());
+  pEndStream->SetData(ByteStringView(" Q").unsigned_span());
 
   RetainPtr<CPDF_Array> pContentArray = ToArray(pContentObj);
   if (pContentArray) {
@@ -299,7 +299,6 @@ FPDFPageObj_TransformClipPath(FPDF_PAGEOBJECT page_object,
   // object is already transformed.
   if (!pPageObj->IsShading())
     pPageObj->TransformClipPath(matrix);
-  pPageObj->TransformGeneralState(matrix);
 }
 
 FPDF_EXPORT FPDF_CLIPPATH FPDF_CALLCONV
@@ -316,7 +315,7 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFClipPath_CountPaths(FPDF_CLIPPATH clip_path) {
   if (!pClipPath || !pClipPath->HasRef())
     return -1;
 
-  return pdfium::base::checked_cast<int>(pClipPath->GetPathCount());
+  return pdfium::checked_cast<int>(pClipPath->GetPathCount());
 }
 
 FPDF_EXPORT int FPDF_CALLCONV

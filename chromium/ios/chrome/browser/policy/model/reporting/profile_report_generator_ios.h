@@ -9,6 +9,7 @@
 
 #include <memory>
 
+#import "base/memory/raw_ptr.h"
 #include "components/policy/core/browser/policy_conversions_client.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 
@@ -17,7 +18,7 @@ class FilePath;
 }
 
 namespace policy {
-class MachineLevelUserCloudPolicyManager;
+class CloudPolicyManager;
 }
 
 class ChromeBrowserState;
@@ -43,12 +44,13 @@ class ProfileReportGeneratorIOS : public ProfileReportGenerator::Delegate {
       enterprise_management::ChromeUserProfileInfo* report) override;
   void GetExtensionRequest(
       enterprise_management::ChromeUserProfileInfo* report) override;
-  std::unique_ptr<policy::PolicyConversionsClient> MakePolicyConversionsClient()
-      override;
-  policy::MachineLevelUserCloudPolicyManager* GetCloudPolicyManager() override;
+  std::unique_ptr<policy::PolicyConversionsClient> MakePolicyConversionsClient(
+      bool is_machine_scope) override;
+  policy::CloudPolicyManager* GetCloudPolicyManager(
+      bool is_machine_scope) override;
 
  private:
-  ChromeBrowserState* browser_state_;
+  raw_ptr<ChromeBrowserState> browser_state_;
 };
 
 }  // namespace enterprise_reporting

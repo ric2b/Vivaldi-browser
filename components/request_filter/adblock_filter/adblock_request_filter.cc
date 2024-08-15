@@ -218,7 +218,7 @@ bool AdBlockRequestFilter::OnBeforeRequest(
                                          frame);
 
   if (rule->redirect() && rule->redirect()->size() && resources_) {
-    absl::optional<std::string> resource(
+    std::optional<std::string> resource(
         resources_->GetRedirect(rule->redirect()->c_str(), resource_type));
     if (resource) {
       std::move(callback).Run(false, false, GURL(resource.value()));
@@ -261,7 +261,7 @@ bool AdBlockRequestFilter::OnHeadersReceived(
       !IsRequestWanted(request->request.url) ||
       !IsOriginWanted(browser_context, rules_index_manager_->group(),
                       document_origin)) {
-    std::move(callback).Run(false, GURL(),
+    std::move(callback).Run(false, false, GURL(),
                             vivaldi::RequestFilter::ResponseHeaderChanges());
     return true;
   }
@@ -290,7 +290,7 @@ bool AdBlockRequestFilter::OnHeadersReceived(
   }
 
   if ((activations.in_allow_rules & flat::ActivationType_DOCUMENT) != 0) {
-    std::move(callback).Run(false, GURL(),
+    std::move(callback).Run(false, false, GURL(),
                             vivaldi::RequestFilter::ResponseHeaderChanges());
     return true;
   }
@@ -301,7 +301,7 @@ bool AdBlockRequestFilter::OnHeadersReceived(
           (activations.in_allow_rules & flat::ActivationType_GENERIC_BLOCK));
 
   if (rules.size() == 1 && IsFullCSPAllowRule(*rules[0])) {
-    std::move(callback).Run(false, GURL(),
+    std::move(callback).Run(false, false, GURL(),
                             vivaldi::RequestFilter::ResponseHeaderChanges());
     return true;
   }
@@ -327,7 +327,7 @@ bool AdBlockRequestFilter::OnHeadersReceived(
         std::make_pair("Content-Security-Policy", added_header));
   }
 
-  std::move(callback).Run(false, GURL(), std::move(response_header_changes));
+  std::move(callback).Run(false, false, GURL(), std::move(response_header_changes));
   return true;
 }
 

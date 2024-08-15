@@ -8,21 +8,21 @@
 #include <iterator>
 #include <set>
 #include <utility>
+#include <vector>
 
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
+#include "extensions/browser/api/declarative_net_request/constants.h"
 #include "extensions/browser/api/declarative_net_request/flat/extension_ruleset_generated.h"
 #include "extensions/browser/api/declarative_net_request/request_action.h"
 #include "extensions/browser/api/declarative_net_request/request_params.h"
 #include "extensions/browser/api/declarative_net_request/utils.h"
 #include "extensions/common/api/declarative_net_request/constants.h"
 
-namespace extensions {
-namespace declarative_net_request {
+namespace extensions::declarative_net_request {
 namespace flat_rule = url_pattern_index::flat;
 using PageAccess = PermissionsData::PageAccess;
 using ActionInfo = CompositeMatcher::ActionInfo;
@@ -40,18 +40,32 @@ bool AreIDsUnique(const CompositeMatcher::MatcherList& matchers) {
   return true;
 }
 
-// Helper to log the time taken in CompositeMatcher::GetBeforeRequestAction.
+// Helper to log the time taken in CompositeMatcher::GetAction.
 class ScopedGetBeforeRequestActionTimer {
  public:
-  ScopedGetBeforeRequestActionTimer() = default;
+  explicit ScopedGetBeforeRequestActionTimer(RulesetMatchingStage stage)
+      : stage_(stage) {}
   ~ScopedGetBeforeRequestActionTimer() {
-    UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
-        "Extensions.DeclarativeNetRequest.EvaluateBeforeRequestTime."
-        "SingleExtension2",
-        timer_.Elapsed(), base::Microseconds(1), base::Milliseconds(50), 50);
+    switch (stage_) {
+      case RulesetMatchingStage::kOnBeforeRequest:
+        UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+            "Extensions.DeclarativeNetRequest.EvaluateBeforeRequestTime."
+            "SingleExtension2",
+            timer_.Elapsed(), base::Microseconds(1), base::Milliseconds(50),
+            50);
+        break;
+      case RulesetMatchingStage::kOnHeadersReceived:
+        UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+            "Extensions.DeclarativeNetRequest.EvaluateHeadersReceivedTime."
+            "SingleExtension2",
+            timer_.Elapsed(), base::Microseconds(1), base::Milliseconds(50),
+            50);
+        break;
+    }
   }
 
  private:
+  RulesetMatchingStage stage_;
   base::ElapsedTimer timer_;
 };
 
@@ -100,7 +114,7 @@ void CompositeMatcher::AddOrUpdateRulesets(MatcherList matchers) {
 }
 
 void CompositeMatcher::RemoveRulesetsWithIDs(const std::set<RulesetID>& ids) {
-  size_t erased_count = base::EraseIf(
+  size_t erased_count = std::erase_if(
       matchers_, [&ids](const std::unique_ptr<RulesetMatcher>& matcher) {
         return base::Contains(ids, matcher->id());
       });
@@ -121,10 +135,11 @@ std::set<RulesetID> CompositeMatcher::ComputeStaticRulesetIDs() const {
   return result;
 }
 
-ActionInfo CompositeMatcher::GetBeforeRequestAction(
+ActionInfo CompositeMatcher::GetAction(
     const RequestParams& params,
-    PageAccess page_access) const {
-  ScopedGetBeforeRequestActionTimer timer;
+    RulesetMatchingStage stage,
+    PermissionsData::PageAccess page_access) const {
+  ScopedGetBeforeRequestActionTimer timer(stage);
 
   bool always_require_host_permissions =
       host_permissions_always_required_ == HostPermissionsAlwaysRequired::kTrue;
@@ -142,8 +157,7 @@ ActionInfo CompositeMatcher::GetBeforeRequestAction(
   std::optional<uint64_t> max_allow_rule_priority;
 
   for (const auto& matcher : matchers_) {
-    std::optional<RequestAction> action =
-        matcher->GetBeforeRequestAction(params);
+    std::optional<RequestAction> action = matcher->GetAction(params, stage);
     if (!action)
       continue;
 
@@ -226,6 +240,13 @@ void CompositeMatcher::OnDidFinishNavigation(
     matcher->OnDidFinishNavigation(navigation_handle);
 }
 
+bool CompositeMatcher::HasRulesets(RulesetMatchingStage stage) const {
+  return base::ranges::any_of(
+      matchers_, [stage](const std::unique_ptr<RulesetMatcher>& matcher) {
+        return matcher->GetRulesCount(stage) > 0;
+      });
+}
+
 void CompositeMatcher::OnMatchersModified() {
   DCHECK(AreIDsUnique(matchers_));
 
@@ -244,5 +265,4 @@ bool CompositeMatcher::ComputeHasAnyExtraHeadersMatcher() const {
   return false;
 }
 
-}  // namespace declarative_net_request
-}  // namespace extensions
+}  // namespace extensions::declarative_net_request

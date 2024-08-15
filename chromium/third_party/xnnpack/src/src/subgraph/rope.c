@@ -7,6 +7,7 @@
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <xnnpack.h>
 #include <xnnpack/log.h>
@@ -22,7 +23,7 @@ static enum xnn_status create_rope_operator(
   size_t num_values,
   struct xnn_operator_data* opdata,
   struct xnn_code_cache* code_cache,
-  struct xnn_weights_cache* weights_cache)
+  xnn_weights_cache_t weights_cache)
 {
   assert(node->num_inputs == 2);
   assert(node->num_outputs == 1);
@@ -55,33 +56,53 @@ static enum xnn_status reshape_rope_operator(
 {
   const uint32_t input_id = opdata->inputs[0];
   assert(input_id < num_values);
+  const struct xnn_value* input_value = values + input_id;
 
-  const size_t num_input_dims = values[input_id].shape.num_dims;
-  const size_t batch_size = xnn_shape_multiply_batch_dims(&values[input_id].shape, 3);
-  const size_t tokens = values[input_id].shape.dim[num_input_dims - 3];
-  const size_t heads = values[input_id].shape.dim[num_input_dims - 2];
-  const size_t channels = values[input_id].shape.dim[num_input_dims - 1];
+  const size_t num_input_dims = input_value->shape.num_dims;
+  const size_t batch_size = xnn_shape_multiply_batch_dims(&input_value->shape, 3);
+  const size_t tokens = input_value->shape.dim[num_input_dims - 3];
+  const size_t heads = input_value->shape.dim[num_input_dims - 2];
+  const size_t channels = input_value->shape.dim[num_input_dims - 1];
 
+  enum xnn_status status = xnn_status_invalid_state;
+  const size_t old_workspace_size = opdata->workspace_size;
   switch (opdata->operator_objects[0]->type) {
     case xnn_operator_type_rope_nthc_f16:
-      return xnn_reshape_rope_nthc_f16(
+      status = xnn_reshape_rope_nthc_f16(
         opdata->operator_objects[0],
         batch_size,
         tokens,
         heads,
         channels,
         threadpool);
+      break;
     case xnn_operator_type_rope_nthc_f32:
-      return xnn_reshape_rope_nthc_f32(
+      status = xnn_reshape_rope_nthc_f32(
         opdata->operator_objects[0],
         batch_size,
         tokens,
         heads,
         channels,
         threadpool);
+      break;
     default:
       return xnn_status_invalid_parameter;
   }
+  if (status != xnn_status_success) {
+    return status;
+  }
+  const uint32_t output_id = opdata->outputs[0];
+  assert(output_id < num_values);
+  struct xnn_value* output_value = values + output_id;
+
+  output_value->shape.num_dims = input_value->shape.num_dims;
+  memcpy(output_value->shape.dim, input_value->shape.dim, input_value->shape.num_dims * sizeof(size_t));
+  const size_t new_size = xnn_tensor_get_size(output_value);
+  if (new_size > output_value->size || opdata->workspace_size > old_workspace_size) {
+    output_value->size = new_size;
+    return xnn_status_reallocation_required;
+  }
+  return xnn_status_success;
 }
 
 static enum xnn_status setup_rope_operator(
@@ -168,12 +189,16 @@ enum xnn_status xnn_define_rope(
     return status;
   }
 
-  if (input_value->datatype != xnn_datatype_fp32) {
-    xnn_log_error(
-      "failed to define %s operator with input ID #%" PRIu32 ": unsupported Value datatype %s (%d)",
-      xnn_node_type_to_string(xnn_node_type_rope), input_id,
-      xnn_datatype_to_string(input_value->datatype), input_value->datatype);
-    return xnn_status_invalid_parameter;
+  switch (input_value->datatype) {
+    case xnn_datatype_fp16:
+    case xnn_datatype_fp32:
+      break;
+    default:
+      xnn_log_error(
+        "failed to define %s operator with input ID #%" PRIu32 ": unsupported Value datatype %s (%d)",
+        xnn_node_type_to_string(xnn_node_type_rope), input_id,
+        xnn_datatype_to_string(input_value->datatype), input_value->datatype);
+      return xnn_status_invalid_parameter;
   }
 
   const struct xnn_value* weights_value = &subgraph->values[weights_id];
@@ -182,12 +207,16 @@ enum xnn_status xnn_define_rope(
     return status;
   }
 
-  if (weights_value->datatype != xnn_datatype_fp32) {
-    xnn_log_error(
-      "failed to define %s operator with weights ID #%" PRIu32 ": unsupported Value datatype %s (%d)",
-      xnn_node_type_to_string(xnn_node_type_rope), weights_id,
-      xnn_datatype_to_string(weights_value->datatype), weights_value->datatype);
-    return xnn_status_invalid_parameter;
+  switch (weights_value->datatype) {
+    case xnn_datatype_fp16:
+    case xnn_datatype_fp32:
+      break;
+    default:
+      xnn_log_error(
+        "failed to define %s operator with weights ID #%" PRIu32 ": unsupported Value datatype %s (%d)",
+        xnn_node_type_to_string(xnn_node_type_rope), weights_id,
+        xnn_datatype_to_string(weights_value->datatype), weights_value->datatype);
+      return xnn_status_invalid_parameter;
   }
 
   status = xnn_subgraph_check_output_node_id(xnn_node_type_rope, output_id, subgraph->num_values);
@@ -201,17 +230,20 @@ enum xnn_status xnn_define_rope(
     return status;
   }
 
-  status = xnn_subgraph_check_all_dims_match(xnn_node_type_rope, input_id, input_value, output_id, output_value);
-  if (status != xnn_status_success) {
-    return status;
-  }
-
-  if (output_value->datatype != xnn_datatype_fp32) {
-    xnn_log_error(
-      "failed to define %s operator with output ID #%" PRIu32 ": unsupported Value datatype %s (%d)",
-      xnn_node_type_to_string(xnn_node_type_rope), output_id,
-      xnn_datatype_to_string(output_value->datatype), output_value->datatype);
-    return xnn_status_invalid_parameter;
+  enum xnn_compute_type compute_type = xnn_compute_type_invalid;
+  switch (output_value->datatype) {
+    case xnn_datatype_fp16:
+      compute_type = xnn_compute_type_fp16;
+      break;
+    case xnn_datatype_fp32:
+      compute_type = xnn_compute_type_fp32;
+      break;
+    default:
+      xnn_log_error(
+        "failed to define %s operator with output ID #%" PRIu32 ": unsupported Value datatype %s (%d)",
+        xnn_node_type_to_string(xnn_node_type_rope), output_id,
+        xnn_datatype_to_string(output_value->datatype), output_value->datatype);
+      return xnn_status_invalid_parameter;
   }
 
   status = xnn_subgraph_check_datatype_matches(xnn_node_type_subtract, input_id, input_value, output_id, output_value);
@@ -225,7 +257,7 @@ enum xnn_status xnn_define_rope(
   }
 
   node->type = xnn_node_type_rope;
-  node->compute_type = xnn_compute_type_fp32;
+  node->compute_type = compute_type;
   node->params.rope.max_tokens = max_tokens;
   node->num_inputs = 2;
   node->inputs[0] = input_id;

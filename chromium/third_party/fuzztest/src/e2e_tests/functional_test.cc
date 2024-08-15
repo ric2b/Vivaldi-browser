@@ -21,7 +21,6 @@
 #include <optional>
 #include <string>
 #include <tuple>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -31,13 +30,14 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
-#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
+#include "./domain_tests/domain_testing.h"
 #include "./fuzztest/internal/io.h"
 #include "./fuzztest/internal/logging.h"
+#include "./fuzztest/internal/printer.h"
 #include "./fuzztest/internal/serialization.h"
 #include "./fuzztest/internal/subprocess.h"
 #include "./fuzztest/internal/type_support.h"
@@ -48,6 +48,7 @@ namespace {
 
 #define FUZZTEST_FLAG_PREFIX_ ""
 
+using ::fuzztest::domain_implementor::PrintMode;
 using ::testing::_;
 using ::testing::AllOf;
 using ::testing::AnyOf;
@@ -549,6 +550,17 @@ TEST_F(UnitTestModeTest, AlwaysSetAndUnsetWorkOnOneofFields) {
   EXPECT_THAT(status, Eq(ExitCode(0)));
 }
 
+void ExpectStackLimitExceededMessage(absl::string_view std_err,
+                                     size_t limit_bytes) {
+#ifdef FUZZTEST_USE_CENTIPEDE
+  EXPECT_THAT(std_err, ContainsRegex(absl::StrCat(
+                           "Stack limit exceeded: [0-9]+ > ", limit_bytes)));
+#else
+  EXPECT_THAT(std_err, HasSubstr(absl::StrCat("Configured limit is ",
+                                              limit_bytes, ".")));
+#endif
+}
+
 TEST_F(UnitTestModeTest, StackLimitWorks) {
 #if defined(__has_feature)
 #if !__has_feature(coverage_sanitizer)
@@ -557,17 +569,74 @@ TEST_F(UnitTestModeTest, StackLimitWorks) {
                   "enable these tests!";
 #endif
 #endif
-#ifdef FUZZTEST_USE_CENTIPEDE
-  GTEST_SKIP() << "Skipping the stack limit test when running with Centipede. "
-                  "Please run with --config=fuzztest to enable these tests!";
-#endif
 
   auto [status, std_out, std_err] =
       Run("MySuite.DataDependentStackOverflow", kDefaultTargetBinary,
           /*env=*/{}, /*fuzzer_flags=*/{{"stack_limit_kb", "1000"}});
   EXPECT_THAT(std_err, HasSubstr("argument 0: "));
-  EXPECT_THAT(std_err, HasSubstr("Configured limit is 1024000."));
+  ExpectStackLimitExceededMessage(std_err, 1024000);
   EXPECT_THAT(status, Eq(Signal(SIGABRT)));
+}
+
+TEST_F(UnitTestModeTest, RssLimitFlagWorks) {
+  auto [status, std_out, std_err] =
+      Run("MySuite.LargeHeapAllocation", kDefaultTargetBinary,
+          /*env=*/{}, /*fuzzer_flags=*/{{"rss_limit_mb", "1024"}});
+  EXPECT_THAT(std_err, HasSubstr("argument 0: "));
+  EXPECT_THAT(std_err, ContainsRegex(absl::StrCat("RSS limit exceeded")));
+  EXPECT_THAT(status, Eq(Signal(SIGABRT)));
+}
+
+TEST_F(UnitTestModeTest, TimeLimitFlagWorks) {
+  auto [status, std_out, std_err] =
+      Run("MySuite.Sleep", kDefaultTargetBinary,
+          /*env=*/{},
+          /*fuzzer_flags=*/{{"time_limit_per_input", "1s"}});
+  EXPECT_THAT(std_err, HasSubstr("argument 0: "));
+  EXPECT_THAT(std_err, ContainsRegex("Per-input timeout exceeded"));
+  EXPECT_THAT(status, Eq(Signal(SIGABRT)));
+}
+
+class GetRandomValueTest : public UnitTestModeTest {
+ protected:
+  int GetValueFromInnerTest(
+      const absl::flat_hash_map<std::string, std::string>& env = {}) {
+    auto [status, std_out, std_err] =
+        Run("DomainTest.GetRandomValue",
+            /*target_binary=*/"testdata/domain_tests", env);
+    int val = 0;
+    FUZZTEST_INTERNAL_CHECK(
+        RE2::PartialMatch(
+            std_out, R"re(==<domain\.GetRandomValue\(\): (-?\d+)>==)re", &val),
+        "Failed to match a value from DomainTest.GetRandomValue!");
+    return val;
+  }
+};
+
+TEST_F(GetRandomValueTest, DestabilizesBitGen) {
+  int val = GetValueFromInnerTest();
+  int other_val = val;
+  for (int i = 0;
+       i < IterationsToHitAll(/*num_cases=*/1, /*hit_probability=*/2.0 / 3);
+       ++i) {
+    other_val = GetValueFromInnerTest();
+    if (other_val != val) break;
+  }
+
+  EXPECT_NE(val, other_val);
+}
+
+TEST_F(GetRandomValueTest, SettingPrngSeedReproducesValue) {
+  int val =
+      GetValueFromInnerTest(/*env=*/
+                            {{"FUZZTEST_PRNG_SEED",
+                              "pJJCK_iNZeUJGe8M42hjOcQ8T2pCXSrQ4Y1dsU3M2_g"}});
+  int other_val =
+      GetValueFromInnerTest(/*env=*/
+                            {{"FUZZTEST_PRNG_SEED",
+                              "pJJCK_iNZeUJGe8M42hjOcQ8T2pCXSrQ4Y1dsU3M2_g"}});
+
+  EXPECT_EQ(val, other_val);
 }
 
 // Tests for the FuzzTest command line interface.
@@ -715,15 +784,40 @@ TEST_F(FuzzingModeCommandLineInterfaceTest, SavesCorpusWhenEnvVarIsSet) {
   EXPECT_THAT(corpus_files, Not(IsEmpty())) << std_err;
 }
 
+void ExpectCorpusInputMessageInLogs(absl::string_view logs, int num_inputs) {
+#ifdef FUZZTEST_USE_CENTIPEDE
+  EXPECT_THAT(logs,
+              HasSubstr(absl::StrFormat("%d inputs to rerun", num_inputs)))
+      << logs;
+#else
+  EXPECT_THAT(logs, HasSubstr(absl::StrFormat(
+                        "Parsed %d inputs and ignored 0 inputs", num_inputs)))
+      << logs;
+#endif
+}
+
+void ExpectMinimizationOutputMessageInLogs(absl::string_view logs,
+                                           int num_outputs,
+                                           int num_allowed_dups = 0) {
+  std::vector<testing::Matcher<std::string>> matchers;
+  for (int i = 0; i <= num_allowed_dups; ++i) {
+#ifdef FUZZTEST_USE_CENTIPEDE
+    matchers.push_back(
+        HasSubstr(absl::StrFormat("distilled: %d", num_outputs + i)));
+#else
+    matchers.push_back(HasSubstr(absl::StrFormat(
+        "Selected %d corpus inputs in minimization mode", num_outputs + i)));
+#endif
+  }
+  EXPECT_THAT(logs, AnyOfArray(matchers)) << logs;
+}
+
 TEST_F(FuzzingModeCommandLineInterfaceTest, RestoresCorpusWhenEnvVarIsSet) {
   TempDir corpus_dir;
-  // We cannot use a non-crashing test since there is no easy way to limit the
-  // run time here.
-  //
   // Although theoretically possible, it is extreme unlikely that the test would
   // find the crash without saving some corpus.
   auto [producer_status, producer_std_out, producer_std_err] =
-      RunWith({{"fuzz", "MySuite.String"}},
+      RunWith({{"fuzz", "MySuite.String"}, {"fuzz_for", "10s"}},
               {{"FUZZTEST_TESTSUITE_OUT_DIR", corpus_dir.dirname()}});
 
   auto corpus_files = ReadFileOrDirectory(corpus_dir.dirname());
@@ -731,32 +825,18 @@ TEST_F(FuzzingModeCommandLineInterfaceTest, RestoresCorpusWhenEnvVarIsSet) {
 
   auto [consumer_status, consumer_std_out, consumer_std_err] =
       RunWith({{"fuzz", "MySuite.String"}},
-              {{"FUZZTEST_TESTSUITE_IN_DIR", corpus_dir.dirname()}});
-#ifdef FUZZTEST_USE_CENTIPEDE
-  EXPECT_THAT(consumer_std_err, HasSubstr(absl::StrFormat(
-                                    "inputs_added: %d", corpus_files.size())));
-#else
-  EXPECT_THAT(consumer_std_err,
-              HasSubstr(absl::StrFormat("Parsed %d inputs and ignored 0 inputs",
-                                        corpus_files.size())));
-#endif  // FUZZTEST_USE_CENTIPEDE
+              {{"FUZZTEST_TESTSUITE_IN_DIR", corpus_dir.dirname()},
+               {"FUZZTEST_MAX_FUZZING_RUNS", "0"}});
+  ExpectCorpusInputMessageInLogs(consumer_std_err, corpus_files.size());
 }
 
 TEST_F(FuzzingModeCommandLineInterfaceTest, MinimizesCorpusWhenEnvVarIsSet) {
-#ifdef FUZZTEST_USE_CENTIPEDE
-  GTEST_SKIP()
-      << "Skipping tests for corpus minimization when running with Centipede. "
-         "Please run with --config=fuzztest to enable these tests!";
-#endif
   TempDir corpus_dir;
   TempDir minimized_corpus_dir;
-  // We cannot use a non-crashing test since there is no easy way to limit the
-  // run time here.
-  //
   // Although theoretically possible, it is extreme unlikely that the test would
   // find the crash without saving some corpus.
   auto [producer_status, producer_std_out, producer_std_err] =
-      RunWith({{"fuzz", "MySuite.String"}},
+      RunWith({{"fuzz", "MySuite.String"}, {"fuzz_for", "10s"}},
               {{"FUZZTEST_TESTSUITE_OUT_DIR", corpus_dir.dirname()}});
 
   auto corpus_files = ReadFileOrDirectory(corpus_dir.dirname());
@@ -782,21 +862,12 @@ TEST_F(FuzzingModeCommandLineInterfaceTest, MinimizesCorpusWhenEnvVarIsSet) {
   }
   EXPECT_THAT(minimized_corpus_data, IsSubsetOf(corpus_data));
 
-  EXPECT_THAT(
-      minimizer_std_err,
-      AllOf(HasSubstr(absl::StrFormat("Parsed %d inputs and ignored 0 inputs",
-                                      corpus_files.size())),
-            HasSubstr(absl::StrFormat(
-                "Selected %d corpus inputs in minimization mode",
-                minimized_corpus_files.size()))));
+  ExpectCorpusInputMessageInLogs(minimizer_std_err, corpus_files.size());
+  ExpectMinimizationOutputMessageInLogs(minimizer_std_err,
+                                        minimized_corpus_files.size());
 }
 
 TEST_F(FuzzingModeCommandLineInterfaceTest, MinimizesDuplicatedCorpus) {
-#ifdef FUZZTEST_USE_CENTIPEDE
-  GTEST_SKIP()
-      << "Skipping tests for corpus minimization when running with Centipede. "
-         "Please run with --config=fuzztest to enable these tests!";
-#endif
   TempDir corpus_dir;
   TempDir minimized_corpus_dir;
   // We cannot use a non-crashing test since there is no easy way to limit the
@@ -805,7 +876,7 @@ TEST_F(FuzzingModeCommandLineInterfaceTest, MinimizesDuplicatedCorpus) {
   // Although theoretically possible, it is extreme unlikely that the test would
   // find the crash without saving some corpus.
   auto [producer_status, producer_std_out, producer_std_err] =
-      RunWith({{"fuzz", "MySuite.String"}},
+      RunWith({{"fuzz", "MySuite.String"}, {"fuzz_for", "10s"}},
               {{"FUZZTEST_TESTSUITE_OUT_DIR", corpus_dir.dirname()}});
 
   auto corpus_files = ReadFileOrDirectory(corpus_dir.dirname());
@@ -825,23 +896,13 @@ TEST_F(FuzzingModeCommandLineInterfaceTest, MinimizesDuplicatedCorpus) {
               AllOf(Not(IsEmpty()), SizeIs(Le(corpus_files.size()))))
       << minimizer_std_err;
 
-  EXPECT_THAT(
-      minimizer_std_err,
-      AllOf(HasSubstr(absl::StrFormat("Parsed %d inputs and ignored 0 inputs",
-                                      corpus_files.size() * 2)),
-            // TODO(b/207375007): Due to non-determinism, sometimes duplicated
-            // input can reach new coverage and thus be counted into the corpus
-            // (but not reflected in the files since they are
-            // content-addressed). We use AnyOf to mitigate the flakiness.
-            AnyOf(HasSubstr(absl::StrFormat(
-                      "Selected %d corpus inputs in minimization mode",
-                      minimized_corpus_files.size())),
-                  HasSubstr(absl::StrFormat(
-                      "Selected %d corpus inputs in minimization mode",
-                      minimized_corpus_files.size() + 1)),
-                  HasSubstr(absl::StrFormat(
-                      "Selected %d corpus inputs in minimization mode",
-                      minimized_corpus_files.size() + 2)))));
+  ExpectCorpusInputMessageInLogs(minimizer_std_err, corpus_files.size() * 2);
+  // TODO(b/207375007): Due to non-determinism, sometimes duplicated
+  // input can reach new coverage and thus be counted into the corpus
+  // (but not reflected in the files since they are
+  // content-addressed). We use `num_allowed_dups` to mitigate the flakiness.
+  ExpectMinimizationOutputMessageInLogs(
+      minimizer_std_err, minimized_corpus_files.size(), /*num_allowed_dups=*/2);
 }
 
 class ReplayFile {
@@ -1000,49 +1061,37 @@ TEST_F(FuzzingModeCommandLineInterfaceTest, GoogleTestHasCurrentTestInfo) {
 }
 
 TEST_F(FuzzingModeCommandLineInterfaceTest, ConfiguresStackLimitByFlag) {
-#ifdef FUZZTEST_USE_CENTIPEDE
-  GTEST_SKIP() << "Skipping the stack limit test when running with Centipede. "
-                  "Please run with --config=fuzztest to enable these tests!";
-#endif
   auto [status, std_out, std_err] =
       RunWith({{"fuzz", "MySuite.DataDependentStackOverflow"},
                {"stack_limit_kb", "1000"}});
   EXPECT_THAT(std_err, HasSubstr("argument 0: "));
-  EXPECT_THAT(std_err, HasSubstr("Configured limit is 1024000."));
+  ExpectStackLimitExceededMessage(std_err, 1024000);
   EXPECT_THAT(status, Eq(Signal(SIGABRT)));
 }
 
 TEST_F(FuzzingModeCommandLineInterfaceTest,
        ConfiguresStackLimitByEnvVarWithWarning) {
-#ifdef FUZZTEST_USE_CENTIPEDE
-  GTEST_SKIP() << "Skipping the stack limit test when running with Centipede. "
-                  "Please run with --config=fuzztest to enable these tests!";
-#endif
   auto [status, std_out, std_err] =
       RunWith({{"fuzz", "MySuite.DataDependentStackOverflow"}},
-              {{"FUZZTEST_STACK_LIMIT", "1234567"}});
+              {{"FUZZTEST_STACK_LIMIT", "512000"}});
   EXPECT_THAT(std_err, HasSubstr("argument 0: "));
   EXPECT_THAT(std_err,
               HasSubstr("Stack limit is set by FUZZTEST_STACK_LIMIT env var "
                         "- this is going to be deprecated soon. Consider "
                         "switching to --" FUZZTEST_FLAG_PREFIX_
                         "stack_limit_kb flag."));
-  EXPECT_THAT(std_err, HasSubstr("Configured limit is 1234567."));
+  ExpectStackLimitExceededMessage(std_err, 512000);
   EXPECT_THAT(status, Eq(Signal(SIGABRT)));
 }
 
 TEST_F(FuzzingModeCommandLineInterfaceTest,
        ConfiguresStackLimitByEnvVarAndOverridesFlag) {
-#ifdef FUZZTEST_USE_CENTIPEDE
-  GTEST_SKIP() << "Skipping the stack limit test when running with Centipede. "
-                  "Please run with --config=fuzztest to enable these tests!";
-#endif
   auto [status, std_out, std_err] =
       RunWith({{"fuzz", "MySuite.DataDependentStackOverflow"},
                {"stack_limit_kb", "1000"}},
-              {{"FUZZTEST_STACK_LIMIT", "1234567"}});
+              {{"FUZZTEST_STACK_LIMIT", "512000"}});
   EXPECT_THAT(std_err, HasSubstr("argument 0: "));
-  EXPECT_THAT(std_err, HasSubstr("Configured limit is 1234567."));
+  ExpectStackLimitExceededMessage(std_err, 512000);
   EXPECT_THAT(status, Eq(Signal(SIGABRT)));
 }
 
@@ -1053,39 +1102,26 @@ TEST_F(FuzzingModeCommandLineInterfaceTest,
               /*env=*/{},
               /*timeout=*/absl::Seconds(1));
   EXPECT_THAT(std_err,
-              Not(HasSubstr("limit is specified but will be ignored for now")));
+              Not(HasSubstr("limit is specified but will be ignored")));
   EXPECT_THAT(status, Eq(ExitCode(0)));
 }
 
-TEST_F(FuzzingModeCommandLineInterfaceTest, RssLimitFlagExistsButIsDisabled) {
-#ifdef FUZZTEST_USE_CENTIPEDE
-  GTEST_SKIP() << "Skipping the rss limit test when running with Centipede. "
-                  "Please run with --config=fuzztest to enable these tests!";
-#endif
+TEST_F(FuzzingModeCommandLineInterfaceTest, RssLimitFlagWorks) {
   auto [status, std_out, std_err] = RunWith(
-      {{"fuzz", "MySuite.PassesWithPositiveInput"}, {"rss_limit_mb", "1234"}},
-      /*env=*/{},
-      /*timeout=*/absl::Seconds(1));
-  EXPECT_THAT(std_err,
-              HasSubstr("RSS limit is specified but will be ignored for now"));
-  EXPECT_THAT(status, Eq(ExitCode(0)));
+      {{"fuzz", "MySuite.LargeHeapAllocation"}, {"rss_limit_mb", "1024"}},
+      /*env=*/{}, /*timeout=*/absl::Seconds(1));
+  EXPECT_THAT(std_err, HasSubstr("argument 0: "));
+  EXPECT_THAT(std_err, ContainsRegex(absl::StrCat("RSS limit exceeded")));
+  EXPECT_THAT(status, Eq(Signal(SIGABRT)));
 }
 
-TEST_F(FuzzingModeCommandLineInterfaceTest, TimeLimitFlagExistsButIsDisabled) {
-#ifdef FUZZTEST_USE_CENTIPEDE
-  GTEST_SKIP() << "Skipping the time limit test when running with Centipede. "
-                  "Please run with --config=fuzztest to enable these tests!";
-#endif
+TEST_F(FuzzingModeCommandLineInterfaceTest, TimeLimitFlagWorks) {
   auto [status, std_out, std_err] =
-      RunWith({{"fuzz", "MySuite.PassesWithPositiveInput"},
-               {"time_limit_per_input", "1s"}},
-              /*env=*/{},
-              /*timeout=*/absl::Seconds(1));
-  EXPECT_THAT(
-      std_err,
-      HasSubstr(
-          "Per-input time limit is specified but will be ignored for now"));
-  EXPECT_THAT(status, Eq(ExitCode(0)));
+      RunWith({{"fuzz", "MySuite.Sleep"}, {"time_limit_per_input", "1s"}},
+              /*env=*/{});
+  EXPECT_THAT(std_err, HasSubstr("argument 0: "));
+  EXPECT_THAT(std_err, ContainsRegex("Per-input timeout exceeded"));
+  EXPECT_THAT(status, Eq(Signal(SIGABRT)));
 }
 
 std::string CentipedePath() {
@@ -1342,6 +1378,13 @@ TEST_P(FuzzingModeCrashFindingTest, DivByZeroTestFindsAbortInFuzzingMode) {
 #endif
 }
 
+TEST_P(FuzzingModeCrashFindingTest, Int32ValueTestFindsAbortInFuzzingMode) {
+  auto [status, std_out, std_err] = Run("MySuite.Int32ValueTest");
+  // -559038737 is 0xdeadbeef in int32_t.
+  EXPECT_THAT(std_err, HasSubstr("argument 0: -559038737"));
+  ExpectTargetAbort(status, std_err);
+}
+
 TEST_P(FuzzingModeCrashFindingTest, CoverageTestFindsAbortInFuzzingMode) {
   auto [status, std_out, std_err] = Run("MySuite.Coverage");
   EXPECT_THAT(std_err, HasSubstr("argument 0: 'F'"));
@@ -1406,7 +1449,7 @@ TEST_P(FuzzingModeCrashFindingTest, EnumClassTestFindsAbortInFuzzingMode) {
 
 TEST_P(FuzzingModeCrashFindingTest, ProtoTestFindsAbortInFuzzingMode) {
   auto [status, std_out, std_err] = Run("MySuite.Proto");
-  EXPECT_THAT(std_err, ContainsRegex(R"(argument 0: \(b:\s+true)"));
+  EXPECT_THAT(std_err, ContainsRegex(R"(argument 0: \((.*\n.*)?b:\s+true)"));
   ExpectTargetAbort(status, std_err);
 }
 
@@ -1604,37 +1647,19 @@ TEST_P(FuzzingModeCrashFindingTest,
 }
 
 TEST_P(FuzzingModeCrashFindingTest, FuzzTestCanFindStackOverflows) {
-  // TODO(b/302012926): Consolidate the stack overflow checking between FuzzTest
-  // and Centipede.
-#ifdef FUZZTEST_USE_CENTIPEDE
-  GTEST_SKIP()
-      << "Skipping the stack calculation tests when running with Centipede. "
-         "Please run with --config=fuzztest to enable these tests!";
-#endif
   auto [status, std_out, std_err] = Run("MySuite.DataDependentStackOverflow");
   EXPECT_THAT(std_err, HasSubstr("argument 0: "));
-  EXPECT_THAT(
-      std_err,
-      ContainsRegex("Code under test used [0-9]* bytes of stack. Configured "
-                    "limit is 131072. You can change the limit by specifying "
-                    "--" FUZZTEST_FLAG_PREFIX_ "stack_limit_kb flag."));
+  // 128 KiB is the default stack limit.
+  ExpectStackLimitExceededMessage(std_err, 128 * 1024);
   ExpectTargetAbort(status, std_err);
 }
 
 TEST_P(FuzzingModeCrashFindingTest,
        StackCalculationWorksWithAlternateStackForSignalHandlers) {
-  // TODO(b/302012926): Consolidate the stack overflow checking between FuzzTest
-  // and Centipede.
-#ifdef FUZZTEST_USE_CENTIPEDE
-  GTEST_SKIP()
-      << "Skipping the stack calculation tests when running with Centipede. "
-         "Please run with --config=fuzztest to enable these tests!";
-#endif
   auto [status, std_out, std_err] =
-      Run("MySuite.StackCalculationWorksWithAlternateStackForSignalHandlers");
+      Run("AlternateSignalStackFixture."
+          "StackCalculationWorksWithAlternateStackForSignalHandlers");
   EXPECT_THAT(std_err, HasSubstr("argument 0: 123456789"));
-  EXPECT_THAT(std_err,
-              Not(HasSubstr("You can change the limit by specifying")));
   ExpectTargetAbort(status, std_err);
 }
 

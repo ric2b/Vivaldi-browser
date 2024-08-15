@@ -2,9 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("../../gni/openscreen.gni")
+
 visibility = [ "./*" ]
 
-source_set("channel") {
+openscreen_source_set("channel") {
   # Used in //components/media_router/common/providers/cast/channel in Chromium.
   visibility += [ "*" ]
   public = [
@@ -38,7 +40,7 @@ source_set("channel") {
   ]
 }
 
-source_set("sender") {
+openscreen_source_set("sender") {
   public = []
   sources = [
     "cast_app_availability_tracker.cc",
@@ -65,7 +67,7 @@ source_set("sender") {
   friend = [ ":unittests" ]
 }
 
-source_set("test_helpers") {
+openscreen_source_set("test_helpers") {
   testonly = true
   public = []
   sources = [
@@ -85,7 +87,7 @@ source_set("test_helpers") {
   friend = [ ":unittests" ]
 }
 
-source_set("unittests") {
+openscreen_source_set("unittests") {
   testonly = true
   visibility += [ "../..:openscreen_unittests_all" ]
   public = []

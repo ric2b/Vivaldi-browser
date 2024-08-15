@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -40,10 +41,9 @@
 #include "services/network/test/test_url_loader_factory.h"
 #include "services/network/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_CHROMEOS)
-#include "services/device/public/cpp/test/fake_geolocation_manager.h"
+#include "services/device/public/cpp/test/fake_geolocation_system_permission_manager.h"
 #endif
 
 namespace device {
@@ -86,9 +86,11 @@ class GeolocationNetworkProviderTest : public testing::Test {
  public:
 #if BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_CHROMEOS)
   void SetUp() override {
-    auto fake_manager = std::make_unique<FakeGeolocationManager>();
+    auto fake_manager =
+        std::make_unique<FakeGeolocationSystemPermissionManager>();
     fake_geolocation_manager_ = fake_manager.get();
-    device::GeolocationManager::SetInstance(std::move(fake_manager));
+    device::GeolocationSystemPermissionManager::SetInstance(
+        std::move(fake_manager));
   }
 #endif
   void TearDown() override {
@@ -134,7 +136,7 @@ class GeolocationNetworkProviderTest : public testing::Test {
       network_response_callback_;
 
 #if BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_CHROMEOS)
-  raw_ptr<FakeGeolocationManager> fake_geolocation_manager_;
+  raw_ptr<FakeGeolocationSystemPermissionManager> fake_geolocation_manager_;
 #endif
 
  protected:
@@ -279,7 +281,7 @@ class GeolocationNetworkProviderTest : public testing::Test {
     std::string upload_data = network::GetUploadData(pending_request.request);
     ASSERT_FALSE(upload_data.empty());
 
-    absl::optional<base::Value> parsed_json =
+    std::optional<base::Value> parsed_json =
         base::JSONReader::Read(upload_data);
     ASSERT_TRUE(parsed_json);
     ASSERT_TRUE(parsed_json->is_dict());

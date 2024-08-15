@@ -523,7 +523,7 @@ fn do_deserialize_section_unencrypted<I: serialize::SectionEncoder>(
 fn fill_section_random_des<'adv, R: rand::Rng, I: serialize::SectionEncoder>(
     mut rng: &mut R,
     sink: &'adv mut Vec<u8>,
-    section_builder: &mut SectionBuilder<I>,
+    section_builder: &mut SectionBuilder<&mut AdvBuilder, I>,
     de_offset: usize,
 ) -> (Vec<DataElement<'adv>>, Vec<GenericDataElement>) {
     let mut expected_des = vec![];

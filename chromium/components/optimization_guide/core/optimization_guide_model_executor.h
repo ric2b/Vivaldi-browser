@@ -28,14 +28,27 @@ struct StreamingResponse {
 
   // True if streaming has finished.
   bool is_complete = false;
-
-  // True if the response was computed on-device.
-  bool provided_by_on_device = false;
 };
 
-using OptimizationGuideModelStreamingExecutionResult =
-    base::expected<const StreamingResponse,
-                   OptimizationGuideModelExecutionError>;
+struct OptimizationGuideModelStreamingExecutionResult {
+  OptimizationGuideModelStreamingExecutionResult();
+  explicit OptimizationGuideModelStreamingExecutionResult(
+      base::expected<const StreamingResponse,
+                     OptimizationGuideModelExecutionError> response,
+      bool provided_by_on_device,
+      std::unique_ptr<ModelQualityLogEntry> log_entry = nullptr);
+
+  ~OptimizationGuideModelStreamingExecutionResult();
+  OptimizationGuideModelStreamingExecutionResult(
+      OptimizationGuideModelStreamingExecutionResult&& src);
+
+  base::expected<const StreamingResponse, OptimizationGuideModelExecutionError>
+      response;
+  // True if the response was computed on-device.
+  bool provided_by_on_device = false;
+  // The log entry will be null until `StreamingResponse.is_complete` is true.
+  std::unique_ptr<ModelQualityLogEntry> log_entry;
+};
 
 // The callback for receiving the model execution result and model quality log
 // entry.
@@ -46,8 +59,25 @@ using OptimizationGuideModelExecutionResultCallback =
 // The callback for receiving streamed output from the model. The log entry will
 // be null until `StreamingResponse.is_complete` is true.
 using OptimizationGuideModelExecutionResultStreamingCallback =
-    base::RepeatingCallback<void(OptimizationGuideModelStreamingExecutionResult,
-                                 std::unique_ptr<ModelQualityLogEntry>)>;
+    base::RepeatingCallback<void(
+        OptimizationGuideModelStreamingExecutionResult)>;
+
+// Params used to control sampling output tokens for the on-device model.
+struct SamplingParams {
+  uint32_t top_k = 1;
+  float temperature = 0.0f;
+};
+
+// Params to control model config per-session.
+struct SessionConfigParams {
+  std::optional<SamplingParams> sampling_params;
+
+  // Whether to disable server fallback if on-device model is unavailable.
+  //
+  // This API will change but is done here quickly for simplicity while the
+  // capabilities API gets designed. Please ask owners before using this API.
+  bool disable_server_fallback = false;
+};
 
 // Interface for model execution.
 class OptimizationGuideModelExecutor {
@@ -82,7 +112,8 @@ class OptimizationGuideModelExecutor {
   // May return nullptr if model execution is not supported. This session should
   // not outlive OptimizationGuideModelExecutor.
   virtual std::unique_ptr<Session> StartSession(
-      proto::ModelExecutionFeature feature) = 0;
+      proto::ModelExecutionFeature feature,
+      const std::optional<SessionConfigParams>& config_params) = 0;
 
   // Executes the model for `feature` with `request_metadata` and invokes the
   // `callback` with the result.

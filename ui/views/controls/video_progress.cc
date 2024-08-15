@@ -256,7 +256,7 @@ ui::Cursor VideoProgress::GetCursor(const ui::MouseEvent& event) {
   return ui::mojom::CursorType::kProgress;
 }
 
-BEGIN_METADATA(VideoProgress, views::View)
+BEGIN_METADATA(VideoProgress)
 END_METADATA
 
 }  // namespace vivaldi

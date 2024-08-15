@@ -5,10 +5,19 @@ licenses(["notice"])
 exports_files_legacy()
 
 skia_cc_library(
-    name = "noop_testrunner",
+    name = "testrunner",
     testonly = True,
-    srcs = ["BazelNoopTestRunner.cpp"],
+    srcs = [
+        "TestRunner.cpp",
+    ],
+    hdrs = ["TestRunner.h"],
     visibility = [
-        "//gm:__pkg__",
+        "//bench:__subpackages__",
+        "//gm:__subpackages__",
+        "//tools/testrunners:__subpackages__",
+    ],
+    deps = [
+        "//:core",
+        "//tools/flags:cmd_flags",
     ],
 )

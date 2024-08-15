@@ -22,13 +22,33 @@ BASE_FEATURE(kPrefetchNIKScope,
              "PrefetchNIKScope",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kPrefetchDocumentManagerEarlyCookieCopySkipped,
-             "PrefetchDocumentManagerEarlyCookieCopySkipped",
+BASE_FEATURE(kPrefetchBrowserInitiatedTriggers,
+             "PrefetchBrowserInitiatedTriggers",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPrefetchClientHints,
+             "PrefetchClientHints",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kPrefetchUsesHTTPCache,
-             "PrefetchUsesHTTPCache",
+constexpr base::FeatureParam<PrefetchClientHintsCrossSiteBehavior>::Option
+    kPrefetchClientHintsCrossSiteBehaviorOptions[] = {
+        {PrefetchClientHintsCrossSiteBehavior::kNone, "none"},
+        {PrefetchClientHintsCrossSiteBehavior::kLowEntropy, "low_entropy"},
+        {PrefetchClientHintsCrossSiteBehavior::kAll, "all"},
+};
+const base::FeatureParam<PrefetchClientHintsCrossSiteBehavior>
+    kPrefetchClientHintsCrossSiteBehavior{
+        &kPrefetchClientHints, "cross_site_behavior",
+        PrefetchClientHintsCrossSiteBehavior::kLowEntropy,
+        &kPrefetchClientHintsCrossSiteBehaviorOptions};
+
+BASE_FEATURE(kPrefetchStateContaminationMitigation,
+             "PrefetchStateContaminationMitigation",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+const base::FeatureParam<bool>
+    kPrefetchStateContaminationSwapsBrowsingContextGroup{
+        &kPrefetchStateContaminationMitigation, "swaps_bcg", false};
 
 BASE_FEATURE(kPrefetchProxy, "PrefetchProxy", base::FEATURE_ENABLED_BY_DEFAULT);
 

@@ -22,7 +22,7 @@ use lazy_static::lazy_static;
 // Pull in the needed deps for std vs no_std
 cfg_if::cfg_if! {
     // Test pulls in std which causes duplicate errors
-    if #[cfg(any(feature = "std", test, feature = "boringssl", feature = "openssl"))] {
+    if #[cfg(any(feature = "std", test, feature = "boringssl"))] {
         use std::sync::{Mutex, MutexGuard};
         use std::collections::HashMap;
 

@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "ash/public/cpp/ash_public_export.h"
+#include "ash/public/cpp/holding_space/holding_space_colors.h"
 #include "ash/public/cpp/holding_space/holding_space_constants.h"
 #include "ash/public/cpp/holding_space/holding_space_file.h"
 #include "ash/public/cpp/holding_space/holding_space_progress.h"
@@ -30,6 +31,10 @@ namespace ash {
 
 class HoldingSpaceImage;
 
+namespace holding_space_metrics {
+enum class EventSource;
+}  // namespace holding_space_metrics
+
 // Contains data needed to display a single item in the holding space UI.
 class ASH_PUBLIC_EXPORT HoldingSpaceItem {
  public:
@@ -38,22 +43,21 @@ class ASH_PUBLIC_EXPORT HoldingSpaceItem {
   // secondary actions on the item's view itself.
   struct InProgressCommand {
    public:
-    using Handler =
-        base::RepeatingCallback<void(const HoldingSpaceItem* item,
-                                     HoldingSpaceCommandId command_id)>;
+    using Handler = base::RepeatingCallback<void(
+        const HoldingSpaceItem* item,
+        HoldingSpaceCommandId command_id,
+        holding_space_metrics::EventSource event_source)>;
 
     InProgressCommand(HoldingSpaceCommandId command_id,
                       int label_id,
                       const gfx::VectorIcon* icon,
                       Handler handler);
 
-    InProgressCommand(const InProgressCommand& other);
-
-    InProgressCommand& operator=(const InProgressCommand& other);
-
+    InProgressCommand(const InProgressCommand&);
+    InProgressCommand& operator=(const InProgressCommand&);
     ~InProgressCommand();
 
-    bool operator==(const InProgressCommand& other) const;
+    bool operator==(const InProgressCommand&) const;
 
     // The identifier for the command.
     HoldingSpaceCommandId command_id;
@@ -187,12 +191,13 @@ class ASH_PUBLIC_EXPORT HoldingSpaceItem {
   std::optional<std::optional<std::u16string>> SetSecondaryText(
       const std::optional<std::u16string>& secondary_text);
 
-  // Sets the color id for the secondary text that should be shown for the item,
-  // returning the previous value if a change occurred or `std::nullopt` to
-  // indicate no-op. If `std::nullopt` is provided, secondary text color will
+  // Sets the color variant for the secondary text that should be shown for the
+  // item, returning the previous value if a change occurred or `std::nullopt`
+  // to indicate no-op. If `std::nullopt` is provided, secondary text color will
   // fall back to default.
-  std::optional<std::optional<ui::ColorId>> SetSecondaryTextColorId(
-      const std::optional<ui::ColorId>& secondary_text_color_id);
+  std::optional<std::optional<HoldingSpaceColorVariant>>
+  SetSecondaryTextColorVariant(const std::optional<HoldingSpaceColorVariant>&
+                                   secondary_text_color_variant);
 
   // Returns `accessible_name_`, falling back to a concatenation of primary
   // and secondary text if absent.
@@ -230,8 +235,9 @@ class ASH_PUBLIC_EXPORT HoldingSpaceItem {
     return secondary_text_;
   }
 
-  const std::optional<ui::ColorId>& secondary_text_color_id() const {
-    return secondary_text_color_id_;
+  const std::optional<HoldingSpaceColorVariant>& secondary_text_color_variant()
+      const {
+    return secondary_text_color_variant_;
   }
 
   const HoldingSpaceImage& image() const { return *image_; }
@@ -245,6 +251,7 @@ class ASH_PUBLIC_EXPORT HoldingSpaceItem {
   }
 
   HoldingSpaceImage& image_for_testing() { return *image_; }
+  const HoldingSpaceImage& image_for_testing() const { return *image_; }
 
  private:
   // Constructor for file backed items.
@@ -268,9 +275,9 @@ class ASH_PUBLIC_EXPORT HoldingSpaceItem {
   // If set, the secondary text that should be shown for the item.
   std::optional<std::u16string> secondary_text_;
 
-  // If set, the color resolved from the color id for the secondary text that
-  // should be shown for the item.
-  std::optional<ui::ColorId> secondary_text_color_id_;
+  // If set, the color resolved from the color variant for the secondary text
+  // that should be shown for the item.
+  std::optional<HoldingSpaceColorVariant> secondary_text_color_variant_;
 
   // If set, the accessible name that should be used for the item.
   std::optional<std::u16string> accessible_name_;

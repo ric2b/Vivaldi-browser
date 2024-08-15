@@ -6,6 +6,7 @@
 
 #include <array>
 #include <utility>
+#include <vector>
 
 #include "base/check.h"
 #include "base/functional/bind.h"
@@ -21,8 +22,9 @@ namespace client_certificates {
 
 namespace {
 
-scoped_refptr<UnexportablePrivateKey> CreateKey() {
-  auto provider = crypto::GetUnexportableKeyProvider();
+scoped_refptr<UnexportablePrivateKey> CreateKey(
+    crypto::UnexportableKeyProvider::Config config) {
+  auto provider = crypto::GetUnexportableKeyProvider(std::move(config));
   if (!provider) {
     return nullptr;
   }
@@ -39,12 +41,29 @@ scoped_refptr<UnexportablePrivateKey> CreateKey() {
   return base::MakeRefCounted<UnexportablePrivateKey>(std::move(key));
 }
 
+scoped_refptr<UnexportablePrivateKey> LoadKeyFromWrapped(
+    const std::vector<uint8_t>& wrapped_key,
+    crypto::UnexportableKeyProvider::Config config) {
+  auto provider = crypto::GetUnexportableKeyProvider(std::move(config));
+  if (!provider) {
+    return nullptr;
+  }
+
+  auto key = provider->FromWrappedSigningKeySlowly(wrapped_key);
+  if (!key) {
+    return nullptr;
+  }
+
+  return base::MakeRefCounted<UnexportablePrivateKey>(std::move(key));
+}
+
 }  // namespace
 
 // static
 std::unique_ptr<UnexportablePrivateKeyFactory>
-UnexportablePrivateKeyFactory::TryCreate() {
-  auto provider = crypto::GetUnexportableKeyProvider();
+UnexportablePrivateKeyFactory::TryCreate(
+    crypto::UnexportableKeyProvider::Config config) {
+  auto provider = crypto::GetUnexportableKeyProvider(config);
 
   if (!provider) {
     // Unexportable keys are not supported.
@@ -52,18 +71,37 @@ UnexportablePrivateKeyFactory::TryCreate() {
   }
 
   return base::WrapUnique<UnexportablePrivateKeyFactory>(
-      new UnexportablePrivateKeyFactory());
+      new UnexportablePrivateKeyFactory(std::move(config)));
 }
 
-UnexportablePrivateKeyFactory::UnexportablePrivateKeyFactory() = default;
+UnexportablePrivateKeyFactory::UnexportablePrivateKeyFactory(
+    crypto::UnexportableKeyProvider::Config config)
+    : config_(std::move(config)) {}
 
 UnexportablePrivateKeyFactory::~UnexportablePrivateKeyFactory() = default;
 
 void UnexportablePrivateKeyFactory::CreatePrivateKey(
     PrivateKeyCallback callback) {
-  base::ThreadPool::PostTaskAndReplyWithResult(FROM_HERE, {base::MayBlock()},
-                                               base::BindOnce(CreateKey),
-                                               std::move(callback));
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()}, base::BindOnce(CreateKey, config_),
+      std::move(callback));
+}
+
+void UnexportablePrivateKeyFactory::LoadPrivateKey(
+    const client_certificates_pb::PrivateKey& serialized_private_key,
+    PrivateKeyCallback callback) {
+  auto private_key_source = ToPrivateKeySource(serialized_private_key.source());
+  CHECK(private_key_source.has_value());
+  CHECK(private_key_source.value() == PrivateKeySource::kUnexportableKey);
+
+  const auto& wrapped_key_str = serialized_private_key.wrapped_key();
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(
+          LoadKeyFromWrapped,
+          std::vector<uint8_t>(wrapped_key_str.begin(), wrapped_key_str.end()),
+          config_),
+      std::move(callback));
 }
 
 }  // namespace client_certificates

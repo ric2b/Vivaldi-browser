@@ -172,7 +172,7 @@
 <translation id="3810973564298564668">管理</translation>
 <translation id="3838085852053358637">無法載入擴充功能</translation>
 <translation id="383891835335927981">未針對任何網站設定縮放等級</translation>
-<translation id="385051799172605136">上一頁</translation>
+<translation id="385051799172605136">返回</translation>
 <translation id="3867944738977021751">憑證欄位</translation>
 <translation id="3905761538810670789">修復應用程式</translation>
 <translation id="3908501907586732282">啟用擴充功能</translation>
@@ -213,7 +213,7 @@
 <translation id="4384652540891215547">啟用擴充功能</translation>
 <translation id="4394049700291259645">停用</translation>
 <translation id="4409697491990005945">邊界</translation>
-<translation id="4423376891418188461">復原設定</translation>
+<translation id="4423376891418188461">還原設定</translation>
 <translation id="4478664379124702289">另存連結為 (&amp;K) ……</translation>
 <translation id="4520385623207007473">使用中的 Cookie</translation>
 <translation id="4536111748245793305">設定檔 <ph name="VALUE" /></translation>
@@ -226,7 +226,7 @@
 <translation id="4643612240819915418">在新分頁中開啟影片 (&amp;O)</translation>
 <translation id="4677772697204437347">GPU 記憶體</translation>
 <translation id="4681930562518940301">在新分頁開啟原始圖片 (&amp;I)</translation>
-<translation id="4711638718396952945">復原設定</translation>
+<translation id="4711638718396952945">還原設定</translation>
 <translation id="4726710629007580002">嘗試安裝擴充功能時的報警：</translation>
 <translation id="4763408175235639573">系統在您瀏覽這個網頁時設定了下列 Cookie</translation>
 <translation id="479536056609751218">網頁，僅 HTML 內容</translation>

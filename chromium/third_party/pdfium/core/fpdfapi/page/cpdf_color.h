@@ -10,10 +10,12 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "core/fxcrt/retain_ptr.h"
-#include "third_party/base/containers/span.h"
+#include "core/fxcrt/span.h"
+#include "core/fxge/dib/fx_dib.h"
 
 class CPDF_ColorSpace;
 class CPDF_Pattern;
@@ -35,9 +37,9 @@ class CPDF_Color {
   void SetValueForPattern(RetainPtr<CPDF_Pattern> pattern,
                           pdfium::span<float> values);
 
-  uint32_t CountComponents() const;
+  uint32_t ComponentCount() const;
   bool IsColorSpaceRGB() const;
-  bool GetRGB(int* R, int* G, int* B) const;
+  std::optional<FX_COLORREF> GetColorRef() const;
 
   // Should only be called if IsPattern() returns true.
   RetainPtr<CPDF_Pattern> GetPattern() const;

@@ -219,7 +219,7 @@ UI.ActionRegistration.registerActionExtension({
 
 UI.ViewManager.registerViewExtension({
   location: UI.ViewManager.ViewLocationValues.ELEMENTS_SIDEBAR,
-  id: 'elements.eventListeners',
+  id: 'elements.event-listeners',
   commandPrompt: i18nLazyString(UIStrings.showEventListeners),
   title: i18nLazyString(UIStrings.eventListeners),
   order: 5,
@@ -233,7 +233,7 @@ UI.ViewManager.registerViewExtension({
 
 UI.ViewManager.registerViewExtension({
   location: UI.ViewManager.ViewLocationValues.ELEMENTS_SIDEBAR,
-  id: 'elements.domProperties',
+  id: 'elements.dom-properties',
   commandPrompt: i18nLazyString(UIStrings.showProperties),
   title: i18nLazyString(UIStrings.properties),
   order: 7,
@@ -247,7 +247,7 @@ UI.ViewManager.registerViewExtension({
 UI.ViewManager.registerViewExtension({
   experiment: Root.Runtime.ExperimentName.CAPTURE_NODE_CREATION_STACKS,
   location: UI.ViewManager.ViewLocationValues.ELEMENTS_SIDEBAR,
-  id: 'elements.domCreation',
+  id: 'elements.dom-creation',
   commandPrompt: i18nLazyString(UIStrings.showStackTrace),
   title: i18nLazyString(UIStrings.stackTrace),
   order: 10,
@@ -418,7 +418,7 @@ UI.ActionRegistration.registerActionExtension({
     const Elements = await loadElementsModule();
     return new Elements.InspectElementModeController.ToggleSearchActionDelegate();
   },
-  condition: Root.Runtime.ConditionName.CAN_DOCK,
+  condition: Root.Runtime.conditions.canDock,
   title: i18nLazyString(UIStrings.captureAreaScreenshot),
   category: UI.ActionRegistration.ActionCategory.SCREENSHOT,
 });
@@ -478,7 +478,7 @@ Common.Settings.registerSettingExtension({
   storageType: Common.Settings.SettingStorageType.Synced,
   order: 1,
   title: i18nLazyString(UIStrings.showUserAgentShadowDOM),
-  settingName: 'showUAShadowDOM',
+  settingName: 'show-ua-shadow-dom',
   settingType: Common.Settings.SettingType.BOOLEAN,
   defaultValue: false,
 });
@@ -488,7 +488,7 @@ Common.Settings.registerSettingExtension({
   storageType: Common.Settings.SettingStorageType.Synced,
   order: 2,
   title: i18nLazyString(UIStrings.wordWrap),
-  settingName: 'domWordWrap',
+  settingName: 'dom-word-wrap',
   settingType: Common.Settings.SettingType.BOOLEAN,
   options: [
     {
@@ -508,7 +508,7 @@ Common.Settings.registerSettingExtension({
   storageType: Common.Settings.SettingStorageType.Synced,
   order: 3,
   title: i18nLazyString(UIStrings.showHtmlComments),
-  settingName: 'showHTMLComments',
+  settingName: 'show-html-comments',
   settingType: Common.Settings.SettingType.BOOLEAN,
   defaultValue: true,
   options: [
@@ -528,7 +528,7 @@ Common.Settings.registerSettingExtension({
   storageType: Common.Settings.SettingStorageType.Synced,
   order: 4,
   title: i18nLazyString(UIStrings.revealDomNodeOnHover),
-  settingName: 'highlightNodeOnHoverInOverlay',
+  settingName: 'highlight-node-on-hover-in-overlay',
   settingType: Common.Settings.SettingType.BOOLEAN,
   defaultValue: true,
 });
@@ -538,13 +538,13 @@ Common.Settings.registerSettingExtension({
   storageType: Common.Settings.SettingStorageType.Synced,
   order: 5,
   title: i18nLazyString(UIStrings.showDetailedInspectTooltip),
-  settingName: 'showDetailedInspectTooltip',
+  settingName: 'show-detailed-inspect-tooltip',
   settingType: Common.Settings.SettingType.BOOLEAN,
   defaultValue: true,
 });
 
 Common.Settings.registerSettingExtension({
-  settingName: 'showEventListenersForAncestors',
+  settingName: 'show-event-listeners-for-ancestors',
   settingType: Common.Settings.SettingType.BOOLEAN,
   defaultValue: true,
 });
@@ -552,7 +552,7 @@ Common.Settings.registerSettingExtension({
 Common.Settings.registerSettingExtension({
   category: Common.Settings.SettingCategory.ADORNER,
   storageType: Common.Settings.SettingStorageType.Synced,
-  settingName: 'adornerSettings',
+  settingName: 'adorner-settings',
   settingType: Common.Settings.SettingType.ARRAY,
   defaultValue: [],
 });
@@ -561,7 +561,7 @@ Common.Settings.registerSettingExtension({
   category: Common.Settings.SettingCategory.ELEMENTS,
   storageType: Common.Settings.SettingStorageType.Synced,
   title: i18nLazyString(UIStrings.showCSSDocumentationTooltip),
-  settingName: 'showCSSPropertyDocumentationOnHover',
+  settingName: 'show-css-property-documentation-on-hover',
   settingType: Common.Settings.SettingType.BOOLEAN,
   defaultValue: true,
 });
@@ -625,10 +625,6 @@ UI.Toolbar.registerToolbarItem({
   },
   order: 1,
   location: UI.Toolbar.ToolbarItemLocation.STYLES_SIDEBARPANE_TOOLBAR,
-  showLabel: undefined,
-  condition: undefined,
-  separator: undefined,
-  actionId: undefined,
 });
 
 UI.Toolbar.registerToolbarItem({
@@ -638,10 +634,6 @@ UI.Toolbar.registerToolbarItem({
   },
   order: 2,
   location: UI.Toolbar.ToolbarItemLocation.STYLES_SIDEBARPANE_TOOLBAR,
-  showLabel: undefined,
-  condition: undefined,
-  separator: undefined,
-  actionId: undefined,
 });
 
 UI.Toolbar.registerToolbarItem({
@@ -651,10 +643,6 @@ UI.Toolbar.registerToolbarItem({
   },
   order: 3,
   location: UI.Toolbar.ToolbarItemLocation.STYLES_SIDEBARPANE_TOOLBAR,
-  showLabel: undefined,
-  condition: undefined,
-  separator: undefined,
-  actionId: undefined,
 });
 
 UI.Toolbar.registerToolbarItem({
@@ -664,20 +652,12 @@ UI.Toolbar.registerToolbarItem({
   },
   order: 100,
   location: UI.Toolbar.ToolbarItemLocation.STYLES_SIDEBARPANE_TOOLBAR,
-  showLabel: undefined,
-  condition: undefined,
-  separator: undefined,
-  actionId: undefined,
 });
 
 UI.Toolbar.registerToolbarItem({
   actionId: 'elements.toggle-element-search',
   location: UI.Toolbar.ToolbarItemLocation.MAIN_TOOLBAR_LEFT,
   order: 0,
-  showLabel: undefined,
-  condition: undefined,
-  separator: undefined,
-  loadItem: undefined,
 });
 
 UI.UIUtils.registerRenderer({

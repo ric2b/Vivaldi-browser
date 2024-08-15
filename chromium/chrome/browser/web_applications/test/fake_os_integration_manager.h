@@ -7,6 +7,7 @@
 
 #include <map>
 #include <optional>
+#include <string_view>
 
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "components/webapps/common/web_app_id.h"
@@ -39,21 +40,10 @@ class FakeOsIntegrationManager : public OsIntegrationManager {
   void UninstallAllOsHooks(const webapps::AppId& app_id,
                            UninstallOsHooksCallback callback) override;
   void UpdateOsHooks(const webapps::AppId& app_id,
-                     base::StringPiece old_name,
+                     std::string_view old_name,
                      FileHandlerUpdateAction file_handlers_need_os_update,
                      const WebAppInstallInfo& web_app_info,
                      UpdateOsHooksCallback callback) override;
-
-  // FakeOsIntegrationManager skips the execution logic and writes directly
-  // to the DB, even if the execute_and_write_config
-  // param is enabled in features::kOsIntegrationSubManagers. To test the
-  // actual OS integration, use the production version of OsIntegrationManager.
-  //
-  // See OsIntegrationSynchronizeCommandTest as an example of using this
-  // function.
-  void Synchronize(const webapps::AppId& app_id,
-                   base::OnceClosure callback,
-                   std::optional<SynchronizeOsOptions> options) override;
 
   size_t num_create_shortcuts_calls() const {
     return num_create_shortcuts_calls_;
@@ -119,6 +109,8 @@ class FakeOsIntegrationManager : public OsIntegrationManager {
 
   bool can_create_shortcuts_ = true;
   std::map<webapps::AppId, bool> next_create_shortcut_results_;
+  std::unique_ptr<OsIntegrationManager::ScopedSuppressForTesting>
+      scoped_suppress_;
 };
 
 // Stub test shortcut manager.

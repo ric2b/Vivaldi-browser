@@ -19,6 +19,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "components/component_updater/component_installer.h"
 #include "components/component_updater/component_updater_service.h"
+#include "components/component_updater/installer_policies/first_party_sets_component_installer_policy.h"
 #include "components/component_updater/installer_policies/masked_domain_list_component_installer_policy.h"
 #include "components/component_updater/installer_policies/origin_trials_component_installer.h"
 #include "components/component_updater/installer_policies/tpcd_metadata_component_installer_policy.h"
@@ -46,7 +47,7 @@ void RegisterComponentsForUpdate(
           component_updater::MaskedDomainListComponentInstallerPolicy>(
           /*on_list_ready=*/base::BindRepeating(
               [](base::Version version,
-                 const absl::optional<std::string>& raw_mdl) {
+                 const std::optional<std::string>& raw_mdl) {
                 if (raw_mdl.has_value()) {
                   VLOG(1) << "Received Masked Domain List version " << version;
                 } else {
@@ -56,6 +57,8 @@ void RegisterComponentsForUpdate(
 
   // Note: We're using a command-line switch because finch features
   // isn't supported in nonembedded WebView.
+  // After setting this flag, it may be necessary to force restart the
+  // non-embedded process.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kWebViewTpcdMetadaComponent)) {
     component_installer_list.push_back(
@@ -67,11 +70,29 @@ void RegisterComponentsForUpdate(
                 })));
   }
 
+  // Note: We're using a command-line switch because finch features
+  // isn't supported in nonembedded WebView.
+  // After setting this flag, it may be necessary to force restart the
+  // non-embedded process.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kWebViewFpsComponent)) {
+    component_installer_list.push_back(
+        std::make_unique<
+            component_updater::FirstPartySetsComponentInstallerPolicy>(
+            /* on_sets_ready= */ base::BindOnce(
+                [](base::Version version, base::File sets_file) {
+                  VLOG(1) << "Received Related Website Sets";
+                }),
+            base::TaskPriority::BEST_EFFORT));
+  }
+
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kWebViewEnableTrustTokensComponent)) {
     // TODO(https://crbug.com/1170468): decide if this component is still
     // needed. Note: We're using a command-line switch because finch features
     // isn't supported in nonembedded WebView.
+    // After setting this flag, it may be necessary to force restart the
+    // non-embedded process.
     component_installer_list.push_back(
         std::make_unique<component_updater::
                              TrustTokenKeyCommitmentsComponentInstallerPolicy>(

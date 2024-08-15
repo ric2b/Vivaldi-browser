@@ -99,12 +99,6 @@ class ASH_EXPORT WindowRestoreController
   // `this`.
   bool IsRestoringWindow(aura::Window* window) const;
 
-  // Starts an overview session with the pine contents view if certain
-  // conditions are met. Triggered by developer accelerator.
-  // TODO(sammiequon): This function is temporary and should be repurposed or
-  // removed for production.
-  void MaybeStartPineOverviewSession();
-
   // display::DisplayObserver:
   void OnDisplayTabletStateChanged(display::TabletState state) override;
 
@@ -167,7 +161,7 @@ class ASH_EXPORT WindowRestoreController
 
   // The set of windows that have had their widgets initialized and will be
   // shown later.
-  base::flat_set<aura::Window*> to_be_shown_windows_;
+  base::flat_set<raw_ptr<aura::Window, CtnExperimental>> to_be_shown_windows_;
 
   // When a window is restored, we post a task to clear its
   // `app_restore::kLaunchedFromAppRestoreKey` property. However, a window can

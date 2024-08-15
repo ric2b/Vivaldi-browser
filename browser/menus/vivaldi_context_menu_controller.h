@@ -7,6 +7,7 @@
 #include <map>
 #include <vector>
 
+#include "base/memory/weak_ptr.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/timer/timer.h"
 #include "browser/menus/vivaldi_developertools_menu_controller.h"
@@ -63,7 +64,7 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   // live via MenuClosed.
   ContextMenuController(content::WebContents* window_web_contents,
                         VivaldiRenderViewContextMenu* rv_context_menu,
-                        absl::optional<Params> params);
+                        std::optional<Params> params);
   ~ContextMenuController() override;
 
   Profile* GetProfile();
@@ -124,7 +125,7 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   raw_ptr<VivaldiRenderViewContextMenu> rv_context_menu_;
   bool with_developer_tools_;
   bool has_shown_ = false;
-  absl::optional<Params> params_;
+  std::optional<Params> params_;
 
   // Loading favicons
   base::CancelableTaskTracker cancelable_task_tracker_;
@@ -146,6 +147,8 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   std::unique_ptr<DeveloperToolsMenuController> developertools_controller_;
   std::unique_ptr<PWAMenuController> pwa_controller_;
   std::unique_ptr<base::OneShotTimer> timer_;
+
+  base::WeakPtrFactory<ContextMenuController> weak_factory_{this};
 };
 
 }  // namespace vivaldi

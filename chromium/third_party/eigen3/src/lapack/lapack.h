@@ -7,127 +7,127 @@
 extern "C" {
 #endif
 
-int BLASFUNC(csymv)(const char *, const int *, const float *, const float *, const int *, const float *, const int *,
-                    const float *, float *, const int *);
-int BLASFUNC(zsymv)(const char *, const int *, const double *, const double *, const int *, const double *, const int *,
-                    const double *, double *, const int *);
-int BLASFUNC(xsymv)(const char *, const int *, const double *, const double *, const int *, const double *, const int *,
-                    const double *, double *, const int *);
+void BLASFUNC(csymv)(const char *, const int *, const float *, const float *, const int *, const float *, const int *,
+                     const float *, float *, const int *);
+void BLASFUNC(zsymv)(const char *, const int *, const double *, const double *, const int *, const double *,
+                     const int *, const double *, double *, const int *);
+void BLASFUNC(xsymv)(const char *, const int *, const double *, const double *, const int *, const double *,
+                     const int *, const double *, double *, const int *);
 
-int BLASFUNC(cspmv)(char *, int *, float *, float *, float *, int *, float *, float *, int *);
-int BLASFUNC(zspmv)(char *, int *, double *, double *, double *, int *, double *, double *, int *);
-int BLASFUNC(xspmv)(char *, int *, double *, double *, double *, int *, double *, double *, int *);
+void BLASFUNC(cspmv)(char *, int *, float *, float *, float *, int *, float *, float *, int *);
+void BLASFUNC(zspmv)(char *, int *, double *, double *, double *, int *, double *, double *, int *);
+void BLASFUNC(xspmv)(char *, int *, double *, double *, double *, int *, double *, double *, int *);
 
-int BLASFUNC(csyr)(char *, int *, float *, float *, int *, float *, int *);
-int BLASFUNC(zsyr)(char *, int *, double *, double *, int *, double *, int *);
-int BLASFUNC(xsyr)(char *, int *, double *, double *, int *, double *, int *);
+void BLASFUNC(csyr)(char *, int *, float *, float *, int *, float *, int *);
+void BLASFUNC(zsyr)(char *, int *, double *, double *, int *, double *, int *);
+void BLASFUNC(xsyr)(char *, int *, double *, double *, int *, double *, int *);
 
-int BLASFUNC(cspr)(char *, int *, float *, float *, int *, float *);
-int BLASFUNC(zspr)(char *, int *, double *, double *, int *, double *);
-int BLASFUNC(xspr)(char *, int *, double *, double *, int *, double *);
+void BLASFUNC(cspr)(char *, int *, float *, float *, int *, float *);
+void BLASFUNC(zspr)(char *, int *, double *, double *, int *, double *);
+void BLASFUNC(xspr)(char *, int *, double *, double *, int *, double *);
 
-int BLASFUNC(sgemt)(char *, int *, int *, float *, float *, int *, float *, int *);
-int BLASFUNC(dgemt)(char *, int *, int *, double *, double *, int *, double *, int *);
-int BLASFUNC(cgemt)(char *, int *, int *, float *, float *, int *, float *, int *);
-int BLASFUNC(zgemt)(char *, int *, int *, double *, double *, int *, double *, int *);
+void BLASFUNC(sgemt)(char *, int *, int *, float *, float *, int *, float *, int *);
+void BLASFUNC(dgemt)(char *, int *, int *, double *, double *, int *, double *, int *);
+void BLASFUNC(cgemt)(char *, int *, int *, float *, float *, int *, float *, int *);
+void BLASFUNC(zgemt)(char *, int *, int *, double *, double *, int *, double *, int *);
 
-int BLASFUNC(sgema)(char *, char *, int *, int *, float *, float *, int *, float *, float *, int *, float *, int *);
-int BLASFUNC(dgema)(char *, char *, int *, int *, double *, double *, int *, double *, double *, int *, double *,
-                    int *);
-int BLASFUNC(cgema)(char *, char *, int *, int *, float *, float *, int *, float *, float *, int *, float *, int *);
-int BLASFUNC(zgema)(char *, char *, int *, int *, double *, double *, int *, double *, double *, int *, double *,
-                    int *);
+void BLASFUNC(sgema)(char *, char *, int *, int *, float *, float *, int *, float *, float *, int *, float *, int *);
+void BLASFUNC(dgema)(char *, char *, int *, int *, double *, double *, int *, double *, double *, int *, double *,
+                     int *);
+void BLASFUNC(cgema)(char *, char *, int *, int *, float *, float *, int *, float *, float *, int *, float *, int *);
+void BLASFUNC(zgema)(char *, char *, int *, int *, double *, double *, int *, double *, double *, int *, double *,
+                     int *);
 
-int BLASFUNC(sgems)(char *, char *, int *, int *, float *, float *, int *, float *, float *, int *, float *, int *);
-int BLASFUNC(dgems)(char *, char *, int *, int *, double *, double *, int *, double *, double *, int *, double *,
-                    int *);
-int BLASFUNC(cgems)(char *, char *, int *, int *, float *, float *, int *, float *, float *, int *, float *, int *);
-int BLASFUNC(zgems)(char *, char *, int *, int *, double *, double *, int *, double *, double *, int *, double *,
-                    int *);
+void BLASFUNC(sgems)(char *, char *, int *, int *, float *, float *, int *, float *, float *, int *, float *, int *);
+void BLASFUNC(dgems)(char *, char *, int *, int *, double *, double *, int *, double *, double *, int *, double *,
+                     int *);
+void BLASFUNC(cgems)(char *, char *, int *, int *, float *, float *, int *, float *, float *, int *, float *, int *);
+void BLASFUNC(zgems)(char *, char *, int *, int *, double *, double *, int *, double *, double *, int *, double *,
+                     int *);
 
-int BLASFUNC(sgetf2)(int *, int *, float *, int *, int *, int *);
-int BLASFUNC(dgetf2)(int *, int *, double *, int *, int *, int *);
-int BLASFUNC(qgetf2)(int *, int *, double *, int *, int *, int *);
-int BLASFUNC(cgetf2)(int *, int *, float *, int *, int *, int *);
-int BLASFUNC(zgetf2)(int *, int *, double *, int *, int *, int *);
-int BLASFUNC(xgetf2)(int *, int *, double *, int *, int *, int *);
+void BLASFUNC(sgetf2)(int *, int *, float *, int *, int *, int *);
+void BLASFUNC(dgetf2)(int *, int *, double *, int *, int *, int *);
+void BLASFUNC(qgetf2)(int *, int *, double *, int *, int *, int *);
+void BLASFUNC(cgetf2)(int *, int *, float *, int *, int *, int *);
+void BLASFUNC(zgetf2)(int *, int *, double *, int *, int *, int *);
+void BLASFUNC(xgetf2)(int *, int *, double *, int *, int *, int *);
 
-int BLASFUNC(sgetrf)(int *, int *, float *, int *, int *, int *);
-int BLASFUNC(dgetrf)(int *, int *, double *, int *, int *, int *);
-int BLASFUNC(qgetrf)(int *, int *, double *, int *, int *, int *);
-int BLASFUNC(cgetrf)(int *, int *, float *, int *, int *, int *);
-int BLASFUNC(zgetrf)(int *, int *, double *, int *, int *, int *);
-int BLASFUNC(xgetrf)(int *, int *, double *, int *, int *, int *);
+void BLASFUNC(sgetrf)(int *, int *, float *, int *, int *, int *);
+void BLASFUNC(dgetrf)(int *, int *, double *, int *, int *, int *);
+void BLASFUNC(qgetrf)(int *, int *, double *, int *, int *, int *);
+void BLASFUNC(cgetrf)(int *, int *, float *, int *, int *, int *);
+void BLASFUNC(zgetrf)(int *, int *, double *, int *, int *, int *);
+void BLASFUNC(xgetrf)(int *, int *, double *, int *, int *, int *);
 
-int BLASFUNC(slaswp)(int *, float *, int *, int *, int *, int *, int *);
-int BLASFUNC(dlaswp)(int *, double *, int *, int *, int *, int *, int *);
-int BLASFUNC(qlaswp)(int *, double *, int *, int *, int *, int *, int *);
-int BLASFUNC(claswp)(int *, float *, int *, int *, int *, int *, int *);
-int BLASFUNC(zlaswp)(int *, double *, int *, int *, int *, int *, int *);
-int BLASFUNC(xlaswp)(int *, double *, int *, int *, int *, int *, int *);
+void BLASFUNC(slaswp)(int *, float *, int *, int *, int *, int *, int *);
+void BLASFUNC(dlaswp)(int *, double *, int *, int *, int *, int *, int *);
+void BLASFUNC(qlaswp)(int *, double *, int *, int *, int *, int *, int *);
+void BLASFUNC(claswp)(int *, float *, int *, int *, int *, int *, int *);
+void BLASFUNC(zlaswp)(int *, double *, int *, int *, int *, int *, int *);
+void BLASFUNC(xlaswp)(int *, double *, int *, int *, int *, int *, int *);
 
-int BLASFUNC(sgetrs)(char *, int *, int *, float *, int *, int *, float *, int *, int *);
-int BLASFUNC(dgetrs)(char *, int *, int *, double *, int *, int *, double *, int *, int *);
-int BLASFUNC(qgetrs)(char *, int *, int *, double *, int *, int *, double *, int *, int *);
-int BLASFUNC(cgetrs)(char *, int *, int *, float *, int *, int *, float *, int *, int *);
-int BLASFUNC(zgetrs)(char *, int *, int *, double *, int *, int *, double *, int *, int *);
-int BLASFUNC(xgetrs)(char *, int *, int *, double *, int *, int *, double *, int *, int *);
+void BLASFUNC(sgetrs)(char *, int *, int *, float *, int *, int *, float *, int *, int *);
+void BLASFUNC(dgetrs)(char *, int *, int *, double *, int *, int *, double *, int *, int *);
+void BLASFUNC(qgetrs)(char *, int *, int *, double *, int *, int *, double *, int *, int *);
+void BLASFUNC(cgetrs)(char *, int *, int *, float *, int *, int *, float *, int *, int *);
+void BLASFUNC(zgetrs)(char *, int *, int *, double *, int *, int *, double *, int *, int *);
+void BLASFUNC(xgetrs)(char *, int *, int *, double *, int *, int *, double *, int *, int *);
 
-int BLASFUNC(sgesv)(int *, int *, float *, int *, int *, float *, int *, int *);
-int BLASFUNC(dgesv)(int *, int *, double *, int *, int *, double *, int *, int *);
-int BLASFUNC(qgesv)(int *, int *, double *, int *, int *, double *, int *, int *);
-int BLASFUNC(cgesv)(int *, int *, float *, int *, int *, float *, int *, int *);
-int BLASFUNC(zgesv)(int *, int *, double *, int *, int *, double *, int *, int *);
-int BLASFUNC(xgesv)(int *, int *, double *, int *, int *, double *, int *, int *);
+void BLASFUNC(sgesv)(int *, int *, float *, int *, int *, float *, int *, int *);
+void BLASFUNC(dgesv)(int *, int *, double *, int *, int *, double *, int *, int *);
+void BLASFUNC(qgesv)(int *, int *, double *, int *, int *, double *, int *, int *);
+void BLASFUNC(cgesv)(int *, int *, float *, int *, int *, float *, int *, int *);
+void BLASFUNC(zgesv)(int *, int *, double *, int *, int *, double *, int *, int *);
+void BLASFUNC(xgesv)(int *, int *, double *, int *, int *, double *, int *, int *);
 
-int BLASFUNC(spotf2)(char *, int *, float *, int *, int *);
-int BLASFUNC(dpotf2)(char *, int *, double *, int *, int *);
-int BLASFUNC(qpotf2)(char *, int *, double *, int *, int *);
-int BLASFUNC(cpotf2)(char *, int *, float *, int *, int *);
-int BLASFUNC(zpotf2)(char *, int *, double *, int *, int *);
-int BLASFUNC(xpotf2)(char *, int *, double *, int *, int *);
+void BLASFUNC(spotf2)(char *, int *, float *, int *, int *);
+void BLASFUNC(dpotf2)(char *, int *, double *, int *, int *);
+void BLASFUNC(qpotf2)(char *, int *, double *, int *, int *);
+void BLASFUNC(cpotf2)(char *, int *, float *, int *, int *);
+void BLASFUNC(zpotf2)(char *, int *, double *, int *, int *);
+void BLASFUNC(xpotf2)(char *, int *, double *, int *, int *);
 
-int BLASFUNC(spotrf)(char *, int *, float *, int *, int *);
-int BLASFUNC(dpotrf)(char *, int *, double *, int *, int *);
-int BLASFUNC(qpotrf)(char *, int *, double *, int *, int *);
-int BLASFUNC(cpotrf)(char *, int *, float *, int *, int *);
-int BLASFUNC(zpotrf)(char *, int *, double *, int *, int *);
-int BLASFUNC(xpotrf)(char *, int *, double *, int *, int *);
+void BLASFUNC(spotrf)(char *, int *, float *, int *, int *);
+void BLASFUNC(dpotrf)(char *, int *, double *, int *, int *);
+void BLASFUNC(qpotrf)(char *, int *, double *, int *, int *);
+void BLASFUNC(cpotrf)(char *, int *, float *, int *, int *);
+void BLASFUNC(zpotrf)(char *, int *, double *, int *, int *);
+void BLASFUNC(xpotrf)(char *, int *, double *, int *, int *);
 
-int BLASFUNC(slauu2)(char *, int *, float *, int *, int *);
-int BLASFUNC(dlauu2)(char *, int *, double *, int *, int *);
-int BLASFUNC(qlauu2)(char *, int *, double *, int *, int *);
-int BLASFUNC(clauu2)(char *, int *, float *, int *, int *);
-int BLASFUNC(zlauu2)(char *, int *, double *, int *, int *);
-int BLASFUNC(xlauu2)(char *, int *, double *, int *, int *);
+void BLASFUNC(slauu2)(char *, int *, float *, int *, int *);
+void BLASFUNC(dlauu2)(char *, int *, double *, int *, int *);
+void BLASFUNC(qlauu2)(char *, int *, double *, int *, int *);
+void BLASFUNC(clauu2)(char *, int *, float *, int *, int *);
+void BLASFUNC(zlauu2)(char *, int *, double *, int *, int *);
+void BLASFUNC(xlauu2)(char *, int *, double *, int *, int *);
 
-int BLASFUNC(slauum)(char *, int *, float *, int *, int *);
-int BLASFUNC(dlauum)(char *, int *, double *, int *, int *);
-int BLASFUNC(qlauum)(char *, int *, double *, int *, int *);
-int BLASFUNC(clauum)(char *, int *, float *, int *, int *);
-int BLASFUNC(zlauum)(char *, int *, double *, int *, int *);
-int BLASFUNC(xlauum)(char *, int *, double *, int *, int *);
+void BLASFUNC(slauum)(char *, int *, float *, int *, int *);
+void BLASFUNC(dlauum)(char *, int *, double *, int *, int *);
+void BLASFUNC(qlauum)(char *, int *, double *, int *, int *);
+void BLASFUNC(clauum)(char *, int *, float *, int *, int *);
+void BLASFUNC(zlauum)(char *, int *, double *, int *, int *);
+void BLASFUNC(xlauum)(char *, int *, double *, int *, int *);
 
-int BLASFUNC(strti2)(char *, char *, int *, float *, int *, int *);
-int BLASFUNC(dtrti2)(char *, char *, int *, double *, int *, int *);
-int BLASFUNC(qtrti2)(char *, char *, int *, double *, int *, int *);
-int BLASFUNC(ctrti2)(char *, char *, int *, float *, int *, int *);
-int BLASFUNC(ztrti2)(char *, char *, int *, double *, int *, int *);
-int BLASFUNC(xtrti2)(char *, char *, int *, double *, int *, int *);
+void BLASFUNC(strti2)(char *, char *, int *, float *, int *, int *);
+void BLASFUNC(dtrti2)(char *, char *, int *, double *, int *, int *);
+void BLASFUNC(qtrti2)(char *, char *, int *, double *, int *, int *);
+void BLASFUNC(ctrti2)(char *, char *, int *, float *, int *, int *);
+void BLASFUNC(ztrti2)(char *, char *, int *, double *, int *, int *);
+void BLASFUNC(xtrti2)(char *, char *, int *, double *, int *, int *);
 
-int BLASFUNC(strtri)(char *, char *, int *, float *, int *, int *);
-int BLASFUNC(dtrtri)(char *, char *, int *, double *, int *, int *);
-int BLASFUNC(qtrtri)(char *, char *, int *, double *, int *, int *);
-int BLASFUNC(ctrtri)(char *, char *, int *, float *, int *, int *);
-int BLASFUNC(ztrtri)(char *, char *, int *, double *, int *, int *);
-int BLASFUNC(xtrtri)(char *, char *, int *, double *, int *, int *);
+void BLASFUNC(strtri)(char *, char *, int *, float *, int *, int *);
+void BLASFUNC(dtrtri)(char *, char *, int *, double *, int *, int *);
+void BLASFUNC(qtrtri)(char *, char *, int *, double *, int *, int *);
+void BLASFUNC(ctrtri)(char *, char *, int *, float *, int *, int *);
+void BLASFUNC(ztrtri)(char *, char *, int *, double *, int *, int *);
+void BLASFUNC(xtrtri)(char *, char *, int *, double *, int *, int *);
 
-int BLASFUNC(spotri)(char *, int *, float *, int *, int *);
-int BLASFUNC(dpotri)(char *, int *, double *, int *, int *);
-int BLASFUNC(qpotri)(char *, int *, double *, int *, int *);
-int BLASFUNC(cpotri)(char *, int *, float *, int *, int *);
-int BLASFUNC(zpotri)(char *, int *, double *, int *, int *);
-int BLASFUNC(xpotri)(char *, int *, double *, int *, int *);
+void BLASFUNC(spotri)(char *, int *, float *, int *, int *);
+void BLASFUNC(dpotri)(char *, int *, double *, int *, int *);
+void BLASFUNC(qpotri)(char *, int *, double *, int *, int *);
+void BLASFUNC(cpotri)(char *, int *, float *, int *, int *);
+void BLASFUNC(zpotri)(char *, int *, double *, int *, int *);
+void BLASFUNC(xpotri)(char *, int *, double *, int *, int *);
 
 #ifdef __cplusplus
 }

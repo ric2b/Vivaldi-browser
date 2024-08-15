@@ -36,9 +36,14 @@ class VivaldiSpatialNavigationController::ScrollListener
                          blink::Document* document)
     : controller_(controller),
       document_(document) {}
-  ~ScrollListener() override { StopListening(); }
+  ~ScrollListener() override = default;
 
   void StartListening() {
+    if (is_listening_) {
+      return;
+    }
+    is_listening_ = true;
+
     blink::LocalDOMWindow* window = document_->domWindow();
     if (!window)
       return;
@@ -52,6 +57,11 @@ class VivaldiSpatialNavigationController::ScrollListener
   }
 
   void StopListening() {
+    if (!is_listening_) {
+      return;
+    }
+    is_listening_ = false;
+
     if (!controller_) {
       return;
     }
@@ -84,6 +94,7 @@ class VivaldiSpatialNavigationController::ScrollListener
   }
   VivaldiSpatialNavigationController* controller_;
   blink::Document* document_;
+  bool is_listening_ = false;
 };
 
 VivaldiSpatialNavigationController::VivaldiSpatialNavigationController(
@@ -178,6 +189,7 @@ void VivaldiSpatialNavigationController::CloseSpatnavOrCurrentOpenMenu(
 
   if (!layout_changed || !element_valid) {
     HideIndicator();
+    scroll_listener_->StopListening();
   }
 }
 

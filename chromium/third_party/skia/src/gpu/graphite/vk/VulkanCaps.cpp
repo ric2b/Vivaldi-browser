@@ -18,6 +18,7 @@
 #include "src/gpu/graphite/RendererProvider.h"
 #include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "src/gpu/graphite/vk/VulkanGraphiteUtilsPriv.h"
+#include "src/gpu/graphite/vk/VulkanRenderPass.h"
 #include "src/gpu/graphite/vk/VulkanSharedContext.h"
 #include "src/gpu/vk/VulkanUtilsPriv.h"
 
@@ -151,6 +152,10 @@ void VulkanCaps::init(const ContextOptions& contextOptions,
         }
     }
 
+    if (extensions->hasExtension(VK_EXT_DEVICE_FAULT_EXTENSION_NAME, 1)) {
+        fSupportsDeviceFaultInfo = true;
+    }
+
     this->finishInitialization(contextOptions);
 }
 
@@ -229,7 +234,10 @@ TextureInfo VulkanCaps::getDefaultSampledTextureInfo(SkColorType ct,
                             VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                             VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     if (isRenderable == Renderable::kYes) {
-        info.fImageUsageFlags = info.fImageUsageFlags | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        // We make all renderable images support being used as input attachment
+        info.fImageUsageFlags = info.fImageUsageFlags |
+                                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
     }
     info.fSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     info.fAspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -942,10 +950,12 @@ void VulkanCaps::FormatInfo::init(const skgpu::VulkanInterface* interface,
     VULKAN_CALL(interface, GetPhysicalDeviceFormatProperties(physDev, format, &fFormatProperties));
 
     if (this->isRenderable(fFormatProperties.optimalTilingFeatures)) {
+        // We make all renderable images support being used as input attachment
         VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                                        VK_IMAGE_USAGE_TRANSFER_DST_BIT |
                                        VK_IMAGE_USAGE_SAMPLED_BIT |
-                                       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+                                       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                       VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
         this->fSupportedSampleCounts.initSampleCounts(interface, physDev, properties, format,
                                                       usageFlags);
     }
@@ -1310,17 +1320,25 @@ UniqueKey VulkanCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipeli
         static const skgpu::UniqueKey::Domain kGraphicsPipelineDomain =
             UniqueKey::GenerateDomain();
 
-        // 5 uint32_t's (render step id, paint id, uint64 renderpass desc, uint16 write swizzle key)
-        UniqueKey::Builder builder(&pipelineKey, kGraphicsPipelineDomain, 5, "GraphicsPipeline");
-        // add graphicspipelinedesc key
-        builder[0] = pipelineDesc.renderStepID();
-        builder[1] = pipelineDesc.paintParamsID().asUInt();
+        VulkanRenderPass::VulkanRenderPassMetaData rpMetaData {renderPassDesc};
 
-        // add renderpassdesc key
-        uint64_t renderPassKey = this->getRenderPassDescKey(renderPassDesc);
-        builder[2] = renderPassKey & 0xFFFFFFFF;
-        builder[3] = (renderPassKey >> 32) & 0xFFFFFFFF;
-        builder[4] = renderPassDesc.fWriteSwizzle.asKey();
+        // Reserve 3 uint32s for the render step id, paint id, and write swizzle.
+        static constexpr int kUint32sNeededForPipelineInfo = 3;
+        // The uint32s needed for a RenderPass is variable number, so consult rpMetaData to
+        // determine how many to reserve.
+        UniqueKey::Builder builder(&pipelineKey,
+                                   kGraphicsPipelineDomain,
+                                   kUint32sNeededForPipelineInfo + rpMetaData.fUint32DataCnt,
+                                   "GraphicsPipeline");
+
+        int idx = 0;
+        // Add GraphicsPipelineDesc information
+        builder[idx++] = pipelineDesc.renderStepID();
+        builder[idx++] = pipelineDesc.paintParamsID().asUInt();
+        // Add RenderPass info relevant for pipeline creation that's not captured in RenderPass keys
+        builder[idx++] = renderPassDesc.fWriteSwizzle.asKey();
+        // Add RenderPassDesc information
+        VulkanRenderPass::AddRenderPassInfoToKey(rpMetaData, builder, idx, /*compatibleOnly=*/true);
 
         builder.finish();
     }
@@ -1375,16 +1393,6 @@ void VulkanCaps::buildKeyForTexture(SkISize dimensions,
                  (static_cast<uint32_t>(vkSpec.fSharingMode)         << 6)  |
                  (static_cast<uint32_t>(vkSpec.fAspectMask)          << 7)  |
                  (static_cast<uint32_t>(vkSpec.fImageUsageFlags)     << 19);
-}
-
-uint64_t VulkanCaps::getRenderPassDescKey(const RenderPassDesc& renderPassDesc) const {
-    VulkanTextureInfo colorInfo, depthStencilInfo;
-    renderPassDesc.fColorAttachment.fTextureInfo.getVulkanTextureInfo(&colorInfo);
-    renderPassDesc.fDepthStencilAttachment.fTextureInfo.getVulkanTextureInfo(&depthStencilInfo);
-    SkASSERT(colorInfo.fFormat < 65535 && depthStencilInfo.fFormat < 65535);
-    uint32_t colorAttachmentKey = colorInfo.fFormat << 16 | colorInfo.fSampleCount;
-    uint32_t dsAttachmentKey = depthStencilInfo.fFormat << 16 | depthStencilInfo.fSampleCount;
-    return (((uint64_t) colorAttachmentKey) << 32) | dsAttachmentKey;
 }
 
 } // namespace skgpu::graphite

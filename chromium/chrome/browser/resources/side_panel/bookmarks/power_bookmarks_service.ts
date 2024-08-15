@@ -7,9 +7,10 @@
 import {PageImageServiceBrowserProxy} from '//resources/cr_components/page_image_service/browser_proxy.js';
 import {ClientId as PageImageServiceClientId} from '//resources/cr_components/page_image_service/page_image_service.mojom-webui.js';
 import {loadTimeData} from '//resources/js/load_time_data.js';
-import {Url} from '//resources/mojo/url/mojom/url.mojom-webui.js';
+import type {Url} from '//resources/mojo/url/mojom/url.mojom-webui.js';
 
-import {BookmarksApiProxy, BookmarksApiProxyImpl} from './bookmarks_api_proxy.js';
+import type {BookmarksApiProxy} from './bookmarks_api_proxy.js';
+import {BookmarksApiProxyImpl} from './bookmarks_api_proxy.js';
 
 // This corresponds to the max number of concurrent ImageService requests
 // before further requests get dropped. Further requests up to 600 should be
@@ -511,6 +512,11 @@ export class PowerBookmarksService {
 
     // Fetch the representative image for this page, if possible.
     this.activeImageServiceRequestCount_++;
+    // TODO(b/303613231): Update this code to distinguish account bookmarks
+    // (which can get images from PageImageService) from local bookmarks (which
+    // can't), once the account bookmark store exists. The "is account bookmark"
+    // bit will likely need to be plumbed here. (For reference:
+    // crrev.com/c/5346717 made the equivalent change for Android.)
     const {result} =
         await PageImageServiceBrowserProxy.getInstance()
             .handler.getPageImageUrl(

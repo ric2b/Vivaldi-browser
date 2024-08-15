@@ -55,9 +55,11 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Managed"/>
 </enum>
 
-<enum name="BooleanOriginHeaderSameAsRequestOrigin">
-  <int value="0" label="Headers differ"/>
-  <int value="1" label="Headers match"/>
+<enum name="CAPPORTQueryResult">
+  <int value="0" label="Success"/>
+  <int value="1" label="Request failed"/>
+  <int value="2" label="Response failed"/>
+  <int value="3" label="Invalid response"/>
 </enum>
 
 <enum name="CaptivePortalNetworkState">
@@ -113,6 +115,10 @@ chromium-metrics-reviews@google.com.
 <enum name="CellularCarrierLockFcmNotification">
   <int value="0" label="UpdateProfile"/>
   <int value="1" label="UnlockDevice"/>
+  <int value="2" label="UpdateProfileBeforeInit"/>
+  <int value="3" label="UnlockDeviceBeforeInit"/>
+  <int value="4" label="UpdateProfileWhileBusy"/>
+  <int value="5" label="UnlockDeviceWhileBusy"/>
 </enum>
 
 <enum name="CellularCarrierLockFcmResult">
@@ -506,6 +512,12 @@ chromium-metrics-reviews@google.com.
   <int value="8"
       label="kUpstreamNoInternet: Hotspot disabled due to upstream network
              has no Internet connectivity."/>
+  <int value="9"
+      label="kDownstreamLinkDisconnect: Hotspot disabled due to downsteam
+             link disconnected."/>
+  <int value="10"
+      label="kDownstreamNetworkDisconnect: Hotspot disabled due to downstream
+             network disconnected."/>
 </enum>
 
 <enum name="HotspotSetConfigResult">
@@ -577,6 +589,25 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="kWifiWithCellularNotConnected"/>
 </enum>
 
+<enum name="IpProtectionEligibility">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="Ineligible"/>
+  <int value="2" label="Eligible"/>
+</enum>
+
+<enum name="IpProtectionGetProxyListResult">
+  <int value="0" label="Failed to acquire a list"/>
+  <int value="1" label="Got a list without any valid entries"/>
+  <int value="2" label="Got a list with at least one valid entry"/>
+</enum>
+
+<enum name="IpProtectionProxyChainId">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="Chain 1"/>
+  <int value="2" label="Chain 2"/>
+  <int value="3" label="Chain 3"/>
+</enum>
+
 <enum name="IpProtectionProxyLayer">
   <int value="0" label="Proxy A"/>
   <int value="1" label="Proxy B"/>
@@ -593,6 +624,7 @@ chromium-metrics-reviews@google.com.
   <int value="7" label="Failed - BSA Error Other"/>
   <int value="8" label="Transient OAuth Token Failure"/>
   <int value="9" label="Persistent OAuth Token Failure"/>
+  <int value="10" label="Disabled by User"/>
 </enum>
 
 <enum name="ManagedApnMigrationType">
@@ -1037,14 +1069,14 @@ chromium-metrics-reviews@google.com.
     Corresponds to NetworkPortalSigninController::SigninMode used to determine
     how to display captive portal signin UI.
   </summary>
-  <int value="1" label="Dialog using the signin Profile"/>
+  <int value="1" label="Dialog using the signin (login) Profile"/>
   <int value="2"
       label="DEPRECATED: Singleton tab using the active user Profile"/>
-  <int value="3" label="Browser tab using the active user Profile"/>
-  <int value="4" label="Browser tab using an OTR Profile"/>
-  <int value="5" label="Dialog using an incognito Profile (deprecated)"/>
-  <int value="6" label="Normal browser tab (OTR policy disabled)"/>
-  <int value="7" label="Normal browser tab (Parental controls)"/>
+  <int value="3" label="Normal tab (extensions and proxies enabled)"/>
+  <int value="4" label="Default (proxies disabled)"/>
+  <int value="5" label="DEPRECATED: Dialog using an incognito Profile"/>
+  <int value="6" label="Incognito mode disabled by policy"/>
+  <int value="7" label="Incognito mode disabled by parental controls"/>
 </enum>
 
 <enum name="NetworkPortalSigninSource">
@@ -1204,20 +1236,20 @@ chromium-metrics-reviews@google.com.
   <int value="6" label="Unknown"/>
 </enum>
 
+<enum name="NetworkTechnologyMeterSubtype">
+  <int value="0" label="Ethernet"/>
+  <int value="1" label="WiFi"/>
+  <int value="2" label="WiFi Metered"/>
+  <int value="3" label="Cellular"/>
+  <int value="4" label="Cellular Metered"/>
+  <int value="5" label="Tether"/>
+  <int value="6" label="Tether Metered"/>
+</enum>
+
 <enum name="NotificationSuppressionState">
   <int value="0" label="NotSuppressed"/>
   <int value="1" label="UserSuppressed"/>
   <int value="2" label="PolicySuppressed"/>
-</enum>
-
-<enum name="OncRecommendedFieldsWorkaroundAction">
-  <int value="0"
-      label="Enabled by feature, ONC NetworkConfiguration not affected"/>
-  <int value="1" label="Enabled by feature, ONC NetworkConfiguration affected"/>
-  <int value="2"
-      label="Disabled by feature, ONC NetworkConfiguration not affected"/>
-  <int value="3"
-      label="Disabled by feature, ONC NetworkConfiguration affected"/>
 </enum>
 
 <enum name="PasspointMatch">
@@ -1272,6 +1304,11 @@ chromium-metrics-reviews@google.com.
   <int value="5" label="TTLS+MSCHAPv2"/>
 </enum>
 
+<enum name="PasspointTermsAndConditions">
+  <int value="0" label="Association to a Passpoint network"/>
+  <int value="1" label="Passpoint network provided a Terms and Conditions URL"/>
+</enum>
+
 <enum name="PlatformCellularConnectResult">
   <summary>
     The return status as a result of a call to connect to a cellular device at
@@ -1297,14 +1334,23 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="Suppress"/>
 </enum>
 
+<enum name="PortalDetectorAggregateCAPPORTResult">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="Captive"/>
+  <int value="2" label="Open, no verified Internet"/>
+  <int value="3" label="Open, with verified Internet"/>
+</enum>
+
 <enum name="PortalDetectorAggregateResult">
   <int value="0" label="Unknown"/>
   <int value="1" label="No Connectivity"/>
   <int value="2" label="Partial Connectivity"/>
-  <int value="3" label="Redirect"/>
+  <int value="3" label="Portal-Redirect (302, 307)"/>
   <int value="4" label="Internet After Partial Connectivity"/>
-  <int value="5" label="Internet After Redirect"/>
+  <int value="5" label="Internet After Portal-Redirect"/>
   <int value="6" label="Internet"/>
+  <int value="7" label="Portal-Suspected (200)"/>
+  <int value="8" label="Internet After Portal-Suspected"/>
 </enum>
 
 <enum name="PortalDetectorResult">
@@ -2145,6 +2191,14 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="MemoryPressure"/>
 </enum>
 
+<enum name="TermsAndConditionsAggregateResult">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="No portal detected, no terms and conditions URL"/>
+  <int value="2" label="No portal detected, terms and conditions URL provided"/>
+  <int value="3" label="Portal detected, no terms and conditions URL"/>
+  <int value="4" label="Portal detected, terms and conditions URL provided"/>
+</enum>
+
 <enum name="UnmanagedApnMigrationType">
   <int value="0"
       label="No last connected attach or default APN, but matches last good
@@ -2375,6 +2429,33 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="Adapter in allowlist but not in AVL"/>
 </enum>
 
+<enum name="WiFiANQPAddressTypeAvailabilitySupport">
+  <int value="0" label="Does not support Address Type Availability"/>
+  <int value="1" label="Supports Address Type Availability"/>
+</enum>
+
+<enum name="WiFiANQPNetworkAuthTypeSupport">
+  <int value="0" label="Does not support Network Authentication Type"/>
+  <int value="1" label="Supports Network Authentication Type"/>
+</enum>
+
+<enum name="WiFiANQPQueryResult">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="Success"/>
+  <int value="2" label="Failure"/>
+  <int value="3" label="Invalid frame"/>
+</enum>
+
+<enum name="WiFiANQPVenueNameSupport">
+  <int value="0" label="Does not support Venue Name"/>
+  <int value="1" label="Supports Venue Name"/>
+</enum>
+
+<enum name="WiFiANQPVenueURLSupport">
+  <int value="0" label="Does not support Venue URL"/>
+  <int value="1" label="Supports Venue URL"/>
+</enum>
+
 <enum name="WiFiAp80211kSupport">
   <int value="0" label="Does not support 802.11k"/>
   <int value="1" label="Supports 802.11k neighbor lists"/>
@@ -2384,6 +2465,11 @@ chromium-metrics-reviews@google.com.
   <int value="0" label="Does not support 802.11r"/>
   <int value="1" label="Supports Over-the-Air FT Roaming"/>
   <int value="2" label="Supports Over-the-DS FT Roaming"/>
+</enum>
+
+<enum name="WiFiAp80211uANQPSupport">
+  <int value="0" label="Does not support 802.11u ANQP"/>
+  <int value="1" label="Supports ANQP"/>
 </enum>
 
 <enum name="WiFiAp80211vBSSMaxIdlePeriodSupport">

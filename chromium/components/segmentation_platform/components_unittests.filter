@@ -17,6 +17,7 @@
 *DummySegmentationPlatformServiceTest.*
 *FailedUkmDatabaseTest.*
 *FeatureAggregatorImplTest.*
+*FeatureListQueryProcessorNoDbCacheTest.*
 *FeatureListQueryProcessorTest.*
 *FeedUserModelTest.*
 *FieldTrialRecorderTest.*
@@ -82,5 +83,6 @@
 *UkmObserverTest.*
 *UkmUrlTableTest.*
 *UmaFeatureProcessorTest.*
+*UmaMetricsTableTest.*
 *UrlSignalHandlerTest.*
 *UserActionSignalHandlerTest.*

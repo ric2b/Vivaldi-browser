@@ -1,6 +1,7 @@
 __pycache__
 /.firebase
 /.gclient_entries
+/.gclient_previous_sync_commits
 *.pyc
 *.swo
 *.swp

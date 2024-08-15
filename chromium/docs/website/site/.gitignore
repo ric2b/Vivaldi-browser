@@ -213,8 +213,6 @@ chromium-os/obsolete/using-eclipse-to-debug-chrome-on-chrome-os/debug connection
 chromium-os/obsolete/using-eclipse-to-debug-chrome-on-chrome-os/Resource Filters.png
 chromium-os/obsolete/monitoring-tools/timeline.jpg
 chromium-os/firmware-porting-guide/2-concepts/Verified Boot Flow.png
-chromium-os/getting-dev-hardware/dev-hardware-list/ChromeOSCompatibilitylist-20091121-A.xlsx
-chromium-os/getting-dev-hardware/dev-hardware-list/icon-checkmark.gif
 chromium-os/plankton/IMG_5169.jpg
 chromium-os/plankton/leds.jpeg
 chromium-os/plankton/Plankton Raiden MCU command table.pdf
@@ -224,21 +222,6 @@ chromium-os/plankton/Plankton Raiden Software Care & Feed.jpg
 chromium-os/plankton/plankton-master.tar.gz
 chromium-os/cable-and-adapter-tips-and-tricks/SourcePowerRule.png
 chromium-os/donnettes/smart receptacle-05042017.pdf
-chromium-os/servo/servov4/650-00588-01_20170601_servo_v4_pvt1_SCH_0.pdf
-chromium-os/servo/image00.jpg
-chromium-os/servo/810-10010-03_20120227_servo_SCH_0.pdf
-chromium-os/servo/chromium_os_servo_v2.tar.gz
-chromium-os/servo/servo_v2_bot.jpg
-chromium-os/servo/IMG_20151019_085815 (1) (1).jpg
-chromium-os/servo/chromium_os_yoshi_flex.tar.gz
-chromium-os/servo/servomicro/652-00166-05_20190308_servo_micro_SCH_0.pdf
-chromium-os/servo/servomicro/Case-Closed Debug in Chromebooks and Servo Micro.pdf
-chromium-os/servo/servo_v2_top.jpg
-chromium-os/ccd/suzy-qs-1.png
-chromium-os/ccd/951-00273-01_20180607_suzyqable_SCH_1.pdf
-chromium-os/poking-around-your-chrome-os-device/tdev.bmp
-chromium-os/poking-around-your-chrome-os-device/dev.bmp
-chromium-os/poking-around-your-chrome-os-device/meh2.jpg
 chromium-os/testing/moblab/overview-of-moblab/image00.png
 chromium-os/testing/moblab/overview-of-moblab/image01.png
 chromium-os/testing/moblab/view-test-result-vis-wmatrix/Selection_977.png
@@ -388,12 +371,9 @@ chromium-os/twinkie/pulseview_VBUS_V_A.png
 chromium-os/twinkie/twinkie_v1.11.20-005227d8f.bin
 chromium-os/twinkie/twinkies-1.png
 chromium-os/developer-guide/BugTrackerName.png
-chromium-os/developer-guide/chromium-os-sandboxing/mount_event_propagation.png
 chromium-os/developer-guide/TrackerName.png
 chromium-os/chromiumos-design-docs/keyboard-controlled-reset-circuit/KbdReset.png
 chromium-os/chromiumos-design-docs/filesystem-autoupdate/ChromeOSFilesystemAutoupdate.png
-chromium-os/chromiumos-design-docs/ec-3po/EC-3PO- The EC console interpreter (1).png
-chromium-os/chromiumos-design-docs/ec-3po/EC-3PO- The EC console interpreter.png
 chromium-os/chromiumos-design-docs/boot-design/boot_design_diagram.png
 chromium-os/chromiumos-design-docs/protecting-cached-user-data/disk-encryption-on-chrome-os--dmcrypt2bext42b1008hapdf
 chromium-os/chromiumos-design-docs/protecting-cached-user-data/disk-encryption-benchmarks--ecryptfs2bext3-1008hapdf
@@ -792,12 +772,6 @@ developers/slack/blob_stop.png
 developers/slack/blob_peek.png
 developers/tree-sheriffs/sheriff-details-chromium/tree_status.png
 developers/tree-sheriffs/sheriff-details-chromium/Waterfall.png
-developers/tree-sheriffs/sheriff-details-chromium-os/Test Orchestrator.png
-developers/tree-sheriffs/sheriff-details-chromium-os/Screenshot.png
-developers/tree-sheriffs/sheriff-details-chromium-os/cloud-storage.png
-developers/tree-sheriffs/sheriff-details-chromium-os/crash-example.png
-developers/tree-sheriffs/sheriff-details-chromium-os/ChromeOS Parallel CQ - Linear view of CLs.png
-developers/tree-sheriffs/sheriff-details-chromium-os/Builders.png
 developers/tree-sheriffs/perf-sheriffs/SheriffBadge2.jpg
 developers/tree-sheriffs/perf-sheriffs/Screen Shot 2013-10-27 at 10.50.40 AM.png
 developers/tree-sheriffs/perf-sheriffs/Screen Shot 2013-04-23 at 8.04.15 AM.png
@@ -1165,4 +1139,53 @@ developers/how-tos/trace-event-profiling-tool/Screenshot-about_gpu.png
 developers/tree-sheriffs/perf-sheriffs/bisecting-performance-regressions/Screenshot from 2013-08-20 09_14_59.png
 developers/tree-sheriffs/perf-sheriffs/bisecting-performance-regressions/Screen Shot 2013-05-28 at 6.18.39 PM.png
 _assets/icon-chromium-96.png
+issue-tracking/googler-guidelines/access-warning1.png
+issue-tracking/googler-guidelines/access-warning2.png
+issue-tracking/googler-guidelines/attachment-access.png
+issue-tracking/googler-guidelines/banner.png
+issue-tracking/googler-guidelines/issue-access.png
+chromium-os/developer-library/reference/infrastructure/input-stack/chrome.png
+chromium-os/developer-library/reference/infrastructure/input-stack/kernel.png
+chromium-os/developer-library/reference/infrastructure/input-stack/vms-and-containers.png
+chromium-os/developer-library/reference/infrastructure/input-stack/chrome.dia
+chromium-os/developer-library/reference/infrastructure/input-stack/vms-and-containers.dia
+chromium-os/developer-library/reference/device/disk-format/boot_flow.png
+chromium-os/developer-library/reference/device/disk-format/kernel_partition_layout.png
+chromium-os/developer-library/reference/device/disk-format/disk_layout.png
+chromium-os/developer-library/reference/development/cros-commit-pipeline/simplified_cq_pipeline.png
+chromium-os/developer-library/reference/security/security-whitepaper/chromeos_security_layers.png
+chromium-os/developer-library/guides/device/developer-mode/developer_mode1.jpg
+chromium-os/developer-library/guides/device/developer-mode/developer_mode2.jpg
+chromium-os/developer-library/guides/device/developer-mode/developer_mode3.jpg
+chromium-os/developer-library/guides/device/developer-mode/developer_mode4.jpg
+chromium-os/developer-library/guides/enterprise/enterprise-metrics/enterprise_metrics.png
+chromium-os/developer-library/guides/experimentation/power-consumption/power_consumption_uma_1.png
+chromium-os/developer-library/guides/experimentation/power-consumption/power_consumption_uma_2.png
+for-testers/faq/SS_1-new.png
+for-testers/faq/SS_1.png
+for-testers/faq/SS_10.png
+for-testers/faq/SS_11.png
+for-testers/faq/SS_12.png
+for-testers/faq/SS_13.png
+for-testers/faq/SS_14.png
+for-testers/faq/SS_15.png
+for-testers/faq/SS_16-new.png
+for-testers/faq/SS_16.png
+for-testers/faq/SS_2.png
+for-testers/faq/SS_3.png
+for-testers/faq/SS_4.png
+for-testers/faq/SS_5.png
+for-testers/faq/SS_6.png
+for-testers/faq/SS_7.png
+for-testers/faq/SS_8.png
+for-testers/faq/SS_9.png
+chromium-os/developer-library/guides/development/sandboxing/sandboxing_daemon_store.png
+chromium-os/developer-library/guides/containers/crostini-developer-guide/crostini_services.png
+chromium-os/developer-library/guides/debugging/a11y-debugging/chromevox_top_bar.png
+chromium-os/developer-library/guides/debugging/a11y-debugging/chromevox_view_logs.png
+chromium-os/developer-library/training/codelabs/debugging-crashes/saved_devices.png
+chromium-os/developer-library/guides/testing/bluetooth-tast-tests/rpi_testbed_setup.png
+chromium-os/developer-library/guides/testing/bluetooth-tast-tests/secure_ssh_raspi.png
+chromium-os/developer-library/guides/cpp/resolving-dependency-issues/chromeos_dependency_chart.png
+chromium-os/developer-library/guides/cpp/resolving-dependency-issues/delegate_diagram.jpg
 #end_lob_ignore

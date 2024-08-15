@@ -50,6 +50,9 @@ CommandLineAppendSwitchNoDup(base::CommandLine& cmd_line,
 
 GURL GetVivaldiNewTabURL();
 
+bool BASE_EXPORT UsingCompactLegacyMenu();
+void BASE_EXPORT SetUsingCompactLegacyMenu(bool);
+
 // Windows-specific flag to inform UI about cancelled drag.
 extern bool BASE_EXPORT g_cancelled_drag;
 

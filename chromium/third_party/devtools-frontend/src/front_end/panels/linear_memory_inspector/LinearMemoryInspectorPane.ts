@@ -27,7 +27,7 @@ export class LinearMemoryInspectorPane extends Common.ObjectWrapper.eventMixin<E
 
   constructor() {
     super(false);
-    this.element.setAttribute('jslog', `${VisualLogging.panel().context('linear-memory-inspector')}`);
+    this.element.setAttribute('jslog', `${VisualLogging.panel('linear-memory-inspector').track({resize: true})}`);
     const placeholder = document.createElement('div');
     placeholder.textContent = i18nString(UIStrings.noOpenInspections);
     placeholder.style.display = 'flex';
@@ -37,6 +37,8 @@ export class LinearMemoryInspectorPane extends Common.ObjectWrapper.eventMixin<E
     this.#tabbedPane.setAllowTabReorder(true, true);
     this.#tabbedPane.addEventListener(UI.TabbedPane.Events.TabClosed, this.#tabClosed, this);
     this.#tabbedPane.show(this.contentElement);
+    this.#tabbedPane.headerElement().setAttribute(
+        'jslog', `${VisualLogging.toolbar().track({keydown: 'ArrowUp|ArrowLeft|ArrowDown|ArrowRight|Enter|Space'})}`);
   }
 
   static instance(): LinearMemoryInspectorPane {

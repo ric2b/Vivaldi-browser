@@ -1,5 +1,5 @@
 import { anyOf } from '../../../../util/compare.js';
-import { Scalar, bool, f16, f32, i32, u32 } from '../../../../util/conversion.js';
+import { ScalarValue, bool, f16, f32, i32, u32 } from '../../../../util/conversion.js';
 import {
   fullI32Range,
   fullU32Range,
@@ -29,7 +29,7 @@ export const d = makeCaseCache('unary/bool_conversion', {
   },
   f32: () => {
     return scalarF32Range().map(f => {
-      const expected: Scalar[] = [];
+      const expected: ScalarValue[] = [];
       if (f !== 0) {
         expected.push(bool(true));
       }
@@ -41,7 +41,7 @@ export const d = makeCaseCache('unary/bool_conversion', {
   },
   f16: () => {
     return scalarF16Range().map(f => {
-      const expected: Scalar[] = [];
+      const expected: ScalarValue[] = [];
       if (f !== 0) {
         expected.push(bool(true));
       }

@@ -1,8 +1,15 @@
 groupshared uint arg_0;
 
+void tint_zero_workgroup_memory(uint local_idx) {
+  if ((local_idx < 1u)) {
+    arg_0 = 0u;
+  }
+  GroupMemoryBarrierWithGroupSync();
+}
+
 uint tint_workgroupUniformLoad_arg_0() {
   GroupMemoryBarrierWithGroupSync();
-  const uint result = arg_0;
+  uint result = arg_0;
   GroupMemoryBarrierWithGroupSync();
   return result;
 }
@@ -19,10 +26,7 @@ struct tint_symbol_1 {
 };
 
 void compute_main_inner(uint local_invocation_index) {
-  {
-    arg_0 = 0u;
-  }
-  GroupMemoryBarrierWithGroupSync();
+  tint_zero_workgroup_memory(local_invocation_index);
   workgroupUniformLoad_37307c();
 }
 

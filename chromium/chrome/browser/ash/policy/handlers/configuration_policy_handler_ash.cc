@@ -8,10 +8,15 @@
 
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <utility>
 #include <vector>
 
+#include "ash/components/arc/arc_prefs.h"
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "ash/constants/geolocation_access_level.h"
+#include "ash/system/privacy_hub/privacy_hub_controller.h"
 #include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/functional/callback.h"
@@ -20,7 +25,6 @@
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "chrome/browser/apps/app_service/policy_util.h"
@@ -148,7 +152,7 @@ base::Value CalculateIdleActionValue(const base::Value* idle_action_value,
   return ConvertToActionEnumValue(idle_action_value);
 }
 
-bool IsSupportedAppTypePolicyId(base::StringPiece policy_id) {
+bool IsSupportedAppTypePolicyId(std::string_view policy_id) {
   return apps_util::IsChromeAppPolicyId(policy_id) ||
          apps_util::IsArcAppPolicyId(policy_id) ||
          apps_util::IsSystemWebAppPolicyId(policy_id) ||
@@ -268,7 +272,7 @@ bool NetworkConfigurationPolicyHandler::CheckPolicySettings(
       &validation_result);
 
   // Pass error/warning message and non-localized debug_info to PolicyErrorMap.
-  std::vector<base::StringPiece> messages;
+  std::vector<std::string_view> messages;
   for (const chromeos::onc::Validator::ValidationIssue& issue :
        validator.validation_issues()) {
     messages.push_back(issue.message);
@@ -476,7 +480,7 @@ void DefaultHandlersForFileExtensionsPolicyHandler::ApplyPolicySettings(
 }
 
 bool DefaultHandlersForFileExtensionsPolicyHandler::IsValidPolicyId(
-    base::StringPiece policy_id) const {
+    std::string_view policy_id) const {
   return IsSupportedAppTypePolicyId(policy_id) ||
          apps_util::IsFileManagerVirtualTaskPolicyId(policy_id);
 }
@@ -685,6 +689,27 @@ void ArcServicePolicyHandler::ApplyPolicySettings(const PolicyMap& policies,
              static_cast<int>(ArcServicePolicyValue::kEnabled)) {
     prefs->SetBoolean(pref_, true);
   }
+}
+
+ArcLocationServicePolicyHandler::ArcLocationServicePolicyHandler(
+    const char* policy,
+    const char* pref)
+    : ArcServicePolicyHandler(policy, pref) {}
+
+void ArcLocationServicePolicyHandler::ApplyPolicySettings(
+    const PolicyMap& policies,
+    PrefValueMap* prefs) {
+  // After the Privacy Hub rollout, the Android location toggle will be replaced
+  // by the ChromeOS location toggle in the OOBE dialog. This new toggle will be
+  // controlled by `kGoogleLocationServicesEnabled`. This new toggle will no
+  // longer support force-setting only the initial value during the setup flow,
+  // so we can ignore this policy.
+  if (ash::features::IsCrosPrivacyHubLocationEnabled()) {
+    return;
+  }
+
+  // Legacy handling.
+  ArcServicePolicyHandler::ApplyPolicySettings(policies, prefs);
 }
 
 }  // namespace policy

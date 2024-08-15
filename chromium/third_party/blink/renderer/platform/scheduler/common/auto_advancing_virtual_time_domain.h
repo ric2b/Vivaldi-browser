@@ -77,7 +77,7 @@ class PLATFORM_EXPORT AutoAdvancingVirtualTimeDomain
 
   // TimeDomain implementation:
   bool MaybeFastForwardToWakeUp(
-      absl::optional<base::sequence_manager::WakeUp> wakeup,
+      std::optional<base::sequence_manager::WakeUp> wakeup,
       bool quit_when_idle_requested) override;
   const char* GetName() const override;
 
@@ -90,7 +90,7 @@ class PLATFORM_EXPORT AutoAdvancingVirtualTimeDomain
   int max_task_starvation_count_;
 
   bool can_advance_virtual_time_;
-  raw_ptr<SchedulerHelper, ExperimentalRenderer> helper_;  // NOT OWNED
+  raw_ptr<SchedulerHelper> helper_;  // NOT OWNED
 
   // VirtualTime is usually doled out in 100ms intervals using fences and this
   // variable let us honor a request to MaybeAdvanceVirtualTime that straddles

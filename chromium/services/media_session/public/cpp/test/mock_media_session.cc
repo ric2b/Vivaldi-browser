@@ -71,6 +71,11 @@ void MockMediaSessionMojoObserver::MediaSessionInfoChanged(
              expected_hide_metadata_ == session_info_->hide_metadata) {
     QuitWaitingIfNeeded();
     expected_hide_metadata_.reset();
+  } else if (expected_meets_visibility_threshold_.has_value() &&
+             expected_meets_visibility_threshold_ ==
+                 session_info_->meets_visibility_threshold) {
+    QuitWaitingIfNeeded();
+    expected_meets_visibility_threshold_.reset();
   } else {
     if (wanted_state_ == session_info_->state ||
         session_info_->playback_state == wanted_playback_state_ ||
@@ -85,7 +90,7 @@ void MockMediaSessionMojoObserver::MediaSessionInfoChanged(
 }
 
 void MockMediaSessionMojoObserver::MediaSessionMetadataChanged(
-    const absl::optional<MediaMetadata>& metadata) {
+    const std::optional<MediaMetadata>& metadata) {
   session_metadata_ = metadata;
 
   if (expected_metadata_.has_value() && expected_metadata_ == metadata) {
@@ -127,7 +132,7 @@ void MockMediaSessionMojoObserver::MediaSessionImagesChanged(
 }
 
 void MockMediaSessionMojoObserver::MediaSessionPositionChanged(
-    const absl::optional<media_session::MediaPosition>& position) {
+    const std::optional<media_session::MediaPosition>& position) {
   session_position_ = position;
 
   if (position.has_value() && expected_position_.has_value() &&
@@ -256,7 +261,7 @@ void MockMediaSessionMojoObserver::WaitForExpectedImagesOfType(
 }
 
 void MockMediaSessionMojoObserver::WaitForEmptyPosition() {
-  // |session_position_| is doubly wrapped in absl::optional so we must check
+  // |session_position_| is doubly wrapped in std::optional so we must check
   // both values.
   if (session_position_.has_value() && !session_position_->has_value())
     return;
@@ -288,6 +293,18 @@ base::TimeDelta MockMediaSessionMojoObserver::WaitForExpectedPositionAtLeast(
 
   return (*session_position_)
       ->GetPositionAtTime((*session_position_)->last_updated_time());
+}
+
+bool MockMediaSessionMojoObserver::WaitForMeetsVisibilityThreshold(
+    bool meets_visibility_threshold) {
+  if (session_info_ &&
+      session_info_->meets_visibility_threshold == meets_visibility_threshold) {
+    return meets_visibility_threshold;
+  }
+
+  expected_meets_visibility_threshold_ = meets_visibility_threshold;
+  StartWaiting();
+  return meets_visibility_threshold;
 }
 
 void MockMediaSessionMojoObserver::StartWaiting() {
@@ -503,14 +520,14 @@ void MockMediaSession::FlushForTesting() {
 }
 
 void MockMediaSession::SimulateMetadataChanged(
-    const absl::optional<MediaMetadata>& metadata) {
+    const std::optional<MediaMetadata>& metadata) {
   for (auto& observer : observers_) {
     observer->MediaSessionMetadataChanged(metadata);
   }
 }
 
 void MockMediaSession::SimulatePositionChanged(
-    const absl::optional<MediaPosition>& position) {
+    const std::optional<MediaPosition>& position) {
   for (auto& observer : observers_) {
     observer->MediaSessionPositionChanged(position);
   }

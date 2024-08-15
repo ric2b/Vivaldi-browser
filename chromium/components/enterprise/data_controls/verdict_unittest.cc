@@ -4,61 +4,128 @@
 
 #include "components/enterprise/data_controls/verdict.h"
 
+#include <vector>
+
 #include "base/functional/callback_helpers.h"
-#include "base/test/test_future.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace data_controls {
 
+namespace {
+
+constexpr char kReportRuleID[] = "report_rule_id";
+constexpr char kWarnRuleID[] = "warn_rule_id";
+constexpr char kBlockRuleID[] = "block_rule_id";
+
+constexpr char kReportRuleName[] = "report_rule_name";
+constexpr char kWarnRuleName[] = "warn_rule_name";
+constexpr char kBlockRuleName[] = "block_rule_name";
+
+// Helpers to make the tests more concise.
+Verdict NotSet() {
+  return Verdict::NotSet();
+}
+Verdict Report() {
+  return Verdict::Report({{kReportRuleID, kReportRuleName}});
+}
+Verdict Warn() {
+  return Verdict::Warn({{kWarnRuleID, kWarnRuleName}});
+}
+Verdict Block() {
+  return Verdict::Block({{kBlockRuleID, kBlockRuleName}});
+}
+Verdict Allow() {
+  return Verdict::Allow();
+}
+
+}  // namespace
+
 TEST(DataControlVerdictTest, Level) {
-  ASSERT_EQ(Verdict::NotSet().level(), Rule::Level::kNotSet);
-  ASSERT_EQ(Verdict::Report(base::DoNothing()).level(), Rule::Level::kReport);
-  ASSERT_EQ(Verdict::Warn(base::DoNothing(), base::DoNothing()).level(),
-            Rule::Level::kWarn);
-  ASSERT_EQ(Verdict::Block(base::DoNothing()).level(), Rule::Level::kBlock);
-  ASSERT_EQ(Verdict::Allow().level(), Rule::Level::kAllow);
+  ASSERT_EQ(NotSet().level(), Rule::Level::kNotSet);
+  ASSERT_EQ(Report().level(), Rule::Level::kReport);
+  ASSERT_EQ(Warn().level(), Rule::Level::kWarn);
+  ASSERT_EQ(Block().level(), Rule::Level::kBlock);
+  ASSERT_EQ(Allow().level(), Rule::Level::kAllow);
 }
 
-TEST(DataControlVerdictTest, InitialReport) {
-  ASSERT_TRUE(Verdict::NotSet().TakeInitialReportClosure().is_null());
-  ASSERT_TRUE(Verdict::Allow().TakeInitialReportClosure().is_null());
-
-  base::test::TestFuture<void> report_future;
-  auto report = Verdict::Report(report_future.GetCallback());
-  auto report_callback = report.TakeInitialReportClosure();
-  ASSERT_FALSE(report_callback.is_null());
-  std::move(report_callback).Run();
-  ASSERT_TRUE(report_future.Wait());
-
-  base::test::TestFuture<void> warn_future;
-  auto warn = Verdict::Warn(warn_future.GetCallback(), base::DoNothing());
-  auto warn_callback = warn.TakeInitialReportClosure();
-  ASSERT_FALSE(warn_callback.is_null());
-  std::move(warn_callback).Run();
-  ASSERT_TRUE(warn_future.Wait());
-
-  base::test::TestFuture<void> block_future;
-  auto block = Verdict::Block(block_future.GetCallback());
-  auto block_callback = block.TakeInitialReportClosure();
-  ASSERT_FALSE(block_callback.is_null());
-  std::move(block_callback).Run();
-  ASSERT_TRUE(block_future.Wait());
+TEST(DataControlVerdictTest, MergedLevel_NotSet) {
+  ASSERT_EQ(Verdict::Merge(NotSet(), NotSet()).level(), Rule::Level::kNotSet);
+  ASSERT_EQ(Verdict::Merge(NotSet(), Report()).level(), Rule::Level::kReport);
+  ASSERT_EQ(Verdict::Merge(NotSet(), Warn()).level(), Rule::Level::kWarn);
+  ASSERT_EQ(Verdict::Merge(NotSet(), Block()).level(), Rule::Level::kBlock);
+  ASSERT_EQ(Verdict::Merge(NotSet(), Allow()).level(), Rule::Level::kAllow);
 }
 
-TEST(DataControlVerdictTest, BypassReport) {
-  ASSERT_TRUE(Verdict::NotSet().TakeBypassReportClosure().is_null());
-  ASSERT_TRUE(
-      Verdict::Block(base::DoNothing()).TakeBypassReportClosure().is_null());
-  ASSERT_TRUE(Verdict::Allow().TakeBypassReportClosure().is_null());
-  ASSERT_TRUE(
-      Verdict::Report(base::DoNothing()).TakeBypassReportClosure().is_null());
+TEST(DataControlVerdictTest, MergedLevel_Report) {
+  ASSERT_EQ(Verdict::Merge(Report(), NotSet()).level(), Rule::Level::kReport);
+  ASSERT_EQ(Verdict::Merge(Report(), Report()).level(), Rule::Level::kReport);
+  ASSERT_EQ(Verdict::Merge(Report(), Warn()).level(), Rule::Level::kWarn);
+  ASSERT_EQ(Verdict::Merge(Report(), Block()).level(), Rule::Level::kBlock);
+  ASSERT_EQ(Verdict::Merge(Report(), Allow()).level(), Rule::Level::kAllow);
+}
 
-  base::test::TestFuture<void> warn_future;
-  auto warn = Verdict::Warn(base::DoNothing(), warn_future.GetCallback());
-  auto warn_callback = warn.TakeBypassReportClosure();
-  ASSERT_FALSE(warn_callback.is_null());
-  std::move(warn_callback).Run();
-  ASSERT_TRUE(warn_future.Wait());
+TEST(DataControlVerdictTest, MergedLevel_Warn) {
+  ASSERT_EQ(Verdict::Merge(Warn(), NotSet()).level(), Rule::Level::kWarn);
+  ASSERT_EQ(Verdict::Merge(Warn(), Report()).level(), Rule::Level::kWarn);
+  ASSERT_EQ(Verdict::Merge(Warn(), Warn()).level(), Rule::Level::kWarn);
+  ASSERT_EQ(Verdict::Merge(Warn(), Block()).level(), Rule::Level::kBlock);
+  ASSERT_EQ(Verdict::Merge(Warn(), Allow()).level(), Rule::Level::kAllow);
+}
+
+TEST(DataControlVerdictTest, MergedLevel_Block) {
+  ASSERT_EQ(Verdict::Merge(Block(), NotSet()).level(), Rule::Level::kBlock);
+  ASSERT_EQ(Verdict::Merge(Block(), Report()).level(), Rule::Level::kBlock);
+  ASSERT_EQ(Verdict::Merge(Block(), Warn()).level(), Rule::Level::kBlock);
+  ASSERT_EQ(Verdict::Merge(Block(), Block()).level(), Rule::Level::kBlock);
+  ASSERT_EQ(Verdict::Merge(Block(), Allow()).level(), Rule::Level::kAllow);
+}
+
+TEST(DataControlVerdictTest, MergedLevel_Allow) {
+  ASSERT_EQ(Verdict::Merge(Allow(), NotSet()).level(), Rule::Level::kAllow);
+  ASSERT_EQ(Verdict::Merge(Allow(), Report()).level(), Rule::Level::kAllow);
+  ASSERT_EQ(Verdict::Merge(Allow(), Warn()).level(), Rule::Level::kAllow);
+  ASSERT_EQ(Verdict::Merge(Allow(), Block()).level(), Rule::Level::kAllow);
+  ASSERT_EQ(Verdict::Merge(Allow(), Allow()).level(), Rule::Level::kAllow);
+}
+
+TEST(DataControlVerdictTest, TriggeredRules) {
+  ASSERT_TRUE(NotSet().triggered_rules().empty());
+  ASSERT_TRUE(Allow().triggered_rules().empty());
+
+  auto report = Report();
+  EXPECT_EQ(report.triggered_rules().size(), 1u);
+  EXPECT_TRUE(report.triggered_rules().count(kReportRuleID));
+  EXPECT_EQ(report.triggered_rules().at(kReportRuleID), kReportRuleName);
+
+  auto warn = Warn();
+  EXPECT_EQ(warn.triggered_rules().size(), 1u);
+  EXPECT_TRUE(warn.triggered_rules().count(kWarnRuleID));
+  EXPECT_EQ(warn.triggered_rules().at(kWarnRuleID), kWarnRuleName);
+
+  auto block = Block();
+  EXPECT_EQ(block.triggered_rules().size(), 1u);
+  EXPECT_TRUE(block.triggered_rules().count(kBlockRuleID));
+  EXPECT_EQ(block.triggered_rules().at(kBlockRuleID), kBlockRuleName);
+}
+
+TEST(DataControlVerdictTest, MergedTriggeredRules) {
+  // Two verdicts with the same triggered rule merge correctly and don't
+  // internally duplicate the rule in two.
+  auto merged_warnings = Verdict::Merge(Warn(), Warn());
+  EXPECT_EQ(merged_warnings.triggered_rules().size(), 1u);
+  EXPECT_TRUE(merged_warnings.triggered_rules().count(kWarnRuleID));
+  EXPECT_EQ(merged_warnings.triggered_rules().at(kWarnRuleID), kWarnRuleName);
+
+  // Merging three verdicts with different rules should rules in a verdict with
+  // all three rules present.
+  auto all_merged = Verdict::Merge(Warn(), Verdict::Merge(Report(), Block()));
+  EXPECT_EQ(all_merged.triggered_rules().size(), 3u);
+  EXPECT_TRUE(all_merged.triggered_rules().count(kReportRuleID));
+  EXPECT_EQ(all_merged.triggered_rules().at(kReportRuleID), kReportRuleName);
+  EXPECT_TRUE(all_merged.triggered_rules().count(kWarnRuleID));
+  EXPECT_EQ(all_merged.triggered_rules().at(kWarnRuleID), kWarnRuleName);
+  EXPECT_TRUE(all_merged.triggered_rules().count(kBlockRuleID));
+  EXPECT_EQ(all_merged.triggered_rules().at(kBlockRuleID), kBlockRuleName);
 }
 
 }  // namespace data_controls

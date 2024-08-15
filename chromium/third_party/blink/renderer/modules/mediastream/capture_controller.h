@@ -5,7 +5,8 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_MEDIASTREAM_CAPTURE_CONTROLLER_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_MEDIASTREAM_CAPTURE_CONTROLLER_H_
 
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include <optional>
+
 #include "third_party/blink/renderer/bindings/modules/v8/v8_capture_start_focus_behavior.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_captured_wheel_action.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
@@ -19,8 +20,10 @@ namespace blink {
 
 class ExceptionState;
 
-class MODULES_EXPORT CaptureController final : public EventTarget,
-                                               public ExecutionContextClient {
+class MODULES_EXPORT CaptureController final
+    : public EventTarget,
+      public ExecutionContextClient,
+      public MediaStreamSource::Observer {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -33,13 +36,14 @@ class MODULES_EXPORT CaptureController final : public EventTarget,
   void setFocusBehavior(V8CaptureStartFocusBehavior, ExceptionState&);
 
   // Captured Surface Control IDL interface - scrolling
-  ScriptPromise sendWheel(ScriptState* script_state,
-                          CapturedWheelAction* action);
+  ScriptPromiseTyped<IDLUndefined> sendWheel(ScriptState* script_state,
+                                             CapturedWheelAction* action);
 
   // Captured Surface Control IDL interface - zooming
   static Vector<int> getSupportedZoomLevels();
-  ScriptPromise getZoomLevel(ScriptState* script_state);
-  ScriptPromise setZoomLevel(ScriptState* script_state, int zoom_level);
+  int getZoomLevel(ExceptionState& exception_state);
+  ScriptPromiseTyped<IDLUndefined> setZoomLevel(ScriptState* script_state,
+                                                int zoom_level);
 
   void SetIsBound(bool value) { is_bound_ = value; }
   bool IsBound() const { return is_bound_; }
@@ -55,15 +59,33 @@ class MODULES_EXPORT CaptureController final : public EventTarget,
   // https://screen-share.github.io/mouse-events/#capture-controller-extensions
   DEFINE_ATTRIBUTE_EVENT_LISTENER(capturedmousechange, kCapturedmousechange)
 
+  // TODO(crbug.com/1466247): Link to spec.
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(capturedzoomlevelchange,
+                                  kCapturedzoomlevelchange)
+
   // Close the window of opportunity to make the focus decision.
   // Further calls to setFocusBehavior() will raise an exception.
   // https://w3c.github.io/mediacapture-screen-share/#dfn-finalize-focus-decision-algorithm
   void FinalizeFocusDecision();
 
+  // MediaStreamSource::Observer
+  void SourceChangedState() override {}
+  void SourceChangedCaptureConfiguration() override {}
+  void SourceChangedCaptureHandle() override {}
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  void SourceChangedZoomLevel(int) override;
+#endif
   void Trace(Visitor* visitor) const override;
 
  private:
-  std::pair<bool, DOMException*> ValidateCapturedSurfaceControlCall() const;
+  struct ValidationResult {
+    ValidationResult(DOMExceptionCode code, String message);
+
+    DOMExceptionCode code;
+    String message;
+  };
+
+  ValidationResult ValidateCapturedSurfaceControlCall() const;
 
   // Whether this CaptureController has been passed to a getDisplayMedia() call.
   // This helps enforce the requirement that any CaptureController may only
@@ -86,11 +108,19 @@ class MODULES_EXPORT CaptureController final : public EventTarget,
   // resolved. If left unset, the default behavior will be used.
   // The default behavior is not specified, and may change.
   // Presently, the default is to focus.
-  absl::optional<V8CaptureStartFocusBehavior> focus_behavior_;
+  std::optional<V8CaptureStartFocusBehavior> focus_behavior_;
 
   // Track whether the window of opportunity to call setFocusBehavior() is still
   // open. Once set to true, this never changes.
   bool focus_decision_finalized_ = false;
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  // The last known zoom level of the captured surface.
+  // Set to a concrete value when capture starts.
+  // Never changes back to nullopt.
+  // Always stays at 100 (the default value) for window- and screen-capture.
+  std::optional<int> zoom_level_;
+#endif
 };
 
 }  // namespace blink

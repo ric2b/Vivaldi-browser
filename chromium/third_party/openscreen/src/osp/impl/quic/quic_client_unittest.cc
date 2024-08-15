@@ -102,7 +102,7 @@ class QuicClientTest : public ::testing::Test {
                              msgs::Type message_type, const uint8_t* b,
                              size_t buffer_size, Clock::time_point now) {
           decode_result = msgs::DecodePresentationConnectionMessage(
-              b, buffer_size, &received_message);
+              b, buffer_size, received_message);
           if (decode_result < 0)
             return ErrorOr<size_t>(Error::Code::kCborParsing);
           return ErrorOr<size_t>(decode_result);

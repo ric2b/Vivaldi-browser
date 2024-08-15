@@ -28,22 +28,18 @@ pub(crate) fn check_ukey2_ffi(
 
     // Default build, RustCrypto
     run_cmd_shell(&ffi_dir, format!("cargo build {locked_arg} --quiet --release --lib"))?;
-    // OpenSSL
+    // BoringSSL
     run_cmd_shell(
         &ffi_dir,
-        format!("cargo build {locked_arg} --quiet --no-default-features --features=openssl"),
+        format!("cargo build {locked_arg} --quiet --no-default-features --features=boringssl"),
     )?;
+    run_cmd_shell(&ffi_dir, "cargo clippy --no-default-features --features=boringssl")?;
 
-    run_cmd_shell(&ffi_dir, "cargo doc --quiet --no-deps")?;
-    run_cmd_shell(&ffi_dir, "cargo clippy --no-default-features --features=openssl")?;
-
-    run_cmd_shell(&ffi_dir, "cargo deny check")?;
-
+    // now run cmake build
     let ffi_build_dir = ffi_dir.join("cpp/build");
     fs::create_dir_all(&ffi_build_dir)?;
     run_cmd_shell_with_color::<YellowStderr>(&ffi_build_dir, "cmake ..")?;
     run_cmd_shell_with_color::<YellowStderr>(&ffi_build_dir, "cmake --build .")?;
     run_cmd_shell_with_color::<YellowStderr>(&ffi_build_dir, "ctest")?;
-
     Ok(())
 }

@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/disabled_grid_view_controller.h"
 
-#import "components/supervised_user/core/common/features.h"
+#import "components/supervised_user/core/common/supervised_user_constants.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
@@ -15,7 +15,7 @@
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/text_view_util.h"
 #import "ios/chrome/grit/ios_strings.h"
-#import "net/base/mac/url_conversions.h"
+#import "net/base/apple/url_conversions.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "url/gurl.h"
 
@@ -210,7 +210,7 @@ NSString* GetTitleString(TabGridPage page) {
 
   const std::string learnMoreURL =
       isSubjectToParentalControls
-          ? supervised_user::kManagedByParentUiMoreInfoUrl.Get()
+          ? supervised_user::kManagedByParentUiMoreInfoUrl
           : kChromeUIManagementURL;
 
   NSString* fullText = l10n_util::GetNSString(messageID);

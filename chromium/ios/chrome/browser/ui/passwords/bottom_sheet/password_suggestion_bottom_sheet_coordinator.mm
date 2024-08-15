@@ -9,7 +9,7 @@
 #import "components/keyed_service/core/service_access_type.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #import "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
-#import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
+#import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_account_password_store_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
 #import "ios/chrome/browser/passwords/model/password_controller_delegate.h"
@@ -72,10 +72,10 @@ using PasswordSuggestionBottomSheetExitReason::kShowPasswordManager;
             browserState, ServiceAccessType::EXPLICIT_ACCESS);
 
     self.reauthModule =
-        ScopedPasswordSuggestionBottomSheetReauthModuleOverride::instance
-            ? ScopedPasswordSuggestionBottomSheetReauthModuleOverride::instance
-                  ->module
-            : [[ReauthenticationModule alloc] init];
+        ScopedPasswordSuggestionBottomSheetReauthModuleOverride::Get();
+    if (!self.reauthModule) {
+      self.reauthModule = [[ReauthenticationModule alloc] init];
+    }
     self.mediator = [[PasswordSuggestionBottomSheetMediator alloc]
           initWithWebStateList:webStateList
                  faviconLoader:IOSChromeFaviconLoaderFactory::
@@ -104,6 +104,8 @@ using PasswordSuggestionBottomSheetExitReason::kShowPasswordManager;
     return;
   }
 
+  self.viewController.parentViewControllerHeight =
+      self.baseViewController.view.frame.size.height;
   __weak __typeof(self) weakSelf = self;
   [self.baseViewController presentViewController:self.viewController
                                         animated:YES

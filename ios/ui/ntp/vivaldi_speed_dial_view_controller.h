@@ -3,12 +3,11 @@
 #ifndef IOS_UI_NTP_VIVALDI_SPEED_DIAL_VIEW_CONTROLLER_H_
 #define IOS_UI_NTP_VIVALDI_SPEED_DIAL_VIEW_CONTROLLER_H_
 
-#import "components/bookmarks/browser/bookmark_model.h"
-#import "ios/chrome/browser/favicon/favicon_loader.h"
+#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
+#import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_container_delegate.h"
 
 using bookmarks::BookmarkNode;
-using bookmarks::BookmarkModel;
 
 class Browser;
 
@@ -20,12 +19,12 @@ class Browser;
 // INITIALIZERS
 + (instancetype)initWithItem:(VivaldiSpeedDialItem*)item
                       parent:(VivaldiSpeedDialItem*)parent
-                   bookmarks:(BookmarkModel*)bookmarks
+                   bookmarks:(LegacyBookmarkModel*)bookmarks
                      browser:(Browser*)browser
                faviconLoader:(FaviconLoader*)faviconLoader
              backgroundImage:(UIImage*)backgroundImage;
 
-- (instancetype)initWithBookmarks:(BookmarkModel*)bookmarks
+- (instancetype)initWithBookmarks:(LegacyBookmarkModel*)bookmarks
                           browser:(Browser*)browser;
 
 // DELEGATE

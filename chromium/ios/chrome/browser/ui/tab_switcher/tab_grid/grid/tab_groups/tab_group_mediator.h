@@ -7,17 +7,20 @@
 
 #import <Foundation/Foundation.h>
 
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/base_grid_mediator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/tab_groups/tab_group_mutator.h"
 
+class TabGroup;
 @protocol TabCollectionConsumer;
 @protocol TabGroupConsumer;
 class WebStateList;
 
 // Tab group mediator in charge to handle model update for one group.
-@interface TabGroupMediator : NSObject <TabGroupMutator>
+@interface TabGroupMediator : BaseGridMediator <TabGroupMutator>
 
 // TODO(crbug.com/1501837): Add a tab group ID when the ID will be available.
 - (instancetype)initWithWebStateList:(WebStateList*)webStateList
+                            tabGroup:(const TabGroup*)tabGroup
                             consumer:(id<TabGroupConsumer>)consumer
                         gridConsumer:(id<TabCollectionConsumer>)gridConsumer;
 

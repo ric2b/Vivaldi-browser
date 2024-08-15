@@ -20,11 +20,11 @@
 #if BUILDFLAG(IS_WIN)
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(importer::ImporterType,
                               importer::TYPE_UNKNOWN,
-                              importer::TYPE_OPERA_OPIUM)
+                              importer::TYPE_OPERA_GX)
 #else
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(importer::ImporterType,
                               importer::TYPE_UNKNOWN,
-                              importer::TYPE_OPERA_OPIUM)
+                              importer::TYPE_OPERA_GX)
 #endif
 
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(importer::ImportItem,

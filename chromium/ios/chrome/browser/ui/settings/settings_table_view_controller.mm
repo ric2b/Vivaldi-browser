@@ -9,6 +9,7 @@
 
 #import "base/apple/foundation_util.h"
 #import "base/feature_list.h"
+#import "base/memory/raw_ptr.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
@@ -23,6 +24,7 @@
 #import "components/password_manager/core/browser/manage_passwords_referrer.h"
 #import "components/password_manager/core/browser/ui/password_check_referrer.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
+#import "components/plus_addresses/features.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_member.h"
 #import "components/prefs/pref_service.h"
@@ -64,7 +66,9 @@
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/utils/first_run_util.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/shared/public/commands/show_signin_command.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
@@ -112,8 +116,9 @@
 #import "ios/chrome/browser/ui/settings/downloads/downloads_settings_coordinator.h"
 #import "ios/chrome/browser/ui/settings/downloads/downloads_settings_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/settings/elements/enterprise_info_popover_view_controller.h"
-#import "ios/chrome/browser/ui/settings/google_services/accounts_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/google_services/google_services_settings_coordinator.h"
+#import "ios/chrome/browser/ui/settings/google_services/manage_accounts/accounts_coordinator.h"
+#import "ios/chrome/browser/ui/settings/google_services/manage_accounts/accounts_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_coordinator.h"
 #import "ios/chrome/browser/ui/settings/language/language_settings_mediator.h"
@@ -138,7 +143,7 @@
 #import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/signin/signin_resources_api.h"
-#import "net/base/mac/url_conversions.h"
+#import "net/base/apple/url_conversions.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
 // Vivaldi
@@ -154,6 +159,7 @@
 #import "ios/ui/settings/sync/vivaldi_sync_coordinator.h"
 #import "ios/ui/settings/tabs/vivaldi_tab_settings_coordinator.h"
 #import "ios/ui/settings/vivaldi_settings_constants.h"
+#import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
@@ -214,9 +220,9 @@ UIImage* GetBrandedGoogleServicesSymbol() {
     SearchEngineObserving,
     SyncObserverModelBridge> {
   // The browser where the settings are being displayed.
-  Browser* _browser;
+  raw_ptr<Browser> _browser;
   // The browser state for `_browser`. Never off the record.
-  ChromeBrowserState* _browserState;  // weak
+  raw_ptr<ChromeBrowserState> _browserState;  // weak
   // Bridge for TemplateURLServiceObserver.
   std::unique_ptr<SearchEngineObserverBridge> _searchEngineObserverBridge;
   std::unique_ptr<signin::IdentityManagerObserverBridge>
@@ -262,8 +268,11 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   // Passwords coordinator.
   PasswordsCoordinator* _passwordsCoordinator;
 
+  // Accounts coordinator.
+  AccountsCoordinator* _accountsCoordinator;
+
   // Feature engagement tracker for the signin IPH.
-  feature_engagement::Tracker* _featureEngagementTracker;
+  raw_ptr<feature_engagement::Tracker> _featureEngagementTracker;
   // Presenter for the signin IPH.
   BubbleViewControllerPresenter* _bubblePresenter;
 
@@ -290,6 +299,7 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   TableViewDetailIconItem* _autoFillProfileDetailItem;
   TableViewDetailIconItem* _autoFillCreditCardDetailItem;
   TableViewDetailIconItem* _notificationsItem;
+  TableViewDetailIconItem* _plusAddressesItem;
   TableViewItem* _syncItem;
 
   // Whether Settings have been dismissed.
@@ -453,8 +463,9 @@ UIImage* GetBrandedGoogleServicesSymbol() {
         &_prefChangeRegistrar);
     _prefObserverBridge->ObserveChangesForPreference(prefs::kSigninAllowed,
                                                      &_prefChangeRegistrar);
-    _notificationsObserver =
-        [[NotificationsSettingsObserver alloc] initWithPrefService:prefService];
+    _notificationsObserver = [[NotificationsSettingsObserver alloc]
+        initWithPrefService:prefService
+                 localState:GetApplicationContext()->GetLocalState()];
     _notificationsObserver.delegate = self;
 
     // TODO(crbug.com/764578): -loadModel should not be called from
@@ -560,8 +571,7 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   [model addSectionWithIdentifier:SettingsSectionIdentifierAdvanced];
 
   if (!IsVivaldiRunning()) {
-  if (base::FeatureList::IsEnabled(kNotificationSettingsMenuItem) &&
-      IsPriceNotificationsEnabled()) {
+  if ([self shouldShowNotificationsSettings]) {
     _notificationsItem = [self notificationsItem];
     [self updateNotificationsDetailText];
     [model addItem:_notificationsItem
@@ -575,6 +585,12 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 
   [model addItem:[self privacyDetailItem]
       toSectionWithIdentifier:SettingsSectionIdentifierAdvanced];
+
+  if (base::FeatureList::IsEnabled(plus_addresses::features::kFeature)) {
+    _plusAddressesItem = [self plusAddressesItem];
+    [model addItem:_plusAddressesItem
+        toSectionWithIdentifier:SettingsSectionIdentifierAdvanced];
+  }
 
   // Vivaldi
   [self addVivaldiATBSettingItem];
@@ -856,12 +872,7 @@ UIImage* GetBrandedGoogleServicesSymbol() {
     defaultBrowser.iconImage =
         [UIImage imageNamed:vDefaultBrowserSetting];
   } else {
-  if (@available(iOS 15, *)) {
-    defaultBrowser.iconImage = DefaultSettingsRootSymbol(kDefaultBrowserSymbol);
-  } else {
-    defaultBrowser.iconImage =
-        DefaultSettingsRootSymbol(kDefaultBrowseriOS14Symbol);
-  }
+  defaultBrowser.iconImage = DefaultSettingsRootSymbol(kDefaultBrowserSymbol);
   defaultBrowser.iconBackgroundColor = [UIColor colorNamed:kPurple500Color];
   defaultBrowser.iconTintColor = UIColor.whiteColor;
   defaultBrowser.iconCornerRadius = kColorfulBackgroundSymbolCornerRadius;
@@ -1092,6 +1103,18 @@ UIImage* GetBrandedGoogleServicesSymbol() {
           accessibilityIdentifier:kSettingsNotificationsId];
 }
 
+- (TableViewDetailIconItem*)plusAddressesItem {
+  NSString* title = l10n_util::GetNSString(IDS_PLUS_ADDRESS_SETTINGS_LABEL);
+  // TODO(crbug.com/1467623): Add icon and finalize display as requirements
+  // solidify.
+  return [self detailItemWithType:SettingsItemTypePlusAddresses
+                             text:title
+                       detailText:nil
+                           symbol:nil
+            symbolBackgroundColor:[UIColor colorNamed:kPink500Color]
+          accessibilityIdentifier:kSettingsPlusAddressesId];
+}
+
 - (TableViewItem*)privacyDetailItem {
   NSString* title = nil;
   title = l10n_util::GetNSString(IDS_IOS_SETTINGS_PRIVACY_TITLE);
@@ -1218,6 +1241,11 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 
 - (TableViewItem*)aboutChromeDetailItem {
   if (IsVivaldiRunning()) {
+    UIColor* tintColor = [UIColor colorNamed:vToolbarButtonColor];
+    UIImage* buttonIcon =
+        [[UIImage imageNamed:vToolbarMenu]
+            imageWithTintColor:tintColor
+                 renderingMode:UIImageRenderingModeAlwaysOriginal];
     NSString* about =
         [NSString stringWithFormat:@"%@ %@",
            GetNSString(IDS_VIVALDI_IOS_SETTINGS_ABOUT),
@@ -1225,7 +1253,7 @@ UIImage* GetBrandedGoogleServicesSymbol() {
     return [self detailItemWithType:SettingsItemTypeAboutChrome
                                text:about
                          detailText:nil
-                             symbol:[UIImage imageNamed:vToolbarMenu]
+                             symbol:buttonIcon
               symbolBackgroundColor:[UIColor colorNamed:kGrey400Color]
             accessibilityIdentifier:kSettingsAboutCellId];
   } // End Vivaldi
@@ -1471,12 +1499,13 @@ UIImage* GetBrandedGoogleServicesSymbol() {
         break;
       }
       base::RecordAction(base::UserMetricsAction("Settings.MyAccount"));
-      AccountsTableViewController* accountsTableViewController =
-          [[AccountsTableViewController alloc] initWithBrowser:_browser
-                                     closeSettingsOnAddAccount:NO];
-      accountsTableViewController.applicationCommandsHandler =
-          self.applicationHandler;
-      controller = accountsTableViewController;
+
+      AccountsCoordinator* accountsCoordinator = [[AccountsCoordinator alloc]
+          initWithBaseNavigationController:self.navigationController
+                                   browser:_browser
+                 closeSettingsOnAddAccount:NO];
+      _accountsCoordinator = accountsCoordinator;
+      [accountsCoordinator start];
       break;
     }
     case SettingsItemTypeGoogleServices:
@@ -1562,8 +1591,7 @@ UIImage* GetBrandedGoogleServicesSymbol() {
           [[AutofillProfileTableViewController alloc] initWithBrowser:_browser];
       break;
     case SettingsItemTypeNotifications:
-      DCHECK(IsPriceNotificationsEnabled() ||
-             IsContentPushNotificationsEnabled());
+      CHECK([self shouldShowNotificationsSettings]);
       [self showNotifications];
       break;
     case SettingsItemTypeVoiceSearch:
@@ -1628,6 +1656,15 @@ UIImage* GetBrandedGoogleServicesSymbol() {
           pushViewController:[[TableCellCatalogViewController alloc] init]
                     animated:YES];
       break;
+    case SettingsItemTypePlusAddresses: {
+      OpenNewTabCommand* command = [OpenNewTabCommand
+          commandWithURLFromChrome:
+              GURL(plus_addresses::features::kPlusAddressManagementUrl.Get())];
+      id<ApplicationCommands> handler = HandlerForProtocol(
+          _browser->GetCommandDispatcher(), ApplicationCommands);
+      [handler closeSettingsUIAndOpenURL:command];
+      break;
+    }
 
     // Vivaldi
     case SettingsItemTypeVivaldiSyncSettings:
@@ -1797,7 +1834,7 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 }
 
 - (BOOL)shouldReplaceSyncSettingsWithAccountSettings {
-  // TODO(crbug.com/1462552): Remove usage of HasSyncConsent() after kSync
+  // TODO(crbug.com/40066949): Remove usage of HasSyncConsent() after kSync
   // users migrated to kSignin in phase 3. See ConsentLevel::kSync
   // documentation for details.
   return base::FeatureList::IsEnabled(
@@ -2253,6 +2290,14 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   [_downloadsSettingsCoordinator start];
 }
 
+// Returns YES if the Notifications settings should show.
+- (BOOL)shouldShowNotificationsSettings {
+  return base::FeatureList::IsEnabled(kNotificationSettingsMenuItem) &&
+         (IsPriceNotificationsEnabled() ||
+          IsContentPushNotificationsEnabled() ||
+          IsIOSTipsNotificationsEnabled());
+}
+
 #pragma mark - Sign in
 
 - (void)showSignIn {
@@ -2328,6 +2373,9 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   _passwordsCoordinator.delegate = nil;
   _passwordsCoordinator = nil;
 
+  [_accountsCoordinator stop];
+  _accountsCoordinator = nil;
+
   [_notificationsCoordinator stop];
   _notificationsCoordinator = nil;
 
@@ -2398,6 +2446,7 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 
   // Remove PrefObserverDelegates.
   _notificationsObserver.delegate = nil;
+  [_notificationsObserver disconnect];
   _notificationsObserver = nil;
 
   // Clear C++ ivars.
@@ -2447,6 +2496,14 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   if ([_identity isEqual:identity]) {
     [self reloadAccountCell];
   }
+}
+
+- (void)onChromeAccountManagerServiceShutdown:
+    (ChromeAccountManagerService*)accountManagerService {
+  // TODO(crbug.com/40926211): settingsWillBeDismissed must be called before the
+  // AccountManagerService is destroyed. Switch to DCHECK if the number of
+  // reports is low.
+  DUMP_WILL_BE_CHECK(!_accountManagerServiceObserver.get());
 }
 
 #pragma mark - BooleanObserver

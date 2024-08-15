@@ -29,6 +29,7 @@
 #include "third_party/skia/include/gpu/MutableTextureState.h"
 #include "third_party/skia/include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "third_party/skia/include/gpu/ganesh/vk/GrVkBackendSemaphore.h"
+#include "third_party/skia/include/gpu/vk/VulkanMutableTextureState.h"
 #include "third_party/skia/include/private/chromium/GrPromiseImageTexture.h"
 #include "ui/gl/gl_utils.h"
 
@@ -292,6 +293,11 @@ SkiaVkAndroidImageRepresentation::GetEndAccessState() {
   if (!vulkan_image_)
     return nullptr;
 
+  // `kSingleDeviceUsage` defines the set of usages for which only the Vulkan
+  // device from SharedContextState is used. If the SI has any usages outside
+  // this set (e.g., if it has any GLES2 usage, including
+  // RASTER_OVER_GLES2_ONLY), then it will be accessed beyond the Vulkan device
+  // from SharedContextState and hence does not have single-device usage.
   const uint32_t kSingleDeviceUsage =
       SHARED_IMAGE_USAGE_DISPLAY_READ | SHARED_IMAGE_USAGE_DISPLAY_WRITE |
       SHARED_IMAGE_USAGE_RASTER_READ | SHARED_IMAGE_USAGE_RASTER_WRITE |
@@ -305,7 +311,8 @@ SkiaVkAndroidImageRepresentation::GetEndAccessState() {
   if ((android_backing()->usage() & ~kSingleDeviceUsage) ||
       android_backing()->is_thread_safe()) {
     return std::make_unique<skgpu::MutableTextureState>(
-        VK_IMAGE_LAYOUT_UNDEFINED, vulkan_image_->queue_family_index());
+        skgpu::MutableTextureStates::MakeVulkan(
+            VK_IMAGE_LAYOUT_UNDEFINED, vulkan_image_->queue_family_index()));
   }
   return nullptr;
 }

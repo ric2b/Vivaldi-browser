@@ -86,7 +86,7 @@ class AutoUpdateObserver : public BuildStateObserver {
 
  private:
   void OnUpdate(const BuildState* build_state) override {
-    absl::optional<base::Version> version = build_state->installed_version();
+    std::optional<base::Version> version = build_state->installed_version();
     extensions::AutoUpdateAPI::SendWillInstallUpdateOnQuit(
         version.value_or(base::Version()));
   }
@@ -114,7 +114,7 @@ void AutoUpdateAPI::ShutdownUpgradeDetection() {
 ExtensionFunction::ResponseAction AutoUpdateCheckForUpdatesFunction::Run() {
   using vivaldi::auto_update::CheckForUpdates::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   base::ThreadPool::PostTaskAndReply(
@@ -226,13 +226,13 @@ ExtensionFunction::ResponseAction AutoUpdateGetLastCheckTimeFunction::Run() {
 ExtensionFunction::ResponseAction AutoUpdateGetUpdateStatusFunction::Run() {
   auto on_pending_update_result =
       [](scoped_refptr<AutoUpdateGetUpdateStatusFunction> f,
-         absl::optional<base::Version> version) {
-        absl::optional<AutoUpdateStatus> status;
+         std::optional<base::Version> version) {
+        std::optional<AutoUpdateStatus> status;
         std::string version_string;
         if (!version) {
           status = AutoUpdateStatus::kNoUpdate;
         } else if (!version->IsValid()) {
-          status = absl::nullopt;
+          status = std::nullopt;
         } else {
           status = AutoUpdateStatus::kWillInstallUpdateOnQuit;
           version_string = version->GetString();
@@ -258,6 +258,11 @@ bool AutoUpdateHasAutoUpdatesFunction::HasAutoUpdates() {
              ::vivaldi::InstallType::kForAllUsers ||
          base::CommandLine::ForCurrentProcess()->HasSwitch(
              switches::kVivaldiSilentUpdate);
+}
+
+ExtensionFunction::ResponseAction AutoUpdateNeedsCodecRestartFunction::Run() {
+  namespace Results = vivaldi::auto_update::NeedsCodecRestart::Results;
+  return RespondNow(ArgumentList(Results::Create(false)));
 }
 
 }  // namespace extensions

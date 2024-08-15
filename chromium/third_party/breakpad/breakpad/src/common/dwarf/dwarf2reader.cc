@@ -285,8 +285,8 @@ const uint8_t* CompilationUnit::SkipAttribute(const uint8_t* start,
     case DW_FORM_sec_offset:
       return start + reader_->OffsetSize();
   }
-  fprintf(stderr,"Unhandled form type");
-  return NULL;
+  fprintf(stderr,"Unhandled form type 0x%x\n", form);
+  return nullptr;
 }
 
 // Read the abbreviation offset from a compilation unit header.
@@ -369,7 +369,7 @@ void CompilationUnit::ReadHeader() {
         break;
       case DW_UT_type:
       case DW_UT_split_type:
-	is_type_unit_ = true;
+        is_type_unit_ = true;
         headerptr += ReadTypeSignature(headerptr);
         headerptr += ReadTypeOffset(headerptr);
         break;
@@ -512,7 +512,7 @@ const uint8_t* CompilationUnit::ProcessOffsetBaseAttribute(
                                                                      &len));
       start += len;
       return ProcessOffsetBaseAttribute(dieoffset, start, attr, form,
-					   implicit_const);
+                                        implicit_const);
 
     case DW_FORM_flag_present:
       return start;
@@ -568,10 +568,10 @@ const uint8_t* CompilationUnit::ProcessOffsetBaseAttribute(
       // offset size.
       assert(header_.version >= 2);
       if (header_.version == 2) {
-	reader_->ReadAddress(start);
+        reader_->ReadAddress(start);
         return start + reader_->AddressSize();
       } else if (header_.version >= 3) {
-	reader_->ReadOffset(start);
+        reader_->ReadOffset(start);
         return start + reader_->OffsetSize();
       }
       break;
@@ -647,8 +647,8 @@ const uint8_t* CompilationUnit::ProcessOffsetBaseAttribute(
       reader_->ReadUnsignedLEB128(start, &len);
       return start + len;
   }
-  fprintf(stderr, "Unhandled form type\n");
-  return NULL;
+  fprintf(stderr,"Unhandled form type 0x%x\n", form);
+  return nullptr;
 }
 
 // If one really wanted, you could merge SkipAttribute and
@@ -896,11 +896,11 @@ const uint8_t* CompilationUnit::ProcessDIE(uint64_t dieoffset,
     uint64_t dieoffset_copy = dieoffset;
     const uint8_t* start_copy = start;
     for (AttributeList::const_iterator i = abbrev.attributes.begin();
-	 i != abbrev.attributes.end();
-	 i++) {
+         i != abbrev.attributes.end();
+         i++) {
       start_copy = ProcessOffsetBaseAttribute(dieoffset_copy, start_copy,
-						 i->attr_, i->form_,
-						 i->value_);
+                                              i->attr_, i->form_,
+                                              i->value_);
     }
   }
 

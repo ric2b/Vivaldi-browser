@@ -32,17 +32,15 @@ class StubClientSharedImageInterface : public gpu::ClientSharedImageInterface {
   gpu::SyncToken GenVerifiedSyncToken() override { return gpu::SyncToken(); }
 
   scoped_refptr<gpu::ClientSharedImage> CreateSharedImage(
-      viz::SharedImageFormat format,
-      const gfx::Size& size,
-      const gfx::ColorSpace& color_space,
-      GrSurfaceOrigin surface_origin,
-      SkAlphaType alpha_type,
-      uint32_t usage,
-      base::StringPiece debug_label,
+      const gpu::SharedImageInfo& si_info,
       gfx::GpuMemoryBufferHandle handle) override {
     return base::MakeRefCounted<gpu::ClientSharedImage>(
-        gpu::Mailbox::GenerateForSharedImage());
+        gpu::Mailbox::GenerateForSharedImage(), si_info.meta, gpu::SyncToken(),
+        holder_);
   }
+
+ protected:
+  ~StubClientSharedImageInterface() override = default;
 };
 
 class TestGpuChannelHost : public gpu::GpuChannelHost {
@@ -56,9 +54,9 @@ class TestGpuChannelHost : public gpu::GpuChannelHost {
             mojo::ScopedMessagePipeHandle(
                 mojo::MessagePipeHandle(mojo::kInvalidHandleValue))) {}
 
-  std::unique_ptr<gpu::ClientSharedImageInterface>
+  scoped_refptr<gpu::ClientSharedImageInterface>
   CreateClientSharedImageInterface() override {
-    return std::make_unique<StubClientSharedImageInterface>();
+    return base::MakeRefCounted<StubClientSharedImageInterface>();
   }
 
  protected:

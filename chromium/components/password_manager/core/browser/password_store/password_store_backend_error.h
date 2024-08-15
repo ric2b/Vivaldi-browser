@@ -27,21 +27,20 @@ enum class PasswordStoreBackendErrorType {
   // Error related only to on-device encryption users when the encryption
   // key is missing. Used on Android.
   kKeyRetrievalRequired = 4,
-  kMaxValue = kKeyRetrievalRequired,
+  // Saving new credentials is disabled due to an outdated GMSCore version.
+  kGMSCoreOutdatedSavingDisabled = 5,
+  // Credentials are saved only on device due to an outdated GMSCore version.
+  kGMSCoreOutdatedSavingPossible = 6,
+  kMaxValue = kGMSCoreOutdatedSavingPossible,
 };
 
 enum class PasswordStoreBackendErrorRecoveryType {
-  // Error which isn't specified properly, should be treated as kUnrecoverable.
-  kUnspecified,
   // Recoverable which can be fixed by either automated or user-driven
   // resolution specific for this error.
   kRecoverable,
   // Unrecoverable errors which can't be fixed easily. It may indicate broken
   // database or other persistent errors.
   kUnrecoverable,
-  // Transitory error which requires no user input and could be resolved by
-  // retrying the operation.
-  kRetriable,
 };
 
 struct PasswordStoreBackendError {

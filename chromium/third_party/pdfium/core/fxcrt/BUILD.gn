@@ -15,6 +15,7 @@ source_set("fxcrt") {
     "../../fxjs:*",
     "../../testing:*",
     "../../testing/fuzzers/*",
+    "../../testing/image_diff/*",
     "../../third_party:fx_agg",
     "../../third_party:fx_lcms2",
     "../../third_party:fx_libopenjpeg",
@@ -43,8 +44,15 @@ source_set("fxcrt") {
     "cfx_seekablestreamproxy.h",
     "cfx_timer.cpp",
     "cfx_timer.h",
+    "check.h",
+    "check_op.h",
     "code_point_view.h",
+    "component_export.h",
+    "containers/adapters.h",
+    "containers/contains.h",
     "data_vector.h",
+    "debug/alias.cc",
+    "debug/alias.h",
     "fileaccess_iface.h",
     "fixed_size_data_vector.h",
     "fx_2d_size.h",
@@ -77,20 +85,39 @@ source_set("fxcrt") {
     "fx_types.h",
     "fx_unicode.cpp",
     "fx_unicode.h",
+    "immediate_crash.h",
     "mask.h",
     "maybe_owned.h",
+    "notreached.h",
+    "numerics/checked_math.h",
+    "numerics/checked_math_impl.h",
+    "numerics/clamped_math.h",
+    "numerics/clamped_math_impl.h",
+    "numerics/safe_conversions.h",
+    "numerics/safe_conversions_arm_impl.h",
+    "numerics/safe_conversions_impl.h",
+    "numerics/safe_math.h",
+    "numerics/safe_math_arm_impl.h",
+    "numerics/safe_math_clang_gcc_impl.h",
+    "numerics/safe_math_shared_impl.h",
     "observed_ptr.cpp",
     "observed_ptr.h",
     "pauseindicator_iface.h",
+    "ptr_util.h",
+    "raw_span.h",
     "retain_ptr.h",
     "scoped_set_insertion.h",
     "shared_copy_on_write.h",
+    "span.h",
     "span_util.h",
     "stl_util.h",
     "string_data_template.cpp",
     "string_data_template.h",
     "string_pool_template.h",
+    "string_template.cpp",
+    "string_template.h",
     "string_view_template.h",
+    "template_util.h",
     "tree_node.h",
     "unowned_ptr.h",
     "utf16.h",
@@ -120,17 +147,16 @@ source_set("fxcrt") {
   ]
   public_deps = [
     "../../:freetype_common",
-    "../../third_party:pdfium_base",
+    "//third_party/abseil-cpp:absl",
     "//third_party/icu:icuuc",
   ]
-  deps = [ "../../third_party:pdfium_compiler_specific" ]
   if (pdf_use_partition_alloc) {
     sources += [ "fx_memory_pa.cpp" ]
     public_deps += [ "../../third_party:pdfium_pa" ]
   } else {
     sources += [ "fx_memory_malloc.cpp" ]
   }
-  if (is_posix || is_fuchsia) {
+  if (is_posix) {
     sources += [
       "cfx_fileaccess_posix.cpp",
       "cfx_fileaccess_posix.h",
@@ -141,7 +167,11 @@ source_set("fxcrt") {
     sources += [
       "cfx_fileaccess_windows.cpp",
       "cfx_fileaccess_windows.h",
+      "code_point_view.cpp",
       "fx_folder_windows.cpp",
+      "win/scoped_select_object.h",
+      "win/win_util.cc",
+      "win/win_util.h",
     ]
   }
   if (pdf_enable_xfa) {

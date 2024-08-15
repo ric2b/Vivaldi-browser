@@ -19,10 +19,10 @@ TEST_F(CXFA_FMParserTest, Empty) {
   EXPECT_FALSE(parser.HasError());
 
   CXFA_FMToJavaScriptDepth::Reset();
-  absl::optional<WideTextBuffer> buf = ast->ToJavaScript();
+  std::optional<WideTextBuffer> buf = ast->ToJavaScript();
   ASSERT_TRUE(buf.has_value());
   // TODO(dsinclair): This is a little weird .....
-  EXPECT_STREQ(L"// comments only", buf.value().MakeString().c_str());
+  EXPECT_EQ(L"// comments only", buf.value().MakeString());
 }
 
 TEST_F(CXFA_FMParserTest, CommentOnlyIsError) {
@@ -35,9 +35,9 @@ TEST_F(CXFA_FMParserTest, CommentOnlyIsError) {
   // EXPECT_TRUE(parser.HasError());
 
   CXFA_FMToJavaScriptDepth::Reset();
-  absl::optional<WideTextBuffer> buf = ast->ToJavaScript();
+  std::optional<WideTextBuffer> buf = ast->ToJavaScript();
   ASSERT_TRUE(buf.has_value());
-  EXPECT_STREQ(L"// comments only", buf.value().MakeString().c_str());
+  EXPECT_EQ(L"// comments only", buf.value().MakeString());
 }
 
 TEST_F(CXFA_FMParserTest, CommentThenValue) {
@@ -65,9 +65,9 @@ return pfm_rt.get_val(pfm_ret);
   EXPECT_FALSE(parser.HasError());
 
   CXFA_FMToJavaScriptDepth::Reset();
-  absl::optional<WideTextBuffer> buf = ast->ToJavaScript();
+  std::optional<WideTextBuffer> buf = ast->ToJavaScript();
   ASSERT_TRUE(buf.has_value());
-  EXPECT_STREQ(ret, buf.value().MakeString().c_str());
+  EXPECT_EQ(ret, buf.value().MakeString());
 }
 
 TEST_F(CXFA_FMParserTest, Parse) {
@@ -135,7 +135,7 @@ return pfm_rt.get_val(pfm_ret);
   EXPECT_FALSE(parser.HasError());
 
   CXFA_FMToJavaScriptDepth::Reset();
-  absl::optional<WideTextBuffer> buf = ast->ToJavaScript();
+  std::optional<WideTextBuffer> buf = ast->ToJavaScript();
   ASSERT_TRUE(buf.has_value());
   EXPECT_EQ(ret, buf.value().AsStringView());
 }
@@ -201,9 +201,9 @@ return pfm_rt.get_val(pfm_ret);
   EXPECT_FALSE(parser.HasError());
 
   CXFA_FMToJavaScriptDepth::Reset();
-  absl::optional<WideTextBuffer> buf = ast->ToJavaScript();
+  std::optional<WideTextBuffer> buf = ast->ToJavaScript();
   ASSERT_TRUE(buf.has_value());
-  EXPECT_STREQ(ret, buf.value().MakeString().c_str());
+  EXPECT_EQ(ret, buf.value().MakeString());
 }
 
 TEST_F(CXFA_FMParserTest, ParseFuncWithoutParams) {
@@ -240,9 +240,9 @@ return pfm_rt.get_val(pfm_ret);
   EXPECT_FALSE(parser.HasError());
 
   CXFA_FMToJavaScriptDepth::Reset();
-  absl::optional<WideTextBuffer> buf = ast->ToJavaScript();
+  std::optional<WideTextBuffer> buf = ast->ToJavaScript();
   ASSERT_TRUE(buf.has_value());
-  EXPECT_STREQ(ret, buf.value().MakeString().c_str());
+  EXPECT_EQ(ret, buf.value().MakeString());
 }
 
 TEST_F(CXFA_FMParserTest, ParseFuncWithBadParamsList) {
@@ -329,9 +329,9 @@ return pfm_rt.get_val(pfm_ret);
   EXPECT_FALSE(parser.HasError());
 
   CXFA_FMToJavaScriptDepth::Reset();
-  absl::optional<WideTextBuffer> buf = ast->ToJavaScript();
+  std::optional<WideTextBuffer> buf = ast->ToJavaScript();
   ASSERT_TRUE(buf.has_value());
-  EXPECT_STREQ(ret, buf.value().MakeString().c_str());
+  EXPECT_EQ(ret, buf.value().MakeString());
 }
 
 TEST_F(CXFA_FMParserTest, ParseCallBig) {
@@ -371,9 +371,9 @@ return pfm_rt.get_val(pfm_ret);
   EXPECT_FALSE(parser.HasError());
 
   CXFA_FMToJavaScriptDepth::Reset();
-  absl::optional<WideTextBuffer> buf = ast->ToJavaScript();
+  std::optional<WideTextBuffer> buf = ast->ToJavaScript();
   ASSERT_TRUE(buf.has_value());
-  EXPECT_STREQ(ret, buf.value().MakeString().c_str());
+  EXPECT_EQ(ret, buf.value().MakeString());
 }
 
 TEST_F(CXFA_FMParserTest, ParseVar) {
@@ -403,9 +403,9 @@ return pfm_rt.get_val(pfm_ret);
   EXPECT_FALSE(parser.HasError());
 
   CXFA_FMToJavaScriptDepth::Reset();
-  absl::optional<WideTextBuffer> buf = ast->ToJavaScript();
+  std::optional<WideTextBuffer> buf = ast->ToJavaScript();
   ASSERT_TRUE(buf.has_value());
-  EXPECT_STREQ(ret, buf.value().MakeString().c_str());
+  EXPECT_EQ(ret, buf.value().MakeString());
 }
 
 TEST_F(CXFA_FMParserTest, ParseFunctionCallNoArguments) {
@@ -437,9 +437,9 @@ return pfm_rt.get_val(pfm_ret);
   EXPECT_FALSE(parser.HasError());
 
   CXFA_FMToJavaScriptDepth::Reset();
-  absl::optional<WideTextBuffer> buf = ast->ToJavaScript();
+  std::optional<WideTextBuffer> buf = ast->ToJavaScript();
   ASSERT_TRUE(buf.has_value());
-  EXPECT_STREQ(ret, buf.value().MakeString().c_str());
+  EXPECT_EQ(ret, buf.value().MakeString());
 }
 
 TEST_F(CXFA_FMParserTest, ParseFunctionCallSingleArgument) {
@@ -471,9 +471,9 @@ return pfm_rt.get_val(pfm_ret);
   EXPECT_FALSE(parser.HasError());
 
   CXFA_FMToJavaScriptDepth::Reset();
-  absl::optional<WideTextBuffer> buf = ast->ToJavaScript();
+  std::optional<WideTextBuffer> buf = ast->ToJavaScript();
   ASSERT_TRUE(buf.has_value());
-  EXPECT_STREQ(ret, buf.value().MakeString().c_str());
+  EXPECT_EQ(ret, buf.value().MakeString());
 }
 
 TEST_F(CXFA_FMParserTest, ParseFunctionCallMultipleArguments) {
@@ -505,9 +505,9 @@ return pfm_rt.get_val(pfm_ret);
   EXPECT_FALSE(parser.HasError());
 
   CXFA_FMToJavaScriptDepth::Reset();
-  absl::optional<WideTextBuffer> buf = ast->ToJavaScript();
+  std::optional<WideTextBuffer> buf = ast->ToJavaScript();
   ASSERT_TRUE(buf.has_value());
-  EXPECT_STREQ(ret, buf.value().MakeString().c_str());
+  EXPECT_EQ(ret, buf.value().MakeString());
 }
 
 TEST_F(CXFA_FMParserTest, ParseFunctionCallMissingCommas) {

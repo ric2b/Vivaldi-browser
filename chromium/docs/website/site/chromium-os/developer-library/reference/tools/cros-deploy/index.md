@@ -90,14 +90,6 @@ When there are multiple versions available, `cros deploy` chooses the best visib
 one. For example, if you `cros workon` a package, `cros deploy` will try to use
 the 9999 version instead.
 
-### Installation root
-
-By default, `cros deploy` installs all packages at root ("/"). The user can
-override this with `--root`. This is necessary for many development packages,
-which are installed in `/usr/local`.
-([A bug is open](https://issuetracker.google.com/issues/226160872)
-to auto-detect the correct location to install to.)
-
 ## Known problems and fixes
 
 ### Failed to emerge package

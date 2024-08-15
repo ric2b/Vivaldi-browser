@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>  // NOLINT (unapproved c++11 header)
+#include <vector>
 
 #include "src/buffer_pool.h"
 #include "src/decoder_state.h"
@@ -146,6 +147,7 @@ class DecoderImpl : public Allocable {
                   "LIBGAV1_MAX_BITDEPTH must be 8, 10 or 12.");
     return LIBGAV1_MAX_BITDEPTH;
   }
+  std::vector<int> GetFrameQps();
 
  private:
   explicit DecoderImpl(const DecoderSettings* settings);
@@ -244,7 +246,7 @@ class DecoderImpl : public Allocable {
   FrameScratchBufferPool frame_scratch_buffer_pool_;
 
   // Used to synchronize the accesses into |temporal_units_| in order to update
-  // the "decoded" state of an temporal unit.
+  // the "decoded" state of a temporal unit.
   std::mutex mutex_;
   std::condition_variable decoded_condvar_;
   bool is_frame_parallel_;
@@ -265,6 +267,9 @@ class DecoderImpl : public Allocable {
 
   const DecoderSettings& settings_;
   bool seen_first_frame_ = false;
+
+  std::vector<int> frame_mean_qps_;
+  int frame_mean_qp_ = 0;
 };
 
 }  // namespace libgav1

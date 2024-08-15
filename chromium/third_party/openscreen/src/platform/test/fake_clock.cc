@@ -60,7 +60,7 @@ void FakeClock::Advance(Clock::duration delta) {
       break;  // No tasks are scheduled for the remaining time range.
     }
 
-    OSP_DCHECK_GT(step_to, now());
+    OSP_CHECK_GT(step_to, now());
     now_.store(step_to, std::memory_order_release);
   }
 

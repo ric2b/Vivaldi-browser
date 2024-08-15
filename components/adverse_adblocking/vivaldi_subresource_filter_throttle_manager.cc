@@ -9,7 +9,6 @@
 #include "components/safe_browsing/core/browser/db/database_manager.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
 #include "components/subresource_filter/content/browser/subresource_filter_profile_context.h"
-#include "components/subresource_filter/content/browser/verified_ruleset_dealer.h"
 #include "content/public/browser/web_contents.h"
 
 const char VivaldiSubresourceFilterAdblockingThrottleManager::

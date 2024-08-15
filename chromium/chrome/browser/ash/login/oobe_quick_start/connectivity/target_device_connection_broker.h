@@ -41,7 +41,8 @@ class TargetDeviceConnectionBroker {
 
   enum class ConnectionClosedReason {
     kComplete,
-    kUserAborted,
+    kUserAborted,  // Based on user selections on target device, which are
+                   // always informed by Chromebook UI.
     kAuthenticationFailed,
     kConnectionLost,
     kRequestTimedOut,
@@ -228,6 +229,11 @@ class TargetDeviceConnectionBroker {
  private:
   std::vector<FeatureSupportStatusCallback> feature_status_callbacks_;
 };
+
+std::ostream& operator<<(
+    std::ostream& stream,
+    const TargetDeviceConnectionBroker::ConnectionClosedReason&
+        connection_closed_reason);
 
 }  // namespace ash::quick_start
 

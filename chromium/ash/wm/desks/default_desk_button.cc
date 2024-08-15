@@ -39,9 +39,10 @@ DefaultDeskButton::DefaultDeskButton(DeskBarViewBase* bar_view)
                      bar_view,
                      base::BindRepeating(&DefaultDeskButton::OnButtonPressed,
                                          base::Unretained(this))) {
-  GetViewAccessibility().OverrideName(
+  GetViewAccessibility().SetName(
       l10n_util::GetStringFUTF16(IDS_ASH_DESKS_DESK_ACCESSIBLE_NAME,
-                                 DesksController::Get()->desks()[0]->name()));
+                                 DesksController::Get()->desks()[0]->name()),
+      ax::mojom::NameFrom::kAttribute);
 
   SetBackground(views::CreateThemedRoundedRectBackground(
       cros_tokens::kCrosSysSystemOnBase, kDefaultButtonCornerRadius));
@@ -79,7 +80,7 @@ void DefaultDeskButton::OnButtonPressed() {
   bar_view_->NudgeDeskName(/*desk_index=*/0);
 }
 
-BEGIN_METADATA(DefaultDeskButton, DeskButtonBase)
+BEGIN_METADATA(DefaultDeskButton)
 END_METADATA
 
 }  // namespace ash

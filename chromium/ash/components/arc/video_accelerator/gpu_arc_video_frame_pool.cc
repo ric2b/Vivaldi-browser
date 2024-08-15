@@ -18,6 +18,7 @@
 #include "media/base/format_utils.h"
 #include "media/base/video_types.h"
 #include "media/gpu/buffer_validation.h"
+#include "media/gpu/chromeos/video_frame_resource.h"
 #include "media/gpu/macros.h"
 #include "media/media_buildflags.h"
 #include "ui/gfx/buffer_format_util.h"
@@ -183,6 +184,10 @@ void GpuArcVideoFramePool::AddVideoFrame(mojom::VideoFramePtr video_frame,
     return;
   }
 
+  // This passes because GetFrameStorageType() is hard coded to match
+  // the storage type of frames produced by CreateVideoFrame().
+  CHECK_EQ(origin_frame->storage_type(), GetFrameStorageType());
+
   const gfx::GpuMemoryBufferId buffer_id =
       origin_frame->GetGpuMemoryBuffer()->GetId();
   auto it = buffer_id_to_video_frame_id_.emplace(buffer_id, video_frame->id);
@@ -200,7 +205,8 @@ void GpuArcVideoFramePool::AddVideoFrame(mojom::VideoFramePtr video_frame,
 
   // Add the frame to the underlying video frame pool.
   DCHECK(import_frame_cb_);
-  import_frame_cb_.Run(std::move(wrapped_frame));
+  import_frame_cb_.Run(
+      media::VideoFrameResource::Create(std::move(wrapped_frame)));
 
   std::move(callback).Run(true);
 }
@@ -228,6 +234,13 @@ void GpuArcVideoFramePool::RequestFrames(
 
   // Let the owner of the video frame pool know new frames were requested.
   request_frames_cb_.Run();
+}
+
+media::VideoFrame::StorageType GpuArcVideoFramePool::GetFrameStorageType()
+    const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // This is validated at runtime to be in sync with the frame storage type.
+  return media::VideoFrame::STORAGE_GPU_MEMORY_BUFFER;
 }
 
 std::optional<int32_t> GpuArcVideoFramePool::GetVideoFrameId(
@@ -258,8 +271,10 @@ gfx::GpuMemoryBufferHandle GpuArcVideoFramePool::CreateGpuMemoryHandle(
     uint64_t modifier) {
   // Check whether we need to use protected buffers.
   if (!secure_mode_.has_value()) {
+    base::ScopedFD dup_fd(HANDLE_EINTR(dup(fd.get())));
     secure_mode_ = protected_buffer_manager_ &&
-                   IsBufferSecure(protected_buffer_manager_.get(), fd);
+                   protected_buffer_manager_->IsProtectedNativePixmapHandle(
+                       std::move(dup_fd));
   }
 
   gfx::GpuMemoryBufferHandle gmb_handle;

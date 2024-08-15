@@ -4,12 +4,12 @@
 
 #include "services/data_decoder/structured_headers_parser_impl.h"
 
+#include <optional>
 #include <string>
 #include <utility>
 
 #include "base/functional/callback.h"
 #include "net/http/structured_headers.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace data_decoder {
 
@@ -25,6 +25,12 @@ void StructuredHeadersParserImpl::ParseItem(const std::string& header,
 void StructuredHeadersParserImpl::ParseList(const std::string& header,
                                             ParseListCallback callback) {
   std::move(callback).Run(net::structured_headers::ParseList(header));
+}
+
+void StructuredHeadersParserImpl::ParseDictionary(
+    const std::string& header,
+    ParseDictionaryCallback callback) {
+  std::move(callback).Run(net::structured_headers::ParseDictionary(header));
 }
 
 }  // namespace data_decoder

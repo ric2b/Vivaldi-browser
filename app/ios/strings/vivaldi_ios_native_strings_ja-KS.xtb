@@ -45,7 +45,6 @@
 <translation id="1754797958074421486">利用規約</translation>
 <translation id="1771413903824396513">ニックネーム順</translation>
 <translation id="1804522390855853698">中国語 (<ph name="ORIGIN" />)</translation>
-<translation id="1807246157184219062">ライト</translation>
 <translation id="1809939268435598390">フォルダーほかす</translation>
 <translation id="1813686536470127172">他のフォルダー</translation>
 <translation id="1828800626900562968">さらのタブ開くんやったら、下のプラスアイコンをタップして。</translation>
@@ -71,8 +70,6 @@
 <translation id="2388224692799337242">ブラウジングしたら、ここに履歴出るで</translation>
 <translation id="2391028308389203648">トルコ語 (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">有効化</translation>
-<translation id="2414886740292270097">ダーク</translation>
-<translation id="2433507940547922241">見た目</translation>
 <translation id="2434910957904013691">全部同期</translation>
 <translation id="2448144008809286557"><ph name="BEGIN_LINK" />ユーザーネーム<ph name="END_LINK" /> か <ph name="BEGIN_LINK" />パスワード<ph name="END_LINK" />忘れた？</translation>
 <translation id="2536780277491102902">例外</translation>
@@ -80,7 +77,6 @@
 <translation id="2562040727226360285">イライラさいなら、サイト正常に読み込まんかもしれんけど (<ph name="ORIGIN" />)</translation>
 <translation id="2577446409661931381">さらのメモ</translation>
 <translation id="2619628557366098325">ポルトガル語 (<ph name="ORIGIN" />)</translation>
-<translation id="2620436844016719705">システム</translation>
 <translation id="2666092431469916601">上</translation>
 <translation id="2677862276555105603">広告
 ブロック数</translation>
@@ -231,7 +227,6 @@
 <translation id="5439835075346716808">このIPからの登録は一時的にブロックされてるわ。後でまた試して。</translation>
 <translation id="5486261815000869482">パスワード確認</translation>
 <translation id="5494016731375030300">最近閉じたタブ</translation>
-<translation id="5569279496588266002">スタートページのレイアウト</translation>
 <translation id="5639137028584114536">プライベートモードでブラウジングするよう、あんたの組織に求められてるわ。タブはプライベートモードでは保存されへんで。
         <ph name="BEGIN_LINK" />詳細<ph name="END_LINK" /></translation>
 <translation id="5684277895745049190">リスト</translation>
@@ -252,7 +247,6 @@
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> 件のアイテム移したわ</translation>
 <translation id="6147094071357011481">最近閉じたタブないわ</translation>
 <translation id="6193995664633100765">インド (<ph name="ORIGIN" />)</translation>
-<translation id="6278428485366576908">テーマ</translation>
 <translation id="6365929278691047681">ドイツ語 (<ph name="ORIGIN" />)</translation>
 <translation id="6404511346730675251">ブックマーク編集</translation>
 <translation id="6406506848690869874">同期</translation>
@@ -364,7 +358,6 @@
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> 件のアイテムほかしたわ</translation>
 <translation id="8763006697839582351">Vivaldiのプライベートタブで開く</translation>
 <translation id="8765173886020357878">検索候補</translation>
-<translation id="8786689981011401964">壁紙</translation>
 <translation id="8804164990146287819">プライバシーポリシー</translation>
 <translation id="8819841443522803117">デフォルトブラウザ変える？Vivaldiにしとき。</translation>
 <translation id="8820817407110198400">ブックマーク</translation>

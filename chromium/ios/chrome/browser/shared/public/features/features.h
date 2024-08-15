@@ -19,9 +19,6 @@ class TimeDelta;
 // Feature flag to enable the Keyboard Accessory Upgrade.
 BASE_DECLARE_FEATURE(kIOSKeyboardAccessoryUpgrade);
 
-// Feature flag to enable the Payments Bottom Sheet.
-BASE_DECLARE_FEATURE(kIOSPaymentsBottomSheet);
-
 // Test-only: Feature flag used to verify that EG2 can trigger flags. Must be
 // always disabled by default, because it is used to verify that enabling
 // features in tests works.
@@ -30,15 +27,27 @@ BASE_DECLARE_FEATURE(kTestFeature);
 // Feature to add the Safety Check module to the Magic Stack.
 BASE_DECLARE_FEATURE(kSafetyCheckMagicStack);
 
+// A parameter representing how many hours must elapse before the Safety Check
+// is automatically run in the Magic Stack.
+extern const char kSafetyCheckMagicStackAutorunHoursThreshold[];
+
+// How many hours between each autorun of the Safety Check in the Magic Stack.
+const base::TimeDelta TimeDelayForSafetyCheckAutorun();
+
 // Feature flag to enable Shared Highlighting (Link to Text).
 BASE_DECLARE_FEATURE(kSharedHighlightingIOS);
 
 // Feature flag to enable Share button in web context menu in iOS.
 BASE_DECLARE_FEATURE(kShareInWebContextMenuIOS);
 
-// TODO(crbug.com/1128242): Remove this flag after the refactoring work is
-// finished. Flag to modernize the tabstrip without disturbing the existing one.
+// Feature flag to enable the modern tabstrip.
 BASE_DECLARE_FEATURE(kModernTabStrip);
+
+// Feature parameters for `kModernTabStrip`feature. If no parameter is set,
+// `kModernTabStripNTBDynamicParam` will be used.
+extern const char kModernTabStripParameterName[];
+extern const char kModernTabStripNTBDynamicParam[];
+extern const char kModernTabStripNTBStaticParam[];
 
 // Feature flag to enable revamped Incognito NTP page.
 BASE_DECLARE_FEATURE(kIncognitoNtpRevamp);
@@ -50,10 +59,26 @@ BASE_DECLARE_FEATURE(kDefaultBrowserIntentsShowSettings);
 BASE_DECLARE_FEATURE(kIOSBrowserEditMenuMetrics);
 
 // Docking Promo experiment variations.
+
+// A parameter representing the experimental arm for when the Docking Promo is
+// displayed: during the FRE, or after the FRE.
 extern const char kIOSDockingPromoExperimentType[];
+// A parameter representing how many hours of inactivity are required (for users
+// no older than 2 days) before the Docking Promo is shown.
+extern const char kIOSDockingPromoNewUserInactiveThresholdHours[];
+// A parameter representing how many hours of inactivity are required (for users
+// no older than 14 days) before the Docking Promo is shown.
+extern const char kIOSDockingPromoOldUserInactiveThresholdHours[];
 
 // Feature flag to enable the Docking Promo.
 BASE_DECLARE_FEATURE(kIOSDockingPromo);
+
+// Killswitch to enable the fixed Docking Promo trigger logic.
+BASE_DECLARE_FEATURE(kIOSDockingPromoFixedTriggerLogicKillswitch);
+
+// Killswitch to prevent the Docking Promo from being deregistered in the Promos
+// Manager.
+BASE_DECLARE_FEATURE(kIOSDockingPromoPreventDeregistrationKillswitch);
 
 // Param values for the Docking Promo display trigger experimental arms.
 enum class DockingPromoDisplayTriggerArm {
@@ -67,6 +92,14 @@ bool IsDockingPromoEnabled();
 
 // Returns the experiment type for the Docking Promo feature.
 DockingPromoDisplayTriggerArm DockingPromoExperimentTypeEnabled();
+
+// For users no older than 2 days, how many hours of inactivity must pass before
+// showing the Docking Promo.
+int HoursInactiveForNewUsersUntilShowingDockingPromo();
+
+// For users no older than 14 days, how many hours of inactivity must pass
+// before showing the Docking Promo.
+int HoursInactiveForOldUsersUntilShowingDockingPromo();
 
 // Feature flag to enable the non-modal DB promo cooldown refactor separating
 // the cooldown periods for full screen and non-modal promos, as well as
@@ -118,6 +151,10 @@ BASE_DECLARE_FEATURE(kIOSLensUseDirectUpload);
 // Feature flag to enable the Lens entrypoint in the home screen widget.
 BASE_DECLARE_FEATURE(kEnableLensInHomeScreenWidget);
 
+// Feature flag to enable the color Lens and voice icons in the home screen
+// widget.
+BASE_DECLARE_FEATURE(kEnableColorLensAndVoiceIconsInHomeScreenWidget);
+
 // Feature flag to enable the Lens entrypoint in the keyboard.
 BASE_DECLARE_FEATURE(kEnableLensInKeyboard);
 
@@ -140,9 +177,6 @@ BASE_DECLARE_FEATURE(kEnableShortenedPasswordAutoFillInstruction);
 
 // Feature flag to enable startup latency improvements.
 BASE_DECLARE_FEATURE(kEnableStartupImprovements);
-
-// Feature flag to enable Apple Calendar event in experience kit.
-BASE_DECLARE_FEATURE(kEnableExpKitAppleCalendar);
 
 // Feature flag / Kill Switch for TCRex.
 BASE_DECLARE_FEATURE(kTCRexKillSwitch);
@@ -195,9 +229,6 @@ bool IsConsistencyNewAccountInterfaceEnabled();
 // Feature flag to enable the new layout of the NTP omnibox.
 BASE_DECLARE_FEATURE(kNewNTPOmniboxLayout);
 
-// Feature flag to move the steady-state (unfocused) omnibox to the bottom.
-BASE_DECLARE_FEATURE(kBottomOmniboxSteadyState);
-
 // Feature param under kBottomOmniboxDefaultSetting to select the default
 // setting.
 extern const char kBottomOmniboxDefaultSettingParam[];
@@ -207,18 +238,9 @@ extern const char kBottomOmniboxDefaultSettingParamSafariSwitcher[];
 // Feature flag to change the default position of the omnibox.
 BASE_DECLARE_FEATURE(kBottomOmniboxDefaultSetting);
 
-// Feature flag to retrieve device switcher results for omnibox default
-// position. Enabled by default.
-BASE_DECLARE_FEATURE(kBottomOmniboxDeviceSwitcherResults);
-
-// Returns true if `kBottomOmniboxSteadyState` feature flag is enabled and the
-// current device is a phone. This checks that the flag is enabled, not that the
-// omnibox is currently at the bottom.
+// Returns true if the bottom omnibox feature is enabled. This does not check
+// that the omnibox is currently at the bottom.
 bool IsBottomOmniboxSteadyStateEnabled();
-
-// Returns true if `kBottomOmniboxDeviceSwitcherResults` feature flag is
-// enabled.
-bool IsBottomOmniboxDeviceSwitcherResultsEnabled();
 
 // Feature flag to enable the bottom omnibox FRE promo.
 BASE_DECLARE_FEATURE(kBottomOmniboxPromoFRE);
@@ -263,25 +285,8 @@ BASE_DECLARE_FEATURE(kOnlyAccessClipboardAsync);
 // Feature flag that enables default browser video in settings experiment.
 BASE_DECLARE_FEATURE(kDefaultBrowserVideoInSettings);
 
-// Feature flag that enables default browser promo to be displayed without
-// matching all the criteria and in depth metrics collection for the displayed
-// promo.
-BASE_DECLARE_FEATURE(kDefaultBrowserTriggerCriteriaExperiment);
-
-// Feature flag to show default browser full-screen promo on omnbibox copy-paste
-// event.
-BASE_DECLARE_FEATURE(kFullScreenPromoOnOmniboxCopyPaste);
-
 // Feature flag to try using the page theme color in the top toolbar
 BASE_DECLARE_FEATURE(kThemeColorInTopToolbar);
-
-// Feature flag to try using the page theme color as dynamic color for the
-// toolbars.
-BASE_DECLARE_FEATURE(kDynamicThemeColor);
-
-// Feature flag to try using the page background color as dynamic color for the
-// toolbars.
-BASE_DECLARE_FEATURE(kDynamicBackgroundColor);
 
 // Feature flag enabling the Tab Grid to always bounce (even when the content
 // fits the screen already).
@@ -366,12 +371,18 @@ BASE_DECLARE_FEATURE(kFullscreenImprovement);
 // Feature flag to enable Tab Groups in Grid.
 BASE_DECLARE_FEATURE(kTabGroupsInGrid);
 
+// Whether the Tab Groups should be enabled in the Grid.
+bool IsTabGroupInGridEnabled();
+
 // Feature flag to enable the handling of external actions passed to Chrome.
 // Enabled by default.
 BASE_DECLARE_FEATURE(kIOSExternalActionURLs);
 
 // Feature flag to disable Lens LVF features.
 BASE_DECLARE_FEATURE(kDisableLensCamera);
+
+// Feature flag to enable color icons in the Omnibox.
+BASE_DECLARE_FEATURE(kOmniboxColorIcons);
 
 // Feature param under `kEnableFeedBackgroundRefresh` to also enable background
 // refresh for the Following feed.
@@ -489,6 +500,11 @@ bool IsContentPushNotificationsSetUpListEnabled();
 // YES when the Content Provisional Push Notifications are enabled.
 bool IsContentPushNotificationsProvisionalEnabled();
 
+// TODO(b/322348322): Remove provisional notifications bypass conditions testing
+// flag param. YES when the Content Provisional Push Notifications are enabled
+// and the time based conditions should be ignored.
+bool IsContentPushNotificationsProvisionalBypass();
+
 // Returns true when the IOSLargeFakebox feature is enabled.
 bool IsIOSLargeFakeboxEnabled();
 
@@ -535,9 +551,6 @@ extern const char kTabResumptionMostRecentTabOnlyParam[];
 extern const char kTabResumptionAllTabsParam[];
 extern const char kTabResumptionAllTabsOneDayThresholdParam[];
 
-// Whether the Magic Stack should be shown.
-bool IsMagicStackEnabled();
-
 // Whether the feed is contained in a Home module.
 bool IsFeedContainmentEnabled();
 
@@ -579,7 +592,38 @@ BASE_DECLARE_FEATURE(kInactiveNavigationAfterAppLaunchKillSwitch);
 // Feature flag to enable Tips Notifications.
 BASE_DECLARE_FEATURE(kIOSTipsNotifications);
 
+// Feature param to specify how much time after the app starts to trigger
+// Tips notifications.
+extern const char kIOSTipsNotificationsTriggerTimeParam[];
+
+// Feature param containing a bitfield to specify which notifications should be
+// enabled. Bits are assigned based on the enum `TipsNotificationType`.
+extern const char kIOSTipsNotificationsEnabledParam[];
+
 // Helper for whether Tips Notifications are enabled.
 bool IsIOSTipsNotificationsEnabled();
+
+// Feature flag to use a UICollectionView for the Magic Stack.
+BASE_DECLARE_FEATURE(kIOSMagicStackCollectionView);
+
+// Returns true if the MagicStack UICollectionView implementation is enabled.
+bool IsIOSMagicStackCollectionViewEnabled();
+
+// Feature flag to disable fullscreen scrolling logic.
+BASE_DECLARE_FEATURE(kDisableFullscreenScrolling);
+
+// Feature flag to prefetch system capabilities on first run.
+BASE_DECLARE_FEATURE(kPrefetchSystemCapabilitiesOnFirstRun);
+
+// Returns true if the system capabilities are prefetched on first run.
+bool IsPrefetchingSystemCapabilitiesOnFirstRun();
+
+// Vivaldi
+// Feature flag to enable new Start page layout.
+BASE_DECLARE_FEATURE(kNewStartPage);
+
+// Whether the new Start page is enabled.
+bool IsNewStartPageIsEnabled();
+// End Vivaldi
 
 #endif  // IOS_CHROME_BROWSER_SHARED_PUBLIC_FEATURES_FEATURES_H_

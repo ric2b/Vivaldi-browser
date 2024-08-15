@@ -233,10 +233,10 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
     make_redirect_rule = true;
   }
 
-  absl::optional<std::bitset<RequestFilterRule::kTypeCount>> exception_types;
-  absl::optional<std::vector<std::string>> exception_domains;
-  absl::optional<std::bitset<RequestFilterRule::kTypeCount>> option_types;
-  absl::optional<std::vector<std::string>> option_domains;
+  std::optional<std::bitset<RequestFilterRule::kTypeCount>> exception_types;
+  std::optional<std::vector<std::string>> exception_domains;
+  std::optional<std::bitset<RequestFilterRule::kTypeCount>> option_types;
+  std::optional<std::vector<std::string>> option_domains;
   if (exceptions) {
     exception_types = GetTypes(exceptions);
     exception_domains = GetDomains(exceptions);
@@ -419,12 +419,12 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
   }
 }
 
-absl::optional<std::bitset<RequestFilterRule::kTypeCount>>
+std::optional<std::bitset<RequestFilterRule::kTypeCount>>
 DuckDuckGoRulesParser::GetTypes(const base::Value* rule_properties) {
   std::bitset<RequestFilterRule::kTypeCount> types;
   const base::Value::List* types_value = rule_properties->GetDict().FindList(kTypesKey);
   if (!types_value)
-    return absl::nullopt;
+    return std::nullopt;
 
   for (const auto& type_name : *types_value) {
     if (!type_name.is_string())
@@ -440,12 +440,12 @@ DuckDuckGoRulesParser::GetTypes(const base::Value* rule_properties) {
   return types;
 }
 
-absl::optional<std::vector<std::string>> DuckDuckGoRulesParser::GetDomains(
+std::optional<std::vector<std::string>> DuckDuckGoRulesParser::GetDomains(
     const base::Value* rule_properties) {
   std::vector<std::string> domains;
   const base::Value::List* domains_value = rule_properties->GetDict().FindList(kDomainsKey);
   if (!domains_value)
-    return absl::nullopt;
+    return std::nullopt;
 
   for (const auto& domain : *domains_value) {
     if (!domain.is_string())

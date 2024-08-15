@@ -200,6 +200,7 @@ struct xnn_operator {
   size_t valid_batch_size;
   size_t last_input_height;
   size_t last_input_width;
+  size_t last_input_channels;
   const void* last_input;
   size_t last_output_height;
   size_t last_output_width;
@@ -232,6 +233,7 @@ struct xnn_operator {
     union xnn_f32_lrelu_params f32_lrelu;
     union xnn_f32_neg_params f32_neg;
     union xnn_f32_rnd_params f32_rnd;
+    union xnn_f32_rsqrt_params f32_rsqrt;
     union xnn_f32_sigmoid_params f32_sigmoid;
     union xnn_f32_sqrt_params f32_sqrt;
     union xnn_f32_tanh_params f32_tanh;
@@ -440,7 +442,7 @@ struct xnn_operator {
   } context;
 
   struct xnn_code_cache* code_cache;
-  struct xnn_weights_cache* weights_cache;
+  xnn_weights_cache_t weights_cache;
   enum xnn_run_state state;
 };
 

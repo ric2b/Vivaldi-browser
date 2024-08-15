@@ -14,9 +14,13 @@
 #include "net/quic/quic_chromium_client_session.h"
 #include "net/quic/quic_http_utils.h"
 #include "net/spdy/spdy_http_utils.h"
+#include "net/third_party/quiche/src/quiche/common/quiche_buffer_allocator.h"
+#include "net/third_party/quiche/src/quiche/common/simple_buffer_allocator.h"
 #include "net/third_party/quiche/src/quiche/quic/core/http/http_constants.h"
+#include "net/third_party/quiche/src/quiche/quic/core/qpack/qpack_instruction_encoder.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_framer.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_stream.h"
+#include "net/third_party/quiche/src/quiche/quic/core/quic_types.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_utils.h"
 #include "net/third_party/quiche/src/quiche/quic/test_tools/mock_random.h"
 #include "net/third_party/quiche/src/quiche/quic/test_tools/quic_test_utils.h"
@@ -67,9 +71,11 @@ quic::QuicFrames CloneFrames(const quic::QuicFrames& frames) {
                 *frame.retire_connection_id_frame);
         break;
       case quic::MESSAGE_FRAME:
-        DCHECK(false) << "Message frame not supported";
-        // frame.message_frame = new
-        // quic::QuicMessageFrame(*frame.message_frame);
+        frame.message_frame = new quic::QuicMessageFrame(
+            frame.message_frame->message_id,
+            quiche::QuicheMemSlice(quiche::QuicheBuffer::Copy(
+                quiche::SimpleBufferAllocator::Get(),
+                frame.message_frame->message_data.data()->AsStringView())));
         break;
       case quic::CRYPTO_FRAME:
         frame.crypto_frame = new quic::QuicCryptoFrame(*frame.crypto_frame);
@@ -81,6 +87,10 @@ quic::QuicFrames CloneFrames(const quic::QuicFrames& frames) {
       case quic::ACK_FREQUENCY_FRAME:
         frame.ack_frequency_frame =
             new quic::QuicAckFrequencyFrame(*frame.ack_frequency_frame);
+        break;
+      case quic::RESET_STREAM_AT_FRAME:
+        frame.reset_stream_at_frame =
+            new quic::QuicResetStreamAtFrame(*frame.reset_stream_at_frame);
         break;
 
       case quic::NUM_FRAME_TYPES:
@@ -104,7 +114,8 @@ QuicTestPacketMaker::QuicTestPacketMaker(quic::ParsedQuicVersion version,
       connection_id_(connection_id),
       clock_(clock),
       host_(host),
-      qpack_encoder_(&decoder_stream_error_delegate_),
+      qpack_encoder_(&decoder_stream_error_delegate_,
+                     quic::HuffmanEncoding::kEnabled),
       perspective_(perspective),
       client_priority_uses_incremental_(client_priority_uses_incremental),
       use_priority_header_(use_priority_header) {
@@ -663,9 +674,10 @@ std::unique_ptr<quic::QuicReceivedPacket> QuicTestPacketMaker::MakeAckPacket(
     uint64_t packet_number,
     uint64_t first_received,
     uint64_t largest_received,
-    uint64_t smallest_received) {
+    uint64_t smallest_received,
+    std::optional<quic::QuicEcnCounts> ecn) {
   InitializeHeader(packet_number);
-  AddQuicAckFrame(first_received, largest_received, smallest_received);
+  AddQuicAckFrame(first_received, largest_received, smallest_received, ecn);
   return BuildPacket();
 }
 
@@ -680,6 +692,14 @@ std::unique_ptr<quic::QuicReceivedPacket> QuicTestPacketMaker::MakeDataPacket(
 }
 
 std::unique_ptr<quic::QuicReceivedPacket>
+QuicTestPacketMaker::MakeDatagramPacket(uint64_t packet_number,
+                                        std::string_view data) {
+  InitializeHeader(packet_number);
+  AddQuicMessageFrame(data);
+  return BuildPacket();
+}
+
+std::unique_ptr<quic::QuicReceivedPacket>
 QuicTestPacketMaker::MakeAckAndDataPacket(uint64_t packet_number,
                                           quic::QuicStreamId stream_id,
                                           uint64_t largest_received,
@@ -690,7 +710,18 @@ QuicTestPacketMaker::MakeAckAndDataPacket(uint64_t packet_number,
 
   AddQuicAckFrame(largest_received, smallest_received);
   AddQuicStreamFrame(stream_id, fin, data);
+  return BuildPacket();
+}
 
+std::unique_ptr<quic::QuicReceivedPacket>
+QuicTestPacketMaker::MakeAckAndDatagramPacket(uint64_t packet_number,
+                                              uint64_t largest_received,
+                                              uint64_t smallest_received,
+                                              std::string_view data) {
+  InitializeHeader(packet_number);
+
+  AddQuicAckFrame(largest_received, smallest_received);
+  AddQuicMessageFrame(data);
   return BuildPacket();
 }
 
@@ -1110,6 +1141,14 @@ void QuicTestPacketMaker::AddQuicStreamsBlockedFrame(
   DVLOG(1) << "Adding frame: " << frames_.back();
 }
 
+void QuicTestPacketMaker::AddQuicMessageFrame(std::string_view data) {
+  auto* message_frame = new quic::QuicMessageFrame(
+      /*message_id=*/0, quiche::QuicheMemSlice(quiche::QuicheBuffer::Copy(
+                            quiche::SimpleBufferAllocator::Get(), data)));
+  frames_.push_back(quic::QuicFrame(message_frame));
+  DVLOG(1) << "Adding frame: " << frames_.back();
+}
+
 void QuicTestPacketMaker::AddQuicStreamFrame(quic::QuicStreamId stream_id,
                                              bool fin,
                                              std::string_view data) {
@@ -1137,21 +1176,24 @@ void QuicTestPacketMaker::AddQuicAckFrame(uint64_t largest_received,
   AddQuicAckFrame(1, largest_received, smallest_received);
 }
 
-void QuicTestPacketMaker::AddQuicAckFrame(uint64_t first_received,
-                                          uint64_t largest_received,
-                                          uint64_t smallest_received) {
+void QuicTestPacketMaker::AddQuicAckFrame(
+    uint64_t first_received,
+    uint64_t largest_received,
+    uint64_t smallest_received,
+    std::optional<quic::QuicEcnCounts> ecn) {
   auto* ack_frame = new quic::QuicAckFrame;
   ack_frame->largest_acked = quic::QuicPacketNumber(largest_received);
   ack_frame->ack_delay_time = quic::QuicTime::Delta::Zero();
   for (uint64_t i = smallest_received; i <= largest_received; ++i) {
-    ack_frame->received_packet_times.push_back(
-        std::make_pair(quic::QuicPacketNumber(i), clock_->Now()));
+    ack_frame->received_packet_times.emplace_back(quic::QuicPacketNumber(i),
+                                                  clock_->Now());
   }
   if (largest_received > 0) {
     DCHECK_GE(largest_received, first_received);
     ack_frame->packets.AddRange(quic::QuicPacketNumber(first_received),
                                 quic::QuicPacketNumber(largest_received + 1));
   }
+  ack_frame->ecn_counters = ecn;
   frames_.push_back(quic::QuicFrame(ack_frame));
   DVLOG(1) << "Adding frame: " << frames_.back();
 }
@@ -1289,7 +1331,8 @@ std::unique_ptr<quic::QuicReceivedPacket> QuicTestPacketMaker::BuildPacketImpl(
                             buffer, quic::kMaxOutgoingPacketSize);
   EXPECT_NE(0u, encrypted_size);
   quic::QuicReceivedPacket encrypted(buffer, encrypted_size, clock_->Now(),
-                                     false);
+                                     false, 0, true, nullptr, 0, false,
+                                     ecn_codepoint_);
   if (save_packet_frames_) {
     saved_frames_[header_.packet_number] = frames_copy;
   } else {
@@ -1373,8 +1416,11 @@ void QuicTestPacketMaker::AddPriorityHeader(spdy::SpdyPriority spdy_priority,
     if (client_priority_uses_incremental_) {
       priority.incremental = kDefaultPriorityIncremental;
     }
-    (*headers)[net::kHttp2PriorityHeader] =
+    std::string serialized_priority =
         quic::SerializePriorityFieldValue(priority);
+    if (!serialized_priority.empty()) {
+      (*headers)[net::kHttp2PriorityHeader] = serialized_priority;
+    }
   }
 }
 

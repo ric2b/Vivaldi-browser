@@ -30,6 +30,11 @@ import org.chromium.url.GURL;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
+// Vivaldi
+import android.graphics.Bitmap;
+import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
+import org.chromium.build.BuildConfig;
+
 /** Common Default Search Engine functions. */
 public class SearchEngineUtils implements Destroyable, TemplateUrlServiceObserver {
     private static final String TAG = "DSEUtils";
@@ -120,7 +125,17 @@ public class SearchEngineUtils implements Destroyable, TemplateUrlServiceObserve
             }
 
             var logoUrl = new GURL(templateUrl.getURL()).getOrigin();
-
+            // Vivaldi Ref. VAB-8763 Note(simonb@vivaldi.com) Gets saved Icon resource from Vivaldi.
+            if (BuildConfig.IS_VIVALDI) {
+                Bitmap image =
+                        SearchEngineIconHandler.get().getSearchEngineLogoImage(
+                                logoUrl.getSpec(), ContextUtils.getApplicationContext().
+                                        getResources());
+                if (image != null) {
+                   mSearchEngineLogo =  new StatusIconResource(logoUrl.getSpec(), image, 0);
+                    return;
+                }
+            }
             boolean willCall =
                     mFaviconHelper.getLocalFaviconImageForURL(
                             mProfile,

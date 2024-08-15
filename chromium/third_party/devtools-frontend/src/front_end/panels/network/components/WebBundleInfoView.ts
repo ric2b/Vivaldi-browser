@@ -4,11 +4,9 @@
 
 import * as Common from '../../../core/common/common.js';
 import * as i18n from '../../../core/i18n/i18n.js';
-import * as Platform from '../../../core/platform/platform.js';
 import type * as SDK from '../../../core/sdk/sdk.js';
 import {PanelUtils} from '../../../panels/utils/utils.js';
 import * as DataGrid from '../../../ui/components/data_grid/data_grid.js';
-import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as LegacyWrapper from '../../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
@@ -41,7 +39,7 @@ export class WebBundleInfoView extends LegacyWrapper.LegacyWrapper.WrappableComp
 
     this.#webBundleInfo = webBundleInfo;
     this.#webBundleName = request.parsedURL.lastPathComponent;
-    this.setAttribute('jslog', `${VisualLogging.pane().context('webbundle')}`);
+    this.setAttribute('jslog', `${VisualLogging.pane('webbundle').track({resize: true})}`);
   }
 
   connectedCallback(): void {
@@ -80,7 +78,9 @@ export class WebBundleInfoView extends LegacyWrapper.LegacyWrapper.WrappableComp
         </${IconButton.Icon.Icon.litTagName}>
         <span>${this.#webBundleName}</span>
         <x-link href="https://web.dev/web-bundles/#explaining-web-bundles"
-          jslog=${VisualLogging.link().track({click: true}).context('webbundle-explainer')}>
+          jslog=${VisualLogging.link('webbundle-explainer').track({
+          click: true,
+        })}>
           <${IconButton.Icon.Icon.litTagName} class="icon"
             .data=${{color: 'var(--icon-default)', iconName: 'help', width: '16px'} as IconButton.Icon.IconData}>
           </${IconButton.Icon.Icon.litTagName}>
@@ -91,7 +91,7 @@ export class WebBundleInfoView extends LegacyWrapper.LegacyWrapper.WrappableComp
           .data=${{
           columns: [
             {
-              id: Platform.StringUtilities.kebab('url'),
+              id: 'url',
               title: i18nString(UIStrings.bundledResource),
               widthWeighting: 1,
               visible: true,
@@ -107,10 +107,9 @@ export class WebBundleInfoView extends LegacyWrapper.LegacyWrapper.WrappableComp
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-web-bundle-info', WebBundleInfoView);
+customElements.define('devtools-web-bundle-info', WebBundleInfoView);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-web-bundle-info': WebBundleInfoView;
   }

@@ -41,7 +41,8 @@ ChromeSafeBrowsingBlockingPageFactory::CreateSafeBrowsingPage(
     content::WebContents* web_contents,
     const GURL& main_frame_url,
     const SafeBrowsingBlockingPage::UnsafeResourceList& unsafe_resources,
-    bool should_trigger_reporting) {
+    bool should_trigger_reporting,
+    std::optional<base::TimeTicks> blocked_page_shown_timestamp) {
   auto* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   // Create appropriate display options for this blocking page.
@@ -84,7 +85,8 @@ ChromeSafeBrowsingBlockingPageFactory::CreateSafeBrowsingPage(
   // browser context.
   return new SafeBrowsingBlockingPage(
       ui_manager, web_contents, main_frame_url, unsafe_resources,
-      CreateControllerClient(web_contents, unsafe_resources, ui_manager),
+      CreateControllerClient(web_contents, unsafe_resources, ui_manager,
+                             blocked_page_shown_timestamp),
       display_options, should_trigger_reporting,
       HistoryServiceFactory::GetForProfile(profile,
                                            ServiceAccessType::EXPLICIT_ACCESS),
@@ -126,7 +128,7 @@ ChromeSafeBrowsingBlockingPageFactory::CreateEnterpriseBlockPage(
     const GURL& main_frame_url,
     const SafeBrowsingBlockingPage::UnsafeResourceList& unsafe_resources) {
   return new EnterpriseBlockPage(
-      web_contents, main_frame_url,
+      web_contents, main_frame_url, unsafe_resources,
       std::make_unique<EnterpriseBlockControllerClient>(web_contents,
                                                         main_frame_url));
 }
@@ -140,7 +142,8 @@ std::unique_ptr<security_interstitials::SecurityInterstitialControllerClient>
 ChromeSafeBrowsingBlockingPageFactory::CreateControllerClient(
     content::WebContents* web_contents,
     const SafeBrowsingBlockingPage::UnsafeResourceList& unsafe_resources,
-    const BaseUIManager* ui_manager) {
+    const BaseUIManager* ui_manager,
+    std::optional<base::TimeTicks> blocked_page_shown_timestamp) {
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   DCHECK(profile);
@@ -151,7 +154,8 @@ ChromeSafeBrowsingBlockingPageFactory::CreateControllerClient(
               Profile::FromBrowserContext(web_contents->GetBrowserContext()),
               ServiceAccessType::EXPLICIT_ACCESS),
           unsafe_resources[0].url,
-          BaseBlockingPage::GetReportingInfo(unsafe_resources));
+          BaseBlockingPage::GetReportingInfo(unsafe_resources,
+                                             blocked_page_shown_timestamp));
 
   auto chrome_settings_page_helper =
       std::make_unique<security_interstitials::ChromeSettingsPageHelper>();

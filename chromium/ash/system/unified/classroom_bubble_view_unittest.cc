@@ -241,6 +241,15 @@ TEST_F(ClassroomBubbleStudentViewTest, RendersComboBoxView) {
   EXPECT_EQ(3u, *combobox_view->GetSelectedIndex());
 }
 
+TEST_F(ClassroomBubbleStudentViewTest, RecordShowTimeHistogramOnClose) {
+  base::HistogramTester histogram_tester;
+  histogram_tester.ExpectTotalCount(
+      "Ash.Glanceables.TimeManagement.Classroom.TotalShowTime", 0);
+  widget_.reset();
+  histogram_tester.ExpectTotalCount(
+      "Ash.Glanceables.TimeManagement.Classroom.TotalShowTime", 1);
+}
+
 TEST_F(ClassroomBubbleStudentViewTest, ReadsInitialComboBoxViewValueFromPrefs) {
   EXPECT_CALL(classroom_client_, GetCompletedStudentAssignments(_))
       .Times(2)
@@ -405,6 +414,7 @@ TEST_F(ClassroomBubbleStudentViewTest, RendersEmptyListLabel) {
 
 TEST_F(ClassroomBubbleStudentViewTest, OpensClassroomUrlForListItem) {
   base::UserActionTester user_actions;
+  base::HistogramTester histogram_tester;
   EXPECT_CALL(classroom_client_, GetCompletedStudentAssignments(_))
       .WillOnce([](GlanceablesClassroomClient::GetAssignmentsCallback cb) {
         std::move(cb).Run(/*success=*/true, CreateAssignments(1));
@@ -424,6 +434,14 @@ TEST_F(ClassroomBubbleStudentViewTest, OpensClassroomUrlForListItem) {
 
   EXPECT_EQ(1, user_actions.GetActionCount(
                    "Glanceables_Classroom_AssignmentPressed"));
+  histogram_tester.ExpectTotalCount(
+      "Ash.Glanceables.TimeManagement.Classroom.UserAction", 2);
+  histogram_tester.ExpectBucketCount(
+      "Ash.Glanceables.TimeManagement.Classroom.UserAction", 0,
+      /*expected_bucket_count=*/1);
+  histogram_tester.ExpectBucketCount(
+      "Ash.Glanceables.TimeManagement.Classroom.UserAction", 2,
+      /*expected_bucket_count=*/1);
 }
 
 TEST_F(ClassroomBubbleStudentViewTest, ShowsProgressBar) {
@@ -445,6 +463,7 @@ TEST_F(ClassroomBubbleStudentViewTest, ShowsProgressBar) {
 
 TEST_F(ClassroomBubbleStudentViewTest, ClickHeaderIconButton) {
   base::UserActionTester user_actions;
+  base::HistogramTester histogram_tester;
 
   LeftClickOn(GetHeaderIcon());
   EXPECT_EQ(new_window_delegate_.GetLastOpenedUrl(),
@@ -452,6 +471,9 @@ TEST_F(ClassroomBubbleStudentViewTest, ClickHeaderIconButton) {
 
   EXPECT_EQ(1, user_actions.GetActionCount(
                    "Glanceables_Classroom_HeaderIconPressed"));
+  histogram_tester.ExpectUniqueSample(
+      "Ash.Glanceables.TimeManagement.Classroom.UserAction", 1,
+      /*expected_bucket_count=*/1);
 }
 
 TEST_F(ClassroomBubbleStudentViewTest, ClickItemViewUserAction) {
@@ -481,6 +503,14 @@ TEST_F(ClassroomBubbleStudentViewTest, ClickItemViewUserAction) {
   histogram_tester.ExpectUniqueSample(
       "Ash.Glanceables.Classroom.Student.ListSelected", 3,
       /*expected_bucket_count=*/1);
+  histogram_tester.ExpectTotalCount(
+      "Ash.Glanceables.TimeManagement.Classroom.UserAction", 3);
+  histogram_tester.ExpectBucketCount(
+      "Ash.Glanceables.TimeManagement.Classroom.UserAction", 0,
+      /*expected_bucket_count=*/1);
+  histogram_tester.ExpectBucketCount(
+      "Ash.Glanceables.TimeManagement.Classroom.UserAction", 2,
+      /*expected_bucket_count=*/2);
 }
 
 TEST_F(ClassroomBubbleStudentViewTest, ShowErrorMessageBubble) {

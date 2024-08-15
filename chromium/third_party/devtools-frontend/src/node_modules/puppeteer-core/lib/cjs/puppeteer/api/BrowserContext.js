@@ -1,31 +1,23 @@
 "use strict";
 /**
- * Copyright 2017 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2017 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BrowserContext = void 0;
+const rxjs_js_1 = require("../../third_party/rxjs/rxjs.js");
 const EventEmitter_js_1 = require("../common/EventEmitter.js");
 const util_js_1 = require("../common/util.js");
 const disposable_js_1 = require("../util/disposable.js");
 /**
- * {@link BrowserContext} represents individual sessions within a
+ * {@link BrowserContext} represents individual user contexts within a
  * {@link Browser | browser}.
  *
  * When a {@link Browser | browser} is launched, it has a single
  * {@link BrowserContext | browser context} by default. Others can be created
- * using {@link Browser.createIncognitoBrowserContext}.
+ * using {@link Browser.createBrowserContext}. Each context has isolated storage
+ * (cookies/localStorage/etc.)
  *
  * {@link BrowserContext} {@link EventEmitter | emits} various events which are
  * documented in the {@link BrowserContextEvent} enum.
@@ -34,11 +26,11 @@ const disposable_js_1 = require("../util/disposable.js");
  * `window.open`, the popup will belong to the parent {@link Page.browserContext
  * | page's browser context}.
  *
- * @example Creating an incognito {@link BrowserContext | browser context}:
+ * @example Creating a new {@link BrowserContext | browser context}:
  *
  * ```ts
- * // Create a new incognito browser context
- * const context = await browser.createIncognitoBrowserContext();
+ * // Create a new browser context
+ * const context = await browser.createBrowserContext();
  * // Create a new page inside context.
  * const page = await context.newPage();
  * // ... do stuff with page ...
@@ -57,31 +49,23 @@ class BrowserContext extends EventEmitter_js_1.EventEmitter {
         super();
     }
     /**
-     * Gets all active {@link Target | targets} inside this
-     * {@link BrowserContext | browser context}.
-     */
-    targets() {
-        throw new Error('Not implemented');
-    }
-    overridePermissions() {
-        throw new Error('Not implemented');
-    }
-    /**
-     * Clears all permission overrides for this
-     * {@link BrowserContext | browser context}.
+     * Waits until a {@link Target | target} matching the given `predicate`
+     * appears and returns it.
      *
-     * @example Clearing overridden permissions in the
-     * {@link Browser.defaultBrowserContext | default browser context}:
+     * This will look all open {@link BrowserContext | browser contexts}.
+     *
+     * @example Finding a target for a page opened via `window.open`:
      *
      * ```ts
-     * const context = browser.defaultBrowserContext();
-     * context.overridePermissions('https://example.com', ['clipboard-read']);
-     * // do stuff ..
-     * context.clearPermissionOverrides();
+     * await page.evaluate(() => window.open('https://www.example.com/'));
+     * const newWindowTarget = await browserContext.waitForTarget(
+     *   target => target.url() === 'https://www.example.com/'
+     * );
      * ```
      */
-    clearPermissionOverrides() {
-        throw new Error('Not implemented');
+    async waitForTarget(predicate, options = {}) {
+        const { timeout: ms = 30000 } = options;
+        return await (0, rxjs_js_1.firstValueFrom)((0, rxjs_js_1.merge)((0, util_js_1.fromEmitterEvent)(this, "targetcreated" /* BrowserContextEvent.TargetCreated */), (0, util_js_1.fromEmitterEvent)(this, "targetchanged" /* BrowserContextEvent.TargetChanged */), (0, rxjs_js_1.from)(this.targets())).pipe((0, util_js_1.filterAsync)(predicate), (0, rxjs_js_1.raceWith)((0, util_js_1.timeout)(ms))));
     }
     /**
      * Whether this {@link BrowserContext | browser context} is closed.

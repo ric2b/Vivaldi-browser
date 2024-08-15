@@ -19,6 +19,18 @@ const std::string& GetEmptyStringRef() {
 }
 }  // namespace
 
+std::string GetGenerateHostTokenRequestPath() {
+  return "";
+}
+
+std::string GetVerifySessionTokenRequestPath() {
+  return "";
+}
+
+std::string GetReauthorizeHostRequestPath() {
+  return "";
+}
+
 const std::string& GetAuthorizationCode(const ProvisionCorpMachineResponse&) {
   return GetEmptyStringRef();
 }
@@ -56,6 +68,36 @@ GetReportProvisioningErrorRequest(const std::string& host_id,
   return std::make_unique<ReportProvisioningErrorRequest>();
 }
 
+std::unique_ptr<GenerateHostTokenRequest> GetGenerateHostTokenRequest(
+    const GenerateHostTokenRequestStruct&) {
+  return std::make_unique<GenerateHostTokenRequest>();
+}
+
+std::unique_ptr<VerifySessionTokenRequest> GetVerifySessionTokenRequest(
+    const VerifySessionTokenRequestStruct&) {
+  return std::make_unique<VerifySessionTokenRequest>();
+}
+
+std::unique_ptr<ReauthorizeHostRequest> GetReauthorizeHostRequest(
+    const ReauthorizeHostRequestStruct&) {
+  return std::make_unique<ReauthorizeHostRequest>();
+}
+
+std::unique_ptr<GenerateHostTokenResponseStruct>
+GetGenerateHostTokenResponseStruct(const GenerateHostTokenResponse&) {
+  return std::make_unique<GenerateHostTokenResponseStruct>();
+}
+
+std::unique_ptr<VerifySessionTokenResponseStruct>
+GetVerifySessionTokenResponseStruct(const VerifySessionTokenResponse&) {
+  return std::make_unique<VerifySessionTokenResponseStruct>();
+}
+
+extern std::unique_ptr<ReauthorizeHostResponseStruct>
+GetReauthorizeHostResponseStruct(const ReauthorizeHostResponse&) {
+  return std::make_unique<ReauthorizeHostResponseStruct>();
+}
+
 std::string GetSendHeartbeatRequestPath() {
   return "";
 }
@@ -63,6 +105,16 @@ std::string GetSendHeartbeatRequestPath() {
 std::unique_ptr<SendHeartbeatRequest> GetSendHeartbeatRequest(
     const std::string& host_id) {
   return std::make_unique<SendHeartbeatRequest>();
+}
+
+std::string GetReportSessionDisconnectedRequestPath() {
+  return "";
+}
+
+std::unique_ptr<ReportSessionDisconnectedRequest>
+GetReportSessionDisconnectedRequest(
+    const ReportSessionDisconnectedRequestStruct&) {
+  return std::make_unique<ReportSessionDisconnectedRequest>();
 }
 
 std::string DoNothingProto::GetTypeName() const {

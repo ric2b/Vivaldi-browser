@@ -31,7 +31,8 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_CSS_CSS_TO_LENGTH_CONVERSION_DATA_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_CSS_TO_LENGTH_CONVERSION_DATA_H_
 
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include <optional>
+
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/css_length_resolver.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
@@ -43,6 +44,7 @@
 
 namespace blink {
 
+class AnchorEvaluator;
 class ComputedStyle;
 class Element;
 class Font;
@@ -223,16 +225,32 @@ class CORE_EXPORT CSSToLengthConversionData : public CSSLengthResolver {
 
     void Trace(Visitor*) const;
 
-    absl::optional<double> Width() const;
-    absl::optional<double> Height() const;
+    std::optional<double> Width() const;
+    std::optional<double> Height() const;
 
    private:
-    void CacheSizeIfNeeded(PhysicalAxes, absl::optional<double>& cache) const;
+    void CacheSizeIfNeeded(PhysicalAxes, std::optional<double>& cache) const;
 
     Member<Element> context_element_;
     mutable PhysicalAxes cached_physical_axes_{kPhysicalAxisNone};
-    mutable absl::optional<double> cached_width_;
-    mutable absl::optional<double> cached_height_;
+    mutable std::optional<double> cached_width_;
+    mutable std::optional<double> cached_height_;
+  };
+
+  // Used to evaluate anchor() and anchor-size() functions.
+  //
+  // https://drafts.csswg.org/css-anchor-position-1/#anchor-pos
+  // https://drafts.csswg.org/css-anchor-position-1/#anchor-size-fn
+  class CORE_EXPORT AnchorData {
+    STACK_ALLOCATED();
+
+   public:
+    AnchorData() = default;
+    AnchorData(Element* anchored, AnchorEvaluator*);
+    AnchorEvaluator* GetEvaluator() const { return evaluator_; }
+
+   private:
+    AnchorEvaluator* evaluator_ = nullptr;
   };
 
   using Flags = uint16_t;
@@ -256,10 +274,13 @@ class CORE_EXPORT CSSToLengthConversionData : public CSSLengthResolver {
     kDynamicViewport = 1u << 5,
     // cq*
     kContainerRelative = 1u << 6,
-    // calc() includes tree scoped reference to an anchor
-    kAnchorRelative = 1u << 7,
+    // https://drafts.csswg.org/css-scoping-1/#css-tree-scoped-reference
+    kTreeScopedReference = 1u << 7,
     // vi, vb, cqi, cqb, etc
     kLogicalDirectionRelative = 1u << 8,
+    // anchor(), anchor-size()
+    // https://drafts.csswg.org/css-anchor-position-1
+    kAnchorRelative = 1u << 9,
     // Adjust the Flags type above if adding more bits below.
   };
 
@@ -269,6 +290,7 @@ class CORE_EXPORT CSSToLengthConversionData : public CSSLengthResolver {
                             const LineHeightSize&,
                             const ViewportSize&,
                             const ContainerSizes&,
+                            const AnchorData&,
                             float zoom,
                             Flags&);
   template <typename ComputedStyleOrBuilder>
@@ -277,6 +299,7 @@ class CORE_EXPORT CSSToLengthConversionData : public CSSLengthResolver {
                             const ComputedStyle* root_style,
                             const ViewportSize& viewport_size,
                             const ContainerSizes& container_sizes,
+                            const AnchorData& anchor_data,
                             float zoom,
                             Flags& flags)
       : CSSToLengthConversionData(
@@ -287,6 +310,7 @@ class CORE_EXPORT CSSToLengthConversionData : public CSSLengthResolver {
                            root_style),
             viewport_size,
             container_sizes,
+            anchor_data,
             zoom,
             flags) {}
 
@@ -313,11 +337,17 @@ class CORE_EXPORT CSSToLengthConversionData : public CSSLengthResolver {
   double ContainerWidth() const override;
   double ContainerHeight() const override;
   WritingMode GetWritingMode() const override;
-  void ReferenceAnchor() const override;
+  void ReferenceTreeScope() const override;
 
   void SetFontSizes(const FontSizes& font_sizes) { font_sizes_ = font_sizes; }
   void SetLineHeightSize(const LineHeightSize& line_height_size) {
     line_height_size_ = line_height_size;
+  }
+
+  void ReferenceAnchor() const override;
+
+  AnchorEvaluator* GetAnchorEvaluator() const override {
+    return anchor_data_.GetEvaluator();
   }
 
   // See ContainerSizes::PreCachedCopy.
@@ -328,9 +358,9 @@ class CORE_EXPORT CSSToLengthConversionData : public CSSLengthResolver {
 
   CSSToLengthConversionData CopyWithAdjustedZoom(float new_zoom) const {
     DCHECK(flags_);
-    return CSSToLengthConversionData(writing_mode_, font_sizes_,
-                                     line_height_size_, viewport_size_,
-                                     container_sizes_, new_zoom, *flags_);
+    return CSSToLengthConversionData(
+        writing_mode_, font_sizes_, line_height_size_, viewport_size_,
+        container_sizes_, anchor_data_, new_zoom, *flags_);
   }
   CSSToLengthConversionData Unzoomed() const {
     return CopyWithAdjustedZoom(1.0f);
@@ -348,6 +378,7 @@ class CORE_EXPORT CSSToLengthConversionData : public CSSLengthResolver {
   LineHeightSize line_height_size_;
   ViewportSize viewport_size_;
   ContainerSizes container_sizes_;
+  AnchorData anchor_data_;
   mutable Flags* flags_ = nullptr;
 };
 

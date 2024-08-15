@@ -118,7 +118,8 @@ class VideoDecoderWrapper : public VideoDecoder {
  */
 std::unique_ptr<VideoDecoder> JavaToNativeVideoDecoder(
     JNIEnv* jni,
-    const JavaRef<jobject>& j_decoder);
+    const JavaRef<jobject>& j_decoder,
+    jlong webrtcEnvRef);
 
 }  // namespace jni
 }  // namespace webrtc

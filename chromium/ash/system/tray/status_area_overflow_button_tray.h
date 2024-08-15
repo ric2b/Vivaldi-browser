@@ -30,9 +30,9 @@ class Shelf;
 // status area contains more buttons than the maximum width. Tapping on this
 // button will show/hide the overflown tray buttons.
 class ASH_EXPORT StatusAreaOverflowButtonTray : public TrayBackgroundView {
- public:
-  METADATA_HEADER(StatusAreaOverflowButtonTray);
+  METADATA_HEADER(StatusAreaOverflowButtonTray, TrayBackgroundView)
 
+ public:
   explicit StatusAreaOverflowButtonTray(Shelf* shelf);
   StatusAreaOverflowButtonTray(const StatusAreaOverflowButtonTray&) = delete;
   StatusAreaOverflowButtonTray& operator=(const StatusAreaOverflowButtonTray&) =
@@ -42,7 +42,7 @@ class ASH_EXPORT StatusAreaOverflowButtonTray : public TrayBackgroundView {
   enum State { CLICK_TO_EXPAND = 0, CLICK_TO_COLLAPSE };
 
   // TrayBackgroundView:
-  void ClickedOutsideBubble() override;
+  void ClickedOutsideBubble(const ui::LocatedEvent& event) override;
   // No need to override since this view doesn't have an active/inactive state.
   void UpdateTrayItemColor(bool is_active) override {}
   std::u16string GetAccessibleNameForTray() override;

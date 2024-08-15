@@ -4,18 +4,23 @@
 
 #include "chrome/browser/metrics/structured/ash_structured_metrics_recorder.h"
 
+#include <utility>
+
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/task_environment.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "chrome/browser/metrics/structured/ash_event_storage.h"
 #include "chrome/browser/metrics/structured/key_data_provider_ash.h"
+#include "chrome/test/base/testing_browser_process.h"
+#include "chrome/test/base/testing_profile_manager.h"
 #include "components/metrics/structured/event.h"
 #include "components/metrics/structured/proto/event_storage.pb.h"
 #include "components/metrics/structured/structured_events.h"
+#include "components/metrics/structured/structured_metrics_client.h"
+#include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/metrics_proto/chrome_user_metrics_extension.pb.h"
 
@@ -116,14 +121,25 @@ class TestSystemProfileProvider : public metrics::MetricsProvider {
 
 class AshStructuredMetricsRecorderTest : public testing::Test {
  public:
+  AshStructuredMetricsRecorderTest()
+      : task_environment_(
+            content::BrowserTaskEnvironment::TimeSource::MOCK_TIME),
+        profile_manager_(TestingBrowserProcess::GetGlobal()) {}
+
+  AshStructuredMetricsRecorderTest(const AshStructuredMetricsRecorderTest&) =
+      delete;
+  AshStructuredMetricsRecorderTest& operator=(
+      const AshStructuredMetricsRecorderTest&) = delete;
+
   void SetUp() override {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
+    ASSERT_TRUE(profile_manager_.SetUp(temp_dir_.GetPath()));
 
     // Fixed paths to store keys for test.
     device_key_path_ =
         temp_dir_.GetPath().Append("structured_metrics").Append("device_keys");
     profile_key_path_ =
-        temp_dir_.GetPath().Append("structured_metrics").Append("keys");
+        GetProfilePath().Append("structured_metrics").Append("keys");
 
     Recorder::GetInstance()->SetUiTaskRunner(
         task_environment_.GetMainThreadTaskRunner());
@@ -133,7 +149,10 @@ class AshStructuredMetricsRecorderTest : public testing::Test {
     task_environment_.AdvanceClock(base::Days(1000));
   }
 
-  void TearDown() override { StructuredMetricsClient::Get()->UnsetDelegate(); }
+  void TearDown() override {
+    StructuredMetricsClient::Get()->UnsetDelegate();
+    profile_manager_.DeleteAllTestingProfiles();
+  }
 
   void Wait() { task_environment_.RunUntilIdle(); }
 
@@ -172,6 +191,14 @@ class AshStructuredMetricsRecorderTest : public testing::Test {
   base::FilePath ProfileKeyFilePath() { return profile_key_path_; }
 
   base::FilePath DeviceKeyFilePath() { return device_key_path_; }
+
+  base::FilePath GetProfilePath() {
+    // u-p1@test-hash is the directory name generated for user p1. This name
+    // seems to be consistent. If it changes, update the directory name. It is
+    // done this way so the directory can be pre-populated with key data such
+    // that it can be used in the remaining tests.
+    return profile_manager_.profiles_dir().Append("u-p1@test-hash");
+  }
 
   base::FilePath PreLoginEventPath() {
     return TempDirPath()
@@ -223,7 +250,8 @@ class AshStructuredMetricsRecorderTest : public testing::Test {
         std::make_unique<AshEventStorage>(base::Seconds(0),
                                           PreLoginEventPath()),
         system_profile_provider_.get()));
-    recorder_->OnProfileAdded(TempDirPath());
+
+    profile_manager_.CreateTestingProfile("p1");
     OnRecordingEnabled();
   }
 
@@ -234,18 +262,17 @@ class AshStructuredMetricsRecorderTest : public testing::Test {
   }
 
  protected:
+  content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<TestSystemProfileProvider> system_profile_provider_;
   std::unique_ptr<AshStructuredMetricsRecorder> recorder_;
-  base::test::TaskEnvironment task_environment_{
-      base::test::TaskEnvironment::MainThreadType::UI,
-      base::test::TaskEnvironment::ThreadPoolExecutionMode::QUEUED,
-      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   base::HistogramTester histogram_tester_;
   base::ScopedTempDir temp_dir_;
+  raw_ptr<TestingProfile> test_profile_;
 
  private:
   TestRecorder test_recorder_;
 
+  TestingProfileManager profile_manager_;
   base::FilePath device_key_path_;
   base::FilePath profile_key_path_;
 };
@@ -258,13 +285,13 @@ TEST_F(AshStructuredMetricsRecorderTest, EventMetricsProvideSystemProfile) {
 
   Wait();
 
-  events::v2::test_project_one::TestEventOne()
-      .SetTestMetricOne(kValueOne)
-      .SetTestMetricTwo(12345)
-      .Record();
-  events::v2::test_project_two::TestEventTwo()
-      .SetTestMetricThree(kValueTwo)
-      .Record();
+  StructuredMetricsClient::Record(
+      std::move(events::v2::test_project_one::TestEventOne()
+                    .SetTestMetricOne(kValueOne)
+                    .SetTestMetricTwo(12345)));
+  StructuredMetricsClient::Record(
+      std::move(events::v2::test_project_two::TestEventTwo().SetTestMetricThree(
+          kValueTwo)));
 
   const auto uma_proto = GetUmaProto();
   CHECK(uma_proto.has_system_profile());
@@ -331,9 +358,9 @@ TEST_F(AshStructuredMetricsRecorderTest,
   // keys set by WriteTestingDeviceKeys. In this case the expected key is
   // "ddd...d", which we observe by checking the ID and HMAC have the correct
   // value given that key.
-  events::v2::test_project_four::TestEventFive()
-      .SetTestMetricFive("value")
-      .Record();
+  StructuredMetricsClient::Record(std::move(
+      events::v2::test_project_four::TestEventFive().SetTestMetricFive(
+          "value")));
 
   const auto data = GetEventMetrics();
   ASSERT_EQ(data.events_size(), 1);
@@ -401,7 +428,8 @@ TEST_F(AshStructuredMetricsRecorderTest, EventSequenceLogging) {
   EXPECT_TRUE(test_event.IsEventSequenceType());
   test_event.SetEventSequenceMetadata(Event::EventSequenceMetadata(1));
   test_event.SetRecordedTimeSinceBoot(base::Milliseconds(test_time));
-  test_event.SetMetric1(test_metric).Record();
+  StructuredMetricsClient::Record(
+      std::move(test_event.SetMetric1(test_metric)));
 
   const auto data = GetEventMetrics();
   ASSERT_EQ(data.events_size(), 1);
@@ -441,7 +469,7 @@ TEST_F(AshStructuredMetricsRecorderTest, CorrectClientAge) {
 
   events::v2::cr_os_events::NoMetricsEvent test_event;
   test_event.SetEventSequenceMetadata(Event::EventSequenceMetadata(1));
-  test_event.Record();
+  StructuredMetricsClient::Record(std::move(test_event));
 
   const auto data = GetEventMetrics();
   ASSERT_EQ(data.events_size(), 1);

@@ -11,6 +11,8 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/extension_apitest.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -133,8 +135,8 @@ IN_PROC_BROWSER_TEST_F(ChromeMimeHandlerViewInteractiveUITest,
   ResultCatcher catcher;
 
   // Set observer to watch for fullscreen.
-  FullscreenNotificationObserver fullscreen_waiter(browser());
-
+  ui_test_utils::FullscreenWaiter fullscreen_waiter(browser(),
+                                                    {.tab_fullscreen = true});
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/testFullscreenEscape.csv")));
 

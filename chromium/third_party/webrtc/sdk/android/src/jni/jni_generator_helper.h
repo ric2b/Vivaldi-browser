@@ -39,6 +39,22 @@
 #define JNI_GENERATOR_EXPORT extern "C" JNIEXPORT JNICALL
 #endif
 
+#if defined(WEBRTC_ARCH_X86)
+// Dalvik JIT generated code doesn't guarantee 16-byte stack alignment on
+// x86 - use force_align_arg_pointer to realign the stack at the JNI
+// boundary. crbug.com/655248
+#define JNI_BOUNDARY_EXPORT \
+  extern "C" __attribute__((visibility("default"), force_align_arg_pointer))
+#else
+#define JNI_BOUNDARY_EXPORT extern "C" __attribute__((visibility("default")))
+#endif
+
+#if defined(COMPONENT_BUILD)
+#define JNI_ZERO_COMPONENT_BUILD_EXPORT __attribute__((visibility("default")))
+#else
+#define JNI_ZERO_COMPONENT_BUILD_EXPORT
+#endif
+
 #define CHECK_EXCEPTION(jni)        \
   RTC_CHECK(!jni->ExceptionCheck()) \
       << (jni->ExceptionDescribe(), jni->ExceptionClear(), "")
@@ -78,7 +94,6 @@ class MethodID {
 }  // namespace webrtc
 
 namespace jni_zero {
-
 // Re-export relevant classes into the namespaces the script expects.
 using webrtc::JavaParamRef;
 using webrtc::JavaRef;
@@ -159,6 +174,15 @@ struct BASE_EXPORT JniJavaCallContextChecked {
 static_assert(sizeof(JniJavaCallContextChecked) ==
                   sizeof(JniJavaCallContextUnchecked),
               "Stack unwinder cannot work with structs of different sizes.");
+
+}  // namespace jni_zero
+
+namespace jni_zero {
+namespace internal {
+using jni_zero::JniJavaCallContextChecked;
+using jni_zero::JniJavaCallContextUnchecked;
+using webrtc::LazyGetClass;
+}  // namespace internal
 }  // namespace jni_zero
 
 // Re-export helpers in the old jni_generator namespace.

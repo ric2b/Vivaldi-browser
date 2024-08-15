@@ -142,12 +142,13 @@ fn v1_deser_ciphertext() {
     section_builder.add_to_advertisement();
     let adv = adv_builder.into_advertisement();
 
-    let discovery_credential = V1DiscoveryCredential::new(
+    let discovery_credential = V1DiscoveryCredential::new::<CryptoProviderImpl>(
         key_seed,
         [0; 32], // Zeroing out MIC HMAC, since it's unused in examples here.
         hkdf.extended_signed_metadata_key_hmac_key().calculate_hmac(&metadata_key.0),
         key_pair.public().to_bytes(),
-    );
+    )
+    .expect("Public key bytes are valid points on the curve since theyc ame from the keypair");
 
     let credentials: [MatchableCredential<V1, MetadataMatchedCredential<_>>; 1] =
         [MatchableCredential { discovery_credential, match_data: encrypted_sender_metadata }];

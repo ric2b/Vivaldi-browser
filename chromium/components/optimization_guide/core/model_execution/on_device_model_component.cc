@@ -4,6 +4,8 @@
 
 #include "components/optimization_guide/core/model_execution/on_device_model_component.h"
 
+#include <optional>
+
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
@@ -14,6 +16,7 @@
 #include "base/strings/strcat.h"
 #include "base/time/time.h"
 #include "base/types/cxx23_to_underlying.h"
+#include "components/optimization_guide/core/model_execution/model_execution_util.h"
 #include "components/optimization_guide/core/optimization_guide_constants.h"
 #include "components/optimization_guide/core/optimization_guide_enums.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
@@ -22,6 +25,19 @@
 
 namespace optimization_guide {
 namespace {
+
+const std::optional<OnDeviceBaseModelSpec> ReadBaseModelSpecFromManifest(
+    const base::Value::Dict& manifest) {
+  auto* model_spec = manifest.FindDict("BaseModelSpec");
+  if (model_spec) {
+    auto* name = model_spec->FindString("name");
+    auto* version = model_spec->FindString("version");
+    if (name && version) {
+      return OnDeviceBaseModelSpec{*name, *version};
+    }
+  }
+  return std::nullopt;
+}
 
 base::WeakPtr<OnDeviceModelComponentStateManager>& GetInstance() {
   static base::NoDestructor<base::WeakPtr<OnDeviceModelComponentStateManager>>
@@ -69,6 +85,7 @@ struct OnDeviceModelComponentStateManager::RegistrationCriteria {
   bool device_capable = false;
   bool on_device_feature_recently_used = false;
   bool enabled_by_feature = false;
+  bool enabled_by_enterprise_policy = false;
 
   // Reasons to uninstall. TODO(b/302327114): Add UMA for uninstall reason.
   bool running_out_of_disk_space = false;
@@ -80,7 +97,9 @@ struct OnDeviceModelComponentStateManager::RegistrationCriteria {
   // The component may or may not be ready.
   bool is_already_installing = false;
 
-  bool is_model_allowed() const { return device_capable && enabled_by_feature; }
+  bool is_model_allowed() const {
+    return device_capable && enabled_by_feature && enabled_by_enterprise_policy;
+  }
 
   bool should_install() const {
     if (should_uninstall()) {
@@ -108,6 +127,8 @@ void LogInstallCriteria(
                      criteria.on_device_feature_recently_used);
   LogInstallCriteria(event_name, "EnabledByFeature",
                      criteria.enabled_by_feature);
+  LogInstallCriteria(event_name, "EnabledByEnterprisePolicy",
+                     criteria.enabled_by_enterprise_policy);
   LogInstallCriteria(event_name, "All", criteria.should_install());
 }
 
@@ -116,7 +137,7 @@ void LogInstallCriteria(
 void OnDeviceModelComponentStateManager::UninstallComplete() {
   local_state_->ClearPref(
       prefs::localstate::kLastTimeEligibleForOnDeviceModelDownload);
-
+  UpdateOnDeviceBaseModelSpecCache();
   component_installer_registered_ = false;
 }
 
@@ -157,6 +178,25 @@ void OnDeviceModelComponentStateManager::DevicePerformanceClassChanged(
                            base::to_underlying(performance_class));
 
   BeginUpdateRegistration();
+}
+
+void OnDeviceModelComponentStateManager::UpdateOnDeviceBaseModelSpecCache() {
+  if (state_ && state_->GetBaseModelSpec()) {
+    local_state_->SetString(prefs::localstate::kOnDeviceBaseModelVersion,
+                            state_->GetBaseModelSpec().value().model_version);
+    local_state_->SetString(prefs::localstate::kOnDeviceBaseModelName,
+                            state_->GetBaseModelSpec().value().model_name);
+  } else {
+    local_state_->ClearPref(prefs::localstate::kOnDeviceBaseModelVersion);
+    local_state_->ClearPref(prefs::localstate::kOnDeviceBaseModelName);
+  }
+}
+
+const std::optional<OnDeviceBaseModelSpec>
+OnDeviceModelComponentStateManager::GetCachedBaseModelSpec() {
+  return OnDeviceBaseModelSpec{
+      local_state_->GetString(prefs::localstate::kOnDeviceBaseModelName),
+      local_state_->GetString(prefs::localstate::kOnDeviceBaseModelVersion)};
 }
 
 void OnDeviceModelComponentStateManager::OnStartup() {
@@ -230,6 +270,9 @@ OnDeviceModelComponentStateManager::GetRegistrationCriteria(
   result.on_device_feature_recently_used =
       WasAnOnDeviceFeatureRecentlyUsed(*local_state_);
   result.enabled_by_feature = features::IsOnDeviceExecutionEnabled();
+  result.enabled_by_enterprise_policy =
+      GetGenAILocalFoundationalModelEnterprisePolicySettings(local_state_) ==
+      prefs::GenAILocalFoundationalModelEnterprisePolicySettings::kAllowed;
 
   auto last_time_eligible = local_state_->GetTime(
       prefs::localstate::kLastTimeEligibleForOnDeviceModelDownload);
@@ -310,7 +353,13 @@ void OnDeviceModelComponentStateManager::SetReady(
     const base::Value::Dict& manifest) {
   state_ = base::WrapUnique(new OnDeviceModelComponentState);
   state_->install_dir_ = install_dir;
-  state_->version_ = version;
+  // This version refers to the component version specifically, not the model
+  // version.
+  state_->component_version_ = version;
+  // Populate the model version and name from the manifest into the Chrome
+  // pref cache. If not present, clears the state and cache.
+  state_->model_spec_ = ReadBaseModelSpecFromManifest(manifest);
+  UpdateOnDeviceBaseModelSpecCache();
   if (is_model_allowed_) {
     NotifyStateChanged();
   }

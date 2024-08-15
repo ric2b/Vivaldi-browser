@@ -989,7 +989,7 @@ angle::Result Program::link(const Context *context, angle::JobResultExpectancy r
 
         switch (result)
         {
-            case egl::CacheGetResult::GetSuccess:
+            case egl::CacheGetResult::Success:
             {
                 // No need to care about the compile jobs any more.
                 mState.mShaderCompileJobs = {};
@@ -1176,6 +1176,16 @@ angle::Result Program::linkJobImpl(const Caps &caps,
             mState.mExecutable->mPod.advancedBlendEquations =
                 fragmentShader->advancedBlendEquations;
             mState.mExecutable->mPod.specConstUsageBits |= fragmentShader->specConstUsageBits;
+
+            for (uint32_t index = 0; index < IMPLEMENTATION_MAX_DRAW_BUFFERS; ++index)
+            {
+                const sh::MetadataFlags flag = static_cast<sh::MetadataFlags>(
+                    static_cast<uint32_t>(sh::MetadataFlags::HasInputAttachment0) + index);
+                if (fragmentShader->metadataFlags.test(flag))
+                {
+                    mState.mExecutable->mPod.fragmentInoutIndices.set(index);
+                }
+            }
         }
 
         *mergedVaryingsOut = GetMergedVaryingsFromLinkingVariables(*linkingVariables);
@@ -1411,12 +1421,8 @@ angle::Result Program::loadBinary(const Context *context,
     // Currently we require the full shader text to compute the program hash.
     // We could also store the binary in the internal program cache.
 
-    for (size_t uniformBlockIndex = 0;
-         uniformBlockIndex < mState.mExecutable->getUniformBlocks().size(); ++uniformBlockIndex)
-    {
-        // After deserializing, we need to set every block dirty
-        mState.mExecutable->mDirtyBits.set(uniformBlockIndex);
-    }
+    // Initialize the uniform block -> buffer index map based on serialized data.
+    mState.mExecutable->initInterfaceBlockBindings();
 
     // If load does not succeed, we know for sure that the binary is not compatible with the
     // backend.  The loaded binary could have been read from the on-disk shader cache and be
@@ -1448,7 +1454,7 @@ angle::Result Program::loadBinary(const Context *context,
     mLinkingState->linkingFromBinary = true;
     mLinkingState->linkEvent         = std::move(loadEvent);
 
-    *resultOut = egl::CacheGetResult::GetSuccess;
+    *resultOut = egl::CacheGetResult::Success;
 
     return angle::Result::Continue;
 }
@@ -1624,31 +1630,12 @@ void Program::bindUniformBlock(UniformBlockIndex uniformBlockIndex, GLuint unifo
 {
     ASSERT(!mLinkingState);
 
-    if (mState.mExecutable->mPod.activeUniformBlockBindings[uniformBlockIndex.value])
-    {
-        GLuint previousBinding =
-            mState.mExecutable->mUniformBlocks[uniformBlockIndex.value].pod.binding;
-        if (previousBinding >= mUniformBlockBindingMasks.size())
-        {
-            mUniformBlockBindingMasks.resize(previousBinding + 1, UniformBlockBindingMask());
-        }
-        mUniformBlockBindingMasks[previousBinding].reset(uniformBlockIndex.value);
-    }
+    mState.mExecutable->remapUniformBlockBinding(uniformBlockIndex, uniformBlockBinding);
 
-    mState.mExecutable->mUniformBlocks[uniformBlockIndex.value].setBinding(uniformBlockBinding);
-    if (uniformBlockBinding >= mUniformBlockBindingMasks.size())
-    {
-        mUniformBlockBindingMasks.resize(uniformBlockBinding + 1, UniformBlockBindingMask());
-    }
-    mUniformBlockBindingMasks[uniformBlockBinding].set(uniformBlockIndex.value);
-    mState.mExecutable->mPod.activeUniformBlockBindings.set(uniformBlockIndex.value,
-                                                            uniformBlockBinding != 0);
+    mProgram->onUniformBlockBinding(uniformBlockIndex);
 
-    onUniformBufferStateChange(
-        gl::ProgramExecutable::DirtyBitType::DIRTY_BIT_UNIFORM_BLOCK_BINDING_0 +
-        uniformBlockIndex.value);
-
-    onStateChange(angle::SubjectMessage::ProgramUniformBlockBindingUpdated);
+    onStateChange(
+        angle::ProgramUniformBlockBindingUpdatedMessageFromIndex(uniformBlockIndex.value));
 }
 
 void Program::setTransformFeedbackVaryings(const Context *context,
@@ -2139,24 +2126,13 @@ bool Program::linkAttributes(const Caps &caps,
     return true;
 }
 
-void Program::initInterfaceBlockBindings()
-{
-    // Set initial bindings from shader.
-    for (size_t blockIndex = 0; blockIndex < mState.mExecutable->getUniformBlocks().size();
-         blockIndex++)
-    {
-        InterfaceBlock &uniformBlock = mState.mExecutable->mUniformBlocks[blockIndex];
-        bindUniformBlock({static_cast<uint32_t>(blockIndex)}, uniformBlock.pod.binding);
-    }
-}
-
 angle::Result Program::syncState(const Context *context)
 {
     ASSERT(!mLinkingState);
     // Wait for the link tasks.  This is because these optimization passes are not currently
     // thread-safe with draw's usage of the executable.
     waitForOptionalLinkTasks(context);
-    return mProgram->syncState(context);
+    return angle::Result::Continue;
 }
 
 angle::Result Program::serialize(const Context *context, angle::MemoryBuffer *binaryOut)
@@ -2343,12 +2319,11 @@ bool Program::deserialize(const Context *context, BinaryInputStream &stream)
 
 void Program::postResolveLink(const Context *context)
 {
-    initInterfaceBlockBindings();
-
     mState.updateActiveSamplers();
     mState.mExecutable->mActiveImageShaderBits.fill({});
     mState.mExecutable->updateActiveImages(getExecutable());
 
+    mState.mExecutable->initInterfaceBlockBindings();
     mState.mExecutable->setUniformValuesFromBindingQualifiers();
 
     if (context->getExtensions().multiDrawANGLE)
@@ -2413,23 +2388,5 @@ void Program::dumpProgramInfo(const Context *context) const
 
     writeFile(path.c_str(), dump.c_str(), dump.length());
     INFO() << "Dumped program: " << path;
-}
-
-void Program::onPPOUniformBufferStateChange(ShaderType shaderType,
-                                            size_t uniformBufferIndex,
-                                            ProgramExecutable *ppoExecutable,
-                                            const ProgramPipelineUniformBlockIndexMap &blockMap)
-{
-    if (uniformBufferIndex >= mUniformBlockBindingMasks.size())
-    {
-        mUniformBlockBindingMasks.resize(uniformBufferIndex + 1, UniformBlockBindingMask());
-    }
-    for (size_t index : mUniformBlockBindingMasks[uniformBufferIndex])
-    {
-        if (getExecutable().getUniformBlocks()[index].isActive(shaderType))
-        {
-            ppoExecutable->mDirtyBits.set(blockMap[static_cast<uint32_t>(index)]);
-        }
-    }
 }
 }  // namespace gl

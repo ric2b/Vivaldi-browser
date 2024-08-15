@@ -309,6 +309,7 @@ bool saveMarket(const SparseMatrixType& mat, const std::string& filename, int sy
   out << header << std::endl;
   out << mat.rows() << " " << mat.cols() << " " << mat.nonZeros() << "\n";
   int count = 0;
+  EIGEN_UNUSED_VARIABLE(count);
   for (int j = 0; j < mat.outerSize(); ++j)
     for (typename SparseMatrixType::InnerIterator it(mat, j); it; ++it) {
       ++count;

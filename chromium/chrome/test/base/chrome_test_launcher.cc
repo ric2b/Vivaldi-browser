@@ -19,7 +19,6 @@
 #include "base/run_loop.h"
 #include "base/sampling_heap_profiler/poisson_allocation_sampler.h"
 #include "base/strings/string_util.h"
-#include "base/test/allow_check_is_test_for_testing.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_file_util.h"
 #include "base/test/test_switches.h"
@@ -73,9 +72,36 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #endif
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/crosapi/crosapi_ash.h"
+#include "chrome/browser/ash/crosapi/crosapi_manager.h"
+#include "chrome/browser/ash/crosapi/test_controller_ash.h"
+#include "chrome/browser/chrome_browser_main.h"
+#include "chrome/browser/chrome_browser_main_extra_parts.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
 #if defined(VIVALDI_BUILD)
 #include "extraparts/vivaldi_main_delegate.h"
 #endif
+
+namespace {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+class TestControllerSetupMainExtraParts : public ChromeBrowserMainExtraParts {
+ public:
+  TestControllerSetupMainExtraParts() = default;
+
+  void PostBrowserStart() override {
+    crosapi::CrosapiManager::Get()->crosapi_ash()->SetTestControllerForTesting(
+        std::make_unique<crosapi::TestControllerAsh>());
+  }
+
+  void PostMainMessageLoopRun() override {
+    crosapi::CrosapiManager::Get()->crosapi_ash()->SetTestControllerForTesting(
+        nullptr);
+  }
+};
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+}  // namespace
 
 // static
 int ChromeTestSuiteRunner::RunTestSuiteInternal(ChromeTestSuite* test_suite) {
@@ -229,6 +255,14 @@ ChromeTestLauncherDelegate::CreateContentMainDelegate() {
 }
 #endif
 
+void ChromeTestLauncherDelegate::CreatedBrowserMainParts(
+    content::BrowserMainParts* browser_main_parts) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  static_cast<ChromeBrowserMainParts*>(browser_main_parts)
+      ->AddParts(std::make_unique<TestControllerSetupMainExtraParts>());
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+}
+
 void ChromeTestLauncherDelegate::PreSharding() {
 #if BUILDFLAG(IS_WIN)
   // Pre-test cleanup for registry state keyed off the profile dir (which can
@@ -268,8 +302,6 @@ int LaunchChromeTests(size_t parallel_jobs,
                       content::TestLauncherDelegate* delegate,
                       int argc,
                       char** argv) {
-  base::test::AllowCheckIsTestForTesting();
-
 #if BUILDFLAG(IS_MAC)
   // Set up the path to the framework so resources can be loaded. This is also
   // performed in ChromeTestSuite, but in browser tests that only affects the

@@ -25,13 +25,15 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_LOADER_FETCH_RESOURCE_H_
 
 #include <memory>
+#include <optional>
+
 #include "base/auto_reset.h"
+#include "base/containers/span.h"
 #include "base/functional/callback.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "mojo/public/cpp/base/big_buffer.h"
 #include "net/base/schemeful_site.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/loader/code_cache.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/scheduler/web_scoped_virtual_time_pauser.h"
 #include "third_party/blink/renderer/platform/allow_discouraged_type.h"
@@ -67,6 +69,7 @@ class Clock;
 
 namespace blink {
 
+class BackgroundResponseProcessor;
 class BlobDataHandle;
 class FetchParameters;
 class ResourceFinishObserver;
@@ -299,7 +302,12 @@ class PLATFORM_EXPORT Resource : public GarbageCollected<Resource>,
   bool ShouldRevalidateStaleResponse() const;
   virtual bool CanUseCacheValidator() const;
   base::TimeDelta FreshnessLifetime() const;
-  bool IsCacheValidator() const { return is_revalidating_; }
+  bool IsCacheValidator() const {
+    return revalidation_status_ == RevalidationStatus::kRevalidating;
+  }
+  bool HasSuccessfulRevalidation() const {
+    return revalidation_status_ == RevalidationStatus::kRevalidated;
+  }
   bool HasCacheControlNoStoreHeader() const;
   bool MustReloadDueToVaryHeader(const ResourceRequest& new_request) const;
 
@@ -434,12 +442,15 @@ class PLATFORM_EXPORT Resource : public GarbageCollected<Resource>,
 
   bool IsLoadedFromMemoryCache() { return is_loaded_from_memory_cache_; }
 
+  virtual scoped_refptr<BackgroundResponseProcessor>
+  MaybeCreateBackgroundResponseProcessor();
+
  protected:
   Resource(const ResourceRequestHead&,
            ResourceType,
            const ResourceLoaderOptions&);
 
-  virtual void NotifyDataReceived(const char* data, size_t size);
+  virtual void NotifyDataReceived(base::span<const char> data);
   virtual void NotifyFinished();
 
   void MarkClientFinished(ResourceClient*);
@@ -526,7 +537,7 @@ class PLATFORM_EXPORT Resource : public GarbageCollected<Resource>,
   ResourceType type_;
   ResourceStatus status_;
 
-  absl::optional<ResourceError> error_;
+  std::optional<ResourceError> error_;
 
   base::TimeTicks load_response_end_;
   base::TimeTicks memory_cache_last_accessed_;
@@ -537,7 +548,6 @@ class PLATFORM_EXPORT Resource : public GarbageCollected<Resource>,
   String cache_identifier_;
 
   bool link_preload_;
-  bool is_revalidating_;
   bool is_alive_;
   bool is_add_remove_client_prohibited_;
   bool is_revalidation_start_forbidden_ = false;
@@ -545,6 +555,15 @@ class PLATFORM_EXPORT Resource : public GarbageCollected<Resource>,
   bool stale_revalidation_started_ = false;
   bool is_preloaded_by_early_hints_ = false;
   bool is_loaded_from_memory_cache_ = false;
+
+  enum class RevalidationStatus {
+    kNoRevalidatingOrFailed,  // not in revalidate procedure or
+                              // revalidate failed.
+    kRevalidating,            // in revalidate process, waiting for
+                              // network response
+    kRevalidated,             // revalidate success by 304 Not Modified
+  };
+  RevalidationStatus revalidation_status_;
 
   ResourceIntegrityDisposition integrity_disposition_;
   SubresourceIntegrity::ReportInfo integrity_report_info_;

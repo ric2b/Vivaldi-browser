@@ -4,7 +4,8 @@
 
 import 'chrome://password-manager/password_manager.js';
 
-import {EditPasswordDialogElement, Page, PasswordDetailsCardElement, PasswordManagerImpl, PasswordViewPageInteractions, Router, SyncBrowserProxyImpl} from 'chrome://password-manager/password_manager.js';
+import type {EditPasswordDialogElement, PasswordDetailsCardElement} from 'chrome://password-manager/password_manager.js';
+import {Page, PasswordManagerImpl, PasswordViewPageInteractions, Router, SyncBrowserProxyImpl} from 'chrome://password-manager/password_manager.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
@@ -240,10 +241,12 @@ suite('PasswordDetailsCardTest', function() {
 
                 if (store === chrome.passwordsPrivate.PasswordStoreSet.DEVICE) {
                   deleteDialog.$.removeFromAccountCheckbox.click();
+                  await deleteDialog.$.removeFromAccountCheckbox.updateComplete;
                 } else if (
                     store ===
                     chrome.passwordsPrivate.PasswordStoreSet.ACCOUNT) {
                   deleteDialog.$.removeFromDeviceCheckbox.click();
+                  await deleteDialog.$.removeFromDeviceCheckbox.updateComplete;
                 }
                 deleteDialog.$.removeButton.click();
 
@@ -281,7 +284,9 @@ suite('PasswordDetailsCardTest', function() {
     assertTrue(!!deleteDialog);
     assertTrue(deleteDialog.$.dialog.open);
     deleteDialog.$.removeFromAccountCheckbox.click();
+    await deleteDialog.$.removeFromAccountCheckbox.updateComplete;
     deleteDialog.$.removeFromDeviceCheckbox.click();
+    await deleteDialog.$.removeFromDeviceCheckbox.updateComplete;
 
     assertFalse(deleteDialog.$.removeFromAccountCheckbox.checked);
     assertFalse(deleteDialog.$.removeFromDeviceCheckbox.checked);

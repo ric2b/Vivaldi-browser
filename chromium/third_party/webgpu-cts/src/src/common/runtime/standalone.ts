@@ -21,7 +21,7 @@ import {
   OptionsInfos,
   camelCaseToSnakeCase,
 } from './helper/options.js';
-import { TestWorker } from './helper/test_worker.js';
+import { TestDedicatedWorker, TestSharedWorker, TestServiceWorker } from './helper/test_worker.js';
 
 const rootQuerySpec = 'webgpu:*';
 let promptBeforeReload = false;
@@ -47,7 +47,14 @@ const { queries: qs, options } = parseSearchParamLikeWithOptions(
   kStandaloneOptionsInfos,
   window.location.search || rootQuerySpec
 );
-const { runnow, debug, unrollConstEvalLoops, powerPreference, compatibility } = options;
+const {
+  runnow,
+  debug,
+  unrollConstEvalLoops,
+  powerPreference,
+  compatibility,
+  forceFallbackAdapter,
+} = options;
 globalTestConfig.unrollConstEvalLoops = unrollConstEvalLoops;
 globalTestConfig.compatibility = compatibility;
 
@@ -56,7 +63,10 @@ const logger = new Logger();
 
 setBaseResourcePath('../out/resources');
 
-const worker = options.worker ? new TestWorker(options) : undefined;
+const dedicatedWorker =
+  options.worker === 'dedicated' ? new TestDedicatedWorker(options) : undefined;
+const sharedWorker = options.worker === 'shared' ? new TestSharedWorker(options) : undefined;
+const serviceWorker = options.worker === 'service' ? new TestServiceWorker(options) : undefined;
 
 const autoCloseOnPass = document.getElementById('autoCloseOnPass') as HTMLInputElement;
 const resultsVis = document.getElementById('resultsVis')!;
@@ -70,11 +80,12 @@ stopButtonElem.addEventListener('click', () => {
   stopRequested = true;
 });
 
-if (powerPreference || compatibility) {
+if (powerPreference || compatibility || forceFallbackAdapter) {
   setDefaultRequestAdapterOptions({
     ...(powerPreference && { powerPreference }),
     // MAINTENANCE_TODO: Change this to whatever the option ends up being
     ...(compatibility && { compatibilityMode: true }),
+    ...(forceFallbackAdapter && { forceFallbackAdapter: true }),
   });
 }
 
@@ -168,8 +179,12 @@ function makeCaseHTML(t: TestTreeLeaf): VisualizedSubtree {
 
     const [rec, res] = logger.record(name);
     caseResult = res;
-    if (worker) {
-      await worker.run(rec, name);
+    if (dedicatedWorker) {
+      await dedicatedWorker.run(rec, name);
+    } else if (sharedWorker) {
+      await sharedWorker.run(rec, name);
+    } else if (serviceWorker) {
+      await serviceWorker.run(rec, name);
     } else {
       await t.run(rec);
     }
@@ -535,7 +550,7 @@ function keyValueToPairs([k, v]: [string, ParamValue]): [string, string][] {
  */
 function prepareParams(params: Record<string, ParamValue>): string {
   const pairsArrays = Object.entries(params)
-    .filter(([, v]) => !!v)
+    .filter(([, v]) => !!v && v !== '0')
     .map(keyValueToPairs);
   const pairs = pairsArrays.flat();
   return new URLSearchParams(pairs).toString();

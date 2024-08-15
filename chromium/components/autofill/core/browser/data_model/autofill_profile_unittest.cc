@@ -622,7 +622,8 @@ TEST(
   // First check that when `triggering_field_type` is not present, a second
   // differentiating label is added.
   AutofillProfile::CreateInferredLabels(
-      {&profile1, &profile2}, /*suggested_fields=*/std::nullopt,
+      {&profile1, &profile2},
+      /*suggested_fields=*/std::nullopt,
       /*triggering_field_type=*/std::nullopt,
       /*excluded_fields=*/{}, /*minimal_fields_shown=*/1, "en-US", &labels);
   ASSERT_EQ(2U, labels.size());
@@ -632,7 +633,8 @@ TEST(
   // If the `triggering_field_type` is present and is unique, there is no need
   // for a second differentiating label.
   AutofillProfile::CreateInferredLabels(
-      {&profile1, &profile2}, /*suggested_fields=*/std::nullopt,
+      {&profile1, &profile2},
+      /*suggested_fields=*/std::nullopt,
       /*triggering_field_type=*/EMAIL_ADDRESS,
       /*excluded_fields=*/{}, /*minimal_fields_shown=*/1, "en-US", &labels);
   ASSERT_EQ(2U, labels.size());
@@ -642,7 +644,8 @@ TEST(
   // If the `triggering_field_type` is present and is not unique, a second
   // differentiating label is added.
   AutofillProfile::CreateInferredLabels(
-      {&profile1, &profile2}, /*suggested_fields=*/std::nullopt,
+      {&profile1, &profile2},
+      /*suggested_fields=*/std::nullopt,
       /*triggering_field_type=*/NAME_FIRST,
       /*excluded_fields=*/{}, /*minimal_fields_shown=*/1, "en-US", &labels);
   ASSERT_EQ(2U, labels.size());
@@ -1357,6 +1360,9 @@ TEST(AutofillProfileTest, Compare_StructuredTypes) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       {features::kAutofillUseI18nAddressModel,
+       features::kAutofillUseBRAddressModel,
+       features::kAutofillUseINAddressModel,
+       features::kAutofillUseMXAddressModel,
        features::kAutofillEnableSupportForLandmark,
        features::kAutofillEnableSupportForBetweenStreets,
        features::kAutofillEnableSupportForAdminLevel2,
@@ -1384,6 +1390,7 @@ TEST(AutofillProfileTest, Compare_StructuredTypes) {
       ADDRESS_HOME_LANDMARK,
       ADDRESS_HOME_OVERFLOW,
       ADDRESS_HOME_OVERFLOW_AND_LANDMARK,
+      ADDRESS_HOME_STREET_LOCATION_AND_LOCALITY,
       ADDRESS_HOME_BETWEEN_STREETS_OR_LANDMARK,
       ADDRESS_HOME_BETWEEN_STREETS,
       ADDRESS_HOME_BETWEEN_STREETS_1,
@@ -1519,7 +1526,8 @@ TEST(AutofillProfileTest, SetRawInfoDoesntTrimWhitespace) {
 TEST(AutofillProfileTest, SetRawInfoWorksForLandmark) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures({features::kAutofillEnableSupportForLandmark,
-                                 features::kAutofillUseI18nAddressModel},
+                                 features::kAutofillUseI18nAddressModel,
+                                 features::kAutofillUseMXAddressModel},
                                 {});
 
   AutofillProfile profile(AddressCountryCode("MX"));
@@ -1532,7 +1540,8 @@ TEST(AutofillProfileTest, SetRawInfoWorksForBetweenStreets) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       {features::kAutofillEnableSupportForBetweenStreets,
-       features::kAutofillUseI18nAddressModel},
+       features::kAutofillUseI18nAddressModel,
+       features::kAutofillUseMXAddressModel},
       {});
   AutofillProfile profile(AddressCountryCode("MX"));
 
@@ -1545,122 +1554,6 @@ TEST(AutofillProfileTest, SetInfoTrimsWhitespace) {
   AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile.SetInfo(EMAIL_ADDRESS, u"\tuser@example.com    ", "en-US");
   EXPECT_EQ(u"user@example.com", profile.GetRawInfo(EMAIL_ADDRESS));
-}
-
-TEST(AutofillProfileTest, SaveAdditionalInfo_Name_AddingNameFull) {
-  AutofillProfile a(i18n_model_definition::kLegacyHierarchyCountryCode);
-
-  a.SetRawInfo(NAME_FIRST, u"Marion");
-  a.SetRawInfo(NAME_MIDDLE, u"Mitchell");
-  a.SetRawInfo(NAME_LAST, u"Morrison");
-  a.FinalizeAfterImport();
-
-  AutofillProfile b = a;
-
-  b.SetRawInfo(NAME_FULL, u"Marion Mitchell Morrison");
-  b.FinalizeAfterImport();
-
-  EXPECT_TRUE(a.SaveAdditionalInfo(b, "en-US"));
-
-  EXPECT_EQ(u"Marion", a.GetRawInfo(NAME_FIRST));
-  EXPECT_EQ(u"Mitchell", a.GetRawInfo(NAME_MIDDLE));
-  EXPECT_EQ(u"Morrison", a.GetRawInfo(NAME_LAST));
-  EXPECT_EQ(u"Marion Mitchell Morrison", a.GetRawInfo(NAME_FULL));
-}
-
-TEST(AutofillProfileTest, SaveAdditionalInfo_Name_KeepNameFull) {
-  AutofillProfile a(i18n_model_definition::kLegacyHierarchyCountryCode);
-
-  a.SetRawInfo(NAME_FIRST, u"Marion");
-  a.SetRawInfo(NAME_MIDDLE, u"Mitchell");
-  a.SetRawInfo(NAME_LAST, u"Morrison");
-  a.SetRawInfo(NAME_FULL, u"Marion Mitchell Morrison");
-
-  AutofillProfile b = a;
-  b.SetRawInfo(NAME_FULL, u"");
-
-  EXPECT_TRUE(a.SaveAdditionalInfo(b, "en-US"));
-
-  EXPECT_EQ(u"Marion", a.GetRawInfo(NAME_FIRST));
-  EXPECT_EQ(u"Mitchell", a.GetRawInfo(NAME_MIDDLE));
-  EXPECT_EQ(u"Morrison", a.GetRawInfo(NAME_LAST));
-  EXPECT_EQ(u"Marion Mitchell Morrison", a.GetRawInfo(NAME_FULL));
-}
-
-// Tests the merging of two similar profiles results in the second profile's
-// non-empty fields overwriting the initial profiles values.
-TEST(AutofillProfileTest,
-     SaveAdditionalInfo_Name_DifferentCaseAndDiacriticsNoNameFull) {
-  AutofillProfile a(i18n_model_definition::kLegacyHierarchyCountryCode);
-
-  a.SetRawInfoWithVerificationStatus(NAME_FIRST, u"marion", kObserved);
-  a.SetRawInfoWithVerificationStatus(NAME_MIDDLE, u"mitchell", kObserved);
-  a.SetRawInfoWithVerificationStatus(NAME_LAST, u"morrison", kObserved);
-  a.SetRawInfoWithVerificationStatus(NAME_FULL, u"marion mitchell morrison",
-                                     kObserved);
-
-  AutofillProfile b = a;
-  a.FinalizeAfterImport();
-
-  b.SetRawInfoWithVerificationStatus(NAME_FIRST, u"Märion", kObserved);
-  b.SetRawInfoWithVerificationStatus(NAME_MIDDLE, u"Mitchéll", kObserved);
-  b.SetRawInfoWithVerificationStatus(NAME_LAST, u"Morrison", kObserved);
-  b.SetRawInfoWithVerificationStatus(NAME_FULL, u"", kObserved);
-  b.FinalizeAfterImport();
-
-  EXPECT_TRUE(a.SaveAdditionalInfo(b, "en-US"));
-
-  // The first, middle and last names should have their first letter in
-  // uppercase and have acquired diacritics.
-  EXPECT_EQ(u"Märion", a.GetRawInfo(NAME_FIRST));
-  EXPECT_EQ(u"Mitchéll", a.GetRawInfo(NAME_MIDDLE));
-  EXPECT_EQ(u"Morrison", a.GetRawInfo(NAME_LAST));
-  // In the merging logic the observed lower-case value should remain
-  // because the upper-case-diacritic version is only formatted.
-  EXPECT_EQ(u"marion mitchell morrison", a.GetRawInfo(NAME_FULL));
-}
-
-// Tests that no loss of information happens when SavingAdditionalInfo with a
-// profile with an empty name part.
-TEST(AutofillProfileTest, SaveAdditionalInfo_Name_LossOfInformation) {
-  AutofillProfile a(i18n_model_definition::kLegacyHierarchyCountryCode);
-
-  a.SetRawInfo(NAME_FIRST, u"Marion");
-  a.SetRawInfo(NAME_MIDDLE, u"Mitchell");
-  a.SetRawInfo(NAME_LAST, u"Morrison");
-  a.FinalizeAfterImport();
-  AutofillProfile b = a;
-  b.SetRawInfo(NAME_MIDDLE, u"");
-
-  EXPECT_TRUE(a.SaveAdditionalInfo(b, "en-US"));
-
-  EXPECT_EQ(u"Marion", a.GetRawInfo(NAME_FIRST));
-  EXPECT_EQ(u"Mitchell", a.GetRawInfo(NAME_MIDDLE));
-  EXPECT_EQ(u"Morrison", a.GetRawInfo(NAME_LAST));
-}
-
-// Tests that merging two complementary profiles for names results in a profile
-// with a complete name.
-TEST(AutofillProfileTest, SaveAdditionalInfo_Name_ComplementaryInformation) {
-  AutofillProfile a(i18n_model_definition::kLegacyHierarchyCountryCode);
-
-  a.SetRawInfo(NAME_FIRST, u"Marion");
-  a.SetRawInfo(NAME_MIDDLE, u"Mitchell");
-  a.SetRawInfo(NAME_LAST, u"Morrison");
-  a.FinalizeAfterImport();
-  AutofillProfile b(i18n_model_definition::kLegacyHierarchyCountryCode);
-
-  b.SetRawInfo(NAME_FULL, u"Marion Mitchell Morrison");
-  b.FinalizeAfterImport();
-
-  EXPECT_TRUE(a.SaveAdditionalInfo(b, "en-US"));
-
-  // The first, middle and last names should be kept and name full should be
-  // added.
-  EXPECT_EQ(u"Marion", a.GetRawInfo(NAME_FIRST));
-  EXPECT_EQ(u"Mitchell", a.GetRawInfo(NAME_MIDDLE));
-  EXPECT_EQ(u"Morrison", a.GetRawInfo(NAME_LAST));
-  EXPECT_EQ(u"Marion Mitchell Morrison", a.GetRawInfo(NAME_FULL));
 }
 
 // Test that the label is correctly set and retrieved from the profile.
@@ -1739,6 +1632,11 @@ TEST(AutofillProfileTest, ConvertToAccountProfile) {
 }
 
 TEST(AutofillProfileTest, RemoveInaccessibleProfileValues) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures({features::kAutofillUseI18nAddressModel,
+                                 features::kAutofillUseDEAddressModel,
+                                 features::kAutofillUseINAddressModel},
+                                {});
   // Returns true if at least one field was removed.
   auto RemoveInaccessibleProfileValues = [](AutofillProfile& profile) {
     const FieldTypeSet inaccessible_fields =
@@ -1751,11 +1649,11 @@ TEST(AutofillProfileTest, RemoveInaccessibleProfileValues) {
       i18n_model_definition::kLegacyHierarchyCountryCode);
   actual_profile.SetRawInfo(NAME_FIRST, u"Florian");
 
-  // State is uncommon in Germany and inaccessible in the settings. Expect it
+  // State is uncommon in Bolivia and inaccessible in the settings. Expect it
   // to be removed.
-  actual_profile.SetRawInfo(ADDRESS_HOME_COUNTRY, u"DE");
+  actual_profile.SetRawInfo(ADDRESS_HOME_COUNTRY, u"BO");
   AutofillProfile expected_profile = actual_profile;
-  actual_profile.SetRawInfo(ADDRESS_HOME_STATE, u"Bayern");
+  actual_profile.SetRawInfo(ADDRESS_HOME_STATE, u"Dummy state");
   EXPECT_TRUE(RemoveInaccessibleProfileValues(actual_profile));
   EXPECT_EQ(actual_profile.Compare(expected_profile), 0);
 
@@ -1766,9 +1664,19 @@ TEST(AutofillProfileTest, RemoveInaccessibleProfileValues) {
   EXPECT_TRUE(RemoveInaccessibleProfileValues(actual_profile));
   EXPECT_EQ(actual_profile.Compare(expected_profile), 0);
 
+  // Dependent locality exist in India as part of the street address, which is a
+  // settings visible node. These should be preserved despite not being
+  // recognized by libaddressinput.
+  actual_profile.SetRawInfo(ADDRESS_HOME_COUNTRY, u"IN");
+  actual_profile.SetRawInfo(ADDRESS_HOME_DEPENDENT_LOCALITY, u"Locality");
+  expected_profile = actual_profile;
+  EXPECT_FALSE(RemoveInaccessibleProfileValues(actual_profile));
+  EXPECT_EQ(actual_profile.Compare(expected_profile), 0);
+
   // If no country is set, the US requirements are used.
   // The US uses both ZIP codes and states.
-  actual_profile.ClearFields({ADDRESS_HOME_COUNTRY});
+  actual_profile.ClearFields(
+      {ADDRESS_HOME_COUNTRY, ADDRESS_HOME_DEPENDENT_LOCALITY});
   actual_profile.SetRawInfo(ADDRESS_HOME_STATE, u"CA");
   actual_profile.SetRawInfo(ADDRESS_HOME_ZIP, u"12345");
   expected_profile = actual_profile;

@@ -26,12 +26,10 @@ var ShortcutCustomizationAppBrowserTest = class extends PolymerTest {
   get featureList() {
     return {
       enabled: [
-        'features::kShortcutCustomizationApp',
         'features::kShortcutCustomization',
-        // TODO(b/276493795): Remove jelly and
-        // shortcut-customization-jelly after the Jelly experiment is launched.
+        // TODO(b/276493795): Remove jelly after the Jelly experiment
+        // is launched.
         'chromeos::features::kJelly',
-        'ash::features::kShortcutCustomizationJelly',
       ]
     };
   }

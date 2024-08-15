@@ -21,6 +21,8 @@ import com.google.android.material.tabs.TabLayoutMediator;
 
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.settings.ProfileDependentSetting;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 
 // Vivaldi
@@ -31,31 +33,31 @@ import androidx.appcompat.widget.Toolbar;
 /**
  * Fragment with a {@link TabLayout} containing a basic and an advanced version of the CBD dialog.
  */
-public class ClearBrowsingDataTabsFragment extends Fragment {
+public class ClearBrowsingDataTabsFragment extends Fragment implements ProfileDependentSetting {
     public static final int CBD_TAB_COUNT = 2;
 
+    private Profile mProfile;
     private ClearBrowsingDataFetcher mFetcher;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        if (savedInstanceState == null) {
-            mFetcher = new ClearBrowsingDataFetcher();
-            mFetcher.fetchImportantSites();
-            mFetcher.requestInfoAboutOtherFormsOfBrowsingHistory();
-        } else {
-            mFetcher =
-                    savedInstanceState.getParcelable(
-                            ClearBrowsingDataFragment.CLEAR_BROWSING_DATA_FETCHER);
-        }
-
         RecordUserAction.record("ClearBrowsingData_DialogCreated");
     }
 
     @Override
     public View onCreateView(
             LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        if (savedInstanceState == null) {
+            mFetcher = new ClearBrowsingDataFetcher();
+            mFetcher.fetchImportantSites(mProfile);
+            mFetcher.requestInfoAboutOtherFormsOfBrowsingHistory(mProfile);
+        } else {
+            mFetcher =
+                    savedInstanceState.getParcelable(
+                            ClearBrowsingDataFragment.CLEAR_BROWSING_DATA_FETCHER);
+        }
+
         // Inflate the layout for this fragment.
         View view = inflater.inflate(R.layout.clear_browsing_data_tabs, container, false);
 
@@ -74,12 +76,14 @@ public class ClearBrowsingDataTabsFragment extends Fragment {
                             tab.setText(getTabTitle(position));
                         })
                 .attach();
-        int tabIndex = BrowsingDataBridge.getInstance().getLastSelectedClearBrowsingDataTab();
+        int tabIndex =
+                BrowsingDataBridge.getForProfile(mProfile).getLastSelectedClearBrowsingDataTab();
         TabLayout.Tab tab = tabLayout.getTabAt(tabIndex);
         if (tab != null) {
             tab.select();
         }
-        tabLayout.addOnTabSelectedListener(new TabSelectListener());
+        tabLayout.addOnTabSelectedListener(new TabSelectListener(mProfile));
+
         if (!ChromeApplicationImpl.isVivaldi() || getActivity() instanceof SettingsActivity) {
         // Set outline provider to null to prevent shadow from being drawn between title and tabs.
         SettingsActivity activity = (SettingsActivity) getActivity();
@@ -121,6 +125,12 @@ public class ClearBrowsingDataTabsFragment extends Fragment {
         outState.putParcelable(ClearBrowsingDataFragment.CLEAR_BROWSING_DATA_FETCHER, mFetcher);
     }
 
+    @Override
+    public void setProfile(Profile profile) {
+        assert profile != null;
+        mProfile = profile;
+    }
+
     private static class ClearBrowsingDataPagerAdapter extends FragmentStateAdapter {
         private final ClearBrowsingDataFetcher mFetcher;
 
@@ -158,10 +168,18 @@ public class ClearBrowsingDataTabsFragment extends Fragment {
     }
 
     private static class TabSelectListener implements TabLayout.OnTabSelectedListener {
+        private final Profile mProfile;
+
+        TabSelectListener(Profile profile) {
+            assert profile != null;
+            mProfile = profile;
+        }
+
         @Override
         public void onTabSelected(TabLayout.Tab tab) {
             int tabIndex = tab.getPosition();
-            BrowsingDataBridge.getInstance().setLastSelectedClearBrowsingDataTab(tabIndex);
+            BrowsingDataBridge.getForProfile(mProfile)
+                    .setLastSelectedClearBrowsingDataTab(tabIndex);
             if (tabIndex == ClearBrowsingDataTab.BASIC) {
                 RecordUserAction.record("ClearBrowsingData_SwitchTo_BasicTab");
             } else {

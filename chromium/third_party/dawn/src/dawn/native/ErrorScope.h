@@ -37,6 +37,8 @@ namespace dawn::native {
 
 class ErrorScope {
   public:
+    ErrorScope(wgpu::ErrorType error, std::string_view message);
+
     wgpu::ErrorType GetErrorType() const;
     const std::string& GetErrorMessage() const;
 
@@ -62,7 +64,7 @@ class ErrorScopeStack {
     // Pass an error to the scopes in the stack. Returns true if one of the scopes
     // captured the error. Returns false if the error should be forwarded to the
     // uncaptured error callback.
-    bool HandleError(wgpu::ErrorType type, const char* message);
+    bool HandleError(wgpu::ErrorType type, std::string_view message);
 
   private:
     std::vector<ErrorScope> mScopes;

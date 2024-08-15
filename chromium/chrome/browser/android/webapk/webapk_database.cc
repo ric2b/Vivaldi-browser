@@ -10,6 +10,7 @@
 #include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/sequence_checker.h"
 #include "chrome/browser/android/webapk/proto/webapk_database.pb.h"
 #include "chrome/browser/android/webapk/webapk_database_factory.h"
@@ -25,7 +26,9 @@ namespace webapk {
 WebApkDatabase::WebApkDatabase(AbstractWebApkDatabaseFactory* database_factory,
                                ReportErrorCallback error_callback)
     : database_factory_(database_factory),
-      error_callback_(std::move(error_callback)) {}
+      error_callback_(std::move(error_callback)) {
+  CHECK(database_factory_);
+}
 
 WebApkDatabase::~WebApkDatabase() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -73,6 +76,12 @@ void WebApkDatabase::Write(
       std::move(write_batch),
       base::BindOnce(&WebApkDatabase::OnDataWritten,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void WebApkDatabase::DeleteAllDataAndMetadata(
+    syncer::ModelTypeStore::CallbackWithResult callback) {
+  CHECK(store_);
+  store_->DeleteAllDataAndMetadata(std::move(callback));
 }
 
 void WebApkDatabase::OnDatabaseOpened(
@@ -132,6 +141,8 @@ void WebApkDatabase::OnAllMetadataRead(
     registry.emplace(record.id, std::move(proto));
   }
 
+  RecordSyncedWebApkCountHistogram(registry.size());
+
   opened_ = true;
   // This should be a tail call: a callback code may indirectly call |this|
   // methods, like WebApkDatabase::Write()
@@ -148,6 +159,11 @@ void WebApkDatabase::OnDataWritten(
   }
 
   std::move(callback).Run(!error);
+}
+
+void WebApkDatabase::RecordSyncedWebApkCountHistogram(int num_web_apks) const {
+  base::UmaHistogramExactLinear("WebApk.Sync.SyncedWebApkCount", num_web_apks,
+                                51 /* max_count */);
 }
 
 }  // namespace webapk

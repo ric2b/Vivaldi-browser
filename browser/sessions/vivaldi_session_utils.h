@@ -119,9 +119,13 @@ int PinTabs(content::BrowserContext* browser_context,
             base::FilePath path, bool value, std::vector<int32_t> ids);
 // Move one or more tabs to window and index.
 int MoveTabs(content::BrowserContext* browser_context,
-            base::FilePath path, std::vector<int32_t> ids, int before_tab_id,
-            absl::optional<int32_t> window_id, absl::optional<bool> pinned,
-            absl::optional<std::string> group, absl::optional<double> workspace);
+             base::FilePath path,
+             std::vector<int32_t> ids,
+             int before_tab_id,
+             std::optional<int32_t> window_id,
+             std::optional<bool> pinned,
+             std::optional<std::string> group,
+             std::optional<double> workspace);
 // Turn tabs specified in 'ids' into tabstack tabs or removes the tabs if
 // group is empty.
 int SetTabStack(content::BrowserContext* browser_context, base::FilePath path,

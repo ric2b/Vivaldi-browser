@@ -35,7 +35,7 @@ std::unique_ptr<base::Value> GetJsonFromFile(
 
   DCHECK(result->is_dict());
   auto& result_dict = result->GetDict();
-  absl::optional<int> version = result_dict.FindInt(rules_json::kVersion);
+  std::optional<int> version = result_dict.FindInt(rules_json::kVersion);
   if (version.value_or(0) != expected_version) {
     return nullptr;
   }
@@ -71,37 +71,29 @@ OrganizedRulesManager::OrganizedRulesManager(
       content_injection_handler_(content_injection_handler),
       group_(group),
       is_loaded_(false),
-      rule_sources_(rule_manager_->GetRuleSources(group)),
       rules_list_folder_(browser_state_path.Append(GetRulesFolderName())
                              .Append(GetGroupFolderName(group_))),
       organized_rules_changed_callback_(organized_rules_changed_callback),
       rule_read_fail_callback_(rule_read_fail_callback),
       on_start_applying_rules_(on_start_applying_rules),
       file_task_runner_(file_task_runner) {
-  rule_manager_->AddObserver(this);
-
-  UpdateExceptions();
-
-  for (const auto& [rule_source_id, rule_source] : rule_sources_) {
-    ReadCompiledRules(rule_source);
-  }
-
-  if (organized_rules_checksum.empty()) {
-    // We don't have organized rules. Just make sure OnOrganizedRulesLoaded is
-    // called after all the ruleshave been read to trigger a rebuild.
-    file_task_runner->PostTaskAndReply(
-        FROM_HERE, base::DoNothing(),
+  organized_rules_checksum_ = organized_rules_checksum;
+  if (organized_rules_checksum_.empty()) {
+    // We want OnOrganizedRulesLoaded to execute after all loading has been
+    // done, to avoid slowing things down.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
         base::BindOnce(&OrganizedRulesManager::OnOrganizedRulesLoaded,
-                       weak_factory_.GetWeakPtr(), "", nullptr));
+                       weak_factory_.GetWeakPtr(), nullptr));
   } else {
     file_task_runner_->PostTaskAndReplyWithResult(
         FROM_HERE,
         base::BindOnce(&GetJsonFromFile,
                        rules_list_folder_.Append(kOrganizedRulesFileName),
-                       organized_rules_checksum,
+                       organized_rules_checksum_,
                        GetOrganizedRulesVersionNumber()),
         base::BindOnce(&OrganizedRulesManager::OnOrganizedRulesLoaded,
-                       weak_factory_.GetWeakPtr(), organized_rules_checksum));
+                       weak_factory_.GetWeakPtr()));
   }
 }
 
@@ -237,17 +229,50 @@ void OrganizedRulesManager::ReorganizeRules() {
 }
 
 void OrganizedRulesManager::OnOrganizedRulesLoaded(
-    std::string checksum,
     std::unique_ptr<base::Value> non_ios_rules_and_metadata) {
-  is_loaded_ = true;
+  rule_sources_ = rule_manager_->GetRuleSources(group_),
+  rule_manager_->AddObserver(this);
+
+  UpdateExceptions();
+
+  for (const auto& [rule_source_id, rule_source] : rule_sources_) {
+    ReadCompiledRules(rule_source);
+  }
+
   if (rule_sources_.empty()) {
     Disable();
     return;
   }
 
+  bool organized_rules_ok =
+      CheckOrganizedRules(non_ios_rules_and_metadata.get());
+
+  if (organized_rules_ok) {
+    base::Value::Dict* scriptlet_rules =
+        non_ios_rules_and_metadata->GetDict().FindDict(
+            rules_json::kScriptletRules);
+    if (scriptlet_rules)
+      content_injection_handler_->SetScriptletInjectionRules(
+          group_, std::move(*scriptlet_rules));
+
+    content_rule_list_provider_->ApplyLoadedRules();
+  } else {
+    organized_rules_checksum_.clear();
+  }
+
+  // Queue firing OnAllRulesLoaded after all the loads queued in
+  // ReadCompiledRules. This ensures that OnAllRulesLoaded is queued after
+  // all of the OnRulesRead callbacks.
+  file_task_runner_->PostTaskAndReply(
+      FROM_HERE, base::DoNothing(),
+      base::BindOnce(&OrganizedRulesManager::OnAllRulesLoaded,
+                     weak_factory_.GetWeakPtr(), !organized_rules_ok));
+}
+
+bool OrganizedRulesManager::CheckOrganizedRules(
+    base::Value* non_ios_rules_and_metadata) {
   if (!non_ios_rules_and_metadata) {
-    ReorganizeRules();
-    return;
+    return false;
   }
   DCHECK(non_ios_rules_and_metadata->is_dict());
 
@@ -257,42 +282,32 @@ void OrganizedRulesManager::OnOrganizedRulesLoaded(
   // starting fresh instead.
   if (non_ios_rules_and_metadata->GetDict().contains("organized-rules")) {
     content_rule_list_provider_->InstallContentRuleLists(base::Value::List());
-    ReorganizeRules();
-    return;
+    return false;
   }
 
   base::Value::Dict* metadata =
       non_ios_rules_and_metadata->GetDict().FindDict(rules_json::kMetadata);
   if (!metadata) {
-    ReorganizeRules();
-    return;
-  }
-
-  absl::optional<int> version = metadata->FindInt(rules_json::kVersion);
-  DCHECK(version);
-  if (*version != GetOrganizedRulesVersionNumber()) {
-    ReorganizeRules();
-    return;
+    return false;
   }
 
   base::Value::Dict* list_checksums =
       metadata->FindDict(rules_json::kListChecksums);
   DCHECK(list_checksums);
 
-  if (list_checksums->size() != compiled_rules_.size()) {
-    ReorganizeRules();
-    return;
+  if (list_checksums->size() != rule_sources_.size()) {
+    return false;
   } else {
     for (auto [string_id, list_checksum] : *list_checksums) {
       DCHECK(list_checksum.is_string());
       uint32_t id = 0;
       bool result = base::StringToUint(string_id, &id);
       DCHECK(result);
-      auto compiled_rules = compiled_rules_.find(id);
-      if (compiled_rules == compiled_rules_.end() ||
-          compiled_rules->second->checksum() != list_checksum.GetString()) {
-        ReorganizeRules();
-        return;
+      auto rule_source = rule_sources_.find(id);
+      if (rule_source == rule_sources_.end() ||
+          rule_source->second.rules_list_checksum !=
+              list_checksum.GetString()) {
+        return false;
       }
     }
   }
@@ -300,8 +315,7 @@ void OrganizedRulesManager::OnOrganizedRulesLoaded(
   std::string* exceptions_checksum =
       metadata->FindString(rules_json::kExceptionRule);
   if ((exceptions_checksum == nullptr) != exception_rule_.is_none()) {
-    ReorganizeRules();
-    return;
+    return false;
   }
 
   if (exceptions_checksum) {
@@ -311,20 +325,18 @@ void OrganizedRulesManager::OnOrganizedRulesLoaded(
              .Serialize(exception_rule_))
       NOTREACHED();
     if (*exceptions_checksum != CalculateBufferChecksum(serialized_exception)) {
-      ReorganizeRules();
-      return;
+      return false;
     }
   }
 
-  base::Value::Dict* scriptlet_rules =
-      non_ios_rules_and_metadata->GetDict().FindDict(
-          rules_json::kScriptletRules);
-  if (scriptlet_rules)
-    content_injection_handler_->SetScriptletInjectionRules(
-        group_, std::move(*scriptlet_rules));
+  return true;
+}
 
-  content_rule_list_provider_->ApplyLoadedRules();
-  organized_rules_checksum_ = checksum;
+void OrganizedRulesManager::OnAllRulesLoaded(bool should_reorganize_rules) {
+  is_loaded_ = true;
+  if (should_reorganize_rules) {
+    ReorganizeRules();
+  }
 }
 
 void OrganizedRulesManager::Disable() {
@@ -377,7 +389,7 @@ void OrganizedRulesManager::OnOrganizedRulesReady(base::Value rules) {
           weak_factory_.GetWeakPtr(), build_result_));
 }
 
-bool OrganizedRulesManager::IsApplyingRules() {
+bool OrganizedRulesManager::IsApplyingRules() const {
   return !organized_rules_ready_callback_.callback().is_null() ||
          content_rule_list_provider_->IsApplyingRules();
 }

@@ -3,11 +3,9 @@
 // found in the LICENSE file.
 
 import * as i18n from '../../../../core/i18n/i18n.js';
-import * as Platform from '../../../../core/platform/platform.js';
 import {assertNotNullOrUndefined} from '../../../../core/platform/platform.js';
 import type * as SDK from '../../../../core/sdk/sdk.js';
 import * as DataGrid from '../../../../ui/components/data_grid/data_grid.js';
-import * as ComponentHelpers from '../../../../ui/components/helpers/helpers.js';
 import * as LegacyWrapper from '../../../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import type * as UI from '../../../../ui/legacy/legacy.js';
 import * as LitHtml from '../../../../ui/lit-html/lit-html.js';
@@ -61,11 +59,10 @@ export class PreloadingMismatchedHeadersGrid extends LegacyWrapper.LegacyWrapper
       return;
     }
 
-    const k = Platform.StringUtilities.kebab;
     const reportsGridData: DataGrid.DataGridController.DataGridControllerData = {
       columns: [
         {
-          id: k('header-name'),
+          id: 'header-name',
           title: i18nString(UIStrings.headerName),
           widthWeighting: 30,
           hideable: false,
@@ -73,7 +70,7 @@ export class PreloadingMismatchedHeadersGrid extends LegacyWrapper.LegacyWrapper
           sortable: true,
         },
         {
-          id: k('initial-value'),
+          id: 'initial-value',
           title: i18nString(UIStrings.initialNavigationValue),
           widthWeighting: 30,
           hideable: false,
@@ -81,7 +78,7 @@ export class PreloadingMismatchedHeadersGrid extends LegacyWrapper.LegacyWrapper
           sortable: true,
         },
         {
-          id: k('activation-value'),
+          id: 'activation-value',
           title: i18nString(UIStrings.activationNavigationValue),
           widthWeighting: 30,
           hideable: false,
@@ -129,8 +126,7 @@ export class PreloadingMismatchedHeadersGrid extends LegacyWrapper.LegacyWrapper
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent(
-    'devtools-resources-preloading-mismatched-headers-grid', PreloadingMismatchedHeadersGrid);
+customElements.define('devtools-resources-preloading-mismatched-headers-grid', PreloadingMismatchedHeadersGrid);
 
 declare global {
   interface HTMLElementTagNameMap {

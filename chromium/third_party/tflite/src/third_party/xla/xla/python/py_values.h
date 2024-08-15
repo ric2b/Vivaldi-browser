@@ -1,4 +1,4 @@
-/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2020 The OpenXLA Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,16 +18,21 @@ limitations under the License.
 #ifndef XLA_PYTHON_PY_VALUES_H_
 #define XLA_PYTHON_PY_VALUES_H_
 
-#include <memory>
+#include <cstdint>
 #include <string>
 #include <tuple>
 #include <utility>
 
+#include "absl/container/inlined_vector.h"
+#include "absl/status/statusor.h"
+#include "absl/types/span.h"
 #include "pybind11/numpy.h"  // from @pybind11
 #include "pybind11/pybind11.h"  // from @pybind11
-#include "xla/pjrt/pjrt_client.h"
+#include "xla/python/ifrt/array.h"
+#include "xla/python/ifrt/device.h"
 #include "xla/python/ifrt/memory.h"
-#include "xla/python/py_client.h"
+#include "xla/python/nb_numpy.h"
+#include "tsl/concurrency/ref_count.h"
 
 namespace xla {
 
@@ -59,13 +64,14 @@ struct DevicePutOptions {
   bool squash_64bit_types = false;
   bool allow_zero_copy = true;
 };
-StatusOr<DevicePutResult> DevicePut(pybind11::handle arg, ifrt::Client* client,
-                                    ifrt::Device* to_device,
-                                    const DevicePutOptions& options,
-                                    ifrt::MemoryKind to_memory_kind);
+absl::StatusOr<DevicePutResult> DevicePut(pybind11::handle arg,
+                                          ifrt::Client* client,
+                                          ifrt::Device* to_device,
+                                          const DevicePutOptions& options,
+                                          ifrt::MemoryKind to_memory_kind);
 
 // Returns `true` if `arg` is a JAX float0 array.
-bool IsFloat0(pybind11::array arg);
+bool IsFloat0(xla::nb_numpy_ndarray arg);
 
 // Describes the abstract shape and dtype of an argument.
 struct PyArgSignature {
@@ -90,8 +96,8 @@ struct PyArgSignature {
 
 // Returns the PyArgSignature associated with an argument. Returns an error if
 // the argument is not supported.
-StatusOr<PyArgSignature> PyArgSignatureOfValue(pybind11::handle arg,
-                                               bool jax_enable_x64);
+absl::StatusOr<PyArgSignature> PyArgSignatureOfValue(pybind11::handle arg,
+                                                     bool jax_enable_x64);
 
 template <typename H>
 H AbslHashValue(H h, const xla::PyArgSignature& s) {

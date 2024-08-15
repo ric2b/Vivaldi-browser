@@ -34,27 +34,39 @@ namespace
 
 const int kWebGLMaxStructNesting = 4;
 
-bool ContainsSampler(const TStructure *structType);
-
-bool ContainsSampler(const TType &type)
+struct IsSamplerFunc
 {
-    if (IsSampler(type.getBasicType()))
+    bool operator()(TBasicType type) { return IsSampler(type); }
+};
+struct IsOpaqueFunc
+{
+    bool operator()(TBasicType type) { return IsOpaqueType(type); }
+};
+
+template <typename OpaqueFunc>
+bool ContainsOpaque(const TStructure *structType);
+
+template <typename OpaqueFunc>
+bool ContainsOpaque(const TType &type)
+{
+    if (OpaqueFunc{}(type.getBasicType()))
     {
         return true;
     }
     if (type.getBasicType() == EbtStruct)
     {
-        return ContainsSampler(type.getStruct());
+        return ContainsOpaque<OpaqueFunc>(type.getStruct());
     }
 
     return false;
 }
 
-bool ContainsSampler(const TStructure *structType)
+template <typename OpaqueFunc>
+bool ContainsOpaque(const TStructure *structType)
 {
     for (const auto &field : structType->fields())
     {
-        if (ContainsSampler(*field->type()))
+        if (ContainsOpaque<OpaqueFunc>(*field->type()))
             return true;
     }
     return false;
@@ -1019,6 +1031,13 @@ bool TParseContext::checkConstructorArguments(const TSourceLoc &line,
                       "constructor");
                 return false;
             }
+            if (argTyped->getBasicType() == EbtInterfaceBlock)
+            {
+                error(line,
+                      "an interface block cannot be used as a constructor argument for this type",
+                      "constructor");
+                return false;
+            }
             if (argTyped->getType().isArray())
             {
                 error(line, "constructing from a non-dereferenced array", "constructor");
@@ -1113,7 +1132,7 @@ bool TParseContext::checkIsNotOpaqueType(const TSourceLoc &line,
 {
     if (pType.type == EbtStruct)
     {
-        if (ContainsSampler(pType.userDef))
+        if (ContainsOpaque<IsSamplerFunc>(pType.userDef))
         {
             std::stringstream reasonStream = sh::InitializeStream<std::stringstream>();
             reasonStream << reason << " (structure contains a sampler)";
@@ -1406,9 +1425,6 @@ bool TParseContext::declareVariable(const TSourceLoc &line,
 
     (*variable) = new TVariable(&symbolTable, identifier, type, symbolType);
 
-    ASSERT(type->getLayoutQualifier().index == -1 ||
-           (isExtensionEnabled(TExtension::EXT_blend_func_extended) &&
-            mShaderType == GL_FRAGMENT_SHADER && mShaderVersion >= 300));
     if (type->getQualifier() == EvqFragmentOut)
     {
         if (type->getLayoutQualifier().index != -1 && type->getLayoutQualifier().location == -1)
@@ -2896,7 +2912,7 @@ TIntermNode *TParseContext::addLoop(TLoopType type,
                (typedCond->getBasicType() == EbtBool && !typedCond->isArray() &&
                 !typedCond->isVector()));
 
-        node = new TIntermLoop(type, init, typedCond, expr, EnsureBlock(body));
+        node = new TIntermLoop(type, init, typedCond, expr, EnsureLoopBodyBlock(body));
         node->setLine(line);
         return node;
     }
@@ -2919,7 +2935,7 @@ TIntermNode *TParseContext::addLoop(TLoopType type,
 
     TIntermBinary *conditionInit = new TIntermBinary(EOpAssign, declarator->getLeft()->deepCopy(),
                                                      declarator->getRight()->deepCopy());
-    TIntermLoop *loop = new TIntermLoop(type, init, conditionInit, expr, EnsureBlock(body));
+    TIntermLoop *loop = new TIntermLoop(type, init, conditionInit, expr, EnsureLoopBodyBlock(body));
     block->appendStatement(loop);
     loop->setLine(line);
     block->setLine(line);
@@ -3617,7 +3633,10 @@ TIntermGlobalQualifierDeclaration *TParseContext::parseGlobalQualifierDeclaratio
                                     typeQualifier.line);
     checkMemoryQualifierIsNotSpecified(typeQualifier.memoryQualifier, typeQualifier.line);
 
-    symbolTable.addInvariantVarying(*variable);
+    if (typeQualifier.invariant)
+    {
+        symbolTable.addInvariantVarying(*variable);
+    }
 
     TIntermSymbol *intermSymbol = new TIntermSymbol(variable);
     intermSymbol->setLine(identifierLoc);
@@ -4701,6 +4720,11 @@ bool TParseContext::checkUnsizedArrayConstructorArgumentDimensionality(
     {
         const TIntermTyped *element = arg->getAsTyped();
         ASSERT(element);
+        if (element->getType().isUnsizedArray())
+        {
+            error(line, "constructing from an unsized array", "constructor");
+            return false;
+        }
         size_t dimensionalityFromElement = element->getType().getNumArraySizes() + 1u;
         if (dimensionalityFromElement > type.getNumArraySizes())
         {
@@ -4979,12 +5003,9 @@ TIntermDeclaration *TParseContext::addInterfaceBlock(
     {
         TField *field    = (*fieldList)[memberIndex];
         TType *fieldType = field->type();
-        if (IsOpaqueType(fieldType->getBasicType()))
+        if (ContainsOpaque<IsOpaqueFunc>(*fieldType))
         {
-            std::string reason("unsupported type - ");
-            reason += fieldType->getBasicString();
-            reason += " types are not allowed in interface blocks";
-            error(field->line(), reason.c_str(), fieldType->getBasicString());
+            error(field->line(), "Opaque types are not allowed in interface blocks", blockName);
         }
 
         const TQualifier qualifier = fieldType->getQualifier();
@@ -5466,14 +5487,12 @@ TIntermTyped *TParseContext::addIndexExpression(TIntermTyped *baseExpression,
 int TParseContext::checkIndexLessThan(bool outOfRangeIndexIsError,
                                       const TSourceLoc &location,
                                       int index,
-                                      int arraySize,
+                                      unsigned int arraySize,
                                       const char *reason)
 {
-    // Should not reach here with an unsized / runtime-sized array.
-    ASSERT(arraySize > 0);
     // A negative index should already have been checked.
     ASSERT(index >= 0);
-    if (index >= arraySize)
+    if (static_cast<unsigned int>(index) >= arraySize)
     {
         std::stringstream reasonStream = sh::InitializeStream<std::stringstream>();
         reasonStream << reason << " '" << index << "'";
@@ -7666,8 +7685,8 @@ TIntermTyped *TParseContext::addMethod(TFunctionLookup *fnCall, const TSourceLoc
     return CreateZeroNode(TType(EbtInt, EbpUndefined, EvqConst));
 }
 
-TIntermTyped *TParseContext::addNonConstructorFunctionCall(TFunctionLookup *fnCall,
-                                                           const TSourceLoc &loc)
+TIntermTyped *TParseContext::addNonConstructorFunctionCallImpl(TFunctionLookup *fnCall,
+                                                               const TSourceLoc &loc)
 {
     // First check whether the function has been hidden by a variable name or struct typename by
     // using the symbol looked up in the lexical phase. If the function is not hidden, look for one
@@ -7729,10 +7748,7 @@ TIntermTyped *TParseContext::addNonConstructorFunctionCall(TFunctionLookup *fnCa
             {
                 // Treat it like a built-in unary operator.
                 TIntermNode *unaryParamNode = fnCall->arguments().front();
-                TIntermTyped *callNode =
-                    createUnaryMath(op, unaryParamNode->getAsTyped(), loc, fnCandidate);
-                ASSERT(callNode != nullptr);
-                return callNode;
+                return createUnaryMath(op, unaryParamNode->getAsTyped(), loc, fnCandidate);
             }
 
             TIntermAggregate *callNode =
@@ -7762,7 +7778,17 @@ TIntermTyped *TParseContext::addNonConstructorFunctionCall(TFunctionLookup *fnCa
             error(loc, "no matching overloaded function found", fnCall->name());
         }
     }
+    return nullptr;
+}
 
+TIntermTyped *TParseContext::addNonConstructorFunctionCall(TFunctionLookup *fnCall,
+                                                           const TSourceLoc &loc)
+{
+    TIntermTyped *result = addNonConstructorFunctionCallImpl(fnCall, loc);
+    if (result != nullptr)
+    {
+        return result;
+    }
     // Error message was already written. Put on an unused node for error recovery.
     return CreateZeroNode(TType(EbtFloat, EbpMedium, EvqConst));
 }

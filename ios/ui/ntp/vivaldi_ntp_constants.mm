@@ -58,12 +58,20 @@ NSString* const vNTPToolbarTextColor =
 // Color for the new tab page toolbar item when selected or highlighted
 NSString* const vNTPToolbarTextHighlightedColor =
     @"vivaldi_ntp_toolbar_text_highlighted_color";
+// Color for the new tab page toolbar more button light tint
+NSString* const vNTPToolbarMoreLightTintColor =
+    @"vivaldi_ntp_toolbar_more_light_color";
+// Color for the new tab page toolbar more button dark tint
+NSString* const vNTPToolbarMoreDarkTintColor =
+    @"vivaldi_ntp_toolbar_more_dark_color";
 
 #pragma mark - ICONS
 // Image names for the search icon.
 NSString* vNTPSearchIcon = @"vivaldi_ntp_search";
 // Image name for toolbar sort icon
 NSString* vNTPToolbarSortIcon = @"vivaldi_ntp_toolbar_sort";
+// Image name for toolbar more icon
+NSString* vNTPToolbarMoreIcon = @"vivaldi_ntp_toolbar_more";
 // Image name for private mode page background
 NSString* vNTPPrivateTabBG = @"vivaldi_private_tab_bg";
 // Image name for private mode page ghost

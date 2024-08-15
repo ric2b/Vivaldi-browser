@@ -171,7 +171,7 @@ void RuntimeAPI::OnProfileAvatarChanged(Profile* profile) {
 ExtensionFunction::ResponseAction RuntimePrivateExitFunction::Run() {
   using vivaldi::runtime_private::Exit::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   if (!browser_shutdown::IsTryingToQuit()) {
     // Free any open devtools if the user selects Exit from the menu.
@@ -219,7 +219,7 @@ RuntimePrivateSetFeatureEnabledFunction::Run() {
   using vivaldi::runtime_private::SetFeatureEnabled::Params;
   namespace Results = vivaldi::runtime_private::SetFeatureEnabled::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   bool found = vivaldi_runtime_feature::Enable(
@@ -311,7 +311,7 @@ ExtensionFunction::ResponseAction RuntimePrivateGetUserProfilesFunction::Run() {
   using vivaldi::runtime_private::GetUserProfiles::Params;
   namespace Results = vivaldi::runtime_private::GetUserProfiles::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   ProfileManager* manager = g_browser_process->profile_manager();
@@ -420,7 +420,7 @@ void RuntimePrivateGetUserProfilesFunction::ProcessImagesOnWorkerThread(
     std::string image_data;
     base::StringPiece base64_input(
         reinterpret_cast<const char*>(&buffer.data()[0]), buffer.size());
-    base::Base64Encode(base64_input, &image_data);
+    image_data = base::Base64Encode(base64_input);
 
     // Mime type does not matter
     image_data.insert(0, base::StringPrintf("data:image/png;base64,"));
@@ -446,7 +446,7 @@ RuntimePrivateOpenNamedProfileFunction::Run() {
   using vivaldi::runtime_private::OpenNamedProfile::Params;
   namespace Results = vivaldi::runtime_private::OpenNamedProfile::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   bool success = false;
@@ -505,7 +505,7 @@ RuntimePrivateUpdateActiveProfileFunction::Run() {
   using vivaldi::runtime_private::UpdateActiveProfile::Params;
   namespace Results = vivaldi::runtime_private::UpdateActiveProfile::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::u16string name = base::UTF8ToUTF16(params->name);
@@ -567,7 +567,7 @@ ExtensionFunction::ResponseAction RuntimePrivateCreateProfileFunction::Run() {
   if (!profiles::IsMultipleProfilesEnabled()) {
     return RespondNow(ArgumentList(Results::Create(false)));
   }
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::u16string name = base::UTF8ToUTF16(params->name);
@@ -637,7 +637,7 @@ ExtensionFunction::ResponseAction
 RuntimePrivateGetProfileStatisticsFunction::Run() {
   using vivaldi::runtime_private::GetProfileStatistics::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   base::FilePath profile_path =
@@ -695,7 +695,7 @@ ExtensionFunction::ResponseAction RuntimePrivateDeleteProfileFunction::Run() {
   namespace Results = vivaldi::runtime_private::DeleteProfile::Results;
   using vivaldi::runtime_private::DeleteProfile::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   base::FilePath profile_path =

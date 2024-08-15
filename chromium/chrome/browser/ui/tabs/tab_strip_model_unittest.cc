@@ -29,6 +29,7 @@
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
+#include "chrome/browser/ui/tabs/tab_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/tabs/test_tab_strip_model_delegate.h"
@@ -738,9 +739,9 @@ TEST_F(TabStripModelTest, TestTabHandlesStaticTabstrip) {
   EXPECT_TRUE(tabstrip.empty());
 
   tabstrip.AppendWebContents(CreateWebContentsWithID(1), true);
-  const TabHandle handle1 = tabstrip.GetTabHandleAt(0);
+  const tabs::TabHandle handle1 = tabstrip.GetTabHandleAt(0);
   tabstrip.AppendWebContents(CreateWebContentsWithID(2), true);
-  const TabHandle handle2 = tabstrip.GetTabHandleAt(1);
+  const tabs::TabHandle handle2 = tabstrip.GetTabHandleAt(1);
 
   EXPECT_EQ(0, tabstrip.GetIndexOfTab(handle1));
   EXPECT_EQ(handle1, tabstrip.GetTabHandleAt(0));
@@ -754,9 +755,9 @@ TEST_F(TabStripModelTest, TestTabHandlesMovingTabInSameTabstrip) {
   EXPECT_TRUE(tabstrip.empty());
 
   tabstrip.AppendWebContents(CreateWebContentsWithID(1), true);
-  const TabHandle handle1 = tabstrip.GetTabHandleAt(0);
+  const tabs::TabHandle handle1 = tabstrip.GetTabHandleAt(0);
   tabstrip.AppendWebContents(CreateWebContentsWithID(2), true);
-  const TabHandle handle2 = tabstrip.GetTabHandleAt(1);
+  const tabs::TabHandle handle2 = tabstrip.GetTabHandleAt(1);
 
   tabstrip.MoveWebContentsAt(0, 1, false);
 
@@ -772,7 +773,7 @@ TEST_F(TabStripModelTest, TestTabHandlesTabClosed) {
   EXPECT_TRUE(tabstrip.empty());
 
   tabstrip.AppendWebContents(CreateWebContentsWithID(1), true);
-  const TabHandle handle = tabstrip.GetTabHandleAt(0);
+  const tabs::TabHandle handle = tabstrip.GetTabHandleAt(0);
   tabstrip.AppendWebContents(CreateWebContentsWithID(2), true);
 
   tabstrip.CloseWebContentsAt(0, TabCloseTypes::CLOSE_NONE);
@@ -789,7 +790,8 @@ TEST_F(TabStripModelTest, TestTabHandlesOutOfBounds) {
   tabstrip.AppendWebContents(CreateWebContentsWithID(1), true);
   tabstrip.AppendWebContents(CreateWebContentsWithID(2), true);
 
-  EXPECT_EQ(TabStripModel::kNoTab, tabstrip.GetIndexOfTab(TabHandle::Null()));
+  EXPECT_EQ(TabStripModel::kNoTab,
+            tabstrip.GetIndexOfTab(tabs::TabHandle::Null()));
   EXPECT_DEATH_IF_SUPPORTED(tabstrip.GetTabHandleAt(2).Get(), "");
   EXPECT_DEATH_IF_SUPPORTED(tabstrip.GetTabHandleAt(-1).Get(), "");
 }
@@ -800,7 +802,7 @@ TEST_F(TabStripModelTest, TestTabHandlesAcrossModels) {
   ASSERT_TRUE(tabstrip.empty());
 
   tabstrip.AppendWebContents(CreateWebContentsWithID(1), true);
-  const TabHandle handle = tabstrip.GetTabHandleAt(0);
+  const tabs::TabHandle handle = tabstrip.GetTabHandleAt(0);
   content::WebContents* raw_contents = handle.Get()->contents();
   tabstrip.AppendWebContents(CreateWebContentsWithID(2), true);
   content::WebContents* const opener = tabstrip.GetWebContentsAt(1);
@@ -819,7 +821,8 @@ TEST_F(TabStripModelTest, TestTabHandlesAcrossModels) {
   // Detach the tab, and the TabModel should continue to exist, but its state
   // should get mostly reset.
 
-  std::unique_ptr<TabModel> owned_tab = tabstrip.DetachTabAtForInsertion(0);
+  std::unique_ptr<tabs::TabModel> owned_tab =
+      tabstrip.DetachTabAtForInsertion(0);
   EXPECT_EQ(owned_tab.get(), handle.Get());
   EXPECT_EQ(nullptr, handle.Get()->owning_model());
 
@@ -4669,4 +4672,57 @@ TEST_F(TabStripModelTest, ToggleMuteUnmuteMultipleSites) {
   EXPECT_FALSE(chrome::IsSiteMuted(tabstrip, 1));
 
   tabstrip.CloseAllTabs();
+}
+
+TEST_F(TabStripModelTest, AppendTab) {
+  TestTabStripModelDelegate delegate;
+  std::unique_ptr<TabStripModel> tabstrip =
+      std::make_unique<TabStripModel>(&delegate, profile());
+  ASSERT_TRUE(tabstrip->empty());
+
+  // Create a 2 tabs to serve as an opener and the previous opener.
+  PrepareTabs(tabstrip.get(), 4);
+  ASSERT_EQ(4, tabstrip->count());
+
+  // Force the opener of tab in index 1 to be tab at index 0.
+  tabstrip->SetOpenerOfWebContentsAt(1, tabstrip->GetWebContentsAt(0));
+  ASSERT_EQ(tabstrip->GetWebContentsAt(0),
+            tabstrip->GetTabHandleAt(1).Get()->opener());
+
+  // Detach 2 tabs for the test, one for each option.
+  std::unique_ptr<tabs::TabModel> tab_model_with_foreground_true =
+      tabstrip->DetachTabAtForInsertion(2);
+  tabs::TabModel* tab_model_with_foreground_true_ptr =
+      tab_model_with_foreground_true.get();
+  ASSERT_EQ(3, tabstrip->count());
+  ASSERT_EQ(tab_model_with_foreground_true->owning_model(), nullptr);
+
+  std::unique_ptr<tabs::TabModel> tab_model_with_foreground_false =
+      tabstrip->DetachTabAtForInsertion(2);
+  tabs::TabModel* tab_model_with_foreground_false_ptr =
+      tab_model_with_foreground_false.get();
+  ASSERT_EQ(2, tabstrip->count());
+  ASSERT_EQ(tab_model_with_foreground_false->owning_model(), nullptr);
+
+  // Add a 3rd tab using the foreground option. When the foreground option is
+  // used, the new tab should become active, and the previous tab should become
+  // the opener for the newly active tab.
+  tabstrip->AppendTab(std::move(tab_model_with_foreground_true),
+                      /*foreground=*/true);
+  EXPECT_TRUE(tabstrip->ContainsIndex(2));
+  EXPECT_EQ(2, tabstrip->active_index());
+  EXPECT_EQ(tabstrip->GetWebContentsAt(1),
+            tabstrip->GetTabHandleAt(2).Get()->opener());
+  EXPECT_EQ(tab_model_with_foreground_true_ptr->owning_model(), tabstrip.get());
+
+  // Add a 4th tab using the non foreground option. this is similar to using the
+  // AddType NONE, which should not set the active tab and should not inherit
+  // the opener.
+  tabstrip->AppendTab(std::move(tab_model_with_foreground_false),
+                      /*foreground=*/false);
+  EXPECT_TRUE(tabstrip->ContainsIndex(3));
+  EXPECT_EQ(2, tabstrip->active_index());
+  EXPECT_EQ(nullptr, tabstrip->GetTabHandleAt(3).Get()->opener());
+  EXPECT_EQ(tab_model_with_foreground_false_ptr->owning_model(),
+            tabstrip.get());
 }

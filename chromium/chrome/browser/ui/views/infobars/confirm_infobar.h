@@ -8,6 +8,7 @@
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/ui/views/infobars/infobar_view.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
+#include "ui/base/interaction/element_identifier.h"
 
 namespace views {
 class Label;
@@ -16,9 +17,11 @@ class MdTextButton;
 
 // An infobar that shows a message, up to two optional buttons, and an optional,
 // right-aligned link.  This is commonly used to do things like:
-// "Would you like to do X?  [Yes]  [No]  [<custom button>]    _Learn More_ [x]"
+// "Would you like to do X?  [Yes]  [No]    _Learn More_ [x]"
 class ConfirmInfoBar : public InfoBarView {
  public:
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kInfoBarElementId);
+
   explicit ConfirmInfoBar(std::unique_ptr<ConfirmInfoBarDelegate> delegate);
 
   ConfirmInfoBar(const ConfirmInfoBar&) = delete;
@@ -27,7 +30,7 @@ class ConfirmInfoBar : public InfoBarView {
   ~ConfirmInfoBar() override;
 
   // InfoBarView:
-  void Layout() override;
+  void Layout(PassKey) override;
 
   ConfirmInfoBarDelegate* GetDelegate();
 
@@ -40,16 +43,14 @@ class ConfirmInfoBar : public InfoBarView {
  private:
   void OkButtonPressed();
   void CancelButtonPressed();
-  void ExtraButtonPressed();
 
-  // Returns the width of all content other than the label and link.  Layout()
-  // uses this to determine how much space the label and link can take.
+  // Returns the width of all content other than the label and link.
+  // Layout uses this to determine how much space the label and link can take.
   int NonLabelWidth() const;
 
   raw_ptr<views::Label> label_ = nullptr;
   raw_ptr<views::MdTextButton> ok_button_ = nullptr;
   raw_ptr<views::MdTextButton> cancel_button_ = nullptr;
-  raw_ptr<views::MdTextButton> extra_button_ = nullptr;
   raw_ptr<views::Link> link_ = nullptr;
 };
 

@@ -5,8 +5,11 @@
 #import "ios/chrome/browser/ui/omnibox/popup/row/omnibox_popup_row_content_view.h"
 
 #import "base/check.h"
+#import "base/metrics/histogram_functions.h"
 #import "ios/chrome/browser/shared/ui/elements/extended_touch_target_button.h"
 #import "ios/chrome/browser/shared/ui/elements/fade_truncating_label.h"
+#import "ios/chrome/browser/shared/ui/util/attributed_string_util.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_icon_view.h"
 #import "ios/chrome/browser/ui/omnibox/popup/row/omnibox_popup_row_delegate.h"
 #import "ios/chrome/browser/ui/omnibox/popup/row/omnibox_popup_row_util.h"
@@ -27,12 +30,19 @@ const CGFloat kMultilineTextTrailingMargin = 4.0;
 const CGFloat kMultilineLineSpacing = 2.0;
 const CGFloat kTrailingButtonSize = 24;
 const CGFloat kTrailingButtonTrailingMargin = 14;
+/// Trailing button trailing margin with popout omnibox.
+const CGFloat kTrailingButtonTrailingMarginPopout = 22.0;
 const CGFloat kTextSpacing = 2.0f;
 const CGFloat kLeadingIconViewSize = 30.0f;
 const CGFloat kLeadingSpace = 17.0f;
+/// Leading space with popout omnibox.
+const CGFloat kLeadingSpacePopout = 23.0;
 const CGFloat kTextIconSpace = 14.0f;
 /// Top color opacity of the `_selectedBackgroundView`.
 const CGFloat kTopGradientColorOpacity = 0.85;
+/// Name of the histogram recording the number of lines in search suggestions.
+const char kOmniboxSearchSuggestionNumberOfLines[] =
+    "IOS.Omnibox.SearchSuggestionNumberOfLines";
 
 }  // namespace
 
@@ -51,6 +61,9 @@ const CGFloat kTopGradientColorOpacity = 0.85;
   NSLayoutConstraint* _textTopConstraint;
   NSLayoutConstraint* _textTrailingToButtonConstraint;
   NSLayoutConstraint* _textTrailingConstraint;
+  /// Constraints changes with popout omnibox.
+  NSLayoutConstraint* _leadingConstraint;
+  NSLayoutConstraint* _trailingButtonTrailingConstraint;
 }
 
 - (instancetype)initWithConfiguration:
@@ -85,19 +98,28 @@ const CGFloat kTopGradientColorOpacity = 0.85;
     [_primaryLabel
         setContentCompressionResistancePriority:UILayoutPriorityDefaultHigh + 1
                                         forAxis:UILayoutConstraintAxisVertical];
+    [_primaryLabel setContentHuggingPriority:UILayoutPriorityRequired
+                                     forAxis:UILayoutConstraintAxisVertical];
     _primaryLabel.lineSpacing = kMultilineLineSpacing;
 
     // Secondary Label Fading.
     _secondaryLabelFading = [[FadeTruncatingLabel alloc] init];
     _secondaryLabelFading.translatesAutoresizingMaskIntoConstraints = NO;
     _secondaryLabelFading.hidden = YES;
+    [_secondaryLabelFading
+        setContentHuggingPriority:UILayoutPriorityRequired
+                          forAxis:UILayoutConstraintAxisVertical];
 
     // Secondary Label Truncating.
     _secondaryLabelTruncating = [[UILabel alloc] init];
     _secondaryLabelTruncating.translatesAutoresizingMaskIntoConstraints = NO;
     _secondaryLabelTruncating.lineBreakMode = NSLineBreakByTruncatingTail;
     _secondaryLabelTruncating.hidden = YES;
+    [_secondaryLabelTruncating
+        setContentHuggingPriority:UILayoutPriorityRequired
+                          forAxis:UILayoutConstraintAxisVertical];
 
+    // Text Stack View.
     _textStackView = [[UIStackView alloc] initWithArrangedSubviews:@[
       _primaryLabel, _secondaryLabelFading, _secondaryLabelTruncating
     ]];
@@ -123,7 +145,9 @@ const CGFloat kTopGradientColorOpacity = 0.85;
     _separator.translatesAutoresizingMaskIntoConstraints = NO;
     _separator.hidden = YES;
     _separator.backgroundColor =
-        [UIColor colorNamed:kOmniboxSuggestionRowSeparatorColor];
+        [UIColor colorNamed:IsIpadPopoutOmniboxEnabled()
+                                ? kOmniboxPopoutSuggestionRowSeparatorColor
+                                : kOmniboxSuggestionRowSeparatorColor];
     [self addSubview:_separator];
 
     NSLayoutAnchor* leadingAnchor = CanUseOmniboxLayoutGuide()
@@ -149,6 +173,14 @@ const CGFloat kTopGradientColorOpacity = 0.85;
         constraintEqualToAnchor:_textStackView.trailingAnchor
                        constant:kTextTrailingMargin];
 
+    // Constraint updated with popout omnibox.
+    _trailingButtonTrailingConstraint = [self.trailingAnchor
+        constraintEqualToAnchor:_trailingButton.trailingAnchor
+                       constant:kTrailingButtonTrailingMargin];
+    _leadingConstraint =
+        [_leadingIconView.leadingAnchor constraintEqualToAnchor:leadingAnchor
+                                                       constant:kLeadingSpace];
+
     [NSLayoutConstraint activateConstraints:@[
       // Row has a minimum height.
       [self.heightAnchor constraintGreaterThanOrEqualToConstant:
@@ -161,8 +193,7 @@ const CGFloat kTopGradientColorOpacity = 0.85;
           constraintEqualToConstant:kLeadingIconViewSize],
       [_leadingIconView.centerYAnchor
           constraintEqualToAnchor:self.centerYAnchor],
-      [_leadingIconView.leadingAnchor constraintEqualToAnchor:leadingAnchor
-                                                     constant:kLeadingSpace],
+      _leadingConstraint,
 
       // Position textStackView "after" leadingIconView.
       _textTopConstraint,
@@ -172,16 +203,14 @@ const CGFloat kTopGradientColorOpacity = 0.85;
           constraintEqualToAnchor:_leadingIconView.trailingAnchor
                          constant:kTextIconSpace],
 
+      // Trailing button constraints.
       [_trailingButton.heightAnchor
           constraintEqualToConstant:kTrailingButtonSize],
       [_trailingButton.widthAnchor
           constraintEqualToConstant:kTrailingButtonSize],
-
       [_trailingButton.centerYAnchor
           constraintEqualToAnchor:self.centerYAnchor],
-      [self.trailingAnchor
-          constraintEqualToAnchor:_trailingButton.trailingAnchor
-                         constant:kTrailingButtonTrailingMargin],
+      _trailingButtonTrailingConstraint,
 
       // Separator height anchor added in `didMoveToWindow`.
       [_separator.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
@@ -277,6 +306,11 @@ const CGFloat kTopGradientColorOpacity = 0.85;
   // Primary Label.
   _primaryLabel.attributedText = configuration.primaryText;
   _primaryLabel.numberOfLines = configuration.primaryTextNumberOfLines;
+  if (configuration.primaryTextNumberOfLines > 1) {
+    // Currently only search suggestions are allowed to be multiline.
+    CHECK(!configuration.secondaryTextDisplayAsURL);
+    [self logNumberOfLinesInSearchSuggestion:configuration.primaryText];
+  }
 
   // Secondary Label.
   _secondaryLabelFading.hidden = YES;
@@ -323,6 +357,16 @@ const CGFloat kTopGradientColorOpacity = 0.85;
     _textTopConstraint.constant = kTextTopMargin;
   }
 
+  // Popout omnibox margins.
+  if (configuration.isPopoutOmnibox) {
+    _trailingButtonTrailingConstraint.constant =
+        kTrailingButtonTrailingMarginPopout;
+    _leadingConstraint.constant = kLeadingSpacePopout;
+  } else {
+    _trailingButtonTrailingConstraint.constant = kTrailingButtonTrailingMargin;
+    _leadingConstraint.constant = kLeadingSpace;
+  }
+
   self.directionalLayoutMargins = configuration.directionalLayoutMargin;
   self.semanticContentAttribute = configuration.semanticContentAttribute;
   [configuration.delegate
@@ -335,6 +379,16 @@ const CGFloat kTopGradientColorOpacity = 0.85;
   [self.configuration.delegate
       omniboxPopupRowWithConfiguration:self.configuration
        didTapTrailingButtonAtIndexPath:self.configuration.indexPath];
+}
+
+/// Log the number of lines of a seach suggestion.
+- (void)logNumberOfLinesInSearchSuggestion:
+    (NSAttributedString*)attributedString {
+  CGFloat width = CGRectGetWidth(_textStackView.frame);
+  NSInteger numberOfLines =
+      NumberOfLinesOfAttributedString(attributedString, width);
+  base::UmaHistogramExactLinear(kOmniboxSearchSuggestionNumberOfLines,
+                                static_cast<int>(numberOfLines), 10);
 }
 
 @end

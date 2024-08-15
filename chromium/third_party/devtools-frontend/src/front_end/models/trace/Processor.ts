@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import * as Handlers from './handlers/handlers.js';
+import * as Insights from './insights/insights.js';
 import * as Types from './types/types.js';
 
 const enum Status {
@@ -32,10 +33,10 @@ export class TraceProcessor<EnabledModelHandlers extends {[key: string]: Handler
     EventTarget {
   // We force the Meta handler to be enabled, so the TraceHandlers type here is
   // the model handlers the user passes in and the Meta handler.
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   readonly #traceHandlers: Handlers.Types.HandlersWithMeta<EnabledModelHandlers>;
   #status = Status.IDLE;
   #modelConfiguration = Types.Configuration.DEFAULT;
+  #insights: Insights.Types.TraceInsightData<EnabledModelHandlers>|null = null;
 
   static createWithAllHandlers(): TraceProcessor<typeof Handlers.ModelHandlers> {
     return new TraceProcessor(Handlers.ModelHandlers, Types.Configuration.DEFAULT);
@@ -117,6 +118,8 @@ export class TraceProcessor<EnabledModelHandlers extends {[key: string]: Handler
       handler.reset();
     }
 
+    this.#insights = null;
+
     this.#status = Status.IDLE;
   }
 
@@ -140,7 +143,6 @@ export class TraceProcessor<EnabledModelHandlers extends {[key: string]: Handler
     // provide status update events, and other various bits of config like the
     // pause duration and frequency.
     const {pauseDuration, eventsPerChunk} = this.#modelConfiguration.processing;
-    const traceEventIterator = new TraceEventIterator(traceEvents, pauseDuration, eventsPerChunk);
 
     // Convert to array so that we are able to iterate all handlers multiple times.
     const sortedHandlers = [...sortHandlers(this.#traceHandlers).values()];
@@ -155,13 +157,18 @@ export class TraceProcessor<EnabledModelHandlers extends {[key: string]: Handler
     }
 
     // Handle each event.
-    for await (const item of traceEventIterator) {
-      if (item.kind === IteratorItemType.STATUS_UPDATE) {
-        this.dispatchEvent(new TraceParseProgressEvent(item.data));
-        continue;
+    for (let i = 0; i < traceEvents.length; ++i) {
+      // Every so often we take a break just to render.
+      if (i % eventsPerChunk === 0 && i) {
+        // Take the opportunity to provide status update events.
+        this.dispatchEvent(new TraceParseProgressEvent({index: i, total: traceEvents.length}));
+        // Wait for rendering before resuming.
+        // TODO(paulirish): consider using `scheduler.await()` or `scheduler.postTask(() => {}, {priority: 'user-blocking'})`
+        await new Promise(resolve => setTimeout(resolve, pauseDuration));
       }
-      for (const handler of sortedHandlers) {
-        handler.handleEvent(item.data);
+      const event = traceEvents[i];
+      for (let j = 0; j < sortedHandlers.length; ++j) {
+        sortedHandlers[j].handleEvent(event);
       }
     }
 
@@ -171,17 +178,70 @@ export class TraceProcessor<EnabledModelHandlers extends {[key: string]: Handler
     }
   }
 
-  get data(): Handlers.Types.EnabledHandlerDataWithMeta<EnabledModelHandlers>|null {
+  get traceParsedData(): Handlers.Types.EnabledHandlerDataWithMeta<EnabledModelHandlers>|null {
     if (this.#status !== Status.FINISHED_PARSING) {
       return null;
     }
 
-    const data = {};
+    const traceParsedData = {};
     for (const [name, handler] of Object.entries(this.#traceHandlers)) {
-      Object.assign(data, {[name]: handler.data()});
+      Object.assign(traceParsedData, {[name]: handler.data()});
     }
 
-    return data as Handlers.Types.EnabledHandlerDataWithMeta<EnabledModelHandlers>;
+    return traceParsedData as Handlers.Types.EnabledHandlerDataWithMeta<EnabledModelHandlers>;
+  }
+
+  #getEnabledInsightRunners(traceParsedData: Handlers.Types.EnabledHandlerDataWithMeta<EnabledModelHandlers>):
+      Insights.Types.EnabledInsightRunners<EnabledModelHandlers> {
+    const enabledInsights = {} as Insights.Types.EnabledInsightRunners<EnabledModelHandlers>;
+    for (const [name, insight] of Object.entries(Insights.InsightRunners)) {
+      const deps = insight.deps();
+      if (deps.some(dep => !traceParsedData[dep])) {
+        continue;
+      }
+      Object.assign(enabledInsights, {[name]: insight.generateInsight});
+    }
+    return enabledInsights;
+  }
+
+  get insights(): Insights.Types.TraceInsightData<EnabledModelHandlers>|null {
+    if (!this.traceParsedData) {
+      return null;
+    }
+
+    if (this.#insights) {
+      return this.#insights;
+    }
+
+    this.#insights = new Map();
+
+    const enabledInsightRunners = this.#getEnabledInsightRunners(this.traceParsedData);
+
+    for (const nav of this.traceParsedData.Meta.mainFrameNavigations) {
+      if (!nav.args.frame || !nav.args.data?.navigationId) {
+        continue;
+      }
+
+      const context = {
+        frameId: nav.args.frame,
+        navigationId: nav.args.data.navigationId,
+      };
+
+      const navInsightData = {} as Insights.Types.NavigationInsightData<EnabledModelHandlers>;
+      for (const [name, generateInsight] of Object.entries(enabledInsightRunners)) {
+        let insightResult;
+        try {
+          insightResult = generateInsight(this.traceParsedData, context);
+        } catch (err) {
+          insightResult = err;
+        }
+        Object.assign(navInsightData, {[name]: insightResult});
+      }
+
+      this.#insights.set(context.navigationId, navInsightData);
+    }
+
+    return this.#insights;
   }
 }
 
@@ -226,45 +286,4 @@ export function sortHandlers(
     visitHandler(handlerName as Handlers.Types.TraceEventHandlerName);
   }
   return sortedMap;
-}
-
-const enum IteratorItemType {
-  TRACE_EVENT = 1,
-  STATUS_UPDATE = 2,
-}
-
-type IteratorItem = IteratorTraceEventItem|IteratorStatusUpdateItem;
-
-type IteratorTraceEventItem = {
-  kind: IteratorItemType.TRACE_EVENT,
-  data: Types.TraceEvents.TraceEventData,
-};
-
-type IteratorStatusUpdateItem = {
-  kind: IteratorItemType.STATUS_UPDATE,
-  data: TraceParseEventProgressData,
-};
-
-class TraceEventIterator {
-  #eventCount: number;
-
-  constructor(
-      private traceEvents: readonly Types.TraceEvents.TraceEventData[], private pauseDuration: number,
-      private eventsPerChunk: number) {
-    this.#eventCount = 0;
-  }
-
-  async * [Symbol.asyncIterator](): AsyncGenerator<IteratorItem, void, void> {
-    for (let i = 0, length = this.traceEvents.length; i < length; i++) {
-      // Every so often we take a break just to render.
-      if (++this.#eventCount % this.eventsPerChunk === 0) {
-        // Take the opportunity to provide status update events.
-        yield {kind: IteratorItemType.STATUS_UPDATE, data: {index: i, total: length}};
-        // Wait for rendering before resuming.
-        await new Promise(resolve => setTimeout(resolve, this.pauseDuration));
-      }
-
-      yield {kind: IteratorItemType.TRACE_EVENT, data: this.traceEvents[i]};
-    }
-  }
 }

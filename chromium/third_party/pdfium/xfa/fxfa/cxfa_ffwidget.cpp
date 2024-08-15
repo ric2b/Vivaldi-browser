@@ -12,12 +12,12 @@
 
 #include "core/fxcodec/fx_codec.h"
 #include "core/fxcodec/progressive_decoder.h"
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/maybe_owned.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
 #include "core/fxge/cfx_path.h"
 #include "core/fxge/cfx_renderdevice.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
-#include "third_party/base/check.h"
 #include "xfa/fgas/graphics/cfgas_gegraphics.h"
 #include "xfa/fwl/fwl_widgethit.h"
 #include "xfa/fxfa/cxfa_eventparam.h"
@@ -496,12 +496,12 @@ bool CXFA_FFWidget::Redo() {
   return false;
 }
 
-absl::optional<WideString> CXFA_FFWidget::Copy() {
-  return absl::nullopt;
+std::optional<WideString> CXFA_FFWidget::Copy() {
+  return std::nullopt;
 }
 
-absl::optional<WideString> CXFA_FFWidget::Cut() {
-  return absl::nullopt;
+std::optional<WideString> CXFA_FFWidget::Cut() {
+  return std::nullopt;
 }
 
 bool CXFA_FFWidget::Paste(const WideString& wsPaste) {

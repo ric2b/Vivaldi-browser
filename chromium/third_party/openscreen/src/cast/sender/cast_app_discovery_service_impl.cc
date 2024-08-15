@@ -25,8 +25,8 @@ CastAppDiscoveryServiceImpl::CastAppDiscoveryServiceImpl(
     CastPlatformClient* platform_client,
     ClockNowFunctionPtr clock)
     : platform_client_(platform_client), clock_(clock), weak_factory_(this) {
-  OSP_DCHECK(platform_client_);
-  OSP_DCHECK(clock_);
+  OSP_CHECK(platform_client_);
+  OSP_CHECK(clock_);
 }
 
 CastAppDiscoveryServiceImpl::~CastAppDiscoveryServiceImpl() {

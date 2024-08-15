@@ -24,6 +24,9 @@ class AutoUpdateAPI : public BrowserContextKeyedAPI {
 
   void Shutdown() override;
 
+  // Handles cleanup of ENVIRONMENT variables before restarting the browser
+  static void HandleRestartPreconditions();
+
   // BrowserContextKeyedAPI implementation.
   static BrowserContextKeyedAPIFactory<AutoUpdateAPI>* GetFactoryInstance();
 
@@ -33,10 +36,12 @@ class AutoUpdateAPI : public BrowserContextKeyedAPI {
   static void SendWillDownloadUpdate(const base::Version& version);
   static void SendDidDownloadUpdate(const base::Version& version);
   static void SendWillInstallUpdateOnQuit(const base::Version& version);
+  static void SendNeedRestartToReloadCodecs();
   static void SendUpdaterWillRelaunchApplication();
   static void SendUpdaterDidRelaunchApplication();
   static void SendDidAbortWithError(const std::string& error,
                                     const std::string& reason);
+
 
  private:
   friend class BrowserContextKeyedAPIFactory<AutoUpdateAPI>;
@@ -52,7 +57,15 @@ class AutoUpdateAPI : public BrowserContextKeyedAPI {
   const raw_ptr<content::BrowserContext> browser_context_;
 
 #if BUILDFLAG(IS_LINUX)
+  void InitUpgradeDetection();
+  void ShutdownUpgradeDetection();
+
+  // handles environment for codec restart conditions
+  // implemented in auto_update_api_linux.cc
+  static void HandleCodecRestartPreconditions();
+
   std::unique_ptr<base::FilePathWatcher> executable_file_watcher_;
+  std::unique_ptr<base::FilePathWatcher> ffmpeg_file_watcher_;
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 #endif
 };
@@ -161,7 +174,7 @@ class AutoUpdateGetUpdateStatusFunction : public ExtensionFunction {
   AutoUpdateGetUpdateStatusFunction() = default;
 
   // Wrap the status for delivery to JS. Use nullopt for status on errors.
-  void SendResult(absl::optional<AutoUpdateStatus> status,
+  void SendResult(std::optional<AutoUpdateStatus> status,
                   std::string version,
                   std::string release_notes_url);
 
@@ -181,6 +194,19 @@ class AutoUpdateHasAutoUpdatesFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   bool HasAutoUpdates();
+};
+
+class AutoUpdateNeedsCodecRestartFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autoUpdate.needsCodecRestart",
+                             AUTOUPDATE_NEEDSCODECRESTART)
+  AutoUpdateNeedsCodecRestartFunction() = default;
+
+ private:
+  ~AutoUpdateNeedsCodecRestartFunction() override = default;
+  void DeliverResult(bool enabled);
+
+  ResponseAction Run() override;
 };
 
 }  // namespace extensions

@@ -72,6 +72,46 @@ exercises a single component), always use unit tests.** This requires some
 planning when writing the code; the rest of this document gives advice for doing
 that.
 
+## Declaring unit test dependencies
+
+Sometimes your package will need additional host tools or build dependencies to
+run unit tests. The recommended way is to use the `test` USE flag. This flag
+will be set when building your package with `FEATURES=test`.
+
+```
+IUSE="test"
+BDEPEND="test? ( sys-apps/foo )"
+```
+
+A few things to note when using the `test` USE flag:
+
+1.  It should be assumed that the `test` USE flag will only be enabled for your
+    package when running with `FEATURES=test`. That is, your dependencies aren't
+    guaranteed to have been built with their `test` USE flag enabled.
+1.  You should never place a `test` USE constraint on a dependency (e.g.,
+    `DEPEND="sys-apps/foo[test?]` or `DEPEND="test? ( sys-apps/foo[test] )`).
+    Supporting this would require transitive rebuilds and violates the first
+    point.
+1.  Your package's public ABI should stay stable regardless of the `test` USE
+    flag. This is because there is no guarantee that a dependency has been
+    compiled with their `test` USE flag enabled.
+
+See the Gentoo documentation on [test dependencies] for more information.
+
+[test dependencies]: https://devmanual.gentoo.org/general-concepts/dependencies/index.html#test-dependencies
+
+### Exclude unit test files from the OS image
+
+Since we want the package to have a stable public ABI regardless of the `test`
+USE flag, we want to always compile any unit test helper libraries. These
+libraries should be installed into `/build`. This folder is excluded by default
+when creating an OS image.
+
+```
+insinto /build/[bin|lib|...]
+doins "${file}"
+```
+
 ## Use well-defined public interfaces
 
 Unit tests verify that functions or classes produce correct output when supplied

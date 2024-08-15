@@ -4,7 +4,7 @@
  *
  *   TrueType and OpenType colored glyph layer support (body).
  *
- * Copyright (C) 2018-2023 by
+ * Copyright (C) 2018-2024 by
  * David Turner, Robert Wilhelm, Dominik Röttsches, and Werner Lemberg.
  *
  * Originally written by Shao Yu Zhang <shaozhang@fb.com>.
@@ -661,6 +661,7 @@
       FT_UInt32  first_layer_index;
 
 
+      ENSURE_READ_BYTES( 5 );
       num_layers = FT_NEXT_BYTE( p );
       if ( num_layers > colr->num_layers_v1 )
         return 0;

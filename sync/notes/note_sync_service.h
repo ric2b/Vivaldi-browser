@@ -70,6 +70,7 @@ class NoteSyncService : public KeyedService {
   sync_notes::NoteModelView* note_model_view();
 
   // For integration tests.
+  void SetIsTrackingMetadataForTesting();
   void SetNotesLimitForTesting(size_t limit);
 
  private:
@@ -77,6 +78,7 @@ class NoteSyncService : public KeyedService {
   // NoteModelTypeProcessor handles communications between sync engine and
   // NotesModel.
   NoteModelTypeProcessor note_model_type_processor_;
+  bool is_tracking_metadata_for_testing_ = false;
 };
 
 }  // namespace sync_notes

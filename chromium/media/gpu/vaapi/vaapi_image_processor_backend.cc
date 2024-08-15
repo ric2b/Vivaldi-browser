@@ -74,13 +74,13 @@ std::unique_ptr<ImageProcessorBackend> VaapiImageProcessorBackend::Create(
   if (!base::Contains(input_config.preferred_storage_types,
                       VideoFrame::STORAGE_GPU_MEMORY_BUFFER)) {
     VLOGF(2) << "VaapiImageProcessorBackend supports GpuMemoryBuffer based"
-                "VideoFrame only for input";
+                "FrameResource only for input";
     return nullptr;
   }
   if (!base::Contains(output_config.preferred_storage_types,
                       VideoFrame::STORAGE_GPU_MEMORY_BUFFER)) {
     VLOGF(2) << "VaapiImageProcessorBackend supports GpuMemoryBuffer based"
-                "VideoFrame only for output";
+                "FrameResource only for output";
     return nullptr;
   }
 
@@ -124,7 +124,7 @@ std::string VaapiImageProcessorBackend::type() const {
 }
 
 const VASurface* VaapiImageProcessorBackend::GetSurfaceForVideoFrame(
-    scoped_refptr<VideoFrame> frame,
+    scoped_refptr<FrameResource> frame,
     bool use_protected) {
   if (!frame->HasGpuMemoryBuffer())
     return nullptr;
@@ -141,10 +141,9 @@ const VASurface* VaapiImageProcessorBackend::GetSurfaceForVideoFrame(
     return surface;
   }
 
-  scoped_refptr<gfx::NativePixmap> pixmap =
-      CreateNativePixmapDmaBuf(frame.get());
+  scoped_refptr<gfx::NativePixmap> pixmap = frame->CreateNativePixmapDmaBuf();
   if (!pixmap) {
-    VLOGF(1) << "Failed to create NativePixmap from VideoFrame";
+    VLOGF(1) << "Failed to create NativePixmap from FrameResource";
     return nullptr;
   }
 
@@ -160,9 +159,10 @@ const VASurface* VaapiImageProcessorBackend::GetSurfaceForVideoFrame(
   return allocated_va_surfaces_[gmb_id].get();
 }
 
-void VaapiImageProcessorBackend::Process(scoped_refptr<VideoFrame> input_frame,
-                                         scoped_refptr<VideoFrame> output_frame,
-                                         FrameReadyCB cb) {
+void VaapiImageProcessorBackend::ProcessFrame(
+    scoped_refptr<FrameResource> input_frame,
+    scoped_refptr<FrameResource> output_frame,
+    FrameResourceReadyCB cb) {
   DVLOGF(4);
   DCHECK_CALLED_ON_VALID_SEQUENCE(backend_sequence_checker_);
   TRACE_EVENT2("media", "VaapiImageProcessorBackend::Process", "input_frame",
@@ -174,11 +174,13 @@ void VaapiImageProcessorBackend::Process(scoped_refptr<VideoFrame> input_frame,
     // where the VPP is needed for processing protected content after decoding.
     // That's because when calling VaapiWrapper::BlitSurface(), we re-use the
     // protected session ID created at decoding time.
-    auto vaapi_wrapper = VaapiWrapper::Create(
-        VaapiWrapper::kVideoProcess, VAProfileNone,
-        EncryptionScheme::kUnencrypted,
-        base::BindRepeating(&ReportVaapiErrorToUMA,
-                            "Media.VaapiImageProcessorBackend.VAAPIError"));
+    auto vaapi_wrapper =
+        VaapiWrapper::Create(
+            VaapiWrapper::kVideoProcess, VAProfileNone,
+            EncryptionScheme::kUnencrypted,
+            base::BindRepeating(&ReportVaapiErrorToUMA,
+                                "Media.VaapiImageProcessorBackend.VAAPIError"))
+            .value_or(nullptr);
     if (!vaapi_wrapper) {
       VLOGF(1) << "Failed to create VaapiWrapper";
       error_cb_.Run();

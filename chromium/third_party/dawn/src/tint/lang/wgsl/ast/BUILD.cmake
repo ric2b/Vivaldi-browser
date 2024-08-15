@@ -53,8 +53,8 @@ tint_add_target(tint_lang_wgsl_ast lib
   lang/wgsl/ast/binary_expression.h
   lang/wgsl/ast/binding_attribute.cc
   lang/wgsl/ast/binding_attribute.h
-  lang/wgsl/ast/bitcast_expression.cc
-  lang/wgsl/ast/bitcast_expression.h
+  lang/wgsl/ast/blend_src_attribute.cc
+  lang/wgsl/ast/blend_src_attribute.h
   lang/wgsl/ast/block_statement.cc
   lang/wgsl/ast/block_statement.h
   lang/wgsl/ast/bool_literal_expression.cc
@@ -125,8 +125,6 @@ tint_add_target(tint_lang_wgsl_ast lib
   lang/wgsl/ast/increment_decrement_statement.h
   lang/wgsl/ast/index_accessor_expression.cc
   lang/wgsl/ast/index_accessor_expression.h
-  lang/wgsl/ast/index_attribute.cc
-  lang/wgsl/ast/index_attribute.h
   lang/wgsl/ast/int_literal_expression.cc
   lang/wgsl/ast/int_literal_expression.h
   lang/wgsl/ast/internal_attribute.cc
@@ -234,7 +232,7 @@ tint_add_target(tint_lang_wgsl_ast_test test
   lang/wgsl/ast/assignment_statement_test.cc
   lang/wgsl/ast/binary_expression_test.cc
   lang/wgsl/ast/binding_attribute_test.cc
-  lang/wgsl/ast/bitcast_expression_test.cc
+  lang/wgsl/ast/blend_src_attribute_test.cc
   lang/wgsl/ast/block_statement_test.cc
   lang/wgsl/ast/bool_literal_expression_test.cc
   lang/wgsl/ast/break_if_statement_test.cc
@@ -269,7 +267,6 @@ tint_add_target(tint_lang_wgsl_ast_test test
   lang/wgsl/ast/if_statement_test.cc
   lang/wgsl/ast/increment_decrement_statement_test.cc
   lang/wgsl/ast/index_accessor_expression_test.cc
-  lang/wgsl/ast/index_attribute_test.cc
   lang/wgsl/ast/int_literal_expression_test.cc
   lang/wgsl/ast/interpolate_attribute_test.cc
   lang/wgsl/ast/location_attribute_test.cc

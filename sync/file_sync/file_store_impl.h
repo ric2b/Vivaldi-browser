@@ -16,7 +16,6 @@
 #include "sync/file_sync/file_data.h"
 #include "sync/file_sync/file_store.h"
 #include "sync/file_sync/file_store_storage.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace file_sync {
 // The synced file store keeps track of files that must be made available for
@@ -66,7 +65,7 @@ class SyncedFileStoreImpl : public SyncedFileStore {
                          std::string checksum);
 
   void OnReadContentDone(std::string checksum,
-                         absl::optional<std::vector<uint8_t>> content);
+                         std::optional<std::vector<uint8_t>> content);
 
   void OnLoadingDone(SyncedFilesData files_data);
   const SyncedFilesData& GetFilesData();
@@ -85,7 +84,7 @@ class SyncedFileStoreImpl : public SyncedFileStore {
   std::map<syncer::ModelType, std::map<std::string, std::string>>
       checksums_for_sync_owners_;
 
-  absl::optional<SyncedFileStoreStorage> storage_;
+  std::optional<SyncedFileStoreStorage> storage_;
 
   scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
 

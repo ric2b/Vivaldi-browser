@@ -77,6 +77,14 @@ void bdcsvd_verify_assert(const MatrixType& input = MatrixType()) {
   svd_verify_constructor_options_assert<BDCSVD<MatrixType>>(input);
 }
 
+template <typename MatrixType>
+void bdcsvd_check_convergence(const MatrixType& input) {
+  BDCSVD<MatrixType, Eigen::ComputeThinU | Eigen::ComputeThinV> svd(input);
+  VERIFY(svd.info() == Eigen::Success);
+  MatrixType D = svd.matrixU() * svd.singularValues().asDiagonal() * svd.matrixV().transpose();
+  VERIFY_IS_APPROX(input, D);
+}
+
 EIGEN_DECLARE_TEST(bdcsvd) {
   CALL_SUBTEST_1((bdcsvd_verify_assert<Matrix3f>()));
   CALL_SUBTEST_2((bdcsvd_verify_assert<Matrix4d>()));
@@ -163,4 +171,7 @@ EIGEN_DECLARE_TEST(bdcsvd) {
   // With total deflation issues before, when it shouldn't be triggered.
   CALL_SUBTEST_47((compare_bdc_jacobi_instance(true, 3)));
   CALL_SUBTEST_48((compare_bdc_jacobi_instance(false, 3)));
+
+  // Convergence for large constant matrix (https://gitlab.com/libeigen/eigen/-/issues/2491)
+  CALL_SUBTEST_49(bdcsvd_check_convergence<MatrixXf>(MatrixXf::Constant(500, 500, 1)));
 }

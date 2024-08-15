@@ -10,17 +10,21 @@ import androidx.annotation.Nullable;
 
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
-import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
-import org.chromium.chrome.browser.sync.SyncServiceFactory;
+import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
 import org.chromium.components.signin.AccountCapabilitiesConstants;
 import org.chromium.components.signin.SigninFeatureMap;
 import org.chromium.components.signin.SigninFeatures;
 import org.chromium.components.signin.base.AccountCapabilities;
+import org.chromium.components.signin.base.CoreAccountId;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.sync.SyncService;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * This test rule mocks AccountManagerFacade and manages sign-in/sign-out.
@@ -35,11 +39,14 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 public class SigninTestRule extends AccountManagerTestRule {
     public static final AccountCapabilities NON_DISPLAYABLE_EMAIL_ACCOUNT_CAPABILITIES =
             new AccountCapabilities(
-                    new String[] {
-                        AccountCapabilitiesConstants
-                                .CAN_HAVE_EMAIL_ADDRESS_DISPLAYED_CAPABILITY_NAME
-                    },
-                    new boolean[] {false});
+                    new HashMap<>(
+                            Map.of(
+                                    AccountCapabilitiesConstants
+                                            .CAN_HAVE_EMAIL_ADDRESS_DISPLAYED_CAPABILITY_NAME,
+                                    false,
+                                    AccountCapabilitiesConstants
+                                            .IS_SUBJECT_TO_PARENTAL_CONTROLS_CAPABILITY_NAME,
+                                    true)));
 
     private boolean mIsSignedIn;
 
@@ -70,7 +77,8 @@ public class SigninTestRule extends AccountManagerTestRule {
         SigninTestUtil.seedAccounts();
     }
 
-    /** Adds an account and seed it in native code. */
+    /** Adds an account and seeds it in native code. */
+    // TODO(crbug.com/40234741): Replace this with a method that takes AccountInfo instead.
     public CoreAccountInfo addAccountAndWaitForSeeding(String accountName) {
         final CoreAccountInfo coreAccountInfo = addAccount(accountName);
         waitForSeeding();
@@ -78,8 +86,8 @@ public class SigninTestRule extends AccountManagerTestRule {
     }
 
     /** Removes an account and seed it in native code. */
-    public void removeAccountAndWaitForSeeding(String accountEmail) {
-        removeAccount(accountEmail);
+    public void removeAccountAndWaitForSeeding(CoreAccountId accountId) {
+        removeAccount(accountId);
         waitForSeeding();
     }
 
@@ -105,7 +113,7 @@ public class SigninTestRule extends AccountManagerTestRule {
     /** Adds and signs in an account with the default name and enables sync. */
     public CoreAccountInfo addTestAccountThenSigninAndEnableSync() {
         return addTestAccountThenSigninAndEnableSync(
-                TestThreadUtils.runOnUiThreadBlockingNoException(SyncServiceFactory::get));
+                SyncTestUtil.getSyncServiceForLastUsedProfile());
     }
 
     /**
@@ -129,8 +137,7 @@ public class SigninTestRule extends AccountManagerTestRule {
         CoreAccountInfo coreAccountInfo = addAccount(email, name);
         waitForSeeding();
         SigninTestUtil.signinAndEnableSync(
-                coreAccountInfo,
-                TestThreadUtils.runOnUiThreadBlockingNoException(SyncServiceFactory::get));
+                coreAccountInfo, SyncTestUtil.getSyncServiceForLastUsedProfile());
         mIsSignedIn = true;
         return coreAccountInfo;
     }
@@ -141,7 +148,7 @@ public class SigninTestRule extends AccountManagerTestRule {
                 () -> {
                     Criteria.checkThat(
                             IdentityServicesProvider.get()
-                                    .getIdentityManager(Profile.getLastUsedRegularProfile())
+                                    .getIdentityManager(ProfileManager.getLastUsedRegularProfile())
                                     .getPrimaryAccountInfo(ConsentLevel.SIGNIN),
                             is(coreAccountInfo));
                 });
@@ -174,7 +181,8 @@ public class SigninTestRule extends AccountManagerTestRule {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     assert IdentityServicesProvider.get()
-                                            .getIdentityManager(Profile.getLastUsedRegularProfile())
+                                            .getIdentityManager(
+                                                    ProfileManager.getLastUsedRegularProfile())
                                             .getPrimaryAccountInfo(ConsentLevel.SYNC)
                                     == null
                             : "Sync should not be enabled";

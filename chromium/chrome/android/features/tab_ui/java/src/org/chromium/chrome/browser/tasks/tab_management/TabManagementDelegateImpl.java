@@ -10,10 +10,13 @@ import android.util.Pair;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 
+import androidx.annotation.LayoutRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.lifetime.Destroyable;
+import org.chromium.base.supplier.LazyOneshotSupplier;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
@@ -33,12 +36,16 @@ import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tasks.tab_management.ColorPickerCoordinator.ColorPickerLayoutType;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
+
+import java.util.List;
+import java.util.function.DoubleConsumer;
 
 /** Impl class that will resolve components for tab management. */
 public class TabManagementDelegateImpl implements TabManagementDelegate {
@@ -79,6 +86,7 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
             @NonNull Supplier<DynamicResourceLoader> dynamicResourceLoaderSupplier,
             @NonNull SnackbarManager snackbarManager,
             @NonNull ModalDialogManager modalDialogManager,
+            @NonNull BottomSheetController bottomSheetController,
             @NonNull OneshotSupplier<IncognitoReauthController> incognitoReauthControllerSupplier,
             @Nullable BackPressManager backPressManager,
             @Nullable OneshotSupplier<LayoutStateProvider> layoutStateProviderSupplier) {
@@ -98,6 +106,7 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
                 dynamicResourceLoaderSupplier,
                 snackbarManager,
                 modalDialogManager,
+                bottomSheetController,
                 incognitoReauthControllerSupplier,
                 backPressManager,
                 layoutStateProviderSupplier);
@@ -153,9 +162,11 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
             @NonNull ScrimCoordinator rootUiScrimCoordinator,
             @NonNull SnackbarManager snackbarManager,
             @NonNull ModalDialogManager modalDialogManager,
+            @NonNull BottomSheetController bottomSheetController,
             @Nullable OneshotSupplier<IncognitoReauthController> incognitoReauthControllerSupplier,
             @NonNull OnClickListener newTabButtonOnClickListener,
-            boolean isIncognito) {
+            boolean isIncognito,
+            @NonNull DoubleConsumer onToolbarAlphaChange) {
         // TODO(crbug/1505772): Consider making this an activity scoped singleton and possibly
         // hosting it in CTA/HubProvider.
         TabSwitcherPaneCoordinatorFactory factory =
@@ -170,7 +181,8 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
                         multiWindowModeStateDispatcher,
                         rootUiScrimCoordinator,
                         snackbarManager,
-                        modalDialogManager);
+                        modalDialogManager,
+                        bottomSheetController);
         TabSwitcherPaneBase pane;
         if (isIncognito) {
             Supplier<TabModelFilter> incongitorTabModelFilterSupplier =
@@ -181,7 +193,8 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
                             factory,
                             incongitorTabModelFilterSupplier,
                             newTabButtonOnClickListener,
-                            incognitoReauthControllerSupplier);
+                            incognitoReauthControllerSupplier,
+                            onToolbarAlphaChange);
         } else {
             Supplier<TabModelFilter> tabModelFilterSupplier =
                     () -> tabModelSelector.getTabModelFilterProvider().getTabModelFilter(false);
@@ -193,8 +206,50 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
                             factory,
                             tabModelFilterSupplier,
                             newTabButtonOnClickListener,
-                            new TabSwitcherPaneDrawableCoordinator(activity, tabModelSelector));
+                            new TabSwitcherPaneDrawableCoordinator(activity, tabModelSelector),
+                            onToolbarAlphaChange);
         }
         return Pair.create(new TabSwitcherPaneAdapter(pane), pane);
+    }
+
+    @Override
+    public Pane createTabGroupsPane(
+            @NonNull Context context,
+            @NonNull TabModelSelector tabModelSelector,
+            @NonNull DoubleConsumer onToolbarAlphaChange) {
+        LazyOneshotSupplier<TabModelFilter> tabModelFilterSupplier =
+                LazyOneshotSupplier.fromSupplier(
+                        () ->
+                                tabModelSelector
+                                        .getTabModelFilterProvider()
+                                        .getTabModelFilter(false));
+        return new TabGroupsPane(context, tabModelFilterSupplier, onToolbarAlphaChange);
+    }
+
+    @Override
+    public Destroyable createTabGroupCreationDialogManager(
+            @NonNull Activity activity,
+            @NonNull ModalDialogManager modalDialogManager,
+            @NonNull TabModelSelector tabModelSelector) {
+        return new TabGroupCreationDialogManager(activity, modalDialogManager, tabModelSelector);
+    }
+
+    @Override
+    public ColorPicker createColorPickerCoordinator(
+            @NonNull Context context,
+            @NonNull List<Integer> colors,
+            @NonNull @LayoutRes int colorPickerLayout,
+            @NonNull @ColorPickerType int colorPickerType,
+            @NonNull boolean isIncognito,
+            @NonNull @ColorPickerLayoutType int layoutType,
+            @Nullable Runnable onColorItemClicked) {
+        return new ColorPickerCoordinator(
+                context,
+                colors,
+                colorPickerLayout,
+                colorPickerType,
+                isIncognito,
+                layoutType,
+                onColorItemClicked);
     }
 }

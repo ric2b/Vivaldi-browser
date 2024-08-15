@@ -51,6 +51,7 @@
 #include "src/tint/lang/wgsl/sem/struct.h"
 #include "src/tint/utils/containers/bitset.h"
 #include "src/tint/utils/containers/unique_vector.h"
+#include "src/tint/utils/text/styled_text.h"
 
 // Forward declarations
 namespace tint::ast {
@@ -104,7 +105,7 @@ class Resolver {
     ~Resolver();
 
     /// @returns error messages from the resolver
-    std::string error() const { return diagnostics_.str(); }
+    std::string error() const { return diagnostics_.Str(); }
 
     /// @returns the list of diagnostics raised by the generator.
     const diag::List& Diagnostics() const { return diagnostics_; }
@@ -294,7 +295,6 @@ class Resolver {
     ////////////////////////////////////////////////////////////////////////////////////////////////
     sem::ValueExpression* IndexAccessor(const ast::IndexAccessorExpression*);
     sem::ValueExpression* Binary(const ast::BinaryExpression*);
-    sem::ValueExpression* Bitcast(const ast::BitcastExpression*);
     sem::Call* Call(const ast::CallExpression*);
     sem::Function* Function(const ast::Function*);
     sem::Call* FunctionCall(const ast::CallExpression*,
@@ -313,6 +313,10 @@ class Resolver {
     /// Register a memory store to an expression, to track accesses to root identifiers in order to
     /// perform alias analysis.
     void RegisterStore(const sem::ValueExpression* expr);
+
+    /// Register a memory load of an expression, to track accesses to root identifiers in order to
+    /// perform alias analysis.
+    void RegisterLoad(const sem::ValueExpression* expr);
 
     /// Perform pointer alias analysis for `call`.
     /// @returns true is the call arguments are free from aliasing issues, false otherwise.
@@ -423,9 +427,9 @@ class Resolver {
     /// @returns the color value on success.
     tint::Result<uint32_t> ColorAttribute(const ast::ColorAttribute* attr);
 
-    /// Resolves the `@index` attribute @p attr
-    /// @returns the index value on success.
-    tint::Result<uint32_t> IndexAttribute(const ast::IndexAttribute* attr);
+    /// Resolves the `@blend_src` attribute @p attr
+    /// @returns the blend_src value on success.
+    tint::Result<uint32_t> BlendSrcAttribute(const ast::BlendSrcAttribute* attr);
 
     /// Resolves the `@binding` attribute @p attr
     /// @returns the binding value on success.
@@ -632,19 +636,19 @@ class Resolver {
     /// Raises an error that the attribute is not valid for the given use.
     /// @param attr the invalue attribute
     /// @param use the thing that the attribute was applied to
-    void ErrorInvalidAttribute(const ast::Attribute* attr, std::string_view use);
+    void ErrorInvalidAttribute(const ast::Attribute* attr, StyledText use);
 
     /// Adds the given internal compiler error message to the diagnostics
-    void AddICE(const std::string& msg, const Source& source) const;
+    void AddICE(std::string_view msg, const Source& source) const;
 
-    /// Adds the given error message to the diagnostics
-    void AddError(const std::string& msg, const Source& source) const;
+    /// @returns a new error message added to the program's diagnostics
+    diag::Diagnostic& AddError(const Source& source) const;
 
-    /// Adds the given warning message to the diagnostics
-    void AddWarning(const std::string& msg, const Source& source) const;
+    /// @returns a new warning message added to the program's diagnostics
+    diag::Diagnostic& AddWarning(const Source& source) const;
 
-    /// Adds the given note message to the diagnostics
-    void AddNote(const std::string& msg, const Source& source) const;
+    /// @returns a new note message added to the program's diagnostics
+    diag::Diagnostic& AddNote(const Source& source) const;
 
     /// @returns the core::type::Type for the builtin type @p builtin_ty with the identifier @p
     /// ident
@@ -679,13 +683,13 @@ class Resolver {
     /// of determining if any two arguments alias at any callsite.
     struct AliasAnalysisInfo {
         /// The set of module-scope variables that are written to, and where that write occurs.
-        std::unordered_map<const sem::Variable*, const sem::ValueExpression*> module_scope_writes;
+        Hashmap<const sem::Variable*, const sem::ValueExpression*, 4> module_scope_writes;
         /// The set of module-scope variables that are read from, and where that read occurs.
-        std::unordered_map<const sem::Variable*, const sem::ValueExpression*> module_scope_reads;
+        Hashmap<const sem::Variable*, const sem::ValueExpression*, 4> module_scope_reads;
         /// The set of function parameters that are written to.
-        std::unordered_set<const sem::Variable*> parameter_writes;
+        Hashset<const sem::Variable*, 4> parameter_writes;
         /// The set of function parameters that are read from.
-        std::unordered_set<const sem::Variable*> parameter_reads;
+        Hashset<const sem::Variable*, 4> parameter_reads;
     };
 
     ProgramBuilder& b;

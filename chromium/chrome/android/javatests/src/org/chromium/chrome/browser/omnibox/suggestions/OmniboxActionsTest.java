@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.browser.omnibox.suggestions;
 
-import static androidx.test.espresso.assertion.ViewAssertions.matches;
-
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -14,9 +12,7 @@ import android.app.Activity;
 
 import androidx.annotation.Nullable;
 import androidx.test.filters.MediumTest;
-import androidx.test.platform.app.InstrumentationRegistry;
 
-import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -33,23 +29,14 @@ import org.mockito.junit.MockitoRule;
 import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.Criteria;
-import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Features;
-import org.chromium.base.test.util.Features.DisableFeatures;
-import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.JniMocker;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.history.HistoryActivity;
-import org.chromium.chrome.browser.omnibox.suggestions.action.HistoryClustersAction;
 import org.chromium.chrome.browser.omnibox.suggestions.action.OmniboxActionInSuggest;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionView;
-import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.IncognitoTabHostUtils;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.util.ActivityTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils.SuggestionInfo;
 import org.chromium.components.omnibox.AutocompleteMatch;
@@ -60,7 +47,6 @@ import org.chromium.components.omnibox.OmniboxSuggestionType;
 import org.chromium.components.omnibox.action.OmniboxAction;
 import org.chromium.components.omnibox.action.OmniboxActionJni;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
-import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.test.util.DisableAnimationsTestRule;
 
 import java.util.ArrayList;
@@ -148,11 +134,6 @@ public class OmniboxActionsTest {
                 .build();
     }
 
-    private AutocompleteMatch createDummyHistoryClustersAction(String name) {
-        return createDummySuggestion(
-                List.of(new HistoryClustersAction(0, "hint", "accessibility", name)));
-    }
-
     private AutocompleteMatch createDummyActionInSuggest(ActionInfo.ActionType... types) {
         var actions = new ArrayList<OmniboxAction>();
         for (var type : types) {
@@ -166,35 +147,6 @@ public class OmniboxActionsTest {
         }
 
         return createDummySuggestion(actions);
-    }
-
-    @Test
-    @MediumTest
-    @DisableFeatures(ChromeFeatureList.OMNIBOX_HISTORY_CLUSTER_PROVIDER)
-    @EnableFeatures({
-        ChromeFeatureList.HISTORY_JOURNEYS,
-        ChromeFeatureList.OMNIBOX_HISTORY_CLUSTER_ACTION_CHIP
-    })
-    public void testHistoryClustersAction() throws Exception {
-        setSuggestions(createDummyHistoryClustersAction("query"));
-        mOmniboxUtils.clickOnAction(0, 0);
-
-        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(sActivityTestRule.getActivity())) {
-            CriteriaHelper.pollUiThread(
-                    () -> {
-                        Tab tab = sActivityTestRule.getActivity().getActivityTab();
-                        Criteria.checkThat(tab, Matchers.notNullValue());
-                        Criteria.checkThat(
-                                tab.getUrl().getSpec(),
-                                Matchers.equalTo("chrome://history/grouped?q=query"));
-                    });
-        } else {
-            mTargetActivity =
-                    ActivityTestUtils.waitForActivity(
-                            InstrumentationRegistry.getInstrumentation(), HistoryActivity.class);
-            Assert.assertNotNull("Could not find the history activity", mTargetActivity);
-        }
-        verifyNoMoreInteractions(mOmniboxActionJni);
     }
 
     @Test

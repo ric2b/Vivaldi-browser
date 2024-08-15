@@ -6,14 +6,16 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CONTENT_CAPTURE_CONTENT_CAPTURE_TASK_H_
 
 #include <memory>
+#include <optional>
 
 #include "base/time/time.h"
 #include "cc/paint/node_id.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/renderer/core/content_capture/content_capture_task_histogram_reporter.h"
 #include "third_party/blink/renderer/core/content_capture/task_session.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/heap/disallow_new_wrapper.h"
 #include "third_party/blink/renderer/platform/timer.h"
+#include "third_party/blink/renderer/platform/wtf/ref_counted.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
@@ -87,6 +89,8 @@ class CORE_EXPORT ContentCaptureTask
     captured_content_for_testing_ = captured_content;
   }
 
+  void ClearDocumentSessionsForTesting();
+
   base::TimeDelta GetTaskNextFireIntervalForTesting() const;
   void CancelTaskForTesting();
   const TaskDelay& GetTaskDelayForTesting() const { return *task_delay_; }
@@ -143,8 +147,9 @@ class CORE_EXPORT ContentCaptureTask
 
   std::unique_ptr<TaskDelay> task_delay_;
 
-  absl::optional<TaskState> task_stop_for_testing_;
-  absl::optional<Vector<cc::NodeInfo>> captured_content_for_testing_;
+  scoped_refptr<ContentCaptureTaskHistogramReporter> histogram_reporter_;
+  std::optional<TaskState> task_stop_for_testing_;
+  std::optional<Vector<cc::NodeInfo>> captured_content_for_testing_;
 };
 
 }  // namespace blink

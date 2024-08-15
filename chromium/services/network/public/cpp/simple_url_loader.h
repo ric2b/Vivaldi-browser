@@ -9,14 +9,15 @@
 
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "base/component_export.h"
+#include "base/feature_list.h"
 #include "base/functional/callback_forward.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/mojom/url_response_head.mojom-forward.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class GURL;
 
@@ -43,6 +44,9 @@ class URLLoaderFactory;
 }  // namespace network
 
 namespace network {
+
+COMPONENT_EXPORT(NETWORK_CPP)
+BASE_DECLARE_FEATURE(kSimpleURLLoaderUseReadAndDiscardBodyOption);
 
 class SimpleURLLoaderStreamConsumer;
 
@@ -375,7 +379,7 @@ class COMPONENT_EXPORT(NETWORK_CPP) SimpleURLLoader {
   // The URLLoaderCompletionStatus for the request. Will be nullopt if the
   // response never completed. May only be called once the loader has informed
   // the caller of completion.
-  virtual const absl::optional<URLLoaderCompletionStatus>& CompletionStatus()
+  virtual const std::optional<URLLoaderCompletionStatus>& CompletionStatus()
       const = 0;
 
   // Returns the URL that this loader is processing. May only be called once the

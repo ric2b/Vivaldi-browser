@@ -4,6 +4,7 @@
 
 #include "chromeos/printing/ppd_cache.h"
 
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -30,8 +31,7 @@ namespace {
 // Return the (full) path to the file we expect to find the given key at.
 base::FilePath FilePathForKey(const base::FilePath& base_dir,
                               const std::string& key) {
-  std::string hashed_key = crypto::SHA256HashString(key);
-  return base_dir.Append(base::HexEncode(hashed_key.data(), hashed_key.size()));
+  return base_dir.Append(base::HexEncode(crypto::SHA256HashString(key)));
 }
 
 // If the cache doesn't already exist, create it.
@@ -72,9 +72,9 @@ PpdCache::FindResult FindImpl(const base::FilePath& cache_dir,
   if (file.ReadAtCurrentPos(buf.data(), info.size) != info.size)
     return result;
 
-  base::StringPiece contents(buf.data(), info.size - crypto::kSHA256Length);
-  base::StringPiece checksum(buf.data() + info.size - crypto::kSHA256Length,
-                             crypto::kSHA256Length);
+  std::string_view contents(buf.data(), info.size - crypto::kSHA256Length);
+  std::string_view checksum(buf.data() + info.size - crypto::kSHA256Length,
+                            crypto::kSHA256Length);
   if (crypto::SHA256HashString(contents) != checksum) {
     LOG(ERROR) << "Bad checksum for cache key " << key;
     return result;

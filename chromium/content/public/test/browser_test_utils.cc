@@ -4,6 +4,7 @@
 
 #include "content/public/test/browser_test_utils.h"
 #include "base/memory/raw_ptr.h"
+#include "content/public/test/synchronize_visual_properties_interceptor.h"
 
 #include <stddef.h>
 
@@ -22,6 +23,7 @@
 #include "base/process/kill.h"
 #include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
+#include "base/scoped_observation.h"
 #include "base/strings/pattern.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -111,6 +113,7 @@
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/network_service_test.mojom.h"
 #include "storage/browser/blob/blob_url_registry.h"
@@ -134,6 +137,7 @@
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/latency/latency_info.h"
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -1246,52 +1250,86 @@ void SimulateLongTapAt(WebContents* web_contents, const gfx::Point& point) {
   rwhva->OnGestureEvent(&long_tap);
 }
 
-class BoundingBoxUpdateWaiterImpl : public TextInputManager::Observer {
+// Observer which waits for the selection bounds in a RenderWidgetHostViewAura
+// to meet some desired conditions.
+class SelectionBoundsWaiter : public TextInputManager::Observer {
  public:
-  explicit BoundingBoxUpdateWaiterImpl(RenderWidgetHostViewAura* rwhva)
-      : text_input_manager_(rwhva->GetTextInputManager()),
-        original_bounding_box_(rwhva->GetSelectionBoundingBox()),
-        rwhva_(rwhva) {
-    text_input_manager_->AddObserver(this);
+  using Predicate = base::RepeatingCallback<bool()>;
+
+  SelectionBoundsWaiter(RenderWidgetHostViewAura* rwhva, Predicate predicate)
+      : predicate_(std::move(predicate)) {
+    text_input_manager_observation_.Observe(rwhva->GetTextInputManager());
   }
-  BoundingBoxUpdateWaiterImpl(const BoundingBoxUpdateWaiterImpl&) = delete;
-  BoundingBoxUpdateWaiterImpl& operator=(const BoundingBoxUpdateWaiterImpl&) =
-      delete;
-  virtual ~BoundingBoxUpdateWaiterImpl() {
-    text_input_manager_->RemoveObserver(this);
+  SelectionBoundsWaiter(const SelectionBoundsWaiter&) = delete;
+  SelectionBoundsWaiter& operator=(const SelectionBoundsWaiter&) = delete;
+  virtual ~SelectionBoundsWaiter() = default;
+
+  // TextInputManager::Observer:
+  void OnSelectionBoundsChanged(
+      TextInputManager* text_input_manager,
+      RenderWidgetHostViewBase* updated_view) override {
+    if (predicate_.Run()) {
+      run_loop_.Quit();
+    }
   }
 
   void Wait() { run_loop_.Run(); }
 
  private:
-  // TextInputManager::Observer:
-  void OnSelectionBoundsChanged(
-      TextInputManager* text_input_manager,
-      RenderWidgetHostViewBase* updated_view) override {
-    if (rwhva_->GetSelectionBoundingBox() == original_bounding_box_) {
-      return;
-    }
-
-    run_loop_.Quit();
-  }
-
-  const raw_ptr<TextInputManager> text_input_manager_;
-  const gfx::Rect original_bounding_box_;
-  const raw_ptr<RenderWidgetHostViewAura> rwhva_;
-
   base::RunLoop run_loop_;
+  Predicate predicate_;
+  base::ScopedObservation<TextInputManager, TextInputManager::Observer>
+      text_input_manager_observation_{this};
 };
 
-BoundingBoxUpdateWaiter::BoundingBoxUpdateWaiter(WebContents* web_contents) {
-  impl_ = std::make_unique<BoundingBoxUpdateWaiterImpl>(
+NonZeroCaretSizeWaiter::NonZeroCaretSizeWaiter(WebContents* web_contents) {
+  RenderWidgetHostViewAura* rwhva =
       static_cast<content::RenderWidgetHostViewAura*>(
-          web_contents->GetRenderWidgetHostView()));
+          web_contents->GetRenderWidgetHostView());
+  selection_bounds_waiter_ = std::make_unique<SelectionBoundsWaiter>(
+      rwhva, base::BindLambdaForTesting([rwhva]() {
+        return !rwhva->GetCaretBounds().size().IsZero();
+      }));
+}
+
+NonZeroCaretSizeWaiter::~NonZeroCaretSizeWaiter() = default;
+
+void NonZeroCaretSizeWaiter::Wait() {
+  selection_bounds_waiter_->Wait();
+}
+
+CaretBoundsUpdateWaiter::CaretBoundsUpdateWaiter(WebContents* web_contents) {
+  RenderWidgetHostViewAura* rwhva =
+      static_cast<content::RenderWidgetHostViewAura*>(
+          web_contents->GetRenderWidgetHostView());
+  const gfx::Rect current_caret_bounds = rwhva->GetCaretBounds();
+  selection_bounds_waiter_ = std::make_unique<SelectionBoundsWaiter>(
+      rwhva, base::BindLambdaForTesting([rwhva, current_caret_bounds]() {
+        return rwhva->GetCaretBounds() != current_caret_bounds;
+      }));
+}
+
+CaretBoundsUpdateWaiter::~CaretBoundsUpdateWaiter() = default;
+
+void CaretBoundsUpdateWaiter::Wait() {
+  selection_bounds_waiter_->Wait();
+}
+
+BoundingBoxUpdateWaiter::BoundingBoxUpdateWaiter(WebContents* web_contents) {
+  RenderWidgetHostViewAura* rwhva =
+      static_cast<content::RenderWidgetHostViewAura*>(
+          web_contents->GetRenderWidgetHostView());
+  const gfx::Rect current_bounding_box = rwhva->GetSelectionBoundingBox();
+  selection_bounds_waiter_ = std::make_unique<SelectionBoundsWaiter>(
+      rwhva, base::BindLambdaForTesting([rwhva, current_bounding_box]() {
+        return rwhva->GetSelectionBoundingBox() != current_bounding_box;
+      }));
 }
 
 BoundingBoxUpdateWaiter::~BoundingBoxUpdateWaiter() = default;
 
 void BoundingBoxUpdateWaiter::Wait() {
-  impl_->Wait();
+  selection_bounds_waiter_->Wait();
 }
 #endif
 
@@ -1629,11 +1667,13 @@ class ExecuteJavaScriptForTestsWaiter : public WebContentsObserver {
   base::WeakPtrFactory<ExecuteJavaScriptForTestsWaiter> weak_ptr_factory_{this};
 };
 
-EvalJsResult EvalJsRunner(const ToRenderFrameHost& execution_target,
-                          base::StringPiece script,
-                          base::StringPiece source_url,
-                          int options,
-                          int32_t world_id) {
+EvalJsResult EvalJsRunner(
+    const ToRenderFrameHost& execution_target,
+    base::StringPiece script,
+    base::StringPiece source_url,
+    int options,
+    int32_t world_id,
+    base::OnceClosure after_script_invoke = base::DoNothing()) {
   RenderFrameHostImpl* rfh =
       static_cast<RenderFrameHostImpl*>(execution_target.render_frame_host());
   if (!rfh->IsRenderFrameLive()) {
@@ -1651,6 +1691,8 @@ EvalJsResult EvalJsRunner(const ToRenderFrameHost& execution_target,
   rfh->ExecuteJavaScriptForTests(base::UTF8ToUTF16(script), user_gesture,
                                  resolve_promises, world_id,
                                  waiter.GetCallback());
+
+  std::move(after_script_invoke).Run();
 
   bool has_value = waiter.Wait();
   if (!has_value) {
@@ -1697,7 +1739,8 @@ EvalJsResult EvalJsRunner(const ToRenderFrameHost& execution_target,
 EvalJsResult EvalJs(const ToRenderFrameHost& execution_target,
                     base::StringPiece script,
                     int options,
-                    int32_t world_id) {
+                    int32_t world_id,
+                    base::OnceClosure after_script_invoke) {
   TRACE_EVENT1("test", "EvalJs", "script", script);
 
   // The sourceURL= parameter provides a string that replaces <anonymous> in
@@ -1712,7 +1755,7 @@ EvalJsResult EvalJs(const ToRenderFrameHost& execution_target,
       base::StrCat({"{", script, "\n}\n//# sourceURL=", kSourceURL});
 
   return EvalJsRunner(execution_target, modified_script, kSourceURL, options,
-                      world_id);
+                      world_id, std::move(after_script_invoke));
 }
 
 EvalJsResult EvalJsAfterLifecycleUpdate(
@@ -2028,12 +2071,6 @@ bool WaitForRenderFrameReady(RenderFrameHost* rfh) {
   return "pageLoadComplete" == result;
 }
 
-void EnableAccessibilityForWebContents(WebContents* web_contents) {
-  WebContentsImpl* web_contents_impl =
-      static_cast<WebContentsImpl*>(web_contents);
-  web_contents_impl->SetAccessibilityMode(ui::kAXModeComplete);
-}
-
 void WaitForAccessibilityFocusChange() {
   base::RunLoop run_loop;
   BrowserAccessibilityManager::SetFocusChangeCallbackForTesting(
@@ -2086,6 +2123,29 @@ void WaitForAccessibilityTreeToContainNodeWithName(WebContents* web_contents,
              main_frame_manager->GetBrowserAccessibilityRoot(), name)) {
     WaitForAccessibilityTreeToChange(web_contents);
     main_frame_manager = main_frame->browser_accessibility_manager();
+  }
+}
+
+void WaitForAccessibilityTreeToContainSelection(
+    WebContents* web_contents,
+    base::StringPiece selection_start_name,
+    base::StringPiece selection_end_name) {
+  while (true) {
+    AccessibilityNotificationWaiter accessibility_waiter(
+        web_contents, ui::AXMode(),
+        ui::AXEventGenerator::Event::DOCUMENT_SELECTION_CHANGED);
+    ASSERT_TRUE(accessibility_waiter.WaitForNotification());
+    content::BrowserAccessibilityManager* manager =
+        accessibility_waiter.event_browser_accessibility_manager();
+
+    const ui::AXTreeData& tree_data = manager->GetTreeData();
+    ui::AXNode* sel_start = manager->GetNode(tree_data.sel_anchor_object_id);
+    ui::AXNode* sel_end = manager->GetNode(tree_data.sel_focus_object_id);
+    if (sel_start && sel_end &&
+        sel_start->GetNameUTF8() == selection_start_name &&
+        sel_end->GetNameUTF8() == selection_end_name) {
+      break;
+    }
   }
 }
 
@@ -3256,7 +3316,7 @@ class TestActivationManager::ConditionInserter {
     // crbug.com/1226442.
     auto* request = NavigationRequest::From(&handle);
     if (!request->IsServedFromBackForwardCache() &&
-        !request->is_potentially_prerendered_page_activation_for_testing()) {
+        !request->is_running_potential_prerender_activation_checks()) {
       return nullptr;
     }
 
@@ -3340,7 +3400,7 @@ CommitDeferringCondition::Result TestActivationManager::FirstConditionCallback(
 
   DCHECK(!request_);
   request_ = NavigationRequest::From(&condition.GetNavigationHandle());
-  DCHECK(request_->is_potentially_prerendered_page_activation_for_testing() ||
+  DCHECK(request_->is_running_potential_prerender_activation_checks() ||
          request_->IsServedFromBackForwardCache())
       << "TestActivationManager should only be used for for page "
          "activations. For regular navigations, use TestNavigationManager.";
@@ -3701,81 +3761,6 @@ void VerifyStaleContentOnFrameEviction(
 
 #endif  // defined(USE_AURA)
 
-ContextMenuInterceptor::ContextMenuInterceptor(
-    content::RenderFrameHost* render_frame_host,
-    ShowBehavior behavior)
-    : render_frame_host_impl_(
-          static_cast<RenderFrameHostImpl*>(render_frame_host)),
-      swapped_impl_(
-          render_frame_host_impl_->local_frame_host_receiver_for_testing(),
-          this),
-      run_loop_(std::make_unique<base::RunLoop>()),
-      quit_closure_(run_loop_->QuitClosure()),
-      show_behavior_(behavior) {}
-
-ContextMenuInterceptor::~ContextMenuInterceptor() = default;
-
-void ContextMenuInterceptor::Wait() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  run_loop_->Run();
-  run_loop_ = nullptr;
-}
-
-void ContextMenuInterceptor::Reset() {
-  ASSERT_EQ(run_loop_, nullptr);
-  run_loop_ = std::make_unique<base::RunLoop>();
-  quit_closure_ = run_loop_->QuitClosure();
-}
-
-blink::mojom::LocalFrameHost* ContextMenuInterceptor::GetForwardingInterface() {
-  return render_frame_host_impl_;
-}
-
-void ContextMenuInterceptor::ShowContextMenu(
-    mojo::PendingAssociatedRemote<blink::mojom::ContextMenuClient>
-        context_menu_client,
-    const blink::UntrustworthyContextMenuParams& params) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  last_params_ = params;
-  std::move(quit_closure_).Run();
-
-  if (show_behavior_ == ShowBehavior::kPreventShow)
-    return;
-
-  GetForwardingInterface()->ShowContextMenu(std::move(context_menu_client),
-                                            params);
-}
-
-UpdateUserActivationStateInterceptor::UpdateUserActivationStateInterceptor(
-    content::RenderFrameHost* render_frame_host)
-    : render_frame_host_impl_(
-          static_cast<RenderFrameHostImpl*>(render_frame_host)),
-      swapped_impl_(
-          render_frame_host_impl_->local_frame_host_receiver_for_testing(),
-          this) {}
-
-UpdateUserActivationStateInterceptor::~UpdateUserActivationStateInterceptor() =
-    default;
-
-void UpdateUserActivationStateInterceptor::set_quit_handler(
-    base::OnceClosure handler) {
-  quit_handler_ = std::move(handler);
-}
-
-blink::mojom::LocalFrameHost*
-UpdateUserActivationStateInterceptor::GetForwardingInterface() {
-  return render_frame_host_impl_;
-}
-
-void UpdateUserActivationStateInterceptor::UpdateUserActivationState(
-    blink::mojom::UserActivationUpdateType update_type,
-    blink::mojom::UserActivationNotificationType notification_type) {
-  update_user_activation_state_ = true;
-  if (quit_handler_)
-    std::move(quit_handler_).Run();
-  GetForwardingInterface()->UpdateUserActivationState(update_type,
-                                                      notification_type);
-}
 
 // static
 void BlobURLStoreInterceptor::InterceptDeprecated(
@@ -3857,7 +3842,7 @@ int LoadBasicRequest(network::mojom::NetworkContext* network_context,
   network::mojom::URLLoaderFactoryParamsPtr url_loader_factory_params =
       network::mojom::URLLoaderFactoryParams::New();
   url_loader_factory_params->process_id = network::mojom::kBrowserProcessId;
-  url_loader_factory_params->is_corb_enabled = false;
+  url_loader_factory_params->is_orb_enabled = false;
   url::Origin origin = url::Origin::Create(url);
   url_loader_factory_params->isolation_info =
       net::IsolationInfo::CreateForInternalRequest(origin);
@@ -3940,106 +3925,6 @@ bool TestGuestAutoresize(WebContents* embedder_web_contents,
                              current_id.embed_token());
 }
 
-SynchronizeVisualPropertiesInterceptor::SynchronizeVisualPropertiesInterceptor(
-    RenderFrameProxyHost* render_frame_proxy_host)
-    : render_frame_proxy_host_(render_frame_proxy_host),
-      local_root_rect_run_loop_(std::make_unique<base::RunLoop>()),
-      swapped_impl_(render_frame_proxy_host_->frame_host_receiver_for_testing(),
-                    this) {}
-
-SynchronizeVisualPropertiesInterceptor::
-    ~SynchronizeVisualPropertiesInterceptor() = default;
-
-blink::mojom::RemoteFrameHost*
-SynchronizeVisualPropertiesInterceptor::GetForwardingInterface() {
-  return render_frame_proxy_host_;
-}
-
-void SynchronizeVisualPropertiesInterceptor::WaitForRect() {
-  local_root_rect_run_loop_->Run();
-}
-
-void SynchronizeVisualPropertiesInterceptor::ResetRectRunLoop() {
-  last_rect_ = gfx::Rect();
-  local_root_rect_run_loop_ = std::make_unique<base::RunLoop>();
-  local_root_rect_received_ = false;
-}
-
-viz::LocalSurfaceId SynchronizeVisualPropertiesInterceptor::WaitForSurfaceId() {
-  surface_id_run_loop_ = std::make_unique<base::RunLoop>();
-  surface_id_run_loop_->Run();
-  return last_surface_id_;
-}
-
-void SynchronizeVisualPropertiesInterceptor::SynchronizeVisualProperties(
-    const blink::FrameVisualProperties& visual_properties) {
-  // Monitor |is_pinch_gesture_active| to determine when pinch gesture ends.
-  if (!visual_properties.is_pinch_gesture_active &&
-      last_pinch_gesture_active_) {
-    pinch_end_run_loop_.Quit();
-  }
-  last_pinch_gesture_active_ = visual_properties.is_pinch_gesture_active;
-
-  gfx::Rect local_root_rect_in_dip = visual_properties.rect_in_local_root;
-  const float dsf =
-      visual_properties.screen_infos.current().device_scale_factor;
-  local_root_rect_in_dip =
-      gfx::Rect(gfx::ScaleToFlooredPoint(
-                    visual_properties.rect_in_local_root.origin(), 1.f / dsf),
-                gfx::ScaleToCeiledSize(
-                    visual_properties.rect_in_local_root.size(), 1.f / dsf));
-
-  // Track each rect updates.
-  GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          &SynchronizeVisualPropertiesInterceptor::OnUpdatedFrameRectOnUI,
-          weak_factory_.GetWeakPtr(), local_root_rect_in_dip));
-
-  // Track each surface id update.
-  GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          &SynchronizeVisualPropertiesInterceptor::OnUpdatedSurfaceIdOnUI,
-          weak_factory_.GetWeakPtr(), visual_properties.local_surface_id));
-
-  // We can't nest on the IO thread. So tests will wait on the UI thread, so
-  // post there to exit the nesting.
-  GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          &SynchronizeVisualPropertiesInterceptor::OnUpdatedFrameSinkIdOnUI,
-          weak_factory_.GetWeakPtr()));
-
-  GetForwardingInterface()->SynchronizeVisualProperties(visual_properties);
-}
-
-void SynchronizeVisualPropertiesInterceptor::OnUpdatedFrameRectOnUI(
-    const gfx::Rect& rect) {
-  last_rect_ = rect;
-  if (!local_root_rect_received_) {
-    local_root_rect_received_ = true;
-    // Tests looking at the rect currently expect all received input to finish
-    // processing before the test continutes.
-    local_root_rect_run_loop_->QuitWhenIdle();
-  }
-}
-
-void SynchronizeVisualPropertiesInterceptor::OnUpdatedFrameSinkIdOnUI() {
-  run_loop_.Quit();
-}
-
-void SynchronizeVisualPropertiesInterceptor::OnUpdatedSurfaceIdOnUI(
-    viz::LocalSurfaceId surface_id) {
-  last_surface_id_ = surface_id;
-  if (surface_id_run_loop_) {
-    surface_id_run_loop_->QuitWhenIdle();
-  }
-}
-
-void SynchronizeVisualPropertiesInterceptor::WaitForPinchGestureEnd() {
-  pinch_end_run_loop_.Run();
-}
 
 RenderWidgetHostMouseEventMonitor::RenderWidgetHostMouseEventMonitor(
     RenderWidgetHost* host)
@@ -4299,16 +4184,23 @@ void CookieChangeObserver::Wait() {
 void CookieChangeObserver::OnCookiesAccessed(
     content::RenderFrameHost* render_frame_host,
     const content::CookieAccessDetails& details) {
-  OnCookieAccessed();
+  OnCookieAccessed(details);
 }
 
 void CookieChangeObserver::OnCookiesAccessed(
     content::NavigationHandle* navigation,
     const content::CookieAccessDetails& details) {
-  OnCookieAccessed();
+  OnCookieAccessed(details);
 }
 
-void CookieChangeObserver::OnCookieAccessed() {
+void CookieChangeObserver::OnCookieAccessed(
+    const content::CookieAccessDetails& details) {
+  if (details.type == CookieAccessDetails::Type::kRead) {
+    num_read_seen_++;
+  } else if (details.type == CookieAccessDetails::Type::kChange) {
+    num_write_seen_++;
+  }
+
   if (++num_seen_ == num_expected_calls_) {
     run_loop_.Quit();
   }
@@ -4326,14 +4218,16 @@ void SetCapturedSurfaceControllerFactoryForTesting(
         WebContentsMediaCaptureId)> factory) {
   using FactoryType =
       ::base::RepeatingCallback<std::unique_ptr<CapturedSurfaceController>(
-          GlobalRenderFrameHostId, WebContentsMediaCaptureId)>;
+          GlobalRenderFrameHostId, WebContentsMediaCaptureId,
+          base::RepeatingCallback<void(int)>)>;
   using MockFactoryType =
       ::base::RepeatingCallback<std::unique_ptr<MockCapturedSurfaceController>(
           GlobalRenderFrameHostId, WebContentsMediaCaptureId)>;
 
   FactoryType wrapped_factory = base::BindRepeating(
       [](MockFactoryType mock_factory, GlobalRenderFrameHostId rfh_id,
-         WebContentsMediaCaptureId captured_wc_id) {
+         WebContentsMediaCaptureId captured_wc_id,
+         base::RepeatingCallback<void(int)> on_zoom_level_change_callback) {
         std::unique_ptr<MockCapturedSurfaceController> mock_controller =
             mock_factory.Run(rfh_id, captured_wc_id);
         std::unique_ptr<CapturedSurfaceController> wrapped_object =

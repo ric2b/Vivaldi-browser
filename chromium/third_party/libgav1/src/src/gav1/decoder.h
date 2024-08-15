@@ -21,6 +21,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <vector>
 #else
 #include <stddef.h>
 #include <stdint.h>
@@ -136,10 +137,21 @@ class LIBGAV1_PUBLIC Decoder {
   // Returns the maximum bitdepth that is supported by this decoder.
   static int GetMaxBitdepth();
 
+  // Returns a vector with the QP values for all the frames in the last temporal
+  // unit in encoding/decoding order (Note: not display order). If no frames are
+  // present in the last temporal unit the method returns an empty vector.
+  //
+  // NOTE: This function is C++ only and is not exposed via the C API.
+  //
+  // TODO(vardar): return a map that contains a QP per spatial layer for each
+  // temporal layer.
+  std::vector<int> GetFramesMeanQpInTemporalUnit();
+
  private:
   DecoderSettings settings_;
   // The object is initialized if and only if impl_ != nullptr.
   std::unique_ptr<DecoderImpl> impl_;
+  std::vector<int> frame_mean_qps_;
 };
 
 }  // namespace libgav1

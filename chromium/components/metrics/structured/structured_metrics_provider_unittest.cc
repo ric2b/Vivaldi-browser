@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <utility>
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -20,6 +21,7 @@
 #include "components/metrics/structured/proto/event_storage.pb.h"
 #include "components/metrics/structured/recorder.h"
 #include "components/metrics/structured/structured_events.h"
+#include "components/metrics/structured/structured_metrics_client.h"
 #include "components/metrics/structured/structured_metrics_features.h"
 #include "components/metrics/structured/structured_metrics_recorder.h"
 #include "components/metrics/structured/test/test_event_storage.h"
@@ -105,16 +107,17 @@ class StructuredMetricsProviderTest : public testing::Test {
   // about: the metrics service initializing and enabling its providers, and a
   // user logging in.
   void Init() {
+    auto key_data_provider = std::make_unique<TestKeyDataProvider>(
+        DeviceKeyFilePath(), ProfileKeyFilePath());
+    test_key_data_provider_ = key_data_provider.get();
     // Create a system profile, normally done by ChromeMetricsServiceClient.
     structured_metrics_recorder_ = std::make_unique<StructuredMetricsRecorder>(
-        std::make_unique<TestKeyDataProvider>(DeviceKeyFilePath(),
-                                              ProfileKeyFilePath()),
-        std::make_unique<TestEventStorage>());
+        std::move(key_data_provider), std::make_unique<TestEventStorage>());
     // Create the provider, normally done by the ChromeMetricsServiceClient.
     provider_ = std::unique_ptr<StructuredMetricsProvider>(
         new StructuredMetricsProvider(
-            /*min_independent_metrics_interval=*/base::Seconds(0),
-            structured_metrics_recorder_.get()));
+            /*min_independent_metrics_interval=*/
+            base::Seconds(0), structured_metrics_recorder_.get()));
     // Enable recording, normally done after the metrics service has checked
     // consent allows recording.
     provider_->OnRecordingEnabled();
@@ -123,7 +126,7 @@ class StructuredMetricsProviderTest : public testing::Test {
   void OnRecordingEnabled() { provider_->OnRecordingEnabled(); }
 
   void OnProfileAdded(const base::FilePath& path) {
-    provider_->recorder().OnProfileAdded(path);
+    test_key_data_provider_->OnProfileAdded(path);
   }
 
   StructuredDataProto GetSessionData() {
@@ -159,6 +162,7 @@ class StructuredMetricsProviderTest : public testing::Test {
   std::unique_ptr<TestSystemProfileProvider> system_profile_provider_;
   std::unique_ptr<StructuredMetricsRecorder> structured_metrics_recorder_;
   std::unique_ptr<StructuredMetricsProvider> provider_;
+  raw_ptr<TestKeyDataProvider> test_key_data_provider_;
   // Feature list should be constructed before task environment.
   base::test::ScopedFeatureList scoped_feature_list_;
   base::test::TaskEnvironment task_environment_{
@@ -188,8 +192,10 @@ TEST_F(StructuredMetricsProviderTest, DisableIndependentUploads) {
   Wait();
 
   OnRecordingEnabled();
-  events::v2::test_project_one::TestEventOne().SetTestMetricTwo(1).Record();
-  events::v2::test_project_three::TestEventFour().SetTestMetricFour(1).Record();
+  StructuredMetricsClient::Record(std::move(
+      events::v2::test_project_one::TestEventOne().SetTestMetricTwo(1)));
+  StructuredMetricsClient::Record(std::move(
+      events::v2::test_project_three::TestEventFour().SetTestMetricFour(1)));
   EXPECT_EQ(GetIndependentMetrics().events_size(), 0);
   EXPECT_EQ(GetSessionData().events_size(), 2);
   ExpectNoErrors();
@@ -200,8 +206,10 @@ TEST_F(StructuredMetricsProviderTest, NoIndependentUploadsBeforeInitialized) {
   // Verify the recorder is not initialized.
   EXPECT_FALSE(RecorderInitialized());
 
-  events::v2::test_project_one::TestEventOne().SetTestMetricTwo(1).Record();
-  events::v2::test_project_three::TestEventFour().SetTestMetricFour(1).Record();
+  StructuredMetricsClient::Record(std::move(
+      events::v2::test_project_one::TestEventOne().SetTestMetricTwo(1)));
+  StructuredMetricsClient::Record(std::move(
+      events::v2::test_project_three::TestEventFour().SetTestMetricFour(1)));
   EXPECT_EQ(GetIndependentMetrics().events_size(), 0);
   EXPECT_EQ(GetSessionData().events_size(), 0);
   ExpectNoErrors();

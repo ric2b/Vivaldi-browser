@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {PageCallbackRouter, PageHandler, PageHandlerInterface} from './omnibox.mojom-webui.js';
+import type {PageHandlerInterface} from './omnibox.mojom-webui.js';
+import {PageCallbackRouter, PageHandler} from './omnibox.mojom-webui.js';
 
 /**
  * @fileoverview This file provides a singleton class that exposes the Mojo
  * handler interface used for bidirectional communication between the
- * <ntp-realbox> or the <cr-realbox-dropdown> and the browser.
+ * <cr-realbox> or the <cr-realbox-dropdown> and the browser.
  */
 
 let instance: RealboxBrowserProxy|null = null;

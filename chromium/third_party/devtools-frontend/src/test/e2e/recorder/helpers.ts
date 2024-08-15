@@ -74,7 +74,7 @@ export async function enableUntrustedEventMode() {
     // TODO: have an explicit UI setting or perhaps a special event to configure this
     // instead of having a global setting.
     const Common = await import('./core/common/common.js');
-    Common.Settings.Settings.instance().createSetting('untrustedRecorderEvents', true);
+    Common.Settings.Settings.instance().createSetting('untrusted-recorder-events', true);
   })()`);
 }
 
@@ -91,7 +91,7 @@ async function createRecording(name: string, selectorAttribute?: string) {
   await input.type(name);
   if (selectorAttribute) {
     const input = await waitForAria(
-        'SELECTOR ATTRIBUTE https://g.co/devtools/recorder#selector',
+        'SELECTOR ATTRIBUTE Learn more',
     );
     await input.type(selectorAttribute);
   }
@@ -167,7 +167,7 @@ interface RecordingSnapshotOptions {
 const preprocessRecording = (
     recording: unknown,
     options: RecordingSnapshotOptions = {},
-    ): unknown => {
+    ) => {
   let value = JSON.stringify(recording).replaceAll(
       `:${getTestServerPort()}`,
       ':<test-port>',

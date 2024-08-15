@@ -84,6 +84,10 @@ const float kResourceAdjustedRatio = 0.5;
 
 bool g_should_fail_drawing_buffer_creation_for_testing = false;
 
+BASE_FEATURE(kAddSharedImageRasterUsageInDrawingBuffer,
+             "AddSharedImageRasterUsageInDrawingBuffer",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 void FlipVertically(base::span<uint8_t> framebuffer,
                     size_t num_rows,
                     size_t row_bytes) {
@@ -344,8 +348,6 @@ void DrawingBuffer::SetIsInHiddenPage(bool hidden) {
 
 void DrawingBuffer::SetHdrMetadata(const gfx::HDRMetadata& hdr_metadata) {
   hdr_metadata_ = hdr_metadata;
-  if (layer_)
-    layer_->SetHdrMetadata(hdr_metadata_);
 }
 
 void DrawingBuffer::SetFilterQuality(
@@ -522,6 +524,7 @@ bool DrawingBuffer::FinishPrepareTransferableResourceSoftware(
       viz::SinglePlaneFormat::kRGBA_8888,
       viz::TransferableResource::ResourceSource::kDrawingBuffer);
   out_resource->color_space = back_color_buffer_->color_space;
+  out_resource->hdr_metadata = hdr_metadata_;
 
   // This holds a ref on the DrawingBuffer that will keep it alive until the
   // mailbox is released (and while the release callback is running). It also
@@ -623,6 +626,7 @@ bool DrawingBuffer::FinishPrepareTransferableResourceGpu(
         color_buffer_for_mailbox->is_overlay_candidate,
         viz::TransferableResource::ResourceSource::kDrawingBuffer);
     out_resource->color_space = color_buffer_for_mailbox->color_space;
+    out_resource->hdr_metadata = hdr_metadata_;
     // This holds a ref on the DrawingBuffer that will keep it alive until the
     // mailbox is released (and while the release callback is running).
     auto func = base::BindOnce(&DrawingBuffer::NotifyMailboxReleasedGpu,
@@ -788,12 +792,24 @@ scoped_refptr<CanvasResource> DrawingBuffer::ExportLowLatencyCanvasResource(
   resource.format = color_buffer->format;
   resource.is_overlay_candidate = color_buffer->is_overlay_candidate;
   resource.color_space = color_buffer->color_space;
+  resource.hdr_metadata = hdr_metadata_;
   resource.resource_source =
       viz::TransferableResource::ResourceSource::kDrawingBuffer;
 
+  if (contents_changed_ && !using_swap_chain_) {
+    // Restart SharedImage access on the single SharedImage to ensure a write
+    // fence is generated on the shared image to guarantee display reads this
+    // frame completely. Display may still read parts of subsequent frames,
+    // which is okay.
+    gl_->EndSharedImageAccessDirectCHROMIUM(color_buffer->texture_id);
+    gl_->BeginSharedImageAccessDirectCHROMIUM(
+        color_buffer->texture_id,
+        GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
+  }
+
   return ExternalCanvasResource::Create(
       resource, viz::ReleaseCallback(), context_provider_->GetWeakPtr(),
-      resource_provider, cc::PaintFlags::FilterQuality::kLow,
+      resource_provider, filter_quality_,
       /*is_origin_top_left=*/opengl_flip_y_extension_);
 }
 
@@ -813,7 +829,7 @@ scoped_refptr<CanvasResource> DrawingBuffer::ExportCanvasResource() {
   return ExternalCanvasResource::Create(
       out_resource, std::move(out_release_callback),
       context_provider_->GetWeakPtr(), /*resource_provider=*/nullptr,
-      cc::PaintFlags::FilterQuality::kLow,
+      filter_quality_,
       /*is_origin_top_left=*/opengl_flip_y_extension_);
 }
 
@@ -1184,7 +1200,6 @@ cc::Layer* DrawingBuffer::CcLayer() {
       layer_->SetPremultipliedAlpha(requested_alpha_type_ !=
                                     kUnpremul_SkAlphaType);
     }
-    layer_->SetHdrMetadata(hdr_metadata_);
     layer_->SetNearestNeighbor(filter_quality_ ==
                                cc::PaintFlags::FilterQuality::kNone);
 
@@ -1900,11 +1915,18 @@ scoped_refptr<DrawingBuffer::ColorBuffer> DrawingBuffer::CreateColorBuffer(
   GLuint texture_id = 0;
   bool created_mappable_si = false;
 
-  // The SharedImages created here are read to and written from by WebGL.
+  // The SharedImages created here are read to and written from by WebGL. They
+  // may also be read via the raster interface for WebGL->video and/or
+  // WebGL->canvas conversions. As RASTER_READ usage was not historically
+  // included here, we are rolling it out with a killswitch.
+  // TODO(crbug.com/1522121): Remove this killswitch post-safe rollout.
   uint32_t usage = gpu::SHARED_IMAGE_USAGE_GLES2_READ |
                    gpu::SHARED_IMAGE_USAGE_GLES2_WRITE |
                    gpu::SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
                    gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
+  if (base::FeatureList::IsEnabled(kAddSharedImageRasterUsageInDrawingBuffer)) {
+    usage = usage | gpu::SHARED_IMAGE_USAGE_RASTER_READ;
+  }
   if (initial_gpu_ == gl::GpuPreference::kHighPerformance)
     usage |= gpu::SHARED_IMAGE_USAGE_HIGH_PERFORMANCE_GPU;
   GrSurfaceOrigin origin = opengl_flip_y_extension_
@@ -1937,6 +1959,9 @@ scoped_refptr<DrawingBuffer::ColorBuffer> DrawingBuffer::CreateColorBuffer(
     front_buffer_shared_image = std::move(shared_images.front_buffer);
   } else {
     if (ShouldUseChromiumImage()) {
+#if !BUILDFLAG(IS_ANDROID)
+      // Android's SharedImage backing for ChromiumImage does not support BGRX.
+
       // TODO(b/286417069): BGRX has issues when Vulkan is used for raster and
       // composite. Using BGRX is technically possible but will require a lot
       // of work given the current state of the codebase. There are projects in
@@ -1956,6 +1981,10 @@ scoped_refptr<DrawingBuffer::ColorBuffer> DrawingBuffer::CreateColorBuffer(
               ContextProvider()->GetCapabilities())) {
         color_buffer_format_ = viz::SinglePlaneFormat::kBGRX_8888;
       }
+#endif  // !BUILDFLAG(IS_ANDROID)
+
+      bool disallow_gmb = base::FeatureList::IsEnabled(
+          features::kDrawingBufferWithoutGpuMemoryBuffer);
 
       // TODO(crbug.com/911176): When RGB emulation is not needed, we should use
       // the non-GMB CreateSharedImage with gpu::SHARED_IMAGE_USAGE_SCANOUT in
@@ -1965,17 +1994,33 @@ scoped_refptr<DrawingBuffer::ColorBuffer> DrawingBuffer::CreateColorBuffer(
       uint32_t additional_usage_flags = gpu::SHARED_IMAGE_USAGE_SCANOUT;
       if (low_latency_enabled()) {
         buffer_usage = gfx::BufferUsage::SCANOUT_FRONT_RENDERING;
-        additional_usage_flags = gpu::SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE;
+        if (disallow_gmb) {
+          additional_usage_flags |=
+              gpu::SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE;
+        } else {
+          additional_usage_flags =
+              gpu::SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE;
+        }
       }
 
       if (gpu::IsImageFromGpuMemoryBufferFormatSupported(
               viz::SinglePlaneSharedImageFormatToBufferFormat(
                   color_buffer_format_),
               ContextProvider()->GetCapabilities())) {
-        auto client_shared_image = sii->CreateSharedImage(
-            color_buffer_format_, size, color_space_, origin,
-            back_buffer_alpha_type, usage | additional_usage_flags,
-            "WebGLDrawingBuffer", gpu::kNullSurfaceHandle, buffer_usage);
+        scoped_refptr<gpu::ClientSharedImage> client_shared_image;
+        if (disallow_gmb) {
+          client_shared_image = sii->CreateSharedImage(
+              {color_buffer_format_, size, color_space_, origin,
+               back_buffer_alpha_type, usage | additional_usage_flags,
+               "WebGLDrawingBuffer"},
+              gpu::kNullSurfaceHandle);
+        } else {
+          client_shared_image = sii->CreateSharedImage(
+              {color_buffer_format_, size, color_space_, origin,
+               back_buffer_alpha_type, usage | additional_usage_flags,
+               "WebGLDrawingBuffer"},
+              gpu::kNullSurfaceHandle, buffer_usage);
+        }
         if (client_shared_image) {
           created_mappable_si = true;
 #if BUILDFLAG(IS_MAC)
@@ -1987,14 +2032,13 @@ scoped_refptr<DrawingBuffer::ColorBuffer> DrawingBuffer::CreateColorBuffer(
           // side and eliminating the usage of MappableSI here altogether. Will
           // require resolving issues with low-latency canvas tests that caused
           // prior attempts to be reverted (crbug.com/1346737).
-          client_shared_image->SetColorSpaceOnNativeBuffer(color_space_);
+          if (!disallow_gmb) {
+            client_shared_image->SetColorSpaceOnNativeBuffer(color_space_);
+          }
 #endif
           back_buffer_shared_image = std::move(client_shared_image);
-#if BUILDFLAG(IS_MAC)
-          // A CHROMIUM_image backed texture requires a specialized set of
-          // parameters on OSX.
-          texture_target = gpu::GetPlatformSpecificTextureTarget();
-#endif
+          texture_target =
+              back_buffer_shared_image->GetTextureTargetForOverlays();
         }
       }
     }
@@ -2010,10 +2054,10 @@ scoped_refptr<DrawingBuffer::ColorBuffer> DrawingBuffer::CreateColorBuffer(
         back_buffer_alpha_type = kUnpremul_SkAlphaType;
       }
 
-      back_buffer_shared_image =
-          sii->CreateSharedImage(color_buffer_format_, size, color_space_,
-                                 origin, back_buffer_alpha_type, usage,
-                                 "WebGLDrawingBuffer", gpu::kNullSurfaceHandle);
+      back_buffer_shared_image = sii->CreateSharedImage(
+          {color_buffer_format_, size, color_space_, origin,
+           back_buffer_alpha_type, usage, "WebGLDrawingBuffer"},
+          gpu::kNullSurfaceHandle);
       CHECK(back_buffer_shared_image);
     }
   }
@@ -2157,8 +2201,22 @@ DrawingBuffer::ScopedStateRestorer::~ScopedStateRestorer() {
 }
 
 bool DrawingBuffer::ShouldUseChromiumImage() {
-  return RuntimeEnabledFeatures::WebGLImageChromiumEnabled() &&
-         chromium_image_usage_ == kAllowChromiumImage;
+  if (chromium_image_usage_ != kAllowChromiumImage) {
+    return false;
+  }
+#if BUILDFLAG(IS_ANDROID)
+  if (ContextProvider()
+          ->GetGpuFeatureInfo()
+          .status_values[gpu::GPU_FEATURE_TYPE_ANDROID_SURFACE_CONTROL] !=
+      gpu::kGpuFeatureStatusEnabled) {
+    return false;
+  }
+#endif
+  if (RuntimeEnabledFeatures::WebGLImageChromiumEnabled()) {
+    return true;
+  }
+  return low_latency_enabled() &&
+         base::FeatureList::IsEnabled(features::kLowLatencyWebGLImageChromium);
 }
 
 }  // namespace blink

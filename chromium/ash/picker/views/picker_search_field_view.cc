@@ -7,8 +7,13 @@
 #include <string>
 #include <string_view>
 
+#include "ash/ash_element_identifiers.h"
+#include "ash/picker/metrics/picker_performance_metrics.h"
+#include "ash/picker/views/picker_key_event_handler.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/typography.h"
+#include "base/functional/bind.h"
+#include "base/time/time.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/compositor.h"
@@ -31,23 +36,29 @@ constexpr auto kSearchFieldVerticalPadding = gfx::Insets::VH(6, 0);
 
 PickerSearchFieldView::PickerSearchFieldView(
     SearchCallback search_callback,
-    PickerSessionMetrics* session_metrics)
+    PickerKeyEventHandler* key_event_handler,
+    PickerPerformanceMetrics* performance_metrics)
     : search_callback_(std::move(search_callback)),
-      session_metrics_(session_metrics) {
-  SetLayoutManager(std::make_unique<views::FillLayout>());
-
-  textfield_ = AddChildView(std::make_unique<views::Textfield>());
-  textfield_->set_controller(this);
-  textfield_->SetBorder(views::CreateEmptyBorder(kSearchFieldBorderInsets));
-  textfield_->SetBackgroundColor(SK_ColorTRANSPARENT);
-  textfield_->SetFontList(TypographyProvider::Get()->ResolveTypographyToken(
-      TypographyToken::kCrosBody2));
-  textfield_->SetPlaceholderText(
-      l10n_util::GetStringUTF16(IDS_PICKER_SEARCH_FIELD_PLACEHOLDER_TEXT));
-  // TODO(b/309706053): Replace this once the strings are finalized.
-  textfield_->SetAccessibleName(u"placeholder");
-
-  SetProperty(views::kMarginsKey, kSearchFieldVerticalPadding);
+      key_event_handler_(key_event_handler),
+      performance_metrics_(performance_metrics) {
+  views::Builder<PickerSearchFieldView>(this)
+      .SetUseDefaultFillLayout(true)
+      .SetProperty(views::kMarginsKey, kSearchFieldVerticalPadding)
+      .AddChild(
+          views::Builder<views::Textfield>()
+              .CopyAddressTo(&textfield_)
+              .SetProperty(views::kElementIdentifierKey,
+                           kPickerSearchFieldTextfieldElementId)
+              .SetController(this)
+              .SetBorder(views::CreateEmptyBorder(kSearchFieldBorderInsets))
+              .SetBackgroundColor(SK_ColorTRANSPARENT)
+              .SetFontList(TypographyProvider::Get()->ResolveTypographyToken(
+                  TypographyToken::kCrosBody2))
+              .SetPlaceholderText(l10n_util::GetStringUTF16(
+                  IDS_PICKER_ZERO_STATE_SEARCH_FIELD_PLACEHOLDER_TEXT))
+              // TODO(b/309706053): Replace this once the strings are finalized.
+              .SetAccessibleName(u"placeholder"))
+      .BuildChildren();
 }
 
 PickerSearchFieldView::~PickerSearchFieldView() = default;
@@ -67,9 +78,14 @@ void PickerSearchFieldView::RemovedFromWidget() {
 void PickerSearchFieldView::ContentsChanged(
     views::Textfield* sender,
     const std::u16string& new_contents) {
-  session_metrics_->MarkContentsChanged();
+  performance_metrics_->MarkContentsChanged();
 
   search_callback_.Run(new_contents);
+}
+
+bool PickerSearchFieldView::HandleKeyEvent(views::Textfield* sender,
+                                           const ui::KeyEvent& key_event) {
+  return key_event_handler_->HandleKeyEvent(key_event);
 }
 
 void PickerSearchFieldView::OnWillChangeFocus(View* focused_before,
@@ -78,7 +94,7 @@ void PickerSearchFieldView::OnWillChangeFocus(View* focused_before,
 void PickerSearchFieldView::OnDidChangeFocus(View* focused_before,
                                              View* focused_now) {
   if (focused_now == textfield_) {
-    session_metrics_->MarkInputFocus();
+    performance_metrics_->MarkInputFocus();
   }
 }
 
@@ -87,7 +103,7 @@ void PickerSearchFieldView::SetPlaceholderText(
   textfield_->SetPlaceholderText(std::u16string(new_placeholder_text));
 }
 
-BEGIN_METADATA(PickerSearchFieldView, views::View)
+BEGIN_METADATA(PickerSearchFieldView)
 END_METADATA
 
 }  // namespace ash

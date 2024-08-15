@@ -30,11 +30,12 @@ parser.add_argument("--clobber-out", action="store_true");
 parser.add_argument("--download-pgo-profiles", action="store_true");
 parser.add_argument("--args-gn")
 parser.add_argument("--checkout-os")
+parser.add_argument("--target-cpu")
 
 args = parser.parse_args()
 
 def RunHooks():
-  global_vars, gn_vars = vivdeps.get_variables(args.checkout_os)
+  global_vars, gn_vars = vivdeps.get_variables(args.checkout_os, args.target_cpu)
 
   if args.download_pgo_profiles or gn_vars.get("is_official_build", False) in ["true", 1, "1", "True", True]:
     global_vars["checkout_pgo_profiles"] = True
@@ -43,29 +44,29 @@ def RunHooks():
   if args.args_gn:
     update_hooks["bootstrap-gn"] = ["--args-gn", args.args_gn]
 
-  hooks = vivdeps.VivaldiDeps(variables = global_vars)
+  hooks = vivdeps.VivaldiDeps(variables = global_vars, gn_vars=gn_vars)
   hooks.Load()
   hooks.RunHooks(update_hooks)
 
 if args.clobber_out:
   import shutil
-  build_dir = "out"
-  out_dir = os.path.join(SRC,build_dir)
-  if os.access(out_dir, os.R_OK):
-    start_time = datetime.datetime.now()
-    print("Deleting ", out_dir)
-    for _ in range(4):
-      try:
-        shutil.rmtree(out_dir)
-      except:
-        pass
-      if not os.access(out_dir, os.R_OK):
-        break
-      print("New delete try after", (datetime.datetime.now()-start_time).total_seconds(), "seconds")
+  for build_dir in ["out", "relayproxy"]:
+    out_dir = os.path.join(SRC,build_dir)
     if os.access(out_dir, os.R_OK):
-      raise Exception("Could not delete out directory")
-    stop_time = datetime.datetime.now()
-    print("Deleted", out_dir, "in", (stop_time-start_time).total_seconds(), "seconds")
+      start_time = datetime.datetime.now()
+      print("Deleting ", out_dir)
+      for _ in range(4):
+        try:
+          shutil.rmtree(out_dir)
+        except:
+          pass
+        if not os.access(out_dir, os.R_OK):
+          break
+        print("New delete try after", (datetime.datetime.now()-start_time).total_seconds(), "seconds")
+      if os.access(out_dir, os.R_OK):
+        raise Exception("Could not delete out directory")
+      stop_time = datetime.datetime.now()
+      print("Deleted", out_dir, "in", (stop_time-start_time).total_seconds(), "seconds")
   if vivdeps.IsAndroidEnabled() and int(os.environ.get("CHROME_HEADLESS",0)):
     print("Cleaning checkout ", SRC)
     subprocess.call(["git", "clean", "-fdx"], cwd=SRC)

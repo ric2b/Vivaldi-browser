@@ -24,14 +24,15 @@
 #include "core/fpdfapi/parser/cpdf_string.h"
 #include "core/fpdfapi/parser/fpdf_parser_utility.h"
 #include "core/fpdfapi/parser/object_tree_traversal_util.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_random.h"
 #include "core/fxcrt/fx_safe_types.h"
+#include "core/fxcrt/raw_span.h"
 #include "core/fxcrt/span_util.h"
 #include "core/fxcrt/stl_util.h"
-#include "third_party/base/check.h"
-#include "third_party/base/containers/contains.h"
 
 namespace {
 
@@ -50,7 +51,7 @@ class CFX_FileBufferArchive final : public IFX_ArchiveStream {
 
   FX_FILESIZE offset_ = 0;
   DataVector<uint8_t> buffer_;
-  pdfium::span<uint8_t> available_;
+  pdfium::raw_span<uint8_t> available_;
   RetainPtr<IFX_RetainableWriteStream> const backing_file_;
 };
 
@@ -81,9 +82,8 @@ bool CFX_FileBufferArchive::WriteBlock(pdfium::span<const uint8_t> buffer) {
   pdfium::span<const uint8_t> src_span = buffer;
   while (!src_span.empty()) {
     size_t copy_size = std::min(available_.size(), src_span.size());
-    fxcrt::spancpy(available_, src_span.first(copy_size));
+    available_ = fxcrt::spancpy(available_, src_span.first(copy_size));
     src_span = src_span.subspan(copy_size);
-    available_ = available_.subspan(copy_size);
     if (available_.empty() && !Flush())
       return false;
   }

@@ -1,7 +1,6 @@
 declare_args() {
   build_branch = "master"
   force_sopranos_build = false
-  is_final_build = false
 }
 
 _vivaldi_version_py_path = "//build/util/version.py"
@@ -10,8 +9,12 @@ _vivaldi_product_kind_file = "//vivaldi/VIVALDI_PRODUCT"
 
 _vivaldi_release_py_path = "//vivaldi/scripts/get_preview.py"
 
-release_kind =
+release_kind = "normal"
+# Only check branch if this is an official build and not a forced sopranos android build
+if (is_official_build && !force_sopranos_build) {
+  release_kind =
     exec_script(_vivaldi_release_py_path, [ build_branch ], "trim string")
+}
 official_product_kind_string =
     exec_script(_vivaldi_version_py_path,
                 [
@@ -30,9 +33,10 @@ if (is_vivaldi_polestar) {
   android_vivaldi_manifest_package = "com.vivaldi.browser.sopranos"
 }
 
+is_final_build = false
 _is_snapshot = false
 _is_dev = false
-if (release_kind == "final") {
+if (is_official_build && release_kind == "final") {
   is_final_build = true
   VIVALDI_RELEASE_KIND = "vivaldi_final"
   if (is_vivaldi_polestar) {
@@ -54,16 +58,16 @@ if (release_kind == "final") {
   _is_dev = true
   VIVALDI_RELEASE_KIND = "vivaldi_sopranos"
 }
-  extra_grit_defines = [
-    "-D",
-    "vivaldi_release_final=${is_final_build}",
-    "-D",
-    "vivaldi_release_snapshot=${_is_snapshot}",
-    "-D",
-    "vivaldi_release_sopranos=${_is_dev}",
-    "-D",
-    "vivaldi_debug=${is_debug}"
-  ]
+extra_grit_defines = [
+  "-D",
+  "vivaldi_release_final=${is_final_build}",
+  "-D",
+  "vivaldi_release_snapshot=${_is_snapshot}",
+  "-D",
+  "vivaldi_release_sopranos=${_is_dev}",
+  "-D",
+  "vivaldi_debug=${is_debug}"
+]
 
 if (is_vivaldi_automotive && !is_vivaldi_polestar) {
   android_vivaldi_manifest_package += ".automotive"
@@ -78,6 +82,9 @@ if (is_vivaldi_automotive && !is_vivaldi_polestar) {
   }
   if (is_vivaldi_volvo) {
     android_vivaldi_manifest_package += ".volvo"
+  }
+  if (is_vivaldi_mahindra) {
+    android_vivaldi_manifest_package += ".mahindra"
   }
 }
 

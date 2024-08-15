@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">風景１２</translation>
 <translation id="1158503667684816647">今後確認しない</translation>
 <translation id="1222195720020481779">インストーラーを起動中...</translation>
+<translation id="1270785070369717623">Opera GX が起動しているため、Vivaldi へ設定をインポートすることができません。作業内容を保存し、Opera GX のウィンドウを閉じてからもう一度やり直してください。</translation>
 <translation id="1276145862619442150">スピードダイヤル</translation>
 <translation id="1281950884873973195">動物６</translation>
 <translation id="1411638389238344450">リンクをメールで送る</translation>
@@ -12,6 +13,7 @@
 <translation id="1462666970065907900">このウィンドウを本当に閉じますか？</translation>
 <translation id="1480046233931937785">クレジット</translation>
 <translation id="1526344461589023948">ダウンロードした更新ファイルを保存できませんでした。お使いのコンピューターに十分な空き容量があることをご確認の上、もう一度お試しください。</translation>
+<translation id="1635542496948266458">プロファイルを切り替える</translation>
 <translation id="1657174850639146440">怪獣９</translation>
 <translation id="1676595396635191120">新規プライベートウィンドウ</translation>
 <translation id="1702758681952953055">エラーが連続して発生する場合、不具合報告にご協力ください。その際、以下の内容をお伝えください。</translation>
@@ -27,12 +29,14 @@
 <translation id="1985669426322966465">ソフトウェアの更新</translation>
 <translation id="2079036669923635404">最新版の Vivaldi <ph name="VERSION" /> が、クリック後すぐにお使い頂けます。</translation>
 <translation id="2141974047387702305">更新ファイルのダウンロード中にエラーが発生しました。インターネットに接続していることをご確認の上、後ほどもう一度お試しください。</translation>
+<translation id="2226825946708954262">⚠ データ損失を理解した上で続行</translation>
 <translation id="2339641773402824483">更新を確認中...</translation>
 <translation id="2441056087170876076">怪獣２</translation>
 <translation id="2444387452209867610">メモを挿入</translation>
 <translation id="2486841023299517366">動物４</translation>
 <translation id="2612127540243995147">インストール準備ができました。Vivaldi を閉じて再起動します。</translation>
 <translation id="2613387515621326337">アップデートサイトを表示する</translation>
+<translation id="2645477450146475243">Opera が起動しているため、Vivaldi へ設定をインポートすることができません。作業内容を保存し、Opera のウィンドウを閉じてからもう一度やり直してください。</translation>
 <translation id="2647368062414805334">Edge が起動しているため、Vivaldi へ設定をインポートすることができません。作業内容を保存し、Edge のウィンドウを閉じてからもう一度やり直してください。</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">動物３</translation>
@@ -41,11 +45,14 @@
 <translation id="2923448633003185837">貼り付けて移動</translation>
 <translation id="2953943267837858202">動画の自動再生を許可しない</translation>
 <translation id="2977472760057091832">プライベートウィンドウで開く</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">新しいタブで開く</translation>
 <translation id="3027988479108856431">Yandex が起動しているため、Vivaldi へ設定をインポートすることができません。作業内容を保存し、Yandex のウィンドウを閉じてからもう一度やり直してください。</translation>
 <translation id="3084011186245865060">風景６</translation>
+<translation id="3085906383264247940">Opera (ベータ)</translation>
 <translation id="3093931836425623631">Vivaldi は、Chromium オープンソースプロジェクトとその他のオープンソースソフトウェアによって構築されています。</translation>
 <translation id="3127383884976966729">動物７</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">新しいブックマーク</translation>
 <translation id="3255747772218936245">更新をインストール</translation>
 <translation id="3259769196742189631">W3C のサービスによる検証</translation>
@@ -54,7 +61,6 @@
 <translation id="3334610655141903168">（無名）</translation>
 <translation id="3372505110412186107"><ph name="VERSION" /> は最新版のVivaldiです。</translation>
 <translation id="3383198080133834965">ばっちり最新版です！</translation>
-<translation id="3402602684546832928">Opera のブックマークファイルを選択してください</translation>
 <translation id="3451317331714872347">風景８</translation>
 <translation id="3457498675806041407">終了の確認</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> がインストールされました。ブラウザを再起動してください。</translation>
@@ -65,6 +71,7 @@
 <translation id="3588820906588687999">新しいタブで画像を開く</translation>
 <translation id="3601066750251199488">怪獣３</translation>
 <translation id="3620979700683094848">サイトは自動で動画再生できます</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Vivaldi の新バージョンが出ました！</translation>
 <translation id="3708982624815781692">ダウンロードはキャンセルされました。</translation>
 <translation id="3732157130969736834">ブックマークにリンク先を追加</translation>
@@ -76,6 +83,9 @@
 <translation id="3914946330804881301">Opera からインポートしたもの</translation>
 <translation id="3921292902397893431">怪獣８</translation>
 <translation id="3943857333388298514">貼り付け</translation>
+<translation id="3974783668264968389">Vivaldi はキーストアのロックを解除できませんでした。キーストアがない場合、保存したログインや安全な Cookie が失われ、同期、メール、カレンダーなどの一部の機能が動作しなくなります。
+
+    今すぐ終了し、キーストアのロックを解除するか修復してから、もう一度やり直してください。本当に続行する場合は、チェックボックスをクリックし、「Continue with Data Loss」ボタンを押してください。</translation>
 <translation id="4005270918754737597">このバージョンをスキップする</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4074744496918018786">プライベートウィンドウで画像を開く</translation>
@@ -88,7 +98,6 @@
 <translation id="443008484043213881">ツール</translation>
 <translation id="4456211719108566931">怪獣６</translation>
 <translation id="4512900838580567989">バックグラウンドのタブで開く</translation>
-<translation id="4515472507709384008">Opera バージョン 15 以上</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">バックグラウンドのタブで画像を開く</translation>
 <translation id="4582480609585453144">リンクをバックグラウンドタブで開く</translation>
@@ -100,16 +109,17 @@
 <translation id="498766871928286903"><ph name="TOTAL_SIZE_TO_DOWNLOAD" /> 中 <ph name="DOWNLOADED" /></translation>
 <translation id="5014281392052865061">インポートしたスピードダイヤル</translation>
 <translation id="5092656712000637858">ウェブパネルに追加</translation>
+<translation id="5106275083540628394">復号化に失敗：データ損失のリスク</translation>
 <translation id="5177818338935286353">怪獣７</translation>
 <translation id="5213743983876949565">動物１</translation>
 <translation id="5238244642230426581">インポートしたブックマーク</translation>
 <translation id="527605719918376753">タブをミュート</translation>
 <translation id="5305569355661722298">ウィンドウを閉じる確認</translation>
+<translation id="5322922669477407077">Opera（開発者向け）</translation>
 <translation id="5388358297987318779">画像を開く</translation>
 <translation id="5416008465899576639">Vivaldi の更新があります。</translation>
 <translation id="5497042274492038489">ウィンドウを閉じる確認</translation>
 <translation id="5594602170491763400">怪獣５</translation>
-<translation id="5615637589913244581">Opera バージョン 15 以上（ベータ）</translation>
 <translation id="5648110075441906505">新しいウィンドウで画像を開く</translation>
 <translation id="5656371807944747581">アップデートエラー！</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> があります（現在使用中のものは <ph name="OLD_VERSION" />）。ダウンロードしますか？</translation>
@@ -120,8 +130,8 @@
 <translation id="6040143037577758943">閉じる</translation>
 <translation id="6229528619562190452">クリックして Vivaldi を更新。</translation>
 <translation id="6234173136417926046">画像をスタートページの背景に使用する</translation>
-<translation id="630690498669249215">Opera のブックマークファイル</translation>
 <translation id="6339818817272922368">ローカルアカウント</translation>
+<translation id="6398710281890660037">プロファイルの保護</translation>
 <translation id="6438786710866753178">風景４</translation>
 <translation id="6477028720702061455">インポートする Opera のプロファイルフォルダーを選択してください</translation>
 <translation id="6510706699590490869">Vivaldi を更新 (&amp;U)</translation>
@@ -131,11 +141,13 @@
 <translation id="6635049669875534328">リリースノート:</translation>
 <translation id="6693585104974197539">インポートする Edge プロファイルフォルダーを選択してください</translation>
 <translation id="6726279523566323394">インポートする Brave プロファイルフォルダーを選択してください</translation>
-<translation id="6804831687363620480">Opera 15+ が起動しているため、Vivaldi へ設定をインポートすることができません。作業内容を保存し、Opera 15+ のウィンドウを閉じてからもう一度やり直してください。</translation>
 <translation id="6892812721183419409"><ph name="USER" /> でリンクを開く</translation>
 <translation id="6896758677409633944">コピー</translation>
+<translation id="6960139763942959188">このプロファルは現在、安全に保存されていません。Vivaldi はあなたのプロフィールをより安全な暗号化された形式にアップグレードしようとしています。続行する前に、今すぐ終了してプロファイルをバックアップしてください。</translation>
 <translation id="7086554968911045110">風景７</translation>
+<translation id="7099506190679014195">安全なキーストアのアップグレード</translation>
 <translation id="7111492742514999492">風景９</translation>
+<translation id="7208252576848052204">Arc が起動しているため、Vivaldi へ設定をインポートすることができません。作業内容を保存し、Arc のウィンドウを閉じてからもう一度やり直してください。</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">更新インストーラーの起動に失敗しました。お使いのコンピューターに十分なメモリーとストレージの空き容量があることをご確認の上、後ほどもう一度お試しください。</translation>
 <translation id="7658239707568436148">キャンセル</translation>
@@ -162,7 +174,6 @@
 <translation id="8562339533180097902">Vivaldi を閉じてインストールする</translation>
 <translation id="8567452685425968223">更新を展開中...</translation>
 <translation id="8624587806981488221">画像を再読み込み (&amp;R)</translation>
-<translation id="864444594187862076">Opera バージョン 15 以上（デベロッパー）</translation>
 <translation id="8651348004684669199">表示中のタブを追加</translation>
 <translation id="8669345741879513971">怪獣１０</translation>
 <translation id="867544375504146191">Yandex</translation>
@@ -178,6 +189,7 @@
 <translation id="9048058608784130603">再起動待ち <ph name="VERSION" /></translation>
 <translation id="9048224371732578627">動画の自動再生が許可されています</translation>
 <translation id="9065203028668620118">編集</translation>
+<translation id="9090254883741610153">続ける</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261"><ph name="USER" /> で画像を開く</translation>
 <translation id="9157539936604258187">開く</translation>

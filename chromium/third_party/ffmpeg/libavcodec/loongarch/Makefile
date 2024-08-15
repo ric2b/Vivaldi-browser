@@ -27,7 +27,10 @@ LSX-OBJS-$(CONFIG_HEVC_DECODER)       += loongarch/hevcdsp_lsx.o \
                                          loongarch/hevc_lpf_sao_lsx.o \
                                          loongarch/hevc_mc_bi_lsx.o \
                                          loongarch/hevc_mc_uni_lsx.o \
-                                         loongarch/hevc_mc_uniw_lsx.o
+                                         loongarch/hevc_mc_uniw_lsx.o \
+                                         loongarch/hevc_add_res.o \
+                                         loongarch/hevc_mc.o \
+                                         loongarch/hevc_idct.o
 LSX-OBJS-$(CONFIG_H264DSP)            += loongarch/h264idct.o \
                                          loongarch/h264idct_loongarch.o \
                                          loongarch/h264dsp.o

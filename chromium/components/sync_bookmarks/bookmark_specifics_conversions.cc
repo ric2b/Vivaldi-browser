@@ -693,7 +693,7 @@ bool HasExpectedBookmarkGuid(const sync_pb::BookmarkSpecifics& specifics,
                                          originator_client_item_id);
 }
 
-absl::optional<std::string> VivaldiGetSyncedThumbnailChecksumFromSpecifics(
+std::optional<std::string> VivaldiGetSyncedThumbnailChecksumFromSpecifics(
     const sync_pb::BookmarkSpecifics& specifics) {
   for (const sync_pb::MetaInfo& meta_info : specifics.meta_info()) {
     if (meta_info.key() == vivaldi_bookmark_kit::ThumbnailString()) {
@@ -701,10 +701,10 @@ absl::optional<std::string> VivaldiGetSyncedThumbnailChecksumFromSpecifics(
           meta_info.value());
     }
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
-absl::optional<std::string> VivaldiGetSyncedThumbnailChecksumFromNode(
+std::optional<std::string> VivaldiGetSyncedThumbnailChecksumFromNode(
     const bookmarks::BookmarkNode* node) {
   std::string thumbnail = vivaldi_bookmark_kit::GetThumbnail(node);
 

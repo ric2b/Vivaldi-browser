@@ -15,7 +15,6 @@ namespace {
 
 const base::Feature* kFeaturesExposedToJava[] = {
     &kAndroidAutofillBottomSheetWorkaround,
-    &kAndroidAutofillFormSubmissionCheckById,
     &kAndroidAutofillPrefillRequestsForLoginForms,
     &kAndroidAutofillSupportVisibilityChanges,
     &kAndroidAutofillUsePwmPredictionsForOverrides,
@@ -31,15 +30,13 @@ BASE_FEATURE(kAndroidAutofillBottomSheetWorkaround,
              "AndroidAutofillBottomSheetWorkaround",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// If enabled, form submissions are reported to Android Autofill iff the
-// `FormGlobalId` of the submitted form matches that of the current Autofill
+// If enabled, we explicitly cancel the ongoing Android autofill session on new
+// document navigation by calling `AutofillManager.cancel()`, we clear the
+// request state in the java side as it works as an indicator to the current
 // session.
-// If disabled, a similarity check is used that requires most (see
-// `FormDataAndroid::SimilarAs` for details) members variables of the forms and
-// their fields to be identical.
-BASE_FEATURE(kAndroidAutofillFormSubmissionCheckById,
-             "AndroidAutofillFormSubmissionCheckById",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kAndroidAutofillCancelSessionOnNavigation,
+             "AndroidAutofillCancelSessionOnNavigation",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // If enabled, prefill requests (i.e. calls to
 // `AutofillManager.notifyVirtualViewsReady`) are supported. Such prefill

@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/layout/geometry/transform_state.h"
+#include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/inline/fragment_item.h"
 #include "third_party/blink/renderer/core/layout/inline/inline_cursor.h"
@@ -442,7 +443,7 @@ void LayoutInline::QuadsForSelfInternal(Vector<gfx::QuadF>& quads,
                                         MapCoordinatesFlags mode,
                                         bool map_to_absolute) const {
   NOT_DESTROYED();
-  absl::optional<gfx::Transform> mapping_to_absolute;
+  std::optional<gfx::Transform> mapping_to_absolute;
   // Set to true if the transform to absolute space depends on the point
   // being mapped (in which case we can't use LocalToAbsoluteTransform).
   bool transform_depends_on_point = false;
@@ -480,17 +481,17 @@ void LayoutInline::QuadsForSelfInternal(Vector<gfx::QuadF>& quads,
   }
 }
 
-absl::optional<PhysicalOffset> LayoutInline::FirstLineBoxTopLeftInternal()
+std::optional<PhysicalOffset> LayoutInline::FirstLineBoxTopLeftInternal()
     const {
   NOT_DESTROYED();
   if (IsInLayoutNGInlineFormattingContext()) {
     InlineCursor cursor;
     cursor.MoveToIncludingCulledInline(*this);
     if (!cursor)
-      return absl::nullopt;
+      return std::nullopt;
     return cursor.CurrentOffsetInBlockFlow();
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 PhysicalOffset LayoutInline::AnchorPhysicalLocation() const {

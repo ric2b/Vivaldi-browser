@@ -54,7 +54,7 @@ bssl::UniquePtr<X509> CreateCertificateInternal(
     bool make_ca,
     X509* issuer,
     EVP_PKEY* issuer_key) {
-  OSP_DCHECK((!!issuer) == (!!issuer_key));
+  OSP_CHECK_EQ((!!issuer), (!!issuer_key));
   bssl::UniquePtr<X509> certificate(X509_new());
   if (!issuer) {
     issuer = certificate.get();

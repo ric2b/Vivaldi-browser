@@ -31,7 +31,6 @@
 #include <utility>
 
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
-#include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/hash_functions.h"
 #include "third_party/blink/renderer/platform/wtf/hash_table_deleted_value_type.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
@@ -73,6 +72,8 @@ namespace WTF {
 //
 template <typename T>
 struct HashTraits;
+
+class String;
 
 namespace internal {
 
@@ -177,15 +178,6 @@ struct GenericHashTraitsBase {
 #else
   static constexpr unsigned kMinimumTableSize = 8;
 #endif
-
-  // When a hash table backing store is traced, its elements will be
-  // traced if their class type has a trace method. However, weak-referenced
-  // elements should not be traced then, but handled by the weak processing
-  // phase that follows.
-  template <typename U = void>
-  struct IsTraceableInCollection {
-    static constexpr bool value = IsTraceable<T>::value && !IsWeak<T>::value;
-  };
 
   // The NeedsToForbidGCOnMove flag is used to make the hash table move
   // operations safe when GC is enabled: if a move constructor invokes
@@ -528,11 +520,6 @@ struct OneFieldHashTraits : GenericHashTraits<T> {
   static constexpr unsigned kMinimumTableSize = FieldTraits::kMinimumTableSize;
 
   template <typename U = void>
-  struct IsTraceableInCollection {
-    static const bool value = IsTraceableInCollectionTrait<FieldTraits>::value;
-  };
-
-  template <typename U = void>
   struct NeedsToForbidGCOnMove {
     static const bool value =
         FieldTraits::template NeedsToForbidGCOnMove<>::value;
@@ -575,13 +562,6 @@ struct TwoFieldsHashTraits : OneFieldHashTraits<T, first_field, FirstTraits> {
 
   // ConstructDeletedValue(), IsDeletedValue(), kMinimumTableSize delegate to
   // the first field, inherited from OneFieldHashTraits.
-
-  template <typename U = void>
-  struct IsTraceableInCollection {
-    static const bool value =
-        IsTraceableInCollectionTrait<FirstTraits>::value ||
-        IsTraceableInCollectionTrait<SecondTraits>::value;
-  };
 
   template <typename U = void>
   struct NeedsToForbidGCOnMove {

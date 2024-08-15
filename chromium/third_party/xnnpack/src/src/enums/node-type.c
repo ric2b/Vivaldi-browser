@@ -15,10 +15,10 @@
 
 
 #if XNN_LOG_LEVEL > 0
-static const uint16_t offset[55] = {
-  0, 8, 12, 17, 35, 54, 71, 93, 101, 107, 120, 133, 146, 154, 169, 174, 191, 209, 234, 241, 245, 257, 269, 281, 287,
-  303, 326, 352, 378, 400, 422, 432, 443, 458, 467, 476, 486, 493, 499, 504, 533, 541, 549, 567, 574, 586, 605, 625,
-  637, 652, 678, 691, 708, 717, 722
+static const uint16_t offset[58] = {
+  0, 8, 12, 17, 35, 54, 71, 93, 101, 107, 120, 133, 146, 159, 167, 182, 187, 204, 222, 247, 254, 258, 270, 282, 294,
+  300, 316, 339, 365, 391, 413, 435, 445, 456, 471, 480, 489, 499, 506, 512, 535, 546, 551, 580, 588, 596, 614, 621,
+  633, 652, 672, 684, 699, 725, 738, 755, 764, 769
 };
 
 static const char data[] =
@@ -34,6 +34,7 @@ static const char data[] =
   "Concatenate2\0"
   "Concatenate3\0"
   "Concatenate4\0"
+  "Concatenate5\0"
   "Convert\0"
   "Convolution 2D\0"
   "Copy\0"
@@ -60,6 +61,8 @@ static const char data[] =
   "Multiply2\0"
   "Negate\0"
   "PReLU\0"
+  "Reciprocal Square Root\0"
+  "Reshape 2D\0"
   "RoPE\0"
   "Scaled Dot Product Attention\0"
   "Sigmoid\0"

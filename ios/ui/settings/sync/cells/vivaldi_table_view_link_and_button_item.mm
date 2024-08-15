@@ -5,7 +5,6 @@
 #import "base/apple/foundation_util.h"
 #import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_styler.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/button_configuration_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/table_view/table_view_cells_constants.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
@@ -113,6 +112,12 @@ const NSTextAlignment kDefaultTextAlignment = NSTextAlignmentCenter;
   if (self) {
     // Create button.
     self.button = [UIButton buttonWithType:UIButtonTypeSystem];
+    UIButtonConfiguration* buttonConfiguration =
+        [UIButtonConfiguration plainButtonConfiguration];
+    buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
+        kButtonTitleVerticalContentInset, kButtonTitleHorizontalContentInset,
+        kButtonTitleVerticalContentInset, kButtonTitleHorizontalContentInset);
+    self.button.configuration = buttonConfiguration;
     self.button.translatesAutoresizingMaskIntoConstraints = NO;
     [self.button.titleLabel
         setFont:[UIFont preferredFontForTextStyle:UIFontTextStyleBody]];
@@ -121,10 +126,6 @@ const NSTextAlignment kDefaultTextAlignment = NSTextAlignmentCenter;
     self.button.titleLabel.textAlignment = NSTextAlignmentCenter;
     self.button.layer.cornerRadius = kButtonCornerRadius;
     self.button.clipsToBounds = YES;
-    SetContentEdgeInsets(self.button, UIEdgeInsetsMake(
-        kButtonTitleVerticalContentInset, kButtonTitleHorizontalContentInset,
-        kButtonTitleVerticalContentInset, kButtonTitleHorizontalContentInset));
-
     self.button.pointerInteractionEnabled = YES;
     // This button's background color is configured whenever the cell is
     // reused. The pointer style provider used here dynamically provides the

@@ -135,7 +135,14 @@ export interface SearchCompletedEvent {
 }
 
 export interface DoAidaConversationResult {
-  response: string;
+  statusCode?: number;
+  headers?: {
+    [x: string]: string,
+  };
+  netError?: number;
+  netErrorName?: string;
+  error?: string;
+  detail?: string;
 }
 
 export interface VisualElementImpression {
@@ -143,10 +150,18 @@ export interface VisualElementImpression {
   type: number;
   parent?: number;
   context?: number;
+  width?: number;
+  height?: number;
 }
 
 export interface ImpressionEvent {
   impressions: VisualElementImpression[];
+}
+
+export interface ResizeEvent {
+  veid: number;
+  width?: number;
+  height?: number;
 }
 
 export interface ClickEvent {
@@ -173,7 +188,7 @@ export interface ChangeEvent {
 }
 
 export interface KeyDownEvent {
-  veid: number;
+  veid?: number;
   context?: number;
 }
 
@@ -240,6 +255,8 @@ export interface InspectorFrontendHostAPI {
   inspectElementCompleted(): void;
 
   openInNewTab(url: Platform.DevToolsPath.UrlString): void;
+
+  openSearchResultsInNewTab(query: string): void;
 
   showItemInFolder(fileSystemPath: Platform.DevToolsPath.RawPathString): void;
 
@@ -343,7 +360,8 @@ export interface InspectorFrontendHostAPI {
 
   initialTargetId(): Promise<string|null>;
 
-  doAidaConversation: (request: string, cb: (result: DoAidaConversationResult) => void) => void;
+  doAidaConversation: (request: string, streamId: number, cb: (result: DoAidaConversationResult) => void) => void;
+  registerAidaClientEvent: (request: string) => void;
 
   recordImpression(event: ImpressionEvent): void;
   recordClick(event: ClickEvent): void;
@@ -428,8 +446,6 @@ export const enum EnumeratedHistogram {
   ExperimentDisabled = 'DevTools.ExperimentDisabled',
   DeveloperResourceLoaded = 'DevTools.DeveloperResourceLoaded',
   DeveloperResourceScheme = 'DevTools.DeveloperResourceScheme',
-  LinearMemoryInspectorRevealedFrom = 'DevTools.LinearMemoryInspector.RevealedFrom',
-  LinearMemoryInspectorTarget = 'DevTools.LinearMemoryInspector.Target',
   Language = 'DevTools.Language',
   SyncSetting = 'DevTools.SyncSetting',
   RecordingAssertion = 'DevTools.RecordingAssertion',

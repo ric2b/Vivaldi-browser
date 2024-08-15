@@ -93,8 +93,8 @@ bool SubstitutionPattern::Parse(const std::string& str,
 SubstitutionPattern SubstitutionPattern::MakeForTest(const char* str) {
   Err err;
   SubstitutionPattern pattern;
-  CHECK(pattern.Parse(str, nullptr, &err))
-      << err.message() << "\n" << err.help_text();
+  CHECK(pattern.Parse(str, nullptr, &err)) << err.message() << "\n"
+                                           << err.help_text();
   return pattern;
 }
 

@@ -37,6 +37,7 @@
 #include "dawn/native/Device.h"
 #include "dawn/native/Instance.h"
 #include "dawn/native/PhysicalDevice.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 
 namespace dawn::native {
 
@@ -124,6 +125,12 @@ void AdapterBase::APIGetProperties(AdapterProperties* properties) const {
         instance->ConsumedError(
             DAWN_VALIDATION_ERROR("Feature AdapterPropertiesD3D is not available."));
     }
+    if (unpacked.Get<AdapterPropertiesVk>() != nullptr &&
+        !mSupportedFeatures.IsEnabled(wgpu::FeatureName::AdapterPropertiesVk)) {
+        instance->ConsumedError(
+            DAWN_VALIDATION_ERROR("Feature AdapterPropertiesVk is not available."));
+    }
+
     if (auto* powerPreferenceDesc = unpacked.Get<DawnAdapterPropertiesPowerPreference>()) {
         powerPreferenceDesc->powerPreference = mPowerPreference;
     }
@@ -210,6 +217,9 @@ ResultOrError<Ref<DeviceBase>> AdapterBase::CreateDevice(const DeviceDescriptor*
     // Default toggles for all backend
     deviceToggles.Default(Toggle::LazyClearResourceOnFirstUse, true);
     deviceToggles.Default(Toggle::TimestampQuantization, true);
+    if (mPhysicalDevice->GetInstance()->IsBackendValidationEnabled()) {
+        deviceToggles.Default(Toggle::UseUserDefinedLabelsInBackend, true);
+    }
 
     // Backend-specific forced and default device toggles
     mPhysicalDevice->SetupBackendDeviceToggles(&deviceToggles);
@@ -271,7 +281,8 @@ Future AdapterBase::APIRequestDeviceF(const DeviceDescriptor* descriptor,
                                       const RequestDeviceCallbackInfo& callbackInfo) {
     struct RequestDeviceEvent final : public EventManager::TrackedEvent {
         WGPURequestDeviceCallback mCallback;
-        void* mUserdata;
+        // TODO(https://crbug.com/dawn/2349): Investigate DanglingUntriaged in dawn/native.
+        raw_ptr<void, DanglingUntriaged> mUserdata;
         ResultOrError<Ref<DeviceBase>> mDeviceOrError;
 
         RequestDeviceEvent(const RequestDeviceCallbackInfo& callbackInfo,
@@ -279,22 +290,27 @@ Future AdapterBase::APIRequestDeviceF(const DeviceDescriptor* descriptor,
             : TrackedEvent(callbackInfo.mode, TrackedEvent::Completed{}),
               mCallback(callbackInfo.callback),
               mUserdata(callbackInfo.userdata),
-              mDeviceOrError(std::move(deviceOrError)) {
-            CompleteIfSpontaneous();
-        }
+              mDeviceOrError(std::move(deviceOrError)) {}
 
         ~RequestDeviceEvent() override { EnsureComplete(EventCompletionType::Shutdown); }
 
         void Complete(EventCompletionType completionType) override {
-            if (mDeviceOrError.IsError()) {
-                std::unique_ptr<ErrorData> errorData = mDeviceOrError.AcquireError();
-                mCallback(WGPURequestDeviceStatus_Error, nullptr,
-                          errorData->GetFormattedMessage().c_str(), mUserdata);
-                return;
+            WGPURequestDeviceStatus status;
+            Ref<DeviceBase> device;
+
+            if (completionType == EventCompletionType::Shutdown) {
+                status = WGPURequestDeviceStatus_InstanceDropped;
+            } else {
+                if (mDeviceOrError.IsError()) {
+                    std::unique_ptr<ErrorData> errorData = mDeviceOrError.AcquireError();
+                    mCallback(WGPURequestDeviceStatus_Error, nullptr,
+                              errorData->GetFormattedMessage().c_str(), mUserdata);
+                    return;
+                }
+                device = mDeviceOrError.AcquireSuccess();
+                status = device == nullptr ? WGPURequestDeviceStatus_Unknown
+                                           : WGPURequestDeviceStatus_Success;
             }
-            Ref<DeviceBase> device = mDeviceOrError.AcquireSuccess();
-            WGPURequestDeviceStatus status = device == nullptr ? WGPURequestDeviceStatus_Unknown
-                                                               : WGPURequestDeviceStatus_Success;
             mCallback(status, ToAPI(ReturnToAPI(std::move(device))), nullptr, mUserdata);
         }
     };
@@ -305,7 +321,6 @@ Future AdapterBase::APIRequestDeviceF(const DeviceDescriptor* descriptor,
     }
 
     FutureID futureID = mPhysicalDevice->GetInstance()->GetEventManager()->TrackEvent(
-        callbackInfo.mode,
         AcquireRef(new RequestDeviceEvent(callbackInfo, CreateDevice(descriptor))));
     return {futureID};
 }

@@ -12,22 +12,20 @@ title: Bug Life Cycle and Reporting Guidelines
 
 ### Chromium (the web browser)
 
-*   Report bugs at <https://crbug.com/wizard>
+*   Report bugs at <https://issues.chromium.org/new>
 *   Specifically:
     *   [Bug Reporting Guidelines for the Mac & Linux
                 builds](/for-testers/bug-reporting-guidlines-for-the-mac-linux-builds)
                 (with links to known issues pages)
     *   [Instructions for reporting
                 crashes](/for-testers/bug-reporting-guidelines/reporting-crash-bug).
-*   View existing bugs at
-            <https://bugs.chromium.org/p/chromium/issues/list>
+    *  View existing bugs at <https://issues.chromium.org/issues?q=status:open>
 
 ### Chromium OS (the operating system)
 
-*   Report bugs at
-            <https://code.google.com/p/chromium/issues/entry?template=Defect%20on%20Chrome%20OS>
+*   Report bugs at [Chromium Issue Tracker](https://issues.chromium.org/new)
 *   View existing bugs at [Chromium OS
-            issues](https://code.google.com/p/chromium/issues/list?can=2&q=os%3Dchrome)
+            issues](https://issues.chromium.org/issues?q=status:open%20customfield1223084:%22ChromeOS%22)
 
 You need a [Google Account](https://www.google.com/accounts/NewAccount)
 associated with your email address in order to use the bug system.
@@ -68,104 +66,36 @@ associated with your email address in order to use the bug system.
 *   [Triage Best
             Practices](/for-testers/bug-reporting-guidelines/triage-best-practices)
 
-## Labels
+## Hotlists
 
-Labels are used to help the engineering team categorize and prioritize the bug
-reports that are coming in. Each report can (and should) have multiple labels.
+Hotlists are used to help the engineering team categorize and prioritize the bug
+reports that are coming in. Each report can (and should) have multiple hotlists.
 
-For details on labels used by the Chromium project, see [Chromium Bug
-Labels](/for-testers/bug-reporting-guidelines/chromium-bug-labels).
+For details on hotlists used by the Chromium project, see [Chromium Bug
+Hotlists](/for-testers/bug-reporting-guidelines/chromium-bug-hotlists).
 
 ## Status
 
-### Open bugs
-
-<table>
-<tr>
-Status value 	 Description </tr>
-<tr>
-<td>Unconfirmed</td>
-<td>The default for public bugs. Waiting for someone to validate, reproduce, or otherwise confirm that this is a bug. </td>
-</tr>
-<tr>
-<td>Untriaged</td>
-<td>A confirmed bug that has not been reviewed for priority or assignment. This is the default for project members' new bugs. </td>
-</tr>
-<tr>
-<td>Available</td>
-<td>Confirmed and triaged, but not assigned. Feel free to take these bugs! </td>
-</tr>
-<tr>
-<td>Assigned</td>
-<td>In someone's work queue. </td>
-</tr>
-<tr>
-<td>Started</td>
-<td>Actively being worked on. </td>
-</tr>
-</table>
-
-### Closed bugs
-
-<table>
-<tr>
-Status value 		 Description 	</tr>
-<tr>
-<td>Fixed</td>
-<td>Fixed.</td>
-</tr>
-<tr>
-<td>Verified</td>
-<td>The fix has been verified by test or by the original reporter.</td>
-</tr>
-<tr>
-<td>Duplicate</td>
-
-<td>This issue has been reported in another bug, or shares the same root cause as another bug. When Duplicate is selected, a field will appear for the ID of the other bug --- be sure to fill this in.</td>
-
-<td>Mark the bug with less information/discussion in it as the Duplicate.</td>
-
-</tr>
-<tr>
-<td>WontFix</td>
-<td>Covers all the reasons we chose to close the bug without taking action (can't repro, working as intended, obsolete).</td>
-</tr>
-<tr>
-<td>ExternalDependency</td>
-<td>Bugs that turn out to be in another project's code and that we've filed with that other project. Useful for tracking known issues that manifest themselves in our product, but that need to be fixed elsewhere (such as WebKit and V8 issues).</td>
-</tr>
-<tr>
-<td>FixUnreleased</td>
-<td>A special state for security hotfixes to mark bugs that are fixed, but not yet delivered to users. Bugs with this status will be visible only to project members and the original reporter.</td>
-</tr>
-<tr>
-<td>Invalid</td>
-<td>Illegible, spam, etc.</td>
-</tr>
-</table>
+To better understand the various fields and statuses, please visit:
+[Issues Overview](https://developers.google.com/issue-tracker/concepts/issues)
 
 ## Bug life cycle
 
-*   When a bug is first logged, it is given **Unconfirmed** status.
-*   The status is changed from unconfirmed to Untriaged once it has been
-            verified as a Chromium bug.
+*   When a bug is first logged, it is given **New** status.
+*   The `Unconfirmed` hotlist is removed when the bug has been verified as a Chromium bug.
 *   Once a bug has been picked up by a developer, it is marked as
-            Assigned.
-*   A status of **Started** means a fix is being worked on.
+            **Assigned**.
+*   A status of **In Progress (Accepted)** means a fix is being worked on.
 *   A status of **Fixed** means that the bug has been fixed, and
             **Verified** means that the fix has been tested and confirmed.
             Please note that it will take some time for the "fix" to make it
             into the various channels (canary, beta, release) - pay attention to
             the milestone attached to the bug, and compare it to
             chrome://version.
-
-## Deciding where to submit your bug
-
-Usually, Chromium-related bugs should be filed under one of the following
-projects:
-
-*   [chromium](http://code.google.com/p/chromium/issues/entry)
-*   [blink](http://crbug.com/) and add component "Blink"
+*   A bug on the [Unconfirmed hotlist](https://issues.chromium.org/savedsearches/6680973)
+            is a newly logged bug that hasn't been confirmed
+*   A bug on the [Available hotlist](https://issues.chromium.org/savedsearches/6681397)
+            has been triaged and is waiting for a fix.
 
 ## Helping with bug triage
 

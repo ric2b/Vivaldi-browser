@@ -7,12 +7,17 @@
 
 #include "base/functional/callback_forward.h"
 #include "components/autofill/core/browser/filling_product.h"
-#include "components/autofill/core/browser/ui/popup_types.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
 #include "components/autofill/core/common/aliases.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 
+namespace password_manager {
+class PasswordManagerDriver;
+}
+
 namespace autofill {
+
+class AutofillDriver;
 
 // An interface for interaction with AutofillPopupController. Will be notified
 // of events by the controller.
@@ -27,6 +32,12 @@ class AutofillPopupDelegate {
     // selected.
     int sub_popup_level = 0;
   };
+
+  virtual ~AutofillPopupDelegate() = default;
+
+  virtual absl::variant<AutofillDriver*,
+                        password_manager::PasswordManagerDriver*>
+  GetDriver() = 0;
 
   // Called when the Autofill popup is shown. If the popup supports sub-popups
   // only the root one triggers it.
@@ -60,25 +71,9 @@ class AutofillPopupDelegate {
   // Informs the delegate that the Autofill previewed form should be cleared.
   virtual void ClearPreviewedForm() = 0;
 
-  // Returns the type of the popup being shown.
-  // TODO(b/316859406): Replace with `GetMainFillingProduct`.
-  virtual PopupType GetPopupType() const = 0;
-
   // Returns the main filling product the popup being shown, which is a function
   // of the list of suggestions being shown.
   virtual FillingProduct GetMainFillingProduct() const = 0;
-
-  // Returns the ax node id associated with the current web contents' element
-  // who has a controller relation to the current autofill popup.
-  virtual int32_t GetWebContentsPopupControllerAxId() const = 0;
-
-  // Sets |deletion_callback| to be called from the delegate's destructor.
-  // Useful for deleting objects which cannot be owned by the delegate but
-  // should not outlive it.
-  virtual void RegisterDeletionCallback(
-      base::OnceClosure deletion_callback) = 0;
-
-  virtual ~AutofillPopupDelegate() = default;
 };
 
 }  // namespace autofill

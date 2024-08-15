@@ -9,7 +9,7 @@
 #include "base/logging.h"
 #include "base/memory/aligned_memory.h"
 #include "base/memory/raw_ptr.h"
-#include "base/sys_byteorder.h"
+#include "base/numerics/byte_conversions.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
@@ -411,7 +411,8 @@ uint32_t MaybeConvertABGRToARGB(uint32_t abgr) {
     SK_A32_SHIFT == 24
   return abgr;
 #else
-  return (base::ByteSwap(abgr & 0x00FFFFFF) >> 8) | (abgr & 0xFF000000);
+  return (base::numerics::ByteSwap(abgr & 0x00FFFFFF) >> 8) |
+         (abgr & 0xFF000000);
 #endif
 }
 
@@ -1233,7 +1234,7 @@ class PaintCanvasVideoRendererWithGLTest : public testing::Test {
   scoped_refptr<VideoFrame> cropped_frame() { return cropped_frame_; }
 
  protected:
-  absl::optional<gl::DisableNullDrawGLBindings> enable_pixels_;
+  std::optional<gl::DisableNullDrawGLBindings> enable_pixels_;
   scoped_refptr<viz::TestInProcessContextProvider> media_context_;
   scoped_refptr<viz::TestInProcessContextProvider> gles2_context_;
   scoped_refptr<viz::TestInProcessContextProvider> destination_context_;

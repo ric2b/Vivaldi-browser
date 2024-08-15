@@ -40,7 +40,6 @@ from typing import Sequence
 from typing import Tuple
 import auth
 import clang_format
-import fix_encoding
 import gclient_paths
 import gclient_utils
 import gerrit_util
@@ -161,10 +160,6 @@ assert len(_KNOWN_GERRIT_TO_SHORT_URLS) == len(
 # Maximum number of branches in a stack that can be traversed and uploaded
 # at once. Picked arbitrarily.
 _MAX_STACKED_BRANCHES_UPLOAD = 20
-
-# Environment variable to indicate if user is participating in the stcked
-# changes dogfood.
-DOGFOOD_STACKED_CHANGES_VAR = 'DOGFOOD_STACKED_CHANGES'
 
 
 class GitPushError(Exception):
@@ -631,12 +626,20 @@ def _print_tryjobs(options, builds):
     print('Total: %d tryjobs' % total)
 
 
-def _ComputeFormatDiffLineRanges(files, upstream_commit):
+def _ComputeFormatDiffLineRanges(files, upstream_commit, expand=0):
     """Gets the changed line ranges for each file since upstream_commit.
 
     Parses a git diff on provided files and returns a dict that maps a file name
     to an ordered list of range tuples in the form (start_line, count).
     Ranges are in the same format as a git diff.
+
+    Args:
+        files: List of paths to diff.
+        upstream_commit: Commit to diff against to find changed lines.
+        expand: Expand diff ranges by this many lines before & after.
+
+    Returns:
+        A dict of path->[(start_line, end_line), ...]
     """
     # If files is empty then diff_output will be a full diff.
     if len(files) == 0:
@@ -667,6 +670,7 @@ def _ComputeFormatDiffLineRanges(files, upstream_commit):
             # Will match the second filename in diff --git a/a.py b/b.py.
             curr_file = match[0]
             line_diffs[curr_file] = []
+            prev_end = 1
         else:
             # Matches +14,3
             if ',' in match[1]:
@@ -678,10 +682,10 @@ def _ComputeFormatDiffLineRanges(files, upstream_commit):
 
             diff_start = int(diff_start)
             diff_count = int(diff_count)
-            diff_end = diff_start + diff_count - 1
-
-            # Only format added ranges (not removed ones).
-            if diff_end >= diff_start:
+            diff_end = diff_start + diff_count + expand
+            diff_start = max(prev_end + 1, diff_start - expand)
+            if diff_start <= diff_end:
+                prev_end = diff_end
                 line_diffs[curr_file].append((diff_start, diff_end))
 
     return line_diffs
@@ -1316,7 +1320,7 @@ class Changelist(object):
 
         self.branchref = branchref
         if self.branchref:
-            assert branchref.startswith('refs/heads/')
+            assert branchref.startswith(('refs/heads/', 'refs/branch-heads/'))
             self.branch = scm.GIT.ShortBranchName(self.branchref)
         else:
             self.branch = None
@@ -2060,15 +2064,6 @@ class Changelist(object):
         if not options.private and not options.no_autocc and not self.GetIssue(
         ):
             ccs = self.GetCCList().split(',')
-            if len(ccs) > 100:
-                lsc = (
-                    'https://chromium.googlesource.com/chromium/src/+/HEAD/docs/'
-                    'process/lsc/lsc_workflow.md')
-                print('WARNING: This will auto-CC %s users.' % len(ccs))
-                print('LSC may be more appropriate: %s' % lsc)
-                print(
-                    'You can also use the --no-autocc flag to disable auto-CC.')
-                confirm_or_exit(action='continue')
 
         # Add ccs from the --cc flag.
         if options.cc:
@@ -2300,9 +2295,15 @@ class Changelist(object):
         if remote_url is None:
             logging.warning('invalid remote')
             return
-        if urllib.parse.urlparse(remote_url).scheme not in ['https', 'sso']:
+
+        parsed_url = urllib.parse.urlparse(remote_url)
+        if parsed_url.scheme == 'sso':
+            # Skip checking authentication for projects with sso:// scheme.
+            return
+
+        if parsed_url.scheme != 'https':
             logging.warning(
-                'Ignoring branch %(branch)s with non-https/sso remote '
+                'Ignoring branch %(branch)s with non-https remote '
                 '%(remote)s', {
                     'branch': self.branch,
                     'remote': self.GetRemoteUrl()
@@ -3125,13 +3126,6 @@ class Changelist(object):
         if not options.private and not options.no_autocc and not self.GetIssue(
         ):
             cc = self.GetCCList().split(',')
-        if len(cc) > 100:
-            lsc = ('https://chromium.googlesource.com/chromium/src/+/HEAD/docs/'
-                   'process/lsc/lsc_workflow.md')
-            print('WARNING: This will auto-CC %s users.' % len(cc))
-            print('LSC may be more appropriate: %s' % lsc)
-            print('You can also use the --no-autocc flag to disable auto-CC.')
-            confirm_or_exit(action='continue')
         # Add cc's from the --cc flag.
         if options.cc:
             cc.extend(options.cc)
@@ -4680,6 +4674,9 @@ def CMDpresubmit(parser, args):
                       help='Run presubmit checks in the ResultSink environment '
                       'and send results to the ResultDB database.')
     parser.add_option('--realm', help='LUCI realm if reporting to ResultDB')
+    parser.add_option('-j',
+                      '--json',
+                      help='File to write JSON results to, or "-" for stdout')
     options, args = parser.parse_args(args)
 
     if not options.force and git_common.is_dirty_git_tree('presubmit'):
@@ -4712,16 +4709,18 @@ def CMDpresubmit(parser, args):
             return 1
         base_branch = 'HEAD'
 
-    cl.RunHook(committing=not options.upload,
-               may_prompt=False,
-               verbose=options.verbose,
-               parallel=options.parallel,
-               upstream=base_branch,
-               description=description,
-               all_files=options.all,
-               files=options.files,
-               resultdb=options.resultdb,
-               realm=options.realm)
+    result = cl.RunHook(committing=not options.upload,
+                        may_prompt=False,
+                        verbose=options.verbose,
+                        parallel=options.parallel,
+                        upstream=base_branch,
+                        description=description,
+                        all_files=options.all,
+                        files=options.files,
+                        resultdb=options.resultdb,
+                        realm=options.realm)
+    if options.json:
+        write_json(options.json, result)
     return 0
 
 
@@ -5062,31 +5061,7 @@ def CMDupload(parser, args):
         print('No previous patchsets, so --retry-failed has no effect.')
         options.retry_failed = False
 
-    disable_dogfood_stacked_changes = os.environ.get(
-        DOGFOOD_STACKED_CHANGES_VAR) == '0'
-    dogfood_stacked_changes = os.environ.get(DOGFOOD_STACKED_CHANGES_VAR) == '1'
-
-    # Only print message for folks who don't have DOGFOOD_STACKED_CHANGES set
-    # to an expected value.
-    if (options.squash and not dogfood_stacked_changes
-            and not disable_dogfood_stacked_changes):
-        print(
-            'This repo has been enrolled in the stacked changes dogfood.\n'
-            '`git cl upload` now uploads the current branch and all upstream '
-            'branches that have un-uploaded updates.\n'
-            'Patches can now be reapplied with --force:\n'
-            '`git cl patch --reapply --force`.\n'
-            'Googlers may visit http://go/stacked-changes-dogfood for more information.\n'
-            '\n'
-            'Depot Tools no longer sets new uploads to "WIP". Please update the\n'
-            '"Set new changes to "work in progress" by default" checkbox at\n'
-            'https://%s/settings/\n'
-            '\n'
-            'To opt-out use `export DOGFOOD_STACKED_CHANGES=0`.\n'
-            'To hide this message use `export DOGFOOD_STACKED_CHANGES=1`.\n'
-            'File bugs at https://bit.ly/3Y6opoI\n' % cl.GetGerritHost())
-
-    if options.squash and not disable_dogfood_stacked_changes:
+    if options.squash:
         if options.cherry_pick_stacked:
             try:
                 orig_args.remove('--cherry-pick-stacked')
@@ -5101,12 +5076,10 @@ def CMDupload(parser, args):
                 # we force code path that will read issue from the config.
                 cl.lookedup_issue = False
             return upload_branch_deps(cl, orig_args, options.force)
-
         return 0
-
     if options.cherry_pick_stacked:
         parser.error(
-            '--cherry-pick-stacked is not available for this workflow.')
+            '--cherry-pick-stacked is not available without squash=true,')
 
     # cl.GetMostRecentPatchset uses cached information, and can return the last
     # patchset before upload. Calling it here makes it clear that it's the
@@ -5247,9 +5220,9 @@ def UploadAllSquashed(options: optparse.Values,
     return 0
 
 
-def _UploadAllPrecheck(options, orig_args):
-    # type: (optparse.Values, Sequence[str]) -> Tuple[Sequence[Changelist],
-    # bool]
+def _UploadAllPrecheck(
+        options: optparse.Values,
+        orig_args: Sequence[str]) -> Tuple[Sequence[Changelist], bool]:
     """Checks the state of the tree and gives the user uploading options
 
     Returns: A tuple of the ordered list of changes that have new commits
@@ -5405,6 +5378,7 @@ def CMDsplit(parser, args):
         'be created, but don\'t create branches or CLs.')
     parser.add_option('--cq-dry-run',
                       action='store_true',
+                      default=False,
                       help='If set, will do a cq dry run for each uploaded CL. '
                       'Please be careful when doing this; more than ~10 CLs '
                       'has the potential to overload our build '
@@ -6067,7 +6041,7 @@ def BuildGitDiffCmd(diff_type, upstream_commit, args, allow_prefix=False):
 
     if args:
         for arg in args:
-            if os.path.isdir(arg) or os.path.isfile(arg):
+            if arg == '-' or os.path.isdir(arg) or os.path.isfile(arg):
                 diff_cmd.append(arg)
             else:
                 DieWithError('Argument "%s" is not a file or a directory' % arg)
@@ -6163,29 +6137,58 @@ def _RunGoogleJavaFormat(opts, paths, top_dir, upstream_commit):
         return 0
 
     base_cmd = [google_java_format, '--aosp']
-    if opts.dry_run or opts.diff:
-        base_cmd += ['--dry-run']
-    else:
-        base_cmd += ['--replace']
+    if not opts.diff:
+        if opts.dry_run:
+            base_cmd += ['--dry-run']
+        else:
+            base_cmd += ['--replace']
 
     changed_lines_only = not (opts.full or settings.GetFormatFullByDefault())
     if changed_lines_only:
-        line_diffs = _ComputeFormatDiffLineRanges(paths, upstream_commit)
+        # Format two lines around each changed line so that the correct amount
+        # of blank lines will be added between symbols.
+        line_diffs = _ComputeFormatDiffLineRanges(paths,
+                                                  upstream_commit,
+                                                  expand=2)
+
+    def RunFormat(cmd, path, range_args, **kwds):
+        stdout = RunCommand(cmd + range_args + [path], **kwds)
+
+        if changed_lines_only:
+            # google-java-format will not remove unused imports because they
+            # do not fall within the changed lines. Run the command again to
+            # remove them.
+            if opts.diff:
+                stdout = RunCommand(cmd + ['--fix-imports-only', '-'],
+                                    stdin=stdout.encode(),
+                                    **kwds)
+            else:
+                stdout += RunCommand(cmd + ['--fix-imports-only', path], **kwds)
+
+        # If --diff is passed, google-java-format will output formatted content.
+        # Diff it with the existing file in the checkout and output the result.
+        if opts.diff:
+            diff_cmd = BuildGitDiffCmd(['-U3'], '--no-index', [path, '-'])
+            stdout = RunGit(diff_cmd, stdin=stdout.encode(), **kwds)
+        return stdout
 
     results = []
     kwds = {'error_ok': True, 'cwd': top_dir}
     with multiprocessing.pool.ThreadPool() as pool:
         for path in paths:
             cmd = base_cmd.copy()
+            range_args = []
             if changed_lines_only:
                 ranges = line_diffs.get(path)
                 if not ranges:
                     # E.g. There were only deleted lines.
                     continue
-                cmd.extend('--lines={}:{}'.format(a, b) for a, b in ranges)
+                range_args = ['--lines={}:{}'.format(a, b) for a, b in ranges]
 
             results.append(
-                pool.apply_async(RunCommand, args=[cmd + [path]], kwds=kwds))
+                pool.apply_async(RunFormat,
+                                 args=[cmd, path, range_args],
+                                 kwds=kwds))
 
         return_value = 0
         for result in results:
@@ -6337,6 +6340,29 @@ def _RunGnFormat(opts, paths, top_dir, upstream_commit):
     return return_value
 
 
+def _RunMojomFormat(opts, paths, top_dir, upstream_commit):
+    primary_solution_path = gclient_paths.GetPrimarySolutionPath()
+    if not primary_solution_path:
+        DieWithError('Could not find the primary solution path (e.g. '
+                     'the chromium checkout)')
+    mojom_format_path = os.path.join(primary_solution_path, 'mojo', 'public',
+                                     'tools', 'mojom', 'mojom_format.py')
+    if not os.path.exists(mojom_format_path):
+        DieWithError('Could not find mojom formater at '
+                     f'"{mojom_format_path}"')
+
+    cmd = [mojom_format_path]
+    if opts.dry_run:
+        cmd.append('--dry-run')
+    cmd.extend(paths)
+
+    ret = subprocess2.call(cmd)
+    if opts.dry_run and ret != 0:
+        return 2
+
+    return ret
+
+
 def _FormatXml(opts, paths, top_dir, upstream_commit):
     # Skip the metrics formatting from the global presubmit hook. These files
     # have a separate presubmit hook that issues an error if the files need
@@ -6453,6 +6479,10 @@ def CMDformat(parser, args):
         action='store_false',
         help='Disables formatting of Swift file types using swift-format.')
 
+    parser.add_option('--mojom',
+                      action='store_true',
+                      help='Enables formatting of .mojom files.')
+
     parser.add_option('--no-java',
                       action='store_true',
                       help='Disable auto-formatting of .java')
@@ -6509,6 +6539,8 @@ def CMDformat(parser, args):
         formatters += [(['.swift'], _RunSwiftFormat)]
     if opts.python is not False:
         formatters += [(['.py'], _RunYapf)]
+    if opts.mojom:
+        formatters += [(['.mojom'], _RunMojomFormat)]
 
     top_dir = settings.GetRoot()
     return_value = 0
@@ -6659,12 +6691,6 @@ class OptionParser(optparse.OptionParser):
 
 
 def main(argv):
-    if sys.version_info[0] < 3:
-        print('\nYour Python version %s is unsupported, please upgrade.\n' %
-              (sys.version.split(' ', 1)[0], ),
-              file=sys.stderr)
-        return 2
-
     colorize_CMDstatus_doc()
     dispatcher = subcommand.CommandDispatcher(__name__)
     try:
@@ -6683,7 +6709,6 @@ def main(argv):
 if __name__ == '__main__':
     # These affect sys.stdout, so do it outside of main() to simplify mocks in
     # the unit tests.
-    fix_encoding.fix_encoding()
     setup_color.init()
     with metrics.collector.print_notice_and_exit():
         sys.exit(main(sys.argv[1:]))

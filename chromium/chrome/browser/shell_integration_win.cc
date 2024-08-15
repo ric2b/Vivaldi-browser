@@ -78,8 +78,7 @@ std::wstring GetProfileIdFromPath(const base::FilePath& profile_path) {
   if (vivaldi::IsStandalone()) {
     base::MD5Digest md5_digest;
     std::string profile_path_ascii(base::WideToASCII(profile_path.value()));
-    base::MD5Sum(profile_path_ascii.c_str(), profile_path_ascii.length(),
-        &md5_digest);
+    base::MD5Sum(base::as_byte_span(profile_path_ascii), &md5_digest);
     profile_id = base::ASCIIToWide(base::MD5DigestToBase16(md5_digest));
   } else {
   base::FilePath default_user_data_dir;
@@ -375,7 +374,12 @@ class OpenSystemSettingsHelper {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     // Make sure all the registry watchers have fired.
     if (--registry_watcher_count_ == 0) {
-      ConcludeInteraction();
+      // Give the ui automation events time to get processed, before finishing
+      // the system settings interaction.
+      timer_.Start(
+          FROM_HERE, base::Seconds(5),
+          base::BindOnce(&OpenSystemSettingsHelper::ConcludeInteraction,
+                         weak_ptr_factory_.GetWeakPtr()));
     }
   }
 

@@ -22,6 +22,7 @@ ivec3 tint_first_trailing_bit(ivec3 v) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   ivec3 inner;
+  uint pad;
 } prevent_dce;
 
 void firstTrailingBit_7496d6() {
@@ -45,6 +46,7 @@ void main() {
 }
 #version 310 es
 precision highp float;
+precision highp int;
 
 uvec3 tint_select(uvec3 param_0, uvec3 param_1, bvec3 param_2) {
     return uvec3(param_2[0] ? param_1[0] : param_0[0], param_2[1] ? param_1[1] : param_0[1], param_2[2] ? param_1[2] : param_0[2]);
@@ -68,6 +70,7 @@ ivec3 tint_first_trailing_bit(ivec3 v) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   ivec3 inner;
+  uint pad;
 } prevent_dce;
 
 void firstTrailingBit_7496d6() {
@@ -108,6 +111,7 @@ ivec3 tint_first_trailing_bit(ivec3 v) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   ivec3 inner;
+  uint pad;
 } prevent_dce;
 
 void firstTrailingBit_7496d6() {

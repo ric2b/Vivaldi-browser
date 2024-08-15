@@ -4,7 +4,8 @@
 
 import 'chrome://password-manager/password_manager.js';
 
-import {CrButtonElement, CrDialogElement, Page, PasswordManagerImpl, PasswordsImporterElement, PluralStringProxyImpl, Router} from 'chrome://password-manager/password_manager.js';
+import type {CrButtonElement, CrDialogElement, PasswordsImporterElement} from 'chrome://password-manager/password_manager.js';
+import {Page, PasswordManagerImpl, PluralStringProxyImpl, Router} from 'chrome://password-manager/password_manager.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
@@ -387,7 +388,10 @@ suite('PasswordsImporterTest', function() {
     assertTrue(dialog.open);
 
     const passwordItems = dialog.querySelectorAll('password-preview-item');
-    passwordItems.forEach(item => item.$.checkbox.click());
+    for (const item of passwordItems) {
+      item.$.checkbox.click();
+      await item.$.checkbox.updateComplete;
+    }
 
     const replaceButton =
         dialog.querySelector<CrButtonElement>('#replaceButton');
@@ -443,7 +447,10 @@ suite('PasswordsImporterTest', function() {
 
     let passwordItems = dialog.querySelectorAll('password-preview-item');
     // Select all rows.
-    passwordItems.forEach(item => item.$.checkbox.click());
+    for (const item of passwordItems) {
+      item.$.checkbox.click();
+      await item.$.checkbox.updateComplete;
+    }
 
     let replaceButton = dialog.querySelector<CrButtonElement>('#replaceButton');
     assertTrue(!!replaceButton);

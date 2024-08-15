@@ -176,10 +176,6 @@ class TargetPage {
 
     const dp = browserSession.protocol();
     const params = {url: 'about:blank'};
-    const createContextOptions = {};
-    params.browserContextId =
-        (await dp.Target.createBrowserContext(createContextOptions))
-            .result.browserContextId;
     targetPage._targetId =
         (await dp.Target.createTarget(params)).result.targetId;
 
@@ -210,9 +206,9 @@ class TargetPage {
             event.params.name === 'load' && event.params.frameId === frameId);
   }
 
-  async close() {
-    const dp = this._session.protocol();
-    dp.Target.closeTarget({targetId: this._targetId});
+  close() {
+    const dp = this._browserSession.protocol();
+    return dp.Target.closeTarget({targetId: this._targetId});
   }
 }
 
@@ -250,6 +246,17 @@ async function screenshot(dp, params) {
   const screenshotParams = {
     format,
   };
+
+  if (params.width > 0 && params.height > 0) {
+    screenshotParams.clip = {
+      x: 0,
+      y: 0,
+      width: params.width,
+      height: params.height,
+      scale: 1.0,
+    };
+  }
+
   const response = await dp.Page.captureScreenshot(screenshotParams);
   return response.result.data;
 }

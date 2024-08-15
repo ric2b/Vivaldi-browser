@@ -87,7 +87,7 @@ export class PropertiesWidget extends UI.ThrottledWidget.ThrottledWidget {
   constructor(throttlingTimeout?: number) {
     super(true /* isWebComponent */, throttlingTimeout);
 
-    this.showAllPropertiesSetting = Common.Settings.Settings.instance().createSetting('showAllProperties', false);
+    this.showAllPropertiesSetting = Common.Settings.Settings.instance().createSetting('show-all-properties', false);
     this.showAllPropertiesSetting.addChangeListener(this.filterList.bind(this));
 
     SDK.TargetManager.TargetManager.instance().addModelListener(
@@ -110,7 +110,7 @@ export class PropertiesWidget extends UI.ThrottledWidget.ThrottledWidget {
     toolbar.appendToolbarItem(new UI.Toolbar.ToolbarSettingCheckbox(
         this.showAllPropertiesSetting, i18nString(UIStrings.showAllTooltip), i18nString(UIStrings.showAll)));
 
-    this.contentElement.setAttribute('jslog', `${VisualLogging.pane().context('element-properties')}`);
+    this.contentElement.setAttribute('jslog', `${VisualLogging.pane('element-properties').track({resize: true})}`);
     this.noMatchesElement = this.contentElement.createChild('div', 'gray-info-message hidden');
     this.noMatchesElement.textContent = i18nString(UIStrings.noMatchingProperty);
 

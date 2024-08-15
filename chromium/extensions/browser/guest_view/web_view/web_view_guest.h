@@ -12,6 +12,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+
 #include "base/values.h"
 #include "components/guest_view/browser/guest_view.h"
 #include "content/public/browser/javascript_dialog_manager.h"
@@ -60,6 +61,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
                       int view_instance_id);
 
   static const char Type[];
+  static const guest_view::GuestViewHistogramValue HistogramValue;
 
   // Returns the WebView partition ID associated with the render process
   // represented by |render_process_host|, if any. Otherwise, an empty string is
@@ -82,7 +84,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   // Request navigating the guest to the provided |src| URL.
   void NavigateGuest(const std::string& src, bool force_navigation,
       ui::PageTransition transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-      absl::optional<content::OpenURLParams> params = absl::nullopt);
+      std::optional<content::OpenURLParams> params = std::nullopt);
 
   // Shows the context menu for the guest.
   void ShowContextMenu(int request_id);
@@ -105,6 +107,10 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   // Sets the transparency of the guest.
   void SetAllowTransparency(bool allow);
   bool allow_transparency() const { return allow_transparency_; }
+
+  // Sets the audio muted state of the guest.
+  void SetAudioMuted(bool mute);
+  bool IsAudioMuted();
 
   // Begin or continue a find request.
   void StartFind(const std::u16string& search_text,
@@ -200,6 +206,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   void GuestViewDidStopLoading() final;
   void GuestZoomChanged(double old_zoom_level, double new_zoom_level) final;
   bool IsAutoSizeSupported() const final;
+  void OnOwnerAudioMutedStateUpdated(bool muted) final;
   void SignalWhenReady(base::OnceClosure callback) final;
   void WillAttachToEmbedder() final;
   bool RequiresSslInterstitials() const final;
@@ -254,13 +261,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   void ExitFullscreenModeForTab(content::WebContents* web_contents) final;
   bool IsFullscreenForTabOrPending(
       const content::WebContents* web_contents) final;
-
-  void RegisterProtocolHandler(content::RenderFrameHost* requesting_frame,
-                               const std::string& protocol,
-                               const GURL& url,
-                               bool user_gesture) final;
-
-  void RequestToLockMouse(content::WebContents* web_contents,
+  void RequestPointerLock(content::WebContents* web_contents,
                           bool user_gesture,
                           bool last_unlocked_by_target) override;
 
@@ -301,7 +302,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
       const content::Referrer& referrer,
       ui::PageTransition transition_type,
       bool force_navigation,
-      absl::optional<content::OpenURLParams> params = absl::nullopt);
+      std::optional<content::OpenURLParams> params = std::nullopt);
 
   void RequestNewWindowPermission(WindowOpenDisposition disposition,
                                   const gfx::Rect& initial_bounds,
@@ -334,6 +335,12 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
 
   bool IsBackForwardCacheSupported() override;
 
+  // Vivaldi
+  void RegisterProtocolHandler(content::RenderFrameHost* requesting_frame,
+                               const std::string& protocol,
+                               const GURL& url,
+                               bool user_gesture) final;
+
   // Identifies the set of rules registries belonging to this guest.
   int rules_registry_id_;
 
@@ -349,6 +356,9 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
 
   // Stores whether the contents of the guest can be transparent.
   bool allow_transparency_ = false;
+
+  // Stores whether the guest has been muted by the webview.setAudioMuted API.
+  bool is_audio_muted_ = false;
 
   // Handles the JavaScript dialog requests.
   JavaScriptDialogHelper javascript_dialog_helper_;
@@ -378,7 +388,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
     bool did_start_navigating_away_from_initial_url = false;
 
     // Vivaldi
-    absl::optional<content::OpenURLParams> params;
+    std::optional<content::OpenURLParams> params;
 
     NewWindowInfo(const GURL& url, const std::string& name);
     NewWindowInfo(const NewWindowInfo&);

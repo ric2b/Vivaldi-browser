@@ -40,12 +40,8 @@ config("pdfium_common_config") {
     defines += [ "PDF_ENABLE_CLICK_LOGGING" ]
   }
 
-  if (pdf_use_skia) {
-    defines += [ "PDF_USE_SKIA" ]
-
-    if (pdf_enable_fontations) {
-      defines += [ "PDF_ENABLE_FONTATIONS" ]
-    }
+  if (pdf_use_skia && pdf_enable_fontations) {
+    defines += [ "PDF_ENABLE_FONTATIONS" ]
   }
 
   if (pdf_use_partition_alloc) {
@@ -261,6 +257,10 @@ config("pdfium_public_config") {
       }
     }
   }
+
+  if (pdf_use_skia) {
+    defines += [ "PDF_USE_SKIA" ]
+  }
 }
 
 config("pdfium_core_config") {
@@ -287,8 +287,10 @@ config("pdfium_plugin_config") {
   defines = []
   if (clang_use_chrome_plugins) {
     # Catch misuse of C-style pointers.
+    # TODO(crbug.com/1320670): enable for non-debug builds once this stops
+    # interfering with code generation.
     # TODO(tsepez): enable for windows, too.
-    if (!is_win) {
+    if (is_debug && !is_win) {
       cflags += [
         "-Xclang",
         "-plugin-arg-find-bad-constructs",
@@ -403,7 +405,6 @@ component("pdfium") {
     "fpdfsdk",
     "fpdfsdk/formfiller",
     "fxjs",
-    "third_party:pdfium_base",
   ]
 
   public_deps = [
@@ -514,7 +515,6 @@ group("pdfium_embeddertest_deps") {
     ":pdfium_public_headers",
     "core/fxcrt",
     "testing:embedder_test_support",
-    "third_party:pdfium_base_test_support",
     "//testing/gmock",
     "//testing/gtest",
   ]

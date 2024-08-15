@@ -4,6 +4,9 @@
 
 #include <math.h>
 
+#include <algorithm>
+
+#include "core/fxcrt/fx_extension.h"
 #include "fxjs/fxv8.h"
 #include "fxjs/xfa/cfxjse_engine.h"
 #include "fxjs/xfa/cfxjse_isolatetracker.h"
@@ -95,8 +98,7 @@ class CFXJSE_FormCalcContextEmbedderTest : public XFAJSEmbedderTest {
     CFXJSE_ScopeUtil_IsolateHandleContext scope(GetJseContext());
     v8::Local<v8::Value> value = GetValue();
     EXPECT_TRUE(fxv8::IsString(value));
-    EXPECT_STREQ(expected,
-                 fxv8::ReentrantToByteStringHelper(isolate(), value).c_str())
+    EXPECT_EQ(expected, fxv8::ReentrantToByteStringHelper(isolate(), value))
         << "Program: " << input;
   }
 };
@@ -691,8 +693,9 @@ TEST_F(CFXJSE_FormCalcContextEmbedderTest, Decode) {
   ExecuteExpectString(R"(Decode("~%26^&*()_+|`{", "mbogo"))", "~&^&*()_+|`{");
   ExecuteExpectString(R"(Decode("~%26^&*()_+|`{"))", "~&^&*()_+|`{");
   ExecuteExpectString(R"(Decode("~%~~"))", "");
+  ExecuteExpectString(R"(Decode("?%f~"))", "");
   ExecuteExpectString(R"(Decode("?%~"))", "");
-  ExecuteExpectString(R"(Decode("?%"))", "?");
+  ExecuteExpectString(R"(Decode("?%"))", "");
 }
 
 TEST_F(CFXJSE_FormCalcContextEmbedderTest, Encode) {
@@ -913,7 +916,12 @@ TEST_F(CFXJSE_FormCalcContextEmbedderTest, Uuid) {
 
   CFXJSE_ScopeUtil_IsolateHandleContext scope(GetJseContext());
   v8::Local<v8::Value> value = GetValue();
-  EXPECT_TRUE(fxv8::IsString(value));
+  ASSERT_TRUE(fxv8::IsString(value));
+  ByteString bstr = fxv8::ToByteString(isolate(), value.As<v8::String>());
+  EXPECT_EQ(bstr.GetLength(), 32u);
+  EXPECT_TRUE(std::all_of(bstr.begin(), bstr.end(), FXSYS_IsHexDigit));
+  EXPECT_TRUE(
+      std::any_of(bstr.begin(), bstr.end(), [](char c) { return c != '0'; }));
 }
 
 TEST_F(CFXJSE_FormCalcContextEmbedderTest, Upper) {

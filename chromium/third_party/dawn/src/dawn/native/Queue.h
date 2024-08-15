@@ -39,6 +39,7 @@
 #include "dawn/native/IntegerTypes.h"
 #include "dawn/native/ObjectBase.h"
 #include "dawn/native/SystemEvent.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 
 #include "dawn/native/DawnNative.h"
 #include "dawn/native/dawn_platform.h"
@@ -56,7 +57,7 @@ struct TrackTaskCallback : CallbackTask {
     ~TrackTaskCallback() override = default;
 
   protected:
-    dawn::platform::Platform* mPlatform = nullptr;
+    raw_ptr<dawn::platform::Platform> mPlatform = nullptr;
     // The serial by which time the callback can be fired.
     ExecutionSerial mSerial = kMaxExecutionSerial;
 };
@@ -68,6 +69,7 @@ class QueueBase : public ApiObjectBase, public ExecutionQueueBase {
     static Ref<QueueBase> MakeError(DeviceBase* device, const char* label);
 
     ObjectType GetType() const override;
+    void FormatLabel(absl::FormatSink* s) const override;
 
     // Dawn API
     void APISubmit(uint32_t commandCount, CommandBufferBase* const* commands);
@@ -135,6 +137,7 @@ class QueueBase : public ApiObjectBase, public ExecutionQueueBase {
                                        size_t size);
     virtual MaybeError WriteTextureImpl(const ImageCopyTexture& destination,
                                         const void* data,
+                                        size_t dataSize,
                                         const TextureDataLayout& dataLayout,
                                         const Extent3D& writeSize);
 

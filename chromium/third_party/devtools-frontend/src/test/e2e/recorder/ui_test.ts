@@ -2,38 +2,35 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/* eslint-disable rulesdir/es_modules_import */
-
 import {assert} from 'chai';
 import {type ElementHandle, type Page} from 'puppeteer-core';
 
 import {type StepType} from '../../../front_end/panels/recorder/models/Schema.js';
-
 import {
+  $$,
+  click,
   getBrowserAndPages,
   getResourcesPath,
+  renderCoordinatorQueueEmpty,
   waitFor,
+  waitForAnimationFrame,
   waitForAria,
   waitForFunction,
-  $$,
   waitForNone,
-  click,
-  waitForAnimationFrame,
-  renderCoordinatorQueueEmpty,
-  assertNotNullOrUndefined,
 } from '../../../test/shared/helper.js';
 import {
   describe,
   it,
 } from '../../../test/shared/mocha-extensions.js';
+
 import {
+  assertRecordingMatchesSnapshot,
   clickSelectButtonItem,
   createAndStartRecording,
   enableAndOpenRecorderPanel,
   getCurrentRecording,
   stopRecording,
   toggleCodeView,
-  assertRecordingMatchesSnapshot,
 } from './helpers.js';
 
 describe('Recorder', function() {
@@ -167,14 +164,12 @@ describe('Recorder', function() {
           const picker = await frontend.waitForSelector(
               'pierce/.selector-picker',
           );
-          assertNotNullOrUndefined(picker);
-          await picker.click();
+          await picker!.click();
 
           // Click element and wait for selector picking to stop.
           await target.bringToFront();
           const element = await target.waitForSelector(query);
-          assertNotNullOrUndefined(element);
-          await element.click();
+          await element!.click();
         }
 
         async function expandStep(frontend: Page, index: number) {
@@ -298,7 +293,7 @@ describe('Recorder', function() {
         await button.click();
         const input = await waitForAria('Timeout');
         // Clear the default value.
-        await input.evaluate((el: Element): void => {
+        await input.evaluate((el: Element) => {
           (el as HTMLInputElement).value = '';
         });
         await input.type('2000');

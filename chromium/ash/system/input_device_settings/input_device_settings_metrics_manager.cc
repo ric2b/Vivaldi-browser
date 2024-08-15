@@ -5,6 +5,8 @@
 #include "ash/system/input_device_settings/input_device_settings_metrics_manager.h"
 
 #include <cstdint>
+#include <optional>
+#include <string_view>
 
 #include "ash/accelerators/accelerator_encoding.h"
 #include "ash/constants/ash_features.h"
@@ -15,6 +17,7 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/system/input_device_settings/input_device_settings_controller_impl.h"
+#include "ash/system/input_device_settings/input_device_settings_metadata.h"
 #include "ash/system/input_device_settings/input_device_settings_pref_names.h"
 #include "ash/system/input_device_settings/input_device_settings_utils.h"
 #include "ash/system/input_device_settings/settings_updated_metrics_info.h"
@@ -23,12 +26,14 @@
 #include "base/json/values_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
+#include "base/types/optional_ref.h"
 #include "components/prefs/pref_service.h"
 #include "ui/events/ash/keyboard_capability.h"
 #include "ui/events/ash/mojom/six_pack_shortcut_modifier.mojom-shared.h"
+#include "ui/events/devices/device_data_manager.h"
+#include "ui/events/devices/keyboard_device.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/events/ozone/evdev/keyboard_mouse_combo_device_metrics.h"
 
@@ -266,7 +271,7 @@ void RecordButtonRemappingNameIfChanged(
 }
 
 template <typename T>
-base::StringPiece GetDeviceTypeMetricsName() {
+std::string_view GetDeviceTypeMetricsName() {
   if constexpr (std::is_same_v<T, mojom::Keyboard>) {
     return "Keyboard";
   } else if constexpr (std::is_same_v<T, mojom::Mouse>) {
@@ -279,7 +284,7 @@ base::StringPiece GetDeviceTypeMetricsName() {
 }
 
 template <typename T>
-base::StringPiece GetSettingsUpdatedPrefName() {
+std::string_view GetSettingsUpdatedPrefName() {
   if constexpr (std::is_same_v<T, mojom::Keyboard>) {
     return prefs::kKeyboardUpdateSettingsMetricInfo;
   } else if constexpr (std::is_same_v<T, mojom::Mouse>) {
@@ -291,11 +296,11 @@ base::StringPiece GetSettingsUpdatedPrefName() {
   }
 }
 
-base::StringPiece GetSettingsUpdatedTimePeriodMetricName(
+std::string_view GetSettingsUpdatedTimePeriodMetricName(
     SettingsUpdatedMetricsInfo::TimePeriod time_period) {
   constexpr auto kTimePeriodToMetricName =
       base::MakeFixedFlatMap<SettingsUpdatedMetricsInfo::TimePeriod,
-                             base::StringPiece>({
+                             std::string_view>({
           {SettingsUpdatedMetricsInfo::TimePeriod::kOneHour, "OneHour"},
           {SettingsUpdatedMetricsInfo::TimePeriod::kThreeHours, "ThreeHours"},
           {SettingsUpdatedMetricsInfo::TimePeriod::kOneDay, "OneDay"},
@@ -305,11 +310,11 @@ base::StringPiece GetSettingsUpdatedTimePeriodMetricName(
   return kTimePeriodToMetricName.at(time_period);
 }
 
-base::StringPiece GetSettingsUpdatedCategoryName(
+std::string_view GetSettingsUpdatedCategoryName(
     SettingsUpdatedMetricsInfo::Category category) {
   constexpr auto kCategoryToMetricName =
       base::MakeFixedFlatMap<SettingsUpdatedMetricsInfo::Category,
-                             base::StringPiece>({
+                             std::string_view>({
           {SettingsUpdatedMetricsInfo::Category::kFirstEver, "FirstEver"},
           {SettingsUpdatedMetricsInfo::Category::kDefault, "FromDefaults"},
           {SettingsUpdatedMetricsInfo::Category::kSynced, "Synced"},
@@ -419,6 +424,19 @@ void RecordInitialButtonRemappingAction(
                               peripheral_kind, "Initial");
 }
 
+std::optional<ui::KeyboardDevice> FindKeyboardWithId(int device_id) {
+  const auto& keyboards =
+      ui::DeviceDataManager::GetInstance()->GetKeyboardDevices();
+  auto iter = base::ranges::find(
+      keyboards, device_id,
+      [](const ui::KeyboardDevice& keyboard) { return keyboard.id; });
+  if (iter == keyboards.end()) {
+    return std::nullopt;
+  }
+
+  return *iter;
+}
+
 }  // namespace
 
 InputDeviceSettingsMetricsManager::InputDeviceSettingsMetricsManager() =
@@ -428,6 +446,11 @@ InputDeviceSettingsMetricsManager::~InputDeviceSettingsMetricsManager() =
 
 void InputDeviceSettingsMetricsManager::RecordKeyboardInitialMetrics(
     const mojom::Keyboard& keyboard) {
+  // TODO(dpad, b/329330990): Fix to work with flag enabled.
+  if (features::IsModifierSplitEnabled()) {
+    return;
+  }
+
   // Only record the metrics once for each keyboard.
   const auto account_id =
       Shell::Get()->session_controller()->GetActiveAccountId();
@@ -487,6 +510,11 @@ void InputDeviceSettingsMetricsManager::RecordKeyboardInitialMetrics(
 void InputDeviceSettingsMetricsManager::RecordKeyboardChangedMetrics(
     const mojom::Keyboard& keyboard,
     const mojom::KeyboardSettings& old_settings) {
+  // TODO(dpad, b/329330990): Fix to work with flag enabled.
+  if (features::IsModifierSplitEnabled()) {
+    return;
+  }
+
   const std::string keyboard_metrics_prefix =
       GetKeyboardMetricsPrefix(keyboard);
 
@@ -981,22 +1009,18 @@ void InputDeviceSettingsMetricsManager::RecordKeyboardMouseComboDeviceMetric(
     const mojom::Keyboard& keyboard,
     const mojom::Mouse& mouse) {
   static base::NoDestructor<base::flat_set<std::string>> logged_devices;
-  static constexpr auto kKnownKeyboardMouseComboDevices =
-      base::MakeFixedFlatSet<base::StringPiece>({
-          "046d:4024",  // Logitech K400
-          "046d:404d",  // Logitech K400+
-          "046d:c548",  // Logitech BOLT Receiver
-          "17ef:60e1",  // Lenovo TrackPoint Keyboard II
-          "17ef:60ee",  // Lenovo TrackPoint Keyboard II
-          "17ef:609f",  // Lenovo 100 USB-A Wireless Combo Keyboard and Mouse
-      });
 
   auto [_, inserted] = logged_devices->insert(keyboard.device_key);
   if (!inserted) {
     return;
   }
 
-  if (kKnownKeyboardMouseComboDevices.contains(keyboard.device_key)) {
+  auto keyboard_device = FindKeyboardWithId(keyboard.id);
+  if (!keyboard_device) {
+    return;
+  }
+
+  if (GetDeviceType(*keyboard_device) == DeviceType::kKeyboardMouseCombo) {
     base::UmaHistogramEnumeration(
         "ChromeOS.Inputs.ComboDeviceClassification",
         ui::ComboDeviceClassification::kKnownComboDevice);

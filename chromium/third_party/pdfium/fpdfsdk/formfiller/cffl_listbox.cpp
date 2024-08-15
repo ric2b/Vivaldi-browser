@@ -10,11 +10,11 @@
 
 #include "constants/form_flags.h"
 #include "core/fpdfdoc/cpdf_bafontmap.h"
+#include "core/fxcrt/containers/contains.h"
 #include "fpdfsdk/cpdfsdk_widget.h"
 #include "fpdfsdk/formfiller/cffl_interactiveformfiller.h"
 #include "fpdfsdk/formfiller/cffl_perwindowdata.h"
 #include "fpdfsdk/pwl/cpwl_list_box.h"
-#include "third_party/base/containers/contains.h"
 
 CFFL_ListBox::CFFL_ListBox(CFFL_InteractiveFormFiller* pFormFiller,
                            CPDFSDK_Widget* pWidget)
@@ -73,7 +73,7 @@ std::unique_ptr<CPWL_Wnd> CFFL_ListBox::NewPWLWindow(
   }
 
   pWnd->SetTopVisibleIndex(m_pWidget->GetTopVisibleIndex());
-  return std::move(pWnd);
+  return pWnd;
 }
 
 bool CFFL_ListBox::OnChar(CPDFSDK_Widget* pWidget,

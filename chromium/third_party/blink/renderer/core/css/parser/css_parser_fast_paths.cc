@@ -1322,6 +1322,20 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
              value_id == CSSValueID::kRelative ||
              value_id == CSSValueID::kAbsolute ||
              value_id == CSSValueID::kFixed || value_id == CSSValueID::kSticky;
+    case CSSPropertyID::kPositionTryOrder:
+      return value_id == CSSValueID::kNormal ||
+             value_id == CSSValueID::kMostWidth ||
+             value_id == CSSValueID::kMostHeight ||
+             value_id == CSSValueID::kMostBlockSize ||
+             value_id == CSSValueID::kMostInlineSize;
+    case CSSPropertyID::kReadingOrderItems:
+      DCHECK(RuntimeEnabledFeatures::CSSReadingOrderItemsEnabled());
+      return value_id == CSSValueID::kNormal ||
+             value_id == CSSValueID::kFlexVisual ||
+             value_id == CSSValueID::kFlexFlow ||
+             value_id == CSSValueID::kGridRows ||
+             value_id == CSSValueID::kGridColumns ||
+             value_id == CSSValueID::kGridOrder;
     case CSSPropertyID::kResize:
       return value_id == CSSValueID::kNone || value_id == CSSValueID::kBoth ||
              value_id == CSSValueID::kHorizontal ||
@@ -1430,6 +1444,8 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
               value_id == CSSValueID::kSearchfield ||
               value_id == CSSValueID::kTextfield ||
               value_id == CSSValueID::kTextarea) ||
+             (RuntimeEnabledFeatures::StylableSelectEnabled() &&
+              value_id == CSSValueID::kBikeshed) ||
              (RuntimeEnabledFeatures::
                   NonStandardAppearanceValuesHighUsageEnabled() &&
               IsNonStandardAppearanceValuesHighUsage(value_id)) ||
@@ -1722,6 +1738,8 @@ CSSBitset CSSParserFastPaths::handled_by_keyword_fast_paths_properties_{{
     CSSPropertyID::kPageOrientation,
     CSSPropertyID::kPointerEvents,
     CSSPropertyID::kPosition,
+    CSSPropertyID::kPositionTryOrder,
+    CSSPropertyID::kReadingOrderItems,
     CSSPropertyID::kResize,
     CSSPropertyID::kScrollBehavior,
     CSSPropertyID::kOverscrollBehaviorInline,

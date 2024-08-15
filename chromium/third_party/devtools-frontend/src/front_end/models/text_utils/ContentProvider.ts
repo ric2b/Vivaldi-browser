@@ -31,11 +31,14 @@
 import type * as Common from '../../core/common/common.js';
 import type * as Platform from '../../core/platform/platform.js';
 
-export abstract class ContentProvider {
-  abstract contentURL(): Platform.DevToolsPath.UrlString;
-  abstract contentType(): Common.ResourceType.ResourceType;
-  abstract requestContent(): Promise<DeferredContent>;
-  abstract searchInContent(query: string, caseSensitive: boolean, isRegex: boolean): Promise<SearchMatch[]>;
+import {type ContentDataOrError} from './ContentData.js';
+import {type StreamingContentDataOrError} from './StreamingContentData.js';
+
+export interface ContentProvider {
+  contentURL(): Platform.DevToolsPath.UrlString;
+  contentType(): Common.ResourceType.ResourceType;
+  requestContent(): Promise<DeferredContent>;
+  searchInContent(query: string, caseSensitive: boolean, isRegex: boolean): Promise<SearchMatch[]>;
 }
 
 export class SearchMatch {
@@ -57,6 +60,7 @@ export const contentAsDataURL = function(
     return null;
   }
 
+  content = contentEncoded ? content : encodeURIComponent(content);
   return 'data:' + mimeType + (charset ? ';charset=' + charset : '') + (contentEncoded ? ';base64' : '') + ',' +
       content;
 };
@@ -73,3 +77,23 @@ export type DeferredContent = {
   error: string,
   isEncoded: boolean,
 };
+
+// Some ContentProvider like NetworkRequests might never actually be able to return
+// a fully completed "requestContent" as the request keeps on going indefinitely.
+// Such proivders can implement the "StreamingContentProvider" addition, which allows
+// for partial/streaming content.
+export interface StreamingContentProvider extends ContentProvider {
+  requestStreamingContent(): Promise<StreamingContentDataOrError>;
+}
+
+export const isStreamingContentProvider = function(provider: ContentProvider): provider is StreamingContentProvider {
+  return 'requestStreamingContent' in provider;
+};
+
+/**
+ * Temporary interface to migrate ContentProvider#requestContent to return
+ * {@link ContentData} instead of a DefferedContent.
+ */
+export interface SafeContentProvider extends ContentProvider {
+  requestContentData(): Promise<ContentDataOrError>;
+}

@@ -26,29 +26,30 @@ impl EcdhProvider<X25519> for X25519Ecdh {
 
 /// A X25519 ephemeral secret used for Diffie-Hellman.
 pub struct X25519EphemeralSecret {
+    public_key: bssl_crypto::x25519::PublicKey,
     secret: bssl_crypto::x25519::PrivateKey,
 }
 
 impl EphemeralSecret<X25519> for X25519EphemeralSecret {
     type Impl = X25519Ecdh;
-    type Error = bssl_crypto::x25519::DiffieHellmanError;
+    type Error = Error;
     type Rng = ();
     type EncodedPublicKey = [u8; 32];
 
     fn generate_random(_rng: &mut Self::Rng) -> Self {
-        Self { secret: bssl_crypto::x25519::PrivateKey::generate() }
+        let key_pair = bssl_crypto::x25519::PrivateKey::generate();
+        Self { public_key: key_pair.0, secret: key_pair.1 }
     }
 
     fn public_key_bytes(&self) -> Self::EncodedPublicKey {
-        let pubkey: bssl_crypto::x25519::PublicKey = (&self.secret).into();
-        pubkey.to_bytes()
+        self.public_key
     }
 
     fn diffie_hellman(
         self,
         other_pub: &<X25519Ecdh as EcdhProvider<X25519>>::PublicKey,
     ) -> Result<<X25519Ecdh as EcdhProvider<X25519>>::SharedSecret, Self::Error> {
-        self.secret.diffie_hellman(&other_pub.0).map(|secret| secret.to_bytes())
+        self.secret.compute_shared_key(&other_pub.0).ok_or(Error::WrongSize)
     }
 }
 
@@ -58,9 +59,12 @@ impl crypto_provider_test::elliptic_curve::EphemeralSecretForTesting<X25519>
 {
     fn from_private_components(
         private_bytes: &[u8; 32],
-        _public_key: &X25519PublicKey,
+        public_key: &X25519PublicKey,
     ) -> Result<Self, Self::Error> {
-        Ok(Self { secret: bssl_crypto::x25519::PrivateKey::from_private_bytes(private_bytes) })
+        Ok(Self {
+            public_key: public_key.0,
+            secret: bssl_crypto::x25519::PrivateKey(*private_bytes),
+        })
     }
 }
 
@@ -69,16 +73,16 @@ impl crypto_provider_test::elliptic_curve::EphemeralSecretForTesting<X25519>
 pub struct X25519PublicKey(bssl_crypto::x25519::PublicKey);
 
 impl PublicKey<X25519> for X25519PublicKey {
-    type Error = Error;
     type EncodedPublicKey = [u8; 32];
+    type Error = Error;
 
     fn from_bytes(bytes: &[u8]) -> Result<Self, Self::Error> {
         let byte_arr: [u8; 32] = bytes.try_into().map_err(|_| Error::WrongSize)?;
-        Ok(Self(bssl_crypto::x25519::PublicKey::from(&byte_arr)))
+        Ok(Self(bssl_crypto::x25519::PublicKey::from(byte_arr)))
     }
 
     fn to_bytes(&self) -> Self::EncodedPublicKey {
-        self.0.to_bytes()
+        self.0
     }
 }
 

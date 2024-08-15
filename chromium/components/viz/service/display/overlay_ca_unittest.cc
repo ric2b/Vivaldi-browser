@@ -87,7 +87,7 @@ static ResourceId CreateResourceInLayerTree(
 
 ResourceId CreateResource(DisplayResourceProvider* parent_resource_provider,
                           ClientResourceProvider* child_resource_provider,
-                          ContextProvider* child_context_provider,
+                          RasterContextProvider* child_context_provider,
                           const gfx::Size& size,
                           bool is_overlay_candidate) {
   ResourceId resource_id = CreateResourceInLayerTree(
@@ -117,7 +117,7 @@ ResourceId CreateResource(DisplayResourceProvider* parent_resource_provider,
 TextureDrawQuad* CreateCandidateQuadAt(
     DisplayResourceProvider* parent_resource_provider,
     ClientResourceProvider* child_resource_provider,
-    ContextProvider* child_context_provider,
+    RasterContextProvider* child_context_provider,
     const SharedQuadState* shared_quad_state,
     AggregatedRenderPass* render_pass,
     const gfx::Rect& rect,
@@ -146,7 +146,7 @@ TextureDrawQuad* CreateCandidateQuadAt(
 TextureDrawQuad* CreateCandidateQuadAt(
     DisplayResourceProvider* parent_resource_provider,
     ClientResourceProvider* child_resource_provider,
-    ContextProvider* child_context_provider,
+    RasterContextProvider* child_context_provider,
     const SharedQuadState* shared_quad_state,
     AggregatedRenderPass* render_pass,
     const gfx::Rect& rect) {
@@ -158,7 +158,7 @@ TextureDrawQuad* CreateCandidateQuadAt(
 TextureDrawQuad* CreateFullscreenCandidateQuad(
     DisplayResourceProvider* parent_resource_provider,
     ClientResourceProvider* child_resource_provider,
-    ContextProvider* child_context_provider,
+    RasterContextProvider* child_context_provider,
     const SharedQuadState* shared_quad_state,
     AggregatedRenderPass* render_pass) {
   return CreateCandidateQuadAt(
@@ -200,7 +200,7 @@ class CALayerOverlayTest : public testing::Test {
   std::unique_ptr<SkiaOutputSurface> output_surface_;
   cc::FakeOutputSurfaceClient output_surface_client_;
   std::unique_ptr<DisplayResourceProviderSkia> resource_provider_;
-  absl::optional<DisplayResourceProviderSkia::LockSetForExternalUse>
+  std::optional<DisplayResourceProviderSkia::LockSetForExternalUse>
       lock_set_for_external_use_;
   scoped_refptr<TestContextProvider> child_provider_;
   std::unique_ptr<ClientResourceProvider> child_resource_provider_;
@@ -392,11 +392,9 @@ TEST_F(CALayerOverlayTest, YUVDrawQuadOverlay) {
                      /*video_frame_uv_sample_size=*/uv_sample_size,
                      y_resource_id, uv_resource_id, uv_resource_id,
                      kInvalidResourceId, gfx::ColorSpace::CreateREC709(),
-                     /*offset=*/0.0f,
-                     /*multiplier=*/1.0f,
                      /*bits_per_channel=*/8,
                      /*video_type=*/gfx::ProtectedVideoType::kClear,
-                     /*metadata=*/absl::nullopt);
+                     /*metadata=*/std::nullopt);
 
     OverlayCandidateList ca_layer_list;
     OverlayProcessorInterface::FilterOperationsMap render_pass_filters;
@@ -428,11 +426,9 @@ TEST_F(CALayerOverlayTest, YUVDrawQuadOverlay) {
                      /*video_frame_uv_sample_size=*/uv_sample_size,
                      y_resource_id, u_resource_id, v_resource_id,
                      kInvalidResourceId, gfx::ColorSpace::CreateREC709(),
-                     /*offset=*/0.0f,
-                     /*multiplier=*/1.0f,
                      /*bits_per_channel=*/8,
                      /*video_type=*/gfx::ProtectedVideoType::kClear,
-                     /*metadata=*/absl::nullopt);
+                     /*metadata=*/std::nullopt);
 
     OverlayCandidateList ca_layer_list;
     OverlayProcessorInterface::FilterOperationsMap render_pass_filters;

@@ -149,7 +149,7 @@ class BASE_EXPORT TaskSource : public RefCountedThreadSafe<TaskSource> {
    private:
     friend class TaskSource;
 
-    raw_ptr<TaskSource> task_source_;
+    raw_ptr<TaskSource, LeakedDanglingUntriaged> task_source_;
   };
 
   // |traits| is metadata that applies to all Tasks in the TaskSource.
@@ -232,7 +232,7 @@ class BASE_EXPORT TaskSource : public RefCountedThreadSafe<TaskSource> {
   // The implementation needs to support this being called multiple times;
   // unless it guarantees never to hand-out multiple RegisteredTaskSources that
   // are concurrently ready.
-  virtual absl::optional<Task> Clear(TaskSource::Transaction* transaction) = 0;
+  virtual std::optional<Task> Clear(TaskSource::Transaction* transaction) = 0;
 
   // Sets TaskSource priority to |priority|.
   void UpdatePriority(TaskPriority priority);
@@ -320,7 +320,7 @@ class BASE_EXPORT RegisteredTaskSource {
   // Returns a task that clears this TaskSource to make it empty. |transaction|
   // is optional and should only be provided if this operation is already part
   // of a transaction.
-  [[nodiscard]] absl::optional<Task> Clear(
+  [[nodiscard]] std::optional<Task> Clear(
       TaskSource::Transaction* transaction = nullptr);
 
  private:
@@ -339,7 +339,7 @@ class BASE_EXPORT RegisteredTaskSource {
 #endif  // DCHECK_IS_ON()
 
   scoped_refptr<TaskSource> task_source_;
-  raw_ptr<TaskTracker> task_tracker_ = nullptr;
+  raw_ptr<TaskTracker, LeakedDanglingUntriaged> task_tracker_ = nullptr;
 };
 
 // A pair of Transaction and RegisteredTaskSource. Useful to carry a

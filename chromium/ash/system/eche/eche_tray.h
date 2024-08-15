@@ -77,9 +77,9 @@ class ASH_EXPORT EcheTray
       public KeyboardControllerObserver,
       public ShellObserver,
       public eche_app::EcheConnectionStatusHandler::Observer {
- public:
-  METADATA_HEADER(EcheTray);
+  METADATA_HEADER(EcheTray, TrayBackgroundView)
 
+ public:
   // TODO(b/226687249): Move to ash/webui/eche_app_ui if dependency cycle error
   // is fixed. Enum representing the connection fail reason. These values are
   // persisted to logs. Entries should not be renumbered and numeric values
@@ -132,7 +132,7 @@ class ASH_EXPORT EcheTray
   bool IsInitialized() const;
 
   // TrayBackgroundView:
-  void ClickedOutsideBubble() override;
+  void ClickedOutsideBubble(const ui::LocatedEvent& event) override;
   void UpdateTrayItemColor(bool is_active) override;
   std::u16string GetAccessibleNameForTray() override;
   void HandleLocaleChange() override;

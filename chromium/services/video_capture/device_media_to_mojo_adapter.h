@@ -54,7 +54,7 @@ class DeviceMediaToMojoAdapter : public Device {
   void StartInProcess(
       const media::VideoCaptureParams& requested_settings,
       const base::WeakPtr<media::VideoFrameReceiver>& frame_handler,
-      mojo::PendingRemote<video_capture::mojom::VideoEffectsManager>
+      mojo::PendingRemote<media::mojom::VideoEffectsManager>
           video_effects_manager) override;
   void StopInProcess() override;
   void MaybeSuspend() override;
@@ -76,11 +76,11 @@ class DeviceMediaToMojoAdapter : public Device {
  private:
   void StartInternal(
       const media::VideoCaptureParams& requested_settings,
-      absl::optional<mojo::PendingRemote<mojom::VideoFrameHandler>>
+      std::optional<mojo::PendingRemote<mojom::VideoFrameHandler>>
           handler_pending_remote,
       const base::WeakPtr<media::VideoFrameReceiver>& frame_handler,
       bool start_in_process,
-      mojo::PendingRemote<video_capture::mojom::VideoEffectsManager>
+      mojo::PendingRemote<media::mojom::VideoEffectsManager>
           video_effects_manager);
 
   const std::unique_ptr<media::VideoCaptureDevice> device_;

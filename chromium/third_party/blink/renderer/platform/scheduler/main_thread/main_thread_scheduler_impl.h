@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <stack>
 
 #include "base/dcheck_is_on.h"
@@ -26,7 +27,6 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_log.h"
 #include "build/build_config.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/renderer/platform/allow_discouraged_type.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
@@ -52,7 +52,6 @@
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/main_thread_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/rail_mode_observer.h"
-#include "third_party/blink/renderer/platform/scheduler/public/task_attribution_tracker.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -115,7 +114,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   // Don't use except for tracing.
   struct TaskDescriptionForTracing {
     TaskType task_type;
-    absl::optional<MainThreadTaskQueue::QueueType> queue_type;
+    std::optional<MainThreadTaskQueue::QueueType> queue_type;
 
     // Required in order to wrap in TraceableState.
     constexpr bool operator!=(const TaskDescriptionForTracing& rhs) const {
@@ -211,9 +210,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   void AddTaskObserver(base::TaskObserver* task_observer) override;
   void RemoveTaskObserver(base::TaskObserver* task_observer) override;
   void SetV8Isolate(v8::Isolate* isolate) override;
-  TaskAttributionTracker* GetTaskAttributionTracker() override;
-  void InitializeTaskAttributionTracker(
-      std::unique_ptr<TaskAttributionTracker> tracker) override;
   blink::MainThreadScheduler* ToMainThreadScheduler() override;
 
   // ThreadSchedulerBase implementation:
@@ -439,14 +435,14 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   void AddAgentGroupScheduler(AgentGroupSchedulerImpl*);
 
   struct AgentGroupSchedulerScope {
-    std::unique_ptr<base::SingleThreadTaskRunner::CurrentHandleOverride>
+    std::unique_ptr<base::SingleThreadTaskRunner::CurrentDefaultHandle>
         single_thread_task_runner_current_handle_override;
     WeakPersistent<AgentGroupScheduler> previous_agent_group_scheduler;
     WeakPersistent<AgentGroupScheduler> current_agent_group_scheduler;
     scoped_refptr<base::SingleThreadTaskRunner> previous_task_runner;
     scoped_refptr<base::SingleThreadTaskRunner> current_task_runner;
     const char* trace_event_scope_name;
-    raw_ptr<void, ExperimentalRenderer> trace_event_scope_id;
+    raw_ptr<void> trace_event_scope_id;
   };
 
   void BeginAgentGroupSchedulerScope(
@@ -489,8 +485,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     ~RendererPauseHandleImpl() override;
 
    private:
-    raw_ptr<MainThreadSchedulerImpl, ExperimentalRenderer>
-        scheduler_;  // NOT OWNED
+    raw_ptr<MainThreadSchedulerImpl> scheduler_;  // NOT OWNED
   };
 
   // IdleHelper::Delegate implementation:
@@ -589,7 +584,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   // enabled/disabled state based on current policy. When triggered from a
   // policy update, |previous_policy| should be populated with the pre-update
   // policy.
-  void UpdateStateForAllTaskQueues(absl::optional<Policy> previous_policy);
+  void UpdateStateForAllTaskQueues(std::optional<Policy> previous_policy);
 
   void UpdateTaskQueueState(
       MainThreadTaskQueue* task_queue,
@@ -621,11 +616,11 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
   // Computes the priority for compositing based on the current use case.
   // Returns nullopt if the use case does not need to set the priority.
-  absl::optional<TaskPriority> ComputeCompositorPriorityFromUseCase() const;
+  std::optional<TaskPriority> ComputeCompositorPriorityFromUseCase() const;
 
   // Computes the compositor task queue priority for the next main frame based
   // on the current `RenderingPrioritizationState`.
-  absl::optional<TaskPriority> ComputeCompositorPriorityForMainFrame() const;
+  std::optional<TaskPriority> ComputeCompositorPriorityForMainFrame() const;
 
   void MaybeUpdateIPCTaskQueuePriorityOnTaskCompleted();
 
@@ -742,7 +737,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
         rail_mode_for_tracing;  // Don't use except for tracing.
 
     TraceableObjectState<bool, TracingCategory::kTopLevel> renderer_hidden;
-    absl::optional<base::ScopedSampleMetadata> renderer_hidden_metadata;
+    std::optional<base::ScopedSampleMetadata> renderer_hidden_metadata;
     TraceableObjectState<bool, TracingCategory::kTopLevel>
         renderer_backgrounded;
     TraceableState<bool, TracingCategory::kDefault>
@@ -762,10 +757,10 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     MainThreadMetricsHelper metrics_helper;
     TraceableState<WebRendererProcessType, TracingCategory::kTopLevel>
         process_type;
-    TraceableState<absl::optional<TaskDescriptionForTracing>,
+    TraceableState<std::optional<TaskDescriptionForTracing>,
                    TracingCategory::kInfo>
         task_description_for_tracing;  // Don't use except for tracing.
-    TraceableState<absl::optional<TaskPriority>,
+    TraceableState<std::optional<TaskPriority>,
                    TracingCategory::kInfo>
         task_priority_for_tracing;  // Only used for tracing.
 
@@ -802,7 +797,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
     WTF::Vector<AgentGroupSchedulerScope> agent_group_scheduler_scope_stack;
 
-    std::unique_ptr<TaskAttributionTracker> task_attribution_tracker;
     Persistent<HeapHashSet<WeakMember<AgentGroupSchedulerImpl>>>
         agent_group_schedulers;
     // Task queues that have been detached from their scheduler and may have

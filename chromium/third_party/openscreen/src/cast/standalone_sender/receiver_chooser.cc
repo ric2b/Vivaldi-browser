@@ -92,7 +92,7 @@ void ReceiverChooser::PrintMenuAndHandleChoice() {
     if (info.v4_address) {
       std::cout << info.v4_address;
     } else {
-      OSP_DCHECK(info.v6_address);
+      OSP_CHECK(info.v6_address);
       std::cout << info.v6_address;
     }
     std::cout << ':' << info.port << '\n';

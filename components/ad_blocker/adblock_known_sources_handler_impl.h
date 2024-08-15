@@ -36,12 +36,12 @@ class KnownRuleSourcesHandlerImpl : public KnownRuleSourcesHandler {
   const std::set<std::string>& GetDeletedPresets(
       RuleGroup group) const override;
 
-  absl::optional<uint32_t> AddSourceFromUrl(RuleGroup group,
+  std::optional<uint32_t> AddSourceFromUrl(RuleGroup group,
                                             const GURL& url) override;
-  absl::optional<uint32_t> AddSourceFromFile(
+  std::optional<uint32_t> AddSourceFromFile(
       RuleGroup group,
       const base::FilePath& file) override;
-  absl::optional<KnownRuleSource> GetSource(RuleGroup group,
+  std::optional<KnownRuleSource> GetSource(RuleGroup group,
                                             uint32_t source_id) override;
   bool RemoveSource(RuleGroup group, uint32_t source_id) override;
 
@@ -55,7 +55,7 @@ class KnownRuleSourcesHandlerImpl : public KnownRuleSourcesHandler {
   void RemoveObserver(Observer* observer) override;
 
  private:
-  absl::optional<uint32_t> AddSource(const KnownRuleSource& known_source,
+  std::optional<uint32_t> AddSource(const KnownRuleSource& known_source,
                                      bool enable);
 
   KnownRuleSources& GetSourceMap(RuleGroup group);

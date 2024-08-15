@@ -12,11 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(np_ffi_bench np_ffi_bench.cc)
+add_executable(
+        np_ffi_bench
+        np_cpp_benches.cc
+        np_c_ffi_benches.cc)
 
 target_link_libraries(
         np_ffi_bench
         nearby_protocol
+        shared_test_util
         benchmark::benchmark)
 
 if (UNIX)

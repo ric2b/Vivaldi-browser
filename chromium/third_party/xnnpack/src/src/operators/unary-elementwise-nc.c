@@ -8,17 +8,19 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
-
-#include <fp16/fp16.h>
-
 #include <xnnpack.h>
 #include <xnnpack/allocator.h>
+#include <xnnpack/common.h>
 #include <xnnpack/config.h>
 #include <xnnpack/log.h>
-#include <xnnpack/operator.h>
-#include <xnnpack/operator-utils.h>
 #include <xnnpack/microparams-init.h>
+#include <xnnpack/microparams.h>
+#include <xnnpack/operator-type.h>
+#include <xnnpack/operator-utils.h>
+#include <xnnpack/operator.h>
 
+#include "pthreadpool.h"
+#include <fp16/fp16.h>
 
 static void init_unary_elementwise_nc(
     uint32_t flags,
@@ -350,9 +352,9 @@ enum xnn_status xnn_create_clamp_nc_f16(
   const uint16_t output_max_as_half = fp16_ieee_from_fp32_value(output_max);
   output_min = fp16_ieee_to_fp32_value(output_min_as_half);
   output_max = fp16_ieee_to_fp32_value(output_max_as_half);
-  if (output_min >= output_max) {
+  if (output_min > output_max) {
     xnn_log_error(
-      "failed to create %s operator with [%.7g, %.7g] output range: lower bound must be below upper bound",
+      "failed to create %s operator with [%.7g, %.7g] output range: lower bound must be less than or equal to upper bound",
       xnn_operator_type_to_string(xnn_operator_type_clamp_nc_f16), output_min, output_max);
     return xnn_status_invalid_parameter;
   }
@@ -391,9 +393,9 @@ enum xnn_status xnn_create_clamp_nc_f32(
     return xnn_status_invalid_parameter;
   }
 
-  if (output_min >= output_max) {
+  if (output_min > output_max) {
     xnn_log_error(
-      "failed to create %s operator with [%.7g, %.7g] output range: lower bound must be below upper bound",
+      "failed to create %s operator with [%.7g, %.7g] output range: lower bound must be less than or equal to upper bound",
       xnn_operator_type_to_string(xnn_operator_type_clamp_nc_f32), output_min, output_max);
     return xnn_status_invalid_parameter;
   }
@@ -425,9 +427,9 @@ enum xnn_status xnn_create_clamp_nc_s8(
     uint32_t flags,
     xnn_operator_t* clamp_op_out)
 {
-  if (output_min >= output_max) {
+  if (output_min > output_max) {
     xnn_log_error(
-      "failed to create %s operator with [%" PRId8 ", %" PRId8 "] output range: range min must be below range max",
+      "failed to create %s operator with [%" PRId8 ", %" PRId8 "] output range: lower bound must be less than or equal to upper bound",
       xnn_operator_type_to_string(xnn_operator_type_clamp_nc_s8), output_min, output_max);
     return xnn_status_invalid_parameter;
   }
@@ -451,9 +453,9 @@ enum xnn_status xnn_create_clamp_nc_u8(
     uint32_t flags,
     xnn_operator_t* clamp_op_out)
 {
-  if (output_min >= output_max) {
+  if (output_min > output_max) {
     xnn_log_error(
-      "failed to create %s operator with [%" PRIu8 ", %" PRIu8 "] output range: range min must be below range max",
+      "failed to create %s operator with [%" PRIu8 ", %" PRIu8 "] output range: lower bound must be less than or equal to upper bound",
       xnn_operator_type_to_string(xnn_operator_type_clamp_nc_u8), output_min, output_max);
     return xnn_status_invalid_parameter;
   }
@@ -520,9 +522,9 @@ enum xnn_status xnn_create_convert_nc_f32_qs8(
     return xnn_status_invalid_parameter;
   }
 
-  if (output_min >= output_max) {
+  if (output_min > output_max) {
     xnn_log_error(
-      "failed to create %s operator with [%" PRId8 ", %" PRId8 "] output range: range min must be below range max",
+      "failed to create %s operator with [%" PRId8 ", %" PRId8 "] output range: lower bound must be less than or equal to upper bound",
       xnn_operator_type_to_string(xnn_operator_type_convert_nc_f32_qs8), output_min, output_max);
     return xnn_status_invalid_parameter;
   }
@@ -602,9 +604,9 @@ enum xnn_status xnn_create_convert_nc_f32_qu8(
     return xnn_status_invalid_parameter;
   }
 
-  if (output_min >= output_max) {
+  if (output_min > output_max) {
     xnn_log_error(
-      "failed to create %s operator with [%" PRIu8 ", %" PRIu8 "] output range: range min must be below range max",
+      "failed to create %s operator with [%" PRIu8 ", %" PRIu8 "] output range: lower bound must be less than or equal to upper bound",
       xnn_operator_type_to_string(xnn_operator_type_convert_nc_f32_qu8), output_min, output_max);
     return xnn_status_invalid_parameter;
   }
@@ -1290,6 +1292,22 @@ enum xnn_status xnn_create_square_root_nc_f32(
     flags, f32_sqrt_config, /*rminmax_config=*/NULL,
     &params, sizeof(params),
     xnn_operator_type_square_root_nc_f32, sqrt_op_out);
+}
+
+enum xnn_status xnn_create_reciprocal_square_root_nc_f32(
+    uint32_t flags, xnn_operator_t* rsqrt_op_out) {
+  const struct xnn_unary_elementwise_config* f32_rsqrt_config =
+      xnn_init_f32_rsqrt_config();
+
+  union xnn_f32_rsqrt_params params;
+  if XNN_LIKELY (f32_rsqrt_config != NULL &&
+                 f32_rsqrt_config->init.f32_rsqrt != NULL) {
+    f32_rsqrt_config->init.f32_rsqrt(&params);
+  }
+
+  return create_unary_elementwise_nc(
+      flags, f32_rsqrt_config, /*rminmax_config=*/NULL, &params, sizeof(params),
+      xnn_operator_type_reciprocal_square_root_nc_f32, rsqrt_op_out);
 }
 
 enum xnn_status xnn_create_tanh_nc_f16(
@@ -2101,6 +2119,24 @@ enum xnn_status xnn_reshape_negate_nc_f32(
     threadpool);
 }
 
+enum xnn_status xnn_reshape_reciprocal_square_root_nc_f32(
+    xnn_operator_t rsqrt_op,
+    size_t batch_size,
+    size_t channels,
+    size_t input_stride,
+    size_t output_stride,
+    pthreadpool_t threadpool)
+{
+  return reshape_unary_elementwise_nc(
+    rsqrt_op, xnn_operator_type_reciprocal_square_root_nc_f32,
+    batch_size,
+    channels, input_stride, output_stride,
+    /*log2_input_size=*/XNN_LOG2_SIZEOF_FLOAT,
+    /*log2_output_size=*/XNN_LOG2_SIZEOF_FLOAT,
+    &rsqrt_op->params.f32_rsqrt, sizeof(rsqrt_op->params.f32_rsqrt),
+    threadpool);
+}
+
 enum xnn_status xnn_reshape_sigmoid_nc_f16(
     xnn_operator_t sigmoid_op,
     size_t batch_size,
@@ -2703,6 +2739,16 @@ enum xnn_status xnn_setup_negate_nc_f32(
     input, output);
 }
 
+enum xnn_status xnn_setup_reciprocal_square_root_nc_f32(
+    xnn_operator_t rsqrt_op,
+    const float* input,
+    float* output)
+{
+  return setup_unary_elementwise_nc(
+    rsqrt_op, xnn_operator_type_reciprocal_square_root_nc_f32,
+    input, output);
+}
+
 enum xnn_status xnn_setup_sigmoid_nc_f16(
     xnn_operator_t sigmoid_op,
     const void* input,
@@ -2986,9 +3032,9 @@ enum xnn_status xnn_run_clamp_nc_f32(
     return xnn_status_invalid_parameter;
   }
 
-  if (output_min >= output_max) {
+  if (output_min > output_max) {
     xnn_log_error(
-      "failed to create %s operator with [%.7g, %.7g] output range: lower bound must be below upper bound",
+      "failed to create %s operator with [%.7g, %.7g] output range: lower bound must be less than or equal to upper bound",
       xnn_operator_type_to_string(xnn_operator_type_clamp_nc_f32), output_min, output_max);
     return xnn_status_invalid_parameter;
   }
@@ -3454,6 +3500,34 @@ enum xnn_status xnn_run_negate_nc_f32(
     channels, input_stride, output_stride, batch_size,
     input, output,
     f32_neg_config, &params, sizeof(params),
+    /*log2_input_size=*/XNN_LOG2_SIZEOF_FLOAT,
+    /*log2_output_size=*/XNN_LOG2_SIZEOF_FLOAT,
+    flags,
+    threadpool);
+}
+
+enum xnn_status xnn_run_reciprocal_square_root_nc_f32(
+  size_t channels,
+  size_t input_stride,
+  size_t output_stride,
+  size_t batch_size,
+  const float* input,
+  float* output,
+  uint32_t flags,
+  pthreadpool_t threadpool)
+{
+  const struct xnn_unary_elementwise_config* f32_rsqrt_config = xnn_init_f32_rsqrt_config();
+
+  union xnn_f32_rsqrt_params params;
+  if XNN_LIKELY(f32_rsqrt_config != NULL && f32_rsqrt_config->init.f32_rsqrt != NULL) {
+    f32_rsqrt_config->init.f32_rsqrt(&params);
+  }
+
+  return run_unary_elementwise_nc(
+    xnn_operator_type_reciprocal_square_root_nc_f32,
+    channels, input_stride, output_stride, batch_size,
+    input, output,
+    f32_rsqrt_config, &params, sizeof(params),
     /*log2_input_size=*/XNN_LOG2_SIZEOF_FLOAT,
     /*log2_output_size=*/XNN_LOG2_SIZEOF_FLOAT,
     flags,

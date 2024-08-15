@@ -1,12 +1,12 @@
 // Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+#include <sys/mman.h>
 
+#include "build/build_config.h"
 #include "partition_alloc/page_allocator.h"
 #include "partition_alloc/partition_alloc_base/cpu.h"
 #include "partition_alloc/partition_alloc_base/notreached.h"
-
-#include <sys/mman.h>
 
 // PA_PROT_BTI requests a page that supports BTI landing pads.
 #define PA_PROT_BTI 0x10
@@ -38,6 +38,9 @@ int GetAccessFlags(PageAccessibilityConfiguration accessibility) {
       return PROT_READ | PROT_EXEC;
     case PageAccessibilityConfiguration::kReadWriteExecute:
       return PROT_READ | PROT_WRITE | PROT_EXEC;
+    case PageAccessibilityConfiguration::kReadWriteExecuteProtected:
+      return PROT_READ | PROT_WRITE | PROT_EXEC |
+             (base::CPU::GetInstanceNoAllocation().has_bti() ? PA_PROT_BTI : 0);
     case PageAccessibilityConfiguration::kInaccessible:
     case PageAccessibilityConfiguration::kInaccessibleWillJitLater:
       return PROT_NONE;

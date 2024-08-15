@@ -101,7 +101,7 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
     this.#debuggerModel = target.model(DebuggerModel);
     if (this.#debuggerModel) {
       Common.Settings.Settings.instance()
-          .moduleSetting('disablePausedStateOverlay')
+          .moduleSetting('disable-paused-state-overlay')
           .addChangeListener(this.updatePausedInDebuggerMessage, this);
       this.#debuggerModel.addEventListener(
           DebuggerModelEvents.DebuggerPaused, this.updatePausedInDebuggerMessage, this);
@@ -118,15 +118,15 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
     this.#defaultHighlighter = new DefaultHighlighter(this);
     this.#highlighter = this.#defaultHighlighter;
 
-    this.#showPaintRectsSetting = Common.Settings.Settings.instance().moduleSetting<boolean>('showPaintRects');
+    this.#showPaintRectsSetting = Common.Settings.Settings.instance().moduleSetting<boolean>('show-paint-rects');
     this.#showLayoutShiftRegionsSetting =
-        Common.Settings.Settings.instance().moduleSetting<boolean>('showLayoutShiftRegions');
-    this.#showAdHighlightsSetting = Common.Settings.Settings.instance().moduleSetting<boolean>('showAdHighlights');
-    this.#showDebugBordersSetting = Common.Settings.Settings.instance().moduleSetting<boolean>('showDebugBorders');
-    this.#showFPSCounterSetting = Common.Settings.Settings.instance().moduleSetting<boolean>('showFPSCounter');
+        Common.Settings.Settings.instance().moduleSetting<boolean>('show-layout-shift-regions');
+    this.#showAdHighlightsSetting = Common.Settings.Settings.instance().moduleSetting<boolean>('show-ad-highlights');
+    this.#showDebugBordersSetting = Common.Settings.Settings.instance().moduleSetting<boolean>('show-debug-borders');
+    this.#showFPSCounterSetting = Common.Settings.Settings.instance().moduleSetting<boolean>('show-fps-counter');
     this.#showScrollBottleneckRectsSetting =
-        Common.Settings.Settings.instance().moduleSetting<boolean>('showScrollBottleneckRects');
-    this.#showWebVitalsSetting = Common.Settings.Settings.instance().moduleSetting<boolean>('showWebVitals');
+        Common.Settings.Settings.instance().moduleSetting<boolean>('show-scroll-bottleneck-rects');
+    this.#showWebVitalsSetting = Common.Settings.Settings.instance().moduleSetting<boolean>('show-web-vitals');
 
     this.#registeredListeners = [];
     this.#showViewportSizeOnResize = true;
@@ -136,13 +136,13 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
     }
 
     this.#persistentHighlighter = new OverlayPersistentHighlighter(this, {
-      onGridOverlayStateChanged: ({nodeId, enabled}): void =>
+      onGridOverlayStateChanged: ({nodeId, enabled}) =>
           this.dispatchEventToListeners(Events.PersistentGridOverlayStateChanged, {nodeId, enabled}),
-      onFlexOverlayStateChanged: ({nodeId, enabled}): void =>
+      onFlexOverlayStateChanged: ({nodeId, enabled}) =>
           this.dispatchEventToListeners(Events.PersistentFlexContainerOverlayStateChanged, {nodeId, enabled}),
-      onContainerQueryOverlayStateChanged: ({nodeId, enabled}): void =>
+      onContainerQueryOverlayStateChanged: ({nodeId, enabled}) =>
           this.dispatchEventToListeners(Events.PersistentContainerQueryOverlayStateChanged, {nodeId, enabled}),
-      onScrollSnapOverlayStateChanged: ({nodeId, enabled}): void =>
+      onScrollSnapOverlayStateChanged: ({nodeId, enabled}) =>
           this.dispatchEventToListeners(Events.PersistentScrollSnapOverlayStateChanged, {nodeId, enabled}),
     });
     this.#domModel.addEventListener(DOMModelEvents.NodeRemoved, () => {
@@ -294,7 +294,7 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
       return;
     }
     const message = this.#debuggerModel && this.#debuggerModel.isPaused() &&
-            !Common.Settings.Settings.instance().moduleSetting('disablePausedStateOverlay').get() ?
+            !Common.Settings.Settings.instance().moduleSetting('disable-paused-state-overlay').get() ?
         i18nString(UIStrings.pausedInDebugger) :
         undefined;
     void this.overlayAgent.invoke_setPausedInDebuggerMessage({message});
@@ -552,7 +552,7 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
 
   private buildHighlightConfig(mode: string|undefined = 'all', showDetailedToolip: boolean|undefined = false):
       Protocol.Overlay.HighlightConfig {
-    const showRulers = Common.Settings.Settings.instance().moduleSetting('showMetricsRulers').get();
+    const showRulers = Common.Settings.Settings.instance().moduleSetting('show-metrics-rulers').get();
     const highlightConfig: Protocol.Overlay.HighlightConfig = {
       showInfo: mode === 'all' || mode === 'container-outline',
       showRulers: showRulers,
@@ -562,7 +562,7 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
       gridHighlightConfig: {},
       flexContainerHighlightConfig: {},
       flexItemHighlightConfig: {},
-      contrastAlgorithm: Root.Runtime.experiments.isEnabled('APCA') ? Protocol.Overlay.ContrastAlgorithm.Apca :
+      contrastAlgorithm: Root.Runtime.experiments.isEnabled('apca') ? Protocol.Overlay.ContrastAlgorithm.Apca :
                                                                       Protocol.Overlay.ContrastAlgorithm.Aa,
     };
 

@@ -169,7 +169,7 @@ class VIEWS_EXPORT TreeView : public View,
   }
 
   // View overrides:
-  void Layout() override;
+  void Layout(PassKey) override;
   gfx::Size CalculatePreferredSize() const override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
@@ -201,8 +201,8 @@ class VIEWS_EXPORT TreeView : public View,
 
   // PrefixDelegate overrides:
   size_t GetRowCount() override;
-  absl::optional<size_t> GetSelectedRow() override;
-  void SetSelectedRow(absl::optional<size_t> row) override;
+  std::optional<size_t> GetSelectedRow() override;
+  void SetSelectedRow(std::optional<size_t> row) override;
   std::u16string GetTextForRow(size_t row) override;
 
  protected:
@@ -457,9 +457,8 @@ class VIEWS_EXPORT TreeView : public View,
   // The model, may be null.
   raw_ptr<ui::TreeModel> model_ = nullptr;
 
-  // Default icons for closed/open.
-  ui::ImageModel closed_icon_;
-  ui::ImageModel open_icon_;
+  // Default folder icon.
+  ui::ImageModel folder_icon_;
 
   // Icons from the model.
   std::vector<ui::ImageModel> icons_;

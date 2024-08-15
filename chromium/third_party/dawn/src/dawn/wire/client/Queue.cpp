@@ -55,6 +55,9 @@ class WorkDoneEvent : public TrackedEvent {
 
   private:
     void CompleteImpl(FutureID futureID, EventCompletionType completionType) override {
+        if (completionType == EventCompletionType::Shutdown) {
+            mStatus = WGPUQueueWorkDoneStatus_InstanceDropped;
+        }
         if (mStatus == WGPUQueueWorkDoneStatus_DeviceLost) {
             mStatus = WGPUQueueWorkDoneStatus_Success;
         }
@@ -74,11 +77,14 @@ class WorkDoneEvent : public TrackedEvent {
 
 Queue::~Queue() = default;
 
-bool Client::DoQueueWorkDoneCallback(ObjectHandle eventManager,
-                                     WGPUFuture future,
-                                     WGPUQueueWorkDoneStatus status) {
-    return GetEventManager(eventManager).SetFutureReady<WorkDoneEvent>(future.id, status) ==
-           WireResult::Success;
+ObjectType Queue::GetObjectType() const {
+    return ObjectType::Queue;
+}
+
+WireResult Client::DoQueueWorkDoneCallback(ObjectHandle eventManager,
+                                           WGPUFuture future,
+                                           WGPUQueueWorkDoneStatus status) {
+    return GetEventManager(eventManager).SetFutureReady<WorkDoneEvent>(future.id, status);
 }
 
 void Queue::OnSubmittedWorkDone(WGPUQueueWorkDoneCallback callback, void* userdata) {

@@ -9,6 +9,22 @@
     },
     "types": [
       {
+        "id": "FolderIds",
+        "type": "object",
+        "description": "Ids for a set of folders.",
+        "properties": {
+          "bookmarks": {
+            "type": "string"
+          },
+          "mobile": {
+            "type": "string"
+          },
+          "trash": {
+            "type": "string"
+          }
+        }
+      },
+      {
         "id": "SpeedDialInfo",
         "type": "object",
         "description": "Object passed to the updateSpeedDialsForWindowsJumplist function.",
@@ -140,28 +156,27 @@
         "name": "updatePartners",
         "type": "function",
         "description": "Update default bookmarks",
-        "parameters": [
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name": "ok",
-                "type": "boolean"
-              },
-              {
-                "name": "noVersion",
-                "type": "boolean",
-                "description": "The version is missing indicating perhaps an older setup."
-              },
-              {
-                "name": "locale",
-                "type": "string",
-                "description": "The locale of the used bookmark file."
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "does_not_support_promises": "vivaldi",
+          "parameters": [
+            {
+              "name": "ok",
+              "type": "boolean"
+            },
+            {
+              "name": "noVersion",
+              "type": "boolean",
+              "description": "The version is missing indicating perhaps an older setup."
+            },
+            {
+              "name": "locale",
+              "type": "string",
+              "description": "The locale of the used bookmark file."
+            }
+          ]
+        }
       },
       {
         "name": "isCustomThumbnail",
@@ -181,6 +196,22 @@
               "name": "result",
               "type": "boolean",
               "description": "true if the bookmark has a custom thumbnail"
+            }
+          ]
+        }
+      },
+      {
+        "name": "getFolderIds",
+        "type": "function",
+        "description": "Returns ids of top level folders.",
+        "parameters": [
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "ids",
+              "$ref": "FolderIds"
             }
           ]
         }

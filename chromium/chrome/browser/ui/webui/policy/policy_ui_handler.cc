@@ -19,6 +19,7 @@
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/i18n/time_formatting.h"
+#include "base/json/json_string_value_serializer.h"
 #include "base/json/json_writer.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -46,6 +47,7 @@
 #include "chrome/browser/policy/value_provider/value_provider_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
+#include "chrome/browser/ui/webui/policy/policy_ui.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/grit/branded_strings.h"
 #include "components/crx_file/id_util.h"
@@ -150,6 +152,9 @@ void PolicyUIHandler::AddCommonLocalizedStringsToSource(
       {"reloadPoliciesDone", IDS_POLICY_RELOAD_POLICIES_DONE},
       {"copyPoliciesDone", IDS_COPY_POLICIES_DONE},
       {"exportPoliciesDone", IDS_EXPORT_POLICIES_JSON_DONE},
+      {"sort", IDS_POLICY_TABLE_COLUMN_SORT},
+      {"sortAscending", IDS_POLICY_TABLE_COLUMN_SORT_ASCENDING},
+      {"sortDescending", IDS_POLICY_TABLE_COLUMN_SORT_DESCENDING},
 #if !BUILDFLAG(IS_CHROMEOS)
       {"reportUploading", IDS_REPORT_UPLOADING},
       {"reportUploaded", IDS_REPORT_UPLOADED},
@@ -172,6 +177,16 @@ void PolicyUIHandler::RegisterMessages() {
       CreateDefaultPolicyValueAndStatusAggregator(Profile::FromWebUI(web_ui()));
   policy_value_and_status_observation_.Observe(
       policy_value_and_status_aggregator_.get());
+
+  const auto* policy_schema_registry_service =
+      Profile::FromWebUI(web_ui())->GetPolicySchemaRegistryService();
+  // In case web_ui() represents an OffTheRecordProfileImpl object (like in a
+  // guest session), there's no PolicySchemaRegistryService, so nothing to
+  // observe there. The profile has no policies anyway.
+  if (policy_schema_registry_service) {
+    schema_registry_observation_.Observe(
+        policy_schema_registry_service->registry());
+  }
 
   web_ui()->RegisterMessageCallback(
       "exportPoliciesJSON",
@@ -231,6 +246,18 @@ void PolicyUIHandler::OnPolicyValueAndStatusChanged() {
   SendStatus();
 }
 
+void PolicyUIHandler::OnSchemaRegistryUpdated(bool has_new_schemas) {
+  SendSchema();
+}
+
+void PolicyUIHandler::SendSchema() {
+  Profile* profile = Profile::FromWebUI(web_ui());
+  if (!IsJavascriptAllowed() || !PolicyUI::ShouldLoadTestPage(profile)) {
+    return;
+  }
+  FireWebUIListener("schema-updated", PolicyUI::GetSchema(profile));
+}
+
 void PolicyUIHandler::HandleExportPoliciesJson(const base::Value::List& args) {
   export_to_json_count_ += 1;
   if (!IsJavascriptAllowed()) {
@@ -246,6 +273,7 @@ void PolicyUIHandler::HandleListenPoliciesUpdates(
     const base::Value::List& args) {
   // Send initial policy values and status to UI page.
   AllowJavascript();
+  SendSchema();
   SendPolicies();
   SendStatus();
 }

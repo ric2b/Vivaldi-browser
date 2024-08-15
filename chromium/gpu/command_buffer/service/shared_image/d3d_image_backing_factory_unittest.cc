@@ -654,7 +654,7 @@ TEST_F(D3DImageBackingFactoryTest, Dawn_SkiaGL) {
   const auto color_space = gfx::ColorSpace::CreateSRGB();
   const gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
   const uint32_t usage =
-      SHARED_IMAGE_USAGE_WEBGPU | SHARED_IMAGE_USAGE_DISPLAY_READ;
+      SHARED_IMAGE_USAGE_WEBGPU_WRITE | SHARED_IMAGE_USAGE_DISPLAY_READ;
   auto backing = shared_image_factory_->CreateSharedImage(
       mailbox, format, surface_handle, size, color_space,
       kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage, "TestLabel",
@@ -837,9 +837,9 @@ TEST_F(D3DImageBackingFactoryTest, Dawn_ConcurrentReads) {
   const gfx::Size size(1, 1);
   const auto color_space = gfx::ColorSpace::CreateSRGB();
   const gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
-  const uint32_t usage = SHARED_IMAGE_USAGE_WEBGPU |
-                         SHARED_IMAGE_USAGE_DISPLAY_READ |
-                         SHARED_IMAGE_USAGE_DISPLAY_WRITE;
+  const uint32_t usage =
+      SHARED_IMAGE_USAGE_WEBGPU_READ | SHARED_IMAGE_USAGE_WEBGPU_WRITE |
+      SHARED_IMAGE_USAGE_DISPLAY_READ | SHARED_IMAGE_USAGE_DISPLAY_WRITE;
   auto backing = shared_image_factory_->CreateSharedImage(
       mailbox, format, surface_handle, size, color_space,
       kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage, "TestLabel",
@@ -923,7 +923,7 @@ TEST_F(D3DImageBackingFactoryTest, GL_Dawn_Skia_UnclearTexture) {
   const auto color_space = gfx::ColorSpace::CreateSRGB();
   const uint32_t usage = SHARED_IMAGE_USAGE_GLES2_WRITE |
                          SHARED_IMAGE_USAGE_DISPLAY_READ |
-                         SHARED_IMAGE_USAGE_WEBGPU;
+                         SHARED_IMAGE_USAGE_WEBGPU_WRITE;
   const gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
   auto backing = shared_image_factory_->CreateSharedImage(
       mailbox, format, surface_handle, size, color_space,
@@ -1036,8 +1036,8 @@ TEST_F(D3DImageBackingFactoryTest, UnclearDawn_SkiaFails) {
   const auto format = viz::SinglePlaneFormat::kRGBA_8888;
   const gfx::Size size(1, 1);
   const auto color_space = gfx::ColorSpace::CreateSRGB();
-  const uint32_t usage =
-      SHARED_IMAGE_USAGE_DISPLAY_READ | SHARED_IMAGE_USAGE_WEBGPU;
+  const uint32_t usage = SHARED_IMAGE_USAGE_DISPLAY_READ |
+                         SHARED_IMAGE_USAGE_WEBGPU_WRITE;
   const gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
   auto backing = shared_image_factory_->CreateSharedImage(
       mailbox, format, surface_handle, size, color_space,
@@ -1292,8 +1292,8 @@ TEST_F(D3DImageBackingFactoryTest, Dawn_ReuseExternalImage) {
   const auto format = viz::SinglePlaneFormat::kRGBA_8888;
   const gfx::Size size(1, 1);
   const auto color_space = gfx::ColorSpace::CreateSRGB();
-  const uint32_t usage =
-      SHARED_IMAGE_USAGE_DISPLAY_READ | SHARED_IMAGE_USAGE_WEBGPU;
+  const uint32_t usage = SHARED_IMAGE_USAGE_DISPLAY_READ |
+                         SHARED_IMAGE_USAGE_WEBGPU_WRITE;
   const gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
   auto backing = shared_image_factory_->CreateSharedImage(
       mailbox, format, surface_handle, size, color_space,
@@ -1411,7 +1411,7 @@ TEST_F(D3DImageBackingFactoryTest, Dawn_HasLastRef) {
   const gfx::Size size(1, 1);
   const auto color_space = gfx::ColorSpace::CreateSRGB();
   const uint32_t usage =
-      SHARED_IMAGE_USAGE_DISPLAY_READ | SHARED_IMAGE_USAGE_WEBGPU;
+      SHARED_IMAGE_USAGE_DISPLAY_READ | SHARED_IMAGE_USAGE_WEBGPU_READ;
   const gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
   auto backing = shared_image_factory_->CreateSharedImage(
       mailbox, format, surface_handle, size, color_space,
@@ -1501,7 +1501,6 @@ D3DImageBackingFactoryTest::CreateVideoImages(const gfx::Size& size,
   uint32_t usage =
       gpu::SHARED_IMAGE_USAGE_VIDEO_DECODE |
       gpu::SHARED_IMAGE_USAGE_GLES2_READ | gpu::SHARED_IMAGE_USAGE_RASTER_READ |
-      gpu::SHARED_IMAGE_USAGE_RASTER_WRITE |
       gpu::SHARED_IMAGE_USAGE_DISPLAY_READ | gpu::SHARED_IMAGE_USAGE_SCANOUT;
 
   base::win::ScopedHandle shared_handle;
@@ -1520,7 +1519,9 @@ D3DImageBackingFactoryTest::CreateVideoImages(const gfx::Size& size,
     shared_handle.Set(handle);
     DCHECK(shared_handle.is_valid());
 
-    usage |= gpu::SHARED_IMAGE_USAGE_WEBGPU;
+    // TODO(dawn:551): Extend the tests using this util to test reading the
+    // textures via Dawn.
+    usage |= gpu::SHARED_IMAGE_USAGE_WEBGPU_READ;
   }
 
   const size_t kNumPlanes = 2;
@@ -1983,8 +1984,6 @@ TEST_F(D3DImageBackingFactoryTest, CreateFromSharedMemory) {
   constexpr uint32_t usage =
       gpu::SHARED_IMAGE_USAGE_VIDEO_DECODE |
       gpu::SHARED_IMAGE_USAGE_GLES2_READ | SHARED_IMAGE_USAGE_GLES2_WRITE |
-      gpu::SHARED_IMAGE_USAGE_RASTER_READ |
-      gpu::SHARED_IMAGE_USAGE_RASTER_WRITE |
       gpu::SHARED_IMAGE_USAGE_DISPLAY_READ | gpu::SHARED_IMAGE_USAGE_SCANOUT;
   std::vector<std::unique_ptr<SharedImageBacking>> shared_image_backings;
   for (size_t i = 0; i < kNumPlanes; i++) {
@@ -2147,7 +2146,6 @@ TEST_F(D3DImageBackingFactoryTest, MultiplanarUploadAndReadback) {
   constexpr SkAlphaType alpha_type = kPremul_SkAlphaType;
   constexpr gfx::ColorSpace color_space;
   constexpr uint32_t usage = gpu::SHARED_IMAGE_USAGE_RASTER_READ |
-                             gpu::SHARED_IMAGE_USAGE_RASTER_WRITE |
                              gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
                              gpu::SHARED_IMAGE_USAGE_SCANOUT |
                              gpu::SHARED_IMAGE_USAGE_CPU_UPLOAD;

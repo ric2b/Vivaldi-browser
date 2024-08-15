@@ -9,7 +9,7 @@
 
 #include <stdint.h>
 
-#include "third_party/base/containers/span.h"
+#include "core/fxcrt/span.h"
 
 struct CRYPT_rc4_context {
   static constexpr int32_t kPermutationLength = 256;
@@ -56,15 +56,15 @@ void CRYPT_ArcFourSetup(CRYPT_rc4_context* context,
                         pdfium::span<const uint8_t> key);
 void CRYPT_ArcFourCrypt(CRYPT_rc4_context* context, pdfium::span<uint8_t> data);
 
-void CRYPT_AESSetKey(CRYPT_aes_context* context,
+void CRYPT_AESSetKey(CRYPT_aes_context* ctx,
                      const uint8_t* key,
                      uint32_t keylen);
-void CRYPT_AESSetIV(CRYPT_aes_context* context, const uint8_t* iv);
-void CRYPT_AESDecrypt(CRYPT_aes_context* context,
+void CRYPT_AESSetIV(CRYPT_aes_context* ctx, const uint8_t* iv);
+void CRYPT_AESDecrypt(CRYPT_aes_context* ctx,
                       uint8_t* dest,
                       const uint8_t* src,
                       uint32_t size);
-void CRYPT_AESEncrypt(CRYPT_aes_context* context,
+void CRYPT_AESEncrypt(CRYPT_aes_context* ctx,
                       uint8_t* dest,
                       const uint8_t* src,
                       uint32_t size);

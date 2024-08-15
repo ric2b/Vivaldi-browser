@@ -13,7 +13,7 @@
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkImage.h"
 #include "include/private/base/SkTPin.h"
-#include "include/utils/SkAnimCodecPlayer.h"
+#include "modules/skresources/src/SkAnimCodecPlayer.h"
 #include "src/base/SkBase64.h"
 #include "src/core/SkOSFile.h"
 #include "src/utils/SkOSPath.h"
@@ -114,6 +114,12 @@ sk_sp<MultiFrameImageAsset> MultiFrameImageAsset::Make(sk_sp<SkData> data, Image
     }
 
     return nullptr;
+}
+
+sk_sp<MultiFrameImageAsset> MultiFrameImageAsset::Make(std::unique_ptr<SkCodec> codec, ImageDecodeStrategy strat) {
+    SkASSERT(codec);
+    return sk_sp<MultiFrameImageAsset>(new MultiFrameImageAsset(
+            std::make_unique<SkAnimCodecPlayer>(std::move(codec)), strat));
 }
 
 MultiFrameImageAsset::MultiFrameImageAsset(std::unique_ptr<SkAnimCodecPlayer> player,
@@ -309,10 +315,11 @@ static sk_sp<SkData> decode_datauri(const char prefix[], const char uri[]) {
 sk_sp<ImageAsset> DataURIResourceProviderProxy::loadImageAsset(const char rpath[],
                                                                const char rname[],
                                                                const char rid[]) const {
+    // First try to decode the data as base64 using codecs registered with SkCodecs::Register()
     if (auto data = decode_datauri("data:image/", rname)) {
         return MultiFrameImageAsset::Make(std::move(data), fStrategy);
     }
-
+    // Fallback to the asking the ProviderProxy to load this image for us.
     return this->INHERITED::loadImageAsset(rpath, rname, rid);
 }
 

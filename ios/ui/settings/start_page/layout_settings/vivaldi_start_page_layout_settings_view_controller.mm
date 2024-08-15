@@ -16,6 +16,7 @@
 #import "ios/ui/settings/start_page/vivaldi_start_page_prefs.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_prefs_helper.h"
 #import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_preview_view.h"
+#import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_column.h"
 #import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_style.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
@@ -50,17 +51,13 @@ const UIEdgeInsets previewViewPadding = UIEdgeInsetsMake(12, 0, 0, 0);
 
 // Item Configuration for for each layout and type of device.
 const PreviewItemConfig itemConfig = {
-    .numberOfItemsLarge = 2,
-    .numberOfItemsLargeLandscape = 3,
+    .numberOfItemsLarge = 4,
     .numberOfItemsLargeiPad = 4,
-    .numberOfItemsMedium = 3,
-    .numberOfItemsMediumLandscape = 5,
+    .numberOfItemsMedium = 6,
     .numberOfItemsMediumiPad = 6,
-    .numberOfItemsSmall = 4,
-    .numberOfItemsSmallLandscape = 7,
+    .numberOfItemsSmall = 8,
     .numberOfItemsSmalliPad = 8,
     .numberOfItemsList = 4,
-    .numberOfItemsListLandscape = 4,
     .numberOfItemsListiPad = 4
 };
 
@@ -227,7 +224,8 @@ const PreviewItemConfig itemConfig = {
 }
 
 - (void)updateUI {
-  [_previewView reloadLayoutWithStyle:[self currentLayoutStyle]];
+  [_previewView reloadLayoutWithStyle:[self currentLayoutStyle]
+                         layoutColumn:[self currentLayoutColumn]];
 }
 
 /// Returns current layout style
@@ -235,6 +233,13 @@ const PreviewItemConfig itemConfig = {
   if (!_browserState)
     return VivaldiStartPageLayoutStyleMedium;
   return [VivaldiStartPagePrefsHelper getStartPageLayoutStyle];
+}
+
+/// Returns current layout column for start page
+- (VivaldiStartPageLayoutColumn)currentLayoutColumn {
+  if (!_browserState)
+    return VivaldiStartPageLayoutColumnUnlimited;
+  return [VivaldiStartPagePrefsHelper getStartPageSpeedDialMaximumColumns];
 }
 
 /// Sets current layout style
@@ -316,12 +321,9 @@ const PreviewItemConfig itemConfig = {
       break;
   }
 
-  [_previewView reloadLayoutWithStyle:selectedLayout];
+  [_previewView reloadLayoutWithStyle:selectedLayout
+                         layoutColumn:[self currentLayoutColumn]];
   [self setCurrentLayoutStyle:selectedLayout];
-
-  [[NSNotificationCenter defaultCenter]
-    postNotificationName:vStartPageLayoutChangeDidChange
-                  object:self];
 }
 
 @end

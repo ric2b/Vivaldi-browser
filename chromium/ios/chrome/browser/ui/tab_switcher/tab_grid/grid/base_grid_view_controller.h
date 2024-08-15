@@ -153,8 +153,18 @@ class WebStateID;
 // Notifies the grid that it is about to be dismissed.
 - (void)prepareForDismissal;
 
+// Moves the visible cells such as their center is in `center` (expressed in
+// self.view's coordinates) and apply `scale`. Pass CGPointZero to reset their
+// position.
+- (void)centerVisibleCellsToPoint:(CGPoint)center withScale:(CGFloat)scale;
+// Resets the move and scale done by the method just above.
+- (void)resetVisibleCellsCenterAndScale;
+
 // Vivaldi
 @property(nonatomic, assign) BOOL isIncognito;
+// YES when the current contents are hidden from the user before a successful
+// biometric authentication.
+@property(nonatomic, assign) BOOL incognitoLockEnabled;
 // End Vivaldi
 
 @end

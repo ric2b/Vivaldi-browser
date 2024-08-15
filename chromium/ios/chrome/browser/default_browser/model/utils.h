@@ -60,6 +60,10 @@ enum class IOSDefaultBrowserVideoPromoAction {
 
 // Visible for testing
 
+// Key in storage containing an NSDate corresponding to the last time
+// an HTTP(S) link was sent and opened by the app.
+extern NSString* const kLastHTTPURLOpenTime;
+
 // Key in storage containing an NSDate indicating the last time a user
 // interacted with a non-modal promo.
 extern NSString* const kLastTimeUserInteractedWithNonModalPromo;
@@ -105,10 +109,8 @@ extern NSString* const kAutofillUseCount;
 extern NSString* const kSpecialTabsUseCount;
 
 // Param names used for the default browser video promo.
-extern const char kVideoConditionsFullscreenPromo[];
-extern const char kVideoConditionsHalfscreenPromo[];
-extern const char kGenericConditionsFullscreenPromo[];
-extern const char kGenericConditionsHalfscreenPromo[];
+extern const char kVideoFullscreenPromo[];
+extern const char kVideoHalfscreenPromo[];
 extern const char kDefaultBrowserVideoPromoVariant[];
 
 // Helper function to set `data` for `key` into the storage object.
@@ -126,10 +128,6 @@ void LogLikelyInterestedDefaultBrowserUserActivity(DefaultPromoType type);
 // Logs to the FET that a default browser promo has been shown.
 void LogToFETDefaultBrowserPromoShown(feature_engagement::Tracker* tracker);
 
-// Logs to the FET that the user has pasted a URL into the omnibox if certain
-// conditions are met.
-void LogToFETUserPastedURLIntoOmnibox(feature_engagement::Tracker* tracker);
-
 // Returns true if the passed default browser badge `feature` should be shown.
 // Also makes the necessary calls to the FET for keeping track of usage, as well
 // as checking that the correct preconditions are met.
@@ -141,19 +139,11 @@ bool ShouldTriggerDefaultBrowserHighlightFeature(
 // Returns true if the default browser video promo is enabled.
 bool IsDefaultBrowserVideoPromoEnabled();
 
-// Returns true if the default browser video promo half screen enabled.
-bool IsDBVideoPromoHalfscreenEnabled();
-
-// Returns true if the default browser video promo full screen enabled.
+// Returns true if the default browser video promo full screen is enabled.
 bool IsDBVideoPromoFullscreenEnabled();
 
-// Returns true if the default browser video promo full screen with generic
-// triggering conditions enabled.
-bool IsDBVideoPromoWithGenericFullscreenEnabled();
-
-// Returns true if the default browser video promo half screen with generic
-// triggering conditions enabled.
-bool IsDBVideoPromoWithGenericHalfscreenEnabled();
+// Returns true if the default browser video promo half screen is enabled.
+bool IsDBVideoPromoHalfscreenEnabled();
 
 // Returns true if the non-modal default browser promo cooldown refactor is
 // enabled.
@@ -198,6 +188,10 @@ bool HasUserInteractedWithTailoredFullscreenPromoBefore();
 // non-modal promo before.
 NSInteger UserInteractionWithNonModalPromoCount();
 
+// Returns the number of times a fullscreen default browser promo has been
+// displayed.
+NSInteger DisplayedFullscreenPromoCount();
+
 // Logs that one of the fullscreen default browser promos was displayed.
 void LogFullscreenDefaultBrowserPromoDisplayed();
 
@@ -207,26 +201,28 @@ void LogUserInteractionWithFullscreenPromo();
 // Logs that the user has interacted with a Tailored Fullscreen Promo.
 void LogUserInteractionWithTailoredFullscreenPromo();
 
-// Logs that the user has interacted with a Non-Modals Promo.
-void LogUserInteractionWithNonModalPromo();
+// Logs that the user has interacted with a non-modal promo. The expected
+// parameters are the current counts, because they will be incremented by 1 and
+// then saved to NSUserDefaults. If kNonModalDefaultBrowserPromoCooldownRefactor
+// is disabled, kDisplayedFullscreenPromoCount will also be incremented by 1.
+void LogUserInteractionWithNonModalPromo(
+    NSInteger currentNonModalPromoInteractionsCount,
+    NSInteger currentFullscreenPromoInteractionsCount);
 
 // Logs that the user has interacted with the first run promo.
 void LogUserInteractionWithFirstRunPromo(BOOL openedSettings);
 
 // Logs in NSUserDefaults that user copy-pasted in the omnibox.
-void LogCopyPasteInOmniboxForDefaultBrowserPromo();
+void LogCopyPasteInOmniboxForCriteriaExperiment();
 
 // Logs in NSUserDefaults that user used bookmarks or bookmark manager.
-void LogBookmarkUseForDefaultBrowserPromo();
+void LogBookmarkUseForCriteriaExperiment();
 
 // Logs in NSUserDefaults that user used autofill suggestions
-void LogAutofillUseForDefaultBrowserPromo();
+void LogAutofillUseForCriteriaExperiment();
 
 // Logs that the user has used remote tabs.
-void LogRemoteTabsUsedForDefaultBrowserPromo();
-
-// Logs that the user has used pinned tabs.
-void LogPinnedTabsUsedForDefaultBrowserPromo();
+void LogRemoteTabsUseForCriteriaExperiment();
 
 // Returns YES if the user has opened the app through first-party intent 2
 // times in the last 7 days, but across 2 user sessions (default 6 hours). Also
@@ -261,18 +257,6 @@ bool IsChromeLikelyDefaultBrowser7Days();
 bool IsChromePotentiallyNoLongerDefaultBrowser(int likelyDefaultInterval,
                                                int likelyNotDefaultInterval);
 
-// Returns true if Chrome was likely the default browser in the last 21 days but
-// not in the last 7 days.
-bool IsChromePotentiallyNoLongerDefaultBrowser21To7();
-
-// Returns true if Chrome was likely the default browser in the last 28 days but
-// not in the last 14 days.
-bool IsChromePotentiallyNoLongerDefaultBrowser28To14();
-
-// Returns true if Chrome was likely the default browser in the last 35 days but
-// not in the last 14 days.
-bool IsChromePotentiallyNoLongerDefaultBrowser35To14();
-
 // Returns true if the past behavior of the user indicates that the user fits
 // the categorization that would likely benefit from having Chrome set as their
 // default browser for the passed `type`. Returns false otherwise.
@@ -298,15 +282,9 @@ const NSArray<NSString*>* DefaultBrowserUtilsLegacyKeysForTesting();
 // Returns the impression limit for the non-modal default browser promo.
 int GetNonModalDefaultBrowserPromoImpressionLimit();
 
-// Returns YES if the app has launched on cold start under
-// `kTimestampAppLaunchOnColdStart`.
-bool HasAppLaunchedOnColdStartAndRecordsLaunch();
-
 // Return true if the default browser promo should be registered with the promo
 // manager to display a default browser promo.
-bool ShouldRegisterPromoWithPromoManager(bool is_signed_in,
-                                         bool is_omnibox_copy_paste,
-                                         feature_engagement::Tracker* tracker);
+bool ShouldRegisterPromoWithPromoManager(bool is_signed_in);
 
 // Returns true if it was determined that the user is eligible for a
 // tailored promo.
@@ -319,14 +297,6 @@ bool IsGeneralPromoEligibleUser(bool is_signed_in);
 // Returns true if it was determined that the user is eligible for the
 // post restore default browser promo.
 bool IsPostRestoreDefaultBrowserEligibleUser();
-
-// Return true if it was determined that the user is eligible for the
-// video promo.
-bool IsVideoPromoEligibleUser(feature_engagement::Tracker* tracker);
-
-// Removes unused data from NSUserDefaults. This method should be periodically
-// pruned of cleanups that have been present for multiple milestones.
-void CleanupUnusedStorage();
 
 // Converts Default browser promo type NSEnum to an enum that can be used by
 // UMA.

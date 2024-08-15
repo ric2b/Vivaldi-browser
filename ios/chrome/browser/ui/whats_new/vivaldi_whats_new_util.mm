@@ -6,7 +6,7 @@
 #import "base/strings/string_number_conversions.h"
 #import "base/strings/string_split.h"
 #import "base/strings/sys_string_conversions.h"
-#import "ios/chrome/browser/promos_manager/promos_manager.h"
+#import "ios/chrome/browser/promos_manager/model/promos_manager.h"
 
 
 namespace {
@@ -30,30 +30,10 @@ bool HasVersionChanged(std::vector<std::string> version,
 
 }  // namespace
 
-
-NSString* vWhatsNewWasShownKey = @"vivaldiWhatsNewWasShown";
 NSString* vLastSeenVersionKey = @"vivaldiLastSeenVersion";
 
-bool WasVivaldiWhatsNewShown() {
-  return
-      [[NSUserDefaults standardUserDefaults] boolForKey:vWhatsNewWasShownKey];
-}
-
-void setVivaldiWhatsNewShown(PromosManager* promosManager) {
-  if (WasVivaldiWhatsNewShown()) {
-    return;
-  }
-
-  // Deregister What's New promo.
-  DCHECK(promosManager);
-  promosManager->DeregisterPromo(promos_manager::Promo::WhatsNew);
-
-  [[NSUserDefaults standardUserDefaults] setBool:YES
-                                          forKey:vWhatsNewWasShownKey];
-}
-
-bool ShouldRegisterVivaldiWhatsNewPromo () {
-  if (!::vivaldi::IsBetaOrFinal()) {
+bool ShouldShowVivaldiWhatsNewPage () {
+  if (::vivaldi::ReleaseKind() < ::vivaldi::Release::kBeta) {
     // Only show for Stable channel
     return false;
   }
@@ -81,9 +61,6 @@ bool ShouldRegisterVivaldiWhatsNewPromo () {
     [[NSUserDefaults standardUserDefaults]
         setObject:base::SysUTF8ToNSString(version)
            forKey:vLastSeenVersionKey];
-    [[NSUserDefaults standardUserDefaults] setBool:NO
-                                        forKey:vWhatsNewWasShownKey];
-    [[NSUserDefaults standardUserDefaults] synchronize];
   }
 
   return version_changed;

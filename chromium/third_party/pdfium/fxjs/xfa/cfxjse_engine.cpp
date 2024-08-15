@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "core/fxcrt/autorestorer.h"
+#include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxcrt/widetext_buffer.h"
@@ -22,7 +23,6 @@
 #include "fxjs/xfa/cfxjse_resolveprocessor.h"
 #include "fxjs/xfa/cfxjse_value.h"
 #include "fxjs/xfa/cjx_object.h"
-#include "third_party/base/containers/contains.h"
 #include "v8/include/v8-function-callback.h"
 #include "v8/include/v8-function.h"
 #include "v8/include/v8-local-handle.h"
@@ -44,8 +44,7 @@ using pdfium::fxjse::kClassTag;
 const FXJSE_CLASS_DESCRIPTOR kGlobalClassDescriptor = {
     kClassTag,  // tag
     "Root",     // name
-    nullptr,    // methods
-    0,          // method count
+    {},         // methods
     CFXJSE_Engine::GlobalPropTypeGetter,
     CFXJSE_Engine::GlobalPropertyGetter,
     CFXJSE_Engine::GlobalPropertySetter,
@@ -55,8 +54,7 @@ const FXJSE_CLASS_DESCRIPTOR kGlobalClassDescriptor = {
 const FXJSE_CLASS_DESCRIPTOR kNormalClassDescriptor = {
     kClassTag,    // tag
     "XFAObject",  // name
-    nullptr,      // methods
-    0,            // method count
+    {},           // methods
     CFXJSE_Engine::NormalPropTypeGetter,
     CFXJSE_Engine::NormalPropertyGetter,
     CFXJSE_Engine::NormalPropertySetter,
@@ -66,8 +64,7 @@ const FXJSE_CLASS_DESCRIPTOR kNormalClassDescriptor = {
 const FXJSE_CLASS_DESCRIPTOR kVariablesClassDescriptor = {
     kClassTag,          // tag
     "XFAScriptObject",  // name
-    nullptr,            // methods
-    0,                  // method count
+    {},                 // methods
     CFXJSE_Engine::NormalPropTypeGetter,
     CFXJSE_Engine::GlobalPropertyGetter,
     CFXJSE_Engine::GlobalPropertySetter,
@@ -180,7 +177,7 @@ CFXJSE_Context::ExecutionResult CFXJSE_Engine::RunScript(
       m_FormCalcContext = std::make_unique<CFXJSE_FormCalcContext>(
           GetIsolate(), m_JsContext.get(), m_pDocument.Get());
     }
-    absl::optional<WideTextBuffer> wsJavaScript =
+    std::optional<WideTextBuffer> wsJavaScript =
         CFXJSE_FormCalcContext::Translate(m_pDocument->GetHeap(), wsScript);
     if (!wsJavaScript.has_value()) {
       auto undefined_value = std::make_unique<CFXJSE_Value>();
@@ -209,7 +206,7 @@ bool CFXJSE_Engine::QueryNodeByFlag(CXFA_Node* refNode,
   if (!refNode)
     return false;
 
-  absl::optional<CFXJSE_Engine::ResolveResult> maybeResult =
+  std::optional<CFXJSE_Engine::ResolveResult> maybeResult =
       ResolveObjects(refNode, propname, dwFlag);
   if (!maybeResult.has_value())
     return false;
@@ -236,7 +233,7 @@ bool CFXJSE_Engine::UpdateNodeByFlag(CXFA_Node* refNode,
   if (!refNode)
     return false;
 
-  absl::optional<CFXJSE_Engine::ResolveResult> maybeResult =
+  std::optional<CFXJSE_Engine::ResolveResult> maybeResult =
       ResolveObjects(refNode, propname, dwFlag);
   if (!maybeResult.has_value())
     return false;
@@ -426,7 +423,7 @@ v8::Local<v8::Value> CFXJSE_Engine::NormalPropertyGetter(
           &pReturnValue)) {
     return pReturnValue;
   }
-  absl::optional<XFA_SCRIPTATTRIBUTEINFO> info = XFA_GetScriptAttributeByName(
+  std::optional<XFA_SCRIPTATTRIBUTEINFO> info = XFA_GetScriptAttributeByName(
       pObject->GetElementType(), wsPropName.AsStringView());
   if (info.has_value()) {
     (*info.value().callback)(pIsolate, pObject->JSObject(), &pReturnValue,
@@ -467,7 +464,7 @@ void CFXJSE_Engine::NormalPropertySetter(v8::Isolate* pIsolate,
   CXFA_Object* pObject = pScriptContext->GetVariablesThis(pOriginalObject);
   WideString wsPropName = WideString::FromUTF8(szPropName);
   WideStringView wsPropNameView = wsPropName.AsStringView();
-  absl::optional<XFA_SCRIPTATTRIBUTEINFO> info =
+  std::optional<XFA_SCRIPTATTRIBUTEINFO> info =
       XFA_GetScriptAttributeByName(pObject->GetElementType(), wsPropNameView);
   if (info.has_value()) {
     CJX_Object* jsObject = pObject->JSObject();
@@ -526,7 +523,7 @@ FXJSE_ClassPropType CFXJSE_Engine::NormalPropTypeGetter(
     return FXJSE_ClassPropType::kMethod;
 
   if (bQueryIn) {
-    absl::optional<XFA_SCRIPTATTRIBUTEINFO> maybe_info =
+    std::optional<XFA_SCRIPTATTRIBUTEINFO> maybe_info =
         XFA_GetScriptAttributeByName(eType, wsPropName.AsStringView());
     if (!maybe_info.has_value())
       return FXJSE_ClassPropType::kNone;
@@ -611,7 +608,7 @@ void CFXJSE_Engine::RunVariablesScript(CXFA_Script* pScriptNode) {
   if (!pTextNode)
     return;
 
-  absl::optional<WideString> wsScript =
+  std::optional<WideString> wsScript =
       pTextNode->JSObject()->TryCData(XFA_Attribute::Value, true);
   if (!wsScript.has_value())
     return;
@@ -685,20 +682,20 @@ void CFXJSE_Engine::RemoveBuiltInObjs(CFXJSE_Context* pContext) {
   fxv8::ReentrantDeleteObjectPropertyHelper(GetIsolate(), pObject, "Date");
 }
 
-absl::optional<CFXJSE_Engine::ResolveResult> CFXJSE_Engine::ResolveObjects(
+std::optional<CFXJSE_Engine::ResolveResult> CFXJSE_Engine::ResolveObjects(
     CXFA_Object* refObject,
     WideStringView wsExpression,
     Mask<XFA_ResolveFlag> dwStyles) {
   return ResolveObjectsWithBindNode(refObject, wsExpression, dwStyles, nullptr);
 }
 
-absl::optional<CFXJSE_Engine::ResolveResult>
+std::optional<CFXJSE_Engine::ResolveResult>
 CFXJSE_Engine::ResolveObjectsWithBindNode(CXFA_Object* refObject,
                                           WideStringView wsExpression,
                                           Mask<XFA_ResolveFlag> dwStyles,
                                           CXFA_Node* bindNode) {
   if (wsExpression.IsEmpty())
-    return absl::nullopt;
+    return std::nullopt;
 
   AutoRestorer<bool> resolving_restorer(&m_bResolvingNodes);
   m_bResolvingNodes = true;
@@ -759,7 +756,7 @@ CFXJSE_Engine::ResolveObjectsWithBindNode(CXFA_Object* refObject,
     }
     if (bNextCreate) {
       int32_t checked_length =
-          pdfium::base::checked_cast<int32_t>(wsExpression.GetLength());
+          pdfium::checked_cast<int32_t>(wsExpression.GetLength());
       if (m_NodeHelper->CreateNode(rndFind.m_wsName, rndFind.m_wsCondition,
                                    nStart == checked_length, this)) {
         continue;
@@ -785,8 +782,7 @@ CFXJSE_Engine::ResolveObjectsWithBindNode(CXFA_Object* refObject,
 
       if (rndFind.m_Result.type == ResolveResult::Type::kAttribute &&
           rndFind.m_Result.script_attribute.callback &&
-          nStart <
-              pdfium::base::checked_cast<int32_t>(wsExpression.GetLength())) {
+          nStart < pdfium::checked_cast<int32_t>(wsExpression.GetLength())) {
         v8::Local<v8::Value> pValue;
         CJX_Object* jsObject = rndFind.m_Result.objects.front()->JSObject();
         (*rndFind.m_Result.script_attribute.callback)(
@@ -815,7 +811,7 @@ CFXJSE_Engine::ResolveObjectsWithBindNode(CXFA_Object* refObject,
           m_NodeHelper->m_iCreateCount = 1;
         }
         int32_t checked_length =
-            pdfium::base::checked_cast<int32_t>(wsExpression.GetLength());
+            pdfium::checked_cast<int32_t>(wsExpression.GetLength());
         if (m_NodeHelper->CreateNode(rndFind.m_wsName, rndFind.m_wsCondition,
                                      nStart == checked_length, this)) {
           continue;
@@ -862,12 +858,12 @@ CFXJSE_Engine::ResolveObjectsWithBindNode(CXFA_Object* refObject,
       result.type = ResolveResult::Type::kExistNodes;
 
     if (result.objects.empty())
-      return absl::nullopt;
+      return std::nullopt;
 
     return result;
   }
   if (nNodes == 0)
-    return absl::nullopt;
+    return std::nullopt;
 
   return result;
 }

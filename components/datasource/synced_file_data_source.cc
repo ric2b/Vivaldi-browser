@@ -11,7 +11,7 @@
 
 namespace {
 void ForwardContent(content::URLDataSource::GotDataCallback callback,
-                    absl::optional<base::span<const uint8_t>> content) {
+                    std::optional<base::span<const uint8_t>> content) {
   if (!content) {
     std::move(callback).Run(scoped_refptr<base::RefCountedMemory>());
     return;

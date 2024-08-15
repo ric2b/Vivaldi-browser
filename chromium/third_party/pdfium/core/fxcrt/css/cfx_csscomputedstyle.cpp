@@ -6,9 +6,9 @@
 
 #include "core/fxcrt/css/cfx_csscomputedstyle.h"
 
+#include "core/fxcrt/containers/adapters.h"
 #include "core/fxcrt/css/cfx_cssstringvalue.h"
 #include "core/fxcrt/css/cfx_cssvaluelist.h"
-#include "third_party/base/containers/adapters.h"
 
 CFX_CSSComputedStyle::CFX_CSSComputedStyle() = default;
 
@@ -16,7 +16,7 @@ CFX_CSSComputedStyle::~CFX_CSSComputedStyle() = default;
 
 bool CFX_CSSComputedStyle::GetCustomStyle(const WideString& wsName,
                                           WideString* pValue) const {
-  for (const auto& prop : pdfium::base::Reversed(m_CustomProperties)) {
+  for (const auto& prop : pdfium::Reversed(m_CustomProperties)) {
     if (wsName == prop.name()) {
       *pValue = prop.value();
       return true;
@@ -25,10 +25,10 @@ bool CFX_CSSComputedStyle::GetCustomStyle(const WideString& wsName,
   return false;
 }
 
-absl::optional<WideString> CFX_CSSComputedStyle::GetLastFontFamily() const {
+std::optional<WideString> CFX_CSSComputedStyle::GetLastFontFamily() const {
   if (!m_InheritedData.m_pFontFamily ||
       m_InheritedData.m_pFontFamily->values().empty()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   return m_InheritedData.m_pFontFamily->values()

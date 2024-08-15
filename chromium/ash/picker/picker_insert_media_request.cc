@@ -4,6 +4,9 @@
 
 #include "ash/picker/picker_insert_media_request.h"
 
+#include "ash/picker/picker_insert_media.h"
+#include "ash/picker/picker_rich_media.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_input_client.h"
@@ -11,11 +14,31 @@
 
 namespace ash {
 
+namespace {
+
+PickerInsertMediaRequest::Result ConvertInsertMediaResult(
+    InsertMediaResult result) {
+  switch (result) {
+    case InsertMediaResult::kSuccess:
+      return PickerInsertMediaRequest::Result::kSuccess;
+    case InsertMediaResult::kUnsupported:
+      return PickerInsertMediaRequest::Result::kUnsupported;
+    case InsertMediaResult::kNotFound:
+      return PickerInsertMediaRequest::Result::kNotFound;
+  }
+}
+
+}  // namespace
+
 PickerInsertMediaRequest::PickerInsertMediaRequest(
     ui::InputMethod* input_method,
-    const std::u16string_view text_to_insert,
-    const base::TimeDelta insert_timeout)
-    : text_to_insert_(text_to_insert) {
+    const PickerRichMedia& media_to_insert,
+    const base::TimeDelta insert_timeout,
+    OnCompleteCallback on_complete_callback)
+    : media_to_insert_(media_to_insert),
+      on_complete_callback_(on_complete_callback.is_null()
+                                ? base::DoNothing()
+                                : std::move(on_complete_callback)) {
   observation_.Observe(input_method);
   insert_timeout_timer_.Start(FROM_HERE, insert_timeout, this,
                               &PickerInsertMediaRequest::CancelPendingInsert);
@@ -25,23 +48,31 @@ PickerInsertMediaRequest::~PickerInsertMediaRequest() = default;
 
 void PickerInsertMediaRequest::OnTextInputStateChanged(
     const ui::TextInputClient* client) {
+  // `OnTextInputStateChanged` can be called multiple times before the insert
+  // timeout. For each `client` change, attempt to insert the media. Only notify
+  // that the insert has failed when the insert has timed out.
   ui::TextInputClient* mutable_client =
       observation_.GetSource()->GetTextInputClient();
+
+  DCHECK_EQ(mutable_client, client);
   if (mutable_client == nullptr ||
       mutable_client->GetTextInputType() ==
           ui::TextInputType::TEXT_INPUT_TYPE_NONE ||
-      !text_to_insert_.has_value()) {
+      !media_to_insert_.has_value()) {
     return;
   }
 
-  DCHECK_EQ(mutable_client, client);
+  if (!InputFieldSupportsInsertingMedia(*media_to_insert_, *mutable_client)) {
+    return;
+  }
 
-  mutable_client->InsertText(
-      *text_to_insert_,
-      ui::TextInputClient::InsertTextCursorBehavior::kMoveCursorAfterText);
-
-  text_to_insert_ = std::nullopt;
+  insert_timeout_timer_.Reset();
   observation_.Reset();
+
+  InsertMediaToInputField(*std::exchange(media_to_insert_, std::nullopt),
+                          *mutable_client,
+                          base::BindOnce(&ConvertInsertMediaResult)
+                              .Then(std::move(on_complete_callback_)));
 }
 
 void PickerInsertMediaRequest::OnInputMethodDestroyed(
@@ -52,8 +83,12 @@ void PickerInsertMediaRequest::OnInputMethodDestroyed(
 }
 
 void PickerInsertMediaRequest::CancelPendingInsert() {
-  text_to_insert_ = std::nullopt;
   observation_.Reset();
+
+  if (media_to_insert_.has_value()) {
+    media_to_insert_ = std::nullopt;
+    std::move(on_complete_callback_).Run(Result::kTimeout);
+  }
 }
 
 }  // namespace ash

@@ -7,8 +7,9 @@
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
+
 #include "base/auto_reset.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
@@ -20,7 +21,7 @@
 #include "content/public/renderer/render_thread.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_features.h"
-#include "extensions/common/extension_messages.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/mojom/host_id.mojom.h"
 #include "extensions/renderer/extension_frame_helper.h"
@@ -95,7 +96,7 @@ class ScriptInjectionManager::RFOHelper : public content::RenderFrameObserver {
   void InvalidateAndResetFrame(bool force_reset);
 
   // The owning ScriptInjectionManager.
-  raw_ptr<ScriptInjectionManager, ExperimentalRenderer> manager_;
+  raw_ptr<ScriptInjectionManager> manager_;
 
   bool should_run_idle_ = true;
 
@@ -264,7 +265,7 @@ void ScriptInjectionManager::OnRenderFrameCreated(
 }
 
 void ScriptInjectionManager::OnExtensionUnloaded(
-    const std::string& extension_id) {
+    const ExtensionId& extension_id) {
   for (auto iter = pending_injections_.begin();
       iter != pending_injections_.end();) {
     if ((*iter)->host_id().id == extension_id) {
@@ -277,7 +278,7 @@ void ScriptInjectionManager::OnExtensionUnloaded(
 }
 
 void ScriptInjectionManager::OnInjectionFinished(ScriptInjection* injection) {
-  base::EraseIf(running_injections_,
+  std::erase_if(running_injections_,
                 [&injection](const std::unique_ptr<ScriptInjection>& mode) {
                   return injection == mode.get();
                 });
@@ -285,7 +286,7 @@ void ScriptInjectionManager::OnInjectionFinished(ScriptInjection* injection) {
 
 void ScriptInjectionManager::OnUserScriptsUpdated(
     const mojom::HostID& changed_host) {
-  base::EraseIf(
+  std::erase_if(
       pending_injections_,
       [&changed_host](const std::unique_ptr<ScriptInjection>& injection) {
         return changed_host == injection->host_id();
@@ -306,7 +307,7 @@ void ScriptInjectionManager::InvalidateForFrame(content::RenderFrame* frame) {
   // note it.
   active_injection_frames_.erase(frame);
 
-  base::EraseIf(pending_injections_,
+  std::erase_if(pending_injections_,
                 [&frame](const std::unique_ptr<ScriptInjection>& injection) {
                   return injection->render_frame() == frame;
                 });
@@ -440,8 +441,7 @@ void ScriptInjectionManager::HandleExecuteCode(
     case mojom::HostID::HostType::kExtensions:
       injection_host = ExtensionInjectionHost::Create(params->host_id->id);
       if (!injection_host) {
-        std::move(callback).Run(base::EmptyString(), GURL::EmptyGURL(),
-                                std::nullopt);
+        std::move(callback).Run(std::string(), GURL(), std::nullopt);
         return;
       }
       break;

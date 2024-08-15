@@ -73,7 +73,7 @@ extern "C" {
 // to leverage in-development code without breaking their stable builds.
 #define AVIF_VERSION_MAJOR 1
 #define AVIF_VERSION_MINOR 0
-#define AVIF_VERSION_PATCH 3
+#define AVIF_VERSION_PATCH 4
 #define AVIF_VERSION_DEVEL 1
 #define AVIF_VERSION \
     ((AVIF_VERSION_MAJOR * 1000000) + (AVIF_VERSION_MINOR * 10000) + (AVIF_VERSION_PATCH * 100) + AVIF_VERSION_DEVEL)
@@ -186,10 +186,11 @@ typedef enum AVIF_NODISCARD avifResult
     AVIF_RESULT_OUT_OF_MEMORY = 26,
     AVIF_RESULT_CANNOT_CHANGE_SETTING = 27, // a setting that can't change is changed during encoding
     AVIF_RESULT_INCOMPATIBLE_IMAGE = 28,    // the image is incompatible with already encoded images
+    AVIF_RESULT_INTERNAL_ERROR = 29,        // some invariants have not been satisfied (likely a bug in libavif)
 #if defined(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
-    AVIF_RESULT_ENCODE_GAIN_MAP_FAILED = 29,
-    AVIF_RESULT_DECODE_GAIN_MAP_FAILED = 30,
-    AVIF_RESULT_INVALID_TONE_MAPPED_IMAGE = 31,
+    AVIF_RESULT_ENCODE_GAIN_MAP_FAILED = 30,
+    AVIF_RESULT_DECODE_GAIN_MAP_FAILED = 31,
+    AVIF_RESULT_INVALID_TONE_MAPPED_IMAGE = 32,
 #endif
 
     // Kept for backward compatibility; please use the symbols above instead.

@@ -122,7 +122,7 @@ class BookmarkModelDropObserver : public bookmarks::BaseBookmarkModelObserver {
  private:
   // bookmarks::BaseBookmarkModelObserver:
   void BookmarkModelChanged() override { CleanUp(); }
-  void BookmarkModelBeingDeleted(BookmarkModel* model) override { CleanUp(); }
+  void BookmarkModelBeingDeleted() override { CleanUp(); }
 
   void CleanUp() {
     bookmark_model_observation_.Reset();
@@ -534,13 +534,13 @@ void BookmarkMenuDelegate::WillShowMenu(MenuItemView* menu) {
 void BookmarkMenuDelegate::BookmarkModelChanged() {}
 
 void BookmarkMenuDelegate::BookmarkNodeFaviconChanged(
-    BookmarkModel* model,
     const BookmarkNode* node) {
   auto menu_pair = node_to_menu_map_.find(node);
   if (menu_pair == node_to_menu_map_.end())
     return;  // We're not showing a menu item for the node.
 
-  menu_pair->second->SetIcon(GetFaviconForNode(model, node));
+  menu_pair->second->SetIcon(
+      GetFaviconForNode(bookmark_model_observation_.GetSource(), node));
 }
 
 void BookmarkMenuDelegate::WillRemoveBookmarks(
@@ -759,7 +759,7 @@ void BookmarkMenuDelegate::BuildMenu(const BookmarkNode* parent,
                                GetFaviconForNode(GetBookmarkModel(), node));
       }
       }
-      child_menu_item->GetViewAccessibility().OverrideDescription(
+      child_menu_item->GetViewAccessibility().SetDescription(
           url_formatter::FormatUrl(
               node->url(), url_formatter::kFormatUrlOmitDefaults,
               base::UnescapeRule::SPACES, nullptr, nullptr, nullptr));

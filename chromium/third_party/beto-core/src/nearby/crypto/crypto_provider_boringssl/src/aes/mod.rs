@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use bssl_crypto::aes::{AesDecryptKey, AesEncryptKey};
+use bssl_crypto::aes::{DecryptKey, EncryptKey};
 use crypto_provider::aes::{
     Aes, Aes128Key, Aes256Key, AesBlock, AesCipher, AesDecryptCipher, AesEncryptCipher, AesKey,
 };
@@ -40,28 +40,28 @@ impl Aes for Aes256 {
 }
 
 /// A BoringSSL backed AES-128 Encryption Cipher
-pub struct Aes128EncryptCipher(AesEncryptKey);
+pub struct Aes128EncryptCipher(EncryptKey);
 
 /// A BoringSSL backed AES-128 Decryption Cipher
-pub struct Aes128DecryptCipher(AesDecryptKey);
+pub struct Aes128DecryptCipher(DecryptKey);
 
 /// A BoringSSL backed AES-256 Encryption Cipher
-pub struct Aes256EncryptCipher(AesEncryptKey);
+pub struct Aes256EncryptCipher(EncryptKey);
 
 /// A BoringSSL backed AES-256 Decryption Cipher
-pub struct Aes256DecryptCipher(AesDecryptKey);
+pub struct Aes256DecryptCipher(DecryptKey);
 
 impl AesCipher for Aes128EncryptCipher {
     type Key = Aes128Key;
 
     fn new(key: &Self::Key) -> Self {
-        Self(bssl_crypto::aes::AesEncryptKey::new_aes_128(*key.as_array()))
+        Self(EncryptKey::new_128(key.as_array()))
     }
 }
 
 impl AesEncryptCipher for Aes128EncryptCipher {
     fn encrypt(&self, block: &mut AesBlock) {
-        bssl_crypto::aes::Aes::encrypt(&self.0, block)
+        self.0.encrypt_in_place(block)
     }
 }
 
@@ -69,13 +69,13 @@ impl AesCipher for Aes128DecryptCipher {
     type Key = Aes128Key;
 
     fn new(key: &Self::Key) -> Self {
-        Self(bssl_crypto::aes::AesDecryptKey::new_aes_128(*key.as_array()))
+        Self(DecryptKey::new_128(key.as_array()))
     }
 }
 
 impl AesDecryptCipher for Aes128DecryptCipher {
     fn decrypt(&self, block: &mut AesBlock) {
-        bssl_crypto::aes::Aes::decrypt(&self.0, block)
+        self.0.decrypt_in_place(block)
     }
 }
 
@@ -83,13 +83,13 @@ impl AesCipher for Aes256EncryptCipher {
     type Key = Aes256Key;
 
     fn new(key: &Self::Key) -> Self {
-        Self(bssl_crypto::aes::AesEncryptKey::new_aes_256(*key.as_array()))
+        Self(EncryptKey::new_256(key.as_array()))
     }
 }
 
 impl AesEncryptCipher for Aes256EncryptCipher {
     fn encrypt(&self, block: &mut AesBlock) {
-        bssl_crypto::aes::Aes::encrypt(&self.0, block)
+        self.0.encrypt_in_place(block)
     }
 }
 
@@ -97,13 +97,13 @@ impl AesCipher for Aes256DecryptCipher {
     type Key = Aes256Key;
 
     fn new(key: &Self::Key) -> Self {
-        Self(bssl_crypto::aes::AesDecryptKey::new_aes_256(*key.as_array()))
+        Self(DecryptKey::new_256(key.as_array()))
     }
 }
 
 impl AesDecryptCipher for Aes256DecryptCipher {
     fn decrypt(&self, block: &mut AesBlock) {
-        bssl_crypto::aes::Aes::decrypt(&self.0, block)
+        self.0.decrypt_in_place(block)
     }
 }
 

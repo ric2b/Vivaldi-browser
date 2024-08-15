@@ -10,7 +10,7 @@ import "attestation_ca.proto";
 import "keystore.proto";
 
 package attestation;
-option go_package = "chromiumos/system_api/attestation_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/attestation_proto";
 
 enum AttestationStatus {
   STATUS_SUCCESS = 0;

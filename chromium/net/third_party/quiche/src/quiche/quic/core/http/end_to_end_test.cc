@@ -467,7 +467,9 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
       server_writer_ = new PacketDroppingTestWriter();
       StartServer();
 
-      client_config_.SetConnectionOptionsToSend(QuicTagVector{kSPAD});
+      if (!GetQuicFlag(quic_always_support_server_preferred_address)) {
+        client_config_.SetConnectionOptionsToSend(QuicTagVector{kSPAD});
+      }
     }
 
     if (!connect_to_server_on_initialize_) {
@@ -3929,7 +3931,8 @@ TEST_P(EndToEndTest, AckNotifierWithPacketLossAndBlockedSocket) {
     // Determine size of headers after QPACK compression.
     NoopDecoderStreamErrorDelegate decoder_stream_error_delegate;
     NoopQpackStreamSenderDelegate encoder_stream_sender_delegate;
-    QpackEncoder qpack_encoder(&decoder_stream_error_delegate);
+    QpackEncoder qpack_encoder(&decoder_stream_error_delegate,
+                               HuffmanEncoding::kEnabled);
     qpack_encoder.set_qpack_stream_sender_delegate(
         &encoder_stream_sender_delegate);
 
@@ -5439,6 +5442,35 @@ TEST_P(EndToEndTest, ClientMultiPortMigrationOnPathDegrading) {
 }
 
 TEST_P(EndToEndTest, SimpleServerPreferredAddressTest) {
+  use_preferred_address_ = true;
+  ASSERT_TRUE(Initialize());
+  if (!version_.HasIetfQuicFrames()) {
+    return;
+  }
+  client_.reset(CreateQuicClient(nullptr));
+  QuicConnection* client_connection = GetClientConnection();
+  EXPECT_TRUE(client_->client()->WaitForHandshakeConfirmed());
+  EXPECT_EQ(server_address_, client_connection->effective_peer_address());
+  EXPECT_EQ(server_address_, client_connection->peer_address());
+  EXPECT_TRUE(client_->client()->HasPendingPathValidation());
+  QuicConnectionId server_cid1 = client_connection->connection_id();
+
+  SendSynchronousFooRequestAndCheckResponse();
+  while (client_->client()->HasPendingPathValidation()) {
+    client_->client()->WaitForEvents();
+  }
+  EXPECT_EQ(server_preferred_address_,
+            client_connection->effective_peer_address());
+  EXPECT_EQ(server_preferred_address_, client_connection->peer_address());
+  EXPECT_NE(server_cid1, client_connection->connection_id());
+
+  const auto client_stats = GetClientConnection()->GetStats();
+  EXPECT_TRUE(client_stats.server_preferred_address_validated);
+  EXPECT_FALSE(client_stats.failed_to_validate_server_preferred_address);
+}
+
+TEST_P(EndToEndTest, SimpleServerPreferredAddressTestNoSPAD) {
+  SetQuicFlag(quic_always_support_server_preferred_address, true);
   use_preferred_address_ = true;
   ASSERT_TRUE(Initialize());
   if (!version_.HasIetfQuicFrames()) {
@@ -7231,8 +7263,7 @@ TEST_P(EndToEndTest, ServerReportsEct0) {
   EXPECT_EQ(ecn->ce, 0);
   EXPECT_TRUE(client_connection->set_ecn_codepoint(ECN_ECT0));
   client_->SendSynchronousRequest("/foo");
-  if (!GetQuicRestartFlag(quic_receive_ecn3) ||
-      !VersionHasIetfQuicFrames(version_.transport_version)) {
+  if (!VersionHasIetfQuicFrames(version_.transport_version)) {
     EXPECT_EQ(ecn->ect0, 0);
   } else {
     EXPECT_GT(ecn->ect0, 0);
@@ -7256,8 +7287,7 @@ TEST_P(EndToEndTest, ServerReportsEct1) {
   EXPECT_EQ(ecn->ce, 0);
   EXPECT_TRUE(client_connection->set_ecn_codepoint(ECN_ECT1));
   client_->SendSynchronousRequest("/foo");
-  if (!GetQuicRestartFlag(quic_receive_ecn3) ||
-      !VersionHasIetfQuicFrames(version_.transport_version)) {
+  if (!VersionHasIetfQuicFrames(version_.transport_version)) {
     EXPECT_EQ(ecn->ect1, 0);
   } else {
     EXPECT_GT(ecn->ect1, 0);
@@ -7281,8 +7311,7 @@ TEST_P(EndToEndTest, ServerReportsCe) {
   EXPECT_EQ(ecn->ce, 0);
   EXPECT_TRUE(client_connection->set_ecn_codepoint(ECN_CE));
   client_->SendSynchronousRequest("/foo");
-  if (!GetQuicRestartFlag(quic_receive_ecn3) ||
-      !VersionHasIetfQuicFrames(version_.transport_version)) {
+  if (!VersionHasIetfQuicFrames(version_.transport_version)) {
     EXPECT_EQ(ecn->ce, 0);
   } else {
     EXPECT_GT(ecn->ce, 0);
@@ -7310,8 +7339,7 @@ TEST_P(EndToEndTest, ClientReportsEct1) {
   server_thread_->Pause();
   EXPECT_EQ(ecn->ect0, 0);
   EXPECT_EQ(ecn->ce, 0);
-  if (!GetQuicRestartFlag(quic_receive_ecn3) ||
-      !VersionHasIetfQuicFrames(version_.transport_version)) {
+  if (!VersionHasIetfQuicFrames(version_.transport_version)) {
     EXPECT_EQ(ecn->ect1, 0);
   } else {
     EXPECT_GT(ecn->ect1, 0);

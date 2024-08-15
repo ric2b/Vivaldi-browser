@@ -37,10 +37,12 @@ struct type_casting_traits<double, int> : vectorized_type_casting_traits<double,
 template <>
 struct type_casting_traits<int, double> : vectorized_type_casting_traits<int, double> {};
 
+#ifndef EIGEN_VECTORIZE_AVX512FP16
 template <>
 struct type_casting_traits<half, float> : vectorized_type_casting_traits<half, float> {};
 template <>
 struct type_casting_traits<float, half> : vectorized_type_casting_traits<float, half> {};
+#endif
 
 template <>
 struct type_casting_traits<bfloat16, float> : vectorized_type_casting_traits<bfloat16, float> {};

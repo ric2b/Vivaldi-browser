@@ -15,10 +15,10 @@
 #include "core/fpdfapi/page/cpdf_pageobject.h"
 #include "core/fpdfapi/parser/cpdf_dictionary.h"
 #include "core/fpdfapi/parser/cpdf_document.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/stl_util.h"
-#include "third_party/base/check.h"
-#include "third_party/base/check_op.h"
 
 bool GraphicsData::operator<(const GraphicsData& other) const {
   if (!FXSYS_SafeEQ(fillAlpha, other.fillAlpha))
@@ -69,9 +69,7 @@ void CPDF_PageObjectHolder::ContinueParse(PauseIndicatorIface* pPause) {
 
   m_ParseState = ParseState::kParsed;
   m_pDocument->IncrementParsedPageCount();
-  if (m_pParser->GetCurStates()) {
-    m_LastCTM = m_pParser->GetCurStates()->current_transformation_matrix();
-  }
+  m_AllCTMs = m_pParser->TakeAllCTMs();
 
   m_pParser.reset();
 }
@@ -86,11 +84,11 @@ std::set<int32_t> CPDF_PageObjectHolder::TakeDirtyStreams() {
   return dirty_streams;
 }
 
-absl::optional<ByteString> CPDF_PageObjectHolder::GraphicsMapSearch(
+std::optional<ByteString> CPDF_PageObjectHolder::GraphicsMapSearch(
     const GraphicsData& gd) {
   auto it = m_GraphicsMap.find(gd);
   if (it == m_GraphicsMap.end())
-    return absl::nullopt;
+    return std::nullopt;
 
   return it->second;
 }
@@ -100,11 +98,11 @@ void CPDF_PageObjectHolder::GraphicsMapInsert(const GraphicsData& gd,
   m_GraphicsMap[gd] = str;
 }
 
-absl::optional<ByteString> CPDF_PageObjectHolder::FontsMapSearch(
+std::optional<ByteString> CPDF_PageObjectHolder::FontsMapSearch(
     const FontData& fd) {
   auto it = m_FontsMap.find(fd);
   if (it == m_FontsMap.end())
-    return absl::nullopt;
+    return std::nullopt;
 
   return it->second;
 }
@@ -112,6 +110,36 @@ absl::optional<ByteString> CPDF_PageObjectHolder::FontsMapSearch(
 void CPDF_PageObjectHolder::FontsMapInsert(const FontData& fd,
                                            const ByteString& str) {
   m_FontsMap[fd] = str;
+}
+
+CFX_Matrix CPDF_PageObjectHolder::GetCTMAtBeginningOfStream(int32_t stream) {
+  CHECK(stream >= 0 || stream == CPDF_PageObject::kNoContentStream);
+
+  if (stream == 0 || m_AllCTMs.empty()) {
+    return CFX_Matrix();
+  }
+
+  if (stream == CPDF_PageObject::kNoContentStream) {
+    return m_AllCTMs.rbegin()->second;
+  }
+
+  // For all other cases, CTM at beginning of `stream` is the same value as CTM
+  // at the end of the previous stream.
+  return GetCTMAtEndOfStream(stream - 1);
+}
+
+CFX_Matrix CPDF_PageObjectHolder::GetCTMAtEndOfStream(int32_t stream) {
+  // This code should never need to calculate the CTM for the end of
+  // `CPDF_PageObject::kNoContentStream`, which uses a negative sentinel value.
+  // All other streams have a non-negative index.
+  CHECK_GE(stream, 0);
+
+  if (m_AllCTMs.empty()) {
+    return CFX_Matrix();
+  }
+
+  const auto it = m_AllCTMs.lower_bound(stream);
+  return it != m_AllCTMs.end() ? it->second : m_AllCTMs.rbegin()->second;
 }
 
 void CPDF_PageObjectHolder::LoadTransparencyInfo() {

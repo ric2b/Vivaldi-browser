@@ -1,4 +1,5 @@
 include_rules = [
+  "+ios/chrome/browser/affiliations/model",
   "+ios/chrome/browser/sync/model",
   "+ios/chrome/browser/bookmarks/model",
   "+ios/chrome/browser/net/model",
@@ -12,6 +13,7 @@ include_rules = [
   "+ios/chrome/browser/signin/model",
   "+ios/chrome/browser/supervised_user/model",
   "+ios/chrome/browser/unified_consent/model",
+  "+ios/chrome/browser/page_info"
 ]
 
 specific_include_rules = {

@@ -25,6 +25,7 @@
 #include "chrome/browser/web_applications/web_app_icon_generator.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
+#include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_ui_manager.h"
 #include "chrome/browser/web_applications/web_contents/web_app_icon_downloader.h"
@@ -39,6 +40,16 @@ namespace web_app {
 
 static const int kUnimportantIconSize1 = 4;
 static const int kUnimportantIconSize2 = 8;
+
+namespace {
+apps::FileHandlers CreateFileHandlersFromManifest(
+    const std::vector<blink::mojom::ManifestFileHandlerPtr>& file_handler,
+    const GURL& app_scope) {
+  WebAppInstallInfo web_app_info;
+  PopulateFileHandlerInfoFromManifest(file_handler, app_scope, &web_app_info);
+  return web_app_info.file_handlers;
+}
+}  // namespace
 
 class ManifestUpdateCheckUtilsTest : public testing::Test {
  public:
@@ -385,7 +396,7 @@ class ManifestUpdateCheckCommandTest : public WebAppTest {
     auto& page_state = web_contents_manager().GetOrCreatePageState(app_url());
 
     page_state.has_service_worker = true;
-    page_state.opt_manifest = GetManifestFromInfo(info);
+    page_state.manifest_before_default_processing = GetManifestFromInfo(info);
     page_state.valid_manifest_for_web_app = true;
     page_state.error_code = webapps::InstallableStatusCode::NO_ERROR_DETECTED;
   }
@@ -451,7 +462,7 @@ TEST_F(ManifestUpdateCheckCommandTest, VerifySuccessfulScopeUpdate) {
   // Verify scope changes are properly propagated.
   WebAppInstallInfo new_info;
   new_info.start_url = app_url();
-  new_info.scope = GURL("https://foo.bar.com/new_scope");
+  new_info.scope = GURL("https://foo.bar.com/new_scope/");
   new_info.display_mode = DisplayMode::kStandalone;
   new_info.title = u"Foo App";
 
@@ -460,7 +471,7 @@ TEST_F(ManifestUpdateCheckCommandTest, VerifySuccessfulScopeUpdate) {
 
   EXPECT_EQ(result.check_result, ManifestUpdateCheckResult::kAppUpdateNeeded);
   EXPECT_EQ(result.new_install_info.value().scope,
-            GURL("https://foo.bar.com/new_scope"));
+            GURL("https://foo.bar.com/new_scope/"));
 }
 
 TEST_F(ManifestUpdateCheckCommandTest, VerifySuccessfulDisplayModeUpdate) {

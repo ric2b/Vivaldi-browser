@@ -2191,6 +2191,24 @@ bool ObuParser::ParseFrameHeader() {
   if (sequence_header_.film_grain_params_present) {
     current_frame_->set_film_grain_params(frame_header_.film_grain_params);
   }
+  if (sequence_header_changed_ &&
+      (frame_header_.frame_type != kFrameKey || !frame_header_.show_frame ||
+       frame_header_.show_existing_frame ||
+       current_frame_->temporal_id() != 0)) {
+    // Section 7.5. Ordering of OBUs: A new coded video sequence is defined to
+    // start at each temporal unit which satisfies both of the following
+    // conditions:
+    //   * A sequence header OBU appears before the first frame header.
+    //   * The first frame header has frame_type equal to KEY_FRAME, show_frame
+    //     equal to 1, show_existing_frame equal to 0, and temporal_id equal to
+    //     0.
+    LIBGAV1_DLOG(
+        WARNING,
+        "The first frame successive to sequence header OBU should be a "
+        "keyframe with show_frame=1, show_existing_frame=0 and "
+        "temporal_id=0");
+  }
+
   return true;
 }
 
@@ -2998,7 +3016,7 @@ StatusCode ObuParser::ParseBasicStreamInfo(const uint8_t* data, size_t size,
       LIBGAV1_DLOG(
           ERROR,
           "Parsed OBU size (%zu bits) is greater than expected OBU size "
-          "(%zu bytes)..",
+          "(%zu bytes).",
           parsed_obu_size_in_bits, obu_size);
       return kStatusBitstreamError;
     }
@@ -3014,7 +3032,8 @@ StatusCode ObuParser::ParseBasicStreamInfo(const uint8_t* data, size_t size,
         parser.bit_reader_->byte_offset() - obu_start_offset;
     return kStatusOk;
   }
-  // Sequence header was never found.
+
+  LIBGAV1_DLOG(ERROR, "Sequence header was never found.");
   return kStatusBitstreamError;
 }
 

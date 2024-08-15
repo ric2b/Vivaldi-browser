@@ -17,7 +17,6 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "base/time/time.h"
-#import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/browser/bookmark_utils.h"
 #import "components/signin/public/identity_manager/account_info.h"
 #import "components/sync/base/features.h"
@@ -25,16 +24,19 @@
 #import "components/sync/service/sync_service_utils.h"
 #import "ios/chrome/browser/bookmarks/model/account_bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/model/bookmarks_utils.h"
+#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
 #import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
-#import "ios/chrome/browser/default_browser/model/utils.h"
+#import "ios/chrome/browser/default_browser/model/default_browser_interest_signals.h"
 #import "ios/chrome/browser/metrics/model/new_tab_page_uma.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_navigation_controller.h"
+#import "ios/chrome/browser/shared/ui/util/top_view_controller.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/ui/util/url_with_title.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
@@ -44,13 +46,13 @@
 #import "ios/chrome/browser/ui/bookmarks/bookmark_navigation_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_path_cache.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
-#import "ios/chrome/browser/ui/bookmarks/home/bookmarks_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/bookmarks/editor/bookmarks_editor_coordinator.h"
 #import "ios/chrome/browser/ui/bookmarks/editor/bookmarks_editor_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/bookmarks/folder_chooser/bookmarks_folder_chooser_coordinator.h"
 #import "ios/chrome/browser/ui/bookmarks/folder_chooser/bookmarks_folder_chooser_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/bookmarks/folder_editor/bookmarks_folder_editor_coordinator.h"
 #import "ios/chrome/browser/ui/bookmarks/folder_editor/bookmarks_folder_editor_coordinator_delegate.h"
+#import "ios/chrome/browser/ui/bookmarks/home/bookmarks_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/bookmarks/home/bookmarks_home_view_controller.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_coordinator.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_table_view_controller.h"
@@ -66,13 +68,12 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/panel/panel_interaction_controller.h"
-#import "ios/ui/bookmarks_editor/vivaldi_bookmark_add_edit_folder_view_controller.h"
-#import "ios/ui/bookmarks_editor/vivaldi_bookmark_add_edit_url_view_controller.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_coordinator.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_entry_point.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
-using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
 
 namespace {
@@ -139,6 +140,11 @@ enum class PresentedState {
 @property(nonatomic, readonly, weak) id<SnackbarCommands>
     snackbarCommandsHandler;
 
+// Vivaldi
+@property(nonatomic, strong)
+    VivaldiBookmarksEditorCoordinator* vivaldiBookmarksEditorCoordinator;
+// End Vivaldi
+
 @end
 
 @implementation BookmarksCoordinator {
@@ -149,9 +155,9 @@ enum class PresentedState {
   base::WeakPtr<ChromeBrowserState> _browserState;
 
   // Profile bookmark model.
-  base::WeakPtr<bookmarks::BookmarkModel> _localOrSyncableBookmarkModel;
+  base::WeakPtr<LegacyBookmarkModel> _localOrSyncableBookmarkModel;
   // Account bookmark model.
-  base::WeakPtr<bookmarks::BookmarkModel> _accountBookmarkModel;
+  base::WeakPtr<LegacyBookmarkModel> _accountBookmarkModel;
   // Coordinator of manage sync settings.
   ManageSyncSettingsCoordinator* _manageSyncSettingsCoordinator;
 }
@@ -172,7 +178,7 @@ enum class PresentedState {
         ios::LocalOrSyncableBookmarkModelFactory::GetForBrowserState(
             _browserState.get())
             ->AsWeakPtr();
-    BookmarkModel* accountBookmarkModel =
+    LegacyBookmarkModel* accountBookmarkModel =
         ios::AccountBookmarkModelFactory::GetForBrowserState(
             _browserState.get());
     if (accountBookmarkModel) {
@@ -269,6 +275,7 @@ enum class PresentedState {
       showSnackbarMessage:[self.mediator addBookmarkWithTitle:title
                                                           URL:bookmarkedURL
                                                    editAction:editAction]];
+  default_browser::NotifyBookmarkAddOrEdit();
 }
 
 - (void)presentBookmarkEditorForURL:(const GURL&)URL {
@@ -284,30 +291,23 @@ enum class PresentedState {
     return;
   }
   [self presentEditorForURLNode:bookmark];
+
+  default_browser::NotifyBookmarkAddOrEdit();
 }
 
 - (void)presentBookmarks {
-  [self presentBookmarksAtDisplayedFolderNode:_localOrSyncableBookmarkModel
-                                                  ->root_node()
+  [self presentBookmarksAtDisplayedFolderNode:
+            _localOrSyncableBookmarkModel
+                ->subtle_root_node_with_unspecified_children()
                             selectingBookmark:nil];
+
+  default_browser::NotifyBookmarkManagerOpened();
 }
 
 - (void)presentFolderChooser {
   DCHECK_EQ(PresentedState::NONE, self.currentPresentedState)
       << [self description];
   DCHECK(!self.bookmarkNavigationController) << [self description];
-
-  // Vivaldi
-  if (vivaldi::IsVivaldiRunning()) {
-      NSArray<BookmarksHomeViewController*>* replacementViewControllers =
-          [self.bookmarkBrowser cachedViewControllerStack];
-      [self showHomeViewController:self.bookmarkBrowser
-          withReplacementViewControllers:replacementViewControllers];
-      self.currentPresentedState = PresentedState::BOOKMARK_BROWSER;
-      return;
-  }
-  // End Vivaldi
-
   [self dismissSnackbar];
   self.currentPresentedState = PresentedState::FOLDER_SELECTION;
   self.folderChooserCoordinator = [[BookmarksFolderChooserCoordinator alloc]
@@ -335,8 +335,11 @@ enum class PresentedState {
   } // End Vivaldi
 
   self.currentPresentedState = PresentedState::BOOKMARK_EDITOR;
+  UIViewController* baseViewController =
+      top_view_controller::TopPresentedViewControllerFrom(
+          self.baseViewController);
   self.bookmarkEditorCoordinator = [[BookmarksEditorCoordinator alloc]
-      initWithBaseViewController:self.baseViewController
+      initWithBaseViewController:baseViewController
                          browser:self.browser
                             node:node
          snackbarCommandsHandler:self.snackbarCommandsHandler];
@@ -554,12 +557,14 @@ enum class PresentedState {
 
   [self stopBookmarksFolderChooserCoordinator];
 
-  bookmarks::StorageType type = bookmark_utils_ios::GetBookmarkModelType(
+  BookmarkModelType type = bookmark_utils_ios::GetBookmarkModelType(
       folder, _localOrSyncableBookmarkModel.get(), _accountBookmarkModel.get());
   SetLastUsedBookmarkFolder(_browserState->GetPrefs(), folder, type);
   [self.snackbarCommandsHandler
       showSnackbarMessage:[self.mediator addBookmarks:_URLs toFolder:folder]];
   _URLs = nil;
+
+  default_browser::NotifyBookmarkAddOrEdit();
 }
 
 - (void)bookmarksFolderChooserCoordinatorDidCancel:
@@ -607,12 +612,14 @@ enum class PresentedState {
 
       // TODO(crbug.com/695749): See if we need different metrics for 'Open
       // all', 'Open all in incognito' and 'Open in incognito'.
-      new_tab_page_uma::RecordAction(_browserState->IsOffTheRecord(),
-                                     webStateList->GetActiveWebState(),
-                                     new_tab_page_uma::ACTION_OPENED_BOOKMARK);
+      bool is_ntp = webStateList->GetActiveWebState()->GetVisibleURL() ==
+                    kChromeUINewTabURL;
+      new_tab_page_uma::RecordNTPAction(
+          _browserState->IsOffTheRecord(), is_ntp,
+          new_tab_page_uma::ACTION_OPENED_BOOKMARK);
       base::RecordAction(
           base::UserMetricsAction("MobileBookmarkManagerEntryOpened"));
-      LogBookmarkUseForDefaultBrowserPromo();
+      default_browser::NotifyURLFromBookmarkOpened();
 
       if (newTab ||
           ((!!inIncognito) != _currentBrowserState->IsOffTheRecord())) {
@@ -855,7 +862,9 @@ enum class PresentedState {
     // after the model is finished loading.
     self.bookmarkBrowser.displayedFolderNode = displayedFolderNode;
     [self.bookmarkBrowser setExternalBookmark:bookmarkNode];
-    if (displayedFolderNode == _localOrSyncableBookmarkModel->root_node()) {
+    if (displayedFolderNode ==
+        _localOrSyncableBookmarkModel
+            ->subtle_root_node_with_unspecified_children()) {
       replacementViewControllers =
           [self.bookmarkBrowser cachedViewControllerStack];
     }
@@ -988,74 +997,31 @@ enum class PresentedState {
                                   parentNode:(const BookmarkNode*)parentNode
                                    isEditing:(BOOL)isEditing
                                     isFolder:(BOOL)isFolder {
-  if (isFolder)
-    [self presentVivaldiBookmarkFolderEditor:editingNode
-                                  parentNode:parentNode
-                                   isEditing:isEditing];
-  else
-    [self presentVivaldiBookmarkURLEditor:editingNode
-                               parentNode:parentNode
-                                isEditing:isEditing];
-}
-
-/// 'editingItem' can be nil as this editor will be presented for both adding
-/// and editing item
-- (void)presentVivaldiBookmarkURLEditor:(const BookmarkNode*)node
-                             parentNode:(const BookmarkNode*)parentNode
-                              isEditing:(BOOL)isEditing {
+  VivaldiBookmarksEditorEntryPoint entryPoint = isFolder ?
+      VivaldiBookmarksEditorEntryPointFolder :
+        VivaldiBookmarksEditorEntryPointBookmark;
 
   VivaldiSpeedDialItem* editingItem =
-    [[VivaldiSpeedDialItem alloc] initWithBookmark:node];
+      [[VivaldiSpeedDialItem alloc] initWithBookmark:editingNode];
 
   VivaldiSpeedDialItem* parentItem =
-    [[VivaldiSpeedDialItem alloc] initWithBookmark:parentNode];
+      [[VivaldiSpeedDialItem alloc] initWithBookmark:parentNode];
 
-  VivaldiBookmarkAddEditURLViewController* controller =
-    [VivaldiBookmarkAddEditURLViewController
-     initWithBrowser:self.browser
-                item:editingItem
-              parent:parentItem
-           isEditing:isEditing
-        allowsCancel:YES];
-
-  UINavigationController *newVC =
-      [[UINavigationController alloc]
-        initWithRootViewController:controller];
-
-  // Present the nav bar controller on top of the parent
-  [self.baseViewController presentViewController:newVC
-                                      animated:YES
-                                    completion:nil];
-}
-
-/// 'editingItem' can be nil as this editor will be presented for both adding
-/// and editing item
-- (void)presentVivaldiBookmarkFolderEditor:(const BookmarkNode*)node
-                                parentNode:(const BookmarkNode*)parentNode
-                                 isEditing:(BOOL)isEditing {
-
-  VivaldiSpeedDialItem* editingItem =
-    [[VivaldiSpeedDialItem alloc] initWithBookmark:node];
-
-  VivaldiSpeedDialItem* parentItem =
-    [[VivaldiSpeedDialItem alloc] initWithBookmark:parentNode];
-
-  VivaldiBookmarkAddEditFolderViewController* controller =
-    [VivaldiBookmarkAddEditFolderViewController
-       initWithBrowser:self.browser
-                  item:editingItem
-                parent:parentItem
-             isEditing:isEditing
-          allowsCancel:YES];
-
-  UINavigationController *newVC =
-      [[UINavigationController alloc]
-        initWithRootViewController:controller];
-
-  // Present the nav bar controller on top of the parent
-  [self.baseViewController presentViewController:newVC
-                                      animated:YES
-                                    completion:nil];
+  UIViewController* baseViewController =
+      top_view_controller::TopPresentedViewControllerFrom(
+          self.baseViewController);
+  VivaldiBookmarksEditorCoordinator* vivaldiBookmarksEditorCoordinator =
+      [[VivaldiBookmarksEditorCoordinator alloc]
+           initWithBaseViewController:baseViewController
+                              browser:self.browser
+                                 item:editingItem
+                               parent:parentItem
+                           entryPoint:entryPoint
+                            isEditing:isEditing
+                         allowsCancel:YES];
+  self.vivaldiBookmarksEditorCoordinator = vivaldiBookmarksEditorCoordinator;
+  self.vivaldiBookmarksEditorCoordinator.allowsNewFolders = YES;
+  [self.vivaldiBookmarksEditorCoordinator start];
 }
 
 @end

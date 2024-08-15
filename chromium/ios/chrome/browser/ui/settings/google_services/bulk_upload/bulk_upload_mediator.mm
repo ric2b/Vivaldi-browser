@@ -7,6 +7,7 @@
 #import "base/check_op.h"
 #import "base/containers/contains.h"
 #import "base/i18n/message_formatter.h"
+#import "base/memory/raw_ptr.h"
 #import "base/metrics/user_metrics.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
@@ -37,29 +38,34 @@ struct BulkUploadModelItem {
 
 // List of model type to display for the bulk upload. The order will be used
 // in the table view.
-const BulkUploadModelItem kBuildUploadModelItems[] = {
-    {
-        syncer::BOOKMARKS,
-        BulkUploadType::kBookmark,
-        IDS_IOS_BULK_UPLOAD_BOOKMARK_TITLE,
-        IDS_IOS_BULK_UPLOAD_BOOKMARK_SUBTITLE,
-        kBulkUploadTableViewBookmarksItemAccessibilityIdentifer,
-    },
-    {
-        syncer::PASSWORDS,
-        BulkUploadType::kPassword,
-        IDS_IOS_BULK_UPLOAD_PASSWORD_TITLE,
-        IDS_IOS_BULK_UPLOAD_BOOKMARK_SUBTITLE,
-        kBulkUploadTableViewPasswordsItemAccessibilityIdentifer,
-    },
-    {
-        syncer::READING_LIST,
-        BulkUploadType::kReadinglist,
-        IDS_IOS_BULK_UPLOAD_READING_LIST_TITLE,
-        IDS_IOS_BULK_UPLOAD_READING_LIST_SUBTITLE,
-        kBulkUploadTableViewReadingListItemAccessibilityIdentifer,
-    },
-};
+
+const std::array<BulkUploadModelItem, 3> GetUploadModelItems() {
+  static const std::array<BulkUploadModelItem, 3> items = {
+      {{
+           syncer::BOOKMARKS,
+           BulkUploadType::kBookmark,
+           IDS_IOS_BULK_UPLOAD_BOOKMARK_TITLE,
+           IDS_IOS_BULK_UPLOAD_BOOKMARK_SUBTITLE,
+           kBulkUploadTableViewBookmarksItemAccessibilityIdentifer,
+       },
+       {
+           syncer::PASSWORDS,
+           BulkUploadType::kPassword,
+           IDS_IOS_BULK_UPLOAD_PASSWORD_TITLE,
+           IDS_IOS_BULK_UPLOAD_BOOKMARK_SUBTITLE,
+           kBulkUploadTableViewPasswordsItemAccessibilityIdentifer,
+       },
+       {
+           syncer::READING_LIST,
+           BulkUploadType::kReadinglist,
+           IDS_IOS_BULK_UPLOAD_READING_LIST_TITLE,
+           IDS_IOS_BULK_UPLOAD_READING_LIST_SUBTITLE,
+           kBulkUploadTableViewReadingListItemAccessibilityIdentifer,
+       }},
+  };
+
+  return items;
+}
 
 }  // namespace
 
@@ -68,13 +74,13 @@ const BulkUploadModelItem kBuildUploadModelItems[] = {
 
 @implementation BulkUploadMediator {
   // The identity manager for this service
-  signin::IdentityManager* _identityManager;
+  raw_ptr<signin::IdentityManager> _identityManager;
   // The email of the user, to display in snackbar message.
   // Observes changes in identity.
   std::unique_ptr<signin::IdentityManagerObserverBridge>
       _identityObserverBridge;
   // The sync service.
-  syncer::SyncService* _syncService;
+  raw_ptr<syncer::SyncService> _syncService;
   // Set of BulkModelType whose item is selected.
   std::set<BulkUploadType> _selectedTypes;
   // Map returned by syncServer::GetLocalDataDescriptions, associating to each
@@ -117,7 +123,7 @@ const BulkUploadModelItem kBuildUploadModelItems[] = {
   }
   __weak BulkUploadMediator* weakSelf = self;
   syncer::ModelTypeSet modelTypeSet;
-  for (BulkUploadModelItem modelItem : kBuildUploadModelItems) {
+  for (auto& modelItem : GetUploadModelItems()) {
     modelTypeSet.Put(modelItem.model_type);
   }
   _syncService->GetLocalDataDescriptions(
@@ -159,7 +165,7 @@ const BulkUploadModelItem kBuildUploadModelItems[] = {
     (std::map<syncer::ModelType, syncer::LocalDataDescription>)map {
   _map = map;
   NSMutableArray<BulkUploadViewItem*>* viewItems = [NSMutableArray array];
-  for (BulkUploadModelItem modelItem : kBuildUploadModelItems) {
+  for (auto& modelItem : GetUploadModelItems()) {
     if (_map[modelItem.model_type].item_count == 0) {
       continue;
     }
@@ -278,7 +284,7 @@ const BulkUploadModelItem kBuildUploadModelItems[] = {
 // Returns model type set of the selected data types.
 - (syncer::ModelTypeSet)selectedModelTypeEnumSet {
   syncer::ModelTypeSet modelTypeSet;
-  for (BulkUploadModelItem modelItem : kBuildUploadModelItems) {
+  for (auto& modelItem : GetUploadModelItems()) {
     if (base::Contains(_selectedTypes, modelItem.bulk_upload_type) &&
         _map[modelItem.model_type].item_count > 0) {
       modelTypeSet.Put(modelItem.model_type);

@@ -138,7 +138,6 @@ PaintLayerScrollableArea::PaintLayerScrollableArea(PaintLayer& layer)
       is_scrollbar_freeze_root_(false),
       is_horizontal_scrollbar_frozen_(false),
       is_vertical_scrollbar_frozen_(false),
-      should_scroll_on_main_thread_(true),
       scrollbar_manager_(*this),
       has_last_committed_scroll_offset_(false),
       scroll_corner_(nullptr),
@@ -1255,6 +1254,8 @@ mojom::blink::ColorScheme PaintLayerScrollableArea::UsedColorSchemeScrollbars()
       GetLayoutBox()->StyleRef().ColorSchemeFlagsIsNormal() &&
       GetLayoutBox()->GetDocument().GetPreferredColorScheme() ==
           mojom::blink::PreferredColorScheme::kDark) {
+    UseCounter::Count(GetLayoutBox()->GetDocument(),
+                      WebFeature::kUsedColorSchemeRootScrollbarsDark);
     return mojom::blink::ColorScheme::kDark;
   }
 
@@ -1490,13 +1491,15 @@ static inline const LayoutObject& ScrollbarStyleSource(
     // can scroll.
     Element* body = doc.body();
     if (body && body->GetLayoutObject() && body->GetLayoutObject()->IsBox() &&
-        body->GetLayoutObject()->StyleRef().HasCustomScrollbarStyle())
+        body->GetLayoutObject()->StyleRef().HasCustomScrollbarStyle(doc)) {
       return *body->GetLayoutObject();
+    }
 
     // If the <body> didn't have a custom style, then the root element might.
     Element* doc_element = doc.documentElement();
     if (doc_element && doc_element->GetLayoutObject() &&
-        doc_element->GetLayoutObject()->StyleRef().HasCustomScrollbarStyle() &&
+        doc_element->GetLayoutObject()->StyleRef().HasCustomScrollbarStyle(
+            doc) &&
         !layout_box.StyleRef().UsesStandardScrollbarStyle()) {
       return *doc_element->GetLayoutObject();
     }
@@ -1543,7 +1546,8 @@ int PaintLayerScrollableArea::ComputeHypotheticalScrollbarThickness(
     return scrollbar->ScrollbarThickness();
 
   const LayoutObject& style_source = ScrollbarStyleSource(*GetLayoutBox());
-  if (style_source.StyleRef().HasCustomScrollbarStyle()) {
+  if (style_source.StyleRef().HasCustomScrollbarStyle(
+          style_source.GetDocument())) {
     return CustomScrollbar::HypotheticalScrollbarThickness(this, orientation,
                                                            &style_source);
   }
@@ -1561,7 +1565,8 @@ bool PaintLayerScrollableArea::NeedsScrollbarReconstruction() const {
 
   const LayoutObject& style_source = ScrollbarStyleSource(*GetLayoutBox());
   bool needs_custom =
-      style_source.IsBox() && style_source.StyleRef().HasCustomScrollbarStyle();
+      style_source.IsBox() && style_source.StyleRef().HasCustomScrollbarStyle(
+                                  style_source.GetDocument());
 
   Scrollbar* scrollbars[] = {HorizontalScrollbar(), VerticalScrollbar()};
 
@@ -1646,9 +1651,10 @@ void PaintLayerScrollableArea::ComputeScrollbarExistence(
     // only appear when scrolling, we don't create them if there isn't overflow
     // to scroll. Thus, overlay scrollbars can't be "always on". i.e.
     // |overlay:scroll| behaves like |overlay:auto|.
+    Document& document = GetLayoutBox()->GetDocument();
     bool has_custom_scrollbar_style = ScrollbarStyleSource(*GetLayoutBox())
                                           .StyleRef()
-                                          .HasCustomScrollbarStyle();
+                                          .HasCustomScrollbarStyle(document);
     bool will_be_overlay = GetPageScrollbarTheme().UsesOverlayScrollbars() &&
                            !has_custom_scrollbar_style;
     if (will_be_overlay) {
@@ -1863,7 +1869,7 @@ const cc::SnapContainerData* PaintLayerScrollableArea::GetSnapContainerData()
 }
 
 void PaintLayerScrollableArea::SetSnapContainerData(
-    absl::optional<cc::SnapContainerData> data) {
+    std::optional<cc::SnapContainerData> data) {
   EnsureRareData().snap_container_data_ = data;
 }
 
@@ -1879,23 +1885,9 @@ bool PaintLayerScrollableArea::SetTargetSnapAreaElementIds(
   return false;
 }
 
-const cc::SnappedTargetData* PaintLayerScrollableArea::GetSnappedTargetData()
-    const {
-  return RareData() && RareData()->snapped_target_data_
-             ? &RareData()->snapped_target_data_.value()
-             : nullptr;
-}
-
-void PaintLayerScrollableArea::SetSnappedTargetData(
-    absl::optional<cc::SnappedTargetData> data) {
-  EnsureRareData().snapped_target_data_ = data;
-}
-
-const cc::SnappedTargetData*
-PaintLayerScrollableArea::GetSnapChangingTargetData() const {
-  return RareData() && RareData()->snapchanging_target_data_
-             ? &RareData()->snapchanging_target_data_.value()
-             : nullptr;
+std::optional<cc::TargetSnapAreaElementIds>
+PaintLayerScrollableArea::GetSnapchangingTargetIds() const {
+  return RareData() ? RareData()->snapchanging_target_ids_ : std::nullopt;
 }
 
 const cc::SnapSelectionStrategy* PaintLayerScrollableArea::GetImplSnapStrategy()
@@ -1908,31 +1900,18 @@ void PaintLayerScrollableArea::SetImplSnapStrategy(
   EnsureRareData().impl_snap_strategy_ = std::move(strategy);
 }
 
-absl::optional<gfx::PointF>
+std::optional<gfx::PointF>
 PaintLayerScrollableArea::GetSnapPositionAndSetTarget(
     const cc::SnapSelectionStrategy& strategy) {
   if (!RareData() || !RareData()->snap_container_data_)
-    return absl::nullopt;
+    return std::nullopt;
 
   cc::SnapContainerData& data = RareData()->snap_container_data_.value();
   if (!data.size())
-    return absl::nullopt;
+    return std::nullopt;
 
-  // If the document has a focused element that is coincident with the snap
-  // target, update the snap target to point to the focused element. This
-  // ensures that we stay snapped to the focused element after a relayout.
-  // TODO(crbug.com/1199911): If the focused element is not a snap target but
-  // has an ancestor that is, perhaps the rule should be applied for the
-  // ancestor element.
-  CompositorElementId active_element_id = CompositorElementId();
-  if (auto* active_element = GetDocument()->ActiveElement()) {
-    active_element_id =
-        CompositorElementIdFromDOMNodeId(active_element->GetDomNodeId());
-  }
-
-  absl::optional<gfx::PointF> snap_point;
-  cc::SnapPositionData snap =
-      data.FindSnapPosition(strategy, active_element_id);
+  std::optional<gfx::PointF> snap_point;
+  cc::SnapPositionData snap = data.FindSnapPosition(strategy);
   if (snap.type != cc::SnapPositionData::Type::kNone) {
     snap_point = gfx::PointF(snap.position.x(), snap.position.y());
   }
@@ -2099,6 +2078,12 @@ bool PaintLayerScrollableArea::HitTestOverflowControls(
   }
 
   if (scroll_corner_ && ScrollCornerRect().Contains(local_point)) {
+    if (GetLayoutBox() && GetLayoutBox()->GetFrame()) {
+      base::debug::CrashKeyString* crash_key =
+          GetLayoutBox()->GetFrame()->GetEventHandler().CrashKeyForBug1519197();
+      base::debug::SetCrashKeyString(crash_key,
+                                     GetLayoutBox()->DebugName().Utf8());
+    }
     result.SetIsOverScrollCorner(true);
     return true;
   }
@@ -2528,17 +2513,22 @@ ScrollingCoordinator* PaintLayerScrollableArea::GetScrollingCoordinator()
 bool PaintLayerScrollableArea::ShouldScrollOnMainThread() const {
   DCHECK_GE(GetDocument()->Lifecycle().GetState(),
             DocumentLifecycle::kPaintClean);
-  return HasBeenDisposed() || should_scroll_on_main_thread_;
-}
-
-void PaintLayerScrollableArea::SetShouldScrollOnMainThread(
-    bool scroll_on_main_thread) {
-  DCHECK_EQ(GetDocument()->Lifecycle().GetState(),
-            DocumentLifecycle::kPaintClean);
-  if (scroll_on_main_thread != should_scroll_on_main_thread_) {
-    should_scroll_on_main_thread_ = scroll_on_main_thread;
-    MainThreadScrollingDidChange();
+  if (HasBeenDisposed()) {
+    return true;
   }
+
+  if (const auto* paint_artifact_compositor =
+          GetLayoutBox()->GetFrameView()->GetPaintArtifactCompositor()) {
+    if (const auto* properties =
+            GetLayoutBox()->FirstFragment().PaintProperties()) {
+      if (const auto* scroll = properties->Scroll()) {
+        return paint_artifact_compositor->GetMainThreadScrollingReasons(
+                   *scroll) !=
+               cc::MainThreadScrollingReason::kNotScrollingOnMain;
+      }
+    }
+  }
+  return true;
 }
 
 bool PaintLayerScrollableArea::PrefersNonCompositedScrolling() const {
@@ -2653,7 +2643,8 @@ Scrollbar* PaintLayerScrollableArea::ScrollbarManager::CreateScrollbar(
   Scrollbar* scrollbar = nullptr;
   const LayoutObject& style_source =
       ScrollbarStyleSource(*ScrollableArea()->GetLayoutBox());
-  if (style_source.StyleRef().HasCustomScrollbarStyle()) {
+  if (style_source.StyleRef().HasCustomScrollbarStyle(
+          style_source.GetDocument())) {
     DCHECK(style_source.GetNode() && style_source.GetNode()->IsElementNode());
     scrollbar = MakeGarbageCollected<CustomScrollbar>(
         ScrollableArea(), orientation, &style_source);
@@ -2910,7 +2901,9 @@ void PaintLayerScrollableArea::InvalidatePaintOfScrollbarIfNeeded(
     if (may_be_composited != previously_might_be_composited) {
       needs_paint_invalidation = true;
       previously_might_be_composited = may_be_composited;
-    } else if (may_be_composited && UsesCompositedScrolling()) {
+    } else if (may_be_composited &&
+               (RuntimeEnabledFeatures::RasterInducingScrollEnabled() ||
+                UsesCompositedScrolling())) {
       // Don't invalidate composited scrollbar if the change is only inside of
       // the scrollbar. ScrollbarDisplayItem will handle such change.
       // TODO(crbug.com/1505560): Avoid paint invalidation for non-composited
@@ -3043,8 +3036,10 @@ gfx::Size PaintLayerScrollableArea::PixelSnappedBorderBoxSize() const {
   // This can be fixed only after we support subpixels in overflow control
   // geometry. For now we ensure correct pixel snapping of overflow controls by
   // calling PositionOverflowControls() again when paint offset is updated.
-  return GetLayoutBox()->PixelSnappedBorderBoxSize(
-      GetLayoutBox()->FirstFragment().PaintOffset());
+  // TODO(crbug.com/962299): Only correct if the paint offset is correct.
+  return ToPixelSnappedSize(
+      GetLayoutBox()->Size().ToLayoutSize(),
+      GetLayoutBox()->FirstFragment().PaintOffset().ToLayoutPoint());
 }
 
 gfx::Rect PaintLayerScrollableArea::ScrollingBackgroundVisualRect(
@@ -3120,32 +3115,27 @@ void PaintLayerScrollableArea::UpdateSnappedTargetsAndEnqueueSnapChanged() {
   if (!container_data) {
     return;
   }
-  const cc::SnappedTargetData* snapped_target_data = GetSnappedTargetData();
-  std::set<cc::ElementId> new_targets =
-      cc::SnapContainerData::FindSnappedTargetsAtScrollOffset(container_data,
-                                                              ScrollPosition());
+  cc::TargetSnapAreaElementIds new_target_ids =
+      container_data->GetTargetSnapAreaElementIds();
+  auto& rare_data = EnsureRareData();
   bool snapchanged =
-      snapped_target_data
-          ? snapped_target_data->GetSnappedTargetIds() != new_targets
-          : new_targets.size();
-
+      (rare_data.snapchanged_target_ids_
+           ? (new_target_ids.x != rare_data.snapchanged_target_ids_->x ||
+              new_target_ids.y != rare_data.snapchanged_target_ids_->y)
+           : true);
   if (snapchanged) {
-    if (!EnsureRareData().snapped_target_data_) {
-      RareData()->snapped_target_data_ = cc::SnappedTargetData();
-    }
-    RareData()->snapped_target_data_->SetSnappedTargetIds(
-        std::move(new_targets));
+    rare_data.snapchanged_target_ids_ = new_target_ids;
     EnqueueSnapChangedEvent();
   }
 }
 
-void PaintLayerScrollableArea::SetSnapChangingTargetData(
-    absl::optional<cc::SnappedTargetData> data) {
-  EnsureRareData().snapchanging_target_data_ = data;
+void PaintLayerScrollableArea::SetSnapchangingTargetIds(
+    std::optional<cc::TargetSnapAreaElementIds> ids) {
+  EnsureRareData().snapchanging_target_ids_ = ids;
 }
 
 void PaintLayerScrollableArea::UpdateSnapChangingTargetsAndEnqueueSnapChanging(
-    const gfx::PointF& scroll_offset) {
+    const cc::TargetSnapAreaElementIds& new_target_ids) {
   if (!RuntimeEnabledFeatures::CSSSnapChangingEventEnabled()) {
     return;
   }
@@ -3153,22 +3143,14 @@ void PaintLayerScrollableArea::UpdateSnapChangingTargetsAndEnqueueSnapChanging(
   if (!container_data) {
     return;
   }
-  const cc::SnappedTargetData* snapchanging_target_data =
-      GetSnapChangingTargetData();
-  if (!snapchanging_target_data) {
-    return;
-  }
-
-  const std::set<cc::ElementId> new_snapchanging_targets =
-      cc::SnapContainerData::FindSnappedTargetsAtScrollOffset(container_data,
-                                                              scroll_offset);
-  if (snapchanging_target_data->GetSnappedTargetIds() !=
-      new_snapchanging_targets) {
-    if (!EnsureRareData().snapchanging_target_data_) {
-      RareData()->snapchanging_target_data_ = cc::SnappedTargetData();
-    }
-    RareData()->snapchanging_target_data_->SetSnappedTargetIds(
-        std::move(new_snapchanging_targets));
+  auto& rare_data = EnsureRareData();
+  bool snapchanging =
+      (rare_data.snapchanging_target_ids_
+           ? (new_target_ids.x != rare_data.snapchanging_target_ids_->x ||
+              new_target_ids.y != rare_data.snapchanging_target_ids_->y)
+           : true);
+  if (snapchanging) {
+    rare_data.snapchanging_target_ids_ = new_target_ids;
     EnqueueSnapChangingEvent();
   }
 }
@@ -3183,7 +3165,42 @@ void PaintLayerScrollableArea::EnqueueSnapChangingEventFromImplIfNeeded() {
     return;
   }
   cc::SnapPositionData snap = container_data->FindSnapPosition(*strategy);
-  UpdateSnapChangingTargetsAndEnqueueSnapChanging(snap.position);
+  UpdateSnapChangingTargetsAndEnqueueSnapChanging(snap.target_element_ids);
+}
+
+Node* PaintLayerScrollableArea::GetSnapEventTargetAlongAxis(
+    const AtomicString& event_type,
+    cc::SnapAxis axis) const {
+  using cc::SnapAxis::kBlock;
+  using cc::SnapAxis::kInline;
+  if (!GetLayoutBox() || !GetLayoutBox()->Style()) {
+    return nullptr;
+  }
+  bool horiz = GetLayoutBox()->Style()->GetWritingDirection().IsHorizontal();
+  std::optional<cc::TargetSnapAreaElementIds> ids;
+  if (event_type == event_type_names::kSnapchanged) {
+    ids = RareData()->snapchanged_target_ids_;
+  } else {
+    ids = RareData()->snapchanging_target_ids_;
+  }
+  if (!ids) {
+    return nullptr;
+  }
+  if ((axis == kBlock && horiz) || (axis == kInline && !horiz)) {
+    if (ids->y) {
+      return DOMNodeIds::NodeForId(DOMNodeIdFromCompositorElementId(ids->y));
+    }
+  } else if ((axis == kInline && horiz) || (axis == kBlock && !horiz)) {
+    if (ids->x) {
+      return DOMNodeIds::NodeForId(DOMNodeIdFromCompositorElementId(ids->x));
+    }
+  }
+  return nullptr;
+}
+
+void PaintLayerScrollableArea::SetSnapchangedTargetIds(
+    std::optional<cc::TargetSnapAreaElementIds> ids) {
+  EnsureRareData().snapchanged_target_ids_ = ids;
 }
 
 }  // namespace blink

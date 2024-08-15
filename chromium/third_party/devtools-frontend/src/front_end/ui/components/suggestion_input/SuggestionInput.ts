@@ -225,6 +225,9 @@ class SuggestionBox extends LitElement {
         selected: index === this.cursor,
       })}
           @mousedown=${this.#dispatchSuggestEvent.bind(this, suggestion)}
+          jslog=${VisualLogging.item('suggestion').track({
+        click: true,
+      })}
         >
           ${suggestion}
         </li>`;
@@ -273,6 +276,11 @@ export class SuggestionInput extends LitElement {
     this.mimeType = '';
     this.autocomplete = true;
     this.addEventListener('blur', this.#handleBlurEvent);
+    let jslog = VisualLogging.value().track({keydown: 'ArrowUp|ArrowDown|Enter', change: true});
+    if (this.jslogContext) {
+      jslog = jslog.context(this.jslogContext);
+    }
+    this.setAttribute('jslog', jslog.toString());
   }
 
   #cachedEditableContent?: EditableContent;
@@ -290,8 +298,12 @@ export class SuggestionInput extends LitElement {
 
   #handleBlurEvent = (): void => {
     window.getSelection()?.removeAllRanges();
+    const changed = this.value !== this.#editableContent.value;
     this.value = this.#editableContent.value;
     this.expression = this.#editableContent.value;
+    if (changed) {
+      this.dispatchEvent(new Event('change'));
+    }
   };
 
   #handleFocusEvent = (event: FocusEvent): void => {
@@ -336,10 +348,6 @@ export class SuggestionInput extends LitElement {
   }
 
   protected override render(): LitHtml.TemplateResult {
-    let jslog = VisualLogging.textField().track({keydown: true});
-    if (this.jslogContext) {
-      jslog = jslog.context(this.jslogContext);
-    }
     // clang-format off
     return html`<devtools-editable-content
         ?disabled=${this.disabled}
@@ -356,7 +364,6 @@ export class SuggestionInput extends LitElement {
         inputmode="text"
         placeholder=${this.placeholder}
         spellcheck="false"
-        jslog=${jslog}
       ></devtools-editable-content>
       <devtools-suggestion-box
         @suggestioninit=${this.#handleSuggestionInitEvent}

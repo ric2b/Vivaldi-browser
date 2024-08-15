@@ -230,7 +230,7 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
                         getCompositorViewHolderSupplier(),
                         getTabContentManagerSupplier(),
                         this::getSnackbarManager,
-                        getEdgeToEdgeSupplier(),
+                        mEdgeToEdgeControllerSupplier,
                         getActivityType(),
                         this::isInOverviewMode,
                         this::isWarmOnResume,
@@ -244,7 +244,8 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
                         mBackPressManager,
                         () -> mTabController,
                         () -> mMinimizationManagerHolder.getMinimizationManager(),
-                        () -> mFeatureOverridesManager);
+                        () -> mFeatureOverridesManager,
+                        getBaseChromeLayout());
         return mBaseCustomTabRootUiCoordinator;
     }
 
@@ -283,7 +284,7 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
 
         // mIntentHandler comes from the base class.
         IntentIgnoringCriterion intentIgnoringCriterion =
-                (intent) -> IntentHandler.shouldIgnoreIntent(intent, isCustomTab());
+                (intent) -> IntentHandler.shouldIgnoreIntent(intent, this, isCustomTab());
 
         BaseCustomTabActivityModule baseCustomTabsModule =
                 overridenBaseCustomTabFactory != null
@@ -545,7 +546,8 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
                 mIntentDataProvider.isIncognito(),
                 isMenuIconAtStart,
                 mBaseCustomTabRootUiCoordinator::isPageInsightsHubEnabled,
-                mBaseCustomTabRootUiCoordinator.getReadAloudControllerSupplier());
+                mBaseCustomTabRootUiCoordinator.getReadAloudControllerSupplier(),
+                mIntentDataProvider.getClientPackageNameIdentitySharing() != null);
     }
 
     @Override
@@ -730,14 +732,13 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
 
     @Override
     public boolean onMenuOrKeyboardAction(int id, boolean fromMenu) {
-        // Disable creating new tabs, bookmark, history, print, help, focus_url, etc.
+        // Disable creating new tabs, bookmark, print, help, focus_url, etc.
         if (id == R.id.focus_url_bar
                 || id == R.id.all_bookmarks_menu_id
                 || id == R.id.help_id
                 || id == R.id.recent_tabs_menu_id
                 || id == R.id.new_incognito_tab_menu_id
-                || id == R.id.new_tab_menu_id
-                || id == R.id.open_history_menu_id) {
+                || id == R.id.new_tab_menu_id) {
             return true;
         }
         return super.onMenuOrKeyboardAction(id, fromMenu);

@@ -8,6 +8,7 @@
 #include <map>
 #include <vector>
 
+#import "base/memory/raw_ptr.h"
 #include "base/values.h"
 #include "ios/web/js_messaging/web_frame_internal.h"
 #include "ios/web/public/test/fakes/fake_web_frame.h"
@@ -21,10 +22,6 @@ class FakeWebFrameImpl : public FakeWebFrame, public WebFrameInternal {
   FakeWebFrameImpl(const std::string& frame_id,
                    bool is_main_frame,
                    GURL security_origin);
-
-  // Returns the JavaScriptContentWorld parameter value received in the last
-  // call to `CallJavaScriptFunctionInContentWorld`.
-  JavaScriptContentWorld* last_received_content_world();
 
   // WebFrame:
   WebFrameInternal* GetWebFrameInternal() override;
@@ -62,8 +59,7 @@ class FakeWebFrameImpl : public FakeWebFrame, public WebFrameInternal {
 
   // WebFrameInternal:
   // The JavaScript call which would be executed by a real WebFrame will be
-  // added to `java_script_calls_`. `content_world` is stored to
-  // `last_received_content_world_`. Always returns true.
+  // added to `java_script_calls_`. Always returns true.
   bool CallJavaScriptFunctionInContentWorld(
       const std::string& name,
       const base::Value::List& parameters,
@@ -72,13 +68,20 @@ class FakeWebFrameImpl : public FakeWebFrame, public WebFrameInternal {
   // added to `java_script_calls_`. Always returns true.
   // `callback` will be executed with the value passed in to
   // AddJsResultForFunctionCall() or null if no such result has been added.
-  // `content_world` is stored to `last_received_content_world_`.
   bool CallJavaScriptFunctionInContentWorld(
       const std::string& name,
       const base::Value::List& parameters,
       JavaScriptContentWorld* content_world,
       base::OnceCallback<void(const base::Value*)> callback,
       base::TimeDelta timeout) override;
+  // The JavaScript call which would be executed by a real WebFrame will be
+  // added to `java_script_calls_`.
+  // `callback` will be executed with the value passed in to
+  // AddResultForExecutedJs() or null if no such result has been added.
+  bool ExecuteJavaScriptInContentWorld(
+      const std::u16string& script,
+      JavaScriptContentWorld* content_world,
+      ExecuteJavaScriptCallbackWithError callback) override;
 
   ~FakeWebFrameImpl() override;
 
@@ -103,9 +106,8 @@ class FakeWebFrameImpl : public FakeWebFrame, public WebFrameInternal {
   // When set to true, will force calls to CallJavaScriptFunction to fail with
   // timeout.
   bool force_timeout_ = false;
-  BrowserState* browser_state_;
+  raw_ptr<BrowserState> browser_state_;
 
-  JavaScriptContentWorld* last_received_content_world_;
   base::RepeatingClosure call_java_script_function_callback_;
 };
 

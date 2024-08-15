@@ -34,20 +34,17 @@
 }
 
 .data-grid td .bar-unused-size {
-  background-color: var(--sys-color-error-bright);
+  background-color: var(--app-color-coverage-unused);
 }
 
 .data-grid td .bar-used-size {
-  background-color: var(--sys-color-green-bright);
+  background-color: var(--app-color-coverage-used);
 }
 
 .data-grid td .percent-value {
-  width: 6ex;
+  width: 7ex;
   display: inline-block;
-}
-
-.data-grid tr:not(.selected) td .percent-value {
-  color: var(--sys-color-token-subtle);
+  color: var(--sys-color-on-surface-subtle);
 }
 
 @media (forced-colors: active) {

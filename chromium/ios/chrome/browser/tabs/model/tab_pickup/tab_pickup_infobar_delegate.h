@@ -11,7 +11,7 @@
 #import "base/ios/block_types.h"
 #import "components/infobars/core/confirm_infobar_delegate.h"
 #import "components/sessions/core/session_id.h"
-#import "ios/chrome/browser/favicon/favicon_loader.h"
+#import "ios/chrome/browser/favicon/model/favicon_loader.h"
 
 class Browser;
 class FaviconLoader;
@@ -49,6 +49,9 @@ class TabPickupInfobarDelegate : public ConfirmInfoBarDelegate {
   bool EqualsDelegate(infobars::InfoBarDelegate* delegate) const override;
 
  private:
+  // Called when a Favicon has been fetched.
+  void FaviconFetched(ProceduralBlock block_handler,
+                      FaviconAttributes* attributes);
   // Session name.
   std::string session_name_;
   // Time the session is last modified.
@@ -66,6 +69,8 @@ class TabPickupInfobarDelegate : public ConfirmInfoBarDelegate {
   raw_ptr<Browser> browser_ = nullptr;
   // Loads favicons.
   raw_ptr<FaviconLoader> favicon_loader_ = nullptr;
+
+  base::WeakPtrFactory<TabPickupInfobarDelegate> weak_factory_{this};
 };
 
 #endif  // IOS_CHROME_BROWSER_PERMISSIONS_PERMISSIONS_INFOBAR_DELEGATE_H_

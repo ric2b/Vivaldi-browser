@@ -1,3 +1,5 @@
+load("@bazel_skylib//lib:selects.bzl", "selects")
+
 # Copyright 2020 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
-load("@bazel_skylib//lib:selects.bzl", "selects")
 
 licenses(["notice"])
 
@@ -55,7 +56,7 @@ cc_library(
         "advertisement_factory.cc",
         "base_broadcast_request.cc",
         "broadcast_manager.cc",
-        "connection_authenticator.cc",
+        "connection_authenticator_impl.cc",
         "credential_manager_impl.cc",
         "ldt.cc",
         "scan_manager.cc",
@@ -68,6 +69,7 @@ cc_library(
         "base_broadcast_request.h",
         "broadcast_manager.h",
         "connection_authenticator.h",
+        "connection_authenticator_impl.h",
         "credential_manager.h",
         "credential_manager_impl.h",
         "ldt.h",
@@ -136,6 +138,8 @@ cc_library(
     srcs = [
     ],
     hdrs = [
+        "mock_connection_authenticator.h",
+        "mock_credential_manager.h",
         "mock_service_controller.h",
     ],
     visibility = [
@@ -143,8 +147,13 @@ cc_library(
     ],
     deps = [
         ":internal",
-        "//presence",
+        "//internal/platform/implementation:comm",
+        "//internal/proto:credential_cc_proto",
+        "//internal/proto:local_credential_cc_proto",
         "@com_github_protobuf_matchers//protobuf-matchers",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings:string_view",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -280,9 +289,9 @@ cc_test(
 )
 
 cc_test(
-    name = "connection_authenticator_test",
+    name = "connection_authenticator_impl_test",
     size = "small",
-    srcs = ["connection_authenticator_test.cc"],
+    srcs = ["connection_authenticator_impl_test.cc"],
     deps = [
         ":internal",
         "//internal/crypto",
@@ -317,6 +326,7 @@ cc_test(
         "//net/proto2/contrib/parse_proto:testing",
         "@com_github_protobuf_matchers//protobuf-matchers",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
@@ -341,6 +351,37 @@ cc_test(
         "//internal/platform:types",
         "//presence/implementation/mediums",
         "@com_github_protobuf_matchers//protobuf-matchers",
+        "@com_google_absl//absl/time",
+        "@com_google_googletest//:gtest_main",
+    ] + select({
+        "@platforms//os:windows": [
+            "//internal/platform/implementation/windows",
+        ],
+        "//conditions:default": [
+            "//internal/platform/implementation/g3",
+        ],
+    }),
+)
+
+cc_test(
+    name = "service_controller_impl_test",
+    size = "small",
+    srcs = ["service_controller_impl_test.cc"],
+    deps = [
+        ":internal",
+        ":internal_test",
+        "//internal/platform:comm",
+        "//internal/platform:test_util",
+        "//internal/platform:types",
+        "//internal/platform/implementation:comm",
+        "//internal/platform/implementation:types",
+        "//internal/proto:credential_cc_proto",
+        "//net/proto2/contrib/parse_proto:testing",
+        "//presence/implementation/mediums",
+        "@com_github_protobuf_matchers//protobuf-matchers",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
     ] + select({

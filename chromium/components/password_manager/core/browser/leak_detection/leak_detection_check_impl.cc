@@ -249,7 +249,7 @@ bool LeakDetectionCheck::CanStartLeakCheck(
       return is_leak_protection_on;
     case safe_browsing::SafeBrowsingState::ENHANCED_PROTECTION:
       // feature is on.
-      return true;
+      return is_leak_protection_on; // Vivaldi
   }
 }
 

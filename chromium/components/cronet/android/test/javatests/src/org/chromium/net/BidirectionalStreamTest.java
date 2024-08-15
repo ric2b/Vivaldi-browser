@@ -47,6 +47,7 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -908,10 +909,9 @@ public class BidirectionalStreamTest {
         builder.addHeader("goodheader2", "headervalue");
         IllegalArgumentException e =
                 assertThrows(IllegalArgumentException.class, () -> builder.build().start());
-        if (mTestRule.implementationUnderTest() == CronetImplementation.AOSP_PLATFORM) {
-            // TODO(b/307234565): Remove check once AOSP propagates this change. Not using
-            // @IgnoreFor so this test fails when the propagation happens hence, serving as a
-            // notification.
+        if (mTestRule.implementationUnderTest() == CronetImplementation.AOSP_PLATFORM
+                && !mTestRule.isRunningInAOSP()) {
+            // TODO(b/307234565): Remove check once chromium Android 14 emulator has latest changes.
             assertThat(e).hasMessageThat().isEqualTo("Invalid header header:name=headervalue");
         } else {
             assertThat(e).hasMessageThat().isEqualTo("Invalid header with headername: header:name");
@@ -928,10 +928,9 @@ public class BidirectionalStreamTest {
         builder.addHeader("headername", "bad header\r\nvalue");
         IllegalArgumentException e =
                 assertThrows(IllegalArgumentException.class, () -> builder.build().start());
-        if (mTestRule.implementationUnderTest() == CronetImplementation.AOSP_PLATFORM) {
-            // TODO(b/307234565): Remove check once AOSP propagates this change. Not using
-            // @IgnoreFor so this test fails when the propagation happens hence, serving as a
-            // notification.
+        if (mTestRule.implementationUnderTest() == CronetImplementation.AOSP_PLATFORM
+                && !mTestRule.isRunningInAOSP()) {
+            // TODO(b/307234565): Remove check once chromium Android 14 emulator has latest changes.
             assertThat(e)
                     .hasMessageThat()
                     .isEqualTo("Invalid header headername=bad header\r\nvalue");
@@ -1597,39 +1596,14 @@ public class BidirectionalStreamTest {
         assertThat(stream.isDone()).isTrue();
     }
 
-    /** Callback that shuts down the engine when the stream has succeeded or failed. */
-    private class ShutdownTestBidirectionalStreamCallback extends TestBidirectionalStreamCallback {
-        @Override
-        public void onSucceeded(BidirectionalStream stream, UrlResponseInfo info) {
-            mCronetEngine.shutdown();
-            // Clear mCronetEngine so it doesn't get shut down second time in tearDown().
-            mCronetEngine = null;
-            super.onSucceeded(stream, info);
-        }
-
-        @Override
-        public void onFailed(
-                BidirectionalStream stream, UrlResponseInfo info, CronetException error) {
-            mCronetEngine.shutdown();
-            // Clear mCronetEngine so it doesn't get shut down second time in tearDown().
-            mCronetEngine = null;
-            super.onFailed(stream, info, error);
-        }
-
-        @Override
-        public void onCanceled(BidirectionalStream stream, UrlResponseInfo info) {
-            mCronetEngine.shutdown();
-            // Clear mCronetEngine so it doesn't get shut down second time in tearDown().
-            mCronetEngine = null;
-            super.onCanceled(stream, info);
-        }
-    }
-
     @Test
     @SmallTest
+    @IgnoreFor(
+            implementations = {CronetImplementation.AOSP_PLATFORM},
+            reason = "ActiveRequestCount is not available in AOSP")
     public void testCronetEngineShutdown() throws Exception {
         // Test that CronetEngine cannot be shut down if there are any active streams.
-        TestBidirectionalStreamCallback callback = new ShutdownTestBidirectionalStreamCallback();
+        TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();
         // Block callback when response starts to verify that shutdown fails
         // if there are active streams.
         callback.setAutoAdvance(false);
@@ -1657,13 +1631,18 @@ public class BidirectionalStreamTest {
         callback.setAutoAdvance(true);
         callback.startNextRead(stream);
         callback.blockForDone();
+        waitForActiveRequestCount(0);
+        mCronetEngine.shutdown();
     }
 
     @Test
     @SmallTest
+    @IgnoreFor(
+            implementations = {CronetImplementation.AOSP_PLATFORM},
+            reason = "ActiveRequestCount is not available in AOSP")
     public void testCronetEngineShutdownAfterStreamFailure() throws Exception {
         // Test that CronetEngine can be shut down after stream reports a failure.
-        TestBidirectionalStreamCallback callback = new ShutdownTestBidirectionalStreamCallback();
+        TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();
         BidirectionalStream.Builder builder =
                 mCronetEngine.newBidirectionalStreamBuilder(
                         Http2TestServer.getEchoMethodUrl(), callback, callback.getExecutor());
@@ -1672,14 +1651,18 @@ public class BidirectionalStreamTest {
         callback.setFailure(FailureType.THROW_SYNC, ResponseStep.ON_READ_COMPLETED);
         callback.blockForDone();
         assertThat(callback.mOnErrorCalled).isTrue();
-        assertThat(mCronetEngine).isNull();
+        waitForActiveRequestCount(0);
+        mCronetEngine.shutdown();
     }
 
     @Test
     @SmallTest
+    @IgnoreFor(
+            implementations = {CronetImplementation.AOSP_PLATFORM},
+            reason = "ActiveRequestCount is not available in AOSP")
     public void testCronetEngineShutdownAfterStreamCancel() throws Exception {
         // Test that CronetEngine can be shut down after stream is canceled.
-        TestBidirectionalStreamCallback callback = new ShutdownTestBidirectionalStreamCallback();
+        TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();
         BidirectionalStream.Builder builder =
                 mCronetEngine.newBidirectionalStreamBuilder(
                         Http2TestServer.getEchoMethodUrl(), callback, callback.getExecutor());
@@ -1696,7 +1679,8 @@ public class BidirectionalStreamTest {
         stream.cancel();
         callback.blockForDone();
         assertThat(callback.mOnCanceledCalled).isTrue();
-        assertThat(mCronetEngine).isNull();
+        waitForActiveRequestCount(0);
+        mCronetEngine.shutdown();
     }
 
     /*
@@ -1858,7 +1842,8 @@ public class BidirectionalStreamTest {
     }
 
     @Test
-    @RequiresMinAndroidApi(Build.VERSION_CODES.M)
+    // TODO(crbug/1521765): Enable on Android M once fixed.
+    @RequiresMinAndroidApi(Build.VERSION_CODES.N)
     public void testBindToDefaultNetworkSucceeds() {
         ConnectivityManagerDelegate delegate =
                 new ConnectivityManagerDelegate(mTestRule.getTestFramework().getContext());
@@ -1877,6 +1862,263 @@ public class BidirectionalStreamTest {
         builder.build().start();
         callback.blockForDone();
         assertThat(callback.getResponseInfoWithChecks()).hasHttpStatusCodeThat().isEqualTo(200);
+    }
+
+    // While our documentation does not specify that the stream passed to the callbacks is the same
+    // object, it is an implicit expectation by our users that we should not break.
+    // See b/328442628 for an example regression.
+    @Test
+    public void testCallbackMethod_onStreamReady_receivesSameStreamObject() {
+        AtomicReference<BidirectionalStream> callbackStream = new AtomicReference<>();
+        TestBidirectionalStreamCallback callback =
+                new TestBidirectionalStreamCallback() {
+                    @Override
+                    public void onStreamReady(BidirectionalStream stream) {
+                        callbackStream.set(stream);
+                        super.onStreamReady(stream);
+                    }
+                };
+
+        startStreamAndAssertCallback(
+                Http2TestServer.getServerUrl(), callback, callbackStream, "GET");
+    }
+
+    // While our documentation does not specify that the stream passed to the callbacks is the same
+    // object, it is an implicit expectation by our users that we should not break.
+    // See b/328442628 for an example regression.
+    @Test
+    public void testCallbackMethod_onReadCompleted_receivesSameStreamObject() {
+        AtomicReference<BidirectionalStream> callbackStream = new AtomicReference<>();
+        TestBidirectionalStreamCallback callback =
+                new TestBidirectionalStreamCallback() {
+                    @Override
+                    public void onReadCompleted(
+                            BidirectionalStream stream,
+                            UrlResponseInfo info,
+                            ByteBuffer byteBuffer,
+                            boolean endOfStream) {
+                        callbackStream.set(stream);
+                        super.onReadCompleted(stream, info, byteBuffer, endOfStream);
+                    }
+                };
+
+        startStreamAndAssertCallback(
+                Http2TestServer.getServerUrl(), callback, callbackStream, "GET");
+    }
+
+    // While our documentation does not specify that the stream passed to the callbacks is the same
+    // object, it is an implicit expectation by our users that we should not break.
+    // See b/328442628 for an example regression.
+    @Test
+    public void testCallbackMethod_onWriteCompleted_receivesSameStreamObject() {
+        AtomicReference<BidirectionalStream> callbackStream = new AtomicReference<>();
+        TestBidirectionalStreamCallback callback =
+                new TestBidirectionalStreamCallback() {
+                    @Override
+                    public void onWriteCompleted(
+                            BidirectionalStream stream,
+                            UrlResponseInfo info,
+                            ByteBuffer byteBuffer,
+                            boolean endOfStream) {
+                        callbackStream.set(stream);
+                        super.onWriteCompleted(stream, info, byteBuffer, endOfStream);
+                    }
+                };
+        callback.addWriteData("1".getBytes());
+
+        startStreamAndAssertCallback(
+                Http2TestServer.getServerUrl(), callback, callbackStream, "POST");
+    }
+
+    // While our documentation does not specify that the stream passed to the callbacks is the same
+    // object, it is an implicit expectation by our users that we should not break.
+    // See b/328442628 for an example regression.
+    @Test
+    public void testCallbackMethod_onResponseHeaders_receivesSameStreamObject() {
+        AtomicReference<BidirectionalStream> callbackStream = new AtomicReference<>();
+        TestBidirectionalStreamCallback callback =
+                new TestBidirectionalStreamCallback() {
+                    @Override
+                    public void onResponseHeadersReceived(
+                            BidirectionalStream stream, UrlResponseInfo info) {
+                        callbackStream.set(stream);
+                        super.onResponseHeadersReceived(stream, info);
+                    }
+                };
+
+        startStreamAndAssertCallback(
+                Http2TestServer.getServerUrl(), callback, callbackStream, "GET");
+    }
+
+    // While our documentation does not specify that the stream passed to the callbacks is the same
+    // object, it is an implicit expectation by our users that we should not break.
+    // See b/328442628 for an example regression.
+    @Test
+    public void testCallbackMethod_onResponseTrailersReceived_receivesSameStreamObject() {
+        AtomicReference<BidirectionalStream> callbackStream = new AtomicReference<>();
+        TestBidirectionalStreamCallback callback =
+                new TestBidirectionalStreamCallback() {
+                    @Override
+                    public void onResponseTrailersReceived(
+                            BidirectionalStream stream,
+                            UrlResponseInfo info,
+                            UrlResponseInfo.HeaderBlock trailers) {
+                        callbackStream.set(stream);
+                        super.onResponseTrailersReceived(stream, info, trailers);
+                    }
+                };
+
+        startStreamAndAssertCallback(
+                Http2TestServer.getEchoTrailersUrl(), callback, callbackStream, "GET");
+    }
+
+    // While our documentation does not specify that the stream passed to the callbacks is the same
+    // object, it is an implicit expectation by our users that we should not break.
+    // See b/328442628 for an example regression.
+    @Test
+    public void testCallbackMethod_onSucceeded_receivesSameStreamObject() {
+        AtomicReference<BidirectionalStream> callbackStream = new AtomicReference<>();
+        TestBidirectionalStreamCallback callback =
+                new TestBidirectionalStreamCallback() {
+                    @Override
+                    public void onSucceeded(BidirectionalStream stream, UrlResponseInfo info) {
+                        callbackStream.set(stream);
+                        super.onSucceeded(stream, info);
+                    }
+                };
+
+        startStreamAndAssertCallback(
+                Http2TestServer.getServerUrl(), callback, callbackStream, "GET");
+    }
+
+    // While our documentation does not specify that the stream passed to the callbacks is the same
+    // object, it is an implicit expectation by our users that we should not break.
+    // See b/328442628 for an example regression.
+    @Test
+    public void testCallbackMethod_onFailed_receivesSameStreamObject() {
+        AtomicReference<BidirectionalStream> callbackStream = new AtomicReference<>();
+        TestBidirectionalStreamCallback callback =
+                new TestBidirectionalStreamCallback() {
+                    @Override
+                    public void onFailed(
+                            BidirectionalStream stream,
+                            UrlResponseInfo info,
+                            CronetException error) {
+                        callbackStream.set(stream);
+                        super.onFailed(stream, info, error);
+                    }
+                };
+        callback.setFailure(FailureType.THROW_SYNC, ResponseStep.ON_STREAM_READY);
+
+        startStreamAndAssertCallback(
+                Http2TestServer.getServerUrl(), callback, callbackStream, "GET");
+    }
+
+    // While our documentation does not specify that the stream passed to the callbacks is the same
+    // object, it is an implicit expectation by our users that we should not break.
+    // See b/328442628 for an example regression.
+    @Test
+    public void testCallbackMethod_onCanceled_receivesSameStreamObject() {
+        AtomicReference<BidirectionalStream> callbackStream = new AtomicReference<>();
+        TestBidirectionalStreamCallback callback =
+                new TestBidirectionalStreamCallback() {
+
+                    @Override
+                    public void onCanceled(BidirectionalStream stream, UrlResponseInfo info) {
+                        callbackStream.set(stream);
+                        super.onCanceled(stream, info);
+                    }
+                };
+        callback.setFailure(FailureType.CANCEL_SYNC, ResponseStep.ON_STREAM_READY);
+
+        startStreamAndAssertCallback(
+                Http2TestServer.getServerUrl(), callback, callbackStream, "GET");
+    }
+
+    private void startStreamAndAssertCallback(
+            String url,
+            TestBidirectionalStreamCallback callback,
+            AtomicReference<BidirectionalStream> callbackStream,
+            String method) {
+        BidirectionalStream stream =
+                mTestRule
+                        .getTestFramework()
+                        .getEngine()
+                        .newBidirectionalStreamBuilder(url, callback, callback.getExecutor())
+                        .setHttpMethod(method)
+                        .build();
+        stream.start();
+        callback.blockForDone();
+
+        assertThat(callbackStream.get() == stream).isTrue();
+    }
+
+    // While our documentation does not specify that the stream passed to the callbacks is the same
+    // object, it is an implicit expectation by our users that we should not break.
+    // See b/328442628 for an example regression.
+    @Test
+    public void testCallback_twoStreamsFromOneBuilder_receivesCorrectStreamObject() {
+        AtomicReference<BidirectionalStream> onStreamReadyStream = new AtomicReference<>();
+        AtomicReference<BidirectionalStream> onResponseHeadersStream = new AtomicReference<>();
+        AtomicReference<BidirectionalStream> onReadCompletedStream = new AtomicReference<>();
+        AtomicReference<BidirectionalStream> onSucceededStream = new AtomicReference<>();
+        TestBidirectionalStreamCallback.SimpleSucceedingCallback callback =
+                new TestBidirectionalStreamCallback.SimpleSucceedingCallback() {
+                    @Override
+                    public void onStreamReady(BidirectionalStream stream) {
+                        onStreamReadyStream.set(stream);
+                        super.onStreamReady(stream);
+                    }
+
+                    @Override
+                    public void onResponseHeadersReceived(
+                            BidirectionalStream stream, UrlResponseInfo info) {
+                        onResponseHeadersStream.set(stream);
+                        super.onResponseHeadersReceived(stream, info);
+                    }
+
+                    @Override
+                    public void onReadCompleted(
+                            BidirectionalStream stream,
+                            UrlResponseInfo info,
+                            ByteBuffer byteBuffer,
+                            boolean endOfStream) {
+                        onReadCompletedStream.set(stream);
+                        super.onReadCompleted(stream, info, byteBuffer, endOfStream);
+                    }
+
+                    @Override
+                    public void onSucceeded(BidirectionalStream stream, UrlResponseInfo info) {
+                        onSucceededStream.set(stream);
+                        super.onSucceeded(stream, info);
+                    }
+                };
+
+        BidirectionalStream.Builder builder =
+                mTestRule
+                        .getTestFramework()
+                        .getEngine()
+                        .newBidirectionalStreamBuilder(
+                                Http2TestServer.getServerUrl(), callback, callback.getExecutor())
+                        .setHttpMethod("GET");
+        BidirectionalStream stream1 = builder.build();
+        BidirectionalStream stream2 = builder.build();
+        stream1.start();
+        callback.done.block();
+
+        assertThat(onStreamReadyStream.get() == stream1).isTrue();
+        assertThat(onResponseHeadersStream.get() == stream1).isTrue();
+        assertThat(onReadCompletedStream.get() == stream1).isTrue();
+        assertThat(onSucceededStream.get() == stream1).isTrue();
+
+        callback.done.close();
+        stream2.start();
+        callback.done.block();
+
+        assertThat(onStreamReadyStream.get() == stream2).isTrue();
+        assertThat(onResponseHeadersStream.get() == stream2).isTrue();
+        assertThat(onReadCompletedStream.get() == stream2).isTrue();
+        assertThat(onSucceededStream.get() == stream2).isTrue();
     }
 
     /**

@@ -44,6 +44,7 @@
 #include "components/prefs/pref_service_factory.h"
 #include "components/prefs/testing_pref_store.h"
 #include "components/security_interstitials/core/pref_names.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -73,6 +74,14 @@ std::string GetRandomCardNumber() {
   for (size_t i = 0; i < length; ++i)
     value.push_back(static_cast<char>(base::RandInt('0', '9')));
   return value;
+}
+
+base::Time GetArbitraryPastTime() {
+  return AutofillClock::Now() - base::Days(5);
+}
+
+base::Time GetArbitraryFutureTime() {
+  return AutofillClock::Now() + base::Days(10);
 }
 
 }  // namespace
@@ -110,6 +119,7 @@ void VerifyFormGroupValues(const FormGroup& form_group,
 std::unique_ptr<PrefService> PrefServiceForTesting() {
   scoped_refptr<user_prefs::PrefRegistrySyncable> registry(
       new user_prefs::PrefRegistrySyncable());
+  signin::IdentityManager::RegisterProfilePrefs(registry.get());
   registry->RegisterBooleanPref(
       RandomizedEncoder::kUrlKeyedAnonymizedDataCollectionEnabled, false);
   registry->RegisterBooleanPref(::prefs::kMixedFormsWarningsEnabled, true);
@@ -129,7 +139,7 @@ std::unique_ptr<PrefService> PrefServiceForTesting(
 [[nodiscard]] FormData CreateTestAddressFormData(const char* unique_id) {
   FormData form;
   form.host_frame = MakeLocalFrameToken();
-  form.unique_renderer_id = MakeFormRendererId();
+  form.renderer_id = MakeFormRendererId();
   form.name = u"MyForm" + ASCIIToUTF16(unique_id ? unique_id : "");
   form.button_titles = {std::make_pair(
       u"Submit", mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
@@ -590,12 +600,53 @@ std::vector<CardUnmaskChallengeOption> GetCardUnmaskChallengeOptions(
             /*challenge_info=*/u"a******b@google.com",
             /*challenge_input_length=*/6U);
         break;
+      case CardUnmaskChallengeOptionType::kThreeDomainSecure: {
+        CardUnmaskChallengeOption challenge_option;
+        challenge_option.id =
+            CardUnmaskChallengeOption::ChallengeOptionId("456");
+        challenge_option.type = type;
+        challenge_option.url_to_open = GURL("https://www.example.com");
+        challenge_options.emplace_back(std::move(challenge_option));
+        break;
+      }
       default:
         NOTREACHED();
         break;
     }
   }
   return challenge_options;
+}
+
+CreditCardFlatRateBenefit GetActiveCreditCardFlatRateBenefit() {
+  return CreditCardFlatRateBenefit(
+      CreditCardBenefitBase::BenefitId("id1"),
+      CreditCardBenefitBase::LinkedCardInstrumentId(1234),
+      /*benefit_description=*/u"Get 2% cashback on any purchase",
+      /*start_time=*/GetArbitraryPastTime(),
+      /*expiry_time=*/GetArbitraryFutureTime());
+}
+
+CreditCardCategoryBenefit GetActiveCreditCardCategoryBenefit() {
+  return CreditCardCategoryBenefit(
+      CreditCardBenefitBase::BenefitId("id2"),
+      CreditCardBenefitBase::LinkedCardInstrumentId(2234),
+      CreditCardCategoryBenefit::BenefitCategory::kSubscription,
+      /*benefit_description=*/u"Get 2x points on purchases on this website",
+      /*start_time=*/GetArbitraryPastTime(),
+      /*expiry_time=*/GetArbitraryFutureTime());
+}
+
+CreditCardMerchantBenefit GetActiveCreditCardMerchantBenefit() {
+  base::flat_set<url::Origin> merchant_domains = {
+      url::Origin::Create(GURL("http://www.example.com")),
+      url::Origin::Create(GURL("http://www.example3.com"))};
+  return CreditCardMerchantBenefit(
+      CreditCardBenefitBase::BenefitId("id3"),
+      CreditCardBenefitBase::LinkedCardInstrumentId(3234),
+      /*benefit_description=*/u"Get 2x points on purchases on this website",
+      merchant_domains,
+      /*start_time=*/GetArbitraryPastTime(),
+      /*expiry_time=*/GetArbitraryFutureTime());
 }
 
 void SetProfileInfo(AutofillProfile* profile,
@@ -745,80 +796,29 @@ void SetServerCreditCards(PaymentsAutofillTable* table,
   }
 }
 
-void InitializePossibleTypesAndValidities(
-    std::vector<FieldTypeSet>& possible_field_types,
-    std::vector<FieldTypeValidityStatesMap>& possible_field_types_validities,
-    const std::vector<FieldType>& possible_types,
-    const std::vector<AutofillDataModel::ValidityState>& validity_states) {
-  possible_field_types.push_back(FieldTypeSet());
-  possible_field_types_validities.push_back(FieldTypeValidityStatesMap());
-
-  if (validity_states.empty()) {
-    for (const auto& possible_type : possible_types) {
-      possible_field_types.back().insert(possible_type);
-      possible_field_types_validities.back()[possible_type].push_back(
-          AutofillProfile::ValidityState::kUnvalidated);
-    }
-    return;
-  }
-
-  ASSERT_FALSE(possible_types.empty());
-  ASSERT_TRUE((possible_types.size() == validity_states.size()) ||
-              (possible_types.size() == 1 && validity_states.size() > 1));
-
-  FieldType possible_type = possible_types[0];
-  for (unsigned i = 0; i < validity_states.size(); ++i) {
-    if (possible_types.size() == validity_states.size()) {
-      possible_type = possible_types[i];
-    }
+void InitializePossibleTypes(std::vector<FieldTypeSet>& possible_field_types,
+                             const std::vector<FieldType>& possible_types) {
+  possible_field_types.emplace_back();
+  for (const auto& possible_type : possible_types) {
     possible_field_types.back().insert(possible_type);
-    possible_field_types_validities.back()[possible_type].push_back(
-        validity_states[i]);
   }
 }
 
 void FillUploadField(AutofillUploadContents::Field* field,
                      unsigned signature,
-                     unsigned autofill_type,
-                     unsigned validity_state) {
+                     unsigned autofill_type) {
   field->set_signature(signature);
   field->add_autofill_type(autofill_type);
-
-  auto* type_validities = field->add_autofill_type_validities();
-  type_validities->set_type(autofill_type);
-  type_validities->add_validity(validity_state);
 }
 
 void FillUploadField(AutofillUploadContents::Field* field,
                      unsigned signature,
-                     const std::vector<unsigned>& autofill_types,
-                     const std::vector<unsigned>& validity_states) {
+                     const std::vector<unsigned>& autofill_types) {
   field->set_signature(signature);
 
   for (unsigned i = 0; i < autofill_types.size(); ++i) {
     field->add_autofill_type(autofill_types[i]);
-
-    auto* type_validities = field->add_autofill_type_validities();
-    type_validities->set_type(autofill_types[i]);
-    if (i < validity_states.size()) {
-      type_validities->add_validity(validity_states[i]);
-    } else {
-      type_validities->add_validity(0);
-    }
   }
-}
-
-void FillUploadField(AutofillUploadContents::Field* field,
-                     unsigned signature,
-                     unsigned autofill_type,
-                     const std::vector<unsigned>& validity_states) {
-  field->set_signature(signature);
-  field->add_autofill_type(autofill_type);
-
-  auto* type_validities = field->add_autofill_type_validities();
-  type_validities->set_type(autofill_type);
-  for (unsigned i = 0; i < validity_states.size(); ++i)
-    type_validities->add_validity(validity_states[i]);
 }
 
 void GenerateTestAutofillPopup(
@@ -826,9 +826,9 @@ void GenerateTestAutofillPopup(
   FormData form;
   FormFieldData field;
   form.host_frame = MakeLocalFrameToken();
-  form.unique_renderer_id = MakeFormRendererId();
+  form.renderer_id = MakeFormRendererId();
   field.host_frame = MakeLocalFrameToken();
-  field.unique_renderer_id = MakeFieldRendererId();
+  field.renderer_id = MakeFieldRendererId();
   field.is_focusable = true;
   field.should_autocomplete = true;
   autofill_external_delegate->OnQuery(
@@ -972,7 +972,6 @@ BankAccount CreatePixBankAccount(int64_t instrument_id) {
   BankAccount bank_account(
       instrument_id, u"nickname", GURL("http://www.example.com"), u"bank_name",
       u"account_number", BankAccount::AccountType::kChecking);
-  bank_account.AddPaymentRail(PaymentInstrument::PaymentRail::kPix);
   return bank_account;
 }
 

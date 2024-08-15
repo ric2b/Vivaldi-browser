@@ -66,7 +66,7 @@ class RuleServiceStorage : public base::ImportantFileWriter::DataSerializer {
 
  private:
   // ImportantFileWriter::DataSerializer implementation.
-   absl::optional<std::string> SerializeData() override;
+  std::optional<std::string> SerializeData() override;
 
   // Callback from backend after obtaining the sources from file.
   void OnLoadFinished(LoadResult load_result);

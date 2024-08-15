@@ -1,4 +1,4 @@
-/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2015 The OpenXLA Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -75,6 +75,46 @@ namespace gpu {
 
 /* static */ absl::Mutex CreatedContexts::mu_{absl::kConstInit};
 /* static */ int64_t CreatedContexts::next_id_ = 1;  // 0 means "no context"
+
+// Formats hipError_t to output prettified values into a log stream.
+// Error summaries taken from:
+string ToString(hipError_t result) {
+#define OSTREAM_ROCM_ERROR(__name) \
+  case hipError##__name:           \
+    return "HIP_ERROR_" #__name;
+
+  switch (result) {
+    OSTREAM_ROCM_ERROR(InvalidValue)
+    OSTREAM_ROCM_ERROR(OutOfMemory)
+    OSTREAM_ROCM_ERROR(NotInitialized)
+    OSTREAM_ROCM_ERROR(Deinitialized)
+    OSTREAM_ROCM_ERROR(NoDevice)
+    OSTREAM_ROCM_ERROR(InvalidDevice)
+    OSTREAM_ROCM_ERROR(InvalidImage)
+    OSTREAM_ROCM_ERROR(InvalidContext)
+    OSTREAM_ROCM_ERROR(InvalidHandle)
+    OSTREAM_ROCM_ERROR(NotFound)
+    OSTREAM_ROCM_ERROR(NotReady)
+    OSTREAM_ROCM_ERROR(NoBinaryForGpu)
+
+    // Encountered an uncorrectable ECC error during execution.
+    OSTREAM_ROCM_ERROR(ECCNotCorrectable)
+
+    // Load/store on an invalid address. Must reboot all context.
+    case 700:
+      return "ROCM_ERROR_ILLEGAL_ADDRESS";
+    // Passed too many / wrong arguments, too many threads for register count.
+    case 701:
+      return "ROCM_ERROR_LAUNCH_OUT_OF_RESOURCES";
+
+      OSTREAM_ROCM_ERROR(ContextAlreadyInUse)
+      OSTREAM_ROCM_ERROR(PeerAccessUnsupported)
+      OSTREAM_ROCM_ERROR(Unknown)  // Unknown internal error to ROCM.
+    default:
+      return absl::StrCat("hipError_t(", static_cast<int>(result), ")");
+  }
+}
+
 namespace {
 
 // Returns the current context and checks that it is in the set of HIP contexts
@@ -142,7 +182,7 @@ ScopedActivateContext::ScopedActivateContext(GpuContext* hip_context) {
   if (tls->depth == 0) {
     VLOG(3) << "ScopedActivateContext switching to "
             << hip_context->device_ordinal();
-    FAIL_IF_ROCM_ERROR(hipCtxSetCurrent(hip_context->context()),
+    FAIL_IF_ROCM_ERROR(wrap::hipCtxSetCurrent(hip_context->context()),
                        "Failed setting context");
     tls->depth = 1;
     tls->current_device_ordinal = hip_context->device_ordinal();
@@ -165,7 +205,7 @@ ScopedActivateContext::ScopedActivateContext(GpuContext* hip_context) {
 
   to_restore_ = tls->context;
   // Set the device and update thread local.
-  FAIL_IF_ROCM_ERROR(hipCtxSetCurrent(hip_context->context()),
+  FAIL_IF_ROCM_ERROR(wrap::hipCtxSetCurrent(hip_context->context()),
                      "Failed setting context");
   tls->current_device_ordinal = hip_context->device_ordinal();
   tls->context = hip_context;
@@ -189,7 +229,7 @@ ScopedActivateContext::~ScopedActivateContext() {
   }
 
   // Set context and update thread local.
-  FAIL_IF_ROCM_ERROR(hipCtxSetCurrent(to_restore_->context()),
+  FAIL_IF_ROCM_ERROR(wrap::hipCtxSetCurrent(to_restore_->context()),
                      "Failed setting context");
   tls->current_device_ordinal = to_restore_->device_ordinal();
   tls->context = to_restore_;
@@ -603,6 +643,25 @@ static std::string_view StreamCaptureModeToString(
   return absl::OkStatus();
 }
 
+absl::StatusOr<std::vector<GpuGraphNodeHandle>>
+GpuDriver::GraphNodeGetDependencies(GpuGraphNodeHandle node) {
+  VLOG(2) << "Get HIP graph node " << node << " dependencies";
+
+  std::vector<hipGraphNode_t> dependencies;
+
+  size_t num_dependencies = 0;
+  RETURN_IF_ROCM_ERROR(
+      hipGraphNodeGetDependencies(node, nullptr, &num_dependencies),
+      "Failed to get HIP graph node depedencies size");
+
+  dependencies.resize(num_dependencies, nullptr);
+  RETURN_IF_ROCM_ERROR(
+      hipGraphNodeGetDependencies(node, dependencies.data(), &num_dependencies),
+      "Failed to get HIP graph node depedencies");
+
+  return dependencies;
+}
+
 /* static */ absl::Status GpuDriver::DestroyGraphExec(hipGraphExec_t exec) {
   VLOG(2) << "Destroying HIP executable graph" << exec;
   RETURN_IF_ROCM_ERROR(wrap::hipGraphExecDestroy(exec),
@@ -703,16 +762,16 @@ GpuDriver::GraphNodeGetType(hipGraphNode_t node) {
 
 /* static */ absl::StatusOr<GpuDriver::GpuGraphNodeResult>
 GpuDriver::GraphAddNode(hipGraphNode_t* node, hipGraph_t graph,
-                        absl::Span<hipGraphNode_t> deps,
+                        absl::Span<const hipGraphNode_t> deps,
                         const GpuGraphNodeParams& params) {
   return absl::UnimplementedError("unsupported node type");
 }
 
 /* static */ absl::Status GpuDriver::GraphAddKernelNode(
-    hipGraphNode_t* node, hipGraph_t graph, absl::Span<hipGraphNode_t> deps,
-    absl::string_view kernel_name, hipFunction_t function,
-    unsigned int grid_dim_x, unsigned int grid_dim_y, unsigned int grid_dim_z,
-    unsigned int block_dim_x, unsigned int block_dim_y,
+    hipGraphNode_t* node, hipGraph_t graph,
+    absl::Span<const hipGraphNode_t> deps, absl::string_view kernel_name,
+    hipFunction_t function, unsigned int grid_dim_x, unsigned int grid_dim_y,
+    unsigned int grid_dim_z, unsigned int block_dim_x, unsigned int block_dim_y,
     unsigned int block_dim_z, unsigned int shared_mem_bytes,
     void** kernel_params, void** extra) {
   VLOG(2) << "Add kernel node to a graph " << graph
@@ -748,6 +807,16 @@ GpuDriver::GraphAddNode(hipGraphNode_t* node, hipGraph_t graph,
                        "Failed to add kernel node to a HIP graph");
 
   return absl::OkStatus();
+}
+
+/* static */ absl::StatusOr<size_t> GpuDriver::GraphGetNodeCount(
+    hipGraph_t graph) {
+  VLOG(2) << "Get node count in graph " << graph;
+  size_t numNodes;
+  RETURN_IF_ROCM_ERROR(wrap::hipGraphGetNodes(graph, nullptr, &numNodes),
+                       "Failed to get HIP graph node count");
+
+  return numNodes;
 }
 
 /*static*/ absl::Status GpuDriver::GraphExecKernelNodeSetParams(
@@ -793,8 +862,8 @@ GpuDriver::GraphAddNode(hipGraphNode_t* node, hipGraph_t graph,
 }
 
 /* static */ absl::Status GpuDriver::GraphAddChildNode(
-    hipGraphNode_t* node, hipGraph_t graph, absl::Span<hipGraphNode_t> deps,
-    hipGraph_t child) {
+    hipGraphNode_t* node, hipGraph_t graph,
+    absl::Span<const hipGraphNode_t> deps, hipGraph_t child) {
   VLOG(2) << "Create a new node by cloning the child graph " << child
           << " and add it to " << graph << "; deps: " << deps.size();
 
@@ -855,7 +924,7 @@ static hipMemAllocationType ToHipAllocationType(
 
 /*static*/ absl::Status GpuDriver::GraphAddMemFreeNode(
     GpuGraphNodeHandle* node, GpuGraphHandle graph,
-    absl::Span<GpuGraphNodeHandle> deps, GpuDevicePtr gpu_dst) {
+    absl::Span<const GpuGraphNodeHandle> deps, GpuDevicePtr gpu_dst) {
   RETURN_IF_ROCM_ERROR(wrap::hipGraphAddMemFreeNode(node, graph, deps.data(),
                                                     deps.size(), gpu_dst),
                        "Failed to add memory free node to a HIP graph");
@@ -864,7 +933,7 @@ static hipMemAllocationType ToHipAllocationType(
 
 /*static*/ absl::Status GpuDriver::GraphAddMemAllocNode(
     GpuGraphNodeHandle* node, GpuGraphHandle graph,
-    absl::Span<GpuGraphNodeHandle> deps, MemAccessFlags access_flags,
+    absl::Span<const GpuGraphNodeHandle> deps, MemAccessFlags access_flags,
     MemLocationType location_type, int device_id,
     MemAllocationType allocation_type, uint64_t size, GpuDevicePtr* d_ptr,
     uint64_t max_pool_size) {
@@ -912,25 +981,16 @@ GpuDriver::GraphGetMemAllocNodeParams(GpuGraphNodeHandle node) {
 
 /* static */ absl::Status GpuDriver::GraphAddMemcpyD2DNode(
     GpuContext* context, GpuGraphNodeHandle* node, GpuGraphHandle graph,
-    absl::Span<GpuGraphNodeHandle> deps, GpuDevicePtr gpu_dst,
+    absl::Span<const GpuGraphNodeHandle> deps, GpuDevicePtr gpu_dst,
     GpuDevicePtr gpu_src, uint64_t size) {
   VLOG(2) << "Add memcpy d2d node to a graph " << graph
           << "; dst: " << reinterpret_cast<void*>(gpu_dst)
           << "; src: " << reinterpret_cast<void*>(gpu_src) << "; size: " << size
           << "; context: " << context->context() << "; deps: " << deps.size();
 
-  hipMemcpy3DParms params{
-      .srcArray = {},
-      .srcPos = {},
-      .srcPtr = {.ptr = gpu_src},
-      .dstArray = {},
-      .dstPos = {},
-      .dstPtr = {.ptr = gpu_dst},
-      .extent = hipExtent{.width = size, .height = 1, .depth = 1},
-      .kind = hipMemcpyDeviceToDevice};
-
-  RETURN_IF_ROCM_ERROR(wrap::hipGraphAddMemcpyNode(node, graph, deps.data(),
-                                                   deps.size(), &params),
+  RETURN_IF_ROCM_ERROR(wrap::hipGraphAddMemcpyNode1D(
+                           node, graph, deps.data(), deps.size(), gpu_dst,
+                           gpu_src, size, hipMemcpyDeviceToDevice),
                        "Failed to add memcpy d2d node to a HIP graph");
 
   return absl::OkStatus();
@@ -944,18 +1004,9 @@ GpuDriver::GraphGetMemAllocNodeParams(GpuGraphNodeHandle node) {
           << "; src: " << reinterpret_cast<void*>(gpu_src) << "; size: " << size
           << "; context: " << context->context();
 
-  hipMemcpy3DParms params{
-      .srcArray = {},
-      .srcPos = {},
-      .srcPtr = {.ptr = gpu_src},
-      .dstArray = {},
-      .dstPos = {},
-      .dstPtr = {.ptr = gpu_dst},
-      .extent = hipExtent{.width = size, .height = 1, .depth = 1},
-      .kind = hipMemcpyDeviceToDevice};
-
   RETURN_IF_ROCM_ERROR(
-      wrap::hipGraphExecMemcpyNodeSetParams(exec, node, &params),
+      wrap::hipGraphExecMemcpyNodeSetParams1D(exec, node, gpu_dst, gpu_src,
+                                              size, hipMemcpyDeviceToDevice),
       "Failed to set memcpy d2d node params");
 
   return absl::OkStatus();
@@ -995,7 +1046,7 @@ struct BitPatternToValue {
 
 /* static */ absl::Status GpuDriver::GraphAddMemsetNode(
     GpuContext* context, GpuGraphNodeHandle* node, GpuGraphHandle graph,
-    absl::Span<GpuGraphNodeHandle> deps, GpuDevicePtr dst,
+    absl::Span<const GpuGraphNodeHandle> deps, GpuDevicePtr dst,
     std::variant<uint8_t, uint16_t, uint32_t> bit_pattern,
     uint64_t num_elements) {
   VLOG(2) << "Add memset node to a graph " << graph
@@ -1112,7 +1163,8 @@ struct BitPatternToValue {
         hipError_t res = wrap::hipModuleLoadData(module, hsaco_data);
 
         if (res != hipSuccess) {
-          ret = absl::InternalError("Failed to load HSACO: ", ToString(res));
+          ret = absl::InternalError(
+              absl::StrCat("Failed to load HSACO: ", ToString(res)));
           notification.Notify();
         }
 
@@ -1313,19 +1365,6 @@ struct BitPatternToValue {
                                                      void* location) {
   LOG(ERROR)
       << "Feature not supported on ROCm platform (UnifiedMemoryDeallocate)";
-}
-
-/* static */ absl::StatusOr<void*> GpuDriver::CollectiveMemoryAllocate(
-    GpuContext* context, uint64_t bytes) {
-  ScopedActivateContext activated{context};
-  return absl::UnimplementedError(
-      "Feature not supported on ROCm platform (CollectiveMemoryAllocate)");
-}
-
-/* static */ absl::Status GpuDriver::CollectiveMemoryDeallocate(
-    GpuContext* context, void* location) {
-  return absl::UnimplementedError(
-      "Feature not supported on ROCm platform (CollectiveMemoryDeallocate)");
 }
 
 /* static */ void* GpuDriver::HostAllocate(GpuContext* context,
@@ -2104,21 +2143,27 @@ static absl::StatusOr<T> GetSimpleAttribute(hipDevice_t device,
   ScopedActivateContext activation{context};
 
   int max_blocks = 0;
-  hipError_t result = hipSuccess;
-  // TODO(ROCm) implement this feature in HIP
-  if (result != hipSuccess) {
-    return absl::Status{
-        absl::StatusCode::kInternal,
-        absl::StrFormat("failed to calculate occupancy of kernel %p: %s",
-                        kernel, ToString(result).c_str())};
-  }
-
+  RETURN_IF_ROCM_ERROR(
+      wrap::hipModuleOccupancyMaxActiveBlocksPerMultiprocessor(
+          &max_blocks, kernel, threads_per_block, dynamic_shared_memory_bytes),
+      "Failed to calculate maximal active blocks per SM");
   return max_blocks;
 }
 
 }  // namespace gpu
 
 namespace rocm {
+
+absl::Status OccupancyGetMaxPotentialBlockSize(int* gridSize, int* blockSize,
+                                               hipFunction_t kernel,
+                                               size_t dynSharedMemPerBlk,
+                                               int blockSizeLimit) {
+  RETURN_IF_ROCM_ERROR(
+      wrap::hipModuleOccupancyMaxPotentialBlockSize(
+          gridSize, blockSize, kernel, dynSharedMemPerBlk, blockSizeLimit),
+      "Failed to calculate maximal potential block size");
+  return absl::OkStatus();
+}
 
 hipCtx_t CurrentContextOrDie() {
   hipCtx_t current = nullptr;

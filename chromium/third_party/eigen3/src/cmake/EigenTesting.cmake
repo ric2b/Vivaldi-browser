@@ -30,7 +30,7 @@ macro(ei_add_test_internal testname testname_with_suffix)
       hip_reset_flags()
       hip_add_executable(${targetname} ${filename} HIPCC_OPTIONS -std=c++14)
       target_compile_definitions(${targetname} PRIVATE -DEIGEN_USE_HIP)
-      set_property(TARGET ${targetname} PROPERTY HIP_ARCHITECTURES gfx900 gfx906 gfx908 gfx90a gfx1030)
+      set_property(TARGET ${targetname} PROPERTY HIP_ARCHITECTURES gfx900 gfx906 gfx908 gfx90a gfx940 gfx941 gfx942 gfx1030)
     elseif(EIGEN_TEST_CUDA_CLANG)
       set_source_files_properties(${filename} PROPERTIES LANGUAGE CXX)
       

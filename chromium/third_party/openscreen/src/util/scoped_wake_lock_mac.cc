@@ -68,13 +68,13 @@ void ScopedWakeLockMac::AcquireWakeLock() {
 
   const IOReturn result = IOPMAssertionCreateWithProperties(
       assertion_properties, &lock_state_.assertion_id);
-  OSP_DCHECK_EQ(result, kIOReturnSuccess);
+  OSP_CHECK_EQ(result, kIOReturnSuccess);
 }
 
 // static
 void ScopedWakeLockMac::ReleaseWakeLock() {
   const IOReturn result = IOPMAssertionRelease(lock_state_.assertion_id);
-  OSP_DCHECK_EQ(result, kIOReturnSuccess);
+  OSP_CHECK_EQ(result, kIOReturnSuccess);
 }
 
 ScopedWakeLockMac::LockState ScopedWakeLockMac::lock_state_{};

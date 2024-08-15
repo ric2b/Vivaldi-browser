@@ -49,6 +49,8 @@
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_mode.h"
+#include "ui/accessibility/ax_node.h"
+#include "ui/accessibility/platform/inspect/ax_api_type.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/color/color_provider_key.h"
 #include "ui/display/types/display_constants.h"
@@ -69,6 +71,7 @@ namespace blink {
 namespace web_pref {
 struct WebPreferences;
 }
+class WebInputEvent;
 struct UserAgentOverride;
 struct RendererPreferences;
 }  // namespace blink
@@ -261,12 +264,6 @@ class WebContents : public PageNavigator,
     // and GetLastActiveTime() will return the WebContents' creation time.
     base::TimeTicks last_active_time;
 
-    // Normal WebContents initialization is split between construction and the
-    // first time it is shown. Some WebContents are never shown though.
-    // Setting this to true will invoke the WebContents delayed initialization
-    // that doesn't require visibility.
-    bool is_never_visible = false;
-
     // Code location responsible for creating the CreateParams.  This is used
     // mostly for debugging (e.g. to help attribute specific scenarios or
     // invariant violations to a particular flavor of WebContents).
@@ -287,13 +284,9 @@ class WebContents : public PageNavigator,
     std::optional<blink::mojom::PictureInPictureWindowOptions>
         picture_in_picture_options;
 
-    // WebContentsDelegate given for the case early initialization code depends
-    // on the delegate callbacks.
-    // For instance, WebContentsDelegate::IsInPreviewMode() will be called in
-    // RenderFrameHostImpl::ctor for the initial instance that is constructed
-    // in WebContents::Create() call, and callers have no chance to set their
-    // delegates.
-    raw_ptr<WebContentsDelegate> delegate = nullptr;
+    // Enable preview mode that shows a page with a capability restriction
+    // for previewing the page.
+    bool preview_mode = false;
   };
 
   // Token that causes input to be blocked on this WebContents for at least as
@@ -598,10 +591,6 @@ class WebContents : public PageNavigator,
   virtual void SetAlwaysSendSubresourceNotifications() = 0;
   virtual bool GetSendSubresourceNotification() = 0;
 
-  // Adds accessibility mode. If accessibility is already enabled, it will be
-  // reset, i.e., the full accessibility tree will be sent to the observers.
-  virtual void EnableAccessibilityMode(ui::AXMode mode) = 0;
-
   // Returns true only if the WebContentsObserver accessibility mode is
   // enabled.
   virtual bool IsWebContentsOnlyAccessibilityModeForTesting() = 0;
@@ -612,10 +601,20 @@ class WebContents : public PageNavigator,
 
   virtual ui::AXMode GetAccessibilityMode() = 0;
 
-  virtual void SetAccessibilityMode(ui::AXMode mode) = 0;
+  // Forces a reset of accessibility state in the instance's renderers.
+  // Observers will receive a new accessibility tree.
+  virtual void ResetAccessibility() = 0;
+
+  // Returns a pointer to the root node of the live accessibility tree for the
+  // main frame, if accessibility is turned on. Otherwise, returns nullptr.
+  virtual ui::AXNode* GetAccessibilityRootNode() = 0;
 
   virtual std::string DumpAccessibilityTree(
       bool internal,
+      std::vector<ui::AXPropertyFilter> property_filters) = 0;
+
+  virtual std::string DumpAccessibilityTree(
+      ui::AXApiType::Type api_type,
       std::vector<ui::AXPropertyFilter> property_filters) = 0;
 
   // A callback that takes a string which contains accessibility event
@@ -633,7 +632,12 @@ class WebContents : public PageNavigator,
       bool start_recording,
       std::optional<AccessibilityEventCallback> callback) = 0;
 
-  // External data.
+  virtual void RecordAccessibilityEvents(
+      ui::AXApiType::Type api_type,
+      bool start_recording,
+      std::optional<AccessibilityEventCallback> callback) = 0;
+
+  // Vivaldi External data.
   virtual void SetVivExtData(const std::string& viv_ext_data) = 0;
   virtual const std::string& GetVivExtData() const = 0;
   virtual void SetIgnoreLinkRouting(const bool ignore_link_routing) = 0;
@@ -1001,7 +1005,7 @@ class WebContents : public PageNavigator,
   // the tab in the screen coordinate system.
   virtual gfx::Rect GetContainerBounds() = 0;
 
-  // Get the bounds of the View, relative to the parent.
+  // Get the bounds of the View in the global screen position.
   virtual gfx::Rect GetViewBounds() = 0;
 
   // Resize a WebContents to |new_bounds|.
@@ -1116,19 +1120,19 @@ class WebContents : public PageNavigator,
   // Gets the preferred size of the contents.
   virtual gfx::Size GetPreferredSize() = 0;
 
-  // Called when the response to a pending mouse lock request has arrived.
+  // Called when the response to a pending pointer lock request has arrived.
   // Returns true if |allowed| is true and the mouse has been successfully
   // locked.
-  virtual bool GotResponseToLockMouseRequest(
+  virtual bool GotResponseToPointerLockRequest(
       blink::mojom::PointerLockResult result) = 0;
 
-  // Wrapper around GotResponseToLockMouseRequest to fit into
+  // Wrapper around GotResponseToPointerLockRequest to fit into
   // ChromeWebViewPermissionHelperDelegate's structure.
-  virtual void GotLockMousePermissionResponse(bool allowed) = 0;
+  virtual void GotPointerLockPermissionResponse(bool allowed) = 0;
 
   // Drop the mouse lock if it is currently locked, or reject an
   // outstanding request if it is pending.
-  virtual void DropMouseLockForTesting() = 0;
+  virtual void DropPointerLockForTesting() = 0;
 
   // Called when the response to a keyboard mouse lock request has arrived.
   // Returns false if the request is no longer valid, otherwise true.
@@ -1384,9 +1388,17 @@ class WebContents : public PageNavigator,
   virtual bool HasRecentInteraction() = 0;
 
   // Causes the WebContents to ignore input events for at least as long as the
-  // token exists.  In the event of multiple calls, input events will be ignored
+  // token exists. In the event of multiple calls, input events will be ignored
   // until all tokens have been destroyed.
-  [[nodiscard]] virtual ScopedIgnoreInputEvents IgnoreInputEvents() = 0;
+  // If WebInputEventAuditCallback is given, it can audits WebInputEvent based
+  // input events and ignore only events that the callback returns false for the
+  // event. Other kind of events, such as focus event or ui::Events will be
+  // always ignored without asking the callback. The given callback will be
+  // invoked only while the returned ScopedIgnoreInputEvents alives.
+  using WebInputEventAuditCallback =
+      base::RepeatingCallback<bool(const blink::WebInputEvent&)>;
+  [[nodiscard]] virtual ScopedIgnoreInputEvents IgnoreInputEvents(
+      std::optional<WebInputEventAuditCallback> audit_callback) = 0;
 
   // Returns the group id for all audio streams that correspond to a single
   // WebContents. This can be used to determine if a AudioOutputStream was
@@ -1444,13 +1456,22 @@ class WebContents : public PageNavigator,
   virtual void SetTabSwitchStartTime(base::TimeTicks start_time,
                                      bool destination_is_loaded) = 0;
 
+  // Checks if the WebContents host pages in preview mode.
+  virtual bool IsInPreviewMode() const = 0;
+
+  // Called before ActivatePreviewPage() to prepare the activation. This will
+  // end the preview mode and IsInPreviewMode() will start returning false after
+  // the call. This allows embedders to run preparation steps on the activating
+  // WebContents (e.g. attach TabHelpers) before activating the page shown by
+  // the WebContents through ActivatePreviewPage().
+  virtual void WillActivatePreviewPage() = 0;
+
   // Activates the primary page that is shown in preview mode. This will relax
   // capability restriction in the browser process, and notify the renderer to
   // process the prerendering activation algorithm.
   // This all processes happens asynchronously, and
   // `WebContentsDelegate::DidActivatePreviewedPage` will be called once it's
   // done.
-  // Should be called while WebContentsDelegate::IsInPreviewMode returns true.
   virtual void ActivatePreviewPage() = 0;
 
   // Starts an embedder triggered (browser-initiated) prerendering page and
@@ -1475,10 +1496,9 @@ class WebContents : public PageNavigator,
       ui::PageTransition page_transition,
       PreloadingHoldbackStatus holdback_status_override,
       PreloadingAttempt* preloading_attempt,
-      std::optional<base::RepeatingCallback<bool(const GURL&)>>
-          url_match_predicate = std::nullopt,
-      std::optional<base::RepeatingCallback<void(NavigationHandle&)>>
-          prerender_navigation_handle_callback = std::nullopt) = 0;
+      base::RepeatingCallback<bool(const GURL&)> url_match_predicate = {},
+      base::RepeatingCallback<void(NavigationHandle&)>
+          prerender_navigation_handle_callback = {}) = 0;
 
   // May be called when the embedder believes that it is likely that the user
   // will perform a back navigation due to the trigger indicated by `predictor`

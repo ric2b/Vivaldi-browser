@@ -24,10 +24,11 @@ import java.util.Calendar;
 // Vivaldi
 import android.os.Build;
 import org.chromium.build.BuildConfig;
-import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoExtensions;
-import org.vivaldi.browser.preferences.VivaldiPreferences;
+import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.browser_ui.accessibility.PageZoomUtils;
+import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoExtensions;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /** Settings fragment that displays information about Chrome. */
 public class AboutChromeSettings extends PreferenceFragmentCompat
@@ -80,7 +81,7 @@ public class AboutChromeSettings extends PreferenceFragmentCompat
                         VivaldiPreferences.UI_SCALE_VALUE);
                 version = version.concat(" [ui=" + ui_dpi);
                 version = version.concat(" page=" + PageZoomUtils.getDefaultZoomAsSeekBarValue(
-                        Profile.getLastUsedRegularProfile()) + "]");
+                        ProfileManager.getLastUsedRegularProfile()) + "]");
             }
             version = version.concat(" (OEM)");
 
@@ -100,8 +101,10 @@ public class AboutChromeSettings extends PreferenceFragmentCompat
                 version = version.concat("(VOLVO)");
             } else if (BuildConfig.IS_OEM_GAS_BUILD) {
                 version = version.concat("(GAS)");
+            } else if (BuildConfig.IS_OEM_MAHINDRA_BUILD) {
+                version = version.concat("(MM)");
             }
-            // Add brand and model
+        // Add brand and model
             version = version.concat(" ").concat(Build.BRAND).concat("/").concat(Build.MODEL);
         }
 

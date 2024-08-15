@@ -16,6 +16,8 @@
 #include "core/fpdfdoc/cpdf_annotlist.h"
 #include "core/fpdfdoc/cpdf_interactiveform.h"
 #include "core/fxcrt/autorestorer.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/stl_util.h"
 #include "fpdfsdk/cpdfsdk_annot.h"
 #include "fpdfsdk/cpdfsdk_annotiteration.h"
@@ -23,8 +25,6 @@
 #include "fpdfsdk/cpdfsdk_formfillenvironment.h"
 #include "fpdfsdk/cpdfsdk_helpers.h"
 #include "fpdfsdk/cpdfsdk_interactiveform.h"
-#include "third_party/base/check.h"
-#include "third_party/base/containers/contains.h"
 
 #ifdef PDF_ENABLE_XFA
 #include "fpdfsdk/fpdfxfa/cpdfxfa_page.h"
@@ -105,7 +105,7 @@ std::unique_ptr<CPDFSDK_Annot> CPDFSDK_PageView::NewAnnot(CPDF_Annot* annot) {
     auto ret = std::make_unique<CPDFSDK_Widget>(annot, this, form);
     form->AddMap(form_control, ret.get());
     if (pdf_form->NeedConstructAP())
-      ret->ResetAppearance(absl::nullopt, CPDFSDK_Widget::kValueUnchanged);
+      ret->ResetAppearance(std::nullopt, CPDFSDK_Widget::kValueUnchanged);
     return ret;
   }
 

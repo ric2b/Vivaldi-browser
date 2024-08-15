@@ -223,14 +223,28 @@ void LibvpxVp9Encoder::EncoderOutputCodedPacketCallback(vpx_codec_cx_pkt* pkt,
   enc->GetEncodedLayerFrame(pkt);
 }
 
+LibvpxVp9Encoder::LibvpxVp9Encoder(const Environment& env,
+                                   Vp9EncoderSettings settings,
+                                   std::unique_ptr<LibvpxInterface> interface)
+    : LibvpxVp9Encoder(std::move(interface),
+                       settings.profile,
+                       env.field_trials()) {}
+
 LibvpxVp9Encoder::LibvpxVp9Encoder(const cricket::VideoCodec& codec,
                                    std::unique_ptr<LibvpxInterface> interface,
+                                   const FieldTrialsView& trials)
+    : LibvpxVp9Encoder(
+          std::move(interface),
+          ParseSdpForVP9Profile(codec.params).value_or(VP9Profile::kProfile0),
+          trials) {}
+
+LibvpxVp9Encoder::LibvpxVp9Encoder(std::unique_ptr<LibvpxInterface> interface,
+                                   VP9Profile profile,
                                    const FieldTrialsView& trials)
     : libvpx_(std::move(interface)),
       encoded_image_(),
       encoded_complete_callback_(nullptr),
-      profile_(
-          ParseSdpForVP9Profile(codec.params).value_or(VP9Profile::kProfile0)),
+      profile_(profile),
       inited_(false),
       timestamp_(0),
       rc_max_intra_target_(0),
@@ -266,7 +280,8 @@ LibvpxVp9Encoder::LibvpxVp9Encoder(const cricket::VideoCodec& codec,
                             "Disabled")),
       performance_flags_(ParsePerformanceFlagsFromTrials(trials)),
       num_steady_state_frames_(0),
-      config_changed_(true) {
+      config_changed_(true),
+      svc_frame_drop_config_(ParseSvcFrameDropConfig(trials)) {
   codec_ = {};
   memset(&svc_params_, 0, sizeof(vpx_svc_extra_cfg_t));
 }
@@ -836,6 +851,8 @@ int LibvpxVp9Encoder::InitAndSetControlSettings(const VideoCodec* inst) {
       // 1:2 scaling in each dimension.
       svc_params_.scaling_factor_num[i] = scaling_factor_num;
       svc_params_.scaling_factor_den[i] = 256;
+      if (inst->mode != VideoCodecMode::kScreensharing)
+        scaling_factor_num /= 2;
     }
   }
 
@@ -922,11 +939,24 @@ int LibvpxVp9Encoder::InitAndSetControlSettings(const VideoCodec* inst) {
         svc_drop_frame_.framedrop_thresh[i] = config_->rc_dropframe_thresh;
       }
     } else {
-      // Configure encoder to drop entire superframe whenever it needs to drop
-      // a layer. This mode is preferred over per-layer dropping which causes
-      // quality flickering and is not compatible with RTP non-flexible mode.
-      svc_drop_frame_.framedrop_mode = FULL_SUPERFRAME_DROP;
-      svc_drop_frame_.max_consec_drop = std::numeric_limits<int>::max();
+      if (svc_frame_drop_config_.enabled &&
+          svc_frame_drop_config_.layer_drop_mode == LAYER_DROP &&
+          is_flexible_mode_ && svc_controller_ &&
+          (inter_layer_pred_ == InterLayerPredMode::kOff ||
+           inter_layer_pred_ == InterLayerPredMode::kOnKeyPic)) {
+        // SVC controller is required since it properly accounts for dropped
+        // refs (unlike SetReferences(), which assumes full superframe drop).
+        svc_drop_frame_.framedrop_mode = LAYER_DROP;
+      } else {
+        // Configure encoder to drop entire superframe whenever it needs to drop
+        // a layer. This mode is preferred over per-layer dropping which causes
+        // quality flickering and is not compatible with RTP non-flexible mode.
+        svc_drop_frame_.framedrop_mode = FULL_SUPERFRAME_DROP;
+      }
+      svc_drop_frame_.max_consec_drop =
+          svc_frame_drop_config_.enabled
+              ? svc_frame_drop_config_.max_consec_drop
+              : std::numeric_limits<int>::max();
       for (size_t i = 0; i < num_spatial_layers_; ++i) {
         svc_drop_frame_.framedrop_thresh[i] = config_->rc_dropframe_thresh;
       }
@@ -1025,7 +1055,7 @@ int LibvpxVp9Encoder::Encode(const VideoFrame& input_image,
 
     if (codec_.mode == VideoCodecMode::kScreensharing) {
       const uint32_t frame_timestamp_ms =
-          1000 * input_image.timestamp() / kVideoPayloadTypeFrequency;
+          1000 * input_image.rtp_timestamp() / kVideoPayloadTypeFrequency;
 
       // To ensure that several rate-limiters with different limits don't
       // interfere, they must be queried in order of increasing limit.
@@ -1736,7 +1766,7 @@ void LibvpxVp9Encoder::GetEncodedLayerFrame(const vpx_codec_cx_pkt* pkt) {
   UpdateReferenceBuffers(*pkt, pics_since_key_);
 
   TRACE_COUNTER1("webrtc", "EncodedFrameSize", encoded_image_.size());
-  encoded_image_.SetRtpTimestamp(input_image_->timestamp());
+  encoded_image_.SetRtpTimestamp(input_image_->rtp_timestamp());
   encoded_image_.SetCaptureTimeIdentifier(
       input_image_->capture_time_identifier());
   encoded_image_.SetColorSpace(input_image_->color_space());
@@ -1905,6 +1935,26 @@ LibvpxVp9Encoder::ParseQualityScalerConfig(const FieldTrialsView& trials) {
   config.low_qp = low_qp.Get();
   config.high_qp = high_qp.Get();
 
+  return config;
+}
+
+LibvpxVp9Encoder::SvcFrameDropConfig LibvpxVp9Encoder::ParseSvcFrameDropConfig(
+    const FieldTrialsView& trials) {
+  FieldTrialFlag enabled = FieldTrialFlag("Enabled");
+  FieldTrialParameter<int> layer_drop_mode("layer_drop_mode",
+                                           FULL_SUPERFRAME_DROP);
+  FieldTrialParameter<int> max_consec_drop("max_consec_drop",
+                                           std::numeric_limits<int>::max());
+  ParseFieldTrial({&enabled, &layer_drop_mode, &max_consec_drop},
+                  trials.Lookup("WebRTC-LibvpxVp9Encoder-SvcFrameDropConfig"));
+  SvcFrameDropConfig config;
+  config.enabled = enabled.Get();
+  config.layer_drop_mode = layer_drop_mode.Get();
+  config.max_consec_drop = max_consec_drop.Get();
+  RTC_LOG(LS_INFO) << "Libvpx VP9 encoder SVC frame drop config: "
+                   << (config.enabled ? "enabled" : "disabled")
+                   << " layer_drop_mode " << config.layer_drop_mode
+                   << " max_consec_drop " << config.max_consec_drop;
   return config;
 }
 

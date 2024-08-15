@@ -7,8 +7,8 @@
 #import "base/check.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_cells_constants.h"
-#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_gesture_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/most_visited_tiles_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_menu_provider.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -19,8 +19,8 @@
 
 @interface ContentSuggestionsMostVisitedTileView ()
 
-// Command handler for the accessibility custom actions.
-@property(nonatomic, weak) id<ContentSuggestionsGestureCommands> commandHandler;
+// Command handler for actions.
+@property(nonatomic, weak) id<MostVisitedTilesCommands> commandHandler;
 
 // Whether the incognito action should be available.
 @property(nonatomic, assign) BOOL incognitoAvailable;
@@ -33,8 +33,6 @@
   self = [super initWithFrame:frame
                      tileType:ContentSuggestionsTileType::kMostVisited];
   if (self) {
-    // Layout subviews using a StackView if Magic Stack is enabled.
-    if (IsMagicStackEnabled()) {
       self.imageContainerView.backgroundColor =
           [UIColor colorNamed:kGrey100Color];
       self.imageContainerView.layer.cornerRadius =
@@ -61,25 +59,19 @@
 
       [self addSubview:stackView];
       AddSameConstraints(stackView, self);
-    }
 
     _faviconView = [[FaviconView alloc] init];
     _faviconView.font = [UIFont systemFontOfSize:22];
     _faviconView.translatesAutoresizingMaskIntoConstraints = NO;
-    CGFloat faviconWidth = IsMagicStackEnabled() ? kMagicStackFaviconWidth : 32;
     [NSLayoutConstraint activateConstraints:@[
-      [_faviconView.heightAnchor constraintEqualToConstant:faviconWidth],
+      [_faviconView.heightAnchor
+          constraintEqualToConstant:kMagicStackFaviconWidth],
       [_faviconView.widthAnchor
           constraintEqualToAnchor:_faviconView.heightAnchor],
     ]];
 
-    if (IsMagicStackEnabled()) {
-      [self addSubview:_faviconView];
-      AddSameCenterConstraints(_faviconView, self.imageContainerView);
-    } else {
-      [self.imageContainerView addSubview:_faviconView];
-      AddSameConstraints(self.imageContainerView, _faviconView);
-    }
+    [self addSubview:_faviconView];
+    AddSameCenterConstraints(_faviconView, self.imageContainerView);
   }
   return self;
 }

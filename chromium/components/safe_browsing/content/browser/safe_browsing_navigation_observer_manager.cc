@@ -6,9 +6,9 @@
 
 #include <iterator>
 #include <memory>
+#include <vector>
 
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
@@ -98,11 +98,9 @@ std::string ShortOriginForReporting(const std::string& url) {
   GURL gurl(url);
   if (gurl.SchemeIsLocal()) {
     std::string sha_url = crypto::SHA256HashString(url);
-    return gurl.scheme() + "://" +
-           base::HexEncode(sha_url.data(), sha_url.size());
-  } else {
-    return gurl.DeprecatedGetOriginAsURL().spec();
+    return gurl.scheme() + "://" + base::HexEncode(sha_url);
   }
+  return gurl.DeprecatedGetOriginAsURL().spec();
 }
 
 base::TimeDelta GetNavigationFootprintTTL() {
@@ -151,7 +149,7 @@ NavigationEventList::NavigationEventList(std::size_t size_limit)
 
 NavigationEventList::~NavigationEventList() = default;
 
-absl::optional<size_t> NavigationEventList::FindNavigationEvent(
+std::optional<size_t> NavigationEventList::FindNavigationEvent(
     const base::Time& last_event_timestamp,
     const GURL& target_url,
     const GURL& target_main_frame_url,
@@ -159,10 +157,10 @@ absl::optional<size_t> NavigationEventList::FindNavigationEvent(
     const content::GlobalRenderFrameHostId& outermost_main_frame_id,
     size_t start_index) {
   if (target_url.is_empty() && target_main_frame_url.is_empty())
-    return absl::nullopt;
+    return std::nullopt;
 
   if (navigation_events_.size() == 0)
-    return absl::nullopt;
+    return std::nullopt;
 
   // If target_url is empty, we should back trace navigation based on its
   // main frame URL instead.
@@ -238,7 +236,7 @@ absl::optional<size_t> NavigationEventList::FindNavigationEvent(
       return result_index;
     }
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 NavigationEvent* NavigationEventList::FindPendingNavigationEvent(
@@ -282,7 +280,7 @@ size_t NavigationEventList::FindRetargetingNavigationEvent(
 
 void NavigationEventList::RecordNavigationEvent(
     std::unique_ptr<NavigationEvent> nav_event,
-    absl::optional<CopyPasteEntry> last_copy_paste_entry) {
+    std::optional<CopyPasteEntry> last_copy_paste_entry) {
   // Skip page refresh and in-page navigation.
   if (nav_event->source_url == nav_event->GetDestinationUrl() &&
       nav_event->source_tab_id == nav_event->target_tab_id)
@@ -566,6 +564,17 @@ SafeBrowsingNavigationObserverManager::IdentifyReferrerChainByEventURL(
 }
 
 SafeBrowsingNavigationObserverManager::AttributionResult
+SafeBrowsingNavigationObserverManager::IdentifyReferrerChainByEventURL(
+    const GURL& event_url,
+    SessionID event_tab_id,
+    int user_gesture_count_limit,
+    ReferrerChain* out_referrer_chain) {
+  return IdentifyReferrerChainByEventURL(
+      event_url, event_tab_id, content::GlobalRenderFrameHostId(),
+      user_gesture_count_limit, out_referrer_chain);
+}
+
+SafeBrowsingNavigationObserverManager::AttributionResult
 SafeBrowsingNavigationObserverManager::IdentifyReferrerChainByPendingEventURL(
     const GURL& event_url,
     int user_gesture_count_limit,
@@ -819,7 +828,7 @@ void SafeBrowsingNavigationObserverManager::CleanUpUserGestures() {
 
 void SafeBrowsingNavigationObserverManager::CleanUpIpAddresses() {
   for (auto it = host_to_ip_map_.begin(); it != host_to_ip_map_.end();) {
-    base::EraseIf(it->second, [](const ResolvedIPAddress& resolved_ip) {
+    std::erase_if(it->second, [](const ResolvedIPAddress& resolved_ip) {
       return IsEventExpired(resolved_ip.timestamp, GetNavigationFootprintTTL());
     });
     if (it->second.empty())
@@ -833,7 +842,7 @@ void SafeBrowsingNavigationObserverManager::CleanUpCopyData() {
   if (last_copy_paste_entry_.has_value()) {
     if (IsEventExpired(last_copy_paste_entry_.value().recorded_time_,
                        GetNavigationFootprintTTL())) {
-      last_copy_paste_entry_ = absl::nullopt;
+      last_copy_paste_entry_ = std::nullopt;
     }
   }
 }
@@ -879,7 +888,9 @@ void SafeBrowsingNavigationObserverManager::RecordNotificationNavigationEvent(
     const GURL& script_url,
     const GURL& url) {
   // Push notifications are tied to the https scheme.
-  if (!script_url.SchemeIs(url::kHttpsScheme)) {
+  // We also care about notifications from Chrome extensions.
+  if (!script_url.SchemeIs(url::kHttpsScheme) &&
+      !script_url.SchemeIs("chrome-extension")) {
     return;
   }
   // We only collect notification referrers for ESB users.

@@ -257,8 +257,7 @@ Analyzer::Analyzer(const Builder& builder,
       if (item->AsTarget()->IsBinary() ||
           item->AsTarget()->output_type() == Target::ACTION ||
           item->AsTarget()->output_type() == Target::ACTION_FOREACH) {
-        const LabelPtrPair<Pool>& pool =
-            item->AsTarget()->pool();
+        const LabelPtrPair<Pool>& pool = item->AsTarget()->pool();
         if (pool.ptr)
           dep_map_.insert(std::make_pair(pool.ptr, item));
       }
@@ -418,7 +417,7 @@ bool Analyzer::ItemRefersToFile(const Item* item,
   }
 
   if (const Config* config = item->AsConfig()) {
-    for (const auto& config_pair: config->configs()) {
+    for (const auto& config_pair : config->configs()) {
       if (ItemRefersToFile(config_pair.ptr, file))
         return true;
     }
@@ -445,8 +444,7 @@ bool Analyzer::ItemRefersToFile(const Item* item,
   for (const auto& cur_file : target->data()) {
     if (cur_file == file->value())
       return true;
-    if (cur_file.back() == '/' &&
-        base::StartsWith(file->value(), cur_file, base::CompareCase::SENSITIVE))
+    if (cur_file.back() == '/' && file->value().starts_with(cur_file))
       return true;
   }
 

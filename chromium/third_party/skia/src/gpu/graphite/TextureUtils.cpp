@@ -61,6 +61,16 @@ sk_sp<SkSurface> make_surface_with_fallback(skgpu::graphite::Recorder* recorder,
     return SkSurfaces::RenderTarget(recorder, info.makeColorType(ct), mipmapped, surfaceProps);
 }
 
+sk_sp<SkSurface> make_scratch_surface_with_fallback(skgpu::graphite::Recorder* recorder,
+                                                    const SkImageInfo& info) {
+    SkColorType ct = recorder->priv().caps()->getRenderableColorType(info.colorType());
+    if (ct == kUnknown_SkColorType) {
+        return nullptr;
+    }
+
+    return skgpu::graphite::Surface::MakeGraphiteScratch(recorder, info.makeColorType(ct));
+}
+
 bool valid_client_provided_image(const SkImage* clientProvided,
                                  const SkImage* original,
                                  SkImage::RequiredProperties requiredProps) {
@@ -584,8 +594,13 @@ bool GenerateMipmaps(Recorder* recorder,
 
     // Within a rescaling pass scratchImg is read from and a scratch surface is written to.
     // At the end of the pass the scratch surface's texture is wrapped and assigned to scratchImg.
+
+    // The scratch surface we create below will use a write swizzle derived from SkColorType and
+    // pixel format. We have to be consistent and swizzle on the read.
+    auto imgSwizzle = recorder->priv().caps()->getReadSwizzle(colorInfo.colorType(),
+                                                              texture->textureInfo());
     sk_sp<SkImage> scratchImg(
-            new Image(kNeedNewImageUniqueID, TextureProxyView(texture), colorInfo));
+            new Image(kNeedNewImageUniqueID, TextureProxyView(texture, imgSwizzle), colorInfo));
 
     SkISize srcSize = texture->dimensions();
     const SkColorInfo outColorInfo = colorInfo.makeAlphaType(kPremul_SkAlphaType);
@@ -595,13 +610,11 @@ bool GenerateMipmaps(Recorder* recorder,
     // those of the original texture, respectively.
     sk_sp<SkSurface> scratchSurfaces[2];
     for (int i = 0; i < 2; ++i) {
-        scratchSurfaces[i] = make_surface_with_fallback(
+        scratchSurfaces[i] = make_scratch_surface_with_fallback(
                 recorder,
                 SkImageInfo::Make(SkISize::Make(std::max(1, srcSize.width() >> (i + 1)),
                                                 std::max(1, srcSize.height() >> (i + 1))),
-                                  outColorInfo),
-                Mipmapped::kNo,
-                nullptr);
+                                  outColorInfo));
         if (!scratchSurfaces[i]) {
             return false;
         }

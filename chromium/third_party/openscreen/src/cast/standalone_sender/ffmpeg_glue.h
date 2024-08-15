@@ -67,7 +67,7 @@ DEFINE_AV_UNIQUE_PTR(SwrContext, swr_alloc, swr_free);
 
 // The av_err2str macro uses a compound literal, which is a C99-only feature.
 // So instead, we roll our own here.
-// TODO(https://issuetracker.google.com/224642520): dedup with standalone
+// TODO(issuetracker.google.com/224642520): dedup with standalone
 // receiver.
 std::string AvErrorToString(int error_num);
 

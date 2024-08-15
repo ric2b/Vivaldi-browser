@@ -300,6 +300,37 @@ enum AVPacketSideDataType {
     AV_PKT_DATA_DYNAMIC_HDR10_PLUS,
 
     /**
+     * IAMF Mix Gain Parameter Data associated with the audio frame. This metadata
+     * is in the form of the AVIAMFParamDefinition struct and contains information
+     * defined in sections 3.6.1 and 3.8.1 of the Immersive Audio Model and
+     * Formats standard.
+     */
+    AV_PKT_DATA_IAMF_MIX_GAIN_PARAM,
+
+    /**
+     * IAMF Demixing Info Parameter Data associated with the audio frame. This
+     * metadata is in the form of the AVIAMFParamDefinition struct and contains
+     * information defined in sections 3.6.1 and 3.8.2 of the Immersive Audio Model
+     * and Formats standard.
+     */
+    AV_PKT_DATA_IAMF_DEMIXING_INFO_PARAM,
+
+    /**
+     * IAMF Recon Gain Info Parameter Data associated with the audio frame. This
+     * metadata is in the form of the AVIAMFParamDefinition struct and contains
+     * information defined in sections 3.6.1 and 3.8.3 of the Immersive Audio Model
+     * and Formats standard.
+     */
+    AV_PKT_DATA_IAMF_RECON_GAIN_INFO_PARAM,
+
+    /**
+     * Ambient viewing environment metadata, as defined by H.274. This metadata
+     * should be associated with a video stream and contains data in the form
+     * of the AVAmbientViewingEnvironment struct.
+    */
+    AV_PKT_DATA_AMBIENT_VIEWING_ENVIRONMENT,
+
+    /**
      * The number of side data types.
      * This is not part of the public API/ABI in the sense that it may
      * change when new side data types are added.

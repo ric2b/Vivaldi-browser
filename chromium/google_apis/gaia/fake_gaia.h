@@ -6,10 +6,10 @@
 #define GOOGLE_APIS_GAIA_FAKE_GAIA_H_
 
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 
-#include <optional>
 #include "base/containers/flat_map.h"
 #include "base/functional/callback.h"
 #include "google_apis/gaia/gaia_auth_consumer.h"
@@ -31,6 +31,8 @@ class HttpResponse;
 // be registered as an additional request handler.
 class FakeGaia {
  public:
+  static constexpr std::string_view kDefaultGaiaId = "12345";
+
   using ScopeSet = std::set<std::string>;
   using RefreshTokenToDeviceIdMap = std::map<std::string, std::string>;
 

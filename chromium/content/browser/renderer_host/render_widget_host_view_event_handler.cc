@@ -135,7 +135,7 @@ void RenderWidgetHostViewEventHandler::SetPopupChild(
   popup_child_event_handler_ = popup_child_event_handler;
 }
 
-blink::mojom::PointerLockResult RenderWidgetHostViewEventHandler::LockMouse(
+blink::mojom::PointerLockResult RenderWidgetHostViewEventHandler::LockPointer(
     bool request_unadjusted_movement) {
   aura::Window* root_window = window_->GetRootWindow();
   if (!root_window)
@@ -162,7 +162,7 @@ blink::mojom::PointerLockResult RenderWidgetHostViewEventHandler::LockMouse(
 }
 
 blink::mojom::PointerLockResult
-RenderWidgetHostViewEventHandler::ChangeMouseLock(
+RenderWidgetHostViewEventHandler::ChangePointerLock(
     bool request_unadjusted_movement) {
   aura::Window* root_window = window_->GetRootWindow();
   if (!root_window || !window_->GetHost())
@@ -193,7 +193,7 @@ RenderWidgetHostViewEventHandler::ChangeMouseLock(
   return blink::mojom::PointerLockResult::kSuccess;
 }
 
-void RenderWidgetHostViewEventHandler::UnlockMouse() {
+void RenderWidgetHostViewEventHandler::UnlockPointer() {
   delegate_->SetTooltipsEnabled(true);
 
   aura::Window* root_window = window_->GetRootWindow();
@@ -215,7 +215,7 @@ void RenderWidgetHostViewEventHandler::UnlockMouse() {
   synthetic_move_position_ =
       gfx::ToFlooredPoint(unlocked_global_mouse_position_);
 
-  host_->LostMouseLock();
+  host_->LostPointerLock();
 }
 
 bool RenderWidgetHostViewEventHandler::LockKeyboard(

@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_LOCK_SCREEN_LOCK_SCREEN_DATA_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_LOCK_SCREEN_LOCK_SCREEN_DATA_H_
 
+#include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
@@ -25,12 +26,12 @@ class LockScreenData final : public ScriptWrappable,
   static const char kSupplementName[];
   explicit LockScreenData(LocalDOMWindow&);
   ~LockScreenData() override;
-  static ScriptPromise getLockScreenData(ScriptState*, LocalDOMWindow&);
-  ScriptPromise GetLockScreenData(ScriptState*);
+  static ScriptPromiseTyped<LockScreenData> getLockScreenData(ScriptState*,
+                                                              LocalDOMWindow&);
 
   // IDL Interface:
-  ScriptPromise getKeys(ScriptState*);
-  ScriptPromise getData(ScriptState*, const String& key);
+  ScriptPromiseTyped<IDLSequence<IDLString>> getKeys(ScriptState*);
+  ScriptPromiseTyped<IDLAny> getData(ScriptState*, const String& key);
   ScriptPromise setData(ScriptState*, const String& key, const String& data);
   ScriptPromise deleteData(ScriptState*, const String& key);
 

@@ -3,9 +3,11 @@
 # found in the LICENSE file.
 
 import("//common-mk/proto_library.gni")
+import("//system_api/dbus/install_dbus_client_headers.gni")
 
 group("all") {
   deps = [
+    ":install_dbus_headers",
     ":install_headers",
     ":install_pkg_config",
     ":libsystem_api",
@@ -49,6 +51,7 @@ group("all") {
     ":system_api-minios-protos",
     ":system_api-ml-goprotos",
     ":system_api-ml-protos",
+    ":system_api-oobe_config-goprotos",
     ":system_api-oobe_config-protos",
     ":system_api-patchpanel-goprotos",
     ":system_api-patchpanel-protos",
@@ -107,6 +110,39 @@ install_config("install_headers") {
   ]
   install_path = "/usr/include/chromeos"
   recursive = true
+}
+
+install_dbus_client_headers("install_dbus_headers") {
+  target_packages = [
+    "anomaly_detector",
+    "attestation",
+    "biod",
+    "chunneld",
+    "crash-reporter",
+    "cros-disks",
+    "cryptohome",
+    "debugd",
+    "discod",
+    "dlcservice",
+    "fbpreprocessor",
+    "kerberos",
+    "login_manager",
+    "lorgnette",
+    "oobe_config",
+    "runtime_probe",
+    "pciguard",
+    "permission_broker",
+    "printscanmgr",
+    "power_manager",
+    "rgbkbd",
+    "rmad",
+    "shadercached",
+    "shill",
+    "smbprovider",
+    "tpm_manager",
+    "u2f",
+    "update_engine",
+  ]
 }
 
 install_config("install_pkg_config") {
@@ -319,6 +355,7 @@ proto_library("system_api-chaps-protos") {
   proto_out_dir = "include/chaps/proto_bindings"
   sources = [
     "${proto_in_dir}/attributes.proto",
+    "${proto_in_dir}/chaps_wrapped_key_info.proto",
     "${proto_in_dir}/ck_structs.proto",
     "${proto_in_dir}/key_permissions.proto",
   ]
@@ -550,6 +587,12 @@ proto_library("system_api-oobe_config-protos") {
   sources = [ "${proto_in_dir}/oobe_config.proto" ]
   standalone = true
   install_package = true
+}
+
+goproto_library("system_api-oobe_config-goprotos") {
+  proto_in_dir = "dbus/oobe_config"
+  proto_out_dir = "go/src/"
+  sources = [ "${proto_in_dir}/oobe_config.proto" ]
 }
 
 proto_library("system_api-runtime_probe-protos") {

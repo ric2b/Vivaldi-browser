@@ -40,8 +40,8 @@ void InitMaterialMenuConfig(views::MenuConfig* config) {
 namespace views {
 
 void MenuConfig::Init() {
-  context_menu_font_list = font_list = gfx::FontList(gfx::Font(
-      new gfx::PlatformFontMac(gfx::PlatformFontMac::SystemFontType::kMenu)));
+  context_menu_font_list = font_list = gfx::FontList(gfx::Font( // Vivaldi keep
+      new gfx::PlatformFontMac(gfx::PlatformFontMac::SystemFontType::kMenu))); // Vivaldi keep
   check_selected_combobox_item = true;
   arrow_key_selection_wraps = false;
   use_mnemonics = false;

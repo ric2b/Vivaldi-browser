@@ -147,6 +147,25 @@
             "description": "Element role"
           }
         }
+      },
+      {
+        "id": "ControlButtonsPadding",
+        "type": "string",
+        "description": "The padding type used for drawing control buttons (macOS only)",
+        "enum": [
+          {
+            "name": "native"
+          },
+          {
+            "name": "lightPadding"
+          },
+          {
+            "name": "mediumPadding"
+          },
+          {
+            "name": "heavyPadding"
+          }
+        ]
       }
     ],
     "functions": [
@@ -282,6 +301,21 @@
             }
           ]
         }
+      },
+      {
+        "name": "setControlButtonsPadding",
+        "type": "function",
+        "description": "Request a new control buttons position.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          },
+          {
+            "name": "padding",
+            "$ref": "ControlButtonsPadding"
+          }
+        ]
       }
     ],
     "events": [
@@ -341,22 +375,6 @@
             "type": "boolean",
             "name": "activated",
             "description": "Changed activation state."
-          }
-        ]
-      },
-      {
-        "name": "onFullscreenMenubarChanged",
-        "type": "function",
-        "description": "Fired when the main menu bar is show/hidden in fullscreen.",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "windowId"
-          },
-          {
-            "type": "boolean",
-            "name": "shown",
-            "description": "Main menubar is shown (true) or hidden (false)."
           }
         ]
       },

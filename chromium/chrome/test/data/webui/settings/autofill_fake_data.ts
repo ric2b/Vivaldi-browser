@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 // clang-format off
-import {AutofillManagerProxy, PaymentsManagerProxy, PersonalDataChangedListener} from 'chrome://settings/lazy_load.js';
+import type {AutofillManagerProxy, PaymentsManagerProxy, PersonalDataChangedListener} from 'chrome://settings/lazy_load.js';
 import {assertEquals} from 'chrome://webui-test/chai_assert.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 
@@ -15,6 +15,8 @@ export const STUB_USER_ACCOUNT_INFO: chrome.autofillPrivate.AccountInfo = {
   email: 'stub-user@example.com',
   isSyncEnabledForAutofillProfiles: false,
   isEligibleForAddressAccountStorage: false,
+  isAutofillSyncToggleAvailable: false,
+  isAutofillSyncToggleEnabled: false,
 };
 
 /**
@@ -193,6 +195,7 @@ export class TestAutofillManager extends TestBrowserProxy implements
       'removeAddress',
       'removePersonalDataManagerListener',
       'setPersonalDataManagerListener',
+      'setAutofillSyncToggleEnabled',
     ]);
 
     // Set these to have non-empty data.
@@ -202,6 +205,8 @@ export class TestAutofillManager extends TestBrowserProxy implements
         email: 'stub-user@example.com',
         isSyncEnabledForAutofillProfiles: true,
         isEligibleForAddressAccountStorage: false,
+        isAutofillSyncToggleAvailable: false,
+        isAutofillSyncToggleEnabled: false,
       },
     };
 
@@ -236,6 +241,10 @@ export class TestAutofillManager extends TestBrowserProxy implements
     this.methodCalled('removeAddress');
   }
 
+  setAutofillSyncToggleEnabled(_enabled: boolean) {
+    this.methodCalled('setAutofillSyncToggleEnabled');
+  }
+
   /**
    * Verifies expectations.
    */
@@ -255,7 +264,6 @@ export class PaymentsManagerExpectations {
   requestedCreditCards: number = 0;
   listeningCreditCards: number = 0;
   removedCreditCards: number = 0;
-  clearedCachedCreditCards: number = 0;
   addedVirtualCards: number = 0;
   requestedIbans: number = 0;
   removedIbans: number = 0;
@@ -288,7 +296,6 @@ export class TestPaymentsManager extends TestBrowserProxy implements
       'addVirtualCard',
       'authenticateUserAndFlipMandatoryAuthToggle',
       'bulkDeleteAllCvcs',
-      'clearCachedCreditCard',
       'getCreditCardList',
       'getIbanList',
       'getLocalCard',
@@ -323,10 +330,6 @@ export class TestPaymentsManager extends TestBrowserProxy implements
   getCreditCardList() {
     this.methodCalled('getCreditCardList');
     return Promise.resolve(this.data.creditCards);
-  }
-
-  clearCachedCreditCard(_guid: string) {
-    this.methodCalled('clearCachedCreditCard');
   }
 
   logServerCardLinkClicked() {}
@@ -416,10 +419,6 @@ export class TestPaymentsManager extends TestBrowserProxy implements
     assertEquals(
         expected.removedCreditCards, this.getCallCount('removeCreditCard'),
         'removedCreditCards mismatch');
-    assertEquals(
-        expected.clearedCachedCreditCards,
-        this.getCallCount('clearCachedCreditCard'),
-        'clearedCachedCreditCards mismatch');
     assertEquals(
         expected.addedVirtualCards, this.getCallCount('addVirtualCard'),
         'addedVirtualCards mismatch');

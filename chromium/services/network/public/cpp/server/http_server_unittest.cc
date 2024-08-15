@@ -14,6 +14,7 @@
 #include "base/format_macros.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/task_environment.h"
@@ -56,7 +57,7 @@ class TestHttpClient {
     base::RunLoop run_loop;
     int net_error = net::ERR_FAILED;
     factory_.CreateTCPConnectedSocket(
-        absl::nullopt /* local address */, addresses,
+        std::nullopt /* local address */, addresses,
         nullptr /* tcp_connected_socket_options */,
         TRAFFIC_ANNOTATION_FOR_TESTS, socket_.BindNewPipeAndPassReceiver(),
         mojo::NullRemote() /* observer */,
@@ -64,8 +65,8 @@ class TestHttpClient {
             [](base::RunLoop* run_loop, int* result_out,
                mojo::ScopedDataPipeConsumerHandle* receive_pipe_handle_out,
                mojo::ScopedDataPipeProducerHandle* send_pipe_handle_out,
-               int result, const absl::optional<net::IPEndPoint>& local_addr,
-               const absl::optional<net::IPEndPoint>& peer_addr,
+               int result, const std::optional<net::IPEndPoint>& local_addr,
+               const std::optional<net::IPEndPoint>& peer_addr,
                mojo::ScopedDataPipeConsumerHandle receive_pipe_handle,
                mojo::ScopedDataPipeProducerHandle send_pipe_handle) {
               *receive_pipe_handle_out = std::move(receive_pipe_handle);
@@ -187,7 +188,7 @@ class HttpServerTest : public testing::Test, public HttpServer::Delegate {
         base::BindOnce(
             [](base::RunLoop* run_loop, int* result_out,
                net::IPEndPoint* local_addr_out, int result,
-               const absl::optional<net::IPEndPoint>& local_addr) {
+               const std::optional<net::IPEndPoint>& local_addr) {
               *result_out = result;
               if (local_addr)
                 *local_addr_out = local_addr.value();
@@ -372,16 +373,17 @@ std::string EncodeFrame(std::string message,
   header.final = finish;
   header.masked = mask;
   header.payload_length = message.size();
-  const int header_size = GetWebSocketFrameHeaderSize(header);
+  const size_t header_size = GetWebSocketFrameHeaderSize(header);
   std::string frame_header;
   frame_header.resize(header_size);
   if (mask) {
     net::WebSocketMaskingKey masking_key = net::GenerateWebSocketMaskingKey();
     WriteWebSocketFrameHeader(header, &masking_key, &frame_header[0],
-                              header_size);
+                              base::checked_cast<int>(header_size));
     MaskWebSocketFramePayload(masking_key, 0, &message[0], message.size());
   } else {
-    WriteWebSocketFrameHeader(header, nullptr, &frame_header[0], header_size);
+    WriteWebSocketFrameHeader(header, nullptr, &frame_header[0],
+                              base::checked_cast<int>(header_size));
   }
   return frame_header + message;
 }

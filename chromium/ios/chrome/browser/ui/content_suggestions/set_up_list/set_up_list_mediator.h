@@ -7,11 +7,16 @@
 
 #import <Foundation/Foundation.h>
 
+#import "base/ios/block_types.h"
+
 class AuthenticationService;
 @protocol ContentSuggestionsConsumer;
 @protocol ContentSuggestionsDelegate;
+@class ContentSuggestionsMetricsRecorder;
+@protocol ContentSuggestionsViewControllerAudience;
 class PrefService;
 @class SceneState;
+@class SetUpListConfig;
 @class SetUpListItem;
 @class SetUpListItemViewData;
 
@@ -24,12 +29,26 @@ class SyncService;
 }  // namespace syncer
 
 // Interface for listening to events occurring in SetUpListMediator.
-@protocol SetUpListMediatorObserver
+@protocol SetUpListConsumer
 @optional
 // Indicates that a SetUpList task has been completed, and whether that resulted
-// in all tasks being `completed`.
+// in all tasks being `completed`. Calls the `completion` block when the
+// animation is finished.
 - (void)setUpListItemDidComplete:(SetUpListItem*)item
-               allItemsCompleted:(BOOL)completed;
+               allItemsCompleted:(BOOL)completed
+                      completion:(ProceduralBlock)completion;
+
+@end
+
+// Audience for Set Up List events
+@protocol SetUpListMediatorAudience
+
+// Indicates that the Set Up List should be removed.
+- (void)removeSetUpList;
+
+// Indicates that the displayed Set Up List should be replaced by
+// `allSetConfig`.
+- (void)replaceSetUpListWithAllSet:(SetUpListConfig*)allSetConfig;
 
 @end
 
@@ -49,9 +68,14 @@ class SyncService;
 
 - (void)disconnect;
 
-// Interface to add/remove a receiver as an observer of SetUpListMediator.
-- (void)addObserver:(id<SetUpListMediatorObserver>)observer;
-- (void)removeObserver:(id<SetUpListMediatorObserver>)observer;
+// Returns YES if the conditions are right to display the Set Up List.
+- (BOOL)shouldShowSetUpList;
+
+// Sends the SetUpList items up to the consumer.
+- (void)showSetUpList;
+
+// Returns the Set Up List module configuration(s) to show.
+- (NSArray<SetUpListConfig*>*)setUpListConfigs;
 
 // Returns the complete list of tasks, inclusive of the ones the user has
 // already completed.
@@ -64,13 +88,24 @@ class SyncService;
 - (BOOL)allItemsComplete;
 
 // Indicates to the mediator to disable SetUpList entirely.
-- (void)disableSetUpList;
+- (void)disableModule;
 
 // Consumer for this mediator.
 @property(nonatomic, weak) id<ContentSuggestionsConsumer> consumer;
 
+// Receiver for Set Up List actions.
+@property(nonatomic, weak) id<ContentSuggestionsViewControllerAudience>
+    commandHandler;
+
+// Audience used to communicate Set Up List events.
+@property(nonatomic, weak) id<SetUpListMediatorAudience> audience;
+
 // Delegate used to communicate Content Suggestions events to the delegate.
 @property(nonatomic, weak) id<ContentSuggestionsDelegate> delegate;
+
+// Recorder for content suggestions metrics.
+@property(nonatomic, weak)
+    ContentSuggestionsMetricsRecorder* contentSuggestionsMetricsRecorder;
 
 @end
 

@@ -1,28 +1,39 @@
+# Copyright 2022 Vivaldi Technologies AS. All rights reserved.
+
 import("//build/config/ios/swift_source_set.gni")
 
 source_set("vivaldi_ntp") {
   sources = [
     "vivaldi_ntp_constants.h",
     "vivaldi_ntp_constants.mm",
+    "vivaldi_ntp_util.h",
+    "vivaldi_ntp_util.mm",
     "vivaldi_speed_dial_constants.h",
     "vivaldi_speed_dial_constants.mm",
     "vivaldi_speed_dial_item.h",
     "vivaldi_speed_dial_item.mm",
     "vivaldi_speed_dial_container_view.h",
     "vivaldi_speed_dial_container_view.mm",
+    "vivaldi_speed_dial_container_view_flow_layout.h",
+    "vivaldi_speed_dial_container_view_flow_layout.mm",
     "vivaldi_speed_dial_base_controller.h",
     "vivaldi_speed_dial_base_controller.mm",
     "vivaldi_speed_dial_view_controller.h",
     "vivaldi_speed_dial_view_controller.mm",
+    "vivaldi_speed_dial_view_controller_delegate.h",
     "vivaldi_speed_dial_container_delegate.h",
     "vivaldi_speed_dial_shared_state.h",
     "vivaldi_speed_dial_shared_state.mm",
     "vivaldi_speed_dial_home_mediator.h",
     "vivaldi_speed_dial_home_mediator.mm",
+    "vivaldi_speed_dial_home_coordinator.h",
+    "vivaldi_speed_dial_home_coordinator.mm",
     "vivaldi_speed_dial_home_consumer.h",
     "vivaldi_speed_dial_sorting_mode.h",
     "vivaldi_private_mode_view.h",
     "vivaldi_private_mode_view.mm",
+    "vivaldi_speed_dial_add_group_view.h",
+    "vivaldi_speed_dial_add_group_view.mm",
   ]
 
   deps = [
@@ -32,31 +43,12 @@ source_set("vivaldi_ntp") {
     "//ios/chrome/app/strings",
     "//ios/chrome/common/ui/util",
     "//ios/chrome/browser/bookmarks/model",
+    "//ios/chrome/browser/ui/first_run:utils",
     "//vivaldi/ios/ui/ntp/cells",
-    "//vivaldi/ios/ui/ntp/top_menu",
+    "//vivaldi/ios/ui/ntp/top_toolbar",
+    "//vivaldi/ios/ui/ntp/top_toolbar:top_toolbar_swift",
     "//vivaldi/ios/ui/thumbnail:service",
-    "resources:vivaldi_ntp_background_color",
-    "resources:vivaldi_private_ntp_background_color",
-    "resources:vivaldi_ntp_searchbar_background_color",
-    "resources:vivaldi_regular_toolbar_background_color",
-    "resources:vivaldi_private_toolbar_background_color",
-    "resources:vivaldi_private_tabview_selected_background_color",
-    "resources:vivaldi_ntp_speed_dial_container_background_color",
-    "resources:vivaldi_ntp_speed_dial_cell_background_color",
-    "resources:vivaldi_ntp_speed_dial_cell_shadow_color",
-    "resources:vivaldi_ntp_speed_dial_domain_text_color",
-    "resources:vivaldi_ntp_toolbar_selectionline_color",
-    "resources:vivaldi_ntp_toolbar_text_color",
-    "resources:vivaldi_ntp_toolbar_text_highlighted_color",
-    "resources:vivaldi_ntp_search",
-    "resources:vivaldi_ntp_toolbar_sort",
-    "resources:vivaldi_ntp_add_new_speed_dial",
-    "resources:vivaldi_ntp_add_new_speed_dial_folder",
-    "resources:vivaldi_private_tab_bg",
-    "resources:vivaldi_open_in_private_tab",
-    "resources:vivaldi_private_tab_ghost",
-    "resources:vivaldi_ntp_fallback_favicon",
-    "resources:vivaldi_ntp_internal_favicon",
+    "resources"
   ]
 
   frameworks = [

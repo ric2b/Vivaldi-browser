@@ -65,6 +65,8 @@ public final class ViewEventSinkImpl implements ViewEventSink, ActivityStateObse
         if (mWebContents.getStylusWritingHandler() != null) {
             ViewAndroidDelegate viewAndroidDelegate = mWebContents.getViewAndroidDelegate();
             if (viewAndroidDelegate != null) {
+                // Vivaldi
+                if (viewAndroidDelegate.getContainerView() != null)
                 mWebContents
                         .getStylusWritingHandler()
                         .onDetachedFromWindow(viewAndroidDelegate.getContainerView().getContext());

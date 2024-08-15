@@ -4,11 +4,12 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/v8_code_cache.h"
 
+#include <optional>
+
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "build/build_config.h"
 #include "components/miracle_parameter/common/public/miracle_parameter.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/v8_cache_options.mojom-blink.h"
 #include "third_party/blink/public/web/web_settings.h"
@@ -64,7 +65,7 @@ uint32_t CacheTag(CacheTagKind kind, const String& encoding) {
          (encoding.IsNull() ? 0 : WTF::GetHash(encoding));
 }
 
-bool TimestampIsRecent(CachedMetadata* cached_metadata) {
+bool TimestampIsRecent(const CachedMetadata* cached_metadata) {
   const base::TimeDelta kHotHours = base::Hours(GetV8CodeCacheHotHours());
   uint64_t time_stamp_ms;
   const uint32_t size = sizeof(time_stamp_ms);
@@ -90,12 +91,14 @@ enum class DetailFlags : uint64_t {
 bool V8CodeCache::HasHotTimestamp(const CachedMetadataHandler* cache_handler) {
   scoped_refptr<CachedMetadata> cached_metadata =
       cache_handler->GetCachedMetadata(
-          V8CodeCache::TagForTimeStamp(cache_handler));
+          V8CodeCache::TagForTimeStamp(cache_handler),
+          CachedMetadataHandler::kAllowUnchecked);
   if (cached_metadata) {
     return TimestampIsRecent(cached_metadata.get());
   }
   cached_metadata = cache_handler->GetCachedMetadata(
-      V8CodeCache::TagForCompileHints(cache_handler));
+      V8CodeCache::TagForCompileHints(cache_handler),
+      CachedMetadataHandler::kAllowUnchecked);
   if (cached_metadata) {
     return TimestampIsRecent(cached_metadata.get());
   }
@@ -112,6 +115,11 @@ bool V8CodeCache::HasCodeCache(
   return cache_handler->GetCachedMetadata(code_cache_tag, behavior).get();
 }
 
+bool V8CodeCache::HasCodeCache(const CachedMetadata& data,
+                               const String& encoding) {
+  return data.DataTypeID() == CacheTag(kCacheTagCode, encoding);
+}
+
 bool V8CodeCache::HasCompileHints(
     const CachedMetadataHandler* cache_handler,
     CachedMetadataHandler::GetCachedMetadataBehavior behavior) {
@@ -126,6 +134,14 @@ bool V8CodeCache::HasCompileHints(
     return false;
   }
   return true;
+}
+
+bool V8CodeCache::HasHotCompileHints(const CachedMetadata& data,
+                                     const String& encoding) {
+  if (data.DataTypeID() != CacheTag(kCacheTagCompileHints, encoding)) {
+    return false;
+  }
+  return TimestampIsRecent(&data);
 }
 
 std::unique_ptr<v8::ScriptCompiler::CachedData> V8CodeCache::CreateCachedData(
@@ -497,7 +513,7 @@ scoped_refptr<CachedMetadata> V8CodeCache::GenerateFullCodeCache(
       [&](perfetto::TracedValue context) {
         inspector_compile_script_event::Data(
             std::move(context), file_name, TextPosition::MinimumPosition(),
-            absl::nullopt, true, false,
+            std::nullopt, true, false,
             ScriptStreamer::NotStreamingReason::kStreamingDisabled);
       });
 

@@ -112,13 +112,23 @@ class CORE_EXPORT GridLayoutData {
                : !(rows_ && rows_->IsForSizing());
   }
 
+  bool IsSubgridWithStandaloneAxis(
+      GridTrackSizingDirection track_direction) const {
+    return columns_ && rows_ &&
+           ((track_direction == kForColumns)
+                ? columns_->IsForSizing() && !rows_->IsForSizing()
+                : rows_->IsForSizing() && !columns_->IsForSizing());
+  }
+
   GridLayoutTrackCollection& Columns() const {
-    DCHECK(columns_ && columns_->Direction() == kForColumns);
+    DCHECK(columns_);
+    DCHECK_EQ(columns_->Direction(), kForColumns);
     return *columns_;
   }
 
   GridLayoutTrackCollection& Rows() const {
-    DCHECK(rows_ && rows_->Direction() == kForRows);
+    DCHECK(rows_);
+    DCHECK_EQ(rows_->Direction(), kForRows);
     return *rows_;
   }
 
@@ -128,6 +138,15 @@ class CORE_EXPORT GridLayoutData {
 
     return To<GridSizingTrackCollection>(
         (track_direction == kForColumns) ? Columns() : Rows());
+  }
+
+  // This method is intended for subgrids with both a standalone and a
+  // subgridded axis. Returns the only subgridded track collection.
+  const GridLayoutTrackCollection& OnlySubgriddedCollection() const {
+    DCHECK(columns_);
+    DCHECK(rows_);
+    DCHECK_NE(columns_->IsForSizing(), rows_->IsForSizing());
+    return columns_->IsForSizing() ? *rows_ : *columns_;
   }
 
   void SetTrackCollection(

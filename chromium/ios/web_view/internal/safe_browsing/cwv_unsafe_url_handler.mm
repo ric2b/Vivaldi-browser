@@ -12,18 +12,20 @@
 #import "ios/components/security_interstitials/safe_browsing/unsafe_resource_util.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/web_state.h"
-#import "net/base/mac/url_conversions.h"
+#import "net/base/apple/url_conversions.h"
 
 CWVUnsafeURLThreatType CWVUnsafeURLThreatTypeFromSBThreatType(
     safe_browsing::SBThreatType threatType) {
+  using enum safe_browsing::SBThreatType;
+
   switch (threatType) {
-    case safe_browsing::SB_THREAT_TYPE_BILLING:
+    case SB_THREAT_TYPE_BILLING:
       return CWVUnsafeURLThreatTypeBilling;
-    case safe_browsing::SB_THREAT_TYPE_URL_MALWARE:
+    case SB_THREAT_TYPE_URL_MALWARE:
       return CWVUnsafeURLThreatTypeMalware;
-    case safe_browsing::SB_THREAT_TYPE_URL_UNWANTED:
+    case SB_THREAT_TYPE_URL_UNWANTED:
       return CWVUnsafeURLThreatTypeUnwanted;
-    case safe_browsing::SB_THREAT_TYPE_URL_PHISHING:
+    case SB_THREAT_TYPE_URL_PHISHING:
       return CWVUnsafeURLThreatTypePhishing;
     default:
       NOTREACHED() << "Update CWVUnsafeURLThreatType for new threat type.";

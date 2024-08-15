@@ -33,6 +33,13 @@ class RasterContextProvider;
 namespace exo {
 class LayerTreeFrameSinkHolder;
 
+// Notifies viz that exo doesn't want to throttle sending
+// `DidReceiveCompositorFrameAck` and `ReclaimResources`. We don't want exo to
+// merge those into OnBeginFrame as that makes clients of exo to throttle as
+// well given frame callbacks as well as buffers are sent/released in a late
+// manner.
+BASE_DECLARE_FEATURE(kExoDisableBeginFrameAcks);
+
 // This class provides functionality for hosting a surface tree. The surface
 // tree is hosted in the |host_window_|.
 class SurfaceTreeHost : public SurfaceDelegate,
@@ -176,6 +183,9 @@ class SurfaceTreeHost : public SurfaceDelegate,
       const gfx::RectF& bounds,
       const gfx::RoundedCornersF& radii_in_dps);
 
+  scoped_refptr<viz::RasterContextProvider> SetRasterContextProviderForTesting(
+      scoped_refptr<viz::RasterContextProvider> context_provider_test);
+
  protected:
   void UpdateDisplayOnTree();
 
@@ -265,7 +275,7 @@ class SurfaceTreeHost : public SurfaceDelegate,
 
   void CleanUpCallbacks();
 
-  float CalculateScaleFactor(const absl::optional<float>& scale_factor) const;
+  float CalculateScaleFactor(const std::optional<float>& scale_factor) const;
 
   // Applies `rounded_corner_bounds` to the `surface` and propagates the bounds
   // to its subsurfaces. `rounded_corner_bounds` should be in the local
@@ -308,11 +318,11 @@ class SurfaceTreeHost : public SurfaceDelegate,
 
   // When a client calls set_scale_factor they're actually setting the scale
   // factor for all future commits.
-  absl::optional<float> pending_scale_factor_;
+  std::optional<float> pending_scale_factor_;
 
   // This is the client-set scale factor that is being used for the current
   // buffer.
-  absl::optional<float> scale_factor_;
+  std::optional<float> scale_factor_;
 
   viz::FrameTokenGenerator next_token_;
 

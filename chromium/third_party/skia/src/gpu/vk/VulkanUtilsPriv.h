@@ -12,6 +12,7 @@
 #include <string>
 
 #include "include/gpu/vk/VulkanTypes.h"
+#include "src/gpu/vk/VulkanInterface.h"
 
 #include "include/core/SkColor.h"
 #include "src/gpu/PipelineUtils.h"
@@ -19,8 +20,6 @@
 
 #ifdef SK_BUILD_FOR_ANDROID
 #include <android/hardware_buffer.h>
-#include "include/gpu/vk/VulkanTypes.h"
-#include "src/gpu/vk/VulkanInterface.h"
 #endif
 
 namespace SkSL {
@@ -223,7 +222,6 @@ template<typename T> T* GetExtensionFeatureStruct(const VkPhysicalDeviceFeatures
 void SetupSamplerYcbcrConversionInfo(VkSamplerYcbcrConversionCreateInfo* outInfo,
                                      const VulkanYcbcrConversionInfo& conversionInfo);
 
-#if defined(SK_DEBUG) || defined(GR_TEST_UTILS)
 static constexpr const char* VkFormatToStr(VkFormat vkFormat) {
     switch (vkFormat) {
         case VK_FORMAT_R8G8B8A8_UNORM:           return "R8G8B8A8_UNORM";
@@ -255,7 +253,6 @@ static constexpr const char* VkFormatToStr(VkFormat vkFormat) {
         default:                                 return "Unknown";
     }
 }
-#endif // defined(SK_DEBUG) || defined(GR_TEST_UTILS)
 
 #ifdef SK_BUILD_FOR_ANDROID
 /**
@@ -281,6 +278,17 @@ bool AllocateAndBindImageMemory(skgpu::VulkanAlloc* outVulkanAlloc,
                                 VkDevice);
 
 #endif // SK_BUILD_FOR_ANDROID
+
+/**
+ * Calls faultProc with faultContext; passes debug info if VK_EXT_device_fault is supported/enabled.
+ *
+ * Note: must only be called *after* receiving VK_ERROR_DEVICE_LOST.
+ */
+void InvokeDeviceLostCallback(const skgpu::VulkanInterface* vulkanInterface,
+                              VkDevice vkDevice,
+                              skgpu::VulkanDeviceLostContext faultContext,
+                              skgpu::VulkanDeviceLostProc faultProc,
+                              bool supportsDeviceFaultInfoExtension);
 
 }  // namespace skgpu
 

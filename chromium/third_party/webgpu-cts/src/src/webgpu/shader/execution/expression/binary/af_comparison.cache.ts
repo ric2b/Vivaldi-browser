@@ -1,5 +1,5 @@
 import { anyOf } from '../../../../util/compare.js';
-import { abstractFloat, bool, Scalar } from '../../../../util/conversion.js';
+import { abstractFloat, bool, ScalarValue } from '../../../../util/conversion.js';
 import { flushSubnormalNumberF64, vectorF64Range } from '../../../../util/math.js';
 import { Case } from '../case.js';
 import { makeCaseCache } from '../case_cache.js';
@@ -11,7 +11,7 @@ import { makeCaseCache } from '../case_cache.js';
 function makeCase(
   lhs: number,
   rhs: number,
-  truthFunc: (lhs: Scalar, rhs: Scalar) => boolean
+  truthFunc: (lhs: ScalarValue, rhs: ScalarValue) => boolean
 ): Case {
   // Subnormal float values may be flushed at any time.
   // https://www.w3.org/TR/WGSL/#floating-point-evaluation
@@ -19,7 +19,7 @@ function makeCase(
   const af_rhs = abstractFloat(rhs);
   const lhs_options = new Set([af_lhs, abstractFloat(flushSubnormalNumberF64(lhs))]);
   const rhs_options = new Set([af_rhs, abstractFloat(flushSubnormalNumberF64(rhs))]);
-  const expected: Array<Scalar> = [];
+  const expected: Array<ScalarValue> = [];
   lhs_options.forEach(l => {
     rhs_options.forEach(r => {
       const result = bool(truthFunc(l, r));
@@ -34,7 +34,7 @@ function makeCase(
 
 export const d = makeCaseCache('binary/af_logical', {
   equals: () => {
-    const truthFunc = (lhs: Scalar, rhs: Scalar): boolean => {
+    const truthFunc = (lhs: ScalarValue, rhs: ScalarValue): boolean => {
       return (lhs.value as number) === (rhs.value as number);
     };
 
@@ -43,7 +43,7 @@ export const d = makeCaseCache('binary/af_logical', {
     });
   },
   not_equals: () => {
-    const truthFunc = (lhs: Scalar, rhs: Scalar): boolean => {
+    const truthFunc = (lhs: ScalarValue, rhs: ScalarValue): boolean => {
       return (lhs.value as number) !== (rhs.value as number);
     };
 
@@ -52,7 +52,7 @@ export const d = makeCaseCache('binary/af_logical', {
     });
   },
   less_than: () => {
-    const truthFunc = (lhs: Scalar, rhs: Scalar): boolean => {
+    const truthFunc = (lhs: ScalarValue, rhs: ScalarValue): boolean => {
       return (lhs.value as number) < (rhs.value as number);
     };
 
@@ -61,7 +61,7 @@ export const d = makeCaseCache('binary/af_logical', {
     });
   },
   less_equals: () => {
-    const truthFunc = (lhs: Scalar, rhs: Scalar): boolean => {
+    const truthFunc = (lhs: ScalarValue, rhs: ScalarValue): boolean => {
       return (lhs.value as number) <= (rhs.value as number);
     };
 
@@ -70,7 +70,7 @@ export const d = makeCaseCache('binary/af_logical', {
     });
   },
   greater_than: () => {
-    const truthFunc = (lhs: Scalar, rhs: Scalar): boolean => {
+    const truthFunc = (lhs: ScalarValue, rhs: ScalarValue): boolean => {
       return (lhs.value as number) > (rhs.value as number);
     };
 
@@ -79,7 +79,7 @@ export const d = makeCaseCache('binary/af_logical', {
     });
   },
   greater_equals: () => {
-    const truthFunc = (lhs: Scalar, rhs: Scalar): boolean => {
+    const truthFunc = (lhs: ScalarValue, rhs: ScalarValue): boolean => {
       return (lhs.value as number) >= (rhs.value as number);
     };
 

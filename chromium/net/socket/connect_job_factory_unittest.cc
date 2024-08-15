@@ -5,6 +5,7 @@
 #include "net/socket/connect_job_factory.h"
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -31,7 +32,6 @@
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/scheme_host_port.h"
 #include "url/url_constants.h"
 
@@ -205,13 +205,13 @@ TEST_F(ConnectJobFactoryTest, CreateConnectJob) {
   const url::SchemeHostPort kEndpoint(url::kHttpScheme, "test", 82);
 
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
-      kEndpoint, ProxyChain::Direct(),
-      /*proxy_annotation_tag=*/absl::nullopt, /*ssl_config_for_origin=*/nullptr,
-      ConnectJobFactory::AlpnMode::kHttpAll, /*force_tunnel=*/false,
-      PrivacyMode::PRIVACY_MODE_DISABLED, OnHostResolutionCallback(),
-      DEFAULT_PRIORITY, SocketTag(), NetworkAnonymizationKey(),
-      SecureDnsPolicy::kAllow, /*disable_cert_network_fetches=*/false,
-      &common_connect_job_params_, &delegate_);
+      kEndpoint, ProxyChain::Direct(), /*proxy_annotation_tag=*/std::nullopt,
+      /*allowed_bad_certs=*/{}, ConnectJobFactory::AlpnMode::kHttpAll,
+      /*force_tunnel=*/false, PrivacyMode::PRIVACY_MODE_DISABLED,
+      OnHostResolutionCallback(), DEFAULT_PRIORITY, SocketTag(),
+      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
+      /*disable_cert_network_fetches=*/false, &common_connect_job_params_,
+      &delegate_);
   EXPECT_EQ(GetCreationCount(), 1u);
 
   ASSERT_THAT(transport_job_factory_->params(), testing::SizeIs(1));
@@ -226,11 +226,11 @@ TEST_F(ConnectJobFactoryTest, CreateConnectJobWithoutScheme) {
 
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
       /*using_ssl=*/false, kEndpoint, ProxyChain::Direct(),
-      /*proxy_annotation_tag=*/absl::nullopt,
-      /*ssl_config_for_origin=*/nullptr, /*force_tunnel=*/false,
-      PrivacyMode::PRIVACY_MODE_DISABLED, OnHostResolutionCallback(),
-      DEFAULT_PRIORITY, SocketTag(), NetworkAnonymizationKey(),
-      SecureDnsPolicy::kAllow, &common_connect_job_params_, &delegate_);
+      /*proxy_annotation_tag=*/std::nullopt,
+      /*force_tunnel=*/false, PrivacyMode::PRIVACY_MODE_DISABLED,
+      OnHostResolutionCallback(), DEFAULT_PRIORITY, SocketTag(),
+      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
+      &common_connect_job_params_, &delegate_);
   EXPECT_EQ(GetCreationCount(), 1u);
 
   ASSERT_THAT(transport_job_factory_->params(), testing::SizeIs(1));
@@ -242,17 +242,15 @@ TEST_F(ConnectJobFactoryTest, CreateConnectJobWithoutScheme) {
 
 TEST_F(ConnectJobFactoryTest, CreateHttpsConnectJob) {
   const url::SchemeHostPort kEndpoint(url::kHttpsScheme, "test", 84);
-  SSLConfig ssl_config;
 
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
-      kEndpoint, ProxyChain::Direct(),
-      /*proxy_annotation_tag=*/absl::nullopt,
-      /*ssl_config_for_origin=*/&ssl_config,
-      ConnectJobFactory::AlpnMode::kHttpAll, /*force_tunnel=*/false,
-      PrivacyMode::PRIVACY_MODE_DISABLED, OnHostResolutionCallback(),
-      DEFAULT_PRIORITY, SocketTag(), NetworkAnonymizationKey(),
-      SecureDnsPolicy::kAllow, /*disable_cert_network_fetches=*/false,
-      &common_connect_job_params_, &delegate_);
+      kEndpoint, ProxyChain::Direct(), /*proxy_annotation_tag=*/std::nullopt,
+      /*allowed_bad_certs=*/{}, ConnectJobFactory::AlpnMode::kHttpAll,
+      /*force_tunnel=*/false, PrivacyMode::PRIVACY_MODE_DISABLED,
+      OnHostResolutionCallback(), DEFAULT_PRIORITY, SocketTag(),
+      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
+      /*disable_cert_network_fetches=*/false, &common_connect_job_params_,
+      &delegate_);
   EXPECT_EQ(GetCreationCount(), 1u);
 
   ASSERT_THAT(ssl_job_factory_->params(), testing::SizeIs(1));
@@ -280,17 +278,15 @@ TEST_F(ConnectJobFactoryTest, CreateHttpsConnectJob) {
 
 TEST_F(ConnectJobFactoryTest, CreateHttpsConnectJobForHttp11) {
   const url::SchemeHostPort kEndpoint(url::kHttpsScheme, "test", 84);
-  SSLConfig ssl_config;
 
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
-      kEndpoint, ProxyChain::Direct(),
-      /*proxy_annotation_tag=*/absl::nullopt,
-      /*ssl_config_for_origin=*/&ssl_config,
-      ConnectJobFactory::AlpnMode::kHttp11Only, /*force_tunnel=*/false,
-      PrivacyMode::PRIVACY_MODE_DISABLED, OnHostResolutionCallback(),
-      DEFAULT_PRIORITY, SocketTag(), NetworkAnonymizationKey(),
-      SecureDnsPolicy::kAllow, /*disable_cert_network_fetches=*/false,
-      &common_connect_job_params_, &delegate_);
+      kEndpoint, ProxyChain::Direct(), /*proxy_annotation_tag=*/std::nullopt,
+      /*allowed_bad_certs=*/{}, ConnectJobFactory::AlpnMode::kHttp11Only,
+      /*force_tunnel=*/false, PrivacyMode::PRIVACY_MODE_DISABLED,
+      OnHostResolutionCallback(), DEFAULT_PRIORITY, SocketTag(),
+      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
+      /*disable_cert_network_fetches=*/false, &common_connect_job_params_,
+      &delegate_);
   EXPECT_EQ(GetCreationCount(), 1u);
 
   ASSERT_THAT(ssl_job_factory_->params(), testing::SizeIs(1));
@@ -318,12 +314,10 @@ TEST_F(ConnectJobFactoryTest, CreateHttpsConnectJobForHttp11) {
 
 TEST_F(ConnectJobFactoryTest, CreateHttpsConnectJobWithoutScheme) {
   const HostPortPair kEndpoint("test", 84);
-  SSLConfig ssl_config;
 
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
       /*using_ssl=*/true, kEndpoint, ProxyChain::Direct(),
-      /*proxy_annotation_tag=*/absl::nullopt,
-      /*ssl_config_for_origin=*/&ssl_config, /*force_tunnel=*/false,
+      /*proxy_annotation_tag=*/std::nullopt, /*force_tunnel=*/false,
       PrivacyMode::PRIVACY_MODE_DISABLED, OnHostResolutionCallback(),
       DEFAULT_PRIORITY, SocketTag(), NetworkAnonymizationKey(),
       SecureDnsPolicy::kAllow, &common_connect_job_params_, &delegate_);
@@ -354,13 +348,12 @@ TEST_F(ConnectJobFactoryTest, CreateHttpProxyConnectJob) {
                           HostPortPair("proxy.test", 86));
 
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
-      kEndpoint, kProxy, TRAFFIC_ANNOTATION_FOR_TESTS,
-      /*ssl_config_for_origin=*/nullptr, ConnectJobFactory::AlpnMode::kHttpAll,
-      /*force_tunnel=*/false, PrivacyMode::PRIVACY_MODE_DISABLED,
-      OnHostResolutionCallback(), DEFAULT_PRIORITY, SocketTag(),
-      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
-      /*disable_cert_network_fetches=*/false, &common_connect_job_params_,
-      &delegate_);
+      kEndpoint, kProxy, TRAFFIC_ANNOTATION_FOR_TESTS, /*allowed_bad_certs=*/{},
+      ConnectJobFactory::AlpnMode::kHttpAll, /*force_tunnel=*/false,
+      PrivacyMode::PRIVACY_MODE_DISABLED, OnHostResolutionCallback(),
+      DEFAULT_PRIORITY, SocketTag(), NetworkAnonymizationKey(),
+      SecureDnsPolicy::kAllow, /*disable_cert_network_fetches=*/false,
+      &common_connect_job_params_, &delegate_);
   EXPECT_EQ(GetCreationCount(), 1u);
 
   ASSERT_THAT(http_proxy_job_factory_->params(), testing::SizeIs(1));
@@ -371,9 +364,9 @@ TEST_F(ConnectJobFactoryTest, CreateHttpProxyConnectJob) {
 
   ASSERT_TRUE(params.transport_params());
   const TransportSocketParams& transport_params = *params.transport_params();
-  EXPECT_THAT(transport_params.destination(),
-              testing::VariantWith<HostPortPair>(
-                  kProxy.GetProxyServer(/*server_index=*/0).host_port_pair()));
+  EXPECT_THAT(
+      transport_params.destination(),
+      testing::VariantWith<HostPortPair>(kProxy.First().host_port_pair()));
 }
 
 TEST_F(ConnectJobFactoryTest, CreateHttpProxyConnectJobWithoutScheme) {
@@ -383,12 +376,11 @@ TEST_F(ConnectJobFactoryTest, CreateHttpProxyConnectJobWithoutScheme) {
 
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
       /*using_ssl=*/false, kEndpoint, kProxy, TRAFFIC_ANNOTATION_FOR_TESTS,
-      /*ssl_config_for_origin=*/nullptr, /*force_tunnel=*/false,
-      PrivacyMode::PRIVACY_MODE_DISABLED, OnHostResolutionCallback(),
-      DEFAULT_PRIORITY, SocketTag(), NetworkAnonymizationKey(),
-      SecureDnsPolicy::kAllow, &common_connect_job_params_, &delegate_);
+      /*force_tunnel=*/false, PrivacyMode::PRIVACY_MODE_DISABLED,
+      OnHostResolutionCallback(), DEFAULT_PRIORITY, SocketTag(),
+      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
+      &common_connect_job_params_, &delegate_);
   EXPECT_EQ(GetCreationCount(), 1u);
-
   ASSERT_THAT(http_proxy_job_factory_->params(), testing::SizeIs(1));
   const HttpProxySocketParams& params =
       *http_proxy_job_factory_->params().front();
@@ -397,20 +389,17 @@ TEST_F(ConnectJobFactoryTest, CreateHttpProxyConnectJobWithoutScheme) {
 
   ASSERT_TRUE(params.transport_params());
   const TransportSocketParams& transport_params = *params.transport_params();
-  EXPECT_THAT(transport_params.destination(),
-              testing::VariantWith<HostPortPair>(
-                  kProxy.GetProxyServer(/*server_index=*/0).host_port_pair()));
+  EXPECT_THAT(
+      transport_params.destination(),
+      testing::VariantWith<HostPortPair>(kProxy.First().host_port_pair()));
 }
 
 TEST_F(ConnectJobFactoryTest, CreateHttpProxyConnectJobForHttps) {
   const url::SchemeHostPort kEndpoint(url::kHttpsScheme, "test", 87);
   const ProxyChain kProxy(ProxyServer::SCHEME_HTTP,
                           HostPortPair("proxy.test", 88));
-  SSLConfig ssl_config;
-
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
-      kEndpoint, kProxy, TRAFFIC_ANNOTATION_FOR_TESTS,
-      /*ssl_config_for_origin=*/&ssl_config,
+      kEndpoint, kProxy, TRAFFIC_ANNOTATION_FOR_TESTS, /*allowed_bad_certs=*/{},
       ConnectJobFactory::AlpnMode::kHttpAll, /*force_tunnel=*/false,
       PrivacyMode::PRIVACY_MODE_DISABLED, OnHostResolutionCallback(),
       DEFAULT_PRIORITY, SocketTag(), NetworkAnonymizationKey(),
@@ -442,23 +431,22 @@ TEST_F(ConnectJobFactoryTest, CreateHttpProxyConnectJobForHttps) {
   ASSERT_TRUE(proxy_params.transport_params());
   const TransportSocketParams& transport_params =
       *proxy_params.transport_params();
-  EXPECT_THAT(transport_params.destination(),
-              testing::VariantWith<HostPortPair>(
-                  kProxy.GetProxyServer(/*server_index=*/0).host_port_pair()));
+  EXPECT_THAT(
+      transport_params.destination(),
+      testing::VariantWith<HostPortPair>(kProxy.First().host_port_pair()));
 }
 
 TEST_F(ConnectJobFactoryTest, CreateHttpProxyConnectJobForHttpsWithoutScheme) {
   const HostPortPair kEndpoint("test", 87);
   const ProxyChain kProxy(ProxyServer::SCHEME_HTTP,
                           HostPortPair("proxy.test", 88));
-  SSLConfig ssl_config;
 
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
       /*using_ssl=*/true, kEndpoint, kProxy, TRAFFIC_ANNOTATION_FOR_TESTS,
-      /*ssl_config_for_origin=*/&ssl_config, /*force_tunnel=*/false,
-      PrivacyMode::PRIVACY_MODE_DISABLED, OnHostResolutionCallback(),
-      DEFAULT_PRIORITY, SocketTag(), NetworkAnonymizationKey(),
-      SecureDnsPolicy::kAllow, &common_connect_job_params_, &delegate_);
+      /*force_tunnel=*/false, PrivacyMode::PRIVACY_MODE_DISABLED,
+      OnHostResolutionCallback(), DEFAULT_PRIORITY, SocketTag(),
+      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
+      &common_connect_job_params_, &delegate_);
   EXPECT_EQ(GetCreationCount(), 1u);
 
   ASSERT_THAT(ssl_job_factory_->params(), testing::SizeIs(1));
@@ -483,25 +471,23 @@ TEST_F(ConnectJobFactoryTest, CreateHttpProxyConnectJobForHttpsWithoutScheme) {
   ASSERT_TRUE(proxy_params.transport_params());
   const TransportSocketParams& transport_params =
       *proxy_params.transport_params();
-  EXPECT_THAT(transport_params.destination(),
-              testing::VariantWith<HostPortPair>(
-                  kProxy.GetProxyServer(/*server_index=*/0).host_port_pair()));
+  EXPECT_THAT(
+      transport_params.destination(),
+      testing::VariantWith<HostPortPair>(kProxy.First().host_port_pair()));
 }
 
 TEST_F(ConnectJobFactoryTest, CreateHttpsProxyConnectJob) {
   const url::SchemeHostPort kEndpoint(url::kHttpScheme, "test", 89);
   const ProxyChain kProxy(ProxyServer::SCHEME_HTTPS,
                           HostPortPair("proxy.test", 90));
-  SSLConfig ssl_config;
 
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
-      kEndpoint, kProxy, TRAFFIC_ANNOTATION_FOR_TESTS,
-      /*ssl_config_for_origin=*/nullptr, ConnectJobFactory::AlpnMode::kHttpAll,
-      /*force_tunnel=*/false, PrivacyMode::PRIVACY_MODE_DISABLED,
-      OnHostResolutionCallback(), DEFAULT_PRIORITY, SocketTag(),
-      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
-      /*disable_cert_network_fetches=*/false, &common_connect_job_params_,
-      &delegate_);
+      kEndpoint, kProxy, TRAFFIC_ANNOTATION_FOR_TESTS, /*allowed_bad_certs=*/{},
+      ConnectJobFactory::AlpnMode::kHttpAll, /*force_tunnel=*/false,
+      PrivacyMode::PRIVACY_MODE_DISABLED, OnHostResolutionCallback(),
+      DEFAULT_PRIORITY, SocketTag(), NetworkAnonymizationKey(),
+      SecureDnsPolicy::kAllow, /*disable_cert_network_fetches=*/false,
+      &common_connect_job_params_, &delegate_);
   EXPECT_EQ(GetCreationCount(), 1u);
 
   ASSERT_THAT(http_proxy_job_factory_->params(), testing::SizeIs(1));
@@ -512,8 +498,7 @@ TEST_F(ConnectJobFactoryTest, CreateHttpsProxyConnectJob) {
 
   ASSERT_TRUE(params.ssl_params());
   const SSLSocketParams& ssl_params = *params.ssl_params();
-  EXPECT_EQ(ssl_params.host_and_port(),
-            kProxy.GetProxyServer(/*server_index=*/0).host_port_pair());
+  EXPECT_EQ(ssl_params.host_and_port(), kProxy.First().host_port_pair());
   EXPECT_TRUE(
       ssl_params.ssl_config().disable_cert_verification_network_fetches);
   EXPECT_EQ(CertVerifier::VERIFY_DISABLE_NETWORK_FETCHES,
@@ -531,23 +516,22 @@ TEST_F(ConnectJobFactoryTest, CreateHttpsProxyConnectJob) {
   ASSERT_EQ(ssl_params.GetConnectionType(), SSLSocketParams::DIRECT);
   const TransportSocketParams& transport_params =
       *ssl_params.GetDirectConnectionParams();
-  EXPECT_THAT(transport_params.destination(),
-              testing::VariantWith<HostPortPair>(
-                  kProxy.GetProxyServer(/*server_index=*/0).host_port_pair()));
+  EXPECT_THAT(
+      transport_params.destination(),
+      testing::VariantWith<HostPortPair>(kProxy.First().host_port_pair()));
 }
 
 TEST_F(ConnectJobFactoryTest, CreateHttpsProxyConnectJobWithoutScheme) {
   const HostPortPair kEndpoint("test", 89);
   const ProxyChain kProxy(ProxyServer::SCHEME_HTTPS,
                           HostPortPair("proxy.test", 90));
-  SSLConfig ssl_config;
 
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
       /*using_ssl=*/false, kEndpoint, kProxy, TRAFFIC_ANNOTATION_FOR_TESTS,
-      /*ssl_config_for_origin=*/nullptr, /*force_tunnel=*/false,
-      PrivacyMode::PRIVACY_MODE_DISABLED, OnHostResolutionCallback(),
-      DEFAULT_PRIORITY, SocketTag(), NetworkAnonymizationKey(),
-      SecureDnsPolicy::kAllow, &common_connect_job_params_, &delegate_);
+      /*force_tunnel=*/false, PrivacyMode::PRIVACY_MODE_DISABLED,
+      OnHostResolutionCallback(), DEFAULT_PRIORITY, SocketTag(),
+      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
+      &common_connect_job_params_, &delegate_);
   EXPECT_EQ(GetCreationCount(), 1u);
 
   ASSERT_THAT(http_proxy_job_factory_->params(), testing::SizeIs(1));
@@ -558,8 +542,7 @@ TEST_F(ConnectJobFactoryTest, CreateHttpsProxyConnectJobWithoutScheme) {
 
   ASSERT_TRUE(params.ssl_params());
   const SSLSocketParams& ssl_params = *params.ssl_params();
-  EXPECT_EQ(ssl_params.host_and_port(),
-            kProxy.GetProxyServer(/*server_index=*/0).host_port_pair());
+  EXPECT_EQ(ssl_params.host_and_port(), kProxy.First().host_port_pair());
   EXPECT_TRUE(
       ssl_params.ssl_config().disable_cert_verification_network_fetches);
   EXPECT_EQ(CertVerifier::VERIFY_DISABLE_NETWORK_FETCHES,
@@ -578,9 +561,9 @@ TEST_F(ConnectJobFactoryTest, CreateHttpsProxyConnectJobWithoutScheme) {
   ASSERT_EQ(ssl_params.GetConnectionType(), SSLSocketParams::DIRECT);
   const TransportSocketParams& transport_params =
       *ssl_params.GetDirectConnectionParams();
-  EXPECT_THAT(transport_params.destination(),
-              testing::VariantWith<HostPortPair>(
-                  kProxy.GetProxyServer(/*server_index=*/0).host_port_pair()));
+  EXPECT_THAT(
+      transport_params.destination(),
+      testing::VariantWith<HostPortPair>(kProxy.First().host_port_pair()));
 }
 
 TEST_F(ConnectJobFactoryTest, CreateNestedHttpsProxyConnectJob) {
@@ -590,11 +573,10 @@ TEST_F(ConnectJobFactoryTest, CreateNestedHttpsProxyConnectJob) {
   const ProxyServer kProxyServer2{ProxyServer::SCHEME_HTTPS,
                                   HostPortPair("proxy2.test", 443)};
   const ProxyChain kNestedProxyChain{{kProxyServer1, kProxyServer2}};
-  SSLConfig ssl_config;
 
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
       kEndpoint, kNestedProxyChain, TRAFFIC_ANNOTATION_FOR_TESTS,
-      /*ssl_config_for_origin=*/nullptr, ConnectJobFactory::AlpnMode::kHttpAll,
+      /*allowed_bad_certs=*/{}, ConnectJobFactory::AlpnMode::kHttpAll,
       /*force_tunnel=*/false, PrivacyMode::PRIVACY_MODE_DISABLED,
       OnHostResolutionCallback(), DEFAULT_PRIORITY, SocketTag(),
       NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
@@ -668,15 +650,13 @@ TEST_F(ConnectJobFactoryTest, CreateNestedHttpsProxyConnectJobWithoutScheme) {
   const ProxyServer kProxyServer2{ProxyServer::SCHEME_HTTPS,
                                   HostPortPair("proxy2.test", 443)};
   const ProxyChain kNestedProxyChain{{kProxyServer1, kProxyServer2}};
-  SSLConfig ssl_config;
 
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
       /*using_ssl=*/false, kEndpoint, kNestedProxyChain,
-      TRAFFIC_ANNOTATION_FOR_TESTS, /*ssl_config_for_origin=*/nullptr,
-      /*force_tunnel=*/false, PrivacyMode::PRIVACY_MODE_DISABLED,
-      OnHostResolutionCallback(), DEFAULT_PRIORITY, SocketTag(),
-      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
-      &common_connect_job_params_, &delegate_);
+      TRAFFIC_ANNOTATION_FOR_TESTS, /*force_tunnel=*/false,
+      PrivacyMode::PRIVACY_MODE_DISABLED, OnHostResolutionCallback(),
+      DEFAULT_PRIORITY, SocketTag(), NetworkAnonymizationKey(),
+      SecureDnsPolicy::kAllow, &common_connect_job_params_, &delegate_);
   EXPECT_EQ(GetCreationCount(), 1u);
 
   ASSERT_THAT(http_proxy_job_factory_->params(), testing::SizeIs(1));
@@ -747,16 +727,15 @@ TEST_F(ConnectJobFactoryTest, CreateNestedHttpsProxyConnectJobForHttps) {
                                   HostPortPair("proxy2.test", 443)};
 
   const ProxyChain kNestedProxyChain{{kProxyServer1, kProxyServer2}};
-  SSLConfig ssl_config;
 
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
       kEndpoint, kNestedProxyChain, TRAFFIC_ANNOTATION_FOR_TESTS,
-      /*ssl_config_for_origin=*/&ssl_config,
-      ConnectJobFactory::AlpnMode::kHttpAll, /*force_tunnel=*/false,
-      PrivacyMode::PRIVACY_MODE_DISABLED, OnHostResolutionCallback(),
-      DEFAULT_PRIORITY, SocketTag(), NetworkAnonymizationKey(),
-      SecureDnsPolicy::kAllow, /*disable_cert_network_fetches=*/false,
-      &common_connect_job_params_, &delegate_);
+      /*allowed_bad_certs=*/{}, ConnectJobFactory::AlpnMode::kHttpAll,
+      /*force_tunnel=*/false, PrivacyMode::PRIVACY_MODE_DISABLED,
+      OnHostResolutionCallback(), DEFAULT_PRIORITY, SocketTag(),
+      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
+      /*disable_cert_network_fetches=*/false, &common_connect_job_params_,
+      &delegate_);
   EXPECT_EQ(GetCreationCount(), 1u);
 
   ASSERT_THAT(ssl_job_factory_->params(), testing::SizeIs(1));
@@ -844,15 +823,13 @@ TEST_F(ConnectJobFactoryTest,
                                   HostPortPair("proxy2.test", 443)};
 
   const ProxyChain kNestedProxyChain{{kProxyServer1, kProxyServer2}};
-  SSLConfig ssl_config;
 
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
       /*using_ssl=*/true, kEndpoint, kNestedProxyChain,
-      TRAFFIC_ANNOTATION_FOR_TESTS, /*ssl_config_for_origin=*/&ssl_config,
-      /*force_tunnel=*/false, PrivacyMode::PRIVACY_MODE_DISABLED,
-      OnHostResolutionCallback(), DEFAULT_PRIORITY, SocketTag(),
-      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
-      &common_connect_job_params_, &delegate_);
+      TRAFFIC_ANNOTATION_FOR_TESTS, /*force_tunnel=*/false,
+      PrivacyMode::PRIVACY_MODE_DISABLED, OnHostResolutionCallback(),
+      DEFAULT_PRIORITY, SocketTag(), NetworkAnonymizationKey(),
+      SecureDnsPolicy::kAllow, &common_connect_job_params_, &delegate_);
   EXPECT_EQ(GetCreationCount(), 1u);
 
   ASSERT_THAT(ssl_job_factory_->params(), testing::SizeIs(1));
@@ -934,13 +911,12 @@ TEST_F(ConnectJobFactoryTest, CreateSocksProxyConnectJob) {
                           HostPortPair("proxy.test", 92));
 
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
-      kEndpoint, kProxy, TRAFFIC_ANNOTATION_FOR_TESTS,
-      /*ssl_config_for_origin=*/nullptr, ConnectJobFactory::AlpnMode::kHttpAll,
-      /*force_tunnel=*/false, PrivacyMode::PRIVACY_MODE_DISABLED,
-      OnHostResolutionCallback(), DEFAULT_PRIORITY, SocketTag(),
-      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
-      /*disable_cert_network_fetches=*/false, &common_connect_job_params_,
-      &delegate_);
+      kEndpoint, kProxy, TRAFFIC_ANNOTATION_FOR_TESTS, /*allowed_bad_certs=*/{},
+      ConnectJobFactory::AlpnMode::kHttpAll, /*force_tunnel=*/false,
+      PrivacyMode::PRIVACY_MODE_DISABLED, OnHostResolutionCallback(),
+      DEFAULT_PRIORITY, SocketTag(), NetworkAnonymizationKey(),
+      SecureDnsPolicy::kAllow, /*disable_cert_network_fetches=*/false,
+      &common_connect_job_params_, &delegate_);
   EXPECT_EQ(GetCreationCount(), 1u);
 
   ASSERT_THAT(socks_job_factory_->params(), testing::SizeIs(1));
@@ -949,9 +925,9 @@ TEST_F(ConnectJobFactoryTest, CreateSocksProxyConnectJob) {
   EXPECT_TRUE(params.is_socks_v5());
 
   const TransportSocketParams& transport_params = *params.transport_params();
-  EXPECT_THAT(transport_params.destination(),
-              testing::VariantWith<HostPortPair>(
-                  kProxy.GetProxyServer(/*server_index=*/0).host_port_pair()));
+  EXPECT_THAT(
+      transport_params.destination(),
+      testing::VariantWith<HostPortPair>(kProxy.First().host_port_pair()));
 }
 
 TEST_F(ConnectJobFactoryTest, CreateSocksProxyConnectJobWithoutScheme) {
@@ -961,10 +937,10 @@ TEST_F(ConnectJobFactoryTest, CreateSocksProxyConnectJobWithoutScheme) {
 
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
       /*using_ssl=*/false, kEndpoint, kProxy, TRAFFIC_ANNOTATION_FOR_TESTS,
-      /*ssl_config_for_origin=*/nullptr, /*force_tunnel=*/false,
-      PrivacyMode::PRIVACY_MODE_DISABLED, OnHostResolutionCallback(),
-      DEFAULT_PRIORITY, SocketTag(), NetworkAnonymizationKey(),
-      SecureDnsPolicy::kAllow, &common_connect_job_params_, &delegate_);
+      /*force_tunnel=*/false, PrivacyMode::PRIVACY_MODE_DISABLED,
+      OnHostResolutionCallback(), DEFAULT_PRIORITY, SocketTag(),
+      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
+      &common_connect_job_params_, &delegate_);
   EXPECT_EQ(GetCreationCount(), 1u);
 
   ASSERT_THAT(socks_job_factory_->params(), testing::SizeIs(1));
@@ -973,9 +949,9 @@ TEST_F(ConnectJobFactoryTest, CreateSocksProxyConnectJobWithoutScheme) {
   EXPECT_TRUE(params.is_socks_v5());
 
   const TransportSocketParams& transport_params = *params.transport_params();
-  EXPECT_THAT(transport_params.destination(),
-              testing::VariantWith<HostPortPair>(
-                  kProxy.GetProxyServer(/*server_index=*/0).host_port_pair()));
+  EXPECT_THAT(
+      transport_params.destination(),
+      testing::VariantWith<HostPortPair>(kProxy.First().host_port_pair()));
 }
 
 TEST_F(ConnectJobFactoryTest, CreateWebsocketConnectJob) {
@@ -987,9 +963,8 @@ TEST_F(ConnectJobFactoryTest, CreateWebsocketConnectJob) {
       &websocket_endpoint_lock_manager;
 
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
-      kEndpoint, ProxyChain::Direct(),
-      /*proxy_annotation_tag=*/absl::nullopt,
-      /*ssl_config_for_origin=*/nullptr, ConnectJobFactory::AlpnMode::kHttpAll,
+      kEndpoint, ProxyChain::Direct(), /*proxy_annotation_tag=*/std::nullopt,
+      /*allowed_bad_certs=*/{}, ConnectJobFactory::AlpnMode::kHttpAll,
       /*force_tunnel=*/false, PrivacyMode::PRIVACY_MODE_DISABLED,
       OnHostResolutionCallback(), DEFAULT_PRIORITY, SocketTag(),
       NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
@@ -1014,8 +989,7 @@ TEST_F(ConnectJobFactoryTest, CreateWebsocketConnectJobWithoutScheme) {
 
   std::unique_ptr<ConnectJob> job = factory_->CreateConnectJob(
       /*using_ssl=*/false, kEndpoint, ProxyChain::Direct(),
-      /*proxy_annotation_tag=*/absl::nullopt,
-      /*ssl_config_for_origin=*/nullptr, /*force_tunnel=*/false,
+      /*proxy_annotation_tag=*/std::nullopt, /*force_tunnel=*/false,
       PrivacyMode::PRIVACY_MODE_DISABLED, OnHostResolutionCallback(),
       DEFAULT_PRIORITY, SocketTag(), NetworkAnonymizationKey(),
       SecureDnsPolicy::kAllow, &common_connect_job_params, &delegate_);

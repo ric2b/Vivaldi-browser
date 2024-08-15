@@ -31,6 +31,7 @@
 #include "chrome/browser/net/cookie_encryption_provider_impl.h"
 #endif  // BUILDFLAG(IS_WIN)
 
+class NetworkAnnotationMonitor;
 class PrefRegistrySimple;
 class PrefService;
 
@@ -166,6 +167,9 @@ class SystemNetworkContextManager {
   // use only.
   void FlushNetworkInterfaceForTesting();
 
+  // Call |FlushForTesting()| on NetworkAnnotationMonitor. For test use only.
+  void FlushNetworkAnnotationMonitorForTesting();
+
   static network::mojom::HttpAuthStaticParamsPtr
   GetHttpAuthStaticParamsForTesting();
   static network::mojom::HttpAuthDynamicParamsPtr
@@ -187,10 +191,6 @@ class SystemNetworkContextManager {
       StubResolverConfigReader* reader) {
     stub_resolver_config_reader_for_testing_ = reader;
   }
-
-#if BUILDFLAG(CHROME_ROOT_STORE_OPTIONAL)
-  static bool IsUsingChromeRootStore();
-#endif  // BUILDFLAG(CHROME_ROOT_STORE_OPTIONAL)
 
  private:
   FRIEND_TEST_ALL_PREFIXES(
@@ -283,6 +283,8 @@ class SystemNetworkContextManager {
   static StubResolverConfigReader* stub_resolver_config_reader_for_testing_;
 
   static std::optional<bool> certificate_transparency_enabled_for_testing_;
+
+  std::unique_ptr<NetworkAnnotationMonitor> network_annotation_monitor_;
 
 #if BUILDFLAG(IS_LINUX)
   GssapiLibraryLoadObserver gssapi_library_loader_observer_{this};

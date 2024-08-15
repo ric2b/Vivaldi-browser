@@ -16,9 +16,9 @@
 
 #include "base/compiler_specific.h"
 #include "base/memory/weak_ptr.h"
+#include "media/audio/apple/audio_auhal.h"
 #include "media/audio/apple/audio_manager_apple.h"
 #include "media/audio/audio_manager_base.h"
-#include "media/audio/mac/audio_auhal_mac.h"
 #include "media/audio/mac/audio_device_listener_mac.h"
 
 namespace base {
@@ -207,12 +207,11 @@ class MEDIA_EXPORT AudioManagerMac : public AudioManagerApple {
 
   // Returns a string with a unique device ID for the given |device_id|, or no
   // value if there is an error.
-  virtual absl::optional<std::string> GetDeviceUniqueID(
-      AudioObjectID device_id);
+  virtual std::optional<std::string> GetDeviceUniqueID(AudioObjectID device_id);
 
   // Returns the transport type of the given |device_id|, or no value if
   // |device_id| has no source or if there is an error.
-  virtual absl::optional<uint32_t> GetDeviceTransportType(
+  virtual std::optional<uint32_t> GetDeviceTransportType(
       AudioObjectID device_id);
   void ShutdownOnAudioThread() override;
 
@@ -253,9 +252,9 @@ class MEDIA_EXPORT AudioManagerMac : public AudioManagerApple {
   // We no longer close the streams, so we may be able to get rid of these
   // member variables. They are currently used by MaybeChangeBufferSize().
   // Investigate if we can remove these.
-  std::list<AudioInputStream*> basic_input_streams_;
-  std::list<AUAudioInputStream*> low_latency_input_streams_;
-  std::list<AUHALStream*> output_streams_;
+  std::unordered_set<AudioInputStream*> basic_input_streams_;
+  std::unordered_set<AUAudioInputStream*> low_latency_input_streams_;
+  std::unordered_set<AUHALStream*> output_streams_;
 
   // Used to swizzle SCStreamManager when performing loopback capture.
   std::unique_ptr<base::apple::ScopedObjCClassSwizzler>

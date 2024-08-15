@@ -7,16 +7,23 @@
 #import <UIKit/UIKit.h>
 
 #import "base/check_op.h"
-#import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_url_usage_coordinator_delegate.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_commands.h"
+#import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_coordinator_delegate.h"
+#import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_url_usage_mediator.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_url_usage_view_controller.h"
-#import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_url_usage_view_controller_presentation_delegate.h"
+#import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_view_controller_presentation_delegate.h"
 
 @interface PrivacyGuideURLUsageCoordinator () <
-    PrivacyGuideURLUsageViewControllerPresentationDelegate>
+    PrivacyGuideViewControllerPresentationDelegate,
+    PromoStyleViewControllerDelegate>
 @end
 
 @implementation PrivacyGuideURLUsageCoordinator {
   PrivacyGuideURLUsageViewController* _viewController;
+  PrivacyGuideURLUsageMediator* _mediator;
 }
 
 @synthesize baseNavigationController = _baseNavigationController;
@@ -37,7 +44,13 @@
 
 - (void)start {
   _viewController = [[PrivacyGuideURLUsageViewController alloc] init];
+  _viewController.delegate = self;
   _viewController.presentationDelegate = self;
+
+  _mediator = [[PrivacyGuideURLUsageMediator alloc]
+      initWithUserPrefService:self.browser->GetBrowserState()->GetPrefs()];
+  _mediator.consumer = _viewController;
+  _viewController.modelDelegate = _mediator;
 
   CHECK(self.baseNavigationController);
   [self.baseNavigationController pushViewController:_viewController
@@ -45,16 +58,25 @@
 }
 
 - (void)stop {
-  _viewController.presentationDelegate = nil;
   _viewController = nil;
+
+  [_mediator disconnect];
+  _mediator = nil;
 }
 
-#pragma mark - PrivacyGuideURLUsageViewControllerPresentationDelegate
+#pragma mark - PrivacyGuideViewControllerPresentationDelegate
 
-- (void)privacyGuideURLUsageViewControllerDidRemove:
-    (PrivacyGuideURLUsageViewController*)controller {
+- (void)privacyGuideViewControllerDidRemove:(UIViewController*)controller {
   CHECK_EQ(_viewController, controller);
-  [self.delegate privacyGuideURLUsageCoordinatorDidRemove:self];
+  [self.delegate privacyGuideCoordinatorDidRemove:self];
+}
+
+#pragma mark - PromoStyleViewControllerDelegate
+
+- (void)didTapPrimaryActionButton {
+  id<PrivacyGuideCommands> handler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), PrivacyGuideCommands);
+  [handler showNextStep];
 }
 
 @end

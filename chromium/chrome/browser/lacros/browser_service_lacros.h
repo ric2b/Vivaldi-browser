@@ -51,7 +51,8 @@ class BrowserServiceLacros : public crosapi::mojom::BrowserService,
       const std::u16string& tab_id,
       const std::u16string& group_id,
       NewWindowForDetachingTabCallback callback) override;
-  void NewTab(NewTabCallback callback) override;
+  void NewTab(std::optional<uint64_t> profile_id,
+              NewTabCallback callback) override;
   void Launch(int64_t target_display_id,
               std::optional<uint64_t> profile_id,
               LaunchCallback callback) override;
@@ -68,6 +69,8 @@ class BrowserServiceLacros : public crosapi::mojom::BrowserService,
   void UpdateKeepAlive(bool enabled) override;
   void OpenForFullRestore(bool skip_crash_restore) override;
   void OpenProfileManager() override;
+  void OpenCaptivePortalSignin(const GURL& url,
+                               OpenUrlCallback callback) override;
 
  private:
   struct PendingOpenUrl;
@@ -109,6 +112,9 @@ class BrowserServiceLacros : public crosapi::mojom::BrowserService,
                           crosapi::mojom::OpenUrlParamsPtr params,
                           OpenUrlCallback callback,
                           Profile* profile);
+  void OpenCaptivePortalSigninWithProfile(const GURL& url,
+                                          OpenUrlCallback callback,
+                                          Profile* profile);
   void RestoreTabWithProfile(RestoreTabCallback callback, Profile* profile);
   void OpenForFullRestoreWithProfile(bool skip_crash_restore, Profile* profile);
   void UpdateComponentPolicy(policy::ComponentPolicyMap policy) override;

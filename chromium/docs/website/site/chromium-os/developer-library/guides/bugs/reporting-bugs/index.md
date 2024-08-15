@@ -55,22 +55,26 @@ this process.
 
 ## Security bugs
 
-If you want to report a security bug, please follow [Reporting Security Bugs].
+If you want to report a security bug, please head over to [Bughunters].
 
 That covers how to securely and privately report issues to the right group.
-Please do *not* use the default [crbug.com/new] system as that creates public
-bugs which anyone can view.
+ChromeOS Security is no longer using the [public issue tracker] for ChromeOS
+security bugs. Moreover, please do *not* use the default [crbug.com/new] system.
+That will fail to reach the right people, and it also creates public bugs that
+anyone can view.
 
-Note that while the Chrome browser does not consider physically-local attacks to
-be inside its threat model, ChromeOS does include certain physically-local
-attacks in its threat model. The reason for this difference is that while the
-Chrome browser does not control the operating system it runs on, on ChromeOS we
-are responsible for the entire system. This means that ChromeOS does need to
-protect against certain physically-local attackers, such as at the lock screen.
-See the [ChromeOS Security Severity Guidelines] for details.
+The [Bughunters rules] cover all the details of which ChromeOS bugs are
+considered security vulnerabilities. Note that while the Chrome browser does not
+consider physically-local attacks to be inside its threat model, ChromeOS does
+include certain physically-local attacks in its threat model. The reason for
+this difference is that while the Chrome browser does not control the operating
+system it runs on, on ChromeOS we are responsible for the entire system. This
+means that ChromeOS does need to protect against certain physically-local
+attackers, such as at the lock screen. See the
+[ChromeOS Security Severity Guidelines] for more details.
 
 Also note that we do not handle account compromises with your Google account
-(e.g. someone stole your Gmail password).  Please see the
+(e.g. someone stole your Gmail password). Please see the
 [Google Account Help document](https://support.google.com/accounts/answer/7539929)
 and related articles instead.
 
@@ -191,7 +195,8 @@ If you think you've identified a bug in ChromeOS, please do the following:
 [new.crbug.com]: https://new.crbug.com/
 [crbug.com/new]: https://crbug.com/new
 [go/newcrosbug]: https://goto.google.com/newcrosbug
-[Reporting Security Bugs]: https://dev.chromium.org/Home/chromium-security/reporting-security-bugs
-[ChromeOS Security Severity Guidelines]: /chromium-os/developer-library/guides/bugs/security-severity-guidelines
-[instructions on filing bugs in ChromeOS ]: /chromium-os/developer-library/guides/bugs/platform-public-tracker
+[ChromeOS Security Severity Guidelines]: security_severity_guidelines.md
+[instructions on filing bugs in ChromeOS ]: platform_public_tracker.md
 [ChromeOS Issue Tracker]: https://issuetracker.google.com
+[Bughunters]: https://bughunters.google.com/report/vrp
+[Bughunters rules]: https://bughunters.google.com/about/rules/4919474699501568/chromeos-vulnerability-reward-program-rules

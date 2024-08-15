@@ -1,4 +1,26 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sk">
+<translation id="1116694919640316211">O prehliadači</translation>
+<translation id="145015347812617860"><ph name="COUNT" />položiek</translation>
+<translation id="1711184756728070210"><ph name="BEGIN_LINK" />➔<ph name="END_LINK" /> ……<ph name="END_LINK" /><ph name="BEGIN_LINK2" />Zásady ochrany osobných údajov➔<ph name="END_LINK2" /></translation>
+<translation id="2272338747456392228">Účet bol uzamknutý</translation>
+<translation id="2324160330092901720">Overovací kód bol odoslaný na adresu <ph name="EMAIL_ID" /></translation>
+<translation id="2386793615875593361">1 vybrané</translation>
+<translation id="2392369802118427583">Aktivovať</translation>
+<translation id="2677862276555105603">Reklama
+zablokovaná</translation>
+<translation id="4032606071208172574">(Predvolené)</translation>
+<translation id="5160018607418677056"><ph name="BEGIN_LINK" />Opätovné odoslanie kódu<ph name="END_LINK" /></translation>
+<translation id="5871497086027727873">1 položka presunutá</translation>
+<translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" />presunutých položiek</translation>
+<translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" />vybraných</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />Importovať<ph name="END_LINK" /></translation>
+<translation id="6757792528048321576">Blokovač reklám a sledovacích zariadení</translation>
+<translation id="750493650310597496">0 vybraných</translation>
+<translation id="8458397775385147834">1 položka vymazaná</translation>
+<translation id="8517852590337319813">Aktivovať svoj účet</translation>
+<translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" />odstránených položiek</translation>
+<translation id="9083392325882095631">1 položka</translation>
+<translation id="984650419570014454">Aktivačný kód musí mať 6 číslic</translation>
 </translationbundle>

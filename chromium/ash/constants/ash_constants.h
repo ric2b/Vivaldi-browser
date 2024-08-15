@@ -21,9 +21,6 @@ extern const base::FilePath::CharType kNssCertDbPath[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const base::FilePath::CharType kNssKeyDbPath[];
 
-// Background color used for the Chrome OS boot splash screen.
-constexpr SkColor kChromeOsBootColor = SkColorSetRGB(0xfe, 0xfe, 0xfe);
-
 // The border thickness of keyboard focus for launcher items and system tray.
 constexpr int kFocusBorderThickness = 2;
 
@@ -34,6 +31,11 @@ constexpr int kFocusBarThickness = 3;
 constexpr int kShelfDisplayOffset = 1;
 
 constexpr int kDefaultLargeCursorSize = 64;
+constexpr int kMinLargeCursorSize = 25;
+constexpr int kMaxLargeCursorSize = 64;
+constexpr int kMaxExtraLargeCursorSize = 128;
+
+constexpr int kDefaultCaretBlinkIntervalMs = 500;
 
 constexpr SkColor kDefaultCursorColor = SK_ColorBLACK;
 
@@ -185,6 +187,15 @@ constexpr bool kDefaultAccessibilitySelectToSpeakVoiceSwitching = false;
 
 // Whether Select-to-speak highlights each word as it is read by default.
 constexpr bool kDefaultAccessibilitySelectToSpeakWordHighlight = true;
+
+// How much to scale cursor speed in various directions.
+constexpr int kDefaultFaceGazeCursorSpeed = 20;
+
+// How much FaceGaze should smooth recent cursor movements.
+constexpr int kDefaultFaceGazeCursorSmoothing = 6;
+
+// Whether to use cursor acceleration.
+constexpr bool kDefaultFaceGazeCursorUseAcceleration = true;
 
 }  // namespace ash
 

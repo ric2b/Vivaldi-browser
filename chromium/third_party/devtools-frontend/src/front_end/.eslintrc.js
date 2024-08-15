@@ -23,13 +23,18 @@ module.exports = {
     'rulesdir/custom_element_definitions_location': ['error', {
       rootFrontendDirectory: __dirname,
     }],
-    'rulesdir/custom_element_component_definition': 'error',
   },
   'overrides': [
     {
       'files': ['*.ts'],
       'rules': {
-        '@typescript-eslint/explicit-function-return-type': 'error',
+        '@typescript-eslint/explicit-function-return-type': [
+            'error', {
+              'allowExpressions': true,
+              'allowConciseArrowFunctionExpressionsStartingWithVoid': true,
+              'allowIIFEs':true,
+            },
+        ],
         'rulesdir/no_importing_images_from_src': 'error',
         'rulesdir/enforce_bound_render_for_schedule_render': 'error',
         'rulesdir/enforce_custom_event_names': 'error',
@@ -144,6 +149,14 @@ module.exports = {
           }
         ]
       }
+    },
+    {
+      'files': ['*.test.ts', '**/testing/*.ts'],
+      'rules': {
+        'rulesdir/check_component_naming': 'off',
+        'rulesdir/custom_element_definitions_location': 'off',
+        '@typescript-eslint/explicit-function-return-type': 'off',
+      },
     },
     {
       'files': ['panels/**/components/*.ts', 'ui/components/**/*.ts', 'entrypoints/**/*.ts'],

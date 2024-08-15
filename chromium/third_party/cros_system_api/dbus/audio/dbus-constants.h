@@ -61,6 +61,7 @@ const char kSetForceRespectUiGains[] = "SetForceRespectUiGains";
 const char kGetNumStreamIgnoreUiGains[] = "GetNumStreamIgnoreUiGains";
 const char kSetHfpMicSrEnabled[] = "SetHfpMicSrEnabled";
 const char kIsHfpMicSrSupported[] = "IsHfpMicSrSupported";
+const char kGetNumberOfArcStreams[] = "GetNumberOfArcStreams";
 
 // Names of properties returned by GetNodes() and GetNodeInfos()
 const char kIsInputProperty[] = "IsInput";
@@ -122,6 +123,7 @@ const char kBluetoothBatteryChanged[] = "BluetoothBatteryChanged";
 const char kSurveyTrigger[] = "SurveyTrigger";
 const char kSpeakOnMuteDetected[] = "SpeakOnMuteDetected";
 const char kNumStreamIgnoreUiGainsChanged[] = "NumStreamIgnoreUiGainsChanged";
+const char kNumberOfArcStreamsChanged[] = "NumberOfArcStreamsChanged";
 }  // namespace cras
 
 #endif  // SYSTEM_API_DBUS_AUDIO_DBUS_CONSTANTS_H_

@@ -18,8 +18,10 @@
 
 #include "absl/algorithm/container.h"
 #include "absl/base/macros.h"
+#include "absl/base/nullability.h"
 #include "absl/strings/match.h"
 #include "absl/types/optional.h"
+#include "api/environment/environment.h"
 #include "api/field_trials_view.h"
 #include "api/scoped_refptr.h"
 #include "api/transport/field_trial_based_config.h"
@@ -133,6 +135,7 @@ class LibaomAv1Encoder final : public VideoEncoder {
   // TODO(webrtc:15225): Kill switch for disabling frame dropping. Remove it
   // after frame dropping is fully rolled out.
   bool disable_frame_dropping_;
+  int max_consec_frame_drop_;
 };
 
 int32_t VerifyCodecSettings(const VideoCodec& codec_settings) {
@@ -163,6 +166,14 @@ int32_t VerifyCodecSettings(const VideoCodec& codec_settings) {
   return WEBRTC_VIDEO_CODEC_OK;
 }
 
+int GetMaxConsecutiveFrameDrop(const FieldTrialsView& field_trials) {
+  webrtc::FieldTrialParameter<int> maxdrop("maxdrop", 0);
+  webrtc::ParseFieldTrial(
+      {&maxdrop},
+      field_trials.Lookup("WebRTC-LibaomAv1Encoder-MaxConsecFrameDrop"));
+  return maxdrop;
+}
+
 LibaomAv1Encoder::LibaomAv1Encoder(
     const absl::optional<LibaomAv1EncoderAuxConfig>& aux_config,
     const FieldTrialsView& trials)
@@ -174,7 +185,8 @@ LibaomAv1Encoder::LibaomAv1Encoder(
       timestamp_(0),
       disable_frame_dropping_(absl::StartsWith(
           trials.Lookup("WebRTC-LibaomAv1Encoder-DisableFrameDropping"),
-          "Enabled")) {}
+          "Enabled")),
+      max_consec_frame_drop_(GetMaxConsecutiveFrameDrop(trials)) {}
 
 LibaomAv1Encoder::~LibaomAv1Encoder() {
   Release();
@@ -297,6 +309,12 @@ int LibaomAv1Encoder::InitEncode(const VideoCodec* codec_settings,
     SET_ENCODER_PARAM_OR_RETURN_ERROR(AV1E_SET_ENABLE_PALETTE, 0);
   }
 
+  if (codec_settings->mode == VideoCodecMode::kRealtimeVideo &&
+      encoder_settings_.GetFrameDropEnabled() && max_consec_frame_drop_ > 0) {
+    SET_ENCODER_PARAM_OR_RETURN_ERROR(AV1E_SET_MAX_CONSEC_FRAME_DROP_CBR,
+                                      max_consec_frame_drop_);
+  }
+
   if (cfg_.g_threads == 8) {
     // Values passed to AV1E_SET_TILE_ROWS and AV1E_SET_TILE_COLUMNS are log2()
     // based.
@@ -358,7 +376,8 @@ bool LibaomAv1Encoder::SetEncoderControlParameters(int param_id,
   return error_code == AOM_CODEC_OK;
 }
 
-// Only positive speeds, range for real-time coding currently is: 6 - 8.
+// Only positive speeds, range for real-time coding currently is: 6 - 10.
+// Speed 11 is used for screen sharing.
 // Lower means slower/better quality, higher means fastest/lower quality.
 int LibaomAv1Encoder::GetCpuSpeed(int width, int height) {
   if (aux_config_) {
@@ -370,6 +389,9 @@ int LibaomAv1Encoder::GetCpuSpeed(int width, int height) {
 
     return 10;
   } else {
+    if (encoder_settings_.mode == VideoCodecMode::kScreensharing) {
+      return 11;
+    }
     // For smaller resolutions, use lower speed setting (get some coding gain at
     // the cost of increased encoding complexity).
     switch (encoder_settings_.GetVideoEncoderComplexity()) {
@@ -708,7 +730,7 @@ int32_t LibaomAv1Encoder::Encode(
         encoded_image._frameType = layer_frame->IsKeyframe()
                                        ? VideoFrameType::kVideoFrameKey
                                        : VideoFrameType::kVideoFrameDelta;
-        encoded_image.SetRtpTimestamp(frame.timestamp());
+        encoded_image.SetRtpTimestamp(frame.rtp_timestamp());
         encoded_image.SetCaptureTimeIdentifier(frame.capture_time_identifier());
         encoded_image.capture_time_ms_ = frame.render_time_ms();
         encoded_image.rotation_ = frame.rotation();
@@ -851,6 +873,17 @@ VideoEncoder::EncoderInfo LibaomAv1Encoder::GetEncoderInfo() const {
 }
 
 }  // namespace
+
+absl::Nonnull<std::unique_ptr<VideoEncoder>> CreateLibaomAv1Encoder(
+    const Environment& env,
+    LibaomAv1EncoderSettings settings) {
+  if (settings.max_pixel_count_to_cpu_speed.empty()) {
+    return std::make_unique<LibaomAv1Encoder>(absl::nullopt,
+                                              env.field_trials());
+  } else {
+    return std::make_unique<LibaomAv1Encoder>(settings, env.field_trials());
+  }
+}
 
 std::unique_ptr<VideoEncoder> CreateLibaomAv1Encoder() {
   return std::make_unique<LibaomAv1Encoder>(absl::nullopt,

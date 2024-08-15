@@ -28,7 +28,6 @@
 #include "gmock/gmock.h"
 #include "src/tint/lang/core/type/reference.h"
 #include "src/tint/lang/core/type/texture_dimension.h"
-#include "src/tint/lang/wgsl/ast/bitcast_expression.h"
 #include "src/tint/lang/wgsl/resolver/resolver.h"
 #include "src/tint/lang/wgsl/resolver/resolver_helper_test.h"
 
@@ -49,7 +48,7 @@ TEST_F(ResolverPtrRefValidationTest, AddressOfLiteral) {
 
     EXPECT_FALSE(r()->Resolve());
 
-    EXPECT_EQ(r()->error(), "12:34 error: cannot take the address of expression");
+    EXPECT_EQ(r()->error(), R"(12:34 error: cannot take the address of value of type 'i32')");
 }
 
 TEST_F(ResolverPtrRefValidationTest, AddressOfLet) {
@@ -62,7 +61,45 @@ TEST_F(ResolverPtrRefValidationTest, AddressOfLet) {
 
     EXPECT_FALSE(r()->Resolve());
 
-    EXPECT_EQ(r()->error(), "12:34 error: cannot take the address of expression");
+    EXPECT_EQ(r()->error(), R"(12:34 error: cannot take the address of 'let l')");
+}
+
+TEST_F(ResolverPtrRefValidationTest, AddressOfConst) {
+    // const c : i32 = 1;
+    // &c
+    auto* l = Const("c", ty.i32(), Expr(1_i));
+    auto* expr = AddressOf(Expr(Source{{12, 34}}, "c"));
+
+    WrapInFunction(l, expr);
+
+    EXPECT_FALSE(r()->Resolve());
+
+    EXPECT_EQ(r()->error(), R"(12:34 error: cannot take the address of 'const c')");
+}
+
+TEST_F(ResolverPtrRefValidationTest, AddressOfOverride) {
+    // override c : i32;
+    // &o
+    Override("o", ty.i32());
+    auto* expr = AddressOf(Expr(Source{{12, 34}}, "o"));
+
+    WrapInFunction(expr);
+
+    EXPECT_FALSE(r()->Resolve());
+
+    EXPECT_EQ(r()->error(), R"(12:34 error: cannot take the address of 'override o')");
+}
+
+TEST_F(ResolverPtrRefValidationTest, AddressOfParameter) {
+    // fn F(p : i32) { _ = &p }
+    // &F
+    Func("F", Vector{Param("p", ty.i32())}, ty.void_(),
+         Vector{
+             Assign(Phony(), AddressOf(Expr(Source{{12, 34}}, "p"))),
+         });
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(), R"(12:34 error: cannot take the address of parameter 'p')");
 }
 
 TEST_F(ResolverPtrRefValidationTest, AddressOfHandle) {
@@ -75,8 +112,111 @@ TEST_F(ResolverPtrRefValidationTest, AddressOfHandle) {
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(),
-              "12:34 error: cannot take the address of expression in handle "
-              "address space");
+              R"(12:34 error: cannot take the address of 'var t' in handle address space)");
+}
+
+TEST_F(ResolverPtrRefValidationTest, AddressOfFunction) {
+    // fn F() {}
+    // &F
+    Func("F", Empty, ty.void_(), Empty);
+    auto* expr = AddressOf(Expr(Source{{12, 34}}, "F"));
+    WrapInFunction(expr);
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(),
+              R"(12:34 error: cannot use function 'F' as value
+note: function 'F' declared here
+12:34 note: are you missing '()'?)");
+}
+
+TEST_F(ResolverPtrRefValidationTest, AddressOfBuiltinFunction) {
+    // &max
+    auto* expr = AddressOf(Expr(Source{{12, 34}}, "max"));
+    WrapInFunction(expr);
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(),
+              R"(12:34 error: cannot use builtin function 'max' as value
+12:34 note: are you missing '()'?)");
+}
+
+TEST_F(ResolverPtrRefValidationTest, AddressOfType) {
+    // &i32
+    auto* expr = AddressOf(Expr(Source{{12, 34}}, "i32"));
+    WrapInFunction(expr);
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(),
+              R"(12:34 error: cannot use type 'i32' as value
+12:34 note: are you missing '()'?)");
+}
+
+TEST_F(ResolverPtrRefValidationTest, AddressOfTypeAlias) {
+    // alias T = i32
+    // &T
+    Alias("T", ty.i32());
+    auto* expr = AddressOf(Expr(Source{{12, 34}}, "T"));
+    WrapInFunction(expr);
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(),
+              R"(12:34 error: cannot use type 'i32' as value
+12:34 note: are you missing '()'?)");
+}
+
+TEST_F(ResolverPtrRefValidationTest, AddressOfAccess) {
+    // &read_write
+    auto* expr = AddressOf(Expr(Source{{12, 34}}, "read_write"));
+    WrapInFunction(expr);
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(), R"(12:34 error: cannot use access 'read_write' as value)");
+}
+
+TEST_F(ResolverPtrRefValidationTest, AddressOfAddressSpace) {
+    // &handle
+    auto* expr = AddressOf(Expr(Source{{12, 34}}, "uniform"));
+    WrapInFunction(expr);
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(), R"(12:34 error: cannot use address space 'uniform' as value)");
+}
+
+TEST_F(ResolverPtrRefValidationTest, AddressOfBuiltinValue) {
+    // &position
+    auto* expr = AddressOf(Expr(Source{{12, 34}}, "position"));
+    WrapInFunction(expr);
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(), R"(12:34 error: cannot use builtin value 'position' as value)");
+}
+
+TEST_F(ResolverPtrRefValidationTest, AddressOfInterpolationSampling) {
+    // &centroid
+    auto* expr = AddressOf(Expr(Source{{12, 34}}, "centroid"));
+    WrapInFunction(expr);
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(),
+              R"(12:34 error: cannot use interpolation sampling 'centroid' as value)");
+}
+
+TEST_F(ResolverPtrRefValidationTest, AddressOfInterpolationType) {
+    // &perspective
+    auto* expr = AddressOf(Expr(Source{{12, 34}}, "perspective"));
+    WrapInFunction(expr);
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(), R"(12:34 error: cannot use interpolation type 'perspective' as value)");
+}
+
+TEST_F(ResolverPtrRefValidationTest, AddressOfTexelFormat) {
+    // &rgba8snorm
+    auto* expr = AddressOf(Expr(Source{{12, 34}}, "rgba8snorm"));
+    WrapInFunction(expr);
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(r()->error(), R"(12:34 error: cannot use texel format 'rgba8snorm' as value)");
 }
 
 TEST_F(ResolverPtrRefValidationTest, AddressOfVectorComponent_MemberAccessor) {
@@ -89,7 +229,7 @@ TEST_F(ResolverPtrRefValidationTest, AddressOfVectorComponent_MemberAccessor) {
 
     EXPECT_FALSE(r()->Resolve());
 
-    EXPECT_EQ(r()->error(), "12:34 error: cannot take the address of a vector component");
+    EXPECT_EQ(r()->error(), R"(12:34 error: cannot take the address of a vector component)");
 }
 
 TEST_F(ResolverPtrRefValidationTest, AddressOfVectorComponent_IndexAccessor) {
@@ -102,7 +242,7 @@ TEST_F(ResolverPtrRefValidationTest, AddressOfVectorComponent_IndexAccessor) {
 
     EXPECT_FALSE(r()->Resolve());
 
-    EXPECT_EQ(r()->error(), "12:34 error: cannot take the address of a vector component");
+    EXPECT_EQ(r()->error(), R"(12:34 error: cannot take the address of a vector component)");
 }
 
 TEST_F(ResolverPtrRefValidationTest, IndirectOfAddressOfHandle) {
@@ -115,8 +255,7 @@ TEST_F(ResolverPtrRefValidationTest, IndirectOfAddressOfHandle) {
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(),
-              "12:34 error: cannot take the address of expression in handle "
-              "address space");
+              R"(12:34 error: cannot take the address of 'var t' in handle address space)");
 }
 
 TEST_F(ResolverPtrRefValidationTest, DerefOfLiteral) {
@@ -128,7 +267,7 @@ TEST_F(ResolverPtrRefValidationTest, DerefOfLiteral) {
 
     EXPECT_FALSE(r()->Resolve());
 
-    EXPECT_EQ(r()->error(), "12:34 error: cannot dereference expression of type 'i32'");
+    EXPECT_EQ(r()->error(), R"(12:34 error: cannot dereference expression of type 'i32')");
 }
 
 TEST_F(ResolverPtrRefValidationTest, DerefOfVar) {
@@ -141,7 +280,7 @@ TEST_F(ResolverPtrRefValidationTest, DerefOfVar) {
 
     EXPECT_FALSE(r()->Resolve());
 
-    EXPECT_EQ(r()->error(), "12:34 error: cannot dereference expression of type 'i32'");
+    EXPECT_EQ(r()->error(), R"(12:34 error: cannot dereference expression of type 'i32')");
 }
 
 TEST_F(ResolverPtrRefValidationTest, InferredPtrAccessMismatch) {
@@ -167,7 +306,7 @@ TEST_F(ResolverPtrRefValidationTest, InferredPtrAccessMismatch) {
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(),
-              "12:34 error: cannot initialize let of type "
+              "12:34 error: cannot initialize 'let' of type "
               "'ptr<storage, i32, read>' with value of type "
               "'ptr<storage, i32, read_write>'");
 }

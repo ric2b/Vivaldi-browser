@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
@@ -20,6 +21,7 @@
 #include "content/public/browser/fullscreen_types.h"
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/media_stream_request.h"
+#include "content/public/browser/preview_cancel_reason.h"
 #include "content/public/browser/serial_chooser.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/window_container_type.mojom-forward.h"
@@ -43,8 +45,6 @@ class GURL;
 
 namespace base {
 class FilePath;
-template <typename T>
-class WeakPtr;
 }
 
 namespace blink {
@@ -55,7 +55,9 @@ class WindowFeatures;
 }  // namespace blink
 
 namespace content {
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_APPLE)
 class ColorChooser;
+#endif
 class EyeDropperListener;
 class FileSelectListener;
 class JavaScriptDialogManager;
@@ -121,6 +123,11 @@ struct CONTENT_EXPORT DownloadInformation {
   // If the download was started by a page or user. False for user. Used to
   // decide if the download should start automatically or not.
   bool content_initiated = false;
+
+  bool blocked_mixed =
+      false;  // NOTE(andre@vivaldi.com) : The download is marked mixed, http
+              // from a https site and need user interaction. Download needs to
+              // be validated.
 
   bool open_when_done = false;
   bool ask_for_target = false;
@@ -565,15 +572,15 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual void ResizeDueToAutoResize(WebContents* web_contents,
                                      const gfx::Size& new_size) {}
 
-  // Requests to lock the mouse. Once the request is approved or rejected,
-  // GotResponseToLockMouseRequest() will be called on the requesting tab
-  // contents.
-  virtual void RequestToLockMouse(WebContents* web_contents,
+  // Requests to lock the mouse pointer. Once the request is approved or
+  // rejected, GotResponseToPointerLockRequest() will be called on the
+  // requesting tab contents.
+  virtual void RequestPointerLock(WebContents* web_contents,
                                   bool user_gesture,
                                   bool last_unlocked_by_target);
 
-  // Notification that the page has lost the mouse lock.
-  virtual void LostMouseLock() {}
+  // Notification that the page has lost the pointer lock.
+  virtual void LostPointerLock() {}
 
   // Requests keyboard lock. Once the request is approved or rejected,
   // GotResponseToKeyboardLockRequest() will be called on |web_contents|.
@@ -775,9 +782,6 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual device::mojom::GeolocationContext*
   GetInstalledWebappGeolocationContext();
 
-  // Returns a weak ptr to the web contents delegate.
-  virtual base::WeakPtr<WebContentsDelegate> GetDelegateWeakPtr();
-
   // Whether the WebContents is privileged.
   // It's used to prevent drag and drop between privileged and non-privileged
   // WebContents.
@@ -794,15 +798,10 @@ class CONTENT_EXPORT WebContentsDelegate {
   // intercept.
   virtual void DidChangeCloseSignalInterceptStatus() {}
 
-  // Whether the WebContents is running in preview mode.
-  virtual bool IsInPreviewMode() const;
+  // Reports that cancellation occurred in preview navigation.
+  virtual void CancelPreview(PreviewCancelReason reason) {}
 
-  // Notify the page uses a forbidden powerful API and cannot be shown in
-  // preview mode.
-  virtual void CancelPreviewByMojoBinderPolicy(
-      const std::string& interface_name) {}
-
-  // Notify the previewed page is activated.
+  // Notifies the previewed page is activated.
   virtual void DidActivatePreviewedPage() {}
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -833,7 +832,7 @@ class CONTENT_EXPORT WebContentsDelegate {
   void Detach(WebContents* source);
 
   // The WebContents that this is currently a delegate for.
-  std::set<WebContents*> attached_contents_;
+  std::set<raw_ptr<WebContents, SetExperimental>> attached_contents_;
 };
 
 }  // namespace content

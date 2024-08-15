@@ -66,6 +66,7 @@
 #include "components/download/public/common/download_item.h"
 #include "components/download/public/common/download_stats.h"
 #include "components/offline_pages/buildflags/buildflags.h"
+#include "components/pdf/common/constants.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_member.h"
@@ -112,6 +113,7 @@
 #include "chrome/browser/ui/android/tab_model/tab_model.h"
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
 #include "components/infobars/content/content_infobar_manager.h"
+#include "content/public/common/content_features.h"
 #include "net/http/http_content_disposition.h"
 #include "third_party/blink/public/common/mime_util/mime_util.h"
 #include "ui/android/window_android.h"
@@ -415,9 +417,9 @@ void MaybeReportDangerousDownloadBlocked(
     }
     router->OnDangerousDownloadEvent(
         download->GetURL(), download->GetTabUrl(), download_path,
-        base::HexEncode(raw_digest_sha256.data(), raw_digest_sha256.size()),
-        danger_type, download->GetMimeType(), /*scan_id*/ "",
-        download->GetTotalBytes(), safe_browsing::EventResult::BLOCKED);
+        base::HexEncode(raw_digest_sha256), danger_type,
+        download->GetMimeType(), /*scan_id*/ "", download->GetTotalBytes(),
+        safe_browsing::EventResult::BLOCKED);
   }
 #endif
 }
@@ -444,6 +446,8 @@ download::DownloadDangerType SavePackageDangerType(
       return download::DOWNLOAD_DANGER_TYPE_BLOCKED_TOO_LARGE;
     case safe_browsing::DownloadCheckResult::SENSITIVE_CONTENT_BLOCK:
       return download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK;
+    case safe_browsing::DownloadCheckResult::BLOCKED_SCAN_FAILED:
+      return download::DOWNLOAD_DANGER_TYPE_BLOCKED_SCAN_FAILED;
 
     default:
       NOTREACHED();
@@ -524,11 +528,10 @@ void ChromeDownloadManagerDelegate::ShowDownloadDialog(
     DownloadDialogBridge::DialogCallback callback) {
   DCHECK(download_dialog_bridge_);
   auto connection_type = net::NetworkChangeNotifier::GetConnectionType();
-  bool is_incognito = profile_->IsOffTheRecord();
 
   download_dialog_bridge_->ShowDialog(
       native_window, total_bytes, connection_type, dialog_type, suggested_path,
-      is_incognito, std::move(callback));
+      profile_, std::move(callback));
 }
 
 void ChromeDownloadManagerDelegate::SetDownloadDialogBridgeForTesting(
@@ -604,7 +607,8 @@ bool ChromeDownloadManagerDelegate::DetermineDownloadTarget(
     DownloadItem* download,
     download::DownloadTargetCallback* callback) {
   if (download->GetTargetFilePath().empty() &&
-      download->GetMimeType() == kPDFMimeType && !download->HasUserGesture()) {
+      download->GetMimeType() == pdf::kPDFMimeType &&
+      !download->HasUserGesture()) {
     ReportPDFLoadStatus(PDFLoadStatus::kTriggeredNoGestureDriveByDownload);
   }
 
@@ -617,6 +621,18 @@ bool ChromeDownloadManagerDelegate::DetermineDownloadTarget(
   DownloadPathReservationTracker::FilenameConflictAction action =
       kDefaultPlatformConflictAction;
 #if BUILDFLAG(IS_ANDROID)
+  if (download->IsTransient() && download_path.empty() &&
+      download->GetMimeType() == pdf::kPDFMimeType &&
+      !download->IsMustDownload()) {
+    base::FilePath generated_filename = net::GenerateFileName(
+        download->GetURL(), download->GetContentDisposition(),
+        profile_->GetPrefs()->GetString(prefs::kDefaultCharset),
+        download->GetSuggestedFilename(), download->GetMimeType(),
+        l10n_util::GetStringUTF8(IDS_DEFAULT_DOWNLOAD_FILENAME));
+    base::FilePath cache_dir;
+    base::android::GetCacheDirectory(&cache_dir);
+    download_path = cache_dir.Append(generated_filename);
+  }
   if (!download_path.empty())
     action = DownloadPathReservationTracker::UNIQUIFY;
 #endif
@@ -692,7 +708,9 @@ bool ChromeDownloadManagerDelegate::IsDangerTypeBlocked(
   return danger_type == download::DOWNLOAD_DANGER_TYPE_BLOCKED_TOO_LARGE ||
          danger_type ==
              download::DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED ||
-         danger_type == download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK;
+         danger_type ==
+             download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK ||
+         danger_type == download::DOWNLOAD_DANGER_TYPE_BLOCKED_SCAN_FAILED;
 }
 
 bool ChromeDownloadManagerDelegate::IsDownloadReadyForCompletion(
@@ -871,6 +889,14 @@ bool ChromeDownloadManagerDelegate::InterceptDownloadIfApplicable(
           "Download.Blocked.ContentType.Automotive",
           download::DownloadContentFromMimeType(mime_type, false),
           download::DownloadContent::MAX);
+      return true;
+    }
+  }
+
+  if (base::FeatureList::IsEnabled(features::kAndroidOpenPdfInline) &&
+      mime_type == pdf::kPDFMimeType) {
+    // If this is already a file, there is no need to download.
+    if (url.SchemeIsFile() || url.SchemeIs("content")) {
       return true;
     }
   }
@@ -1499,6 +1525,18 @@ void ChromeDownloadManagerDelegate::CheckClientDownloadDone(
         danger_type =
             download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_LOCAL_PASSWORD_SCANNING;
         break;
+      case safe_browsing::DownloadCheckResult::BLOCKED_SCAN_FAILED:
+        danger_type = download::DOWNLOAD_DANGER_TYPE_BLOCKED_SCAN_FAILED;
+        break;
+      case safe_browsing::DownloadCheckResult::IMMEDIATE_DEEP_SCAN:
+        is_pending_scanning = true;
+        danger_type = download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING;
+        safe_browsing::DownloadProtectionService::UploadForConsumerDeepScanning(
+            item,
+            DownloadItemWarningData::DeepScanTrigger::
+                TRIGGER_IMMEDIATE_DEEP_SCAN,
+            /*password=*/std::nullopt);
+        break;
     }
     DCHECK_NE(danger_type,
               download::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT);
@@ -1618,6 +1656,7 @@ void ChromeDownloadManagerDelegate::CheckSavePackageScanningDone(
     case safe_browsing::DownloadCheckResult::BLOCKED_PASSWORD_PROTECTED:
     case safe_browsing::DownloadCheckResult::BLOCKED_TOO_LARGE:
     case safe_browsing::DownloadCheckResult::SENSITIVE_CONTENT_BLOCK:
+    case safe_browsing::DownloadCheckResult::BLOCKED_SCAN_FAILED:
       enterprise_connectors::RunSavePackageScanningCallback(item,
                                                             /*allowed*/ false);
       break;

@@ -82,6 +82,7 @@
 __version__ = '0.7'
 
 import copy
+import hashlib
 import json
 import logging
 import optparse
@@ -91,13 +92,16 @@ import posixpath
 import pprint
 import re
 import sys
+import shutil
+import tarfile
+import tempfile
 import time
 import urllib.parse
 
 from collections.abc import Collection, Mapping, Sequence
 
 import detect_host_arch
-import fix_encoding
+import download_from_google_storage
 import git_common
 import gclient_eval
 import gclient_paths
@@ -749,6 +753,19 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
                                        should_process=should_process,
                                        relative=use_relative_paths,
                                        condition=condition))
+            elif dep_type == 'gcs':
+                deps_to_add.append(
+                    GcsDependency(parent=self,
+                                  name=name,
+                                  bucket=dep_value['bucket'],
+                                  object_name=dep_value['object_name'],
+                                  sha256sum=dep_value['sha256sum'],
+                                  output_file=dep_value.get('output_file'),
+                                  size_bytes=dep_value['size_bytes'],
+                                  custom_vars=self.custom_vars,
+                                  should_process=should_process,
+                                  relative=use_relative_paths,
+                                  condition=condition))
             else:
                 url = dep_value.get('url')
                 deps_to_add.append(
@@ -1540,6 +1557,7 @@ _PLATFORM_MAPPING = {
     'linux': 'linux',
     'win32': 'win',
     'aix6': 'aix',
+    'zos': 'zos',
 }
 
 
@@ -1628,6 +1646,7 @@ class GClient(GitDependency):
         "ios": "ios",
         "fuchsia": "fuchsia",
         "chromeos": "chromeos",
+        "zos": "zos",
     }
 
     DEFAULT_CLIENT_FILE_TEXT = ("""\
@@ -2485,6 +2504,172 @@ it or fix the checkout.
         return self._enforced_cpu
 
 
+class GcsDependency(Dependency):
+    """A Dependency object that represents a single GCS bucket and object"""
+
+    def __init__(self, parent, name, bucket, object_name, sha256sum,
+                 output_file, size_bytes, custom_vars, should_process, relative,
+                 condition):
+        self.bucket = bucket
+        self.object_name = object_name
+        self.sha256sum = sha256sum
+        self.output_file = output_file
+        self.size_bytes = size_bytes
+        url = 'gs://{bucket}/{object_name}'.format(
+            bucket=self.bucket,
+            object_name=self.object_name,
+        )
+        super(GcsDependency, self).__init__(parent=parent,
+                                            name=name,
+                                            url=url,
+                                            managed=None,
+                                            custom_deps=None,
+                                            custom_vars=custom_vars,
+                                            custom_hooks=None,
+                                            deps_file=None,
+                                            should_process=should_process,
+                                            should_recurse=False,
+                                            relative=relative,
+                                            condition=condition)
+
+    #override
+    def run(self, revision_overrides, command, args, work_queue, options,
+            patch_refs, target_branches, skip_sync_revisions):
+        """Downloads GCS package."""
+        logging.info('GcsDependency(%s).run()' % self.name)
+        if not self.should_process:
+            return
+        self.DownloadGoogleStorage()
+        super(GcsDependency,
+              self).run(revision_overrides, command, args, work_queue, options,
+                        patch_refs, target_branches, skip_sync_revisions)
+
+    def WriteFilenameHash(self, sha1, hash_file):
+        with open(hash_file, 'w') as f:
+            f.write(sha1)
+            f.write('\n')
+
+    def IsDownloadNeeded(self, output_dir, output_file):
+        """Check if download and extract is needed."""
+        download_needed = False
+        if not os.path.exists(output_file):
+            download_needed = True
+
+        hash_file = os.path.join(output_dir, 'hash')
+        existing_hash = None
+        if os.path.exists(hash_file):
+            try:
+                with open(hash_file, 'r') as f:
+                    existing_hash = f.read().rstrip()
+            except IOError:
+                download_needed = True
+        else:
+            download_needed = True
+
+        if existing_hash != self.sha256sum:
+            download_needed = True
+        return download_needed
+
+    def GetSha256Sum(self, filename):
+        sha = hashlib.sha256()
+        with open(filename, 'rb') as f:
+            while True:
+                # Read in 1mb chunks, so it doesn't all have to be loaded into
+                # memory.
+                chunk = f.read(1024 * 1024)
+                if not chunk:
+                    break
+                sha.update(chunk)
+        return sha.hexdigest()
+
+    def DownloadGoogleStorage(self):
+        """Calls GCS."""
+        gcs_file_name = self.object_name.split('/')[-1]
+        root_dir = self.root.root_dir
+
+        # Directory of the extracted tarfile contents
+        output_dir = os.path.join(root_dir, self.name)
+        output_file = os.path.join(output_dir, self.output_file
+                                   or gcs_file_name)
+
+        if not self.IsDownloadNeeded(output_dir, output_file):
+            return
+
+        # Remove hashfile
+        hash_file = os.path.join(output_dir, 'hash')
+        if os.path.exists(hash_file):
+            os.remove(hash_file)
+
+        # Remove tarfile
+        if os.path.exists(output_file):
+            os.remove(output_file)
+
+        # Remove extracted contents
+        if os.path.exists(output_dir):
+            shutil.rmtree(output_dir)
+        os.makedirs(output_dir)
+
+        if os.getenv('GCLIENT_TEST') == '1':
+            if 'no-extract' in output_file:
+                with open(output_file, 'w+') as f:
+                    f.write('non-extractable file')
+            else:
+                # Create fake tar file and extracted tar contents
+                tmpdir = tempfile.mkdtemp()
+                copy_dir = os.path.join(tmpdir, self.name, 'extracted_dir')
+                if os.path.exists(copy_dir):
+                    shutil.rmtree(copy_dir)
+                os.makedirs(copy_dir)
+                with open(os.path.join(copy_dir, 'extracted_file'), 'w+') as f:
+                    f.write('extracted text')
+                with tarfile.open(output_file, "w:gz") as tar:
+                    tar.add(copy_dir, arcname=os.path.basename(copy_dir))
+        else:
+            gcs_url = 'gs://%s/%s' % (self.bucket, self.object_name)
+            gsutil = download_from_google_storage.Gsutil(
+                download_from_google_storage.GSUTIL_DEFAULT_PATH)
+            gsutil.check_call('cp', gcs_url, output_file)
+
+        calculated_sha256sum = ''
+        calculated_size_bytes = None
+        if os.getenv('GCLIENT_TEST') == '1':
+            calculated_sha256sum = 'abcd123'
+            calculated_size_bytes = 10000
+        else:
+            calculated_sha256sum = self.GetSha256Sum(output_file)
+            calculated_size_bytes = os.path.getsize(output_file)
+
+        if calculated_sha256sum != self.sha256sum:
+            raise Exception('sha256sum does not match calculated hash. '
+                            '{original} vs {calculated}'.format(
+                                original=self.sha256sum,
+                                calculated=calculated_sha256sum,
+                            ))
+
+        if calculated_size_bytes != self.size_bytes:
+            raise Exception('size_bytes does not match calculated size bytes. '
+                            '{original} vs {calculated}'.format(
+                                original=self.size_bytes,
+                                calculated=calculated_size_bytes,
+                            ))
+
+        if tarfile.is_tarfile(output_file):
+            with tarfile.open(output_file, 'r:*') as tar:
+                tar.extractall(path=output_dir)
+        self.WriteFilenameHash(calculated_sha256sum, hash_file)
+
+    #override
+    def GetScmName(self):
+        """Always 'gcs'."""
+        return 'gcs'
+
+    #override
+    def CreateSCM(self, out_cb=None):
+        """Create a Wrapper instance suitable for handling this GCS dependency."""
+        return gclient_scm.GcsWrapper(self.url, self.root.root_dir, self.name,
+                                      self.outbuf, out_cb)
+
+
 class CipdDependency(Dependency):
     """A Dependency object that represents a single CIPD package."""
     def __init__(self, parent, name, dep_value, cipd_root, custom_vars,
@@ -2938,7 +3123,7 @@ def CMDgitmodules(parser, args):
     if cache_info:
         subprocess2.call(['git', 'update-index', '--add'] + cache_info)
     subprocess2.call(['git', 'add', '.gitmodules'])
-    print('.gitmodules and gitlinks updated. Please check `git diff --staged`'
+    print('.gitmodules and gitlinks updated. Please check `git diff --staged` '
           'and commit those staged changes (`git commit` without -a)')
 
 
@@ -4106,11 +4291,6 @@ def path_contains_tilde():
 
 
 def can_run_gclient_and_helpers():
-    if sys.version_info[0] < 3:
-        print('\nYour python version %s is unsupported, please upgrade.\n' %
-              sys.version.split(' ', 1)[0],
-              file=sys.stderr)
-        return False
     if not sys.executable:
         print('\nPython cannot find the location of it\'s own executable.\n',
               file=sys.stderr)
@@ -4130,7 +4310,6 @@ def main(argv):
     execute."""
     if not can_run_gclient_and_helpers():
         return 2
-    fix_encoding.fix_encoding()
     disable_buffering()
     setup_color.init()
     dispatcher = subcommand.CommandDispatcher(__name__)

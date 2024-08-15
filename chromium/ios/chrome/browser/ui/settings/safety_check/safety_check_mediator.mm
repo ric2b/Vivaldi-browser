@@ -57,7 +57,7 @@
 #import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/web/common/url_scheme_util.h"
-#import "net/base/mac/url_conversions.h"
+#import "net/base/apple/url_conversions.h"
 #import "services/network/public/cpp/shared_url_loader_factory.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/base/l10n/time_format.h"
@@ -723,7 +723,8 @@ void ResetSettingsCheckItem(SettingsCheckItem* item) {
 
 // Computes whether user is capable to run password check in Google Account.
 - (BOOL)canUseAccountPasswordCheckup {
-  return password_manager::sync_util::GetAccountForSaving(self.syncService) &&
+  return password_manager::sync_util::GetAccountForSaving(self.userPrefService,
+                                                          self.syncService) &&
          !self.syncService->GetUserSettings()->IsEncryptEverythingEnabled();
 }
 
@@ -874,6 +875,15 @@ void ResetSettingsCheckItem(SettingsCheckItem* item) {
           // push a completed state to the UI if the check was cancelled.
           if (weakSelf.checksRemaining)
             [weakSelf checkAndReconfigureSafeBrowsingState];
+
+          NSString* announcement = weakSelf.updateCheckItem.detailText;
+          announcement = [announcement
+              stringByAppendingString:weakSelf.passwordCheckItem.detailText];
+          announcement = [announcement
+              stringByAppendingString:weakSelf.safeBrowsingCheckItem
+                                          .detailText];
+          UIAccessibilityPostNotification(
+              UIAccessibilityScreenChangedNotification, announcement);
         });
   }
 }

@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_USER_EDUCATION_COMMON_FEATURE_PROMO_STORAGE_SERVICE_H_
 #define COMPONENTS_USER_EDUCATION_COMMON_FEATURE_PROMO_STORAGE_SERVICE_H_
 
+#include <optional>
 #include <set>
 
 #include "base/feature_list.h"
@@ -12,7 +13,6 @@
 #include "base/time/clock.h"
 #include "base/time/time.h"
 #include "components/user_education/common/feature_promo_data.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 // Declare in the global namespace for test purposes.
 class FeaturePromoStorageInteractiveTest;
@@ -38,7 +38,7 @@ class FeaturePromoStorageService {
   FeaturePromoStorageService& operator=(const FeaturePromoStorageService&) =
       delete;
 
-  virtual absl::optional<FeaturePromoData> ReadPromoData(
+  virtual std::optional<FeaturePromoData> ReadPromoData(
       const base::Feature& iph_feature) const = 0;
 
   virtual void SavePromoData(const base::Feature& iph_feature,
@@ -59,6 +59,15 @@ class FeaturePromoStorageService {
 
   // Reset the policy data.
   virtual void ResetPolicy() = 0;
+
+  virtual user_education::NewBadgeData ReadNewBadgeData(
+      const base::Feature& new_badge_feature) const = 0;
+
+  virtual void SaveNewBadgeData(const base::Feature& new_badge_feature,
+                                const NewBadgeData& new_badge_data) = 0;
+
+  // Resets the state of `new_badge_feature`.
+  virtual void ResetNewBadge(const base::Feature& new_badge_feature) = 0;
 
   // Returns the set of apps that `iph_feature` has been shown for.
   std::set<std::string> GetShownForApps(const base::Feature& iph_feature) const;

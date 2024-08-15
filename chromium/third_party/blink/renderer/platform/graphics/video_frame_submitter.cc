@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/platform/graphics/video_frame_submitter.h"
 
+#include <optional>
 #include <utility>
 
 #include "base/feature_list.h"
@@ -22,6 +23,8 @@
 #include "components/viz/common/resources/returned_resource.h"
 #include "components/viz/common/surfaces/frame_sink_bundle_id.h"
 #include "gpu/command_buffer/client/raster_interface.h"
+#include "gpu/ipc/client/client_shared_image_interface.h"
+#include "gpu/ipc/client/gpu_channel_host.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_types.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -30,7 +33,6 @@
 #include "services/viz/public/mojom/compositing/frame_sink_bundle.mojom-blink.h"
 #include "services/viz/public/mojom/compositing/layer_context.mojom-blink.h"
 #include "services/viz/public/mojom/hit_test/hit_test_region_list.mojom-blink.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/frame_sinks/embedded_frame_sink.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -108,7 +110,7 @@ class VideoFrameSubmitter::FrameSinkBundleProxy
   void SubmitCompositorFrame(
       const viz::LocalSurfaceId& local_surface_id,
       viz::CompositorFrame frame,
-      absl::optional<viz::HitTestRegionList> hit_test_region_list,
+      std::optional<viz::HitTestRegionList> hit_test_region_list,
       uint64_t submit_time) override {
     if (!bundle_) {
       return;
@@ -123,7 +125,7 @@ class VideoFrameSubmitter::FrameSinkBundleProxy
   void SubmitCompositorFrameSync(
       const viz::LocalSurfaceId& local_surface_id,
       viz::CompositorFrame frame,
-      absl::optional<viz::HitTestRegionList> hit_test_region_list,
+      std::optional<viz::HitTestRegionList> hit_test_region_list,
       uint64_t submit_time,
       SubmitCompositorFrameSyncCallback callback) override {
     NOTREACHED();
@@ -196,6 +198,10 @@ VideoFrameSubmitter::~VideoFrameSubmitter() {
   if (context_provider_)
     context_provider_->RemoveObserver(this);
 
+  if (shared_image_interface_) {
+    shared_image_interface_->gpu_channel()->RemoveObserver(this);
+  }
+
   // Release VideoFrameResourceProvider early since its destruction will make
   // calls back into this class via the viz::SharedBitmapReporter interface.
   resource_provider_.reset();
@@ -257,6 +263,7 @@ void VideoFrameSubmitter::Initialize(cc::VideoFrameProvider* provider,
   DCHECK(!video_frame_provider_);
   video_frame_provider_ = provider;
   is_media_stream_ = is_media_stream;
+  task_runner_ = base::SingleThreadTaskRunner::GetCurrentDefault();
   context_provider_callback_.Run(
       nullptr, base::BindOnce(&VideoFrameSubmitter::OnReceivedContextProvider,
                               weak_ptr_factory_.GetWeakPtr()));
@@ -310,6 +317,11 @@ void VideoFrameSubmitter::OnContextLost() {
   if (context_provider_)
     context_provider_->RemoveObserver(this);
 
+  if (shared_image_interface_) {
+    shared_image_interface_->gpu_channel()->RemoveObserver(this);
+    shared_image_interface_.reset();
+  }
+
   waiting_for_compositor_ack_ = false;
   last_frame_id_.reset();
 
@@ -328,6 +340,29 @@ void VideoFrameSubmitter::OnContextLost() {
       context_provider_,
       base::BindOnce(&VideoFrameSubmitter::OnReceivedContextProvider,
                      weak_ptr_factory_.GetWeakPtr()));
+}
+
+void VideoFrameSubmitter::OnGpuChannelLost() {
+  // GpuChannel lost is notified on the IO thread. Forward it to the
+  // VideoFrameCompositor thread.
+  if (base::SingleThreadTaskRunner::GetCurrentDefault() != task_runner_) {
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&VideoFrameSubmitter::OnGpuChannelLost,
+                                  weak_ptr_factory_.GetWeakPtr()));
+    return;
+  }
+
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  if (!shared_image_interface_) {
+    return;
+  }
+
+  // The Observable removes all observers after completing GpuChannelLost
+  // notification. No need to RemoveObserver(). Call RemoveObserver during
+  // notification will cause deadlock.
+  shared_image_interface_.reset();
+
+  OnContextLost();
 }
 
 void VideoFrameSubmitter::DidReceiveCompositorFrameAck(
@@ -491,12 +526,19 @@ void VideoFrameSubmitter::DidDeleteSharedBitmap(const viz::SharedBitmapId& id) {
 
 void VideoFrameSubmitter::OnReceivedContextProvider(
     bool use_gpu_compositing,
-    scoped_refptr<viz::RasterContextProvider> context_provider) {
+    scoped_refptr<viz::RasterContextProvider> context_provider,
+    scoped_refptr<gpu::ClientSharedImageInterface> shared_image_interface) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
   if (!use_gpu_compositing) {
-    resource_provider_->Initialize(nullptr, this);
-    if (frame_sink_id_.is_valid())
+    shared_image_interface_ = std::move(shared_image_interface);
+    if (shared_image_interface_) {
+      shared_image_interface_->gpu_channel()->AddObserver(this);
+    }
+    resource_provider_->Initialize(nullptr, this, shared_image_interface_);
+    if (frame_sink_id_.is_valid()) {
       StartSubmitting();
+    }
     return;
   }
 
@@ -514,7 +556,8 @@ void VideoFrameSubmitter::OnReceivedContextProvider(
   }
 
   context_provider_->AddObserver(this);
-  resource_provider_->Initialize(context_provider_.get(), nullptr);
+  resource_provider_->Initialize(context_provider_.get(), nullptr,
+                                 /*shared_image_interface*/ nullptr);
 
   if (frame_sink_id_.is_valid())
     StartSubmitting();
@@ -718,7 +761,7 @@ bool VideoFrameSubmitter::SubmitFrame(
   // contain any SurfaceDrawQuads.
   compositor_frame_sink_->SubmitCompositorFrame(
       child_local_surface_id_allocator_.GetCurrentLocalSurfaceId(),
-      std::move(compositor_frame), absl::nullopt, 0);
+      std::move(compositor_frame), std::nullopt, 0);
   frame_trackers_.NotifySubmitFrame(frame_token, false, begin_frame_ack,
                                     last_begin_frame_args_);
   resource_provider_->ReleaseFrameResources();
@@ -746,7 +789,7 @@ void VideoFrameSubmitter::SubmitEmptyFrame() {
 
   compositor_frame_sink_->SubmitCompositorFrame(
       child_local_surface_id_allocator_.GetCurrentLocalSurfaceId(),
-      std::move(compositor_frame), absl::nullopt, 0);
+      std::move(compositor_frame), std::nullopt, 0);
   frame_trackers_.NotifySubmitFrame(frame_token, false, begin_frame_ack,
                                     last_begin_frame_args_);
 

@@ -7,15 +7,19 @@
  * Page in eSIM Setup flow that displays a choice of available eSIM Profiles.
  */
 
-import '//resources/cr_elements/cr_shared_style.css.js';
+import '//resources/ash/common/cr_elements/cr_shared_style.css.js';
 import '//resources/polymer/v3_0/iron-list/iron-list.js';
-import '//resources/cr_components/localized_link/localized_link.js';
+import '//resources/ash/common/cr_elements/localized_link/localized_link.js';
 import './base_page.js';
 import './profile_discovery_list_item.js';
 
+import {MojoInterfaceProviderImpl} from '//resources/ash/common/network/mojo_interface_provider.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
+import {I18nMixin} from 'chrome://resources/ash/common/cr_elements/i18n_mixin.js';
+import {assert} from 'chrome://resources/js/assert.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {ESimProfileProperties} from 'chrome://resources/mojo/chromeos/ash/services/cellular_setup/public/mojom/esim_manager.mojom-webui.js';
+import {NetworkType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 
 import {getTemplate} from './profile_discovery_list_page.html.js';
 
@@ -39,15 +43,70 @@ export class ProfileDiscoveryListPageElement extends
         type: Object,
         notify: true,
       },
+      /**
+       * If true, device is locked to specific cellular operator.
+       */
+      isDeviceCarrierLocked_: {
+        type: Boolean,
+        value: false,
+      },
+
+      isCellularCarrierLockEnabled_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.valueExists('isCellularCarrierLockEnabled') &&
+              loadTimeData.getBoolean('isCellularCarrierLockEnabled');
+        },
+      },
     };
   }
 
   pendingProfileProperties: ESimProfileProperties[];
   selectedProfileProperties: ESimProfileProperties|null;
+  private isDeviceCarrierLocked_: boolean;
+  private isCellularCarrierLockEnabled_: boolean;
+
+  attemptToFocusOnFirstProfile(): boolean {
+    if (!this.pendingProfileProperties ||
+        this.pendingProfileProperties.length === 0) {
+      return false;
+    }
+
+    const items =
+        this.shadowRoot!.querySelectorAll('profile-discovery-list-item');
+    const item = items[0] as HTMLElement;
+    assert(items.length > 0);
+    item.focus();
+    item.setAttribute('selected', 'true');
+    return true;
+  }
 
   private isProfilePropertiesSelected_(profileProperties:
                                            ESimProfileProperties): boolean {
     return this.selectedProfileProperties === profileProperties;
+  }
+
+  constructor() {
+    super();
+
+    if (!this.isCellularCarrierLockEnabled_) {
+      return;
+    }
+
+    const networkConfig =
+        MojoInterfaceProviderImpl.getInstance().getMojoServiceRemote();
+    networkConfig!.getDeviceStateList().then(response => {
+      const devices = response.result;
+      const deviceState =
+          devices.find(device => device.type === NetworkType.kCellular) || null;
+      if (deviceState) {
+        this.isDeviceCarrierLocked_ = deviceState.isCarrierLocked;
+      }
+    });
+  }
+
+  private shouldShowCarrierLockWarning_(): boolean {
+    return this.isCellularCarrierLockEnabled_ && this.isDeviceCarrierLocked_;
   }
 
   private enterManuallyClicked_(e: CustomEvent): void {
@@ -58,6 +117,12 @@ export class ProfileDiscoveryListPageElement extends
       bubbles: true,
       composed: true,
     }));
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [ProfileDiscoveryListPageElement.is]: ProfileDiscoveryListPageElement;
   }
 }
 

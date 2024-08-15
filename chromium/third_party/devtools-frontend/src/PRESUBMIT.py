@@ -188,24 +188,61 @@ def _CheckESBuildVersion(input_api, output_api):
     return results
 
 
-def _CheckFormat(input_api, output_api):
-    node_modules_affected_files = _getAffectedFiles(input_api, [
-        input_api.os_path.join(input_api.PresubmitLocalPath(), 'node_modules'),
+def _CheckEnumeratedHistograms(input_api, output_api):
+    enumerated_histograms_files = [
         input_api.os_path.join(input_api.PresubmitLocalPath(), 'front_end',
-                               'third_party')
-    ], [], [])
-
-    # TODO(crbug.com/1068198): Remove once `git cl format --js` can handle large CLs.
-    if (len(node_modules_affected_files) > 0):
+                               'devtools_compatibility.js'),
+        input_api.os_path.join(input_api.PresubmitLocalPath(), 'front_end',
+                               'core', 'host', 'InspectorFrontendHostAPI.ts')
+    ]
+    affected_main_files = _getAffectedFiles(input_api,
+                                            enumerated_histograms_files, [],
+                                            ['.js', '.ts'])
+    if len(affected_main_files) == 0:
         return [
             output_api.PresubmitNotifyResult(
-                'Skipping Format Checks because `node_modules`/`front_end/third_party` files are affected.'
-            )
+                'No affected files for UMA Enumerated Histograms check')
         ]
+
+    results = [
+        output_api.PresubmitNotifyResult(
+            'Running UMA Enumerated Histograms check:')
+    ]
+    script_path = input_api.os_path.join(input_api.PresubmitLocalPath(),
+                                         'scripts',
+                                         'check_enumerated_histograms.js')
+    results.extend(_checkWithNodeScript(input_api, output_api, script_path))
+    return results
+
+
+def _CheckFormat(input_api, output_api):
+    files_with_potential_large_diffs = _getAffectedFiles(
+        input_api, [
+            input_api.os_path.join(input_api.PresubmitLocalPath(),
+                                   'node_modules'),
+            input_api.os_path.join(input_api.PresubmitLocalPath(), 'front_end',
+                                   'third_party'),
+            input_api.os_path.join(input_api.PresubmitLocalPath(), 'front_end',
+                                   'generated'),
+            input_api.os_path.join(input_api.PresubmitLocalPath(), 'front_end',
+                                   'models', 'javascript_metadata'),
+        ], [], [])
+
+    # Changes to the above directories can produce large diffs. This is a problem on Windows,
+    # where clang-format-diff.py specifies all the diff ranges on the command line when invoking
+    # clang-format. Since command line length is limited on Win, the invocation fails.
+    # As a heuristic, we'll format all touched files fully if we suspect that the diff could
+    # be large.
+    # TODO(crbug.com/1068198): Remove once `git cl format --js` can handle large CLs.
+    additional_args = []
+    if (len(files_with_potential_large_diffs) > 0):
+        additional_args = ['--full']
 
     results = [output_api.PresubmitNotifyResult('Running Format Checks:')]
 
-    return _ExecuteSubProcess(input_api, output_api, ['git', 'cl', 'format', '--js'], [], results)
+    return _ExecuteSubProcess(input_api, output_api,
+                              ['git', 'cl', 'format', '--js'] +
+                              additional_args, [], results)
 
 
 def _CheckDevToolsRunESLintTests(input_api, output_api):
@@ -601,8 +638,8 @@ def _CommonChecks(canned_checks):
         _CheckGeneratedFiles, _CheckDevToolsStyleJS, _CheckDevToolsStyleCSS,
         _CheckDevToolsRunESLintTests, _CheckDevToolsRunBuildTests,
         _CheckDevToolsNonJSFileLicenseHeaders, _CheckFormat,
-        _CheckESBuildVersion, _CheckChangesAreExclusiveToDirectory,
-        _CheckObsoleteScreenshotGoldens
+        _CheckESBuildVersion, _CheckEnumeratedHistograms,
+        _CheckChangesAreExclusiveToDirectory, _CheckObsoleteScreenshotGoldens
     ]
     # Run the canned checks from `depot_tools` after the custom DevTools checks.
     # The canned checks for example check that lines have line endings. The

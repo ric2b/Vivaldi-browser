@@ -19,7 +19,7 @@ package nearby.sharing.analytics.proto;
 import "google/protobuf/duration.proto";
 
 // import "storage/datapol/annotations/proto/semantic_annotations.proto";
-import "third_party/nearby/proto/sharing_enums.proto";
+import "proto/sharing_enums.proto";
 
 // "wireless/android/privacy/annotations/proto/collection_basis_annotations.proto";
 
@@ -407,6 +407,7 @@ message SharingLog {
     // not designed to be joined with other sessions/events of the same user to
     // reconstruct particular user's activity pattern.
     optional int64 session_id = 6 /* type = ST_SESSION_ID */;
+    optional int32 vendor_id = 7 /* type = ST_PARTNER_ID */;
   }
 
   // TODO(fdi): may consider adding a field about decipherability later.

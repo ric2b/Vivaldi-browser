@@ -16,7 +16,6 @@ import org.chromium.blink.mojom.AuthenticatorStatus;
 import org.chromium.blink.mojom.PaymentOptions;
 import org.chromium.blink.mojom.PublicKeyCredentialCreationOptions;
 import org.chromium.blink.mojom.PublicKeyCredentialRequestOptions;
-import org.chromium.components.webauthn.WebauthnModeProvider.WebauthnMode;
 import org.chromium.content_public.browser.RenderFrameHost;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsStatics;
@@ -40,18 +39,20 @@ public class InternalAuthenticator {
     private InternalAuthenticator(
             long nativeInternalAuthenticatorAndroid,
             Context context,
+            WebContents webContents,
             FidoIntentSender intentSender,
             RenderFrameHost renderFrameHost,
             Origin topOrigin) {
         mNativeInternalAuthenticatorAndroid = nativeInternalAuthenticatorAndroid;
+        WebauthnModeProvider.getInstance().setGlobalWebauthnMode(WebauthnMode.CHROME);
         mAuthenticator =
                 new AuthenticatorImpl(
                         context,
+                        webContents,
                         intentSender,
                         /* createConfirmationUiDelegate= */ null,
                         renderFrameHost,
-                        topOrigin,
-                        WebauthnMode.CHROME);
+                        topOrigin);
     }
 
     public static InternalAuthenticator createForTesting(
@@ -59,7 +60,8 @@ public class InternalAuthenticator {
             FidoIntentSender intentSender,
             RenderFrameHost renderFrameHost,
             Origin topOrigin) {
-        return new InternalAuthenticator(-1, context, intentSender, renderFrameHost, topOrigin);
+        return new InternalAuthenticator(
+                -1, context, /* webContents= */ null, intentSender, renderFrameHost, topOrigin);
     }
 
     @CalledByNative
@@ -72,6 +74,7 @@ public class InternalAuthenticator {
         return new InternalAuthenticator(
                 nativeInternalAuthenticatorAndroid,
                 context,
+                webContents,
                 new AuthenticatorImpl.WindowIntentSender(window),
                 renderFrameHost,
                 topOrigin);
@@ -161,7 +164,7 @@ public class InternalAuthenticator {
      */
     @CalledByNative
     public boolean isGetMatchingCredentialIdsSupported() {
-        return mAuthenticator.isGetMatchingCredentialIdsSupported();
+        return GmsCoreUtils.isGetMatchingCredentialIdsSupported();
     }
 
     /**

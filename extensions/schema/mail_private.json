@@ -576,6 +576,22 @@
             }
           ]
         }
+      },
+      {
+        "name": "deleteMailSearchDB",
+        "type": "function",
+        "description": "Deletes MailSearchDB and MaildSearchDB-journal file. Re-creates the files afterwards. This action cannot be reverted.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "description": "Boolean stating if deleting the files was successful.",
+              "type": "boolean"
+            }
+          ]
+        }
       }
     ],
     "events": [

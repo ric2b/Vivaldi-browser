@@ -10,7 +10,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "third_party/base/containers/span.h"
+#include "core/fxcrt/raw_span.h"
+#include "core/fxcrt/span.h"
 
 class CFX_BitStream {
  public:
@@ -33,7 +34,7 @@ class CFX_BitStream {
  private:
   size_t m_BitPos = 0;
   const size_t m_BitSize;
-  pdfium::span<const uint8_t> const m_pData;
+  pdfium::raw_span<const uint8_t> const m_pData;
 };
 
 #endif  // CORE_FXCRT_CFX_BITSTREAM_H_

@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_POLICY_CORE_COMMON_SCHEMA_H_
 #define COMPONENTS_POLICY_CORE_COMMON_SCHEMA_H_
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -13,7 +14,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/values.h"
 #include "components/policy/policy_export.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace policy {
 namespace internal {
@@ -73,6 +73,11 @@ enum SchemaOnErrorStrategy {
 constexpr int kSchemaOptionsNone = 0;
 constexpr int kSchemaOptionsIgnoreUnknownAttributes = 1 << 0;
 
+// String used to hide sensitive policy values.
+// It should be consistent with the mask |NetworkConfigurationPolicyHandler|
+// uses for network credential fields.
+extern const char kSensitiveValueMask[];
+
 class Schema;
 
 typedef std::vector<Schema> SchemaList;
@@ -128,7 +133,7 @@ class POLICY_EXPORT Schema {
   // accept any strings.
   // |options| is a bitwise-OR combination of the options above (see
   // |kSchemaOptions*| above).
-  static absl::optional<base::Value::Dict> ParseToDictAndValidate(
+  static std::optional<base::Value::Dict> ParseToDictAndValidate(
       const std::string& schema,
       int options,
       std::string* error);

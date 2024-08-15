@@ -8,13 +8,9 @@ import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.Application;
 import android.app.Instrumentation;
-import android.app.job.JobScheduler;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.SharedPreferences;
-import android.content.pm.InstrumentationInfo;
-import android.content.pm.PackageManager;
-import android.content.pm.PackageManager.NameNotFoundException;
 import android.os.Build;
 import android.os.Build.VERSION;
 import android.os.Bundle;
@@ -44,8 +40,8 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.FileUtils;
 import org.chromium.base.LifetimeAssert;
 import org.chromium.base.Log;
+import org.chromium.base.ResettersForTesting;
 import org.chromium.base.library_loader.LibraryLoader;
-import org.chromium.base.metrics.UmaRecorderHolder;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.InMemorySharedPreferences;
@@ -53,6 +49,7 @@ import org.chromium.base.test.util.InMemorySharedPreferencesContext;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.ScalableTimeout;
 import org.chromium.build.BuildConfig;
+import org.chromium.testing.TestListInstrumentationRunListener;
 
 import java.io.File;
 import java.io.IOException;
@@ -67,43 +64,20 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * A custom AndroidJUnitRunner that supports incremental install and custom test listing. Also
- * customizes various TestRunner and Instrumentation behaviors, like when Activities get finished,
- * and adds a timeout to waitForIdleSync.
  *
- * <p>Please beware that is this not a class runner. It is declared in test apk AndroidManifest.xml
- * <instrumentation>
+ *
+ * <pre>
+ * An Instrumentation subclass that:
+ *    * Supports incremental install.
+ *    * Installs an InMemorySharedPreferences, and a few other try-to-make-things-less-flaky things.
+ * </pre>
  */
 public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
-    private static final String LIST_ALL_TESTS_FLAG =
-            "org.chromium.base.test.BaseChromiumAndroidJUnitRunner.TestList";
-    private static final String LIST_TESTS_PACKAGE_FLAG =
-            "org.chromium.base.test.BaseChromiumAndroidJUnitRunner.TestListPackage";
     private static final String IS_UNIT_TEST_FLAG =
             "org.chromium.base.test.BaseChromiumAndroidJUnitRunner.IsUnitTest";
     private static final String EXTRA_CLANG_COVERAGE_DEVICE_FILE =
             "org.chromium.base.test.BaseChromiumAndroidJUnitRunner.ClangCoverageDeviceFile";
 
-    /**
-     * This flag is supported by AndroidJUnitRunner.
-     *
-     * See the following page for detail
-     * https://developer.android.com/reference/android/support/test/runner/AndroidJUnitRunner.html
-     */
-    private static final String ARGUMENT_TEST_PACKAGE = "package";
-
-    /**
-     * The following arguments are corresponding to AndroidJUnitRunner command line arguments.
-     * `annotation`: run with only the argument annotation
-     * `notAnnotation`: run all tests except the ones with argument annotation
-     * `log`: run in log only mode, do not execute tests
-     *
-     * For more detail, please check
-     * https://developer.android.com/reference/android/support/test/runner/AndroidJUnitRunner.html
-     */
-    private static final String ARGUMENT_ANNOTATION = "annotation";
-
-    private static final String ARGUMENT_NOT_ANNOTATION = "notAnnotation";
     private static final String ARGUMENT_LOG_ONLY = "log";
 
     private static final String TAG = "BaseJUnitRunner";
@@ -120,6 +94,7 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
     private static final long FINISH_APP_TASKS_POLL_INTERVAL_MS = 100;
 
     static InMemorySharedPreferencesContext sInMemorySharedPreferencesContext;
+    private static boolean sTestListMode;
 
     static {
         CommandLineInitUtil.setFilenameOverrideForTesting(CommandLineFlags.getTestCmdLineFile());
@@ -128,10 +103,6 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
     @Override
     public Application newApplication(ClassLoader cl, String className, Context context)
             throws ClassNotFoundException, IllegalAccessException, InstantiationException {
-        Context targetContext = super.getTargetContext();
-        boolean hasUnderTestApk =
-                !getContext().getPackageName().equals(targetContext.getPackageName());
-
         // Wrap |context| here so that calls to getSharedPreferences() from within
         // attachBaseContext() will hit our InMemorySharedPreferencesContext.
         sInMemorySharedPreferencesContext = new InMemorySharedPreferencesContext(context);
@@ -161,6 +132,18 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
         return sInMemorySharedPreferencesContext;
     }
 
+    @Override
+    public void onCreate(Bundle arguments) {
+        if (arguments == null) {
+            arguments = new Bundle();
+        }
+        sTestListMode = "true".equals(arguments.getString(ARGUMENT_LOG_ONLY));
+        // Do not finish activities between tests so that batched tests can start
+        // an activity in @BeforeClass and have it live until @AfterClass.
+        arguments.putString("waitForActivitiesToComplete", "false");
+        super.onCreate(arguments);
+    }
+
     /**
      * Add TestListInstrumentationRunListener when argument ask the runner to list tests info.
      *
@@ -171,11 +154,12 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
     @Override
     public void onStart() {
         Bundle arguments = InstrumentationRegistry.getArguments();
+        ResettersForTesting.enable();
         if (arguments.getString(IS_UNIT_TEST_FLAG) != null) {
             LibraryLoader.setBrowserProcessStartupBlockedForTesting();
         }
 
-        if (shouldListTests()) {
+        if (sTestListMode) {
             Log.w(
                     TAG,
                     String.format(
@@ -194,7 +178,7 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
                                 arguments.toString()));
             }
             finishAllAppTasks(getTargetContext());
-            getTargetContext().getSystemService(JobScheduler.class).cancelAll();
+            BaseJUnit4TestRule.clearJobSchedulerJobs();
             checkOrDeleteOnDiskSharedPreferences(false);
             clearDataDirectory(sInMemorySharedPreferencesContext);
             InstrumentationRegistry.getInstrumentation().setInTouchMode(true);
@@ -234,50 +218,22 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
         }
     }
 
-    // TODO(yolandyan): Move this to test harness side once this class gets removed
-    private void addTestListPackage(Bundle bundle) {
-        PackageManager pm = getContext().getPackageManager();
-        InstrumentationInfo info;
-        try {
-            info = pm.getInstrumentationInfo(getComponentName(), PackageManager.GET_META_DATA);
-        } catch (NameNotFoundException e) {
-            Log.e(TAG, String.format("Could not find component %s", getComponentName()));
-            throw new RuntimeException(e);
-        }
-        Bundle metaDataBundle = info.metaData;
-        if (metaDataBundle != null && metaDataBundle.getString(LIST_TESTS_PACKAGE_FLAG) != null) {
-            bundle.putString(
-                    ARGUMENT_TEST_PACKAGE, metaDataBundle.getString(LIST_TESTS_PACKAGE_FLAG));
-        }
-    }
-
     private void listTests() {
         Bundle results = new Bundle();
-        TestListInstrumentationRunListener listener = new TestListInstrumentationRunListener();
         try {
             TestExecutor.Builder executorBuilder = new TestExecutor.Builder(this);
-            executorBuilder.addRunListener(listener);
-            Bundle junit3Arguments = new Bundle(InstrumentationRegistry.getArguments());
-            junit3Arguments.putString(ARGUMENT_NOT_ANNOTATION, "org.junit.runner.RunWith");
-            addTestListPackage(junit3Arguments);
-            Request listJUnit3TestRequest = createListTestRequest(junit3Arguments);
-            results = executorBuilder.build().execute(listJUnit3TestRequest);
+            executorBuilder.addRunListener(new TestListInstrumentationRunListener(true));
 
-            Bundle junit4Arguments = new Bundle(InstrumentationRegistry.getArguments());
-            junit4Arguments.putString(ARGUMENT_ANNOTATION, "org.junit.runner.RunWith");
-            addTestListPackage(junit4Arguments);
-
-            // Do not use Log runner from android test support.
+            // Do not use androidx's AndroidLogOnlyBuilder.
             //
-            // Test logging and execution skipping is handled by BaseJUnit4ClassRunner,
-            // having ARGUMENT_LOG_ONLY in argument bundle here causes AndroidJUnitRunner
-            // to use its own log-only class runner instead of BaseJUnit4ClassRunner.
+            // We require BaseJUnit4ClassRunner to implement our test skipping / restrictions logic,
+            // but ARGUMENT_LOG_ONLY means that our runner will not be used.
+            // Remove the argument, and have BaseJUnit4ClassRunner run in no-op mode.
+            Bundle junit4Arguments = new Bundle(InstrumentationRegistry.getArguments());
             junit4Arguments.remove(ARGUMENT_LOG_ONLY);
 
             Request listJUnit4TestRequest = createListTestRequest(junit4Arguments);
             results.putAll(executorBuilder.build().execute(listJUnit4TestRequest));
-            listener.saveTestsToJson(
-                    InstrumentationRegistry.getArguments().getString(LIST_ALL_TESTS_FLAG));
         } catch (IOException | RuntimeException e) {
             String msg = "Fatal exception when running tests";
             Log.e(TAG, msg, e);
@@ -319,8 +275,7 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
     }
 
     static boolean shouldListTests() {
-        Bundle arguments = InstrumentationRegistry.getArguments();
-        return arguments != null && arguments.getString(LIST_ALL_TESTS_FLAG) != null;
+        return sTestListMode;
     }
 
     /**
@@ -431,13 +386,6 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
         }
     }
 
-    private static Object getField(Class<?> clazz, Object instance, String name)
-            throws ReflectiveOperationException {
-        Field field = clazz.getDeclaredField(name);
-        field.setAccessible(true);
-        return field.get(instance);
-    }
-
     /**
      * ClassLoader that translates NoClassDefFoundError into ClassNotFoundException.
      *
@@ -495,14 +443,6 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
                                 "Skipping abstract class %s: not a test", loadedClass.getName()));
                 return false;
             }
-            if (junit.framework.Test.class.isAssignableFrom(loadedClass)) {
-                // ensure that if a TestCase, it has at least one test method otherwise
-                // TestSuite will throw error
-                if (junit.framework.TestCase.class.isAssignableFrom(loadedClass)) {
-                    return hasJUnit3TestMethod(loadedClass);
-                }
-                return true;
-            }
             if (loadedClass.isAnnotationPresent(RunWith.class)) {
                 return true;
             }
@@ -525,30 +465,9 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
         }
     }
 
-    private static boolean hasJUnit3TestMethod(Class<?> loadedClass) {
-        for (Method testMethod : loadedClass.getMethods()) {
-            if (isPublicTestMethod(testMethod)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // copied from junit.framework.TestSuite
-    private static boolean isPublicTestMethod(Method m) {
-        return isTestMethod(m) && Modifier.isPublic(m.getModifiers());
-    }
-
-    // copied from junit.framework.TestSuite
-    private static boolean isTestMethod(Method m) {
-        return m.getParameterTypes().length == 0
-                && m.getName().startsWith("test")
-                && m.getReturnType().equals(Void.TYPE);
-    }
-
     @Override
     public void finish(int resultCode, Bundle results) {
-        if (shouldListTests()) {
+        if (sTestListMode) {
             super.finish(resultCode, results);
             return;
         }
@@ -565,9 +484,7 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
 
         try {
             writeClangCoverageProfileIfEnabled();
-            getTargetContext().getSystemService(JobScheduler.class).cancelAll();
             checkOrDeleteOnDiskSharedPreferences(true);
-            UmaRecorderHolder.resetForTesting();
 
             // There is a bug on L and below that DestroyActivitiesRule does not cause onStop and
             // onDestroy. On other versions, DestroyActivitiesRule may still fail flakily. Ignore
@@ -588,29 +505,6 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
 
         // This will end up force stopping the package, so code after this line will not run.
         super.finish(resultCode, results);
-    }
-
-    // Since we prevent the default runner's behaviour of finishing Activities between tests, don't
-    // finish Activities, don't have the runner wait for them to finish either (as this will add a 2
-    // second timeout to each test).
-    @Override
-    protected void waitForActivitiesToComplete() {}
-
-    // Note that in this class we cannot use ThreadUtils to post tasks as some tests initialize the
-    // browser in ways that cause tasks posted through PostTask to not run. This function should be
-    // used instead.
-    @Override
-    public void runOnMainSync(Runnable runner) {
-        if (runner.getClass() == ActivityFinisher.class) {
-            // This is a gross hack.
-            // Without migrating to the androidx runner, we have no way to prevent
-            // MonitoringInstrumentation from trying to kill our activities, and we rely on
-            // MonitoringInstrumentation for many things like result reporting.
-            // In order to allow batched tests to reuse Activities, drop the ActivityFinisher tasks
-            // without running them.
-            return;
-        }
-        super.runOnMainSync(runner);
     }
 
     /** Finishes all tasks Chrome has listed in Android's Overview. */

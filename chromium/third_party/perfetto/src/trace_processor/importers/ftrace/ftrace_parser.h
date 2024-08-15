@@ -26,12 +26,12 @@
 #include "src/trace_processor/importers/common/trace_parser.h"
 #include "src/trace_processor/importers/ftrace/drm_tracker.h"
 #include "src/trace_processor/importers/ftrace/ftrace_descriptors.h"
+#include "src/trace_processor/importers/ftrace/ftrace_sched_event_tracker.h"
 #include "src/trace_processor/importers/ftrace/gpu_work_period_tracker.h"
 #include "src/trace_processor/importers/ftrace/iostat_tracker.h"
 #include "src/trace_processor/importers/ftrace/mali_gpu_event_tracker.h"
 #include "src/trace_processor/importers/ftrace/pkvm_hyp_cpu_tracker.h"
 #include "src/trace_processor/importers/ftrace/rss_stat_tracker.h"
-#include "src/trace_processor/importers/ftrace/sched_event_tracker.h"
 #include "src/trace_processor/importers/ftrace/virtio_gpu_tracker.h"
 #include "src/trace_processor/types/trace_processor_context.h"
 
@@ -233,7 +233,7 @@ class FtraceParser {
   void ParseWakeSourceDeactivate(int64_t timestamp, protozero::ConstBytes);
   void ParseSuspendResume(int64_t timestamp, protozero::ConstBytes);
   void ParseSuspendResumeMinimal(int64_t timestamp, protozero::ConstBytes);
-  void ParseSchedCpuUtilCfs(int64_t timestap, protozero::ConstBytes);
+  void ParseSchedCpuUtilCfs(int64_t timestamp, protozero::ConstBytes);
 
   void ParseFuncgraphEntry(int64_t timestamp,
                            uint32_t pid,
@@ -293,6 +293,8 @@ class FtraceParser {
   void ParseAndroidFsDatareadStart(int64_t ts,
                                    uint32_t pid,
                                    protozero::ConstBytes);
+  StringId GetRpmStatusStringId(int32_t rpm_status_val);
+  void ParseRpmStatus(int64_t ts, protozero::ConstBytes);
 
   TraceProcessorContext* context_;
   RssStatTracker rss_stat_tracker_;
@@ -382,6 +384,10 @@ class FtraceParser {
   const StringId bytes_read_id_end_;
   const StringId android_fs_category_id_;
   const StringId android_fs_data_read_id_;
+  const StringId runtime_status_invalid_id_;
+  const StringId runtime_status_active_id_;
+  const StringId runtime_status_suspending_id_;
+  const StringId runtime_status_resuming_id_;
   std::vector<StringId> syscall_arg_name_ids_;
 
   struct FtraceMessageStrings {
@@ -444,6 +450,10 @@ class FtraceParser {
   // putting them in the metadata multiple times (the ftrace data sources
   // re-emits begin stats on every flush).
   std::unordered_set<uint32_t> seen_errors_for_sequence_id_;
+
+  // Tracks Linux devices with active runtime power management (RPM) status
+  // slices.
+  std::unordered_set<std::string> devices_with_active_rpm_slice_;
 
   struct PairHash {
     std::size_t operator()(const std::pair<uint64_t, int64_t>& p) const {

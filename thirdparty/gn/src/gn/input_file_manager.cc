@@ -290,8 +290,8 @@ bool InputFileManager::LoadFile(const LocationRange& origin,
                                 Err* err) {
   std::vector<Token> tokens;
   std::unique_ptr<ParseNode> root;
-  bool success =
-      DoLoadFile(origin, build_settings, name, load_file_callback_, file, &tokens, &root, err);
+  bool success = DoLoadFile(origin, build_settings, name, load_file_callback_,
+                            file, &tokens, &root, err);
   // Can't return early. We have to ensure that the completion event is
   // signaled in all cases because another thread could be blocked on this one.
 

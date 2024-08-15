@@ -96,6 +96,7 @@ class MailClientBackend : public base::RefCountedThreadSafe<MailClientBackend>,
   bool CreateMessages(std::vector<MessageRow> messages);
 
   bool DeleteMessages(SearchListIDs ids);
+  bool DeleteMailSearchDB();
 
   MessageResult UpdateMessage(mail_client::MessageRow message);
 

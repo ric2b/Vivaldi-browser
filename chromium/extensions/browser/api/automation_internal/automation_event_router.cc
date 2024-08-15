@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/observer_list.h"
 #include "base/ranges/algorithm.h"
 #include "base/values.h"
@@ -22,7 +21,6 @@
 #include "extensions/common/api/automation_internal.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_id.h"
-#include "extensions/common/extension_messages.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "ui/accessibility/ax_action_data.h"

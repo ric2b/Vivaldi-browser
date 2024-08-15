@@ -177,7 +177,9 @@ namespace {{metadata.namespace}} {
 
         {% macro render_cpp_method_declaration(type, method) -%}
             {% set CppType = as_cppType(type.name) %}
-            {{as_cppType(method.return_type.name)}} {{CppType}}::{{method.name.CamelCase()}}(
+            {% set OriginalMethodName = method.name.CamelCase() %}
+            {% set MethodName = OriginalMethodName[:-1] if method.name.chunks[-1] == "f" else OriginalMethodName %}
+            {{as_cppType(method.return_type.name)}} {{CppType}}::{{MethodName}}(
                 {%- for arg in method.arguments -%}
                     {%- if not loop.first %}, {% endif -%}
                     {%- if arg.type.category == "object" and arg.annotation == "value" -%}

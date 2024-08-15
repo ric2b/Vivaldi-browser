@@ -54,6 +54,7 @@ class ReceiverDelegate {
 
   // Called when a presentation is requested to be terminated by a controller.
   virtual void TerminatePresentation(const std::string& id,
+                                     TerminationSource source,
                                      TerminationReason reason) = 0;
 };
 
@@ -87,6 +88,7 @@ class Receiver final : public MessageDemuxer::MessageCallback,
   // Also called by the embedder to report that a presentation has been
   // terminated.
   Error OnPresentationTerminated(const std::string& presentation_id,
+                                 TerminationSource source,
                                  TerminationReason reason) override;
   void OnConnectionDestroyed(Connection* connection) override;
 

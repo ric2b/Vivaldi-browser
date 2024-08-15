@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "ash/constants/ash_pref_names.h"
 #include "base/feature_list.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
@@ -51,10 +52,8 @@
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/search_engines/default_search_manager.h"
-#include "components/services/screen_ai/buildflags/buildflags.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/spellcheck/browser/pref_names.h"
-#include "components/supervised_user/core/common/features.h"
 #include "components/supervised_user/core/common/pref_names.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "components/translate/core/browser/translate_prefs.h"
@@ -66,6 +65,7 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/management_policy.h"
 #include "extensions/common/extension.h"
+#include "services/screen_ai/buildflags/buildflags.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/components/arc/arc_prefs.h"
@@ -103,12 +103,14 @@ namespace {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 bool IsPrivilegedCrosSetting(const std::string& pref_name) {
-  if (!ash::CrosSettings::IsCrosSettings(pref_name))
+  if (!ash::CrosSettings::IsCrosSettings(pref_name)) {
     return false;
+  }
   if (!ash::system::PerUserTimezoneEnabled()) {
     // kSystemTimezone should be changeable by all users.
-    if (pref_name == ash::kSystemTimezone)
+    if (pref_name == ash::kSystemTimezone) {
       return false;
+    }
   }
   // Cros settings are considered privileged and are either policy
   // controlled or owner controlled.
@@ -117,8 +119,9 @@ bool IsPrivilegedCrosSetting(const std::string& pref_name) {
 
 bool IsRestrictedCrosSettingForChildUser(Profile* profile,
                                          const std::string& pref_name) {
-  if (!profile->IsChild())
+  if (!profile->IsChild()) {
     return false;
+  }
 
   return ash::CrosSettings::Get()
       ->supervised_user_cros_settings_provider()
@@ -142,12 +145,14 @@ const base::Value* GetRestrictedCrosSettingValueForChildUser(
 bool IsSettingReadOnly(const std::string& pref_name) {
   // download.default_directory is used to display the directory location and
   // for policy indicators, but should not be changed directly.
-  if (pref_name == prefs::kDownloadDefaultDirectory)
+  if (pref_name == prefs::kDownloadDefaultDirectory) {
     return true;
+  }
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // System timezone is never directly changeable by the user.
-  if (pref_name == ash::kSystemTimezone)
+  if (pref_name == ash::kSystemTimezone) {
     return ash::system::PerUserTimezoneEnabled();
+  }
   // enable_screen_lock and pin_unlock_autosubmit_enabled
   // must be changed through the quickUnlockPrivate API.
   if (pref_name == ash::prefs::kEnableAutoScreenLock ||
@@ -170,8 +175,9 @@ PrefsUtil::~PrefsUtil() {}
 
 const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
   static PrefsUtil::TypedPrefMap* s_allowlist = nullptr;
-  if (s_allowlist)
+  if (s_allowlist) {
     return *s_allowlist;
+  }
   s_allowlist = new PrefsUtil::TypedPrefMap();
 
   // Miscellaneous
@@ -188,6 +194,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::kBoolean;
 #endif
   (*s_allowlist)[autofill::prefs::kAutofillPaymentCvcStorage] =
+      settings_api::PrefType::kBoolean;
+  (*s_allowlist)[autofill::prefs::kAutofillPaymentCardBenefits] =
       settings_api::PrefType::kBoolean;
   (*s_allowlist)[payments::kCanMakePaymentEnabled] =
       settings_api::PrefType::kBoolean;
@@ -234,9 +242,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
   (*s_allowlist)[::prefs::kConfirmToQuitEnabled] =
       settings_api::PrefType::kBoolean;
 #endif
-  (*s_allowlist)[dom_distiller::prefs::kOfferReaderMode] =
-      settings_api::PrefType::kBoolean;
   (*s_allowlist)[prefs::kHoverCardImagesEnabled] =
+      settings_api::PrefType::kBoolean;
+  (*s_allowlist)[prefs::kHoverCardMemoryUsageEnabled] =
       settings_api::PrefType::kBoolean;
 
   // On startup.
@@ -333,6 +341,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::kBoolean;
   (*s_allowlist)[::kGeneratedHttpsFirstModePref] =
       settings_api::PrefType::kNumber;
+  (*s_allowlist)[::prefs::kSafeBrowsingEsbOptInWithFriendlierSettings] =
+      settings_api::PrefType::kBoolean;
 
   // Tracking protection page
   (*s_allowlist)[::prefs::kCookieControlsMode] =
@@ -351,6 +361,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::kNumber;
   (*s_allowlist)[::prefs::kEnableDoNotTrack] = settings_api::PrefType::kBoolean;
   (*s_allowlist)[::prefs::kIpProtectionEnabled] =
+      settings_api::PrefType::kBoolean;
+  (*s_allowlist)[::prefs::kFingerprintingProtectionEnabled] =
       settings_api::PrefType::kBoolean;
 
   // Sync and personalization page.
@@ -669,6 +681,18 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
           settings_api::PrefType::kNumber;
   (*s_allowlist)[ash::prefs::kAccessibilityMonoAudioEnabled] =
       settings_api::PrefType::kBoolean;
+  (*s_allowlist)[ash::prefs::kAccessibilityMouseKeysEnabled] =
+      settings_api::PrefType::kBoolean;
+  (*s_allowlist)[ash::prefs::kAccessibilityMouseKeysShortcutToPauseEnabled] =
+      settings_api::PrefType::kBoolean;
+  (*s_allowlist)[ash::prefs::kAccessibilityMouseKeysDisableInTextFields] =
+      settings_api::PrefType::kBoolean;
+  (*s_allowlist)[ash::prefs::kAccessibilityMouseKeysAcceleration] =
+      settings_api::PrefType::kNumber;
+  (*s_allowlist)[ash::prefs::kAccessibilityMouseKeysMaxSpeed] =
+      settings_api::PrefType::kNumber;
+  (*s_allowlist)[ash::prefs::kAccessibilityMouseKeysDominantHand] =
+      settings_api::PrefType::kBoolean;
   (*s_allowlist)
       [ash::prefs::kAccessibilityEnhancedNetworkVoicesInSelectToSpeakAllowed] =
           settings_api::PrefType::kBoolean;
@@ -691,8 +715,28 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::kBoolean;
   (*s_allowlist)[ash::prefs::kAccessibilitySelectToSpeakWordHighlight] =
       settings_api::PrefType::kBoolean;
+  (*s_allowlist)[ash::prefs::kAccessibilityReducedAnimationsEnabled] =
+      settings_api::PrefType::kBoolean;
   (*s_allowlist)[ash::prefs::kAccessibilityFaceGazeEnabled] =
       settings_api::PrefType::kBoolean;
+  (*s_allowlist)[ash::prefs::kAccessibilityFaceGazeCursorSpeedUp] =
+      settings_api::PrefType::kNumber;
+  (*s_allowlist)[ash::prefs::kAccessibilityFaceGazeCursorSpeedDown] =
+      settings_api::PrefType::kNumber;
+  (*s_allowlist)[ash::prefs::kAccessibilityFaceGazeCursorSpeedLeft] =
+      settings_api::PrefType::kNumber;
+  (*s_allowlist)[ash::prefs::kAccessibilityFaceGazeCursorSpeedRight] =
+      settings_api::PrefType::kNumber;
+  (*s_allowlist)[ash::prefs::kAccessibilityFaceGazeCursorSmoothing] =
+      settings_api::PrefType::kNumber;
+  (*s_allowlist)[ash::prefs::kAccessibilityFaceGazeCursorUseAcceleration] =
+      settings_api::PrefType::kBoolean;
+  (*s_allowlist)[ash::prefs::kAccessibilityFaceGazeGesturesToMacros] =
+      settings_api::PrefType::kDictionary;
+  (*s_allowlist)[ash::prefs::kAccessibilityFaceGazeGesturesToConfidence] =
+      settings_api::PrefType::kDictionary;
+  (*s_allowlist)[ash::prefs::kAccessibilityCaretBlinkInterval] =
+      settings_api::PrefType::kNumber;
 
   // Text to Speech.
   (*s_allowlist)[::prefs::kTextToSpeechLangToVoiceName] =
@@ -827,7 +871,7 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::kBoolean;
 
   // Restore apps and pages on startup
-  (*s_allowlist)[ash::full_restore::kRestoreAppsAndPagesPrefName] =
+  (*s_allowlist)[ash::prefs::kRestoreAppsAndPagesPrefName] =
       settings_api::PrefType::kNumber;
 
   // Timezone settings.
@@ -865,6 +909,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::kNumber;
   (*s_allowlist)[ash::prefs::kDockedMagnifierScreenHeightDivisor] =
       settings_api::PrefType::kNumber;
+  (*s_allowlist)[ash::prefs::kSnapWindowSuggestions] =
+      settings_api::PrefType::kBoolean;
 
   // Input method settings.
   (*s_allowlist)[::prefs::kLanguagePreloadEngines] =
@@ -975,6 +1021,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::kBoolean;
   (*s_allowlist)[ash::prefs::kUserGeolocationAccessLevel] =
       settings_api::PrefType::kNumber;
+  (*s_allowlist)[ash::prefs::kUserGeolocationAccuracyEnabled] =
+      settings_api::PrefType::kBoolean;
 #else
   // System settings.
   (*s_allowlist)[::prefs::kBackgroundModeEnabled] =
@@ -1004,7 +1052,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
-
+  (*s_allowlist)[::prefs::kDocumentScanAPITrustedExtensions] =
+      settings_api::PrefType::kList;
   (*s_allowlist)[::prefs::kPrintingAPIExtensionsAllowlist] =
       settings_api::PrefType::kList;
 #endif
@@ -1074,9 +1123,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
   (*s_allowlist)
       [performance_manager::user_tuning::prefs::kBatterySaverModeState] =
           settings_api::PrefType::kNumber;
-  (*s_allowlist)
-      [performance_manager::user_tuning::prefs::kTabDiscardingExceptions] =
-          settings_api::PrefType::kList;
+  (*s_allowlist)[performance_manager::user_tuning::prefs::
+                     kTabDiscardingExceptionsWithTime] =
+      settings_api::PrefType::kDictionary;
   (*s_allowlist)[performance_manager::user_tuning::prefs::
                      kManagedTabDiscardingExceptions] =
       settings_api::PrefType::kList;
@@ -1158,15 +1207,17 @@ std::optional<settings_api::PrefObject> PrefsUtil::GetPref(
   std::optional<settings_api::PrefObject> pref_object;
   if (IsCrosSetting(name)) {
     pref_object = GetCrosSettingsPref(name);
-    if (!pref_object)
+    if (!pref_object) {
       return std::nullopt;
+    }
   } else if (generated_prefs && generated_prefs->HasPref(name)) {
     return generated_prefs->GetPref(name);
   } else {
     PrefService* pref_service = FindServiceForPref(name);
     pref = pref_service->FindPreference(name);
-    if (!pref)
+    if (!pref) {
       return std::nullopt;
+    }
     pref_object.emplace();
     pref_object->key = pref->name();
     pref_object->type = GetType(name, pref->GetType());
@@ -1197,33 +1248,19 @@ std::optional<settings_api::PrefObject> PrefsUtil::GetPref(
     return pref_object;
   }
 #endif
-  if (base::FeatureList::IsEnabled(
-          supervised_user::kSupervisedPrefsControlledBySupervisedStore)) {
-    if (pref && pref->IsManaged()) {
-      pref_object->controlled_by = settings_api::ControlledBy::kUserPolicy;
-    }
-
-    if (pref && pref->IsManagedByCustodian()) {
-      pref_object->controlled_by =
-          settings_api::ControlledBy::kChildRestriction;
-    }
-
-    if (pref_object->controlled_by != settings_api::ControlledBy::kNone) {
-      pref_object->enforcement = settings_api::Enforcement::kEnforced;
-      return pref_object;
-    }
-  } else {
-    if (pref && pref->IsManaged()) {
-      if (profile_->IsChild()) {
-        pref_object->controlled_by =
-            settings_api::ControlledBy::kChildRestriction;
-      } else {
-        pref_object->controlled_by = settings_api::ControlledBy::kUserPolicy;
-      }
-      pref_object->enforcement = settings_api::Enforcement::kEnforced;
-      return pref_object;
-    }
+  if (pref && pref->IsManaged()) {
+    pref_object->controlled_by = settings_api::ControlledBy::kUserPolicy;
   }
+
+  if (pref && pref->IsManagedByCustodian()) {
+    pref_object->controlled_by = settings_api::ControlledBy::kChildRestriction;
+  }
+
+  if (pref_object->controlled_by != settings_api::ControlledBy::kNone) {
+    pref_object->enforcement = settings_api::Enforcement::kEnforced;
+    return pref_object;
+  }
+
   // A pref is recommended if it has a recommended value, regardless of whether
   // the current value is set by policy. The UI will test to see whether the
   // current value matches the recommended value and inform the user.
@@ -1288,22 +1325,26 @@ settings_private::SetPrefResult PrefsUtil::SetPref(const std::string& pref_name,
     return settings_private::SetPrefResult::PREF_NOT_FOUND;
   }
 
-  if (IsCrosSetting(pref_name))
+  if (IsCrosSetting(pref_name)) {
     return SetCrosSettingsPref(pref_name, value);
+  }
 
   settings_private::GeneratedPrefs* generated_prefs =
       settings_private::GeneratedPrefsFactory::GetForBrowserContext(profile_);
-  if (generated_prefs && generated_prefs->HasPref(pref_name))
+  if (generated_prefs && generated_prefs->HasPref(pref_name)) {
     return generated_prefs->SetPref(pref_name, value);
+  }
 
   PrefService* pref_service = FindServiceForPref(pref_name);
 
-  if (!IsPrefUserModifiable(pref_name))
+  if (!IsPrefUserModifiable(pref_name)) {
     return settings_private::SetPrefResult::PREF_NOT_MODIFIABLE;
+  }
 
   const PrefService::Preference* pref = pref_service->FindPreference(pref_name);
-  if (!pref)
+  if (!pref) {
     return settings_private::SetPrefResult::PREF_NOT_FOUND;
+  }
 
   switch (pref->GetType()) {
     case base::Value::Type::BOOLEAN:
@@ -1317,27 +1358,31 @@ settings_private::SetPrefResult PrefsUtil::SetPref(const std::string& pref_name,
       // Otherwise if the number is a whole number like 2.0, it will
       // automatically be of type INTEGER causing type mismatches in
       // PrefService::SetUserPrefValue for doubles, and vice versa.
-      if (!value->is_double() && !value->is_int())
+      if (!value->is_double() && !value->is_int()) {
         return settings_private::SetPrefResult::PREF_TYPE_MISMATCH;
+      }
       double double_value;
       double_value = value->GetDouble();
 
-      if (pref->GetType() == base::Value::Type::DOUBLE)
+      if (pref->GetType() == base::Value::Type::DOUBLE) {
         pref_service->SetDouble(pref_name, double_value);
-      else
+      } else {
         pref_service->SetInteger(pref_name, static_cast<int>(double_value));
+      }
       break;
     case base::Value::Type::STRING: {
-      if (!value->is_string())
+      if (!value->is_string()) {
         return settings_private::SetPrefResult::PREF_TYPE_MISMATCH;
+      }
 
       std::string string_value = value->GetString();
       if (IsPrefTypeURL(pref_name)) {
         GURL fixed = url_formatter::FixupURL(string_value, std::string());
-        if (fixed.is_valid())
+        if (fixed.is_valid()) {
           string_value = fixed.spec();
-        else
+        } else {
           string_value = std::string();
+        }
       }
 
       pref_service->SetString(pref_name, string_value);
@@ -1358,12 +1403,14 @@ settings_private::SetPrefResult PrefsUtil::SetCrosSettingsPref(
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (pref_name == ash::kSystemTimezone) {
     const std::string* string_value = value->GetIfString();
-    if (!string_value)
+    if (!string_value) {
       return settings_private::SetPrefResult::PREF_TYPE_MISMATCH;
+    }
     const user_manager::User* user =
         ash::ProfileHelper::Get()->GetUserByProfile(profile_);
-    if (user && ash::system::SetSystemTimezone(user, *string_value))
+    if (user && ash::system::SetSystemTimezone(user, *string_value)) {
       return settings_private::SetPrefResult::SUCCESS;
+    }
     return settings_private::SetPrefResult::PREF_NOT_MODIFIABLE;
   }
 
@@ -1417,10 +1464,12 @@ bool PrefsUtil::IsPrefTypeURL(const std::string& pref_name) {
 bool PrefsUtil::IsPrefEnterpriseManaged(const std::string& pref_name) {
   policy::BrowserPolicyConnectorAsh* connector =
       g_browser_process->platform_part()->browser_policy_connector_ash();
-  if (!connector->IsDeviceEnterpriseManaged())
+  if (!connector->IsDeviceEnterpriseManaged()) {
     return false;
-  if (IsPrivilegedCrosSetting(pref_name))
+  }
+  if (IsPrivilegedCrosSetting(pref_name)) {
     return true;
+  }
   if (pref_name == ash::kSystemTimezone || pref_name == prefs::kUserTimezone) {
     return ash::system::IsTimezonePrefsManaged(pref_name);
   }
@@ -1430,12 +1479,14 @@ bool PrefsUtil::IsPrefEnterpriseManaged(const std::string& pref_name) {
 bool PrefsUtil::IsPrefOwnerControlled(const std::string& pref_name) {
   // ash::kSystemTimezone is global display-only preference and
   // it should appear as disabled, but not owned.
-  if (pref_name == ash::kSystemTimezone)
+  if (pref_name == ash::kSystemTimezone) {
     return false;
+  }
 
   if (IsPrivilegedCrosSetting(pref_name)) {
-    if (!ash::ProfileHelper::IsOwnerProfile(profile_))
+    if (!ash::ProfileHelper::IsOwnerProfile(profile_)) {
       return true;
+    }
   }
   return false;
 }
@@ -1458,8 +1509,9 @@ bool PrefsUtil::IsPrefPrimaryUserControlled(const std::string& pref_name) {
 bool PrefsUtil::IsHotwordDisabledForChildUser(const std::string& pref_name) {
   const std::string& hotwordEnabledPref =
       ash::assistant::prefs::kAssistantHotwordEnabled;
-  if (!profile_->IsChild() || pref_name != hotwordEnabledPref)
+  if (!profile_->IsChild() || pref_name != hotwordEnabledPref) {
     return false;
+  }
 
   PrefService* pref_service = FindServiceForPref(hotwordEnabledPref);
   const PrefService::Preference* pref =
@@ -1479,18 +1531,21 @@ bool PrefsUtil::IsPrefSupervisorControlled(const std::string& pref_name) {
 }
 
 bool PrefsUtil::IsPrefUserModifiable(const std::string& pref_name) {
-  if (IsSettingReadOnly(pref_name))
+  if (IsSettingReadOnly(pref_name)) {
     return false;
+  }
 
   const PrefService::Preference* profile_pref =
       profile_->GetPrefs()->FindPreference(pref_name);
-  if (profile_pref)
+  if (profile_pref) {
     return profile_pref->IsUserModifiable();
+  }
 
   const PrefService::Preference* local_state_pref =
       g_browser_process->local_state()->FindPreference(pref_name);
-  if (local_state_pref)
+  if (local_state_pref) {
     return local_state_pref->IsUserModifiable();
+  }
 
   return false;
 }
@@ -1514,11 +1569,13 @@ PrefService* PrefsUtil::FindServiceForPref(const std::string& pref_name) {
   // Find which PrefService contains the given pref. Pref names should not
   // be duplicated across services, however if they are, prefer the user's
   // prefs.
-  if (user_prefs->FindPreference(pref_name))
+  if (user_prefs->FindPreference(pref_name)) {
     return user_prefs;
+  }
 
-  if (g_browser_process->local_state()->FindPreference(pref_name))
+  if (g_browser_process->local_state()->FindPreference(pref_name)) {
     return g_browser_process->local_state();
+  }
 
   return user_prefs;
 }
@@ -1535,34 +1592,39 @@ const Extension* PrefsUtil::GetExtensionControllingPref(
     const settings_api::PrefObject& pref_object) {
   // Look for specific prefs that might be extension controlled. This generally
   // corresponds with some indiciator that should be shown in the settings UI.
-  if (pref_object.key == ::prefs::kHomePage)
+  if (pref_object.key == ::prefs::kHomePage) {
     return GetExtensionOverridingHomepage(profile_);
-
-  if (pref_object.key == ::prefs::kRestoreOnStartup) {
-    if (pref_object.value->GetInt() == SessionStartupPref::kPrefValueURLs)
-      return GetExtensionOverridingStartupPages(profile_);
   }
 
-  if (pref_object.key == ::prefs::kURLsToRestoreOnStartup)
+  if (pref_object.key == ::prefs::kRestoreOnStartup) {
+    if (pref_object.value->GetInt() == SessionStartupPref::kPrefValueURLs) {
+      return GetExtensionOverridingStartupPages(profile_);
+    }
+  }
+
+  if (pref_object.key == ::prefs::kURLsToRestoreOnStartup) {
     return GetExtensionOverridingStartupPages(profile_);
+  }
 
   if (pref_object.key ==
       DefaultSearchManager::kDefaultSearchProviderDataPrefName) {
     return GetExtensionOverridingSearchEngine(profile_);
   }
 
-  if (pref_object.key == proxy_config::prefs::kProxy)
+  if (pref_object.key == proxy_config::prefs::kProxy) {
     return GetExtensionOverridingProxy(profile_);
+  }
 
   // If it's none of the above, attempt a more general strategy.
   std::string extension_id =
       ExtensionPrefValueMapFactory::GetForBrowserContext(profile_)
           ->GetExtensionControllingPref(pref_object.key);
-  if (extension_id.empty())
+  if (extension_id.empty()) {
     return nullptr;
+  }
 
-  return ExtensionRegistry::Get(profile_)->GetExtensionById(
-      extension_id, ExtensionRegistry::ENABLED);
+  return ExtensionRegistry::Get(profile_)->enabled_extensions().GetByID(
+      extension_id);
 }
 
 }  // namespace extensions

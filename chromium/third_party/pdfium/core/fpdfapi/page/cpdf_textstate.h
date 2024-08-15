@@ -7,10 +7,12 @@
 #ifndef CORE_FPDFAPI_PAGE_CPDF_TEXTSTATE_H_
 #define CORE_FPDFAPI_PAGE_CPDF_TEXTSTATE_H_
 
+#include <array>
+
 #include "core/fxcrt/retain_ptr.h"
 #include "core/fxcrt/shared_copy_on_write.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/unowned_ptr.h"
-#include "third_party/base/containers/span.h"
 
 class CPDF_Document;
 class CPDF_Font;
@@ -78,8 +80,8 @@ class CPDF_TextState {
     float m_CharSpace = 0.0f;
     float m_WordSpace = 0.0f;
     TextRenderingMode m_TextMode = TextRenderingMode::MODE_FILL;
-    float m_Matrix[4] = {1.0f, 0.0f, 0.0f, 1.0f};
-    float m_CTM[4] = {1.0f, 0.0f, 0.0f, 1.0f};
+    std::array<float, 4> m_Matrix = {1.0f, 0.0f, 0.0f, 1.0f};
+    std::array<float, 4> m_CTM = {1.0f, 0.0f, 0.0f, 1.0f};
 
    private:
     TextData();

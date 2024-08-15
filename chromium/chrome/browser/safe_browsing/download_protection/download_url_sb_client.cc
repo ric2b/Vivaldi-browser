@@ -57,12 +57,10 @@ void DownloadUrlSBClient::OnDownloadDestroyed(
 }
 
 void DownloadUrlSBClient::StartCheck() {
-  DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(kSafeBrowsingOnUIThread)
-                          ? content::BrowserThread::UI
-                          : content::BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!database_manager_.get() ||
       database_manager_->CheckDownloadUrl(url_chain_, this)) {
-    CheckDone(SB_THREAT_TYPE_SAFE);
+    CheckDone(SBThreatType::SB_THREAT_TYPE_SAFE);
   } else {
     // Add a reference to this object to prevent it from being destroyed
     // before url checking result is returned.
@@ -71,7 +69,7 @@ void DownloadUrlSBClient::StartCheck() {
 }
 
 bool DownloadUrlSBClient::IsDangerous(SBThreatType threat_type) const {
-  return threat_type == SB_THREAT_TYPE_URL_BINARY_MALWARE;
+  return threat_type == SBThreatType::SB_THREAT_TYPE_URL_BINARY_MALWARE;
 }
 
 // Implements SafeBrowsingDatabaseManager::Client.
@@ -93,7 +91,7 @@ void DownloadUrlSBClient::CheckDone(SBThreatType threat_type) {
                                    ? DownloadCheckResult::DANGEROUS
                                    : DownloadCheckResult::SAFE;
   UpdateDownloadCheckStats(total_type_);
-  if (threat_type != SB_THREAT_TYPE_SAFE) {
+  if (threat_type != SBThreatType::SB_THREAT_TYPE_SAFE) {
     UpdateDownloadCheckStats(dangerous_type_);
     content::GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE,
@@ -112,8 +110,7 @@ void DownloadUrlSBClient::CheckDone(SBThreatType threat_type) {
 void DownloadUrlSBClient::ReportMalware(SBThreatType threat_type) {
   std::string post_data;
   if (!sha256_hash_.empty()) {
-    post_data +=
-        base::HexEncode(sha256_hash_.data(), sha256_hash_.size()) + "\n";
+    post_data += base::HexEncode(sha256_hash_) + "\n";
   }
   for (size_t i = 0; i < url_chain_.size(); ++i) {
     post_data += url_chain_[i].spec() + "\n";

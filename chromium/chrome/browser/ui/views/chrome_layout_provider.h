@@ -71,8 +71,6 @@ enum ChromeDistanceMetric {
   DISTANCE_TOAST_CONTROL_VERTICAL,
   // Vertical margin for labels in a toast.
   DISTANCE_TOAST_LABEL_VERTICAL,
-  // Horizontal spacing between controls that are logically unrelated.
-  DISTANCE_UNRELATED_CONTROL_HORIZONTAL,
   // Larger horizontal spacing between unrelated controls.
   DISTANCE_UNRELATED_CONTROL_HORIZONTAL_LARGE,
   // Larger vertical spacing between unrelated controls.
@@ -89,9 +87,6 @@ enum ChromeDistanceMetric {
   DISTANCE_BETWEEN_PRIMARY_AND_SECONDARY_LABELS_HORIZONTAL,
   // Vertical padding at the top and bottom of the an omnibox match row.
   DISTANCE_OMNIBOX_CELL_VERTICAL_PADDING,
-  // Horizontal overlap between an activity indicator chip and a permission
-  // request chip.
-  DISTANCE_OMNIBOX_CHIPS_OVERLAP,
   // Vertical padding at the top and bottom of the an omnibox match row for two
   // line layout.
   DISTANCE_OMNIBOX_TWO_LINE_CELL_VERTICAL_PADDING,

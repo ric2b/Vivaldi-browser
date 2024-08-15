@@ -13,12 +13,12 @@
 #include "build/build_config.h"
 #include "core/fxcrt/fx_coordinates.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/unowned_ptr.h"
 #include "core/fxge/cfx_path.h"
 #include "core/fxge/dib/fx_dib.h"
 #include "core/fxge/render_defines.h"
 #include "core/fxge/renderdevicedriver_iface.h"
-#include "third_party/base/containers/span.h"
 
 class CFX_DIBBase;
 class CFX_DIBitmap;
@@ -94,13 +94,9 @@ class CFX_RenderDevice {
   }
 
   RetainPtr<CFX_DIBitmap> GetBackDrop();
-  bool GetDIBits(const RetainPtr<CFX_DIBitmap>& pBitmap, int left, int top);
-  bool SetDIBits(const RetainPtr<const CFX_DIBBase>& pBitmap,
-                 int left,
-                 int top) {
-    return SetDIBitsWithBlend(pBitmap, left, top, BlendMode::kNormal);
-  }
-  bool SetDIBitsWithBlend(const RetainPtr<const CFX_DIBBase>& pBitmap,
+  bool GetDIBits(RetainPtr<CFX_DIBitmap> bitmap, int left, int top);
+  bool SetDIBits(RetainPtr<const CFX_DIBBase> bitmap, int left, int top);
+  bool SetDIBitsWithBlend(RetainPtr<const CFX_DIBBase> bitmap,
                           int left,
                           int top,
                           BlendMode blend_mode);
@@ -116,7 +112,7 @@ class CFX_RenderDevice {
                                       int dest_height,
                                       const FXDIB_ResampleOptions& options,
                                       BlendMode blend_mode);
-  bool SetBitMask(const RetainPtr<CFX_DIBBase>& pBitmap,
+  bool SetBitMask(RetainPtr<const CFX_DIBBase> bitmap,
                   int left,
                   int top,
                   uint32_t argb);
@@ -203,11 +199,9 @@ class CFX_RenderDevice {
                    int alpha,
                    bool bAlphaMode);
 
-  // Multiplies the device by a constant alpha, returning `true` on success.
+  // See RenderDeviceDriverIface methods of the same name.
   bool MultiplyAlpha(float alpha);
-
-  // Multiplies the device by an alpha mask, returning `true` on success.
-  bool MultiplyAlphaMask(const RetainPtr<const CFX_DIBBase>& mask);
+  bool MultiplyAlphaMask(RetainPtr<const CFX_DIBitmap> mask);
 
 #if defined(PDF_USE_SKIA)
   bool SetBitsWithMask(RetainPtr<const CFX_DIBBase> bitmap,

@@ -35,6 +35,7 @@
 #include "media/base/media_switches.h"
 #include "media/base/media_util.h"
 #include "media/base/platform_features.h"
+#include "media/base/svc_scalability_mode.h"
 #include "media/base/video_bitrate_allocation.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
@@ -137,8 +138,8 @@ class SignaledValue {
   bool IsValid() { return event; }
 
  private:
-  raw_ptr<base::WaitableEvent, ExperimentalRenderer> event;
-  raw_ptr<int32_t, ExperimentalRenderer> val;
+  raw_ptr<base::WaitableEvent> event;
+  raw_ptr<int32_t> val;
 };
 
 class ScopedSignaledValue {
@@ -262,7 +263,8 @@ uint8_t GetDropFrameThreshold(const webrtc::VideoCodec& codec_settings) {
   // This drop frame threshold is same as WebRTC.
   // https://source.chromium.org/chromium/chromium/src/+/main:third_party/webrtc/modules/video_coding/codecs/vp9/libvpx_vp9_encoder.cc
   if (codec_settings.GetFrameDropEnabled() &&
-      base::FeatureList::IsEnabled(media::kVideoEncoderFrameDrop)) {
+      base::FeatureList::IsEnabled(
+          media::kWebRTCHardwareVideoEncoderFrameDrop)) {
     return 30;
   }
   return 0;
@@ -356,7 +358,7 @@ bool CreateSpatialLayersConfig(
     std::vector<media::VideoEncodeAccelerator::Config::SpatialLayer>*
         spatial_layers,
     media::SVCInterLayerPredMode* inter_layer_pred) {
-  absl::optional<webrtc::ScalabilityMode> scalability_mode =
+  std::optional<webrtc::ScalabilityMode> scalability_mode =
       codec_settings.GetScalabilityMode();
 
   if (codec_settings.codecType == webrtc::kVideoCodecVP9 &&
@@ -462,6 +464,14 @@ bool CreateSpatialLayersConfig(
           *inter_layer_pred = CopyFromWebRtcInterLayerPredMode(
               codec_settings.VP9().interLayerPred);
         }
+      }
+      break;
+    case webrtc::kVideoCodecAV1:
+      // No hardware encoder supports for AV1 either temporal layer or spatial
+      // layer encoding.
+      if (scalability_mode.value_or(webrtc::ScalabilityMode::kL1T1) !=
+          webrtc::ScalabilityMode::kL1T1) {
+        return false;
       }
       break;
     default:
@@ -599,7 +609,7 @@ class RTCVideoEncoder::Impl : public media::VideoEncodeAccelerator::Client {
        scoped_refptr<media::MojoVideoEncoderMetricsProviderFactory>
            encoder_metrics_provider_factory,
        webrtc::VideoCodecType video_codec_type,
-       absl::optional<webrtc::ScalabilityMode> scalability_mode,
+       std::optional<webrtc::ScalabilityMode> scalability_mode,
        webrtc::VideoContentType video_content_type,
        UpdateEncoderInfoCallback update_encoder_info_callback,
        base::RepeatingClosure execute_software_fallback,
@@ -700,8 +710,7 @@ class RTCVideoEncoder::Impl : public media::VideoEncodeAccelerator::Client {
   SEQUENCE_CHECKER(sequence_checker_);
 
   // Factory for creating VEAs, shared memory buffers, etc.
-  const raw_ptr<media::GpuVideoAcceleratorFactories, ExperimentalRenderer>
-      gpu_factories_;
+  const raw_ptr<media::GpuVideoAcceleratorFactories> gpu_factories_;
 
   scoped_refptr<media::MojoVideoEncoderMetricsProviderFactory>
       encoder_metrics_provider_factory_;
@@ -765,7 +774,7 @@ class RTCVideoEncoder::Impl : public media::VideoEncodeAccelerator::Client {
   const webrtc::VideoCodecType video_codec_type_;
 
   // The scalability mode, as reported to WebRTC.
-  const absl::optional<webrtc::ScalabilityMode> scalability_mode_;
+  const std::optional<webrtc::ScalabilityMode> scalability_mode_;
 
   // The content type, as reported to WebRTC (screenshare vs realtime video).
   const webrtc::VideoContentType video_content_type_;
@@ -802,8 +811,8 @@ class RTCVideoEncoder::Impl : public media::VideoEncodeAccelerator::Client {
 
   // webrtc::VideoEncoder encode complete callback.
   // TODO(b/257021675): Don't guard this by |lock_|
-  raw_ptr<webrtc::EncodedImageCallback, ExperimentalRenderer>
-      encoded_image_callback_ GUARDED_BY(lock_){nullptr};
+  raw_ptr<webrtc::EncodedImageCallback> encoded_image_callback_
+      GUARDED_BY(lock_){nullptr};
 
   // They are bound to |gpu_task_runner_|, which is sequence checked by
   // |sequence_checker|.
@@ -816,7 +825,7 @@ RTCVideoEncoder::Impl::Impl(
     scoped_refptr<media::MojoVideoEncoderMetricsProviderFactory>
         encoder_metrics_provider_factory,
     webrtc::VideoCodecType video_codec_type,
-    absl::optional<webrtc::ScalabilityMode> scalability_mode,
+    std::optional<webrtc::ScalabilityMode> scalability_mode,
     webrtc::VideoContentType video_content_type,
     UpdateEncoderInfoCallback update_encoder_info_callback,
     base::RepeatingClosure execute_software_fallback,
@@ -918,7 +927,6 @@ void RTCVideoEncoder::Impl::Enqueue(FrameChunk frame_chunk) {
   if (base::FeatureList::IsEnabled(
           features::kVideoEncoderLimitsFramesInEncoder) &&
       frames_in_encoder_count_ >= kMaxFramesInEncoder) {
-    CHECK_EQ(frames_in_encoder_count_, kMaxFramesInEncoder);
     DVLOG(1) << "VAE drops the input frame to reduce latency";
     base::AutoLock lock(lock_);
     if (encoded_image_callback_) {
@@ -1023,7 +1031,7 @@ void RTCVideoEncoder::Impl::RequestEncodingParametersChange(
   }
   DCHECK_EQ(allocation.GetSumBps(), parameters.bitrate.get_sum_bps());
   video_encoder_->RequestEncodingParametersChange(allocation, framerate,
-                                                  absl::nullopt);
+                                                  std::nullopt);
 }
 
 void RTCVideoEncoder::Impl::RecordTimestampMatchUMA() const {
@@ -1161,9 +1169,9 @@ void RTCVideoEncoder::Impl::BitstreamBufferReady(
 
   // Find RTP and capture timestamps by going through |pending_timestamps_|.
   // Derive it from current time otherwise.
-  absl::optional<uint32_t> rtp_timestamp;
-  absl::optional<int64_t> capture_timestamp_ms;
-  absl::optional<ActiveSpatialLayers> expected_active_spatial_layers;
+  std::optional<uint32_t> rtp_timestamp;
+  std::optional<int64_t> capture_timestamp_ms;
+  std::optional<ActiveSpatialLayers> expected_active_spatial_layers;
   if (!failed_timestamp_match_) {
     // Pop timestamps until we have a match.
     while (!submitted_frames_.empty()) {
@@ -1551,7 +1559,7 @@ void RTCVideoEncoder::Impl::EncodeOneFrame(FrameChunk frame_chunk) {
                                               input_frame_coded_size_);
         input_buffers_[index] = std::make_unique<base::MappedReadOnlyRegion>(
             base::ReadOnlySharedMemoryRegion::Create(input_frame_buffer_size));
-        if (!input_buffers_[index]) {
+        if (!input_buffers_[index]->IsValid()) {
           NotifyErrorStatus({media::EncoderStatus::Codes::kSystemAPICallError,
                              "Failed to create input buffer"});
           return;
@@ -1897,6 +1905,34 @@ int32_t RTCVideoEncoder::InitEncode(
     return WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE;
   }
 
+  // Fallback to SW if VEA does not support VP9 SVC encoding.
+  if (codec_settings->codecType == webrtc::kVideoCodecVP9 &&
+      (codec_settings->VP9().numberOfTemporalLayers > 1 ||
+       codec_settings->VP9().numberOfSpatialLayers > 1)) {
+    const auto vea_supported_profiles =
+        gpu_factories_->GetVideoEncodeAcceleratorSupportedProfiles().value_or(
+            media::VideoEncodeAccelerator::SupportedProfiles());
+    auto support_profile = base::ranges::find_if(
+        vea_supported_profiles,
+        [this](const media::VideoEncodeAccelerator::SupportedProfile&
+                   support_profile) {
+          return this->profile_ == support_profile.profile &&
+                 support_profile.scalability_modes.size() > 0;
+        });
+    if (vea_supported_profiles.end() != support_profile) {
+      media::SVCScalabilityMode scalability_mode =
+          ToSVCScalabilityMode(spatial_layers, inter_layer_pred);
+      if (support_profile->scalability_modes.end() ==
+          base::ranges::find_if(
+              support_profile->scalability_modes,
+              [scalability_mode](const media::SVCScalabilityMode& value) {
+                return value == scalability_mode;
+              })) {
+        return WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE;
+      }
+    }
+  }
+
   gfx::Size input_visible_size(codec_settings->width, codec_settings->height);
   // Check that |profile| supports |input_visible_size|.
   if (base::FeatureList::IsEnabled(features::kWebRtcUseMinMaxVEADimensions)) {
@@ -1935,8 +1971,8 @@ int32_t RTCVideoEncoder::InitEncode(
       base::BindRepeating(&RTCVideoEncoder::UpdateEncoderInfo,
                           base::Unretained(this));
   base::RepeatingClosure execute_software_fallback =
-      base::BindPostTaskToCurrentDefault(
-          base::BindRepeating(&RTCVideoEncoder::SetError, weak_this_));
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
+          &RTCVideoEncoder::SetError, weak_this_, ++impl_id_));
 
   impl_ = std::make_unique<Impl>(
       gpu_factories_, encoder_metrics_provider_factory_,
@@ -1955,10 +1991,9 @@ int32_t RTCVideoEncoder::InitEncode(
 
   vea_config_ = media::VideoEncodeAccelerator::Config(
       pixel_format, input_visible_size, profile_,
-      media::Bitrate::ConstantBitrate(bitrate_bps));
+      media::Bitrate::ConstantBitrate(bitrate_bps),
+      codec_settings->maxFramerate, storage_type, vea_content_type);
   vea_config_->is_constrained_h264 = is_constrained_h264_;
-  vea_config_->storage_type = storage_type;
-  vea_config_->content_type = vea_content_type;
   vea_config_->spatial_layers = spatial_layers;
   vea_config_->inter_layer_pred = inter_layer_pred;
   vea_config_->drop_frame_thresh_percentage =
@@ -2021,7 +2056,7 @@ int32_t RTCVideoEncoder::Encode(
     int32_t initialization_val = InitializeEncoder(*vea_config_);
     vea_config_.reset();
     if (initialization_val != WEBRTC_VIDEO_CODEC_OK) {
-      SetError();
+      SetError(impl_id_);
       Release();
       CHECK(!impl_);
       pending_rate_params_.reset();
@@ -2201,9 +2236,13 @@ void RTCVideoEncoder::UpdateEncoderInfo(
                                                preferred_pixel_formats.end());
 }
 
-void RTCVideoEncoder::SetError() {
+void RTCVideoEncoder::SetError(uint32_t impl_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(webrtc_sequence_checker_);
-  has_error_ = true;
+  //  RTCVideoEncoder should reject to set error if the impl_id is not equal to
+  //  current impl_id_, which means it's requested by a released impl_.
+  if (impl_id == impl_id_) {
+    has_error_ = true;
+  }
 
   if (error_callback_for_testing_)
     std::move(error_callback_for_testing_).Run();

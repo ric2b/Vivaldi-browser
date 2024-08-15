@@ -324,7 +324,7 @@ void PageTimingMetricsSender::EnsureSendTimer(bool urgent) {
 void PageTimingMetricsSender::SendNow() {
   have_sent_ipc_ = true;
   std::vector<mojom::ResourceDataUpdatePtr> resources;
-  for (auto* resource : modified_resources_) {
+  for (PageResourceDataUse* resource : modified_resources_) {
     resources.push_back(resource->GetResourceDataUpdate());
     if (resource->IsFinishedLoading()) {
       page_resource_data_use_.erase(resource->resource_id());
@@ -369,11 +369,14 @@ void PageTimingMetricsSender::InitiateUserInteractionTiming() {
 void PageTimingMetricsSender::DidObserveUserInteraction(
     base::TimeTicks max_event_start,
     base::TimeTicks max_event_end,
+    base::TimeTicks max_event_queued_main_thread,
     blink::UserInteractionType interaction_type,
     uint64_t interaction_offset) {
   input_timing_delta_->num_interactions++;
   metadata_recorder_.AddInteractionDurationMetadata(max_event_start,
                                                     max_event_end);
+  metadata_recorder_.AddInteractionDurationAfterQueueingMetadata(
+      max_event_start, max_event_queued_main_thread, max_event_end);
   base::TimeDelta max_event_duration = max_event_end - max_event_start;
   input_timing_delta_->max_event_durations->get_user_interaction_latencies()
       .emplace_back(mojom::UserInteractionLatency::New(

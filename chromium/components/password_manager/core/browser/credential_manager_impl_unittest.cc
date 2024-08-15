@@ -11,6 +11,7 @@
 #include <string>
 #include <utility>
 
+#include "base/containers/to_vector.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
@@ -18,15 +19,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/test/gmock_move_support.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
-#include "base/test/to_vector.h"
 #include "build/build_config.h"
-#include "components/password_manager/core/browser/affiliation/fake_affiliation_service.h"
+#include "components/affiliations/core/browser/fake_affiliation_service.h"
 #include "components/password_manager/core/browser/affiliation/mock_affiliated_match_helper.h"
 #include "components/password_manager/core/browser/credential_manager_pending_request_task.h"
 #include "components/password_manager/core/browser/credential_manager_utils.h"
-#include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/leak_detection/leak_detection_check.h"
 #include "components/password_manager/core/browser/leak_detection/leak_detection_check_factory.h"
 #include "components/password_manager/core/browser/leak_detection/leak_detection_request_utils.h"
@@ -103,7 +101,7 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
   MOCK_METHOD(
       void,
       PasswordWasAutofilled,
-      (const std::vector<vector_experimental_raw_ptr<const PasswordForm>>&,
+      (base::span<const PasswordForm>,
        const url::Origin&,
        const std::vector<vector_experimental_raw_ptr<const PasswordForm>>*,
        bool was_autofilled_on_pageload),
@@ -170,7 +168,7 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
         FROM_HERE, base::BindOnce(std::move(callback),
                                   base::Owned(new PasswordForm(*form))));
     PromptUserToChooseCredentialsPtr(
-        base::test::ToVector(local_forms, &std::unique_ptr<PasswordForm>::get),
+        base::ToVector(local_forms, &std::unique_ptr<PasswordForm>::get),
         origin, base::DoNothing());
     return true;
   }
@@ -231,20 +229,13 @@ GURL HttpURLFromHttps(const GURL& https_url) {
 class CredentialManagerImplTest : public testing::Test,
                                   public testing::WithParamInterface<bool> {
  public:
-  CredentialManagerImplTest() {
-    if (GetParam()) {
-      feature_list_.InitAndEnableFeature(
-          password_manager::features::kEnablePasswordsAccountStorage);
-    } else {
-      feature_list_.InitAndDisableFeature(
-          password_manager::features::kEnablePasswordsAccountStorage);
-    }
-  }
+  CredentialManagerImplTest() = default;
 
   void SetUp() override {
     store_ = new TestPasswordStore;
 
-    fake_affiliation_service_ = std::make_unique<FakeAffiliationService>();
+    fake_affiliation_service_ =
+        std::make_unique<affiliations::FakeAffiliationService>();
     auto owning_mock_match_helper =
         std::make_unique<NiceMock<MockAffiliatedMatchHelper>>(
             fake_affiliation_service_.get());
@@ -414,7 +405,6 @@ class CredentialManagerImplTest : public testing::Test,
   void RunAllPendingTasks() { task_environment_.RunUntilIdle(); }
 
  protected:
-  base::test::ScopedFeatureList feature_list_;
   base::test::TaskEnvironment task_environment_;
   PasswordForm form_;
   PasswordForm affiliated_form1_;
@@ -425,7 +415,8 @@ class CredentialManagerImplTest : public testing::Test,
   scoped_refptr<TestPasswordStore> store_;
   scoped_refptr<TestPasswordStore> account_store_;
   std::unique_ptr<testing::NiceMock<MockPasswordManagerClient>> client_;
-  std::unique_ptr<FakeAffiliationService> fake_affiliation_service_;
+  std::unique_ptr<affiliations::FakeAffiliationService>
+      fake_affiliation_service_;
   raw_ptr<MockAffiliatedMatchHelper> mock_match_helper_ = nullptr;
   std::unique_ptr<CredentialManagerImpl> cm_service_impl_;
 };
@@ -1741,7 +1732,7 @@ TEST_P(CredentialManagerImplTest,
   EXPECT_CALL(
       *client_,
       PasswordWasAutofilled(
-          ElementsAre(Pointee(MatchesFormExceptStore(form_))), _,
+          ElementsAre(MatchesFormExceptStore(form_)), _,
           Pointee(ElementsAre(Pointee(MatchesFormExceptStore(federated)))), _));
 
   bool called = false;

@@ -9,8 +9,9 @@
 
 #include <vector>
 
+#include "core/fxcrt/raw_span.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/widestring.h"
-#include "third_party/base/containers/span.h"
 #include "xfa/fgas/crt/locale_iface.h"
 
 class CFX_DateTime;
@@ -83,8 +84,11 @@ class CFGAS_StringFormatter {
                                  WideString* wsDatePattern,
                                  WideString* wsTimePattern) const;
 
-  const WideString m_wsPattern;                   // keep pattern string alive.
-  const pdfium::span<const wchar_t> m_spPattern;  // span into |m_wsPattern|.
+  // keep pattern string alive.
+  const WideString m_wsPattern;
+
+  // span into `m_wsPattern`.
+  const pdfium::raw_span<const wchar_t> m_spPattern;
 };
 
 #endif  // XFA_FGAS_CRT_CFGAS_STRINGFORMATTER_H_

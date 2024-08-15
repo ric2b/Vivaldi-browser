@@ -43,13 +43,13 @@
 #include "chrome/browser/ash/login/test/session_manager_state_waiter.h"
 #include "chrome/browser/ash/login/test/test_predicate_waiter.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
-#include "chrome/browser/ash/login/users/chrome_user_manager.h"
 #include "chrome/browser/ash/login/users/test_users.h"
 #include "chrome/browser/ash/login/wizard_context.h"
 #include "chrome/browser/ash/policy/affiliation/affiliation_test_helper.h"
 #include "chrome/browser/ash/policy/core/device_policy_cros_test_helper.h"
 #include "chrome/browser/ash/policy/test_support/embedded_policy_test_server_mixin.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
+#include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/ash/settings/scoped_testing_cros_settings.h"
 #include "chrome/browser/ash/settings/stub_cros_settings_provider.h"
 #include "chrome/browser/browser_process.h"
@@ -85,6 +85,7 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
+#include "components/policy/core/common/cloud/test/policy_builder.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_pref_names.h"
@@ -108,7 +109,6 @@
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
@@ -249,6 +249,13 @@ class SamlTestBase : public OobeBaseTest {
 
     // TODO(crbug.com/1177416) - Fix this with a proper SSL solution.
     command_line->AppendSwitch(::switches::kIgnoreCertificateErrors);
+
+    // This will change the verification key to be used by the
+    // CloudPolicyValidator. It will allow for the policy provided by the
+    // PolicyBuilder to pass the signature validation.
+    command_line->AppendSwitchASCII(
+        policy::switches::kPolicyVerificationKey,
+        policy::PolicyBuilder::GetEncodedPolicyVerificationKey());
   }
 
   void SetUpInProcessBrowserTestFixture() override {
@@ -1275,20 +1282,21 @@ void SAMLPolicyTest::SetUpOnMainThread() {
 
   // Give affiliated users appropriate affiliation IDs.
   const base::flat_set<std::string> user_affiliation_ids = {kAffiliationID};
-  ChromeUserManager::Get()->SetUserAffiliation(
+  auto* user_manager = user_manager::UserManager::Get();
+  user_manager->SetUserAffiliation(
       AccountId::FromUserEmailGaiaId(
           saml_test_users::kFirstUserCorpExampleComEmail, kFirstSAMLUserGaiaId),
       user_affiliation_ids);
-  ChromeUserManager::Get()->SetUserAffiliation(
+  user_manager->SetUserAffiliation(
       AccountId::FromUserEmailGaiaId(
           saml_test_users::kSecondUserCorpExampleComEmail,
           kSecondSAMLUserGaiaId),
       user_affiliation_ids);
-  ChromeUserManager::Get()->SetUserAffiliation(
+  user_manager->SetUserAffiliation(
       AccountId::FromUserEmailGaiaId(
           saml_test_users::kThirdUserCorpExampleComEmail, kThirdSAMLUserGaiaId),
       user_affiliation_ids);
-  ChromeUserManager::Get()->SetUserAffiliation(
+  user_manager->SetUserAffiliation(
       AccountId::FromUserEmailGaiaId(kNonSAMLUserEmail, kNonSAMLUserGaiaId),
       user_affiliation_ids);
 
@@ -2085,7 +2093,8 @@ IN_PROC_BROWSER_TEST_P(SAMLPasswordAttributesTest, LoginSucceeded) {
 }
 
 // Verify that no password attributes are stored when login fails.
-IN_PROC_BROWSER_TEST_P(SAMLPasswordAttributesTest, LoginFailed) {
+// TODO(crbug.com/325657256): Test is flaky.
+IN_PROC_BROWSER_TEST_P(SAMLPasswordAttributesTest, DISABLED_LoginFailed) {
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
   fake_saml_idp()->SetSamlResponseFile("saml_with_password_attributes.xml");
   ShowGAIALoginForm();

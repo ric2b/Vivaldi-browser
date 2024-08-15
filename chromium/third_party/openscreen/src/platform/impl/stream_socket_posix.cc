@@ -55,7 +55,7 @@ StreamSocketPosix& StreamSocketPosix::operator=(StreamSocketPosix&& other) =
 
 StreamSocketPosix::~StreamSocketPosix() {
   if (handle_.fd != kUnsetHandleFd) {
-    OSP_DCHECK(state_ != TcpSocketState::kClosed);
+    OSP_CHECK(state_ != TcpSocketState::kClosed);
     Close();
   }
 }
@@ -124,7 +124,7 @@ Error StreamSocketPosix::Close() {
     return ReportSocketClosedError();
   }
 
-  OSP_DCHECK(state_ != TcpSocketState::kClosed);
+  OSP_CHECK(state_ != TcpSocketState::kClosed);
   state_ = TcpSocketState::kClosed;
 
   const int file_descriptor_to_close = handle_.fd;
@@ -175,7 +175,7 @@ Error StreamSocketPosix::Listen() {
 }
 
 Error StreamSocketPosix::Listen(int max_backlog_size) {
-  OSP_DCHECK(state_ == TcpSocketState::kNotConnected);
+  OSP_CHECK(state_ == TcpSocketState::kNotConnected);
   if (!EnsureInitializedAndOpen()) {
     return ReportSocketClosedError();
   }
@@ -244,7 +244,7 @@ Error StreamSocketPosix::Initialize() {
     return CloseOnError(Error::Code::kSocketInvalidState);
   }
 
-  OSP_DCHECK_EQ(last_error_code_, Error::Code::kNone);
+  OSP_CHECK_EQ(last_error_code_, Error::Code::kNone);
   return Error::None();
 }
 

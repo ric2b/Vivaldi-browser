@@ -29,7 +29,6 @@ class CPDF_Form final : public CPDF_PageObjectHolder,
     ~RecursionState();
 
     std::set<const uint8_t*> parsed_set;
-    int form_count = 0;
   };
 
   // Helper method to choose the first non-null resources dictionary.
@@ -50,7 +49,7 @@ class CPDF_Form final : public CPDF_PageObjectHolder,
   void ParseContentForType3Char(CPDF_Type3Char* pType3Char) override;
   bool HasPageObjects() const override;
   CFX_FloatRect CalcBoundingBox() const override;
-  absl::optional<std::pair<RetainPtr<CFX_DIBitmap>, CFX_Matrix>>
+  std::optional<std::pair<RetainPtr<CFX_DIBitmap>, CFX_Matrix>>
   GetBitmapAndMatrixFromSoleImageOfForm() const override;
 
   void ParseContent();

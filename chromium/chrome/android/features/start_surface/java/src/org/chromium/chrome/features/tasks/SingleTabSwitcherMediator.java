@@ -41,7 +41,6 @@ import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
-import org.chromium.chrome.browser.tasks.ReturnToChromeUtil;
 import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
 import org.chromium.chrome.browser.tasks.tab_management.TabListFaviconProvider;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegate.TabSwitcherType;
@@ -131,11 +130,6 @@ public class SingleTabSwitcherMediator implements TabSwitcher.Controller {
                 new TabModelObserver() {
                     @Override
                     public void didSelectTab(Tab tab, int type, int lastId) {
-                        if (!ReturnToChromeUtil.isStartSurfaceRefactorEnabled(mContext)
-                                && mTabModelSelector.isIncognitoSelected()) {
-                            return;
-                        }
-
                         assert mPropertyModel.get(IS_VISIBLE) || mModuleDelegate != null;
 
                         mSelectedTabDidNotChangedAfterShown = false;
@@ -188,7 +182,7 @@ public class SingleTabSwitcherMediator implements TabSwitcher.Controller {
                             Tab tab = normalTabModel.getTabAt(selectedTabIndex);
                             mPropertyModel.set(TITLE, tab.getTitle());
                             if (mIsSurfacePolishEnabled) {
-                                mPropertyModel.set(URL, tab.getUrl().getHost());
+                                mPropertyModel.set(URL, getDomainUrl(tab.getUrl()));
                             }
                             if (mTabTitleAvailableTime == null) {
                                 mTabTitleAvailableTime = SystemClock.elapsedRealtime();
@@ -311,7 +305,7 @@ public class SingleTabSwitcherMediator implements TabSwitcher.Controller {
 
                 mPropertyModel.set(TITLE, activeTab.getTitle());
                 if (mIsSurfacePolishEnabled) {
-                    mPropertyModel.set(URL, activeTab.getUrl().getHost());
+                    mPropertyModel.set(URL, getDomainUrl(activeTab.getUrl()));
                 }
                 if (mTabTitleAvailableTime == null) {
                     mTabTitleAvailableTime = SystemClock.elapsedRealtime();
@@ -441,7 +435,7 @@ public class SingleTabSwitcherMediator implements TabSwitcher.Controller {
                     mPropertyModel.set(FAVICON, favicon);
                 });
         if (mIsSurfacePolishEnabled) {
-            mPropertyModel.set(URL, tab.getUrl().getHost());
+            mPropertyModel.set(URL, getDomainUrl(tab.getUrl()));
             mayUpdateTabThumbnail(tab);
         }
     }
@@ -478,6 +472,15 @@ public class SingleTabSwitcherMediator implements TabSwitcher.Controller {
     @ModuleType
     int getModuleType() {
         return ModuleDelegate.ModuleType.SINGLE_TAB;
+    }
+
+    static String getDomainUrl(GURL url) {
+        if (StartSurfaceConfiguration.useMagicStack()) {
+            String domainUrl = UrlUtilities.getDomainAndRegistry(url.getSpec(), false);
+            return !TextUtils.isEmpty(domainUrl) ? domainUrl : url.getHost();
+        } else {
+            return url.getHost();
+        }
     }
 
     OnTabSelectingListener getTabSelectingListenerForTesting() {

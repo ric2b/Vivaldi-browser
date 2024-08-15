@@ -1906,7 +1906,7 @@ SpvId SPIRVCodeGenerator::writeIntrinsicCall(const FunctionCall& c, OutputStream
     }
     const ExpressionArray& arguments = c.arguments();
     int32_t intrinsicId = intrinsic.floatOp;
-    if (arguments.size() > 0) {
+    if (!arguments.empty()) {
         const Type& type = arguments[0]->type();
         if (intrinsic.opKind == kSpecial_IntrinsicOpcodeKind) {
             // Keep the default float op.
@@ -4548,7 +4548,7 @@ SpvId SPIRVCodeGenerator::writeGlobalVar(ProgramKind kind,
         case SK_SAMPLEMASK_BUILTIN:
             // SkSL exposes this as a `uint` but SPIR-V, like GLSL, uses an array of signed `uint`
             // decorated with SpvBuiltinSampleMask.
-            type = fSynthetics.addArrayDimension(type, /*arraySize=*/1);
+            type = fSynthetics.addArrayDimension(fContext, type, /*arraySize=*/1);
             layout.fBuiltin = SpvBuiltInSampleMask;
             break;
     }

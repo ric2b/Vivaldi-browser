@@ -12,7 +12,9 @@
 #include "base/memory/raw_ptr.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/input_event_activation_protector.h"
+#include "ui/views/layout/delegating_layout_manager.h"
 #include "ui/views/metadata/view_factory.h"
 #include "ui/views/window/client_view.h"
 #include "ui/views/window/dialog_observer.h"
@@ -37,7 +39,9 @@ class Widget;
 // You must not directly depend on or use DialogClientView; it is internal to
 // //ui/views. Access it through the public interfaces on DialogDelegate. It is
 // only VIEWS_EXPORT to make it available to views_unittests.
-class VIEWS_EXPORT DialogClientView : public ClientView, public DialogObserver {
+class VIEWS_EXPORT DialogClientView : public ClientView,
+                                      public DialogObserver,
+                                      public LayoutDelegate {
   METADATA_HEADER(DialogClientView, ClientView)
 
  public:
@@ -65,6 +69,11 @@ class VIEWS_EXPORT DialogClientView : public ClientView, public DialogObserver {
   gfx::Size GetMaximumSize() const override;
   void VisibilityChanged(View* starting_from, bool is_visible) override;
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // ClientView implementation:
+  void UpdateWindowRoundedCorners(int corner_radius) override;
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
   // Input protection is triggered upon prompt creation and updated on
   // visibility changes. Other situations such as top window changes in certain
   // situations should trigger the input protection manually by calling this
@@ -77,7 +86,6 @@ class VIEWS_EXPORT DialogClientView : public ClientView, public DialogObserver {
   // this view is visible).
   void TriggerInputProtection(bool force_early = false);
 
-  void Layout() override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   void ViewHierarchyChanged(
       const ViewHierarchyChangedDetails& details) override;
@@ -103,6 +111,10 @@ class VIEWS_EXPORT DialogClientView : public ClientView, public DialogObserver {
 
   bool IsPossiblyUnintendedInteraction(const ui::Event& event);
 
+  // LayoutDelegate:
+  ProposedLayout CalculateProposedLayout(
+      const SizeBounds& size_bounds) const override;
+
  private:
   enum {
     // The number of buttons that DialogClientView can support.
@@ -112,6 +124,10 @@ class VIEWS_EXPORT DialogClientView : public ClientView, public DialogObserver {
 
   // Returns the DialogDelegate for the window.
   DialogDelegate* GetDialogDelegate() const;
+
+  void SetBackgroundRadii(const gfx::RoundedCornersF& radii);
+
+  void UpdateBackground();
 
   // DialogObserver:
   void OnDialogChanged() override;
@@ -124,7 +140,8 @@ class VIEWS_EXPORT DialogClientView : public ClientView, public DialogObserver {
   // (which must be pointed to by `member`).  Which action is chosen is based on
   // whether DialogDelegate::GetDialogButtons() includes `type`, and whether
   // `member` points to a button that already exists.
-  void UpdateDialogButton(raw_ptr<MdTextButton>* member, ui::DialogButton type);
+  void UpdateDialogButton(raw_ptr<MdTextButton, DanglingUntriaged>* member,
+                          ui::DialogButton type);
 
   void ButtonPressed(ui::DialogButton type, const ui::Event& event);
 
@@ -160,8 +177,8 @@ class VIEWS_EXPORT DialogClientView : public ClientView, public DialogObserver {
   gfx::Size minimum_size_;
 
   // The dialog buttons.
-  raw_ptr<MdTextButton> ok_button_ = nullptr;
-  raw_ptr<MdTextButton> cancel_button_ = nullptr;
+  raw_ptr<MdTextButton, DanglingUntriaged> ok_button_ = nullptr;
+  raw_ptr<MdTextButton, DanglingUntriaged> cancel_button_ = nullptr;
 
   // The extra view shown in the row of buttons; may be nullptr.
   raw_ptr<View> extra_view_ = nullptr;
@@ -177,6 +194,8 @@ class VIEWS_EXPORT DialogClientView : public ClientView, public DialogObserver {
   bool adding_or_removing_views_ = false;
 
   std::unique_ptr<InputEventActivationProtector> input_protector_;
+
+  gfx::RoundedCornersF background_radii_;
 };
 
 BEGIN_VIEW_BUILDER(VIEWS_EXPORT, DialogClientView, ClientView)

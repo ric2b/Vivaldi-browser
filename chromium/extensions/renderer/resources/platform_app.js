@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 var logging = requireNative('logging');
-var chrome = requireNative('chrome').GetChrome();
+//var chrome = requireNative('chrome').GetChrome();
 
 // Extract current extension ID and determine if the extension is Vivaldi
 var process = requireNative('process');

@@ -54,6 +54,12 @@ extern NSString* const kToolbarShadowColor;
 extern NSString* const kOmniboxKeyboardButtonColor;
 // Color for separator between omnibox suggestions.
 extern NSString* const kOmniboxSuggestionRowSeparatorColor;
+// Color for separator between omnibox popout suggestions.
+extern NSString* const kOmniboxPopoutSuggestionRowSeparatorColor;
+// Background colorfor the tab group favicon views.
+extern NSString* const kTabGroupFaviconBackgroundColor;
+// Color for the omnibox popout overlay.
+extern NSString* const kOmniboxPopoutOverlayColor;
 
 // ***************
 // Standard Colors
@@ -132,6 +138,7 @@ extern NSString* const kGrey800Color;
 extern NSString* const kGrey900Color;
 // Static Grey palette (same color for light and dark modes).
 extern NSString* const kStaticGrey300Color;
+extern NSString* const kStaticGrey900Color;
 
 // **********************
 // Light Mode only colors (alpha = 0 in dark mode)

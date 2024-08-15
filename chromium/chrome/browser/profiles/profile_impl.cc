@@ -180,6 +180,7 @@
 #include "services/data_decoder/public/cpp/data_decoder.h"
 #include "services/preferences/public/mojom/preferences.mojom.h"
 #include "services/preferences/public/mojom/tracked_preference_validation_delegate.mojom.h"
+#include "services/screen_ai/buildflags/buildflags.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -237,6 +238,11 @@
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
+#endif
+
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+#include "chrome/browser/accessibility/pdf_ocr_controller_factory.h"
+#include "ui/accessibility/accessibility_features.h"
 #endif
 
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
@@ -430,6 +436,8 @@ void ProfileImpl::RegisterProfilePrefs(
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   registry->RegisterBooleanPref(prefs::kPdfAnnotationsEnabled, true);
 #endif
+  registry->RegisterStringPref(prefs::kCustomProfileLabel, std::string());
+  registry->RegisterIntegerPref(prefs::kProfileLabelPreset, 0);
 }
 
 ProfileImpl::ProfileImpl(
@@ -490,7 +498,7 @@ ProfileImpl::ProfileImpl(
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // TODO(crbug.com/1325210): Move this into
-  // ChromeUserManager::OnProfileCreationStarted().
+  // ChromeUserManagerImpl::OnProfileCreationStarted().
   if (ash::ProfileHelper::IsUserProfile(this)) {
     // |ash::InitializeAccountManager| is called during a User's session
     // initialization but some tests do not properly login to a User Session.
@@ -601,11 +609,13 @@ void ProfileImpl::LoadPrefsForNormalStartup(bool async_prefs) {
         profile_manager->GetProfileAttributesStorage()
             .GetProfileAttributesWithPath(GetPath());
 
-    if (entry && !entry->GetProfileManagementEnrollmentToken().empty()) {
+    if (entry && (!entry->GetProfileManagementEnrollmentToken().empty() ||
+                  entry->IsDasherlessManagement())) {
       profile_cloud_policy_manager_ = policy::ProfileCloudPolicyManager::Create(
           GetPath(), GetPolicySchemaRegistryService()->registry(),
           force_immediate_policy_load, io_task_runner_,
-          base::BindRepeating(&content::GetNetworkConnectionTracker));
+          base::BindRepeating(&content::GetNetworkConnectionTracker),
+          entry->IsDasherlessManagement());
       cloud_policy_manager = profile_cloud_policy_manager_.get();
     } else {
 #else
@@ -789,8 +799,11 @@ void ProfileImpl::DoFinalInit(CreateMode create_mode) {
   // Not necessary for profiles that don't have a BookmarkModel.
   // On CrOS sync service will be initialized after sign in.
   BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(this);
-  if (model)
-    model->AddObserver(new BookmarkModelLoadedObserver(this));
+  if (model) {
+    // `BookmarkModelLoadedObserver` destroys itself eventually, when loading
+    // completes.
+    new BookmarkModelLoadedObserver(this, model);
+  }
 #endif
 
   // The ad service might not be available for some irregular profiles, like the
@@ -854,6 +867,13 @@ void ProfileImpl::DoFinalInit(CreateMode create_mode) {
   // The password settings service needs to start listening to settings
   // changes from Google Mobile Services, as early as possible.
   PasswordManagerSettingsServiceFactory::GetForProfile(this);
+#endif
+
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+  if (features::IsPdfOcrEnabled()) {
+    // Create the PDF OCR controller so that it can self-activate as needed.
+    screen_ai::PdfOcrControllerFactory::GetForProfile(this);
+  }
 #endif
 
   // The announcement notification  service might not be available for some
@@ -1535,8 +1555,12 @@ void ProfileImpl::ChangeAppLocale(const std::string& new_locale,
       GetPrefs()->SetString(prefs::kApplicationLocaleBackup, new_locale);
       break;
     }
-    case APP_LOCALE_CHANGED_VIA_UNKNOWN:
-    default: {
+    case APP_LOCALE_CHANGED_VIA_DEMO_SESSION_REVERT:
+    case APP_LOCALE_CHANGED_VIA_SYSTEM_TRAY: {
+      // no-op
+      break;
+    }
+    case APP_LOCALE_CHANGED_VIA_UNKNOWN: {
       NOTREACHED();
       break;
     }

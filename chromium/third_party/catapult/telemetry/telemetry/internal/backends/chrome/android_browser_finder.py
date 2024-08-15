@@ -114,7 +114,7 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
         self._support_apk_list = finder_options.webview_embedder_apk
       else:
         self._support_apk_list = self._backend_settings.FindSupportApks(
-            self._local_apk, finder_options.chrome_root)
+            self._local_apk)
     elif finder_options.webview_embedder_apk:
       logging.warning(
           'No embedder needed for %s, ignoring --webview-embedder-apk option',
@@ -321,46 +321,63 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
   def UpdateExecutableIfNeeded(self):
     # TODO(crbug.com/815133): This logic should belong to backend_settings.
     for apk in self._support_apk_list:
-      logging.warning('Installing %s on device if needed.', apk)
+      logging.warning('Installing support apk (%s) on device if needed.', apk)
       self.platform.InstallApplication(apk)
 
-    apk_name = self._backend_settings.GetApkName(
-        self._platform_backend.device)
-    is_webview_apk = apk_name is not None and ('SystemWebView' in apk_name or
-                                               'system_webview' in apk_name or
-                                               'TrichromeWebView' in apk_name or
-                                               'trichrome_webview' in apk_name)
-    # The WebView fallback logic prevents sideloaded WebView APKs from being
-    # installed and set as the WebView implementation correctly. Disable the
-    # fallback logic before installing the WebView APK to make sure the fallback
-    # logic doesn't interfere.
-    if is_webview_apk:
-      self._platform_backend.device.SetWebViewFallbackLogic(False)
+    # This may be the case if the apk containing the browser is installed some
+    # other way before telemetry runs (see example in crbug.com/326579345).
+    if not self._local_apk:
+      return
 
-    if self._local_apk:
-      logging.warning('Installing %s on device if needed.', self._local_apk)
-      self.platform.InstallApplication(
-          self._local_apk, modules=self._modules_to_install)
-      if self._compile_apk:
-        package_name = apk_helper.GetPackageName(self._local_apk)
-        logging.warning('Compiling %s.', package_name)
-        self._platform_backend.device.RunShellCommand(
-            ['cmd', 'package', 'compile', '-m', self._compile_apk, '-f',
-             package_name],
-            check_return=True,
-            timeout=120)
+    package_name = apk_helper.GetPackageName(self._local_apk)
+    device = self._platform_backend.device
+    logging.warning('Installing %s on device if needed.', self._local_apk)
+    self.platform.InstallApplication(self._local_apk,
+                                     modules=self._modules_to_install)
+    if self._compile_apk:
+      logging.warning('Compiling %s.', package_name)
+      cmd = [
+          'cmd', 'package', 'compile', '-m', self._compile_apk, '-f',
+          package_name
+      ]
+      device.RunShellCommand(cmd, check_return=True, timeout=120)
 
-    sdk_version = self._platform_backend.device.build_version_sdk
-    # Bundles are in the ../bin directory, so it's safer to just check the
-    # correct name is part of the path.
-    is_monochrome = apk_name is not None and (apk_name == 'Monochrome.apk' or
-                                              'monochrome_bundle' in apk_name)
-    if ((is_webview_apk or
-         (is_monochrome and sdk_version < version_codes.Q)) and
-        sdk_version >= version_codes.NOUGAT):
-      package_name = apk_helper.GetPackageName(self._local_apk)
-      logging.warning('Setting %s as WebView implementation.', package_name)
-      self._platform_backend.device.SetWebViewImplementation(package_name)
+    sdk_version = device.build_version_sdk
+    # We can only switch WebView providers on Android Nougat and above.
+    if sdk_version < version_codes.NOUGAT:
+      return
+
+    apk_name = self._backend_settings.GetApkName(device) or ''
+    if 'webview' in apk_name.lower():
+      # The WebView fallback logic prevents sideloaded WebView APKs from being
+      # installed and set as the WebView implementation. Disable the fallback
+      # logic before installing the WebView APK to make sure the fallback logic
+      # doesn't interfere.
+      device.SetWebViewFallbackLogic(False)
+      should_override_webview_provider = True
+    elif sdk_version >= version_codes.Q:
+      # For Android Q and above, WebView is the only provider that is allowed,
+      # so no other Chrome packages can be set as the WebView implementation.
+      should_override_webview_provider = False
+    elif 'monochrome' in apk_name.lower():
+      # From Android Nougat to Android P, some Chrome packages are also allowed
+      # to be WebView providers. Monochrome is the only Chrome build variant
+      # that can also act as a WebView provider.
+      should_override_webview_provider = True
+    else:
+      should_override_webview_provider = False
+
+    if should_override_webview_provider:
+      # Only a specific set of package names are allowed to be set as the
+      # WebView implementation. Make sure the package name is in the allowlist
+      # before setting it as the WebView implementation.
+      allowed = device.GetWebViewUpdateServiceDump().get('WebViewPackages')
+      if package_name in allowed:
+        logging.warning('Setting %s as WebView implementation.', package_name)
+        device.SetWebViewImplementation(package_name)
+      else:
+        logging.warning('Cannot set %s as WebView implementation, not in %r.',
+                        package_name, allowed)
 
   def GetTypExpectationsTags(self):
     tags = super().GetTypExpectationsTags()

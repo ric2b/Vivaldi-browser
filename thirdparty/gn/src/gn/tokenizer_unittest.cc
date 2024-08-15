@@ -234,4 +234,3 @@ TEST(Tokenizer, WhitespaceTransformToSpace) {
   EXPECT_EQ(results[3].type(), Token::LEFT_BRACE);
   EXPECT_EQ(results[3].value(), "{");
 }
-

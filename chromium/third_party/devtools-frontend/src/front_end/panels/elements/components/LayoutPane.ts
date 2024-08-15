@@ -4,9 +4,9 @@
 
 import * as Common from '../../../core/common/common.js';
 import * as i18n from '../../../core/i18n/i18n.js';
+import * as Platform from '../../../core/platform/platform.js';
 import * as SDK from '../../../core/sdk/sdk.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
-import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as Input from '../../../ui/components/input/input.js';
 import * as LegacyWrapper from '../../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import * as NodeText from '../../../ui/components/node_text/node_text.js';
@@ -78,17 +78,17 @@ const nodeToLayoutElement = (node: SDK.DOMModel.DOMNode): LayoutElement => {
     domId: node.getAttribute('id'),
     domClasses: className ? className.split(/\s+/).filter(s => Boolean(s)) : undefined,
     enabled: false,
-    reveal: (): void => {
+    reveal: () => {
       void Common.Revealer.reveal(node);
       void node.scrollIntoView();
     },
-    highlight: (): void => {
+    highlight: () => {
       node.highlight();
     },
-    hideHighlight: (): void => {
+    hideHighlight: () => {
       SDK.OverlayModel.OverlayModel.hideDOMNodeHighlight();
     },
-    toggle: (_value: boolean): never => {
+    toggle: (_value: boolean) => {
       throw new Error('Not implemented');
     },
     setColor(_value: string): never {
@@ -106,7 +106,7 @@ const gridNodesToElements = (nodes: SDK.DOMModel.DOMNode[]): LayoutElement[] => 
       color:
           node.domModel().overlayModel().colorOfGridInPersistentOverlay(nodeId) || 'var(--sys-color-inverse-surface)',
       enabled: node.domModel().overlayModel().isHighlightedGridInPersistentOverlay(nodeId),
-      toggle: (value: boolean): void => {
+      toggle: (value: boolean) => {
         if (value) {
           node.domModel().overlayModel().highlightGridInPersistentOverlay(nodeId);
         } else {
@@ -130,7 +130,7 @@ const flexContainerNodesToElements = (nodes: SDK.DOMModel.DOMNode[]): LayoutElem
       color:
           node.domModel().overlayModel().colorOfFlexInPersistentOverlay(nodeId) || 'var(--sys-color-inverse-surface)',
       enabled: node.domModel().overlayModel().isHighlightedFlexContainerInPersistentOverlay(nodeId),
-      toggle: (value: boolean): void => {
+      toggle: (value: boolean) => {
         if (value) {
           node.domModel().overlayModel().highlightFlexContainerInPersistentOverlay(nodeId);
         } else {
@@ -176,7 +176,7 @@ export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
   constructor() {
     super();
     this.#settings = this.#makeSettings();
-    this.#uaShadowDOMSetting = Common.Settings.Settings.instance().moduleSetting('showUAShadowDOM');
+    this.#uaShadowDOMSetting = Common.Settings.Settings.instance().moduleSetting('show-ua-shadow-dom');
     this.#domModels = [];
     this.#shadow.adoptedStyleSheets = [
       Input.checkboxStyles,
@@ -190,6 +190,7 @@ export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
       layoutPaneWrapperInstance = LegacyWrapper.LegacyWrapper.legacyWrapper(UI.Widget.Widget, new LayoutPane());
     }
     layoutPaneWrapperInstance.element.style.minWidth = 'min-content';
+    layoutPaneWrapperInstance.element.setAttribute('jslog', `${VisualLogging.pane('layout').track({resize: true})}`);
     return layoutPaneWrapperInstance.getComponent();
   }
 
@@ -246,7 +247,8 @@ export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
 
   #makeSettings(): Setting[] {
     const settings = [];
-    for (const settingName of ['showGridLineLabels', 'showGridTrackSizes', 'showGridAreas', 'extendGridLines']) {
+    for (const settingName
+             of ['show-grid-line-labels', 'show-grid-track-sizes', 'show-grid-areas', 'extend-grid-lines']) {
       const setting = Common.Settings.Settings.instance().moduleSetting(settingName);
       const settingValue = setting.get();
       const settingType = setting.type();
@@ -338,10 +340,10 @@ export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
       // clang-format off
       render(html`
         <details open>
-          <summary class="header" @keydown=${this.#onSummaryKeyDown}>
+          <summary class="header" @keydown=${this.#onSummaryKeyDown} jslog=${VisualLogging.sectionHeader('grid-settings').track({click: true})}>
             ${i18nString(UIStrings.grid)}
           </summary>
-          <div class="content-section" jslog=${VisualLogging.section().context('grid-settings')}>
+          <div class="content-section" jslog=${VisualLogging.section('grid-settings')}>
             <h3 class="content-section-title">${i18nString(UIStrings.overlayDisplaySettings)}</h3>
             <div class="select-settings">
               ${this.#getEnumSettings().map(setting => this.#renderEnumSetting(setting))}
@@ -351,7 +353,7 @@ export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
             </div>
           </div>
           ${gridElements ?
-            html`<div class="content-section" jslog=${VisualLogging.section().context('grid-overlays')}>
+            html`<div class="content-section" jslog=${VisualLogging.section('grid-overlays')}>
               <h3 class="content-section-title">
                 ${gridElements.length ? i18nString(UIStrings.gridOverlays) : i18nString(UIStrings.noGridLayoutsFoundOnThisPage)}
               </h3>
@@ -364,11 +366,11 @@ export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
         ${flexContainerElements !== undefined ?
           html`
           <details open>
-            <summary class="header" @keydown=${this.#onSummaryKeyDown}>
+            <summary class="header" @keydown=${this.#onSummaryKeyDown} jslog=${VisualLogging.sectionHeader('flexbox-overlays').track({click: true})}>
               ${i18nString(UIStrings.flexbox)}
             </summary>
             ${flexContainerElements ?
-              html`<div class="content-section" jslog=${VisualLogging.section().context('flexbox-overlays')}>
+              html`<div class="content-section" jslog=${VisualLogging.section('flexbox-overlays')}>
                 <h3 class="content-section-title">
                   ${flexContainerElements.length ? i18nString(UIStrings.flexboxOverlays) : i18nString(UIStrings.noFlexboxLayoutsFoundOnThisPage)}
                 </h3>
@@ -467,7 +469,7 @@ export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
           } as NodeText.NodeText.NodeTextData}></${NodeText.NodeText.NodeText.litTagName}>
         </span>
       </label>
-      <label @keyup=${onColorLabelKeyUp} @keydown=${onColorLabelKeyDown} class="color-picker-label" style="background: ${element.color};" jslog=${VisualLogging.showStyleEditor().track({click: true}).context('color')}>
+      <label @keyup=${onColorLabelKeyUp} @keydown=${onColorLabelKeyDown} class="color-picker-label" style="background: ${element.color};" jslog=${VisualLogging.showStyleEditor('color').track({click: true})}>
         <input @change=${onColorChange} @input=${onColorChange} title=${i18nString(UIStrings.chooseElementOverlayColor)} tabindex="0" class="color-picker" type="color" value=${element.color} />
       </label>
       <${Buttons.Button.Button.litTagName} class="show-element"
@@ -500,16 +502,17 @@ export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
         @change=${onEnumSettingChange}>
         ${
         setting.options.map(
-            opt => html`<option value=${opt.value} .selected=${setting.value === opt.value}>${opt.title}</option>`)}
+            opt => html`<option value=${opt.value} .selected=${setting.value === opt.value} jslog=${
+                VisualLogging.item(Platform.StringUtilities.toKebabCase(opt.value)).track({click: true})}>${
+                opt.title}</option>`)}
       </select>
     </label>`;
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-layout-pane', LayoutPane);
+customElements.define('devtools-layout-pane', LayoutPane);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-layout-pane': LayoutPane;
   }

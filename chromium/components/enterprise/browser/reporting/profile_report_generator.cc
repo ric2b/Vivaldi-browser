@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/check_is_test.h"
 #include "base/files/file_path.h"
 #include "base/notreached.h"
 #include "build/chromeos_buildflags.h"
@@ -31,6 +32,10 @@ void ProfileReportGenerator::set_extensions_enabled(bool enabled) {
 
 void ProfileReportGenerator::set_policies_enabled(bool enabled) {
   policies_enabled_ = enabled;
+}
+
+void ProfileReportGenerator::set_is_machine_scope(bool is_machine) {
+  is_machine_scope_ = is_machine;
 }
 
 std::unique_ptr<em::ChromeUserProfileInfo>
@@ -66,16 +71,18 @@ ProfileReportGenerator::MaybeGenerate(const base::FilePath& path,
 
   if (policies_enabled_) {
     // TODO(crbug.com/983151): Upload policy error as their IDs.
-    auto client = delegate_->MakePolicyConversionsClient();
+    auto client = delegate_->MakePolicyConversionsClient(is_machine_scope_);
     // `client` may not be provided in unit test.
     if (client) {
-      policies_ = policy::DictionaryPolicyConversions(std::move(client))
+      policies_ = policy::PolicyConversions(std::move(client))
                       .EnableConvertTypes(false)
                       .EnablePrettyPrint(false)
                       .ToValueDict();
       GetChromePolicyInfo();
       GetExtensionPolicyInfo();
       GetPolicyFetchTimestampInfo();
+    } else {
+      CHECK_IS_TEST();
     }
   }
 
@@ -92,8 +99,8 @@ void ProfileReportGenerator::GetExtensionPolicyInfo() {
 
 void ProfileReportGenerator::GetPolicyFetchTimestampInfo() {
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
-  AppendMachineLevelUserCloudPolicyFetchTimestamp(
-      report_.get(), delegate_->GetCloudPolicyManager());
+  AppendCloudPolicyFetchTimestamp(
+      report_.get(), delegate_->GetCloudPolicyManager(is_machine_scope_));
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 }
 

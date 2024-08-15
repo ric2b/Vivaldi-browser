@@ -25,10 +25,10 @@
 #include <memory>
 #include <utility>
 
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/stl_util.h"
 #include "fxbarcode/common/reedsolomon/BC_ReedSolomonGF256.h"
-#include "third_party/base/check.h"
 
 CBC_ReedSolomonGF256Poly::CBC_ReedSolomonGF256Poly(
     CBC_ReedSolomonGF256* field,
@@ -151,7 +151,7 @@ std::unique_ptr<CBC_ReedSolomonGF256Poly> CBC_ReedSolomonGF256Poly::Divide(
     return nullptr;
 
   int32_t denominatorLeadingTerm = other->GetCoefficients(other->GetDegree());
-  absl::optional<int32_t> inverseDenominatorLeadingTeam =
+  std::optional<int32_t> inverseDenominatorLeadingTeam =
       m_field->Inverse(denominatorLeadingTerm);
   if (!inverseDenominatorLeadingTeam.has_value())
     return nullptr;

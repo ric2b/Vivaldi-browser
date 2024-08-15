@@ -94,13 +94,13 @@ ReceiverSession::ReceiverSession(Client* const client,
                    client_->OnError(this, error);
                  }),
       packet_router_(environment_) {
-  OSP_DCHECK(client_);
-  OSP_DCHECK(environment_);
+  OSP_CHECK(client_);
+  OSP_CHECK(environment_);
 
-  OSP_DCHECK(!std::any_of(
+  OSP_CHECK(std::none_of(
       constraints_.video_codecs.begin(), constraints_.video_codecs.end(),
       [](VideoCodec c) { return c == VideoCodec::kNotSpecified; }));
-  OSP_DCHECK(!std::any_of(
+  OSP_CHECK(std::none_of(
       constraints_.audio_codecs.begin(), constraints_.audio_codecs.end(),
       [](AudioCodec c) { return c == AudioCodec::kNotSpecified; }));
 
@@ -306,7 +306,7 @@ void ReceiverSession::SelectStreams(const Offer& offer,
           SelectStream(constraints_.video_codecs, client_, offer.video_streams);
     }
   } else {
-    OSP_DCHECK(offer.cast_mode == CastMode::kRemoting);
+    OSP_CHECK(offer.cast_mode == CastMode::kRemoting);
 
     if (offer.audio_streams.size() == 1) {
       properties->selected_audio =
@@ -370,7 +370,7 @@ std::unique_ptr<Receiver> ReceiverSession::ConstructReceiver(
 
 ReceiverSession::ConfiguredReceivers ReceiverSession::SpawnReceivers(
     const PendingOffer& properties) {
-  OSP_DCHECK(properties.IsValid());
+  OSP_CHECK(properties.IsValid());
   ResetReceivers(Client::kRenegotiated);
 
   AudioCaptureConfig audio_config;
@@ -415,7 +415,7 @@ void ReceiverSession::ResetReceivers(Client::ReceiversDestroyingReason reason) {
 }
 
 Answer ReceiverSession::ConstructAnswer(const PendingOffer& properties) {
-  OSP_DCHECK(properties.IsValid());
+  OSP_CHECK(properties.IsValid());
 
   std::vector<int> stream_indexes;
   std::vector<Ssrc> stream_ssrcs;
@@ -476,7 +476,7 @@ Answer ReceiverSession::ConstructAnswer(const PendingOffer& properties) {
 ReceiverCapability ReceiverSession::CreateRemotingCapabilityV2() {
   // If we don't support remoting, there is no reason to respond to
   // capability requests--they are not used for mirroring.
-  OSP_DCHECK(constraints_.remoting);
+  OSP_CHECK(constraints_.remoting);
   ReceiverCapability capability;
   capability.remoting_version = kSupportedRemotingVersion;
 

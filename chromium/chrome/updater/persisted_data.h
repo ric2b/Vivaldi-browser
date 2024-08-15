@@ -108,6 +108,12 @@ class PersistedData : public base::RefCountedThreadSafe<PersistedData>,
   bool GetUsageStatsEnabled() const;
   void SetUsageStatsEnabled(bool usage_stats_enabled);
 
+  // EulaRequired reflects whether some user responsible for this system has
+  // accepted a EULA that covers the updater's operation or not. EulaRequired
+  // defaults to false; refer to functional_spec.md for details.
+  bool GetEulaRequired() const;
+  void SetEulaRequired(bool eula_required);
+
   // LastChecked is set when the updater completed successfully a call to
   // `UpdateService::UpdateAll` as indicated by the `UpdateService::Result`
   // argument of the completion callback. This means that the execution path
@@ -134,6 +140,10 @@ class PersistedData : public base::RefCountedThreadSafe<PersistedData>,
   base::Version GetProductVersion(const std::string& id) const override;
   void SetProductVersion(const std::string& id,
                          const base::Version& pv) override;
+  base::Version GetMaxPreviousProductVersion(
+      const std::string& id) const override;
+  void SetMaxPreviousProductVersion(const std::string& id,
+                                    const base::Version& max_version) override;
   std::string GetFingerprint(const std::string& id) const override;
   void SetFingerprint(const std::string& id, const std::string& fp) override;
   int GetDateLastActive(const std::string& id) const override;
@@ -155,6 +165,7 @@ class PersistedData : public base::RefCountedThreadSafe<PersistedData>,
                        int datenum,
                        base::OnceClosure callback) override;
   int GetInstallDate(const std::string& id) const override;
+  void SetInstallDate(const std::string& id, int install_date) override;
   void GetActiveBits(const std::vector<std::string>& ids,
                      base::OnceCallback<void(const std::set<std::string>&)>
                          callback) const override;

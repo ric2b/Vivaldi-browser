@@ -14,7 +14,7 @@
 
 use crate::{unwrap, PanicReason};
 use np_ffi_core::common::*;
-use np_ffi_core::credentials::credential_book::CredentialBook;
+use np_ffi_core::credentials::CredentialBook;
 use np_ffi_core::deserialize::v0::*;
 use np_ffi_core::deserialize::v1::*;
 use np_ffi_core::deserialize::*;

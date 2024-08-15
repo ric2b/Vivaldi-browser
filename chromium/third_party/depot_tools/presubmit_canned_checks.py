@@ -3,9 +3,11 @@
 # found in the LICENSE file.
 """Generic presubmit checks that can be reused by other presubmit checks."""
 
+import datetime
 import io as _io
 import os as _os
 import time
+import zoneinfo
 
 import metadata.discover
 import metadata.validate
@@ -266,6 +268,20 @@ def CheckCorpLinksInFiles(input_api, output_api, source_file_filter=None):
     if text:
         return [output_api.PresubmitPromptWarning(text)]
     return []
+
+
+def CheckLargeScaleChange(input_api, output_api):
+    """Checks if the change should go through the LSC process."""
+    size = len(input_api.AffectedFiles())
+    if size <= 100:
+        return []
+    return [
+        output_api.PresubmitPromptWarning(
+            f'This change contains {size} files.\n'
+            'Consider using the LSC (large scale change) process.\n'
+            'See https://chromium.googlesource.com/chromium/src/+/HEAD/docs/process/lsc/lsc_workflow.md.'  # pylint: disable=line-too-long
+        )
+    ]
 
 
 def GetCppLintFilters(lint_filters=None):
@@ -888,6 +904,77 @@ def CheckChromiumDependencyMetadata(input_api, output_api, file_filter=None):
 ### Other checks
 
 
+_IGNORE_FREEZE_FOOTER = 'Ignore-Freeze'
+
+_FREEZE_TZ = zoneinfo.ZoneInfo("America/Los_Angeles")
+_FREEZE_START = datetime.datetime(2023, 12, 15, 0, 0, tzinfo=_FREEZE_TZ)
+_FREEZE_END = datetime.datetime(2024, 1, 2, 0, 0, tzinfo=_FREEZE_TZ)
+
+def CheckInfraFreeze(input_api,
+                     output_api,
+                     files_to_include=None,
+                     files_to_exclude=None):
+    """Prevent modifications during infra code freeze.
+
+    Args:
+        input_api: The InputApi.
+        output_api: The OutputApi.
+        files_to_include: A list of regexes identifying the files to
+            include in the freeze if not matched by a regex in
+            files_to_exclude. The regexes will be matched against the
+            paths of the affected files under the directory containing
+            the PRESUBMIT.py relative to the client root, using / as the
+            path separator. If not provided, all files under the
+            directory containing the PRESUBMIT.py will be included.
+        files_to_exclude: A list of regexes identifying the files to
+            exclude from the freeze. The regexes will be matched against
+            the paths of the affected files under the directory
+            containing the PRESUBMIT.py relative to the client root,
+            using / as the path separator. If not provided, no files
+            will be excluded.
+    """
+    # Not in the freeze time range
+    now = datetime.datetime.now(_FREEZE_TZ)
+    if now < _FREEZE_START or now >= _FREEZE_END:
+        input_api.logging.info('No freeze is in effect')
+        return []
+
+    # The CL is ignoring the freeze
+    if _IGNORE_FREEZE_FOOTER in input_api.change.GitFootersFromDescription():
+        input_api.logging.info('Freeze is being ignored')
+        return []
+
+    def file_filter(affected_file):
+        files_to_check = files_to_include or ['.*']
+        files_to_skip = files_to_exclude or []
+        return input_api.FilterSourceFile(affected_file,
+                                          files_to_check=files_to_check,
+                                          files_to_skip=files_to_skip)
+
+    # Compute the affected files that are covered by the freeze
+    files = [
+        af.LocalPath()
+        for af in input_api.AffectedFiles(file_filter=file_filter)
+    ]
+
+    # The Cl does not touch ny files covered by the freeze
+    if not files:
+        input_api.logging.info('No affected files are covered by freeze')
+        return []
+
+    # Don't report errors when on the presubmit --all bot or when testing with
+    # presubmit --files.
+    if input_api.no_diffs:
+        report_type = output_api.PresubmitPromptWarning
+    else:
+        report_type = output_api.PresubmitError
+    return [
+        report_type('There is a prod infra freeze in effect from {} until {},'
+                    'the following files cannot be modified:\n  {}'.format(
+                        _FREEZE_START, _FREEZE_END, '\n  '.join(files)))
+    ]
+
+
 def CheckDoNotSubmit(input_api, output_api):
     return (CheckDoNotSubmitInDescription(input_api, output_api) +
             CheckDoNotSubmitInFiles(input_api, output_api))
@@ -1282,8 +1369,8 @@ def GetPylint(input_api,
         kwargs = {'env': env}
         if input_api.platform == 'win32':
             # On Windows, scripts on the current directory take precedence over
-            # PATH. When `pylint.bat` calls `vpython`, it will execute the
-            # `vpython` of the depot_tools under test instead of the one in the
+            # PATH. When `pylint.bat` calls `vpython3`, it will execute the
+            # `vpython3` of the depot_tools under test instead of the one in the
             # bot. As a workaround, we run the tests from the parent directory
             # instead.
             cwd = input_api.change.RepositoryRoot()
@@ -1636,6 +1723,9 @@ def PanProjectChecks(input_api,
     results.extend(
         input_api.canned_checks.CheckCorpLinksInFiles(
             input_api, output_api, source_file_filter=sources))
+    snapshot("checking large scale change")
+    results.extend(
+        input_api.canned_checks.CheckLargeScaleChange(input_api, output_api))
 
     if input_api.is_committing:
         if global_checks:
@@ -1926,6 +2016,11 @@ def CheckForCommitObjects(input_api, output_api):
     for commit_tree_entry in commit_tree_entries:
         git_submodules[commit_tree_entry[2]] = commit_tree_entry[3]
 
+    gitmodules_file = input_api.os_path.join(input_api.PresubmitLocalPath(),
+                                             '.gitmodules')
+    with open(gitmodules_file) as f:
+        gitmodules_content = f.read()
+
     mismatch_entries = []
     deps_msg = ""
     for dep_path, dep in deps['deps'].items():
@@ -1946,7 +2041,23 @@ def CheckForCommitObjects(input_api, output_api):
             continue
 
         if commit_hash in git_submodules:
-            git_submodules.pop(commit_hash)
+            submodule_path = git_submodules.pop(commit_hash)
+            if not dep_path.endswith(submodule_path):
+                # DEPS entry path doesn't point to a gitlink.
+                return [
+                    output_api.PresubmitError(
+                        f'Unexpected DEPS entry {dep_path}.\n'
+                        f'Expected path to end with {submodule_path}.\n'
+                        'Make sure DEPS paths match those in .gitmodules \n'
+                        f'and a gitlink exists at {dep_path}.')
+                ]
+            if f'path = {submodule_path}' not in gitmodules_content:
+                return [
+                    output_api.PresubmitError(
+                        f'No submodule with path {submodule_path} in '
+                        '.gitmodules.\nMake sure entries in .gitmodules match '
+                        'gitlink locations in the tree.')
+                ]
         else:
             mismatch_entries.append(dep_path)
             deps_msg += f"\n [DEPS]      {dep_path} -> {commit_hash}"
@@ -2006,8 +2117,8 @@ def CheckVPythonSpec(input_api, output_api, file_filter=None):
         output_api: Bag of output related interfaces.
         file_filter: Custom function that takes a path (relative to client root) and
             returns boolean, which is used to filter files for which to apply the
-            verification to. Defaults to any path ending with .vpython, which captures
-            both global .vpython and <script>.vpython files.
+            verification to. Defaults to any path ending with .vpython(3), which captures
+            both global .vpython(3) and <script>.vpython(3) files.
 
     Returns:
         A list of input_api.Command objects containing verification commands.

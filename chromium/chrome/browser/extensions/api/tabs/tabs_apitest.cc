@@ -160,7 +160,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionApiTabTestWithContextType, Pinned) {
   ASSERT_TRUE(RunExtensionTest("tabs/basics/pinned")) << message_;
 }
 
-#if BUILDFLAG(IS_LINUX) && !defined(NDEBUG)
+// Flakes reported on Linux debug and Mac, see crbug.com/40936001.
+#if (BUILDFLAG(IS_LINUX) && !defined(NDEBUG)) || BUILDFLAG(IS_MAC)
 #define MAYBE_Move DISABLED_Move
 #else
 #define MAYBE_Move Move
@@ -330,7 +331,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionApiTabTestWithContextType, NoPermissions) {
   ASSERT_TRUE(RunExtensionTest("tabs/no_permissions")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_P(ExtensionApiTabTestWithContextType, HostPermission) {
+IN_PROC_BROWSER_TEST_P(ExtensionApiTabTestWithContextType,
+                       DISABLED_HostPermission) {
   ASSERT_TRUE(RunExtensionTest("tabs/host_permission")) << message_;
 }
 
@@ -544,9 +546,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTabPrerenderingTest, DISABLED_Prerendering) {
   ASSERT_TRUE(RunExtensionTest("tabs/prerendering")) << message_;
 }
 
-// TODO(crbug.com/1501760): Flaky on multiple platforms.
 IN_PROC_BROWSER_TEST_F(ExtensionApiTabPrerenderingTest,
-                       DISABLED_PrerenderingIntoANewTab) {
+                       PrerenderingIntoANewTab) {
   ASSERT_TRUE(RunExtensionTest("tabs/prerendering_into_new_tab")) << message_;
 }
 

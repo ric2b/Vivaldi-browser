@@ -1094,9 +1094,6 @@ base::Value::Dict ArcNetHostImpl::TranslateProxyConfiguration(
 
 void ArcNetHostImpl::AddPasspointCredentials(
     mojom::PasspointCredentialsPtr credentials) {
-  if (!ash::features::IsPasspointARCSupportEnabled()) {
-    return;
-  }
   TranslatePasspointCredentialsToDict(
       std::move(credentials),
       base::BindOnce(&ArcNetHostImpl::AddPasspointCredentialsWithProperties,
@@ -1133,12 +1130,6 @@ aura::Window* ArcNetHostImpl::GetAppWindow(const std::string& package_name) {
 void ArcNetHostImpl::RequestPasspointAppApproval(
     mojom::PasspointApprovalRequestPtr request,
     RequestPasspointAppApprovalCallback callback) {
-  if (!ash::features::IsPasspointARCSupportEnabled()) {
-    std::move(callback).Run(
-        mojom::PasspointApprovalResponse::New(/*allow=*/false));
-    return;
-  }
-
   aura::Window* window = GetAppWindow(request->package_name);
   if (!window) {
     NET_LOG(ERROR) << __func__ << ": Failed to get app window";
@@ -1415,6 +1406,16 @@ void ArcNetHostImpl::NotifySocketConnectionEvent(
   ash::PatchPanelClient::Get()->NotifySocketConnectionEvent(*notification);
 }
 
-void ArcNetHostImpl::NotifyVPNSocketConnectionEvent(
-    mojom::SocketConnectionEventPtr msg) {}
+void ArcNetHostImpl::NotifyARCVPNSocketConnectionEvent(
+    mojom::SocketConnectionEventPtr msg) {
+  auto notification = net_utils::TranslateSocketConnectionEvent(msg);
+  if (!notification) {
+    NET_LOG(ERROR) << "Translate socket connection event failed, not sending "
+                      "notification for ARC VPN socket.";
+    return;
+  }
+  ash::PatchPanelClient::Get()->NotifyARCVPNSocketConnectionEvent(
+      *notification);
+}
+
 }  // namespace arc

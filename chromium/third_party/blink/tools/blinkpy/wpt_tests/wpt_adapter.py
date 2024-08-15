@@ -134,6 +134,7 @@ class WPTAdapter:
     PORT_NAME_BY_PRODUCT = {
         'android_webview': 'webview',
         'chrome': 'chrome',
+        'chrome_android': 'android',
     }
 
     def __init__(self, product, port, options, paths):
@@ -144,8 +145,11 @@ class WPTAdapter:
         self.finder = path_finder.PathFinder(self.fs)
         self.options = options
         self.paths = paths
-        self.failure_threshold = 0
-        self.crash_timeout_threshold = 0
+        self._processor = WPTResultsProcessor(
+            self.fs,
+            self.port,
+            artifacts_dir=self.port.artifacts_directory(),
+            reset_results=self.options.reset_results)
         self._expectations = TestExpectations(self.port)
 
     @classmethod
@@ -237,7 +241,8 @@ class WPTAdapter:
         runner_options.no_capture_stdio = True
         runner_options.manifest_download = False
         runner_options.manifest_update = False
-        runner_options.headless = True
+        runner_options.pause_after_test = False
+        runner_options.headless = self.options.headless
 
         # Set up logging as early as possible.
         self._set_up_runner_output_options(runner_options)
@@ -272,7 +277,6 @@ class WPTAdapter:
         if verbose_level >= 3:
             runner_options.webdriver_args.extend([
                 '--verbose',
-                '--log-path=-',
             ])
 
         if self.using_upstream_wpt:
@@ -281,6 +285,10 @@ class WPTAdapter:
                     self.fs.join(self.port.results_directory(),
                                  'wpt_reports.json'))
             ]
+
+        # Dump `*-{actual,expected}.png` screenshots for all failures like
+        # `run_web_tests.py` does. See crbug.com/40947531.
+        runner_options.reftest_screenshot = 'fail'
         runner_options.log = wptlogging.setup(dict(vars(runner_options)),
                                               {'grouped': sys.stdout})
         logging.root.handlers.clear()
@@ -346,9 +354,10 @@ class WPTAdapter:
             runner_options.fail_on_unexpected = False
             runner_options.restart_on_unexpected = False
         else:
-            # By default, wpt will treat unexpected passes as errors, so we
-            # disable that to be consistent with Chromium CI.
-            runner_options.fail_on_unexpected_pass = False
+            # Unexpected subtest passes in wptrunner are equivalent to baseline
+            # mismatches in `run_web_tests.py`, so don't pass
+            # `--no-fail-on-unexpected-pass`. The test loader always adds
+            # test-level pass expectations to compensate.
             runner_options.restart_on_unexpected = False
             runner_options.restart_on_new_group = False
             # Add `--run-by-dir=0` so that tests can be more evenly distributed
@@ -376,15 +385,6 @@ class WPTAdapter:
                                                      '127.0.0.1.pem')
 
     def _set_up_runner_debugging_options(self, runner_options):
-        self.port.set_option_default('use_xvfb',
-                                     self.port.get_option('headless'))
-        if not self.options.headless:
-            logger.info('Not headless; default to 1 worker to avoid '
-                        'opening too many windows')
-            runner_options.headless = False
-            # Force `--pause-after-test`, since it doesn't make sense to run
-            # tests headfully without giving a chance for interaction.
-            runner_options.pause_after_test = True
         if self.options.wrapper:
             runner_options.debugger = self.options.wrapper[0]
             # `wpt run` expects a plain `str`, not a `List[str]`:
@@ -481,9 +481,9 @@ class WPTAdapter:
             runner_options.test_types = self.options.test_types
             runner_options.retry_unexpected = self.options.num_retries
 
-            self.failure_threshold = self.port.max_allowed_failures(
+            self._processor.failure_threshold = self.port.max_allowed_failures(
                 len(include_tests))
-            self.crash_timeout_threshold = self.port.max_allowed_crash_or_timeouts(
+            self._processor.crash_timeout_threshold = self.port.max_allowed_crash_or_timeouts(
                 len(include_tests))
 
             # sharding is done inside wrapper
@@ -579,7 +579,7 @@ class WPTAdapter:
             # lifecycles.
             from wptrunner.metadata import logger
             logger._state.has_shutdown = False
-            return 1 if exit_code else 0
+            return 1 if exit_code or self._processor.num_regressions > 0 else 0
 
     def _create_extra_run_info(self, run_info_path, tests_root):
         run_info = {
@@ -606,15 +606,7 @@ class WPTAdapter:
 
     @contextlib.contextmanager
     def process_and_upload_results(self, runner_options: argparse.Namespace):
-        artifacts_dir = self.port.artifacts_directory()
-        processor = WPTResultsProcessor(
-            self.fs,
-            self.port,
-            artifacts_dir=artifacts_dir,
-            failure_threshold=self.failure_threshold,
-            crash_timeout_threshold=self.crash_timeout_threshold,
-            reset_results=self.options.reset_results)
-        with processor.stream_results() as events:
+        with self._processor.stream_results() as events:
             runner_options.log.add_handler(events.put)
             try:
                 yield
@@ -622,15 +614,16 @@ class WPTAdapter:
                 # Always copy `results.html` into `layout-test-results/` so that
                 # the partial results can be viewed, and the directory is
                 # archived next run. See crbug.com/1475556.
-                processor.copy_results_viewer()
-                processor.process_results_json(
+                self._processor.copy_results_viewer()
+                self._processor.process_results_json(
                     self.port.get_option('json_test_results'))
         if runner_options.log_wptreport:
-            processor.process_wpt_report(runner_options.log_wptreport[0].name)
+            self._processor.process_wpt_report(
+                runner_options.log_wptreport[0].name)
         if (self.port.get_option('show_results')
-                and processor.num_initial_failures > 0):
+                and self._processor.num_initial_failures > 0):
             self.port.show_results_html_file(
-                self.fs.join(artifacts_dir, 'results.html'))
+                self.fs.join(self.port.artifacts_directory(), 'results.html'))
         if self.options.reset_results:
             self._optimize(runner_options)
 
@@ -703,10 +696,6 @@ def parse_arguments(argv):
     # `--no-expectations` to `run_wpt_tests.py`, and skip reporting results when
     # the flag is passed.
     options.no_expectations = False
-    # Directly tie Xvfb usage to headless mode. Xvfb can supercede a real X
-    # server and therefore should never be started in `--no-headless` mode.
-    # Conversely, the default headless mode should always start Xvfb.
-    options.use_xvfb = options.headless
     return options, args
 
 

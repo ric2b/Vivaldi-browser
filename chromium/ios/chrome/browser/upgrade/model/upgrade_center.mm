@@ -10,6 +10,7 @@
 
 #import "base/apple/bundle_locations.h"
 #import "base/apple/foundation_util.h"
+#import "base/memory/raw_ptr.h"
 #import "base/scoped_observation.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/time/time.h"
@@ -28,7 +29,7 @@
 #import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/web/common/url_scheme_util.h"
-#import "net/base/mac/url_conversions.h"
+#import "net/base/apple/url_conversions.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/base/models/image_model.h"
 #import "ui/gfx/image/image.h"
@@ -162,7 +163,7 @@ class UpgradeInfoBarDismissObserver
     scoped_observation_.Reset();
   }
 
-  UpgradeInfoBarDelegate* infobar_delegate_;
+  raw_ptr<UpgradeInfoBarDelegate> infobar_delegate_;
   __weak UpgradeCenter* dismiss_delegate_;
   __strong NSString* tab_id_;
   base::ScopedObservation<infobars::InfoBarManager,
@@ -222,18 +223,10 @@ class UpgradeInfoBarDismissObserver
 }
 @synthesize handler = _handler;
 
-+ (UpgradeCenter*)sharedInstance {
-  static UpgradeCenter* obj;
-  static dispatch_once_t onceToken;
-  dispatch_once(&onceToken, ^{
-    obj = [[self alloc] init];
-  });
-  return obj;
-}
-
 - (instancetype)init {
   self = [super init];
   if (self) {
+    DCHECK(GetApplicationContext()->GetLocalState());
     _upgradeInfoBarDelegates = [[NSMutableDictionary alloc] init];
 
     // There is no dealloc and no unregister as this class is a never
@@ -449,7 +442,7 @@ class UpgradeInfoBarDismissObserver
 }
 
 - (void)resetForTests {
-  [[UpgradeCenter sharedInstance] hideUpgradeInfoBars];
+  [self hideUpgradeInfoBars];
 
   NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
   [defaults removeObjectForKey:kIOSChromeUpToDateKey];

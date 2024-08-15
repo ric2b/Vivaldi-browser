@@ -30,7 +30,6 @@
 #include "components/content_settings/core/common/content_settings_utils.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
-#include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry.h"
 #include "components/prefs/pref_service.h"
 #include "services/preferences/public/cpp/dictionary_value_update.h"
@@ -118,19 +117,18 @@ PrefProvider::PrefProvider(PrefService* prefs,
 
   DiscardOrMigrateObsoletePreferences();
 
-  pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
-  pref_change_registrar_->Init(prefs_);
+  pref_change_registrar_.Init(prefs_);
 
   WebsiteSettingsRegistry* website_settings =
       WebsiteSettingsRegistry::GetInstance();
   for (const WebsiteSettingsInfo* info : *website_settings) {
     content_settings_prefs_.insert(std::make_pair(
-        info->type(), std::make_unique<ContentSettingsPref>(
-                          info->type(), prefs_, pref_change_registrar_.get(),
-                          info->pref_name(), info->partitioned_pref_name(),
-                          off_the_record_, restore_session,
-                          base::BindRepeating(&PrefProvider::Notify,
-                                              base::Unretained(this)))));
+        info->type(),
+        std::make_unique<ContentSettingsPref>(
+            info->type(), prefs_, &pref_change_registrar_, info->pref_name(),
+            info->partitioned_pref_name(), off_the_record_, restore_session,
+            base::BindRepeating(&PrefProvider::Notify,
+                                base::Unretained(this)))));
   }
 
   size_t num_exceptions = 0;
@@ -218,10 +216,10 @@ bool PrefProvider::SetWebsiteSetting(
                                 ? GetCoarseVisitedTime(clock_->Now())
                                 : base::Time();
 
-  // If SessionModel is OneTime, we know for sure that a one time permission
-  // has been set by the One Time Provider, therefore we reset a potentially
-  // existing Allow Always setting.
-  if (constraints.session_model() == SessionModel::OneTime) {
+  // If mojom::SessionModel is ONE_TIME, we know for sure that a one time
+  // permission has been set by the One Time Provider, therefore we reset a
+  // potentially existing Allow Always setting.
+  if (constraints.session_model() == mojom::SessionModel::ONE_TIME) {
     DCHECK(content_type == ContentSettingsType::GEOLOCATION ||
            content_type == ContentSettingsType::MEDIASTREAM_MIC ||
            content_type == ContentSettingsType::MEDIASTREAM_CAMERA);
@@ -341,13 +339,13 @@ bool PrefProvider::UpdateLastVisitTime(
                           GetCoarseVisitedTime(clock_->Now()), partition_key);
 }
 
-absl::optional<base::TimeDelta> PrefProvider::RenewContentSetting(
+std::optional<base::TimeDelta> PrefProvider::RenewContentSetting(
     const GURL& primary_url,
     const GURL& secondary_url,
     ContentSettingsType content_type,
-    absl::optional<ContentSetting> setting_to_match,
+    std::optional<ContentSetting> setting_to_match,
     const PartitionKey& partition_key) {
-  absl::optional<base::TimeDelta> delta_to_expiration;
+  std::optional<base::TimeDelta> delta_to_expiration;
   UpdateSetting(
       content_type,
       [&](const Rule& rule) -> bool {
@@ -397,7 +395,7 @@ void PrefProvider::ShutdownOnUIThread() {
   for (const auto& pref : content_settings_prefs_) {
     pref.second->OnShutdown();
   }
-  pref_change_registrar_.reset();
+  pref_change_registrar_.Reset();
   prefs_ = nullptr;
 }
 
@@ -433,6 +431,9 @@ void PrefProvider::DiscardOrMigrateObsoletePreferences() {
 
 void PrefProvider::SetClockForTesting(base::Clock* clock) {
   clock_ = clock;
+  for (auto& pref : content_settings_prefs_) {
+    pref.second->SetClockForTesting(clock);  // IN-TEST
+  }
 }
 
 }  // namespace content_settings

@@ -4,7 +4,7 @@
  *
  *   OpenType objects manager (body).
  *
- * Copyright (C) 1996-2023 by
+ * Copyright (C) 1996-2024 by
  * David Turner, Robert Wilhelm, and Werner Lemberg.
  *
  * This file is part of the FreeType project, and may only be used,
@@ -694,8 +694,7 @@
         FT_UInt  instance_index = (FT_UInt)face_index >> 16;
 
 
-        if ( FT_HAS_MULTIPLE_MASTERS( cffface ) &&
-             instance_index > 0                 )
+        if ( FT_HAS_MULTIPLE_MASTERS( cffface ) )
         {
           error = FT_Set_Named_Instance( cffface, instance_index );
           if ( error )

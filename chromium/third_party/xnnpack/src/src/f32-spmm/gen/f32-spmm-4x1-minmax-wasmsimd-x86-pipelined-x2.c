@@ -46,12 +46,12 @@ void xnn_f32_spmm_minmax_ukernel_4x1__wasmsimd_x86_pipelined_x2(
       vw = wasm_v128_load32_splat(w); w += 1;
 
       for (; nnz >= 2; nnz -= 2) {
-        vacc0123 = wasm_f32x4_add(vacc0123, wasm_f32x4_mul(vi0123,   vw));
+        vacc0123 = wasm_f32x4_add(vacc0123, wasm_f32x4_mul(vi0123, vw));
         input = (const float*restrict) ((uintptr_t) input + (uintptr_t) diff);
         diff = *dmap++;
         vw = wasm_v128_load32_splat(w); w += 1;
         vi0123 = wasm_v128_load(input + 0);
-        vacc0123 = wasm_f32x4_add(vacc0123, wasm_f32x4_mul(vi0123,   vw));
+        vacc0123 = wasm_f32x4_add(vacc0123, wasm_f32x4_mul(vi0123, vw));
         input = (const float*restrict) ((uintptr_t) input + (uintptr_t) diff);
         diff = *dmap++;
         vw = wasm_v128_load32_splat(w); w += 1;

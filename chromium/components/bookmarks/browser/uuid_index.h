@@ -7,6 +7,7 @@
 
 #include <unordered_set>
 
+#include "base/memory/raw_ptr.h"
 #include "base/uuid.h"
 
 namespace bookmarks {
@@ -22,6 +23,10 @@ class NodeUuidEquality {
 
   bool operator()(const BookmarkNode* n1, const base::Uuid& uuid2) const {
     return n1->uuid() == uuid2;
+  }
+
+  bool operator()(const base::Uuid& uuid1, const BookmarkNode* n2) const {
+    return uuid1 == n2->uuid();
   }
 };
 
@@ -40,7 +45,9 @@ class NodeUuidHash {
 };
 
 using UuidIndex =
-    std::unordered_set<const BookmarkNode*, NodeUuidHash, NodeUuidEquality>;
+    std::unordered_set<raw_ptr<const BookmarkNode, CtnExperimental>,
+                       NodeUuidHash,
+                       NodeUuidEquality>;
 
 }  // namespace bookmarks
 

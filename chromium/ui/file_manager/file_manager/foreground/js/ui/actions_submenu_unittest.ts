@@ -6,12 +6,12 @@ import {getTrustedHTML} from 'chrome://resources/js/static_types.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
 
 import {queryDecoratedElement, queryRequiredElement} from '../../../common/js/dom_utils.js';
-import {ActionsModel} from '../actions_model.js';
+import type {ActionsModel} from '../actions_model.js';
 import {MockActionModel, MockActionsModel} from '../mock_actions_model.js';
 
 import {ActionsSubmenu} from './actions_submenu.js';
 import {Menu} from './menu.js';
-import {MenuItem} from './menu_item.js';
+import type {MenuItem} from './menu_item.js';
 
 let menu: Menu;
 let submenu: ActionsSubmenu;
@@ -69,10 +69,11 @@ export function testCustomActionRendering() {
 
 export function testCommandActionRendering() {
   submenu.setActionsModel(
-      new MockActionsModel({SHARE: new MockActionModel('share with me!')}) as
+      new MockActionsModel(
+          {SAVE_FOR_OFFLINE: new MockActionModel('save for offline!')}) as
       unknown as ActionsModel);
   const item = menu.querySelector('cr-menu-item') as MenuItem;
   assertTrue(!!item);
-  assertEquals('Share', item.textContent);
-  assertEquals('share', item.command?.id);
+  assertEquals('Toggle pinned', item.textContent);
+  assertEquals('toggle-pinned', item.command?.id);
 }

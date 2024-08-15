@@ -4,21 +4,22 @@
 
 #include "services/network/ssl_config_type_converter.h"
 
+#include <optional>
+
 #include "base/check_op.h"
 #include "base/notreached.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace mojo {
 
 namespace {
-absl::optional<bool> OptionalBoolFromMojo(network::mojom::OptionalBool v) {
+std::optional<bool> OptionalBoolFromMojo(network::mojom::OptionalBool v) {
   switch (v) {
     case network::mojom::OptionalBool::kTrue:
-      return absl::make_optional(true);
+      return std::make_optional(true);
     case network::mojom::OptionalBool::kFalse:
-      return absl::make_optional(false);
+      return std::make_optional(false);
     case network::mojom::OptionalBool::kUnset:
-      return absl::nullopt;
+      return std::nullopt;
   }
   NOTREACHED_NORETURN();
 }
@@ -49,10 +50,6 @@ net::SSLContextConfig MojoSSLConfigToSSLContextConfig(
   net_config.post_quantum_override =
       OptionalBoolFromMojo(mojo_config->post_quantum_override);
   net_config.ech_enabled = mojo_config->ech_enabled;
-  net_config.insecure_hash_override =
-      OptionalBoolFromMojo(mojo_config->insecure_hash_override);
-  net_config.rsa_key_usage_for_local_anchors_override = OptionalBoolFromMojo(
-      mojo_config->rsa_key_usage_for_local_anchors_override);
   return net_config;
 }
 

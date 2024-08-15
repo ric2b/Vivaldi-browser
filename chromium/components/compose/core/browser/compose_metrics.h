@@ -6,6 +6,7 @@
 #define COMPONENTS_COMPOSE_CORE_BROWSER_COMPOSE_METRICS_H_
 
 #include "base/time/time.h"
+#include "components/compose/core/browser/compose_enums.mojom.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 
@@ -19,8 +20,8 @@ namespace compose {
 extern const char kComposeDialogOpenLatency[];
 extern const char kComposeDialogSelectionLength[];
 extern const char kComposeRequestReason[];
-extern const char kComposeRequestDurationOk[];
-extern const char kComposeRequestDurationError[];
+extern const char kComposeRequestDurationOkSuffix[];
+extern const char kComposeRequestDurationErrorSuffix[];
 extern const char kComposeRequestStatus[];
 extern const char kComposeSessionComposeCount[];
 extern const char kComposeSessionCloseReason[];
@@ -117,7 +118,10 @@ enum class ComposeSessionEventTypes {
   kThumbsUp = 16,
   kInsertClicked = 17,
   kCloseClicked = 18,
-  kMaxValue = kCloseClicked,
+  kEditClicked = 19,
+  kCancelEditClicked = 20,
+  kAnyModifierUsed = 21,
+  kMaxValue = kAnyModifierUsed,
 };
 
 // Enum for recording the show status of the Compose context menu item.
@@ -141,6 +145,40 @@ enum class ComposeShowStatus {
   kFormFieldNestedInFencedFrame = 11,
   kFeatureFlagDisabled = 12,
   kMaxValue = kFeatureFlagDisabled,
+};
+
+enum class EvalLocation : int {
+  // Response was evaluated on the server.
+  kServer,
+  // Response was evaluated on the device.
+  kOnDevice,
+};
+
+// Keep in sync with ComposeSessionEvalLocation in
+// src/tools/metrics/histograms/metadata/compose/enums.xml.
+enum class SessionEvalLocation {
+  // No responses were evaluated.
+  kNone = 0,
+  // All responses were evaluated on the server.
+  kServer = 1,
+  // All responses were evaluated on the device.
+  kOnDevice = 2,
+  // Some responses were evaluated on the server and some on the device.
+  kMixed = 3,
+  kMaxValue = kMixed,
+};
+
+// Enum for recording the feedback state of a Compose request.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused. Keep in sync with
+// ComposeRequestFeedback in
+// src/tools/metrics/histograms/metadata/compose/enums.xml.
+enum class ComposeRequestFeedback {
+  kNoFeedback = 0,
+  kPositiveFeedback = 1,
+  kNegativeFeedback = 2,
+  kRequestError = 3,
+  kMaxValue = kRequestError,
 };
 
 // Struct containing event and logging information for an individual
@@ -194,6 +232,14 @@ struct ComposeSessionEvents {
   bool inserted_results = false;
   // True if the the user closed the compose session via the "x" button.
   bool close_clicked = false;
+  // True if the user has pressed the "Edit" button this session.
+  bool did_click_edit = false;
+  // True if the user has pressed "Cancel" on the editing view for this session.
+  bool did_click_cancel_on_edit = false;
+  // Number of on-device responses received.
+  unsigned int on_device_responses = 0;
+  // Number of server responses received.
+  unsigned int server_responses = 0;
 };
 
 // Enum with the possible reasons for it being impossible to open the Compose
@@ -264,10 +310,18 @@ void LogComposeContextMenuShowStatus(ComposeShowStatus status);
 void LogOpenComposeDialogResult(OpenComposeDialogResult result);
 
 void LogComposeRequestReason(ComposeRequestReason reason);
+void LogComposeRequestReason(EvalLocation eval_location,
+                             ComposeRequestReason reason);
 
-// Log the duration of a compose request. |is_valid| indicates the status of
+void LogComposeRequestStatus(compose::mojom::ComposeStatus status);
+void LogComposeRequestStatus(EvalLocation eval_location,
+                             compose::mojom::ComposeStatus status);
+
+// Log the duration of a compose request. |is_ok| indicates the status of
 // the request.
-void LogComposeRequestDuration(base::TimeDelta duration, bool is_ok);
+void LogComposeRequestDuration(base::TimeDelta duration,
+                               EvalLocation eval_location,
+                               bool is_ok);
 
 void LogComposeFirstRunSessionCloseReason(
     ComposeFirstRunSessionCloseReason reason);
@@ -282,6 +336,12 @@ void LogComposeMSBBSessionCloseReason(ComposeMSBBSessionCloseReason reason);
 // Log session based metrics when a consent session ends.
 void LogComposeMSBBSessionDialogShownCount(ComposeMSBBSessionCloseReason reason,
                                            int dialog_shown_count);
+
+SessionEvalLocation GetSessionEvalLocationFromEvents(
+    const ComposeSessionEvents& session_events);
+
+std::optional<EvalLocation> GetEvalLocationFromEvents(
+    const ComposeSessionEvents& session_events);
 
 // Log session based metrics when a session ends.
 // Should only be called once per session.
@@ -311,8 +371,13 @@ void LogComposeDialogOpenLatency(base::TimeDelta duration);
 void LogComposeDialogSelectionLength(int length);
 
 // Log the session duration with |session_suffix| applied to histogram name.
-void LogComposeSessionDuration(base::TimeDelta session_duration,
-                               std::string session_suffix = "");
+void LogComposeSessionDuration(
+    base::TimeDelta session_duration,
+    std::string session_suffix = "",
+    std::optional<EvalLocation> eval_location = std::nullopt);
+
+void LogComposeRequestFeedback(EvalLocation eval_location,
+                               ComposeRequestFeedback feedback);
 
 }  // namespace compose
 

@@ -17,6 +17,8 @@
 #include <utility>
 #include <vector>
 
+#include "api/environment/environment.h"
+#include "api/environment/environment_factory.h"
 #include "api/test/mock_video_decoder.h"
 #include "api/test/mock_video_decoder_factory.h"
 #include "api/test/mock_video_encoder.h"
@@ -44,13 +46,12 @@ namespace {
 using ::testing::_;
 using ::testing::ElementsAre;
 using ::testing::Field;
-using ::testing::Invoke;
-using ::testing::InvokeWithoutArgs;
 using ::testing::NiceMock;
 using ::testing::Return;
 using ::testing::SizeIs;
 using ::testing::UnorderedElementsAreArray;
 using ::testing::Values;
+using ::testing::WithoutArgs;
 
 using VideoCodecStats = VideoCodecTester::VideoCodecStats;
 using VideoSourceSettings = VideoCodecTester::VideoSourceSettings;
@@ -124,7 +125,7 @@ class TestVideoEncoder : public MockVideoEncoder {
       encoded_frame.SetFrameType(frame.keyframe
                                      ? VideoFrameType::kVideoFrameKey
                                      : VideoFrameType::kVideoFrameDelta);
-      encoded_frame.SetRtpTimestamp(input_frame.timestamp());
+      encoded_frame.SetRtpTimestamp(input_frame.rtp_timestamp());
       encoded_frame.SetSpatialIndex(frame.layer_id.spatial_idx);
       encoded_frame.SetTemporalIndex(frame.layer_id.temporal_idx);
       encoded_frame.SetEncodedData(
@@ -160,7 +161,7 @@ class TestVideoDecoder : public MockVideoDecoder {
     VideoFrame decoded_frame =
         VideoFrame::Builder()
             .set_video_frame_buffer(frame_buffer)
-            .set_timestamp_rtp(encoded_frame.RtpTimestamp())
+            .set_rtp_timestamp(encoded_frame.RtpTimestamp())
             .build();
     callback_->Decoded(decoded_frame);
     frame_sizes_.push_back(DataSize::Bytes(encoded_frame.size()));
@@ -193,37 +194,33 @@ class VideoCodecTesterTest : public ::testing::Test {
         .framerate = kTargetFramerate};
 
     NiceMock<MockVideoEncoderFactory> encoder_factory;
-    ON_CALL(encoder_factory, CreateVideoEncoder)
-        .WillByDefault([&](const SdpVideoFormat&) {
-          return std::make_unique<NiceMock<TestVideoEncoder>>(scalability_mode,
-                                                              encoded_frames);
-        });
+    ON_CALL(encoder_factory, Create).WillByDefault(WithoutArgs([&] {
+      return std::make_unique<NiceMock<TestVideoEncoder>>(scalability_mode,
+                                                          encoded_frames);
+    }));
 
     NiceMock<MockVideoDecoderFactory> decoder_factory;
-    ON_CALL(decoder_factory, CreateVideoDecoder)
-        .WillByDefault([&](const SdpVideoFormat&) {
-          // Video codec tester destroyes decoder at the end of test. Test
-          // decoder collects stats which we need to access after test. To keep
-          // the decode alive we wrap it into a wrapper and pass the wrapper to
-          // the tester.
-          class DecoderWrapper : public TestVideoDecoder {
-           public:
-            explicit DecoderWrapper(TestVideoDecoder* decoder)
-                : decoder_(decoder) {}
-            int32_t Decode(const EncodedImage& encoded_frame,
-                           int64_t render_time_ms) {
-              return decoder_->Decode(encoded_frame, render_time_ms);
-            }
-            int32_t RegisterDecodeCompleteCallback(
-                DecodedImageCallback* callback) {
-              return decoder_->RegisterDecodeCompleteCallback(callback);
-            }
-            TestVideoDecoder* decoder_;
-          };
-          decoders_.push_back(std::make_unique<NiceMock<TestVideoDecoder>>());
-          return std::make_unique<NiceMock<DecoderWrapper>>(
-              decoders_.back().get());
-        });
+    ON_CALL(decoder_factory, Create).WillByDefault(WithoutArgs([&] {
+      // Video codec tester destroyes decoder at the end of test. Test
+      // decoder collects stats which we need to access after test. To keep
+      // the decode alive we wrap it into a wrapper and pass the wrapper to
+      // the tester.
+      class DecoderWrapper : public TestVideoDecoder {
+       public:
+        explicit DecoderWrapper(TestVideoDecoder* decoder)
+            : decoder_(decoder) {}
+        int32_t Decode(const EncodedImage& encoded_frame,
+                       int64_t render_time_ms) {
+          return decoder_->Decode(encoded_frame, render_time_ms);
+        }
+        int32_t RegisterDecodeCompleteCallback(DecodedImageCallback* callback) {
+          return decoder_->RegisterDecodeCompleteCallback(callback);
+        }
+        TestVideoDecoder* decoder_;
+      };
+      decoders_.push_back(std::make_unique<NiceMock<TestVideoDecoder>>());
+      return std::make_unique<NiceMock<DecoderWrapper>>(decoders_.back().get());
+    }));
 
     int num_spatial_layers =
         ScalabilityModeToNumSpatialLayers(scalability_mode);
@@ -252,7 +249,7 @@ class VideoCodecTesterTest : public ::testing::Test {
 
     std::unique_ptr<VideoCodecStats> stats =
         VideoCodecTester::RunEncodeDecodeTest(
-            video_source_settings, &encoder_factory, &decoder_factory,
+            env_, video_source_settings, &encoder_factory, &decoder_factory,
             EncoderSettings{}, DecoderSettings{}, encoding_settings);
 
     remove(yuv_path.c_str());
@@ -260,6 +257,7 @@ class VideoCodecTesterTest : public ::testing::Test {
   }
 
  protected:
+  const Environment env_ = CreateEnvironment();
   std::vector<std::unique_ptr<TestVideoDecoder>> decoders_;
 };
 
@@ -605,21 +603,22 @@ class VideoCodecTesterTestPacing
   void TearDown() override { remove(source_yuv_file_path_.c_str()); }
 
  protected:
+  const Environment env_ = CreateEnvironment();
   std::string source_yuv_file_path_;
 };
 
 TEST_P(VideoCodecTesterTestPacing, PaceEncode) {
   auto [pacing_settings, expected_delta_ms] = GetParam();
+  const Environment env = CreateEnvironment();
   VideoSourceSettings video_source{
       .file_path = source_yuv_file_path_,
       .resolution = {.width = kSourceWidth, .height = kSourceHeight},
       .framerate = kTargetFramerate};
 
   NiceMock<MockVideoEncoderFactory> encoder_factory;
-  ON_CALL(encoder_factory, CreateVideoEncoder(_))
-      .WillByDefault([](const SdpVideoFormat&) {
-        return std::make_unique<NiceMock<MockVideoEncoder>>();
-      });
+  ON_CALL(encoder_factory, Create).WillByDefault(WithoutArgs([] {
+    return std::make_unique<NiceMock<MockVideoEncoder>>();
+  }));
 
   std::map<uint32_t, EncodingSettings> encoding_settings =
       VideoCodecTester::CreateEncodingSettings(
@@ -629,7 +628,7 @@ TEST_P(VideoCodecTesterTestPacing, PaceEncode) {
   EncoderSettings encoder_settings;
   encoder_settings.pacing_settings = pacing_settings;
   std::vector<Frame> frames =
-      VideoCodecTester::RunEncodeTest(video_source, &encoder_factory,
+      VideoCodecTester::RunEncodeTest(env, video_source, &encoder_factory,
                                       encoder_settings, encoding_settings)
           ->Slice(/*filter=*/{}, /*merge=*/false);
   ASSERT_THAT(frames, SizeIs(kNumFrames));
@@ -644,16 +643,15 @@ TEST_P(VideoCodecTesterTestPacing, PaceDecode) {
   MockCodedVideoSource video_source(kNumFrames, kTargetFramerate);
 
   NiceMock<MockVideoDecoderFactory> decoder_factory;
-  ON_CALL(decoder_factory, CreateVideoDecoder(_))
-      .WillByDefault([](const SdpVideoFormat&) {
-        return std::make_unique<NiceMock<MockVideoDecoder>>();
-      });
+  ON_CALL(decoder_factory, Create).WillByDefault(WithoutArgs([] {
+    return std::make_unique<NiceMock<MockVideoDecoder>>();
+  }));
 
   DecoderSettings decoder_settings;
   decoder_settings.pacing_settings = pacing_settings;
   std::vector<Frame> frames =
-      VideoCodecTester::RunDecodeTest(&video_source, &decoder_factory,
-                                      decoder_settings, SdpVideoFormat("VP8"))
+      VideoCodecTester::RunDecodeTest(env_, &video_source, &decoder_factory,
+                                      decoder_settings, SdpVideoFormat::VP8())
           ->Slice(/*filter=*/{}, /*merge=*/false);
   ASSERT_THAT(frames, SizeIs(kNumFrames));
   EXPECT_NEAR((frames[1].decode_start - frames[0].decode_start).ms(),
@@ -676,5 +674,137 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_tuple(PacingSettings{.mode = PacingMode::kConstantRate,
                                        .constant_rate = Frequency::Hertz(20)},
                         /*expected_delta_ms=*/50)));
+
+struct EncodingSettingsTestParameters {
+  std::string codec_type;
+  std::string scalability_mode;
+  std::vector<int> bitrate_kbps;
+  std::vector<int> expected_bitrate_kbps;
+};
+
+class VideoCodecTesterTestEncodingSettings
+    : public ::testing::TestWithParam<EncodingSettingsTestParameters> {};
+
+TEST_P(VideoCodecTesterTestEncodingSettings, CreateEncodingSettings) {
+  EncodingSettingsTestParameters test_params = GetParam();
+  std::map<uint32_t, EncodingSettings> encoding_settings =
+      VideoCodecTester::CreateEncodingSettings(
+          test_params.codec_type, test_params.scalability_mode, /*width=*/1280,
+          /*height=*/720, test_params.bitrate_kbps, /*framerate_fps=*/30,
+          /*num_frames=*/1);
+  ASSERT_THAT(encoding_settings, SizeIs(1));
+  const std::map<LayerId, LayerSettings>& layers_settings =
+      encoding_settings.begin()->second.layers_settings;
+  std::vector<int> configured_bitrate_kbps;
+  std::transform(layers_settings.begin(), layers_settings.end(),
+                 std::back_inserter(configured_bitrate_kbps),
+                 [](const auto& layer_settings) {
+                   return layer_settings.second.bitrate.kbps();
+                 });
+  EXPECT_EQ(configured_bitrate_kbps, test_params.expected_bitrate_kbps);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    Vp8,
+    VideoCodecTesterTestEncodingSettings,
+    Values(EncodingSettingsTestParameters{.codec_type = "VP8",
+                                          .scalability_mode = "L1T1",
+                                          .bitrate_kbps = {1},
+                                          .expected_bitrate_kbps = {1}},
+           EncodingSettingsTestParameters{.codec_type = "VP8",
+                                          .scalability_mode = "L1T1",
+                                          .bitrate_kbps = {10000},
+                                          .expected_bitrate_kbps = {10000}},
+           EncodingSettingsTestParameters{
+               .codec_type = "VP8",
+               .scalability_mode = "L1T3",
+               .bitrate_kbps = {1000},
+               .expected_bitrate_kbps = {400, 200, 400}},
+           EncodingSettingsTestParameters{
+               .codec_type = "VP8",
+               .scalability_mode = "S3T3",
+               .bitrate_kbps = {100},
+               .expected_bitrate_kbps = {40, 20, 40, 0, 0, 0, 0, 0, 0}},
+           EncodingSettingsTestParameters{
+               .codec_type = "VP8",
+               .scalability_mode = "S3T3",
+               .bitrate_kbps = {10000},
+               .expected_bitrate_kbps = {60, 30, 60, 200, 100, 200, 1000, 500,
+                                         1000}},
+           EncodingSettingsTestParameters{
+               .codec_type = "VP8",
+               .scalability_mode = "S3T3",
+               .bitrate_kbps = {100, 200, 300, 400, 500, 600, 700, 800, 900},
+               .expected_bitrate_kbps = {100, 200, 300, 400, 500, 600, 700, 800,
+                                         900}}));
+
+INSTANTIATE_TEST_SUITE_P(
+    Vp9,
+    VideoCodecTesterTestEncodingSettings,
+    Values(EncodingSettingsTestParameters{.codec_type = "VP9",
+                                          .scalability_mode = "L1T1",
+                                          .bitrate_kbps = {1},
+                                          .expected_bitrate_kbps = {1}},
+           EncodingSettingsTestParameters{.codec_type = "VP9",
+                                          .scalability_mode = "L1T1",
+                                          .bitrate_kbps = {10000},
+                                          .expected_bitrate_kbps = {10000}},
+           EncodingSettingsTestParameters{
+               .codec_type = "VP9",
+               .scalability_mode = "L1T3",
+               .bitrate_kbps = {1000},
+               .expected_bitrate_kbps = {540, 163, 297}},
+           EncodingSettingsTestParameters{
+               .codec_type = "VP9",
+               .scalability_mode = "L3T3",
+               .bitrate_kbps = {100},
+               .expected_bitrate_kbps = {54, 16, 30, 0, 0, 0, 0, 0, 0}},
+           EncodingSettingsTestParameters{
+               .codec_type = "VP9",
+               .scalability_mode = "L3T3",
+               .bitrate_kbps = {10000},
+               .expected_bitrate_kbps = {77, 23, 42, 226, 68, 124, 823, 249,
+                                         452}},
+           EncodingSettingsTestParameters{
+               .codec_type = "VP9",
+               .scalability_mode = "L3T3",
+               .bitrate_kbps = {100, 200, 300, 400, 500, 600, 700, 800, 900},
+               .expected_bitrate_kbps = {100, 200, 300, 400, 500, 600, 700, 800,
+                                         900}}));
+
+INSTANTIATE_TEST_SUITE_P(
+    Av1,
+    VideoCodecTesterTestEncodingSettings,
+    Values(EncodingSettingsTestParameters{.codec_type = "AV1",
+                                          .scalability_mode = "L1T1",
+                                          .bitrate_kbps = {1},
+                                          .expected_bitrate_kbps = {1}},
+           EncodingSettingsTestParameters{.codec_type = "AV1",
+                                          .scalability_mode = "L1T1",
+                                          .bitrate_kbps = {10000},
+                                          .expected_bitrate_kbps = {10000}},
+           EncodingSettingsTestParameters{
+               .codec_type = "AV1",
+               .scalability_mode = "L1T3",
+               .bitrate_kbps = {1000},
+               .expected_bitrate_kbps = {540, 163, 297}},
+           EncodingSettingsTestParameters{
+               .codec_type = "AV1",
+               .scalability_mode = "L3T3",
+               .bitrate_kbps = {100},
+               .expected_bitrate_kbps = {54, 16, 30, 0, 0, 0, 0, 0, 0}},
+           EncodingSettingsTestParameters{
+               .codec_type = "AV1",
+               .scalability_mode = "L3T3",
+               .bitrate_kbps = {10000},
+               .expected_bitrate_kbps = {77, 23, 42, 226, 68, 124, 823, 249,
+                                         452}},
+           EncodingSettingsTestParameters{
+               .codec_type = "AV1",
+               .scalability_mode = "L3T3",
+               .bitrate_kbps = {100, 200, 300, 400, 500, 600, 700, 800, 900},
+               .expected_bitrate_kbps = {100, 200, 300, 400, 500, 600, 700, 800,
+                                         900}}));
+
 }  // namespace test
 }  // namespace webrtc

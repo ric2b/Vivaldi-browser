@@ -158,12 +158,6 @@ void TestSyncService::FireStateChanged() {
   }
 }
 
-void TestSyncService::FirePaymentsIntegrationEnabledChanged() {
-  for (SyncServiceObserver& observer : observers_) {
-    observer.OnSyncPaymentsIntegrationEnabledChanged(this);
-  }
-}
-
 void TestSyncService::FireSyncCycleCompleted() {
   for (SyncServiceObserver& observer : observers_) {
     observer.OnSyncCycleCompleted(this);
@@ -341,7 +335,7 @@ void TestSyncService::GetAllNodesForDebugging(
 
 SyncService::ModelTypeDownloadStatus TestSyncService::GetDownloadStatusFor(
     ModelType type) const {
-  if (base::Contains(download_statuses_, type)) {
+  if (download_statuses_.contains(type)) {
     return download_statuses_.at(type);
   }
   return ModelTypeDownloadStatus::kUpToDate;
@@ -352,6 +346,16 @@ void TestSyncService::RecordReasonIfWaitingForUpdates(
     const std::string& histogram_name) const {}
 
 void TestSyncService::SetInvalidationsForSessionsEnabled(bool enabled) {}
+
+bool TestSyncService::SupportsExplicitPassphrasePlatformClient() {
+  return !!send_passphrase_to_platform_client_cb_;
+}
+
+void TestSyncService::SendExplicitPassphraseToPlatformClient() {
+  if (SupportsExplicitPassphrasePlatformClient()) {
+    send_passphrase_to_platform_client_cb_.Run();
+  }
+}
 
 void TestSyncService::Shutdown() {
   for (SyncServiceObserver& observer : observers_)
@@ -371,6 +375,12 @@ void TestSyncService::GetTypesWithUnsyncedData(
 void TestSyncService::SetLocalDataDescriptions(
     const std::map<ModelType, LocalDataDescription>& local_data_descriptions) {
   local_data_descriptions_ = local_data_descriptions;
+}
+
+void TestSyncService::SetPassphrasePlatformClientCallback(
+    const base::RepeatingClosure& send_passphrase_to_platform_client_cb) {
+  send_passphrase_to_platform_client_cb_ =
+      send_passphrase_to_platform_client_cb;
 }
 
 void TestSyncService::GetLocalDataDescriptions(

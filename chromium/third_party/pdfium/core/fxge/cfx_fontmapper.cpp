@@ -13,6 +13,9 @@
 #include <utility>
 
 #include "build/build_config.h"
+#include "core/fxcrt/check_op.h"
+#include "core/fxcrt/containers/adapters.h"
+#include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_codepage.h"
 #include "core/fxcrt/fx_extension.h"
@@ -23,9 +26,6 @@
 #include "core/fxge/cfx_substfont.h"
 #include "core/fxge/fx_font.h"
 #include "core/fxge/systemfontinfo_iface.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/containers/adapters.h"
-#include "third_party/base/containers/contains.h"
 
 namespace {
 
@@ -176,24 +176,26 @@ ByteString TT_NormalizeName(ByteString norm) {
   return norm;
 }
 
-void GetFontFamily(uint32_t nStyle, ByteString* fontName) {
-  if (fontName->Contains("Script")) {
-    if (FontStyleIsForceBold(nStyle))
-      *fontName = "ScriptMTBold";
-    else if (fontName->Contains("Palace"))
-      *fontName = "PalaceScriptMT";
-    else if (fontName->Contains("French"))
-      *fontName = "FrenchScriptMT";
-    else if (fontName->Contains("FreeStyle"))
-      *fontName = "FreeStyleScript";
-    return;
+const char* GetFontFamily(uint32_t nStyle, const ByteString& fontname) {
+  if (fontname.Contains("Script")) {
+    if (FontStyleIsForceBold(nStyle)) {
+      return "ScriptMTBold";
+    }
+    if (fontname.Contains("Palace")) {
+      return "PalaceScriptMT";
+    } else if (fontname.Contains("French")) {
+      return "FrenchScriptMT";
+    } else if (fontname.Contains("FreeStyle")) {
+      return "FreeStyleScript";
+    }
+    return nullptr;
   }
   for (const auto& alternate : kAltFontFamilies) {
-    if (fontName->Contains(alternate.m_pFontName)) {
-      *fontName = alternate.m_pFontFamily;
-      return;
+    if (fontname.Contains(alternate.m_pFontName)) {
+      return alternate.m_pFontFamily;
     }
   }
+  return nullptr;
 }
 
 ByteString ParseStyle(const ByteString& bsStyle, size_t iStart) {
@@ -373,7 +375,7 @@ ByteString GetSubstName(const ByteString& name, bool is_truetype) {
 bool IsNarrowFontName(const ByteString& name) {
   static const char kNarrowFonts[][10] = {"Narrow", "Condensed"};
   for (const char* font : kNarrowFonts) {
-    absl::optional<size_t> pos = name.Find(font);
+    std::optional<size_t> pos = name.Find(font);
     if (pos.has_value() && pos.value() != 0)
       return true;
   }
@@ -476,12 +478,12 @@ void CFX_FontMapper::LoadInstalledFonts() {
 
 ByteString CFX_FontMapper::MatchInstalledFonts(const ByteString& norm_name) {
   LoadInstalledFonts();
-  for (const ByteString& font : pdfium::base::Reversed(m_InstalledTTFonts)) {
+  for (const ByteString& font : pdfium::Reversed(m_InstalledTTFonts)) {
     if (TT_NormalizeName(font) == norm_name) {
       return font;
     }
   }
-  for (const auto& font_data : pdfium::base::Reversed(m_LocalizedTTFonts)) {
+  for (const auto& font_data : pdfium::Reversed(m_LocalizedTTFonts)) {
     if (TT_NormalizeName(font_data.first) == norm_name) {
       return font_data.second;
     }
@@ -595,7 +597,7 @@ RetainPtr<CFX_Face> CFX_FontMapper::FindSubstFont(const ByteString& name,
   bool has_comma = false;
   bool has_hyphen = false;
   {
-    absl::optional<size_t> pos = subst_name.Find(",");
+    std::optional<size_t> pos = subst_name.Find(",");
     if (pos.has_value()) {
       family = subst_name.First(pos.value());
       GetStandardFontName(&family);
@@ -619,7 +621,7 @@ RetainPtr<CFX_Face> CFX_FontMapper::FindSubstFont(const ByteString& name,
     base_font = kNumStandardFonts;
     nStyle = FXFONT_NORMAL;
     if (!has_comma) {
-      absl::optional<size_t> pos = family.ReverseFind('-');
+      std::optional<size_t> pos = family.ReverseFind('-');
       if (pos.has_value()) {
         style = family.Last(family.GetLength() - (pos.value() + 1));
         family = family.First(pos.value());
@@ -656,7 +658,11 @@ RetainPtr<CFX_Face> CFX_FontMapper::FindSubstFont(const ByteString& name,
   const bool is_cjk = FX_CharSetIsCJK(Charset);
   bool is_italic = FontStyleIsItalic(nStyle);
 
-  GetFontFamily(nStyle, &family);
+  const char* maybe_family = GetFontFamily(nStyle, family);
+  if (maybe_family) {
+    family = ByteString(maybe_family);
+  }
+
   ByteString match = MatchInstalledFonts(TT_NormalizeName(family));
   if (match.IsEmpty() && family != subst_name &&
       (!has_comma && (!has_hyphen || (has_hyphen && !is_style_available)))) {
@@ -773,22 +779,22 @@ bool CFX_FontMapper::HasLocalizedFont(ByteStringView name) const {
 }
 
 #if BUILDFLAG(IS_WIN)
-absl::optional<ByteString> CFX_FontMapper::InstalledFontNameStartingWith(
+std::optional<ByteString> CFX_FontMapper::InstalledFontNameStartingWith(
     const ByteString& name) const {
   for (const auto& thisname : m_InstalledTTFonts) {
     if (thisname.First(name.GetLength()) == name)
       return thisname;
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
-absl::optional<ByteString> CFX_FontMapper::LocalizedFontNameStartingWith(
+std::optional<ByteString> CFX_FontMapper::LocalizedFontNameStartingWith(
     const ByteString& name) const {
   for (const auto& thispair : m_LocalizedTTFonts) {
     if (thispair.first.First(name.GetLength()) == name)
       return thispair.second;
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 #endif  // BUILDFLAG(IS_WIN)
 
@@ -878,8 +884,8 @@ RetainPtr<CFX_Face> CFX_FontMapper::GetCachedFace(void* font_handle,
 }
 
 // static
-absl::optional<CFX_FontMapper::StandardFont>
-CFX_FontMapper::GetStandardFontName(ByteString* name) {
+std::optional<CFX_FontMapper::StandardFont> CFX_FontMapper::GetStandardFontName(
+    ByteString* name) {
   const auto* end = std::end(kAltFontNames);
   const auto* found =
       std::lower_bound(std::begin(kAltFontNames), end, name->c_str(),
@@ -887,7 +893,7 @@ CFX_FontMapper::GetStandardFontName(ByteString* name) {
                          return FXSYS_stricmp(element.m_pName, name) < 0;
                        });
   if (found == end || FXSYS_stricmp(found->m_pName, name->c_str()))
-    return absl::nullopt;
+    return std::nullopt;
 
   *name = kBase14FontNames[static_cast<size_t>(found->m_Index)];
   return found->m_Index;

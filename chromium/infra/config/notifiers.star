@@ -72,6 +72,14 @@ luci.notifier(
 )
 
 luci.notifier(
+    name = "codeql-infra",
+    on_status_change = True,
+    notify_emails = [
+        "flowerhack@google.com",
+    ],
+)
+
+luci.notifier(
     name = "cr-fuchsia",
     on_status_change = True,
     notify_emails = [
@@ -109,14 +117,6 @@ luci.notifier(
     on_new_status = ["FAILURE"],
     notify_emails = [
         "weblayer-sheriff@grotations.appspotmail.com",
-    ],
-)
-
-luci.notifier(
-    name = "chrome-build-perf",
-    on_new_status = ["FAILURE"],
-    notify_emails = [
-        "chrome-build-team+alert@google.com",
     ],
 )
 

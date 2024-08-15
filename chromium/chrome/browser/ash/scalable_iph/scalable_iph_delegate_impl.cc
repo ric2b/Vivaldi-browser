@@ -5,6 +5,7 @@
 #include "chrome/browser/ash/scalable_iph/scalable_iph_delegate_impl.h"
 
 #include <memory>
+#include <string_view>
 
 #include "apps/launcher.h"
 #include "ash/constants/notifier_catalogs.h"
@@ -23,8 +24,8 @@
 #include "ash/shelf/shelf_app_button.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shell.h"
-#include "ash/system/notification_center/message_view_factory.h"
 #include "ash/system/model/system_tray_model.h"
+#include "ash/system/notification_center/message_view_factory.h"
 #include "ash/webui/grit/ash_print_management_resources.h"
 #include "ash/webui/settings/public/constants/routes.mojom.h"
 #include "base/notreached.h"
@@ -55,6 +56,8 @@
 #include "chromeos/ash/grit/ash_resources.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
+#include "components/variations/service/variations_service.h"
+#include "net/base/url_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
@@ -62,6 +65,7 @@
 #include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/public/cpp/notification_delegate.h"
 #include "url/gurl.h"
+#include "url/url_canon_stdstring.h"
 
 #if BUILDFLAG(ENABLE_CROS_SCALABLE_IPH)
 #include "chrome/grit/preinstalled_web_apps_resources.h"  // nogncheck
@@ -94,6 +98,31 @@ constexpr char kNotifierId[] = "scalable_iph";
 constexpr char kButtonIndex = 0;
 constexpr gfx::Size kBubbleIconSizeDip = gfx::Size(60, 60);
 constexpr char kHelpAppPerksUrl[] = "chrome://help-app/offers";
+
+constexpr std::string_view kChromebookPerksUrl =
+    "https://www.google.com/chromebook/perks/";
+constexpr std::string_view kChromebookPerksUrlQueryNameId = "id";
+
+constexpr auto kIdsOfPerksMinecraftRealms2023 =
+    base::MakeFixedFlatMap<std::string_view, std::string_view>(
+        {{"us", "minecraft.realms.2023"},
+         {"gb", "minecraft.uk.2023"},
+         {"ca", "minecraft.realms.ca.2023"},
+         {"au", "minecraft.realms.au.2023"}});
+
+std::string GetCountryCode() {
+  return g_browser_process->variations_service()->GetStoredPermanentCountry();
+}
+
+GURL GetPerksMinecraftRealmsUrl(std::string_view country_code) {
+  const auto it = kIdsOfPerksMinecraftRealms2023.find(country_code);
+  if (it == kIdsOfPerksMinecraftRealms2023.end()) {
+    return GURL();
+  }
+
+  return net::AppendQueryParameter(GURL(kChromebookPerksUrl),
+                                   kChromebookPerksUrlQueryNameId, it->second);
+}
 
 const base::flat_map<ActionType, std::string>& GetActionTypeURLs() {
   static const base::NoDestructor<base::flat_map<ActionType, std::string>>
@@ -158,10 +187,6 @@ message_center::NotifierId GetNotifierId() {
       NotificationCatalogName::kScalableIphNotification);
 }
 
-bool IsWallpaperNotification(const NotificationParams& params) {
-  return params.image_type == NotificationImageType::kWallpaper;
-}
-
 bool IsAppValidForProfile(Profile* profile, const std::string& app_id) {
   if (app_id == arc::kPlayStoreAppId &&
       !arc::IsArcPlayStoreEnabledForProfile(profile)) {
@@ -212,6 +237,36 @@ int GetResourceId(BubbleIcon icon) {
 #else
   return IDR_PRODUCT_LOGO_128;
 #endif  // BUILDFLAG(ENABLE_CROS_SCALABLE_IPH)
+}
+
+std::optional<int> GetResourceId(
+    NotificationImageType notification_image_type) {
+#if BUILDFLAG(ENABLE_CROS_SCALABLE_IPH)
+  switch (notification_image_type) {
+    case NotificationImageType::kNoImage:
+      return std::nullopt;
+    case NotificationImageType::kWallpaper:
+      return IDR_SCALABLE_IPH_NOTIFICATION_WALLPAPER_1_PNG;
+    case NotificationImageType::kMinecraft:
+      return IDR_SCALABLE_IPH_NOTIFICATION_MINECRAFT_1x_PNG;
+  }
+#else
+  return std::nullopt;
+#endif  // BUILDFLAG(ENABLE_CROS_SCALABLE_IPH)
+}
+
+std::optional<std::string> GetNotificationCustomViewType(
+    const NotificationParams& params) {
+  if (params.image_type == NotificationImageType::kWallpaper) {
+    return kWallpaperNotificationType;
+  }
+
+  if (params.summary_text == scalable_iph::ScalableIphDelegate::
+                                 NotificationSummaryText::kWelcomeTips) {
+    return kScalableIphNotificationType;
+  }
+
+  return std::nullopt;
 }
 
 class ScalableIphNotificationDelegate
@@ -330,9 +385,16 @@ ScalableIphDelegateImpl::~ScalableIphDelegateImpl() {
       kWallpaperNotificationType);
 }
 
-void ScalableIphDelegateImpl::ShowBubble(
+bool ScalableIphDelegateImpl::ShowBubble(
     const scalable_iph::ScalableIphDelegate::BubbleParams& params,
     std::unique_ptr<scalable_iph::IphSession> iph_session) {
+  if (!IsEligibleAction(params.button.action.action_type)) {
+    SCALABLE_IPH_LOG(GetLogger())
+        << "Specified action is not eligible -> Not showing a bubble.";
+    return false;
+  }
+
+  // TODO(b/323426306): move this out to //ash/scalable_iph.
   SCALABLE_IPH_LOG(GetLogger()) << "Show bubble: " << params;
 
   // It will be no-op if the `bubble_id_` is an empty string when the first time
@@ -358,7 +420,7 @@ void ScalableIphDelegateImpl::ShowBubble(
           << params.anchor_view_app_id << " -> Not showing a bubble.";
       bubble_iph_session_.reset();
       bubble_id_ = "";
-      return;
+      return false;
     }
   }
 
@@ -399,12 +461,22 @@ void ScalableIphDelegateImpl::ShowBubble(
     resized_image.EnsureRepsForSupportedScales();
     nudge_data.image_model = ui::ImageModel::FromImageSkia(resized_image);
   }
+
   ash::AnchoredNudgeManager::Get()->Show(nudge_data);
+
+  return true;
 }
 
-void ScalableIphDelegateImpl::ShowNotification(
+bool ScalableIphDelegateImpl::ShowNotification(
     const NotificationParams& params,
     std::unique_ptr<scalable_iph::IphSession> iph_session) {
+  if (!IsEligibleAction(params.button.action.action_type)) {
+    SCALABLE_IPH_LOG(GetLogger())
+        << "Specified action is not eligible -> Not showing a notification.";
+    return false;
+  }
+
+  // TODO(b/323426306): move this out to //ash/scalable_iph.
   SCALABLE_IPH_LOG(GetLogger()) << "Show notification: " << params;
 
   std::string notification_source_name = params.source;
@@ -419,31 +491,24 @@ void ScalableIphDelegateImpl::ShowNotification(
   button_info.title = base::UTF8ToUTF16(button_text);
   rich_notification_data.buttons.push_back(button_info);
 
-#if BUILDFLAG(ENABLE_CROS_SCALABLE_IPH)
-  if (IsWallpaperNotification(params)) {
+  std::optional<int> notification_image_id = GetResourceId(params.image_type);
+  if (notification_image_id) {
     rich_notification_data.image =
         ui::ResourceBundle::GetSharedInstance().GetImageNamed(
-            IDR_SCALABLE_IPH_NOTIFICATION_WALLPAPER_1_PNG);
+            notification_image_id.value());
   }
-#endif  // BUILDFLAG(ENABLE_CROS_SCALABLE_IPH)
 
   const gfx::VectorIcon* icon = &gfx::kNoneIcon;
   if (params.icon == ScalableIphDelegate::NotificationIcon::kRedeem) {
     icon = &chromeos::kRedeemIcon;
   }
 
-  std::string custom_view_type;
-  if (IsWallpaperNotification(params)) {
-    custom_view_type = kWallpaperNotificationType;
-  } else if (params.summary_text ==
-             ScalableIphDelegate::NotificationSummaryText::kWelcomeTips) {
-    custom_view_type = kScalableIphNotificationType;
-  }
-
+  std::optional<std::string> custom_view_type =
+      GetNotificationCustomViewType(params);
   std::unique_ptr<message_center::Notification> notification =
       ash::CreateSystemNotificationPtr(
-          custom_view_type.empty() ? message_center::NOTIFICATION_TYPE_SIMPLE
-                                   : message_center::NOTIFICATION_TYPE_CUSTOM,
+          custom_view_type ? message_center::NOTIFICATION_TYPE_CUSTOM
+                           : message_center::NOTIFICATION_TYPE_SIMPLE,
           params.notification_id, base::UTF8ToUTF16(notification_title),
           base::UTF8ToUTF16(notification_text),
           base::UTF8ToUTF16(notification_source_name), GURL(), GetNotifierId(),
@@ -452,11 +517,14 @@ void ScalableIphDelegateImpl::ShowNotification(
               std::move(iph_session), params.notification_id,
               params.button.action),
           *icon, message_center::SystemNotificationWarningLevel::NORMAL);
-  if (!custom_view_type.empty()) {
-    notification->set_custom_view_type(custom_view_type);
+
+  if (custom_view_type) {
+    notification->set_custom_view_type(custom_view_type.value());
   }
 
   AddOrReplaceNotification(std::move(notification));
+
+  return true;
 }
 
 void ScalableIphDelegateImpl::AddObserver(DelegateObserver* observer) {
@@ -609,6 +677,20 @@ void ScalableIphDelegateImpl::PerformActionForScalableIph(
                         GetLogger());
       break;
     }
+    case ActionType::kOpenChromebookPerksMinecraftRealms2023: {
+      GURL perks_url = GetPerksMinecraftRealmsUrl(GetCountryCode());
+
+      CHECK(!perks_url.is_empty())
+          << "No perks url found for " << GetCountryCode()
+          << ". Unable to perform an action. This must not happen as "
+             "eligibility of an action must be checked by `IsEligibleAction` "
+             "before showing it in a UI.";
+      CHECK(perks_url.is_valid())
+          << "Invalid url is provided. Url is managed on the client side. We "
+             "use CHECK as this is a client side invariant.";
+      OpenUrlForProfile(profile_, perks_url, GetLogger());
+      break;
+    }
     case ActionType::kOpenLauncher:
     case ActionType::kInvalid: {
       DLOG(WARNING)
@@ -683,6 +765,20 @@ void ScalableIphDelegateImpl::SetFakeFeatureStatusProviderForTesting(
   feature_status_provider_observer_.Reset();
   feature_status_provider_observer_.Observe(feature_status_provider_);
   MaybeNotifyPhoneHubOnboardingEligibility();
+}
+
+bool ScalableIphDelegateImpl::IsEligibleAction(
+    scalable_iph::ActionType action_type) {
+  if (action_type ==
+      scalable_iph::ActionType::kOpenChromebookPerksMinecraftRealms2023) {
+    GURL perks_url = GetPerksMinecraftRealmsUrl(GetCountryCode());
+    if (perks_url.is_empty()) {
+      SCALABLE_IPH_LOG(GetLogger())
+          << action_type << " is not eligible for " << GetCountryCode();
+      return false;
+    }
+  }
+  return true;
 }
 
 void ScalableIphDelegateImpl::SetHasOnlineNetwork(bool has_online_network) {

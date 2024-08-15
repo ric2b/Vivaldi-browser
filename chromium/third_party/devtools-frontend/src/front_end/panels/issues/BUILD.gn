@@ -5,6 +5,7 @@
 import("../../../scripts/build/ninja/devtools_entrypoint.gni")
 import("../../../scripts/build/ninja/devtools_module.gni")
 import("../../../scripts/build/ninja/generate_css.gni")
+import("../../../third_party/typescript/typescript.gni")
 import("../visibility.gni")
 
 generate_css("css_files") {
@@ -57,8 +58,6 @@ devtools_module("issues") {
     "../../ui/lit-html:bundle",
     "./components:bundle",
   ]
-
-  visibility = [ "../../../test/unittests/front_end/issues" ]
 }
 
 devtools_entrypoint("bundle") {
@@ -71,8 +70,6 @@ devtools_entrypoint("bundle") {
 
   visibility = [
     ":*",
-    "../../../test/unittests/front_end/entrypoints/missing_entrypoints/*",
-    "../../../test/unittests/front_end/panels/issues/*",
     "../../entrypoints/*",
     "../elements/*",
   ]
@@ -92,4 +89,21 @@ devtools_entrypoint("meta") {
   ]
 
   visibility = [ "../../entrypoints/*" ]
+}
+
+ts_library("unittests") {
+  testonly = true
+
+  sources = [
+    "IssueAggregator.test.ts",
+    "IssueView.test.ts",
+  ]
+
+  deps = [
+    ":bundle",
+    "../../core/common:bundle",
+    "../../core/host:bundle",
+    "../../core/sdk:bundle",
+    "../../testing",
+  ]
 }

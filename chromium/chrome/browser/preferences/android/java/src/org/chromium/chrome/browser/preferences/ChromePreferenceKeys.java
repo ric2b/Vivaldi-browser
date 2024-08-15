@@ -216,30 +216,6 @@ public final class ChromePreferenceKeys {
             "Chrome.RequestDesktopSiteGlobalSetting.DefaultEnabled";
 
     /**
-     * Indicates whether the device qualifies for default-enabling the desktop site global setting.
-     * Not set: the device is not eligible for the experiment;
-     * True: the device is eligible for the experiment;
-     * False: a downgrade is pending because a previously eligible device is not eligible for the
-     * experiment any more.
-     */
-    public static final String DEFAULT_ENABLE_DESKTOP_SITE_GLOBAL_SETTING_COHORT =
-            "Chrome.RequestDesktopSiteGlobalSetting.DefaultEnabledCohort";
-
-    /**
-     * Indicates whether the device qualifies for showing a message to opt-in to the desktop site
-     * global setting.
-     */
-    public static final String DESKTOP_SITE_GLOBAL_SETTING_OPT_IN_MESSAGE_COHORT =
-            "Chrome.RequestDesktopSiteGlobalSetting.OptInMessageCohort";
-
-    /**
-     * Indicates display spec when the device is added to the default-on cohort for the desktop site
-     * global setting experiment.
-     */
-    public static final String DESKTOP_SITE_GLOBAL_SETTING_DEFAULT_ON_COHORT_DISPLAY_SPEC =
-            "Chrome.RequestDesktopSiteGlobalSetting.DefaultOnCohortDisplaySpec";
-
-    /**
      * Indicates that Chrome should show an alert to the user about data privacy if the device
      * lock is removed.
      */
@@ -558,6 +534,13 @@ public final class ChromePreferenceKeys {
             new KeyPrefix("Chrome.HomeModules.ModuleType.*");
 
     /**
+     * The number at the end should be consistent with {@link
+     * org.chromium.chrome.browser.magic_stack.ModuleDelegate.ModuleType}
+     */
+    public static final KeyPrefix HOME_MODULES_FRESHNESS_COUNT =
+            new KeyPrefix("Chrome.HomeModules.FreshnessCount.*");
+
+    /**
      * Save the timestamp of the last time that we record metrics on whether user enables the price
      * tracking annotations.
      */
@@ -601,7 +584,12 @@ public final class ChromePreferenceKeys {
     public static final String PRICE_TRACKING_USER_MANAGED_NOTIFICATIONS_TIMESTAMPS =
             "Chrome.PriceTracking.UserManagedNotificationsTimestamps";
 
-    public static final String PRIVACY_METRICS_IN_SAMPLE = "in_metrics_sample";
+    /** Is this client in a metrics reporting group. */
+    public static final String PRIVACY_IN_SAMPLE_FOR_METRICS = "in_metrics_sample";
+
+    /** Is this client in the crash reporting group. */
+    public static final String PRIVACY_IN_SAMPLE_FOR_CRASHES =
+            "Chrome.Privacy.InSampleForCrashReporting";
 
     /**
      * This is deprecated and is going to be removed in the future (See https://crbug.com/1320040).
@@ -937,11 +925,8 @@ public final class ChromePreferenceKeys {
                 DEFAULT_BROWSER_PROMO_PROMOED_COUNT,
                 DEFAULT_BROWSER_PROMO_SESSION_COUNT,
                 DEFAULT_ENABLED_DESKTOP_SITE_GLOBAL_SETTING,
-                DEFAULT_ENABLE_DESKTOP_SITE_GLOBAL_SETTING_COHORT,
                 DEPRECATED_HOMEPAGE_LOCATION_POLICY,
                 DEPRECATED_HOMEPAGE_PARTNER_CUSTOMIZED_DEFAULT_URI,
-                DESKTOP_SITE_GLOBAL_SETTING_DEFAULT_ON_COHORT_DISPLAY_SPEC,
-                DESKTOP_SITE_GLOBAL_SETTING_OPT_IN_MESSAGE_COHORT,
                 DEVICE_LOCK_SHOW_ALERT_IF_REMOVED,
                 DOWNLOAD_INTERSTITIAL_DOWNLOAD_PENDING_REMOVAL,
                 DSE_NEW_TAB_URL,
@@ -950,6 +935,7 @@ public final class ChromePreferenceKeys {
                 FIRST_RUN_SKIPPED_BY_POLICY,
                 FLAGS_LAST_CACHED_MINIMAL_BROWSER_FLAGS_TIME_MILLIS,
                 HOME_MODULES_MODULE_TYPE.pattern(),
+                HOME_MODULES_FRESHNESS_COUNT.pattern(),
                 HOMEPAGE_CUSTOM_GURL,
                 HOMEPAGE_LOCATION_POLICY_GURL,
                 HOMEPAGE_USE_CHROME_NTP,
@@ -1009,6 +995,7 @@ public final class ChromePreferenceKeys {
                 PRICE_TRACKING_PRICE_WELCOME_MESSAGE_CARD_SHOW_COUNT,
                 PRICE_TRACKING_TRACK_PRICES_ON_TABS,
                 PRICE_TRACKING_USER_MANAGED_NOTIFICATIONS_TIMESTAMPS,
+                PRIVACY_IN_SAMPLE_FOR_CRASHES,
                 PRIVACY_METRICS_REPORTING_PERMITTED_BY_USER,
                 PRIVACY_METRICS_REPORTING_PERMITTED_BY_POLICY,
                 PROMO_IS_DISMISSED.pattern(),

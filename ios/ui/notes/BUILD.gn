@@ -42,7 +42,10 @@ source_set("notes") {
     "note_add_edit_folder_view_controller.h",
     "note_folder_selection_header_view.mm",
     "note_folder_selection_header_view.h",
-    "note_add_edit_controller_delegate.h"
+    "note_add_edit_controller_delegate.h",
+    "note_sorting_mode.h",
+    "vivaldi_notes_pref.h",
+    "vivaldi_notes_pref.mm"
   ]
 
   deps = [

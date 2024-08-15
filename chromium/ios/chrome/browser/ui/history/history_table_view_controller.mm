@@ -58,6 +58,7 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/navigation/referrer.h"
+#import "ios/web/public/web_state.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "ui/strings/grit/ui_strings.h"
@@ -303,22 +304,11 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 
   // If there are no results and no URLs have been loaded, report that no
   // history entries were found.
-
-  if (vivaldi::IsVivaldiRunning()) {
-    if (self.browser->GetBrowserState()->IsOffTheRecord()
-        || (results.empty() && self.empty && !self.searchInProgress)) {
-      [self addEmptyTableViewBackground];
-      [self updateToolbarButtonsWithAnimation:NO];
-      return;
-    }
-
-  } else {
   if (results.empty() && self.empty && !self.searchInProgress) {
     [self addEmptyTableViewBackground];
     [self updateToolbarButtonsWithAnimation:NO];
     return;
   }
-  } // End Vivaldi
 
   self.finishedLoading = queryResultsInfo.reached_beginning;
   self.empty = NO;
@@ -1321,9 +1311,12 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   if (!self.browser) {
     return;
   }
-  new_tab_page_uma::RecordAction(
-      self.browser->GetBrowserState()->IsOffTheRecord(),
-      self.browser->GetWebStateList()->GetActiveWebState(),
+  web::WebState* currentWebState =
+      self.browser->GetWebStateList()->GetActiveWebState();
+  bool is_ntp =
+      currentWebState && currentWebState->GetVisibleURL() == kChromeUINewTabURL;
+  new_tab_page_uma::RecordNTPAction(
+      self.browser->GetBrowserState()->IsOffTheRecord(), is_ntp,
       new_tab_page_uma::ACTION_OPENED_HISTORY_ENTRY);
   UrlLoadParams params = UrlLoadParams::InCurrentTab(URL);
   params.web_params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;

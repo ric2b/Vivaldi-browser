@@ -1,3 +1,12 @@
+groupshared float wg_var;
+
+void tint_zero_workgroup_memory(uint local_idx) {
+  if ((local_idx < 1u)) {
+    wg_var = 0.0f;
+  }
+  GroupMemoryBarrierWithGroupSync();
+}
+
 struct S {
   float a;
 };
@@ -12,17 +21,13 @@ static float4 v4f32_var = float4(0.0f, 0.0f, 0.0f, 0.0f);
 static float2x3 m2x3_var = float2x3(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 static float arr_var[4] = (float[4])0;
 static S struct_var = (S)0;
-groupshared float wg_var;
 
 struct tint_symbol_1 {
   uint local_invocation_index : SV_GroupIndex;
 };
 
 void main_inner(uint local_invocation_index) {
-  {
-    wg_var = 0.0f;
-  }
-  GroupMemoryBarrierWithGroupSync();
+  tint_zero_workgroup_memory(local_invocation_index);
   bool_var = false;
   i32_var = 0;
   u32_var = 0u;
@@ -31,9 +36,9 @@ void main_inner(uint local_invocation_index) {
   v3u32_var = (0u).xxx;
   v4f32_var = (0.0f).xxxx;
   m2x3_var = float2x3((0.0f).xxx, (0.0f).xxx);
-  const float tint_symbol_2[4] = (float[4])0;
+  float tint_symbol_2[4] = (float[4])0;
   arr_var = tint_symbol_2;
-  const S tint_symbol_3 = (S)0;
+  S tint_symbol_3 = (S)0;
   struct_var = tint_symbol_3;
   wg_var = 42.0f;
 }

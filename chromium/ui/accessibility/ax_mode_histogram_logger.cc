@@ -73,8 +73,14 @@ void RecordAccessibilityModeHistograms(AXHistogramPrefix prefix,
                      AXMode::ModeFlagHistogramValue::UMA_AX_MODE_LABEL_IMAGES);
     }
 
-    if (new_mode_flags & ui::AXMode::kPDF) {
+    if (new_mode_flags & ui::AXMode::kPDFPrinting) {
       RecordModeFlag(prefix, AXMode::ModeFlagHistogramValue::UMA_AX_MODE_PDF);
+    }
+
+    if (new_mode_flags & ui::AXMode::kAnnotateMainNode) {
+      RecordModeFlag(
+          prefix,
+          AXMode::ModeFlagHistogramValue::UMA_AX_MODE_ANNOTATE_MAIN_NODE);
     }
   }
 

@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Paisagem 12</translation>
 <translation id="1158503667684816647">Não pedir confirmação novamente</translation>
 <translation id="1222195720020481779">Iniciando o instalador...</translation>
+<translation id="1270785070369717623">Infelizmente, as configurações do Opera GX não estão disponíveis enquanto o navegador está em execução. Para importar essas configurações para o Vivaldi, salve seu trabalho e feche todas as janelas do Opera GX. Em seguida, clique em Continuar.</translation>
 <translation id="1276145862619442150">Discagem Rápida</translation>
 <translation id="1281950884873973195">Animal 6</translation>
 <translation id="1411638389238344450">Enviar link por &amp;email</translation>
@@ -33,6 +34,7 @@
 <translation id="2486841023299517366">Animal 4</translation>
 <translation id="2612127540243995147">Pronto para instalar. Vivaldi será encerrado e iniciado novamente.</translation>
 <translation id="2613387515621326337">Exibir o website de atualizações</translation>
+<translation id="2645477450146475243">Infelizmente, as configurações do Opera não estão disponíveis enquanto o navegador está em execução. Para importar essas configurações para o Vivaldi, salve seu trabalho e feche todas as janelas do Opera. Em seguida, clique em Continuar.</translation>
 <translation id="2647368062414805334">Infelizmente, as configurações do Edge não estão disponíveis enquanto o browser está aberto. Para importar essas configurações, salve o seu trabalho e feche todas as janelas do Edge. Então, clique em Continuar.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Animal 3</translation>
@@ -41,11 +43,14 @@
 <translation id="2923448633003185837">Colar e Ir</translation>
 <translation id="2953943267837858202">Não permitido rodar vídeos automaticamente</translation>
 <translation id="2977472760057091832">Abrir link em janela &amp;privada</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Abrir uma nova aba</translation>
 <translation id="3027988479108856431">Infelizmente, suas configurações do Yandex não estão disponíveis enquanto ele estiver em execução. Para importá-las ao Vivaldi, salve seu trabalho e feche todas as janelas do Yandex. Então clique em Continuar.</translation>
 <translation id="3084011186245865060">Paisagem 6</translation>
+<translation id="3085906383264247940">Opera (Beta)</translation>
 <translation id="3093931836425623631">Vivaldi é possível graças ao projeto de código aberto Chromium e vários outros softwares de código aberto.</translation>
 <translation id="3127383884976966729">Animal 7</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">Novo marcador</translation>
 <translation id="3255747772218936245">Instalar atualização</translation>
 <translation id="3259769196742189631">Validar na &amp;W3C</translation>
@@ -54,7 +59,6 @@
 <translation id="3334610655141903168">(sem título)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> é a versão mais recente disponível.</translation>
 <translation id="3383198080133834965">Você está atualizado!</translation>
-<translation id="3402602684546832928">Selecione um arquivo de marcadores do Opera</translation>
 <translation id="3451317331714872347">Paisagem 8</translation>
 <translation id="3457498675806041407">Fechar Vivaldi</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> já foi instalado e será ativado após reinicar o navegador.</translation>
@@ -65,6 +69,7 @@
 <translation id="3588820906588687999">Abrir imagem em nova &amp;aba</translation>
 <translation id="3601066750251199488">Monstro 3</translation>
 <translation id="3620979700683094848">Sites têm permissão para rodar vídeos automaticamente</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Uma nova versão do Vivaldi está disponível!</translation>
 <translation id="3708982624815781692">O download foi cancelado.</translation>
 <translation id="3732157130969736834">Adicionar link aos marcadores</translation>
@@ -88,7 +93,6 @@
 <translation id="443008484043213881">Ferramentas</translation>
 <translation id="4456211719108566931">Monstro 6</translation>
 <translation id="4512900838580567989">Abrir link em segundo p&amp;lano</translation>
-<translation id="4515472507709384008">Opera versão 15+</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Abrir imagem em segundo p&amp;lano</translation>
 <translation id="4582480609585453144">Abrir Link em Segundo Plano</translation>
@@ -105,11 +109,11 @@
 <translation id="5238244642230426581">Marcadores importados</translation>
 <translation id="527605719918376753">Silenciar aba</translation>
 <translation id="5305569355661722298">Fechar Janela</translation>
+<translation id="5322922669477407077">Opera (Developer)</translation>
 <translation id="5388358297987318779">&amp;Abrir imagem</translation>
 <translation id="5416008465899576639">Uma nova versão do Vivaldi está disponível.</translation>
 <translation id="5497042274492038489">Fechar Janela</translation>
 <translation id="5594602170491763400">Monstro 5</translation>
-<translation id="5615637589913244581">Opera versão 15+ (Beta)</translation>
 <translation id="5648110075441906505">Abrir imagem em nova &amp;janela</translation>
 <translation id="5656371807944747581">Erro de Atualização!</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> está disponível (você tem <ph name="OLD_VERSION" />). Gostaria de baixa-la agora?</translation>
@@ -120,7 +124,6 @@
 <translation id="6040143037577758943">Fechar</translation>
 <translation id="6229528619562190452">Clique aqui para atualizar o Vivaldi.</translation>
 <translation id="6234173136417926046">Usar imagem como fundo da Discagem Rápida</translation>
-<translation id="630690498669249215">Arquivo de marcadores do Opera</translation>
 <translation id="6339818817272922368">Conta Local</translation>
 <translation id="6438786710866753178">Paisagem 4</translation>
 <translation id="6477028720702061455">Selecione a pasta do perfil do Opera para importar</translation>
@@ -131,11 +134,11 @@
 <translation id="6635049669875534328">Notas de lançamento:</translation>
 <translation id="6693585104974197539">Selecione a pasta de perfil do Edge para ser importado</translation>
 <translation id="6726279523566323394">Selecione a pasta de perfil do Brave para ser importado</translation>
-<translation id="6804831687363620480">Infelizmente, suas configurações do Opera 15+ não estão disponíveis enquanto ele estiver em execução. Para importá-las ao Vivaldi, salve seu trabalho e feche todas as janelas do Opera 15+. Então clique em Continuar.</translation>
 <translation id="6892812721183419409">Abrir Link como <ph name="USER" /></translation>
 <translation id="6896758677409633944">Copiar</translation>
 <translation id="7086554968911045110">Paisagem 7</translation>
 <translation id="7111492742514999492">Paisagem 9</translation>
+<translation id="7208252576848052204">Infelizmente, as configurações do Arc não estão disponíveis enquanto o navegador está em execução. Para importar essas configurações para o Vivaldi, salve seu trabalho e feche todas as janelas do Arc. Em seguida, clique em Continuar.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Falha ao iniciar o instalador da atualização. Por favor, cheque se o computador tem memória ou espaço em disco suficiente e tente novamente mais tarde.</translation>
 <translation id="7658239707568436148">Cancelar</translation>
@@ -162,7 +165,6 @@
 <translation id="8562339533180097902">Fechar o Vivaldi e instalar agora</translation>
 <translation id="8567452685425968223">Extraindo atualização...</translation>
 <translation id="8624587806981488221">&amp;Recarregar imagem</translation>
-<translation id="864444594187862076">Opera versão 15+ (Developer)</translation>
 <translation id="8651348004684669199">Adicionar aba ativa</translation>
 <translation id="8669345741879513971">Monstro 10</translation>
 <translation id="867544375504146191">Yandex</translation>

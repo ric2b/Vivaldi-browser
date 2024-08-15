@@ -32,9 +32,13 @@
 #include "core/fpdfdoc/cpdf_viewerpreferences.h"
 #include "core/fxcrt/cfx_read_only_span_stream.h"
 #include "core/fxcrt/cfx_timer.h"
+#include "core/fxcrt/check_op.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/fx_stream.h"
 #include "core/fxcrt/fx_system.h"
+#include "core/fxcrt/numerics/safe_conversions.h"
+#include "core/fxcrt/ptr_util.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/span_util.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxcrt/unowned_ptr.h"
@@ -50,14 +54,9 @@
 #include "fpdfsdk/cpdfsdk_renderpage.h"
 #include "fxjs/ijs_runtime.h"
 #include "public/fpdf_formfill.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/containers/span.h"
-#include "third_party/base/memory/ptr_util.h"
-#include "third_party/base/numerics/safe_conversions.h"
 
 #ifdef PDF_ENABLE_V8
 #include "fxjs/cfx_v8_array_buffer_allocator.h"
-#include "third_party/base/no_destructor.h"
 #endif
 
 #ifdef PDF_ENABLE_XFA
@@ -274,6 +273,7 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_DestroyLibrary() {
   CPDF_PageModule::Destroy();
   CFX_GEModule::Destroy();
   CFX_Timer::DestroyGlobals();
+  FX_DestroyMemoryAllocators();
 
   g_bLibraryInitialized = false;
 }
@@ -839,7 +839,7 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDF_DeviceToPage(FPDF_PAGE page,
 
   IPDF_Page* pPage = IPDFPageFromFPDFPage(page);
   const FX_RECT rect(start_x, start_y, start_x + size_x, start_y + size_y);
-  absl::optional<CFX_PointF> pos =
+  std::optional<CFX_PointF> pos =
       pPage->DeviceToPage(rect, rotate, CFX_PointF(device_x, device_y));
   if (!pos.has_value())
     return false;
@@ -865,8 +865,7 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDF_PageToDevice(FPDF_PAGE page,
   IPDF_Page* pPage = IPDFPageFromFPDFPage(page);
   const FX_RECT rect(start_x, start_y, start_x + size_x, start_y + size_y);
   CFX_PointF page_point(static_cast<float>(page_x), static_cast<float>(page_y));
-  absl::optional<CFX_PointF> pos =
-      pPage->PageToDevice(rect, rotate, page_point);
+  std::optional<CFX_PointF> pos = pPage->PageToDevice(rect, rotate, page_point);
   if (!pos.has_value())
     return false;
 
@@ -1102,7 +1101,7 @@ FPDF_VIEWERREF_GetName(FPDF_DOCUMENT document,
     return 0;
 
   CPDF_ViewerPreferences viewRef(pDoc);
-  absl::optional<ByteString> bsVal = viewRef.GenericName(key);
+  std::optional<ByteString> bsVal = viewRef.GenericName(key);
   if (!bsVal.has_value())
     return 0;
 
@@ -1152,8 +1151,11 @@ FPDF_EXPORT const char* FPDF_CALLCONV FPDF_GetRecommendedV8Flags() {
 }
 
 FPDF_EXPORT void* FPDF_CALLCONV FPDF_GetArrayBufferAllocatorSharedInstance() {
-  static pdfium::base::NoDestructor<CFX_V8ArrayBufferAllocator> allocator;
-  return allocator.get();
+  // Deliberately leaked. This allocator is used outside of the library
+  // initialization / destruction lifecycle, and the caller does not take
+  // ownership of the object. Thus there is no existing way to delete this.
+  static auto* s_allocator = new CFX_V8ArrayBufferAllocator();
+  return s_allocator;
 }
 #endif  // PDF_ENABLE_V8
 
@@ -1174,7 +1176,7 @@ FPDF_EXPORT FPDF_RESULT FPDF_CALLCONV FPDF_BStr_Set(FPDF_BSTR* bstr,
     return -1;
 
   if (length == -1)
-    length = pdfium::base::checked_cast<int>(strlen(cstr));
+    length = pdfium::checked_cast<int>(strlen(cstr));
 
   if (length == 0) {
     FPDF_BStr_Clear(bstr);
@@ -1250,7 +1252,7 @@ FPDF_EXPORT FPDF_DEST FPDF_CALLCONV FPDF_GetNamedDest(FPDF_DOCUMENT document,
         break;
       i++;
     }
-    wsName = PDF_DecodeText(bsName.raw_span());
+    wsName = PDF_DecodeText(bsName.unsigned_span());
   } else {
     pDestObj = name_tree->LookupValueAndName(index, &wsName);
   }
@@ -1265,7 +1267,7 @@ FPDF_EXPORT FPDF_DEST FPDF_CALLCONV FPDF_GetNamedDest(FPDF_DOCUMENT document,
     return nullptr;
 
   ByteString utf16Name = wsName.ToUTF16LE();
-  int len = pdfium::base::checked_cast<int>(utf16Name.GetLength());
+  int len = pdfium::checked_cast<int>(utf16Name.GetLength());
   if (!buffer) {
     *buflen = len;
   } else if (len <= *buflen) {

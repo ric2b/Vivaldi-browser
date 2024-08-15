@@ -356,7 +356,10 @@ public class FeedV2NewTabPageTest {
     public void testSignInPromoWhenDefaultAccountCanNotOfferExtendedSyncPromos() {
         final AccountCapabilitiesBuilder capabilitiesBuilder = new AccountCapabilitiesBuilder();
         mAccountManagerTestRule.addAccount(
-                "test@gmail.com", capabilitiesBuilder.setCanOfferExtendedSyncPromos(false).build());
+                "test@gmail.com",
+                capabilitiesBuilder
+                        .setCanShowHistorySyncOptInsWithoutMinorModeRestrictions(false)
+                        .build());
         mIsCachePopulatedInAccountManagerFacade = true;
 
         openNewTabPage();
@@ -436,8 +439,8 @@ public class FeedV2NewTabPageTest {
                 recyclerView,
                 "feedContent_landscape"
                         + (mEnableScrollableMVT
-                                ? "_with_scrollable_mvt"
-                                : "_with_non_scrollable_mvt"));
+                                ? "_with_scrollable_mvt_v2"
+                                : "_with_non_scrollable_mvt_v2"));
     }
 
     @Test

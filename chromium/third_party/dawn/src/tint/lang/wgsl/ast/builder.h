@@ -60,7 +60,7 @@
 #include "src/tint/lang/wgsl/ast/assignment_statement.h"
 #include "src/tint/lang/wgsl/ast/binary_expression.h"
 #include "src/tint/lang/wgsl/ast/binding_attribute.h"
-#include "src/tint/lang/wgsl/ast/bitcast_expression.h"
+#include "src/tint/lang/wgsl/ast/blend_src_attribute.h"
 #include "src/tint/lang/wgsl/ast/bool_literal_expression.h"
 #include "src/tint/lang/wgsl/ast/break_if_statement.h"
 #include "src/tint/lang/wgsl/ast/break_statement.h"
@@ -86,7 +86,6 @@
 #include "src/tint/lang/wgsl/ast/if_statement.h"
 #include "src/tint/lang/wgsl/ast/increment_decrement_statement.h"
 #include "src/tint/lang/wgsl/ast/index_accessor_expression.h"
-#include "src/tint/lang/wgsl/ast/index_attribute.h"
 #include "src/tint/lang/wgsl/ast/int_literal_expression.h"
 #include "src/tint/lang/wgsl/ast/interpolate_attribute.h"
 #include "src/tint/lang/wgsl/ast/invariant_attribute.h"
@@ -114,6 +113,7 @@
 #include "src/tint/lang/wgsl/ast/variable_decl_statement.h"
 #include "src/tint/lang/wgsl/ast/while_statement.h"
 #include "src/tint/lang/wgsl/ast/workgroup_attribute.h"
+#include "src/tint/lang/wgsl/builtin_fn.h"
 #include "src/tint/lang/wgsl/extension.h"
 #include "src/tint/utils/id/generation_id.h"
 #include "src/tint/utils/text/string.h"
@@ -1548,30 +1548,28 @@ class Builder {
     }
 
     /// @param expr the expression for the bitcast
-    /// @return an `ast::BitcastExpression` of type `ty`, with the values of
-    /// `expr` converted to `ast::Expression`s using `Expr()`
+    /// @return a bitcast call of type `ty`, with the values of `expr` converted to
+    /// `ast::Expression`s using `Expr()`
     template <typename T, typename EXPR>
-    const ast::BitcastExpression* Bitcast(EXPR&& expr) {
+    const ast::CallExpression* Bitcast(EXPR&& expr) {
         return Bitcast(ty.Of<T>(), std::forward<EXPR>(expr));
     }
 
     /// @param type the type to cast to
     /// @param expr the expression for the bitcast
-    /// @return an `ast::BitcastExpression` of @p type constructed with the values
-    /// `expr`.
+    /// @return a bitcast call of @p type constructed with the values `expr`.
     template <typename EXPR>
-    const ast::BitcastExpression* Bitcast(ast::Type type, EXPR&& expr) {
+    const ast::CallExpression* Bitcast(ast::Type type, EXPR&& expr) {
         return Bitcast(source_, type, Expr(std::forward<EXPR>(expr)));
     }
 
     /// @param source the source information
     /// @param type the type to cast to
     /// @param expr the expression for the bitcast
-    /// @return an `ast::BitcastExpression` of @p type constructed with the values
-    /// `expr`.
+    /// @return a bitcast call of @p type constructed with the values `expr`.
     template <typename EXPR>
-    const ast::BitcastExpression* Bitcast(const Source& source, ast::Type type, EXPR&& expr) {
-        return create<ast::BitcastExpression>(source, type, Expr(std::forward<EXPR>(expr)));
+    const ast::CallExpression* Bitcast(const Source& source, ast::Type type, EXPR&& expr) {
+        return Call(source, Ident(wgsl::BuiltinFn::kBitcast, type), Expr(std::forward<EXPR>(expr)));
     }
 
     /// @param type the vector type
@@ -3193,21 +3191,21 @@ class Builder {
         return create<ast::LocationAttribute>(source_, Expr(std::forward<EXPR>(location)));
     }
 
-    /// Creates an ast::IndexAttribute
+    /// Creates an ast::BlendSrcAttribute
     /// @param source the source information
-    /// @param index the index value expression
-    /// @returns the index attribute pointer
+    /// @param blend_src the blend_src value expression
+    /// @returns the blend_src attribute pointer
     template <typename EXPR>
-    const ast::IndexAttribute* Index(const Source& source, EXPR&& index) {
-        return create<ast::IndexAttribute>(source, Expr(std::forward<EXPR>(index)));
+    const ast::BlendSrcAttribute* BlendSrc(const Source& source, EXPR&& blend_src) {
+        return create<ast::BlendSrcAttribute>(source, Expr(std::forward<EXPR>(blend_src)));
     }
 
-    /// Creates an ast::IndexAttribute
-    /// @param index the index value expression
-    /// @returns the index attribute pointer
+    /// Creates an ast::BlendSrcAttribute
+    /// @param blend_src the blend_src value expression
+    /// @returns the blend_src attribute pointer
     template <typename EXPR>
-    const ast::IndexAttribute* Index(EXPR&& index) {
-        return create<ast::IndexAttribute>(source_, Expr(std::forward<EXPR>(index)));
+    const ast::BlendSrcAttribute* BlendSrc(EXPR&& blend_src) {
+        return create<ast::BlendSrcAttribute>(source_, Expr(std::forward<EXPR>(blend_src)));
     }
 
     /// Creates an ast::IdAttribute

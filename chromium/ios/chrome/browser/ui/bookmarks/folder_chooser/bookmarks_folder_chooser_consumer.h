@@ -10,12 +10,11 @@
 
 namespace bookmarks {
 class BookmarkNode;
+}
 
 // Vivaldi
-class BookmarkModel;
+class LegacyBookmarkModel;
 // End Vivaldi
-
-}
 
 // Consumer protocol to receive updates from the model layer.
 @protocol BookmarksFolderChooserConsumer <NSObject>
@@ -30,8 +29,6 @@ class BookmarkModel;
 
 // "Mobile Bookmarks" folder node that always exists by default.
 - (const bookmarks::BookmarkNode*)mobileFolderNode;
-// Root folder node in the bookmark model tree.
-- (const bookmarks::BookmarkNode*)rootFolderNode;
 // The list of visible folders to show.
 - (std::vector<const bookmarks::BookmarkNode*>)visibleFolderNodes;
 
@@ -60,7 +57,7 @@ class BookmarkModel;
 - (BOOL)shouldShowAccountBookmarks;
 
 // Vivaldi
-- (bookmarks::BookmarkModel*)profileBookmarkModel;
+- (LegacyBookmarkModel*)profileBookmarkModel;
 // End Vivaldi
 
 @end

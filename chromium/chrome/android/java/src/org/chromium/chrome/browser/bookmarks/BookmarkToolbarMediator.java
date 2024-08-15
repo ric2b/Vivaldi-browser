@@ -34,7 +34,6 @@ import org.chromium.ui.base.DeviceFormFactor;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Objects;
 
 // Vivaldi
 import org.chromium.chrome.browser.ChromeApplicationImpl;
@@ -87,6 +86,7 @@ class BookmarkToolbarMediator
     private final BookmarkUiPrefs mBookmarkUiPrefs;
     private final BookmarkAddNewFolderCoordinator mBookmarkAddNewFolderCoordinator;
     private final Runnable mEndSearchRunnable;
+    private final BookmarkMoveSnackbarManager mBookmarkMoveSnackbarManager;
 
     // TODO(crbug.com/1413463): Remove reference to BookmarkDelegate if possible.
     private @Nullable BookmarkDelegate mBookmarkDelegate;
@@ -108,7 +108,8 @@ class BookmarkToolbarMediator
             BookmarkOpener bookmarkOpener,
             BookmarkUiPrefs bookmarkUiPrefs,
             BookmarkAddNewFolderCoordinator bookmarkAddNewFolderCoordinator,
-            Runnable endSearchRunnable) {
+            Runnable endSearchRunnable,
+            BookmarkMoveSnackbarManager bookmarkMoveSnackbarManager) {
         mContext = context;
         mModel = model;
 
@@ -128,6 +129,7 @@ class BookmarkToolbarMediator
         mBookmarkUiPrefs.addObserver(mBookmarkUiPrefsObserver);
         mBookmarkAddNewFolderCoordinator = bookmarkAddNewFolderCoordinator;
         mEndSearchRunnable = endSearchRunnable;
+        mBookmarkMoveSnackbarManager = bookmarkMoveSnackbarManager;
 
         if (BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) {
             mModel.set(BookmarkToolbarProperties.SORT_MENU_IDS, SORT_MENU_IDS);
@@ -240,8 +242,8 @@ class BookmarkToolbarMediator
             List<BookmarkId> list = mSelectionDelegate.getSelectedItemsAsList();
             if (list.size() >= 1) {
                 if (BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) {
-                    BookmarkUtils.startFolderPickerActivity(
-                            mContext, list.toArray(new BookmarkId[0]));
+                    mBookmarkMoveSnackbarManager.startFolderPickerAndObserveResult(
+                            list.toArray(new BookmarkId[0]));
                 } else {
                     BookmarkFolderSelectActivity.startFolderSelectActivity(
                             mContext, list.toArray(new BookmarkId[0]));
@@ -440,7 +442,10 @@ class BookmarkToolbarMediator
             navigationButton = NavigationButton.BACK;
         } else if (ChromeApplicationImpl.isVivaldi() &&
                 folder.equals(mBookmarkModel.getDefaultReadingListFolder())) {
-                navigationButton = NavigationButton.NONE;
+            navigationButton = NavigationButton.NONE;
+            if (mTabbedActivity != null && mTabbedActivity.findViewById(R.id.bookmarks_tab_button)
+                    != null)  // Vivaldi Ref. VAB-8796
+                navigationButton = NavigationButton.BACK;
             title = res.getString(R.string.menu_reading_list);
         } else {
             title = folderItem.getTitle();
@@ -469,10 +474,8 @@ class BookmarkToolbarMediator
             // Special behavior in reading list:
             // - Select CHRONOLOGICAL as sort order.
             // - Disable sort menu items.
-            // TODO(crbug.com/1501998): Add account reading list folder support here.
             boolean inReadingList =
-                    Objects.equals(
-                            mCurrentFolder, mBookmarkModel.getLocalOrSyncableReadingListFolder());
+                    BookmarkUtils.isReadingListFolder(mBookmarkModel, mCurrentFolder);
             mModel.set(BookmarkToolbarProperties.SORT_MENU_IDS_ENABLED, !inReadingList);
             if (inReadingList) {
                 // Reading list items are always sorted by date added.
@@ -545,8 +548,8 @@ class BookmarkToolbarMediator
             mEndSearchRunnable.run();
             return;
         }
-        mBookmarkDelegate.openFolder(
-                BookmarkUtils.getParentFolderForViewing(mBookmarkModel, mCurrentFolder));
+
+        mBookmarkDelegate.openFolder(mBookmarkModel.getBookmarkById(mCurrentFolder).getParentId());
     }
 
     /** Vivaldi */

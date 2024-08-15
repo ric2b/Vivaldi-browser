@@ -112,7 +112,7 @@ void LacrosBrowserShortcutsController::RemoveShortcut(
       provider_->registrar_unsafe().CanUserUninstallWebApp(web_app->app_id()));
   webapps::WebappUninstallSource webapp_uninstall_source =
       ConvertUninstallSourceToWebAppUninstallSource(uninstall_source);
-  provider_->scheduler().UninstallWebApp(
+  provider_->scheduler().RemoveUserUninstallableManagements(
       web_app->app_id(), webapp_uninstall_source,
       base::IgnoreArgs<webapps::UninstallResultCode>(std::move(callback)));
 }
@@ -145,7 +145,7 @@ void LacrosBrowserShortcutsController::RegisterControllerOnRegistryReady() {
   if (service->GetInterfaceVersion<crosapi::mojom::AppShortcutPublisher>() <
           int{crosapi::mojom::AppShortcutPublisher::MethodMinVersions::
                   kRegisterAppShortcutControllerMinVersion} &&
-      !chromeos::BrowserParamsProxy::Get()->IsCrosapiDisabledForTesting()) {
+      !chromeos::BrowserParamsProxy::IsCrosapiDisabledForTesting()) {
     LOG(WARNING)
         << "Ash AppShortcutPublisher version "
         << service->GetInterfaceVersion<crosapi::mojom::AppShortcutPublisher>()
@@ -184,7 +184,7 @@ void LacrosBrowserShortcutsController::MaybePublishBrowserShortcuts(
   if (service->GetInterfaceVersion<crosapi::mojom::AppShortcutPublisher>() <
           int{crosapi::mojom::AppShortcutPublisher::MethodMinVersions::
                   kPublishShortcutsMinVersion} &&
-      !chromeos::BrowserParamsProxy::Get()->IsCrosapiDisabledForTesting()) {
+      !chromeos::BrowserParamsProxy::IsCrosapiDisabledForTesting()) {
     LOG(WARNING)
         << "Ash AppShortcutPublisher version "
         << service->GetInterfaceVersion<crosapi::mojom::AppShortcutPublisher>()
@@ -289,7 +289,7 @@ void LacrosBrowserShortcutsController::OnWebAppUninstalled(
   if (service->GetInterfaceVersion<crosapi::mojom::AppShortcutPublisher>() <
           int{crosapi::mojom::AppShortcutPublisher::MethodMinVersions::
                   kShortcutRemovedMinVersion} &&
-      !chromeos::BrowserParamsProxy::Get()->IsCrosapiDisabledForTesting()) {
+      !chromeos::BrowserParamsProxy::IsCrosapiDisabledForTesting()) {
     LOG(WARNING)
         << "Ash AppShortcutPublisher version "
         << service->GetInterfaceVersion<crosapi::mojom::AppShortcutPublisher>()

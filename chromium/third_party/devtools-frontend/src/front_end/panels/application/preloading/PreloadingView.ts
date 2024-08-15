@@ -20,6 +20,7 @@ import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import * as PreloadingComponents from './components/components.js';
 import type * as PreloadingHelper from './helper/helper.js';
 import preloadingViewStyles from './preloadingView.css.js';
+import preloadingViewDropDownStyles from './preloadingViewDropDown.css.js';
 
 const UIStrings = {
   /**
@@ -210,7 +211,7 @@ export class PreloadingRuleSetView extends UI.Widget.VBox {
             ${this.ruleSetGrid}
           </div>
           <div slot="sidebar" class="overflow-auto" style="height: 100%"
-          jslog=${VisualLogging.section().context('rule-set-details')}>
+          jslog=${VisualLogging.section('rule-set-details')}>
             ${this.ruleSetDetails}
           </div>
         </${SplitView.SplitView.SplitView.litTagName}>`,
@@ -301,7 +302,7 @@ export class PreloadingAttemptView extends UI.Widget.VBox {
   constructor(model: SDK.PreloadingModel.PreloadingModel) {
     super(/* isWebComponent */ true, /* delegatesFocus */ false);
 
-    this.element.setAttribute('jslog', `${VisualLogging.pane().context('preloading-speculations')}`);
+    this.element.setAttribute('jslog', `${VisualLogging.pane('preloading-speculations')}`);
     this.model = model;
     SDK.TargetManager.TargetManager.instance().addScopeChangeListener(this.onScopeChange.bind(this));
     SDK.TargetManager.TargetManager.instance().addModelListener(
@@ -333,6 +334,7 @@ export class PreloadingAttemptView extends UI.Widget.VBox {
     const vbox = new UI.Widget.VBox();
 
     const toolbar = new UI.Toolbar.Toolbar('preloading-toolbar', vbox.contentElement);
+    toolbar.element.setAttribute('jslog', `${VisualLogging.toolbar()}`);
     this.ruleSetSelector = new PreloadingRuleSetSelector(() => this.render());
     toolbar.appendToolbarItem(this.ruleSetSelector.item());
 
@@ -448,7 +450,7 @@ export class PreloadingSummaryView extends UI.Widget.VBox {
   constructor(model: SDK.PreloadingModel.PreloadingModel) {
     super(/* isWebComponent */ true, /* delegatesFocus */ false);
 
-    this.element.setAttribute('jslog', `${VisualLogging.pane().context('speculative-loads')}`);
+    this.element.setAttribute('jslog', `${VisualLogging.pane('speculative-loads')}`);
     this.model = model;
     SDK.TargetManager.TargetManager.instance().addScopeChangeListener(this.onScopeChange.bind(this));
     SDK.TargetManager.TargetManager.instance().addModelListener(
@@ -528,7 +530,7 @@ class PreloadingRuleSetSelector implements
     this.toolbarItem.setTitle(i18nString(UIStrings.filterFilterByRuleSet));
     this.toolbarItem.element.classList.add('toolbar-has-dropdown');
     this.toolbarItem.element.setAttribute(
-        'jslog', `${VisualLogging.action().track({click: true}).context('filter-by-rule-set')}`);
+        'jslog', `${VisualLogging.action('filter-by-rule-set').track({click: true})}`);
 
     // Initializes `listModel` and `dropDown` using data of the model.
     this.onModelUpdated();
@@ -554,6 +556,17 @@ class PreloadingRuleSetSelector implements
     } else {
       this.dropDown.selectItem(selected);
     }
+    this.updateWidth(items);
+  }
+
+  // Updates the width for the DropDown element.
+  private updateWidth(items: (Protocol.Preload.RuleSetId|typeof AllRuleSetRootId)[]): void {
+    // Width set by `UI.SoftDropDown`.
+    const DEFAULT_WIDTH = 315;
+    const urlLengths = items.map(x => this.titleFor(x).length);
+    const maxLength = Math.max(...urlLengths);
+    const width = Math.min(maxLength * 6 + 16, DEFAULT_WIDTH);
+    this.dropDown.setWidth(width);
   }
 
   // AllRuleSetRootId is used within the selector to indicate the root item. When interacting with PreloadingModel,
@@ -606,8 +619,8 @@ class PreloadingRuleSetSelector implements
   // Method for UI.SoftDropDown.Delegate<Protocol.Preload.RuleSetId|typeof AllRuleSetRootId>
   createElementForItem(id: Protocol.Preload.RuleSetId|typeof AllRuleSetRootId): Element {
     const element = document.createElement('div');
-    const shadowRoot =
-        UI.Utils.createShadowRootWithCoreStyles(element, {cssFile: undefined, delegatesFocus: undefined});
+    const shadowRoot = UI.Utils.createShadowRootWithCoreStyles(
+        element, {cssFile: [preloadingViewDropDownStyles], delegatesFocus: undefined});
     const title = shadowRoot.createChild('div', 'title');
     UI.UIUtils.createTextChild(title, Platform.StringUtilities.trimEndWithMaxLength(this.titleFor(id), 100));
     const subTitle = shadowRoot.createChild('div', 'subtitle');

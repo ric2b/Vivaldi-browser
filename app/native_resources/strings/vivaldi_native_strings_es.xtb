@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Paisaje 12</translation>
 <translation id="1158503667684816647">No volver a preguntar</translation>
 <translation id="1222195720020481779">Iniciando el instalador...</translation>
+<translation id="1270785070369717623">Desafortunadamente, no se puede acceder a los ajustes de Opera GX mientras el navegador esté abierto. Para importar estos ajustes a Vivaldi, guarda lo que estés haciendo, cierra todas las ventanas de Opera GX y haz clic en Continuar.</translation>
 <translation id="1276145862619442150">Accesos rápidos</translation>
 <translation id="1281950884873973195">Animal 6</translation>
 <translation id="1411638389238344450">Enviar el enlace por correo</translation>
@@ -12,6 +13,7 @@
 <translation id="1462666970065907900">¿Estás seguro de que quieres cerrar esta ventana?</translation>
 <translation id="1480046233931937785">Créditos</translation>
 <translation id="1526344461589023948">Se ha producido un error al intentar guardar una actualización descargada. Por favor, comprueba que tu equipo tenga suficiente espacio en disco e inténtalo de nuevo más tarde.</translation>
+<translation id="1635542496948266458">Cambiar de perfil</translation>
 <translation id="1657174850639146440">Monstruo 9</translation>
 <translation id="1676595396635191120">Nueva ventana privada</translation>
 <translation id="1702758681952953055">Si el error persiste, por favor repórtalo e incluye los siguientes detalles:</translation>
@@ -27,12 +29,14 @@
 <translation id="1985669426322966465">Actualización del programa</translation>
 <translation id="2079036669923635404">Haz clic aquí para actualizar Vivaldi a la versión <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Se ha producido un error al descargar los archivos de actualización. Por favor, comprueba tu conexión a Internet y vuelve a intentarlo más tarde.</translation>
+<translation id="2226825946708954262">⚠ Continuar con pérdida de datos</translation>
 <translation id="2339641773402824483">Buscando actualizaciones...</translation>
 <translation id="2441056087170876076">Monstruo 2</translation>
 <translation id="2444387452209867610">Insertar nota</translation>
 <translation id="2486841023299517366">Animal 4</translation>
 <translation id="2612127540243995147">La nueva versión está lista para ser instalada. Vivaldi se cerrará y luego se reiniciará automáticamente.</translation>
 <translation id="2613387515621326337">Mostrar el sitio web de actualizaciones</translation>
+<translation id="2645477450146475243">Desafortunadamente, no se puede acceder a los ajustes de Opera mientras el navegador esté abierto. Para importar estos ajustes a Vivaldi, guarda lo que estés haciendo, cierra todas las ventanas de Opera y haz clic en Continuar.</translation>
 <translation id="2647368062414805334">Lamentablemente, las preferencias de Edge no estarán disponibles mientras dicho navegador esté ejecutándose. Para importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Edge y después haz clic en «Continuar».</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Animal 3</translation>
@@ -41,11 +45,14 @@
 <translation id="2923448633003185837">Pegar e ir</translation>
 <translation id="2953943267837858202">No permitidos para reproducir vídeos automáticamente</translation>
 <translation id="2977472760057091832">Abrir enlace en una ventana privada</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Abrir en pestaña nueva</translation>
 <translation id="3027988479108856431">Lamentablemente, las preferencias de Yandex no estarán disponibles mientras dicho navegador esté ejecutándose. Para poder importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Yandex y después haz clic en «Continuar».</translation>
 <translation id="3084011186245865060">Paisaje 6</translation>
+<translation id="3085906383264247940">Opera (Beta)</translation>
 <translation id="3093931836425623631">Vivaldi es posible gracias al proyecto de código abierto Chromium y a otros programas de código abierto.</translation>
 <translation id="3127383884976966729">Animal 7</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">Marcador nuevo</translation>
 <translation id="3255747772218936245">Instalar actualización</translation>
 <translation id="3259769196742189631">Validar página (W3C)</translation>
@@ -54,7 +61,6 @@
 <translation id="3334610655141903168">(sin título)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> es la versión más reciente disponible.</translation>
 <translation id="3383198080133834965">Vivaldi está actualizado</translation>
-<translation id="3402602684546832928">Selecciona el archivo de marcadores de Opera</translation>
 <translation id="3451317331714872347">Paisaje 8</translation>
 <translation id="3457498675806041407">Confirmar salida</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> ha sido instalado, se activará después que reinicies el navegador.</translation>
@@ -65,6 +71,7 @@
 <translation id="3588820906588687999">Abrir imagen en una pestaña nueva</translation>
 <translation id="3601066750251199488">Monstruo 3</translation>
 <translation id="3620979700683094848">Los sitios pueden reproducir vídeos automáticamente</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">¡Una nueva versión de Vivaldi está disponible!</translation>
 <translation id="3708982624815781692">Se ha cancelado la descarga.</translation>
 <translation id="3732157130969736834">Añadir a marcadores</translation>
@@ -76,6 +83,9 @@
 <translation id="3914946330804881301">Importado de Opera</translation>
 <translation id="3921292902397893431">Monstruo 8</translation>
 <translation id="3943857333388298514">Pegar</translation>
+<translation id="3974783668264968389">No se ha podido desbloquear tu almacén de claves seguras. Si procedes, se perderán tus datos de inicio de sesión y cookies seguras, y algunas funciones como Sync, Correo y Calendario dejarán de funcionar.
+
+    Cierra el programa, desbloquea o repara tu almacén de claves, e inténtalo de nuevo. Si aún así deseas continuar, haz clic en la casilla y selecciona el botón "Continuar con pérdida de datos".</translation>
 <translation id="4005270918754737597">Omitir esta versión</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4074744496918018786">Abrir imagen en una ventana privada</translation>
@@ -88,7 +98,6 @@
 <translation id="443008484043213881">Herramientas</translation>
 <translation id="4456211719108566931">Monstruo 6</translation>
 <translation id="4512900838580567989">Abrir enlace en una pestaña en segundo plano</translation>
-<translation id="4515472507709384008">Opera versión 15+</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Abrir imagen en una pestaña en segundo plano</translation>
 <translation id="4582480609585453144">Abrir enlace en una pestaña en segundo plano</translation>
@@ -100,16 +109,17 @@
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> de <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Acceso rápido importado</translation>
 <translation id="5092656712000637858">Añadir página a un panel web</translation>
+<translation id="5106275083540628394">Error al descifrar: riesgo de pérdida de datos</translation>
 <translation id="5177818338935286353">Monstruo 7</translation>
 <translation id="5213743983876949565">Animal 1</translation>
 <translation id="5238244642230426581">Marcadores importados</translation>
 <translation id="527605719918376753">Silenciar pestaña</translation>
 <translation id="5305569355661722298">Confirmar cierre de ventana</translation>
+<translation id="5322922669477407077">Opera (Developer)</translation>
 <translation id="5388358297987318779">Abrir imagen</translation>
 <translation id="5416008465899576639">Una nueva versión de Vivaldi está disponible.</translation>
 <translation id="5497042274492038489">Confirmar cierre de ventana</translation>
 <translation id="5594602170491763400">Monstruo 5</translation>
-<translation id="5615637589913244581">Opera versión 15+ (beta)</translation>
 <translation id="5648110075441906505">Abrir imagen en una ventana nueva</translation>
 <translation id="5656371807944747581">¡Error al actualizar!</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> está disponible (actualmente tienes instalada la versión <ph name="OLD_VERSION" />). ¿Quieres descargarla ahora?</translation>
@@ -120,8 +130,8 @@
 <translation id="6040143037577758943">Cerrar</translation>
 <translation id="6229528619562190452">Haz clic aquí para actualizar Vivaldi.</translation>
 <translation id="6234173136417926046">Usar imagen como fondo de la página de inicio</translation>
-<translation id="630690498669249215">Archivo de marcadores de Opera</translation>
 <translation id="6339818817272922368">Cuenta local</translation>
+<translation id="6398710281890660037">Asegurar mi perfil</translation>
 <translation id="6438786710866753178">Paisaje 4</translation>
 <translation id="6477028720702061455">Selecciona la carpeta del perfil de Opera a importar</translation>
 <translation id="6510706699590490869">Act&amp;ualizar Vivaldi</translation>
@@ -131,11 +141,13 @@
 <translation id="6635049669875534328">Notas de la versión:</translation>
 <translation id="6693585104974197539">Selecciona la carpeta del perfil de Edge a importar</translation>
 <translation id="6726279523566323394">Selecciona la carpeta del perfil de Brave a importar</translation>
-<translation id="6804831687363620480">Lamentablemente, las preferencias de Opera 15+ no estarán disponibles mientras dicho navegador esté ejecutándose. Para importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Opera 15+ y después haz clic en «Continuar».</translation>
 <translation id="6892812721183419409">Abrir enlace como <ph name="USER" /></translation>
 <translation id="6896758677409633944">Copiar</translation>
+<translation id="6960139763942959188">Este perfil está almacenado de forma no segura en un formato sin cifrar. Vivaldi va a actualizar tu perfil para convertirlo en un formato más seguro y cifrado. Realiza una copia de seguridad de tu perfil antes de continuar.</translation>
 <translation id="7086554968911045110">Paisaje 7</translation>
+<translation id="7099506190679014195">Actualización para el almacenado seguro de claves</translation>
 <translation id="7111492742514999492">Paisaje 9</translation>
+<translation id="7208252576848052204">Desafortunadamente, no se puede acceder a los ajustes de Arc mientras el navegador esté abierto. Para importar estos ajustes a Vivaldi, guarda lo que estés haciendo, cierra todas las ventanas de Arc y haz clic en Continuar.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Error al iniciar el instalador de actualizaciones. Por favor, revisa que el equipo tenga suficiente memoria o espacio en disco y reinténtalo más tarde.</translation>
 <translation id="7658239707568436148">Cancelar</translation>
@@ -162,7 +174,6 @@
 <translation id="8562339533180097902">Cerrar Vivaldi e instalar ahora</translation>
 <translation id="8567452685425968223">Extrayendo actualización...</translation>
 <translation id="8624587806981488221">Recargar &amp;imagen</translation>
-<translation id="864444594187862076">Opera versión 15+ (desarrollo)</translation>
 <translation id="8651348004684669199">Añadir la pestaña activa</translation>
 <translation id="8669345741879513971">Monstruo 10</translation>
 <translation id="867544375504146191">Yandex</translation>
@@ -178,6 +189,7 @@
 <translation id="9048058608784130603">Actualización <ph name="VERSION" /> pendiente</translation>
 <translation id="9048224371732578627">Permitidos para reproducir vídeos automáticamente</translation>
 <translation id="9065203028668620118">Editar</translation>
+<translation id="9090254883741610153">Continuar</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Abrir imagen como <ph name="USER" /></translation>
 <translation id="9157539936604258187">Abrir enlace</translation>

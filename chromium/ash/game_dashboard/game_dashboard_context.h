@@ -6,8 +6,11 @@
 #define ASH_GAME_DASHBOARD_GAME_DASHBOARD_CONTEXT_H_
 
 #include <memory>
+#include <string>
 
 #include "ash/ash_export.h"
+#include "ash/game_dashboard/game_dashboard_metrics.h"
+#include "ash/wm/window_state_observer.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
@@ -18,17 +21,23 @@ namespace aura {
 class Window;
 }  // namespace aura
 
+namespace views {
+class Widget;
+}  // namespace views
+
 namespace ash {
 
 class GameDashboardButton;
+class GameDashboardButtonRevealController;
+class GameDashboardMainMenuCursorHandler;
 class GameDashboardMainMenuView;
 class GameDashboardToolbarView;
-class GameDashboardWidget;
 
 // This class manages Game Dashboard related UI for a given `aura::Window`, and
 // its instance is managed by the `GameDashboardController`.
 class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
-                                        public views::WidgetObserver {
+                                        public views::WidgetObserver,
+                                        public WindowStateObserver {
  public:
   // Indicator for the 4 quadrants that the toolbar is able to be placed.
   enum class ToolbarSnapLocation {
@@ -45,9 +54,15 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
 
   aura::Window* game_window() { return game_window_.get(); }
 
+  const std::string& app_id() const { return app_id_; }
+
   GameDashboardMainMenuView* main_menu_view() { return main_menu_view_; }
 
-  GameDashboardWidget* game_dashboard_button_widget() {
+  base::WeakPtr<GameDashboardContext> GetWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
+
+  views::Widget* game_dashboard_button_widget() {
     return game_dashboard_button_widget_.get();
   }
 
@@ -55,9 +70,24 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
     return toolbar_snap_location_;
   }
 
-  const std::u16string& recording_duration() const {
-    return recording_duration_;
+  void set_recording_from_main_menu(bool from_main_menu) {
+    recording_from_main_menu_ = from_main_menu;
   }
+
+  // Returns true if the main menu is opened. `main_menu_widget_` is created
+  // only when the main menu is opened, otherwise it's null.
+  bool IsMainMenuOpen() const { return main_menu_widget_.get(); }
+
+  const std::u16string& GetRecordingDuration() const;
+
+  // Stacks Game Dashboard UI widgets above `widget` if it is needed.
+  void MaybeStackAboveWidget(views::Widget* widget);
+
+  // Enables the Game Dashboard widgets' UI visibility if `enable` is true.
+  // Otherwise, hide the widgets.
+  void EnableFeatures(
+      bool enable,
+      GameDashboardMainMenuToggleMethod main_menu_toggle_method);
 
   // Reassigns the new `toolbar_snap_location_` and performs an animation as the
   // toolbar moves to its new location.
@@ -70,10 +100,11 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
   void UpdateForGameControlsFlags();
 
   // Toggles the creation/deletion of the main menu within the game window.
-  void ToggleMainMenu();
+  void ToggleMainMenuByAccelerator();
+  void ToggleMainMenu(GameDashboardMainMenuToggleMethod toggle_method);
 
   // Closes the main menu. Clears `main_menu_widget_` and `main_menu_view_`.
-  void CloseMainMenu();
+  void CloseMainMenu(GameDashboardMainMenuToggleMethod toggle_method);
 
   // Toggles the creation/deletion of the toolbar within the game window.
   // Returns the toolbar visibility state.
@@ -88,6 +119,9 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
 
   bool IsToolbarVisible() const;
 
+  // Returns the toolbar bounds if `IsToolbarVisible`, otherwise an empty rect.
+  gfx::Rect GetToolbarBoundsInScreen() const;
+
   // Called only when `CaptureModeController` has started a recording session.
   // If `is_recording_game_window` is true, then the recording session was
   // initiated by the Game Dashboard and the `game_window_` is being recorded.
@@ -101,14 +135,31 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
   // point a new recording is allowed to be started.
   void OnVideoFileFinalized();
 
+  // Controls the Game Dashboard Button visibility.
+  void SetGameDashboardButtonVisibility(bool visible);
+
   // views::ViewObserver:
   void OnViewPreferredSizeChanged(views::View* observed_view) override;
 
   // views::WidgetObserver:
-  void OnWidgetDestroying(views::Widget* widget) override;
+  void OnWidgetDestroyed(views::Widget* widget) override;
+
+  // WindowStateObserver:
+  void OnPreWindowStateTypeChange(WindowState* window_state,
+                                  chromeos::WindowStateType old_type) override;
+  void OnPostWindowStateTypeChange(WindowState* window_state,
+                                   chromeos::WindowStateType old_type) override;
 
  private:
   friend class GameDashboardContextTestApi;
+
+  // Registers a pretarget handler to always show the mouse cursor. Called when
+  // the user opens the main menu.
+  void AddCursorHandler();
+
+  // Unregisters the pretarget handler that always shows the mouse cursor.
+  // Called when the user closes the main menu.
+  void RemoveCursorHandler();
 
   // Creates a Game Dashboard button widget and adds it as a sibling of the game
   // window.
@@ -121,6 +172,14 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
   // Called when `GameDashboardButton` is pressed, and toggles the main menu.
   void OnGameDashboardButtonPressed();
 
+  // Shows the Game Dashboard welcome dialog, if it's enabled in the Game
+  // Dashboard settings.
+  void MaybeShowWelcomeDialog();
+
+  // Updates the Game Dashboard welcome dialog's bounds and location, relative
+  // to the `game_window_`.
+  void MaybeUpdateWelcomeDialogBounds();
+
   // Determines the toolbar's physical location on screen based on the
   // `toolbar_snap_location_` value.
   const gfx::Rect CalculateToolbarWidgetBounds();
@@ -129,20 +188,47 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
   // it transfers from the previous location.
   void AnimateToolbarWidgetBoundsChange(const gfx::Rect& target_screen_bounds);
 
+  // Shows the Game Dashboard toolbar if `prefs::kGameDashboardShowToolbar` is
+  // true.
+  void MaybeShowToolbar();
+
   // Repeating timer callback that notifies `main_menu_view_` of the video
   // recording session duration.
   void OnUpdateRecordingTimer();
 
+  // Closes and deletes the Game Dashboard welcome dialog once it's no longer
+  // needed.
+  void CloseWelcomeDialogIfAny();
+
+  // Callback when the `GameDashboardWelcomeDialog`'s timer has completed.
+  void OnWelcomeDialogTimerCompleted();
+
+  // Resets the `main_menu_view_`, removes the cursor handler, and updates the
+  // `game_dashboard_button_` UI.
+  void UpdateOnMainMenuClosed();
+
   const raw_ptr<aura::Window> game_window_;
 
-  // Game Dashboard button widget for the Game Dashboard.
-  std::unique_ptr<GameDashboardWidget> game_dashboard_button_widget_;
+  const std::string app_id_;
 
-  // Expanded main menu for the Game Dashboard.
+  // Game Dashboard button widget for the Game Dashboard.
+  std::unique_ptr<views::Widget> game_dashboard_button_widget_;
+
+  // Delegate responsible for determining when to show/hide the Game Dashboard
+  // button when `game_window_` is in fullscreen. This a temporary scoped
+  // object that is around while `game_window_` is fullscreen.
+  std::unique_ptr<GameDashboardButtonRevealController>
+      game_dashboard_button_reveal_controller_;
+
+  // Expanded main menu for the Game Dashboard, which displays the main menu and
+  // the settings view.
   views::UniqueWidgetPtr main_menu_widget_;
 
   // The toolbar for the Game Dashboard.
-  std::unique_ptr<GameDashboardWidget> toolbar_widget_;
+  std::unique_ptr<views::Widget> toolbar_widget_;
+
+  // The dialog displayed when the game window first opens.
+  std::unique_ptr<views::Widget> welcome_dialog_widget_;
 
   // The indicator of the current corner that the toolbar is placed.
   ToolbarSnapLocation toolbar_snap_location_;
@@ -152,14 +238,17 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
   raw_ptr<GameDashboardButton> game_dashboard_button_ = nullptr;
 
   // The `GameDashboardMainMenuView` when the user presses the Game Dashboard
-  // button.
-  // Owned by the views hierarchy.
+  // button to display all Game Dashboard views. This displays the main menu and
+  // settings views. Owned by the views hierarchy.
   raw_ptr<GameDashboardMainMenuView, DanglingUntriaged> main_menu_view_ =
       nullptr;
 
   // The `GameDashboardToolbarView` when the user makes the toolbar visible.
   // Owned by the views hierarchy.
   raw_ptr<GameDashboardToolbarView> toolbar_view_ = nullptr;
+
+  // Handles cursor management when the main menu is open.
+  std::unique_ptr<GameDashboardMainMenuCursorHandler> main_menu_cursor_handler_;
 
   // A repeating timer to keep track of the recording session duration.
   base::RepeatingTimer recording_timer_;
@@ -169,6 +258,19 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
 
   // Duration since `recording_timer_` started.
   std::u16string recording_duration_;
+
+  // Indicates whether the Game Dashboard welcome dialog should be shown. This
+  // param ensures the welcome dialog is only shown once per game window
+  // startup.
+  bool show_welcome_dialog_ = false;
+
+  // Indicates where the recording feature starts from the main menu. It is
+  // false if the recording starts from the toolbar. It is null if the recording
+  // is started from somewhere else.
+  std::optional<bool> recording_from_main_menu_;
+
+  base::ScopedObservation<WindowState, WindowStateObserver>
+      window_state_observation_{this};
 
   base::WeakPtrFactory<GameDashboardContext> weak_ptr_factory_{this};
 };

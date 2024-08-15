@@ -10,6 +10,7 @@
 #include "base/memory/weak_ptr.h"
 #include "cc/resources/ui_resource_bitmap.h"
 #include "cc/slim/layer.h"
+#include "components/viz/common/frame_timing_details.h"
 #include "content/common/content_export.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "ui/android/resources/ui_resource_provider.h"
@@ -88,9 +89,6 @@ class CONTENT_EXPORT Compositor {
   // Composite *without* having modified the layer tree.
   virtual void SetNeedsComposite() = 0;
 
-  // Request a draw and swap even if there is no change to the layer tree.
-  virtual void SetNeedsRedraw() = 0;
-
   // Returns the UI resource provider associated with the compositor.
   virtual base::WeakPtr<ui::UIResourceProvider> GetUIResourceProvider() = 0;
 
@@ -124,15 +122,15 @@ class CONTENT_EXPORT Compositor {
   // to the screen (it's entirely possible some frames may be dropped between
   // the time this is called and the callback is run).
   using SuccessfulPresentationTimeCallback =
-      base::OnceCallback<void(base::TimeTicks)>;
+      base::OnceCallback<void(const viz::FrameTimingDetails&)>;
   virtual void RequestSuccessfulPresentationTimeForNextFrame(
       SuccessfulPresentationTimeCallback callback) = 0;
 
   // Control whether `CompositorClient::DidSwapBuffers` should be called. The
   // default is false. Note this is asynchronous. Any pending callbacks may
   // immediately after enabling may still be missed; best way to avoid this is
-  // to call this before calling `SetNeedsComposite` or `SetNeedsRedraw`. Also
-  // there may be trailing calls to `DidSwapBuffers` after unsetting this.
+  // to call this before calling `SetNeedsComposite`. Also there may be trailing
+  // calls to `DidSwapBuffers` after unsetting this.
   virtual void SetDidSwapBuffersCallbackEnabled(bool enable) = 0;
 
  protected:

@@ -9,6 +9,8 @@ _JAVAP_PATH = "//third_party/jdk/current/bin/javap"
 
 declare_args() {
   # Enables JNI multiplexing to reduce JNI native methods overhead.
+  # When we want to "enable" this, we can use this line instead/
+  # allow_jni_multiplexing = !is_java_debug && is_component_build == false
   allow_jni_multiplexing = false
 
   # Use hashed symbol names to reduce JNI symbol overhead.
@@ -91,10 +93,10 @@ template("_invoke_jni_zero") {
 #     splits which provide their own native library. (optional)
 #   namespace: Registration functions will be wrapped into this. (optional)
 #   require_native_mocks: Enforce that any native calls using
-#     org.chromium.base.annotations.NativeMethods must have a mock set
+#     org.jni_zero.NativeMethods must have a mock set
 #     (optional).
 #   enable_native_mocks: Allow native calls using
-#     org.chromium.base.annotations.NativeMethods to be mocked in tests
+#     org.jni_zero.NativeMethods to be mocked in tests
 #     (optional).
 #
 # Example
@@ -196,23 +198,17 @@ template("generate_jni_registration") {
     }
 
     if (_manual_jni_registration || _enable_jni_multiplexing) {
-      _subdir = rebase_path(target_gen_dir, root_gen_dir)
-      _jni_header_output =
-          "$jni_headers_dir/$_subdir/${target_name}_generated.h"
-      outputs += [ _jni_header_output ]
+      _cpp_codegen_output = invoker.cpp_codegen_output
+      outputs += [ _cpp_codegen_output ]
       args += [
         "--header-path",
-        rebase_path(_jni_header_output, root_build_dir),
+        rebase_path(_cpp_codegen_output, root_build_dir),
       ]
 
       public_configs = [
-        # This gives targets depending on this registration access to our generated header.
+        # This gives targets depending on this registration access to our
+        # generated C++ file.
         "//third_party/jni_zero:jni_include_dir",
-
-        # For now, we unconditionally use chromium's base. We could move this
-        # to depend on an invoker variable like we do with generate_jni_impl
-        # if we want this to be configurable.
-        "//third_party/jni_zero:use_chromium_base_define",
       ]
     }
 
@@ -229,9 +225,6 @@ template("generate_jni_registration") {
 # JNI target implementation. See generate_jni or generate_jar_jni for usage.
 template("generate_jni_impl") {
   public_configs = []
-  if (!defined(invoker.use_chromium_base) || invoker.use_chromium_base) {
-    public_configs += [ "//third_party/jni_zero:use_chromium_base_define" ]
-  }
   _jni_zero_action_target_name = target_name + "__action"
   if (current_toolchain != default_toolchain && target_os == "android") {
     # Rather than regenerating .h files in secondary toolchains, re-use the
@@ -246,7 +239,7 @@ template("generate_jni_impl") {
 
       # Depending on the action name to avoid cross-toolchain native deps.
       public_deps = [ ":$_jni_zero_action_target_name($default_toolchain)" ]
-      deps = [ "//third_party/jni_zero:jni_zero_utils" ]
+      deps = [ "//third_party/jni_zero" ]
       metadata = {
         shared_libraries_barrier = []
       }
@@ -258,19 +251,8 @@ template("generate_jni_impl") {
       _jni_output_dir = "$jni_headers_dir/$_subdir/$_final_target_name"
       if (defined(invoker.jni_generator_include)) {
         _jni_generator_include = invoker.jni_generator_include
-        _jni_generator_include_deps = []
       } else {
-        _jni_generator_include = "//third_party/jni_zero/jni_zero_helper.h"
-        _jni_generator_include_deps = [
-          # Using //base/android/jni_generator/jni_generator_helper.h introduces
-          # a dependency on buildflags targets indirectly through
-          # base/android/jni_android.h, which is part of the //base target.
-          # This can't depend directly on //base without causing a dependency
-          # cycle, though.
-          "//base:debugging_buildflags",
-          "//base:logging_buildflags",
-          "//build:chromeos_buildflags",
-        ]
+        _jni_generator_include = "//third_party/jni_zero/jni_zero_internal.h"
       }
 
       # The sources aren't compiled so don't check their dependencies.
@@ -284,8 +266,6 @@ template("generate_jni_impl") {
       if (!defined(public_deps)) {
         public_deps = []
       }
-      public_deps += _jni_generator_include_deps
-
       public_configs += [ "//third_party/jni_zero:jni_include_dir" ]
 
       inputs = []
@@ -378,7 +358,6 @@ template("generate_jni_impl") {
     # files included in their executables without explicitly depending on our
     # targets in jni_zero/BUILD.gn.
     group(_final_target_name) {
-      deps = [ "//third_party/jni_zero:jni_zero_utils" ]
       public_deps = [ ":$_jni_zero_action_target_name" ]
       forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
       if (defined(visibility)) {
@@ -416,6 +395,7 @@ template("generate_jni") {
     forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
     metadata = {
       jni_source_files = sources
+
       # This field is only used by Cronet team during the translation
       # of the GN build targets to Soong modules. From a pure
       # GN perspective, it is unused.
@@ -466,25 +446,53 @@ template("generate_jar_jni") {
 # In order to depend on the JNI registration, use
 # <native-target-name>__jni_registration.
 template("native_with_jni") {
-  _needs_native_dep =
-      (defined(invoker.manual_jni_registration) &&
-       invoker.manual_jni_registration) || allow_jni_multiplexing
+  _enable_underlying_native =
+      !defined(invoker.enable_target) || invoker.enable_target
+  _manual_jni_registration = defined(invoker.manual_jni_registration) &&
+                             invoker.manual_jni_registration
+  _needs_cpp_codegen =
+      (_manual_jni_registration || allow_jni_multiplexing) &&
+      !(defined(invoker.collect_inputs_only) && invoker.collect_inputs_only)
+  _needs_native_dep = _enable_underlying_native && _needs_cpp_codegen
+  if ((_needs_cpp_codegen && current_toolchain == default_toolchain) ||
+      _needs_native_dep) {
+    _subdir = rebase_path(target_gen_dir, root_gen_dir)
+    _registration_cpp_codegen_output =
+        "$jni_headers_dir/$_subdir/${target_name}__jni_registration_generated"
+
+    # Make it a header for jni_registration (where we need to #include it) and
+    # .cc when it's multiplexing.
+    if (_manual_jni_registration) {
+      _registration_cpp_codegen_output += ".h"
+    } else {
+      _registration_cpp_codegen_output += ".cc"
+    }
+  }
   if (_needs_native_dep || current_toolchain == default_toolchain) {
     _jni_registration_target_name = "${target_name}__jni_registration"
   }
 
   if (current_toolchain == default_toolchain) {
+    if (defined(invoker.visibility)) {
+      _target_name_for_visibility = target_name
+    }
     generate_jni_registration(_jni_registration_target_name) {
       forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
+      if (defined(visibility)) {
+        visibility += [ ":$_target_name_for_visibility" ]
+      }
       native_deps = invoker.deps
 
-      if (allow_jni_multiplexing) {
-        enable_jni_multiplexing = true
-      }
       if (defined(invoker.testonly) && invoker.testonly) {
         enable_native_mocks = true
         add_stubs_for_missing_jni = true
         remove_uncalled_jni = true
+      }
+      if (_needs_cpp_codegen) {
+        if (allow_jni_multiplexing) {
+          enable_jni_multiplexing = true
+        }
+        cpp_codegen_output = _registration_cpp_codegen_output
       }
       forward_variables_from(invoker,
                              [
@@ -508,17 +516,37 @@ template("native_with_jni") {
                ])
   }
 
-  if (!defined(invoker.enable_target) || invoker.enable_target) {
+  if (_enable_underlying_native) {
     if (defined(invoker.target_type_import)) {
       import(invoker.target_type_import)
     }
     target(invoker.target_type, target_name) {
       deps = invoker.deps
+      if (defined(invoker.sources)) {
+        sources = invoker.sources
+      }
+
+      # Need to overwrite configs, which have defaults. We assume we have
+      # already set the correct defaults in the invoker.
+      configs = []
+      configs = invoker.configs
       if (_needs_native_dep) {
+        configs +=
+            [ "//third_party/jni_zero:jni_include_dir($default_toolchain)" ]
         deps += [ ":$_jni_registration_target_name($default_toolchain)" ]
+        if (!defined(sources)) {
+          sources = []
+        }
+        sources += [ _registration_cpp_codegen_output ]
       }
       forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
-      forward_variables_from(invoker, "*", TESTONLY_AND_VISIBILITY + [ "deps" ])
+      forward_variables_from(invoker,
+                             "*",
+                             TESTONLY_AND_VISIBILITY + [
+                                   "configs",
+                                   "deps",
+                                   "sources",
+                                 ])
     }
   } else {
     not_needed(invoker, "*")

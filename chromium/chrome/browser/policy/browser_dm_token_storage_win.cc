@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -25,7 +26,6 @@
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
@@ -152,8 +152,7 @@ bool StoreDMTokenInRegistry(const std::string& token) {
   if (!app_command)
     return false;
 
-  std::string token_base64;
-  base::Base64Encode(token, &token_base64);
+  std::string token_base64 = base::Base64Encode(token);
   VARIANT var;
   VariantInit(&var);
   _variant_t token_var = token_base64.c_str();
@@ -251,7 +250,7 @@ std::string BrowserDMTokenStorageWin::InitDMToken() {
 
     DCHECK_LE(size, installer::kMaxDMTokenLength);
     return std::string(base::TrimWhitespaceASCII(
-        base::StringPiece(raw_value.data(), size), base::TRIM_ALL));
+        std::string_view(raw_value.data(), size), base::TRIM_ALL));
   }
 
   DVLOG(1) << "Failed to get DMToken from Registry.";

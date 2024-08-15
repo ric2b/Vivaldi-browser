@@ -142,7 +142,8 @@ public class Features {
 
         @Override
         protected void after() {
-            reset();
+            // Resets state that might persist in between tests.
+            FeatureList.setTestFeatures(null);
 
             // sInstance may already be null if there are nested usages.
             if (sInstance == null) return;
@@ -175,18 +176,18 @@ public class Features {
     }
 
     /** Collects the provided features to be registered as enabled. */
-    public void enable(String... featureNames) {
+    private void enable(String... featureNames) {
         // TODO(dgn): assert that it's not being called too late and will be able to be applied.
         for (String featureName : featureNames) mRegisteredState.put(featureName, true);
     }
 
     /** Collects the provided features to be registered as disabled. */
-    public void disable(String... featureNames) {
+    private void disable(String... featureNames) {
         // TODO(dgn): assert that it's not being called too late and will be able to be applied.
         for (String featureName : featureNames) mRegisteredState.put(featureName, false);
     }
 
-    protected void applyForJUnit() {
+    private void applyForJUnit() {
         // In unit tests, @Enable/DisableFeatures become Java-side {@link FeatureList$TestValues}.
         // If a flag is checked but its value is not explicitly set by the test, {@link FeatureList}
         // throws an exception.
@@ -196,7 +197,7 @@ public class Features {
         CachedFlag.setFeaturesForTesting(mRegisteredState);
     }
 
-    protected void applyForInstrumentation() {
+    private void applyForInstrumentation() {
         // In instrumentation tests, command line args --enable/disable-features passed by
         // @CommandLineFlags and @Enable/DisableFeatures are merged, and actually applied via
         // {@link CommandLine}, so that their test values are reflected in native too. Thus,
@@ -211,12 +212,6 @@ public class Features {
 
         // Apply "--force-fieldtrials" passed by @CommandLineFlags.
         FieldTrials.getInstance().applyFieldTrials();
-    }
-
-    /** Resets Features-related state that might persist in between tests. */
-    private static void reset() {
-        FeatureList.setTestFeatures(null);
-        FeatureList.resetTestCanUseDefaultsForTesting();
     }
 
     private void clearRegisteredState() {

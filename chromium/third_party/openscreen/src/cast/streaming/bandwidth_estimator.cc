@@ -18,7 +18,7 @@ namespace {
 // Converts units from |bytes| per |time_window| number of Clock ticks into
 // bits-per-second.
 int ToClampedBitsPerSecond(int32_t bytes, Clock::duration time_window) {
-  OSP_DCHECK_GT(time_window, Clock::duration::zero());
+  OSP_CHECK_GT(time_window, Clock::duration::zero());
 
   // Divide |bytes| by |time_window| and scale the units to bits per second.
   constexpr int64_t kBitsPerByte = 8;
@@ -40,22 +40,22 @@ BandwidthEstimator::BandwidthEstimator(int max_packets_per_timeslice,
       history_window_(timeslice_duration * kNumTimeslices),
       burst_history_(timeslice_duration, start_time),
       feedback_history_(timeslice_duration, start_time) {
-  OSP_DCHECK_GT(max_packets_per_timeslice, 0);
-  OSP_DCHECK_GT(timeslice_duration, Clock::duration::zero());
+  OSP_CHECK_GT(max_packets_per_timeslice, 0);
+  OSP_CHECK_GT(timeslice_duration, Clock::duration::zero());
 }
 
 BandwidthEstimator::~BandwidthEstimator() = default;
 
 void BandwidthEstimator::OnBurstComplete(int num_packets_sent,
                                          Clock::time_point when) {
-  OSP_DCHECK_GE(num_packets_sent, 0);
+  OSP_CHECK_GE(num_packets_sent, 0);
   burst_history_.Accumulate(num_packets_sent, when);
 }
 
 void BandwidthEstimator::OnRtcpReceived(
     Clock::time_point arrival_time,
     Clock::duration estimated_round_trip_time) {
-  OSP_DCHECK_GE(estimated_round_trip_time, Clock::duration::zero());
+  OSP_CHECK_GE(estimated_round_trip_time, Clock::duration::zero());
   // Move forward the feedback history tracking timeline to include the latest
   // moment a packet could have left the Sender.
   feedback_history_.AdvanceToIncludeTime(arrival_time -
@@ -66,9 +66,9 @@ void BandwidthEstimator::OnPayloadReceived(
     int payload_bytes_acknowledged,
     Clock::time_point ack_arrival_time,
     Clock::duration estimated_round_trip_time) {
-  OSP_DCHECK_GE(payload_bytes_acknowledged, 0);
-  OSP_DCHECK_LT(ack_arrival_time, Clock::time_point::max());
-  OSP_DCHECK_GE(estimated_round_trip_time, Clock::duration::zero());
+  OSP_CHECK_GE(payload_bytes_acknowledged, 0);
+  OSP_CHECK_LT(ack_arrival_time, Clock::time_point::max());
+  OSP_CHECK_GE(estimated_round_trip_time, Clock::duration::zero());
   // Track the bytes in terms of when the last packet was sent.
   feedback_history_.Accumulate(payload_bytes_acknowledged,
                                ack_arrival_time - estimated_round_trip_time);

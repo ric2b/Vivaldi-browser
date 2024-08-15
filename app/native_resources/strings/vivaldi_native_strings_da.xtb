@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Landskab 12</translation>
 <translation id="1158503667684816647">Vis ikke bekræftelse igen</translation>
 <translation id="1222195720020481779">Starter installationen...</translation>
+<translation id="1270785070369717623">Desværre er dine Opera GX-indstillinger ikke tilgængelige mens browseren kører. For at importere disse indstillinger til Vivaldi, skal du gemme dit arbejde og lukke alle Opera GX-vinduer. Klik derefter Fortsæt.</translation>
 <translation id="1276145862619442150">Hurtigkald</translation>
 <translation id="1281950884873973195">Dyr 6</translation>
 <translation id="1411638389238344450">Send link via mail</translation>
@@ -12,6 +13,7 @@
 <translation id="1462666970065907900">Vil du virkelig lukke vinduet?</translation>
 <translation id="1480046233931937785">Kredittering</translation>
 <translation id="1526344461589023948">Der opstod en fejl under forsøg på at gemme en downloadet opdatering. Kontrollér venligst at computeren har nok diskplads og prøv igen senere.</translation>
+<translation id="1635542496948266458">Skift profiler</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Nyt privat vindue</translation>
 <translation id="1702758681952953055">Hvis fejlen gentager sig, så rapporter den og inkluder følgende detaljer:</translation>
@@ -27,12 +29,14 @@
 <translation id="1985669426322966465">Softwareopdatering</translation>
 <translation id="2079036669923635404">Klik her for at opdatere Vivaldi til version <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Der opstod en fejl under download af opdateringsfiler. Kontrollér venligst din internetforbindelse og prøv igen senere.</translation>
+<translation id="2226825946708954262">⚠ Fortsæt med datatab</translation>
 <translation id="2339641773402824483">Søger efter opdateringer...</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Indsæt note</translation>
 <translation id="2486841023299517366">Dyr 4</translation>
 <translation id="2612127540243995147">Klar til at installere. Vivaldi vil blive lukket og genstartet.</translation>
 <translation id="2613387515621326337">Vis opdaterings-website</translation>
+<translation id="2645477450146475243">Desværre er dine Opera-indstillinger ikke tilgængelige mens browseren kører. For at importere disse indstillinger til Vivaldi, skal du gemme dit arbejde og lukke alle Opera-vinduer. Klik derefter Fortsæt.</translation>
 <translation id="2647368062414805334">Desværre, er dine Edge-indstillinger ikke tilgængelige mens den browser kører. For at importere disse indstillinger til Vivaldi, skal du gemme dit arbejde og lukke alle Edge-vinduer. Klik derefter fortsæt.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Dyr 3</translation>
@@ -41,11 +45,14 @@
 <translation id="2923448633003185837">Indsæt og gå til</translation>
 <translation id="2953943267837858202">Har ikke tilladelse til automatisk afspilning af video</translation>
 <translation id="2977472760057091832">Åbn link i privat-vindue</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Åbn i ny fane</translation>
 <translation id="3027988479108856431">Trist, dine Yandex-indstillinger er ikke tilgængelige mens den browser kører. For at importere disse indstillinger til Vivaldi skal du gemme dit arbejde og lukke alle Yandex-vinduer. Klik derefter på Fortsæt.</translation>
 <translation id="3084011186245865060">Landskab 6</translation>
+<translation id="3085906383264247940">Opera (Beta)</translation>
 <translation id="3093931836425623631">Vivaldi er muliggjort af Chromium open source-projektet og anden open source software.</translation>
 <translation id="3127383884976966729">Dyr 7</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">Nyt bogmærke</translation>
 <translation id="3255747772218936245">Installer opdatering</translation>
 <translation id="3259769196742189631">Validér</translation>
@@ -54,7 +61,6 @@
 <translation id="3334610655141903168">(ingen titel)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> er i øjeblikket den nyeste version, der er tilgængelig.</translation>
 <translation id="3383198080133834965">Du er opdateret!</translation>
-<translation id="3402602684546832928">Vælg Opera bogmærke-fil</translation>
 <translation id="3451317331714872347">Landskab 8</translation>
 <translation id="3457498675806041407">Bekræft lukning</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> er allerede installeret og vil blive aktiveret efter genstart af browseren.</translation>
@@ -65,6 +71,7 @@
 <translation id="3588820906588687999">Åbn &amp;billede på ny fane</translation>
 <translation id="3601066750251199488">Monster 3</translation>
 <translation id="3620979700683094848">Sider kan automatisk afspille video</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">En ny version af Vivaldi er tilgængelig!</translation>
 <translation id="3708982624815781692">Download blev annuleret.</translation>
 <translation id="3732157130969736834">Gem link som bogmærke</translation>
@@ -76,6 +83,9 @@
 <translation id="3914946330804881301">Importeret fra Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
 <translation id="3943857333388298514">Sæt ind</translation>
+<translation id="3974783668264968389">Vivaldi kunne ikke låse dit sikre nøglearkiv op. Uden nøglearkivet mister du dine gemte logins, sikre cookies, og nogle funktioner, såsom Synkronisering, Mail og Kalender stopper med at fungere.
+
+    Afslut nu, lås op eller reparér dit nøglearkiv, og prøv derefter igen. Hvis du virkelig vil fortsætte, skal du klikke på afkrydsningsfeltet og trykke på knappen "Fortsæt med datatab.</translation>
 <translation id="4005270918754737597">Spring denne version over</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4074744496918018786">Åbn billede i nyt vindue</translation>
@@ -88,7 +98,6 @@
 <translation id="443008484043213881">Værktøjer</translation>
 <translation id="4456211719108566931">Monster 6</translation>
 <translation id="4512900838580567989">Åbn link i ny baggrundsfane</translation>
-<translation id="4515472507709384008">Opera version 15+</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Åbn billede på ny baggrundsfane</translation>
 <translation id="4582480609585453144">Åbn linket i baggrundsfane</translation>
@@ -100,16 +109,17 @@
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> af <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Importerede Kvikknapper</translation>
 <translation id="5092656712000637858">Tilføj side som Net-panel</translation>
+<translation id="5106275083540628394">Dekryptering fejlede: Risiko for datatab</translation>
 <translation id="5177818338935286353">Monster 7</translation>
 <translation id="5213743983876949565">Dyr 1</translation>
 <translation id="5238244642230426581">Importerede bogmærker</translation>
 <translation id="527605719918376753">Mute fane</translation>
 <translation id="5305569355661722298">Bekræft lukning af vindue</translation>
+<translation id="5322922669477407077">Opera (Udvikler)</translation>
 <translation id="5388358297987318779">Åbn billede</translation>
 <translation id="5416008465899576639">En ny version af Vivaldi er tilgængelig.</translation>
 <translation id="5497042274492038489">Bekræft lukning af vindue</translation>
 <translation id="5594602170491763400">Monster 5</translation>
-<translation id="5615637589913244581">Opera version 15+ (Beta)</translation>
 <translation id="5648110075441906505">Åbn billede i nyt vindue</translation>
 <translation id="5656371807944747581">Opdateringsfejl!</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> er nu tilgængelig (du har <ph name="OLD_VERSION" />). Vil du downloade den nu?</translation>
@@ -120,8 +130,8 @@
 <translation id="6040143037577758943">Luk</translation>
 <translation id="6229528619562190452">Klik her for at opdatere Vivaldi.</translation>
 <translation id="6234173136417926046">Brug billede som baggrund på Vivaldi-startsiden</translation>
-<translation id="630690498669249215">Opera bogmærker-fil</translation>
 <translation id="6339818817272922368">Lokal konto</translation>
+<translation id="6398710281890660037">Beskyt min profil</translation>
 <translation id="6438786710866753178">Landskab 4</translation>
 <translation id="6477028720702061455">Vælg Opera-profilmappe der skal importeres</translation>
 <translation id="6510706699590490869">&amp;Opdater Vivaldi</translation>
@@ -131,11 +141,13 @@
 <translation id="6635049669875534328">Udgivelsesnoter:</translation>
 <translation id="6693585104974197539">Vælg Edge-profilmappe, der skal importeres</translation>
 <translation id="6726279523566323394">Vælg Brave-profilmappe, der skal importeres</translation>
-<translation id="6804831687363620480">Trist, dine Opera 15+ indstillinger er ikke tilgængelige mens den browser kører. For at importere disse indstillinger til Vivaldi skal du gamme dit arbejde og lukke alle Opera 15+ vinduer. Klik derefter på Fortsæt.</translation>
 <translation id="6892812721183419409">Åbn link som <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopier</translation>
+<translation id="6960139763942959188">Denne profil gemmes i øjeblikket usikkert i et ikke-krypteret format. Vivaldi er ved at opgradere din profil til et mere sikkert krypteret format. Du skal afslutte nu og sikkerhedskopiere din profil, før du fortsætter.</translation>
 <translation id="7086554968911045110">Landskab 7</translation>
+<translation id="7099506190679014195">Opgradering af sikkert nøglearkiv</translation>
 <translation id="7111492742514999492">Landskab 9</translation>
+<translation id="7208252576848052204">Desværre er dine Arc-indstillinger ikke tilgængelige mens browseren kører. For at importere disse indstillinger til Vivaldi, skal du gemme dit arbejde og lukke alle Arc-vinduer. Klik derefter Fortsæt.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Start af opdaterings-installationsprogramet fejlede. Kontrollér venligst at computeren har nok RAM eller diskplads og prøv igen senere.</translation>
 <translation id="7658239707568436148">Annuller</translation>
@@ -162,7 +174,6 @@
 <translation id="8562339533180097902">Luk Vivaldi og installer nu</translation>
 <translation id="8567452685425968223">Udpakker opdatering...</translation>
 <translation id="8624587806981488221">&amp;Genindlæs billede</translation>
-<translation id="864444594187862076">Opera version 15+ (Udvikler)</translation>
 <translation id="8651348004684669199">Tilføj aktiv fane</translation>
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>
@@ -178,6 +189,7 @@
 <translation id="9048058608784130603">Afventer opdatering <ph name="VERSION" /></translation>
 <translation id="9048224371732578627">Har tilladelse til automatisk afspilning af video</translation>
 <translation id="9065203028668620118">Rediger</translation>
+<translation id="9090254883741610153">Lad mig fortsætte</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Åbn billede som <ph name="USER" /></translation>
 <translation id="9157539936604258187">Åbn link</translation>

@@ -7,14 +7,16 @@
 // clang-format off
 import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {AddSiteDialogElement, CookiesExceptionType, ContentSetting, ContentSettingsTypes, SettingsEditExceptionDialogElement, SITE_EXCEPTION_WILDCARD, SiteException, SiteListElement, SiteSettingSource, SiteSettingsPrefsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
+import type {AddSiteDialogElement, SettingsEditExceptionDialogElement, SiteException, SiteListElement} from 'chrome://settings/lazy_load.js';
+import {CookiesExceptionType, ContentSetting, ContentSettingsTypes, SITE_EXCEPTION_WILDCARD, SiteSettingSource, SiteSettingsPrefsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
 import {CrSettingsPrefs, loadTimeData, Router} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 import {TestSiteSettingsPrefsBrowserProxy} from './test_site_settings_prefs_browser_proxy.js';
-import {createContentSettingTypeToValuePair, createRawSiteException, createSiteSettingsPrefs, SiteSettingsPref} from './test_util.js';
+import type {SiteSettingsPref} from './test_util.js';
+import {createContentSettingTypeToValuePair, createRawSiteException, createSiteSettingsPrefs} from './test_util.js';
 // clang-format on
 
 /**
@@ -1334,6 +1336,7 @@ suite('EditExceptionDialog', function() {
 
     // Simulate user input of whitespace only text.
     input!.value = '  ';
+    await input.updateComplete;
     input!.dispatchEvent(
         new CustomEvent('input', {bubbles: true, composed: true}));
     flush();
@@ -1344,6 +1347,7 @@ suite('EditExceptionDialog', function() {
     browserProxy.setIsPatternValidForType(false);
     const expectedPattern = '*';
     input!.value = expectedPattern;
+    await input.updateComplete;
     input!.dispatchEvent(
         new CustomEvent('input', {bubbles: true, composed: true}));
 
@@ -1360,6 +1364,7 @@ suite('EditExceptionDialog', function() {
     // Simulate user edit.
     const newValue = input!.value + ':1234';
     input!.value = newValue;
+    await input.updateComplete;
 
     const actionButton = dialog.$.actionButton;
     assertTrue(!!actionButton);
@@ -1395,8 +1400,10 @@ suite('AddExceptionDialog', function() {
     assertTrue(actionButton.disabled);
 
     const input = dialog.shadowRoot!.querySelector('cr-input');
-    input!.value = expectedPattern;
-    input!.dispatchEvent(
+    assertTrue(!!input);
+    input.value = expectedPattern;
+    await input.updateComplete;
+    input.dispatchEvent(
         new CustomEvent('input', {bubbles: true, composed: true}));
 
     const [pattern, _category] =
@@ -1448,6 +1455,7 @@ suite('AddExceptionDialog', function() {
     browserProxy.setIsPatternValidForType(false);
     const expectedPattern = 'foobarbaz';
     input!.value = expectedPattern;
+    await input.updateComplete;
     input!.dispatchEvent(
         new CustomEvent('input', {bubbles: true, composed: true}));
 

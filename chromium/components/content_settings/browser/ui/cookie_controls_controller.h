@@ -16,9 +16,7 @@
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/cookie_blocking_3pcd_status.h"
-#include "components/content_settings/core/common/cookie_controls_breakage_confidence_level.h"
 #include "components/content_settings/core/common/cookie_controls_enforcement.h"
-#include "components/content_settings/core/common/cookie_controls_status.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/privacy_sandbox/tracking_protection_settings.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -68,12 +66,6 @@ class CookieControlsController final
   bool HasUserChangedCookieBlockingForSite();
   void SetUserChangedCookieBlockingForSite(bool changed);
 
-  // Returns the current breakage confidence level.
-  CookieControlsBreakageConfidenceLevel GetBreakageConfidenceLevel();
-
-  // Returns the current cookie controls status.
-  CookieControlsStatus GetCookieControlsStatus();
-
   void AddObserver(CookieControlsObserver* obs);
   void RemoveObserver(CookieControlsObserver* obs);
 
@@ -83,9 +75,6 @@ class CookieControlsController final
 
  private:
   struct Status {
-    // TODO(b/317975095): Remove `status` in favor of `control_visible` and
-    // `protections_on`.
-    CookieControlsStatus status;
     bool controls_visible;
     bool protections_on;
     CookieControlsEnforcement enforcement;
@@ -139,20 +128,9 @@ class CookieControlsController final
       bool block_third_party_cookies) override;
   void OnCookieSettingChanged() override;
 
-  // Determine the CookieControlsStatus based on |web_contents|.
   Status GetStatus(content::WebContents* web_contents);
 
-  // Determine the confidence of site being broken and user needing to use
-  // cookie controls. It affects the prominence of UI entry points. It takes
-  // into account blocked third-party cookie access, enforcement by 3PCD
-  // metadata grant, exceptions lifecycle, site engagement index and recent user
-  // activity (like frequent page reloads).
-  CookieControlsBreakageConfidenceLevel GetConfidenceLevel(
-      CookieControlsStatus status,
-      CookieControlsEnforcement enforcement,
-      int allowed_sites,
-      int blocked_sites,
-      int bounce_count);
+  bool HasOriginSandboxedTopLevelDocument() const;
 
   // Updates the blocked cookie count of |icon_|.
   void PresentBlockedCookieCounter();
@@ -161,20 +139,8 @@ class CookieControlsController final
 
   void OnPageFinishedLoading();
 
-  // Returns the number of allowed cookies.
-  int GetAllowedCookieCount() const;
-
-  // Returns the number of blocked cookies.
-  int GetBlockedCookieCount() const;
-
   // Returns the number of stateful bounces leading to this page.
   int GetStatefulBounceCount() const;
-
-  // Returns the number of allowed sites.
-  int GetAllowedSitesCount() const;
-
-  // Returns the number of blocked sites.
-  int GetBlockedSitesCount() const;
 
   // Returns the number of allowed third-party sites with cookies.
   int GetAllowedThirdPartyCookiesSitesCount() const;
@@ -187,6 +153,13 @@ class CookieControlsController final
   // Record metrics when third-party cookies are allowed.
   void RecordActivationMetrics();
 
+  bool SiteDataAccessed(int third_party_allowed_sites,
+                        int third_party_blocked_sites);
+
+  bool ShouldHighlightUserBypass();
+  bool ShouldUserBypassIconBeVisible(bool protections_on,
+                                     bool controls_visible,
+                                     int third_party_sites_count);
   content::WebContents* GetWebContents() const;
 
   std::unique_ptr<TabObserver> tab_observer_;

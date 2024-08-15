@@ -400,7 +400,10 @@ static int opt_add_vfilter(void *optctx, const char *opt, const char *arg)
     if (ret < 0)
         return ret;
 
-    vfilters_list[nb_vfilters - 1] = arg;
+    vfilters_list[nb_vfilters - 1] = av_strdup(arg);
+    if (!vfilters_list[nb_vfilters - 1])
+        return AVERROR(ENOMEM);
+
     return 0;
 }
 
@@ -937,6 +940,13 @@ static int upload_texture(SDL_Texture **tex, AVFrame *frame)
     return ret;
 }
 
+static enum AVColorSpace sdl_supported_color_spaces[] = {
+    AVCOL_SPC_BT709,
+    AVCOL_SPC_BT470BG,
+    AVCOL_SPC_SMPTE170M,
+    AVCOL_SPC_UNSPECIFIED,
+};
+
 static void set_sdl_yuv_conversion_mode(AVFrame *frame)
 {
 #if SDL_VERSION_ATLEAST(2,0,8)
@@ -1305,7 +1315,13 @@ static void do_exit(VideoState *is)
     if (window)
         SDL_DestroyWindow(window);
     uninit_opts();
+    for (int i = 0; i < nb_vfilters; i++)
+        av_freep(&vfilters_list[i]);
     av_freep(&vfilters_list);
+    av_freep(&video_codec_name);
+    av_freep(&audio_codec_name);
+    av_freep(&subtitle_codec_name);
+    av_freep(&input_filename);
     avformat_network_deinit();
     if (show_status)
         printf("\n");
@@ -1858,6 +1874,10 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
     const AVDictionaryEntry *e = NULL;
     int nb_pix_fmts = 0;
     int i, j;
+    AVBufferSrcParameters *par = av_buffersrc_parameters_alloc();
+
+    if (!par)
+        return AVERROR(ENOMEM);
 
     for (i = 0; i < renderer_info.num_texture_formats; i++) {
         for (j = 0; j < FF_ARRAY_ELEMS(sdl_texture_format_map) - 1; j++) {
@@ -1881,10 +1901,12 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
     graph->scale_sws_opts = av_strdup(sws_flags_str);
 
     snprintf(buffersrc_args, sizeof(buffersrc_args),
-             "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
+             "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d:"
+             "colorspace=%d:range=%d",
              frame->width, frame->height, frame->format,
              is->video_st->time_base.num, is->video_st->time_base.den,
-             codecpar->sample_aspect_ratio.num, FFMAX(codecpar->sample_aspect_ratio.den, 1));
+             codecpar->sample_aspect_ratio.num, FFMAX(codecpar->sample_aspect_ratio.den, 1),
+             frame->colorspace, frame->color_range);
     if (fr.num && fr.den)
         av_strlcatf(buffersrc_args, sizeof(buffersrc_args), ":frame_rate=%d/%d", fr.num, fr.den);
 
@@ -1892,6 +1914,10 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
                                             avfilter_get_by_name("buffer"),
                                             "ffplay_buffer", buffersrc_args, NULL,
                                             graph)) < 0)
+        goto fail;
+    par->hw_frames_ctx = frame->hw_frames_ctx;
+    ret = av_buffersrc_parameters_set(filt_src, par);
+    if (ret < 0)
         goto fail;
 
     ret = avfilter_graph_create_filter(&filt_out,
@@ -1901,6 +1927,8 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
         goto fail;
 
     if ((ret = av_opt_set_int_list(filt_out, "pix_fmts", pix_fmts,  AV_PIX_FMT_NONE, AV_OPT_SEARCH_CHILDREN)) < 0)
+        goto fail;
+    if ((ret = av_opt_set_int_list(filt_out, "color_spaces", sdl_supported_color_spaces,  AVCOL_SPC_UNSPECIFIED, AV_OPT_SEARCH_CHILDREN)) < 0)
         goto fail;
 
     last_filter = filt_out;
@@ -1930,11 +1958,11 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
         if (sd)
             displaymatrix = (int32_t *)sd->data;
         if (!displaymatrix) {
-            const AVPacketSideData *sd = av_packet_side_data_get(is->video_st->codecpar->coded_side_data,
-                                                                 is->video_st->codecpar->nb_coded_side_data,
-                                                                 AV_PKT_DATA_DISPLAYMATRIX);
-            if (sd)
-                displaymatrix = (int32_t *)sd->data;
+            const AVPacketSideData *psd = av_packet_side_data_get(is->video_st->codecpar->coded_side_data,
+                                                                  is->video_st->codecpar->nb_coded_side_data,
+                                                                  AV_PKT_DATA_DISPLAYMATRIX);
+            if (psd)
+                displaymatrix = (int32_t *)psd->data;
         }
         theta = get_rotation(displaymatrix);
 
@@ -1959,6 +1987,7 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
     is->out_video_filter = filt_out;
 
 fail:
+    av_freep(&par);
     return ret;
 }
 
@@ -3516,7 +3545,7 @@ static void event_loop(VideoState *cur_stream)
 static int opt_width(void *optctx, const char *opt, const char *arg)
 {
     double num;
-    int ret = parse_number(opt, arg, OPT_INT64, 1, INT_MAX, &num);
+    int ret = parse_number(opt, arg, OPT_TYPE_INT64, 1, INT_MAX, &num);
     if (ret < 0)
         return ret;
 
@@ -3527,7 +3556,7 @@ static int opt_width(void *optctx, const char *opt, const char *arg)
 static int opt_height(void *optctx, const char *opt, const char *arg)
 {
     double num;
-    int ret = parse_number(opt, arg, OPT_INT64, 1, INT_MAX, &num);
+    int ret = parse_number(opt, arg, OPT_TYPE_INT64, 1, INT_MAX, &num);
     if (ret < 0)
         return ret;
 
@@ -3568,7 +3597,7 @@ static int opt_show_mode(void *optctx, const char *opt, const char *arg)
 
     if (show_mode == SHOW_MODE_NONE) {
         double num;
-        int ret = parse_number(opt, arg, OPT_INT, 0, SHOW_MODE_NB-1, &num);
+        int ret = parse_number(opt, arg, OPT_TYPE_INT, 0, SHOW_MODE_NB-1, &num);
         if (ret < 0)
             return ret;
         show_mode = num;
@@ -3586,7 +3615,9 @@ static int opt_input_file(void *optctx, const char *filename)
     }
     if (!strcmp(filename, "-"))
         filename = "fd:";
-    input_filename = filename;
+    input_filename = av_strdup(filename);
+    if (!input_filename)
+        return AVERROR(ENOMEM);
 
     return 0;
 }
@@ -3594,6 +3625,7 @@ static int opt_input_file(void *optctx, const char *filename)
 static int opt_codec(void *optctx, const char *opt, const char *arg)
 {
    const char *spec = strchr(opt, ':');
+   const char **name;
    if (!spec) {
        av_log(NULL, AV_LOG_ERROR,
               "No media specifier was specified in '%s' in option '%s'\n",
@@ -3601,71 +3633,75 @@ static int opt_codec(void *optctx, const char *opt, const char *arg)
        return AVERROR(EINVAL);
    }
    spec++;
+
    switch (spec[0]) {
-   case 'a' :    audio_codec_name = arg; break;
-   case 's' : subtitle_codec_name = arg; break;
-   case 'v' :    video_codec_name = arg; break;
+   case 'a' : name = &audio_codec_name;    break;
+   case 's' : name = &subtitle_codec_name; break;
+   case 'v' : name = &video_codec_name;    break;
    default:
        av_log(NULL, AV_LOG_ERROR,
               "Invalid media specifier '%s' in option '%s'\n", spec, opt);
        return AVERROR(EINVAL);
    }
-   return 0;
+
+   av_freep(name);
+   *name = av_strdup(arg);
+   return *name ? 0 : AVERROR(ENOMEM);
 }
 
 static int dummy;
 
 static const OptionDef options[] = {
     CMDUTILS_COMMON_OPTIONS
-    { "x", HAS_ARG, { .func_arg = opt_width }, "force displayed width", "width" },
-    { "y", HAS_ARG, { .func_arg = opt_height }, "force displayed height", "height" },
-    { "fs", OPT_BOOL, { &is_full_screen }, "force full screen" },
-    { "an", OPT_BOOL, { &audio_disable }, "disable audio" },
-    { "vn", OPT_BOOL, { &video_disable }, "disable video" },
-    { "sn", OPT_BOOL, { &subtitle_disable }, "disable subtitling" },
-    { "ast", OPT_STRING | HAS_ARG | OPT_EXPERT, { &wanted_stream_spec[AVMEDIA_TYPE_AUDIO] }, "select desired audio stream", "stream_specifier" },
-    { "vst", OPT_STRING | HAS_ARG | OPT_EXPERT, { &wanted_stream_spec[AVMEDIA_TYPE_VIDEO] }, "select desired video stream", "stream_specifier" },
-    { "sst", OPT_STRING | HAS_ARG | OPT_EXPERT, { &wanted_stream_spec[AVMEDIA_TYPE_SUBTITLE] }, "select desired subtitle stream", "stream_specifier" },
-    { "ss", HAS_ARG | OPT_TIME, { &start_time }, "seek to a given position in seconds", "pos" },
-    { "t",  HAS_ARG | OPT_TIME, { &duration }, "play  \"duration\" seconds of audio/video", "duration" },
-    { "bytes", OPT_INT | HAS_ARG, { &seek_by_bytes }, "seek by bytes 0=off 1=on -1=auto", "val" },
-    { "seek_interval", OPT_FLOAT | HAS_ARG, { &seek_interval }, "set seek interval for left/right keys, in seconds", "seconds" },
-    { "nodisp", OPT_BOOL, { &display_disable }, "disable graphical display" },
-    { "noborder", OPT_BOOL, { &borderless }, "borderless window" },
-    { "alwaysontop", OPT_BOOL, { &alwaysontop }, "window always on top" },
-    { "volume", OPT_INT | HAS_ARG, { &startup_volume}, "set startup volume 0=min 100=max", "volume" },
-    { "f", HAS_ARG, { .func_arg = opt_format }, "force format", "fmt" },
-    { "stats", OPT_BOOL | OPT_EXPERT, { &show_status }, "show status", "" },
-    { "fast", OPT_BOOL | OPT_EXPERT, { &fast }, "non spec compliant optimizations", "" },
-    { "genpts", OPT_BOOL | OPT_EXPERT, { &genpts }, "generate pts", "" },
-    { "drp", OPT_INT | HAS_ARG | OPT_EXPERT, { &decoder_reorder_pts }, "let decoder reorder pts 0=off 1=on -1=auto", ""},
-    { "lowres", OPT_INT | HAS_ARG | OPT_EXPERT, { &lowres }, "", "" },
-    { "sync", HAS_ARG | OPT_EXPERT, { .func_arg = opt_sync }, "set audio-video sync. type (type=audio/video/ext)", "type" },
-    { "autoexit", OPT_BOOL | OPT_EXPERT, { &autoexit }, "exit at the end", "" },
-    { "exitonkeydown", OPT_BOOL | OPT_EXPERT, { &exit_on_keydown }, "exit on key down", "" },
-    { "exitonmousedown", OPT_BOOL | OPT_EXPERT, { &exit_on_mousedown }, "exit on mouse down", "" },
-    { "loop", OPT_INT | HAS_ARG | OPT_EXPERT, { &loop }, "set number of times the playback shall be looped", "loop count" },
-    { "framedrop", OPT_BOOL | OPT_EXPERT, { &framedrop }, "drop frames when cpu is too slow", "" },
-    { "infbuf", OPT_BOOL | OPT_EXPERT, { &infinite_buffer }, "don't limit the input buffer size (useful with realtime streams)", "" },
-    { "window_title", OPT_STRING | HAS_ARG, { &window_title }, "set window title", "window title" },
-    { "left", OPT_INT | HAS_ARG | OPT_EXPERT, { &screen_left }, "set the x position for the left of the window", "x pos" },
-    { "top", OPT_INT | HAS_ARG | OPT_EXPERT, { &screen_top }, "set the y position for the top of the window", "y pos" },
-    { "vf", OPT_EXPERT | HAS_ARG, { .func_arg = opt_add_vfilter }, "set video filters", "filter_graph" },
-    { "af", OPT_STRING | HAS_ARG, { &afilters }, "set audio filters", "filter_graph" },
-    { "rdftspeed", OPT_INT | HAS_ARG| OPT_AUDIO | OPT_EXPERT, { &rdftspeed }, "rdft speed", "msecs" },
-    { "showmode", HAS_ARG, { .func_arg = opt_show_mode}, "select show mode (0 = video, 1 = waves, 2 = RDFT)", "mode" },
-    { "i", OPT_BOOL, { &dummy}, "read specified file", "input_file"},
-    { "codec", HAS_ARG, { .func_arg = opt_codec}, "force decoder", "decoder_name" },
-    { "acodec", HAS_ARG | OPT_STRING | OPT_EXPERT, {    &audio_codec_name }, "force audio decoder",    "decoder_name" },
-    { "scodec", HAS_ARG | OPT_STRING | OPT_EXPERT, { &subtitle_codec_name }, "force subtitle decoder", "decoder_name" },
-    { "vcodec", HAS_ARG | OPT_STRING | OPT_EXPERT, {    &video_codec_name }, "force video decoder",    "decoder_name" },
-    { "autorotate", OPT_BOOL, { &autorotate }, "automatically rotate video", "" },
-    { "find_stream_info", OPT_BOOL | OPT_INPUT | OPT_EXPERT, { &find_stream_info },
+    { "x",                  OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_width }, "force displayed width", "width" },
+    { "y",                  OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_height }, "force displayed height", "height" },
+    { "fs",                 OPT_TYPE_BOOL,            0, { &is_full_screen }, "force full screen" },
+    { "an",                 OPT_TYPE_BOOL,            0, { &audio_disable }, "disable audio" },
+    { "vn",                 OPT_TYPE_BOOL,            0, { &video_disable }, "disable video" },
+    { "sn",                 OPT_TYPE_BOOL,            0, { &subtitle_disable }, "disable subtitling" },
+    { "ast",                OPT_TYPE_STRING, OPT_EXPERT, { &wanted_stream_spec[AVMEDIA_TYPE_AUDIO] }, "select desired audio stream", "stream_specifier" },
+    { "vst",                OPT_TYPE_STRING, OPT_EXPERT, { &wanted_stream_spec[AVMEDIA_TYPE_VIDEO] }, "select desired video stream", "stream_specifier" },
+    { "sst",                OPT_TYPE_STRING, OPT_EXPERT, { &wanted_stream_spec[AVMEDIA_TYPE_SUBTITLE] }, "select desired subtitle stream", "stream_specifier" },
+    { "ss",                 OPT_TYPE_TIME,            0, { &start_time }, "seek to a given position in seconds", "pos" },
+    { "t",                  OPT_TYPE_TIME,            0, { &duration }, "play  \"duration\" seconds of audio/video", "duration" },
+    { "bytes",              OPT_TYPE_INT,             0, { &seek_by_bytes }, "seek by bytes 0=off 1=on -1=auto", "val" },
+    { "seek_interval",      OPT_TYPE_FLOAT,           0, { &seek_interval }, "set seek interval for left/right keys, in seconds", "seconds" },
+    { "nodisp",             OPT_TYPE_BOOL,            0, { &display_disable }, "disable graphical display" },
+    { "noborder",           OPT_TYPE_BOOL,            0, { &borderless }, "borderless window" },
+    { "alwaysontop",        OPT_TYPE_BOOL,            0, { &alwaysontop }, "window always on top" },
+    { "volume",             OPT_TYPE_INT,             0, { &startup_volume}, "set startup volume 0=min 100=max", "volume" },
+    { "f",                  OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_format }, "force format", "fmt" },
+    { "stats",              OPT_TYPE_BOOL,   OPT_EXPERT, { &show_status }, "show status", "" },
+    { "fast",               OPT_TYPE_BOOL,   OPT_EXPERT, { &fast }, "non spec compliant optimizations", "" },
+    { "genpts",             OPT_TYPE_BOOL,   OPT_EXPERT, { &genpts }, "generate pts", "" },
+    { "drp",                OPT_TYPE_INT,    OPT_EXPERT, { &decoder_reorder_pts }, "let decoder reorder pts 0=off 1=on -1=auto", ""},
+    { "lowres",             OPT_TYPE_INT,    OPT_EXPERT, { &lowres }, "", "" },
+    { "sync",               OPT_TYPE_FUNC, OPT_FUNC_ARG | OPT_EXPERT, { .func_arg = opt_sync }, "set audio-video sync. type (type=audio/video/ext)", "type" },
+    { "autoexit",           OPT_TYPE_BOOL,   OPT_EXPERT, { &autoexit }, "exit at the end", "" },
+    { "exitonkeydown",      OPT_TYPE_BOOL,   OPT_EXPERT, { &exit_on_keydown }, "exit on key down", "" },
+    { "exitonmousedown",    OPT_TYPE_BOOL,   OPT_EXPERT, { &exit_on_mousedown }, "exit on mouse down", "" },
+    { "loop",               OPT_TYPE_INT,    OPT_EXPERT, { &loop }, "set number of times the playback shall be looped", "loop count" },
+    { "framedrop",          OPT_TYPE_BOOL,   OPT_EXPERT, { &framedrop }, "drop frames when cpu is too slow", "" },
+    { "infbuf",             OPT_TYPE_BOOL,   OPT_EXPERT, { &infinite_buffer }, "don't limit the input buffer size (useful with realtime streams)", "" },
+    { "window_title",       OPT_TYPE_STRING,          0, { &window_title }, "set window title", "window title" },
+    { "left",               OPT_TYPE_INT,    OPT_EXPERT, { &screen_left }, "set the x position for the left of the window", "x pos" },
+    { "top",                OPT_TYPE_INT,    OPT_EXPERT, { &screen_top }, "set the y position for the top of the window", "y pos" },
+    { "vf",                 OPT_TYPE_FUNC, OPT_FUNC_ARG | OPT_EXPERT, { .func_arg = opt_add_vfilter }, "set video filters", "filter_graph" },
+    { "af",                 OPT_TYPE_STRING,          0, { &afilters }, "set audio filters", "filter_graph" },
+    { "rdftspeed",          OPT_TYPE_INT, OPT_AUDIO | OPT_EXPERT, { &rdftspeed }, "rdft speed", "msecs" },
+    { "showmode",           OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_show_mode}, "select show mode (0 = video, 1 = waves, 2 = RDFT)", "mode" },
+    { "i",                  OPT_TYPE_BOOL,            0, { &dummy}, "read specified file", "input_file"},
+    { "codec",              OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_codec}, "force decoder", "decoder_name" },
+    { "acodec",             OPT_TYPE_STRING, OPT_EXPERT, {    &audio_codec_name }, "force audio decoder",    "decoder_name" },
+    { "scodec",             OPT_TYPE_STRING, OPT_EXPERT, { &subtitle_codec_name }, "force subtitle decoder", "decoder_name" },
+    { "vcodec",             OPT_TYPE_STRING, OPT_EXPERT, {    &video_codec_name }, "force video decoder",    "decoder_name" },
+    { "autorotate",         OPT_TYPE_BOOL,            0, { &autorotate }, "automatically rotate video", "" },
+    { "find_stream_info",   OPT_TYPE_BOOL, OPT_INPUT | OPT_EXPERT, { &find_stream_info },
         "read and decode the streams to fill missing information with heuristics" },
-    { "filter_threads", HAS_ARG | OPT_INT | OPT_EXPERT, { &filter_nbthreads }, "number of filter threads per graph" },
-    { "enable_vulkan", OPT_BOOL, { &enable_vulkan }, "enable vulkan renderer" },
-    { "vulkan_params", HAS_ARG | OPT_STRING | OPT_EXPERT, { &vulkan_params }, "vulkan configuration using a list of key=value pairs separated by ':'" },
-    { "hwaccel", HAS_ARG | OPT_STRING | OPT_EXPERT, { &hwaccel }, "use HW accelerated decoding" },
+    { "filter_threads",     OPT_TYPE_INT,    OPT_EXPERT, { &filter_nbthreads }, "number of filter threads per graph" },
+    { "enable_vulkan",      OPT_TYPE_BOOL,            0, { &enable_vulkan }, "enable vulkan renderer" },
+    { "vulkan_params",      OPT_TYPE_STRING, OPT_EXPERT, { &vulkan_params }, "vulkan configuration using a list of key=value pairs separated by ':'" },
+    { "hwaccel",            OPT_TYPE_STRING, OPT_EXPERT, { &hwaccel }, "use HW accelerated decoding" },
     { NULL, },
 };
 
@@ -3680,8 +3716,8 @@ void show_help_default(const char *opt, const char *arg)
 {
     av_log_set_callback(log_callback_help);
     show_usage();
-    show_help_options(options, "Main options:", 0, OPT_EXPERT, 0);
-    show_help_options(options, "Advanced options:", OPT_EXPERT, 0, 0);
+    show_help_options(options, "Main options:", 0, OPT_EXPERT);
+    show_help_options(options, "Advanced options:", OPT_EXPERT, 0);
     printf("\n");
     show_help_children(avcodec_get_class(), AV_OPT_FLAG_DECODING_PARAM);
     show_help_children(avformat_get_class(), AV_OPT_FLAG_DECODING_PARAM);

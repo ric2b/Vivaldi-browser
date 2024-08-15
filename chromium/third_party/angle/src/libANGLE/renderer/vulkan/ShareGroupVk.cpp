@@ -28,13 +28,6 @@ namespace rx
 
 namespace
 {
-// For DesciptorSetUpdates
-constexpr size_t kDescriptorBufferInfosInitialSize = 8;
-constexpr size_t kDescriptorImageInfosInitialSize  = 4;
-constexpr size_t kDescriptorWriteInfosInitialSize =
-    kDescriptorBufferInfosInitialSize + kDescriptorImageInfosInitialSize;
-constexpr size_t kDescriptorBufferViewsInitialSize = 0;
-
 // How often monolithic pipelines should be created, if preferMonolithicPipelinesOverLibraries is
 // enabled.  Pipeline creation is typically O(hundreds of microseconds).  A value of 2ms is chosen
 // arbitrarily; it ensures that there is always at most a single pipeline job in progress, while
@@ -144,7 +137,7 @@ angle::Result ShareGroupVk::updateContextsPriority(ContextVk *contextVk,
 
     {
         vk::ScopedQueueSerialIndex index;
-        RendererVk *renderer = contextVk->getRenderer();
+        vk::Renderer *renderer = contextVk->getRenderer();
         ANGLE_TRY(renderer->allocateScopedQueueSerialIndex(&index));
         ANGLE_TRY(renderer->submitPriorityDependency(contextVk, protectionTypes, mContextsPriority,
                                                      newPriority, index.get()));
@@ -164,7 +157,7 @@ angle::Result ShareGroupVk::updateContextsPriority(ContextVk *contextVk,
 
 void ShareGroupVk::onDestroy(const egl::Display *display)
 {
-    RendererVk *renderer = vk::GetImpl(display)->getRenderer();
+    vk::Renderer *renderer = vk::GetImpl(display)->getRenderer();
 
     for (std::unique_ptr<vk::BufferPool> &pool : mDefaultBufferPools)
     {
@@ -172,7 +165,7 @@ void ShareGroupVk::onDestroy(const egl::Display *display)
         {
             // If any context uses display texture share group, it is expected that a
             // BufferBlock may still in used by textures that outlived ShareGroup.  The
-            // non-empty BufferBlock will be put into RendererVk's orphan list instead.
+            // non-empty BufferBlock will be put into Renderer's orphan list instead.
             pool->destroy(renderer, mState.hasAnyContextWithDisplayTextureShareGroup());
         }
     }
@@ -228,9 +221,8 @@ angle::Result ShareGroupVk::scheduleMonolithicPipelineCreationTask(
                                                  &compatibleRenderPass));
     taskOut->setRenderPass(compatibleRenderPass);
 
-    egl::Display *display = contextVk->getRenderer()->getDisplay();
     mMonolithicPipelineCreationEvent =
-        display->getMultiThreadPool()->postWorkerTask(taskOut->getTask());
+        contextVk->getRenderer()->getGlobalOps()->postMultiThreadWorkerTask(taskOut->getTask());
 
     taskOut->onSchedule(mMonolithicPipelineCreationEvent);
 
@@ -289,104 +281,7 @@ void TextureUpload::onTextureRelease(TextureVk *textureVk)
     }
 }
 
-// UpdateDescriptorSetsBuilder implementation.
-UpdateDescriptorSetsBuilder::UpdateDescriptorSetsBuilder()
-{
-    // Reserve reasonable amount of spaces so that for majority of apps we don't need to grow at all
-    mDescriptorBufferInfos.reserve(kDescriptorBufferInfosInitialSize);
-    mDescriptorImageInfos.reserve(kDescriptorImageInfosInitialSize);
-    mWriteDescriptorSets.reserve(kDescriptorWriteInfosInitialSize);
-    mBufferViews.reserve(kDescriptorBufferViewsInitialSize);
-}
-
-UpdateDescriptorSetsBuilder::~UpdateDescriptorSetsBuilder() = default;
-
-template <typename T, const T *VkWriteDescriptorSet::*pInfo>
-void UpdateDescriptorSetsBuilder::growDescriptorCapacity(std::vector<T> *descriptorVector,
-                                                         size_t newSize)
-{
-    const T *const oldInfoStart = descriptorVector->empty() ? nullptr : &(*descriptorVector)[0];
-    size_t newCapacity          = std::max(descriptorVector->capacity() << 1, newSize);
-    descriptorVector->reserve(newCapacity);
-
-    if (oldInfoStart)
-    {
-        // patch mWriteInfo with new BufferInfo/ImageInfo pointers
-        for (VkWriteDescriptorSet &set : mWriteDescriptorSets)
-        {
-            if (set.*pInfo)
-            {
-                size_t index = set.*pInfo - oldInfoStart;
-                set.*pInfo   = &(*descriptorVector)[index];
-            }
-        }
-    }
-}
-
-template <typename T, const T *VkWriteDescriptorSet::*pInfo>
-T *UpdateDescriptorSetsBuilder::allocDescriptorInfos(std::vector<T> *descriptorVector, size_t count)
-{
-    size_t oldSize = descriptorVector->size();
-    size_t newSize = oldSize + count;
-    if (newSize > descriptorVector->capacity())
-    {
-        // If we have reached capacity, grow the storage and patch the descriptor set with new
-        // buffer info pointer
-        growDescriptorCapacity<T, pInfo>(descriptorVector, newSize);
-    }
-    descriptorVector->resize(newSize);
-    return &(*descriptorVector)[oldSize];
-}
-
-VkDescriptorBufferInfo *UpdateDescriptorSetsBuilder::allocDescriptorBufferInfos(size_t count)
-{
-    return allocDescriptorInfos<VkDescriptorBufferInfo, &VkWriteDescriptorSet::pBufferInfo>(
-        &mDescriptorBufferInfos, count);
-}
-
-VkDescriptorImageInfo *UpdateDescriptorSetsBuilder::allocDescriptorImageInfos(size_t count)
-{
-    return allocDescriptorInfos<VkDescriptorImageInfo, &VkWriteDescriptorSet::pImageInfo>(
-        &mDescriptorImageInfos, count);
-}
-
-VkWriteDescriptorSet *UpdateDescriptorSetsBuilder::allocWriteDescriptorSets(size_t count)
-{
-    size_t oldSize = mWriteDescriptorSets.size();
-    size_t newSize = oldSize + count;
-    mWriteDescriptorSets.resize(newSize);
-    return &mWriteDescriptorSets[oldSize];
-}
-
-VkBufferView *UpdateDescriptorSetsBuilder::allocBufferViews(size_t count)
-{
-    return allocDescriptorInfos<VkBufferView, &VkWriteDescriptorSet::pTexelBufferView>(
-        &mBufferViews, count);
-}
-
-uint32_t UpdateDescriptorSetsBuilder::flushDescriptorSetUpdates(VkDevice device)
-{
-    if (mWriteDescriptorSets.empty())
-    {
-        ASSERT(mDescriptorBufferInfos.empty());
-        ASSERT(mDescriptorImageInfos.empty());
-        return 0;
-    }
-
-    vkUpdateDescriptorSets(device, static_cast<uint32_t>(mWriteDescriptorSets.size()),
-                           mWriteDescriptorSets.data(), 0, nullptr);
-
-    uint32_t retVal = static_cast<uint32_t>(mWriteDescriptorSets.size());
-
-    mWriteDescriptorSets.clear();
-    mDescriptorBufferInfos.clear();
-    mDescriptorImageInfos.clear();
-    mBufferViews.clear();
-
-    return retVal;
-}
-
-vk::BufferPool *ShareGroupVk::getDefaultBufferPool(RendererVk *renderer,
+vk::BufferPool *ShareGroupVk::getDefaultBufferPool(vk::Renderer *renderer,
                                                    VkDeviceSize size,
                                                    uint32_t memoryTypeIndex,
                                                    BufferUsageType usageType)
@@ -409,7 +304,7 @@ vk::BufferPool *ShareGroupVk::getDefaultBufferPool(RendererVk *renderer,
     return mDefaultBufferPools[memoryTypeIndex].get();
 }
 
-void ShareGroupVk::pruneDefaultBufferPools(RendererVk *renderer)
+void ShareGroupVk::pruneDefaultBufferPools(vk::Renderer *renderer)
 {
     mLastPruneTime = angle::GetCurrentSystemTime();
 
@@ -434,7 +329,7 @@ void ShareGroupVk::pruneDefaultBufferPools(RendererVk *renderer)
 #endif
 }
 
-bool ShareGroupVk::isDueForBufferPoolPrune(RendererVk *renderer)
+bool ShareGroupVk::isDueForBufferPoolPrune(vk::Renderer *renderer)
 {
     // Ensure we periodically prune to maintain the heuristic information
     double timeElapsed = angle::GetCurrentSystemTime() - mLastPruneTime;

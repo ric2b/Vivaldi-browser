@@ -25,5 +25,13 @@ if (enable_relay_proxy) {
         "//vivaldi/proxy:copy-proxy-binary",
       ]
     }
+    update_target("//chrome:chrome_framework_resources") {
+      sources += [
+        "$root_out_dir/vivaldi-proxy/relayproxy.pem",
+      ]
+      public_deps += [
+        "//vivaldi/proxy:copy-proxy-binary",
+      ]
+    }
   }
 }

@@ -71,7 +71,6 @@ enum {
   kSyncedDefaultSpeedDialsSearchProviderGUID = 1000003,
   kSyncedDefaultSpeedDialsPrivateSearchProviderGUID = 1000004,
   kSyncedDefaultImageSearchProviderGUID = 1000005,
-  kVivaldiAddressBarSearchDirectMatchEnabled = 1000006,
 };
 
 // Prefs from the prefs_definitions.json have their own ids starting at 1.
@@ -105,10 +104,6 @@ const auto& SyncablePreferences() {
         sync_preferences::MergeBehavior::kNone}},
       {prefs::kSyncedDefaultImageSearchProviderGUID,
        {syncable_prefs_ids::kSyncedDefaultImageSearchProviderGUID,
-        syncer::PREFERENCES, sync_preferences::PrefSensitivity::kNone,
-        sync_preferences::MergeBehavior::kNone}},
-      {vivaldiprefs::kVivaldiAddressBarSearchDirectMatchEnabled,
-       {syncable_prefs_ids::kVivaldiAddressBarSearchDirectMatchEnabled,
         syncer::PREFERENCES, sync_preferences::PrefSensitivity::kNone,
         sync_preferences::MergeBehavior::kNone}},
   });
@@ -313,7 +308,7 @@ void PatchPrefsJson(base::Value::Dict& prefs, base::Value& overrides) {
 
 base::Value::Dict ReadPrefsJson() {
   ResourceReader reader_main(kPrefsDefinitionFileName);
-  absl::optional<base::Value> dictionary_value = reader_main.ParseJSON();
+  std::optional<base::Value> dictionary_value = reader_main.ParseJSON();
   if (!dictionary_value) {
     // Any error in the primary preference file is fatal.
     LOG(FATAL) << reader_main.GetError();
@@ -325,7 +320,7 @@ base::Value::Dict ReadPrefsJson() {
 
 #ifdef VIVALDI_PREFERENCE_OVERRIDE_FILE
   ResourceReader reader_overrides(prefs_overrides::kFileName);
-  absl::optional<base::Value> overrides = reader_overrides.ParseJSON();
+  std::optional<base::Value> overrides = reader_overrides.ParseJSON();
   if (!overrides) {
     if (!reader_overrides.IsNotFoundError()) {
       LOG(ERROR) << prefs_overrides::kFileName << ": "
@@ -371,13 +366,13 @@ VivaldiPrefsDefinitions::SyncedPrefProperties&
 VivaldiPrefsDefinitions::SyncedPrefProperties::operator=(
     SyncedPrefProperties&&) = default;
 
-absl::optional<int> VivaldiPrefsDefinitions::EnumPrefValues::FindValue(
+std::optional<int> VivaldiPrefsDefinitions::EnumPrefValues::FindValue(
     base::StringPiece name) const {
   for (const auto& i : name_value_pairs) {
     if (i.first == name)
       return i.second;
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 const std::string* VivaldiPrefsDefinitions::EnumPrefValues::FindName(
@@ -510,7 +505,7 @@ void VivaldiPrefsDefinitions::AddPropertiesFromDefinition(
   base::Value::Dict* syncable_path = syncable_paths.FindDict(current_path);
   if (syncable_path) {
     result.sync_properties.emplace();
-    absl::optional<int> sync_id = syncable_path->FindInt(kSyncIdKeyName);
+    std::optional<int> sync_id = syncable_path->FindInt(kSyncIdKeyName);
     if (!sync_id) {
       LOG(FATAL) << "Expected an integer at '" << kSyncableKeyName << ".\""
                  << current_path << "\"." << kSyncIdKeyName;
@@ -578,7 +573,7 @@ void VivaldiPrefsDefinitions::AddPropertiesFromDefinition(
     }
 
     if (default_value.is_string()) {
-      absl::optional<int> int_value =
+      std::optional<int> int_value =
           enum_values.FindValue(default_value.GetString());
       if (int_value)
         result.default_value = base::Value(*int_value);
@@ -629,12 +624,6 @@ void VivaldiPrefsDefinitions::RegisterProfilePrefs(
 
   registry->RegisterDictionaryPref(
       vivaldiprefs::kVivaldiAccountPendingRegistration);
-#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
-  registry->RegisterBooleanPref(
-      vivaldiprefs::kVivaldiAddressBarSearchDirectMatchEnabled,
-      g_browser_process->GetApplicationLocale() == "en-US",
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-#endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
   registry->RegisterListPref(vivaldiprefs::kVivaldiExperiments);
   registry->RegisterInt64Pref(vivaldiprefs::kVivaldiLastTopSitesVacuumDate, 0);
   registry->RegisterDictionaryPref(vivaldiprefs::kVivaldiPIPPlacement);
@@ -696,7 +685,7 @@ void VivaldiPrefsDefinitions::RegisterProfilePrefs(
   }
 }
 
-absl::optional<sync_preferences::SyncablePrefMetadata>
+std::optional<sync_preferences::SyncablePrefMetadata>
 VivaldiPrefsDefinitions::GetSyncablePrefMetadata(
     const std::string& pref_name) const {
   const auto* it = SyncablePreferences().find(pref_name);
@@ -707,7 +696,7 @@ VivaldiPrefsDefinitions::GetSyncablePrefMetadata(
   const auto& item = pref_properties_.find(pref_name);
   if (item == pref_properties_.end() || !item->second.definition ||
       !item->second.definition->sync_properties) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   const SyncedPrefProperties& sync_properties =
       *(item->second.definition->sync_properties);

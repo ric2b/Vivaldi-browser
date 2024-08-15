@@ -12,7 +12,6 @@
 #include "chrome/browser/ash/login/test/login_manager_mixin.h"
 #include "chrome/browser/ash/login/test/scoped_policy_update.h"
 #include "chrome/browser/ash/login/test/user_policy_mixin.h"
-#include "chrome/browser/ash/login/users/chrome_user_manager.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/ownership/owner_settings_service_ash_factory.h"
 #include "chrome/browser/ash/policy/core/device_policy_builder.h"
@@ -275,7 +274,7 @@ IN_PROC_BROWSER_TEST_P(ChromeOSPerUserGuestTestWithDeviceOwner,
   bool owner_consent = GetParam();
 
   EXPECT_THAT(user_manager::UserManager::Get()->GetActiveUser()->GetType(),
-              Eq(user_manager::USER_TYPE_GUEST));
+              Eq(user_manager::UserType::kGuest));
   EXPECT_THAT(ash::DeviceSettingsService::Get()->GetOwnershipStatus(),
               Eq(ash::DeviceSettingsService::OwnershipStatus::kOwnershipTaken));
 
@@ -370,7 +369,7 @@ IN_PROC_BROWSER_TEST_P(ChromeOSPerUserManagedDeviceTest,
 
   // Post-login state.
   EXPECT_THAT(user_manager::UserManager::Get()->GetActiveUser()->GetType(),
-              Eq(user_manager::USER_TYPE_REGULAR));
+              Eq(user_manager::UserType::kRegular));
   EXPECT_TRUE(log_store->has_alternate_ongoing_log_store());
 
   // Should still follow policy_consent.

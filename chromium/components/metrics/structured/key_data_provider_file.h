@@ -8,10 +8,11 @@
 #include <memory>
 #include <optional>
 
+#include "base/barrier_closure.h"
 #include "base/files/file_path.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "components/metrics/structured/key_data_provider.h"
+#include "components/metrics/structured/lib/key_data_provider.h"
 
 namespace metrics::structured {
 
@@ -27,7 +28,6 @@ class KeyDataProviderFile : public KeyDataProvider, KeyDataProvider::Observer {
 
   // KeyDataProvider:
   bool IsReady() override;
-  void OnProfileAdded(const base::FilePath& profile_path) override;
   std::optional<uint64_t> GetId(const std::string& project_name) override;
   std::optional<uint64_t> GetSecondaryId(
       const std::string& project_name) override;

@@ -20,6 +20,7 @@
 #include "components/autofill/core/browser/data_model/autofill_structured_address_format_provider.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_name.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_utils.h"
+#include "components/autofill/core/browser/data_model/autofill_synthesized_address_component.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/common/autofill_features.h"
 
@@ -105,8 +106,17 @@ std::unique_ptr<AddressComponent> BuildTreeNode(
     case ADDRESS_HOME_APT_TYPE:
     case ADDRESS_HOME_OTHER_SUBUNIT:
     case ADDRESS_HOME_ADDRESS_WITH_NAME:
-    case COMPANY_NAME:
+    case ADDRESS_HOME_STREET_LOCATION_AND_LOCALITY:
+    case ADDRESS_HOME_STREET_LOCATION_AND_LANDMARK:
+    case ADDRESS_HOME_DEPENDENT_LOCALITY_AND_LANDMARK:
     case DELIVERY_INSTRUCTIONS:
+      return std::make_unique<AddressComponent>(type, std::move(children),
+                                                MergeMode::kDefault);
+    case NO_SERVER_DATA:
+    case UNKNOWN_TYPE:
+    case EMPTY_TYPE:
+    case EMAIL_ADDRESS:
+    case COMPANY_NAME:
     case NAME_FIRST:
     case NAME_MIDDLE:
     case NAME_LAST:
@@ -117,13 +127,6 @@ std::unique_ptr<AddressComponent> BuildTreeNode(
     case NAME_LAST_CONJUNCTION:
     case NAME_LAST_SECOND:
     case NAME_HONORIFIC_PREFIX:
-    case NAME_FULL_WITH_HONORIFIC_PREFIX:
-      return std::make_unique<AddressComponent>(type, std::move(children),
-                                                MergeMode::kDefault);
-    case NO_SERVER_DATA:
-    case UNKNOWN_TYPE:
-    case EMPTY_TYPE:
-    case EMAIL_ADDRESS:
     case PHONE_HOME_NUMBER:
     case PHONE_HOME_CITY_CODE:
     case PHONE_HOME_COUNTRY_CODE:
@@ -159,9 +162,6 @@ std::unique_ptr<AddressComponent> BuildTreeNode(
     case NOT_PASSWORD:
     case SINGLE_USERNAME:
     case NOT_USERNAME:
-    case BIRTHDATE_DAY:
-    case BIRTHDATE_MONTH:
-    case BIRTHDATE_4_DIGIT_YEAR:
     case PHONE_HOME_CITY_CODE_WITH_TRUNK_PREFIX:
     case PHONE_HOME_CITY_AND_NUMBER_WITHOUT_TRUNK_PREFIX:
     case PHONE_HOME_NUMBER_PREFIX:
@@ -178,23 +178,65 @@ std::unique_ptr<AddressComponent> BuildTreeNode(
   NOTREACHED_NORETURN();
 }
 
+std::unique_ptr<SynthesizedAddressComponent> BuildSynthesizedNode(
+    FieldType type,
+    const TreeDefinition& tree_def,
+    const base::flat_map<FieldType, std::unique_ptr<AddressComponent>>&
+        nodes_registry) {
+  std::vector<AddressComponent*> children;
+  children.reserve(tree_def.at(type).size());
+  for (FieldType child_type : tree_def.at(type)) {
+    children.push_back(nodes_registry.at(child_type).get());
+  }
+  return std::make_unique<SynthesizedAddressComponent>(
+      type, std::move(children), MergeMode::kDefault);
+}
+
 AddressComponent* BuildSubTree(
     const TreeDefinition& tree_def,
     FieldType root,
+    AddressCountryCode country_code,
     base::flat_map<FieldType, std::unique_ptr<AddressComponent>>&
         nodes_registry) {
+  // Registers `node` in the nodes registry.
+  auto RegisterNode =
+      [&nodes_registry](std::unique_ptr<AddressComponent> node) {
+        auto [it, inserted] =
+            nodes_registry.emplace(node->GetStorageType(), std::move(node));
+        CHECK(inserted);
+        return it->second.get();
+      };
+
+  // Leaf nodes do not have an entry in the `tree_def`. By definition
+  // they cannot have children nor be synthesized nodes.
+  if (!tree_def.contains(root)) {
+    return RegisterNode(BuildTreeNode(root, /*children=*/{}));
+  }
+
   std::vector<AddressComponent*> children;
-  // Leaf nodes do not have an entry in the tree_def.
-  if (tree_def.contains(root)) {
-    children.reserve(tree_def.at(root).size());
-    for (FieldType child_type : tree_def.at(root)) {
-      children.push_back(BuildSubTree(tree_def, child_type, nodes_registry));
+  children.reserve(tree_def.at(root).size());
+  for (FieldType child_type : tree_def.at(root)) {
+    if (!IsSynthesizedType(child_type, country_code)) {
+      children.push_back(
+          BuildSubTree(tree_def, child_type, country_code, nodes_registry));
     }
   }
-  auto [it, inserted] =
-      nodes_registry.emplace(root, BuildTreeNode(root, std::move(children)));
-  CHECK(inserted);
-  return it->second.get();
+
+  std::unique_ptr<AddressComponent> node =
+      BuildTreeNode(root, std::move(children));
+
+  // Synthesized nodes are owned by the lowest common ancestor of their
+  // constituents. That means that at this point, all their constituents have
+  // been built and stored in the nodes registry.
+  for (FieldType child_type : tree_def.at(root)) {
+    if (IsSynthesizedType(child_type, country_code)) {
+      AddressComponent* synthesized_node = RegisterNode(
+          BuildSynthesizedNode(child_type, tree_def, nodes_registry));
+      node->RegisterSynthesizedSubcomponent(synthesized_node);
+    }
+  }
+
+  return RegisterNode(std::move(node));
 }
 
 TreeEdgesList GetTreeEdges(AddressCountryCode country_code) {
@@ -205,7 +247,7 @@ TreeEdgesList GetTreeEdges(AddressCountryCode country_code) {
         ->second;
   }
 
-  auto* it = kAutofillModelRules.find(country_code.value());
+  auto it = kAutofillModelRules.find(country_code.value());
 
   // If the entry is not defined, use the legacy rules.
   return it == kAutofillModelRules.end()
@@ -230,7 +272,7 @@ AddressComponentsStore CreateAddressComponentModel(
 
   base::flat_map<FieldType, std::unique_ptr<AddressComponent>> components;
   AddressComponent* root =
-      BuildSubTree(tree_def, ADDRESS_HOME_ADDRESS, components);
+      BuildSubTree(tree_def, ADDRESS_HOME_ADDRESS, country_code, components);
 
   if (!country_code->empty() && country_code != kLegacyHierarchyCountryCode) {
     // Set the address model country to the one requested.
@@ -241,6 +283,14 @@ AddressComponentsStore CreateAddressComponentModel(
   return AddressComponentsStore(std::move(components));
 }
 
+bool IsSynthesizedType(FieldType field_type, AddressCountryCode country_code) {
+  return kAutofillSynthesizeNodes.contains(
+      {IsCustomHierarchyAvailableForCountry(country_code)
+           ? country_code.value()
+           : kLegacyHierarchyCountryCode.value(),
+       field_type});
+}
+
 std::u16string GetFormattingExpression(FieldType field_type,
                                        AddressCountryCode country_code) {
   if (base::FeatureList::IsEnabled(features::kAutofillUseI18nAddressModel) &&
@@ -249,7 +299,7 @@ std::u16string GetFormattingExpression(FieldType field_type,
     // expression if they exist. Note that it should not fallback to a legacy
     // expression, as these ones refer to a different hierarchy.
     if (IsCustomHierarchyAvailableForCountry(country_code)) {
-      auto* it =
+      auto it =
           kAutofillFormattingRulesMap.find({country_code.value(), field_type});
 
       return it != kAutofillFormattingRulesMap.end()
@@ -258,7 +308,7 @@ std::u16string GetFormattingExpression(FieldType field_type,
     }
 
     // Otherwise return a legacy formatting expression that exists.
-    auto* legacy_it = kAutofillFormattingRulesMap.find(
+    auto legacy_it = kAutofillFormattingRulesMap.find(
         {kLegacyHierarchyCountryCode.value(), field_type});
     return legacy_it != kAutofillFormattingRulesMap.end()
                ? std::u16string(legacy_it->second)
@@ -283,7 +333,7 @@ i18n_model_definition::ValueParsingResults ParseValueByI18nRegularExpression(
           ? country_code
           : kLegacyHierarchyCountryCode;
 
-  auto* it = kAutofillParsingRulesMap.find(
+  auto it = kAutofillParsingRulesMap.find(
       {country_code_for_parsing.value(), field_type});
   return it != kAutofillParsingRulesMap.end() ? it->second->Parse(value)
                                               : std::nullopt;
@@ -292,7 +342,7 @@ i18n_model_definition::ValueParsingResults ParseValueByI18nRegularExpression(
 std::optional<std::u16string_view> GetStopwordsExpression(
     FieldType field_type,
     AddressCountryCode country_code) {
-  auto* it = kAutofillModelStopwords.find({country_code.value(), field_type});
+  auto it = kAutofillModelStopwords.find({country_code.value(), field_type});
   if (it == kAutofillModelStopwords.end()) {
     return std::nullopt;
   }
@@ -309,7 +359,7 @@ bool IsTypeEnabledForCountry(FieldType field_type,
     return true;
   }
 
-  auto* it = kAutofillModelRules.find(country_code.value());
+  auto it = kAutofillModelRules.find(country_code.value());
   return base::ranges::any_of(
       it->second, [field_type](const FieldTypeDescription& description) {
         return description.field_type == field_type ||
@@ -323,8 +373,23 @@ bool IsCustomHierarchyAvailableForCountry(AddressCountryCode country_code) {
     return false;
   }
 
+  if (country_code == AddressCountryCode("BR") &&
+      !base::FeatureList::IsEnabled(features::kAutofillUseBRAddressModel)) {
+    return false;
+  }
+
   if (country_code == AddressCountryCode("DE") &&
       !base::FeatureList::IsEnabled(features::kAutofillUseDEAddressModel)) {
+    return false;
+  }
+
+  if (country_code == AddressCountryCode("IN") &&
+      !base::FeatureList::IsEnabled(features::kAutofillUseINAddressModel)) {
+    return false;
+  }
+
+  if (country_code == AddressCountryCode("MX") &&
+      !base::FeatureList::IsEnabled(features::kAutofillUseMXAddressModel)) {
     return false;
   }
 

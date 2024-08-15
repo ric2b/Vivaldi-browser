@@ -58,6 +58,7 @@ struct traits<SparseMatrix<Scalar_, Options_, StorageIndex_>> {
     ColsAtCompileTime = Dynamic,
     MaxRowsAtCompileTime = Dynamic,
     MaxColsAtCompileTime = Dynamic,
+    Options = Options_,
     Flags = Options_ | NestByRefBit | LvalueBit | CompressedAccessBit,
     SupportedAccessPatterns = InnerRandomAccessPattern
   };

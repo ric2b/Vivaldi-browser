@@ -49,7 +49,7 @@ class MockGpuVideoAcceleratorFactories : public GpuVideoAcceleratorFactories {
                                                     RequestOverlayInfoCB));
 
   MOCK_METHOD0(GetVideoEncodeAcceleratorSupportedProfiles,
-               absl::optional<VideoEncodeAccelerator::SupportedProfiles>());
+               std::optional<VideoEncodeAccelerator::SupportedProfiles>());
   MOCK_METHOD0(IsEncoderSupportKnown, bool());
   MOCK_METHOD1(NotifyEncoderSupportKnown, void(base::OnceClosure));
   // CreateVideoEncodeAccelerator returns scoped_ptr, which the mocking
@@ -69,7 +69,6 @@ class MockGpuVideoAcceleratorFactories : public GpuVideoAcceleratorFactories {
 
   bool ShouldUseGpuMemoryBuffersForVideoFrames(
       bool for_media_stream) const override;
-  unsigned ImageTextureTarget(gfx::BufferFormat format) override;
   OutputFormat VideoFrameOutputFormat(VideoPixelFormat pixel_format) override {
     return video_frame_output_format_;
   }

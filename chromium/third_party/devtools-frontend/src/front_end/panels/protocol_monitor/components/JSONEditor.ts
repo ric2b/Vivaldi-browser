@@ -169,7 +169,8 @@ export class JSONEditor extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this.#hintPopoverHelper = new UI.PopoverHelper.PopoverHelper(this, event => this.#handlePopoverDescriptions(event));
+    this.#hintPopoverHelper = new UI.PopoverHelper.PopoverHelper(
+        this, event => this.#handlePopoverDescriptions(event), 'protocol-monitor.hint');
     this.#hintPopoverHelper.setDisableOnClick(true);
     this.#hintPopoverHelper.setTimeout(300);
     this.#hintPopoverHelper.setHasPadding(true);
@@ -411,11 +412,11 @@ export class JSONEditor extends LitElement {
 
     return {
       box: hintElement.boxInWindow(),
-      show: async(popover: UI.GlassPane.GlassPane): Promise<boolean> => {
+      show: async (popover: UI.GlassPane.GlassPane) => {
         const popupElement = new ElementsComponents.CSSHintDetailsView.CSSHintDetailsView({
-          'getMessage': (): string => `<code><span>${head}</span></code>`,
-          'getPossibleFixMessage': (): string => popupContent,
-          'getLearnMoreLink': (): string =>
+          'getMessage': () => `<code><span>${head}</span></code>`,
+          'getPossibleFixMessage': () => popupContent,
+          'getLearnMoreLink': () =>
               `https://chromedevtools.github.io/devtools-protocol/tot/${this.command.split('.')[0]}/`,
         });
         popover.contentElement.appendChild(popupElement);
@@ -826,7 +827,7 @@ export class JSONEditor extends LitElement {
             .showConnector=${false}
             .position=${Dialogs.Dialog.DialogVerticalPosition.BOTTOM}
             .buttonTitle=${targetLabel}
-            jslog=${VisualLogging.dropDown().track({click: true}).context('targets')}
+            jslog=${VisualLogging.dropDown('targets').track({click: true})}
           >
           ${repeat(this.targets, target => {
           return LitHtml.html`

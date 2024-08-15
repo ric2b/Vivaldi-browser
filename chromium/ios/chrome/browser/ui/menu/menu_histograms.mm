@@ -49,6 +49,8 @@ const char kTabStripEntryActionsHistogram[] =
     "Mobile.ContextMenu.TabStrip.Actions";
 const char kInactiveTabsEntryActionsHistogram[] =
     "Mobile.ContextMenu.InactiveTabsEntry.Actions";
+const char kTabGroupEntryActionsHistogram[] =
+    "Mobile.ContextMenu.TabGroupEntry.Actions";
 
 // Vivaldi
 const char kNoteEntryActionsHistogram[] =
@@ -87,6 +89,7 @@ const char* GetActionsHistogramName(MenuScenarioHistogram scenario) {
     case kMenuScenarioHistogramContextMenuLink:
       return KContextMenuLinkActionsHistogram;
     case kMenuScenarioHistogramTabGridEntry:
+    case kMenuScenarioHistogramTabGroupGridEntry:
     case kMenuScenarioHistogramThumbStrip:
       return kTabGridActionsHistogram;
     case kMenuScenarioHistogramTabGridAddTo:
@@ -105,6 +108,8 @@ const char* GetActionsHistogramName(MenuScenarioHistogram scenario) {
       return kTabStripEntryActionsHistogram;
     case kMenuScenarioHistogramInactiveTabsEntry:
       return kInactiveTabsEntryActionsHistogram;
+    case kMenuScenarioHistogramTabGroupViewEntry:
+      return kTabGroupEntryActionsHistogram;
     case kMenuScenarioHistogramCount:
       NOTREACHED_NORETURN();
 

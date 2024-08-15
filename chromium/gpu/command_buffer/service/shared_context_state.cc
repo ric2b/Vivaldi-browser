@@ -4,8 +4,11 @@
 
 #include "gpu/command_buffer/service/shared_context_state.h"
 
+#include <atomic>
+
 #include "base/debug/dump_without_crashing.h"
 #include "base/immediate_crash.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/observer_list.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
@@ -15,6 +18,7 @@
 #include "components/crash/core/common/crash_key.h"
 #include "gpu/command_buffer/common/shm_count.h"
 #include "gpu/command_buffer/service/context_state.h"
+#include "gpu/command_buffer/service/dawn_context_provider.h"
 #include "gpu/command_buffer/service/gl_context_virtual.h"
 #include "gpu/command_buffer/service/gr_cache_controller.h"
 #include "gpu/command_buffer/service/gr_shader_cache.h"
@@ -66,6 +70,7 @@
 #include "ui/gl/gl_angle_util_win.h"
 #endif
 
+namespace gpu {
 namespace {
 
 static constexpr size_t kInitialScratchDeserializationBufferSize = 1024;
@@ -102,9 +107,58 @@ int32_t GetDawnMaxTextureSize(gpu::DawnContextProvider* context_provider) {
 }
 #endif  // BUILDFLAG(SKIA_USE_DAWN)
 
-}  // anonymous namespace
+// Used to represent Skia backend type for UMA.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class SkiaBackendType {
+  kUnknown = 0,
+  kNone = 1,
+  kGaneshGL = 2,
+  kGaneshVulkan = 3,
+  kGraphiteDawnVulkan = 4,
+  kGraphiteDawnMetal = 5,
+  kGraphiteDawnD3D11 = 6,
+  kGraphiteDawnD3D12 = 7,
+  // It's not clear what granularity of kGraphiteDawnGL* backend dawn will
+  // provided yet so those values are to be added later.
+  kMaxValue = kGraphiteDawnD3D12
+};
 
-namespace gpu {
+SkiaBackendType FindSkiaBackendType(SharedContextState* context) {
+  switch (context->gr_context_type()) {
+    case gpu::GrContextType::kNone:
+      return SkiaBackendType::kNone;
+    case gpu::GrContextType::kGL:
+      return SkiaBackendType::kGaneshGL;
+    case gpu::GrContextType::kVulkan:
+      return SkiaBackendType::kGaneshVulkan;
+    case gpu::GrContextType::kGraphiteMetal:
+      // Graphite/Metal isn't expected to be used outside tests.
+      return SkiaBackendType::kUnknown;
+    case gpu::GrContextType::kGraphiteDawn: {
+      if (!context->dawn_context_provider()) {
+        // TODO(kylechar): Bail out of GPU process earlier if
+        // DawnContextProvider initialization fails.
+        return SkiaBackendType::kUnknown;
+      }
+      switch (context->dawn_context_provider()->backend_type()) {
+        case wgpu::BackendType::Vulkan:
+          return SkiaBackendType::kGraphiteDawnVulkan;
+        case wgpu::BackendType::D3D11:
+          return SkiaBackendType::kGraphiteDawnD3D11;
+        case wgpu::BackendType::D3D12:
+          return SkiaBackendType::kGraphiteDawnD3D12;
+        case wgpu::BackendType::Metal:
+          return SkiaBackendType::kGraphiteDawnMetal;
+        default:
+          break;
+      }
+    }
+  }
+  return SkiaBackendType::kUnknown;
+}
+
+}  // anonymous namespace
 
 void SharedContextState::compileError(const char* shader,
                                       const char* errors,
@@ -115,6 +169,9 @@ void SharedContextState::compileError(const char* shader,
                << "------------------------\n"
                << shader << "\nErrors:\n"
                << errors;
+
+    static crash_reporter::CrashKeyString<8192> shader_key("skia-error-shader");
+    shader_key.Set(shader);
 
     static crash_reporter::CrashKeyString<2048> error_key("skia-compile-error");
     error_key.Set(errors);
@@ -220,7 +277,6 @@ SharedContextState::SharedContextState(
       share_group_(std::move(share_group)),
       context_(context),
       real_context_(std::move(context)),
-      surface_(std::move(surface)),
       sk_surface_cache_(MaxNumSkSurface()) {
   if (gr_context_type_ == GrContextType::kVulkan) {
     if (vk_context_provider_) {
@@ -230,6 +286,11 @@ SharedContextState::SharedContextState(
       use_virtualized_gl_contexts_ = false;
     }
   }
+
+  DCHECK(context_ && surface && context_->default_surface());
+  // |this| no longer stores the |surface| as that one must be stored by the
+  // context. Do a sanity check that it is true.
+  DCHECK(context_->default_surface() == surface);
 
   if (base::SingleThreadTaskRunner::HasCurrentDefault()) {
     base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
@@ -274,20 +335,29 @@ SharedContextState::~SharedContextState() {
   // current, or the GrContext was already abandoned if the GLContext was lost.
   owned_gr_context_.reset();
 
-  // |surface_| needs to be destroyed while there is a current GL context if
-  // using GL, as some implementations make calls to the GL bindings. Any such
-  // implementations will themselves ensure that the context is current in their
-  // destructor (we cannot blindly make the context current here, as there are
-  // other implementations that crash if the context is made current at this
-  // point :\). However, we drop our reference to |surface_| before releasing
-  // the context below so that the release has the intended effect.
   last_current_surface_ = nullptr;
-  surface_.reset();
 
   if (context_->IsCurrent(nullptr))
     context_->ReleaseCurrent(nullptr);
   base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
       this);
+}
+
+bool SharedContextState::IsUsingGL() const {
+  // If context type is none then SharedContextState exists for WebGL fallback
+  // to hold a GL context.
+  return gr_context_type_ == GrContextType::kGL ||
+         gr_context_type_ == GrContextType::kNone;
+}
+
+bool SharedContextState::IsGraphiteDawnMetal() const {
+#if BUILDFLAG(SKIA_USE_DAWN)
+  return gr_context_type_ == GrContextType::kGraphiteDawn &&
+         dawn_context_provider_ &&
+         dawn_context_provider_->backend_type() == wgpu::BackendType::Metal;
+#else
+  return false;
+#endif
 }
 
 bool SharedContextState::IsGraphiteDawnVulkan() const {
@@ -317,8 +387,23 @@ bool SharedContextState::InitializeSkia(
     GpuProcessShmCount* use_shader_cache_shm_count,
     gl::ProgressReporter* progress_reporter) {
   static crash_reporter::CrashKeyString<16> crash_key("gr-context-type");
-  crash_key.Set(
-      base::StringPrintf("%u", static_cast<uint32_t>(gr_context_type_)));
+  crash_key.Set(GrContextTypeToString(gr_context_type_));
+
+  // Record the Skia backend type the first time Skia/SharedContextState is
+  // initialized. This can happen more than once and on different threads but
+  // the backend type should never change.
+  static std::atomic<bool> once(true);
+  if (once.exchange(false, std::memory_order_relaxed)) {
+    SkiaBackendType context_enum = FindSkiaBackendType(this);
+    base::UmaHistogramEnumeration("GPU.SkiaBackendType", context_enum);
+  }
+
+  if (gr_context_type_ == GrContextType::kNone) {
+    // SharedContextState only exists to hold a GL context for WebGL fallback
+    // if context type is set to none. We don't need to initialization Skia
+    // for raster/compositing work.
+    return true;
+  }
 
   if (gr_context_type_ == GrContextType::kGraphiteDawn ||
       gr_context_type_ == GrContextType::kGraphiteMetal) {
@@ -404,11 +489,6 @@ bool SharedContextState::InitializeGanesh(
     CHECK_EQ(gr_context_type_, GrContextType::kVulkan);
 #if BUILDFLAG(ENABLE_VULKAN)
     if (vk_context_provider_) {
-      // TODO(vasilyt): Remove this if there is no problem with caching.
-      if (!base::FeatureList::IsEnabled(
-              features::kEnableGrShaderCacheForVulkan))
-        options.fPersistentCache = nullptr;
-
       if (!vk_context_provider_->InitializeGrContext(options)) {
         LOG(ERROR) << "Failed to initialize GrContext for Vulkan.";
         return false;
@@ -440,11 +520,17 @@ bool SharedContextState::InitializeGraphite(
       GetDefaultGraphiteContextOptions(workarounds);
   if (gr_context_type_ == GrContextType::kGraphiteDawn) {
 #if BUILDFLAG(SKIA_USE_DAWN)
-    if (dawn_context_provider_ &&
-        dawn_context_provider_->InitializeGraphiteContext(context_options)) {
+    CHECK(dawn_context_provider_);
+    if (dawn_context_provider_->InitializeGraphiteContext(context_options)) {
       graphite_context_ = dawn_context_provider_->GetGraphiteContext();
     } else {
-      DLOG(ERROR) << "Failed to create Graphite Context for Dawn";
+      // There is currently no way for the GPU process to gracefully handle
+      // failure to initialize Dawn, leaving the user in an unknown state if we
+      // allow GPU process initialization to continue. Intentionally crash the
+      // GPU process in this case to trigger browser-side fallback logic (either
+      // to software or to Ganesh depending on the platform).
+      // TODO(crbug.com/325000752): Handle this case within the GPU process.
+      CHECK(0);
     }
 #endif
   } else {
@@ -572,7 +658,7 @@ bool SharedContextState::InitializeGL(
     auto virtual_context = base::MakeRefCounted<GLContextVirtual>(
         share_group_.get(), real_context_.get(),
         weak_ptr_factory_.GetWeakPtr());
-    if (!virtual_context->Initialize(surface_.get(), gl::GLContextAttribs())) {
+    if (!virtual_context->Initialize(surface(), gl::GLContextAttribs())) {
       LOG(ERROR) << "SharedContextState::InitializeGL failure Initialize "
                     "virtual context failed";
       feature_info_ = nullptr;
@@ -649,10 +735,11 @@ bool SharedContextState::MakeCurrent(gl::GLSurface* surface, bool needs_gl) {
     return false;
   }
 
-  const bool using_gl = GrContextIsGL() || needs_gl;
+  const bool using_gl = IsUsingGL() || needs_gl;
   if (using_gl) {
-    gl::GLSurface* dont_care_surface =
-        last_current_surface_ ? last_current_surface_.get() : surface_.get();
+    gl::GLSurface* dont_care_surface = last_current_surface_
+                                           ? last_current_surface_.get()
+                                           : context_->default_surface();
     surface = surface ? surface : dont_care_surface;
 
     if (!context_->MakeCurrent(surface)) {
@@ -708,8 +795,9 @@ void SharedContextState::MarkContextLost(error::ContextLostReason reason) {
 }
 
 bool SharedContextState::IsCurrent(gl::GLSurface* surface, bool needs_gl) {
-  if (!GrContextIsGL() && !needs_gl)
+  if (!IsUsingGL() && !needs_gl) {
     return true;
+  }
   if (context_lost())
     return false;
   return context_->IsCurrent(surface);
@@ -836,8 +924,14 @@ void SharedContextState::UseShaderCache(
   }
 }
 
+gl::GLSurface* SharedContextState::surface() const {
+  return context_->default_surface();
+}
+
 gl::GLDisplay* SharedContextState::display() {
-  return surface_.get()->GetGLDisplay();
+  auto* gl_surface = surface();
+  DCHECK(gl_surface);
+  return gl_surface->GetGLDisplay();
 }
 
 bool SharedContextState::initialized() const {
@@ -952,8 +1046,9 @@ std::optional<error::ContextLostReason> SharedContextState::GetResetStatus(
 #endif
 
   // Not using GL.
-  if (!GrContextIsGL() && !needs_gl)
+  if (!IsUsingGL() && !needs_gl) {
     return std::nullopt;
+  }
 
   // GL is not initialized.
   if (!context_state_)
@@ -1026,7 +1121,7 @@ void SharedContextState::ScheduleSkiaCleanup() {
 
 int32_t SharedContextState::GetMaxTextureSize() const {
   int32_t max_texture_size = 0;
-  if (GrContextIsGL()) {
+  if (IsUsingGL()) {
     gl::GLApi* const api = gl::g_current_gl_context;
     api->glGetIntegervFn(GL_MAX_TEXTURE_SIZE, &max_texture_size);
   } else if (GrContextIsVulkan()) {
@@ -1064,6 +1159,8 @@ int32_t SharedContextState::GetMaxTextureSize() const {
 Microsoft::WRL::ComPtr<ID3D11Device> SharedContextState::GetD3D11Device()
     const {
   switch (gr_context_type_) {
+    case GrContextType::kNone:
+      return nullptr;
     case GrContextType::kGL:
     case GrContextType::kVulkan:
       return gl::QueryD3D11DeviceObjectFromANGLE();

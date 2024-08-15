@@ -169,8 +169,9 @@ void TestImportedNotes(const ImportedNotesEntry& imported,
 class OperaImportObserver : public ProfileWriter,
                             public importer::ImporterProgressObserver {
  public:
-  OperaImportObserver()
+  OperaImportObserver(base::RunLoop *loop)
       : ProfileWriter(NULL),
+        loop(loop),
         bookmark_count(0),
         notes_count(0),
         password_count(0) {}
@@ -179,7 +180,7 @@ class OperaImportObserver : public ProfileWriter,
   void ImportItemStarted(importer::ImportItem item) override {}
   void ImportItemEnded(importer::ImportItem item) override {}
   void ImportEnded() override {
-    base::RunLoop().QuitCurrentWhenIdleDeprecated();
+    loop->Quit();
     EXPECT_EQ(std::size(OperaBookmarks), bookmark_count);
     EXPECT_EQ(std::size(OperaNotes), notes_count);
     EXPECT_EQ(std::size(OperaPasswords), password_count);
@@ -228,6 +229,7 @@ class OperaImportObserver : public ProfileWriter,
  private:
   ~OperaImportObserver() override {}
 
+  base::RunLoop *loop;
   size_t bookmark_count;
   size_t notes_count;
   size_t password_count;
@@ -248,10 +250,11 @@ class OperaProfileImporterBrowserTest : public InProcessBrowserTest {
   }
 
   void TestVivaldiImportOfOpera(std::string profile_subdir,
-                                importer::ImporterProgressObserver* observer,
-                                ProfileWriter* writer,
                                 bool use_master_password = false) {
     // CopyDirectory requires IO access
+    base::RunLoop loop;
+    scoped_refptr<OperaImportObserver> observer(new OperaImportObserver(&loop));
+
     base::VivaldiScopedAllowBlocking allow_blocking;
     base::FilePath data_dir;
     ASSERT_TRUE(PathService::Get(vivaldi::DIR_VIVALDI_TEST_DATA, &data_dir));
@@ -273,11 +276,12 @@ class OperaProfileImporterBrowserTest : public InProcessBrowserTest {
     // Deletes itself
     ExternalProcessImporterHost* host = new ExternalProcessImporterHost;
 
-    host->set_observer(observer);
+    host->set_observer(observer.get());
     host->StartImportSettings(
         import_profile, browser()->profile(), imported_items,
-        base::WrapRefCounted<ProfileWriter>(writer).get());
-    base::RunLoop().Run();
+        base::WrapRefCounted<ProfileWriter>(observer.get()).get());
+
+    loop.Run();
   }
 
   base::ScopedTempDir temp_dir;
@@ -286,14 +290,10 @@ class OperaProfileImporterBrowserTest : public InProcessBrowserTest {
 
 IN_PROC_BROWSER_TEST_F(OperaProfileImporterBrowserTest,
                        ImportNoMasterPassword) {
-  scoped_refptr<OperaImportObserver> observer(new OperaImportObserver());
-
-  TestVivaldiImportOfOpera("opera-nopass", observer.get(), observer.get());
+  TestVivaldiImportOfOpera("opera-nopass");
 }
 
 IN_PROC_BROWSER_TEST_F(OperaProfileImporterBrowserTest,
                        ImportWithMasterPassword) {
-  scoped_refptr<OperaImportObserver> observer(new OperaImportObserver());
-
-  TestVivaldiImportOfOpera("opera-pass", observer.get(), observer.get(), true);
+  TestVivaldiImportOfOpera("opera-pass", true);
 }

@@ -14,6 +14,7 @@ static_library("internal") {
     "//chrome/browser",
     "//chrome/browser/data_sharing:*",
     "//chrome/test:*",
+    "//ios/chrome/browser/data_sharing/model",
   ]
 
   sources = [
@@ -26,6 +27,7 @@ static_library("internal") {
   ]
 
   deps = [
+    "//components/endpoint_fetcher:endpoint_fetcher",
     "//components/signin/public/identity_manager",
     "//services/network/public/cpp",
   ]
@@ -67,6 +69,7 @@ source_set("unit_tests") {
     ":internal",
     "//base",
     "//base/test:test_support",
+    "//components/endpoint_fetcher:test_support",
     "//components/signin/public/identity_manager:test_support",
     "//net/traffic_annotation:test_support",
     "//services/network:test_support",
@@ -113,6 +116,22 @@ if (is_android) {
     sources = [
       "android/java/src/org/chromium/components/data_sharing/DataSharingNetworkLoaderImpl.java",
       "android/java/src/org/chromium/components/data_sharing/DataSharingServiceImpl.java",
+    ]
+  }
+
+  robolectric_library("data_sharing_junit_tests") {
+    sources = [ "android/java/src/org/chromium/components/data_sharing/DataSharingNetworkLoaderImplTest.java" ]
+
+    deps = [
+      ":internal_java",
+      "//base:base_java",
+      "//base:base_java_test_support",
+      "//base:base_junit_test_support",
+      "//net/android:net_java",
+      "//third_party/jni_zero:jni_zero_java",
+      "//third_party/junit",
+      "//third_party/mockito:mockito_java",
+      "//url:gurl_java",
     ]
   }
 }

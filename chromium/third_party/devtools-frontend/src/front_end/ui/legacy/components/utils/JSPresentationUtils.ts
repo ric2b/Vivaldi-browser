@@ -78,13 +78,14 @@ function populateContextMenu(link: Element, event: Event): void {
     if (Bindings.IgnoreListManager.IgnoreListManager.instance().isUserIgnoreListedURL(uiLocation.uiSourceCode.url())) {
       contextMenu.debugSection().appendItem(
           i18nString(UIStrings.removeFromIgnore),
-          () => Bindings.IgnoreListManager.IgnoreListManager.instance().unIgnoreListUISourceCode(
-              uiLocation.uiSourceCode));
+          () =>
+              Bindings.IgnoreListManager.IgnoreListManager.instance().unIgnoreListUISourceCode(uiLocation.uiSourceCode),
+          {jslogContext: 'remove-from-ignore-list'});
     } else {
       contextMenu.debugSection().appendItem(
           i18nString(UIStrings.addToIgnore),
-          () =>
-              Bindings.IgnoreListManager.IgnoreListManager.instance().ignoreListUISourceCode(uiLocation.uiSourceCode));
+          () => Bindings.IgnoreListManager.IgnoreListManager.instance().ignoreListUISourceCode(uiLocation.uiSourceCode),
+          {jslogContext: 'add-to-ignore-list'});
     }
   }
   contextMenu.appendApplicableItems(event);
@@ -129,7 +130,7 @@ export function buildStackTraceRows(
         revealBreakpoint: previousStackFrameWasBreakpointCondition,
       });
       if (link) {
-        link.setAttribute('jslog', `${VisualLogging.link().track({click: true}).context('stack-trace-link')}`);
+        link.setAttribute('jslog', `${VisualLogging.link('stack-trace').track({click: true})}`);
         link.addEventListener('contextmenu', populateContextMenu.bind(null, link));
         // TODO(crbug.com/1183325): fix race condition with uiLocation still being null here
         // Note: This has always checked whether the call frame location *in the generated
@@ -213,6 +214,7 @@ function updateHiddenRows(
 
 export function buildStackTracePreviewContents(
     target: SDK.Target.Target|null, linkifier: Linkifier, options: Options = {
+      widthConstrained: false,
       stackTrace: undefined,
       tabStops: undefined,
     }): {element: HTMLElement, links: HTMLElement[]} {
@@ -220,10 +222,12 @@ export function buildStackTracePreviewContents(
   const element = document.createElement('span');
   element.classList.add('monospace');
   element.classList.add('stack-preview-container');
+  element.classList.toggle('width-constrained', options.widthConstrained);
   element.style.display = 'inline-block';
   const shadowRoot =
       UI.Utils.createShadowRootWithCoreStyles(element, {cssFile: [jsUtilsStyles], delegatesFocus: undefined});
   const contentElement = shadowRoot.createChild('table', 'stack-preview-container');
+  contentElement.classList.toggle('width-constrained', options.widthConstrained);
   if (!stackTrace) {
     return {element, links: []};
   }
@@ -295,6 +299,10 @@ function renderStackTraceTable(
 export interface Options {
   stackTrace: Protocol.Runtime.StackTrace|undefined;
   tabStops: boolean|undefined;
+  // Whether the width of stack trace preview
+  // is constrained to its container or whether
+  // it can grow the container.
+  widthConstrained?: boolean;
 }
 
 export interface StackTraceRegularRow {

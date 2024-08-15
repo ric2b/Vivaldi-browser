@@ -41,7 +41,6 @@ from blinkpy.common.system.log_utils import configure_logging
 from blinkpy.web_tests.models.test_expectations import (TestExpectations,
                                                         ParseError)
 from blinkpy.web_tests.models.typ_types import Expectation, ResultType
-from blinkpy.web_tests.port.android import ANDROID_DISABLED_TESTS
 from blinkpy.web_tests.port.base import Port
 from blinkpy.web_tests.port.factory import platform_options
 
@@ -65,15 +64,11 @@ def lint(host, options):
     # The checks and list of expectation files are generally not
     # platform-dependent. Still, we need a port to identify test types and
     # manipulate virtual test paths.
-    #
-    # Force a manifest update to ensure it's always up-to-date.
-    # TODO(crbug.com/1411505): See if the manifest refresh can be made faster.
-    options.manifest_update = True
-
     finder = PathFinder(host.filesystem)
     # Add all extra expectation files to be linted.
-    options.additional_expectations.extend([ANDROID_DISABLED_TESTS] + [
+    options.additional_expectations.extend([
         finder.path_from_web_tests('ChromeTestExpectations'),
+        finder.path_from_web_tests('MobileTestExpectations'),
         finder.path_from_web_tests('WebGPUExpectations'),
     ])
     port = host.port_factory.get(options=options)

@@ -150,7 +150,7 @@ void VivaldiTranslateServerRequest::OnRequestResponse(
                              std::vector<std::string>());
   } else {
     base::JSONParserOptions options = base::JSON_ALLOW_TRAILING_COMMAS;
-    absl::optional<base::Value> json =
+    std::optional<base::Value> json =
         base::JSONReader::Read(*response_body, options);
     if (json) {
       const base::Value::List* translated_values;

@@ -34,7 +34,7 @@ page](http://goto.google.com/cros-build).
 
 *   Help writing unittests using [python-mock](/chromium-os/python-mock)
 *   [Python style
-            guide](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/styleguide/python.md)
+            guide](/chromium-os/developer-library/reference/style-guides/python)
 *   [Chromium OS Developer
             Guide](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/developer_guide.md)
 *   [Developing Chromium on Chromium

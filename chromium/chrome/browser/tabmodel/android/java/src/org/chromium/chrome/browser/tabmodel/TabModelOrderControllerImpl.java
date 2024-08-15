@@ -74,8 +74,8 @@ public class TabModelOrderControllerImpl implements TabModelOrderController { //
                 int tabPositionSetting =
                         ChromeSharedPreferences.getInstance().readInt("new_tab_position", 1);
                 // We check for NewTabPositionSetting.AFTER_RELATED_TAB. Magic number due to dep
-                // issues.
-                if (tabPositionSetting == 0) {
+                // issues. Ref. VAB-8839 Do the same calculation if AS_TAB_STACK_WITH_RELATED_TAB
+                if (tabPositionSetting == 0 || tabPositionSetting == 3) {
                     int relatedTabIndex = getIndexAfterRelatedTabs(newTab, currentIndex);
                     // When a link has been clicked we assume a relation.
                     int index = linkClicked(type) ? currentIndex + 1 : -1;

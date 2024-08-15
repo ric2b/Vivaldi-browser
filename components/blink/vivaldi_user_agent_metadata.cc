@@ -19,7 +19,7 @@ UserAgentOverride::UserAgentOverride() {
 
 UserAgentOverride::UserAgentOverride(const UserAgentOverride& old) = default;
 
-absl::optional<UserAgentMetadata> UserAgentOverride::GetUaMetaDataOverride(
+std::optional<UserAgentMetadata> UserAgentOverride::GetUaMetaDataOverride(
     const std::string& hostname,
     bool return_main_metadata) const {
   if (!hostname.empty() && domain_ua_metadata_override.size()) {
@@ -33,7 +33,7 @@ absl::optional<UserAgentMetadata> UserAgentOverride::GetUaMetaDataOverride(
     }
   }
   if (!return_main_metadata) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   return ua_metadata_override;
 }

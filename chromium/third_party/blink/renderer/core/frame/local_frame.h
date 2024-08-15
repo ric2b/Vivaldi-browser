@@ -38,7 +38,6 @@
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "services/device/public/mojom/device_posture_provider.mojom-blink-forward.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink-forward.h"
 #include "third_party/blink/public/common/frame/frame_ad_evidence.h"
@@ -48,6 +47,7 @@
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/back_forward_cache_not_restored_reasons.mojom-blink.h"
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/device_posture/device_posture_provider.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/devtools/devtools_agent.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/back_forward_cache_controller.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink-forward.h"
@@ -68,6 +68,7 @@
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_background_resource_fetch_assets.h"
 #include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/web/web_print_params.h"
 #include "third_party/blink/public/web/web_script_execution_callback.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/document_style_environment_variables.h"
@@ -140,6 +141,7 @@ class InspectorTaskRunner;
 class InspectorTraceEvents;
 class InterfaceRegistry;
 class LCPCriticalPathPredictor;
+class LCPScriptObserver;
 class LayoutView;
 class LocalDOMWindow;
 class LocalFrameClient;
@@ -148,6 +150,7 @@ class LocalWindowProxy;
 class Node;
 class NodeTraversal;
 class PerformanceMonitor;
+class WebLinkPreviewTriggerer;
 class PluginData;
 class PolicyContainer;
 class ScrollSnapshotClient;
@@ -262,7 +265,8 @@ class CORE_EXPORT LocalFrame final
 
   // BackForwardCacheLoaderHelperImpl::Delegate:
   void EvictFromBackForwardCache(
-      mojom::blink::RendererEvictionReason reason) override;
+      mojom::blink::RendererEvictionReason reason,
+      std::unique_ptr<SourceLocation> source_location) override;
   void DidBufferLoadWhileInBackForwardCache(bool update_process_wide_count,
                                             size_t num_bytes) override;
 
@@ -287,6 +291,7 @@ class CORE_EXPORT LocalFrame final
   void SetDOMWindow(LocalDOMWindow*);
   LocalFrameView* View() const override;
   Document* GetDocument() const;
+  void DocumentDetached();
   void SetPagePopupOwner(Element&);
   Element* PagePopupOwner() const { return page_popup_owner_.Get(); }
   bool HasPagePopupOwner() const { return page_popup_owner_ != nullptr; }
@@ -306,6 +311,7 @@ class CORE_EXPORT LocalFrame final
   BackgroundColorPaintImageGenerator* GetBackgroundColorPaintImageGenerator();
   BoxShadowPaintImageGenerator* GetBoxShadowPaintImageGenerator();
   ClipPathPaintImageGenerator* GetClipPathPaintImageGenerator();
+  void SetClipPathPaintImageGeneratorForTesting(ClipPathPaintImageGenerator*);
   LCPCriticalPathPredictor* GetLCPP();
 
   // A local root is the root of a connected subtree that contains only
@@ -397,8 +403,7 @@ class CORE_EXPORT LocalFrame final
   // Begin printing.
   // If too large (in the inline direction), the frame content will fit to the
   // page size with the specified maximum shrink ratio.
-  void StartPrinting(const WebPrintPageDescription&,
-                     float maximum_shrink_ratio = 0);
+  void StartPrinting(const WebPrintParams&, float maximum_shrink_ratio = 0);
   void StartPrinting(const gfx::SizeF& page_size = gfx::SizeF(),
                      float maximum_shrink_ratio = 0);
 
@@ -433,17 +438,17 @@ class CORE_EXPORT LocalFrame final
   // media query value changed.
   void MediaQueryAffectingValueChangedForLocalSubtree(MediaValueChange);
 
-  void WindowSegmentsChanged(const WebVector<gfx::Rect>& window_segments);
+  void ViewportSegmentsChanged(const WebVector<gfx::Rect>& viewport_segments);
   void UpdateViewportSegmentCSSEnvironmentVariables(
-      const WebVector<gfx::Rect>& window_segments);
+      const WebVector<gfx::Rect>& viewport_segments);
   void UpdateViewportSegmentCSSEnvironmentVariables(
       StyleEnvironmentVariables& vars,
-      const WebVector<gfx::Rect>& window_segments);
+      const WebVector<gfx::Rect>& viewport_segments);
 
   void OverrideDevicePostureForEmulation(
-      device::mojom::blink::DevicePostureType device_posture_param);
+      mojom::blink::DevicePostureType device_posture_param);
   void DisableDevicePostureOverrideForEmulation();
-  device::mojom::blink::DevicePostureType GetDevicePosture();
+  mojom::blink::DevicePostureType GetDevicePosture();
 
   String SelectedText() const;
   String SelectedText(const TextIteratorBehavior& behavior) const;
@@ -451,6 +456,8 @@ class CORE_EXPORT LocalFrame final
   void TextSelectionChanged(const WTF::String& selection_text,
                             uint32_t offset,
                             const gfx::Range& range) const;
+
+  void VisibleTextSelectionChanged(const WTF::String& selection_text) const;
 
   PositionWithAffinityTemplate<EditingAlgorithm<NodeTraversal>>
   PositionForPoint(const PhysicalOffset& frame_point);
@@ -524,6 +531,7 @@ class CORE_EXPORT LocalFrame final
   IdlenessDetector* GetIdlenessDetector() { return idleness_detector_.Get(); }
   AdTracker* GetAdTracker() { return ad_tracker_.Get(); }
   void SetAdTrackerForTesting(AdTracker* ad_tracker);
+  LCPScriptObserver* GetScriptObserver() { return script_observer_.Get(); }
   AttributionSrcLoader* GetAttributionSrcLoader() {
     return attribution_src_loader_.Get();
   }
@@ -621,10 +629,10 @@ class CORE_EXPORT LocalFrame final
   // stack.
   bool IsAdScriptInStack() const;
 
-  // The evidence for or against a frame being an ad. `absl::nullopt` if not yet
+  // The evidence for or against a frame being an ad. `std::nullopt` if not yet
   // set or if the frame is a subfiltering root frame (outermost main frame or
   // portal) as only child frames can be tagged as ads.
-  const absl::optional<blink::FrameAdEvidence>& AdEvidence() const {
+  const std::optional<blink::FrameAdEvidence>& AdEvidence() const {
     return ad_evidence_;
   }
 
@@ -657,7 +665,7 @@ class CORE_EXPORT LocalFrame final
   SmoothScrollSequencer* GetSmoothScrollSequencer() const;
 
   mojom::blink::ReportingServiceProxy* GetReportingService();
-  device::mojom::blink::DevicePostureProvider* GetDevicePostureProvider();
+  mojom::blink::DevicePostureProvider* GetDevicePostureProvider();
 
   // Returns the frame host ptr. The interface returned is backed by an
   // associated interface with the legacy Chrome IPC channel.
@@ -757,7 +765,7 @@ class CORE_EXPORT LocalFrame final
   void SaveImageAt(const gfx::Point& window_point);
   void AdvanceFocusForIME(mojom::blink::FocusType focus_type);
   void PostMessageEvent(
-      const absl::optional<RemoteFrameToken>& source_frame_token,
+      const std::optional<RemoteFrameToken>& source_frame_token,
       const String& source_origin,
       const String& target_origin,
       BlinkTransferableMessage message);
@@ -860,7 +868,7 @@ class CORE_EXPORT LocalFrame final
   void SetBackgroundColorPaintImageGeneratorForTesting(
       BackgroundColorPaintImageGenerator* generator);
 
-  absl::optional<SkColor> GetFrameOverlayColorForTesting() const;
+  std::optional<SkColor> GetFrameOverlayColorForTesting() const;
 
   // Returns a PendingRemote resolved via this frame's BrowserInterfaceBroker
   // for use when creating the PublicUrlManager instance in threaded worklets.
@@ -916,6 +924,31 @@ class CORE_EXPORT LocalFrame final
   // Can only be called while the frame is not detached.
   const mojom::RendererContentSettingsPtr& GetContentSettings();
 
+  // Returns whether images are allowed to load for the current frame. This is a
+  // convenience method that checks both renderer content settings and frame
+  // settings.
+  // Can only be called while the frame is not detached.
+  bool ImagesEnabled();
+
+  // Returns whether script is allowed to run for the current frame. This is a
+  // convenience method that checks both renderer content settings and frame
+  // settings.
+  // Can only be called while the frame is not detached.
+  bool ScriptEnabled();
+
+  const WebPrintParams& GetPrintParams() const;
+
+  // Return a keep alive handle for the browser side NavigationStateKeepAlive.
+  // The NavigationStateKeepAlive is created by a RenderFrameHost. Holding the
+  // pending receiver of this remote means the keep alive handle can still exist
+  // beyond the lifetime of the RenderFrameHost that created it.
+  mojo::PendingRemote<mojom::blink::NavigationStateKeepAliveHandle>
+  IssueKeepAliveHandle();
+
+  WebLinkPreviewTriggerer* GetOrCreateLinkPreviewTriggerer();
+  void SetLinkPreviewTriggererForTesting(
+      std::unique_ptr<WebLinkPreviewTriggerer> trigger);
+
  private:
   friend class FrameNavigationDisabler;
   // LocalFrameMojoHandler is a part of LocalFrame.
@@ -959,6 +992,7 @@ class CORE_EXPORT LocalFrame final
   void OnTaskCompleted(base::TimeTicks start_time,
                        base::TimeTicks end_time) override;
   void MainFrameInteractive() override;
+  void MainFrameFirstMeaningfulPaint() override;
 
   // Activates the user activation states of this frame and all its ancestors.
   //
@@ -998,6 +1032,8 @@ class CORE_EXPORT LocalFrame final
   void SetTitlebarAreaDocumentStyleEnvironmentVariables() const;
   void MaybeUpdateWindowControlsOverlayWithNewZoomLevel();
 #endif
+
+  void EnsureLinkPreviewTriggererInitialized();
 
   std::unique_ptr<FrameScheduler> frame_scheduler_;
 
@@ -1062,6 +1098,7 @@ class CORE_EXPORT LocalFrame final
   // Access content_capture_manager_ through GetOrResetContentCaptureManager()
   // because WebContentCaptureClient might already stop the capture.
   Member<ContentCaptureManager> content_capture_manager_;
+  Member<LCPScriptObserver> script_observer_;
 
   HistoryUserActivationState history_user_activation_state_;
 
@@ -1078,7 +1115,7 @@ class CORE_EXPORT LocalFrame final
 
   Member<FrameOverlay> frame_color_overlay_;
 
-  absl::optional<base::UnguessableToken> embedding_token_;
+  std::optional<base::UnguessableToken> embedding_token_;
 
   std::unique_ptr<WebPrescientNetworking> prescient_networking_;
 
@@ -1135,7 +1172,7 @@ class CORE_EXPORT LocalFrame final
       window_controls_overlay_changed_delegate_;
 #endif
 
-  // The evidence for or against a frame being an ad frame. `absl::nullopt` if
+  // The evidence for or against a frame being an ad frame. `std::nullopt` if
   // not yet set or if the frame is a subfiltering root frame. (Only non-root
   // frames can be tagged as ad frames.) This is per-frame (as opposed to
   // per-document) as we want to decide whether a frame is an ad or not before
@@ -1144,7 +1181,7 @@ class CORE_EXPORT LocalFrame final
   // This is constructed directly in the renderer in the case of an initial
   // synchronous commit and otherwise is signaled from the browser process at
   // ready-to-commit time.
-  absl::optional<blink::FrameAdEvidence> ad_evidence_;
+  std::optional<blink::FrameAdEvidence> ad_evidence_;
 
   Member<LCPCriticalPathPredictor> lcpp_;
 
@@ -1157,7 +1194,7 @@ class CORE_EXPORT LocalFrame final
 
   // The identifier of the ad script at the time of frame creation. Kept to
   // defer instrumentation probe call till the frame is committed.
-  absl::optional<AdScriptIdentifier> ad_script_from_frame_creation_stack_;
+  std::optional<AdScriptIdentifier> ad_script_from_frame_creation_stack_;
 
   bool evict_cached_session_storage_on_freeze_or_unload_ = false;
 
@@ -1179,6 +1216,14 @@ class CORE_EXPORT LocalFrame final
   // not so it can block BFCache.
   FrameScheduler::SchedulingAffectingFeatureHandle
       feature_handle_for_scheduler_;
+
+  WebPrintParams print_params_;
+
+  // Holds WebLinkPreviewTriggerer instance if content renderer client wants to
+  // inject it. Note that `link_preview_triggerer_` may be nullptr after
+  // initialization.
+  bool is_link_preivew_triggerer_initialized_ = false;
+  std::unique_ptr<WebLinkPreviewTriggerer> link_preview_triggerer_;
 };
 
 inline FrameLoader& LocalFrame::Loader() const {

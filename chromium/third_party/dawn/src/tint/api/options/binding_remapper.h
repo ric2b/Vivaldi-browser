@@ -43,7 +43,7 @@ struct BindingRemapperOptions {
     BindingPoints binding_points;
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-    TINT_REFLECT(binding_points);
+    TINT_REFLECT(BindingRemapperOptions, binding_points);
 };
 
 }  // namespace tint

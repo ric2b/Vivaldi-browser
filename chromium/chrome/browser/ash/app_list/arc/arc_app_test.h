@@ -12,6 +12,7 @@
 #include "ash/components/arc/mojom/app.mojom-forward.h"
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
+#include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
 
 namespace arc {
@@ -37,7 +38,12 @@ class Profile;
 // Helper class to initialize arc bridge to work with arc apps in unit tests.
 class ArcAppTest {
  public:
-  ArcAppTest();
+  enum UserManagerMode {
+    kDoNothing,
+    kCreate,
+  };
+  explicit ArcAppTest(
+      UserManagerMode user_manager_mode = UserManagerMode::kCreate);
 
   ArcAppTest(const ArcAppTest&) = delete;
   ArcAppTest& operator=(const ArcAppTest&) = delete;
@@ -164,6 +170,8 @@ class ArcAppTest {
 
   bool wait_compatibility_mode_ = false;
 
+  std::unique_ptr<session_manager::SessionManager> session_manager_;
+
   std::unique_ptr<arc::ArcServiceManager> arc_service_manager_;
   std::unique_ptr<arc::ArcSessionManager> arc_session_manager_;
   std::unique_ptr<arc::ArcPlayStoreEnabledPreferenceHandler>
@@ -175,7 +183,7 @@ class ArcAppTest {
   std::unique_ptr<arc::FakeIntentHelperInstance> intent_helper_instance_;
 
   user_manager::TypedScopedUserManager<ash::FakeChromeUserManager>
-      fake_user_manager_{std::make_unique<ash::FakeChromeUserManager>()};
+      fake_user_manager_;
   std::vector<arc::mojom::AppInfoPtr> fake_apps_;
   std::vector<arc::mojom::AppInfoPtr> fake_default_apps_;
   std::vector<arc::mojom::ArcPackageInfoPtr> fake_packages_;

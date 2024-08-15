@@ -74,6 +74,13 @@ class OmniboxPopupMediatorDelegate {
            originView:(UIView*)originView;
 @end
 
+// Vivaldi
+/// Delegate for reverse search autocomplete results
+@protocol OmniboxPopupReverseSearchResultsDelegate
+- (void)omniboxSearchResultsShouldReverse:(BOOL)reverse;
+@end
+// End Vivaldi
+
 @interface OmniboxPopupMediator : NSObject <AutocompleteResultConsumerDelegate,
                                             AutocompleteResultDataSource,
                                             CarouselItemMenuProvider,
@@ -141,6 +148,11 @@ class OmniboxPopupMediatorDelegate {
 
 /// Updates the popup with the `results`.
 - (void)updateWithResults:(const AutocompleteResult&)results;
+
+// Vivaldi
+@property(nonatomic, weak) id<OmniboxPopupReverseSearchResultsDelegate>
+    reverseSearchResultsProvider;
+// End Vivaldi
 
 @end
 

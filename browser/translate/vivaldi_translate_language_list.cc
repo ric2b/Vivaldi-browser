@@ -213,7 +213,7 @@ void VivaldiTranslateLanguageList::OnListDownloaded(
       break;
     }
     base::JSONParserOptions options = base::JSON_ALLOW_TRAILING_COMMAS;
-    absl::optional<base::Value> json =
+    std::optional<base::Value> json =
         base::JSONReader::Read(*response_body, options);
     if (!json) {
       LOG(ERROR) << "Invalid language list JSON";

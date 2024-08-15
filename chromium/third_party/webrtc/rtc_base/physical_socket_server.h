@@ -188,10 +188,12 @@ class PhysicalSocket : public Socket, public sigslot::has_slots<> {
              const SocketAddress& addr) override;
 
   int Recv(void* buffer, size_t length, int64_t* timestamp) override;
+  // TODO(webrtc:15368): Deprecate and remove.
   int RecvFrom(void* buffer,
                size_t length,
                SocketAddress* out_addr,
                int64_t* timestamp) override;
+  int RecvFrom(ReceiveBuffer& buffer) override;
 
   int Listen(int backlog) override;
   Socket* Accept(SocketAddress* out_addr) override;
@@ -222,7 +224,8 @@ class PhysicalSocket : public Socket, public sigslot::has_slots<> {
   int DoReadFromSocket(void* buffer,
                        size_t length,
                        SocketAddress* out_addr,
-                       int64_t* timestamp);
+                       int64_t* timestamp,
+                       EcnMarking* ecn);
 
   void OnResolveResult(const webrtc::AsyncDnsResolverResult& resolver);
 
@@ -244,6 +247,8 @@ class PhysicalSocket : public Socket, public sigslot::has_slots<> {
   int error_ RTC_GUARDED_BY(mutex_);
   ConnState state_;
   std::unique_ptr<webrtc::AsyncDnsResolverInterface> resolver_;
+  uint8_t dscp_ = 0;  // 6bit.
+  uint8_t ecn_ = 0;   // 2bits.
 
 #if !defined(NDEBUG)
   std::string dbg_addr_;

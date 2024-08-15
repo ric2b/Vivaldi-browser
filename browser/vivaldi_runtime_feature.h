@@ -7,7 +7,6 @@
 #include "base/containers/flat_set.h"
 #include "base/strings/string_piece.h"
 #include "content/common/content_export.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace content {
 class BrowserContext;

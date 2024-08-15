@@ -223,13 +223,3 @@ The complete interface can be found in
 `src/third_party/llvm-build/Release+Asserts/lib/clang/3.6.0/include/sanitizer/msan_interface.h`.
 Functions such as `__msan_unpoison()` can also be used to permanently annotate
 your code for MSan, but please CC eugenis@ if you intend to do so.
-
-## Reproducing ClusterFuzz Bugs
-
-Because MSan only supports Ubuntu Precise/Trusty and not Rodete, the
-[ClusterFuzz reproduce tool](https://github.com/google/clusterfuzz-tools) cannot
-reproduce bugs found using MSan (on Rodete).
-
-If you are on Rodete, you can try to reproduce them manually using docker to run
-MSan by following [these
-instructions](/developers/testing/memorysanitizer#TOC-Running-on-other-distros-using-Docker).

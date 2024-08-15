@@ -31,6 +31,7 @@
 #include "chrome/browser/ui/views/extensions/extensions_menu_view.h"
 #include "chrome/browser/ui/views/extensions/extensions_request_access_button.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_button.h"
+#include "chrome/browser/ui/views/extensions/extensions_toolbar_container_view_controller.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_action_hover_card_controller.h"
@@ -58,30 +59,9 @@ namespace {
 
 using ::ui::mojom::DragOperation;
 
-// Flex behavior precedence for the container's views.
-constexpr int kFlexOrderExtensionsButton = 1;
-constexpr int kFlexOrderRequestAccessButton = 2;
-constexpr int kFlexOrderActionView = 3;
-
 base::OnceClosure& GetOnVisibleCallbackForTesting() {
   static base::NoDestructor<base::OnceClosure> callback;
   return *callback;
-}
-
-// Check if there's any security UI that might be spoofable because of
-// overlapping with the extension popup. The media picker dialog has been
-// identified to be susceptible. See crbug.com/1300006.
-bool HasPossiblyOverlappingSecurityUI(Browser* browser) {
-  views::ElementTrackerViews::ViewList media_picker_dialogs =
-      views::ElementTrackerViews::GetInstance()->GetAllMatchingViews(
-          DesktopMediaPickerDialogView::kDesktopMediaPickerDialogViewIdentifier,
-          browser->window()->GetElementContext());
-
-  return std::any_of(media_picker_dialogs.begin(), media_picker_dialogs.end(),
-                     [](views::View* dialog_view) {
-                       views::Widget* dialog_widget = dialog_view->GetWidget();
-                       return dialog_widget && dialog_widget->IsVisible();
-                     });
 }
 
 }  // namespace
@@ -194,11 +174,15 @@ ExtensionsToolbarContainer::ExtensionsToolbarContainer(Browser* browser,
       // order preference.
       extensions_button_->SetProperty(
           views::kFlexBehaviorKey,
-          hide_icon_flex_specification.WithOrder(kFlexOrderExtensionsButton));
+          hide_icon_flex_specification.WithOrder(
+              ExtensionsToolbarContainerViewController::
+                  kFlexOrderExtensionsButton));
       if (request_access_button_) {
         request_access_button_->SetProperty(
-            views::kFlexBehaviorKey, hide_icon_flex_specification.WithOrder(
-                                         kFlexOrderRequestAccessButton));
+            views::kFlexBehaviorKey,
+            hide_icon_flex_specification.WithOrder(
+                ExtensionsToolbarContainerViewController::
+                    kFlexOrderRequestAccessButton));
       }
       break;
   }
@@ -253,14 +237,14 @@ void ExtensionsToolbarContainer::CreateActions() {
     CreateActionForId(action_id);
   }
 
-  ReorderViews();
+  ReorderAllChildViews();
   UpdateContainerVisibility();
 }
 
 void ExtensionsToolbarContainer::AddAction(
     const ToolbarActionsModel::ActionId& action_id) {
   CreateActionForId(action_id);
-  ReorderViews();
+  ReorderAllChildViews();
 
   // Auto hide mode should not become visible due to extensions being added,
   // only due to user interaction.
@@ -323,7 +307,7 @@ void ExtensionsToolbarContainer::UpdatePinnedActions() {
   for (const auto& it : icons_) {
     UpdateIconVisibility(it.first);
   }
-  ReorderViews();
+  ReorderAllChildViews();
 
   drop_weak_ptr_factory_.InvalidateWeakPtrs();
 }
@@ -361,6 +345,12 @@ void ExtensionsToolbarContainer::UpdateRequestAccessButton(
   CHECK(base::FeatureList::IsEnabled(
       extensions_features::kExtensionsMenuAccessControl));
 
+  // Button is never visible when actions cannot be show in toolbar.
+  if (!model_->CanShowActionsInToolbar(*browser_)) {
+    CHECK(!request_access_button_->GetVisible());
+    return;
+  }
+
   // Don't update the button if the confirmation message is currently showing;
   // it'll go away after a few seconds. Once the confirmation is collapsed,
   // button should be updated again.
@@ -389,10 +379,10 @@ void ExtensionsToolbarContainer::UpdateRequestAccessButton(
 
   // Extensions button has left flat edge iff request access button is visible.
   // This will also update the button's background.
-  absl::optional<ToolbarButton::Edge> extensions_button_edge =
+  std::optional<ToolbarButton::Edge> extensions_button_edge =
       request_access_button_->GetVisible()
-          ? absl::optional<ToolbarButton::Edge>(ToolbarButton::Edge::kLeft)
-          : absl::nullopt;
+          ? std::optional<ToolbarButton::Edge>(ToolbarButton::Edge::kLeft)
+          : std::nullopt;
   extensions_button_->SetFlatEdge(extensions_button_edge);
 }
 
@@ -505,7 +495,8 @@ void ExtensionsToolbarContainer::UpdateIconVisibility(
             views::FlexSpecification(min_flex_rule,
                                      views::MaximumFlexSizeRule::kPreferred)
                 .WithWeight(0)
-                .WithOrder(kFlexOrderActionView));
+                .WithOrder(ExtensionsToolbarContainerViewController::
+                               kFlexOrderActionView));
         break;
     }
   } else {
@@ -642,10 +633,6 @@ bool ExtensionsToolbarContainer::ShowToolbarActionPopupForAPICall(
   if (popped_out_action_ || !browser_->window()->IsActive())
     return false;
 
-  // Don't draw over security UIs.
-  if (HasPossiblyOverlappingSecurityUI(browser_))
-    return false;
-
   ToolbarActionViewController* action = GetActionForId(action_id);
   DCHECK(action);
   action->TriggerPopupForAPI(std::move(callback));
@@ -675,22 +662,57 @@ bool ExtensionsToolbarContainer::HasAnyExtensions() const {
   return !actions_.empty();
 }
 
-void ExtensionsToolbarContainer::ReorderViews() {
+bool ExtensionsToolbarContainer::HasBlockingSecurityUI() const {
+  // Check if there's any security UI that might be spoofable because of
+  // overlapping with the extension popup. The media picker dialog has been
+  // identified to be susceptible. See crbug.com/40058873.
+  // Not all security UIs are blocking. Non-blocking security UIs can avoid
+  // being occluded by setting a higher z-order (sub)level. In contrast,
+  // blocking security UIs cannot leverage z-ordering because they share the
+  // same rendering layer with the browser window.
+  // TODO(crbug.com/326681253): block on other possibly overlapping security
+  // UIs.
+  views::ElementTrackerViews::ViewList media_picker_dialogs =
+      views::ElementTrackerViews::GetInstance()->GetAllMatchingViews(
+          DesktopMediaPickerDialogView::kDesktopMediaPickerDialogViewIdentifier,
+          browser_->window()->GetElementContext());
+
+  return std::any_of(media_picker_dialogs.begin(), media_picker_dialogs.end(),
+                     [](views::View* dialog_view) {
+                       views::Widget* dialog_widget = dialog_view->GetWidget();
+                       return dialog_widget && dialog_widget->IsVisible();
+                     });
+}
+
+void ExtensionsToolbarContainer::ReorderAllChildViews() {
+  // Reorder pinned action views left-to-right.
   const auto& pinned_action_ids = model_->pinned_action_ids();
-  for (size_t i = 0; i < pinned_action_ids.size(); ++i)
+  for (size_t i = 0; i < pinned_action_ids.size(); ++i) {
     ReorderChildView(GetViewForId(pinned_action_ids[i]), i);
-
-  if (drop_info_.get())
+  }
+  if (drop_info_.get()) {
     ReorderChildView(GetViewForId(drop_info_->action_id), drop_info_->index);
+  }
 
-  // The extension button is always second to last if |close_side_panel_button_|
-  // exists, or last otherwise.
-  ReorderChildView(main_item(), close_side_panel_button_ ? children().size() - 1
-                                                         : children().size());
+  // Reorder other buttons right-to-left. This guarantees popped out action
+  // views will appear in between pinned action views and other buttons. We
+  // don't reorder popped out action views because they should appear in the
+  // order they were triggered.
+  int button_index = children().size() - 1;
 
-  // The close side panel button is always last.
   if (close_side_panel_button_) {
-    ReorderChildView(close_side_panel_button_, children().size());
+    // The close side panel button is always last.
+    ReorderChildView(close_side_panel_button_, button_index--);
+  }
+
+  // The extension button is always second to last if `close_side_panel_button_`
+  // exists, or last otherwise.
+  ReorderChildView(main_item(), button_index--);
+
+  if (request_access_button_) {
+    // The request access button is always third to last if
+    // `close_side_panel_button_` exists, or second to last otherwise.
+    ReorderChildView(request_access_button_, button_index);
   }
 }
 
@@ -829,7 +851,7 @@ int ExtensionsToolbarContainer::OnDragUpdated(
   if (!drop_info_.get() || drop_info_->index != before_icon) {
     drop_info_ = std::make_unique<DropInfo>(data.id(), before_icon);
     SetExtensionIconVisibility(drop_info_->action_id, false);
-    ReorderViews();
+    ReorderAllChildViews();
   }
 
   return ui::DragDropTypes::DRAG_MOVE;
@@ -972,27 +994,6 @@ void ExtensionsToolbarContainer::OnMenuClosed() {
   UpdateContainerVisibility();
 }
 
-void ExtensionsToolbarContainer::WindowControlsOverlayEnabledChanged(
-    bool enabled) {
-  if (!main_item())
-    return;
-
-  UpdateContainerVisibility();
-
-  main_item()->ClearProperty(views::kFlexBehaviorKey);
-  views::MinimumFlexSizeRule min_flex_rule =
-      views::MinimumFlexSizeRule::kPreferredSnapToZero;
-
-  if (enabled)
-    min_flex_rule = views::MinimumFlexSizeRule::kPreferred;
-
-  main_item()->SetProperty(
-      views::kFlexBehaviorKey,
-      views::FlexSpecification(min_flex_rule,
-                               views::MaximumFlexSizeRule::kPreferred)
-          .WithOrder(kFlexOrderExtensionsButton));
-}
-
 void ExtensionsToolbarContainer::UpdateSidePanelState(bool is_active) {
   close_side_panel_button_->SetVisible(is_active);
   if (is_active) {
@@ -1019,7 +1020,7 @@ void ExtensionsToolbarContainer::MovePinnedAction(
 
 void ExtensionsToolbarContainer::DragDropCleanup(
     const ToolbarActionsModel::ActionId& dragged_extension_id) {
-  ReorderViews();
+  ReorderAllChildViews();
   GetAnimatingLayoutManager()->PostOrQueueAction(base::BindOnce(
       &ExtensionsToolbarContainer::SetExtensionIconVisibility,
       weak_ptr_factory_.GetWeakPtr(), dragged_extension_id, true));

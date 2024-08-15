@@ -74,11 +74,10 @@ class HeaderChecker : public base::RefCountedThreadSafe<HeaderChecker> {
   FRIEND_TEST_ALL_PREFIXES(HeaderCheckerTest, CheckInclude);
   FRIEND_TEST_ALL_PREFIXES(HeaderCheckerTest, PublicFirst);
   FRIEND_TEST_ALL_PREFIXES(HeaderCheckerTest, CheckIncludeAllowCircular);
+  FRIEND_TEST_ALL_PREFIXES(HeaderCheckerTest, CheckIncludeSwiftModule);
   FRIEND_TEST_ALL_PREFIXES(HeaderCheckerTest, SourceFileForInclude);
   FRIEND_TEST_ALL_PREFIXES(HeaderCheckerTest,
                            SourceFileForInclude_FileNotFound);
-  FRIEND_TEST_ALL_PREFIXES(HeaderCheckerTest,
-                           SourceFileForInclude_SwiftBridgeHeader);
   FRIEND_TEST_ALL_PREFIXES(HeaderCheckerTest, Friend);
 
   ~HeaderChecker();

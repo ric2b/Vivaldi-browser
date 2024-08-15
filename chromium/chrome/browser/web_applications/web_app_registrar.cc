@@ -12,7 +12,6 @@
 
 #include "base/check_op.h"
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
@@ -479,7 +478,8 @@ std::vector<webapps::AppId> WebAppRegistrar::FindAppsInScope(
 
 std::optional<webapps::AppId> WebAppRegistrar::FindInstalledAppWithUrlInScope(
     const GURL& url,
-    bool window_only) const {
+    bool window_only,
+    bool exclude_diy_apps) const {
   const std::string url_spec = url.spec();
 
   std::optional<webapps::AppId> best_app_id;
@@ -499,6 +499,10 @@ std::optional<webapps::AppId> WebAppRegistrar::FindInstalledAppWithUrlInScope(
 
     if (window_only &&
         GetAppEffectiveDisplayMode(app_id) == DisplayMode::kBrowser) {
+      continue;
+    }
+
+    if (exclude_diy_apps && IsDiyApp(app_id)) {
       continue;
     }
 
@@ -602,8 +606,9 @@ bool WebAppRegistrar::IsTabbedWindowModeEnabled(
 GURL WebAppRegistrar::GetAppNewTabUrl(const webapps::AppId& app_id) const {
   if (IsTabbedWindowModeEnabled(app_id)) {
     auto* web_app = GetAppById(app_id);
-    if (!web_app)
-      return GURL::EmptyGURL();
+    if (!web_app) {
+      return GURL();
+    }
 
     if (web_app->tab_strip()) {
       std::optional<GURL> url = web_app->tab_strip().value().new_tab_button.url;
@@ -1210,6 +1215,14 @@ bool WebAppRegistrar::IsPreferredAppForCapturingUrl(
          CapturesLinksInScope(app_id);
 }
 
+bool WebAppRegistrar::IsDiyApp(const webapps::AppId& app_id) const {
+  if (!IsInstalled(app_id)) {
+    return false;
+  }
+  const WebApp* web_app = GetAppById(app_id);
+  return web_app && web_app->is_diy_app();
+}
+
 std::string WebAppRegistrar::GetAppShortName(
     const webapps::AppId& app_id) const {
   if (base::FeatureList::IsEnabled(
@@ -1320,15 +1333,12 @@ ApiApprovalState WebAppRegistrar::GetAppFileHandlerApprovalState(
 
 bool WebAppRegistrar::ExpectThatFileHandlersAreRegisteredWithOs(
     const webapps::AppId& app_id) const {
-  const WebApp* web_app = GetAppById(app_id);
-  if (!web_app) {
+  auto state = GetAppCurrentOsIntegrationState(app_id);
+  if (!state.has_value()) {
     return false;
   }
 
-  // TODO(dibyapal): Add support for the new `current_os_integration_state()`
-  // when file handlers are added there. https://crbug.com/1404165.
-  return web_app->file_handler_os_integration_state() ==
-         OsIntegrationState::kEnabled;
+  return state->has_file_handling();
 }
 
 std::optional<GURL> WebAppRegistrar::GetAppScopeInternal(
@@ -1404,7 +1414,7 @@ base::flat_set<ScopeExtensionInfo> WebAppRegistrar::GetValidatedScopeExtensions(
 
 GURL WebAppRegistrar::GetAppManifestUrl(const webapps::AppId& app_id) const {
   auto* web_app = GetAppById(app_id);
-  return web_app ? web_app->manifest_url() : GURL::EmptyGURL();
+  return web_app ? web_app->manifest_url() : GURL();
 }
 
 base::Time WebAppRegistrar::GetAppLastBadgingTime(

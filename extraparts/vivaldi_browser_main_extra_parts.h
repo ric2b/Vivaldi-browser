@@ -32,6 +32,8 @@ class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
   void PreMainMessageLoopRun() override;
   void PostMainMessageLoopRun() override;
 
+  void PostDestroyThreads() override;
+
   static std::unique_ptr<VivaldiBrowserMainExtraParts> Create();
 
  private:

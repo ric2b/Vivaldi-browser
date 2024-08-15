@@ -189,16 +189,8 @@ OmniboxResultView::OmniboxResultView(OmniboxPopupViewViews* popup_view,
 
     views::View* suggestion_and_buttons =
         right->AddChildView(std::make_unique<views::View>());
-    if (OmniboxFieldTrial::IsActionsUISimplificationEnabled()) {
-      suggestion_and_buttons->SetLayoutManager(
-          std::make_unique<views::FlexLayout>());
-    } else {
-      suggestion_and_buttons
-          ->SetLayoutManager(std::make_unique<views::FlexLayout>())
-          ->SetOrientation(views::LayoutOrientation::kVertical);
-      suggestion_and_buttons->SetProperty(views::kMarginsKey,
-                                          gfx::Insets::VH(6, 0));
-    }
+    suggestion_and_buttons->SetLayoutManager(
+        std::make_unique<views::FlexLayout>());
     suggestion_and_buttons->SetProperty(
         views::kFlexBehaviorKey,
         views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
@@ -206,21 +198,13 @@ OmniboxResultView::OmniboxResultView(OmniboxPopupViewViews* popup_view,
 
     suggestion_view_ = suggestion_and_buttons->AddChildView(
         std::make_unique<OmniboxMatchCellView>(this));
-    if (OmniboxFieldTrial::IsActionsUISimplificationEnabled()) {
-      // Allocate space for the suggestion text only after accounting
-      // for the space needed to render the inline action chip row.
-      suggestion_view_->SetProperty(
-          views::kFlexBehaviorKey,
-          views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
-                                   views::MaximumFlexSizeRule::kPreferred)
-              .WithOrder(2));
-    } else {
-      suggestion_view_->SetProperty(
-          views::kFlexBehaviorKey,
-          views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
-                                   views::MaximumFlexSizeRule::kUnbounded)
-              .WithWeight(4));
-    }
+    // Allocate space for the suggestion text only after accounting
+    // for the space needed to render the inline action chip row.
+    suggestion_view_->SetProperty(
+        views::kFlexBehaviorKey,
+        views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
+                                 views::MaximumFlexSizeRule::kPreferred)
+            .WithOrder(2));
 
     remove_suggestion_button_ = right->AddChildView(
         std::make_unique<OmniboxRemoveSuggestionButton>(base::BindRepeating(
@@ -244,18 +228,14 @@ OmniboxResultView::OmniboxResultView(OmniboxPopupViewViews* popup_view,
     button_row_ = suggestion_and_buttons->AddChildView(
         std::make_unique<OmniboxSuggestionButtonRowView>(popup_view_,
                                                          model_index));
-    if (OmniboxFieldTrial::IsActionsUISimplificationEnabled()) {
-      // If there's insufficient space for rendering both the suggestion text
-      // and the action chip row together, then allow the inline action chip row
-      // to disappear entirely.
-      // TODO(crbug/1479721): Finalize proper width shrinkage behavior once
-      //   we've received detailed UX guidance.
-      button_row_->SetProperty(
-          views::kFlexBehaviorKey,
-          views::FlexSpecification(
-              views::MinimumFlexSizeRule::kPreferredSnapToZero,
-              views::MaximumFlexSizeRule::kPreferred));
-    }
+    // If there's insufficient space for rendering both the suggestion text
+    // and the action chip row together, then allow the inline action chip row
+    // to disappear entirely.
+    button_row_->SetProperty(
+        views::kFlexBehaviorKey,
+        views::FlexSpecification(
+            views::MinimumFlexSizeRule::kPreferredSnapToZero,
+            views::MaximumFlexSizeRule::kPreferred));
 
     mouse_enter_exit_handler_.ObserveMouseEnterExitOn(this);
 
@@ -342,7 +322,7 @@ std::unique_ptr<views::Background> OmniboxResultView::GetPopupCellBackground(
     gfx::RoundedCornersF radii = {0, static_cast<float>(view->height()),
                                   static_cast<float>(view->height()), 0};
     return views::CreateThemedRoundedRectBackground(
-        GetOmniboxBackgroundColorId(part_state), radii, 0);
+        GetOmniboxBackgroundColorId(part_state), radii);
   }
 
   return views::CreateThemedSolidBackground(
@@ -363,7 +343,7 @@ void OmniboxResultView::SetMatch(const AutocompleteMatch& match) {
   if (match_.answer) {
     suggestion_view_->content()->AppendExtraText(match_.answer->first_line());
     suggestion_view_->description()->SetTextWithStyling(
-        match_.answer->second_line(), true);
+        match_.answer->second_line(), false);
   } else {
     // Not all 2-line suggestions have deemphasized descriptions; specifically,
     // calculator answers are 2-line but not deemphasized.
@@ -423,10 +403,8 @@ void OmniboxResultView::ApplyThemeAndRefreshIcons(bool force_reapply_styles) {
       selected ? kColorOmniboxResultsTextSelected : kColorOmniboxText;
   bool prefers_contrast =
       GetNativeTheme() && GetNativeTheme()->UserHasContrastPreference();
-  if (match_.answer) {
-    suggestion_view_->content()->ApplyTextColor(default_id);
-    suggestion_view_->description()->ApplyTextColor(default_id);
-  } else if (match_.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY) {
+  if (match_.answer ||
+      match_.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY) {
     suggestion_view_->content()->ApplyTextColor(default_id);
     suggestion_view_->description()->ApplyTextColor(dimmed_id);
   } else if (match_.type == AutocompleteMatchType::NULL_RESULT_MESSAGE) {
@@ -443,8 +421,7 @@ void OmniboxResultView::ApplyThemeAndRefreshIcons(bool force_reapply_styles) {
 
   // The selection indicator indicates when the suggestion is focused. Do not
   // show the selection indicator if an auxiliary button is selected.
-  if (OmniboxFieldTrial::IsKeywordModeRefreshEnabled() &&
-      match_.HasInstantKeyword(
+  if (match_.HasInstantKeyword(
           popup_view_->controller()->client()->GetTemplateURLService())) {
     const OmniboxPopupSelection::LineState line_state =
         popup_view_->GetSelection().state;
@@ -574,8 +551,7 @@ bool OmniboxResultView::OnMouseDragged(const ui::MouseEvent& event) {
 }
 
 void OmniboxResultView::OnMouseReleased(const ui::MouseEvent& event) {
-  if (OmniboxFieldTrial::IsKeywordModeRefreshEnabled() &&
-      match_.type == AutocompleteMatchType::STARTER_PACK) {
+  if (match_.type == AutocompleteMatchType::STARTER_PACK) {
     // Starter pack matches in the keyword mode refresh are a special case that
     // does not commit the omnibox by opening a selected match.
     OmniboxEditModel* model = popup_view_->model();
@@ -686,12 +662,8 @@ gfx::Image OmniboxResultView::GetIcon() const {
                                               : kColorOmniboxResultsIcon;
   }
 
-  if (OmniboxFieldTrial::IsActionsUISimplificationEnabled() &&
-      (match_.type == AutocompleteMatchType::HISTORY_CLUSTER ||
-       match_.type == AutocompleteMatchType::PEDAL)) {
-    // When `kOmniboxActionsUISimplification` is enabled, pedal and journeys
-    // vector icons will need a distinctive foreground color in order to stand
-    // out against the blue square background they are painted upon.
+  if (match_.type == AutocompleteMatchType::HISTORY_CLUSTER ||
+      match_.type == AutocompleteMatchType::PEDAL) {
     vector_icon_color_id = kColorOmniboxAnswerIconGM3Foreground;
   }
 

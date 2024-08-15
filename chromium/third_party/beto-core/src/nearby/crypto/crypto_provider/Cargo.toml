@@ -13,8 +13,7 @@ tinyvec.workspace = true
 [dev-dependencies]
 criterion.workspace = true
 hex-literal.workspace = true
-crypto_provider_openssl.workspace = true
-crypto_provider_rustcrypto = { workspace = true, features = ["std"] }
+crypto_provider_default = { workspace = true, features = ["std"]}
 rand_ext.workspace = true
 rand.workspace = true
 
@@ -23,6 +22,7 @@ default = ["alloc"]
 std = []
 alloc = []
 test_vectors = []
+test_boringssl = ["crypto_provider_default/boringssl"]
 raw_private_key_permit = []
 
 [[bench]]

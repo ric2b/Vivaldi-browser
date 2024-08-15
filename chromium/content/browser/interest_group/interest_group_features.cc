@@ -20,12 +20,12 @@ BASE_FEATURE(kEnableIFrameAdAuctionHeaders,
 // interests groups.
 BASE_FEATURE(kEnableUpdatingExecutionModeToFrozenContext,
              "EnableUpdatingExecutionModeToFrozenContext",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enable updating userBiddingSignals when updating a user's interests groups.
 BASE_FEATURE(kEnableUpdatingUserBiddingSignals,
              "EnableUpdatingUserBiddingSignals",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enable write ahead logging for interest group storage.
 BASE_FEATURE(kFledgeEnableWALForInterestGroupStorage,
@@ -40,5 +40,17 @@ BASE_FEATURE(kFledgeFacilitatedTestingSignalsHeaders,
 BASE_FEATURE(kFledgePrefetchBandAKeys,
              "FledgePrefetchBandAKeys",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enable storing a retrieving B&A keys for the interest group
+// database.
+BASE_FEATURE(kFledgeStoreBandAKeysInDB,
+             "FledgeStoreBandAKeysInDB",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enable detecting inconsistency in the `PageImpl` used in the auction. Abort
+// the auction when detected.
+BASE_FEATURE(kDetectInconsistentPageImpl,
+             "DetectInconsistentPageImpl",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace features

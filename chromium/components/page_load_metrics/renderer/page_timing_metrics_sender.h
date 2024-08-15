@@ -9,6 +9,7 @@
 
 #include "base/containers/flat_set.h"
 #include "base/containers/small_map.h"
+#include "base/memory/raw_ptr.h"
 #include "components/page_load_metrics/common/page_load_metrics.mojom-forward.h"
 #include "components/page_load_metrics/common/page_load_timing.h"
 #include "components/page_load_metrics/renderer/page_resource_data_use.h"
@@ -91,6 +92,7 @@ class PageTimingMetricsSender {
 
   void DidObserveUserInteraction(base::TimeTicks max_event_start,
                                  base::TimeTicks max_event_end,
+                                 base::TimeTicks max_event_queued_main_thread,
                                  blink::UserInteractionType interaction_type,
                                  uint64_t interaction_offset);
   // Updates the timing information. Buffers |timing| to be sent over mojo
@@ -132,7 +134,7 @@ class PageTimingMetricsSender {
   mojom::PageLoadTimingPtr last_timing_;
   mojom::CpuTimingPtr last_cpu_timing_;
   mojom::InputTimingPtr input_timing_delta_;
-  absl::optional<blink::SubresourceLoadMetrics> subresource_load_metrics_;
+  std::optional<blink::SubresourceLoadMetrics> subresource_load_metrics_;
 
   // The the sender keep track of metadata as it comes in, because the sender is
   // scoped to a single committed load.
@@ -155,7 +157,8 @@ class PageTimingMetricsSender {
 
   // Set of all resources that have completed or received a transfer
   // size update since the last timimg update.
-  base::flat_set<PageResourceDataUse*> modified_resources_;
+  base::flat_set<raw_ptr<PageResourceDataUse, CtnExperimental>>
+      modified_resources_;
 
   // Field trial for alternating page timing metrics sender buffer timer delay.
   // https://crbug.com/847269.

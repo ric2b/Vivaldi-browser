@@ -5,6 +5,7 @@
 #include "chrome/browser/new_tab_page/modules/history_clusters/history_clusters_module_service.h"
 
 #include <array>
+#include <vector>
 
 #include "base/barrier_callback.h"
 #include "base/metrics/field_trial_params.h"
@@ -180,7 +181,7 @@ void HistoryClustersModuleService::OnGetFilteredClusters(
   std::set<std::u16string> seen_cluster_labels = {};
   NTPHistoryClustersIneligibleReason ineligible_reason =
       clusters.empty() ? kNoClusters : kNone;
-  base::EraseIf(clusters, [&](auto& cluster) {
+  std::erase_if(clusters, [&](auto& cluster) {
     // Cull clusters that do not have a label.
     if (!cluster.label.has_value()) {
       return true;
@@ -214,14 +215,14 @@ void HistoryClustersModuleService::OnGetFilteredClusters(
     // Ensure visits contains at most one SRP visit and its the first one in the
     // list.
     history::ClusterVisit first_srp_visit = *srp_visits_it;
-    base::EraseIf(cluster.visits, [&](auto& visit) {
+    std::erase_if(cluster.visits, [&](auto& visit) {
       return default_search_provider->IsSearchURL(
           visit.normalized_url, template_url_service_->search_terms_data());
     });
     cluster.visits.insert(cluster.visits.begin(), first_srp_visit);
 
     // Cull visits that have a zero relevance score, are Hidden, or Done.
-    base::EraseIf(cluster.visits, [&](auto& visit) {
+    std::erase_if(cluster.visits, [&](auto& visit) {
       return visit.score == 0.0 ||
              visit.interaction_state ==
                  history::ClusterVisit::InteractionState::kHidden ||
@@ -278,33 +279,57 @@ void HistoryClustersModuleService::OnGetFilteredClusters(
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   } else {
     SortClustersUsingHeuristic(category_boostlist_, clusters);
-    OnGetRankedClusters(std::move(callback), std::move(clusters),
+    std::vector<std::pair<history::Cluster, std::optional<float>>>
+        clusters_with_scores;
+    std::transform(clusters.cbegin(), clusters.cend(),
+                   std::back_inserter(clusters_with_scores),
+                   [](history::Cluster cluster) {
+                     return std::make_pair(cluster, std::nullopt);
+                   });
+    OnGetRankedClusters(std::move(callback), clusters_with_scores,
                         /*ranking_signals=*/{});
   }
 }
 
 void HistoryClustersModuleService::OnGetRankedClusters(
     GetClustersCallback callback,
-    std::vector<history::Cluster> clusters,
+    std::vector<std::pair<history::Cluster, std::optional<float>>>
+        clusters_with_scores,
     base::flat_map<int64_t, HistoryClustersModuleRankingSignals>
         ranking_signals) {
-  if (clusters.empty()) {
-    std::move(callback).Run(std::move(clusters), std::move(ranking_signals));
+  if (clusters_with_scores.empty()) {
+    std::move(callback).Run({}, std::move(ranking_signals));
     return;
   }
 
   // Record metrics for top cluster.
-  history::Cluster top_cluster = clusters.front();
+  history::Cluster top_cluster =
+      std::get<history::Cluster>(clusters_with_scores.front());
   base::UmaHistogramCounts100("NewTabPage.HistoryClusters.NumVisits",
                               top_cluster.visits.size());
   base::UmaHistogramCounts100("NewTabPage.HistoryClusters.NumRelatedSearches",
                               top_cluster.related_searches.size());
 
   // Cull to max clusters to return.
-  if (clusters.size() > max_clusters_to_return_) {
-    clusters.resize(max_clusters_to_return_);
+  if (clusters_with_scores.size() > max_clusters_to_return_) {
+    clusters_with_scores.resize(max_clusters_to_return_);
   }
 
+  for (auto& cluster_and_score : clusters_with_scores) {
+    auto& score = std::get<std::optional<float>>(cluster_and_score);
+    if (score.has_value()) {
+      base::UmaHistogramCustomCounts("NewTabPage.HistoryClusters.Score",
+                                     round(score.value() * -100), 1, 100, 100);
+    }
+  }
+
+  std::vector<history::Cluster> clusters;
+  std::transform(
+      clusters_with_scores.cbegin(), clusters_with_scores.cend(),
+      std::back_inserter(clusters),
+      [](std::pair<history::Cluster, std::optional<float>> cluster_and_score) {
+        return cluster_and_score.first;
+      });
   std::move(callback).Run(std::move(clusters), std::move(ranking_signals));
 
   if (!IsCartModuleEnabled() || !cart_service_) {

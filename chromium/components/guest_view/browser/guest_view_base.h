@@ -51,10 +51,10 @@ struct SetSizeParams {
   SetSizeParams();
   ~SetSizeParams();
 
-  absl::optional<bool> enable_auto_size;
-  absl::optional<gfx::Size> min_size;
-  absl::optional<gfx::Size> max_size;
-  absl::optional<gfx::Size> normal_size;
+  std::optional<bool> enable_auto_size;
+  std::optional<gfx::Size> min_size;
+  std::optional<gfx::Size> max_size;
+  std::optional<gfx::Size> normal_size;
 };
 
 // A GuestViewBase is the base class browser-side API implementation for a
@@ -269,7 +269,7 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
 
   void SetOpener(GuestViewBase* opener);
 
-  const absl::optional<
+  const std::optional<
       std::pair<base::Value::Dict, content::WebContents::CreateParams>>&
   GetCreateParams() const;
 
@@ -341,6 +341,10 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   // This method is invoked when the contents preferred size changes. This will
   // only ever fire if IsPreferredSizeSupported returns true.
   virtual void OnPreferredSizeChanged(const gfx::Size& pref_size) {}
+
+  // This method is invoked when the owner contents audio muted state changes to
+  // give the container an opportunity to adjust their muted state.
+  virtual void OnOwnerAudioMutedStateUpdated(bool muted);
 
   // Signals that the guest view is ready.  The default implementation signals
   // immediately, but derived class can override this if they need to do
@@ -516,7 +520,7 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   // The params used when creating the guest contents. These are saved here in
   // case we need to recreate the guest contents. Not all guest types need to
   // store these.
-  absl::optional<
+  std::optional<
       std::pair<base::Value::Dict, content::WebContents::CreateParams>>
       create_params_;
 

@@ -6,15 +6,13 @@
 
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_constants.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_features.h"
 #import "ios/ui/custom_views/vivaldi_search_bar_view.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using l10n_util::GetNSString;
 
@@ -102,7 +100,9 @@ UIEdgeInsets speedDialSelectionLabelPadding = UIEdgeInsetsMake(0, 4, 0, 8);
   UILabel* speedDialSelectionLabel = [[UILabel alloc] init];
   _speedDialSelectionLabel = speedDialSelectionLabel;
   NSString* titleString =
-    GetNSString(IDS_IOS_BOOKMARK_SHOW_ONLY_SD_FOLDERS);
+      [VivaldiBookmarksEditorFeatures shouldShowNewBookmarkEditor] ?
+          GetNSString(IDS_IOS_BOOKMARK_SHOW_ONLY_GROUPS) :
+          GetNSString(IDS_IOS_BOOKMARK_SHOW_ONLY_SD_FOLDERS);
   speedDialSelectionLabel.text = titleString;
   speedDialSelectionLabel.accessibilityLabel = titleString;
   speedDialSelectionLabel.textColor = UIColor.labelColor;

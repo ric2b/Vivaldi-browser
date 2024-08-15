@@ -57,7 +57,6 @@ const PrefMappingEntry kMappings[] = {
      password_manager::prefs::kCredentialsEnableService,
      APIPermissionID::kPrivacy, APIPermissionID::kPrivacy},
 
-    // Note in Lacros this is Ash-controlled.
     {"protectedContentEnabled", prefs::kProtectedContentDefault,
      APIPermissionID::kPrivacy, APIPermissionID::kPrivacy},
 
@@ -219,10 +218,8 @@ PrefTransformerInterface* PrefMapping::FindTransformerForBrowserPref(
 // the pref in ash, or nullptr if no pref exists.
 crosapi::mojom::PrefPath PrefMapping::GetPrefPathForPrefName(
     const std::string& pref_name) const {
-  // TODO(crbug.com/1513684): Convert to MakeFixedFlatMap().
-  static const auto name_to_extension_prefpath =
-      base::MakeFixedFlatMapNonConsteval<base::StringPiece,
-                                         crosapi::mojom::PrefPath>(
+  static constexpr auto name_to_extension_prefpath = base::MakeFixedFlatMap<
+      base::StringPiece, crosapi::mojom::PrefPath>(
       {{chromeos::prefs::kDockedMagnifierEnabled,
         crosapi::mojom::PrefPath::kDockedMagnifierEnabled},
        {chromeos::prefs::kAccessibilityAutoclickEnabled,
@@ -253,10 +250,8 @@ crosapi::mojom::PrefPath PrefMapping::GetPrefPathForPrefName(
         crosapi::mojom::PrefPath::kAccessibilitySwitchAccessEnabled},
        {chromeos::prefs::kAccessibilityVirtualKeyboardEnabled,
         crosapi::mojom::PrefPath::kAccessibilityVirtualKeyboardEnabled},
-       {prefs::kProtectedContentDefault,
-        crosapi::mojom::PrefPath::kProtectedContentDefault},
        {proxy_config::prefs::kProxy, crosapi::mojom::PrefPath::kProxy}});
-  auto* pref_iter = name_to_extension_prefpath.find(pref_name);
+  auto pref_iter = name_to_extension_prefpath.find(pref_name);
   return pref_iter == name_to_extension_prefpath.end()
              ? crosapi::mojom::PrefPath::kUnknown
              : pref_iter->second;

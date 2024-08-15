@@ -83,7 +83,7 @@ void PageInfoControllerAndroid::RecordPageInfoAction(
     const JavaParamRef<jobject>& obj,
     jint action) {
   presenter_->RecordPageInfoAction(
-      static_cast<PageInfo::PageInfoAction>(action));
+      static_cast<page_info::PageInfoAction>(action));
 }
 
 void PageInfoControllerAndroid::UpdatePermissions(
@@ -147,17 +147,14 @@ void PageInfoControllerAndroid::SetPermissionInfo(
     permissions_to_display.push_back(
         ContentSettingsType::FEDERATED_IDENTITY_API);
   }
-  if (base::FeatureList::IsEnabled(
-          permissions::features::kPermissionStorageAccessAPI)) {
     permissions_to_display.push_back(ContentSettingsType::STORAGE_ACCESS);
-  }
 
   std::map<ContentSettingsType, ContentSetting>
       user_specified_settings_to_display;
 
   for (const auto& permission : permission_info_list) {
     if (base::Contains(permissions_to_display, permission.type)) {
-      absl::optional<ContentSetting> setting_to_display =
+      std::optional<ContentSetting> setting_to_display =
           GetSettingToDisplay(permission);
       if (setting_to_display) {
         user_specified_settings_to_display[permission.type] =
@@ -197,7 +194,7 @@ void PageInfoControllerAndroid::SetPermissionInfo(
   Java_PageInfoController_updatePermissionDisplay(env, controller_jobject_);
 }
 
-absl::optional<ContentSetting> PageInfoControllerAndroid::GetSettingToDisplay(
+std::optional<ContentSetting> PageInfoControllerAndroid::GetSettingToDisplay(
     const PageInfo::PermissionInfo& permission) {
   // All permissions should be displayed if they are non-default.
   if (permission.setting != CONTENT_SETTING_DEFAULT &&
@@ -228,7 +225,7 @@ absl::optional<ContentSetting> PageInfoControllerAndroid::GetSettingToDisplay(
   // factory-default after we add the functionality to populate the permissions
   // subpage directly from the permissions returned from this controller.
 
-  return absl::optional<ContentSetting>();
+  return std::optional<ContentSetting>();
 }
 
 void PageInfoControllerAndroid::SetAdPersonalizationInfo(

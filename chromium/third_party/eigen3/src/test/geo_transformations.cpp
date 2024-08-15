@@ -273,6 +273,12 @@ void transformations() {
              .matrix()
              .isIdentity(test_precision<Scalar>()));
 
+  t20.setIdentity();
+  t20.shear(Scalar(2), Scalar(3));
+  Transform2 t23 = t20 * t21;
+  t21.preshear(Scalar(2), Scalar(3));
+  VERIFY_IS_APPROX(t21, t23);
+
   // Transform - new API
   // 3D
   t0.setIdentity();

@@ -19,7 +19,7 @@ WebIdentityRequester::WebIdentityRequester(ExecutionContext* context,
     : execution_context_(context), requirement_(requirement) {}
 
 WebIdentityRequester::ResolverAndProviders::ResolverAndProviders(
-    ScriptPromiseResolver* resolver,
+    ScriptPromiseResolverTyped<IDLNullable<Credential>>* resolver,
     Vector<KURL> providers)
     : resolver_(resolver), providers_(std::move(providers)) {}
 
@@ -29,12 +29,12 @@ void WebIdentityRequester::ResolverAndProviders::Trace(Visitor* v) const {
 
 void WebIdentityRequester::OnRequestToken(
     mojom::blink::RequestTokenStatus status,
-    const absl::optional<KURL>& selected_idp_config_url,
+    const std::optional<KURL>& selected_idp_config_url,
     const WTF::String& token,
     mojom::blink::TokenErrorPtr error,
     bool is_auto_selected) {
   for (const auto& resolver_and_providers : resolvers_and_providers_) {
-    ScriptPromiseResolver* resolver = resolver_and_providers->resolver_;
+    auto& resolver = resolver_and_providers->resolver_;
     const Vector<KURL>& providers = resolver_and_providers->providers_;
 
     switch (status) {
@@ -99,7 +99,7 @@ void WebIdentityRequester::RequestToken() {
 }
 
 void WebIdentityRequester::AppendGetCall(
-    ScriptPromiseResolver* resolver,
+    ScriptPromiseResolverTyped<IDLNullable<Credential>>* resolver,
     const HeapVector<Member<IdentityProviderRequestOptions>>& providers,
     mojom::blink::RpContext rp_context,
     mojom::blink::RpMode rp_mode) {
@@ -110,7 +110,7 @@ void WebIdentityRequester::AppendGetCall(
     return;
   }
 
-  Vector<mojom::blink::IdentityProviderPtr> idp_ptrs;
+  Vector<mojom::blink::IdentityProviderRequestOptionsPtr> idp_ptrs;
   Vector<KURL> idp_urls;
   for (const auto& provider : providers) {
     mojom::blink::IdentityProviderRequestOptionsPtr options =
@@ -126,9 +126,7 @@ void WebIdentityRequester::AppendGetCall(
       }
     }
     idp_urls.push_back(options->config->config_url);
-    mojom::blink::IdentityProviderPtr idp =
-        mojom::blink::IdentityProvider::NewFederated(std::move(options));
-    idp_ptrs.push_back(std::move(idp));
+    idp_ptrs.push_back(std::move(options));
   }
 
   resolvers_and_providers_.emplace_back(
@@ -170,7 +168,7 @@ void WebIdentityRequester::InsertScopedAbortState(
 }
 
 void WebIdentityRequester::InitWindowOnloadEventListener(
-    ScriptPromiseResolver* resolver) {
+    ScriptPromiseResolverTyped<IDLNullable<Credential>>* resolver) {
   window_onload_event_listener_ =
       MakeGarbageCollected<WebIdentityWindowOnloadEventListener>(
           resolver->DomWindow()->document(), WrapPersistent(this));
@@ -178,7 +176,8 @@ void WebIdentityRequester::InitWindowOnloadEventListener(
                                           window_onload_event_listener_);
 }
 
-void WebIdentityRequester::StartDelayTimer(ScriptPromiseResolver* resolver) {
+void WebIdentityRequester::StartDelayTimer(
+    ScriptPromiseResolverTyped<IDLNullable<Credential>>* resolver) {
   DCHECK(!RuntimeEnabledFeatures::FedCmMultipleIdentityProvidersEnabled(
       execution_context_));
 
@@ -225,7 +224,7 @@ void WebIdentityRequester::AbortRequest(ScriptState* script_state) {
 
   if (!is_requesting_token_) {
     OnRequestToken(mojom::blink::RequestTokenStatus::kErrorCanceled,
-                   absl::nullopt, "", nullptr, /*is_auto_selected=*/false);
+                   std::nullopt, "", nullptr, /*is_auto_selected=*/false);
     return;
   }
 

@@ -97,8 +97,8 @@ bool HasLessRestrictiveLimits(std::vector<T> first, std::vector<T> second) {
         use_first_fake ? &fake_codecs_struct : &(*first_it++);
     T* second_codec_struct =
         use_second_fake ? &fake_codecs_struct : &(*second_it++);
-    OSP_DCHECK(!first_codec_struct->applies_to_all_codecs);
-    OSP_DCHECK(!second_codec_struct->applies_to_all_codecs);
+    OSP_CHECK(!first_codec_struct->applies_to_all_codecs);
+    OSP_CHECK(!second_codec_struct->applies_to_all_codecs);
     if (!first_codec_struct->IsSupersetOf(*second_codec_struct)) {
       return false;
     }

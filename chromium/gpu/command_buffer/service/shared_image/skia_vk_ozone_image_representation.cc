@@ -31,6 +31,7 @@
 #include "third_party/skia/include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "third_party/skia/include/gpu/ganesh/vk/GrVkBackendSemaphore.h"
 #include "third_party/skia/include/gpu/ganesh/vk/GrVkBackendSurface.h"
+#include "third_party/skia/include/gpu/vk/VulkanMutableTextureState.h"
 #include "third_party/skia/include/private/chromium/GrPromiseImageTexture.h"
 
 namespace gpu {
@@ -58,7 +59,7 @@ SkiaVkOzoneImageRepresentation::SkiaVkOzoneImageRepresentation(
     auto promise_texture =
         GrPromiseImageTexture::Make(GrBackendTextures::MakeVk(
             vulkan_image->size().width(), vulkan_image->size().height(),
-            CreateGrVkImageInfo(vulkan_image.get(), color_space())));
+            CreateGrVkImageInfo(vulkan_image.get(), format(), color_space())));
     if (!promise_texture) {
       LOG(ERROR) << "Unable to create GrPromiseImageTexture";
       promise_textures_.clear();
@@ -265,6 +266,11 @@ void SkiaVkOzoneImageRepresentation::EndAccess(bool readonly) {
 
 std::unique_ptr<skgpu::MutableTextureState>
 SkiaVkOzoneImageRepresentation::GetEndAccessState() {
+  // `kSingleDeviceUsage` defines the set of usages for which only the Vulkan
+  // device from SharedContextState is used. If the SI has any usages outside
+  // this set (e.g., if it has any GLES2 usage, including
+  // RASTER_OVER_GLES2_ONLY), then it will be accessed beyond the Vulkan device
+  // from SharedContextState and hence does not have single-device usage.
   const uint32_t kSingleDeviceUsage =
       SHARED_IMAGE_USAGE_DISPLAY_READ | SHARED_IMAGE_USAGE_DISPLAY_WRITE |
       SHARED_IMAGE_USAGE_RASTER_READ | SHARED_IMAGE_USAGE_RASTER_WRITE |
@@ -287,7 +293,8 @@ SkiaVkOzoneImageRepresentation::GetEndAccessState() {
     DCHECK_NE(queue_family_index, VK_QUEUE_FAMILY_IGNORED);
 
     return std::make_unique<skgpu::MutableTextureState>(
-        VK_IMAGE_LAYOUT_UNDEFINED, queue_family_index);
+        skgpu::MutableTextureStates::MakeVulkan(VK_IMAGE_LAYOUT_UNDEFINED,
+                                                queue_family_index));
   }
   return nullptr;
 }

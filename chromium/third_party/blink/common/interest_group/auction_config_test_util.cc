@@ -5,6 +5,7 @@
 #include "third_party/blink/common/interest_group/auction_config_test_util.h"
 
 #include "base/containers/flat_map.h"
+#include "base/time/time.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -32,6 +33,14 @@ AuctionConfig CreateFullAuctionConfig() {
   const url::Origin buyer = url::Origin::Create(GURL("https://buyer.test"));
   auction_config.per_buyer_experiment_group_ids[buyer] = 3;
 
+  const std::vector<blink::AuctionConfig::AdKeywordReplacement>
+      deprecated_render_url_replacements = {
+          blink::AuctionConfig::AdKeywordReplacement(
+              {"${SELLER}", "ExampleSSP"})};
+  auction_config.non_shared_params.deprecated_render_url_replacements =
+      blink::AuctionConfig::MaybePromiseDeprecatedRenderURLReplacements::
+          FromValue(deprecated_render_url_replacements);
+
   AuctionConfig::NonSharedParams& non_shared_params =
       auction_config.non_shared_params;
   non_shared_params.interest_group_buyers.emplace();
@@ -42,7 +51,7 @@ AuctionConfig CreateFullAuctionConfig() {
       AuctionConfig::MaybePromiseJson::FromValue("[5]");
   non_shared_params.seller_timeout = base::Seconds(6);
 
-  absl::optional<base::flat_map<url::Origin, std::string>> per_buyer_signals;
+  std::optional<base::flat_map<url::Origin, std::string>> per_buyer_signals;
   per_buyer_signals.emplace();
   (*per_buyer_signals)[buyer] = "[7]";
   non_shared_params.per_buyer_signals =
@@ -57,16 +66,6 @@ AuctionConfig CreateFullAuctionConfig() {
       AuctionConfig::MaybePromiseBuyerTimeouts::FromValue(
           std::move(buyer_timeouts));
 
-  AuctionConfig::BuyerCurrencies buyer_currencies;
-  buyer_currencies.per_buyer_currencies.emplace();
-  (*buyer_currencies.per_buyer_currencies)[buyer] = AdCurrency::From("CAD");
-  buyer_currencies.all_buyers_currency = AdCurrency::From("USD");
-  non_shared_params.buyer_currencies =
-      AuctionConfig::MaybePromiseBuyerCurrencies::FromValue(
-          std::move(buyer_currencies));
-
-  non_shared_params.seller_currency = AdCurrency::From("EUR");
-
   AuctionConfig::BuyerTimeouts buyer_cumulative_timeouts;
   buyer_cumulative_timeouts.per_buyer_timeouts.emplace();
   (*buyer_cumulative_timeouts.per_buyer_timeouts)[buyer] = base::Seconds(432);
@@ -74,6 +73,17 @@ AuctionConfig CreateFullAuctionConfig() {
   non_shared_params.buyer_cumulative_timeouts =
       AuctionConfig::MaybePromiseBuyerTimeouts::FromValue(
           std::move(buyer_cumulative_timeouts));
+
+  non_shared_params.reporting_timeout = base::Seconds(7);
+  non_shared_params.seller_currency = AdCurrency::From("EUR");
+
+  AuctionConfig::BuyerCurrencies buyer_currencies;
+  buyer_currencies.per_buyer_currencies.emplace();
+  (*buyer_currencies.per_buyer_currencies)[buyer] = AdCurrency::From("CAD");
+  buyer_currencies.all_buyers_currency = AdCurrency::From("USD");
+  non_shared_params.buyer_currencies =
+      AuctionConfig::MaybePromiseBuyerCurrencies::FromValue(
+          std::move(buyer_currencies));
 
   non_shared_params.per_buyer_group_limits[buyer] = 10;
   non_shared_params.all_buyers_group_limit = 11;
@@ -90,6 +100,11 @@ AuctionConfig CreateFullAuctionConfig() {
       {AuctionConfig::NonSharedParams::BuyerReportType::
            kTotalSignalsFetchLatency,
        {absl::MakeUint128(0, 1), 2.0}}};
+  non_shared_params.auction_report_buyer_debug_mode_config.emplace();
+  non_shared_params.auction_report_buyer_debug_mode_config->is_enabled = true;
+  non_shared_params.auction_report_buyer_debug_mode_config->debug_key =
+      0x8000000000000000u;
+
   non_shared_params.requested_size = AdSize(
       100, AdSize::LengthUnit::kPixels, 70, AdSize::LengthUnit::kScreenHeight);
   non_shared_params.all_slots_requested_sizes = {
@@ -98,10 +113,13 @@ AuctionConfig CreateFullAuctionConfig() {
       AdSize(55.5, AdSize::LengthUnit::kScreenWidth, 50.5,
              AdSize::LengthUnit::kPixels),
   };
+  non_shared_params.per_buyer_multi_bid_limits[buyer] = 10;
+  non_shared_params.all_buyers_multi_bid_limit = 5;
   non_shared_params.required_seller_capabilities = {
       SellerCapabilities::kLatencyStats};
 
   non_shared_params.auction_nonce = base::Uuid::GenerateRandomV4();
+  non_shared_params.max_trusted_scoring_signals_url_length = 2560;
 
   DirectFromSellerSignalsSubresource
       direct_from_seller_signals_per_buyer_signals_buyer;

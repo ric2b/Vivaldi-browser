@@ -5,8 +5,8 @@
 #import <ImageIO/ImageIO.h>
 
 #import "base/strings/sys_string_conversions.h"
-#import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
+#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_item.h"
 
 using vivaldi_bookmark_kit::SetNodeThumbnail;
@@ -29,7 +29,7 @@ NSString* thumbnailDirectory = @"Vivaldi/sd-thumbnails";
                        snapshot:(UIImage*)snapshot
                         replace:(BOOL)replace
                     isMigrating:(BOOL)isMigrating
-                      bookmarks:(bookmarks::BookmarkModel*)bookmarks {
+                      bookmarks:(LegacyBookmarkModel*)bookmarks {
   NSString* snapshotPath = [self storeThumbnailFromSnapshot:snapshot
                                                      SDItem:sdItem
                                                     replace:replace];

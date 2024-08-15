@@ -40,7 +40,7 @@ using ::testing::ElementsAre;
 class RangeTest : public EditingTestBase {};
 
 TEST_F(RangeTest, extractContentsWithDOMMutationEvent) {
-  if (!RuntimeEnabledFeatures::MutationEventsEnabled()) {
+  if (!RuntimeEnabledFeatures::MutationEventsEnabledByRuntimeFlag()) {
     // TODO(crbug.com/1446498) Remove this test when MutationEvents are disabled
     // for good. This is just a test of `DOMSubtreeModified` and ranges.
     return;
@@ -315,10 +315,10 @@ TEST_F(RangeTest, BoundingRectMustIndependentFromSelection) {
   const gfx::RectF rect_before = range->BoundingRect();
   EXPECT_GT(rect_before.width(), 0);
   EXPECT_GT(rect_before.height(), 0);
-  Selection().SetSelectionAndEndTyping(
-      SelectionInDOMTree::Builder()
-          .SetBaseAndExtent(EphemeralRange(range))
-          .Build());
+  Selection().SetSelection(SelectionInDOMTree::Builder()
+                               .SetBaseAndExtent(EphemeralRange(range))
+                               .Build(),
+                           SetSelectionOptions());
   UpdateAllLifecyclePhasesForTest();
   EXPECT_EQ(Selection().SelectedText(), "x x");
   const gfx::RectF rect_after = range->BoundingRect();

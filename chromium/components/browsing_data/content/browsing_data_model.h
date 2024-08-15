@@ -16,6 +16,7 @@
 #include "components/browsing_data/content/shared_worker_info.h"
 #include "components/webid/federated_identity_data_model.h"
 #include "content/public/browser/attribution_data_model.h"
+#include "content/public/browser/cdm_storage_data_model.h"
 #include "content/public/browser/interest_group_manager.h"
 #include "content/public/browser/private_aggregation_data_model.h"
 #include "content/public/browser/session_storage_usage_info.h"
@@ -57,9 +58,10 @@ class BrowsingDataModel {
     kSharedDictionary,
     kSharedWorker,
     kCookie,
+    kCdmStorage,
 
     kFirstType = kTrustTokens,
-    kLastType = kCookie,
+    kLastType = kCdmStorage,
     kExtendedDelegateRange =
         63,  // This is needed to include delegate values when adding delegate
              // browsing data to the model.
@@ -113,7 +115,7 @@ class BrowsingDataModel {
 
     // Returns the non-1P SchemefulSite this data is partitioned on. Returns
     // base::nullopt if the data is not partitioned, or is the 1P partition.
-    absl::optional<net::SchemefulSite> GetThirdPartyPartitioningSite() const;
+    std::optional<net::SchemefulSite> GetThirdPartyPartitioningSite() const;
 
     // The logical owner of this browsing data. This is the entity which this
     // information will be most strongly associated with in UX surfaces.
@@ -159,8 +161,12 @@ class BrowsingDataModel {
     // Returns the owner of the data identified by the given DataKey and
     // StorageType, or nullopt if the delegate does not manage the entity that
     // owns the given data.
-    virtual absl::optional<DataOwner> GetDataOwner(
+    virtual std::optional<DataOwner> GetDataOwner(
         const DataKey& data_key,
+        StorageType storage_type) const = 0;
+
+    // Returns true if storage type is Cookie-like i.e. non kAPI type.
+    virtual std::optional<bool> IsStorageTypeCookieLike(
         StorageType storage_type) const = 0;
 
     // Returns whether the delegate considers `storage_type` to be blocked by
@@ -169,7 +175,7 @@ class BrowsingDataModel {
     // This method isn't aware of the context in which the data key is being
     // accessed and may return false positive in case it was called for a first
     // party key in a first party context.
-    virtual absl::optional<bool> IsBlockedByThirdPartyCookieBlocking(
+    virtual std::optional<bool> IsBlockedByThirdPartyCookieBlocking(
         const DataKey& data_key,
         StorageType storage_type) const = 0;
 
@@ -227,6 +233,10 @@ class BrowsingDataModel {
   // Retrieves the host from the data owner.
   static const std::string GetHost(const DataOwner& data_owner);
 
+  // Retrieves the owning origin for a specific data key.
+  static const url::Origin GetOriginForDataKey(
+      const BrowsingDataModel::DataKey& data_key);
+
   // Consults supported storage backends to create and populate a Model based
   // on the current state of `browser_context`.
   static void BuildFromDisk(
@@ -282,6 +292,10 @@ class BrowsingDataModel {
   // Virtual to allow an in-memory only fake to be created.
   virtual void RemoveUnpartitionedBrowsingData(const DataOwner& data_owner,
                                                base::OnceClosure completed);
+
+  // Returns true if storage type is Cookie-like i.e. non kAPI type.
+  // This can't be static as it requires to consult the delegate.
+  bool IsStorageTypeCookieLike(StorageType storage_type) const;
 
   // Returns whether the provided `storage_type` is blocked when third party
   // cookies are blocked, utilizing `data_key` to exclude partitioned data.

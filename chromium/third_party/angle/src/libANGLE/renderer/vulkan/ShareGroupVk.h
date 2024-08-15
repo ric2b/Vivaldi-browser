@@ -20,8 +20,6 @@ namespace rx
 {
 constexpr VkDeviceSize kMaxTotalEmptyBufferBytes = 16 * 1024 * 1024;
 
-class RendererVk;
-
 class TextureUpload
 {
   public:
@@ -34,37 +32,6 @@ class TextureUpload
   private:
     // Keep track of the previously stored texture. Used to flush mutable textures.
     TextureVk *mPrevUploadedMutableTexture;
-};
-
-class UpdateDescriptorSetsBuilder final : angle::NonCopyable
-{
-  public:
-    UpdateDescriptorSetsBuilder();
-    ~UpdateDescriptorSetsBuilder();
-
-    VkDescriptorBufferInfo *allocDescriptorBufferInfos(size_t count);
-    VkDescriptorImageInfo *allocDescriptorImageInfos(size_t count);
-    VkWriteDescriptorSet *allocWriteDescriptorSets(size_t count);
-    VkBufferView *allocBufferViews(size_t count);
-
-    VkDescriptorBufferInfo &allocDescriptorBufferInfo() { return *allocDescriptorBufferInfos(1); }
-    VkDescriptorImageInfo &allocDescriptorImageInfo() { return *allocDescriptorImageInfos(1); }
-    VkWriteDescriptorSet &allocWriteDescriptorSet() { return *allocWriteDescriptorSets(1); }
-    VkBufferView &allocBufferView() { return *allocBufferViews(1); }
-
-    // Returns the number of written descriptor sets.
-    uint32_t flushDescriptorSetUpdates(VkDevice device);
-
-  private:
-    template <typename T, const T *VkWriteDescriptorSet::*pInfo>
-    T *allocDescriptorInfos(std::vector<T> *descriptorVector, size_t count);
-    template <typename T, const T *VkWriteDescriptorSet::*pInfo>
-    void growDescriptorCapacity(std::vector<T> *descriptorVector, size_t newSize);
-
-    std::vector<VkDescriptorBufferInfo> mDescriptorBufferInfos;
-    std::vector<VkDescriptorImageInfo> mDescriptorImageInfos;
-    std::vector<VkWriteDescriptorSet> mWriteDescriptorSets;
-    std::vector<VkBufferView> mBufferViews;
 };
 
 class ShareGroupVk : public ShareGroupImpl
@@ -93,12 +60,12 @@ class ShareGroupVk : public ShareGroupImpl
     // Used to flush the mutable textures more often.
     angle::Result onMutableTextureUpload(ContextVk *contextVk, TextureVk *newTexture);
 
-    vk::BufferPool *getDefaultBufferPool(RendererVk *renderer,
+    vk::BufferPool *getDefaultBufferPool(vk::Renderer *renderer,
                                          VkDeviceSize size,
                                          uint32_t memoryTypeIndex,
                                          BufferUsageType usageType);
-    void pruneDefaultBufferPools(RendererVk *renderer);
-    bool isDueForBufferPoolPrune(RendererVk *renderer);
+    void pruneDefaultBufferPools(vk::Renderer *renderer);
+    bool isDueForBufferPoolPrune(vk::Renderer *renderer);
 
     void calculateTotalBufferCount(size_t *bufferCount, VkDeviceSize *totalSize) const;
     void logBufferPools() const;

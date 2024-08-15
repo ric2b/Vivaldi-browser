@@ -59,6 +59,22 @@ class DownloadUIModel {
     kMaxValue = kSuspiciousArchive
   };
 
+  // Represents the UI pattern used for the download, based on its danger type.
+  // This should be consistent across the download bubble and
+  // chrome://downloads, wherever download warnings are displayed.
+  enum class DangerUiPattern {
+    // The download has no warning and no error conditions.
+    kNormal,
+    // The download has a warning with a red "dangerous" icon and red text.
+    kDangerous,
+    // The download has a warning with a gray "warning" icon and gray text.
+    // Includes "unverified" and insecure.
+    kSuspicious,
+    // Some other combination of warning colors/icons, including the "download
+    // off" icon for an error or cancellation.
+    kOther,
+  };
+
   // Abstract base class for building StatusText
   class StatusTextBuilderBase {
    public:
@@ -122,144 +138,6 @@ class DownloadUIModel {
         bool is_active);
     std::u16string GetBubbleWarningStatusText() const;
   };
-
-#if !BUILDFLAG(IS_ANDROID)
-  // Keep UI logic in this class in sync with DownloadBubbleRowViewInfo.
-  // TODO(crbug.com/1482901): Unify the logic.
-  struct BubbleUIInfo {
-    struct SubpageButton {
-      DownloadCommands::Command command;
-      std::u16string label;
-      bool is_prominent = false;
-
-      // Controls the text color of the button. Only applied for some secondary
-      // buttons.
-      std::optional<ui::ColorId> color;
-
-      SubpageButton(DownloadCommands::Command command,
-                    std::u16string label,
-                    bool is_prominent,
-                    std::optional<ui::ColorId> color = std::nullopt);
-    };
-
-    struct QuickAction {
-      DownloadCommands::Command command;
-      std::u16string hover_text;
-      raw_ptr<const gfx::VectorIcon> icon = nullptr;
-      QuickAction(DownloadCommands::Command command,
-                  const std::u16string& hover_text,
-                  const gfx::VectorIcon* icon);
-    };
-
-    struct LabelWithLink {
-      struct LinkedRange {
-        // The offset where the link text (i.e. "Chrome blocks some downloads")
-        // starts, with respect to the label string containing it.
-        size_t start_offset = 0;
-        // Link text length.
-        size_t length = 0;
-        // Action to perform when the link is clicked.
-        DownloadCommands::Command command;
-      };
-
-      // The entire label string with link, i.e. "Learn why Chrome blocks some
-      // downloads".
-      std::u16string label_and_link_text;
-      // The link info. Note this assumes that the text contains exactly one
-      // link.
-      LinkedRange linked_range;
-    };
-
-    // has a progress bar and a cancel button.
-    bool has_progress_bar = false;
-    bool is_progress_bar_looping = false;
-    // kColorAlertHighSeverity, kColorAlertMediumSeverityIcon, or
-    // kColorSecondaryForeground
-    ui::ColorId secondary_color = ui::kColorSecondaryForeground;
-    // Color used for alert text, which may be different from |secondary_color|,
-    // used for icons. If this is nullopt, |secondary_color| will be used for
-    // text.
-    std::optional<ui::ColorId> secondary_text_color = std::nullopt;
-
-    // Override icon
-    raw_ptr<const gfx::VectorIcon> icon_model_override = nullptr;
-
-    // Subpage summary of the download warning
-    std::u16string warning_summary;
-
-    // Secondary label for the subpage summary
-    std::u16string warning_secondary_text;
-
-    // Icon for the secondary text in the subpage
-    raw_ptr<const gfx::VectorIcon> warning_secondary_icon = nullptr;
-
-    // The command for the primary button
-    std::optional<DownloadCommands::Command> primary_button_command;
-
-    // List of quick actions
-    std::vector<QuickAction> quick_actions;
-
-    // Subpage buttons
-    std::vector<SubpageButton> subpage_buttons;
-
-    // Text with link to go at the bottom of the subpage summary, such as "Learn
-    // why Chrome blocks some downloads".
-    std::optional<LabelWithLink> learn_more_link;
-
-    // Whether the main button should be enabled. When true, the main button
-    // will either:
-    // - Open the subpage, if it exists
-    // - Open the download, if no subpage exists
-    bool main_button_enabled = true;
-
-    BubbleUIInfo();
-    ~BubbleUIInfo();
-    BubbleUIInfo(const BubbleUIInfo&);
-    BubbleUIInfo& AddSubpageSummary(const std::u16string& summary);
-    BubbleUIInfo& AddSubpageSecondaryIconAndText(
-        const gfx::VectorIcon& icon,
-        const std::u16string& secondary_text);
-    BubbleUIInfo& AddProgressBar();
-    BubbleUIInfo& AddIconAndColor(const gfx::VectorIcon& vector_icon,
-                                  ui::ColorId color_id);
-    BubbleUIInfo& AddSecondaryTextColor(ui::ColorId color_id);
-    BubbleUIInfo& AddPrimaryButton(DownloadCommands::Command command);
-    // Add button to the subpage. Only two buttons are supported.
-    // The first one added is the primary, and the second one the secondary.
-    BubbleUIInfo& AddPrimarySubpageButton(const std::u16string& label,
-                                          DownloadCommands::Command command);
-    BubbleUIInfo& AddSecondarySubpageButton(
-        const std::u16string& label,
-        DownloadCommands::Command command,
-        std::optional<ui::ColorId> color = std::nullopt);
-    BubbleUIInfo& SetProgressBarLooping();
-    BubbleUIInfo& AddQuickAction(DownloadCommands::Command command,
-                                 const std::u16string& label,
-                                 const gfx::VectorIcon* icon);
-    // Add a learn_more_link with the specified message ids and command when
-    // clicked. Assumes that the message given by label_text_id has a
-    // placeholder where the message specified by link_text_id should go.
-    BubbleUIInfo& AddLearnMoreLink(int label_text_id,
-                                   int link_text_id,
-                                   DownloadCommands::Command command);
-    // Same as above but takes the link text string itself, and assumes that
-    // the whole string should be linked, rather than a substring.
-    BubbleUIInfo& AddLearnMoreLink(const std::u16string& link_text,
-                                   DownloadCommands::Command command);
-
-    BubbleUIInfo& DisableMainButton();
-
-    // Set common characteristics for dangerous or suspicious downloads.
-    static BubbleUIInfo DangerousUiPattern(
-        const std::u16string& subpage_summary);
-    static BubbleUIInfo SuspiciousUiPattern(
-        const std::u16string& subpage_summary,
-        const std::u16string& secondary_subpage_button_label);
-
-    ui::ColorId GetColorForSecondaryText() const;
-    bool HasSubpage() const;
-  };
-#endif
 
   using DownloadUIModelPtr = std::unique_ptr<DownloadUIModel>;
 
@@ -585,15 +463,6 @@ class DownloadUIModel {
   virtual void ExecuteCommand(DownloadCommands* download_commands,
                               DownloadCommands::Command command);
 
-  // Gets the information about the download bubbles subpage.
-  BubbleUIInfo GetBubbleUIInfo() const;
-  BubbleUIInfo GetBubbleUIInfoForInterrupted(
-      offline_items_collection::FailState fail_state) const;
-  BubbleUIInfo GetBubbleUIInfoForInProgressOrComplete() const;
-  virtual BubbleUIInfo GetBubbleUIInfoForTailoredWarning(
-      TailoredWarningType tailored_warning_type) const;
-  BubbleUIInfo GetBubbleUIInfoForFileTypeWarningNoSafeBrowsing() const;
-
   // Returns |true| if this download should be displayed in the download bubble.
   // Note that this may return true even if the download bubble is not enabled
   // on the platform.
@@ -602,6 +471,10 @@ class DownloadUIModel {
   // Returns the type of tailored warning. Returns kNoTailoredWarning if this
   // download shouldn't trigger a tailored warning.
   virtual TailoredWarningType GetTailoredWarningType() const;
+
+  // Returns the UI pattern to be used for the download, e.g. dangerous or
+  // suspicious. Returns kNoWarning if the download has no warning.
+  virtual DangerUiPattern GetDangerUiPattern() const;
 
   // Ephemeral warnings are ones that are quickly removed from the bubble if the
   // user has not acted on them, and later deleted altogether. Is this that kind

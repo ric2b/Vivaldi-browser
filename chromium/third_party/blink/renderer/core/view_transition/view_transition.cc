@@ -44,9 +44,9 @@ uint32_t NextDocumentTag() {
   return next_document_tag++;
 }
 
-absl::optional<Vector<String>> FilterTypes(
-    const absl::optional<Vector<String>>& types) {
-  absl::optional<Vector<String>> result;
+std::optional<Vector<String>> FilterTypes(
+    const std::optional<Vector<String>>& types) {
+  std::optional<Vector<String>> result;
   if (!types) {
     return result;
   }
@@ -129,25 +129,33 @@ const char* ViewTransition::StateToString(State state) {
 ViewTransition* ViewTransition::CreateFromScript(
     Document* document,
     V8ViewTransitionCallback* callback,
-    const absl::optional<Vector<String>>& types,
+    const std::optional<Vector<String>>& types,
     Delegate* delegate) {
   CHECK(document->GetExecutionContext());
   return MakeGarbageCollected<ViewTransition>(PassKey(), document, callback,
                                               types, delegate);
 }
 
+ViewTransition* ViewTransition::CreateSkipped(
+    Document* document,
+    V8ViewTransitionCallback* callback) {
+  return MakeGarbageCollected<ViewTransition>(PassKey(), document, callback);
+}
+
 ViewTransition::ViewTransition(PassKey,
                                Document* document,
                                V8ViewTransitionCallback* update_dom_callback,
-                               const absl::optional<Vector<String>>& types,
+                               const std::optional<Vector<String>>& types,
                                Delegate* delegate)
     : ExecutionContextLifecycleObserver(document->GetExecutionContext()),
       creation_type_(CreationType::kScript),
       document_(document),
       delegate_(delegate),
+      transition_id_(viz::TransitionId::Create()),
       document_tag_(NextDocumentTag()),
       style_tracker_(
-          MakeGarbageCollected<ViewTransitionStyleTracker>(*document_)),
+          MakeGarbageCollected<ViewTransitionStyleTracker>(*document_,
+                                                           transition_id_)),
       script_delegate_(MakeGarbageCollected<DOMViewTransition>(
           *document->GetExecutionContext(),
           *this,
@@ -156,32 +164,55 @@ ViewTransition::ViewTransition(PassKey,
   CHECK(RuntimeEnabledFeatures::ViewTransitionTypesEnabled() || !types_);
   if (auto* originating_element = document_->documentElement()) {
     originating_element->ActiveViewTransitionStateChanged();
+    if (types_ && !types_->empty()) {
+      originating_element->ActiveViewTransitionTypeStateChanged();
+    }
   }
   ProcessCurrentState();
+}
+
+ViewTransition::ViewTransition(PassKey,
+                               Document* document,
+                               V8ViewTransitionCallback* update_dom_callback)
+    : ExecutionContextLifecycleObserver(document->GetExecutionContext()),
+      creation_type_(CreationType::kScript),
+      document_(document),
+      document_tag_(NextDocumentTag()),
+      script_delegate_(MakeGarbageCollected<DOMViewTransition>(
+          *document->GetExecutionContext(),
+          *this,
+          update_dom_callback)) {
+  SkipTransition();
 }
 
 // static
 ViewTransition* ViewTransition::CreateForSnapshotForNavigation(
     Document* document,
+    const viz::NavigationId& navigation_id,
     ViewTransitionStateCallback callback,
     Delegate* delegate) {
-  return MakeGarbageCollected<ViewTransition>(PassKey(), document,
-                                              std::move(callback), delegate);
+  return MakeGarbageCollected<ViewTransition>(
+      PassKey(), document, navigation_id, std::move(callback), delegate);
 }
 
 ViewTransition::ViewTransition(PassKey,
                                Document* document,
+                               const viz::NavigationId& navigation_id,
                                ViewTransitionStateCallback callback,
                                Delegate* delegate)
     : ExecutionContextLifecycleObserver(document->GetExecutionContext()),
       creation_type_(CreationType::kForSnapshot),
       document_(document),
       delegate_(delegate),
-      navigation_id_(viz::NavigationID::Create()),
+      transition_id_(navigation_id),
       document_tag_(NextDocumentTag()),
       style_tracker_(
-          MakeGarbageCollected<ViewTransitionStyleTracker>(*document_)),
-      transition_state_callback_(std::move(callback)) {
+          MakeGarbageCollected<ViewTransitionStyleTracker>(*document_,
+                                                           transition_id_)),
+      transition_state_callback_(std::move(callback)),
+      script_delegate_(MakeGarbageCollected<DOMViewTransition>(
+          *document_->GetExecutionContext(),
+          *this)) {
   TRACE_EVENT0("blink", "ViewTransition::ViewTransition - CreatedForSnapshot");
   DCHECK(transition_state_callback_);
   ProcessCurrentState();
@@ -204,7 +235,7 @@ ViewTransition::ViewTransition(PassKey,
       creation_type_(CreationType::kFromSnapshot),
       document_(document),
       delegate_(delegate),
-      navigation_id_(transition_state.navigation_id),
+      transition_id_(transition_state.transition_id),
       document_tag_(NextDocumentTag()),
       style_tracker_(MakeGarbageCollected<ViewTransitionStyleTracker>(
           *document_,
@@ -224,21 +255,26 @@ void ViewTransition::SkipTransition(PromiseResponse response) {
   if (IsTerminalState(state_))
     return;
 
+  // TODO(khushalsagar): Figure out the promise handling when this is on the
+  // old Document for a cross-document navigation.
+
   // Cleanup logic which is tied to ViewTransition objects created using the
   // script API. script_delegate_ is cleared when the Document is being torn
   // down and script specific callbacks don't need to be dispatched in that
   // case.
   if (script_delegate_) {
-    CHECK_NE(creation_type_, CreationType::kForSnapshot);
     script_delegate_->DidSkipTransition(response);
   }
 
   // If we already started processing the transition (i.e. we're beyond capture
-  // tag discovery), then send a release directive.
+  // tag discovery), then send a release directive. We don't do this, if we're
+  // capturing this for a snapshot. The only way that transition is skipped is
+  // if we finished capturing.
   if (static_cast<int>(state_) >
-      static_cast<int>(State::kCaptureTagDiscovery)) {
-    delegate_->AddPendingRequest(
-        ViewTransitionRequest::CreateRelease(document_tag_, navigation_id_));
+          static_cast<int>(State::kCaptureTagDiscovery) &&
+      creation_type_ != CreationType::kForSnapshot) {
+    delegate_->AddPendingRequest(ViewTransitionRequest::CreateRelease(
+        document_tag_, CrossDocumentNavigationId()));
   }
 
   // We always need to call the transition state callback (mojo seems to require
@@ -246,15 +282,19 @@ void ViewTransition::SkipTransition(PromiseResponse response) {
   if (transition_state_callback_) {
     CHECK_EQ(creation_type_, CreationType::kForSnapshot);
     ViewTransitionState view_transition_state;
-    view_transition_state.navigation_id = navigation_id_;
+    view_transition_state.transition_id = transition_id_;
     std::move(transition_state_callback_).Run(std::move(view_transition_state));
   }
 
   // Resume rendering, and finalize the rest of the state.
   ResumeRendering();
-  style_tracker_->Abort();
+  if (style_tracker_) {
+    style_tracker_->Abort();
+  }
 
-  delegate_->OnTransitionFinished(this);
+  if (delegate_) {
+    delegate_->OnTransitionFinished(this);
+  }
 
   // This should be the last call in this function to avoid erroneously checking
   // the `state_` against the wrong state.
@@ -264,10 +304,14 @@ void ViewTransition::SkipTransition(PromiseResponse response) {
 bool ViewTransition::AdvanceTo(State state) {
   DCHECK(CanAdvanceTo(state)) << "Current state " << static_cast<int>(state_)
                               << " new state " << static_cast<int>(state);
+  bool was_initial = state_ == State::kInitial;
   state_ = state;
-  if (IsTerminalState(state_)) {
+  if (!was_initial && IsTerminalState(state_)) {
     if (auto* originating_element = document_->documentElement()) {
       originating_element->ActiveViewTransitionStateChanged();
+      if (types_ && !types_->empty()) {
+        originating_element->ActiveViewTransitionTypeStateChanged();
+      }
     }
   }
   // If we need to run in a lifecycle, but we're not in one, then make sure to
@@ -298,7 +342,7 @@ bool ViewTransition::CanAdvanceTo(State state) const {
   switch (state_) {
     case State::kInitial:
       return state == State::kCaptureTagDiscovery ||
-             state == State::kWaitForRenderBlock;
+             state == State::kWaitForRenderBlock || state == State::kAborted;
     case State::kCaptureTagDiscovery:
       return state == State::kCaptureRequestPending || state == State::kAborted;
     case State::kCaptureRequestPending:
@@ -420,7 +464,8 @@ void ViewTransition::ProcessCurrentState() {
         }
 
         delegate_->AddPendingRequest(ViewTransitionRequest::CreateCapture(
-            document_tag_, style_tracker_->CapturedTagCount(), navigation_id_,
+            document_tag_, style_tracker_->CapturedTagCount(),
+            CrossDocumentNavigationId(),
             style_tracker_->TakeCaptureResourceIds(),
             ConvertToBaseOnceCallback(
                 CrossThreadBindOnce(&ViewTransition::NotifyCaptureFinished,
@@ -452,7 +497,7 @@ void ViewTransition::ProcessCurrentState() {
           DCHECK(transition_state_callback_);
           ViewTransitionState view_transition_state =
               style_tracker_->GetViewTransitionState();
-          view_transition_state.navigation_id = navigation_id_;
+          CHECK_EQ(view_transition_state.transition_id, transition_id_);
 
           process_next_state =
               AdvanceTo(State::kTransitionStateCallbackDispatched);
@@ -460,6 +505,7 @@ void ViewTransition::ProcessCurrentState() {
 
           std::move(transition_state_callback_)
               .Run(std::move(view_transition_state));
+          SkipTransition(PromiseResponse::kRejectAbort);
           break;
         }
 
@@ -501,6 +547,14 @@ void ViewTransition::ProcessCurrentState() {
         }
 
         ResumeRendering();
+
+        // Animation and subsequent steps require us to have a view. If after
+        // running the callbacks, we don't have a view, skip the transition.
+        if (!document_->View()) {
+          SkipTransition();
+          break;
+        }
+
         process_next_state = AdvanceTo(State::kAnimateTagDiscovery);
         DCHECK(process_next_state);
         break;
@@ -511,6 +565,16 @@ void ViewTransition::ProcessCurrentState() {
             DocumentUpdateReason::kViewTransition);
         DCHECK_GE(document_->Lifecycle().GetState(),
                   DocumentLifecycle::kPrePaintClean);
+
+        // Note: this happens after updating the lifecycle since the snapshot
+        // root can depend on layout when using a mobile viewport (i.e.
+        // horizontally overflowing element expanding the size of the frame
+        // view). See also: https://crbug.com/1454207.
+        if (style_tracker_->SnapshotRootDidChangeSize()) {
+          SkipTransition(PromiseResponse::kRejectInvalidState);
+          break;
+        }
+
         style_tracker_->AddTransitionElementsFromCSS();
         process_next_state = AdvanceTo(State::kAnimateRequestPending);
         DCHECK(process_next_state);
@@ -523,8 +587,8 @@ void ViewTransition::ProcessCurrentState() {
         }
 
         delegate_->AddPendingRequest(
-            ViewTransitionRequest::CreateAnimateRenderer(document_tag_,
-                                                         navigation_id_));
+            ViewTransitionRequest::CreateAnimateRenderer(
+                document_tag_, CrossDocumentNavigationId()));
         process_next_state = AdvanceTo(State::kAnimating);
         DCHECK(!process_next_state);
 
@@ -554,7 +618,7 @@ void ViewTransition::ProcessCurrentState() {
         script_delegate_->DidFinishAnimating();
 
         delegate_->AddPendingRequest(ViewTransitionRequest::CreateRelease(
-            document_tag_, navigation_id_));
+            document_tag_, CrossDocumentNavigationId()));
         delegate_->OnTransitionFinished(this);
 
         style_tracker_ = nullptr;
@@ -587,21 +651,21 @@ bool ViewTransition::MatchForOnlyChild(
   return style_tracker_->MatchForOnlyChild(pseudo_id, view_transition_name);
 }
 
-bool ViewTransition::MatchForActiveViewTransition(
+bool ViewTransition::MatchForActiveViewTransition() {
+  CHECK(RuntimeEnabledFeatures::ViewTransitionTypesEnabled());
+  return !IsTerminalState(state_);
+}
+
+bool ViewTransition::MatchForActiveViewTransitionType(
     const Vector<AtomicString>& pseudo_types) {
   CHECK(RuntimeEnabledFeatures::ViewTransitionTypesEnabled());
-
   if (IsTerminalState(state_)) {
     return false;
   }
 
-  // Empty pseudo types is :active-view-transition(*), which should match as
-  // long as there is a view transition.
-  if (pseudo_types.empty()) {
-    return true;
-  }
+  CHECK(!pseudo_types.empty());
 
-  // If types are not specified, then there is no match (other than above)
+  // If types are not specified, then there is no match.
   if (!types_ || types_->empty()) {
     return false;
   }
@@ -650,6 +714,17 @@ void ViewTransition::NotifyDOMCallbackFinished(bool success) {
 
   // Succeed or fail, rendering must be resumed after this.
   CHECK(!rendering_paused_scope_);
+}
+
+viz::NavigationId ViewTransition::CrossDocumentNavigationId() const {
+  if (!IsForNavigationOnNewDocument() && !IsForNavigationSnapshot()) {
+    return viz::NavigationId();
+  }
+
+  // Since the transition_id is unique across transitions and preserved between
+  // new and old for a cross-document transition, we can use it as the
+  // navigation ID on cross document requests.
+  return transition_id_;
 }
 
 bool ViewTransition::NeedsViewTransitionEffectNode(

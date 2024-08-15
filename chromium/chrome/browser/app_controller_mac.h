@@ -181,6 +181,8 @@ class ColorProvider;
 - (void)commandDispatchUsingKeyModifiers:(id)sender;
 - (void)vivInitShareMenu:(NSMenuItem*)menuItem;
 
+- (void)openUrlsInVivaldi:(const std::vector<GURL>&)urls;
+
 @end
 
 #endif  // __OBJC__

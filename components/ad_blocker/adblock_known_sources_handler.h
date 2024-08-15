@@ -35,12 +35,12 @@ class KnownRuleSourcesHandler {
   virtual const std::set<std::string>& GetDeletedPresets(
       RuleGroup group) const = 0;
 
-  virtual absl::optional<uint32_t> AddSourceFromUrl(RuleGroup group,
+  virtual std::optional<uint32_t> AddSourceFromUrl(RuleGroup group,
                                                     const GURL& url) = 0;
-  virtual absl::optional<uint32_t> AddSourceFromFile(
+  virtual std::optional<uint32_t> AddSourceFromFile(
       RuleGroup group,
       const base::FilePath& file) = 0;
-  virtual absl::optional<KnownRuleSource> GetSource(RuleGroup group,
+  virtual std::optional<KnownRuleSource> GetSource(RuleGroup group,
                                                     uint32_t source_id) = 0;
   virtual bool RemoveSource(RuleGroup group, uint32_t source_id) = 0;
 

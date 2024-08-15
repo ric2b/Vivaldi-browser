@@ -12,7 +12,6 @@
 #include "chrome/browser/apps/app_service/app_service_proxy_ash.h"
 #include "chrome/browser/ash/drive/drivefs_test_support.h"
 #include "chrome/browser/ash/file_manager/file_tasks.h"
-#include "chrome/browser/ash/file_manager/volume_manager.h"
 #include "chrome/browser/ash/file_system_provider/fake_extension_provider.h"
 #include "chrome/browser/ash/file_system_provider/fake_provided_file_system.h"
 #include "chrome/browser/platform_util.h"
@@ -21,11 +20,15 @@
 class Profile;
 
 namespace file_manager {
+
+class Volume;
+
 namespace test {
 
 static const char kODFSSampleUrl[] = "https://1drv.ms/123";
-static const char kSampleUserEmail1[] = "user1@gmail.com";
-static const char kSampleUserEmail2[] = "user2@gmail.com";
+static const char kSampleUserEmail1[] = "user.1@gmail.com";
+static const char kSampleUserUpperCaseEmail1[] = "USER.1@gmail.com";
+static const char kSampleUserEmail2[] = "user.2@gmail.com";
 
 // A dummy folder in a temporary path that is automatically mounted as a
 // Profile's Downloads folder.
@@ -215,7 +218,7 @@ class FakeExtensionProviderOneDrive
   CreateProvidedFileSystem(
       Profile* profile,
       const ash::file_system_provider::ProvidedFileSystemInfo& file_system_info,
-      ash::file_system_provider::ContentCache* content_cache) override;
+      ash::file_system_provider::CacheManager* cache_manager) override;
 
   // Calls `request_mount_callback` if set.
   bool RequestMount(

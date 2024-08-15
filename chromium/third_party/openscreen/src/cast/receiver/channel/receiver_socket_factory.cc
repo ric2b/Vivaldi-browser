@@ -13,8 +13,8 @@ ReceiverSocketFactory::Client::~Client() = default;
 ReceiverSocketFactory::ReceiverSocketFactory(Client* client,
                                              CastSocket::Client* socket_client)
     : client_(client), socket_client_(socket_client) {
-  OSP_DCHECK(client);
-  OSP_DCHECK(socket_client);
+  OSP_CHECK(client);
+  OSP_CHECK(socket_client);
 }
 
 ReceiverSocketFactory::~ReceiverSocketFactory() = default;

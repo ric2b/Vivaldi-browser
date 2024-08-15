@@ -4,20 +4,24 @@
 
 package org.chromium.chrome.browser.sync.settings;
 
-import android.accounts.Account;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.UserManager;
 
 import androidx.annotation.LayoutRes;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.DialogFragment;
+import androidx.fragment.app.FragmentManager;
+import androidx.fragment.app.FragmentTransaction;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceScreen;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.settings.ChromeBaseSettingsFragment;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
@@ -25,11 +29,12 @@ import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.signin.services.DisplayableProfileData;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.ProfileDataCache;
-import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.signin.services.SigninManager.SignInStateObserver;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
+import org.chromium.chrome.browser.sync.TrustedVaultClient;
+import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils.SyncError;
+import org.chromium.chrome.browser.sync.ui.PassphraseDialogFragment;
 import org.chromium.chrome.browser.ui.signin.SignOutDialogCoordinator;
-import org.chromium.chrome.browser.ui.signin.SignOutDialogCoordinator.Listener;
 import org.chromium.chrome.browser.ui.signin.SigninUtils;
 import org.chromium.components.browser_ui.settings.ChromeBasePreference;
 import org.chromium.components.browser_ui.settings.CustomDividerFragment;
@@ -39,6 +44,10 @@ import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountUtils;
 import org.chromium.components.signin.GAIAServiceType;
+import org.chromium.components.signin.SigninFeatureMap;
+import org.chromium.components.signin.SigninFeatures;
+import org.chromium.components.signin.Tribool;
+import org.chromium.components.signin.base.AccountInfo;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.metrics.SignoutReason;
@@ -51,15 +60,22 @@ import java.util.List;
 /**
  * The settings screen with information and settings related to the user's accounts.
  *
- * This shows which accounts the user is signed in with, allows the user to sign out of Chrome,
+ * <p>This shows which accounts the user is signed in with, allows the user to sign out of Chrome,
  * links to sync settings, has links to add accounts and go incognito, and shows parental settings
  * if a child account is in use.
  *
- * Note: This can be triggered from a web page, e.g. a GAIA sign-in page.
+ * <p>Note: This can be triggered from a web page, e.g. a GAIA sign-in page.
  */
 public class AccountManagementFragment extends ChromeBaseSettingsFragment
-        implements Listener, SignInStateObserver, ProfileDataCache.Observer, CustomDividerFragment {
-    private static final String CLEAR_DATA_PROGRESS_DIALOG_TAG = "clear_data_progress";
+        implements SignInStateObserver,
+                ProfileDataCache.Observer,
+                CustomDividerFragment,
+                IdentityErrorCardPreference.Listener,
+                PassphraseDialogFragment.Delegate {
+    private static final int REQUEST_CODE_TRUSTED_VAULT_KEY_RETRIEVAL = 1;
+    private static final int REQUEST_CODE_TRUSTED_VAULT_RECOVERABILITY_DEGRADED = 2;
+
+    private static final String FRAGMENT_ENTER_PASSPHRASE = "enter_passphrase";
 
     /**
      * The key for an integer value in arguments bundle to
@@ -68,6 +84,7 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
      */
     private static final String SHOW_GAIA_SERVICE_TYPE_EXTRA = "ShowGAIAServiceType";
 
+    private static final String PREF_IDENTITY_ERROR_CARD_PREFERENCE = "identity_error_card";
     private static final String PREF_ACCOUNTS_CATEGORY = "accounts_category";
     private static final String PREF_PARENT_ACCOUNT_CATEGORY = "parent_account_category";
     private static final String PREF_SIGN_OUT = "sign_out";
@@ -75,16 +92,19 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
 
     private @GAIAServiceType int mGaiaServiceType = GAIAServiceType.GAIA_SERVICE_TYPE_NONE;
 
+    private IdentityErrorCardPreference mIdentityErrorCardPreference;
+
     private CoreAccountInfo mSignedInCoreAccountInfo;
     private ProfileDataCache mProfileDataCache;
+    private SyncService mSyncService;
     private @Nullable SyncService.SyncSetupInProgressHandle mSyncSetupInProgressHandle;
 
     @Override
     public void onCreatePreferences(Bundle savedState, String rootKey) {
-        SyncService syncService = SyncServiceFactory.getForProfile(getProfile());
-        if (syncService != null) {
+        mSyncService = SyncServiceFactory.getForProfile(getProfile());
+        if (mSyncService != null) {
             // Prevent sync settings changes from taking effect until the user leaves this screen.
-            mSyncSetupInProgressHandle = syncService.getSetupInProgressHandle();
+            mSyncSetupInProgressHandle = mSyncService.getSetupInProgressHandle();
         }
 
         if (getArguments() != null) {
@@ -167,6 +187,11 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
         AccountManagerFacadeProvider.getInstance()
                 .getCoreAccountInfos()
                 .then(this::updateAccountsList);
+
+        // TODO(crbug.com/1503649): Figure out the behaviour for child accounts.
+        mIdentityErrorCardPreference =
+                (IdentityErrorCardPreference) findPreference(PREF_IDENTITY_ERROR_CARD_PREFERENCE);
+        mIdentityErrorCardPreference.initialize(getProfile(), this);
     }
 
     /**
@@ -185,7 +210,7 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
 
     private void configureSignOutSwitch() {
         Preference signOutPreference = findPreference(PREF_SIGN_OUT);
-        if (getProfile().isChild()) {
+        if (isSupervisedUser()) {
             getPreferenceScreen().removePreference(signOutPreference);
             getPreferenceScreen().removePreference(findPreference(PREF_SIGN_OUT_DIVIDER));
         } else {
@@ -211,11 +236,11 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
                             SignOutDialogCoordinator.show(
                                     requireContext(),
                                     getProfile(),
+                                    getChildFragmentManager(),
                                     ((ModalDialogManagerHolder) getActivity())
                                             .getModalDialogManager(),
-                                    this,
-                                    SignOutDialogCoordinator.ActionType.CLEAR_PRIMARY_ACCOUNT,
-                                    mGaiaServiceType);
+                                    SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS,
+                                    /* onSignOut= */ null);
                         } else {
                             IdentityServicesProvider.get()
                                     .getSigninManager(getProfile())
@@ -231,7 +256,7 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
 
     private void configureChildAccountPreferences() {
         Preference parentAccounts = findPreference(PREF_PARENT_ACCOUNT_CATEGORY);
-        if (getProfile().isChild()) {
+        if (isSupervisedUser()) {
             PrefService prefService = UserPrefs.get(getProfile());
 
             String firstParent = prefService.getString(Pref.SUPERVISED_USER_CUSTODIAN_EMAIL);
@@ -380,14 +405,14 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
 
     private void setAccountBadges(List<CoreAccountInfo> coreAccountInfos) {
         for (CoreAccountInfo coreAccountInfo : coreAccountInfos) {
-            Account account = CoreAccountInfo.getAndroidAccountFrom(coreAccountInfo);
             AccountManagerFacadeProvider.getInstance()
                     .checkChildAccountStatus(
-                            account,
+                            coreAccountInfo,
                             (isChild, childAccount) -> {
                                 if (isChild) {
                                     mProfileDataCache.setBadge(
-                                            childAccount.name, R.drawable.ic_account_child_20dp);
+                                            childAccount.getEmail(),
+                                            R.drawable.ic_account_child_20dp);
                                 }
                             });
         }
@@ -401,40 +426,7 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
                 .then(this::updateAccountsList);
     }
 
-    // SignOutDialogListener implementation:
-    @Override
-    public void onSignOutClicked(boolean forceWipeUserData) {
-        // In case the user reached this fragment without being signed in, we guard the sign out so
-        // we do not hit a native crash.
-        if (!IdentityServicesProvider.get()
-                .getIdentityManager(getProfile())
-                .hasPrimaryAccount(ConsentLevel.SIGNIN)) {
-            return;
-        }
-        final DialogFragment clearDataProgressDialog = new ClearDataProgressDialog();
-        IdentityServicesProvider.get()
-                .getSigninManager(getProfile())
-                .signOut(
-                        SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS,
-                        new SigninManager.SignOutCallback() {
-                            @Override
-                            public void preWipeData() {
-                                clearDataProgressDialog.show(
-                                        getFragmentManager(), CLEAR_DATA_PROGRESS_DIALOG_TAG);
-                            }
-
-                            @Override
-                            public void signOutComplete() {
-                                if (clearDataProgressDialog.isAdded()) {
-                                    clearDataProgressDialog.dismissAllowingStateLoss();
-                                }
-                            }
-                        },
-                        forceWipeUserData);
-    }
-
     // SignInStateObserver implementation:
-
     @Override
     public void onSignedIn() {
         update();
@@ -444,6 +436,112 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
     public void onSignedOut() {
         update();
     }
+
+    // IdentityErrorCardPreference.Listener implementation.
+    @Override
+    public void onIdentityErrorCardButtonClicked(@SyncError int error) {
+        assert mSignedInCoreAccountInfo != null;
+        switch (error) {
+            case SyncError.AUTH_ERROR:
+                AccountManagerFacadeProvider.getInstance()
+                        .updateCredentials(
+                                CoreAccountInfo.getAndroidAccountFrom(mSignedInCoreAccountInfo),
+                                getActivity(),
+                                null);
+                return;
+            case SyncError.CLIENT_OUT_OF_DATE:
+                // Opens the client in play store for update.
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setData(
+                        Uri.parse(
+                                "market://details?id="
+                                        + ContextUtils.getApplicationContext().getPackageName()));
+                startActivity(intent);
+                return;
+            case SyncError.PASSPHRASE_REQUIRED:
+                displayPassphraseDialog();
+                return;
+            case SyncError.TRUSTED_VAULT_KEY_REQUIRED_FOR_EVERYTHING:
+            case SyncError.TRUSTED_VAULT_KEY_REQUIRED_FOR_PASSWORDS:
+                SyncSettingsUtils.openTrustedVaultKeyRetrievalDialog(
+                        this, mSignedInCoreAccountInfo, REQUEST_CODE_TRUSTED_VAULT_KEY_RETRIEVAL);
+                return;
+            case SyncError.TRUSTED_VAULT_RECOVERABILITY_DEGRADED_FOR_EVERYTHING:
+            case SyncError.TRUSTED_VAULT_RECOVERABILITY_DEGRADED_FOR_PASSWORDS:
+                SyncSettingsUtils.openTrustedVaultRecoverabilityDegradedDialog(
+                        this,
+                        mSignedInCoreAccountInfo,
+                        REQUEST_CODE_TRUSTED_VAULT_RECOVERABILITY_DEGRADED);
+                return;
+            case SyncError.OTHER_ERRORS:
+            case SyncError.SYNC_SETUP_INCOMPLETE:
+                // Identity error card is not shown for unrecoverable errors nor for sync setup
+                // incomplete error (the latter is shown as part of sync error in the manage sync
+                // settings page).
+                assert false; // NOTREACHED()
+                // fall through
+            case SyncError.NO_ERROR:
+            default:
+                return;
+        }
+    }
+
+    /**
+     * Called upon completion of an activity started by a previous call to startActivityForResult()
+     * via SyncSettingsUtils.openTrustedVaultKeyRetrievalDialog() or
+     * SyncSettingsUtils.openTrustedVaultRecoverabilityDegradedDialog().
+     *
+     * @param requestCode Request code of the requested intent.
+     * @param resultCode Result code of the requested intent.
+     * @param data The data returned by the intent.
+     */
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        // Upon key retrieval completion, the keys in TrustedVaultClient could have changed. This is
+        // done even if the user cancelled the flow (i.e. resultCode != RESULT_OK) because it's
+        // harmless to issue a redundant notifyKeysChanged().
+        if (requestCode == REQUEST_CODE_TRUSTED_VAULT_KEY_RETRIEVAL) {
+            TrustedVaultClient.get().notifyKeysChanged();
+        }
+        if (requestCode == REQUEST_CODE_TRUSTED_VAULT_RECOVERABILITY_DEGRADED) {
+            TrustedVaultClient.get().notifyRecoverabilityChanged();
+        }
+    }
+
+    private void displayPassphraseDialog() {
+        FragmentTransaction ft = getFragmentManager().beginTransaction();
+        PassphraseDialogFragment.newInstance(this).show(ft, FRAGMENT_ENTER_PASSPHRASE);
+    }
+
+    /** Returns whether the passphrase successfully decrypted the pending keys. */
+    private boolean handleDecryption(String passphrase) {
+        if (passphrase.isEmpty() || !mSyncService.setDecryptionPassphrase(passphrase)) {
+            return false;
+        }
+        // PassphraseDialogFragment doesn't handle closing itself, so do it here. This is not done
+        // in updateSyncStateFromAndroidSyncSettings() because that happens onResume and possibly in
+        // other cases where the dialog should stay open.
+        closeDialogIfOpen(FRAGMENT_ENTER_PASSPHRASE);
+        // Update UI.
+        update();
+        return true;
+    }
+
+    /** Callback for PassphraseDialogFragment.Listener */
+    @Override
+    public boolean onPassphraseEntered(String passphrase) {
+        if (!mSyncService.isEngineInitialized()
+                || !mSyncService.isPassphraseRequiredForPreferredDataTypes()) {
+            // If the engine was shut down since the dialog was opened, or the passphrase isn't
+            // required anymore, do nothing.
+            return false;
+        }
+        return handleDecryption(passphrase);
+    }
+
+    /** Callback for PassphraseDialogFragment.Listener */
+    @Override
+    public void onPassphraseCanceled() {}
 
     /**
      * Open the account management UI.
@@ -456,5 +554,35 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
         SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
         settingsLauncher.launchSettingsActivity(
                 context, AccountManagementFragment.class, arguments);
+    }
+
+    private boolean isSupervisedUser() {
+        // SEED_ACCOUNTS_REVAMP is needed for using capabilities, otherwise
+        // findExtendedAccountInfoByEmailAddress is not guaranteed to have the needed account
+        if (ChromeFeatureList.isEnabled(
+                        ChromeFeatureList.MIGRATE_ACCOUNT_MANAGEMENT_SETTINGS_TO_CAPABILITIES)
+                && SigninFeatureMap.isEnabled(SigninFeatures.SEED_ACCOUNTS_REVAMP)) {
+            assert mSignedInCoreAccountInfo != null;
+            AccountInfo accountinfo =
+                    IdentityServicesProvider.get()
+                            .getIdentityManager(getProfile())
+                            .findExtendedAccountInfoByEmailAddress(
+                                    mSignedInCoreAccountInfo.getEmail());
+            return accountinfo.getAccountCapabilities().isSubjectToParentalControls()
+                    == Tribool.TRUE;
+        }
+        return getProfile().isChild();
+    }
+
+    private void closeDialogIfOpen(String tag) {
+        FragmentManager manager = getFragmentManager();
+        if (manager == null) {
+            // Do nothing if the manager doesn't exist yet; see http://crbug.com/480544.
+            return;
+        }
+        DialogFragment df = (DialogFragment) manager.findFragmentByTag(tag);
+        if (df != null) {
+            df.dismiss();
+        }
     }
 }

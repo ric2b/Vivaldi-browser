@@ -23,14 +23,15 @@ class FakeOrcaService : public ash::orca::mojom::OrcaService {
   explicit FakeOrcaService(OrcaLogger* logger) : logger_(logger) {}
 
   void BindEditor(
-      mojo::PendingAssociatedRemote<ash::orca::mojom::TextActuator>
+      mojo::PendingAssociatedRemote<ash::orca::mojom::SystemActuator>
           text_actuator,
       mojo::PendingAssociatedRemote<ash::orca::mojom::TextQueryProvider>
           text_query_provider,
       mojo::PendingAssociatedReceiver<ash::orca::mojom::EditorClientConnector>
           client_connector,
       mojo::PendingAssociatedReceiver<ash::orca::mojom::EditorEventSink>
-          event_sink) override {
+          event_sink,
+      ash::orca::mojom::EditorConfigPtr editor_config) override {
     logger_->log(logger_, OrcaLogSeverity::ORCA_LOG_SEVERITY_WARNING,
                  "Success");
   }

@@ -49,6 +49,11 @@
 #import "ios/chrome/browser/supervised_user/model/supervised_user_settings_service_factory.h"
 #import "ios/web/public/thread/web_thread.h"
 
+// Vivaldi
+#import "components/ad_blocker/adblock_rule_service.h"
+#import "ios/ad_blocker/adblock_rule_service_factory.h"
+// End Vivaldi
+
 // Returns a bool indicating whether the necessary directories were able to be
 // created (or already existed).
 bool EnsureBrowserStateDirectoriesCreated(const base::FilePath& path,
@@ -129,15 +134,13 @@ ChromeBrowserStateImpl::ChromeBrowserStateImpl(
   BrowserStateDependencyManager::GetInstance()
       ->RegisterBrowserStatePrefsForServices(pref_registry_.get());
 
-  scoped_refptr<SupervisedUserPrefStore> supervised_user_prefs;
-  if (supervised_user::IsChildAccountSupervisionEnabled()) {
-    // Create a SupervisedUserPrefStore and initialize it with empty data.
-    // The pref store will load SupervisedUserSettingsService disk data after
-    // the creation of PrefService.
-    supervised_user_prefs = base::MakeRefCounted<SupervisedUserPrefStore>();
-    supervised_user_prefs->OnNewSettingsAvailable(base::Value::Dict());
-    DCHECK(supervised_user_prefs->IsInitializationComplete());
-  }
+  // Create a SupervisedUserPrefStore and initialize it with empty data.
+  // The pref store will load SupervisedUserSettingsService disk data after
+  // the creation of PrefService.
+  scoped_refptr<SupervisedUserPrefStore> supervised_user_prefs =
+      base::MakeRefCounted<SupervisedUserPrefStore>();
+  supervised_user_prefs->OnNewSettingsAvailable(base::Value::Dict());
+  DCHECK(supervised_user_prefs->IsInitializationComplete());
 
   prefs_ = CreateBrowserStatePrefs(
       state_path, GetIOTaskRunner().get(), pref_registry_,
@@ -165,17 +168,15 @@ ChromeBrowserStateImpl::ChromeBrowserStateImpl(
   supervised_user_settings->Init(state_path, GetIOTaskRunner(),
                                  /*load_synchronously=*/true);
 
-  if (supervised_user::IsChildAccountSupervisionEnabled()) {
-    supervised_user_prefs->Init(supervised_user_settings);
+  supervised_user_prefs->Init(supervised_user_settings);
 
-    auto supervised_provider = std::make_unique<
-        supervised_user::SupervisedUserContentSettingsProvider>(
-        supervised_user_settings);
+  auto supervised_provider =
+      std::make_unique<supervised_user::SupervisedUserContentSettingsProvider>(
+          supervised_user_settings);
 
-    ios::HostContentSettingsMapFactory::GetForBrowserState(this)
-        ->RegisterProvider(HostContentSettingsMap::SUPERVISED_PROVIDER,
-                           std::move(supervised_provider));
-  }
+  ios::HostContentSettingsMapFactory::GetForBrowserState(this)
+      ->RegisterProvider(HostContentSettingsMap::SUPERVISED_PROVIDER,
+                         std::move(supervised_provider));
 
   base::FilePath cookie_path = state_path.Append(kIOSChromeCookieFilename);
   base::FilePath cache_path = GetCachePath(base_cache_path);
@@ -218,6 +219,8 @@ ChromeBrowserStateImpl::GetOffTheRecordChromeBrowserState() {
   if (!otr_state_) {
     otr_state_.reset(new OffTheRecordChromeBrowserStateImpl(
         GetIOTaskRunner(), this, GetOffTheRecordStatePath()));
+    adblock_filter::RuleServiceFactory::GetForBrowserState(this)
+        ->SetIncognitoBrowserState(otr_state_.get());
   }
 
   return otr_state_.get();
@@ -231,6 +234,11 @@ void ChromeBrowserStateImpl::DestroyOffTheRecordChromeBrowserState() {
   // Tear down both the OTR ChromeBrowserState and the OTR Profile with which
   // it is associated.
   otr_state_.reset();
+  auto* adblock_service =
+      adblock_filter::RuleServiceFactory::GetForBrowserStateIfExists(this);
+  if (adblock_service) {
+    adblock_service->SetIncognitoBrowserState(nullptr);
+  }
 }
 
 BrowserStatePolicyConnector* ChromeBrowserStateImpl::GetPolicyConnector() {
@@ -256,6 +264,8 @@ void ChromeBrowserStateImpl::SetOffTheRecordChromeBrowserState(
     std::unique_ptr<ChromeBrowserState> otr_state) {
   DCHECK(!otr_state_);
   otr_state_ = std::move(otr_state);
+  adblock_filter::RuleServiceFactory::GetForBrowserState(this)
+      ->SetIncognitoBrowserState(otr_state_.get());
 }
 
 ChromeBrowserStateIOData* ChromeBrowserStateImpl::GetIOData() {

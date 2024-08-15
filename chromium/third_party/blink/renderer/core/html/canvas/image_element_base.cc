@@ -148,7 +148,7 @@ gfx::Size ImageElementBase::BitmapSourceSize() const {
 }
 
 static bool HasDimensionsForImage(SVGImage* svg_image,
-                                  absl::optional<gfx::Rect> crop_rect,
+                                  std::optional<gfx::Rect> crop_rect,
                                   const ImageBitmapOptions* options) {
   if (!svg_image->ConcreteObjectSize(gfx::SizeF()).IsEmpty())
     return true;
@@ -159,9 +159,9 @@ static bool HasDimensionsForImage(SVGImage* svg_image,
   return false;
 }
 
-ScriptPromise ImageElementBase::CreateImageBitmap(
+ScriptPromiseTyped<ImageBitmap> ImageElementBase::CreateImageBitmap(
     ScriptState* script_state,
-    absl::optional<gfx::Rect> crop_rect,
+    std::optional<gfx::Rect> crop_rect,
     const ImageBitmapOptions* options,
     ExceptionState& exception_state) {
   ImageResourceContent* image_content = CachedImage();
@@ -169,19 +169,19 @@ ScriptPromise ImageElementBase::CreateImageBitmap(
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
         "No image can be retrieved from the provided element.");
-    return ScriptPromise();
+    return ScriptPromiseTyped<ImageBitmap>();
   }
   if (options->hasResizeWidth() && options->resizeWidth() == 0) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
         "The resize width dimension is equal to 0.");
-    return ScriptPromise();
+    return ScriptPromiseTyped<ImageBitmap>();
   }
   if (options->hasResizeHeight() && options->resizeHeight() == 0) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
         "The resize width dimension is equal to 0.");
-    return ScriptPromise();
+    return ScriptPromiseTyped<ImageBitmap>();
   }
   if (auto* svg_image = DynamicTo<SVGImage>(image_content->GetImage())) {
     if (!HasDimensionsForImage(svg_image, crop_rect, options)) {
@@ -190,7 +190,7 @@ ScriptPromise ImageElementBase::CreateImageBitmap(
           "The image element contains an SVG image without intrinsic "
           "dimensions, and no resize options or crop region are "
           "specified.");
-      return ScriptPromise();
+      return ScriptPromiseTyped<ImageBitmap>();
     }
     // The following function only works on SVGImages (as checked above).
     return ImageBitmap::CreateAsync(

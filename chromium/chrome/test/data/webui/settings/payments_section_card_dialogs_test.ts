@@ -6,12 +6,15 @@
 import 'chrome://settings/lazy_load.js';
 
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {SettingsSimpleConfirmationDialogElement, PaymentsManagerImpl, SettingsCreditCardEditDialogElement, SettingsVirtualCardUnenrollDialogElement} from 'chrome://settings/lazy_load.js';
-import {CrButtonElement, loadTimeData} from 'chrome://settings/settings.js';
+import type {CrInputElement, SettingsSimpleConfirmationDialogElement, SettingsCreditCardEditDialogElement, SettingsVirtualCardUnenrollDialogElement} from 'chrome://settings/lazy_load.js';
+import {PaymentsManagerImpl} from 'chrome://settings/lazy_load.js';
+import type {CrButtonElement} from 'chrome://settings/settings.js';
+import {loadTimeData} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {eventToPromise, isVisible, whenAttributeIs} from 'chrome://webui-test/test_util.js';
 
-import {createCreditCardEntry, createEmptyCreditCardEntry, TestPaymentsManager} from './autofill_fake_data.js';
+import type {TestPaymentsManager} from './autofill_fake_data.js';
+import {createCreditCardEntry, createEmptyCreditCardEntry} from './autofill_fake_data.js';
 import {createPaymentsSection, getDefaultExpectations, getLocalAndServerCreditCardListItems, getCardRowShadowRoot} from './payments_section_utils.js';
 
 // clang-format on
@@ -269,7 +272,6 @@ suite('PaymentsSectionCardDialogs', function() {
     const creditCard = createCreditCardEntry();
 
     creditCard.metadata!.isLocal = true;
-    creditCard.metadata!.isCached = false;
     creditCard.metadata!.isVirtualCardEnrollmentEligible = false;
     creditCard.metadata!.isVirtualCardEnrolled = false;
 
@@ -317,7 +319,6 @@ suite('PaymentsSectionCardDialogs', function() {
     const creditCard = createCreditCardEntry();
 
     creditCard.metadata!.isLocal = true;
-    creditCard.metadata!.isCached = false;
     creditCard.metadata!.isVirtualCardEnrollmentEligible = false;
     creditCard.metadata!.isVirtualCardEnrolled = false;
 
@@ -453,13 +454,14 @@ suite('PaymentsSectionCardDialogs', function() {
         loadTimeData.getString('creditCardCvcImageTitle'), cvcInputImage.title);
 
     const numberInput =
-        creditCardDialog.shadowRoot!.querySelector<HTMLInputElement>(
+        creditCardDialog.shadowRoot!.querySelector<CrInputElement>(
             '#numberInput');
     assertTrue(!!numberInput);
     assertTrue(isVisible(numberInput));
 
     // AmEx card entry.
     numberInput.value = '34';
+    await numberInput.updateComplete;
     numberInput.dispatchEvent(new CustomEvent('input'));
     assertEquals(
         loadTimeData.getString('creditCardCvcAmexImageTitle'),
@@ -467,6 +469,7 @@ suite('PaymentsSectionCardDialogs', function() {
 
     // Non-AmEx card entry.
     numberInput.value = '42';
+    await numberInput.updateComplete;
     numberInput.dispatchEvent(new CustomEvent('input'));
     assertEquals(
         loadTimeData.getString('creditCardCvcImageTitle'), cvcInputImage.title);

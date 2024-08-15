@@ -121,6 +121,36 @@ TEST_F(UserEducationUtilTest, ExtendedPropertiesWithStyle) {
             std::nullopt);
 }
 
+// Verifies that `CreateExtendedPropertiesWithAccessibleName()` can be used to
+// create extended properties for a help bubble having set accessible name, and
+// that `GetHelpBubbleAccessibleName()` can be used to retrieve help bubble
+// accessible name from extended properties.
+TEST_F(UserEducationUtilTest, ExtendedPropertiesWithAccessibleName) {
+  std::string accessible_name = "Accessible Name";
+  EXPECT_EQ(GetHelpBubbleAccessibleName(
+                CreateExtendedPropertiesWithAccessibleName(accessible_name)),
+            accessible_name);
+
+  // It is permissible to query help bubble accessible name even when absent.
+  EXPECT_EQ(GetHelpBubbleAccessibleName(HelpBubbleParams::ExtendedProperties()),
+            std::nullopt);
+}
+
+// Verifies that `CreateExtendedPropertiesWithBodyText()` can be used to create
+// extended properties for a help bubble having set body text, and that
+// `GetHelpBubbleBodyText()` can be used to retrieve help bubble body text from
+// extended properties.
+TEST_F(UserEducationUtilTest, ExtendedPropertiesWithBodyText) {
+  std::string body_text = "Body Text";
+  EXPECT_EQ(
+      GetHelpBubbleBodyText(CreateExtendedPropertiesWithBodyText(body_text)),
+      body_text);
+
+  // It is permissible to query help bubble body text even when absent.
+  EXPECT_EQ(GetHelpBubbleBodyText(HelpBubbleParams::ExtendedProperties()),
+            std::nullopt);
+}
+
 // Verifies that `ToString()` is working as intended.
 TEST_F(UserEducationUtilTest, ToString) {
   std::set<std::string> tutorial_id_strs;
@@ -247,14 +277,14 @@ TEST_F(UserEducationUtilAshTest, GetUserType) {
 
   auto* session_controller = GetSessionControllerClient();
   session_controller->AddUserSession(guest_account_id.GetUserEmail(),
-                                     user_manager::USER_TYPE_GUEST);
+                                     user_manager::UserType::kGuest);
   session_controller->AddUserSession(regular_account_id.GetUserEmail(),
-                                     user_manager::USER_TYPE_REGULAR);
+                                     user_manager::UserType::kRegular);
 
   // Case: multiple user sessions added.
   EXPECT_FALSE(GetUserType(AccountId()));
-  EXPECT_EQ(GetUserType(guest_account_id), user_manager::USER_TYPE_GUEST);
-  EXPECT_EQ(GetUserType(regular_account_id), user_manager::USER_TYPE_REGULAR);
+  EXPECT_EQ(GetUserType(guest_account_id), user_manager::UserType::kGuest);
+  EXPECT_EQ(GetUserType(regular_account_id), user_manager::UserType::kRegular);
 }
 
 // Verifies that `IsPrimaryAccountActive()` is working as intended.

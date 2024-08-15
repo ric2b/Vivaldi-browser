@@ -28,6 +28,7 @@
 #include "components/performance_manager/public/render_process_host_proxy.h"
 #include "content/public/browser/dedicated_worker_creator.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/service_worker_running_info.h"
 #include "content/public/browser/shared_worker_service.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/fake_service_worker_context.h"
@@ -171,7 +172,9 @@ class TestSharedWorkerService : public content::SharedWorkerService {
   void EnumerateSharedWorkers(Observer* observer) override;
   bool TerminateWorker(const GURL& url,
                        const std::string& name,
-                       const blink::StorageKey& storage_key) override;
+                       const blink::StorageKey& storage_key,
+                       const blink::mojom::SharedWorkerSameSiteCookies
+                           same_site_cookies) override;
   void Shutdown() override;
 
   // Creates a new shared worker and returns its token.
@@ -218,7 +221,8 @@ void TestSharedWorkerService::EnumerateSharedWorkers(Observer* observer) {
 bool TestSharedWorkerService::TerminateWorker(
     const GURL& url,
     const std::string& name,
-    const blink::StorageKey& storage_key) {
+    const blink::StorageKey& storage_key,
+    const blink::mojom::SharedWorkerSameSiteCookies same_site_cookies) {
   // Not implemented.
   ADD_FAILURE();
   return false;
@@ -421,7 +425,9 @@ void TestServiceWorkerContext::StartServiceWorker(int64_t version_id,
         content::ServiceWorkerRunningInfo(
             worker_url, scope_url,
             blink::StorageKey::CreateFirstParty(url::Origin::Create(scope_url)),
-            worker_process_id, blink::ServiceWorkerToken()));
+            worker_process_id, blink::ServiceWorkerToken(),
+            content::ServiceWorkerRunningInfo::ServiceWorkerVersionStatus::
+                kActivated));
   }
 }
 

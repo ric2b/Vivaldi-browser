@@ -6,6 +6,7 @@
 
 #include "public/fpdf_save.h"
 
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -22,7 +23,6 @@
 #include "fpdfsdk/cpdfsdk_filewriteadapter.h"
 #include "fpdfsdk/cpdfsdk_helpers.h"
 #include "public/fpdf_edit.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #ifdef PDF_ENABLE_XFA
 #include "core/fpdfapi/parser/cpdf_stream.h"
@@ -111,18 +111,17 @@ bool SaveXFADocumentData(CPDFXFA_Context* pContext,
         pdfium::MakeRetain<CFX_MemoryStream>();
     if (pContext->SaveDatasetsPackage(pFileWrite) &&
         pFileWrite->GetSize() > 0) {
-      auto pDataDict = pPDFDocument->New<CPDF_Dictionary>();
       if (iDataSetsIndex != -1) {
         if (pDataSetsStream) {
-          pDataSetsStream->InitStreamFromFile(pFileWrite, std::move(pDataDict));
+          pDataSetsStream->InitStreamFromFile(pFileWrite);
         }
       } else {
-        auto pData = pPDFDocument->NewIndirect<CPDF_Stream>();
-        pData->InitStreamFromFile(pFileWrite, std::move(pDataDict));
+        auto data_stream = pPDFDocument->NewIndirect<CPDF_Stream>(
+            pFileWrite, pPDFDocument->New<CPDF_Dictionary>());
         int iLast = fxcrt::CollectionSize<int>(*pArray) - 2;
         pArray->InsertNewAt<CPDF_String>(iLast, "datasets", false);
         pArray->InsertNewAt<CPDF_Reference>(iLast + 1, pPDFDocument,
-                                            pData->GetObjNum());
+                                            data_stream->GetObjNum());
       }
       fileList->push_back(std::move(pFileWrite));
     }
@@ -132,17 +131,17 @@ bool SaveXFADocumentData(CPDFXFA_Context* pContext,
     RetainPtr<IFX_SeekableStream> pFileWrite =
         pdfium::MakeRetain<CFX_MemoryStream>();
     if (pContext->SaveFormPackage(pFileWrite) && pFileWrite->GetSize() > 0) {
-      auto pDataDict = pPDFDocument->New<CPDF_Dictionary>();
       if (iFormIndex != -1) {
-        if (pFormStream)
-          pFormStream->InitStreamFromFile(pFileWrite, std::move(pDataDict));
+        if (pFormStream) {
+          pFormStream->InitStreamFromFile(pFileWrite);
+        }
       } else {
-        auto pData = pPDFDocument->NewIndirect<CPDF_Stream>();
-        pData->InitStreamFromFile(pFileWrite, std::move(pDataDict));
+        auto data_stream = pPDFDocument->NewIndirect<CPDF_Stream>(
+            pFileWrite, pPDFDocument->New<CPDF_Dictionary>());
         int iLast = fxcrt::CollectionSize<int>(*pArray) - 2;
         pArray->InsertNewAt<CPDF_String>(iLast, "form", false);
         pArray->InsertNewAt<CPDF_Reference>(iLast + 1, pPDFDocument,
-                                            pData->GetObjNum());
+                                            data_stream->GetObjNum());
       }
       fileList->push_back(std::move(pFileWrite));
     }
@@ -154,7 +153,7 @@ bool SaveXFADocumentData(CPDFXFA_Context* pContext,
 bool DoDocSave(FPDF_DOCUMENT document,
                FPDF_FILEWRITE* pFileWrite,
                FPDF_DWORD flags,
-               absl::optional<int> version) {
+               std::optional<int> version) {
   CPDF_Document* pPDFDoc = CPDFDocumentFromFPDFDocument(document);
   if (!pPDFDoc)
     return false;

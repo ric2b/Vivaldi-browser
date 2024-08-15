@@ -6,6 +6,8 @@
 class Profile;
 
 namespace vivaldi {
+// true == profile is okay
+bool VivaldiValidateProfile(Profile*);
 void VivaldiInitProfile(Profile*);
 }
 

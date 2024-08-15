@@ -100,7 +100,7 @@ class ASH_EXPORT PaletteTray : public TrayBackgroundView,
   void OnDisplayConfigurationChanged() override;
 
   // TrayBackgroundView:
-  void ClickedOutsideBubble() override;
+  void ClickedOutsideBubble(const ui::LocatedEvent& event) override;
   void UpdateTrayItemColor(bool is_active) override;
   void OnThemeChanged() override;
   std::u16string GetAccessibleNameForTray() override;
@@ -112,7 +112,6 @@ class ASH_EXPORT PaletteTray : public TrayBackgroundView,
   void ShowBubble() override;
   TrayBubbleView* GetBubbleView() override;
   views::Widget* GetBubbleWidget() const override;
-  const char* GetClassName() const override;
 
   // PaletteToolManager::Delegate:
   void HidePalette() override;

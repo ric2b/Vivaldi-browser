@@ -18,7 +18,6 @@
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
-#include "third_party/blink/public/mojom/loader/referrer.mojom.h"
 
 namespace content {
 
@@ -33,8 +32,8 @@ class CONTENT_EXPORT PrefetchNetworkContext {
   PrefetchNetworkContext(
       bool use_isolated_network_context,
       const PrefetchType& prefetch_type,
-      const blink::mojom::Referrer& referring_origin,
-      const GlobalRenderFrameHostId& referring_render_frame_host_id);
+      const GlobalRenderFrameHostId& referring_render_frame_host_id,
+      const url::Origin& referring_origin);
   ~PrefetchNetworkContext();
 
   PrefetchNetworkContext(const PrefetchNetworkContext&) = delete;
@@ -55,13 +54,10 @@ class CONTENT_EXPORT PrefetchNetworkContext {
   void CloseIdleConnections();
 
  private:
-  // Binds |pending_receiver| to a URL loader factory associated with
-  // the given |network_context|.
-  void CreateNewURLLoaderFactory(
+  // Returns a URLLoaderFactory associated with the given |network_context|.
+  scoped_refptr<network::SharedURLLoaderFactory> CreateNewURLLoaderFactory(
       BrowserContext* browser_context,
-      network::mojom::NetworkContext* network_context,
-      mojo::PendingReceiver<network::mojom::URLLoaderFactory> pending_receiver,
-      std::optional<net::IsolationInfo> isolation_info);
+      network::mojom::NetworkContext* network_context);
 
   // Bind |network_context_| to a new network context and configure it to use
   // the prefetch proxy. Also set up |url_loader_factory_| as a new URL loader
@@ -75,10 +71,15 @@ class CONTENT_EXPORT PrefetchNetworkContext {
   // Used to determine if the prefetch proxy should be used.
   const PrefetchType prefetch_type_;
 
-  // These parameters are used when considering to proxy |url_loader_factory_|
-  // by calling WillCreateURLLoaderFactory.
-  const blink::mojom::Referrer referrer_;
+  // The referring RenderFrameHost is used when considering to proxy
+  // |url_loader_factory_| by calling WillCreateURLLoaderFactory.
   const GlobalRenderFrameHostId referring_render_frame_host_id_;
+
+  // The origin that initiates the prefetch request, used when considering to
+  // proxy |url_loader_factory_| by calling WillCreateURLLoaderFactory.
+  // For renderer-initiated prefetch, this is calculated by referring
+  // RenderFrameHost's LastCommittedOrigin.
+  const url::Origin referring_origin_;
 
   // The network context and URL loader factory to use when making prefetches.
   mojo::Remote<network::mojom::NetworkContext> network_context_;

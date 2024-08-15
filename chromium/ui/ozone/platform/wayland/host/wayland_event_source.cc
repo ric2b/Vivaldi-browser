@@ -4,18 +4,19 @@
 
 #include "ui/ozone/platform/wayland/host/wayland_event_source.h"
 
+#include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
+#include <tuple>
 
 #include "base/check.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "build/chromeos_buildflags.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event_utils.h"
@@ -88,11 +89,7 @@ EventTarget* GetRootTarget(EventTarget* target) {
 }
 
 gfx::Point GetOriginInScreen(WaylandWindow* target) {
-  // The origin for located events and positions of popup windows is the window
-  // geometry.
-  // See https://crbug.com/1292486
-  gfx::Point origin = target->GetBoundsInDIP().origin() -
-                      target->GetWindowGeometryOffsetInDIP();
+  gfx::Point origin = target->GetBoundsInDIP().origin();
   auto* parent = static_cast<WaylandWindow*>(target->GetParentTarget());
   while (parent) {
     origin += parent->GetBoundsInDIP().origin().OffsetFromOrigin();
@@ -240,7 +237,7 @@ uint32_t WaylandEventSource::OnKeyboardKeyEvent(
     EventType type,
     DomCode dom_code,
     bool repeat,
-    absl::optional<uint32_t> serial,
+    std::optional<uint32_t> serial,
     base::TimeTicks timestamp,
     int device_id,
     WaylandKeyboard::KeyEventKind kind) {
@@ -299,6 +296,14 @@ uint32_t WaylandEventSource::OnKeyboardKeyEvent(
   }
   event.SetProperties(properties);
   return DispatchEvent(&event);
+}
+
+void WaylandEventSource::OnSynthesizedKeyPressEvent(DomCode dom_code,
+                                                    base::TimeTicks timestamp) {
+  std::ignore =
+      OnKeyboardKeyEvent(ET_KEY_PRESSED, dom_code, /*repeat=*/false,
+                         /*serial=*/std::nullopt, timestamp,
+                         /*device_id=*/0, WaylandKeyboard::KeyEventKind::kKey);
 }
 
 void WaylandEventSource::OnPointerFocusChanged(
@@ -478,6 +483,12 @@ void WaylandEventSource::DumpState(std::ostream& out) const {
   }
 }
 
+void WaylandEventSource::ResetStateForTesting() {
+  event_watcher_->Flush();
+  event_watcher_->RoundTripQueue();
+  event_watcher_->StopProcessingEvents();
+}
+
 const gfx::PointF& WaylandEventSource::GetPointerLocation() const {
   return pointer_location_;
 }
@@ -521,7 +532,7 @@ void WaylandEventSource::OnPointerFrameEvent() {
 }
 
 void WaylandEventSource::OnPointerAxisSourceEvent(uint32_t axis_source) {
-  EnsurePointerScrollData(/*timestamp*/ absl::nullopt);
+  EnsurePointerScrollData(/*timestamp*/ std::nullopt);
   pointer_scroll_data_->axis_source = axis_source;
 }
 
@@ -763,7 +774,7 @@ void WaylandEventSource::OnPinchEvent(EventType event_type,
                                       const gfx::Vector2dF& delta,
                                       base::TimeTicks timestamp,
                                       int device_id,
-                                      absl::optional<float> scale_delta) {
+                                      std::optional<float> scale_delta) {
   GestureEventDetails details(event_type);
   details.set_device_type(GestureDeviceType::DEVICE_TOUCHPAD);
   if (scale_delta)
@@ -921,7 +932,7 @@ void WaylandEventSource::OnWindowRemoved(WaylandWindow* window) {
 
 void WaylandEventSource::HandleTouchFocusChange(WaylandWindow* window,
                                                 bool focused,
-                                                absl::optional<PointerId> id) {
+                                                std::optional<PointerId> id) {
   DCHECK(window);
   bool actual_focus = id ? !ShouldUnsetTouchFocus(window, id.value()) : focused;
   window->set_touch_focus(actual_focus);
@@ -1008,9 +1019,9 @@ gfx::Vector2dF WaylandEventSource::ComputeFlingVelocity() {
                         (count * sums.ty_ - sums.t_ * sums.y_) * det_inv);
 }
 
-absl::optional<PointerDetails> WaylandEventSource::AmendStylusData() const {
+std::optional<PointerDetails> WaylandEventSource::AmendStylusData() const {
   if (!last_pointer_stylus_data_)
-    return absl::nullopt;
+    return std::nullopt;
 
   DCHECK_NE(last_pointer_stylus_data_->type, EventPointerType::kUnknown);
   return PointerDetails(last_pointer_stylus_data_->type, /*pointer_id=*/0,
@@ -1020,12 +1031,12 @@ absl::optional<PointerDetails> WaylandEventSource::AmendStylusData() const {
                         last_pointer_stylus_data_->tilt.y());
 }
 
-absl::optional<PointerDetails> WaylandEventSource::AmendStylusData(
+std::optional<PointerDetails> WaylandEventSource::AmendStylusData(
     PointerId pointer_id) const {
   const auto it = last_touch_stylus_data_.find(pointer_id);
   if (it == last_touch_stylus_data_.end() || !it->second ||
       it->second->type == EventPointerType::kTouch) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   // The values below come from the default values in pointer_details.cc|h.
@@ -1037,7 +1048,7 @@ absl::optional<PointerDetails> WaylandEventSource::AmendStylusData(
 }
 
 void WaylandEventSource::EnsurePointerScrollData(
-    const absl::optional<base::TimeTicks>& timestamp) {
+    const std::optional<base::TimeTicks>& timestamp) {
   if (!pointer_scroll_data_)
     pointer_scroll_data_ = PointerScrollData();
   if (!pointer_scroll_data_->timestamp && timestamp) {

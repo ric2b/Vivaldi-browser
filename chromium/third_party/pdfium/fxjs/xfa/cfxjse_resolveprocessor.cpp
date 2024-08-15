@@ -10,14 +10,14 @@
 #include <utility>
 #include <vector>
 
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
+#include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/fx_extension.h"
 #include "fxjs/xfa/cfxjse_engine.h"
 #include "fxjs/xfa/cfxjse_nodehelper.h"
 #include "fxjs/xfa/cfxjse_value.h"
 #include "fxjs/xfa/cjx_object.h"
-#include "third_party/base/check.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/containers/contains.h"
 #include "xfa/fxfa/parser/cxfa_document.h"
 #include "xfa/fxfa/parser/cxfa_localemgr.h"
 #include "xfa/fxfa/parser/cxfa_node.h"
@@ -213,7 +213,7 @@ bool CFXJSE_ResolveProcessor::ResolveForAttributeRs(
     CXFA_Object* curNode,
     CFXJSE_Engine::ResolveResult* rnd,
     WideStringView strAttr) {
-  absl::optional<XFA_SCRIPTATTRIBUTEINFO> info =
+  std::optional<XFA_SCRIPTATTRIBUTEINFO> info =
       XFA_GetScriptAttributeByName(curNode->GetElementType(), strAttr);
   if (!info.has_value())
     return false;
@@ -573,8 +573,8 @@ int32_t CFXJSE_ResolveProcessor::GetFilter(WideStringView wsExpression,
   }
   wsName.ReleaseBuffer(nNameCount);
   wsCondition.ReleaseBuffer(nConditionCount);
-  wsName.Trim();
-  wsCondition.Trim();
+  wsName.TrimWhitespace();
+  wsCondition.TrimWhitespace();
   rnd.m_uHashName =
       static_cast<XFA_HashCode>(FX_HashCode_GetW(wsName.AsStringView()));
   return nStart;
@@ -650,7 +650,7 @@ void CFXJSE_ResolveProcessor::FilterCondition(v8::Isolate* pIsolate,
   }
 
   size_t iFoundCount = pRnd->m_Result.objects.size();
-  wsCondition.Trim();
+  wsCondition.TrimWhitespace();
 
   const size_t nLen = wsCondition.GetLength();
   if (nLen == 0) {

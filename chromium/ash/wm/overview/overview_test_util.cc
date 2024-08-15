@@ -82,6 +82,14 @@ void WaitForOverviewExitAnimation() {
   WaitForOverviewAnimationState(OverviewAnimationState::kExitAnimationComplete);
 }
 
+void WaitForOverviewEntered() {
+  base::RunLoop run_loop;
+  OverviewTestApi().WaitForOverviewState(
+      OverviewAnimationState::kEnterAnimationComplete,
+      base::IgnoreArgs<bool>(run_loop.QuitClosure()));
+  run_loop.Run();
+}
+
 OverviewGrid* GetOverviewGridForRoot(aura::Window* root) {
   DCHECK(root->IsRootWindow());
 
@@ -157,6 +165,25 @@ void SendKeyUntilOverviewItemIsFocused(ui::KeyboardCode key) {
   do {
     SendKey(key);
   } while (!GetOverviewFocusedWindow());
+}
+
+void WaitForOcclusionStateChange(aura::Window* window,
+                                 aura::Window::OcclusionState target_state) {
+  while (window->GetOcclusionState() != target_state) {
+    base::RunLoop().RunUntilIdle();
+  }
+}
+
+bool IsWindowInItsCorrespondingOverviewGrid(aura::Window* window) {
+  const auto& overview_items =
+      GetOverviewGridForRoot(window->GetRootWindow())->window_list();
+  for (auto& overview_item : overview_items) {
+    if (overview_item->Contains(window)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 }  // namespace ash

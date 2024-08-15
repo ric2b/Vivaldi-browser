@@ -29,7 +29,7 @@ typedef std::set<const vivaldi::NoteNode*> NodeSet;
 
 // Finds note nodes from passed in |ids|. The optional is only set if all
 // the |ids| have been found.
-absl::optional<NodeSet> FindNodesByIds(vivaldi::NotesModel* model,
+std::optional<NodeSet> FindNodesByIds(vivaldi::NotesModel* model,
                                        const std::set<int64_t>& ids);
 
 // Finds note node passed in |id|, in the |model|.
@@ -41,6 +41,9 @@ const vivaldi::NoteNode* FindNodeById(vivaldi::NotesModel* model,
 const vivaldi::NoteNode* FindFolderById(vivaldi::NotesModel* model,
                                               int64_t id);
 
+// Returns the title string & normalizes it.
+NSString* NormalizeTitle(const NSString* title);
+
 // The iOS code is doing some munging of the note folder names in order
 // to display a slighly different wording for the default folders.
 NSString* TitleForNoteNode(const vivaldi::NoteNode* node);
@@ -51,7 +54,13 @@ NSString* subtitleForNoteNode(const vivaldi::NoteNode* node);
 // Returns the noted create date and time from the node.
 NSDate* createdAtForNoteNode(const vivaldi::NoteNode* node);
 
+// Returns the noted last modified date and time from the node.
+NSDate* lastModificationTimeForNoteNode(const vivaldi::NoteNode* node);
+
 #pragma mark - Updating Notes
+
+// A Snackbar helper to show toast messages.
+MDCSnackbarMessage* CreateToastWithWrapper(NSString* text);
 
 // Creates the note if |node| is NULL. Otherwise updates |node|.
 // |folder| is the intended parent of |node|.

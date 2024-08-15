@@ -10,8 +10,6 @@ namespace vivaldiprefs {
 // Profile prefs go here.
 extern const char kAutoUpdateEnabled[];
 extern const char kVivaldiAccountPendingRegistration[];
-constexpr char kVivaldiAddressBarSearchDirectMatchEnabled[] =
-    "vivaldi.address_bar.search.direct_match_enabled";
 extern const char kVivaldiExperiments[];
 extern const char kVivaldiLastTopSitesVacuumDate[];
 extern const char kVivaldiPIPPlacement[];
@@ -43,10 +41,14 @@ extern const char kVivaldiClientHintsBrandCustomBrandVersion[];
 
 extern const char kVivaldiCrashReportingConsentGranted[];
 
+extern const char kVivaldiPreferredColorScheme[];
 #if BUILDFLAG(IS_IOS)
+// Notes
 extern const char kVivaldiNoteFolderDefault[];
 extern const char kVivaldiNoteCachedTopMostRow[];
 extern const char kVivaldiNoteCachedFolderId[];
+extern const char kVivaldiNotesSortingMode[];
+extern const char kVivaldiNotesSortingOrder[];
 
 // Setting for folder visiblity on bookmark folder page
 extern const char kVivaldiBookmarkFoldersViewMode[];
@@ -75,10 +77,18 @@ extern const char kVivaldiDynamicAccentColorEnabled[];
 extern const char kVivaldiStartpagePortraitImage[];
 extern const char kVivaldiStartpageLandscapeImage[];
 // Start page
-// Speed dial sorting mode
+// Speed dial/Bookmarks sorting mode
 extern const char kVivaldiSpeedDialSortingMode[];
+// Speed dial/Bookmarks sorting order e.g ascending/descending
+extern const char kVivaldiSpeedDialSortingOrder[];
 // Start page layout
 extern const char kVivaldiStartPageLayoutStyle[];
+// Start page speed dial maximum column
+extern const char kVivaldiStartPageSDMaximumColumns[];
+// Start page show/hide speed dials
+extern const char kVivaldiStartPageShowSpeedDials[];
+// Start page show/hide customize button
+extern const char kVivaldiStartPageShowCustomizeButton[];
 // Start page Custom background Image
 extern const char kVivaldiStartpagePortraitImage[];
 extern const char kVivaldiStartpageLandscapeImage[];

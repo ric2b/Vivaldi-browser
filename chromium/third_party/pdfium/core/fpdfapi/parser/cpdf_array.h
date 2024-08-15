@@ -9,6 +9,7 @@
 
 #include <stddef.h>
 
+#include <optional>
 #include <set>
 #include <type_traits>
 #include <utility>
@@ -16,10 +17,9 @@
 
 #include "core/fpdfapi/parser/cpdf_indirect_object_holder.h"
 #include "core/fpdfapi/parser/cpdf_object.h"
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/fx_coordinates.h"
 #include "core/fxcrt/retain_ptr.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/base/check.h"
 
 // Arrays never contain nullptrs for objects within bounds, but some of the
 // methods will tolerate out-of-bounds indices and return nullptr for those
@@ -72,7 +72,7 @@ class CPDF_Array final : public CPDF_Object {
   CFX_FloatRect GetRect() const;
   CFX_Matrix GetMatrix() const;
 
-  absl::optional<size_t> Find(const CPDF_Object* pThat) const;
+  std::optional<size_t> Find(const CPDF_Object* pThat) const;
   bool Contains(const CPDF_Object* pThat) const;
 
   // Creates object owned by the array, and returns a retained pointer to it.
@@ -83,6 +83,9 @@ class CPDF_Array final : public CPDF_Object {
   template <typename T, typename... Args>
   typename std::enable_if<!CanInternStrings<T>::value, RetainPtr<T>>::type
   AppendNew(Args&&... args) {
+    static_assert(!std::is_same<T, CPDF_Stream>::value,
+                  "Cannot append a CPDF_Stream directly. Add it indirectly as "
+                  "a `CPDF_Reference` instead.");
     return pdfium::WrapRetain(static_cast<T*>(
         AppendInternal(pdfium::MakeRetain<T>(std::forward<Args>(args)...))));
   }
@@ -95,6 +98,9 @@ class CPDF_Array final : public CPDF_Object {
   template <typename T, typename... Args>
   typename std::enable_if<!CanInternStrings<T>::value, RetainPtr<T>>::type
   SetNewAt(size_t index, Args&&... args) {
+    static_assert(!std::is_same<T, CPDF_Stream>::value,
+                  "Cannot set a CPDF_Stream directly. Add it indirectly as a "
+                  "`CPDF_Reference` instead.");
     return pdfium::WrapRetain(static_cast<T*>(SetAtInternal(
         index, pdfium::MakeRetain<T>(std::forward<Args>(args)...))));
   }
@@ -107,6 +113,9 @@ class CPDF_Array final : public CPDF_Object {
   template <typename T, typename... Args>
   typename std::enable_if<!CanInternStrings<T>::value, RetainPtr<T>>::type
   InsertNewAt(size_t index, Args&&... args) {
+    static_assert(!std::is_same<T, CPDF_Stream>::value,
+                  "Cannot insert a CPDF_Stream directly. Add it indirectly as "
+                  "a `CPDF_Reference` instead.");
     return pdfium::WrapRetain(static_cast<T*>(InsertAtInternal(
         index, pdfium::MakeRetain<T>(std::forward<Args>(args)...))));
   }

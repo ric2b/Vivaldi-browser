@@ -5,6 +5,7 @@
 import("//build_overrides/build.gni")
 import("//third_party/libprotobuf-mutator/fuzzable_proto_library.gni")
 import("//third_party/protobuf/proto_library.gni")
+import("../../gni/openscreen.gni")
 import("../../testing/libfuzzer/fuzzer_test.gni")
 
 # TODO(crbug.com/1378386): Update Chromium tests to not include private headers
@@ -18,7 +19,7 @@ fuzzable_proto_library("remoting_proto") {
   sources = [ "remoting.proto" ]
 }
 
-source_set("streaming_configs") {
+openscreen_source_set("streaming_configs") {
   # Used in //components/cast_streaming in Chromium.
   visibility += [ "*" ]
   public = [
@@ -32,8 +33,6 @@ source_set("streaming_configs") {
     "resolution.cc",
   ]
 
-  public_configs = [ "../../build:openscreen_include_dirs" ]
-
   public_deps = [
     "../../third_party/abseil",
     "../../third_party/jsoncpp",
@@ -45,7 +44,7 @@ source_set("streaming_configs") {
   ]
 }
 
-source_set("common") {
+openscreen_source_set("common") {
   # Used by multiple targets in Chromium.
   visibility += [ "*" ]
   public = [
@@ -98,8 +97,6 @@ source_set("common") {
     "statistics_defines.h",
   ]
 
-  public_configs = [ "../../build:openscreen_include_dirs" ]
-
   public_deps = [
     ":remoting_proto",
     ":streaming_configs",
@@ -127,7 +124,7 @@ source_set("common") {
   ]
 }
 
-source_set("receiver") {
+openscreen_source_set("receiver") {
   # Used by //components/cast_streaming and //chromecast/cast_core/browser in
   # Chromium.
   visibility += [ "*" ]
@@ -167,7 +164,7 @@ source_set("receiver") {
   ]
 }
 
-source_set("sender") {
+openscreen_source_set("sender") {
   # Used by //components/mirroring and //media/cast in Chromium.
   visibility += [ "*" ]
   public = [
@@ -207,7 +204,7 @@ source_set("sender") {
   ]
 }
 
-source_set("test_helpers") {
+openscreen_source_set("test_helpers") {
   testonly = true
   public = []
   sources = [
@@ -228,7 +225,7 @@ source_set("test_helpers") {
   friend = [ ":unittests" ]
 }
 
-source_set("unittests") {
+openscreen_source_set("unittests") {
   testonly = true
   visibility += [ "../..:openscreen_unittests_all" ]
   public = []

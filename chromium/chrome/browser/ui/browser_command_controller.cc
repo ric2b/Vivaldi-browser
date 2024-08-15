@@ -40,7 +40,6 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/commander/commander.h"
 #include "chrome/browser/ui/managed_ui.h"
 #include "chrome/browser/ui/page_info/page_info_dialog.h"
 #include "chrome/browser/ui/passwords/ui_utils.h"
@@ -75,7 +74,6 @@
 #include "components/performance_manager/public/features.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_service.h"
-#include "components/services/screen_ai/buildflags/buildflags.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/signin/public/base/signin_buildflags.h"
@@ -94,6 +92,8 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension_urls.h"
 #include "printing/buildflags/buildflags.h"
+#include "services/screen_ai/buildflags/buildflags.h"
+#include "ui/actions/actions.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
@@ -961,9 +961,6 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_SHOW_BETA_FORUM:
       ShowBetaForum(browser_);
       break;
-    case IDC_TOGGLE_QUICK_COMMANDS:
-      ToggleCommander(browser_);
-      break;
     case IDC_DISTILL_PAGE:
       ToggleDistilledView(browser_);
       break;
@@ -1341,8 +1338,6 @@ void BrowserCommandController::InitCommandState() {
       IDC_SHOW_SAVE_LOCAL_CARD_SIGN_IN_PROMO_IF_APPLICABLE, true);
   command_updater_.UpdateCommandEnabled(IDC_CLOSE_SIGN_IN_PROMO, true);
   command_updater_.UpdateCommandEnabled(IDC_CARET_BROWSING_TOGGLE, true);
-  command_updater_.UpdateCommandEnabled(IDC_TOGGLE_QUICK_COMMANDS,
-                                        commander::IsEnabled());
   // Navigation commands
   command_updater_.UpdateCommandEnabled(
       IDC_HOME, normal_window || browser_->is_type_app() ||
@@ -1577,8 +1572,8 @@ void BrowserCommandController::UpdateCommandsForTabState() {
   }
 
   bool is_isolated_app = current_web_contents->GetPrimaryMainFrame()
-                             ->GetWebExposedIsolationLevel() >=
-                         WebExposedIsolationLevel::kMaybeIsolatedApplication;
+                             ->GetWebExposedIsolationLevel() ==
+                         WebExposedIsolationLevel::kIsolatedApplication;
   bool is_pinned_home_tab = web_app::IsPinnedHomeTab(
       browser_->tab_strip_model(), browser_->tab_strip_model()->active_index());
   command_updater_.UpdateCommandEnabled(
@@ -1832,6 +1827,13 @@ void BrowserCommandController::UpdatePrintingState() {
 
   bool print_enabled = CanPrint(browser_);
   command_updater_.UpdateCommandEnabled(IDC_PRINT, print_enabled);
+  if (features::IsToolbarPinningEnabled()) {
+    actions::ActionItem* const print_action =
+        actions::ActionManager::Get().FindAction(kActionPrint);
+    if (print_action) {
+      print_action->SetEnabled(print_enabled);
+    }
+  }
 #if BUILDFLAG(ENABLE_PRINTING)
   command_updater_.UpdateCommandEnabled(IDC_BASIC_PRINT,
                                         CanBasicPrint(browser_));

@@ -20,7 +20,7 @@
 #import "components/password_manager/ios/ios_password_manager_driver_factory.h"
 #import "components/sync/base/model_type.h"
 #import "components/sync/service/sync_service.h"
-#import "ios/chrome/browser/favicon/favicon_loader.h"
+#import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/passwords/model/password_tab_helper.h"
 #import "ios/chrome/browser/shared/ui/list_model/list_model.h"
@@ -81,8 +81,8 @@ BOOL AreCredentialsAtIndexesConnected(
 // YES if passwords were fetched at least once.
 @property(nonatomic, assign) BOOL passwordsWereFetched;
 
-// YES if the active field is of type 'password'.
-@property(nonatomic, assign) BOOL activeFieldIsPassword;
+// YES if the active field is obfuscated.
+@property(nonatomic, assign) BOOL activeFieldIsObfuscated;
 
 // The relevant active web state.
 @property(nonatomic, assign) web::WebState* webState;
@@ -117,7 +117,7 @@ BOOL AreCredentialsAtIndexesConnected(
                              webState:(web::WebState*)webState
                           syncService:(syncer::SyncService*)syncService
                                   URL:(const GURL&)URL
-               invokedOnPasswordField:(BOOL)invokedOnPasswordField {
+             invokedOnObfuscatedField:(BOOL)invokedOnObfuscatedField {
   self = [super init];
   if (self) {
     _credentials = @[];
@@ -125,7 +125,7 @@ BOOL AreCredentialsAtIndexesConnected(
     _webState = webState;
     _syncService = syncService;
     _URL = URL;
-    _activeFieldIsPassword = invokedOnPasswordField;
+    _activeFieldIsObfuscated = invokedOnObfuscatedField;
     _webStateObserverBridge =
         std::make_unique<web::WebStateObserverBridge>(self);
     _webState->AddObserver(_webStateObserverBridge.get());
@@ -133,6 +133,10 @@ BOOL AreCredentialsAtIndexesConnected(
         std::make_unique<autofill::FormActivityObserverBridge>(_webState, self);
   }
   return self;
+}
+
+- (void)dealloc {
+  [self disconnect];
 }
 
 - (void)disconnect {
@@ -262,7 +266,7 @@ BOOL AreCredentialsAtIndexesConnected(
         _syncService->GetActiveDataTypes().Has(syncer::PASSWORDS) &&
         passwordManagerClient &&
         passwordManagerClient->IsSavingAndFillingEnabled(_URL) &&
-        _activeFieldIsPassword) {
+        _activeFieldIsObfuscated) {
       NSString* suggestPasswordTitleString = l10n_util::GetNSString(
           IDS_IOS_MANUAL_FALLBACK_SUGGEST_STRONG_PASSWORD_WITH_DOTS);
       ManualFillActionItem* suggestPasswordItem = [[ManualFillActionItem alloc]
@@ -343,18 +347,14 @@ BOOL AreCredentialsAtIndexesConnected(
 
   password_manager::PasswordManagerDriver* driver =
       IOSPasswordManagerDriverFactory::FromWebStateAndWebFrame(webState, frame);
-  const std::vector<raw_ptr<const password_manager::PasswordForm,
-                            VectorExperimental>>* passwordForms =
+  const base::span<const password_manager::PasswordForm> passwordForms =
       passwordManager->GetBestMatches(driver, formId);
-  if (!passwordForms) {
-    return @[];
-  }
 
   NSMutableArray<ManualFillCredential*>* credentials =
-      [[NSMutableArray alloc] initWithCapacity:passwordForms->size()];
-  for (const password_manager::PasswordForm* form : *passwordForms) {
+      [[NSMutableArray alloc] initWithCapacity:passwordForms.size()];
+  for (const password_manager::PasswordForm& form : passwordForms) {
     ManualFillCredential* credential =
-        [[ManualFillCredential alloc] initWithPasswordForm:*form];
+        [[ManualFillCredential alloc] initWithPasswordForm:form];
     [credentials addObject:credential];
   }
 
@@ -429,9 +429,10 @@ BOOL AreCredentialsAtIndexesConnected(
     didRegisterFormActivity:(const autofill::FormActivityParams&)params
                     inFrame:(web::WebFrame*)frame {
   DCHECK_EQ(_webState, webState);
-  if (_activeFieldIsPassword !=
-      (params.field_type == autofill::kPasswordFieldType)) {
-    _activeFieldIsPassword = params.field_type == autofill::kPasswordFieldType;
+  if (_activeFieldIsObfuscated !=
+      (params.field_type == autofill::kObfuscatedFieldType)) {
+    _activeFieldIsObfuscated =
+        params.field_type == autofill::kObfuscatedFieldType;
     [self postActionsToConsumer];
   }
 }
@@ -441,7 +442,9 @@ BOOL AreCredentialsAtIndexesConnected(
 - (void)webStateDestroyed:(web::WebState*)webState {
   DCHECK_EQ(_webState, webState);
   if (_webState) {
-    _webState->RemoveObserver(_webStateObserverBridge.get());
+    if (_webStateObserverBridge) {
+      _webState->RemoveObserver(_webStateObserverBridge.get());
+    }
     _webState = nullptr;
   }
   _webStateObserverBridge.reset();

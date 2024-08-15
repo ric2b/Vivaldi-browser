@@ -63,7 +63,7 @@
 extern int vp8_update_coef_context(VP8_COMP *cpi);
 #endif
 
-extern unsigned int vp8_get_processor_freq();
+extern unsigned int vp8_get_processor_freq(void);
 
 int vp8_calc_ss_err(YV12_BUFFER_CONFIG *source, YV12_BUFFER_CONFIG *dest);
 
@@ -2005,6 +2005,7 @@ struct VP8_COMP *vp8_create_compressor(const VP8_CONFIG *oxcf) {
 
 #if CONFIG_MULTITHREAD
   if (vp8cx_create_encoder_threads(cpi)) {
+    cpi->common.error.setjmp = 0;
     vp8_remove_compressor(&cpi);
     return 0;
   }
@@ -2058,8 +2059,6 @@ struct VP8_COMP *vp8_create_compressor(const VP8_CONFIG *oxcf) {
 
   vp8_loop_filter_init(cm);
 
-  cpi->common.error.setjmp = 0;
-
 #if CONFIG_MULTI_RES_ENCODING
 
   /* Calculate # of MBs in a row in lower-resolution level image. */
@@ -2085,6 +2084,8 @@ struct VP8_COMP *vp8_create_compressor(const VP8_CONFIG *oxcf) {
   /* setup block ptrs & offsets */
   vp8_setup_block_ptrs(&cpi->mb);
   vp8_setup_block_dptrs(&cpi->mb.e_mbd);
+
+  cpi->common.error.setjmp = 0;
 
   return cpi;
 }
@@ -3182,7 +3183,8 @@ void vp8_loopfilter_frame(VP8_COMP *cpi, VP8_COMMON *cm) {
 
 #if CONFIG_MULTITHREAD
   if (vpx_atomic_load_acquire(&cpi->b_multi_threaded)) {
-    sem_post(&cpi->h_event_end_lpf); /* signal that we have set filter_level */
+    /* signal that we have set filter_level */
+    vp8_sem_post(&cpi->h_event_end_lpf);
   }
 #endif
 
@@ -4397,11 +4399,11 @@ static void encode_frame_to_data_rate(VP8_COMP *cpi, size_t *size,
 #if CONFIG_MULTITHREAD
   if (vpx_atomic_load_acquire(&cpi->b_multi_threaded)) {
     /* start loopfilter in separate thread */
-    sem_post(&cpi->h_event_start_lpf);
+    vp8_sem_post(&cpi->h_event_start_lpf);
     cpi->b_lpf_running = 1;
     /* wait for the filter_level to be picked so that we can continue with
      * stream packing */
-    sem_wait(&cpi->h_event_end_lpf);
+    vp8_sem_wait(&cpi->h_event_end_lpf);
   } else
 #endif
   {
@@ -5133,7 +5135,7 @@ int vp8_get_compressed_data(VP8_COMP *cpi, unsigned int *frame_flags,
 #if CONFIG_MULTITHREAD
   /* wait for the lpf thread done */
   if (vpx_atomic_load_acquire(&cpi->b_multi_threaded) && cpi->b_lpf_running) {
-    sem_wait(&cpi->h_event_end_lpf);
+    vp8_sem_wait(&cpi->h_event_end_lpf);
     cpi->b_lpf_running = 0;
   }
 #endif
@@ -5264,8 +5266,6 @@ int vp8_get_compressed_data(VP8_COMP *cpi, unsigned int *frame_flags,
 
 #endif
 #endif
-
-  cpi->common.error.setjmp = 0;
 
   return 0;
 }

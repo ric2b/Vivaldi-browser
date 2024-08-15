@@ -8,6 +8,7 @@
 #import <memory>
 
 #import "base/memory/ptr_util.h"
+#import "base/memory/raw_ptr.h"
 #import "base/strings/string_piece.h"
 #import "base/strings/string_util.h"
 #import "base/strings/sys_string_conversions.h"
@@ -16,8 +17,8 @@
 #import "base/test/ios/wait_util.h"
 #import "base/test/metrics/histogram_tester.h"
 #import "base/test/scoped_feature_list.h"
+#import "components/affiliations/core/browser/fake_affiliation_service.h"
 #import "components/keyed_service/core/service_access_type.h"
-#import "components/password_manager/core/browser/affiliation/fake_affiliation_service.h"
 #import "components/password_manager/core/browser/password_form.h"
 #import "components/password_manager/core/browser/password_manager_test_utils.h"
 #import "components/password_manager/core/browser/password_store/test_password_store.h"
@@ -30,7 +31,7 @@
 #import "components/strings/grit/components_strings.h"
 #import "components/sync/test/mock_sync_service.h"
 #import "components/sync_preferences/pref_service_mock_factory.h"
-#import "ios/chrome/browser/passwords/model/ios_chrome_affiliation_service_factory.h"
+#import "ios/chrome/browser/affiliations/model/ios_chrome_affiliation_service_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_check_manager.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_check_manager_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
@@ -142,7 +143,7 @@ class SafetyCheckMediatorTest : public PlatformTest {
         IOSChromeAffiliationServiceFactory::GetInstance(),
         base::BindRepeating(base::BindLambdaForTesting([](web::BrowserState*) {
           return std::unique_ptr<KeyedService>(
-              std::make_unique<password_manager::FakeAffiliationService>());
+              std::make_unique<affiliations::FakeAffiliationService>());
         })));
     browser_state_ = test_cbs_builder.Build();
     AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
@@ -266,11 +267,11 @@ class SafetyCheckMediatorTest : public PlatformTest {
   IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
   scoped_refptr<TestPasswordStore> store_;
-  AuthenticationService* auth_service_;
+  raw_ptr<AuthenticationService> auth_service_;
   scoped_refptr<IOSChromePasswordCheckManager> password_check_;
   SafetyCheckMediator* mediator_;
-  PrefService* pref_service_;
-  PrefService* local_pref_service_;
+  raw_ptr<PrefService> pref_service_;
+  raw_ptr<PrefService> local_pref_service_;
   PrefBackedBoolean* safe_browsing_preference_;
 };
 
@@ -365,7 +366,7 @@ TEST_F(SafetyCheckMediatorTest, TimestampResetIfNoIssuesInCheck) {
 // completes its run.
 TEST_F(SafetyCheckMediatorTest, TimestampSetForLatestRun) {
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures({kMagicStack, kSafetyCheckMagicStack}, {});
+  feature_list.InitWithFeatures({kSafetyCheckMagicStack}, {});
 
   mediator_.checkDidRun = true;
 

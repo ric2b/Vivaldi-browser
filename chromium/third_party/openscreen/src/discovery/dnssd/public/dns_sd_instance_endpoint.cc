@@ -75,7 +75,7 @@ void DnsSdInstanceEndpoint::InitializeEndpoints() {
   OSP_CHECK(!endpoints_.empty());
   std::sort(endpoints_.begin(), endpoints_.end());
   for (const auto& endpoint : endpoints_) {
-    OSP_DCHECK_EQ(endpoint.port, port());
+    OSP_CHECK_EQ(endpoint.port, port());
     addresses_.push_back(endpoint.address);
   }
 }

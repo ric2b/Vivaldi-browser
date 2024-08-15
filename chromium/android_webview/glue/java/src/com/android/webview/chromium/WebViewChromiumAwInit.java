@@ -25,7 +25,9 @@ import org.chromium.android_webview.AwBrowserProcess;
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwContentsStatics;
 import org.chromium.android_webview.AwCookieManager;
+import org.chromium.android_webview.AwCrashyClassUtils;
 import org.chromium.android_webview.AwDarkMode;
+import org.chromium.android_webview.AwFeatureMap;
 import org.chromium.android_webview.AwLocaleConfig;
 import org.chromium.android_webview.AwNetworkChangeNotifierRegistrationPolicy;
 import org.chromium.android_webview.AwProxyController;
@@ -36,6 +38,7 @@ import org.chromium.android_webview.HttpAuthDatabase;
 import org.chromium.android_webview.ProductConfig;
 import org.chromium.android_webview.R;
 import org.chromium.android_webview.WebViewChromiumRunQueue;
+import org.chromium.android_webview.common.AwFeatures;
 import org.chromium.android_webview.common.AwResource;
 import org.chromium.android_webview.common.AwSwitches;
 import org.chromium.android_webview.common.Lifetime;
@@ -171,32 +174,43 @@ public class WebViewChromiumAwInit {
             PathService.override(DIR_RESOURCE_PAKS_ANDROID, "/system/framework/webview/paks");
 
             initPlatSupportLibrary();
-            doNetworkInitializations(context);
+            AwContentsStatics.setCheckClearTextPermitted(
+                    context.getApplicationInfo().targetSdkVersion >= Build.VERSION_CODES.O);
 
             waitUntilSetUpResources();
 
             // NOTE: Finished writing Java resources. From this point on, it's safe to use them.
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && mIsPostedFromBackgroundThread) {
-                // Try to work around the problem we're seeing with resources on Android 12. When
-                // WebView is being initialized from a background thread, it's possible that the
-                // asset path updated by WebViewFactory is no longer present by the time we get
-                // here due to something on the UI thread having caused a resource update in the
-                // app in the meantime, because WebViewFactory does not add the path persistently.
-                // So, we can try to add them again using the "better" method in WebViewDelegate.
-
-                // However, we only want to try this if the resources are actually missing, because
-                // in the past we've seen this cause apps that were working to *start* crashing.
-                // The first resource that gets accessed in startup happens during the
-                // AwBrowserProcess.start() call when trying to determine if the device is a tablet,
-                // and that's the most common place for us to crash. So, try calling that same
-                // method and see if it throws - if so then we're unlikely to make the situation
-                // any worse by trying to fix the path.
-                try {
-                    DeviceFormFactor.isTablet();
-                } catch (Resources.NotFoundException e) {
-                    mFactory.addWebViewAssetPath(context);
-                }
+            // Try to work around the resources problem.
+            //
+            // WebViewFactory adds WebView's asset path to the host app before any of the code in
+            // the APK starts running, but it adds it using an old mechanism that doesn't persist if
+            // the app's resource configuration changes for any other reason.
+            //
+            // By the time we get here, it's possible it's gone missing due to something on the UI
+            // thread having triggered a resource update. This can happen either because WebView
+            // initialization was triggered by a background thread (and thus this code is running
+            // inside a posted task on the UI thread which may have taken any amount of time to
+            // actually run), or because the app used CookieManager first, which triggers the code
+            // being loaded and WebViewFactory doing the initial resources add, but does not call
+            // startChromiumLocked until the app uses some other API, an arbitrary amount of time
+            // later. So, we can try to add them again using the "better" method in WebViewDelegate.
+            //
+            // However, we only want to try this if the resources are actually missing, because
+            // in the past we've seen this cause apps that were working to *start* crashing.
+            // The first resource that gets accessed in startup happens during the
+            // AwBrowserProcess.start() call when trying to determine if the device is a tablet,
+            // and that's the most common place for us to crash. So, try calling that same
+            // method and see if it throws - if so then we're unlikely to make the situation
+            // any worse by trying to fix the path.
+            //
+            // This cannot fix the problem in all cases - if the app is using a weird ContextWrapper
+            // or doing other unusual things with resources/assets then even adding it with this
+            // mechanism might not help.
+            try {
+                DeviceFormFactor.isTablet();
+            } catch (Resources.NotFoundException e) {
+                mFactory.addWebViewAssetPath(context);
             }
 
             AwBrowserProcess.configureChildProcessLauncher();
@@ -209,6 +223,7 @@ public class WebViewChromiumAwInit {
 
             AwBrowserProcess.start();
             AwBrowserProcess.handleMinidumpsAndSetMetricsConsent(/* updateMetricsConsent= */ true);
+            doNetworkInitializations(context);
 
             // This has to be done after variations are initialized, so components could be
             // registered or not depending on the variations flags.
@@ -256,6 +271,8 @@ public class WebViewChromiumAwInit {
             // This runs all the pending tasks queued for after Chromium init is finished,
             // so should be the last thing that happens in startChromiumLocked.
             mFactory.getRunQueue().drainQueue();
+
+            AwCrashyClassUtils.maybeCrashIfEnabled();
         }
         RecordHistogram.recordTimesHistogram(
                 "Android.WebView.Startup.CreationTime.StartChromiumLocked",
@@ -401,6 +418,9 @@ public class WebViewChromiumAwInit {
     private void doNetworkInitializations(Context applicationContext) {
         try (ScopedSysTraceEvent e =
                 ScopedSysTraceEvent.scoped("WebViewChromiumAwInit.doNetworkInitializations")) {
+            boolean forceUpdateNetworkState =
+                    !AwFeatureMap.isEnabled(
+                            AwFeatures.WEBVIEW_USE_INITIAL_NETWORK_STATE_AT_STARTUP);
             if (applicationContext.checkPermission(
                             Manifest.permission.ACCESS_NETWORK_STATE,
                             Process.myPid(),
@@ -408,12 +428,8 @@ public class WebViewChromiumAwInit {
                     == PackageManager.PERMISSION_GRANTED) {
                 NetworkChangeNotifier.init();
                 NetworkChangeNotifier.setAutoDetectConnectivityState(
-                        new AwNetworkChangeNotifierRegistrationPolicy());
+                        new AwNetworkChangeNotifierRegistrationPolicy(), forceUpdateNetworkState);
             }
-
-            AwContentsStatics.setCheckClearTextPermitted(
-                    applicationContext.getApplicationInfo().targetSdkVersion
-                            >= Build.VERSION_CODES.O);
         }
     }
 

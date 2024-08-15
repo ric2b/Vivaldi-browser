@@ -6,7 +6,8 @@ import {
   getSingleDataType,
   getComponentReadbackTraits,
 } from '../../../../util/texture/texel_data.js';
-import { CheckContents } from '../texture_zero.spec.js';
+
+import { CheckContents } from './texture_zero_init_test.js';
 
 export const checkContentsBySampling: CheckContents = (
   t,

@@ -11,9 +11,9 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_SPECULATION_RULES_STUB_SPECULATION_HOST_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_SPECULATION_RULES_STUB_SPECULATION_HOST_H_
 
-class KURL;
-
 namespace blink {
+
+class KURL;
 
 class StubSpeculationHost : public mojom::blink::SpeculationHost {
  public:
@@ -46,6 +46,7 @@ class StubSpeculationHost : public mojom::blink::SpeculationHost {
 
   // mojom::blink::SpeculationHost.
   void UpdateSpeculationCandidates(Candidates candidates) override;
+  void OnLCPPredicted() override {}
   void EnableNoVarySearchSupport() override;
   void InitiatePreview(const KURL& url) override;
 

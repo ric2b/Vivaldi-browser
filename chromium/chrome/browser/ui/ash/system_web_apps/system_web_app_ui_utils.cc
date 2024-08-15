@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/check_op.h"
-#include "base/debug/dump_without_crashing.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -126,7 +125,8 @@ namespace {
 void LaunchSystemWebAppAsyncContinue(Profile* profile_for_launch,
                                      const SystemWebAppType type,
                                      const SystemAppLaunchParams& params,
-                                     apps::WindowInfoPtr window_info) {
+                                     apps::WindowInfoPtr window_info,
+                                     apps::LaunchCallback callback) {
   if (profile_for_launch->ShutdownStarted()) {
     return;
   }
@@ -154,7 +154,8 @@ void LaunchSystemWebAppAsyncContinue(Profile* profile_for_launch,
   if (params.url) {
     DCHECK(params.url->is_valid());
     app_service->LaunchAppWithUrl(*app_id, event_flags, *params.url,
-                                  params.launch_source, std::move(window_info));
+                                  params.launch_source, std::move(window_info),
+                                  std::move(callback));
     return;
   }
 
@@ -166,10 +167,13 @@ void LaunchSystemWebAppAsyncContinue(Profile* profile_for_launch,
 void LaunchSystemWebAppAsync(Profile* profile,
                              const SystemWebAppType type,
                              const SystemAppLaunchParams& params,
-                             apps::WindowInfoPtr window_info) {
+                             apps::WindowInfoPtr window_info,
+                             std::optional<apps::LaunchCallback> callback) {
   DCHECK(profile);
   // Terminal should be launched with crostini::LaunchTerminal*.
   DCHECK(type != SystemWebAppType::TERMINAL);
+  // Callback is only supported when launching with an URL.
+  DCHECK(!callback || params.url.has_value());
 
   // TODO(https://crbug.com/1135863): Implement a confirmation dialog when
   // changing to a different profile.
@@ -177,15 +181,11 @@ void LaunchSystemWebAppAsync(Profile* profile,
   if (profile_for_launch == nullptr) {
     // We can't find a suitable profile to launch. Complain about this so we
     // can identify the call site, and ask them to pick the right profile.
-    base::debug::DumpWithoutCrashing();
-
-    DVLOG(1)
+    // Note that this is fatal in developer builds.
+    DUMP_WILL_BE_NOTREACHED_NORETURN()
         << "LaunchSystemWebAppAsync is called on a profile that can't launch "
            "system web apps. The launch request is ignored. Please check the "
            "profile you are using is correct.";
-
-    // This will DCHECK in debug builds. But no-op in production builds.
-    NOTREACHED();
 
     // Early return if we can't find a profile to launch.
     return;
@@ -210,7 +210,9 @@ void LaunchSystemWebAppAsync(Profile* profile,
   manager->on_apps_synchronized().Post(
       FROM_HERE,
       base::BindOnce(&LaunchSystemWebAppAsyncContinue, profile_for_launch, type,
-                     params, std::move(window_info)));
+                     params, std::move(window_info),
+                     callback.has_value() ? std::move(callback.value())
+                                          : base::DoNothing()));
 }
 
 Browser* LaunchSystemWebAppImpl(Profile* profile,

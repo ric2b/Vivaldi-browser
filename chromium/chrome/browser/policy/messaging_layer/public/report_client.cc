@@ -11,7 +11,7 @@
 #include "base/functional/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -21,6 +21,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/policy/messaging_layer/storage_selector/storage_selector.h"
 #include "chrome/browser/policy/messaging_layer/util/dm_token_retriever_provider.h"
+#include "chrome/browser/policy/messaging_layer/util/reporting_server_connector.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/reporting/client/dm_token_retriever.h"
 #include "components/reporting/client/report_queue_configuration.h"
@@ -46,7 +47,8 @@ const base::FilePath::CharType kReportingDirectory[] =
 }  // namespace
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 
-ReportingClient::ReportingClient()
+ReportingClient::ReportingClient(
+    scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner)
     : ReportQueueProvider(
           base::BindRepeating(
               [](base::OnceCallback<void(
@@ -64,26 +66,65 @@ ReportingClient::ReportingClient()
                 StorageSelector::CreateLocalStorageModule(
                     reporting_path, SignatureVerifier::VerificationKey(),
                     CompressionInformation::COMPRESSION_SNAPPY,
-                    base::BindRepeating(&ReportingClient::AsyncStartUploader),
+                    base::BindPostTask(
+                        ReportQueueProvider::GetInstance()
+                            ->sequenced_task_runner(),
+                        base::BindRepeating(
+                            &ReportingClient::AsyncStartUploader,
+                            ReportQueueProvider::GetInstance()->GetWeakPtr())),
                     std::move(storage_created_cb));
 #endif  // !BUILDFLAG(IS_CHROMEOS)
               }),
-          base::SequencedTaskRunner::GetCurrentDefault()) {
+          sequenced_task_runner) {
+  // Register itself as observer to connector.
+  ReportingServerConnector::GetInstance()->AddObserver(this);
 }
 
-ReportingClient::~ReportingClient() = default;
+ReportingClient::~ReportingClient() {
+  // Unregister itself as observer to connector.
+  ReportingServerConnector::GetInstance()->RemoveObserver(this);
+}
 
-// static
-ReportingClient* ReportingClient::GetInstance() {
-  return base::Singleton<ReportingClient>::get();
+void ReportingClient::OnConnected() {
+  // Immediately perform dummy upload that will retrieve encryption key, if
+  // `Storage` does not have it yet. This is done to provide the key for later
+  // events posting even in case the device goes offline very soon after
+  // enrollment - `Flush` tries to request encryption key from the server. It
+  // is expected to succeed, but even if it fails, later enqueue operations
+  // have a good chance to succeed if the server is available. Note that we
+  // cannot use Speculative Report Queue - as opposed to `Enqueue`, `Flush`
+  // does wait for the underlying actual queue to be created.
+  ReportQueueProvider::CreateQueue(
+      ReportQueueConfiguration::Create(
+          {
+              .destination = Destination::HEARTBEAT_EVENTS  // Unused
+          })
+          .Build()
+          .value(),
+      base::BindOnce([](StatusOr<std::unique_ptr<ReportQueue>> queue_result) {
+        if (!queue_result.has_value()) {
+          LOG(WARNING) << "Failed to create queue for initial flush";
+          return;
+        }
+        // Flush SECURITY queue since it is usually empty (events are uploaded
+        // immediately after they are posted).
+        queue_result.value()->Flush(
+            Priority::SECURITY, base::BindOnce([](Status status) {
+              LOG_IF(WARNING, !status.ok()) << "Initial flush error=" << status;
+            }));
+      }));
+}
+
+void ReportingClient::OnDisconnected() {
+  // No action required upon disconnect.
 }
 
 // static
-ReportQueueProvider* ReportQueueProvider::GetInstance() {
-  // Forward to ReportingClient::GetInstance, because
-  // base::Singleton<ReportingClient>::get() cannot be called
-  // outside ReportingClient class.
-  return ReportingClient::GetInstance();
+ReportQueueProvider::SmartPtr<ReportingClient> ReportingClient::Create(
+    scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner) {
+  return SmartPtr<ReportingClient>(
+      new ReportingClient(sequenced_task_runner),
+      base::OnTaskRunnerDeleter(sequenced_task_runner));
 }
 
 void ReportingClient::ConfigureReportQueue(
@@ -288,62 +329,63 @@ ReportingClient::CreateLocalUploadProvider(
   // is instantiated.
   return std::make_unique<EncryptedReportingUploadProvider>(
       base::BindPostTask(
-          ReportingClient::GetInstance()->sequenced_task_runner(),
+          ReportQueueProvider::GetInstance()->sequenced_task_runner(),
           StorageSelector::GetLocalReportSuccessfulUploadCb(storage_module)),
       base::BindPostTask(
-          ReportingClient::GetInstance()->sequenced_task_runner(),
+          ReportQueueProvider::GetInstance()->sequenced_task_runner(),
           StorageSelector::GetLocalEncryptionKeyAttachedCb(storage_module)));
 }
 
 // static
 void ReportingClient::AsyncStartUploader(
+    base::WeakPtr<ReportQueueProvider> instance,
     UploaderInterface::UploadReason reason,
     UploaderInterface::UploaderInterfaceResultCb start_uploader_cb) {
-  ReportingClient::GetInstance()->DeliverAsyncStartUploader(
-      reason, std::move(start_uploader_cb));
+  if (!instance) {
+    std::move(start_uploader_cb)
+        .Run(base::unexpected(
+            Status(error::UNAVAILABLE, "Client not available")));
+    return;
+  }
+  auto* const client = static_cast<ReportingClient*>(instance.get());
+  CHECK(client);
+  client->DeliverAsyncStartUploader(reason, std::move(start_uploader_cb));
 }
 
 void ReportingClient::DeliverAsyncStartUploader(
     UploaderInterface::UploadReason reason,
     UploaderInterface::UploaderInterfaceResultCb start_uploader_cb) {
-  sequenced_task_runner()->PostTask(
-      FROM_HERE,
+  if (!upload_provider_) {
+    // If non-missived uploading is enabled, it will need upload
+    // provider. In case of missived Uploader will be provided by
+    // EncryptedReportingServiceProvider so it does not need to be
+    // enabled here.
+    if (!StorageSelector::is_uploader_required() ||
+        StorageSelector::is_use_missive()) {
+      std::move(start_uploader_cb)
+          .Run(base::unexpected(
+              Status(error::UNAVAILABLE, "Uploader not available")));
+      return;
+    }
+    upload_provider_ = CreateLocalUploadProvider(storage());
+  }
+  auto uploader = Uploader::Create(
+      /*need_encryption_key=*/
+      reason == UploaderInterface::UploadReason::KEY_DELIVERY,
       base::BindOnce(
-          [](UploaderInterface::UploadReason reason,
-             UploaderInterface::UploaderInterfaceResultCb start_uploader_cb,
-             ReportingClient* instance) {
-            if (!instance->upload_provider_) {
-              // If non-missived uploading is enabled, it will need upload
-              // provider. In case of missived Uploader will be provided by
-              // EncryptedReportingServiceProvider so it does not need to be
-              // enabled here.
-              if (!StorageSelector::is_uploader_required() ||
-                  StorageSelector::is_use_missive()) {
-                std::move(start_uploader_cb)
-                    .Run(base::unexpected(
-                        Status(error::UNAVAILABLE, "Uploader not available")));
-                return;
-              }
-              instance->upload_provider_ =
-                  CreateLocalUploadProvider(instance->storage());
+          [](base::WeakPtr<EncryptedReportingUploadProvider> upload_provider,
+             bool need_encryption_key, std::vector<EncryptedRecord> records,
+             ScopedReservation scoped_reservation) {
+            if (!upload_provider) {
+              return Status{error::UNAVAILABLE, "Uploader not available"};
             }
-            auto uploader = Uploader::Create(
-                /*need_encryption_key=*/
-                reason == UploaderInterface::UploadReason::KEY_DELIVERY,
-                base::BindOnce(
-                    [](EncryptedReportingUploadProvider* upload_provider,
-                       bool need_encryption_key,
-                       std::vector<EncryptedRecord> records,
-                       ScopedReservation scoped_reservation) {
-                      upload_provider->RequestUploadEncryptedRecords(
-                          need_encryption_key, std::move(records),
-                          std::move(scoped_reservation), base::DoNothing());
-                      return Status::StatusOK();
-                    },
-                    base::Unretained(instance->upload_provider_.get())));
-            std::move(start_uploader_cb).Run(std::move(uploader));
+            upload_provider->RequestUploadEncryptedRecords(
+                need_encryption_key, std::move(records),
+                std::move(scoped_reservation), base::DoNothing());
+            return Status::StatusOK();
           },
-          reason, std::move(start_uploader_cb), base::Unretained(this)));
+          upload_provider_->GetWeakPtr()));
+  std::move(start_uploader_cb).Run(std::move(uploader));
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 }  // namespace reporting

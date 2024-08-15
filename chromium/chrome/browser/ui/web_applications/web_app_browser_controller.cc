@@ -470,8 +470,15 @@ GURL WebAppBrowserController::GetAppNewTabUrl() const {
 }
 
 bool WebAppBrowserController::ShouldHideNewTabButton() const {
-  if (!registrar().IsTabbedWindowModeEnabled(app_id())) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // Show new tab button for Terminal System App.
+  if (system_app() && system_app()->ShouldHaveTabStrip()) {
     return false;
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+  if (!registrar().IsTabbedWindowModeEnabled(app_id())) {
+    return true;
   }
 
   // If the app added a pinned home tab without changing their new tab URL, we

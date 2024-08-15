@@ -4,7 +4,7 @@
 
 import 'chrome://os-settings/lazy_load.js';
 
-import {CrLinkRowElement, CrToggleElement, DevicePageBrowserProxyImpl, displaySettingsProviderMojom, Router, routes, setDisplayApiForTesting, setDisplaySettingsProviderForTesting, SettingsDisplayElement, SettingsDropdownMenuElement, SettingsSliderElement, SettingsToggleButtonElement} from 'chrome://os-settings/os_settings.js';
+import {CrLinkRowElement, CrToggleElement, DevicePageBrowserProxyImpl, DisplayLayoutElement, displaySettingsProviderMojom, Router, routes, setDisplayApiForTesting, setDisplaySettingsProviderForTesting, SettingsDisplayElement, SettingsDropdownMenuElement, SettingsSliderElement, SettingsToggleButtonElement} from 'chrome://os-settings/os_settings.js';
 import {strictQuery} from 'chrome://resources/ash/common/typescript_utils/strict_query.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
@@ -336,6 +336,15 @@ suite('<settings-display>', () => {
           1,
           externalDisplayHistogram.get(
               displaySettingsProviderMojom.DisplaySettingsType.kOrientation));
+
+      const externalDisplayOrientationHistogram =
+          displaySettingsProvider.getDisplayOrientationHistogram(
+              /*is_internal=*/ false);
+      assertEquals(
+          1,
+          externalDisplayOrientationHistogram.get(
+              displaySettingsProviderMojom.DisplaySettingsOrientationOption
+                  .k90Degree));
     });
 
     test('overscan', () => {
@@ -371,6 +380,14 @@ suite('<settings-display>', () => {
           externalDisplayHistogram.get(
               displaySettingsProviderMojom.DisplaySettingsType.kNightLight));
 
+      const externalDisplayNightLightStatusHistogram =
+          displaySettingsProvider.getDisplayNightLightStatusHistogram(
+              /*is_internal=*/ false);
+      assertEquals(
+          1,
+          externalDisplayNightLightStatusHistogram.get(
+              /*night_light_status=*/ true));
+
       // Mock user updating night light schedule.
       const schedule = displayNightLight.shadowRoot!
                            .querySelector<SettingsDropdownMenuElement>(
@@ -388,6 +405,15 @@ suite('<settings-display>', () => {
           externalDisplayHistogram.get(
               displaySettingsProviderMojom.DisplaySettingsType
                   .kNightLightSchedule));
+
+      const externalDisplayNightLightScheduleHistogram =
+          displaySettingsProvider.getDisplayNightLightScheduleHistogram(
+              /*is_internal=*/ false);
+      assertEquals(
+          1,
+          externalDisplayNightLightScheduleHistogram.get(
+              displaySettingsProviderMojom
+                  .DisplaySettingsNightLightScheduleOption.kSunsetToSunrise));
     });
 
     test('mirror mode', () => {
@@ -404,6 +430,10 @@ suite('<settings-display>', () => {
           1,
           displayHistogram.get(
               displaySettingsProviderMojom.DisplaySettingsType.kMirrorMode));
+      assertEquals(
+          1,
+          displaySettingsProvider.getDisplayMirrorModeStatusHistogram().get(
+              /*mirror_mode_status=*/ true));
     });
 
     test('unified mode', () => {
@@ -419,6 +449,10 @@ suite('<settings-display>', () => {
           1,
           displayHistogram.get(
               displaySettingsProviderMojom.DisplaySettingsType.kUnifiedMode));
+      assertEquals(
+          1,
+          displaySettingsProvider.getDisplayUnifiedModeStatusHistogram().get(
+              /*mirror_mode_status=*/ true));
     });
 
     test('primary display', () => {
@@ -739,12 +773,14 @@ suite('<settings-display>', () => {
         })
         .then(() => {
           const displayLayout =
-              displayPage.shadowRoot!.querySelector('#displayLayout') as any;
+              displayPage.shadowRoot!.querySelector<DisplayLayoutElement>(
+                  '#displayLayout');
           assert(!!displayLayout);
           const display = strictQuery(
               `#_${kDisplayIdPrefix}2`, displayLayout.shadowRoot, HTMLElement);
-          const layout =
-              displayLayout.displayLayoutMap_.get(`${kDisplayIdPrefix}2`);
+          const layout = displayLayout.getDisplayLayoutMapForTesting().get(
+              `${kDisplayIdPrefix}2`);
+          assert(layout);
 
           assertEquals(layout.parentId, `${kDisplayIdPrefix}1`);
           assertEquals(layout.position, 'right');
@@ -833,4 +869,103 @@ suite('<settings-display>', () => {
     assertFalse(temperature.hidden);
     assertFalse(schedule.hidden);
   });
+
+  test('Display Performance', async () => {
+    await initPage();
+
+    // Set up a single display.
+    addDisplay(1);
+    fakeSystemDisplay.onDisplayChanged.callListeners();
+    await fakeSystemDisplay.getInfoCalled.promise;
+    await fakeSystemDisplay.getLayoutCalled.promise;
+    assertEquals(1, displayPage.displays.length);
+
+    const displayPerformanceToggle = strictQuery(
+        '#displayPerformanceModeToggle', displayPage.shadowRoot, HTMLElement);
+    assertTrue(!!displayPerformanceToggle);
+    displayPerformanceToggle.click();
+
+    assertTrue(displaySettingsProvider.getShinyPerformance());
+  });
+
+  test('Display brightness, flag disabled', async () => {
+    loadTimeData.overrideValues(
+        {enableDisplayBrightnessControlInSettings: false});
+    await initPage();
+
+    // Set up a single display.
+    addDisplay(1);
+    fakeSystemDisplay.onDisplayChanged.callListeners();
+    await fakeSystemDisplay.getInfoCalled.promise;
+    await fakeSystemDisplay.getLayoutCalled.promise;
+    assertEquals(1, displayPage.displays.length);
+
+    const displayBrightness =
+        displayPage.shadowRoot!.querySelector<HTMLDivElement>(
+            '#brightnessSliderWrapper');
+    assertFalse(!!displayBrightness);
+  });
+
+  test('Display brightness, flag enabled on internal display', async () => {
+    loadTimeData.overrideValues(
+        {enableDisplayBrightnessControlInSettings: true});
+    await initPage();
+
+    // Set up the internal display.
+    addDisplay(1);
+    fakeSystemDisplay.onDisplayChanged.callListeners();
+    await fakeSystemDisplay.getInfoCalled.promise;
+    await fakeSystemDisplay.getLayoutCalled.promise;
+    assertEquals(1, displayPage.displays.length);
+    flush();
+
+    // Display brightness slider should be present on the internal display.
+    const displayBrightness =
+        displayPage.shadowRoot!.querySelector<HTMLDivElement>(
+            '#brightnessSliderWrapper');
+    assertTrue(!!displayBrightness);
+  });
+
+  test('Display brightness, flag enabled on external display', async () => {
+    loadTimeData.overrideValues(
+        {enableDisplayBrightnessControlInSettings: true});
+    await initPage();
+
+    // Set up the internal display.
+    addDisplay(1);
+    fakeSystemDisplay.onDisplayChanged.callListeners();
+    await fakeSystemDisplay.getInfoCalled.promise;
+    await fakeSystemDisplay.getLayoutCalled.promise;
+    assertEquals(1, displayPage.displays.length);
+    flush();
+
+    // Set up an external display.
+    addDisplay(2);
+    fakeSystemDisplay.onDisplayChanged.callListeners();
+    await fakeSystemDisplay.getInfoCalled.promise;
+    await fakeSystemDisplay.getLayoutCalled.promise;
+    assertEquals(2, displayPage.displays.length);
+    flush();
+
+    // Select the second display.
+    const displayLayout =
+        displayPage.shadowRoot!.querySelector('#displayLayout');
+    assertTrue(!!displayLayout);
+    const displayDiv = strictQuery(
+        `#_${kDisplayIdPrefix}2`, displayLayout.shadowRoot, HTMLElement);
+    assertTrue(!!displayDiv);
+    displayDiv.click();
+
+    // Check that the second display is selected.
+    assertEquals(displayPage.displays[1]!.id, displayPage.selectedDisplay!.id);
+    flush();
+
+    const displayBrightness =
+        displayPage.shadowRoot!.querySelector<HTMLDivElement>(
+            '#brightnessSliderWrapper');
+
+    // Display brightness slider should not be present on external displays.
+    assertFalse(!!displayBrightness);
+  });
+
 });

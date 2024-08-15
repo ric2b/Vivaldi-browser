@@ -5,7 +5,8 @@
 import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {CredentialManagementDialogPage, CrIconButtonElement, SecurityKeysCredentialBrowserProxy, SecurityKeysCredentialBrowserProxyImpl, SettingsSecurityKeysCredentialManagementDialogElement} from 'chrome://settings/lazy_load.js';
+import type {CrIconButtonElement, SecurityKeysCredentialBrowserProxy, SettingsSecurityKeysCredentialManagementDialogElement} from 'chrome://settings/lazy_load.js';
+import {CredentialManagementDialogPage, SecurityKeysCredentialBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
@@ -158,6 +159,7 @@ suite('SecurityKeysCredentialManagement', function() {
     assertShown(allDivs, dialog, 'pinPrompt');
     assertEquals(currentMinPinLength, dialog.$.pin.minPinLength);
     dialog.$.pin.$.pin.value = '000000';
+    await dialog.$.pin.$.pin.updateComplete;
     dialog.$.confirmButton.click();
     const pin = await browserProxy.whenCalled('providePin');
     assertEquals(pin, '000000');
@@ -219,6 +221,7 @@ suite('SecurityKeysCredentialManagement', function() {
     assertShown(allDivs, dialog, 'pinPrompt');
     assertEquals(currentMinPinLength, dialog.$.pin.minPinLength);
     dialog.$.pin.$.pin.value = '000000';
+    await dialog.$.pin.$.pin.updateComplete;
     dialog.$.confirmButton.click();
     const pin = await browserProxy.whenCalled('providePin');
     assertEquals(pin, '000000');
@@ -266,6 +269,10 @@ suite('SecurityKeysCredentialManagement', function() {
     assertShown(allDivs, dialog, 'edit');
     dialog.$.displayNameInput.value = 'Bobby Example';
     dialog.$.userNameInput.value = 'bobby@example.com';
+    await Promise.all([
+      dialog.$.displayNameInput.updateComplete,
+      dialog.$.userNameInput.updateComplete,
+    ]);
     dialog.$.confirmButton.click();
     credentials[0]!.userDisplayName = 'Bobby Example';
     credentials[0]!.userName = 'bobby@example.com';

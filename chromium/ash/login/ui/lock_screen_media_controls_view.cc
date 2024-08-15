@@ -16,6 +16,7 @@
 #include "ash/style/ash_color_id.h"
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
+#include "base/notreached.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -460,7 +461,7 @@ gfx::Size LockScreenMediaControlsView::CalculatePreferredSize() const {
   return contents_view_->GetPreferredSize();
 }
 
-void LockScreenMediaControlsView::Layout() {
+void LockScreenMediaControlsView::Layout(PassKey) {
   contents_view_->SetBoundsRect(GetContentsBounds());
 }
 
@@ -603,7 +604,7 @@ void LockScreenMediaControlsView::MediaSessionPositionChanged(
   if (!position.has_value()) {
     if (progress_->GetVisible()) {
       progress_->SetVisible(false);
-      Layout();
+      DeprecatedLayoutImmediately();
     }
     return;
   }
@@ -612,7 +613,7 @@ void LockScreenMediaControlsView::MediaSessionPositionChanged(
 
   if (!progress_->GetVisible()) {
     progress_->SetVisible(true);
-    Layout();
+    DeprecatedLayoutImmediately();
   }
 }
 
@@ -653,6 +654,11 @@ void LockScreenMediaControlsView::MediaControllerImageChanged(
             kDesiredSourceIconSize);
       }
       header_row_->SetAppIcon(session_icon);
+      break;
+    }
+    case media_session::mojom::MediaSessionImageType::kChapter: {
+      NOTREACHED() << " The chpater images should be updated in "
+                      "`MediaControllerChapterImageChanged` ";
     }
   }
 }
@@ -812,7 +818,7 @@ void LockScreenMediaControlsView::SetArtwork(
       ScaleSizeToFitView(img->size(), session_artwork_->GetPreferredSize()));
   session_artwork_->SetImage(*img);
 
-  Layout();
+  DeprecatedLayoutImmediately();
   session_artwork_->SetClipPath(GetArtworkClipPath());
 }
 
@@ -888,7 +894,7 @@ void LockScreenMediaControlsView::RunResetControlsAnimation() {
   contents_view_->layer()->SetOpacity(1);
 }
 
-BEGIN_METADATA(LockScreenMediaControlsView, views::View)
+BEGIN_METADATA(LockScreenMediaControlsView)
 END_METADATA
 
 }  // namespace ash

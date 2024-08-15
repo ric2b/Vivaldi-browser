@@ -17,6 +17,7 @@
 
 struct RegisterOptions;
 struct ImpressionEvent;
+struct ResizeEvent;
 struct ClickEvent;
 struct HoverEvent;
 struct DragEvent;
@@ -45,6 +46,7 @@ class DevToolsEmbedderMessageDispatcher {
     virtual void InspectedURLChanged(const std::string& url) = 0;
     virtual void SetIsDocked(DispatchCallback callback, bool is_docked) = 0;
     virtual void OpenInNewTab(const std::string& url) = 0;
+    virtual void OpenSearchResultsInNewTab(const std::string& query) = 0;
     virtual void ShowItemInFolder(const std::string& file_system_path) = 0;
     virtual void SaveToFile(const std::string& url,
                             const std::string& content,
@@ -107,6 +109,7 @@ class DevToolsEmbedderMessageDispatcher {
                                             double duration) = 0;
     virtual void RecordUserMetricsAction(const std::string& name) = 0;
     virtual void RecordImpression(const ImpressionEvent& event) = 0;
+    virtual void RecordResize(const ResizeEvent& event) = 0;
     virtual void RecordClick(const ClickEvent& event) = 0;
     virtual void RecordHover(const HoverEvent& event) = 0;
     virtual void RecordDrag(const DragEvent& event) = 0;
@@ -126,7 +129,9 @@ class DevToolsEmbedderMessageDispatcher {
     virtual void CanShowSurvey(DispatchCallback callback,
                                const std::string& trigger) = 0;
     virtual void DoAidaConversation(DispatchCallback callback,
-                                    const std::string& request) = 0;
+                                    const std::string& request,
+                                    int stream_id) = 0;
+    virtual void RegisterAidaClientEvent(const std::string& request) = 0;
   };
 
   using DispatchCallback = Delegate::DispatchCallback;

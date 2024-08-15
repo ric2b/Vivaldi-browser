@@ -31,7 +31,8 @@ base::FilePath GetProfileDir(importer::ImporterType importerType) {
 
   if (importerType == importer::TYPE_OPERA_OPIUM ||
       importerType == importer::TYPE_OPERA_OPIUM_BETA ||
-      importerType == importer::TYPE_OPERA_OPIUM_DEV) {
+      importerType == importer::TYPE_OPERA_OPIUM_DEV ||
+      importerType == importer::TYPE_OPERA_GX) {
     if (!PathService::Get(base::DIR_ROAMING_APP_DATA, &app_data_path)) {
       return app_data_path.AppendASCII("not-supported");
     }
@@ -71,7 +72,12 @@ base::FilePath GetProfileDir(importer::ImporterType importerType) {
     case importer::TYPE_EDGE_CHROMIUM:
       profile_path = app_data_path.AppendASCII("Microsoft\\Edge\\User Data");
       break;
-
+    case importer::TYPE_ARC:
+      profile_path = app_data_path.AppendASCII("The Browser Company\\Arc\\User Data");
+      break;
+    case importer::TYPE_OPERA_GX:
+      profile_path = app_data_path.AppendASCII("Opera Software\\Opera GX Stable");
+      break;
     default:
       profile_path = app_data_path.AppendASCII("not-supported");
       break;

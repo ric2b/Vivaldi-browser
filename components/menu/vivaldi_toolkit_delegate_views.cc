@@ -12,20 +12,26 @@
 
 class VivaldiMenuModelAdapterViews : public views::MenuModelAdapter {
  public:
-  VivaldiMenuModelAdapterViews(ui::MenuModel* menu_model,
-                               vivaldi::ContextMenuPostitionDelegate* delegate)
+  VivaldiMenuModelAdapterViews(
+      ui::MenuModel* menu_model,
+      base::WeakPtr<vivaldi::ContextMenuPostitionDelegate> delegate)
       : views::MenuModelAdapter(menu_model), delegate_(delegate) {}
 
   // views::MenuDelegate
   bool VivaldiShouldTryPositioningContextMenu() const override {
-    return delegate_ && delegate_->CanSetPosition();
+    if (delegate_) {
+      return delegate_->CanSetPosition();
+    }
+    return false;
   }
 
   void VivaldiGetContextMenuPosition(
       gfx::Rect* menu_bounds,
       const gfx::Rect& monitor_bounds,
       const gfx::Rect& anchor_bounds) const override {
-    delegate_->SetPosition(menu_bounds, monitor_bounds, anchor_bounds);
+    if (delegate_) {
+      delegate_->SetPosition(menu_bounds, monitor_bounds, anchor_bounds);
+    }
   }
 
   void VivaldiExecutePersistent(
@@ -41,12 +47,12 @@ class VivaldiMenuModelAdapterViews : public views::MenuModelAdapter {
   }
 
  private:
-  const raw_ptr<vivaldi::ContextMenuPostitionDelegate> delegate_;
+  base::WeakPtr<vivaldi::ContextMenuPostitionDelegate> delegate_;
 };
 
 views::MenuItemView* ToolkitDelegateViews::VivaldiInit(
     ui::SimpleMenuModel* menu_model,
-    vivaldi::ContextMenuPostitionDelegate* delegate) {
+    base::WeakPtr<vivaldi::ContextMenuPostitionDelegate> delegate) {
   // NOTE(espen): Replicate ToolkitDelegateViews::Init, but without
   // views::MenuRunner::ASYNC. That flag does not work when we want to manage a
   // menu and execute its selected action from an extension. The extension

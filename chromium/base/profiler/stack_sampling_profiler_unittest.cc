@@ -19,6 +19,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/metrics_hashes.h"
+#include "base/notimplemented.h"
 #include "base/profiler/profiler_buildflags.h"
 #include "base/profiler/sample_metadata.h"
 #include "base/profiler/stack_sampler.h"
@@ -322,8 +323,9 @@ void TestLibraryUnload(bool wait_until_unloaded, ModuleCache* module_cache) {
 
   NativeLibrary other_library = LoadOtherLibrary();
 
-  UnwindScenario scenario(
-      BindRepeating(&CallThroughOtherLibrary, Unretained(other_library)));
+  // TODO(https://crbug.com/1380714): Remove `UnsafeDanglingUntriaged`
+  UnwindScenario scenario(BindRepeating(
+      &CallThroughOtherLibrary, UnsafeDanglingUntriaged(other_library)));
 
   UnwindScenario::SampleEvents events;
   TargetThread target_thread(

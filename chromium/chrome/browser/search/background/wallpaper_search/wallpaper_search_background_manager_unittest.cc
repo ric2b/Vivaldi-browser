@@ -297,6 +297,23 @@ TEST_F(WallpaperSearchBackgroundManagerTest,
   EXPECT_EQ(SK_ColorRED, image_arg.ToSkBitmap()->getColor(0, 0));
 }
 
+TEST_F(WallpaperSearchBackgroundManagerTest, IsCurrentBackground) {
+  base::Token token = base::Token::CreateRandom();
+  CustomBackground custom_background;
+  custom_background.local_background_id = token;
+  ON_CALL(mock_ntp_custom_background_service(), GetCustomBackground())
+      .WillByDefault(Return(std::make_optional(custom_background)));
+
+  bool is_current_background =
+      wallpaper_search_background_manager().IsCurrentBackground(
+          base::Token::CreateRandom());
+  EXPECT_FALSE(is_current_background);
+
+  is_current_background =
+      wallpaper_search_background_manager().IsCurrentBackground(token);
+  EXPECT_TRUE(is_current_background);
+}
+
 TEST_F(WallpaperSearchBackgroundManagerTest, SaveCurrentBackgroundToHistory) {
   base::Token token = base::Token::CreateRandom();
   CustomBackground custom_background;
@@ -602,6 +619,27 @@ TEST_F(WallpaperSearchBackgroundManagerTest,
 
   // The theme file created above should still be there.
   EXPECT_TRUE(base::PathExists(GetFilePathForBackground(tokens[3])));
+}
+
+// Test that looping through history doesn't crash if the value is the wrong.
+// shape.
+// Example: The pref used to be a list of token strings and is now a list of
+//          |base::Value::Dict|. If we run into the old form, we do not want
+//          to crash.
+TEST_F(WallpaperSearchBackgroundManagerTest,
+       NoCrashIfHistoryContainsIllformedData) {
+  // Fill and set history with a token string instead of dict.
+  base::Value::List history = base::Value::List();
+  base::Token token = base::Token::CreateRandom();
+  history.Append(token.ToString());
+  pref_service().SetList(prefs::kNtpWallpaperSearchHistory, std::move(history));
+  pref_service().SetString(prefs::kNtpCustomBackgroundLocalToDeviceId,
+                           token.ToString());
+
+  // Clear wallpaper search theme resource since this is a way to make the loop
+  // through history occur.
+  WallpaperSearchBackgroundManager::RemoveWallpaperSearchBackground(&profile());
+  task_environment().RunUntilIdle();
 }
 
 TEST_F(WallpaperSearchBackgroundManagerTest, NotifyAboutHistory) {

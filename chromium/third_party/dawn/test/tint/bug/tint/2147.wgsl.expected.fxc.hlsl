@@ -25,13 +25,13 @@ float4 main_inner() {
   if (!(tint_discarded)) {
     tint_symbol_2 = SatomicCompareExchangeWeak(0u, 0, 1);
   }
-  const atomic_compare_exchange_result_i32 tint_symbol = tint_symbol_2;
-  const int old_value = tint_symbol.old_value;
+  atomic_compare_exchange_result_i32 tint_symbol = tint_symbol_2;
+  int old_value = tint_symbol.old_value;
   return float4((float(old_value)).xxxx);
 }
 
 tint_symbol_1 main() {
-  const float4 inner_result = main_inner();
+  float4 inner_result = main_inner();
   tint_symbol_1 wrapper_result = (tint_symbol_1)0;
   wrapper_result.value = inner_result;
   if (tint_discarded) {

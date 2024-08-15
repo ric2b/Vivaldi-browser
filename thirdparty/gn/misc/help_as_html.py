@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright 2014 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -78,7 +78,7 @@ def ParseCommand(command, out):
 
 def main():
   if len(sys.argv) < 2:
-    print 'usage: help_as_html.py <gn_binary>'
+    print('usage: help_as_html.py <gn_binary>')
     return 1
   header = '''<!DOCTYPE html>
 <html>
@@ -97,7 +97,7 @@ def main():
   commands, output = ParseTopLevel(GetOutput('help'))
   for command in commands:
     output += ParseCommand(command, GetOutput('help', command))
-  print header + '\n'.join(output) + footer
+  print(header + '\n'.join(output) + footer)
   return 0
 
 

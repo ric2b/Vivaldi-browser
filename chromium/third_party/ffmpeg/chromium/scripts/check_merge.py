@@ -58,50 +58,55 @@ EXCLUDED_FILENAMES = [
     r"^chromium/patches/",
 ]
 
+
 def search_regexps(text, regexps):
-  return [r for r in regexps if re.search(r, text)]
+    return [r for r in regexps if re.search(r, text)]
+
 
 def main(argv):
-  # What we're considering merging, and would like to check.  Normally, this
-  # is HEAD, but you might want to verify some previous merge.
-  if len(argv) > 1:
-    new_commit = argv[1]
-  else:
-    new_commit = "HEAD"
+    # What we're considering merging, and would like to check.  Normally, this
+    # is HEAD, but you might want to verify some previous merge.
+    if len(argv) > 1:
+        new_commit = argv[1]
+    else:
+        new_commit = "HEAD"
 
-  print(f"Comparing {new_commit} to baseline {EXISTING_COMMIT}...")
+    print(f"Comparing {new_commit} to baseline {EXISTING_COMMIT}...")
 
-  diff = subprocess.Popen(["git", "diff", "-U0", EXISTING_COMMIT, new_commit],
-          stdout=subprocess.PIPE).communicate()[0].decode(sys.stdout.encoding)
-  filename=None
-  skip = False
-  files_encountered = 0
-  files_skipped = 0
-  failures = set()
-  for line in diff.splitlines():
-      if line.startswith("+++"):
-        # +++ b/filename => filename
-        filename = line.split("/",1)[1]
-        skip = False
-        files_encountered += 1
-        if search_regexps(filename, EXCLUDED_FILENAMES):
-          skip = True
-          files_skipped += 1
-      elif line.startswith("+") and not skip:
-        # |line| is an insertion into |new_commit|.
-        # Drop the leading "+" from the string being searched.
-        tripwire = search_regexps(line[1:], INSERTION_TRIPWIRES)
-        if tripwire:
-          failures.add("Tripwire '%s' found in %s" % (tripwire, filename))
+    diff = subprocess.Popen(
+        ["git", "diff", "-U0", EXISTING_COMMIT, new_commit],
+        stdout=subprocess.PIPE).communicate()[0].decode(sys.stdout.encoding)
+    filename = None
+    skip = False
+    files_encountered = 0
+    files_skipped = 0
+    failures = set()
+    for line in diff.splitlines():
+        if line.startswith("+++"):
+            # +++ b/filename => filename
+            filename = line.split("/", 1)[1]
+            skip = False
+            files_encountered += 1
+            if search_regexps(filename, EXCLUDED_FILENAMES):
+                skip = True
+                files_skipped += 1
+        elif line.startswith("+") and not skip:
+            # |line| is an insertion into |new_commit|.
+            # Drop the leading "+" from the string being searched.
+            tripwire = search_regexps(line[1:], INSERTION_TRIPWIRES)
+            if tripwire:
+                failures.add("Tripwire '%s' found in %s" %
+                             (tripwire, filename))
 
-  # If we have failures, then print them and fail.
-  if failures:
-    for failure in failures:
-      print(f"Failure: {failure}")
-    sys.exit(2)
+    # If we have failures, then print them and fail.
+    if failures:
+        for failure in failures:
+            print(f"Failure: {failure}")
+        sys.exit(2)
 
-  checked = files_encountered - files_skipped
-  print(f"No problems found! Checked {checked}, skipped {files_skipped}.")
+    checked = files_encountered - files_skipped
+    print(f"No problems found! Checked {checked}, skipped {files_skipped}.")
+
 
 if __name__ == '__main__':
-  main(sys.argv)
+    main(sys.argv)

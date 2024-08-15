@@ -1839,7 +1839,7 @@ IN_PROC_BROWSER_TEST_P(AdsPageLoadMetricsObserverResourceBrowserTest,
       });
       observer.observe();
 
-      window.addEventListener('unload', function(event) {
+      window.addEventListener('pagehide', function(event) {
         observer.takeRecords().forEach(process);
         window.domAutomationController.send('END');
       });

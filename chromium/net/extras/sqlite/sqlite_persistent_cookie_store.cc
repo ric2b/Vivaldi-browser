@@ -7,6 +7,7 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <tuple>
 #include <unordered_set>
@@ -42,7 +43,6 @@
 #include "sql/meta_table.h"
 #include "sql/statement.h"
 #include "sql/transaction.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 #include "url/third_party/mozilla/url_parse.h"
 
@@ -114,16 +114,16 @@ namespace {
 // Version 20 - 2023/11/14 - https://crrev.com/c/5030577
 // Version 19 - 2023/09/22 - https://crrev.com/c/4704672
 // Version 18 - 2022/04/19 - https://crrev.com/c/3594203
-// Version 17 - 2022/01/25 - https://crrev.com/c/3416230
-// Version 16 - 2021/09/10 - https://crrev.com/c/3152897
-// Version 15 - 2021/07/01 - https://crrev.com/c/3001822
 //
 // Versions older than two years should be removed and marked as unsupported.
-// This was last done August 1, 2023. https://crrev.com/c/4701765
+// This was last done in February 2024. https://crrev.com/c/5300252
 // Be sure to update SQLitePersistentCookieStoreTest.TestInvalidVersionRecovery
 // to test the latest unsupported version number.
 //
 // Unsupported versions:
+// Version 17 - 2022/01/25 - https://crrev.com/c/3416230
+// Version 16 - 2021/09/10 - https://crrev.com/c/3152897
+// Version 15 - 2021/07/01 - https://crrev.com/c/3001822
 // Version 14 - 2021/02/23 - https://crrev.com/c/2036899
 // Version 13 - 2020/10/28 - https://crrev.com/c/2505468
 // Version 12 - 2019/11/20 - https://crrev.com/c/1898301
@@ -315,7 +315,7 @@ class SQLitePersistentCookieStore::Backend
   }
 
   // Database upgrade statements.
-  absl::optional<int> DoMigrateDatabaseSchema() override;
+  std::optional<int> DoMigrateDatabaseSchema() override;
 
   class PendingOperation {
    public:
@@ -532,119 +532,6 @@ class IncrementTimeDelta {
   base::Time start_;
 };
 
-// Initializes the cookies table, returning true on success.
-// The table cannot exist when calling this function.
-bool CreateV16Schema(sql::Database* db) {
-  DCHECK(!db->DoesTableExist("cookies"));
-
-  std::string stmt(base::StringPrintf(
-      "CREATE TABLE cookies("
-      "creation_utc INTEGER NOT NULL,"
-      "top_frame_site_key TEXT NOT NULL,"
-      "host_key TEXT NOT NULL,"
-      "name TEXT NOT NULL,"
-      "value TEXT NOT NULL,"
-      "encrypted_value BLOB DEFAULT '',"
-      "path TEXT NOT NULL,"
-      "expires_utc INTEGER NOT NULL,"
-      "is_secure INTEGER NOT NULL,"
-      "is_httponly INTEGER NOT NULL,"
-      "last_access_utc INTEGER NOT NULL,"
-      "has_expires INTEGER NOT NULL DEFAULT 1,"
-      "is_persistent INTEGER NOT NULL DEFAULT 1,"
-      "priority INTEGER NOT NULL DEFAULT %d,"
-      "samesite INTEGER NOT NULL DEFAULT %d,"
-      "source_scheme INTEGER NOT NULL DEFAULT %d,"
-      "source_port INTEGER NOT NULL DEFAULT %d,"
-      "is_same_party INTEGER NOT NULL DEFAULT 0,"
-      "UNIQUE (top_frame_site_key, host_key, name, path))",
-      CookiePriorityToDBCookiePriority(COOKIE_PRIORITY_DEFAULT),
-      CookieSameSiteToDBCookieSameSite(CookieSameSite::UNSPECIFIED),
-      static_cast<int>(CookieSourceScheme::kUnset),
-      SQLitePersistentCookieStore::kDefaultUnknownPort));
-  if (!db->Execute(stmt.c_str()))
-    return false;
-
-  return true;
-}
-
-// Initializes the cookies table, returning true on success.
-// The table cannot exist when calling this function.
-bool CreateV17Schema(sql::Database* db) {
-  DCHECK(!db->DoesTableExist("cookies"));
-
-  const char* kCreateTableQuery =
-      "CREATE TABLE cookies("
-      "creation_utc INTEGER NOT NULL,"
-      "host_key TEXT NOT NULL,"
-      "top_frame_site_key TEXT NOT NULL,"
-      "name TEXT NOT NULL,"
-      "value TEXT NOT NULL,"
-      "encrypted_value BLOB NOT NULL,"
-      "path TEXT NOT NULL,"
-      "expires_utc INTEGER NOT NULL,"
-      "is_secure INTEGER NOT NULL,"
-      "is_httponly INTEGER NOT NULL,"
-      "last_access_utc INTEGER NOT NULL,"
-      "has_expires INTEGER NOT NULL,"
-      "is_persistent INTEGER NOT NULL,"
-      "priority INTEGER NOT NULL,"
-      "samesite INTEGER NOT NULL,"
-      "source_scheme INTEGER NOT NULL,"
-      "source_port INTEGER NOT NULL,"
-      "is_same_party INTEGER NOT NULL);";
-
-  const char* kCreateIndexQuery =
-      "CREATE UNIQUE INDEX cookies_unique_index "
-      "ON cookies(host_key, top_frame_site_key, name, path)";
-
-  if (!db->Execute(kCreateTableQuery))
-    return false;
-  if (!db->Execute(kCreateIndexQuery))
-    return false;
-
-  return true;
-}
-
-// Initializes the cookies table, returning true on success.
-// The table cannot exist when calling this function.
-bool CreateV18Schema(sql::Database* db) {
-  DCHECK(!db->DoesTableExist("cookies"));
-
-  const char* kCreateTableQuery =
-      "CREATE TABLE cookies("
-      "creation_utc INTEGER NOT NULL,"
-      "host_key TEXT NOT NULL,"
-      "top_frame_site_key TEXT NOT NULL,"
-      "name TEXT NOT NULL,"
-      "value TEXT NOT NULL,"
-      "encrypted_value BLOB NOT NULL,"
-      "path TEXT NOT NULL,"
-      "expires_utc INTEGER NOT NULL,"
-      "is_secure INTEGER NOT NULL,"
-      "is_httponly INTEGER NOT NULL,"
-      "last_access_utc INTEGER NOT NULL,"
-      "has_expires INTEGER NOT NULL,"
-      "is_persistent INTEGER NOT NULL,"
-      "priority INTEGER NOT NULL,"
-      "samesite INTEGER NOT NULL,"
-      "source_scheme INTEGER NOT NULL,"
-      "source_port INTEGER NOT NULL,"
-      "is_same_party INTEGER NOT NULL,"
-      "last_update_utc INTEGER NOT NULL);";
-
-  const char* kCreateIndexQuery =
-      "CREATE UNIQUE INDEX cookies_unique_index "
-      "ON cookies(host_key, top_frame_site_key, name, path)";
-
-  if (!db->Execute(kCreateTableQuery))
-    return false;
-  if (!db->Execute(kCreateIndexQuery))
-    return false;
-
-  return true;
-}
-
 bool CreateV20Schema(sql::Database* db) {
   CHECK(!db->DoesTableExist("cookies"));
 
@@ -675,14 +562,7 @@ bool CreateV20Schema(sql::Database* db) {
       "ON cookies(host_key, top_frame_site_key, name, path, source_scheme, "
       "source_port)";
 
-  if (!db->Execute(kCreateTableQuery)) {
-    return false;
-  }
-  if (!db->Execute(kCreateIndexQuery)) {
-    return false;
-  }
-
-  return true;
+  return db->Execute(kCreateTableQuery) && db->Execute(kCreateIndexQuery);
 }
 
 bool CreateV21Schema(sql::Database* db) {
@@ -714,21 +594,14 @@ bool CreateV21Schema(sql::Database* db) {
       "ON cookies(host_key, top_frame_site_key, name, path, source_scheme, "
       "source_port)";
 
-  if (!db->Execute(kCreateTableQuery)) {
-    return false;
-  }
-  if (!db->Execute(kCreateIndexQuery)) {
-    return false;
-  }
-
-  return true;
+  return db->Execute(kCreateTableQuery) && db->Execute(kCreateIndexQuery);
 }
 
 }  // namespace
 
 void SQLitePersistentCookieStore::Backend::Load(
     LoadedCallback loaded_callback) {
-  LoadCookiesForKey(absl::nullopt, std::move(loaded_callback));
+  LoadCookiesForKey(std::nullopt, std::move(loaded_callback));
 }
 
 void SQLitePersistentCookieStore::Backend::LoadCookiesForKey(
@@ -793,10 +666,7 @@ void SQLitePersistentCookieStore::Backend::NotifyLoadCompleteInForeground(
 bool SQLitePersistentCookieStore::Backend::CreateDatabaseSchema() {
   DCHECK(db());
 
-  if (db()->DoesTableExist("cookies"))
-    return true;
-
-  return CreateV21Schema(db());
+  return db()->DoesTableExist("cookies") || CreateV21Schema(db());
 }
 
 bool SQLitePersistentCookieStore::Backend::DoInitializeDatabase() {
@@ -944,7 +814,8 @@ void SQLitePersistentCookieStore::Backend::DeleteTopFrameSiteKeys(
     delete_statement.Reset(true);
   }
 }
-
+// TODO crbug.com/328624585 explore removing top_frame_site_keys_to_delete
+//  after ancestor chain bit changes to cookie partition key are added.
 bool SQLitePersistentCookieStore::Backend::MakeCookiesFromSQLStatement(
     std::vector<std::unique_ptr<CanonicalCookie>>& cookies,
     sql::Statement& statement,
@@ -965,16 +836,18 @@ bool SQLitePersistentCookieStore::Backend::MakeCookiesFromSQLStatement(
       value = statement.ColumnString(4);
     }
 
-    absl::optional<CookiePartitionKey> cookie_partition_key;
-    std::string top_frame_site_key = statement.ColumnString(2);
-    // If we can't deserialize a top_frame_site_key, we delete any cookie with
-    // that key.
-    if (!CookiePartitionKey::Deserialize(top_frame_site_key,
-                                         cookie_partition_key)) {
-      top_frame_site_keys_to_delete.insert(std::move(top_frame_site_key));
+    // TODO (crbug.com/326605834) Once ancestor chain bit changes are
+    // implemented update this method utilize the ancestor bit.
+    //
+    // If we can't create a CookiePartitionKey from SQL values, we delete any
+    // cookie with the same top_frame_site_key value.
+    base::expected<std::optional<CookiePartitionKey>, std::string>
+        partition_key =
+            CookiePartitionKey::FromStorage(statement.ColumnString(2));
+    if (!partition_key.has_value()) {
+      top_frame_site_keys_to_delete.insert(statement.ColumnString(2));
       continue;
     }
-
     // Returns nullptr if the resulting cookie is not canonical.
     std::unique_ptr<net::CanonicalCookie> cc = CanonicalCookie::FromStorage(
         statement.ColumnString(3),  // name
@@ -991,7 +864,7 @@ bool SQLitePersistentCookieStore::Backend::MakeCookiesFromSQLStatement(
             statement.ColumnInt(14))),  // samesite
         DBCookiePriorityToCookiePriority(static_cast<DBCookiePriority>(
             statement.ColumnInt(12))),                    // priority
-        std::move(cookie_partition_key),                  // top_frame_site_key
+        std::move(partition_key.value()),                 // top_frame_site_key
         DBToCookieSourceScheme(statement.ColumnInt(15)),  // source_scheme
         statement.ColumnInt(16));                         // source_port
     if (cc) {
@@ -1019,129 +892,9 @@ bool SQLitePersistentCookieStore::Backend::MakeCookiesFromSQLStatement(
   return ok;
 }
 
-absl::optional<int>
+std::optional<int>
 SQLitePersistentCookieStore::Backend::DoMigrateDatabaseSchema() {
   int cur_version = meta_table()->GetVersionNumber();
-
-  if (cur_version == 15) {
-    sql::Transaction transaction(db());
-    if (!transaction.Begin())
-      return absl::nullopt;
-
-    if (!db()->Execute("DROP TABLE IF EXISTS cookies_old"))
-      return absl::nullopt;
-    if (!db()->Execute("ALTER TABLE cookies RENAME TO cookies_old"))
-      return absl::nullopt;
-
-    if (!CreateV16Schema(db())) {
-      return absl::nullopt;
-    }
-    std::string insert_cookies_sql = base::StringPrintf(
-        "INSERT OR REPLACE INTO cookies "
-        "(creation_utc, host_key, top_frame_site_key, name, value, "
-        "encrypted_value, path, expires_utc, is_secure, is_httponly, "
-        "last_access_utc, has_expires, is_persistent, priority, samesite, "
-        "source_scheme, source_port, is_same_party) "
-        "SELECT creation_utc, host_key, top_frame_site_key, name, value,"
-        "       encrypted_value, path, expires_utc, is_secure, is_httponly,"
-        "       last_access_utc, has_expires, is_persistent, priority, "
-        "samesite,"
-        "       source_scheme, source_port, is_same_party "
-        "FROM cookies_old ORDER BY creation_utc ASC");
-    if (!db()->Execute(insert_cookies_sql.c_str()))
-      return absl::nullopt;
-    if (!db()->Execute("DROP TABLE cookies_old"))
-      return absl::nullopt;
-
-    ++cur_version;
-    if (!meta_table()->SetVersionNumber(cur_version) ||
-        !meta_table()->SetCompatibleVersionNumber(
-            std::min(cur_version, kCompatibleVersionNumber)) ||
-        !transaction.Commit()) {
-      return absl::nullopt;
-    }
-  }
-
-  if (cur_version == 16) {
-    sql::Transaction transaction(db());
-    if (!transaction.Begin())
-      return absl::nullopt;
-
-    if (!db()->Execute("DROP TABLE IF EXISTS cookies_old"))
-      return absl::nullopt;
-    if (!db()->Execute("ALTER TABLE cookies RENAME TO cookies_old"))
-      return absl::nullopt;
-    if (!db()->Execute("DROP INDEX IF EXISTS cookies_unique_index"))
-      return absl::nullopt;
-
-    if (!CreateV17Schema(db()))
-      return absl::nullopt;
-    static constexpr char insert_cookies_sql[] =
-        "INSERT OR REPLACE INTO cookies "
-        "(creation_utc, host_key, top_frame_site_key, name, value, "
-        "encrypted_value, path, expires_utc, is_secure, is_httponly, "
-        "last_access_utc, has_expires, is_persistent, priority, samesite, "
-        "source_scheme, source_port, is_same_party) "
-        "SELECT creation_utc, host_key, top_frame_site_key, name, value,"
-        "       encrypted_value, path, expires_utc, is_secure, is_httponly,"
-        "       last_access_utc, has_expires, is_persistent, priority, "
-        "samesite,"
-        "       source_scheme, source_port, is_same_party "
-        "FROM cookies_old ORDER BY creation_utc ASC";
-    if (!db()->Execute(insert_cookies_sql))
-      return absl::nullopt;
-    if (!db()->Execute("DROP TABLE cookies_old"))
-      return absl::nullopt;
-
-    ++cur_version;
-    if (!meta_table()->SetVersionNumber(cur_version) ||
-        !meta_table()->SetCompatibleVersionNumber(
-            std::min(cur_version, kCompatibleVersionNumber)) ||
-        !transaction.Commit()) {
-      return absl::nullopt;
-    }
-  }
-
-  if (cur_version == 17) {
-    SCOPED_UMA_HISTOGRAM_TIMER("Cookie.TimeDatabaseMigrationToV18");
-
-    sql::Transaction transaction(db());
-    if (!transaction.Begin())
-      return absl::nullopt;
-
-    if (!db()->Execute("DROP TABLE IF EXISTS cookies_old"))
-      return absl::nullopt;
-    if (!db()->Execute("ALTER TABLE cookies RENAME TO cookies_old"))
-      return absl::nullopt;
-    if (!db()->Execute("DROP INDEX IF EXISTS cookies_unique_index"))
-      return absl::nullopt;
-
-    if (!CreateV18Schema(db()))
-      return absl::nullopt;
-    static constexpr char insert_cookies_sql[] =
-        "INSERT OR REPLACE INTO cookies "
-        "(creation_utc, host_key, top_frame_site_key, name, value, "
-        "encrypted_value, path, expires_utc, is_secure, is_httponly, "
-        "last_access_utc, has_expires, is_persistent, priority, samesite, "
-        "source_scheme, source_port, is_same_party, last_update_utc) "
-        "SELECT creation_utc, host_key, top_frame_site_key, name, value,"
-        "       encrypted_value, path, expires_utc, is_secure, is_httponly,"
-        "       last_access_utc, has_expires, is_persistent, priority, "
-        "       samesite, source_scheme, source_port, is_same_party, 0 "
-        "FROM cookies_old ORDER BY creation_utc ASC";
-    if (!db()->Execute(insert_cookies_sql))
-      return absl::nullopt;
-    if (!db()->Execute("DROP TABLE cookies_old"))
-      return absl::nullopt;
-
-    ++cur_version;
-    if (!meta_table()->SetVersionNumber(cur_version) ||
-        !meta_table()->SetCompatibleVersionNumber(
-            std::min(cur_version, kCompatibleVersionNumber)) ||
-        !transaction.Commit()) {
-      return absl::nullopt;
-    }
-  }
 
   if (cur_version == 18) {
     SCOPED_UMA_HISTOGRAM_TIMER("Cookie.TimeDatabaseMigrationToV19");
@@ -1151,19 +904,19 @@ SQLitePersistentCookieStore::Backend::DoMigrateDatabaseSchema() {
                                  "UPDATE cookies SET expires_utc = ? WHERE "
                                  "has_expires = 1 AND expires_utc > ?"));
     if (!update_statement.is_valid()) {
-      return absl::nullopt;
+      return std::nullopt;
     }
 
     sql::Transaction transaction(db());
     if (!transaction.Begin()) {
-      return absl::nullopt;
+      return std::nullopt;
     }
 
     base::Time expires_cap = base::Time::Now() + base::Days(400);
     update_statement.BindTime(0, expires_cap);
     update_statement.BindTime(1, expires_cap);
     if (!update_statement.Run()) {
-      return absl::nullopt;
+      return std::nullopt;
     }
 
     ++cur_version;
@@ -1171,7 +924,7 @@ SQLitePersistentCookieStore::Backend::DoMigrateDatabaseSchema() {
         !meta_table()->SetCompatibleVersionNumber(
             std::min(cur_version, kCompatibleVersionNumber)) ||
         !transaction.Commit()) {
-      return absl::nullopt;
+      return std::nullopt;
     }
   }
 
@@ -1180,21 +933,21 @@ SQLitePersistentCookieStore::Backend::DoMigrateDatabaseSchema() {
 
     sql::Transaction transaction(db());
     if (!transaction.Begin()) {
-      return absl::nullopt;
+      return std::nullopt;
     }
 
     if (!db()->Execute("DROP TABLE IF EXISTS cookies_old")) {
-      return absl::nullopt;
+      return std::nullopt;
     }
     if (!db()->Execute("ALTER TABLE cookies RENAME TO cookies_old")) {
-      return absl::nullopt;
+      return std::nullopt;
     }
     if (!db()->Execute("DROP INDEX IF EXISTS cookies_unique_index")) {
-      return absl::nullopt;
+      return std::nullopt;
     }
 
     if (!CreateV20Schema(db())) {
-      return absl::nullopt;
+      return std::nullopt;
     }
 
     static constexpr char insert_cookies_sql[] =
@@ -1210,10 +963,10 @@ SQLitePersistentCookieStore::Backend::DoMigrateDatabaseSchema() {
         "last_update_utc "
         "FROM cookies_old ORDER BY creation_utc ASC";
     if (!db()->Execute(insert_cookies_sql)) {
-      return absl::nullopt;
+      return std::nullopt;
     }
     if (!db()->Execute("DROP TABLE cookies_old")) {
-      return absl::nullopt;
+      return std::nullopt;
     }
 
     ++cur_version;
@@ -1221,7 +974,7 @@ SQLitePersistentCookieStore::Backend::DoMigrateDatabaseSchema() {
         !meta_table()->SetCompatibleVersionNumber(
             std::min(cur_version, kCompatibleVersionNumber)) ||
         !transaction.Commit()) {
-      return absl::nullopt;
+      return std::nullopt;
     }
   }
 
@@ -1230,21 +983,21 @@ SQLitePersistentCookieStore::Backend::DoMigrateDatabaseSchema() {
 
     sql::Transaction transaction(db());
     if (!transaction.Begin()) {
-      return absl::nullopt;
+      return std::nullopt;
     }
 
     if (!db()->Execute("DROP TABLE IF EXISTS cookies_old")) {
-      return absl::nullopt;
+      return std::nullopt;
     }
     if (!db()->Execute("ALTER TABLE cookies RENAME TO cookies_old")) {
-      return absl::nullopt;
+      return std::nullopt;
     }
     if (!db()->Execute("DROP INDEX IF EXISTS cookies_unique_index")) {
-      return absl::nullopt;
+      return std::nullopt;
     }
 
     if (!CreateV21Schema(db())) {
-      return absl::nullopt;
+      return std::nullopt;
     }
 
     static constexpr char insert_cookies_sql[] =
@@ -1259,10 +1012,10 @@ SQLitePersistentCookieStore::Backend::DoMigrateDatabaseSchema() {
         "       samesite, source_scheme, source_port, last_update_utc "
         "FROM cookies_old ORDER BY creation_utc ASC";
     if (!db()->Execute(insert_cookies_sql)) {
-      return absl::nullopt;
+      return std::nullopt;
     }
     if (!db()->Execute("DROP TABLE cookies_old")) {
-      return absl::nullopt;
+      return std::nullopt;
     }
 
     ++cur_version;
@@ -1270,13 +1023,13 @@ SQLitePersistentCookieStore::Backend::DoMigrateDatabaseSchema() {
         !meta_table()->SetCompatibleVersionNumber(
             std::min(cur_version, kCompatibleVersionNumber)) ||
         !transaction.Commit()) {
-      return absl::nullopt;
+      return std::nullopt;
     }
   }
 
   // Put future migration cases here.
 
-  return absl::make_optional(cur_version);
+  return std::make_optional(cur_version);
 }
 
 void SQLitePersistentCookieStore::Backend::AddCookie(
@@ -1312,8 +1065,7 @@ void SQLitePersistentCookieStore::Backend::BatchOperation(
     // When queueing the operation, see if it overwrites any already pending
     // ones for the same row.
     auto key = cc.StrictlyUniqueKey();
-    auto iter_and_result =
-        pending_.insert(std::make_pair(key, PendingOperationsForKey()));
+    auto iter_and_result = pending_.emplace(key, PendingOperationsForKey());
     PendingOperationsForKey& ops_for_key = iter_and_result.first->second;
     if (!iter_and_result.second) {
       // Insert failed -> already have ops.
@@ -1404,9 +1156,13 @@ void SQLitePersistentCookieStore::Backend::DoCommit() {
     for (std::unique_ptr<PendingOperation>& po_entry : kv.second) {
       // Free the cookies as we commit them to the database.
       std::unique_ptr<PendingOperation> po(std::move(po_entry));
-      std::string top_frame_site_key;
-      if (!CookiePartitionKey::Serialize(po->cc().PartitionKey(),
-                                         top_frame_site_key)) {
+      // TODO (crbug.com/326605834) Once ancestor chain bit changes are
+      // implemented update this method utilize the ancestor bit.
+      base::expected<CookiePartitionKey::SerializedCookiePartitionKey,
+                     std::string>
+          serialized_partition_key =
+              CookiePartitionKey::Serialize(po->cc().PartitionKey());
+      if (!serialized_partition_key.has_value()) {
         continue;
       }
       switch (po->op()) {
@@ -1414,7 +1170,7 @@ void SQLitePersistentCookieStore::Backend::DoCommit() {
           add_statement.Reset(true);
           add_statement.BindTime(0, po->cc().CreationDate());
           add_statement.BindString(1, po->cc().Domain());
-          add_statement.BindString(2, top_frame_site_key);
+          add_statement.BindString(2, serialized_partition_key->TopLevelSite());
           add_statement.BindString(3, po->cc().Name());
           if (crypto_) {
             std::string encrypted_value;
@@ -1433,7 +1189,7 @@ void SQLitePersistentCookieStore::Backend::DoCommit() {
           }
           add_statement.BindString(6, po->cc().Path());
           add_statement.BindTime(7, po->cc().ExpiryDate());
-          add_statement.BindBool(8, po->cc().IsSecure());
+          add_statement.BindBool(8, po->cc().SecureAttribute());
           add_statement.BindBool(9, po->cc().IsHttpOnly());
           add_statement.BindTime(10, po->cc().LastAccessDate());
           add_statement.BindBool(11, po->cc().IsPersistent());
@@ -1456,7 +1212,10 @@ void SQLitePersistentCookieStore::Backend::DoCommit() {
           update_access_statement.BindTime(0, po->cc().LastAccessDate());
           update_access_statement.BindString(1, po->cc().Name());
           update_access_statement.BindString(2, po->cc().Domain());
-          update_access_statement.BindString(3, top_frame_site_key);
+          // TODO (crbug.com/326605834) Once ancestor chain bit changes are
+          // implemented update this method utilize the ancestor bit.
+          update_access_statement.BindString(
+              3, serialized_partition_key->TopLevelSite());
           update_access_statement.BindString(4, po->cc().Path());
           update_access_statement.BindInt(
               5, static_cast<int>(po->cc().SourceScheme()));
@@ -1472,7 +1231,10 @@ void SQLitePersistentCookieStore::Backend::DoCommit() {
           delete_statement.Reset(true);
           delete_statement.BindString(0, po->cc().Name());
           delete_statement.BindString(1, po->cc().Domain());
-          delete_statement.BindString(2, top_frame_site_key);
+          // TODO (crbug.com/326605834) Once ancestor chain bit changes are
+          // implemented update this method utilize the ancestor bit.
+          delete_statement.BindString(2,
+                                      serialized_partition_key->TopLevelSite());
           delete_statement.BindString(3, po->cc().Path());
           delete_statement.BindInt(4,
                                    static_cast<int>(po->cc().SourceScheme()));

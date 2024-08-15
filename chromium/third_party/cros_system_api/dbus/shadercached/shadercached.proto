@@ -7,7 +7,7 @@ syntax = "proto3";
 option optimize_for = LITE_RUNTIME;
 
 package shadercached;
-option go_package = "chromiumos/system_api/shadercached_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/shadercached_proto";
 
 message InstallRequest {
   // Steam application id.

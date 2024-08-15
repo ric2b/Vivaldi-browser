@@ -41,6 +41,7 @@
 #include "third_party/skia/include/gpu/ganesh/vk/GrVkBackendSemaphore.h"
 #include "third_party/skia/include/gpu/ganesh/vk/GrVkBackendSurface.h"
 #include "third_party/skia/include/gpu/vk/GrVkTypes.h"
+#include "third_party/skia/include/gpu/vk/VulkanMutableTextureState.h"
 #include "third_party/skia/include/private/chromium/GrPromiseImageTexture.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gl/buildflags.h"
@@ -155,6 +156,7 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::Create(
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
+    std::string debug_label,
     const base::flat_map<VkFormat, VkImageUsageFlags>& image_usage_cache,
     base::span<const uint8_t> pixel_data) {
   bool is_external = context_state->support_vulkan_external_object();
@@ -164,7 +166,8 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::Create(
       SHARED_IMAGE_USAGE_GLES2_READ | SHARED_IMAGE_USAGE_GLES2_WRITE |
       SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
       SHARED_IMAGE_USAGE_RASTER_READ | SHARED_IMAGE_USAGE_RASTER_WRITE |
-      SHARED_IMAGE_USAGE_OOP_RASTERIZATION | SHARED_IMAGE_USAGE_WEBGPU;
+      SHARED_IMAGE_USAGE_OOP_RASTERIZATION | SHARED_IMAGE_USAGE_WEBGPU_READ |
+      SHARED_IMAGE_USAGE_WEBGPU_WRITE;
   VkImageUsageFlags vk_usage = VK_IMAGE_USAGE_SAMPLED_BIT |
                                VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                                VK_IMAGE_USAGE_TRANSFER_DST_BIT;
@@ -223,16 +226,16 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::Create(
     }
 
     estimated_size += image->device_size();
-    textures.emplace_back(std::move(image), color_space);
+    textures.emplace_back(std::move(image), format, color_space);
   }
 
   bool use_separate_gl_texture =
       UseSeparateGLTexture(context_state.get(), format);
   auto backing = std::make_unique<ExternalVkImageBacking>(
       base::PassKey<ExternalVkImageBacking>(), mailbox, format, size,
-      color_space, surface_origin, alpha_type, usage, estimated_size,
-      std::move(context_state), std::move(textures), command_pool,
-      use_separate_gl_texture);
+      color_space, surface_origin, alpha_type, usage, std::move(debug_label),
+      estimated_size, std::move(context_state), std::move(textures),
+      command_pool, use_separate_gl_texture);
 
   if (!pixel_data.empty()) {
     auto image_info = backing->AsSkImageInfo();
@@ -263,6 +266,7 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::CreateFromGMB(
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
+    std::string debug_label,
     std::optional<gfx::BufferUsage> buffer_usage) {
   if (!gpu::IsImageSizeValidForGpuMemoryBufferFormat(size,
                                                      ToBufferFormat(format))) {
@@ -292,15 +296,16 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::CreateFromGMB(
 
   std::vector<TextureHolderVk> textures;
   textures.reserve(1);
-  textures.emplace_back(std::move(image), color_space);
+  textures.emplace_back(std::move(image), format, color_space);
 
   bool use_separate_gl_texture =
       UseSeparateGLTexture(context_state.get(), format);
   auto backing = std::make_unique<ExternalVkImageBacking>(
       base::PassKey<ExternalVkImageBacking>(), mailbox, format, size,
-      color_space, surface_origin, alpha_type, usage, estimated_size,
-      std::move(context_state), std::move(textures), command_pool,
-      use_separate_gl_texture, std::move(handle), std::move(buffer_usage));
+      color_space, surface_origin, alpha_type, usage, std::move(debug_label),
+      estimated_size, std::move(context_state), std::move(textures),
+      command_pool, use_separate_gl_texture, std::move(handle),
+      std::move(buffer_usage));
   backing->SetCleared();
   return backing;
 }
@@ -317,6 +322,7 @@ ExternalVkImageBacking::CreateWithPixmap(
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
+    std::string debug_label,
     gfx::BufferUsage buffer_usage) {
 #if BUILDFLAG(IS_OZONE)
   // Create a pixmap.
@@ -343,7 +349,8 @@ ExternalVkImageBacking::CreateWithPixmap(
   // Create backing from the handle.
   return CreateFromGMB(std::move(context_state), command_pool, mailbox,
                        std::move(handle), format, size, color_space,
-                       surface_origin, alpha_type, usage);
+                       surface_origin, alpha_type, usage,
+                       std::move(debug_label));
 #else
   return nullptr;
 #endif  // BUILDFLAG(IS_OZONE)
@@ -358,6 +365,7 @@ ExternalVkImageBacking::ExternalVkImageBacking(
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
+    std::string debug_label,
     size_t estimated_size_bytes,
     scoped_refptr<SharedContextState> context_state,
     std::vector<TextureHolderVk> vk_textures,
@@ -372,6 +380,7 @@ ExternalVkImageBacking::ExternalVkImageBacking(
                                       surface_origin,
                                       alpha_type,
                                       usage,
+                                      std::move(debug_label),
                                       estimated_size_bytes,
                                       /*is_thread_safe=*/false,
                                       std::move(buffer_usage)),
@@ -503,8 +512,9 @@ bool ExternalVkImageBacking::BeginAccess(
     for (auto& vk_texture : vk_textures_) {
       gr_context->setBackendTextureState(
           vk_texture.backend_texture,
-          skgpu::MutableTextureState(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                     VK_QUEUE_FAMILY_EXTERNAL));
+          skgpu::MutableTextureStates::MakeVulkan(
+              VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+              VK_QUEUE_FAMILY_EXTERNAL));
     }
 
     ExternalSemaphore external_semaphore =
@@ -746,7 +756,6 @@ bool ExternalVkImageBacking::CreateGLTexture(bool is_passthrough,
   auto& vulkan_image = vk_texture.vulkan_image;
   gfx::Size plane_size = vulkan_image->size();
   auto plane_format = GLTextureHolder::GetPlaneFormat(format(), plane_index);
-
   DCHECK_EQ(gl_textures_.size(), plane_index);
   auto& gl_texture = gl_textures_.emplace_back(plane_format, plane_size,
                                                is_passthrough, nullptr);
@@ -1226,8 +1235,9 @@ bool ExternalVkImageBacking::UploadToVkImage(
   for (auto& vk_texture : vk_textures_) {
     gr_context->setBackendTextureState(
         vk_texture.backend_texture,
-        skgpu::MutableTextureState(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                   VK_QUEUE_FAMILY_EXTERNAL));
+        skgpu::MutableTextureStates::MakeVulkan(
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_QUEUE_FAMILY_EXTERNAL));
   }
 
   auto end_access_semaphore = external_semaphore_pool()->GetOrCreateSemaphore();

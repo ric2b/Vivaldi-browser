@@ -45,9 +45,9 @@ class ArcNotificationContentView
       public ArcNotificationItem::Observer,
       public ArcNotificationSurfaceManager::Observer,
       public views::WidgetObserver {
- public:
-  METADATA_HEADER(ArcNotificationContentView);
+  METADATA_HEADER(ArcNotificationContentView, views::NativeViewHost)
 
+ public:
   static int GetNotificationContentViewWidth();
 
   ArcNotificationContentView(ArcNotificationItem* item,
@@ -67,6 +67,9 @@ class ArcNotificationContentView
   void ActivateWidget(bool activate);
 
   bool slide_in_progress() const { return slide_in_progress_; }
+
+  // views::NativeViewHost
+  void SetVisible(bool visible) override;
 
  private:
   friend class ArcNotificationViewTest;
@@ -90,6 +93,8 @@ class ArcNotificationContentView
   bool IsExpanded() const;
   void SetManuallyExpandedOrCollapsed(bool value);
   bool IsManuallyExpandedOrCollapsed() const;
+  void EnsureSurfaceAttached();
+  void EnsureSurfaceDetached();
 
   void ShowCopiedSurface();
   void HideCopiedSurface();
@@ -100,7 +105,7 @@ class ArcNotificationContentView
   // views::NativeViewHost
   void ViewHierarchyChanged(
       const views::ViewHierarchyChangedDetails& details) override;
-  void Layout() override;
+  void Layout(PassKey) override;
   void OnPaint(gfx::Canvas* canvas) override;
   void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;

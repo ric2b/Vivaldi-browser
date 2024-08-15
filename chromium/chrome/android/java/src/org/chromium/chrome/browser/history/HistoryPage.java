@@ -9,7 +9,6 @@ import android.net.Uri;
 
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.history_clusters.HistoryClustersConstants;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
@@ -45,22 +44,18 @@ public class HistoryPage extends BasicNativePage {
         Uri uri = Uri.parse(url);
         assert uri.getHost().equals(UrlConstants.HISTORY_HOST);
 
-        boolean showHistoryClustersImmediately =
-                uri.getPath().contains(HistoryClustersConstants.JOURNEYS_PATH)
-                        || uri.getPath().contains(HistoryClustersConstants.GROUPS_PATH);
-        String historyClustersQuery =
-                uri.getQueryParameter(HistoryClustersConstants.HISTORY_CLUSTERS_QUERY_KEY);
-
         mHistoryManager =
                 new HistoryManager(
                         activity,
-                        false,
+                        /* isSeparateActivity= */ false,
                         snackbarManager,
                         profile,
                         tabSupplier,
-                        showHistoryClustersImmediately,
-                        historyClustersQuery,
-                        new BrowsingHistoryBridge(profile.getOriginalProfile()));
+                        new BrowsingHistoryBridge(profile.getOriginalProfile()),
+                        new HistoryUmaRecorder(),
+                        null,
+                        /* shouldShowClearData= */ true,
+                        /* appSpecificHistory= */ false);
         mTitle = host.getContext().getResources().getString(R.string.menu_history);
 
         initWithView(mHistoryManager.getView());

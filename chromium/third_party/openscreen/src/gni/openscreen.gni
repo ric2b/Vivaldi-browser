@@ -1,0 +1,230 @@
+# Copyright 2024 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chrome_build.gni")
+import("//build/config/compiler/pgo/pgo.gni")
+import("//build/config/gclient_args.gni")
+import("//build/config/ios/config.gni")
+import("//build/config/sanitizers/sanitizers.gni")
+import("//build_overrides/build.gni")
+
+declare_args() {
+  # Use static libraries instead of source_sets.
+  openscreen_static_library = false
+
+  # Enable monolithic static library for embedders.
+  openscreen_monolithic = false
+}
+
+# Points to // in openscreen stand-alone or to //third_party/openscreen/src in
+# Chrome (for example). We need absolute paths for all configs in templates as
+# they are shared in different subdirectories.
+openscreen_path_prefix = get_path_info("../", "abspath")
+
+###############################################################################
+# Templates
+#
+
+# Common configs to remove or add in all openscreen targets.
+openscreen_remove_configs = []
+openscreen_add_configs = [ openscreen_path_prefix + ":features" ]
+
+# Any component that depends on Open Screen likely includes its headers, which
+# need to be able to refer to each other.
+openscreen_add_public_configs = [ openscreen_path_prefix + ":include_dirs" ]
+
+if (is_debug) {
+  openscreen_remove_configs +=
+      [ "//build/config/compiler:default_optimization" ]
+  openscreen_add_configs += [ "//build/config/compiler:no_optimize" ]
+} else {
+  openscreen_remove_configs +=
+      [ "//build/config/compiler:default_optimization" ]
+
+  if (((is_posix && !is_android) || is_win) && !using_sanitizer) {
+    openscreen_add_configs += [ "//build/config/compiler:optimize_speed" ]
+  } else {
+    openscreen_add_configs += [ "//build/config/compiler:optimize_max" ]
+  }
+}
+
+if (!build_with_chromium && is_clang) {
+  openscreen_remove_configs += [ "//build/config/clang:find_bad_constructs" ]
+}
+
+# All templates should be kept in sync.
+template("openscreen_source_set") {
+  if (defined(openscreen_static_library) && openscreen_static_library) {
+    link_target_type = "static_library"
+  } else {
+    link_target_type = "source_set"
+  }
+  target(link_target_type, target_name) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "configs",
+                             "public_configs",
+                             "remove_configs",
+                           ])
+    configs -= openscreen_remove_configs
+    configs += openscreen_add_configs
+    if (defined(invoker.remove_configs)) {
+      configs -= invoker.remove_configs
+    }
+    if (defined(invoker.configs)) {
+      configs += invoker.configs
+    }
+    public_configs = openscreen_add_public_configs
+    if (defined(invoker.public_configs)) {
+      public_configs += invoker.public_configs
+    }
+  }
+}
+
+template("openscreen_header_set") {
+  source_set(target_name) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "configs",
+                             "public_configs",
+                           ])
+    configs -= openscreen_remove_configs
+    configs += openscreen_add_configs
+    configs += invoker.configs
+    public_configs = openscreen_add_public_configs
+    if (defined(invoker.public_configs)) {
+      public_configs += invoker.public_configs
+    }
+  }
+}
+
+template("openscreen_executable") {
+  if (is_ios) {
+    import("//build/config/ios/rules.gni")
+
+    ios_app_bundle(target_name) {
+      forward_variables_from(invoker,
+                             "*",
+                             [
+                               "configs",
+                               "public_configs",
+                               "remove_configs",
+                             ])
+      configs -= openscreen_remove_configs
+      configs += openscreen_add_configs
+      if (defined(invoker.remove_configs)) {
+        configs -= invoker.remove_configs
+      }
+      configs += invoker.configs
+
+      public_configs = openscreen_add_public_configs
+      if (defined(invoker.public_configs)) {
+        public_configs += invoker.public_configs
+      }
+
+      # Provide sensible defaults in case invoker did not define any of those
+      # required variables.
+      if (!defined(info_plist) && !defined(info_plist_target)) {
+        info_plist = openscreen_path_prefix + "/gni/Info.plist"
+      }
+
+      bundle_identifier = "$ios_app_bundle_id_prefix.chrome.unittests.dev"
+    }
+  } else {
+    executable(target_name) {
+      forward_variables_from(invoker,
+                             "*",
+                             [
+                               "configs",
+                               "public_configs",
+                               "remove_configs",
+                             ])
+      configs -= openscreen_remove_configs
+      configs += openscreen_add_configs
+      if (defined(invoker.remove_configs)) {
+        configs -= invoker.remove_configs
+      }
+      if (defined(invoker.configs)) {
+        configs += invoker.configs
+      }
+      public_configs = openscreen_add_public_configs
+      if (defined(invoker.public_configs)) {
+        public_configs += invoker.public_configs
+      }
+      if (is_linux || is_chromeos) {
+        # For enabling ASLR.
+        ldflags = [ "-pie" ]
+      }
+    }
+  }
+}
+
+template("openscreen_component") {
+  component(target_name) {
+    output_name = target_name
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "configs",
+                             "public_configs",
+                             "remove_configs",
+                           ])
+    configs -= openscreen_remove_configs
+    configs += openscreen_add_configs
+    if (defined(invoker.remove_configs)) {
+      configs -= invoker.remove_configs
+    }
+    configs += invoker.configs
+    public_configs = openscreen_add_public_configs
+    if (defined(invoker.public_configs)) {
+      public_configs += invoker.public_configs
+    }
+  }
+}
+
+template("openscreen_shared_library") {
+  shared_library(target_name) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "configs",
+                             "public_configs",
+                             "remove_configs",
+                           ])
+    configs -= openscreen_remove_configs
+    configs += openscreen_add_configs
+    if (defined(invoker.remove_configs)) {
+      configs -= invoker.remove_configs
+    }
+    if (defined(invoker.configs)) {
+      configs += invoker.configs
+    }
+    public_configs = openscreen_add_public_configs
+    if (defined(invoker.public_configs)) {
+      public_configs += invoker.public_configs
+    }
+  }
+}
+
+template("openscreen_static_library") {
+  static_library(target_name) {
+    complete_static_lib = true
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "configs",
+                             "public_configs",
+                           ])
+    configs -= openscreen_remove_configs
+    configs -= [ "//build/config/compiler:thin_archive" ]
+    configs += openscreen_add_configs
+    configs += invoker.configs
+    public_configs = openscreen_add_public_configs
+    if (defined(invoker.public_configs)) {
+      public_configs += invoker.public_configs
+    }
+  }
+}

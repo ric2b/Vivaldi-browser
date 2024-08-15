@@ -105,6 +105,7 @@ static const Packet16uc p16uc_DUPLICATE16_EVEN = {0, 1, 0, 1, 4, 5, 4, 5, 8, 9, 
 static const Packet16uc p16uc_DUPLICATE16_ODD = {2, 3, 2, 3, 6, 7, 6, 7, 10, 11, 10, 11, 14, 15, 14, 15};
 
 static Packet16uc p16uc_QUADRUPLICATE16_HI = {0, 1, 0, 1, 0, 1, 0, 1, 2, 3, 2, 3, 2, 3, 2, 3};
+static Packet16uc p16uc_QUADRUPLICATE16 = {0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3};
 
 static Packet16uc p16uc_MERGEE16 = {0, 1, 16, 17, 4, 5, 20, 21, 8, 9, 24, 25, 12, 13, 28, 29};
 static Packet16uc p16uc_MERGEO16 = {2, 3, 18, 19, 6, 7, 22, 23, 10, 11, 26, 27, 14, 15, 30, 31};
@@ -1714,6 +1715,26 @@ EIGEN_STRONG_INLINE Packet16uc ploaddup<Packet16uc>(const unsigned char* from) {
   else
     p = ploadu<Packet16uc>(from);
   return vec_mergeh(p, p);
+}
+
+template <>
+EIGEN_STRONG_INLINE Packet16c ploadquad<Packet16c>(const signed char* from) {
+  Packet16c p;
+  if ((std::ptrdiff_t(from) % 16) == 0)
+    p = pload<Packet16c>(from);
+  else
+    p = ploadu<Packet16c>(from);
+  return vec_perm(p, p, p16uc_QUADRUPLICATE16);
+}
+
+template <>
+EIGEN_STRONG_INLINE Packet16uc ploadquad<Packet16uc>(const unsigned char* from) {
+  Packet16uc p;
+  if ((std::ptrdiff_t(from) % 16) == 0)
+    p = pload<Packet16uc>(from);
+  else
+    p = ploadu<Packet16uc>(from);
+  return vec_perm(p, p, p16uc_QUADRUPLICATE16);
 }
 
 template <typename Packet>

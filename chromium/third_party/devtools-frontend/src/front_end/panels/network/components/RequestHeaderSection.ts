@@ -5,7 +5,6 @@
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as Platform from '../../../core/platform/platform.js';
 import type * as SDK from '../../../core/sdk/sdk.js';
-import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
@@ -84,7 +83,7 @@ export class RequestHeaderSection extends HTMLElement {
       ${this.#headers.map(header => html`
         <${HeaderSectionRow.litTagName}
           .data=${{header: header} as HeaderSectionRowData}
-          jslog=${VisualLogging.value().context('request-header')}
+          jslog=${VisualLogging.item('request-header')}
         ></${HeaderSectionRow.litTagName}>
       `)}
     `, this.#shadow, {host: this});
@@ -126,7 +125,7 @@ export class RequestHeaderSection extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-request-header-section', RequestHeaderSection);
+customElements.define('devtools-request-header-section', RequestHeaderSection);
 
 declare global {
   interface HTMLElementTagNameMap {

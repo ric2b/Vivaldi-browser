@@ -66,17 +66,13 @@ class WebTransportHandshakeProxy : public RequestFilterManager::Proxy,
   }
 
   void Start() {
-    bool should_collapse_initiator = false;
     // Since WebTransport doesn't support redirect, 'redirect_url' is ignored
     // even if extensions assigned it.
     const int result = request_handler_->OnBeforeRequest(
         browser_context_, &info_,
         base::BindOnce(&WebTransportHandshakeProxy::OnBeforeRequestCompleted,
                        base::Unretained(this)),
-        &redirect_url_, &should_collapse_initiator);
-    // It doesn't make sense to collapse WebTransport requests since they won't
-    // be associated with a DOM element.
-    DCHECK(!should_collapse_initiator);
+        &redirect_url_, nullptr);
 
     if (result == net::ERR_IO_PENDING)
       return;
@@ -152,7 +148,7 @@ class WebTransportHandshakeProxy : public RequestFilterManager::Proxy,
         browser_context_, &info_,
         base::BindOnce(&WebTransportHandshakeProxy::OnHeadersReceivedCompleted,
                        base::Unretained(this)),
-        response_headers_.get(), &override_headers_, &redirect_url_);
+        response_headers_.get(), &override_headers_, &redirect_url_, nullptr);
 
     if (result == net::ERR_IO_PENDING)
       return;

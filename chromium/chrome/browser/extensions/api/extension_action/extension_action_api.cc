@@ -41,6 +41,7 @@
 #include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/error_utils.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/common/feature_switch.h"
 #include "extensions/common/image_util.h"
 #include "extensions/common/manifest_constants.h"
@@ -243,8 +244,8 @@ void ExtensionActionAPI::DispatchExtensionActionClicked(
   if (event_name) {
     base::Value::List args;
     // The action APIs (browserAction, pageAction, action) are only available
-    // to blessed extension contexts. As such, we deterministically know that
-    // the right context type here is blessed.
+    // to privileged extension contexts. As such, we deterministically know that
+    // the right context type here is privileged.
     constexpr mojom::ContextType context_type =
         mojom::ContextType::kPrivilegedExtension;
     ExtensionTabUtil::ScrubTabBehavior scrub_tab_behavior =
@@ -292,7 +293,7 @@ ExtensionPrefs* ExtensionActionAPI::GetExtensionPrefs() {
 
 void ExtensionActionAPI::DispatchEventToExtension(
     content::BrowserContext* context,
-    const std::string& extension_id,
+    const ExtensionId& extension_id,
     events::HistogramValue histogram_value,
     const std::string& event_name,
     base::Value::List event_args) {

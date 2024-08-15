@@ -201,7 +201,7 @@ void VivaldiInvalidationService::OnInvalidation(
   constexpr char kTypeKey[] = "notification_type";
 
   std::string* client_id = invalidation.FindString(kClientIdKey);
-  absl::optional<int64_t> version =
+  std::optional<int64_t> version =
       base::ValueToInt64(invalidation.Find(kVersionKey));
   std::string* type = invalidation.FindString(kTypeKey);
 

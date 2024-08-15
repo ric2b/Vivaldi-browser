@@ -39,6 +39,7 @@ struct packet_traits<std::complex<float> > : default_packet_traits {
     HasDiv = 1,
     HasNegate = 1,
     HasSqrt = 1,
+    HasLog = 1,
     HasAbs = 0,
     HasAbs2 = 0,
     HasMin = 0,
@@ -223,6 +224,7 @@ struct packet_traits<std::complex<double> > : default_packet_traits {
     HasDiv = 1,
     HasNegate = 1,
     HasSqrt = 1,
+    HasLog = 1,
     HasAbs = 0,
     HasAbs2 = 0,
     HasMin = 0,
@@ -446,6 +448,16 @@ EIGEN_STRONG_INLINE Packet4cd psqrt<Packet4cd>(const Packet4cd& a) {
 template <>
 EIGEN_STRONG_INLINE Packet8cf psqrt<Packet8cf>(const Packet8cf& a) {
   return psqrt_complex<Packet8cf>(a);
+}
+
+template <>
+EIGEN_STRONG_INLINE Packet4cd plog<Packet4cd>(const Packet4cd& a) {
+  return plog_complex<Packet4cd>(a);
+}
+
+template <>
+EIGEN_STRONG_INLINE Packet8cf plog<Packet8cf>(const Packet8cf& a) {
+  return plog_complex<Packet8cf>(a);
 }
 
 }  // end namespace internal

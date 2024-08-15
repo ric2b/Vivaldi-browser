@@ -57,6 +57,7 @@ Value RunReadFile(Scope* scope,
       args[0], err, scope->settings()->build_settings()->root_path_utf8());
   if (err->has_error())
     return Value();
+  scope->AddBuildDependencyFile(source_file);
   base::FilePath file_path =
       scope->settings()->build_settings()->GetFullPath(source_file);
 

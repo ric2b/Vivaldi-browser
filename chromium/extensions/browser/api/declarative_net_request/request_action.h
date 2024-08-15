@@ -8,13 +8,13 @@
 #include <cstdint>
 #include <optional>
 #include <vector>
+
 #include "extensions/common/api/declarative_net_request.h"
 #include "extensions/common/api/declarative_net_request/constants.h"
 #include "extensions/common/extension_id.h"
 #include "url/gurl.h"
 
-namespace extensions {
-namespace declarative_net_request {
+namespace extensions::declarative_net_request {
 
 namespace flat {
 struct ModifyHeaderInfo;
@@ -127,7 +127,6 @@ std::optional<RequestAction> GetMaxPriorityAction(
     std::optional<RequestAction> lhs,
     std::optional<RequestAction> rhs);
 
-}  // namespace declarative_net_request
-}  // namespace extensions
+}  // namespace extensions::declarative_net_request
 
 #endif  // EXTENSIONS_BROWSER_API_DECLARATIVE_NET_REQUEST_REQUEST_ACTION_H_

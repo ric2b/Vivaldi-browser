@@ -3,9 +3,9 @@
 // found in the LICENSE file.
 
 #include "content/renderer/pepper/pepper_media_device_manager.h"
+#include <vector>
 
 #include "base/check.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
@@ -91,7 +91,7 @@ PepperMediaDeviceManager::GetForRenderFrame(
       PepperMediaDeviceManager::Get(render_frame);
   if (!handler)
     handler = new PepperMediaDeviceManager(render_frame);
-  return handler->AsWeakPtr();
+  return handler->weak_ptr_factory_.GetWeakPtr();
 }
 
 PepperMediaDeviceManager::PepperMediaDeviceManager(RenderFrame* render_frame)
@@ -112,8 +112,9 @@ void PepperMediaDeviceManager::EnumerateDevices(PP_DeviceType_Dev type,
       request_audio_input, request_video_input, request_audio_output,
       false /* request_video_input_capabilities */,
       false /* request_audio_input_capabilities */,
-      base::BindOnce(&PepperMediaDeviceManager::DevicesEnumerated, AsWeakPtr(),
-                     std::move(callback), ToMediaDeviceType(type)));
+      base::BindOnce(&PepperMediaDeviceManager::DevicesEnumerated,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback),
+                     ToMediaDeviceType(type)));
 }
 
 size_t PepperMediaDeviceManager::StartMonitoringDevices(
@@ -143,7 +144,7 @@ void PepperMediaDeviceManager::StopMonitoringDevices(PP_DeviceType_Dev type,
   SubscriptionList& subscriptions =
       device_change_subscriptions_[static_cast<size_t>(
           ToMediaDeviceType(type))];
-  base::EraseIf(subscriptions,
+  std::erase_if(subscriptions,
                 [subscription_id](const Subscription& subscription) {
                   return subscription.first == subscription_id;
                 });
@@ -167,17 +168,18 @@ int PepperMediaDeviceManager::OpenDevice(PP_DeviceType_Dev type,
           kPepperInsecureOriginMessage);
     }
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(&PepperMediaDeviceManager::OnDeviceOpened,
-                                  AsWeakPtr(), request_id, false, std::string(),
-                                  blink::MediaStreamDevice()));
+        FROM_HERE,
+        base::BindOnce(&PepperMediaDeviceManager::OnDeviceOpened,
+                       weak_ptr_factory_.GetWeakPtr(), request_id, false,
+                       std::string(), blink::MediaStreamDevice()));
     return request_id;
   }
 
   GetMediaStreamDispatcherHost()->OpenDevice(
       request_id, device_id,
       PepperMediaDeviceManager::FromPepperDeviceType(type),
-      base::BindOnce(&PepperMediaDeviceManager::OnDeviceOpened, AsWeakPtr(),
-                     request_id));
+      base::BindOnce(&PepperMediaDeviceManager::OnDeviceOpened,
+                     weak_ptr_factory_.GetWeakPtr(), request_id));
 
   return request_id;
 }

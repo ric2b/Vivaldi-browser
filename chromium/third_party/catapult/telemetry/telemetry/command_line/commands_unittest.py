@@ -9,12 +9,12 @@ except ImportError:
   from io import StringIO
 import json
 import unittest
+from unittest import mock
 
 from telemetry import benchmark
 from telemetry.command_line import commands
 from telemetry import story as story_module
 from telemetry import page as page_module
-import mock
 
 
 class BenchmarkFoo(benchmark.Benchmark):
@@ -58,6 +58,7 @@ class PrintBenchmarkListTests(unittest.TestCase):
     expected_printed_stream = (
         'Available benchmarks for TestBrowser are:\n'
         '  BenchmarkFoo Benchmark foo for testing.\n'
+        'Pass --detailed to show all stories and their tags.\n'
         'Pass --browser to list benchmarks for another browser.\n\n')
     commands.PrintBenchmarkList([BenchmarkFoo],
                                 self._mock_possible_browser,
@@ -72,6 +73,7 @@ class PrintBenchmarkListTests(unittest.TestCase):
         '\n'
         'Not supported benchmarks for TestBrowser are (force run with -d):\n'
         '  BenchmarkDisabled Benchmark disabled for testing.\n'
+        'Pass --detailed to show all stories and their tags.\n'
         'Pass --browser to list benchmarks for another browser.\n\n')
 
     with mock.patch.object(

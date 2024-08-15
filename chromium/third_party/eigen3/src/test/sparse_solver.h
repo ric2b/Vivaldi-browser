@@ -484,6 +484,15 @@ void check_sparse_spd_determinant(Solver& solver) {
   }
 }
 
+template <typename Solver>
+void check_sparse_zero_matrix(Solver& solver) {
+  typedef typename Solver::MatrixType Mat;
+
+  Mat A(1, 1);
+  solver.compute(A);
+  VERIFY_IS_EQUAL(solver.info(), NumericalIssue);
+}
+
 template <typename Solver, typename DenseMat>
 Index generate_sparse_square_problem(Solver&, typename Solver::MatrixType& A, DenseMat& dA, int maxSize = 300,
                                      int options = ForceNonZeroDiag) {

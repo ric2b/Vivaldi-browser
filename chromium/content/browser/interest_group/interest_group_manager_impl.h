@@ -40,6 +40,7 @@
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
+#include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
 #include "services/network/public/mojom/client_security_state.mojom.h"
 #include "third_party/blink/public/common/interest_group/interest_group.h"
 #include "third_party/blink/public/mojom/interest_group/ad_auction_service.mojom.h"
@@ -145,7 +146,9 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   //
   // `url_loader_factory` is the factory for renderer frame where
   // navigator.joinAdInterestGroup() was invoked, and will be used for the
-  // .well-known fetch if one is needed. It will also be used to pre-fetch
+  // .well-known fetch if one is needed.
+  //
+  // `url_loader_factory_for_keyfetch`  will  be used to pre-fetch
   // B&A server keys if the B&A server is enabled and if this is the first
   // joinAdInterestGroup call since browser start.
   //
@@ -164,6 +167,8 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
       const net::NetworkIsolationKey& network_isolation_key,
       bool report_result_only,
       network::mojom::URLLoaderFactory& url_loader_factory,
+      scoped_refptr<network::SharedURLLoaderFactory>
+          url_loader_factory_for_keyfetch,
       AreReportingOriginsAttestedCallback attestation_callback,
       blink::mojom::AdAuctionService::JoinInterestGroupCallback callback);
 
@@ -322,6 +327,21 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
                      auction_worklet::mojom::PrioritySignalsDoublePtr>
           update_priority_signals_overrides);
 
+  // Update B&A keys for a coordinator. This function will overwrite any
+  // existing keys for the coordinator.
+  void SetBiddingAndAuctionServerKeys(
+      const url::Origin& coordinator,
+      const std::vector<BiddingAndAuctionServerKey>& keys,
+      base::Time expiration);
+
+  // Load stored B&A server keys for a coordinator along with the keys'
+  // expiration.
+  void GetBiddingAndAuctionServerKeys(
+      const url::Origin& coordinator,
+      base::OnceCallback<
+          void(std::pair<base::Time, std::vector<BiddingAndAuctionServerKey>>)>
+          callback);
+
   // Clears the InterestGroupPermissionsChecker's cache of the results of
   // .well-known fetches.
   void ClearPermissionsCache();
@@ -410,9 +430,11 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
       base::OnceCallback<void(BiddingAndAuctionData)> callback);
 
   // Get the public key to use for the auction data. The `loader` pointer must
-  // remain valid until the `callback` is called or destroyed.
+  // remain valid until the `callback` is called or destroyed. The `callback`
+  // may be called synchronously if the key is already available or the
+  // coordinator is not recognized.
   void GetBiddingAndAuctionServerKey(
-      network::mojom::URLLoaderFactory* loader,
+      scoped_refptr<network::SharedURLLoaderFactory> loader,
       std::optional<url::Origin> coordinator,
       base::OnceCallback<void(
           base::expected<BiddingAndAuctionServerKey, std::string>)> callback);
@@ -482,6 +504,8 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
       blink::InterestGroup group,
       const GURL& joining_url,
       bool report_result_only,
+      scoped_refptr<network::SharedURLLoaderFactory>
+          url_loader_factory_for_keyfetch,
       AreReportingOriginsAttestedCallback attestation_callback,
       blink::mojom::AdAuctionService::JoinInterestGroupCallback callback,
       bool can_join);

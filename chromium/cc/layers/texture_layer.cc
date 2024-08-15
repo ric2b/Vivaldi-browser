@@ -6,9 +6,9 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
@@ -79,14 +79,6 @@ void TextureLayer::SetUV(const gfx::PointF& top_left,
   SetNeedsCommit();
 }
 
-void TextureLayer::SetHdrMetadata(const gfx::HDRMetadata& hdr_metadata) {
-  if (hdr_metadata_.Read(*this) == hdr_metadata) {
-    return;
-  }
-  hdr_metadata_.Write(*this) = hdr_metadata;
-  SetNeedsCommit();
-}
-
 void TextureLayer::SetPremultipliedAlpha(bool premultiplied_alpha) {
   if (premultiplied_alpha_.Read(*this) == premultiplied_alpha)
     return;
@@ -140,6 +132,11 @@ void TextureLayer::SetTransferableResource(
   bool requires_commit = true;
   SetTransferableResourceInternal(resource, std::move(release_callback),
                                   requires_commit);
+}
+
+void TextureLayer::SetNeedsSetTransferableResource() {
+  needs_set_resource_.Write(*this) = true;
+  SetNeedsPushProperties();
 }
 
 void TextureLayer::SetLayerTreeHost(LayerTreeHost* host) {
@@ -222,7 +219,6 @@ void TextureLayer::PushPropertiesTo(
   texture_layer->SetPremultipliedAlpha(premultiplied_alpha_.Read(*this));
   texture_layer->SetBlendBackgroundColor(blend_background_color_.Read(*this));
   texture_layer->SetForceTextureToOpaque(force_texture_to_opaque_.Read(*this));
-  texture_layer->SetHdrMetadata(hdr_metadata_.Read(*this));
   if (needs_set_resource_.Read(*this)) {
     viz::TransferableResource resource;
     viz::ReleaseCallback release_callback;
@@ -259,7 +255,7 @@ SharedBitmapIdRegistration TextureLayer::RegisterSharedBitmapId(
   DCHECK(!base::Contains(to_register_bitmaps_.Read(*this), id));
   DCHECK(!base::Contains(registered_bitmaps_.Read(*this), id));
   to_register_bitmaps_.Write(*this)[id] = std::move(bitmap);
-  base::Erase(to_unregister_bitmap_ids_.Write(*this), id);
+  std::erase(to_unregister_bitmap_ids_.Write(*this), id);
 
   // This does not SetNeedsCommit() to be as lazy as possible.
   // Notifying a SharedBitmapId is not needed until it is used,

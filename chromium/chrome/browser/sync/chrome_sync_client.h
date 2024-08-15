@@ -6,26 +6,15 @@
 #define CHROME_BROWSER_SYNC_CHROME_SYNC_CLIENT_H__
 
 #include <memory>
-#include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/task/sequenced_task_runner.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/sync/glue/extensions_activity_monitor.h"
 #include "components/browser_sync/browser_sync_client.h"
-#include "components/sync/model/model_type_store_service.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "extensions/buildflags/buildflags.h"
 
 class Profile;
-
-namespace autofill {
-class AutofillWebDataService;
-}  // namespace autofill
-
-namespace password_manager {
-class PasswordStoreInterface;
-}  // namespace password_manager
 
 namespace syncer {
 class ModelTypeController;
@@ -72,6 +61,9 @@ class ChromeSyncClient : public browser_sync::BrowserSyncClient {
   syncer::SyncApiComponentFactory* GetSyncApiComponentFactory() override;
   bool IsCustomPassphraseAllowed() override;
   void OnLocalSyncTransportDataCleared() override;
+  bool IsPasswordSyncAllowed() override;
+  void SetPasswordSyncAllowedChangeCb(
+      const base::RepeatingClosure& cb) override;
 
  private:
   // Convenience function used during controller creation.
@@ -96,20 +88,13 @@ class ChromeSyncClient : public browser_sync::BrowserSyncClient {
   // The sync api component factory in use by this client.
   std::unique_ptr<browser_sync::SyncApiComponentFactoryImpl> component_factory_;
 
-  // Members that must be fetched on the UI thread but accessed on their
-  // respective backend threads.
-  scoped_refptr<autofill::AutofillWebDataService> profile_web_data_service_;
-  scoped_refptr<autofill::AutofillWebDataService> account_web_data_service_;
-  scoped_refptr<password_manager::PasswordStoreInterface>
-      profile_password_store_;
-  scoped_refptr<password_manager::PasswordStoreInterface>
-      account_password_store_;
-
-  // The task runner for the |web_data_service_|, if any.
-  scoped_refptr<base::SequencedTaskRunner> web_data_service_thread_;
-
   // Generates and monitors the ExtensionsActivity object used by sync.
   ExtensionsActivityMonitor extensions_activity_monitor_;
+
+#if BUILDFLAG(IS_ANDROID)
+  // Watches password_manager::prefs::kPasswordsUseUPMLocalAndSeparateStores.
+  PrefChangeRegistrar upm_pref_change_registrar_;
+#endif  // BUILDFLAG(IS_ANDROID)
 };
 
 }  // namespace browser_sync

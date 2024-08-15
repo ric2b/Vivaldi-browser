@@ -94,7 +94,7 @@ class ExpandedValueBase {
     } else {
       // Debug builds: Ensure the highest bit is not set (which would cause
       // overflow when casting to the signed integer).
-      OSP_DCHECK_EQ(
+      OSP_CHECK_EQ(
           static_cast<ShortUnsigned>(0),
           x & (static_cast<ShortUnsigned>(1) << ((sizeof(x) * 8) - 1)));
       return Subclass(x);

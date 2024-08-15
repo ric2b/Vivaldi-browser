@@ -72,34 +72,34 @@ class NoteModelView {
   void SetLastModificationTime(const vivaldi::NoteNode* node,
                                const base::Time time);
   void SetURL(const vivaldi::NoteNode* node, const GURL& url);
-  const vivaldi::NoteNode* AddFolder(const vivaldi::NoteNode* parent,
-                                     size_t index,
-                                     const std::u16string& name,
-                                     absl::optional<base::Time> creation_time,
-                                     absl::optional<base::Time> last_modified_time,
-                                     absl::optional<base::Uuid> uuid);
+  const vivaldi::NoteNode* AddFolder(
+      const vivaldi::NoteNode* parent,
+      size_t index,
+      const std::u16string& name,
+      std::optional<base::Time> creation_time,
+      std::optional<base::Time> last_modified_time,
+      std::optional<base::Uuid> uuid);
   const vivaldi::NoteNode* AddNote(const vivaldi::NoteNode* parent,
                                    size_t index,
                                    const std::u16string& title,
                                    const GURL& url,
                                    const std::u16string& content,
-                                   absl::optional<base::Time> creation_time,
-                                   absl::optional<base::Time> last_modified_time,
-                                   absl::optional<base::Uuid> uuid);
-  const vivaldi::NoteNode* AddSeparator(
-      const vivaldi::NoteNode* parent,
-      size_t index,
-      const std::u16string& name,
-      absl::optional<base::Time> creation_time,
-      absl::optional<base::Uuid> uuid);
+                                   std::optional<base::Time> creation_time,
+                                   std::optional<base::Time> last_modified_time,
+                                   std::optional<base::Uuid> uuid);
+  const vivaldi::NoteNode* AddSeparator(const vivaldi::NoteNode* parent,
+                                        size_t index,
+                                        const std::u16string& name,
+                                        std::optional<base::Time> creation_time,
+                                        std::optional<base::Uuid> uuid);
   const vivaldi::NoteNode* AddAttachmentFromChecksum(
       const vivaldi::NoteNode* parent,
       size_t index,
       const std::u16string& title,
       const GURL& url,
       const std::string& checksum,
-      absl::optional<base::Time> creation_time,
-      absl::optional<base::Uuid> uuid);
+      std::optional<base::Time> creation_time,
+      std::optional<base::Uuid> uuid);
   void ReorderChildren(
       const vivaldi::NoteNode* parent,
       const std::vector<const vivaldi::NoteNode*>& ordered_nodes);

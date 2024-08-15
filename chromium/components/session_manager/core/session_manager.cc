@@ -57,13 +57,17 @@ void SessionManager::CreateSessionForRestart(const AccountId& user_account_id,
   const user_manager::User* user = user_manager->FindUser(user_account_id);
   // Tests do not always create users.
   const bool is_child =
-      user && user->GetType() == user_manager::USER_TYPE_CHILD;
+      user && user->GetType() == user_manager::UserType::kChild;
   CreateSessionInternal(user_account_id, user_id_hash,
                         true /* browser_restart */, is_child);
 }
 
 bool SessionManager::IsSessionStarted() const {
   return session_started_;
+}
+
+bool SessionManager::IsUserSessionStartUpTaskCompleted() const {
+  return user_session_start_up_task_completed_;
 }
 
 void SessionManager::SessionStarted() {
@@ -126,6 +130,13 @@ void SessionManager::NotifyUserLoggedIn(const AccountId& user_account_id,
     return;
   user_manager->UserLoggedIn(user_account_id, user_id_hash, browser_restart,
                              is_child);
+}
+
+void SessionManager::HandleUserSessionStartUpTaskCompleted() {
+  user_session_start_up_task_completed_ = true;
+  for (auto& observer : observers_) {
+    observer.OnUserSessionStartUpTaskCompleted();
+  }
 }
 
 // static

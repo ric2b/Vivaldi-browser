@@ -28,7 +28,9 @@ typedef struct SVQ1EncDSPContext {
                              intptr_t size);
 } SVQ1EncDSPContext;
 
+void ff_svq1enc_init(SVQ1EncDSPContext *c);
 void ff_svq1enc_init_ppc(SVQ1EncDSPContext *c);
+void ff_svq1enc_init_riscv(SVQ1EncDSPContext *c);
 void ff_svq1enc_init_x86(SVQ1EncDSPContext *c);
 
 #endif /* AVCODEC_SVQ1ENCDSP_H */

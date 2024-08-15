@@ -93,7 +93,6 @@ class CC_EXPORT FrameSequenceTrackerCollection {
                          const viz::BeginFrameArgs& origin_args);
   void NotifyFrameEnd(const viz::BeginFrameArgs& args,
                       const viz::BeginFrameArgs& main_args);
-
   // Note that this notifies the trackers of the presentation-feedbacks, and
   // destroys any tracker that had been scheduled for destruction (using
   // |ScheduleRemoval()|) if it has no more pending frames. Data from non

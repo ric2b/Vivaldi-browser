@@ -494,6 +494,12 @@ void UIBindingsDelegate::OpenInNewTab(const std::string& url) {
   }
 }
 
+void UIBindingsDelegate::OpenSearchResultsInNewTab(const std::string& query) {
+  if (ui_bindings_delegate_) {
+    ui_bindings_delegate_->OpenSearchResultsInNewTab(query);
+  }
+}
+
 void UIBindingsDelegate::SetWhitelistedShortcuts(const std::string& message) {
   if (ui_bindings_delegate_) {
     ui_bindings_delegate_->SetWhitelistedShortcuts(message);

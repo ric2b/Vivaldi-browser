@@ -63,7 +63,7 @@ main:
                   auth:
                     type: OIDC
                 result: pollPinpointJobResult
-              retry: ${http.default_retry_non_idempotent}
+              retry: ${http.default_retry}
           - assignStatus:
               assign:
                 - status: ${pollPinpointJobResult.body.status}
@@ -101,8 +101,9 @@ main:
                     job_id: ${job_id}
                   auth:
                     type: OIDC
+                  timeout: 600
                 result: getCabeAnalysisResult
-              retry: ${http.default_retry_non_idempotent}
+              retry: ${http.default_retry}
           - assignStatistic:
               assign:
                 - statistic: ${getCabeAnalysisResult.body[anomaly.benchmark][anomaly.measurement]}
@@ -123,7 +124,9 @@ main:
                 args:
                   url: ${functionResponse.body.serviceConfig.uri}
                   body:
+                    anomaly: ${anomaly}
                     statistic: ${statistic}
+                    job_id: ${job_id}
                   auth:
                     type: OIDC
                 result: regressionDetectionResult

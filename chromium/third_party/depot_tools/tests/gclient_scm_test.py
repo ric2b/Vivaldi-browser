@@ -53,11 +53,11 @@ class BasicTests(unittest.TestCase):
     @mock.patch('gclient_scm.scm.GIT.Capture')
     def testGetFirstRemoteUrl(self, mockCapture):
         REMOTE_STRINGS = [
-            ('remote.origin.url E:\\foo\\bar', 'E:\\foo\\bar'),
-            ('remote.origin.url /b/foo/bar', '/b/foo/bar'),
-            ('remote.origin.url https://foo/bar', 'https://foo/bar'),
-            ('remote.origin.url E:\\Fo Bar\\bax', 'E:\\Fo Bar\\bax'),
-            ('remote.origin.url git://what/"do', 'git://what/"do')
+            ('remote.origin.url\nE:\\foo\\bar\x00', 'E:\\foo\\bar'),
+            ('remote.origin.url\n/b/foo/bar\x00', '/b/foo/bar'),
+            ('remote.origin.url\nhttps://foo/bar\x00', 'https://foo/bar'),
+            ('remote.origin.url\nE:\\Fo Bar\\bax\x00', 'E:\\Fo Bar\\bax'),
+            ('remote.origin.url\ngit://what/"do\x00', 'git://what/"do')
         ]
         FAKE_PATH = '/fake/path'
         mockCapture.side_effect = [question for question, _ in REMOTE_STRINGS]
@@ -65,10 +65,12 @@ class BasicTests(unittest.TestCase):
         for _, answer in REMOTE_STRINGS:
             self.assertEqual(
                 gclient_scm.SCMWrapper._get_first_remote_url(FAKE_PATH), answer)
+            gclient_scm.scm.GIT._clear_config(FAKE_PATH)
 
         expected_calls = [
-            mock.call(['config', '--local', '--get-regexp', r'remote.*.url'],
-                      cwd=FAKE_PATH) for _ in REMOTE_STRINGS
+            mock.call(['config', '--list', '-z'],
+                      cwd=FAKE_PATH,
+                      strip_out=False) for _ in REMOTE_STRINGS
         ]
         self.assertEqual(mockCapture.mock_calls, expected_calls)
 
@@ -1017,6 +1019,33 @@ class CipdWrapperTestCase(unittest.TestCase):
     def testUpdate(self):
         """Checks that update does nothing."""
         scm = self.createScmWithPackageThatSatisfies(lambda _: True)
+        scm.update(None, (), [])
+
+
+class GcsWrapperTestCase(unittest.TestCase):
+
+    def setUp(self):
+        self.workdir = tempfile.mkdtemp()
+        self.url = 'gs://123bucket/path_to_tar.gz'
+
+    def createScm(self):
+        return gclient_scm.GcsWrapper(url=self.url,
+                                      root_dir=self.workdir,
+                                      relpath='fake_relpath')
+
+    def testRevert(self):
+        """Checks that revert does nothing."""
+        scm = self.createScm()
+        scm.revert(None, (), [])
+
+    def testRevinfo(self):
+        """Checks that revinfo does nothing."""
+        scm = self.createScm()
+        scm.revinfo(None, (), [])
+
+    def testUpdate(self):
+        """Checks that update does nothing."""
+        scm = self.createScm()
         scm.update(None, (), [])
 
 

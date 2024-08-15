@@ -230,9 +230,9 @@ class ShelfAppButton::AppStatusIndicatorView
     : public gfx::AnimationDelegate,
       public views::View,
       public ShelfAppButtonAnimation::Observer {
- public:
-  METADATA_HEADER(AppStatusIndicatorView);
+  METADATA_HEADER(AppStatusIndicatorView, views::View)
 
+ public:
   AppStatusIndicatorView()
       : jelly_enabled_(chromeos::features::IsJellyEnabled()) {
     // Make sure the events reach the parent view for handling.
@@ -413,14 +413,11 @@ class ShelfAppButton::AppStatusIndicatorView
   base::TimeTicks animation_end_time_;  // For attention throbbing underline.
 };
 
-BEGIN_METADATA(ShelfAppButton, AppStatusIndicatorView, views::View)
+BEGIN_METADATA(ShelfAppButton, AppStatusIndicatorView)
 END_METADATA
 
 ////////////////////////////////////////////////////////////////////////////////
 // ShelfAppButton
-
-// static
-const char ShelfAppButton::kViewClassName[] = "ash/ShelfAppButton";
 
 // static
 bool ShelfAppButton::ShouldHandleEventFromContextMenu(
@@ -649,7 +646,7 @@ void ShelfAppButton::AddState(State state) {
 void ShelfAppButton::ClearState(State state) {
   if (state_ & state) {
     state_ &= ~state;
-    Layout();
+    DeprecatedLayoutImmediately();
     if (state & STATE_ATTENTION)
       indicator_->ShowAttention(false);
     if (state & STATE_ACTIVE)
@@ -903,10 +900,6 @@ gfx::Rect ShelfAppButton::CalculateSmallRippleArea() const {
   return small_ripple_area;
 }
 
-const char* ShelfAppButton::GetClassName() const {
-  return kViewClassName;
-}
-
 bool ShelfAppButton::OnMousePressed(const ui::MouseEvent& event) {
   // Clear any closing desks so that the user does not try to interact with an
   // app that is open on a closing desk.
@@ -1048,7 +1041,7 @@ gfx::Rect ShelfAppButton::GetNotificationIndicatorBounds(float icon_scale) {
                  scaled_icon_view_bounds.y() + padding, diameter, diameter));
 }
 
-void ShelfAppButton::Layout() {
+void ShelfAppButton::Layout(PassKey) {
   Shelf* shelf = shelf_view_->shelf();
   gfx::Rect icon_view_bounds =
       GetIconViewBounds(GetContentsBounds(), icon_scale_,
@@ -1091,12 +1084,12 @@ void ShelfAppButton::Layout() {
   indicator_->SetBoundsRect(indicator_bounds);
 
   UpdateState();
-  views::FocusRing::Get(this)->Layout();
+  views::FocusRing::Get(this)->DeprecatedLayoutImmediately();
   UpdateProgressRingBounds();
 }
 
 void ShelfAppButton::ChildPreferredSizeChanged(views::View* child) {
-  Layout();
+  DeprecatedLayoutImmediately();
 }
 
 void ShelfAppButton::OnThemeChanged() {
@@ -1475,5 +1468,8 @@ void ShelfAppButton::OnAnimatedInFromPromiseApp(
 
   callback.Run();
 }
+
+BEGIN_METADATA(ShelfAppButton)
+END_METADATA
 
 }  // namespace ash

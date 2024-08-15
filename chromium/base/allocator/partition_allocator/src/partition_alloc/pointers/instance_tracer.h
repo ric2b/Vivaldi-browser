@@ -26,8 +26,9 @@ class InstanceTracer {
  public:
   constexpr uint64_t owner_id() const { return 0; }
 
-  constexpr static void Trace(uint64_t owner_id, uintptr_t address) {}
-  constexpr static void Untrace(uint64_t owner_id) {}
+  constexpr static void Trace([[maybe_unused]] uint64_t owner_id,
+                              [[maybe_unused]] uintptr_t address) {}
+  constexpr static void Untrace([[maybe_unused]] uint64_t owner_id) {}
 };
 
 #else
@@ -48,12 +49,14 @@ class PA_TRIVIAL_ABI InstanceTracer {
 
   constexpr uint64_t owner_id() const { return owner_id_; }
 
-  constexpr static void Trace(uint64_t owner_id, uintptr_t address) {
+  constexpr static void Trace(uint64_t owner_id,
+                              bool may_dangle,
+                              uintptr_t address) {
     if (partition_alloc::internal::base::is_constant_evaluated() ||
         owner_id == 0) {
       return;
     }
-    TraceImpl(owner_id, address);
+    TraceImpl(owner_id, may_dangle, address);
   }
   constexpr static void Untrace(uint64_t owner_id) {
     if (partition_alloc::internal::base::is_constant_evaluated() ||
@@ -73,7 +76,7 @@ class PA_TRIVIAL_ABI InstanceTracer {
 
  private:
   PA_COMPONENT_EXPORT(RAW_PTR)
-  static void TraceImpl(uint64_t owner_id, uintptr_t address);
+  static void TraceImpl(uint64_t owner_id, bool may_dangle, uintptr_t address);
   PA_COMPONENT_EXPORT(RAW_PTR) static void UntraceImpl(uint64_t owner_id);
 
   constexpr uint64_t CreateOwnerId() {
@@ -83,7 +86,7 @@ class PA_TRIVIAL_ABI InstanceTracer {
     return ++counter_;
   }
 
-  static std::atomic<uint64_t> counter_;
+  PA_COMPONENT_EXPORT(RAW_PTR) static std::atomic<uint64_t> counter_;
 
   // 0 is treated as 'ownerless'. It is used as a sentinel for constexpr
   // raw_ptrs or other places where owner tracking doesn't make sense.

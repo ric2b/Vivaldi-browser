@@ -9,6 +9,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -27,7 +28,6 @@
 #include "components/sync/protocol/sync.pb.h"
 #include "net/http/http_status_code.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace switches {
 
@@ -246,6 +246,13 @@ class FakeServer : public syncer::LoopbackServer::ObserverForTests {
 
   void TriggerMigrationDoneError(syncer::ModelTypeSet types);
 
+  // Add the user to the collaboration for the shared data types.
+  void AddCollaboration(const std::string& collaboration_id);
+
+  // Removes the user from the collaboration. Does not clean up related entities
+  // from the server.
+  void RemoveCollaboration(const std::string& collaboration_id);
+
   // Implement LoopbackServer::ObserverForTests:
   void OnCommit(syncer::ModelTypeSet committed_model_types) override;
   void OnHistoryCommit(const std::string& url) override;
@@ -300,7 +307,7 @@ class FakeServer : public syncer::LoopbackServer::ObserverForTests {
   std::vector<std::unique_ptr<testing::ScopedTrace>> gtest_scoped_traces_;
 
   // If set, the server will return HTTP errors.
-  absl::optional<net::HttpStatusCode> http_error_status_code_;
+  std::optional<net::HttpStatusCode> http_error_status_code_;
 
   // All URLs received via HISTORY sync.
   std::set<std::string> committed_history_urls_;
@@ -353,6 +360,9 @@ class FakeServer : public syncer::LoopbackServer::ObserverForTests {
   // The LoopbackServer does not know how to handle offer data properly, so
   // the FakeServer handles those itself.
   std::vector<sync_pb::SyncEntity> offer_entities_;
+
+  // List of collaborations the user is a member of, used for all shared types.
+  std::vector<std::string> collaborations_;
 
   // Creates WeakPtr versions of the current FakeServer. This must be the last
   // data member!

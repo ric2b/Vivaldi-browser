@@ -3,6 +3,7 @@
 layout(rgba32f) uniform highp writeonly image3D arg_0;
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   uvec3 inner;
+  uint pad;
 } prevent_dce;
 
 void textureDimensions_f93ece() {
@@ -25,10 +26,12 @@ void main() {
 }
 #version 310 es
 precision highp float;
+precision highp int;
 
 layout(rgba32f) uniform highp writeonly image3D arg_0;
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   uvec3 inner;
+  uint pad;
 } prevent_dce;
 
 void textureDimensions_f93ece() {
@@ -49,6 +52,7 @@ void main() {
 layout(rgba32f) uniform highp writeonly image3D arg_0;
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   uvec3 inner;
+  uint pad;
 } prevent_dce;
 
 void textureDimensions_f93ece() {

@@ -2,13 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as EnvironmentHelpers from '../../../../../test/unittests/front_end/helpers/EnvironmentHelpers.js';
-import * as TraceHelpers from '../../../../../test/unittests/front_end/helpers/TraceHelpers.js';
-import * as PerfUI from '../../../legacy/components/perf_ui/perf_ui.js';
-import * as ComponentSetup from '../../helpers/helpers.js';
-
 import type * as Platform from '../../../../core/platform/platform.js';
 import * as TraceEngine from '../../../../models/trace/trace.js';
+import * as EnvironmentHelpers from '../../../../testing/EnvironmentHelpers.js';
+import * as TraceHelpers from '../../../../testing/TraceHelpers.js';
+import * as PerfUI from '../../../legacy/components/perf_ui/perf_ui.js';
+import * as ComponentSetup from '../../helpers/helpers.js';
 
 await EnvironmentHelpers.initializeGlobalVars();
 await ComponentSetup.ComponentServerSetup.setup();
@@ -75,9 +74,9 @@ function renderExample2() {
   class FakeProviderWithLongTasksForStriping extends TraceHelpers.FakeFlameChartProvider {
     override timelineData(): PerfUI.FlameChart.FlameChartTimelineData|null {
       return PerfUI.FlameChart.FlameChartTimelineData.create({
-        entryLevels: [1, 1, 1, 2, 2, 2, 2],
-        entryStartTimes: [5, 55, 70, 5, 30, 55, 75],
-        entryTotalTimes: [45, 10, 20, 20, 20, 5, 15],
+        entryLevels: [0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2],
+        entryStartTimes: [5, 55, 70, 5, 30, 55, 75, 5, 10, 15, 20],
+        entryTotalTimes: [45, 10, 20, 20, 20, 5, 15, 4, 4, 4, 4],
         entryDecorations: [
           [
             {
@@ -111,6 +110,28 @@ function renderExample2() {
             {
               type: PerfUI.FlameChart.FlameChartDecorationType.CANDY,
               startAtTime: TraceEngine.Types.Timing.MicroSeconds(10_000),
+            },
+            {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+            {type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE},
+          ],
+          [
+            {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+          ],
+          [
+            {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+            {type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE},
+          ],
+          [
+            {
+              type: PerfUI.FlameChart.FlameChartDecorationType.CANDY,
+              startAtTime: TraceEngine.Types.Timing.MicroSeconds(1_000),
+            },
+            {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+          ],
+          [
+            {
+              type: PerfUI.FlameChart.FlameChartDecorationType.CANDY,
+              startAtTime: TraceEngine.Types.Timing.MicroSeconds(1_000),
             },
             {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
             {type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE},
@@ -263,7 +284,74 @@ function renderExample4() {
   });
 }
 
+/**
+ * Render a flame chart with event initiators of different sizes.
+ * Some initiator and initiated events are hidden.
+ **/
+function renderExample5() {
+  class FakeProviderWithVariousTasksForInitiators extends TraceHelpers.FakeFlameChartProvider {
+    override timelineData(): PerfUI.FlameChart.FlameChartTimelineData|null {
+      return PerfUI.FlameChart.FlameChartTimelineData.create({
+        entryLevels: [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2],
+        entryStartTimes: [5, 5, 5, 15, 15, 15, 40, 40, 40, 55.4, 55.4, 55.4, 80, 80, 80],
+        entryTotalTimes: [6, 6, 6, 5, 5, 5, 15, 15, 15, 2, 2, 2, 10, 10, 10],
+        entryDecorations: [
+          [],
+          [],
+          [
+            {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+          ],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [
+            {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+          ],
+          [],
+          [],
+          [
+            {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+          ],
+          [
+            {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+          ],
+        ],
+        initiatorsData: [
+          {initiatorIndex: 2, eventIndex: 3, isInitiatorHidden: true},
+          {initiatorIndex: 1, eventIndex: 13},
+          {initiatorIndex: 3, eventIndex: 6},
+          {initiatorIndex: 3, eventIndex: 8, isEntryHidden: true},
+          {initiatorIndex: 6, eventIndex: 11},
+          {initiatorIndex: 11, eventIndex: 12, isInitiatorHidden: true, isEntryHidden: true},
+        ],
+        groups: [{
+          name: 'Testing initiators' as Platform.UIString.LocalizedString,
+          startLevel: 0,
+          style: defaultGroupStyle,
+        }],
+      });
+    }
+  }
+
+  const container = document.querySelector('div#container5');
+  if (!container) {
+    throw new Error('No container');
+  }
+  const delegate = new TraceHelpers.MockFlameChartDelegate();
+  const dataProvider = new FakeProviderWithVariousTasksForInitiators();
+  const flameChart = new PerfUI.FlameChart.FlameChart(dataProvider, delegate);
+
+  flameChart.markAsRoot();
+  flameChart.setSelectedEntry(14);
+  flameChart.setWindowTimes(0, 100);
+  flameChart.show(container);
+  flameChart.update();
+}
+
 renderExample1();
 renderExample2();
 renderExample3();
 renderExample4();
+renderExample5();

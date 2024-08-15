@@ -131,12 +131,13 @@ export class CoverageView extends UI.Widget.VBox {
   constructor() {
     super(true);
 
-    this.element.setAttribute('jslog', `${VisualLogging.panel().context('coverage')}`);
+    this.element.setAttribute('jslog', `${VisualLogging.panel('coverage').track({resize: true})}`);
 
     this.model = null;
     this.decorationManager = null;
 
     const toolbarContainer = this.contentElement.createChild('div', 'coverage-toolbar-container');
+    toolbarContainer.setAttribute('jslog', `${VisualLogging.toolbar()}`);
     const toolbar = new UI.Toolbar.Toolbar('coverage-toolbar', toolbarContainer);
     toolbar.makeWrappable(true);
 
@@ -156,7 +157,8 @@ export class CoverageView extends UI.Widget.VBox {
     for (const type of coverageTypes) {
       this.coverageTypeComboBox.addOption(this.coverageTypeComboBox.createOption(type.label, `${type.value}`));
     }
-    this.coverageTypeComboBoxSetting = Common.Settings.Settings.instance().createSetting('coverageViewCoverageType', 0);
+    this.coverageTypeComboBoxSetting =
+        Common.Settings.Settings.instance().createSetting('coverage-view-coverage-type', 0);
     this.coverageTypeComboBox.setSelectedIndex(this.coverageTypeComboBoxSetting.get());
     this.coverageTypeComboBox.setEnabled(true);
     toolbar.appendToolbarItem(this.coverageTypeComboBox);
@@ -218,7 +220,7 @@ export class CoverageView extends UI.Widget.VBox {
     toolbar.appendToolbarItem(this.filterByTypeComboBox);
 
     toolbar.appendSeparator();
-    this.showContentScriptsSetting = Common.Settings.Settings.instance().createSetting('showContentScripts', false);
+    this.showContentScriptsSetting = Common.Settings.Settings.instance().createSetting('show-content-scripts', false);
     this.showContentScriptsSetting.addChangeListener(this.onFilterChanged, this);
     this.contentScriptsCheckbox = new UI.Toolbar.ToolbarSettingCheckbox(
         this.showContentScriptsSetting, i18nString(UIStrings.includeExtensionContentScripts),
@@ -511,16 +513,24 @@ export class CoverageView extends UI.Widget.VBox {
   private updateStats(): void {
     const all = {total: 0, unused: 0};
     const filtered = {total: 0, unused: 0};
-    let filterApplied = false;
+    const filterApplied = this.textFilterRegExp !== null;
     if (this.model) {
       for (const info of this.model.entries()) {
         all.total += info.size();
         all.unused += info.unusedSize();
         if (this.isVisible(false, info)) {
-          filtered.total += info.size();
-          filtered.unused += info.unusedSize();
-        } else {
-          filterApplied = true;
+          if (this.textFilterRegExp?.test(info.url())) {
+            filtered.total += info.size();
+            filtered.unused += info.unusedSize();
+          } else {
+            // If it doesn't match the filter, calculate the stats from visible children if there are any
+            for (const childInfo of info.sourcesURLCoverageInfo.values()) {
+              if (this.isVisible(false, childInfo)) {
+                filtered.total += childInfo.size();
+                filtered.unused += childInfo.unusedSize();
+              }
+            }
+          }
         }
       }
     }

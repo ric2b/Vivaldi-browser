@@ -66,14 +66,7 @@ class SyncConsentDisabledChecker : public SingleClientStatusChangeChecker {
 
 class SingleClientStandaloneTransportSyncTest : public SyncTest {
  public:
-  SingleClientStandaloneTransportSyncTest() : SyncTest(SINGLE_CLIENT) {
-    feature_list_.InitAndDisableFeature(switches::kUnoDesktop);
-  }
-
-  ~SingleClientStandaloneTransportSyncTest() override = default;
-
- private:
-  base::test::ScopedFeatureList feature_list_;
+  SingleClientStandaloneTransportSyncTest() : SyncTest(SINGLE_CLIENT) {}
 };
 
 // On Chrome OS sync auto-starts on sign-in.
@@ -272,7 +265,8 @@ class SingleClientStandaloneTransportWithReplaceSyncWithSigninSyncTest
   SingleClientStandaloneTransportWithReplaceSyncWithSigninSyncTest() {
     override_features_.InitWithFeatures(
         /*enabled_features=*/
-        {syncer::kEnablePreferencesAccountStorage,
+        {switches::kExplicitBrowserSigninUIOnDesktop,
+         syncer::kEnablePreferencesAccountStorage,
          syncer::kSyncEnableContactInfoDataTypeInTransportMode,
          syncer::kSyncEnableContactInfoDataTypeForCustomPassphraseUsers,
          syncer::kReplaceSyncPromosWithSignInPromos,
@@ -513,6 +507,9 @@ IN_PROC_BROWSER_TEST_F(
       syncer::PRIORITY_PREFERENCES));
 }
 
+// TODO(crbug.com/1117345): Android currently doesn't support PRE_ tests and
+// all of these are.
+#if !BUILDFLAG(IS_ANDROID)
 // A test fixture to cover migration behavior: In PRE_ tests, the
 // kReplaceSyncPromosWithSignInPromos is *dis*abled, in non-PRE_ tests it is
 // *en*abled.
@@ -524,8 +521,8 @@ class SingleClientStandaloneTransportReplaceSyncWithSigninMigrationSyncTest
     // mode are unconditionally enabled.
     default_features_.InitWithFeatures(
         /*enabled_features=*/
-        {syncer::kReadingListEnableSyncTransportModeUponSignIn,
-         password_manager::features::kEnablePasswordsAccountStorage,
+        {switches::kExplicitBrowserSigninUIOnDesktop,
+         syncer::kReadingListEnableSyncTransportModeUponSignIn,
          syncer::kSyncEnableContactInfoDataTypeInTransportMode,
          syncer::kEnableBookmarkFoldersForAccountStorage,
          syncer::kEnablePreferencesAccountStorage},
@@ -543,8 +540,6 @@ class SingleClientStandaloneTransportReplaceSyncWithSigninMigrationSyncTest
   base::test::ScopedFeatureList sync_to_signin_feature_;
 };
 
-// TODO(crbug.com/1117345): Android currently doesn't support PRE_ tests.
-#if !BUILDFLAG(IS_ANDROID)
 IN_PROC_BROWSER_TEST_F(
     SingleClientStandaloneTransportReplaceSyncWithSigninMigrationSyncTest,
     PRE_MigratesSignedInUser) {

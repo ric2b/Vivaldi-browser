@@ -186,13 +186,11 @@ void WebsiteSettingsRegistry::Init() {
 #endif
            ,
            WebsiteSettingsInfo::INHERIT_IN_INCOGNITO);
-#if !defined(VIVALDI_BUILD)
   Register(
       ContentSettingsType::MEDIA_ENGAGEMENT, "media-engagement", base::Value(),
       WebsiteSettingsInfo::UNSYNCABLE, WebsiteSettingsInfo::LOSSY,
       WebsiteSettingsInfo::GENERIC_SINGLE_ORIGIN_SCOPE,
       DESKTOP | PLATFORM_ANDROID, WebsiteSettingsInfo::INHERIT_IN_INCOGNITO);
-#endif
   Register(ContentSettingsType::CLIENT_HINTS, "client-hints", base::Value(),
            WebsiteSettingsInfo::UNSYNCABLE, WebsiteSettingsInfo::LOSSY,
            WebsiteSettingsInfo::GENERIC_SINGLE_ORIGIN_SCOPE,

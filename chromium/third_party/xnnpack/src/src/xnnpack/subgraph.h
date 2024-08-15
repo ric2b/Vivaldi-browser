@@ -27,13 +27,22 @@
 
 #define XNN_INVALID_NODE_ID UINT32_MAX
 
-#define XNN_MAX_OPERATOR_OBJECTS 4
+#define XNN_MAX_OPERATOR_OBJECTS 5
 
 /// Disable fusion of nodes in subgraph. Fusion is enabled by default, set this flag to turn it off.
 #define XNN_FLAG_NO_OPERATOR_FUSION 0x80000000
 
 #ifdef __cplusplus
 extern "C" {
+#endif
+
+#ifdef XNN_SLINKY_ENABLED
+struct xnn_value;
+struct slinky_pipeline;
+typedef struct slinky_pipeline* slinky_pipeline_t;
+slinky_pipeline_t xnn_runtime_to_slinky_pipeline(xnn_runtime_t runtime);
+void destroy_slinky_pipeline(slinky_pipeline_t pipeline);
+enum xnn_status evaluate(slinky_pipeline_t p, struct xnn_value* const* input_values, size_t num_inputs, struct xnn_value* const* output_values, size_t num_outputs);
 #endif
 
 struct xnn_shape {
@@ -186,7 +195,7 @@ typedef enum xnn_status (*xnn_create_operator_fn)(
   size_t num_values,
   struct xnn_operator_data* opdata,
   struct xnn_code_cache* code_cache,
-  struct xnn_weights_cache* weights_cache);
+  xnn_weights_cache_t weights_cache);
 
 typedef enum xnn_status (*xnn_reshape_operator_fn)(
   struct xnn_operator_data* opdata,
@@ -240,7 +249,7 @@ struct xnn_node {
   /// Static parameters of the operator node.
   union {
     struct {
-      size_t axis;
+      int32_t axis;
     } concatenate;
     struct {
       uint32_t input_padding_top;
@@ -292,7 +301,7 @@ struct xnn_node {
       uint32_t block_size;
     } depth_to_space_2d;
     struct {
-      size_t axis;
+      int32_t axis;
     } even_split;
     struct {
       uint32_t padding_top;
@@ -412,8 +421,13 @@ struct xnn_operator_data {
       size_t num_reduction_axes;
       size_t reduction_axes[XNN_MAX_TENSOR_DIMS];
     };
+    // Used for reshape.
+    struct {
+      size_t num_reshape_dims;
+      size_t reshape_dims[XNN_MAX_TENSOR_DIMS];
+    };
     // Used for concatenate.
-    size_t axis;
+    int32_t axis;
     // Used for static constant pad.
     struct {
       size_t post_paddings[XNN_MAX_TENSOR_DIMS];
@@ -480,6 +494,15 @@ struct xnn_runtime {
   // True if runtime has ever been setup. If it has been setup, the pointers inside of opdata need to be updated if
   // workspace changes.
   bool has_been_setup;
+  bool memory_planned;
+
+#ifdef XNN_SLINKY_ENABLED
+  slinky_pipeline_t slinky_pipeline;
+  size_t num_inputs;
+  size_t num_outputs;
+  struct xnn_value* input_values[XNN_MAX_OPERATOR_OBJECTS];
+  struct xnn_value* output_values[XNN_MAX_OPERATOR_OBJECTS];
+#endif
 };
 
 struct xnn_value* xnn_subgraph_new_internal_value(xnn_subgraph_t subgraph);
@@ -513,8 +536,7 @@ XNN_INLINE static size_t xnn_tensor_get_rounded_size(const struct xnn_value* val
 enum xnn_shape_inference_status xnn_tensor_propagate_dimension(
   struct xnn_value* to,
   uint32_t to_dim,
-  const struct xnn_value* from,
-  uint32_t from_dim);
+  size_t infer_dim);
 
 // Product of all shape dimensions
 size_t xnn_shape_multiply_all_dims(
@@ -570,6 +592,13 @@ void xnn_subgraph_analyze_consumers_and_producers(xnn_subgraph_t subgraph);
 // Infer shape information across subgraph.
 // No flags currently supported, in the future it can be used to configure how shape inference is done.
 enum xnn_status xnn_subgraph_infer_shape(xnn_subgraph_t subgraph, uint32_t flags);
+
+enum xnn_status resize_fully_connected_output_tensor(
+  const struct xnn_operator_data* opdata,
+  struct xnn_value* values,
+  size_t num_values,
+  size_t old_workspace_size,
+  pthreadpool_t threadpool);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -9,15 +9,15 @@
 
 #include <memory>
 
+#include "core/fxcrt/check_op.h"
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_memory_wrappers.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/unowned_ptr.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
 #include "core/fxge/cfx_path.h"
 #include "core/fxge/renderdevicedriver_iface.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/containers/span.h"
 #include "third_party/skia/include/core/SkPoint.h"
 #include "third_party/skia/include/core/SkRSXform.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
@@ -89,13 +89,11 @@ class CFX_SkiaDeviceDriver final : public RenderDeviceDriverIface {
   bool GetClipBox(FX_RECT* pRect) override;
 
   /** Load device buffer into a DIB */
-  bool GetDIBits(const RetainPtr<CFX_DIBitmap>& pBitmap,
-                 int left,
-                 int top) override;
+  bool GetDIBits(RetainPtr<CFX_DIBitmap> bitmap, int left, int top) override;
 
   RetainPtr<CFX_DIBitmap> GetBackDrop() override;
 
-  bool SetDIBits(const RetainPtr<const CFX_DIBBase>& pBitmap,
+  bool SetDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                  uint32_t color,
                  const FX_RECT& src_rect,
                  int dest_left,
@@ -153,7 +151,7 @@ class CFX_SkiaDeviceDriver final : public RenderDeviceDriverIface {
                    bool bAlphaMode) override;
 
   bool MultiplyAlpha(float alpha) override;
-  bool MultiplyAlphaMask(const RetainPtr<const CFX_DIBBase>& mask) override;
+  bool MultiplyAlphaMask(RetainPtr<const CFX_DIBitmap> mask) override;
 
   void Clear(uint32_t color);
   void Dump() const;

@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "ash/constants/ash_features.h"
+#include "ash/shortcut_viewer/strings/grit/shortcut_viewer_strings.h"
 #include "ash/webui/shortcut_customization_ui/backend/search/fake_search_data.h"
 #include "ash/webui/shortcut_customization_ui/backend/search/search.mojom.h"
 #include "base/memory/raw_ptr.h"
@@ -19,6 +20,7 @@
 #include "chrome/browser/ash/app_list/search/search_features.h"
 #include "chrome/browser/ash/app_list/search/test/test_manatee_cache.h"
 #include "chrome/browser/ash/app_list/search/test/test_search_controller.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/test/base/chrome_ash_test_base.h"
 #include "chrome/test/base/testing_profile.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -119,6 +121,9 @@ class KeyboardShortcutProviderFuzzyMatchTest
         profile_.get(), std::move(test_manatee_cache_));
     provider_ = provider.get();
     search_controller_->AddProvider(std::move(provider));
+
+    // TODO(b/326514738): bypassed the filtering in the unit test.
+    provider_->set_should_apply_query_filtering_for_test(false);
   }
 
   void Wait() { task_environment()->RunUntilIdle(); }
@@ -278,11 +283,18 @@ class KeyboardShortcutProviderManateeTest
     provider_ = provider.get();
     search_controller_->AddProvider(std::move(provider));
     test_shortcut_data_ = {
-        KeyboardShortcutData(u"Open the link in a new tab", 43234, 43235),
-        KeyboardShortcutData(u"Open the link in the tab", 43148, 43149),
-        KeyboardShortcutData(u"Highlight the next item on your shelf", 43150,
-                             43151)};
+        KeyboardShortcutData(u"Open the link in a new tab",
+                             IDS_KSV_DESCRIPTION_DRAG_LINK_IN_NEW_TAB,
+                             IDS_KSV_SHORTCUT_DRAG_LINK_IN_NEW_TAB),
+        KeyboardShortcutData(u"Open the link in the tab",
+                             IDS_KSV_DESCRIPTION_DRAG_LINK_IN_SAME_TAB,
+                             IDS_KSV_SHORTCUT_DRAG_LINK_IN_SAME_TAB),
+        KeyboardShortcutData(u"Highlight the next item on your shelf",
+                             IDS_KSV_DESCRIPTION_HIGHLIGHT_NEXT_ITEM_ON_SHELF,
+                             IDS_KSV_SHORTCUT_HIGHLIGHT_NEXT_ITEM_ON_SHELF)};
     provider_->set_shortcut_data_for_test(test_shortcut_data_);
+    // TODO(b/326514738): bypassed the filtering in the unit test.
+    provider_->set_should_apply_query_filtering_for_test(false);
   }
 
   void Wait() { task_environment()->RunUntilIdle(); }
@@ -499,6 +511,9 @@ class CustomizableKeyboardShortcutProviderTest : public ChromeAshTestBase {
     // Initialize search_controller_;
     search_controller_ = std::make_unique<TestSearchController>();
     search_controller_->AddProvider(std::move(provider));
+
+    // TODO(b/326514738): bypassed the filtering in the unit test.
+    provider_->set_should_apply_query_filtering_for_test(false);
   }
 
   void Wait() { task_environment()->RunUntilIdle(); }

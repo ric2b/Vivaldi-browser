@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "absl/types/optional.h"
+#include "api/environment/environment.h"
 #include "api/numerics/samples_stats_counter.h"
 #include "api/test/metrics/metric.h"
 #include "api/test/metrics/metrics_logger.h"
@@ -48,7 +49,7 @@ class VideoCodecTester {
   };
 
   struct EncodingSettings {
-    SdpVideoFormat sdp_video_format = SdpVideoFormat("VP8");
+    SdpVideoFormat sdp_video_format = SdpVideoFormat::VP8();
     ScalabilityMode scalability_mode = ScalabilityMode::kL1T1;
 
     struct LayerSettings {
@@ -199,6 +200,7 @@ class VideoCodecTester {
 
   // Decodes video, collects and returns decode metrics.
   static std::unique_ptr<VideoCodecStats> RunDecodeTest(
+      const Environment& env,
       CodedVideoSource* video_source,
       VideoDecoderFactory* decoder_factory,
       const DecoderSettings& decoder_settings,
@@ -206,6 +208,7 @@ class VideoCodecTester {
 
   // Encodes video, collects and returns encode metrics.
   static std::unique_ptr<VideoCodecStats> RunEncodeTest(
+      const Environment& env,
       const VideoSourceSettings& source_settings,
       VideoEncoderFactory* encoder_factory,
       const EncoderSettings& encoder_settings,
@@ -213,6 +216,7 @@ class VideoCodecTester {
 
   // Encodes and decodes video, collects and returns encode and decode metrics.
   static std::unique_ptr<VideoCodecStats> RunEncodeDecodeTest(
+      const Environment& env,
       const VideoSourceSettings& source_settings,
       VideoEncoderFactory* encoder_factory,
       VideoDecoderFactory* decoder_factory,

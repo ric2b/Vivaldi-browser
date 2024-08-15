@@ -30,6 +30,7 @@
 #include "src/tint/utils/containers/transform.h"
 #include "src/tint/utils/containers/vector.h"
 #include "src/tint/utils/text/string.h"
+#include "src/tint/utils/text/styled_text.h"
 
 namespace tint {
 
@@ -64,10 +65,11 @@ size_t Distance(std::string_view str_a, std::string_view str_b) {
 
 void SuggestAlternatives(std::string_view got,
                          Slice<const std::string_view> strings,
-                         StringStream& ss,
+                         StyledText& ss,
                          const SuggestAlternativeOptions& options /* = {} */) {
     // If the string typed was within kSuggestionDistance of one of the possible enum values,
     // suggest that. Don't bother with suggestions if the string was extremely long.
+    auto default_style = ss.Style();
     constexpr size_t kSuggestionDistance = 5;
     constexpr size_t kSuggestionMaxLength = 64;
     if (!got.empty() && got.size() < kSuggestionMaxLength) {
@@ -81,7 +83,8 @@ void SuggestAlternatives(std::string_view got,
             }
         }
         if (!candidate.empty()) {
-            ss << "Did you mean '" << options.prefix << candidate << "'?";
+            ss << "Did you mean " << options.alternatives_style << options.prefix << candidate
+               << default_style << "?";
             if (options.list_possible_values) {
                 ss << "\n";
             }
@@ -95,7 +98,7 @@ void SuggestAlternatives(std::string_view got,
             if (str != strings[0]) {
                 ss << ", ";
             }
-            ss << "'" << options.prefix << str << "'";
+            ss << options.alternatives_style << options.prefix << str << default_style;
         }
     }
 }

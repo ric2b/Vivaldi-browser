@@ -10,7 +10,6 @@
 
 #include "app/vivaldi_apptools.h"
 #include "base/base64.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/hash/sha1.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -39,7 +38,8 @@ namespace {
 void HashSpecifics(const sync_pb::EntitySpecifics& specifics,
                    std::string* hash) {
   DCHECK_GT(specifics.ByteSize(), 0);
-  base::Base64Encode(base::SHA1HashString(specifics.SerializeAsString()), hash);
+  *hash =
+      base::Base64Encode(base::SHA1HashString(specifics.SerializeAsString()));
 }
 
 // Returns a map from id to node for all nodes in |model|.
@@ -77,9 +77,9 @@ std::unique_ptr<SyncedNoteTracker> SyncedNoteTracker::CreateEmpty(
   // base::WrapUnique() used because the constructor is private.
   return base::WrapUnique(new SyncedNoteTracker(
       std::move(model_type_state), /*notes_reuploaded=*/false,
-      /*num_ignored_updates_due_to_missing_parent=*/absl::optional<int64_t>(0),
+      /*num_ignored_updates_due_to_missing_parent=*/std::optional<int64_t>(0),
       /*max_version_among_ignored_updates_due_to_missing_parent=*/
-      absl::nullopt, synced_file_store));
+      std::nullopt, synced_file_store));
 }
 
 // static
@@ -110,13 +110,13 @@ SyncedNoteTracker::CreateFromNotesModelAndMetadata(
       model_metadata.notes_hierarchy_fields_reuploaded() &&
       base::FeatureList::IsEnabled(switches::kSyncReuploadBookmarks);
 
-  absl::optional<int64_t> num_ignored_updates_due_to_missing_parent;
+  std::optional<int64_t> num_ignored_updates_due_to_missing_parent;
   if (model_metadata.has_num_ignored_updates_due_to_missing_parent()) {
     num_ignored_updates_due_to_missing_parent =
         model_metadata.num_ignored_updates_due_to_missing_parent();
   }
 
-  absl::optional<int64_t>
+  std::optional<int64_t>
       max_version_among_ignored_updates_due_to_missing_parent;
   if (model_metadata
           .has_max_version_among_ignored_updates_due_to_missing_parent()) {
@@ -300,7 +300,7 @@ void SyncedNoteTracker::Remove(const SyncedNoteTrackerEntity* entity) {
 
   client_tag_hash_to_entities_map_.erase(entity->GetClientTagHash());
 
-  base::Erase(ordered_local_tombstones_, entity);
+  std::erase(ordered_local_tombstones_, entity);
   sync_id_to_entities_map_.erase(entity->metadata().server_id());
   DCHECK_EQ(sync_id_to_entities_map_.size(),
             client_tag_hash_to_entities_map_.size());
@@ -402,8 +402,8 @@ SyncedNoteTracker::GetEntitiesWithLocalChanges() const {
 SyncedNoteTracker::SyncedNoteTracker(
     sync_pb::ModelTypeState model_type_state,
     bool notes_reuploaded,
-    absl::optional<int64_t> num_ignored_updates_due_to_missing_parent,
-    absl::optional<int64_t>
+    std::optional<int64_t> num_ignored_updates_due_to_missing_parent,
+    std::optional<int64_t>
         max_version_among_ignored_updates_due_to_missing_parent,
     file_sync::SyncedFileStore* synced_file_store)
     : synced_file_store_(synced_file_store),
@@ -626,12 +626,12 @@ void SyncedNoteTracker::RecordIgnoredServerUpdateDueToMissingParent(
   }
 }
 
-absl::optional<int64_t>
+std::optional<int64_t>
 SyncedNoteTracker::GetNumIgnoredUpdatesDueToMissingParentForTest() const {
   return num_ignored_updates_due_to_missing_parent_;
 }
 
-absl::optional<int64_t>
+std::optional<int64_t>
 SyncedNoteTracker::GetMaxVersionAmongIgnoredUpdatesDueToMissingParentForTest()
     const {
   return max_version_among_ignored_updates_due_to_missing_parent_;
@@ -728,7 +728,7 @@ void SyncedNoteTracker::UndeleteTombstoneForNoteNode(
          note_node_to_entities_map_.end());
   DCHECK_EQ(GetEntityForSyncId(entity->metadata().server_id()), entity);
 
-  base::Erase(ordered_local_tombstones_, entity);
+  std::erase(ordered_local_tombstones_, entity);
   SyncedNoteTrackerEntity* mutable_entity = AsMutableEntity(entity);
   mutable_entity->MutableMetadata()->set_is_deleted(false);
   mutable_entity->set_note_node(node);

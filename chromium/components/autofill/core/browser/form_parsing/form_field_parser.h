@@ -71,8 +71,8 @@ class RegexMatchesCache {
   static Key BuildKey(base::StringPiece16 input, base::StringPiece16 pattern);
 
   // Returns whether `pattern` in the key matched `input` if this information is
-  // cached. absl::nullopt if the information is not cached.
-  absl::optional<bool> Get(Key key);
+  // cached. std::nullopt if the information is not cached.
+  std::optional<bool> Get(Key key);
 
   // Stores whether `pattern` in the key matched `input`.
   void Put(Key key, bool value);
@@ -176,15 +176,15 @@ class FormFieldParser {
       base::span<const MatchPatternRef> patterns,
       const AutofillField& field,
       const char* regex_name = "",
-      MatchingPattern (*projection)(const MatchingPattern&) = nullptr);
+      MatchParams (*projection)(const MatchParams&) = nullptr);
 
 #if defined(UNIT_TEST)
   static bool MatchForTesting(ParsingContext& context,
                               const AutofillField* field,
                               base::StringPiece16 pattern,
-                              MatchParams match_type,
+                              DenseSet<MatchAttribute> match_attributes,
                               const char* regex_name = "") {
-    return FormFieldParser::Match(context, field, pattern, match_type,
+    return FormFieldParser::Match(context, field, pattern, match_attributes,
                                   regex_name);
   }
 
@@ -207,12 +207,11 @@ class FormFieldParser {
   // Initial values assigned to FieldCandidates by their corresponding parsers.
   // There's an implicit precedence determined by the values assigned here.
   // Email is currently the most important followed by Phone, Travel, Address,
-  // Birthdate, Credit Card, IBAN, Price, Name, Merchant promo code, and Search.
+  // Credit Card, IBAN, Price, Name, Merchant promo code, and Search.
   static constexpr float kBaseEmailParserScore = 1.4f;
   static constexpr float kBasePhoneParserScore = 1.3f;
   static constexpr float kBaseTravelParserScore = 1.2f;
   static constexpr float kBaseAddressParserScore = 1.1f;
-  static constexpr float kBaseBirthdateParserScore = 1.05f;
   static constexpr float kBaseCreditCardParserScore = 1.0f;
   static constexpr float kBaseIbanParserScore = 0.975f;
   static constexpr float kBasePriceParserScore = 0.95f;
@@ -246,10 +245,12 @@ class FormFieldParser {
                          raw_ptr<AutofillField>* match,
                          const char* regex_name = "");
 
-  // TODO(crbug/1142936): Remove `projection` if it's not needed anymore.
   // When `kNoLegacyPattern` is passed as the `pattern`, the functions always
   // default to `patterns`, regardless of the status of
   // `features::kAutofillParsingPatternProvider`.
+  // If a `match_pattern_projection` is defined, it is applied to the pattern's
+  // MatchParams after dereferencing the `MatchPatternRef`s. Note that this is
+  // only relevant with pattern provider.
   static bool ParseFieldSpecifics(
       ParsingContext& context,
       AutofillScanner* scanner,
@@ -258,7 +259,7 @@ class FormFieldParser {
       base::span<const MatchPatternRef> patterns,
       raw_ptr<AutofillField>* match,
       const char* regex_name = "",
-      MatchingPattern (*projection)(const MatchingPattern&) = nullptr);
+      MatchParams (*match_pattern_projection)(const MatchParams&) = nullptr);
 
   // Attempts to parse a field with an empty label. Returns true
   // on success and fills |match| with a pointer to the field.
@@ -326,7 +327,7 @@ class FormFieldParser {
       base::span<const MatchPatternRef> patterns,
       raw_ptr<AutofillField>* match,
       const char* regex_name,
-      MatchingPattern (*projection)(const MatchingPattern&));
+      MatchParams (*projection)(const MatchParams&));
 
   // Parses the stream of fields in |scanner| with regular expression |pattern|
   // as specified in |match_type|. If |match| is non-NULL and the pattern
@@ -352,7 +353,7 @@ class FormFieldParser {
   static bool Match(ParsingContext& context,
                     const AutofillField* field,
                     base::StringPiece16 pattern,
-                    MatchParams match_type,
+                    DenseSet<MatchAttribute> match_attributes,
                     const char* regex_name = "");
 
   // Perform a "pass" over the |fields| where each pass uses the supplied
@@ -364,12 +365,6 @@ class FormFieldParser {
   static void ParseFormFieldsPass(
       ParseFunction parse,
       ParsingContext& context,
-      const std::vector<raw_ptr<AutofillField, VectorExperimental>>& fields,
-      FieldCandidatesMap& field_candidates);
-
-  // Interpret the fields' `parsable_name()` (id or name attribute) as an
-  // autocomplete type and classify them by it. E.g. <input id=given-name>.
-  static void ParseUsingAutocompleteAttributes(
       const std::vector<raw_ptr<AutofillField, VectorExperimental>>& fields,
       FieldCandidatesMap& field_candidates);
 };

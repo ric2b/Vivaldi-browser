@@ -175,6 +175,10 @@ func run() error {
 	rootPath := ""
 	globs := []string{}
 	for _, arg := range args {
+		if len(arg) > 1 && arg[0:2] == "--" {
+			return fmt.Errorf("unexpected flag after globs: %s", arg)
+		}
+
 		// Make absolute
 		if !filepath.IsAbs(arg) {
 			arg = filepath.Join(dawnRoot, arg)
@@ -1112,12 +1116,7 @@ func saveValidationCache(vc validationCache) {
 	}
 }
 
-// defaultRootPath returns the default path to the root of the test tree
-func defaultRootPath() string {
-	return filepath.Join(fileutils.DawnRoot(), "test/tint")
-}
-
 // defaultTintPath returns the default path to the tint executable
 func defaultTintPath() string {
-	return filepath.Join(fileutils.DawnRoot(), "out/active/tint")
+	return filepath.Join(fileutils.DawnRoot(), "out", "active", "tint"+fileutils.ExeExt)
 }

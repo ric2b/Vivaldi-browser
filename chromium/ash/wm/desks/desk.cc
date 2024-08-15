@@ -6,10 +6,10 @@
 
 #include <absl/cleanup/cleanup.h>
 #include <utility>
+#include <vector>
 
 #include "ash/constants/app_types.h"
 #include "ash/public/cpp/window_properties.h"
-#include "ash/scoped_animation_disabler.h"
 #include "ash/shell.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/desks_restore_util.h"
@@ -37,6 +37,7 @@
 #include "ui/aura/window_tracker.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/screen.h"
+#include "ui/wm/core/scoped_animation_disabler.h"
 #include "ui/wm/core/window_util.h"
 
 namespace ash {
@@ -46,7 +47,7 @@ namespace {
 constexpr char kConsecutiveDailyVisitsHistogramName[] =
     "Ash.Desks.ConsecutiveDailyVisits";
 
-// Prefix for the desks lifetime histogram.
+// Prefix for the desks lifetime histograms.
 constexpr char kDeskLifetimeHistogramNamePrefix[] = "Ash.Desks.DeskLifetime_";
 
 // The amount of time a user has to stay on a recently activated desk for it to
@@ -351,7 +352,7 @@ void Desk::OnRootWindowClosing(aura::Window* root) {
   const auto windows = windows_;
   for (aura::Window* window : windows) {
     if (window->GetRootWindow() == root)
-      base::Erase(windows_, window);
+      std::erase(windows_, window);
   }
 
   if (last_active_root_ == root) {
@@ -430,7 +431,7 @@ void Desk::AddWindowToDesk(aura::Window* window) {
 void Desk::RemoveWindowFromDesk(aura::Window* window) {
   DCHECK(base::Contains(windows_, window));
 
-  base::Erase(windows_, window);
+  std::erase(windows_, window);
   // No need to refresh the mini_views if the destroyed window doesn't show up
   // there in the first place. Also don't refresh for visible on all desks
   // windows since they're already refreshed in OnWindowRemoved().
@@ -498,10 +499,17 @@ void Desk::SetGuid(base::Uuid new_guid) {
   }
 }
 
-void Desk::SetLacrosProfileId(uint64_t lacros_profile_id,
-                              bool skip_prefs_update) {
+void Desk::SetLacrosProfileId(
+    uint64_t lacros_profile_id,
+    std::optional<DeskProfilesSelectProfileSource> source,
+    bool skip_prefs_update) {
   if (lacros_profile_id == lacros_profile_id_) {
     return;
+  }
+
+  if (source) {
+    base::UmaHistogramEnumeration(kDeskProfilesSelectProfileHistogramName,
+                                  *source);
   }
 
   lacros_profile_id_ = lacros_profile_id;
@@ -523,7 +531,7 @@ void Desk::PrepareForActivationAnimation() {
           Shell::Get()->float_controller()->FindFloatedWindowOfDesk(this)) {
     // Ensure the floated window remain hidden during activation animation.
     // The floated window will be shown when desk is activated.
-    ScopedAnimationDisabler disabler(floated_window);
+    wm::ScopedAnimationDisabler disabler(floated_window);
     floated_window->Hide();
   }
 
@@ -802,11 +810,21 @@ void Desk::UpdateDeskBackdrops() {
 }
 
 void Desk::RecordLifetimeHistogram(int index) {
-  // Desk index is 1-indexed in histograms.
-  const int desk_index = index + 1;
-  base::UmaHistogramCounts1000(
-      base::StringPrintf("%s%i", kDeskLifetimeHistogramNamePrefix, desk_index),
-      (base::Time::Now() - creation_time_).InHours());
+  // Desk index is 1-indexed in histograms. The histogram is only defined for
+  // the first 8 desks.
+  if (const int desk_index = index + 1; desk_index <= 8) {
+    std::string histogram;
+    if (lacros_profile_id() != 0) {
+      histogram = base::StringPrintf(
+          "%sProfile_%i", kDeskLifetimeHistogramNamePrefix, desk_index);
+    } else {
+      histogram = base::StringPrintf("%s%i", kDeskLifetimeHistogramNamePrefix,
+                                     desk_index);
+    }
+
+    base::UmaHistogramCounts1000(
+        histogram, (base::Time::Now() - creation_time_).InHours());
+  }
 }
 
 bool Desk::IsConsecutiveDailyVisit() const {

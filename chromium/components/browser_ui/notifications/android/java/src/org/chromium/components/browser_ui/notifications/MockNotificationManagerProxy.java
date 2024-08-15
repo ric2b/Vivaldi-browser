@@ -12,6 +12,8 @@ import android.os.Build;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
+import org.chromium.base.Callback;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,15 +27,30 @@ public class MockNotificationManagerProxy implements NotificationManagerProxy {
     private static final String KEY_SEPARATOR = ":";
 
     /** Holds a notification and the arguments passed to #notify and #cancel. */
-    public static class NotificationEntry {
+    public static class NotificationEntry implements StatusBarNotificationProxy {
         public final Notification notification;
         public final String tag;
         public final int id;
 
-        NotificationEntry(Notification notification, String tag, int id) {
+        public NotificationEntry(Notification notification, String tag, int id) {
             this.notification = notification;
             this.tag = tag;
             this.id = id;
+        }
+
+        @Override
+        public int getId() {
+            return id;
+        }
+
+        @Override
+        public String getTag() {
+            return tag;
+        }
+
+        @Override
+        public Notification getNotification() {
+            return notification;
         }
     }
 
@@ -146,8 +163,14 @@ public class MockNotificationManagerProxy implements NotificationManagerProxy {
 
     @Override
     @RequiresApi(Build.VERSION_CODES.O)
-    public List<NotificationChannelGroup> getNotificationChannelGroups() {
-        return null;
+    public void getNotificationChannelGroups(Callback<List<NotificationChannelGroup>> callback) {
+        callback.onResult(null);
+    }
+
+    @Override
+    @RequiresApi(Build.VERSION_CODES.O)
+    public void getNotificationChannels(Callback<List<NotificationChannel>> callback) {
+        callback.onResult(null);
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -162,4 +185,9 @@ public class MockNotificationManagerProxy implements NotificationManagerProxy {
 
     @Override
     public void deleteNotificationChannelGroup(String groupId) {}
+
+    @Override
+    public List<? extends StatusBarNotificationProxy> getActiveNotifications() {
+        return getNotifications();
+    }
 }

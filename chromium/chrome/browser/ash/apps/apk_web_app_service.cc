@@ -19,6 +19,7 @@
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/promise_apps/promise_app_service.h"
 #include "chrome/browser/ash/apps/apk_web_app_service_factory.h"
+#include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
 #include "chrome/browser/profiles/profile.h"
@@ -349,7 +350,7 @@ void ApkWebAppService::MaybeUninstallWebApp(const webapps::AppId& web_app_id) {
 
   auto* provider = web_app::WebAppProvider::GetForWebApps(profile_);
   DCHECK(provider);
-  provider->scheduler().RemoveInstallSource(
+  provider->scheduler().RemoveInstallManagementMaybeUninstall(
       web_app_id, web_app::WebAppManagement::kWebAppStore,
       webapps::WebappUninstallSource::kArc,
       base::BindOnce(&ApkWebAppService::OnDidRemoveInstallSource,

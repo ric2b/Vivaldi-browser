@@ -5,6 +5,9 @@
 #ifndef COMPONENTS_SEARCH_ENGINES_SEARCH_ENGINE_CHOICE_SEARCH_ENGINE_CHOICE_SERVICE_H_
 #define COMPONENTS_SEARCH_ENGINES_SEARCH_ENGINE_CHOICE_SEARCH_ENGINE_CHOICE_SERVICE_H_
 
+#include <optional>
+
+#include "base/gtest_prod_util.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "components/country_codes/country_codes.h"
@@ -37,16 +40,6 @@ class SearchEngineChoiceService : public KeyedService {
   // TODO(b/318824817): To be removed post-launch.
   bool ShouldShowUpdatedSettings();
 
-#if BUILDFLAG(IS_IOS)
-  // Returns whether the search engine choice screen can be displayed or not
-  // based on device policies and profile properties.
-  // TODO(b/318801987): Move the function to some iOS-specific location and
-  //                    consider removing `is_regular_profile`.
-  bool ShouldShowChoiceScreen(const policy::PolicyService& policy_service,
-                              bool is_regular_profile,
-                              TemplateURLService* template_url_service);
-#endif
-
   // Returns the choice screen eligibility condition most relevant for the
   // profile associated with `profile_prefs` and `template_url_service`. Only
   // checks dynamic conditions, that can change from one call to the other
@@ -78,12 +71,12 @@ class SearchEngineChoiceService : public KeyedService {
   void RecordChoiceMade(ChoiceMadeLocation choice_location,
                         TemplateURLService* template_url_service);
 
+ private:
   // Checks if the search engine choice should be prompted again, based on
   // experiment parameters. If a reprompt is needed, some preferences related to
   // the choice are cleared, which triggers a reprompt on the next page load.
   void PreprocessPrefsForReprompt();
 
- private:
   int GetCountryIdInternal();
 
 #if BUILDFLAG(IS_ANDROID)
@@ -99,6 +92,8 @@ class SearchEngineChoiceService : public KeyedService {
 
   base::WeakPtrFactory<SearchEngineChoiceService> weak_ptr_factory_{this};
 };
+
+void MarkSearchEngineChoiceCompletedForTesting(PrefService& prefs);
 
 }  // namespace search_engines
 

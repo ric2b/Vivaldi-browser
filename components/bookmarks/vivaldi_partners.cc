@@ -232,12 +232,12 @@ const PartnerDatabase* g_partner_db = nullptr;
 
 // static
 std::unique_ptr<PartnerDatabase> PartnerDatabase::Read() {
-  absl::optional<base::Value> partner_db_value =
+  std::optional<base::Value> partner_db_value =
       ResourceReader::ReadJSON(kBookmarkResourceDir, kPartnerDBFile);
   if (!partner_db_value)
     return nullptr;
 
-  absl::optional<base::Value> partners_locale_value =
+  std::optional<base::Value> partners_locale_value =
       ResourceReader::ReadJSON(kBookmarkResourceDir, kPartnerLocaleMapFile);
   if (!partners_locale_value)
     return nullptr;

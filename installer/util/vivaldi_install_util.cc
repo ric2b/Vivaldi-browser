@@ -55,10 +55,10 @@ bool IsVivaldiInstalled(const base::FilePath& install_top_dir) {
   return is_installed;
 }
 
-absl::optional<InstallType> FindInstallType(
+std::optional<InstallType> FindInstallType(
     const base::FilePath& install_top_dir) {
   if (!IsVivaldiInstalled(install_top_dir))
-    return absl::nullopt;
+    return std::nullopt;
 
   base::FilePath install_binary_dir =
       install_top_dir.Append(installer::kInstallBinaryDir);
@@ -228,7 +228,7 @@ base::Version GetInstallVersion(base::FilePath install_binary_dir) {
   return base::Version();
 }
 
-absl::optional<base::Version> GetPendingUpdateVersion(
+std::optional<base::Version> GetPendingUpdateVersion(
     base::FilePath install_binary_dir) {
   if (install_binary_dir.empty()) {
     install_binary_dir = GetInstallBinaryDir();
@@ -236,7 +236,7 @@ absl::optional<base::Version> GetPendingUpdateVersion(
   base::FilePath new_exe_path =
       install_binary_dir.Append(installer::kChromeNewExe);
   if (!DoesPathExist(new_exe_path))
-    return absl::nullopt;
+    return std::nullopt;
   return ReadExeVersion(new_exe_path);
 }
 
@@ -417,10 +417,10 @@ std::wstring ReadRegistryString(const wchar_t* name,
   return value;
 }
 
-absl::optional<uint32_t> ReadRegistryUint32(const wchar_t* name,
+std::optional<uint32_t> ReadRegistryUint32(const wchar_t* name,
                                             const base::win::RegKey& key) {
   if (!key.Valid())
-    return absl::nullopt;
+    return std::nullopt;
   DWORD value = 0;
   LSTATUS status = key.ReadValueDW(name, &value);
   if (status != ERROR_SUCCESS) {
@@ -428,20 +428,20 @@ absl::optional<uint32_t> ReadRegistryUint32(const wchar_t* name,
       LOG(ERROR) << base::StringPrintf(
           "Failed to read registry name %ls status==0x%lx", name, status);
     }
-    return absl::nullopt;
+    return std::nullopt;
   }
   return value;
 }
 
-absl::optional<bool> ReadRegistryBool(const wchar_t* name,
+std::optional<bool> ReadRegistryBool(const wchar_t* name,
                                       const base::win::RegKey& key) {
-  absl::optional<uint32_t> value_word = ReadRegistryUint32(name, key);
+  std::optional<uint32_t> value_word = ReadRegistryUint32(name, key);
   if (!value_word)
-    return absl::nullopt;
+    return std::nullopt;
   if (*value_word > 1) {
     LOG(ERROR) << "Invalid boolean registry value in " << name << ": "
                << *value_word;
-    return absl::nullopt;
+    return std::nullopt;
   }
   return *value_word != 0;
 }

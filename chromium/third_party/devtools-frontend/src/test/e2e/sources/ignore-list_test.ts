@@ -33,7 +33,7 @@ import {
   stepOut,
 } from '../helpers/sources-helpers.js';
 
-describe('Ignore list', async function() {
+describe('Ignore list', function() {
   it('can be toggled on and off in call stack', async function() {
     await setIgnoreListPattern('thirdparty');
     const {target, frontend} = getBrowserAndPages();
@@ -158,7 +158,7 @@ describe('Ignore list', async function() {
   });
 
   it('removes ignored sources from page source tree', async function() {
-    await enableExperiment('justMyCode');
+    await enableExperiment('just-my-code');
     await setIgnoreListPattern('thirdparty');
     await goToResource('sources/multi-files.html');
     await openSourcesPanel();

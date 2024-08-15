@@ -443,7 +443,7 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
                                   kSettingsFileName));
       return;
     }
-    absl::optional<base::Value> settings =
+    std::optional<base::Value> settings =
         base::JSONReader::Read(settings_text, base::JSON_ALLOW_TRAILING_COMMAS);
     if (!settings) {
       AddError(ImportError::kBadSettings,
@@ -514,7 +514,7 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
     // TODO(igor@vivaldi.com): Consider checking the extension matches the
     // data format not to rely on chromium image loader be tolerant to image
     // format mismatch and to report junk data earlier.
-    absl::optional<VivaldiImageStore::ImageFormat> image_format =
+    std::optional<VivaldiImageStore::ImageFormat> image_format =
         VivaldiImageStore::FindFormatForPath(relative_path);
     if (!image_format) {
       AddError(ImportError::kBadSettings,
@@ -626,10 +626,10 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
 
   struct BoolInfo {};
   struct NumberInfo {
-    NumberInfo(double min_value, absl::optional<double> max_value)
+    NumberInfo(double min_value, std::optional<double> max_value)
         : min_value(min_value), max_value(max_value) {}
     double min_value;
-    absl::optional<double> max_value;
+    std::optional<double> max_value;
   };
   struct StringInfo {
     bool can_be_empty = false;
@@ -640,7 +640,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
     std::vector<base::StringPiece> enum_cases;
   };
 
-  using InfoUnion = absl::variant<BoolInfo, NumberInfo, StringInfo, EnumInfo>;
+  using InfoUnion = std::variant<BoolInfo, NumberInfo, StringInfo, EnumInfo>;
 
   enum Presence {
     kOptional,
@@ -663,7 +663,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
       list.emplace_back(key, Info(kOptional, InfoUnion(BoolInfo())));
     };
     auto add_number = [&](const char* key, double min_value,
-                          absl::optional<double> max_value) -> void {
+                          std::optional<double> max_value) -> void {
       // The number is required if 0 cannot be used as the default value.
       Presence presence = min_value <= 0.0 && (!max_value || *max_value >= 0.0)
                               ? kOptional
@@ -696,7 +696,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
     add_string("url", kCanBeEmpty);
 
     add_number("engineVersion", 1.0, 1.0);
-    add_number(kVersionKey, 0, absl::nullopt);
+    add_number(kVersionKey, 0, std::nullopt);
     add_string("name", kNotEmpty);
 
     add_bool("accentFromPage");
@@ -743,11 +743,11 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
       for (auto name_info : *info_map) {
         key_ = name_info.first;
         presence_ = name_info.second.presence;
-        absl::visit(*this, name_info.second.infoUnion);
+        std::visit(*this, name_info.second.infoUnion);
       }
     }
 
-    // function call operators to use with the absl::visit() call above
+    // function call operators to use with the std::visit() call above
     // to check individual keys. They are public to avoiding friending a
     // template method.
 

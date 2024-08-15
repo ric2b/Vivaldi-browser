@@ -29,12 +29,12 @@
 #include "build/build_config.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_regexp.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/create_element_flags.h"
 #include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
 #include "third_party/blink/renderer/core/html/forms/step_range.h"
 #include "third_party/blink/renderer/core/html/forms/text_control_element.h"
+#include "third_party/blink/renderer/platform/bindings/script_regexp.h"
 #include "third_party/blink/renderer/platform/theme_types.h"
 
 namespace blink {
@@ -201,11 +201,11 @@ class CORE_EXPORT HTMLInputElement
   // delay the 'input' event with EventQueueScope.
   void SetValueFromRenderer(const String&);
 
-  absl::optional<uint32_t> selectionStartForBinding(ExceptionState&) const;
-  absl::optional<uint32_t> selectionEndForBinding(ExceptionState&) const;
+  std::optional<uint32_t> selectionStartForBinding(ExceptionState&) const;
+  std::optional<uint32_t> selectionEndForBinding(ExceptionState&) const;
   String selectionDirectionForBinding(ExceptionState&) const;
-  void setSelectionStartForBinding(absl::optional<uint32_t>, ExceptionState&);
-  void setSelectionEndForBinding(absl::optional<uint32_t>, ExceptionState&);
+  void setSelectionStartForBinding(std::optional<uint32_t>, ExceptionState&);
+  void setSelectionEndForBinding(std::optional<uint32_t>, ExceptionState&);
   void setSelectionDirectionForBinding(const String&, ExceptionState&);
   void setSelectionRangeForBinding(unsigned start,
                                    unsigned end,
@@ -390,6 +390,7 @@ class CORE_EXPORT HTMLInputElement
 
  protected:
   void DefaultEventHandler(Event&) override;
+  bool IsInnerEditorValueEmpty() const final;
 
  private:
   enum AutoCompleteSetting { kUninitialized, kOn, kOff };
@@ -426,6 +427,7 @@ class CORE_EXPORT HTMLInputElement
 
   void AccessKeyAction(SimulatedClickCreationScope creation_scope) final;
 
+  void DidRecalcStyle(const StyleRecalcChange) override;
   void ParseAttribute(const AttributeModificationParams&) override;
   bool IsPresentationAttribute(const QualifiedName&) const final;
   void CollectStyleForPresentationAttribute(const QualifiedName&,
@@ -456,8 +458,8 @@ class CORE_EXPORT HTMLInputElement
   bool TooLong(const String&, NeedsToCheckDirtyFlag) const;
   bool TooShort(const String&, NeedsToCheckDirtyFlag) const;
 
-  TextControlInnerEditorElement* EnsureInnerEditorElement() const final;
-  void UpdatePlaceholderText() final;
+  void CreateInnerEditorElementIfNecessary() const final;
+  HTMLElement* UpdatePlaceholderText() final;
   void HandleBlurEvent() final;
   void DispatchFocusInEvent(const AtomicString& event_type,
                             Element* old_focused_element,
@@ -508,6 +510,7 @@ class CORE_EXPORT HTMLInputElement
   unsigned is_placeholder_visible_ : 1;
   unsigned has_been_password_field_ : 1;
   unsigned should_show_strong_password_label_ : 1;
+  unsigned scheduled_create_shadow_tree_ : 1;
   Member<InputType> input_type_;
   Member<InputTypeView> input_type_view_;
   // The ImageLoader must be owned by this element because the loader code

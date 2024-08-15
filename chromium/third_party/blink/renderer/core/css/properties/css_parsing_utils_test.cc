@@ -49,13 +49,13 @@ TEST(CSSParsingUtilsTest, Revert) {
 double ConsumeAngleValue(String target) {
   auto tokens = CSSTokenizer(target).TokenizeToEOF();
   CSSParserTokenRange range(tokens);
-  return ConsumeAngle(range, *MakeContext(), absl::nullopt)->ComputeDegrees();
+  return ConsumeAngle(range, *MakeContext(), std::nullopt)->ComputeDegrees();
 }
 
 double ConsumeAngleValue(String target, double min, double max) {
   auto tokens = CSSTokenizer(target).TokenizeToEOF();
   CSSParserTokenRange range(tokens);
-  return ConsumeAngle(range, *MakeContext(), absl::nullopt, min, max)
+  return ConsumeAngle(range, *MakeContext(), std::nullopt, min, max)
       ->ComputeDegrees();
 }
 
@@ -309,6 +309,40 @@ TEST(CSSParsingUtilsTest, ConsumeColorRangePreservation) {
     CSSParserTokenRange range(tokens);
     EXPECT_EQ(nullptr, css_parsing_utils::ConsumeColor(range, *MakeContext()));
     EXPECT_EQ(test, range.Serialize());
+  }
+}
+
+TEST(CSSParsingUtilsTest, InternalPositionTryOptionsInUAMode) {
+  auto ConsumePositionTryOptionForTest = [](String css_text,
+                                            CSSParserMode mode) {
+    auto tokens = CSSTokenizer(css_text).TokenizeToEOF();
+    CSSParserTokenRange range(tokens);
+    return css_parsing_utils::ConsumeSinglePositionTryOption(
+        range, *MakeContext(mode));
+  };
+
+  struct {
+    STACK_ALLOCATED();
+
+   public:
+    String css_text;
+    bool allow_ua;
+    bool allow_other;
+  } expectations[]{
+      {.css_text = "--foo", .allow_ua = true, .allow_other = true},
+      {.css_text = "-foo", .allow_ua = false, .allow_other = false},
+      {.css_text = "-internal-foo", .allow_ua = true, .allow_other = false},
+  };
+  for (auto& expectation : expectations) {
+    EXPECT_EQ(ConsumePositionTryOptionForTest(expectation.css_text,
+                                              kHTMLStandardMode) != nullptr,
+              expectation.allow_other);
+    EXPECT_EQ(ConsumePositionTryOptionForTest(expectation.css_text,
+                                              kHTMLQuirksMode) != nullptr,
+              expectation.allow_other);
+    EXPECT_EQ(ConsumePositionTryOptionForTest(expectation.css_text,
+                                              kUASheetMode) != nullptr,
+              expectation.allow_ua);
   }
 }
 

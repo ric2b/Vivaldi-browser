@@ -49,11 +49,6 @@ BASE_FEATURE(kWebAuthnGoogleCorpRemoteDesktopClientPrivilege,
 BASE_FEATURE(kWebAuthnAndroidCredMan,
              "WebAuthenticationAndroidCredMan",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enabled in M118. Remove in or after M121.
-BASE_FEATURE(kWebAuthnAndroidCredManForHybrid,
-             "WebAuthenticationAndroidCredManForHybrid",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_ANDROID)
 
 // Added in M115. Remove in or after M118
@@ -97,11 +92,6 @@ BASE_FEATURE(kWebAuthnICloudKeychainForInactiveWithoutDrive,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enabled in M117. Remove in or after M120.
-BASE_FEATURE(kWebAuthConditionalUIExperimentation,
-             "WebAuthenticationConditionalUIExperimentation",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Enabled in M117. Remove in or after M120.
 BASE_FEATURE(kWebAuthnLinkingExperimentation,
              "WebAuthenticationLinkingExperimentation",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -122,11 +112,6 @@ BASE_FEATURE(kWebAuthnFilterGooglePasskeys,
              "WebAuthenticationFilterGooglePasskeys",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Enabled in M119. Remove in or after M122.
-BASE_FEATURE(kWebAuthnAndroidIncognitoConfirmation,
-             "WebAuthenticationAndroidIncognitoConfirmation",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Enabled in M120. Remove in or after M123.
 BASE_FEATURE(kWebAuthnPRFEvalDuringCreate,
              "WebAuthenticationPRFEvalDuringCreate",
@@ -138,11 +123,6 @@ BASE_FEATURE(kChromeOsPasskeys,
              "WebAuthenticationCrosPasskeys",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
-
-// Enabled in M121. Remove in or after M124.
-BASE_FEATURE(kWebAuthnScreenReaderMode,
-             "WebAuthenticationScreenReaderMode",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enabled in M120. Remove in or after M123.
 BASE_FEATURE(kWebAuthnAccessibleTimeouts,
@@ -168,5 +148,16 @@ BASE_FEATURE(kAllowExtensionsToSetWebAuthnRpIds,
 BASE_FEATURE(kWebAuthnAndroidFidoJson,
              "WebAuthenticationAndroidFidoJson",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Default enabled in M123. Remove in or after M126.
+BASE_FEATURE(kWebAuthnPreferVirtualPlatformAuthenticator,
+             "WebAuthenticationPreferVirtualPlatformAuthenticator",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Deprecation flag.
+// Default disabled in M125. Remove in or after M128.
+BASE_FEATURE(kWebAuthnEnableAndroidCableAuthenticator,
+             "WebAuthenticationEnableAndroidCableAuthenticator",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace device

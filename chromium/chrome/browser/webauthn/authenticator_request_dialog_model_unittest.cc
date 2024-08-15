@@ -9,6 +9,7 @@
 
 #include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
+#include "base/containers/to_vector.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
@@ -19,7 +20,6 @@
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
-#include "base/test/to_vector.h"
 #include "base/time/time.h"
 #include "base/types/strong_alias.h"
 #include "build/build_config.h"
@@ -249,7 +249,7 @@ base::StringPiece TransportAvailabilityParamToString(
 
 template <typename T, base::StringPiece (*F)(T)>
 std::string SetToString(base::flat_set<T> s) {
-  return base::JoinString(base::test::ToVector(s, F), ", ");
+  return base::JoinString(base::ToVector(s, F), ", ");
 }
 
 std::unique_ptr<device::cablev2::Pairing> GetPairingFromSync() {
@@ -1460,8 +1460,8 @@ TEST_F(AuthenticatorRequestDialogModelTest, Mechanisms) {
       model.SetHints(hints);
     }
 
-    model.SetAccountPreselectedCallback(
-        base::BindRepeating([](device::PublicKeyCredentialDescriptor cred) {}));
+    model.SetAccountPreselectedCallback(base::BindRepeating(
+        [](device::DiscoverableCredentialMetadata cred) {}));
 
     if (has_v2_cable_extension.has_value() || !test.phones.empty() ||
         base::Contains(test.transports,
@@ -2007,8 +2007,8 @@ TEST_F(AuthenticatorRequestDialogModelTest,
 
   int preselect_num_called = 0;
   model.SetAccountPreselectedCallback(base::BindRepeating(
-      [](int* i, device::PublicKeyCredentialDescriptor cred) {
-        EXPECT_EQ(cred.id, std::vector<uint8_t>({1, 2, 3, 4}));
+      [](int* i, device::DiscoverableCredentialMetadata cred) {
+        EXPECT_EQ(cred.cred_id, std::vector<uint8_t>({1, 2, 3, 4}));
         ++(*i);
       },
       &preselect_num_called));
@@ -2041,8 +2041,8 @@ TEST_F(AuthenticatorRequestDialogModelTest, ConditionalUIRecognizedCredential) {
   AuthenticatorRequestDialogModel model(main_rfh());
   int preselect_num_called = 0;
   model.SetAccountPreselectedCallback(base::BindRepeating(
-      [](int* i, device::PublicKeyCredentialDescriptor cred) {
-        EXPECT_EQ(cred.id, std::vector<uint8_t>({0}));
+      [](int* i, device::DiscoverableCredentialMetadata cred) {
+        EXPECT_EQ(cred.cred_id, std::vector<uint8_t>({0}));
         ++(*i);
       },
       &preselect_num_called));
@@ -2315,6 +2315,34 @@ TEST_F(AuthenticatorRequestDialogModelTest, ConditionalUIWindowsCancel) {
 }
 #endif  // BUILDFLAG(IS_WIN)
 
+#if BUILDFLAG(IS_MAC)
+// Tests that a transport = internal virtual authenticator can be dispatched to
+// on Mac.
+// Regression test for crbug.com/1520898.
+TEST_F(AuthenticatorRequestDialogModelTest, PlatformVirtualAuthenticator) {
+  AuthenticatorRequestDialogModel model(main_rfh());
+  model.saved_authenticators().AddAuthenticator(AuthenticatorReference(
+      /*device_id=*/"virtual-authenticator", AuthenticatorTransport::kInternal,
+      device::AuthenticatorType::kOther));
+  model.SetAccountPreselectedCallback(base::DoNothing());
+  base::RunLoop run_loop;
+  model.SetRequestCallback(
+      base::BindLambdaForTesting([&](const std::string& authenticator_id) {
+        EXPECT_EQ(authenticator_id, "virtual-authenticator");
+        run_loop.Quit();
+      }));
+  TransportAvailabilityInfo transports_info;
+  transports_info.user_verification_requirement =
+      device::UserVerificationRequirement::kRequired;
+  transports_info.request_type = device::FidoRequestType::kGetAssertion;
+  transports_info.has_empty_allow_list = false;
+  transports_info.recognized_credentials = {kCred2};
+  model.StartFlow(std::move(transports_info),
+                  /*is_conditional_mediation=*/false);
+  run_loop.Run();
+}
+#endif  // BUILDFLAG(IS_MAC)
+
 TEST_F(AuthenticatorRequestDialogModelTest, PreSelect) {
   for (const bool has_empty_allow_list : {false, true}) {
     SCOPED_TRACE(::testing::Message()
@@ -2323,8 +2351,8 @@ TEST_F(AuthenticatorRequestDialogModelTest, PreSelect) {
     AuthenticatorRequestDialogModel model(main_rfh());
     int preselect_num_called = 0;
     model.SetAccountPreselectedCallback(base::BindLambdaForTesting(
-        [&preselect_num_called](device::PublicKeyCredentialDescriptor cred) {
-          EXPECT_EQ(cred.id, std::vector<uint8_t>({1}));
+        [&preselect_num_called](device::DiscoverableCredentialMetadata cred) {
+          EXPECT_EQ(cred.cred_id, std::vector<uint8_t>({1}));
           ++preselect_num_called;
         }));
     int request_num_called = 0;
@@ -2346,8 +2374,14 @@ TEST_F(AuthenticatorRequestDialogModelTest, PreSelect) {
     transports_info.request_type = device::FidoRequestType::kGetAssertion;
     transports_info.available_transports = kAllTransports;
     transports_info.has_empty_allow_list = has_empty_allow_list;
+#if BUILDFLAG(IS_MAC)
+    // The TouchID authenticator will be immediately dispatched to if the device
+    // has biometrics configured. Simulate a lack of biometrics to align with
+    // other platforms.
+    model.set_local_biometrics_override_for_testing(false);
+#endif  // BUILDFLAG(IS_MAC)
     transports_info.user_verification_requirement =
-        device::UserVerificationRequirement::kRequired;
+        device::UserVerificationRequirement::kPreferred;
     transports_info.has_platform_authenticator_credential = device::
         FidoRequestHandlerBase::RecognizedCredential::kHasRecognizedCredential;
     transports_info.recognized_credentials = {kCred1FromICloudKeychain, kCred2};
@@ -2357,11 +2391,7 @@ TEST_F(AuthenticatorRequestDialogModelTest, PreSelect) {
     if (has_empty_allow_list) {
       EXPECT_EQ(model.current_step(), Step::kSelectPriorityMechanism);
     } else {
-#if BUILDFLAG(IS_MAC)
-      EXPECT_EQ(model.current_step(), Step::kNotStarted);
-#else
       EXPECT_EQ(model.current_step(), Step::kPreSelectSingleAccount);
-#endif
     }
 #else
     if (has_empty_allow_list) {
@@ -2645,7 +2675,7 @@ TEST_F(AuthenticatorRequestDialogModelTest, Crbug1503187) {
       FidoRequestHandlerBase::RecognizedCredential::kHasRecognizedCredential;
 
   AuthenticatorRequestDialogModel model(main_rfh());
-  RepeatingValueCallbackReceiver<device::PublicKeyCredentialDescriptor>
+  RepeatingValueCallbackReceiver<device::DiscoverableCredentialMetadata>
       account_preselected_callback;
   model.SetAccountPreselectedCallback(account_preselected_callback.Callback());
   model.StartFlow(std::move(transports_info),
@@ -2682,7 +2712,7 @@ TEST_F(MultiplePlatformAuthenticatorsTest, DeduplicateAccounts) {
 
     AuthenticatorRequestDialogModel model(main_rfh());
     model.set_allow_icloud_keychain(true);
-    RepeatingValueCallbackReceiver<device::PublicKeyCredentialDescriptor>
+    RepeatingValueCallbackReceiver<device::DiscoverableCredentialMetadata>
         account_preselected_callback;
     model.SetAccountPreselectedCallback(
         account_preselected_callback.Callback());
@@ -2834,7 +2864,7 @@ TEST_F(MultiplePlatformAuthenticatorsTest,
 
     AuthenticatorRequestDialogModel model(main_rfh());
     model.set_allow_icloud_keychain(true);
-    RepeatingValueCallbackReceiver<device::PublicKeyCredentialDescriptor>
+    RepeatingValueCallbackReceiver<device::DiscoverableCredentialMetadata>
         account_preselected_callback;
     model.SetAccountPreselectedCallback(
         account_preselected_callback.Callback());
@@ -2843,12 +2873,12 @@ TEST_F(MultiplePlatformAuthenticatorsTest,
                     /*is_conditional_mediation=*/false);
 
     EXPECT_EQ(model.current_step(), Step::kNotStarted);
-    device::PublicKeyCredentialDescriptor descriptor =
+    device::DiscoverableCredentialMetadata descriptor =
         account_preselected_callback.WaitForResult();
     if (credential_source == device::AuthenticatorType::kTouchID) {
-      EXPECT_EQ(descriptor.id, kCred2.cred_id);
+      EXPECT_EQ(descriptor.cred_id, kCred2.cred_id);
     } else {
-      EXPECT_EQ(descriptor.id, kCred1FromICloudKeychain.cred_id);
+      EXPECT_EQ(descriptor.cred_id, kCred1FromICloudKeychain.cred_id);
     }
   }
 }
@@ -2944,7 +2974,7 @@ TEST_F(ListPasskeysFromSyncTest, MechanismsFromUserAccounts) {
   model.set_cable_transport_info(
       /*extension_is_v2=*/std::nullopt, std::move(phones),
       contact_phone_callback.Callback(), std::nullopt);
-  RepeatingValueCallbackReceiver<device::PublicKeyCredentialDescriptor>
+  RepeatingValueCallbackReceiver<device::DiscoverableCredentialMetadata>
       account_preselected_callback;
   model.SetAccountPreselectedCallback(account_preselected_callback.Callback());
 
@@ -2968,11 +2998,10 @@ TEST_F(ListPasskeysFromSyncTest, MechanismsFromUserAccounts) {
             l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_USE_GENERIC_DEVICE));
   EXPECT_EQ(mech1.icon, vector_icons::kPasskeyIcon);
   mech1.callback.Run();
-  device::PublicKeyCredentialDescriptor result =
+  device::DiscoverableCredentialMetadata result =
       account_preselected_callback.WaitForResult();
-  EXPECT_EQ(result.id, kCred1.cred_id);
-  EXPECT_THAT(result.transports,
-              testing::ElementsAre(device::FidoTransportProtocol::kInternal));
+  EXPECT_EQ(result.cred_id, kCred1.cred_id);
+  EXPECT_EQ(result.source, device::AuthenticatorType::kOther);
   EXPECT_EQ(request_callback.WaitForResult(), kLocalAuthenticatorId);
 
   // Reset the model as if the user had cancelled out of the operation.
@@ -2990,9 +3019,8 @@ TEST_F(ListPasskeysFromSyncTest, MechanismsFromUserAccounts) {
   EXPECT_EQ(mech2.icon, vector_icons::kPasskeyIcon);
   mech2.callback.Run();
   result = account_preselected_callback.WaitForResult();
-  EXPECT_EQ(result.id, kCred2.cred_id);
-  EXPECT_THAT(result.transports,
-              testing::ElementsAre(device::FidoTransportProtocol::kInternal));
+  EXPECT_EQ(result.cred_id, kCred2.cred_id);
+  EXPECT_EQ(result.source, device::AuthenticatorType::kOther);
   EXPECT_EQ(request_callback.WaitForResult(), kLocalAuthenticatorId);
 
   // Reset the model as if the user had cancelled out of the operation.
@@ -3012,9 +3040,8 @@ TEST_F(ListPasskeysFromSyncTest, MechanismsFromUserAccounts) {
   EXPECT_EQ(mech3.icon, kSmartphoneIcon);
   mech3.callback.Run();
   result = account_preselected_callback.WaitForResult();
-  EXPECT_EQ(result.id, kPhoneCred1.cred_id);
-  EXPECT_THAT(result.transports,
-              testing::ElementsAre(device::FidoTransportProtocol::kHybrid));
+  EXPECT_EQ(result.cred_id, kPhoneCred1.cred_id);
+  EXPECT_EQ(result.source, device::AuthenticatorType::kPhone);
   EXPECT_TRUE(contact_phone_callback.WaitForResult());
 }
 
@@ -3096,8 +3123,7 @@ TEST_F(ListPasskeysFromSyncTest, WindowsHelloButtonLabel_GetAssertion) {
       &fake_win_webauthn_api);
   for (const auto& test_case : kWinHelloButtonGetAssertionTestCases) {
     AuthenticatorRequestDialogModel model(main_rfh());
-    model.SetAccountPreselectedCallback(
-        base::BindRepeating([](device::PublicKeyCredentialDescriptor cred) {}));
+    model.SetAccountPreselectedCallback(base::DoNothing());
 
     TransportAvailabilityInfo transports_info;
     transports_info.has_win_native_api_authenticator = true;

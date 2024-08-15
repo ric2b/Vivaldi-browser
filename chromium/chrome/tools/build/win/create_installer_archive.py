@@ -44,7 +44,7 @@ TEMP_ARCHIVE_DIR = "temp_installer_archive"
 VERSION_FILE = "VERSION"
 
 g_archive_inputs = []
-
+g_signed_files = []
 
 def BuildVersion(vivaldi_version=None, vivaldi_build_version= None):
     """Returns the full build version string constructed from information in
@@ -238,6 +238,8 @@ def SignTarget(options, target):
   if target.rpartition(".")[-1].lower() not in ["dll", "exe"]:
     return
 
+  g_signed_files.append(target)
+
   print("Starting Signing of", target)
   signcommand = ([options.vivaldi_sign_cmd,
       "sign",
@@ -262,6 +264,8 @@ def SignTargets(config, options, distribution, staging_dir,enable_hidpi):
     sections.append(distribution.upper())
   if enable_hidpi == '1':
     sections.append('HIDPI')
+  if options.include_dxc == '1':
+    sections.append('DXC')
 
   for section in sections:
     assert "WIDEWINE_SIGN" not in section.capitalize() , "Should not happen"
@@ -269,7 +273,8 @@ def SignTargets(config, options, distribution, staging_dir,enable_hidpi):
       if option.endswith('dir'):
         continue
       # We don't re-sign MS files.
-      if option == "d3dcompiler_47.dll":
+      if option in ["d3dcompiler_47.dll", "dxil.dll"] :
+        g_signed_files.append(option)
         continue
 
       src_dir = os.path.join(staging_dir, config.get(section, option))
@@ -409,8 +414,12 @@ def RunSystemCommand(cmd, verbose, retry_fun=None, **kw):
                         "Command output:\n%s" % (e.cmd, e.returncode, e.output))
 
 
-def CreateArchiveFile(options, staging_dir, current_version, prev_version):
-    """Creates a new installer archive file after deleting any preexisting file.
+def CreateArchiveFiles(options, staging_dir, current_version, prev_version):
+    """Creates a new installer archive file after deleting any existing old
+    file.
+    Returns:
+        A tuple of the names of the compressed and uncompressed archive files,
+        in that order.
     """
     # First create an uncompressed archive file for the current build
     # (chrome.7z)
@@ -514,15 +523,15 @@ def CreateArchiveFile(options, staging_dir, current_version, prev_version):
             strip_time=True)
     except LZMA_OOM:
         return os.path.basename(orig_file)
-    return compressed_archive_file
+    return compressed_archive_file, os.path.basename(archive_file)
 
 
 def PrepareSetupExec(options, current_version, prev_version):
     """Prepares setup.exe for bundling in mini_installer based on options."""
-    if options.setup_exe_format == "FULL":
+    if options.setup_exe_format == 'FULL':
         setup_file = SETUP_EXEC
         SignTarget(options, SETUP_EXEC)
-    elif options.setup_exe_format == "DIFF":
+    elif options.setup_exe_format == 'DIFF':
         if not options.last_chrome_installer:
             raise Exception(
                 "To use DIFF for setup.exe, --last_chrome_installer is needed.")
@@ -533,7 +542,7 @@ def PrepareSetupExec(options, current_version, prev_version):
                                   SETUP_PATCH_FILE_PREFIX + PATCH_FILE_EXT)
         GenerateDiffPatch(options, prev_setup_file, new_setup_file, patch_file)
         setup_file = SETUP_PATCH_FILE_PREFIX + '_' + current_version + \
-                     '_from_' + prev_version + COMPRESSED_FILE_EXT
+                    '_from_' + prev_version + COMPRESSED_FILE_EXT
         setup_file_path = os.path.join(options.build_dir, setup_file)
         SignTarget(options, setup_file_path)
         CompressUsingLZMA(options.build_dir, setup_file_path, patch_file,
@@ -564,41 +573,38 @@ _RESOURCE_FILE_HEADER = """\
 // mini_installer.exe. For each file to be linked there should be two
 // lines:
 // - The first line contains the output filename (without path) and the
-// type of the resource ('BN' - not compressed , 'BL' - LZ compressed,
+// type of the resource:
+//
+// 'BN' - not compressed binary,
+// 'BD' - uncompressed dependency for component builds,
+// 'BL' - LZ compressed,
 // 'B7' - LZMA compressed)
+//
 // - The second line contains the path to the input file. Uses '/' to
 // separate path components.
 """
 
 
-def CreateResourceInputFile(output_dir, setup_format, archive_file, setup_file,
+def CreateResourceInputFile(output_dir, setup_file, setup_resource_type,
+                            archive_file, archive_resource_type,
                             resource_file_path, component_build, staging_dir,
                             current_version):
     """Creates resource input file (packed_files.txt) for mini_installer
     project.
-
-  This method checks the format of setup.exe being used and according sets
-  its resource type.
-  """
-    setup_resource_type = "BL"
-    if (setup_format == "FULL"):
-        setup_resource_type = "BN"
-    elif (setup_format == "DIFF"):
-        setup_resource_type = "B7"
-
+    """
     # An array of (file, type, path) tuples of the files to be included.
-    resources = []
-    resources.append(
-        (setup_file, setup_resource_type, os.path.join(output_dir, setup_file)))
-    resources.append((archive_file, 'B7', os.path.join(output_dir,
-                                                       archive_file)))
+    resources = [(setup_file, setup_resource_type,
+                  os.path.join(output_dir, setup_file)),
+                 (archive_file, archive_resource_type,
+                  os.path.join(output_dir, archive_file))]
+
     # Include all files needed to run setup.exe (these are copied into the
     # 'Installer' dir by DoComponentBuildTasks).
     if component_build:
         installer_dir = os.path.join(staging_dir, CHROME_DIR, current_version,
                                      'Installer')
-        for file in os.listdir(installer_dir):
-            resources.append((file, 'BN', os.path.join(installer_dir, file)))
+        resources += [(file, 'BD', os.path.join(installer_dir, file))
+                      for file in os.listdir(installer_dir)]
 
     with open(resource_file_path, 'w') as f:
         f.write(_RESOURCE_FILE_HEADER)
@@ -751,6 +757,13 @@ def main(options):
         SignTargets(config, options, options.distribution,
                     staging_dir,
                     options.enable_hidpi)
+        # Need to compare lowercase basenames since case and paths can be different
+        binaries = set([os.path.basename(x).lower() for x in g_archive_inputs if x.rpartition(".")[-1].lower() in ["dll", "exe"]])
+        signed_binaries = set(os.path.basename(x).lower() for x in g_signed_files)
+        assert binaries == signed_binaries, "Missing signature of files: %s\nBinaries: %s\nSigned: %s\nList %s" % (
+              str(list(binaries-signed_binaries)),
+              str(binaries), str(signed_binaries), str(g_signed_files)
+        )
     if options.vivaldi_widevine_sign_cmd:
         assert options.vivaldi_widevine_verify_cmd
         assert options.vivaldi_widevine_private_key
@@ -770,19 +783,44 @@ def main(options):
         version_numbers = prev_version.split('.')
         prev_build_number = version_numbers[2] + '.' + version_numbers[3]
 
-    # Name of the archive file built (for example - chrome.7z or
+    # Name of the archive file built (for example - chrome.packed.7z or
     # patch-<old_version>-<new_version>.7z or patch-<new_version>.7z
-    archive_file = CreateArchiveFile(options, staging_dir, current_build_number,
-                                     prev_build_number)
+    archive_file, archive_file_uncompressed = CreateArchiveFiles(
+        options, staging_dir, current_build_number, prev_build_number)
 
     setup_file = PrepareSetupExec(options, current_build_number,
                                   prev_build_number)
+    is_component_build = options.component_build == '1'
+    if (options.setup_exe_format == 'DIFF'):
+        # Create the compressed resource for a differential updater.
+        CreateResourceInputFile(options.output_dir, setup_file, 'B7',
+                                archive_file, 'B7', options.resource_file_path,
+                                is_component_build, staging_dir,
+                                current_version)
+    elif (options.setup_exe_format == 'FULL'):
+        CreateResourceInputFile(options.output_dir, setup_file, 'BN',
+                                archive_file, 'B7', options.resource_file_path,
+                                is_component_build, staging_dir,
+                                current_version)
+    else:
+        # If `setup_exe_format` does not match 'FULL' or 'DIFF', we assume
+        # `COMPRESSED` was intended. May be worth reconsidering this in the
+        # future.
 
-    CreateResourceInputFile(options.output_dir, options.setup_exe_format,
-                            archive_file, setup_file,
-                            options.resource_file_path,
-                            options.component_build == '1', staging_dir,
-                            current_version)
+        # Create the compressed resource.
+        CreateResourceInputFile(options.output_dir, setup_file, 'BL',
+                                archive_file, 'B7', options.resource_file_path,
+                                is_component_build, staging_dir,
+                                current_version)
+
+    # Create the uncompressed resource, if resource_file_path_uncompressed
+    # was provided.
+    if options.resource_file_path_uncompressed:
+        CreateResourceInputFile(options.output_dir, SETUP_EXEC, 'BN',
+                                archive_file_uncompressed, 'BN',
+                                options.resource_file_path_uncompressed,
+                                is_component_build, staging_dir,
+                                current_version)
 
 
 def _ParseOptions():
@@ -803,10 +841,15 @@ def _ParseOptions():
         '--output_dir',
         help='The output directory where the archives will be written. '
         'Defaults to the build_dir.')
-    parser.add_option('--resource_file_path',
-                      help='The path where the resource file will be output. '
-                      'Defaults to %s in the build directory.' %
-                      MINI_INSTALLER_INPUT_FILE)
+    parser.add_option(
+        '--resource_file_path',
+        help='The path where the compressed resource file will be output. '
+        'Defaults to %s in the build directory.' % MINI_INSTALLER_INPUT_FILE)
+    parser.add_option(
+        '--resource_file_path_uncompressed',
+        help='The path where the uncompressed resource file will be output. '
+        'This is optional, and should not be used in debug builds. '
+        'Defaults to None')
     parser.add_option('-d',
                       '--distribution',
                       help='Name of Chromium Distribution. Optional.')

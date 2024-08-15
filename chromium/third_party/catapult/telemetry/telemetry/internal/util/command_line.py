@@ -4,7 +4,8 @@
 
 from __future__ import absolute_import
 import argparse
-import optparse  # pylint: disable=deprecated-module
+
+from telemetry.core import optparse_argparse_migration as oam
 
 from py_utils import camel_case
 
@@ -50,19 +51,21 @@ class Command(ArgumentHandlerMixIn):
     """Main method to run this command as a standalone script."""
     parser = argparse.ArgumentParser()
     cls.AddCommandLineArgs(parser)
-    args = parser.parse_args(args=args)
+    args, positional_args = parser.parse_known_args(args=args)
+    args.positional_args = positional_args
     cls.ProcessCommandLineArgs(parser, args)
     return min(cls().Run(args), 255)
 
 
-# TODO: Convert everything to argparse.
+# TODO(crbug.com/40807291): Convert everything to argparse.
 class OptparseCommand(Command):
   usage = ''
 
   @classmethod
   def CreateParser(cls):
-    return optparse.OptionParser('%%prog %s %s' % (cls.Name(), cls.usage),
-                                 description=cls.Description())
+    return oam.CreateFromOptparseInputs(
+        '%%prog %s %s' % (cls.Name(), cls.usage),
+        description=cls.Description())
 
   @classmethod
   def AddCommandLineArgs(cls, parser, environment):

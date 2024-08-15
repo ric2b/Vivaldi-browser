@@ -19,6 +19,7 @@
 #include "ash/accelerators/magnifier_key_scroller.h"
 #include "ash/accelerators/modifier_key_combo_recorder.h"
 #include "ash/accelerators/pre_target_accelerator_handler.h"
+#include "ash/accelerators/rapid_key_sequence_recorder.h"
 #include "ash/accelerators/shortcut_input_handler.h"
 #include "ash/accelerators/spoken_feedback_toggler.h"
 #include "ash/accelerometer/accelerometer_reader.h"
@@ -29,6 +30,7 @@
 #include "ash/accessibility/magnifier/docked_magnifier_controller.h"
 #include "ash/accessibility/magnifier/fullscreen_magnifier_controller.h"
 #include "ash/accessibility/magnifier/partial_magnifier_controller.h"
+#include "ash/accessibility/mouse_keys/mouse_keys_controller.h"
 #include "ash/accessibility/sticky_keys/sticky_keys_controller.h"
 #include "ash/accessibility/ui/accessibility_focus_ring_controller_impl.h"
 #include "ash/ambient/ambient_controller.h"
@@ -62,6 +64,7 @@
 #include "ash/display/display_configuration_observer.h"
 #include "ash/display/display_error_observer.h"
 #include "ash/display/display_highlight_controller.h"
+#include "ash/display/display_performance_mode_controller.h"
 #include "ash/display/display_prefs.h"
 #include "ash/display/display_shutdown_observer.h"
 #include "ash/display/event_transformation_handler.h"
@@ -229,6 +232,7 @@
 #include "ash/wm/window_animations.h"
 #include "ash/wm/window_cycle/window_cycle_controller.h"
 #include "ash/wm/window_properties.h"
+#include "ash/wm/window_restore/pine_controller.h"
 #include "ash/wm/window_restore/window_restore_controller.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_shadow_controller_delegate.h"
@@ -259,6 +263,7 @@
 #include "dbus/bus.h"
 #include "media/capture/video/chromeos/video_capture_features_chromeos.h"
 #include "services/video_capture/public/mojom/multi_capture_service.mojom.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/layout_manager.h"
@@ -773,6 +778,9 @@ Shell::~Shell() {
     RemovePreTargetHandler(shortcut_input_handler_.get());
   }
   RemovePreTargetHandler(modality_filter_.get());
+  if (::features::IsAccessibilityMouseKeysEnabled()) {
+    RemovePreTargetHandler(mouse_keys_controller_.get());
+  }
   RemovePreTargetHandler(tooltip_controller_.get());
 
   // Resets the implementation of clipboard history utility functions.
@@ -790,6 +798,7 @@ Shell::~Shell() {
   // `shortcut_input_handler_` must be cleaned up before
   // `event_rewriter_controller_`.
   modifier_key_combo_recorder_.reset();
+  rapid_key_sequence_recorder_.reset();
   shortcut_input_handler_.reset();
   // `AccessibilityEventRewriter` references objects owned by
   // EventRewriterController directly, so it must be reset first to avoid
@@ -877,6 +886,8 @@ Shell::~Shell() {
 
   display_highlight_controller_.reset();
 
+  display_performance_mode_controller_.reset();
+
   // VideoActivityNotifier must be deleted before |video_detector_| is
   // deleted because it's observing video activity through
   // VideoDetector::Observer interface.
@@ -916,6 +927,9 @@ Shell::~Shell() {
 
   // Relies on `overview_controller`.
   post_login_glanceables_metrics_reporter_.reset();
+
+  // Has to happen before `~OverviewController` since it's an observer.
+  pine_controller_.reset();
 
   // Has to happen before `~MruWindowTracker` and after
   // `~GameDashboardController`.
@@ -960,6 +974,7 @@ Shell::~Shell() {
   // These need a valid Shell instance to clean up properly, so explicitly
   // delete them before invalidating the instance.
   // Alphabetical. TODO(oshima): sort.
+  mouse_keys_controller_.reset();
   autoclick_controller_.reset();
   fullscreen_magnifier_controller_.reset();
   tooltip_controller_.reset();
@@ -1374,6 +1389,7 @@ void Shell::Init(
       std::make_unique<KeyboardModifierMetricsRecorder>();
   event_rewriter_controller_ = std::make_unique<EventRewriterControllerImpl>();
   modifier_key_combo_recorder_ = std::make_unique<ModifierKeyComboRecorder>();
+  rapid_key_sequence_recorder_ = std::make_unique<RapidKeySequenceRecorder>();
 
   env_filter_ = std::make_unique<::wm::CompoundEventFilter>();
   AddPreTargetHandler(env_filter_.get());
@@ -1576,12 +1592,16 @@ void Shell::Init(
   // used in its constructor.
   app_list_controller_ = std::make_unique<AppListControllerImpl>();
 
-  if (features::IsBirchFeatureEnabled() &&
-      switches::IsBirchSecretKeyMatched()) {
+  if (features::IsForestFeatureEnabled()) {
     birch_model_ = std::make_unique<BirchModel>();
   }
 
   autoclick_controller_ = std::make_unique<AutoclickController>();
+
+  if (::features::IsAccessibilityMouseKeysEnabled()) {
+    mouse_keys_controller_ = std::make_unique<MouseKeysController>();
+    AddPreTargetHandler(mouse_keys_controller_.get());
+  }
 
   color_enhancement_controller_ =
       std::make_unique<ColorEnhancementController>();
@@ -1649,10 +1669,8 @@ void Shell::Init(
   // `SystemNotificationController` is created, because
   // `SystemNotificationController` ctor will creat an instance of
   // `PowerSoundsController`, which will access and play the initialized sounds.
-  if (features::AreSystemSoundsEnabled()) {
-    system_sounds_delegate_ = shell_delegate_->CreateSystemSoundsDelegate();
-    system_sounds_delegate_->Init();
-  }
+  system_sounds_delegate_ = shell_delegate_->CreateSystemSoundsDelegate();
+  system_sounds_delegate_->Init();
 
   privacy_hub_controller_ = PrivacyHubController::CreatePrivacyHubController();
 
@@ -1728,6 +1746,9 @@ void Shell::Init(
   display_highlight_controller_ =
       std::make_unique<DisplayHighlightController>();
 
+  display_performance_mode_controller_ =
+      std::make_unique<DisplayPerformanceModeController>();
+
   if (features::IsDisplayAlignmentAssistanceEnabled()) {
     display_alignment_controller_ =
         std::make_unique<DisplayAlignmentController>();
@@ -1749,6 +1770,9 @@ void Shell::Init(
   projector_controller_ = std::make_unique<ProjectorControllerImpl>();
 
   float_controller_ = std::make_unique<FloatController>();
+  if (features::IsForestFeatureEnabled()) {
+    pine_controller_ = std::make_unique<PineController>();
+  }
   pip_controller_ = std::make_unique<PipController>();
 
   multitask_menu_nudge_delegate_ =

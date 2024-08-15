@@ -7,10 +7,10 @@
 #include <stdint.h>
 
 #include "core/fxcrt/fx_coordinates.h"
+#include "core/fxcrt/span.h"
 #include "core/fxge/dib/fx_dib.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/base/containers/span.h"
 
 namespace {
 
@@ -28,7 +28,7 @@ TEST(CFX_DIBitmap, Create) {
 
 TEST(CFX_DIBitmap, CalculatePitchAndSizeGood) {
   // Simple case with no provided pitch.
-  absl::optional<CFX_DIBitmap::PitchAndSize> result =
+  std::optional<CFX_DIBitmap::PitchAndSize> result =
       CFX_DIBitmap::CalculatePitchAndSize(100, 200, FXDIB_Format::kArgb, 0);
   ASSERT_TRUE(result.has_value());
   EXPECT_EQ(400u, result.value().pitch);
@@ -98,7 +98,7 @@ TEST(CFX_DIBitmap, CalculatePitchAndSizeBad) {
 
 TEST(CFX_DIBitmap, CalculatePitchAndSizeBoundary) {
   // Test boundary condition for pitch overflow.
-  absl::optional<CFX_DIBitmap::PitchAndSize> result =
+  std::optional<CFX_DIBitmap::PitchAndSize> result =
       CFX_DIBitmap::CalculatePitchAndSize(536870908, 4, FXDIB_Format::k8bppRgb,
                                           0);
   ASSERT_TRUE(result);
@@ -121,7 +121,7 @@ TEST(CFX_DIBitmap, CalculatePitchAndSizeBoundary) {
 TEST(CFX_DIBitmap, UnPreMultiply_FromCleared) {
   auto bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
   ASSERT_TRUE(bitmap->Create(1, 1, FXDIB_Format::kArgb));
-  FXARGB_SETDIB(bitmap->GetBuffer().data(), 0x7f'7f'7f'7f);
+  FXARGB_SetDIB(bitmap->GetWritableBuffer().data(), 0x7f'7f'7f'7f);
 
   bitmap->UnPreMultiply();
 
@@ -132,7 +132,7 @@ TEST(CFX_DIBitmap, UnPreMultiply_FromPreMultiplied) {
   auto bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
   ASSERT_TRUE(bitmap->Create(1, 1, FXDIB_Format::kArgb));
   bitmap->ForcePreMultiply();
-  FXARGB_SETDIB(bitmap->GetBuffer().data(), 0x7f'7f'7f'7f);
+  FXARGB_SetDIB(bitmap->GetWritableBuffer().data(), 0x7f'7f'7f'7f);
 
   bitmap->UnPreMultiply();
 
@@ -143,7 +143,7 @@ TEST(CFX_DIBitmap, UnPreMultiply_FromUnPreMultiplied) {
   auto bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
   ASSERT_TRUE(bitmap->Create(1, 1, FXDIB_Format::kArgb));
   bitmap->UnPreMultiply();
-  FXARGB_SETDIB(bitmap->GetBuffer().data(), 0x7f'ff'ff'ff);
+  FXARGB_SetDIB(bitmap->GetWritableBuffer().data(), 0x7f'ff'ff'ff);
 
   bitmap->UnPreMultiply();
 

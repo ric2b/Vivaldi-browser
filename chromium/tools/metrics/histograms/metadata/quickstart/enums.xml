@@ -49,6 +49,15 @@ chromium-metrics-reviews@google.com.
   <int value="8" label="Invalid advertisement error code"/>
 </enum>
 
+<enum name="QuickStartGaiaAuthenticationResult">
+  <int value="0" label="Unknown error"/>
+  <int value="1" label="Success"/>
+  <int value="2" label="Response parsing error"/>
+  <int value="3" label="Rejection"/>
+  <int value="4" label="Addition challenges on source"/>
+  <int value="5" label="Additional challenges on target"/>
+</enum>
+
 <enum name="QuickStartGaiaTransferResultFailureReason">
   <int value="0" label="No account received from phone"/>
   <int value="1" label="Ineligible account"/>
@@ -102,7 +111,7 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="Welcome Screen"/>
   <int value="3" label="Network Screen"/>
   <int value="4" label="Gaia Screen"/>
-  <int value="5" label="Setup Android Phone with Quick Start"/>
+  <int value="5" label="Set up Chromebook with Android Phone"/>
   <int value="6" label="Connecting to Wifi with Quick Start"/>
   <int value="7"
       label="Checking for Update and Determining Device Configuration"/>

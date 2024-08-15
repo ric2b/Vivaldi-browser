@@ -32,7 +32,6 @@
   VivaldiSpeedDialContainerView *speedDialView =
     [VivaldiSpeedDialContainerView new];
   _speedDialView = speedDialView;
-  speedDialView.backgroundColor = UIColor.clearColor;
   [self addSubview:speedDialView];
   [speedDialView fillSuperview];
   speedDialView.delegate = self;
@@ -42,15 +41,23 @@
 - (void)configureWith:(NSArray*)speedDials
                parent:(VivaldiSpeedDialItem*)parent
         faviconLoader:(FaviconLoader*)faviconLoader
-          layoutStyle:(VivaldiStartPageLayoutStyle)style {
+          layoutStyle:(VivaldiStartPageLayoutStyle)style
+         layoutColumn:(VivaldiStartPageLayoutColumn)column
+         showAddGroup:(BOOL)showAddGroup
+    verticalSizeClass:(UIUserInterfaceSizeClass)verticalSizeClass {
   [self.speedDialView configureWith:speedDials
                              parent:parent
                       faviconLoader:faviconLoader
-                        layoutStyle:style];
+                        layoutStyle:style
+                       layoutColumn:column
+                       showAddGroup:showAddGroup
+                  verticalSizeClass:verticalSizeClass];
 }
 
-- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style {
-  [self.speedDialView reloadLayoutWithStyle:style];
+- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style
+                 layoutColumn:(VivaldiStartPageLayoutColumn)column {
+  [self.speedDialView reloadLayoutWithStyle:style
+                               layoutColumn:column];
 }
 
 - (void)setCurrentPage:(NSInteger)page {
@@ -101,6 +108,11 @@
                           parent:(VivaldiSpeedDialItem*)parent {
   if (self.delegate)
     [self.delegate didSelectAddNewSpeedDial:isFolder parent:parent];
+}
+
+- (void)didSelectAddNewGroupForParent:(VivaldiSpeedDialItem*)parent {
+  if (self.delegate)
+    [self.delegate didSelectAddNewGroupForParent:parent];
 }
 
 @end

@@ -9,6 +9,7 @@
 
 #include <stdint.h>
 
+#include <array>
 #include <memory>
 #include <vector>
 
@@ -16,10 +17,10 @@
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_types.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/string_pool_template.h"
 #include "core/fxcrt/unowned_ptr.h"
 #include "core/fxcrt/weak_ptr.h"
-#include "third_party/base/containers/span.h"
 
 class CPDF_Dictionary;
 class CPDF_IndirectObjectHolder;
@@ -126,8 +127,8 @@ class CPDF_SyntaxParser {
   DataVector<uint8_t> m_pFileBuf;
   FX_FILESIZE m_BufOffset = 0;
   uint32_t m_WordSize = 0;
-  uint8_t m_WordBuffer[257] = {};
   uint32_t m_ReadBufferSize = CPDF_Stream::kFileBufSize;
+  std::array<uint8_t, 257> m_WordBuffer = {};
 
   // The syntax parser records traversed trailer end byte offsets here.
   UnownedPtr<std::vector<unsigned int>> m_TrailerEnds;

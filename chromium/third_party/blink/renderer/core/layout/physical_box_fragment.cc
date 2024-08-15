@@ -113,7 +113,7 @@ const PhysicalBoxFragment* PhysicalBoxFragment::Create(
       ToPhysicalSize(builder->Size(), builder->GetWritingMode());
   WritingModeConverter converter(writing_direction, physical_size);
 
-  absl::optional<PhysicalRect> inflow_bounds;
+  std::optional<PhysicalRect> inflow_bounds;
   if (builder->inflow_bounds_)
     inflow_bounds = converter.ToPhysical(*builder->inflow_bounds_);
 
@@ -275,18 +275,21 @@ PhysicalBoxFragment::PhysicalBoxFragment(
     const PhysicalBoxStrut& borders,
     bool has_padding,
     const PhysicalBoxStrut& padding,
-    const absl::optional<PhysicalRect>& inflow_bounds,
+    const std::optional<PhysicalRect>& inflow_bounds,
     bool has_fragment_items,
     WritingMode block_or_line_writing_mode)
     : PhysicalFragment(builder,
                        block_or_line_writing_mode,
                        kFragmentBox,
-                       builder->BoxType()),
+                       builder->GetBoxType()),
       bit_field_(ConstHasFragmentItemsFlag::encode(has_fragment_items) |
                  HasDescendantsForTablePartFlag::encode(false) |
                  IsFragmentationContextRootFlag::encode(
                      builder->is_fragmentation_context_root_) |
-                 IsMonolithicFlag::encode(builder->is_monolithic_)) {
+                 IsMonolithicFlag::encode(builder->is_monolithic_) |
+                 IsMonolithicOverflowPropagationDisabledFlag::encode(
+                     builder->GetConstraintSpace()
+                         .IsMonolithicOverflowPropagationDisabled())) {
   DCHECK(layout_object_);
   DCHECK(layout_object_->IsBoxModelObject());
   DCHECK(!builder->break_token_ || builder->break_token_->IsBlockType());
@@ -309,7 +312,7 @@ PhysicalBoxFragment::PhysicalBoxFragment(
     auto* items = const_cast<FragmentItems*>(ComputeItemsAddress());
     DCHECK_EQ(items_builder->GetWritingMode(), block_or_line_writing_mode);
     DCHECK_EQ(items_builder->Direction(), builder->Direction());
-    absl::optional<PhysicalSize> new_size =
+    std::optional<PhysicalSize> new_size =
         items_builder->ToFragmentItems(Size(), items);
     if (new_size)
       size_ = *new_size;
@@ -795,6 +798,66 @@ PhysicalBoxFragment::GetMutableForContainerLayout() const {
                                    const_cast<PhysicalBoxFragment&>(*this));
 }
 
+void PhysicalBoxFragment::MutableForOofFragmentation::AddChildFragmentainer(
+    const PhysicalBoxFragment& child_fragment,
+    LogicalOffset child_offset) {
+  // We should only end up here when updating a nested multicol container that
+  // has already being laid out, to add new fragmentainers to hold OOFs.
+  DCHECK(fragment_.IsFragmentationContextRoot());
+  DCHECK(child_fragment.IsFragmentainerBox());
+
+  WritingModeConverter converter(fragment_.Style().GetWritingDirection(),
+                                 fragment_.Size());
+  PhysicalFragmentLink link;
+  link.offset = converter.ToPhysical(child_offset, child_fragment.Size());
+  link.fragment = &child_fragment;
+  fragment_.children_.push_back(link);
+}
+
+void PhysicalBoxFragment::MutableForOofFragmentation::Merge(
+    const PhysicalBoxFragment& placeholder_fragmentainer) {
+  DCHECK(placeholder_fragmentainer.IsFragmentainerBox());
+
+  // Copy all child fragments.
+  for (const PhysicalFragmentLink& new_child :
+       placeholder_fragmentainer.children_) {
+    fragment_.children_.push_back(new_child);
+    DCHECK(new_child->IsOutOfFlowPositioned());
+    fragment_.has_out_of_flow_fragment_child_ = true;
+  }
+
+  // The existing break token may need to be updated, because of monolithic
+  // overflow (printing).
+  if (const BlockBreakToken* new_break_token =
+          placeholder_fragmentainer.GetBreakToken()) {
+    if (const BlockBreakToken* old_break_token = fragment_.GetBreakToken()) {
+      old_break_token->GetMutableForOofFragmentation().Merge(*new_break_token);
+    } else {
+      fragment_.break_token_ = new_break_token;
+    }
+  }
+
+  // Copy over any additional anchor queries.
+  if (const PhysicalAnchorQuery* query =
+          placeholder_fragmentainer.AnchorQuery()) {
+    if (!fragment_.oof_data_) {
+      fragment_.oof_data_ = MakeGarbageCollected<OofData>();
+    }
+    for (auto entry : *query) {
+      fragment_.oof_data_->anchor_query.insert(entry.key, entry.value);
+    }
+  }
+
+  UpdateOverflow();
+}
+
+void PhysicalBoxFragment::MutableForOofFragmentation::UpdateOverflow() {
+  PhysicalRect overflow =
+      ScrollableOverflowCalculator::RecalculateScrollableOverflowForFragment(
+          fragment_, /* has_block_fragmentation */ true);
+  fragment_.GetMutableForStyleRecalc().SetScrollableOverflow(overflow);
+}
+
 void PhysicalBoxFragment::SetInkOverflow(const PhysicalRect& self,
                                          const PhysicalRect& contents) {
   SetInkOverflowType(
@@ -911,6 +974,9 @@ PhysicalRect PhysicalBoxFragment::RecalcContentsInkOverflow() {
 PhysicalRect PhysicalBoxFragment::ComputeSelfInkOverflow() const {
   DCHECK_EQ(PostLayout(), this);
   const ComputedStyle& style = Style();
+
+  // TODO(crbug.com/325215738): Remove this when we're done investigating.
+  CHECK(&style);
 
   PhysicalRect ink_overflow(LocalRect());
   if (UNLIKELY(IsTableRow())) {
@@ -1113,17 +1179,6 @@ void PhysicalBoxFragment::AddOutlineRectsForInlineBox(
 
   if (ShouldIncludeBlockInkOverflowForAnchorOnly(outline_type) &&
       !HasNonVisibleOverflow() && !HasControlClip(*this)) {
-    if (!RuntimeEnabledFeatures::LayoutNewContainingBlockEnabled() &&
-        container->IsAnonymousBlock()) {
-      const auto* container_box = DynamicTo<LayoutBox>(
-          container->GetLayoutObject()->NonAnonymousAncestor());
-      if (!container_box)
-        return;
-      // TODO(crbug.com/1380673): Just picking the first fragment isn't right.
-      container = container_box->GetPhysicalFragment(0);
-      DCHECK(container);
-    }
-
     for (const auto& child : container->PostLayoutChildren()) {
       if (!child->IsOutOfFlowPositioned() ||
           child->GetLayoutObject()->ContainerForAbsolutePosition() !=

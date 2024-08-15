@@ -20,12 +20,12 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cmath>
 #include <condition_variable>  // NOLINT (unapproved c++11 header)
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>  // NOLINT (unapproved c++11 header)
-#include <vector>
 
 #include "src/buffer_pool.h"
 #include "src/decoder_state.h"
@@ -80,13 +80,13 @@ class Tile : public MaxAlignedAllocable {
       const SegmentationMap* prev_segment_ids, PostFilter* const post_filter,
       const dsp::Dsp* const dsp, ThreadPool* const thread_pool,
       BlockingCounterWithStatus* const pending_tiles, bool frame_parallel,
-      bool use_intra_prediction_buffer) {
+      bool use_intra_prediction_buffer, bool parse_only) {
     std::unique_ptr<Tile> tile(new (std::nothrow) Tile(
         tile_number, data, size, sequence_header, frame_header, current_frame,
         state, frame_scratch_buffer, wedge_masks, quantizer_matrix,
         saved_symbol_decoder_context, prev_segment_ids, post_filter, dsp,
-        thread_pool, pending_tiles, frame_parallel,
-        use_intra_prediction_buffer));
+        thread_pool, pending_tiles, frame_parallel, use_intra_prediction_buffer,
+        parse_only));
     return (tile != nullptr && tile->Init()) ? std::move(tile) : nullptr;
   }
 
@@ -188,6 +188,12 @@ class Tile : public MaxAlignedAllocable {
   int column4x4_start() const { return column4x4_start_; }
   int column4x4_end() const { return column4x4_end_; }
 
+  int GetTileMeanQP() const {
+    return static_cast<int>(
+        std::round(static_cast<float>(weighted_cumulative_block_qp_) /
+                   cumulative_block_weights_));
+  }
+
  private:
   // Stores the transform tree state when reading variable size transform trees
   // and when applying the transform tree. When applying the transform tree,
@@ -250,7 +256,7 @@ class Tile : public MaxAlignedAllocable {
        const SegmentationMap* prev_segment_ids, PostFilter* post_filter,
        const dsp::Dsp* dsp, ThreadPool* thread_pool,
        BlockingCounterWithStatus* pending_tiles, bool frame_parallel,
-       bool use_intra_prediction_buffer);
+       bool use_intra_prediction_buffer, bool parse_only);
 
   // Performs member initializations that may fail. Helper function used by
   // Create().
@@ -637,6 +643,13 @@ class Tile : public MaxAlignedAllocable {
 
   // current_quantizer_index_ is in the range [0, 255].
   uint8_t current_quantizer_index_;
+  // The weighted sum of the QP values per block for a tile. The weights are in
+  // terms of 4x4 blocks. E.g., a block of size 32x16 has the weight 32/4 *
+  // 16/4.
+  int64_t weighted_cumulative_block_qp_ = 0;
+  // The sums of the weights per block in a tile.
+  int64_t cumulative_block_weights_ = 0;
+
   // These two arrays (|coefficient_levels_| and |dc_categories_|) are used to
   // store the entropy context. Their dimensions are as follows: First -
   // left/top; Second - plane; Third - row4x4 (if first dimension is
@@ -781,6 +794,8 @@ class Tile : public MaxAlignedAllocable {
   // the access index will be the corresponding SuperBlockColumnIndex()'th
   // entry.
   DynamicBuffer<BlockCdfContext> top_context_;
+  // Whether the tile should only be parsed and not decoded.
+  const bool parse_only_;
 };
 
 struct Tile::Block {

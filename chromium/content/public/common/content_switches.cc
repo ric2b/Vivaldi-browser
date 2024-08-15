@@ -808,6 +808,10 @@ const char kTimeTicksAtUnixEpoch[] = "time-ticks-at-unix-epoch";
 const char kUseFakeCodecForPeerConnection[] =
     "use-fake-codec-for-peer-connection";
 
+// Bypass the digital-identity-credential OS call. Simulate the user
+// accepting the OS-presented dialog.
+const char kUseFakeUIForDigitalIdentity[] = "use-fake-ui-for-digital-identity";
+
 // Bypass the FedCM account selection dialog. If a value is provided for
 // this switch, that account ID is selected, otherwise the first account
 // is chosen.
@@ -898,12 +902,6 @@ const char kWebOtpBackendAuto[] = "web-otp-backend-auto";
 // ignores this switch on its stable and beta channels.
 const char kDisableWebRtcEncryption[]      = "disable-webrtc-encryption";
 
-// Disables HW decode acceleration for WebRTC.
-const char kDisableWebRtcHWDecoding[]       = "disable-webrtc-hw-decoding";
-
-// Disables HW encode acceleration for WebRTC.
-const char kDisableWebRtcHWEncoding[] = "disable-webrtc-hw-encoding";
-
 // Enables negotiation of encrypted header extensions from RFC 6904 for SRTP
 // in WebRTC.
 // See https://tools.ietf.org/html/rfc6904 for further information.
@@ -939,13 +937,13 @@ const char kDisableScrollToTextFragment[] = "disable-scroll-to-text-fragment";
 const char kWebXrForceRuntime[] = "force-webxr-runtime";
 
 // Tell WebXr to assume that it does not support any runtimes.
-const char kWebXrRuntimeNone[] = "no-vr-runtime";
+const char kWebXrRuntimeNone[] = "no-xr-runtime";
 
 const char kWebXrRuntimeOrientationSensors[] = "orientation-sensors";
 
 // The following are the runtimes that WebXr supports.
+const char kWebXrRuntimeArCore[] = "arcore";
 const char kWebXrRuntimeCardboard[] = "cardboard";
-const char kWebXrRuntimeGVR[] = "gvr";
 const char kWebXrRuntimeOpenXr[] = "openxr";
 
 #if BUILDFLAG(IS_ANDROID)

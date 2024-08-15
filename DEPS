@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "I8ef6652397d276043a6c9e54a0381719292a88ec",
+  "upstream_commit_id": "I57c4719b625b9076abdc96013cda4ad427e646e4",
 
   # The path of the sysroots.json file.
   # This is used by vendor builds like Electron.
@@ -406,6 +406,17 @@ hooks = [
     ],
   },
   # Download PGO profiles.
+  {
+    'name': 'Fetch PGO profiles for win-arm64',
+    'pattern': '.',
+    'condition': 'checkout_pgo_profiles and checkout_win',
+    'action': [ 'python3',
+                'chromium/tools/update_pgo_profiles.py',
+                '--target=win-arm64',
+                'update',
+                '--gs-url-base=chromium-optimization-profiles/pgo_profiles',
+    ],
+  },
   {
     'name': 'Fetch PGO profiles for win32',
     'pattern': '.',

@@ -3,13 +3,14 @@
 // found in the LICENSE file.
 
 import {AsyncUtil} from '/common/async_util.js';
-import {EventGenerator} from '/common/event_generator.js';
 import {EventHandler} from '/common/event_handler.js';
-
-import {FaceLandmarkerResult} from '../third_party/mediapipe/task_vision/vision.js';
+import {TestImportManager} from '/common/testing/test_import_manager.js';
+import type {FaceLandmarkerResult} from '/third_party/mediapipe/vision.js';
 
 import ScreenRect = chrome.accessibilityPrivate.ScreenRect;
 import ScreenPoint = chrome.accessibilityPrivate.ScreenPoint;
+
+type PrefObject = chrome.settingsPrivate.PrefObject;
 
 // A ScreenPoint represents an integer screen coordinate, whereas
 // a FloatingPoint2D represents a (x, y) floating point number
@@ -27,13 +28,16 @@ export class MouseController {
   private onMouseDraggedHandler_: EventHandler;
   private screenBounds_: ScreenRect|undefined;
 
-  /** These should come from user prefs, but are currently simply hard-coded. */
-  private targetBufferSize_ = MouseController.BUFFER_SIZE;
-  private useMouseAcceleration_ = MouseController.USE_MOUSE_ACCELERATION;
-  private spdRight_ = MouseController.SPD_RIGHT;
-  private spdLeft_ = MouseController.SPD_LEFT;
-  private spdUp_ = MouseController.SPD_UP;
-  private spdDown_ = MouseController.SPD_DOWN;
+  private prefsListener_: ((prefs: PrefObject[]) => void);
+
+  // These values will be updated when prefs are received in init_().
+  private targetBufferSize_ = MouseController.DEFAULT_BUFFER_SIZE;
+  private useMouseAcceleration_ =
+      MouseController.DEFAULT_USE_MOUSE_ACCELERATION;
+  private spdRight_ = MouseController.DEFAULT_MOUSE_SPEED;
+  private spdLeft_ = MouseController.DEFAULT_MOUSE_SPEED;
+  private spdUp_ = MouseController.DEFAULT_MOUSE_SPEED;
+  private spdDown_ = MouseController.DEFAULT_MOUSE_SPEED;
 
   /** The most recent raw face landmark mouse locations. */
   private buffer_: ScreenPoint[] = [];
@@ -60,6 +64,8 @@ export class MouseController {
         event => this.onMouseMovedOrDragged_(event));
 
     this.calcSmoothKernel_();
+
+    this.prefsListener_ = prefs => this.updateFromPrefs_(prefs);
   }
 
   async init(): Promise<void> {
@@ -69,6 +75,9 @@ export class MouseController {
     this.onMouseMovedHandler_.start();
     this.onMouseDraggedHandler_.setNodes(desktop);
     this.onMouseDraggedHandler_.start();
+
+    chrome.settingsPrivate.getAllPrefs(prefs => this.updateFromPrefs_(prefs));
+    chrome.settingsPrivate.onPrefsChanged.addListener(this.prefsListener_);
 
     // TODO(b/309121742): Handle display bounds changed.
     const screens = await new Promise<ScreenRect[]>((resolve) => {
@@ -204,23 +213,8 @@ export class MouseController {
     }
   }
 
-  clickLeft(): void {
-    if (!this.mouseLocation_) {
-      return;
-    }
-    EventGenerator.sendMouseClick(this.mouseLocation_.x, this.mouseLocation_.y);
-  }
-
-  clickRight(): void {
-    if (!this.mouseLocation_) {
-      return;
-    }
-    EventGenerator.sendMouseClick(
-        this.mouseLocation_.x, this.mouseLocation_.y, {
-          mouseButton:
-              chrome.accessibilityPrivate.SyntheticMouseEventButton.RIGHT,
-          delayMs: 0,
-        });
+  mouseLocation(): ScreenPoint|undefined {
+    return this.mouseLocation_;
   }
 
   resetLocation(): void {
@@ -242,6 +236,7 @@ export class MouseController {
       clearInterval(this.mouseInterval_);
       this.mouseInterval_ = -1;
     }
+    chrome.settingsPrivate.onPrefsChanged.removeListener(this.prefsListener_);
   }
 
   /** Listener for when the mouse position changes. */
@@ -257,12 +252,13 @@ export class MouseController {
 
   /**
    * Construct a kernel for smoothing the recent facegaze points.
-   * Specifically, this is a Hamming curve with M = BUFFER_SIZE * 2,
+   * Specifically, this is a Hamming curve with M = targetBufferSize_ * 2,
    * matching the project-gameface Python implementation.
    * Note: Whenever the buffer size is updated, we must reconstruct
    * the smoothing kernel so that it is the right length.
    */
   private calcSmoothKernel_(): void {
+    this.smoothKernel_ = [];
     let sum = 0;
     for (let i = 0; i < this.targetBufferSize_; i++) {
       const value = .54 -
@@ -309,7 +305,7 @@ export class MouseController {
 
   /**
    * Calculate a sigmoid function that creates an S curve with
-   * a y intercept around ~.2 for velocity == 0 and
+   * a y intercept around ~.2 for velocity === 0 and
    * approaches 1.2 around velocity of 22. Change is near-linear
    * around velocities 0 to 9, centered at velocity of five.
    */
@@ -322,6 +318,49 @@ export class MouseController {
     const sig = 1 / (1 + Math.exp(-slope * (velocity - shift)));
     return multiply * sig;
   }
+
+  private updateFromPrefs_(prefs: PrefObject[]): void {
+    prefs.forEach(pref => {
+      switch (pref.key) {
+        case MouseController.PREF_SPD_UP:
+          if (pref.value) {
+            this.spdUp_ = pref.value;
+          }
+          break;
+        case MouseController.PREF_SPD_DOWN:
+          if (pref.value) {
+            this.spdDown_ = pref.value;
+          }
+          break;
+        case MouseController.PREF_SPD_LEFT:
+          if (pref.value) {
+            this.spdLeft_ = pref.value;
+          }
+          break;
+        case MouseController.PREF_SPD_RIGHT:
+          if (pref.value) {
+            this.spdRight_ = pref.value;
+          }
+          break;
+        case MouseController.PREF_CURSOR_SMOOTHING:
+          if (pref.value) {
+            this.targetBufferSize_ = pref.value;
+            this.calcSmoothKernel_();
+            while (this.buffer_.length > this.targetBufferSize_) {
+              this.buffer_.shift();
+            }
+          }
+          break;
+        case MouseController.PREF_CURSOR_USE_ACCELERATION:
+          if (pref.value !== undefined) {
+            this.useMouseAcceleration_ = pref.value;
+          }
+          break;
+        default:
+          return;
+      }
+    });
+  }
 }
 
 export namespace MouseController {
@@ -331,18 +370,26 @@ export namespace MouseController {
   /** How frequently to run the mouse movement logic. */
   export const MOUSE_INTERVAL_MS = 16;
 
-  // TODO(b/309121742): These constants could become prefs.
-
   /**
    * How long to wait after the user moves the mouse with a physical device
    * before moving the mouse with facegaze.
    */
   export const IGNORE_UPDATES_AFTER_MOUSE_MOVE_MS = 500;
 
-  export const BUFFER_SIZE = 6;
-  export const USE_MOUSE_ACCELERATION = true;
-  export const SPD_RIGHT = 20;
-  export const SPD_LEFT = 20;
-  export const SPD_DOWN = 20;
-  export const SPD_UP = 20;
+  // Pref names. Should be in sync with with values at ash_pref_names.h.
+  export const PREF_SPD_UP = 'settings.a11y.face_gaze.cursor_speed_up';
+  export const PREF_SPD_DOWN = 'settings.a11y.face_gaze.cursor_speed_down';
+  export const PREF_SPD_LEFT = 'settings.a11y.face_gaze.cursor_speed_left';
+  export const PREF_SPD_RIGHT = 'settings.a11y.face_gaze.cursor_speed_right';
+  export const PREF_CURSOR_SMOOTHING =
+      'settings.a11y.face_gaze.cursor_smoothing';
+  export const PREF_CURSOR_USE_ACCELERATION =
+      'settings.a11y.face_gaze.cursor_use_acceleration';
+
+  // Default values. Will be overwritten by prefs.
+  export const DEFAULT_MOUSE_SPEED = 20;
+  export const DEFAULT_USE_MOUSE_ACCELERATION = true;
+  export const DEFAULT_BUFFER_SIZE = 6;
 }
+
+TestImportManager.exportForTesting(MouseController);

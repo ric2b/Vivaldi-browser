@@ -7,8 +7,8 @@
 // Public License v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-#include <valarray>
 #include <vector>
+
 #include "main.h"
 
 using Eigen::placeholders::all;
@@ -17,11 +17,13 @@ using Eigen::placeholders::lastN;
 using Eigen::placeholders::lastp1;
 #include <array>
 
+namespace test {
 typedef std::pair<Index, Index> IndexPair;
+}
 
 int encode(Index i, Index j) { return int(i * 100 + j); }
 
-IndexPair decode(Index ij) { return IndexPair(ij / 100, ij % 100); }
+test::IndexPair decode(Index ij) { return test::IndexPair(ij / 100, ij % 100); }
 
 template <typename T>
 bool match(const T& xpr, std::string ref, std::string str_xpr = "") {
@@ -69,12 +71,10 @@ void check_indexed_view() {
   ArrayXXi A = ArrayXXi::NullaryExpr(n, n, std::ref(encode));
 
   for (Index i = 0; i < n; ++i)
-    for (Index j = 0; j < n; ++j) VERIFY(decode(A(i, j)) == IndexPair(i, j));
+    for (Index j = 0; j < n; ++j) VERIFY(decode(A(i, j)) == test::IndexPair(i, j));
 
   Array4i eii(4);
   eii << 3, 1, 6, 5;
-  std::valarray<int> vali(4);
-  Map<ArrayXi>(&vali[0], 4) = eii;
   std::vector<int> veci(4);
   Map<ArrayXi>(veci.data(), 4) = eii;
 

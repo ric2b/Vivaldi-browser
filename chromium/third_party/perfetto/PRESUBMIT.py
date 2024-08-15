@@ -51,6 +51,7 @@ def CheckChange(input, output):
             '.*/Makefile$',
             '/perfetto_build_flags.h$',
             "infra/luci/.*",
+            "^ui/.*\.[jt]s$",  # TS/JS handled by eslint
         ])
 
   results = []
@@ -64,12 +65,14 @@ def CheckChange(input, output):
       output,
       80,
       source_file_filter=long_line_sources)
+  # TS/JS handled by eslint
   results += RunAndReportIfLong(
-      input.canned_checks.CheckPatchFormatted, input, output, check_js=True)
+      input.canned_checks.CheckPatchFormatted, input, output, check_js=False)
   results += RunAndReportIfLong(input.canned_checks.CheckGNFormatted, input,
                                 output)
   results += RunAndReportIfLong(CheckIncludeGuards, input, output)
   results += RunAndReportIfLong(CheckIncludeViolations, input, output)
+  results += RunAndReportIfLong(CheckIncludePaths, input, output)
   results += RunAndReportIfLong(CheckProtoComments, input, output)
   results += RunAndReportIfLong(CheckBuild, input, output)
   results += RunAndReportIfLong(CheckAndroidBlueprint, input, output)
@@ -82,6 +85,8 @@ def CheckChange(input, output):
   results += RunAndReportIfLong(CheckSqlMetrics, input, output)
   results += RunAndReportIfLong(CheckTestData, input, output)
   results += RunAndReportIfLong(CheckAmalgamatedPythonTools, input, output)
+  results += RunAndReportIfLong(CheckChromeStdlib, input, output)
+  results += RunAndReportIfLong(CheckAbsolutePathsInGn, input, output)
   return results
 
 
@@ -247,6 +252,31 @@ def CheckIncludeViolations(input_api, output_api):
   return []
 
 
+def CheckIncludePaths(input_api, output_api):
+
+  def file_filter(x):
+    return input_api.FilterSourceFile(x, files_to_check=[r'.*\.h$', r'.*\.cc$'])
+
+  error_lines = []
+  for f in input_api.AffectedSourceFiles(file_filter):
+    for line_num, line in f.ChangedContents():
+      m = input_api.re.search(r'^#include "(.*\.h)"', line)
+      if not m:
+        continue
+      inc_hdr = m.group(1)
+      if inc_hdr.startswith('include/perfetto'):
+        error_lines.append('  %s:%s: Redundant "include/" in #include path"' %
+                           (f.LocalPath(), line_num))
+      if '/' not in inc_hdr:
+        error_lines.append(
+            '  %s:%s: relative #include not allowed, use full path' %
+            (f.LocalPath(), line_num))
+  return [] if len(error_lines) == 0 else [
+      output_api.PresubmitError('Invalid #include paths detected:\n' +
+                                '\n'.join(error_lines))
+  ]
+
+
 def CheckBinaryDescriptors(input_api, output_api):
   # The script invocation doesn't work on Windows.
   if input_api.is_windows:
@@ -380,6 +410,37 @@ def CheckTestData(input_api, output_api):
   return []
 
 
+def CheckChromeStdlib(input_api, output_api):
+  stdlib_paths = ("src/trace_processor/perfetto_sql/stdlib/chrome/",
+                  "test/data/chrome/",
+                  "test/trace_processor/diff_tests/stdlib/chrome/")
+
+  def chrome_stdlib_file_filter(x):
+    return input_api.FilterSourceFile(x, files_to_check=stdlib_paths)
+
+  # Only check chrome stdlib files
+  if not any(input_api.AffectedFiles(file_filter=chrome_stdlib_file_filter)):
+    return []
+
+  # Always allow Copybara service to make changes to chrome stdlib
+  if input_api.change.COPYBARA_IMPORT:
+    return []
+
+  if input_api.change.CHROME_STDLIB_MANUAL_ROLL:
+    return []
+
+  message = (
+      'Files under {0} and {1} '
+      'are rolled from the Chromium repository by a '
+      'Copybara service.\nYou should not modify these in '
+      'the Perfetto repository, please make your changes '
+      'in Chromium instead.\n'
+      'If you want to do a manual roll, you must specify '
+      'CHROME_STDLIB_MANUAL_ROLL=<reason> in the CL description.').format(
+          *stdlib_paths)
+  return [output_api.PresubmitError(message)]
+
+
 def CheckAmalgamatedPythonTools(input_api, output_api):
   # The script invocation doesn't work on Windows.
   if input_api.is_windows:
@@ -400,3 +461,29 @@ def CheckAmalgamatedPythonTools(input_api, output_api):
             ' to update them.')
     ]
   return []
+
+
+def CheckAbsolutePathsInGn(input_api, output_api):
+
+  def file_filter(x):
+    return input_api.FilterSourceFile(
+        x,
+        files_to_check=[r'.*\.gni?$'],
+        files_to_skip=['^.gn$', '^gn/.*', '^buildtools/.*'])
+
+  error_lines = []
+  for f in input_api.AffectedSourceFiles(file_filter):
+    for line_number, line in f.ChangedContents():
+      if input_api.re.search(r'(^\s*[#])|([#]\s*nogncheck)', line):
+        continue  # Skip comments and '# nogncheck' lines
+      if input_api.re.search(r'"//[^"]', line):
+        error_lines.append('  %s:%s: %s' %
+                           (f.LocalPath(), line_number, line.strip()))
+
+  if len(error_lines) == 0:
+    return []
+  return [
+      output_api.PresubmitError(
+          'Use relative paths in GN rather than absolute:\n' +
+          '\n'.join(error_lines))
+  ]

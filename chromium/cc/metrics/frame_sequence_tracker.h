@@ -28,9 +28,7 @@ struct BeginFrameId;
 namespace cc {
 // Tracks a sequence of frames to determine the throughput. It tracks this by
 // tracking the vsync sequence-numbers (from |BeginFrameArgs::sequence_number|),
-// and the presentation-timestamps (from |gfx::PresentationFeedback|). It also
-// tracks which frames were expected to include update from the main-thread, and
-// which presented frames did include updates from the main-thread.
+// and the presentation-timestamps (from |gfx::PresentationFeedback|).
 // This object should be created through
 // FrameSequenceTrackerCollection::CreateTracker() API.
 class CC_EXPORT FrameSequenceTracker {
@@ -67,6 +65,8 @@ class CC_EXPORT FrameSequenceTracker {
                          const viz::BeginFrameAck& ack,
                          const viz::BeginFrameArgs& origin_args);
 
+  // Notifies the tracker when the compositor thread has finished processing a
+  // BeginFrameArgs.
   void ReportFrameEnd(const viz::BeginFrameArgs& args,
                       const viz::BeginFrameArgs& main_args);
 
@@ -88,6 +88,10 @@ class CC_EXPORT FrameSequenceTracker {
   void ReportMainFrameCausedNoDamage(const viz::BeginFrameArgs& args,
                                      bool aborted);
 
+  // Notifies the tracker of the presentation-feedback of a previously submitted
+  // CompositorFrame with |frame_token|.
+  void ReportFramePresented(uint32_t frame_token);
+
   // Notifies that frame production has currently paused. This is typically used
   // for interactive frame-sequences, e.g. during touch-scroll.
   void PauseFrameProduction();
@@ -107,6 +111,10 @@ class CC_EXPORT FrameSequenceTracker {
   // |metrics_| to report.
   void CleanUp();
 
+  // Called by FrameSorter, this delivers `frame_info` merging both Compositor
+  // and Main thread updates for the given `args`. These are sorted by the
+  // `viz::BeginFrameArgs::frame_id` so we do not have to perform our own
+  // analysis of interleaving frames.
   void AddSortedFrame(const viz::BeginFrameArgs& args,
                       const FrameInfo& frame_info);
 
@@ -147,8 +155,8 @@ class CC_EXPORT FrameSequenceTracker {
                               uint64_t throttled_frame_count);
 
   bool ShouldIgnoreBeginFrameSource(uint64_t source_id) const;
-
   bool ShouldIgnoreSequence(uint64_t sequence_number) const;
+  void ResetAllStateIfPaused();
 
   const int custom_sequence_id_;
 
@@ -238,6 +246,9 @@ class CC_EXPORT FrameSequenceTracker {
   // True when an impl-impl is not ended. A tracker is ready for termination
   // only when the last impl-frame is ended (ReportFrameEnd).
   bool is_inside_frame_ = false;
+
+  // The args for the first frame that started after the tracker was created.
+  viz::BeginFrameArgs first_begin_frame_args_;
 
   // Frame id of the last ended frame when the tracker is active.
   viz::BeginFrameId last_ended_frame_id_;

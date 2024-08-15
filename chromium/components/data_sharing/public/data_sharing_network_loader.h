@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_DATA_SHARING_PUBLIC_DATA_SHARING_NETWORK_LOADER_H_
 #define COMPONENTS_DATA_SHARING_PUBLIC_DATA_SHARING_NETWORK_LOADER_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -30,7 +31,8 @@ class DataSharingNetworkLoader {
   DataSharingNetworkLoader& operator=(const DataSharingNetworkLoader&) = delete;
 
   // Called to fetch data from the network. Callback will be invoked once the
-  // fetch completes.
+  // fetch completes. If an error occurs, a nullptr will be passed to the
+  // callback.
   virtual void LoadUrl(const GURL& gurl,
                        const std::vector<std::string>& scopes,
                        const std::string& post_data,

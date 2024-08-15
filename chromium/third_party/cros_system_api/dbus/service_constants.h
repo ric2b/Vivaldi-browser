@@ -19,7 +19,6 @@
 #include "cfm/dbus-constants.h"
 #include "chunneld/dbus-constants.h"
 #include "cros-disks/dbus-constants.h"
-#include "cros_healthd/dbus-constants.h"
 #include "cryptohome/dbus-constants.h"
 #include "dcad/dbus-constants.h"
 #include "debugd/dbus-constants.h"
@@ -63,12 +62,15 @@
 #include "vm_concierge/dbus-constants.h"
 #include "vm_plugin_dispatcher/dbus-constants.h"
 #include "vm_sk_forwarding/dbus-constants.h"
-#include "wilco_dtc_supportd/dbus-constants.h"
 
 namespace dbus {
 const char kDBusInterface[] = "org.freedesktop.DBus";
 const char kDBusServiceName[] = "org.freedesktop.DBus";
 const char kDBusServicePath[] = "/org/freedesktop/DBus";
+
+// Debug Stats Interface
+const char kDBusDebugStatsInterface[] = "org.freedesktop.DBus.Debug.Stats";
+const char kDBusDebugStatsGetConnectionStats[] = "GetConnectionStats";
 
 // Object Manager interface
 const char kDBusObjectManagerInterface[] = "org.freedesktop.DBus.ObjectManager";
@@ -527,8 +529,6 @@ constexpr char kMojoConnectionServiceInterface[] =
 // Methods
 constexpr char kBootstrapMojoConnectionForRollbackNetworkConfigMethod[] =
     "BootstrapMojoConnectionForRollbackNetworkConfigService";
-constexpr char kBootstrapForCrosHealthdInternalServiceFactoryMethod[] =
-    "kBootstrapForCrosHealthdInternalServiceFactoryMethod";
 }  // namespace mojo_connection_service
 
 namespace virtual_file_provider {

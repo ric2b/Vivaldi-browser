@@ -52,6 +52,8 @@ const char kVivaldiClientHintsBrandCustomBrandVersion[] =
 const char kVivaldiCrashReportingConsentGranted[] =
     "vivaldi.CrashReportingConsentGranted";
 
+const char kVivaldiPreferredColorScheme[] =
+    "vivaldi.PreferredColorScheme";
 #if BUILDFLAG(IS_IOS)
 // Caches the folder id of user's position in the note hierarchy navigator.
 const char kVivaldiNoteCachedFolderId[] = "vivaldi.note.cached_folder_id";
@@ -60,6 +62,10 @@ const char kVivaldiNoteCachedFolderId[] = "vivaldi.note.cached_folder_id";
 const char kVivaldiNoteCachedTopMostRow[] = "vivaldi.note.cached_top_most_row";
 
 const char kVivaldiNoteFolderDefault[] = "vivaldi.note.default_folder";
+
+// Sort order of notes
+const char kVivaldiNotesSortingMode[] = "vivaldi.notes.sorting_mode";
+const char kVivaldiNotesSortingOrder[] = "vivaldi.notes.sorting_order";
 
 // Setting for folder visiblity on bookmark folder page
 const char kVivaldiBookmarkFoldersViewMode[] =
@@ -87,7 +93,14 @@ const char kVivaldiDynamicAccentColorEnabled[] =
 
 // Start page
 const char kVivaldiSpeedDialSortingMode[] = "vivaldi.speed_dial.sorting_mode";
+const char kVivaldiSpeedDialSortingOrder[] = "vivaldi.speed_dial.sorting_order";
 const char kVivaldiStartPageLayoutStyle[] = "vivaldi.start_page.layout_style";
+const char kVivaldiStartPageSDMaximumColumns[] =
+    "vivaldi.start_page.speed_dial.maximum_columns";
+const char kVivaldiStartPageShowSpeedDials[] =
+    "vivaldi.start_page.show_speed_dials";
+const char kVivaldiStartPageShowCustomizeButton[] =
+    "vivaldi.start_page.show_customize_button";
 const char kVivaldiStartpagePortraitImage[] =
     "vivaldi.appearance.startpage.image";
 const char kVivaldiStartpageLandscapeImage[] =

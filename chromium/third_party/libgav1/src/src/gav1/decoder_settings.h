@@ -83,6 +83,9 @@ typedef struct Libgav1DecoderSettings {
   //   Bit 4: Film grain synthesis.
   //   All the bits other than the last 5 are ignored.
   uint8_t post_filter_mask;
+  // A boolean. If set to 1, the decoder will only parse the bitstream, i.e., no
+  // decoding will take place.
+  int parse_only;
 } Libgav1DecoderSettings;
 
 LIBGAV1_PUBLIC void Libgav1DecoderSettingsInitDefault(
@@ -139,6 +142,9 @@ struct DecoderSettings {
   //   Bit 4: Film grain synthesis.
   //   All the bits other than the last 5 are ignored.
   uint8_t post_filter_mask = 0x1f;
+  // If set to true, the decoder will only parse the bitstream, i.e., no
+  // decoding will take place.
+  bool parse_only = false;
 };
 
 }  // namespace libgav1

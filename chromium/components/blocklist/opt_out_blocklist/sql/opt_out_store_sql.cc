@@ -28,13 +28,6 @@
 
 namespace blocklist {
 
-// When enabled, prefer to use the new recovery module to recover the
-// `OptOutStoreSQL` database. See https://crbug.com/1385500 for details.
-// This is a kill switch and is not intended to be used in a field trial.
-BASE_FEATURE(kOptOutStoreSQLUseBuiltInRecoveryIfSupported,
-             "OptOutStoreSQLUseBuiltInRecoveryIfSupported",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 namespace {
 
 // Command line switch to change the entry per host DB size.
@@ -101,9 +94,8 @@ void DatabaseErrorCallback(sql::Database* db,
                            int extended_error,
                            sql::Statement* stmt) {
   // Attempt to recover a corrupt database, if it is eligible to be recovered.
-  if (sql::BuiltInRecovery::RecoverIfPossible(
-          db, extended_error, sql::BuiltInRecovery::Strategy::kRecoverOrRaze,
-          &kOptOutStoreSQLUseBuiltInRecoveryIfSupported)) {
+  if (sql::Recovery::RecoverIfPossible(
+          db, extended_error, sql::Recovery::Strategy::kRecoverOrRaze)) {
     // Recovery was attempted. The database handle has been poisoned and the
     // error callback has been reset.
 
@@ -390,7 +382,6 @@ void OptOutStoreSQL::LoadBlockList(
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   if (!db_) {
     db_ = std::make_unique<sql::Database>(sql::DatabaseOptions{
-        .exclusive_locking = true,
         // The entry size should be between 11 and 10 + x bytes, where x is the
         // the length of the host name string in bytes.
         // The total number of entries per host is bounded at 32, and the total

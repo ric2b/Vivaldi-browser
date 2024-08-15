@@ -10,6 +10,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -22,6 +23,7 @@
 #include "components/optimization_guide/core/optimization_guide_constants.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/optimization_guide/core/optimization_guide_logger.h"
+#include "components/optimization_guide/core/optimization_guide_model_executor.h"
 #include "components/optimization_guide/core/optimization_guide_prefs.h"
 #include "components/optimization_guide/core/optimization_guide_util.h"
 #include "components/optimization_guide/core/test_model_info_builder.h"
@@ -66,17 +68,16 @@ std::vector<std::string> ConcatResponses(
 constexpr proto::ModelExecutionFeature kFeature =
     proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_COMPOSE;
 
-class FakeOnDeviceSession : public base::SupportsWeakPtr<FakeOnDeviceSession>,
-                            public on_device_model::mojom::Session {
+class FakeOnDeviceSession final : public on_device_model::mojom::Session {
  public:
   // on_device_model::mojom::Session:
   void AddContext(on_device_model::mojom::InputOptionsPtr input,
                   mojo::PendingRemote<on_device_model::mojom::ContextClient>
                       client) override {
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&FakeOnDeviceSession::AddContextInternal, AsWeakPtr(),
-                       std::move(input), std::move(client)));
+        FROM_HERE, base::BindOnce(&FakeOnDeviceSession::AddContextInternal,
+                                  weak_factory_.GetWeakPtr(), std::move(input),
+                                  std::move(client)));
   }
 
   void Execute(on_device_model::mojom::InputOptionsPtr input,
@@ -88,8 +89,9 @@ class FakeOnDeviceSession : public base::SupportsWeakPtr<FakeOnDeviceSession>,
     }
     base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
-        base::BindOnce(&FakeOnDeviceSession::ExecuteImpl, AsWeakPtr(),
-                       std::move(input), std::move(response)),
+        base::BindOnce(&FakeOnDeviceSession::ExecuteImpl,
+                       weak_factory_.GetWeakPtr(), std::move(input),
+                       std::move(response)),
         g_execute_delay);
   }
 
@@ -109,6 +111,11 @@ class FakeOnDeviceSession : public base::SupportsWeakPtr<FakeOnDeviceSession>,
     if (g_model_execute_result.empty()) {
       auto chunk = on_device_model::mojom::ResponseChunk::New();
       chunk->text = "Input: " + input->text + "\n";
+      if (input->top_k > 1) {
+        chunk->text += "TopK: " + base::NumberToString(*input->top_k) +
+                       ", Temp: " + base::NumberToString(*input->temperature) +
+                       "\n";
+      }
       if (g_safety_info) {
         chunk->safety_info = g_safety_info->Clone();
       }
@@ -161,6 +168,7 @@ class FakeOnDeviceSession : public base::SupportsWeakPtr<FakeOnDeviceSession>,
   }
 
   std::vector<std::string> context_;
+  base::WeakPtrFactory<FakeOnDeviceSession> weak_factory_{this};
 };
 
 class FakeOnDeviceModel : public on_device_model::mojom::OnDeviceModel {
@@ -172,6 +180,13 @@ class FakeOnDeviceModel : public on_device_model::mojom::OnDeviceModel {
     // Session.
     receivers_.Clear();
     receivers_.Add(std::make_unique<FakeOnDeviceSession>(), std::move(session));
+  }
+
+  void LoadAdaptation(
+      on_device_model::mojom::LoadAdaptationParamsPtr params,
+      mojo::PendingReceiver<on_device_model::mojom::OnDeviceModel> model,
+      LoadAdaptationCallback callback) override {
+    std::move(callback).Run(on_device_model::mojom::LoadModelResult::kSuccess);
   }
 
  private:
@@ -277,7 +292,9 @@ class OnDeviceModelServiceControllerTest : public testing::Test {
          {features::kOptimizationGuideOnDeviceModel,
           {{"on_device_model_min_tokens_for_context", "10"},
            {"on_device_model_max_tokens_for_context", "22"},
-           {"on_device_model_context_token_chunk_size", "4"}}},
+           {"on_device_model_context_token_chunk_size", "4"},
+           {"on_device_model_topk", "1"},
+           {"on_device_model_temperature", "0"}}},
          {features::kTextSafetyClassifier,
           {{"on_device_must_use_safety_model", "false"}}}},
         {});
@@ -465,9 +482,8 @@ class OnDeviceModelServiceControllerTest : public testing::Test {
   base::FilePath temp_dir() const { return temp_dir_.GetPath(); }
 
  protected:
-  void OnResponse(OptimizationGuideModelStreamingExecutionResult result,
-                  std::unique_ptr<ModelQualityLogEntry> log_entry) {
-    log_entry_received_ = std::move(log_entry);
+  void OnResponse(OptimizationGuideModelStreamingExecutionResult result) {
+    log_entry_received_ = std::move(result.log_entry);
     if (log_entry_received_) {
       // Make sure that an execution ID is always generated if we return a log
       // entry.
@@ -480,14 +496,14 @@ class OnDeviceModelServiceControllerTest : public testing::Test {
                                        .execution_id(),
                                    "on-device"));
     }
-    if (!result.has_value()) {
-      response_error_ = result.error().error();
+    if (!result.response.has_value()) {
+      response_error_ = result.response.error().error();
       return;
     }
-    provided_by_on_device_ = result.value().provided_by_on_device;
+    provided_by_on_device_ = result.provided_by_on_device;
     auto response =
-        ParsedAnyMetadata<proto::ComposeResponse>(result.value().response);
-    if (result.value().is_complete) {
+        ParsedAnyMetadata<proto::ComposeResponse>(result.response->response);
+    if (result.response->is_complete) {
       response_received_ = response->output();
     } else {
       streamed_responses_.push_back(response->output());
@@ -521,8 +537,9 @@ TEST_F(OnDeviceModelServiceControllerTest, ModelExecutionSuccess) {
   Initialize();
 
   base::HistogramTester histogram_tester;
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session);
   ExecuteModel(*session, "foo");
   task_environment_.RunUntilIdle();
@@ -552,10 +569,30 @@ TEST_F(OnDeviceModelServiceControllerTest, ModelExecutionSuccess) {
       OnDeviceModelEligibilityReason::kSuccess, 1);
 }
 
+TEST_F(OnDeviceModelServiceControllerTest,
+       ModelExecutionFeatureExecutionNotEnabled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {}, {features::kOptimizationGuideComposeOnDeviceEval});
+
+  Initialize();
+
+  base::HistogramTester histogram_tester;
+  auto session = test_controller_->CreateSession(
+      proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_COMPOSE,
+      base::DoNothing(), &logger_, nullptr, /*config_params=*/std::nullopt);
+  EXPECT_FALSE(session);
+
+  histogram_tester.ExpectUniqueSample(
+      "OptimizationGuide.ModelExecution.OnDeviceModelEligibilityReason.Compose",
+      OnDeviceModelEligibilityReason::kFeatureExecutionNotEnabled, 1);
+}
+
 TEST_F(OnDeviceModelServiceControllerTest, ModelExecutionWithContext) {
   Initialize();
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session);
   {
     base::HistogramTester histogram_tester;
@@ -581,8 +618,9 @@ TEST_F(OnDeviceModelServiceControllerTest, ModelExecutionWithContext) {
 TEST_F(OnDeviceModelServiceControllerTest,
        ModelExecutionLoadsSingleContextChunk) {
   Initialize();
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session);
 
   AddContext(*session, "context");
@@ -603,8 +641,9 @@ TEST_F(OnDeviceModelServiceControllerTest,
 TEST_F(OnDeviceModelServiceControllerTest,
        ModelExecutionLoadsLongContextInChunks) {
   Initialize();
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session);
 
   AddContext(*session, "this is long context");
@@ -628,8 +667,9 @@ TEST_F(OnDeviceModelServiceControllerTest,
        ModelExecutionCancelsOptionalContext) {
   Initialize();
   g_execute_delay = base::Seconds(10);
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session);
 
   AddContext(*session, "this is long context");
@@ -654,8 +694,9 @@ TEST_F(OnDeviceModelServiceControllerTest, ModelExecutionModelNotAvailable) {
   Initialize({.model_component_ready = false});
 
   base::HistogramTester histogram_tester;
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_FALSE(session);
 
   histogram_tester.ExpectUniqueSample(
@@ -668,8 +709,9 @@ TEST_F(OnDeviceModelServiceControllerTest, ModelAvailableAfterInit) {
 
   // Model not yet available.
   base::HistogramTester histogram_tester;
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_FALSE(session);
 
   on_device_component_state_manager_.get()->OnStartup();
@@ -678,16 +720,42 @@ TEST_F(OnDeviceModelServiceControllerTest, ModelAvailableAfterInit) {
   task_environment_.RunUntilIdle();
 
   // Model now available.
-  session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  session = test_controller_->CreateSession(kFeature, base::DoNothing(),
+                                            &logger_, nullptr,
+                                            /*config_params=*/std::nullopt);
   EXPECT_TRUE(session);
+}
+
+// Validates behavior of a session when execution config is updated after a
+// session is created.
+TEST_F(OnDeviceModelServiceControllerTest, MidSessionModelUpdate) {
+  Initialize();
+
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
+
+  // Simulate a model update.
+  WriteExecutionConfig({});
+  on_device_component_state_manager_.SetReady(temp_dir());
+  task_environment_.RunUntilIdle();
+
+  // Verify the existing session still works.
+  ExecuteModel(*session, "foo");
+  task_environment_.RunUntilIdle();
+
+  ASSERT_TRUE(response_received_);
+  const std::string expected_response = "Input: execute:foo\n";
+  EXPECT_EQ(*response_received_, expected_response);
+  EXPECT_TRUE(*provided_by_on_device_);
 }
 
 TEST_F(OnDeviceModelServiceControllerTest, SessionBeforeAndAfterModelUpdate) {
   Initialize();
 
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   AddContext(*session, "context");
   task_environment_.RunUntilIdle();
   EXPECT_EQ(1ull, test_controller_->on_device_model_receiver_count());
@@ -701,8 +769,9 @@ TEST_F(OnDeviceModelServiceControllerTest, SessionBeforeAndAfterModelUpdate) {
 
   // Create a new session and verify it fails due to the configuration.
   base::HistogramTester histogram_tester;
-  session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  session = test_controller_->CreateSession(kFeature, base::DoNothing(),
+                                            &logger_, nullptr,
+                                            /*config_params=*/std::nullopt);
   ASSERT_FALSE(session);
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.ModelExecution.OnDeviceModelEligibilityReason.Compose",
@@ -715,7 +784,7 @@ TEST_F(OnDeviceModelServiceControllerTest, SessionFailsForInvalidFeature) {
 
   EXPECT_FALSE(test_controller_->CreateSession(
       proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_TAB_ORGANIZATION,
-      base::DoNothing(), &logger_));
+      base::DoNothing(), &logger_, nullptr, /*config_params=*/std::nullopt));
 
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.ModelExecution.OnDeviceModelEligibilityReason."
@@ -827,8 +896,9 @@ TEST_F(OnDeviceModelServiceControllerTest, SessionRequiresSafetyModel) {
   {
     base::HistogramTester histogram_tester;
 
-    EXPECT_FALSE(
-        test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_));
+    EXPECT_FALSE(test_controller_->CreateSession(
+        kFeature, base::DoNothing(), &logger_, nullptr,
+        /*config_params=*/std::nullopt));
 
     histogram_tester.ExpectUniqueSample(
         "OptimizationGuide.ModelExecution.OnDeviceModelEligibilityReason."
@@ -856,8 +926,9 @@ TEST_F(OnDeviceModelServiceControllerTest, SessionRequiresSafetyModel) {
             .SetModelMetadata(any)
             .Build();
     test_controller_->MaybeUpdateSafetyModel(*model_info);
-    EXPECT_FALSE(
-        test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_));
+    EXPECT_FALSE(test_controller_->CreateSession(
+        kFeature, base::DoNothing(), &logger_, nullptr,
+        /*config_params=*/std::nullopt));
 
     histogram_tester.ExpectUniqueSample(
         "OptimizationGuide.ModelExecution."
@@ -888,8 +959,9 @@ TEST_F(OnDeviceModelServiceControllerTest, SessionRequiresSafetyModel) {
             .SetModelMetadata(any)
             .Build();
     test_controller_->MaybeUpdateSafetyModel(*model_info);
-    EXPECT_TRUE(
-        test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_));
+    EXPECT_TRUE(test_controller_->CreateSession(
+        kFeature, base::DoNothing(), &logger_, nullptr,
+        /*config_params=*/std::nullopt));
 
     histogram_tester.ExpectUniqueSample(
         "OptimizationGuide.ModelExecution."
@@ -907,8 +979,9 @@ TEST_F(OnDeviceModelServiceControllerTest, SessionRequiresSafetyModel) {
     base::HistogramTester histogram_tester;
 
     test_controller_->MaybeUpdateSafetyModel(std::nullopt);
-    EXPECT_FALSE(
-        test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_));
+    EXPECT_FALSE(test_controller_->CreateSession(
+        kFeature, base::DoNothing(), &logger_, nullptr,
+        /*config_params=*/std::nullopt));
 
     histogram_tester.ExpectUniqueSample(
         "OptimizationGuide.ModelExecution.OnDeviceModelEligibilityReason."
@@ -930,8 +1003,9 @@ TEST_F(OnDeviceModelServiceControllerTest, SessionRequiresSafetyModel) {
             .SetModelFilePath(temp_dir().Append(FILE_PATH_LITERAL("garbage")))
             .Build();
     test_controller_->MaybeUpdateSafetyModel(*model_info);
-    EXPECT_FALSE(
-        test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_));
+    EXPECT_FALSE(test_controller_->CreateSession(
+        kFeature, base::DoNothing(), &logger_, nullptr,
+        /*config_params=*/std::nullopt));
 
     histogram_tester.ExpectUniqueSample(
         "OptimizationGuide.ModelExecution.OnDeviceModelEligibilityReason."
@@ -974,8 +1048,9 @@ TEST_F(OnDeviceModelServiceControllerTest, SafetyModelRetract) {
           .SetModelMetadata(any)
           .Build();
   test_controller_->MaybeUpdateSafetyModel(*model_info);
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session);
 
   // Scores never provided even on complete.
@@ -1079,7 +1154,8 @@ TEST_F(OnDeviceModelServiceControllerTest, SafetyModelUsedButNoRetract) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeatureWithParameters(
       features::kTextSafetyClassifier,
-      {{"on_device_must_use_safety_model", "true"}});
+      {{"on_device_must_use_safety_model", "true"},
+       {"on_device_retract_unsafe_content", "false"}});
 
   proto::TextSafetyModelMetadata model_metadata;
   auto* safety_config = model_metadata.add_feature_text_safety_configurations();
@@ -1102,8 +1178,9 @@ TEST_F(OnDeviceModelServiceControllerTest, SafetyModelUsedButNoRetract) {
           .SetModelMetadata(any)
           .Build();
   test_controller_->MaybeUpdateSafetyModel(*model_info);
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session);
 
   // Score exceeds threshold. Would not pass but not retracting.
@@ -1129,6 +1206,117 @@ TEST_F(OnDeviceModelServiceControllerTest, SafetyModelUsedButNoRetract) {
   EXPECT_TRUE(ts_log.response().text_safety_model_response().is_unsafe());
 }
 
+TEST_F(OnDeviceModelServiceControllerTest, SafetyModelDarkMode) {
+  Initialize();
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeatureWithParameters(
+      features::kTextSafetyClassifier,
+      {{"on_device_must_use_safety_model", "false"},
+       {"on_device_retract_unsafe_content", "false"}});
+
+  proto::TextSafetyModelMetadata model_metadata;
+  auto* safety_config = model_metadata.add_feature_text_safety_configurations();
+  safety_config->set_feature(kFeature);
+  auto* threshold1 = safety_config->add_safety_category_thresholds();
+  threshold1->set_output_index(0);
+  threshold1->set_threshold(0.5);
+  auto* threshold2 = safety_config->add_safety_category_thresholds();
+  threshold2->set_output_index(1);
+  threshold2->set_threshold(0.5);
+  proto::Any any;
+  any.set_type_url(
+      "type.googleapis.com/optimization_guide.proto.TextSafetyModelMetadata");
+  model_metadata.SerializeToString(any.mutable_value());
+  std::unique_ptr<optimization_guide::ModelInfo> model_info =
+      TestModelInfoBuilder()
+          .SetAdditionalFiles(
+              {temp_dir().Append(kTsDataFile),
+               temp_dir().Append(base::FilePath(kTsSpModelFile))})
+          .SetModelMetadata(any)
+          .Build();
+  test_controller_->MaybeUpdateSafetyModel(*model_info);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
+  EXPECT_TRUE(session);
+
+  // Score exceeds threshold. Would not pass but not retracting.
+  g_safety_info = on_device_model::mojom::SafetyInfo::New();
+  g_safety_info->class_scores = {0.7, 0.3};
+  ExecuteModel(*session, "foo");
+  task_environment_.RunUntilIdle();
+  EXPECT_TRUE(response_received_);
+  EXPECT_FALSE(response_error_);
+
+  // Make sure T&S logged.
+  ASSERT_TRUE(log_entry_received_);
+  const auto logged_on_device_model_execution_info =
+      log_entry_received_->log_ai_data_request()
+          ->model_execution_info()
+          .on_device_model_execution_info();
+  EXPECT_GE(logged_on_device_model_execution_info.execution_infos_size(), 2);
+  auto ts_log = logged_on_device_model_execution_info.execution_infos(
+      logged_on_device_model_execution_info.execution_infos_size() - 1);
+  EXPECT_TRUE(ts_log.request().has_text_safety_model_request());
+  EXPECT_THAT(ts_log.response().text_safety_model_response().scores(),
+              ElementsAre(0.7, 0.3));
+  EXPECT_TRUE(ts_log.response().text_safety_model_response().is_unsafe());
+}
+
+TEST_F(OnDeviceModelServiceControllerTest, SafetyModelDarkModeNoFeatureConfig) {
+  Initialize();
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeatureWithParameters(
+      features::kTextSafetyClassifier,
+      {{"on_device_must_use_safety_model", "false"},
+       {"on_device_retract_unsafe_content", "false"}});
+
+  proto::TextSafetyModelMetadata model_metadata;
+  auto* other_feature_safety_config =
+      model_metadata.add_feature_text_safety_configurations();
+  other_feature_safety_config->set_feature(proto::MODEL_EXECUTION_FEATURE_TEST);
+  auto* threshold1 =
+      other_feature_safety_config->add_safety_category_thresholds();
+  threshold1->set_output_index(0);
+  threshold1->set_threshold(0.5);
+  auto* threshold2 =
+      other_feature_safety_config->add_safety_category_thresholds();
+  threshold2->set_output_index(1);
+  threshold2->set_threshold(0.5);
+  proto::Any any;
+  any.set_type_url(
+      "type.googleapis.com/optimization_guide.proto.TextSafetyModelMetadata");
+  model_metadata.SerializeToString(any.mutable_value());
+  std::unique_ptr<optimization_guide::ModelInfo> model_info =
+      TestModelInfoBuilder()
+          .SetAdditionalFiles(
+              {temp_dir().Append(kTsDataFile),
+               temp_dir().Append(base::FilePath(kTsSpModelFile))})
+          .SetModelMetadata(any)
+          .Build();
+  test_controller_->MaybeUpdateSafetyModel(*model_info);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
+  EXPECT_TRUE(session);
+
+  ExecuteModel(*session, "foo");
+  task_environment_.RunUntilIdle();
+  EXPECT_TRUE(response_received_);
+  EXPECT_FALSE(response_error_);
+
+  // T&S should not be passed through or logged.
+  ASSERT_TRUE(log_entry_received_);
+  const auto logged_on_device_model_execution_info =
+      log_entry_received_->log_ai_data_request()
+          ->model_execution_info()
+          .on_device_model_execution_info();
+  for (const auto& execution_info :
+       logged_on_device_model_execution_info.execution_infos()) {
+    EXPECT_FALSE(execution_info.request().has_text_safety_model_request());
+  }
+}
+
 TEST_F(OnDeviceModelServiceControllerTest, ModelExecutionNoMinContext) {
   Initialize();
   base::test::ScopedFeatureList feature_list;
@@ -1136,10 +1324,13 @@ TEST_F(OnDeviceModelServiceControllerTest, ModelExecutionNoMinContext) {
       features::kOptimizationGuideOnDeviceModel,
       {{"on_device_model_min_tokens_for_context", "0"},
        {"on_device_model_max_tokens_for_context", "22"},
-       {"on_device_model_context_token_chunk_size", "4"}});
+       {"on_device_model_context_token_chunk_size", "4"},
+       {"on_device_model_topk", "1"},
+       {"on_device_model_temperature", "0"}});
 
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session);
 
   AddContext(*session, "context");
@@ -1164,8 +1355,9 @@ TEST_F(OnDeviceModelServiceControllerTest, ReturnsErrorOnServiceDisconnect) {
   feature_list.InitAndEnableFeatureWithParameters(
       features::kOptimizationGuideOnDeviceModel,
       {{"on_device_fallback_to_server_on_disconnect", "false"}});
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session);
   task_environment_.RunUntilIdle();
 
@@ -1185,8 +1377,9 @@ TEST_F(OnDeviceModelServiceControllerTest, ReturnsErrorOnServiceDisconnect) {
 
 TEST_F(OnDeviceModelServiceControllerTest, CancelsExecuteOnAddContext) {
   Initialize();
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session);
   task_environment_.RunUntilIdle();
 
@@ -1207,8 +1400,9 @@ TEST_F(OnDeviceModelServiceControllerTest, CancelsExecuteOnAddContext) {
 
 TEST_F(OnDeviceModelServiceControllerTest, CancelsExecuteOnExecute) {
   Initialize();
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session);
   task_environment_.RunUntilIdle();
 
@@ -1228,8 +1422,9 @@ TEST_F(OnDeviceModelServiceControllerTest, WontStartSessionAfterGpuBlocked) {
   Initialize();
   // Start a session.
   test_controller_->set_load_model_result(LoadModelResult::kGpuBlocked);
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session);
 
   // Wait for the service to launch, and be shut down.
@@ -1239,8 +1434,9 @@ TEST_F(OnDeviceModelServiceControllerTest, WontStartSessionAfterGpuBlocked) {
     base::HistogramTester histogram_tester;
 
     // Because the model returned kGpuBlocked, no more sessions should start.
-    EXPECT_FALSE(
-        test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_));
+    EXPECT_FALSE(test_controller_->CreateSession(
+        kFeature, base::DoNothing(), &logger_, nullptr,
+        /*config_params=*/std::nullopt));
 
     histogram_tester.ExpectUniqueSample(
         "OptimizationGuide.ModelExecution.OnDeviceModelEligibilityReason."
@@ -1252,8 +1448,9 @@ TEST_F(OnDeviceModelServiceControllerTest, WontStartSessionAfterGpuBlocked) {
 TEST_F(OnDeviceModelServiceControllerTest, DontRecreateSessionIfGpuBlocked) {
   Initialize();
   test_controller_->set_load_model_result(LoadModelResult::kGpuBlocked);
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   ASSERT_TRUE(session);
 
   // Wait for the service to launch, and be shut down.
@@ -1271,16 +1468,18 @@ TEST_F(OnDeviceModelServiceControllerTest, StopsConnectingAfterMultipleDrops) {
   test_controller_->set_drop_connection_request(true);
   for (int i = 0; i < features::GetOnDeviceModelCrashCountBeforeDisable();
        ++i) {
-    auto session =
-        test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+    auto session = test_controller_->CreateSession(
+        kFeature, base::DoNothing(), &logger_, nullptr,
+        /*config_params=*/std::nullopt);
     EXPECT_TRUE(session) << i;
     task_environment_.RunUntilIdle();
   }
 
   {
     base::HistogramTester histogram_tester;
-    auto session =
-        test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+    auto session = test_controller_->CreateSession(
+        kFeature, base::DoNothing(), &logger_, nullptr,
+        /*config_params=*/std::nullopt);
     EXPECT_FALSE(session);
 
     histogram_tester.ExpectUniqueSample(
@@ -1295,8 +1494,9 @@ TEST_F(OnDeviceModelServiceControllerTest, AlternatingDisconnectSucceeds) {
   // Start a session.
   for (int i = 0; i < 10; ++i) {
     test_controller_->set_drop_connection_request(i % 2 == 1);
-    auto session =
-        test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+    auto session = test_controller_->CreateSession(
+        kFeature, base::DoNothing(), &logger_, nullptr,
+        /*config_params=*/std::nullopt);
     EXPECT_TRUE(session) << i;
     task_environment_.RunUntilIdle();
   }
@@ -1309,13 +1509,15 @@ TEST_F(OnDeviceModelServiceControllerTest,
   test_controller_->set_drop_connection_request(true);
   for (int i = 0; i < features::GetOnDeviceModelCrashCountBeforeDisable();
        ++i) {
-    auto session =
-        test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+    auto session = test_controller_->CreateSession(
+        kFeature, base::DoNothing(), &logger_, nullptr,
+        /*config_params=*/std::nullopt);
     EXPECT_TRUE(session) << i;
     task_environment_.RunUntilIdle();
   }
-  EXPECT_FALSE(
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_));
+  EXPECT_FALSE(test_controller_->CreateSession(kFeature, base::DoNothing(),
+                                               &logger_, nullptr,
+                                               /*config_params=*/std::nullopt));
 
   // Change the pref to a different value and recreate the service.
   access_controller_ = nullptr;
@@ -1327,15 +1529,17 @@ TEST_F(OnDeviceModelServiceControllerTest,
   task_environment_.RunUntilIdle();
 
   // A new session should be started because the version changed.
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session);
 }
 
 TEST_F(OnDeviceModelServiceControllerTest, AddContextDisconnectExecute) {
   Initialize();
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session);
   AddContext(*session, "foo");
   task_environment_.RunUntilIdle();
@@ -1373,8 +1577,9 @@ TEST_F(OnDeviceModelServiceControllerTest, AddContextDisconnectExecute) {
 
 TEST_F(OnDeviceModelServiceControllerTest, AddContextExecuteDisconnect) {
   Initialize();
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session);
   AddContext(*session, "foo");
   task_environment_.RunUntilIdle();
@@ -1389,15 +1594,17 @@ TEST_F(OnDeviceModelServiceControllerTest, AddContextExecuteDisconnect) {
 
 TEST_F(OnDeviceModelServiceControllerTest, ExecuteDisconnectedSession) {
   Initialize();
-  auto session1 =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session1 = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session1);
   AddContext(*session1, "foo");
   task_environment_.RunUntilIdle();
 
   // Start another session.
-  auto session2 =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session2 = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session2);
   AddContext(*session2, "bar");
   task_environment_.RunUntilIdle();
@@ -1452,7 +1659,8 @@ TEST_F(OnDeviceModelServiceControllerTest, CallsRemoteExecute) {
   Initialize();
   test_controller_->set_load_model_result(LoadModelResult::kGpuBlocked);
   auto session = test_controller_->CreateSession(
-      kFeature, CreateExecuteRemoteFn(), &logger_);
+      kFeature, CreateExecuteRemoteFn(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   ASSERT_TRUE(session);
 
   // Wait for the service to launch, and be shut down.
@@ -1481,7 +1689,8 @@ TEST_F(OnDeviceModelServiceControllerTest, AddContextInvalidConfig) {
   Initialize({.config = config});
 
   auto session = test_controller_->CreateSession(
-      kFeature, CreateExecuteRemoteFn(), &logger_);
+      kFeature, CreateExecuteRemoteFn(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   ASSERT_TRUE(session);
   {
     base::HistogramTester histogram_tester;
@@ -1510,7 +1719,8 @@ TEST_F(OnDeviceModelServiceControllerTest, ExecuteInvalidConfig) {
   Initialize({.config = config});
 
   auto session = test_controller_->CreateSession(
-      kFeature, CreateExecuteRemoteFn(), &logger_);
+      kFeature, CreateExecuteRemoteFn(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   ASSERT_TRUE(session);
   base::HistogramTester histogram_tester;
   ExecuteModel(*session, "2");
@@ -1528,7 +1738,8 @@ TEST_F(OnDeviceModelServiceControllerTest, FallbackToServerAfterDelay) {
   g_execute_delay = features::GetOnDeviceModelTimeForInitialResponse() * 2;
 
   auto session = test_controller_->CreateSession(
-      kFeature, CreateExecuteRemoteFn(), &logger_);
+      kFeature, CreateExecuteRemoteFn(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   ASSERT_TRUE(session);
   ExecuteModel(*session, "2z");
   base::HistogramTester histogram_tester;
@@ -1561,7 +1772,8 @@ TEST_F(OnDeviceModelServiceControllerTest,
        FallbackToServerOnDisconnectWhileWaitingForExecute) {
   Initialize();
   auto session = test_controller_->CreateSession(
-      kFeature, CreateExecuteRemoteFn(), &logger_);
+      kFeature, CreateExecuteRemoteFn(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session);
   task_environment_.RunUntilIdle();
   test_controller_->LaunchService();
@@ -1585,8 +1797,9 @@ TEST_F(OnDeviceModelServiceControllerTest,
 TEST_F(OnDeviceModelServiceControllerTest,
        DestroySessionWhileWaitingForResponse) {
   Initialize();
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   ASSERT_TRUE(session);
   ExecuteModel(*session, "foo");
   base::HistogramTester histogram_tester;
@@ -1604,8 +1817,9 @@ TEST_F(OnDeviceModelServiceControllerTest,
 
 TEST_F(OnDeviceModelServiceControllerTest, DisconnectsWhenIdle) {
   Initialize();
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   ASSERT_TRUE(session);
   ExecuteModel(*session, "foo");
   session.reset();
@@ -1626,7 +1840,8 @@ TEST_F(OnDeviceModelServiceControllerTest, UseServerWithRepeatedDelays) {
   for (int i = 0; i < features::GetOnDeviceModelTimeoutCountBeforeDisable();
        ++i) {
     auto session = test_controller_->CreateSession(
-        kFeature, CreateExecuteRemoteFn(), &logger_);
+        kFeature, CreateExecuteRemoteFn(), &logger_, nullptr,
+        /*config_params=*/std::nullopt);
     ASSERT_TRUE(session);
     ExecuteModel(*session, "2z");
     task_environment_.FastForwardBy(
@@ -1641,7 +1856,8 @@ TEST_F(OnDeviceModelServiceControllerTest, UseServerWithRepeatedDelays) {
   // As we reached GetOnDeviceModelTimeoutCountBeforeDisable() timeouts, the
   // next session should use the server.
   EXPECT_EQ(nullptr, test_controller_->CreateSession(
-                         kFeature, base::DoNothing(), &logger_));
+                         kFeature, base::DoNothing(), &logger_, nullptr,
+                         /*config_params=*/std::nullopt));
 }
 
 TEST_F(OnDeviceModelServiceControllerTest, RedactedField) {
@@ -1650,8 +1866,9 @@ TEST_F(OnDeviceModelServiceControllerTest, RedactedField) {
   Initialize({.config = config});
 
   // `foo` doesn't match the redaction, so should be returned.
-  auto session1 =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session1 = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   ASSERT_TRUE(session1);
   ExecuteModelUsingInput(*session1, "foo");
   task_environment_.RunUntilIdle();
@@ -1662,8 +1879,9 @@ TEST_F(OnDeviceModelServiceControllerTest, RedactedField) {
   // Input and output contain text matching redact, so should not be redacted.
   response_received_.reset();
   streamed_responses_.clear();
-  auto session2 =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session2 = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   ASSERT_TRUE(session2);
   ExecuteModelUsingInput(*session2, "abarx");
   task_environment_.RunUntilIdle();
@@ -1675,8 +1893,9 @@ TEST_F(OnDeviceModelServiceControllerTest, RedactedField) {
   g_model_execute_result = {"Input: abarx\n"};
   response_received_.reset();
   streamed_responses_.clear();
-  auto session3 =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session3 = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   ASSERT_TRUE(session3);
   ExecuteModelUsingInput(*session3, "foo");
   task_environment_.RunUntilIdle();
@@ -1691,8 +1910,9 @@ TEST_F(OnDeviceModelServiceControllerTest, RejectedField) {
                                          proto::RedactBehavior::REJECT);
   Initialize({.config = config});
 
-  auto session1 =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session1 = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   ASSERT_TRUE(session1);
   ExecuteModelUsingInput(*session1, "bar");
   task_environment_.RunUntilIdle();
@@ -1733,8 +1953,9 @@ TEST_F(OnDeviceModelServiceControllerTest, UsePreviousResponseForRewrite) {
   // Force 'bar' to be returned from model.
   g_model_execute_result = {"Input: bar\n"};
 
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   ASSERT_TRUE(session);
   ExecuteModelWithRewrite(*session);
   task_environment_.RunUntilIdle();
@@ -1752,8 +1973,9 @@ TEST_F(OnDeviceModelServiceControllerTest, ReplacementText) {
 
   // Output contains redacted text (and  input doesn't), so redact.
   g_model_execute_result = {"Input: abarx\n"};
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   ASSERT_TRUE(session);
   ExecuteModelUsingInput(*session, "foo");
   task_environment_.RunUntilIdle();
@@ -1778,8 +2000,9 @@ TEST_F(OnDeviceModelServiceControllerTest, DetectsRepeats) {
       " some more repeating text",
       " more stuff",
   };
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   ASSERT_TRUE(session);
   ExecuteModelUsingInput(*session, "foo");
   task_environment_.RunUntilIdle();
@@ -1825,8 +2048,9 @@ TEST_F(OnDeviceModelServiceControllerTest, DetectsRepeatsAndCancelsResponse) {
       " some more repeating text",
       " more stuff",
   };
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   ASSERT_TRUE(session);
   ExecuteModelUsingInput(*session, "foo");
   task_environment_.RunUntilIdle();
@@ -1872,8 +2096,9 @@ TEST_F(OnDeviceModelServiceControllerTest, DetectsRepeatsAcrossResponses) {
       "some text",   " some more repeating", " text",
       " some more ", "repeating text",       " more stuff",
   };
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   ASSERT_TRUE(session);
   ExecuteModelUsingInput(*session, "foo");
   task_environment_.RunUntilIdle();
@@ -1922,8 +2147,9 @@ TEST_F(OnDeviceModelServiceControllerTest, IgnoresNonRepeatingText) {
       " some more non repeating text",
       " more stuff",
   };
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   ASSERT_TRUE(session);
   ExecuteModelUsingInput(*session, "foo");
   task_environment_.RunUntilIdle();
@@ -1952,6 +2178,41 @@ TEST_F(OnDeviceModelServiceControllerTest, IgnoresNonRepeatingText) {
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.ModelExecution.OnDeviceResponseHasRepeats.Compose",
       false, 1);
+}
+
+TEST_F(OnDeviceModelServiceControllerTest,
+       InitWithNoOnDeviceComponentStateManager) {
+  access_controller_ = nullptr;
+  test_controller_ = nullptr;
+
+  auto access_controller =
+      std::make_unique<OnDeviceModelAccessController>(pref_service_);
+  access_controller_ = access_controller.get();
+  test_controller_ = base::MakeRefCounted<FakeOnDeviceModelServiceController>(
+      std::move(access_controller),
+      on_device_component_state_manager_.get()->GetWeakPtr());
+
+  on_device_component_state_manager_.Reset();
+  // Init should not crash.
+  test_controller_->Init();
+}
+
+TEST_F(OnDeviceModelServiceControllerTest, UsesTopKAndTemperature) {
+  Initialize();
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      SessionConfigParams{.sampling_params = SamplingParams{
+                              .top_k = 3,
+                              .temperature = 2,
+                          }});
+  EXPECT_TRUE(session);
+  ExecuteModel(*session, "foo");
+  task_environment_.RunUntilIdle();
+  EXPECT_TRUE(response_received_);
+  const std::string expected_response =
+      "Input: execute:foo\nTopK: 3, Temp: 2\n";
+  EXPECT_EQ(*response_received_, expected_response);
+  EXPECT_THAT(streamed_responses_, ElementsAre(expected_response));
 }
 
 class OnDeviceModelServiceControllerTsIntervalTest
@@ -1995,8 +2256,9 @@ TEST_P(OnDeviceModelServiceControllerTsIntervalTest,
           .SetModelMetadata(any)
           .Build();
   test_controller_->MaybeUpdateSafetyModel(*model_info);
-  auto session =
-      test_controller_->CreateSession(kFeature, base::DoNothing(), &logger_);
+  auto session = test_controller_->CreateSession(
+      kFeature, base::DoNothing(), &logger_, nullptr,
+      /*config_params=*/std::nullopt);
   EXPECT_TRUE(session);
 
   g_safety_info = on_device_model::mojom::SafetyInfo::New();

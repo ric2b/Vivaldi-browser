@@ -29,7 +29,6 @@
 #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
-#include "components/sync/android/explicit_passphrase_platform_client.h"
 #include "components/sync/base/command_line_switches.h"
 #include "components/sync/base/features.h"
 #include "components/sync/base/model_type.h"
@@ -57,7 +56,14 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if BUILDFLAG(IS_ANDROID)
+#include "base/android/build_info.h"
+#include "base/android/jni_android.h"
+#include "base/android/jni_array.h"
+#include "base/android/jni_string.h"
+#include "components/sync/android/jni_headers/ExplicitPassphrasePlatformClient_jni.h"
 #include "components/sync/android/sync_service_android_bridge.h"
+#include "components/sync/engine/nigori/nigori.h"
+#include "components/sync/protocol/nigori_specifics.pb.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
 namespace syncer {
@@ -68,6 +74,15 @@ BASE_FEATURE(kSyncUnsubscribeFromTypesWithPermanentErrors,
              "SyncUnsubscribeFromTypesWithPermanentErrors",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr int kMinGmsVersionCodeWithCustomPassphraseApi = 235204000;
+
+// Keep in sync with the corresponding string in
+// ExplicitPassphrasePlatformClientTest.java
+constexpr char kIgnoreMinGmsVersionWithPassphraseSupportForTest[] =
+    "ignore-min-gms-version-with-passphrase-support-for-test";
+#endif  // BUILDFLAG(IS_ANDROID)
+
 // The time after browser startup to report sync configuration metrics.
 constexpr base::TimeDelta kRecordDownloadStatusTimeout = base::Seconds(30);
 
@@ -75,20 +90,31 @@ constexpr char kModelTypeReachedUpToDateHistogramPrefix[] =
     "Sync.ModelTypeUpToDateTime";
 
 // The initial state of sync, for the Sync.InitialState2 histogram. Even if
-// this value is CAN_START, sync startup might fail for reasons that we may
-// want to consider logging in the future, such as a passphrase needed for
-// decryption, or the version of Chrome being too old. This enum is used to
-// back a UMA histogram, and should therefore be treated as append-only.
+// this value indicates that sync (the feature or the transport) can start, the
+// startup might fail for reasons such as network issues, or the version of
+// Chrome being too old.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
 enum SyncInitialState {
-  CAN_START = 0,                // Sync can attempt to start up.
-  NOT_SIGNED_IN = 1,            // There is no signed in user.
-  NOT_REQUESTED = 2,            // The user turned off sync.
-  NOT_REQUESTED_NOT_SETUP = 3,  // The user turned off sync and setup completed
-                                // is false. Might indicate a stop-and-clear.
-  NEEDS_CONFIRMATION = 4,       // The user must confirm sync settings.
-  NOT_ALLOWED_BY_POLICY = 5,    // Sync is disallowed by enterprise policy.
-  OBSOLETE_NOT_ALLOWED_BY_PLATFORM = 6,
-  kMaxValue = OBSOLETE_NOT_ALLOWED_BY_PLATFORM
+  // Sync-the-feature can attempt to start up.
+  kFeatureCanStart = 0,
+  // There is no signed in user, so neither feature nor transport can start.
+  kNotSignedIn = 1,
+  // The user has disabled Sync-the-feature, but the initial setup has been
+  // completed. This should be very rare; it can happen after a
+  // reset-via-dashboard on ChromeOS.
+  kFeatureNotRequested = 2,
+  // The user has not enabled Sync-the-feature. This is the expected state for
+  // a Sync-the-transport (signed-in non-syncing) user.
+  kFeatureNotRequestedNotSetup = 3,
+  // The user has enabled Sync-the-feature, but has not completed the initial
+  // setup. This should be rare; it can happen if the initial setup got
+  // interrupted e.g. by a crash.
+  kFeatureNotSetup = 4,
+  // Sync (both feature and transport) is disallowed by enterprise policy.
+  kNotAllowedByPolicy = 5,
+  kObsoleteNotAllowedByPlatform = 6,
+  kMaxValue = kObsoleteNotAllowedByPlatform
 };
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -107,20 +133,20 @@ enum class DownloadStatusWaitingForUpdatesReason {
 void RecordSyncInitialState(SyncService::DisableReasonSet disable_reasons,
                             bool is_sync_feature_requested,
                             bool initial_sync_feature_setup_complete) {
-  SyncInitialState sync_state = CAN_START;
+  SyncInitialState sync_state = kFeatureCanStart;
   if (disable_reasons.Has(SyncService::DISABLE_REASON_NOT_SIGNED_IN)) {
-    sync_state = NOT_SIGNED_IN;
+    sync_state = kNotSignedIn;
   } else if (disable_reasons.Has(
                  SyncService::DISABLE_REASON_ENTERPRISE_POLICY)) {
-    sync_state = NOT_ALLOWED_BY_POLICY;
+    sync_state = kNotAllowedByPolicy;
   } else if (!is_sync_feature_requested) {
     if (initial_sync_feature_setup_complete) {
-      sync_state = NOT_REQUESTED;
+      sync_state = kFeatureNotRequested;
     } else {
-      sync_state = NOT_REQUESTED_NOT_SETUP;
+      sync_state = kFeatureNotRequestedNotSetup;
     }
   } else if (!initial_sync_feature_setup_complete) {
-    sync_state = NEEDS_CONFIRMATION;
+    sync_state = kFeatureNotSetup;
   }
   base::UmaHistogramEnumeration("Sync.InitialState2", sync_state);
 }
@@ -188,15 +214,6 @@ void LogWaitingForUpdatesReasonIfNeeded(
   }
 }
 
-bool ShouldForceImmediateStartIfTransportDataMissing() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  return true;
-#else
-  return base::FeatureList::IsEnabled(
-      kSyncAlwaysForceImmediateStartIfTransportDataMissing);
-#endif
-}
-
 }  // namespace
 
 SyncServiceImpl::InitParams::InitParams() = default;
@@ -234,6 +251,11 @@ SyncServiceImpl::SyncServiceImpl(InitParams init_params)
   // If Sync is disabled via command line flag, then SyncServiceImpl
   // shouldn't be instantiated.
   DCHECK(IsSyncAllowedByFlag());
+
+  sync_prefs_.SetPasswordSyncAllowed(sync_client_->IsPasswordSyncAllowed());
+  // base::Unretained() is safe, `this` outlives `sync_client_`.
+  sync_client_->SetPasswordSyncAllowedChangeCb(base::BindRepeating(
+      &SyncServiceImpl::OnPasswordSyncAllowedChanged, base::Unretained(this)));
 
   sync_stopped_reporter_ = std::make_unique<SyncStoppedReporter>(
       sync_service_url_, MakeUserAgentForSync(channel_), url_loader_factory_);
@@ -298,6 +320,8 @@ void SyncServiceImpl::Initialize() {
 #endif  // BUILDFLAG(IS_IOS)
   sync_prefs_.MaybeMigratePrefsForSyncToSigninPart1(
       GetSyncAccountStateForPrefs(),
+      signin::GaiaIdHash::FromGaiaId(GetAccountInfo().gaia));
+  sync_prefs_.MaybeMigrateCustomPassphrasePref(
       signin::GaiaIdHash::FromGaiaId(GetAccountInfo().gaia));
 
   if (!IsLocalSyncEnabled()) {
@@ -371,13 +395,8 @@ void SyncServiceImpl::Initialize() {
   }
 
   if (IsEngineAllowedToRun()) {
-    const bool force_immediate_start =
-        !sync_client_->GetSyncApiComponentFactory()
-             ->HasTransportDataIncludingFirstSync() &&
-        (IsLocalSyncEnabled() ||
-         ShouldForceImmediateStartIfTransportDataMissing());
-
-    if (force_immediate_start) {
+    if (!sync_client_->GetSyncApiComponentFactory()
+             ->HasTransportDataIncludingFirstSync()) {
       // Sync never initialized before on this profile, so let's try immediately
       // the very first time. This is particularly useful for Chrome Ash (where
       // the user is signed in to begin with) and local sync (where sign-in
@@ -826,13 +845,9 @@ SyncService::TransportState SyncServiceImpl::GetTransportState() const {
     return TransportState::START_DEFERRED;
   }
 
-  if (!engine_->IsInitialized()) {
+  if (!engine_->IsInitialized() || !data_type_manager_) {
     return TransportState::INITIALIZING;
   }
-
-  DCHECK(engine_);
-  // The DataTypeManager gets created once the engine is initialized.
-  DCHECK(data_type_manager_);
 
   // At this point we should usually be able to configure our data types (so the
   // DataTypeManager should not be STOPPED anymore), unless setup is in
@@ -920,7 +935,7 @@ void SyncServiceImpl::NotifyShutdown() {
 }
 
 void SyncServiceImpl::ClearUnrecoverableError() {
-  unrecoverable_error_reason_ = absl::nullopt;
+  unrecoverable_error_reason_ = std::nullopt;
   unrecoverable_error_message_.clear();
   unrecoverable_error_location_ = base::Location();
 }
@@ -1072,6 +1087,11 @@ void SyncServiceImpl::OnActionableProtocolError(
             "Sync.PassphraseTypeUponNotMyBirthdayOrEncryptionObsolete",
             crypto_.GetPassphraseType().value_or(
                 PassphraseType::kImplicitPassphrase));
+        // Account passphrase pref should be cleared when sync is reset from the
+        // dashboard because then the cached passphrase wouldn't be useful
+        // anymore.
+        sync_prefs_.ClearEncryptionBootstrapTokenForAccount(
+            signin::GaiaIdHash::FromGaiaId(GetAccountInfo().gaia));
       }
 
       // Security domain state might be reset, reset local state as well.
@@ -1093,7 +1113,7 @@ void SyncServiceImpl::OnActionableProtocolError(
 #else  // !BUILDFLAG(IS_CHROMEOS_ASH)
       // On every platform except ash, revoke the Sync consent/Clear primary
       // account after a dashboard clear.
-      // TODO(crbug.com/1462552): Simplify once kSync becomes unreachable or is
+      // TODO(crbug.com/40066949): Simplify once kSync becomes unreachable or is
       // deleted from the codebase. See ConsentLevel::kSync documentation for
       // details.
       if (!IsLocalSyncEnabled() &&
@@ -1110,15 +1130,13 @@ void SyncServiceImpl::OnActionableProtocolError(
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
         // On mobile, fully sign out the user.
         account_mutator->ClearPrimaryAccount(
-            signin_metrics::ProfileSignout::kServerForcedDisable,
-            signin_metrics::SignoutDelete::kIgnoreMetric);
+            signin_metrics::ProfileSignout::kServerForcedDisable);
 #else
         // Note: On some platforms, revoking the sync consent will also clear
         // the primary account as transitioning from ConsentLevel::kSync to
         // ConsentLevel::kSignin is not supported.
         account_mutator->RevokeSyncConsent(
-            signin_metrics::ProfileSignout::kServerForcedDisable,
-            signin_metrics::SignoutDelete::kIgnoreMetric);
+            signin_metrics::ProfileSignout::kServerForcedDisable);
 #endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
       }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -1224,7 +1242,9 @@ void SyncServiceImpl::CryptoRequiredUserActionChanged() {
 
 void SyncServiceImpl::MaybeRecordTrustedVaultHistograms() {
   if (should_record_trusted_vault_error_shown_on_startup_ &&
-      crypto_.IsTrustedVaultKeyRequiredStateKnown() && IsSyncFeatureEnabled()) {
+      crypto_.IsTrustedVaultKeyRequiredStateKnown() &&
+      user_settings_->IsEncryptedDatatypeEnabled()) {
+    // If the key-required state is known, the engine must exist.
     DCHECK(engine_);
 
     should_record_trusted_vault_error_shown_on_startup_ = false;
@@ -1284,7 +1304,7 @@ void SyncServiceImpl::PassphraseTypeChanged(PassphraseType passphrase_type) {
   sync_prefs_.SetCachedPassphraseType(passphrase_type);
 }
 
-absl::optional<PassphraseType> SyncServiceImpl::GetPassphraseType() const {
+std::optional<PassphraseType> SyncServiceImpl::GetPassphraseType() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return sync_prefs_.GetCachedPassphraseType();
 }
@@ -1292,15 +1312,13 @@ absl::optional<PassphraseType> SyncServiceImpl::GetPassphraseType() const {
 void SyncServiceImpl::SetEncryptionBootstrapToken(
     const std::string& bootstrap_token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  sync_prefs_.SetEncryptionBootstrapToken(bootstrap_token);
-#if BUILDFLAG(IS_ANDROID)
-  SendExplicitPassphraseToJavaPlatformClient(this);
-#endif
+  user_settings_->SetEncryptionBootstrapToken(bootstrap_token);
+  SendExplicitPassphraseToPlatformClient();
 }
 
 std::string SyncServiceImpl::GetEncryptionBootstrapToken() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return sync_prefs_.GetEncryptionBootstrapToken();
+  return user_settings_->GetEncryptionBootstrapToken();
 }
 
 bool SyncServiceImpl::IsCustomPassphraseAllowed() const {
@@ -1408,8 +1426,7 @@ base::Time SyncServiceImpl::GetLastSyncedTimeForDebugging() const {
   return engine_->GetLastSyncedTimeForDebugging();
 }
 
-void SyncServiceImpl::OnPreferredDataTypesPrefChange(
-    bool payments_integration_enabled_changed) {
+void SyncServiceImpl::OnSelectedTypesPrefChange() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (data_type_manager_) {
@@ -1417,12 +1434,6 @@ void SyncServiceImpl::OnPreferredDataTypesPrefChange(
   }
 
   ReconfigureDatatypeManager(/*bypass_setup_in_progress_check=*/false);
-
-  if (payments_integration_enabled_changed) {
-    for (SyncServiceObserver& observer : *observers_) {
-      observer.OnSyncPaymentsIntegrationEnabledChanged(this);
-    }
-  }
 }
 
 SyncClient* SyncServiceImpl::GetSyncClientForTest() {
@@ -1550,7 +1561,9 @@ void SyncServiceImpl::ConfigureDataTypeManager(ConfigureReason reason) {
   data_type_manager_->Configure(GetPreferredDataTypes(), configure_context);
 
   // Record in UMA whether we're configuring the full Sync feature or only the
-  // transport.
+  // transport. These values are persisted to logs. Entries should not be
+  // renumbered and numeric values should never be reused. Keep in sync with
+  // SyncFeatureOrTransport in tools/metrics/histograms/metadata/sync/enums.xml.
   enum class ConfigureDataTypeManagerOption {
     kFeature = 0,
     kTransport = 1,
@@ -2122,6 +2135,10 @@ SyncService::ModelTypeDownloadStatus SyncServiceImpl::GetDownloadStatusForImpl(
   return ModelTypeDownloadStatus::kUpToDate;
 }
 
+void SyncServiceImpl::OnPasswordSyncAllowedChanged() {
+  sync_prefs_.SetPasswordSyncAllowed(sync_client_->IsPasswordSyncAllowed());
+}
+
 CoreAccountInfo SyncServiceImpl::GetAccountInfo() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!auth_manager_) {
@@ -2151,6 +2168,54 @@ void SyncServiceImpl::SetInvalidationsForSessionsEnabled(bool enabled) {
   UpdateDataTypesForInvalidations();
 }
 
+bool SyncServiceImpl::SupportsExplicitPassphrasePlatformClient() {
+#if BUILDFLAG(IS_ANDROID)
+  int version_code = 0;
+  bool has_min_gms_version =
+      base::StringToInt(
+          base::android::BuildInfo::GetInstance()->gms_version_code(),
+          &version_code) &&
+      version_code >= kMinGmsVersionCodeWithCustomPassphraseApi;
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          kIgnoreMinGmsVersionWithPassphraseSupportForTest) &&
+      !has_min_gms_version) {
+    return false;
+  }
+
+  return base::FeatureList::IsEnabled(
+      syncer::kPassExplicitSyncPassphraseToGmsCore);
+#else
+  return false;
+#endif  // BUILDFLAG(IS_ANDROID)
+}
+
+void SyncServiceImpl::SendExplicitPassphraseToPlatformClient() {
+#if BUILDFLAG(IS_ANDROID)
+  if (!SupportsExplicitPassphrasePlatformClient()) {
+    return;
+  }
+
+  std::unique_ptr<syncer::Nigori> nigori_key =
+      user_settings_->GetExplicitPassphraseDecryptionNigoriKey();
+  if (!nigori_key) {
+    return;
+  }
+
+  sync_pb::NigoriKey proto;
+  proto.set_deprecated_name(nigori_key->GetKeyName());
+  nigori_key->ExportKeys(proto.mutable_deprecated_user_key(),
+                         proto.mutable_encryption_key(),
+                         proto.mutable_mac_key());
+  int32_t byte_size = proto.ByteSize();
+  std::vector<uint8_t> bytes(byte_size);
+  proto.SerializeToArray(bytes.data(), byte_size);
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_ExplicitPassphrasePlatformClient_setExplicitDecryptionPassphrase(
+      env, ConvertToJavaCoreAccountInfo(env, GetAccountInfo()),
+      base::android::ToJavaByteArray(env, bytes));
+#endif  // BUILDFLAG(IS_ANDROID)
+}
+
 void SyncServiceImpl::StopAndClear() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -2162,15 +2227,17 @@ void SyncServiceImpl::StopAndClear() {
   // that if the user ever chooses to enable Sync again, they start off with
   // their previous settings by default. We do however require going through
   // first-time setup again and set SyncRequested to false.
+  // For explicit passphrase users, clear the encryption key, such that they
+  // will need to reenter it if sync gets re-enabled. Note: the gaia-keyed
+  // passphrase pref should be cleared before clearing
+  // InitialSyncFeatureSetupComplete().
+  sync_prefs_.ClearAllEncryptionBootstrapTokens();
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
   sync_prefs_.ClearInitialSyncFeatureSetupComplete();
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
   sync_prefs_.ClearPassphrasePromptMutedProductVersion();
   // The passphrase type is now undefined again.
   sync_prefs_.ClearCachedPassphraseType();
-  // For explicit passphrase users, clear the encryption key, such that they
-  // will need to reenter it if sync gets re-enabled.
-  sync_prefs_.ClearEncryptionBootstrapToken();
   // If the migration didn't finish before StopAndClear() was called, mark it as
   // done so it doesn't trigger again if the user signs in later.
   sync_prefs_.MarkPartialSyncToSigninMigrationFullyDone();

@@ -13,7 +13,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_pool_2d_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_reduce_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_split_options.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_transpose_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_triangular_options.h"
 #include "third_party/blink/renderer/modules/ml/buildflags.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph_builder.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph_test_base.h"
@@ -21,7 +21,7 @@
 // TODO(https://crbug.com/1273291): Remove all uses of this macro.
 #define SKIP_TEST_ON_UNSUPPORTED_BACKEND(backend_type)       \
   do {                                                       \
-    if (GetBackendType() == backend_type)                    \
+    if (GetParam() == backend_type)                          \
       GTEST_SKIP() << #backend_type << " is not supported."; \
   } while (0)
 
@@ -29,14 +29,11 @@ namespace blink {
 
 namespace {
 
-const TestVariety kGraphTestVariety[] = {
+// kWebNNService is a valid parameter type, but ml_graph_test doesn't run
+// against it.
+const BackendType kGraphBackendType[] = {
 #if BUILDFLAG(BUILD_WEBNN_WITH_XNNPACK)
-    {BackendType::kXnnpack, ExecutionMode::kAsync},
-    {BackendType::kXnnpack, ExecutionMode::kSync},
-#endif
-
-#if BUILDFLAG(BUILD_WEBNN_WITH_TFLITE_MODEL_LOADER)
-    {BackendType::kModelLoader, ExecutionMode::kAsync},
+    BackendType::kXnnpack,
 #endif
 };
 
@@ -46,7 +43,7 @@ class MLGraphTest : public MLGraphTestBase {};
 
 template <typename T>
 struct ElementWiseBinaryTester {
-  ElementWiseBinaryKind kind;
+  webnn::mojom::blink::ElementWiseBinary::Kind kind;
   OperandInfo<T> lhs;
   OperandInfo<T> rhs;
   Vector<T> expected;
@@ -81,13 +78,13 @@ struct ElementWiseBinaryTester {
 };
 
 TEST_P(MLGraphTest, ElementWiseBinaryTest) {
-  MLGraphV8TestingScope scope;
+  V8TestingScope scope;
   {
     // Test element-wise add operator for two 0-D scalars.
     // The expected results should be the sum of the values of the two input
     // scalars.
     ElementWiseBinaryTester<float>{
-        .kind = ElementWiseBinaryKind::kAdd,
+        .kind = webnn::mojom::blink::ElementWiseBinary::Kind::kAdd,
         .lhs = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                 .dimensions = {},
                 .values = {2.0}},
@@ -102,7 +99,7 @@ TEST_P(MLGraphTest, ElementWiseBinaryTest) {
     // The expected results should be the sum of the values of the two input
     // tensors, element-wise.
     ElementWiseBinaryTester<float>{
-        .kind = ElementWiseBinaryKind::kAdd,
+        .kind = webnn::mojom::blink::ElementWiseBinary::Kind::kAdd,
         .lhs = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                 .dimensions = {2},
                 .values = {1.0, 2.0}},
@@ -115,7 +112,7 @@ TEST_P(MLGraphTest, ElementWiseBinaryTest) {
   {
     // Test element-wise add operator for two 2-D tensors.
     ElementWiseBinaryTester<float>{
-        .kind = ElementWiseBinaryKind::kAdd,
+        .kind = webnn::mojom::blink::ElementWiseBinary::Kind::kAdd,
         .lhs = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                 .dimensions = {2, 2},
                 .values = {1.0, 2.0, 3.0, 4.0}},
@@ -129,7 +126,7 @@ TEST_P(MLGraphTest, ElementWiseBinaryTest) {
     // Test element-wise add operator for 0-D scalar broadcasting to 2-D
     // tensor.
     ElementWiseBinaryTester<float>{
-        .kind = ElementWiseBinaryKind::kAdd,
+        .kind = webnn::mojom::blink::ElementWiseBinary::Kind::kAdd,
         .lhs = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                 .dimensions = {2, 2},
                 .values = {1.0, 2.0, 3.0, 4.0}},
@@ -143,7 +140,7 @@ TEST_P(MLGraphTest, ElementWiseBinaryTest) {
     // Test element-wise add operator for 1-D tensor broadcasting to 2-D
     // tensor.
     ElementWiseBinaryTester<float>{
-        .kind = ElementWiseBinaryKind::kAdd,
+        .kind = webnn::mojom::blink::ElementWiseBinary::Kind::kAdd,
         .lhs = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                 .dimensions = {2, 2},
                 .values = {1.0, 2.0, 3.0, 4.0}},
@@ -157,7 +154,7 @@ TEST_P(MLGraphTest, ElementWiseBinaryTest) {
     // Test element-wise add operator for 3-D tensor broadcasting to 3-D
     // tensor.
     ElementWiseBinaryTester<float>{
-        .kind = ElementWiseBinaryKind::kAdd,
+        .kind = webnn::mojom::blink::ElementWiseBinary::Kind::kAdd,
         .lhs = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                 .dimensions = {1, 2, 2},
                 .values = {1.0, 2.0, 3.0, 4.0}},
@@ -170,7 +167,7 @@ TEST_P(MLGraphTest, ElementWiseBinaryTest) {
   {
     // Test element-wise add operator for two 4-D tensors
     ElementWiseBinaryTester<float>{
-        .kind = ElementWiseBinaryKind::kAdd,
+        .kind = webnn::mojom::blink::ElementWiseBinary::Kind::kAdd,
         .lhs = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                 .dimensions = {1, 2, 2, 1},
                 .values = {1.0, 2.0, 3.0, 4.0}},
@@ -185,7 +182,7 @@ TEST_P(MLGraphTest, ElementWiseBinaryTest) {
     // The expected results should be the difference of the values of the two
     // input tensors, element-wise.
     ElementWiseBinaryTester<float>{
-        .kind = ElementWiseBinaryKind::kSub,
+        .kind = webnn::mojom::blink::ElementWiseBinary::Kind::kSub,
         .lhs = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                 .dimensions = {1, 2, 2, 1},
                 .values = {1.0, 2.0, 3.0, 4.0}},
@@ -200,7 +197,7 @@ TEST_P(MLGraphTest, ElementWiseBinaryTest) {
     // The expected results should be the product of the values of the two
     // input tensors, element-wise.
     ElementWiseBinaryTester<float>{
-        .kind = ElementWiseBinaryKind::kMul,
+        .kind = webnn::mojom::blink::ElementWiseBinary::Kind::kMul,
         .lhs = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                 .dimensions = {1, 2, 2, 1},
                 .values = {1.0, 2.0, 3.0, 4.0}},
@@ -215,7 +212,7 @@ TEST_P(MLGraphTest, ElementWiseBinaryTest) {
     // The expected results should be the quotient of the values of the two
     // input tensors, element-wise.
     ElementWiseBinaryTester<float>{
-        .kind = ElementWiseBinaryKind::kDiv,
+        .kind = webnn::mojom::blink::ElementWiseBinary::Kind::kDiv,
         .lhs = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                 .dimensions = {1, 2, 2, 1},
                 .values = {3.0, 4.0, 6.0, 8.0}},
@@ -230,7 +227,7 @@ TEST_P(MLGraphTest, ElementWiseBinaryTest) {
     // The expected results should be the lesser values of the two input
     // tensors, element-wise.
     ElementWiseBinaryTester<float>{
-        .kind = ElementWiseBinaryKind::kMin,
+        .kind = webnn::mojom::blink::ElementWiseBinary::Kind::kMin,
         .lhs = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                 .dimensions = {1, 2, 2, 1},
                 .values = {1.0, 4.0, 5.0, 8.0}},
@@ -245,7 +242,7 @@ TEST_P(MLGraphTest, ElementWiseBinaryTest) {
     // The expected results should be the greater values of the two input
     // tensors, element-wise.
     ElementWiseBinaryTester<float>{
-        .kind = ElementWiseBinaryKind::kMax,
+        .kind = webnn::mojom::blink::ElementWiseBinary::Kind::kMax,
         .lhs = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                 .dimensions = {1, 2, 2, 1},
                 .values = {1.0, 4.0, 5.0, 8.0}},
@@ -273,7 +270,8 @@ struct PowTester {
     auto* rhs_operand = BuildConstant(builder, rhs.dimensions, rhs.data_type,
                                       rhs.values, scope.GetExceptionState());
     auto* output_operand = BuildElementWiseBinary(
-        scope, builder, ElementWiseBinaryKind::kPow, lhs_operand, rhs_operand);
+        scope, builder, webnn::mojom::blink::ElementWiseBinary::Kind::kPow,
+        lhs_operand, rhs_operand);
     auto [graph, build_exception] =
         helper.BuildGraph(scope, builder, {{"output", output_operand}});
     ASSERT_THAT(graph, testing::NotNull());
@@ -292,7 +290,7 @@ struct PowTester {
 };
 
 TEST_P(MLGraphTest, PowTest) {
-  MLGraphV8TestingScope scope;
+  V8TestingScope scope;
   {
     // Test element-wise pow operator with exponent = 2.
     PowTester<float>{.lhs = {.data_type = V8MLOperandDataType::Enum::kFloat32,
@@ -319,7 +317,7 @@ TEST_P(MLGraphTest, PowTest) {
 
 template <typename T>
 struct ElementWiseUnaryTester {
-  ElementWiseUnaryKind kind;
+  webnn::mojom::blink::ElementWiseUnary::Kind kind;
   OperandInfo<T> input;
   Vector<T> expected;
 
@@ -333,53 +331,56 @@ struct ElementWiseUnaryTester {
                    scope.GetExceptionState());
     MLOperand* output_operand = nullptr;
     switch (kind) {
-      case ElementWiseUnaryKind::kAbs:
+      case webnn::mojom::blink::ElementWiseUnary::Kind::kAbs:
         output_operand = builder->abs(input_operand, scope.GetExceptionState());
         break;
-      case ElementWiseUnaryKind::kCeil:
+      case webnn::mojom::blink::ElementWiseUnary::Kind::kCeil:
         output_operand =
             builder->ceil(input_operand, scope.GetExceptionState());
         break;
-      case ElementWiseUnaryKind::kCos:
+      case webnn::mojom::blink::ElementWiseUnary::Kind::kCos:
         output_operand = builder->cos(input_operand, scope.GetExceptionState());
         break;
-      case ElementWiseUnaryKind::kExp:
+      case webnn::mojom::blink::ElementWiseUnary::Kind::kExp:
         output_operand = builder->exp(input_operand, scope.GetExceptionState());
         break;
-      case ElementWiseUnaryKind::kFloor:
+      case webnn::mojom::blink::ElementWiseUnary::Kind::kFloor:
         output_operand =
             builder->floor(input_operand, scope.GetExceptionState());
         break;
-      case ElementWiseUnaryKind::kLog:
+      case webnn::mojom::blink::ElementWiseUnary::Kind::kLog:
         output_operand = builder->log(input_operand, scope.GetExceptionState());
         break;
-      case ElementWiseUnaryKind::kNeg:
+      case webnn::mojom::blink::ElementWiseUnary::Kind::kNeg:
         output_operand = builder->neg(input_operand, scope.GetExceptionState());
         break;
-      case ElementWiseUnaryKind::kSin:
+      case webnn::mojom::blink::ElementWiseUnary::Kind::kSin:
         output_operand = builder->sin(input_operand, scope.GetExceptionState());
         break;
-      case ElementWiseUnaryKind::kTan:
+      case webnn::mojom::blink::ElementWiseUnary::Kind::kTan:
         output_operand = builder->tan(input_operand, scope.GetExceptionState());
         break;
-      case ElementWiseUnaryKind::kErf:
+      case webnn::mojom::blink::ElementWiseUnary::Kind::kErf:
         output_operand = builder->erf(input_operand, scope.GetExceptionState());
         break;
-      case ElementWiseUnaryKind::kIdentity:
+      case webnn::mojom::blink::ElementWiseUnary::Kind::kIdentity:
         output_operand =
             builder->identity(input_operand, scope.GetExceptionState());
         break;
-      case ElementWiseUnaryKind::kLogicalNot:
+      case webnn::mojom::blink::ElementWiseUnary::Kind::kLogicalNot:
         output_operand =
             builder->logicalNot(input_operand, scope.GetExceptionState());
         break;
-      case ElementWiseUnaryKind::kReciprocal:
+      case webnn::mojom::blink::ElementWiseUnary::Kind::kReciprocal:
         output_operand =
             builder->reciprocal(input_operand, scope.GetExceptionState());
         break;
-      case ElementWiseUnaryKind::kSqrt:
+      case webnn::mojom::blink::ElementWiseUnary::Kind::kSqrt:
         output_operand =
             builder->sqrt(input_operand, scope.GetExceptionState());
+        break;
+      case webnn::mojom::blink::ElementWiseUnary::Kind::kCast:
+        // TODO: crbug.com/325598628 - Add tests for this case.
         break;
     }
     auto [graph, build_exception] =
@@ -401,13 +402,12 @@ struct ElementWiseUnaryTester {
 };
 
 TEST_P(MLGraphTest, ElementWiseUnaryTest) {
-  SKIP_TEST_ON_UNSUPPORTED_BACKEND(BackendType::kModelLoader);
   V8TestingScope scope;
   {
     // Test element-wise abs operator for a 0-D scalar.
     // The expected results should be the absolute value of the input scalar.
     ElementWiseUnaryTester<float>{
-        .kind = ElementWiseUnaryKind::kAbs,
+        .kind = webnn::mojom::blink::ElementWiseUnary::Kind::kAbs,
         .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                   .dimensions = {},
                   .values = {-2.0}},
@@ -419,7 +419,7 @@ TEST_P(MLGraphTest, ElementWiseUnaryTest) {
     // The expected results should be the absolute value of the input tensor,
     // element-wise.
     ElementWiseUnaryTester<float>{
-        .kind = ElementWiseUnaryKind::kAbs,
+        .kind = webnn::mojom::blink::ElementWiseUnary::Kind::kAbs,
         .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                   .dimensions = {2},
                   .values = {-1.0, -2.0}},
@@ -431,7 +431,7 @@ TEST_P(MLGraphTest, ElementWiseUnaryTest) {
     // The expected results should be the ceiling of the input tensor,
     // element-wise.
     ElementWiseUnaryTester<float>{
-        .kind = ElementWiseUnaryKind::kCeil,
+        .kind = webnn::mojom::blink::ElementWiseUnary::Kind::kCeil,
         .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                   .dimensions = {1, 2},
                   .values = {1.1, -2.2}},
@@ -443,7 +443,7 @@ TEST_P(MLGraphTest, ElementWiseUnaryTest) {
     // The expected results should be the floor of the input tensor,
     // element-wise.
     ElementWiseUnaryTester<float>{
-        .kind = ElementWiseUnaryKind::kFloor,
+        .kind = webnn::mojom::blink::ElementWiseUnary::Kind::kFloor,
         .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                   .dimensions = {1, 2, 2},
                   .values = {1.1, -2.2, 3.3, -4.4}},
@@ -455,7 +455,7 @@ TEST_P(MLGraphTest, ElementWiseUnaryTest) {
     // The expected results should be the numerical negative value of the input
     // tensor, element-wise.
     ElementWiseUnaryTester<float>{
-        .kind = ElementWiseUnaryKind::kNeg,
+        .kind = webnn::mojom::blink::ElementWiseUnary::Kind::kNeg,
         .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                   .dimensions = {1, 2, 2, 1},
                   .values = {1.0, -2.0, 3.0, -4.0}},
@@ -467,11 +467,53 @@ TEST_P(MLGraphTest, ElementWiseUnaryTest) {
     // The expected results should be the square root value of the input
     // tensor, element-wise.
     ElementWiseUnaryTester<float>{
-        .kind = ElementWiseUnaryKind::kSqrt,
+        .kind = webnn::mojom::blink::ElementWiseUnary::Kind::kSqrt,
         .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                   .dimensions = {1, 2, 2, 1},
                   .values = {1.0, 4.0, 9.0, 16.0}},
         .expected = {1.0, 2.0, 3.0, 4.0}}
+        .Test(*this, scope);
+  }
+  // Below operators are not implemented on XNNPACK backend.
+  SKIP_TEST_ON_UNSUPPORTED_BACKEND(BackendType::kXnnpack);
+  {
+    // Test element-wise Cos operator.
+    ElementWiseUnaryTester<float>{
+        .kind = webnn::mojom::blink::ElementWiseUnary::Kind::kCos,
+        .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
+                  .dimensions = {2, 2},
+                  .values = {1, -2, 3, -4}},
+        .expected = {cos(1.f), cos(-2.f), cos(3.f), cos(-4.f)}}
+        .Test(*this, scope);
+  }
+  {
+    // Test element-wise Exp operator.
+    ElementWiseUnaryTester<float>{
+        .kind = webnn::mojom::blink::ElementWiseUnary::Kind::kExp,
+        .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
+                  .dimensions = {2, 2},
+                  .values = {1, -2, 3, -4}},
+        .expected = {exp(1.f), exp(-2.f), exp(3.f), exp(-4.f)}}
+        .Test(*this, scope);
+  }
+  {
+    // Test element-wise Log operator.
+    ElementWiseUnaryTester<float>{
+        .kind = webnn::mojom::blink::ElementWiseUnary::Kind::kLog,
+        .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
+                  .dimensions = {3},
+                  .values = {0, 3, 10}},
+        .expected = {log(0.f), log(3.f), log(10.f)}}
+        .Test(*this, scope);
+  }
+  {
+    // Test element-wise Sin operator.
+    ElementWiseUnaryTester<float>{
+        .kind = webnn::mojom::blink::ElementWiseUnary::Kind::kSin,
+        .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
+                  .dimensions = {2, 2},
+                  .values = {1, -2, 3, -4}},
+        .expected = {sin(1.f), sin(-2.f), sin(3.f), sin(-4.f)}}
         .Test(*this, scope);
   }
 }
@@ -514,7 +556,6 @@ struct PReluTester {
 };
 
 TEST_P(MLGraphTest, PReluTest) {
-  SKIP_TEST_ON_UNSUPPORTED_BACKEND(BackendType::kModelLoader);
   V8TestingScope scope;
   {
     // Test prelu operator with input_shape = {3} and slope_shape =
@@ -582,7 +623,7 @@ struct ReluTester {
 };
 
 TEST_P(MLGraphTest, ReluTest) {
-  MLGraphV8TestingScope scope;
+  V8TestingScope scope;
   {
     // Test relu operator for 1-D tensor.
     // The expected results should be the result of the rectified linear
@@ -668,7 +709,6 @@ struct LeakyReluTester {
 };
 
 TEST_P(MLGraphTest, LeakyReluTest) {
-  SKIP_TEST_ON_UNSUPPORTED_BACKEND(BackendType::kModelLoader);
   V8TestingScope scope;
   {
     // Test leakyRelu operator with default options.
@@ -705,7 +745,7 @@ TEST_P(MLGraphTest, LeakyReluTest) {
 
 template <typename T>
 struct ReduceTester {
-  ReduceKind kind;
+  webnn::mojom::blink::Reduce::Kind kind;
   OperandInfo<T> input;
   bool keep_dimensions = false;
   Vector<T> expected;
@@ -742,13 +782,12 @@ struct ReduceTester {
 };
 
 TEST_P(MLGraphTest, ReduceTest) {
-  SKIP_TEST_ON_UNSUPPORTED_BACKEND(BackendType::kModelLoader);
   V8TestingScope scope;
   {
     // Test reduceMean operator with default options.
     auto* options = MLReduceOptions::Create();
     ReduceTester<float>{
-        .kind = ReduceKind::kMean,
+        .kind = webnn::mojom::blink::Reduce::Kind::kMean,
         .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                   .dimensions = {1, 2, 2, 1},
                   .values = {1.0, 2.0, 3.0, 4.0}},
@@ -760,7 +799,7 @@ TEST_P(MLGraphTest, ReduceTest) {
     // Test reduceMean operator with keep_dimensions = true.
     auto* options = MLReduceOptions::Create();
     ReduceTester<float>{
-        .kind = ReduceKind::kMean,
+        .kind = webnn::mojom::blink::Reduce::Kind::kMean,
         .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                   .dimensions = {1, 2, 2, 1},
                   .values = {1.0, 2.0, 3.0, 4.0}},
@@ -774,7 +813,7 @@ TEST_P(MLGraphTest, ReduceTest) {
     auto* options = MLReduceOptions::Create();
     options->setAxes({1});
     ReduceTester<float>{
-        .kind = ReduceKind::kMean,
+        .kind = webnn::mojom::blink::Reduce::Kind::kMean,
         .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                   .dimensions = {2, 2},
                   .values = {1.0, 2.0, 3.0, 4.0}},
@@ -787,7 +826,7 @@ TEST_P(MLGraphTest, ReduceTest) {
     auto* options = MLReduceOptions::Create();
     options->setAxes({1});
     ReduceTester<float>{
-        .kind = ReduceKind::kMean,
+        .kind = webnn::mojom::blink::Reduce::Kind::kMean,
         .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                   .dimensions = {2, 2},
                   .values = {1.0, 2.0, 3.0, 4.0}},
@@ -834,7 +873,6 @@ struct Resample2dTester {
 };
 
 TEST_P(MLGraphTest, Resample2dTest) {
-  SKIP_TEST_ON_UNSUPPORTED_BACKEND(BackendType::kModelLoader);
   V8TestingScope scope;
   {
     // Test resample2d operator with axes = {1, 2}, sizes = {4, 4}.
@@ -902,18 +940,7 @@ struct ClampTester {
 };
 
 TEST_P(MLGraphTest, ClampTest) {
-  SKIP_TEST_ON_UNSUPPORTED_BACKEND(BackendType::kModelLoader);
   V8TestingScope scope;
-  {
-    // Test clamp operator with default options that no minimum and maximum
-    // values are defined.
-    ClampTester<float>{
-        .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
-                  .dimensions = {1, 2, 2, 1},
-                  .values = {-10.0, -0.5, 0.5, 10.0}},
-        .expected = {-10.0, -0.5, 0.5, 10.0}}
-        .Test(*this, scope);
-  }
   {
     // Test clamp operator with the minimum value defined.
     MLClampOptions* options = MLClampOptions::Create();
@@ -926,18 +953,7 @@ TEST_P(MLGraphTest, ClampTest) {
         .Test(*this, scope, options);
   }
   {
-    // Test clamp operator with the maximum value defined.
-    MLClampOptions* options = MLClampOptions::Create();
-    options->setMaxValue(6.0);
-    ClampTester<float>{
-        .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
-                  .dimensions = {1, 2, 2, 1},
-                  .values = {-10.0, -0.5, 0.5, 10.0}},
-        .expected = {-10.0, -0.5, 0.5, 6.0}}
-        .Test(*this, scope, options);
-  }
-  {
-    // Test clamp operator with both the minimum and maximum values defined.
+    // Test clamp operator with the minimum = 0 and maximum = 6.
     MLClampOptions* options = MLClampOptions::Create();
     options->setMinValue(0.0);
     options->setMaxValue(6.0);
@@ -946,6 +962,18 @@ TEST_P(MLGraphTest, ClampTest) {
                   .dimensions = {1, 2, 2, 1},
                   .values = {-10.0, -0.5, 0.5, 10.0}},
         .expected = {0.0, 0.0, 0.5, 6.0}}
+        .Test(*this, scope, options);
+  }
+  {
+    // Test clamp operator with the minimum = -1 and maximum = 1.
+    MLClampOptions* options = MLClampOptions::Create();
+    options->setMinValue(-1.0);
+    options->setMaxValue(1.0);
+    ClampTester<float>{
+        .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
+                  .dimensions = {1, 2, 2, 1},
+                  .values = {-10.0, -0.5, 0.5, 10.0}},
+        .expected = {-1, -0.5, 0.5, 1}}
         .Test(*this, scope, options);
   }
   {
@@ -960,13 +988,34 @@ TEST_P(MLGraphTest, ClampTest) {
         .expected = {6.0}}
         .Test(*this, scope, options);
   }
+  {
+    // Test clamp operator with default options that no minimum and maximum
+    // values are defined.
+    ClampTester<float>{
+        .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
+                  .dimensions = {1, 2, 2, 1},
+                  .values = {-10.0, -0.5, 0.5, 10.0}},
+        .expected = {-10.0, -0.5, 0.5, 10.0}}
+        .Test(*this, scope);
+  }
+  {
+    // Test clamp operator with the maximum value defined.
+    MLClampOptions* options = MLClampOptions::Create();
+    options->setMaxValue(6.0);
+    ClampTester<float>{
+        .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
+                  .dimensions = {1, 2, 2, 1},
+                  .values = {-10.0, -0.5, 0.5, 10.0}},
+        .expected = {-10.0, -0.5, 0.5, 6.0}}
+        .Test(*this, scope, options);
+  }
 }
 
 template <typename T>
 struct Conv2dTester {
   OperandInfo<T> input;
   OperandInfo<T> filter;
-  absl::optional<OperandInfo<T>> bias = absl::nullopt;
+  std::optional<OperandInfo<T>> bias = std::nullopt;
   Vector<T> expected;
 
   void Test(MLGraphTest& helper,
@@ -1006,7 +1055,7 @@ struct Conv2dTester {
 };
 
 TEST_P(MLGraphTest, Conv2dTest) {
-  MLGraphV8TestingScope scope;
+  V8TestingScope scope;
   auto* builder =
       CreateMLGraphBuilder(scope.GetExecutionContext(), scope.GetScriptState(),
                            scope.GetExceptionState());
@@ -1026,6 +1075,28 @@ TEST_P(MLGraphTest, Conv2dTest) {
         .expected = {30.0, 36.0, 42.0, 66.0, 81.0, 96.0, 102.0, 126.0, 150.0,
                      138.0, 171.0, 204.0, 174.0, 216.0, 258.0, 210.0, 261.0,
                      312.0}}
+        .Test(*this, scope, builder, options);
+  }
+  {
+    // Test conv2d operator for explicit padding are not same as the calculated
+    // padding with kSameUpper, input, filter size, stride and dilation that
+    // are used by CalculateConv2dPadding function.
+    auto* options = MLConv2dOptions::Create();
+    options->setInputLayout(V8MLInputOperandLayout::Enum::kNhwc);
+    options->setFilterLayout(V8MLConv2dFilterOperandLayout::Enum::kOhwi);
+    // The paddings are {1, 1, 1, 1} with calculating by CalculateConv2dPadding
+    // function.
+    options->setPadding({2, 2, 1, 1});
+    options->setStrides({2, 2});
+    Conv2dTester<float>{
+        .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
+                  .dimensions = {1, 7, 5, 1},
+                  .values = Vector<float>(35, 1.0)},
+        .filter = {.data_type = V8MLOperandDataType::Enum::kFloat32,
+                   .dimensions = {1, 3, 3, 1},
+                   .values = Vector<float>(9, 1.0)},
+        .expected = {2.0, 3.0, 2.0, 6.0, 9.0, 6.0, 6.0, 9.0, 6.0, 6.0, 9.0, 6.0,
+                     2.0, 3.0, 2.0}}
         .Test(*this, scope, builder, options);
   }
   {
@@ -1130,7 +1201,7 @@ template <typename T>
 struct ConvTranspose2dTester {
   OperandInfo<T> input;
   OperandInfo<T> filter;
-  absl::optional<OperandInfo<T>> bias = absl::nullopt;
+  std::optional<OperandInfo<T>> bias = std::nullopt;
   Vector<T> expected;
 
   void Test(
@@ -1171,7 +1242,6 @@ struct ConvTranspose2dTester {
 };
 
 TEST_P(MLGraphTest, ConvTranspose2dTest) {
-  SKIP_TEST_ON_UNSUPPORTED_BACKEND(BackendType::kModelLoader);
   V8TestingScope scope;
   auto* builder =
       CreateMLGraphBuilder(scope.GetExecutionContext(), scope.GetScriptState(),
@@ -1301,7 +1371,7 @@ template <typename T>
 struct GemmTester {
   OperandInfo<T> a;
   OperandInfo<T> b;
-  absl::optional<OperandInfo<T>> c = absl::nullopt;
+  std::optional<OperandInfo<T>> c = std::nullopt;
   Vector<T> expected;
 
   void Test(MLGraphTest& helper,
@@ -1333,11 +1403,11 @@ struct GemmTester {
         helper.ComputeGraph(scope, graph, inputs, outputs);
     EXPECT_THAT(compute_exception, testing::IsNull());
     auto results = GetArrayBufferViewValues<T>(outputs[0].second);
+    EXPECT_EQ(results, expected);
   }
 };
 
 TEST_P(MLGraphTest, GemmTest) {
-  SKIP_TEST_ON_UNSUPPORTED_BACKEND(BackendType::kModelLoader);
   V8TestingScope scope;
   auto* builder =
       CreateMLGraphBuilder(scope.GetExecutionContext(), scope.GetScriptState(),
@@ -1417,15 +1487,11 @@ struct HardSwishTester {
         helper.ComputeGraph(scope, graph, inputs, outputs);
     EXPECT_THAT(compute_exception, testing::IsNull());
     auto results = GetArrayBufferViewValues<float>(outputs[0].second);
-    EXPECT_EQ(results.size(), expected.size());
-    for (wtf_size_t i = 0; i < expected.size(); ++i) {
-      EXPECT_FLOAT_EQ(results[i], expected[i]);
-    }
+    ExpectFloatArrayEqual(results, expected);
   }
 };
 
 TEST_P(MLGraphTest, HardSwishTest) {
-  SKIP_TEST_ON_UNSUPPORTED_BACKEND(BackendType::kModelLoader);
   V8TestingScope scope;
   {
     // Test hardSwish operator for 1-D tensor.
@@ -1474,7 +1540,7 @@ TEST_P(MLGraphTest, HardSwishTest) {
 
 template <typename T>
 struct Pool2dTester {
-  Pool2dKind kind;
+  webnn::mojom::blink::Pool2d::Kind kind;
   OperandInfo<T> input;
   Vector<T> expected;
 
@@ -1507,14 +1573,17 @@ struct Pool2dTester {
 };
 
 TEST_P(MLGraphTest, Pool2dTest) {
-  MLGraphV8TestingScope scope;
+  V8TestingScope scope;
+
+  // TODO: crbug.com/325598628 - Add tests for `kL2Pool2d`.
+
   {
     // Test averagePool2d operator for nhwc input layout.
     auto* options = MLPool2dOptions::Create();
     options->setLayout(V8MLInputOperandLayout::Enum::kNhwc);
     options->setWindowDimensions({3, 3});
     Pool2dTester<float>{
-        .kind = Pool2dKind::kAverage,
+        .kind = webnn::mojom::blink::Pool2d::Kind::kAveragePool2d,
         .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                   .dimensions = {1, 4, 4, 1},
                   .values = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0,
@@ -1527,7 +1596,7 @@ TEST_P(MLGraphTest, Pool2dTest) {
     auto* options = MLPool2dOptions::Create();
     options->setLayout(V8MLInputOperandLayout::Enum::kNhwc);
     Pool2dTester<float>{
-        .kind = Pool2dKind::kAverage,
+        .kind = webnn::mojom::blink::Pool2d::Kind::kAveragePool2d,
         .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                   .dimensions = {1, 4, 4, 1},
                   .values = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0,
@@ -1541,12 +1610,35 @@ TEST_P(MLGraphTest, Pool2dTest) {
     options->setLayout(V8MLInputOperandLayout::Enum::kNhwc);
     options->setWindowDimensions({3, 3});
     Pool2dTester<float>{
-        .kind = Pool2dKind::kMax,
+        .kind = webnn::mojom::blink::Pool2d::Kind::kMaxPool2d,
         .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                   .dimensions = {1, 4, 4, 1},
                   .values = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0,
                              11.0, 12.0, 13.0, 14.0, 15.0, 16.0}},
         .expected = {11.0, 12.0, 15.0, 16.0}}
+        .Test(*this, scope, options);
+  }
+  {
+    // Test maxPool2d operator for explicit padding are not same as the
+    // calculated padding with kSameUpper, input size, window dimensions, stride
+    // and dilation that are used by CalculateConv2dPadding function.
+    auto* options = MLPool2dOptions::Create();
+    options->setLayout(V8MLInputOperandLayout::Enum::kNhwc);
+    // The paddings are {1, 1, 1, 1} with calculating by CalculateConv2dPadding
+    // function.
+    options->setPadding({2, 2, 1, 1});
+    options->setWindowDimensions({3, 3});
+    options->setStrides({2, 2});
+    Pool2dTester<float>{
+        .kind = webnn::mojom::blink::Pool2d::Kind::kMaxPool2d,
+        .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
+                  .dimensions = {1, 7, 5, 1},
+                  .values = {2.0, 3.0, 2.0, 6.0, 9.0, 2.0, 3.0, 2.0, 6.0,
+                             9.0, 2.0, 3.0, 2.0, 6.0, 9.0, 2.0, 3.0, 2.0,
+                             6.0, 9.0, 2.0, 3.0, 2.0, 6.0, 9.0, 2.0, 3.0,
+                             2.0, 6.0, 9.0, 2.0, 3.0, 2.0, 6.0, 9.0}},
+        .expected = {3.0, 6.0, 9.0, 3.0, 6.0, 9.0, 3.0, 6.0, 9.0, 3.0, 6.0, 9.0,
+                     3.0, 6.0, 9.0}}
         .Test(*this, scope, options);
   }
 }
@@ -1589,7 +1681,7 @@ struct ReshapeTester {
 };
 
 TEST_P(MLGraphTest, ReshapeTest) {
-  MLGraphV8TestingScope scope;
+  V8TestingScope scope;
   {
     // Test reshaping 1-D 1-element tensor to 0-D scalar.
     ReshapeTester<float>{
@@ -1628,6 +1720,71 @@ TEST_P(MLGraphTest, ReshapeTest) {
                   .values = {-10.0, -0.5, 0.5, 10.0}},
         .new_shape = {1, 4},
         .expected_output_shape = {1, 4}}
+        .Test(*this, scope);
+  }
+}
+
+template <typename T>
+struct SigmoidTester {
+  OperandInfo<T> input;
+  Vector<T> expected;
+
+  void Test(MLGraphTest& helper, V8TestingScope& scope) {
+    // Build the graph.
+    auto* builder =
+        CreateMLGraphBuilder(scope.GetExecutionContext(),
+                             scope.GetScriptState(), scope.GetExceptionState());
+    auto* input_operand =
+        BuildInput(builder, "input", input.dimensions, input.data_type,
+                   scope.GetExceptionState());
+    auto* output_operand =
+        builder->sigmoid(input_operand, scope.GetExceptionState());
+    auto [graph, build_exception] =
+        helper.BuildGraph(scope, builder, {{"output", output_operand}});
+    ASSERT_NE(graph, nullptr);
+
+    // Compute the graph.
+    MLNamedArrayBufferViews inputs(
+        {{"input",
+          CreateArrayBufferViewForOperand(input_operand, input.values)}});
+    MLNamedArrayBufferViews outputs(
+        {{"output", CreateArrayBufferViewForOperand(output_operand)}});
+    auto* compute_exception =
+        helper.ComputeGraph(scope, graph, inputs, outputs);
+    ASSERT_EQ(compute_exception, nullptr);
+    ASSERT_EQ(outputs.size(), 1u);
+    auto results = GetArrayBufferViewValues<T>(outputs[0].second);
+    ExpectFloatArrayEqual(results, expected);
+  }
+};
+
+TEST_P(MLGraphTest, SigmoidTest) {
+  V8TestingScope scope;
+  {
+    // Test sigmoid with a 0-D scalar input.
+    SigmoidTester<float>{
+        .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
+                  .dimensions = {},
+                  .values = {0}},
+        .expected = {0.5}}
+        .Test(*this, scope);
+  }
+  {
+    // Test sigmoid with a 1d input.
+    SigmoidTester<float>{
+        .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
+                  .dimensions = {3},
+                  .values = {0, 0, 0}},
+        .expected = {0.5, 0.5, 0.5}}
+        .Test(*this, scope);
+  }
+  {
+    // Test sigmoid with a 3d input.
+    SigmoidTester<float>{
+        .input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
+                  .dimensions = {2, 3, 1},
+                  .values = {0, 0, 0, 0, 0, 0}},
+        .expected = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5}}
         .Test(*this, scope);
   }
 }
@@ -1678,7 +1835,6 @@ struct SplitTester {
 };
 
 TEST_P(MLGraphTest, SplitTest) {
-  SKIP_TEST_ON_UNSUPPORTED_BACKEND(BackendType::kModelLoader);
   V8TestingScope scope;
   auto* builder =
       CreateMLGraphBuilder(scope.GetExecutionContext(), scope.GetScriptState(),
@@ -1765,7 +1921,6 @@ struct TransposeTester {
 };
 
 TEST_P(MLGraphTest, TransposeTest) {
-  SKIP_TEST_ON_UNSUPPORTED_BACKEND(BackendType::kModelLoader);
   V8TestingScope scope;
   auto* builder =
       CreateMLGraphBuilder(scope.GetExecutionContext(), scope.GetScriptState(),
@@ -1854,7 +2009,6 @@ struct ConcatTester {
 };
 
 TEST_P(MLGraphTest, ConcatTest) {
-  SKIP_TEST_ON_UNSUPPORTED_BACKEND(BackendType::kModelLoader);
   V8TestingScope scope;
   {
     // Test concat operator with one input and axis = 0.
@@ -1971,7 +2125,6 @@ struct PadTester {
 };
 
 TEST_P(MLGraphTest, PadTest) {
-  SKIP_TEST_ON_UNSUPPORTED_BACKEND(BackendType::kModelLoader);
   V8TestingScope scope;
   auto* builder =
       CreateMLGraphBuilder(scope.GetExecutionContext(), scope.GetScriptState(),
@@ -2001,6 +2154,34 @@ TEST_P(MLGraphTest, PadTest) {
         .ending_padding = {1, 2},
         .expected = {8., 8., 8., 8., 8., 8., 8., 8., 8., 1., 2., 3., 8., 8.,
                      8., 8., 4., 5., 6., 8., 8., 8., 8., 8., 8., 8., 8., 8.}}
+        .Test(*this, scope, builder, options);
+  }
+  // Reflection and Symmetric padding mode are not implemented on XNNPACK.
+  SKIP_TEST_ON_UNSUPPORTED_BACKEND(BackendType::kXnnpack);
+  {
+    // Test pad with mode = "reflection".
+    auto* options = MLPadOptions::Create();
+    options->setMode("reflection");
+    PadTester<float>{.input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
+                               .dimensions = {1, 1, 2, 3},
+                               .values = {0, 1, 2, 3, 4, 5}},
+                     .beginning_padding = {0, 0, 1, 2},
+                     .ending_padding = {0, 0, 1, 2},
+                     .expected = {5, 4, 3, 4, 5, 4, 3, 2, 1, 0, 1, 2, 1, 0,
+                                  5, 4, 3, 4, 5, 4, 3, 2, 1, 0, 1, 2, 1, 0}}
+        .Test(*this, scope, builder, options);
+  }
+  {
+    // Test pad with mode = "symmetric".
+    auto* options = MLPadOptions::Create();
+    options->setMode("symmetric");
+    PadTester<float>{.input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
+                               .dimensions = {1, 2, 3, 1},
+                               .values = {0, 1, 2, 3, 4, 5}},
+                     .beginning_padding = {0, 1, 2, 0},
+                     .ending_padding = {0, 1, 2, 0},
+                     .expected = {1, 0, 0, 1, 2, 2, 1, 1, 0, 0, 1, 2, 2, 1,
+                                  4, 3, 3, 4, 5, 5, 4, 4, 3, 3, 4, 5, 5, 4}}
         .Test(*this, scope, builder, options);
   }
 }
@@ -2038,7 +2219,6 @@ struct SliceTester {
 };
 
 TEST_P(MLGraphTest, SliceTest) {
-  SKIP_TEST_ON_UNSUPPORTED_BACKEND(BackendType::kModelLoader);
   V8TestingScope scope;
   auto* builder =
       CreateMLGraphBuilder(scope.GetExecutionContext(), scope.GetScriptState(),
@@ -2063,7 +2243,7 @@ TEST_P(MLGraphTest, SliceTest) {
 }
 
 TEST_P(MLGraphTest, BuildAndComputeGraphWithOnlyConstants) {
-  MLGraphV8TestingScope scope;
+  V8TestingScope scope;
   auto* builder =
       CreateMLGraphBuilder(scope.GetExecutionContext(), scope.GetScriptState(),
                            scope.GetExceptionState());
@@ -2153,7 +2333,7 @@ TEST_P(MLGraphTest, BuildAndComputeGraphWithOnlyConstants) {
 
 INSTANTIATE_TEST_SUITE_P(All,
                          MLGraphTest,
-                         testing::ValuesIn(kGraphTestVariety),
-                         TestVarietyToString);
+                         testing::ValuesIn(kGraphBackendType),
+                         TestParamInfoToString);
 
 }  // namespace blink

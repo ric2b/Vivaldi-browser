@@ -9,6 +9,7 @@ import type * as Puppeteer from '../../../third_party/puppeteer/puppeteer.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as SuggestionInput from '../../../ui/components/suggestion_input/suggestion_input.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import * as Controllers from '../controllers/controllers.js';
 import * as Models from '../models/models.js';
 import * as Util from '../util/util.js';
@@ -38,15 +39,15 @@ type Attribute = Keys<Models.Schema.Step>;
 type DataType<A extends Attribute> = ReturnType<typeof typeConverters[typeof dataTypeByAttribute[A]]>;
 
 const typeConverters = Object.freeze({
-  string: (value: string): string => value.trim(),
-  number: (value: string): number => {
+  string: (value: string) => value.trim(),
+  number: (value: string) => {
     const number = parseFloat(value);
     if (Number.isNaN(number)) {
       return 0;
     }
     return number;
   },
-  boolean: (value: string): boolean => {
+  boolean: (value: string) => {
     if (value.toLowerCase() === 'true') {
       return true;
     }
@@ -349,7 +350,7 @@ export class EditorState {
     for (const attribute of attributes.required) {
       promise = Promise.all([
         promise,
-        (async(): Promise<EditorState> => Object.assign(state, {
+        (async () => Object.assign(state, {
           [attribute]: await this.defaultByAttribute(state, attribute),
         }))(),
       ]);
@@ -496,6 +497,9 @@ class RecorderSelectorPickerButton extends LitElement {
       .iconName=${'select-element'}
       .active=${this.#picker.active}
       .variant=${Buttons.Button.Variant.SECONDARY}
+      jslog=${VisualLogging.toggle('selector-picker').track({
+      click: true,
+    })}
     ></devtools-button>`;
   }
 }
@@ -659,6 +663,9 @@ export class StepEditor extends LitElement {
         .size=${Buttons.Button.Size.SMALL}
         .iconName=${opts.iconName}
         .variant=${Buttons.Button.Variant.SECONDARY}
+        jslog=${VisualLogging.action(opts.class).track({
+      click: true,
+    })}
         class="inline-button ${opts.class}"
         @click=${opts.onClick}
       ></devtools-button>
@@ -684,7 +691,8 @@ export class StepEditor extends LitElement {
       .title=${i18nString(UIStrings.deleteRow)}
       class="inline-button delete-row"
       data-attribute=${attribute}
-      @click=${(event: MouseEvent): void => {
+      jslog=${VisualLogging.action('delete').track({click: true})}
+      @click=${(event: MouseEvent) => {
         event.preventDefault();
         event.stopPropagation();
 
@@ -699,7 +707,7 @@ export class StepEditor extends LitElement {
   #renderTypeRow(editable: boolean): LitHtml.TemplateResult {
     this.#renderedAttributes.add('type');
     // clang-format off
-    return html`<div class="row attribute" data-attribute="type">
+    return html`<div class="row attribute" data-attribute="type" jslog=${VisualLogging.treeItem('type')}>
       <div>type<span class="separator">:</span></div>
       <devtools-suggestion-input
         .disabled=${!editable || this.disabled}
@@ -719,13 +727,13 @@ export class StepEditor extends LitElement {
       return;
     }
     // clang-format off
-    return html`<div class="row attribute" data-attribute=${attribute}>
+    return html`<div class="row attribute" data-attribute=${attribute} jslog=${VisualLogging.treeItem(Platform.StringUtilities.toKebabCase(attribute))}>
       <div>${attribute}<span class="separator">:</span></div>
       <devtools-suggestion-input
         .disabled=${this.disabled}
         .placeholder=${defaultValuesByAttribute[attribute].toString()}
         .value=${live(attributeValue)}
-        .mimeType=${((): string => {
+        .mimeType=${(() => {
           switch (attribute) {
             case 'expression':
               return 'text/javascript';
@@ -763,7 +771,7 @@ export class StepEditor extends LitElement {
     }
     // clang-format off
     return html`
-      <div class="attribute" data-attribute="frame">
+      <div class="attribute" data-attribute="frame" jslog=${VisualLogging.treeItem('frame')}>
         <div class="row">
           <div>frame<span class="separator">:</span></div>
           ${this.#renderDeleteButton('frame')}
@@ -834,7 +842,7 @@ export class StepEditor extends LitElement {
       return;
     }
     // clang-format off
-    return html`<div class="attribute" data-attribute="selectors">
+    return html`<div class="attribute" data-attribute="selectors" jslog=${VisualLogging.treeItem('selectors')}>
       <div class="row">
         <div>selectors<span class="separator">:</span></div>
         <devtools-recorder-selector-picker-button
@@ -957,17 +965,17 @@ export class StepEditor extends LitElement {
       return;
     }
     // clang-format off
-    return html`<div class="attribute" data-attribute="assertedEvents">
+    return html`<div class="attribute" data-attribute="assertedEvents" jslog=${VisualLogging.treeItem('asserted-events')}>
       <div class="row">
         <div>asserted events<span class="separator">:</span></div>
         ${this.#renderDeleteButton('assertedEvents')}
       </div>
       ${this.state.assertedEvents.map((event, index) => {
-        return html` <div class="padded row">
+        return html` <div class="padded row" jslog=${VisualLogging.treeItem('event-type')}>
             <div>type<span class="separator">:</span></div>
             <div>${event.type}</div>
           </div>
-          <div class="padded row">
+          <div class="padded row" jslog=${VisualLogging.treeItem('event-title')}>
             <div>title<span class="separator">:</span></div>
             <devtools-suggestion-input
               .disabled=${this.disabled}
@@ -989,7 +997,7 @@ export class StepEditor extends LitElement {
               })}
             ></devtools-suggestion-input>
           </div>
-          <div class="padded row">
+          <div class="padded row" jslog=${VisualLogging.treeItem('event-url')}>
             <div>url<span class="separator">:</span></div>
             <devtools-suggestion-input
               .disabled=${this.disabled}
@@ -1022,18 +1030,19 @@ export class StepEditor extends LitElement {
       return;
     }
     // clang-format off
-    return html`<div class="attribute" data-attribute="attributes">
+    return html`<div class="attribute" data-attribute="attributes" jslog=${VisualLogging.treeItem('attributes')}>
       <div class="row">
         <div>attributes<span class="separator">:</span></div>
         ${this.#renderDeleteButton('attributes')}
       </div>
       ${this.state.attributes.map(({ name, value }, index, attributes) => {
-        return html`<div class="padded row">
+        return html`<div class="padded row" jslog=${VisualLogging.treeItem('attribute')}>
           <devtools-suggestion-input
             .disabled=${this.disabled}
             .placeholder=${defaultValuesByAttribute.attributes[0].name}
             .value=${live(name)}
             data-path=${`attributes.${index}.name`}
+            jslog=${VisualLogging.key().track({change: true})}
             @blur=${this.#handleInputBlur({
               attribute: 'attributes',
               from(name) {
@@ -1080,7 +1089,7 @@ export class StepEditor extends LitElement {
               {
                 attributes: new ArrayAssignments({
                   [index + 1]: new InsertAssignment(
-                    ((): { name: string, value: string } => {
+                    (() => {
                       {
                         const names = new Set(
                           attributes.map(({ name }) => name),
@@ -1132,6 +1141,7 @@ export class StepEditor extends LitElement {
           .variant=${Buttons.Button.Variant.SECONDARY}
           class="add-row"
           data-attribute=${attr}
+          jslog=${VisualLogging.action(`add-${Platform.StringUtilities.toKebabCase(attr)}`)}
           @click=${this.#handleAddRowClickEvent}
         >
           ${i18nString(UIStrings.addAttribute, {
@@ -1154,7 +1164,7 @@ export class StepEditor extends LitElement {
 
     // clang-format off
     const result = html`
-      <div class="wrapper">
+      <div class="wrapper" jslog=${VisualLogging.tree('step-editor')}>
         ${this.#renderTypeRow(this.isTypeEditable)} ${this.#renderRow('target')}
         ${this.#renderFrameRow()} ${this.#renderSelectorsRow()}
         ${this.#renderRow('deviceType')} ${this.#renderRow('button')}
@@ -1192,14 +1202,11 @@ export class StepEditor extends LitElement {
     `;
 
     // clang-format on
-    Platform.DCHECK(() => {
-      for (const key of Object.keys(dataTypeByAttribute)) {
-        if (!this.#renderedAttributes.has(key as Attribute)) {
-          return false;
-        }
+    for (const key of Object.keys(dataTypeByAttribute)) {
+      if (!this.#renderedAttributes.has(key as Attribute)) {
+        throw new Error(`The editable attribute ${key} does not have UI`);
       }
-      return true;
-    }, 'One of the editable attributes does not have UI');
+    }
 
     return result;
   }

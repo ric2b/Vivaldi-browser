@@ -47,29 +47,34 @@ TEST(CIncludeIterator, Basic) {
   IncludeStringWithLocation include;
   EXPECT_TRUE(iter.GetNextIncludeString(&include));
   EXPECT_EQ("foo/bar.h", include.contents);
-  EXPECT_TRUE(RangeIs(include.location, 3, 11, 20)) << include.location.begin().Describe(true);
+  EXPECT_TRUE(RangeIs(include.location, 3, 11, 20))
+      << include.location.begin().Describe(true);
   EXPECT_FALSE(include.system_style_include);
 
   EXPECT_TRUE(iter.GetNextIncludeString(&include));
   EXPECT_EQ("stdio.h", include.contents);
-  EXPECT_TRUE(RangeIs(include.location, 5, 11, 18)) << include.location.begin().Describe(true);
+  EXPECT_TRUE(RangeIs(include.location, 5, 11, 18))
+      << include.location.begin().Describe(true);
   EXPECT_TRUE(include.system_style_include);
 
   EXPECT_TRUE(iter.GetNextIncludeString(&include));
   EXPECT_EQ("foo/baz.h", include.contents);
-  EXPECT_TRUE(RangeIs(include.location, 7, 12, 21)) << include.location.begin().Describe(true);
+  EXPECT_TRUE(RangeIs(include.location, 7, 12, 21))
+      << include.location.begin().Describe(true);
   EXPECT_FALSE(include.system_style_include);
 
   EXPECT_TRUE(iter.GetNextIncludeString(&include));
   EXPECT_EQ("la/deda.h", include.contents);
-  EXPECT_TRUE(RangeIs(include.location, 8, 11, 20)) << include.location.begin().Describe(true);
+  EXPECT_TRUE(RangeIs(include.location, 8, 11, 20))
+      << include.location.begin().Describe(true);
   EXPECT_FALSE(include.system_style_include);
 
   // The line annotated with "nogncheck" should be skipped.
 
   EXPECT_TRUE(iter.GetNextIncludeString(&include));
   EXPECT_EQ("weird_mac_import.h", include.contents);
-  EXPECT_TRUE(RangeIs(include.location, 10, 10, 28)) << include.location.begin().Describe(true);
+  EXPECT_TRUE(RangeIs(include.location, 10, 10, 28))
+      << include.location.begin().Describe(true);
   EXPECT_FALSE(include.system_style_include);
 
   EXPECT_FALSE(iter.GetNextIncludeString(&include));

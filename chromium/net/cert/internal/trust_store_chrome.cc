@@ -3,13 +3,15 @@
 // found in the LICENSE file.
 
 #include "net/cert/internal/trust_store_chrome.h"
+
+#include <optional>
+
 #include "base/containers/span.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "net/cert/root_store_proto_lite/root_store.pb.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/boringssl/src/include/openssl/pool.h"
 #include "third_party/boringssl/src/pki/cert_errors.h"
 #include "third_party/boringssl/src/pki/parsed_certificate.h"
@@ -20,8 +22,21 @@ namespace {
 #include "net/data/ssl/chrome_root_store/chrome-root-store-inc.cc"
 }  // namespace
 
-ChromeRootStoreData::ChromeRootStoreData() = default;
+ChromeRootStoreData::Anchor::Anchor(
+    std::shared_ptr<const bssl::ParsedCertificate> certificate,
+    std::vector<ChromeRootCertConstraints> constraints)
+    : certificate(std::move(certificate)),
+      constraints(std::move(constraints)) {}
+ChromeRootStoreData::Anchor::~Anchor() = default;
 
+ChromeRootStoreData::Anchor::Anchor(const Anchor& other) = default;
+ChromeRootStoreData::Anchor::Anchor(Anchor&& other) = default;
+ChromeRootStoreData::Anchor& ChromeRootStoreData::Anchor::operator=(
+    const ChromeRootStoreData::Anchor& other) = default;
+ChromeRootStoreData::Anchor& ChromeRootStoreData::Anchor::operator=(
+    ChromeRootStoreData::Anchor&& other) = default;
+
+ChromeRootStoreData::ChromeRootStoreData() = default;
 ChromeRootStoreData::~ChromeRootStoreData() = default;
 
 ChromeRootStoreData::ChromeRootStoreData(const ChromeRootStoreData& other) =
@@ -32,7 +47,7 @@ ChromeRootStoreData& ChromeRootStoreData::operator=(
 ChromeRootStoreData& ChromeRootStoreData::operator=(
     ChromeRootStoreData&& other) = default;
 
-absl::optional<ChromeRootStoreData>
+std::optional<ChromeRootStoreData>
 ChromeRootStoreData::CreateChromeRootStoreData(
     const chrome_root_store::RootStore& proto) {
   ChromeRootStoreData root_store_data;
@@ -40,7 +55,7 @@ ChromeRootStoreData::CreateChromeRootStoreData(
   for (auto& anchor : proto.trust_anchors()) {
     if (anchor.der().empty()) {
       LOG(ERROR) << "Error anchor with empty DER in update";
-      return absl::nullopt;
+      return std::nullopt;
     }
 
     auto parsed = bssl::ParsedCertificate::Create(
@@ -48,9 +63,27 @@ ChromeRootStoreData::CreateChromeRootStoreData(
         net::x509_util::DefaultParseCertificateOptions(), nullptr);
     if (!parsed) {
       LOG(ERROR) << "Error parsing cert for update";
-      return absl::nullopt;
+      return std::nullopt;
     }
-    root_store_data.anchors_.push_back(std::move(parsed));
+
+    std::vector<ChromeRootCertConstraints> constraints;
+    for (const auto& constraint : anchor.constraints()) {
+      constraints.push_back(
+          {.sct_not_after =
+               constraint.has_sct_not_after_sec()
+                   ? std::optional(
+                         base::Time::UnixEpoch() +
+                         base::Seconds(constraint.sct_not_after_sec()))
+                   : std::nullopt,
+           .sct_all_after =
+               constraint.has_sct_all_after_sec()
+                   ? std::optional(
+                         base::Time::UnixEpoch() +
+                         base::Seconds(constraint.sct_all_after_sec()))
+                   : std::nullopt});
+    }
+    root_store_data.anchors_.emplace_back(std::move(parsed),
+                                          std::move(constraints));
   }
 
   root_store_data.version_ = proto.version_major();
@@ -66,6 +99,10 @@ TrustStoreChrome::TrustStoreChrome()
 TrustStoreChrome::TrustStoreChrome(base::span<const ChromeRootCertInfo> certs,
                                    bool certs_are_static,
                                    int64_t version) {
+  std::vector<
+      std::pair<std::string_view, std::vector<ChromeRootCertConstraints>>>
+      constraints;
+
   // TODO(hchao, sleevi): Explore keeping a CRYPTO_BUFFER of just the DER
   // certificate and subject name. This would hopefully save memory compared
   // to keeping the full parsed representation in memory, especially when
@@ -90,15 +127,32 @@ TrustStoreChrome::TrustStoreChrome(base::span<const ChromeRootCertInfo> certs,
     // There should always be a valid cert, because we should be parsing Chrome
     // Root Store static data compiled in.
     CHECK(parsed);
+    if (!cert_info.constraints.empty()) {
+      constraints.emplace_back(parsed->der_cert().AsStringView(),
+                               std::vector(cert_info.constraints.begin(),
+                                           cert_info.constraints.end()));
+    }
     trust_store_.AddTrustAnchor(std::move(parsed));
   }
+
+  constraints_ = base::flat_map(std::move(constraints));
   version_ = version;
 }
 
 TrustStoreChrome::TrustStoreChrome(const ChromeRootStoreData& root_store_data) {
+  std::vector<
+      std::pair<std::string_view, std::vector<ChromeRootCertConstraints>>>
+      constraints;
+
   for (const auto& anchor : root_store_data.anchors()) {
-    trust_store_.AddTrustAnchor(anchor);
+    if (!anchor.constraints.empty()) {
+      constraints.emplace_back(anchor.certificate->der_cert().AsStringView(),
+                               anchor.constraints);
+    }
+    trust_store_.AddTrustAnchor(anchor.certificate);
   }
+
+  constraints_ = base::flat_map(std::move(constraints));
   version_ = root_store_data.version();
 }
 
@@ -116,6 +170,16 @@ bssl::CertificateTrust TrustStoreChrome::GetTrust(
 
 bool TrustStoreChrome::Contains(const bssl::ParsedCertificate* cert) const {
   return trust_store_.Contains(cert);
+}
+
+base::span<const ChromeRootCertConstraints>
+TrustStoreChrome::GetConstraintsForCert(
+    const bssl::ParsedCertificate* cert) const {
+  auto it = constraints_.find(cert->der_cert().AsStringView());
+  if (it != constraints_.end()) {
+    return it->second;
+  }
+  return {};
 }
 
 // static

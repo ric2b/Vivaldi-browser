@@ -39,13 +39,13 @@ namespace {
 void GenerateMSL(benchmark::State& state, std::string input_name) {
     auto res = bench::LoadProgram(input_name);
     if (res != Success) {
-        state.SkipWithError(res.Failure().reason.str());
+        state.SkipWithError(res.Failure().reason.Str());
         return;
     }
     auto& program = res->program;
 
     tint::msl::writer::Options gen_options = {};
-    gen_options.array_length_from_uniform.ubo_binding = tint::BindingPoint{0, 30};
+    gen_options.array_length_from_uniform.ubo_binding = 30;
     gen_options.array_length_from_uniform.bindpoint_to_size_index.emplace(tint::BindingPoint{0, 0},
                                                                           0);
     gen_options.array_length_from_uniform.bindpoint_to_size_index.emplace(tint::BindingPoint{0, 1},
@@ -67,7 +67,7 @@ void GenerateMSL(benchmark::State& state, std::string input_name) {
     for (auto _ : state) {
         auto gen_res = Generate(program, gen_options);
         if (gen_res != Success) {
-            state.SkipWithError(gen_res.Failure().reason.str());
+            state.SkipWithError(gen_res.Failure().reason.Str());
         }
     }
 }

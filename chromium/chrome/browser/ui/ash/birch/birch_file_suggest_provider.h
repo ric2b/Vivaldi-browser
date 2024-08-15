@@ -5,34 +5,38 @@
 #ifndef CHROME_BROWSER_UI_ASH_BIRCH_BIRCH_FILE_SUGGEST_PROVIDER_H_
 #define CHROME_BROWSER_UI_ASH_BIRCH_BIRCH_FILE_SUGGEST_PROVIDER_H_
 
+#include <optional>
+
 #include "ash/ash_export.h"
+#include "ash/birch/birch_data_provider.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ash/file_suggest/file_suggest_keyed_service.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class Profile;
 
 namespace ash {
 
-struct BirchFileItem;
-
 // Manages observing file suggestion changes for the birch feature. Fetched
 // file suggest items are send to the `BirchModel` to be stored.
 class ASH_EXPORT BirchFileSuggestProvider
-    : public FileSuggestKeyedService::Observer {
+    : public BirchDataProvider,
+      public FileSuggestKeyedService::Observer {
  public:
   explicit BirchFileSuggestProvider(Profile* profile);
   BirchFileSuggestProvider(const BirchFileSuggestProvider&) = delete;
   BirchFileSuggestProvider& operator=(const BirchFileSuggestProvider&) = delete;
   ~BirchFileSuggestProvider() override;
 
+  // BirchDataProvider:
+  void RequestBirchDataFetch() override;
+
   // FileSuggestKeyedService::Observer:
   void OnFileSuggestionUpdated(FileSuggestionType type) override;
 
   void OnSuggestedFileDataUpdated(
-      const absl::optional<std::vector<FileSuggestData>>& suggest_results);
+      const std::optional<std::vector<FileSuggestData>>& suggest_results);
 
   void set_file_suggest_service_for_test(
       FileSuggestKeyedService* suggest_service) {
@@ -40,8 +44,6 @@ class ASH_EXPORT BirchFileSuggestProvider
   }
 
  private:
-  void OnFileInfoRetrieved(std::vector<BirchFileItem> file_items);
-
   raw_ptr<FileSuggestKeyedService> file_suggest_service_;
 
   base::ScopedObservation<FileSuggestKeyedService,

@@ -14,6 +14,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/test/run_until.h"
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -22,6 +23,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_browsertest_util.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/test_launcher_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -1324,12 +1326,8 @@ IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, MAYBE_FocusAndVisibility) {
 
 // Flaky timeouts on Linux. https://crbug.com/709202
 // Flaky timeouts on Win. https://crbug.com/846695
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
-#define MAYBE_KeyboardFocusSimple DISABLED_KeyboardFocusSimple
-#else
-#define MAYBE_KeyboardFocusSimple KeyboardFocusSimple
-#endif
-IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, MAYBE_KeyboardFocusSimple) {
+// Flaky timeouts on Mac. https://crbug.com/1520415
+IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, DISABLED_KeyboardFocusSimple) {
   TestHelper("testKeyboardFocusSimple", "web_view/focus", NO_TEST_SERVER);
 
   EXPECT_EQ(embedder_web_contents()->GetFocusedFrame(),
@@ -1581,14 +1579,11 @@ IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest,
   // Verify that the view is offset inside root view as expected.
   content::RenderWidgetHostView* guest_rwhv =
       GetGuestRenderFrameHost()->GetView();
-  while (guest_rwhv->TransformPointToRootCoordSpace(gfx::Point())
-             .OffsetFromOrigin()
-             .Length() < distance_from_root_view_origin) {
-    base::RunLoop run_loop;
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
-    run_loop.Run();
-  }
+  EXPECT_TRUE(base::test::RunUntil([&]() {
+    return guest_rwhv->TransformPointToRootCoordSpace(gfx::Point())
+               .OffsetFromOrigin()
+               .Length() >= distance_from_root_view_origin;
+  }));
 
   // Now trigger the popup and wait until it is displayed. The popup will get
   // dismissed after being shown.
@@ -1639,6 +1634,7 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest,
 
   // Wait for guest's document to consider itself focused. This avoids
   // flakiness on some platforms.
+  // TODO(crbug.com/1519130): `base::test::RunUntil` times out on mac.
   while (!content::EvalJs(guest_rfh, "document.hasFocus()").ExtractBool()) {
     base::RunLoop run_loop;
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(

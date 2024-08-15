@@ -1,0 +1,24 @@
+# Copyright 2024 The ChromiumOS Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Installs `dbus-constants.h` file for the package listed in `target_packages`
+# in the respective daemons' client library include directory. Users will need
+# to include the corresponding client library to access these files.
+template("install_dbus_client_headers") {
+  forward_variables_from(invoker, [ "target_packages" ])
+
+  foreach(target_package, target_packages) {
+    install_config("install_header_" + target_package) {
+      sources = [ "dbus/${target_package}/dbus-constants.h" ]
+      install_path = "/usr/include/${target_package}-client/${target_package}"
+    }
+  }
+
+  group(target_name) {
+    deps = []
+    foreach(target_package, target_packages) {
+      deps += [ ":install_header_$target_package" ]
+    }
+  }
+}

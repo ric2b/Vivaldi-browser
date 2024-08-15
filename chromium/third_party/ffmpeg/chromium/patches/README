@@ -806,3 +806,38 @@ Date:   Wed Oct 4 10:36:29 2023 -0700
 Affects:
     libavformat/matroskadec.c
 
+------------------------------------------------------------------
+commit 1958aa856574b93b4565695e4dece9e3f6e3aa1c
+Author: Dan Sanders <sandersd@chromium.org>
+Date:   Fri Jan 12 19:08:20 2024 +0000
+
+    Use saturated timestamp subtraction in mov_get_skip_samples()
+
+    Bug: 1512551
+    Change-Id: I1caa7166b51376ac0b643d25d5e842c0a688f38b
+    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5193387
+    Reviewed-by: Dale Curtis <dalecurtis@chromium.org>
+
+Affects:
+    libavformat/mov.c
+
+------------------------------------------------------------------
+commit a6fd62c6a9a1c26be133de0dfdc0a34a61260f36
+Author: Eugene Zemtsov <eugene@chromium.org>
+Date:   Tue Feb 27 13:48:38 2024 -0800
+
+    Make Immersive Audio Model optional for MOV demuxing
+
+Affects:
+    libavformat/mov.c
+
+------------------------------------------------------------------
+commit 84c486596980cfe307c863b9595ea699fb032e46
+Author: Eugene Zemtsov <eugene@chromium.org>
+Date:   Tue Feb 27 15:25:30 2024 -0800
+
+    Disable Immersive Audio Model be default in MOV demuxing
+
+Affects:
+    configure
+

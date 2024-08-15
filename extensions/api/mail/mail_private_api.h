@@ -368,6 +368,20 @@ class MailPrivateStartMigrationFunction : public MailPrivateAsyncFunction {
   base::CancelableTaskTracker task_tracker_;
 };
 
+class MailPrivateDeleteMailSearchDBFunction : public MailPrivateAsyncFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.deleteMailSearchDB",
+                             MAIL_DELETE_MAIL_SEARCH_DB)
+ public:
+  MailPrivateDeleteMailSearchDBFunction() = default;
+
+ private:
+  ~MailPrivateDeleteMailSearchDBFunction() override = default;
+  void OnDeleteFinished(bool success);
+  // ExtensionFunction:
+  ResponseAction Run() override;
+  base::CancelableTaskTracker task_tracker_;
+};
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_MAIL_MAIL_PRIVATE_API_H_

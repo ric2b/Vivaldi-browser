@@ -13,8 +13,8 @@
 
 #include "core/fxcrt/fx_coordinates.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxge/dib/fx_dib.h"
-#include "third_party/base/containers/span.h"
 
 class CFX_DIBBase;
 class CFX_DIBitmap;
@@ -68,11 +68,9 @@ class RenderDeviceDriverIface {
                                 BlendMode blend_type);
 
   virtual bool GetClipBox(FX_RECT* pRect) = 0;
-  virtual bool GetDIBits(const RetainPtr<CFX_DIBitmap>& pBitmap,
-                         int left,
-                         int top);
+  virtual bool GetDIBits(RetainPtr<CFX_DIBitmap> bitmap, int left, int top);
   virtual RetainPtr<CFX_DIBitmap> GetBackDrop();
-  virtual bool SetDIBits(const RetainPtr<const CFX_DIBBase>& pBitmap,
+  virtual bool SetDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                          uint32_t color,
                          const FX_RECT& src_rect,
                          int dest_left,
@@ -124,10 +122,23 @@ class RenderDeviceDriverIface {
 #endif
 
   // Multiplies the device by a constant alpha, returning `true` on success.
+  // Implementations CHECK the following conditions:
+  // - `this` is bitmap-based and `this` is not of a mask format.
+  //
+  // The backing bitmap for `this` will be converted to format
+  // `FXDIB_Format::kArgb` on success when `alpha` is not 1.
   virtual bool MultiplyAlpha(float alpha) = 0;
 
   // Multiplies the device by an alpha mask, returning `true` on success.
-  virtual bool MultiplyAlphaMask(const RetainPtr<const CFX_DIBBase>& mask) = 0;
+  // Implementations CHECK the following conditions:
+  // - `this` is bitmap-based and of format `FXDIB_Format::kArgb` or
+  //   `FXDIB_Format::kRgb32`.
+  // - `mask` must be of format `FXDIB_Format::k8bppMask`.
+  // - `mask` must have the same dimensions as `this`.
+  //
+  // The backing bitmap for `this` will be converted to format
+  // `FXDIB_Format::kArgb` on success.
+  virtual bool MultiplyAlphaMask(RetainPtr<const CFX_DIBitmap> mask) = 0;
 };
 
 #endif  // CORE_FXGE_RENDERDEVICEDRIVER_IFACE_H_

@@ -44,6 +44,9 @@ const char kAuthStackManagerCreateCredentialMethod[] = "CreateCredential";
 const char kAuthStackManagerAuthenticateCredentialMethod[] =
     "AuthenticateCredential";
 const char kAuthStackManagerDeleteCredentialMethod[] = "DeleteCredential";
+const char kAuthStackManagerEnrollLegacyTemplateMethod[] =
+    "EnrollLegacyTemplate";
+const char kAuthStackManagerListLegacyRecordsMethod[] = "ListLegacyRecords";
 
 // Signals
 const char kBiometricsManagerEnrollScanDoneSignal[] = "EnrollScanDone";

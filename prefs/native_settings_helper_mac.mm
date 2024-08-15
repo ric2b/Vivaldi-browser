@@ -23,13 +23,6 @@ namespace {
 
 } // namespace
 
-int getAquaColor() {
-  NSNumber* appleAquaColorVariant =
-    [[NSUserDefaults standardUserDefaults]
-      objectForKey:@"AppleAquaColorVariant"];
-  return [appleAquaColorVariant intValue];
-}
-
 std::string getActionOnDoubleClick() {
   NSString* appleActionOnDoubleClick =
     [[NSUserDefaults standardUserDefaults]
@@ -97,18 +90,6 @@ std::string getSystemHighlightColor() {
     }
   }
   return hightlightColorString;
-}
-
-bool getMenubarVisibleInFullscreen() {
-  bool value = [[[NSUserDefaults standardUserDefaults]
-      objectForKey:@"AppleMenuBarVisibleInFullscreen"] boolValue];
-  return value;
-}
-
-bool getHideMenubar() {
-  bool value = [[[NSUserDefaults standardUserDefaults]
-      objectForKey:@"_HIHideMenuBar"] boolValue];
-  return value;
 }
 
 }  // namespace vivaldi

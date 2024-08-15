@@ -8,19 +8,19 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "base/location.h"
 #include "base/time/time.h"
 #include "components/viz/common/viz_common_export.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace perfetto {
 class EventContext;
 namespace protos {
 namespace pbzero {
-class BeginFrameArgs;
+class BeginFrameArgsV2;
 }
 }  // namespace protos
 }  // namespace perfetto
@@ -192,7 +192,7 @@ struct VIZ_COMMON_EXPORT BeginFrameArgs {
   std::unique_ptr<base::trace_event::ConvertableToTraceFormat> AsValue() const;
   void AsValueInto(base::trace_event::TracedValue* dict) const;
   void AsProtozeroInto(perfetto::EventContext& ctx,
-                       perfetto::protos::pbzero::BeginFrameArgs* args) const;
+                       perfetto::protos::pbzero::BeginFrameArgsV2* args) const;
 
   std::string ToString() const;
 
@@ -241,7 +241,7 @@ struct VIZ_COMMON_EXPORT BeginFrameArgs {
   // Note `deadline` is not yet updated to one of these deadline since some
   // code still assumes `deadline` is a multiple of `interval` from
   // `frame_time`.
-  absl::optional<PossibleDeadlines> possible_deadlines;
+  std::optional<PossibleDeadlines> possible_deadlines;
 
  private:
   BeginFrameArgs(uint64_t source_id,

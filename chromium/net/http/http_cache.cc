@@ -4,6 +4,7 @@
 
 #include "net/http/http_cache.h"
 
+#include <optional>
 #include <utility>
 
 #include "base/compiler_specific.h"
@@ -49,7 +50,6 @@
 #include "net/http/http_util.h"
 #include "net/log/net_log_with_source.h"
 #include "net/quic/quic_server_info.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_POSIX)
 #include <unistd.h>
@@ -604,7 +604,7 @@ std::string HttpCache::GetResourceURLFromHttpCacheKey(const std::string& key) {
 
 // static
 // Generate a key that can be used inside the cache.
-absl::optional<std::string> HttpCache::GenerateCacheKey(
+std::optional<std::string> HttpCache::GenerateCacheKey(
     const GURL& url,
     int load_flags,
     const NetworkIsolationKey& network_isolation_key,
@@ -626,7 +626,7 @@ absl::optional<std::string> HttpCache::GenerateCacheKey(
     // confused with a single-keyed entry). Separate the origin and url
     // with invalid whitespace character |kDoubleKeySeparator|.
     if (network_isolation_key.IsTransient()) {
-      return absl::nullopt;
+      return std::nullopt;
     }
     std::string subframe_document_resource_prefix =
         is_subframe_document_resource ? kSubframeDocumentResourcePrefix : "";
@@ -647,7 +647,7 @@ absl::optional<std::string> HttpCache::GenerateCacheKey(
 }
 
 // static
-absl::optional<std::string> HttpCache::GenerateCacheKeyForRequest(
+std::optional<std::string> HttpCache::GenerateCacheKeyForRequest(
     const HttpRequestInfo* request) {
   CHECK(request);
   const int64_t upload_data_identifier =
@@ -1117,7 +1117,7 @@ void HttpCache::WritersDoneWritingToEntry(scoped_refptr<ActiveEntry> entry,
 
   if (success) {
     // Add any idle writers to readers.
-    for (auto* reader : make_readers) {
+    for (Transaction* reader : make_readers) {
       reader->WriteModeTransactionAboutToBecomeReader();
       entry->readers().insert(reader);
     }
@@ -1144,7 +1144,7 @@ void HttpCache::DoomEntryValidationNoMatch(scoped_refptr<ActiveEntry> entry) {
   // and the add_to_entry_queue transactions. Reset the queued transaction's
   // cache pending state so that in case it's destructor is invoked, it's ok
   // for the transaction to not be found in this entry.
-  for (auto* transaction : entry->add_to_entry_queue()) {
+  for (net::HttpCache::Transaction* transaction : entry->add_to_entry_queue()) {
     transaction->ResetCachePendingState();
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
@@ -1166,7 +1166,7 @@ void HttpCache::ProcessEntryFailure(ActiveEntry* entry) {
   DoomActiveEntry(entry->GetEntry()->GetKey());
 
   // ERR_CACHE_RACE causes the transaction to restart the whole process.
-  for (auto* queued_transaction : list) {
+  for (Transaction* queued_transaction : list) {
     queued_transaction->cache_io_callback().Run(net::ERR_CACHE_RACE);
   }
 }

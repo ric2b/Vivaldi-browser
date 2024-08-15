@@ -4,6 +4,7 @@
 
 #include "components/password_manager/core/browser/votes_uploader.h"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <utility>
@@ -25,6 +26,7 @@
 #include "components/autofill/core/common/signatures.h"
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/password_manager/core/browser/features/password_features.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_store/mock_password_store_interface.h"
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
 #include "components/password_manager/core/browser/vote_uploads_test_matchers.h"
@@ -131,7 +133,7 @@ class VotesUploaderTest : public testing::Test {
     for (int i = 0; i < kNumberOfFields; ++i) {
       FormFieldData field;
       field.name = GetFieldNameByIndex(i);
-      field.unique_renderer_id = FieldRendererId(i);
+      field.renderer_id = FieldRendererId(i);
       form_to_upload_.form_data.fields.push_back(field);
       submitted_form_.form_data.fields.push_back(field);
     }
@@ -270,11 +272,15 @@ TEST_F(VotesUploaderTest, SendVotesOnSaveOverwrittenFlow) {
     field.name = GetFieldNameByIndex(i);
     match_form.form_data.fields.push_back(field);
   }
-  std::vector<raw_ptr<const PasswordForm, VectorExperimental>> matches = {
-      &match_form};
+
+  std::vector<PasswordForm> matches = {match_form};
+  std::vector<raw_ptr<const PasswordForm, VectorExperimental>> matches_ptr(
+      matches.size());
+  base::ranges::transform(matches, matches_ptr.begin(),
+                          [](const PasswordForm& form) { return &form; });
 
   EXPECT_TRUE(votes_uploader.FindCorrectedUsernameElement(
-      matches, u"correct_username", u"password_value"));
+      matches_ptr, u"correct_username", u"password_value"));
 
   // SendVotesOnSave should call UploadPasswordVote and StartUploadRequest
   // twice. The first call is not the one that should be tested.
@@ -323,7 +329,7 @@ TEST_F(VotesUploaderTest, SendVoteOnCredentialsReuseFlow) {
 
   FormFieldData field;
   field.name = GetFieldNameByIndex(6);
-  field.unique_renderer_id = FieldRendererId(6);
+  field.renderer_id = FieldRendererId(6);
 
   PasswordForm pending;
   pending.times_used_in_html_form = 1;
@@ -410,11 +416,11 @@ TEST_F(VotesUploaderTest, InitialValueDetection) {
 
   FormFieldData username_field;
   username_field.value = prefilled_username;
-  username_field.unique_renderer_id = username_field_renderer_id;
+  username_field.renderer_id = username_field_renderer_id;
 
   FormFieldData other_field;
   other_field.value = u"some_field";
-  other_field.unique_renderer_id = FieldRendererId(3234);
+  other_field.renderer_id = FieldRendererId(3234);
 
   form_data.fields = {other_field, username_field};
 
@@ -434,7 +440,7 @@ TEST_F(VotesUploaderTest, InitialValueDetection) {
 
   int found_fields = 0;
   for (auto& f : form_structure) {
-    if (f->unique_renderer_id == username_field_renderer_id) {
+    if (f->renderer_id == username_field_renderer_id) {
       found_fields++;
       ASSERT_TRUE(f->initial_value_hash());
       EXPECT_EQ(f->initial_value_hash().value(), expected_hash);

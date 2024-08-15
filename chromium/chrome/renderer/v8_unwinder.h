@@ -89,7 +89,7 @@ class V8Unwinder : public base::Unwinder {
                     const base::ModuleCache::Module* b) const;
   };
 
-  const raw_ptr<v8::Isolate, ExperimentalRenderer> isolate_;
+  const raw_ptr<v8::Isolate> isolate_;
   const v8::JSEntryStubs js_entry_stubs_;
   const v8::MemoryRange embedded_code_range_;
 
@@ -102,7 +102,9 @@ class V8Unwinder : public base::Unwinder {
 
   // Records the currently active V8 modules, ordered by their extents in
   // memory.
-  std::set<const base::ModuleCache::Module*, ModuleCompare> modules_;
+  std::set<raw_ptr<const base::ModuleCache::Module, SetExperimental>,
+           ModuleCompare>
+      modules_;
 };
 
 #endif  // CHROME_RENDERER_V8_UNWINDER_H_

@@ -16,7 +16,6 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/view_shadow.h"
 #include "base/memory/raw_ptr.h"
-#include "chrome/browser/ash/login/ui/captive_portal_dialog_delegate.h"
 #include "chrome/browser/ash/login/ui/login_display_host_mojo.h"
 #include "chrome/browser/ash/login/ui/oobe_dialog_size_utils.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -27,7 +26,9 @@
 #include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/oobe_ui.h"
 #include "chrome/browser/ui/webui/chrome_web_contents_handler.h"
+#include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "ui/aura/window.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -50,9 +51,38 @@ constexpr char kGaiaURL[] = "chrome://oobe/gaia-signin";
 
 }  // namespace
 
-class OobeWebDialogView : public views::WebDialogView {
+// TODO(b/314987456): This is a duplicate of the same class used for cleanup in
+// InlineLoginDialog and a few others. They can be consolidated.
+//
+// Cleans up the delegate for a WebContentsModalDialogManager on destruction, or
+// on WebContents destruction, whichever comes first.
+class OobeUIDialogDelegate::ModalDialogManagerCleanup
+    : public content::WebContentsObserver {
  public:
-  METADATA_HEADER(OobeWebDialogView);
+  // This constructor automatically observes |web_contents| for its lifetime.
+  explicit ModalDialogManagerCleanup(content::WebContents* web_contents)
+      : content::WebContentsObserver(web_contents) {}
+  ModalDialogManagerCleanup(const ModalDialogManagerCleanup&) = delete;
+  ModalDialogManagerCleanup& operator=(const ModalDialogManagerCleanup&) =
+      delete;
+  ~ModalDialogManagerCleanup() override { ResetDelegate(); }
+
+  // content::WebContentsObserver:
+  void WebContentsDestroyed() override { ResetDelegate(); }
+
+  void ResetDelegate() {
+    if (!web_contents()) {
+      return;
+    }
+    web_modal::WebContentsModalDialogManager::FromWebContents(web_contents())
+        ->SetDelegate(nullptr);
+  }
+};
+
+class OobeWebDialogView : public views::WebDialogView {
+  METADATA_HEADER(OobeWebDialogView, views::WebDialogView)
+
+ public:
   OobeWebDialogView(content::BrowserContext* context,
                     ui::WebDialogDelegate* delegate,
                     std::unique_ptr<WebContentsHandler> handler)
@@ -114,7 +144,7 @@ class OobeWebDialogView : public views::WebDialogView {
   views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
 };
 
-BEGIN_METADATA(OobeWebDialogView, views::WebDialogView)
+BEGIN_METADATA(OobeWebDialogView)
 END_METADATA
 
 // View that controls size of OobeUIDialog.
@@ -133,8 +163,9 @@ END_METADATA
 // It is assumed that host view is always a full-screen view on a primary
 // display.
 class LayoutWidgetDelegateView : public views::WidgetDelegateView {
+  METADATA_HEADER(LayoutWidgetDelegateView, views::WidgetDelegateView)
+
  public:
-  METADATA_HEADER(LayoutWidgetDelegateView);
   LayoutWidgetDelegateView(OobeUIDialogDelegate* dialog_delegate,
                            OobeWebDialogView* oobe_view)
       : dialog_delegate_(dialog_delegate), oobe_view_(oobe_view) {
@@ -173,7 +204,7 @@ class LayoutWidgetDelegateView : public views::WidgetDelegateView {
   // views::WidgetDelegateView:
   ui::ModalType GetModalType() const override { return ui::MODAL_TYPE_WINDOW; }
 
-  void Layout() override {
+  void Layout(PassKey) override {
     if (fullscreen_) {
       oobe_view_->SetBoundsRect(GetContentsBounds());
       return;
@@ -204,7 +235,7 @@ class LayoutWidgetDelegateView : public views::WidgetDelegateView {
   bool has_shelf_ = true;
 };
 
-BEGIN_METADATA(LayoutWidgetDelegateView, views::WidgetDelegateView)
+BEGIN_METADATA(LayoutWidgetDelegateView)
 ADD_PROPERTY_METADATA(bool, Fullscreen)
 ADD_PROPERTY_METADATA(bool, HasShelf)
 END_METADATA
@@ -256,15 +287,19 @@ OobeUIDialogDelegate::OobeUIDialogDelegate(
       !ChromeKeyboardControllerClient::Get()->is_keyboard_visible());
 
   view_observer_.Observe(dialog_view_.get());
-
-  captive_portal_delegate_ =
-      (new CaptivePortalDialogDelegate(dialog_view_))->GetWeakPtr();
-
   GetOobeUI()->GetErrorScreen()->MaybeInitCaptivePortalWindowProxy(
-      dialog_view_->web_contents());
+      GetWebContents());
   oobe_ui_observer_.Observe(GetOobeUI());
   captive_portal_observer_.Observe(
       GetOobeUI()->GetErrorScreen()->captive_portal_window_proxy());
+  // Set this as the web modal delegate so that web dialog can appear. E.g.
+  // for the proxy auth.
+  auto* web_contents = GetWebContents();
+  web_modal::WebContentsModalDialogManager::CreateForWebContents(web_contents);
+  web_modal::WebContentsModalDialogManager::FromWebContents(web_contents)
+      ->SetDelegate(this);
+  modal_dialog_manager_cleanup_ =
+      std::make_unique<ModalDialogManagerCleanup>(web_contents);
 }
 
 OobeUIDialogDelegate::~OobeUIDialogDelegate() {
@@ -274,10 +309,12 @@ OobeUIDialogDelegate::~OobeUIDialogDelegate() {
   // `OnAfterCaptivePortalHidden` to be called after `OobeUIDialogDelegate`
   // destruction.
   captive_portal_observer_.Reset();
-  if (captive_portal_delegate_)
-    captive_portal_delegate_->Close();
-  if (controller_)
+  if (controller_) {
     controller_->OnDialogDestroyed(this);
+  }
+  for (auto& observer : modal_dialog_host_observer_list_) {
+    observer.OnHostDestroying();
+  }
 }
 
 content::WebContents* OobeUIDialogDelegate::GetWebContents() {
@@ -324,6 +361,8 @@ void OobeUIDialogDelegate::Hide() {
 void OobeUIDialogDelegate::Close() {
   if (!widget_)
     return;
+  SetState(OobeDialogState::HIDDEN);
+
   // We do not call LoginScreen::NotifyOobeDialogVisibility here, because this
   // would cause the LoginShelfView to update its button visibility even though
   // the login screen is about to be destroyed. See http://crbug/836172
@@ -407,9 +446,6 @@ void OobeUIDialogDelegate::OnKeyboardVisibilityChanged(bool visible) {
 
 void OobeUIDialogDelegate::OnBeforeCaptivePortalShown() {
   should_display_captive_portal_ = false;
-
-  if (captive_portal_delegate_)
-    captive_portal_delegate_->Show();
 }
 
 void OobeUIDialogDelegate::OnAfterCaptivePortalHidden() {
@@ -417,9 +453,6 @@ void OobeUIDialogDelegate::OnAfterCaptivePortalHidden() {
   // while the OOBE dialog was not shown, we should not attempt to load the
   // captive portal next time the OOBE dialog pops up.
   should_display_captive_portal_ = false;
-
-  if (captive_portal_delegate_)
-    captive_portal_delegate_->Hide();
 }
 
 void OobeUIDialogDelegate::OnCurrentScreenChanged(OobeScreenId current_screen,
@@ -433,6 +466,38 @@ void OobeUIDialogDelegate::OnDestroyingOobeUI() {
 void OobeUIDialogDelegate::OnFocusLeavingSystemTray(bool reverse) {
   if (dialog_view_)
     dialog_view_->AboutToRequestFocusFromTabTraversal(reverse);
+}
+
+web_modal::WebContentsModalDialogHost*
+OobeUIDialogDelegate::GetWebContentsModalDialogHost() {
+  return this;
+}
+
+gfx::NativeView OobeUIDialogDelegate::GetHostView() const {
+  return widget_->GetNativeView();
+}
+
+gfx::Point OobeUIDialogDelegate::GetDialogPosition(const gfx::Size& size) {
+  // Center the widget.
+  gfx::Size widget_size = widget_->GetWindowBoundsInScreen().size();
+  return gfx::Point(widget_size.width() / 2 - size.width() / 2,
+                    widget_size.height() / 2 - size.height() / 2);
+}
+
+gfx::Size OobeUIDialogDelegate::GetMaximumDialogSize() {
+  return widget_->GetWindowBoundsInScreen().size();
+}
+
+void OobeUIDialogDelegate::AddObserver(
+    web_modal::ModalDialogHostObserver* observer) {
+  if (observer && !modal_dialog_host_observer_list_.HasObserver(observer)) {
+    modal_dialog_host_observer_list_.AddObserver(observer);
+  }
+}
+
+void OobeUIDialogDelegate::RemoveObserver(
+    web_modal::ModalDialogHostObserver* observer) {
+  modal_dialog_host_observer_list_.RemoveObserver(observer);
 }
 
 ui::WebDialogDelegate::FrameKind OobeUIDialogDelegate::GetWebDialogFrameKind()

@@ -217,8 +217,6 @@ endif()
 
 option_if_not_defined(TINT_ENABLE_INSTALL "Enable install step for Tint libraries" OFF)
 option_if_not_defined(TINT_BUILD_CMD_TOOLS "Build the Tint command line tools" ON)
-option_if_not_defined(TINT_BUILD_DOCS "Build documentation" ON)
-option_if_not_defined(TINT_DOCS_WARN_AS_ERROR "When building documentation, treat warnings as errors" OFF)
 
 if (NOT DAWN_USE_GLFW AND (TINT_BUILD_CMD_TOOLS OR DAWN_BUILD_SAMPLES))
   message(SEND_ERROR "Dawn samples require GLFW")
@@ -241,6 +239,9 @@ option_if_not_defined(TINT_BUILD_REGEX_FUZZER "Build regex fuzzer" OFF)
 option_if_not_defined(TINT_BUILD_BENCHMARKS "Build Tint benchmarks" OFF)
 option_if_not_defined(TINT_BUILD_TESTS "Build tests" ON)
 option_if_not_defined(TINT_BUILD_AS_OTHER_OS "Override OS detection to force building of *_other.cc files" OFF)
+
+option_if_not_defined(TINT_BUILD_TINTD "Build the WGSL language server" OFF)
+option_if_not_defined(TINT_INSTALL_TINTD "Install the WGSL language server" OFF)
 
 set_if_not_defined(TINT_EXTERNAL_BENCHMARK_CORPUS_DIR "" "Directory that holds a corpus of external shaders to benchmark.")
 
@@ -348,8 +349,6 @@ message(STATUS "Dawn build with MSAN: ${DAWN_ENABLE_MSAN}")
 message(STATUS "Dawn build with UBSAN: ${DAWN_ENABLE_UBSAN}")
 
 message(STATUS "Tint build command line executable tools: ${TINT_BUILD_CMD_TOOLS}")
-message(STATUS "Tint build docs: ${TINT_BUILD_DOCS}")
-message(STATUS "Tint build docs with warn as error: ${TINT_DOCS_WARN_AS_ERROR}")
 message(STATUS "Tint build SPIR-V reader: ${TINT_BUILD_SPV_READER}")
 message(STATUS "Tint build WGSL reader: ${TINT_BUILD_WGSL_READER}")
 message(STATUS "Tint build GLSL writer: ${TINT_BUILD_GLSL_WRITER}")
@@ -387,6 +386,7 @@ function(common_compile_options TARGET)
 
       -Wno-deprecated-builtins
       -Wno-unknown-warning-option
+      -Wno-switch-default
     )
 
     if (${DAWN_ENABLE_MSAN})
@@ -540,38 +540,14 @@ if (MSVC AND NOT COMPILER_IS_CLANG_CL)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
 endif()
 
-if(${TINT_BUILD_DOCS})
-  find_package(Doxygen)
-  if(DOXYGEN_FOUND)
-    set(DOXYGEN_WARN_AS_ERROR NO)
-    if(TINT_DOCS_WARN_AS_ERROR)
-      set(DOXYGEN_WARN_AS_ERROR YES)
-    endif()
-
-    set(DOXYGEN_WARN_FORMAT "$file:$line: $text")
-    if (MSVC)
-      set(DOXYGEN_WARN_FORMAT "$file($line): $text")
-    endif()
-
-    add_custom_target(tint-docs ALL
-        COMMAND ${CMAKE_COMMAND}
-          -E env
-          "DOXYGEN_OUTPUT_DIRECTORY=${CMAKE_BINARY_DIR}/docs"
-          "DOXYGEN_WARN_AS_ERROR=${DOXYGEN_WARN_AS_ERROR}"
-          "DOXYGEN_WARN_FORMAT=${DOXYGEN_WARN_FORMAT}"
-          ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Generating API documentation"
-        VERBATIM)
-  else()
-    message("Doxygen not found. Skipping documentation")
-  endif(DOXYGEN_FOUND)
-endif()
-
 ################################################################################
 # Run on all subdirectories
 ################################################################################
 if (EXISTS "${DAWN_PROTOBUF_DIR}/cmake")
+  if (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang") AND WIN32)
+    set(protobuf_HAVE_BUILTIN_ATOMICS 1)
+  endif()
+
   # Needs to come before SPIR-V Tools
   include("third_party/protobuf.cmake")
 endif()
@@ -619,4 +595,3 @@ if (DAWN_EMIT_COVERAGE)
     COMMENT "Generating tint coverage data"
     VERBATIM)
 endif()
-

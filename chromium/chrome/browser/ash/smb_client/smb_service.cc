@@ -50,8 +50,7 @@
 #include "net/base/network_interfaces.h"
 #include "url/url_util.h"
 
-namespace ash {
-namespace smb_client {
+namespace ash::smb_client {
 
 namespace {
 
@@ -319,8 +318,7 @@ void SmbService::Mount(const std::string& display_name,
     // Only generate a salt if there's a password and we've been asked to save
     // credentials. If there is no password, there's nothing for smbfs to store
     // and the salt is unused.
-    salt.resize(kSaltLength);
-    crypto::RandBytes(salt);
+    salt = crypto::RandBytesAsVector(kSaltLength);
   }
   SmbShareInfo info(parsed_url, display_name, username, workgroup, use_kerberos,
                     salt);
@@ -712,5 +710,4 @@ bool SmbService::IsAnySmbShareConfigured() {
   return !saved_smbfs_shares.empty() || !preconfigured_shares.empty();
 }
 
-}  // namespace smb_client
-}  // namespace ash
+}  // namespace ash::smb_client

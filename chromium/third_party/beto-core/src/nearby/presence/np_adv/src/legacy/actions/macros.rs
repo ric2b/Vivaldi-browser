@@ -48,25 +48,6 @@ macro_rules! boolean_element_action_element_impl_shared {
 /// Use `plaintext_only`, `ciphertext_only`, or `plaintext_and_ciphertext` to create appropriate
 /// impls.
 macro_rules! boolean_element {
-    ($type_name:ident, $index:expr, plaintext_only) => {
-        $crate::legacy::actions::macros::boolean_element_struct!($type_name);
-        $crate::legacy::actions::macros::boolean_element_struct_from_bool!($type_name);
-
-        impl $crate::legacy::actions::ActionElement for $type_name {
-            $crate::legacy::actions::macros::boolean_element_action_element_impl_shared!(
-                $type_name, $index
-            );
-
-            fn supports_flavor(flavor: $crate::legacy::PacketFlavorEnum) -> bool {
-                match flavor {
-                    $crate::legacy::PacketFlavorEnum::Plaintext => true,
-                    $crate::legacy::PacketFlavorEnum::Ciphertext => false,
-                }
-            }
-        }
-
-        $crate::legacy::actions::macros::boolean_element_to_plaintext_element!($type_name);
-    };
     ($type_name:ident, $index:expr, ciphertext_only) => {
         $crate::legacy::actions::macros::boolean_element_struct!($type_name);
         $crate::legacy::actions::macros::boolean_element_struct_from_bool!($type_name);

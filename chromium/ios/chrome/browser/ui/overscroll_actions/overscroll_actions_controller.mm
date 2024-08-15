@@ -29,6 +29,12 @@
 #import "ios/web/common/features.h"
 #import "ios/web/public/ui/crw_web_view_proxy.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 namespace {
 // This enum is used to record the overscroll actions performed by the user on
 // the histogram named `OverscrollActions`.
@@ -424,6 +430,16 @@ UIEdgeInsets TopContentInset(UIScrollView* scrollView, CGFloat topInset) {
 }
 
 - (BOOL)isOverscrollActionsAllowed {
+
+  // Note:(prio@vivaldi.com) Disable pull to refresh for PDFs as its almost
+  // unnecessary anyway. This is a fix for VIB-360(Chromium bug) where address
+  // bar can be left in a weird state if users start a pull to refresh and do
+  // not complete it, like a quick pull.
+  // TODO: - (prio)Try finding a way that do not require this patch.
+  if (IsVivaldiRunning() && _webViewProxy.shouldUseViewContentInset) {
+    return NO;
+  }
+
   const BOOL isZooming = [[self scrollView] isZooming];
   // Check that the scrollview is scrolled to top.
   const BOOL isScrolledToTop = fabs([[self scrollView] contentOffset].y +

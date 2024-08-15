@@ -12,10 +12,11 @@
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
+#include "base/types/expected.h"
 #include "net/base/completion_once_callback.h"
+#include "net/base/net_errors.h"
 #include "net/http/http_transaction.h"
 #include "net/socket/next_proto.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class GURL;
 
@@ -135,8 +136,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) SharedDictionaryNetworkTransaction
     net::CompletionOnceCallback callback;
   };
 
-  SharedDictionaryEncodingType ParseSharedDictionaryEncodingType(
-      const net::HttpResponseHeaders& headers);
+  base::expected<SharedDictionaryEncodingType, net::Error>
+  ParseSharedDictionaryEncodingType(const net::HttpResponseHeaders& headers);
 
   void OnStartCompleted(net::CompletionOnceCallback callback, int result);
 
@@ -151,6 +152,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) SharedDictionaryNetworkTransaction
   raw_ref<SharedDictionaryManager> shared_dictionary_manager_;
   scoped_refptr<SharedDictionaryStorage> shared_dictionary_storage_;
   std::unique_ptr<SharedDictionary> shared_dictionary_;
+  // The Structured Field sf-binary hash of sha256 of dictionary calculated when
+  // sending a HTTP request.
+  std::string dictionary_hash_base64_;
 
   DictionaryStatus dictionary_status_ = DictionaryStatus::kNoDictionary;
 

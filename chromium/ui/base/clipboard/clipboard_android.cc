@@ -52,14 +52,14 @@
 // These "other formats" only work within the same process, and can't be copied
 // between Android applications.
 
-using base::android::AttachCurrentThread;
-using base::android::ClearException;
 using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaByteArrayToByteVector;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
 using base::android::ToJavaByteArray;
+using jni_zero::AttachCurrentThread;
+using jni_zero::ClearException;
 
 namespace ui {
 
@@ -468,11 +468,11 @@ ClipboardAndroid::~ClipboardAndroid() {
 void ClipboardAndroid::OnPreShutdown() {}
 
 // DataTransferEndpoint is not used on this platform.
-absl::optional<DataTransferEndpoint> ClipboardAndroid::GetSource(
+std::optional<DataTransferEndpoint> ClipboardAndroid::GetSource(
     ClipboardBuffer buffer) const {
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(buffer, ClipboardBuffer::kCopyPaste);
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 const ClipboardSequenceNumberToken& ClipboardAndroid::GetSequenceNumber(
@@ -670,7 +670,8 @@ void ClipboardAndroid::WritePortableAndPlatformRepresentations(
     ClipboardBuffer buffer,
     const ObjectMap& objects,
     std::vector<Clipboard::PlatformRepresentation> platform_representations,
-    std::unique_ptr<DataTransferEndpoint> data_src) {
+    std::unique_ptr<DataTransferEndpoint> data_src,
+    uint32_t privacy_types) {
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(buffer, ClipboardBuffer::kCopyPaste);
   g_map.Get().Clear();
@@ -688,8 +689,7 @@ void ClipboardAndroid::WriteText(base::StringPiece text) {
 
 void ClipboardAndroid::WriteHTML(
     base::StringPiece markup,
-    absl::optional<base::StringPiece> /* source_url */,
-    ClipboardContentType /* content_type */) {
+    std::optional<base::StringPiece> /* source_url */) {
   g_map.Get().Set(ClipboardFormatType::HtmlType(), markup);
 }
 
@@ -738,6 +738,18 @@ void ClipboardAndroid::WriteData(const ClipboardFormatType& format,
   g_map.Get().Set(
       format,
       std::string(reinterpret_cast<const char*>(data.data()), data.size()));
+}
+
+void ClipboardAndroid::WriteClipboardHistory() {
+  // TODO(crbug.com/40945200): Add support for this.
+}
+
+void ClipboardAndroid::WriteUploadCloudClipboard() {
+  // TODO(crbug.com/40945200): Add support for this.
+}
+
+void ClipboardAndroid::WriteConfidentialDataForPassword() {
+  // TODO(crbug.com/40945200): Add support for this.
 }
 
 }  // namespace ui

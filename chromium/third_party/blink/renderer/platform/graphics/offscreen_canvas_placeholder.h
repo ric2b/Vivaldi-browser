@@ -5,19 +5,20 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_OFFSCREEN_CANVAS_PLACEHOLDER_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_OFFSCREEN_CANVAS_PLACEHOLDER_H_
 
+#include <optional>
+
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "cc/paint/paint_flags.h"
 #include "components/viz/common/resources/resource_id.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/renderer/platform/graphics/canvas_resource_dispatcher.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 
 namespace blink {
 
 class CanvasResource;
-class CanvasResourceDispatcher;
 
 class PLATFORM_EXPORT OffscreenCanvasPlaceholder {
   DISALLOW_NEW();
@@ -31,7 +32,9 @@ class PLATFORM_EXPORT OffscreenCanvasPlaceholder {
       base::WeakPtr<CanvasResourceDispatcher>,
       scoped_refptr<base::SingleThreadTaskRunner>);
 
-  void SetSuspendOffscreenCanvasAnimation(bool);
+  using AnimationState = CanvasResourceDispatcher::AnimationState;
+
+  void SetSuspendOffscreenCanvasAnimation(AnimationState requested_state);
 
   static OffscreenCanvasPlaceholder* GetPlaceholderCanvasById(
       unsigned placeholder_id);
@@ -51,8 +54,13 @@ class PLATFORM_EXPORT OffscreenCanvasPlaceholder {
 
   virtual bool HasCanvasCapture() const { return false; }
 
+  AnimationState get_animation_state_for_testing() const {
+    return current_animation_state_;
+  }
+
  private:
-  bool PostSetSuspendAnimationToOffscreenCanvasThread(bool suspend);
+  bool PostSetAnimationStateToOffscreenCanvasThread(
+      AnimationState animation_state);
 
   // Information about the Offscreen Canvas:
   scoped_refptr<CanvasResource> placeholder_frame_;
@@ -64,14 +72,14 @@ class PLATFORM_EXPORT OffscreenCanvasPlaceholder {
   };
   int placeholder_id_ = kNoPlaceholderId;
 
-  enum AnimationState {
-    kActiveAnimation,
-    kSuspendedAnimation,
-    kShouldSuspendAnimation,
-    kShouldActivateAnimation,
-  };
-  AnimationState animation_state_ = kActiveAnimation;
-  absl::optional<cc::PaintFlags::FilterQuality> filter_quality_ = absl::nullopt;
+  // If an animation state change was requested, but we couldn't update it
+  // immediately, then this holds the most recent request.
+  std::optional<AnimationState> deferred_animation_state_;
+
+  // Most recent animation state sent to the dispatcher.
+  AnimationState current_animation_state_ = AnimationState::kActive;
+
+  std::optional<cc::PaintFlags::FilterQuality> filter_quality_ = std::nullopt;
 };
 
 }  // namespace blink

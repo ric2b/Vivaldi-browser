@@ -14,7 +14,8 @@ class RuleService;
 
 class RuleServiceFactory : public BrowserStateKeyedServiceFactory {
  public:
-  static RuleService* GetForBrowserState(
+  static RuleService* GetForBrowserState(ChromeBrowserState* browser_state);
+  static RuleService* GetForBrowserStateIfExists(
       ChromeBrowserState* browser_state);
   static RuleServiceFactory* GetInstance();
 

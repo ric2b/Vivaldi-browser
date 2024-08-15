@@ -8,7 +8,7 @@ option optimize_for = LITE_RUNTIME;
 // This file defines messages used for interacting with the document scanner
 // utility, lorgnette.
 package lorgnette;
-option go_package = "chromiumos/system_api/lorgnette_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/lorgnette_proto";
 
 // Describes possible types of sources that can be supported by a scanner.
 enum SourceType {
@@ -92,6 +92,13 @@ message ScannerInfo {
 
   // A suggested string for displaying to the user.
   string display_name = 9;
+
+  // A general description of the protocol/backend used for this scanner, such
+  // as Mopria, WSD, or epson2.  In most cases, this can be derived from the
+  // first part of the SANE connection string, but it is explicitly given here
+  // to avoid requiring every consumer of this message to do a
+  // redundant/inconsistent calculation.
+  string protocol_type = 10;
 }
 
 // Information returned from a ListScanners dbus request.

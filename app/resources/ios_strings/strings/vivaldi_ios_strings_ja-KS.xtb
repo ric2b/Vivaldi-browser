@@ -5,12 +5,8 @@
 <translation id="1137850887415122856">プライベートタブをロックするんやったら、Touch ID、Face ID、それかパスコード設定して。</translation>
 <translation id="1310184829257917508">よそのアプリからリンク開く時プライベートタブで開くか聞く</translation>
 <translation id="1512201558627495343">さらのプライベートタブ</translation>
-<translation id="1786453623676543866">さらのVivaldiタブで検索する。</translation>
 <translation id="207677936531967364">さらのプライベートタブページ</translation>
 <translation id="2899836479226240291">デフォルトのブラウザアプリVivaldiにしたら、リンク自動的にVivaldiで開けるで。</translation>
-<translation id="3171582312249481866">Vivaldi設定開く</translation>
-<translation id="3372807273343182542">URL、Vivaldiのプライベートタブで開く</translation>
-<translation id="3379322781901918214">1. Vivaldi設定開く</translation>
 <translation id="3473652525653758699">さらのプライベートウィンドウ</translation>
 <translation id="3501504415290398157">プライベートタブのロック解除するんやったら<ph name="BIOMETRIC_AUTHENITCATION_TYPE" />使うてな。</translation>
 <translation id="3692650606013198282">プライベートタブで開く</translation>
@@ -20,11 +16,8 @@
 <translation id="4755216899422789286">URL、Vivaldiで開く</translation>
 <translation id="6233792867654386826">入力したURLがVivaldiで開くで。</translation>
 <translation id="6827597288286078054">プライベート検索</translation>
-<translation id="7175743738896712454">入力したURLがVivaldiのプライベートタブで開くで。</translation>
 <translation id="7307970171564921489"><ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> でプライベートタブのロック解除する</translation>
 <translation id="7347289093190902150">プライベートタブで開く？</translation>
 <translation id="7549299604720382000">さらのプライベートタブ</translation>
 <translation id="8326104954595890674">さらのプライベートタブ</translation>
-<translation id="8763006697839582351">Vivaldiのプライベートタブで開く</translation>
-<translation id="9060728682512999830">Vivaldiで検索</translation>
 </translationbundle>

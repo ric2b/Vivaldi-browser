@@ -4,8 +4,9 @@
 
 #include "ui/aura/env.h"
 
+#include <vector>
+
 #include "base/command_line.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -168,7 +169,7 @@ void Env::SetGestureRecognizer(
 
 gfx::Point Env::GetLastPointerPoint(ui::mojom::DragEventSource event_source,
                                     Window* window,
-                                    absl::optional<gfx::Point> fallback) {
+                                    std::optional<gfx::Point> fallback) {
   if (event_source == ui::mojom::DragEventSource::kTouch) {
     if (is_touch_down()) {
       auto iter = last_touch_locations_.find(window);
@@ -275,7 +276,7 @@ void Env::NotifyHostInitialized(WindowTreeHost* host) {
 }
 
 void Env::NotifyHostDestroyed(WindowTreeHost* host) {
-  base::Erase(window_tree_hosts_, host);
+  std::erase(window_tree_hosts_, host);
   for (EnvObserver& observer : observers_)
     observer.OnHostDestroyed(host);
 }

@@ -6,7 +6,7 @@
 
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
-#import "ios/chrome/browser/promos_manager/promos_manager_factory.h"
+#import "ios/chrome/browser/promos_manager/model/promos_manager_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
@@ -22,6 +22,10 @@
 #import "ios/chrome/browser/ui/promos_manager/promos_manager_ui_handler.h"
 #import "ios/chrome/common/ui/confirmation_alert/confirmation_alert_action_handler.h"
 #import "ios/public/provider/chrome/browser/password_auto_fill/password_auto_fill_api.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
 
 @interface CredentialProviderPromoCoordinator () <
     ConfirmationAlertActionHandler,
@@ -77,6 +81,13 @@ using credential_provider_promo::IOSCredentialProviderPromoAction;
 
 - (void)showCredentialProviderPromoWithTrigger:
     (CredentialProviderPromoTrigger)trigger {
+
+  // TODO: (@prio@vivaldi.com) - (VIB-506) Enable this
+  // This promo requires creating proper lottie animation to replace the
+  // chromium assets.
+  if (vivaldi::IsVivaldiRunning())
+    return; // End Vivaldi
+
   // If the user is not eligible to be shown the promo, or the VC is already
   // being presented, return early.
   if (![self.mediator

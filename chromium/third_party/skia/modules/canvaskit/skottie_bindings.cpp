@@ -5,14 +5,17 @@
  * found in the LICENSE file.
  */
 
+#include "include/codec/SkCodec.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
+#include "include/private/base/SkOnce.h"
 #include "modules/canvaskit/WasmCommon.h"
 #include "modules/skottie/include/Skottie.h"
 #include "modules/skottie/include/SkottieProperty.h"
+#include "modules/skottie/include/SlotManager.h"
 #include "modules/skottie/utils/SkottieUtils.h"
 #include "modules/skottie/utils/TextEditor.h"
 #include "modules/skparagraph/include/Paragraph.h"
@@ -28,6 +31,19 @@
 #include <vector>
 #include <emscripten.h>
 #include <emscripten/bind.h>
+
+#if defined(SK_CODEC_DECODES_GIF)
+#include "include/codec/SkGifDecoder.h"
+#endif
+#if defined(SK_CODEC_DECODES_JPEG)
+#include "include/codec/SkJpegDecoder.h"
+#endif
+#if defined(SK_CODEC_DECODES_PNG)
+#include "include/codec/SkPngDecoder.h"
+#endif
+#if defined(SK_CODEC_DECODES_WEBP)
+#include "include/codec/SkWebpDecoder.h"
+#endif
 
 using namespace emscripten;
 namespace para = skia::textlayout;
@@ -145,7 +161,11 @@ public:
                                               const char[] /* id */) const override {
         // For CK/Skottie we ignore paths & IDs, and identify images based solely on name.
         if (auto data = this->findAsset(name)) {
-            return skresources::MultiFrameImageAsset::Make(std::move(data));
+            auto codec = DecodeImageData(data);
+            if (!codec) {
+                return nullptr;
+            }
+            return skresources::MultiFrameImageAsset::Make(std::move(codec));
         }
 
         return nullptr;
@@ -748,6 +768,24 @@ EMSCRIPTEN_BINDINGS(Skottie) {
             auto bytes = SkData::MakeFromMalloc(assetDatas[i], assetSizes[i]);
             assets.push_back(std::make_pair(std::move(name), std::move(bytes)));
         }
+
+        // DataURIResourceProviderProxy needs codecs registered to try to process Base64 encoded
+        // images.
+        static SkOnce once;
+        once([] {
+#if defined(SK_CODEC_DECODES_PNG)
+            SkCodecs::Register(SkPngDecoder::Decoder());
+#endif
+#if defined(SK_CODEC_DECODES_JPEG)
+            SkCodecs::Register(SkJpegDecoder::Decoder());
+#endif
+#if defined(SK_CODEC_DECODES_GIF)
+            SkCodecs::Register(SkGifDecoder::Decoder());
+#endif
+#if defined(SK_CODEC_DECODES_WEBP)
+            SkCodecs::Register(SkWebpDecoder::Decoder());
+#endif
+        });
 
         return ManagedAnimation::Make(json,
                                       skresources::DataURIResourceProviderProxy::Make(

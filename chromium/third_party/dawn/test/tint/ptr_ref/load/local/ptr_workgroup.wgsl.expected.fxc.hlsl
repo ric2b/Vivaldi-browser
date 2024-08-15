@@ -1,16 +1,20 @@
 groupshared int i;
 
+void tint_zero_workgroup_memory(uint local_idx) {
+  if ((local_idx < 1u)) {
+    i = 0;
+  }
+  GroupMemoryBarrierWithGroupSync();
+}
+
 struct tint_symbol_1 {
   uint local_invocation_index : SV_GroupIndex;
 };
 
 void main_inner(uint local_invocation_index) {
-  {
-    i = 0;
-  }
-  GroupMemoryBarrierWithGroupSync();
+  tint_zero_workgroup_memory(local_invocation_index);
   i = 123;
-  const int u = (i + 1);
+  int u = (i + 1);
 }
 
 [numthreads(1, 1, 1)]

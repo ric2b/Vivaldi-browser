@@ -30,7 +30,6 @@ class FontList;
 
 namespace views {
 class AXVirtualView;
-class ImageView;
 }  // namespace views
 
 // View used to draw a bubble, containing an icon and a label. We use this as a
@@ -105,8 +104,10 @@ class IconLabelBubbleView : public views::InkDropObserver,
                 const std::u16string& accessible_name);
   void SetFontList(const gfx::FontList& font_list);
 
-  const views::ImageView* GetImageView() const { return image(); }
-  views::ImageView* GetImageView() { return image(); }
+  const views::View* GetImageContainerView() const {
+    return image_container_view();
+  }
+  views::View* GetImageContainerView() { return image_container_view(); }
 
   // Exposed for testing.
   views::View* separator_view() const { return separator_view_; }
@@ -125,6 +126,10 @@ class IconLabelBubbleView : public views::InkDropObserver,
   // Reduces the slide duration to 1ms such that animation still follows
   // through in the code but is short enough that it is essentially skipped.
   void ReduceAnimationTimeForTesting();
+
+  // Enables tests to reset slide animation to a state where the label is not
+  // showing.
+  void ResetSlideAnimationForTesting() { ResetSlideAnimation(false); }
 
  protected:
   static constexpr int kOpenTimeMS = 150;
@@ -165,7 +170,7 @@ class IconLabelBubbleView : public views::InkDropObserver,
 
   // views::LabelButton:
   gfx::Size CalculatePreferredSize() const override;
-  void Layout() override;
+  void Layout(PassKey) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   void OnThemeChanged() override;
   bool IsTriggerableEvent(const ui::Event& event) override;

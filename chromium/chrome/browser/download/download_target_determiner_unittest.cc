@@ -2544,7 +2544,16 @@ TEST_F(DownloadTargetDeterminerTest, TestSanitizeEnvVariable) {
        DownloadItem::TARGET_DISPOSITION_PROMPT,
 
        EXPECT_CRDOWNLOAD},
-      {// 2: File name is an env var.
+      {// 2: File name falling back to dangerous extensions after removing env var.
+       SAVE_AS, download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
+       DownloadFileType::NOT_DANGEROUS, "http://example.com/foo2.lnk.%%",
+       "application/octet-stream", FILE_PATH_LITERAL(""),
+
+       FILE_PATH_LITERAL("foo2.download"),
+       DownloadItem::TARGET_DISPOSITION_PROMPT,
+
+       EXPECT_CRDOWNLOAD},
+      {// 3: File name is an env var.
        SAVE_AS, download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
        DownloadFileType::NOT_DANGEROUS, "http://example.com/%foo.txt%",
        "text/plain", FILE_PATH_LITERAL(""),
@@ -2864,7 +2873,7 @@ class DownloadTargetDeterminerDlpTest : public DownloadTargetDeterminerTest {
     user_manager::User* user =
         user_manager_->AddUserWithAffiliationAndTypeAndProfile(
             account_id, /*is_affiliated=*/false,
-            user_manager::USER_TYPE_REGULAR, profile_.get());
+            user_manager::UserType::kRegular, profile_.get());
     user_manager_->UserLoggedIn(account_id, user->username_hash(),
                                 /*browser_restart=*/false,
                                 /*is_child=*/false);

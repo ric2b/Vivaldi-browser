@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "base/notreached.h"
 #include "base/numerics/checked_math.h"
 #include "base/ranges/algorithm.h"
 #include "base/sequence_checker.h"
@@ -18,6 +19,7 @@
 #include "base/types/fixed_array.h"
 #include "build/buildflag.h"
 #include "components/ml/webnn/graph_validation_utils.h"
+#include "services/webnn/public/mojom/webnn_graph.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_clamp_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_compute_result.h"
@@ -246,9 +248,7 @@ class XnnRuntimeWrapper : public ThreadSafeRefCounted<XnnRuntimeWrapper> {
   // Creates an XNNPACK Runtime object from the Subgraph object. The Runtime
   // object is a combination of an execution plan for Subgraph Nodes and a
   // memory manager for Subgraph Values and will be used for the accelerated
-  // executions. This method can run either in a background thread for
-  // asynchronous graph building or in the caller's thread for synchronous graph
-  // building.
+  // executions. This method should run in a background thread.
   //
   // The `num_threads` indicates how many work items will be scheduled to
   // base::ThreadPool that run XNNPACK operators in parallel. The value `0`
@@ -257,10 +257,11 @@ class XnnRuntimeWrapper : public ThreadSafeRefCounted<XnnRuntimeWrapper> {
   static scoped_refptr<XnnRuntimeWrapper> Create(
       XnnSubgraphPtr subgraph,
       scoped_refptr<SharedXnnpackContext> xnn_context,
-      Vector<DataBufferPtr> static_data_buffers,
+      Vector<DataBuffer> static_data_buffers,
       uint32_t num_threads,
       String& error_message) {
     ScopedMLTrace scoped_trace("XnnRuntimeWrapper::Create");
+    CHECK(!IsMainThread());
     CHECK(xnn_context);
     CHECK(subgraph);
 
@@ -345,7 +346,7 @@ class XnnRuntimeWrapper : public ThreadSafeRefCounted<XnnRuntimeWrapper> {
   XnnRuntimeWrapper(xnn_runtime_t xnn_runtime,
                     pthreadpool_t pthreadpool,
                     scoped_refptr<SharedXnnpackContext> xnn_context,
-                    Vector<DataBufferPtr> static_data_buffers)
+                    Vector<DataBuffer> static_data_buffers)
       : xnn_context_(std::move(xnn_context)),
         static_data_buffers_(std::move(static_data_buffers)),
         xnn_external_values_(std::make_unique<Vector<xnn_external_value>>()),
@@ -359,7 +360,7 @@ class XnnRuntimeWrapper : public ThreadSafeRefCounted<XnnRuntimeWrapper> {
 
   // Holds the static data of XNNPACK Values for MLGraph's constant operands.
   // The data must outlive XNNPACK Subgraph and Runtime objects using them.
-  Vector<DataBufferPtr> static_data_buffers_;
+  Vector<DataBuffer> static_data_buffers_;
 
   // Holds the XNNPACK external values (value ID and data pointer) used for
   // Runtime setup. It is used to avoid unnecessary Runtime setup if no pointers
@@ -422,7 +423,7 @@ Vector<size_t> GetXnnDimensions(const Vector<uint32_t>& operand_dimensions) {
 // static_data_buffers_ member, it would outlive the XNNPACK Value who uses it.
 xnn_status DefineXnnValue(xnn_subgraph_t subgraph,
                           const MLOperand* operand,
-                          const DataBufferPtr& data,
+                          const DataBuffer& data,
                           uint32_t external_value_id,
                           uint32_t& value_id,
                           String& error_message) {
@@ -439,26 +440,33 @@ xnn_status DefineXnnValue(xnn_subgraph_t subgraph,
   uint32_t flags = 0;
   if (external_value_id != XNN_INVALID_VALUE_ID) {
     // External Values should not be initialized with static data.
-    DCHECK(!data);
+    CHECK(data.empty());
     switch (operand->Kind()) {
-      case MLOperand::OperandKind::kInput:
+      case webnn::mojom::blink::Operand::Kind::kInput:
         flags = XNN_VALUE_FLAG_EXTERNAL_INPUT;
         break;
-      case MLOperand::OperandKind::kOutput:
+      case webnn::mojom::blink::Operand::Kind::kOutput:
         flags = XNN_VALUE_FLAG_EXTERNAL_OUTPUT;
         break;
-      case MLOperand::OperandKind::kConstant:
+      case webnn::mojom::blink::Operand::Kind::kConstant:
         // Should not define an external Value for constant operand.
         NOTREACHED();
         break;
     }
   }
 
+  // The data buffer should have extra bytes if it is present.
+  // `operand->ByteLength() + XNN_EXTRA_BYTES` won't overflow because that is
+  // validated before creating data buffer.
+  if (!data.empty()) {
+    CHECK_EQ(data.size(), operand->ByteLength() + XNN_EXTRA_BYTES);
+  }
+
   switch (datatype) {
     case xnn_datatype_fp32:
     case xnn_datatype_fp16:
       XNN_CHECK_STATUS_AND_SET_ERROR_MESSAGE(xnn_define_tensor_value(
-          subgraph, datatype, dims.size(), dims.data(), data.get(),
+          subgraph, datatype, dims.size(), dims.data(), data.data(),
           external_value_id, flags, &value_id));
       break;
     default:
@@ -481,8 +489,8 @@ xnn_status DefineExternalXnnValue(xnn_subgraph_t subgraph,
                                   uint32_t& value_id,
                                   String& error_message) {
   DCHECK_NE(external_value_id, XNN_INVALID_VALUE_ID);
-  return DefineXnnValue(subgraph, operand, DataBufferPtr(nullptr),
-                        external_value_id, value_id, error_message);
+  return DefineXnnValue(subgraph, operand, DataBuffer(), external_value_id,
+                        value_id, error_message);
 }
 
 // Define an internal XNNPACK Value given a WebNN graph's intermediate
@@ -493,8 +501,8 @@ xnn_status DefineInternalXnnValue(xnn_subgraph_t subgraph,
                                   String& error_message) {
   // Set external_value_id to XNN_INVALID_VALUE_ID, so an internal ID will be
   // created for the Value and value_id will be set to that internal ID.
-  return DefineXnnValue(subgraph, operand, DataBufferPtr(nullptr),
-                        XNN_INVALID_VALUE_ID, value_id, error_message);
+  return DefineXnnValue(subgraph, operand, DataBuffer(), XNN_INVALID_VALUE_ID,
+                        value_id, error_message);
 }
 
 // Define a static XNNPACK Value given a WebNN graph's constant operand and its
@@ -502,14 +510,32 @@ xnn_status DefineInternalXnnValue(xnn_subgraph_t subgraph,
 // the Subgraph object, and of any Runtime objects created from the Subgraph.
 xnn_status DefineStaticXnnValue(xnn_subgraph_t subgraph,
                                 const MLOperand* operand,
-                                const DataBufferPtr& data,
+                                const DataBuffer& data,
                                 uint32_t& value_id,
                                 String& error_message) {
-  DCHECK(data);
+  CHECK(!data.empty());
   // Set external_value_id to XNN_INVALID_VALUE_ID, so an internal ID will be
   // created for the Value and value_id will be set to that internal ID.
   return DefineXnnValue(subgraph, operand, data, XNN_INVALID_VALUE_ID, value_id,
                         error_message);
+}
+
+// XNNPACK requires input and static data buffers to have `XNN_EXTRA_BYTES`
+// bytes at the end. This method allocates a buffer with `XNN_EXTRA_BYTES` bytes
+// and copies the content of array buffer into the new buffer.
+std::optional<DataBuffer> MakeBufferWithExtraBytes(
+    const DOMArrayBufferView* array_buffer_view) {
+  CHECK(!array_buffer_view->IsDetached());
+  // Allocate an initialized buffer with `XNN_EXTRA_BYTES` extra bytes.
+  auto buffer_size =
+      base::MakeCheckedNum(array_buffer_view->byteLength()) + XNN_EXTRA_BYTES;
+  if (!buffer_size.IsValid()) {
+    return std::nullopt;
+  }
+  auto buffer = DataBuffer::WithSize(buffer_size.ValueOrDie());
+  memcpy(buffer.data(), array_buffer_view->BaseAddress(),
+         array_buffer_view->byteLength());
+  return buffer;
 }
 
 uint32_t GetOperatorInputValueId(const MLOperator* op,
@@ -538,12 +564,14 @@ struct XnnOutputRange {
 };
 
 // Helper to get XNNPACK Node output value range for WebNN activation operators.
+//
+// TODO: crbug.com/325598628 - This should take an MLActivation.
 XnnOutputRange GetXnnOutputRangeForActivation(const MLOperator* ml_operator) {
   DCHECK(ml_operator);
   XnnOutputRange output_range;
   switch (ml_operator->Kind()) {
     // TODO(crbug.com/1273291): Support clamp.
-    case MLOperator::OperatorKind::kClamp: {
+    case webnn::mojom::blink::Operation::Tag::kClamp: {
       // According to WebNN clamp spec:
       // https://www.w3.org/TR/webnn/#api-mlgraphbuilder-clamp, clamping occurs
       // only if the lower bound or/and upper bound are provided.
@@ -556,7 +584,7 @@ XnnOutputRange GetXnnOutputRangeForActivation(const MLOperator* ml_operator) {
           options->getMaxValueOr(+std::numeric_limits<float>::infinity());
       break;
     }
-    case MLOperator::OperatorKind::kRelu:
+    case webnn::mojom::blink::Operation::Tag::kRelu:
       // Set the minimum value to 0 according to the rectified linear function,
       // y = max(0, x).
       output_range.min = 0.0f;
@@ -564,7 +592,7 @@ XnnOutputRange GetXnnOutputRangeForActivation(const MLOperator* ml_operator) {
       break;
     default:
       // Only clamp and relu are supported.
-      NOTREACHED();
+      NOTREACHED_NORETURN();
   }
   return output_range;
 }
@@ -594,45 +622,16 @@ struct XnnPadding2D {
 
 // Helper to get padding sizes for XNNPACK convolution 2d or pooling 2d Nodes.
 template <typename OptionsType>
-XnnPadding2D GetXnnPadding2D(const OptionsType* options,
-                             uint32_t input_height,
-                             uint32_t input_width,
-                             uint32_t filter_height,
-                             uint32_t filter_width,
-                             uint32_t stride_height,
-                             uint32_t stride_width,
-                             uint32_t dilation_height,
-                             uint32_t dilation_width) {
-  auto padding = CalculatePadding2D(
-      options, input_height, input_width, filter_height, filter_width,
-      stride_height, stride_width, dilation_height, dilation_width);
-  return XnnPadding2D{.top = padding.beginning.height,
-                      .bottom = padding.ending.height,
-                      .left = padding.beginning.width,
-                      .right = padding.ending.width};
-}
-
-// Helper to get padding sizes for XNNPACK convTranspose2d Nodes.
-XnnPadding2D GetXnnConvTransposePadding2D(
-    const MLConvTranspose2dOptions* options,
-    uint32_t input_height,
-    uint32_t input_width,
-    uint32_t filter_height,
-    uint32_t filter_width,
-    uint32_t stride_height,
-    uint32_t stride_width,
-    uint32_t dilation_height,
-    uint32_t dilation_width,
-    uint32_t output_padding_height,
-    uint32_t output_padding_width) {
-  auto padding = blink::CalculateConvTransposePadding2D(
-      options, input_height, input_width, filter_height, filter_width,
-      stride_height, stride_width, dilation_height, dilation_width,
-      output_padding_height, output_padding_width);
-  return XnnPadding2D{.top = padding.beginning.height,
-                      .bottom = padding.ending.height,
-                      .left = padding.beginning.width,
-                      .right = padding.ending.width};
+XnnPadding2D GetXnnPadding2D(const OptionsType* options) {
+  // Set the XNNPACK padding from WebNN explicit padding that is in
+  // [beginning_height, ending_height, beginning_width, ending_width],
+  // default to 0.
+  auto ml_padding = options->getPaddingOr({0, 0, 0, 0});
+  CHECK_EQ(ml_padding.size(), 4u);
+  return XnnPadding2D{.top = ml_padding[0],
+                      .bottom = ml_padding[1],
+                      .left = ml_padding[2],
+                      .right = ml_padding[3]};
 }
 
 xnn_status DefineXnnNodeForConv2d(xnn_subgraph_t subgraph,
@@ -667,7 +666,6 @@ xnn_status DefineXnnNodeForConv2d(xnn_subgraph_t subgraph,
   const uint32_t dilation_width = options->getDilationsOr(default_dilations)[1];
 
   // Set input and filter sizes of XNNPACK conv2d.
-  uint32_t input_height, input_width;
   uint32_t filter_height, filter_width;
   uint32_t input_channels, output_channels;
   const uint32_t groups = options->groups();
@@ -675,14 +673,13 @@ xnn_status DefineXnnNodeForConv2d(xnn_subgraph_t subgraph,
   if (options->inputLayout().AsEnum() == V8MLInputOperandLayout::Enum::kNhwc) {
     const auto* input = conv2d->Inputs()[0].Get();
     DCHECK(input);
-    input_height = input->Dimensions()[1];
-    input_width = input->Dimensions()[2];
     input_channels = input->Dimensions()[3];
     const auto* output = conv2d->Outputs()[0].Get();
     DCHECK(output);
     output_channels = output->Dimensions()[3];
 
-    depthwise = IsDepthwiseConv2d(input_channels, output_channels, groups);
+    depthwise =
+        webnn::IsDepthwiseConv2d(input_channels, output_channels, groups);
     auto validation_result = ValidateFilterLayout(
         depthwise, options->inputLayout(), options->filterLayout());
     if (!validation_result.has_value()) {
@@ -702,10 +699,8 @@ xnn_status DefineXnnNodeForConv2d(xnn_subgraph_t subgraph,
     return xnn_status_unsupported_parameter;
   }
 
-  // Set or calculate padding sizes of XNNPACK conv2d.
-  const auto padding = GetXnnPadding2D(
-      options, input_height, input_width, filter_height, filter_width,
-      stride_height, stride_width, dilation_height, dilation_width);
+  // Set padding sizes of XNNPACK conv2d.
+  const auto padding = GetXnnPadding2D(options);
 
   // Set the minimum and maximum output values for XNNPACK conv2d based on the
   // fused activation function. If no fused activation function is set, there
@@ -713,16 +708,24 @@ xnn_status DefineXnnNodeForConv2d(xnn_subgraph_t subgraph,
   XnnOutputRange output_range{.min = -std::numeric_limits<float>::infinity(),
                               .max = +std::numeric_limits<float>::infinity()};
   if (options->hasActivation()) {
-    switch (options->activation()->Operator()->Kind()) {
-      case MLOperator::OperatorKind::kClamp:
-      case MLOperator::OperatorKind::kRelu:
+    switch (options->activation()->Kind()) {
+      case webnn::mojom::blink::Activation::Tag::kClamp:
+      case webnn::mojom::blink::Activation::Tag::kRelu:
         output_range =
             GetXnnOutputRangeForActivation(options->activation()->Operator());
         break;
-      default:
+      case webnn::mojom::blink::Activation::Tag::kElu:
+      case webnn::mojom::blink::Activation::Tag::kHardSigmoid:
+      case webnn::mojom::blink::Activation::Tag::kLeakyRelu:
+      case webnn::mojom::blink::Activation::Tag::kLinear:
+      case webnn::mojom::blink::Activation::Tag::kSigmoid:
+      case webnn::mojom::blink::Activation::Tag::kSoftmax:
+      case webnn::mojom::blink::Activation::Tag::kSoftplus:
+      case webnn::mojom::blink::Activation::Tag::kSoftsign:
+      case webnn::mojom::blink::Activation::Tag::kTanh:
         error_message = "The fused operator (" +
-                        MLOperator::OperatorKindToString(
-                            options->activation()->Operator()->Kind()) +
+                        MLActivation::ActivationKindToString(
+                            options->activation()->Kind()) +
                         ") is not supported by conv2d.";
         return xnn_status_unsupported_parameter;
     }
@@ -848,11 +851,8 @@ xnn_status DefineXnnNodeForConvTranspose2d(
         options->getOutputPaddingOr(default_output_padding)[1];
   }
 
-  // Set or calculate padding sizes of XNNPACK convTranspose2d.
-  const auto padding = GetXnnConvTransposePadding2D(
-      options, input_height, input_width, filter_height, filter_width,
-      stride_height, stride_width, dilation_height, dilation_width,
-      output_padding_height, output_padding_width);
+  // Set padding sizes of XNNPACK convTranspose2d.
+  const auto padding = GetXnnPadding2D(options);
 
   // Set the minimum and maximum output values for XNNPACK convTranspose2d based
   // on the fused activation function. If no fused activation function is set,
@@ -860,18 +860,26 @@ xnn_status DefineXnnNodeForConvTranspose2d(
   XnnOutputRange output_range{.min = -std::numeric_limits<float>::infinity(),
                               .max = +std::numeric_limits<float>::infinity()};
   if (options->hasActivation()) {
-    switch (options->activation()->Operator()->Kind()) {
-      case MLOperator::OperatorKind::kClamp:
-      case MLOperator::OperatorKind::kRelu:
+    switch (options->activation()->Kind()) {
+      case webnn::mojom::blink::Activation::Tag::kClamp:
+      case webnn::mojom::blink::Activation::Tag::kRelu:
         output_range =
             GetXnnOutputRangeForActivation(options->activation()->Operator());
         break;
-      default:
+      case webnn::mojom::blink::Activation::Tag::kElu:
+      case webnn::mojom::blink::Activation::Tag::kHardSigmoid:
+      case webnn::mojom::blink::Activation::Tag::kLeakyRelu:
+      case webnn::mojom::blink::Activation::Tag::kLinear:
+      case webnn::mojom::blink::Activation::Tag::kSigmoid:
+      case webnn::mojom::blink::Activation::Tag::kSoftmax:
+      case webnn::mojom::blink::Activation::Tag::kSoftplus:
+      case webnn::mojom::blink::Activation::Tag::kSoftsign:
+      case webnn::mojom::blink::Activation::Tag::kTanh:
         // TODO(crbug.com/1273291): Support other fused operators by standalone
         // XNNPACK operators.
         error_message = "The fused operator (" +
-                        MLOperator::OperatorKindToString(
-                            options->activation()->Operator()->Kind()) +
+                        MLActivation::ActivationKindToString(
+                            options->activation()->Kind()) +
                         ") is not supported by convTranspose2d.";
         return xnn_status_unsupported_parameter;
     }
@@ -898,6 +906,9 @@ xnn_status DefineXnnNodeForElementWiseBinary(
     const MLOperator* binary,
     const OperandValueIdMap& operand_value_id_map,
     String& error_message) {
+  CHECK_EQ(binary->Kind(),
+           webnn::mojom::blink::Operation::Tag::kElementWiseBinary);
+
   const uint32_t lhs_id =
       GetOperatorInputValueId(binary, operand_value_id_map, 0);
   const uint32_t rhs_id =
@@ -907,33 +918,33 @@ xnn_status DefineXnnNodeForElementWiseBinary(
   const float output_min = -std::numeric_limits<float>::infinity();
   const float output_max = +std::numeric_limits<float>::infinity();
   const uint32_t flags = 0;
-  switch (binary->Kind()) {
-    case MLOperator::OperatorKind::kAdd: {
+  switch (binary->SubKind<webnn::mojom::blink::ElementWiseBinary::Kind>()) {
+    case webnn::mojom::blink::ElementWiseBinary::Kind::kAdd: {
       XNN_CHECK_STATUS_AND_SET_ERROR_MESSAGE(xnn_define_add2(
           subgraph, output_min, output_max, lhs_id, rhs_id, output_id, flags));
       break;
     }
-    case MLOperator::OperatorKind::kSub: {
+    case webnn::mojom::blink::ElementWiseBinary::Kind::kSub: {
       XNN_CHECK_STATUS_AND_SET_ERROR_MESSAGE(xnn_define_subtract(
           subgraph, output_min, output_max, lhs_id, rhs_id, output_id, flags));
       break;
     }
-    case MLOperator::OperatorKind::kMul: {
+    case webnn::mojom::blink::ElementWiseBinary::Kind::kMul: {
       XNN_CHECK_STATUS_AND_SET_ERROR_MESSAGE(xnn_define_multiply2(
           subgraph, output_min, output_max, lhs_id, rhs_id, output_id, flags));
       break;
     }
-    case MLOperator::OperatorKind::kDiv: {
+    case webnn::mojom::blink::ElementWiseBinary::Kind::kDiv: {
       XNN_CHECK_STATUS_AND_SET_ERROR_MESSAGE(xnn_define_divide(
           subgraph, output_min, output_max, lhs_id, rhs_id, output_id, flags));
       break;
     }
-    case MLOperator::OperatorKind::kMax: {
+    case webnn::mojom::blink::ElementWiseBinary::Kind::kMax: {
       XNN_CHECK_STATUS_AND_SET_ERROR_MESSAGE(
           xnn_define_maximum2(subgraph, lhs_id, rhs_id, output_id, flags));
       break;
     }
-    case MLOperator::OperatorKind::kMin: {
+    case webnn::mojom::blink::ElementWiseBinary::Kind::kMin: {
       XNN_CHECK_STATUS_AND_SET_ERROR_MESSAGE(
           xnn_define_minimum2(subgraph, lhs_id, rhs_id, output_id, flags));
       break;
@@ -945,12 +956,12 @@ xnn_status DefineXnnNodeForElementWiseBinary(
     // spec, we will map that to XNNPACK square root directly. And there is a
     // proposal in WG to support dedicated square root operator -
     // https://github.com/webmachinelearning/webnn/issues/438.
-    case MLOperator::OperatorKind::kPow: {
+    case webnn::mojom::blink::ElementWiseBinary::Kind::kPow: {
       const auto* operand_a = binary->Inputs()[0].Get();
       CHECK(operand_a);
       const auto* operand_b = binary->Inputs()[1].Get();
       CHECK(operand_b);
-      if (operand_b->Kind() != MLOperand::OperandKind::kConstant) {
+      if (operand_b->Kind() != webnn::mojom::blink::Operand::Kind::kConstant) {
         error_message = "Operand b should be defined as a constant for pow.";
         return xnn_status_unsupported_parameter;
       }
@@ -985,8 +996,12 @@ xnn_status DefineXnnNodeForElementWiseBinary(
       }
       break;
     }
-    default:
-      NOTREACHED();
+    case webnn::mojom::blink::ElementWiseBinary::Kind::kEqual:
+    case webnn::mojom::blink::ElementWiseBinary::Kind::kGreater:
+    case webnn::mojom::blink::ElementWiseBinary::Kind::kGreaterOrEqual:
+    case webnn::mojom::blink::ElementWiseBinary::Kind::kLesser:
+    case webnn::mojom::blink::ElementWiseBinary::Kind::kLesserOrEqual:
+      NOTREACHED_NORETURN() << "Unsupported element-wise binary operator.";
   }
   return xnn_status_success;
 }
@@ -996,38 +1011,50 @@ xnn_status DefineXnnNodeForElementWiseUnary(
     const MLOperator* unary,
     const OperandValueIdMap& operand_value_id_map,
     String& error_message) {
+  CHECK_EQ(unary->Kind(),
+           webnn::mojom::blink::Operation::Tag::kElementWiseUnary);
+
   const uint32_t input_id =
       GetOperatorInputValueId(unary, operand_value_id_map);
   const uint32_t output_id =
       GetOperatorOutputValueId(unary, operand_value_id_map);
   const uint32_t flags = 0;
-  switch (unary->Kind()) {
-    case MLOperator::OperatorKind::kAbs: {
+  switch (unary->SubKind<webnn::mojom::blink::ElementWiseUnary::Kind>()) {
+    case webnn::mojom::blink::ElementWiseUnary::Kind::kAbs: {
       XNN_CHECK_STATUS_AND_SET_ERROR_MESSAGE(
           xnn_define_abs(subgraph, input_id, output_id, flags));
       break;
     }
-    case MLOperator::OperatorKind::kCeil: {
+    case webnn::mojom::blink::ElementWiseUnary::Kind::kCeil: {
       XNN_CHECK_STATUS_AND_SET_ERROR_MESSAGE(
           xnn_define_ceiling(subgraph, input_id, output_id, flags));
       break;
     }
-    case MLOperator::OperatorKind::kFloor: {
+    case webnn::mojom::blink::ElementWiseUnary::Kind::kFloor: {
       XNN_CHECK_STATUS_AND_SET_ERROR_MESSAGE(
           xnn_define_floor(subgraph, input_id, output_id, flags));
       break;
     }
-    case MLOperator::OperatorKind::kNeg: {
+    case webnn::mojom::blink::ElementWiseUnary::Kind::kNeg: {
       XNN_CHECK_STATUS_AND_SET_ERROR_MESSAGE(
           xnn_define_negate(subgraph, input_id, output_id, flags));
       break;
     }
-    case MLOperator::OperatorKind::kSqrt: {
+    case webnn::mojom::blink::ElementWiseUnary::Kind::kSqrt: {
       XNN_CHECK_STATUS_AND_SET_ERROR_MESSAGE(
           xnn_define_square_root(subgraph, input_id, output_id, flags));
       break;
     }
-    default:
+    case webnn::mojom::blink::ElementWiseUnary::Kind::kCos:
+    case webnn::mojom::blink::ElementWiseUnary::Kind::kExp:
+    case webnn::mojom::blink::ElementWiseUnary::Kind::kLog:
+    case webnn::mojom::blink::ElementWiseUnary::Kind::kSin:
+    case webnn::mojom::blink::ElementWiseUnary::Kind::kTan:
+    case webnn::mojom::blink::ElementWiseUnary::Kind::kLogicalNot:
+    case webnn::mojom::blink::ElementWiseUnary::Kind::kIdentity:
+    case webnn::mojom::blink::ElementWiseUnary::Kind::kErf:
+    case webnn::mojom::blink::ElementWiseUnary::Kind::kReciprocal:
+    case webnn::mojom::blink::ElementWiseUnary::Kind::kCast:
       NOTREACHED_NORETURN() << "Unsupported element-wise unary operator.";
   }
   return xnn_status_success;
@@ -1071,37 +1098,13 @@ xnn_status DefineXnnNodeForGemm(xnn_subgraph_t subgraph,
 
   const MLGemmOptions* options =
       static_cast<const MLGemmOptions*>(gemm->Options());
-  if (options->hasC()) {
-    // XNNPACK fully connected Node only supports 1-D bias tensor (operand c of
-    // WebNN gemm operator) with [output_channels] dimensions.
-    const auto* bias = options->c();
-    const auto output_channels = gemm->Outputs()[0]->Dimensions()[1];
-    if (bias->Dimensions().size() != 1u ||
-        bias->Dimensions()[0] != output_channels) {
-      // TODO(crbug.com/1273291): Support the bias with other dimensions by
-      // element-wise addition operator.
-      error_message = String::Format("The dimensions of bias must be [%u].",
-                                     output_channels);
-      return xnn_status_unsupported_parameter;
-    }
-  }
-  if (options->alpha() != 1.0f) {
-    // TODO(crbug.com/1273291): Support alpha by using element-wise
-    // multiplication operator.
-    error_message = "gemm doesn't support alpha option.";
+  const auto output_channels = gemm->Outputs()[0]->Dimensions()[1];
+  const auto validation_result = ValidateGemmOptions(options, output_channels);
+  if (!validation_result.has_value()) {
+    error_message = validation_result.error();
     return xnn_status_unsupported_parameter;
   }
-  if (options->beta() != 1.0f) {
-    // TODO(crbug.com/1273291): Support beta by using element-wise
-    // multiplication operator.
-    error_message = "gemm doesn't support beta option.";
-    return xnn_status_unsupported_parameter;
-  }
-  if (options->aTranspose()) {
-    // TODO(crbug.com/1273291): Support aTranspose by using transpose operator.
-    error_message = "gemm doesn't support aTranspose option.";
-    return xnn_status_unsupported_parameter;
-  }
+
   uint32_t flags = 0;
   if (!options->bTranspose()) {
     // When bTranspose option is false, the filter tensor (operand b of WebNN
@@ -1130,6 +1133,49 @@ xnn_status DefineXnnNodeForHardSwish(
   const uint32_t flags = 0;
   XNN_CHECK_STATUS_AND_SET_ERROR_MESSAGE(
       xnn_define_hardswish(subgraph, input_id, output_id, flags));
+  return xnn_status_success;
+}
+
+xnn_status DefineXnnNodeForMatmul(xnn_subgraph_t subgraph,
+                                  const MLOperator* matmul,
+                                  const OperandValueIdMap& operand_value_id_map,
+                                  String& error_message) {
+  // Set up the Value ID of input1, input2 and output tensors for XNNPACK
+  // Batch Matrix Multiply Node.
+  const uint32_t input1_id =
+      GetOperatorInputValueId(matmul, operand_value_id_map, 0);
+  const uint32_t input2_id =
+      GetOperatorInputValueId(matmul, operand_value_id_map, 1);
+  const uint32_t output_id =
+      GetOperatorOutputValueId(matmul, operand_value_id_map);
+
+  const auto* input1 = matmul->Inputs()[0].Get();
+  CHECK(input1);
+  const auto input1_rank = input1->Dimensions().size();
+  const auto* input2 = matmul->Inputs()[1].Get();
+  CHECK(input2);
+  const auto input2_rank = input1->Dimensions().size();
+
+  if (input1_rank != input2_rank) {
+    error_message = "The rank of two inputs must be the same.";
+    return xnn_status_unsupported_parameter;
+  }
+
+  if (input1_rank < 3) {
+    error_message = "The rank of the input must be equal to or greater than 3.";
+    return xnn_status_unsupported_parameter;
+  }
+
+  for (wtf_size_t i = 0; i < input1_rank - 2; i++) {
+    if (input1->Dimensions()[i] != input2->Dimensions()[i]) {
+      error_message = "XNNPACK can't support broadcasting for matrix multiply.";
+      return xnn_status_unsupported_parameter;
+    }
+  }
+
+  uint32_t flags = 0;
+  XNN_CHECK_STATUS_AND_SET_ERROR_MESSAGE(xnn_define_batch_matrix_multiply(
+      subgraph, input1_id, input2_id, output_id, flags));
   return xnn_status_success;
 }
 
@@ -1197,6 +1243,8 @@ xnn_status DefineXnnNodeForPool2d(xnn_subgraph_t subgraph,
                                   const MLOperator* pool2d,
                                   const OperandValueIdMap& operand_value_id_map,
                                   String& error_message) {
+  CHECK_EQ(pool2d->Kind(), webnn::mojom::blink::Operation::Tag::kPool2d);
+
   const uint32_t input_id =
       GetOperatorInputValueId(pool2d, operand_value_id_map);
   const uint32_t output_id =
@@ -1256,9 +1304,7 @@ xnn_status DefineXnnNodeForPool2d(xnn_subgraph_t subgraph,
   }
 
   // Set or calculate padding sizes of XNNPACK pooling 2d Node.
-  auto padding = GetXnnPadding2D(options, input_height, input_width,
-                                 filter_height, filter_width, stride_height,
-                                 stride_width, dilation_height, dilation_width);
+  auto padding = GetXnnPadding2D(options);
 
   // Since XNNPACK doesn't support ceil rounding, add bottom and right padding
   // to bring the output to the sizes after ceil rounding.
@@ -1282,8 +1328,8 @@ xnn_status DefineXnnNodeForPool2d(xnn_subgraph_t subgraph,
   const float output_min = -std::numeric_limits<float>::infinity();
   const float output_max = +std::numeric_limits<float>::infinity();
   const uint32_t flags = 0;
-  switch (pool2d->Kind()) {
-    case MLOperator::OperatorKind::kAveragePool2d: {
+  switch (pool2d->SubKind<webnn::mojom::blink::Pool2d::Kind>()) {
+    case webnn::mojom::blink::Pool2d::Kind::kAveragePool2d: {
       if (dilation_height != 1 || dilation_width != 1) {
         error_message = "averagePool2d doesn't support dilations.";
         return xnn_status_unsupported_parameter;
@@ -1300,7 +1346,7 @@ xnn_status DefineXnnNodeForPool2d(xnn_subgraph_t subgraph,
       }
       break;
     }
-    case MLOperator::OperatorKind::kMaxPool2d: {
+    case webnn::mojom::blink::Pool2d::Kind::kMaxPool2d: {
       XNN_CHECK_STATUS_AND_SET_ERROR_MESSAGE(xnn_define_max_pooling_2d(
           subgraph, padding.top, padding.right, padding.bottom, padding.left,
           filter_height, filter_width, stride_height, stride_width,
@@ -1308,9 +1354,9 @@ xnn_status DefineXnnNodeForPool2d(xnn_subgraph_t subgraph,
           output_id, flags));
       break;
     }
-    default:
+    case webnn::mojom::blink::Pool2d::Kind::kL2Pool2d:
       // Only average and max pool2d are supported by this method.
-      NOTREACHED();
+      NOTREACHED_NORETURN();
   }
   return xnn_status_success;
 }
@@ -1338,7 +1384,7 @@ xnn_status DefineXnnNodeForPRelu(xnn_subgraph_t subgraph,
   // TODO(crbug.com/1273291): Consider implementing prelu by other XNNPACK ops
   // as max(0, x) + slope ∗ min(0, x) formula when slope is a non-constant
   // operand.
-  if (slope->Kind() != MLOperand::OperandKind::kConstant) {
+  if (slope->Kind() != webnn::mojom::blink::Operand::Kind::kConstant) {
     error_message = "Slope should be defined as a constant operand.";
     return xnn_status_invalid_parameter;
   }
@@ -1372,6 +1418,8 @@ xnn_status DefineXnnNodeForReduce(xnn_subgraph_t subgraph,
                                   const MLOperator* reduce,
                                   const OperandValueIdMap& operand_value_id_map,
                                   String& error_message) {
+  CHECK_EQ(reduce->Kind(), webnn::mojom::blink::Operation::Tag::kReduce);
+
   const uint32_t input_id =
       GetOperatorInputValueId(reduce, operand_value_id_map);
   const uint32_t output_id =
@@ -1393,18 +1441,25 @@ xnn_status DefineXnnNodeForReduce(xnn_subgraph_t subgraph,
   });
 
   const uint32_t flags = 0;
-  switch (reduce->Kind()) {
-    case MLOperator::OperatorKind::kReduceMean: {
+  switch (reduce->SubKind<webnn::mojom::blink::Reduce::Kind>()) {
+    case webnn::mojom::blink::Reduce::Kind::kMean: {
       XNN_CHECK_STATUS_AND_SET_ERROR_MESSAGE(xnn_define_static_mean(
           subgraph, reduction_axes.size(), reduction_axes.data(), input_id,
           output_id, flags));
       break;
     }
-    default: {
+    case webnn::mojom::blink::Reduce::Kind::kL1:
+    case webnn::mojom::blink::Reduce::Kind::kL2:
+    case webnn::mojom::blink::Reduce::Kind::kLogSum:
+    case webnn::mojom::blink::Reduce::Kind::kLogSumExp:
+    case webnn::mojom::blink::Reduce::Kind::kMax:
+    case webnn::mojom::blink::Reduce::Kind::kMin:
+    case webnn::mojom::blink::Reduce::Kind::kProduct:
+    case webnn::mojom::blink::Reduce::Kind::kSum:
+    case webnn::mojom::blink::Reduce::Kind::kSumSquare:
       // Because this method only supports reduceMean currently, it should
       // already throw unsupported error for other operators.
       NOTREACHED_NORETURN();
-    }
   }
   return xnn_status_success;
 }
@@ -1657,16 +1712,8 @@ xnn_status DefineXnnNodeForTranspose(
   const auto* input = transpose->Inputs()[0].Get();
   CHECK(input);
   const auto input_rank = input->Dimensions().size();
-  // According to WebNN spec:
-  // https://www.w3.org/TR/webnn/#api-mlgraphbuilder-transpose,
-  // When permutation is not specified, it’s set to [N-1, ..., 0], where N is
-  // the rank of the input tensor.
-  Vector<uint32_t> default_permutation(input_rank);
-  for (wtf_size_t i = 0; i < input_rank - 1; i++) {
-    default_permutation[i] = input_rank - 1 - i;
-  }
   const Vector<uint32_t> permutation =
-      options->getPermutationOr(std::move(default_permutation));
+      options->getPermutationOr(CreateDefaultPermutation(input_rank));
 
   // The current WebNN spec defines the value of permutation as signed
   // integer: https://www.w3.org/TR/webnn/#dom-mltransposeoptions-permutation
@@ -1743,151 +1790,209 @@ xnn_status DefineXnnNode(xnn_subgraph_t subgraph,
                          const OperandValueIdMap& operand_value_id_map,
                          String& error_message) {
   switch (ml_operator->Kind()) {
-    case MLOperator::OperatorKind::kClamp:
-      XNN_CHECK_STATUS(DefineXnnNodeForClamp(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-    case MLOperator::OperatorKind::kConv2d:
-      XNN_CHECK_STATUS(DefineXnnNodeForConv2d(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-    case MLOperator::OperatorKind::kConvTranspose2d:
-      XNN_CHECK_STATUS(DefineXnnNodeForConvTranspose2d(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-    // Define XNNPACK Node for element-wise binary operators.
-    case MLOperator::OperatorKind::kAdd:
-    case MLOperator::OperatorKind::kSub:
-    case MLOperator::OperatorKind::kMul:
-    case MLOperator::OperatorKind::kDiv:
-    case MLOperator::OperatorKind::kMax:
-    case MLOperator::OperatorKind::kMin:
-    case MLOperator::OperatorKind::kPow: {
-      XNN_CHECK_STATUS(DefineXnnNodeForElementWiseBinary(
-          subgraph, ml_operator, operand_value_id_map, error_message));
+    case webnn::mojom::blink::Operation::Tag::kClamp:
+      return DefineXnnNodeForClamp(subgraph, ml_operator, operand_value_id_map,
+                                   error_message);
+    case webnn::mojom::blink::Operation::Tag::kConv2d: {
+      switch (ml_operator->SubKind<webnn::mojom::blink::Conv2d::Kind>()) {
+        case webnn::mojom::blink::Conv2d::Kind::kDirect:
+          return DefineXnnNodeForConv2d(subgraph, ml_operator,
+                                        operand_value_id_map, error_message);
+        case webnn::mojom::blink::Conv2d::Kind::kTransposed:
+          return DefineXnnNodeForConvTranspose2d(
+              subgraph, ml_operator, operand_value_id_map, error_message);
+      }
       break;
     }
-    // Define XNNPACK Node for element-wise unary operators.
-    case MLOperator::OperatorKind::kAbs:
-    case MLOperator::OperatorKind::kCeil:
-    case MLOperator::OperatorKind::kFloor:
-    case MLOperator::OperatorKind::kNeg:
-    case MLOperator::OperatorKind::kSqrt: {
-      XNN_CHECK_STATUS(DefineXnnNodeForElementWiseUnary(
-          subgraph, ml_operator, operand_value_id_map, error_message));
+    case webnn::mojom::blink::Operation::Tag::kElementWiseBinary: {
+      switch (ml_operator
+                  ->SubKind<webnn::mojom::blink::ElementWiseBinary::Kind>()) {
+        case webnn::mojom::blink::ElementWiseBinary::Kind::kAdd:
+        case webnn::mojom::blink::ElementWiseBinary::Kind::kSub:
+        case webnn::mojom::blink::ElementWiseBinary::Kind::kMul:
+        case webnn::mojom::blink::ElementWiseBinary::Kind::kDiv:
+        case webnn::mojom::blink::ElementWiseBinary::Kind::kMax:
+        case webnn::mojom::blink::ElementWiseBinary::Kind::kMin:
+        case webnn::mojom::blink::ElementWiseBinary::Kind::kPow:
+          return DefineXnnNodeForElementWiseBinary(
+              subgraph, ml_operator, operand_value_id_map, error_message);
+        case webnn::mojom::blink::ElementWiseBinary::Kind::kEqual:
+        case webnn::mojom::blink::ElementWiseBinary::Kind::kGreater:
+        case webnn::mojom::blink::ElementWiseBinary::Kind::kGreaterOrEqual:
+        case webnn::mojom::blink::ElementWiseBinary::Kind::kLesser:
+        case webnn::mojom::blink::ElementWiseBinary::Kind::kLesserOrEqual:
+          error_message =
+              "The operator (" +
+              MLOperator::OperatorKindToString(
+                  ml_operator->Kind(),
+                  ml_operator->SubKind<
+                      webnn::mojom::blink::ElementWiseBinary::Kind>()) +
+              ") is not supported.";
+          return xnn_status_unsupported_parameter;
+      }
       break;
     }
-    case MLOperator::OperatorKind::kElu:
-      XNN_CHECK_STATUS(DefineXnnNodeForElu(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-    case MLOperator::OperatorKind::kGemm:
-      XNN_CHECK_STATUS(DefineXnnNodeForGemm(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-    case MLOperator::OperatorKind::kHardSwish:
-      XNN_CHECK_STATUS(DefineXnnNodeForHardSwish(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-    case MLOperator::OperatorKind::kPad:
-      XNN_CHECK_STATUS(DefineXnnNodeForPad(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-    // Define XNNPACK Node for pool2d operators.
-    case MLOperator::OperatorKind::kAveragePool2d:
-    case MLOperator::OperatorKind::kMaxPool2d: {
-      XNN_CHECK_STATUS(DefineXnnNodeForPool2d(
-          subgraph, ml_operator, operand_value_id_map, error_message));
+    case webnn::mojom::blink::Operation::Tag::kElementWiseUnary: {
+      switch (
+          ml_operator->SubKind<webnn::mojom::blink::ElementWiseUnary::Kind>()) {
+        case webnn::mojom::blink::ElementWiseUnary::Kind::kAbs:
+        case webnn::mojom::blink::ElementWiseUnary::Kind::kCeil:
+        case webnn::mojom::blink::ElementWiseUnary::Kind::kFloor:
+        case webnn::mojom::blink::ElementWiseUnary::Kind::kNeg:
+        case webnn::mojom::blink::ElementWiseUnary::Kind::kSqrt:
+          return DefineXnnNodeForElementWiseUnary(
+              subgraph, ml_operator, operand_value_id_map, error_message);
+        case webnn::mojom::blink::ElementWiseUnary::Kind::kCos:
+        case webnn::mojom::blink::ElementWiseUnary::Kind::kExp:
+        case webnn::mojom::blink::ElementWiseUnary::Kind::kLog:
+        case webnn::mojom::blink::ElementWiseUnary::Kind::kSin:
+        case webnn::mojom::blink::ElementWiseUnary::Kind::kTan:
+        case webnn::mojom::blink::ElementWiseUnary::Kind::kLogicalNot:
+        case webnn::mojom::blink::ElementWiseUnary::Kind::kIdentity:
+        case webnn::mojom::blink::ElementWiseUnary::Kind::kErf:
+        case webnn::mojom::blink::ElementWiseUnary::Kind::kReciprocal:
+        case webnn::mojom::blink::ElementWiseUnary::Kind::kCast:
+          error_message =
+              "The operator (" +
+              MLOperator::OperatorKindToString(
+                  ml_operator->Kind(),
+                  ml_operator->SubKind<
+                      webnn::mojom::blink::ElementWiseUnary::Kind>()) +
+              ") is not supported.";
+          return xnn_status_unsupported_parameter;
+      }
+    }
+    case webnn::mojom::blink::Operation::Tag::kElu:
+      return DefineXnnNodeForElu(subgraph, ml_operator, operand_value_id_map,
+                                 error_message);
+    case webnn::mojom::blink::Operation::Tag::kGemm:
+      return DefineXnnNodeForGemm(subgraph, ml_operator, operand_value_id_map,
+                                  error_message);
+    case webnn::mojom::blink::Operation::Tag::kHardSwish:
+      return DefineXnnNodeForHardSwish(subgraph, ml_operator,
+                                       operand_value_id_map, error_message);
+    case webnn::mojom::blink::Operation::Tag::kMatmul:
+      return DefineXnnNodeForMatmul(subgraph, ml_operator, operand_value_id_map,
+                                    error_message);
+    case webnn::mojom::blink::Operation::Tag::kPad:
+      return DefineXnnNodeForPad(subgraph, ml_operator, operand_value_id_map,
+                                 error_message);
+    case webnn::mojom::blink::Operation::Tag::kPool2d: {
+      switch (ml_operator->SubKind<webnn::mojom::blink::Pool2d::Kind>()) {
+        case webnn::mojom::blink::Pool2d::Kind::kAveragePool2d:
+        case webnn::mojom::blink::Pool2d::Kind::kMaxPool2d:
+          return DefineXnnNodeForPool2d(subgraph, ml_operator,
+                                        operand_value_id_map, error_message);
+        case webnn::mojom::blink::Pool2d::Kind::kL2Pool2d:
+          error_message =
+              "The operator (" +
+              MLOperator::OperatorKindToString(
+                  ml_operator->Kind(),
+                  ml_operator->SubKind<webnn::mojom::blink::Pool2d::Kind>()) +
+              ") is not supported.";
+          return xnn_status_unsupported_parameter;
+      }
       break;
     }
-    case MLOperator::OperatorKind::kLeakyRelu:
-      XNN_CHECK_STATUS(DefineXnnNodeForLeakyRelu(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-    case MLOperator::OperatorKind::kPRelu:
-      XNN_CHECK_STATUS(DefineXnnNodeForPRelu(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-      // Define XNNPACK Node for reduction operators.
-    case MLOperator::OperatorKind::kReduceMean:
-      XNN_CHECK_STATUS(DefineXnnNodeForReduce(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-    case MLOperator::OperatorKind::kRelu:
-      XNN_CHECK_STATUS(DefineXnnNodeForRelu(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-    case MLOperator::OperatorKind::kReshape:
-      XNN_CHECK_STATUS(DefineXnnNodeForReshape(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-    case MLOperator::OperatorKind::kSigmoid:
-      XNN_CHECK_STATUS(DefineXnnNodeForSigmoid(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-    case MLOperator::OperatorKind::kSlice:
-      XNN_CHECK_STATUS(DefineXnnNodeForSlice(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-    case MLOperator::OperatorKind::kSoftmax:
-      XNN_CHECK_STATUS(DefineXnnNodeForSoftmax(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-    case MLOperator::OperatorKind::kResample2d: {
-      XNN_CHECK_STATUS(DefineXnnNodeForResample2d(
-          subgraph, ml_operator, operand_value_id_map, error_message));
+    case webnn::mojom::blink::Operation::Tag::kLeakyRelu:
+      return DefineXnnNodeForLeakyRelu(subgraph, ml_operator,
+                                       operand_value_id_map, error_message);
+    case webnn::mojom::blink::Operation::Tag::kPrelu:
+      return DefineXnnNodeForPRelu(subgraph, ml_operator, operand_value_id_map,
+                                   error_message);
+    case webnn::mojom::blink::Operation::Tag::kReduce: {
+      switch (ml_operator->SubKind<webnn::mojom::blink::Reduce::Kind>()) {
+        case webnn::mojom::blink::Reduce::Kind::kMean:
+          return DefineXnnNodeForReduce(subgraph, ml_operator,
+                                        operand_value_id_map, error_message);
+        case webnn::mojom::blink::Reduce::Kind::kL1:
+        case webnn::mojom::blink::Reduce::Kind::kL2:
+        case webnn::mojom::blink::Reduce::Kind::kLogSum:
+        case webnn::mojom::blink::Reduce::Kind::kLogSumExp:
+        case webnn::mojom::blink::Reduce::Kind::kMax:
+        case webnn::mojom::blink::Reduce::Kind::kMin:
+        case webnn::mojom::blink::Reduce::Kind::kProduct:
+        case webnn::mojom::blink::Reduce::Kind::kSum:
+        case webnn::mojom::blink::Reduce::Kind::kSumSquare:
+          error_message =
+              "The operator (" +
+              MLOperator::OperatorKindToString(
+                  ml_operator->Kind(),
+                  ml_operator->SubKind<webnn::mojom::blink::Reduce::Kind>()) +
+              ") is not supported.";
+          return xnn_status_unsupported_parameter;
+      }
       break;
     }
-    case MLOperator::OperatorKind::kSplit: {
-      XNN_CHECK_STATUS(DefineXnnNodeForSplit(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-    }
-    case MLOperator::OperatorKind::kTranspose: {
-      XNN_CHECK_STATUS(DefineXnnNodeForTranspose(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-    }
-    case MLOperator::OperatorKind::kTanh: {
-      XNN_CHECK_STATUS(DefineXnnNodeForTanh(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-    }
-    case MLOperator::OperatorKind::kConcat: {
-      XNN_CHECK_STATUS(DefineXnnNodeForConcat(
-          subgraph, ml_operator, operand_value_id_map, error_message));
-      break;
-    }
-    default: {
+    case webnn::mojom::blink::Operation::Tag::kRelu:
+      return DefineXnnNodeForRelu(subgraph, ml_operator, operand_value_id_map,
+                                  error_message);
+    case webnn::mojom::blink::Operation::Tag::kReshape:
+      return DefineXnnNodeForReshape(subgraph, ml_operator,
+                                     operand_value_id_map, error_message);
+    case webnn::mojom::blink::Operation::Tag::kSigmoid:
+      return DefineXnnNodeForSigmoid(subgraph, ml_operator,
+                                     operand_value_id_map, error_message);
+    case webnn::mojom::blink::Operation::Tag::kSlice:
+      return DefineXnnNodeForSlice(subgraph, ml_operator, operand_value_id_map,
+                                   error_message);
+    case webnn::mojom::blink::Operation::Tag::kSoftmax:
+      return DefineXnnNodeForSoftmax(subgraph, ml_operator,
+                                     operand_value_id_map, error_message);
+    case webnn::mojom::blink::Operation::Tag::kResample2d:
+      return DefineXnnNodeForResample2d(subgraph, ml_operator,
+                                        operand_value_id_map, error_message);
+    case webnn::mojom::blink::Operation::Tag::kSplit:
+      return DefineXnnNodeForSplit(subgraph, ml_operator, operand_value_id_map,
+                                   error_message);
+    case webnn::mojom::blink::Operation::Tag::kTranspose:
+      return DefineXnnNodeForTranspose(subgraph, ml_operator,
+                                       operand_value_id_map, error_message);
+    case webnn::mojom::blink::Operation::Tag::kTanh:
+      return DefineXnnNodeForTanh(subgraph, ml_operator, operand_value_id_map,
+                                  error_message);
+    case webnn::mojom::blink::Operation::Tag::kConcat:
+      return DefineXnnNodeForConcat(subgraph, ml_operator, operand_value_id_map,
+                                    error_message);
+    case webnn::mojom::blink::Operation::Tag::kArgMinMax:
+      error_message =
+          "The operator (" +
+          MLOperator::OperatorKindToString(
+              ml_operator->Kind(),
+              ml_operator->SubKind<webnn::mojom::blink::ArgMinMax::Kind>()) +
+          ") is not supported.";
+      return xnn_status_unsupported_parameter;
+    case webnn::mojom::blink::Operation::Tag::kBatchNormalization:
+    case webnn::mojom::blink::Operation::Tag::kExpand:
+    case webnn::mojom::blink::Operation::Tag::kGather:
+    case webnn::mojom::blink::Operation::Tag::kGru:
+    case webnn::mojom::blink::Operation::Tag::kHardSigmoid:
+    case webnn::mojom::blink::Operation::Tag::kLayerNormalization:
+    case webnn::mojom::blink::Operation::Tag::kInstanceNormalization:
+    case webnn::mojom::blink::Operation::Tag::kLinear:
+    case webnn::mojom::blink::Operation::Tag::kLstm:
+    case webnn::mojom::blink::Operation::Tag::kSoftplus:
+    case webnn::mojom::blink::Operation::Tag::kSoftsign:
+    case webnn::mojom::blink::Operation::Tag::kTriangular:
+    case webnn::mojom::blink::Operation::Tag::kWhere:
       error_message = "The operator (" +
                       MLOperator::OperatorKindToString(ml_operator->Kind()) +
                       ") is not supported.";
       return xnn_status_unsupported_parameter;
-    }
   }
-  return xnn_status_success;
 }
 
 }  // namespace
 
 // static
-void MLGraphXnnpack::ValidateAndBuildAsync(ScopedMLTrace scoped_trace,
-                                           MLContext* context,
-                                           const MLNamedOperands& named_outputs,
-                                           ScriptPromiseResolver* resolver) {
-  scoped_trace.AddStep("MLGraphXnnpack::ValidateAndBuildAsync");
-  auto* graph = MakeGarbageCollected<MLGraphXnnpack>(context);
-  graph->BuildAsync(std::move(scoped_trace), named_outputs, resolver);
-}
-
-// static
-MLGraph* MLGraphXnnpack::ValidateAndBuildSync(
-    ScriptState* script_state,
+void MLGraphXnnpack::ValidateAndBuild(
+    ScopedMLTrace scoped_trace,
     MLContext* context,
     const MLNamedOperands& named_outputs,
-    ExceptionState& exception_state) {
-  return MakeGarbageCollected<MLGraphXnnpack>(context)->BuildSync(
-      script_state, named_outputs, exception_state);
+    ScriptPromiseResolverTyped<MLGraph>* resolver) {
+  scoped_trace.AddStep("MLGraphXnnpack::ValidateAndBuild");
+  auto* graph = MakeGarbageCollected<MLGraphXnnpack>(context);
+  graph->Build(std::move(scoped_trace), named_outputs, resolver);
 }
 
 MLGraphXnnpack::MLGraphXnnpack(MLContext* context)
@@ -1918,10 +2023,9 @@ const Vector<xnn_external_value>& MLGraphXnnpack::GetXnnExternalValuesTesting()
   return xnn_runtime_wrapper_->GetXnnExternalValuesTesting();
 }
 
-void MLGraphXnnpack::BuildAsyncImpl(ScopedMLTrace scoped_trace,
-                                    const MLNamedOperands& named_outputs,
-                                    ScriptPromiseResolver* resolver) {
-  CHECK(IsMainThread());
+void MLGraphXnnpack::BuildImpl(ScopedMLTrace scoped_trace,
+                               const MLNamedOperands& named_outputs,
+                               ScriptPromiseResolverTyped<MLGraph>* resolver) {
   CHECK(!xnn_runtime_wrapper_);
   PostCrossThreadTask(
       *xnnpack_task_runner_, FROM_HERE,
@@ -1938,7 +2042,7 @@ void MLGraphXnnpack::GetSharedXnnpackContextOnBackgroundThread(
     ScopedMLTrace scoped_trace,
     CrossThreadHandle<MLGraphXnnpack> graph,
     CrossThreadHandle<MLNamedOperands> named_outputs,
-    CrossThreadHandle<ScriptPromiseResolver> resolver,
+    CrossThreadHandle<ScriptPromiseResolverTyped<MLGraph>> resolver,
     scoped_refptr<base::SequencedTaskRunner> resolver_task_runner) {
   CHECK(!IsMainThread());
   // Get or create the SharedXnnpackContext.
@@ -1959,16 +2063,15 @@ void MLGraphXnnpack::OnDidGetSharedXnnpackContext(
     ScopedMLTrace scoped_trace,
     scoped_refptr<SharedXnnpackContext> xnn_context,
     MLNamedOperands* named_outputs,
-    ScriptPromiseResolver* resolver,
+    ScriptPromiseResolverTyped<MLGraph>* resolver,
     String error_message) {
-  CHECK(IsMainThread());
   if (!xnn_context) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         XnnStatusToDOMExceptionCode(xnn_status_uninitialized), error_message));
     return;
   }
 
-  Vector<DataBufferPtr> static_data_buffers;
+  Vector<DataBuffer> static_data_buffers;
   XnnSubgraphPtr subgraph(nullptr, &xnn_delete_subgraph);
   xnn_status status = CreateXnnSubgraph(*named_outputs, subgraph,
                                         static_data_buffers, error_message);
@@ -1995,10 +2098,10 @@ void MLGraphXnnpack::CreateXnnRuntimeOnBackgroundThread(
     ScopedMLTrace scoped_trace,
     XnnSubgraphPtr subgraph,
     scoped_refptr<SharedXnnpackContext> xnn_context,
-    Vector<DataBufferPtr> static_data_buffers,
+    Vector<DataBuffer> static_data_buffers,
     CrossThreadHandle<MLGraphXnnpack> graph,
     uint32_t num_threads,
-    CrossThreadHandle<ScriptPromiseResolver> resolver,
+    CrossThreadHandle<ScriptPromiseResolverTyped<MLGraph>> resolver,
     scoped_refptr<base::SequencedTaskRunner> resolver_task_runner) {
   CHECK(!IsMainThread());
   String error_message;
@@ -2018,9 +2121,8 @@ void MLGraphXnnpack::CreateXnnRuntimeOnBackgroundThread(
 void MLGraphXnnpack::OnDidCreateXnnRuntime(
     ScopedMLTrace scoped_trace,
     scoped_refptr<XnnRuntimeWrapper> xnn_runtime_wrapper,
-    ScriptPromiseResolver* resolver,
+    ScriptPromiseResolverTyped<MLGraph>* resolver,
     String error_message) {
-  CHECK(IsMainThread());
   if (!xnn_runtime_wrapper) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kDataError, error_message));
@@ -2030,50 +2132,27 @@ void MLGraphXnnpack::OnDidCreateXnnRuntime(
   resolver->Resolve(this);
 }
 
-MLGraph* MLGraphXnnpack::BuildSyncImpl(ScriptState* script_state,
-                                       const MLNamedOperands& named_outputs,
-                                       ExceptionState& exception_state) {
-  CHECK(!xnn_runtime_wrapper_);
-  String error_message;
-  auto xnn_context = SharedXnnpackContext::GetInstance(error_message);
-  if (!xnn_context) {
-    exception_state.ThrowDOMException(
-        XnnStatusToDOMExceptionCode(xnn_status_uninitialized), error_message);
-    return nullptr;
-  }
-  Vector<DataBufferPtr> static_data_buffers;
-  XnnSubgraphPtr subgraph(nullptr, &xnn_delete_subgraph);
-  xnn_status status = CreateXnnSubgraph(named_outputs, subgraph,
-                                        static_data_buffers, error_message);
-  if (status != xnn_status_success) {
-    exception_state.ThrowDOMException(XnnStatusToDOMExceptionCode(status),
-                                      error_message);
-    return nullptr;
-  }
-  xnn_runtime_wrapper_ =
-      XnnRuntimeWrapper::Create(std::move(subgraph), std::move(xnn_context),
-                                std::move(static_data_buffers),
-                                ml_context_->GetNumThreads(), error_message);
-  if (!xnn_runtime_wrapper_) {
-    exception_state.ThrowDOMException(
-        XnnStatusToDOMExceptionCode(xnn_status_invalid_parameter),
-        error_message);
-    return nullptr;
-  }
-
-  return this;
-}
-
-void MLGraphXnnpack::ComputeAsyncImpl(ScopedMLTrace scoped_trace,
-                                      const MLNamedArrayBufferViews& inputs,
-                                      const MLNamedArrayBufferViews& outputs,
-                                      ScriptPromiseResolver* resolver,
-                                      ExceptionState& exception_state) {
+void MLGraphXnnpack::ComputeImpl(
+    ScopedMLTrace scoped_trace,
+    const MLNamedArrayBufferViews& inputs,
+    const MLNamedArrayBufferViews& outputs,
+    ScriptPromiseResolverTyped<MLComputeResult>* resolver,
+    ExceptionState& exception_state) {
   scoped_trace.AddStep("MLGraphXnnpack::TransferNamedArrayBufferViews");
-
   // `MLNamedArrayBufferViews` objects should be accessed on the thread owning
   // the heap before transferring.
-  auto external_values = CreateExternalValues(inputs, outputs);
+  //
+  // The input buffers should be passed along with external values to background
+  // thread where the XNNPACK runtime uses them.
+  auto external_values_and_input_buffers =
+      CreateExternalValues(inputs, outputs);
+  if (!external_values_and_input_buffers) {
+    resolver->Reject(MakeGarbageCollected<DOMException>(
+        DOMExceptionCode::kDataError, "Failed to create input buffers."));
+    return;
+  }
+  auto [external_values, input_buffers] =
+      std::move(external_values_and_input_buffers.value());
 
   // Transfer the `MLNamedArrayBufferViews` to `NamedArrayBufferViewsInfo` which
   // is safe to be posted to a worker thread.
@@ -2100,9 +2179,9 @@ void MLGraphXnnpack::ComputeAsyncImpl(ScopedMLTrace scoped_trace,
   PostCrossThreadTask(
       *xnnpack_task_runner_, FROM_HERE,
       CrossThreadBindOnce(&ComputeOnBackgroundThread, std::move(scoped_trace),
-                          xnn_runtime_wrapper_, std::move(external_values),
-                          std::move(inputs_info), std::move(outputs_info),
-                          MakeCrossThreadHandle(this),
+                          xnn_runtime_wrapper_, std::move(input_buffers),
+                          std::move(external_values), std::move(inputs_info),
+                          std::move(outputs_info), MakeCrossThreadHandle(this),
                           MakeCrossThreadHandle(resolver),
                           resolver_task_runner_));
 }
@@ -2111,11 +2190,12 @@ void MLGraphXnnpack::ComputeAsyncImpl(ScopedMLTrace scoped_trace,
 void MLGraphXnnpack::ComputeOnBackgroundThread(
     ScopedMLTrace scoped_trace,
     scoped_refptr<XnnRuntimeWrapper> xnn_runtime_wrapper,
+    Vector<DataBuffer> input_buffers,
     XnnExternalValuesPtr external_values,
     NamedArrayBufferViewsInfoPtr inputs_info,
     NamedArrayBufferViewsInfoPtr outputs_info,
     CrossThreadHandle<MLGraphXnnpack> graph,
-    CrossThreadHandle<ScriptPromiseResolver> resolver,
+    CrossThreadHandle<ScriptPromiseResolverTyped<MLComputeResult>> resolver,
     scoped_refptr<base::SequencedTaskRunner> resolver_task_runner) {
   CHECK(!IsMainThread());
   scoped_trace.AddStep("MLGraphXnnpack::ComputeOnBackgroundThread");
@@ -2133,12 +2213,13 @@ void MLGraphXnnpack::ComputeOnBackgroundThread(
                           std::move(error_message)));
 }
 
-void MLGraphXnnpack::OnDidCompute(ScopedMLTrace scoped_trace,
-                                  xnn_status status,
-                                  NamedArrayBufferViewsInfoPtr inputs_info,
-                                  NamedArrayBufferViewsInfoPtr outputs_info,
-                                  ScriptPromiseResolver* resolver,
-                                  String error_message) {
+void MLGraphXnnpack::OnDidCompute(
+    ScopedMLTrace scoped_trace,
+    xnn_status status,
+    NamedArrayBufferViewsInfoPtr inputs_info,
+    NamedArrayBufferViewsInfoPtr outputs_info,
+    ScriptPromiseResolverTyped<MLComputeResult>* resolver,
+    String error_message) {
   if (status != xnn_status_success) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         XnnStatusToDOMExceptionCode(status), error_message));
@@ -2152,23 +2233,10 @@ void MLGraphXnnpack::OnDidCompute(ScopedMLTrace scoped_trace,
   resolver->Resolve(result);
 }
 
-void MLGraphXnnpack::ComputeSyncImpl(const MLNamedArrayBufferViews& inputs,
-                                     const MLNamedArrayBufferViews& outputs,
-                                     ExceptionState& exception_state) {
-  auto external_values = CreateExternalValues(inputs, outputs);
-  String error_message;
-  xnn_status status =
-      xnn_runtime_wrapper_->Invoke(std::move(external_values), error_message);
-  if (status != xnn_status_success) {
-    exception_state.ThrowDOMException(XnnStatusToDOMExceptionCode(status),
-                                      error_message);
-  }
-}
-
 xnn_status MLGraphXnnpack::CreateXnnSubgraph(
     const MLNamedOperands& named_outputs,
     XnnSubgraphPtr& out_subgraph,
-    Vector<DataBufferPtr>& out_static_data_buffers,
+    Vector<DataBuffer>& out_static_data_buffers,
     String& error_message) {
   ScopedMLTrace scoped_trace("MLGraphXnnpack::CreateXnnSubgraph");
 
@@ -2188,7 +2256,7 @@ xnn_status MLGraphXnnpack::CreateXnnSubgraph(
   XnnSubgraphPtr subgraph(subgraph_ptr, &xnn_delete_subgraph);
 
   // Holds the static data of XNNPACK Values for MLGraph's constant operands.
-  Vector<DataBufferPtr> static_data_buffers;
+  Vector<DataBuffer> static_data_buffers;
   // Map the operand to its XNNPACK Value ID.
   OperandValueIdMap operand_value_id_map;
   // The ID is used to define an external XNNPACK Value. It should be increased
@@ -2227,7 +2295,7 @@ xnn_status MLGraphXnnpack::CreateXnnSubgraph(
         continue;
       }
       switch (operand->Kind()) {
-        case MLOperand::OperandKind::kInput: {
+        case webnn::mojom::blink::Operand::Kind::kInput: {
           // Define an external XNNPACK Value for the graph's input operand.
           // The external ID should be in the [0, external_value_ids_num - 1]
           // range.
@@ -2245,7 +2313,7 @@ xnn_status MLGraphXnnpack::CreateXnnSubgraph(
           input_external_value_id_map_.insert(operand->Name(), value_id);
           break;
         }
-        case MLOperand::OperandKind::kConstant: {
+        case webnn::mojom::blink::Operand::Kind::kConstant: {
           // Define a static XNNPACK Value for this constant operand. Because
           // XNNPACK requires the static data of a static XNNPACK Value must
           // exceed the life-time of its Subgraph and Runtime objects, a new
@@ -2253,22 +2321,20 @@ xnn_status MLGraphXnnpack::CreateXnnSubgraph(
           // The contents of this constant operand are copied from the array
           // buffer into the newly-allocated buffer and it is used to initialize
           // the XNNPACK Value.
-          const auto* array_buffer_view = operand->ArrayBufferView();
-          CHECK(array_buffer_view);
-          CHECK(!array_buffer_view->IsDetached());
-          auto data =
-              std::make_unique<uint8_t[]>(array_buffer_view->byteLength());
-          DCHECK(data);
-          memcpy(data.get(), array_buffer_view->BaseAddress(),
-                 array_buffer_view->byteLength());
+          auto buffer = MakeBufferWithExtraBytes(operand->ArrayBufferView());
+          if (!buffer) {
+            error_message = "The constant is too large.";
+            return xnn_status_invalid_parameter;
+          }
           uint32_t value_id;
-          XNN_CHECK_STATUS(DefineStaticXnnValue(subgraph.get(), operand, data,
-                                                value_id, error_message));
+          XNN_CHECK_STATUS(DefineStaticXnnValue(subgraph.get(), operand,
+                                                buffer.value(), value_id,
+                                                error_message));
           operand_value_id_map.insert(operand.Get(), value_id);
-          static_data_buffers.push_back(std::move(data));
+          static_data_buffers.push_back(std::move(buffer.value()));
           break;
         }
-        case MLOperand::OperandKind::kOutput:
+        case webnn::mojom::blink::Operand::Kind::kOutput:
           // Because the operators are visited in topological order, if this
           // operand is an intermediate operand, it should already be defined as
           // an output operand of the dependent operator.
@@ -2301,30 +2367,38 @@ xnn_status MLGraphXnnpack::CreateXnnSubgraph(
   return xnn_status_success;
 }
 
-XnnExternalValuesPtr MLGraphXnnpack::CreateExternalValues(
+std::optional<std::pair<XnnExternalValuesPtr, Vector<DataBuffer>>>
+MLGraphXnnpack::CreateExternalValues(
     const MLNamedArrayBufferViews& inputs,
     const MLNamedArrayBufferViews& outputs) const {
+  Vector<DataBuffer> input_buffers;
+  input_buffers.reserve(inputs.size());
   auto external_values = std::make_unique<Vector<xnn_external_value>>();
-  external_values->reserve((inputs.size() + outputs.size()));
-  // Although XNNPACK doesn't validate the pointers, the base address and the
-  // byte length of the array buffer views are already validated by
-  // ValidateNamedArrayBufferViews(). It should be safe to setup XNNPACK Runtime
-  // object with them.
+  external_values->reserve(inputs.size() + outputs.size());
   for (const auto& [name, array_buffer_view] : inputs) {
-    DCHECK(input_external_value_id_map_.Contains(name));
+    auto buffer = MakeBufferWithExtraBytes(array_buffer_view.Get());
+    if (!buffer) {
+      return std::nullopt;
+    }
     external_values->emplace_back(
         xnn_external_value{.id = input_external_value_id_map_.at(name),
-                           .data = array_buffer_view->BaseAddress()});
+                           .data = buffer.value().data()});
+    input_buffers.emplace_back(std::move(buffer.value()));
   }
+  // Although XNNPACK doesn't validate the pointers, the base address and
+  // the byte length of the array buffer views are already validated by
+  // ValidateNamedArrayBufferViews(). It should be safe to setup XNNPACK
+  // Runtime object with them.
   for (const auto& [name, array_buffer_view] : outputs) {
-    DCHECK(output_external_value_id_map_.Contains(name));
+    // It's safe to set external value data to base address of array buffer,
+    // because XNNPACK never writes beyond the array bounds.
     external_values->emplace_back(
         xnn_external_value{.id = output_external_value_id_map_.at(name),
                            .data = array_buffer_view->BaseAddress()});
   }
   base::ranges::sort(*external_values, base::ranges::less{},
                      &xnn_external_value::id);
-  return external_values;
+  return std::make_pair(std::move(external_values), std::move(input_buffers));
 }
 
 }  // namespace blink

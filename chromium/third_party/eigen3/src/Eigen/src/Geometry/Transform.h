@@ -943,7 +943,8 @@ EIGEN_DEVICE_FUNC Transform<Scalar, Dim, Mode, Options>& Transform<Scalar, Dim, 
     const Scalar& sx, const Scalar& sy) {
   EIGEN_STATIC_ASSERT(int(Dim) == 2, YOU_MADE_A_PROGRAMMING_MISTAKE)
   EIGEN_STATIC_ASSERT(Mode != int(Isometry), THIS_METHOD_IS_ONLY_FOR_SPECIFIC_TRANSFORMATIONS)
-  m_matrix.template block<Dim, HDim>(0, 0) = LinearMatrixType(1, sx, sy, 1) * m_matrix.template block<Dim, HDim>(0, 0);
+  m_matrix.template block<Dim, HDim>(0, 0) =
+      LinearMatrixType({{1, sy}, {sx, 1}}) * m_matrix.template block<Dim, HDim>(0, 0);
   return *this;
 }
 

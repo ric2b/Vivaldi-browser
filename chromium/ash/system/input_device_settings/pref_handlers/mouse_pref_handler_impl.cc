@@ -10,6 +10,7 @@
 #include "ash/public/mojom/input_device_settings.mojom.h"
 #include "ash/shell.h"
 #include "ash/system/input_device_settings/input_device_settings_defaults.h"
+#include "ash/system/input_device_settings/input_device_settings_logging.h"
 #include "ash/system/input_device_settings/input_device_settings_metadata.h"
 #include "ash/system/input_device_settings/input_device_settings_pref_names.h"
 #include "ash/system/input_device_settings/input_device_settings_utils.h"
@@ -47,6 +48,25 @@ bool GetDefaultSwapRightValue(const mojom::MousePolicies& mouse_policies) {
   }
 
   return kDefaultSwapRight;
+}
+
+// Append all missing button remappings to the current list with default
+// remapping action.
+void UpdateButtonRemappingsWithCompleteList(
+    mojom::MouseButtonConfig mouse_button_config,
+    std::vector<mojom::ButtonRemappingPtr>& current_button_remappings) {
+  auto default_remappings =
+      GetButtonRemappingListForConfig(mouse_button_config);
+  for (auto& remapping : default_remappings) {
+    const auto iter = base::ranges::find(
+        current_button_remappings, *remapping->button,
+        [](const mojom::ButtonRemappingPtr& current_remapping) {
+          return *current_remapping->button;
+        });
+    if (iter == current_button_remappings.end()) {
+      current_button_remappings.push_back(std::move(remapping));
+    }
+  }
 }
 
 // GetMouseSettingsFromPrefs returns a mouse settings based on user prefs
@@ -91,7 +111,7 @@ mojom::MouseSettingsPtr GetMouseSettingsFromPrefs(
       prefs->GetUserPrefValue(prefs::kMouseScrollAcceleration);
   settings->scroll_acceleration =
       scroll_acceleration_preference ? scroll_acceleration_preference->GetBool()
-                                     : kDefaultSensitivity;
+                                     : kDefaultScrollAccelerationEnabled;
   force_persistence.scroll_acceleration =
       scroll_acceleration_preference != nullptr;
 
@@ -99,7 +119,7 @@ mojom::MouseSettingsPtr GetMouseSettingsFromPrefs(
       prefs->GetUserPrefValue(prefs::kMouseScrollSensitivity);
   settings->scroll_sensitivity = scroll_sensitivity_preference
                                      ? scroll_sensitivity_preference->GetInt()
-                                     : kDefaultScrollAcceleration;
+                                     : kDefaultScrollSensitivity;
   force_persistence.scroll_sensitivity =
       scroll_sensitivity_preference != nullptr;
 
@@ -123,10 +143,10 @@ mojom::MouseSettingsPtr RetrieveMouseSettings(
           .value_or(kDefaultAccelerationEnabled);
   settings->scroll_sensitivity =
       settings_dict.FindInt(prefs::kMouseSettingScrollSensitivity)
-          .value_or(kDefaultSensitivity);
+          .value_or(kDefaultScrollSensitivity);
   settings->scroll_acceleration =
       settings_dict.FindBool(prefs::kMouseSettingScrollAcceleration)
-          .value_or(kDefaultScrollAcceleration);
+          .value_or(kDefaultScrollAccelerationEnabled);
   return settings;
 }
 
@@ -183,17 +203,18 @@ base::Value::Dict ConvertSettingsToDict(
 
   if (ShouldPersistSetting(prefs::kMouseSettingScrollSensitivity,
                            static_cast<int>(mouse.settings->scroll_sensitivity),
-                           kDefaultSensitivity,
+                           kDefaultScrollSensitivity,
                            force_persistence.scroll_sensitivity,
                            existing_settings_dict)) {
     settings_dict.Set(prefs::kMouseSettingScrollSensitivity,
                       mouse.settings->scroll_sensitivity);
   }
 
-  if (ShouldPersistSetting(
-          prefs::kMouseSettingScrollAcceleration,
-          mouse.settings->scroll_acceleration, kDefaultScrollAcceleration,
-          force_persistence.scroll_acceleration, existing_settings_dict)) {
+  if (ShouldPersistSetting(prefs::kMouseSettingScrollAcceleration,
+                           mouse.settings->scroll_acceleration,
+                           kDefaultScrollAccelerationEnabled,
+                           force_persistence.scroll_acceleration,
+                           existing_settings_dict)) {
     settings_dict.Set(prefs::kMouseSettingScrollAcceleration,
                       mouse.settings->scroll_acceleration);
   }
@@ -328,14 +349,27 @@ void MousePrefHandlerImpl::InitializeMouseSettings(
                    ? SettingsUpdatedMetricsInfo::Category::kDefault
                    : SettingsUpdatedMetricsInfo::Category::kFirstEver;
   }
+  if (category == SettingsUpdatedMetricsInfo::Category::kSynced) {
+    PR_LOG(INFO, Feature::IDS)
+        << GetMouseSettingsLog("Synced with latest settings", *mouse);
+  } else if (category == SettingsUpdatedMetricsInfo::Category::kDefault) {
+    PR_LOG(INFO, Feature::IDS)
+        << GetMouseSettingsLog("Using default settings", *mouse);
+  } else {
+    PR_LOG(INFO, Feature::IDS)
+        << GetMouseSettingsLog("First time connected", *mouse);
+  }
   if (features::IsPeripheralCustomizationEnabled()) {
     const auto& button_remappings_dict =
         pref_service->GetDict(prefs::kMouseButtonRemappingsDictPref);
     const auto* button_remappings_list =
         button_remappings_dict.FindList(mouse->device_key);
     if (button_remappings_list) {
-      mouse->settings->button_remappings = ConvertListToButtonRemappingArray(
+      auto button_remappings = ConvertListToButtonRemappingArray(
           *button_remappings_list, mouse->customization_restriction);
+      UpdateButtonRemappingsWithCompleteList(mouse->mouse_button_config,
+                                             button_remappings);
+      mouse->settings->button_remappings = std::move(button_remappings);
     } else {
       mouse->settings->button_remappings =
           GetButtonRemappingListForConfig(mouse->mouse_button_config);

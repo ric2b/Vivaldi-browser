@@ -13,10 +13,13 @@
 #include <string.h>  // for memcpy() and memset().
 
 #include <iterator>
+#include <optional>
+#include <string_view>
 #include <utility>
 
-#include "base/big_endian.h"
+#include "base/containers/heap_array.h"
 #include "base/containers/span.h"
+#include "base/numerics/byte_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "net/base/io_buffer.h"
@@ -36,7 +39,6 @@
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/scheme_host_port.h"
 #include "url/url_constants.h"
 
@@ -166,7 +168,7 @@ class WebSocketBasicStreamSocketTest : public TestWithTaskEnvironment {
         PrivacyMode::PRIVACY_MODE_DISABLED, NetworkAnonymizationKey(),
         SecureDnsPolicy::kAllow, /*disable_cert_network_fetches=*/false);
     transport_socket->Init(
-        group_id, null_params, absl::nullopt /* proxy_annotation_tag */, MEDIUM,
+        group_id, null_params, std::nullopt /* proxy_annotation_tag */, MEDIUM,
         SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
         CompletionOnceCallback(), ClientSocketPool::ProxyAuthCallback(), &pool_,
         NetLogWithSource());
@@ -826,13 +828,23 @@ TEST_F(WebSocketBasicStreamSocketChunkedReadTest, OneMegFrame) {
   const size_t kWireSize = kPayloadSize + kLargeFrameHeaderSize;
   const size_t kExpectedFrameCount =
       (kWireSize + kReadBufferSize - 1) / kReadBufferSize;
-  auto big_frame = std::make_unique<char[]>(kWireSize);
-  memcpy(big_frame.get(), "\x81\x7F", 2);
-  base::WriteBigEndian(big_frame.get() + 2, kPayloadSize);
-  memset(big_frame.get() + kLargeFrameHeaderSize, 'A', kPayloadSize);
 
-  CreateChunkedRead(ASYNC, big_frame.get(), kWireSize, kReadBufferSize,
-                    kExpectedFrameCount, LAST_FRAME_BIG);
+  auto big_frame = base::HeapArray<uint8_t>::WithSize(kWireSize);
+  auto [extended_header, payload] =
+      big_frame.as_span().split_at(kLargeFrameHeaderSize);
+
+  {
+    auto [header, extended_payload_length] = extended_header.split_at<2u>();
+    header.copy_from(base::as_byte_span({'\x81', '\x7F'}));
+    extended_payload_length.copy_from(
+        base::numerics::U64ToBigEndian(kPayloadSize));
+  }
+
+  std::ranges::fill(payload, 'A');
+
+  CreateChunkedRead(ASYNC, reinterpret_cast<char*>(big_frame.data()),
+                    big_frame.size(), kReadBufferSize, kExpectedFrameCount,
+                    LAST_FRAME_BIG);
 
   for (size_t frame = 0; frame < kExpectedFrameCount; ++frame) {
     frames_.clear();
@@ -928,7 +940,8 @@ TEST_F(WebSocketBasicStreamSocketWriteTest, WriteNullptrPong) {
 // Check that writing with a non-nullptr mask works correctly.
 TEST_F(WebSocketBasicStreamSocketTest, WriteNonNulMask) {
   std::string masked_frame = std::string("\x81\x88");
-  masked_frame += std::string(kNonNulMaskingKey.key, 4);
+  masked_frame += std::string(std::begin(kNonNulMaskingKey.key),
+                              std::end(kNonNulMaskingKey.key));
   masked_frame += "jiggered";
   MockWrite writes[] = {
       MockWrite(SYNCHRONOUS, masked_frame.data(), masked_frame.size())};

@@ -16,6 +16,7 @@ import random
 import re
 import socket
 import sys
+import tarfile
 import tempfile
 import textwrap
 import time
@@ -47,6 +48,9 @@ def read_tree(tree_root):
         for f in [join(root, f) for f in files if not f.startswith('.')]:
             filepath = f[len(tree_root) + 1:].replace(os.sep, '/')
             assert len(filepath) > 0, f
+            if tarfile.is_tarfile(join(root, f)):
+                tree[filepath] = 'tarfile'
+                continue
             with io.open(join(root, f), encoding='utf-8') as f:
                 tree[filepath] = f.read()
     return tree
@@ -210,7 +214,7 @@ class FakeReposBase(object):
 
 class FakeRepos(FakeReposBase):
     """Implements populateGit()."""
-    NB_GIT_REPOS = 21
+    NB_GIT_REPOS = 23
 
     def populateGit(self):
         # Testing:
@@ -880,6 +884,74 @@ deps = {
 	url = invalid/repo_url.git"""
             },
         )
+
+        self._commit_git(
+            'repo_22', {
+                'DEPS':
+                textwrap.dedent("""\
+        vars = {}
+        deps = {
+          'src/gcs_dep': {
+            'bucket': '123bucket',
+            'object_name': 'deadbeef',
+            'dep_type': 'gcs',
+            'sha256sum': 'abcd123',
+            'size_bytes': 10000,
+          },
+          'src/another_gcs_dep': {
+            'bucket': '456bucket',
+            'object_name': 'Linux/llvmfile.tar.gz',
+            'dep_type': 'gcs',
+            'sha256sum': 'abcd123',
+            'size_bytes': 10000,
+          },
+          'src/gcs_dep_with_output_file': {
+            'bucket': '789bucket',
+            'object_name': 'clang-format-version123',
+            'dep_type': 'gcs',
+            'sha256sum': 'abcd123',
+            'output_file': 'clang-format-no-extract',
+            'size_bytes': 10000,
+          },
+        }"""),
+                'origin':
+                'git/repo_22@1\n'
+            })
+
+        self._commit_git(
+            'repo_23', {
+                'DEPS': """
+deps = {
+  'src/repo12': '/repo_12',
+}""",
+                'origin': 'git/repo_23@1\n',
+            })
+
+        self._commit_git(
+            'repo_23', {
+                'DEPS': """
+deps = {
+  'src/repo12': '/repo_12@refs/changes/1212',
+}""",
+                'origin': 'git/repo_23@2\n',
+            })
+
+        # src/repo12 is now a GCS dependency.
+        self._commit_git(
+            'repo_23', {
+                'DEPS': """
+deps = {
+  'src/repo12': {
+    'bucket': 'bucket123',
+    'object_name': 'path_to_file.tar.gz',
+    'dep_type': 'gcs',
+    'sha256sum': 'abcd123',
+    'size_bytes': 10000,
+  },
+}
+""",
+                'origin': 'git/repo_23@3\n'
+            })
 
 
 class FakeRepoSkiaDEPS(FakeReposBase):

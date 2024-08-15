@@ -27,18 +27,17 @@ import org.chromium.chrome.browser.lifecycle.DestroyObserver;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
+import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdownScrollListener;
 import org.chromium.chrome.browser.status_indicator.StatusIndicatorCoordinator;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
-import org.chromium.chrome.browser.tasks.ReturnToChromeUtil;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiThemeUtil;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator;
 import org.chromium.chrome.features.start_surface.StartSurface;
-import org.chromium.chrome.features.start_surface.StartSurfaceState;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.scrim.ScrimProperties;
 import org.chromium.ui.UiUtils;
@@ -52,16 +51,21 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
 import org.vivaldi.browser.speeddial.SpeedDialPage;
 import org.vivaldi.browser.themes.VivaldiAccentColor;
 
+// Vivaldi
+import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.build.BuildConfig;
+
 /**
  * Maintains the status bar color for a {@link Window}.
  *
- * TODO(crbug.com/1450945): Prevent initialization of StatusBarColorController for automotive.
+ * <p>TODO(crbug.com/1450945): Prevent initialization of StatusBarColorController for automotive.
  */
 public class StatusBarColorController
         implements DestroyObserver,
                 TopToolbarCoordinator.UrlExpansionObserver,
                 StatusIndicatorCoordinator.StatusIndicatorObserver,
                 UrlFocusChangeListener,
+                OmniboxSuggestionsDropdownScrollListener,
                 TopToolbarCoordinator.ToolbarColorObserver {
     public static final @ColorInt int UNDEFINED_STATUS_BAR_COLOR = Color.TRANSPARENT;
     public static final @ColorInt int DEFAULT_STATUS_BAR_COLOR = Color.argb(0x01, 0, 0, 0);
@@ -94,6 +98,9 @@ public class StatusBarColorController
     private final @ColorInt int mStandardDefaultThemeColor;
     private final @ColorInt int mIncognitoDefaultThemeColor;
     private final @ColorInt int mActiveOmniboxDefaultColor;
+    private final @ColorInt int mIncognitoActiveOmniboxColor;
+    private final @ColorInt int mStandardScrolledOmniboxColor;
+    private final @ColorInt int mIncognitoScrolledOmniboxColor;
     private final boolean mIsSurfacePolishEnabled;
     private final @ColorInt int mPolishedHomeSurfaceBgColor;
     private boolean mToolbarColorChanged;
@@ -105,6 +112,7 @@ public class StatusBarColorController
     private boolean mIsInOverviewMode;
     private boolean mIsIncognito;
     private boolean mIsOmniboxFocused;
+    private boolean mAreSuggestionsScrolled;
 
     private @ColorInt int mScrimColor = ScrimProperties.INVALID_COLOR;
     private float mStatusBarScrimFraction;
@@ -116,7 +124,12 @@ public class StatusBarColorController
     private OneshotSupplier<StartSurface> mStartSurfaceSupplier;
     private StartSurface mStartSurface;
     private StartSurface.StateObserver mStartSurfaceStateObserver;
-    private @StartSurfaceState int mStartSurfaceState = StartSurfaceState.NOT_SHOWN;
+
+    // Tab strip transition states.
+    private boolean mTabStripHiddenOnTablet;
+    private @ColorInt int mTabStripTransitionOverlayColor = ScrimProperties.INVALID_COLOR;
+    private float mTabStripTransitionOverlayAlpha;
+    private boolean mAllowToolbarColorOnTablets;
 
     private final LayoutStateObserver mLayoutStateObserver =
             new LayoutStateObserver() {
@@ -172,6 +185,7 @@ public class StatusBarColorController
         mStatusBarColorProvider = statusBarColorProvider;
         mStartSurfaceSupplier = startSurfaceSupplier;
         mIsSurfacePolishEnabled = ChromeFeatureList.sSurfacePolish.isEnabled();
+        mAllowToolbarColorOnTablets = false;
 
         mStandardPrimaryBgColor = ChromeColors.getPrimaryBackgroundColor(context, false);
         mIncognitoPrimaryBgColor = ChromeColors.getPrimaryBackgroundColor(context, true);
@@ -183,11 +197,21 @@ public class StatusBarColorController
         mStatusIndicatorColor = UNDEFINED_STATUS_BAR_COLOR;
         if (OmniboxFeatures.shouldShowModernizeVisualUpdate(context)
                 && OmniboxFeatures.shouldShowActiveColorOnOmnibox()) {
+            // TODO(crbug.com/1521964): Share code with LocationBarCoordinator's constructor.
             mActiveOmniboxDefaultColor =
                     ChromeColors.getSurfaceColor(
                             context, R.dimen.omnibox_suggestion_dropdown_bg_elevation);
+            mIncognitoActiveOmniboxColor = context.getColor(R.color.omnibox_dropdown_bg_incognito);
+            // TODO(crbug.com/1521964): Share code with ToolbarPhone#getToolbarDefaultColor().
+            mStandardScrolledOmniboxColor =
+                    ChromeColors.getSurfaceColor(context, R.dimen.toolbar_text_box_elevation);
+            mIncognitoScrolledOmniboxColor =
+                    context.getColor(R.color.default_bg_color_dark_elev_2_baseline);
         } else {
             mActiveOmniboxDefaultColor = mStandardDefaultThemeColor;
+            mIncognitoActiveOmniboxColor = mIncognitoPrimaryBgColor;
+            mStandardScrolledOmniboxColor = mStandardDefaultThemeColor;
+            mIncognitoScrolledOmniboxColor = mIncognitoPrimaryBgColor;
         }
 
         mStatusBarColorTabObserver =
@@ -261,14 +285,7 @@ public class StatusBarColorController
                     }
                 };
 
-        // TODO(https://crbug.com/1315679): Remove mStartSurfaceSupplier after the refactor is
-        // enabled by default. If Start surface refactor is enabled, we can observe layout state
-        // change to see if the Start surface is showing. If disabled, we have to observe the
-        // StartSurfaceState provided by mStartSurfaceSupplier.
-        if (ReturnToChromeUtil.isStartSurfaceEnabled(context)
-                && !ReturnToChromeUtil.isStartSurfaceRefactorEnabled(context)) {
-            mStartSurfaceSupplier.onAvailable(this::onStartSurfaceAvailable);
-        } else if (layoutManagerSupplier != null) {
+        if (layoutManagerSupplier != null) {
             // LayoutState is observed when the feature "Start surface refactor" is enabled or Start
             // surface is disabled.
             layoutManagerSupplier.addObserver(
@@ -298,35 +315,9 @@ public class StatusBarColorController
     private boolean shouldUpdateStatusBarColorForHomeSurface() {
         return mIsSurfacePolishEnabled
                 && !mIsIncognito
+                && mStartSurfaceSupplier != null
                 && mStartSurfaceSupplier.hasValue()
                 && mStartSurfaceSupplier.get().isHomepageShown();
-    }
-
-    private void onStartSurfaceAvailable(StartSurface startSurface) {
-        mStartSurface = startSurface;
-        if (mStartSurface.getStartSurfaceState() != mStartSurfaceState) {
-            onStartSurfaceStateChanged(mStartSurface.getStartSurfaceState());
-        }
-        mStartSurfaceStateObserver =
-                (newState, shouldShowToolbar) -> {
-                    if (mStartSurfaceState != newState) {
-                        onStartSurfaceStateChanged(newState);
-                    }
-                };
-        // TODO(https://crbug.com/1315679): Remove |mStartSurfaceSupplier|,
-        // |mStartSurfaceState| and |mStartSurfaceStateObserver| after the refactor is
-        // enabled by default.
-        mStartSurface.addStateChangeObserver(mStartSurfaceStateObserver);
-    }
-
-    private void onStartSurfaceStateChanged(@StartSurfaceState int newState) {
-        mStartSurfaceState = newState;
-        if (mStartSurfaceState == StartSurfaceState.NOT_SHOWN) {
-            mIsInOverviewMode = false;
-        } else {
-            mIsInOverviewMode = true;
-        }
-        updateStatusBarColor();
     }
 
     // DestroyObserver implementation.
@@ -344,11 +335,6 @@ public class StatusBarColorController
             mCallbackController = null;
         }
         if (mStartSurfaceSupplier != null) {
-            if (mStartSurface != null) {
-                mStartSurface.removeStateChangeObserver(mStartSurfaceStateObserver);
-                mStartSurface = null;
-                mStartSurfaceStateObserver = null;
-            }
             mStartSurfaceSupplier = null;
         }
     }
@@ -367,12 +353,13 @@ public class StatusBarColorController
     // TopToolbarCoordinator.ToolbarColorObserver implementation.
     @Override
     public void onToolbarColorChanged(@ColorInt int color) {
-        if (!OmniboxFeatures.shouldMatchToolbarAndStatusBarColor()) {
-            return;
-        }
-
-        // Status bar on tablets should not change at all times.
-        if (mIsTablet) {
+        boolean shouldUseToolbarColorOnPhone =
+                !mIsTablet && OmniboxFeatures.shouldMatchToolbarAndStatusBarColor();
+        // Status bar color on tablets could change when the DYNAMIC_TOP_CHROME feature is enabled,
+        // where it might be required for the status bar color to match the toolbar color when the
+        // tab strip is hidden.
+        boolean shouldUseToolbarColorOnTablet = mIsTablet && mAllowToolbarColorOnTablets;
+        if (!shouldUseToolbarColorOnPhone && !shouldUseToolbarColorOnTablet) {
             return;
         }
 
@@ -395,6 +382,18 @@ public class StatusBarColorController
         mIsOmniboxFocused = hasFocus;
         // Note (david@vivaldi.com): We don't update the status bar color when focus changes.
         if (!ChromeApplicationImpl.isVivaldi())
+        updateStatusBarColor();
+    }
+
+    @Override
+    public void onSuggestionDropdownScroll() {
+        mAreSuggestionsScrolled = true;
+        updateStatusBarColor();
+    }
+
+    @Override
+    public void onSuggestionDropdownOverscrolledToTop() {
+        mAreSuggestionsScrolled = false;
         updateStatusBarColor();
     }
 
@@ -423,6 +422,20 @@ public class StatusBarColorController
     }
 
     /**
+     * Add the tab strip transition scrim overlay on the status bar during a tab strip transition.
+     *
+     * @param overlayColor The overlay color.
+     * @param overlayAlpha The alpha that |overlayColor| should have on the status bar color.
+     */
+    public void setTabStripColorOverlay(@ColorInt int overlayColor, float overlayAlpha) {
+        assert mIsTablet;
+        if (!mAllowToolbarColorOnTablets) return;
+        mTabStripTransitionOverlayColor = overlayColor;
+        mTabStripTransitionOverlayAlpha = overlayAlpha;
+        updateStatusBarColor();
+    }
+
+    /**
      * @param tabModelSelector The {@link TabModelSelector} to check whether incognito model is
      *                         selected.
      */
@@ -441,11 +454,24 @@ public class StatusBarColorController
         mStatusBarColorWithoutStatusIndicator = calculateBaseStatusBarColor();
         @ColorInt
         int statusBarColor = applyStatusBarIndicatorColor(mStatusBarColorWithoutStatusIndicator);
+        statusBarColor = applyTabStripOverlay(statusBarColor);
         statusBarColor = applyCurrentScrimToColor(statusBarColor);
         setStatusBarColor(mWindow, statusBarColor);
 
         // Note(david@vivaldi.com): We also apply color to the navigation bar.
         VivaldiColorUtils.setNavigationBarColor(mWindow, mCurrentTab, mIsInOverviewMode);
+    }
+
+    /**
+     * Set whether the tab strip is hidden or visible on a tablet. This state will be used to
+     * determine the base status bar color on a tablet.
+     *
+     * @param tabStripHiddenOnTablet Whether the tab strip is hidden or visible on a tablet.
+     */
+    public void setTabStripHiddenOnTablet(boolean tabStripHiddenOnTablet) {
+        assert mIsTablet;
+        if (!mAllowToolbarColorOnTablets) return;
+        mTabStripHiddenOnTablet = tabStripHiddenOnTablet;
     }
 
     /**
@@ -468,7 +494,15 @@ public class StatusBarColorController
         }
 
         if (mIsTablet) {
-            return TabUiThemeUtil.getTabStripBackgroundColor(mWindow.getContext(), mIsIncognito);
+            // When applicable, the status bar should use the focused activity tab strip color
+            // (default), and should not be affected by an activity focus change.
+            // TODO (crbug.com/326290073): Use another boolean to allow using the default color spec
+            // even when the activity is not in focus, to avoid any confusion stemming from why
+            // |isActivityFocused| is always true in this invocation here.
+            return mTabStripHiddenOnTablet
+                    ? mToolbarColor
+                    : TabUiThemeUtil.getTabStripBackgroundColor(
+                            mWindow.getContext(), mIsIncognito, /* isActivityFocused= */ true);
         }
 
         // When Omnibox gains focus, we want to clear the status bar theme color.
@@ -532,10 +566,15 @@ public class StatusBarColorController
 
     /** Calculates the default status bar color based on the incognito state. */
     private @ColorInt int calculateDefaultStatusBarColor() {
-        if (mIsOmniboxFocused) {
-            return mIsIncognito ? mIncognitoPrimaryBgColor : mActiveOmniboxDefaultColor;
+        if (!mIsOmniboxFocused) {
+            return mIsIncognito ? mIncognitoDefaultThemeColor : mStandardDefaultThemeColor;
         }
-        return mIsIncognito ? mIncognitoDefaultThemeColor : mStandardDefaultThemeColor;
+
+        if (mAreSuggestionsScrolled) {
+            return mIsIncognito ? mIncognitoScrolledOmniboxColor : mStandardScrolledOmniboxColor;
+        } else {
+            return mIsIncognito ? mIncognitoActiveOmniboxColor : mActiveOmniboxDefaultColor;
+        }
     }
 
     /**
@@ -577,8 +616,39 @@ public class StatusBarColorController
             final Context context = root.getContext();
             mScrimColor = context.getColor(R.color.default_scrim_color);
         }
+        if (BuildConfig.IS_VIVALDI && ((ChromeActivity) mWindow.getContext()).isTablet()) {
+            mScrimColor = mIsInOverviewMode
+                    ? ChromeColors.getPrimaryBackgroundColor(mWindow.getContext(), mIsIncognito)
+                    : 0; // Ref VAB-8589 Address field has wrong colour and has extra white border
+        }
+
         // Apply a color overlay if the scrim is showing.
         return ColorUtils.overlayColor(color, mScrimColor, mStatusBarScrimFraction);
+    }
+
+    /**
+     * Apply and get the tab strip overlay applied color if the strip transition scrim is showing.
+     *
+     * @param color Base color to apply the overlay to.
+     */
+    private @ColorInt int applyTabStripOverlay(@ColorInt int color) {
+        // If the tab strip is transitioning on a tablet, apply the strip overlay on the status bar.
+        if (mIsTablet && mTabStripTransitionOverlayAlpha > 0) {
+            return ColorUtils.getColorWithOverlay(
+                    color, mTabStripTransitionOverlayColor, mTabStripTransitionOverlayAlpha);
+        }
+        return color;
+    }
+
+    /**
+     * Determines whether the status bar color could use the toolbar color on tablets when certain
+     * conditions are met. This is currently supported on ChromeTabbedActivity's with the
+     * DYNAMIC_TOP_CHROME feature enabled.
+     *
+     * @param allowToolbarColorOnTablets Whether the status bar color could use the toolbar color.
+     */
+    public void setAllowToolbarColorOnTablets(boolean allowToolbarColorOnTablets) {
+        mAllowToolbarColorOnTablets = allowToolbarColorOnTablets;
     }
 
     /**

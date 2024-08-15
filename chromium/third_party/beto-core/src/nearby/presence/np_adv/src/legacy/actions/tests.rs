@@ -250,18 +250,6 @@ fn action_bits_try_from_flavor_mismatch_plaintext() {
 }
 
 #[test]
-fn action_bits_try_from_flavor_mismatch_ciphertext() {
-    assert_eq!(
-        FlavorNotSupported { flavor: PacketFlavorEnum::Ciphertext },
-        ActionBits::<Ciphertext>::try_from(ActionType::Finder.all_bits()).unwrap_err()
-    );
-    assert_eq!(
-        0xF0000000,
-        ActionBits::<Ciphertext>::try_from(ActionType::ContextSyncSeqNum.all_bits()).unwrap().bits
-    );
-}
-
-#[test]
 fn actions_de_deser_plaintext_with_ciphertext_action() {
     assert_eq!(
         DataElementDeserializeError::FlavorNotSupported {

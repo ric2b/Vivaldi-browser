@@ -1,4 +1,6 @@
 import("//vivaldi/gn/config/product.gni")
+import ("//vivaldi/testing/testing.gni")
+import("//build/config/chrome_build.gni")
 
 if (is_win) {
   update_target("//chrome/installer/setup:setup") {
@@ -68,20 +70,22 @@ if (is_win) {
     public_configs = [ "//third_party/abseil-cpp:absl_include_config" ]
   }
 
-  # We do not include //chrome/install_static:install_static_unittests in the
-  # vivaldi build, so add out test to a related test set that we do include. We
-  # also add the source files to simplify dependency management.
-  update_target("//components:components_unittests") {
-    if (!defined(sources)) {
-      sources = []
+  if (vivaldi_build_tests) {
+    # We do not include //chrome/install_static:install_static_unittests in the
+    # vivaldi build, so add out test to a related test set that we do include. We
+    # also add the source files to simplify dependency management.
+    update_target("//components:components_unittests") {
+      if (!defined(sources)) {
+        sources = []
+      }
+      sources += [
+        "//vivaldi/installer/util/vivaldi_install_constants.cc",
+        "//vivaldi/installer/util/vivaldi_install_constants.h",
+        "//vivaldi/installer/util/vivaldi_static_install_helpers.cc",
+        "//vivaldi/installer/util/vivaldi_static_install_helpers.h",
+        "//vivaldi/installer/util/vivaldi_static_install_helpers_unittest.cc",
+      ]
     }
-    sources += [
-      "//vivaldi/installer/util/vivaldi_install_constants.cc",
-      "//vivaldi/installer/util/vivaldi_install_constants.h",
-      "//vivaldi/installer/util/vivaldi_static_install_helpers.cc",
-      "//vivaldi/installer/util/vivaldi_static_install_helpers.h",
-      "//vivaldi/installer/util/vivaldi_static_install_helpers_unittest.cc",
-    ]
   }
 
   update_target("//chrome/installer/util:with_no_strings") {
@@ -120,8 +124,13 @@ if (is_linux && !is_component_build) {
       "//vivaldi/installer/linux/common/wrapper",
       "//vivaldi/installer/linux/common/xfce-helper.template",
       "//vivaldi/installer/win/EULA.html",
-      "//vivaldi/relayproxy/linux/relayproxy-linux",
     ]
+    if (target_cpu == "x64") {
+      sources += [
+        "//vivaldi/relayproxy/linux/relayproxy-linux",
+        "//vivaldi/relayproxy/linux/relayproxy.pem",
+      ]
+    }
   }
 }
 

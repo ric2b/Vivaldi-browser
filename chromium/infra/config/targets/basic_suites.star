@@ -271,7 +271,6 @@ targets.legacy_basic_suite(
     name = "blink_unittests",
     tests = {
         "blink_unit_tests": targets.legacy_test_config(),
-        "blink_unit_tests_v2": targets.legacy_test_config(),
     },
 )
 
@@ -282,28 +281,30 @@ targets.legacy_basic_suite(
     },
 )
 
-targets.legacy_basic_suite(
-    name = "cast_audio_specific_chromium_gtests",
-    tests = {
-        "cast_audio_backend_unittests": targets.legacy_test_config(),
-        "cast_base_unittests": targets.legacy_test_config(),
-        "cast_cast_core_unittests": targets.legacy_test_config(),
-        "cast_crash_unittests": targets.legacy_test_config(),
-        "cast_media_unittests": targets.legacy_test_config(),
-        "cast_shell_browsertests": targets.legacy_test_config(
-            args = [
-                "--enable-local-file-accesses",
-                "--ozone-platform=headless",
-                "--no-sandbox",
-                "--test-launcher-jobs=1",
-            ],
-            swarming = targets.swarming(
-                enable = False,  # https://crbug.com/861753
-            ),
-        ),
-        "cast_shell_unittests": targets.legacy_test_config(),
-    },
-)
+# TODO(issues.chromium.org/1516671): Create a combined test suite target for
+# Cast Receiver builders.
+# targets.legacy_basic_suite(
+#     name = "cast_audio_specific_chromium_gtests",
+#     tests = {
+#         "cast_audio_backend_unittests": targets.legacy_test_config(),
+#         "cast_base_unittests": targets.legacy_test_config(),
+#         "cast_cast_core_unittests": targets.legacy_test_config(),
+#         "cast_crash_unittests": targets.legacy_test_config(),
+#         "cast_media_unittests": targets.legacy_test_config(),
+#         "cast_shell_browsertests": targets.legacy_test_config(
+#             args = [
+#                 "--enable-local-file-accesses",
+#                 "--ozone-platform=headless",
+#                 "--no-sandbox",
+#                 "--test-launcher-jobs=1",
+#             ],
+#             swarming = targets.swarming(
+#                 enable = False,  # https://crbug.com/861753
+#             ),
+#         ),
+#         "cast_shell_unittests": targets.legacy_test_config(),
+#     },
+# )
 
 targets.legacy_basic_suite(
     name = "cast_junit_tests",
@@ -325,18 +326,20 @@ targets.legacy_basic_suite(
     },
 )
 
-targets.legacy_basic_suite(
-    name = "cast_video_specific_chromium_gtests",
-    tests = {
-        "cast_display_settings_unittests": targets.legacy_test_config(
-            experiment_percentage = 100,
-        ),
-        "cast_graphics_unittests": targets.legacy_test_config(),
-        "views_unittests": targets.legacy_test_config(
-            experiment_percentage = 100,
-        ),
-    },
-)
+# TODO(issues.chromium.org/1516671): Create a combined test suite target for
+# Cast Receiver builders.
+# targets.legacy_basic_suite(
+#     name = "cast_video_specific_chromium_gtests",
+#     tests = {
+#         "cast_display_settings_unittests": targets.legacy_test_config(
+#             experiment_percentage = 100,
+#         ),
+#         "cast_graphics_unittests": targets.legacy_test_config(),
+#         "views_unittests": targets.legacy_test_config(
+#             experiment_percentage = 100,
+#         ),
+#     },
+# )
 
 targets.legacy_basic_suite(
     name = "chrome_android_finch_smoke_tests",
@@ -496,6 +499,47 @@ targets.legacy_basic_suite(
     },
 )
 
+# Test suite for running criticalstaging Tast tests.
+targets.legacy_basic_suite(
+    name = "chromeos_browser_criticalstaging_tast_tests",
+    tests = {
+        "chrome_criticalstaging_tast_tests": targets.legacy_test_config(
+            mixins = [
+                "has_native_resultdb_integration",
+            ],
+            ci_only = True,
+            swarming = targets.swarming(
+                shards = 2,
+                # Tast test doesn't always output. See crbug.com/1306300
+                io_timeout_sec = 3600,
+                idempotent = False,  # https://crbug.com/923426#c27
+            ),
+            experiment_percentage = 100,
+        ),
+    },
+)
+
+# Test suite for running disabled Tast tests to collect data to re-enable
+# them. The test suite should not be critical to builders.
+targets.legacy_basic_suite(
+    name = "chromeos_browser_disabled_tast_tests",
+    tests = {
+        "chrome_disabled_tast_tests": targets.legacy_test_config(
+            mixins = [
+                "has_native_resultdb_integration",
+            ],
+            ci_only = True,
+            swarming = targets.swarming(
+                shards = 2,
+                # Tast test doesn't always output. See crbug.com/1306300
+                io_timeout_sec = 3600,
+                idempotent = False,  # https://crbug.com/923426#c27
+            ),
+            experiment_percentage = 100,
+        ),
+    },
+)
+
 targets.legacy_basic_suite(
     name = "chromeos_browser_integration_tests",
     tests = {
@@ -568,6 +612,23 @@ targets.legacy_basic_suite(
     },
 )
 
+targets.legacy_basic_suite(
+    name = "chromeos_cq_medium_tast_tests",
+    tests = {
+        "cq_medium_tast_tests": targets.legacy_test_config(
+            # `tast_expr` must be a non-empty string to run the tast tests. But the value of
+            # would be overridden by `tast_arrt_expr` defined in chromeos/BUILD.gn, so that we
+            # put the stub string here.
+            tast_expr = "STUB_STRING_TO_RUN_TAST_TESTS",
+            test_level_retries = 2,
+            # Timeout including DUT privisioning.
+            timeout_sec = 3600,
+            # Number of shards. Might be overriden for slower boards.
+            shards = 5,
+        ),
+    },
+)
+
 # GTests to run on Chrome OS devices, but not Chrome OS VMs. Any differences
 # between this and chromeos_system_friendly_gtests below should only be due
 # to resource constraints (ie: not enough devices).
@@ -632,7 +693,7 @@ targets.legacy_basic_suite(
     tests = {
         "chromeos_js_code_coverage_browser_tests": targets.legacy_test_config(
             swarming = targets.swarming(
-                shards = 20,
+                shards = 32,
             ),
         ),
     },
@@ -767,7 +828,6 @@ targets.legacy_basic_suite(
     tests = {
         "blink_heap_unittests": targets.legacy_test_config(),
         "webkit_unit_tests": targets.legacy_test_config(),
-        "webkit_unit_tests_v2": targets.legacy_test_config(),
     },
 )
 
@@ -779,7 +839,18 @@ targets.legacy_basic_suite(
 )
 
 targets.legacy_basic_suite(
-    name = "chromium_dev_desktop_gtests",
+    name = "chromium_dev_mac_gtests",
+    tests = {
+        "base_unittests": targets.legacy_test_config(),
+        "content_unittests": targets.legacy_test_config(),
+        "net_unittests": targets.legacy_test_config(),
+        "rust_gtest_interop_unittests": targets.legacy_test_config(),
+        "unit_tests": targets.legacy_test_config(),
+    },
+)
+
+targets.legacy_basic_suite(
+    name = "chromium_dev_win_gtests",
     tests = {
         "base_unittests": targets.legacy_test_config(),
         "content_browsertests": targets.legacy_test_config(
@@ -788,7 +859,11 @@ targets.legacy_basic_suite(
             ),
         ),
         "content_unittests": targets.legacy_test_config(),
-        "interactive_ui_tests": targets.legacy_test_config(),
+        "interactive_ui_tests": targets.legacy_test_config(
+            swarming = targets.swarming(
+                shards = 3,
+            ),
+        ),
         "net_unittests": targets.legacy_test_config(),
         "rust_gtest_interop_unittests": targets.legacy_test_config(),
         "unit_tests": targets.legacy_test_config(),
@@ -937,11 +1012,6 @@ targets.legacy_basic_suite(
                 shards = 6,
             ),
         ),
-        "webkit_unit_tests_v2": targets.legacy_test_config(
-            android_swarming = targets.swarming(
-                shards = 6,
-            ),
-        ),
         "wtf_unittests": targets.legacy_test_config(),
         "zlib_unittests": targets.legacy_test_config(),
     },
@@ -1004,7 +1074,7 @@ targets.legacy_basic_suite(
         "multiscreen_interactive_ui_tests": targets.legacy_test_config(
             args = [
                 "--windows-virtual-display-driver",
-                "--gtest_filter=*MultiScreen*:*VirtualDisplayWinUtil*",
+                "--gtest_filter=*MultiScreen*:*VirtualDisplayUtilWin*",
             ],
             swarming = targets.swarming(
                 dimensions = {
@@ -1487,7 +1557,45 @@ targets.legacy_basic_suite(
                 "print-reftest",
             ],
             swarming = targets.swarming(
-                shards = 15,
+                shards = 1,
+            ),
+        ),
+    },
+)
+
+targets.legacy_basic_suite(
+    name = "chromium_wpt_tests_headful_isolated_scripts",
+    tests = {
+        "chrome_wpt_tests_headful": targets.legacy_test_config(
+            args = [
+                "--no-headless",
+                "--test-type",
+                "testharness",
+                "reftest",
+                "crashtest",
+                "print-reftest",
+            ],
+            swarming = targets.swarming(
+                shards = 1,
+            ),
+        ),
+    },
+)
+
+targets.legacy_basic_suite(
+    name = "chromium_wpt_tests_old_headless_isolated_scripts",
+    tests = {
+        "chrome_wpt_tests_old_headless": targets.legacy_test_config(
+            args = [
+                "--test-type",
+                "testharness",
+                "reftest",
+                "crashtest",
+                "print-reftest",
+                "--additional-driver-flag=--headless=old",
+            ],
+            swarming = targets.swarming(
+                shards = 1,
             ),
         ),
     },
@@ -1587,109 +1695,6 @@ targets.legacy_basic_suite(
             args = [
                 "--gtest-benchmark-name=components_perftests",
             ],
-        ),
-    },
-)
-
-# TODO(crbug.com/1444855): Delete the cr23_{linux,mac,win}_gtest suites
-# after the ChromeRefresh2023 is fully rolled out.
-targets.legacy_basic_suite(
-    name = "cr23_linux_gtests",
-    tests = {
-        "cr23_browser_tests": targets.legacy_test_config(
-            args = [
-                "--test-launcher-filter-file=../../testing/buildbot/filters/cr23.linux.cr23_browser_tests.filter",
-            ],
-            ci_only = True,
-            swarming = targets.swarming(
-                shards = 20,
-            ),
-        ),
-        "cr23_interactive_ui_tests": targets.legacy_test_config(
-            args = [
-                "--test-launcher-filter-file=../../testing/buildbot/filters/cr23.linux.cr23_interactive_ui_tests.filter",
-            ],
-            ci_only = True,
-            swarming = targets.swarming(
-                shards = 10,
-            ),
-        ),
-        "cr23_views_unittests": targets.legacy_test_config(
-            ci_only = True,
-        ),
-    },
-)
-
-targets.legacy_basic_suite(
-    name = "cr23_mac_gtests",
-    tests = {
-        "cr23_browser_tests": targets.legacy_test_config(
-            args = [
-                "--test-launcher-filter-file=../../testing/buildbot/filters/cr23.mac.cr23_browser_tests.filter",
-            ],
-            ci_only = True,
-            swarming = targets.swarming(
-                shards = 20,
-            ),
-        ),
-        "cr23_interactive_ui_tests": targets.legacy_test_config(
-            args = [
-                "--test-launcher-filter-file=../../testing/buildbot/filters/cr23.mac.cr23_interactive_ui_tests.filter",
-            ],
-            ci_only = True,
-            swarming = targets.swarming(
-                shards = 10,
-            ),
-        ),
-        "cr23_views_unittests": targets.legacy_test_config(
-            ci_only = True,
-        ),
-    },
-)
-
-targets.legacy_basic_suite(
-    name = "cr23_pixel_browser_tests_gtests",
-    tests = {
-        "cr23_pixel_browser_tests": targets.legacy_test_config(
-            args = [
-                "--test-launcher-filter-file=../../testing/buildbot/filters/pixel_tests.filter;../../testing/buildbot/filters/cr23.win.cr23_browser_tests.filter",
-                "--test-launcher-jobs=1",
-            ],
-            swarming = targets.swarming(
-                shards = 3,
-            ),
-        ),
-        "cr23_pixel_interactive_ui_tests": targets.legacy_test_config(
-            args = [
-                "--test-launcher-filter-file=../../testing/buildbot/filters/pixel_tests.filter;../../testing/buildbot/filters/cr23.win.cr23_interactive_ui_tests.filter",
-            ],
-        ),
-    },
-)
-
-targets.legacy_basic_suite(
-    name = "cr23_win_gtests",
-    tests = {
-        "cr23_browser_tests": targets.legacy_test_config(
-            args = [
-                "--test-launcher-filter-file=../../testing/buildbot/filters/cr23.win.cr23_browser_tests.filter",
-            ],
-            ci_only = True,
-            swarming = targets.swarming(
-                shards = 20,
-            ),
-        ),
-        "cr23_interactive_ui_tests": targets.legacy_test_config(
-            args = [
-                "--test-launcher-filter-file=../../testing/buildbot/filters/cr23.win.cr23_interactive_ui_tests.filter",
-            ],
-            ci_only = True,
-            swarming = targets.swarming(
-                shards = 10,
-            ),
-        ),
-        "cr23_views_unittests": targets.legacy_test_config(
-            ci_only = True,
         ),
     },
 )
@@ -1926,7 +1931,6 @@ targets.legacy_basic_suite(
     name = "fuchsia_chrome_small_gtests",
     tests = {
         "courgette_unittests": targets.legacy_test_config(),
-        "extensions_unittests": targets.legacy_test_config(),
         "headless_unittests": targets.legacy_test_config(),
         "message_center_unittests": targets.legacy_test_config(),
         "views_examples_unittests": targets.legacy_test_config(
@@ -1954,7 +1958,6 @@ targets.legacy_basic_suite(
         "blink_heap_unittests": targets.legacy_test_config(),
         "blink_platform_unittests": targets.legacy_test_config(),
         "blink_unittests": targets.legacy_test_config(),
-        "blink_unittests_v2": targets.legacy_test_config(),
         "boringssl_crypto_tests": targets.legacy_test_config(),
         "boringssl_ssl_tests": targets.legacy_test_config(),
         "capture_unittests": targets.legacy_test_config(),
@@ -2093,14 +2096,6 @@ targets.legacy_basic_suite(
             ),
         ),
         "gl_unittests": targets.legacy_test_config(),
-    },
-)
-
-targets.legacy_basic_suite(
-    name = "goma_gtests",
-    tests = {
-        "base_unittests": targets.legacy_test_config(),
-        "content_unittests": targets.legacy_test_config(),
     },
 )
 
@@ -2468,7 +2463,7 @@ targets.legacy_basic_suite(
                 "webgpu_telemetry_cts",
             ],
             args = [
-                "--extra-browser-args=--use-angle=gl --use-webgpu-adapter=opengles --enable-webgpu-developer-features",
+                "--extra-browser-args=--use-angle=gl --use-webgpu-adapter=opengles --enable-features=WebGPUExperimentalFeatures",
             ],
             swarming = targets.swarming(
                 shards = 14,
@@ -2525,33 +2520,45 @@ targets.legacy_basic_suite(
                 shards = 8,
             ),
         ),
-    },
-)
-
-targets.legacy_basic_suite(
-    name = "gpu_dawn_webgpu_cts_dxc",
-    tests = {
-        "webgpu_cts_dxc_tests": targets.legacy_test_config(
+        "webgpu_cts_fxc_tests": targets.legacy_test_config(
             mixins = [
                 "webgpu_telemetry_cts",
                 "linux_vulkan",
             ],
             args = [
-                "--use-dxc",
+                "--use-fxc",
+            ],
+            swarming = targets.swarming(
+                shards = 8,
+            ),
+        ),
+    },
+)
+
+targets.legacy_basic_suite(
+    name = "gpu_dawn_webgpu_cts_fxc",
+    tests = {
+        "webgpu_cts_fxc_tests": targets.legacy_test_config(
+            mixins = [
+                "webgpu_telemetry_cts",
+                "linux_vulkan",
+            ],
+            args = [
+                "--use-fxc",
             ],
             ci_only = True,
             swarming = targets.swarming(
                 shards = 14,
             ),
         ),
-        "webgpu_cts_dxc_with_validation_tests": targets.legacy_test_config(
+        "webgpu_cts_fxc_with_validation_tests": targets.legacy_test_config(
             mixins = [
                 "webgpu_telemetry_cts",
                 "linux_vulkan",
             ],
             args = [
                 "--enable-dawn-backend-validation",
-                "--use-dxc",
+                "--use-fxc",
             ],
             ci_only = True,
             swarming = targets.swarming(
@@ -2834,6 +2841,81 @@ targets.legacy_basic_suite(
             ],
             chromeos_args = [
                 "$$MAGIC_SUBSTITUTION_ChromeOSTelemetryRemote",
+            ],
+        ),
+    },
+)
+
+# This is esentially a copy of gpu_passthrough_telemetry_tests running with
+# Graphite. Initially limited to just the tests that pass on Android.
+targets.legacy_basic_suite(
+    name = "gpu_passthrough_graphite_telemetry_tests",
+    tests = {
+        "expected_color_pixel_passthrough_graphite_test": targets.legacy_test_config(
+            args = [
+                "--dont-restore-color-profile-after-test",
+                "--test-machine-name",
+                "${buildername}",
+                "--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --enable-features=SkiaGraphite",
+            ],
+            android_args = [
+                "--extra-browser-args=--force-online-connection-state-for-indicator",
+                "$$MAGIC_SUBSTITUTION_GPUTelemetryNoRootForUnrootedDevices",
+            ],
+            chromeos_args = [
+                "$$MAGIC_SUBSTITUTION_ChromeOSTelemetryRemote",
+            ],
+            lacros_args = [
+                "--extra-browser-args=--enable-features=UseOzonePlatform --ozone-platform=wayland",
+                "--xvfb",
+                "--no-xvfb",
+                "--use-weston",
+                "--weston-use-gl",
+            ],
+        ),
+        "pixel_skia_gold_passthrough_graphite_test": targets.legacy_test_config(
+            args = [
+                "--dont-restore-color-profile-after-test",
+                "--test-machine-name",
+                "${buildername}",
+                "--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --enable-features=SkiaGraphite",
+                "$$MAGIC_SUBSTITUTION_GPUParallelJobs",
+            ],
+            android_args = [
+                # TODO(crbug.com/1093085): Remove this once we fix the tests.
+                "--extra-browser-args=--force-online-connection-state-for-indicator",
+                "$$MAGIC_SUBSTITUTION_GPUTelemetryNoRootForUnrootedDevices",
+            ],
+            chromeos_args = [
+                "$$MAGIC_SUBSTITUTION_ChromeOSTelemetryRemote",
+            ],
+            lacros_args = [
+                "--extra-browser-args=--enable-features=UseOzonePlatform --ozone-platform=wayland",
+                "--xvfb",
+                "--no-xvfb",
+                "--use-weston",
+                "--weston-use-gl",
+            ],
+        ),
+        "screenshot_sync_passthrough_graphite_tests": targets.legacy_test_config(
+            args = [
+                "--dont-restore-color-profile-after-test",
+                "--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --enable-features=SkiaGraphite",
+            ],
+            android_args = [
+                # TODO(crbug.com/1093085): Remove this once we fix the tests.
+                "--extra-browser-args=--force-online-connection-state-for-indicator",
+                "$$MAGIC_SUBSTITUTION_GPUTelemetryNoRootForUnrootedDevices",
+            ],
+            chromeos_args = [
+                "$$MAGIC_SUBSTITUTION_ChromeOSTelemetryRemote",
+            ],
+            lacros_args = [
+                "--extra-browser-args=--enable-features=UseOzonePlatform --ozone-platform=wayland",
+                "--xvfb",
+                "--no-xvfb",
+                "--use-weston",
+                "--weston-use-gl",
             ],
         ),
     },
@@ -3616,120 +3698,6 @@ targets.legacy_basic_suite(
 )
 
 targets.legacy_basic_suite(
-    name = "ios_blink_tests",
-    tests = {
-        "absl_hardening_tests": targets.legacy_test_config(),
-        "angle_unittests": targets.legacy_test_config(
-            use_isolated_scripts_api = True,
-        ),
-        "base_unittests": targets.legacy_test_config(),
-        "blink_common_unittests": targets.legacy_test_config(),
-        "blink_fuzzer_unittests": targets.legacy_test_config(),
-        "blink_heap_unittests": targets.legacy_test_config(),
-        "blink_platform_unittests": targets.legacy_test_config(
-            args = [
-                "--test-launcher-bot-mode",
-                "--test-launcher-filter-file=testing/buildbot/filters/ios.blink_platform_unittests.filter",
-            ],
-        ),
-        "blink_unittests": targets.legacy_test_config(),
-        "blink_unittests_v2": targets.legacy_test_config(),
-        "boringssl_crypto_tests": targets.legacy_test_config(),
-        "boringssl_ssl_tests": targets.legacy_test_config(),
-        "capture_unittests": targets.legacy_test_config(),
-        "cast_unittests": targets.legacy_test_config(),
-        "cc_unittests": targets.legacy_test_config(
-            args = [
-                "--test-launcher-bot-mode",
-                "--test-launcher-filter-file=testing/buildbot/filters/ios.cc_unittests.filter",
-                "--use-gpu-in-tests",
-            ],
-        ),
-        "components_browsertests": targets.legacy_test_config(),
-        "components_unittests": targets.legacy_test_config(
-            args = [
-                "--test-launcher-bot-mode",
-                "--test-launcher-filter-file=testing/buildbot/filters/ios.use_blink.components_unittests.filter",
-            ],
-        ),
-        "compositor_unittests": targets.legacy_test_config(
-            args = [
-                "--test-launcher-bot-mode",
-                "--test-launcher-filter-file=testing/buildbot/filters/ios.compositor_unittests.filter",
-            ],
-        ),
-        "content_browsertests": targets.legacy_test_config(
-            args = [
-                "--test-launcher-bot-mode",
-                "--test-launcher-filter-file=testing/buildbot/filters/ios.content_browsertests.filter",
-            ],
-            swarming = targets.swarming(
-                shards = 8,
-                expiration_sec = 10800,
-                hard_timeout_sec = 14400,
-            ),
-            timeout_sec = 14400,
-        ),
-        "content_unittests": targets.legacy_test_config(
-            args = [
-                "--test-launcher-bot-mode",
-                "--test-launcher-filter-file=testing/buildbot/filters/ios.content_unittests.filter",
-            ],
-        ),
-        "crashpad_tests": targets.legacy_test_config(),
-        "crypto_unittests": targets.legacy_test_config(),
-        "device_unittests": targets.legacy_test_config(),
-        "display_unittests": targets.legacy_test_config(),
-        "env_chromium_unittests": targets.legacy_test_config(),
-        "events_unittests": targets.legacy_test_config(),
-        "gcm_unit_tests": targets.legacy_test_config(),
-        "gfx_unittests": targets.legacy_test_config(),
-        "gin_unittests": targets.legacy_test_config(),
-        "gl_unittests": targets.legacy_test_config(),
-        "google_apis_unittests": targets.legacy_test_config(),
-        "gpu_unittests": targets.legacy_test_config(),
-        "gwp_asan_unittests": targets.legacy_test_config(),
-        "ipc_tests": targets.legacy_test_config(),
-        "latency_unittests": targets.legacy_test_config(),
-        "leveldb_unittests": targets.legacy_test_config(),
-        "libjingle_xmpp_unittests": targets.legacy_test_config(),
-        "liburlpattern_unittests": targets.legacy_test_config(),
-        "media_unittests": targets.legacy_test_config(),
-        "media_unittests_skia_graphite_dawn": targets.legacy_test_config(),
-        "media_unittests_skia_graphite_metal": targets.legacy_test_config(),
-        "midi_unittests": targets.legacy_test_config(),
-        "mojo_unittests": targets.legacy_test_config(),
-        "native_theme_unittests": targets.legacy_test_config(),
-        "net_unittests": targets.legacy_test_config(),
-        "perfetto_unittests": targets.legacy_test_config(),
-        "printing_unittests": targets.legacy_test_config(),
-        "sandbox_unittests": targets.legacy_test_config(),
-        "services_unittests": targets.legacy_test_config(),
-        "shell_dialogs_unittests": targets.legacy_test_config(),
-        "skia_unittests": targets.legacy_test_config(),
-        "sql_unittests": targets.legacy_test_config(),
-        "storage_unittests": targets.legacy_test_config(),
-        "ui_base_unittests": targets.legacy_test_config(
-            args = [
-                "--test-launcher-filter-file=testing/buildbot/filters/ios.ui_base_unittests.filter",
-            ],
-        ),
-        "ui_touch_selection_unittests": targets.legacy_test_config(),
-        "ui_unittests": targets.legacy_test_config(),
-        "url_unittests": targets.legacy_test_config(),
-        "viz_unittests": targets.legacy_test_config(
-            args = [
-                "--test-launcher-bot-mode",
-                "--test-launcher-filter-file=testing/buildbot/filters/ios.viz_unittests.filter",
-                "--use-gpu-in-tests",
-            ],
-        ),
-        "wtf_unittests": targets.legacy_test_config(),
-        "zlib_unittests": targets.legacy_test_config(),
-    },
-)
-
-targets.legacy_basic_suite(
     name = "ios_common_tests",
     tests = {
         "absl_hardening_tests": targets.legacy_test_config(),
@@ -4096,6 +4064,27 @@ targets.legacy_basic_suite(
 )
 
 targets.legacy_basic_suite(
+    name = "linux_lacros_chrome_gtests",
+    tests = {
+        "browser_tests": targets.legacy_test_config(
+            swarming = targets.swarming(
+                shards = 33,
+            ),
+        ),
+        "lacros_chrome_browsertests": targets.legacy_test_config(
+            swarming = targets.swarming(
+                shards = 6,
+            ),
+        ),
+        "interactive_ui_tests": targets.legacy_test_config(
+            swarming = targets.swarming(
+                shards = 6,
+            ),
+        ),
+    },
+)
+
+targets.legacy_basic_suite(
     name = "linux_lacros_chrome_interactive_ui_tests_version_skew",
     tests = {
         "interactive_ui_tests": targets.legacy_test_config(
@@ -4112,7 +4101,6 @@ targets.legacy_basic_suite(
 targets.legacy_basic_suite(
     name = "linux_lacros_specific_gtests",
     tests = {
-        "lacros_chrome_unittests": targets.legacy_test_config(),
         "ozone_unittests": targets.legacy_test_config(),
     },
 )
@@ -4169,7 +4157,6 @@ targets.legacy_basic_suite(
         "blink_heap_unittests": targets.legacy_test_config(),
         "blink_platform_unittests": targets.legacy_test_config(),
         "blink_unittests": targets.legacy_test_config(),
-        "blink_unittests_v2": targets.legacy_test_config(),
         "cc_unittests": targets.legacy_test_config(),
         "components_unittests": targets.legacy_test_config(),
         "content_unittests": targets.legacy_test_config(),
@@ -4203,6 +4190,15 @@ targets.legacy_basic_suite(
     name = "minidump_uploader_tests",
     tests = {
         "minidump_uploader_test": targets.legacy_test_config(
+            experiment_percentage = 100,
+        ),
+    },
+)
+
+targets.legacy_basic_suite(
+    name = "jni_zero_sample_apk_test",
+    tests = {
+        "test_sample_jni_apk": targets.legacy_test_config(
             experiment_percentage = 100,
         ),
     },
@@ -4391,6 +4387,35 @@ targets.legacy_basic_suite(
 )
 
 targets.legacy_basic_suite(
+    name = "ondevice_stability_tests",
+    tests = {
+        "ondevice_stability_tests": targets.legacy_test_config(
+            mixins = [
+                "has_native_resultdb_integration",
+            ],
+            linux_args = [
+                "--chromedriver",
+                "chromedriver",
+                "--binary",
+                "chrome",
+            ],
+            mac_args = [
+                "--chromedriver",
+                "chromedriver",
+                "--binary",
+                "Google Chrome.app/Contents/MacOS/Google Chrome",
+            ],
+            win_args = [
+                "--chromedriver",
+                "chromedriver.exe",
+                "--binary",
+                "Chrome.exe",
+            ],
+        ),
+    },
+)
+
+targets.legacy_basic_suite(
     name = "optimization_guide_android_gtests",
     tests = {
         "optimization_guide_components_unittests": targets.legacy_test_config(),
@@ -4399,23 +4424,19 @@ targets.legacy_basic_suite(
 )
 
 targets.legacy_basic_suite(
-    name = "optimization_guide_desktop_gtests",
+    name = "optimization_guide_nogpu_gtests",
     tests = {
         "chrome_ml_unittests": targets.legacy_test_config(),
         "optimization_guide_browser_tests": targets.legacy_test_config(),
         "optimization_guide_components_unittests": targets.legacy_test_config(),
-        "optimization_guide_gpu_unittests": targets.legacy_test_config(),
         "optimization_guide_unittests": targets.legacy_test_config(),
     },
 )
 
 targets.legacy_basic_suite(
-    name = "optimization_guide_desktop_gtests_nogpu",
+    name = "optimization_guide_gpu_gtests",
     tests = {
-        "chrome_ml_unittests": targets.legacy_test_config(),
-        "optimization_guide_browser_tests": targets.legacy_test_config(),
-        "optimization_guide_components_unittests": targets.legacy_test_config(),
-        "optimization_guide_unittests": targets.legacy_test_config(),
+        "optimization_guide_gpu_unittests": targets.legacy_test_config(),
     },
 )
 
@@ -4900,26 +4921,6 @@ targets.legacy_basic_suite(
         "web_engine_browsertests": targets.legacy_test_config(),
         "web_engine_integration_tests": targets.legacy_test_config(),
         "web_engine_unittests": targets.legacy_test_config(),
-    },
-)
-
-targets.legacy_basic_suite(
-    name = "webrtc_chromium_baremetal_gtests",
-    tests = {
-        # Run capture unittests on bots that have real webcams.
-        "capture_unittests": targets.legacy_test_config(
-            args = [
-                "--enable-logging",
-                "--v=1",
-                "--test-launcher-jobs=1",
-                "--test-launcher-print-test-stdio=always",
-            ],
-            swarming = targets.swarming(
-                dimensions = {
-                    "pool": "WebRTC-chromium",
-                },
-            ),
-        ),
     },
 )
 

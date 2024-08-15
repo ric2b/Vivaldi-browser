@@ -62,6 +62,7 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
   private boundOnInput?: ((ev: Event) => void);
   private boundOnMouseWheel?: ((event: Event) => void);
   private boundClearAutocomplete?: (() => void);
+  private boundOnBlur?: ((ev: Event) => void);
   private contentElement?: HTMLElement;
   private suggestBox?: SuggestBox;
   private isEditing?: boolean;
@@ -70,6 +71,7 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
   private oldTabIndex?: number;
   private completeTimeout?: number;
   private disableDefaultSuggestionForEmptyInputInternal?: boolean;
+  private changed: boolean;
   jslogContext: string|undefined = undefined;
 
   constructor() {
@@ -85,6 +87,7 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
     this.ghostTextElement.classList.add('auto-complete-text');
     this.ghostTextElement.setAttribute('contenteditable', 'false');
     this.leftParenthesesIndices = [];
+    this.changed = false;
     ARIAUtils.markAsHidden(this.ghostTextElement);
   }
 
@@ -134,6 +137,7 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
     this.boundOnInput = this.onInput.bind(this);
     this.boundOnMouseWheel = this.onMouseWheel.bind(this);
     this.boundClearAutocomplete = this.clearAutocomplete.bind(this);
+    this.boundOnBlur = this.onBlur.bind(this);
     this.proxyElement = element.ownerDocument.createElement('span');
     ThemeSupport.ThemeSupport.instance().appendStyle(this.proxyElement, textPromptStyles);
     this.contentElement = this.proxyElement.createChild('div', 'text-prompt-root');
@@ -142,7 +146,7 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
       element.parentElement.insertBefore(this.proxyElement, element);
     }
     this.contentElement.appendChild(element);
-    let jslog = VisualLogging.textField().track({keydown: true});
+    let jslog = VisualLogging.textField().track({keydown: 'Enter|Escape', change: true});
     if (this.jslogContext) {
       jslog = jslog.context(this.jslogContext);
     }
@@ -156,7 +160,7 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
     this.elementInternal.addEventListener('input', this.boundOnInput, false);
     this.elementInternal.addEventListener('wheel', this.boundOnMouseWheel, false);
     this.elementInternal.addEventListener('selectstart', this.boundClearAutocomplete, false);
-    this.elementInternal.addEventListener('blur', this.boundClearAutocomplete, false);
+    this.elementInternal.addEventListener('blur', this.boundOnBlur, false);
 
     this.suggestBox = new SuggestBox(this, 20);
 
@@ -175,6 +179,7 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
   }
 
   detach(): void {
+    this.maybeDispatchChange();
     this.removeFromElement();
     if (this.focusRestorer) {
       this.focusRestorer.restore();
@@ -286,8 +291,7 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
     this.element().removeEventListener('input', (this.boundOnInput as (this: HTMLElement, arg1: Event) => void), false);
     this.element().removeEventListener(
         'selectstart', (this.boundClearAutocomplete as (this: HTMLElement, arg1: Event) => void), false);
-    this.element().removeEventListener(
-        'blur', (this.boundClearAutocomplete as (this: HTMLElement, arg1: Event) => void), false);
+    this.element().removeEventListener('blur', (this.boundOnBlur as (this: HTMLElement, arg1: Event) => void), false);
     if (this.isEditing) {
       this.stopEditing();
     }
@@ -431,6 +435,7 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
     this.refreshGhostText();
     this.previousText = text;
     this.dispatchEventToListeners(Events.TextChanged);
+    this.changed = true;
 
     this.autoCompleteSoon();
   }
@@ -462,7 +467,20 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
 
     if (beforeText !== this.textWithCurrentSuggestion()) {
       this.dispatchEventToListeners(Events.TextChanged);
+      this.changed = true;
     }
+  }
+
+  private maybeDispatchChange(): void {
+    if (this.changed && this.elementInternal) {
+      this.elementInternal.dispatchEvent(new Event('change'));
+      this.changed = false;
+    }
+  }
+
+  private onBlur(): void {
+    this.clearAutocomplete();
+    this.maybeDispatchChange();
   }
 
   private refreshGhostText(): void {
@@ -605,6 +623,7 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
     this.refreshGhostText();
     if (isIntermediateSuggestion) {
       this.dispatchEventToListeners(Events.TextChanged);
+      this.changed = true;
     }
   }
 
@@ -627,11 +646,12 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
 
     this.clearAutocomplete();
     this.dispatchEventToListeners(Events.TextChanged);
+    this.changed = true;
 
     return true;
   }
 
-  ariaControlledBy(): Element {
+  ownerElement(): Element {
     return this.element();
   }
 

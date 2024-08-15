@@ -78,6 +78,12 @@ CppType::~CppType() {
   switch (which) {
     case CppType::Which::kUninitialized:
       break;
+    case CppType::Which::kBool:
+      break;
+    case CppType::Which::kFloat:
+      break;
+    case CppType::Which::kInt64:
+      break;
     case CppType::Which::kUint64:
       break;
     case CppType::Which::kString:
@@ -646,7 +652,16 @@ CppType* MakeCppType(CppSymbolTable* table,
   CppType* cpp_type = nullptr;
   switch (type.which) {
     case CddlType::Which::kId: {
-      if (type.id == "uint") {
+      if (type.id == "bool") {
+        cpp_type = GetCppType(table, name);
+        cpp_type->which = CppType::Which::kBool;
+      } else if (type.id == "float") {
+        cpp_type = GetCppType(table, name);
+        cpp_type->which = CppType::Which::kFloat;
+      } else if (type.id == "int") {
+        cpp_type = GetCppType(table, name);
+        cpp_type->which = CppType::Which::kInt64;
+      } else if (type.id == "uint") {
         cpp_type = GetCppType(table, name);
         cpp_type->which = CppType::Which::kUint64;
       } else if (type.id == "text") {
@@ -745,6 +760,9 @@ void PrePopulateCppTypes(CppSymbolTable* table) {
   default_types.emplace_back("bstr", CppType::Which::kBytes);
   default_types.emplace_back("bytes", CppType::Which::kBytes);
   default_types.emplace_back("uint", CppType::Which::kUint64);
+  default_types.emplace_back("bool", CppType::Which::kBool);
+  default_types.emplace_back("float", CppType::Which::kFloat);
+  default_types.emplace_back("int", CppType::Which::kInt64);
 
   for (auto& pair : default_types) {
     auto entry = table->cpp_type_map.find(pair.first);

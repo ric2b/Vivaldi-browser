@@ -12,10 +12,10 @@
 #include <utility>
 
 #include "core/fxcodec/flate/flatemodule.h"
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/fx_memory_wrappers.h"
 #include "fxjs/gc/container_trace.h"
 #include "fxjs/xfa/cjx_object.h"
-#include "third_party/base/check.h"
 #include "xfa/fxfa/parser/cxfa_acrobat.h"
 #include "xfa/fxfa/parser/cxfa_common.h"
 #include "xfa/fxfa/parser/cxfa_locale.h"
@@ -1231,7 +1231,7 @@ void CXFA_LocaleMgr::SetDefLocale(GCedLocaleIface* pLocale) {
   m_pDefLocale = pLocale;
 }
 
-absl::optional<WideString> CXFA_LocaleMgr::GetConfigLocaleName(
+std::optional<WideString> CXFA_LocaleMgr::GetConfigLocaleName(
     CXFA_Node* pConfig) const {
   if (m_bConfigLocaleCached)
     return m_wsConfigLocale;
@@ -1260,7 +1260,7 @@ absl::optional<WideString> CXFA_LocaleMgr::GetConfigLocaleName(
   if (!pLocale)
     return m_wsConfigLocale;
 
-  absl::optional<WideString> wsMaybeLocale =
+  std::optional<WideString> wsMaybeLocale =
       pLocale->JSObject()->TryCData(XFA_Attribute::Value, false);
   if (!wsMaybeLocale.has_value() || wsMaybeLocale.value().IsEmpty())
     return m_wsConfigLocale;

@@ -178,9 +178,8 @@ class SupervisedUserExtensionTestBase : public ExtensionServiceTestWithInstall {
       supervised_user_extensions_delegate_;
 };
 
-class SupervisedUserExtensionTest
-    : public SupervisedUserExtensionTestBase,
-      public testing::WithParamInterface<std::tuple<bool, bool>> {
+class SupervisedUserExtensionTest : public SupervisedUserExtensionTestBase,
+                                    public testing::WithParamInterface<bool> {
  public:
   SupervisedUserExtensionTest() {
     // Parental restrictions on the extensions permissions for supervised users
@@ -188,41 +187,30 @@ class SupervisedUserExtensionTest
     // kEnableExtensionsPermissionsForSupervisedUsersOnDesktop is enabled.
     // Extension permissions for supervised users are already enabled on
     // ChromeOS by default.
-    are_extension_permissions_enabled = std::get<0>(GetParam());
-    is_url_filtering_enabled = std::get<1>(GetParam());
-    std::vector<base::test::FeatureRef> enabled_features;
-    std::vector<base::test::FeatureRef> disabled_features;
+    are_extension_permissions_enabled_ = GetParam();
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-    if (are_extension_permissions_enabled) {
-      enabled_features.push_back(
-          supervised_user::
-              kEnableExtensionsPermissionsForSupervisedUsersOnDesktop);
+    if (are_extension_permissions_enabled_) {
+      feature_list_.InitWithFeatures(
+          /*enabled_features=*/
+          {supervised_user::
+               kEnableExtensionsPermissionsForSupervisedUsersOnDesktop},
+          /*disabled_features=*/{});
     } else {
-      disabled_features.push_back(
-          supervised_user::
-              kEnableExtensionsPermissionsForSupervisedUsersOnDesktop);
+      feature_list_.InitWithFeatures(
+          /*enabled_features=*/{}, /*disabled_features=*/{
+              supervised_user::
+                  kEnableExtensionsPermissionsForSupervisedUsersOnDesktop});
     }
-    if (is_url_filtering_enabled) {
-      // We want to test that this feature has no impact on the test's
-      // behavior.
-      enabled_features.push_back(
-          supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS);
-    } else {
-      disabled_features.push_back(
-          supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS);
-    }
-    feature_list_.InitWithFeatures(enabled_features, disabled_features);
 #endif
   }
 
   // SupervisedUserExtensionTestBase implementation:
   bool ShouldExtensionPermissionsApply() override {
-    return are_extension_permissions_enabled;
+    return are_extension_permissions_enabled_;
   }
 
  private:
-  bool are_extension_permissions_enabled;
-  bool is_url_filtering_enabled;
+  bool are_extension_permissions_enabled_;
   base::test::ScopedFeatureList feature_list_;
 };
 
@@ -310,6 +298,40 @@ TEST_P(SupervisedUserExtensionTest, ExtensionsStateAfterGellerization) {
   }
 }
 
+// Tests that extensions that are disabled pending parent approval
+// for supervised users, become re-enabled if the user becomes unsupervised.
+TEST_P(SupervisedUserExtensionTest, ExtensionsStateAfterGraduation) {
+  InitServices(/*profile_is_supervised=*/true);
+  supervised_user_test_util::
+      SetSupervisedUserExtensionsMayRequestPermissionsPref(profile(), true);
+
+  // When extension parental controls are enabled on the current platform the
+  // extensions will be installed but disabled until the custodian approval.
+  // When extension permissions are disabled the extensions will be installed
+  // and enabled.
+  auto install_state =
+      ShouldExtensionPermissionsApply() ? INSTALL_WITHOUT_LOAD : INSTALL_NEW;
+  base::FilePath path = data_dir().AppendASCII("good.crx");
+  const Extension* extension = InstallCRX(path, install_state);
+  ASSERT_TRUE(extension);
+  std::string id = extension->id();
+
+  if (ShouldExtensionPermissionsApply()) {
+    // This extension is a supervised user initiated install and should remain
+    // disabled.
+    CheckDisabledForCustodianApproval(id);
+  } else {
+    // The new installed extension should be enabled.
+    CheckEnabled(id);
+  }
+
+  // Make the profile un-supervised.
+  profile()->AsTestingProfile()->SetIsSupervisedProfile(false);
+
+  // The extension should become enabled.
+  CheckEnabled(id);
+}
+
 // Tests that a child user is allowed to install extensions when pref
 // kSupervisedUserExtensionsMayRequestPermissions is set to true.
 // If the extension permissions are enabled the newly-installed extensions
@@ -320,8 +342,8 @@ TEST_P(SupervisedUserExtensionTest, InstallAllowedForSupervisedUser) {
   supervised_user_test_util::
       SetSupervisedUserExtensionsMayRequestPermissionsPref(profile(), true);
 
-  // When extension permissions are enabled the extensions will be installed
-  // but disabled until custodian approvals are performed.
+  // When extension parental controls are enabled on the current platform the
+  // extensions will be installed but disabled until the custodian approval.
   // When extension permissions are disabled the extensions will be installed
   // and enabled.
   auto install_state =
@@ -643,26 +665,19 @@ INSTANTIATE_TEST_SUITE_P(
     ExtensionsPermissionsForSupervisedUsersOnDesktopFeature,
     SupervisedUserExtensionTest,
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-    testing::Values(std::make_tuple(/*are_extension_permissions_enabled=*/false,
-                                    /*is_url_filtering_enabled*/ false),
-                    std::make_tuple(/*are_extension_permissions_enabled=*/false,
-                                    /*is_url_filtering_enabled*/ true),
-                    std::make_tuple(/*are_extension_permissions_enabled=*/true,
-                                    /*is_url_filtering_enabled*/ false),
-                    std::make_tuple(/*are_extension_permissions_enabled=*/true,
-                                    /*is_url_filtering_enabled*/ true))
+    testing::Bool(),
 #else
-    // On ChromeOS the extension permissions and the url filtering are on by
-    // default.
-    testing::Values(std::make_tuple(/*are_extension_permissions_enabled=*/true,
-                                    /*is_url_filtering_enabled*/ true))
+    // On ChromeOS the extension permissions are on by default.
+    testing::Values(true),
 #endif
-);
+    [](const auto& info) {
+      return std::string(info.param ? "WithExtensionPermissions"
+                                    : "WithoutExtensionPermissions");
+    });
 
 // Test class for cases that apply only when Extension Permissions are enabled.
 class SupervisedUserWithEnabledExtensionPermissionsTest
-    : public SupervisedUserExtensionTestBase,
-      public testing::WithParamInterface<bool> {
+    : public SupervisedUserExtensionTestBase {
  public:
   SupervisedUserWithEnabledExtensionPermissionsTest() {
     // Parental restrictions on the extensions permissions for supervised users
@@ -670,37 +685,22 @@ class SupervisedUserWithEnabledExtensionPermissionsTest
     // kEnableExtensionsPermissionsForSupervisedUsersOnDesktop is enabled.
     // Extension permissions for supervised users are already enabled on
     // ChromeOS by default.
-    is_url_filtering_enabled = GetParam();
-    std::vector<base::test::FeatureRef> enabled_features;
-    std::vector<base::test::FeatureRef> disabled_features;
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-    // We want to test that this feature has no impact on the test's behavior.
-    if (is_url_filtering_enabled) {
-      enabled_features.push_back(
-          supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS);
-    } else {
-      disabled_features.push_back(
-          supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS);
-    }
-
-    enabled_features.push_back(
-        supervised_user::
-            kEnableExtensionsPermissionsForSupervisedUsersOnDesktop);
-    feature_list_.InitWithFeatures(enabled_features, disabled_features);
+    feature_list_.InitWithFeatures(
+        /*enabled_features=*/
+        {supervised_user::
+             kEnableExtensionsPermissionsForSupervisedUsersOnDesktop},
+        /*disabled_features=*/{});
 #endif
   }
 
   // SupervisedUserExtensionTestBase implementation:
   bool ShouldExtensionPermissionsApply() override { return true; }
-
- private:
-  bool is_url_filtering_enabled;
-  base::test::ScopedFeatureList feature_list_;
 };
 
 // Tests that the kApprovalGranted UMA metric only increments once without
 // duplication for the same extension id.
-TEST_P(SupervisedUserWithEnabledExtensionPermissionsTest,
+TEST_F(SupervisedUserWithEnabledExtensionPermissionsTest,
        DontTriggerMetricsIfAlreadyApproved) {
   InitServices(/*profile_is_supervised=*/true);
   supervised_user_test_util::
@@ -759,7 +759,7 @@ TEST_P(SupervisedUserWithEnabledExtensionPermissionsTest,
 // Tests that parent approval is necessary but not sufficient to enable
 // extensions when both disable reasons custodian_approval_required and
 // permissions_increase are present.
-TEST_P(SupervisedUserWithEnabledExtensionPermissionsTest,
+TEST_F(SupervisedUserWithEnabledExtensionPermissionsTest,
        ParentApprovalNecessaryButNotSufficient) {
   InitServices(/*profile_is_supervised=*/true);
   supervised_user_test_util::
@@ -791,18 +791,5 @@ TEST_P(SupervisedUserWithEnabledExtensionPermissionsTest,
   // The extension should be enabled.
   CheckEnabled(id);
 }
-
-INSTANTIATE_TEST_SUITE_P(
-    ExtensionsPermissionsEnabledForSupervisedUsersOnDesktop,
-    SupervisedUserWithEnabledExtensionPermissionsTest,
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-    testing::Values(
-        /*is_url_filtering_enabled=*/false,
-        /*is_url_filtering_enabled=*/true)
-#else
-    // On Chrome OS Url filtering is always enabled.
-    testing::Values(/*is_url_filtering_enabled=*/true)
-#endif
-);
 
 }  // namespace extensions

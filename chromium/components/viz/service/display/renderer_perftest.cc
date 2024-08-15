@@ -132,7 +132,7 @@ SharedQuadState* CreateTestSharedQuadState(
   const int sorting_context_id = 0;
   SharedQuadState* shared_state = render_pass->CreateAndAppendSharedQuadState();
   shared_state->SetAll(quad_to_target_transform, layer_rect, visible_layer_rect,
-                       mask_filter_info, /*clip_rect=*/absl::nullopt,
+                       mask_filter_info, /*clip_rect=*/std::nullopt,
                        are_contents_opaque, opacity, blend_mode,
                        sorting_context_id, /*layer_id=*/0u,
                        /*fast_rounded_corner=*/false);
@@ -169,9 +169,8 @@ TransferableResource CreateTestTexture(
       child_context_provider->SharedImageInterface();
   DCHECK(sii);
   auto client_shared_image = sii->CreateSharedImage(
-      SinglePlaneFormat::kRGBA_8888, size, gfx::ColorSpace(),
-      kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
-      gpu::SHARED_IMAGE_USAGE_DISPLAY_READ, "TestLabel",
+      {SinglePlaneFormat::kRGBA_8888, size, gfx::ColorSpace(),
+       gpu::SHARED_IMAGE_USAGE_DISPLAY_READ, "TestLabel"},
       base::as_byte_span(pixels));
   gpu::SyncToken sync_token = sii->GenVerifiedSyncToken();
 

@@ -8,7 +8,7 @@ syntax = "proto3";
 
 package runtime_probe;
 
-option go_package = "chromiumos/system_api/runtime_probe_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/runtime_probe_proto";
 
 // Defined error code.
 enum ErrorCode {
@@ -49,6 +49,7 @@ message ProbeRequest {
     ethernet = 13;
     wireless = 14;
     cpu = 15;
+    tpm = 16;
   }
   reserved 1;
   repeated SupportCategory categories = 4;
@@ -599,6 +600,19 @@ message Cpu {
   Fields values = 2;
 }
 
+message Tpm {
+  message Fields {
+    // TPM spec level.
+    uint32 spec_level = 1;
+    // Vendor specific information.
+    string vendor_specific = 2;
+    // Manufacturer code.
+    string manufacturer = 3;
+  }
+  string name = 1;
+  Fields values = 2;
+}
+
 // A ProbeResult contains all potential probe results. For category not
 // existed or not requested for probing, field is expected to be empty.
 message ProbeResult {
@@ -624,6 +638,7 @@ message ProbeResult {
   repeated Network ethernet = 15;
   repeated Network wireless = 16;
   repeated Cpu cpu = 17;
+  repeated Tpm tpm = 18;
 }
 
 // Holds componenet fields for any component categories.
@@ -643,6 +658,7 @@ message ComponentFields {
     Network.Fields ethernet = 12;
     Network.Fields wireless = 13;
     Cpu.Fields cpu = 14;
+    Tpm.Fields tpm = 15;
   }
 }
 

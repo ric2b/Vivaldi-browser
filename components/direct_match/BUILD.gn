@@ -1,0 +1,37 @@
+# Copyright (c) 2024 Vivaldi Technologies AS. All rights reserved
+
+source_set("direct_match") {
+  sources = [
+    "direct_match_service.cc",
+    "direct_match_service.h",
+    "qwerty_weighted_distance.cc",
+    "qwerty_weighted_distance.h",
+  ]
+  deps = [
+    "//base",
+    "//content/public/browser",
+  ]
+}
+
+static_library("browser") {
+  sources = [
+    "direct_match_service_factory.cc",
+    "direct_match_service_factory.h",
+  ]
+  deps = [
+    ":direct_match",
+    "//base",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [ "direct_match_unittest.cc" ]
+
+  deps = [
+    ":direct_match",
+    "//base",
+    "//testing/gtest",
+  ]
+}

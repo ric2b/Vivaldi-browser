@@ -5,7 +5,7 @@
 import {assert} from 'chrome://resources/js/assert.js';
 import {CustomElement} from 'chrome://resources/js/custom_element.js';
 
-import {AngleFeature, BrowserBridge, ClientInfo, FeatureStatus, Problem} from './browser_bridge.js';
+import type {AngleFeature, BrowserBridge, ClientInfo, FeatureStatus, Problem} from './browser_bridge.js';
 import {getTemplate} from './info_view.html.js';
 import {VulkanInfo} from './vulkan_info.js';
 
@@ -681,6 +681,7 @@ export class InfoViewElement extends CustomElement {
           'Direct Rendering Display Compositor',
       'webgpu': 'WebGPU',
       'skia_graphite': 'Skia Graphite',
+      'webnn': 'WebNN',
     };
 
     const statusMap: Record<string, {label: string, class: string}> = {

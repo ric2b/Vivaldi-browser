@@ -25,21 +25,6 @@ namespace adblock_filter {
 
 namespace {
 
-constexpr auto kOldResourceTypeMap =
-    base::MakeFixedFlatMap<RequestFilterRule::ResourceType, base::StringPiece>({
-        {RequestFilterRule::kStylesheet, "style-sheet"},
-        {RequestFilterRule::kImage, "image"},
-        {RequestFilterRule::kObject, "media"},
-        {RequestFilterRule::kScript, "script"},
-        {RequestFilterRule::kXmlHttpRequest, "raw"},
-        {RequestFilterRule::kSubDocument, "document"},
-        {RequestFilterRule::kFont, "font"},
-        {RequestFilterRule::kMedia, "media"},
-        {RequestFilterRule::kWebSocket, "raw"},
-        {RequestFilterRule::kPing, "ping"},
-        {RequestFilterRule::kOther, "raw"},
-    });
-
 constexpr auto kResourceTypeMap =
     base::MakeFixedFlatMap<RequestFilterRule::ResourceType, base::StringPiece>({
         {RequestFilterRule::kStylesheet, "style-sheet"},
@@ -89,10 +74,7 @@ class Trigger {
       base::Value::List resource_type;
       for (size_t i = 0; i < resource_type_.size(); i++) {
         if (resource_type_.test(i)) {
-          if (base::ios::IsRunningOnIOS15OrLater())
-            resource_type.Append(base::Value(kResourceTypeMap.at(i)));
-          else
-            resource_type.Append(base::Value(kOldResourceTypeMap.at(i)));
+          resource_type.Append(base::Value(kResourceTypeMap.at(i)));
         }
       }
       result.Set(rules_json::kResourceType, std::move(resource_type));
@@ -116,7 +98,7 @@ class Trigger {
       case LoadContext::kAny:
         break;
     }
-    if (!load_context.empty() && base::ios::IsRunningOnIOS15OrLater()) {
+    if (!load_context.empty()) {
       result.Set(rules_json::kLoadContext, std::move(load_context));
     }
 
@@ -264,12 +246,12 @@ void AppendfromPattern(base::StringPiece pattern, std::string& result) {
   }
 }
 
-absl::optional<std::string> GetRegexFromRule(const RequestFilterRule& rule) {
+std::optional<std::string> GetRegexFromRule(const RequestFilterRule& rule) {
   base::StringPiece pattern(rule.pattern);
 
   // Unicode not supported by iOS content blocker
   if (!base::IsStringASCII(pattern))
-    return absl::nullopt;
+    return std::nullopt;
 
   if (pattern.empty())
     return kWildcardRegex;
@@ -290,12 +272,12 @@ absl::optional<std::string> GetRegexFromRule(const RequestFilterRule& rule) {
         case '|':
         case '^':
           if (!escaped)
-            return absl::nullopt;
+            return std::nullopt;
           break;
         default:
           // character classes, word boundaries and backreferences unsupported
           if ((base::IsAsciiAlpha(c) || base::IsAsciiDigit(c)) && escaped)
-            return absl::nullopt;
+            return std::nullopt;
       }
     }
 
@@ -605,7 +587,7 @@ void CompileRequestFilterRule(
     base::Value::Dict& compiled_cosmetic_filter_rules) {
   static const std::bitset<RequestFilterRule::kTypeCount> subdocument_type =
       (1 << RequestFilterRule::kSubDocument);
-  absl::optional<std::string> url_filter = GetRegexFromRule(rule);
+  std::optional<std::string> url_filter = GetRegexFromRule(rule);
   if (!url_filter)
     return;
   auto resource_types = rule.resource_types;

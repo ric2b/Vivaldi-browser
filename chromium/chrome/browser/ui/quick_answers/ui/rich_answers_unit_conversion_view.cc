@@ -14,42 +14,39 @@
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
-#include "ui/chromeos/styles/cros_tokens_color_mappings.h"
+#include "ui/color/color_id.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout_view.h"
 #include "ui/views/layout/flex_layout_view.h"
 
+namespace quick_answers {
+
 namespace {
 
-std::string BuildFormulaDescriptionText(double source_rate,
-                                        double dest_rate,
-                                        const std::string& category) {
-  std::u16string arithmetic_operator_text;
+void AddAlternativeUnits(views::View* container_view,
+                         const UnitConversionResult& unit_conversion_result) {
+  for (const UnitConversion& unit_conversion :
+       unit_conversion_result.alternative_unit_conversions_list) {
+    double dest_amount = unit_conversion.ConvertSourceAmountToDestAmount(
+        unit_conversion_result.source_amount);
 
-  if (source_rate <= dest_rate) {
-    arithmetic_operator_text = l10n_util::GetStringUTF16(
-        IDS_QUICK_ANSWERS_UNIT_CONVERSION_FORMULA_MULTIPLICATION_OPERATOR_TEXT);
-  } else {
-    arithmetic_operator_text = l10n_util::GetStringUTF16(
-        IDS_QUICK_ANSWERS_UNIT_CONVERSION_FORMULA_DIVISION_OPERATOR_TEXT);
+    std::string dest_amount_text =
+        BuildRoundedUnitAmountDisplayText(dest_amount);
+
+    views::BoxLayoutView* box_layout_view =
+        container_view->AddChildView(CreateHorizontalBoxLayoutView());
+    box_layout_view->AddChildView(QuickAnswersTextLabel::CreateLabelWithStyle(
+        dest_amount_text, GetFontList(TypographyToken::kCrosButton1),
+        kContentTextWidth,
+        /*is_multi_line=*/false, ui::kColorSysOnSurface));
+    box_layout_view->AddChildView(QuickAnswersTextLabel::CreateLabelWithStyle(
+        unit_conversion.dest_rule().unit_name(),
+        GetFontList(TypographyToken::kCrosBody2), kContentTextWidth,
+        /*is_multi_line=*/false, ui::kColorSysSecondary));
   }
-
-  std::optional<double> conversion_rate =
-      quick_answers::GetRatio(source_rate, dest_rate);
-  if (!conversion_rate.has_value()) {
-    return std::string();
-  }
-
-  return l10n_util::GetStringFUTF8(
-      IDS_QUICK_ANSWERS_UNIT_CONVERSION_FORMULA_DESCRIPTION_TEXT,
-      arithmetic_operator_text, base::UTF8ToUTF16(base::ToLowerASCII(category)),
-      base::UTF8ToUTF16(base::StringPrintf(quick_answers::kResultValueTemplate,
-                                           conversion_rate.value())));
 }
 
 }  // namespace
-
-namespace quick_answers {
 
 // RichAnswersUnitConversionView
 // -----------------------------------------------------------
@@ -79,48 +76,49 @@ void RichAnswersUnitConversionView::InitLayout() {
 
   MaybeAddFormulaInformation();
 
-  // Separator.
-  content_view_->AddChildView(CreateSeparatorView());
+  if (!unit_conversion_result_.alternative_unit_conversions_list.empty()) {
+    content_view_->AddChildView(CreateSeparatorView());
+
+    AddAlternativeUnits(content_view_, unit_conversion_result_);
+  }
 }
 
 void RichAnswersUnitConversionView::AddConversionResultText() {
   content_view_->AddChildView(QuickAnswersTextLabel::CreateLabelWithStyle(
       unit_conversion_result_.result_text,
       GetFontList(TypographyToken::kCrosDisplay5), kContentTextWidth,
-      /*is_multi_line=*/true, cros_tokens::kCrosSysOnSurface));
+      /*is_multi_line=*/true, ui::kColorSysOnSurface));
 }
 
 void RichAnswersUnitConversionView::MaybeAddFormulaInformation() {
-  if (!unit_conversion_result_.standard_unit_conversion_rates.has_value()) {
+  if (!unit_conversion_result_.source_to_dest_unit_conversion.has_value()) {
     return;
   }
 
-  StandardUnitConversionRates conversion_rates =
-      unit_conversion_result_.standard_unit_conversion_rates.value();
-  std::string formula_description_text = BuildFormulaDescriptionText(
-      conversion_rates.source_to_standard_conversion_rate,
-      conversion_rates.dest_to_standard_conversion_rate,
-      unit_conversion_result_.category);
-  if (formula_description_text.empty()) {
+  UnitConversion unit_conversion =
+      unit_conversion_result_.source_to_dest_unit_conversion.value();
+  std::optional<std::string> formula_description_text =
+      unit_conversion.GetConversionFormulaText();
+  if (!formula_description_text) {
     return;
   }
 
   content_view_->AddChildView(QuickAnswersTextLabel::CreateLabelWithStyle(
       l10n_util::GetStringUTF8(
-          IDS_QUICK_ANSWERS_UNIT_CONVERSION_FORMULA_LABEL_TEXT),
+          IDS_RICH_ANSWERS_VIEW_UNIT_CONVERSION_FORMULA_LABEL_TEXT),
       GetFontList(TypographyToken::kCrosBody2Italic), kContentTextWidth,
-      /*is_multi_line=*/false, cros_tokens::kCrosSysSecondary));
+      /*is_multi_line=*/false, ui::kColorSysSecondary));
 
   views::BoxLayoutView* subcontent_view =
       content_view_->AddChildView(CreateHorizontalBoxLayoutView());
   subcontent_view->SetInsideBorderInsets(kSubContentViewInsets);
   subcontent_view->AddChildView(QuickAnswersTextLabel::CreateLabelWithStyle(
-      formula_description_text, GetFontList(TypographyToken::kCrosBody2),
-      kContentTextWidth,
-      /*is_multi_line=*/true, cros_tokens::kCrosSysOnSurface));
+      formula_description_text.value(),
+      GetFontList(TypographyToken::kCrosBody2), kContentTextWidth,
+      /*is_multi_line=*/true, ui::kColorSysOnSurface));
 }
 
-BEGIN_METADATA(RichAnswersUnitConversionView, RichAnswersView)
+BEGIN_METADATA(RichAnswersUnitConversionView)
 END_METADATA
 
 }  // namespace quick_answers

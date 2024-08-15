@@ -2,7 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-CN">
 <translation id="1038842779957582377">未知名称</translation>
-<translation id="1089439967362294234">更改口令</translation>
+<translation id="1089439967362294234">更改密码</translation>
 <translation id="1110994991967754504">选择对<ph name="PERMISSION_NAME" />的权限</translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> 意外终止了连接。</translation>
 <translation id="1161325031994447685">重新连接到 Wi-Fi 网络</translation>
@@ -24,7 +24,7 @@
 <translation id="2187317261103489799">检测（默认）</translation>
 <translation id="2224337661447660594">未连接到互联网</translation>
 <translation id="2292556288342944218">您被禁止访问互联网</translation>
-<translation id="2317259163369394535"><ph name="DOMAIN" /> 要求提供用户名和口令。</translation>
+<translation id="2317259163369394535"><ph name="DOMAIN" /> 要求提供用户名和密码。</translation>
 <translation id="2337852623177822836">设置由管理员控制</translation>
 <translation id="2355395290879513365">攻击者可能能够看到您正在此网站上浏览的图片，并通过编辑这些图片让您受骗。</translation>
 <translation id="2356070529366658676">询问</translation>
@@ -65,7 +65,7 @@
 <translation id="3447661539832366887">此设备的所有者已关闭恐龙游戏。</translation>
 <translation id="3447884698081792621">显示证书（由<ph name="ISSUER" />签发）</translation>
 <translation id="3462200631372590220">隐藏详情</translation>
-<translation id="3484560055331845446">您可能会无法再访问自己的 Google 帐号。Chrome 建议您立即更改口令。系统会要求您登录。</translation>
+<translation id="3484560055331845446">您可能会无法再访问自己的 Google 帐号。Chrome 建议您立即更改密码。系统会要求您登录。</translation>
 <translation id="3566021033012934673">您的连接不是私密连接</translation>
 <translation id="3574305903863751447"><ph name="COUNTRY" /><ph name="STATE" /><ph name="CITY" /></translation>
 <translation id="3586931643579894722">隐藏详细信息</translation>
@@ -151,7 +151,7 @@
 <translation id="6447842834002726250">Cookie</translation>
 <translation id="6451458296329894277">确认重新提交表单</translation>
 <translation id="6569060085658103619">您正在查看扩展程序页面</translation>
-<translation id="6657585470893396449">口令</translation>
+<translation id="6657585470893396449">密码</translation>
 <translation id="6711464428925977395">代理服务器出现问题，或者地址有误。</translation>
 <translation id="6757797048963528358">您的设备已进入休眠模式。</translation>
 <translation id="6890956352250146925">Cookie 和网站数据的相关选项</translation>
@@ -183,13 +183,13 @@
 <translation id="7758069387465995638">防火墙或防病毒软件可能已阻止您连接到网络。</translation>
 <translation id="7800304661137206267">该连接是使用 <ph name="CIPHER" /> 进行加密的，同时使用 <ph name="MAC" /> 进行讯息身份验证并使用 <ph name="KX" /> 作为密钥交换机制。</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> 通常会使用加密技术来保护您的信息。Vivaldi 此次尝试连接到 <ph name="SITE" /> 时，该网站发回了异常的错误凭据。这可能是因为有攻击者在试图冒充 <ph name="SITE" />，或者 Wi-Fi 登录屏幕中断了此次连接。请放心，您的信息仍然是安全的，因为 Vivaldi 尚未进行任何数据交换便停止了连接。</translation>
-<translation id="7878562273885520351">您的口令可能已泄露</translation>
+<translation id="7878562273885520351">您的密码可能已泄露</translation>
 <translation id="7951415247503192394">（32 位）</translation>
 <translation id="7953236668995583915">请重新加载此页面，以便在该网站上应用更新后的设置</translation>
 <translation id="8025119109950072390">此网站上的攻击者可能会诱骗您做出一些诸如安装软件或泄露个人信息（例如：密码、电话号码或信用卡信息）之类的危险事情。</translation>
 <translation id="8037357227543935929">询问（默认）</translation>
 <translation id="8041940743680923270">使用全局默认设置（询问）</translation>
-<translation id="808894953321890993">更改口令</translation>
+<translation id="808894953321890993">更改密码</translation>
 <translation id="8119307142152921512">广告和追踪器</translation>
 <translation id="8149426793427495338">您的计算机已进入休眠模式。</translation>
 <translation id="8150722005171944719">无法读取 <ph name="URL" /> 上的文件。该文件可能已遭到删除、移动，或者文件权限不允许进行访问。</translation>
@@ -208,7 +208,7 @@
 <translation id="8820817407110198400">书签</translation>
 <translation id="8940028675168378100">被 <ph name="BLOCKER_NAME" /> 屏蔽</translation>
 <translation id="8963117664422609631">转到网站设置</translation>
-<translation id="9001074447101275817">代理 (<ph name="DOMAIN" />) 要求提供用户名和口令。</translation>
+<translation id="9001074447101275817">代理 (<ph name="DOMAIN" />) 要求提供用户名和密码。</translation>
 <translation id="9008201768610948239">忽略</translation>
 <translation id="9025348182339809926">（无效）</translation>
 <translation id="9039213469156557790">而且，此页中包含其他不安全的资源。这些资源在传输过程中能被他人查看，而攻击者可以修改这些资源，从而改变此页的行为。</translation>
@@ -218,7 +218,7 @@
 <translation id="9169664750068251925">在此网站上始终阻止</translation>
 <translation id="9180553614777056266">广告拦截器</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> 使用了不受支持的协议。</translation>
-<translation id="936602727769022409">您可能会无法再访问自己的 Google 帐号。建议您立即更改口令。系统会要求您登录。</translation>
+<translation id="936602727769022409">您可能会无法再访问自己的 Google 帐号。建议您立即更改密码。系统会要求您登录。</translation>
 <translation id="969892804517981540">官方版</translation>
 <translation id="988159990683914416">开发者内部版本</translation>
 </translationbundle>

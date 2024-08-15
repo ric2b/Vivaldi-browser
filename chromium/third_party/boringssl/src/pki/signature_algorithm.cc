@@ -6,6 +6,7 @@
 
 #include <openssl/bytestring.h>
 #include <openssl/digest.h>
+
 #include "input.h"
 #include "parse_values.h"
 #include "parser.h"
@@ -122,21 +123,16 @@ const uint8_t kOidRsaSsaPss[] = {0x2a, 0x86, 0x48, 0x86, 0xf7,
 const uint8_t kOidMgf1[] = {0x2a, 0x86, 0x48, 0x86, 0xf7,
                             0x0d, 0x01, 0x01, 0x08};
 
-// Returns true if |input| is empty.
-[[nodiscard]] bool IsEmpty(const der::Input &input) {
-  return input.Length() == 0;
-}
-
 // Returns true if the entirety of the input is a NULL value.
-[[nodiscard]] bool IsNull(const der::Input &input) {
+[[nodiscard]] bool IsNull(der::Input input) {
   der::Parser parser(input);
   der::Input null_value;
-  if (!parser.ReadTag(der::kNull, &null_value)) {
+  if (!parser.ReadTag(CBS_ASN1_NULL, &null_value)) {
     return false;
   }
 
   // NULL values are TLV encoded; the value is expected to be empty.
-  if (!IsEmpty(null_value)) {
+  if (!null_value.empty()) {
     return false;
   }
 
@@ -144,8 +140,8 @@ const uint8_t kOidMgf1[] = {0x2a, 0x86, 0x48, 0x86, 0xf7,
   return !parser.HasMore();
 }
 
-[[nodiscard]] bool IsNullOrEmpty(const der::Input &input) {
-  return IsNull(input) || IsEmpty(input);
+[[nodiscard]] bool IsNullOrEmpty(der::Input input) {
+  return IsNull(input) || input.empty();
 }
 
 // Parses a MaskGenAlgorithm as defined by RFC 5912:
@@ -215,7 +211,7 @@ const uint8_t kOidMgf1[] = {0x2a, 0x86, 0x48, 0x86, 0xf7,
 // Note also that DER encoding (ITU-T X.690 section 11.5) prohibits
 // specifying default values explicitly. The parameter should instead be
 // omitted to indicate a default value.
-std::optional<SignatureAlgorithm> ParseRsaPss(const der::Input &params) {
+std::optional<SignatureAlgorithm> ParseRsaPss(der::Input params) {
   der::Parser parser(params);
   der::Parser params_parser;
   if (!parser.ReadSequence(&params_parser)) {
@@ -242,12 +238,15 @@ std::optional<SignatureAlgorithm> ParseRsaPss(const der::Input &params) {
   DigestAlgorithm hash, mgf1_hash;
   der::Parser salt_length_parser;
   uint64_t salt_length;
-  if (!params_parser.ReadTag(der::ContextSpecificConstructed(0), &field) ||
+  if (!params_parser.ReadTag(
+          CBS_ASN1_CONTEXT_SPECIFIC | CBS_ASN1_CONSTRUCTED | 0, &field) ||
       !ParseHashAlgorithm(field, &hash) ||
-      !params_parser.ReadTag(der::ContextSpecificConstructed(1), &field) ||
+      !params_parser.ReadTag(
+          CBS_ASN1_CONTEXT_SPECIFIC | CBS_ASN1_CONSTRUCTED | 1, &field) ||
       !ParseMaskGenAlgorithm(field, &mgf1_hash) ||
-      !params_parser.ReadConstructed(der::ContextSpecificConstructed(2),
-                                     &salt_length_parser) ||
+      !params_parser.ReadConstructed(
+          CBS_ASN1_CONTEXT_SPECIFIC | CBS_ASN1_CONSTRUCTED | 2,
+          &salt_length_parser) ||
       !salt_length_parser.ReadUint64(&salt_length) ||
       salt_length_parser.HasMore() || params_parser.HasMore()) {
     return std::nullopt;
@@ -273,7 +272,7 @@ std::optional<SignatureAlgorithm> ParseRsaPss(const der::Input &params) {
 
 }  // namespace
 
-[[nodiscard]] bool ParseAlgorithmIdentifier(const der::Input &input,
+[[nodiscard]] bool ParseAlgorithmIdentifier(der::Input input,
                                             der::Input *algorithm,
                                             der::Input *parameters) {
   der::Parser parser(input);
@@ -290,7 +289,7 @@ std::optional<SignatureAlgorithm> ParseRsaPss(const der::Input &params) {
     return false;
   }
 
-  if (!algorithm_identifier_parser.ReadTag(der::kOid, algorithm)) {
+  if (!algorithm_identifier_parser.ReadTag(CBS_ASN1_OBJECT, algorithm)) {
     return false;
   }
 
@@ -308,10 +307,9 @@ std::optional<SignatureAlgorithm> ParseRsaPss(const der::Input &params) {
   return !algorithm_identifier_parser.HasMore();
 }
 
-[[nodiscard]] bool ParseHashAlgorithm(const der::Input &input,
-                                      DigestAlgorithm *out) {
+[[nodiscard]] bool ParseHashAlgorithm(der::Input input, DigestAlgorithm *out) {
   CBS cbs;
-  CBS_init(&cbs, input.UnsafeData(), input.Length());
+  CBS_init(&cbs, input.data(), input.size());
   const EVP_MD *md = EVP_parse_digest_algorithm(&cbs);
 
   if (md == EVP_sha1()) {
@@ -332,7 +330,7 @@ std::optional<SignatureAlgorithm> ParseRsaPss(const der::Input &params) {
 }
 
 std::optional<SignatureAlgorithm> ParseSignatureAlgorithm(
-    const der::Input &algorithm_identifier) {
+    der::Input algorithm_identifier) {
   der::Input oid;
   der::Input params;
   if (!ParseAlgorithmIdentifier(algorithm_identifier, &oid, &params)) {
@@ -365,16 +363,16 @@ std::optional<SignatureAlgorithm> ParseSignatureAlgorithm(
 
   // RFC 5912 requires that the parameters for ECDSA algorithms be absent
   // ("PARAMS TYPE NULL ARE absent"):
-  if (oid == der::Input(kOidEcdsaWithSha1) && IsEmpty(params)) {
+  if (oid == der::Input(kOidEcdsaWithSha1) && params.empty()) {
     return SignatureAlgorithm::kEcdsaSha1;
   }
-  if (oid == der::Input(kOidEcdsaWithSha256) && IsEmpty(params)) {
+  if (oid == der::Input(kOidEcdsaWithSha256) && params.empty()) {
     return SignatureAlgorithm::kEcdsaSha256;
   }
-  if (oid == der::Input(kOidEcdsaWithSha384) && IsEmpty(params)) {
+  if (oid == der::Input(kOidEcdsaWithSha384) && params.empty()) {
     return SignatureAlgorithm::kEcdsaSha384;
   }
-  if (oid == der::Input(kOidEcdsaWithSha512) && IsEmpty(params)) {
+  if (oid == der::Input(kOidEcdsaWithSha512) && params.empty()) {
     return SignatureAlgorithm::kEcdsaSha512;
   }
 

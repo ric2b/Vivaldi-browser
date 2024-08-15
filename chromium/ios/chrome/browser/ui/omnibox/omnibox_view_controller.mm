@@ -6,24 +6,23 @@
 
 #import "base/containers/contains.h"
 #import "base/functional/bind.h"
+#import "base/memory/raw_ptr.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/omnibox/browser/omnibox_field_trial.h"
 #import "components/open_from_clipboard/clipboard_recent_content.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_constants.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_container_view.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_keyboard_delegate.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_change_delegate.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_delegate.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
-#import "ios/chrome/common/ui/util/pointer_interaction_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/lens/lens_api.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -38,18 +37,11 @@ using vivaldi::IsVivaldiRunning;
 
 using base::UserMetricsAction;
 
-namespace {
-
-const CGFloat kClearButtonInset = 4.0f;
-const CGFloat kClearButtonImageSize = 17.0f;
-
-}  // namespace
-
 @interface OmniboxViewController () <OmniboxTextFieldDelegate,
                                      OmniboxKeyboardDelegate,
                                      UIScribbleInteractionDelegate> {
   // Weak, acts as a delegate
-  OmniboxTextChangeDelegate* _textChangeDelegate;
+  raw_ptr<OmniboxTextChangeDelegate> _textChangeDelegate;
 
   // Vivaldi
   // The search engine list to trigger search engine shortcut if matched
@@ -109,7 +101,13 @@ const CGFloat kClearButtonImageSize = 17.0f;
 
 @end
 
-@implementation OmniboxViewController
+@implementation OmniboxViewController {
+  // Omnibox uses a custom clear button. It has a custom tint and image, but
+  // otherwise it should act exactly like a system button.
+  /// Clear button owned by `view` (OmniboxContainerView).
+  __weak UIButton* _clearButton;
+}
+
 @dynamic view;
 
 - (instancetype)initWithIncognito:(BOOL)isIncognito {
@@ -134,6 +132,7 @@ const CGFloat kClearButtonImageSize = 17.0f;
                                                  iconTint:iconTintColor];
   self.view.incognito = self.incognito;
   self.view.layoutGuideCenter = self.layoutGuideCenter;
+  _clearButton = self.view.clearButton;
 
   self.view.shouldGroupAccessibilityChildren = YES;
 
@@ -166,15 +165,23 @@ const CGFloat kClearButtonImageSize = 17.0f;
              action:@selector(searchCopiedText:)]);
 #endif
 
-  self.textField.placeholderTextColor = [self placeholderAndClearButtonColor];
-
+  self.textField.placeholderTextColor =
+      [UIColor colorNamed:kTextfieldPlaceholderColor];
   if (IsVivaldiRunning()) {
     self.textField.placeholder = [self defaultPlaceholder];
   } else {
   self.textField.placeholder = l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT);
   } // End Vivaldi
 
-  [self setupClearButton];
+  [_clearButton addTarget:self
+                   action:@selector(clearButtonPressed)
+         forControlEvents:UIControlEventTouchUpInside];
+
+  // Observe text changes to show the clear button when there is text and hide
+  // it when the textfield is empty.
+  [self.textField addTarget:self
+                     action:@selector(textFieldDidChange:)
+           forControlEvents:UIControlEventEditingChanged];
 
   [NSNotificationCenter.defaultCenter
       addObserver:self
@@ -250,6 +257,10 @@ const CGFloat kClearButtonImageSize = 17.0f;
 }
 
 - (UIView<TextFieldViewContaining>*)viewContainingTextField {
+  return self.view;
+}
+
+- (id<OmniboxAdditionalTextConsumer>)additionalTextConsumer {
   return self.view;
 }
 
@@ -550,7 +561,7 @@ const CGFloat kClearButtonImageSize = 17.0f;
 }
 
 - (void)setClearButtonFaded:(BOOL)faded {
-  self.textField.rightView.alpha = faded ? 0 : 1;
+  _clearButton.alpha = faded ? 0 : 1;
 }
 
 #pragma mark - LocationBarOffsetProvider
@@ -560,11 +571,6 @@ const CGFloat kClearButtonImageSize = 17.0f;
 }
 
 #pragma mark - private
-
-// Tint color for the textfield placeholder and the clear button.
-- (UIColor*)placeholderAndClearButtonColor {
-  return [UIColor colorNamed:kTextfieldPlaceholderColor];
-}
 
 - (BOOL)shouldUseLensInMenu {
   return ios::provider::IsLensSupported() &&
@@ -657,52 +663,6 @@ const CGFloat kClearButtonImageSize = 17.0f;
 
 #pragma mark clear button
 
-// Omnibox uses a custom clear button. It has a custom tint and image, but
-// otherwise it should act exactly like a system button. To achieve this, a
-// custom button is used as the `rightView`. Textfield's setRightViewMode: is
-// used to make the button invisible when the textfield is empty; the visibility
-// is updated on textfield text changes and clear button presses.
-- (void)setupClearButton {
-  // Do not use the system clear button. Use a custom "right view" instead.
-  // Note that `rightView` is an incorrect name, it's really a trailing view.
-  [self.textField setClearButtonMode:UITextFieldViewModeNever];
-  [self.textField setRightViewMode:UITextFieldViewModeAlways];
-
-  UIButtonConfiguration* conf =
-      [UIButtonConfiguration plainButtonConfiguration];
-  conf.image = [self clearButtonIcon];
-  conf.contentInsets =
-      NSDirectionalEdgeInsetsMake(kClearButtonInset, kClearButtonInset,
-                                  kClearButtonInset, kClearButtonInset);
-
-  UIButton* clearButton = [UIButton buttonWithType:UIButtonTypeSystem];
-  clearButton.configuration = conf;
-
-  [clearButton addTarget:self
-                  action:@selector(clearButtonPressed)
-        forControlEvents:UIControlEventTouchUpInside];
-  self.textField.rightView = clearButton;
-
-  clearButton.tintColor = [self placeholderAndClearButtonColor];
-  SetA11yLabelAndUiAutomationName(clearButton, IDS_IOS_ACCNAME_CLEAR_TEXT,
-                                  @"Clear Text");
-
-  clearButton.pointerInteractionEnabled = YES;
-  clearButton.pointerStyleProvider =
-      CreateLiftEffectCirclePointerStyleProvider();
-
-  // Observe text changes to show the clear button when there is text and hide
-  // it when the textfield is empty.
-  [self.textField addTarget:self
-                     action:@selector(textFieldDidChange:)
-           forControlEvents:UIControlEventEditingChanged];
-}
-
-- (UIImage*)clearButtonIcon {
-  return DefaultSymbolWithPointSize(kXMarkCircleFillSymbol,
-                                    kClearButtonImageSize);
-}
-
 - (void)clearButtonPressed {
   // Emulate a system button clear callback.
   BOOL shouldClear =
@@ -718,8 +678,7 @@ const CGFloat kClearButtonImageSize = 17.0f;
 // Hides the clear button if the textfield is empty; shows it otherwise.
 - (void)updateClearButtonVisibility {
   BOOL hasText = self.textField.text.length > 0;
-  [self.textField setRightViewMode:hasText ? UITextFieldViewModeAlways
-                                           : UITextFieldViewModeNever];
+  [self.view setClearButtonHidden:!hasText];
 }
 
 // Handle the updates to semanticContentAttribute by passing the changes along
@@ -773,18 +732,12 @@ const CGFloat kClearButtonImageSize = 17.0f;
 }
 
 - (void)visitCopiedLink:(id)sender {
-  // A search using clipboard link is activity that should indicate a user
-  // that would be interested in setting Chrome as the default browser.
-  LogCopyPasteInOmniboxForDefaultBrowserPromo();
   RecordAction(UserMetricsAction("Mobile.OmniboxContextMenu.VisitCopiedLink"));
   self.omniboxInteractedWhileFocused = YES;
   [self.pasteDelegate didTapVisitCopiedLink];
 }
 
 - (void)searchCopiedText:(id)sender {
-  // A search using clipboard text is activity that should indicate a user
-  // that would be interested in setting Chrome as the default browser.
-  LogCopyPasteInOmniboxForDefaultBrowserPromo();
   RecordAction(UserMetricsAction("Mobile.OmniboxContextMenu.SearchCopiedText"));
   self.omniboxInteractedWhileFocused = YES;
   [self.pasteDelegate didTapSearchCopiedText];
@@ -827,8 +780,13 @@ const CGFloat kClearButtonImageSize = 17.0f;
   NSString *currentString =
       [textField.text stringByReplacingCharactersInRange:range
                                               withString:newText];
-  // Find the range of the first space
-  NSRange firstSpaceRange = [currentString rangeOfString:@" "];
+
+  // Create a character set that includes both ASCII and full-width spaces
+  NSMutableCharacterSet *spaceCharacterSet =
+      [NSMutableCharacterSet whitespaceCharacterSet];
+  // Find the range of the first space using the character set
+  NSRange firstSpaceRange =
+      [currentString rangeOfCharacterFromSet:spaceCharacterSet];
   // If there's a space in the string
   if (firstSpaceRange.location != NSNotFound) {
     // Extract the substring up to the first space

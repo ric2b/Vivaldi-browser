@@ -4,8 +4,9 @@
 
 import 'chrome://flags/app.js';
 
-import {FlagsAppElement} from 'chrome://flags/app.js';
-import {ExperimentalFeaturesData, Feature, FlagsBrowserProxyImpl} from 'chrome://flags/flags_browser_proxy.js';
+import type {FlagsAppElement} from 'chrome://flags/app.js';
+import type {ExperimentalFeaturesData, Feature} from 'chrome://flags/flags_browser_proxy.js';
+import {FlagsBrowserProxyImpl} from 'chrome://flags/flags_browser_proxy.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {eventToPromise, isVisible} from 'chrome://webui-test/test_util.js';
 
@@ -65,8 +66,13 @@ suite('FlagsAppTest', function() {
     'needsRestart': false,
     'showBetaChannelPromotion': false,
     'showDevChannelPromotion': false,
-    'showOwnerWarning': false,
+    // <if expr="chromeos_ash">
+    'showOwnerWarning': true,
+    'showSystemFlagsLink': false,
+    // </if>
+    // <if expr="chromeos_lacros">
     'showSystemFlagsLink': true,
+    // </if>
   };
 
   let app: FlagsAppElement;
@@ -102,6 +108,31 @@ suite('FlagsAppTest', function() {
     selectEl.dispatchEvent(
         new CustomEvent('change', {composed: true, bubbles: true}));
   }
+
+  test('Layout', function() {
+    // Flag search
+    assertTrue(isVisible(searchTextArea));
+    assertFalse(isVisible(clearSearch));
+    assertTrue(isVisible(resetAllButton));
+
+    // <if expr="chromeos_ash">
+    assertFalse(isVisible(app.getRequiredElement('#os-link-container')));
+    // </if>
+    // <if expr="chromeos_lacros">
+    assertTrue(isVisible(app.getRequiredElement('#os-link-container')));
+    // </if>
+
+    // Title and version
+    assertTrue(isVisible(app.getRequiredElement('.section-header-title')));
+    assertTrue(isVisible(app.getRequiredElement('#version')));
+
+    // Blurb warning
+    assertTrue(isVisible(app.getRequiredElement('.blurb-container')));
+    // <if expr="chromeos_ash">
+    // Owner warning
+    assertTrue(!!app.getRequiredElement('#owner-warning'));
+    // </if>
+  });
 
   test('check available/unavailable tabs are rendered properly', function() {
     const availableTab = app.getRequiredElement('#tab-available');

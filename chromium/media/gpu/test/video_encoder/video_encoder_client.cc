@@ -45,7 +45,7 @@ static unsigned int kMinInFlightFrames = 12;
 // only dereferenced after rescheduling the task on the specified task runner.
 template <typename CallbackFunc, typename... CallbackArgs>
 void CallbackThunk(
-    absl::optional<base::WeakPtr<VideoEncoderClient>> encoder_client,
+    std::optional<base::WeakPtr<VideoEncoderClient>> encoder_client,
     scoped_refptr<base::SequencedTaskRunner> task_runner,
     CallbackFunc func,
     CallbackArgs... args) {
@@ -62,6 +62,7 @@ VideoEncoderClientConfig::VideoEncoderClientConfig(
     const std::vector<VideoEncodeAccelerator::Config::SpatialLayer>&
         spatial_layers,
     SVCInterLayerPredMode inter_layer_pred_mode,
+    VideoEncodeAccelerator::Config::ContentType content_type,
     const VideoBitrateAllocation& bitrate_allocation,
     bool reverse)
     : output_profile(output_profile),
@@ -73,6 +74,7 @@ VideoEncoderClientConfig::VideoEncoderClientConfig(
       num_spatial_layers(
           std::max(spatial_layers.size(), static_cast<size_t>(1u))),
       inter_layer_pred_mode(inter_layer_pred_mode),
+      content_type(content_type),
       bitrate_allocation(bitrate_allocation),
       framerate(video->FrameRate()),
       num_frames_to_encode(video->NumFrames()),
@@ -499,11 +501,11 @@ void VideoEncoderClient::CreateEncoderTask(const RawVideo* video,
   VideoEncodeAccelerator::Config config(
       video_->PixelFormat(), encoder_client_config_.output_resolution,
       encoder_client_config_.output_profile,
-      encoder_client_config_.bitrate_allocation.GetSumBitrate());
+      encoder_client_config_.bitrate_allocation.GetSumBitrate(),
+      encoder_client_config_.framerate,
+      encoder_client_config_.input_storage_type,
+      encoder_client_config_.content_type);
 
-  config.initial_framerate = encoder_client_config_.framerate;
-  config.storage_type = encoder_client_config_.input_storage_type;
-  config.content_type = VideoEncodeAccelerator::Config::ContentType::kCamera;
   config.drop_frame_thresh_percentage =
       encoder_client_config_.drop_frame_thresh;
   config.spatial_layers = encoder_client_config_.spatial_layers;
@@ -616,7 +618,7 @@ void VideoEncoderClient::UpdateBitrateTask(
   DCHECK_CALLED_ON_VALID_SEQUENCE(encoder_client_sequence_checker_);
   DVLOGF(4);
   aligned_data_helper_->UpdateFrameRate(framerate);
-  encoder_->RequestEncodingParametersChange(bitrate, framerate, absl::nullopt);
+  encoder_->RequestEncodingParametersChange(bitrate, framerate, std::nullopt);
   base::AutoLock auto_lcok(stats_lock_);
   current_stats_.framerate = framerate;
 }

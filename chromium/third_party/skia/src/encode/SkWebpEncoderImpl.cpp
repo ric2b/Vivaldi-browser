@@ -175,19 +175,21 @@ bool Encode(SkWStream* stream, const SkPixmap& pixmap, const Options& opts) {
         }
 
         WebPData assembled;
+        SkAutoTCallVProc<WebPData, WebPDataClear> autoWebPData(&assembled);
         if (WEBP_MUX_OK != WebPMuxAssemble(mux, &assembled)) {
             return false;
         }
 
-        stream->write(assembled.bytes, assembled.size);
-        WebPDataClear(&assembled);
+        if (!stream->write(assembled.bytes, assembled.size)) {
+            return false;
+        }
     }
 
     return true;
 }
 
 bool EncodeAnimated(SkWStream* stream, SkSpan<const SkEncoder::Frame> frames, const Options& opts) {
-    if (!stream || !frames.size()) {
+    if (!stream || frames.empty()) {
         return false;
     }
 

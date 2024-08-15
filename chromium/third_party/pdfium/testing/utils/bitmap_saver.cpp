@@ -7,9 +7,9 @@
 #include <fstream>
 #include <vector>
 
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "testing/image_diff/image_diff_png.h"
-#include "third_party/base/check.h"
 
 // static
 void BitmapSaver::WriteBitmapToPng(FPDF_BITMAP bitmap,
@@ -24,7 +24,7 @@ void BitmapSaver::WriteBitmapToPng(FPDF_BITMAP bitmap,
   size *= height;
   auto input = pdfium::make_span(
       static_cast<const uint8_t*>(FPDFBitmap_GetBuffer(bitmap)),
-      pdfium::base::ValueOrDieForType<size_t>(size));
+      pdfium::ValueOrDieForType<size_t>(size));
 
   std::vector<uint8_t> png;
   int format = FPDFBitmap_GetFormat(bitmap);

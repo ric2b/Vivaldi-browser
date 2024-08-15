@@ -5,12 +5,12 @@
 #ifndef COMPONENTS_ML_WEBNN_GRAPH_VALIDATION_UTILS_H_
 #define COMPONENTS_ML_WEBNN_GRAPH_VALIDATION_UTILS_H_
 
+#include <optional>
 #include <vector>
 
 #include "base/containers/enum_set.h"
 #include "base/containers/span.h"
 #include "base/types/expected.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace webnn {
@@ -97,13 +97,12 @@ enum class Conv2dFilterOperandLayout { kOihw, kHwio, kOhwi, kIhwo };
 // / groups, H is height and W is the width of filter.
 enum class ConvTranspose2dFilterOperandLayout { kIohw, kHwoi, kOhwi };
 
-// Represents the `MLAutoPad`. `Explicit` means that the values in the padding
-// array should be used for calculating input padding, the `SameUpper` and
-// `SameLower` options mean the padding values are automatically computed.
-enum class AutoPad { kExplicit, kSameUpper, kSameLower };
-
 // Represents the `MLRoundingType` that is used to compute the output shape.
 enum class RoundingType { kFloor, kCeil };
+
+// Represents the `MLRecurrentNetworkDirection` that specifies the processing
+// direction of the input sequence.
+enum class RecurrentNetworkDirection { kForward, kBackward, kBoth };
 
 enum ReduceKind {
   kL1,
@@ -147,9 +146,9 @@ struct BatchNormalizationAttributes {
       delete;
 
   // The 1-D tensor of the scaling values.
-  absl::optional<Operand> scale;
+  std::optional<Operand> scale;
   // The 1-D tensor of the bias values.
-  absl::optional<Operand> bias;
+  std::optional<Operand> bias;
   // The number which specifies the index to the feature count dimension of the
   // input shape for which the mean and variance values are.
   uint32_t axis = 1;
@@ -173,8 +172,6 @@ struct Conv2dAttributesBase {
   Size2d<uint32_t> strides;
   // The dilation factor for each spatial dimension of input.
   Size2d<uint32_t> dilations;
-  // The automatic input padding options.
-  AutoPad auto_pad = AutoPad::kExplicit;
   // The number of groups that input channels and output channels are divided
   // into.
   uint32_t groups = 1;
@@ -182,7 +179,7 @@ struct Conv2dAttributesBase {
   InputOperandLayout input_layout = InputOperandLayout::kNchw;
   // The additional 1-D tensor with the shape of [output_channels] whose values
   // are to be added to the convolution result.
-  absl::optional<Operand> bias_operand;
+  std::optional<Operand> bias_operand;
 };
 
 // Contains the attributes of conv2d operator.
@@ -215,7 +212,7 @@ struct ConvTranspose2dAttributes : Conv2dAttributesBase {
   // The padding values applied to each spatial dimension of the output tensor.
   Size2d<uint32_t> output_padding;
   // The sizes of the last two dimensions of the output tensor.
-  absl::optional<Size2d<uint32_t>> output_sizes;
+  std::optional<Size2d<uint32_t>> output_sizes;
   // The layout format of the convTranspose2d filter.
   ConvTranspose2dFilterOperandLayout filter_layout =
       ConvTranspose2dFilterOperandLayout::kIohw;
@@ -224,7 +221,7 @@ struct ConvTranspose2dAttributes : Conv2dAttributesBase {
 // Contains the attributes of pool2d operator.
 struct Pool2dAttributes {
   // The dimensions of the sliding window.
-  absl::optional<Size2d<uint32_t>> window_dimensions;
+  std::optional<Size2d<uint32_t>> window_dimensions;
   // The additional rows and columns added to the beginning and ending of each
   // spatial dimension of input.
   Padding2d padding;
@@ -233,14 +230,12 @@ struct Pool2dAttributes {
   Size2d<uint32_t> strides;
   // The dilation factor for each spatial dimension of input.
   Size2d<uint32_t> dilations;
-  // The automatic input padding options.
-  AutoPad auto_pad = AutoPad::kExplicit;
   // The layout format of the input.
   InputOperandLayout layout = InputOperandLayout::kNchw;
   // The rounding function used to compute the output shape.
   RoundingType rounding_type = RoundingType::kFloor;
   // The element height and width of the output tensor.
-  absl::optional<Size2d<uint32_t>> output_sizes;
+  std::optional<Size2d<uint32_t>> output_sizes;
 };
 
 // Contains the attributes of gemm operator.
@@ -255,7 +250,7 @@ struct GemmAttributes {
   GemmAttributes& operator=(const GemmAttributes&) = delete;
 
   // The optional third tensor in expression alpha * A * B + beta * C.
-  absl::optional<Operand> c_operand;
+  std::optional<Operand> c_operand;
   // A float scalar multiplier for the `A * B`.
   float alpha = 1.0;
   // A float scalar multiplier for the third tensor.
@@ -264,6 +259,31 @@ struct GemmAttributes {
   bool a_transpose = false;
   // True is to transpose the second tensor matrix multiplication.
   bool b_transpose = false;
+};
+
+// Contains the attributes of gru operator.
+struct GruAttributes {
+  GruAttributes();
+  ~GruAttributes();
+
+  GruAttributes(GruAttributes&& other);
+  GruAttributes& operator=(GruAttributes&& other);
+
+  GruAttributes(const GruAttributes&) = delete;
+  GruAttributes& operator=(const GruAttributes&) = delete;
+
+  // The bias operand.
+  std::optional<Operand> bias;
+  // The recurrent bias operand.
+  std::optional<Operand> recurrent_bias;
+  // The initial hidden state operand.
+  std::optional<Operand> initial_hidden_state;
+  // Indicates whether to return the outputs of the entire sequence.
+  bool return_sequence;
+  // Specifies the processing direction of the input sequence.
+  RecurrentNetworkDirection direction;
+  // The number of activations.
+  uint32_t activation_count;
 };
 
 // Contains the attributes of instanceNormalization operator.
@@ -281,9 +301,9 @@ struct InstanceNormalizationAttributes {
       const InstanceNormalizationAttributes&) = delete;
 
   // The scale operand.
-  absl::optional<Operand> scale;
+  std::optional<Operand> scale;
   // The bias operand.
-  absl::optional<Operand> bias;
+  std::optional<Operand> bias;
   // The layout format of the input.
   InputOperandLayout layout = InputOperandLayout::kNchw;
 };
@@ -301,9 +321,37 @@ struct LayerNormalizationAttributes {
       delete;
 
   // The scale operand.
-  absl::optional<Operand> scale;
+  std::optional<Operand> scale;
   // The bias operand.
-  absl::optional<Operand> bias;
+  std::optional<Operand> bias;
+};
+
+struct LstmAttributes {
+  LstmAttributes();
+  ~LstmAttributes();
+
+  LstmAttributes(LstmAttributes&& other);
+  LstmAttributes& operator=(LstmAttributes&& other);
+
+  LstmAttributes(const LstmAttributes&) = delete;
+  LstmAttributes& operator=(const LstmAttributes&) = delete;
+
+  // The bias operand.
+  std::optional<Operand> bias;
+  // The recurrent bias operand.
+  std::optional<Operand> recurrent_bias;
+  // The peephole weight operand.
+  std::optional<Operand> peephole_weight;
+  // The initial hidden state operand.
+  std::optional<Operand> initial_hidden_state;
+  // The initial cell state operand.
+  std::optional<Operand> initial_cell_state;
+  // The number of activations.
+  size_t activation_count;
+  // Indicates whether to return the outputs of the entire sequence.
+  bool return_sequence;
+  // The processing direction of the input sequence.
+  RecurrentNetworkDirection direction;
 };
 
 struct SliceAttributes {
@@ -420,6 +468,16 @@ base::expected<Operand, std::string> ValidateGemmAndInferOutput(
     const Operand& b,
     const GemmAttributes& attributes);
 
+// Validate and infer output information of gru operator defined in WebIDL here
+// https://www.w3.org/TR/webnn/#api-mlgraphbuilder-gru.
+base::expected<std::vector<Operand>, std::string> ValidateGruAndInferOutput(
+    const Operand& input,
+    const Operand& weight,
+    const Operand& recurrent_weight,
+    uint32_t steps,
+    uint32_t hidden_size,
+    const GruAttributes& attributes);
+
 // Validate and infer output information of instanceNormalization operator
 // defined in WebIDL here
 // https://www.w3.org/TR/webnn/#api-mlgraphbuilder-instancenorm.
@@ -434,6 +492,16 @@ base::expected<Operand, std::string> ValidateLayerNormalizationAndInferOutput(
     const Operand& input,
     base::span<const uint32_t> axes,
     const LayerNormalizationAttributes& attributes);
+
+// Validate and infer output information of lstm operator defined
+// in WebIDL here https://www.w3.org/TR/webnn/#api-mlgraphbuilder-lstm.
+base::expected<std::vector<Operand>, std::string> ValidateLstmAndInferOutput(
+    const Operand& input,
+    const Operand& weight,
+    const Operand& recurrent_weight,
+    const uint32_t steps,
+    const uint32_t hidden_size,
+    const LstmAttributes& attributes);
 
 // Validate concat operator defined in WebIDL here
 // https://www.w3.org/TR/webnn/#api-mlgraphbuilder-concat
@@ -467,6 +535,11 @@ base::expected<Operand, std::string> ValidateReduceAndInferOutput(
     base::span<const uint32_t> axes,
     bool keepDimensions = false);
 
+// Validate triangular operator defined in WebIDL here
+// https://www.w3.org/TR/webnn/#api-mlgraphbuilder-triangular.
+base::expected<Operand, std::string> ValidateTriangularAndInferOutput(
+    Operand input);
+
 // TODO(crbug.com/1273291): Add the link of the where operator definition in
 // WebIDL.
 // Validate where operator.
@@ -491,41 +564,10 @@ base::expected<void, std::string> ValidateAxes(base::span<const uint32_t> axes,
 // If bidirectional is true, its behavior follows the numpy-broadcasting-rule:
 // https://numpy.org/doc/stable/user/basics.broadcasting.html#general-broadcasting-rules.
 // Otherwise, it unidirectionally broadcasts the lhs to the rhs.
-absl::optional<std::vector<uint32_t>> BroadcastShapes(
+std::optional<std::vector<uint32_t>> BroadcastShapes(
     base::span<const uint32_t> dims_lhs,
     base::span<const uint32_t> dims_rhs,
     bool bidirectional = true);
-
-// TODO(crbug.com/1273291): Don't export PaddingSizes when moving the validation
-// of ConvTransposed2d to the shared library.
-struct PaddingSizes {
-  uint32_t begin;
-  uint32_t end;
-};
-
-// Calculate the effective padding for conv2d based on WebNN auto padding
-// rules.
-//
-// TODO(crbug.com/1273291): Add the link to WebNN spec's algorithm once it is
-// defined, tracked by: https://github.com/webmachinelearning/webnn/issues/326
-absl::optional<PaddingSizes> CalculateConv2dPadding(AutoPad auto_pad,
-                                                    const uint32_t input_size,
-                                                    const uint32_t filter_size,
-                                                    const uint32_t stride,
-                                                    const uint32_t dilation);
-
-// Calculate the effective padding for convTranspose2d based on WebNN auto
-// padding rules.
-//
-// TODO(crbug.com/1273291): Add the link to WebNN spec's algorithm once it is
-// defined, tracked by: https://github.com/webmachinelearning/webnn/issues/326
-absl::optional<PaddingSizes> CalculateConvTranspose2dPadding(
-    AutoPad auto_pad,
-    const uint32_t input_size,
-    const uint32_t filter_size,
-    const uint32_t stride,
-    const uint32_t dilation,
-    const uint32_t output_padding);
 
 // Calculate the output size for convTranspose2d based on WebNN spec:
 // https://www.w3.org/TR/webnn/#api-mlgraphbuilder-convtranspose2d
@@ -540,6 +582,13 @@ base::expected<uint32_t, std::string> CalculateConvTranspose2dOutputSize(
     const uint32_t output_padding);
 
 bool IsFloatingPointType(Operand::DataType data_type);
+
+// A depthwise conv2d operation is a variant of grouped convolution where the
+// options.groups == input_channels == output_channels according to WebNN conv2d
+// spec: https://www.w3.org/TR/webnn/#api-mlgraphbuilder-conv2d.
+bool IsDepthwiseConv2d(uint32_t input_channels,
+                       uint32_t output_channels,
+                       uint32_t groups);
 
 }  // namespace webnn
 

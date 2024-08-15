@@ -5,10 +5,10 @@
 #ifndef CC_TILES_TILES_WITH_RESOURCE_ITERATOR_H_
 #define CC_TILES_TILES_WITH_RESOURCE_ITERATOR_H_
 
+#include <optional>
 #include <set>
 #include <vector>
 
-#include <optional>
 #include "base/memory/raw_ptr.h"
 #include "cc/cc_export.h"
 #include "cc/tiles/picture_layer_tiling.h"
@@ -84,7 +84,7 @@ class CC_EXPORT TilesWithResourceIterator {
 
   // Set of tiles that have been visited. Used to ensure the same tile isn't
   // visited more than once.
-  std::set<Tile*> visited_;
+  std::set<raw_ptr<Tile, SetExperimental>> visited_;
 
   // Created when GetCurrentAsPrioritizedTile() is called.
   std::optional<PrioritizedTile> prioritized_tile_;

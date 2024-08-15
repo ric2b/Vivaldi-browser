@@ -6,7 +6,6 @@
 #include <utility>
 #include <vector>
 
-
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_string_value_serializer.h"
@@ -66,7 +65,7 @@ const base::FilePath::CharType kSourcesFileName[] =
 const base::FilePath::CharType kBackupExtension[] = FILE_PATH_LITERAL("bak");
 
 // How often we save.
-const int kSaveDelay = 10;  // seconds
+constexpr base::TimeDelta kSaveDelay = base::Seconds(2);
 
 void BackupCallback(const base::FilePath& path) {
   base::FilePath backup_path = path.ReplaceExtension(kBackupExtension);
@@ -84,16 +83,18 @@ void LoadCounters(const base::Value& counters_value,
   }
 }
 
-void LoadSourcesList(base::Value::List& sources_list, RuleSources& rule_sources) {
+void LoadSourcesList(base::Value::List& sources_list,
+                     RuleSources& rule_sources) {
   for (auto& source_value : sources_list) {
     if (!source_value.is_dict())
       continue;
 
-    const std::string* source_file = source_value.GetDict().FindString(kSourceFileKey);
+    const std::string* source_file =
+        source_value.GetDict().FindString(kSourceFileKey);
     const std::string* source_url_string =
         source_value.GetDict().FindString(kSourceUrlKey);
 
-    absl::optional<int> group = source_value.GetDict().FindInt(kGroupKey);
+    std::optional<int> group = source_value.GetDict().FindInt(kGroupKey);
     // The rule must have its group set
     if (!group || group.value() < static_cast<int>(RuleGroup::kFirst) ||
         group.value() > static_cast<int>(RuleGroup::kLast))
@@ -113,7 +114,7 @@ void LoadSourcesList(base::Value::List& sources_list, RuleSources& rule_sources)
       continue;
     }
 
-    absl::optional<bool> allow_abp_snippets =
+    std::optional<bool> allow_abp_snippets =
         source_value.GetDict().FindBool(kAllowAbpSnippets);
     if (allow_abp_snippets && allow_abp_snippets.value())
       rule_sources.back().allow_abp_snippets = true;
@@ -123,19 +124,19 @@ void LoadSourcesList(base::Value::List& sources_list, RuleSources& rule_sources)
     if (rules_list_checksum)
       rule_sources.back().rules_list_checksum = std::move(*rules_list_checksum);
 
-    absl::optional<base::Time> last_update =
+    std::optional<base::Time> last_update =
         base::ValueToTime(source_value.GetDict().Find(kLastUpdateKey));
     if (last_update) {
       rule_sources.back().last_update = last_update.value();
     }
 
-    absl::optional<base::Time> next_fetch =
+    std::optional<base::Time> next_fetch =
         base::ValueToTime(source_value.GetDict().Find(kNextFetchKey));
     if (next_fetch) {
       rule_sources.back().next_fetch = next_fetch.value();
     }
 
-    absl::optional<int> last_fetch_result =
+    std::optional<int> last_fetch_result =
         source_value.GetDict().FindInt(kLastFetchResultKey);
     if (last_fetch_result &&
         last_fetch_result.value() >= static_cast<int>(FetchResult::kFirst) &&
@@ -143,23 +144,23 @@ void LoadSourcesList(base::Value::List& sources_list, RuleSources& rule_sources)
       rule_sources.back().last_fetch_result =
           FetchResult(last_fetch_result.value());
 
-    absl::optional<bool> has_tracker_infos =
+    std::optional<bool> has_tracker_infos =
         source_value.GetDict().FindBool(kHasTrackerInfosKey);
     if (has_tracker_infos)
       rule_sources.back().has_tracker_infos = has_tracker_infos.value();
 
-    absl::optional<int> valid_rules_count =
+    std::optional<int> valid_rules_count =
         source_value.GetDict().FindInt(kValidRulesCountKey);
     if (valid_rules_count)
       rule_sources.back().rules_info.valid_rules = *valid_rules_count;
 
-    absl::optional<int> unsupported_rules_count =
+    std::optional<int> unsupported_rules_count =
         source_value.GetDict().FindInt(kUnsupportedRulesCountKey);
     if (unsupported_rules_count)
       rule_sources.back().rules_info.unsupported_rules =
           *unsupported_rules_count;
 
-    absl::optional<int> invalid_rules_count =
+    std::optional<int> invalid_rules_count =
         source_value.GetDict().FindInt(kInvalidRulesCountKey);
     if (invalid_rules_count)
       rule_sources.back().rules_info.invalid_rules = *invalid_rules_count;
@@ -168,7 +169,8 @@ void LoadSourcesList(base::Value::List& sources_list, RuleSources& rule_sources)
     if (title)
       rule_sources.back().unsafe_adblock_metadata.title = std::move(*title);
 
-    const std::string* homepage = source_value.GetDict().FindString(kHomePageKey);
+    const std::string* homepage =
+        source_value.GetDict().FindString(kHomePageKey);
     if (homepage)
       rule_sources.back().unsafe_adblock_metadata.homepage = GURL(*homepage);
 
@@ -176,16 +178,17 @@ void LoadSourcesList(base::Value::List& sources_list, RuleSources& rule_sources)
     if (license)
       rule_sources.back().unsafe_adblock_metadata.license = GURL(*license);
 
-    const std::string* redirect = source_value.GetDict().FindString(kRedirectKey);
+    const std::string* redirect =
+        source_value.GetDict().FindString(kRedirectKey);
     if (redirect)
       rule_sources.back().unsafe_adblock_metadata.redirect = GURL(*redirect);
 
-    absl::optional<int64_t> version =
+    std::optional<int64_t> version =
         base::ValueToInt64(source_value.GetDict().Find(kVersionKey));
     if (version)
       rule_sources.back().unsafe_adblock_metadata.version = *version;
 
-    absl::optional<base::TimeDelta> expires =
+    std::optional<base::TimeDelta> expires =
         base::ValueToTimeDelta(source_value.GetDict().Find(kExpiresKey));
     if (last_update) {
       rule_sources.back().unsafe_adblock_metadata.expires = expires.value();
@@ -208,11 +211,12 @@ void LoadKnownSources(base::Value::List& sources_list,
     if (!source_value.is_dict())
       continue;
 
-    const std::string* source_file = source_value.GetDict().FindString(kSourceFileKey);
+    const std::string* source_file =
+        source_value.GetDict().FindString(kSourceFileKey);
     const std::string* source_url_string =
         source_value.GetDict().FindString(kSourceUrlKey);
 
-    absl::optional<int> group = source_value.GetDict().FindInt(kGroupKey);
+    std::optional<int> group = source_value.GetDict().FindInt(kGroupKey);
     // The rule must have its group set
     if (!group || group.value() < static_cast<int>(RuleGroup::kFirst) ||
         group.value() > static_cast<int>(RuleGroup::kLast))
@@ -232,7 +236,7 @@ void LoadKnownSources(base::Value::List& sources_list,
       continue;
     }
 
-    absl::optional<bool> allow_abp_snippets =
+    std::optional<bool> allow_abp_snippets =
         source_value.GetDict().FindBool(kAllowAbpSnippets);
     if (allow_abp_snippets && allow_abp_snippets.value())
       known_sources.back().allow_abp_snippets = true;
@@ -247,7 +251,7 @@ void LoadRulesGroup(RuleGroup group,
                     base::Value& rule_group_value,
                     RuleServiceStorage::LoadResult& load_result) {
   DCHECK(rule_group_value.is_dict());
-  absl::optional<int> active_exception_list =
+  std::optional<int> active_exception_list =
       rule_group_value.GetDict().FindInt(kExceptionsTypeKey);
   if (active_exception_list &&
       active_exception_list >= RuleManager::kFirstExceptionList &&
@@ -256,28 +260,33 @@ void LoadRulesGroup(RuleGroup group,
         RuleManager::ExceptionsList(active_exception_list.value());
   }
 
-  base::Value::List* process_list = rule_group_value.GetDict().FindList(kProcessListKey);
+  base::Value::List* process_list =
+      rule_group_value.GetDict().FindList(kProcessListKey);
   if (process_list)
     LoadStringSetFromList(*process_list,
                           load_result.exceptions[static_cast<size_t>(group)]
                                                 [RuleManager::kProcessList]);
 
-  base::Value::List* exempt_list = rule_group_value.GetDict().FindList(kExemptListKey);
+  base::Value::List* exempt_list =
+      rule_group_value.GetDict().FindList(kExemptListKey);
   if (exempt_list)
     LoadStringSetFromList(*exempt_list,
                           load_result.exceptions[static_cast<size_t>(group)]
                                                 [RuleManager::kExemptList]);
 
-  absl::optional<bool> enabled = rule_group_value.GetDict().FindBool(kEnabledKey);
+  std::optional<bool> enabled =
+      rule_group_value.GetDict().FindBool(kEnabledKey);
   if (enabled)
     load_result.groups_enabled[static_cast<size_t>(group)] = enabled.value();
 
-  std::string* index_checksum = rule_group_value.GetDict().FindString(kIndexChecksum);
+  std::string* index_checksum =
+      rule_group_value.GetDict().FindString(kIndexChecksum);
   if (index_checksum)
     load_result.index_checksums[static_cast<size_t>(group)] =
         std::move(*index_checksum);
 
-  base::Value::List* sources_list = rule_group_value.GetDict().FindList(kRuleSourcesKey);
+  base::Value::List* sources_list =
+      rule_group_value.GetDict().FindList(kRuleSourcesKey);
   if (sources_list)
     LoadSourcesList(*sources_list,
                     load_result.rule_sources[static_cast<size_t>(group)]);
@@ -327,12 +336,12 @@ RuleServiceStorage::LoadResult DoLoad(const base::FilePath& path) {
                      load_result);
     }
 
-    absl::optional<base::Time> blocked_reporting_start =
+    std::optional<base::Time> blocked_reporting_start =
         base::ValueToTime(root->GetDict().Find(kBlockedReportingStartKey));
     if (blocked_reporting_start)
       load_result.blocked_reporting_start = *blocked_reporting_start;
 
-    absl::optional<int> version = root->GetDict().FindInt(kVersionKey);
+    std::optional<int> version = root->GetDict().FindInt(kVersionKey);
     if (version)
       load_result.storage_version =
           std::max(0, std::min(kCurrentStorageVersion, version.value()));
@@ -479,7 +488,7 @@ RuleServiceStorage::RuleServiceStorage(
       rule_service_(rule_service),
       writer_(profile_path.Append(kSourcesFileName),
               file_io_task_runner_,
-              base::Seconds(kSaveDelay)),
+              kSaveDelay),
       weak_factory_(this) {
   DCHECK(rule_service_);
   file_io_task_runner_->PostTask(
@@ -512,7 +521,7 @@ void RuleServiceStorage::OnRuleServiceShutdown() {
     writer_.DoScheduledWrite();
 }
 
-absl::optional<std::string> RuleServiceStorage::SerializeData() {
+std::optional<std::string> RuleServiceStorage::SerializeData() {
   base::Value::Dict root;
 
   root.Set(kTrackingRulesKey,
@@ -530,7 +539,7 @@ absl::optional<std::string> RuleServiceStorage::SerializeData() {
   JSONStringValueSerializer serializer(&output);
   serializer.set_pretty_print(true);
   if (!serializer.Serialize(root))
-    return absl::nullopt;
+    return std::nullopt;
 
   return output;
 }

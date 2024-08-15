@@ -29,9 +29,9 @@ class CaptureModeOption;
 // independent section in the settings menu. Each group can be created with a
 // header that has an icon and a label for the group, or be header-less.
 class ASH_EXPORT CaptureModeMenuGroup : public views::View {
- public:
-  METADATA_HEADER(CaptureModeMenuGroup);
+  METADATA_HEADER(CaptureModeMenuGroup, views::View)
 
+ public:
   class Delegate {
    public:
     // Called when user selects an option.
@@ -104,7 +104,8 @@ class ASH_EXPORT CaptureModeMenuGroup : public views::View {
   // will open a folder window for user to select a new folder to save the
   // captured filed on click/press.
   void AddMenuItem(views::Button::PressedCallback callback,
-                   std::u16string item_label);
+                   std::u16string item_label,
+                   bool enabled);
 
   // Returns true if the option with the given `option_id` is checked, if such
   // option exists.

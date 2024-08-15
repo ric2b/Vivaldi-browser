@@ -1279,12 +1279,6 @@ class TestGitCl(unittest.TestCase):
             change_id='Ixxx',
             gitcookies_exists=False)
 
-    def test_gerrit_upload_without_change_id(self):
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        self._run_gerrit_upload_test([],
-                                     'desc ✔\n\nBUG=\n\nChange-Id: Ixxx', [],
-                                     change_id='Ixxx')
-
     def test_gerrit_upload_without_change_id_nosquash(self):
         self._run_gerrit_upload_test(
             ['--no-squash'],
@@ -1361,189 +1355,6 @@ class TestGitCl(unittest.TestCase):
             change_id='I123456789',
             final_description=(
                 'desc ✔\n\nBUG=\nR=foo@example.com\n\nChange-Id: I123456789'))
-
-    def test_gerrit_upload_force_sets_bug(self):
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        self._run_gerrit_upload_test(
-            ['-b', '10000', '-f'],
-            u'desc=\n\nBug: 10000\nChange-Id: Ixxx', [],
-            force=True,
-            fetched_description='desc=\n\nChange-Id: Ixxx',
-            change_id='Ixxx')
-
-    def test_gerrit_upload_corrects_wrong_change_id(self):
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        self._run_gerrit_upload_test(
-            ['-b', '10000', '-m', 'Title', '--edit-description'],
-            u'desc=\n\nBug: 10000\nChange-Id: Ixxxx', [],
-            issue='123456',
-            edit_description='desc=\n\nBug: 10000\nChange-Id: Izzzz',
-            fetched_description='desc=\n\nChange-Id: Ixxxx',
-            title='Title',
-            change_id='Ixxxx')
-
-    def test_gerrit_upload_force_sets_fixed(self):
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        self._run_gerrit_upload_test(
-            ['-x', '10000', '-f'],
-            u'desc=\n\nFixed: 10000\nChange-Id: Ixxx', [],
-            force=True,
-            fetched_description='desc=\n\nChange-Id: Ixxx',
-            change_id='Ixxx')
-
-    def test_gerrit_reviewer_multiple(self):
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        self._run_gerrit_upload_test(
-            [], 'desc ✔\nBUG=\nR=another@example.com\n'
-            'CC=more@example.com,people@example.com\n\n'
-            'Change-Id: 123456789', ['another@example.com'],
-            cc=['more@example.com', 'people@example.com'],
-            change_id='123456789')
-
-    def test_gerrit_upload_squash_first_is_default(self):
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        self._run_gerrit_upload_test([],
-                                     'desc ✔\nBUG=\n\nChange-Id: 123456789', [],
-                                     change_id='123456789')
-
-    def test_gerrit_upload_squash_first(self):
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        self._run_gerrit_upload_test(['--squash'],
-                                     'desc ✔\nBUG=\n\nChange-Id: 123456789', [],
-                                     squash=True,
-                                     change_id='123456789')
-
-    def test_gerrit_upload_squash_first_title(self):
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        self._run_gerrit_upload_test(['-f', '-t', 'title'],
-                                     'title\n\ndesc\n\nChange-Id: 123456789',
-                                     [],
-                                     title='title',
-                                     force=True,
-                                     squash=True,
-                                     log_description='desc',
-                                     change_id='123456789')
-
-    def test_gerrit_upload_squash_first_with_labels(self):
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        self._run_gerrit_upload_test(
-            ['--squash', '--cq-dry-run', '--enable-auto-submit'],
-            'desc ✔\nBUG=\n\nChange-Id: 123456789', [],
-            squash=True,
-            labels={
-                'Commit-Queue': 1,
-                'Auto-Submit': 1
-            },
-            change_id='123456789')
-
-    def test_gerrit_upload_squash_first_against_rev(self):
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        custom_cl_base = 'custom_cl_base_rev_or_branch'
-        self._run_gerrit_upload_test(['--squash', custom_cl_base],
-                                     'desc ✔\nBUG=\n\nChange-Id: 123456789', [],
-                                     squash=True,
-                                     custom_cl_base=custom_cl_base,
-                                     change_id='123456789')
-        self.assertIn(
-            'If you proceed with upload, more than 1 CL may be created by Gerrit',
-            sys.stdout.getvalue())
-
-    def test_gerrit_upload_squash_reupload(self):
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        description = 'desc ✔\nBUG=\n\nChange-Id: 123456789'
-        self._run_gerrit_upload_test(['--squash'],
-                                     description, [],
-                                     squash=True,
-                                     issue=123456,
-                                     change_id='123456789')
-
-    @mock.patch('sys.stderr', StringIO())
-    def test_gerrit_upload_squash_reupload_to_abandoned(self):
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        description = 'desc ✔\nBUG=\n\nChange-Id: 123456789'
-        with self.assertRaises(SystemExitMock):
-            self._run_gerrit_upload_test(['--squash'],
-                                         description, [],
-                                         squash=True,
-                                         issue=123456,
-                                         fetched_status='ABANDONED',
-                                         change_id='123456789')
-        self.assertEqual(
-            'Change https://chromium-review.googlesource.com/123456 has been '
-            'abandoned, new uploads are not allowed\n', sys.stderr.getvalue())
-
-    @mock.patch('gerrit_util.GetAccountDetails',
-                return_value={'email': 'yet-another@example.com'})
-    def test_gerrit_upload_squash_reupload_to_not_owned(self, _mock):
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        description = 'desc ✔\nBUG=\n\nChange-Id: 123456789'
-        self._run_gerrit_upload_test(['--squash'],
-                                     description, [],
-                                     squash=True,
-                                     issue=123456,
-                                     other_cl_owner='other@example.com',
-                                     change_id='123456789')
-        self.assertIn(
-            'WARNING: Change 123456 is owned by other@example.com, but you '
-            'authenticate to Gerrit as yet-another@example.com.\n'
-            'Uploading may fail due to lack of permissions',
-            sys.stdout.getvalue())
-
-    @mock.patch('sys.stderr', StringIO())
-    def test_gerrit_upload_for_merged(self):
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        with self.assertRaises(SystemExitMock):
-            self._run_gerrit_upload_test(
-                [],
-                'desc ✔\n\nBUG=\n\nChange-Id: I123456789', [],
-                issue=123456,
-                fetched_status='MERGED',
-                change_id='I123456789',
-                reset_issue=False)
-        self.assertEqual('New uploads are not allowed.\n',
-                         sys.stderr.getvalue())
-
-    def test_gerrit_upload_new_issue_for_merged(self):
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        self._run_gerrit_upload_test([],
-                                     'desc ✔\n\nBUG=\n\nChange-Id: I123456789',
-                                     [],
-                                     issue=123456,
-                                     fetched_status='MERGED',
-                                     change_id='I123456789',
-                                     reset_issue=True)
-
-    def test_upload_change_description_editor(self):
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        fetched_description = 'foo\n\nChange-Id: 123456789'
-        description = 'bar\n\nChange-Id: 123456789'
-        self._run_gerrit_upload_test(['--squash', '--edit-description'],
-                                     description, [],
-                                     fetched_description=fetched_description,
-                                     squash=True,
-                                     issue=123456,
-                                     change_id='123456789',
-                                     edit_description=description)
-
-    @mock.patch('git_cl.Changelist._UpdateWithExternalChanges',
-                return_value='newparent')
-    def test_upload_change_uses_external_base(self, *_mocks):
-        self.skipTest("flaky test - depends on DOGFOOD_STACKED_CHANGES=0")
-        squash_hash = 'branch.main.' + git_cl.GERRIT_SQUASH_HASH_CONFIG_KEY
-        self.mockGit.config[squash_hash] = 'beef2'
-
-        self._run_gerrit_upload_test(
-            ['--squash'],
-            'desc ✔\n\nBUG=\n\nChange-Id: 123456789',
-            [],
-            squash=True,
-            issue=123456,
-            change_id='123456789',
-            ref_to_push='beef2',
-            external_parent='newparent',
-        )
 
     @mock.patch('git_cl.Changelist.GetGerritHost',
                 return_value='chromium-review.googlesource.com')
@@ -2737,6 +2548,19 @@ class TestGitCl(unittest.TestCase):
         cl = self._test_gerrit_ensure_authenticated_common(auth={})
         self.assertIsNone(cl.EnsureAuthenticated(force=False))
 
+    def test_gerrit_ensure_authenticated_sso(self):
+        self.mockGit.config['remote.origin.url'] = 'sso://repo'
+
+        mock.patch(
+            'git_cl.gerrit_util.CookiesAuthenticator',
+            CookiesAuthenticatorMockFactory(hosts_with_creds={})).start()
+
+        cl = git_cl.Changelist()
+        cl.branch = 'main'
+        cl.branchref = 'refs/heads/main'
+        cl.lookedup_issue = True
+        self.assertIsNone(cl.EnsureAuthenticated(force=False))
+
     def test_gerrit_ensure_authenticated_bearer_token(self):
         cl = self._test_gerrit_ensure_authenticated_common(
             auth={
@@ -2748,11 +2572,11 @@ class TestGitCl(unittest.TestCase):
             'chromium.googlesource.com')
         self.assertTrue('Bearer' in header)
 
-    def test_gerrit_ensure_authenticated_non_https(self):
+    def test_gerrit_ensure_authenticated_non_https_sso(self):
         self.mockGit.config['remote.origin.url'] = 'custom-scheme://repo'
         self.calls = [
             (('logging.warning',
-              'Ignoring branch %(branch)s with non-https/sso remote '
+              'Ignoring branch %(branch)s with non-https remote '
               '%(remote)s', {
                   'branch': 'main',
                   'remote': 'custom-scheme://repo'
@@ -3309,7 +3133,6 @@ class TestGitCl(unittest.TestCase):
         mock.patch('git_cl._GitCookiesChecker.get_hosts_with_creds',
                    lambda _, include_netrc=False: []).start()
         self.calls = [
-            ((['git', 'config', '--path', 'http.cookiefile'], ), CERR1),
             ((['git', 'config', '--global', 'http.cookiefile'], ), CERR1),
             (('os.path.exists', os.path.join('~', NETRC_FILENAME)), True),
             (('ask_for_data', 'Press Enter to setup .gitcookies, '
@@ -3332,7 +3155,6 @@ class TestGitCl(unittest.TestCase):
         custom_cookie_path = ('C:\\.gitcookies' if sys.platform == 'win32' else
                               '/custom/.gitcookies')
         self.calls = [
-            ((['git', 'config', '--path', 'http.cookiefile'], ), CERR1),
             ((['git', 'config', '--global',
                'http.cookiefile'], ), custom_cookie_path),
             (('os.path.exists', custom_cookie_path), False),
@@ -4446,6 +4268,13 @@ class CMDTestCaseBase(unittest.TestCase):
 
 
 class CMDPresubmitTestCase(CMDTestCaseBase):
+    _RUN_HOOK_RETURN = {
+        'errors': [],
+        'more_cc': [],
+        'notifications': [],
+        'warnings': []
+    }
+
     def setUp(self):
         super(CMDPresubmitTestCase, self).setUp()
         mock.patch('git_cl.Changelist.GetCommonAncestorWithUpstream',
@@ -4454,7 +4283,8 @@ class CMDPresubmitTestCase(CMDTestCaseBase):
                    return_value='fetch description').start()
         mock.patch('git_cl._create_description_from_log',
                    return_value='get description').start()
-        mock.patch('git_cl.Changelist.RunHook').start()
+        mock.patch('git_cl.Changelist.RunHook',
+                   return_value=self._RUN_HOOK_RETURN).start()
 
     def testDefaultCase(self):
         self.assertEqual(0, git_cl.main(['presubmit']))
@@ -4517,6 +4347,12 @@ class CMDPresubmitTestCase(CMDTestCaseBase):
             files=None,
             resultdb=True,
             realm='chromium:public')
+
+    @mock.patch('git_cl.write_json')
+    def testJson(self, mock_write_json):
+        self.assertEqual(0, git_cl.main(['presubmit', '--json', 'file.json']))
+        mock_write_json.assert_called_once_with('file.json',
+                                                self._RUN_HOOK_RETURN)
 
 
 class CMDTryResultsTestCase(CMDTestCaseBase):
@@ -4972,55 +4808,7 @@ class CMDUploadTestCase(CMDTestCaseBase):
         mock.patch('git_cl.Settings.GetRoot', return_value='').start()
         mock.patch('git_cl.Settings.GetSquashGerritUploads',
                    return_value=True).start()
-        mock.patch.dict(os.environ, {
-            git_cl.DOGFOOD_STACKED_CHANGES_VAR: "0"
-        }).start()
         self.addCleanup(mock.patch.stopall)
-
-    def testWarmUpChangeDetailCache(self):
-        self.assertEqual(0, git_cl.main(['upload']))
-        gerrit_util.GetChangeDetail.assert_called_once_with(
-            'chromium-review.googlesource.com', 'depot_tools~123456',
-            frozenset([
-                'LABELS', 'CURRENT_REVISION', 'DETAILED_ACCOUNTS',
-                'CURRENT_COMMIT'
-            ]))
-
-    def testUploadRetryFailed(self):
-        # This test mocks out the actual upload part, and just asserts that
-        # after upload, if --retry-failed is added, then the tool will fetch try
-        # jobs from the previous patchset and trigger the right builders on the
-        # latest patchset.
-        git_cl._fetch_tryjobs.side_effect = [
-            # Latest patchset: No builds.
-            [],
-            # Patchset before latest: Some builds.
-            [{
-                'id': str(100 + idx),
-                'builder': {
-                    'project': 'chromium',
-                    'bucket': 'try',
-                    'builder': 'bot_' + status.lower(),
-                },
-                'createTime': '2019-10-09T08:00:0%d.854286Z' % (idx % 10),
-                'tags': [],
-                'status': status,
-            } for idx, status in enumerate(self._STATUSES)],
-        ]
-
-        self.assertEqual(0, git_cl.main(['upload', '--retry-failed']))
-        self.assertEqual([
-            mock.call(mock.ANY, 'cr-buildbucket.appspot.com', patchset=7),
-            mock.call(mock.ANY, 'cr-buildbucket.appspot.com', patchset=6),
-        ], git_cl._fetch_tryjobs.mock_calls)
-        expected_buckets = [
-            ('chromium', 'try', 'bot_failure'),
-            ('chromium', 'try', 'bot_infra_failure'),
-        ]
-        git_cl._trigger_tryjobs.assert_called_once_with(mock.ANY,
-                                                        expected_buckets,
-                                                        mock.ANY, 8)
-
 
 class MakeRequestsHelperTestCase(unittest.TestCase):
     def exampleGerritChange(self):

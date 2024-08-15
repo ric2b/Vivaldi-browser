@@ -55,7 +55,7 @@ def _create_singleton_node_type(kind):
         get = get,
     )
 
-def _create_unscoped_node_type(kind, allow_unnamed = False):
+def _create_unscoped_node_type(kind, allow_empty_id = False):
     """Create an unscoped node type.
 
     Unscoped node types only allow for one node to exist with a given key_value.
@@ -65,9 +65,11 @@ def _create_unscoped_node_type(kind, allow_unnamed = False):
     Args:
         kind: (str) An identifier for the kind of the node. Must be unique
             within the chromium namespace.
-        allow_unnamed: (bool) Whether or not to allow the creation of unnamed
-            nodes. This can allow for creating resources that are defined within
-            the definition of other resources without requiring assigned names.
+        allow_empty_id: (bool) Whether or not to allow the creation of nodes
+            without providing an ID value. This can allow for creating resources
+            that are defined within the definition of other resources without
+            requiring assigning an ID upfront. Instead, a unique ID will be
+            generated.
 
     Returns:
         A node type that can be used for creating and getting nodes of
@@ -82,7 +84,7 @@ def _create_unscoped_node_type(kind, allow_unnamed = False):
             key of kind will be extracted from the keyset.
         * add(key_id, **kwargs): Adds a node with a key created via
             `key(key_id)`. `graph.add_node` will be called with the key and
-            `**kwargs`. Returns the key. If allow_unnamed is True, key_id will
+            `**kwargs`. Returns the key. If allow_empty_id is True, key_id will
             have the defult value of None and a None value for key_id will
             create a node with a key that is unique within the lucicfg run.
         * get(key_id): Gets the node with key given by `key(key_id)`.
@@ -93,7 +95,7 @@ def _create_unscoped_node_type(kind, allow_unnamed = False):
             return key_id_or_keyset.get(kind)
         return graph.key(_CHROMIUM_NS_KIND, "", kind, key_id_or_keyset)
 
-    if allow_unnamed:
+    if allow_empty_id:
         def add(key_id = None, **kwargs):
             if key_id == None:
                 sequence_value = str(sequence.next(kind))
@@ -302,7 +304,7 @@ def _create_link_node_type(kind, parent_node_type, child_node_type):
         the parents or children of the relationship.
 
         The node types has the following methods:
-        * link(name, parent_key, child_key): Create a link between the nodes
+        * link(parent_key, child_key): Create a link between the nodes
             identified by `parent_key` and `child_key`. The name is an arbitrary
             name that will appear in error messages if there are issues with the
             node.

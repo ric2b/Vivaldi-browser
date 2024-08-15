@@ -23,6 +23,10 @@ enum BareEnum {
   LABEL_OTHER = 10;
 }
 
+message SingleBytesField {
+  optional bytes data = 1;
+}
+
 message TestSubProtobuf {
   optional int32 subproto_i32 = 1;
   repeated int32 subproto_rep_i32 = 2 [packed = true];
@@ -133,4 +137,79 @@ message MessageWithGroup {
     optional int64 field1 = 2;
     optional int64 field2 = 3;
   }
+}
+
+// Represents transitions through a food creation machine.
+message FoodMachineProcedure {
+  message Action {
+    enum Type {
+      TYPE_UNSPECIFIED = 0;
+      WARMUP = 1;
+      INSERT_RAW_MATERIALS = 3;
+      PREPARE_RAW_MATERIALS = 4;
+      COOK = 5;
+      PLATE = 6;
+      EMERGENCY_STOP = 7;
+    }
+    // The type of the action to perform. Determines the interpretation of
+    // fields within this message.
+    optional Type type = 1;
+    // The type of materials being added, for materials related `Type`s.
+    repeated string materials = 2;
+  }
+  // Actions for the food machine to take.
+  repeated Action actions = 1;
+}
+
+// Represents an expression entered into a 4 function calculator
+message CalculatorExpression {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    ADD = 1;
+    SUB = 2;
+    MUL = 3;
+    DIV = 4;
+    VALUE = 5;
+  }
+  optional Type type = 1;
+  // Valid for non-VALUE operands.
+  optional CalculatorExpression left = 2;
+  // Valid for non-VALUE operands.
+  optional CalculatorExpression right = 3;
+  // Value only for VALUE types.
+  optional int32 value = 4;
+}
+
+// Input to starting run of the (imaginary) Courier Robot CR-560.
+message RoboCourier560Plan {
+  message ExtraAction {
+    enum Type {
+      TYPE_UNSPECIFIED = 0;
+      CHANGE_NAME = 1;
+      POST_NOTICE = 2;
+    }
+    optional Type type = 1;
+    // The contents of the ExtraAction. Interpretation depends on the `type`.
+    optional string content = 2;
+  }
+  message Mail {
+    // The recipient's name
+    optional string name = 1;
+    // The recipient's address
+    optional string address = 2;
+    // Content of the mail.
+    optional string content = 3;
+  }
+  // Mail to deliver.
+  repeated Mail mail = 1;
+  // Any non-mail related actions to take at a address.
+  map<string, ExtraAction> extra_actions = 2;
+}
+
+message WebSearchResult {
+  // Number of URLs in the search result.
+  optional int64 count = 1;
+  optional string query = 2;
+  // A list of size `count` containing valid URLs.
+  repeated string urls = 3;
 }

@@ -7,6 +7,7 @@
 
 #import <UIKit/UIKit.h>
 
+#import "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "ios/chrome/browser/snapshots/model/snapshot_id.h"
@@ -68,15 +69,6 @@ class SnapshotTabHelper : public web::WebStateObserver,
   // Instructs the helper not to snapshot content for the next page load event.
   void IgnoreNextLoad();
 
-  // Hint that the snapshot will likely be saved to disk when the application is
-  // backgrounded.  The snapshot is then saved in memory, so it does not need to
-  // be read off disk.
-  void WillBeSavedGreyWhenBackgrounding();
-
-  // Write a grey copy of the snapshot to disk, but if and only if a color
-  // version of the snapshot already exists in memory or on disk.
-  void SaveGreyInBackground();
-
   // Returns the ID to use for the snapshot.
   SnapshotID GetSnapshotID() const;
 
@@ -91,7 +83,7 @@ class SnapshotTabHelper : public web::WebStateObserver,
       web::PageLoadCompletionStatus load_completion_status) override;
   void WebStateDestroyed(web::WebState* web_state) override;
 
-  web::WebState* web_state_ = nullptr;
+  raw_ptr<web::WebState> web_state_ = nullptr;
   SnapshotManager* snapshot_manager_ = nil;
 
   // Manages this object as an observer of `web_state_`.

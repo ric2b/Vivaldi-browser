@@ -167,6 +167,13 @@ enum PrintscanDebugCategories {
   PrintscanDebugCategory_SCANNING = 0x2,
 };
 
+// Firmware dump types for firmware dump operations. These values must align
+// with those in org.chromium.debug.xml.
+enum class FirmwareDumpType {
+  ALL = 0,
+  WIFI = 1,
+};
+
 // Debug log keys which should be substituted in the system info dialog.
 const char kIwlwifiDumpKey[] = "iwlwifi_dump";
 

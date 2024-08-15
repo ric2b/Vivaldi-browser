@@ -27,24 +27,24 @@ class ScreenshotDelegateTest : public PlatformTest {
 
   void SetUp() override {
     browser_interface_ = [[StubBrowserProvider alloc] init];
-    browser_interface_provider_ = [[StubBrowserProviderInterface alloc] init];
+    browser_provider_interface_ = [[StubBrowserProviderInterface alloc] init];
     screenshot_service_ = OCMClassMock([UIScreenshotService class]);
   }
 
   void createScreenshotDelegate() {
-    screenshotDelegate_ = [[ScreenshotDelegate alloc]
-        initWithBrowserProviderInterface:browser_interface_provider_];
+    screenshot_delegate_ = [[ScreenshotDelegate alloc]
+        initWithBrowserProviderInterface:browser_provider_interface_];
   }
 
   web::WebTaskEnvironment task_environment_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
   StubBrowserProvider* browser_interface_;
-  StubBrowserProviderInterface* browser_interface_provider_;
-  ScreenshotDelegate* screenshotDelegate_;
+  StubBrowserProviderInterface* browser_provider_interface_;
+  ScreenshotDelegate* screenshot_delegate_;
   id screenshot_service_;
 };
 
-// Tests that ScreenshotDelegate can be init with browserInterfaceProvider can
+// Tests that ScreenshotDelegate can be init with browserProviderInterface can
 // be set and that data can be generated from it.
 TEST_F(ScreenshotDelegateTest, ScreenshotService) {
   // Expected: Empty NSData.
@@ -75,21 +75,20 @@ TEST_F(ScreenshotDelegateTest, ScreenshotService) {
                  frame.size.width, frame.size.height);
 
   // Insert the web_state into the Browser.
-  int insertion_index = browser.GetWebStateList()->InsertWebState(
-      WebStateList::kInvalidIndex, std::move(web_state),
-      WebStateList::INSERT_NO_FLAGS, WebStateOpener());
+  int insertion_index =
+      browser.GetWebStateList()->InsertWebState(std::move(web_state));
   browser.GetWebStateList()->ActivateWebStateAt(insertion_index);
 
   // Add the Browser to StubBrowserProvider.
   browser_interface_.browser = &browser;
 
   // Add the StubBrowserProvider to StubBrowserProviderInterface.
-  browser_interface_provider_.currentBrowserProvider = browser_interface_;
+  browser_provider_interface_.currentBrowserProvider = browser_interface_;
 
   createScreenshotDelegate();
 
   __block int nbCalls = 0;
-  [screenshotDelegate_ screenshotService:screenshot_service_
+  [screenshot_delegate_ screenshotService:screenshot_service_
       generatePDFRepresentationWithCompletion:^(NSData* PDFData,
                                                 NSInteger indexOfCurrentPage,
                                                 CGRect rectInCurrentPage) {
@@ -102,18 +101,18 @@ TEST_F(ScreenshotDelegateTest, ScreenshotService) {
   EXPECT_EQ(1, nbCalls);
 }
 
-// Tests that when ScreenshotDelegate's browserInterfaceProvider has a nil
+// Tests that when ScreenshotDelegate's browserProviderInterface has a nil
 // Browser screenshotService will return nil.
 TEST_F(ScreenshotDelegateTest, NilBrowser) {
   // Expected: nil NSData.
   // Add the StubBrowserProvider with no set Browser to
   // StubBrowserProviderInterface.
-  browser_interface_provider_.currentBrowserProvider = browser_interface_;
+  browser_provider_interface_.currentBrowserProvider = browser_interface_;
 
   createScreenshotDelegate();
 
   __block bool callback_ran = false;
-  [screenshotDelegate_ screenshotService:screenshot_service_
+  [screenshot_delegate_ screenshotService:screenshot_service_
       generatePDFRepresentationWithCompletion:^(NSData* PDFData,
                                                 NSInteger indexOfCurrentPage,
                                                 CGRect rectInCurrentPage) {
@@ -124,7 +123,7 @@ TEST_F(ScreenshotDelegateTest, NilBrowser) {
   EXPECT_TRUE(callback_ran);
 }
 
-// Tests that when ScreenshotDelegate's browserInterfaceProvider has a nil
+// Tests that when ScreenshotDelegate's browserProviderInterface has a nil
 // WebSatate screenshotService will return nil.
 TEST_F(ScreenshotDelegateTest, NilWebState) {
   // Expected: nil NSData.
@@ -134,12 +133,12 @@ TEST_F(ScreenshotDelegateTest, NilWebState) {
   browser_interface_.browser = &browser;
 
   // Add the StubBrowserProvider to StubBrowserProviderInterface.
-  browser_interface_provider_.currentBrowserProvider = browser_interface_;
+  browser_provider_interface_.currentBrowserProvider = browser_interface_;
 
   createScreenshotDelegate();
 
   __block bool callback_ran = false;
-  [screenshotDelegate_ screenshotService:screenshot_service_
+  [screenshot_delegate_ screenshotService:screenshot_service_
       generatePDFRepresentationWithCompletion:^(NSData* PDFData,
                                                 NSInteger indexOfCurrentPage,
                                                 CGRect rectInCurrentPage) {

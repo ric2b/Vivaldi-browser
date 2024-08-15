@@ -4,13 +4,14 @@
 
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_check_manager_factory.h"
 
+#import "base/memory/raw_ptr.h"
 #import "base/memory/ref_counted.h"
 #import "base/memory/weak_ptr.h"
 #import "base/no_destructor.h"
 #import "components/keyed_service/core/service_access_type.h"
 #import "components/keyed_service/ios/browser_state_dependency_manager.h"
+#import "ios/chrome/browser/affiliations/model/ios_chrome_affiliation_service_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_account_password_store_factory.h"
-#import "ios/chrome/browser/passwords/model/ios_chrome_affiliation_service_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_bulk_leak_check_service_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_check_manager.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
@@ -48,7 +49,7 @@ class IOSChromePasswordCheckManagerProxy : public KeyedService {
   }
 
  private:
-  ChromeBrowserState* browser_state_ = nullptr;
+  raw_ptr<ChromeBrowserState> browser_state_ = nullptr;
   base::WeakPtr<IOSChromePasswordCheckManager> instance_;
 };
 }  // namespace

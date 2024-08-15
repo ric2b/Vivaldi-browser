@@ -67,6 +67,11 @@ bool FontFaceSetDocument::InActiveContext() const {
   return context && To<LocalDOMWindow>(context)->document()->IsActive();
 }
 
+FontSelector* FontFaceSetDocument::GetFontSelector() const {
+  DCHECK(IsMainThread());
+  return GetDocument()->GetStyleEngine().GetFontSelector();
+}
+
 AtomicString FontFaceSetDocument::status() const {
   DEFINE_STATIC_LOCAL(AtomicString, loading, ("loading"));
   DEFINE_STATIC_LOCAL(AtomicString, loaded, ("loaded"));
@@ -125,7 +130,8 @@ size_t FontFaceSetDocument::ApproximateBlankCharacterCount() const {
   return count;
 }
 
-ScriptPromise FontFaceSetDocument::ready(ScriptState* script_state) {
+ScriptPromiseTyped<FontFaceSet> FontFaceSetDocument::ready(
+    ScriptState* script_state) {
   if (ready_->GetState() != ReadyProperty::kPending && InActiveContext()) {
     // |ready_| is already resolved, but there may be pending stylesheet
     // changes and/or layout operations that may cause another font loads.
@@ -189,13 +195,10 @@ bool FontFaceSetDocument::ResolveFontStyle(const String& font_string,
   ComputedStyleBuilder builder =
       GetDocument()->GetStyleResolver().CreateComputedStyleBuilder();
 
-  FontFamily font_family;
-  font_family.SetFamily(
-      FontFaceSet::DefaultFontFamily(),
-      FontFamily::InferredTypeFor(FontFaceSet::DefaultFontFamily()));
-
   FontDescription default_font_description;
-  default_font_description.SetFamily(font_family);
+  default_font_description.SetFamily(FontFamily(
+      FontFaceSet::DefaultFontFamily(),
+      FontFamily::InferredTypeFor(FontFaceSet::DefaultFontFamily())));
   default_font_description.SetSpecifiedSize(FontFaceSet::kDefaultFontSize);
   default_font_description.SetComputedSize(FontFaceSet::kDefaultFontSize);
 

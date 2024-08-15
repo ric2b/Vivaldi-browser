@@ -34,11 +34,15 @@
 using vivaldi::NoteNode;
 using vivaldi::NotesModel;
 
+namespace  {
+  const int MAXIMUM_TITLE_LENGTH = 128;
+}
+
 namespace note_utils_ios {
 
 NSString* const kNotesSnackbarCategory = @"NotesSnackbarCategory";
 
-absl::optional<NodeSet> FindNodesByIds(NotesModel* model,
+std::optional<NodeSet> FindNodesByIds(NotesModel* model,
                                        const std::set<int64_t>& ids) {
   DCHECK(model);
   NodeSet nodes;
@@ -54,7 +58,7 @@ absl::optional<NodeSet> FindNodesByIds(NotesModel* model,
   }
 
   if (ids.size() != nodes.size())
-    return absl::nullopt;
+    return std::nullopt;
 
   return nodes;
 }
@@ -77,6 +81,33 @@ const NoteNode* FindFolderById(vivaldi::NotesModel* model,
   return node && node->is_folder() ? node : nullptr;
 }
 
+NSString* NormalizeTitle(const NSString* title) {
+  NSArray* lines = [title componentsSeparatedByString:@"\n"];
+  if ([lines count] <= 0) {
+    return [title mutableCopy];
+  }
+  NSString* normalizeTitle = [[lines objectAtIndex:0]
+                              stringByTrimmingCharactersInSet:
+                                [NSCharacterSet whitespaceCharacterSet]];
+  // Convert all multiples spaces into singles
+  normalizeTitle = [normalizeTitle
+                    stringByReplacingOccurrencesOfString:@" {2,}"
+                    withString:@""
+                    options:NSRegularExpressionSearch
+                    range:NSMakeRange(0, normalizeTitle.length)];
+  // Normalizes the header level for simpicity
+  normalizeTitle = [normalizeTitle
+                    stringByReplacingOccurrencesOfString:@"#"
+                    withString:@""
+                    options:NSRegularExpressionSearch
+                    range:NSMakeRange(0, normalizeTitle.length)];
+
+  if (normalizeTitle.length > MAXIMUM_TITLE_LENGTH) {
+    normalizeTitle = [normalizeTitle substringToIndex:MAXIMUM_TITLE_LENGTH];
+  }
+  return normalizeTitle;
+}
+
 NSString* TitleForNoteNode(const NoteNode* node) {
   NSString* title;
   if (node->is_main()) {
@@ -89,11 +120,13 @@ NSString* TitleForNoteNode(const NoteNode* node) {
     title = base::SysUTF16ToNSString(node->GetTitle());
   }
 
-  if (node->is_folder()){
+  if (!node->GetTitle().empty()) {
     title = base::SysUTF16ToNSString(node->GetTitle());
   } else {
     title = base::SysUTF16ToNSString(node->GetContent());
   }
+
+  title = NormalizeTitle(title);
 
   // Assign a default note name if it is at top level.
   if (node->is_root() && ![title length])
@@ -122,6 +155,10 @@ NSDate* createdAtForNoteNode(const vivaldi::NoteNode* node) {
   return node->GetCreationTime().ToNSDate();
 }
 
+NSDate* lastModificationTimeForNoteNode(const vivaldi::NoteNode* node) {
+  return node->GetLastModificationTime().ToNSDate();
+}
+
 #pragma mark - Updating Notes
 
 // Deletes all subnodes of |node|, including |node|, that are in |notes|.
@@ -148,25 +185,29 @@ MDCSnackbarMessage* CreateToastWithWrapper(NSString* text) {
 
 MDCSnackbarMessage* CreateOrUpdateNoteWithToast(
     const NoteNode* node,
-    NSString* title,
+    NSString* content,
     const GURL& url,
     const NoteNode* folder,
     vivaldi::NotesModel* note_model,
     ChromeBrowserState* browser_state) {
-  std::u16string titleString = base::SysNSStringToUTF16(title);
+  std::u16string contentString = base::SysNSStringToUTF16(content);
 
   // If the note has no changes supporting Undo, just bail out.
-  if (node && node->GetTitle() == titleString && node->GetURL() == url &&
+  if (node && node->GetTitle() == contentString && node->GetURL() == url &&
       node->parent() == folder) {
     return nil;
   }
   // Save the note information.
-  if (!node) {  // Create a new note.
+  if (!node) {
+    // Normalize title first from content
+    std::u16string title = base::SysNSStringToUTF16(NormalizeTitle(content));
+    // Create a new note.
     node = note_model->AddNote(folder, folder->children().size(),
-                                  titleString, url, titleString);
+                                  title, url, contentString);
   } else {  // Update the information.
-    note_model->SetContent(node, titleString);
-    note_model->SetTitle(node, titleString);
+    std::u16string nodeTitle = base::SysNSStringToUTF16(TitleForNoteNode(node));
+    note_model->SetContent(node, contentString);
+    note_model->SetTitle(node, nodeTitle);
     note_model->SetURL(node, url);
 
     DCHECK(folder);

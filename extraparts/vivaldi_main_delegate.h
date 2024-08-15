@@ -26,7 +26,7 @@ class VivaldiMainDelegate
   ~VivaldiMainDelegate() override;
   content::ContentBrowserClient* CreateContentBrowserClient() override;
 
-  absl::optional<int> BasicStartupComplete() override;
+  std::optional<int> BasicStartupComplete() override;
 };
 
 #if !BUILDFLAG(IS_ANDROID)

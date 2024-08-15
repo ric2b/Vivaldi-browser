@@ -4,10 +4,12 @@
 
 #import "ios/chrome/browser/ui/search_engine_choice/search_engine_choice_ui_util.h"
 
+#import "base/command_line.h"
 #import "base/i18n/rtl.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "components/search_engines/search_engine_choice_utils.h"
+#import "components/search_engines/search_engines_switches.h"
 #import "components/search_engines/template_url.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
@@ -16,7 +18,6 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/button_util.h"
 #import "ios/chrome/common/ui/util/device_util.h"
-#import "ios/chrome/common/ui/util/sdk_forward_declares.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "ui/base/resource/resource_bundle.h"
 
@@ -26,27 +27,6 @@ namespace {
 constexpr CGFloat kMoreArrowMargin = 4;
 
 }  // namespace
-
-UIFont* GetTitleFontWithTraitCollection(UITraitCollection* trait_collection) {
-  BOOL dynamic_type_enabled = UIContentSizeCategoryIsAccessibilityCategory(
-      trait_collection.preferredContentSizeCategory);
-
-  UIFontTextStyle text_style = nil;
-  if (!dynamic_type_enabled && IsRegularXRegularSizeClass(trait_collection)) {
-    text_style = UIFontTextStyleTitle1;
-  } else if (!dynamic_type_enabled && !IsSmallDevice()) {
-    text_style = UIFontTextStyleLargeTitle;
-  } else {
-    text_style = UIFontTextStyleTitle2;
-  }
-  CHECK(text_style);
-  UIFontDescriptor* descriptor =
-      [UIFontDescriptor preferredFontDescriptorWithTextStyle:text_style];
-  UIFont* font = [UIFont systemFontOfSize:descriptor.pointSize
-                                   weight:UIFontWeightBold];
-  UIFontMetrics* font_metrics = [UIFontMetrics metricsForTextStyle:text_style];
-  return [font_metrics scaledFontForFont:font];
-}
 
 UIButton* CreateDisabledPrimaryButton() {
   UIButton* button = PrimaryActionButton(/*pointer_interaction_enabled=*/YES);
@@ -126,20 +106,15 @@ void UpdatePrimaryButton(UIButton* button,
 
 UIImage* SearchEngineFaviconFromTemplateURL(const TemplateURL& template_url) {
   // Only works for prepopulated search engines.
-  CHECK_GT(template_url.prepopulate_id(), 0, base::NotFatalUntil::M124)
+  CHECK_GT(template_url.prepopulate_id(), 0, base::NotFatalUntil::M127)
       << base::UTF16ToUTF8(template_url.short_name());
   std::u16string engine_keyword = template_url.data().keyword();
   int resource_id = search_engines::GetIconResourceId(engine_keyword);
-  CHECK_NE(resource_id, -1, base::NotFatalUntil::M124)
-      << base::UTF16ToUTF8(engine_keyword);
   if (resource_id == -1) {
-    return nil;
+    // It is possible to have no resource id for a prepopulated search engine
+    // that was selected from a country outside of EEA countries.
+    return [UIImage imageNamed:@"default_world_favicon"];
   }
   ui::ResourceBundle& resource_bundle = ui::ResourceBundle::GetSharedInstance();
   return resource_bundle.GetNativeImageNamed(resource_id).ToUIImage();
-}
-
-bool IsSearchEngineForceEnabled() {
-  return [[NSUserDefaults standardUserDefaults]
-      boolForKey:kSearchEngineForceEnabled];
 }

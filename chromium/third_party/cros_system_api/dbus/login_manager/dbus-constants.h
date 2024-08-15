@@ -97,14 +97,18 @@ const char kContainerShutdownFail[] = INTERFACE ".ContainerShutdownFail";
 const char kGetPeerCredsFailed[] = INTERFACE ".GetPeerCredsFailed";
 const char kDeleteFail[] = INTERFACE ".DeleteFail";
 const char kEmitFailed[] = INTERFACE ".EmitFailed";
+const char kFwmpRemovalFailed[] = INTERFACE ".FwmpRemovalFailed";
 const char kGetServiceFail[] = INTERFACE ".kGetServiceFail";
 const char kInitMachineInfoFail[] = INTERFACE ".InitMachineInfoFail";
 const char kInvalidAccount[] = INTERFACE ".InvalidAccount";
+const char kInvalidArgs[] = INTERFACE ".InvalidArgs";
 const char kLowFreeDisk[] = INTERFACE ".LowFreeDisk";
 const char kNoOwnerKey[] = INTERFACE ".NoOwnerKey";
 const char kNoUserNssDb[] = INTERFACE ".NoUserNssDb";
 const char kNotAvailable[] = INTERFACE ".NotAvailable";
 const char kNotStarted[] = INTERFACE ".NotStarted";
+const char kNvramClearedReadFailed[] = INTERFACE ".NvramClearedReadFailed";
+const char kNvramClearedUpdateFailed[] = INTERFACE ".NvramClearedUpdateFailed";
 const char kPolicyInitFail[] = INTERFACE ".PolicyInitFail";
 const char kPubkeySetIllegal[] = INTERFACE ".PubkeySetIllegal";
 const char kPolicySignatureRequired[] = INTERFACE ".PolicySignatureRequired";
@@ -112,16 +116,13 @@ const char kSessionDoesNotExist[] = INTERFACE ".SessionDoesNotExist";
 const char kSessionExists[] = INTERFACE ".SessionExists";
 const char kSigDecodeFail[] = INTERFACE ".SigDecodeFail";
 const char kSigEncodeFail[] = INTERFACE ".SigEncodeFail";
+const char kStateKeysRequestFail[] = INTERFACE ".StateKeysRequestFail";
+const char kSystemPropertyUpdateFailed[] =
+    INTERFACE ".SystemPropertyUpdateFailed";
 const char kTestingChannelError[] = INTERFACE ".TestingChannelError";
 const char kUnknownPid[] = INTERFACE ".UnknownPid";
 const char kVerifyFail[] = INTERFACE ".VerifyFail";
-const char kSystemPropertyUpdateFailed[] =
-    INTERFACE ".SystemPropertyUpdateFailed";
 const char kVpdUpdateFailed[] = INTERFACE ".VpdUpdateFailed";
-const char kFwmpRemovalFailed[] = INTERFACE ".FwmpRemovalFailed";
-const char kNvramClearedReadFailed[] = INTERFACE ".NvramClearedReadFailed";
-const char kNvramClearedUpdateFailed[] = INTERFACE ".NvramClearedUpdateFailed";
-const char kInvalidArgs[] = INTERFACE ".InvalidArgs";
 
 #undef INTERFACE
 }  // namespace dbus_error

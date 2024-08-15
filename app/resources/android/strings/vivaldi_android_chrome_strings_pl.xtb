@@ -16,6 +16,7 @@
 <translation id="2433507940547922241">Wygląd</translation>
 <translation id="2501278716633472235">Przejdź wstecz</translation>
 <translation id="2633278372998075009">Karty prywatne</translation>
+<translation id="272026394418727548">Strona główna Vivaldi</translation>
 <translation id="2951071800649516099">Dodaj strony do listy do przeczytania, aby przeczytać je później</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> zakładka}
@@ -26,6 +27,7 @@
 <translation id="3504699618187058974">Grupy kart</translation>
 <translation id="3518985090088779359">Akceptuj i kontynuuj</translation>
 <translation id="3571177741182643350">Nieprzeczytane artykuły - dostępne offline:</translation>
+<translation id="3602290021589620013">Podgląd</translation>
 <translation id="3700829948786686853">Witaj w przeglądarce Vivaldi</translation>
 <translation id="3719826155360621982">Strona główna</translation>
 <translation id="385051799172605136">Wstecz</translation>
@@ -65,7 +67,6 @@ Aby dostosować wyszukiwane hasło, przyciśnij przez chwilę i zaznacz interesu
 <translation id="7427132068601343474">Vivaldi – informacje</translation>
 <translation id="7465104139234185284">Zamknij wszystkie karty prywatne</translation>
 <translation id="7481312909269577407">Dalej</translation>
-<translation id="7583262514280211622">Tutaj znajdziesz swoją listę stron do przeczytania</translation>
 <translation id="7968014550143838305">Dodano do listy stron do przeczytania</translation>
 <translation id="804786196054284061">Warunki użytkowania Vivaldi</translation>
 <translation id="8127542551745560481">Edytuj stronę główną</translation>

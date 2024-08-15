@@ -5,6 +5,7 @@
 #include "chrome/browser/ash/bruschetta/bruschetta_network_context.h"
 
 #include <stdint.h>
+
 #include <memory>
 #include <optional>
 #include <vector>
@@ -98,7 +99,7 @@ BruschettaNetworkContext::GetURLLoaderFactory() {
     network::mojom::URLLoaderFactoryParamsPtr url_loader_factory_params =
         network::mojom::URLLoaderFactoryParams::New();
     url_loader_factory_params->process_id = network::mojom::kBrowserProcessId;
-    url_loader_factory_params->is_corb_enabled = false;
+    url_loader_factory_params->is_orb_enabled = false;
     url_loader_factory_params->is_trusted = true;
     url_loader_observers_.Add(
         this, url_loader_factory_params->url_loader_network_observer
@@ -269,5 +270,8 @@ void BruschettaNetworkContext::Clone(
         observer) {
   url_loader_observers_.Add(this, std::move(observer));
 }
+
+void BruschettaNetworkContext::OnWebSocketConnectedToPrivateNetwork(
+    network::mojom::IPAddressSpace ip_address_space) {}
 
 }  // namespace bruschetta

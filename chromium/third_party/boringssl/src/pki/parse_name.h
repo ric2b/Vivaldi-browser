@@ -8,10 +8,10 @@
 #include <vector>
 
 #include <openssl/base.h>
+#include <openssl/bytestring.h>
 
 #include "input.h"
 #include "parser.h"
-#include "tag.h"
 
 namespace bssl {
 
@@ -65,7 +65,7 @@ inline constexpr uint8_t kTypeEmailAddressOid[] = {0x2A, 0x86, 0x48, 0x86, 0xF7,
 //     value AttributeValue
 // }
 struct OPENSSL_EXPORT X509NameAttribute {
-  X509NameAttribute(der::Input in_type, der::Tag in_value_tag,
+  X509NameAttribute(der::Input in_type, CBS_ASN1_TAG in_value_tag,
                     der::Input in_value)
       : type(in_type), value_tag(in_value_tag), value(in_value) {}
 
@@ -106,7 +106,7 @@ struct OPENSSL_EXPORT X509NameAttribute {
   [[nodiscard]] bool AsRFC2253String(std::string *out) const;
 
   der::Input type;
-  der::Tag value_tag;
+  CBS_ASN1_TAG value_tag;
   der::Input value;
 };
 
@@ -140,11 +140,11 @@ typedef std::vector<RelativeDistinguishedName> RDNSequence;
 
 // Parses a DER-encoded "Name" as specified by 5280. Returns true on success
 // and sets the results in |out|.
-[[nodiscard]] OPENSSL_EXPORT bool ParseName(const der::Input &name_tlv,
+[[nodiscard]] OPENSSL_EXPORT bool ParseName(der::Input name_tlv,
                                             RDNSequence *out);
 // Parses a DER-encoded "Name" value (without the sequence tag & length) as
 // specified by 5280. Returns true on success and sets the results in |out|.
-[[nodiscard]] OPENSSL_EXPORT bool ParseNameValue(const der::Input &name_value,
+[[nodiscard]] OPENSSL_EXPORT bool ParseNameValue(der::Input name_value,
                                                  RDNSequence *out);
 
 // Formats a RDNSequence |rdn_sequence| per RFC2253 as an ASCII string and

@@ -17,6 +17,7 @@
 #include "src/trace_processor/tables/android_tables_py.h"
 #include "src/trace_processor/tables/counter_tables_py.h"
 #include "src/trace_processor/tables/flow_tables_py.h"
+#include "src/trace_processor/tables/jit_tables_py.h"
 #include "src/trace_processor/tables/memory_tables_py.h"
 #include "src/trace_processor/tables/metadata_tables_py.h"
 #include "src/trace_processor/tables/profiler_tables_py.h"
@@ -43,6 +44,10 @@ AndroidLogTable::~AndroidLogTable() = default;
 // counter_tables_py.h
 CounterTable::~CounterTable() = default;
 
+// jit_tables.py
+JitCodeTable::~JitCodeTable() = default;
+JitFrameTable::~JitFrameTable() = default;
+
 // metadata_tables_py.h
 RawTable::~RawTable() = default;
 FtraceEventTable::~FtraceEventTable() = default;
@@ -65,7 +70,7 @@ CpuProfileStackSampleTable::~CpuProfileStackSampleTable() = default;
 PerfSampleTable::~PerfSampleTable() = default;
 SymbolTable::~SymbolTable() = default;
 HeapProfileAllocationTable::~HeapProfileAllocationTable() = default;
-ExperimentalFlamegraphNodesTable::~ExperimentalFlamegraphNodesTable() = default;
+ExperimentalFlamegraphTable::~ExperimentalFlamegraphTable() = default;
 HeapGraphObjectTable::~HeapGraphObjectTable() = default;
 HeapGraphClassTable::~HeapGraphClassTable() = default;
 HeapGraphReferenceTable::~HeapGraphReferenceTable() = default;
@@ -107,6 +112,7 @@ PerfCounterTrackTable::~PerfCounterTrackTable() = default;
 EnergyCounterTrackTable::~EnergyCounterTrackTable() = default;
 UidCounterTrackTable::~UidCounterTrackTable() = default;
 EnergyPerUidCounterTrackTable::~EnergyPerUidCounterTrackTable() = default;
+LinuxDeviceTrackTable::~LinuxDeviceTrackTable() = default;
 
 // trace_proto_tables_py.h
 ExperimentalProtoPathTable::~ExperimentalProtoPathTable() = default;
@@ -133,6 +139,7 @@ WindowManagerShellTransitionsTable::~WindowManagerShellTransitionsTable() =
     default;
 WindowManagerShellTransitionHandlersTable::
     ~WindowManagerShellTransitionHandlersTable() = default;
+ProtoLogTable::~ProtoLogTable() = default;
 
 }  // namespace tables
 

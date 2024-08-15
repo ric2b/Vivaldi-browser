@@ -102,8 +102,6 @@ using content::RenderFrame;
 // Any text beyond this point will be clipped.
 static const size_t kMaxIndexChars = 65535;
 
-// Constants for UMA statistic collection.
-static const char kTranslateCaptureText[] = "Translate.CaptureText";
 
 // For a page that auto-refreshes, we still show the bubble, if
 // the refresh delay is less than this value (in seconds).
@@ -252,6 +250,13 @@ void ChromeRenderFrameObserver::ReadyToCommitNavigation(
 
   translate_agent_->PrepareForUrl(
       render_frame()->GetWebFrame()->GetDocument().Url());
+}
+
+void ChromeRenderFrameObserver::DidSetPageLifecycleState(
+    bool restoring_from_bfcache) {
+  if (restoring_from_bfcache && translate_agent_) {
+    translate_agent_->RenewPageRegistration();
+  }
 }
 
 void ChromeRenderFrameObserver::DidFinishLoad() {
@@ -689,7 +694,6 @@ void ChromeRenderFrameObserver::CapturePageText(
 
   std::u16string contents;
   {
-    SCOPED_UMA_HISTOGRAM_TIMER(kTranslateCaptureText);
     TRACE_EVENT0("renderer", "ChromeRenderFrameObserver::CapturePageText");
 
     contents = WebFrameContentDumper::DumpFrameTreeAsText(

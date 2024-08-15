@@ -4,64 +4,53 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 /// <reference types="node" />
-/// <reference types="node" />
-import type { Readable } from 'stream';
-import type * as Bidi from 'chromium-bidi/lib/cjs/protocol/protocol.js';
 import type Protocol from 'devtools-protocol';
-import type { Observable, ObservableInput } from '../../third_party/rxjs/rxjs.js';
 import type { CDPSession } from '../api/CDPSession.js';
 import type { WaitForOptions } from '../api/Frame.js';
 import type { HTTPResponse } from '../api/HTTPResponse.js';
-import { Page, type GeolocationOptions, type MediaFeature, type NewDocumentScriptEvaluation, type ScreenshotOptions } from '../api/Page.js';
+import type { MediaFeature, GeolocationOptions, PageEvents } from '../api/Page.js';
+import { Page, type NewDocumentScriptEvaluation, type ScreenshotOptions } from '../api/Page.js';
 import { Accessibility } from '../cdp/Accessibility.js';
 import { Coverage } from '../cdp/Coverage.js';
 import { Tracing } from '../cdp/Tracing.js';
+import type { Cookie, CookieParam } from '../common/Cookie.js';
+import type { DeleteCookiesRequest } from '../common/Cookie.js';
+import { EventEmitter } from '../common/EventEmitter.js';
 import type { PDFOptions } from '../common/PDFOptions.js';
 import type { Awaitable } from '../common/types.js';
 import type { Viewport } from '../common/Viewport.js';
 import type { BidiBrowser } from './Browser.js';
 import type { BidiBrowserContext } from './BrowserContext.js';
-import { type BrowsingContext } from './BrowsingContext.js';
-import type { BidiConnection } from './Connection.js';
+import type { BidiCdpSession } from './CDPSession.js';
+import type { BrowsingContext } from './core/BrowsingContext.js';
 import { BidiFrame } from './Frame.js';
-import type { BidiHTTPRequest } from './HTTPRequest.js';
 import type { BidiHTTPResponse } from './HTTPResponse.js';
 import { BidiKeyboard, BidiMouse, BidiTouchscreen } from './Input.js';
 import type { BidiJSHandle } from './JSHandle.js';
-import type { BiDiNetworkIdle } from './lifecycle.js';
-import type { BiDiPageTarget } from './Target.js';
+import type { BidiWebWorker } from './WebWorker.js';
 /**
  * @internal
  */
 export declare class BidiPage extends Page {
     #private;
-    _client(): CDPSession;
-    constructor(browsingContext: BrowsingContext, browserContext: BidiBrowserContext, target: BiDiPageTarget);
-    /**
-     * @internal
-     */
-    get connection(): BidiConnection;
+    static from(browserContext: BidiBrowserContext, browsingContext: BrowsingContext): BidiPage;
+    accessor trustedEmitter: EventEmitter<PageEvents>;
+    readonly keyboard: BidiKeyboard;
+    readonly mouse: BidiMouse;
+    readonly touchscreen: BidiTouchscreen;
+    readonly accessibility: Accessibility;
+    readonly tracing: Tracing;
+    readonly coverage: Coverage;
+    _client(): BidiCdpSession;
+    private constructor();
     setUserAgent(userAgent: string, userAgentMetadata?: Protocol.Emulation.UserAgentMetadata | undefined): Promise<void>;
     setBypassCSP(enabled: boolean): Promise<void>;
     queryObjects<Prototype>(prototypeHandle: BidiJSHandle<Prototype>): Promise<BidiJSHandle<Prototype[]>>;
-    _setBrowserContext(browserContext: BidiBrowserContext): void;
-    get accessibility(): Accessibility;
-    get tracing(): Tracing;
-    get coverage(): Coverage;
-    get mouse(): BidiMouse;
-    get touchscreen(): BidiTouchscreen;
-    get keyboard(): BidiKeyboard;
     browser(): BidiBrowser;
     browserContext(): BidiBrowserContext;
     mainFrame(): BidiFrame;
-    /**
-     * @internal
-     */
     focusedFrame(): Promise<BidiFrame>;
     frames(): BidiFrame[];
-    frame(frameId?: string): BidiFrame | null;
-    childFrames(frameId: string): BidiFrame[];
-    getNavigationResponse(id?: string | null): BidiHTTPResponse | null;
     isClosed(): boolean;
     close(options?: {
         runBeforeUnload?: boolean;
@@ -85,24 +74,8 @@ export declare class BidiPage extends Page {
     setViewport(viewport: Viewport): Promise<void>;
     viewport(): Viewport | null;
     pdf(options?: PDFOptions): Promise<Buffer>;
-    createPDFStream(options?: PDFOptions | undefined): Promise<Readable>;
+    createPDFStream(options?: PDFOptions | undefined): Promise<ReadableStream<Uint8Array>>;
     _screenshot(options: Readonly<ScreenshotOptions>): Promise<string>;
-    waitForRequest(urlOrPredicate: string | ((req: BidiHTTPRequest) => boolean | Promise<boolean>), options?: {
-        timeout?: number;
-    }): Promise<BidiHTTPRequest>;
-    waitForResponse(urlOrPredicate: string | ((res: BidiHTTPResponse) => boolean | Promise<boolean>), options?: {
-        timeout?: number;
-    }): Promise<BidiHTTPResponse>;
-    waitForNetworkIdle(options?: {
-        idleTime?: number;
-        timeout?: number;
-    }): Promise<void>;
-    /** @internal */
-    _waitWithNetworkIdle(observableInput: ObservableInput<{
-        result: Bidi.BrowsingContext.NavigateResult;
-    } | null>, networkIdle: BiDiNetworkIdle): Observable<{
-        result: Bidi.BrowsingContext.NavigateResult;
-    } | null>;
     createCDPSession(): Promise<CDPSession>;
     bringToFront(): Promise<void>;
     evaluateOnNewDocument<Params extends unknown[], Func extends (...args: Params) => unknown = (...args: Params) => unknown>(pageFunction: Func | string, ...args: Params): Promise<NewDocumentScriptEvaluation>;
@@ -112,19 +85,19 @@ export declare class BidiPage extends Page {
     }): Promise<void>;
     isDragInterceptionEnabled(): boolean;
     setCacheEnabled(enabled?: boolean): Promise<void>;
+    cookies(...urls: string[]): Promise<Cookie[]>;
     isServiceWorkerBypassed(): never;
-    target(): BiDiPageTarget;
+    target(): never;
     waitForFileChooser(): never;
-    workers(): never;
+    workers(): BidiWebWorker[];
     setRequestInterception(): never;
     setDragInterception(): never;
     setBypassServiceWorker(): never;
     setOfflineMode(): never;
     emulateNetworkConditions(): never;
-    cookies(): never;
-    setCookie(): never;
-    deleteCookie(): never;
-    removeExposedFunction(): never;
+    setCookie(...cookies: CookieParam[]): Promise<void>;
+    deleteCookie(...cookies: DeleteCookiesRequest[]): Promise<void>;
+    removeExposedFunction(name: string): Promise<void>;
     authenticate(): never;
     setExtraHTTPHeaders(): never;
     metrics(): never;

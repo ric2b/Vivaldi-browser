@@ -36,10 +36,10 @@
 #include "components/supervised_user/core/browser/supervised_user_service.h"
 #include "components/supervised_user/core/browser/supervised_user_settings_service.h"
 #include "components/supervised_user/core/browser/supervised_user_url_filter.h"
+#include "components/supervised_user/core/browser/supervised_user_utils.h"
 #include "components/supervised_user/core/common/features.h"
 #include "components/supervised_user/core/common/features_testutils.h"
 #include "components/supervised_user/core/common/supervised_user_constants.h"
-#include "components/supervised_user/core/common/supervised_user_utils.h"
 #include "components/supervised_user/test_support/kids_management_api_server_mock.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -257,10 +257,6 @@ class SupervisedUserNavigationThrottleTestBase
   }
 
  private:
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-  base::test::ScopedFeatureList feature_list_{
-      supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS};
-#endif
   supervised_user::SupervisionMixin supervision_mixin_;
   content::test::PrerenderTestHelper prerender_helper_;
 };
@@ -918,14 +914,10 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserIframeFilterTest,
   filter->SetDefaultFilteringBehavior(
       supervised_user::FilteringBehavior::kBlock);
 
-  // The async checker will make rpc calls to check if the url should be
-  // blocked or not. This may cause flakiness.
-  filter->ClearAsyncURLChecker();
-
   base::RunLoop().RunUntilIdle();
 
   // Allows |www.example.com|.
-  AllowlistHost(kExampleHost);
+  AllowlistHost("*.example.*");
 
   // |with_frames_same_domain.html| contains subframes with "a.example.com" and
   // "b.example.com", and "c.example2.com" urls.

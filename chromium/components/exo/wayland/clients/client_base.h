@@ -71,7 +71,7 @@ class ClientBase {
     bool use_xdg = false;
     bool use_release_fences = false;
     bool use_stylus = false;
-    absl::optional<std::string> wayland_socket = {};
+    std::optional<std::string> wayland_socket = {};
     uint32_t linux_dmabuf_version = ZWP_LINUX_DMABUF_V1_MODIFIER_SINCE_VERSION;
   };
 
@@ -110,7 +110,8 @@ class ClientBase {
   std::unique_ptr<Buffer> CreateBuffer(const gfx::Size& size,
                                        int32_t drm_format,
                                        int32_t bo_usage,
-                                       bool add_buffer_listener = true);
+                                       bool add_buffer_listener = true,
+                                       bool use_vulkan = false);
   std::unique_ptr<Buffer> CreateDrmBuffer(const gfx::Size& size,
                                           int32_t drm_format,
                                           const uint64_t* modifiers,

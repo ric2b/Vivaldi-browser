@@ -36,15 +36,15 @@ const diag::Formatter::Style formatter_style{/* print_file: */ true, /* print_se
 
 class ParserImplErrorResyncTest : public WGSLParserTest {};
 
-#define EXPECT(SOURCE, EXPECTED)                                                   \
-    do {                                                                           \
-        std::string source = SOURCE;                                               \
-        std::string expected = EXPECTED;                                           \
-        auto p = parser(source);                                                   \
-        EXPECT_EQ(false, p->Parse());                                              \
-        auto diagnostics = p->builder().Diagnostics();                             \
-        EXPECT_EQ(true, diagnostics.contains_errors());                            \
-        EXPECT_EQ(expected, diag::Formatter(formatter_style).format(diagnostics)); \
+#define EXPECT(SOURCE, EXPECTED)                                                           \
+    do {                                                                                   \
+        std::string source = SOURCE;                                                       \
+        std::string expected = EXPECTED;                                                   \
+        auto p = parser(source);                                                           \
+        EXPECT_EQ(false, p->Parse());                                                      \
+        auto diagnostics = p->builder().Diagnostics();                                     \
+        EXPECT_EQ(true, diagnostics.ContainsErrors());                                     \
+        EXPECT_EQ(expected, diag::Formatter(formatter_style).Format(diagnostics).Plain()); \
     } while (false)
 
 TEST_F(ParserImplErrorResyncTest, BadFunctionDecls) {
@@ -67,7 +67,7 @@ fn x(.) {}
      ^
 
 test.wgsl:4:2 error: expected attribute
-Possible values: 'align', 'binding', 'builtin', 'color', 'compute', 'diagnostic', 'fragment', 'group', 'id', 'index', 'interpolate', 'invariant', 'location', 'must_use', 'size', 'vertex', 'workgroup_size'
+Possible values: 'align', 'binding', 'blend_src', 'builtin', 'color', 'compute', 'diagnostic', 'fragment', 'group', 'id', 'interpolate', 'invariant', 'location', 'must_use', 'size', 'vertex', 'workgroup_size'
 @_ fn -> {}
  ^
 )");
@@ -135,7 +135,7 @@ test.wgsl:5:10 error: expected ':' for struct member
          ^^^^
 
 test.wgsl:7:6 error: expected attribute
-Possible values: 'align', 'binding', 'builtin', 'color', 'compute', 'diagnostic', 'fragment', 'group', 'id', 'index', 'interpolate', 'invariant', 'location', 'must_use', 'size', 'vertex', 'workgroup_size'
+Possible values: 'align', 'binding', 'blend_src', 'builtin', 'color', 'compute', 'diagnostic', 'fragment', 'group', 'id', 'interpolate', 'invariant', 'location', 'must_use', 'size', 'vertex', 'workgroup_size'
     @- x : i32,
      ^
 )");

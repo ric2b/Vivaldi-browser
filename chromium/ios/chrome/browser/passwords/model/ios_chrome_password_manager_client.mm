@@ -27,7 +27,6 @@
 #import "components/sync/service/sync_service.h"
 #import "components/translate/core/browser/translate_manager.h"
 #import "components/ukm/ios/ukm_url_recorder.h"
-#import "ios/chrome/browser/credential_provider_promo/model/features.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_account_password_store_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_reuse_manager_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
@@ -53,19 +52,7 @@ using password_manager::PasswordFormManagerForUI;
 using password_manager::PasswordManagerMetricsRecorder;
 using password_manager::PasswordStore;
 using password_manager::PasswordStoreInterface;
-using password_manager::SyncState;
 using password_manager::metrics_util::PasswordType;
-
-namespace {
-
-// Used for callbacks that expect a const pointer, since base::Callback isn't
-// smart enough to allow binding the SyncServiceFactory method directly.
-const syncer::SyncService* GetConstSyncServicePtr(
-    ChromeBrowserState* browser_state) {
-  return SyncServiceFactory::GetForBrowserStateIfExists(browser_state);
-}
-
-}  // namespace
 
 IOSChromePasswordManagerClient::IOSChromePasswordManagerClient(
     id<IOSChromePasswordManagerClientBridge> bridge)
@@ -74,9 +61,7 @@ IOSChromePasswordManagerClient::IOSChromePasswordManagerClient(
           GetPrefs(),
           GetLocalStatePrefs(),
           SyncServiceFactory::GetForBrowserStateIfExists(bridge_.browserState)),
-      credentials_filter_(
-          this,
-          base::BindRepeating(&GetConstSyncServicePtr, bridge_.browserState)),
+      credentials_filter_(this),
       helper_(this) {
   saving_passwords_enabled_.Init(
       password_manager::prefs::kCredentialsEnableService, GetPrefs());
@@ -87,12 +72,6 @@ IOSChromePasswordManagerClient::IOSChromePasswordManagerClient(
 }
 
 IOSChromePasswordManagerClient::~IOSChromePasswordManagerClient() = default;
-
-SyncState IOSChromePasswordManagerClient::GetPasswordSyncState() const {
-  syncer::SyncService* sync_service =
-      SyncServiceFactory::GetForBrowserState(bridge_.browserState);
-  return password_manager::sync_util::GetPasswordSyncState(sync_service);
-}
 
 bool IOSChromePasswordManagerClient::PromptUserToChooseCredentials(
     std::vector<std::unique_ptr<password_manager::PasswordForm>> local_forms,
@@ -182,7 +161,13 @@ PrefService* IOSChromePasswordManagerClient::GetLocalStatePrefs() const {
 
 const syncer::SyncService* IOSChromePasswordManagerClient::GetSyncService()
     const {
-  return GetConstSyncServicePtr(bridge_.browserState);
+  return SyncServiceFactory::GetForBrowserStateIfExists(bridge_.browserState);
+}
+
+affiliations::AffiliationService*
+IOSChromePasswordManagerClient::GetAffiliationService() {
+  // Not used on IOS platform.
+  return nullptr;
 }
 
 PasswordStoreInterface*
@@ -223,11 +208,9 @@ void IOSChromePasswordManagerClient::NotifySuccessfulLoginWithExistingPassword(
         submitted_manager) {
   helper_.NotifySuccessfulLoginWithExistingPassword(
       std::move(submitted_manager));
-  if (IsCredentialProviderExtensionPromoEnabled()) {
-    [bridge_
-        showCredentialProviderPromo:CredentialProviderPromoTrigger::
-                                        SuccessfulLoginUsingExistingPassword];
-  }
+  [bridge_
+      showCredentialProviderPromo:CredentialProviderPromoTrigger::
+                                      SuccessfulLoginUsingExistingPassword];
 }
 
 void IOSChromePasswordManagerClient::NotifyStorePasswordCalled() {

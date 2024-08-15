@@ -64,6 +64,7 @@ import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.homepage.HomepagePolicyManager;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.layouts.LayoutType;
+import org.chromium.chrome.browser.new_tab_url.DseNewTabUrlManager;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
@@ -305,6 +306,17 @@ public class ReturnToChromeUtilUnitTest {
 
         // Verifies returning false if segmentation result is negative (not show).
         result = new ClassificationResult(PredictionStatus.NOT_READY, null);
+        ReturnToChromeUtil.cacheReturnTimeFromSegmentationImpl(result);
+        Assert.assertEquals(
+                -1,
+                ReturnToChromeUtil.getReturnTimeFromSegmentation(
+                        START_SURFACE_RETURN_TIME_SECONDS));
+        Assert.assertFalse(ReturnToChromeUtil.shouldShowTabSwitcher(1, false));
+
+        // Verifies returning false if segmentation result is negative (not show).
+        result =
+                new ClassificationResult(
+                        PredictionStatus.SUCCEEDED, new String[] {"ChromeStartAndroidV2"});
         ReturnToChromeUtil.cacheReturnTimeFromSegmentationImpl(result);
         Assert.assertEquals(
                 -1,
@@ -596,9 +608,11 @@ public class ReturnToChromeUtilUnitTest {
 
         ChromeSharedPreferences.getInstance()
                 .writeBoolean(ChromePreferenceKeys.IS_DSE_GOOGLE, false);
+        DseNewTabUrlManager.setIsEeaChoiceCountryForTesting(true);
         Assert.assertFalse(ReturnToChromeUtil.isStartSurfaceEnabled(mContext));
 
         ChromeSharedPreferences.getInstance().removeKey(ChromePreferenceKeys.IS_DSE_GOOGLE);
+        DseNewTabUrlManager.resetIsEeaChoiceCountryForTesting();
     }
 
     @Test

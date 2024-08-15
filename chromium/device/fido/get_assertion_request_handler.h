@@ -6,6 +6,7 @@
 #define DEVICE_FIDO_GET_ASSERTION_REQUEST_HANDLER_H_
 
 #include <memory>
+#include <optional>
 #include <set>
 #include <vector>
 
@@ -15,11 +16,11 @@
 #include "device/fido/auth_token_requester.h"
 #include "device/fido/authenticator_get_assertion_response.h"
 #include "device/fido/ctap_get_assertion_request.h"
+#include "device/fido/discoverable_credential_metadata.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_request_handler_base.h"
 #include "device/fido/fido_transport_protocol.h"
 #include "device/fido/public_key_credential_descriptor.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
 class ElapsedTimer;
@@ -51,6 +52,7 @@ enum class GetAssertionStatus {
   kWinNotAllowedError,
   kHybridTransportError,
   kICloudKeychainNoCredentials,
+  kEnclaveError,
 };
 
 class COMPONENT_EXPORT(DEVICE_FIDO) GetAssertionRequestHandler
@@ -59,7 +61,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) GetAssertionRequestHandler
  public:
   using CompletionCallback = base::OnceCallback<void(
       GetAssertionStatus,
-      absl::optional<std::vector<AuthenticatorGetAssertionResponse>>,
+      std::optional<std::vector<AuthenticatorGetAssertionResponse>>,
       FidoAuthenticator* authenticator)>;
 
   GetAssertionRequestHandler(
@@ -78,7 +80,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) GetAssertionRequestHandler
 
   // Filters the allow list of the get assertion request to the given
   // |credential|.
-  void PreselectAccount(PublicKeyCredentialDescriptor credential);
+  void PreselectAccount(DiscoverableCredentialMetadata credential);
 
   base::WeakPtr<GetAssertionRequestHandler> GetWeakPtr();
 
@@ -113,7 +115,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) GetAssertionRequestHandler
   void HavePINUVAuthTokenResultForAuthenticator(
       FidoAuthenticator* authenticator,
       AuthTokenRequester::Result result,
-      absl::optional<pin::TokenResponse> response) override;
+      std::optional<pin::TokenResponse> response) override;
 
   void ObtainPINUVAuthToken(FidoAuthenticator* authenticator,
                             std::set<pin::Permissions> permissions,
@@ -153,7 +155,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) GetAssertionRequestHandler
   // preselected_credential_ is set when the UI invokes `PreselectAccount()`. It
   // contains the credential chosen by the user during a request prior to
   // dispatching to the authenticator.
-  absl::optional<PublicKeyCredentialDescriptor> preselected_credential_;
+  std::optional<DiscoverableCredentialMetadata> preselected_credential_;
 
   SEQUENCE_CHECKER(my_sequence_checker_);
   base::WeakPtrFactory<GetAssertionRequestHandler> weak_factory_{this};

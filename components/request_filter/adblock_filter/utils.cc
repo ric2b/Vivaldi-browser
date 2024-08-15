@@ -42,7 +42,7 @@ std::string GetRulesListVersionHeader() {
 }
 
 std::string CalculateBufferChecksum(base::span<const uint8_t> data) {
-  return base::NumberToString(base::PersistentHash(data.data(), data.size()));
+  return base::NumberToString(base::PersistentHash(data));
 }
 
 int CompareDomains(base::StringPiece lhs_domain, base::StringPiece rhs_domain) {

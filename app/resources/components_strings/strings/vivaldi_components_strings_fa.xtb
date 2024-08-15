@@ -6,6 +6,7 @@
 <translation id="1110994991967754504">انتخاب مجوز برای <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> به‌طور غیرمنتظره‌ای اتصال را قطع کرد.</translation>
 <translation id="1161325031994447685">‏اتصال مجدد به Wi-Fi</translation>
+<translation id="1175364870820465910">&amp;چاپ...</translation>
 <translation id="1375198122581997741">درباره نسخه</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> داده‌ای ارسال نکرد.</translation>
 <translation id="1559528461873125649">فاقد چنین فایل یا دایرکتوری است</translation>
@@ -28,6 +29,7 @@
 <translation id="2355395290879513365">مهاجمین ممکن است بتوانند تصاویری را که در این سایت می‌بینید مشاهده کنند و با دست‌کاری آن‌ها شما را فریب دهند.</translation>
 <translation id="2356070529366658676">سؤال شود</translation>
 <translation id="2359808026110333948">ادامه</translation>
+<translation id="2388886110302389394">باز کردن صفحه در یک پنجره‌ی خصوصی جدید (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />راه‌اندازی عیب‌یابی شبکه<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">این صفحه توسط یک افزونه مسدود شده است</translation>
 <translation id="2501278716633472235">بازگشت</translation>
@@ -77,6 +79,7 @@
 <translation id="3950820424414687140">ورود به سیستم</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> مسدود است</translation>
 <translation id="3987940399970879459">کمتر از ۱ مگابایت</translation>
+<translation id="4075123085690634698">باز کردن صفحه در یک پنجره‌ی خصوصی جدید (⇧⌘N)</translation>
 <translation id="4075732493274867456">‏کلاینت و سرور از مجموعه رمزگذاری یا نسخه پروتکل SSL مشترکی استفاده نمی‌کنند.</translation>
 <translation id="4116663294526079822">همیشه مجاز در این سایت</translation>
 <translation id="4130226655945681476">بررسی کابل‌ها، مودم یا رهیاب شبکه</translation>
@@ -153,6 +156,7 @@
 <translation id="6757797048963528358">رایانه‌تان به حالت خواب رفته است.</translation>
 <translation id="6890956352250146925">تنظیمات کوکی‌ها و داده‌های سایت</translation>
 <translation id="6897140037006041989">نماینده کاربر</translation>
+<translation id="6957624206566198865">باز کردن صفحه در زبانه‌ی خصوصی جدید</translation>
 <translation id="7053983685419859001">مسدود کردن</translation>
 <translation id="7079718277001814089">این سایت حاوی بدافزار است</translation>
 <translation id="7096937462164235847">هویت این وب‌سایت تأیید نشده است.</translation>
@@ -181,6 +185,7 @@
 <translation id="7834399512844817676">‏<ph name="SITE" /> معمولاً برای محافظت از اطلاعات شما از رمزگذاری استفاده می‌کند. اما این بار که Vivaldi تلاش کرد به <ph name="SITE" /> متصل شود، وب‌سایت اعتبارنامه‌ای نامعمول و نادرست را برگرداند. ممکن است مهاجمی در تلاش باشد خود را به‌جای <ph name="SITE" /> معرفی کند یا یک صفحه ورود به سیستم Wi-Fi در ارتباط اختلال ایجاد کرده باشد. اطلاعات شما همچنان ایمن است، زیرا Vivaldi قبل از هرگونه تبادل داده، اتصال را متوقف کرد.</translation>
 <translation id="7878562273885520351">ممکن است رمز عبورتان درمعرض خطر باشد</translation>
 <translation id="7951415247503192394">(۳۲ بیت)</translation>
+<translation id="7953236668995583915">برای اعمال تنظیمات جدید در این سایت، این صفحه را دوباره بارگذاری کنید</translation>
 <translation id="8025119109950072390">مهاجمان در این سایت ممکن است شما را فریب دهند که کارهای خطرناکی مثل نصب نرم‌افزار یا ارائه اطلاعات شخصی‌تان (مثلاً رمزهای عبور، شماره تلفن‌ها یا کارت‌های اعتباری) انجام دهید.</translation>
 <translation id="8037357227543935929">درخواست (پیش‌فرض)</translation>
 <translation id="8041940743680923270">استفاده از پیش‌فرض سراسری (سؤال شود)</translation>
@@ -204,6 +209,7 @@
 <translation id="8940028675168378100">مسدود شده توسط <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">رفتن به تنظیمات سایت</translation>
 <translation id="9001074447101275817">پروکسی <ph name="DOMAIN" /> نیاز به یک نام کاربری و رمز عبور دارد.</translation>
+<translation id="9008201768610948239">نادیده گرفتن</translation>
 <translation id="9025348182339809926">(نامعتبر)</translation>
 <translation id="9039213469156557790">علاوه بر آن، این صفحه دارای منابع دیگری است که امن نیستند. این منابع در حین انتقال، توسط دیگران قابل مشاهده بوده و ممکن است برای تغییر رفتار صفحه، توسط یک مهاجم تغییر داده شوند.</translation>
 <translation id="9062620674789239642">ممکن است جابه‌جا، ویرایش ویا حذف شده باشد.</translation>

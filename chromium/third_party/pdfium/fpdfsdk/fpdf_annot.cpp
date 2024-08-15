@@ -30,17 +30,17 @@
 #include "core/fpdfdoc/cpdf_formfield.h"
 #include "core/fpdfdoc/cpdf_generateap.h"
 #include "core/fpdfdoc/cpdf_interactiveform.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/fx_string_wrappers.h"
+#include "core/fxcrt/numerics/safe_conversions.h"
+#include "core/fxcrt/ptr_util.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxge/cfx_color.h"
 #include "fpdfsdk/cpdfsdk_formfillenvironment.h"
 #include "fpdfsdk/cpdfsdk_helpers.h"
 #include "fpdfsdk/cpdfsdk_interactiveform.h"
-#include "third_party/base/check.h"
-#include "third_party/base/containers/contains.h"
-#include "third_party/base/memory/ptr_util.h"
-#include "third_party/base/numerics/safe_conversions.h"
 
 namespace {
 
@@ -341,6 +341,7 @@ FPDFAnnot_IsSupportedSubtype(FPDF_ANNOTATION_SUBTYPE subtype) {
   // The supported subtypes must also be communicated in the user doc.
   switch (subtype) {
     case FPDF_ANNOT_CIRCLE:
+    case FPDF_ANNOT_FILEATTACHMENT:
     case FPDF_ANNOT_FREETEXT:
     case FPDF_ANNOT_HIGHLIGHT:
     case FPDF_ANNOT_INK:
@@ -433,7 +434,7 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFPage_GetAnnotIndex(FPDF_PAGE page,
   if (it == locker.end())
     return -1;
 
-  return pdfium::base::checked_cast<int>(it - locker.begin());
+  return pdfium::checked_cast<int>(it - locker.begin());
 }
 
 FPDF_EXPORT void FPDF_CALLCONV FPDFPage_CloseAnnot(FPDF_ANNOTATION annot) {
@@ -504,7 +505,7 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFAnnot_AddInkStroke(FPDF_ANNOTATION annot,
                                                      size_t point_count) {
   if (FPDFAnnot_GetSubtype(annot) != FPDF_ANNOT_INK || !points ||
       point_count == 0 ||
-      !pdfium::base::IsValueInRangeForNumericType<int32_t>(point_count)) {
+      !pdfium::IsValueInRangeForNumericType<int32_t>(point_count)) {
     return -1;
   }
 
@@ -593,8 +594,7 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFAnnot_GetObjectCount(FPDF_ANNOTATION annot) {
 
     pAnnot->SetForm(std::move(pStream));
   }
-  return pdfium::base::checked_cast<int>(
-      pAnnot->GetForm()->GetPageObjectCount());
+  return pdfium::checked_cast<int>(pAnnot->GetForm()->GetPageObjectCount());
 }
 
 FPDF_EXPORT FPDF_PAGEOBJECT FPDF_CALLCONV
@@ -1062,62 +1062,63 @@ FPDFAnnot_SetAP(FPDF_ANNOTATION annot,
   static_assert(std::size(kModeKeyForMode) == FPDF_ANNOT_APPEARANCEMODE_COUNT,
                 "length of kModeKeyForMode should be equal to "
                 "FPDF_ANNOT_APPEARANCEMODE_COUNT");
-  const char* modeKey = kModeKeyForMode[appearanceMode];
+  const char* mode_key = kModeKeyForMode[appearanceMode];
 
   RetainPtr<CPDF_Dictionary> pApDict =
       pAnnotDict->GetMutableDictFor(pdfium::annotation::kAP);
 
-  // If value is null, we're in remove mode. Otherwise, we're in add/update
-  // mode.
-  if (value) {
-    // Annotation object's non-empty bounding rect will be used as the /BBox
-    // for the associated /XObject object
-    CFX_FloatRect rect = pAnnotDict->GetRectFor(pdfium::annotation::kRect);
-    constexpr float kMinSize = 0.000001f;
-    if (rect.Width() < kMinSize || rect.Height() < kMinSize)
-      return false;
-
-    CPDF_AnnotContext* pAnnotContext =
-        CPDFAnnotContextFromFPDFAnnotation(annot);
-
-    CPDF_Document* pDoc = pAnnotContext->GetPage()->GetDocument();
-    if (!pDoc)
-      return false;
-
-    auto pNewIndirectStream = pDoc->NewIndirect<CPDF_Stream>();
-    ByteString newAPStream =
-        PDF_EncodeText(WideStringFromFPDFWideString(value).AsStringView());
-    pNewIndirectStream->SetData(newAPStream.raw_span());
-
-    RetainPtr<CPDF_Dictionary> pStreamDict =
-        pNewIndirectStream->GetMutableDict();
-    pStreamDict->SetNewFor<CPDF_Name>(pdfium::annotation::kType, "XObject");
-    pStreamDict->SetNewFor<CPDF_Name>(pdfium::annotation::kSubtype, "Form");
-    pStreamDict->SetRectFor("BBox", rect);
-    // Transparency values are specified in range [0.0f, 1.0f]. We are strictly
-    // checking for value < 1 and not <= 1 so that the output PDF size does not
-    // unnecessarily bloat up by creating a new dictionary in case of solid
-    // color.
-    if (pAnnotDict->KeyExist("CA") && pAnnotDict->GetFloatFor("CA") < 1.0f) {
-      RetainPtr<CPDF_Dictionary> pResourceDict =
-          SetExtGStateInResourceDict(pDoc, pAnnotDict.Get(), "Normal");
-      pStreamDict->SetFor("Resources", pResourceDict);
-    }
-
-    // Storing reference to indirect object in annotation's AP
-    if (!pApDict) {
-      pApDict = pAnnotDict->SetNewFor<CPDF_Dictionary>(pdfium::annotation::kAP);
-    }
-    pApDict->SetNewFor<CPDF_Reference>(modeKey, pDoc,
-                                       pNewIndirectStream->GetObjNum());
-  } else {
+  // If `value` is null, then the action is to remove.
+  if (!value) {
     if (pApDict) {
-      if (appearanceMode == FPDF_ANNOT_APPEARANCEMODE_NORMAL)
+      if (appearanceMode == FPDF_ANNOT_APPEARANCEMODE_NORMAL) {
         pAnnotDict->RemoveFor(pdfium::annotation::kAP);
-      else
-        pApDict->RemoveFor(modeKey);
+      } else {
+        pApDict->RemoveFor(mode_key);
+      }
     }
+    return true;
   }
+
+  // Otherwise, add/update when `value` is non-null.
+  //
+  // Annotation object's non-empty bounding rect will be used as the /BBox
+  // for the associated /XObject object
+  CFX_FloatRect rect = pAnnotDict->GetRectFor(pdfium::annotation::kRect);
+  constexpr float kMinSize = 0.000001f;
+  if (rect.Width() < kMinSize || rect.Height() < kMinSize) {
+    return false;
+  }
+
+  CPDF_AnnotContext* pAnnotContext = CPDFAnnotContextFromFPDFAnnotation(annot);
+
+  CPDF_Document* pDoc = pAnnotContext->GetPage()->GetDocument();
+  if (!pDoc) {
+    return false;
+  }
+
+  auto stream_dict = pdfium::MakeRetain<CPDF_Dictionary>();
+  stream_dict->SetNewFor<CPDF_Name>(pdfium::annotation::kType, "XObject");
+  stream_dict->SetNewFor<CPDF_Name>(pdfium::annotation::kSubtype, "Form");
+  stream_dict->SetRectFor("BBox", rect);
+  // Transparency values are specified in range [0.0f, 1.0f]. We are strictly
+  // checking for value < 1 and not <= 1 so that the output PDF size does not
+  // unnecessarily bloat up by creating a new dictionary in case of solid
+  // color.
+  if (pAnnotDict->KeyExist("CA") && pAnnotDict->GetFloatFor("CA") < 1.0f) {
+    stream_dict->SetFor("Resources", SetExtGStateInResourceDict(
+                                         pDoc, pAnnotDict.Get(), "Normal"));
+  }
+
+  auto new_stream = pDoc->NewIndirect<CPDF_Stream>(std::move(stream_dict));
+  ByteString new_stream_data =
+      PDF_EncodeText(WideStringFromFPDFWideString(value).AsStringView());
+  new_stream->SetData(new_stream_data.unsigned_span());
+
+  // Storing reference to indirect object in annotation's AP
+  if (!pApDict) {
+    pApDict = pAnnotDict->SetNewFor<CPDF_Dictionary>(pdfium::annotation::kAP);
+  }
+  pApDict->SetNewFor<CPDF_Reference>(mode_key, pDoc, new_stream->GetObjNum());
 
   return true;
 }
@@ -1471,4 +1472,52 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFAnnot_SetURI(FPDF_ANNOTATION annot,
   action->SetNewFor<CPDF_Name>("S", "URI");
   action->SetNewFor<CPDF_String>("URI", uri, /*bHex=*/false);
   return true;
+}
+
+FPDF_EXPORT FPDF_ATTACHMENT FPDF_CALLCONV
+FPDFAnnot_GetFileAttachment(FPDF_ANNOTATION annot) {
+  if (FPDFAnnot_GetSubtype(annot) != FPDF_ANNOT_FILEATTACHMENT) {
+    return nullptr;
+  }
+
+  RetainPtr<CPDF_Dictionary> annot_dict =
+      GetMutableAnnotDictFromFPDFAnnotation(annot);
+  if (!annot_dict) {
+    return nullptr;
+  }
+
+  return FPDFAttachmentFromCPDFObject(
+      annot_dict->GetMutableDirectObjectFor("FS"));
+}
+
+FPDF_EXPORT FPDF_ATTACHMENT FPDF_CALLCONV
+FPDFAnnot_AddFileAttachment(FPDF_ANNOTATION annot, FPDF_WIDESTRING name) {
+  if (FPDFAnnot_GetSubtype(annot) != FPDF_ANNOT_FILEATTACHMENT) {
+    return nullptr;
+  }
+
+  CPDF_AnnotContext* context = CPDFAnnotContextFromFPDFAnnotation(annot);
+  if (!context) {
+    return nullptr;
+  }
+
+  RetainPtr<CPDF_Dictionary> annot_dict = context->GetMutableAnnotDict();
+  if (!annot_dict) {
+    return nullptr;
+  }
+
+  WideString ws_name = WideStringFromFPDFWideString(name);
+  if (ws_name.IsEmpty()) {
+    return nullptr;
+  }
+
+  CPDF_Document* doc = context->GetPage()->GetDocument();
+  auto fs_obj = doc->NewIndirect<CPDF_Dictionary>();
+
+  fs_obj->SetNewFor<CPDF_Name>("Type", "Filespec");
+  fs_obj->SetNewFor<CPDF_String>("UF", ws_name.AsStringView());
+  fs_obj->SetNewFor<CPDF_String>("F", ws_name.AsStringView());
+
+  annot_dict->SetNewFor<CPDF_Reference>("FS", doc, fs_obj->GetObjNum());
+  return FPDFAttachmentFromCPDFObject(fs_obj);
 }

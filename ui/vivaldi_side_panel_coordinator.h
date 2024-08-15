@@ -16,13 +16,13 @@ class SidePanelCoordinator : public SidePanelUI,
 
   ~SidePanelCoordinator() override;
 
-  void Show(absl::optional<SidePanelEntryId> entry_id = absl::nullopt,
-            absl::optional<SidePanelOpenTrigger> open_trigger =
-                absl::nullopt) override;
+  void Show(
+      std::optional<SidePanelEntryId> entry_id = std::nullopt,
+      std::optional<SidePanelOpenTrigger> open_trigger = std::nullopt) override;
 
-  void Show(SidePanelEntryKey entry_key,
-            absl::optional<SidePanelOpenTrigger> open_trigger =
-                absl::nullopt) override;
+  void Show(
+      SidePanelEntryKey entry_key,
+      std::optional<SidePanelOpenTrigger> open_trigger = std::nullopt) override;
 
   void Close() override;
 
@@ -35,7 +35,7 @@ class SidePanelCoordinator : public SidePanelUI,
 
   void UpdatePinState() override;
 
-  absl::optional<SidePanelEntryId> GetCurrentEntryId() const override;
+  std::optional<SidePanelEntryId> GetCurrentEntryId() const override;
 
   bool IsSidePanelShowing() const override;
 

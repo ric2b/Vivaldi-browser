@@ -49,14 +49,18 @@
 #include "ui/window_registry_service_factory.h"
 
 #include "app/vivaldi_apptools.h"
+#include "browser/search_engines/vivaldi_search_engines_updater.h"
 #include "browser/vivaldi_runtime_feature.h"
 #include "components/browser/vivaldi_brand_select.h"
+#include "components/search_engines/search_engines_manager.h"
 
 #include "components/datasource/vivaldi_image_store.h"
 #include "components/notes/notes_factory.h"
 #include "contact/contact_service_factory.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "ui/webui/vivaldi_web_ui_controller_factory.h"
+
+#include "components/direct_match/direct_match_service_factory.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/api/auto_update/auto_update_api.h"
@@ -147,6 +151,7 @@ void VivaldiBrowserMainExtraParts::
       EnsureAssociatedFactoryBuilt();
   vivaldi::RequestFilterProxyingWebSocket::EnsureAssociatedFactoryBuilt();
   vivaldi::NotesModelFactory::GetInstance();
+  direct_match::DirectMatchServiceFactory::GetInstance();
   VivaldiImageStore::InitFactory();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::AutoUpdateAPI::GetFactoryInstance();
@@ -196,6 +201,7 @@ void VivaldiBrowserMainExtraParts::
 #endif
 
   VivaldiTranslateClient::LoadTranslationScript();
+  SearchEnginesManager::GetInstance();
 }
 
 void VivaldiBrowserMainExtraParts::PreProfileInit() {
@@ -295,8 +301,19 @@ void VivaldiBrowserMainExtraParts::PreMainMessageLoopRun() {
   base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
   if (!cmd_line.HasSwitch(switches::kAutoTestMode))
     stats_reporter_ = vivaldi::StatsReporter::CreateInstance();
+
+  vivaldi::SearchEnginesUpdater::Update(
+      g_browser_process->shared_url_loader_factory());
 }
 
 void VivaldiBrowserMainExtraParts::PostMainMessageLoopRun() {
   vivaldi::ClientHintsBrandRegisterProfilePrefs(nullptr);
+}
+
+void VivaldiBrowserMainExtraParts::PostDestroyThreads() {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  // this has to be done after threads are destroyed,
+  // as there is an ENV variable manipulation code inside
+  extensions::AutoUpdateAPI::HandleRestartPreconditions();
+#endif  // ENABLE_EXTENSIONS
 }

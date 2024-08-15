@@ -8,12 +8,15 @@
 #import "base/files/file_util.h"
 #import "base/test/scoped_feature_list.h"
 #import "components/bookmarks/test/bookmark_test_helpers.h"
+#import "components/commerce/core/mock_shopping_service.h"
+#import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
+#import "ios/chrome/browser/commerce/model/shopping_service_factory.h"
 #import "ios/chrome/browser/download/model/download_directory_util.h"
 #import "ios/chrome/browser/download/model/external_app_util.h"
-#import "ios/chrome/browser/favicon/favicon_service_factory.h"
-#import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
-#import "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
+#import "ios/chrome/browser/favicon/model/favicon_service_factory.h"
+#import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
+#import "ios/chrome/browser/favicon/model/ios_chrome_large_icon_service_factory.h"
 #import "ios/chrome/browser/history/model/history_service_factory.h"
 #import "ios/chrome/browser/lens/model/lens_browser_agent.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
@@ -31,6 +34,7 @@
 #import "ios/chrome/browser/shared/public/commands/promos_manager_commands.h"
 #import "ios/chrome/browser/shared/public/commands/save_image_to_photos_command.h"
 #import "ios/chrome/browser/shared/public/commands/save_to_photos_commands.h"
+#import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/model/fake_authentication_service_delegate.h"
@@ -46,6 +50,7 @@
 #import "ios/chrome/browser/ui/save_to_photos/save_to_photos_coordinator.h"
 #import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
 #import "ios/chrome/browser/ui/sharing/sharing_params.h"
+#import "ios/chrome/browser/ui/start_surface/start_surface_recent_tab_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_notifier_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
@@ -91,6 +96,9 @@ class BrowserCoordinatorTest : public PlatformTest {
         PrerenderServiceFactory::GetInstance(),
         PrerenderServiceFactory::GetDefaultFactory());
     test_cbs_builder.AddTestingFactory(
+        ios::BookmarkModelFactory::GetInstance(),
+        ios::BookmarkModelFactory::GetDefaultFactory());
+    test_cbs_builder.AddTestingFactory(
         ios::LocalOrSyncableBookmarkModelFactory::GetInstance(),
         ios::LocalOrSyncableBookmarkModelFactory::GetDefaultFactory());
     test_cbs_builder.AddTestingFactory(
@@ -102,6 +110,12 @@ class BrowserCoordinatorTest : public PlatformTest {
         base::BindRepeating(
             segmentation_platform::SegmentationPlatformServiceFactory::
                 GetDefaultFactory()));
+    test_cbs_builder.AddTestingFactory(
+        commerce::ShoppingServiceFactory::GetInstance(),
+        base::BindRepeating(
+            [](web::BrowserState*) -> std::unique_ptr<KeyedService> {
+              return std::make_unique<commerce::MockShoppingService>();
+            }));
 
     chrome_browser_state_ = test_cbs_builder.Build();
     browser_ = std::make_unique<TestBrowser>(chrome_browser_state_.get(),
@@ -112,6 +126,7 @@ class BrowserCoordinatorTest : public PlatformTest {
     WebNavigationBrowserAgent::CreateForBrowser(browser_.get());
     WebUsageEnablerBrowserAgent::CreateForBrowser(browser_.get());
     TabInsertionBrowserAgent::CreateForBrowser(browser_.get());
+    StartSurfaceRecentTabBrowserAgent::CreateForBrowser(browser_.get());
     WebStateDelegateBrowserAgent::CreateForBrowser(
         browser_.get(), TabInsertionBrowserAgent::FromBrowser(browser_.get()));
     SyncErrorBrowserAgent::CreateForBrowser(browser_.get());
@@ -133,17 +148,16 @@ class BrowserCoordinatorTest : public PlatformTest {
                              forProtocol:@protocol(IncognitoReauthCommands)];
 
     // Set up ApplicationCommands mock. Because ApplicationCommands conforms
-    // to ApplicationSettingsCommands, that needs to be mocked and dispatched
+    // to SettingsCommands, that needs to be mocked and dispatched
     // as well.
     id mockApplicationCommandHandler =
         OCMProtocolMock(@protocol(ApplicationCommands));
-    id mockApplicationSettingsCommandHandler =
-        OCMProtocolMock(@protocol(ApplicationSettingsCommands));
+    id mockSettingsCommandHandler =
+        OCMProtocolMock(@protocol(SettingsCommands));
     [dispatcher startDispatchingToTarget:mockApplicationCommandHandler
                              forProtocol:@protocol(ApplicationCommands)];
-    [dispatcher
-        startDispatchingToTarget:mockApplicationSettingsCommandHandler
-                     forProtocol:@protocol(ApplicationSettingsCommands)];
+    [dispatcher startDispatchingToTarget:mockSettingsCommandHandler
+                             forProtocol:@protocol(SettingsCommands)];
   }
 
   BrowserCoordinator* GetBrowserCoordinator() {
@@ -159,8 +173,8 @@ class BrowserCoordinatorTest : public PlatformTest {
     AttachTabHelpers(web_state.get(), NO);
 
     int insertion_index = browser_->GetWebStateList()->InsertWebState(
-        /*index=*/0, std::move(web_state), WebStateList::INSERT_ACTIVATE,
-        WebStateOpener());
+        std::move(web_state),
+        WebStateList::InsertionParams::Automatic().Activate());
     browser_->GetWebStateList()->ActivateWebStateAt(insertion_index);
 
     return insertion_index;

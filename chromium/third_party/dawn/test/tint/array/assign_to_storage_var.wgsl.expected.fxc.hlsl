@@ -1,9 +1,20 @@
+groupshared int4 src_workgroup[4];
+
+void tint_zero_workgroup_memory(uint local_idx) {
+  {
+    for(uint idx = local_idx; (idx < 4u); idx = (idx + 1u)) {
+      uint i = idx;
+      src_workgroup[i] = (0).xxxx;
+    }
+  }
+  GroupMemoryBarrierWithGroupSync();
+}
+
 struct S {
   int4 arr[4];
 };
 
 static int4 src_private[4] = (int4[4])0;
-groupshared int4 src_workgroup[4];
 cbuffer cbuffer_src_uniform : register(b0) {
   uint4 src_uniform[4];
 };
@@ -13,12 +24,12 @@ RWByteAddressBuffer dst_nested : register(u3);
 
 typedef int4 ret_arr_ret[4];
 ret_arr_ret ret_arr() {
-  const int4 tint_symbol_4[4] = (int4[4])0;
+  int4 tint_symbol_4[4] = (int4[4])0;
   return tint_symbol_4;
 }
 
 S ret_struct_arr() {
-  const S tint_symbol_5 = (S)0;
+  S tint_symbol_5 = (S)0;
   return tint_symbol_5;
 }
 
@@ -83,16 +94,16 @@ void dst_nested_store(uint offset, int value[4][3][2]) {
 
 void foo(int4 src_param[4]) {
   int4 src_function[4] = (int4[4])0;
-  const int4 tint_symbol_6[4] = {(1).xxxx, (2).xxxx, (3).xxxx, (3).xxxx};
+  int4 tint_symbol_6[4] = {(1).xxxx, (2).xxxx, (3).xxxx, (3).xxxx};
   tint_symbol_store(0u, tint_symbol_6);
   tint_symbol_store(0u, src_param);
   tint_symbol_store(0u, ret_arr());
-  const int4 src_let[4] = (int4[4])0;
+  int4 src_let[4] = (int4[4])0;
   tint_symbol_store(0u, src_let);
   tint_symbol_store(0u, src_function);
   tint_symbol_store(0u, src_private);
   tint_symbol_store(0u, src_workgroup);
-  const S tint_symbol_1 = ret_struct_arr();
+  S tint_symbol_1 = ret_struct_arr();
   tint_symbol_store(0u, tint_symbol_1.arr);
   tint_symbol_store(0u, src_uniform_load(0u));
   tint_symbol_store(0u, src_storage_load(0u));
@@ -105,14 +116,8 @@ struct tint_symbol_3 {
 };
 
 void main_inner(uint local_invocation_index) {
-  {
-    for(uint idx = local_invocation_index; (idx < 4u); idx = (idx + 1u)) {
-      const uint i = idx;
-      src_workgroup[i] = (0).xxxx;
-    }
-  }
-  GroupMemoryBarrierWithGroupSync();
-  const int4 ary[4] = (int4[4])0;
+  tint_zero_workgroup_memory(local_invocation_index);
+  int4 ary[4] = (int4[4])0;
   foo(ary);
 }
 

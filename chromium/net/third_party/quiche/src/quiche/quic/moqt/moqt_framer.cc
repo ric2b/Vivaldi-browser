@@ -6,439 +6,371 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <optional>
+#include <type_traits>
+#include <utility>
 
+#include "absl/container/inlined_vector.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "quiche/quic/core/quic_data_writer.h"
 #include "quiche/quic/core/quic_time.h"
-#include "quiche/quic/core/quic_types.h"
 #include "quiche/quic/moqt/moqt_messages.h"
+#include "quiche/quic/platform/api/quic_bug_tracker.h"
+#include "quiche/common/platform/api/quiche_bug_tracker.h"
 #include "quiche/common/quiche_buffer_allocator.h"
+#include "quiche/common/quiche_data_writer.h"
+#include "quiche/common/simple_buffer_allocator.h"
+#include "quiche/common/wire_serialization.h"
 
 namespace moqt {
 
 namespace {
 
-inline size_t NeededVarIntLen(const uint64_t value) {
-  return static_cast<size_t>(quic::QuicDataWriter::GetVarInt62Len(value));
-}
-inline size_t NeededVarIntLen(const MoqtVersion value) {
-  return static_cast<size_t>(
-      quic::QuicDataWriter::GetVarInt62Len(static_cast<uint64_t>(value)));
-}
-inline size_t NeededVarIntLen(const MoqtMessageType value) {
-  return static_cast<size_t>(
-      quic::QuicDataWriter::GetVarInt62Len(static_cast<uint64_t>(value)));
-}
-inline size_t NeededVarIntLen(const MoqtSubscribeLocationMode value) {
-  return static_cast<size_t>(
-      quic::QuicDataWriter::GetVarInt62Len(static_cast<uint64_t>(value)));
-}
-inline size_t ParameterLen(const uint64_t type, const uint64_t value_len) {
-  return NeededVarIntLen(type) + NeededVarIntLen(value_len) + value_len;
-}
-inline size_t LocationLength(const std::optional<MoqtSubscribeLocation> loc) {
-  if (!loc.has_value()) {
-    return NeededVarIntLen(MoqtSubscribeLocationMode::kNone);
-  }
-  if (loc->absolute) {
-    return NeededVarIntLen(MoqtSubscribeLocationMode::kAbsolute) +
-           NeededVarIntLen(loc->absolute_value);
-  }
-  // It's a relative value
-  if (loc->relative_value < 0) {
-    return NeededVarIntLen(MoqtSubscribeLocationMode::kRelativePrevious) +
-           NeededVarIntLen(static_cast<uint64_t>(loc->relative_value * -1));
-  }
-  return NeededVarIntLen(MoqtSubscribeLocationMode::kRelativeNext) +
-         NeededVarIntLen(static_cast<uint64_t>(loc->relative_value));
-}
-inline size_t LengthPrefixedStringLength(absl::string_view string) {
-  return NeededVarIntLen(string.length()) + string.length();
-}
+using ::quiche::QuicheBuffer;
+using ::quiche::WireBytes;
+using ::quiche::WireOptional;
+using ::quiche::WireSpan;
+using ::quiche::WireStringWithVarInt62Length;
+using ::quiche::WireUint8;
+using ::quiche::WireVarInt62;
 
-// This only supports values up to UINT8_MAX, as that's all that exists in the
-// standard.
-inline bool WriteVarIntParameter(quic::QuicDataWriter& writer, uint64_t type,
-                                 uint64_t value) {
-  if (!writer.WriteVarInt62(type)) {
-    return false;
-  }
-  if (!writer.WriteVarInt62(NeededVarIntLen(value))) {
-    return false;
-  }
-  return writer.WriteVarInt62(value);
-}
+// Encoding for MOQT Locations:
+// https://moq-wg.github.io/moq-transport/draft-ietf-moq-transport.html#name-subscribe-locations
+class WireLocation {
+ public:
+  using DataType = std::optional<MoqtSubscribeLocation>;
+  explicit WireLocation(const DataType& location) : location_(location) {}
 
-inline bool WriteStringParameter(quic::QuicDataWriter& writer, uint64_t type,
-                                 absl::string_view value) {
-  if (!writer.WriteVarInt62(type)) {
-    return false;
+  size_t GetLengthOnWire() {
+    return quiche::ComputeLengthOnWire(
+        WireVarInt62(GetModeForSubscribeLocation(location_)),
+        WireOptional<WireVarInt62>(LocationOffsetOnTheWire(location_)));
   }
-  return writer.WriteStringPieceVarInt62(value);
-}
+  absl::Status SerializeIntoWriter(quiche::QuicheDataWriter& writer) {
+    return quiche::SerializeIntoWriter(
+        writer, WireVarInt62(GetModeForSubscribeLocation(location_)),
+        WireOptional<WireVarInt62>(LocationOffsetOnTheWire(location_)));
+  }
 
-inline bool WriteLocation(quic::QuicDataWriter& writer,
-                          std::optional<MoqtSubscribeLocation> loc) {
-  if (!loc.has_value()) {
-    return writer.WriteVarInt62(
-        static_cast<uint64_t>(MoqtSubscribeLocationMode::kNone));
-  }
-  if (loc->absolute) {
-    if (!writer.WriteVarInt62(
-            static_cast<uint64_t>(MoqtSubscribeLocationMode::kAbsolute))) {
-      return false;
+ private:
+  // For all location types other than None, we record a single varint after the
+  // type; this function computes the value of that varint.
+  static std::optional<uint64_t> LocationOffsetOnTheWire(
+      std::optional<MoqtSubscribeLocation> location) {
+    if (!location.has_value()) {
+      return std::nullopt;
     }
-    return writer.WriteVarInt62(loc->absolute_value);
-  }
-  if (loc->relative_value < 0) {
-    if (!writer.WriteVarInt62(static_cast<uint64_t>(
-            MoqtSubscribeLocationMode::kRelativePrevious))) {
-      return false;
+    if (location->absolute) {
+      return location->absolute_value;
     }
-    return writer.WriteVarInt62(
-        static_cast<uint64_t>(loc->relative_value * -1));
+    return location->relative_value <= 0 ? -location->relative_value
+                                         : location->relative_value + 1;
   }
-  if (!writer.WriteVarInt62(
-          static_cast<uint64_t>(MoqtSubscribeLocationMode::kRelativeNext))) {
-    return false;
+
+  const DataType& location_;
+};
+
+// Encoding for string parameters as described in
+// https://moq-wg.github.io/moq-transport/draft-ietf-moq-transport.html#name-parameters
+struct StringParameter {
+  template <typename Enum>
+  StringParameter(Enum type, absl::string_view data)
+      : type(static_cast<uint64_t>(type)), data(data) {
+    static_assert(std::is_enum_v<Enum>);
   }
-  return writer.WriteVarInt62(static_cast<uint64_t>(loc->relative_value));
+
+  uint64_t type;
+  absl::string_view data;
+};
+class WireStringParameter {
+ public:
+  using DataType = StringParameter;
+
+  explicit WireStringParameter(const StringParameter& parameter)
+      : parameter_(parameter) {}
+  size_t GetLengthOnWire() {
+    return quiche::ComputeLengthOnWire(
+        WireVarInt62(parameter_.type),
+        WireStringWithVarInt62Length(parameter_.data));
+  }
+  absl::Status SerializeIntoWriter(quiche::QuicheDataWriter& writer) {
+    return quiche::SerializeIntoWriter(
+        writer, WireVarInt62(parameter_.type),
+        WireStringWithVarInt62Length(parameter_.data));
+  }
+
+ private:
+  const StringParameter& parameter_;
+};
+
+// Encoding for integer parameters as described in
+// https://moq-wg.github.io/moq-transport/draft-ietf-moq-transport.html#name-parameters
+struct IntParameter {
+  template <typename Enum, typename Param>
+  IntParameter(Enum type, Param value)
+      : type(static_cast<uint64_t>(type)), value(static_cast<uint64_t>(value)) {
+    static_assert(std::is_enum_v<Enum>);
+    static_assert(std::is_enum_v<Param> || std::is_unsigned_v<Param>);
+  }
+
+  uint64_t type;
+  uint64_t value;
+};
+class WireIntParameter {
+ public:
+  using DataType = IntParameter;
+
+  explicit WireIntParameter(const IntParameter& parameter)
+      : parameter_(parameter) {}
+  size_t GetLengthOnWire() {
+    return quiche::ComputeLengthOnWire(
+        WireVarInt62(parameter_.type),
+        WireVarInt62(NeededVarIntLen(parameter_.value)),
+        WireVarInt62(parameter_.value));
+  }
+  absl::Status SerializeIntoWriter(quiche::QuicheDataWriter& writer) {
+    return quiche::SerializeIntoWriter(
+        writer, WireVarInt62(parameter_.type),
+        WireVarInt62(NeededVarIntLen(parameter_.value)),
+        WireVarInt62(parameter_.value));
+  }
+
+ private:
+  size_t NeededVarIntLen(const uint64_t value) {
+    return static_cast<size_t>(quic::QuicDataWriter::GetVarInt62Len(value));
+  }
+
+  const IntParameter& parameter_;
+};
+
+// Serializes data into buffer using the default allocator.  Invokes QUICHE_BUG
+// on failure.
+template <typename... Ts>
+QuicheBuffer Serialize(Ts... data) {
+  absl::StatusOr<QuicheBuffer> buffer = quiche::SerializeIntoBuffer(
+      quiche::SimpleBufferAllocator::Get(), data...);
+  if (!buffer.ok()) {
+    QUICHE_BUG(moqt_failed_serialization)
+        << "Failed to serialize MoQT frame: " << buffer.status();
+    return QuicheBuffer();
+  }
+  return *std::move(buffer);
 }
 
 }  // namespace
 
-quiche::QuicheBuffer MoqtFramer::SerializeObject(
-    const MoqtObject& message, const absl::string_view payload) {
-  if (message.payload_length.has_value() &&
-      *message.payload_length < payload.length()) {
-    QUICHE_DLOG(INFO) << "payload_size is too small for payload";
+quiche::QuicheBuffer MoqtFramer::SerializeObjectHeader(
+    const MoqtObject& message, bool is_first_in_stream) {
+  if (!message.payload_length.has_value() &&
+      !(message.forwarding_preference == MoqtForwardingPreference::kObject ||
+        message.forwarding_preference == MoqtForwardingPreference::kDatagram)) {
+    QUIC_BUG(quic_bug_serialize_object_input_01)
+        << "Track or Group forwarding preference requires knowing the object "
+           "length in advance";
     return quiche::QuicheBuffer();
   }
-  uint64_t message_type =
-      static_cast<uint64_t>(message.payload_length.has_value()
-                                ? MoqtMessageType::kObjectWithPayloadLength
-                                : MoqtMessageType::kObjectWithoutPayloadLength);
-  size_t buffer_size =
-      NeededVarIntLen(message_type) + NeededVarIntLen(message.track_id) +
-      NeededVarIntLen(message.group_sequence) +
-      NeededVarIntLen(message.object_sequence) +
-      NeededVarIntLen(message.object_send_order) + payload.length();
-  if (message.payload_length.has_value()) {
-    buffer_size += NeededVarIntLen(*message.payload_length);
+  if (!is_first_in_stream) {
+    switch (message.forwarding_preference) {
+      case MoqtForwardingPreference::kTrack:
+        return Serialize(WireVarInt62(message.group_id),
+                         WireVarInt62(message.object_id),
+                         WireVarInt62(*message.payload_length));
+      case MoqtForwardingPreference::kGroup:
+        return Serialize(WireVarInt62(message.object_id),
+                         WireVarInt62(*message.payload_length));
+      default:
+        QUIC_BUG(quic_bug_serialize_object_input_02)
+            << "Object or Datagram forwarding_preference must be first in "
+               "stream";
+        return quiche::QuicheBuffer();
+    }
   }
-  quiche::QuicheBuffer buffer(allocator_, buffer_size);
-  quic::QuicDataWriter writer(buffer.size(), buffer.data());
-  writer.WriteVarInt62(message_type);
-  writer.WriteVarInt62(message.track_id);
-  writer.WriteVarInt62(message.group_sequence);
-  writer.WriteVarInt62(message.object_sequence);
-  writer.WriteVarInt62(message.object_send_order);
-  if (message.payload_length.has_value()) {
-    writer.WriteVarInt62(*message.payload_length);
+  MoqtMessageType message_type =
+      GetMessageTypeForForwardingPreference(message.forwarding_preference);
+  switch (message.forwarding_preference) {
+    case MoqtForwardingPreference::kTrack:
+      return Serialize(
+          WireVarInt62(message_type), WireVarInt62(message.subscribe_id),
+          WireVarInt62(message.track_alias),
+          WireVarInt62(message.object_send_order),
+          WireVarInt62(message.group_id), WireVarInt62(message.object_id),
+          WireVarInt62(*message.payload_length));
+    case MoqtForwardingPreference::kGroup:
+      return Serialize(
+          WireVarInt62(message_type), WireVarInt62(message.subscribe_id),
+          WireVarInt62(message.track_alias), WireVarInt62(message.group_id),
+          WireVarInt62(message.object_send_order),
+          WireVarInt62(message.object_id),
+          WireVarInt62(*message.payload_length));
+    case MoqtForwardingPreference::kObject:
+    case MoqtForwardingPreference::kDatagram:
+      return Serialize(
+          WireVarInt62(message_type), WireVarInt62(message.subscribe_id),
+          WireVarInt62(message.track_alias), WireVarInt62(message.group_id),
+          WireVarInt62(message.object_id),
+          WireVarInt62(message.object_send_order));
   }
-  writer.WriteStringPiece(payload);
-  return buffer;
 }
 
-quiche::QuicheBuffer MoqtFramer::SerializeObjectPayload(
-    const absl::string_view payload) {
-  quiche::QuicheBuffer buffer(allocator_, payload.length());
-  quic::QuicDataWriter writer(buffer.size(), buffer.data());
-  writer.WriteStringPiece(payload);
-  return buffer;
+quiche::QuicheBuffer MoqtFramer::SerializeObjectDatagram(
+    const MoqtObject& message, absl::string_view payload) {
+  return Serialize(
+      WireVarInt62(MoqtMessageType::kObjectDatagram),
+      WireVarInt62(message.subscribe_id), WireVarInt62(message.track_alias),
+      WireVarInt62(message.group_id), WireVarInt62(message.object_id),
+      WireVarInt62(message.object_send_order), WireBytes(payload));
 }
 
 quiche::QuicheBuffer MoqtFramer::SerializeClientSetup(
     const MoqtClientSetup& message) {
-  size_t buffer_size = NeededVarIntLen(MoqtMessageType::kClientSetup) +
-                       NeededVarIntLen(message.supported_versions.size());
-  for (MoqtVersion version : message.supported_versions) {
-    buffer_size += NeededVarIntLen(version);
-  }
-  uint64_t num_params = 0;
+  absl::InlinedVector<IntParameter, 1> int_parameters;
+  absl::InlinedVector<StringParameter, 1> string_parameters;
   if (message.role.has_value()) {
-    num_params++;
-    buffer_size +=
-        ParameterLen(static_cast<uint64_t>(MoqtSetupParameter::kRole), 1);
+    int_parameters.push_back(
+        IntParameter(MoqtSetupParameter::kRole, *message.role));
   }
   if (!using_webtrans_ && message.path.has_value()) {
-    num_params++;
-    buffer_size +=
-        ParameterLen(static_cast<uint64_t>(MoqtSetupParameter::kPath),
-                     message.path->length());
+    string_parameters.push_back(
+        StringParameter(MoqtSetupParameter::kPath, *message.path));
   }
-  buffer_size += NeededVarIntLen(num_params);
-  quiche::QuicheBuffer buffer(allocator_, buffer_size);
-  quic::QuicDataWriter writer(buffer.size(), buffer.data());
-  writer.WriteVarInt62(static_cast<uint64_t>(MoqtMessageType::kClientSetup));
-  writer.WriteVarInt62(message.supported_versions.size());
-  for (MoqtVersion version : message.supported_versions) {
-    writer.WriteVarInt62(static_cast<uint64_t>(version));
-  }
-  writer.WriteVarInt62(num_params);
-  if (message.role.has_value()) {
-    WriteVarIntParameter(writer,
-                         static_cast<uint64_t>(MoqtSetupParameter::kRole),
-                         static_cast<uint64_t>(*message.role));
-  }
-  if (!using_webtrans_ && message.path.has_value()) {
-    WriteStringParameter(writer,
-                         static_cast<uint64_t>(MoqtSetupParameter::kPath),
-                         *message.path);
-  }
-  QUICHE_DCHECK(writer.remaining() == 0);
-  return buffer;
+  return Serialize(
+      WireVarInt62(MoqtMessageType::kClientSetup),
+      WireVarInt62(message.supported_versions.size()),
+      WireSpan<WireVarInt62, MoqtVersion>(message.supported_versions),
+      WireVarInt62(string_parameters.size() + int_parameters.size()),
+      WireSpan<WireIntParameter>(int_parameters),
+      WireSpan<WireStringParameter>(string_parameters));
 }
 
 quiche::QuicheBuffer MoqtFramer::SerializeServerSetup(
     const MoqtServerSetup& message) {
-  size_t buffer_size = NeededVarIntLen(MoqtMessageType::kServerSetup) +
-                       NeededVarIntLen(message.selected_version);
-  uint64_t num_params = 0;
+  absl::InlinedVector<IntParameter, 1> int_parameters;
   if (message.role.has_value()) {
-    num_params++;
-    buffer_size +=
-        ParameterLen(static_cast<uint64_t>(MoqtSetupParameter::kRole), 1);
+    int_parameters.push_back(
+        IntParameter(MoqtSetupParameter::kRole, *message.role));
   }
-  buffer_size += NeededVarIntLen(num_params);
-  quiche::QuicheBuffer buffer(allocator_, buffer_size);
-  quic::QuicDataWriter writer(buffer.size(), buffer.data());
-  writer.WriteVarInt62(static_cast<uint64_t>(MoqtMessageType::kServerSetup));
-  writer.WriteVarInt62(static_cast<uint64_t>(message.selected_version));
-  writer.WriteVarInt62(num_params);
-  if (message.role.has_value()) {
-    WriteVarIntParameter(writer,
-                         static_cast<uint64_t>(MoqtSetupParameter::kRole),
-                         static_cast<uint64_t>(*message.role));
-  }
-  QUICHE_DCHECK(writer.remaining() == 0);
-  return buffer;
+  return Serialize(WireVarInt62(MoqtMessageType::kServerSetup),
+                   WireVarInt62(message.selected_version),
+                   WireVarInt62(int_parameters.size()),
+                   WireSpan<WireIntParameter>(int_parameters));
 }
 
-quiche::QuicheBuffer MoqtFramer::SerializeSubscribeRequest(
-    const MoqtSubscribeRequest& message) {
+quiche::QuicheBuffer MoqtFramer::SerializeSubscribe(
+    const MoqtSubscribe& message) {
   if (!message.start_group.has_value() || !message.start_object.has_value()) {
-    QUIC_LOG(INFO) << "start_group or start_object is missing";
+    QUICHE_BUG(MoqtFramer_start_group_missing)
+        << "start_group or start_object is missing";
     return quiche::QuicheBuffer();
   }
   if (message.end_group.has_value() != message.end_object.has_value()) {
-    QUIC_LOG(INFO) << "end_group and end_object must both be None or both "
-                   << "non-None";
+    QUICHE_BUG(MoqtFramer_end_mismatch)
+        << "end_group and end_object must both be None or both non-None";
     return quiche::QuicheBuffer();
   }
-  size_t buffer_size = NeededVarIntLen(MoqtMessageType::kSubscribeRequest) +
-                       LengthPrefixedStringLength(message.track_namespace) +
-                       LengthPrefixedStringLength(message.track_name) +
-                       LocationLength(message.start_group) +
-                       LocationLength(message.start_object) +
-                       LocationLength(message.end_group) +
-                       LocationLength(message.end_object);
-  uint64_t num_params = 0;
+  absl::InlinedVector<StringParameter, 1> string_params;
   if (message.authorization_info.has_value()) {
-    num_params++;
-    buffer_size += ParameterLen(
-        static_cast<uint64_t>(MoqtTrackRequestParameter::kAuthorizationInfo),
-        message.authorization_info->length());
+    string_params.push_back(
+        StringParameter(MoqtTrackRequestParameter::kAuthorizationInfo,
+                        *message.authorization_info));
   }
-  buffer_size += NeededVarIntLen(num_params);
-  quiche::QuicheBuffer buffer(allocator_, buffer_size);
-  quic::QuicDataWriter writer(buffer.size(), buffer.data());
-  writer.WriteVarInt62(
-      static_cast<uint64_t>(MoqtMessageType::kSubscribeRequest));
-  writer.WriteStringPieceVarInt62(message.track_namespace);
-  writer.WriteStringPieceVarInt62(message.track_name);
-  WriteLocation(writer, message.start_group);
-  WriteLocation(writer, message.start_object);
-  WriteLocation(writer, message.end_group);
-  WriteLocation(writer, message.end_object);
-  writer.WriteVarInt62(num_params);
-  if (message.authorization_info.has_value()) {
-    WriteStringParameter(
-        writer,
-        static_cast<uint64_t>(MoqtTrackRequestParameter::kAuthorizationInfo),
-        *message.authorization_info);
-  }
-  QUICHE_DCHECK(writer.remaining() == 0);
-  return buffer;
+  return Serialize(
+      WireVarInt62(MoqtMessageType::kSubscribe),
+      WireVarInt62(message.subscribe_id), WireVarInt62(message.track_alias),
+      WireStringWithVarInt62Length(message.track_namespace),
+      WireStringWithVarInt62Length(message.track_name),
+      WireLocation(message.start_group), WireLocation(message.start_object),
+      WireLocation(message.end_group), WireLocation(message.end_object),
+      WireVarInt62(string_params.size()),
+      WireSpan<WireStringParameter>(string_params));
 }
 
 quiche::QuicheBuffer MoqtFramer::SerializeSubscribeOk(
     const MoqtSubscribeOk& message) {
-  size_t buffer_size =
-      NeededVarIntLen(static_cast<uint64_t>(MoqtMessageType::kSubscribeOk)) +
-      LengthPrefixedStringLength(message.track_namespace) +
-      LengthPrefixedStringLength(message.track_name) +
-      NeededVarIntLen(message.track_id) +
-      NeededVarIntLen(message.expires.ToMilliseconds());
-  quiche::QuicheBuffer buffer(allocator_, buffer_size);
-  quic::QuicDataWriter writer(buffer.size(), buffer.data());
-  writer.WriteVarInt62(static_cast<uint64_t>(MoqtMessageType::kSubscribeOk));
-  writer.WriteStringPieceVarInt62(message.track_namespace);
-  writer.WriteStringPieceVarInt62(message.track_name);
-  writer.WriteVarInt62(message.track_id);
-  writer.WriteVarInt62(message.expires.ToMilliseconds());
-  QUICHE_DCHECK(writer.remaining() == 0);
-  return buffer;
+  if (message.largest_id.has_value()) {
+    return Serialize(WireVarInt62(MoqtMessageType::kSubscribeOk),
+                     WireVarInt62(message.subscribe_id),
+                     WireVarInt62(message.expires.ToMilliseconds()),
+                     WireUint8(1), WireVarInt62(message.largest_id->group),
+                     WireVarInt62(message.largest_id->object));
+  }
+  return Serialize(WireVarInt62(MoqtMessageType::kSubscribeOk),
+                   WireVarInt62(message.subscribe_id),
+                   WireVarInt62(message.expires.ToMilliseconds()),
+                   WireUint8(0));
 }
 
 quiche::QuicheBuffer MoqtFramer::SerializeSubscribeError(
     const MoqtSubscribeError& message) {
-  size_t buffer_size =
-      NeededVarIntLen(static_cast<uint64_t>(MoqtMessageType::kSubscribeError)) +
-      LengthPrefixedStringLength(message.track_namespace) +
-      LengthPrefixedStringLength(message.track_name) +
-      NeededVarIntLen(message.error_code) +
-      LengthPrefixedStringLength(message.reason_phrase);
-  quiche::QuicheBuffer buffer(allocator_, buffer_size);
-  quic::QuicDataWriter writer(buffer.size(), buffer.data());
-  writer.WriteVarInt62(static_cast<uint64_t>(MoqtMessageType::kSubscribeError));
-  writer.WriteStringPieceVarInt62(message.track_namespace);
-  writer.WriteStringPieceVarInt62(message.track_name);
-  writer.WriteVarInt62(message.error_code);
-  writer.WriteStringPieceVarInt62(message.reason_phrase);
-  QUICHE_DCHECK(writer.remaining() == 0);
-  return buffer;
+  return Serialize(WireVarInt62(MoqtMessageType::kSubscribeError),
+                   WireVarInt62(message.subscribe_id),
+                   WireVarInt62(message.error_code),
+                   WireStringWithVarInt62Length(message.reason_phrase),
+                   WireVarInt62(message.track_alias));
 }
 
 quiche::QuicheBuffer MoqtFramer::SerializeUnsubscribe(
     const MoqtUnsubscribe& message) {
-  size_t buffer_size =
-      NeededVarIntLen(static_cast<uint64_t>(MoqtMessageType::kUnsubscribe)) +
-      LengthPrefixedStringLength(message.track_namespace) +
-      LengthPrefixedStringLength(message.track_name);
-  quiche::QuicheBuffer buffer(allocator_, buffer_size);
-  quic::QuicDataWriter writer(buffer.size(), buffer.data());
-  writer.WriteVarInt62(static_cast<uint64_t>(MoqtMessageType::kUnsubscribe));
-  writer.WriteStringPieceVarInt62(message.track_namespace);
-  writer.WriteStringPieceVarInt62(message.track_name);
-  QUICHE_DCHECK(writer.remaining() == 0);
-  return buffer;
+  return Serialize(WireVarInt62(MoqtMessageType::kUnsubscribe),
+                   WireVarInt62(message.subscribe_id));
 }
 
-quiche::QuicheBuffer MoqtFramer::SerializeSubscribeFin(
-    const MoqtSubscribeFin& message) {
-  size_t buffer_size =
-      NeededVarIntLen(static_cast<uint64_t>(MoqtMessageType::kSubscribeFin)) +
-      LengthPrefixedStringLength(message.track_namespace) +
-      LengthPrefixedStringLength(message.track_name) +
-      NeededVarIntLen(message.final_group) +
-      NeededVarIntLen(message.final_object);
-  quiche::QuicheBuffer buffer(allocator_, buffer_size);
-  quic::QuicDataWriter writer(buffer.size(), buffer.data());
-  writer.WriteVarInt62(static_cast<uint64_t>(MoqtMessageType::kSubscribeFin));
-  writer.WriteStringPieceVarInt62(message.track_namespace);
-  writer.WriteStringPieceVarInt62(message.track_name);
-  writer.WriteVarInt62(message.final_group);
-  writer.WriteVarInt62(message.final_object);
-  QUICHE_DCHECK(writer.remaining() == 0);
-  return buffer;
-}
-
-quiche::QuicheBuffer MoqtFramer::SerializeSubscribeRst(
-    const MoqtSubscribeRst& message) {
-  size_t buffer_size =
-      NeededVarIntLen(static_cast<uint64_t>(MoqtMessageType::kSubscribeRst)) +
-      LengthPrefixedStringLength(message.track_namespace) +
-      LengthPrefixedStringLength(message.track_name) +
-      NeededVarIntLen(message.error_code) +
-      LengthPrefixedStringLength(message.reason_phrase) +
-      NeededVarIntLen(message.final_group) +
-      NeededVarIntLen(message.final_object);
-  quiche::QuicheBuffer buffer(allocator_, buffer_size);
-  quic::QuicDataWriter writer(buffer.size(), buffer.data());
-  writer.WriteVarInt62(static_cast<uint64_t>(MoqtMessageType::kSubscribeRst));
-  writer.WriteStringPieceVarInt62(message.track_namespace);
-  writer.WriteStringPieceVarInt62(message.track_name);
-  writer.WriteVarInt62(message.error_code);
-  writer.WriteStringPieceVarInt62(message.reason_phrase);
-  writer.WriteVarInt62(message.final_group);
-  writer.WriteVarInt62(message.final_object);
-  QUICHE_DCHECK(writer.remaining() == 0);
-  return buffer;
+quiche::QuicheBuffer MoqtFramer::SerializeSubscribeDone(
+    const MoqtSubscribeDone& message) {
+  if (message.final_id.has_value()) {
+    return Serialize(WireVarInt62(MoqtMessageType::kSubscribeDone),
+                     WireVarInt62(message.subscribe_id),
+                     WireVarInt62(message.status_code),
+                     WireStringWithVarInt62Length(message.reason_phrase),
+                     WireUint8(1), WireVarInt62(message.final_id->group),
+                     WireVarInt62(message.final_id->object));
+  }
+  return Serialize(
+      WireVarInt62(MoqtMessageType::kSubscribeDone),
+      WireVarInt62(message.subscribe_id), WireVarInt62(message.status_code),
+      WireStringWithVarInt62Length(message.reason_phrase), WireUint8(0));
 }
 
 quiche::QuicheBuffer MoqtFramer::SerializeAnnounce(
     const MoqtAnnounce& message) {
-  size_t buffer_size =
-      NeededVarIntLen(static_cast<uint64_t>(MoqtMessageType::kAnnounce)) +
-      LengthPrefixedStringLength(message.track_namespace);
-  uint64_t num_params = 0;
+  absl::InlinedVector<StringParameter, 1> string_params;
   if (message.authorization_info.has_value()) {
-    num_params++;
-    buffer_size += ParameterLen(
-        static_cast<uint64_t>(MoqtTrackRequestParameter::kAuthorizationInfo),
-        message.authorization_info->length());
+    string_params.push_back(
+        StringParameter(MoqtTrackRequestParameter::kAuthorizationInfo,
+                        *message.authorization_info));
   }
-  buffer_size += NeededVarIntLen(num_params);
-  quiche::QuicheBuffer buffer(allocator_, buffer_size);
-  quic::QuicDataWriter writer(buffer.size(), buffer.data());
-  writer.WriteVarInt62(static_cast<uint64_t>(MoqtMessageType::kAnnounce));
-  writer.WriteStringPieceVarInt62(message.track_namespace);
-  writer.WriteVarInt62(num_params);
-  if (message.authorization_info.has_value()) {
-    WriteStringParameter(
-        writer,
-        static_cast<uint64_t>(MoqtTrackRequestParameter::kAuthorizationInfo),
-        *message.authorization_info);
-  }
-  QUICHE_DCHECK(writer.remaining() == 0);
-  return buffer;
+  return Serialize(
+      WireVarInt62(static_cast<uint64_t>(MoqtMessageType::kAnnounce)),
+      WireStringWithVarInt62Length(message.track_namespace),
+      WireVarInt62(string_params.size()),
+      WireSpan<WireStringParameter>(string_params));
 }
 
 quiche::QuicheBuffer MoqtFramer::SerializeAnnounceOk(
     const MoqtAnnounceOk& message) {
-  size_t buffer_size =
-      NeededVarIntLen(static_cast<uint64_t>(MoqtMessageType::kAnnounceOk)) +
-      LengthPrefixedStringLength(message.track_namespace);
-  quiche::QuicheBuffer buffer(allocator_, buffer_size);
-  quic::QuicDataWriter writer(buffer.size(), buffer.data());
-  writer.WriteVarInt62(static_cast<uint64_t>(MoqtMessageType::kAnnounceOk));
-  writer.WriteStringPieceVarInt62(message.track_namespace);
-  QUICHE_DCHECK(writer.remaining() == 0);
-  return buffer;
+  return Serialize(WireVarInt62(MoqtMessageType::kAnnounceOk),
+                   WireStringWithVarInt62Length(message.track_namespace));
 }
 
 quiche::QuicheBuffer MoqtFramer::SerializeAnnounceError(
     const MoqtAnnounceError& message) {
-  size_t buffer_size =
-      NeededVarIntLen(static_cast<uint64_t>(MoqtMessageType::kAnnounceError)) +
-      LengthPrefixedStringLength(message.track_namespace) +
-      NeededVarIntLen(message.error_code) +
-      LengthPrefixedStringLength(message.reason_phrase);
-  quiche::QuicheBuffer buffer(allocator_, buffer_size);
-  quic::QuicDataWriter writer(buffer.size(), buffer.data());
-  writer.WriteVarInt62(static_cast<uint64_t>(MoqtMessageType::kAnnounceError));
-  writer.WriteStringPieceVarInt62(message.track_namespace);
-  writer.WriteVarInt62(message.error_code);
-  writer.WriteStringPieceVarInt62(message.reason_phrase);
-  QUICHE_DCHECK(writer.remaining() == 0);
-  return buffer;
+  return Serialize(WireVarInt62(MoqtMessageType::kAnnounceError),
+                   WireStringWithVarInt62Length(message.track_namespace),
+                   WireVarInt62(message.error_code),
+                   WireStringWithVarInt62Length(message.reason_phrase));
 }
 
 quiche::QuicheBuffer MoqtFramer::SerializeUnannounce(
     const MoqtUnannounce& message) {
-  size_t buffer_size =
-      NeededVarIntLen(static_cast<uint64_t>(MoqtMessageType::kUnannounce)) +
-      LengthPrefixedStringLength(message.track_namespace);
-  quiche::QuicheBuffer buffer(allocator_, buffer_size);
-  quic::QuicDataWriter writer(buffer.size(), buffer.data());
-  writer.WriteVarInt62(static_cast<uint64_t>(MoqtMessageType::kUnannounce));
-  writer.WriteStringPieceVarInt62(message.track_namespace);
-  QUICHE_DCHECK(writer.remaining() == 0);
-  return buffer;
+  return Serialize(WireVarInt62(MoqtMessageType::kUnannounce),
+                   WireStringWithVarInt62Length(message.track_namespace));
 }
 
 quiche::QuicheBuffer MoqtFramer::SerializeGoAway(const MoqtGoAway& message) {
-  size_t buffer_size =
-      NeededVarIntLen(static_cast<uint64_t>(MoqtMessageType::kGoAway)) +
-      LengthPrefixedStringLength(message.new_session_uri);
-  quiche::QuicheBuffer buffer(allocator_, buffer_size);
-  quic::QuicDataWriter writer(buffer.size(), buffer.data());
-  writer.WriteVarInt62(static_cast<uint64_t>(MoqtMessageType::kGoAway));
-  writer.WriteStringPieceVarInt62(message.new_session_uri);
-  QUICHE_DCHECK(writer.remaining() == 0);
-  return buffer;
+  return Serialize(WireVarInt62(MoqtMessageType::kGoAway),
+                   WireStringWithVarInt62Length(message.new_session_uri));
 }
 
 }  // namespace moqt

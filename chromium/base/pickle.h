@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -18,7 +19,6 @@
 #include "base/memory/raw_ptr_exclusion.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_piece.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
 
@@ -59,7 +59,7 @@ class BASE_EXPORT PickleIterator {
   [[nodiscard]] bool ReadData(const char** data, size_t* length);
 
   // Similar, but using base::span for convenience.
-  [[nodiscard]] absl::optional<base::span<const uint8_t>> ReadData();
+  [[nodiscard]] std::optional<base::span<const uint8_t>> ReadData();
 
   // A pointer to the data will be placed in |*data|. The caller specifies the
   // number of bytes to read, and ReadBytes will validate this length. The
@@ -220,8 +220,9 @@ class BASE_EXPORT Pickle {
   void WriteString16(const StringPiece16& value);
   // "Data" is a blob with a length. When you read it out you will be given the
   // length. See also WriteBytes.
-  // TODO(crbug.com/1490484): Migrate callers to the string_view version.
+  // TODO(crbug.com/1490484): Migrate callers to the span versions.
   void WriteData(const char* data, size_t length);
+  void WriteData(span<const uint8_t> data);
   void WriteData(std::string_view data);
   // "Bytes" is a blob with no length. The caller must specify the length both
   // when reading and writing. It is normally used to serialize PoD types of a
@@ -272,6 +273,15 @@ class BASE_EXPORT Pickle {
     return header_ ? header_->payload_size : 0;
   }
 
+  base::span<const uint8_t> payload_bytes() const {
+    return base::as_bytes(base::make_span(payload(), payload_size()));
+  }
+
+ protected:
+  // Returns size of the header, which can have default value, set by user or
+  // calculated by passed raw data.
+  size_t header_size() const { return header_size_; }
+
   const char* payload() const {
     return reinterpret_cast<const char*>(header_) + header_size_;
   }
@@ -282,11 +292,6 @@ class BASE_EXPORT Pickle {
     // This object may be invalid.
     return header_ ? payload() + payload_size() : NULL;
   }
-
- protected:
-  // Returns size of the header, which can have default value, set by user or
-  // calculated by passed raw data.
-  size_t header_size() const { return header_size_; }
 
   char* mutable_payload() {
     return reinterpret_cast<char*>(header_) + header_size_;

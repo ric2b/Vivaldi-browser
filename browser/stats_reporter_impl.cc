@@ -247,7 +247,7 @@ std::pair<int, int> GetYearAndISOWeekNumber(base::Time time) {
   return std::make_pair(year, week_of_year);
 }
 
-base::Time ValidateTime(absl::optional<base::Time> time,
+base::Time ValidateTime(std::optional<base::Time> time,
                         base::Time now,
                         base::TimeDelta delay) {
   if (!time || *time > now + delay) {
@@ -257,7 +257,7 @@ base::Time ValidateTime(absl::optional<base::Time> time,
   }
 }
 
-absl::optional<StatsReporterImpl::FileAndContent> LockAndReadFile(
+std::optional<StatsReporterImpl::FileAndContent> LockAndReadFile(
     base::FilePath path) {
   // This should only return a fail state (nullopt) if we fail to get a lock
   // as that indicates there is another lock holder, and a ping is probably
@@ -276,7 +276,7 @@ absl::optional<StatsReporterImpl::FileAndContent> LockAndReadFile(
     return result;
   }
   if (result.file.Lock(base::File::LockMode::kExclusive) != base::File::FILE_OK)
-    return absl::nullopt;
+    return std::nullopt;
 
   int64_t length = result.file.GetLength();
   result.content.resize(length);
@@ -355,7 +355,7 @@ bool StatsReporterImpl::GeneratePingRequest(
     const std::string& user_agent,
     const std::string& client_hints,
     ReportingData& local_state_reporting_data,
-    absl::optional<base::Value>& os_profile_reporting_data_json,
+    std::optional<base::Value>& os_profile_reporting_data_json,
     std::string& request_url,
     std::string& body,
     base::TimeDelta& next_reporting_time_interval) {
@@ -396,7 +396,7 @@ bool StatsReporterImpl::GeneratePingRequest(
             os_profile_reporting_data_json->GetDict().Find(kNextYearlyPingKey)),
         now, kMaxYearlyPingDelay);
 
-    absl::optional<base::Time> installation_time = base::ValueToTime(
+    std::optional<base::Time> installation_time = base::ValueToTime(
         os_profile_reporting_data_json->GetDict().Find(kInstallationTimeKey));
     if (installation_time)
       os_profile_reporting_data.installation_time = *installation_time;
@@ -407,7 +407,7 @@ bool StatsReporterImpl::GeneratePingRequest(
                                                     legacy_user_id);
     }
 
-    absl::optional<int> pings_since_last_month =
+    std::optional<int> pings_since_last_month =
         os_profile_reporting_data_json->GetDict().FindInt(
             kPingsSinceLastMonthKey);
     if (pings_since_last_month)
@@ -703,7 +703,7 @@ bool StatsReporterImpl::GeneratePingRequest(
 }
 
 void StatsReporterImpl::OnOSStatFileRead(
-    absl::optional<FileAndContent> file_and_content) {
+    std::optional<FileAndContent> file_and_content) {
   if (!file_and_content) {
     ScheduleNextReporting(kLockDelay, false);
     return;
@@ -755,7 +755,7 @@ void StatsReporterImpl::DoReporting(FileHolder os_profile_reporting_data_file,
   local_state_reporting_data.pings_since_last_month =
       prefs->GetInteger(vivaldiprefs::kVivaldiStatsPingsSinceLastMonth);
 
-  absl::optional<base::Value> os_profile_reporting_data_json;
+  std::optional<base::Value> os_profile_reporting_data_json;
   if (!os_profile_reporting_data.empty()) {
     base::StringPiece fixed_os_profile_reporting_data(
         os_profile_reporting_data);
@@ -817,7 +817,7 @@ void StatsReporterImpl::DoReporting(FileHolder os_profile_reporting_data_file,
 void StatsReporterImpl::OnURLLoadComplete(
     FileHolder os_profile_reporting_data_file,
     ReportingData local_state_reporting_data,
-    absl::optional<base::Value> os_profile_reporting_data_json,
+    std::optional<base::Value> os_profile_reporting_data_json,
     base::TimeDelta next_reporting_time_interval_,
     std::unique_ptr<std::string> response_body) {
   bool success = url_loader_->NetError() == net::OK;

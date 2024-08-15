@@ -7,6 +7,7 @@ vec3 tint_select(vec3 param_0, vec3 param_1, bvec3 param_2) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   vec3 inner;
+  uint pad;
 } prevent_dce;
 
 void select_ebfea2() {
@@ -32,6 +33,7 @@ void main() {
 }
 #version 310 es
 precision highp float;
+precision highp int;
 
 vec3 tint_select(vec3 param_0, vec3 param_1, bvec3 param_2) {
     return vec3(param_2[0] ? param_1[0] : param_0[0], param_2[1] ? param_1[1] : param_0[1], param_2[2] ? param_1[2] : param_0[2]);
@@ -40,6 +42,7 @@ vec3 tint_select(vec3 param_0, vec3 param_1, bvec3 param_2) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   vec3 inner;
+  uint pad;
 } prevent_dce;
 
 void select_ebfea2() {
@@ -67,6 +70,7 @@ vec3 tint_select(vec3 param_0, vec3 param_1, bvec3 param_2) {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   vec3 inner;
+  uint pad;
 } prevent_dce;
 
 void select_ebfea2() {

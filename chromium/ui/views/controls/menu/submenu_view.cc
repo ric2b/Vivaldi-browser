@@ -9,10 +9,10 @@
 #include <set>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/ranges/algorithm.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -54,7 +54,7 @@ std::vector<MIV*> GetMenuItemsFromChildren(const View::Views& children) {
   base::ranges::transform(
       children, std::back_inserter(menu_items),
       static_cast<MIV* (*)(V*)>(&AsViewClass<MenuItemView>));
-  base::EraseIf(menu_items, [](MIV* item) {
+  std::erase_if(menu_items, [](MIV* item) {
     return !item || IsViewClass<EmptyMenuMenuItem>(item);
   });
   return menu_items;
@@ -195,7 +195,7 @@ void SubmenuView::ChildPreferredSizeChanged(View* child) {
   }
 }
 
-void SubmenuView::Layout() {
+void SubmenuView::Layout(PassKey) {
   // We're in a ScrollView, and need to set our width/height ourselves.
   if (!parent()) {
     return;
@@ -468,15 +468,15 @@ size_t SubmenuView::GetRowCount() {
   return GetMenuItems().size();
 }
 
-absl::optional<size_t> SubmenuView::GetSelectedRow() {
+std::optional<size_t> SubmenuView::GetSelectedRow() {
   const auto menu_items = GetMenuItems();
   const auto i = base::ranges::find_if(menu_items, &MenuItemView::IsSelected);
-  return (i == menu_items.cend()) ? absl::nullopt
-                                  : absl::make_optional(static_cast<size_t>(
+  return (i == menu_items.cend()) ? std::nullopt
+                                  : std::make_optional(static_cast<size_t>(
                                         std::distance(menu_items.cbegin(), i)));
 }
 
-void SubmenuView::SetSelectedRow(absl::optional<size_t> row) {
+void SubmenuView::SetSelectedRow(std::optional<size_t> row) {
   parent_menu_item_->GetMenuController()->SetSelection(
       GetMenuItemAt(row.value()), MenuController::SELECTION_DEFAULT);
 }
@@ -706,7 +706,7 @@ bool SubmenuView::OnScroll(float dx, float dy) {
   return false;
 }
 
-void SubmenuView::SetBorderColorId(absl::optional<ui::ColorId> color_id) {
+void SubmenuView::SetBorderColorId(std::optional<ui::ColorId> color_id) {
   if (scroll_view_container_) {
     scroll_view_container_->SetBorderColorId(color_id);
   }

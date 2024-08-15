@@ -527,7 +527,7 @@ EIGEN_STRONG_INLINE Packet4i pnegate(const Packet4i& a) {
 
 template <>
 EIGEN_STRONG_INLINE Packet16b pnegate(const Packet16b& a) {
-  return psub(pset1<Packet16b>(false), a);
+  return a;
 }
 
 template <>
@@ -677,18 +677,6 @@ template <>
 EIGEN_DEVICE_FUNC inline Packet2d pselect(const Packet2d& mask, const Packet2d& a, const Packet2d& b) {
   return _mm_blendv_pd(b, a, mask);
 }
-
-template <>
-EIGEN_DEVICE_FUNC inline Packet16b pselect(const Packet16b& mask, const Packet16b& a, const Packet16b& b) {
-  return _mm_blendv_epi8(b, a, mask);
-}
-#else
-template <>
-EIGEN_DEVICE_FUNC inline Packet16b pselect(const Packet16b& mask, const Packet16b& a, const Packet16b& b) {
-  Packet16b a_part = _mm_and_si128(mask, a);
-  Packet16b b_part = _mm_andnot_si128(mask, b);
-  return _mm_or_si128(a_part, b_part);
-}
 #endif
 
 template <>
@@ -696,8 +684,8 @@ EIGEN_STRONG_INLINE Packet4i ptrue<Packet4i>(const Packet4i& a) {
   return _mm_cmpeq_epi32(a, a);
 }
 template <>
-EIGEN_STRONG_INLINE Packet16b ptrue<Packet16b>(const Packet16b& a) {
-  return _mm_cmpeq_epi8(a, a);
+EIGEN_STRONG_INLINE Packet16b ptrue<Packet16b>(const Packet16b& /*a*/) {
+  return pset1<Packet16b>(true);
 }
 template <>
 EIGEN_STRONG_INLINE Packet4f ptrue<Packet4f>(const Packet4f& a) {
@@ -838,7 +826,9 @@ EIGEN_STRONG_INLINE Packet4ui pcmp_eq(const Packet4ui& a, const Packet4ui& b) {
 }
 template <>
 EIGEN_STRONG_INLINE Packet16b pcmp_eq(const Packet16b& a, const Packet16b& b) {
-  return _mm_cmpeq_epi8(a, b);
+  // Mask out invalid bool bits to avoid UB.
+  const Packet16b kBoolMask = pset1<Packet16b>(true);
+  return _mm_and_si128(_mm_cmpeq_epi8(a, b), kBoolMask);
 }
 template <>
 EIGEN_STRONG_INLINE Packet4i pcmp_le(const Packet4i& a, const Packet4i& b) {
@@ -1377,7 +1367,7 @@ EIGEN_STRONG_INLINE void pstoreu<uint32_t>(uint32_t* to, const Packet4ui& from) 
 }
 template <>
 EIGEN_STRONG_INLINE void pstoreu<bool>(bool* to, const Packet16b& from) {
-  EIGEN_DEBUG_ALIGNED_STORE _mm_storeu_si128(reinterpret_cast<__m128i*>(to), from);
+  EIGEN_DEBUG_UNALIGNED_STORE _mm_storeu_si128(reinterpret_cast<__m128i*>(to), from);
 }
 
 template <typename Scalar, typename Packet>

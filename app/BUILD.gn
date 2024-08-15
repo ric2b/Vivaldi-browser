@@ -204,6 +204,7 @@ grit("vivaldi_unscaled_native_resources") {
       "is_oem_mercedes_build=$is_vivaldi_mercedes",
       "is_oem_volvo_build=$is_vivaldi_volvo",
       "is_oem_gas_build=$is_vivaldi_gas",
+      "is_oem_mahindra_build=$is_vivaldi_mahindra",
     ]
   }
   output_dir = "$root_gen_dir/vivaldi"

@@ -4,6 +4,8 @@
 
 #include "ash/wm/desks/templates/admin_template_launch_tracker.h"
 
+#include <vector>
+
 #include "ash/public/cpp/saved_desk_delegate.h"
 #include "ash/root_window_settings.h"
 #include "ash/shell.h"
@@ -47,11 +49,11 @@ void UpdateWindowBounds(DeskTemplate& saved_desk,
 
   for (auto& [app_id, launch_list] : app_id_to_launch_list) {
     for (auto& [window_id, app_restore_data] : base::Reversed(launch_list)) {
-      CHECK(app_restore_data->current_bounds.has_value());
+      CHECK(app_restore_data->window_info.current_bounds.has_value());
 
       // The bounds as found in the template are in display-local
       // coordinates. We must first translate them into screen coordinates.
-      gfx::Rect& bounds = *app_restore_data->current_bounds;
+      gfx::Rect& bounds = *app_restore_data->window_info.current_bounds;
       bounds.Offset(work_area.origin().x(), work_area.origin().y());
 
       AdjustAdminTemplateWindowBounds(work_area, existing_bounds, bounds);
@@ -226,7 +228,7 @@ bool DoesAllWindowsHaveBounds(const DeskTemplate& admin_template) {
       admin_template.desk_restore_data()->app_id_to_launch_list();
   for (auto& [app_id, launch_list] : app_id_to_launch_list) {
     for (auto& [window_id, app_restore_data] : launch_list) {
-      if (!app_restore_data->current_bounds.has_value()) {
+      if (!app_restore_data->window_info.current_bounds.has_value()) {
         return false;
       }
     }
@@ -254,10 +256,10 @@ bool MergeAdminTemplateWindowUpdate(DeskTemplate& admin_template,
     restore_data->display_id = *update.display_id;
   }
   if (update.bounds) {
-    restore_data->current_bounds = *update.bounds;
+    restore_data->window_info.current_bounds = *update.bounds;
   }
   if (update.activation_index) {
-    restore_data->activation_index = *update.activation_index;
+    restore_data->window_info.activation_index = *update.activation_index;
   }
 
   return true;
@@ -424,7 +426,8 @@ void AdminTemplateLaunchTracker::LaunchTemplate(SavedDeskDelegate* delegate,
 
     for (auto& [app_id, launch_list] : app_id_to_launch_list) {
       for (auto& [window_id, app_restore_data] : launch_list) {
-        app_restore_data->current_bounds = all_bounds[--window_count];
+        app_restore_data->window_info.current_bounds =
+            all_bounds[--window_count];
         app_restore_data->display_id = default_display_id;
         root_to_rwids[default_root].push_back(
             {.template_rwid = mapping[window_id], .unique_rwid = window_id});
@@ -492,7 +495,7 @@ void AdminTemplateLaunchTracker::OnObserverCreated(
 
 void AdminTemplateLaunchTracker::OnObserverDone(
     base::CheckedObserver* observer) {
-  base::EraseIf(window_observers_,
+  std::erase_if(window_observers_,
                 [&](const auto& ptr) { return ptr.get() == observer; });
 }
 

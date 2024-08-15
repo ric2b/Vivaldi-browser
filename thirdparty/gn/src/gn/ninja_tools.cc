@@ -15,8 +15,9 @@
 
 namespace {
 
-base::CommandLine CreateNinjaToolCommandLine(const base::FilePath& ninja_executable,
-                                             const std::string& tool) {
+base::CommandLine CreateNinjaToolCommandLine(
+    const base::FilePath& ninja_executable,
+    const std::string& tool) {
   base::CommandLine cmdline(ninja_executable);
   cmdline.SetParseSwitches(false);
   cmdline.AppendArg("-t");

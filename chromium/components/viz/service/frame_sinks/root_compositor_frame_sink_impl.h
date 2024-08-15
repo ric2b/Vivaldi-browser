@@ -6,6 +6,7 @@
 #define COMPONENTS_VIZ_SERVICE_FRAME_SINKS_ROOT_COMPOSITOR_FRAME_SINK_IMPL_H_
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "base/functional/callback_helpers.h"
@@ -17,6 +18,7 @@
 #include "components/viz/service/display/display_client.h"
 #include "components/viz/service/display/frame_rate_decider.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
+#include "components/viz/service/frame_sinks/eviction_handler.h"
 #include "components/viz/service/viz_service_export.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
@@ -26,7 +28,6 @@
 #include "services/viz/privileged/mojom/compositing/display_private.mojom.h"
 #include "services/viz/privileged/mojom/compositing/frame_sink_manager.mojom.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/ozone_buildflags.h"
 #include "ui/gfx/ca_layer_params.h"
 
@@ -100,7 +101,7 @@ class VIZ_SERVICE_EXPORT RootCompositorFrameSinkImpl
   void SetStandaloneBeginFrameObserver(
       mojo::PendingRemote<mojom::BeginFrameObserver> observer) override;
   void SetMaxVrrInterval(
-      absl::optional<base::TimeDelta> max_vrr_interval) override;
+      std::optional<base::TimeDelta> max_vrr_interval) override;
 
   // mojom::CompositorFrameSink:
   void SetNeedsBeginFrame(bool needs_begin_frame) override;
@@ -110,7 +111,7 @@ class VIZ_SERVICE_EXPORT RootCompositorFrameSinkImpl
   void SubmitCompositorFrame(
       const LocalSurfaceId& local_surface_id,
       CompositorFrame frame,
-      absl::optional<HitTestRegionList> hit_test_region_list,
+      std::optional<HitTestRegionList> hit_test_region_list,
       uint64_t submit_time) override;
   void DidNotProduceFrame(const BeginFrameAck& begin_frame_ack) override;
   void DidAllocateSharedBitmap(base::ReadOnlySharedMemoryRegion region,
@@ -119,7 +120,7 @@ class VIZ_SERVICE_EXPORT RootCompositorFrameSinkImpl
   void SubmitCompositorFrameSync(
       const LocalSurfaceId& local_surface_id,
       CompositorFrame frame,
-      absl::optional<HitTestRegionList> hit_test_region_list,
+      std::optional<HitTestRegionList> hit_test_region_list,
       uint64_t submit_time,
       SubmitCompositorFrameSyncCallback callback) override;
   void InitializeCompositorFrameSinkType(
@@ -205,10 +206,8 @@ class VIZ_SERVICE_EXPORT RootCompositorFrameSinkImpl
   base::TimeDelta preferred_frame_interval_ =
       FrameRateDecider::UnspecifiedFrameInterval();
 
-  // If we evict the root surface, we want to push an empty compositor frame to
-  // it first to unref its resources. This requires a draw and swap to complete
-  // to actually unref.
-  LocalSurfaceId to_evict_on_next_draw_and_swap_ = LocalSurfaceId();
+  // See comments on `EvictionHandler`.
+  EvictionHandler eviction_handler_;
 
 #if BUILDFLAG(IS_LINUX) && BUILDFLAG(IS_OZONE_X11)
   gfx::Size last_swap_pixel_size_;
@@ -224,7 +223,7 @@ class VIZ_SERVICE_EXPORT RootCompositorFrameSinkImpl
 
 #if BUILDFLAG(IS_ANDROID)
   // Let client control whether it wants `DidCompleteSwapWithSize`.
-  bool enable_swap_competion_callback_ = false;
+  bool enable_swap_completion_callback_ = false;
 #endif
 };
 

@@ -11,7 +11,6 @@
 #include "base/uuid.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/sync/base/model_type.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace file_sync {
 // The synced file store keeps track of files that must be made available for
@@ -25,7 +24,7 @@ namespace file_sync {
 class SyncedFileStore : public KeyedService {
  public:
   using GetFileCallback = base::OnceCallback<void(
-      absl::optional<base::span<const uint8_t>> content)>;
+      std::optional<base::span<const uint8_t>> content)>;
 
   ~SyncedFileStore() override;
 

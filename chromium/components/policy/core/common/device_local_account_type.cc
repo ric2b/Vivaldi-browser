@@ -31,11 +31,11 @@ constexpr char kDeviceLocalAccountDomainSuffix[] = ".device-local.localhost";
 
 std::string GenerateDeviceLocalAccountUserId(std::string_view account_id,
                                              DeviceLocalAccountType type) {
-  const auto* it = kDomainPrefixMap.find(type);
+  const auto it = kDomainPrefixMap.find(type);
   CHECK(it != kDomainPrefixMap.end());
   return gaia::CanonicalizeEmail(
-      base::StrCat({base::HexEncode(account_id.data(), account_id.size()), "@",
-                    it->second, kDeviceLocalAccountDomainSuffix}));
+      base::StrCat({base::HexEncode(account_id), "@", it->second,
+                    kDeviceLocalAccountDomainSuffix}));
 }
 
 base::expected<DeviceLocalAccountType, GetDeviceLocalAccountTypeError>

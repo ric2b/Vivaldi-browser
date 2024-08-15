@@ -14,6 +14,8 @@
 
 #include "src/utils/constants.h"
 
+#include <cstdint>
+
 namespace libgav1 {
 
 const uint8_t k4x4WidthLog2[kMaxBlockSizes] = {0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2,
@@ -870,5 +872,9 @@ const int16_t kDirectionalIntraPredictorDerivative[44] = {
 
 const uint8_t kDeblockFilterLevelIndex[kMaxPlanes][kNumLoopFilterTypes] = {
     {0, 1}, {2, 2}, {3, 3}};
+
+const uint16_t kBlockWeight[kMaxBlockSizes] = {
+    1,  2,  4,  2,  4,   8,  16,  4,   8,   16,  32,
+    64, 16, 32, 64, 128, 64, 128, 256, 512, 512, 1024};
 
 }  // namespace libgav1

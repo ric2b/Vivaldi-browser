@@ -1026,6 +1026,13 @@ cc_library(
         "//mediapipe/framework:disable_rtti_and_exceptions": [
             "MEDIAPIPE_HAS_RTTI=0",
         ],
+        # Excludes AHardwareBuffer features from vendor processes
+        "//mediapipe/framework:android_no_jni": ["MEDIAPIPE_NO_JNI"],
+        # unless they're linked against nativewindow.
+        "//mediapipe/framework/formats:android_link_native_window": [
+            "MEDIAPIPE_ANDROID_LINK_NATIVE_WINDOW",
+            "MEDIAPIPE_NO_JNI",
+        ],
     }),
     visibility = [
         "//fitbit/research/sensing/mobisense:__subpackages__",
@@ -1782,5 +1789,30 @@ cc_test(
         "//mediapipe/framework/tool:sink",
         "//mediapipe/framework/tool/testdata:dub_quad_test_subgraph",
         "@com_google_absl//absl/strings:str_format",
+    ],
+)
+
+cc_library(
+    name = "memory_manager",
+    hdrs = ["memory_manager.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//mediapipe/framework:port",
+    ] + select({
+        "//mediapipe:android": [
+            "//mediapipe/framework/formats:hardware_buffer_pool",
+            "//mediapipe/gpu:multi_pool",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
+    name = "memory_manager_service",
+    hdrs = ["memory_manager_service.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":graph_service",
+        ":memory_manager",
     ],
 )

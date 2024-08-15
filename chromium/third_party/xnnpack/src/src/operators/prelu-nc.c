@@ -92,8 +92,12 @@ static enum xnn_status create_prelu_nc(
   pack_prelu_w(channels, negative_slope, weights_ptr);
 
   if (use_weights_cache(prelu_op)) {
-    prelu_op->packed_weights.offset = xnn_get_or_insert_weights_cache(
-        prelu_op->weights_cache, weights_ptr, aligned_total_weights_size);
+    struct xnn_weights_cache_look_up_key cache_key;
+    cache_key.seed = murmur_hash3(weights_ptr, aligned_total_weights_size, /*seed=*/7);
+    cache_key.kernel = negative_slope;
+    cache_key.bias = NULL;
+    prelu_op->packed_weights.offset = xnn_look_up_or_insert_weights_cache(
+        prelu_op->weights_cache, &cache_key, weights_ptr, aligned_total_weights_size);
   }
 
   prelu_op->channels = channels;
@@ -204,12 +208,6 @@ static enum xnn_status reshape_prelu_nc(
     return xnn_status_success;
   }
 
-  if (prelu_op->weights_cache != NULL && !xnn_weights_cache_is_finalized(prelu_op->weights_cache)) {
-    xnn_log_error("failed to reshape %s operator: weights cache is not finalized",
-      xnn_operator_type_to_string(expected_operator_type));
-    return xnn_status_invalid_state;
-  }
-
   const struct xnn_prelu_config* prelu = prelu_op->prelu_config;
 
   const size_t channels = prelu_op->channels;
@@ -279,6 +277,12 @@ static enum xnn_status setup_prelu_nc(
       xnn_operator_type_to_string(expected_operator_type),
       xnn_operator_type_to_string(prelu_op->type));
     return xnn_status_invalid_parameter;
+  }
+
+  if (prelu_op->weights_cache != NULL && !xnn_weights_cache_is_finalized(prelu_op->weights_cache)) {
+    xnn_log_error("failed to setup %s operator: weights cache is not finalized",
+      xnn_operator_type_to_string(expected_operator_type));
+    return xnn_status_invalid_state;
   }
 
   switch (prelu_op->state) {

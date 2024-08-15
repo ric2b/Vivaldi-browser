@@ -15,12 +15,14 @@
 //! in order to define the interfaces in this crate's various modules.
 
 use array_view::ArrayView;
+use crypto_provider::{CryptoProvider, CryptoRng};
+use crypto_provider_default::CryptoProviderImpl;
 use handle_map::HandleNotPresentError;
-use lock_adapter::std::RwLock;
+use lock_adapter::std::{RwLock, RwLockWriteGuard};
 use lock_adapter::RwLock as _;
 use std::string::String;
 
-const DEFAULT_MAX_HANDLES: u32 = u32::MAX - 1;
+pub(crate) const DEFAULT_MAX_HANDLES: u32 = u32::MAX - 1;
 
 /// Configuration for top-level constants to be used
 /// by the rest of the FFI which are independent of
@@ -61,6 +63,18 @@ pub struct CommonConfig {
     /// value will be set to `u32::MAX - 1`, which is the upper-bound
     /// on this value.
     max_num_deserialized_v1_advertisements: u32,
+
+    /// The maximum number of v0 advertisement builders
+    /// which may be active at any one time. By default, this
+    /// value will be set to `u32::MAX - 1`, which is the upper-bound
+    /// on this value.
+    max_num_v0_advertisement_builders: u32,
+
+    /// The maximum number of v1 advertisement builders
+    /// which may be active at any one time. By default, this
+    /// value will be set to `u32::MAX - 1`, which is the upper-bound
+    /// on this value.
+    max_num_v1_advertisement_builders: u32,
 }
 
 impl Default for CommonConfig {
@@ -77,6 +91,8 @@ impl CommonConfig {
             max_num_credential_books: DEFAULT_MAX_HANDLES,
             max_num_deserialized_v0_advertisements: DEFAULT_MAX_HANDLES,
             max_num_deserialized_v1_advertisements: DEFAULT_MAX_HANDLES,
+            max_num_v0_advertisement_builders: DEFAULT_MAX_HANDLES,
+            max_num_v1_advertisement_builders: DEFAULT_MAX_HANDLES,
         }
     }
     #[cfg(feature = "std")]
@@ -110,6 +126,12 @@ impl CommonConfig {
     pub(crate) fn max_num_deserialized_v1_advertisements(&self) -> u32 {
         self.max_num_deserialized_v1_advertisements
     }
+    pub(crate) fn max_num_v0_advertisement_builders(&self) -> u32 {
+        self.max_num_v0_advertisement_builders
+    }
+    pub(crate) fn max_num_v1_advertisement_builders(&self) -> u32 {
+        self.max_num_v1_advertisement_builders
+    }
     pub(crate) fn set_num_shards(&mut self, num_shards: u8) {
         self.num_shards = num_shards
     }
@@ -139,7 +161,7 @@ impl CommonConfig {
             DEFAULT_MAX_HANDLES.min(max_num_deserialized_v0_advertisements)
     }
 
-    /// Sets the maximum number of active handles to deserialized v0
+    /// Sets the maximum number of active handles to deserialized v1
     /// advertisements which may be active at any one time.
     /// Max value: `u32::MAX - 1`.
     pub fn set_max_num_deserialized_v1_advertisements(
@@ -148,6 +170,26 @@ impl CommonConfig {
     ) {
         self.max_num_deserialized_v1_advertisements =
             DEFAULT_MAX_HANDLES.min(max_num_deserialized_v1_advertisements)
+    }
+    /// Sets the maximum number of active handles to v0 advertisement
+    /// builders which may be active at any one time.
+    /// Max value: `u32::MAX - 1`.
+    pub fn set_max_num_v0_advertisement_builders(
+        &mut self,
+        max_num_v0_advertisement_builders: u32,
+    ) {
+        self.max_num_v0_advertisement_builders =
+            DEFAULT_MAX_HANDLES.min(max_num_v0_advertisement_builders)
+    }
+    /// Sets the maximum number of active handles to v1 advertisement
+    /// builders which may be active at any one time.
+    /// Max value: `u32::MAX - 1`.
+    pub fn set_max_num_v1_advertisement_builders(
+        &mut self,
+        max_num_v1_advertisement_builders: u32,
+    ) {
+        self.max_num_v1_advertisement_builders =
+            DEFAULT_MAX_HANDLES.min(max_num_v1_advertisement_builders)
     }
 }
 
@@ -167,6 +209,12 @@ pub(crate) fn global_max_num_deserialized_v0_advertisements() -> u32 {
 }
 pub(crate) fn global_max_num_deserialized_v1_advertisements() -> u32 {
     COMMON_CONFIG.read().max_num_deserialized_v1_advertisements()
+}
+pub(crate) fn global_max_num_v0_advertisement_builders() -> u32 {
+    COMMON_CONFIG.read().max_num_v0_advertisement_builders()
+}
+pub(crate) fn global_max_num_v1_advertisement_builders() -> u32 {
+    COMMON_CONFIG.read().max_num_v1_advertisement_builders()
 }
 
 /// Sets an override to the number of shards to employ in the NP FFI's
@@ -241,6 +289,31 @@ pub fn global_config_set_max_num_deserialized_v1_advertisements(
     config.set_max_num_deserialized_v1_advertisements(max_num_deserialized_v1_advertisements);
 }
 
+/// Sets the maximum number of active handles to v0 advertisement
+/// builders which may be active at any one time.
+/// Max value: `u32::MAX - 1`.
+///
+/// Setting this value will have no effect if the handle-maps for the
+/// API have already begun being used by the client code, and any
+/// values set will take effect upon the first usage of any API
+/// call which references or returns a v0 advertisement builder.
+pub fn global_config_set_max_num_v0_advertisement_builders(max_num_v0_advertisement_builders: u32) {
+    let mut config = COMMON_CONFIG.write();
+    config.set_max_num_v0_advertisement_builders(max_num_v0_advertisement_builders);
+}
+
+/// Sets the maximum number of active handles to v1 advertisement
+/// builders which may be active at any one time.
+/// Max value: `u32::MAX - 1`.
+///
+/// Setting this value will have no effect if the handle-maps for the
+/// API have already begun being used by the client code, and any
+/// values set will take effect upon the first usage of any API
+/// call which references or returns a v1 advertisement builder.
+pub fn global_config_set_max_num_v1_advertisement_builders(max_num_v1_advertisement_builders: u32) {
+    let mut config = COMMON_CONFIG.write();
+    config.set_max_num_v1_advertisement_builders(max_num_v1_advertisement_builders);
+}
 // API surfaces:
 
 /// A result-type enum which tells the caller whether/not a deallocation
@@ -271,8 +344,12 @@ pub struct RawAdvertisementPayload {
 
 impl RawAdvertisementPayload {
     /// Yields a slice of the bytes in this raw advertisement payload.
+    #[allow(clippy::unwrap_used)]
     pub fn as_slice(&self) -> &[u8] {
-        self.bytes.as_slice()
+        // The unwrapping here will never trigger a panic,
+        // because the byte-buffer is 255 bytes, the byte-length
+        // of which is the maximum value storable in a u8.
+        self.bytes.as_slice().unwrap()
     }
 }
 
@@ -289,6 +366,27 @@ pub struct ByteBuffer<const N: usize> {
     bytes: [u8; N],
 }
 
+/// A FFI safe wrapper of a fixed size array
+#[derive(Clone)]
+#[repr(C)]
+pub struct FixedSizeArray<const N: usize>([u8; N]);
+
+impl<const N: usize> FixedSizeArray<N> {
+    /// Constructs a byte-buffer from a Rust-side-derived owned array
+    pub(crate) fn from_array(bytes: [u8; N]) -> Self {
+        Self(bytes)
+    }
+    /// Yields a slice of the bytes
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+    /// De-structures this FFI-compatible fixed-size array
+    /// into a bare Rust fixed size array.
+    pub fn into_array(self) -> [u8; N] {
+        self.0
+    }
+}
+
 impl<const N: usize> ByteBuffer<N> {
     /// Constructs a byte-buffer from a Rust-side-derived
     /// ArrayView, which is assumed to be trusted to be
@@ -300,9 +398,37 @@ impl<const N: usize> ByteBuffer<N> {
         Self { len, bytes }
     }
     /// Yields a slice of the first `self.len` bytes of `self.bytes`.
-    pub fn as_slice(&self) -> &[u8] {
-        &self.bytes[..(self.len as usize)]
+    pub fn as_slice(&self) -> Option<&[u8]> {
+        if self.len as usize <= N {
+            Some(&self.bytes[..(self.len as usize)])
+        } else {
+            None
+        }
     }
+}
+
+pub(crate) type CryptoRngImpl = <CryptoProviderImpl as CryptoProvider>::CryptoRng;
+
+pub(crate) struct LazyInitCryptoRng {
+    maybe_rng: Option<CryptoRngImpl>,
+}
+
+impl LazyInitCryptoRng {
+    const fn new() -> Self {
+        Self { maybe_rng: None }
+    }
+    pub(crate) fn get_rng(&mut self) -> &mut CryptoRngImpl {
+        self.maybe_rng.get_or_insert_with(CryptoRngImpl::new)
+    }
+}
+
+/// Shared, lazily-initialized cryptographically-secure
+/// RNG for all operations in the FFI core.
+static CRYPTO_RNG: RwLock<LazyInitCryptoRng> = RwLock::new(LazyInitCryptoRng::new());
+
+/// Gets a write guard to the (lazily-init) library-global crypto rng.
+pub(crate) fn get_global_crypto_rng() -> RwLockWriteGuard<'static, LazyInitCryptoRng> {
+    CRYPTO_RNG.write()
 }
 
 /// The DE type for an encrypted identity
@@ -320,6 +446,17 @@ pub enum EncryptedIdentityType {
     Provisioned = 4,
 }
 
+impl From<EncryptedIdentityType> for np_adv::de_type::EncryptedIdentityDataElementType {
+    fn from(val: EncryptedIdentityType) -> np_adv::de_type::EncryptedIdentityDataElementType {
+        use np_adv::de_type::EncryptedIdentityDataElementType;
+        match val {
+            EncryptedIdentityType::Private => EncryptedIdentityDataElementType::Private,
+            EncryptedIdentityType::Trusted => EncryptedIdentityDataElementType::Trusted,
+            EncryptedIdentityType::Provisioned => EncryptedIdentityDataElementType::Provisioned,
+        }
+    }
+}
+
 impl From<np_adv::de_type::EncryptedIdentityDataElementType> for EncryptedIdentityType {
     fn from(value: np_adv::de_type::EncryptedIdentityDataElementType) -> Self {
         use np_adv::de_type::EncryptedIdentityDataElementType;
@@ -330,6 +467,16 @@ impl From<np_adv::de_type::EncryptedIdentityDataElementType> for EncryptedIdenti
         }
     }
 }
+
+/// Error returned if the bit representation of a supposedly-Rust-constructed
+/// -and-validated type actually doesn't correspond to the format of the
+/// data structure expected on the Rust side of the boundary, and performing
+/// further operations on the structure would yield unintended behavior.
+/// If this kind of error is being raised, the foreign lang code must
+/// be messing with stack-allocated data structures for this library
+/// in an entirely unexpected way.
+#[derive(Debug)]
+pub struct InvalidStackDataStructure;
 
 /// Error raised when attempting to cast an enum to
 /// one of its variants, but the value is actually

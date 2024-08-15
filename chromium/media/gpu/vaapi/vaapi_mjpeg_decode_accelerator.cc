@@ -9,6 +9,7 @@
 #include <va/va.h>
 
 #include <array>
+#include <optional>
 #include <utility>
 
 #include "base/files/scoped_file.h"
@@ -40,7 +41,6 @@
 #include "media/gpu/vaapi/vaapi_image_decoder.h"
 #include "media/gpu/vaapi/vaapi_utils.h"
 #include "media/gpu/vaapi/vaapi_wrapper.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -177,11 +177,14 @@ void VaapiMjpegDecodeAccelerator::Decoder::Initialize(
     return;
   }
 
-  vpp_vaapi_wrapper_ = VaapiWrapper::Create(
-      VaapiWrapper::kVideoProcess, VAProfileNone,
-      EncryptionScheme::kUnencrypted,
-      base::BindRepeating(&ReportVaapiErrorToUMA,
-                          "Media.VaapiMjpegDecodeAccelerator.Vpp.VAAPIError"));
+  vpp_vaapi_wrapper_ =
+      VaapiWrapper::Create(
+          VaapiWrapper::kVideoProcess, VAProfileNone,
+          EncryptionScheme::kUnencrypted,
+          base::BindRepeating(
+              &ReportVaapiErrorToUMA,
+              "Media.VaapiMjpegDecodeAccelerator.Vpp.VAAPIError"))
+          .value_or(nullptr);
   if (!vpp_vaapi_wrapper_) {
     VLOGF(1) << "Failed initializing VAAPI for VPP";
     std::move(init_cb).Run(false);

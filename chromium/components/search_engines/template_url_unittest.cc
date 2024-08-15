@@ -273,9 +273,8 @@ TEST_F(TemplateURLTest, URLRefTestImageURLWithPOST) {
                               "image/jpeg");
             break;
           case TemplateURLRef::GOOGLE_IMAGE_THUMBNAIL_BASE64: {
-            std::string base64_image_content;
-            base::Base64Encode(search_args.image_thumbnail_content,
-                               &base64_image_content);
+            std::string base64_image_content =
+                base::Base64Encode(search_args.image_thumbnail_content);
             ExpectPostParamIs(*i, "base64_image_content", base64_image_content,
                               "image/jpeg");
             break;
@@ -322,9 +321,8 @@ TEST_F(TemplateURLTest, ImageThumbnailContentTypePostParams) {
       url.image_url_ref().post_params_;
   ExpectContainsPostParam(post_params, "image_content",
                           search_args.image_thumbnail_content, "image/tiff");
-  std::string base64_image_content;
-  base::Base64Encode(search_args.image_thumbnail_content,
-                     &base64_image_content);
+  std::string base64_image_content =
+      base::Base64Encode(search_args.image_thumbnail_content);
   ExpectContainsPostParam(post_params, "base64_image_content",
                           base64_image_content, "image/tiff");
 }
@@ -1160,6 +1158,30 @@ TEST_F(TemplateURLTest, ParseURLNestedParameter) {
   EXPECT_EQ(1U, replacements[0].index);
   EXPECT_EQ(TemplateURLRef::SEARCH_TERMS, replacements[0].type);
   EXPECT_TRUE(valid);
+}
+
+TEST_F(TemplateURLTest, SearchSourceId) {
+  const std::string base_url_str("http://google.com/?");
+  const std::string query_params_str("{google:sourceId}");
+  const std::string full_url_str = base_url_str + query_params_str;
+  search_terms_data_.set_google_base_url(base_url_str);
+
+  TemplateURLData data;
+  data.SetURL(full_url_str);
+  TemplateURL url(data);
+  EXPECT_TRUE(url.url_ref().IsValid(search_terms_data_));
+  ASSERT_FALSE(url.url_ref().SupportsReplacement(search_terms_data_));
+  TemplateURLRef::SearchTermsArgs search_terms_args;
+
+  // Check that the URL is correct.
+  GURL result(
+      url.url_ref().ReplaceSearchTerms(search_terms_args, search_terms_data_));
+  ASSERT_TRUE(result.is_valid());
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+  EXPECT_EQ("http://google.com/?sourceid=chrome-mobile&", result.spec());
+#else
+  EXPECT_EQ("http://google.com/?sourceid=chrome&", result.spec());
+#endif
 }
 
 TEST_F(TemplateURLTest, SearchClient) {

@@ -1,33 +1,64 @@
 # Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
 
+import("//build/config/ios/swift_source_set.gni")
+
 source_set("vivaldi_bookmarks_editor") {
   sources = [
-    "vivaldi_bookmarks_constants.h",
-    "vivaldi_bookmarks_constants.mm",
-    "vivaldi_bookmark_add_edit_folder_view_controller.h",
-    "vivaldi_bookmark_add_edit_folder_view_controller.mm",
-    "vivaldi_bookmark_add_edit_url_view_controller.h",
-    "vivaldi_bookmark_add_edit_url_view_controller.mm",
-    "vivaldi_bookmark_parent_folder_view.h",
-    "vivaldi_bookmark_parent_folder_view.mm",
     "vivaldi_bookmark_folder_selection_header_view.h",
     "vivaldi_bookmark_folder_selection_header_view.mm",
-    "vivaldi_bookmark_add_edit_controller_delegate.h",
     "vivaldi_bookmark_prefs.h",
     "vivaldi_bookmark_prefs.mm",
+    "vivaldi_bookmarks_constants.h",
+    "vivaldi_bookmarks_constants.mm",
+    "vivaldi_bookmarks_editor_consumer.h",
+    "vivaldi_bookmarks_editor_coordinator.h",
+    "vivaldi_bookmarks_editor_coordinator.mm",
+    "vivaldi_bookmarks_editor_entry_point.h",
+    "vivaldi_bookmarks_editor_entry_purpose.h",
+    "vivaldi_bookmarks_editor_features.h",
+    "vivaldi_bookmarks_editor_features.mm",
+    "vivaldi_bookmarks_editor_mediator.h",
+    "vivaldi_bookmarks_editor_mediator.mm",
   ]
 
   deps = [
-    "//ui/base",
-    "//base",
+    ":vivaldi_bookmarks_editor_swift",
     "//base:i18n",
+    "//base",
+    "//components/bookmarks/browser:browser",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
+    "//ios/chrome/browser/shared/model/browser_state",
+    "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/common/ui/util",
+    "//ui/base",
     "resources",
   ]
 
   frameworks = [
     "Foundation.framework",
     "UIKit.framework",
+  ]
+}
+
+swift_source_set("vivaldi_bookmarks_editor_swift") {
+  bridge_header = "vivaldi_bookmarks_editor_swift_bridge.h"
+  sources = [
+    "vivaldi_bookmarks_editor_bookmark_view.swift",
+    "vivaldi_bookmarks_editor_constants.swift",
+    "vivaldi_bookmarks_editor_group_view.swift",
+    "vivaldi_bookmarks_editor_state.swift",
+    "vivaldi_bookmarks_editor_view_provider.swift",
+    "vivaldi_bookmarks_editor_view.swift",
+  ]
+
+  deps = [
+    "//base",
+    "//ui/base",
+  ]
+
+  frameworks = [
+    "UIKit.framework",
+    "SwiftUI.framework",
   ]
 }

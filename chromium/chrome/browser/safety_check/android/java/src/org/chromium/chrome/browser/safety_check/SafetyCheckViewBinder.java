@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.safety_check;
 
 import android.content.Context;
+import android.text.TextUtils;
 import android.view.View;
 
 import androidx.annotation.VisibleForTesting;
@@ -201,8 +202,12 @@ class SafetyCheckViewBinder {
             PropertyModel model, SafetyCheckSettingsFragment fragment) {
         long lastRunTime = model.get(SafetyCheckProperties.LAST_RUN_TIMESTAMP);
         long currentTime = System.currentTimeMillis();
-        fragment.getTimestampTextView()
-                .setText(getLastRunTimestampText(fragment.getContext(), lastRunTime, currentTime));
+        String timestampText =
+                getLastRunTimestampText(fragment.getContext(), lastRunTime, currentTime);
+        if (!TextUtils.equals(fragment.getTimestampTextView().getText(), timestampText)) {
+            fragment.getTimestampTextView().setText(timestampText);
+            fragment.getTimestampTextView().announceForAccessibility(timestampText);
+        }
     }
 
     private static void clearTimestampText(SafetyCheckSettingsFragment fragment) {
@@ -304,6 +309,9 @@ class SafetyCheckViewBinder {
         } else if (PasswordsCheckPreferenceProperties.COMPROMISED_PASSWORDS_COUNT == propertyKey) {
             // Do nothing - this is handled by the PASSWORDS_STATE update.
             return;
+        } else if (PasswordsCheckPreferenceProperties.PASSWORDS_TITLE == propertyKey) {
+            SafetyCheckElementPreference preference = fragment.findPreference(preferenceViewId);
+            preference.setTitle(model.get(PasswordsCheckPreferenceProperties.PASSWORDS_TITLE));
         } else {
             assert false : "Unhandled property detected in SafetyCheckViewBinder!";
         }

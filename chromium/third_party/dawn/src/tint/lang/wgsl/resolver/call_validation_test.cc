@@ -143,7 +143,7 @@ TEST_F(ResolverCallValidationTest, PointerArgument_LetIdentExpr) {
          });
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), "12:34 error: cannot take the address of expression");
+    EXPECT_EQ(r()->error(), "12:34 error: cannot take the address of 'let z'");
 }
 
 TEST_F(ResolverCallValidationTest,
@@ -214,7 +214,7 @@ TEST_F(ResolverCallValidationTest, PointerArgument_AddressOfLetMember) {
          });
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), "12:34 error: cannot take the address of expression");
+    EXPECT_EQ(r()->error(), "12:34 error: cannot take the address of value of type 'i32'");
 }
 
 TEST_F(ResolverCallValidationTest, PointerArgument_FunctionParam) {
@@ -481,7 +481,7 @@ TEST_F(ResolverCallValidationTest, MustUseFunction) {
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(
         r()->error(),
-        R"(12:34 error: ignoring return value of function 'fn_must_use' annotated with @must_use
+        R"(12:34 error: ignoring return value of function 'fn_must_use' annotated with '@must_use'
 56:78 note: function 'fn_must_use' declared here)");
 }
 
@@ -514,12 +514,20 @@ TEST_F(ResolverCallValidationTest, UnexpectedBuiltinTemplateArgs) {
     // }
     Func("f", tint::Empty, ty.void_(),
          Vector{
-             Decl(Var("v", Call(Ident(Source{{12, 34}}, "min", "i32"), 1_a, 2_a))),
+             Decl(Var("v", Call(Source{{12, 34}}, Ident("min", "i32"), 1_a, 2_a))),
          });
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(),
-              R"(12:34 error: builtin function 'min' does not take template arguments)");
+              R"(12:34 error: no matching call to 'min<i32>(abstract-int, abstract-int)'
+
+2 candidate functions:
+ • 'min(T  ✓ , T  ✓ ) -> T' where:
+      ✗  overload expects 0 template arguments, call passed 1 argument
+      ✓  'T' is 'abstract-float', 'abstract-int', 'f32', 'i32', 'u32' or 'f16'
+ • 'min(vecN<T>  ✗ , vecN<T>  ✗ ) -> vecN<T>' where:
+      ✗  'T' is 'abstract-float', 'abstract-int', 'f32', 'i32', 'u32' or 'f16'
+)");
 }
 
 }  // namespace

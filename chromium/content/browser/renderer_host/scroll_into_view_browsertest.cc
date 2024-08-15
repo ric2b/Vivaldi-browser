@@ -25,6 +25,7 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/mojom/frame/frame.mojom-test-utils.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom.h"
 #include "third_party/re2/src/re2/re2.h"
 #include "ui/events/event_constants.h"
@@ -853,37 +854,16 @@ INSTANTIATE_TEST_SUITE_P(/* no prefix */,
                          DescribeFrameType);
 #endif
 
-enum FencedFrameType { kFencedFrameMPArch, kFencedFrameShadowDOM };
-
-[[maybe_unused]] std::string DescribeFencedFrameType(
-    const testing::TestParamInfo<FencedFrameType>& info) {
-  std::string impl_type;
-  switch (info.param) {
-    case kFencedFrameMPArch: {
-      impl_type = "MPArch";
-    } break;
-    case kFencedFrameShadowDOM: {
-      impl_type = "ShadowDOM";
-    } break;
-  }
-  return impl_type;
-}
-
 // Tests scrollIntoView behaviors related to a fenced frame.
 class ScrollIntoViewFencedFrameBrowserTest
-    : public ScrollIntoViewBrowserTestBase,
-      public ::testing::WithParamInterface<FencedFrameType> {
+    : public ScrollIntoViewBrowserTestBase {
  public:
   ScrollIntoViewFencedFrameBrowserTest() {
-    const char* impl_param =
-        GetParam() == kFencedFrameMPArch ? "mparch" : "shadow_dom";
-    feature_list_.InitWithFeaturesAndParameters(
-        {{blink::features::kFencedFrames,
-          {{"implementation_type", impl_param}}},
-         {features::kPrivacySandboxAdsAPIsOverride, {}},
-         {blink::features::kFencedFramesAPIChanges, {}},
-         {blink::features::kFencedFramesDefaultMode, {}}},
-        {/* disabled_features */});
+    feature_list_.InitWithFeatures({blink::features::kFencedFrames,
+                                    features::kPrivacySandboxAdsAPIsOverride,
+                                    blink::features::kFencedFramesAPIChanges,
+                                    blink::features::kFencedFramesDefaultMode},
+                                   {/* disabled_features */});
   }
   bool IsForceLocalFrames() const override { return false; }
   bool IsWritingModeLTR() const override { return true; }
@@ -901,25 +881,25 @@ class ScrollIntoViewFencedFrameBrowserTest
   base::test::ScopedFeatureList feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_P(ScrollIntoViewFencedFrameBrowserTest,
+IN_PROC_BROWSER_TEST_F(ScrollIntoViewFencedFrameBrowserTest,
                        SingleFencedFrame) {
   ASSERT_TRUE(SetupTest("siteA{FencedFrame}(siteB)"));
   RunTest();
 }
 
-IN_PROC_BROWSER_TEST_P(ScrollIntoViewFencedFrameBrowserTest,
+IN_PROC_BROWSER_TEST_F(ScrollIntoViewFencedFrameBrowserTest,
                        NestedFencedFrames) {
   ASSERT_TRUE(SetupTest("siteA{FencedFrame}(siteB{FencedFrame}(siteC))"));
   RunTest();
 }
 
-IN_PROC_BROWSER_TEST_P(ScrollIntoViewFencedFrameBrowserTest,
+IN_PROC_BROWSER_TEST_F(ScrollIntoViewFencedFrameBrowserTest,
                        LocalFrameInFencedFrame) {
   ASSERT_TRUE(SetupTest("siteA{FencedFrame}(siteB(siteB))"));
   RunTest();
 }
 
-IN_PROC_BROWSER_TEST_P(ScrollIntoViewFencedFrameBrowserTest,
+IN_PROC_BROWSER_TEST_F(ScrollIntoViewFencedFrameBrowserTest,
                        RemoteFrameInFencedFrame) {
   ASSERT_TRUE(SetupTest("siteA{FencedFrame}(siteB(siteC))"));
 
@@ -946,13 +926,13 @@ IN_PROC_BROWSER_TEST_P(ScrollIntoViewFencedFrameBrowserTest,
   RunTest();
 }
 
-IN_PROC_BROWSER_TEST_P(ScrollIntoViewFencedFrameBrowserTest,
+IN_PROC_BROWSER_TEST_F(ScrollIntoViewFencedFrameBrowserTest,
                        FencedFrameInRemoteFrame) {
   ASSERT_TRUE(SetupTest("siteA(siteB{FencedFrame}(siteC))"));
   RunTest();
 }
 
-IN_PROC_BROWSER_TEST_P(ScrollIntoViewFencedFrameBrowserTest,
+IN_PROC_BROWSER_TEST_F(ScrollIntoViewFencedFrameBrowserTest,
                        ProgrammaticScrollIntoViewDoesntCrossFencedFrame) {
   ASSERT_TRUE(SetupTest("siteA{FencedFrame}(siteB)"));
 
@@ -981,12 +961,6 @@ IN_PROC_BROWSER_TEST_P(ScrollIntoViewFencedFrameBrowserTest,
       .FlushForTesting();
   EXPECT_FALSE(interceptor.HasCalledScrollRectToVisibleInParentFrame());
 }
-
-INSTANTIATE_TEST_SUITE_P(/* no prefix */,
-                         ScrollIntoViewFencedFrameBrowserTest,
-                         testing::Values(kFencedFrameMPArch,
-                                         kFencedFrameShadowDOM),
-                         DescribeFencedFrameType);
 
 }  // namespace
 

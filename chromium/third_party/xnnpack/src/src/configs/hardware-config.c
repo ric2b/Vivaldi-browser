@@ -17,7 +17,16 @@
 #else
   #include <pthread.h>
 #endif
-
+#if XNN_ARCH_ARM && XNN_PLATFORM_ANDROID
+  #include <ctype.h>
+  #include <sys/utsname.h>
+#endif
+#if XNN_ARCH_X86_64 && defined(__linux__)
+#include <sys/syscall.h>
+#include <unistd.h>
+#define XFEATURE_XTILEDATA 18
+#define ARCH_REQ_XCOMP_PERM 0x1023
+#endif
 #if XNN_ENABLE_CPUINFO
   #include <cpuinfo.h>
 #endif  // XNN_ENABLE_CPUINFO
@@ -39,6 +48,33 @@
 #include <xnnpack/config.h>
 #include <xnnpack/log.h>
 
+#if XNN_ARCH_ARM && XNN_PLATFORM_ANDROID
+static void KernelVersion(int* version) {
+  struct utsname buffer;
+  int i;
+  version[0] = version[1] = 0;
+  if (uname(&buffer) == 0) {
+    char* v = buffer.release;
+    for (i = 0; *v && i < 2; ++v) {
+      if (isdigit(*v)) {
+        version[i++] = (int) strtol(v, &v, 10);
+      }
+    }
+  }
+}
+#endif
+
+#if XNN_ARCH_X86_64 && defined(__linux__)
+ssize_t xnn_syscall(size_t rax, size_t rdi, size_t rsi, size_t rdx) {
+  __asm (
+    "syscall"
+    : "+a" (rax)
+    : "D"(rdi), "S"(rsi), "d"(rdx)
+    : "rcx", "r11", "memory"
+  );
+  return rax;
+}
+#endif
 
 static struct xnn_hardware_config hardware_config = {0};
 
@@ -49,16 +85,6 @@ static struct xnn_hardware_config hardware_config = {0};
 #endif
 
 static void init_hardware_config(void) {
-  #if XNN_ARCH_ARM
-    hardware_config.use_arm_v6 = cpuinfo_has_arm_v6();
-    hardware_config.use_arm_vfpv2 = cpuinfo_has_arm_vfpv2();
-    hardware_config.use_arm_vfpv3 = cpuinfo_has_arm_vfpv3();
-    hardware_config.use_arm_neon = cpuinfo_has_arm_neon();
-    hardware_config.use_arm_neon_fp16 = cpuinfo_has_arm_neon_fp16();
-    hardware_config.use_arm_neon_fma = cpuinfo_has_arm_neon_fma();
-    hardware_config.use_arm_neon_v8 = cpuinfo_has_arm_neon_v8();
-  #endif
-
   #if XNN_ARCH_ARM64 || XNN_ARCH_ARM
     #if XNN_PLATFORM_WINDOWS
       SYSTEM_INFO system_info;
@@ -84,6 +110,28 @@ static void init_hardware_config(void) {
       hardware_config.use_arm_neon_dot = cpuinfo_has_arm_neon_dot();
     #endif
   #endif
+
+  #if XNN_ARCH_ARM
+    hardware_config.use_arm_v6 = cpuinfo_has_arm_v6();
+    hardware_config.use_arm_vfpv2 = cpuinfo_has_arm_vfpv2();
+    hardware_config.use_arm_vfpv3 = cpuinfo_has_arm_vfpv3();
+    hardware_config.use_arm_neon = cpuinfo_has_arm_neon();
+    hardware_config.use_arm_neon_fp16 = cpuinfo_has_arm_neon_fp16();
+    hardware_config.use_arm_neon_fma = cpuinfo_has_arm_neon_fma();
+    hardware_config.use_arm_neon_v8 = cpuinfo_has_arm_neon_v8();
+    hardware_config.use_arm_neon_udot = hardware_config.use_arm_neon_dot;
+    #if XNN_PLATFORM_ANDROID
+      if (hardware_config.use_arm_neon_dot) {
+        int kernelversion[2];
+        KernelVersion(kernelversion);
+        xnn_log_debug("udot is disabled in linux kernel earlier than 6.7");
+        if (kernelversion[0] < 6 || (kernelversion[0] == 6 && kernelversion[1] < 7)) {
+          hardware_config.use_arm_neon_dot = false;
+        }
+      }
+    #endif
+  #endif
+
   #if XNN_ARCH_ARM64
     hardware_config.use_arm_neon_i8mm = cpuinfo_has_arm_i8mm();
   #endif
@@ -101,13 +149,37 @@ static void init_hardware_config(void) {
       cpuinfo_has_x86_avx512bw() && cpuinfo_has_x86_avx512dq() && cpuinfo_has_x86_avx512vl();
     hardware_config.use_x86_avx512vbmi = hardware_config.use_x86_avx512skx && cpuinfo_has_x86_avx512vbmi();
     hardware_config.use_x86_avx512vnni = hardware_config.use_x86_avx512skx && cpuinfo_has_x86_avx512vnni();
+    hardware_config.use_x86_avx512vnnigfni = hardware_config.use_x86_avx512vnni && cpuinfo_has_x86_gfni();
+#if XNN_ENABLE_AVX512AMX
+    // TODO(fbarchard): Use cpuinfo_has_x86_amx_int8 when available.
+    // Infer AMX support from Sapphire Rapids having fp16 and amx.
+    hardware_config.use_x86_avx512amx = hardware_config.use_x86_avx512vnnigfni && cpuinfo_has_x86_avx512fp16();
+#if XNN_ARCH_X86_64 && defined(__linux__)
+    if (hardware_config.use_x86_avx512amx) {
+      size_t status = xnn_syscall(SYS_arch_prctl, ARCH_REQ_XCOMP_PERM, XFEATURE_XTILEDATA, 0);
+      if (status) {
+        xnn_log_info("XFEATURE_XTILEDATA setup is failed, TMUL usage is not allowed");
+        hardware_config.use_x86_avx512amx = 0;
+      }
+    }
+#endif
+#else
+    hardware_config.use_x86_avx512amx = 0;
+#endif
+#if XNN_ENABLE_AVXVNNI
     hardware_config.use_x86_avxvnni = hardware_config.use_x86_avx2 && cpuinfo_has_x86_avxvnni();
+#else
+    hardware_config.use_x86_avxvnni = 0;
+#endif
   #endif  // !XNN_ARCH_X86 && !XNN_ARCH_X86_64
 
   #if XNN_ARCH_RISCV
     const long hwcap = getauxval(AT_HWCAP);
     xnn_log_debug("getauxval(AT_HWCAP) = %08lX", hwcap);
     hardware_config.use_riscv_vector = (hwcap & COMPAT_HWCAP_ISA_V) != 0;
+
+    /* There is no HWCAP for fp16 so disable by default */
+    hardware_config.use_riscv_vector_fp16_arith = false;
 
     if (hardware_config.use_riscv_vector) {
       register uint32_t vlenb __asm__ ("t0");
@@ -124,7 +196,7 @@ static void init_hardware_config(void) {
       hardware_config.use_vsx = 1;
     }
     #if defined PPC_FEATURE2_ARCH_3_1
-      if (HWCAPs_2 &  PPC_FEATURE2_ARCH_3_1) {
+      if (HWCAPs_2 & PPC_FEATURE2_ARCH_3_1) {
         hardware_config.use_vsx3 = 1;
       }
       if (HWCAPs_2 & PPC_FEATURE2_MMA) {
@@ -205,12 +277,12 @@ static void init_hardware_config(void) {
 #endif
 
 const struct xnn_hardware_config* xnn_init_hardware_config() {
-  #if !XNN_PLATFORM_WEB && !XNN_ARCH_RISCV && !XNN_ARCH_PPC64 && !(XNN_ARCH_ARM64 && XNN_PLATFORM_WINDOWS)
+  #if !XNN_PLATFORM_WEB && !XNN_ARCH_RISCV && !XNN_ARCH_PPC64
     if (!cpuinfo_initialize()) {
       xnn_log_error("failed to initialize cpuinfo");
       return NULL;
     }
-  #endif  // !XNN_PLATFORM_WEB && !XNN_ARCH_RISCV && !(XNN_ARCH_ARM64 && XNN_PLATFORM_WINDOWS)
+  #endif  // !XNN_PLATFORM_WEB && !XNN_ARCH_RISCV && !XNN_ARCH_PPC64
   #if XNN_ARCH_ARM
     #if XNN_PLATFORM_MOBILE
       if (!cpuinfo_has_arm_neon()) {

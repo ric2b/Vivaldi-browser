@@ -12,7 +12,6 @@
 #include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -151,7 +150,7 @@ const VariableResolver BuildVariableResolver(
 // Return the value associated to the first item in |variables| that is not
 // empty.
 std::string ResolveVariableChain(const VariableResolver& resolver,
-                                 std::vector<base::StringPiece> variables) {
+                                 std::vector<std::string_view> variables) {
   for (const auto& variable : variables) {
     // Variables should always be valid and have a mapping in |resolver|.
     DCHECK(resolver.find(variable) != resolver.end());
@@ -164,7 +163,7 @@ std::string ResolveVariableChain(const VariableResolver& resolver,
   return "";
 }
 
-std::vector<base::StringPiece> SplitByColon(base::StringPiece input) {
+std::vector<std::string_view> SplitByColon(std::string_view input) {
   return base::SplitStringPiece(input, ":", base::TRIM_WHITESPACE,
                                 base::SPLIT_WANT_NONEMPTY);
 }
@@ -185,7 +184,7 @@ std::string SearchAndReplace(
     // Output the prefix skipped by PartialMatch until |capture| is found.
     DCHECK(capture.begin() >= search_input.begin());
     size_t prefix_size = capture.begin() - search_input.begin();
-    output.emplace_back(search_input.begin(), prefix_size);
+    output.emplace_back(search_input.data(), prefix_size);
     // Output the replacement for |capture|.
     output.emplace_back(replacement_getter.Run(capture));
 
@@ -193,7 +192,8 @@ std::string SearchAndReplace(
     DCHECK(search_input.length() >= prefix_size + capture.length());
     size_t remaining_size =
         search_input.length() - (prefix_size + capture.length());
-    search_input = std::string_view(capture.end(), remaining_size);
+    search_input =
+        std::string_view(capture.data() + capture.size(), remaining_size);
   }
   // Output the remaining |search_input|.
   output.emplace_back(search_input);
@@ -202,7 +202,7 @@ std::string SearchAndReplace(
 
 // Returns a regular expression that matches any one variable in |resolver|.
 std::string ResolverKeyMatcher(const VariableResolver& resolver) {
-  std::vector<base::StringPiece> keys;
+  std::vector<std::string_view> keys;
   for (const auto& item : resolver) {
     keys.emplace_back(item.first);
   }
@@ -235,7 +235,7 @@ void ReplaceVariables(const VariableResolver& resolver,
         // Remove the "${" prefix and the "}" suffix from |variable|.
         DCHECK(variable.starts_with("${") && variable.ends_with("}"));
         const std::string_view chain = variable.substr(2, variable.size() - 3);
-        const std::vector<base::StringPiece> variables = SplitByColon(chain);
+        const std::vector<std::string_view> variables = SplitByColon(chain);
 
         const std::string chain_value =
             ResolveVariableChain(resolver, variables);

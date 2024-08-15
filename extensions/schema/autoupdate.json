@@ -178,7 +178,23 @@
             }
           ]
         }
+      },
+      {
+        "name": "needsCodecRestart",
+        "type": "function",
+        "description": "Return true if restart is needed due to codec update.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "type": "boolean",
+              "name": "result"
+            }
+          ]
+        }
       }
+
     ],
     "events": [
       {
@@ -239,6 +255,12 @@
             "description": "The version that will be installed on quit or an empty string if not known"
           }
         ]
+      },
+      {
+        "name": "onNeedRestartToReloadCodecs",
+        "type": "function",
+        "description": "Fired when an update to FFMPEG codecs happened while the application was running, and restart is needed to reload them",
+        "parameters": []
       },
       {
         "name": "onUpdaterWillRelaunchApplication",

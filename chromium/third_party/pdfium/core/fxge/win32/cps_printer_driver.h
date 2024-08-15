@@ -45,7 +45,7 @@ class CPSPrinterDriver final : public RenderDeviceDriverIface {
                 const CFX_FillRenderOptions& fill_options,
                 BlendMode blend_type) override;
   bool GetClipBox(FX_RECT* pRect) override;
-  bool SetDIBits(const RetainPtr<const CFX_DIBBase>& pBitmap,
+  bool SetDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                  uint32_t color,
                  const FX_RECT& src_rect,
                  int left,
@@ -74,7 +74,7 @@ class CPSPrinterDriver final : public RenderDeviceDriverIface {
                       uint32_t color,
                       const CFX_TextRenderOptions& options) override;
   bool MultiplyAlpha(float alpha) override;
-  bool MultiplyAlphaMask(const RetainPtr<const CFX_DIBBase>& mask) override;
+  bool MultiplyAlphaMask(RetainPtr<const CFX_DIBitmap> mask) override;
 
   HDC m_hDC;
   int m_Width;

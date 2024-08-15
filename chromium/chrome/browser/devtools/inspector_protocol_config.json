@@ -40,8 +40,8 @@
             },
             {
                 "domain": "Storage",
-                "include": ["runBounceTrackingMitigations"],
-                "async": ["runBounceTrackingMitigations"]
+                "include": ["runBounceTrackingMitigations", "getRelatedWebsiteSets"],
+                "async": ["runBounceTrackingMitigations", "getRelatedWebsiteSets"]
             },
             {
                 "domain": "SystemInfo",
@@ -49,7 +49,7 @@
             },
             {
                 "domain": "Autofill",
-                "async": [ "trigger", "setAddresses" ]
+                "async": [ "setAddresses" ]
             }
         ]
     },

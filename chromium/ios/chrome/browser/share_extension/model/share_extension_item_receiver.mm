@@ -9,6 +9,7 @@
 #import "base/apple/foundation_util.h"
 #import "base/functional/bind.h"
 #import "base/ios/block_types.h"
+#import "base/memory/raw_ptr.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/metrics/user_metrics_action.h"
 #import "base/strings/sys_string_conversions.h"
@@ -23,7 +24,7 @@
 #import "ios/chrome/common/app_group/app_group_constants.h"
 #import "ios/web/public/thread/web_task_traits.h"
 #import "ios/web/public/thread/web_thread.h"
-#import "net/base/mac/url_conversions.h"
+#import "net/base/apple/url_conversions.h"
 #import "url/gurl.h"
 
 namespace {
@@ -63,8 +64,8 @@ void LogHistogramReceivedItem(ShareExtensionItemReceived type) {
 @interface ShareExtensionItemReceiver () <NSFilePresenter> {
   BOOL _isObservingReadingListFolder;
   BOOL _readingListFolderCreated;
-  ReadingListModel* _readingListModel;
-  bookmarks::BookmarkModel* _bookmarkModel;
+  raw_ptr<ReadingListModel> _readingListModel;
+  raw_ptr<bookmarks::BookmarkModel> _bookmarkModel;
   scoped_refptr<base::SequencedTaskRunner> _taskRunner;
 }
 
@@ -290,6 +291,10 @@ void LogHistogramReceivedItem(ShareExtensionItemReceived type) {
     }
     case app_group::BOOKMARK_ITEM: {
       LogHistogramReceivedItem(BOOKMARK_ENTRY);
+      // TODO(crbug.com/40260909): Once feature
+      // `syncer::kEnableBookmarkFoldersForAccountStorage` is launched, this
+      // may want to save bookmarks under `_bookmarkModel->mobile_node()`, if
+      // it returns non-null.
       _bookmarkModel->AddNewURL(_bookmarkModel->mobile_node(), 0,
                                 base::UTF8ToUTF16(entryTitle), entryURL);
       break;

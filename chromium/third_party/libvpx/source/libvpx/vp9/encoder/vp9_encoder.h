@@ -25,6 +25,7 @@
 #include "vpx_dsp/variance.h"
 #include "vpx_dsp/psnr.h"
 #include "vpx_ports/system_state.h"
+#include "vpx_util/vpx_pthread.h"
 #include "vpx_util/vpx_thread.h"
 #include "vpx_util/vpx_timestamp.h"
 
@@ -1394,11 +1395,6 @@ void vp9_scale_and_extend_frame_nonnormative(const YV12_BUFFER_CONFIG *src,
 void vp9_scale_and_extend_frame_nonnormative(const YV12_BUFFER_CONFIG *src,
                                              YV12_BUFFER_CONFIG *dst);
 #endif  // CONFIG_VP9_HIGHBITDEPTH
-
-YV12_BUFFER_CONFIG *vp9_svc_twostage_scale(
-    VP9_COMMON *cm, YV12_BUFFER_CONFIG *unscaled, YV12_BUFFER_CONFIG *scaled,
-    YV12_BUFFER_CONFIG *scaled_temp, INTERP_FILTER filter_type,
-    int phase_scaler, INTERP_FILTER filter_type2, int phase_scaler2);
 
 YV12_BUFFER_CONFIG *vp9_scale_if_required(
     VP9_COMMON *cm, YV12_BUFFER_CONFIG *unscaled, YV12_BUFFER_CONFIG *scaled,

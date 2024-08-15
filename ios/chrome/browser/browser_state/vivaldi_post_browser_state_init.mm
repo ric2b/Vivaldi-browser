@@ -4,14 +4,17 @@
 
 #import "base/memory/raw_ptr.h"
 #import "browser/removed_partners_tracker.h"
+#import "browser/search_engines/vivaldi_search_engines_updater.h"
 #import "browser/vivaldi_default_bookmarks.h"
 #import "components/keyed_service/core/service_access_type.h"
 #import "ios/ad_blocker/adblock_rule_service_factory.h"
 #import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
-#import "ios/chrome/browser/favicon/favicon_service_factory.h"
+#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
+#import "ios/chrome/browser/favicon/model/favicon_service_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/notes/notes_factory.h"
+#import "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace vivaldi_default_bookmarks {
 namespace {
@@ -24,7 +27,7 @@ class UpdaterClientImpl : public UpdaterClient {
   static std::unique_ptr<UpdaterClientImpl> Create(
       ChromeBrowserState* browser_state);
 
-  bookmarks::BookmarkModel* GetBookmarkModel() override;
+  LegacyBookmarkModel* GetBookmarkModel() override;
   FaviconServiceGetter GetFaviconServiceGetter() override;
   PrefService* GetPrefService() override;
   const std::string& GetApplicationLocale() override;
@@ -48,7 +51,7 @@ UpdaterClientImpl::UpdaterClientImpl(ChromeBrowserState* browser_state)
     : browser_state_(browser_state) {}
 UpdaterClientImpl::~UpdaterClientImpl() = default;
 
-bookmarks::BookmarkModel* UpdaterClientImpl::GetBookmarkModel() {
+LegacyBookmarkModel* UpdaterClientImpl::GetBookmarkModel() {
   return ios::LocalOrSyncableBookmarkModelFactory::
               GetForBrowserState(browser_state_);
 }
@@ -73,6 +76,8 @@ FaviconServiceGetter UpdaterClientImpl::GetFaviconServiceGetter() {
 
 namespace vivaldi {
 void PostBrowserStateInit(ChromeBrowserState* browser_state) {
+  vivaldi::SearchEnginesUpdater::Update(
+      browser_state->GetSharedURLLoaderFactory());
   vivaldi_partners::RemovedPartnersTracker::Create(
       browser_state->GetPrefs(), ios::LocalOrSyncableBookmarkModelFactory::
                                       GetForBrowserState(browser_state));

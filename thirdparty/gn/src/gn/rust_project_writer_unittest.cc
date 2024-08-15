@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 #include "gn/rust_project_writer.h"
-#include "base/strings/string_util.h"
 #include "base/files/file_path.h"
+#include "base/strings/string_util.h"
 #include "gn/filesystem_utils.h"
 #include "gn/substitution_list.h"
 #include "gn/target.h"
@@ -13,9 +13,9 @@
 #include "util/build_config.h"
 #include "util/test/test.h"
 
-
-static void ExpectEqOrShowDiff(const char* expected, const std::string& actual) {
-  if(expected != actual) {
+static void ExpectEqOrShowDiff(const char* expected,
+                               const std::string& actual) {
+  if (expected != actual) {
     printf("\nExpected: >>>\n%s<<<\n", expected);
     printf("  Actual: >>>\n%s<<<\n", actual.c_str());
   }

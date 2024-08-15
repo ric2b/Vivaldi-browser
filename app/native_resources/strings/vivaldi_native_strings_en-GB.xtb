@@ -54,7 +54,6 @@
 <translation id="3334610655141903168">(no title)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> is currently the newest version available.</translation>
 <translation id="3383198080133834965">You’re up to date!</translation>
-<translation id="3402602684546832928">Select Opera bookmark file</translation>
 <translation id="3451317331714872347">Landscape 8</translation>
 <translation id="3457498675806041407">Confirm Exit</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> is already installed and will be activated after restarting the browser.</translation>
@@ -86,7 +85,6 @@
 <translation id="443008484043213881">Tools</translation>
 <translation id="4456211719108566931">Monster 6</translation>
 <translation id="4512900838580567989">Open Link in New Background Tab</translation>
-<translation id="4515472507709384008">Opera version 15+</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Open Image in New Background Tab</translation>
 <translation id="4582480609585453144">Open Link in Background Tab</translation>
@@ -107,7 +105,6 @@
 <translation id="5416008465899576639">A new version of Vivaldi is available.</translation>
 <translation id="5497042274492038489">Confirm window close</translation>
 <translation id="5594602170491763400">Monster 5</translation>
-<translation id="5615637589913244581">Opera version 15+ (Beta)</translation>
 <translation id="5648110075441906505">Open Image in New Window</translation>
 <translation id="5656371807944747581">Update Error!</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> is now available (you have <ph name="OLD_VERSION" />). Would you like to download it now?</translation>
@@ -118,7 +115,6 @@
 <translation id="6040143037577758943">Close</translation>
 <translation id="6229528619562190452">Click here to update Vivaldi.</translation>
 <translation id="6234173136417926046">Use Image as Start Page Background</translation>
-<translation id="630690498669249215">Opera Bookmarks File</translation>
 <translation id="6339818817272922368">Local Account</translation>
 <translation id="6438786710866753178">Landscape 4</translation>
 <translation id="6477028720702061455">Select Opera profile folder for import</translation>
@@ -129,7 +125,6 @@
 <translation id="6635049669875534328">Release notes:</translation>
 <translation id="6693585104974197539">Select Edge profile folder for import</translation>
 <translation id="6726279523566323394">Select Brave profile folder for import</translation>
-<translation id="6804831687363620480">Sadly, your Opera 15+ settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Opera 15+ windows. Then click Continue.</translation>
 <translation id="6892812721183419409">Open Link as <ph name="USER" /></translation>
 <translation id="6896758677409633944">Copy</translation>
 <translation id="7086554968911045110">Landscape 7</translation>
@@ -160,7 +155,6 @@
 <translation id="8562339533180097902">Close Vivaldi and install now</translation>
 <translation id="8567452685425968223">Extracting update...</translation>
 <translation id="8624587806981488221">&amp;Reload image</translation>
-<translation id="864444594187862076">Opera version 15+ (Developer)</translation>
 <translation id="8651348004684669199">Add Active Tab</translation>
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>

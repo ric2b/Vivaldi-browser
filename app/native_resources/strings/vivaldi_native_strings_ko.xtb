@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">경관 12</translation>
 <translation id="1158503667684816647">다시 보지 않기</translation>
 <translation id="1222195720020481779">설치 관리자를 실행하는 중...</translation>
+<translation id="1270785070369717623">Opera GX 브라우저가 실행 중인 상태에서는 설정에 접근할 수 없습니다. Vivaldi로 설정을 불러오려면 작업을 완료한 후 모든 Opera GX 창을 닫아주세요.</translation>
 <translation id="1276145862619442150">스피드 다이얼</translation>
 <translation id="1281950884873973195">동물 6</translation>
 <translation id="1411638389238344450">이 링크를 메일로 보내기</translation>
@@ -12,6 +13,7 @@
 <translation id="1462666970065907900">정말로 이 창을 닫으실건가요?</translation>
 <translation id="1480046233931937785">크레딧</translation>
 <translation id="1526344461589023948">다운로드한 업데이트를 저장하던 중 오류가 발생했습니다. 컴퓨터에 저장 공간이 충분한지 확인 후 다시 시도해주세요.</translation>
+<translation id="1635542496948266458">프로필 변경</translation>
 <translation id="1657174850639146440">괴물 9</translation>
 <translation id="1676595396635191120">새 사생활 보호 창</translation>
 <translation id="1702758681952953055">오류가 계속 발생한다면 다음 정보를 포함해서 저희에게 알려주세요:</translation>
@@ -27,12 +29,14 @@
 <translation id="1985669426322966465">소프트웨어 업데이트</translation>
 <translation id="2079036669923635404">Vivaldi 버전을 <ph name="VERSION" />로 업데이트하려면 여기를 클릭하세요.</translation>
 <translation id="2141974047387702305">업데이트 파일을 다운로드하던 중 오류가 발생했습니다. 인터넷 연결을 확인 후 다시 시도해주세요.</translation>
+<translation id="2226825946708954262">⚠ 데이터 손실 후 계속하기</translation>
 <translation id="2339641773402824483">업데이트를 확인하는 중...</translation>
 <translation id="2441056087170876076">괴물 2</translation>
 <translation id="2444387452209867610">노트 삽입</translation>
 <translation id="2486841023299517366">동물 4</translation>
 <translation id="2612127540243995147">설치할 준비가 되었습니다. Vivaldi가 종료되고 다시 실행됩니다.</translation>
 <translation id="2613387515621326337">업데이트 웹사이트 표시</translation>
+<translation id="2645477450146475243">Opera 브라우저가 실행 중인 상태에서는 설정에 접근할 수 없습니다. Vivaldi로 설정을 불러오려면 작업을 완료한 후 모든 Opera 창을 닫아주세요.</translation>
 <translation id="2647368062414805334">죄송하지만 Edge를 실행하는 중에는 설정을 가져올 수 없습니다. Vivaldi로 설정을 가져오시려면 작업을 저장한 후에 모든 Edge 창을 닫아주신 후 계속을 눌러주세요.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">동물 3</translation>
@@ -41,11 +45,14 @@
 <translation id="2923448633003185837">붙여넣기 및 이동</translation>
 <translation id="2953943267837858202">동영상을 자동으로 재생하도록 허용되지 않음</translation>
 <translation id="2977472760057091832">새 사생활 보호 창에서 링크 열기</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">새 탭에서 열기</translation>
 <translation id="3027988479108856431">죄송하게도, Yandex가 실행 중인 상태에서는 설정을 가져올 수 없습니다. Vivaldi로 설정을 가져오려면 현재 작업을 저장하고 모든 Yandex 창을 닫은 후 계속을 클릭하세요.</translation>
 <translation id="3084011186245865060">경관 6</translation>
+<translation id="3085906383264247940">Opera (Beta)</translation>
 <translation id="3093931836425623631">Vivaldi는 Chromium 오픈소스 프로젝트를 비롯한 여러 오픈소스 소프트웨어에 기초해 만들어진 브라우저입니다.</translation>
 <translation id="3127383884976966729">동물 7</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">새 북마크</translation>
 <translation id="3255747772218936245">업데이트 설치</translation>
 <translation id="3259769196742189631">W3C 검증</translation>
@@ -54,7 +61,6 @@
 <translation id="3334610655141903168">(제목 없음)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" />(은)는 현재 최신 버전입니다.</translation>
 <translation id="3383198080133834965">최신 버전입니다!</translation>
-<translation id="3402602684546832928">Opera 북마크 파일 선택</translation>
 <translation id="3451317331714872347">경관 8</translation>
 <translation id="3457498675806041407">나가기 확인</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> 이 이미 설치되었으며 재시작한 이후 활성화될 것입니다.</translation>
@@ -65,6 +71,7 @@
 <translation id="3588820906588687999">새 탭에서 이미지 열기</translation>
 <translation id="3601066750251199488">괴물 3</translation>
 <translation id="3620979700683094848">사이트가 자동으로 동영상을 재생할 수 있음</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">새로운 버전의 Vivaldi를 사용할 수 있습니다!</translation>
 <translation id="3708982624815781692">다운로드가 취소되었습니다.</translation>
 <translation id="3732157130969736834">이 링크 북마크</translation>
@@ -76,6 +83,9 @@
 <translation id="3914946330804881301">Opera에서 가져온 북마크</translation>
 <translation id="3921292902397893431">괴물 8</translation>
 <translation id="3943857333388298514">붙여넣기</translation>
+<translation id="3974783668264968389">Vivaldi에서 보안 키스토어를 잠금 해제할 수 없습니다. 키스토어가 없으면 저장된 로그인, 보안 쿠키, 그리고 동기화, 메일, 캘린더와 같은 기능을 사용할 수 없게 됩니다
+
+    일단 중단하고 키스토어를 잠금 해제하거나 복구한 다음 다시 한 번 시도해보세요. 정말로 계속하시겠다면 체크박스를 클리하고 "데이터 손실 후 계속하기" 버튼을 눌러주세요.</translation>
 <translation id="4005270918754737597">이 버전 건너뛰기</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4074744496918018786">새 사생활 보호 창에서 이미지 열기</translation>
@@ -88,7 +98,6 @@
 <translation id="443008484043213881">도구</translation>
 <translation id="4456211719108566931">괴물 6</translation>
 <translation id="4512900838580567989">새 탭에 링크 열어놓기</translation>
-<translation id="4515472507709384008">Opera 버전 15+</translation>
 <translation id="4545097004879999966">Opera 메일</translation>
 <translation id="4548358047305717967">새 탭에 이미지 열어놓기</translation>
 <translation id="4582480609585453144">백그라운드 탭에서 링크 열기</translation>
@@ -100,16 +109,17 @@
 <translation id="498766871928286903"><ph name="DOWNLOADED" />/<ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">가져온 스피드 다이얼</translation>
 <translation id="5092656712000637858">이 페이지를 웹 패널에 추가</translation>
+<translation id="5106275083540628394">복호화 실패: 데이터 손실 위험 있음</translation>
 <translation id="5177818338935286353">괴물 7</translation>
 <translation id="5213743983876949565">동물 1</translation>
 <translation id="5238244642230426581">가져온 북마크</translation>
 <translation id="527605719918376753">탭 음소거</translation>
 <translation id="5305569355661722298">창 닫기 확인</translation>
+<translation id="5322922669477407077">Opera (Developer)</translation>
 <translation id="5388358297987318779">이미지 열기</translation>
 <translation id="5416008465899576639">새 버전의 Vivaldi로 업데이트 할 수 있습니다.</translation>
 <translation id="5497042274492038489">창 닫기 확인</translation>
 <translation id="5594602170491763400">괴물 5</translation>
-<translation id="5615637589913244581">Opera 버전 15+ (베타)</translation>
 <translation id="5648110075441906505">새 창에서 이미지 열기</translation>
 <translation id="5656371807944747581">업데이트 오류!</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" />(을)를 사용할 수 있습니다 (현재 버전 <ph name="OLD_VERSION" />). 지금 다운로드하시겠어요?</translation>
@@ -120,8 +130,8 @@
 <translation id="6040143037577758943">닫기</translation>
 <translation id="6229528619562190452">Vivialdi를 업데이트하려면 여기를 클릭하세요.</translation>
 <translation id="6234173136417926046">이 이미지를 시작 페이지 배경으로 사용</translation>
-<translation id="630690498669249215">Opera 북마크 파일</translation>
 <translation id="6339818817272922368">로컬 계정</translation>
+<translation id="6398710281890660037">프로필 보호하기</translation>
 <translation id="6438786710866753178">경관 4</translation>
 <translation id="6477028720702061455">가져올 Opera 프로필 폴더 선택</translation>
 <translation id="6510706699590490869">Vivaldi 업데이트 (&amp;U)</translation>
@@ -131,11 +141,13 @@
 <translation id="6635049669875534328">변경사항:</translation>
 <translation id="6693585104974197539">불러올 Edge 프로필 폴더를 선택해주세요</translation>
 <translation id="6726279523566323394">불러올 Brave 프로필 폴더를 선택해주세요</translation>
-<translation id="6804831687363620480">죄송하게도, Opera 15+가 실행 중인 상태에서는 설정을 가져올 수 없습니다. Vivaldi로 설정을 가져오려면 현재 작업을 저장하고 모든 Opera 15+ 창을 닫은 후 계속을 클릭하세요.</translation>
 <translation id="6892812721183419409"><ph name="USER" />(으)로 링크 열기</translation>
 <translation id="6896758677409633944">복사</translation>
+<translation id="6960139763942959188">프로필이 암호화되지 않은 형식으로 저장되어 있습니다. Vivaldi에서 프로필을 더 안전한 암호화된 형식으로 업그레이드하려고 합니다. 계속하기 전에 일단 중단하고 프로필을 백업할 수 있습니다.</translation>
 <translation id="7086554968911045110">경관 7</translation>
+<translation id="7099506190679014195">보안 키스토어 업그레이드</translation>
 <translation id="7111492742514999492">경관 9</translation>
+<translation id="7208252576848052204">Arc 브라우저가 실행 중인 상태에서는 설정에 접근할 수 없습니다. Vivaldi로 설정을 불러오려면 작업을 완료한 후 모든 Arc 창을 닫아주세요.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">설치 관리자를 실행할 수 없습니다. 컴퓨터에 충분한 메모리 또는 저장 공간이 있는지 확인 후 다시 시도해주세요.</translation>
 <translation id="7658239707568436148">취소</translation>
@@ -162,7 +174,6 @@
 <translation id="8562339533180097902">Vivaldi 종료 및 설치</translation>
 <translation id="8567452685425968223">업데이트를 추출하는 중...</translation>
 <translation id="8624587806981488221">이미지 새로고침 (&amp;R)</translation>
-<translation id="864444594187862076">Opera 버전 15+ (개발자 버전)</translation>
 <translation id="8651348004684669199">활성화 탭 추가</translation>
 <translation id="8669345741879513971">괴물 10</translation>
 <translation id="867544375504146191">Yandex</translation>
@@ -178,6 +189,7 @@
 <translation id="9048058608784130603"><ph name="VERSION" /> 업데이트 대기 중</translation>
 <translation id="9048224371732578627">동영상을 자동으로 재생하도록 허용됨</translation>
 <translation id="9065203028668620118">수정</translation>
+<translation id="9090254883741610153">계속하기</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261"><ph name="USER" />(으)로 이미지 열기</translation>
 <translation id="9157539936604258187">링크 열기</translation>

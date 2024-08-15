@@ -54,6 +54,7 @@
 #include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/dom/layout_tree_builder_traversal.h"
 #include "third_party/blink/renderer/core/dom/node.h"
+#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/pseudo_element.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/static_node_list.h"
@@ -82,6 +83,7 @@
 #include "third_party/blink/renderer/core/inspector/inspector_history.h"
 #include "third_party/blink/renderer/core/inspector/resolve_node.h"
 #include "third_party/blink/renderer/core/inspector/v8_inspector_string.h"
+#include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
@@ -238,6 +240,7 @@ protocol::DOM::PseudoType InspectorDOMAgent::ProtocolPseudoElementType(
       return protocol::DOM::PseudoTypeEnum::ViewTransitionOld;
     case kAfterLastInternalPseudoId:
     case kPseudoIdNone:
+    case kPseudoIdInvalid:
       CHECK(false);
       return "";
   }
@@ -590,7 +593,7 @@ protocol::Response InspectorDOMAgent::getNodesForSubtreeByStyle(
 
   HashMap<CSSPropertyID, HashSet<String>> properties;
   for (const auto& style : *computed_styles) {
-    absl::optional<CSSPropertyName> property_name = CSSPropertyName::From(
+    std::optional<CSSPropertyName> property_name = CSSPropertyName::From(
         document_->GetExecutionContext(), style->getName());
     if (!property_name)
       return protocol::Response::InvalidParams("Invalid CSS property name");
@@ -1764,12 +1767,12 @@ String InspectorDOMAgent::DocumentBaseURLString(Document* document) {
 // static
 protocol::DOM::ShadowRootType InspectorDOMAgent::GetShadowRootType(
     ShadowRoot* shadow_root) {
-  switch (shadow_root->GetType()) {
-    case ShadowRootType::kUserAgent:
+  switch (shadow_root->GetMode()) {
+    case ShadowRootMode::kUserAgent:
       return protocol::DOM::ShadowRootTypeEnum::UserAgent;
-    case ShadowRootType::kOpen:
+    case ShadowRootMode::kOpen:
       return protocol::DOM::ShadowRootTypeEnum::Open;
-    case ShadowRootType::kClosed:
+    case ShadowRootMode::kClosed:
       return protocol::DOM::ShadowRootTypeEnum::Closed;
   }
   NOTREACHED();

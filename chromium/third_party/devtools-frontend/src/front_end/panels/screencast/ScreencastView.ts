@@ -252,7 +252,7 @@ export class ScreencastView extends UI.Widget.VBox implements SDK.OverlayModel.H
   }
 
   private screencastFrame(base64Data: string, metadata: Protocol.Page.ScreencastFrameMetadata): void {
-    this.imageElement.onload = (): void => {
+    this.imageElement.onload = () => {
       this.pageScaleFactor = metadata.pageScaleFactor;
       this.screenOffsetTop = metadata.offsetTop;
       this.scrollOffsetX = metadata.scrollOffsetX;
@@ -332,7 +332,7 @@ export class ScreencastView extends UI.Widget.VBox implements SDK.OverlayModel.H
     const node = await this.domModel.nodeForLocation(
         Math.floor(position.x / this.pageScaleFactor + this.scrollOffsetX),
         Math.floor(position.y / this.pageScaleFactor + this.scrollOffsetY),
-        Common.Settings.Settings.instance().moduleSetting('showUAShadowDOM').get());
+        Common.Settings.Settings.instance().moduleSetting('show-ua-shadow-dom').get());
     if (!node) {
       return;
     }

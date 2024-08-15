@@ -16,6 +16,7 @@ import static org.mockito.Mockito.when;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.view.View;
 import android.widget.TextView;
 
@@ -38,6 +39,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLog;
 
+import org.chromium.base.LocaleUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Features.DisableFeatures;
@@ -51,6 +53,7 @@ import org.chromium.chrome.browser.feed.v2.FeedUserActionType;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedSnackbarController.FeedLauncher;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
@@ -63,6 +66,8 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
+
+import java.util.Locale;
 
 /** Tests {@link WebFeedSnackbarController}. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -103,7 +108,13 @@ public final class WebFeedSnackbarControllerTest {
         // Print logs to stdout.
         ShadowLog.stream = System.out;
 
-        Profile.setLastUsedProfileForTesting(mProfile);
+        // Set default locale to other country in order not to make
+        // FeedFeatures.isFeedFollowUiUpdateEnabled always return true.
+        Configuration config = new Configuration();
+        config.setLocale(new Locale("tl", "PH"));
+        LocaleUtils.setDefaultLocalesFromConfiguration(config);
+
+        ProfileManager.setLastUsedProfileForTesting(mProfile);
         MockitoAnnotations.initMocks(this);
         mJniMocker.mock(WebFeedBridge.getTestHooksForTesting(), mWebFeedBridgeJniMock);
         mJniMocker.mock(FeedServiceBridge.getTestHooksForTesting(), mFeedServideBridgeJniMock);

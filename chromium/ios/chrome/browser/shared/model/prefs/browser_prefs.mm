@@ -75,6 +75,7 @@
 #import "components/variations/service/variations_service.h"
 #import "components/web_resource/web_resource_pref_names.h"
 #import "ios/chrome/app/variations_app_state_agent.h"
+#import "ios/chrome/browser/drive/model/drive_policy.h"
 #import "ios/chrome/browser/first_run/model/first_run.h"
 #import "ios/chrome/browser/memory/model/memory_debugger_manager.h"
 #import "ios/chrome/browser/metrics/model/constants.h"
@@ -91,6 +92,7 @@
 #import "ios/chrome/browser/shared/model/browser_state/browser_state_info_cache.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/tips_notifications/model/tips_notification_client.h"
 #import "ios/chrome/browser/ui/authentication/history_sync/history_sync_utils.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
@@ -103,6 +105,7 @@
 #import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_constants.h"
 #import "ios/chrome/browser/upgrade/model/upgrade_constants.h"
 #import "ios/chrome/browser/voice/model/voice_search_prefs_registration.h"
+#import "ios/chrome/browser/web/model/annotations/annotations_util.h"
 #import "ios/chrome/browser/web/model/font_size/font_size_tab_helper.h"
 #import "ios/components/cookie_util/cookie_constants.h"
 #import "ios/web/common/features.h"
@@ -113,6 +116,7 @@
 #import "ios/ui/bookmarks_editor/vivaldi_bookmark_prefs.h"
 #import "ios/ui/notes/note_mediator.h"
 #import "ios/ui/notes/note_path_cache.h"
+#import "ios/ui/notes/vivaldi_notes_pref.h"
 #import "ios/ui/settings/appearance/vivaldi_appearance_settings_prefs.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_prefs.h"
 #import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
@@ -120,24 +124,6 @@
 // End Vivaldi
 
 namespace {
-
-// Deprecated 03/2022
-const char kShowReadingListInBookmarkBar[] = "bookmark_bar.show_reading_list";
-
-// Deprecated 03/2022
-const char kPrefReadingListMessagesNeverShow[] =
-    "reading_list_message_never_show";
-
-// Deprecated 04/2022
-const char kFRETrialGroupPrefName[] = "fre_refactoring.trial_group";
-const char kOptimizationGuideRemoteFetchingEnabled[] =
-    "optimization_guide.fetching_enabled";
-
-// Deprecated 05/2022.
-const char kTrialGroupV3PrefName[] = "fre_refactoringV3.trial_group";
-
-// Deprecated 05/2022.
-const char kAccountIdMigrationState[] = "account_id_migration_state";
 
 // Deprecated 09/2022.
 const char kDataSaverEnabled[] = "spdy_proxy.enabled";
@@ -198,6 +184,9 @@ const char kAppStoreRatingActiveDaysInPastWeekKey[] =
     "AppStoreRatingActiveDaysInPastWeek";
 const char kAppStoreRatingLastShownPromoDayKey[] =
     "AppStoreRatingLastShownPromoDay";
+
+// Deprecated 02/24.
+const char kIosPromosManagerImpressions[] = "ios.promos_manager.impressions";
 
 // Helper function migrating the preference `pref_name` of type "double" from
 // `defaults` to `pref_service`.
@@ -299,6 +288,23 @@ void MigrateArrayOfDatesPreferenceFromUserDefaults(std::string_view pref_name,
   [defaults removeObjectForKey:key];
 }
 
+// Helper function migrating the `list` preference from LocalState prefs to
+// BrowserState prefs.
+void MigrateListPrefFromLocalStatePrefsToProfilePrefs(
+    std::string_view pref_name,
+    PrefService* pref_service) {
+  PrefService* local_pref_service = GetApplicationContext()->GetLocalState();
+
+  const PrefService::Preference* legacy_pref =
+      local_pref_service->FindPreference(pref_name.data());
+  if (legacy_pref && !legacy_pref->IsDefaultValue()) {
+    pref_service->SetList(
+        pref_name.data(),
+        local_pref_service->GetList(pref_name.data()).Clone());
+    local_pref_service->ClearPref(pref_name.data());
+  }
+}
+
 // Helper function migrating the `string` preference from LocalState prefs to
 // BrowserState prefs.
 void MigrateStringPrefFromLocalStatePrefsToProfilePrefs(
@@ -311,6 +317,22 @@ void MigrateStringPrefFromLocalStatePrefsToProfilePrefs(
   if (legacy_pref && !legacy_pref->IsDefaultValue()) {
     pref_service->SetString(pref_name.data(),
                             local_pref_service->GetString(pref_name.data()));
+    local_pref_service->ClearPref(pref_name.data());
+  }
+}
+
+// Helper function migrating the `time` preference from LocalState prefs to
+// BrowserState prefs.
+void MigrateTimePrefFromLocalStatePrefsToProfilePrefs(
+    std::string_view pref_name,
+    PrefService* pref_service) {
+  PrefService* local_pref_service = GetApplicationContext()->GetLocalState();
+
+  const PrefService::Preference* legacy_pref =
+      local_pref_service->FindPreference(pref_name.data());
+  if (legacy_pref && !legacy_pref->IsDefaultValue()) {
+    pref_service->SetTime(pref_name.data(),
+                          local_pref_service->GetTime(pref_name.data()));
     local_pref_service->ClearPref(pref_name.data());
   }
 }
@@ -342,6 +364,8 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   segmentation_platform::SegmentationPlatformService::RegisterLocalStatePrefs(
       registry);
   optimization_guide::prefs::RegisterLocalStatePrefs(registry);
+  PushNotificationService::RegisterLocalStatePrefs(registry);
+  TipsNotificationClient::RegisterLocalStatePrefs(registry);
 
   // Preferences related to the browser state manager.
   registry->RegisterStringPref(prefs::kBrowserStateLastUsed, std::string());
@@ -373,7 +397,7 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(prefs::kIosPreRestoreAccountInfo);
 
   registry->RegisterListPref(prefs::kIosPromosManagerActivePromos);
-  registry->RegisterListPref(prefs::kIosPromosManagerImpressions);
+  registry->RegisterListPref(kIosPromosManagerImpressions);
   registry->RegisterListPref(prefs::kIosPromosManagerSingleDisplayActivePromos);
   registry->RegisterDictionaryPref(
       prefs::kIosPromosManagerSingleDisplayPendingPromos);
@@ -410,10 +434,6 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kLensCameraAssistedSearchPolicyAllowed,
                                 true);
 
-  registry->RegisterIntegerPref(kFRETrialGroupPrefName, 0);
-
-  registry->RegisterIntegerPref(kTrialGroupV3PrefName, 0);
-
   registry->RegisterDictionaryPref(kPrefPromoObject);
 
   // Registers prefs to count the remaining number of times autofill branding
@@ -448,19 +468,12 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   // Default to 0 which is the unassigned value.
   registry->RegisterIntegerPref(prefs::kInactiveTabsTimeThreshold, 0);
 
-  // Preferences related to the tab pickup feature.
+  // Preference related to the tab pickup feature.
   registry->RegisterBooleanPref(prefs::kTabPickupEnabled, true);
-  registry->RegisterTimePref(prefs::kTabPickupLastDisplayedTime, base::Time());
-  registry->RegisterStringPref(prefs::kTabPickupLastDisplayedURL,
-                               std::string());
 
   registry->RegisterIntegerPref(prefs::kIosSyncSegmentsNewTabPageDisplayCount,
                                 0);
 
-  // Pref used to store the latest Most Visited Sites to detect changes
-  // to the top Most Visited Sites.
-  registry->RegisterListPref(prefs::kIosLatestMostVisitedSites,
-                             PrefRegistry::LOSSY_PREF);
   // Pref used to store the number of impressions of the Most Visited Sites
   // since a freshness signal of the Most Visited Sites.
   registry->RegisterIntegerPref(
@@ -571,6 +584,7 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   [NoteMediator registerBrowserStatePrefs:registry];
   [NotePathCache registerBrowserStatePrefs:registry];
   [VivaldiStartPagePrefs registerBrowserStatePrefs:registry];
+  [VivaldiNotesPrefs registerBrowserStatePrefs:registry];
   [VivaldiBookmarkPrefs registerBrowserStatePrefs:registry];
   [VivaldiTabSettingPrefs registerBrowserStatePrefs:registry];
   [VivaldiAppearanceSettingPrefs registerBrowserStatePrefs:registry];
@@ -589,7 +603,7 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   // Even if chrome changes its settings.
   if (vivaldi::IsVivaldiRunning()) {
     registry->RegisterBooleanPref(
-        prefs::kEnableDoNotTrack, true,
+        prefs::kEnableDoNotTrackIos, true,
         user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
     registry->RegisterBooleanPref(
         translate::prefs::kOfferTranslateEnabled, false,
@@ -599,7 +613,7 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
         user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   } else {
   registry->RegisterBooleanPref(
-      prefs::kEnableDoNotTrack, false,
+      prefs::kEnableDoNotTrackIos, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
       translate::prefs::kOfferTranslateEnabled, true,
@@ -659,10 +673,6 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
 
   registry->RegisterBooleanPref(prefs::kAllowChromeDataInBackups, true);
 
-  registry->RegisterBooleanPref(kShowReadingListInBookmarkBar, true);
-
-  registry->RegisterBooleanPref(kOptimizationGuideRemoteFetchingEnabled, true);
-
   // Register HTTPS related settings.
   registry->RegisterBooleanPref(prefs::kHttpsOnlyModeEnabled, false);
   registry->RegisterBooleanPref(prefs::kMixedContentAutoupgradeEnabled, true);
@@ -675,8 +685,6 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   // already shown.
   registry->RegisterBooleanPref(
       policy::policy_prefs::kUserPolicyNotificationWasShown, false);
-
-  registry->RegisterIntegerPref(kAccountIdMigrationState, 0);
 
   registry->RegisterIntegerPref(prefs::kIosShareChromeCount, 0,
                                 PrefRegistry::LOSSY_PREF);
@@ -733,6 +741,13 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
       prefs::kIosSaveToPhotosContextMenuPolicySettings,
       static_cast<int>(SaveToPhotosPolicySettings::kEnabled));
 
+  // Preferences related to Save to Drive settings.
+  registry->RegisterStringPref(prefs::kIosSaveToDriveDefaultGaiaId,
+                               std::string());
+  registry->RegisterIntegerPref(
+      prefs::kIosSaveToDriveDownloadManagerPolicySettings,
+      static_cast<int>(SaveToDrivePolicySettings::kEnabled));
+
   // Preferences related to parcel tracking.
   registry->RegisterBooleanPref(
       prefs::kIosParcelTrackingOptInPromptDisplayLimitMet, false);
@@ -785,16 +800,24 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(prefs::kInsecureFormWarningsEnabled, true);
 
   registry->RegisterTimePref(kLastCookieDeletionDate, base::Time());
+
+  registry->RegisterDictionaryPref(prefs::kWebAnnotationsPolicy);
+
+  // Preferences related to the tab pickup feature.
+  registry->RegisterTimePref(prefs::kTabPickupLastDisplayedTime, base::Time());
+  registry->RegisterStringPref(prefs::kTabPickupLastDisplayedURL,
+                               std::string());
+
+  // Pref used to store the latest Most Visited Sites to detect changes
+  // to the top Most Visited Sites.
+  registry->RegisterListPref(prefs::kIosLatestMostVisitedSites,
+                             PrefRegistry::LOSSY_PREF);
+
+  registry->RegisterBooleanPref(prefs::kUserAgentWasChanged, false);
 }
 
 // This method should be periodically pruned of year+ old migrations.
 void MigrateObsoleteLocalStatePrefs(PrefService* prefs) {
-  // Added 04/2022
-  prefs->ClearPref(kFRETrialGroupPrefName);
-
-  // Added 05/2022
-  prefs->ClearPref(kTrialGroupV3PrefName);
-
   // Added 09/2022
   prefs->ClearPref(kPrefPromoObject);
 
@@ -835,6 +858,9 @@ void MigrateObsoleteLocalStatePrefs(PrefService* prefs) {
   // Added 01/2024.
   prefs->ClearPref(kAppStoreRatingLastShownPromoDayKey);
   [defaults removeObjectForKey:@(kAppStoreRatingLastShownPromoDayKey)];
+
+  // Added 02/2024.
+  prefs->ClearPref(kIosPromosManagerImpressions);
 }
 
 // This method should be periodically pruned of year+ old migrations.
@@ -842,20 +868,6 @@ void MigrateObsoleteBrowserStatePrefs(const base::FilePath& state_path,
                                       PrefService* prefs) {
   // Check MigrateDeprecatedAutofillPrefs() to see if this is safe to remove.
   autofill::prefs::MigrateDeprecatedAutofillPrefs(prefs);
-
-  // Added 03/2022
-  prefs->ClearPref(kShowReadingListInBookmarkBar);
-
-  // Added 3/2022.
-  if (prefs->FindPreference(kPrefReadingListMessagesNeverShow)) {
-    prefs->ClearPref(kPrefReadingListMessagesNeverShow);
-  }
-
-  // Added 4/2022.
-  prefs->ClearPref(kOptimizationGuideRemoteFetchingEnabled);
-
-  // Added 05/2022
-  prefs->ClearPref(kAccountIdMigrationState);
 
   // Added 09/2022
   prefs->ClearPref(kPrefPromoObject);
@@ -963,7 +975,7 @@ void MigrateObsoleteBrowserStatePrefs(const base::FilePath& state_path,
       kActivityBucketLastReportedDateArrayKey, prefs, defaults);
 
   // Added 10/2023, but DO NOT REMOVE after the usual year!
-  // TODO(crbug.com/1486420): Remove ~one year after full launch.
+  // TODO(crbug.com/40282890): Remove ~one year after full launch.
   browser_sync::MaybeMigrateSyncingUserToSignedIn(state_path, prefs);
 
   // Added 12/2023.
@@ -980,6 +992,18 @@ void MigrateObsoleteBrowserStatePrefs(const base::FilePath& state_path,
   // BrowserState pref needs to be updated.
   MigrateStringPrefFromLocalStatePrefsToProfilePrefs(
       tab_resumption_prefs::kTabResumptionLastOpenedTabURLPref, prefs);
+
+  // Added 02/2024.
+  MigrateTimePrefFromLocalStatePrefsToProfilePrefs(
+      prefs::kTabPickupLastDisplayedTime, prefs);
+
+  // Added 02/2024.
+  MigrateStringPrefFromLocalStatePrefsToProfilePrefs(
+      prefs::kTabPickupLastDisplayedURL, prefs);
+
+  // Added 02/2024.
+  MigrateListPrefFromLocalStatePrefsToProfilePrefs(
+      prefs::kIosLatestMostVisitedSites, prefs);
 }
 
 void MigrateObsoleteUserDefault() {
@@ -991,4 +1015,7 @@ void MigrateObsoleteUserDefault() {
   // Added 10/2023
   [defaults removeObjectForKey:@"PathToBrowserStateToKeep"];
   [defaults removeObjectForKey:@"HasBrowserStateBeenRemoved"];
+
+  // TODO(b/322004644): Remove in M124+. Added 02/2024.
+  [defaults removeObjectForKey:@"TimestampAppLaunchedOnColdStart"];
 }

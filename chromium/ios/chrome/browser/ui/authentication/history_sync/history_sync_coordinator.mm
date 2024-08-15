@@ -4,9 +4,11 @@
 
 #import "ios/chrome/browser/ui/authentication/history_sync/history_sync_coordinator.h"
 
+#import "base/memory/raw_ptr.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
 #import "components/signin/public/base/signin_metrics.h"
+#import "components/signin/public/base/signin_switches.h"
 #import "components/sync/base/user_selectable_type.h"
 #import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_user_settings.h"
@@ -35,7 +37,7 @@
   // History view controller.
   HistorySyncViewController* _viewController;
   // Pref service.
-  PrefService* _prefService;
+  raw_ptr<PrefService> _prefService;
   // `YES` if coordinator used during the first run.
   BOOL _firstRun;
   // `YES` if the user's email should be shown in the footer text.
@@ -164,6 +166,7 @@
 
   _viewController = [[HistorySyncViewController alloc] init];
   _viewController.delegate = self;
+
   ChromeAccountManagerService* chromeAccountManagerService =
       ChromeAccountManagerServiceFactory::GetForBrowserState(browserState);
   signin::IdentityManager* identityManager =
@@ -176,9 +179,10 @@
                       showUserEmail:_showUserEmail];
   _mediator.consumer = _viewController;
   _mediator.delegate = self;
+
   if (_firstRun) {
     _viewController.modalInPresentation = YES;
-    base::UmaHistogramEnumeration("FirstRun.Stage",
+    base::UmaHistogramEnumeration(first_run::kFirstRunStageHistogram,
                                   first_run::kHistorySyncScreenStart);
   }
   base::RecordAction(base::UserMetricsAction("Signin_HistorySync_Started"));
@@ -233,9 +237,11 @@
 
   history_sync::ResetDeclinePrefs(_prefService);
   base::RecordAction(base::UserMetricsAction("Signin_HistorySync_Completed"));
+  [self recordActionButtonTappedWithHistorySyncCompleted:YES];
   if (_firstRun) {
     base::UmaHistogramEnumeration(
-        "FirstRun.Stage", first_run::kHistorySyncScreenCompletionWithSync);
+        first_run::kFirstRunStageHistogram,
+        first_run::kHistorySyncScreenCompletionWithSync);
   }
   base::UmaHistogramEnumeration("Signin.HistorySyncOptIn.Completed",
                                 _accessPoint,
@@ -248,9 +254,11 @@
 - (void)didTapSecondaryActionButton {
   history_sync::RecordDeclinePrefs(_prefService);
   base::RecordAction(base::UserMetricsAction("Signin_HistorySync_Declined"));
+  [self recordActionButtonTappedWithHistorySyncCompleted:NO];
   if (_firstRun) {
     base::UmaHistogramEnumeration(
-        "FirstRun.Stage", first_run::kHistorySyncScreenCompletionWithoutSync);
+        first_run::kFirstRunStageHistogram,
+        first_run::kHistorySyncScreenCompletionWithoutSync);
   }
   base::UmaHistogramEnumeration("Signin.HistorySyncOptIn.Declined",
                                 _accessPoint,
@@ -258,6 +266,36 @@
   _recordOptInEndAtStop = NO;
 
   [_delegate closeHistorySyncCoordinator:self declinedByUser:YES];
+}
+
+#pragma mark - Private
+
+- (void)recordActionButtonTappedWithHistorySyncCompleted:(BOOL)completed {
+  if (!base::FeatureList::IsEnabled(
+          switches::kMinorModeRestrictionsForHistorySyncOptIn)) {
+    return;
+  }
+
+  std::optional<signin_metrics::SyncButtonClicked> buttonClicked;
+  switch (_viewController.actionButtonsVisibility) {
+    case ActionButtonsVisibility::kRegularButtonsShown:
+      buttonClicked = completed ? signin_metrics::SyncButtonClicked::
+                                      kHistorySyncOptInNotEqualWeighted
+                                : signin_metrics::SyncButtonClicked::
+                                      kHistorySyncCancelNotEqualWeighted;
+      break;
+    case ActionButtonsVisibility::kEquallyWeightedButtonShown:
+      buttonClicked = completed ? signin_metrics::SyncButtonClicked::
+                                      kHistorySyncOptInEqualWeighted
+                                : signin_metrics::SyncButtonClicked::
+                                      kHistorySyncCancelEqualWeighted;
+      break;
+    default:
+      NOTREACHED();
+      break;
+  }
+
+  base::UmaHistogramEnumeration("Signin.SyncButtons.Clicked", *buttonClicked);
 }
 
 @end

@@ -4,10 +4,11 @@
 
 package org.chromium.chrome.browser.compositor;
 
+import static androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
+
+import android.app.Activity;
 import android.content.Context;
-import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.RectF;
@@ -16,23 +17,25 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.util.AttributeSet;
-import android.util.Pair;
 import android.view.DragEvent;
-import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.PointerIcon;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.view.accessibility.AccessibilityEvent;
 import android.widget.FrameLayout;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.accessibility.AccessibilityEventCompat;
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
 import androidx.customview.widget.ExploreByTouchHelper;
 
+import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
 import org.chromium.base.ObserverList;
 import org.chromium.base.SysUtils;
@@ -157,6 +160,7 @@ public class CompositorViewHolder extends FrameLayout
     private boolean mIsKeyboardShowing;
     private boolean mNativeInitialized;
     private LayoutManagerImpl mLayoutManager;
+    private Activity mActivity;
     private CompositorView mCompositorView;
 
     private boolean mContentOverlayVisiblity = true;
@@ -191,8 +195,6 @@ public class CompositorViewHolder extends FrameLayout
     // Cache objects that should not be created frequently.
     private final Rect mCacheRect = new Rect();
     private final Point mCachePoint = new Point();
-
-    private boolean mIsInVr;
 
     private boolean mControlsResizeView;
     private boolean mInGesture;
@@ -319,6 +321,11 @@ public class CompositorViewHolder extends FrameLayout
                 }
 
                 @Override
+                public void onWillShowBrowserControls(Tab tab) {
+                    CompositorViewHolder.this.onWillShowBrowserControls();
+                }
+
+                @Override
                 public void onWebContentsSwapped(
                         Tab tab, boolean didStartLoad, boolean didFinishLoad) {
                     // After swapping web contents, any gesture active in the old ContentView is
@@ -349,46 +356,6 @@ public class CompositorViewHolder extends FrameLayout
                     }
                 }
             };
-
-    /** This view is created on demand to display debugging information. */
-    private static class DebugOverlay extends View {
-        private final List<Pair<Rect, Integer>> mRectangles = new ArrayList<>();
-        private final Paint mPaint = new Paint();
-        private boolean mFirstPush = true;
-
-        /**
-         * @param context The current Android's context.
-         */
-        public DebugOverlay(Context context) {
-            super(context);
-        }
-
-        /**
-         * Pushes a rectangle to be drawn on the screen on top of everything.
-         *
-         * @param rect The rectangle to be drawn on screen
-         * @param color The color of the rectangle
-         */
-        public void pushRect(Rect rect, int color) {
-            if (mFirstPush) {
-                mRectangles.clear();
-                mFirstPush = false;
-            }
-            mRectangles.add(new Pair<>(rect, color));
-            invalidate();
-        }
-
-        @Override
-        protected void onDraw(Canvas canvas) {
-            for (int i = 0; i < mRectangles.size(); i++) {
-                mPaint.setColor(mRectangles.get(i).second);
-                canvas.drawRect(mRectangles.get(i).first, mPaint);
-            }
-            mFirstPush = true;
-        }
-    }
-
-    private DebugOverlay mDebugOverlay;
 
     private View mUrlBar;
 
@@ -455,6 +422,13 @@ public class CompositorViewHolder extends FrameLayout
                 new FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
 
         setOnSystemUiVisibilityChangeListener(visibility -> handleSystemUiVisibilityChange());
+        if (isFullscreenApiMigrationEnabled()) {
+            setOnApplyWindowInsetsListener(
+                    (view, windowInsets) -> {
+                        handleSystemUiVisibilityChange();
+                        return windowInsets;
+                    });
+        }
         handleSystemUiVisibilityChange();
 
         mDelayTempStripRemoval = TabUiFeatureUtilities.isDelayTempStripRemovalEnabled(getContext());
@@ -515,7 +489,8 @@ public class CompositorViewHolder extends FrameLayout
         return mCachePoint;
     }
 
-    private void handleSystemUiVisibilityChange() {
+    @VisibleForTesting
+    void handleSystemUiVisibilityChange() {
         View view = getContentView();
         if (view == null || !ViewCompat.isAttachedToWindow(view)) view = this;
 
@@ -526,14 +501,8 @@ public class CompositorViewHolder extends FrameLayout
             view = (View) view.getParent();
         }
 
-        // SYSTEM_UI_FLAG_FULLSCREEN is cleared when showing the soft keyboard in older version of
-        // Android (prior to P).  The immersive mode flags are not cleared, so use those in
-        // combination to detect this state.
-        boolean isInFullscreen =
-                (uiVisibility & View.SYSTEM_UI_FLAG_FULLSCREEN) != 0
-                        || (uiVisibility & View.SYSTEM_UI_FLAG_IMMERSIVE) != 0
-                        || (uiVisibility & View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY) != 0;
-        boolean layoutFullscreen = (uiVisibility & View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN) != 0;
+        boolean isInFullscreen = isInFullscreenMode(uiVisibility, view);
+        boolean layoutFullscreen = isLayoutFullscreen(uiVisibility);
 
         if (mShowingFullscreen == isInFullscreen) return;
         mShowingFullscreen = isInFullscreen;
@@ -552,6 +521,55 @@ public class CompositorViewHolder extends FrameLayout
         // not reliably jump from updating the viewport too early.
         long delay = layoutFullscreen ? SYSTEM_UI_VIEWPORT_UPDATE_DELAY_MS : 0;
         postDelayed(mSystemUiFullscreenResizeRunnable, delay);
+    }
+
+    private static boolean isFullscreenApiMigrationEnabled() {
+        return ChromeFeatureList.sFullscreenInsetsApiMigration.isEnabled()
+                || (BuildInfo.getInstance().isAutomotive
+                        && ChromeFeatureList.sFullscreenInsetsApiMigrationOnAutomotive.isEnabled());
+    }
+
+    private boolean isInFullscreenMode(int uiVisibility, View view) {
+        // If the fullscreen api migration is enabled, check the updated API instead.
+        if (isFullscreenApiMigrationEnabled()) {
+            if (view != null
+                    && view.getRootWindowInsets() != null
+                    && mActivity != null
+                    && mActivity.getWindow() != null
+                    && mActivity.getWindow().getDecorView() != null) {
+                Window window = mActivity.getWindow();
+                return !WindowInsetsCompat.toWindowInsetsCompat(view.getRootWindowInsets(), view)
+                                .isVisible(WindowInsetsCompat.Type.statusBars())
+                        || WindowCompat.getInsetsController(window, window.getDecorView())
+                                        .getSystemBarsBehavior()
+                                == BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
+            } else {
+                return false;
+            }
+        } else {
+            // SYSTEM_UI_FLAG_FULLSCREEN is cleared when showing the soft keyboard in older version
+            // of
+            // Android (prior to P).  The immersive mode flags are not cleared, so use those in
+            // combination to detect this state.
+            return (uiVisibility & View.SYSTEM_UI_FLAG_FULLSCREEN) != 0
+                    || (uiVisibility & View.SYSTEM_UI_FLAG_IMMERSIVE) != 0
+                    || (uiVisibility & View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY) != 0;
+        }
+    }
+
+    private boolean isLayoutFullscreen(int uiVisibility) {
+        if (isFullscreenApiMigrationEnabled()) {
+            if (mActivity != null
+                    && mActivity.getWindow() != null
+                    && mActivity.getWindow().getDecorView() != null) {
+                // TODO(crbug.com/1519669): Coordinate usage of #setDecorFitsSystemWindows
+                return !mActivity.getWindow().getDecorView().getFitsSystemWindows();
+            } else {
+                return false;
+            }
+        } else {
+            return (uiVisibility & View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN) != 0;
+        }
     }
 
     /**
@@ -655,6 +673,7 @@ public class CompositorViewHolder extends FrameLayout
             WindowAndroid windowAndroid,
             TabContentManager tabContentManager,
             PrefService prefService) {
+        mActivity = windowAndroid.getActivity().get();
         mCompositorView.initNativeCompositor(
                 SysUtils.isLowEndDevice(), windowAndroid, tabContentManager);
 
@@ -748,16 +767,13 @@ public class CompositorViewHolder extends FrameLayout
             mInGesture = false;
             tryUpdateControlsAndWebContentsSizing();
         }
-        if (!ChromeFeatureList.sDeferNotifyInMotion.isEnabled()) {
-            updateInMotion();
-        }
     }
 
     private void updateInMotion() {
         // TODO(https://crbug.com/1378716): Track fling as well.
         boolean inMotion = mInGesture || mContentViewScrolling;
         mInMotionSupplier.set(inMotion);
-        if (ChromeFeatureList.sDeferKeepScreenOnDuringGesture.isEnabled() && mContentView != null) {
+        if (mContentView != null) {
             mContentView.setDeferKeepScreenOnChanges(inMotion);
         }
     }
@@ -819,9 +835,7 @@ public class CompositorViewHolder extends FrameLayout
         // notifying in motion, should be done after this.
         boolean handled = super.dispatchTouchEvent(e);
 
-        if (ChromeFeatureList.sDeferNotifyInMotion.isEnabled()) {
-            updateInMotion();
-        }
+        updateInMotion();
         return handled;
     }
 
@@ -917,8 +931,6 @@ public class CompositorViewHolder extends FrameLayout
      */
     @VisibleForTesting
     void updateWebContentsSize(Tab tab) {
-        // When in VR, the CompositorView doesn't control the size of the WebContents.
-        if (mIsInVr) return;
         if (tab == null) return;
 
         WebContents webContents = tab.getWebContents();
@@ -1155,7 +1167,6 @@ public class CompositorViewHolder extends FrameLayout
             float topViewsTranslation = mBrowserControlsManager.getTopVisibleContentOffset();
             float bottomMargin =
                     BrowserControlsUtils.getBottomContentOffset(mBrowserControlsManager);
-            applyTranslationToTopChildViews(view, topViewsTranslation);
             applyMarginToFullscreenChildViews(view, topViewsTranslation, bottomMargin);
             tryUpdateControlsAndWebContentsSizing();
         }
@@ -1178,20 +1189,6 @@ public class CompositorViewHolder extends FrameLayout
                 ViewUtils.requestLayout(
                         child, "CompositorViewHolder.applyMarginToFullscreenChildViews");
                 TraceEvent.instant("FullscreenManager:child.requestLayout()");
-            }
-        }
-    }
-
-    private static void applyTranslationToTopChildViews(ViewGroup contentView, float translation) {
-        for (int i = 0; i < contentView.getChildCount(); i++) {
-            View child = contentView.getChildAt(i);
-            if (!(child.getLayoutParams() instanceof FrameLayout.LayoutParams)) continue;
-
-            FrameLayout.LayoutParams layoutParams =
-                    (FrameLayout.LayoutParams) child.getLayoutParams();
-            if (Gravity.TOP == (layoutParams.gravity & Gravity.FILL_VERTICAL)) {
-                child.setTranslationY(translation);
-                TraceEvent.instant("FullscreenManager:child.setTranslationY()");
             }
         }
     }
@@ -1378,15 +1375,6 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     @Override
-    public void pushDebugRect(Rect rect, int color) {
-        if (mDebugOverlay == null) {
-            mDebugOverlay = new DebugOverlay(getContext());
-            addView(mDebugOverlay);
-        }
-        mDebugOverlay.pushRect(rect, color);
-    }
-
-    @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         mIsKeyboardShowing =
@@ -1430,12 +1418,10 @@ public class CompositorViewHolder extends FrameLayout
         onViewportChanged();
     }
 
-    @Override
     public int getTopControlsHeightPixels() {
         return mBrowserControlsManager != null ? mBrowserControlsManager.getTopControlsHeight() : 0;
     }
 
-    @Override
     public int getBottomControlsHeightPixels() {
         return mBrowserControlsManager != null
                 ? mBrowserControlsManager.getBottomControlsHeight()
@@ -1624,6 +1610,22 @@ public class CompositorViewHolder extends FrameLayout
         setTab(tab);
     }
 
+    @VisibleForTesting
+    void onWillShowBrowserControls() {
+        // TODO(bokan): Flag guarding new behavior, remove once M125 ships.
+        // https://crbug.com/41490049.
+        if (!ChromeFeatureList.sBrowserControlsEarlyResize.isEnabled()) return;
+
+        // Let observers know the controls will be shown, resize the web content
+        // immediately rather than waiting for the controls animation to finish. This
+        // helps makes the resize more predictable, in particular, when capturing
+        // snapshots of outgoing content for a view transition.
+        if (mControlsResizeView) return;
+        mControlsResizeView = true;
+        updateWebContentsSize(getCurrentTab());
+        onControlsResizeViewChanged(getWebContents(), mControlsResizeView);
+    }
+
     private void setTab(Tab tab) {
         // The StartSurfaceUserData.getInstance().getUnusedTabRestoredAtStartup() is only true when
         // the Start surface is showing in the startup and there isn't any Tab opened. Thus, no
@@ -1723,21 +1725,6 @@ public class CompositorViewHolder extends FrameLayout
         if (tab.getView() != tab.getContentView()) return;
 
         updateWebContentsSize(tab);
-    }
-
-    /**
-     * Called when VR is entered. The CompositorViewHolder loses control over WebContents sizing.
-     */
-    public void onEnterVr() {
-        mIsInVr = true;
-    }
-
-    /**
-     * Called when VR is exited. The CompositorViewHolder regains control over WebContents sizing.
-     */
-    public void onExitVr() {
-        mIsInVr = false;
-        tryUpdateControlsAndWebContentsSizing();
     }
 
     @Override

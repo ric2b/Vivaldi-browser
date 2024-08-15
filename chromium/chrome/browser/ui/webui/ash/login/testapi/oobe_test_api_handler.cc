@@ -25,13 +25,19 @@
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
+#include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_requisition_manager.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/ui/ash/login_screen_client_impl.h"
 #include "chrome/browser/ui/webui/ash/login/hid_detection_screen_handler.h"
 #include "chromeos/ash/components/assistant/buildflags.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/account_id/account_id.h"
 #include "components/login/localized_values_builder.h"
+#include "components/metrics/metrics_pref_names.h"
+#include "components/metrics/metrics_service.h"
+#include "components/user_manager/user_manager.h"
 #include "services/device/public/mojom/input_service.mojom.h"
 #include "ui/display/screen.h"
 
@@ -64,6 +70,13 @@ void OobeTestAPIHandler::DeclareJSCallbacks() {
               &OobeTestAPIHandler::HandleGetPrimaryDisplayName);
   AddCallback("OobeTestApi.emulateDevicesForTesting",
               &OobeTestAPIHandler::EmulateDevicesConnectedForTesting);
+
+  AddCallback("OobeTestApi.getShouldSkipChoobe",
+              &OobeTestAPIHandler::HandleGetShouldSkipChoobe);
+  AddCallback("OobeTestApi.getShouldSkipTouchpadScroll",
+              &OobeTestAPIHandler::HandleGetShouldSkipTouchpadScroll);
+  AddCallback("OobeTestApi.getMetricsClientID",
+              &OobeTestAPIHandler::HandleGetMetricsClientID);
 }
 
 void OobeTestAPIHandler::GetAdditionalParameters(base::Value::Dict* dict) {
@@ -101,6 +114,7 @@ void OobeTestAPIHandler::GetAdditionalParameters(base::Value::Dict* dict) {
   bool skip_touchpad_scroll =
       !features::IsOobeTouchpadScrollEnabled() ||
       InputDeviceSettingsController::Get()->GetConnectedTouchpads().empty();
+  // TODO(b/327270907) Remove `testapi_shouldSkipTouchpadScroll`.
   dict->Set("testapi_shouldSkipTouchpadScroll", skip_touchpad_scroll);
 
   bool skip_display_size = !features::IsOobeDisplaySizeEnabled();
@@ -111,10 +125,28 @@ void OobeTestAPIHandler::GetAdditionalParameters(base::Value::Dict* dict) {
   // when display size Screen or touchpad scroll screen is skipped.
   bool skip_choobe = !features::IsOobeChoobeEnabled() || skip_touchpad_scroll ||
                      skip_display_size;
+  // TODO(b/327270907) Remove `testapi_shouldSkipChoobe`.
   dict->Set("testapi_shouldSkipChoobe", skip_choobe);
 
   dict->Set("testapi_shouldSkipGaiaInfoScreen",
             !features::IsOobeGaiaInfoScreenEnabled());
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  // The current method is called early, before the user logs-in,
+  // If Chrome was launched in OOBE, `is_owner` will be set to true since
+  // `user_manager->GetUsers().size()` would return 0.
+  // If it's launched in the login screen to test the add person flow, then
+  // the number of existing users before the new user logs-in should be > 0.
+  policy::BrowserPolicyConnectorAsh* connector =
+      g_browser_process->platform_part()->browser_policy_connector_ash();
+  auto* user_manager = user_manager::UserManager::Get();
+  bool is_owner = !connector->IsDeviceEnterpriseManaged() &&
+                  user_manager->GetUsers().size() == 0;
+  dict->Set("testapi_shouldSkipHwDataCollection",
+            !is_owner || !switches::IsRevenBranding());
+#else
+  dict->Set("testapi_shouldSkipHwDataCollection", true);
+#endif
 }
 
 void OobeTestAPIHandler::LoginWithPin(const std::string& username,
@@ -181,7 +213,7 @@ void OobeTestAPIHandler::LoginAsGuest() {
   VLOG(1) << "LoginAsGuest";
   WizardController::default_controller()->SkipToLoginForTesting();  // IN-TEST
   CHECK(ExistingUserController::current_controller());
-  UserContext context(user_manager::USER_TYPE_GUEST, EmptyAccountId());
+  UserContext context(user_manager::UserType::kGuest, EmptyAccountId());
   ExistingUserController::current_controller()->Login(context,
                                                       SigninSpecifics());
 }
@@ -220,6 +252,47 @@ void OobeTestAPIHandler::OnGetDisplayUnitInfoList(
   }
   ResolveJavascriptCallback(base::Value(callback_id),
                             base::Value(display_name));
+}
+
+void OobeTestAPIHandler::HandleGetShouldSkipChoobe(
+    const std::string& callback_id) {
+  // CHOOBE screen is only skipped if the number of optional screens is less
+  // than 3, since theme selection is always shown, CHOOBE should be skipped
+  // when display size Screen or touchpad scroll screen is skipped.
+  bool skip_touchpad_scroll =
+      !features::IsOobeTouchpadScrollEnabled() ||
+      InputDeviceSettingsController::Get()->GetConnectedTouchpads().empty();
+  bool skip_display_size = !features::IsOobeDisplaySizeEnabled();
+
+  ResolveJavascriptCallback(base::Value(callback_id),
+                            !features::IsOobeChoobeEnabled() ||
+                                skip_touchpad_scroll || skip_display_size);
+}
+
+void OobeTestAPIHandler::HandleGetShouldSkipTouchpadScroll(
+    const std::string& callback_id) {
+  ResolveJavascriptCallback(base::Value(callback_id),
+                            !features::IsOobeTouchpadScrollEnabled() ||
+                                InputDeviceSettingsController::Get()
+                                    ->GetConnectedTouchpads()
+                                    .empty());
+}
+
+void OobeTestAPIHandler::HandleGetMetricsClientID(
+    const std::string& callback_id) {
+  std::string client_id;
+  if (g_browser_process->metrics_service()) {
+    client_id = g_browser_process->metrics_service()->GetClientId();
+  }
+
+  // Early in OOBE `metrics_service()->GetClientId()` will return an empty
+  // string. If that's the case look for the client ID in the preference
+  // `kMetricsProvisionalClientID`.
+  if (client_id.empty()) {
+    client_id = g_browser_process->local_state()->GetString(
+        metrics::prefs::kMetricsProvisionalClientID);
+  }
+  ResolveJavascriptCallback(base::Value(callback_id), client_id);
 }
 
 }  // namespace ash

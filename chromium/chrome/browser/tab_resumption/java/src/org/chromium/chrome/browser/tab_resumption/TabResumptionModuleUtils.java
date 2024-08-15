@@ -4,40 +4,101 @@
 
 package org.chromium.chrome.browser.tab_resumption;
 
-import android.view.ViewGroup;
+import android.content.res.Resources;
+import android.text.TextUtils;
 
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.magic_stack.HomeModulesConfigManager;
+import org.chromium.chrome.browser.magic_stack.ModuleDelegate.ModuleType;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
+import org.chromium.chrome.browser.sync.SyncServiceFactory;
+import org.chromium.chrome.browser.tab_resumption.TabResumptionModuleMetricsUtils.ModuleNotShownReason;
+import org.chromium.chrome.browser.tab_resumption.TabResumptionModuleMetricsUtils.ModuleVisibility;
+import org.chromium.components.embedder_support.util.UrlUtilities;
+import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.url.GURL;
+
+import java.util.concurrent.TimeUnit;
 
 /** Utilities for the tab resumption module. */
 public class TabResumptionModuleUtils {
+
     /** Callback to handle click on suggestion tiles. */
     public interface SuggestionClickCallback {
         void onSuggestionClick(GURL gurl);
     }
 
-    /** Returns whether to show the tab resumption module. */
-    static boolean shouldShowTabResumptionModule(Profile profile) {
-        // TODO(crbug.com/1515325): Check user is signed in with sync enabled.
-        return ChromeFeatureList.sTabResumptionModuleAndroid.isEnabled();
+    /**
+     * Based on settings, decides whether Chrome should attempt to show the tab resumption module.
+     * Provides the reason if the decision is to not show.
+     */
+    static ModuleVisibility computeModuleVisibility(Profile profile) {
+        if (!ChromeFeatureList.sTabResumptionModuleAndroid.isEnabled()
+                || !HomeModulesConfigManager.getInstance()
+                        .getPrefModuleTypeEnabled(ModuleType.TAB_RESUMPTION)) {
+            return new ModuleVisibility(false, ModuleNotShownReason.FEATURE_DISABLED);
+        }
+
+        if (!IdentityServicesProvider.get()
+                .getIdentityManager(profile)
+                .hasPrimaryAccount(ConsentLevel.SYNC)) {
+            return new ModuleVisibility(false, ModuleNotShownReason.NOT_SIGNED_IN);
+        }
+
+        if (!SyncServiceFactory.getForProfile(profile).hasKeepEverythingSynced()) {
+            return new ModuleVisibility(false, ModuleNotShownReason.NOT_SYNC);
+        }
+
+        return new ModuleVisibility(true, ModuleNotShownReason.NUM_ENTRIES);
     }
 
     /**
-     * Creates a {@link TabResumptionModuleCoordinator} if allowed to.
+     * Returns whether to show the tab resumption module. The module shows only if the following are
+     * met:
      *
-     * @param parent The parent layout which the tab resumption module lives.
-     * @param suggestionClickCallback The function to call when a suggestion tile is clicked.
-     * @param profile The profile of the user.
-     * @param moduleContainerStubId The id of the tab resumption module on its parent view.
+     * <pre>
+     * 1. Feature (by flag TAB_RESUMPTION_MODULE_ANDROID and user preferences) is enabled;
+     * 2. The user has signed in;
+     * 3. The user has turned on sync.
+     * </pre>
      */
-    public static TabResumptionModuleCoordinator mayCreateTabResumptionModuleCoordinator(
-            ViewGroup parent,
-            SuggestionClickCallback suggestionClickCallback,
-            Profile profile,
-            int moduleContainerStubId) {
-        if (!shouldShowTabResumptionModule(profile)) return null;
+    static boolean shouldShowTabResumptionModule(Profile profile) {
+        return computeModuleVisibility(profile).value;
+    }
 
-        return new TabResumptionModuleCoordinator(parent, moduleContainerStubId);
+    /**
+     * Computes the string representation of how recent an event was, given the time delta.
+     *
+     * @param res Resources for string resource retrieval.
+     * @param timeDelta Time delta in milliseconds.
+     */
+    static String getRecencyString(Resources res, long timeDeltaMs) {
+        if (timeDeltaMs < 0L) timeDeltaMs = 0L;
+
+        long daysElapsed = TimeUnit.MILLISECONDS.toDays(timeDeltaMs);
+        if (daysElapsed > 0L) {
+            return res.getQuantityString(R.plurals.n_days_ago, (int) daysElapsed, daysElapsed);
+        }
+
+        long hoursElapsed = TimeUnit.MILLISECONDS.toHours(timeDeltaMs);
+        if (hoursElapsed > 0L) {
+            return res.getQuantityString(
+                    R.plurals.n_hours_ago_narrow, (int) hoursElapsed, hoursElapsed);
+        }
+
+        // Bound recency to 1 min.
+        long minutesElapsed = Math.max(1L, TimeUnit.MILLISECONDS.toMinutes(timeDeltaMs));
+        return res.getQuantityString(
+                R.plurals.n_minutes_ago_narrow, (int) minutesElapsed, minutesElapsed);
+    }
+
+    /**
+     * Extracts the registered, organization-identifying host and all its registry information, but
+     * no subdomains, from a given URL. In particular, removes the "www." prefix.
+     */
+    static String getDomainUrl(GURL url) {
+        String domainUrl = UrlUtilities.getDomainAndRegistry(url.getSpec(), false);
+        return TextUtils.isEmpty(domainUrl) ? url.getHost() : domainUrl;
     }
 }

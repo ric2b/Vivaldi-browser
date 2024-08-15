@@ -65,6 +65,17 @@ size_t AXNode::GetChildCount() const {
   return children_.size();
 }
 
+#if DCHECK_IS_ON()
+size_t AXNode::GetSubtreeCount() const {
+  DCHECK(!tree_->GetTreeUpdateInProgressState());
+  size_t count = 1;  // |this| counts as one.
+  for (AXNode* child : children_) {
+    count += child->GetSubtreeCount();
+  }
+  return count;
+}
+#endif  // DCHECK_IS_ON()
+
 size_t AXNode::GetChildCountCrossingTreeBoundary() const {
   DCHECK(!tree_->GetTreeUpdateInProgressState());
 
@@ -690,7 +701,7 @@ AXNode* AXNode::GetLowestCommonAncestor(const AXNode& other) {
   return common_ancestor;
 }
 
-absl::optional<int> AXNode::CompareTo(const AXNode& other) const {
+std::optional<int> AXNode::CompareTo(const AXNode& other) const {
   if (this == &other)
     return 0;
 
@@ -707,7 +718,7 @@ absl::optional<int> AXNode::CompareTo(const AXNode& other) const {
   }
 
   if (!common_ancestor)
-    return absl::nullopt;
+    return std::nullopt;
   if (common_ancestor == this)
     return -1;
   if (common_ancestor == &other)
@@ -716,7 +727,7 @@ absl::optional<int> AXNode::CompareTo(const AXNode& other) const {
   if (our_ancestors.empty() || other_ancestors.empty()) {
     NOTREACHED() << "The common ancestor should be followed by two uncommon "
                     "children in the two corresponding lists of ancestors.";
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   size_t this_uncommon_ancestor_index = our_ancestors.top()->GetIndexInParent();
@@ -1281,43 +1292,43 @@ bool AXNode::IsTable() const {
   return IsTableLike(GetRole());
 }
 
-absl::optional<int> AXNode::GetTableColCount() const {
+std::optional<int> AXNode::GetTableColCount() const {
   DCHECK(!tree_->GetTreeUpdateInProgressState());
   const AXTableInfo* table_info = GetAncestorTableInfo();
   if (!table_info)
-    return absl::nullopt;
+    return std::nullopt;
   return static_cast<int>(table_info->col_count);
 }
 
-absl::optional<int> AXNode::GetTableRowCount() const {
+std::optional<int> AXNode::GetTableRowCount() const {
   DCHECK(!tree_->GetTreeUpdateInProgressState());
   const AXTableInfo* table_info = GetAncestorTableInfo();
   if (!table_info)
-    return absl::nullopt;
+    return std::nullopt;
   return static_cast<int>(table_info->row_count);
 }
 
-absl::optional<int> AXNode::GetTableAriaColCount() const {
+std::optional<int> AXNode::GetTableAriaColCount() const {
   DCHECK(!tree_->GetTreeUpdateInProgressState());
   const AXTableInfo* table_info = GetAncestorTableInfo();
   if (!table_info)
-    return absl::nullopt;
-  return absl::make_optional(table_info->aria_col_count);
+    return std::nullopt;
+  return std::make_optional(table_info->aria_col_count);
 }
 
-absl::optional<int> AXNode::GetTableAriaRowCount() const {
+std::optional<int> AXNode::GetTableAriaRowCount() const {
   DCHECK(!tree_->GetTreeUpdateInProgressState());
   const AXTableInfo* table_info = GetAncestorTableInfo();
   if (!table_info)
-    return absl::nullopt;
-  return absl::make_optional(table_info->aria_row_count);
+    return std::nullopt;
+  return std::make_optional(table_info->aria_row_count);
 }
 
-absl::optional<int> AXNode::GetTableCellCount() const {
+std::optional<int> AXNode::GetTableCellCount() const {
   DCHECK(!tree_->GetTreeUpdateInProgressState());
   const AXTableInfo* table_info = GetAncestorTableInfo();
   if (!table_info)
-    return absl::nullopt;
+    return std::nullopt;
 
   return static_cast<int>(table_info->unique_cell_ids.size());
 }
@@ -1363,6 +1374,49 @@ AXNode* AXNode::GetTableCellFromCoords(int row_index, int col_index) const {
 
   return tree_->GetFromId(table_info->cell_ids[static_cast<size_t>(row_index)]
                                               [static_cast<size_t>(col_index)]);
+}
+
+AXNode* AXNode::GetTableCellFromAriaCoords(int aria_row_index,
+                                           int aria_col_index) const {
+  DCHECK(!tree_->GetTreeUpdateInProgressState());
+  const AXTableInfo* table_info = GetAncestorTableInfo();
+  if (!table_info) {
+    return nullptr;
+  }
+
+  if (aria_row_index < 1 || aria_row_index > table_info->aria_row_count ||
+      aria_col_index < 1 || aria_col_index > table_info->aria_col_count) {
+    return nullptr;
+  }
+
+  // Aria rows/columns are not guaranteed to be contiguous, and can also
+  // span multiple "rows" or "columns".
+  // So while we do need to check many of the internal rows/columns, we can do
+  // some skipping around, and don't need to continue to search if we are past
+  // the specified row/column.
+  for (size_t row = 0; row < table_info->row_count; ++row) {
+    for (size_t col = 0; col < table_info->col_count; ++col) {
+      AXNode* node = tree_->GetFromId(table_info->cell_ids[row][col]);
+      CHECK(node);
+
+      std::optional<int> current_aria_row = node->GetTableCellAriaRowIndex();
+      std::optional<int> current_aria_col = node->GetTableCellAriaColIndex();
+      if (!current_aria_row || *current_aria_row < aria_row_index) {
+        break;
+      } else if (*current_aria_row > aria_row_index) {
+        return nullptr;
+      }
+      if (!current_aria_col || *current_aria_col < aria_col_index) {
+        continue;
+      } else if (*current_aria_col > aria_col_index) {
+        return nullptr;
+      }
+      DCHECK(*current_aria_row == aria_row_index &&
+             *current_aria_col == aria_col_index);
+      return node;
+    }
+  }
+  return nullptr;
 }
 
 std::vector<AXNodeID> AXNode::GetTableColHeaderNodeIds() const {
@@ -1428,7 +1482,7 @@ AXNode::GetExtraMacNodes() const {
 }
 
 bool AXNode::IsGenerated() const {
-  bool is_generated_node = id() < 0;
+  bool is_generated_node = id() < 0 && id() > kInitialEmptyDocumentRootNodeID;
 #if DCHECK_IS_ON()
   // Currently, the only generated nodes are columns and table header
   // containers, and when those roles occur, they are always extra mac nodes.
@@ -1449,17 +1503,17 @@ bool AXNode::IsTableRow() const {
   return ui::IsTableRow(GetRole());
 }
 
-absl::optional<int> AXNode::GetTableRowRowIndex() const {
+std::optional<int> AXNode::GetTableRowRowIndex() const {
   if (!IsTableRow())
-    return absl::nullopt;
+    return std::nullopt;
 
   const AXTableInfo* table_info = GetAncestorTableInfo();
   if (!table_info)
-    return absl::nullopt;
+    return std::nullopt;
 
   const auto& iter = table_info->row_id_to_index.find(id());
   if (iter == table_info->row_id_to_index.end())
-    return absl::nullopt;
+    return std::nullopt;
   return static_cast<int>(iter->second);
 }
 
@@ -1485,13 +1539,13 @@ bool AXNode::IsTableColumn() const {
   return ui::IsTableColumn(GetRole());
 }
 
-absl::optional<int> AXNode::GetTableColColIndex() const {
+std::optional<int> AXNode::GetTableColColIndex() const {
   if (!IsTableColumn())
-    return absl::nullopt;
+    return std::nullopt;
 
   const AXTableInfo* table_info = GetAncestorTableInfo();
   if (!table_info)
-    return absl::nullopt;
+    return std::nullopt;
 
   int index = 0;
   for (const AXNode* node : table_info->extra_mac_nodes) {
@@ -1512,56 +1566,56 @@ bool AXNode::IsTableCellOrHeader() const {
   return IsCellOrTableHeader(GetRole());
 }
 
-absl::optional<int> AXNode::GetTableCellIndex() const {
+std::optional<int> AXNode::GetTableCellIndex() const {
   if (!IsTableCellOrHeader())
-    return absl::nullopt;
+    return std::nullopt;
 
   const AXTableInfo* table_info = GetAncestorTableInfo();
   if (!table_info)
-    return absl::nullopt;
+    return std::nullopt;
 
   const auto& iter = table_info->cell_id_to_index.find(id());
   if (iter != table_info->cell_id_to_index.end())
     return static_cast<int>(iter->second);
-  return absl::nullopt;
+  return std::nullopt;
 }
 
-absl::optional<int> AXNode::GetTableCellColIndex() const {
+std::optional<int> AXNode::GetTableCellColIndex() const {
   const AXTableInfo* table_info = GetAncestorTableInfo();
   if (!table_info)
-    return absl::nullopt;
+    return std::nullopt;
 
-  absl::optional<int> index = GetTableCellIndex();
+  std::optional<int> index = GetTableCellIndex();
   if (!index)
-    return absl::nullopt;
+    return std::nullopt;
 
   return static_cast<int>(table_info->cell_data_vector[*index].col_index);
 }
 
-absl::optional<int> AXNode::GetTableCellRowIndex() const {
+std::optional<int> AXNode::GetTableCellRowIndex() const {
   const AXTableInfo* table_info = GetAncestorTableInfo();
   if (!table_info)
-    return absl::nullopt;
+    return std::nullopt;
 
   // If it's a table row, use the first cell within.
   if (IsTableRow()) {
     if (const AXNode* first_cell = table_info->GetFirstCellInRow(this)) {
       return first_cell->GetTableCellRowIndex();
     }
-    return absl::nullopt;
+    return std::nullopt;
   }
 
-  absl::optional<int> index = GetTableCellIndex();
+  std::optional<int> index = GetTableCellIndex();
   if (!index)
-    return absl::nullopt;
+    return std::nullopt;
 
   return static_cast<int>(table_info->cell_data_vector[*index].row_index);
 }
 
-absl::optional<int> AXNode::GetTableCellColSpan() const {
+std::optional<int> AXNode::GetTableCellColSpan() const {
   // If it's not a table cell, don't return a col span.
   if (!IsTableCellOrHeader())
-    return absl::nullopt;
+    return std::nullopt;
 
   // Otherwise, try to return a colspan, with 1 as the default if it's not
   // specified.
@@ -1571,10 +1625,10 @@ absl::optional<int> AXNode::GetTableCellColSpan() const {
   return 1;
 }
 
-absl::optional<int> AXNode::GetTableCellRowSpan() const {
+std::optional<int> AXNode::GetTableCellRowSpan() const {
   // If it's not a table cell, don't return a row span.
   if (!IsTableCellOrHeader())
-    return absl::nullopt;
+    return std::nullopt;
 
   // Otherwise, try to return a row span, with 1 as the default if it's not
   // specified.
@@ -1584,47 +1638,47 @@ absl::optional<int> AXNode::GetTableCellRowSpan() const {
   return 1;
 }
 
-absl::optional<int> AXNode::GetTableCellAriaColIndex() const {
+std::optional<int> AXNode::GetTableCellAriaColIndex() const {
   const AXTableInfo* table_info = GetAncestorTableInfo();
   if (!table_info)
-    return absl::nullopt;
+    return std::nullopt;
 
-  absl::optional<int> index = GetTableCellIndex();
+  std::optional<int> index = GetTableCellIndex();
   if (!index)
-    return absl::nullopt;
+    return std::nullopt;
 
   int aria_col_index =
       static_cast<int>(table_info->cell_data_vector[*index].aria_col_index);
   // |aria-colindex| attribute is one-based, value less than 1 is invalid.
   // https://www.w3.org/TR/wai-aria-1.2/#aria-colindex
-  return (aria_col_index > 0) ? absl::optional<int>(aria_col_index)
-                              : absl::nullopt;
+  return (aria_col_index > 0) ? std::optional<int>(aria_col_index)
+                              : std::nullopt;
 }
 
-absl::optional<int> AXNode::GetTableCellAriaRowIndex() const {
+std::optional<int> AXNode::GetTableCellAriaRowIndex() const {
   const AXTableInfo* table_info = GetAncestorTableInfo();
   if (!table_info)
-    return absl::nullopt;
+    return std::nullopt;
 
   // If it's a table row, use the first cell within.
   if (IsTableRow()) {
     if (const AXNode* first_cell = table_info->GetFirstCellInRow(this)) {
       return first_cell->GetTableCellAriaRowIndex();
     }
-    return absl::nullopt;
+    return std::nullopt;
   }
 
-  absl::optional<int> index = GetTableCellIndex();
+  std::optional<int> index = GetTableCellIndex();
   if (!index) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   int aria_row_index =
       static_cast<int>(table_info->cell_data_vector[*index].aria_row_index);
   // |aria-rowindex| attribute is one-based, value less than 1 is invalid.
   // https://www.w3.org/TR/wai-aria-1.2/#aria-rowindex
-  return (aria_row_index > 0) ? absl::optional<int>(aria_row_index)
-                              : absl::nullopt;
+  return (aria_row_index > 0) ? std::optional<int>(aria_row_index)
+                              : std::nullopt;
 }
 
 std::vector<AXNodeID> AXNode::GetTableCellColHeaderNodeIds() const {
@@ -1695,7 +1749,7 @@ void AXNode::IdVectorToNodeVector(const std::vector<AXNodeID>& ids,
   }
 }
 
-absl::optional<int> AXNode::GetHierarchicalLevel() const {
+std::optional<int> AXNode::GetHierarchicalLevel() const {
   int hierarchical_level =
       GetIntAttribute(ax::mojom::IntAttribute::kHierarchicalLevel);
 
@@ -1705,7 +1759,7 @@ absl::optional<int> AXNode::GetHierarchicalLevel() const {
   if (hierarchical_level > 0)
     return hierarchical_level;
 
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 bool AXNode::IsOrderedSetItem() const {
@@ -1730,12 +1784,12 @@ bool AXNode::IsOrderedSet() const {
 }
 
 // Uses AXTree's cache to calculate node's PosInSet.
-absl::optional<int> AXNode::GetPosInSet() const {
+std::optional<int> AXNode::GetPosInSet() const {
   return tree_->GetPosInSet(*this);
 }
 
 // Uses AXTree's cache to calculate node's SetSize.
-absl::optional<int> AXNode::GetSetSize() const {
+std::optional<int> AXNode::GetSetSize() const {
   return tree_->GetSetSize(*this);
 }
 
@@ -1790,8 +1844,7 @@ bool AXNode::SetRoleMatchesItemRole(const AXNode* ordered_set) const {
     case ax::mojom::Role::kDescriptionList:
       // Only the term for each description list entry should receive posinset
       // and setsize.
-      return item_role == ax::mojom::Role::kDescriptionListTerm ||
-             item_role == ax::mojom::Role::kTerm;
+      return item_role == ax::mojom::Role::kTerm;
     case ax::mojom::Role::kComboBoxSelect:
       // kComboBoxSelect wraps a kMenuListPopUp.
       return item_role == ax::mojom::Role::kMenuListPopup;
@@ -2166,12 +2219,13 @@ bool AXNode::IsLikelyARIAActiveDescendant() const {
             ax::mojom::IntAttribute::kActivedescendantId)) {
       return true;
     }
-    // Check for an ancestor listbox that is controlled by a textfield combobox
-    // that also has an aria-activedescendant.
-    // Note: blink will map aria-owns to aria-controls in the textfield combobox
-    // case as it was the older technique, but treating as an actual aria-owns
-    // makes no sense as a textfield cannot have children.
-    if (ancestor_node->GetRole() == ax::mojom::Role::kListBox) {
+    // Check for an ancestor listbox/tree/grid/treegrid/dialog that is
+    // controlled by a textfield combobox that also has an
+    // aria-activedescendant. Note: blink will map aria-owns to aria-controls in
+    // the textfield combobox case as it was the older technique, but treating
+    // as an actual aria-owns makes no sense as a textfield cannot have
+    // children.
+    if (ui::IsComboBoxContainer(ancestor_node->GetRole())) {
       std::set<AXNodeID> nodes_that_control_this_list =
           tree()->GetReverseRelations(ax::mojom::IntListAttribute::kControlsIds,
                                       ancestor_node->id());

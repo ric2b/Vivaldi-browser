@@ -150,13 +150,13 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   size_t GetRowCount() const;
 
   // Selects the specified item, making sure it's visible.
-  void Select(absl::optional<size_t> model_row);
+  void Select(std::optional<size_t> model_row);
 
   // Selects all items.
   void SetSelectionAll(bool select);
 
   // Returns the first selected row in terms of the model.
-  absl::optional<size_t> GetFirstSelectedRow() const;
+  std::optional<size_t> GetFirstSelectedRow() const;
 
   const ui::ListSelectionModel& selection_model() const {
     return selection_model_;
@@ -183,9 +183,9 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   void SetObserver(TableViewObserver* observer);
   TableViewObserver* GetObserver() const;
 
-  absl::optional<size_t> GetActiveVisibleColumnIndex() const;
+  std::optional<size_t> GetActiveVisibleColumnIndex() const;
 
-  void SetActiveVisibleColumnIndex(absl::optional<size_t> index);
+  void SetActiveVisibleColumnIndex(std::optional<size_t> index);
 
   const std::vector<VisibleColumn>& visible_columns() const {
     return visible_columns_;
@@ -249,7 +249,7 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   bool header_row_is_active() const { return header_row_is_active_; }
 
   // View overrides:
-  void Layout() override;
+  void Layout(PassKey) override;
   gfx::Size CalculatePreferredSize() const override;
   bool GetNeedsNotificationWhenVisibleBoundsChange() const override;
   void OnVisibleBoundsChanged() override;
@@ -366,7 +366,7 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   void AdvanceActiveVisibleColumn(AdvanceDirection direction);
 
   // Sets the selection to the specified index (in terms of the view).
-  void SelectByViewIndex(absl::optional<size_t> view_index);
+  void SelectByViewIndex(std::optional<size_t> view_index);
 
   // Sets the selection model to |new_selection|.
   void SetSelectionModel(ui::ListSelectionModel new_selection);
@@ -484,7 +484,9 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   // Updates the focus rings of the TableView and the TableHeader if necessary.
   void UpdateFocusRings();
 
-  raw_ptr<ui::TableModel> model_ = nullptr;
+  // TODO(327473315): Only one of raw_ptr in this class is dangling. Find which
+  // one.
+  raw_ptr<ui::TableModel, LeakedDanglingUntriaged> model_ = nullptr;
 
   std::vector<ui::TableColumn> columns_;
 
@@ -494,11 +496,13 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
 
   // The active visible column. Used for keyboard access to functionality such
   // as sorting and resizing. nullopt if no visible column is active.
-  absl::optional<size_t> active_visible_column_index_ = absl::nullopt;
+  std::optional<size_t> active_visible_column_index_ = std::nullopt;
 
   // The header. This is only created if more than one column is specified or
   // the first column has a non-empty title.
-  raw_ptr<TableHeader> header_ = nullptr;
+  // TODO(327473315): Only one of raw_ptr in this class is dangling. Find which
+  // one.
+  raw_ptr<TableHeader, LeakedDanglingUntriaged> header_ = nullptr;
 
   // TableView allows using the keyboard to activate a cell or row, including
   // optionally the header row. This bool keeps track of whether the active row
@@ -516,7 +520,9 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   // is selected then.
   bool select_on_remove_ = true;
 
-  raw_ptr<TableViewObserver, DanglingUntriaged> observer_ = nullptr;
+  // TODO(327473315): Only one of raw_ptr in this class is dangling. Find which
+  // one.
+  raw_ptr<TableViewObserver, LeakedDanglingUntriaged> observer_ = nullptr;
   // If |sort_on_paint_| is true, table will sort before painting.
   bool sort_on_paint_ = false;
 
@@ -527,8 +533,8 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
 
   int row_height_;
 
-  // Width of the ScrollView last time Layout() was invoked. Used to determine
-  // when we should invoke UpdateVisibleColumnSizes().
+  // Width of the ScrollView at last layout. Used to determine when we should
+  // invoke UpdateVisibleColumnSizes().
   int last_parent_width_ = 0;
 
   // The width we layout to. This may differ from |last_parent_width_|.
@@ -541,7 +547,9 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   std::vector<size_t> view_to_model_;
   std::vector<size_t> model_to_view_;
 
-  raw_ptr<TableGrouper> grouper_ = nullptr;
+  // TODO(327473315): Only one of raw_ptr in this class is dangling. Find which
+  // one.
+  raw_ptr<TableGrouper, LeakedDanglingUntriaged> grouper_ = nullptr;
 
   // True if in SetVisibleColumnWidth().
   bool in_set_visible_column_width_ = false;
@@ -555,7 +563,7 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
 };
 
 BEGIN_VIEW_BUILDER(VIEWS_EXPORT, TableView, View)
-VIEW_BUILDER_PROPERTY(absl::optional<size_t>, ActiveVisibleColumnIndex)
+VIEW_BUILDER_PROPERTY(std::optional<size_t>, ActiveVisibleColumnIndex)
 VIEW_BUILDER_PROPERTY(const std::vector<ui::TableColumn>&,
                       Columns,
                       std::vector<ui::TableColumn>)

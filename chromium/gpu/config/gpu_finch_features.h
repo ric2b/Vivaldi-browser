@@ -32,8 +32,6 @@ GPU_EXPORT BASE_DECLARE_FEATURE(kWebViewThreadSafeMediaDefault);
 GPU_EXPORT BASE_DECLARE_FEATURE(kIncreaseBufferCountForHighFrameRate);
 #endif  // BUILDFLAG(IS_ANDROID)
 
-GPU_EXPORT BASE_DECLARE_FEATURE(kAggressiveSkiaGpuResourcePurge);
-
 GPU_EXPORT BASE_DECLARE_FEATURE(kDefaultEnableGpuRasterization);
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -68,8 +66,6 @@ GPU_EXPORT BASE_DECLARE_FEATURE(kAdjustGpuProcessPriority);
 
 GPU_EXPORT BASE_DECLARE_FEATURE(kGenGpuDiskCacheKeyPrefixInGpuService);
 
-GPU_EXPORT BASE_DECLARE_FEATURE(kSharedImageManager);
-
 GPU_EXPORT BASE_DECLARE_FEATURE(kVaapiJpegImageDecodeAcceleration);
 
 GPU_EXPORT BASE_DECLARE_FEATURE(kVaapiWebPImageDecodeAcceleration);
@@ -87,8 +83,6 @@ GPU_EXPORT extern const base::FeatureParam<bool> kSkiaGraphiteDawnShareDevice;
 GPU_EXPORT BASE_DECLARE_FEATURE(kSkiaGraphiteDawnUseD3D12);
 #endif
 
-GPU_EXPORT BASE_DECLARE_FEATURE(kEnableGrShaderCacheForVulkan);
-
 GPU_EXPORT BASE_DECLARE_FEATURE(kEnableWatchdogReportOnlyModeOnGpuInit);
 
 GPU_EXPORT BASE_DECLARE_FEATURE(kEnableVkPipelineCache);
@@ -96,8 +90,6 @@ GPU_EXPORT BASE_DECLARE_FEATURE(kEnableVkPipelineCache);
 GPU_EXPORT BASE_DECLARE_FEATURE(kNoDiscardableMemoryForGpuDecodePath);
 
 GPU_EXPORT BASE_DECLARE_FEATURE(kEnableDrDc);
-
-GPU_EXPORT BASE_DECLARE_FEATURE(kForceGpuMainThreadToNormalPriorityDrDc);
 
 GPU_EXPORT BASE_DECLARE_FEATURE(kForceRestartGpuKillSwitch);
 
@@ -130,10 +122,11 @@ GPU_EXPORT BASE_DECLARE_FEATURE(kGpuCleanupInBackground);
 GPU_EXPORT BASE_DECLARE_FEATURE(kCmdDecoderSkipGLRedMesaWorkaroundOnAndroid);
 #endif
 
+GPU_EXPORT BASE_DECLARE_FEATURE(kDeferredOverlaysRelease);
+
 GPU_EXPORT bool UseGles2ForOopR();
 GPU_EXPORT bool IsUsingVulkan();
 GPU_EXPORT bool IsDrDcEnabled();
-GPU_EXPORT bool IsGpuMainThreadForcedToNormalPriorityDrDc();
 GPU_EXPORT bool NeedThreadSafeAndroidMedia();
 GPU_EXPORT bool IsANGLEValidationEnabled();
 GPU_EXPORT bool IsSkiaGraphiteEnabled(const base::CommandLine* command_line);

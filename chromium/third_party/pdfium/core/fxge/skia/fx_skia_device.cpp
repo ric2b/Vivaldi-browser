@@ -26,11 +26,17 @@
 #include "core/fpdfapi/parser/cpdf_stream.h"
 #include "core/fpdfapi/parser/cpdf_stream_acc.h"
 #include "core/fxcrt/cfx_bitstream.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_2d_size.h"
 #include "core/fxcrt/fx_coordinates.h"
 #include "core/fxcrt/fx_memory.h"
 #include "core/fxcrt/fx_system.h"
+#include "core/fxcrt/notreached.h"
+#include "core/fxcrt/numerics/safe_conversions.h"
+#include "core/fxcrt/ptr_util.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxge/cfx_defaultrenderdevice.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
@@ -45,12 +51,6 @@
 #include "core/fxge/dib/cstretchengine.h"
 #include "core/fxge/dib/fx_dib.h"
 #include "core/fxge/text_char_pos.h"
-#include "third_party/base/check.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/containers/span.h"
-#include "third_party/base/memory/ptr_util.h"
-#include "third_party/base/notreached.h"
-#include "third_party/base/numerics/safe_conversions.h"
 #include "third_party/skia/include/core/SkBlendMode.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkClipOp.h"
@@ -282,7 +282,7 @@ SkBlendMode GetSkiaBlendMode(BlendMode blend_type) {
 bool AddColors(const CPDF_ExpIntFunc* func,
                DataVector<SkColor>& colors,
                bool is_encode_reversed) {
-  if (func->CountInputs() != 1) {
+  if (func->InputCount() != 1) {
     return false;
   }
   if (func->GetExponent() != 1) {
@@ -316,10 +316,10 @@ uint8_t FloatToByte(float f) {
 bool AddSamples(const CPDF_SampledFunc* func,
                 DataVector<SkColor>& colors,
                 DataVector<SkScalar>& pos) {
-  if (func->CountInputs() != 1) {
+  if (func->InputCount() != 1) {
     return false;
   }
-  if (func->CountOutputs() != 3) {  // expect rgb
+  if (func->OutputCount() != 3) {  // expect rgb
     return false;
   }
   if (func->GetEncodeInfo().empty()) {
@@ -555,7 +555,7 @@ void PaintStroke(SkPaint* spaint,
       intervals[i * 2 + 1] = off;
     }
     spaint->setPathEffect(SkDashPathEffect::Make(
-        intervals.data(), pdfium::base::checked_cast<int>(intervals.size()),
+        intervals.data(), pdfium::checked_cast<int>(intervals.size()),
         graph_state->m_DashPhase));
   }
   spaint->setStyle(SkPaint::kStroke_Style);
@@ -966,8 +966,8 @@ bool CFX_SkiaDeviceDriver::MultiplyAlpha(float alpha) {
 }
 
 bool CFX_SkiaDeviceDriver::MultiplyAlphaMask(
-    const RetainPtr<const CFX_DIBBase>& mask) {
-  CHECK(mask->IsMaskFormat());
+    RetainPtr<const CFX_DIBitmap> mask) {
+  CHECK_EQ(FXDIB_Format::k8bppMask, mask->GetFormat());
 
   sk_sp<SkImage> skia_mask = mask->RealizeSkImage();
   if (!skia_mask) {
@@ -1028,7 +1028,7 @@ bool CFX_SkiaDeviceDriver::SetClip_PathFill(
 
   SkPath skClipPath;
   if (path.GetPoints().size() == 5 || path.GetPoints().size() == 4) {
-    absl::optional<CFX_FloatRect> maybe_rectf = path.GetRect(&deviceMatrix);
+    std::optional<CFX_FloatRect> maybe_rectf = path.GetRect(&deviceMatrix);
     if (maybe_rectf.has_value()) {
       CFX_FloatRect& rectf = maybe_rectf.value();
       rectf.Intersect(CFX_FloatRect(0, 0,
@@ -1358,7 +1358,7 @@ bool CFX_SkiaDeviceDriver::GetClipBox(FX_RECT* pRect) {
   return true;
 }
 
-bool CFX_SkiaDeviceDriver::GetDIBits(const RetainPtr<CFX_DIBitmap>& pBitmap,
+bool CFX_SkiaDeviceDriver::GetDIBits(RetainPtr<CFX_DIBitmap> bitmap,
                                      int left,
                                      int top) {
   const uint8_t* input_buffer = m_pBitmap->GetBuffer().data();
@@ -1366,7 +1366,7 @@ bool CFX_SkiaDeviceDriver::GetDIBits(const RetainPtr<CFX_DIBitmap>& pBitmap,
     return true;
   }
 
-  uint8_t* output_buffer = pBitmap->GetWritableBuffer().data();
+  uint8_t* output_buffer = bitmap->GetWritableBuffer().data();
   DCHECK(output_buffer);
 
   SkImageInfo input_info =
@@ -1377,10 +1377,10 @@ bool CFX_SkiaDeviceDriver::GetDIBits(const RetainPtr<CFX_DIBitmap>& pBitmap,
       /*rasterReleaseProc=*/nullptr, /*releaseContext=*/nullptr);
 
   SkImageInfo output_info = SkImageInfo::Make(
-      pBitmap->GetWidth(), pBitmap->GetHeight(),
+      bitmap->GetWidth(), bitmap->GetHeight(),
       Get32BitSkColorType(m_bRgbByteOrder), kPremul_SkAlphaType);
   sk_sp<SkSurface> output =
-      SkSurfaces::WrapPixels(output_info, output_buffer, pBitmap->GetPitch());
+      SkSurfaces::WrapPixels(output_info, output_buffer, bitmap->GetPitch());
 
   output->getCanvas()->drawImage(input, left, top, SkSamplingOptions());
   return true;
@@ -1390,25 +1390,24 @@ RetainPtr<CFX_DIBitmap> CFX_SkiaDeviceDriver::GetBackDrop() {
   return m_pBackdropBitmap;
 }
 
-bool CFX_SkiaDeviceDriver::SetDIBits(
-    const RetainPtr<const CFX_DIBBase>& pBitmap,
-    uint32_t color,
-    const FX_RECT& src_rect,
-    int left,
-    int top,
-    BlendMode blend_type) {
+bool CFX_SkiaDeviceDriver::SetDIBits(RetainPtr<const CFX_DIBBase> bitmap,
+                                     uint32_t color,
+                                     const FX_RECT& src_rect,
+                                     int left,
+                                     int top,
+                                     BlendMode blend_type) {
   if (m_pBitmap->GetBuffer().empty()) {
     return true;
   }
 
   CFX_Matrix matrix = CFX_RenderDevice::GetFlipMatrix(
-      pBitmap->GetWidth(), pBitmap->GetHeight(), left, top);
+      bitmap->GetWidth(), bitmap->GetHeight(), left, top);
 
   // `bNoSmoothing` prevents linear sampling when rendering bitmaps.
   FXDIB_ResampleOptions sampling_options;
   sampling_options.bNoSmoothing = true;
 
-  return StartDIBitsSkia(std::move(pBitmap), src_rect, /*alpha=*/1.0f, color,
+  return StartDIBitsSkia(std::move(bitmap), src_rect, /*alpha=*/1.0f, color,
                          matrix, sampling_options, blend_type);
 }
 
@@ -1604,8 +1603,8 @@ bool CFX_SkiaDeviceDriver::StartDIBitsSkia(RetainPtr<const CFX_DIBBase> bitmap,
     if (!use_interpolate_bilinear) {
       float dest_width = ceilf(matrix.GetXUnit());
       float dest_height = ceilf(matrix.GetYUnit());
-      if (pdfium::base::IsValueInRangeForNumericType<int>(dest_width) &&
-          pdfium::base::IsValueInRangeForNumericType<int>(dest_height)) {
+      if (pdfium::IsValueInRangeForNumericType<int>(dest_width) &&
+          pdfium::IsValueInRangeForNumericType<int>(dest_height)) {
         use_interpolate_bilinear = CStretchEngine::UseInterpolateBilinear(
             options, static_cast<int>(dest_width),
             static_cast<int>(dest_height), width, height);

@@ -7,10 +7,12 @@
 
 #include <memory>
 
+#include "base/callback_list.h"
 #include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/media/captured_surface_control_permission_manager.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_media_capture_id.h"
@@ -35,11 +37,14 @@ class CONTENT_EXPORT CapturedSurfaceController {
       WebContentsMediaCaptureId captured_wc_id,
       std::unique_ptr<CapturedSurfaceControlPermissionManager>
           permission_manager,
+      base::RepeatingCallback<void(int)> on_zoom_level_change_callback,
       base::RepeatingCallback<void(base::WeakPtr<WebContents>)>
           wc_resolution_callback);
 
-  CapturedSurfaceController(GlobalRenderFrameHostId capturer_rfh_id,
-                            WebContentsMediaCaptureId captured_wc_id);
+  CapturedSurfaceController(
+      GlobalRenderFrameHostId capturer_rfh_id,
+      WebContentsMediaCaptureId captured_wc_id,
+      base::RepeatingCallback<void(int)> on_zoom_level_change_callback);
 
   virtual ~CapturedSurfaceController();
 
@@ -56,32 +61,49 @@ class CONTENT_EXPORT CapturedSurfaceController {
       blink::mojom::CapturedWheelActionPtr action,
       base::OnceCallback<void(CapturedSurfaceControlResult)> reply_callback);
 
-  // Get the zoom level of the captured tab.
-  virtual void GetZoomLevel(
-      base::OnceCallback<void(
-          std::optional<int> zoom_level,
-          blink::mojom::CapturedSurfaceControlResult result)> reply_callback);
-
   // Set the zoom level of the captured tab.
   virtual void SetZoomLevel(
       int zoom_level,
       base::OnceCallback<void(CapturedSurfaceControlResult)> reply_callback);
 
+  struct CapturedSurfaceInfo final {
+    CapturedSurfaceInfo(
+        base::WeakPtr<WebContents> captured_wc,
+        std::unique_ptr<base::CallbackListSubscription,
+                        BrowserThread::DeleteOnUIThread> subscription,
+        int subscription_version,
+        int initial_zoom_level);
+    CapturedSurfaceInfo(CapturedSurfaceInfo&& other);
+    CapturedSurfaceInfo& operator=(CapturedSurfaceInfo&& other);
+    ~CapturedSurfaceInfo();
+
+    base::WeakPtr<WebContents> captured_wc;
+    std::unique_ptr<base::CallbackListSubscription,
+                    BrowserThread::DeleteOnUIThread>
+        subscription;
+    int subscription_version;
+    int initial_zoom_level;
+  };
+
  private:
   using PermissionResult =
-      ::content::CapturedSurfaceControlPermissionManager::PermissionResult;
+      CapturedSurfaceControlPermissionManager::PermissionResult;
+
+  void OnZoomLevelChange(int subscription_version, int zoom_level);
 
   CapturedSurfaceController(
       GlobalRenderFrameHostId capturer_rfh_id,
       WebContentsMediaCaptureId captured_wc_id,
       std::unique_ptr<CapturedSurfaceControlPermissionManager>
           permission_manager,
+      base::RepeatingCallback<void(int)> on_zoom_level_change_callback,
       base::RepeatingCallback<void(base::WeakPtr<WebContents>)>
           wc_resolution_callback);
 
   // Manage the resolution of WebContents-IDs into base::WeakPtr<WebContents>.
-  void ResolveCapturedWebContents(WebContentsMediaCaptureId captured_wc_id);
-  void OnCapturedWebContentsResolved(base::WeakPtr<WebContents> captured_wc);
+  void ResolveCapturedSurface(WebContentsMediaCaptureId captured_wc_id);
+  void OnCapturedSurfaceResolved(
+      std::optional<CapturedSurfaceInfo> captured_surface);
 
   const GlobalRenderFrameHostId capturer_rfh_id_;
 
@@ -108,7 +130,7 @@ class CONTENT_EXPORT CapturedSurfaceController {
   // fail gracefully. Subsequent calls are valid and can succeed.
   // TODO(crbug.com/1520375): Add UMA to measure how often this happens
   // and determine whether it's worth the effort to fix.
-  absl::optional<base::WeakPtr<WebContents>> captured_wc_;
+  std::optional<base::WeakPtr<WebContents>> captured_wc_;
 
   // Counts the pending resolutions, so that `captured_wc_` would only
   // be set to a concrete values when the last one resolves.
@@ -120,6 +142,19 @@ class CONTENT_EXPORT CapturedSurfaceController {
   // base::WeakPtr<WebContents> completes.
   const base::RepeatingCallback<void(base::WeakPtr<WebContents>)>
       wc_resolution_callback_;
+
+  // `zoom_level_subscription_` controls the lifetime of a subscriptions to
+  // zoom-level updates for a captured tab. If the capture is switched over to a
+  // new tab, the subscription is re-initialized and `subscription_version_` is
+  // incremented so that callback invocations from the previous subscriptions
+  // may be ignored.
+  std::unique_ptr<base::CallbackListSubscription,
+                  BrowserThread::DeleteOnUIThread>
+      zoom_level_subscription_;
+  int subscription_version_ = 0;
+
+  std::optional<int> current_zoom_level_;
+  const base::RepeatingCallback<void(int)> on_zoom_level_change_callback_;
 
   base::WeakPtrFactory<CapturedSurfaceController> weak_factory_{this};
 };

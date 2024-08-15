@@ -4,7 +4,7 @@ Execution Tests for the i32 conversion operations
 
 import { makeTestGroup } from '../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../gpu_test.js';
-import { TypeBool, TypeF16, TypeF32, TypeI32, TypeU32 } from '../../../../util/conversion.js';
+import { Type } from '../../../../util/conversion.js';
 import { ShaderBuilder, allInputSources, run } from '../expression.js';
 
 import { d } from './i32_conversion.cache.js';
@@ -31,7 +31,7 @@ The result is 1u if e is true and 0u otherwise
   )
   .fn(async t => {
     const cases = await d.get('bool');
-    await run(t, vectorizeToExpression(t.params.vectorize), [TypeBool], TypeI32, t.params, cases);
+    await run(t, vectorizeToExpression(t.params.vectorize), [Type.bool], Type.i32, t.params, cases);
   });
 
 g.test('u32')
@@ -48,7 +48,7 @@ Reinterpretation of bits
   )
   .fn(async t => {
     const cases = await d.get('u32');
-    await run(t, vectorizeToExpression(t.params.vectorize), [TypeU32], TypeI32, t.params, cases);
+    await run(t, vectorizeToExpression(t.params.vectorize), [Type.u32], Type.i32, t.params, cases);
   });
 
 g.test('i32')
@@ -65,7 +65,7 @@ Identity operation
   )
   .fn(async t => {
     const cases = await d.get('i32');
-    await run(t, vectorizeToExpression(t.params.vectorize), [TypeI32], TypeI32, t.params, cases);
+    await run(t, vectorizeToExpression(t.params.vectorize), [Type.i32], Type.i32, t.params, cases);
   });
 
 g.test('f32')
@@ -82,7 +82,7 @@ e is converted to i32, rounding towards zero
   )
   .fn(async t => {
     const cases = await d.get('f32');
-    await run(t, vectorizeToExpression(t.params.vectorize), [TypeF32], TypeI32, t.params, cases);
+    await run(t, vectorizeToExpression(t.params.vectorize), [Type.f32], Type.i32, t.params, cases);
   });
 
 g.test('f16')
@@ -102,5 +102,5 @@ e is converted to u32, rounding towards zero
   })
   .fn(async t => {
     const cases = await d.get('f16');
-    await run(t, vectorizeToExpression(t.params.vectorize), [TypeF16], TypeI32, t.params, cases);
+    await run(t, vectorizeToExpression(t.params.vectorize), [Type.f16], Type.i32, t.params, cases);
   });

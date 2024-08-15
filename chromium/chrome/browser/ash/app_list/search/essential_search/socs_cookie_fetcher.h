@@ -23,15 +23,22 @@ namespace app_list {
 // SocsCookieFetcher is still WIP.
 class SocsCookieFetcher final {
  public:
+  // This enum is tied directly to a UMA enum defined in
+  // //tools/metrics/histograms/metadata/ash/enums.xml, and should
+  // always reflect it (do not change one without changing the other).
+  // These values are persisted to logs. Entries should not be renumbered
+  // and numeric values should never be reused.
   enum class Status {
-    kOk,
-    kRequestBodyNotSerialized,
-    kServerError,
-    kEmptyResponse,
-    kJsonParseFailure,
-    kNotJsonDict,
-    kFetchNoCookie,
-    kInvalidCookie
+    kOk = 0,
+    kRequestBodyNotSerialized = 1,
+    kServerError = 2,
+    kEmptyResponse = 3,
+    kJsonParseFailure = 4,
+    kNotJsonDict = 5,
+    kFetchNoCookie = 6,
+    kInvalidCookie = 7,
+    kCookieInsertionFailure = 8,
+    kMaxValue = kCookieInsertionFailure
   };
 
   class Consumer {

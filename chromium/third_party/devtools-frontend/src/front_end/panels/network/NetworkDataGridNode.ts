@@ -33,7 +33,6 @@
  */
 
 // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/naming-convention */
 
 import * as Common from '../../core/common/common.js';
@@ -223,6 +222,15 @@ const UIStrings = {
    *@example {4 B} PH2
    */
   matchedToServiceWorkerRouter: 'Matched to `ServiceWorker router`#{PH1}, resource size: {PH2}',
+
+  /**
+   *@description Cell title in Network Data Grid Node of the Network panel
+   *@example {1} PH1
+   *@example {4 B} PH2
+   *@example {12 B} PH3
+   */
+  matchedToServiceWorkerRouterWithNetworkSource:
+      'Matched to `ServiceWorker router`#{PH1}, {PH2} transferred over network, resource size: {PH3}',
   /**
    *@description Text in Network Data Grid Node of the Network panel
    */
@@ -388,7 +396,7 @@ export class NetworkNode extends DataGrid.SortableDataGrid.SortableDataGridNode<
     return cell;
   }
 
-  renderCell(cell: Element, columnId: string): void {
+  renderCell(_cell: Element, _columnId: string): void {
   }
 
   isFailed(): boolean {
@@ -956,11 +964,11 @@ export class NetworkRequestNode extends NetworkNode {
         this.setTextAndTitle(cell, this.requestInternal.domain);
         break;
       }
-      case 'remoteaddress': {
+      case 'remote-address': {
         this.setTextAndTitle(cell, this.requestInternal.remoteAddress());
         break;
       }
-      case 'remoteaddress-space': {
+      case 'remote-address-space': {
         this.renderAddressSpaceCell(cell, this.requestInternal.remoteAddressSpace());
         break;
       }
@@ -968,7 +976,7 @@ export class NetworkRequestNode extends NetworkNode {
         this.setTextAndTitle(cell, this.arrayLength(this.requestInternal.includedRequestCookies()));
         break;
       }
-      case 'setcookies': {
+      case 'set-cookies': {
         this.setTextAndTitle(cell, this.arrayLength(this.requestInternal.nonBlockedResponseCookies()));
         break;
       }
@@ -994,7 +1002,7 @@ export class NetworkRequestNode extends NetworkNode {
             cell, initialPriority ? PerfUI.NetworkPriorities.uiLabelForNetworkPriority(initialPriority) : '');
         break;
       }
-      case 'connectionid': {
+      case 'connection-id': {
         this.setTextAndTitle(cell, this.requestInternal.connectionId === '0' ? '' : this.requestInternal.connectionId);
         break;
       }
@@ -1517,10 +1525,19 @@ export class NetworkRequestNode extends NetworkNode {
       UI.Tooltip.Tooltip.install(cell, i18nString(UIStrings.servedFromMemoryCacheResource, {PH1: resourceSize}));
       cell.classList.add('network-dim-cell');
     } else if (this.requestInternal.serviceWorkerRouterInfo) {
-      const ruleIdMatched = this.requestInternal.serviceWorkerRouterInfo.ruleIdMatched;
+      const {serviceWorkerRouterInfo} = this.requestInternal;
+      const ruleIdMatched = serviceWorkerRouterInfo.ruleIdMatched;
       UI.UIUtils.createTextChild(cell, i18nString(UIStrings.serviceWorkerRouter));
-      UI.Tooltip.Tooltip.install(
-          cell, i18nString(UIStrings.matchedToServiceWorkerRouter, {PH1: ruleIdMatched, PH2: resourceSize}));
+      let tooltipText;
+      if (serviceWorkerRouterInfo.matchedSourceType === Protocol.Network.ServiceWorkerRouterSource.Network) {
+        const transferSize = Platform.NumberUtilities.bytesToString(this.requestInternal.transferSize);
+        tooltipText = i18nString(
+            UIStrings.matchedToServiceWorkerRouterWithNetworkSource,
+            {PH1: ruleIdMatched, PH2: transferSize, PH3: resourceSize});
+      } else {
+        tooltipText = i18nString(UIStrings.matchedToServiceWorkerRouter, {PH1: ruleIdMatched, PH2: resourceSize});
+      }
+      UI.Tooltip.Tooltip.install(cell, tooltipText);
       cell.classList.add('network-dim-cell');
     } else if (this.requestInternal.fetchedViaServiceWorker) {
       UI.UIUtils.createTextChild(cell, i18nString(UIStrings.serviceWorker));

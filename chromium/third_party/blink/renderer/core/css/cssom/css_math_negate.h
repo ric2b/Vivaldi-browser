@@ -8,6 +8,10 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/cssom/css_math_value.h"
 
+namespace WTF {
+class StringBuilder;
+}  // namespace WTF
+
 namespace blink {
 
 // Represents the negation of a CSSNumericValue.
@@ -60,9 +64,9 @@ class CORE_EXPORT CSSMathNegate : public CSSMathValue {
  private:
   // From CSSNumericValue
   CSSNumericValue* Negate() final { return value_.Get(); }
-  absl::optional<CSSNumericSumValue> SumValue() const final;
+  std::optional<CSSNumericSumValue> SumValue() const final;
 
-  void BuildCSSText(Nested, ParenLess, StringBuilder&) const final;
+  void BuildCSSText(Nested, ParenLess, WTF::StringBuilder&) const final;
 
   Member<CSSNumericValue> value_;
 };

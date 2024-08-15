@@ -1,0 +1,10 @@
+[package]
+name = "pourover_macro_core"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+proc-macro2.workspace = true
+syn.workspace = true
+quote.workspace = true

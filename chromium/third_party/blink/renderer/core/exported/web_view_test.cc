@@ -28,8 +28,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "third_party/blink/public/web/web_view.h"
+
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/functional/callback_helpers.h"
@@ -48,7 +51,6 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
@@ -79,10 +81,10 @@
 #include "third_party/blink/public/web/web_print_params.h"
 #include "third_party/blink/public/web/web_script_source.h"
 #include "third_party/blink/public/web/web_settings.h"
-#include "third_party/blink/public/web/web_view.h"
 #include "third_party/blink/public/web/web_view_client.h"
 #include "third_party/blink/public/web/web_widget.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_document.h"
+#include "third_party/blink/renderer/core/css/css_default_style_sheets.h"
 #include "third_party/blink/renderer/core/css/css_style_declaration.h"
 #include "third_party/blink/renderer/core/css/media_query_list_listener.h"
 #include "third_party/blink/renderer/core/css/media_query_matcher.h"
@@ -149,8 +151,10 @@
 #include "third_party/blink/renderer/platform/graphics/paint/paint_record_builder.h"
 #include "third_party/blink/renderer/platform/heap/thread_state.h"
 #include "third_party/blink/renderer/platform/keyboard_codes.h"
+#include "third_party/blink/renderer/platform/loader/fetch/memory_cache.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
+#include "third_party/blink/renderer/platform/testing/task_environment.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/url_loader_mock_factory.h"
 #include "third_party/blink/renderer/platform/testing/url_test_helpers.h"
@@ -248,7 +252,7 @@ class WebViewTest : public testing::Test {
     void OnDestruct() override {}
 
    private:
-    absl::optional<blink::mojom::PageVisibilityState> page_visibility_;
+    std::optional<blink::mojom::PageVisibilityState> page_visibility_;
   };
 
   explicit WebViewTest(frame_test_helpers::CreateTestWebFrameWidgetCallback
@@ -265,6 +269,10 @@ class WebViewTest : public testing::Test {
   void TearDown() override {
     EventTiming::SetTickClockForTesting(nullptr);
     url_test_helpers::UnregisterAllURLsAndClearMemoryCache();
+    web_view_helper_.Reset();
+    MemoryCache::Get()->EvictResources();
+    // Clear lazily loaded style sheets.
+    CSSDefaultStyleSheets::Instance().PrepareForLeakDetection();
   }
 
  protected:
@@ -329,6 +337,7 @@ class WebViewTest : public testing::Test {
   }
 
   std::string base_url_{"http://www.test.com/"};
+  test::TaskEnvironment task_environment_;
   frame_test_helpers::WebViewHelper web_view_helper_;
   scoped_refptr<base::TestMockTimeTaskRunner> test_task_runner_;
 };
@@ -552,7 +561,7 @@ TEST_F(WebViewTest, SetBaseBackgroundColorAndBlendWithExistingContent) {
   SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.clear(kAlphaRed);
 
-  auto* builder = MakeGarbageCollected<PaintRecordBuilder>();
+  PaintRecordBuilder builder;
 
   // Paint the root of the main frame in the way that CompositedLayerMapping
   // would.
@@ -561,10 +570,10 @@ TEST_F(WebViewTest, SetBaseBackgroundColorAndBlendWithExistingContent) {
 
   view->GetLayoutView()->GetDocument().Lifecycle().AdvanceTo(
       DocumentLifecycle::kInPaint);
-  PaintLayerPainter(*root_layer).Paint(builder->Context());
+  PaintLayerPainter(*root_layer).Paint(builder.Context());
   view->GetLayoutView()->GetDocument().Lifecycle().AdvanceTo(
       DocumentLifecycle::kPaintClean);
-  builder->EndRecording().Playback(&canvas);
+  builder.EndRecording().Playback(&canvas);
 
   // The result should be a blend of red and green.
   SkColor color = bitmap.getColor(kWidth / 2, kHeight / 2);
@@ -2575,7 +2584,7 @@ TEST_F(WebViewTest, BackForwardRestoreScroll) {
       /*is_synchronously_committed=*/false, /*source_element=*/nullptr,
       mojom::blink::TriggeringEventInfo::kNotFromEvent,
       /*is_browser_initiated=*/true,
-      /*soft_navigation_heuristics_task_id=*/absl::nullopt);
+      /*soft_navigation_heuristics_task_id=*/std::nullopt);
   main_frame_local->Loader().GetDocumentLoader()->CommitSameDocumentNavigation(
       item2->Url(), WebFrameLoadType::kBackForward, item2.Get(),
       ClientRedirectPolicy::kNotClientRedirect,
@@ -2583,7 +2592,7 @@ TEST_F(WebViewTest, BackForwardRestoreScroll) {
       /*is_synchronously_committed=*/false, /*source_element=*/nullptr,
       mojom::blink::TriggeringEventInfo::kNotFromEvent,
       /*is_browser_initiated=*/true,
-      /*soft_navigation_heuristics_task_id=*/absl::nullopt);
+      /*soft_navigation_heuristics_task_id=*/std::nullopt);
   main_frame_local->Loader().GetDocumentLoader()->CommitSameDocumentNavigation(
       item1->Url(), WebFrameLoadType::kBackForward, item1.Get(),
       ClientRedirectPolicy::kNotClientRedirect,
@@ -2591,7 +2600,7 @@ TEST_F(WebViewTest, BackForwardRestoreScroll) {
       /*is_synchronously_committed=*/false, /*source_element=*/nullptr,
       mojom::blink::TriggeringEventInfo::kNotFromEvent,
       /*is_browser_initiated=*/true,
-      /*soft_navigation_heuristics_task_id=*/absl::nullopt);
+      /*soft_navigation_heuristics_task_id=*/std::nullopt);
   web_view_impl->MainFrameWidget()->UpdateAllLifecyclePhases(
       DocumentUpdateReason::kTest);
 
@@ -2614,7 +2623,7 @@ TEST_F(WebViewTest, BackForwardRestoreScroll) {
       /*is_synchronously_committed=*/false, /*source_element=*/nullptr,
       mojom::blink::TriggeringEventInfo::kNotFromEvent,
       /*is_browser_initiated=*/true,
-      /*soft_navigation_heuristics_task_id=*/absl::nullopt);
+      /*soft_navigation_heuristics_task_id=*/std::nullopt);
 
   main_frame_local->Loader().GetDocumentLoader()->CommitSameDocumentNavigation(
       item3->Url(), WebFrameLoadType::kBackForward, item3.Get(),
@@ -2623,7 +2632,7 @@ TEST_F(WebViewTest, BackForwardRestoreScroll) {
       /*is_synchronously_committed=*/false, /*source_element=*/nullptr,
       mojom::blink::TriggeringEventInfo::kNotFromEvent,
       /*is_browser_initiated=*/true,
-      /*soft_navigation_heuristics_task_id=*/absl::nullopt);
+      /*soft_navigation_heuristics_task_id=*/std::nullopt);
   // The scroll offset is only applied via invoking the anchor via the main
   // lifecycle, or a forced layout.
   // TODO(chrishtr): At the moment, WebLocalFrameImpl::GetScrollOffset() does
@@ -4076,8 +4085,8 @@ class ViewCreatingWebFrameClient
       network::mojom::blink::WebSandboxFlags,
       const SessionStorageNamespaceId&,
       bool& consumed_user_gesture,
-      const absl::optional<Impression>&,
-      const absl::optional<WebPictureInPictureWindowOptions>&,
+      const std::optional<Impression>&,
+      const std::optional<WebPictureInPictureWindowOptions>&,
       const WebURL&) override {
     return web_view_helper_.InitializeWithOpener(Frame());
   }
@@ -4175,8 +4184,8 @@ class ViewReusingWebFrameClient
       network::mojom::blink::WebSandboxFlags,
       const SessionStorageNamespaceId&,
       bool& consumed_user_gesture,
-      const absl::optional<Impression>&,
-      const absl::optional<WebPictureInPictureWindowOptions>&,
+      const std::optional<Impression>&,
+      const std::optional<WebPictureInPictureWindowOptions>&,
       const WebURL&) override {
     return web_view_;
   }

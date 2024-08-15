@@ -41,6 +41,7 @@
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrContextOptions.h"
+#include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/gpu/GrTypes.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
@@ -102,6 +103,7 @@
 #include "src/text/gpu/SlugImpl.h"
 #include "src/text/gpu/SubRunContainer.h"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -116,6 +118,17 @@ struct SkDrawShadowRec;
 using namespace skia_private;
 
 #define ASSERT_SINGLE_OWNER SKGPU_ASSERT_SINGLE_OWNER(fContext->priv().singleOwner())
+
+#if defined(GR_TEST_UTILS)
+// GrContextOptions::fMaxTextureSizeOverride exists but doesn't allow for changing the
+// maxTextureSize on the fly.
+int gOverrideMaxTextureSizeGanesh = 0;
+// Allows tests to check how many tiles were drawn on the most recent call to
+// Device::drawAsTiledImageRect. This is an atomic because we can write to it from
+// multiple threads during "normal" operations. However, the tests that actually
+// read from it are done single-threaded.
+std::atomic<int> gNumTilesDrawnGanesh{0};
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -991,20 +1004,48 @@ bool Device::drawAsTiledImageRect(SkCanvas* canvas,
                                   const SkSamplingOptions& sampling,
                                   const SkPaint& paint,
                                   SkCanvas::SrcRectConstraint constraint) {
+    GrRecordingContext* rCtx = canvas->recordingContext();
+    if (!rCtx) {
+        return false;
+    }
     ASSERT_SINGLE_OWNER
 
     GrAA aa = fSurfaceDrawContext->chooseAA(paint);
     SkCanvas::QuadAAFlags aaFlags = (aa == GrAA::kYes) ? SkCanvas::kAll_QuadAAFlags
                                                        : SkCanvas::kNone_QuadAAFlags;
 
-    return TiledTextureUtils::DrawAsTiledImageRect(canvas,
-                                                   image,
-                                                   src ? *src
-                                                       : SkRect::MakeIWH(image->width(),
-                                                                         image->height()),
-                                                   dst, aaFlags, sampling, &paint, constraint);
-}
+    // NOTE: if the context is not a direct context, it doesn't have access to the resource
+    // cache, and theoretically, the resource cache's limits could be being changed on
+    // another thread, so even having access to just the limit wouldn't be a reliable
+    // test during recording here.
+    size_t cacheSize = 0;
+    if (auto dCtx = GrAsDirectContext(rCtx)) {
+        cacheSize = dCtx->getResourceCacheLimit();
+    }
+    size_t maxTextureSize = rCtx->maxTextureSize();
+#if defined(GR_TEST_UTILS)
+    if (gOverrideMaxTextureSizeGanesh) {
+        maxTextureSize = gOverrideMaxTextureSizeGanesh;
+    }
+    gNumTilesDrawnGanesh.store(0, std::memory_order_relaxed);
+#endif
 
+    [[maybe_unused]] auto [wasTiled, numTiles] = TiledTextureUtils::DrawAsTiledImageRect(
+            canvas,
+            image,
+            src ? *src : SkRect::MakeIWH(image->width(), image->height()),
+            dst,
+            aaFlags,
+            sampling,
+            &paint,
+            constraint,
+            cacheSize,
+            maxTextureSize);
+#if defined(GR_TEST_UTILS)
+    gNumTilesDrawnGanesh.store(numTiles, std::memory_order_relaxed);
+#endif
+    return wasTiled;
+}
 
 void Device::drawViewLattice(GrSurfaceProxyView view,
                              const GrColorInfo& info,
@@ -1033,15 +1074,21 @@ void Device::drawViewLattice(GrSurfaceProxyView view,
     }
 
     if (info.isAlphaOnly()) {
-        // If we were doing this with an FP graph we'd use a kDstIn blend between the texture and
-        // the paint color.
+        // If we were doing this with an FP graph we'd use a kDstIn blend between the texture
+        // and the paint color.
         view.concatSwizzle(skgpu::Swizzle("aaaa"));
     }
     auto csxf = GrColorSpaceXform::Make(info, fSurfaceDrawContext->colorInfo());
 
-    fSurfaceDrawContext->drawImageLattice(this->clip(), std::move(grPaint), this->localToDevice(),
-                                          std::move(view), info.alphaType(), std::move(csxf),
-                                          filter, std::move(iter), dst);
+    fSurfaceDrawContext->drawImageLattice(this->clip(),
+                                          std::move(grPaint),
+                                          this->localToDevice(),
+                                          std::move(view),
+                                          info.alphaType(),
+                                          std::move(csxf),
+                                          filter,
+                                          std::move(iter),
+                                          dst);
 }
 
 void Device::drawImageLattice(const SkImage* image,
@@ -1055,12 +1102,8 @@ void Device::drawImageLattice(const SkImage* image,
     auto [view, ct] = skgpu::ganesh::AsView(this->recordingContext(), image, skgpu::Mipmapped::kNo);
     if (view) {
         GrColorInfo colorInfo(ct, image->alphaType(), image->refColorSpace());
-        this->drawViewLattice(std::move(view),
-                              std::move(colorInfo),
-                              std::move(iter),
-                              dst,
-                              filter,
-                              paint);
+        this->drawViewLattice(
+                std::move(view), std::move(colorInfo), std::move(iter), dst, filter, paint);
     }
 }
 
@@ -1191,8 +1234,7 @@ void Device::drawAtlas(const SkRSXform xform[],
 
 void Device::onDrawGlyphRunList(SkCanvas* canvas,
                                 const sktext::GlyphRunList& glyphRunList,
-                                const SkPaint& initialPaint,
-                                const SkPaint& drawingPaint) {
+                                const SkPaint& paint) {
     ASSERT_SINGLE_OWNER
     GR_CREATE_TRACE_MARKER_CONTEXT("skgpu::ganesh::Device", "drawGlyphRunList", fContext.get());
     SkASSERT(!glyphRunList.hasRSXForm());
@@ -1200,9 +1242,9 @@ void Device::onDrawGlyphRunList(SkCanvas* canvas,
     if (glyphRunList.blob() == nullptr) {
         // If the glyphRunList does not have an associated text blob, then it was created by one of
         // the direct draw APIs (drawGlyphs, etc.). Use a Slug to draw the glyphs.
-        auto slug = this->convertGlyphRunListToSlug(glyphRunList, initialPaint, drawingPaint);
+        auto slug = this->convertGlyphRunListToSlug(glyphRunList, paint);
         if (slug != nullptr) {
-            this->drawSlug(canvas, slug.get(), drawingPaint);
+            this->drawSlug(canvas, slug.get(), paint);
         }
     } else {
         fSurfaceDrawContext->drawGlyphRunList(canvas,
@@ -1210,7 +1252,7 @@ void Device::onDrawGlyphRunList(SkCanvas* canvas,
                                               this->localToDevice(),
                                               glyphRunList,
                                               this->strikeDeviceInfo(),
-                                              drawingPaint);
+                                              paint);
     }
 }
 
@@ -1376,7 +1418,8 @@ void Device::asyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvColorSpace,
 sk_sp<SkDevice> Device::createDevice(const CreateInfo& cinfo, const SkPaint*) {
     ASSERT_SINGLE_OWNER
 
-    SkSurfaceProps props(this->surfaceProps().flags(), cinfo.fPixelGeometry);
+    SkSurfaceProps props =
+        this->surfaceProps().cloneWithPixelGeometry(cinfo.fPixelGeometry);
 
     SkASSERT(cinfo.fInfo.colorType() != kRGBA_1010102_SkColorType);
 
@@ -1449,20 +1492,16 @@ SkStrikeDeviceInfo Device::strikeDeviceInfo() const {
     return {this->surfaceProps(), this->scalerContextFlags(), &fSDFTControl};
 }
 
-sk_sp<sktext::gpu::Slug>
-Device::convertGlyphRunListToSlug(const sktext::GlyphRunList& glyphRunList,
-                                  const SkPaint& initialPaint,
-                                  const SkPaint& drawingPaint) {
+sk_sp<sktext::gpu::Slug> Device::convertGlyphRunListToSlug(const sktext::GlyphRunList& glyphRunList,
+                                                           const SkPaint& paint) {
     return sktext::gpu::SlugImpl::Make(this->localToDevice(),
                                        glyphRunList,
-                                       initialPaint,
-                                       drawingPaint,
+                                       paint,
                                        this->strikeDeviceInfo(),
                                        SkStrikeCache::GlobalStrikeCache());
 }
 
-void Device::drawSlug(SkCanvas* canvas, const sktext::gpu::Slug* slug,
-                      const SkPaint& drawingPaint) {
+void Device::drawSlug(SkCanvas* canvas, const sktext::gpu::Slug* slug, const SkPaint& paint) {
     SkASSERT(canvas);
     SkASSERT(slug);
     const sktext::gpu::SlugImpl* slugImpl = static_cast<const sktext::gpu::SlugImpl*>(slug);
@@ -1490,8 +1529,7 @@ void Device::drawSlug(SkCanvas* canvas, const sktext::gpu::Slug* slug,
         }
     };
 
-    slugImpl->subRuns()->draw(canvas, slugImpl->origin(),
-                              drawingPaint, slugImpl, atlasDelegate);
+    slugImpl->subRuns()->draw(canvas, slugImpl->origin(), paint, slugImpl, atlasDelegate);
 }
 
 }  // namespace skgpu::ganesh

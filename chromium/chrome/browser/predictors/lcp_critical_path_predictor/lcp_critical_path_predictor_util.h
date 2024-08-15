@@ -25,6 +25,12 @@ ConvertLcppDataToLCPCriticalPathPredictorNavigationTimeHint(
 // vector.
 std::vector<GURL> PredictFetchedFontUrls(const LcppData& data);
 
+// Returns possible preconnects based on past loads for a given `data`.
+// The returned origins are ordered by descending frequency (the most
+// frequent one comes first). If there is no data, it returns an empty
+// vector.
+std::vector<GURL> PredictPreconnectableOrigins(const LcppData& data);
+
 // Returns possible subresource URLs from past loads for a given `data`.
 // The returned URLs are ordered by descending frequency (the most
 // frequent one comes first). If there is no data, it returns an empty
@@ -48,6 +54,7 @@ struct LcppDataInputs {
   std::string lcp_element_locator;
   // async script urls of the latest LCP candidate element.
   std::vector<GURL> lcp_influencer_scripts;
+  std::vector<GURL> preconnect_origins;
 
   // Fetched font URLs.
   // Unlike data above, the field will be updated per font fetch.

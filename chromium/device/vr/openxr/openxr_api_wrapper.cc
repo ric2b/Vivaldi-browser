@@ -7,11 +7,14 @@
 #include <stdint.h>
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 #include "base/check.h"
 #include "base/containers/contains.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/functional/callback_helpers.h"
 #include "base/notreached.h"
+#include "base/numerics/angle_conversions.h"
 #include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/typed_macros.h"
@@ -28,7 +31,6 @@
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "third_party/openxr/src/include/openxr/openxr.h"
-#include "ui/gfx/geometry/angle_conversions.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/quaternion.h"
 #include "ui/gfx/geometry/size.h"
@@ -172,7 +174,7 @@ OpenXrApiWrapper::~OpenXrApiWrapper() {
 void OpenXrApiWrapper::Reset() {
   SetXrSessionState(XR_SESSION_STATE_UNKNOWN);
   anchor_manager_.reset();
-  unbounded_space_type_ = XR_REFERENCE_SPACE_TYPE_MAX_ENUM;
+  unbounded_space_provider_.reset();
   unbounded_space_ = XR_NULL_HANDLE;
   local_space_ = XR_NULL_HANDLE;
   stage_space_ = XR_NULL_HANDLE;
@@ -295,6 +297,11 @@ bool OpenXrApiWrapper::HasColorSwapChain() const {
 }
 
 bool OpenXrApiWrapper::HasSpace(XrReferenceSpaceType type) const {
+  if (unbounded_space_provider_ &&
+      unbounded_space_provider_->GetType() == type) {
+    return unbounded_space_ != XR_NULL_HANDLE;
+  }
+
   switch (type) {
     case XR_REFERENCE_SPACE_TYPE_LOCAL:
       return local_space_ != XR_NULL_HANDLE;
@@ -302,8 +309,6 @@ bool OpenXrApiWrapper::HasSpace(XrReferenceSpaceType type) const {
       return view_space_ != XR_NULL_HANDLE;
     case XR_REFERENCE_SPACE_TYPE_STAGE:
       return stage_space_ != XR_NULL_HANDLE;
-    case XR_REFERENCE_SPACE_TYPE_UNBOUNDED_MSFT:
-      return unbounded_space_ != XR_NULL_HANDLE;
     default:
       NOTREACHED();
       return false;
@@ -512,10 +517,10 @@ XrResult OpenXrApiWrapper::InitSession(
   CreateSpace(XR_REFERENCE_SPACE_TYPE_STAGE, &stage_space_);
   UpdateStageBounds();
 
-  if (extension_helper.ExtensionEnumeration()->ExtensionSupported(
-          XR_MSFT_UNBOUNDED_REFERENCE_SPACE_EXTENSION_NAME)) {
+  unbounded_space_provider_ = extension_helper.CreateUnboundedSpaceProvider();
+  if (unbounded_space_provider_) {
     RETURN_IF_XR_FAILED(
-        CreateSpace(XR_REFERENCE_SPACE_TYPE_UNBOUNDED_MSFT, &unbounded_space_));
+        unbounded_space_provider_->CreateSpace(session_, &unbounded_space_));
   }
 
   EnsureEventPolling();
@@ -986,10 +991,10 @@ mojom::XRViewPtr OpenXrApiWrapper::CreateView(
   view->mojo_from_view = XrPoseToGfxTransform(xr_view.pose);
 
   view->field_of_view = mojom::VRFieldOfView::New();
-  view->field_of_view->up_degrees = gfx::RadToDeg(xr_view.fov.angleUp);
-  view->field_of_view->down_degrees = gfx::RadToDeg(-xr_view.fov.angleDown);
-  view->field_of_view->left_degrees = gfx::RadToDeg(-xr_view.fov.angleLeft);
-  view->field_of_view->right_degrees = gfx::RadToDeg(xr_view.fov.angleRight);
+  view->field_of_view->up_degrees = base::RadToDeg(xr_view.fov.angleUp);
+  view->field_of_view->down_degrees = base::RadToDeg(-xr_view.fov.angleDown);
+  view->field_of_view->left_degrees = base::RadToDeg(-xr_view.fov.angleLeft);
+  view->field_of_view->right_degrees = base::RadToDeg(xr_view.fov.angleRight);
 
   view->viewport =
       gfx::Rect(x_offset, 0, view_config.Properties()[view_index].Width(),
@@ -1197,12 +1202,17 @@ XrResult OpenXrApiWrapper::ProcessEvents() {
           reinterpret_cast<XrEventDataReferenceSpaceChangePending*>(
               &event_data);
       DCHECK(reference_space_change_pending->session == session_);
-      // TODO(crbug.com/1015049)
+      // TODO(https://crbug.com/1015049)
       // Currently WMR only throw reference space change event for stage.
       // Other runtimes may decide to do it differently.
       if (reference_space_change_pending->referenceSpaceType ==
           XR_REFERENCE_SPACE_TYPE_STAGE) {
         UpdateStageBounds();
+      } else if (unbounded_space_provider_ &&
+                 reference_space_change_pending->referenceSpaceType ==
+                     unbounded_space_provider_->GetType()) {
+        // TODO(https://crbug.com/1015049): Properly handle unbounded reference
+        // space change events.
       }
     } else if (event_data.type ==
                XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED) {
@@ -1305,6 +1315,20 @@ bool OpenXrApiWrapper::GetStageParameters(
       local_from_stage_location.pose.position.z;
 
   local_from_stage = gfx::Transform::Compose(local_from_stage_decomp);
+
+  // TODO(https://crbug.com/1522245): Check for crash dumps.
+  std::array<float, 16> transform_data;
+  local_from_stage.GetColMajorF(transform_data.data());
+  bool contains_nan = base::ranges::any_of(
+      transform_data, [](const float f) { return std::isnan(f); });
+
+  if (contains_nan) {
+    // It's unclear if this could be tripping on every frame, but reporting once
+    // per day per user (the default throttling) should be sufficient for future
+    // investigation.
+    base::debug::DumpWithoutCrashing();
+    return false;
+  }
   return true;
 }
 

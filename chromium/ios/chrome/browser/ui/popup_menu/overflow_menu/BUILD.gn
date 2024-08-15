@@ -14,6 +14,7 @@ source_set("overflow_menu_constants") {
 
 source_set("overflow_menu") {
   sources = [
+    "overflow_menu_action_provider.h",
     "overflow_menu_mediator.h",
     "overflow_menu_mediator.mm",
     "overflow_menu_metrics.h",
@@ -38,13 +39,13 @@ source_set("overflow_menu") {
     "//components/reading_list/core",
     "//components/reading_list/ios",
     "//components/supervised_user/core/browser",
-    "//components/supervised_user/core/browser:supervised_user_preferences",
     "//components/supervised_user/core/common",
     "//components/sync/service",
     "//components/translate/core/browser",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/bookmarks/model",
     "//ios/chrome/browser/commerce/model/push_notification",
+    "//ios/chrome/browser/default_browser/model:default_browser_interest_signals",
     "//ios/chrome/browser/default_browser/model:utils",
     "//ios/chrome/browser/find_in_page/model",
     "//ios/chrome/browser/follow/model:browser_agent",
@@ -162,11 +163,13 @@ source_set("unit_tests") {
     "destination_customization_model_unittest.mm",
     "overflow_menu_constants_unittest.mm",
     "overflow_menu_mediator_unittest.mm",
+    "overflow_menu_metrics_unittest.mm",
     "overflow_menu_orderer_unittest.mm",
   ]
   deps = [
     ":overflow_menu",
     ":overflow_menu_constants",
+    ":overflow_menu_swift",
     "//base",
     "//base/test:test_support",
     "//components/bookmarks/browser",
@@ -180,7 +183,7 @@ source_set("unit_tests") {
     "//components/prefs",
     "//components/prefs:test_support",
     "//components/reading_list/core",
-    "//components/supervised_user/core/browser:supervised_user_preferences",
+    "//components/supervised_user/core/browser",
     "//components/supervised_user/core/common",
     "//components/sync/service",
     "//components/sync_preferences",
@@ -188,13 +191,14 @@ source_set("unit_tests") {
     "//components/translate/core/browser",
     "//components/translate/core/language_detection",
     "//ios/chrome/browser/bookmarks/model",
+    "//ios/chrome/browser/bookmarks/model:test_support",
     "//ios/chrome/browser/overlays/model",
     "//ios/chrome/browser/overlays/model/public/web_content_area",
     "//ios/chrome/browser/overlays/model/test",
     "//ios/chrome/browser/passwords/model:store_factory",
     "//ios/chrome/browser/policy/model:constants",
     "//ios/chrome/browser/policy/model:test_support",
-    "//ios/chrome/browser/promos_manager:test_support",
+    "//ios/chrome/browser/promos_manager/model:test_support",
     "//ios/chrome/browser/reading_list/model",
     "//ios/chrome/browser/reading_list/model:test_support",
     "//ios/chrome/browser/search_engines/model:template_url_service_factory",
@@ -237,7 +241,9 @@ source_set("eg2_tests") {
   testonly = true
   sources = [ "overflow_menu_carousel_egtest.mm" ]
   deps = [
+    ":feature_flags",
     "//base",
+    "//components/feature_engagement/public",
     "//components/sync/base",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/metrics/model:eg_test_support+eg2",

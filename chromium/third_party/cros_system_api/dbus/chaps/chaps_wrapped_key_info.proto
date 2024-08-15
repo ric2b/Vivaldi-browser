@@ -1,0 +1,25 @@
+// Copyright 2023 The ChromiumOS Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+syntax = "proto2";
+
+option optimize_for = LITE_RUNTIME;
+
+package chaps;
+
+// Proto for a key being wrapped with kChapsKeyWrapMechanism.
+// Unwrapping Instructions:
+// 1. Derive the actual wrapping key using the base_aes_key and Chaps' secret
+//    random seed.
+// 2. Use the derived key with CKM_AES_KEY_WRAP_KWP(([AES KEYWRAP] section 6.3))
+//    to decrypt the wrapped_attribute_list.
+message ChapsWrappedKeyInfo {
+  // Base AES key used in the key derivation process. Along with Chaps' secret
+  // random seed, it's used to generate a key specifically for actually
+  // wrapping/unwrapping the key's attribute list.
+  optional bytes base_aes_key = 1;
+  // The encrypted attribute list of the key. This is wrapped using the derived
+  // key (see base_aes_key comment) and the CKM_AES_KEY_WRAP_KWP mechanism.
+  optional bytes wrapped_attribute_list = 2;
+}

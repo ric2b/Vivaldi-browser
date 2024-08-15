@@ -12,7 +12,8 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './tab_organization_not_started.html.js';
-import {AccountInfo, SyncInfo, TabSearchSyncBrowserProxy, TabSearchSyncBrowserProxyImpl} from './tab_search_sync_browser_proxy.js';
+import type {AccountInfo, SyncInfo, TabSearchSyncBrowserProxy} from './tab_search_sync_browser_proxy.js';
+import {TabSearchSyncBrowserProxyImpl} from './tab_search_sync_browser_proxy.js';
 
 enum SyncState {
   SIGNED_OUT,
@@ -39,7 +40,11 @@ export class TabOrganizationNotStartedElement extends
 
   static get properties() {
     return {
-      showFre: Boolean,
+      showFre: {
+        type: Boolean,
+        value: false,
+      },
+
       account_: Object,
       sync_: Object,
     };
@@ -64,11 +69,6 @@ export class TabOrganizationNotStartedElement extends
 
     this.syncBrowserProxy_.getSyncInfo().then(this.setSync_.bind(this));
     this.addWebUiListener('sync-info-changed', this.setSync_.bind(this));
-  }
-
-  announceHeader() {
-    this.$.header.textContent = '';
-    this.$.header.textContent = this.getTitle_();
   }
 
   private setAccount_(account: AccountInfo) {
@@ -119,6 +119,10 @@ export class TabOrganizationNotStartedElement extends
         }
       }
     }
+  }
+
+  private shouldShowBodyLink_(): boolean {
+    return this.getSyncState_() === SyncState.SYNCED && this.showFre;
   }
 
   private shouldShowAccountInfo_(): boolean {
@@ -193,6 +197,19 @@ export class TabOrganizationNotStartedElement extends
         chrome.metricsPrivate.recordBoolean(
             'Tab.Organization.TabSearch.Clicked', true);
         break;
+    }
+  }
+
+  private onLinkClick_() {
+    this.dispatchEvent(new CustomEvent('learn-more-click', {
+      bubbles: true,
+      composed: true,
+    }));
+  }
+
+  private onLinkKeyDown_(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      this.onLinkClick_();
     }
   }
 }

@@ -190,36 +190,39 @@ USB::~USB() {
   DCHECK(get_permission_requests_.empty());
 }
 
-ScriptPromise USB::getDevices(ScriptState* script_state,
-                              ExceptionState& exception_state) {
+ScriptPromiseTyped<IDLSequence<USBDevice>> USB::getDevices(
+    ScriptState* script_state,
+    ExceptionState& exception_state) {
   if (ShouldBlockUsbServiceCall(GetSupplementable()->DomWindow(),
                                 GetExecutionContext(), &exception_state)) {
-    return ScriptPromise();
+    return ScriptPromiseTyped<IDLSequence<USBDevice>>();
   }
 
   EnsureServiceConnection();
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
-      script_state, exception_state.GetContext());
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolverTyped<IDLSequence<USBDevice>>>(
+          script_state, exception_state.GetContext());
   get_devices_requests_.insert(resolver);
   service_->GetDevices(WTF::BindOnce(&USB::OnGetDevices, WrapPersistent(this),
                                      WrapPersistent(resolver)));
   return resolver->Promise();
 }
 
-ScriptPromise USB::requestDevice(ScriptState* script_state,
-                                 const USBDeviceRequestOptions* options,
-                                 ExceptionState& exception_state) {
+ScriptPromiseTyped<USBDevice> USB::requestDevice(
+    ScriptState* script_state,
+    const USBDeviceRequestOptions* options,
+    ExceptionState& exception_state) {
   if (!DomWindow()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotSupportedError,
         "The implementation did not support the requested type of object or "
         "operation.");
-    return ScriptPromise();
+    return ScriptPromiseTyped<USBDevice>();
   }
 
   if (ShouldBlockUsbServiceCall(GetSupplementable()->DomWindow(),
                                 GetExecutionContext(), &exception_state)) {
-    return ScriptPromise();
+    return ScriptPromiseTyped<USBDevice>();
   }
 
   EnsureServiceConnection();
@@ -227,12 +230,12 @@ ScriptPromise USB::requestDevice(ScriptState* script_state,
   if (!LocalFrame::HasTransientUserActivation(DomWindow()->GetFrame())) {
     exception_state.ThrowSecurityError(
         "Must be handling a user gesture to show a permission request.");
-    return ScriptPromise();
+    return ScriptPromiseTyped<USBDevice>();
   }
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolverTyped<USBDevice>>(
       script_state, exception_state.GetContext());
-  ScriptPromise promise = resolver->Promise();
+  auto promise = resolver->Promise();
   auto mojo_options = mojom::blink::WebUsbRequestDeviceOptions::New();
   if (options->hasFilters()) {
     mojo_options->filters.reserve(options->filters().size());
@@ -298,8 +301,9 @@ void USB::ForgetDevice(
   service_->ForgetDevice(device_guid, std::move(callback));
 }
 
-void USB::OnGetDevices(ScriptPromiseResolver* resolver,
-                       Vector<UsbDeviceInfoPtr> device_infos) {
+void USB::OnGetDevices(
+    ScriptPromiseResolverTyped<IDLSequence<USBDevice>>* resolver,
+    Vector<UsbDeviceInfoPtr> device_infos) {
   DCHECK(get_devices_requests_.Contains(resolver));
 
   HeapVector<Member<USBDevice>> devices;
@@ -309,7 +313,7 @@ void USB::OnGetDevices(ScriptPromiseResolver* resolver,
   get_devices_requests_.erase(resolver);
 }
 
-void USB::OnGetPermission(ScriptPromiseResolver* resolver,
+void USB::OnGetPermission(ScriptPromiseResolverTyped<USBDevice>* resolver,
                           UsbDeviceInfoPtr device_info) {
   DCHECK(get_permission_requests_.Contains(resolver));
 
@@ -356,7 +360,8 @@ void USB::OnServiceConnectionError() {
   // script to be executed in the process of determining if the value is a
   // thenable. Move the set to a local variable to prevent such execution from
   // invalidating the iterator used by the loop.
-  HeapHashSet<Member<ScriptPromiseResolver>> get_devices_requests;
+  HeapHashSet<Member<ScriptPromiseResolverTyped<IDLSequence<USBDevice>>>>
+      get_devices_requests;
   get_devices_requests.swap(get_devices_requests_);
   for (auto& resolver : get_devices_requests)
     resolver->Resolve(HeapVector<Member<USBDevice>>(0));

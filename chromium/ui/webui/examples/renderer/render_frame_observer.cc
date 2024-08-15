@@ -255,7 +255,7 @@ class V8BinderContext {
     callback->Run(args);
   }
 
-  const raw_ptr<v8::Isolate, ExperimentalRenderer> isolate_;
+  const raw_ptr<v8::Isolate> isolate_;
   v8::HandleScope handle_scope_;
   v8::Local<v8::Context> context_;
   v8::Context::Scope context_scope_;
@@ -281,7 +281,7 @@ void RenderFrameObserver::OnDestruct() {
 
 void RenderFrameObserver::DidStartNavigation(
     const GURL& url,
-    absl::optional<blink::WebNavigationType> navigation_type) {
+    std::optional<blink::WebNavigationType> navigation_type) {
   if (!url.SchemeIs("chrome") || url.host() != "browser") {
     this_instance_.reset();
     return;

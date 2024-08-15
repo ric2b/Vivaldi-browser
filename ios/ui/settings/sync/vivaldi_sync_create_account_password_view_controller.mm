@@ -252,8 +252,9 @@ BOOL subscribeToNewsletter;
   createButton.buttonText =
       l10n_util::GetNSString(IDS_VIVALDI_CREATE_ACCOUNT_CREATE);
   createButton.textAlignment = NSTextAlignmentNatural;
-  createButton.buttonBackgroundColor = [UIColor clearColor];
-  createButton.buttonTextColor = [UIColor colorNamed:kBlueColor];
+  createButton.buttonBackgroundColor = [UIColor colorNamed:kBlueColor];
+  createButton.buttonTextColor = [UIColor colorNamed:kSolidButtonTextColor];
+  createButton.cellBackgroundColor = createButton.buttonBackgroundColor;
   createButton.disableButtonIntrinsicWidth = YES;
 
   [self.tableViewModel addItem:createButton

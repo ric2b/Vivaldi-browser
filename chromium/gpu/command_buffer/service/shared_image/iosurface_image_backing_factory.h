@@ -104,6 +104,7 @@ class GPU_GLES2_EXPORT IOSurfaceImageBackingFactory
                    gfx::GpuMemoryBufferType gmb_type,
                    GrContextType gr_context_type,
                    base::span<const uint8_t> pixel_data) override;
+  SharedImageBackingType GetBackingType() override;
 
  private:
   std::unique_ptr<SharedImageBacking> CreateSharedImageInternal(
@@ -115,6 +116,7 @@ class GPU_GLES2_EXPORT IOSurfaceImageBackingFactory
       GrSurfaceOrigin surface_origin,
       SkAlphaType alpha_type,
       uint32_t usage,
+      std::string debug_label,
       base::span<const uint8_t> pixel_data);
   std::unique_ptr<SharedImageBacking> CreateSharedImageGMBs(
       const Mailbox& mailbox,
@@ -124,6 +126,7 @@ class GPU_GLES2_EXPORT IOSurfaceImageBackingFactory
       GrSurfaceOrigin surface_origin,
       SkAlphaType alpha_type,
       uint32_t usage,
+      std::string debug_label,
       gfx::GpuMemoryBufferHandle handle,
       uint32_t io_surface_plane,
       gfx::BufferPlane buffer_plane,

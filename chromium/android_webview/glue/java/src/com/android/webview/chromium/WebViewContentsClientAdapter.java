@@ -52,7 +52,9 @@ import org.chromium.android_webview.permission.Resource;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
+import org.chromium.base.PathUtils;
 import org.chromium.base.TraceEvent;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.ScopedSysTraceEvent;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
@@ -64,6 +66,7 @@ import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.WeakHashMap;
+import java.util.regex.Pattern;
 
 /**
  * An adapter class that forwards the callbacks from {@link ContentViewClient}
@@ -101,6 +104,11 @@ class WebViewContentsClientAdapter extends SharedWebViewContentsClientAdapter {
 
     private WeakHashMap<AwPermissionRequest, WeakReference<PermissionRequestAdapter>>
             mOngoingPermissionRequests;
+
+    // Pattern to match URLs that WebView internally handles as asset or
+    // resource lookups.
+    private static final Pattern FILE_ANDROID_ASSET_PATTERN =
+            Pattern.compile("^file:/*android_(asset|res).*");
 
     /**
      * Adapter constructor.
@@ -895,6 +903,16 @@ class WebViewContentsClientAdapter extends SharedWebViewContentsClientAdapter {
                                 s = new String[uriList.length];
                                 for (int i = 0; i < uriList.length; i++) {
                                     s[i] = uriList[i].toString();
+                                    if ("file".equals(uriList[i].getScheme())
+                                            && !FILE_ANDROID_ASSET_PATTERN
+                                                    .matcher(s[i])
+                                                    .matches()) {
+                                        RecordHistogram.recordBooleanHistogram(
+                                                "Android.WebView.FileChooserResultOutsideAppDataDir",
+                                                PathUtils.isPathUnderAppDir(
+                                                        uriList[i].getSchemeSpecificPart(),
+                                                        mContext));
+                                    }
                                 }
                             }
                             uploadFileCallback.onResult(s);
@@ -1006,18 +1024,33 @@ class WebViewContentsClientAdapter extends SharedWebViewContentsClientAdapter {
                 result = mWebChromeClient.getDefaultVideoPoster();
             }
             if (result == null) {
-                // The ic_play_circle_outline_black_48dp icon is transparent so we need to draw it
-                // on a gray background.
                 Bitmap poster =
                         BitmapFactory.decodeResource(
                                 mContext.getResources(),
                                 R.drawable.ic_play_circle_outline_black_48dp);
-                result =
-                        Bitmap.createBitmap(
-                                poster.getWidth(), poster.getHeight(), poster.getConfig());
-                result.eraseColor(Color.GRAY);
-                Canvas canvas = new Canvas(result);
-                canvas.drawBitmap(poster, 0f, 0f, null);
+
+                // WebView relies on the application's resources from the context we have.
+                // If the application does anything to change how these resources work,
+                // this could result in us failing to retrieve the bitmap.
+                // It is not a fix, and we could still run into other problems, but we
+                // will fall back to an empty Bitmap rather than try use the resource we
+                // couldn't retrieve to try to help apps that may run into this problem.
+                // See crbug.com/329106309 for more information.
+                if (poster != null) {
+                    // The ic_play_circle_outline_black_48dp icon is transparent so we need to draw
+                    // it on a gray background.
+                    result =
+                            Bitmap.createBitmap(
+                                    poster.getWidth(), poster.getHeight(), poster.getConfig());
+                    result.eraseColor(Color.GRAY);
+                    Canvas canvas = new Canvas(result);
+                    canvas.drawBitmap(poster, 0f, 0f, null);
+                } else {
+                    Log.w(TAG, "Unable to retrieve default video poster from resources");
+                    result =
+                            Bitmap.createBitmap(
+                                    new int[] {Color.TRANSPARENT}, 1, 1, Bitmap.Config.ARGB_8888);
+                }
             }
             return result;
         }

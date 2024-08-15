@@ -56,7 +56,7 @@ export class OverlayPersistentHighlighter {
     this.#callbacks = callbacks;
 
     this.#persistentHighlightSetting =
-        Common.Settings.Settings.instance().createLocalSetting('persistentHighlightSetting', []);
+        Common.Settings.Settings.instance().createLocalSetting('persistent-highlight-setting', []);
 
     this.#gridHighlights = new Map();
 
@@ -73,13 +73,13 @@ export class OverlayPersistentHighlighter {
     this.#gridColorGenerator = new OverlayColorGenerator();
     this.#flexColorGenerator = new OverlayColorGenerator();
 
-    this.#showGridLineLabelsSetting = Common.Settings.Settings.instance().moduleSetting('showGridLineLabels');
+    this.#showGridLineLabelsSetting = Common.Settings.Settings.instance().moduleSetting('show-grid-line-labels');
     this.#showGridLineLabelsSetting.addChangeListener(this.onSettingChange, this);
-    this.#extendGridLinesSetting = Common.Settings.Settings.instance().moduleSetting('extendGridLines');
+    this.#extendGridLinesSetting = Common.Settings.Settings.instance().moduleSetting('extend-grid-lines');
     this.#extendGridLinesSetting.addChangeListener(this.onSettingChange, this);
-    this.#showGridAreasSetting = Common.Settings.Settings.instance().moduleSetting('showGridAreas');
+    this.#showGridAreasSetting = Common.Settings.Settings.instance().moduleSetting('show-grid-areas');
     this.#showGridAreasSetting.addChangeListener(this.onSettingChange, this);
-    this.#showGridTrackSizesSetting = Common.Settings.Settings.instance().moduleSetting('showGridTrackSizes');
+    this.#showGridTrackSizesSetting = Common.Settings.Settings.instance().moduleSetting('show-grid-track-sizes');
     this.#showGridTrackSizesSetting.addChangeListener(this.onSettingChange, this);
   }
 

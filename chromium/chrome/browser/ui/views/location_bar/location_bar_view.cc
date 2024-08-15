@@ -69,6 +69,7 @@
 #include "chrome/browser/ui/views/page_action/page_action_icon_params.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/browser/ui/views/passwords/manage_passwords_icon_views.h"
+#include "chrome/browser/ui/views/permissions/chip/permission_chip_view.h"
 #include "chrome/browser/ui/views/permissions/chip/permission_dashboard_view.h"
 #include "chrome/browser/ui/views/send_tab_to_self/send_tab_to_self_icon_view.h"
 #include "chrome/browser/ui/views/sharing_hub/sharing_hub_icon_view.h"
@@ -108,7 +109,7 @@
 #include "content/public/common/url_constants.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/feature_switch.h"
-#include "services/device/public/cpp/geolocation/geolocation_manager.h"
+#include "services/device/public/cpp/geolocation/geolocation_system_permission_manager.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -149,6 +150,11 @@
 #include "ui/views/view.h"
 #include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
+
+#if BUILDFLAG(IS_MAC)
+#include "chrome/browser/web_applications/app_shim_registry_mac.h"
+#include "chrome/browser/web_applications/web_app_tab_helper.h"
+#endif
 
 namespace {
 
@@ -207,9 +213,14 @@ LocationBarView::LocationBarView(Browser* browser,
 
 #if BUILDFLAG(IS_MAC)
     geolocation_permission_observation_.Observe(
-        device::GeolocationManager::GetInstance());
+        device::GeolocationSystemPermissionManager::GetInstance());
 #endif
   }
+#if BUILDFLAG(IS_MAC)
+  app_shim_observation_ =
+      AppShimRegistry::Get()->RegisterAppChangedCallback(base::BindRepeating(
+          &LocationBarView::OnAppShimChanged, base::Unretained(this)));
+#endif
 }
 
 LocationBarView::~LocationBarView() = default;
@@ -234,8 +245,8 @@ void LocationBarView::Init() {
             browser_, this, permission_dashboard_view_);
   } else {
     chip_controller_ = std::make_unique<ChipController>(
-        browser_, AddChildViewAt(std::make_unique<OmniboxChipButton>(
-                                     OmniboxChipButton::PressedCallback()),
+        browser_, AddChildViewAt(std::make_unique<PermissionChipView>(
+                                     PermissionChipView::PressedCallback()),
                                  0));
   }
 
@@ -360,9 +371,6 @@ void LocationBarView::Init() {
     params.types_enabled.push_back(PageActionIconType::kZoom);
     params.types_enabled.push_back(PageActionIconType::kFileSystemAccess);
 
-    if (dom_distiller::IsDomDistillerEnabled() && browser_->is_type_normal()) {
-      params.types_enabled.push_back(PageActionIconType::kReaderMode);
-    }
     if (features::IsReadAnythingOmniboxIconEnabled()) {
       params.types_enabled.push_back(PageActionIconType::kReadAnything);
     }
@@ -383,7 +391,7 @@ void LocationBarView::Init() {
 
   // TODO(crbug.com/1167060): Place this in the proper order upon having final
   // mocks.
-  params.types_enabled.push_back(PageActionIconType::kSaveAutofillAddress);
+  params.types_enabled.push_back(PageActionIconType::kAutofillAddress);
 
   if (browser_) {
     if (sharing_hub::HasPageAction(profile_, is_popup_mode_) &&
@@ -598,7 +606,7 @@ void LocationBarView::OnKeywordFaviconFetched(const gfx::Image& icon) {
   selected_keyword_view_->SetCustomImage(icon);
 }
 
-void LocationBarView::Layout() {
+void LocationBarView::Layout(PassKey) {
   if (!IsInitialized())
     return;
 
@@ -889,7 +897,7 @@ void LocationBarView::Layout() {
     position_view(omnibox_additional_text_view_, omnibox_additional_text_width);
   }
 
-  View::Layout();
+  LayoutSuperclass<View>(this);
 }
 
 void LocationBarView::OnThemeChanged() {
@@ -913,7 +921,7 @@ void LocationBarView::OnThemeChanged() {
 }
 
 void LocationBarView::ChildPreferredSizeChanged(views::View* child) {
-  Layout();
+  DeprecatedLayoutImmediately();
   SchedulePaint();
 }
 
@@ -947,7 +955,7 @@ void LocationBarView::Update(WebContents* contents) {
   if (qr_generator_icon)
     qr_generator_icon->SetVisible(false);
 
-  OnChanged();  // NOTE: Calls Layout().
+  OnChanged();  // NOTE: Triggers layout.
 
   // A permission prompt may be suspended due to an invalid state (empty or
   // editing location bar). Restore the suspended prompt if possible.
@@ -1163,6 +1171,13 @@ void LocationBarView::RefreshBackground() {
   // correctly enable subpixel AA.
   omnibox_view_->SetBackgroundColor(background_color);
 
+  // The divider between indicators and request chips should have the same color
+  // as the omnibox.
+  if (base::FeatureList::IsEnabled(
+          content_settings::features::kLeftHandSideActivityIndicators)) {
+    permission_dashboard_view_->SetDividerBackgroundColor(background_color);
+  }
+
   SchedulePaint();
 }
 
@@ -1186,8 +1201,7 @@ bool LocationBarView::RefreshContentSettingViews() {
         base::FeatureList::IsEnabled(
             content_settings::features::kLeftHandSideActivityIndicators)) {
       visibility_changed |= permission_dashboard_controller()->Update(
-          v->content_setting_image_model(),
-          v->delegate()->ShouldHideContentSettingImage());
+          v->content_setting_image_model(), v->delegate());
     } else {
       v->Update();
       if (was_visible != v->GetVisible()) {
@@ -1263,7 +1277,7 @@ void LocationBarView::FocusSearch() {
 
 void LocationBarView::UpdateContentSettingsIcons() {
   if (RefreshContentSettingViews()) {
-    Layout();
+    DeprecatedLayoutImmediately();
     SchedulePaint();
   }
 }
@@ -1438,7 +1452,7 @@ void LocationBarView::OnChanged() {
       omnibox_view_ && omnibox_view_->model()->user_input_in_progress() &&
       !omnibox_view_->GetText().empty() &&
       IsVirtualKeyboardVisible(GetWidget()));
-  Layout();
+  InvalidateLayout();
   SchedulePaint();
   UpdateSendTabToSelfIcon();
   UpdateQRCodeGeneratorIcon();
@@ -1666,6 +1680,22 @@ ui::MouseEvent LocationBarView::AdjustMouseEventLocationForOmniboxView(
 bool LocationBarView::GetPopupMode() const {
   return is_popup_mode_;
 }
+
+#if BUILDFLAG(IS_MAC)
+void LocationBarView::OnAppShimChanged(const webapps::AppId& app_id) {
+  WebContents* web_contents = GetWebContents();
+  // During window creation and teardown it is possible for web_contents to be
+  // null.
+  if (!web_contents) {
+    return;
+  }
+  if (const webapps::AppId* id =
+          web_app::WebAppTabHelper::GetAppId(web_contents);
+      id && *id == app_id) {
+    UpdateContentSettingsIcons();
+  }
+}
+#endif
 
 BEGIN_METADATA(LocationBarView)
 ADD_READONLY_PROPERTY_METADATA(int, BorderRadius)

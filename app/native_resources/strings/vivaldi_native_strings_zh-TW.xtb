@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">風景 12</translation>
 <translation id="1158503667684816647">不再顯示確認對話方塊</translation>
 <translation id="1222195720020481779">啟動安裝程式中……</translation>
+<translation id="1270785070369717623">很抱歉，無法在 Opera GX 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Opera GX 視窗，然後點選繼續。</translation>
 <translation id="1276145862619442150">快速撥號</translation>
 <translation id="1281950884873973195">動物 6</translation>
 <translation id="1411638389238344450">透過郵件傳送連結</translation>
@@ -12,6 +13,7 @@
 <translation id="1462666970065907900">您確定要關閉這個視窗嗎？</translation>
 <translation id="1480046233931937785">製作群</translation>
 <translation id="1526344461589023948">嘗試儲存下載的更新檔時發生錯誤，請檢查電腦有足夠硬碟空間並稍後再試。</translation>
+<translation id="1635542496948266458">切換設定檔</translation>
 <translation id="1657174850639146440">怪獸 9</translation>
 <translation id="1676595396635191120">新增無痕式視窗</translation>
 <translation id="1702758681952953055">如果持續發生錯誤，請回報並包含以下資訊：</translation>
@@ -27,12 +29,14 @@
 <translation id="1985669426322966465">軟體更新</translation>
 <translation id="2079036669923635404">按這裡升級為 Vivaldi <ph name="VERSION" /> 版。</translation>
 <translation id="2141974047387702305">下載檔案時發生錯誤，請檢查您的網路連線並稍後再試。</translation>
+<translation id="2226825946708954262">⚠ 放棄資料並繼續</translation>
 <translation id="2339641773402824483">檢查更新中……</translation>
 <translation id="2441056087170876076">怪獸 2</translation>
 <translation id="2444387452209867610">插入筆記</translation>
 <translation id="2486841023299517366">動物 4</translation>
 <translation id="2612127540243995147">已準備好安裝。Vivaldi 將被關閉並重新啟動。</translation>
 <translation id="2613387515621326337">顯示更新網站</translation>
+<translation id="2645477450146475243">很抱歉，無法在 Opera 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Opera 視窗，然後點選繼續。</translation>
 <translation id="2647368062414805334">很抱歉，無法在 Edge 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Edge 視窗，然後點選繼續。</translation>
 <translation id="2721334646575696520">Microsoft Edge 瀏覽器</translation>
 <translation id="2848085334714181751">動物 3</translation>
@@ -41,11 +45,14 @@
 <translation id="2923448633003185837">貼上並前往</translation>
 <translation id="2953943267837858202">不允許自動播放影音</translation>
 <translation id="2977472760057091832">在無痕式視窗開啟連結</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">在新分頁開啟</translation>
 <translation id="3027988479108856431">很抱歉，無法在 Yandex 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Yandex 視窗，然後點選繼續。</translation>
 <translation id="3084011186245865060">風景 6</translation>
+<translation id="3085906383264247940">Opera（Beta）</translation>
 <translation id="3093931836425623631">Vivaldi 是基於 Chromium 開放原始碼專案及其它開放原始碼軟體而實現的。</translation>
 <translation id="3127383884976966729">動物 7</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">新增書籤</translation>
 <translation id="3255747772218936245">安裝更新</translation>
 <translation id="3259769196742189631">驗證</translation>
@@ -54,7 +61,6 @@
 <translation id="3334610655141903168">（無標題）</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" />現在是最新版本。</translation>
 <translation id="3383198080133834965">您已經更新到最新版！</translation>
-<translation id="3402602684546832928">選取 Opera 書籤檔案</translation>
 <translation id="3451317331714872347">風景 8</translation>
 <translation id="3457498675806041407">確認結束</translation>
 <translation id="3470981972195599598">已安裝 Vivaldi <ph name="VERSION" /> 並將在重新啟動瀏覽器後套用。</translation>
@@ -65,6 +71,7 @@
 <translation id="3588820906588687999">在新分頁開啟圖片</translation>
 <translation id="3601066750251199488">怪獸 3</translation>
 <translation id="3620979700683094848">網站可以自動播放影音</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">有新版的 Vivaldi 可以使用！</translation>
 <translation id="3708982624815781692">下載已被取消。</translation>
 <translation id="3732157130969736834">新增連結為書籤</translation>
@@ -76,6 +83,9 @@
 <translation id="3914946330804881301">從 Opera 匯入</translation>
 <translation id="3921292902397893431">怪獸 8</translation>
 <translation id="3943857333388298514">貼上</translation>
+<translation id="3974783668264968389">Vivaldi 無法解鎖您的安全金鑰儲存庫。沒有安全金鑰儲存庫，您將會失去已儲存的登入資訊、安全 Cookie，並且某些功能（例如同步、郵件和日曆）將停止運作。
+
+    請立即結束應用程式，解鎖或修復您的金鑰儲存庫，然後再試一次。如果您真的要繼續，請勾選此核取方塊並按「 放棄資料並繼續」按鈕。</translation>
 <translation id="4005270918754737597">略過這個版本</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4074744496918018786">在無痕式視窗開啟圖片</translation>
@@ -88,7 +98,6 @@
 <translation id="443008484043213881">工具</translation>
 <translation id="4456211719108566931">怪獸 6</translation>
 <translation id="4512900838580567989">在新的背景分頁中開啟連結</translation>
-<translation id="4515472507709384008">Opera 15+ 瀏覽器</translation>
 <translation id="4545097004879999966">Opera 郵件</translation>
 <translation id="4548358047305717967">在新的背景分頁中開啟圖片</translation>
 <translation id="4582480609585453144">在背景分頁中開啟連結</translation>
@@ -100,16 +109,17 @@
 <translation id="498766871928286903">已下載 <ph name="DOWNLOADED" /> 共 <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">已匯入的快速撥號</translation>
 <translation id="5092656712000637858">新增頁面至網頁面板</translation>
+<translation id="5106275083540628394">解密失敗：存在資料遺失風險</translation>
 <translation id="5177818338935286353">怪獸 7</translation>
 <translation id="5213743983876949565">動物 1</translation>
 <translation id="5238244642230426581">已匯入的書籤</translation>
 <translation id="527605719918376753">靜音分頁</translation>
 <translation id="5305569355661722298">確認關閉視窗</translation>
+<translation id="5322922669477407077">Opera（Developer）</translation>
 <translation id="5388358297987318779">開啟圖片</translation>
 <translation id="5416008465899576639">有新版本的 Vivaldi。</translation>
 <translation id="5497042274492038489">確認視窗關閉</translation>
 <translation id="5594602170491763400">怪獸 5</translation>
-<translation id="5615637589913244581">Opera 15+（Beta）瀏覽器</translation>
 <translation id="5648110075441906505">在新視窗開啟圖片</translation>
 <translation id="5656371807944747581">更新錯誤！</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> 版已經可以使用（您正在使用 <ph name="OLD_VERSION" />版）。您想要立即下載嗎？</translation>
@@ -120,8 +130,8 @@
 <translation id="6040143037577758943">關閉</translation>
 <translation id="6229528619562190452">點此更新 Vivaldi。</translation>
 <translation id="6234173136417926046">使用圖片作為起始頁背景</translation>
-<translation id="630690498669249215">Opera 書籤檔案</translation>
 <translation id="6339818817272922368">本地帳號</translation>
+<translation id="6398710281890660037">保護我的設定檔</translation>
 <translation id="6438786710866753178">風景 4</translation>
 <translation id="6477028720702061455">選取 Opera 設定檔資料夾以匯入</translation>
 <translation id="6510706699590490869">更新 Vivaldi (&amp;U)</translation>
@@ -131,11 +141,13 @@
 <translation id="6635049669875534328">更新事項：</translation>
 <translation id="6693585104974197539">選擇匯入 Edge 設定檔目錄</translation>
 <translation id="6726279523566323394">選擇匯入 Brave設定檔目錄</translation>
-<translation id="6804831687363620480">很抱歉，無法在 Opera 15+ 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Opera 15+ 視窗，然後點選繼續。</translation>
 <translation id="6892812721183419409">開啟連結為<ph name="USER" /></translation>
 <translation id="6896758677409633944">複製</translation>
+<translation id="6960139763942959188">這個設定檔目前以非加密格式不安全地儲存。Vivaldi 將升級您的設定檔到更安全的加密格式。您應該立即結束應用程式並備份您的設定檔，然後再繼續。</translation>
 <translation id="7086554968911045110">風景 7</translation>
+<translation id="7099506190679014195">安全金鑰儲存庫升級</translation>
 <translation id="7111492742514999492">風景 9</translation>
+<translation id="7208252576848052204">很抱歉，無法在 Arc 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Arc 視窗，然後點選繼續。</translation>
 <translation id="7337881442233988129">Chromium 瀏覽器</translation>
 <translation id="7581266044164103589">啟動更新安裝程式失敗，請檢查電腦有足夠記憶體或硬碟空間並稍後再試。</translation>
 <translation id="7658239707568436148">取消</translation>
@@ -162,7 +174,6 @@
 <translation id="8562339533180097902">關閉 Vivaldi 並立即安裝</translation>
 <translation id="8567452685425968223">解壓縮更新中……</translation>
 <translation id="8624587806981488221">重新載入圖片 (&amp;R)</translation>
-<translation id="864444594187862076">Opera 15+（開發者版本）瀏覽器</translation>
 <translation id="8651348004684669199">新增現用分頁</translation>
 <translation id="8669345741879513971">怪獸 10</translation>
 <translation id="867544375504146191">Yandex 瀏覽器</translation>
@@ -178,6 +189,7 @@
 <translation id="9048058608784130603">等待更新 <ph name="VERSION" /></translation>
 <translation id="9048224371732578627">允許自動播放影音</translation>
 <translation id="9065203028668620118">編輯</translation>
+<translation id="9090254883741610153">讓我繼續</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">開啟圖片為 <ph name="USER" /></translation>
 <translation id="9157539936604258187">開啟連結</translation>

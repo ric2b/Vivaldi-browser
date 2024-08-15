@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "base/functional/bind.h"
@@ -24,12 +25,14 @@
 #include "net/base/http_user_agent_settings.h"
 #include "net/base/net_errors.h"
 #include "net/base/proxy_chain.h"
+#include "net/base/session_usage.h"
 #include "net/dns/public/secure_dns_policy.h"
 #include "net/log/net_log_source_type.h"
 #include "net/log/net_log_with_source.h"
 #include "net/nqe/network_quality_estimator.h"
 #include "net/quic/quic_http_utils.h"
 #include "net/quic/quic_proxy_client_socket.h"
+#include "net/quic/quic_session_key.h"
 #include "net/quic/quic_session_pool.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/next_proto.h"
@@ -42,7 +45,6 @@
 #include "net/spdy/spdy_session_pool.h"
 #include "net/spdy/spdy_stream.h"
 #include "net/ssl/ssl_cert_request_info.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "url/gurl.h"
 #include "url/scheme_host_port.h"
@@ -124,11 +126,19 @@ HttpProxyTimeoutExperiments* GetProxyTimeoutExperiments() {
   return &proxy_timeout_experiments;
 }
 
+// Make a URL for a proxy, for use in proxy auth challenges.
+GURL MakeProxyUrl(const HttpProxySocketParams& params) {
+  const bool is_https = params.ssl_params() || params.quic_ssl_config();
+  return GURL((is_https ? "https://" : "http://") +
+              params.proxy_server().host_port_pair().ToString());
+}
+
 }  // namespace
 
 HttpProxySocketParams::HttpProxySocketParams(
     scoped_refptr<TransportSocketParams> transport_params,
     scoped_refptr<SSLSocketParams> ssl_params,
+    std::optional<SSLConfig> quic_ssl_config,
     const HostPortPair& endpoint,
     const ProxyChain& proxy_chain,
     size_t proxy_chain_index,
@@ -138,6 +148,7 @@ HttpProxySocketParams::HttpProxySocketParams(
     SecureDnsPolicy secure_dns_policy)
     : transport_params_(std::move(transport_params)),
       ssl_params_(std::move(ssl_params)),
+      quic_ssl_config_(std::move(quic_ssl_config)),
       endpoint_(endpoint),
       proxy_chain_(proxy_chain),
       proxy_chain_index_(proxy_chain_index),
@@ -145,18 +156,23 @@ HttpProxySocketParams::HttpProxySocketParams(
       network_anonymization_key_(network_anonymization_key),
       traffic_annotation_(traffic_annotation),
       secure_dns_policy_(secure_dns_policy) {
-  // This is either a connection to an HTTP proxy or an SSL/QUIC proxy.
-  DCHECK(transport_params_ || ssl_params_);
-  DCHECK(!transport_params_ || !ssl_params_);
   DCHECK(!proxy_chain_.is_direct());
   DCHECK(proxy_chain_.IsValid());
-
   CHECK(proxy_chain_index_ < proxy_chain_.length());
 
-  // If connecting to a QUIC proxy, and |ssl_params_| must be valid. This also
-  // implies |transport_params_| is null, per the above DCHECKs.
-  if (proxy_server().is_quic()) {
-    DCHECK(ssl_params_);
+  // This is either a connection to an HTTP proxy,an SSL proxy, or a QUIC proxy.
+  if (transport_params_) {
+    DCHECK(!ssl_params_);
+    DCHECK(!quic_ssl_config_);
+    DCHECK(!proxy_server().is_quic());
+  } else if (ssl_params_) {
+    DCHECK(!transport_params_);
+    DCHECK(!quic_ssl_config_);
+    DCHECK(!proxy_server().is_quic());
+  } else if (quic_ssl_config_) {
+    DCHECK(!ssl_params_);
+    DCHECK(!transport_params_);
+    DCHECK(proxy_server().is_quic());
   }
 
   // Only supports proxy endpoints without scheme for now.
@@ -164,8 +180,8 @@ HttpProxySocketParams::HttpProxySocketParams(
   if (transport_params_) {
     DCHECK(absl::holds_alternative<HostPortPair>(
         transport_params_->destination()));
-  } else if (ssl_params_->GetConnectionType() ==
-             SSLSocketParams::ConnectionType::DIRECT) {
+  } else if (ssl_params_ && ssl_params_->GetConnectionType() ==
+                                SSLSocketParams::ConnectionType::DIRECT) {
     DCHECK(absl::holds_alternative<HostPortPair>(
         ssl_params_->GetDirectConnectionParams()->destination()));
   }
@@ -205,8 +221,7 @@ HttpProxyConnectJob::HttpProxyConnectJob(
           params_->tunnel()
               ? base::MakeRefCounted<HttpAuthController>(
                     HttpAuth::AUTH_PROXY,
-                    GURL((params_->ssl_params() ? "https://" : "http://") +
-                         params_->proxy_server().host_port_pair().ToString()),
+                    MakeProxyUrl(*params_),
                     params_->network_anonymization_key(),
                     common_connect_job_params->http_auth_cache,
                     common_connect_job_params->http_auth_handler_factory,
@@ -306,7 +321,7 @@ base::TimeDelta HttpProxyConnectJob::AlternateNestedConnectionTimeout(
     return default_alternate_timeout;
   }
 
-  absl::optional<base::TimeDelta> http_rtt_estimate =
+  std::optional<base::TimeDelta> http_rtt_estimate =
       network_quality_estimator->GetHttpRTT();
   if (!http_rtt_estimate) {
     return default_alternate_timeout;
@@ -598,7 +613,7 @@ int HttpProxyConnectJob::DoHttpProxyConnectComplete(int result) {
   }
 
   if (result == OK) {
-    SetSocket(std::move(transport_socket_), /*dns_aliases=*/absl::nullopt);
+    SetSocket(std::move(transport_socket_), /*dns_aliases=*/std::nullopt);
   }
 
   return result;
@@ -671,10 +686,9 @@ int HttpProxyConnectJob::DoSpdyProxyCreateStreamComplete(int result) {
 }
 
 int HttpProxyConnectJob::DoQuicProxyCreateSession() {
-  SSLSocketParams* ssl_params = params_->ssl_params().get();
-  DCHECK(ssl_params);
   DCHECK(params_->tunnel());
   DCHECK(!common_connect_job_params()->quic_supported_versions->empty());
+  const SSLConfig& ssl_config = params_->quic_ssl_config().value();
 
   // Reset the timer to just the length of time allowed for HttpProxy handshake
   // so that a fast QUIC connection plus a slow tunnel setup doesn't take longer
@@ -689,16 +703,21 @@ int HttpProxyConnectJob::DoQuicProxyCreateSession() {
   // Use default QUIC version, which is the version listed supported version.
   quic::ParsedQuicVersion quic_version =
       common_connect_job_params()->quic_supported_versions->front();
+  // TODO(https://crbug.com/1491092): Update to handle multi-proxy chains. We
+  // will need to create a proxy chain corresponding to all proxy servers up to
+  // but not including the one we are connecting to (or ProxyChain::Direct for
+  // the first proxy server) and use that instead of ProxyChain::Direct() below.
+  CHECK(!params_->proxy_chain().is_multi_proxy());
   return quic_session_request_->Request(
       // TODO(crbug.com/1206799) Pass the destination directly once it's
       // converted to contain scheme.
       url::SchemeHostPort(url::kHttpsScheme, proxy_server.host(),
                           proxy_server.port()),
-      quic_version, ssl_params->privacy_mode(), kH2QuicTunnelPriority,
+      quic_version, ProxyChain::Direct(), params_->traffic_annotation(),
+      SessionUsage::kProxy, ssl_config.privacy_mode, kH2QuicTunnelPriority,
       socket_tag(), params_->network_anonymization_key(),
       params_->secure_dns_policy(),
-      /*use_dns_aliases=*/false, /*require_dns_https_alpn=*/false,
-      ssl_params->ssl_config().GetCertVerifyFlags(),
+      /*require_dns_https_alpn=*/false, ssl_config.GetCertVerifyFlags(),
       GURL("https://" + proxy_server.ToString()), net_log(),
       &quic_net_error_details_,
       /*failed_on_default_network_callback=*/CompletionOnceCallback(),
@@ -856,11 +875,15 @@ SpdySessionKey HttpProxyConnectJob::CreateSpdySessionKey() const {
   if (params_->proxy_chain_index() == 0) {
     DCHECK(session_key_proxy_chain.is_direct());
   }
-  return SpdySessionKey(params_->proxy_server().host_port_pair(),
-                        session_key_proxy_chain, PRIVACY_MODE_DISABLED,
-                        SpdySessionKey::IsProxySession::kTrue, socket_tag(),
-                        params_->network_anonymization_key(),
-                        params_->secure_dns_policy());
+
+  // Note that `disable_cert_network_fetches` must be true for proxies to avoid
+  // deadlock. See comment on
+  // `SSLConfig::disable_cert_verification_network_fetches`.
+  return SpdySessionKey(
+      params_->proxy_server().host_port_pair(), PRIVACY_MODE_DISABLED,
+      session_key_proxy_chain, SessionUsage::kProxy, socket_tag(),
+      params_->network_anonymization_key(), params_->secure_dns_policy(),
+      /*disable_cert_verification_network_fetches=*/true);
 }
 
 }  // namespace net

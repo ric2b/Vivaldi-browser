@@ -6,35 +6,33 @@ import {assert} from 'chai';
 import type * as puppeteer from 'puppeteer-core';
 
 import type * as Console from '../../../front_end/panels/console/console.js';
-import {click, getBrowserAndPages, waitFor} from '../../shared/helper.js';
+import {click, getBrowserAndPages, hover, setDevToolsSettings, waitFor, waitForNone} from '../../shared/helper.js';
 import {describe, it} from '../../shared/mocha-extensions.js';
 import {clickOnContextMenu, CONSOLE_TAB_SELECTOR} from '../helpers/console-helpers.js';
 
-describe('ConsoleInsight', async function() {
+describe('ConsoleInsight', function() {
   const CLICK_TARGET_SELECTOR = '.console-message-text';
-  const EXPLAIN_LABEL = 'Explain this error';
+  const EXPLAIN_LABEL = 'Understand this error';
 
-  async function mockAida(response: unknown) {
+  async function setupMocks(aidaResponse: unknown) {
     const {frontend} = getBrowserAndPages();
     await frontend.bringToFront();
     await frontend.evaluateOnNewDocument(`
       globalThis.doAidaConversationForTesting = (data, cb) => {
-        cb({"response": JSON.stringify(${JSON.stringify(response)})});
+        cb({"response": JSON.stringify(${JSON.stringify(aidaResponse)})});
+      }
+      globalThis.getSyncInformation = (cb) => {
+        cb({"isSyncActive": true, "accountEmail": "some-email"});
       }
     `);
     await frontend.goto(frontend.url() + '&enableAida=true', {
       waitUntil: 'networkidle0',
     });
-    await frontend.evaluate(`(async () => {
-      const Root = await import('./core/root/root.js');
-      Root.Runtime.experiments.setEnabled('consoleInsights', true);
-    })()`);
-    await frontend.goto(frontend.url() + '&enableAida=true');
   }
 
-  it('shows an insight for a console message', async () => {
+  it('shows an insight for a console message via the context menu', async () => {
     const {target} = getBrowserAndPages();
-    await mockAida([
+    await setupMocks([
       {'textChunk': {'text': 'test'}},
     ]);
     await click(CONSOLE_TAB_SELECTOR);
@@ -45,9 +43,23 @@ describe('ConsoleInsight', async function() {
     await waitFor('devtools-console-insight', undefined, undefined, 'pierce');
   });
 
+  it('shows an insight for a console message via the hover button', async () => {
+    const {target} = getBrowserAndPages();
+    await setupMocks([
+      {'textChunk': {'text': 'test'}},
+    ]);
+    await click(CONSOLE_TAB_SELECTOR);
+    await target.evaluate(() => {
+      console.error(new Error('Unexpected error'));
+    });
+    await waitFor('.hover-button', undefined, undefined, 'pierce');
+    await hover('.console-message');
+    await click('.hover-button');
+    await waitFor('devtools-console-insight', undefined, undefined, 'pierce');
+  });
+
   it('does not show context menu if AIDA is not available', async () => {
     const {target} = getBrowserAndPages();
-    await mockAida(null);
     await click(CONSOLE_TAB_SELECTOR);
     await target.evaluate(() => {
       console.error(new Error('Unexpected error'));
@@ -56,7 +68,23 @@ describe('ConsoleInsight', async function() {
     const menu = await waitFor('.soft-context-menu', undefined, undefined, 'pierce');
     const items = await menu.$$('.soft-context-menu-item');
     const texts = await Promise.all(items.map(item => item.evaluate(e => (e as HTMLElement).innerText)));
-    assert(!texts.some(item => item.toLowerCase().startsWith(EXPLAIN_LABEL)), 'Context menu shows the explain option');
+    assert(
+        !texts.some(item => item.toLowerCase().startsWith(EXPLAIN_LABEL.toLowerCase())),
+        'Context menu shows the explain option');
+    await waitForNone('.hover-button');
+  });
+
+  it('does not show the hover button if locale is not supported', async () => {
+    const {target} = getBrowserAndPages();
+    await setDevToolsSettings({language: 'zh'});
+    await setupMocks([
+      {'textChunk': {'text': 'test'}},
+    ]);
+    await click(CONSOLE_TAB_SELECTOR);
+    await target.evaluate(() => {
+      console.error(new Error('Unexpected error'));
+    });
+    await waitForNone('.hover-button', undefined, undefined, 'pierce');
   });
 
   it('gets console message texts', async () => {
@@ -155,11 +183,12 @@ describe('ConsoleInsight', async function() {
       messages = await frontend.$$('pierce/.console-message-wrapper');
     }
 
-    const messageGetter = async(consoleModule: typeof Console, consoleElement: Element): Promise<string> => {
+    const messageGetter = async (consoleModule: typeof Console, consoleElement: Element) => {
       const consoleViewMessage = consoleModule.ConsoleViewMessage.getMessageForElement(consoleElement);
       const message = consoleViewMessage?.toMessageTextString() || '';
       // Replace dynamic line and column numbers in stacktraces with ':1:1'.
-      return message.replace(/:\d+:\d+/gi, ':1:1');
+      // Ignore stacktrace added by Puppeteer.
+      return message.replace(/:\d+:\d+/gi, ':1:1').replaceAll(/\n    at pptr:;CdpFrame\.%3Can….js%3A\d+%3A\d+\):1:1/gi, '');
     };
     const consoleModule = (await frontend.evaluateHandle('import(\'./panels/console/console.js\')')) as
         puppeteer.JSHandle<typeof Console>;

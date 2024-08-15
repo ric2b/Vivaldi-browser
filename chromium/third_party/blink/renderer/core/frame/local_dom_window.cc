@@ -27,11 +27,13 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/trace_event/trace_id_helper.h"
 #include "base/trace_event/typed_macros.h"
 #include "build/build_config.h"
 #include "cc/input/snap_selection_strategy.h"
@@ -57,6 +59,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_scroll_to_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_void_function.h"
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy.h"
+#include "third_party/blink/renderer/bindings/core/v8/window_proxy_manager.h"
 #include "third_party/blink/renderer/core/accessibility/ax_context.h"
 #include "third_party/blink/renderer/core/aom/computed_accessible_node.h"
 #include "third_party/blink/renderer/core/css/css_computed_style_declaration.h"
@@ -120,6 +123,7 @@
 #include "third_party/blink/renderer/core/layout/adjust_for_absolute_zoom.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
+#include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/core/navigation_api/navigation_api.h"
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
@@ -137,6 +141,7 @@
 #include "third_party/blink/renderer/core/timing/window_performance.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_type_policy_factory.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_types_util.h"
+#include "third_party/blink/renderer/core/view_transition/view_transition_supplement.h"
 #include "third_party/blink/renderer/platform/back_forward_cache_buffer_limit_tracker.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
@@ -148,7 +153,7 @@
 #include "third_party/blink/renderer/platform/scheduler/public/dummy_schedulers.h"
 #include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
-#include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
+#include "third_party/blink/renderer/platform/scheduler/public/task_attribution_tracker.h"
 #include "third_party/blink/renderer/platform/storage/blink_storage_key.h"
 #include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
@@ -173,9 +178,10 @@ bool IsRunningMicrotasks(ScriptState* script_state) {
 void SetCurrentTaskAsCallbackParent(
     CallbackFunctionWithTaskAttributionBase* callback) {
   ScriptState* script_state = callback->CallbackRelevantScriptState();
-  auto* tracker = ThreadScheduler::Current()->GetTaskAttributionTracker();
+  auto* tracker =
+      scheduler::TaskAttributionTracker::From(script_state->GetIsolate());
   if (tracker && script_state->World().IsMainWorld()) {
-    callback->SetParentTask(tracker->RunningTask(script_state));
+    callback->SetParentTask(tracker->RunningTask());
   }
 }
 
@@ -264,8 +270,12 @@ void LocalDOMWindow::Initialize() {
 void LocalDOMWindow::ResetWindowAgent(WindowAgent* agent) {
   GetAgent()->DetachContext(this);
   ResetAgent(agent);
-  if (document_)
+  if (document_) {
     document_->ResetAgent(*agent);
+  }
+
+  CHECK(GetFrame());
+  GetFrame()->GetFrameScheduler()->SetAgentClusterId(GetAgentClusterID());
 
   // This is only called on Android WebView, we need to reassign the microtask
   // queue if there already is one for the associated context. There shouldn't
@@ -582,7 +592,7 @@ scoped_refptr<base::SingleThreadTaskRunner> LocalDOMWindow::GetTaskRunner(
 void LocalDOMWindow::ReportPermissionsPolicyViolation(
     mojom::blink::PermissionsPolicyFeature feature,
     mojom::blink::PolicyDisposition disposition,
-    const absl::optional<String>& reporting_endpoint,
+    const std::optional<String>& reporting_endpoint,
     const String& message) const {
   if (disposition == mojom::blink::PolicyDisposition::kEnforce) {
     const_cast<LocalDOMWindow*>(this)->CountPermissionsPolicyUsage(
@@ -661,7 +671,7 @@ void LocalDOMWindow::ReportDocumentPolicyViolation(
   document_policy_violation_reports_sent_.insert(report_id);
 
   // Send the document policy violation report to any ReportingObservers.
-  const absl::optional<std::string> endpoint =
+  const std::optional<std::string> endpoint =
       relevant_document_policy->GetFeatureEndpoint(feature);
 
   if (is_report_only) {
@@ -701,7 +711,7 @@ void LocalDOMWindow::AddConsoleMessageImpl(ConsoleMessage* console_message,
         line_number = parser->LineNumber().OneBasedInt();
     }
     Vector<DOMNodeId> nodes(console_message->Nodes());
-    absl::optional<mojom::blink::ConsoleMessageCategory> category =
+    std::optional<mojom::blink::ConsoleMessageCategory> category =
         console_message->Category();
     console_message = MakeGarbageCollected<ConsoleMessage>(
         console_message->GetSource(), console_message->GetLevel(),
@@ -839,8 +849,9 @@ void LocalDOMWindow::DocumentWasClosed() {
   //
   // 4.5. ..., invoke the reset algorithm of each of those elements.
   // 4.6.3. Run any session history document visibility change steps ...
-  if (document_)
+  if (document_) {
     document_->GetFormController().RestoreImmediately();
+  }
 
   // 4.6.4. Fire an event named pageshow at the Document object's relevant
   // global object, ...
@@ -876,6 +887,10 @@ void LocalDOMWindow::DispatchPersistedPageshowEvent(
 
 void LocalDOMWindow::DispatchPagehideEvent(
     PageTransitionEventPersistence persistence) {
+  if (document_->IsPrerendering()) {
+    // Do not dispatch the event while prerendering.
+    return;
+  }
   if (document_->UnloadStarted()) {
     // We've already dispatched pagehide (since it's the first thing we do when
     // starting unload) and shouldn't dispatch it again. We might get here on
@@ -900,15 +915,9 @@ void LocalDOMWindow::DispatchPagehideEvent(
 void LocalDOMWindow::EnqueueHashchangeEvent(const String& old_url,
                                             const String& new_url) {
   DCHECK(GetFrame());
-  if (GetFrame()->IsMainFrame()) {
-    if (auto* script_state = ToScriptStateForMainWorld(GetFrame())) {
-      // script_state can be nullptr here.
-      // TODO(yoav): get a better understanding of when this happens and add a
-      // test to guard against this.
-      SoftNavigationHeuristics* heuristics =
-          SoftNavigationHeuristics::From(*this);
-      heuristics->SameDocumentNavigationStarted(script_state);
-    }
+  if (SoftNavigationHeuristics* heuristics =
+          SoftNavigationHeuristics::From(*this)) {
+    heuristics->SameDocumentNavigationStarted();
   }
   // https://html.spec.whatwg.org/C/#history-traversal
   EnqueueWindowEvent(*HashChangeEvent::Create(old_url, new_url),
@@ -919,13 +928,10 @@ void LocalDOMWindow::DispatchPopstateEvent(
     scoped_refptr<SerializedScriptValue> state_object,
     scheduler::TaskAttributionInfo* parent_task) {
   DCHECK(GetFrame());
-  // This unique_ptr maintains the TaskScope alive for the lifetime of the
-  // method.
-  std::unique_ptr<scheduler::TaskAttributionTracker::TaskScope>
+  std::optional<scheduler::TaskAttributionTracker::TaskScope>
       task_attribution_scope;
-  CHECK(ThreadScheduler::Current());
-  auto* tracker = ThreadScheduler::Current()->GetTaskAttributionTracker();
   if (parent_task) {
+    auto* tracker = scheduler::TaskAttributionTracker::From(GetIsolate());
     ScriptState* script_state = ToScriptStateForMainWorld(GetFrame());
     if (script_state && tracker) {
       task_attribution_scope = tracker->CreateTaskScope(
@@ -1175,6 +1181,15 @@ void LocalDOMWindow::SchedulePostMessage(PostedMessage* posted_message) {
                         std::move(posted_message->target_origin),
                         std::move(location), source->GetAgent()->cluster_id()));
   event->async_task_context()->Schedule(this, "postMessage");
+  uint64_t trace_id = base::trace_event::GetNextGlobalTraceId();
+  event->SetTraceId(trace_id);
+  TRACE_EVENT_INSTANT(
+      "devtools.timeline", "SchedulePostMessage", "data",
+      [&](perfetto::TracedValue context) {
+        inspector_schedule_post_message_event::Data(
+            std::move(context), GetExecutionContext(), trace_id);
+      },
+      perfetto::Flow::Global(trace_id));
 }
 
 void LocalDOMWindow::DispatchPostMessage(
@@ -1191,6 +1206,14 @@ void LocalDOMWindow::DispatchPostMessage(
     return;
 
   event->EntangleMessagePorts(this);
+
+  TRACE_EVENT(
+      "devtools.timeline", "HandlePostMessage", "data",
+      [&](perfetto::TracedValue context) {
+        inspector_handle_post_message_event::Data(
+            std::move(context), GetExecutionContext(), *event);
+      },
+      perfetto::Flow::Global(event->GetTraceId()));
 
   DispatchMessageEventWithOriginCheck(intended_target_origin.get(), event,
                                       std::move(location),
@@ -2531,4 +2554,11 @@ void LocalDOMWindow::GenerateNewNavigationId() {
   navigation_id_ = WTF::CreateCanonicalUUIDString();
 }
 
+void LocalDOMWindow::SetHasBeenRevealed(bool revealed) {
+  if (has_been_revealed_ == revealed)
+    return;
+  has_been_revealed_ = revealed;
+  CHECK(document_);
+  ViewTransitionSupplement::From(*document_)->DidChangeRevealState();
+}
 }  // namespace blink

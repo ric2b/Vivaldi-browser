@@ -19,6 +19,7 @@
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/svg/svg_length_functions.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_view.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/clear_collection_scope.h"
 
 namespace blink {
 
@@ -137,8 +138,7 @@ void InlineBoxState::ComputeTextMetrics(const ComputedStyle& styleref,
   FontHeight emphasis_marks_outsets =
       ComputeEmphasisMarkOutsets(styleref, fontref);
   FontHeight leading_space = CalculateLeadingSpace(
-      styleref.ComputedLineHeightAsFixed(fontref), text_metrics,
-      styleref.TextBoxTrim(), styleref.GetWritingMode());
+      styleref.ComputedLineHeightAsFixed(fontref), text_metrics);
   if (emphasis_marks_outsets.IsEmpty()) {
     text_metrics.AddLeading(leading_space);
   } else {
@@ -152,7 +152,7 @@ void InlineBoxState::ComputeTextMetrics(const ComputedStyle& styleref,
 
   metrics.Unite(text_metrics);
 
-  include_used_fonts = styleref.LineHeight().IsNegative();
+  include_used_fonts = styleref.LineHeight().IsAuto();
 }
 
 void InlineBoxState::ResetTextMetrics() {
@@ -169,14 +169,14 @@ void InlineBoxState::EnsureTextMetrics(const ComputedStyle& styleref,
 
 void InlineBoxState::AccumulateUsedFonts(const ShapeResultView* shape_result) {
   const auto baseline_type = style->GetFontBaseline();
-  HashSet<const SimpleFontData*> fallback_fonts;
+  HeapHashSet<Member<const SimpleFontData>> fallback_fonts;
+  ClearCollectionScope clear_scope(&fallback_fonts);
   shape_result->FallbackFonts(&fallback_fonts);
   for (const SimpleFontData* const fallback_font : fallback_fonts) {
     FontHeight fallback_metrics =
         fallback_font->GetFontMetrics().GetFontHeight(baseline_type);
     FontHeight leading_space = CalculateLeadingSpace(
-        fallback_font->GetFontMetrics().FixedLineSpacing(), fallback_metrics,
-        style->TextBoxTrim(), style->GetWritingMode());
+        fallback_font->GetFontMetrics().FixedLineSpacing(), fallback_metrics);
     fallback_metrics.AddLeading(leading_space);
     metrics.Unite(fallback_metrics);
   }
@@ -1149,8 +1149,7 @@ FontHeight InlineLayoutStateStack::MetricsForTopAndBottomAlign(
     // Include the line-height property. The inline box has the height of the
     // font metrics without the line-height included.
     FontHeight leading_space =
-        CalculateLeadingSpace(style.ComputedLineHeightAsFixed(), box_metrics,
-                              style.TextBoxTrim(), style.GetWritingMode());
+        CalculateLeadingSpace(style.ComputedLineHeightAsFixed(), box_metrics);
     box_metrics.AddLeading(leading_space);
     metrics.Unite(box_metrics);
   }

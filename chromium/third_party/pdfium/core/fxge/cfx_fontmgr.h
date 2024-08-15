@@ -10,6 +10,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <array>
 #include <map>
 #include <memory>
 #include <tuple>
@@ -18,9 +19,9 @@
 #include "core/fxcrt/fixed_size_data_vector.h"
 #include "core/fxcrt/observed_ptr.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxge/cfx_face.h"
 #include "core/fxge/freetype/fx_freetype.h"
-#include "third_party/base/containers/span.h"
 
 class CFX_FontMapper;
 
@@ -39,7 +40,7 @@ class CFX_FontMgr {
     ~FontDesc() override;
 
     const FixedSizeDataVector<uint8_t> m_pFontData;
-    ObservedPtr<CFX_Face> m_TTCFaces[16];
+    std::array<ObservedPtr<CFX_Face>, 16> m_TTCFaces;
   };
 
   // `index` must be less than `CFX_FontMapper::kNumStandardFonts`.

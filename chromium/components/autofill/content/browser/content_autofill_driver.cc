@@ -25,6 +25,7 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_data_predictions.h"
+#include "components/autofill/core/common/signatures.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -83,7 +84,9 @@ ContentAutofillDriver* cast(autofill::AutofillDriver* driver) {
 ContentAutofillDriver::ContentAutofillDriver(
     content::RenderFrameHost* render_frame_host,
     ContentAutofillDriverFactory* owner)
-    : render_frame_host_(*render_frame_host), owner_(*owner) {}
+    : render_frame_host_(*render_frame_host), owner_(*owner) {
+  autofill_manager_ = GetAutofillClient().CreateManager(/*pass_key=*/{}, *this);
+}
 
 ContentAutofillDriver::~ContentAutofillDriver() {
   owner_->router().UnregisterDriver(this,
@@ -152,6 +155,10 @@ ContentAutofillDriver* ContentAutofillDriver::GetParent() {
     return nullptr;
   }
   return owner_->DriverForFrame(parent_rfh);
+}
+
+ContentAutofillClient& ContentAutofillDriver::GetAutofillClient() {
+  return owner_->client();
 }
 
 AutofillManager& ContentAutofillDriver::GetAutofillManager() {
@@ -227,7 +234,7 @@ net::IsolationInfo ContentAutofillDriver::IsolationInfo() {
 }
 
 base::flat_set<FieldGlobalId> ContentAutofillDriver::ApplyFormAction(
-    mojom::ActionType action_type,
+    mojom::FormActionType action_type,
     mojom::ActionPersistence action_persistence,
     const FormData& form,
     const url::Origin& triggered_origin,
@@ -235,28 +242,26 @@ base::flat_set<FieldGlobalId> ContentAutofillDriver::ApplyFormAction(
   return router().ApplyFormAction(
       this, action_type, action_persistence, form, triggered_origin,
       field_type_map,
-      [](autofill::AutofillDriver* target, mojom::ActionType action_type,
+      [](autofill::AutofillDriver* target, mojom::FormActionType action_type,
          mojom::ActionPersistence action_persistence,
-         FormRendererId form_renderer_id,
-         const std::vector<FormFieldData>& fields) {
-        cast(target)->GetAutofillAgent()->ApplyFormAction(
-            action_type, action_persistence, form_renderer_id, fields);
+         const std::vector<FormFieldData::FillData>& fields) {
+        cast(target)->GetAutofillAgent()->ApplyFieldsAction(
+            action_type, action_persistence, fields);
       });
 }
 
 void ContentAutofillDriver::ApplyFieldAction(
+    mojom::FieldActionType action_type,
     mojom::ActionPersistence action_persistence,
-    mojom::TextReplacement text_replacement,
     const FieldGlobalId& field,
     const std::u16string& value) {
   router().ApplyFieldAction(
-      this, action_persistence, text_replacement, field, value,
-      [](autofill::AutofillDriver* target,
+      this, action_type, action_persistence, field, value,
+      [](autofill::AutofillDriver* target, mojom::FieldActionType action_type,
          mojom::ActionPersistence action_persistence,
-         mojom::TextReplacement text_replacement, const FieldRendererId& field,
-         const std::u16string& value) {
+         const FieldRendererId& field, const std::u16string& value) {
         cast(target)->GetAutofillAgent()->ApplyFieldAction(
-            action_persistence, text_replacement, field, value);
+            action_type, action_persistence, field, value);
       });
 }
 
@@ -401,31 +406,6 @@ void ContentAutofillDriver::RendererShouldSetSuggestionAvailability(
       });
 }
 
-void ContentAutofillDriver::ProbablyFormSubmitted(
-    base::PassKey<ContentAutofillDriverFactory>) {
-  // TODO(crbug.com/1117451): This currently misbehaves in frame-transcending
-  // forms: SetFormToBeProbablySubmitted() is routed, but this event is not.
-  // We should probably direct the event to the top-most frame, perhaps to the
-  // top-most frame that has a `potentially_submitted_form_`.
-  if (potentially_submitted_form_) {
-    FormSubmitted(*potentially_submitted_form_, false,
-                  mojom::SubmissionSource::PROBABLY_FORM_SUBMITTED);
-  }
-}
-
-void ContentAutofillDriver::SetFormToBeProbablySubmitted(
-    const std::optional<FormData>& form) {
-  if (!bad_message::CheckFrameNotPrerendering(render_frame_host())) {
-    return;
-  }
-  router().SetFormToBeProbablySubmitted(
-      this, GetFormWithFrameAndFormMetaData(form),
-      [](autofill::AutofillDriver* target, const FormData* optional_form) {
-        cast(target)->potentially_submitted_form_ =
-            base::OptionalFromPtr(optional_form);
-      });
-}
-
 void ContentAutofillDriver::FormsSeen(
     const std::vector<FormData>& raw_updated_forms,
     const std::vector<FormRendererId>& raw_removed_forms) {
@@ -434,7 +414,7 @@ void ContentAutofillDriver::FormsSeen(
   }
   std::vector<FormData> updated_forms = raw_updated_forms;
   for (FormData& form : updated_forms)
-    SetFrameAndFormMetaData(form, nullptr);
+    SetFrameAndFormMetaData(form, std::nullopt);
 
   std::vector<FormGlobalId> removed_forms;
   removed_forms.reserve(raw_removed_forms.size());
@@ -462,16 +442,6 @@ void ContentAutofillDriver::FormSubmitted(
       submission_source,
       [](autofill::AutofillDriver* target, const FormData& form,
          bool known_success, mojom::SubmissionSource submission_source) {
-        // Omit duplicate form submissions. It may be reasonable to take
-        // |source| into account here as well.
-        // TODO(crbug/1117451): Clean up experiment code.
-        if (base::FeatureList::IsEnabled(
-                features::kAutofillProbableFormSubmissionInBrowser) &&
-            !base::FeatureList::IsEnabled(
-                features::kAutofillAllowDuplicateFormSubmissions) &&
-            !cast(target)->submitted_forms_.insert(form.global_id()).second) {
-          return;
-        }
         target->GetAutofillManager().OnFormSubmitted(
             WithNewVersion(form), known_success, submission_source);
       });
@@ -486,7 +456,7 @@ void ContentAutofillDriver::TextFieldDidChange(const FormData& raw_form,
   }
   FormData form = raw_form;
   FormFieldData field = raw_field;
-  SetFrameAndFormMetaData(form, &field);
+  SetFrameAndFormMetaData(form, field);
   router().TextFieldDidChange(
       this, std::move(form), field,
       TransformBoundingBoxToViewportCoordinates(bounding_box), timestamp,
@@ -506,7 +476,7 @@ void ContentAutofillDriver::TextFieldDidScroll(const FormData& raw_form,
   }
   FormData form = raw_form;
   FormFieldData field = raw_field;
-  SetFrameAndFormMetaData(form, &field);
+  SetFrameAndFormMetaData(form, field);
   router().TextFieldDidScroll(
       this, std::move(form), field,
       TransformBoundingBoxToViewportCoordinates(bounding_box),
@@ -526,7 +496,7 @@ void ContentAutofillDriver::SelectControlDidChange(
   }
   FormData form = raw_form;
   FormFieldData field = raw_field;
-  SetFrameAndFormMetaData(form, &field);
+  SetFrameAndFormMetaData(form, field);
   router().SelectControlDidChange(
       this, std::move(form), field,
       TransformBoundingBoxToViewportCoordinates(bounding_box),
@@ -547,7 +517,7 @@ void ContentAutofillDriver::AskForValuesToFill(
   }
   FormData form = raw_form;
   FormFieldData field = raw_field;
-  SetFrameAndFormMetaData(form, &field);
+  SetFrameAndFormMetaData(form, field);
   router().AskForValuesToFill(
       this, std::move(form), field,
       TransformBoundingBoxToViewportCoordinates(bounding_box), trigger_source,
@@ -589,7 +559,7 @@ void ContentAutofillDriver::FocusOnFormField(const FormData& raw_form,
   }
   FormData form = raw_form;
   FormFieldData field = raw_field;
-  SetFrameAndFormMetaData(form, &field);
+  SetFrameAndFormMetaData(form, field);
   router().FocusOnFormField(
       this, std::move(form), field,
       TransformBoundingBoxToViewportCoordinates(bounding_box),
@@ -649,7 +619,7 @@ void ContentAutofillDriver::JavaScriptChangedAutofilledValue(
   }
   FormData form = raw_form;
   FormFieldData field = raw_field;
-  SetFrameAndFormMetaData(form, &field);
+  SetFrameAndFormMetaData(form, field);
   router().JavaScriptChangedAutofilledValue(
       this, std::move(form), field, old_value,
       [](autofill::AutofillDriver* target, const FormData& form,
@@ -659,22 +629,7 @@ void ContentAutofillDriver::JavaScriptChangedAutofilledValue(
       });
 }
 
-void ContentAutofillDriver::OnContextMenuShownInField(
-    const FormGlobalId& form_global_id,
-    const FieldGlobalId& field_global_id) {
-  router().OnContextMenuShownInField(
-      this, form_global_id, field_global_id,
-      [](autofill::AutofillDriver* target, const FormGlobalId& form_global_id,
-         const FieldGlobalId& field_global_id) {
-        target->GetAutofillManager().OnContextMenuShownInField(form_global_id,
-                                                               field_global_id);
-      });
-}
-
 void ContentAutofillDriver::Reset() {
-  // The driver's RenderFrameHost may be used for the page we're navigating to.
-  // Therefore, we need to forget all forms of the page we're navigating from.
-  submitted_forms_.clear();
   owner_->router().UnregisterDriver(this,
                                     /*driver_is_dying=*/false);
   autofill_manager_->Reset();
@@ -692,7 +647,7 @@ ContentAutofillDriver::GetAutofillAgent() {
 
 void ContentAutofillDriver::SetFrameAndFormMetaData(
     FormData& form,
-    FormFieldData* optional_field) const {
+    base::optional_ref<FormFieldData> field) const {
   form.host_frame = GetFrameToken();
 
   // GetLastCommittedURL doesn't include URL updates due to document.open() and
@@ -711,23 +666,25 @@ void ContentAutofillDriver::SetFrameAndFormMetaData(
   // The form signature must not be calculated before setting FormData::url.
   FormSignature form_signature = CalculateFormSignature(form);
 
-  auto SetFieldMetaData = [&](FormFieldData& field) {
-    field.host_frame = form.host_frame;
-    field.host_form_id = form.unique_renderer_id;
-    field.origin = render_frame_host_->GetLastCommittedOrigin();
-    field.host_form_signature = form_signature;
-    field.bounds = TransformBoundingBoxToViewportCoordinates(field.bounds);
+  auto SetFieldMetaData = [&](FormFieldData& f) {
+    f.host_frame = form.host_frame;
+    f.host_form_id = form.renderer_id;
+    f.origin = render_frame_host_->GetLastCommittedOrigin();
+    f.host_form_signature = form_signature;
+    f.bounds = TransformBoundingBoxToViewportCoordinates(f.bounds);
   };
 
-  for (FormFieldData& field : form.fields)
-    SetFieldMetaData(field);
-  if (optional_field)
-    SetFieldMetaData(*optional_field);
+  for (FormFieldData& f : form.fields) {
+    SetFieldMetaData(f);
+  }
+  if (field.has_value()) {
+    SetFieldMetaData(*field);
+  }
 }
 
 FormData ContentAutofillDriver::GetFormWithFrameAndFormMetaData(
     FormData form) const {
-  SetFrameAndFormMetaData(form, nullptr);
+  SetFrameAndFormMetaData(form, std::nullopt);
   return form;
 }
 

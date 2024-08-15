@@ -106,7 +106,6 @@
 #include "extensions/browser/updater/manifest_fetch_data.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_features.h"
-#include "extensions/common/extension_messages.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/features/feature_developer_mode_only.h"
 #include "extensions/common/manifest_constants.h"
@@ -238,6 +237,14 @@ void ExtensionService::BlocklistExtensionForTest(
       extension_id, BitMapBlocklistState::BLOCKLISTED_MALWARE,
       extension_prefs_);
   OnBlocklistStateAdded(extension_id);
+}
+
+void ExtensionService::GreylistExtensionForTest(
+    const std::string& extension_id,
+    const BitMapBlocklistState& state) {
+  blocklist_prefs::SetSafeBrowsingExtensionBlocklistState(extension_id, state,
+                                                          extension_prefs_);
+  OnGreylistStateAdded(extension_id, state);
 }
 
 bool ExtensionService::OnExternalExtensionUpdateUrlFound(
@@ -1331,8 +1338,8 @@ void ExtensionService::CheckManagementPolicy() {
     // related disable reasons.
     bool is_supervised = false;
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-    is_supervised =
-        profile() && supervised_user::IsChildAccount(*profile()->GetPrefs());
+    is_supervised = profile() && supervised_user::IsSubjectToParentalControls(
+                                     *profile()->GetPrefs());
 #endif
     if (!is_supervised) {
       disable_reasons &= (~disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED);

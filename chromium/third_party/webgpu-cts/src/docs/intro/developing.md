@@ -48,7 +48,7 @@ You can use this to preview how your test plan will appear.
 You can view different suites (webgpu, unittests, stress, etc.) or different subtrees of
 the test suite.
 
-- `http://localhost:8080/standalone/` (defaults to `?runnow=0&worker=0&debug=0&q=webgpu:*`)
+- `http://localhost:8080/standalone/` (defaults to `?runnow=0&debug=0&q=webgpu:*`)
 - `http://localhost:8080/standalone/?q=unittests:*`
 - `http://localhost:8080/standalone/?q=unittests:basic:*`
 
@@ -56,7 +56,9 @@ The following url parameters change how the harness runs:
 
 - `runnow=1` runs all matching tests on page load.
 - `debug=1` enables verbose debug logging from tests.
-- `worker=1` runs the tests on a Web Worker instead of the main thread.
+- `worker=dedicated` (or `worker` or `worker=1`) runs the tests on a dedicated worker instead of the main thread.
+- `worker=shared` runs the tests on a shared worker instead of the main thread.
+- `worker=service` runs the tests on a service worker instead of the main thread.
 - `power_preference=low-power` runs most tests passing `powerPreference: low-power` to `requestAdapter`
 - `power_preference=high-performance` runs most tests passing `powerPreference: high-performance` to `requestAdapter`
 

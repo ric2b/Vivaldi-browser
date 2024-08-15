@@ -164,14 +164,17 @@ TEST_F(ResolverBuiltinValidationTest, BuiltinRedeclaredAsAliasUsedAsFunction) {
     WrapInFunction(Call(Source{{56, 78}}, "mix", 1_f, 2_f, 3_f));
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), R"(56:78 error: no matching constructor for i32(f32, f32, f32)
+    EXPECT_EQ(r()->error(), R"(56:78 error: no matching constructor for 'i32(f32, f32, f32)'
 
 2 candidate constructors:
-  i32(i32) -> i32
-  i32() -> i32
+ • 'i32(i32  ✗ ) -> i32'
+ • 'i32() -> i32' where:
+      ✗  overload expects 0 arguments, call passed 3 arguments
 
 1 candidate conversion:
-  i32<T>(T) -> i32  where: T is abstract-int, abstract-float, f32, f16, u32 or bool
+ • 'i32(T  ✓ ) -> i32' where:
+      ✗  overload expects 1 argument, call passed 3 arguments
+      ✓  'T' is 'abstract-int', 'abstract-float', 'f32', 'f16', 'u32' or 'bool'
 )");
 }
 
@@ -572,7 +575,7 @@ TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Dot4I8Packed_FeatureDis
     EXPECT_FALSE(resolver.Resolve());
     EXPECT_EQ(resolver.error(),
               "12:34 error: built-in function 'dot4I8Packed' requires the "
-              "packed_4x8_integer_dot_product language feature, which is not allowed in the "
+              "'packed_4x8_integer_dot_product' language feature, which is not allowed in the "
               "current environment");
 }
 
@@ -601,7 +604,7 @@ TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Dot4U8Packed_FeatureDis
     EXPECT_FALSE(resolver.Resolve());
     EXPECT_EQ(resolver.error(),
               "12:34 error: built-in function 'dot4U8Packed' requires the "
-              "packed_4x8_integer_dot_product language feature, which is not allowed in the "
+              "'packed_4x8_integer_dot_product' language feature, which is not allowed in the "
               "current environment");
 }
 
@@ -628,7 +631,7 @@ TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Pack4xI8_FeatureDisallo
     EXPECT_FALSE(resolver.Resolve());
     EXPECT_EQ(resolver.error(),
               "12:34 error: built-in function 'pack4xI8' requires the "
-              "packed_4x8_integer_dot_product language feature, which is not allowed in the "
+              "'packed_4x8_integer_dot_product' language feature, which is not allowed in the "
               "current environment");
 }
 
@@ -655,7 +658,7 @@ TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Pack4xU8_FeatureDisallo
     EXPECT_FALSE(resolver.Resolve());
     EXPECT_EQ(resolver.error(),
               "12:34 error: built-in function 'pack4xU8' requires the "
-              "packed_4x8_integer_dot_product language feature, which is not allowed in the "
+              "'packed_4x8_integer_dot_product' language feature, which is not allowed in the "
               "current environment");
 }
 
@@ -682,7 +685,7 @@ TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Pack4xI8Clamp_FeatureDi
     EXPECT_FALSE(resolver.Resolve());
     EXPECT_EQ(resolver.error(),
               "12:34 error: built-in function 'pack4xI8Clamp' requires the "
-              "packed_4x8_integer_dot_product language feature, which is not allowed in the "
+              "'packed_4x8_integer_dot_product' language feature, which is not allowed in the "
               "current environment");
 }
 
@@ -709,7 +712,7 @@ TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Pack4xU8Clamp_FeatureDi
     EXPECT_FALSE(resolver.Resolve());
     EXPECT_EQ(resolver.error(),
               "12:34 error: built-in function 'pack4xU8Clamp' requires the "
-              "packed_4x8_integer_dot_product language feature, which is not allowed in the "
+              "'packed_4x8_integer_dot_product' language feature, which is not allowed in the "
               "current environment");
 }
 
@@ -736,7 +739,7 @@ TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Unpack4xI8_FeatureDisal
     EXPECT_FALSE(resolver.Resolve());
     EXPECT_EQ(resolver.error(),
               "12:34 error: built-in function 'unpack4xI8' requires the "
-              "packed_4x8_integer_dot_product language feature, which is not allowed in the "
+              "'packed_4x8_integer_dot_product' language feature, which is not allowed in the "
               "current environment");
 }
 
@@ -763,7 +766,7 @@ TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Unpack4xU8_FeatureDisal
     EXPECT_FALSE(resolver.Resolve());
     EXPECT_EQ(resolver.error(),
               "12:34 error: built-in function 'unpack4xU8' requires the "
-              "packed_4x8_integer_dot_product language feature, which is not allowed in the "
+              "'packed_4x8_integer_dot_product' language feature, which is not allowed in the "
               "current environment");
 }
 
@@ -778,10 +781,10 @@ TEST_F(ResolverBuiltinValidationTest, WorkgroupUniformLoad_WrongAddressSpace) {
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(),
-              R"(error: no matching call to workgroupUniformLoad(ptr<storage, i32, read_write>)
+              R"(error: no matching call to 'workgroupUniformLoad(ptr<storage, i32, read_write>)'
 
 1 candidate function:
-  workgroupUniformLoad(ptr<workgroup, T, read_write>) -> T
+ • 'workgroupUniformLoad(ptr<workgroup, T, read_write>  ✗ ) -> T'
 )");
 }
 
@@ -990,10 +993,9 @@ TEST_F(ResolverBuiltinValidationTest, TextureBarrier_FeatureDisallowed) {
 
     Resolver resolver{this, wgsl::AllowedFeatures{}};
     EXPECT_FALSE(resolver.Resolve());
-    EXPECT_EQ(resolver.error(),
-              "12:34 error: built-in function 'textureBarrier' requires the "
-              "readonly_and_readwrite_storage_textures language feature, which is not allowed in "
-              "the current environment");
+    EXPECT_EQ(
+        resolver.error(),
+        R"(12:34 error: built-in function 'textureBarrier' requires the 'readonly_and_readwrite_storage_textures' language feature, which is not allowed in the current environment)");
 }
 
 }  // namespace

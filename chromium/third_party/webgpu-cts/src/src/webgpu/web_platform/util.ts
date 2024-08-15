@@ -134,22 +134,6 @@ export const kVideoInfo = makeTable({
         bottomRightColor: 'green',
       },
     },
-    'four-colors-theora-bt601.ogv': {
-      mimeType: 'video/ogg; codecs=theora',
-      colorSpace: 'bt601',
-      coded: {
-        topLeftColor: 'yellow',
-        topRightColor: 'red',
-        bottomLeftColor: 'blue',
-        bottomRightColor: 'green',
-      },
-      display: {
-        topLeftColor: 'yellow',
-        topRightColor: 'red',
-        bottomLeftColor: 'blue',
-        bottomRightColor: 'green',
-      },
-    },
     'four-colors-h264-bt601.mp4': {
       mimeType: 'video/mp4; codecs=avc1.4d400c',
       colorSpace: 'bt601',
@@ -293,6 +277,70 @@ export const kVideoInfo = makeTable({
         topRightColor: 'red',
         bottomLeftColor: 'blue',
         bottomRightColor: 'green',
+      },
+    },
+    'four-colors-h264-bt601-hflip.mp4': {
+      mimeType: 'video/mp4; codecs=vp09.00.10.08',
+      colorSpace: 'bt601',
+      coded: {
+        topLeftColor: 'yellow',
+        topRightColor: 'red',
+        bottomLeftColor: 'blue',
+        bottomRightColor: 'green',
+      },
+      display: {
+        topLeftColor: 'red',
+        topRightColor: 'yellow',
+        bottomLeftColor: 'green',
+        bottomRightColor: 'blue',
+      },
+    },
+    'four-colors-h264-bt601-vflip.mp4': {
+      mimeType: 'video/mp4; codecs=vp09.00.10.08',
+      colorSpace: 'bt601',
+      coded: {
+        topLeftColor: 'yellow',
+        topRightColor: 'red',
+        bottomLeftColor: 'blue',
+        bottomRightColor: 'green',
+      },
+      display: {
+        topLeftColor: 'blue',
+        topRightColor: 'green',
+        bottomLeftColor: 'yellow',
+        bottomRightColor: 'red',
+      },
+    },
+    'four-colors-vp9-bt601-hflip.mp4': {
+      mimeType: 'video/mp4; codecs=vp09.00.10.08',
+      colorSpace: 'bt601',
+      coded: {
+        topLeftColor: 'yellow',
+        topRightColor: 'red',
+        bottomLeftColor: 'blue',
+        bottomRightColor: 'green',
+      },
+      display: {
+        topLeftColor: 'red',
+        topRightColor: 'yellow',
+        bottomLeftColor: 'green',
+        bottomRightColor: 'blue',
+      },
+    },
+    'four-colors-vp9-bt601-vflip.mp4': {
+      mimeType: 'video/mp4; codecs=vp09.00.10.08',
+      colorSpace: 'bt601',
+      coded: {
+        topLeftColor: 'yellow',
+        topRightColor: 'red',
+        bottomLeftColor: 'blue',
+        bottomRightColor: 'green',
+      },
+      display: {
+        topLeftColor: 'blue',
+        topRightColor: 'green',
+        bottomLeftColor: 'yellow',
+        bottomRightColor: 'red',
       },
     },
   },
@@ -463,6 +511,8 @@ export function getVideoElement(t: GPUTest, videoName: VideoName): HTMLVideoElem
 
   const videoUrl = getResourcePath(videoName);
   videoElement.src = videoUrl;
+
+  t.trackForCleanup(videoElement);
 
   return videoElement;
 }

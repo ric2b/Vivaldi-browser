@@ -7,12 +7,14 @@
 #include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility/magnifier/docked_magnifier_controller.h"
 #include "ash/accessibility/magnifier/fullscreen_magnifier_controller.h"
+#include "ash/accessibility/mouse_keys/mouse_keys_controller.h"
 #include "ash/accessibility/switch_access/point_scan_controller.h"
 #include "ash/constants/ash_constants.h"
 #include "ash/keyboard/keyboard_util.h"
 #include "ash/public/cpp/accessibility_event_rewriter_delegate.h"
 #include "ash/shell.h"
 #include "base/system/sys_info.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/events/ash/event_rewriter_ash.h"
 #include "ui/events/devices/device_data_manager.h"
 #include "ui/events/event.h"
@@ -35,7 +37,7 @@ ui::InputDeviceType GetInputDeviceType(
     return ui::INPUT_DEVICE_BLUETOOTH;
   // On Chrome OS emulated on Linux, the keyboard is always "UNKNOWN".
   if (base::SysInfo::IsRunningOnChromeOS())
-    NOTREACHED();
+    DUMP_WILL_BE_NOTREACHED_NORETURN();
   return ui::INPUT_DEVICE_UNKNOWN;
 }
 }  // namespace
@@ -126,7 +128,12 @@ bool AccessibilityEventRewriter::RewriteEventForChromeVox(
   if (event.IsKeyEvent()) {
     const ui::KeyEvent* key_event = event.AsKeyEvent();
     ui::EventRewriterAsh::MutableKeyState state(key_event);
-    event_rewriter_ash_->RewriteModifierKeys(*key_event, &state);
+
+    // On new rewriter sequence, modifiers are already rewritten before
+    // this rewriter.
+    if (!features::IsKeyboardRewriterFixEnabled()) {
+      event_rewriter_ash_->RewriteModifierKeys(*key_event, &state);
+    }
 
     // Remove the Search modifier before asking for function keys to be
     // rewritten, then restore the flags. This allows ChromeVox to receive keys
@@ -181,7 +188,11 @@ bool AccessibilityEventRewriter::RewriteEventForSwitchAccess(
 
   const ui::KeyEvent* key_event = event.AsKeyEvent();
   ui::EventRewriterAsh::MutableKeyState state(key_event);
-  event_rewriter_ash_->RewriteModifierKeys(*key_event, &state);
+  // On new rewriter sequence, modifiers are already rewritten before
+  // this rewriter.
+  if (!features::IsKeyboardRewriterFixEnabled()) {
+    event_rewriter_ash_->RewriteModifierKeys(*key_event, &state);
+  }
   event_rewriter_ash_->RewriteFunctionKeys(*key_event, &state);
 
   std::unique_ptr<ui::Event> rewritten_event;
@@ -321,7 +332,13 @@ ui::EventDispatchDetails AccessibilityEventRewriter::RewriteEvent(
   if (!delegate_)
     return SendEvent(continuation, &event);
 
-  if (Shell::Get()->accessibility_controller()->IsSwitchAccessRunning()) {
+  // TODO(259372916): Switch to using the tray icon visibility.
+  if (::features::IsAccessibilityMouseKeysEnabled()) {
+    captured = Shell::Get()->mouse_keys_controller()->RewriteEvent(event);
+  }
+
+  if (!captured &&
+      Shell::Get()->accessibility_controller()->IsSwitchAccessRunning()) {
     captured = RewriteEventForSwitchAccess(event, continuation);
   }
 

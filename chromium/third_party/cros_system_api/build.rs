@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
-use chromeos_dbus_bindings::{self, generate_module, BindingsType};
+use chromeos_dbus_bindings::{generate_module, BindingsType};
 
 // The parent path of system_api.
 const SOURCE_DIR: &str = "..";
@@ -110,6 +110,10 @@ const PROTOS_TO_GENERATE: &[(&str, &str)] = &[
     (
         "printscanmgr_service",
         "system_api/dbus/printscanmgr/printscanmgr_service.proto",
+    ),
+    (
+        "metrics_event",
+        "system_api/dbus/metrics_event/metrics_event.proto",
     ),
     (
         "recoverable_key_store",

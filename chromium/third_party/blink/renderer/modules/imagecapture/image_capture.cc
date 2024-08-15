@@ -1075,7 +1075,7 @@ MediaSettingsRange* ApplyIdealValueConstraint(
     bool* has_setting_ptr,
     double* setting_ptr,
     MediaSettingsRange* effective_capability,
-    absl::optional<double> ideal_constraint,
+    std::optional<double> ideal_constraint,
     double current_setting) {
   // Clamp and update the setting.
   *has_setting_ptr = true;
@@ -1251,8 +1251,8 @@ MediaSettingsRange* ApplyValueConstraint(
           has_setting_ptr, setting_ptr, new_effective_capability,
           (dictionary_constraint->hasIdeal() &&
            constraint_set_type == MediaTrackConstraintSetType::kBasic)
-              ? absl::make_optional(dictionary_constraint->ideal())
-              : absl::nullopt,
+              ? std::make_optional(dictionary_constraint->ideal())
+              : std::nullopt,
           current_setting);
     }
   }
@@ -1393,7 +1393,7 @@ void ApplyValueConstraint(bool* has_setting_ptr,
 // As a substitute, we use `MediaTrackSettings` and its `pointsOfInterest`
 // field to convey restrictions placed by previous exact `pointsOfInterest`
 // constraints.
-absl::optional<HeapVector<Member<Point2D>>> ApplyValueConstraint(
+std::optional<HeapVector<Member<Point2D>>> ApplyValueConstraint(
     bool* has_setting_ptr,
     Vector<media::mojom::blink::Point2DPtr>* setting_ptr,
     const HeapVector<Member<Point2D>>* effective_setting,
@@ -1403,7 +1403,7 @@ absl::optional<HeapVector<Member<Point2D>>> ApplyValueConstraint(
       CheckValueConstraint(effective_setting, constraint, constraint_set_type));
   if (!IsValueConstraint(constraint, constraint_set_type)) {
     // Keep the effective capability intact.
-    return absl::nullopt;
+    return std::nullopt;
   }
   using ContentType =
       V8UnionConstrainPoint2DParametersOrPoint2DSequence::ContentType;
@@ -1420,7 +1420,7 @@ absl::optional<HeapVector<Member<Point2D>>> ApplyValueConstraint(
       DCHECK_EQ(constraint_set_type, MediaTrackConstraintSetType::kBasic);
       ApplyValueConstraint(has_setting_ptr, setting_ptr, effective_setting,
                            constraint->GetAsPoint2DSequence());
-      return absl::nullopt;
+      return std::nullopt;
     case ContentType::kConstrainPoint2DParameters: {
       DCHECK_NE(constraint_set_type,
                 MediaTrackConstraintSetType::kFirstAdvanced);
@@ -1437,7 +1437,7 @@ absl::optional<HeapVector<Member<Point2D>>> ApplyValueConstraint(
       DCHECK_EQ(constraint_set_type, MediaTrackConstraintSetType::kBasic);
       ApplyValueConstraint(has_setting_ptr, setting_ptr, effective_setting,
                            dictionary_constraint->ideal());
-      return absl::nullopt;
+      return std::nullopt;
     }
   }
 }
@@ -1510,25 +1510,39 @@ void ImageCapture::ContextDestroyed() {
   service_requests_.clear();
 }
 
-ScriptPromise ImageCapture::getPhotoCapabilities(ScriptState* script_state) {
-  return GetMojoPhotoState(
-      script_state, WTF::BindOnce(&ImageCapture::ResolveWithPhotoCapabilities,
+ScriptPromiseTyped<PhotoCapabilities> ImageCapture::getPhotoCapabilities(
+    ScriptState* script_state) {
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolverTyped<PhotoCapabilities>>(
+          script_state);
+  auto promise = resolver->Promise();
+  GetMojoPhotoState(resolver,
+                    WTF::BindOnce(&ImageCapture::ResolveWithPhotoCapabilities,
                                   WrapPersistent(this)));
+  return promise;
 }
 
-ScriptPromise ImageCapture::getPhotoSettings(ScriptState* script_state) {
-  return GetMojoPhotoState(
-      script_state, WTF::BindOnce(&ImageCapture::ResolveWithPhotoSettings,
+ScriptPromiseTyped<PhotoSettings> ImageCapture::getPhotoSettings(
+    ScriptState* script_state) {
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolverTyped<PhotoSettings>>(
+          script_state);
+  auto promise = resolver->Promise();
+  GetMojoPhotoState(resolver,
+                    WTF::BindOnce(&ImageCapture::ResolveWithPhotoSettings,
                                   WrapPersistent(this)));
+  return promise;
 }
 
-ScriptPromise ImageCapture::takePhoto(ScriptState* script_state,
-                                      const PhotoSettings* photo_settings) {
+ScriptPromiseTyped<Blob> ImageCapture::takePhoto(
+    ScriptState* script_state,
+    const PhotoSettings* photo_settings) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"),
                "ImageCapture::takePhoto");
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
-  ScriptPromise promise = resolver->Promise();
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolverTyped<Blob>>(script_state);
+  auto promise = resolver->Promise();
 
   if (TrackIsInactive(*stream_track_)) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
@@ -1606,9 +1620,12 @@ ScriptPromise ImageCapture::takePhoto(ScriptState* script_state,
   return promise;
 }
 
-ScriptPromise ImageCapture::grabFrame(ScriptState* script_state) {
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
-  ScriptPromise promise = resolver->Promise();
+ScriptPromiseTyped<ImageBitmap> ImageCapture::grabFrame(
+    ScriptState* script_state) {
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolverTyped<ImageBitmap>>(
+          script_state);
+  auto promise = resolver->Promise();
 
   if (TrackIsInactive(*stream_track_)) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
@@ -2037,7 +2054,7 @@ void ImageCapture::ApplyMediaTrackConstraintSetToSettings(
   if (constraint_set->hasPointsOfInterest()) {
     // There is no |settings->has_points_of_interest|.
     bool has_points_of_interest = !settings->points_of_interest.empty();
-    absl::optional new_effective_setting = ApplyValueConstraint(
+    std::optional new_effective_setting = ApplyValueConstraint(
         &has_points_of_interest, &settings->points_of_interest,
         effective_settings->hasPointsOfInterest()
             ? &effective_settings->pointsOfInterest()
@@ -2183,7 +2200,7 @@ bool ImageCapture::CheckMediaTrackConstraintSet(
     const MediaTrackConstraintSet* constraint_set,
     MediaTrackConstraintSetType constraint_set_type,
     ScriptPromiseResolver* resolver) const {
-  if (absl::optional<const char*> name =
+  if (std::optional<const char*> name =
           GetConstraintWithCapabilityExistenceMismatch(constraint_set,
                                                        constraint_set_type)) {
     MaybeRejectWithOverconstrainedError(resolver, name.value(),
@@ -2377,24 +2394,20 @@ bool ImageCapture::HasPanTiltZoomPermissionGranted() const {
   return pan_tilt_zoom_permission_ == mojom::blink::PermissionStatus::GRANTED;
 }
 
-ScriptPromise ImageCapture::GetMojoPhotoState(
-    ScriptState* script_state,
-    PromiseResolverFunction resolver_cb) {
+void ImageCapture::GetMojoPhotoState(ScriptPromiseResolver* resolver,
+                                     PromiseResolverFunction resolver_cb) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"),
                "ImageCapture::GetMojoPhotoState");
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
-  ScriptPromise promise = resolver->Promise();
-
   if (TrackIsInactive(*stream_track_)) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kInvalidStateError, kInvalidStateTrackError));
-    return promise;
+    return;
   }
 
   if (!service_.is_bound()) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kNotFoundError, kNoServiceError));
-    return promise;
+    return;
   }
   service_requests_.insert(resolver);
 
@@ -2403,7 +2416,6 @@ ScriptPromise ImageCapture::GetMojoPhotoState(
       WTF::BindOnce(&ImageCapture::OnMojoGetPhotoState, WrapPersistent(this),
                     WrapPersistent(resolver), std::move(resolver_cb),
                     /*trigger_take_photo=*/false));
-  return promise;
 }
 
 void ImageCapture::OnMojoGetPhotoState(
@@ -2504,7 +2516,7 @@ void ImageCapture::OnMojoTakePhoto(ScriptPromiseResolver* resolver,
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kUnknownError, "platform error"));
   } else {
-    resolver->Resolve(
+    resolver->DowncastTo<Blob>()->Resolve(
         Blob::Create(blob->data.data(), blob->data.size(), blob->mime_type));
   }
   service_requests_.erase(resolver);
@@ -2703,18 +2715,18 @@ void ImageCapture::MaybeRejectWithOverconstrainedError(
 
 void ImageCapture::ResolveWithNothing(ScriptPromiseResolver* resolver) {
   DCHECK(resolver);
-  resolver->Resolve();
+  resolver->DowncastTo<IDLUndefined>()->Resolve();
 }
 
 void ImageCapture::ResolveWithPhotoSettings(ScriptPromiseResolver* resolver) {
   DCHECK(resolver);
-  resolver->Resolve(photo_settings_);
+  resolver->DowncastTo<PhotoSettings>()->Resolve(photo_settings_);
 }
 
 void ImageCapture::ResolveWithPhotoCapabilities(
     ScriptPromiseResolver* resolver) {
   DCHECK(resolver);
-  resolver->Resolve(photo_capabilities_);
+  resolver->DowncastTo<PhotoCapabilities>()->Resolve(photo_capabilities_);
 }
 
 bool ImageCapture::IsPageVisible() const {
@@ -2725,7 +2737,7 @@ const String& ImageCapture::SourceId() const {
   return stream_track_->Component()->Source()->Id();
 }
 
-const absl::optional<const char*>
+const std::optional<const char*>
 ImageCapture::GetConstraintWithCapabilityExistenceMismatch(
     const MediaTrackConstraintSet* constraint_set,
     MediaTrackConstraintSetType constraint_set_type) const {
@@ -2863,7 +2875,7 @@ ImageCapture::GetConstraintWithCapabilityExistenceMismatch(
           constraint_set_type)) {
     return "faceFraming";
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 ImageCapture* ImageCapture::Clone() const {

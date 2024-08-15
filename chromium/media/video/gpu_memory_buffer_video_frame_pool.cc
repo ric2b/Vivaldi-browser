@@ -212,7 +212,7 @@ class GpuMemoryBufferVideoFramePool::PoolImpl
       const gfx::ColorSpace& color_space,
       base::TimeDelta timestamp,
       bool video_frame_allow_overlay,
-      const absl::optional<gpu::VulkanYCbCrInfo>& ycbcr_info);
+      const std::optional<gpu::VulkanYCbCrInfo>& ycbcr_info);
 
   // Return true if |resources| can be used to represent a frame for
   // specific |format| and |size|.
@@ -256,7 +256,7 @@ class GpuMemoryBufferVideoFramePool::PoolImpl
   const raw_ptr<GpuVideoAcceleratorFactories> gpu_factories_;
 
   // Pool of resources.
-  std::list<FrameResources*> resources_pool_;
+  std::list<raw_ptr<FrameResources, CtnExperimental>> resources_pool_;
 
   GpuVideoAcceleratorFactories::OutputFormat output_format_;
 
@@ -1240,7 +1240,7 @@ scoped_refptr<VideoFrame> GpuMemoryBufferVideoFramePool::PoolImpl::
         const gfx::ColorSpace& color_space,
         base::TimeDelta timestamp,
         bool video_frame_allow_overlay,
-        const absl::optional<gpu::VulkanYCbCrInfo>& ycbcr_info) {
+        const std::optional<gpu::VulkanYCbCrInfo>& ycbcr_info) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
   gpu::SharedImageInterface* sii = gpu_factories_->SharedImageInterface();
   if (!sii) {
@@ -1296,12 +1296,13 @@ scoped_refptr<VideoFrame> GpuMemoryBufferVideoFramePool::PoolImpl::
 
     const gfx::BufferFormat buffer_format =
         GpuMemoryBufferFormat(output_format_, plane);
-    unsigned texture_target = gpu_factories_->ImageTextureTarget(buffer_format);
-    // Bind the texture and create or rebind the image.
+    // Bind the texture and create or rebind the image. This image may be read
+    // via the raster interface for import into canvas and/or 2-copy import into
+    // WebGL as well as potentially being read via the GLES interface for 1-copy
+    // import into WebGL.
     if (gpu_memory_buffer && !plane_resource.shared_image) {
       uint32_t usage = gpu::SHARED_IMAGE_USAGE_GLES2_READ |
                        gpu::SHARED_IMAGE_USAGE_RASTER_READ |
-                       gpu::SHARED_IMAGE_USAGE_RASTER_WRITE |
                        gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
                        gpu::SHARED_IMAGE_USAGE_SCANOUT;
 
@@ -1310,7 +1311,8 @@ scoped_refptr<VideoFrame> GpuMemoryBufferVideoFramePool::PoolImpl::
       // OzoneImageBacking is by default turned on.
       if (base::CommandLine::ForCurrentProcess()->HasSwitch(
               switches::kEnableUnsafeWebGPU)) {
-        usage |= gpu::SHARED_IMAGE_USAGE_WEBGPU;
+        // This SharedImage may be used for zero-copy import into WebGPU.
+        usage |= gpu::SHARED_IMAGE_USAGE_WEBGPU_READ;
       }
 #endif
 
@@ -1324,21 +1326,24 @@ scoped_refptr<VideoFrame> GpuMemoryBufferVideoFramePool::PoolImpl::
             plane_resource.needs_external_sampler = true;
           }
         }
-        plane_resource.shared_image = sii->CreateSharedImage(
-            si_format, gpu_memory_buffer->GetSize(), color_space,
-            kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage, kDebugLabel,
-            gpu_memory_buffer->CloneHandle());
+        plane_resource.shared_image =
+            sii->CreateSharedImage({si_format, gpu_memory_buffer->GetSize(),
+                                    color_space, usage, kDebugLabel},
+                                   gpu_memory_buffer->CloneHandle());
       } else {
         plane_resource.shared_image = sii->CreateSharedImage(
             gpu_memory_buffer, gpu_factories_->GpuMemoryBufferManager(),
-            GetSharedImageBufferPlane(output_format_, plane), color_space,
-            kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage, kDebugLabel);
+            GetSharedImageBufferPlane(output_format_, plane),
+            {color_space, kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage,
+             kDebugLabel});
       }
       CHECK(plane_resource.shared_image);
     } else if (plane_resource.shared_image) {
       sii->UpdateSharedImage(frame_resources->sync_token,
                              plane_resource.shared_image->mailbox());
     }
+    auto texture_target = plane_resource.shared_image->GetTextureTarget(
+        gfx::BufferUsage::SCANOUT_CPU_READ_WRITE, buffer_format);
     mailbox_holders[plane] =
         gpu::MailboxHolder(plane_resource.shared_image->mailbox(),
                            gpu::SyncToken(), texture_target);
@@ -1448,7 +1453,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::Shutdown() {
 
   // Delete all the resources on the media thread.
   in_shutdown_ = true;
-  for (auto* frame_resources : resources_pool_) {
+  for (FrameResources* frame_resources : resources_pool_) {
     // Will be deleted later upon return to pool.
     if (frame_resources->is_used())
       continue;

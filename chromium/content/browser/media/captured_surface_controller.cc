@@ -6,12 +6,14 @@
 
 #include <cmath>
 
+#include "base/feature_list.h"
 #include "base/task/bind_post_task.h"
 #include "content/browser/media/captured_surface_control_permission_manager.h"
 #include "content/browser/media/media_stream_web_contents_observer.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/common/features.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -27,35 +29,65 @@ namespace content {
 namespace {
 
 using ::blink::mojom::CapturedSurfaceControlResult;
-using PermissionManager = ::content::CapturedSurfaceControlPermissionManager;
-using PermissionResult =
-    ::content::CapturedSurfaceControlPermissionManager::PermissionResult;
+using PermissionManager = CapturedSurfaceControlPermissionManager;
+using PermissionResult = PermissionManager::PermissionResult;
 using GetZoomLevelReplyCallback =
     base::OnceCallback<void(std::optional<int> zoom_level,
                             blink::mojom::CapturedSurfaceControlResult result)>;
+using CapturedSurfaceInfo = CapturedSurfaceController::CapturedSurfaceInfo;
 
-base::WeakPtr<WebContents> ResolveWebContentsOnUI(
-    WebContentsMediaCaptureId wc_id) {
+void OnZoomLevelChangeOnUI(
+    base::RepeatingCallback<void(int)> on_zoom_level_change_callback,
+    base::WeakPtr<WebContents> captured_wc,
+    const HostZoomMap::ZoomLevelChange& change) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  if (!captured_wc) {
+    return;
+  }
+
+  int zoom_level =
+      std::round(100 * blink::PageZoomLevelToZoomFactor(
+                           HostZoomMap::GetZoomLevel(captured_wc.get())));
+  on_zoom_level_change_callback.Run(zoom_level);
+}
+
+std::optional<CapturedSurfaceInfo> ResolveCapturedSurfaceOnUI(
+    WebContentsMediaCaptureId wc_id,
+    int subscription_version,
+    base::RepeatingCallback<void(int)> on_zoom_level_change_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (wc_id.is_null()) {
-    return nullptr;
+    return std::nullopt;
   }
 
   WebContents* const wc =
       WebContents::FromRenderFrameHost(RenderFrameHost::FromID(
           wc_id.render_process_id, wc_id.main_render_frame_id));
 
-  return wc ? wc->GetWeakPtr() : nullptr;
-}
+  if (!wc) {
+    return std::nullopt;
+  }
 
-// Checks whether the app is focused.
-// Note that this is different from requiring that the capturer RFH is focused.
-// The check here starts at the primary main frame, and then cascades through
-// the tree - which is the desired behavior.
-bool IsFocused(WebContentsImpl& web_contents) {
-  RenderFrameHostImpl* const rfhi = web_contents.GetPrimaryMainFrame();
-  return rfhi && rfhi->IsFocused();
+  HostZoomMap* host_zoom_map = HostZoomMap::GetForWebContents(wc);
+  if (!host_zoom_map) {
+    return std::nullopt;
+  }
+
+  int initial_zoom_level = std::round(
+      100 * blink::PageZoomLevelToZoomFactor(HostZoomMap::GetZoomLevel(wc)));
+
+  std::unique_ptr<base::CallbackListSubscription,
+                  BrowserThread::DeleteOnUIThread>
+      subscription_ptr(new base::CallbackListSubscription());
+  base::WeakPtr<WebContents> wc_weak_ptr = wc->GetWeakPtr();
+  *subscription_ptr =
+      host_zoom_map->AddZoomLevelChangedCallback(base::BindRepeating(
+          &OnZoomLevelChangeOnUI, on_zoom_level_change_callback, wc_weak_ptr));
+
+  return CapturedSurfaceInfo(wc_weak_ptr, std::move(subscription_ptr),
+                             subscription_version, initial_zoom_level);
 }
 
 // Deliver a synthetic MouseWheel action on `captured_wc` with the parameters
@@ -73,8 +105,7 @@ CapturedSurfaceControlResult DoSendWheel(
       RenderFrameHostImpl::FromID(capturer_rfh_id));
   if (!capturer_wc) {
     // The capturing frame or tab appears to have closed asynchronously.
-    // TODO(crbug.com/1466247): Use a dedicated error.
-    return CapturedSurfaceControlResult::kUnknownError;
+    return CapturedSurfaceControlResult::kCapturerNotFoundError;
   }
 
   RenderFrameHost* const captured_rfh =
@@ -93,11 +124,6 @@ CapturedSurfaceControlResult DoSendWheel(
 
   if (capturer_wc == captured_wc.get()) {
     return CapturedSurfaceControlResult::kDisallowedForSelfCaptureError;
-  }
-
-  if (!IsFocused(*capturer_wc)) {
-    // TODO(crbug.com/1466247): Use a dedicated error.
-    return CapturedSurfaceControlResult::kUnknownError;
   }
 
   // Scale (x, y).
@@ -164,8 +190,7 @@ CapturedSurfaceControlResult DoSetZoomLevel(
       RenderFrameHostImpl::FromID(capturer_rfh_id));
   if (!capturer_wc) {
     // The capturing frame or tab appears to have closed asynchronously.
-    // TODO(crbug.com/1466247): Use a dedicated error.
-    return CapturedSurfaceControlResult::kUnknownError;
+    return CapturedSurfaceControlResult::kCapturerNotFoundError;
   }
 
   if (!captured_wc) {
@@ -176,53 +201,25 @@ CapturedSurfaceControlResult DoSetZoomLevel(
     return CapturedSurfaceControlResult::kDisallowedForSelfCaptureError;
   }
 
-  if (!IsFocused(*capturer_wc)) {
-    // TODO(crbug.com/1466247): Use a dedicated error.
+  // TODO(crbug.com/328589994): Hard-code kCapturedSurfaceControlTemporaryZoom.
+  if (!base::FeatureList::IsEnabled(
+          features::kCapturedSurfaceControlTemporaryZoom)) {
+    HostZoomMap::SetZoomLevel(captured_wc.get(),
+                              blink::PageZoomFactorToZoomLevel(
+                                  static_cast<double>(zoom_level) / 100));
+    return CapturedSurfaceControlResult::kSuccess;
+  }
+
+  HostZoomMap* const zoom_map =
+      HostZoomMap::GetForWebContents(captured_wc.get());
+  if (!zoom_map) {
     return CapturedSurfaceControlResult::kUnknownError;
   }
 
-  content::HostZoomMap::SetZoomLevel(
-      captured_wc.get(),
+  zoom_map->SetTemporaryZoomLevel(
+      captured_wc->GetPrimaryMainFrame()->GetGlobalId(),
       blink::PageZoomFactorToZoomLevel(static_cast<double>(zoom_level) / 100));
   return CapturedSurfaceControlResult::kSuccess;
-}
-
-// Get the zoom level of the tab indicated by `captured_wc`.
-//
-// Return the zoom_level if successful or nullopt otherwise.
-std::pair<std::optional<int>, CapturedSurfaceControlResult> DoGetZoomLevel(
-    GlobalRenderFrameHostId capturer_rfh_id,
-    base::WeakPtr<WebContents> captured_wc) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  WebContentsImpl* const capturer_wc = WebContentsImpl::FromRenderFrameHostImpl(
-      RenderFrameHostImpl::FromID(capturer_rfh_id));
-  if (!capturer_wc) {
-    // The capturing frame or tab appears to have closed asynchronously.
-    // TODO(crbug.com/1466247): Use a dedicated error.
-    return std::make_pair(std::nullopt,
-                          CapturedSurfaceControlResult::kUnknownError);
-  }
-
-  if (!captured_wc) {
-    return std::make_pair(
-        std::nullopt,
-        CapturedSurfaceControlResult::kCapturedSurfaceNotFoundError);
-  }
-
-  if (capturer_wc == captured_wc.get()) {
-    return std::make_pair(
-        std::nullopt,
-        CapturedSurfaceControlResult::kDisallowedForSelfCaptureError);
-  }
-
-  // The requirement that the capturer be focused does not apply here
-  // as it does for SendWheel() and SetZoomLevel().
-
-  const double zoom_level = blink::PageZoomLevelToZoomFactor(
-      content::HostZoomMap::GetZoomLevel(captured_wc.get()));
-  return std::make_pair(std::round(100 * zoom_level),
-                        CapturedSurfaceControlResult::kSuccess);
 }
 
 void OnPermissionCheckResult(
@@ -263,48 +260,70 @@ base::OnceCallback<void(PermissionResult)> ComposeCallbacks(
   // Callback for reporting result of both permission-prompt as well as action
   // (if permitted) to the renderer.
   base::OnceCallback<void(CapturedSurfaceControlResult)> reply_callback_io =
-      base::BindPostTask(content::GetIOThreadTaskRunner({}),
-                         std::move(reply_callback));
+      base::BindPostTask(GetIOThreadTaskRunner({}), std::move(reply_callback));
 
   return base::BindPostTask(
-      content::GetUIThreadTaskRunner({}),
+      GetUIThreadTaskRunner({}),
       base::BindOnce(&OnPermissionCheckResult, std::move(action_callback),
                      std::move(reply_callback_io)));
 }
 
 }  // namespace
 
+CapturedSurfaceInfo::CapturedSurfaceInfo(
+    base::WeakPtr<WebContents> captured_wc,
+    std::unique_ptr<base::CallbackListSubscription,
+                    BrowserThread::DeleteOnUIThread> subscription,
+    int subscription_version,
+    int initial_zoom_level)
+    : captured_wc(captured_wc),
+      subscription(std::move(subscription)),
+      subscription_version(subscription_version),
+      initial_zoom_level(initial_zoom_level) {}
+
+CapturedSurfaceInfo::CapturedSurfaceInfo(CapturedSurfaceInfo&& other) = default;
+CapturedSurfaceInfo& CapturedSurfaceInfo::operator=(
+    CapturedSurfaceInfo&& other) = default;
+
+CapturedSurfaceInfo::~CapturedSurfaceInfo() = default;
+
 std::unique_ptr<CapturedSurfaceController>
 CapturedSurfaceController::CreateForTesting(
     GlobalRenderFrameHostId capturer_rfh_id,
     WebContentsMediaCaptureId captured_wc_id,
-    std::unique_ptr<CapturedSurfaceControlPermissionManager> permission_manager,
+    std::unique_ptr<PermissionManager> permission_manager,
+    base::RepeatingCallback<void(int)> on_zoom_level_change_callback,
     base::RepeatingCallback<void(base::WeakPtr<WebContents>)>
         wc_resolution_callback) {
   return base::WrapUnique(new CapturedSurfaceController(
       capturer_rfh_id, captured_wc_id, std::move(permission_manager),
-      std::move(wc_resolution_callback)));
+      on_zoom_level_change_callback, std::move(wc_resolution_callback)));
 }
 
 CapturedSurfaceController::CapturedSurfaceController(
     GlobalRenderFrameHostId capturer_rfh_id,
-    WebContentsMediaCaptureId captured_wc_id)
+    WebContentsMediaCaptureId captured_wc_id,
+    base::RepeatingCallback<void(int)> on_zoom_level_change_callback)
     : CapturedSurfaceController(
           capturer_rfh_id,
           captured_wc_id,
           std::make_unique<PermissionManager>(capturer_rfh_id),
+          std::move(on_zoom_level_change_callback),
           /*wc_resolution_callback=*/base::DoNothing()) {}
 
 CapturedSurfaceController::CapturedSurfaceController(
     GlobalRenderFrameHostId capturer_rfh_id,
     WebContentsMediaCaptureId captured_wc_id,
     std::unique_ptr<PermissionManager> permission_manager,
+    base::RepeatingCallback<void(int)> on_zoom_level_change_callback,
     base::RepeatingCallback<void(base::WeakPtr<WebContents>)>
         wc_resolution_callback)
     : capturer_rfh_id_(capturer_rfh_id),
       permission_manager_(std::move(permission_manager)),
-      wc_resolution_callback_(std::move(wc_resolution_callback)) {
-  ResolveCapturedWebContents(captured_wc_id);
+      wc_resolution_callback_(std::move(wc_resolution_callback)),
+      on_zoom_level_change_callback_(std::move(on_zoom_level_change_callback)) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  ResolveCapturedSurface(captured_wc_id);
 }
 
 CapturedSurfaceController::~CapturedSurfaceController() = default;
@@ -313,7 +332,7 @@ void CapturedSurfaceController::UpdateCaptureTarget(
     WebContentsMediaCaptureId captured_wc_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  ResolveCapturedWebContents(captured_wc_id);
+  ResolveCapturedSurface(captured_wc_id);
 }
 
 void CapturedSurfaceController::SendWheel(
@@ -336,29 +355,6 @@ void CapturedSurfaceController::SendWheel(
       ComposeCallbacks(std::move(action_callback), std::move(reply_callback)));
 }
 
-void CapturedSurfaceController::GetZoomLevel(
-    GetZoomLevelReplyCallback reply_callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  if (!captured_wc_.has_value()) {
-    std::move(reply_callback)
-        .Run(std::nullopt,
-             CapturedSurfaceControlResult::kCapturedSurfaceNotFoundError);
-    return;
-  }
-
-  GetUIThreadTaskRunner({})->PostTaskAndReplyWithResult(
-      FROM_HERE,
-      base::BindOnce(&DoGetZoomLevel, capturer_rfh_id_, captured_wc_.value()),
-      base::BindOnce(
-          [](GetZoomLevelReplyCallback reply_callback,
-             std::pair<std::optional<int>, CapturedSurfaceControlResult>
-                 result) {
-            std::move(reply_callback).Run(result.first, result.second);
-          },
-          std::move(reply_callback)));
-}
-
 void CapturedSurfaceController::SetZoomLevel(
     int zoom_level,
     base::OnceCallback<void(CapturedSurfaceControlResult)> reply_callback) {
@@ -379,36 +375,71 @@ void CapturedSurfaceController::SetZoomLevel(
       ComposeCallbacks(std::move(action_callback), std::move(reply_callback)));
 }
 
-void CapturedSurfaceController::ResolveCapturedWebContents(
+void CapturedSurfaceController::ResolveCapturedSurface(
     WebContentsMediaCaptureId captured_wc_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   // Avoid posting new tasks (DoSendWheel/DoSetZoomLevel) with the old target
   // while pending resolution.
-  captured_wc_ = absl::nullopt;
+  captured_wc_ = std::nullopt;
+  zoom_level_subscription_.reset();
 
   // Ensure that, in the unlikely case that multiple resolutions are pending at
   // the same time, only the resolution of the last one will set `captured_wc_`
   // back to a concrete value.
   ++pending_wc_resolutions_;
 
+  base::RepeatingCallback on_zoom_level_change_callback =
+      base::BindRepeating(&CapturedSurfaceController::OnZoomLevelChange,
+                          weak_factory_.GetWeakPtr(), ++subscription_version_);
+
   GetUIThreadTaskRunner({})->PostTaskAndReplyWithResult(
-      FROM_HERE, base::BindOnce(&ResolveWebContentsOnUI, captured_wc_id),
-      base::BindOnce(&CapturedSurfaceController::OnCapturedWebContentsResolved,
+      FROM_HERE,
+      base::BindOnce(
+          &ResolveCapturedSurfaceOnUI, captured_wc_id, subscription_version_,
+          base::BindPostTask(GetIOThreadTaskRunner({}),
+                             std::move(on_zoom_level_change_callback))),
+      base::BindOnce(&CapturedSurfaceController::OnCapturedSurfaceResolved,
                      weak_factory_.GetWeakPtr()));
 }
 
-void CapturedSurfaceController::OnCapturedWebContentsResolved(
-    base::WeakPtr<WebContents> captured_wc) {
+void CapturedSurfaceController::OnCapturedSurfaceResolved(
+    std::optional<CapturedSurfaceInfo> captured_surface_info) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   DCHECK_GE(pending_wc_resolutions_, 1);
   if (--pending_wc_resolutions_ > 0) {
     return;
   }
+  if (!captured_surface_info) {
+    return;
+  }
 
-  captured_wc_ = captured_wc;
-  wc_resolution_callback_.Run(captured_wc);
+  captured_wc_ = captured_surface_info->captured_wc;
+  zoom_level_subscription_ = std::move(captured_surface_info->subscription);
+  OnZoomLevelChange(captured_surface_info->subscription_version,
+                    captured_surface_info->initial_zoom_level);
+  wc_resolution_callback_.Run(captured_surface_info->captured_wc);
+}
+
+void CapturedSurfaceController::OnZoomLevelChange(
+    int zoom_level_subscription_version,
+    int zoom_level) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  // Only propagate zoom-level updates if they are sent with the current
+  // zoom-level subscription version.
+  if (zoom_level_subscription_version != subscription_version_) {
+    return;
+  }
+
+  // Do not propagate if the zoom level has not changed.
+  if (current_zoom_level_ == zoom_level) {
+    return;
+  }
+
+  current_zoom_level_ = zoom_level;
+  on_zoom_level_change_callback_.Run(zoom_level);
 }
 
 }  // namespace content

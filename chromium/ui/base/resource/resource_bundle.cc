@@ -11,7 +11,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/big_endian.h"
 #include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/files/file.h"
@@ -20,6 +19,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/notreached.h"
+#include "base/numerics/byte_conversions.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/ranges/algorithm.h"
@@ -77,7 +77,7 @@ namespace ui {
 namespace {
 
 // PNG-related constants.
-const unsigned char kPngMagic[8] = { 0x89, 'P', 'N', 'G', 13, 10, 26, 10 };
+const uint8_t kPngMagic[8] = {0x89, 'P', 'N', 'G', 13, 10, 26, 10};
 const size_t kPngChunkMetadataSize = 12;  // length, type, crc32
 const unsigned char kPngScaleChunkType[4] = { 'c', 's', 'C', 'l' };
 const unsigned char kPngDataChunkType[4] = { 'I', 'D', 'A', 'T' };
@@ -653,7 +653,7 @@ gfx::Image& ResourceBundle::GetImageNamed(int resource_id) {
   return inserted.first->second;
 }
 
-absl::optional<ResourceBundle::LottieData> ResourceBundle::GetLottieData(
+std::optional<ResourceBundle::LottieData> ResourceBundle::GetLottieData(
     int resource_id) const {
   // The prefix that GRIT prepends to Lottie assets, after compression if any.
   // See: tools/grit/grit/node/structure.py
@@ -662,7 +662,7 @@ absl::optional<ResourceBundle::LottieData> ResourceBundle::GetLottieData(
   const base::StringPiece potential_lottie = GetRawDataResource(resource_id);
   if (potential_lottie.substr(0u, std::size(kLottiePrefix)) !=
       base::StringPiece(kLottiePrefix, std::size(kLottiePrefix))) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   LottieData result;
@@ -681,7 +681,7 @@ const ui::ImageModel& ResourceBundle::GetThemedLottieImageNamed(
   if (found != image_models_.end())
     return found->second;
 
-  absl::optional<LottieData> data = GetLottieData(resource_id);
+  std::optional<LottieData> data = GetLottieData(resource_id);
   if (!data) {
     LOG(WARNING) << "Unable to load themed Lottie image with id "
                  << resource_id;
@@ -794,7 +794,7 @@ base::StringPiece ResourceBundle::GetRawDataResourceForScale(
 
 std::string ResourceBundle::LoadDataResourceString(int resource_id) const {
   if (delegate_) {
-    absl::optional<std::string> data =
+    std::optional<std::string> data =
         delegate_->LoadDataResourceString(resource_id);
     if (data)
       return data.value();
@@ -1110,7 +1110,7 @@ void ResourceBundle::InitDefaultFontList() {
 gfx::ImageSkia ResourceBundle::CreateImageSkia(int resource_id) {
   DCHECK(!resource_handles_.empty()) << "Missing call to SetResourcesDataDLL?";
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  absl::optional<LottieData> data = GetLottieData(resource_id);
+  std::optional<LottieData> data = GetLottieData(resource_id);
   if (data) {
     return (*g_parse_lottie_as_still_image_)(std::move(*data));
   }
@@ -1236,7 +1236,7 @@ std::u16string ResourceBundle::GetLocalizedStringImpl(int resource_id) const {
     return std::u16string();
   }
 
-  absl::optional<base::StringPiece> data;
+  std::optional<base::StringPiece> data;
   ResourceHandle::TextEncodingType encoding =
       locale_resources_data_->GetTextEncodingType();
   if (!(data = locale_resources_data_->GetStringPiece(
@@ -1279,35 +1279,38 @@ std::u16string ResourceBundle::GetLocalizedStringImpl(int resource_id) const {
 }
 
 // static
-bool ResourceBundle::PNGContainsFallbackMarker(const unsigned char* buf,
-                                               size_t size) {
-  if (size < std::size(kPngMagic) ||
-      memcmp(buf, kPngMagic, std::size(kPngMagic)) != 0) {
-    // Data invalid or a JPEG.
-    return false;
+bool ResourceBundle::PNGContainsFallbackMarker(base::span<const uint8_t> buf) {
+  if (buf.size() < std::size(kPngMagic) ||
+      buf.first(std::size(kPngMagic)) != kPngMagic) {
+    return false;  // Data invalid or a JPEG.
   }
-  size_t pos = std::size(kPngMagic);
+  buf = buf.subspan(std::size(kPngMagic));
 
   // Scan for custom chunks until we find one, find the IDAT chunk, or run out
   // of chunks.
   for (;;) {
-    if (size - pos < kPngChunkMetadataSize)
+    if (buf.size() < kPngChunkMetadataSize) {
       break;
-    uint32_t length = 0;
-    base::ReadBigEndian(buf + pos, &length);
-    if (size - pos - kPngChunkMetadataSize < length)
-      break;
-    if (length == 0 && memcmp(buf + pos + sizeof(uint32_t), kPngScaleChunkType,
-                              std::size(kPngScaleChunkType)) == 0) {
-      return true;
     }
-    if (memcmp(buf + pos + sizeof(uint32_t), kPngDataChunkType,
-               std::size(kPngDataChunkType)) == 0) {
+    uint32_t length = base::numerics::U32FromBigEndian(buf.first<4u>());
+    if (buf.size() - kPngChunkMetadataSize < length) {
+      break;
+    }
+    if (length == 0u) {
+      auto scale_chunk =
+          buf.subspan(sizeof(uint32_t), std::size(kPngScaleChunkType));
+      if (scale_chunk == kPngScaleChunkType) {
+        return true;
+      }
+    }
+    auto data_chunk =
+        buf.subspan(sizeof(uint32_t), std::size(kPngDataChunkType));
+    if (data_chunk == kPngDataChunkType) {
       // Stop looking for custom chunks, any custom chunks should be before an
       // IDAT chunk.
       break;
     }
-    pos += length + kPngChunkMetadataSize;
+    buf = buf.subspan(length + kPngChunkMetadataSize);
   }
   return false;
 }
@@ -1317,7 +1320,10 @@ bool ResourceBundle::DecodePNG(const unsigned char* buf,
                                size_t size,
                                SkBitmap* bitmap,
                                bool* fell_back_to_1x) {
-  *fell_back_to_1x = PNGContainsFallbackMarker(buf, size);
+  *fell_back_to_1x = PNGContainsFallbackMarker(
+      // TODO(crbug.com/40284755): DecodePNG should be receiving a span. We
+      // can't tell that the size is correct from here.
+      UNSAFE_BUFFERS(base::span(buf, size)));
   return gfx::PNGCodec::Decode(buf, size, bitmap);
 }
 

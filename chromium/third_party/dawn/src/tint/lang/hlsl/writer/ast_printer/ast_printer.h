@@ -35,7 +35,6 @@
 #include <utility>
 
 #include "src/tint/api/common/binding_point.h"
-#include "src/tint/api/options/array_length_from_uniform.h"
 #include "src/tint/lang/core/builtin_value.h"
 #include "src/tint/lang/hlsl/writer/ast_raise/decompose_memory_access.h"
 #include "src/tint/lang/hlsl/writer/common/options.h"
@@ -105,7 +104,7 @@ class ASTPrinter : public tint::TextGenerator {
     /// @param out the output stream
     /// @param expr the as expression
     /// @returns true if the bitcast was emitted
-    bool EmitBitcast(StringStream& out, const ast::BitcastExpression* expr);
+    bool EmitBitcastCall(StringStream& out, const ast::CallExpression* expr);
     /// Emits a list of statements
     /// @param stmts the statement list
     /// @returns true if the statements were emitted successfully
@@ -596,10 +595,6 @@ class ASTPrinter : public tint::TextGenerator {
         return builder_.TypeOf(ptr);
     }
 
-    /// @return true if ty is a struct or array with a matrix member (recursively), false otherwise.
-    /// @param ty the type that will be queried.
-    bool IsStructOrArrayOfMatrix(const core::type::Type* ty);
-
     ProgramBuilder builder_;
 
     /// Helper functions emitted at the top of the output
@@ -618,7 +613,6 @@ class ASTPrinter : public tint::TextGenerator {
     std::unordered_map<const core::type::Matrix*, std::string> dynamic_matrix_scalar_write_;
     std::unordered_map<const core::type::Type*, std::string> value_or_one_if_zero_;
     std::unordered_set<const core::type::Struct*> emitted_structs_;
-    std::unordered_map<const core::type::Type*, bool> is_struct_or_array_of_matrix_;
 
     // The line index in current_buffer_ of the current global declaration / function.
     size_t global_insertion_point_ = 0;

@@ -5,12 +5,14 @@
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme_fluent.h"
 
 #include "base/numerics/safe_conversions.h"
+#include "third_party/blink/public/common/css/forced_colors.h"
 #include "third_party/blink/public/platform/web_theme_engine.h"
 #include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar.h"
 #include "third_party/blink/renderer/platform/theme/web_theme_engine_helper.h"
 #include "third_party/blink/renderer/platform/web_test_support.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 
 namespace blink {
 
@@ -127,6 +129,13 @@ base::TimeDelta ScrollbarThemeFluent::OverlayScrollbarFadeOutDuration() const {
   return style_.fade_out_duration;
 }
 
+ScrollbarPart ScrollbarThemeFluent::PartsToInvalidateOnThumbPositionChange(
+    const Scrollbar& scrollbar,
+    float old_position,
+    float new_position) const {
+  return ScrollbarPart::kNoPart;
+}
+
 int ScrollbarThemeFluent::ThumbThickness(
     const float scale_from_dip,
     const EScrollbarWidth scrollbar_width) const {
@@ -160,6 +169,19 @@ void ScrollbarThemeFluent::PaintButton(GraphicsContext& context,
       context, scrollbar,
       UsesOverlayScrollbars() ? InsetButtonRect(scrollbar, rect, part) : rect,
       part);
+}
+WebThemeEngine::ScrollbarThumbExtraParams
+ScrollbarThemeFluent::BuildScrollbarThumbExtraParams(
+    const Scrollbar& scrollbar) {
+  WebThemeEngine::ScrollbarThumbExtraParams scrollbar_thumb;
+  if (scrollbar.ScrollbarThumbColor().has_value()) {
+    scrollbar_thumb.thumb_color =
+        scrollbar.ScrollbarThumbColor().value().toSkColor4f().toSkColor();
+  }
+  scrollbar_thumb.is_thumb_minimal_mode =
+      scrollbar.IsFluentOverlayScrollbarMinimalMode();
+  scrollbar_thumb.is_web_test = WebTestSupport::IsRunningWebTest();
+  return scrollbar_thumb;
 }
 
 gfx::Rect ScrollbarThemeFluent::InsetTrackRect(const Scrollbar& scrollbar,
@@ -204,20 +226,21 @@ int ScrollbarThemeFluent::ScrollbarTrackInsetPx(float scale) const {
 }
 
 gfx::Rect ScrollbarThemeFluent::ShrinkMainThreadedMinimalModeThumbRect(
-    Scrollbar& scrollbar,
-    gfx::Rect& rect) const {
+    const Scrollbar& scrollbar,
+    const gfx::Rect& rect) const {
   CHECK(UsesOverlayScrollbars());
   const float idle_thickness_scale = style_.idle_thickness_scale;
+  gfx::RectF thumb_rect(rect);
   if (scrollbar.Orientation() == kHorizontalScrollbar) {
-    rect.set_y(rect.y() + rect.height() * (1 - idle_thickness_scale));
-    rect.set_height(rect.height() * idle_thickness_scale);
+    thumb_rect.set_y(rect.y() + rect.height() * (1 - idle_thickness_scale));
+    thumb_rect.set_height(rect.height() * idle_thickness_scale);
   } else {
     if (!scrollbar.IsLeftSideVerticalScrollbar()) {
-      rect.set_x(rect.x() + rect.width() * (1 - idle_thickness_scale));
+      thumb_rect.set_x(rect.x() + rect.width() * (1 - idle_thickness_scale));
     }
-    rect.set_width(rect.width() * idle_thickness_scale);
+    thumb_rect.set_width(rect.width() * idle_thickness_scale);
   }
-  return rect;
+  return gfx::ToEnclosingRect(thumb_rect);
 }
 
 }  // namespace blink

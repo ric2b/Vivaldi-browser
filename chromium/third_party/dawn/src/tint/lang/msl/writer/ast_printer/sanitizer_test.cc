@@ -55,7 +55,7 @@ TEST_F(MslSanitizerTest, Call_ArrayLength) {
          });
 
     Options opts = DefaultOptions();
-    opts.array_length_from_uniform.ubo_binding = BindingPoint{0, 30};
+    opts.array_length_from_uniform.ubo_binding = 30;
     opts.array_length_from_uniform.bindpoint_to_size_index.emplace(BindingPoint{2, 1}, 1);
     ASTPrinter& gen = SanitizeAndBuild(opts);
 
@@ -78,16 +78,16 @@ struct tint_array {
     T elements[N];
 };
 
-struct tint_symbol {
-  /* 0x0000 */ tint_array<uint4, 1> buffer_size;
+struct TintArrayLengths {
+  /* 0x0000 */ tint_array<uint4, 1> array_lengths;
 };
 
 struct my_struct {
   tint_array<float, 1> a;
 };
 
-fragment void a_func(const constant tint_symbol* tint_symbol_2 [[buffer(30)]]) {
-  uint len = (((*(tint_symbol_2)).buffer_size[0u][1u] - 0u) / 4u);
+fragment void a_func(const constant TintArrayLengths* tint_symbol [[buffer(30)]]) {
+  uint len = (((*(tint_symbol)).array_lengths[0u][1u] - 0u) / 4u);
   return;
 }
 
@@ -112,7 +112,7 @@ TEST_F(MslSanitizerTest, Call_ArrayLength_OtherMembersInStruct) {
          });
 
     Options opts = DefaultOptions();
-    opts.array_length_from_uniform.ubo_binding = BindingPoint{0, 30};
+    opts.array_length_from_uniform.ubo_binding = 30;
     opts.array_length_from_uniform.bindpoint_to_size_index.emplace(BindingPoint{2, 1}, 1);
     ASTPrinter& gen = SanitizeAndBuild(opts);
 
@@ -135,8 +135,8 @@ struct tint_array {
     T elements[N];
 };
 
-struct tint_symbol {
-  /* 0x0000 */ tint_array<uint4, 1> buffer_size;
+struct TintArrayLengths {
+  /* 0x0000 */ tint_array<uint4, 1> array_lengths;
 };
 
 struct my_struct {
@@ -144,8 +144,8 @@ struct my_struct {
   tint_array<float, 1> a;
 };
 
-fragment void a_func(const constant tint_symbol* tint_symbol_2 [[buffer(30)]]) {
-  uint len = (((*(tint_symbol_2)).buffer_size[0u][1u] - 4u) / 4u);
+fragment void a_func(const constant TintArrayLengths* tint_symbol [[buffer(30)]]) {
+  uint len = (((*(tint_symbol)).array_lengths[0u][1u] - 4u) / 4u);
   return;
 }
 
@@ -173,7 +173,7 @@ TEST_F(MslSanitizerTest, Call_ArrayLength_ViaLets) {
          });
 
     Options opts = DefaultOptions();
-    opts.array_length_from_uniform.ubo_binding = BindingPoint{0, 30};
+    opts.array_length_from_uniform.ubo_binding = 30;
     opts.array_length_from_uniform.bindpoint_to_size_index.emplace(BindingPoint{2, 1}, 1);
     ASTPrinter& gen = SanitizeAndBuild(opts);
 
@@ -196,16 +196,16 @@ struct tint_array {
     T elements[N];
 };
 
-struct tint_symbol {
-  /* 0x0000 */ tint_array<uint4, 1> buffer_size;
+struct TintArrayLengths {
+  /* 0x0000 */ tint_array<uint4, 1> array_lengths;
 };
 
 struct my_struct {
   tint_array<float, 1> a;
 };
 
-fragment void a_func(const constant tint_symbol* tint_symbol_2 [[buffer(30)]]) {
-  uint len = (((*(tint_symbol_2)).buffer_size[0u][1u] - 0u) / 4u);
+fragment void a_func(const constant TintArrayLengths* tint_symbol [[buffer(30)]]) {
+  uint len = (((*(tint_symbol)).array_lengths[0u][1u] - 0u) / 4u);
   return;
 }
 
@@ -232,7 +232,7 @@ TEST_F(MslSanitizerTest, Call_ArrayLength_ArrayLengthFromUniform) {
          });
 
     Options options;
-    options.array_length_from_uniform.ubo_binding = {0, 29};
+    options.array_length_from_uniform.ubo_binding = 29;
     options.array_length_from_uniform.bindpoint_to_size_index.emplace(BindingPoint{0, 1}, 7u);
     options.array_length_from_uniform.bindpoint_to_size_index.emplace(BindingPoint{0, 2}, 2u);
     ASTPrinter& gen = SanitizeAndBuild(options);
@@ -256,16 +256,16 @@ struct tint_array {
     T elements[N];
 };
 
-struct tint_symbol {
-  /* 0x0000 */ tint_array<uint4, 2> buffer_size;
+struct TintArrayLengths {
+  /* 0x0000 */ tint_array<uint4, 2> array_lengths;
 };
 
 struct my_struct {
   tint_array<float, 1> a;
 };
 
-fragment void a_func(const constant tint_symbol* tint_symbol_2 [[buffer(29)]]) {
-  uint len = ((((*(tint_symbol_2)).buffer_size[1u][3u] - 0u) / 4u) + (((*(tint_symbol_2)).buffer_size[0u][2u] - 0u) / 4u));
+fragment void a_func(const constant TintArrayLengths* tint_symbol [[buffer(29)]]) {
+  uint len = ((((*(tint_symbol)).array_lengths[1u][3u] - 0u) / 4u) + (((*(tint_symbol)).array_lengths[0u][2u] - 0u) / 4u));
   return;
 }
 
@@ -291,12 +291,12 @@ TEST_F(MslSanitizerTest, Call_ArrayLength_ArrayLengthFromUniformMissingBinding) 
          });
 
     Options options;
-    options.array_length_from_uniform.ubo_binding = {0, 29};
+    options.array_length_from_uniform.ubo_binding = 29;
     options.array_length_from_uniform.bindpoint_to_size_index.emplace(BindingPoint{0, 2}, 2u);
     ASTPrinter& gen = SanitizeAndBuild(options);
 
     ASSERT_FALSE(gen.Generate());
-    EXPECT_THAT(gen.Diagnostics().str(), HasSubstr("Unable to translate builtin: arrayLength"));
+    EXPECT_THAT(gen.Diagnostics().Str(), HasSubstr("Unable to translate builtin: arrayLength"));
 }
 
 }  // namespace

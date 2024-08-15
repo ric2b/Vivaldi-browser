@@ -65,12 +65,8 @@ struct PartialAccess {
     // The list of constant indices to get from the base to the source object.
     Vector<core::ir::Value*, 4> indices;
 
-    // A specialization of Hasher for PartialAccess.
-    struct Hasher {
-        inline std::size_t operator()(const PartialAccess& src) const {
-            return Hash(src.base, src.indices);
-        }
-    };
+    /// @returns the hash code of the PartialAccess
+    tint::HashCode HashCode() const { return Hash(base, indices); }
 
     // An equality helper for PartialAccess.
     bool operator==(const PartialAccess& other) const {
@@ -139,7 +135,7 @@ void Run(core::ir::Module& ir) {
 
     // Replace each access instruction that we recorded.
     Hashmap<core::ir::Value*, core::ir::Value*, 4> object_to_local;
-    Hashmap<PartialAccess, core::ir::Value*, 4, PartialAccess::Hasher> source_object_to_value;
+    Hashmap<PartialAccess, core::ir::Value*, 4> source_object_to_value;
     for (const auto& to_replace : worklist) {
         auto* access = to_replace.access;
         auto* source_object = access->Object();
@@ -149,7 +145,7 @@ void Run(core::ir::Module& ir) {
         if (to_replace.first_dynamic_index > 0) {
             PartialAccess partial_access = {
                 access->Object(), access->Indices().Truncate(to_replace.first_dynamic_index)};
-            source_object = source_object_to_value.GetOrCreate(partial_access, [&] {
+            source_object = source_object_to_value.GetOrAdd(partial_access, [&] {
                 auto* intermediate_source = builder.Access(to_replace.dynamic_index_source_type,
                                                            source_object, partial_access.indices);
                 intermediate_source->InsertBefore(access);
@@ -158,7 +154,7 @@ void Run(core::ir::Module& ir) {
         }
 
         // Declare a local variable and copy the source object to it.
-        auto* local = object_to_local.GetOrCreate(source_object, [&] {
+        auto* local = object_to_local.GetOrAdd(source_object, [&] {
             auto* decl = builder.Var(ir.Types().ptr(
                 core::AddressSpace::kFunction, source_object->Type(), core::Access::kReadWrite));
             decl->SetInitializer(source_object);

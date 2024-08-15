@@ -166,24 +166,24 @@
           {
             "name": "params",
             "$ref": "CaptureUIParams"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "success",
-                "type": "boolean",
-                "description": "true if the image was succesfully captured"
-              },
-              {
-                "name": "image",
-                "type": "string",
-                "description": "base64-encoded of the captured image if any."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "does_not_support_promises": "vivaldi",
+          "parameters": [
+            {
+              "name": "success",
+              "type": "boolean",
+              "description": "true if the image was succesfully captured"
+            },
+            {
+              "name": "image",
+              "type": "string",
+              "description": "base64-encoded of the captured image if any."
+            }
+          ]
+        }
       },
       {
         "name": "captureTab",
@@ -198,24 +198,24 @@
           {
             "name": "params",
             "$ref": "CaptureTabParams"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "success",
-                "type": "boolean",
-                "description": "true if the image was succesfully captured"
-              },
-              {
-                "name": "image",
-                "type": "string",
-                "description": "base64-encoded of the captured image if any."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "does_not_support_promises": "vivaldi",
+          "parameters": [
+            {
+              "name": "success",
+              "type": "boolean",
+              "description": "true if the image was succesfully captured"
+            },
+            {
+              "name": "image",
+              "type": "string",
+              "description": "base64-encoded of the captured image if any."
+            }
+          ]
+        }
       },
       {
         "name": "captureBookmark",

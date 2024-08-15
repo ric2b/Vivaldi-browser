@@ -17,8 +17,16 @@ IN_PROC_BROWSER_TEST_F(CrElementsTest, CrButton) {
   RunTest("cr_elements/cr_button_test.js", "mocha.run()");
 }
 
+IN_PROC_BROWSER_TEST_F(CrElementsTest, CrChip) {
+  RunTest("cr_elements/cr_chip_test.js", "mocha.run()");
+}
+
 IN_PROC_BROWSER_TEST_F(CrElementsTest, CrContainerShadowMixin) {
   RunTest("cr_elements/cr_container_shadow_mixin_test.js", "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(CrElementsTest, CrContainerShadowMixinLit) {
+  RunTest("cr_elements/cr_container_shadow_mixin_lit_test.js", "mocha.run()");
 }
 
 IN_PROC_BROWSER_TEST_F(CrElementsTest, CrDialog) {
@@ -83,12 +91,6 @@ IN_PROC_BROWSER_TEST_F(CrElementsTest, CrSearchField) {
   RunTest("cr_elements/cr_search_field_test.js", "mocha.run()");
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-IN_PROC_BROWSER_TEST_F(CrElementsTest, CrSearchableDropDown) {
-  RunTest("cr_elements/cr_searchable_drop_down_test.js", "mocha.run()");
-}
-#endif
-
 IN_PROC_BROWSER_TEST_F(CrElementsTest, CrSlider) {
   RunTest("cr_elements/cr_slider_test.js", "mocha.run()");
 }
@@ -107,6 +109,10 @@ IN_PROC_BROWSER_TEST_F(CrElementsTest, CrToastManager) {
 
 IN_PROC_BROWSER_TEST_F(CrElementsTest, CrViewManager) {
   RunTest("cr_elements/cr_view_manager_test.js", "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(CrElementsTest, CrPaperRippleMixin) {
+  RunTest("cr_elements/cr_paper_ripple_mixin_test.js", "mocha.run()");
 }
 
 IN_PROC_BROWSER_TEST_F(CrElementsTest, CrPolicyIndicator) {
@@ -178,15 +184,4 @@ class CrElementsWithPixelOutputTest : public WebUIMochaBrowserTest {
 #endif
 IN_PROC_BROWSER_TEST_F(CrElementsWithPixelOutputTest, MAYBE_CrLottie) {
   RunTest("cr_elements/cr_lottie_test.js", "mocha.run()");
-}
-
-// https://crbug.com/1044390 - maybe flaky on Mac?
-#if BUILDFLAG(IS_MAC)
-#define MAYBE_CrFingerprintProgressArc DISABLED_CrFingerprintProgressArc
-#else
-#define MAYBE_CrFingerprintProgressArc CrFingerprintProgressArc
-#endif
-IN_PROC_BROWSER_TEST_F(CrElementsWithPixelOutputTest,
-                       MAYBE_CrFingerprintProgressArc) {
-  RunTest("cr_elements/cr_fingerprint_progress_arc_test.js", "mocha.run()");
 }

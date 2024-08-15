@@ -267,6 +267,10 @@ std::string ToolbarController::GetActionNameFromElementIdentifier(
           {kToolbarMediaButtonElementId, "MediaButton"},
           {kToolbarNewTabButtonElementId, "NewTabButton"},
           {kToolbarSidePanelButtonElementId, "SidePanelButton"},
+          {kActionClearBrowsingData, "PinnedClearBrowsingDataButton"},
+          {kActionDevTools, "PinnedDeveloperToolsButton"},
+          {kActionNewIncognitoWindow, "PinnedNewIncognitoWindowButton"},
+          {kActionPrint, "PinnedPrintButton"},
           {kActionSidePanelShowBookmarks, "PinnedShowBookmarkSidePanelButton"},
           {kActionSidePanelShowReadAnything,
            "PinnedShowReadAnythingSidePanelButton"},
@@ -277,6 +281,9 @@ std::string ToolbarController::GetActionNameFromElementIdentifier(
           {kActionSidePanelShowSearchCompanion,
            "PinnedShowSearchCompanionSidePanelButton"},
           {kActionSidePanelShowPerformance, "ShowPerformanceSidePanelButton"},
+          {kActionTaskManager, "PinnedTaskManagerButton"},
+          {kActionSidePanelShowLensOverlayResults,
+           "PinnedShowLensOverlayResultsSidePanelButton"},
       });
 
   const auto it = identifier_to_action_name_map->find(identifier);

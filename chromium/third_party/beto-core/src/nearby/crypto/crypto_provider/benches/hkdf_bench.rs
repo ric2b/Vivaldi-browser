@@ -19,8 +19,7 @@ use hex_literal::hex;
 
 use crypto_provider::hkdf::Hkdf;
 use crypto_provider::CryptoProvider;
-use crypto_provider_openssl::Openssl;
-use crypto_provider_rustcrypto::RustCrypto;
+use crypto_provider_default::CryptoProviderImpl;
 
 // simple benchmark, which creates a new hmac, updates once, then finalizes
 fn hkdf_sha256_operations<C: CryptoProvider>(c: &mut Criterion) {
@@ -46,6 +45,6 @@ fn hkdf_sha256_operations<C: CryptoProvider>(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, hkdf_sha256_operations::<RustCrypto>, hkdf_sha256_operations::<Openssl>,);
+criterion_group!(benches, hkdf_sha256_operations::<CryptoProviderImpl>);
 
 criterion_main!(benches);

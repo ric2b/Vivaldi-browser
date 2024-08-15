@@ -4,12 +4,19 @@
 
 #include "chrome/browser/ui/tabs/tab_model.h"
 
+#include "chrome/browser/ui/lens/lens_overlay_controller.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
+
+namespace tabs {
 
 TabModel::TabModel(std::unique_ptr<content::WebContents> contents,
                    TabStripModel* owning_model)
     : contents_(std::move(contents)), owning_model_(owning_model) {
   CHECK(owning_model);
+  lens_overlay_controller_ = std::make_unique<LensOverlayController>(this);
+
+  UpdateVivPanel();
 }
 
 TabModel::~TabModel() = default;
@@ -39,9 +46,23 @@ void TabModel::OnRemovedFromModel() {
   group_ = std::nullopt;
 }
 
+TabCollection* TabModel::GetParentCollection(
+    base::PassKey<TabCollection>) const {
+  CHECK(base::FeatureList::IsEnabled(features::kTabStripCollectionStorage));
+  return parent_collection_;
+}
+
+void TabModel::OnReparented(TabCollection* parent,
+                            base::PassKey<TabCollection>) {
+  CHECK(base::FeatureList::IsEnabled(features::kTabStripCollectionStorage));
+  parent_collection_ = parent;
+}
+
 void TabModel::WriteIntoTrace(perfetto::TracedValue context) const {
   auto dict = std::move(context).WriteDictionary();
   dict.Add("web_contents", contents());
   dict.Add("pinned", pinned());
   dict.Add("blocked", blocked());
 }
+
+}  // namespace tabs

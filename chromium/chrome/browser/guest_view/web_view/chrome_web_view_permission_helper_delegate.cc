@@ -117,6 +117,8 @@ void ChromeWebViewPermissionHelperDelegate::CanDownload(
   request_info.Set(guest_view::kMimeType, download_info_.mime_type);
   request_info.Set(guest_view::kSuggestedFilename,
                             download_info_.suggested_filename);
+  request_info.Set(guest_view::kMixedDownload,
+                            download_info_.blocked_mixed);
   // Vivaldi end
 
   web_view_permission_helper()->RequestPermission(

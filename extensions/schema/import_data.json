@@ -14,7 +14,6 @@
           "safari",
           "bookmarks_file",
           "opera",
-          "opera_bookmark",
           "chrome",
           "chromium",
           "vivaldi",
@@ -26,6 +25,8 @@
           "edge_chromium",
           "thunderbird",
           "opera_opium",
+          "arc",
+          "opera_gx",
           "unknown"
         ]
       },
@@ -41,6 +42,11 @@
           "profileName": {
             "type": "string",
             "description": "The profile name."
+          },
+          "profilePath": {
+            "type": "string",
+            "description": "The profile path, if it is different than parent profile.",
+            "optional": true
           }
         }
       },
@@ -93,21 +99,25 @@
             "type": "boolean",
             "description": "Does profile support contacts."
           },
-          "supportsStandaloneImport": {
-            "type": "boolean",
-            "description": "Does profile support standalone import with a dialog."
-          },
           "hasDefaultInstall": {
             "type": "boolean",
-            "description": "Is a default installation detected (for Opera 12 and Vivaldi)."
+            "description": "Is a default installation detected."
           },
-          "willShowDialogType": {
+          "detectedProfilePath": {
             "type": "string",
-            "description": "When import starts and custom profile or file import is selected, this returns what dialog will be shown, if any. Possible values are 'file', 'folder' and 'none'."
+            "description": "Is the path on disk to the detected profile."
           },
-          "profilePath": {
+          "requiresInteractiveImport": {
+            "type": "boolean",
+            "description": "Does the profile require interactive (file/directory picker dialog) selection by the user."
+          },
+          "suggestedProfilePath": {
             "type": "string",
-            "description": "Is the path on disk to the detected profile"
+            "description": "Suggested default profile path for profile selection dialog."
+          },
+          "dialogType": {
+            "type": "string",
+            "description": "What type of dialog should be used for interactive import. Possible values are 'file' or 'folder'."
           },
           "mailPath": {
             "type": "string",
@@ -190,13 +200,12 @@
             "name": "importPath",
             "type": "string",
             "optional": true
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": []
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": []
+        }
       },
       {
         "name": "openThunderbirdMailbox",
@@ -213,20 +222,19 @@
             "type": "string",
             "optional": "true",
             "description": "Seek to this position after opening, serialized as a string because V8's integer type is too small for large mbox files."
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "description": "Callback function returning file size.",
-            "parameters": [
-              {
-                "name": "fileSize",
-                "type": "string",
-                "description": "Size of mailbox file in bytes. Suitable for using seekPosition/fileSize as a  status indicator ratio. Serialized as a string because V8's integer type is too small for large mbox files."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Callback function returning file size.",
+          "parameters": [
+            {
+              "name": "fileSize",
+              "type": "string",
+              "description": "Size of mailbox file in bytes. Suitable for using seekPosition/fileSize as a  status indicator ratio. Serialized as a string because V8's integer type is too small for large mbox files."
+            }
+          ]
+        }
       },
       {
         "name": "closeThunderbirdMailbox",
@@ -238,25 +246,24 @@
         "name": "readMessageFromThunderbirdMailbox",
         "type": "function",
         "description": "Read one message from currently open Thunderbird mailbox.",
-        "parameters": [
-          {
-            "name": "callback",
-            "type": "function",
-            "description": "Callback function containing message",
-            "parameters": [
-              {
-                "name": "message",
-                "type": "string",
-                "description": "Contents of the message just read"
-              },
-              {
-                "name": "seekPosition",
-                "type": "string",
-                "description": "Seek position in file after reading. Returns -1 if all messages have been read. Serialized as a string because V8's integer type is too small for large mbox files."
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "description": "Callback function containing message",
+          "does_not_support_promises": "vivaldi",
+          "parameters": [
+            {
+              "name": "message",
+              "type": "string",
+              "description": "Contents of the message just read"
+            },
+            {
+              "name": "seekPosition",
+              "type": "string",
+              "description": "Seek position in file after reading. Returns -1 if all messages have been read. Serialized as a string because V8's integer type is too small for large mbox files."
+            }
+          ]
+        }
       }
     ],
     "events": [

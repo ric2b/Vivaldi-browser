@@ -424,8 +424,6 @@ const EnumeratedHistogram = {
   Language: 'DevTools.Language',
   LighthouseModeRun: 'DevTools.LighthouseModeRun',
   LighthouseCategoryUsed: 'DevTools.LighthouseCategoryUsed',
-  LinearMemoryInspectorRevealedFrom: 'DevTools.LinearMemoryInspector.RevealedFrom',
-  LinearMemoryInspectorTarget: 'DevTools.LinearMemoryInspector.Target',
   ManifestSectionSelected: 'DevTools.ManifestSectionSelected',
   PanelClosed: 'DevTools.PanelClosed',
   PanelShown: 'DevTools.PanelShown',
@@ -676,6 +674,14 @@ const InspectorFrontendHostImpl = class {
    */
   openInNewTab(url) {
     DevToolsAPI.sendMessageToEmbedder('openInNewTab', [url], null);
+  }
+
+  /**
+   * @override
+   * @param {string} query
+   */
+  openSearchResultsInNewTab(query) {
+    DevToolsAPI.sendMessageToEmbedder('openSearchResultsInNewTab', [query], null);
   }
 
   /**
@@ -1003,6 +1009,14 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
+   * @param {InspectorFrontendHostAPI.ResizeEvent} resizeEvent
+   */
+  recordResize(resizeEvent) {
+    DevToolsAPI.sendMessageToEmbedder('recordResize', [resizeEvent], null);
+  }
+
+  /**
+   * @override
    * @param {InspectorFrontendHostAPI.ClickEvent} clickEvent
    */
   recordClick(clickEvent) {
@@ -1120,10 +1134,19 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @param {string} request
+   * @param {number} streamId
    * @param {function(!InspectorFrontendHostAPI.DoAidaConversationResult): void} cb
    */
-  doAidaConversation(request, cb) {
-    DevToolsAPI.sendMessageToEmbedder('doAidaConversation', [request], cb);
+  doAidaConversation(request, streamId, cb) {
+    DevToolsAPI.sendMessageToEmbedder('doAidaConversation', [request, streamId], cb);
+  }
+
+  /**
+   * @param {string} request
+   * @param {function(!InspectorFrontendHostAPI.DoAidaConversationResult): void} cb
+   */
+  registerAidaClientEvent(request) {
+    DevToolsAPI.sendMessageToEmbedder('registerAidaClientEvent', [request]);
   }
 };
 

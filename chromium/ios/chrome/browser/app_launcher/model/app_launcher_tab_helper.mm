@@ -20,11 +20,12 @@
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/url/url_util.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/web/common/features.h"
 #import "ios/web/common/url_scheme_util.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/web_client.h"
-#import "net/base/mac/url_conversions.h"
+#import "net/base/apple/url_conversions.h"
 #import "url/gurl.h"
 
 namespace {
@@ -64,6 +65,13 @@ enum class ExternalURLRequestStatus {
   kSubFrameRequestBlocked = 2,
   kCount,
 };
+
+// Execute the callbacks contained in `callbacks`.
+void ExecuteCallbacks(std::vector<base::OnceClosure> callbacks) {
+  for (auto& callback : callbacks) {
+    std::move(callback).Run();
+  }
+}
 
 }  // namespace
 
@@ -167,6 +175,7 @@ void AppLauncherTabHelper::RequestToLaunchApp(const GURL& url,
 void AppLauncherTabHelper::ShowAppLaunchAlert(AppLauncherAlertCause cause,
                                               const GURL& url) {
   if (!delegate_) {
+    LaunchAppRequestCompleted();
     return;
   }
   is_prompt_active_ = true;
@@ -180,6 +189,7 @@ void AppLauncherTabHelper::OnShowAppLaunchAlertDone(const GURL& url,
                                                     bool user_allowed) {
   if (!user_allowed || !delegate_) {
     is_prompt_active_ = false;
+    LaunchAppRequestCompleted();
     return;
   }
 
@@ -225,11 +235,12 @@ void AppLauncherTabHelper::LaunchAppRequestCompleted() {
   is_app_launch_request_pending_ = false;
   is_prompt_active_ = false;
 
-  // Call and clear all callbacks waiting for app launch completion.
-  for (auto& callback : callbacks_waiting_for_app_launch_completion_) {
-    std::move(callback).Run();
-  }
-  callbacks_waiting_for_app_launch_completion_.clear();
+  // Some of the callback may destruct `this`, so post the execution to remove
+  // the function from the stack.
+  std::vector<base::OnceClosure> callbacks;
+  std::swap(callbacks_waiting_for_app_launch_completion_, callbacks);
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&ExecuteCallbacks, std::move(callbacks)));
 }
 
 void AppLauncherTabHelper::ShouldAllowRequest(
@@ -260,7 +271,12 @@ void AppLauncherTabHelper::ShouldAllowRequest(
                        app_launch_request.user_tapped_recently);
   }
 
-  std::move(callback).Run(policy_decision);
+  if (!is_prompt_active_) {
+    std::move(callback).Run(policy_decision);
+  } else {
+    callbacks_waiting_for_app_launch_completion_.push_back(
+        base::BindOnce(std::move(callback), policy_decision));
+  }
 }
 
 AppLauncherTabHelper::PolicyDecisionAndOptionalAppLaunchRequest
@@ -293,6 +309,12 @@ AppLauncherTabHelper::GetPolicyDecisionAndOptionalAppLaunchRequest(
   // Disallow navigations to tel: URLs from cross-origin frames.
   if (request_url.SchemeIs(url::kTelScheme) &&
       request_info.target_frame_is_cross_origin) {
+    return {PolicyDecision::Cancel(), kNoAppLaunchRequest};
+  }
+
+  if (!base::FeatureList::IsEnabled(
+          web::features::kAllowCrossWindowExternalAppNavigation) &&
+      request_info.target_window_is_cross_origin) {
     return {PolicyDecision::Cancel(), kNoAppLaunchRequest};
   }
 
@@ -330,7 +352,7 @@ AppLauncherTabHelper::GetPolicyDecisionAndOptionalAppLaunchRequest(
   web::NavigationItem* pending_item =
       web_state_->GetNavigationManager()->GetPendingItem();
   GURL original_pending_url =
-      pending_item ? pending_item->GetOriginalRequestURL() : GURL::EmptyGURL();
+      pending_item ? pending_item->GetOriginalRequestURL() : GURL();
   bool is_link_transition = ui::PageTransitionCoreTypeIs(
       request_info.transition_type, ui::PAGE_TRANSITION_LINK);
 

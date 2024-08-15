@@ -33,7 +33,6 @@ class VivaldiWindowFrameViewMac : public views::NativeFrameView {
   int NonClientHitTest(const gfx::Point& point) override;
 
   // views::View overrides
-  void Layout() override;
   gfx::Size GetMinimumSize() const override;
  private:
   // Indirect owner.
@@ -48,10 +47,6 @@ VivaldiWindowFrameViewMac::VivaldiWindowFrameViewMac(
 
 VivaldiWindowFrameViewMac::~VivaldiWindowFrameViewMac() =
     default;
-
-void VivaldiWindowFrameViewMac::Layout() {
-  NonClientFrameView::Layout();
-}
 
 gfx::Rect VivaldiWindowFrameViewMac::GetWindowBoundsForClientBounds(
     const gfx::Rect& client_bounds) const {
@@ -83,7 +78,12 @@ int VivaldiWindowFrameViewMac::NonClientHitTest(
 }
 
 gfx::Size VivaldiWindowFrameViewMac::GetMinimumSize() const {
-  gfx::Size min_size = window_->minimum_size();
+  views::Widget* widget = window_->GetWidget();
+  if (!widget) {
+    LOG(ERROR) << "GetMinimumSize called with no widget";
+    return gfx::Size(1,1);
+  }
+  gfx::Size min_size = widget->client_view()->GetMinimumSize();
   min_size.SetToMax(gfx::Size(1, 1));
   return min_size;
 }

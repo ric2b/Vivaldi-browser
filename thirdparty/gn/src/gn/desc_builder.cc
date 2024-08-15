@@ -282,6 +282,7 @@ class ConfigDescBuilder : public BaseDescBuilder {
     CONFIG_VALUE_ARRAY_HANDLER(ldflags, std::string)
     CONFIG_VALUE_ARRAY_HANDLER(lib_dirs, SourceDir)
     CONFIG_VALUE_ARRAY_HANDLER(libs, LibFile)
+    CONFIG_VALUE_ARRAY_HANDLER(rustflags, std::string)
     CONFIG_VALUE_ARRAY_HANDLER(swiftflags, std::string)
 
 #undef CONFIG_VALUE_ARRAY_HANDLER

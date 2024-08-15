@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -36,6 +37,7 @@
 #include "build/blink_buildflags.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/multiprocess_func_list.h"
 
@@ -64,6 +66,12 @@ namespace base::debug {
 
 namespace {
 
+using ::testing::AssertionFailure;
+using ::testing::AssertionResult;
+using ::testing::AssertionSuccess;
+using ::testing::Ge;
+using ::testing::Optional;
+
 #if ENABLE_CPU_TESTS
 
 void BusyWork(std::vector<std::string>* vec) {
@@ -74,31 +82,20 @@ void BusyWork(std::vector<std::string>* vec) {
   }
 }
 
+// Tests that GetCumulativeCPUUsage() returns a valid result that's equal to or
+// greater than `prev_cpu_usage`, and returns the result. If
+// GetCumulativeCPUUsage() returns an error, records a failed expectation and
+// returns an empty TimeDelta so that each test doesn't need to check for
+// nullopt repeatedly.
 TimeDelta TestCumulativeCPU(ProcessMetrics* metrics, TimeDelta prev_cpu_usage) {
-  const TimeDelta current_cpu_usage = metrics->GetCumulativeCPUUsage();
-  EXPECT_GE(current_cpu_usage, prev_cpu_usage);
-  EXPECT_GE(metrics->GetPlatformIndependentCPUUsage(), 0.0);
-  return current_cpu_usage;
-}
-
-TimeDelta TestPreciseCumulativeCPU(ProcessMetrics* metrics,
-                                   TimeDelta prev_cpu_usage) {
-#if BUILDFLAG(IS_WIN)
-  const TimeDelta current_cpu_usage = metrics->GetPreciseCumulativeCPUUsage();
-  EXPECT_GE(current_cpu_usage, prev_cpu_usage);
-  EXPECT_GE(metrics->GetPreciseCPUUsage(), 0.0);
-  return current_cpu_usage;
-#else
-  // Do nothing. Not supported on this platform.
-  return base::TimeDelta();
-#endif
+  const std::optional<TimeDelta> current_cpu_usage =
+      metrics->GetCumulativeCPUUsage();
+  EXPECT_THAT(current_cpu_usage, Optional(Ge(prev_cpu_usage)));
+  EXPECT_THAT(metrics->GetPlatformIndependentCPUUsage(), Optional(Ge(0.0)));
+  return current_cpu_usage.value_or(TimeDelta());
 }
 
 #endif  // ENABLE_CPU_TESTS
-
-using ::testing::AssertionFailure;
-using ::testing::AssertionResult;
-using ::testing::AssertionSuccess;
 
 // Helper to deal with Mac process launching complexity. On other platforms this
 // is just a thin wrapper around SpawnMultiProcessTestChild.
@@ -160,8 +157,8 @@ class TestChildLauncher::TestChildPortProvider final : public PortProvider {
   TestChildPortProvider(const TestChildPortProvider&) = delete;
   TestChildPortProvider& operator=(const TestChildPortProvider&) = delete;
 
-  mach_port_t TaskForPid(ProcessHandle process) const final {
-    return process == handle_ ? port_.get() : MACH_PORT_NULL;
+  mach_port_t TaskForHandle(ProcessHandle process_handle) const final {
+    return process_handle == handle_ ? port_.get() : MACH_PORT_NULL;
   }
 
  private:
@@ -455,6 +452,60 @@ TEST_F(SystemMetricsTest, ParseMeminfo) {
   EXPECT_EQ(meminfo.dirty, 4);
   EXPECT_EQ(69936u,
             base::SysInfo::AmountOfAvailablePhysicalMemory(meminfo) / 1024);
+
+  // output from a system with a large page cache, to catch arithmetic errors
+  // that incorrectly assume free + buffers + cached <= total. (Copied from
+  // ash/components/arc/test/data/mem_profile/16G.)
+  const char large_cache_input[] =
+      "MemTotal:       18025572 kB\n"
+      "MemFree:        13150176 kB\n"
+      "MemAvailable:   15447672 kB\n"
+      "Buffers:         1524852 kB\n"
+      "Cached:         12645260 kB\n"
+      "SwapCached:            0 kB\n"
+      "Active:          2572904 kB\n"
+      "Inactive:        1064976 kB\n"
+      "Active(anon):    1047836 kB\n"
+      "Inactive(anon):    11736 kB\n"
+      "Active(file):    1525068 kB\n"
+      "Inactive(file):  1053240 kB\n"
+      "Unevictable:      611904 kB\n"
+      "Mlocked:           32884 kB\n"
+      "SwapTotal:      11756208 kB\n"
+      "SwapFree:       11756208 kB\n"
+      "Dirty:              4152 kB\n"
+      "Writeback:             0 kB\n"
+      "AnonPages:       1079660 kB\n"
+      "Mapped:           782152 kB\n"
+      "Shmem:            591820 kB\n"
+      "Slab:             366104 kB\n"
+      "SReclaimable:     254356 kB\n"
+      "SUnreclaim:       111748 kB\n"
+      "KernelStack:       22652 kB\n"
+      "PageTables:        41540 kB\n"
+      "NFS_Unstable:          0 kB\n"
+      "Bounce:                0 kB\n"
+      "WritebackTmp:          0 kB\n"
+      "CommitLimit:    15768992 kB\n"
+      "Committed_AS:   36120244 kB\n"
+      "VmallocTotal:   34359738367 kB\n"
+      "VmallocUsed:           0 kB\n"
+      "VmallocChunk:          0 kB\n"
+      "Percpu:             3328 kB\n"
+      "AnonHugePages:     32768 kB\n"
+      "ShmemHugePages:        0 kB\n"
+      "ShmemPmdMapped:        0 kB\n"
+      "DirectMap4k:      293036 kB\n"
+      "DirectMap2M:     6918144 kB\n"
+      "DirectMap1G:     2097152 kB\n";
+
+  meminfo = {};
+  EXPECT_TRUE(ParseProcMeminfo(large_cache_input, &meminfo));
+  EXPECT_EQ(meminfo.total, 18025572);
+  EXPECT_EQ(meminfo.free, 13150176);
+  EXPECT_EQ(meminfo.buffers, 1524852);
+  EXPECT_EQ(meminfo.cached, 12645260);
+  EXPECT_EQ(GetSystemCommitChargeFromMeminfo(meminfo), 0u);
 }
 
 TEST_F(SystemMetricsTest, ParseVmstat) {
@@ -583,10 +634,7 @@ TEST_F(SystemMetricsTest, TestNoNegativeCpuUsage) {
   std::unique_ptr<ProcessMetrics> metrics =
       ProcessMetrics::CreateCurrentProcessMetrics();
 
-  EXPECT_GE(metrics->GetPlatformIndependentCPUUsage(), 0.0);
-#if BUILDFLAG(IS_WIN)
-  EXPECT_GE(metrics->GetPreciseCPUUsage(), 0.0);
-#endif
+  EXPECT_THAT(metrics->GetPlatformIndependentCPUUsage(), Optional(Ge(0.0)));
 
   Thread thread1("thread1");
   Thread thread2("thread2");
@@ -609,23 +657,15 @@ TEST_F(SystemMetricsTest, TestNoNegativeCpuUsage) {
   thread3.task_runner()->PostTask(FROM_HERE, BindOnce(&BusyWork, &vec3));
 
   TimeDelta prev_cpu_usage = TestCumulativeCPU(metrics.get(), TimeDelta());
-  TimeDelta prev_precise_cpu_usage =
-      TestPreciseCumulativeCPU(metrics.get(), TimeDelta());
 
   thread1.Stop();
   prev_cpu_usage = TestCumulativeCPU(metrics.get(), prev_cpu_usage);
-  prev_precise_cpu_usage =
-      TestPreciseCumulativeCPU(metrics.get(), prev_precise_cpu_usage);
 
   thread2.Stop();
   prev_cpu_usage = TestCumulativeCPU(metrics.get(), prev_cpu_usage);
-  prev_precise_cpu_usage =
-      TestPreciseCumulativeCPU(metrics.get(), prev_precise_cpu_usage);
 
   thread3.Stop();
   prev_cpu_usage = TestCumulativeCPU(metrics.get(), prev_cpu_usage);
-  prev_precise_cpu_usage =
-      TestPreciseCumulativeCPU(metrics.get(), prev_precise_cpu_usage);
 }
 
 #if !BUILDFLAG(IS_APPLE) || BUILDFLAG(USE_BLINK)
@@ -657,38 +697,15 @@ TEST_F(SystemMetricsTest, MeasureChildCpuUsage) {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_FUCHSIA)
   // Windows and Fuchsia return final measurements of a process after it exits.
   TestCumulativeCPU(metrics.get(), cpu_usage2);
-#elif BUILDFLAG(IS_APPLE)
-  // Mac and iOS return 0 on error. GetPlatformIndependentCPUUsage subtracts
-  // from this to get a negative.
-  EXPECT_EQ(metrics->GetCumulativeCPUUsage(), TimeDelta());
-  EXPECT_LT(metrics->GetPlatformIndependentCPUUsage(), 0.0);
 #else
-  // All other platforms return a negative time value to indicate an error.
-  EXPECT_LT(metrics->GetCumulativeCPUUsage(), TimeDelta());
-  EXPECT_LT(metrics->GetPlatformIndependentCPUUsage(), 0.0);
+  // All other platforms return an error.
+  EXPECT_EQ(metrics->GetCumulativeCPUUsage(), std::nullopt);
+  EXPECT_EQ(metrics->GetPlatformIndependentCPUUsage(), std::nullopt);
 #endif
 }
 
 #endif  // !BUILDFLAG(IS_APPLE) || BUILDFLAG(USE_BLINK)
 
-#if BUILDFLAG(IS_FUCHSIA)
-
-// Fuchsia CHECK's when measuring an invalid procses.
-using SystemMetricsDeathTest = SystemMetricsTest;
-TEST_F(SystemMetricsDeathTest, InvalidProcessCpuUsage) {
-  std::unique_ptr<ProcessMetrics> metrics =
-      ProcessMetrics::CreateProcessMetrics(kNullProcessHandle);
-  EXPECT_CHECK_DEATH(
-      { [[maybe_unused]] TimeDelta usage = metrics->GetCumulativeCPUUsage(); });
-  EXPECT_CHECK_DEATH({
-    [[maybe_unused]] double usage = metrics->GetPlatformIndependentCPUUsage();
-  });
-}
-
-#else  // !BUILDFLAG(IS_FUCHSIA)
-
-// Windows, Mac and iOS also return 0 on error. All other platforms return a
-// negative value to indicate an error.
 TEST_F(SystemMetricsTest, InvalidProcessCpuUsage) {
 #if BUILDFLAG(IS_MAC)
   std::unique_ptr<ProcessMetrics> metrics =
@@ -697,20 +714,9 @@ TEST_F(SystemMetricsTest, InvalidProcessCpuUsage) {
   std::unique_ptr<ProcessMetrics> metrics =
       ProcessMetrics::CreateProcessMetrics(kNullProcessHandle);
 #endif
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE)
-  EXPECT_EQ(metrics->GetCumulativeCPUUsage(), TimeDelta());
-#else
-  EXPECT_LT(metrics->GetCumulativeCPUUsage(), TimeDelta());
-#endif
-
-  // The first call always caches the result of GetCumulativeCPUUsage() and
-  // returns 0, even if it's an error value. The second call returns the delta
-  // with the cached result, which is 0 when the second GetCumulativeCPUUsage()
-  // call returns the same error value.
-  EXPECT_EQ(metrics->GetPlatformIndependentCPUUsage(), 0.0);
-  EXPECT_EQ(metrics->GetPlatformIndependentCPUUsage(), 0.0);
+  EXPECT_EQ(metrics->GetCumulativeCPUUsage(), std::nullopt);
+  EXPECT_EQ(metrics->GetPlatformIndependentCPUUsage(), std::nullopt);
 }
-#endif  // !BUILDFLAG(IS_FUCHSIA)
 
 #endif  // ENABLE_CPU_TESTS
 

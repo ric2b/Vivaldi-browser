@@ -129,7 +129,6 @@
 #include "chrome/browser/accessibility/live_caption/live_caption_controller_factory.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/profiles/nuke_profile_directory_utils.h"
-#include "chrome/browser/search/background/wallpaper_search/wallpaper_search_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -400,7 +399,7 @@ std::optional<bool> IsUserChild(Profile* profile) {
   const user_manager::User* user =
       ash::ProfileHelper::Get()->GetUserByProfile(profile);
   return user ? std::make_optional(user->GetType() ==
-                                   user_manager::USER_TYPE_CHILD)
+                                   user_manager::UserType::kChild)
               : std::nullopt;
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
   return chromeos::BrowserParamsProxy::Get()->SessionType() ==
@@ -418,15 +417,14 @@ void RunCallbacks(std::vector<base::OnceCallback<void(Profile*)>>& callbacks,
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
 void ClearPrimaryAccountForProfile(
     base::WeakPtr<Profile> weak_profile,
-    signin_metrics::ProfileSignout signout_source_metric,
-    signin_metrics::SignoutDelete signout_delete_metric) {
+    signin_metrics::ProfileSignout signout_source_metric) {
   Profile* profile = weak_profile.get();
   if (!profile)
     return;
 
   IdentityManagerFactory::GetForProfile(profile)
       ->GetPrimaryAccountMutator()
-      ->ClearPrimaryAccount(signout_source_metric, signout_delete_metric);
+      ->ClearPrimaryAccount(signout_source_metric);
 }
 #endif
 
@@ -983,13 +981,6 @@ void ProfileManager::CreateMultiProfileAsync(
   init_params.is_omitted = is_hidden;
   storage.AddProfile(std::move(init_params));
 
-  if (!base::FeatureList::IsEnabled(
-          features::kNukeProfileBeforeCreateMultiAsync)) {
-    profile_manager->CreateProfileAsync(
-        new_path, std::move(initialized_callback), std::move(created_callback));
-    return;
-  }
-
   // As another check, make sure the generated path is not present in the file
   // system (there could be orphan profile dirs).
   // TODO(crbug.com/1277948): There can be a theoretical race condition with a
@@ -1236,12 +1227,8 @@ void ProfileManager::InitProfileUserPrefs(Profile* profile) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   bool force_supervised_user_id =
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-      g_browser_process->platform_part()
-              ->profile_helper()
-              ->GetSigninProfileDir() != profile->GetPath() &&
-      g_browser_process->platform_part()
-              ->profile_helper()
-              ->GetLockScreenAppProfilePath() != profile->GetPath() &&
+      !ash::IsSigninBrowserContext(profile) &&
+      !ash::IsLockScreenAppBrowserContext(profile) &&
 #endif
       command_line->HasSwitch(switches::kSupervisedUserId);
 
@@ -1571,14 +1558,6 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
 
   // Ensure NavigationPredictorKeyedService is started.
   NavigationPredictorKeyedServiceFactory::GetForProfile(profile);
-
-#if !BUILDFLAG(IS_ANDROID)
-  // Ensure WallpaperSearchServiceFactory is started.
-  if (base::FeatureList::IsEnabled(optimization_guide::features::internal::
-                                       kWallpaperSearchSettingsVisibility)) {
-    WallpaperSearchServiceFactory::GetForProfile(profile);
-  }
-#endif  // !BUILDFLAG(IS_ANDROID)
 
   // Ensure PreloadingModelKeyedService is started.
   PreloadingModelKeyedServiceFactory::GetForProfile(profile);
@@ -2033,8 +2012,7 @@ void ProfileManager::AddProfileToStorage(Profile* profile) {
             base::BindOnce(&ClearPrimaryAccountForProfile,
                            profile->GetWeakPtr(),
                            signin_metrics::ProfileSignout::
-                               kAuthenticationFailedWithForceSignin,
-                           signin_metrics::SignoutDelete::kIgnoreMetric));
+                               kAuthenticationFailedWithForceSignin));
       }
 #endif
       return;

@@ -44,6 +44,7 @@ dependencies {
     implementation("com.google.code.findbugs:jsr305:3.0.2")
     implementation(kotlin("stdlib"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.9.2")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.9.2")
 }
 
 kotlin {
@@ -51,10 +52,10 @@ kotlin {
 }
 
 tasks.jmh {
-    jvmArgs.value(mutableListOf("-Djava.library.path=../../../../target/release"))
+    jvmArgs.value(mutableListOf("-Djava.library.path=$projectDir/../../../../target/release"))
 }
 
 tasks.test {
     useJUnitPlatform()
-    jvmArgs = mutableListOf("-Djava.library.path=../../../../target/debug")
+    jvmArgs = mutableListOf("-Djava.library.path=$projectDir/../../../../target/debug")
 }

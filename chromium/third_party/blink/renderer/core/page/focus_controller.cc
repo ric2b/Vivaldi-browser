@@ -68,6 +68,7 @@
 #include "third_party/blink/renderer/core/page/frame_tree.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/spatial_navigation.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 #include "app/vivaldi_apptools.h"
 
@@ -1375,6 +1376,7 @@ Element* FocusController::NextFocusableElementForImeAndAutofill(
 // https://html.spec.whatwg.org/C/#get-the-focusable-area
 Element* FocusController::FindFocusableElementInShadowHost(
     const Element& shadow_host) {
+  CHECK(!RuntimeEnabledFeatures::NewGetFocusableAreaBehaviorEnabled());
   // We have no behavior difference by focus trigger. Skip step 2.1.
 
   // 2.2. Otherwise, let possible focus delegates be the list of all

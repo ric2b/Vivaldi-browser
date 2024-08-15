@@ -60,9 +60,9 @@ constexpr int kClassify8GbDeviceInKb = 7500000;
 constexpr int kClassify16GbDeviceInKb = 15500000;
 
 std::string GenerateRandomToken() {
-  char random_bytes[16];
-  base::RandBytes(random_bytes, 16);
-  return base::HexEncode(random_bytes, 16);
+  uint8_t random_bytes[16];
+  base::RandBytes(random_bytes);
+  return base::HexEncode(random_bytes);
 }
 
 // Waits until |raw_socket_fd| is readable.
@@ -154,16 +154,6 @@ void ApplyDisableDownloadProvider(StartParams* params) {
   params->disable_download_provider =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           ash::switches::kArcDisableDownloadProvider);
-}
-
-void ApplyDisableUreadahed(StartParams* params) {
-  // Host ureadahead generation implies disabling ureadahead.
-  params->disable_ureadahead =
-      IsUreadaheadDisabled() || IsHostUreadaheadGeneration();
-}
-
-void ApplyHostUreadahedGeneration(StartParams* params) {
-  params->host_ureadahead_generation = IsHostUreadaheadGeneration();
 }
 
 void ApplyUseDevCaches(StartParams* params) {
@@ -515,8 +505,6 @@ void ArcSessionImpl::DoStartMiniInstance(size_t num_cores_disabled) {
 
   ApplyDalvikMemoryProfile(system_memory_info_callback_, &params);
   ApplyDisableDownloadProvider(&params);
-  ApplyDisableUreadahed(&params);
-  ApplyHostUreadahedGeneration(&params);
   ApplyUseDevCaches(&params);
   ApplyHostUreadaheadMode(&params);
 

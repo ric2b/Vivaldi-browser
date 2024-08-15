@@ -510,10 +510,11 @@ g.test('function_parameter_matching')
   .params(u =>
     u
       .combine('decl', keysOf(kFunctionParamTypeCases))
-      .combine('arg', keysOf(kFunctionParamValueCases))
       .filter(u => {
         return kFunctionParamTypeCases[u.decl].valid !== false;
       })
+      .beginSubcases()
+      .combine('arg', keysOf(kFunctionParamValueCases))
   )
   .beforeAllSubcases(t => {
     if (kFunctionParamTypeCases[t.params.decl].name === 'f16') {
@@ -738,67 +739,75 @@ function checkArgTypeMatch(param_type: string, arg_matches: string[]): boolean {
   return false;
 }
 
-g.test('call_arg_types_match_params')
+g.test('call_arg_types_match_1_param')
   .specURL('https://gpuweb.github.io/gpuweb/wgsl/#function-calls')
   .desc(`Test that the argument types match in order`)
   .params(u =>
     u
-      .combine('num_args', [1, 2, 3] as const)
+      .combine('p1_type', kParamsTypes) //
+      .beginSubcases()
+      .combine('arg1_value', keysOf(kArgValues))
+  )
+  .fn(t => {
+    const code = `
+fn bar(p1 : ${t.params.p1_type}) { }
+fn foo() {
+  bar(${kArgValues[t.params.arg1_value].value});
+}`;
+
+    const res = checkArgTypeMatch(t.params.p1_type, kArgValues[t.params.arg1_value].matches);
+    t.expectCompileResult(res, code);
+  });
+
+g.test('call_arg_types_match_2_params')
+  .specURL('https://gpuweb.github.io/gpuweb/wgsl/#function-calls')
+  .desc(`Test that the argument types match in order`)
+  .params(u =>
+    u
+      .combine('p1_type', kParamsTypes)
+      .combine('p2_type', kParamsTypes)
+      .beginSubcases()
+      .combine('arg1_value', keysOf(kArgValues))
+      .combine('arg2_value', keysOf(kArgValues))
+  )
+  .fn(t => {
+    const code = `
+fn bar(p1 : ${t.params.p1_type}, p2 : ${t.params.p2_type}) { }
+fn foo() {
+  bar(${kArgValues[t.params.arg1_value].value}, ${kArgValues[t.params.arg2_value].value});
+}`;
+
+    const res =
+      checkArgTypeMatch(t.params.p1_type, kArgValues[t.params.arg1_value].matches) &&
+      checkArgTypeMatch(t.params.p2_type, kArgValues[t.params.arg2_value].matches);
+    t.expectCompileResult(res, code);
+  });
+
+g.test('call_arg_types_match_3_params')
+  .specURL('https://gpuweb.github.io/gpuweb/wgsl/#function-calls')
+  .desc(`Test that the argument types match in order`)
+  .params(u =>
+    u
       .combine('p1_type', kParamsTypes)
       .combine('p2_type', kParamsTypes)
       .combine('p3_type', kParamsTypes)
+      .beginSubcases()
       .combine('arg1_value', keysOf(kArgValues))
       .combine('arg2_value', keysOf(kArgValues))
       .combine('arg3_value', keysOf(kArgValues))
   )
   .fn(t => {
-    let code = `
-    fn bar(`;
-    for (let i = 0; i < t.params.num_args; i++) {
-      switch (i) {
-        case 0:
-        default: {
-          code += `p${i} : ${t.params.p1_type},`;
-          break;
-        }
-        case 1: {
-          code += `p${i} : ${t.params.p2_type},`;
-          break;
-        }
-        case 2: {
-          code += `p${i} : ${t.params.p3_type},`;
-          break;
-        }
-      }
-    }
-    code += `) { }
-    fn foo() {
-      bar(`;
-    for (let i = 0; i < t.params.num_args; i++) {
-      switch (i) {
-        case 0:
-        default: {
-          code += `${kArgValues[t.params.arg1_value].value},`;
-          break;
-        }
-        case 1: {
-          code += `${kArgValues[t.params.arg2_value].value},`;
-          break;
-        }
-        case 2: {
-          code += `${kArgValues[t.params.arg3_value].value},`;
-          break;
-        }
-      }
-    }
-    code += `);\n}`;
+    const code = `
+fn bar(p1 : ${t.params.p1_type}, p2 : ${t.params.p2_type}, p3 : ${t.params.p3_type}) { }
+fn foo() {
+  bar(${kArgValues[t.params.arg1_value].value},
+      ${kArgValues[t.params.arg2_value].value},
+      ${kArgValues[t.params.arg3_value].value});
+}`;
 
-    let res = checkArgTypeMatch(t.params.p1_type, kArgValues[t.params.arg1_value].matches);
-    if (res && t.params.num_args > 1) {
-      res = checkArgTypeMatch(t.params.p2_type, kArgValues[t.params.arg2_value].matches);
-    }
-    if (res && t.params.num_args > 2) {
-      res = checkArgTypeMatch(t.params.p3_type, kArgValues[t.params.arg3_value].matches);
-    }
+    const res =
+      checkArgTypeMatch(t.params.p1_type, kArgValues[t.params.arg1_value].matches) &&
+      checkArgTypeMatch(t.params.p2_type, kArgValues[t.params.arg2_value].matches) &&
+      checkArgTypeMatch(t.params.p3_type, kArgValues[t.params.arg3_value].matches);
     t.expectCompileResult(res, code);
   });

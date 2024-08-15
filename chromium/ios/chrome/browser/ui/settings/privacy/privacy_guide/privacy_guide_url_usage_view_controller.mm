@@ -14,16 +14,15 @@
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_image_detail_text_cell.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_constants.h"
-#import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_url_usage_view_controller_presentation_delegate.h"
-#import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_url_usage_view_controller_delegate.h"
+#import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_utils.h"
+#import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_view_controller_presentation_delegate.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
 namespace {
 
 NSString* const kURLUsageBannerName = @"url_usage_illustration";
-const CGFloat kSwitchCellCornerRadius = 12;
-const CGFloat kSymbolSize = 20;
 
 enum SectionIdentifier {
   kSectionIdentifierSwitch,
@@ -47,6 +46,7 @@ enum ItemIdentifier {
 @implementation PrivacyGuideURLUsageViewController {
   SelfSizingTableView* _tableView;
   UITableViewDiffableDataSource<NSNumber*, NSNumber*>* _dataSource;
+  BOOL _URLUsageEnabled;
 }
 
 #pragma mark - UIViewController
@@ -70,8 +70,7 @@ enum ItemIdentifier {
 
 - (void)didMoveToParentViewController:(UIViewController*)parent {
   if (!parent) {
-    [self.presentationDelegate
-        privacyGuideURLUsageViewControllerDidRemove:self];
+    [self.presentationDelegate privacyGuideViewControllerDidRemove:self];
   }
 }
 
@@ -91,24 +90,25 @@ enum ItemIdentifier {
     case kSectionIdentifierSwitch:
       return nil;
     case kSectionIdentifierWhenOn: {
-      TableViewTextHeaderFooterView* header =
-          DequeueTableViewHeaderFooter<TableViewTextHeaderFooterView>(
-              tableView);
-      header.textLabel.text =
-          l10n_util::GetNSString(IDS_IOS_PRIVACY_GUIDE_WHEN_ON_HEADER);
-      [header setSubtitle:nil];
-      return header;
+      return PrivacyGuideHeaderView(_tableView,
+                                    IDS_IOS_PRIVACY_GUIDE_WHEN_ON_HEADER);
     }
     case kSectionIdentifierThingsToConsider: {
-      TableViewTextHeaderFooterView* header =
-          DequeueTableViewHeaderFooter<TableViewTextHeaderFooterView>(
-              tableView);
-      header.textLabel.text = l10n_util::GetNSString(
-          IDS_IOS_PRIVACY_GUIDE_THINGS_TO_CONSIDER_HEADER);
-      [header setSubtitle:nil];
-      return header;
+      return PrivacyGuideHeaderView(
+          _tableView, IDS_IOS_PRIVACY_GUIDE_THINGS_TO_CONSIDER_HEADER);
     }
   }
+}
+
+#pragma mark - PrivacyGuideURLUsageConsumer
+
+- (void)setURLUsageEnabled:(BOOL)enabled {
+  _URLUsageEnabled = enabled;
+
+  NSDiffableDataSourceSnapshot<NSNumber*, NSNumber*>* snapshot =
+      [_dataSource snapshot];
+  [snapshot reconfigureItemsWithIdentifiers:@[ @(kItemIdentifierSwitch) ]];
+  [_dataSource applySnapshot:snapshot animatingDifferences:YES];
 }
 
 #pragma mark - Private
@@ -116,17 +116,8 @@ enum ItemIdentifier {
 // Initializes a SelfSizingTableView, adds it to the view hierarchy and
 // specifies its constraints.
 - (void)setupTableView {
-  _tableView =
-      [[SelfSizingTableView alloc] initWithFrame:CGRectZero
-                                           style:ChromeTableViewStyle()];
+  _tableView = PrivacyGuideTableView();
   _tableView.delegate = self;
-  _tableView.translatesAutoresizingMaskIntoConstraints = NO;
-  _tableView.alwaysBounceVertical = NO;
-  _tableView.backgroundColor = [UIColor clearColor];
-  _tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
-  _tableView.separatorInset = UIEdgeInsetsZero;
-  [_tableView setLayoutMargins:UIEdgeInsetsZero];
-  _tableView.sectionHeaderTopPadding = 0;
 
   [self.specificContentView addSubview:_tableView];
   [NSLayoutConstraint activateConstraints:@[
@@ -187,62 +178,41 @@ enum ItemIdentifier {
                       itemIdentifier:(ItemIdentifier)itemIdentifier {
   switch (itemIdentifier) {
     case kItemIdentifierSwitch: {
-      TableViewSwitchCell* cell =
-          DequeueTableViewCell<TableViewSwitchCell>(tableView);
-      NSString* title = l10n_util::GetNSString(
-          IDS_IOS_GOOGLE_SERVICES_SETTINGS_BETTER_SEARCH_AND_BROWSING_TEXT);
-      // TODO(crbug.com/1509830): Initial state of the switch should be queried
-      // from the mediator.
-      [cell configureCellWithTitle:title subtitle:nil switchEnabled:YES on:YES];
-      [cell setUseCustomSeparator:NO];
-      cell.textLabel.font =
-          [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
-      cell.textLabel.numberOfLines = 0;
-      cell.textLabel.adjustsFontForContentSizeCategory = YES;
-      cell.backgroundColor = [UIColor colorNamed:kSecondaryBackgroundColor];
-      cell.layer.cornerRadius = kSwitchCellCornerRadius;
-      cell.accessibilityIdentifier = kPrivacyGuideURLUsageSwitchID;
+      TableViewSwitchCell* cell = PrivacyGuideSwitchCell(
+          _tableView,
+          IDS_IOS_GOOGLE_SERVICES_SETTINGS_BETTER_SEARCH_AND_BROWSING_TEXT, YES,
+          _URLUsageEnabled, kPrivacyGuideURLUsageSwitchID);
+      [cell.switchView addTarget:self
+                          action:@selector(URLUsageSwitchChanged:)
+                forControlEvents:UIControlEventValueChanged];
       return cell;
     }
     case kItemIdentifierBrowseFaster: {
-      return [self privacyGuideExplanationCell:
-                       IDS_IOS_PRIVACY_GUIDE_URL_USAGE_BROWSER_FASTER
-                                    symbolName:kBoltSymbol];
+      return PrivacyGuideExplanationCell(
+          _tableView, IDS_IOS_PRIVACY_GUIDE_URL_USAGE_BROWSER_FASTER,
+          kBoltSymbol);
     }
     case kItemIdentifierImprovedSuggestions: {
-      return [self privacyGuideExplanationCell:
-                       IDS_IOS_PRIVACY_GUIDE_URL_USAGE_IMPROVED_SUGGESTIONS
-                                    symbolName:kLightBulbSymbol];
+      return PrivacyGuideExplanationCell(
+          _tableView, IDS_IOS_PRIVACY_GUIDE_URL_USAGE_IMPROVED_SUGGESTIONS,
+          kLightBulbSymbol);
     }
     case kItemIdentifierPredictSites: {
-      return [self privacyGuideExplanationCell:
-                       IDS_IOS_PRIVACY_GUIDE_URL_USAGE_PREDICT_SITES
-                                    symbolName:kLinkActionSymbol];
+      return PrivacyGuideExplanationCell(
+          _tableView, IDS_IOS_PRIVACY_GUIDE_URL_USAGE_PREDICT_SITES,
+          kLinkActionSymbol);
     }
     case kItemIdentifierUsageReport: {
-      return [self privacyGuideExplanationCell:
-                       IDS_IOS_PRIVACY_GUIDE_URL_USAGE_USAGE_REPORT
-                                    symbolName:kShareSymbol];
+      return PrivacyGuideExplanationCell(
+          _tableView, IDS_IOS_PRIVACY_GUIDE_URL_USAGE_USAGE_REPORT,
+          kShareSymbol);
     }
   }
 }
 
-// Formats a Privacy Guide explanation cell and sets the corresponding text and
-// symbol.
-- (SettingsImageDetailTextCell*)privacyGuideExplanationCell:(int)textID
-                                                 symbolName:
-                                                     (NSString*)symbolName {
-  // TODO(crbug.com/1519511): Remove the default insets in the
-  // SettingsImageDetailTextCell.
-  SettingsImageDetailTextCell* cell =
-      DequeueTableViewCell<SettingsImageDetailTextCell>(_tableView);
-  cell.image = DefaultSymbolWithPointSize(symbolName, kSymbolSize);
-  cell.detailTextLabel.text = l10n_util::GetNSString(textID);
-  cell.detailTextLabel.textColor = [UIColor colorNamed:kTextSecondaryColor];
-  [cell setImageViewTintColor:[UIColor colorNamed:kTextSecondaryColor]];
-  [cell alignImageWithFirstLineOfText:YES];
-  [cell setUseCustomSeparator:NO];
-  return cell;
+// Called when the switch is tapped.
+- (void)URLUsageSwitchChanged:(UISwitch*)sender {
+  [self.modelDelegate didEnableURLUsage:sender.isOn];
 }
 
 @end

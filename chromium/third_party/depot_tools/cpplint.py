@@ -325,21 +325,25 @@ _CPP_HEADERS = frozenset([
     'tree.h',
     'type_traits.h',
     'vector.h',
-    # 17.6.1.2 C++ library headers
+    # C++ library headers [headers]
     'algorithm',
     'any',
     'array',
     'atomic',
+    'barrier',
+    'bit',
     'bitset',
     'charconv',
     'chrono',
     'codecvt',
     'complex',
+    'concepts',
     'condition_variable',
     'deque',
-    'execution',
     'exception',
+    'execution',
     'filesystem',
+    'format',
     'forward_list',
     'fstream',
     'functional',
@@ -351,6 +355,7 @@ _CPP_HEADERS = frozenset([
     'iostream',
     'istream',
     'iterator',
+    'latch',
     'limits',
     'list',
     'locale',
@@ -359,22 +364,30 @@ _CPP_HEADERS = frozenset([
     'memory_resource',
     'mutex',
     'new',
+    'numbers',
     'numeric',
     'optional',
     'ostream',
     'queue',
     'random',
+    'ranges',
     'ratio',
     'regex',
     'scoped_allocator',
+    'semaphore',
     'set',
+    'shared_mutex',
+    'source_location',
+    'span',
     'sstream',
     'stack',
     'stdexcept',
+    'stop_token',
     'streambuf',
     'string',
     'string_view',
     'strstream',
+    'syncstream',
     'system_error',
     'thread',
     'tuple',
@@ -387,7 +400,8 @@ _CPP_HEADERS = frozenset([
     'valarray',
     'variant',
     'vector',
-    # 17.6.1.2 C++ headers for C library facilities
+    'version',
+    # C++ headers for C library facilities [headers]
     'cassert',
     'ccomplex',
     'cctype',
@@ -418,9 +432,9 @@ _CPP_HEADERS = frozenset([
 
 # List of functions from <type_traits>.  See [meta.type.synop]
 _TYPE_TRAITS = [
-    # 23.15.3, helper class
+    # Helper class [meta.help]
     'integral_constant',
-    # 23.15.4.1, primary type categories
+    # Primary type categories [meta.unary.cat]
     'is_void',
     'is_null_pointer',
     'is_integral',
@@ -435,7 +449,7 @@ _TYPE_TRAITS = [
     'is_union',
     'is_class',
     'is_function',
-    # 23.15.4.2, composite type categories
+    # Composite type categories [meta.unary.comp]
     'is_reference',
     'is_arithmetic',
     'is_fundamental',
@@ -443,7 +457,7 @@ _TYPE_TRAITS = [
     'is_scalar',
     'is_compound',
     'is_member_pointer',
-    # 23.15.4.3, type properties
+    # Type properties [meta.unary.prop]
     'is_const',
     'is_volatile',
     'is_trivial',
@@ -457,6 +471,8 @@ _TYPE_TRAITS = [
     'is_aggregate',
     'is_signed',
     'is_unsigned',
+    'is_bounded_array',
+    'is_unbounded_array',
     'is_constructible',
     'is_default_constructible',
     'is_copy_constructible',
@@ -487,19 +503,22 @@ _TYPE_TRAITS = [
     'is_nothrow_destructible',
     'has_virtual_destructor',
     'has_unique_object_representations',
-    # 23.15.5, type property queries
+    # Type property queries [meta.unary.prop.query]
     'alignment_of',
     'rank',
     'extent',
-    # 23.15.6, type relations
+    # Relationship between types [meta.rel]
     'is_same',
     'is_base_of',
     'is_convertible',
+    'is_nothrow_convertible',
+    'is_layout_compatible',
+    'is_pointer_interconvertible_base_of',
     'is_invocable',
     'is_invocable_r',
     'is_nothrow_invocable',
     'is_nothrow_invocable_r',
-    # 23.15.7.1, const-volatile modifications
+    # Const-volatile modifications [meta.trans.cv]
     'remove_const',
     'remove_volatile',
     'remove_cv',
@@ -512,51 +531,62 @@ _TYPE_TRAITS = [
     'add_const_t',
     'add_volatile_t',
     'add_cv_t',
-    # 23.15.7.2, reference modifications
+    # Reference modifications [meta.trans.ref]
     'remove_reference',
     'add_lvalue_reference',
     'add_rvalue_reference',
     'remove_reference_t',
     'add_lvalue_reference_t',
     'add_rvalue_reference_t',
-    # 23.15.7.3, sign modifications
+    # Sign modifications [meta.trans.sign]
     'make_signed',
     'make_unsigned',
     'make_signed_t',
     'make_unsigned_t',
-    # 23.15.7.4, array modifications
+    # Array modifications [meta.trans.arr]
     'remove_extent',
     'remove_all_extents',
     'remove_extent_t',
     'remove_all_extents_t',
-    # 23.15.7.5, pointer modifications
+    # Pointer modifications [meta.trans.ptr]
     'remove_pointer',
     'add_pointer',
     'remove_pointer_t',
     'add_pointer_t',
-    # 23.15.7.6, other transformations
+    # Other transformations [meta.trans.other]
+    'type_identity',
     'aligned_storage',
     'aligned_union',
+    'remove_cvref',
     'decay',
     'enable_if',
     'conditional',
     'common_type',
+    'basic_common_reference',
+    'common_reference',
     'underlying_type',
     'invoke_result',
+    'unwrap_reference',
+    'unwrap_ref_decay',
+    'type_identity_t',
     'aligned_storage_t',
     'aligned_union_t',
+    'remove_cvref_t',
     'decay_t',
     'enable_if_t',
     'conditional_t',
     'common_type_t',
+    'common_reference_t',
     'underlying_type_t',
     'invoke_result_t',
+    'unwrap_reference_t',
+    'unwrap_ref_decay_t',
     'void_t',
-    # 23.15.8, logical operator traits
+    # Logical operator traits [meta.logical]
     'conjunction',
     'disjunction',
     'negation',
-    # 23.15.4.1, primary type categories
+    # Primary type categories _v [meta.unary.cat]
     'is_void_v',
     'is_null_pointer_v',
     'is_integral_v',
@@ -571,7 +601,7 @@ _TYPE_TRAITS = [
     'is_union_v',
     'is_class_v',
     'is_function_v',
-    # 23.15.4.2, composite type categories
+    # Composite type categories _v [meta.unary.comp]
     'is_reference_v',
     'is_arithmetic_v',
     'is_fundamental_v',
@@ -579,7 +609,7 @@ _TYPE_TRAITS = [
     'is_scalar_v',
     'is_compound_v',
     'is_member_pointer_v',
-    # 23.15.4.3, type properties
+    # Type properties _v [meta.unary.prop]
     'is_const_v',
     'is_volatile_v',
     'is_trivial_v',
@@ -593,6 +623,8 @@ _TYPE_TRAITS = [
     'is_aggregate_v',
     'is_signed_v',
     'is_unsigned_v',
+    'is_bounded_array_v',
+    'is_unbounded_array_v',
     'is_constructible_v',
     'is_default_constructible_v',
     'is_copy_constructible_v',
@@ -623,21 +655,29 @@ _TYPE_TRAITS = [
     'is_nothrow_destructible_v',
     'has_virtual_destructor_v',
     'has_unique_object_representations_v',
-    # 23.15.5, type property queries
+    # Type property queries _v [meta.unary.prop.query]
     'alignment_of_v',
     'rank_v',
     'extent_v',
     'is_same_v',
     'is_base_of_v',
     'is_convertible_v',
+    'is_nothrow_convertible_v',
+    'is_layout_compatible_v',
+    'is_pointer_interconvertible_base_of_v',
     'is_invocable_v',
     'is_invocable_r_v',
     'is_nothrow_invocable_v',
     'is_nothrow_invocable_r_v',
-    # 23.15.8, logical operator traits
+    # Logical operator traits _v [meta.logical]
     'conjunction_v',
     'disjunction_v',
     'negation_v',
+    # Member relationships [meta.member]
+    'is_pointer_interconvertible_with_class',
+    'is_corresponding_member',
+    # Constant evaluation context [meta.const.eval]
+    'is_constant_evaluated',
 ]
 _TYPE_TRAITS_RE = re.compile(r'\b::(?:' + ('|'.join(_TYPE_TRAITS)) + ')<')
 
@@ -3003,7 +3043,7 @@ class NestingState(object):
 
 def CheckForNonStandardConstructs(filename, clean_lines, linenum, nesting_state,
                                   error):
-    """Logs an error if we see certain non-ANSI constructs ignored by gcc-2.
+    r"""Logs an error if we see certain non-ANSI constructs ignored by gcc-2.
 
     Complain about several constructs which gcc-2 accepts, but which are
     not standard C++.  Warning about these in lint is one way to ease the
@@ -4839,7 +4879,7 @@ def CheckIncludeLine(filename, clean_lines, linenum, include_state, error):
 
 
 def _GetTextInside(text, start_pattern):
-    """Retrieves all the text between matching open and close parentheses.
+    r"""Retrieves all the text between matching open and close parentheses.
 
     Given a string of lines and a regular expression string, retrieve all the text
     following the expression and between opening punctuation symbols like

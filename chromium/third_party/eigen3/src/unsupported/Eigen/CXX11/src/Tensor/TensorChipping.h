@@ -78,7 +78,9 @@ class TensorChippingOp : public TensorBase<TensorChippingOp<DimId, XprType> > {
   typedef typename Eigen::internal::traits<TensorChippingOp>::Index Index;
 
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE TensorChippingOp(const XprType& expr, const Index offset, const Index dim)
-      : m_xpr(expr), m_offset(offset), m_dim(dim) {}
+      : m_xpr(expr), m_offset(offset), m_dim(dim) {
+    eigen_assert(dim < XprType::NumDimensions && dim >= 0 && "Chip_Dim_out_of_range");
+  }
 
   EIGEN_DEVICE_FUNC const Index offset() const { return m_offset; }
   EIGEN_DEVICE_FUNC const Index dim() const { return m_dim.actualDim(); }

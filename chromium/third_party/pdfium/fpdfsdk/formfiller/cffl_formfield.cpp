@@ -10,11 +10,11 @@
 
 #include "constants/form_flags.h"
 #include "core/fpdfapi/page/cpdf_page.h"
+#include "core/fxcrt/check.h"
 #include "core/fxge/cfx_renderdevice.h"
 #include "fpdfsdk/cpdfsdk_pageview.h"
 #include "fpdfsdk/cpdfsdk_widget.h"
 #include "fpdfsdk/formfiller/cffl_perwindowdata.h"
-#include "third_party/base/check.h"
 
 CFFL_FormField::CFFL_FormField(CFFL_InteractiveFormFiller* pFormFiller,
                                CPDFSDK_Widget* pWidget)
@@ -317,7 +317,7 @@ CPWL_Wnd::CreateParams CFFL_FormField::GetCreateParam() {
   if (dwFieldFlag & pdfium::form_flags::kReadOnly)
     dwCreateFlags |= PWS_READONLY;
 
-  absl::optional<FX_COLORREF> color = m_pWidget->GetFillColor();
+  std::optional<FX_COLORREF> color = m_pWidget->GetFillColor();
   if (color.has_value())
     cp.sBackgroundColor = CFX_Color(color.value());
   color = m_pWidget->GetBorderColor();

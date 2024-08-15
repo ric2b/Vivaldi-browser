@@ -4,6 +4,7 @@
 
 import("../../../scripts/build/ninja/devtools_entrypoint.gni")
 import("../../../scripts/build/ninja/devtools_module.gni")
+import("../../../third_party/typescript/typescript.gni")
 import("../visibility.gni")
 
 devtools_module("formatter") {
@@ -33,8 +34,6 @@ devtools_entrypoint("bundle") {
 
   visibility = [
     ":*",
-    "../../../test/unittests/front_end/models/formatter/*",
-    "../../../test/unittests/front_end/models/source_map_scopes/*",
     "../../entrypoints/formatter_worker/*",
     "../../models/breakpoints/*",
     "../../models/source_map_scopes/*",
@@ -48,4 +47,19 @@ devtools_entrypoint("bundle") {
   ]
 
   visibility += devtools_models_visibility
+}
+
+ts_library("unittests") {
+  testonly = true
+
+  sources = [ "ScriptFormatter.test.ts" ]
+
+  deps = [
+    ":bundle",
+    "../../core/common:bundle",
+    "../../core/sdk:bundle",
+    "../../models/bindings:bundle",
+    "../../models/workspace:bundle",
+    "../../testing",
+  ]
 }

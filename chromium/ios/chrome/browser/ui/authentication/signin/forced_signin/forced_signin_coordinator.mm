@@ -123,6 +123,7 @@
     case kDefaultBrowserPromo:
     case kChoice:
     case kOmniboxPosition:
+    case kDockingPromo:
     case kStepsCompleted:
       NOTREACHED() << "Type of screen not supported." << static_cast<int>(type);
       break;
@@ -150,10 +151,6 @@
   [self.childCoordinator stop];
   self.childCoordinator = nil;
   [self presentScreen:[self.screenProvider nextScreenType]];
-}
-
-- (void)skipAllScreens {
-  [self finishPresentingScreens];
 }
 
 #pragma mark - SigninCoordinator

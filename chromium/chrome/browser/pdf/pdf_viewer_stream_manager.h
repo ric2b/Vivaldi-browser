@@ -38,8 +38,8 @@ namespace pdf {
 // PDF navigation events in a `content::WebContents`. It handles multiple PDF
 // viewer instances in a single `content::WebContents`. It is responsible for:
 // 1. Storing the `extensions::StreamContainer` PDF data.
-// 2. Observing for the PDF embedder RFH either navigating or closing (including
-//    by crashing). This is necessary to ensure that streams that aren't claimed
+// 2. Observing for the PDF frames either navigating or closing (including by
+//    crashing). This is necessary to ensure that streams that aren't claimed
 //    are not leaked, by deleting the stream if any of those events occur.
 // 3. Observing for the RFH created by the PDF embedder RFH to load the PDF
 //    extension URL.
@@ -51,11 +51,27 @@ namespace pdf {
 // `extensions::StreamContainer` objects are stored from
 // `PluginResponseInterceptorURLLoaderThrottle::WillProcessResponse()` until
 // the PDF viewer is no longer in use.
+//
+// Use `PdfViewerStreamManager::Create()` to create an instance.
 // Use `PdfViewerStreamManager::FromWebContents()` to get an instance.
 class PdfViewerStreamManager
     : public content::WebContentsObserver,
       public content::WebContentsUserData<PdfViewerStreamManager> {
  public:
+  // A factory interface used to generate test PDF stream managers.
+  class Factory {
+   public:
+    // If PdfViewerStreamManager has a factory set, then
+    // `PdfViewerStreamManager::Create()` will automatically use
+    // `CreatePdfViewerStreamManager()` to create the PDF stream manager if
+    // necessary for PDF navigations.
+    virtual void CreatePdfViewerStreamManager(
+        content::WebContents* contents) = 0;
+
+   protected:
+    virtual ~Factory() = default;
+  };
+
   // Information about the PDF embedder RFH needed to store and retrieve stream
   // containers.
   struct EmbedderHostInfo {
@@ -72,6 +88,13 @@ class PdfViewerStreamManager
     content::GlobalRenderFrameHostId global_id;
   };
 
+  // Creates a `PdfViewerStreamManager` for `contents`, if one doesn't already
+  // exist.
+  static void Create(content::WebContents* contents);
+
+  // Use `Create()` to create an instance instead.
+  static void CreateForWebContents(content::WebContents*) = delete;
+
   PdfViewerStreamManager(const PdfViewerStreamManager&) = delete;
   PdfViewerStreamManager& operator=(const PdfViewerStreamManager&) = delete;
   ~PdfViewerStreamManager() override;
@@ -80,6 +103,10 @@ class PdfViewerStreamManager
   // the `content::WebContents` of `render_frame_host`.
   static PdfViewerStreamManager* FromRenderFrameHost(
       content::RenderFrameHost* render_frame_host);
+
+  // Overrides factory for testing. Default (nullptr) value indicates regular
+  // (non-test) environment.
+  static void SetFactoryForTesting(Factory* factory);
 
   // Starts tracking a `StreamContainer` in an embedder FrameTreeNode, before
   // the embedder host commits. The `StreamContainer` is considered unclaimed
@@ -98,6 +125,22 @@ class PdfViewerStreamManager
   base::WeakPtr<extensions::StreamContainer> GetStreamContainer(
       content::RenderFrameHost* embedder_host);
 
+  // Returns true if `render_frame_host` is an extension host for a PDF. During
+  // a PDF load, the initial RFH for the extension frame commits to the
+  // about:blank URL. Another RFH will then be chosen to host the extension.
+  // This returns true for both hosts. Depending on what navigation step the
+  // frame is on, callers can also check the last committed origin to
+  // differentiate between the hosts.
+  bool IsPdfExtensionHost(content::RenderFrameHost* render_frame_host);
+
+  // Returns true if `render_frame_host` is a content host for a PDF. During a
+  // PDF load, the initial RFH for the content frame attempts to navigate to the
+  // stream URL. Another RFH will then be chosen to host the content frame. This
+  // returns true for both hosts. Depending on what navigation step the frame is
+  // on, callers can also check the last committed URL to differentiate between
+  // the hosts.
+  bool IsPdfContentHost(content::RenderFrameHost* render_frame_host);
+
   // Returns whether the PDF plugin should handle save events.
   bool PluginCanSave(content::RenderFrameHost* embedder_host);
 
@@ -105,11 +148,17 @@ class PdfViewerStreamManager
   void SetPluginCanSave(content::RenderFrameHost* embedder_host,
                         bool plugin_can_save);
 
+  // Deletes the unclaimed stream info associated with `frame_tree_node_id`, and
+  // deletes `this` if there are no remaining stream infos.
+  void DeleteUnclaimedStreamInfo(int frame_tree_node_id);
+
   // WebContentsObserver overrides.
   void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
   void RenderFrameHostChanged(content::RenderFrameHost* old_host,
                               content::RenderFrameHost* new_host) override;
   void FrameDeleted(int frame_tree_node_id) override;
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void ReadyToCommitNavigation(
       content::NavigationHandle* navigation_handle) override;
   void DidFinishNavigation(
@@ -119,6 +168,20 @@ class PdfViewerStreamManager
   // node ID as `embedder_host` as claimed by `embedder_host`. Callers must
   // ensure such a stream info exists before calling this.
   void ClaimStreamInfoForTesting(content::RenderFrameHost* embedder_host);
+
+  // For testing only. Set `embedder_host`'s extension frame tree node ID as
+  // `frame_tree_node_id`. This is needed to listen for extension host deletion.
+  // Callers must ensure that `embedder_host` has a claimed stream info.
+  void SetExtensionFrameTreeNodeIdForTesting(
+      content::RenderFrameHost* embedder_host,
+      int frame_tree_node_id);
+
+  // For testing only. Set `embedder_host`'s content frame tree node ID as
+  // `frame_tree_node_id`. This is needed to listen for content host deletion.
+  // Callers must ensure that `embedder_host` has a claimed stream info.
+  void SetContentFrameTreeNodeIdForTesting(
+      content::RenderFrameHost* embedder_host,
+      int frame_tree_node_id);
 
  protected:
   // Stream container stored for a single PDF navigation.
@@ -157,6 +220,22 @@ class PdfViewerStreamManager
 
     bool DidPdfContentNavigate() const;
 
+    int extension_host_frame_tree_node_id() const {
+      return extension_host_frame_tree_node_id_;
+    }
+
+    void set_extension_host_frame_tree_node_id(int frame_tree_node_id) {
+      extension_host_frame_tree_node_id_ = frame_tree_node_id;
+    }
+
+    int content_host_frame_tree_node_id() const {
+      return content_host_frame_tree_node_id_;
+    }
+
+    void set_content_host_frame_tree_node_id(int frame_tree_node_id) {
+      content_host_frame_tree_node_id_ = frame_tree_node_id;
+    }
+
     bool plugin_can_save() const { return plugin_can_save_; }
 
     void set_plugin_can_save(bool plugin_can_save) {
@@ -181,6 +260,14 @@ class PdfViewerStreamManager
     mojo::AssociatedRemote<extensions::mojom::MimeHandlerViewContainerManager>
         container_manager_;
 
+    // The frame tree node ID of the extension host. Initialized when the
+    // initial about:blank navigation commits in the extension frame.
+    int extension_host_frame_tree_node_id_ = 0;
+
+    // The frame tree node ID of the content host. Initialized when the
+    // navigation to the stream URL starts.
+    int content_host_frame_tree_node_id_ = 0;
+
     // A unique ID for this instance. Used for postMessage support to identify
     // `extensions::MimeHandlerViewFrameContainer` objects.
     int32_t instance_id_;
@@ -189,6 +276,7 @@ class PdfViewerStreamManager
     bool plugin_can_save_ = false;
   };
 
+  // Use `Create()` to create an instance instead.
   explicit PdfViewerStreamManager(content::WebContents* contents);
 
   // Returns the stream info claimed by `embedder_host`, or nullptr if there's
@@ -216,9 +304,22 @@ class PdfViewerStreamManager
   // `ContainsUnclaimedStreamInfo()` before calling this.
   StreamInfo* ClaimStreamInfo(content::RenderFrameHost* embedder_host);
 
-  // Deletes the stream info associated with `embedder_host`, and deletes
-  // `this` if there are no remaining stream infos.
-  void DeleteStreamInfo(content::RenderFrameHost* embedder_host);
+  // Deletes the claimed stream info associated with `embedder_host`, and
+  // deletes `this` if there are no remaining stream infos.
+  void DeleteClaimedStreamInfo(content::RenderFrameHost* embedder_host);
+
+  // Intended to be called when a RenderFrameHost in the observed
+  // `content::WebContents` is replaced or deleted. If `render_frame_host` is a
+  // deleted PDF extension host, then delete the stream. Deletes `this` if there
+  // are no remaining streams. Returns true if the stream was deleted, false
+  // otherwise.
+  [[nodiscard]] bool MaybeDeleteStreamOnPdfExtensionHostChanged(
+      content::RenderFrameHost* old_host);
+
+  // Same as `MaybeDeleteStreamOnPdfExtensionHostChanged()`, but for the content
+  // host.
+  [[nodiscard]] bool MaybeDeleteStreamOnPdfContentHostChanged(
+      content::RenderFrameHost* old_host);
 
   // Intended to be called during the PDF content frame's
   // `ReadyToCommitNavigation()` event. Registers navigations occurring in a PDF
@@ -230,6 +331,11 @@ class PdfViewerStreamManager
   // Sets up postMessage communication between the embedder frame and the PDF
   // extension frame after the PDF has finished loading.
   bool MaybeSetUpPostMessage(content::NavigationHandle* navigation_handle);
+
+  // During the PDF content frame navigation, set the related PDF stream's
+  // content host frame tree node ID.
+  void SetStreamContentHostFrameTreeNodeId(
+      content::NavigationHandle* navigation_handle);
 
   // Sets up beforeunload API support for full-page PDF viewers.
   // TODO(crbug.com/1445746): Currently a no-op. Support the beforeunload API.

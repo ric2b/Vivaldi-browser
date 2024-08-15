@@ -2,45 +2,48 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-visibility = [ "./*" ]
+import("../gni/openscreen.gni")
 
-source_set("osp") {
-  visibility += [ "../*" ]
-  public_deps = [ "public" ]
-  deps = [ "impl" ]
-}
+if (!is_win && !is_mac) {
+  visibility = [ "./*" ]
+  openscreen_source_set("osp") {
+    visibility += [ "../*" ]
+    public_deps = [ "public" ]
+    deps = [ "impl" ]
+  }
 
-source_set("unittests") {
-  testonly = true
-  visibility += [ "..:openscreen_unittests_all" ]
-  public = []
-  sources = [
-    "impl/presentation/presentation_connection_unittest.cc",
-    "impl/presentation/presentation_controller_unittest.cc",
-    "impl/presentation/presentation_receiver_unittest.cc",
-    "impl/presentation/testing/mock_connection_delegate.h",
-    "impl/presentation/url_availability_requester_unittest.cc",
-    "impl/quic/quic_client_unittest.cc",
-    "impl/quic/quic_server_unittest.cc",
-    "impl/receiver_list_unittest.cc",
-    "impl/service_listener_impl_unittest.cc",
-    "impl/service_publisher_impl_unittest.cc",
-    "public/endpoint_request_ids_unittest.cc",
-    "public/message_demuxer_unittest.cc",
-    "public/service_info_unittest.cc",
-  ]
+  openscreen_source_set("unittests") {
+    testonly = true
+    visibility += [ "..:openscreen_unittests_all" ]
+    public = []
+    sources = [
+      "impl/presentation/presentation_connection_unittest.cc",
+      "impl/presentation/presentation_controller_unittest.cc",
+      "impl/presentation/presentation_receiver_unittest.cc",
+      "impl/presentation/testing/mock_connection_delegate.h",
+      "impl/presentation/url_availability_requester_unittest.cc",
+      "impl/quic/quic_client_unittest.cc",
+      "impl/quic/quic_server_unittest.cc",
+      "impl/receiver_list_unittest.cc",
+      "impl/service_listener_impl_unittest.cc",
+      "impl/service_publisher_impl_unittest.cc",
+      "public/endpoint_request_ids_unittest.cc",
+      "public/message_demuxer_unittest.cc",
+      "public/service_info_unittest.cc",
+    ]
 
-  deps = [
-    "../platform:base",
-    "../platform:test",
-    "../third_party/abseil",
-    "../third_party/googletest:gmock",
-    "../third_party/googletest:gtest",
-    "../third_party/tinycbor",
-    "../util",
-    "impl",
-    "impl/quic:test_support",
-    "public",
-    "public:test_support",
-  ]
+    deps = [
+      "../platform:base",
+      "../platform:test",
+      "../third_party/abseil",
+      "../third_party/googletest:gmock",
+      "../third_party/googletest:gtest",
+      "../third_party/tinycbor",
+      "../util",
+      "impl",
+      "impl/quic:test_support",
+      "public",
+      "public:test_support",
+    ]
+  }
 }

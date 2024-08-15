@@ -97,10 +97,11 @@ void NinjaCreateBundleTargetWriter::Run() {
   // targets to treat the entire bundle as a single unit, even though it is
   // a directory, so that it can be depended upon as a discrete build edge.
   out_ << "build ";
-  path_output_.WriteFile(
-      out_,
+
+  WriteOutput(
       OutputFile(settings_->build_settings(),
                  target_->bundle_data().GetBundleRootDirOutput(settings_)));
+
   out_ << ": phony " << target_->dependency_output_file().value();
   out_ << std::endl;
 }
@@ -162,7 +163,7 @@ void NinjaCreateBundleTargetWriter::WriteCopyBundleFileRuleSteps(
     output_files->push_back(expanded_output_file);
 
     out_ << "build ";
-    path_output_.WriteFile(out_, expanded_output_file);
+    WriteOutput(std::move(expanded_output_file));
     out_ << ": " << GetNinjaRulePrefixForToolchain(settings_)
          << GeneralTool::kGeneralToolCopyBundleData << " ";
     path_output_.WriteFile(out_, source_file);
@@ -206,7 +207,7 @@ void NinjaCreateBundleTargetWriter::WriteCompileAssetsCatalogStep(
     DCHECK(!target_->bundle_data().partial_info_plist().is_null());
 
     out_ << "build ";
-    path_output_.WriteFile(out_, partial_info_plist);
+    WriteOutput(partial_info_plist);
     out_ << ": " << GetNinjaRulePrefixForToolchain(settings_)
          << GeneralTool::kGeneralToolStamp;
     if (!order_only_deps.empty()) {
@@ -222,14 +223,14 @@ void NinjaCreateBundleTargetWriter::WriteCompileAssetsCatalogStep(
   DCHECK(!input_dep.value().empty());
 
   out_ << "build ";
-  path_output_.WriteFile(out_, compiled_catalog);
+  WriteOutput(std::move(compiled_catalog));
   if (partial_info_plist != OutputFile()) {
     // If "partial_info_plist" is non-empty, then add it to list of implicit
     // outputs of the asset catalog compilation, so that target can use it
     // without getting the ninja error "'foo', needed by 'bar', missing and
     // no known rule to make it".
     out_ << " | ";
-    path_output_.WriteFile(out_, partial_info_plist);
+    WriteOutput(partial_info_plist);
   }
 
   out_ << ": " << GetNinjaRulePrefixForToolchain(settings_)
@@ -289,7 +290,7 @@ NinjaCreateBundleTargetWriter::WriteCompileAssetsCatalogInputDepsStamp(
   xcassets_input_stamp_file.value().append(".xcassets.inputdeps.stamp");
 
   out_ << "build ";
-  path_output_.WriteFile(out_, xcassets_input_stamp_file);
+  WriteOutput(xcassets_input_stamp_file);
   out_ << ": " << GetNinjaRulePrefixForToolchain(settings_)
        << GeneralTool::kGeneralToolStamp;
 
@@ -317,7 +318,7 @@ void NinjaCreateBundleTargetWriter::WriteCodeSigningStep(
   SubstitutionWriter::GetListAsOutputFiles(
       settings_, target_->bundle_data().code_signing_outputs(),
       &code_signing_output_files);
-  path_output_.WriteFiles(out_, code_signing_output_files);
+  WriteOutputs(code_signing_output_files);
 
   // Since the code signature step depends on all the files from the bundle,
   // the create_bundle stamp can just depends on the output of the signature
@@ -355,7 +356,7 @@ OutputFile NinjaCreateBundleTargetWriter::WriteCodeSigningInputDepsStamp(
   code_signing_input_stamp_file.value().append(".codesigning.inputdeps.stamp");
 
   out_ << "build ";
-  path_output_.WriteFile(out_, code_signing_input_stamp_file);
+  WriteOutput(code_signing_input_stamp_file);
   out_ << ": " << GetNinjaRulePrefixForToolchain(settings_)
        << GeneralTool::kGeneralToolStamp;
 

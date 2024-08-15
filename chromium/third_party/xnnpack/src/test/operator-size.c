@@ -39,7 +39,6 @@ int main(int argc, char** argv) {
       xnn_create_argmax_pooling2d_nhwc_f32(
         0, 0, 0, 0,
         0, 0,
-        0, 0, 0,
         0, &op);
       break;
     case 4:
@@ -51,7 +50,6 @@ int main(int argc, char** argv) {
         0, 0, 0, 0,
         0, 0,
         0, 0,
-        0, 0, 0,
         0.0f, 0.0f,
         0, &op);
       break;
@@ -121,7 +119,6 @@ int main(int argc, char** argv) {
       break;
     case 17:
       xnn_create_global_average_pooling_nwc_f32(
-        0, 0, 0,
         0.0f, 0.0f,
         0, &op);
       break;
@@ -142,9 +139,7 @@ int main(int argc, char** argv) {
     case 21:
       xnn_create_max_pooling2d_nhwc_f32(
         0, 0, 0, 0,
-        0, 0,
-        0, 0,
-        0, 0,
+        0, 0, 0,
         0, 0, 0,
         0.0f, 0.0f,
         0, &op);
@@ -190,8 +185,7 @@ int main(int argc, char** argv) {
       break;
     case 31:
       xnn_create_resize_bilinear2d_nhwc_f32(
-        0, 0, 0,
-        0, &op);
+        0, 0, 0, &op);
       break;
     case 32:
       xnn_setup_resize_bilinear2d_nhwc_f32(
@@ -209,7 +203,6 @@ int main(int argc, char** argv) {
       break;
     case 35:
       xnn_create_softmax_nc_f32(
-        0, 0, 0,
         0, &op);
       break;
     case 36:

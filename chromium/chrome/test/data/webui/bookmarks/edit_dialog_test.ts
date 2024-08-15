@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {BookmarksApiProxyImpl, BookmarksEditDialogElement, normalizeNode, setDebouncerForTesting} from 'chrome://bookmarks/bookmarks.js';
+import type {BookmarksEditDialogElement} from 'chrome://bookmarks/bookmarks.js';
+import {BookmarksApiProxyImpl, normalizeNode, setDebouncerForTesting} from 'chrome://bookmarks/bookmarks.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 
@@ -54,9 +55,12 @@ suite('<bookmarks-edit-dialog>', function() {
     const item = normalizeNode(
         createItem('1', {url: 'http://website.com', title: 'website'}));
     dialog.showEditDialog(item);
+    await Promise.all([
+      dialog.$.name.updateComplete,
+      dialog.$.url.updateComplete,
+    ]);
 
     dialog.$.saveButton.click();
-
     assertEquals(item.id, lastUpdate.id);
     assertEquals(item.url, lastUpdate.edit.url);
     assertEquals(item.title, lastUpdate.edit.title);
@@ -64,10 +68,14 @@ suite('<bookmarks-edit-dialog>', function() {
     // Editing a folder, changing the title.
     const folder = normalizeNode(createFolder('2', [], {title: 'Cool Sites'}));
     dialog.showEditDialog(folder);
+    await Promise.all([
+      dialog.$.name.updateComplete,
+      dialog.$.url.updateComplete,
+    ]);
     dialog.$.name.value = 'Awesome websites';
+    await dialog.$.name.updateComplete;
 
     dialog.$.saveButton.click();
-
     assertEquals(folder.id, lastUpdate.id);
     assertEquals(undefined, lastUpdate.edit.url);
     assertEquals('Awesome websites', lastUpdate.edit.title);
@@ -75,10 +83,15 @@ suite('<bookmarks-edit-dialog>', function() {
 
   test('add passes the correct details to the backend', async function() {
     dialog.showAddDialog(false, '1');
+    await Promise.all([
+      dialog.$.name.updateComplete,
+      dialog.$.url.updateComplete,
+    ]);
 
     dialog.$.name.value = 'Permission Site';
+    await dialog.$.name.updateComplete;
     dialog.$.url.value = 'permission.site';
-    flush();
+    await dialog.$.url.updateComplete;
 
     setDebouncerForTesting();
 
@@ -91,7 +104,7 @@ suite('<bookmarks-edit-dialog>', function() {
     assertEquals('Permission Site', args.title);
   });
 
-  test('validates urls correctly', function() {
+  test('validates urls correctly', async () => {
     dialog.$.url.value = 'http://www.example.com';
     assertTrue(dialog.validateUrl());
 
@@ -99,7 +112,6 @@ suite('<bookmarks-edit-dialog>', function() {
     assertTrue(dialog.validateUrl());
 
     dialog.$.url.value = 'example.com';
-    flush();
     assertTrue(dialog.validateUrl());
     flush();
     assertEquals('http://example.com', dialog.$.url.value);
@@ -114,15 +126,13 @@ suite('<bookmarks-edit-dialog>', function() {
     assertFalse(dialog.validateUrl());
   });
 
-  test('doesn\'t save when URL is invalid', function() {
+  test('doesn\'t save when URL is invalid', async () => {
     const item = normalizeNode(createItem('0'));
     dialog.showEditDialog(item);
 
     dialog.$.url.value = '';
-
-    flush();
+    await dialog.$.url.updateComplete;
     dialog.$.saveButton.click();
-    flush();
 
     assertTrue(dialog.$.url.invalid);
     assertTrue(dialog.$.dialog.open);

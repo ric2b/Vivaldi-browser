@@ -18,7 +18,6 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "third_party/blink/public/mojom/peerconnection/peer_connection_tracker.mojom-blink.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_goog_media_constraints.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/modules/peerconnection/media_stream_track_metrics.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_rtp_receiver_impl.h"
@@ -137,7 +136,6 @@ class MODULES_EXPORT RTCPeerConnectionHandler {
       ExecutionContext* context,
       const webrtc::PeerConnectionInterface::RTCConfiguration&
           server_configuration,
-      GoogMediaConstraints* media_constraints,
       WebLocalFrame* web_frame,
       ExceptionState& exception_state);
 
@@ -275,9 +273,11 @@ class MODULES_EXPORT RTCPeerConnectionHandler {
                       const String& sdp_mid,
                       int sdp_mline_index,
                       int component,
-                      int address_family);
+                      int address_family,
+                      const String& usernameFragment,
+                      const String& url);
   void OnIceCandidateError(const String& address,
-                           absl::optional<uint16_t> port,
+                           std::optional<uint16_t> port,
                            const String& host_candidate,
                            const String& url,
                            int error_code,
@@ -340,12 +340,12 @@ class MODULES_EXPORT RTCPeerConnectionHandler {
           error_or_sender);
   // Helper function to remove a track on the signaling thread.
   // Updates the entire transceiver state.
-  // The result will be absl::nullopt if the operation is cancelled,
+  // The result will be std::nullopt if the operation is cancelled,
   // and no change to the state will be made.
   void RemoveTrackOnSignalingThread(
       webrtc::RtpSenderInterface* sender,
       blink::TransceiverStateSurfacer* transceiver_state_surfacer,
-      absl::optional<webrtc::RTCError>* result);
+      std::optional<webrtc::RTCError>* result);
   void CreateOfferOnSignalingThread(
       webrtc::CreateSessionDescriptionObserver* observer,
       webrtc::PeerConnectionInterface::RTCOfferAnswerOptions offer_options,
@@ -396,7 +396,7 @@ class MODULES_EXPORT RTCPeerConnectionHandler {
   // references on the signaling thread during GC.
   scoped_refptr<base::SingleThreadTaskRunner> signaling_thread_;
 
-  raw_ptr<blink::WebLocalFrame, ExperimentalRenderer> frame_ = nullptr;
+  raw_ptr<blink::WebLocalFrame> frame_ = nullptr;
 
   // Map and owners of track adapters. Every track that is in use by the peer
   // connection has an associated blink and webrtc layer representation of it.

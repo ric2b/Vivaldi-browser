@@ -35,10 +35,11 @@ class AutofillPopupController : public AutofillPopupViewDelegate {
   virtual void UnselectSuggestion() = 0;
 
   // Accepts the suggestion at `index`. The suggestion will only be accepted if
-  // the popup has been shown for at least `show_threshold` compared to
-  // `event_time` to allow ruling out accidental popup interactions
-  // (crbug.com/1279268).
-  virtual void AcceptSuggestion(int index, base::TimeTicks event_time) = 0;
+  // the popup has been shown for at least `kIgnoreEarlyClicksOnPopupDuration`
+  // to allow ruling out accidental popup interactions (crbug.com/1279268).
+  static constexpr base::TimeDelta kIgnoreEarlyClicksOnPopupDuration =
+      base::Milliseconds(500);
+  virtual void AcceptSuggestion(int index) = 0;
 
   // Executes the action associated with the button that is displayed in the
   // suggestion at `index`. Button actions depend on the type of the suggestion.
@@ -83,10 +84,6 @@ class AutofillPopupController : public AutofillPopupViewDelegate {
   virtual bool GetRemovalConfirmationText(int index,
                                           std::u16string* title,
                                           std::u16string* body) = 0;
-
-  // Returns the popup type corresponding to the controller.
-  // TODO(b/316859406): Replace with `GetMainFillingProduct`.
-  virtual PopupType GetPopupType() const = 0;
 
   // Returns the main filling product corresponding to the controller.
   virtual FillingProduct GetMainFillingProduct() const = 0;

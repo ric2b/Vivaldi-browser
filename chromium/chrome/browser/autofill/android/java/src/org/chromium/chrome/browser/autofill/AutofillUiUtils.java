@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.autofill;
 
+import android.annotation.SuppressLint;
 import android.content.ComponentCallbacks;
 import android.content.Context;
 import android.content.res.Configuration;
@@ -27,6 +28,7 @@ import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ClickableSpan;
 import android.text.style.ImageSpan;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.MeasureSpec;
 import android.view.ViewGroup;
@@ -509,7 +511,8 @@ public class AutofillUiUtils {
             boolean underlineLinks,
             Callback<String> onClickCallback) {
         SpannableStringBuilder spannableStringBuilder = new SpannableStringBuilder();
-        for (LegalMessageLine line : legalMessageLines) {
+        for (int i = 0; i < legalMessageLines.size(); i++) {
+            LegalMessageLine line = legalMessageLines.get(i);
             SpannableString text = new SpannableString(line.text);
             for (final LegalMessageLine.Link link : line.links) {
                 if (underlineLinks) {
@@ -533,6 +536,9 @@ public class AutofillUiUtils {
                 }
             }
             spannableStringBuilder.append(text);
+            if (i != legalMessageLines.size() - 1) {
+                spannableStringBuilder.append("\n");
+            }
         }
         return spannableStringBuilder;
     }
@@ -777,5 +783,23 @@ public class AutofillUiUtils {
             default:
                 return InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS;
         }
+    }
+
+    /**
+     * Sets the touch event filter on the provided `view` so that touch events are ignored if
+     * something is drawn on top of the `view`. This is done to mitigate the clickjacking attacks.
+     *
+     * @param view The view to set the touch event filter on.
+     */
+    @SuppressLint("ClickableViewAccessibility")
+    public static void setFilterTouchForSecurity(View view) {
+        if (!ChromeFeatureList.isEnabled(
+                ChromeFeatureList.AUTOFILL_ENABLE_SECURITY_TOUCH_EVENT_FILTERING_ANDROID)) {
+            return;
+        }
+        view.setFilterTouchesWhenObscured(true);
+        view.setOnTouchListener(
+                (View v, MotionEvent ev) ->
+                        (ev.getFlags() & MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED) != 0);
     }
 }

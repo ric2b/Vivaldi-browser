@@ -20,6 +20,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.Browser;
 import android.view.MotionEvent;
+import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
@@ -35,6 +36,7 @@ import org.chromium.base.cached_flags.AllCachedFieldTrialParameters;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.BackupSigninProcessor;
+import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.app.metrics.LaunchCauseMetrics;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
@@ -42,10 +44,12 @@ import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntent
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabProvider;
 import org.chromium.chrome.browser.customtabs.dependency_injection.BaseCustomTabActivityComponent;
 import org.chromium.chrome.browser.customtabs.features.CustomTabNavigationBarController;
+import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabHistoryIPHController;
 import org.chromium.chrome.browser.dependency_injection.ChromeActivityCommonsModule;
 import org.chromium.chrome.browser.firstrun.FirstRunSignInProcessor;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fonts.FontPreloader;
+import org.chromium.chrome.browser.history.HistoryManagerUtils;
 import org.chromium.chrome.browser.history.HistoryTabHelper;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
@@ -54,9 +58,11 @@ import org.chromium.chrome.browser.page_info.ChromePageInfo;
 import org.chromium.chrome.browser.page_info.ChromePageInfoHighlight;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TrustedCdn;
+import org.chromium.chrome.browser.ui.google_bottom_bar.GoogleBottomBarCoordinator;
 import org.chromium.components.page_info.PageInfoController.OpenedFromSource;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.util.ColorUtils;
 
 /** The activity for custom tabs. It will be launched on top of a client's task. */
@@ -89,14 +95,12 @@ public class CustomTabActivity extends BaseCustomTabActivity {
             new CustomTabActivityTabProvider.Observer() {
                 @Override
                 public void onInitialTabCreated(@NonNull Tab tab, int mode) {
-                    resetPostMessageHandlersForCurrentSession();
-                    maybeCreateHistoryTabHelper(tab);
+                    onTabInitOrSwapped(tab);
                 }
 
                 @Override
                 public void onTabSwapped(@NonNull Tab tab) {
-                    resetPostMessageHandlersForCurrentSession();
-                    maybeCreateHistoryTabHelper(tab);
+                    onTabInitOrSwapped(tab);
                 }
 
                 @Override
@@ -105,8 +109,13 @@ public class CustomTabActivity extends BaseCustomTabActivity {
                 }
             };
 
+    private void onTabInitOrSwapped(@Nullable Tab tab) {
+        resetPostMessageHandlersForCurrentSession();
+        if (tab != null) maybeCreateHistoryTabHelper(tab);
+    }
+
     private void maybeCreateHistoryTabHelper(Tab tab) {
-        String appId = mIntentDataProvider.getClientPackageName();
+        String appId = mIntentDataProvider.getClientPackageNameIdentitySharing();
         if (appId != null) HistoryTabHelper.from(tab).setAppId(appId, tab.getWebContents());
     }
 
@@ -146,7 +155,7 @@ public class CustomTabActivity extends BaseCustomTabActivity {
         super.performPreInflationStartup();
         mTabProvider.addObserver(mTabChangeObserver);
         // We might have missed an onInitialTabCreated event.
-        resetPostMessageHandlersForCurrentSession();
+        onTabInitOrSwapped(mTabProvider.getTab());
 
         mSession = mIntentDataProvider.getSession();
 
@@ -173,6 +182,20 @@ public class CustomTabActivity extends BaseCustomTabActivity {
         setTaskDescription(
                 new ActivityManager.TaskDescription(
                         null, null, mIntentDataProvider.getColorProvider().getToolbarColor()));
+
+        GoogleBottomBarCoordinator googleBottomBarCoordinator =
+                mBaseCustomTabRootUiCoordinator.getGoogleBottomBarCoordinator();
+
+        // Display Google Bottom Bar using BottomBarDelegate only when PageInsightsHub is not
+        // enabled.
+        if (googleBottomBarCoordinator != null
+                && !mBaseCustomTabRootUiCoordinator.isPageInsightsHubEnabled()) {
+            View googleBottomBarView = googleBottomBarCoordinator.createGoogleBottomBarView();
+            getComponent()
+                    .resolveBottomBarDelegate()
+                    .setBottomBarHeight(googleBottomBarView.getHeight());
+            getComponent().resolveBottomBarDelegate().setBottomBarContentView(googleBottomBarView);
+        }
 
         getComponent().resolveBottomBarDelegate().showBottomBarIfNecessary();
     }
@@ -212,13 +235,13 @@ public class CustomTabActivity extends BaseCustomTabActivity {
 
     @Override
     protected void handleFinishAndClose() {
-        mOpenTimeRecorder.updateCloseCause();
+        if (mOpenTimeRecorder != null) mOpenTimeRecorder.updateCloseCause();
         super.handleFinishAndClose();
     }
 
     @Override
     protected void onUserLeaveHint() {
-        mOpenTimeRecorder.onUserLeaveHint();
+        if (mOpenTimeRecorder != null) mOpenTimeRecorder.onUserLeaveHint();
         super.onUserLeaveHint();
     }
 
@@ -294,6 +317,19 @@ public class CustomTabActivity extends BaseCustomTabActivity {
             var pageInsights = mBaseCustomTabRootUiCoordinator.getPageInsightsCoordinator();
             assert pageInsights != null;
             pageInsights.launch();
+            return true;
+        } else if (id == R.id.open_history_menu_id) {
+            if (ChromeFeatureList.sAppSpecificHistory.isEnabled()) {
+                HistoryManagerUtils.showAppSpecificHistoryManager(
+                        this,
+                        getTabModelSelector().isIncognitoSelected(),
+                        mIntentDataProvider.getClientPackageNameIdentitySharing());
+                CustomTabHistoryIPHController historyIPH =
+                        mBaseCustomTabRootUiCoordinator.getHistoryIPHController();
+                if (historyIPH != null) {
+                    historyIPH.notifyUserEngaged();
+                }
+            }
             return true;
         }
         return super.onMenuOrKeyboardAction(id, fromMenu);
@@ -404,5 +440,19 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     protected void setDefaultTaskDescription() {
         // mIntentDataProvider is not ready when the super calls this method. So, we skip setting
         // the task description here, and do it in #performPostInflationStartup();
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (ChromeFeatureList.sAppSpecificHistory.isEnabled()
+                && requestCode == HistoryManagerUtils.HISTORY_REQUEST_CODE
+                && resultCode == RESULT_OK) {
+            LoadUrlParams params =
+                    new LoadUrlParams(
+                            data.getData().toString(),
+                            IntentHandler.getTransitionTypeFromIntent(data, PageTransition.LINK));
+            mTabProvider.getTab().loadUrl(params);
+        }
     }
 }

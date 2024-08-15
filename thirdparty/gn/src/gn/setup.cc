@@ -148,6 +148,18 @@ Variables
       The command-line switch --root-target will override this value (see "gn
       help --root-target").
 
+  root_patterns [optional]
+      A list of label pattern strings. When not defined or empty, the GN build
+      graph will contain all targets from any BUILD.gn evaluated in the default
+      toolchain context, and their transitive dependencies.
+
+      When set to a non empty list, only the targets in the default toolchain
+      matching these patterns, and their transitive dependencies, will be defined
+      instead.
+
+      The command-line switch --root-pattern will override this value (see
+      "gn help --root-pattern")
+
   script_executable [optional]
       By default, GN runs the scripts used in action targets and exec_script
       calls using the Python interpreter found in PATH. This value specifies the
@@ -889,6 +901,7 @@ bool Setup::FillOtherConfig(const base::CommandLine& cmdline, Err* err) {
 
   SourceDir current_dir(build_settings_.RemapActualToSourcePath("//"));
   Label root_target_label(current_dir, "");
+  std::vector<LabelPattern> root_patterns;
 
   // Secondary source path, read from the config file if present.
   // Read from the config file if present.
@@ -966,10 +979,63 @@ bool Setup::FillOtherConfig(const base::CommandLine& cmdline, Err* err) {
       }
     }
   }
+
+  if (cmdline.HasSwitch(switches::kRootPattern)) {
+    auto& switches = cmdline.GetSwitches();
+    for (auto it = switches.find(switches::kRootPattern);
+         it != switches.end() && it->first == switches::kRootPattern; ++it) {
+      std::string pattern = base::CommandLine::StringTypeToUTF8(it->second);
+      LabelPattern pat = LabelPattern::GetPattern(
+          SourceDir("//"), build_settings_.root_path_utf8(),
+          Value(nullptr, pattern), err);
+      if (err->has_error()) {
+        err->AppendSubErr(
+            Err(Location(),
+                "for the command-line switch --root-pattern=" + pattern));
+        return false;
+      }
+      if (!pat.toolchain().is_null()) {
+        *err = Err(Location(),
+                   "Root pattern cannot have toolchain suffix: " + pattern);
+        return false;
+      }
+      root_patterns.push_back(std::move(pat));
+    }
+    // Ensure GN does not complain about the .gn root_patterns value being
+    // ignored if it is set.
+    (void)dotfile_scope_.GetValue("root_patterns", true);
+  } else {
+    const Value* root_patterns_value =
+        dotfile_scope_.GetValue("root_patterns", true);
+    if (root_patterns_value) {
+      if (!root_patterns_value->VerifyTypeIs(Value::LIST, err)) {
+        return false;
+      }
+      for (const auto& pattern_value : root_patterns_value->list_value()) {
+        if (!pattern_value.VerifyTypeIs(Value::STRING, err))
+          return false;
+
+        LabelPattern pat = LabelPattern::GetPattern(
+            SourceDir("//"), build_settings_.root_path_utf8(), pattern_value,
+            err);
+        if (err->has_error())
+          return false;
+        if (!pat.toolchain().is_null()) {
+          *err =
+              Err(pattern_value, "Root pattern cannot have toolchain suffix: " +
+                                     pattern_value.string_value());
+          return false;
+        }
+        root_patterns.push_back(std::move(pat));
+      }
+    }
+  }
+
   // Set the root build file here in order to take into account the values of
   // "build_file_extension" and "root".
   root_build_file_ = loader_->BuildFileForLabel(root_target_label);
   build_settings_.SetRootTargetLabel(root_target_label);
+  build_settings_.SetRootPatterns(std::move(root_patterns));
 
   // Build config file.
   const Value* build_config_value =

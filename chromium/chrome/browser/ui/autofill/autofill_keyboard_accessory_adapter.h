@@ -95,7 +95,7 @@ class AutofillKeyboardAccessoryAdapter : public AutofillPopupView,
 
   // AutofillPopupController:
   // Hidden: void OnSuggestionsChanged() override;
-  void AcceptSuggestion(int index, base::TimeTicks event_time) override;
+  void AcceptSuggestion(int index) override;
   void PerformButtonActionForSuggestion(int index) override;
   int GetLineCount() const override;
   const autofill::Suggestion& GetSuggestionAt(int row) const override;
@@ -111,7 +111,6 @@ class AutofillKeyboardAccessoryAdapter : public AutofillPopupView,
       AutofillMetrics::SingleEntryRemovalMethod removal_method) override;
   void SelectSuggestion(int index) override;
   void UnselectSuggestion() override;
-  PopupType GetPopupType() const override;
   FillingProduct GetMainFillingProduct() const override;
   bool ShouldIgnoreMouseObservedOutsideItemBoundsCheck() const override;
   base::WeakPtr<AutofillPopupController> OpenSubPopup(

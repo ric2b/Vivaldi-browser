@@ -6,7 +6,7 @@
 
 typedef [EnforceRange] unsigned long GPUMapModeFlags;
 [
-    Exposed=(Window, DedicatedWorker),
+    Exposed=(Window, Worker),
     SecureContext
 ] namespace GPUMapMode {
     const GPUFlagsConstant READ  = 0x0001;

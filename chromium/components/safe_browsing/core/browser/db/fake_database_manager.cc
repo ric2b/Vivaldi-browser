@@ -38,10 +38,6 @@ bool FakeSafeBrowsingDatabaseManager::CanCheckRequestDestination(
   return true;
 }
 
-bool FakeSafeBrowsingDatabaseManager::ChecksAreAlwaysAsync() const {
-  return false;
-}
-
 bool FakeSafeBrowsingDatabaseManager::CheckBrowseUrl(
     const GURL& url,
     const SBThreatTypeSet& threat_types,
@@ -52,8 +48,9 @@ bool FakeSafeBrowsingDatabaseManager::CheckBrowseUrl(
     return true;
 
   const SBThreatType result_threat_type = it->second;
-  if (result_threat_type == SB_THREAT_TYPE_SAFE)
+  if (result_threat_type == SBThreatType::SB_THREAT_TYPE_SAFE) {
     return true;
+  }
 
   ThreatPatternType pattern_type = ThreatPatternType::NONE;
   const auto it1 = dangerous_patterns_.find(url);
@@ -79,8 +76,9 @@ bool FakeSafeBrowsingDatabaseManager::CheckDownloadUrl(
       continue;
 
     const SBThreatType result_threat_type = it->second;
-    if (result_threat_type == SB_THREAT_TYPE_SAFE)
+    if (result_threat_type == SBThreatType::SB_THREAT_TYPE_SAFE) {
       continue;
+    }
 
     sb_task_runner()->PostTask(
         FROM_HERE,

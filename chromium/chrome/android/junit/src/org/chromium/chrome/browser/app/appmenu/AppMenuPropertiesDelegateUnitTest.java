@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.app.appmenu;
 
 import static androidx.test.espresso.matcher.ViewMatchers.assertThat;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -88,10 +89,11 @@ import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuUiState;
 import org.chromium.chrome.browser.translate.TranslateBridge;
 import org.chromium.chrome.browser.translate.TranslateBridgeJni;
+import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
+import org.chromium.chrome.browser.ui.appmenu.AppMenuItemProperties;
+import org.chromium.chrome.browser.ui.appmenu.AppMenuPropertiesDelegate;
+import org.chromium.chrome.browser.ui.appmenu.CustomViewBinder;
 import org.chromium.chrome.browser.webapps.WebappRegistry;
-import org.chromium.chrome.features.start_surface.StartSurface;
-import org.chromium.chrome.features.start_surface.StartSurfaceCoordinator;
-import org.chromium.chrome.features.start_surface.StartSurfaceState;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.browser_ui.accessibility.PageZoomCoordinator;
 import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
@@ -111,10 +113,13 @@ import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.net.ConnectionType;
 import org.chromium.ui.accessibility.AccessibilityState;
+import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
+import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 
@@ -137,7 +142,6 @@ public class AppMenuPropertiesDelegateUnitTest {
     @Mock private ToolbarManager mToolbarManager;
     @Mock private View mDecorView;
     @Mock private LayoutStateProvider mLayoutStateProvider;
-    @Mock private StartSurfaceCoordinator mStartSurfaceCoordinator;
     @Mock private UpdateMenuItemHelper mUpdateMenuItemHelper;
     @Mock private UserPrefs.Natives mUserPrefsJniMock;
     @Mock private Profile mProfile;
@@ -154,14 +158,14 @@ public class AppMenuPropertiesDelegateUnitTest {
     @Mock private AppBannerManager.Natives mAppBannerManagerJniMock;
     @Mock private ReadAloudController mReadAloudController;
     @Mock private TranslateBridge.Natives mTranslateBridgeJniMock;
-
+    @Mock private AppMenuHandler mAppMenuHandler;
+    @Mock private AppMenuPropertiesDelegate.CustomItemViewTypeProvider mCustomItemViewTypeProvider;
     private OneshotSupplierImpl<IncognitoReauthController> mIncognitoReauthControllerSupplier =
             new OneshotSupplierImpl<>();
     private OneshotSupplierImpl<LayoutStateProvider> mLayoutStateProviderSupplier =
             new OneshotSupplierImpl<>();
     private ObservableSupplierImpl<BookmarkModel> mBookmarkModelSupplier =
             new ObservableSupplierImpl<>();
-    private OneshotSupplierImpl<StartSurface> mStartSurfaceSupplier = new OneshotSupplierImpl<>();
     private ObservableSupplierImpl<ReadAloudController> mReadAloudControllerSupplier =
             new ObservableSupplierImpl<>();
 
@@ -187,6 +191,7 @@ public class AppMenuPropertiesDelegateUnitTest {
         when(mTab.getProfile()).thenReturn(mProfile);
         when(mWebContents.getNavigationController()).thenReturn(mNavigationController);
         when(mNavigationController.getUseDesktopUserAgent()).thenReturn(false);
+        when(mTabModelSelector.isTabStateInitialized()).thenReturn(true);
         when(mTabModelSelector.getCurrentModel()).thenReturn(mTabModel);
         when(mTabModelSelector.getModel(false)).thenReturn((mTabModel));
         when(mTabModelSelector.getModel(true)).thenReturn((mIncognitoTabModel));
@@ -233,7 +238,6 @@ public class AppMenuPropertiesDelegateUnitTest {
                                 mToolbarManager,
                                 mDecorView,
                                 mLayoutStateProviderSupplier,
-                                mStartSurfaceSupplier,
                                 mBookmarkModelSupplier,
                                 mIncognitoReauthControllerSupplier,
                                 mReadAloudControllerSupplier));
@@ -249,6 +253,9 @@ public class AppMenuPropertiesDelegateUnitTest {
     private void setupFeatureDefaults() {
         setShoppingListEligible(false);
         setShoppingListEligible(false);
+        mTestValues.addFeatureFlagOverride(ChromeFeatureList.PWA_UNIVERSAL_INSTALL_UI, false);
+        mTestValues.addFeatureFlagOverride(
+                ChromeFeatureList.SYNC_SHOW_IDENTITY_ERRORS_FOR_SIGNED_IN_USERS, false);
         FeatureList.setTestValues(mTestValues);
     }
 
@@ -338,6 +345,8 @@ public class AppMenuPropertiesDelegateUnitTest {
             R.id.new_incognito_tab_menu_id,
             R.id.divider_line_id,
             R.id.open_history_menu_id,
+            R.id.quick_delete_menu_id,
+            R.id.quick_delete_divider_line_id,
             R.id.downloads_menu_id,
             R.id.all_bookmarks_menu_id,
             R.id.recent_tabs_menu_id,
@@ -368,6 +377,8 @@ public class AppMenuPropertiesDelegateUnitTest {
             R.id.new_incognito_tab_menu_id,
             R.id.divider_line_id,
             R.id.open_history_menu_id,
+            R.id.quick_delete_menu_id,
+            R.id.quick_delete_divider_line_id,
             R.id.downloads_menu_id,
             R.id.all_bookmarks_menu_id,
             R.id.recent_tabs_menu_id,
@@ -388,6 +399,8 @@ public class AppMenuPropertiesDelegateUnitTest {
             R.string.menu_new_incognito_tab,
             0,
             R.string.menu_history,
+            R.string.menu_quick_delete,
+            0,
             R.string.menu_downloads,
             R.string.menu_bookmarks,
             R.string.menu_recent_tabs,
@@ -439,6 +452,8 @@ public class AppMenuPropertiesDelegateUnitTest {
             R.id.new_incognito_tab_menu_id,
             R.id.divider_line_id,
             R.id.open_history_menu_id,
+            R.id.quick_delete_menu_id,
+            R.id.quick_delete_divider_line_id,
             R.id.downloads_menu_id,
             R.id.all_bookmarks_menu_id,
             R.id.recent_tabs_menu_id,
@@ -459,6 +474,8 @@ public class AppMenuPropertiesDelegateUnitTest {
             R.string.menu_new_incognito_tab,
             0,
             R.string.menu_history,
+            R.string.menu_quick_delete,
+            0,
             R.string.menu_downloads,
             R.string.menu_bookmarks,
             R.string.menu_recent_tabs,
@@ -506,6 +523,8 @@ public class AppMenuPropertiesDelegateUnitTest {
             R.id.new_incognito_tab_menu_id,
             R.id.divider_line_id,
             R.id.open_history_menu_id,
+            R.id.quick_delete_menu_id,
+            R.id.quick_delete_divider_line_id,
             R.id.downloads_menu_id,
             R.id.all_bookmarks_menu_id,
             R.id.recent_tabs_menu_id,
@@ -560,6 +579,7 @@ public class AppMenuPropertiesDelegateUnitTest {
             R.id.new_tab_menu_id,
             R.id.new_incognito_tab_menu_id,
             R.id.open_history_menu_id,
+            R.id.quick_delete_menu_id,
             R.id.downloads_menu_id,
             R.id.all_bookmarks_menu_id,
             R.id.recent_tabs_menu_id,
@@ -588,6 +608,7 @@ public class AppMenuPropertiesDelegateUnitTest {
             R.id.new_incognito_tab_menu_id,
             R.id.close_all_tabs_menu_id,
             tabSelectionEditorMenuItemId,
+            R.id.quick_delete_menu_id,
             R.id.preferences_id
         };
         assertMenuItemsAreEqual(menu, expectedItems);
@@ -614,7 +635,10 @@ public class AppMenuPropertiesDelegateUnitTest {
         mAppMenuPropertiesDelegate.prepareMenu(menu, null);
 
         Integer[] expectedItems = {
-            R.id.new_tab_menu_id, R.id.new_incognito_tab_menu_id, R.id.preferences_id
+            R.id.new_tab_menu_id,
+            R.id.new_incognito_tab_menu_id,
+            R.id.preferences_id,
+            R.id.quick_delete_menu_id
         };
         assertMenuItemsAreEqual(menu, expectedItems);
     }
@@ -653,6 +677,8 @@ public class AppMenuPropertiesDelegateUnitTest {
             R.id.new_incognito_tab_menu_id,
             R.id.divider_line_id,
             R.id.open_history_menu_id,
+            R.id.quick_delete_menu_id,
+            R.id.quick_delete_divider_line_id,
             R.id.downloads_menu_id,
             R.id.all_bookmarks_menu_id,
             R.id.recent_tabs_menu_id,
@@ -731,44 +757,6 @@ public class AppMenuPropertiesDelegateUnitTest {
         mAppMenuPropertiesDelegate.updateBookmarkMenuItemShortcut(
                 bookmarkMenuItemShortcut, mTab, /* fromCCT= */ false);
         verify(bookmarkMenuItemShortcut).setEnabled(false);
-    }
-
-    @Test
-    public void updateBookmarkMenuItemRow() {
-        setShoppingListEligible(true);
-        doReturn(true).when(mBookmarkModel).isEditBookmarksEnabled();
-
-        MenuItem bookmarkMenuItemAdd = mock(MenuItem.class);
-        MenuItem bookmarkMenuItemEdit = mock(MenuItem.class);
-        mAppMenuPropertiesDelegate.updateBookmarkMenuItemRow(
-                bookmarkMenuItemAdd, bookmarkMenuItemEdit, mTab);
-        verify(bookmarkMenuItemAdd).setVisible(true);
-        verify(bookmarkMenuItemAdd).setEnabled(true);
-    }
-
-    @Test
-    public void updateBookmarkMenuItemRow_NullTab() {
-        setShoppingListEligible(true);
-
-        MenuItem bookmarkMenuItemAdd = mock(MenuItem.class);
-        MenuItem bookmarkMenuItemEdit = mock(MenuItem.class);
-        mAppMenuPropertiesDelegate.updateBookmarkMenuItemRow(
-                bookmarkMenuItemAdd, bookmarkMenuItemEdit, null);
-        verify(bookmarkMenuItemAdd).setVisible(false);
-        verify(bookmarkMenuItemEdit).setVisible(false);
-    }
-
-    @Test
-    public void updateBookmarkMenuItemRow_NullBookmarkModel() {
-        setShoppingListEligible(true);
-        mBookmarkModelSupplier.set(null);
-
-        MenuItem bookmarkMenuItemAdd = mock(MenuItem.class);
-        MenuItem bookmarkMenuItemEdit = mock(MenuItem.class);
-        mAppMenuPropertiesDelegate.updateBookmarkMenuItemRow(
-                bookmarkMenuItemAdd, bookmarkMenuItemEdit, null);
-        verify(bookmarkMenuItemAdd).setVisible(false);
-        verify(bookmarkMenuItemEdit).setVisible(false);
     }
 
     @Test
@@ -1013,6 +1001,24 @@ public class AppMenuPropertiesDelegateUnitTest {
 
     @Test
     @SmallTest
+    public void testSelectTabsOption_IsDisabled_InRegularMode_TabStateNotInitialized() {
+        setUpMocksForOverviewMenu(LayoutType.TAB_SWITCHER);
+        when(mTabModelSelector.getCurrentModel()).thenReturn(mTabModel);
+        prepareMocksForGroupTabsOnTabModel(mTabModel);
+
+        when(mTabModelSelector.isTabStateInitialized()).thenReturn(false);
+
+        Menu menu = createTestMenu();
+        mAppMenuPropertiesDelegate.prepareMenu(menu, null);
+        // Check group tabs enabled decision in regular mode doesn't depend on re-auth.
+        verify(mIncognitoReauthControllerMock, times(0)).isReauthPageShowing();
+
+        MenuItem item = menu.findItem(R.id.menu_select_tabs);
+        assertFalse(item.isEnabled());
+    }
+
+    @Test
+    @SmallTest
     public void testSelectTabsOption_IsEnabledOneTab_InRegularMode_IndependentOfIncognitoReauth() {
         setUpMocksForOverviewMenu(LayoutType.TAB_SWITCHER);
         when(mTabModelSelector.getCurrentModel()).thenReturn(mTabModel);
@@ -1048,17 +1054,11 @@ public class AppMenuPropertiesDelegateUnitTest {
 
     @Test
     public void testStartSurfaceMenu() {
-        mStartSurfaceSupplier.set(mStartSurfaceCoordinator);
-        @LayoutType
-        int layoutType =
-                ChromeFeatureList.sStartSurfaceRefactor.isEnabled()
-                        ? LayoutType.START_SURFACE
-                        : LayoutType.TAB_SWITCHER;
+        @LayoutType int layoutType = LayoutType.START_SURFACE;
         setUpMocksForOverviewMenu(layoutType);
         doReturn(true).when(mAppMenuPropertiesDelegate).isAutoDarkWebContentsEnabled();
 
         when(mIncognitoTabModel.getCount()).thenReturn(0);
-        mAppMenuPropertiesDelegate.setStartSurfaceStateForTesting(StartSurfaceState.SHOWN_HOMEPAGE);
         Assert.assertTrue(mAppMenuPropertiesDelegate.shouldShowPageMenu());
         Assert.assertTrue(mAppMenuPropertiesDelegate.isInStartSurfaceHomepage());
         Assert.assertEquals(MenuGroup.PAGE_MENU, mAppMenuPropertiesDelegate.getMenuGroup());
@@ -1071,6 +1071,8 @@ public class AppMenuPropertiesDelegateUnitTest {
             R.id.new_incognito_tab_menu_id,
             R.id.divider_line_id,
             R.id.open_history_menu_id,
+            R.id.quick_delete_menu_id,
+            R.id.quick_delete_divider_line_id,
             R.id.downloads_menu_id,
             R.id.all_bookmarks_menu_id,
             R.id.recent_tabs_menu_id,
@@ -1320,6 +1322,62 @@ public class AppMenuPropertiesDelegateUnitTest {
         Menu menu = createTestMenu();
         mAppMenuPropertiesDelegate.prepareMenu(menu, null);
         assertTrue(menu.findItem(R.id.readaloud_menu_id).isVisible());
+    }
+
+    @Test
+    public void testReadaloudMenuItem_readableBecomesUnreadable() {
+        testReadAloudMenuItemUpdates(/* initiallyReadable= */ true, /* laterReadable= */ false);
+    }
+
+    @Test
+    public void testReadaloudMenuItem_unreadableBecomesReadable() {
+        testReadAloudMenuItemUpdates(/* initiallyReadable= */ false, /* laterReadable= */ true);
+    }
+
+    @Test
+    public void testReadaloudMenuItem_noChangeInReadability_notReadable() {
+        testReadAloudMenuItemUpdates(/* initiallyReadable= */ false, /* laterReadable= */ false);
+    }
+
+    @Test
+    public void testReadaloudMenuItem_noChangeInReadability_readable() {
+        testReadAloudMenuItemUpdates(/* initiallyReadable= */ true, /* laterReadable= */ true);
+    }
+
+    private void testReadAloudMenuItemUpdates(boolean initiallyReadable, boolean laterReadable) {
+        AccessibilityState.setIsScreenReaderEnabledForTesting(false);
+        when(mTab.getUrl()).thenReturn(JUnitTestGURLs.EXAMPLE_URL);
+        when(mReadAloudController.isReadable(mTab)).thenReturn(initiallyReadable);
+        setUpMocksForPageMenu();
+        Menu menu = createTestMenu();
+        mAppMenuPropertiesDelegate.getMenuItemsForMenu(
+                menu, mCustomItemViewTypeProvider, mAppMenuHandler);
+        // When menu is created, the visibility should match readability state at that time
+        assertEquals(initiallyReadable, hasReadAloudInMenu());
+
+        when(mCustomItemViewTypeProvider.fromMenuItemId(anyInt()))
+                .thenReturn(CustomViewBinder.NOT_HANDLED);
+        when(mReadAloudController.isReadable(mTab)).thenReturn(laterReadable);
+        // When a new readability result is retrieved, ensure that the menu item visibility matches
+        // the current readability state.
+        mAppMenuPropertiesDelegate.getReadAloudmenuResetter().run();
+        assertEquals(laterReadable, hasReadAloudInMenu());
+    }
+
+    private boolean hasReadAloudInMenu() {
+        ModelList modelList = mAppMenuPropertiesDelegate.getModelList();
+        if (modelList == null) {
+            return false;
+        }
+        Iterator<ListItem> it = modelList.iterator();
+        while (it.hasNext()) {
+            ListItem li = it.next();
+            int id = li.model.get(AppMenuItemProperties.MENU_ITEM_ID);
+            if (id == R.id.readaloud_menu_id) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean doTestShouldShowNewMenu(

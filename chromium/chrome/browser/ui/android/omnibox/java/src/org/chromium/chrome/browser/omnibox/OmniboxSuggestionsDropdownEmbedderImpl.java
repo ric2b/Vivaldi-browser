@@ -14,8 +14,10 @@ import android.view.WindowInsets;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.graphics.Insets;
 import androidx.core.view.WindowInsetsCompat;
 
+import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
@@ -25,6 +27,9 @@ import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.base.WindowDelegate;
 import org.chromium.ui.display.DisplayUtil;
+
+// Vivaldi
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 /**
  * Implementation of {@link OmniboxSuggestionsDropdownEmbedder} that positions it using an "anchor"
@@ -51,6 +56,7 @@ import org.chromium.ui.display.DisplayUtil;
     private int mWindowHeightDp;
     private WindowInsetsCompat mWindowInsetsCompat;
     private DeferredIMEWindowInsetApplicationCallback mDeferredIMEWindowInsetApplicationCallback;
+    private @Nullable View mBaseChromeLayout;
 
     // Vivaldi
     private int mControlsHeight;
@@ -63,13 +69,17 @@ import org.chromium.ui.display.DisplayUtil;
      *     (android.R.id.content) view.
      * @param horizontalAlignmentView View to which the dropdown should be horizontally aligned when
      *     its width is smaller than the anchor view. This must be a descendant of the anchor view.
+     * @param baseChromeLayout The base view hosting Chrome that certain views (e.g. the omnibox
+     *     suggestion list) will position themselves relative to. If null, the content view will be
+     *     used.
      */
     OmniboxSuggestionsDropdownEmbedderImpl(
             @NonNull WindowAndroid windowAndroid,
             @NonNull WindowDelegate windowDelegate,
             @NonNull View anchorView,
             @NonNull View horizontalAlignmentView,
-            boolean forcePhoneStyleOmnibox) {
+            boolean forcePhoneStyleOmnibox,
+            @Nullable View baseChromeLayout) {
         mWindowAndroid = windowAndroid;
         mWindowDelegate = windowDelegate;
         mAnchorView = anchorView;
@@ -80,7 +90,10 @@ import org.chromium.ui.display.DisplayUtil;
         Configuration configuration = mContext.getResources().getConfiguration();
         mWindowWidthDp = configuration.smallestScreenWidthDp;
         mWindowHeightDp = configuration.screenHeightDp;
+        mBaseChromeLayout = baseChromeLayout;
+
         setControlsHeight(0); // Vivaldi
+
         recalculateOmniboxAlignment();
     }
 
@@ -206,7 +219,17 @@ import org.chromium.ui.display.DisplayUtil;
     void recalculateOmniboxAlignment() {
         View contentView = mAnchorView.getRootView().findViewById(android.R.id.content);
         int contentViewTopPadding = contentView == null ? 0 : contentView.getPaddingTop();
-        ViewUtils.getRelativeLayoutPosition(contentView, mAnchorView, mPositionArray);
+
+        // If there is a base Chrome layout, calculate the relative position from it rather than
+        // the content view. Sometimes, Chrome will add an intermediate layout to host certain
+        // views above the toolbar, such as the top back button toolbar on automotive devices.
+        // Since the omnibox alignment top padding will position the omnibox relative to this base
+        // layout, rather than the content view, the base layout should be used here to avoid
+        // "double counting" and creating a gap between the browser controls and omnibox
+        // suggestions.
+        View baseRelativeLayout = mBaseChromeLayout != null ? mBaseChromeLayout : contentView;
+        ViewUtils.getRelativeLayoutPosition(baseRelativeLayout, mAnchorView, mPositionArray);
+
         int top = mPositionArray[1] + mAnchorView.getMeasuredHeight() - contentViewTopPadding;
         int left;
         int width;
@@ -261,7 +284,28 @@ import org.chromium.ui.display.DisplayUtil;
                 mDeferredIMEWindowInsetApplicationCallback != null
                         ? mDeferredIMEWindowInsetApplicationCallback.getCurrentKeyboardHeight()
                         : 0;
-        int windowHeight = DisplayUtil.dpToPx(mWindowAndroid.getDisplay(), mWindowHeightDp);
+
+        int windowHeight;
+        if (BuildInfo.getInstance().isAutomotive
+                && contentView != null
+                && contentView.getRootWindowInsets() != null) {
+            // Some automotive devices dismiss bottom system bars when bringing up the keyboard,
+            // preventing the height of those bottom bars from being subtracted from the keyboard.
+            // To avoid a bottom-bar-sized gap above the keyboard, Chrome needs to calculate a new
+            // window height from the display with the new system bar insets, rather than rely on
+            // the cached mWindowHeightDp (that implicitly assumes persistence of the now-dismissed
+            // bottom system bars).
+            WindowInsetsCompat windowInsets =
+                    WindowInsetsCompat.toWindowInsetsCompat(contentView.getRootWindowInsets());
+            Insets systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
+            windowHeight =
+                    mWindowAndroid.getDisplay().getDisplayHeight()
+                            - systemBars.top
+                            - systemBars.bottom;
+        } else {
+            windowHeight = DisplayUtil.dpToPx(mWindowAndroid.getDisplay(), mWindowHeightDp);
+        }
+
         int minSpaceAboveWindowBottom =
                 mContext.getResources()
                         .getDimensionPixelSize(R.dimen.omnibox_min_space_above_window_bottom);
@@ -275,9 +319,15 @@ import org.chromium.ui.display.DisplayUtil;
 
         int height = Math.min(windowSpace, contentSpace) - top;
 
-        // Note(david@vivaldi.com): Ref.: VAB-8066. This apply only when |mControlsHeight| is
-        // greater 0 which indicates that the controls are at the bottom.
-        if (org.chromium.build.BuildConfig.IS_VIVALDI && mControlsHeight > 0) {
+        // Note(david@vivaldi.com): Ref.: VAB-8066. (followup) Ref. VAB-8955 |address_bar_to_bottom|
+        // is true indicates that the controls are at the bottom.
+        if (org.chromium.build.BuildConfig.IS_VIVALDI && ChromeSharedPreferences.getInstance().
+                readBoolean("address_bar_to_bottom", false)) {
+            int correctControlsHeight = calculateControlsHeight(
+                    mContext, mAnchorView, CalculationType.COMBINED); // Vivaldi Ref. VAB-9055
+            if (mControlsHeight != correctControlsHeight) { // Height differs on fresh Native Page
+                setControlsHeight(correctControlsHeight);
+            }
             height = contentSpace - keyboardHeight - mControlsHeight;
         }
 
@@ -318,5 +368,72 @@ import org.chromium.ui.display.DisplayUtil;
      */
     public void setControlsHeight(int height) {
         mControlsHeight = height;
+    }
+
+    /**
+     * Vivaldi
+     */
+    public enum CalculationType {
+        BOTTOM_CONTROLS, SEARCH_ENGINE_SUGGESTION, COMBINED
+    }
+
+    /**
+     * Vivaldi
+     * A combined method to get the bottomControlsHeight, searchengineSuggestionHeight or
+     * the combination of both
+     * And includes the calculation types of:
+     * Case(BOTTOM_CONTROLS) Calculation of just BottomControls
+     * Case(SEARCH_ENGINE_SUGGESTION) Calculation of just searchEngineSuggestionHeight
+     * Case(COMBINED) Combined calculation if both cases are needed.
+     * Returns the wanted height int.
+     */
+    public static int calculateControlsHeight(Context context, View anchorView,
+                                              CalculationType calculationType) {
+        if (anchorView == null) return 0;
+
+        int bottomPadding = 10;
+        int bottomControlsHeight = anchorView.getHeight() - bottomPadding;
+
+        boolean isAddressBarBottom =
+                ChromeSharedPreferences.getInstance().readBoolean(
+                        "address_bar_to_bottom", false);
+        boolean isTabStripOn =
+                ChromeSharedPreferences.getInstance().readBoolean("show_tab_strip", true);
+        boolean isTabStackToolbarOn = ChromeSharedPreferences.getInstance().readBoolean(
+                "tab_stack_toolbar_visible", false);
+        boolean isTabStackActive =
+                ChromeSharedPreferences.getInstance().readBoolean("tab_stack_visible", false);
+        boolean isSearchEngineSuggestionOn = ChromeSharedPreferences.getInstance().readBoolean(
+                "show_search_engine_suggestion", false);
+
+        if (isTabStripOn)
+            bottomControlsHeight += (int) context.getResources().getDimension(
+                    org.chromium.chrome.browser.omnibox.R.dimen.tab_strip_height);
+        if (isTabStackActive || isTabStackToolbarOn)
+            bottomControlsHeight += (int) context.getResources().getDimension(
+                    org.chromium.chrome.browser.omnibox.R.dimen.tab_strip_height);
+
+        // Needed in the case COMBINED or BOTTOM_CONTROLS when AddressBar is at the top.
+        if (!isAddressBarBottom && (calculationType == CalculationType.BOTTOM_CONTROLS
+                || calculationType == CalculationType.COMBINED))
+            bottomControlsHeight = 0;
+
+        switch (calculationType) {
+            case BOTTOM_CONTROLS -> {
+                return bottomControlsHeight;
+            }
+            case SEARCH_ENGINE_SUGGESTION -> {
+                return isSearchEngineSuggestionOn ? (int) context.getResources().getDimension(
+                        org.chromium.chrome.browser.omnibox.R.dimen
+                                .search_engine_suggestion_view_height) : 0;
+            }
+            case COMBINED -> {
+                bottomControlsHeight += isSearchEngineSuggestionOn ?
+                        (int) context.getResources().getDimension(
+                        org.chromium.chrome.browser.omnibox.R.dimen
+                                .search_engine_suggestion_view_height) : 0;
+            }
+        }
+        return bottomControlsHeight;
     }
 }

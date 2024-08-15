@@ -22,6 +22,7 @@ import static org.chromium.ui.test.util.MockitoHelper.doCallback;
 
 import android.app.Activity;
 import android.graphics.Bitmap;
+import android.view.ViewStub;
 import android.widget.FrameLayout;
 
 import androidx.test.ext.junit.rules.ActivityScenarioRule;
@@ -31,6 +32,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
@@ -42,10 +44,15 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
+import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
@@ -65,6 +72,7 @@ import org.chromium.chrome.browser.ui.favicon.FaviconHelperJni;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModel;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler.BackPressResult;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.components.feature_engagement.Tracker;
@@ -83,6 +91,8 @@ public class TabSwitcherPaneCoordinatorUnitTest {
     @Rule public JniMocker mJniMocker = new JniMocker();
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
+
+    @Rule public TestRule mProcessor = new Features.JUnitProcessor();
 
     @Rule
     public ActivityScenarioRule<TestActivity> mActivityScenarioRule =
@@ -104,6 +114,7 @@ public class TabSwitcherPaneCoordinatorUnitTest {
     @Mock private Callback<Integer> mOnTabClickedCallback;
     @Mock private FaviconHelper.Natives mFaviconHelperJniMock;
     @Mock private Tracker mTracker;
+    @Mock private BottomSheetController mBottomSheetController;
 
     private final OneshotSupplierImpl<ProfileProvider> mProfileProviderSupplier =
             new OneshotSupplierImpl<>();
@@ -156,6 +167,9 @@ public class TabSwitcherPaneCoordinatorUnitTest {
         mRootView.addView(mCoordinatorView);
         activity.setContentView(mRootView);
 
+        HistogramWatcher watcher =
+                HistogramWatcher.newSingleRecordWatcher(
+                        "Android.TabSwitcher.SetupRecyclerView.Time");
         mCoordinator =
                 new TabSwitcherPaneCoordinator(
                         activity,
@@ -171,6 +185,7 @@ public class TabSwitcherPaneCoordinatorUnitTest {
                         mScrimCoordinator,
                         mSnackbarManager,
                         mModalDialogManager,
+                        mBottomSheetController,
                         mContainerView,
                         mResetHandler,
                         mIsVisibleSupplier,
@@ -178,6 +193,7 @@ public class TabSwitcherPaneCoordinatorUnitTest {
                         mOnTabClickedCallback,
                         TabListMode.GRID,
                         /* supportsEmptyState= */ true);
+        watcher.assertExpected();
 
         mCoordinator.initWithNative();
 
@@ -239,7 +255,13 @@ public class TabSwitcherPaneCoordinatorUnitTest {
 
     @Test
     @SmallTest
+    @DisableFeatures({ChromeFeatureList.DATA_SHARING_ANDROID})
+    @EnableFeatures(ChromeFeatureList.TAB_GROUP_PARITY_ANDROID)
     public void testTabGridDialogVisibilitySupplier() {
+        ViewStub dialogStub = new ViewStub(mActivity);
+        mCoordinatorView.addView(dialogStub);
+        dialogStub.setId(R.id.tab_grid_dialog_stub);
+
         Supplier<Boolean> tabGridDialogVisibilitySupplier =
                 mCoordinator.getTabGridDialogVisibilitySupplier();
 

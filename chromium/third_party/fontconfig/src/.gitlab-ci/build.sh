@@ -3,29 +3,36 @@
 set -ex
 set -o pipefail
 
+cidir=$(dirname $0)
+[ -f ${cidir}/fcenv ] && . ${cidir}/fcenv
+
 case "$OSTYPE" in
     msys) MyPWD=$(pwd -W) ;;
+    *BSD) PATH=$PATH:/usr/local/bin ;&
     *) MyPWD=$(pwd) ;;
 esac
 enable=()
 disable=()
 distcheck=0
 enable_install=1
+disable_check=0
 cross=0
 buildsys="autotools"
 type="both"
 arch=""
 buildopt=()
 SRCDIR=$MyPWD
+export MAKE=${MAKE:-make}
 export BUILD_ID=${BUILD_ID:-fontconfig-$$}
 export PREFIX=${PREFIX:-$MyPWD/prefix}
 export BUILDDIR=${BUILDDIR:-$MyPWD/build}
 
-while getopts a:ce:d:hIs:t:X: OPT
+while getopts a:cCe:d:hIs:t:X: OPT
 do
     case $OPT in
         'a') arch=$OPTARG ;;
         'c') distcheck=1 ;;
+        'C') disable_check=1 ;;
         'e') enable+=($OPTARG) ;;
         'd') disable+=($OPTARG) ;;
         'I') enable_install=0 ;;
@@ -87,15 +94,18 @@ if [ x"$buildsys" == "xautotools" ]; then
     mkdir "$BUILDDIR" "$PREFIX"
     cd "$BUILDDIR"
     ../autogen.sh --prefix="$PREFIX" ${buildopt[*]} 2>&1 | tee /tmp/fc-build.log || r=$?
-    make V=1 2>&1 | tee -a /tmp/fc-build.log || r=$?
-    make check V=1 2>&1 | tee -a /tmp/fc-build.log || r=$?
+    $MAKE V=1 2>&1 | tee -a /tmp/fc-build.log || r=$?
+    if [ $disable_check -eq 0 ]; then
+        $MAKE check V=1 2>&1 | tee -a /tmp/fc-build.log || r=$?
+    fi
     if [ $enable_install -eq 1 ]; then
-        make install V=1 2>&1 | tee -a /tmp/fc-build.log || r=$?
+        $MAKE install V=1 2>&1 | tee -a /tmp/fc-build.log || r=$?
     fi
     if [ $distcheck -eq 1 ]; then
-        make distcheck V=1 2>&1 | tee -a /tmp/fc-build.log || r=$?
+        $MAKE distcheck V=1 2>&1 | tee -a /tmp/fc-build.log || r=$?
     fi
 elif [ x"$buildsys" == "xmeson" ]; then
+    pip install meson
     for i in "${enable[@]}"; do
         buildopt+=(-D$i=true)
     done
@@ -120,7 +130,9 @@ elif [ x"$buildsys" == "xmeson" ]; then
     buildopt+=(--default-library=$type)
     meson setup --prefix="$PREFIX" ${buildopt[*]} "$BUILDDIR" 2>&1 | tee /tmp/fc-build.log || r=$?
     meson compile -v -C "$BUILDDIR" 2>&1 | tee -a /tmp/fc-build.log || r=$?
-    meson test -v -C "$BUILDDIR" 2>&1 | tee -a /tmp/fc-build.log || r=$?
+    if [ $disable_check -eq 0 ]; then
+        meson test -v -C "$BUILDDIR" 2>&1 | tee -a /tmp/fc-build.log || r=$?
+    fi
     if [ $enable_install -eq 1 ]; then
         meson install -C "$BUILDDIR" 2>&1 | tee -a /tmp/fc-build.log || r=$?
     fi

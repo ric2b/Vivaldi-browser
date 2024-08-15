@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/fileapi/blob.h"
 #include "third_party/blink/renderer/core/frame/navigator.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
+#include "third_party/blink/renderer/core/workers/shared_worker.h"
 #include "third_party/blink/renderer/modules/broadcastchannel/broadcast_channel.h"
 #include "third_party/blink/renderer/modules/file_system_access/storage_manager_file_system_access.h"
 #include "third_party/blink/renderer/modules/storage/storage_controller.h"
@@ -68,12 +69,18 @@ const char StorageAccessHandle::kBroadcastChannelNotRequested[] =
     "Broadcast Channel was not requested when storage access handle was "
     "initialized.";
 
+// static
+const char StorageAccessHandle::kSharedWorkerNotRequested[] =
+    "Shared Worker was not requested when storage access handle was "
+    "initialized.";
+
 namespace {
 
-void EstimateImplAfterRemoteEstimate(ScriptPromiseResolver* resolver,
-                                     int64_t current_usage,
-                                     int64_t current_quota,
-                                     bool success) {
+void EstimateImplAfterRemoteEstimate(
+    ScriptPromiseResolverTyped<StorageEstimate>* resolver,
+    int64_t current_usage,
+    int64_t current_quota,
+    bool success) {
   ScriptState* script_state = resolver->GetScriptState();
   if (!script_state->ContextIsValid()) {
     return;
@@ -102,12 +109,18 @@ StorageAccessHandle::StorageAccessHandle(
     : Supplement<LocalDOMWindow>(window),
       storage_access_types_(storage_access_types),
       remote_(window.GetExecutionContext()),
-      broadcast_channel_(window.GetExecutionContext()) {
+      broadcast_channel_(window.GetExecutionContext()),
+      shared_worker_(window.GetExecutionContext()) {
   window.CountUse(
       WebFeature::kStorageAccessAPI_requestStorageAccess_BeyondCookies);
   if (storage_access_types_->all()) {
     window.CountUse(
         WebFeature::kStorageAccessAPI_requestStorageAccess_BeyondCookies_all);
+  }
+  if (storage_access_types_->cookies()) {
+    window.CountUse(
+        WebFeature::
+            kStorageAccessAPI_requestStorageAccess_BeyondCookies_cookies);
   }
   if (storage_access_types_->sessionStorage()) {
     window.CountUse(
@@ -158,6 +171,11 @@ StorageAccessHandle::StorageAccessHandle(
         WebFeature::
             kStorageAccessAPI_requestStorageAccess_BeyondCookies_BroadcastChannel);
   }
+  if (storage_access_types_->sharedWorker()) {
+    window.CountUse(
+        WebFeature::
+            kStorageAccessAPI_requestStorageAccess_BeyondCookies_SharedWorker);
+  }
   if (storage_access_types_->all() || storage_access_types_->sessionStorage()) {
     InitSessionStorage();
   }
@@ -181,12 +199,16 @@ StorageAccessHandle::StorageAccessHandle(
   }
   if (storage_access_types_->all() ||
       storage_access_types_->createObjectURL() ||
-      storage_access_types_->revokeObjectURL()) {
+      storage_access_types_->revokeObjectURL() ||
+      storage_access_types_->sharedWorker()) {
     InitBlobStorage();
   }
   if (storage_access_types_->all() ||
       storage_access_types_->broadcastChannel()) {
     InitBroadcastChannel();
+  }
+  if (storage_access_types_->all() || storage_access_types_->sharedWorker()) {
+    InitSharedWorker();
   }
 }
 
@@ -200,6 +222,7 @@ void StorageAccessHandle::Trace(Visitor* visitor) const {
   visitor->Trace(caches_);
   visitor->Trace(blob_storage_);
   visitor->Trace(broadcast_channel_);
+  visitor->Trace(shared_worker_);
   ScriptWrappable::Trace(visitor);
   Supplement<LocalDOMWindow>::Trace(visitor);
 }
@@ -286,14 +309,14 @@ CacheStorage* StorageAccessHandle::caches(
   return caches_;
 }
 
-ScriptPromise StorageAccessHandle::getDirectory(
+ScriptPromiseTyped<FileSystemDirectoryHandle> StorageAccessHandle::getDirectory(
     ScriptState* script_state,
     ExceptionState& exception_state) const {
   if (!storage_access_types_->all() && !storage_access_types_->getDirectory()) {
-    ScriptPromiseResolver* resolver =
-        MakeGarbageCollected<ScriptPromiseResolver>(
-            script_state, exception_state.GetContext());
-    ScriptPromise promise = resolver->Promise();
+    auto* resolver = MakeGarbageCollected<
+        ScriptPromiseResolverTyped<FileSystemDirectoryHandle>>(
+        script_state, exception_state.GetContext());
+    auto promise = resolver->Promise();
     resolver->RejectWithSecurityError(kGetDirectoryNotRequested,
                                       kGetDirectoryNotRequested);
     return promise;
@@ -308,7 +331,7 @@ ScriptPromise StorageAccessHandle::getDirectory(
 }
 
 void StorageAccessHandle::GetDirectoryImpl(
-    ScriptPromiseResolver* resolver) const {
+    ScriptPromiseResolverTyped<FileSystemDirectoryHandle>* resolver) const {
   if (!remote_) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kInvalidStateError));
@@ -319,12 +342,13 @@ void StorageAccessHandle::GetDirectoryImpl(
                     WrapPersistent(resolver)));
 }
 
-ScriptPromise StorageAccessHandle::estimate(
+ScriptPromiseTyped<StorageEstimate> StorageAccessHandle::estimate(
     ScriptState* script_state,
     ExceptionState& exception_state) const {
-  ScriptPromiseResolver* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
-      script_state, exception_state.GetContext());
-  ScriptPromise promise = resolver->Promise();
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolverTyped<StorageEstimate>>(
+          script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
   if (!storage_access_types_->all() && !storage_access_types_->estimate()) {
     resolver->RejectWithSecurityError(kEstimateNotRequested,
                                       kEstimateNotRequested);
@@ -390,6 +414,22 @@ BroadcastChannel* StorageAccessHandle::BroadcastChannel(
           kStorageAccessAPI_requestStorageAccess_BeyondCookies_BroadcastChannel_Use);
   return MakeGarbageCollected<blink::BroadcastChannel>(
       PassKey(), execution_context, name, broadcast_channel_.get());
+}
+
+blink::SharedWorker* StorageAccessHandle::SharedWorker(
+    ExecutionContext* context,
+    const String& url,
+    const V8UnionSharedWorkerOptionsOrString* name_or_options,
+    ExceptionState& exception_state) const {
+  if (!storage_access_types_->all() && !storage_access_types_->sharedWorker()) {
+    exception_state.ThrowSecurityError(kSharedWorkerNotRequested);
+    return nullptr;
+  }
+  GetSupplementable()->CountUse(
+      WebFeature::
+          kStorageAccessAPI_requestStorageAccess_BeyondCookies_SharedWorker_Use);
+  return SharedWorker::Create(PassKey(), context, url, name_or_options,
+                              exception_state, blob_storage_, &shared_worker_);
 }
 
 void StorageAccessHandle::InitSessionStorage() {
@@ -529,5 +569,26 @@ void StorageAccessHandle::InitBroadcastChannel() {
           GetSupplementable()->GetExecutionContext()->GetTaskRunner(
               TaskType::kInternalDefault)));
 }
+
+void StorageAccessHandle::InitSharedWorker() {
+  if (!GetSupplementable()->GetSecurityOrigin()->CanAccessSharedWorkers()) {
+    return;
+  }
+  if (!InitRemote()) {
+    return;
+  }
+  remote_->BindSharedWorker(shared_worker_.BindNewPipeAndPassReceiver(
+      GetSupplementable()->GetExecutionContext()->GetTaskRunner(
+          TaskType::kDOMManipulation)));
+}
+
+namespace bindings {
+
+ExecutionContext* ExecutionContextFromV8Wrappable(
+    const StorageAccessHandle* storage_access_handle) {
+  return storage_access_handle->GetSupplementable();
+}
+
+}  // namespace bindings
 
 }  // namespace blink

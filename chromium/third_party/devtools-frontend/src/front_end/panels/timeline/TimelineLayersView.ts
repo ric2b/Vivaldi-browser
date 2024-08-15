@@ -19,12 +19,12 @@ export class TimelineLayersView extends UI.SplitWidget.SplitWidget {
   constructor(
       model: TimelineModel.TimelineModel.TimelineModelImpl,
       showPaintProfilerCallback: (arg0: SDK.PaintProfiler.PaintProfilerSnapshot) => void) {
-    super(true, false, 'timelineLayersView');
+    super(true, false, 'timeline-layers-view');
     this.model = model;
     this.showPaintProfilerCallback = showPaintProfilerCallback;
 
     this.element.classList.add('timeline-layers-view');
-    this.rightSplitWidget = new UI.SplitWidget.SplitWidget(true, true, 'timelineLayersViewDetails');
+    this.rightSplitWidget = new UI.SplitWidget.SplitWidget(true, true, 'timeline-layers-view-details');
     this.rightSplitWidget.element.classList.add('timeline-layers-view-properties');
     this.setMainWidget(this.rightSplitWidget);
 

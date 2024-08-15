@@ -7,6 +7,7 @@ from __future__ import print_function
 
 import glob
 import os
+import re
 import subprocess
 import sys
 
@@ -14,24 +15,26 @@ import sys
 class ClangPluginTest(object):
   """Test harness for clang plugins."""
 
-  def __init__(self, test_base, clang_path, plugin_name, reset_results):
+  def __init__(self,
+               test_base,
+               clang_path,
+               plugin_names,
+               reset_results,
+               filename_regex=None):
     """Constructor.
 
     Args:
       test_base: Path to the directory containing the tests.
       clang_path: Path to the clang binary.
-      plugin_name: Name of the plugin.
+      plugin_names: Names of the plugins.
       reset_results: If true, resets expected results to the actual test output.
+      filename_regex: If present, only runs tests that match the regex pattern.
     """
     self._test_base = test_base
     self._clang_path = clang_path
-    self._plugin_name = plugin_name
+    self._plugin_names = plugin_names
     self._reset_results = reset_results
-
-  def AddPluginArg(self, clang_cmd, plugin_arg):
-    """Helper to add an argument for the tested plugin."""
-    clang_cmd.extend(['-Xclang', '-plugin-arg-%s' % self._plugin_name,
-                      '-Xclang', plugin_arg])
+    self._filename_regex = filename_regex
 
   def AdjustClangArguments(self, clang_cmd):
     """Tests can override this to customize the command line for clang."""
@@ -49,20 +52,24 @@ class ClangPluginTest(object):
 
     os.chdir(self._test_base)
 
-    clang_cmd = [self._clang_path, '-c', '-std=c++14']
+    clang_cmd = [self._clang_path, '-c', '-std=c++20']
 
     # Use the traditional diagnostics format (see crbug.com/1450229).
     clang_cmd.extend([
         '-fno-diagnostics-show-line-numbers', '-fcaret-diagnostics-max-lines=1'
     ])
 
-    clang_cmd.extend(['-Xclang', '-add-plugin', '-Xclang', self._plugin_name])
+    for p in self._plugin_names:
+      clang_cmd.extend(['-Xclang', '-add-plugin', '-Xclang', p])
     self.AdjustClangArguments(clang_cmd)
 
     passing = []
     failing = []
     tests = glob.glob('*.cpp') + glob.glob('*.mm')
     for test in tests:
+      if self._filename_regex and not re.search(self._filename_regex, test):
+        continue
+
       sys.stdout.write('Testing %s... ' % test)
       test_name, _ = os.path.splitext(test)
 

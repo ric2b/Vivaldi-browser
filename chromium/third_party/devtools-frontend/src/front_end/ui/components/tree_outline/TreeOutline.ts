@@ -239,13 +239,11 @@ export class TreeOutline<TreeNodeDataType> extends HTMLElement {
   }
 
   #setNodeKeyNoWrapCSSVariable(attributeValue: string|null): void {
-    ComponentHelpers.SetCSSProperty.set(
-        this, '--override-key-whitespace-wrapping', attributeValue !== null ? 'nowrap' : 'initial');
+    this.style.setProperty('--override-key-whitespace-wrapping', attributeValue !== null ? 'nowrap' : 'initial');
   }
 
   #setTopLevelNodeBorderColorCSSVariable(attributeValue: string|null): void {
-    ComponentHelpers.SetCSSProperty.set(
-        this, '--override-top-node-border', attributeValue ? `1px solid ${attributeValue}` : '');
+    this.style.setProperty('--override-top-node-border', attributeValue ? `1px solid ${attributeValue}` : '');
   }
 
   async #recursivelyCollapseTreeNodeChildren(treeNode: TreeNode<TreeNodeDataType>): Promise<void> {
@@ -495,14 +493,14 @@ export class TreeOutline<TreeNodeDataType> extends HTMLElement {
         })}
       >
         <span class="arrow-and-key-wrapper"
-          @mouseover=${(): void => {
+          @mouseover=${() => {
             this.dispatchEvent(new ItemMouseOverEvent(node));
           }}
-          @mouseout=${(): void => {
+          @mouseout=${() => {
             this.dispatchEvent(new ItemMouseOutEvent(node));
           }}
         >
-          <span class="arrow-icon" @click=${this.#onArrowClick(node)} jslog=${VisualLogging.treeItemExpand().track({click: true})}>
+          <span class="arrow-icon" @click=${this.#onArrowClick(node)} jslog=${VisualLogging.expand().track({click: true})}>
           </span>
           <span class="tree-node-key" data-node-key=${node.treeNodeData}>${renderedNodeKey}</span>
         </span>
@@ -554,10 +552,9 @@ export class TreeOutline<TreeNodeDataType> extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-tree-outline', TreeOutline);
+customElements.define('devtools-tree-outline', TreeOutline);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-tree-outline': TreeOutline<unknown>;
   }

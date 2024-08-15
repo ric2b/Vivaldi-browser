@@ -6,7 +6,8 @@ import './i18n_setup.js';
 
 import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {dedupingMixin, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import type {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {dedupingMixin} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 /**
  * Specifies all possible routes in settings.
@@ -65,6 +66,7 @@ export interface SettingsRoutes {
   SITE_SETTINGS_ALL: Route;
   SITE_SETTINGS_AR: Route;
   SITE_SETTINGS_AUTOMATIC_DOWNLOADS: Route;
+  SITE_SETTINGS_AUTOMATIC_FULLSCREEN: Route;
   SITE_SETTINGS_AUTO_PICTURE_IN_PICTURE: Route;
   SITE_SETTINGS_AUTO_VERIFY: Route;
   SITE_SETTINGS_BACKGROUND_SYNC: Route;

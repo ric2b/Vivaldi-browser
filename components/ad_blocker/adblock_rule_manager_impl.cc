@@ -97,12 +97,12 @@ std::map<uint32_t, RuleSource> RuleManagerImpl::GetRuleSources(
   return output;
 }
 
-absl::optional<RuleSource> RuleManagerImpl::GetRuleSource(RuleGroup group,
+std::optional<RuleSource> RuleManagerImpl::GetRuleSource(RuleGroup group,
                                                           uint32_t source_id) {
   const auto& rule_sources = GetSourceMap(group);
   const auto& source_context = rule_sources.find(source_id);
   if (source_context == rule_sources.end())
-    return absl::nullopt;
+    return std::nullopt;
   return source_context->second->rule_source();
 }
 

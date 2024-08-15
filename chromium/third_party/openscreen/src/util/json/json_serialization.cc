@@ -26,8 +26,8 @@ ErrorOr<Json::Value> Parse(std::string_view document) {
   Json::Value root_node;
   std::string error_msg;
   std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
-  const bool succeeded =
-      reader->parse(document.begin(), document.end(), &root_node, &error_msg);
+  const bool succeeded = reader->parse(&*document.begin(), &*document.end(),
+                                       &root_node, &error_msg);
   if (!succeeded) {
     return ErrorOr<Json::Value>(Error::Code::kJsonParseError, error_msg);
   }

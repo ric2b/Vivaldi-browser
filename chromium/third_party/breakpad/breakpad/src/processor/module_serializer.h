@@ -36,6 +36,7 @@
 #ifndef PROCESSOR_MODULE_SERIALIZER_H__
 #define PROCESSOR_MODULE_SERIALIZER_H__
 
+#include <cstdint>
 #include <map>
 #include <string>
 
@@ -110,7 +111,7 @@ class ModuleSerializer {
       FastSourceLineResolver::Module::kNumberMaps_;
 
   // Memory sizes required to serialize map components in Module.
-  uint32_t map_sizes_[kNumberMaps_];
+  uint64_t map_sizes_[kNumberMaps_];
 
   // Serializers for each individual map component in Module class.
   StdMapSerializer<int, string> files_serializer_;

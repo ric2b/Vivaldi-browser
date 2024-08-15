@@ -3,9 +3,9 @@
 // found in the LICENSE file.
 
 #include <string>
+#include <string_view>
 
 #include "base/functional/callback_helpers.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
@@ -46,7 +46,13 @@ constexpr char kBadIconErrorTemplate[] = R"({
       "icons_http_results": [ {
          "http_code_desc": "Not Found",
          "http_status_code": 404,
+         "icon_size": "0x0",
          "icon_url": "$1banners/bad_icon.png"
+      }, {
+         "http_code_desc": "Not Found",
+         "http_status_code": 404,
+         "icon_size": "0x0",
+         "icon_url": "$1favicon.ico"
       } ],
       "is_generated_icon": true
    } ]
@@ -54,7 +60,7 @@ constexpr char kBadIconErrorTemplate[] = R"({
 )";
 
 // Drops all CR and LF characters.
-std::string TrimLineEndings(base::StringPiece text) {
+std::string TrimLineEndings(std::string_view text) {
   return base::CollapseWhitespaceASCII(
       text,
       /*trim_sequences_with_line_breaks=*/true);
@@ -101,7 +107,7 @@ class WebAppInternalsBrowserTest : public WebAppControllerBrowserTest {
           app_id = new_app_id;
           run_loop.Quit();
         }),
-        /*use_fallback=*/true);
+        FallbackBehavior::kAllowFallbackDataAlways);
 
     run_loop.Run();
     return app_id;

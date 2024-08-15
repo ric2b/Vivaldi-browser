@@ -5,6 +5,7 @@
 #ifndef UI_GL_GL_SURFACE_H_
 #define UI_GL_GL_SURFACE_H_
 
+#include <optional>
 #include <vector>
 
 #include "base/functional/callback.h"
@@ -12,7 +13,6 @@
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/delegated_ink_metadata.h"
 #include "ui/gfx/frame_data.h"
 #include "ui/gfx/geometry/rect.h"
@@ -119,9 +119,6 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface>,
   // Get the underlying platform specific surface "handle".
   virtual void* GetHandle() = 0;
 
-  // Returns whether or not the surface supports SwapBuffersWithBounds
-  virtual bool SupportsSwapBuffersWithBounds();
-
   // Returns whether or not the surface supports PostSubBuffer.
   virtual bool SupportsPostSubBuffer();
 
@@ -150,13 +147,6 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface>,
   virtual void SwapBuffersAsync(SwapCompletionCallback completion_callback,
                                 PresentationCallback presentation_callback,
                                 gfx::FrameData data);
-
-  // Swap buffers with content bounds. If it returns SWAP_FAILED, it is possible
-  // that the context is no longer current.
-  virtual gfx::SwapResult SwapBuffersWithBounds(
-      const std::vector<gfx::Rect>& rects,
-      PresentationCallback callback,
-      gfx::FrameData data);
 
   // Copy part of the backbuffer to the frontbuffer. If it returns SWAP_FAILED,
   // it is possible that the context is no longer current.
@@ -255,10 +245,6 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface>,
 
   // Return the interface used for querying EGL timestamps.
   virtual EGLTimestampClient* GetEGLTimestampClient();
-
-  virtual bool SupportsGpuVSync() const;
-
-  virtual void SetGpuVSyncEnabled(bool enabled);
 
   virtual void SetFrameRate(float frame_rate) {}
   static GLSurface* GetCurrent();

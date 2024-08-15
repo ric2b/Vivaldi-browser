@@ -10,12 +10,18 @@ import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
 
+import androidx.annotation.OptIn;
+import androidx.core.os.BuildCompat;
+
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.ApplicationLifetime;
 import org.chromium.chrome.browser.BrowserRestartActivity;
+
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /**
  * Answers requests to kill and (potentially) restart Chrome's main browser process.
@@ -69,6 +75,7 @@ class ChromeLifetimeController
     }
 
     @Override
+    @OptIn(markerClass = androidx.core.os.BuildCompat.PrereleaseSdkCheck.class)
     public void onTerminate(boolean restart) {
         mRestartChromeOnDestroy = restart;
 
@@ -79,9 +86,16 @@ class ChromeLifetimeController
             activity.finish();
         }
 
-        // Kick off a timer to kill the process after a delay, which fires only if the Activities
-        // take too long to be finished.
-        mHandler.postDelayed(mRestartRunnable, WATCHDOG_DELAY_MS);
+        if (BuildCompat.isAtLeastV()) {
+            // Background activity launches are prohibited on newer versions of Android, so if the
+            // restart intent isn't fired right away then Chrome won't restart. See b/331370736.
+            mHandler.post(mRestartRunnable);
+        } else {
+            // Kick off a timer to kill the process after a delay, which fires only if the
+            // Activities
+            // take too long to be finished.
+            mHandler.postDelayed(mRestartRunnable, WATCHDOG_DELAY_MS);
+        }
     }
 
     @Override
@@ -89,6 +103,10 @@ class ChromeLifetimeController
         assert mRemainingActivitiesCount > 0;
         if (newState == ActivityState.DESTROYED) {
             mRemainingActivitiesCount--;
+            // Vivaldi: For Mercedes, let the watchdog always fire the restart intent and give
+            // the Starfish platform a few hundred ms to settle down before relaunching Vivaldi.
+            // Ref. https://bugs.vivaldi.com/browse/AUTO-120
+            if (BuildConfig.IS_OEM_MERCEDES_BUILD) return;
             if (mRemainingActivitiesCount == 0) {
                 fireBrowserRestartActivityIntent();
             }

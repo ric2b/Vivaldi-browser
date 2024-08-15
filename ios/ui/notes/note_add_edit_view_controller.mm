@@ -522,7 +522,7 @@ CGFloat bodyContainerCornerRadius = 6;
 }
 
 - (void)updateUIFromNote {
-  self.noteTextView.text = note_utils_ios::TitleForNoteNode(self.note);
+  self.noteTextView.text = base::SysUTF16ToNSString(self.note->GetContent());
   // Save button state.
   [self updateSaveButtonState];
 }

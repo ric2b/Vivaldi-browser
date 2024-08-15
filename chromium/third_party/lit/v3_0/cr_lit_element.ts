@@ -2,12 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {LitElement} from 'lit/index.js';
+import {LitElement, PropertyValues} from 'lit/index.js';
 
 type ElementCache = Record<string, HTMLElement>;
 
+// Converts a 'nameLikeThis' to 'name-like-this'.
+function toDashCase(name: string): string {
+  return name.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+}
+
 export class CrLitElement extends LitElement {
   $: ElementCache;
+  private willUpdatePending_: boolean = false;
+
+  // Properties for which a '<property-name>-changed' event should be fired
+  // whenever they change.
+  private static notifyProps_: Set<PropertyKey>|null = null;
 
   constructor() {
     super();
@@ -23,6 +33,24 @@ export class CrLitElement extends LitElement {
     const self = this;
     this.$ = new Proxy({}, {
       get(cache: ElementCache, id: string): HTMLElement {
+        if (!self.hasUpdated && !self.isConnected) {
+          throw new Error(`CrLitElement ${
+              self.tagName} $ dictionary accessed before element is connected at least once.`);
+        }
+
+        if (!self.hasUpdated) {
+          // Ensure not within a willUpdate() call, otherwise the
+          // performUpdate() call below will cause an endless recursion. Local
+          // DOM nodes should not be accessed within willUpdate() anyway.
+          if (self.willUpdatePending_) {
+            throw new Error(`CrLitElement ${
+                self.tagName} tried to access this.$ within willUpdate().`);
+          }
+
+          // See Case3 in `ensureInitialRender_` docs.
+          self.performUpdate();
+        }
+
         // First look whether the element has already been retrieved previously.
         if (id in cache) {
           return cache[id]!;
@@ -31,13 +59,96 @@ export class CrLitElement extends LitElement {
         // Otherwise query the shadow DOM and cache the reference for later use.
         const element = self.shadowRoot!.querySelector<HTMLElement>(`#${id}`);
         if (element === null) {
-          throw new Error(`CrLitElement: Failed to find child with id ${id}`);
+          throw new Error(`CrLitElement ${
+              self.tagName}: Failed to find child with id ${id}`);
         }
         cache[id] = element;
 
         return element;
       },
     });
+  }
+
+  // In a few cases it is necessary to force-render the initial state
+  // synchronously instead of waiting for Lit's asynchronous initial render, to
+  // make the initial render behavior similar to Polymer, and consequently make
+  // migrating from Polymer to Lit easier. Documented known such cases below.
+  //
+  // Case1: Calling synchronous APIs that access the ShadowDOM.
+  // Addressed by the call in connectedCallback().
+  //
+  // For example CrActionMenuElement provides synchronous APIs showAt(),
+  // showAtPosition(), close(), getDialog(), and client code should be able to
+  // call these immediately after attaching this element to the DOM, without
+  // having to wait for `updateComplete`.
+  //
+  // Case2: Calling focus() right after a parent dom-if template is stamped.
+  // Addressed by CrLitElement's focus() override.
+  //
+  // This can happen when the following hierarchy is encountered:
+  // <dom-if> grandparent > Polymer parent element > Lit child element
+  // When the dom-if is stamped, and the parent's connectedCallback() is called,
+  // the Lit child's connectedCallback() has not fired yet (unlike Polymer
+  // children, which use `_enqueueClient` from [1]), which is problematic
+  // when the parent element calls a synchronous API method on the Lit child
+  // that assumes that the ShadowDOM is rendered, for example cr-icon-button's
+  // focus().
+  //
+  // [1] https://github.com/Polymer/polymer/blob/1e8b246d01ea99adba305ea04c45d26da31f68f1/lib/mixins/property-effects.js#L1762
+  //
+  // Case3: Referring to child nodes right after a parent dom-if is stamped.
+  // Addressed by the effectively identical logic in the this.$ Proxy above.
+  //
+  // This happens when the same pattern as Case 2 above is encountered.
+  private ensureInitialRender_() {
+    if (!this.hasUpdated) {
+      this.performUpdate();
+    }
+  }
+
+  override connectedCallback() {
+    super.connectedCallback();
+    // See Case1 in `ensureInitialRender_` docs.
+    this.ensureInitialRender_();
+  }
+
+  override willUpdate(_changedProperties: PropertyValues<this>) {
+    this.willUpdatePending_ = true;
+  }
+
+  override updated(changedProperties: PropertyValues<this>) {
+    this.willUpdatePending_ = false;
+
+    const notifyProps = (this.constructor as typeof CrLitElement).notifyProps_;
+    if (notifyProps !== null) {
+      const indexableThis = this as Record<PropertyKey, any>;
+      for (const key of changedProperties.keys()) {
+        if (notifyProps.has(key)) {
+          if (changedProperties.get(key as keyof CrLitElement) === undefined &&
+              indexableThis[key] === undefined) {
+            // Don't fire events if the property was changed back to 'undefined'
+            // before the element was connected. Lit still reports such
+            // properties in `changedProperties` as going from 'undefined' to
+            // 'undefined'.
+            continue;
+          }
+          this.fire(
+              `${toDashCase(key.toString())}-changed`,
+              {value: indexableThis[key]});
+        }
+      }
+    }
+  }
+
+  override focus() {
+    // See Case2 in `ensureInitialRender_` docs.
+    this.ensureInitialRender_();
+    super.focus();
+  }
+
+  fire(eventName: string, detail?: any) {
+    this.dispatchEvent(
+        new CustomEvent(eventName, {bubbles: true, composed: true, detail}));
   }
 
   // Modifies the 'properties' object by automatically specifying
@@ -65,8 +176,7 @@ export class CrLitElement extends LitElement {
 
       // Specify a dash-case attribute name, derived from the property name,
       // similar to what Polymer did.
-      (value as Mutable<typeof value>).attribute =
-          key.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+      (value as Mutable<typeof value>).attribute = toDashCase(key);
     }
 
     // Mutating the properties object alone isn't enough, in the case where
@@ -75,8 +185,25 @@ export class CrLitElement extends LitElement {
     Object.defineProperty(this, 'properties', {value: properties});
   }
 
+  private static populateNotifyProps(): void {
+    if (!this.hasOwnProperty('properties')) {
+      return;
+    }
+
+    for (const [key, value] of Object.entries(this.properties)) {
+      if ((value as {notify?: boolean}).notify) {
+        // Lazily create `notifyProps_` only if any such property exists.
+        if (this.notifyProps_ === null) {
+          this.notifyProps_ = new Set();
+        }
+        this.notifyProps_.add(key);
+      }
+    }
+  }
+
   protected static override finalize() {
     this.patchPropertiesObject();
+    this.populateNotifyProps();
     super.finalize();
   }
 }

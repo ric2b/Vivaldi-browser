@@ -36,7 +36,7 @@ class FormFieldParserTest
                       LanguageCode language = LanguageCode("")) {
     ParsingContext context(client_country, language,
                            GetActivePatternSource().value());
-    FormFieldParser::ParseFormFields(context, list_,
+    FormFieldParser::ParseFormFields(context, fields_,
                                      /*is_form_tag=*/true,
                                      field_candidates_map_);
     return field_candidates_map_.size();
@@ -46,7 +46,7 @@ class FormFieldParserTest
   int ParseSingleFieldForms() {
     ParsingContext context(GeoIpCountryCode(""), LanguageCode(""),
                            GetActivePatternSource().value());
-    FormFieldParser::ParseSingleFieldForms(context, list_,
+    FormFieldParser::ParseSingleFieldForms(context, fields_,
                                            /*is_form_tag=*/true,
                                            field_candidates_map_);
     return field_candidates_map_.size();
@@ -55,7 +55,7 @@ class FormFieldParserTest
   int ParseStandaloneCVCFields() {
     ParsingContext context(GeoIpCountryCode(""), LanguageCode(""),
                            GetActivePatternSource().value());
-    FormFieldParser::ParseStandaloneCVCFields(context, list_,
+    FormFieldParser::ParseStandaloneCVCFields(context, fields_,
                                               field_candidates_map_);
     return field_candidates_map_.size();
   }
@@ -63,7 +63,7 @@ class FormFieldParserTest
   int ParseStandaloneEmailFields() {
     ParsingContext context(GeoIpCountryCode(""), LanguageCode(""),
                            GetActivePatternSource().value());
-    FormFieldParser::ParseStandaloneEmailFields(context, list_,
+    FormFieldParser::ParseStandaloneEmailFields(context, fields_,
                                                 field_candidates_map_);
     return field_candidates_map_.size();
   }
@@ -124,7 +124,6 @@ INSTANTIATE_TEST_SUITE_P(FormFieldParserTest,
 
 TEST_P(MatchTest, Match) {
   const auto& [label, positive_patterns, negative_patterns] = GetParam();
-  constexpr MatchParams kMatchLabel{{MatchAttribute::kLabel}, {}};
   AutofillField field;
   SCOPED_TRACE("label = " + base::UTF16ToUTF8(label));
   field.label = label;
@@ -134,14 +133,14 @@ TEST_P(MatchTest, Match) {
                            PatternSource::kLegacy);
     SCOPED_TRACE("positive_pattern = " + base::UTF16ToUTF8(pattern));
     EXPECT_TRUE(FormFieldParser::MatchForTesting(context, &field, pattern,
-                                                 kMatchLabel));
+                                                 {MatchAttribute::kLabel}));
   }
   for (const auto& pattern : negative_patterns) {
     ParsingContext context(GeoIpCountryCode(""), LanguageCode(""),
                            PatternSource::kLegacy);
     SCOPED_TRACE("negative_pattern = " + base::UTF16ToUTF8(pattern));
     EXPECT_FALSE(FormFieldParser::MatchForTesting(context, &field, pattern,
-                                                  kMatchLabel));
+                                                  {MatchAttribute::kLabel}));
   }
 }
 
@@ -168,36 +167,20 @@ TEST_P(FormFieldParserTest, ParseFormFieldsEnforceMinFillableFields) {
   EXPECT_EQ(0, ParseFormFields());
 }
 
-// Tests that the `parseable_name()` is parsed as an autocomplete type.
-TEST_P(FormFieldParserTest, ParseNameAsAutocompleteType) {
-  base::test::ScopedFeatureList autocomplete_feature;
-  autocomplete_feature.InitAndEnableFeature(
-      features::kAutofillParseNameAsAutocompleteType);
-
-  AddTextFormFieldData("given-name", "", NAME_FIRST);
-  AddTextFormFieldData("family-name", "", NAME_LAST);
-  AddTextFormFieldData("cc-exp-month", "", CREDIT_CARD_EXP_MONTH);
-  // The label is not parsed as an autocomplete type.
-  AddTextFormFieldData("", "cc-exp-month", UNKNOWN_TYPE);
-  EXPECT_EQ(3, ParseFormFields());
-  TestClassificationExpectations();
-}
-
 // Test that the parseable label is used when the feature is enabled.
 TEST_P(FormFieldParserTest, TestParseableLabels) {
   AddTextFormFieldData("", "not a parseable label", UNKNOWN_TYPE);
-  AutofillField* autofill_field = list_.back().get();
+  AutofillField* autofill_field = fields_.back().get();
   autofill_field->set_parseable_label(u"First Name");
 
-  constexpr MatchParams kMatchLabel{{MatchAttribute::kLabel}, {}};
   {
     base::test::ScopedFeatureList feature_list;
     feature_list.InitAndEnableFeature(
         features::kAutofillEnableSupportForParsingWithSharedLabels);
     ParsingContext context(GeoIpCountryCode(""), LanguageCode(""),
                            PatternSource::kLegacy);
-    EXPECT_TRUE(FormFieldParser::MatchForTesting(context, autofill_field,
-                                                 u"First Name", kMatchLabel));
+    EXPECT_TRUE(FormFieldParser::MatchForTesting(
+        context, autofill_field, u"First Name", {MatchAttribute::kLabel}));
   }
   {
     base::test::ScopedFeatureList feature_list;
@@ -205,8 +188,8 @@ TEST_P(FormFieldParserTest, TestParseableLabels) {
         features::kAutofillEnableSupportForParsingWithSharedLabels);
     ParsingContext context(GeoIpCountryCode(""), LanguageCode(""),
                            PatternSource::kLegacy);
-    EXPECT_FALSE(FormFieldParser::MatchForTesting(context, autofill_field,
-                                                  u"First Name", kMatchLabel));
+    EXPECT_FALSE(FormFieldParser::MatchForTesting(
+        context, autofill_field, u"First Name", {MatchAttribute::kLabel}));
   }
 }
 
@@ -371,15 +354,11 @@ TEST_P(FormFieldParserTest, ParseFormRequires3DistinctFieldTypes) {
 }
 
 TEST_P(FormFieldParserTest, ParseStandaloneZipDisabledForUS) {
-  base::test::ScopedFeatureList enabled{
-      features::kAutofillEnableZipOnlyAddressForms};
   AddTextFormFieldData("zip", "ZIP", ADDRESS_HOME_ZIP);
   EXPECT_EQ(0, ParseFormFields(GeoIpCountryCode("US")));
 }
 
 TEST_P(FormFieldParserTest, ParseStandaloneZipEnabledForBR) {
-  base::test::ScopedFeatureList enabled{
-      features::kAutofillEnableZipOnlyAddressForms};
   AddTextFormFieldData("cep", "CEP", ADDRESS_HOME_ZIP);
   EXPECT_EQ(1, ParseFormFields(GeoIpCountryCode("BR")));
   TestClassificationExpectations();

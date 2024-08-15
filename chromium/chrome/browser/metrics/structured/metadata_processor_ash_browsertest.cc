@@ -5,6 +5,7 @@
 #include "chrome/browser/metrics/structured/metadata_processor_ash.h"
 
 #include <optional>
+#include <utility>
 
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_screen_test_api.h"
@@ -33,6 +34,7 @@
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
 #include "components/metrics/metrics_service.h"
 #include "components/metrics/structured/structured_events.h"
+#include "components/metrics/structured/structured_metrics_client.h"
 #include "components/metrics/structured/structured_metrics_features.h"
 #include "components/metrics/structured/structured_metrics_service.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
@@ -295,7 +297,7 @@ class MetadataProcessorTest : public policy::DevicePolicyCrosBrowserTest,
     auto* controller = ash::ExistingUserController::current_controller();
     ASSERT_TRUE(controller);
 
-    ash::UserContext user_context(user_manager::USER_TYPE_PUBLIC_ACCOUNT,
+    ash::UserContext user_context(user_manager::UserType::kPublicAccount,
                                   account_id_1_);
     controller->Login(user_context, ash::SigninSpecifics());
   }
@@ -390,7 +392,7 @@ class MetadataProcessorTest : public policy::DevicePolicyCrosBrowserTest,
           kAppInstallUrl,
           policy::DeviceLocalAccount::TYPE_WEB_KIOSK_APP));
   // Not strictly necessary, but makes kiosk tests run much faster.
-  std::unique_ptr<base::AutoReset<bool>> skip_splash_wait_override_ =
+  base::AutoReset<bool> skip_splash_wait_override_ =
       KioskLaunchController::SkipSplashScreenWaitForTesting();
   std::unique_ptr<ScopedDeviceSettings> settings_;
 };
@@ -417,7 +419,7 @@ IN_PROC_BROWSER_TEST_P(MetadataProcessorTest, DISABLED_UserMetadata) {
 
   ASSERT_TRUE(structured_metrics_mixin_.GetRecorder()->CanProvideMetrics());
 
-  NoMetricsEvent().Record();
+  StructuredMetricsClient::Record(std::move(NoMetricsEvent()));
 
   Wait();
 

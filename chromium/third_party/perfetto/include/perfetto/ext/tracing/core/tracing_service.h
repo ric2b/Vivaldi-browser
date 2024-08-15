@@ -30,6 +30,7 @@
 #include "perfetto/ext/tracing/core/shared_memory.h"
 #include "perfetto/ext/tracing/core/trace_packet.h"
 #include "perfetto/tracing/buffer_exhausted_policy.h"
+#include "perfetto/tracing/core/clock_snapshots.h"
 #include "perfetto/tracing/core/flush_flags.h"
 #include "perfetto/tracing/core/forward_decls.h"
 
@@ -194,8 +195,16 @@ class PERFETTO_EXPORT_COMPONENT ConsumerEndpoint {
   // existing tracing session. Will invoke Consumer::OnSessionCloned().
   // If TracingSessionID == kBugreportSessionId (0xff...ff) the session with the
   // highest bugreport score is cloned (if any exists).
-  // TODO(primiano): make pure virtual after various 3way patches.
-  virtual void CloneSession(TracingSessionID);
+  struct CloneSessionArgs {
+    // If set, the trace filter will not have effect on the cloned session.
+    // Used for bugreports.
+    bool skip_trace_filter = false;
+
+    // If set, affects the generation of the FlushFlags::CloneTarget to be set
+    // to kBugreport when requesting the flush to the producers.
+    bool for_bugreport = false;
+  };
+  virtual void CloneSession(TracingSessionID, CloneSessionArgs) = 0;
 
   // Requests all data sources to flush their data immediately and invokes the
   // passed callback once all of them have acked the flush (in which case
@@ -205,15 +214,15 @@ class PERFETTO_EXPORT_COMPONENT ConsumerEndpoint {
   // if that one is not set (or is set to 0), kDefaultFlushTimeoutMs (5s) is
   // used.
   using FlushCallback = std::function<void(bool /*success*/)>;
-  virtual void Flush(uint32_t timeout_ms, FlushCallback callback, FlushFlags);
+  virtual void Flush(uint32_t timeout_ms,
+                     FlushCallback callback,
+                     FlushFlags) = 0;
 
-  // The only caller of this method is arctraceservice's PerfettoClient.
-  // Everything else in the codebase uses the 3-arg Flush() above.
-  // TODO(primiano): remove the overload without FlushFlags once
-  // arctraceservice moves away from this interface. arctraceservice lives in
-  // the internal repo and changes to this interface require multi-side patches.
-  // Inernally this calls Flush(timeout, callback, FlushFlags(0)).
-  virtual void Flush(uint32_t timeout_ms, FlushCallback callback);
+  // This is required for legacy out-of-repo clients like arctraceservice which
+  // use the 2-version parameter.
+  inline void Flush(uint32_t timeout_ms, FlushCallback callback) {
+    Flush(timeout_ms, std::move(callback), FlushFlags());
+  }
 
   // Tracing data will be delivered invoking Consumer::OnTraceData().
   virtual void ReadBuffers() = 0;
@@ -239,9 +248,14 @@ class PERFETTO_EXPORT_COMPONENT ConsumerEndpoint {
 
   // Used to obtain the list of connected data sources and other info about
   // the tracing service.
+  struct QueryServiceStateArgs {
+    // If set, only the TracingServiceState.tracing_sessions is filled.
+    bool sessions_only = false;
+  };
   using QueryServiceStateCallback =
       std::function<void(bool success, const TracingServiceState&)>;
-  virtual void QueryServiceState(QueryServiceStateCallback) = 0;
+  virtual void QueryServiceState(QueryServiceStateArgs,
+                                 QueryServiceStateCallback) = 0;
 
   // Used for feature detection. Makes sense only when the consumer and the
   // service talk over IPC and can be from different versions.
@@ -270,6 +284,29 @@ struct PERFETTO_EXPORT_COMPONENT TracingServiceInitOpts {
   // compressed ones.
   using CompressorFn = void (*)(std::vector<TracePacket>*);
   CompressorFn compressor_fn = nullptr;
+
+  // Whether the relay endpoint is enabled on producer transport(s).
+  bool enable_relay_endpoint = false;
+};
+
+// The API for the Relay port of the Service. Subclassed by the
+// tracing_service_impl.cc business logic when returning it in response to the
+// ConnectRelayClient() method.
+class PERFETTO_EXPORT_COMPONENT RelayEndpoint {
+ public:
+  virtual ~RelayEndpoint();
+
+  // A snapshot of client and host clocks.
+  struct SyncClockSnapshot {
+    ClockSnapshotVector client_clock_snapshots;
+    ClockSnapshotVector host_clock_snapshots;
+  };
+
+  enum class SyncMode : uint32_t { PING = 1, UPDATE = 2 };
+  virtual void SyncClocks(SyncMode sync_mode,
+                          ClockSnapshotVector client_clocks,
+                          ClockSnapshotVector host_clocks) = 0;
+  virtual void Disconnect() = 0;
 };
 
 // The public API of the tracing Service business logic.
@@ -286,6 +323,7 @@ class PERFETTO_EXPORT_COMPONENT TracingService {
  public:
   using ProducerEndpoint = perfetto::ProducerEndpoint;
   using ConsumerEndpoint = perfetto::ConsumerEndpoint;
+  using RelayEndpoint = perfetto::RelayEndpoint;
   using InitOpts = TracingServiceInitOpts;
 
   // Default sizes used by the service implementation and client library.
@@ -385,6 +423,18 @@ class PERFETTO_EXPORT_COMPONENT TracingService {
   //
   // This feature is currently used by Chrome.
   virtual void SetSMBScrapingEnabled(bool enabled) = 0;
+
+  using RelayClientID = std::pair<base::MachineID, /*client ID*/ uint64_t>;
+  // Connects a remote RelayClient instance and obtains a RelayEndpoint, which
+  // is a 1:1 channel between one RelayClient and the Service. To disconnect
+  // just call Disconnect() of the RelayEndpoint instance. The relay client is
+  // connected using an identifier of MachineID and client ID. The service
+  // doesn't hold an object that represents the client because the relay port
+  // only has a client-to-host SyncClock() method.
+  //
+  // TODO(chinglinyu): connect the relay client using a RelayClient* object when
+  // we need host-to-client RPC method.
+  virtual std::unique_ptr<RelayEndpoint> ConnectRelayClient(RelayClientID) = 0;
 };
 
 }  // namespace perfetto

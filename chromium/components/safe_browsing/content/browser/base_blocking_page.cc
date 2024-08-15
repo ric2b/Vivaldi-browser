@@ -207,6 +207,8 @@ std::string BaseBlockingPage::GetExtraMetricsSuffix(
 security_interstitials::BaseSafeBrowsingErrorUI::SBInterstitialReason
 BaseBlockingPage::GetInterstitialReason(
     const UnsafeResourceList& unsafe_resources) {
+  using enum SBThreatType;
+
   bool harmful = false;
   for (auto iter = unsafe_resources.begin(); iter != unsafe_resources.end();
        ++iter) {
@@ -263,7 +265,9 @@ void BaseBlockingPage::set_proceeded(bool proceeded) {
 
 // static
 security_interstitials::MetricsHelper::ReportDetails
-BaseBlockingPage::GetReportingInfo(const UnsafeResourceList& unsafe_resources) {
+BaseBlockingPage::GetReportingInfo(
+    const UnsafeResourceList& unsafe_resources,
+    std::optional<base::TimeTicks> blocked_page_shown_timestamp) {
   BaseSafeBrowsingErrorUI::SBInterstitialReason interstitial_reason =
       GetInterstitialReason(unsafe_resources);
 
@@ -271,6 +275,7 @@ BaseBlockingPage::GetReportingInfo(const UnsafeResourceList& unsafe_resources) {
   reporting_info.metric_prefix =
       GetMetricPrefix(unsafe_resources, interstitial_reason);
   reporting_info.extra_suffix = GetExtraMetricsSuffix(unsafe_resources);
+  reporting_info.blocked_page_shown_timestamp = blocked_page_shown_timestamp;
   return reporting_info;
 }
 
@@ -282,13 +287,15 @@ BaseBlockingPage::CreateControllerClient(
     BaseUIManager* ui_manager,
     PrefService* pref_service,
     std::unique_ptr<security_interstitials::SettingsPageHelper>
-        settings_page_helper) {
+        settings_page_helper,
+    std::optional<base::TimeTicks> blocked_page_shown_timestamp) {
   history::HistoryService* history_service =
       ui_manager->history_service(web_contents);
 
   std::unique_ptr<security_interstitials::MetricsHelper> metrics_helper =
       std::make_unique<security_interstitials::MetricsHelper>(
-          unsafe_resources[0].url, GetReportingInfo(unsafe_resources),
+          unsafe_resources[0].url,
+          GetReportingInfo(unsafe_resources, blocked_page_shown_timestamp),
           history_service);
 
   return std::make_unique<SafeBrowsingControllerClient>(
@@ -344,6 +351,7 @@ void BaseBlockingPage::OnDontProceedDone() {
 
 // static
 bool BaseBlockingPage::ShouldReportThreatDetails(SBThreatType threat_type) {
+  using enum SBThreatType;
   return threat_type == SB_THREAT_TYPE_BILLING ||
          threat_type == SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING ||
          threat_type == SB_THREAT_TYPE_URL_MALWARE ||

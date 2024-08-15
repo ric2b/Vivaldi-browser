@@ -30,16 +30,21 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_WEBORIGIN_SECURITY_ORIGIN_H_
 
 #include <stdint.h>
+
 #include <memory>
+#include <optional>
 
 #include "base/gtest_prod_util.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/hash_traits.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/thread_safe_ref_counted.h"
 #include "url/origin.h"
+
+namespace WTF {
+class StringBuilder;
+}  // namespace WTF
 
 namespace blink {
 
@@ -396,6 +401,9 @@ class PLATFORM_EXPORT SecurityOrigin : public RefCounted<SecurityOrigin> {
   // For calling GetNonceForSerialization().
   friend class BlobURLOpaqueOriginNonceMap;
 
+  template <typename T, typename... Args>
+  friend scoped_refptr<T> base::MakeRefCounted(Args&&... args);
+
   // Creates a new opaque SecurityOrigin using the supplied |precursor| origin
   // and |nonce|.
   static scoped_refptr<SecurityOrigin> CreateOpaque(
@@ -415,7 +423,7 @@ class PLATFORM_EXPORT SecurityOrigin : public RefCounted<SecurityOrigin> {
   SecurityOrigin(NewUniqueOpaque, const SecurityOrigin* precursor_origin);
 
   // Create a tuple SecurityOrigin, with parameters via KURL
-  explicit SecurityOrigin(const KURL& url);
+  static scoped_refptr<SecurityOrigin> CreateInternal(const KURL& url);
 
   // Constructs a non-opaque tuple origin, analogously to
   // url::Origin::Origin(url::SchemeHostPort).
@@ -431,7 +439,7 @@ class PLATFORM_EXPORT SecurityOrigin : public RefCounted<SecurityOrigin> {
 
   // FIXME: Rename this function to something more semantic.
   bool PassesFileCheck(const SecurityOrigin*) const;
-  void BuildRawString(StringBuilder&) const;
+  void BuildRawString(WTF::StringBuilder&) const;
 
   // Get the nonce associated with this origin, if it is opaque. This should be
   // used only when trying to send an Origin across an IPC pipe or comparing
@@ -442,7 +450,7 @@ class PLATFORM_EXPORT SecurityOrigin : public RefCounted<SecurityOrigin> {
   const String host_ = g_empty_string;
   String domain_ = g_empty_string;
   const uint16_t port_ = 0;
-  const absl::optional<url::Origin::Nonce> nonce_if_opaque_;
+  const std::optional<url::Origin::Nonce> nonce_if_opaque_;
   bool universal_access_ = false;
   bool domain_was_set_in_dom_ = false;
   bool can_load_local_resources_ = false;

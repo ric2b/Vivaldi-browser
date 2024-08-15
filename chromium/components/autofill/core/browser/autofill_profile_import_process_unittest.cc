@@ -33,14 +33,19 @@ MATCHER(CompareWithSource, "") {
 class AutofillProfileImportProcessTest : public testing::Test {
  protected:
   void BlockProfileForUpdates(const AutofillProfile& profile) {
-    while (!personal_data_manager_.IsProfileUpdateBlocked(profile.guid())) {
-      personal_data_manager_.AddStrikeToBlockProfileUpdate(profile.guid());
+    while (
+        !personal_data_manager_.address_data_manager().IsProfileUpdateBlocked(
+            profile.guid())) {
+      personal_data_manager_.address_data_manager()
+          .AddStrikeToBlockProfileUpdate(profile.guid());
     }
   }
 
   void BlockDomainForNewProfiles(GURL url) {
-    while (!personal_data_manager_.IsNewProfileImportBlockedForDomain(url)) {
-      personal_data_manager_.AddStrikeToBlockNewProfileImportForDomain(url);
+    while (!personal_data_manager_.address_data_manager()
+                .IsNewProfileImportBlockedForDomain(url)) {
+      personal_data_manager_.address_data_manager()
+          .AddStrikeToBlockNewProfileImportForDomain(url);
     }
   }
 
@@ -61,26 +66,6 @@ class AutofillProfileImportProcessTest : public testing::Test {
   TestPersonalDataManager personal_data_manager_;
   GURL url_{"https://www.import.me/now.html"};
 };
-
-// Test that two subsequently created `ProfileImportProcess`s have distinct ids.
-TEST_F(AutofillProfileImportProcessTest, DistinctIds) {
-  AutofillProfile empty_profile(
-      i18n_model_definition::kLegacyHierarchyCountryCode);
-  ProfileImportProcess import_data1(empty_profile, "en_US", url_,
-                                    &personal_data_manager_,
-                                    /*allow_only_silent_updates=*/false);
-  ProfileImportProcess import_data2(empty_profile, "en_US", url_,
-                                    &personal_data_manager_,
-                                    /*allow_only_silent_updates=*/false);
-
-  // The import ids should be distinct.
-  EXPECT_NE(import_data1.import_id(), import_data2.import_id());
-
-  // In fact, the import id is incremented for every initiated
-  // `ProfileImportData`.
-  EXPECT_EQ(import_data1.import_id().value() + 1,
-            import_data2.import_id().value());
-}
 
 // Tests the import process for the scenario, that the user accepts the import
 // of their first profile.

@@ -28,11 +28,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-import type * as Platform from '../platform/platform.js';
+import * as Platform from '../platform/platform.js';
 import * as Root from '../root/root.js';
 
 import {Console} from './Console.js';
-import {type GenericEvents, type EventDescriptor, type EventTargetEvent} from './EventTarget.js';
+import {type EventDescriptor, type EventTargetEvent, type GenericEvents} from './EventTarget.js';
 import {ObjectWrapper} from './Object.js';
 import {
   getLocalizedSettingsCategory,
@@ -59,8 +59,8 @@ export class Settings {
   readonly moduleSettings: Map<string, Setting<unknown>>;
 
   private constructor(
-      private readonly syncedStorage: SettingsStorage, readonly globalStorage: SettingsStorage,
-      private readonly localStorage: SettingsStorage) {
+      readonly syncedStorage: SettingsStorage, readonly globalStorage: SettingsStorage,
+      readonly localStorage: SettingsStorage) {
     this.#sessionStorage = new SettingsStorage({});
 
     this.settingNameSet = new Set();
@@ -79,11 +79,7 @@ export class Settings {
           this.createRegExpSetting(settingName, defaultValue, undefined, storageType) :
           this.createSetting(settingName, defaultValue, storageType);
 
-      if (Root.Runtime.Runtime.platform() === 'mac' && registration.titleMac) {
-        setting.setTitleFunction(registration.titleMac);
-      } else {
-        setting.setTitleFunction(registration.title);
-      }
+      setting.setTitleFunction(registration.title);
       if (registration.userActionCondition) {
         setting.setRequiresUserAction(Boolean(Root.Runtime.Runtime.queryParam(registration.userActionCondition)));
       }
@@ -136,6 +132,19 @@ export class Settings {
     }
     this.settingNameSet.add(settingName);
     this.moduleSettings.set(setting.name, setting);
+  }
+
+  static normalizeSettingName(name: string): string {
+    if ([
+          VersionController.GLOBAL_VERSION_SETTING_NAME,
+          VersionController.SYNCED_VERSION_SETTING_NAME,
+          VersionController.LOCAL_VERSION_SETTING_NAME,
+          'currentDockState',
+          'isUnderTest',
+        ].includes(name)) {
+      return name;
+    }
+    return Platform.StringUtilities.toKebabCase(name);
   }
 
   // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
@@ -270,6 +279,10 @@ export class SettingsStorage {
     this.backingStore.clear();
   }
 
+  keys(): string[] {
+    return Object.keys(this.object);
+  }
+
   dumpSizes(): void {
     Console.instance().log('Ten largest settings: ');
 
@@ -294,7 +307,7 @@ export class SettingsStorage {
   }
 }
 
-function removeSetting(setting: Setting<unknown>): void {
+function removeSetting(setting: {name: string, storage: SettingsStorage}): void {
   const name = setting.name;
   const settings = Settings.instance();
 
@@ -336,7 +349,7 @@ export class Setting<V> {
   constructor(
       readonly name: string, readonly defaultValue: V, private readonly eventSupport: ObjectWrapper<GenericEvents>,
       readonly storage: SettingsStorage) {
-    storage.register(name);
+    storage.register(this.name);
   }
 
   setSerializer(serializer: Serializer<unknown, V>): void {
@@ -376,7 +389,25 @@ export class Setting<V> {
   }
 
   disabled(): boolean {
+    if (this.#registration?.disabledCondition) {
+      const {disabled} = this.#registration.disabledCondition();
+      // If registration does not disable it, pass through to #disabled
+      // attribute check.
+      if (disabled) {
+        return true;
+      }
+    }
     return this.#disabled || false;
+  }
+
+  disabledReason(): string|undefined {
+    if (this.#registration?.disabledCondition) {
+      const result = this.#registration.disabledCondition();
+      if (result.disabled) {
+        return result.reason;
+      }
+    }
+    return undefined;
   }
 
   setDisabled(disabled: boolean): void {
@@ -583,7 +614,7 @@ export class VersionController {
   static readonly SYNCED_VERSION_SETTING_NAME = 'syncedInspectorVersion';
   static readonly LOCAL_VERSION_SETTING_NAME = 'localInspectorVersion';
 
-  static readonly CURRENT_VERSION = 36;
+  static readonly CURRENT_VERSION = 37;
 
   readonly #globalVersionSetting: Setting<number>;
   readonly #syncedVersionSetting: Setting<number>;
@@ -1199,6 +1230,34 @@ export class VersionController {
   updateVersionFrom35To36(): void {
     // We have changed the default from 'false' to 'true' and this updates the existing setting just for once.
     Settings.instance().createSetting('showThirdPartyIssues', true).set(true);
+  }
+
+  updateVersionFrom36To37(): void {
+    const updateStorage = (storage: SettingsStorage): void => {
+      for (const key of storage.keys()) {
+        const normalizedKey = Settings.normalizeSettingName(key);
+        if (normalizedKey !== key) {
+          const value = storage.get(key);
+          removeSetting({name: key, storage});
+          storage.set(normalizedKey, value);
+        }
+      }
+    };
+    updateStorage(Settings.instance().globalStorage);
+    updateStorage(Settings.instance().syncedStorage);
+    updateStorage(Settings.instance().localStorage);
+
+    for (const key of Settings.instance().globalStorage.keys()) {
+      if ((key.startsWith('data-grid-') && key.endsWith('-column-weights')) || key.endsWith('-tab-order') ||
+          key === 'views-location-override' || key === 'closeable-tabs') {
+        const setting = Settings.instance().createSetting(key, {});
+        setting.set(Platform.StringUtilities.toKebabCaseKeys(setting.get()));
+      }
+      if (key.endsWith('-selected-tab')) {
+        const setting = Settings.instance().createSetting(key, '');
+        setting.set(Platform.StringUtilities.toKebabCase(setting.get()));
+      }
+    }
   }
 
   /*

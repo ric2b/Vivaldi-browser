@@ -560,18 +560,11 @@ void ToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event) {
       event->StopPropagation();
       return;
     case ui::ET_GESTURE_PINCH_END: {
-      if (!features::IsPipPinchToResizeEnabled()) {
-        return;
-      }
       CompletePinch();
       event->StopPropagation();
       return;
     }
     case ui::ET_GESTURE_PINCH_UPDATE:
-      if (!features::IsPipPinchToResizeEnabled()) {
-        return;
-      }
-
       // `ET_GESTURE_PINCH_UPDATE` is also called during two-finger edge resize,
       // but is handled with `ET_GESTURE_SCROLL_UPDATE`.
       if (window_resizer_ && window_resizer_->IsResize()) {
@@ -677,7 +670,7 @@ bool ToplevelWindowEventHandler::AttemptToStartDrag(
   // initiated, during which time the gesture type may have changed. To
   // start the appropriate gesture, `this` keeps track of if the current
   // gesture is a drag or a pinch.
-  if (in_pinch_ && features::IsPipPinchToResizeEnabled()) {
+  if (in_pinch_) {
     return AttemptToStartPinch(window, point_in_parent, window_component,
                                /*update_gesture_target=*/true);
   }
@@ -742,6 +735,10 @@ bool ToplevelWindowEventHandler::AttemptToStartDrag(
     is_moving_floated_window_ = true;
   }
 
+  // Mark the currently dragged or resized window as excluded for occlusion
+  // purposes.
+  scoped_exclude_.emplace(window);
+
   return true;
 }
 
@@ -754,9 +751,6 @@ bool ToplevelWindowEventHandler::AttemptToStartPinch(
     // Transfer events for gesture if switching to new target.
     aura::Env::GetInstance()->gesture_recognizer()->TransferEventsTo(
         gesture_target_, window, ui::TransferTouchesBehavior::kDontCancel);
-  }
-  if (!features::IsPipPinchToResizeEnabled()) {
-    return false;
   }
 
   // `ET_GESTURE_PINCH_BEGIN` is also called during two-finger edge resize,
@@ -918,8 +912,11 @@ bool ToplevelWindowEventHandler::PrepareForDrag(
 }
 
 bool ToplevelWindowEventHandler::CompleteDrag(DragResult result) {
-  if (!window_resizer_)
+  scoped_exclude_.reset();
+
+  if (!window_resizer_) {
     return false;
+  }
 
   std::unique_ptr<ScopedWindowResizer> resizer(std::move(window_resizer_));
   switch (result) {
@@ -1034,8 +1031,7 @@ void ToplevelWindowEventHandler::HandlePinch(aura::Window* target,
       target, window_resizer_->resizer()->GetTarget()->parent(),
       &location_in_parent);
   window_resizer_->resizer()->Pinch(location_in_parent,
-                                    event->details().scale(),
-                                    event->details().pinch_angle());
+                                    event->details().scale());
   event->StopPropagation();
 }
 

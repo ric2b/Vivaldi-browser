@@ -23,6 +23,8 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_HIT_TEST_REQUEST_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_HIT_TEST_REQUEST_H_
 
+#include <optional>
+
 #include "base/functional/callback.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
@@ -115,8 +117,6 @@ class HitTestRequest {
   HitTestRequestType GetType() const { return request_type_; }
   const LayoutObject* GetStopNode() const { return stop_node_.Get(); }
 
-  // TODO(paint-dev): enforce that the callback doesn't invalidate rendering,
-  // similar to LocalFrameView::in_post_lifecycle_steps_.
   ListBasedHitTestBehavior RunHitNodeCb(const Node& node) const {
     DCHECK(hit_node_cb_);
     return hit_node_cb_->Run(node);

@@ -14,6 +14,8 @@
 #import "build/build_config.h"
 #import "components/feature_engagement/public/feature_constants.h"
 #import "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/iph_for_new_chrome_user/model/features.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_app_interface.h"
@@ -28,6 +30,7 @@
 #import "ios/chrome/test/earl_grey/chrome_matchers_app_interface.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/chrome/test/earl_grey/chrome_xcui_actions.h"
+#import "ios/chrome/test/earl_grey/test_switches.h"
 #import "ios/testing/earl_grey/app_launch_manager.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ios/web/public/test/element_selector.h"
@@ -287,6 +290,13 @@ void FocusFakebox() {
 
   [ChromeEarlGrey clearPasteboard];
   [ChromeEarlGrey clearBrowsingHistory];
+
+  [ChromeEarlGrey setBoolValue:NO forUserPref:prefs::kBottomOmnibox];
+}
+
+- (void)tearDown {
+  [ChromeEarlGrey setBoolValue:NO forUserPref:prefs::kBottomOmnibox];
+  [super tearDown];
 }
 
 #pragma mark - Helpers
@@ -558,12 +568,13 @@ void FocusFakebox() {
   if ([ChromeEarlGrey isIPadIdiom]) {
     EARL_GREY_TEST_SKIPPED(@"Skipped for iPad (no bottom omnibox in tablet)");
   }
-  // Enable the IPH Demo Mode feature to ensure the IPH triggers
+
+  [ChromeEarlGrey setBoolValue:YES forUserPref:prefs::kBottomOmnibox];
+
+  // Enable the IPH flag to ensure the IPH triggersenable)
   AppLaunchConfiguration config = [self appConfigurationForTestCase];
-  config.additional_args.push_back(
-      base::StringPrintf("--enable-features=%s:chosen_feature/"
-                         "IPH_iOSShareToolbarItemFeature,IPHForSafariSwitcher",
-                         feature_engagement::kIPHDemoMode.name));
+  config.iph_feature_enabled = "IPH_iOSShareToolbarItemFeature";
+  config.additional_args.push_back("--enable-features=IPHForSafariSwitcher");
   // Force the conditions that allow the iph to show.
   config.additional_args.push_back("-ForceExperienceForDeviceSwitcher");
   config.additional_args.push_back("SyncedAndFirstDevice");
@@ -598,17 +609,13 @@ void FocusFakebox() {
 // Tests that copying in the omnibox will trigger the share button IPH to be
 // displayed, if certain conditions are met, when omnibox is at the top.
 - (void)testCopyInOmniboxTriggersShareButtonIPHWithTopOmnibox {
-  // Enable the IPH Demo Mode feature to ensure the IPH triggers
+  // Enable the IPH flag to ensure the IPH triggers
   AppLaunchConfiguration config = [self appConfigurationForTestCase];
-  config.additional_args.push_back(
-      base::StringPrintf("--enable-features=%s:chosen_feature/"
-                         "IPH_iOSShareToolbarItemFeature,IPHForSafariSwitcher",
-                         feature_engagement::kIPHDemoMode.name));
+  config.iph_feature_enabled = "IPH_iOSShareToolbarItemFeature";
+  config.additional_args.push_back("--enable-features=IPHForSafariSwitcher");
   // Force the conditions that allow the iph to show.
   config.additional_args.push_back("-ForceExperienceForDeviceSwitcher");
   config.additional_args.push_back("SyncedAndFirstDevice");
-  config.additional_args.push_back(
-      base::StringPrintf("--disable-features=BottomOmniboxSteadyState"));
 
   [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
 
@@ -629,6 +636,10 @@ void FocusFakebox() {
   [ChromeEarlGrey verifyStringCopied:base::SysUTF8ToNSString(_URL1.spec())];
 
   DefocusOmnibox();
+
+  // Verify the omnibox is at the top.
+  [ChromeEarlGrey
+      waitForUIElementToAppearWithMatcher:chrome_test_util::OmniboxOnTop()];
 
   // Verify the share button IPH is shown.
   [ChromeEarlGrey
@@ -671,6 +682,13 @@ void FocusFakebox() {
   // Clear the pasteboard in case there is a URL copied.
   UIPasteboard* pasteboard = UIPasteboard.generalPasteboard;
   [pasteboard setValue:@"" forPasteboardType:UIPasteboardNameGeneral];
+
+  [ChromeEarlGrey setBoolValue:NO forUserPref:prefs::kBottomOmnibox];
+}
+
+- (void)tearDown {
+  [ChromeEarlGrey setBoolValue:NO forUserPref:prefs::kBottomOmnibox];
+  [super tearDown];
 }
 
 // Tapping on steady view starts editing.
@@ -766,22 +784,22 @@ void FocusFakebox() {
   if ([ChromeEarlGrey isIPadIdiom]) {
     EARL_GREY_TEST_SKIPPED(@"Skipped for iPad (no bottom omnibox in tablet)");
   }
-  // Enable the IPH Demo Mode feature to ensure the IPH triggers
+
+  [ChromeEarlGrey setBoolValue:YES forUserPref:prefs::kBottomOmnibox];
+
+  // Enable the IPH flag to ensure the IPH triggers
   AppLaunchConfiguration config = [self appConfigurationForTestCase];
-  config.additional_args.push_back(
-      base::StringPrintf("--enable-features=%s:chosen_feature/"
-                         "IPH_iOSShareToolbarItemFeature,IPHForSafariSwitcher",
-                         feature_engagement::kIPHDemoMode.name));
+  config.iph_feature_enabled = "IPH_iOSShareToolbarItemFeature";
+  config.additional_args.push_back("--enable-features=IPHForSafariSwitcher");
   // Force the conditions that allow the iph to show.
   config.additional_args.push_back("-ForceExperienceForDeviceSwitcher");
   config.additional_args.push_back("SyncedAndFirstDevice");
 
   [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
 
-  GREYAssertTrue([ChromeEarlGrey isBottomOmniboxSteadyStateEnabled],
-                 @"Test case should have ran in bottom omnibox environment");
-
   [self openPage1];
+  [ChromeEarlGrey
+      waitForUIElementToAppearWithMatcher:chrome_test_util::OmniboxAtBottom()];
 
   // Long pressing should allow copying.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::DefocusedLocationView()]
@@ -806,17 +824,13 @@ void FocusFakebox() {
 // button IPH to be displayed, if certain conditions are met, with the omnibox
 // at the top.
 - (void)testCopyLocationBarTriggersShareButtonIPHWithTopOmnibox {
-  // Enable the IPH Demo Mode feature to ensure the IPH triggers
+  // Enable the IPH flag to ensure the IPH triggers
   AppLaunchConfiguration config = [self appConfigurationForTestCase];
-  config.additional_args.push_back(
-      base::StringPrintf("--enable-features=%s:chosen_feature/"
-                         "IPH_iOSShareToolbarItemFeature,IPHForSafariSwitcher",
-                         feature_engagement::kIPHDemoMode.name));
+  config.iph_feature_enabled = "IPH_iOSShareToolbarItemFeature";
+  config.additional_args.push_back("--enable-features=IPHForSafariSwitcher");
   // Force the conditions that allow the iph to show.
   config.additional_args.push_back("-ForceExperienceForDeviceSwitcher");
   config.additional_args.push_back("SyncedAndFirstDevice");
-  config.additional_args.push_back(
-      base::StringPrintf("--disable-features=BottomOmniboxSteadyState"));
 
   [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
 
@@ -835,6 +849,10 @@ void FocusFakebox() {
       performAction:grey_tap()];
   [ChromeEarlGrey verifyStringCopied:base::SysUTF8ToNSString(_URL1.spec())];
 
+  // Verify the omnibox is at the top.
+  [ChromeEarlGrey
+      waitForUIElementToAppearWithMatcher:chrome_test_util::OmniboxOnTop()];
+
   // Verify the share button IPH is shown.
   GREYAssert([ChromeEarlGrey testUIElementAppearanceWithMatcher:
                                  chrome_test_util::TabShareButton()],
@@ -848,12 +866,10 @@ void FocusFakebox() {
 // share button IPH to be displayed, if the share button is disabled because the
 // url is not sharable.
 - (void)testCopyLocationBarNotTriggersShareButtonIPHWhenButtonDisabled {
-  // Enable the IPH Demo Mode feature to ensure the IPH triggers
+  // Enable the IPH flag to ensure the IPH triggers
   AppLaunchConfiguration config = [self appConfigurationForTestCase];
-  config.additional_args.push_back(
-      base::StringPrintf("--enable-features=%s:chosen_feature/"
-                         "IPH_iOSShareToolbarItemFeature,IPHForSafariSwitcher",
-                         feature_engagement::kIPHDemoMode.name));
+  config.iph_feature_enabled = "IPH_iOSShareToolbarItemFeature";
+  config.additional_args.push_back("--enable-features=IPHForSafariSwitcher");
   // Force the conditions that allow the iph to show.
   config.additional_args.push_back("-ForceExperienceForDeviceSwitcher");
   config.additional_args.push_back("SyncedAndFirstDevice");
@@ -1188,7 +1204,13 @@ void FocusFakebox() {
 // displayed. Paste button should be hidden when pasteboard is empty otherwise
 // it should be displayed. Select & SelectAll buttons should be hidden when the
 // omnibox is empty.
-- (void)testEmptyOmnibox {
+// TODO(b/325908456): This test fails on iPad device.
+#if TARGET_OS_SIMULATOR
+#define MAYBE_testEmptyOmnibox testEmptyOmnibox
+#else
+#define MAYBE_testEmptyOmnibox DISABLED_testEmptyOmnibox
+#endif
+- (void)MAYBE_testEmptyOmnibox {
   // TODO(crbug.com/1209342): this test fails on iOS 15 devices.
   if (!base::ios::IsRunningOnIOS16OrLater()) {
     EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 15.");
@@ -1300,7 +1322,13 @@ void FocusFakebox() {
 // fied, Select button should be hidden & SelectAll button should be displayed.
 // If the selected text is the entire omnibox field, select & SelectAll button
 // should be hidden.
-- (void)testSelection {
+// TODO(b/325908456): This test fails on iPad device.
+#if TARGET_OS_SIMULATOR
+#define MAYBE_testSelection testSelection
+#else
+#define MAYBE_testSelection DISABLED_testSelection
+#endif
+- (void)MAYBE_testSelection {
   // Focus omnibox.
   [self focusFakebox];
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
@@ -1362,7 +1390,13 @@ void FocusFakebox() {
       assertWithMatcher:grey_nil()];
 }
 
-- (void)testNoDefaultMatch {
+// TODO(b/325908456): This test fails on iPad device.
+#if TARGET_OS_SIMULATOR
+#define MAYBE_testNoDefaultMatch testNoDefaultMatch
+#else
+#define MAYBE_testNoDefaultMatch DISABLED_testNoDefaultMatch
+#endif
+- (void)MAYBE_testNoDefaultMatch {
   // TODO(crbug.com/1253345) This test fails on iOS 15 devices.
   if (!base::ios::IsRunningOnIOS16OrLater()) {
     EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 15.");

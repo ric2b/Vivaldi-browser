@@ -16,6 +16,7 @@
 #include "components/viz/common/quads/texture_draw_quad.h"
 #include "components/viz/common/quads/yuv_video_draw_quad.h"
 #include "components/viz/service/display/output_surface.h"
+#include "media/base/media_switches.h"
 #include "media/base/video_frame.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -31,6 +32,19 @@ static void DebugSetImplThreadAndMainThreadBlocked(
   task_runner_provider->SetCurrentThreadIsImplThread(true);
   task_runner_provider->SetMainThreadBlocked(true);
 #endif
+}
+
+bool CanUseRasterInterface() {
+#if BUILDFLAG(IS_ANDROID)
+  return base::FeatureList::IsEnabled(
+      media::kRasterInterfaceInVideoResourceUpdater);
+#else
+  return true;
+#endif
+}
+
+bool UseMultiplanarSoftwarePixelUpload() {
+  return CanUseRasterInterface() && media::IsWritePixelsYUVEnabled();
 }
 
 TEST(VideoLayerImplTest, Occlusion) {
@@ -333,14 +347,21 @@ TEST(VideoLayerImplTest, SoftwareVideoFrameGeneratesYUVQuad) {
 
   EXPECT_EQ(1u, impl.quad_list().size());
   const viz::DrawQuad* draw_quad = impl.quad_list().ElementAt(0);
-  ASSERT_EQ(viz::DrawQuad::Material::kYuvVideoContent, draw_quad->material);
 
-  const auto* yuv_draw_quad =
-      static_cast<const viz::YUVVideoDrawQuad*>(draw_quad);
-  EXPECT_EQ(yuv_draw_quad->uv_tex_size().height(),
-            (yuv_draw_quad->ya_tex_size().height() + 1) / 2);
-  EXPECT_EQ(yuv_draw_quad->uv_tex_size().width(),
-            (yuv_draw_quad->ya_tex_size().width() + 1) / 2);
+  if (UseMultiplanarSoftwarePixelUpload()) {
+    ASSERT_EQ(viz::DrawQuad::Material::kTextureContent, draw_quad->material);
+    const auto* texture_draw_quad =
+        static_cast<const viz::TextureDrawQuad*>(draw_quad);
+    EXPECT_TRUE(texture_draw_quad->is_video_frame);
+  } else {
+    ASSERT_EQ(viz::DrawQuad::Material::kYuvVideoContent, draw_quad->material);
+    const auto* yuv_draw_quad =
+        static_cast<const viz::YUVVideoDrawQuad*>(draw_quad);
+    EXPECT_EQ(yuv_draw_quad->uv_tex_size().height(),
+              (yuv_draw_quad->ya_tex_size().height() + 1) / 2);
+    EXPECT_EQ(yuv_draw_quad->uv_tex_size().width(),
+              (yuv_draw_quad->ya_tex_size().width() + 1) / 2);
+  }
 }
 
 TEST(VideoLayerImplTest, HibitSoftwareVideoFrameGeneratesYUVQuad) {
@@ -373,12 +394,19 @@ TEST(VideoLayerImplTest, HibitSoftwareVideoFrameGeneratesYUVQuad) {
 
   EXPECT_EQ(1u, impl.quad_list().size());
   const viz::DrawQuad* draw_quad = impl.quad_list().ElementAt(0);
-  ASSERT_EQ(viz::DrawQuad::Material::kYuvVideoContent, draw_quad->material);
 
-  const auto* yuv_draw_quad =
-      static_cast<const viz::YUVVideoDrawQuad*>(draw_quad);
-  EXPECT_EQ(5, yuv_draw_quad->uv_tex_size().height());
-  EXPECT_EQ(10, yuv_draw_quad->uv_tex_size().width());
+  if (UseMultiplanarSoftwarePixelUpload()) {
+    ASSERT_EQ(viz::DrawQuad::Material::kTextureContent, draw_quad->material);
+    const auto* texture_draw_quad =
+        static_cast<const viz::TextureDrawQuad*>(draw_quad);
+    EXPECT_TRUE(texture_draw_quad->is_video_frame);
+  } else {
+    ASSERT_EQ(viz::DrawQuad::Material::kYuvVideoContent, draw_quad->material);
+    const auto* yuv_draw_quad =
+        static_cast<const viz::YUVVideoDrawQuad*>(draw_quad);
+    EXPECT_EQ(5, yuv_draw_quad->uv_tex_size().height());
+    EXPECT_EQ(10, yuv_draw_quad->uv_tex_size().width());
+  }
 }
 
 TEST(VideoLayerImplTest, NativeYUVFrameGeneratesYUVQuad) {

@@ -23,9 +23,12 @@
 #include "base/sequence_checker.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/thread_pool.h"
 #include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/task_environment.h"
 #include "base/thread_annotations.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "build/build_config.h"
@@ -34,7 +37,6 @@
 #include "sql/recovery.h"
 #include "sql/sql_features.h"
 #include "sql/statement.h"
-#include "sql/test/database_test_peer.h"
 #include "sql/test/scoped_error_expecter.h"
 #include "sql/test/test_helpers.h"
 #include "sql/transaction.h"
@@ -481,6 +483,100 @@ TEST_P(SQLDatabaseTest, ResetErrorCallback) {
       << "Execute() should not report errors after reset_error_callback()";
   EXPECT_EQ(SQLITE_OK, error)
       << "Execute() should not report errors after reset_error_callback()";
+}
+
+// Regression test for https://crbug.com/1522873
+TEST_P(SQLDatabaseTest, ErrorCallbackThatClosesDb) {
+  for (const bool reopen_db : {false, true}) {
+    SCOPED_TRACE(::testing::Message() << "reopen_db: " << reopen_db);
+    // Ensure that `db_` is fresh in this iteration.
+    CreateFreshDB();
+    static constexpr char kCreateSql[] =
+        "CREATE TABLE rows(id INTEGER PRIMARY KEY NOT NULL)";
+    ASSERT_TRUE(db_->Execute(kCreateSql));
+    ASSERT_TRUE(db_->Execute("INSERT INTO rows(id) VALUES(12)"));
+
+    bool error_callback_called = false;
+    int error = SQLITE_OK;
+    db_->set_error_callback(
+        base::BindLambdaForTesting([&](int sqlite_error, Statement* statement) {
+          error_callback_called = true;
+          error = sqlite_error;
+          db_->Close();
+          if (reopen_db) {
+            ASSERT_TRUE(db_->Open(db_path_));
+          }
+        }));
+
+    {
+      sql::test::ScopedErrorExpecter expecter;
+      expecter.ExpectError(SQLITE_CONSTRAINT);
+      EXPECT_FALSE(db_->Execute("INSERT INTO rows(id) VALUES(12)"))
+          << "Inserting a duplicate primary key should have failed";
+      EXPECT_TRUE(expecter.SawExpectedErrors())
+          << "Inserting a duplicate primary key should have failed";
+    }
+    EXPECT_TRUE(error_callback_called);
+    EXPECT_EQ(SQLITE_CONSTRAINT_PRIMARYKEY, error);
+    EXPECT_EQ(db_->is_open(), reopen_db);
+  }
+}
+
+TEST_P(SQLDatabaseTest, DetachFromSequence) {
+  base::test::TaskEnvironment task_environment;
+
+  // Get a task runner so we can post tasks to different sequence.
+  scoped_refptr<base::SequencedTaskRunner> task_runner =
+      base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()});
+  ASSERT_FALSE(task_runner->RunsTasksInCurrentSequence());
+
+  // The database's sequence checker is already implicitly attached to the
+  // current sequence because the test fixture opened it.
+  ASSERT_TRUE(db_->is_open());
+
+  // Detach before moving the Database instance to another sequence. Note that
+  // it will be destroyed on the other sequence.
+  db_->DetachFromSequence();
+  base::RunLoop run_loop;
+  task_runner->PostTaskAndReply(
+      FROM_HERE,
+      base::BindOnce(
+          [](std::unique_ptr<Database> db) {
+            static constexpr char kCreateSql[] =
+                "CREATE TABLE rows(id INTEGER PRIMARY KEY NOT NULL)";
+            ASSERT_TRUE(db->Execute(kCreateSql));
+          },
+          std::move(db_)),
+      run_loop.QuitClosure());
+  run_loop.Run();
+}
+
+// Regression test for https://crbug.com/1522873
+TEST_P(SQLDatabaseTest, ErrorCallbackThatFreesDatabase) {
+  static constexpr char kCreateSql[] =
+      "CREATE TABLE rows(id INTEGER PRIMARY KEY NOT NULL)";
+  ASSERT_TRUE(db_->Execute(kCreateSql));
+  ASSERT_TRUE(db_->Execute("INSERT INTO rows(id) VALUES(12)"));
+
+  bool error_callback_called = false;
+  int error = SQLITE_OK;
+  db_->set_error_callback(
+      base::BindLambdaForTesting([&](int sqlite_error, Statement* statement) {
+        error_callback_called = true;
+        error = sqlite_error;
+        db_.reset();
+      }));
+
+  {
+    sql::test::ScopedErrorExpecter expecter;
+    expecter.ExpectError(SQLITE_CONSTRAINT);
+    EXPECT_FALSE(db_->Execute("INSERT INTO rows(id) VALUES(12)"))
+        << "Inserting a duplicate primary key should have failed";
+    EXPECT_TRUE(expecter.SawExpectedErrors())
+        << "Inserting a duplicate primary key should have failed";
+  }
+  EXPECT_TRUE(error_callback_called);
+  EXPECT_EQ(SQLITE_CONSTRAINT_PRIMARYKEY, error);
 }
 
 // Sets a flag to true/false to track being alive.
@@ -1511,8 +1607,7 @@ TEST_P(SQLDatabaseTest, AttachDatabase) {
   // Cannot see the attached database, yet.
   EXPECT_FALSE(db_->IsSQLValid("SELECT COUNT(*) from other.rows"));
 
-  EXPECT_TRUE(DatabaseTestPeer::AttachDatabase(db_.get(), attach_path,
-                                               kAttachmentPoint));
+  EXPECT_TRUE(db_->AttachDatabase(attach_path, kAttachmentPoint));
   EXPECT_TRUE(db_->IsSQLValid("SELECT COUNT(*) from other.rows"));
 
   // Queries can touch both databases after the ATTACH.
@@ -1523,7 +1618,7 @@ TEST_P(SQLDatabaseTest, AttachDatabase) {
     EXPECT_EQ(1, select.ColumnInt(0));
   }
 
-  EXPECT_TRUE(DatabaseTestPeer::DetachDatabase(db_.get(), kAttachmentPoint));
+  EXPECT_TRUE(db_->DetachDatabase(kAttachmentPoint));
   EXPECT_FALSE(db_->IsSQLValid("SELECT COUNT(*) from other.rows"));
 }
 
@@ -1549,8 +1644,7 @@ TEST_P(SQLDatabaseTest, AttachDatabaseWithOpenTransaction) {
   // Attach succeeds in a transaction.
   Transaction transaction(db_.get());
   EXPECT_TRUE(transaction.Begin());
-  EXPECT_TRUE(DatabaseTestPeer::AttachDatabase(db_.get(), attach_path,
-                                               kAttachmentPoint));
+  EXPECT_TRUE(db_->AttachDatabase(attach_path, kAttachmentPoint));
   EXPECT_TRUE(db_->IsSQLValid("SELECT COUNT(*) from other.rows"));
 
   // Queries can touch both databases after the ATTACH.
@@ -1565,14 +1659,14 @@ TEST_P(SQLDatabaseTest, AttachDatabaseWithOpenTransaction) {
   {
     sql::test::ScopedErrorExpecter expecter;
     expecter.ExpectError(SQLITE_ERROR);
-    EXPECT_FALSE(DatabaseTestPeer::DetachDatabase(db_.get(), kAttachmentPoint));
+    EXPECT_FALSE(db_->DetachDatabase(kAttachmentPoint));
     ASSERT_TRUE(expecter.SawExpectedErrors());
   }
   EXPECT_TRUE(db_->IsSQLValid("SELECT COUNT(*) from other.rows"));
 
   // Detach succeeds when the transaction is closed.
   transaction.Rollback();
-  EXPECT_TRUE(DatabaseTestPeer::DetachDatabase(db_.get(), kAttachmentPoint));
+  EXPECT_TRUE(db_->DetachDatabase(kAttachmentPoint));
   EXPECT_FALSE(db_->IsSQLValid("SELECT COUNT(*) from other.rows"));
 }
 
@@ -2179,8 +2273,8 @@ TEST_P(SQLDatabaseTest, OpenWithRecoveryHandlesCorruption) {
     size_t error_count = 0;
     auto callback = base::BindLambdaForTesting([&](int error, Statement* stmt) {
       error_count++;
-      ASSERT_TRUE(BuiltInRecovery::RecoverIfPossible(
-          db_.get(), error, sql::BuiltInRecovery::Strategy::kRecoverOrRaze));
+      ASSERT_TRUE(Recovery::RecoverIfPossible(
+          db_.get(), error, sql::Recovery::Strategy::kRecoverOrRaze));
       if (corrupt_after_recovery) {
         // Corrupt the file again after temporarily recovering it.
         ASSERT_TRUE(sql::test::CorruptSizeInHeader(db_path_));

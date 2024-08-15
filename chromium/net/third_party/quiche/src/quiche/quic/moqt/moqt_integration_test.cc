@@ -31,6 +31,7 @@ namespace {
 using ::quic::simulator::Simulator;
 using ::testing::_;
 using ::testing::Assign;
+using ::testing::Return;
 
 class ClientEndpoint : public quic::simulator::QuicEndpointWithConnection {
  public:
@@ -62,6 +63,7 @@ class ClientEndpoint : public quic::simulator::QuicEndpointWithConnection {
   testing::MockFunction<void(absl::string_view)>& terminated_callback() {
     return callbacks_.session_terminated_callback;
   }
+  MockSessionCallbacks& callbacks() { return callbacks_; }
 
  private:
   MockSessionCallbacks callbacks_;
@@ -104,6 +106,7 @@ class ServerEndpoint : public quic::simulator::QuicEndpointWithConnection {
   testing::MockFunction<void(absl::string_view)>& terminated_callback() {
     return callbacks_.session_terminated_callback;
   }
+  MockSessionCallbacks& callbacks() { return callbacks_; }
 
  private:
   MockSessionCallbacks callbacks_;
@@ -117,9 +120,9 @@ class MoqtIntegrationTest : public quiche::test::QuicheTest {
  public:
   void CreateDefaultEndpoints() {
     client_ = std::make_unique<ClientEndpoint>(
-        &test_harness_.simulator(), "Client", "Server", MoqtVersion::kDraft01);
+        &test_harness_.simulator(), "Client", "Server", MoqtVersion::kDraft03);
     server_ = std::make_unique<ServerEndpoint>(
-        &test_harness_.simulator(), "Server", "Client", MoqtVersion::kDraft01);
+        &test_harness_.simulator(), "Server", "Client", MoqtVersion::kDraft03);
     test_harness_.set_client(client_.get());
     test_harness_.set_server(server_.get());
   }
@@ -170,7 +173,7 @@ TEST_F(MoqtIntegrationTest, VersionMismatch) {
       &test_harness_.simulator(), "Client", "Server",
       MoqtVersion::kUnrecognizedVersionForTests);
   server_ = std::make_unique<ServerEndpoint>(
-      &test_harness_.simulator(), "Server", "Client", MoqtVersion::kDraft01);
+      &test_harness_.simulator(), "Server", "Client", MoqtVersion::kDraft03);
   test_harness_.set_client(client_.get());
   test_harness_.set_server(server_.get());
   WireUpEndpoints();
@@ -189,19 +192,71 @@ TEST_F(MoqtIntegrationTest, VersionMismatch) {
   EXPECT_TRUE(success);
 }
 
-TEST_F(MoqtIntegrationTest, AnnounceExchange) {
+TEST_F(MoqtIntegrationTest, AnnounceSuccess) {
   EstablishSession();
-  testing::MockFunction<void(absl::string_view track_namespace,
-                             std::optional<absl::string_view> error_message)>
+  EXPECT_CALL(server_->callbacks().incoming_announce_callback, Call("foo"))
+      .WillOnce(Return(std::nullopt));
+  testing::MockFunction<void(
+      absl::string_view track_namespace,
+      std::optional<MoqtAnnounceErrorReason> error_message)>
       announce_callback;
   client_->session()->Announce("foo", announce_callback.AsStdFunction());
   bool matches = false;
   EXPECT_CALL(announce_callback, Call(_, _))
       .WillOnce([&](absl::string_view track_namespace,
-                    std::optional<absl::string_view> error_message) {
+                    std::optional<MoqtAnnounceErrorReason> error) {
         matches = true;
         EXPECT_EQ(track_namespace, "foo");
-        EXPECT_FALSE(error_message.has_value());
+        EXPECT_FALSE(error.has_value());
+      });
+  bool success =
+      test_harness_.RunUntilWithDefaultTimeout([&]() { return matches; });
+  EXPECT_TRUE(success);
+}
+
+TEST_F(MoqtIntegrationTest, AnnounceSuccessSubscribeInResponse) {
+  EstablishSession();
+  EXPECT_CALL(server_->callbacks().incoming_announce_callback, Call("foo"))
+      .WillOnce(Return(std::nullopt));
+  MockRemoteTrackVisitor server_visitor;
+  testing::MockFunction<void(
+      absl::string_view track_namespace,
+      std::optional<MoqtAnnounceErrorReason> error_message)>
+      announce_callback;
+  client_->session()->Announce("foo", announce_callback.AsStdFunction());
+  bool matches = false;
+  EXPECT_CALL(announce_callback, Call(_, _))
+      .WillOnce([&](absl::string_view track_namespace,
+                    std::optional<MoqtAnnounceErrorReason> error) {
+        EXPECT_EQ(track_namespace, "foo");
+        EXPECT_FALSE(error.has_value());
+        server_->session()->SubscribeCurrentGroup(track_namespace, "/catalog",
+                                                  &server_visitor);
+      });
+  EXPECT_CALL(server_visitor, OnReply(_, _)).WillOnce([&]() {
+    matches = true;
+  });
+  bool success =
+      test_harness_.RunUntilWithDefaultTimeout([&]() { return matches; });
+  EXPECT_TRUE(success);
+}
+
+TEST_F(MoqtIntegrationTest, AnnounceFailure) {
+  EstablishSession();
+  testing::MockFunction<void(
+      absl::string_view track_namespace,
+      std::optional<MoqtAnnounceErrorReason> error_message)>
+      announce_callback;
+  client_->session()->Announce("foo", announce_callback.AsStdFunction());
+  bool matches = false;
+  EXPECT_CALL(announce_callback, Call(_, _))
+      .WillOnce([&](absl::string_view track_namespace,
+                    std::optional<MoqtAnnounceErrorReason> error) {
+        matches = true;
+        EXPECT_EQ(track_namespace, "foo");
+        ASSERT_TRUE(error.has_value());
+        EXPECT_EQ(error->error_code,
+                  MoqtAnnounceErrorCode::kAnnounceNotSupported);
       });
   bool success =
       test_harness_.RunUntilWithDefaultTimeout([&]() { return matches; });
@@ -213,7 +268,8 @@ TEST_F(MoqtIntegrationTest, SubscribeAbsoluteOk) {
   FullTrackName full_track_name("foo", "bar");
   MockLocalTrackVisitor server_visitor;
   MockRemoteTrackVisitor client_visitor;
-  server_->session()->AddLocalTrack(full_track_name, &server_visitor);
+  server_->session()->AddLocalTrack(
+      full_track_name, MoqtForwardingPreference::kObject, &server_visitor);
   std::optional<absl::string_view> expected_reason = std::nullopt;
   bool received_ok = false;
   EXPECT_CALL(client_visitor, OnReply(full_track_name, expected_reason))
@@ -231,7 +287,8 @@ TEST_F(MoqtIntegrationTest, SubscribeRelativeOk) {
   FullTrackName full_track_name("foo", "bar");
   MockLocalTrackVisitor server_visitor;
   MockRemoteTrackVisitor client_visitor;
-  server_->session()->AddLocalTrack(full_track_name, &server_visitor);
+  server_->session()->AddLocalTrack(
+      full_track_name, MoqtForwardingPreference::kObject, &server_visitor);
   std::optional<absl::string_view> expected_reason = std::nullopt;
   bool received_ok = false;
   EXPECT_CALL(client_visitor, OnReply(full_track_name, expected_reason))
@@ -249,7 +306,8 @@ TEST_F(MoqtIntegrationTest, SubscribeCurrentGroupOk) {
   FullTrackName full_track_name("foo", "bar");
   MockLocalTrackVisitor server_visitor;
   MockRemoteTrackVisitor client_visitor;
-  server_->session()->AddLocalTrack(full_track_name, &server_visitor);
+  server_->session()->AddLocalTrack(
+      full_track_name, MoqtForwardingPreference::kObject, &server_visitor);
   std::optional<absl::string_view> expected_reason = std::nullopt;
   bool received_ok = false;
   EXPECT_CALL(client_visitor, OnReply(full_track_name, expected_reason))

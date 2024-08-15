@@ -15,7 +15,8 @@ export type TestParams = {
 type DestroyableObject =
   | { destroy(): void }
   | { close(): void }
-  | { getExtension(extensionName: 'WEBGL_lose_context'): WEBGL_lose_context };
+  | { getExtension(extensionName: 'WEBGL_lose_context'): WEBGL_lose_context }
+  | HTMLVideoElement;
 
 export class SubcaseBatchState {
   constructor(
@@ -124,8 +125,12 @@ export class Fixture<S extends SubcaseBatchState = SubcaseBatchState> {
         if (WEBGL_lose_context) WEBGL_lose_context.loseContext();
       } else if ('destroy' in o) {
         o.destroy();
-      } else {
+      } else if ('close' in o) {
         o.close();
+      } else {
+        // HTMLVideoElement
+        o.src = '';
+        o.srcObject = null;
       }
     }
   }

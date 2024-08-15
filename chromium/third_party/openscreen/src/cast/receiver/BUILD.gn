@@ -2,11 +2,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("../../gni/openscreen.gni")
+
 visibility = [ "./*" ]
 
 # TODO(https://issuetracker.google.com/255951872): Move public code into the
 # public/ folder.
-source_set("channel") {
+openscreen_source_set("channel") {
   visibility += [ "*" ]
   public = [
     "channel/device_auth_namespace_handler.h",
@@ -35,7 +37,7 @@ source_set("channel") {
   ]
 }
 
-source_set("agent") {
+openscreen_source_set("agent") {
   visibility += [ "../standalone_receiver:*" ]
   public = [ "application_agent.h" ]
   sources = [ "application_agent.cc" ]
@@ -52,7 +54,7 @@ source_set("agent") {
   ]
 }
 
-source_set("test_helpers") {
+openscreen_source_set("test_helpers") {
   testonly = true
   visibility += [ "../test:unittests" ]
   public = [ "channel/testing/device_auth_test_helpers.h" ]
@@ -69,7 +71,7 @@ source_set("test_helpers") {
   ]
 }
 
-source_set("unittests") {
+openscreen_source_set("unittests") {
   testonly = true
   visibility += [
     "../..:openscreen_unittests_all",

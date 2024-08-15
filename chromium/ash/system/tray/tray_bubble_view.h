@@ -17,6 +17,7 @@
 #include "base/memory/weak_ptr.h"
 #include "ui/accessibility/ax_enums.mojom-forward.h"
 #include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/display/display_observer.h"
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
@@ -42,10 +43,11 @@ class SystemShadow;
 // and other implementation specific details.
 class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
                                   public views::MouseWatcherListener,
+                                  public display::DisplayObserver,
                                   public message_center::MessageCenterObserver {
- public:
-  METADATA_HEADER(TrayBubbleView);
+  METADATA_HEADER(TrayBubbleView, views::BubbleDialogDelegateView)
 
+ public:
   // All the types of tray bubbles. This is defined in the init params when
   // constructing the bubble.
   enum class TrayBubbleType {
@@ -123,7 +125,7 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
     // corresponding tray has been cleaned up.
     base::WeakPtr<Delegate> delegate = nullptr;
     gfx::NativeWindow parent_window = gfx::NativeWindow();
-    raw_ptr<View> anchor_view = nullptr;
+    raw_ptr<View, DanglingUntriaged> anchor_view = nullptr;
     AnchorMode anchor_mode = AnchorMode::kView;
     // Only used if anchor_mode == AnchorMode::kRect.
     gfx::Rect anchor_rect;
@@ -135,6 +137,9 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
     int preferred_width = 0;
     int max_height = 0;
     bool close_on_deactivate = true;
+    // Indicates whether the tray bubble will become activatable when it is
+    // clicked.
+    bool set_can_activate_on_click_or_tap = false;
     // Indicates whether tray bubble view should add a pre target event handler.
     bool reroute_event_handler = false;
     int corner_radius = kBubbleCornerRadius;
@@ -254,6 +259,9 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
       const std::string& notification_id,
       const message_center::DisplaySource source) override;
 
+  // display::DisplayObserver:
+  void OnDisplayTabletStateChanged(display::TabletState state) override;
+
   // Notify tray bubble's observers and `StatusAreaWidget` that this tray is
   // being open (only applicable to bubble that is anchored to status area).
   // This function is automatically called during `TrayBubbleView`'s
@@ -301,6 +309,7 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
 
     // Overridden from ui::EventHandler
     void OnKeyEvent(ui::KeyEvent* event) override;
+    void OnEvent(ui::Event* event) override;
 
    private:
     // TrayBubbleView to which key events are going to be rerouted. Not owned.
@@ -312,6 +321,7 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
   base::WeakPtr<Delegate> delegate_;
   int preferred_width_;
   bool is_gesture_dragging_;
+  bool set_can_activate_on_click_or_tap_;
 
   // True once the mouse cursor was actively moved by the user over the bubble.
   // Only then the OnMouseExitedView() event will get passed on to listeners.

@@ -22,6 +22,7 @@
 #include "extensions/browser/pref_names.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/common/extension_urls.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
@@ -51,7 +52,7 @@ class CWSInfoServiceTest : public ::testing::Test,
     test_url_loader_factory_.AddResponse(load_url.spec(), response);
   }
 
-  StoreMetadata BuildStoreMetadata(const std::string& extension_id,
+  StoreMetadata BuildStoreMetadata(const ExtensionId& extension_id,
                                    base::Time last_update_time);
   void VerifyCWSInfoRetrieved(
       const StoreMetadata* metadata,
@@ -71,7 +72,7 @@ class CWSInfoServiceTest : public ::testing::Test,
     return cws_info_service_->info_check_timer_.GetCurrentDelay().InSeconds();
   }
 
-  static std::string GetNameFromId(const std::string& id) {
+  static std::string GetNameFromId(const ExtensionId& id) {
     return "items/" + id + "/storeMetadata";
   }
 
@@ -119,6 +120,9 @@ CWSInfoServiceTest::CWSInfoServiceTest()
   // Create CWSInfoService instance.
   cws_info_service_ = CWSInfoService::Get(profile_.get());
 
+  // Skip official Google API key check for testing.
+  cws_info_service_->SetSkipApiCheckForTesting(true);
+
   // Create test extension service instance.
   base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
   auto* test_extension_system = static_cast<extensions::TestExtensionSystem*>(
@@ -144,7 +148,7 @@ scoped_refptr<const Extension> CWSInfoServiceTest::AddExtension(
 }
 
 StoreMetadata CWSInfoServiceTest::BuildStoreMetadata(
-    const std::string& extension_id,
+    const ExtensionId& extension_id,
     base::Time last_update_time) {
   StoreMetadata metadata;
   metadata.set_name(GetNameFromId(extension_id));

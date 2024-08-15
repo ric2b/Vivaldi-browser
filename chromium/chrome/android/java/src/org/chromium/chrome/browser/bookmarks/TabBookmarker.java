@@ -95,11 +95,11 @@ public class TabBookmarker {
             BookmarkUtils.showSaveFlow(
                     mActivity,
                     mBottomSheetControllerSupplier.get(),
-                    /* fromExplicitTrackUi= */ true,
+                    currentTab.getProfile(),
                     bookmarkId,
+                    /* fromExplicitTrackUi= */ true,
                     /* wasBookmarkMoved= */ false,
-                    /* isNewBookmark= */ false,
-                    currentTab.getProfile());
+                    /* isNewBookmark= */ false);
         }
     }
 

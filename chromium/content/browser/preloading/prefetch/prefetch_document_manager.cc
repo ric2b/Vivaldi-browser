@@ -10,24 +10,27 @@
 #include <vector>
 
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "content/browser/browser_context_impl.h"
 #include "content/browser/preloading/prefetch/prefetch_container.h"
 #include "content/browser/preloading/prefetch/prefetch_params.h"
 #include "content/browser/preloading/prefetch/prefetch_service.h"
+#include "content/browser/preloading/preloading.h"
+#include "content/browser/preloading/preloading_attempt_impl.h"
 #include "content/browser/preloading/preloading_data_impl.h"
 #include "content/browser/preloading/preloading_trigger_type_impl.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/prefetch_metrics.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/content_client.h"
 #include "net/http/http_no_vary_search_data.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/no_vary_search.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
+#include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom.h"
 #include "url/origin.h"
 
 namespace content {
@@ -64,7 +67,6 @@ SpeculationCandidateToPrefetchUrlParams(
 
 PrefetchDocumentManager::PrefetchDocumentManager(RenderFrameHost* rfh)
     : DocumentUserData(rfh),
-      WebContentsObserver(WebContents::FromRenderFrameHost(rfh)),
       document_token_(
           static_cast<RenderFrameHostImpl*>(rfh)->GetDocumentToken()),
       no_vary_search_support_enabled_(
@@ -118,62 +120,6 @@ PrefetchDocumentManager* PrefetchDocumentManager::FromDocumentToken(
     }
   }
   return nullptr;
-}
-
-void PrefetchDocumentManager::DidStartNavigation(
-    NavigationHandle* navigation_handle) {
-  if (PrefetchDocumentManagerEarlyCookieCopySkipped()) {
-    // The `DidStartNavigation` logic is for optimization, but we are not sure
-    // how much that is buying us. We are experimenting disabling it.
-    // See crbug.com/1503003 for details.
-    return;
-  }
-
-  // Ignore navigations for a different LocalFrameToken.
-  // TODO(crbug.com/1431804, crbug.com/1431387): LocalFrameToken is used here
-  // for scoping while RenderFrameHost's ID is used elsewhere. In the long term
-  // we should fix this inconsistency, but the current code is at least not
-  // worse than checking RenderFrameHostId here.
-  if (render_frame_host().GetFrameToken() !=
-      navigation_handle->GetInitiatorFrameToken()) {
-    DVLOG(1) << "PrefetchDocumentManager::DidStartNavigation() for "
-             << navigation_handle->GetURL()
-             << ": skipped (different LocalFrameToken)";
-    return;
-  }
-
-  // Ignores any same document navigations since we can't use prefetches to
-  // speed them up.
-  if (navigation_handle->IsSameDocument()) {
-    DVLOG(1) << "PrefetchDocumentManager::DidStartNavigation() for "
-             << navigation_handle->GetURL() << ": skipped (same document)";
-    return;
-  }
-
-  PrefetchService* prefetch_service = GetPrefetchService();
-  if (!prefetch_service) {
-    return;
-  }
-
-  base::WeakPtr<PrefetchContainer> prefetch_container =
-      prefetch_service->MatchUrl(
-          PrefetchContainer::Key(document_token_, navigation_handle->GetURL()));
-  if (!prefetch_container) {
-    return;
-  }
-
-  switch (prefetch_container->GetServableState(PrefetchCacheableDuration())) {
-    case PrefetchContainer::ServableState::kServable:
-      // For prefetches that are already servable, start the process of
-      // copying cookies from the isolated network context used to make the
-      // prefetch to the default network context.
-      prefetch_service->CopyIsolatedCookies(prefetch_container->CreateReader());
-      break;
-
-    case PrefetchContainer::ServableState::kNotServable:
-    case PrefetchContainer::ServableState::kShouldBlockUntilHeadReceived:
-      break;
-  }
 }
 
 void PrefetchDocumentManager::ProcessCandidates(
@@ -239,7 +185,7 @@ void PrefetchDocumentManager::ProcessCandidates(
         return true;
       };
 
-  base::EraseIf(candidates, should_process_entry);
+  std::erase_if(candidates, should_process_entry);
 
   for (auto& [prefetch_url, prefetch_type, referrer, no_vary_search_expected] :
        prefetches) {
@@ -284,6 +230,12 @@ void PrefetchDocumentManager::PrefetchUrl(
     return;
   }
 
+  // Log that a prefetch is occurring. Paths that reach this point go through
+  // speculation rules in some form or another.
+  GetContentClient()->browser()->LogWebFeatureForCurrentPage(
+      &render_frame_host(),
+      blink::mojom::WebFeature::kSpeculationRulesPrefetch);
+
   std::optional<net::HttpNoVarySearchData> no_vary_search_expected;
   if (mojo_no_vary_search_expected) {
     no_vary_search_expected =
@@ -295,13 +247,29 @@ void PrefetchDocumentManager::PrefetchUrl(
     return;
   }
 
+  auto* web_contents = WebContents::FromRenderFrameHost(&render_frame_host());
+  auto* preloading_data =
+      PreloadingData::GetOrCreateForWebContents(web_contents);
+
+  PreloadingURLMatchCallback matcher =
+      PreloadingDataImpl::GetPrefetchServiceMatcher(
+          prefetch_service, PrefetchContainer::Key(document_token_, url));
+
+  auto* attempt =
+      static_cast<PreloadingAttemptImpl*>(preloading_data->AddPreloadingAttempt(
+          GetPredictorForPreloadingTriggerType(prefetch_type.trigger_type()),
+          PreloadingType::kPrefetch, std::move(matcher),
+          web_contents->GetPrimaryMainFrame()->GetPageUkmSourceId()));
+
+  attempt->SetSpeculationEagerness(prefetch_type.GetEagerness());
+
+  // `PreloadingPrediction` is added in `PreloadingDecider`.
+
   // Create a new |PrefetchContainer| and take ownership of it
   auto container = std::make_unique<PrefetchContainer>(
-      render_frame_host().GetGlobalId(), document_token_, url, prefetch_type,
-      referrer, std::move(no_vary_search_expected),
-      weak_method_factory_.GetWeakPtr(),
-      PreloadingDataImpl::GetPrefetchServiceMatcher(
-          prefetch_service, PrefetchContainer::Key(document_token_, url)));
+      static_cast<RenderFrameHostImpl&>(render_frame_host()), document_token_,
+      url, prefetch_type, referrer, std::move(no_vary_search_expected),
+      weak_method_factory_.GetWeakPtr(), attempt->GetWeakPtr());
   container->SetDevToolsObserver(std::move(devtools_observer));
   DVLOG(1) << *container << ": created";
   all_prefetches_[url] = container->GetWeakPtr();

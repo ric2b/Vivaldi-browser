@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "gn/rust_tool.h"
 #include "gn/rust_values.h"
+#include "gn/rust_tool.h"
 #include "gn/target.h"
 
 RustValues::RustValues() : crate_type_(RustValues::CRATE_AUTO) {}
@@ -27,7 +27,7 @@ RustValues::CrateType RustValues::InferredCrateType(const Target* target) {
 
   CrateType crate_type = target->rust_values().crate_type();
   if (crate_type != CRATE_AUTO) {
-      return crate_type;
+    return crate_type;
   }
 
   switch (target->output_type()) {
@@ -49,6 +49,6 @@ RustValues::CrateType RustValues::InferredCrateType(const Target* target) {
 // static
 bool RustValues::IsRustLibrary(const Target* target) {
   return target->output_type() == Target::RUST_LIBRARY ||
-     InferredCrateType(target) == CRATE_DYLIB ||
-     InferredCrateType(target) == CRATE_PROC_MACRO;
+         InferredCrateType(target) == CRATE_DYLIB ||
+         InferredCrateType(target) == CRATE_PROC_MACRO;
 }

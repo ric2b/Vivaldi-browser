@@ -36,7 +36,7 @@ class ASH_EXPORT FocusModeTray : public TrayBackgroundView,
   ~FocusModeTray() override;
 
   // TrayBackgroundView:
-  void ClickedOutsideBubble() override;
+  void ClickedOutsideBubble(const ui::LocatedEvent& event) override;
   std::u16string GetAccessibleNameForTray() override;
   std::u16string GetAccessibleNameForBubble() override;
   void HandleLocaleChange() override {}
@@ -47,6 +47,7 @@ class ASH_EXPORT FocusModeTray : public TrayBackgroundView,
   void ShowBubble() override;
   void UpdateTrayItemColor(bool is_active) override;
   void OnThemeChanged() override;
+  void OnAnimationEnded() override;
 
   // FocusModeController::Observer:
   void OnFocusModeChanged(bool in_focus_session) override;
@@ -55,7 +56,9 @@ class ASH_EXPORT FocusModeTray : public TrayBackgroundView,
       const FocusModeSession::Snapshot& session_snapshot) override;
 
   // views::View:
-  void Layout() override;
+  void Layout(PassKey) override;
+
+  views::ImageView* image_view() { return image_view_; }
 
   FocusModeCountdownView* countdown_view_for_testing() {
     return countdown_view_;
@@ -102,6 +105,19 @@ class ASH_EXPORT FocusModeTray : public TrayBackgroundView,
   // Updates the progression of the progress indicator.
   void UpdateProgressRing();
 
+  // Returns whether the event is located specifically on this focus mode tray
+  // view.
+  bool EventTargetsTray(const ui::LocatedEvent& event) const;
+
+  // Handles all the cleanup logic associated with closing the bubble, and may
+  // reset the focus session if conditions are met. This helper function is
+  // mainly used to prevent resetting the focus session when using
+  // multi-displays during the ending moment.
+  void CloseBubbleAndMaybeReset(bool should_reset);
+
+  // This is used to track the current session snapshot, if any.
+  std::optional<FocusModeSession::Snapshot> session_snapshot_;
+
   // Image view of the focus mode lamp.
   const raw_ptr<views::ImageView> image_view_;
 
@@ -120,6 +136,15 @@ class ASH_EXPORT FocusModeTray : public TrayBackgroundView,
 
   // An object that draws and updates the progress ring.
   std::unique_ptr<ProgressIndicator> progress_indicator_;
+
+  // True to show the progress ring after the pulse animation of
+  // `progress_indicator_`.
+  bool show_progress_ring_after_animation_ = false;
+
+  // True when the bounce in animation of the tray is done during the ending
+  // moment; it will be reset to false when starting or ending a focus session,
+  // or extending a focus session during the ending moment.
+  bool bounce_in_animation_finished_ = false;
 
   base::WeakPtrFactory<FocusModeTray> weak_ptr_factory_{this};
 };

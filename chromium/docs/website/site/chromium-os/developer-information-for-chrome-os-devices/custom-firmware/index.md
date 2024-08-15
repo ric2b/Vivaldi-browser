@@ -154,31 +154,23 @@ nv-U-Boot on the Samsung ARM Chromebook](/system/errors/NodeNotFound) page.
 **Step two** is to sign your binary like a Chromium OS kernel:
 
 ```none
-echo blah > dummy.txt
-vbutil_kernel --pack kernelpart.bin \
-	--keyblock /usr/share/vboot/devkeys/kernel.keyblock \
-	--signprivate /usr/share/vboot/devkeys/kernel_data_key.vbprivk \
-	--version 1 \
-	--vmlinuz ${MY_BINARY} \
-	--bootloader dummy.txt \
-	--config dummy.txt \
-	--arch arm
+echo blah > config.txt
+futility sign \
+    --config config.txt \
+    --arch arm \
+    --vmlinuz ${MY_BINARY} \
+    --outfile kernelpart.bin
 KPART=$(pwd)/kernelpart.bin
 ```
 
 Notes:
 
 1.  **Your binary is specified with the **`--vmlinuz`** argument.**
-2.  **We use a `dummy.txt` file for the bootloader and config file args,
-            just so `vbutil_kernel` doesn't complain. (TODO: Seems to work
-            without this. Is it still needed?)**
+2.  **We use a `config.txt` file for the config file arg, so that
+            `futility sign` won't complain.**
 3.  **We specify `--arch arm` even if we're building for x86, because
-            x86 kernels have a preamble that `vbutil_kernel` will try to remove
+            x86 kernels have a preamble that `futility` will try to remove
             and U-Boot doesn't have that.**
-4.  **At some point we should modify `vbutil_kernel` to be more
-            accommodating so we don't have to use these tricks. There's a
-            [bug](http://code.google.com/p/chromium-os/issues/detail?id=23548)
-            open for that, and I'll get to it Real Soon Now.**
 
 **Step three** is to copy that image to the chromebook and try it out.
 

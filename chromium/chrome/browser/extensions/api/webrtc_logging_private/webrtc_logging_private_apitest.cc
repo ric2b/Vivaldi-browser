@@ -24,6 +24,8 @@
 #include "chrome/browser/media/webrtc/webrtc_event_log_manager.h"
 #include "chrome/browser/media/webrtc/webrtc_event_log_manager_common.h"
 #include "chrome/browser/media/webrtc/webrtc_log_uploader.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
@@ -406,8 +408,7 @@ class WebrtcLoggingPrivateApiTest : public extensions::ExtensionApiTest {
     const int lid = 0;
 
     manager->OnPeerConnectionAdded(frame_id, lid, pid, /*url=*/std::string(),
-                                   /*rtc_configuration=*/std::string(),
-                                   /*constraints=*/std::string());
+                                   /*rtc_configuration=*/std::string());
 
     if (!session_id.empty()) {
       manager->OnPeerConnectionSessionIdSet(frame_id, lid, session_id);

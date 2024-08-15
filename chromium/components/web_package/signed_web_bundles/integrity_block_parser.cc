@@ -53,7 +53,7 @@ void IntegrityBlockParser::StartParsing(
 }
 
 void IntegrityBlockParser::ParseMagicBytesAndVersion(
-    const absl::optional<std::vector<uint8_t>>& data) {
+    const std::optional<std::vector<uint8_t>>& data) {
   if (!data) {
     RunErrorCallback("Error reading integrity block magic bytes.",
                      mojom::BundleParseErrorType::kParserInternalError);
@@ -97,7 +97,7 @@ void IntegrityBlockParser::ParseMagicBytesAndVersion(
 
 void IntegrityBlockParser::ParseSignatureStack(
     uint64_t offset_in_stream,
-    const absl::optional<std::vector<uint8_t>>& data) {
+    const std::optional<std::vector<uint8_t>>& data) {
   if (!data) {
     RunErrorCallback("Error reading signature stack.");
     return;
@@ -111,11 +111,9 @@ void IntegrityBlockParser::ParseSignatureStack(
     return;
   }
 
-  if (*signature_stack_size != 1 && *signature_stack_size != 2) {
-    // TODO(cmfcmf): Support more signatures for key rotation.
+  if (*signature_stack_size == 0) {
     RunErrorCallback(
-        "The signature stack must contain one or two signatures (developer + "
-        "potentially distributor signature).");
+        "The signature stack must contain at least one signature.");
     return;
   }
 
@@ -136,7 +134,7 @@ void IntegrityBlockParser::ReadSignatureStackEntry(
 void IntegrityBlockParser::ParseSignatureStackEntry(
     uint64_t offset_in_stream,
     const uint64_t signature_stack_entries_left,
-    const absl::optional<std::vector<uint8_t>>& data) {
+    const std::optional<std::vector<uint8_t>>& data) {
   if (!data) {
     RunErrorCallback("Error reading signature stack entry.");
     return;
@@ -178,7 +176,7 @@ void IntegrityBlockParser::ParseSignatureStackEntryAttributesHeader(
     uint64_t offset_in_stream,
     const uint64_t signature_stack_entries_left,
     mojom::BundleIntegrityBlockSignatureStackEntryPtr signature_stack_entry,
-    const absl::optional<std::vector<uint8_t>>& data) {
+    const std::optional<std::vector<uint8_t>>& data) {
   if (!data) {
     RunErrorCallback(
         "Error reading signature stack entry's attributes header.");
@@ -224,7 +222,7 @@ void IntegrityBlockParser::ParseSignatureStackEntryAttributesPublicKeyKey(
     uint64_t offset_in_stream,
     const uint64_t signature_stack_entries_left,
     mojom::BundleIntegrityBlockSignatureStackEntryPtr signature_stack_entry,
-    const absl::optional<std::vector<uint8_t>>& data) {
+    const std::optional<std::vector<uint8_t>>& data) {
   if (!data) {
     RunErrorCallback(
         "Error reading signature stack entry's ed25519PublicKey attribute.");
@@ -280,7 +278,7 @@ void IntegrityBlockParser::ReadSignatureStackEntryAttributesPublicKeyValue(
     uint64_t offset_in_stream,
     const uint64_t signature_stack_entries_left,
     mojom::BundleIntegrityBlockSignatureStackEntryPtr signature_stack_entry,
-    const absl::optional<std::vector<uint8_t>>& public_key_bytes) {
+    const std::optional<std::vector<uint8_t>>& public_key_bytes) {
   if (!public_key_bytes) {
     RunErrorCallback("Error reading signature stack entry's public key.");
     return;
@@ -312,7 +310,7 @@ void IntegrityBlockParser::ParseSignatureStackEntrySignatureHeader(
     uint64_t offset_in_stream,
     const uint64_t signature_stack_entries_left,
     mojom::BundleIntegrityBlockSignatureStackEntryPtr signature_stack_entry,
-    const absl::optional<std::vector<uint8_t>>& data) {
+    const std::optional<std::vector<uint8_t>>& data) {
   if (!data) {
     RunErrorCallback(
         "Error reading CBOR header of the signature stack entry's signature.");
@@ -353,7 +351,7 @@ void IntegrityBlockParser::ParseSignatureStackEntrySignature(
     uint64_t offset_in_stream,
     uint64_t signature_stack_entries_left,
     mojom::BundleIntegrityBlockSignatureStackEntryPtr signature_stack_entry,
-    const absl::optional<std::vector<uint8_t>>& signature_bytes) {
+    const std::optional<std::vector<uint8_t>>& signature_bytes) {
   if (!signature_bytes.has_value()) {
     RunErrorCallback("Error reading signature-stack entry signature.");
     return;

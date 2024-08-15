@@ -163,6 +163,11 @@ void WebContentsViewChildFrame::FullscreenStateChanged(bool is_fullscreen) {}
 void WebContentsViewChildFrame::UpdateWindowControlsOverlay(
     const gfx::Rect& bounding_rect) {}
 
+BackForwardTransitionAnimationManager*
+WebContentsViewChildFrame::GetBackForwardTransitionAnimationManager() {
+  return nullptr;
+}
+
 void WebContentsViewChildFrame::RestoreFocus() {
   NOTREACHED();
 }

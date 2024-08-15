@@ -8,6 +8,7 @@
 
 #import <map>
 
+#import "base/memory/raw_ptr.h"
 #import "base/test/metrics/histogram_tester.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/browser/app_launcher/model/app_launcher_tab_helper.h"
@@ -27,7 +28,7 @@
 #import "ios/web/public/test/fakes/fake_web_state.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "ios/web/public/web_state.h"
-#import "net/base/mac/url_conversions.h"
+#import "net/base/apple/url_conversions.h"
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
@@ -61,7 +62,7 @@ class FakeAppLauncherTabHelper : public AppLauncherTabHelper {
   AppLauncherTabHelperDelegate* delegate() { return delegate_; }
 
  private:
-  AppLauncherTabHelperDelegate* delegate_;
+  raw_ptr<AppLauncherTabHelperDelegate> delegate_;
 };
 
 // Test fixture for AppLauncherBrowserAgent.
@@ -83,8 +84,8 @@ class AppLauncherBrowserAgentTest : public PlatformTest {
 
   ~AppLauncherBrowserAgentTest() override {
     [application_ stopMocking];
-    browser_->GetWebStateList()->CloseAllWebStates(
-        WebStateList::CLOSE_NO_FLAGS);
+    CloseAllWebStates(*browser_->GetWebStateList(),
+                      WebStateList::CLOSE_NO_FLAGS);
   }
 
   // Returns the AppLauncherBrowserAgent.
@@ -133,10 +134,10 @@ class AppLauncherBrowserAgentTest : public PlatformTest {
             app_launcher_tab_helper_browser_presentation_provider_);
 
     // Insert the WebState into the Browser's WebStateList.
-    int index = browser_->GetWebStateList()->count();
     browser_->GetWebStateList()->InsertWebState(
-        index, std::move(passed_web_state), WebStateList::INSERT_ACTIVATE,
-        WebStateOpener(opener));
+        std::move(passed_web_state),
+        WebStateList::InsertionParams::Automatic().Activate().WithOpener(
+            WebStateOpener(opener)));
     return web_state;
   }
 
@@ -336,7 +337,7 @@ TEST_F(AppLauncherBrowserAgentTest, ShowDialogInOpener) {
 
   // Verify that an app launch overlay request was added to `web_state`'s queue.
   EXPECT_TRUE(IsShowingDialog(
-      opener,
+      web_state,
       app_launcher_overlays::AppLaunchConfirmationRequestCause::kOther));
 }
 

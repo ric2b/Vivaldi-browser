@@ -18,14 +18,15 @@
 #include "base/memory/weak_ptr.h"
 #include "base/types/optional_ref.h"
 #include "build/build_config.h"
+#include "components/autofill/core/browser/autofill_plus_address_delegate.h"
 #include "components/autofill/core/browser/autofill_trigger_details.h"
 #include "components/autofill/core/browser/country_type.h"
 #include "components/autofill/core/browser/filling_product.h"
 #include "components/autofill/core/browser/payments/legal_message_line.h"
 #include "components/autofill/core/browser/payments/payments_window_manager.h"
 #include "components/autofill/core/browser/ui/fast_checkout_client.h"
+#include "components/autofill/core/browser/ui/popup_hiding_reasons.h"
 #include "components/autofill/core/browser/ui/popup_item_ids.h"
-#include "components/autofill/core/browser/ui/popup_types.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
 #include "components/autofill/core/common/aliases.h"
 #include "components/autofill/core/common/form_data.h"
@@ -33,7 +34,6 @@
 #include "components/autofill/core/common/form_interactions_flow.h"
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/device_reauth/device_authenticator.h"
-#include "components/plus_addresses/plus_address_types.h"
 #include "components/profile_metrics/browser_profile_type.h"
 #include "components/security_state/core/security_state.h"
 #include "components/translate/core/browser/language_state.h"
@@ -46,10 +46,6 @@
 #include "url/origin.h"
 
 class PrefService;
-
-namespace plus_addresses {
-class PlusAddressService;
-}
 
 namespace signin {
 class IdentityManager;
@@ -81,14 +77,12 @@ class AutofillAblationStudy;
 class AutofillComposeDelegate;
 class AutofillCrowdsourcingManager;
 class AutofillDriver;
-struct AutofillErrorDialogContext;
 class AutofillMlPredictionModelHandler;
 class AutofillOfferData;
 class AutofillOfferManager;
 class AutofillOptimizationGuide;
 class AutofillPopupDelegate;
 class AutofillProfile;
-enum class AutofillProgressDialogType;
 struct CardUnmaskChallengeOption;
 class CardUnmaskDelegate;
 struct CardUnmaskPromptOptions;
@@ -119,7 +113,6 @@ enum class WebauthnDialogState;
 namespace payments {
 class MandatoryReauthManager;
 class PaymentsAutofillClient;
-class PaymentsNetworkInterface;
 class PaymentsWindowManager;
 }
 
@@ -207,7 +200,7 @@ class AutofillClient {
     kFido = 2,
   };
 
-  enum class SaveAddressProfileOfferUserDecision {
+  enum class AddressPromptUserDecision {
     kUndefined,
     // No prompt is shown and no decision is needed to proceed with the process.
     kUserNotAsked,
@@ -311,7 +304,8 @@ class AutofillClient {
     PopupOpenArgs(const gfx::RectF& element_bounds,
                   base::i18n::TextDirection text_direction,
                   std::vector<Suggestion> suggestions,
-                  AutofillSuggestionTriggerSource trigger_source);
+                  AutofillSuggestionTriggerSource trigger_source,
+                  int32_t form_control_ax_id);
     PopupOpenArgs(const PopupOpenArgs&);
     PopupOpenArgs(PopupOpenArgs&&);
     PopupOpenArgs& operator=(const PopupOpenArgs&);
@@ -322,8 +316,9 @@ class AutofillClient {
     base::i18n::TextDirection text_direction =
         base::i18n::TextDirection::UNKNOWN_DIRECTION;
     std::vector<Suggestion> suggestions;
-    AutofillSuggestionTriggerSource trigger_source{
-        AutofillSuggestionTriggerSource::kUnspecified};
+    AutofillSuggestionTriggerSource trigger_source =
+        AutofillSuggestionTriggerSource::kUnspecified;
+    int32_t form_control_ax_id = 0;
   };
 
   // Describes the position of the Autofill popup on the screen.
@@ -378,7 +373,7 @@ class AutofillClient {
   // edited version of the profile should be passed as the second parameter. No
   // Autofill profile is passed otherwise.
   using AddressProfileSavePromptCallback =
-      base::OnceCallback<void(SaveAddressProfileOfferUserDecision,
+      base::OnceCallback<void(AddressPromptUserDecision,
                               base::optional_ref<const AutofillProfile>)>;
 
   // The callback accepts the boolean parameter indicating whether the user has
@@ -395,7 +390,7 @@ class AutofillClient {
   virtual version_info::Channel GetChannel() const;
 
   // Returns whether the user is currently operating in an incognito context.
-  virtual bool IsOffTheRecord() = 0;
+  virtual bool IsOffTheRecord() const = 0;
 
   // Returns the URL loader factory associated with this driver.
   virtual scoped_refptr<network::SharedURLLoaderFactory>
@@ -431,18 +426,17 @@ class AutofillClient {
   // Gets the IbanAccessManager instance associated with the client.
   virtual IbanAccessManager* GetIbanAccessManager();
 
-  // When the enterprise plus address feature is supported, gets the
-  // KeyedService that manages that data.
-  virtual plus_addresses::PlusAddressService* GetPlusAddressService();
-
   // Returns the `AutofillComposeDelegate` instance for the tab of this client.
   virtual AutofillComposeDelegate* GetComposeDelegate();
 
+  // Returns the `AutofillPlusAddressDelegate` associated with the profile of
+  // the window of this tab.
+  virtual AutofillPlusAddressDelegate* GetPlusAddressDelegate();
+
   // Orchestrates UI for enterprise plus address creation; no-op except on
   // supported platforms.
-  virtual void OfferPlusAddressCreation(
-      const url::Origin& main_frame_origin,
-      plus_addresses::PlusAddressCallback callback);
+  virtual void OfferPlusAddressCreation(const url::Origin& main_frame_origin,
+                                        PlusAddressCallback callback);
 
   // Gets the MerchantPromoCodeManager instance associated with the
   // client (can be null for unsupported platforms).
@@ -468,9 +462,6 @@ class AutofillClient {
 
   // Gets the payments::PaymentsAutofillClient instance owned by the client.
   virtual payments::PaymentsAutofillClient* GetPaymentsAutofillClient();
-
-  // Gets the payments::PaymentsNetworkInterface instance owned by the client.
-  virtual payments::PaymentsNetworkInterface* GetPaymentsNetworkInterface() = 0;
 
   // Gets the payments::PaymentsWindowManager owned by the client.
   virtual payments::PaymentsWindowManager* GetPaymentsWindowManager();
@@ -689,13 +680,6 @@ class AutofillClient {
                                         bool should_show_prompt,
                                         SaveIbanPromptCallback callback);
 
-  // Called after credit card upload is finished. Will show upload result to
-  // users. |card_saved| indicates if the card is successfully saved.
-  // TODO(crbug.com/932818): This function is overridden in iOS codebase and in
-  // the desktop codebase. If iOS is not using it to do anything, please keep
-  // this function for desktop.
-  virtual void CreditCardUploadCompleted(bool card_saved);
-
   // Will show an infobar to get user consent for Credit Card assistive filling.
   // Will run |callback| on success.
   virtual void ConfirmCreditCardFillAssist(const CreditCard& card,
@@ -762,19 +746,6 @@ class AutofillClient {
   // |UpdatePopup| to update the open popup in-place.
   virtual void PinPopupView() = 0;
 
-  // The returned arguments allow to reopen the dropdown with
-  // `ShowAutofillPopup()` even if the controller is destroyed temporarily.
-  // This function ensures that the element's bounds are transformed back to the
-  // screen space-independent bounds.
-  // The suggestion trigger source of the existing popup is not reused, but
-  // replaced with `trigger_source`. This is because it should indicate the
-  // reason for reopening the popup. Reusing the existing trigger source can
-  // have unwanted implications such as re-auto-selecting the first suggestion
-  // in the `AutofillSuggestionTriggerSource::kTextFieldDidReceiveKeyDown` case.
-  // Note that the password manager doesn't distinguish between trigger sources.
-  virtual PopupOpenArgs GetReopenPopupArgs(
-      AutofillSuggestionTriggerSource trigger_source) const = 0;
-
   // Returns the information of the popup on the screen, if there is one that is
   // showing. Note that this implemented only on Desktop.
   virtual std::optional<PopupScreenLocation> GetPopupScreenLocation() const;
@@ -808,24 +779,6 @@ class AutofillClient {
   // necessary information in `options` to show the manual fallback bubble.
   virtual void OnVirtualCardDataAvailable(
       const VirtualCardManualFallbackBubbleOptions& options);
-
-  // Shows an error dialog when card retrieval errors happen. The type of error
-  // dialog that is shown will match the `type` in `context`. If the
-  // `server_returned_title` and `server_returned_description` in `context` are
-  // both set, the error dialog that is displayed will have these fields
-  // displayed for the title and description, respectively.
-  virtual void ShowAutofillErrorDialog(
-      const AutofillErrorDialogContext& context);
-
-  // Show/dismiss the progress dialog which contains a throbber and a text
-  // message indicating that something is in progress.
-  virtual void ShowAutofillProgressDialog(
-      AutofillProgressDialogType autofill_progress_dialog_type,
-      base::OnceClosure cancel_callback);
-  virtual void CloseAutofillProgressDialog(
-      bool show_confirmation_before_closing,
-      base::OnceClosure no_interactive_authentication_callback =
-          base::OnceClosure());
 
   // Maybe triggers a hats survey that measures the user's perception of
   // Autofill. When triggering happens, the survey dialog will be displayed with
@@ -867,6 +820,10 @@ class AutofillClient {
   // AutofillAgent::queryAutofillForForm() was called. See crbug.com/1097015.
   virtual bool IsLastQueriedField(FieldGlobalId field_id) = 0;
 #endif
+
+  // Whether we can add more information to the contents of suggestions text due
+  // to the use of a large keyboard accessory view. See b/40942168.
+  virtual bool ShouldFormatForLargeKeyboardAccessory() const;
 
   // Navigates to |url| in a new tab. |url| links to the promo code offer
   // details page for the offers in a promo code suggestions popup. Every offer

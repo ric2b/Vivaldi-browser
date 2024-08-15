@@ -7,7 +7,7 @@ syntax = "proto3";
 option optimize_for = LITE_RUNTIME;
 
 package metrics_event;
-option go_package = "chromiumos/system_api/metrics_event_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/metrics_event_proto";
 
 // Content of signals emitted by Chrome (the ChromeEvent signal in the
 // MetricsEventService) and the anomaly_detector daemon (the AnomalyEvent

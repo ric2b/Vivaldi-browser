@@ -4,6 +4,7 @@
 
 #include <memory>
 #include "ash/constants/ash_features.h"
+#include "ash/public/cpp/login_screen_test_api.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -13,7 +14,9 @@
 #include "chrome/browser/ash/login/screens/quick_start_screen.h"
 #include "chrome/browser/ash/login/screens/update_screen.h"
 #include "chrome/browser/ash/login/screens/welcome_screen.h"
+#include "chrome/browser/ash/login/test/device_state_mixin.h"
 #include "chrome/browser/ash/login/test/js_checker.h"
+#include "chrome/browser/ash/login/test/login_manager_mixin.h"
 #include "chrome/browser/ash/login/test/oobe_base_test.h"
 #include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/ash/login/test/oobe_screens_utils.h"
@@ -239,7 +242,7 @@ class QuickStartBrowserTest : public OobeBaseTest {
   void AbortFlowFromPhoneSide() {
     connection_broker()->CloseConnection(
         quick_start::TargetDeviceConnectionBroker::ConnectionClosedReason::
-            kUserAborted);
+            kConnectionLost);
   }
 
   void SimulateUserVerification(bool simulate_failure = false) {
@@ -440,7 +443,7 @@ IN_PROC_BROWSER_TEST_F(QuickStartBrowserTest, QRCode) {
   base::HistogramTester histogram_tester;
   histogram_tester.ExpectBucketCount(
       kScreenOpenedHistogram,
-      quick_start::QuickStartMetrics::ScreenName::kSetUpAndroidPhone, 0);
+      quick_start::QuickStartMetrics::ScreenName::kSetUpWithAndroidPhone, 0);
   test::WaitForWelcomeScreen();
   test::OobeJS().ExpectVisiblePath(kQuickStartButtonPath);
 
@@ -466,7 +469,7 @@ IN_PROC_BROWSER_TEST_F(QuickStartBrowserTest, QRCode) {
   EXPECT_EQ(canvas_cell_count * canvas_cell_count, qr_code_size);
   histogram_tester.ExpectBucketCount(
       kScreenOpenedHistogram,
-      quick_start::QuickStartMetrics::ScreenName::kSetUpAndroidPhone, 1);
+      quick_start::QuickStartMetrics::ScreenName::kSetUpWithAndroidPhone, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(QuickStartBrowserTest, PinCode) {
@@ -537,12 +540,34 @@ IN_PROC_BROWSER_TEST_F(QuickStartBrowserTest, CancelOnQRCode) {
   EnsureFlowNotActive();
 }
 
+IN_PROC_BROWSER_TEST_F(QuickStartBrowserTest, CancelAndRestartWithNewSession) {
+  EnterQuickStartFlowFromWelcomeScreen();
+  uint64_t first_session_id = connection_broker()->session_id();
+
+  SimulatePhoneConnection();
+  SimulateUserVerification();
+
+  // Cancel flow.
+  test::OobeJS()
+      .CreateVisibilityWaiter(/*visibility=*/true,
+                              kCancelButtonVerificationDialog)
+      ->Wait();
+  test::OobeJS().ClickOnPath(kCancelButtonVerificationDialog);
+  OobeScreenWaiter(WelcomeView::kScreenId).Wait();
+  EnsureFlowNotActive();
+
+  // Enter again and check that session info is different.
+  EnterQuickStartFlowFromWelcomeScreen();
+  uint64_t second_session_id = connection_broker()->session_id();
+  EXPECT_NE(first_session_id, second_session_id);
+}
+
 IN_PROC_BROWSER_TEST_F(QuickStartBrowserTest, EndToEndWithMetrics) {
   SetUpDisconnectedWifiNetwork();
   base::HistogramTester histogram_tester;
   histogram_tester.ExpectBucketCount(
       kScreenOpenedHistogram,
-      quick_start::QuickStartMetrics::ScreenName::kSetUpAndroidPhone, 0);
+      quick_start::QuickStartMetrics::ScreenName::kSetUpWithAndroidPhone, 0);
   histogram_tester.ExpectBucketCount(
       kScreenOpenedHistogram,
       quick_start::QuickStartMetrics::ScreenName::kConnectingToWifi, 0);
@@ -550,7 +575,7 @@ IN_PROC_BROWSER_TEST_F(QuickStartBrowserTest, EndToEndWithMetrics) {
   EnterQuickStartFlowFromWelcomeScreen();
   histogram_tester.ExpectBucketCount(
       kScreenOpenedHistogram,
-      quick_start::QuickStartMetrics::ScreenName::kSetUpAndroidPhone, 1);
+      quick_start::QuickStartMetrics::ScreenName::kSetUpWithAndroidPhone, 1);
 
   SimulatePhoneConnection();
   SimulateUserVerification();
@@ -789,6 +814,32 @@ IN_PROC_BROWSER_TEST_F(QuickStartBrowserTest, HandleEmptyAccounts) {
 
   // Returns to the Gaia screen
   OobeScreenWaiter(GaiaScreenHandler::kScreenId).Wait();
+}
+
+class QuickStartLoginScreenTest : public QuickStartBrowserTest {
+ public:
+  QuickStartLoginScreenTest() : QuickStartBrowserTest() {
+    login_manager_mixin_.AppendRegularUsers(1);
+  }
+
+ private:
+  DeviceStateMixin device_state_{
+      &mixin_host_, DeviceStateMixin::State::OOBE_COMPLETED_CONSUMER_OWNED};
+  LoginManagerMixin login_manager_mixin_{&mixin_host_};
+};
+
+IN_PROC_BROWSER_TEST_F(QuickStartLoginScreenTest, EntryPointNotVisible) {
+  SetupNetwork(/*connected=*/true);
+  EXPECT_TRUE(LoginScreenTestApi::ClickAddUserButton());
+  EXPECT_TRUE(LoginScreenTestApi::IsOobeDialogVisible());
+  OobeScreenWaiter(UserCreationView::kScreenId).Wait();
+
+  test::OobeJS().ClickOnPath({"user-creation", "selfButton"});
+  test::OobeJS().ClickOnPath({"user-creation", "nextButton"});
+
+  OobeScreenWaiter(GaiaView::kScreenId).Wait();
+  base::RunLoop().RunUntilIdle();
+  test::OobeJS().ExpectHiddenPath(kQuickStartButtonGaia);
 }
 
 }  // namespace ash

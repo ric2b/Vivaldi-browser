@@ -93,7 +93,7 @@ class IndexStorage : public base::ImportantFileWriter::DataSerializer {
   void OnLoadFinished(std::unique_ptr<IndexLoadDetails> details);
 
   // ImportantFileWriter::DataSerializer implementation.
-  absl::optional<std::string> SerializeData() override;
+  std::optional<std::string> SerializeData() override;
 
   bool SaveValue(const std::unique_ptr<base::Value>& value);
 

@@ -41,6 +41,7 @@
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/shared/public/commands/security_alert_commands.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
@@ -50,6 +51,7 @@
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/address_coordinator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/card_coordinator.h"
+#import "ios/chrome/browser/ui/autofill/manual_fill/expanded_manual_fill_coordinator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/fallback_view_controller.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_all_password_coordinator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_all_password_coordinator_delegate.h"
@@ -86,13 +88,14 @@ const CGFloat kIPHVerticalOffset = -5;
     FormInputAccessoryViewControllerDelegate,
     ManualFillAllPasswordCoordinatorDelegate,
     PasswordCoordinatorDelegate,
+    ExpandedManualFillCoordinatorDelegate,
     SecurityAlertCommands>
 
 // Coordinator in charge of the presenting password autofill options as a modal.
 @property(nonatomic, strong)
     ManualFillAllPasswordCoordinator* allPasswordCoordinator;
 
-// Coordinator in charge of the keyboar autofill branding.
+// Coordinator in charge of the keyboard autofill branding.
 @property(nonatomic, strong) BrandingCoordinator* brandingCoordinator;
 
 // The Mediator for the input accessory view controller.
@@ -152,10 +155,12 @@ const CGFloat kIPHVerticalOffset = -5;
           initWithWebStateList:browser->GetWebStateList()
           securityAlertHandler:securityAlertHandler
         reauthenticationModule:_reauthenticationModule];
-    _formInputAccessoryTapRecognizer = [[UITapGestureRecognizer alloc]
-        initWithTarget:self
-                action:@selector(tapInsideRecognized:)];
-    _formInputAccessoryTapRecognizer.cancelsTouchesInView = NO;
+    if (!base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
+      _formInputAccessoryTapRecognizer = [[UITapGestureRecognizer alloc]
+          initWithTarget:self
+                  action:@selector(tapInsideRecognized:)];
+      _formInputAccessoryTapRecognizer.cancelsTouchesInView = NO;
+    }
   }
   return self;
 }
@@ -199,8 +204,10 @@ const CGFloat kIPHVerticalOffset = -5;
       reauthenticationModule:self.reauthenticationModule];
   self.formInputAccessoryViewController.formSuggestionClient =
       self.formInputAccessoryMediator;
-  [self.formInputAccessoryViewController.view
-      addGestureRecognizer:self.formInputAccessoryTapRecognizer];
+  if (!base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
+    [self.formInputAccessoryViewController.view
+        addGestureRecognizer:self.formInputAccessoryTapRecognizer];
+  }
 
   self.layoutGuide =
       [layoutGuideCenter makeLayoutGuideNamed:kAutofillFirstSuggestionGuide];
@@ -231,12 +238,7 @@ const CGFloat kIPHVerticalOffset = -5;
 
 - (void)reset {
   [self stopChildren];
-
-  [self.formInputAccessoryMediator enableSuggestions];
-  [self.formInputAccessoryViewController reset];
-
-  self.formInputViewController = nil;
-  [GetFirstResponder() reloadInputViews];
+  [self resetInputViews];
 }
 
 #pragma mark - Presenting Children
@@ -256,8 +258,9 @@ const CGFloat kIPHVerticalOffset = -5;
   [self.childCoordinators removeAllObjects];
 }
 
+// Starts the password coordinator and displays its view controller.
 - (void)startPasswordsFromButton:(UIButton*)button
-          invokedOnPasswordField:(BOOL)invokedOnPasswordField {
+        invokedOnObfuscatedField:(BOOL)invokedOnObfuscatedField {
   WebStateList* webStateList = self.browser->GetWebStateList();
   DCHECK(webStateList->GetActiveWebState());
   const GURL& URL = webStateList->GetActiveWebState()->GetLastCommittedURL();
@@ -270,7 +273,7 @@ const CGFloat kIPHVerticalOffset = -5;
                              browser:self.browser
                                  URL:URL
                     injectionHandler:self.injectionHandler
-              invokedOnPasswordField:invokedOnPasswordField
+            invokedOnObfuscatedField:invokedOnObfuscatedField
                               formID:lastSeenParams.unique_form_id
                              frameID:lastSeenParams.frame_id];
 
@@ -285,6 +288,7 @@ const CGFloat kIPHVerticalOffset = -5;
   [self.childCoordinators addObject:passwordCoordinator];
 }
 
+// Starts the card coordinator and displays its view controller.
 - (void)startCardsFromButton:(UIButton*)button {
   CardCoordinator* cardCoordinator = [[CardCoordinator alloc]
       initWithBaseViewController:self.baseViewController
@@ -301,6 +305,7 @@ const CGFloat kIPHVerticalOffset = -5;
   [self.childCoordinators addObject:cardCoordinator];
 }
 
+// Starts the address coordinator and displays its view controller.
 - (void)startAddressFromButton:(UIButton*)button {
   AddressCoordinator* addressCoordinator = [[AddressCoordinator alloc]
       initWithBaseViewController:self.baseViewController
@@ -315,6 +320,32 @@ const CGFloat kIPHVerticalOffset = -5;
   }
 
   [self.childCoordinators addObject:addressCoordinator];
+}
+
+// Starts the expanded manual fill coordinator and displays its view controller.
+- (void)startManualFillForDataType:(manual_fill::ManualFillDataType)dataType
+          invokedOnObfuscatedField:(BOOL)invokedOnObfuscatedField {
+  autofill::FormActivityParams lastSeenParams =
+      self.formInputAccessoryMediator.lastSeenParams;
+
+  ExpandedManualFillCoordinator* expandedManualFillCoordinator =
+      [[ExpandedManualFillCoordinator alloc]
+          initWithBaseViewController:self.baseViewController
+                             browser:self.browser
+                         forDataType:dataType];
+
+  expandedManualFillCoordinator.injectionHandler = self.injectionHandler;
+  expandedManualFillCoordinator.invokedOnObfuscatedField =
+      invokedOnObfuscatedField;
+  expandedManualFillCoordinator.formID = lastSeenParams.unique_form_id;
+  expandedManualFillCoordinator.frameID = lastSeenParams.frame_id;
+  expandedManualFillCoordinator.delegate = self;
+  [expandedManualFillCoordinator start];
+
+  self.formInputViewController = expandedManualFillCoordinator.viewController;
+  [GetFirstResponder() reloadInputViews];
+
+  [self.childCoordinators addObject:expandedManualFillCoordinator];
 }
 
 #pragma mark - FormInputAccessoryMediatorHandler
@@ -350,45 +381,75 @@ const CGFloat kIPHVerticalOffset = -5;
 
 #pragma mark - FormInputAccessoryViewControllerDelegate
 
-- (void)formInputAccessoryViewControllerKeyboardButtonPressed:
-    (FormInputAccessoryViewController*)formInputAccessoryViewController {
+- (void)formInputAccessoryViewController:
+            (FormInputAccessoryViewController*)formInputAccessoryViewController
+                  didPressKeyboardButton:(UIButton*)keyboardButton {
   [self reset];
 }
 
-- (void)formInputAccessoryViewControllerAccountButtonPressed:
+- (void)formInputAccessoryViewController:
             (FormInputAccessoryViewController*)formInputAccessoryViewController
-                                                      sender:(UIButton*)sender {
+                   didPressAccountButton:(UIButton*)accountButton {
   [self stopChildren];
-  [self startAddressFromButton:sender];
-  [self.formInputAccessoryViewController lockManualFallbackView];
-  [self.formInputAccessoryMediator disableSuggestions];
+  [self startAddressFromButton:accountButton];
+  [self updateKeyboardAccessoryForManualFilling];
 }
 
-- (void)formInputAccessoryViewControllerCardButtonPressed:
+- (void)formInputAccessoryViewController:
             (FormInputAccessoryViewController*)formInputAccessoryViewController
-                                                   sender:(UIButton*)sender {
+                didPressCreditCardButton:(UIButton*)creditCardButton {
   [self stopChildren];
-  [self startCardsFromButton:sender];
-  [self.formInputAccessoryViewController lockManualFallbackView];
-  [self.formInputAccessoryMediator disableSuggestions];
+  [self startCardsFromButton:creditCardButton];
+  [self updateKeyboardAccessoryForManualFilling];
 }
 
-- (void)formInputAccessoryViewControllerPasswordButtonPressed:
+- (void)formInputAccessoryViewController:
             (FormInputAccessoryViewController*)formInputAccessoryViewController
-                                                       sender:
-                                                           (UIButton*)sender {
+                  didPressPasswordButton:(UIButton*)passwordButton {
   [self stopChildren];
-  BOOL invokedOnPasswordField =
-      [self.formInputAccessoryMediator lastFocusedFieldWasPassword];
-  [self startPasswordsFromButton:sender
-          invokedOnPasswordField:invokedOnPasswordField];
-  [self.formInputAccessoryViewController lockManualFallbackView];
-  [self.formInputAccessoryMediator disableSuggestions];
+  BOOL invokedOnObfuscatedField =
+      [self.formInputAccessoryMediator lastFocusedFieldWasObfuscated];
+  [self startPasswordsFromButton:passwordButton
+        invokedOnObfuscatedField:invokedOnObfuscatedField];
+  [self updateKeyboardAccessoryForManualFilling];
+}
+
+- (void)formInputAccessoryViewController:
+            (FormInputAccessoryViewController*)formInputAccessoryViewController
+                didPressManualFillButton:(UIButton*)manualFillButton
+                             forDataType:
+                                 (manual_fill::ManualFillDataType)dataType {
+  CHECK(IsKeyboardAccessoryUpgradeEnabled());
+
+  [self stopChildren];
+  BOOL invokedOnObfuscatedField =
+      [self.formInputAccessoryMediator lastFocusedFieldWasObfuscated];
+  [self startManualFillForDataType:dataType
+          invokedOnObfuscatedField:invokedOnObfuscatedField];
+
+  // TODO(crbug.com/326265397): Hide the keyboard accessory and remove line
+  // below.
+  [self updateKeyboardAccessoryForManualFilling];
+}
+
+- (void)formInputAccessoryViewController:
+            (FormInputAccessoryViewController*)formInputAccessoryViewController
+            didTapFormInputAccessoryView:(UIView*)formInputAccessoryView {
+  if (base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
+    [self dismissBubble];
+  } else {
+    // This method can't be reached when `kEnableStartupImprovements` is not
+    // enabled. It will call `[self tapInsideRecognized:]` to dismiss the bubble
+    // instead;
+    NOTREACHED();
+  }
 }
 
 - (void)formInputAccessoryViewControllerReset:
     (FormInputAccessoryViewController*)formInputAccessoryViewController {
-  [self reset];
+  CHECK_EQ(self.formInputAccessoryViewController,
+           formInputAccessoryViewController);
+  [self resetInputViews];
 }
 
 #pragma mark - FallbackCoordinatorDelegate
@@ -436,6 +497,13 @@ const CGFloat kIPHVerticalOffset = -5;
   [generationProvider triggerPasswordGeneration];
 }
 
+#pragma mark - ManualFillAllPasswordCoordinatorDelegate
+
+- (void)manualFillAllPasswordCoordinatorWantsToBeDismissed:
+    (ManualFillAllPasswordCoordinator*)coordinator {
+  [self stopManualFillAllPasswordCoordinator];
+}
+
 #pragma mark - CardCoordinatorDelegate
 
 - (void)openCardSettings {
@@ -456,6 +524,13 @@ const CGFloat kIPHVerticalOffset = -5;
 - (void)openAddressSettings {
   [self reset];
   [self.navigator openAddressSettings];
+}
+
+#pragma mark - ExpandedManualFillCoordinatorDelegate
+
+- (void)stopExpandedManualFillCoordinator:
+    (ExpandedManualFillCoordinator*)coordinator {
+  [self reset];
 }
 
 #pragma mark - SecurityAlertCommands
@@ -499,8 +574,15 @@ const CGFloat kIPHVerticalOffset = -5;
 #pragma mark - Actions
 
 - (void)tapInsideRecognized:(id)sender {
-  [self.bubblePresenter dismissAnimated:YES];
-  self.bubblePresenter = nil;
+  if (!base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
+    [self dismissBubble];
+  } else {
+    // This method can't be reached when `kEnableStartupImprovements` is
+    // enabled. It will call `[self
+    // formInputAccessoryViewController:didTapFormInputAccessoryView:]` to
+    // dismiss the bubble instead;
+    NOTREACHED();
+  }
 }
 
 #pragma mark - Private
@@ -572,8 +654,11 @@ const CGFloat kIPHVerticalOffset = -5;
 
 // Opens other passwords.
 - (void)showAllPasswords {
-  CHECK(!self.allPasswordCoordinator, base::NotFatalUntil::M124);
   [self reset];
+  // The old coordinator could still be alive at this point. Stop it and release
+  // it before starting a new one. See crbug.com/40063966.
+  [self stopManualFillAllPasswordCoordinator];
+
   self.allPasswordCoordinator = [[ManualFillAllPasswordCoordinator alloc]
       initWithBaseViewController:self.baseViewController
                          browser:self.browser
@@ -665,11 +750,26 @@ const CGFloat kIPHVerticalOffset = -5;
                                     anchorPoint:anchorPoint];
 }
 
-#pragma mark - ManualFillAllPasswordCoordinatorDelegate
+- (void)dismissBubble {
+  [self.bubblePresenter dismissAnimated:YES];
+  self.bubblePresenter = nil;
+}
 
-- (void)manualFillAllPasswordCoordinatorWantsToBeDismissed:
-    (ManualFillAllPasswordCoordinator*)coordinator {
-  [self stopManualFillAllPasswordCoordinator];
+// Resets `formInputAccessoryViewController` and `formInputViewController` to
+// their initial state.
+- (void)resetInputViews {
+  [self.formInputAccessoryMediator enableSuggestions];
+  [self.formInputAccessoryViewController reset];
+
+  self.formInputViewController = nil;
+  [GetFirstResponder() reloadInputViews];
+}
+
+// Updates the keyboard accessory to the state it should be in when a manual
+// fill view is displayed.
+- (void)updateKeyboardAccessoryForManualFilling {
+  [self.formInputAccessoryViewController lockManualFallbackView];
+  [self.formInputAccessoryMediator disableSuggestions];
 }
 
 @end

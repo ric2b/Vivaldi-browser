@@ -314,22 +314,6 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
     low_latency_enabled_ = low_latency_enabled;
   }
 
-  // This class helps implement correct semantics for BlitFramebuffer
-  // when the DrawingBuffer is using a CHROMIUM image for its backing
-  // store and RGB emulation is in use (basically, macOS only).
-  class PLATFORM_EXPORT ScopedRGBEmulationForBlitFramebuffer {
-    STACK_ALLOCATED();
-
-   public:
-    ScopedRGBEmulationForBlitFramebuffer(DrawingBuffer*,
-                                         bool is_user_draw_framebuffer_bound);
-    ~ScopedRGBEmulationForBlitFramebuffer();
-
-   private:
-    scoped_refptr<DrawingBuffer> drawing_buffer_;
-    bool doing_work_ = false;
-  };
-
   scoped_refptr<CanvasResource> ExportCanvasResource();
 
   scoped_refptr<CanvasResource> ExportLowLatencyCanvasResource(
@@ -405,8 +389,7 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
    private:
     scoped_refptr<DrawingBuffer> drawing_buffer_;
     // The previous state restorer, in case restorers are nested.
-    raw_ptr<ScopedStateRestorer, ExperimentalRenderer>
-        previous_state_restorer_ = nullptr;
+    raw_ptr<ScopedStateRestorer> previous_state_restorer_ = nullptr;
     bool clear_state_dirty_ = false;
     bool pixel_pack_parameters_dirty_ = false;
     bool texture_binding_dirty_ = false;
@@ -602,7 +585,7 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
   void ResolveAndPresentSwapChainIfNeeded();
 
   // Weak, reset by beginDestruction.
-  raw_ptr<Client, ExperimentalRenderer> client_ = nullptr;
+  raw_ptr<Client> client_ = nullptr;
 
   const PreserveDrawingBuffer preserve_drawing_buffer_;
   const WebGLVersion webgl_version_;
@@ -633,7 +616,7 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
   // The current state restorer, which is used to track state dirtying. It is an
   // error to dirty state shared with WebGL while there is no existing state
   // restorer.
-  raw_ptr<ScopedStateRestorer, ExperimentalRenderer> state_restorer_ = nullptr;
+  raw_ptr<ScopedStateRestorer> state_restorer_ = nullptr;
 
   // This is used when the user requests either a depth or stencil buffer.
   GLuint depth_stencil_buffer_ = 0;

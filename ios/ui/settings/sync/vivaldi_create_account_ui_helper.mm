@@ -10,7 +10,7 @@
 #error "This file requires ARC support."
 #endif
 
-absl::optional<base::Value> NSDataToDict(NSData* data) {
+std::optional<base::Value> NSDataToDict(NSData* data) {
   const base::StringPiece server_reply(static_cast<const char*>([data bytes]),
                                         [data length]);
   return base::JSONReader::Read(server_reply);

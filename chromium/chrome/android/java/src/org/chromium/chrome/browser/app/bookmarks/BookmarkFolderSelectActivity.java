@@ -32,7 +32,6 @@ import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.BookmarkModelObserver;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayPref;
 import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
-import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.browser_ui.util.TraceEventVectorDrawableCompat;
@@ -152,7 +151,7 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mModel = BookmarkModel.getForProfile(Profile.getLastUsedRegularProfile());
+        mModel = BookmarkModel.getForProfile(getProfileProvider().getOriginalProfile());
         List<String> stringList =
                 IntentUtils.safeGetStringArrayListExtra(getIntent(), INTENT_BOOKMARKS_TO_MOVE);
 
@@ -176,7 +175,7 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
 
         mIsCreatingFolder = getIntent().getBooleanExtra(INTENT_IS_CREATING_FOLDER, false);
         if (mIsCreatingFolder) {
-            mParentId = mModel.getDefaultFolder();
+            mParentId = mModel.getDefaultBookmarkFolder();
         } else {
             mParentId = mModel.getBookmarkById(mBookmarksToMove.get(0)).getParentId();
         }
@@ -308,7 +307,7 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
     }
 
     private void moveBookmarksAndFinish(List<BookmarkId> bookmarkIds, BookmarkId parentId) {
-        BookmarkUtils.moveBookmarksToParent(mModel, bookmarkIds, parentId);
+        mModel.moveBookmarks(bookmarkIds, parentId);
         BookmarkUtils.setLastUsedParent(parentId);
         finishActivity(bookmarkIds);
     }

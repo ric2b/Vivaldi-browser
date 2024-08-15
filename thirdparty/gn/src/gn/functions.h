@@ -162,6 +162,22 @@ Value RunFilterInclude(Scope* scope,
                        const std::vector<Value>& args,
                        Err* err);
 
+extern const char kFilterLabelsInclude[];
+extern const char kFilterLabelsInclude_HelpShort[];
+extern const char kFilterLabelsInclude_Help[];
+Value RunFilterLabelsInclude(Scope* scope,
+                      const FunctionCallNode* function,
+                      const std::vector<Value>& args,
+                      Err* err);
+
+extern const char kFilterLabelsExclude[];
+extern const char kFilterLabelsExclude_HelpShort[];
+extern const char kFilterLabelsExclude_Help[];
+Value RunFilterLabelsExclude(Scope* scope,
+                      const FunctionCallNode* function,
+                      const std::vector<Value>& args,
+                      Err* err);
+
 extern const char kForEach[];
 extern const char kForEach_HelpShort[];
 extern const char kForEach_Help[];
@@ -236,6 +252,14 @@ Value RunImport(Scope* scope,
                 const std::vector<Value>& args,
                 Err* err);
 
+extern const char kLabelMatches[];
+extern const char kLabelMatches_HelpShort[];
+extern const char kLabelMatches_Help[];
+Value RunLabelMatches(Scope* scope,
+                      const FunctionCallNode* function,
+                      const std::vector<Value>& args,
+                      Err* err);
+
 extern const char kLoadableModule[];
 extern const char kLoadableModule_HelpShort[];
 extern const char kLoadableModule_Help[];
@@ -306,10 +330,10 @@ extern const char kRustProcMacro[];
 extern const char kRustProcMacro_HelpShort[];
 extern const char kRustProcMacro_Help[];
 Value RunRustProcMacro(Scope* scope,
-                   const FunctionCallNode* function,
-                   const std::vector<Value>& args,
-                   BlockNode* block,
-                   Err* err);
+                       const FunctionCallNode* function,
+                       const std::vector<Value>& args,
+                       BlockNode* block,
+                       Err* err);
 
 extern const char kSetDefaults[];
 extern const char kSetDefaults_HelpShort[];

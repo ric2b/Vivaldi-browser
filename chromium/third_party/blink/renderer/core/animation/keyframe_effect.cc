@@ -172,12 +172,11 @@ KeyframeEffect* KeyframeEffect::Create(
     if (element) {
       element->GetDocument().UpdateStyleAndLayoutTreeForElement(
           element, DocumentUpdateReason::kWebAnimation);
-      PseudoId pseudo_id =
-          CSSSelectorParser::ParsePseudoElement(pseudo, element);
-      AtomicString pseudo_argument =
-          PseudoElementHasArguments(pseudo_id)
-              ? CSSSelectorParser::ParsePseudoElementArgument(pseudo)
-              : WTF::g_null_atom;
+
+      AtomicString pseudo_argument = WTF::g_null_atom;
+
+      PseudoId pseudo_id = CSSSelectorParser::ParsePseudoElement(
+          pseudo, element, pseudo_argument);
       effect->effect_target_ =
           element->GetNestedPseudoElement(pseudo_id, pseudo_argument);
     }
@@ -255,6 +254,7 @@ void KeyframeEffect::setPseudoElement(String pseudo,
     exception_state.ThrowDOMException(
         DOMExceptionCode::kSyntaxError,
         "A valid pseudo-selector must be null or start with ::.");
+    return;
   }
 
   RefreshTarget();
@@ -269,9 +269,10 @@ void KeyframeEffect::RefreshTarget() {
   } else {
     target_element_->GetDocument().UpdateStyleAndLayoutTreeForElement(
         target_element_, DocumentUpdateReason::kWebAnimation);
-    PseudoId pseudoId =
-        CSSSelectorParser::ParsePseudoElement(target_pseudo_, target_element_);
-    new_target = target_element_->GetPseudoElement(pseudoId);
+    AtomicString argument;
+    PseudoId pseudoId = CSSSelectorParser::ParsePseudoElement(
+        target_pseudo_, target_element_, argument);
+    new_target = target_element_->GetPseudoElement(pseudoId, argument);
   }
 
   if (new_target != effect_target_) {
@@ -417,7 +418,7 @@ KeyframeEffect::CheckCanStartAnimationOnCompositor(
 
 void KeyframeEffect::StartAnimationOnCompositor(
     int group,
-    absl::optional<double> start_time,
+    std::optional<double> start_time,
     base::TimeDelta time_offset,
     double animation_playback_rate,
     CompositorAnimation* compositor_animation,
@@ -628,7 +629,7 @@ void KeyframeEffect::ApplyEffects() {
     GetAnimation()->CancelAnimationOnCompositor();
   }
 
-  absl::optional<double> iteration = CurrentIteration();
+  std::optional<double> iteration = CurrentIteration();
   DCHECK(iteration);
   DCHECK_GE(iteration.value(), 0);
   bool changed = false;
@@ -723,7 +724,7 @@ void KeyframeEffect::DetachTarget(Animation* animation) {
 
 AnimationTimeDelta KeyframeEffect::CalculateTimeToEffectChange(
     bool forwards,
-    absl::optional<AnimationTimeDelta> local_time,
+    std::optional<AnimationTimeDelta> local_time,
     AnimationTimeDelta time_to_next_iteration) const {
   const AnimationTimeDelta start_time = NormalizedTiming().start_delay;
 
@@ -774,11 +775,11 @@ AnimationTimeDelta KeyframeEffect::CalculateTimeToEffectChange(
   }
 }
 
-absl::optional<AnimationTimeDelta> KeyframeEffect::TimelineDuration() const {
+std::optional<AnimationTimeDelta> KeyframeEffect::TimelineDuration() const {
   if (GetAnimation() && GetAnimation()->TimelineInternal()) {
     return GetAnimation()->TimelineInternal()->GetDuration();
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 // Returns true if transform, translate, rotate or scale is composited

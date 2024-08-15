@@ -26,6 +26,7 @@
 #include "gtest/gtest.h"
 #include "absl/types/span.h"
 #include "connections/implementation/client_proxy.h"
+#include "connections/implementation/flags/nearby_connections_feature_flags.h"
 #include "connections/implementation/mock_service_controller.h"
 #include "connections/listeners.h"
 #include "connections/params.h"
@@ -35,6 +36,8 @@
 #include "connections/v3/connections_device.h"
 #include "connections/v3/listening_result.h"
 #include "connections/v3/params.h"
+#include "internal/interop/authentication_status.h"
+#include "internal/flags/nearby_flags.h"
 #include "internal/platform/byte_array.h"
 #include "internal/platform/condition_variable.h"
 #include "internal/platform/count_down_latch.h"
@@ -276,18 +279,28 @@ class ServiceControllerRouterTest : public testing::Test {
                            v3::ConnectionRequestInfo request_info,
                            ResultCallback callback, bool call_all_cb,
                            bool check_result = true,
-                           bool endpoint_info_present = true) {
+                           bool endpoint_info_present = true,
+                           AuthenticationStatus authentication_status =
+                               AuthenticationStatus::kSuccess) {
+    ConnectionResponseInfo response_info{
+        .remote_endpoint_info = ByteArray{"endpoint_name"},
+        .authentication_token = "auth_token",
+        .raw_authentication_token = ByteArray{"auth_token"},
+        .is_incoming_connection = true,
+        .authentication_status = authentication_status,
+    };
+
     // If we set check_result to false, we expect that RequestConnection will
     // not be called.
     if (check_result) {
       EXPECT_CALL(*mock_, RequestConnectionV3)
-          .WillOnce([call_all_cb, endpoint_info_present, this](
+          .WillOnce([call_all_cb, endpoint_info_present, response_info, this](
                         ClientProxy*, const NearbyDevice&,
                         const ConnectionRequestInfo& info,
                         const ConnectionOptions&) {
             EXPECT_EQ(info.endpoint_info.Empty(), !endpoint_info_present);
             if (call_all_cb) {
-              info.listener.initiated_cb(kRemoteEndpointId, {});
+              info.listener.initiated_cb(kRemoteEndpointId, response_info);
               info.listener.accepted_cb(kRemoteEndpointId);
               info.listener.rejected_cb(kRemoteEndpointId,
                                         Status{Status::kConnectionRejected});
@@ -310,12 +323,6 @@ class ServiceControllerRouterTest : public testing::Test {
         EXPECT_EQ(result_, Status{Status::kSuccess});
       }
     }
-    ConnectionResponseInfo response_info{
-        .remote_endpoint_info = ByteArray{"endpoint_name"},
-        .authentication_token = "auth_token",
-        .raw_authentication_token = ByteArray{"auth_token"},
-        .is_incoming_connection = true,
-    };
     if (client->HasPendingConnectionToEndpoint(kRemoteDevice.GetEndpointId())) {
       // we are calling this again, and do not need to rerun the below behavior.
       return;
@@ -528,6 +535,32 @@ TEST_F(ServiceControllerRouterTest, QualityConversionWorks) {
   EXPECT_EQ(router_.GetMediumQuality(Medium::WIFI_LAN), v3::Quality::kHigh);
   EXPECT_EQ(router_.GetMediumQuality(Medium::WIFI_DIRECT), v3::Quality::kHigh);
   EXPECT_EQ(router_.GetMediumQuality(Medium::WIFI_AWARE), v3::Quality::kHigh);
+}
+
+TEST_F(ServiceControllerRouterTest, EnableBleV2InConstructor) {
+  // This constructor is used to allow the platform to set the value
+  // of kEnableBleV2 to |enable_ble_v2|.
+  NearbyFlags::GetInstance().OverrideBoolFlagValue(
+      config_package_nearby::nearby_connections_feature::kEnableBleV2, false);
+  EXPECT_FALSE(NearbyFlags::GetInstance().GetBoolFlag(
+      config_package_nearby::nearby_connections_feature::kEnableBleV2));
+  ServiceControllerRouter ble_v2_enabled_router =
+      ServiceControllerRouter(/*enable_ble_v2=*/true);
+  EXPECT_TRUE(NearbyFlags::GetInstance().GetBoolFlag(
+      config_package_nearby::nearby_connections_feature::kEnableBleV2));
+}
+
+TEST_F(ServiceControllerRouterTest, DisableBleV2InConstructor) {
+  // This constructor is used to allow the platform to set the value
+  // of kEnableBleV2 to |enable_ble_v2|.
+  NearbyFlags::GetInstance().OverrideBoolFlagValue(
+      config_package_nearby::nearby_connections_feature::kEnableBleV2, true);
+  EXPECT_TRUE(NearbyFlags::GetInstance().GetBoolFlag(
+      config_package_nearby::nearby_connections_feature::kEnableBleV2));
+  ServiceControllerRouter ble_v2_disabled_router =
+      ServiceControllerRouter(/*enable_ble_v2=*/false);
+  EXPECT_FALSE(NearbyFlags::GetInstance().GetBoolFlag(
+      config_package_nearby::nearby_connections_feature::kEnableBleV2));
 }
 
 TEST_F(ServiceControllerRouterTest, StartAdvertisingCalled) {
@@ -834,7 +867,9 @@ TEST_F(ServiceControllerRouterTest, RequestConnectionCalledV3) {
           .listener = {
               .initiated_cb =
                   [&initiated_latch](const NearbyDevice&,
-                                     const v3::InitialConnectionInfo&) {
+                                     const v3::InitialConnectionInfo& info) {
+                    EXPECT_EQ(info.authentication_status,
+                              AuthenticationStatus::kSuccess);
                     initiated_latch.CountDown();
                   },
               .result_cb =
@@ -858,6 +893,64 @@ TEST_F(ServiceControllerRouterTest, RequestConnectionCalledV3) {
         cond_.Notify();
       },
       true);
+  EXPECT_TRUE(initiated_latch.Await().Ok());
+  EXPECT_TRUE(result_latch.Await().Ok());
+  EXPECT_TRUE(disconnected_latch.Await().Ok());
+  EXPECT_TRUE(bandwidth_changed_latch.Await().Ok());
+}
+
+TEST_F(ServiceControllerRouterTest,
+       RequestConnectionCalledV3_AuthenticationStatusFail) {
+  // Either Advertising, or Discovery should be ongoing.
+  StartDiscovery(&client_, kServiceId, kDiscoveryOptions, DiscoveryListener{},
+                 [this](Status status) {
+                   MutexLock lock(&mutex_);
+                   result_ = status;
+                   complete_ = true;
+                   cond_.Notify();
+                 });
+  // Establish connection.
+  auto local_device =
+      v3::ConnectionsDevice(client_.GetLocalEndpointId(), kRequestorName, {});
+  // Testing callback wrapping as well.
+  CountDownLatch initiated_latch(1);
+  CountDownLatch result_latch(2);
+  CountDownLatch disconnected_latch(1);
+  CountDownLatch bandwidth_changed_latch(1);
+
+  RequestConnectionV3(
+      &client_, kRemoteDevice,
+      v3::ConnectionRequestInfo{
+          .local_device = local_device,
+          .listener = {
+              .initiated_cb =
+                  [&initiated_latch](const NearbyDevice&,
+                                     const v3::InitialConnectionInfo& info) {
+                    EXPECT_EQ(info.authentication_status,
+                              AuthenticationStatus::kFailure);
+                    initiated_latch.CountDown();
+                  },
+              .result_cb =
+                  [&result_latch](const NearbyDevice&, v3::ConnectionResult) {
+                    result_latch.CountDown();
+                  },
+              .disconnected_cb =
+                  [&disconnected_latch](const NearbyDevice&) {
+                    disconnected_latch.CountDown();
+                  },
+              .bandwidth_changed_cb =
+                  [&bandwidth_changed_latch](const NearbyDevice&,
+                                             v3::BandwidthInfo) {
+                    bandwidth_changed_latch.CountDown();
+                  }},
+      },
+      [this](Status status) {
+        MutexLock lock(&mutex_);
+        result_ = status;
+        complete_ = true;
+        cond_.Notify();
+      },
+      true, true, true, AuthenticationStatus::kFailure);
   EXPECT_TRUE(initiated_latch.Await().Ok());
   EXPECT_TRUE(result_latch.Await().Ok());
   EXPECT_TRUE(disconnected_latch.Await().Ok());

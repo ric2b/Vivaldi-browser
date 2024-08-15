@@ -18,7 +18,6 @@
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
-#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
@@ -93,12 +92,6 @@ namespace content {
 
 namespace {
 
-// Controls if browser compositor context can be backed by raster decoder.
-// TODO(crbug.com/1505425): Remove kill switch once rolled out to stable.
-BASE_FEATURE(kUseRasterDecoderForAndroidBrowserContext,
-             "UseRasterDecoderForAndroidBrowserContext",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // NOINLINE to make sure crashes use this for magic signature.
 NOINLINE void FatalSurfaceFailure() {
   LOG(FATAL) << "Fatal surface initialization failure";
@@ -120,9 +113,8 @@ gpu::ContextCreationAttribs GetCompositorContextAttributes(
   attributes.need_alpha = requires_alpha_channel;
 
   attributes.enable_raster_interface = true;
-  attributes.enable_gles2_interface =
-      !base::FeatureList::IsEnabled(kUseRasterDecoderForAndroidBrowserContext);
-  attributes.enable_grcontext = attributes.enable_gles2_interface;
+  attributes.enable_gles2_interface = false;
+  attributes.enable_grcontext = false;
 
   return attributes;
 }
@@ -189,75 +181,6 @@ class CompositorImpl::AndroidHostDisplayClient : public viz::HostDisplayClient {
 
  private:
   raw_ptr<CompositorImpl> compositor_;
-};
-
-class CompositorImpl::HostBeginFrameObserver
-    : public viz::mojom::BeginFrameObserver {
- public:
-  HostBeginFrameObserver(
-      const base::flat_set<SimpleBeginFrameObserver*>& observers,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner)
-      : simple_begin_frame_observers_(observers),
-        task_runner_(std::move(task_runner)) {}
-
-  void OnStandaloneBeginFrame(const viz::BeginFrameArgs& args) override {
-    // Mark the current task as interesting, as it maybe be responsible for
-    // handling input events for flings.
-    base::TaskAnnotator::MarkCurrentTaskAsInterestingForTracing();
-    if (args.type == viz::BeginFrameArgs::MISSED) {
-      return;
-    }
-
-    if (pending_coalesce_callback_) {
-      begin_frame_args_ = args;
-      return;
-    }
-
-    if ((base::TimeTicks::Now() - args.frame_time) > args.interval) {
-      begin_frame_args_ = args;
-      pending_coalesce_callback_ = true;
-      task_runner_->PostDelayedTask(
-          FROM_HERE,
-          base::BindOnce(
-              &CompositorImpl::HostBeginFrameObserver::CoalescedBeginFrame,
-              weak_factory_.GetWeakPtr()),
-          base::Microseconds(1));
-      return;
-    }
-
-    CallObservers(args);
-  }
-
-  mojo::PendingRemote<viz::mojom::BeginFrameObserver> GetBoundRemote() {
-    return receiver_.BindNewPipeAndPassRemote(task_runner_);
-  }
-
- private:
-  void CoalescedBeginFrame() {
-    DCHECK(begin_frame_args_.IsValid());
-    pending_coalesce_callback_ = false;
-    viz::BeginFrameArgs args = begin_frame_args_;
-    begin_frame_args_ = viz::BeginFrameArgs();
-    CallObservers(args);
-  }
-
-  // This may be deleted as part of `CallObservers`.
-  void CallObservers(const viz::BeginFrameArgs& args) {
-    auto observers_copy = *simple_begin_frame_observers_;
-    for (auto* simple_observer : observers_copy) {
-      simple_observer->OnBeginFrame(args.frame_time);
-    }
-  }
-
-  const raw_ref<const base::flat_set<SimpleBeginFrameObserver*>>
-      simple_begin_frame_observers_;
-  const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-
-  bool pending_coalesce_callback_ = false;
-  viz::BeginFrameArgs begin_frame_args_;
-
-  mojo::Receiver<viz::mojom::BeginFrameObserver> receiver_{this};
-  base::WeakPtrFactory<HostBeginFrameObserver> weak_factory_{this};
 };
 
 class CompositorImpl::ScopedCachedBackBuffer {
@@ -443,13 +366,7 @@ void CompositorImpl::SetBackgroundColor(int color) {
 void CompositorImpl::CreateLayerTreeHost() {
   DCHECK(!host_);
 
-  cc::slim::LayerTree::InitParams init_params;
-  init_params.client = this;
-  init_params.cc_task_graph_runner =
-      CompositorDependenciesAndroid::Get().GetTaskGraphRunner();
-  init_params.task_runner =
-      content::GetUIThreadTaskRunner({BrowserTaskType::kUserInput});
-  host_ = cc::slim::LayerTree::Create(std::move(init_params));
+  host_ = cc::slim::LayerTree::Create(this);
   DCHECK(!host_->IsVisible());
   host_->SetViewportRectAndScale(gfx::Rect(size_), root_window_->GetDipScale(),
                                  GenerateLocalSurfaceId());
@@ -562,10 +479,6 @@ void CompositorImpl::SetNeedsComposite() {
 
 void CompositorImpl::MaybeCompositeNow() {
   host_->MaybeCompositeNow();
-}
-
-void CompositorImpl::SetNeedsRedraw() {
-  host_->SetNeedsRedraw();
 }
 
 void CompositorImpl::BeginFrame(const viz::BeginFrameArgs& args) {
@@ -850,7 +763,7 @@ void CompositorImpl::InitializeVizLayerTreeFrameSink(
   pending_frames_ = 0;
   gpu_capabilities_ = context_provider->ContextCapabilities();
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
-      content::GetUIThreadTaskRunner({BrowserTaskType::kUserInput});
+      GetUIThreadTaskRunner({BrowserTaskType::kUserInput});
 
   auto root_params = viz::mojom::RootCompositorFrameSinkParams::New();
 
@@ -995,7 +908,7 @@ void CompositorImpl::DecrementPendingReadbacks() {
 }
 
 void CompositorImpl::AddSimpleBeginFrameObserver(
-    SimpleBeginFrameObserver* obs) {
+    ui::HostBeginFrameObserver::SimpleBeginFrameObserver* obs) {
   DCHECK(obs);
   DCHECK(!base::Contains(simple_begin_frame_observers_, obs));
   simple_begin_frame_observers_.insert(obs);
@@ -1003,7 +916,7 @@ void CompositorImpl::AddSimpleBeginFrameObserver(
 }
 
 void CompositorImpl::RemoveSimpleBeginFrameObserver(
-    SimpleBeginFrameObserver* obs) {
+    ui::HostBeginFrameObserver::SimpleBeginFrameObserver* obs) {
   DCHECK(obs);
   DCHECK(base::Contains(simple_begin_frame_observers_, obs));
 
@@ -1025,9 +938,9 @@ void CompositorImpl::MaybeUpdateObserveBeginFrame() {
     return;
   }
 
-  host_begin_frame_observer_ = std::make_unique<HostBeginFrameObserver>(
+  host_begin_frame_observer_ = std::make_unique<ui::HostBeginFrameObserver>(
       simple_begin_frame_observers_,
-      content::GetUIThreadTaskRunner({BrowserTaskType::kUserInput}));
+      GetUIThreadTaskRunner({BrowserTaskType::kUserInput}));
   display_private_->SetStandaloneBeginFrameObserver(
       host_begin_frame_observer_->GetBoundRemote());
 }

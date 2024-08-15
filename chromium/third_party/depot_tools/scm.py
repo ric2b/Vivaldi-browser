@@ -3,12 +3,11 @@
 # found in the LICENSE file.
 """SCM-specific utility classes."""
 
-import glob
-import io
+from collections import defaultdict
 import os
 import platform
 import re
-import sys
+from typing import Mapping, List
 
 import gclient_utils
 import subprocess2
@@ -20,53 +19,6 @@ import subprocess2
 VERSIONED_NO = 0
 VERSIONED_DIR = 1
 VERSIONED_SUBMODULE = 2
-
-
-def ValidateEmail(email):
-    return (re.match(r"^[a-zA-Z0-9._%\-+]+@[a-zA-Z0-9._%-]+.[a-zA-Z]{2,6}$",
-                     email) is not None)
-
-
-def GetCasedPath(path):
-    """Elcheapos way to get the real path case on Windows."""
-    if sys.platform.startswith('win') and os.path.exists(path):
-        # Reconstruct the path.
-        path = os.path.abspath(path)
-        paths = path.split('\\')
-        for i in range(len(paths)):
-            if i == 0:
-                # Skip drive letter.
-                continue
-            subpath = '\\'.join(paths[:i + 1])
-            prev = len('\\'.join(paths[:i]))
-            # glob.glob will return the cased path for the last item only. This
-            # is why we are calling it in a loop. Extract the data we want and
-            # put it back into the list.
-            paths[i] = glob.glob(subpath + '*')[0][prev + 1:len(subpath)]
-        path = '\\'.join(paths)
-    return path
-
-
-def GenFakeDiff(filename):
-    """Generates a fake diff from a file."""
-    file_content = gclient_utils.FileRead(filename, 'rb').splitlines(True)
-    filename = filename.replace(os.sep, '/')
-    nb_lines = len(file_content)
-    # We need to use / since patch on unix will fail otherwise.
-    data = io.StringIO()
-    data.write("Index: %s\n" % filename)
-    data.write('=' * 67 + '\n')
-    # Note: Should we use /dev/null instead?
-    data.write("--- %s\n" % filename)
-    data.write("+++ %s\n" % filename)
-    data.write("@@ -0,0 +1,%d @@\n" % nb_lines)
-    # Prepend '+' to every lines.
-    for line in file_content:
-        data.write('+')
-        data.write(line)
-    result = data.getvalue()
-    data.close()
-    return result
 
 
 def determine_scm(root):
@@ -87,16 +39,52 @@ def determine_scm(root):
         return None
 
 
-def only_int(val):
-    if val.isdigit():
-        return int(val)
-
-    return 0
-
-
 class GIT(object):
     current_version = None
     rev_parse_cache = {}
+
+    # Maps cwd -> {config key, [config values]}
+    # This cache speeds up all `git config ...` operations by only running a
+    # single subcommand, which can greatly accelerate things like
+    # git-map-branches.
+    _CONFIG_CACHE: Mapping[str, Mapping[str, List[str]]] = {}
+
+    @staticmethod
+    def _load_config(cwd: str) -> Mapping[str, List[str]]:
+        """Loads git config for the given cwd.
+
+        The calls to this method are cached in-memory for performance. The
+        config is only reloaded on cache misses.
+
+        Args:
+            cwd: path to fetch `git config` for.
+
+        Returns:
+            A dict mapping git config keys to a list of its values.
+        """
+        if cwd not in GIT._CONFIG_CACHE:
+            try:
+                rawConfig = GIT.Capture(['config', '--list', '-z'],
+                                        cwd=cwd,
+                                        strip_out=False)
+            except subprocess2.CalledProcessError:
+                return {}
+
+            cfg = defaultdict(list)
+
+            # Splitting by '\x00' gets an additional empty string at the end.
+            for line in rawConfig.split('\x00')[:-1]:
+                key, value = map(str.strip, line.split('\n', 1))
+                cfg[key].append(value)
+
+            GIT._CONFIG_CACHE[cwd] = cfg
+
+        return GIT._CONFIG_CACHE[cwd]
+
+    @staticmethod
+    def _clear_config(cwd: str) -> None:
+        GIT._CONFIG_CACHE.pop(cwd, None)
+
 
     @staticmethod
     def ApplyEnvVars(kwargs):
@@ -167,10 +155,28 @@ class GIT(object):
 
     @staticmethod
     def GetConfig(cwd, key, default=None):
-        try:
-            return GIT.Capture(['config', key], cwd=cwd)
-        except subprocess2.CalledProcessError:
+        values = GIT._load_config(cwd).get(key, None)
+        if not values:
             return default
+
+        return values[-1]
+
+    @staticmethod
+    def GetConfigBool(cwd, key):
+        return GIT.GetConfig(cwd, key) == 'true'
+
+    @staticmethod
+    def GetConfigList(cwd, key):
+        return GIT._load_config(cwd).get(key, [])
+
+    @staticmethod
+    def YieldConfigRegexp(cwd, pattern):
+        """Yields (key, value) pairs for any config keys matching `pattern`."""
+        p = re.compile(pattern)
+        for name, values in GIT._load_config(cwd).items():
+            if p.match(name):
+                for value in values:
+                    yield name, value
 
     @staticmethod
     def GetBranchConfig(cwd, branch, key, default=None):
@@ -179,11 +185,42 @@ class GIT(object):
         return GIT.GetConfig(cwd, key, default)
 
     @staticmethod
-    def SetConfig(cwd, key, value=None):
-        if value is None:
-            args = ['config', '--unset', key]
+    def SetConfig(cwd,
+                  key,
+                  value=None,
+                  *,
+                  value_pattern=None,
+                  modify_all=False,
+                  scope='local'):
+        """Sets or unsets one or more config values.
+
+        Args:
+            cwd: path to fetch `git config` for.
+            key: The specific config key to affect.
+            value: The value to set. If this is None, `key` will be unset.
+            value_pattern: For use with `all=True`, allows further filtering of
+                the set or unset operation based on the currently configured
+                value. Ignored for `all=False`.
+            modify_all: If True, this will change a set operation to
+                `--replace-all`, and will change an unset operation to
+                `--unset-all`.
+            scope: By default this is the local scope, but could be `system`,
+                `global`, or `worktree`, depending on which config scope you
+                want to affect.
+        """
+        GIT._clear_config(cwd)
+
+        args = ['config', f'--{scope}']
+        if value == None:
+            args.extend(['--unset' + ('-all' if modify_all else ''), key])
         else:
-            args = ['config', key, value]
+            if modify_all:
+                args.append('--replace-all')
+
+            args.extend([key, value])
+
+        if modify_all and value_pattern:
+            args.append(value_pattern)
         GIT.Capture(args, cwd=cwd)
 
     @staticmethod
@@ -463,13 +500,19 @@ class GIT(object):
     @staticmethod
     def ListSubmodules(repo_root):
         # type: (str) -> Collection[str]
-        """Returns the list of submodule paths for the given repo."""
+        """Returns the list of submodule paths for the given repo.
+
+        Path separators will be adjusted for the current OS.
+        """
         if not os.path.exists(os.path.join(repo_root, '.gitmodules')):
             return []
         config_output = GIT.Capture(
             ['config', '--file', '.gitmodules', '--get-regexp', 'path'],
             cwd=repo_root)
-        return [line.split()[-1] for line in config_output.splitlines()]
+        return [
+            line.split()[-1].replace('/', os.path.sep)
+            for line in config_output.splitlines()
+        ]
 
     @staticmethod
     def CleanupDir(cwd, relative_dir):

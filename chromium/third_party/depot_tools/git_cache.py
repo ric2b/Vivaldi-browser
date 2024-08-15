@@ -197,7 +197,8 @@ class Mirror(object):
                 try:
                     cachepath = subprocess.check_output(
                         [cls.git_exe, 'config'] + cls._GIT_CONFIG_LOCATION +
-                        ['cache.cachepath']).decode('utf-8', 'ignore').strip()
+                        ['--type', 'path', 'cache.cachepath']).decode(
+                            'utf-8', 'ignore').strip()
                 except subprocess.CalledProcessError:
                     cachepath = os.environ.get('GIT_CACHE_PATH',
                                                cls.UNSET_CACHEPATH)
@@ -248,7 +249,7 @@ class Mirror(object):
         env.setdefault('GIT_ASKPASS', 'true')
         env.setdefault('SSH_ASKPASS', 'true')
         self.print('running "git %s" in "%s"' % (' '.join(cmd), cwd))
-        gclient_utils.CheckCallAndFilter([self.git_exe] + cmd, **kwargs)
+        return gclient_utils.CheckCallAndFilter([self.git_exe] + cmd, **kwargs)
 
     def config(self, reset_fetch_config=False):
         if reset_fetch_config:
@@ -467,26 +468,26 @@ class Mirror(object):
                 with open(self._init_sentient_file, 'w'):
                     # Create sentient file
                     pass
-                # Set appropriate symbolic-ref
-                remote_info = exponential_backoff_retry(
-                    lambda: subprocess.check_output(
-                        [
-                            self.git_exe, '--git-dir',
-                            os.path.abspath(self.mirror_path), 'remote', 'show',
-                            self.url
-                        ],
-                        cwd=self.mirror_path).decode('utf-8', 'ignore').strip())
-                default_branch_regexp = re.compile(r'HEAD branch: (.*)$')
-                m = default_branch_regexp.search(remote_info, re.MULTILINE)
-                if m:
-                    self.RunGit(
-                        ['symbolic-ref', 'HEAD', 'refs/heads/' + m.groups()[0]])
+                self._set_symbolic_ref()
             else:
                 # Bootstrap failed, previous cache exists; warn and continue.
                 logging.warning(
                     'Git cache has a lot of pack files (%d). Tried to '
                     're-bootstrap but failed. Continuing with non-optimized '
                     'repository.' % len(pack_files))
+
+    def _set_symbolic_ref(self):
+        remote_info = exponential_backoff_retry(lambda: subprocess.check_output(
+            [
+                self.git_exe, '--git-dir',
+                os.path.abspath(self.mirror_path), 'remote', 'show', self.url
+            ],
+            cwd=self.mirror_path).decode('utf-8', 'ignore').strip())
+        default_branch_regexp = re.compile(r'HEAD branch: (.*)')
+        m = default_branch_regexp.search(remote_info, re.MULTILINE)
+        if m:
+            self.RunGit(['symbolic-ref', 'HEAD', 'refs/heads/' + m.groups()[0]])
+
 
     def _fetch(self,
                verbose,
@@ -534,6 +535,13 @@ class Mirror(object):
         if os.path.isfile(self._init_sentient_file):
             os.remove(self._init_sentient_file)
 
+        # Since --prune is used, it's possible that HEAD no longer exists (e.g.
+        # a repo uses new HEAD and old is removed). This ensures that HEAD still
+        # points to a valid commit, otherwise gets a new HEAD.
+        out = self.RunGit(['rev-parse', 'HEAD'], print_stdout=False)
+        if out.startswith(b'HEAD'):
+            self._set_symbolic_ref()
+
     def populate(self,
                  depth=None,
                  no_fetch_tags=False,
@@ -547,7 +555,7 @@ class Mirror(object):
             depth = 10000
         gclient_utils.safe_makedirs(self.GetCachePath())
 
-        def bootstrap(force=False):
+        def bootstrap_cache(force=False):
             self._ensure_bootstrapped(depth,
                                       bootstrap,
                                       reset_fetch_config,
@@ -564,12 +572,12 @@ class Mirror(object):
                 wipe_cache()
 
             try:
-                bootstrap()
+                bootstrap_cache()
             except ClobberNeeded:
                 # This is a major failure, we need to clean and force a
                 # bootstrap.
                 wipe_cache()
-                bootstrap(force=True)
+                bootstrap_cache(force=True)
 
     def update_bootstrap(self, prune=False, gc_aggressive=False):
         # NOTE: There have been cases where repos were being recursively

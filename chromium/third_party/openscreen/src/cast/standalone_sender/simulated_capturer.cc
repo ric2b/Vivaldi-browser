@@ -40,7 +40,7 @@ SimulatedCapturer::SimulatedCapturer(Environment* environment,
       packet_(MakeUniqueAVPacket()),
       decoded_frame_(MakeUniqueAVFrame()),
       next_task_(environment->now_function(), environment->task_runner()) {
-  OSP_DCHECK(observer_);
+  OSP_CHECK(observer_);
 
   if (!format_context_) {
     OnError("MakeUniqueAVFormatContext", AVERROR_UNKNOWN);
@@ -255,8 +255,8 @@ SimulatedAudioCapturer::SimulatedAudioCapturer(Environment* environment,
       sample_rate_(sample_rate),
       client_(client),
       resampler_(MakeUniqueSwrContext()) {
-  OSP_DCHECK_GT(num_channels_, 0);
-  OSP_DCHECK_GT(sample_rate_, 0);
+  OSP_CHECK_GT(num_channels_, 0);
+  OSP_CHECK_GT(sample_rate_, 0);
 }
 
 SimulatedAudioCapturer::~SimulatedAudioCapturer() {
@@ -336,14 +336,14 @@ std::optional<Clock::duration> SimulatedAudioCapturer::ProcessDecodedFrame(
 
   const int64_t num_leftover_input_samples =
       swr_get_delay(resampler_.get(), input_sample_rate_);
-  OSP_DCHECK_GE(num_leftover_input_samples, 0);
+  OSP_CHECK_GE(num_leftover_input_samples, 0);
   const Clock::duration reference_time_adjustment = -ToApproximateClockDuration(
       num_leftover_input_samples, AVRational{1, input_sample_rate_});
 
   const int64_t num_output_samples_desired =
       av_rescale_rnd(num_leftover_input_samples + frame.nb_samples,
                      sample_rate_, input_sample_rate_, AV_ROUND_ZERO);
-  OSP_DCHECK_GE(num_output_samples_desired, 0);
+  OSP_CHECK_GE(num_output_samples_desired, 0);
   resampled_audio_.resize(num_channels_ * num_output_samples_desired);
   uint8_t* output_argument[1] = {
       reinterpret_cast<uint8_t*>(resampled_audio_.data())};

@@ -21,7 +21,9 @@
 <translation id="1315107593850379616">აღდგენის ელფოსტა</translation>
 <translation id="1325473901257014816">Vivadi-სთან ერთად, თქვენ შეგეძლებათ, ყველა თქვენი ჩანართი ერთ ბრაუზერში იქონიოთ და მისი სინქრონიზაცია გააკეთოთ ყველა მოწყობილობისთვის.</translation>
 <translation id="132683371494960526">მშობელი საქაღალდის შესაცვლელად ორჯერ დაატყაპუნეთ.</translation>
+<translation id="1341156196125040601">აირჩიეთ, სად გნებავთ, მისამართის ზოლი გქონდეთ.</translation>
 <translation id="1354002567845495520">Vivaldi-ის შენიშვნების სინქი (მიმაგრებული ფაილები სინქრონიზებადი არაა)</translation>
+<translation id="1365181765792690850">ამ პარამეტრის ჩართვამ, შეიძლება, ზოგიერთი ვებგვერდი ან/და გამოსახულება გააფუჭოს. ძალაში სრულად შესასვლელად საჭიროა გადატვირთვა.</translation>
 <translation id="1379470994139227452">Vivaldi-ის ნაგულისხმევად დაყენება</translation>
 <translation id="1381484244248892686">შენახული პაროლები ნებისმიერ მოწყობილობაზე შეგიძლიათ, გამოიყენოთ. ისინი შენახულია Vivaldi-ის პაროლების მმართველში ელფოსტისთვის <ph name="EMAIL" /></translation>
 <translation id="1383876407941801731">ძებნა</translation>
@@ -38,6 +40,7 @@
 <translation id="1659112017960130179">კორეული (<ph name="ORIGIN" />)</translation>
 <translation id="1689333818294560261">მეტსახელი</translation>
 <translation id="1711184756728070210"><ph name="BEGIN_LINK" />გამოყენების პირობები ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />კონფიდენციალობის პოლიტიკა ➔<ph name="END_LINK2" /></translation>
+<translation id="1717473843091433383">ნაძალადევი ბნელი თემა ყველა ვებგვერდზე</translation>
 <translation id="1721552494230946796">ახალი სწრაფი წვდომის პანელის საქაღალდე</translation>
 <translation id="173924678149983125">შეიყვანეთ URL ბლოკერის წესების შემოსატანად</translation>
 <translation id="1751280147639351837">ტრეკერის და რეკლამის დაბლოკვა</translation>
@@ -45,7 +48,7 @@
 <translation id="1754797958074421486">გამოყენების პირობები</translation>
 <translation id="1771413903824396513">მეტსახელით</translation>
 <translation id="1804522390855853698">ჩინური (<ph name="ORIGIN" />)</translation>
-<translation id="1807246157184219062">მსუბუქი</translation>
+<translation id="1807246157184219062">ღია</translation>
 <translation id="1809939268435598390">საქაღალდის წაშლა</translation>
 <translation id="1813686536470127172">სხვა საქაღალდე</translation>
 <translation id="1828800626900562968">დაატყაპუნეთ ქვემოთ მიმატების ხატულაზე ახალი ჩანართის შესაქმნელად.</translation>
@@ -72,17 +75,19 @@
 <translation id="2391028308389203648">თურქული (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">აქტივაცია</translation>
 <translation id="2414886740292270097">ბნელი</translation>
-<translation id="2433507940547922241">გარეგნობა</translation>
 <translation id="2434910957904013691">ყველას სინქი</translation>
 <translation id="2448144008809286557">დაგავიწყდათ <ph name="BEGIN_LINK" />მომხმარებლის სახელი<ph name="END_LINK" /> ან <ph name="BEGIN_LINK" />პაროლი<ph name="END_LINK" />?</translation>
+<translation id="2478478121390627077">ამჟამად არჩეული ფერი</translation>
 <translation id="2536780277491102902">გამონაკლისები</translation>
 <translation id="2558801801411970131">იბლოკება ტრეკერები</translation>
 <translation id="2562040727226360285">მოსაბეზრებელი ელემენტების მოცილება. შეიძლება, ზოგიერთი საიტი სწორად აღარ გამოჩნდეს. (<ph name="ORIGIN" />)</translation>
 <translation id="2577446409661931381">ახალი ჩანაწერი</translation>
+<translation id="261264557609353020">გაშვების გვერდი</translation>
 <translation id="2619628557366098325">პორტუგალიური (<ph name="ORIGIN" />)</translation>
 <translation id="2620436844016719705">სისტემა</translation>
 <translation id="2666092431469916601">თავში</translation>
-<translation id="2677862276555105603">რეკლამა დაიბლოკა</translation>
+<translation id="2677862276555105603">რეკლამა
+დაიბლოკა</translation>
 <translation id="2678542925523700624">ესტონური (<ph name="ORIGIN" />)</translation>
 <translation id="2709516037105925701">ავტომატური შევსება</translation>
 <translation id="271033894570825754">ახალი</translation>
@@ -126,6 +131,7 @@
 <translation id="3527085408025491307">საქაღალდე</translation>
 <translation id="3530991200302302959">ბულგარული (<ph name="ORIGIN" />)</translation>
 <translation id="3601414719864711130">თარიღით</translation>
+<translation id="3602290021589620013">მინიატურა</translation>
 <translation id="3607176258839749451">რეგისტრაცია ჩავარდა შეცდომის გამო. მოგვიანებით სცადეთ.</translation>
 <translation id="3646647753063635401">ყველა მონაცემის სინქრონიზაცია და ახალი მონაცემების ტიპების სინქრონიზაციის ავტომატური ჩართვა</translation>
 <translation id="3682791711395736890">საიტის სრული ვერსიის ნახვა</translation>
@@ -172,6 +178,7 @@
 <translation id="4413780690230851155">ბრაუზერის ისტორიის წაშლა</translation>
 <translation id="4452878871193896747">ინდონეზიური (<ph name="ORIGIN" />)</translation>
 <translation id="445620040230332178">ჩანართის სტილი</translation>
+<translation id="4461652107878667683">ნავიგაცია წინ</translation>
 <translation id="4474581062946673155">ამჟამად სხვა მოწყობილობებიდან დასინქრონებული ჩანართები არ გაგაჩნიათ.</translation>
 <translation id="4488900295693536220">გამოსადეგია, როცა მისამართის პანელი დაბლაა. აადვილებს მინიშნებებთან წვდომას.</translation>
 <translation id="4493850495402472953">და</translation>
@@ -180,6 +187,7 @@
 <translation id="4515084385531683114">პაროლები მის მმართველშია შენახული, ამ მოწყობილობაზე.</translation>
 <translation id="4525945044609022380">ეს ელფოსტა უკვე მიბმულია სხვა ანგარიშზე.</translation>
 <translation id="4526803704855831732">კონფიდენციალური ჩანართები</translation>
+<translation id="4553717494760925411">ნავიგაცია უკან</translation>
 <translation id="4563480492836333884">ელფოსტა მისაღები არაა. გამოიყენეთ სხვა დომენი.</translation>
 <translation id="457386861538956877">მეტი...</translation>
 <translation id="460370326897402035">პაროლი არასწორია.</translation>
@@ -188,6 +196,7 @@
 <translation id="4654578955713250802">დაბლოკეთ რეკლამა და ტრეკერები</translation>
 <translation id="4655510151391078468">ეს კოდი თქვენთვის გამოგზავნილს არ ემთხვევა.
         გაქვთ დარჩენილი <ph name="ATTEMPTS" /> ცდა.</translation>
+<translation id="46613249405673440">ფონის სურათად არჩევა</translation>
 <translation id="466494460776294423">გადამოწმების კოდი აუცილებელია</translation>
 <translation id="4714431804859029826">&amp;ნაგულისხმევი პარამეტრების აღდგენა</translation>
 <translation id="4727698999970341158">ისლანდიური (<ph name="ORIGIN" />)</translation>
@@ -196,8 +205,10 @@
 <translation id="4780953868408193639">ტრეკერი
 დაიბლოკა</translation>
 <translation id="4807415245238822255">პაროლები არ ემთხვევა.</translation>
+<translation id="4818836520802586445">აქცენტის ფერი</translation>
 <translation id="4821701638681626529">Vivaldi, როცა ინკოგნიტო ჩანართებს იყენებთ, ისტორიას არ ინახავს</translation>
 <translation id="4833044618885331665">სინქრონიზაციის გამოსაყენებლად Vivaldi-ის ვერსია უნდა ასწიოთ.</translation>
+<translation id="484462545196658690">ავტო</translation>
 <translation id="4852383705713307704">რეკლამა დაიბლოკა</translation>
 <translation id="4871370605780490696">სანიშნის დამატება</translation>
 <translation id="4903325570808402486">Vivaldi-ის პარამეტრების სინქრონიზაცია (ჯერჯერობით ყველა პარამეტრი სინქრონიზებადი არაა)</translation>
@@ -208,6 +219,8 @@
 <translation id="497942794017668482">იბლოკება ტრეკერები და რეკლამა</translation>
 <translation id="5037761343305489956">დაკოპირდა შენიშვნაში</translation>
 <translation id="504986598654589766">ინტერნეტში კონფიდენციალური ჩანართით მუშაობა ნიშნავს, რომ ძებნა, ნანახი საიტები, ქუქიები და დროებითი ფაილები დამახსოვრებული არ იქნება. Vivaldi არ დაშიფრავს ან რამენაირად შეცვლის თქვენს შეერთებას.</translation>
+<translation id="505774819758747674">მინიატურა პანელისთვის არჩეული აქცენტის ფერით</translation>
+<translation id="5094183365876568934">ზოგიერთი ვებგვერდი თავიანთ ფერების სქემას მომხმარებლის პარამეტრებს არგებს. აირჩიეთ, რომელი ფერების სქემა გნებავთ, საიტებმა გამოიყენონ.</translation>
 <translation id="5094376253685335202">სინქრონიზაციის ჩართვა</translation>
 <translation id="5116316489033177455">სანიშნეებისა და სწრაფი წვდომის პანელების სინქრონიზაცია</translation>
 <translation id="5122095890854520072">ლატვიური (<ph name="ORIGIN" />)</translation>
@@ -230,7 +243,6 @@
 <translation id="5439835075346716808">რეგისტრაცია ამ IP-დან დროებით დაბლოკილია. მოგვიანებით სცადეთ.</translation>
 <translation id="5486261815000869482">პაროლის დადასტურება</translation>
 <translation id="5494016731375030300">ახლახანს დახურული ჩანართები</translation>
-<translation id="5569279496588266002">საწყისი გვერდის განლაგება</translation>
 <translation id="5639137028584114536">თქვენი ორგანიზაცია მოითხოვს, ინტერნეტში კონფიდენციალურად იმუშაოთ. ამ რეჟიმში ჩანართები არ ინახება.
         <ph name="BEGIN_LINK" />Learn more<ph name="END_LINK" /></translation>
 <translation id="5684277895745049190">სია</translation>
@@ -251,7 +263,7 @@
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> ელემენტი გადატანილია</translation>
 <translation id="6147094071357011481">ახლახან დახურული ჩანართები ხელმიუწვდომელია</translation>
 <translation id="6193995664633100765">ინდური (<ph name="ORIGIN" />)</translation>
-<translation id="6278428485366576908">თემა</translation>
+<translation id="6224086034182508647">ვებგვერდის გარეგნობის მორგება</translation>
 <translation id="6365929278691047681">გერმანული (<ph name="ORIGIN" />)</translation>
 <translation id="6404511346730675251">სანიშნის რედაქტირება</translation>
 <translation id="6406506848690869874">სინქრონიზაცია</translation>
@@ -262,6 +274,7 @@
 <translation id="6527303717912515753">გაზიარება</translation>
 <translation id="6535988230515403205">პოლონური (<ph name="ORIGIN" />)</translation>
 <translation id="659351303388691480">ბრაუზერის მონაცემების გასუფთავება...</translation>
+<translation id="6602272356389933803">გარეგნობა &amp; თემა</translation>
 <translation id="6614744450826097546">რეკლამის დეტალები</translation>
 <translation id="6627583120233659107">საქაღალდის ჩასწორება</translation>
 <translation id="6631760746795162665">კოლუმბიური (<ph name="ORIGIN" />)</translation>
@@ -272,6 +285,8 @@
 <translation id="6657585470893396449">პაროლი</translation>
 <translation id="6690955457036363013">მართეთ დაბლოკვის დონე თითოეული საიტისთვის</translation>
 <translation id="6703516503311038964">მე მსურს, Vivaldi-ის გაზეთი მივიღო</translation>
+<translation id="6724024423419410528">ფერები</translation>
+<translation id="6745857330065678428">აქცენტის ფერის მემკვიდრეობით მიღება გვერდიდან</translation>
 <translation id="6757792528048321576">ტრეკერის და რეკლამის დაბლოკვა</translation>
 <translation id="6798469570047202628">შეყვანილი პაროლი არასწორია</translation>
 <translation id="681368974849482173">ელემენტი შეიქმნა</translation>
@@ -279,10 +294,12 @@
 <translation id="6875510405870945573">აირჩიეთ დაბლოკვის სასურველი დონე.</translation>
 <translation id="6885837502028760851">მხოლოდ სწრაფი პანელის საქაღალდეების ჩვენება</translation>
 <translation id="6887143077297974801">სინქრონიზაციის დაწყება ჩავარდა.</translation>
+<translation id="691132463664340655">ბრაუზერის თემა</translation>
 <translation id="6937750621455385628">შესასვლელად Vivaldi-ის ანგარიში უნდა გამოიყენოთ.</translation>
 <translation id="6945221475159498467">არჩევა</translation>
 <translation id="6946395294519639514">პანელებით შეგიძლიათ ხშირად გამოყენებულ ხელსაწყოებამდე ადვილად მიხვიდეთ, ბრაუზერის გვერდით პანელით.</translation>
 <translation id="6951435330868954105">ნაგულისხმევი პარამეტრების მართვა</translation>
+<translation id="6951948201878750661">დაატყაპუნეთ ამ ფერის ასარჩევად</translation>
 <translation id="6967884871145366229">კონფიდენციალობის პარამეტრების მართვა</translation>
 <translation id="6973630695168034713">საქაღალდეები</translation>
 <translation id="7006864796794806241">პაროლის აღდგენა</translation>
@@ -305,11 +322,14 @@
 <translation id="7417521636956146248">საძიებო სისტემები ნაგულისხმევ პარამეტრებზე დაბრუნდება, რაც ასევე ჩამოყრის თქვენ მიერ მითითებული საძიებო სისტემის პარამეტრებს.</translation>
 <translation id="7454640759045234067">ტრეკერები დაიბლოკა</translation>
 <translation id="7461899062138731833">წყაროები</translation>
+<translation id="7490291412537629707">გახსნა ახალ ფონურ ჩანართში</translation>
 <translation id="750493650310597496">მონიშნულია 0</translation>
 <translation id="7525067979554623046">შექმნა</translation>
+<translation id="753732157349120914">ჩანართების გადამრთველი</translation>
 <translation id="7573518470897278603">საიტის მობილური ვერსიის ნახვა</translation>
 <translation id="7574321014880720413">ახალი დომენის დამატება</translation>
 <translation id="7587132259180664054">ელფოსტა წარმატებით გაიგზავნა</translation>
+<translation id="7587287726969638956">ვებგვერდის გარეგნობა</translation>
 <translation id="7602336701644200880">ელფოსტის გაგზავნა ჩავარდა. კიდევ სცადეთ.</translation>
 <translation id="7606108789437688910">შენიშვნის მისამართების კონფიდენციალურ ჩანართში გახსნა</translation>
 <translation id="7622661618259256505">აირჩიეთ პაროლი, რომელიც მინიმუმ 12 სიმბოლოსგან შედგება.</translation>
@@ -319,20 +339,24 @@
 <translation id="7730831244010940855">შევცვალო Vivaldi ნაგულისხმევად iPad-ზე?</translation>
 <translation id="7732622593814325274">ტრეკერების დაბლოკვის წყაროების მართვა</translation>
 <translation id="7765158879357617694">გადატანა</translation>
+<translation id="7771452384635174008">განლაგება</translation>
 <translation id="7801204999757211519">უკვე გავთ ანგარიში? <ph name="BEGIN_LINK" />შედით ➔<ph name="END_LINK" /></translation>
 <translation id="7914995060146784406">შენიშვნის ჩასწორება</translation>
 <translation id="7925340978147141704">პაროლის ჩვენება</translation>
 <translation id="8008214489230610096">გაიმეორეთ აღდგენის ელფოსტა</translation>
+<translation id="8046542428651654244">მინიატურის განახლება</translation>
 <translation id="804786196054284061">მომხმარებლის სალიცენზიო შეთანხმება</translation>
 <translation id="8053851743673939284">ფრანგული (<ph name="ORIGIN" />)</translation>
 <translation id="8066170816074394954">სერვერის შეცდომა.</translation>
 <translation id="8076492880354921740">ჩანართები</translation>
 <translation id="8112996065264879835">ეს კოდი იმას, რომელიც გამოგიგზავნეთ, არ ემთხვევა.
        მიაღწიეთ ცდების მაქსიმალურ რაოდენობას. გამოითხოვეთ ახალი კოდი ქვემოთ არსებული თავიდან გამოგზავნის პარამეტრით.</translation>
+<translation id="8134672010161840864">დაატყაპუნეთ გამოსახულების ამოსაჭრელად და გადასაადგილებლად</translation>
 <translation id="8142291334394582384">ძებნის მინიშნებების მიმდევრობის შებრუნება</translation>
 <translation id="8147118677117542370">შეიყვანთ თქვენი ასაკი.</translation>
 <translation id="8165573437634525334">დაშფვრს პაროლით დაცული მონაცემები</translation>
 <translation id="8182979418912184986">ახალი კონფიდენციალური ჩანართი</translation>
+<translation id="8237090677709100373">მომხმარებლის ფერის კოდი</translation>
 <translation id="8257908958623224237">კონფლქტი სხვა კლიენტის მონაცემებთან.</translation>
 <translation id="8261506727792406068">წაშლა</translation>
 <translation id="8273666073173891138">არ შემინახავს საქაღალდეში <ph name="FOLDER_TITLE" /></translation>
@@ -363,8 +387,8 @@
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> ელემენტი წაიშალა</translation>
 <translation id="8763006697839582351">გახსნა Vivaldi-ში ინკოგნიტოში</translation>
 <translation id="8765173886020357878">ძებნის მინიშნებები</translation>
-<translation id="8786689981011401964">ფონის სურათბი</translation>
 <translation id="8804164990146287819">პირადულობის დაცვა</translation>
+<translation id="8818152010000655963">ფონის სურათი</translation>
 <translation id="8819841443522803117">დროა, ნაგულისხმევი ბრაუზერი გადართოთ? აირჩიეთ Vivaldi.</translation>
 <translation id="8820817407110198400">სანიშნეები</translation>
 <translation id="8855707633300847215">ჩანართის ზოლის ჩვენება</translation>
@@ -372,7 +396,8 @@
 <translation id="89390081013973080">ყველაფერი მზადაა! დროა, გადაწყვიტოთ, რის სინქრონიზაციას აპირებთ მოწყობილობებს შორის.</translation>
 <translation id="8965371804397726192">ყველა მონაცემის სინქრონიზაციის დაწყება</translation>
 <translation id="9028089729841356743">ქსელის შეცდომა.</translation>
-<translation id="9043882097999887291">რეკლამა დაიბლოკა</translation>
+<translation id="9043882097999887291">რეკლამა
+დაიბლოკა</translation>
 <translation id="9065203028668620118">ჩასწორება</translation>
 <translation id="9079251484401922158">ფინური (<ph name="ORIGIN" />)</translation>
 <translation id="9083392325882095631">1 ელემენტი</translation>

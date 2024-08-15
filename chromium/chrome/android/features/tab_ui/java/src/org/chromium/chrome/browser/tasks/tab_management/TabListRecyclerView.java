@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
-import static org.chromium.chrome.features.start_surface.TabSwitcherAndStartSurfaceLayout.ZOOMING_DURATION;
+import static org.chromium.chrome.browser.tasks.tab_management.TabSwitcherLayout.ZOOMING_DURATION;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
@@ -555,9 +555,13 @@ class TabListRecyclerView extends RecyclerView
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
 
-        if (mShadowImageView != null) {
-            removeViewInLayout(mShadowImageView);
-            mShadowImageView = null;
+        // This seems to be dead buggy code pre-Hub, and causes problems post-Hub. The view removal
+        // does not seem to be guaranteed to succeed in #removeViewInLayout().
+        if (!HubFieldTrial.isHubEnabled()) {
+            if (mShadowImageView != null) {
+                removeViewInLayout(mShadowImageView);
+                mShadowImageView = null;
+            }
         }
 
         if (mScrollListener != null) {

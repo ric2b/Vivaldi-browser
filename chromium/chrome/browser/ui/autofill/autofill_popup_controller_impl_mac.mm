@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/autofill/autofill_popup_controller_impl_mac.h"
 
 #import "chrome/browser/ui/cocoa/touchbar/web_textfield_touch_bar_controller.h"
+#include "components/autofill/core/browser/filling_product.h"
 #include "components/autofill/core/browser/ui/autofill_popup_delegate.h"
 #include "components/autofill/core/browser/ui/popup_item_ids.h"
 
@@ -19,10 +20,12 @@ WeakPtr<AutofillPopupControllerImpl> AutofillPopupControllerImpl::GetOrCreate(
     content::WebContents* web_contents,
     gfx::NativeView container_view,
     const gfx::RectF& element_bounds,
-    base::i18n::TextDirection text_direction) {
+    base::i18n::TextDirection text_direction,
+    int32_t form_control_ax_id) {
   if (previous.get() && previous->delegate_.get() == delegate.get() &&
       previous->container_view() == container_view) {
-    previous->SetElementBounds(element_bounds);
+    previous->controller_common_.element_bounds = element_bounds;
+    previous->form_control_ax_id_ = form_control_ax_id;
     previous->ClearState();
     return previous;
   }
@@ -31,7 +34,8 @@ WeakPtr<AutofillPopupControllerImpl> AutofillPopupControllerImpl::GetOrCreate(
     previous->Hide(PopupHidingReason::kViewDestroyed);
 
   AutofillPopupControllerImpl* controller = new AutofillPopupControllerImplMac(
-      delegate, web_contents, container_view, element_bounds, text_direction);
+      delegate, web_contents, container_view, element_bounds, text_direction,
+      form_control_ax_id);
   return controller->GetWeakPtr();
 }
 
@@ -40,17 +44,19 @@ AutofillPopupControllerImplMac::AutofillPopupControllerImplMac(
     content::WebContents* web_contents,
     gfx::NativeView container_view,
     const gfx::RectF& element_bounds,
-    base::i18n::TextDirection text_direction)
+    base::i18n::TextDirection text_direction,
+    int32_t form_control_ax_id)
     : AutofillPopupControllerImpl(delegate,
                                   web_contents,
                                   container_view,
                                   element_bounds,
                                   text_direction,
+                                  form_control_ax_id,
                                   base::DoNothing(),
                                   std::nullopt),
       touch_bar_controller_(nil),
-      is_credit_card_popup_(delegate->GetPopupType() ==
-                            PopupType::kCreditCards) {}
+      is_credit_card_popup_(delegate->GetMainFillingProduct() ==
+                            FillingProduct::kCreditCard) {}
 
 AutofillPopupControllerImplMac::~AutofillPopupControllerImplMac() = default;
 

@@ -80,10 +80,10 @@ bool NeedsAnchorPositionScrollData(Element& element,
   }
   // There's an explicitly set default anchor or additional fallback-bounds rect
   // to track.
-  if (style.AnchorDefault() || style.PositionFallbackBounds()) {
+  if (style.PositionAnchor() || style.PositionFallbackBounds()) {
     return true;
   }
-  // Now we have `anchor-default: implicit`. We need `AnchorPositionScrollData`
+  // Now we have `position-anchor: implicit`. We need `AnchorPositionScrollData`
   // only if there's an implicit anchor element to track.
   return element.ImplicitAnchorElement();
 }
@@ -239,10 +239,7 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
       }
     }
 
-    LayoutBlock* block =
-        RuntimeEnabledFeatures::LayoutNewContainingBlockEnabled()
-            ? InclusiveContainingBlock()
-            : FindNonAnonymousContainingBlock(this);
+    LayoutBlock* block = InclusiveContainingBlock();
 
     if ((could_contain_fixed && !can_contain_fixed) ||
         (could_contain_absolute && !can_contain_absolute)) {
@@ -620,31 +617,31 @@ LayoutBoxModelObject::ComputeStickyPositionConstraints() const {
   // Compute the insets.
   {
     auto ResolveInset = [](const Length& length,
-                           LayoutUnit size) -> absl::optional<LayoutUnit> {
+                           LayoutUnit size) -> std::optional<LayoutUnit> {
       if (length.IsAuto()) {
-        return absl::nullopt;
+        return std::nullopt;
       }
       return MinimumValueForLength(length, size);
     };
 
     const PhysicalSize available_size = constraints->constraining_rect.size;
     const auto& style = StyleRef();
-    absl::optional<LayoutUnit> left =
-        ResolveInset(style.UsedLeft(), available_size.width);
-    absl::optional<LayoutUnit> right =
-        ResolveInset(style.UsedRight(), available_size.width);
-    absl::optional<LayoutUnit> top =
-        ResolveInset(style.UsedTop(), available_size.height);
-    absl::optional<LayoutUnit> bottom =
-        ResolveInset(style.UsedBottom(), available_size.height);
+    std::optional<LayoutUnit> left =
+        ResolveInset(style.Left(), available_size.width);
+    std::optional<LayoutUnit> right =
+        ResolveInset(style.Right(), available_size.width);
+    std::optional<LayoutUnit> top =
+        ResolveInset(style.Top(), available_size.height);
+    std::optional<LayoutUnit> bottom =
+        ResolveInset(style.Bottom(), available_size.height);
 
     // Skip the end inset if there is not enough space to honor both insets.
     if (left && right) {
       if (*left + *right + sticky_box_rect.Width() > available_size.width) {
         if (style.IsLeftToRightDirection()) {
-          right = absl::nullopt;
+          right = std::nullopt;
         } else {
-          left = absl::nullopt;
+          left = std::nullopt;
         }
       }
     }
@@ -653,7 +650,7 @@ LayoutBoxModelObject::ComputeStickyPositionConstraints() const {
       // writing mode when related sections are fixed in spec. See
       // http://lists.w3.org/Archives/Public/www-style/2014May/0286.html
       if (*top + *bottom + sticky_box_rect.Height() > available_size.height) {
-        bottom = absl::nullopt;
+        bottom = std::nullopt;
       }
     }
 

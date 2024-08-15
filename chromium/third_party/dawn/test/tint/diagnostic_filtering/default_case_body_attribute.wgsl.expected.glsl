@@ -12,15 +12,19 @@
 
 #version 310 es
 precision highp float;
+precision highp int;
 
 layout(location = 0) in float x_1;
 int tint_ftoi(float v) {
   return ((v < 2147483520.0f) ? ((v < -2147483648.0f) ? (-2147483647 - 1) : int(v)) : 2147483647);
 }
 
+uniform highp sampler2D t_s;
+
 void tint_symbol(float x) {
   switch(tint_ftoi(x)) {
     default: {
+      vec4 tint_phony = texture(t_s, vec2(0.0f));
       break;
     }
   }

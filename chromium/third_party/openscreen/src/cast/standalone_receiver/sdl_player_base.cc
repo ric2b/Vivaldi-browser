@@ -32,8 +32,8 @@ SDLPlayerBase::SDLPlayerBase(ClockNowFunctionPtr now_function,
       decode_alarm_(now_, task_runner),
       render_alarm_(now_, task_runner),
       presentation_alarm_(now_, task_runner) {
-  OSP_DCHECK(receiver_);
-  OSP_DCHECK(media_type_);
+  OSP_CHECK(receiver_);
+  OSP_CHECK(media_type_);
 
   decoder_.set_client(this);
   receiver_->SetConsumer(this);
@@ -103,7 +103,7 @@ void SDLPlayerBase::OnFramesReady(int buffer_size) {
   EncodedFrame frame = receiver_->ConsumeNextFrame(buffer_.AsByteBuffer());
 
   // Create the tracking state for the frame in the player pipeline.
-  OSP_DCHECK_EQ(frames_to_render_.count(frame.frame_id), 0);
+  OSP_CHECK_EQ(frames_to_render_.count(frame.frame_id), 0);
   PendingFrame& pending_frame = frames_to_render_[frame.frame_id];
   pending_frame.start_time = start_time;
 
@@ -120,7 +120,7 @@ void SDLPlayerBase::OnFrameDecoded(FrameId frame_id, const AVFrame& frame) {
   if (it == frames_to_render_.end()) {
     return;
   }
-  OSP_DCHECK(!it->second.decoded_frame);
+  OSP_CHECK(!it->second.decoded_frame);
   // av_clone_frame() does a shallow copy here, incrementing a ref-count on the
   // memory backing the frame.
   it->second.decoded_frame = AVFrameUniquePtr(av_frame_clone(&frame));

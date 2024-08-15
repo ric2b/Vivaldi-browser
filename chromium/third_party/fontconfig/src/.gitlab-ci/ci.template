@@ -12,7 +12,7 @@
 # and run ci-fairy generate-template. For details, see
 # https://freedesktop.pages.freedesktop.org/ci-templates/ci-fairy.html#templating-gitlab-ci-yml
 
-.templates_sha: &template_sha 81a36b5c5349fd3222036bb3caa0166083a3fd44
+.templates_sha: &template_sha d11c0dd4c1c9a69c14b4af9b50cdd12b89d24672
 
 include:
   {% for distro in distributions|sort(attribute="name") %}
@@ -27,8 +27,10 @@ include:
   - local: '.gitlab-ci/other.yml'
 
 stages:
+  - sanity check
   - prep
   - test
+  - deploy
   - container_clean
 
 variables:
@@ -40,15 +42,49 @@ variables:
 # Note: these tags have no meaning and are not tied to a particular
 # fontconfig version
 {% for distro in distributions %}
-  {{"%-13s"| format(distro.name.upper() + '_TAG:')}}'{{distro.tag}}-{{
+  {{"%-15s"| format(distro.name.upper() + '_TAG:')}}'{{distro.tag}}-{{
     (ci_fairy.hashfiles('.gitlab-ci/config.yml',
                         '.gitlab-ci/' + distro.name + '-install.sh'))[0:12]
   }}'
 {% endfor %}
 
 {% for distro in distributions %}
-  {{"%-13s"| format(distro.name.upper() + '_EXEC:')}}'bash .gitlab-ci/{{distro.name}}-install.sh'
+  {{"%-15s"| format(distro.name.upper() + '_EXEC:')}}'bash .gitlab-ci/{{distro.name}}-install.sh'
 {% endfor %}
+
+#######################################
+#                                     #
+#            sanity check             #
+#                                     #
+#######################################
+
+fail-if-fork-is-not-public:
+  stage: sanity check
+  script:
+    - |
+      if [ $CI_PROJECT_VISIBILITY != "public" ]; then
+          echo "*************************************************************************************"
+          echo "Project visibility must be set to 'public'."
+          echo "Change this in $CI_PROJECT_URL/edit under 'Visibility, project features, permissions'"
+          echo "*************************************************************************************"
+          exit 1
+      fi
+  except:
+    - main@fontconfig/fontconfig
+
+check-ci-script:
+  extends:
+    - .fdo.ci-fairy
+  stage: sanity check
+  script:
+    - ci-fairy generate-template --verify && exit 0 || true
+    - >
+      printf "%s\n" \
+        "Committed gitlab-ci.yml differs from generated gitlab-ci.yml." \
+        "To change the gitlab CI, edit .gitlab-ci/ci.template and/or .gitlab-ci/config.yml" \
+        " and run ci-fairy generate-template. For details, see " \
+        "https://freedesktop.pages.freedesktop.org/ci-templates/ci-fairy.html#templating-gitlab-ci-yml"
+    - exit 1
 
 #######################################
 #                                     #
@@ -62,7 +98,15 @@ variables:
 {% for version in distro.versions %}
 
 {{distro.name}}:{{version}}@container-prep:
+{% if distro.qemu_based %}
+  extends: .fdo.qemu-build@{{distro.name}}
+{% else %}
   extends: .fdo.container-build@{{distro.name}}
+{% endif %}
+{% if distro.qemu_based %}
+  tags:
+    - kvm
+{% endif %}
   stage: prep
   variables:
     GIT_STRATEGY: none
@@ -126,9 +170,68 @@ variables:
 #                                     #
 #######################################
 
+.check_tainted: &check_tainted |
+  # make sure the kernel is not tainted
+  if [[ "$(ssh localhost -p 5555 cat /proc/sys/kernel/tainted)" -gt 0 ]];
+  then
+    echo tainted kernel ;
+    exit 1 ;
+  fi
+
+.build-in-qemu@template:
+  tags:
+    - kvm
+  script:
+    - /app/vmctl start || (echo "Error - Failed to start the VM." && exit 1)
+
+    - *check_tainted
+
+    - export BUILD_ID="fontconfig-$CI_JOB_NAME_$CI_COMMIT_SHA-$CI_JOB_ID"
+    - export PREFIX="$(pwd)/prefix-$BUILD_ID"
+    - export BUILDDIR="$(pwd)/build-$BUILD_ID"
+    - export MAKEFLAGS="-j4"
+    - |
+      buildopt=()
+      for bo in $FC_BUILD_ENABLED; do
+        buildopt+=(-e $bo)
+      done
+      for bo in $FC_BUILD_DISABLED; do
+        buildopt+=(-d $bo)
+      done
+      [ -n "$FC_BUILD_ARCH" ] && buildopt+=(-a $FC_BUILD_ARCH)
+      [ $FC_BUILD_DISTCHECK -eq 1 ] && buildopt+=(-c)
+      [ $FC_BUILD_NO_INSTALL -eq 1 ] && buildopt+=(-I)
+      [ $FC_BUILD_NO_CHECK -eq 1 ] && buildopt+=(-C)
+      buildopt+=(-s $FC_BUILDSYS)
+      buildopt+=(-t $FC_BUILD_TYPE)
+      buildopt+=(-X $FC_XML_BACKEND)
+      export buildopt
+    - "scp -r $(pwd) vm:"
+    - echo "CI_JOB_ID=\"$CI_JOB_ID\"" > fcenv
+    - echo "CI_JOB_NAME=\"$CI_JOB_NAME\"" >> fcenv
+    - echo "BUILD_ID=\"$BUILD_ID\"" >> fcenv
+    - echo "MAKEFLAGS=\"$MAKEFLAGS\"" >> fcenv
+    - echo "MAKE=\"$MAKE\"" >> fcenv
+    - "scp fcenv vm:~/$CI_PROJECT_NAME/.gitlab-ci/fcenv"
+    - /app/vmctl exec "cd $CI_PROJECT_NAME ; bash .gitlab-ci/build.sh ${buildopt[@]}" && touch .success || true
+    - scp -r vm:$CI_PROJECT_NAME/build $BUILDDIR
+
+    - *check_tainted
+
+    - /app/vmctl stop
+    - if [[ ! -e .success ]];
+      then
+        exit 1 ;
+      fi
+  variables:
+    FC_BUILDSYS: autotools
+    FC_XML_BACKEND: expat
+    FC_BUILD_TYPE: both
+    FC_BUILD_DISTCHECK: 0
+    FC_BUILD_NO_INSTALL: 0
+    FC_BUILD_NO_CHECK: 0
+
 .build@template:
-  before_script:
-    - pip install meson
   script:
     - export BUILD_ID="fontconfig-$CI_JOB_NAME_$CI_COMMIT_SHA-$CI_JOB_ID"
     - export PREFIX="$(pwd)/prefix-$BUILD_ID"
@@ -145,16 +248,18 @@ variables:
       [ -n "$FC_BUILD_ARCH" ] && buildopt+=(-a $FC_BUILD_ARCH)
       [ $FC_BUILD_DISTCHECK -eq 1 ] && buildopt+=(-c)
       [ $FC_BUILD_NO_INSTALL -eq 1 ] && buildopt+=(-I)
+      [ $FC_BUILD_NO_CHECK -eq 1 ] && buildopt+=(-C)
       buildopt+=(-s $FC_BUILDSYS)
       buildopt+=(-t $FC_BUILD_TYPE)
       buildopt+=(-X $FC_XML_BACKEND)
-      sh .gitlab-ci/build.sh ${buildopt[*]}
+      sh .gitlab-ci/build.sh ${buildopt[@]}
   variables:
     FC_BUILDSYS: autotools
     FC_XML_BACKEND: expat
     FC_BUILD_TYPE: both
     FC_BUILD_DISTCHECK: 0
     FC_BUILD_NO_INSTALL: 0
+    FC_BUILD_NO_CHECK: 0
 
 .fc_artifacts:
   artifacts:
@@ -162,9 +267,13 @@ variables:
     when: always
     expire_in: 5 days
     paths:
-      - fc-build.log
-      - build-*/fontconfig-*.tar.*
-      - build-*/fontconfig*/_build
+      - build*/doc/fontconfig-user.html
+      - build*/doc/fontconfig-devel/*
+      - build*/fc-build.log
+      - build*/fontconfig-*.tar.*
+      - build*/test/*log
+      - build*/fontconfig*/_build
+      - build*/meson-logs/*
 
 #######################################
 #                                     #
@@ -176,9 +285,14 @@ variables:
 {% for version in distro.versions %}
 {% for build in distro.builds %}
 
+{% if not 'build_only' in build or build.build_only == version %}
 t_{{distro.name}}:{{version}}:{{build.name}}:
   extends:
+{% if distro.qemu_based %}
+    - .build-in-qemu@template
+{% else %}
     - .build@template
+{% endif %}
     - .fdo.distribution-image@{{distro.name}}
     - .fc_artifacts
   variables:
@@ -193,8 +307,42 @@ t_{{distro.name}}:{{version}}:{{build.name}}:
     {% endif %}
   needs:
     - '{{distro.name}}:{{version}}@container-prep'
+{% endif %}
 
 {% endfor %}
 {% endfor %}
 {% endfor %}
 
+#######################################
+#                                     #
+#            deploy stage             #
+#                                     #
+#######################################
+
+check-merge-request:
+  extends:
+    - .fdo.ci-fairy
+  stage: deploy
+  script:
+    - ci-fairy check-merge-request --require-allow-collaboration --junit-xml=results.xml
+  artifacts:
+    when: on_failure
+    reports:
+      junit: results.xml
+  allow_failure: true
+
+pages:
+  stage: deploy
+  script:
+    - |
+      mkdir public || :
+      cp -a build*/doc/fontconfig-user.html build*/doc/fontconfig-devel public/
+  artifacts:
+    paths:
+      - public
+  dependencies:
+    - t_fedora:rawhide:autotools shared libxml2
+  needs:
+    - t_fedora:rawhide:autotools shared libxml2
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"

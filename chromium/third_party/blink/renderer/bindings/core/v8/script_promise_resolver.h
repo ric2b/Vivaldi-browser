@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_BINDINGS_CORE_V8_SCRIPT_PROMISE_RESOLVER_H_
 
 #include "base/dcheck_is_on.h"
+#include "base/hash/hash.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
@@ -21,7 +22,6 @@
 #include "third_party/blink/renderer/platform/heap/disallow_new_wrapper.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/prefinalizer.h"
-#include "third_party/blink/renderer/platform/heap/self_keep_alive.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cancellable_task.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "v8/include/v8.h"
@@ -32,11 +32,8 @@
 
 namespace blink {
 
-// Used only for allowing a ScriptPromiseProperty to specify that it will
-// resolve/reject with v8::Undefined.
-struct ToV8UndefinedGenerator {
-  DISALLOW_NEW();
-};
+template <typename IDLResolvedType>
+class ScriptPromiseResolverTyped;
 
 // This class wraps v8::Promise::Resolver and provides the following
 // functionalities.
@@ -69,30 +66,32 @@ class CORE_EXPORT ScriptPromiseResolver
 
   // Anything that can be passed to ToV8Traits can be passed to this function.
   template <typename IDLType, typename BlinkType>
-  void Resolve(BlinkType value) {
-    ResolveOrReject<IDLType>(value, kResolving);
+  void Reject(BlinkType value) {
+    if (!PrepareToResolveOrReject<kRejecting>()) {
+      return;
+    }
+    ResolveOrReject<IDLType, BlinkType>(value);
   }
 
-  // Anything that can be passed to ToV8Traits can be passed to this function.
-  template <typename IDLType, typename BlinkType>
-  void Reject(BlinkType value) {
-    ResolveOrReject<IDLType>(value, kRejecting);
-  }
+  // These are shorthand helpers for rejecting the promise with a common type.
+  // Use the templated Reject<IDLType>() variant for uncommon types.
+  void Reject(DOMException*);
+  void Reject(v8::Local<v8::Value>);
+  void Reject(const ScriptValue&);
+  void Reject(const char*);
+  void Reject(bool);
 
   // Anything that can be passed to toV8 can be passed to this function.
   template <typename T>
   void Resolve(T value) {
-    ResolveOrReject(value, kResolving);
-  }
-
-  // Anything that can be passed to toV8 can be passed to this function.
-  template <typename T>
-  void Reject(T value) {
-    ResolveOrReject(value, kRejecting);
+    if (!PrepareToResolveOrReject<kResolving>()) {
+      return;
+    }
+    ResolveOrReject(value);
   }
 
   void Resolve() { Resolve(ToV8UndefinedGenerator()); }
-  void Reject() { Reject(ToV8UndefinedGenerator()); }
+  void Reject() { Reject<IDLUndefined>(ToV8UndefinedGenerator()); }
 
   // Returns a callback that will run |callback| with the Entry realm
   // and the Current realm set to the resolver's ScriptState. Note |callback|
@@ -152,6 +151,15 @@ class CORE_EXPORT ScriptPromiseResolver
     return resolver_.Promise();
   }
 
+  template <typename IDLResolvedType>
+  ScriptPromiseResolverTyped<IDLResolvedType>* DowncastTo() {
+#if DCHECK_IS_ON()
+    DCHECK_EQ(runtime_type_id_,
+              GetTypeId<ScriptPromiseResolverTyped<IDLResolvedType>>());
+#endif
+    return static_cast<ScriptPromiseResolverTyped<IDLResolvedType>*>(this);
+  }
+
   // ExecutionContextLifecycleObserver implementation.
   void ContextDestroyed() override { Detach(); }
 
@@ -169,15 +177,27 @@ class CORE_EXPORT ScriptPromiseResolver
 #endif
   }
 
-  // Once this function is called this resolver stays alive while the
-  // promise is pending and the associated ExecutionContext isn't stopped.
-  void KeepAliveWhilePending();
-
   void Trace(Visitor*) const override;
 
- private:
-  class ExceptionStateScope;
+ protected:
   typedef ScriptPromise::InternalResolver Resolver;
+
+  ScriptPromiseResolver(ScriptState*, const ExceptionContext&, Resolver);
+
+  Resolver resolver_;
+
+#if DCHECK_IS_ON()
+  template <typename T>
+  inline size_t GetTypeId() {
+    return base::FastHash(__PRETTY_FUNCTION__);
+  }
+
+  // True if promise() is called.
+  bool is_promise_called_ = false;
+  size_t runtime_type_id_ = 0;
+#endif
+
+  class ExceptionStateScope;
   enum ResolutionState {
     kPending,
     kResolving,
@@ -186,16 +206,8 @@ class CORE_EXPORT ScriptPromiseResolver
   };
 
   template <typename IDLType, typename BlinkType>
-  void ResolveOrReject(BlinkType value, ResolutionState new_state) {
-    if (state_ != kPending || !GetScriptState()->ContextIsValid() ||
-        !GetExecutionContext() || GetExecutionContext()->IsContextDestroyed()) {
-      return;
-    }
-    DCHECK(new_state == kResolving || new_state == kRejecting);
-    state_ = new_state;
-
+  void ResolveOrReject(BlinkType value) {
     ScriptState::Scope scope(script_state_.Get());
-
     // Calling ToV8 in a ScriptForbiddenScope will trigger a CHECK and
     // cause a crash. ToV8 just invokes a constructor for wrapper creation,
     // which is safe (no author script can be run). Adding AllowUserAgentScript
@@ -210,34 +222,26 @@ class CORE_EXPORT ScriptPromiseResolver
           v8::MicrotasksScope::kDoNotRunMicrotasks);
       value_.Reset(isolate, ToV8Traits<IDLType>::ToV8(script_state_, value));
     }
-
-    if (GetExecutionContext()->IsContextPaused()) {
-      ScheduleResolveOrReject();
-      return;
-    }
-    // TODO(esprehn): This is a hack, instead we should CHECK that
-    // script is allowed, and v8 should be running the entry hooks below and
-    // crashing if script is forbidden. We should then audit all users of
-    // ScriptPromiseResolver and the related specs and switch to an async
-    // resolve.
-    // See: http://crbug.com/663476
-    if (ScriptForbiddenScope::IsScriptForbidden()) {
-      ScheduleResolveOrReject();
-      return;
-    }
-    ResolveOrRejectImmediately();
+    NotifyResolveOrReject();
   }
 
-  template <typename T>
-  void ResolveOrReject(T value, ResolutionState new_state) {
+ protected:
+  template <ResolutionState new_state>
+  bool PrepareToResolveOrReject() {
+    ExecutionContext* execution_context = GetExecutionContext();
     if (state_ != kPending || !GetScriptState()->ContextIsValid() ||
-        !GetExecutionContext() || GetExecutionContext()->IsContextDestroyed())
-      return;
-    DCHECK(new_state == kResolving || new_state == kRejecting);
+        !execution_context || execution_context->IsContextDestroyed()) {
+      return false;
+    }
+    static_assert(new_state == kResolving || new_state == kRejecting);
     state_ = new_state;
+    return true;
+  }
 
+ private:
+  template <typename T>
+  void ResolveOrReject(T value) {
     ScriptState::Scope scope(script_state_.Get());
-
     // Calling ToV8 in a ScriptForbiddenScope will trigger a CHECK and
     // cause a crash. ToV8 just invokes a constructor for wrapper creation,
     // which is safe (no author script can be run). Adding AllowUserAgentScript
@@ -253,24 +257,10 @@ class CORE_EXPORT ScriptPromiseResolver
       value_.Reset(isolate, ToV8(value, script_state_->GetContext()->Global(),
                                  script_state_->GetIsolate()));
     }
-
-    if (GetExecutionContext()->IsContextPaused()) {
-      ScheduleResolveOrReject();
-      return;
-    }
-    // TODO(esprehn): This is a hack, instead we should CHECK that
-    // script is allowed, and v8 should be running the entry hooks below and
-    // crashing if script is forbidden. We should then audit all users of
-    // ScriptPromiseResolver and the related specs and switch to an async
-    // resolve.
-    // See: http://crbug.com/663476
-    if (ScriptForbiddenScope::IsScriptForbidden()) {
-      ScheduleResolveOrReject();
-      return;
-    }
-    ResolveOrRejectImmediately();
+    NotifyResolveOrReject();
   }
 
+  void NotifyResolveOrReject();
   void ResolveOrRejectImmediately();
   void ScheduleResolveOrReject();
   void ResolveOrRejectDeferred();
@@ -285,117 +275,9 @@ class CORE_EXPORT ScriptPromiseResolver
     return impl->ToV8(isolate, creation_context);
   }
 
-  // Dictionary
-  static v8::Local<v8::Value> ToV8(const bindings::DictionaryBase* dictionary,
-                                   v8::Local<v8::Object> creation_context,
-                                   v8::Isolate* isolate) {
-    if (UNLIKELY(!dictionary)) {
-      return v8::Null(isolate);
-    }
-    ScriptState* script_state =
-        ScriptState::From(creation_context->GetCreationContextChecked());
-    return dictionary->ToV8(script_state);
-  }
-
-  // Union
-  static v8::Local<v8::Value> ToV8(const bindings::UnionBase* union_value,
-                                   v8::Local<v8::Object> creation_context,
-                                   v8::Isolate* isolate) {
-    return union_value->ToV8(
-        ScriptState::From(creation_context->GetCreationContextChecked()));
-  }
-
-  // Primitives
-  static v8::Local<v8::Value> ToV8(const String& value,
-                                   v8::Local<v8::Object> creation_context,
-                                   v8::Isolate* isolate) {
-    return V8String(isolate, value);
-  }
-
-  static v8::Local<v8::Value> ToV8(const char* value,
-                                   v8::Local<v8::Object> creation_context,
-                                   v8::Isolate* isolate) {
-    return V8String(isolate, value);
-  }
-
-  template <size_t sizeOfValue>
-  static v8::Local<v8::Value> ToV8SignedIntegerInternal(int64_t value,
-                                                        v8::Isolate*);
-
-  template <>
-  v8::Local<v8::Value> ToV8SignedIntegerInternal<4>(int64_t value,
-                                                    v8::Isolate* isolate) {
-    return v8::Integer::New(isolate, static_cast<int32_t>(value));
-  }
-
-  template <>
-  v8::Local<v8::Value> ToV8SignedIntegerInternal<8>(int64_t value,
-                                                    v8::Isolate* isolate) {
-    int32_t value_in32_bit = static_cast<int32_t>(value);
-    if (value_in32_bit == value) {
-      return v8::Integer::New(isolate, value_in32_bit);
-    }
-    // V8 doesn't have a 64-bit integer implementation.
-    return v8::Number::New(isolate, value);
-  }
-
-  template <size_t sizeOfValue>
-  static v8::Local<v8::Value> ToV8UnsignedIntegerInternal(uint64_t value,
-                                                          v8::Isolate*);
-
-  template <>
-  v8::Local<v8::Value> ToV8UnsignedIntegerInternal<4>(uint64_t value,
-                                                      v8::Isolate* isolate) {
-    return v8::Integer::NewFromUnsigned(isolate, static_cast<uint32_t>(value));
-  }
-
-  template <>
-  v8::Local<v8::Value> ToV8UnsignedIntegerInternal<8>(uint64_t value,
-                                                      v8::Isolate* isolate) {
-    uint32_t value_in32_bit = static_cast<uint32_t>(value);
-    if (value_in32_bit == value) {
-      return v8::Integer::NewFromUnsigned(isolate, value_in32_bit);
-    }
-    // V8 doesn't have a 64-bit integer implementation.
-    return v8::Number::New(isolate, value);
-  }
-
-  static v8::Local<v8::Value> ToV8(int32_t value,
-                                   v8::Local<v8::Object> creation_context,
-                                   v8::Isolate* isolate) {
-    return ToV8SignedIntegerInternal<sizeof value>(value, isolate);
-  }
-
-  static v8::Local<v8::Value> ToV8(int64_t value,
-                                   v8::Local<v8::Object> creation_context,
-                                   v8::Isolate* isolate) {
-    return ToV8SignedIntegerInternal<sizeof value>(value, isolate);
-  }
-
-  static v8::Local<v8::Value> ToV8(uint32_t value,
-                                   v8::Local<v8::Object> creation_context,
-                                   v8::Isolate* isolate) {
-    return ToV8UnsignedIntegerInternal<sizeof value>(value, isolate);
-  }
-
-  static v8::Local<v8::Value> ToV8(uint64_t value,
-                                   v8::Local<v8::Object> creation_context,
-                                   v8::Isolate* isolate) {
-    return ToV8UnsignedIntegerInternal<sizeof value>(value, isolate);
-  }
-
   static v8::Local<v8::Value> ToV8(bool value,
                                    v8::Local<v8::Object> creation_context,
-                                   v8::Isolate* isolate) {
-    return v8::Boolean::New(isolate, value);
-  }
-
-  // Identity operator
-  static v8::Local<v8::Value> ToV8(v8::Local<v8::Value> value,
-                                   v8::Local<v8::Object> creation_context,
-                                   v8::Isolate*) {
-    return value;
-  }
+                                   v8::Isolate* isolate) = delete;
 
   // Undefined
   static v8::Local<v8::Value> ToV8(const ToV8UndefinedGenerator& value,
@@ -404,87 +286,110 @@ class CORE_EXPORT ScriptPromiseResolver
     return v8::Undefined(isolate);
   }
 
-  // Array
-  template <typename T, wtf_size_t inlineCapacity>
-  static v8::Local<v8::Array> ToV8(
-      const HeapVector<T, inlineCapacity>& sequence,
-      v8::Local<v8::Object> creation_context,
-      v8::Isolate* isolate) {
-    RUNTIME_CALL_TIMER_SCOPE(
-        isolate, RuntimeCallStats::CounterId::kToV8SequenceInternal);
-
-    v8::LocalVector<v8::Value> converted_sequence(
-        isolate, base::checked_cast<wtf_size_t>(sequence.size()));
-    base::ranges::transform(
-        sequence, converted_sequence.begin(), [&](const auto& item) {
-          v8::Local<v8::Value> value = ToV8(item, creation_context, isolate);
-          if (value.IsEmpty()) {
-            value = v8::Undefined(isolate);
-          }
-          return value;
-        });
-
-    return v8::Array::New(isolate, converted_sequence.data(),
-                          base::checked_cast<int>(converted_sequence.size()));
-  }
-
-  // Nullable
-  template <typename InnerType>
-  static v8::Local<v8::Value> ToV8(const absl::optional<InnerType>& value,
-                                   v8::Local<v8::Object> creation_context,
-                                   v8::Isolate* isolate) {
-    if (!value) {
-      return v8::Null(isolate);
-    }
-    return ToV8(*value, creation_context, isolate);
-  }
-
-  // Promise
-  static v8::Local<v8::Value> ToV8(const ScriptPromise& value,
-                                   v8::Local<v8::Object> creation_context,
-                                   v8::Isolate* isolate) {
-    DCHECK(!value.IsEmpty());
-    return value.V8Value();
-  }
-
-  // ScriptValue
-  static v8::Local<v8::Value> ToV8(const ScriptValue& value,
-                                   v8::Local<v8::Object> creation_context,
-                                   v8::Isolate* isolate) {
-    if (value.IsEmpty()) {
-      return v8::Undefined(isolate);
-    }
-    return value.V8Value();
-  }
-
-  static v8::Local<v8::Value> ToV8(const DisallowNewWrapper<ScriptValue>* value,
-                                   v8::Local<v8::Object> creation_context,
-                                   v8::Isolate* isolate) {
-    if (value->Value().IsEmpty()) {
-      return v8::Undefined(isolate);
-    }
-    return value->Value().V8Value();
-  }
-
   ResolutionState state_;
   const Member<ScriptState> script_state_;
   TaskHandle deferred_resolve_task_;
-  Resolver resolver_;
   TraceWrapperV8Reference<v8::Value> value_;
   const ExceptionContext exception_context_;
   String script_url_;
 
-  // To support keepAliveWhilePending(), this object needs to keep itself
-  // alive while in that state.
-  SelfKeepAlive<ScriptPromiseResolver> keep_alive_;
-
 #if DCHECK_IS_ON()
-  // True if promise() is called.
-  bool is_promise_called_ = false;
   bool suppress_detach_check_ = false;
 
   base::debug::StackTrace create_stack_trace_{8};
 #endif
+};
+
+template <typename IDLResolvedType>
+class ScriptPromiseResolverTyped : public ScriptPromiseResolver {
+ public:
+  explicit ScriptPromiseResolverTyped(ScriptState* script_state)
+      : ScriptPromiseResolverTyped(
+            script_state,
+            ExceptionContext(ExceptionContextType::kUnknown,
+                             nullptr,
+                             nullptr)) {}
+
+  ScriptPromiseResolverTyped(ScriptState* script_state,
+                             const ExceptionContext& context)
+      : ScriptPromiseResolver(script_state,
+                              context,
+                              TypedResolver(script_state)) {
+#if DCHECK_IS_ON()
+    runtime_type_id_ = GetTypeId<ScriptPromiseResolverTyped<IDLResolvedType>>();
+#endif
+  }
+
+  // Anything that can be passed to ToV8Traits<IDLResolvedType> can be passed to
+  // this function.
+  template <typename BlinkType>
+  void Resolve(BlinkType value) {
+    if (!PrepareToResolveOrReject<kResolving>()) {
+      return;
+    }
+    ResolveOrReject<IDLResolvedType, BlinkType>(value);
+  }
+
+  // This Resolve() method allows a Promise expecting to be resolved with a
+  // union type to be resolved with any type of that union without the caller
+  // needing to explicitly construct a union object.
+  template <typename BlinkType>
+    requires std::derived_from<IDLResolvedType, bindings::UnionBase>
+  void Resolve(BlinkType value) {
+    if (!PrepareToResolveOrReject<kResolving>()) {
+      return;
+    }
+    ResolveOrReject<IDLResolvedType, IDLResolvedType*>(
+        MakeGarbageCollected<IDLResolvedType>(value));
+  }
+
+  // Many IDL-exposed promises with a type other than undefined nevertheless
+  // resolve with undefined in certain circumstances. Do we need to support this
+  // behavior?
+  void Resolve() {
+    if (!PrepareToResolveOrReject<kResolving>()) {
+      return;
+    }
+    ResolveOrReject<IDLUndefined, ToV8UndefinedGenerator>(
+        ToV8UndefinedGenerator());
+  }
+
+  ScriptPromiseTyped<IDLResolvedType> Promise() {
+#if DCHECK_IS_ON()
+    is_promise_called_ = true;
+#endif
+    return TypedResolver::GetTyped(resolver_).Promise();
+  }
+
+  // Returns a callback that will run |callback| with the Entry realm
+  // and the Current realm set to the resolver's ScriptState. Note |callback|
+  // will only be run if the execution context and V8 context are capable
+  // to run. This situation occurs when the resolver's execution context
+  // or V8 context have started their destruction. See
+  // `IsInParallelAlgorithmRunnable` for details.
+  template <typename... Args>
+  base::OnceCallback<void(Args...)> WrapCallbackInScriptScope(
+      base::OnceCallback<void(ScriptPromiseResolverTyped<IDLResolvedType>*,
+                              Args...)> callback) {
+    return WTF::BindOnce(
+        [](ScriptPromiseResolverTyped<IDLResolvedType>* resolver,
+           base::OnceCallback<void(ScriptPromiseResolverTyped<IDLResolvedType>*,
+                                   Args...)> callback,
+           Args... args) {
+          ScriptState* script_state = resolver->GetScriptState();
+          if (!IsInParallelAlgorithmRunnable(resolver->GetExecutionContext(),
+                                             script_state)) {
+            return;
+          }
+          ScriptState::Scope script_state_scope(script_state);
+          std::move(callback).Run(resolver, std::move(args)...);
+        },
+        WrapPersistent(this), std::move(callback));
+  }
+
+ private:
+  using TypedResolver =
+      ScriptPromiseTyped<IDLResolvedType>::InternalResolverTyped;
 };
 
 }  // namespace blink

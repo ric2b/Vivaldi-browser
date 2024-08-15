@@ -8,7 +8,7 @@ import './keyboard_tester.js';
 import './touchscreen_tester.js';
 
 import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
-import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
+import {I18nMixin} from 'chrome://resources/ash/common/cr_elements/i18n_mixin.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {PolymerElementProperties} from 'chrome://resources/polymer/v3_0/polymer/interfaces.js';
 import {afterNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -119,7 +119,9 @@ export class InputListElement extends InputListElementBase {
   constructor() {
     super();
     this.browserProxy.initialize();
-    this.loadInitialDevices();
+    this.loadInitialDevices().then(() => {
+      this.handleKeyboardTesterDirectOpen();
+    });
     this.observeConnectedDevices();
     this.observeInternalDisplayPowerState();
     this.observeLidState();
@@ -133,8 +135,8 @@ export class InputListElement extends InputListElementBase {
     this.keyboardTester = keyboardTester;
   }
 
-  private loadInitialDevices(): void {
-    this.inputDataProvider.getConnectedDevices().then((devices) => {
+  private loadInitialDevices(): Promise<void> {
+    return this.inputDataProvider.getConnectedDevices().then((devices) => {
       this.keyboards = devices.keyboards;
       this.touchpads = devices.touchDevices.filter(
           (device: TouchDeviceInfo) =>
@@ -281,6 +283,19 @@ export class InputListElement extends InputListElementBase {
     assert(keyboard);
     this.keyboardTester.keyboard = keyboard;
     this.keyboardTester.show();
+  }
+
+  /**
+   * Show the keyboard tester directly if `showDefaultKeyboardTester` is present
+   * in the query string.
+   */
+  private handleKeyboardTesterDirectOpen(): void {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('showDefaultKeyboardTester') && this.keyboards.length > 0 &&
+        !this.keyboardTester?.isOpen()) {
+      this.keyboardTester.keyboard = this.keyboards[0];
+      this.keyboardTester.show();
+    }
   }
 
   /**

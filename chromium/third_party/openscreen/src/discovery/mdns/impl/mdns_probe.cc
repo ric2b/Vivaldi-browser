@@ -39,10 +39,10 @@ MdnsProbeImpl::MdnsProbeImpl(MdnsSender* sender,
       sender_(sender),
       receiver_(receiver),
       observer_(observer) {
-  OSP_DCHECK(sender_);
-  OSP_DCHECK(receiver_);
-  OSP_DCHECK(random_delay_);
-  OSP_DCHECK(observer_);
+  OSP_CHECK(sender_);
+  OSP_CHECK(receiver_);
+  OSP_CHECK(random_delay_);
+  OSP_CHECK(observer_);
 
   receiver_->AddResponseCallback(this);
   alarm_.ScheduleFromNow([this]() { ProbeOnce(); },
@@ -50,13 +50,13 @@ MdnsProbeImpl::MdnsProbeImpl(MdnsSender* sender,
 }
 
 MdnsProbeImpl::~MdnsProbeImpl() {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 
   Stop();
 }
 
 void MdnsProbeImpl::ProbeOnce() {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 
   if (successful_probe_queries_++ < kProbeIterationCountBeforeSuccess) {
     // MdnsQuerier cannot be used, because probe queries cannot use the cache,
@@ -77,7 +77,7 @@ void MdnsProbeImpl::ProbeOnce() {
 }
 
 void MdnsProbeImpl::Stop() {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 
   if (is_running_) {
     alarm_.Cancel();
@@ -87,7 +87,7 @@ void MdnsProbeImpl::Stop() {
 }
 
 void MdnsProbeImpl::Postpone(std::chrono::seconds delay) {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 
   successful_probe_queries_ = 0;
   alarm_.Cancel();
@@ -95,8 +95,8 @@ void MdnsProbeImpl::Postpone(std::chrono::seconds delay) {
 }
 
 void MdnsProbeImpl::OnMessageReceived(const MdnsMessage& message) {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
-  OSP_DCHECK(message.type() == MessageType::Response);
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(message.type() == MessageType::Response);
 
   for (const auto& record : message.answers()) {
     if (record.name() == target_name()) {

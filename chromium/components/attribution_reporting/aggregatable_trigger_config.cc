@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -14,10 +15,10 @@
 #include "base/types/expected.h"
 #include "base/types/expected_macros.h"
 #include "base/values.h"
+#include "components/attribution_reporting/constants.h"
 #include "components/attribution_reporting/features.h"
 #include "components/attribution_reporting/source_registration_time_config.mojom.h"
 #include "components/attribution_reporting/trigger_registration_error.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace attribution_reporting {
 
@@ -25,15 +26,6 @@ namespace {
 
 using ::attribution_reporting::mojom::SourceRegistrationTimeConfig;
 using ::attribution_reporting::mojom::TriggerRegistrationError;
-
-constexpr char kAggregatableSourceRegistrationTime[] =
-    "aggregatable_source_registration_time";
-constexpr char kTriggerContextId[] = "trigger_context_id";
-
-constexpr char kInclude[] = "include";
-constexpr char kExclude[] = "exclude";
-
-constexpr size_t kMaxTriggerContextIdLength = 64;
 
 base::expected<mojom::SourceRegistrationTimeConfig, TriggerRegistrationError>
 ParseAggregatableSourceRegistrationTime(const base::Value* value) {
@@ -44,28 +36,29 @@ ParseAggregatableSourceRegistrationTime(const base::Value* value) {
   const std::string* str = value->GetIfString();
   if (!str) {
     return base::unexpected(
-        TriggerRegistrationError::kAggregatableSourceRegistrationTimeWrongType);
+        TriggerRegistrationError::
+            kAggregatableSourceRegistrationTimeValueInvalid);
   }
 
-  if (*str == kInclude) {
+  if (*str == kSourceRegistrationTimeInclude) {
     return SourceRegistrationTimeConfig::kInclude;
   }
 
-  if (*str == kExclude) {
+  if (*str == kSourceRegistrationTimeExclude) {
     return SourceRegistrationTimeConfig::kExclude;
   }
 
   return base::unexpected(TriggerRegistrationError::
-                              kAggregatableSourceRegistrationTimeUnknownValue);
+                              kAggregatableSourceRegistrationTimeValueInvalid);
 }
 
 std::string SerializeAggregatableSourceRegistrationTime(
     SourceRegistrationTimeConfig config) {
   switch (config) {
     case SourceRegistrationTimeConfig::kInclude:
-      return kInclude;
+      return kSourceRegistrationTimeInclude;
     case SourceRegistrationTimeConfig::kExclude:
-      return kExclude;
+      return kSourceRegistrationTimeExclude;
   }
 }
 
@@ -84,7 +77,7 @@ bool IsTriggerContextIdAllowed(
 }
 
 bool IsValid(SourceRegistrationTimeConfig source_registration_time_config,
-             const absl::optional<std::string>& trigger_context_id) {
+             const std::optional<std::string>& trigger_context_id) {
   if (!trigger_context_id.has_value()) {
     return true;
   }
@@ -93,12 +86,12 @@ bool IsValid(SourceRegistrationTimeConfig source_registration_time_config,
          IsTriggerContextIdAllowed(source_registration_time_config);
 }
 
-base::expected<absl::optional<std::string>, TriggerRegistrationError>
+base::expected<std::optional<std::string>, TriggerRegistrationError>
 ParseTriggerContextId(base::Value* value) {
   if (!base::FeatureList::IsEnabled(
           features::kAttributionReportingTriggerContextId) ||
       !value) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   std::string* s = value->GetIfString();
@@ -118,7 +111,7 @@ AggregatableTriggerConfig::Parse(base::Value::Dict& dict) {
                    ParseAggregatableSourceRegistrationTime(
                        dict.Find(kAggregatableSourceRegistrationTime)));
 
-  ASSIGN_OR_RETURN(absl::optional<std::string> trigger_context_id,
+  ASSIGN_OR_RETURN(std::optional<std::string> trigger_context_id,
                    ParseTriggerContextId(dict.Find(kTriggerContextId)));
 
   if (trigger_context_id.has_value() &&
@@ -133,11 +126,11 @@ AggregatableTriggerConfig::Parse(base::Value::Dict& dict) {
 }
 
 // static
-absl::optional<AggregatableTriggerConfig> AggregatableTriggerConfig::Create(
+std::optional<AggregatableTriggerConfig> AggregatableTriggerConfig::Create(
     SourceRegistrationTimeConfig source_registration_time_config,
-    absl::optional<std::string> trigger_context_id) {
+    std::optional<std::string> trigger_context_id) {
   if (!IsValid(source_registration_time_config, trigger_context_id)) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   return AggregatableTriggerConfig(source_registration_time_config,
                                    std::move(trigger_context_id));
@@ -147,7 +140,7 @@ AggregatableTriggerConfig::AggregatableTriggerConfig() = default;
 
 AggregatableTriggerConfig::AggregatableTriggerConfig(
     SourceRegistrationTimeConfig source_registration_time_config,
-    absl::optional<std::string> trigger_context_id)
+    std::optional<std::string> trigger_context_id)
     : source_registration_time_config_(source_registration_time_config),
       trigger_context_id_(std::move(trigger_context_id)) {
   CHECK(IsValid(source_registration_time_config_, trigger_context_id_));

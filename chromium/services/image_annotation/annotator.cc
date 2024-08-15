@@ -6,10 +6,10 @@
 
 #include <tuple>
 #include <utility>
+#include <vector>
 
 #include "base/base64.h"
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
@@ -133,7 +133,7 @@ mojom::AnnotationPtr ParseJsonOcrAnnotation(const base::Value& ocr_engine,
         continue;
 
       // A confidence value of 0 or 1 is interpreted as an int and not a double.
-      absl::optional<double> confidence =
+      std::optional<double> confidence =
           word_dict->FindDouble("confidenceScore");
       if (!confidence.has_value() || *confidence < 0.0 || *confidence > 1.0)
         continue;
@@ -217,7 +217,7 @@ std::tuple<bool, std::vector<mojom::AnnotationPtr>> ParseJsonDescAnnotations(
     if (type_lookup == kAnnotationTypes->end())
       continue;
 
-    const absl::optional<double> score = desc_dict->FindDouble("score");
+    const std::optional<double> score = desc_dict->FindDouble("score");
     if (!score.has_value())
       continue;
 
@@ -265,7 +265,7 @@ mojom::AnnotationPtr ParseJsonIconAnnotations(const base::Value& icon_engine) {
 
     std::string icon_type_value = *icon_type;
 
-    const absl::optional<double> score = icon_dict->FindDouble("score");
+    const std::optional<double> score = icon_dict->FindDouble("score");
     if (!score.has_value())
       continue;
 
@@ -389,7 +389,7 @@ std::map<std::string, mojom::AnnotateImageResultPtr> UnpackJsonResponse(
     // Remove any description OCR data (which is lower quality) if we have
     // specialized OCR results.
     if (!ocr_annotation.is_null()) {
-      base::EraseIf(annotations, [](const mojom::AnnotationPtr& a) {
+      std::erase_if(annotations, [](const mojom::AnnotationPtr& a) {
         return a->type == mojom::AnnotationType::kOcr;
       });
       annotations.push_back(std::move(ocr_annotation));
@@ -401,7 +401,7 @@ std::map<std::string, mojom::AnnotateImageResultPtr> UnpackJsonResponse(
     // TODO(accessibility): consider filtering some icon types here e.g.
     // information.
     if (!icon_annotation.is_null()) {
-      base::EraseIf(annotations, [](const mojom::AnnotationPtr& a) {
+      std::erase_if(annotations, [](const mojom::AnnotationPtr& a) {
         return a->type == mojom::AnnotationType::kLabel ||
                a->type == mojom::AnnotationType::kCaption;
       });
@@ -800,10 +800,9 @@ void Annotator::OnServerResponseReceived(
                      weak_factory_.GetWeakPtr(), request_keys));
 }
 
-void Annotator::OnResponseJsonParsed(
-    const std::set<RequestKey>& request_keys,
-    const absl::optional<base::Value> json_data,
-    const absl::optional<std::string>& error) {
+void Annotator::OnResponseJsonParsed(const std::set<RequestKey>& request_keys,
+                                     const std::optional<base::Value> json_data,
+                                     const std::optional<std::string>& error) {
   const bool success = json_data.has_value() && !error.has_value();
   ReportJsonParseSuccess(success);
 
@@ -996,8 +995,8 @@ void Annotator::OnServerLangsResponseReceived(
 }
 
 void Annotator::OnServerLangsResponseJsonParsed(
-    absl::optional<base::Value> json_data,
-    const absl::optional<std::string>& error) {
+    std::optional<base::Value> json_data,
+    const std::optional<std::string>& error) {
   if (!json_data.has_value() || error.has_value()) {
     DVLOG(1) << "Parsing server langs response JSON failed with error: "
              << error.value_or("No reason reported.");

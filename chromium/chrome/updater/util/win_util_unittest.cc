@@ -48,6 +48,7 @@
 #include "chrome/updater/updater_version.h"
 #include "chrome/updater/util/unit_test_util.h"
 #include "chrome/updater/util/unit_test_util_win.h"
+#include "chrome/updater/win/scoped_impersonation.h"
 #include "chrome/updater/win/test/test_executables.h"
 #include "chrome/updater/win/test/test_strings.h"
 #include "chrome/updater/win/win_constants.h"
@@ -143,12 +144,9 @@ TEST(WinUtil, ShellExecuteAndWait) {
 }
 
 TEST(WinUtil, RunElevated) {
-  // TODO(crbug.com/1314521): Click on UAC prompts in Updater tests that require
-  // elevation
   if (!::IsUserAnAdmin()) {
     return;
   }
-
   const base::CommandLine test_process_cmd_line =
       GetTestProcessCommandLine(GetTestScope(), test::GetTestName());
   EXPECT_THAT(RunElevated(test_process_cmd_line.GetProgram(),
@@ -176,6 +174,29 @@ TEST(WinUtil, RunDeElevated_Exe) {
   EXPECT_HRESULT_SUCCEEDED(
       RunDeElevated(test_process_cmd_line.GetProgram().value(),
                     test_process_cmd_line.GetArgumentsString()));
+  EXPECT_TRUE(event_holder.event.TimedWait(TestTimeouts::action_max_timeout()));
+
+  EXPECT_TRUE(test::WaitFor(
+      [&] { return test::FindProcesses(kTestProcessExecutableName).empty(); }));
+}
+
+TEST(WinUtil, RunDeElevatedCmdLine_Exe) {
+  // Create a shared event to be waited for in this process and signaled in the
+  // test process to confirm that the test process is running at medium
+  // integrity.
+  test::EventHolder event_holder(IsElevatedWithUACOn()
+                                     ? CreateEveryoneWaitableEventForTest()
+                                     : test::CreateWaitableEventForTest());
+  ASSERT_NE(event_holder.event.handle(), nullptr);
+
+  base::CommandLine test_process_cmd_line =
+      GetTestProcessCommandLine(GetTestScope(), test::GetTestName());
+  test_process_cmd_line.AppendSwitchNative(
+      IsElevatedWithUACOn() ? kTestEventToSignalIfMediumIntegrity
+                            : kTestEventToSignal,
+      event_holder.name);
+  EXPECT_HRESULT_SUCCEEDED(
+      RunDeElevatedCmdLine(test_process_cmd_line.GetCommandLineString()));
   EXPECT_TRUE(event_holder.event.TimedWait(TestTimeouts::action_max_timeout()));
 
   EXPECT_TRUE(test::WaitFor(
@@ -554,6 +575,20 @@ TEST(WinUtil, GetTextForSystemError) {
   EXPECT_EQ(
       GetTextForSystemError(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_ITF, 0x200)),
       L"0x80040200");
+}
+
+TEST(WinUtil, GetLoggedOnUserToken) {
+  if (!::IsUserAnAdmin() || !IsUACOn()) {
+    return;
+  }
+
+  ASSERT_TRUE(::IsUserAnAdmin());
+  HResultOr<ScopedKernelHANDLE> token = GetLoggedOnUserToken();
+  ASSERT_TRUE(token.has_value());
+
+  ScopedImpersonation impersonate;
+  ASSERT_TRUE(SUCCEEDED(impersonate.Impersonate(token.value().get())));
+  ASSERT_FALSE(::IsUserAnAdmin());
 }
 
 }  // namespace updater

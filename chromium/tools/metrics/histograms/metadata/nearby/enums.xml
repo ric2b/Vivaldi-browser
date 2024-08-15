@@ -320,6 +320,21 @@ chromium-metrics-reviews@google.com.
   <int value="1414" label="Hidden visibility selected and confirmed"/>
   <int value="1415" label="Manage contacts selected"/>
   <int value="1416" label="Cancel selected on visibility page"/>
+  <int value="1417" label="Your devices visibility selected and confirmed"/>
+</enum>
+
+<enum name="NearbySharePairedKeyVerificationError">
+  <int value="0"
+      label="IncomingFramesReader timed out or failed to parse Encryption
+             frame"/>
+  <int value="1"
+      label="IncomingFramesReader timed out or failed to parse Result frame"/>
+  <int value="2"
+      label="Unable to verify remote public certificate while restricted to
+             contacts"/>
+  <int value="3"
+      label="Unable to verify main signature and optional signature missing"/>
+  <int value="4" label="Unable to verify both main and optional signatures"/>
 </enum>
 
 <enum name="NearbyShareServiceStatusCode">
@@ -387,6 +402,7 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="No one"/>
   <int value="2" label="All contacts"/>
   <int value="3" label="Selected contacts"/>
+  <int value="4" label="Your devices"/>
 </enum>
 
 </enums>

@@ -39,7 +39,6 @@
 
 TINT_INSTANTIATE_TYPEINFO(tint::ast::transform::AddBlockAttribute);
 TINT_INSTANTIATE_TYPEINFO(tint::ast::transform::AddBlockAttribute::BlockAttribute);
-TINT_INSTANTIATE_TYPEINFO(tint::ast::transform::AddBlockAttribute::Config);
 
 namespace tint::ast::transform {
 
@@ -48,13 +47,12 @@ AddBlockAttribute::AddBlockAttribute() = default;
 AddBlockAttribute::~AddBlockAttribute() = default;
 
 Transform::ApplyResult AddBlockAttribute::Apply(const Program& src,
-                                                const DataMap& inputs,
+                                                const DataMap&,
                                                 DataMap&) const {
     ProgramBuilder b;
     program::CloneContext ctx{&b, &src, /* auto_clone_symbols */ true};
 
     auto& sem = src.Sem();
-    auto* cfg = inputs.Get<Config>();
 
     // A map from a type in the source program to a block-decorated wrapper that contains it in the
     // destination program.
@@ -82,15 +80,10 @@ Transform::ApplyResult AddBlockAttribute::Apply(const Program& src,
         bool needs_wrapping = !str ||                    // Type is not a structure
                               str->HasFixedFootprint();  // Struct has a fixed footprint
 
-        if (cfg && cfg->skip_push_constants &&
-            var->AddressSpace() == core::AddressSpace::kPushConstant) {
-            continue;
-        }
-
         if (needs_wrapping) {
             const char* kMemberName = "inner";
 
-            auto* wrapper = wrapper_structs.GetOrCreate(ty, [&] {
+            auto* wrapper = wrapper_structs.GetOrAdd(ty, [&] {
                 auto* block = b.ASTNodes().Create<BlockAttribute>(b.ID(), b.AllocateNodeID());
                 auto wrapper_name = global->name->symbol.Name() + "_block";
                 auto* ret =
@@ -135,9 +128,5 @@ const AddBlockAttribute::BlockAttribute* AddBlockAttribute::BlockAttribute::Clon
     return ctx.dst->ASTNodes().Create<AddBlockAttribute::BlockAttribute>(ctx.dst->ID(),
                                                                          ctx.dst->AllocateNodeID());
 }
-
-AddBlockAttribute::Config::Config(bool skip_push_consts) : skip_push_constants(skip_push_consts) {}
-
-AddBlockAttribute::Config::~Config() = default;
 
 }  // namespace tint::ast::transform

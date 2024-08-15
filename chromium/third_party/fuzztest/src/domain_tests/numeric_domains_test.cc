@@ -32,14 +32,14 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/substitute.h"
-#include "absl/types/span.h"
-#include "./fuzztest/domain.h"
+#include "./fuzztest/domain_core.h"
 #include "./domain_tests/domain_testing.h"
 #include "./fuzztest/internal/serialization.h"
 
 namespace fuzztest {
 namespace {
 
+using ::fuzztest::internal::IRObject;
 using ::testing::AllOf;
 using ::testing::Contains;
 using ::testing::Each;
@@ -230,17 +230,15 @@ TYPED_TEST(NumericTest, InRangeValueIsParsedCorrectly) {
       : is_at_most_64_bit_integer      ? "i: $0"
                                        : R"(sub { i: 0 } sub { i: $0 })";
 
-  auto corpus_value =
-      domain.ParseCorpus(*internal::IRObject::FromString(absl::StrCat(
-          "FUZZTESTv1 ",
-          absl::Substitute(serialized_format, static_cast<int32_t>(max)))));
+  auto corpus_value = domain.ParseCorpus(*IRObject::FromString(absl::StrCat(
+      "FUZZTESTv1 ",
+      absl::Substitute(serialized_format, static_cast<int32_t>(max)))));
   ASSERT_TRUE(corpus_value.has_value());
   EXPECT_OK(domain.ValidateCorpusValue(*corpus_value));
 
-  corpus_value =
-      domain.ParseCorpus(*internal::IRObject::FromString(absl::StrCat(
-          "FUZZTESTv1 ",
-          absl::Substitute(serialized_format, static_cast<int32_t>(max) + 1))));
+  corpus_value = domain.ParseCorpus(*IRObject::FromString(absl::StrCat(
+      "FUZZTESTv1 ",
+      absl::Substitute(serialized_format, static_cast<int32_t>(max) + 1))));
   // Greater than max should be parsed, but rejected by validation.
   ASSERT_TRUE(corpus_value.has_value());
   EXPECT_THAT(
@@ -255,6 +253,28 @@ TYPED_TEST(NumericTest, NonZero) {
                                      /*num_seeds=*/10, /*num_mutations=*/100);
   ASSERT_THAT(values, SizeIs(Ge(110)));
   for (auto v : values) ASSERT_THAT(v.user_value, Ne(0));
+}
+
+template <typename T>
+class CharTest : public testing::Test {};
+using CharTypes = testing::Types<char, signed char, unsigned char>;
+
+TYPED_TEST_SUITE(CharTest, CharTypes);
+
+TYPED_TEST(CharTest, GetRandomValueYieldsEveryValue) {
+  using T = TypeParam;
+  Domain<T> domain = Arbitrary<T>();
+
+  absl::flat_hash_set<T> values;
+  absl::BitGen prng;
+  for (int i = 0;
+       values.size() < 256 &&
+       i < IterationsToHitAll(/*num_cases=*/256, /*hit_probability=*/1.0 / 256);
+       ++i) {
+    values.insert(domain.GetRandomValue(prng));
+  }
+
+  EXPECT_THAT(values, SizeIs(256));
 }
 
 TEST(Finite, CreatesFiniteFloatingPointValuesAndShrinksTowardsZero) {
@@ -321,6 +341,23 @@ TEST(InRange, SupportsSingletonRange) {
   val.Mutate(domain, bitgen, /*only_shrink=*/false);
 
   EXPECT_EQ(val.user_value, 10);
+}
+
+TEST(InRange, GetRandomValueYieldsEveryValue) {
+  auto domain = InRange(1, 64);
+
+  absl::flat_hash_set<int> values;
+  absl::BitGen prng;
+  // InRange is biased towards extreme values. Conservatively, we use the
+  // probability to hit a non-extreme value for all values.
+  static constexpr double kHitProbability = 1.0 / 3 * 1.0 / 64;
+  for (int i = 0; values.size() < 64 &&
+                  i < IterationsToHitAll(/*num_cases=*/64, kHitProbability);
+       ++i) {
+    values.insert(domain.GetRandomValue(prng));
+  }
+
+  EXPECT_THAT(values, SizeIs(64));
 }
 
 TEST(IllegalInputs, Numeric) {

@@ -75,9 +75,18 @@ void TestCreditCardSaveManager::set_upload_request_card(
   upload_request_.card = std::move(card);
 }
 
-payments::PaymentsNetworkInterface::UploadRequestDetails*
+payments::PaymentsNetworkInterface::UploadCardRequestDetails*
 TestCreditCardSaveManager::upload_request() {
   return &upload_request_;
+}
+
+void TestCreditCardSaveManager::InitVirtualCardEnroll(
+    const CreditCard& credit_card,
+    std::optional<payments::PaymentsNetworkInterface::
+                      GetDetailsForEnrollmentResponseDetails>
+        get_details_for_enrollment_response_details) {
+  CreditCardSaveManager::InitVirtualCardEnroll(
+      credit_card, get_details_for_enrollment_response_details);
 }
 
 void TestCreditCardSaveManager::OnDidUploadCard(

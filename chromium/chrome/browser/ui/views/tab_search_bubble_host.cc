@@ -7,10 +7,10 @@
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/strings/strcat.h"
+#include "base/trace_event/trace_event.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
-#include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
-#include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -60,31 +60,21 @@ TabSearchOpenAction GetActionForEvent(const ui::Event& event) {
 
 TabSearchBubbleHost::TabSearchBubbleHost(views::Button* button,
                                          Profile* profile)
-    : optimization_guide::SettingsEnabledObserver(
-          optimization_guide::proto::ModelExecutionFeature::
-              MODEL_EXECUTION_FEATURE_TAB_ORGANIZATION),
-      button_(button),
+    : button_(button),
       profile_(profile),
-      webui_bubble_manager_(button,
-                            profile,
-                            GURL(chrome::kChromeUITabSearchURL),
-                            IDS_ACCNAME_TAB_SEARCH),
+      webui_bubble_manager_(WebUIBubbleManager::Create<TabSearchUI>(
+          button,
+          profile,
+          GURL(chrome::kChromeUITabSearchURL),
+          IDS_ACCNAME_TAB_SEARCH)),
       widget_open_timer_(base::BindRepeating([](base::TimeDelta time_elapsed) {
         base::UmaHistogramMediumTimes("Tabs.TabSearch.WindowDisplayedDuration3",
                                       time_elapsed);
       })) {
-  if (TabOrganizationUtils::GetInstance()->IsEnabled(profile)) {
-    auto* const tab_organization_service =
-        TabOrganizationServiceFactory::GetForProfile(profile);
-    if (tab_organization_service) {
-      tab_organization_service->AddObserver(this);
-    }
-  }
-  OptimizationGuideKeyedService* optimization_guide_keyed_service =
-      OptimizationGuideKeyedServiceFactory::GetForProfile(profile);
-  if (optimization_guide_keyed_service) {
-    optimization_guide_keyed_service->AddModelExecutionSettingsEnabledObserver(
-        this);
+  auto* const tab_organization_service =
+      TabOrganizationServiceFactory::GetForProfile(profile);
+  if (tab_organization_service) {
+    tab_organization_observation_.Observe(tab_organization_service);
   }
   auto menu_button_controller = std::make_unique<views::MenuButtonController>(
       button,
@@ -95,47 +85,43 @@ TabSearchBubbleHost::TabSearchBubbleHost(views::Button* button,
   button->SetButtonController(std::move(menu_button_controller));
 }
 
-TabSearchBubbleHost::~TabSearchBubbleHost() {
-  if (TabOrganizationUtils::GetInstance()->IsEnabled(profile_)) {
-    auto* const tab_organization_service =
-        TabOrganizationServiceFactory::GetForProfile(profile_);
-    if (tab_organization_service) {
-      tab_organization_service->RemoveObserver(this);
-    }
-  }
-  OptimizationGuideKeyedService* optimization_guide_keyed_service =
-      OptimizationGuideKeyedServiceFactory::GetForProfile(profile_);
-  if (optimization_guide_keyed_service) {
-    optimization_guide_keyed_service
-        ->RemoveModelExecutionSettingsEnabledObserver(this);
-  }
-}
+TabSearchBubbleHost::~TabSearchBubbleHost() = default;
 
 void TabSearchBubbleHost::OnWidgetVisibilityChanged(views::Widget* widget,
                                                     bool visible) {
-  CHECK_EQ(webui_bubble_manager_.GetBubbleWidget(), widget);
+  CHECK_EQ(webui_bubble_manager_->GetBubbleWidget(), widget);
   if (visible && widget && bubble_created_time_.has_value()) {
     widget->GetCompositor()->RequestSuccessfulPresentationTimeForNextFrame(
         base::BindOnce(
             [](base::TimeTicks bubble_created_time,
                bool bubble_using_cached_web_contents,
-               base::TimeTicks presentation_timestamp) {
+               WebUIContentsWarmupLevel contents_warmup_level,
+               const viz::FrameTimingDetails& frame_timing_details) {
+              base::TimeTicks presentation_timestamp =
+                  frame_timing_details.presentation_feedback.timestamp;
+              base::TimeDelta time_to_show =
+                  presentation_timestamp - bubble_created_time;
               base::UmaHistogramMediumTimes(
                   bubble_using_cached_web_contents
                       ? "Tabs.TabSearch.WindowTimeToShowCachedWebView2"
                       : "Tabs.TabSearch.WindowTimeToShowUncachedWebView2",
-                  presentation_timestamp - bubble_created_time);
+                  time_to_show);
+              base::UmaHistogramMediumTimes(
+                  base::StrCat({"Tabs.TabSearch.TimeToShow.",
+                                ToString(contents_warmup_level)}),
+                  time_to_show);
             },
             *bubble_created_time_,
-            webui_bubble_manager_.bubble_using_cached_web_contents()));
+            webui_bubble_manager_->bubble_using_cached_web_contents(),
+            webui_bubble_manager_->contents_warmup_level()));
     bubble_created_time_.reset();
   }
 }
 
 void TabSearchBubbleHost::OnWidgetDestroying(views::Widget* widget) {
-  DCHECK_EQ(webui_bubble_manager_.GetBubbleWidget(), widget);
+  DCHECK_EQ(webui_bubble_manager_->GetBubbleWidget(), widget);
   DCHECK(bubble_widget_observation_.IsObservingSource(
-      webui_bubble_manager_.GetBubbleWidget()));
+      webui_bubble_manager_->GetBubbleWidget()));
   bubble_widget_observation_.Reset();
   pressed_lock_.reset();
 }
@@ -163,35 +149,18 @@ void TabSearchBubbleHost::OnUserInvokedFeature(const Browser* browser) {
   }
 }
 
-void TabSearchBubbleHost::OnChangeInFeatureCurrentlyEnabledState(
-    bool is_now_enabled) {
-  // This logic is slightly more strict than is_now_enabled, may make a
-  // difference in some edge cases.
-  bool enabled = TabOrganizationUtils::GetInstance()->IsEnabled(profile_);
-  if (!enabled) {
-    return;
-  }
-
-  auto* const tab_organization_service =
-      TabOrganizationServiceFactory::GetForProfile(profile_);
-  if (!tab_organization_service ||
-      tab_organization_service->HasObserver(this)) {
-    return;
-  }
-
-  tab_organization_service->AddObserver(this);
-}
-
 bool TabSearchBubbleHost::ShowTabSearchBubble(
     bool triggered_by_keyboard_shortcut,
     int tab_index) {
+  TRACE_EVENT0("ui", "TabSearchBubbleHost::ShowTabSearchBubble");
   if (tab_index >= 0) {
     profile_->GetPrefs()->SetInteger(tab_search_prefs::kTabSearchTabIndex,
                                      tab_index);
   }
 
-  if (webui_bubble_manager_.GetBubbleWidget())
+  if (webui_bubble_manager_->GetBubbleWidget()) {
     return false;
+  }
 
   // Close the Tab Search IPH if it is showing.
   BrowserFeaturePromoController* controller =
@@ -217,11 +186,18 @@ bool TabSearchBubbleHost::ShowTabSearchBubble(
   }
 
   bubble_created_time_ = base::TimeTicks::Now();
-  webui_bubble_manager_.ShowBubble(anchor,
-                                   ShouldTabSearchRenderBeforeTabStrip()
-                                       ? views::BubbleBorder::TOP_LEFT
-                                       : views::BubbleBorder::TOP_RIGHT,
-                                   kTabSearchBubbleElementId);
+  webui_bubble_manager_->set_widget_initialization_callback(base::BindOnce(
+      [](base::TimeTicks bubble_init_start_time) {
+        base::UmaHistogramMediumTimes(
+            "Tabs.TabSearch.BubbleWidgetInitializationTime",
+            base::TimeTicks::Now() - bubble_init_start_time);
+      },
+      *bubble_created_time_));
+  webui_bubble_manager_->ShowBubble(anchor,
+                                    ShouldTabSearchRenderBeforeTabStrip()
+                                        ? views::BubbleBorder::TOP_LEFT
+                                        : views::BubbleBorder::TOP_RIGHT,
+                                    kTabSearchBubbleElementId);
 
   auto* tracker =
       feature_engagement::TrackerFactory::GetForBrowserContext(profile_);
@@ -236,8 +212,8 @@ bool TabSearchBubbleHost::ShowTabSearchBubble(
   // There should only ever be a single bubble widget active for the
   // TabSearchBubbleHost.
   DCHECK(!bubble_widget_observation_.IsObserving());
-  bubble_widget_observation_.Observe(webui_bubble_manager_.GetBubbleWidget());
-  widget_open_timer_.Reset(webui_bubble_manager_.GetBubbleWidget());
+  bubble_widget_observation_.Observe(webui_bubble_manager_->GetBubbleWidget());
+  widget_open_timer_.Reset(webui_bubble_manager_->GetBubbleWidget());
 
   // Hold the pressed lock while the |bubble_| is active.
   pressed_lock_ = menu_button_controller_->TakeLock();
@@ -245,7 +221,7 @@ bool TabSearchBubbleHost::ShowTabSearchBubble(
 }
 
 void TabSearchBubbleHost::CloseTabSearchBubble() {
-  webui_bubble_manager_.CloseBubble();
+  webui_bubble_manager_->CloseBubble();
 }
 
 const Browser* TabSearchBubbleHost::GetBrowser() const {
@@ -265,11 +241,13 @@ void TabSearchBubbleHost::ButtonPressed(const ui::Event& event) {
     base::UmaHistogramEnumeration("Tabs.TabSearch.OpenAction",
                                   GetActionForEvent(event));
 
-    webui_bubble_manager_.GetBubbleWidget()
+    webui_bubble_manager_->GetBubbleWidget()
         ->GetCompositor()
         ->RequestSuccessfulPresentationTimeForNextFrame(base::BindOnce(
             [](base::TimeTicks button_pressed_time,
-               base::TimeTicks presentation_timestamp) {
+               const viz::FrameTimingDetails& frame_timing_details) {
+              base::TimeTicks presentation_timestamp =
+                  frame_timing_details.presentation_feedback.timestamp;
               base::UmaHistogramMediumTimes(
                   "Tabs.TabSearch."
                   "ButtonPressedToNextFramePresented",

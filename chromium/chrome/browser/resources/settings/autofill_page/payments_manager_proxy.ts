@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {PersonalDataChangedListener} from './autofill_manager_proxy.js';
+import type {PersonalDataChangedListener} from './autofill_manager_proxy.js';
 
 /**
  * Interface for all callbacks to the payments autofill API.
@@ -34,11 +34,6 @@ export interface PaymentsManagerProxy {
 
   /** @param guid The GUID of the credit card to remove. */
   removeCreditCard(guid: string): void;
-
-  /**
-   * @param guid The GUID to credit card to remove from the cache.
-   */
-  clearCachedCreditCard(guid: string): void;
 
   /**
    * Saves the given credit card.
@@ -144,10 +139,6 @@ export class PaymentsManagerImpl implements PaymentsManagerProxy {
 
   removeCreditCard(guid: string) {
     chrome.autofillPrivate.removeEntry(guid);
-  }
-
-  clearCachedCreditCard(guid: string) {
-    chrome.autofillPrivate.maskCreditCard(guid);
   }
 
   saveCreditCard(creditCard: chrome.autofillPrivate.CreditCardEntry) {

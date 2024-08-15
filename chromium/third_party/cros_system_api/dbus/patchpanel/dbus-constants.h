@@ -7,43 +7,45 @@
 
 namespace patchpanel {
 
-const char kPatchPanelInterface[] = "org.chromium.PatchPanel";
-const char kPatchPanelServicePath[] = "/org/chromium/PatchPanel";
-const char kPatchPanelServiceName[] = "org.chromium.PatchPanel";
+constexpr char kPatchPanelInterface[] = "org.chromium.PatchPanel";
+constexpr char kPatchPanelServicePath[] = "/org/chromium/PatchPanel";
+constexpr char kPatchPanelServiceName[] = "org.chromium.PatchPanel";
 
 // Exported methods.
-const char kArcShutdownMethod[] = "ArcShutdown";
-const char kArcStartupMethod[] = "ArcStartup";
-const char kArcVmShutdownMethod[] = "ArcVmShutdown";
-const char kArcVmStartupMethod[] = "ArcVmStartup";
-const char kConnectNamespaceMethod[] = "ConnectNamespace";
-const char kCreateLocalOnlyNetworkMethod[] = "CreateLocalOnlyNetwork";
-const char kCreateTetheredNetworkMethod[] = "CreateTetheredNetwork";
-const char kConfigureNetworkMethod[] = "ConfigureNetwork";
-const char kGetDevicesMethod[] = "GetDevices";
-const char kGetDownstreamNetworkInfoMethod[] = "GetDownstreamNetworkInfo";
-const char kGetTrafficCountersMethod[] = "GetTrafficCounters";
-const char kModifyPortRuleMethod[] = "ModifyPortRule";
-const char kParallelsVmShutdownMethod[] = "ParallelsVmShutdown";
-const char kParallelsVmStartupMethod[] = "ParallelsVmStartup";
-const char kNotifyAndroidInteractiveStateMethod[] =
+constexpr char kArcShutdownMethod[] = "ArcShutdown";
+constexpr char kArcStartupMethod[] = "ArcStartup";
+constexpr char kArcVmShutdownMethod[] = "ArcVmShutdown";
+constexpr char kArcVmStartupMethod[] = "ArcVmStartup";
+constexpr char kConnectNamespaceMethod[] = "ConnectNamespace";
+constexpr char kCreateLocalOnlyNetworkMethod[] = "CreateLocalOnlyNetwork";
+constexpr char kCreateTetheredNetworkMethod[] = "CreateTetheredNetwork";
+constexpr char kConfigureNetworkMethod[] = "ConfigureNetwork";
+constexpr char kGetDevicesMethod[] = "GetDevices";
+constexpr char kGetDownstreamNetworkInfoMethod[] = "GetDownstreamNetworkInfo";
+constexpr char kGetTrafficCountersMethod[] = "GetTrafficCounters";
+constexpr char kModifyPortRuleMethod[] = "ModifyPortRule";
+constexpr char kParallelsVmShutdownMethod[] = "ParallelsVmShutdown";
+constexpr char kParallelsVmStartupMethod[] = "ParallelsVmStartup";
+constexpr char kNotifyAndroidInteractiveStateMethod[] =
     "NotifyAndroidInteractiveState";
-const char kNotifyAndroidWifiMulticastLockChangeMethod[] =
+constexpr char kNotifyAndroidWifiMulticastLockChangeMethod[] =
     "NotifyAndroidWifiMulticastLockChange";
-const char kNotifySocketConnectionEventMethod[] = "NotifySocketConnectionEvent";
-const char kNotifyVPNSocketConnectionEventMethod[] =
-    "NotifyVPNSocketConnectionEvent";
-const char kSetDnsRedirectionRuleMethod[] = "SetDnsRedirectionRule";
-const char kSetFeatureFlagMethod[] = "SetFeatureFlag";
-const char kSetVpnIntentMethod[] = "SetVpnIntent";
-const char kSetVpnLockdown[] = "SetVpnLockdown";
-const char kTerminaVmShutdownMethod[] = "TerminaVmShutdown";
-const char kTerminaVmStartupMethod[] = "TerminaVmStartup";
+constexpr char kNotifySocketConnectionEventMethod[] =
+    "NotifySocketConnectionEvent";
+constexpr char kNotifyARCVPNSocketConnectionEventMethod[] =
+    "NotifyARCVPNSocketConnectionEvent";
+constexpr char kSetDnsRedirectionRuleMethod[] = "SetDnsRedirectionRule";
+constexpr char kSetFeatureFlagMethod[] = "SetFeatureFlag";
+constexpr char kSetVpnLockdown[] = "SetVpnLockdown";
+constexpr char kTagSocketMethod[] = "TagSocket";
+constexpr char kTerminaVmShutdownMethod[] = "TerminaVmShutdown";
+constexpr char kTerminaVmStartupMethod[] = "TerminaVmStartup";
 
 // Signals.
-const char kNetworkDeviceChangedSignal[] = "NetworkDeviceChanged";
-const char kNetworkConfigurationChangedSignal[] = "NetworkConfigurationChanged";
-const char kNeighborReachabilityEventSignal[] = "NeighborReachabilityEvent";
+constexpr char kNetworkDeviceChangedSignal[] = "NetworkDeviceChanged";
+constexpr char kNetworkConfigurationChangedSignal[] =
+    "NetworkConfigurationChanged";
+constexpr char kNeighborReachabilityEventSignal[] = "NeighborReachabilityEvent";
 
 }  // namespace patchpanel
 

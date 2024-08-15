@@ -9,6 +9,7 @@
 #include "base/check.h"
 #include "base/dcheck_is_on.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/memory/raw_ref.h"
 #include "base/thread_annotations.h"
 #include "build/build_config.h"
@@ -136,25 +137,26 @@ class SCOPED_LOCKABLE BasicAutoLock {
 
   explicit BasicAutoLock(LockType& lock) EXCLUSIVE_LOCK_FUNCTION(lock)
       : lock_(lock) {
-    lock_->Acquire();
+    lock_.Acquire();
   }
 
   BasicAutoLock(LockType& lock, const AlreadyAcquired&)
       EXCLUSIVE_LOCKS_REQUIRED(lock)
       : lock_(lock) {
-    lock_->AssertAcquired();
+    lock_.AssertAcquired();
   }
 
   BasicAutoLock(const BasicAutoLock&) = delete;
   BasicAutoLock& operator=(const BasicAutoLock&) = delete;
 
   ~BasicAutoLock() UNLOCK_FUNCTION() {
-    lock_->AssertAcquired();
-    lock_->Release();
+    lock_.AssertAcquired();
+    lock_.Release();
   }
 
  private:
-  const raw_ref<LockType, DanglingUntriaged> lock_;
+  // RAW_PTR_EXCLUSION: crbug.com/1521343 crbug.com/1520734 crbug.com/1519816
+  RAW_PTR_EXCLUSION LockType& lock_;
 };
 
 // This is an implementation used for AutoTryLock templated on the lock type.

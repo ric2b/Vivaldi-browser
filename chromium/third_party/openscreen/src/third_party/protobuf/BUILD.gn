@@ -33,6 +33,7 @@ config("protobuf_warnings") {
       "-Wno-implicit-int-float-conversion",
       "-Wno-unreachable-code-break",
       "-Wno-deprecated-declarations",
+      "-Wno-unused-const-variable",
     ]
   }
 }
@@ -44,6 +45,12 @@ config("using_proto") {
     "src",
     "$root_gen_dir",
   ]
+}
+
+config("allow_deprecated_proto_fields") {
+  if (is_clang) {
+    cflags = [ "-DPROTOBUF_ALLOW_DEPRECATED=1" ]
+  }
 }
 
 source_set("protobuf_lite") {

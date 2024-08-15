@@ -39,11 +39,11 @@ namespace base {
 // glibc has two strerror_r functions: a historical GNU-specific one that
 // returns type char *, and a POSIX.1-2001 compliant one available since 2.3.4
 // that returns int. This wraps the GNU-specific one.
-static void POSSIBLY_UNUSED
-wrap_posix_strerror_r(char* (*strerror_r_ptr)(int, char*, size_t),
-                      int err,
-                      char* buf,
-                      size_t len) {
+static void POSSIBLY_UNUSED wrap_posix_strerror_r(
+    char* (*strerror_r_ptr)(int, char*, size_t),
+    int err,
+    char* buf,
+    size_t len) {
   // GNU version.
   char* rc = (*strerror_r_ptr)(err, buf, len);
   if (rc != buf) {

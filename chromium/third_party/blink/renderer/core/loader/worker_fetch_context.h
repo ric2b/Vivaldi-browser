@@ -48,7 +48,7 @@ class WorkerFetchContext final : public BaseFetchContext {
   // BaseFetchContext implementation:
   net::SiteForCookies GetSiteForCookies() const override;
   SubresourceFilter* GetSubresourceFilter() const override;
-  bool AllowScriptFromSource(const KURL&) const override;
+  bool AllowScript() const override;
   bool ShouldBlockRequestByInspector(const KURL&) const override;
   void DispatchDidBlockRequest(const ResourceRequest&,
                                const ResourceLoaderOptions&,
@@ -83,7 +83,7 @@ class WorkerFetchContext final : public BaseFetchContext {
   void AddResourceTiming(mojom::blink::ResourceTimingInfoPtr,
                          const AtomicString& initiator_type) override;
   void PopulateResourceRequest(ResourceType,
-                               const absl::optional<float> resource_width,
+                               const std::optional<float> resource_width,
                                ResourceRequest&,
                                const ResourceLoaderOptions&) override;
   std::unique_ptr<ResourceLoadInfoNotifierWrapper>

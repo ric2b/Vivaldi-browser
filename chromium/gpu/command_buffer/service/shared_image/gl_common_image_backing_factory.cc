@@ -34,8 +34,8 @@ std::optional<viz::SharedImageFormat> GetFallbackFormatIfNotSupported(
     const GLFormatCaps& caps) {
   if (plane_format == viz::SinglePlaneFormat::kR_8 &&
       (!caps.ext_texture_rg() || caps.disable_r8_shared_images())) {
-    // Fallback to LUMINANCE_8 for R_8 format.
-    return viz::SinglePlaneFormat::kLUMINANCE_8;
+    // Fallback to ALPHA_8 for R_8 format.
+    return viz::SinglePlaneFormat::kALPHA_8;
   }
   if (plane_format == viz::SinglePlaneFormat::kRG_88 &&
       !caps.ext_texture_rg()) {
@@ -47,6 +47,11 @@ std::optional<viz::SharedImageFormat> GetFallbackFormatIfNotSupported(
       !caps.ext_texture_norm16()) {
     // No fallback for R_16, RG_1616 format.
     return std::nullopt;
+  }
+  if (plane_format == viz::SinglePlaneFormat::kR_F16 &&
+      (!caps.is_atleast_gles3() || !caps.enable_texture_half_float_linear())) {
+    // Fallback to LUMINANCE_F16 for R_F16 format.
+    return viz::SinglePlaneFormat::kLUMINANCE_F16;
   }
   return plane_format;
 }

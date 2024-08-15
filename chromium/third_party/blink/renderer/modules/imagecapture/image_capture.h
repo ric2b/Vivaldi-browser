@@ -6,11 +6,12 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_IMAGECAPTURE_IMAGE_CAPTURE_H_
 
 #include <memory>
+#include <optional>
 
 #include "base/time/time.h"
 #include "media/capture/mojom/image_capture.mojom-blink.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/permissions/permission.mojom-blink.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
@@ -19,8 +20,9 @@
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 
 namespace blink {
-
+class Blob;
 class ExceptionState;
+class ImageBitmap;
 class ImageCaptureFrameGrabber;
 class MediaStreamTrack;
 class MediaTrackCapabilities;
@@ -29,7 +31,6 @@ class MediaTrackConstraintSet;
 class MediaTrackSettings;
 class PhotoCapabilities;
 class PhotoSettings;
-class ScriptPromise;
 class ScriptPromiseResolver;
 
 class MODULES_EXPORT ImageCapture final
@@ -59,10 +60,10 @@ class MODULES_EXPORT ImageCapture final
 
   MediaStreamTrack* videoStreamTrack() const { return stream_track_.Get(); }
 
-  ScriptPromise getPhotoCapabilities(ScriptState*);
-  ScriptPromise getPhotoSettings(ScriptState*);
-  ScriptPromise takePhoto(ScriptState*, const PhotoSettings*);
-  ScriptPromise grabFrame(ScriptState*);
+  ScriptPromiseTyped<PhotoCapabilities> getPhotoCapabilities(ScriptState*);
+  ScriptPromiseTyped<PhotoSettings> getPhotoSettings(ScriptState*);
+  ScriptPromiseTyped<Blob> takePhoto(ScriptState*, const PhotoSettings*);
+  ScriptPromiseTyped<ImageBitmap> grabFrame(ScriptState*);
 
   bool CheckAndApplyMediaTrackConstraintsToSettings(
       media::mojom::blink::PhotoSettings*,
@@ -120,7 +121,7 @@ class MODULES_EXPORT ImageCapture final
   // Called when we get an updated PTZ permission value from the browser.
   void OnPermissionStatusChange(mojom::blink::PermissionStatus) override;
 
-  ScriptPromise GetMojoPhotoState(ScriptState*, PromiseResolverFunction);
+  void GetMojoPhotoState(ScriptPromiseResolver*, PromiseResolverFunction);
   void OnMojoGetPhotoState(ScriptPromiseResolver*,
                            PromiseResolverFunction,
                            bool trigger_take_photo,
@@ -169,8 +170,7 @@ class MODULES_EXPORT ImageCapture final
 
   // Get the name a constraint for which the existence of the capability or
   // the permission to access the capability does not match the constraint.
-  const absl::optional<const char*>
-  GetConstraintWithCapabilityExistenceMismatch(
+  const std::optional<const char*> GetConstraintWithCapabilityExistenceMismatch(
       const MediaTrackConstraintSet* constraint_set,
       MediaTrackConstraintSetType) const;
 

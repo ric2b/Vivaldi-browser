@@ -5,12 +5,14 @@
 import './diagnose_info_table.js';
 
 import {CustomElement} from '//resources/js/custom_element.js';
-import {Time, TimeDelta} from '//resources/mojo/mojo/public/mojom/base/time.mojom-webui.js';
+import type {Time, TimeDelta} from '//resources/mojo/mojo/public/mojom/base/time.mojom-webui.js';
 
-import {DiagnoseInfoTableElement} from './diagnose_info_table.js';
+import type {DiagnoseInfoTableElement} from './diagnose_info_table.js';
 import {getTemplate} from './diagnose_info_view.html.js';
-import {AccessPointData, GeolocationDiagnostics, INVALID_CHANNEL, INVALID_RADIO_SIGNAL_STRENGTH, INVALID_SIGNAL_TO_NOISE, NetworkLocationDiagnostics, NetworkLocationResponse, PositionCacheDiagnostics, WifiPollingPolicyDiagnostics} from './geolocation_internals.mojom-webui.js';
-import {BAD_ACCURACY, BAD_ALTITUDE, BAD_HEADING, BAD_LATITUDE_LONGITUDE, BAD_SPEED, GeopositionResult} from './geoposition.mojom-webui.js';
+import type {AccessPointData, GeolocationDiagnostics, NetworkLocationDiagnostics, NetworkLocationResponse, PositionCacheDiagnostics, WifiPollingPolicyDiagnostics} from './geolocation_internals.mojom-webui.js';
+import {INVALID_CHANNEL, INVALID_RADIO_SIGNAL_STRENGTH, INVALID_SIGNAL_TO_NOISE} from './geolocation_internals.mojom-webui.js';
+import type {GeopositionResult} from './geoposition.mojom-webui.js';
+import {BAD_ACCURACY, BAD_ALTITUDE, BAD_HEADING, BAD_LATITUDE_LONGITUDE, BAD_SPEED} from './geoposition.mojom-webui.js';
 
 export const PROVIDER_STATE_TABLE_ID = 'provider-state-table';
 const PROVIDER_STATE_ENUM: {[key: number]: string} = {
@@ -44,7 +46,7 @@ function mojoTimeToDate(mojoTime: Time) {
 }
 
 // Returns a string representation of `mojoTime`.
-function stringifyMojoTime(mojoTime?: Time) {
+function stringifyMojoTime(mojoTime: Time|null) {
   if (!mojoTime) {
     return 'None';
   }
@@ -53,7 +55,7 @@ function stringifyMojoTime(mojoTime?: Time) {
 
 // Returns a string representation of `mojoGeopositionResult`.
 function stringifyMojoGeopositionResult(
-    mojoGeopositionResult?: GeopositionResult) {
+    mojoGeopositionResult: GeopositionResult|null) {
   if (!mojoGeopositionResult) {
     return 'None';
   }
@@ -226,8 +228,8 @@ export class DiagnoseInfoViewElement extends CustomElement {
     return tableData;
   }
 
-  updateNetworkLocationDiagnostics(networkLocationDiagnostics?:
-                                       NetworkLocationDiagnostics) {
+  updateNetworkLocationDiagnostics(networkLocationDiagnostics:
+                                       NetworkLocationDiagnostics|null) {
     if (!networkLocationDiagnostics) {
       this.wifiDataTable_.hideTable();
       return;
@@ -248,8 +250,8 @@ export class DiagnoseInfoViewElement extends CustomElement {
         WIFI_DATA_TABLE_ID, wifiData, footerMessage);
   }
 
-  updatePositionCacheDiagnostics(positionCacheDiagnostics?:
-                                     PositionCacheDiagnostics) {
+  updatePositionCacheDiagnostics(positionCacheDiagnostics:
+                                     PositionCacheDiagnostics|null) {
     if (!positionCacheDiagnostics) {
       this.positionCacheTable_.hideTable();
       return;
@@ -274,7 +276,7 @@ export class DiagnoseInfoViewElement extends CustomElement {
     this.watchPositionTable_.updateTable(WATCH_TABLE_ID, [data], footerMessage);
   }
 
-  updateWifiPollingPolicyTable(data?: WifiPollingPolicyDiagnostics) {
+  updateWifiPollingPolicyTable(data: WifiPollingPolicyDiagnostics|null) {
     if (!data) {
       this.wifiPollingPolicyTable_.hideTable();
       return;

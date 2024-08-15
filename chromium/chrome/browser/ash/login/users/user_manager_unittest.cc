@@ -17,6 +17,7 @@
 #include "base/run_loop.h"
 #include "base/values.h"
 #include "chrome/browser/ash/login/users/avatar/user_image_manager_impl.h"
+#include "chrome/browser/ash/login/users/avatar/user_image_manager_registry.h"
 #include "chrome/browser/ash/login/users/chrome_user_manager_impl.h"
 #include "chrome/browser/ash/policy/core/device_local_account.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -43,6 +44,7 @@
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#include "components/user_manager/user_manager_pref_names.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_task_environment.h"
@@ -158,11 +160,6 @@ class UserManagerTest : public testing::Test {
     ResetUserManager();
 
     ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
-
-    wallpaper_controller_client_ = std::make_unique<
-        WallpaperControllerClientImpl>(
-        std::make_unique<wallpaper_handlers::TestWallpaperFetcherDelegate>());
-    wallpaper_controller_client_->InitForTesting(&test_wallpaper_controller_);
   }
 
   void TearDown() override {
@@ -179,32 +176,37 @@ class UserManagerTest : public testing::Test {
     ConciergeClient::Shutdown();
   }
 
-  ChromeUserManagerImpl* GetChromeUserManager() const {
-    return static_cast<ChromeUserManagerImpl*>(user_manager_.Get());
-  }
-
   bool IsEphemeralAccountId(const AccountId& account_id) const {
-    return GetChromeUserManager()->IsEphemeralAccountId(account_id);
+    return user_manager_->IsEphemeralAccountId(account_id);
   }
 
   void SetEphemeralModeConfig(
       user_manager::UserManager::EphemeralModeConfig ephemeral_mode_config) {
-    GetChromeUserManager()->SetEphemeralModeConfig(
-        std::move(ephemeral_mode_config));
+    user_manager_->SetEphemeralModeConfig(std::move(ephemeral_mode_config));
   }
 
   AccountId GetUserManagerOwnerId() const {
-    return GetChromeUserManager()->GetOwnerAccountId();
+    return user_manager_->GetOwnerAccountId();
   }
 
   void SetUserManagerOwnerId(const AccountId& owner_account_id) {
-    GetChromeUserManager()->SetOwnerId(owner_account_id);
+    user_manager_->SetOwnerId(owner_account_id);
   }
 
   void ResetUserManager() {
     // Initialize the UserManager singleton to a fresh ChromeUserManagerImpl
     // instance.
+    // WallpaperControllerClient needs to be recreated, too, because
+    // it subscribes UserManager singleton.
+    wallpaper_controller_client_.reset();
+    user_image_manager_registry_.reset();
     user_manager_.Reset(ChromeUserManagerImpl::CreateChromeUserManager());
+    user_image_manager_registry_ =
+        std::make_unique<ash::UserImageManagerRegistry>(user_manager_.Get());
+    wallpaper_controller_client_ = std::make_unique<
+        WallpaperControllerClientImpl>(
+        std::make_unique<wallpaper_handlers::TestWallpaperFetcherDelegate>());
+    wallpaper_controller_client_->InitForTesting(&test_wallpaper_controller_);
 
     // ChromeUserManagerImpl ctor posts a task to reload policies.
     // Also ensure that all existing ongoing user manager tasks are completed.
@@ -256,7 +258,7 @@ class UserManagerTest : public testing::Test {
   }
 
   void RetrieveTrustedDevicePolicies() {
-    GetChromeUserManager()->RetrieveTrustedDevicePolicies();
+    user_manager_->RetrieveTrustedDevicePolicies();
   }
 
  protected:
@@ -282,7 +284,8 @@ class UserManagerTest : public testing::Test {
   // local_state_ should be destructed after ProfileManager.
   std::unique_ptr<ScopedTestingLocalState> local_state_;
 
-  user_manager::TypedScopedUserManager<ChromeUserManager> user_manager_;
+  user_manager::TypedScopedUserManager<ChromeUserManagerImpl> user_manager_;
+  std::unique_ptr<ash::UserImageManagerRegistry> user_image_manager_registry_;
   base::ScopedTempDir temp_dir_;
 };
 
@@ -498,8 +501,9 @@ TEST_F(UserManagerTest, DoNotSaveKioskAccountsToKRegularUsersPref) {
       false /* is_child */);
   ResetUserManager();
 
-  EXPECT_EQ(
-      1U, local_state_->Get()->GetList(user_manager::kRegularUsersPref).size());
+  EXPECT_EQ(1U, local_state_->Get()
+                    ->GetList(user_manager::prefs::kRegularUsersPref)
+                    .size());
   EXPECT_EQ(2U, user_manager::UserManager::Get()->GetUsers().size());
 
   SetDeviceSettings(
@@ -507,8 +511,9 @@ TEST_F(UserManagerTest, DoNotSaveKioskAccountsToKRegularUsersPref) {
       /* owner= */ kOwnerAccountId.GetUserEmail());
   RetrieveTrustedDevicePolicies();
 
-  EXPECT_TRUE(
-      local_state_->Get()->GetList(user_manager::kRegularUsersPref).empty());
+  EXPECT_TRUE(local_state_->Get()
+                  ->GetList(user_manager::prefs::kRegularUsersPref)
+                  .empty());
   EXPECT_EQ(1U, user_manager::UserManager::Get()->GetUsers().size());
 }
 
@@ -653,12 +658,12 @@ TEST_F(UserManagerTest, ScreenLockAvailability) {
       ash::ProfileHelper::GetProfilePathByUserIdHash(user->username_hash()));
 
   // Verify that the user is allowed to lock the screen.
-  EXPECT_TRUE(user_manager::UserManager::Get()->CanCurrentUserLock());
+  EXPECT_TRUE(user_manager::UserManager::Get()->GetActiveUser()->CanLock());
   EXPECT_EQ(1U, user_manager::UserManager::Get()->GetUnlockUsers().size());
 
   // The user is not allowed to lock the screen.
   profile.GetPrefs()->SetBoolean(prefs::kAllowScreenLock, false);
-  EXPECT_FALSE(user_manager::UserManager::Get()->CanCurrentUserLock());
+  EXPECT_FALSE(user_manager::UserManager::Get()->GetActiveUser()->CanLock());
   EXPECT_EQ(0U, user_manager::UserManager::Get()->GetUnlockUsers().size());
 
   ResetUserManager();

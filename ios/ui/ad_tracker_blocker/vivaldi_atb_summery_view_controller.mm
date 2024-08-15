@@ -6,16 +6,11 @@
 #import <UIKit/UIKit.h>
 
 #import "base/apple/foundation_util.h"
-#import "base/strings/sys_string_conversions.h"
-#import "base/strings/utf_string_conversions.h"
-#import "components/url_formatter/url_fixer.h"
-#import "ios/chrome/browser/favicon/favicon_loader.h"
-#import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
+#import "components/favicon/ios/web_favicon_driver.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
-#import "ios/chrome/common/ui/favicon/favicon_attributes.h"
-#import "ios/chrome/common/ui/favicon/favicon_constants.h"
 #import "ios/ui/ad_tracker_blocker/cells/vivaldi_atb_setting_item.h"
 #import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
 #import "ios/ui/ad_tracker_blocker/settings/vivaldi_atb_settings_view_controller.h"
@@ -26,28 +21,14 @@
 #import "ios/ui/helpers/vivaldi_colors_helper.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
-#import "ios/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/web/public/web_state_observer_bridge.h"
+#import "ios/web/public/web_state.h"
 #import "ui/base/l10n/l10n_util.h"
-#import "url/gurl.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 // Namespace
 namespace {
-// Converts NSString entered by the user to a GURL.
-GURL ConvertUserDataToGURL(NSString* urlString) {
-  if (urlString) {
-    return url_formatter::FixupURL(base::SysNSStringToUTF8(urlString),
-                                   std::string());
-  } else {
-    return GURL();
-  }
-}
-
 // Padding for title label.
 const UIEdgeInsets titleLabelPadding = UIEdgeInsetsMake(0.f, 12.f, 0.f, 0.f);
 
@@ -65,10 +46,15 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
 typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeSiteSetting = kItemTypeEnumZero
 };
-
 }
 
-@interface VivaldiATBSummeryViewController()<VivaldiATBConsumer> {
+@interface VivaldiATBSummeryViewController()<VivaldiATBConsumer,
+                                            CRWWebStateObserver> {
+  // The WebState this instance is observing. Will be null after
+  // -webStateDestroyed: has been called.
+  web::WebState* _webState;
+  // Bridge to observe the web state from Objective-C.
+  std::unique_ptr<web::WebStateObserverBridge> _webStateObserverBridge;
   // Track rule group updates.
   BOOL ruleGroupApplied[2];
   // Track if a rule apply in progress. This is set to 'YES' only when user
@@ -84,9 +70,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
 @property (weak, nonatomic) UIImageView* faviconView;
 // Title label for the title of the host/domain currently loaded.
 @property (weak, nonatomic) UILabel* titleLabel;
-// FaviconLoader is a keyed service that uses LargeIconService to retrieve
-// favicon images.
-@property(nonatomic, assign) FaviconLoader* faviconLoader;
 // The Browser in which blocker engine is active.
 @property(nonatomic, assign) Browser* browser;
 // The user's browser state model used.
@@ -109,7 +92,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
 @synthesize faviconView = _faviconView;
 @synthesize titleLabel = _titleLabel;
 @synthesize browser = _browser;
-@synthesize faviconLoader = _faviconLoader;
 @synthesize browserState = _browserState;
 @synthesize host = _host;
 @synthesize adblockManager = _adblockManager;
@@ -126,8 +108,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
     _browser = browser;
     _browserState =
         _browser->GetBrowserState()->GetOriginalChromeBrowserState();
-    _faviconLoader =
-        IOSChromeFaviconLoaderFactory::GetForBrowserState(_browserState);
     ruleGroupApplied[0] = NO;
     ruleGroupApplied[1] = NO;
     ruleApplyInProgress = NO;
@@ -155,6 +135,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
   // We would like to initiate the title and favicon update when view is
   // about to be on the lifecycle.
   [self populateTitleAndFavicon];
+
+  [self setUpWebStateObserver];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+  [super viewWillDisappear:animated];
+  [self removeWebStateObserver];
 }
 
 - (void)viewDidLayoutSubviews {
@@ -368,32 +355,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 }
 
 - (void)populateTitleAndFavicon {
-  [self loadFavicon];
+  self.faviconView.image = self.favicon;
   self.titleLabel.text = self.host;
-}
-
-// Asynchronously loads favicon for given domain. When the favicon is not
-// found in cache, use the fall back icon style.
-- (void)loadFavicon {
-
-  // Start loading a favicon.
-  __weak VivaldiATBSummeryViewController* weakSelf = self;
-  GURL url = ConvertUserDataToGURL(self.host);
-  GURL blockURL(url);
-  auto faviconLoadedBlock = ^(FaviconAttributes* attributes) {
-    VivaldiATBSummeryViewController* strongSelf = weakSelf;
-    if (!strongSelf)
-      return;
-
-    if (!attributes || !attributes.faviconImage) {
-      self.faviconView.image = [UIImage imageNamed:vNTPSDFallbackFavicon];
-      return;
-    }
-    self.faviconView.image = attributes.faviconImage;
-  };
-
-  self.faviconLoader->FaviconForPageUrlOrHost(
-      blockURL, kMinFaviconSizePt, faviconLoadedBlock);
 }
 
 - (void)navigateToDetailsViewControllerWithSource:(ATBSourceType)source {
@@ -519,10 +482,49 @@ typedef NS_ENUM(NSInteger, ItemType) {
 }
 
 - (void)shutdown {
+  [self removeWebStateObserver];
+
   if (!self.adblockManager)
     return;
   self.adblockManager.consumer = nil;
   [self.adblockManager disconnect];
+}
+
+- (void)setUpWebStateObserver {
+  if ([self activeWebState]) {
+    _webState = [self activeWebState];
+    _webStateObserverBridge =
+        std::make_unique<web::WebStateObserverBridge>(self);
+    _webState->AddObserver(_webStateObserverBridge.get());
+  }
+}
+
+- (void)removeWebStateObserver {
+  if (_webState) {
+    _webState->RemoveObserver(_webStateObserverBridge.get());
+    _webStateObserverBridge.reset();
+  }
+}
+
+// Returns the favicon for the page
+- (UIImage*)favicon {
+  favicon::FaviconDriver* faviconDriver =
+      favicon::WebFaviconDriver::FromWebState([self activeWebState]);
+  UIImage* fallbackFavicon = [UIImage imageNamed:vNTPSDFallbackFavicon];
+  if (faviconDriver && faviconDriver->FaviconIsValid()) {
+    gfx::Image favicon = faviconDriver->GetFavicon();
+    if (!favicon.IsEmpty()) {
+      return favicon.ToUIImage();
+    } else {
+      return fallbackFavicon;
+    }
+  } else {
+    return fallbackFavicon;
+  }
+}
+
+- (web::WebState*)activeWebState {
+  return self.browser->GetWebStateList()->GetActiveWebState();
 }
 
 #pragma mark - UITABLEVIEW DELEGATE
@@ -604,6 +606,16 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [self didRefreshSettingOptions:_adblockerSettingOptions];
       break;
     }
+  }
+}
+
+#pragma mark - CRWWebStateObserver
+- (void)webState:(web::WebState*)webState
+    didUpdateFaviconURLCandidates:
+        (const std::vector<web::FaviconURL>&)candidates {
+  DCHECK_EQ(_webState, webState);
+  if (_webState) {
+    self.faviconView.image = self.favicon;
   }
 }
 

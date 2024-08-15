@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_VIDEO_FRAME_SUBMITTER_H_
 
 #include <memory>
+#include <optional>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/read_only_shared_memory_region.h"
@@ -19,12 +20,12 @@
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "components/viz/common/resources/shared_bitmap.h"
 #include "components/viz/common/surfaces/child_local_surface_id_allocator.h"
+#include "gpu/ipc/client/gpu_channel_observer.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/buffer.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom-blink.h"
 #include "services/viz/public/mojom/compositing/frame_timing_details.mojom-blink.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/frame_sinks/embedded_frame_sink.mojom-blink.h"
 #include "third_party/blink/public/platform/web_video_frame_submitter.h"
 #include "third_party/blink/renderer/platform/graphics/video_frame_resource_provider.h"
@@ -43,6 +44,7 @@ class PLATFORM_EXPORT VideoFrameSubmitter
     : public WebVideoFrameSubmitter,
       public viz::ContextLostObserver,
       public viz::SharedBitmapReporter,
+      public gpu::GpuChannelLostObserver,
       public viz::mojom::blink::CompositorFrameSinkClient {
  public:
   VideoFrameSubmitter(WebContextProviderCallback,
@@ -71,6 +73,9 @@ class PLATFORM_EXPORT VideoFrameSubmitter
   // viz::ContextLostObserver implementation.
   void OnContextLost() override;
 
+  // gpu::GpuChannelLostObserver implementation.
+  void OnGpuChannelLost() override;
+
   // cc::mojom::CompositorFrameSinkClient implementation.
   void DidReceiveCompositorFrameAck(
       WTF::Vector<viz::ReturnedResource> resources) override;
@@ -97,7 +102,8 @@ class PLATFORM_EXPORT VideoFrameSubmitter
   // requested.
   void OnReceivedContextProvider(
       bool use_gpu_compositing,
-      scoped_refptr<viz::RasterContextProvider> context_provider);
+      scoped_refptr<viz::RasterContextProvider> context_provider,
+      scoped_refptr<gpu::ClientSharedImageInterface> shared_image_interface);
 
   // Adopts `context_provider` if it's non-null and in a usable state. Returns
   // true on success and false on failure, implying that a new ContextProvider
@@ -145,10 +151,10 @@ class PLATFORM_EXPORT VideoFrameSubmitter
       scoped_refptr<media::VideoFrame> video_frame,
       media::VideoTransformation transform);
 
-  raw_ptr<cc::VideoFrameProvider, ExperimentalRenderer> video_frame_provider_ =
-      nullptr;
+  raw_ptr<cc::VideoFrameProvider> video_frame_provider_ = nullptr;
   bool is_media_stream_ = false;
   scoped_refptr<viz::RasterContextProvider> context_provider_;
+  scoped_refptr<gpu::ClientSharedImageInterface> shared_image_interface_;
   mojo::Remote<viz::mojom::blink::CompositorFrameSink> remote_frame_sink_;
   mojo::Remote<mojom::blink::SurfaceEmbedder> surface_embedder_;
   mojo::Receiver<viz::mojom::blink::CompositorFrameSinkClient> receiver_{this};
@@ -164,8 +170,8 @@ class PLATFORM_EXPORT VideoFrameSubmitter
 
   // Points to either `remote_frame_sink_` or `bundle_proxy_` depending
   // on whether UseVideoFrameSinkBundle is enabled.
-  raw_ptr<viz::mojom::blink::CompositorFrameSink, ExperimentalRenderer>
-      compositor_frame_sink_ = nullptr;
+  raw_ptr<viz::mojom::blink::CompositorFrameSink> compositor_frame_sink_ =
+      nullptr;
 
   // Current rendering state. Set by StartRendering() and StopRendering().
   bool is_rendering_ = false;
@@ -208,7 +214,7 @@ class PLATFORM_EXPORT VideoFrameSubmitter
 
   base::OneShotTimer empty_frame_timer_;
 
-  absl::optional<media::VideoFrame::ID> last_frame_id_;
+  std::optional<media::VideoFrame::ID> last_frame_id_;
 
   // We use cc::FrameSorter directly, rather than via
   // cc::CompositorFrameReportingController because video frames do not progress
@@ -228,6 +234,8 @@ class PLATFORM_EXPORT VideoFrameSubmitter
   // frames should be ignored by the video tracker even if they are reported as
   // presented.
   base::flat_set<uint32_t> ignorable_submitted_frames_;
+
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   THREAD_CHECKER(thread_checker_);
 

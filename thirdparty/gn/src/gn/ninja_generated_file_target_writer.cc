@@ -56,7 +56,8 @@ void NinjaGeneratedFileTargetWriter::GenerateFile() {
 
   base::FilePath output =
       settings_->build_settings()->GetFullPath(outputs_as_sources[0]);
-  ScopedTrace trace(TraceItem::TRACE_FILE_WRITE_GENERATED, outputs_as_sources[0].value());
+  ScopedTrace trace(TraceItem::TRACE_FILE_WRITE_GENERATED,
+                    outputs_as_sources[0].value());
   trace.SetToolchain(target_->settings()->toolchain_label());
 
   // If this is a metadata target, populate the write value with the appropriate
@@ -69,7 +70,8 @@ void NinjaGeneratedFileTargetWriter::GenerateFile() {
     contents = Value(target_->action_values().outputs().list()[0].origin(),
                      Value::LIST);
     TargetSet targets_walked;
-    ScopedTrace metadata_walk_trace(TraceItem::TRACE_WALK_METADATA, target_->label());
+    ScopedTrace metadata_walk_trace(TraceItem::TRACE_WALK_METADATA,
+                                    target_->label());
     trace.SetToolchain(target_->settings()->toolchain_label());
     if (!target_->GetMetadata(target_->data_keys(), target_->walk_keys(),
                               target_->rebase(), /*deps_only = */ true,

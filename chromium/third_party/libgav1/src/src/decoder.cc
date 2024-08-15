@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <new>
+#include <vector>
 
 #include "src/decoder_impl.h"
 
@@ -40,6 +41,7 @@ Libgav1StatusCode Libgav1DecoderCreate(const Libgav1DecoderSettings* settings,
   cxx_settings.output_all_layers = settings->output_all_layers != 0;
   cxx_settings.operating_point = settings->operating_point;
   cxx_settings.post_filter_mask = settings->post_filter_mask;
+  cxx_settings.parse_only = settings->parse_only != 0;
 
   const Libgav1StatusCode status = cxx_decoder->Init(&cxx_settings);
   if (status == kLibgav1StatusOk) {
@@ -101,7 +103,11 @@ StatusCode Decoder::EnqueueFrame(const uint8_t* data, const size_t size,
 
 StatusCode Decoder::DequeueFrame(const DecoderBuffer** out_ptr) {
   if (impl_ == nullptr) return kStatusNotInitialized;
-  return impl_->DequeueFrame(out_ptr);
+  StatusCode status = impl_->DequeueFrame(out_ptr);
+  if (settings_.parse_only) {
+    frame_mean_qps_ = impl_->GetFrameQps();
+  }
+  return status;
 }
 
 StatusCode Decoder::SignalEOS() {
@@ -115,5 +121,9 @@ StatusCode Decoder::SignalEOS() {
 
 // static.
 int Decoder::GetMaxBitdepth() { return DecoderImpl::GetMaxBitdepth(); }
+
+std::vector<int> Decoder::GetFramesMeanQpInTemporalUnit() {
+  return frame_mean_qps_;
+}
 
 }  // namespace libgav1

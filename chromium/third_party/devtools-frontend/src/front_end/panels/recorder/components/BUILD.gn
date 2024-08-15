@@ -5,6 +5,7 @@
 import("../../../../scripts/build/ninja/devtools_entrypoint.gni")
 import("../../../../scripts/build/ninja/devtools_module.gni")
 import("../../../../scripts/build/ninja/generate_css.gni")
+import("../../../../third_party/typescript/typescript.gni")
 
 generate_css("css_files") {
   sources = [
@@ -59,6 +60,7 @@ devtools_module("components") {
     "../../../ui/components/text_editor:bundle",
     "../../../ui/legacy:bundle",
     "../../../ui/lit-html:bundle",
+    "../../../ui/visual_logging:bundle",
     "../controllers:bundle",
     "../converters:bundle",
     "../extensions:bundle",
@@ -78,7 +80,28 @@ devtools_entrypoint("bundle") {
   visibility = [
     ":*",
     "../:*",
-    "../../../../test/unittests/front_end/panels/recorder/*",
     "../../../ui/components/docs/*",
+  ]
+}
+
+ts_library("unittests") {
+  testonly = true
+
+  sources = [
+    "CreateRecordingView.test.ts",
+    "RecordingListView.test.ts",
+    "RecordingView.test.ts",
+    "ReplayButton.test.ts",
+    "SelectButton.test.ts",
+    "StepEditor.test.ts",
+    "StepView.test.ts",
+  ]
+
+  deps = [
+    ":bundle",
+    "../../../testing",
+    "../../../ui/components/text_editor:bundle",
+    "../models:bundle",
+    "../testing",
   ]
 }

@@ -56,6 +56,7 @@ class GPU_GLES2_EXPORT D3DImageBacking final
       GrSurfaceOrigin surface_origin,
       SkAlphaType alpha_type,
       uint32_t usage,
+      std::string debug_label,
       Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture,
       scoped_refptr<DXGISharedHandleState> dxgi_shared_handle_state,
       const GLFormatCaps& gl_format_caps,
@@ -225,6 +226,7 @@ class GPU_GLES2_EXPORT D3DImageBacking final
                   GrSurfaceOrigin surface_origin,
                   SkAlphaType alpha_type,
                   uint32_t usage,
+                  std::string debug_label,
                   Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture,
                   scoped_refptr<DXGISharedHandleState> dxgi_shared_handle_state,
                   const GLFormatCaps& gl_format_caps,
@@ -233,6 +235,13 @@ class GPU_GLES2_EXPORT D3DImageBacking final
                   size_t plane_index = 0u,
                   Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain = nullptr,
                   bool is_back_buffer = false);
+
+  bool use_fence_synchronization() const {
+    // Fences are needed if we're sharing between devices and there's no keyed
+    // mutex for synchroniztaion.
+    return dxgi_shared_handle_state_ &&
+           !dxgi_shared_handle_state_->has_keyed_mutex();
+  }
 
   // Helper to retrieve internal EGLImage for WebGPU GLES compat backend.
   void* GetEGLImage() const;

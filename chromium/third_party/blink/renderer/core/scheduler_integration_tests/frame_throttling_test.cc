@@ -420,10 +420,6 @@ TEST_P(FrameThrottlingTest, ForAllThrottledLocalFrameViews) {
 }
 
 TEST_P(FrameThrottlingTest, HiddenCrossOriginDisplayNoneFramesAreThrottled) {
-  // Enable cross-origin non-visible iframe throttling.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      features::kThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes);
   // Create a document with doubly nested iframes.
   SimRequest main_resource("https://example.com/", "text/html");
   SimRequest frame_resource("https://example.com/iframe.html", "text/html");
@@ -456,24 +452,6 @@ TEST_P(FrameThrottlingTest, HiddenCrossOriginDisplayNoneFramesAreThrottled) {
   // we will throttle the frame.
   EXPECT_FALSE(frame_document->View()->CanThrottleRendering());
   EXPECT_TRUE(inner_frame_document->View()->CanThrottleRendering());
-  EXPECT_TRUE(base::FeatureList::IsEnabled(
-      features::kThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes));
-  {
-    // Re-test with flag disabled.
-    base::test::ScopedFeatureList feature_list_inner;
-    feature_list_inner.InitAndDisableFeature(
-        features::kThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes);
-    EXPECT_FALSE(
-        features::
-            IsThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframesEnabled());
-
-    frame_document->View()->GetLayoutView()->SetNeedsLayout("test");
-    frame_document->View()->ScheduleAnimation();
-    frame_document->View()->GetLayoutView()->Layer()->SetNeedsRepaint();
-    frame_document->View()->ForceUpdateViewportIntersections();
-    CompositeFrame();
-    EXPECT_FALSE(inner_frame_document->View()->CanThrottleRendering());
-  }
 }
 
 TEST_P(FrameThrottlingTest, ThrottledLifecycleUpdate) {
@@ -554,11 +532,16 @@ TEST_P(FrameThrottlingTest, ThrottledFrameCompositing) {
 
   auto* frame_element = To<HTMLIFrameElement>(
       GetDocument().getElementById(AtomicString("frame")));
-  auto* frame_view = frame_element->contentDocument()->View();
+  auto* frame_doc = frame_element->contentDocument();
+  auto* frame_view = frame_doc->View();
   EXPECT_FALSE(frame_view->CanThrottleRendering());
   auto* root_layer = WebView().MainFrameImpl()->GetFrameView()->RootCcLayer();
   EXPECT_EQ(0u, CcLayersByDOMElementId(root_layer, "container").size());
-  EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "inner_frame").size());
+  if (RuntimeEnabledFeatures::HitTestOpaquenessEnabled()) {
+    EXPECT_TRUE(CcLayerByOwnerNodeId(root_layer, frame_doc->GetDomNodeId()));
+  } else {
+    EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "inner_frame").size());
+  }
 
   // First make the child hidden to enable throttling, and composite
   // the container.
@@ -570,7 +553,11 @@ TEST_P(FrameThrottlingTest, ThrottledFrameCompositing) {
   CompositeFrame();
   EXPECT_TRUE(frame_view->CanThrottleRendering());
   EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "container").size());
-  EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "inner_frame").size());
+  if (RuntimeEnabledFeatures::HitTestOpaquenessEnabled()) {
+    EXPECT_TRUE(CcLayerByOwnerNodeId(root_layer, frame_doc->GetDomNodeId()));
+  } else {
+    EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "inner_frame").size());
+  }
 
   // Then bring it back on-screen, and decomposite container.
   container_element->setAttribute(kStyleAttr, g_empty_atom);
@@ -579,7 +566,11 @@ TEST_P(FrameThrottlingTest, ThrottledFrameCompositing) {
   CompositeFrame();
   EXPECT_FALSE(frame_view->CanThrottleRendering());
   EXPECT_EQ(0u, CcLayersByDOMElementId(root_layer, "container").size());
-  EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "inner_frame").size());
+  if (RuntimeEnabledFeatures::HitTestOpaquenessEnabled()) {
+    EXPECT_TRUE(CcLayerByOwnerNodeId(root_layer, frame_doc->GetDomNodeId()));
+  } else {
+    EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "inner_frame").size());
+  }
 }
 
 TEST_P(FrameThrottlingTest, MutatingThrottledFrameDoesNotCauseAnimation) {
@@ -1386,10 +1377,6 @@ TEST_P(FrameThrottlingTest, UpdatePaintPropertiesOnUnthrottling) {
 }
 
 TEST_P(FrameThrottlingTest, DisplayNoneNotThrottled) {
-  // Enable cross-origin non-visible iframe throttling.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      features::kThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes);
   SimRequest main_resource("https://example.com/", "text/html");
 
   LoadURL("https://example.com/");
@@ -1411,26 +1398,9 @@ TEST_P(FrameThrottlingTest, DisplayNoneNotThrottled) {
   // When ThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes is enabled,
   // we will throttle cross-origin display:none.
   EXPECT_TRUE(frame_document->View()->CanThrottleRendering());
-  {
-    // Re-test with flag disabled.
-    base::test::ScopedFeatureList feature_list_inner;
-    feature_list_inner.InitAndDisableFeature(
-        features::kThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes);
-
-    frame_document->View()->GetLayoutView()->SetNeedsLayout("test");
-    frame_document->View()->ScheduleAnimation();
-    frame_document->View()->GetLayoutView()->Layer()->SetNeedsRepaint();
-    frame_document->View()->ForceUpdateViewportIntersections();
-    CompositeFrame();
-    EXPECT_FALSE(frame_document->View()->CanThrottleRendering());
-  }
 }
 
 TEST_P(FrameThrottlingTest, DisplayNoneChildrenRemainThrottled) {
-  // Enable cross-origin non-visible iframe throttling.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      features::kThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes);
   // Create two nested frames which are throttled.
   SimRequest main_resource("https://example.com/", "text/html");
   SimRequest frame_resource("https://example.com/iframe.html", "text/html");
@@ -1465,27 +1435,6 @@ TEST_P(FrameThrottlingTest, DisplayNoneChildrenRemainThrottled) {
   EXPECT_TRUE(frame_element->contentDocument()->View()->CanThrottleRendering());
   EXPECT_TRUE(
       child_frame_element->contentDocument()->View()->CanThrottleRendering());
-  {
-    // Re-test with flag disabled.
-    base::test::ScopedFeatureList feature_list_inner;
-    feature_list_inner.InitAndDisableFeature(
-        features::kThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes);
-
-    frame_element->contentDocument()->View()->GetLayoutView()->SetNeedsLayout(
-        "test");
-    frame_element->contentDocument()->View()->ScheduleAnimation();
-    frame_element->contentDocument()
-        ->View()
-        ->GetLayoutView()
-        ->Layer()
-        ->SetNeedsRepaint();
-    frame_element->contentDocument()
-        ->View()
-        ->ForceUpdateViewportIntersections();
-    CompositeFrame();
-    EXPECT_FALSE(
-        frame_element->contentDocument()->View()->CanThrottleRendering());
-  }
 }
 
 TEST_P(FrameThrottlingTest, LifecycleUpdateAfterUnthrottledCompositingUpdate) {
@@ -1666,11 +1615,6 @@ class TestEventListener : public NativeEventListener {
 }  // namespace
 
 TEST_P(FrameThrottlingTest, ThrottledIframeGetsResizeEvents) {
-  // Enable cross-origin non-visible iframe throttling.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      features::kThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes);
-
   WebView().GetSettings()->SetJavaScriptEnabled(true);
 
   // Set up child-iframe that can be throttled and make sure it still gets a

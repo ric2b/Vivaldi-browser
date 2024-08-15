@@ -189,7 +189,7 @@ IN_PROC_BROWSER_TEST_P(DemoModeAppIntegrationTestBase, WebUIDoesNotLaunch) {
 IN_PROC_BROWSER_TEST_P(DemoModeAppIntegrationTest, DemoModeApp) {
   const GURL url(ash::kChromeUntrustedUIDemoModeAppIndexURL);
   EXPECT_NO_FATAL_FAILURE(ExpectSystemWebAppValid(SystemWebAppType::DEMO_MODE,
-                                                  url, "Demo Mode App"));
+                                                  url, "ChromeOS Highlights"));
 }
 
 IN_PROC_BROWSER_TEST_P(DemoModeAppIntegrationTest,
@@ -244,20 +244,31 @@ IN_PROC_BROWSER_TEST_P(DemoModeAppIntegrationTest,
 // the metricsPrivateIndividualApis extension API
 IN_PROC_BROWSER_TEST_P(DemoModeAppIntegrationTest,
                        DemoModeAppRecordMetricsFromComponentContent) {
+  constexpr int kAttractLoopTimestamp = 5000, kEasyPageDuration = 6500,
+                kProcessorPageDuration = 7300;
   const std::string kTestJs =
       "import {metricsService, Page, PillarButton, DetailsPage} from "
       "'./demo_mode_metrics_service.js'; "
       "document.addEventListener('DOMContentLoaded', () => {"
       "  metricsService.recordAttractLoopBreak();"
-      "  metricsService.recordAttractLoopBreakTimestamp(10000);"
+      "  metricsService.recordAttractLoopBreakTimestamp(" +
+      base::ToString(kAttractLoopTimestamp) +
+      ");"
+      "  metricsService.recordAttractLoopBreakTimestamp(NaN);"
       "  metricsService.recordHomePageButtonClick(Page.EASY); "
       "  metricsService.recordHomePageButtonClick(Page.CHROMEOS); "
-      "  metricsService.recordPageViewDuration(Page.EASY, 10000); "
+      "  metricsService.recordPageViewDuration(Page.EASY, " +
+      base::ToString(kEasyPageDuration) +
+      "); "
+      "  metricsService.recordPageViewDuration(Page.EASY, NaN); "
       "  metricsService.recordPillarPageButtonClick(PillarButton.NEXT); "
       "  metricsService.recordNavbarButtonClick(Page.FAST); "
       "  metricsService.recordDetailsPageClicked(DetailsPage.MOBILE_GAMING); "
+      "  metricsService.recordDetailsPageViewDuration(DetailsPage.PROCESSOR, " +
+      base::ToString(kProcessorPageDuration) +
+      "); "
       "  metricsService.recordDetailsPageViewDuration(DetailsPage.PROCESSOR, "
-      "10000); "
+      "NaN); "
       "});";
 
   base::UserActionTester user_action_tester;
@@ -295,12 +306,22 @@ IN_PROC_BROWSER_TEST_P(DemoModeAppIntegrationTest,
   histogram_tester_.ExpectBucketCount("DemoMode.Highlights.FirstInteraction",
                                       2 /* Fast button click */, 0);
   histogram_tester_.ExpectTimeBucketCount(
-      "DemoMode.Highlights.PageStayDuration.EasyPage", base::Seconds(10), 1);
+      "DemoMode.AttractLoop.Timestamp",
+      base::Milliseconds(kAttractLoopTimestamp), 1);
+  histogram_tester_.ExpectTimeBucketCount(
+      "DemoMode.Highlights.PageStayDuration.EasyPage",
+      base::Milliseconds(kEasyPageDuration), 1);
   histogram_tester_.ExpectTimeBucketCount(
       "DemoMode.Highlights.DetailsPageStayDuration.ProcessorPage",
-      base::Seconds(10), 1);
-  histogram_tester_.ExpectTimeBucketCount("DemoMode.AttractLoop.Timestamp",
-                                          base::Seconds(10), 1);
+      base::Milliseconds(kProcessorPageDuration), 1);
+  histogram_tester_.ExpectBucketCount(
+      "DemoMode.Highlights.Error", 0 /* Invalid attract loop break timestamp */,
+      1);
+  histogram_tester_.ExpectBucketCount("DemoMode.Highlights.Error",
+                                      1 /* Invalid page view duration */, 1);
+  histogram_tester_.ExpectBucketCount(
+      "DemoMode.Highlights.Error", 2 /* Invalid details page view duration */,
+      1);
 }
 
 // TODO(b/232945108): Change this to instead verify default resource if
@@ -358,6 +379,14 @@ IN_PROC_BROWSER_TEST_P(DemoModeAppIntegrationTest,
       .WillOnce(base::test::RunClosure(run_loop.QuitClosure()));
   LaunchApp(std::move(params));
   run_loop.Run();
+}
+
+// Test that the Demo Mode Highlight App has a minimum window size of 800 pixels
+// x 600 pixels.
+IN_PROC_BROWSER_TEST_P(DemoModeAppIntegrationTest, DemoModeAppMinWindowSize) {
+  WaitForTestSystemAppInstall();
+  auto* system_app = GetManager().GetSystemApp(SystemWebAppType::DEMO_MODE);
+  EXPECT_EQ(system_app->GetMinimumWindowSize(), gfx::Size(800, 600));
 }
 
 INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_GUEST_SESSION_P(

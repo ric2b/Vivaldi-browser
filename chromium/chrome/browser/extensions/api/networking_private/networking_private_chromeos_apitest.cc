@@ -14,6 +14,7 @@
 #include "base/test/test_future.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/extension_apitest.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/onc/onc_constants.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
@@ -740,6 +741,16 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, GetDeviceStates) {
   manager_test()->AddTechnology("cellular", false /* disabled */);
   manager_test()->SetTechnologyInitializing("cellular", true);
   EXPECT_TRUE(RunNetworkingSubtest("getDeviceStates")) << message_;
+}
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest,
+                       GetDeviceStatesLacros) {
+  if (!SetUpAsh()) {
+    GTEST_SKIP() << "Unsupported ash version.";
+  }
+  EXPECT_TRUE(RunNetworkingSubtest("getDeviceStatesLacros")) << message_;
 }
 #endif
 

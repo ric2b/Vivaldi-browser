@@ -183,9 +183,9 @@ void SyncBasedUrlKeyedDataCollectionConsentHelper::OnSyncShutdown(
 }
 
 void SyncBasedUrlKeyedDataCollectionConsentHelper::UpdateSyncDataTypeStates() {
+  // TODO(crbug.com/40067025): Remove the `require_sync_feature_enabled` param
+  // once kReplaceSyncPromosWithSignInPromos is launched.
   if (require_sync_feature_enabled_) {
-    // TODO(crbug.com/1462552): Find a replacement once IsSyncFeatureEnabled()
-    // starts always returning false.
     sync_feature_state_ =
         sync_service_ && sync_service_->IsSyncFeatureEnabled();
   }

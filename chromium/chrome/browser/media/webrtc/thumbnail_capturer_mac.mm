@@ -23,6 +23,7 @@
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/bind_post_task.h"
 #include "base/timer/timer.h"
@@ -181,7 +182,7 @@ const base::FeatureParam<CaptureMode>::Option capture_mode_options[] = {
     {CaptureMode::kSCScreenshotManager, "sc_screenshot_manager"},
 };
 const base::FeatureParam<CaptureMode> kThumbnailCapturerMacCaptureMode{
-    &kThumbnailCapturerMac, "capture_mode", CaptureMode::kSCStream,
+    &kThumbnailCapturerMac, "capture_mode", CaptureMode::kSCScreenshotManager,
     &capture_mode_options};
 
 CaptureMode GetCaptureModeFeatureParam() {
@@ -365,6 +366,8 @@ void ScreenshotManagerCapturer::SelectSources(
     gfx::Size thumbnail_size) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
+  thumbnail_size_ = thumbnail_size;
+
   // The iteration is in reverse order so that the sources
   // first in the list are captured first. This way we make sure that the first
   // thumbnails in the view are captured first.
@@ -420,10 +423,9 @@ void ScreenshotManagerCapturer::CaptureSource(
         return;
       }
 
-      NSArray<SCWindow*>* exclude_windows = nil;
       SCContentFilter* filter =
           [[SCContentFilter alloc] initWithDisplay:selected_display
-                                  excludingWindows:exclude_windows];
+                                  excludingWindows:@[]];
       SCScreenshotCaptureSource(filter, [selected_display frame],
                                 [selected_display displayID]);
       break;
@@ -507,7 +509,7 @@ class API_AVAILABLE(macos(13.2)) ThumbnailCapturerMac
     : public ThumbnailCapturer {
  public:
   explicit ThumbnailCapturerMac(DesktopMediaList::Type type);
-  ~ThumbnailCapturerMac() override {}
+  ~ThumbnailCapturerMac() override;
 
   void Start(Consumer* callback) override;
 
@@ -564,6 +566,8 @@ class API_AVAILABLE(macos(13.2)) ThumbnailCapturerMac
   int max_frame_rate_;
   const int minimum_window_size_;
   raw_ptr<Consumer> consumer_;
+  int shareable_content_callbacks_ = 0;
+  int shareable_content_errors_ = 0;
 
   // A cache of the shareable windows and shareable displays. sharable_windows_
   // is used to produce the source list. shareable_displays_ is used to
@@ -591,6 +595,18 @@ ThumbnailCapturerMac::ThumbnailCapturerMac(DesktopMediaList::Type type)
       shareable_windows_([[NSArray<SCWindow*> alloc] init]) {
   CHECK(type_ == DesktopMediaList::Type::kWindow ||
         type_ == DesktopMediaList::Type::kScreen);
+}
+
+ThumbnailCapturerMac::~ThumbnailCapturerMac() {
+  if (shareable_content_callbacks_ > 0) {
+    // Round upwards so that a single callback with error will show up in the
+    // histogram as greater than 0%.
+    int error_percentage = static_cast<int>(std::ceil(
+        (100.0 * shareable_content_errors_) / shareable_content_callbacks_));
+    base::UmaHistogramPercentage(
+        "Media.ThumbnailCapturerMac.ShareableContentErrorPercentage",
+        error_percentage);
+  }
 }
 
 void ThumbnailCapturerMac::Start(Consumer* consumer) {
@@ -693,7 +709,7 @@ void ThumbnailCapturerMac::UpdateWindowsList() {
                           weak_factory_.GetWeakPtr()));
 
   auto handler = ^(SCShareableContent* content, NSError* error) {
-    content_callback.Run(content);
+    content_callback.Run(error ? nil : content);
   };
 
   // Exclude desktop windows (e.g., background image and deskktop icons) and
@@ -708,7 +724,10 @@ void ThumbnailCapturerMac::OnRecurrentShareableContent(
     SCShareableContent* content) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
+  ++shareable_content_callbacks_;
   if (!content) {
+    DVLOG(2) << "Could not get shareable content.";
+    ++shareable_content_errors_;
     return;
   }
 
@@ -955,7 +974,9 @@ void ThumbnailCapturerMac::OnCapturedFrame(
 }  // namespace
 
 bool ShouldUseThumbnailCapturerMac(DesktopMediaList::Type type) {
-  if (@available(macOS 14.0, *)) {
+  // There was a bug in ScreenCaptureKit that was fixed in 14.4,
+  // see b/40076027.
+  if (@available(macOS 14.4, *)) {
     switch (type) {
       case DesktopMediaList::Type::kWindow:
         return base::FeatureList::IsEnabled(

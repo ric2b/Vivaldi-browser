@@ -1519,16 +1519,6 @@ void DecodeExternalDataPolicies(
                                   external_data_manager, policies);
     }
   }
-
-  if (policy.has_device_wilco_dtc_configuration()) {
-    const em::DeviceWilcoDtcConfigurationProto& container(
-        policy.device_wilco_dtc_configuration());
-    if (container.has_device_wilco_dtc_configuration()) {
-      SetExternalDataDevicePolicy(key::kDeviceWilcoDtcConfiguration,
-                                  container.device_wilco_dtc_configuration(),
-                                  external_data_manager, policies);
-    }
-  }
 }
 
 void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
@@ -1909,22 +1899,6 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
     }
   }
 
-  if (policy.has_device_wilco_dtc_allowed() &&
-      policy.device_wilco_dtc_allowed().has_device_wilco_dtc_allowed()) {
-    VLOG(2) << "Set Wilco DTC allowed to "
-            << policy.device_wilco_dtc_allowed().device_wilco_dtc_allowed();
-    policies->Set(
-        key::kDeviceWilcoDtcAllowed, POLICY_LEVEL_MANDATORY,
-        POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
-        base::Value(
-            policy.device_wilco_dtc_allowed().device_wilco_dtc_allowed()),
-        nullptr);
-  } else {
-    VLOG(2) << "No Wilco DTC allowed policy: "
-            << policy.has_device_wilco_dtc_allowed() << " "
-            << policy.device_wilco_dtc_allowed().has_device_wilco_dtc_allowed();
-  }
-
   if (policy.has_device_wifi_allowed()) {
     const em::DeviceWiFiAllowedProto& container(policy.device_wifi_allowed());
     if (container.has_device_wifi_allowed()) {
@@ -2240,17 +2214,6 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
         policy.device_dlc_predownload_list().value().entries(), policies);
   }
 
-  if (policy.has_extended_fkeys_modifier()) {
-    const em::ExtendedFkeysModifierProto& container(
-        policy.extended_fkeys_modifier());
-    if (container.has_modifier()) {
-      policies->Set(policy::key::kDeviceExtendedFkeysModifier,
-                    POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_MACHINE,
-                    POLICY_SOURCE_CLOUD, base::Value(container.modifier()),
-                    nullptr);
-    }
-  }
-
   if (policy.has_device_flex_hw_data_for_product_improvement_enabled()) {
     const em::DeviceFlexHwDataForProductImprovementEnabledProto& container(
         policy.device_flex_hw_data_for_product_improvement_enabled());
@@ -2274,12 +2237,25 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
   }
 
   if (policy.has_deviceloginscreentouchvirtualkeyboardenabled()) {
-    if (const em::BooleanPolicyProto &
-            container(policy.deviceloginscreentouchvirtualkeyboardenabled());
-        container.has_value()) {
+    const em::BooleanPolicyProto& container(
+        policy.deviceloginscreentouchvirtualkeyboardenabled());
+    if (container.has_value()) {
       policies->Set(key::kTouchVirtualKeyboardEnabled, POLICY_LEVEL_MANDATORY,
                     POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
                     base::Value(container.value()), nullptr);
+    }
+  }
+}
+
+// TODO(b/324221325): Move other Kiosk-related policies to this function.
+void DecodeKioskPolicies(const em::ChromeDeviceSettingsProto& policy,
+                         PolicyMap* policies) {
+  if (policy.has_deviceweeklyscheduledsuspend()) {
+    const em::StringPolicyProto& container(
+        policy.deviceweeklyscheduledsuspend());
+    if (container.has_value()) {
+      SetJsonDevicePolicy(key::kDeviceWeeklyScheduledSuspend, container.value(),
+                          policies);
     }
   }
 }
@@ -2339,6 +2315,7 @@ void DecodeDevicePolicy(
   DecodeAutoUpdatePolicies(policy, policies);
   DecodeAccessibilityPolicies(policy, policies);
   DecodeExternalDataPolicies(policy, external_data_manager, policies);
+  DecodeKioskPolicies(policy, policies);
   DecodeGenericPolicies(policy, policies);
 }
 

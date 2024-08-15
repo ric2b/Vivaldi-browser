@@ -307,6 +307,9 @@ class TemplateURLServiceUtilLoadTest : public testing::Test {
 
   TemplateURLServiceUtilLoadTest() {
     TemplateURLPrepopulateData::RegisterProfilePrefs(prefs_.registry());
+    TemplateURLService::RegisterProfilePrefs(prefs_.registry());
+    search_engine_choice_service_ =
+        std::make_unique<search_engines::SearchEngineChoiceService>(prefs_);
   }
 
   // Simulates how the search providers are loaded during Chrome init by
@@ -330,9 +333,9 @@ class TemplateURLServiceUtilLoadTest : public testing::Test {
     resource_metadata.builtin_keyword_data_version = initial_state.data_version;
     resource_metadata.builtin_keyword_milestone = initial_state.milestone;
     resource_metadata.builtin_keyword_country = initial_state.country;
-    CallGetSearchProvidersUsingLoadedEngines(&prefs_,
-                                             &search_engine_choice_service,
-                                             &template_urls, resource_metadata);
+    CallGetSearchProvidersUsingLoadedEngines(
+        &prefs_, search_engine_choice_service_.get(), &template_urls,
+        resource_metadata);
 
     std::optional<bool> use_extended_list_output =
         prefs().HasPrefPath(
@@ -355,8 +358,8 @@ class TemplateURLServiceUtilLoadTest : public testing::Test {
 
  private:
   sync_preferences::TestingPrefServiceSyncable prefs_;
-  search_engines::SearchEngineChoiceService search_engine_choice_service{
-      prefs_};
+  std::unique_ptr<search_engines::SearchEngineChoiceService>
+      search_engine_choice_service_;
 };
 
 TEST_F(TemplateURLServiceUtilLoadTest,
@@ -500,12 +503,16 @@ TEST_F(TemplateURLServiceUtilLoadTest,
   base::test::ScopedFeatureList feature_list{
       switches::kSearchEngineChoiceTrigger};
   prefs().SetInteger(country_codes::kCountryIDAtInstall, kEeaCountryId);
+  const size_t kEeaKeywordEnginesCount =
+      TemplateURLPrepopulateData::GetPrepopulationSetFromCountryIDForTesting(
+          kEeaCountryId)
+          .size();
 
   const KeywordTestMetadata kDefaultUpdatedState = {
       .data_version = kCurrentDataVersion,
       .milestone = kCurrentMilestone,
       .country = kEeaCountryId,
-      .keyword_engines_count = 12u,
+      .keyword_engines_count = kEeaKeywordEnginesCount,
       .use_extended_list = true};
   const KeywordTestMetadata kNoUpdate = {.data_version = 0,
                                          .milestone = 0,
@@ -514,7 +521,7 @@ TEST_F(TemplateURLServiceUtilLoadTest,
                                          .use_extended_list = true};
 
   // Initial state: nothing. Simulates a fresh install.
-  // The function should populate the profile with 12 engines and current
+  // The function should populate the profile with 8 engines and current
   // metadata.
   auto output = SimulateFromDatabaseState({});
   EXPECT_EQ(output, kDefaultUpdatedState);

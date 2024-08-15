@@ -5,11 +5,12 @@
 #ifndef COMPONENTS_VIZ_COMMON_QUADS_YUV_VIDEO_DRAW_QUAD_H_
 #define COMPONENTS_VIZ_COMMON_QUADS_YUV_VIDEO_DRAW_QUAD_H_
 
+#include <optional>
+
 #include "base/bits.h"
 #include "components/viz/common/quads/draw_quad.h"
 #include "components/viz/common/resources/resource_id.h"
 #include "components/viz/common/viz_common_export.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -51,11 +52,9 @@ class VIZ_COMMON_EXPORT YUVVideoDrawQuad : public DrawQuad {
               ResourceId v_plane_resource_id,
               ResourceId a_plane_resource_id,
               const gfx::ColorSpace& color_space,
-              float offset,
-              float multiplier,
               uint32_t bits,
               gfx::ProtectedVideoType video_type,
-              absl::optional<gfx::HDRMetadata> metadata);
+              std::optional<gfx::HDRMetadata> metadata);
 
   void SetAll(const SharedQuadState* shared_quad_state,
               const gfx::Rect& rect,
@@ -73,11 +72,9 @@ class VIZ_COMMON_EXPORT YUVVideoDrawQuad : public DrawQuad {
               ResourceId v_plane_resource_id,
               ResourceId a_plane_resource_id,
               const gfx::ColorSpace& color_space,
-              float offset,
-              float multiplier,
               uint32_t bits,
               gfx::ProtectedVideoType video_type,
-              absl::optional<gfx::HDRMetadata> metadata);
+              std::optional<gfx::HDRMetadata> metadata);
 
   // The video frame's coded size: the full dimensions of the video frame data
   // (see gfx::Media::VideoFrame::coded_size). The YA and UV texture sizes are
@@ -85,17 +82,15 @@ class VIZ_COMMON_EXPORT YUVVideoDrawQuad : public DrawQuad {
   gfx::Size coded_size;
   gfx::Rect video_visible_rect;
 
-  float resource_offset = 0.0f;
-  float resource_multiplier = 1.0f;
   uint32_t bits_per_channel = 8;
   // TODO(hubbe): Move to ResourceProvider::ScopedSamplerGL.
   gfx::ColorSpace video_color_space;
   gfx::ProtectedVideoType protected_video_type =
       gfx::ProtectedVideoType::kClear;
-  absl::optional<gfx::HDRMetadata> hdr_metadata;
+  std::optional<gfx::HDRMetadata> hdr_metadata;
 
   // This optional damage is in target render pass coordinate space.
-  absl::optional<gfx::Rect> damage_rect;
+  std::optional<gfx::Rect> damage_rect;
 
   // The UV texture size scale relative to coded_size. Is either 1 or 2.
   uint8_t u_scale : 2;

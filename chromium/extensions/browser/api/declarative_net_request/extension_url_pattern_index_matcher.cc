@@ -9,16 +9,15 @@
 #include <list>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/check_op.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/notreached.h"
 #include "extensions/browser/api/declarative_net_request/request_action.h"
 #include "extensions/browser/api/declarative_net_request/request_params.h"
 #include "extensions/common/api/declarative_net_request.h"
 
-namespace extensions {
-namespace declarative_net_request {
+namespace extensions::declarative_net_request {
 namespace flat_rule = url_pattern_index::flat;
 namespace dnr_api = api::declarative_net_request;
 
@@ -70,16 +69,20 @@ ExtensionUrlPatternIndexMatcher::ExtensionUrlPatternIndexMatcher(
       metadata_list_(metadata_list),
       before_request_matchers_(GetMatchers(before_request_index_list)),
       headers_received_matchers_(GetMatchers(headers_received_index_list)),
+      before_request_rules_count_(
+          GetRulesCountInternal(before_request_matchers_)),
+      headers_received_rules_count_(
+          GetRulesCountInternal(headers_received_matchers_)),
+      // Currently, this is set to true if there exist any rules that match on,
+      // or modify headers. This is why we check if there are any rules to be
+      // matched in the onHeadersReceived phase since they need to match on
+      // response headers.
       // TODO(kelvinjiang): Consider separating this condition for request and
       // response headers so extra headers are only included for the phases
       // that need them.
       is_extra_headers_matcher_(
           IsExtraHeadersMatcherInternal(before_request_matchers_) ||
-          IsExtraHeadersMatcherInternal(headers_received_matchers_)),
-      before_request_rules_count_(
-          GetRulesCountInternal(before_request_matchers_)),
-      headers_received_rules_count_(
-          GetRulesCountInternal(headers_received_matchers_)) {}
+          headers_received_rules_count_ > 0) {}
 
 ExtensionUrlPatternIndexMatcher::~ExtensionUrlPatternIndexMatcher() = default;
 
@@ -121,7 +124,7 @@ ExtensionUrlPatternIndexMatcher::GetModifyHeadersActions(
       params, before_request_matchers_, flat::IndexType_modify_headers);
 
   if (min_priority) {
-    base::EraseIf(rules, [&min_priority](const flat_rule::UrlRule* rule) {
+    std::erase_if(rules, [&min_priority](const flat_rule::UrlRule* rule) {
       return rule->priority() <= *min_priority;
     });
   }
@@ -130,18 +133,22 @@ ExtensionUrlPatternIndexMatcher::GetModifyHeadersActions(
 }
 
 std::optional<RequestAction>
-ExtensionUrlPatternIndexMatcher::GetBeforeRequestActionIgnoringAncestors(
-    const RequestParams& params) const {
-  return GetMaxPriorityAction(GetActionHelper(params, before_request_matchers_),
-                              GetAllowAllRequestsAction(params));
-}
+ExtensionUrlPatternIndexMatcher::GetActionIgnoringAncestors(
+    const RequestParams& params,
+    RulesetMatchingStage stage) const {
+  switch (stage) {
+    case RulesetMatchingStage::kOnBeforeRequest:
+      return GetMaxPriorityAction(
+          GetActionHelper(params, before_request_matchers_),
+          GetAllowAllRequestsAction(params));
+    case RulesetMatchingStage::kOnHeadersReceived:
+      // TODO(crbug.com/1141166): Investigate how matching allowAllRequests
+      // rules from other request stages may affect which action to return.
+      return GetActionHelper(params, headers_received_matchers_);
+  }
 
-std::optional<RequestAction>
-ExtensionUrlPatternIndexMatcher::GetHeadersReceivedActionIgnoringAncestors(
-    const RequestParams& params) const {
-  // TODO(crbug.com/1141166): Investigate how matching allowAllRequests rules
-  // from other request stages may affect which action to return.
-  return GetActionHelper(params, headers_received_matchers_);
+  NOTREACHED();
+  return std::nullopt;
 }
 
 std::optional<RequestAction> ExtensionUrlPatternIndexMatcher::GetActionHelper(
@@ -227,5 +234,4 @@ ExtensionUrlPatternIndexMatcher::GetDisabledRuleIdsForTesting() const {
   return disabled_rule_ids_;
 }
 
-}  // namespace declarative_net_request
-}  // namespace extensions
+}  // namespace extensions::declarative_net_request

@@ -8,24 +8,21 @@ title: For Testers
 
 * [Bug reporting guidelines and how to report
   bugs](/for-testers/bug-reporting-guidelines)
-* [Glossary](/glossary)
+* [Glossary](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/glossary.md)
 * [Enable logging](/for-testers/enable-logging)
 * [Recording
   traces](/developers/how-tos/trace-event-profiling-tool/recording-tracing-runs)
+* [Frequently Asked Questions](/for-testers/faq)
+* [Issue Tracker Query Syntax for Monorail users](/for-testers/query-syntax)
 
 ## Contributing
 
-* [Find duplicate bugs](http://code.google.com/p/chromium/issues/list)
-* [Confirm unconfirmed
-  bugs](http://code.google.com/p/chromium/issues/list?q=status:Unconfirmed)
-* [Confirm unconfirmed Mac
-  bugs](http://code.google.com/p/chromium/issues/list?can=2&q=+os:mac+status:unconfirmed&colspec=ID+Stars+Pri+Area+Type+Status+Summary+Modified+Owner+Mstone+OS&cells=tiles)
-* [Confirm unconfirmed Linux
-  bugs](http://code.google.com/p/chromium/issues/list?can=2&q=os:Linux+status:unconfirmed&colspec=ID+Stars+Pri+Area+Type+Status+Summary+Modified+Owner+Mstone+OS&x=mstone&y=area&cells=tiles)
-* [Verify Mac fixed
-  bugs](http://code.google.com/p/chromium/issues/list?can=1&q=os:mac+status:fixed&colspec=ID+Stars+Pri+Area+Type+Status+Summary+Modified+Owner+Mstone+OS&x=mstone&y=area&cells=tiles)
-* [Verify Linux fixed
-   bugs](http://code.google.com/p/chromium/issues/list?can=1&q=os:Linux+status:fixed&colspec=ID+Stars+Pri+Area+Type+Status+Summary+Modified+Owner+Mstone+OS&x=mstone&y=area&cells=tiles)
+* [Find duplicate bugs](https://issues.chromium.org/issues?q=status:open)
+* [Confirm new bugs](https://issues.chromium.org/issues?q=status:new)
+* [Confirm new Mac bugs](https://issues.chromium.org/issues?q=status:new%20customfield1223084:%22Mac%22)
+* [Confirm new Linux bugs](https://issues.chromium.org/issues?q=status:new%20customfield1223084:%22Linux%22)
+* [Verify Mac fixed bugs](https://issues.chromium.org/issues?q=status:fixed%20customfield1223084:%22Mac%22)
+* [Verify Linux fixed bugs](https://issues.chromium.org/issues?q=status:fixed%20customfield1223084:%22Linux%22)
 * [Frontend testing](/for-testers/frontend-testing)
-* [Firmware testing](/for-testers/faft)
+* [Firmware testing](https://chromium.googlesource.com/chromiumos/third_party/autotest/+/HEAD/docs/faft-how-to-run-doc.md)
 * [Installer](/for-testers/installer)

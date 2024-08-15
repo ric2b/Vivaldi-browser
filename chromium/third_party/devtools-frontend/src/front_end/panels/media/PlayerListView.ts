@@ -54,8 +54,6 @@ export class PlayerListView extends UI.Widget.VBox implements TriggerDispatcher 
   constructor(mainContainer: MainView) {
     super(true);
 
-    this.element.setAttribute('jslog', `${VisualLogging.pane().context('player-list')}`);
-
     this.playerEntryFragments = new Map();
     this.playerEntriesWithHostnameFrameTitle = new Set();
 
@@ -77,7 +75,7 @@ export class PlayerListView extends UI.Widget.VBox implements TriggerDispatcher 
     </div>
     `;
     const element = entry.element();
-    element.setAttribute('jslog', `${VisualLogging.item().track({click: true}).context('player')}`);
+    element.setAttribute('jslog', `${VisualLogging.item('player').track({click: true})}`);
     element.addEventListener('click', this.selectPlayer.bind(this, playerID, element));
     element.addEventListener('contextmenu', this.rightClickPlayer.bind(this, playerID));
 
@@ -99,12 +97,15 @@ export class PlayerListView extends UI.Widget.VBox implements TriggerDispatcher 
   private rightClickPlayer(playerID: string, event: Event): boolean {
     const contextMenu = new UI.ContextMenu.ContextMenu(event);
     contextMenu.headerSection().appendItem(
-        i18nString(UIStrings.hidePlayer), this.mainContainer.markPlayerForDeletion.bind(this.mainContainer, playerID));
+        i18nString(UIStrings.hidePlayer), this.mainContainer.markPlayerForDeletion.bind(this.mainContainer, playerID),
+        {jslogContext: 'hide-player'});
     contextMenu.headerSection().appendItem(
         i18nString(UIStrings.hideAllOthers),
-        this.mainContainer.markOtherPlayersForDeletion.bind(this.mainContainer, playerID));
+        this.mainContainer.markOtherPlayersForDeletion.bind(this.mainContainer, playerID),
+        {jslogContext: 'hide-all-others'});
     contextMenu.headerSection().appendItem(
-        i18nString(UIStrings.savePlayerInfo), this.mainContainer.exportPlayerData.bind(this.mainContainer, playerID));
+        i18nString(UIStrings.savePlayerInfo), this.mainContainer.exportPlayerData.bind(this.mainContainer, playerID),
+        {jslogContext: 'save-player-info'});
     void contextMenu.show();
     return true;
   }

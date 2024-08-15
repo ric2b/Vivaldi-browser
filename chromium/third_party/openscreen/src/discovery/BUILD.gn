@@ -3,11 +3,12 @@
 # found in the LICENSE file.
 
 import("//build_overrides/build.gni")
+import("../gni/openscreen.gni")
 import("../testing/libfuzzer/fuzzer_test.gni")
 
 visibility = [ "./*" ]
 
-source_set("public") {
+openscreen_source_set("public") {
   visibility += [ "*" ]
 
   public = [
@@ -45,7 +46,7 @@ source_set("public") {
   friend = [ ":unittests" ]
 }
 
-source_set("mdns") {
+openscreen_source_set("mdns") {
   visibility += [ "..:gn_all" ]
   public = []
   sources = [
@@ -81,7 +82,7 @@ source_set("mdns") {
   ]
 }
 
-source_set("dnssd") {
+openscreen_source_set("dnssd") {
   visibility += [
     "..:gn_all",
     "../cast/common:discovery_e2e_test",
@@ -120,7 +121,7 @@ source_set("dnssd") {
   friend = [ ":unittests" ]
 }
 
-source_set("testing") {
+openscreen_source_set("testing") {
   testonly = true
   visibility += [ ":unittests" ]
   public = [
@@ -150,7 +151,7 @@ source_set("testing") {
   ]
 }
 
-source_set("unittests") {
+openscreen_source_set("unittests") {
   testonly = true
   visibility += [ "..:openscreen_unittests_all" ]
   public = []

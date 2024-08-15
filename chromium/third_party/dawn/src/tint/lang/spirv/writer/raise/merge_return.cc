@@ -73,7 +73,7 @@ struct State {
     void Process(core::ir::Function* fn) {
         // Find all of the nested return instructions in the function.
         for (const auto& usage : fn->Usages()) {
-            if (auto* ret = usage.instruction->As<core::ir::Return>()) {
+            if (auto* ret = usage->instruction->As<core::ir::Return>()) {
                 TransitivelyMarkAsReturning(ret->Block()->Parent());
             }
         }
@@ -209,6 +209,12 @@ struct State {
                 }
             }
         }
+
+        // If this is a non-empty block that still has no terminator, we need to insert an exit
+        // instruction (unless it is the function's top-level block).
+        if (!block->IsEmpty() && !block->Terminator() && block->Parent()) {
+            ExitFromBlock(block);
+        }
     }
 
     /// Transforms a return instruction.
@@ -262,6 +268,14 @@ struct State {
             block->Append(b.Store(return_val, ret->Args()[0]));
         }
 
+        // Replace the return instruction with an exit instruction.
+        ExitFromBlock(block);
+        ret->Destroy();
+    }
+
+    /// Append an instruction to @p block that will exit from its containing control instruction.
+    /// @param block the instruction to exit from
+    void ExitFromBlock(core::ir::Block* block) {
         // If the outermost control instruction is expecting exit values, then return them as
         // 'undef' values.
         auto* ctrl = block->Parent();
@@ -270,7 +284,6 @@ struct State {
 
         // Replace the return instruction with an exit instruction.
         block->Append(b.Exit(ctrl, std::move(exit_args)));
-        ret->Destroy();
     }
 
     /// Builds instructions to create a 'if(continue_execution)' conditional.

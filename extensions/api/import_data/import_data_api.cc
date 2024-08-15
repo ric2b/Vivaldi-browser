@@ -2,6 +2,8 @@
 
 #include "extensions/api/import_data/import_data_api.h"
 
+#include <algorithm>
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -9,7 +11,9 @@
 
 #include "app/vivaldi_resources.h"
 
+#include "base/base_paths.h"
 #include "base/lazy_instance.h"
+#include "base/path_service.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -29,6 +33,7 @@
 #include "chrome/browser/ui/chrome_select_file_policy.h"
 #include "chrome/browser/ui/webui/settings/settings_utils.h"
 #include "chrome/browser/ui/webui/settings/site_settings_helper.h"
+#include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/pref_names.h"
 
@@ -58,7 +63,6 @@
 
 #include "content/public/browser/render_view_host.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
-#include "extensions/common/extension_messages.h"
 
 #include "extensions/schema/import_data.h"
 #include "extensions/tools/vivaldi_tools.h"
@@ -66,6 +70,11 @@
 #include "components/strings/grit/components_strings.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
+
+
+#if BUILDFLAG(IS_MAC)
+#include "base/apple/foundation_util.h"
+#endif
 
 class Browser;
 
@@ -112,7 +121,6 @@ bool ProfileSingletonFactory::getProfileRequested() {
 }
 
 namespace {
-
 // A getline function that deals with cross-platform line endings. See:
 // https://stackoverflow.com/questions/6089231/getting-std-ifstream-to-handle-lf-cr-and-crlf
 // Also tells us wheter line ended with both cr and lf.
@@ -182,6 +190,33 @@ const std::string ImportItemToString(importer::ImportItem item) {
   NOTREACHED();
   return nullptr;
 }
+
+
+#if BUILDFLAG(IS_WIN)
+  static std::string toSystemUTF(const std::wstring& str) {
+    return base::WideToUTF8(str);
+  }
+#else
+  static std::string toSystemUTF(const std::string& str) {
+    return str;
+  }
+#endif  // BUILDFLAG(IS_WIN)
+
+  bool GetDefaultUserDataDirectory(base::FilePath* result) {
+#if BUILDFLAG(IS_WIN)
+    const auto key = base::DIR_COMMON_APP_DATA;
+#elif BUILDFLAG(IS_MAC)
+    const auto key = base::DIR_APP_DATA;
+#else
+    const auto key = base::DIR_HOME;
+#endif
+    bool success = false;
+    if (result && base::PathService::Get(key, result)) {
+      success = true;
+    }
+    return success;
+  }
+
 }  // namespace
 
 ImportDataAPI::ImportDataAPI(content::BrowserContext* context)
@@ -387,10 +422,6 @@ ImportTypes MapImportType(const importer::ImporterType& importer_type) {
       type = vivaldi::import_data::ImportTypes::kOpera;
       break;
 
-    case importer::TYPE_OPERA_BOOKMARK_FILE:
-      type = vivaldi::import_data::ImportTypes::kOperaBookmark;
-      break;
-
     case importer::TYPE_CHROME:
       type = vivaldi::import_data::ImportTypes::kChrome;
       break;
@@ -434,11 +465,41 @@ ImportTypes MapImportType(const importer::ImporterType& importer_type) {
       type = vivaldi::import_data::ImportTypes::kOperaOpium;
       break;
 
+    case importer::TYPE_ARC:
+      type = vivaldi::import_data::ImportTypes::kArc;
+      break;
+
+    case importer::TYPE_OPERA_GX:
+      type = vivaldi::import_data::ImportTypes::kOperaGx;
+      break;
+
     case importer::TYPE_UNKNOWN:
       type = vivaldi::import_data::ImportTypes::kOperaOpium;
       break;
   }
   return type;
+}
+std::string MapSuggestedProfilePath(
+    const vivaldi::import_data::ImportTypes& type) {
+  using ImportTypes = vivaldi::import_data::ImportTypes;
+  base::FilePath path;
+
+  // Currently only Safari and bookmark files are treated specially.
+  // The rest of ImportTypes is usually detected,
+  // or should be in the user data dir (e.g ~/Library/Application Support)
+  switch (type) {
+    #if BUILDFLAG(IS_MAC)
+    case ImportTypes::kSafari: {
+      return base::apple::GetUserLibraryPath().Append("Safari").AsUTF8Unsafe();
+    }
+#endif
+    case ImportTypes::kBookmarksFile:
+      return chrome::GetUserDocumentsDirectory(&path) ? path.AsUTF8Unsafe()
+                                                      : "";
+    default:
+      break;
+  }
+  return GetDefaultUserDataDirectory(&path) ? path.AsUTF8Unsafe() : "";
 }
 
 ImportDataGetProfilesFunction::ImportDataGetProfilesFunction() {}
@@ -449,21 +510,30 @@ void ImportDataGetProfilesFunction::Finished() {
   namespace Results = vivaldi::import_data::GetProfiles::Results;
 
   std::vector<vivaldi::import_data::ProfileItem> nodes;
+  std::map<std::string, int> importersNamesLUT;
   for (size_t i = 0; i < api_importer_list_->count(); ++i) {
     const importer::SourceProfile& source_profile =
         api_importer_list_->GetSourceProfileAt(i);
 
+    // NOTE(konrad@vivaldi.com): VB-76639 To distinguish firefox profiles
+    const auto importerName = base::UTF16ToUTF8(source_profile.importer_name);
+    if (auto it = importersNamesLUT.find(importerName);
+        it != importersNamesLUT.end()) {
+      vivaldi::import_data::UserProfileItem profile;
+      profile.profile_name = profile.profile_display_name =
+          base::UTF16ToUTF8(source_profile.profile);
+      profile.profile_path = toSystemUTF(source_profile.source_path.value());
+      nodes.at(it->second).user_profiles.emplace_back(std::move(profile));
+      continue;
+    }
     nodes.emplace_back();
     vivaldi::import_data::ProfileItem* profile = &nodes.back();
 
     uint16_t browser_services = source_profile.services_supported;
 
-    profile->name = base::UTF16ToUTF8(source_profile.importer_name);
-    profile->index = i;
-    if (source_profile.profile.length() > 0) {
-      // NOTE(tomas@vivaldi.com): VB-76639 To distinguish firefox profiles
-      profile->name += " " + base::UTF16ToUTF8(source_profile.profile);
-    }
+    profile->name = importerName;
+    profile->index = importersNamesLUT.size();
+    importersNamesLUT.emplace(profile->name, profile->index);
 
     profile->history = ((browser_services & importer::HISTORY) != 0);
     profile->favorites = ((browser_services & importer::FAVORITES) != 0);
@@ -475,36 +545,22 @@ void ImportDataGetProfilesFunction::Finished() {
     profile->email = ((browser_services & importer::EMAIL) != 0);
     profile->contacts = ((browser_services & importer::CONTACTS) != 0);
 
-    profile->supports_standalone_import =
-        (source_profile.importer_type == importer::TYPE_OPERA ||
-         source_profile.importer_type == importer::TYPE_VIVALDI ||
-         source_profile.importer_type == importer::TYPE_EDGE_CHROMIUM ||
-         source_profile.importer_type == importer::TYPE_BRAVE);
-
-    profile->profile_path =
-#if BUILDFLAG(IS_WIN)
-        base::WideToUTF8(source_profile.source_path.value());
-#else
-        source_profile.source_path.value();
-#endif  // BUILDFLAG(IS_WIN)
     profile->import_type = MapImportType(source_profile.importer_type);
 
-    profile->mail_path =
-#if BUILDFLAG(IS_WIN)
-        base::WideToUTF8(source_profile.mail_path.value());
-#else
-        source_profile.mail_path.value();
-#endif  // BUILDFLAG(IS_WIN)
+    profile->mail_path = toSystemUTF(source_profile.mail_path.value());
     profile->has_default_install = !source_profile.source_path.empty();
 
-    if (profile->supports_standalone_import) {
-      profile->will_show_dialog_type = "folder";
-    } else if (source_profile.importer_type ==
-                   importer::TYPE_OPERA_BOOKMARK_FILE ||
-               source_profile.importer_type == importer::TYPE_BOOKMARKS_FILE) {
-      profile->will_show_dialog_type = "file";
+    if (profile->has_default_install) {
+      profile->detected_profile_path = toSystemUTF(source_profile.source_path.value());
     } else {
-      profile->will_show_dialog_type = "none";
+      profile->requires_interactive_import = true;
+      profile->suggested_profile_path =
+          MapSuggestedProfilePath(profile->import_type);
+    }
+    if (source_profile.importer_type == importer::TYPE_BOOKMARKS_FILE) {
+      profile->dialog_type = "file";
+    } else {
+      profile->dialog_type = "folder";
     }
 
     std::vector<vivaldi::import_data::UserProfileItem> profileItems;
@@ -551,7 +607,7 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
   using vivaldi::import_data::StartImport::Params;
   namespace Results = vivaldi::import_data::StartImport::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   int browser_index = params->profile_index;
@@ -591,7 +647,6 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
 
   std::u16string dialog_title;
   if (importer_type_ == importer::TYPE_BOOKMARKS_FILE ||
-      importer_type_ == importer::TYPE_OPERA_BOOKMARK_FILE ||
       ((importer_type_ == importer::TYPE_OPERA ||
         importer_type_ == importer::TYPE_EDGE_CHROMIUM ||
         importer_type_ == importer::TYPE_BRAVE ||
@@ -626,7 +681,7 @@ ExtensionFunction::ResponseAction
 ImportDataOpenThunderbirdMailboxFunction::Run() {
   namespace Results = vivaldi::import_data::OpenThunderbirdMailbox::Results;
   using vivaldi::import_data::OpenThunderbirdMailbox::Params;
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::streampos fsize;

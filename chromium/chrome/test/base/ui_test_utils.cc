@@ -26,6 +26,7 @@
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
@@ -37,6 +38,9 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
+#include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
@@ -479,6 +483,135 @@ bool WaitForMinimized(Browser* browser) {
                           base::Unretained(browser->window())),
       true);
   return minimize_waiter.Wait();
+}
+
+FullscreenWaiter::FullscreenWaiter(Browser* browser,
+                                   FullscreenWaiter::Expectation expectation)
+    : expectation_(std::move(expectation)),
+      controller_(browser->exclusive_access_manager()->fullscreen_controller()),
+      // Sometimes, the wait is called on a sequeunce, e.g.
+      // as a part of interactive_ui_tests's RunTestSequence.
+      // To handle that case, we can process pending task posted to the sequence
+      // in nested RunLoop.
+      run_loop_(base::RunLoop::Type::kNestableTasksAllowed),
+      satisfied_(IsSatisfied()) {
+  observation_.Observe(controller_);
+}
+
+FullscreenWaiter::~FullscreenWaiter() = default;
+
+void FullscreenWaiter::Wait() {
+  if (satisfied_) {
+    return;
+  }
+  run_loop_.Run();
+}
+
+void FullscreenWaiter::OnFullscreenStateChanged() {
+  // Note: In Lacros, when full screen mode changes, FullscreenController
+  // triggers WindowFullscreenStateChanged twice for the same change
+  // asynchronously. If the test code toggles fullscreen mode on and off, there
+  // is a race between the second notification of fullscreen mode on and test
+  // code toggle fullscreen mode off. Wait until the fullscreen state changes to
+  // the expected mode. See details in crbug.com/1481727.
+  if (!IsSatisfied()) {
+    return;
+  }
+  satisfied_ = true;
+  if (run_loop_.running()) {
+    run_loop_.Quit();
+  }
+}
+
+bool FullscreenWaiter::IsSatisfied() const {
+  if (expectation_.browser_fullscreen.has_value() &&
+      expectation_.browser_fullscreen.value() !=
+          controller_->IsFullscreenForBrowser()) {
+    return false;
+  }
+
+  if (expectation_.tab_fullscreen.has_value() &&
+      expectation_.tab_fullscreen.value() != controller_->IsTabFullscreen()) {
+    return false;
+  }
+
+  if (expectation_.display_id.has_value()) {
+    // Display ID is valid iff the tab fullscreen mode is active.
+    if (!controller_->IsTabFullscreen()) {
+      return false;
+    }
+    if (expectation_.display_id.value() !=
+        FullscreenController::GetDisplayId(
+            *controller_->exclusive_access_tab())) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+void ToggleFullscreenModeAndWait(Browser* browser) {
+  // The waiting condition is following the current implementation.
+  // If the mode is either browser/tab fullscreen, it will be existed.
+  // Otherwise, entering into browser fullscreen.
+  bool current = browser->exclusive_access_manager()->context()->IsFullscreen();
+  FullscreenWaiter waiter(browser, current ? FullscreenWaiter::kNoFullscreen
+                                           : FullscreenWaiter::Expectation{
+                                                 .browser_fullscreen = true});
+  chrome::ToggleFullscreenMode(browser);
+  waiter.Wait();
+}
+
+BrowserSetLastActiveWaiter::BrowserSetLastActiveWaiter(
+    Browser* browser,
+    bool wait_for_set_last_active_observed)
+    : browser_(browser),
+      wait_for_set_last_active_observed_(wait_for_set_last_active_observed) {
+  BrowserList::AddObserver(this);
+  if (chrome::FindLastActive() == browser_ &&
+      !wait_for_set_last_active_observed_) {
+    satisfied_ = true;
+  }
+}
+
+BrowserSetLastActiveWaiter::~BrowserSetLastActiveWaiter() {
+  BrowserList::RemoveObserver(this);
+}
+
+// Runs a loop until |browser_| becomes the last active browser.
+void BrowserSetLastActiveWaiter::Wait() {
+  if (satisfied_) {
+    return;
+  }
+
+  run_loop_.Run();
+}
+
+// BrowserListObserver:
+void BrowserSetLastActiveWaiter::OnBrowserSetLastActive(Browser* browser) {
+  if (browser == browser_) {
+    satisfied_ = true;
+    if (run_loop_.running()) {
+      run_loop_.Quit();
+    }
+  }
+}
+
+void WaitForBrowserSetLastActive(Browser* browser,
+                                 bool wait_for_set_last_active_observed) {
+  BrowserSetLastActiveWaiter waiter(browser, wait_for_set_last_active_observed);
+  waiter.Wait();
+}
+
+Browser* OpenNewEmptyWindowAndWaitUntilSetAsLastActive(
+    Profile* profile,
+    bool should_trigger_session_restore) {
+  BrowserChangeObserver new_browser_observer(
+      nullptr, ui_test_utils::BrowserChangeObserver::ChangeType::kAdded);
+  chrome::NewEmptyWindow(profile, should_trigger_session_restore);
+  Browser* new_browser = new_browser_observer.Wait();
+  WaitForBrowserSetLastActive(new_browser);
+  return new_browser;
 }
 
 void SendToOmniboxAndSubmit(Browser* browser,

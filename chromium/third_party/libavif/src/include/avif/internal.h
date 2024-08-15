@@ -59,6 +59,13 @@ static inline void avifBreakOnError()
         }                                 \
     } while (0)
 
+// AVIF_ASSERT_OR_RETURN() can be used instead of assert() for extra security in release builds.
+#ifdef NDEBUG
+#define AVIF_ASSERT_OR_RETURN(A) AVIF_CHECKERR((A), AVIF_RESULT_INTERNAL_ERROR)
+#else
+#define AVIF_ASSERT_OR_RETURN(A) assert(A)
+#endif
+
 // ---------------------------------------------------------------------------
 // URNs and Content-Types
 
@@ -148,6 +155,9 @@ void avifImageCopyNoAlloc(avifImage * dstImage, const avifImage * srcImage);
 // If the AVIF_PLANES_YUV bit is set in planes, then srcImage and dstImage must have the same yuvFormat.
 // Ignores the gainMap field (which exists only if AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP is defined).
 void avifImageCopySamples(avifImage * dstImage, const avifImage * srcImage, avifPlanesFlags planes);
+
+// ---------------------------------------------------------------------------
+// Alpha
 
 typedef struct avifAlphaParams
 {
@@ -313,6 +323,8 @@ typedef enum avifItemCategory
 #endif
     AVIF_ITEM_CATEGORY_COUNT
 } avifItemCategory;
+
+avifBool avifIsAlpha(avifItemCategory itemCategory);
 
 // ---------------------------------------------------------------------------
 

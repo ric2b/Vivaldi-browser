@@ -21,6 +21,8 @@ import "components/sync/protocol/autofill_offer_specifics.proto";
 import "components/sync/protocol/autofill_wallet_credential_specifics.proto";
 import "components/sync/protocol/autofill_wallet_usage_specifics.proto";
 import "components/sync/protocol/bookmark_specifics.proto";
+import "components/sync/protocol/collaboration_group_specifics.proto";
+import "components/sync/protocol/compare_specifics.proto";
 import "components/sync/protocol/contact_info_specifics.proto";
 import "components/sync/protocol/device_info_specifics.proto";
 import "components/sync/protocol/dictionary_specifics.proto";
@@ -38,6 +40,7 @@ import "components/sync/protocol/os_preference_specifics.proto";
 import "components/sync/protocol/os_priority_preference_specifics.proto";
 import "components/sync/protocol/password_sharing_invitation_specifics.proto";
 import "components/sync/protocol/password_specifics.proto";
+import "components/sync/protocol/plus_address_specifics.proto";
 import "components/sync/protocol/power_bookmark_specifics.proto";
 import "components/sync/protocol/preference_specifics.proto";
 import "components/sync/protocol/printer_specifics.proto";
@@ -50,6 +53,7 @@ import "components/sync/protocol/security_event_specifics.proto";
 import "components/sync/protocol/send_tab_to_self_specifics.proto";
 import "components/sync/protocol/segmentation_specifics.proto";
 import "components/sync/protocol/session_specifics.proto";
+import "components/sync/protocol/shared_tab_group_data_specifics.proto";
 import "components/sync/protocol/sharing_message_specifics.proto";
 import "components/sync/protocol/theme_specifics.proto";
 import "components/sync/protocol/typed_url_specifics.proto";
@@ -151,6 +155,13 @@ message EntitySpecifics {
     OutgoingPasswordSharingInvitationSpecifics
         outgoing_password_sharing_invitation = 1142081;
     AutofillWalletCredentialSpecifics autofill_wallet_credential = 1164238;
+    SharedTabGroupDataSpecifics shared_tab_group_data = 1239418;
+    CollaborationGroupSpecifics collaboration_group = 1259076;
+    CompareSpecifics compare = 1329438;
+    PlusAddressSpecifics plus_address = 1267844;
+    // When adding a new type, follow the docs below and keep this comment as
+    // the last entry.
+    // https://www.chromium.org/developers/design-documents/sync/integration-checklist/
 
     NotesSpecifics notes = 229171;
 

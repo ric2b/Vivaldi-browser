@@ -48,7 +48,7 @@ struct Options {
     /// Set to `true` to use the syntax tree writer
     bool use_syntax_tree_writer = false;
 
-    TINT_REFLECT(use_syntax_tree_writer);
+    TINT_REFLECT(Options, use_syntax_tree_writer);
 #endif
 };
 

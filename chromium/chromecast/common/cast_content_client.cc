@@ -5,14 +5,15 @@
 #include "chromecast/common/cast_content_client.h"
 
 #include <stdint.h>
+
 #include <memory>
+#include <string_view>
 #include <utility>
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/native_library.h"
 #include "base/path_service.h"
-#include "base/strings/string_piece.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "chromecast/base/cast_constants.h"
@@ -32,6 +33,7 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include <optional>
+
 #include "chromecast/common/media/cast_media_drm_bridge_client.h"
 #include "components/cdm/common/android_cdm_registration.h"
 #endif
@@ -49,7 +51,7 @@
 #if BUILDFLAG(BUNDLE_WIDEVINE_CDM) && BUILDFLAG(IS_LINUX)
 #include "base/no_destructor.h"
 #include "components/cdm/common/cdm_manifest.h"
-#include "media/cdm/cdm_capability.h"
+#include "media/base/cdm_capability.h"
 #include "third_party/widevine/cdm/widevine_cdm_common.h"  // nogncheck
 // component updated CDM on all desktop platforms and remove this.
 // This file is In SHARED_INTERMEDIATE_DIR.
@@ -142,7 +144,7 @@ std::u16string CastContentClient::GetLocalizedString(int message_id) {
   return l10n_util::GetStringUTF16(message_id);
 }
 
-base::StringPiece CastContentClient::GetDataResource(
+std::string_view CastContentClient::GetDataResource(
     int resource_id,
     ui::ResourceScaleFactor scale_factor) {
   return ui::ResourceBundle::GetSharedInstance().GetRawDataResourceForScale(

@@ -3,7 +3,8 @@
 # found in the LICENSE file.
 
 import("//build_overrides/build.gni")
-import("//cast/streaming/external_libraries.gni")
+import("../../gni/openscreen.gni")
+import("../streaming/external_libraries.gni")
 
 visibility = [ "./*" ]
 
@@ -23,7 +24,7 @@ if (!build_with_chromium) {
     }
   }
 
-  executable("cast_sender") {
+  openscreen_executable("cast_sender") {
     testonly = true
     visibility += [ "../..:gn_all" ]
     deps = [
@@ -89,11 +90,8 @@ if (!build_with_chromium) {
       }
     }
 
-    configs += [ "../common:certificate_config" ]
+    configs = [ "../common:certificate_config" ]
 
-    public_configs = [
-      "../../build:openscreen_include_dirs",
-      ":standalone_external_libs",
-    ]
+    public_configs = [ ":standalone_external_libs" ]
   }
 }

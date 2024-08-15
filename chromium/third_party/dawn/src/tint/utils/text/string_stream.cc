@@ -30,12 +30,27 @@
 namespace tint {
 
 StringStream::StringStream() {
+    Reset();
+}
+
+StringStream::StringStream(const StringStream& other) {
+    Reset();
+    sstream_ << other.str();
+}
+
+StringStream::~StringStream() = default;
+
+StringStream& StringStream::operator=(const StringStream& other) {
+    Reset();
+    return *this << other.str();
+}
+
+void StringStream::Reset() {
+    sstream_.clear();
     sstream_.flags(sstream_.flags() | std::ios_base::showpoint | std::ios_base::fixed);
     sstream_.imbue(std::locale::classic());
     sstream_.precision(9);
 }
-
-StringStream::~StringStream() = default;
 
 StringStream& operator<<(StringStream& out, CodePoint code_point) {
     if (code_point < 0x7f) {

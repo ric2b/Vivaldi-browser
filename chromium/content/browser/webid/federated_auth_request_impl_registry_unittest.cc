@@ -75,8 +75,7 @@ class FederatedAuthRequestImplRegistryTest
     mock_auto_reauthn_permission_delegate_ =
         std::make_unique<NiceMock<MockAutoReauthnPermissionDelegate>>();
     mock_identity_registry_ = std::make_unique<NiceMock<MockIdentityRegistry>>(
-        web_contents(), /*delegate=*/nullptr,
-        url::Origin::Create(GURL(kIdpUrl)));
+        web_contents(), /*delegate=*/nullptr, GURL(kIdpUrl));
 
     federated_auth_request_impl_ = &FederatedAuthRequestImpl::CreateForTesting(
         *main_test_rfh(), test_api_permission_delegate_.get(),
@@ -111,6 +110,20 @@ class FederatedAuthRequestImplRegistryTest
 TEST_F(FederatedAuthRequestImplRegistryTest, RegistersIdPSuccessfully) {
   GURL configURL = GURL(kIdpUrl);
 
+  static_cast<TestRenderFrameHost*>(main_test_rfh())->SimulateUserActivation();
+
+  auto controller =
+      std::make_unique<NiceMock<MockIdentityRequestDialogController>>();
+
+  EXPECT_CALL(*controller, RequestIdPRegistrationPermision(_, _))
+      .WillOnce(::testing::WithArg<1>(
+          [](base::OnceCallback<void(bool accepted)> callback) {
+            std::move(callback).Run(true);
+          }));
+
+  federated_auth_request_impl_->SetDialogControllerForTests(
+      std::move(controller));
+
   feature_list_.InitAndEnableFeature(features::kFedCmIdPRegistration);
 
   EXPECT_CALL(*mock_permission_delegate_, RegisterIdP(_)).WillOnce(Return());
@@ -124,9 +137,33 @@ TEST_F(FederatedAuthRequestImplRegistryTest, RegistersIdPSuccessfully) {
   loop.Run();
 }
 
+// Test Registering denied without user activation.
+TEST_F(FederatedAuthRequestImplRegistryTest,
+       RegistersIdPDeniedWithoutUserActivation) {
+  GURL configURL = GURL(kIdpUrl);
+
+  auto controller =
+      std::make_unique<NiceMock<MockIdentityRequestDialogController>>();
+
+  federated_auth_request_impl_->SetDialogControllerForTests(
+      std::move(controller));
+
+  feature_list_.InitAndEnableFeature(features::kFedCmIdPRegistration);
+
+  base::RunLoop loop;
+  request_remote_->RegisterIdP(std::move(configURL),
+                               base::BindLambdaForTesting([&loop](bool result) {
+                                 EXPECT_EQ(false, result);
+                                 loop.Quit();
+                               }));
+  loop.Run();
+}
+
 // Test Registering an IdP without the feature enabled.
 TEST_F(FederatedAuthRequestImplRegistryTest, RegistersWithoutFeature) {
   GURL configURL = GURL(kIdpUrl);
+
+  static_cast<TestRenderFrameHost*>(main_test_rfh())->SimulateUserActivation();
 
   base::RunLoop loop;
   request_remote_->RegisterIdP(std::move(configURL),
@@ -140,6 +177,8 @@ TEST_F(FederatedAuthRequestImplRegistryTest, RegistersWithoutFeature) {
 // Test Registering a configURL of a different origin.
 TEST_F(FederatedAuthRequestImplRegistryTest, RegistersCrossOriginNotAllowed) {
   GURL configURL = GURL("https://another.example");
+
+  static_cast<TestRenderFrameHost*>(main_test_rfh())->SimulateUserActivation();
 
   feature_list_.InitAndEnableFeature(features::kFedCmIdPRegistration);
 

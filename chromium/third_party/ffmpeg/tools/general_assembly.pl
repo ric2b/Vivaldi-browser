@@ -13,6 +13,18 @@ use utf8;
 use DateTime;
 use DateTime::Format::ISO8601;
 
+my @extra_members = (
+    # entries should be of the format
+    # [   <name>,   <email>, <date elected> ],
+    # ['Foo Bar', 'foo@bar', DateTime->new(year => 8613, month => 5, day => 22)],
+    ['Ronald Bultje',       'rsbultje@gmail.com',           DateTime->new(year => 2023, month => 11, day => 28)],
+    ['Hendrik Leppkes',     'h.leppkes@gmail.com',          DateTime->new(year => 2023, month => 11, day => 28)],
+    ['Reimar Döffinger',    'Reimar.Doeffinger@gmx.de',     DateTime->new(year => 2023, month => 11, day => 28)],
+    ['Alexander Strasser',  'eclipse7@gmx.net',             DateTime->new(year => 2023, month => 11, day => 28)],
+    ['Baptiste Coudurier',  'baptiste.coudurier@gmail.com', DateTime->new(year => 2023, month => 11, day => 28)],
+    ['Shiyou Yin',          'yinshiyou-hf@loongson.cn',     DateTime->new(year => 2023, month => 11, day => 28)],
+);
+
 sub trim { my $s = shift; $s =~ s/^\s+|\s+$//g; return $s };
 
 sub print_help {
@@ -29,7 +41,7 @@ sub print_help {
 my $print_full = 1;
 my $print_names = 0;
 my $print_emails = 0;
-my $date         = DateTime->now()->iso8601;
+my $date_str     = DateTime->now()->iso8601;
 my $help = 0;
 
 GetOptions(
@@ -37,7 +49,7 @@ GetOptions(
     "names" => \$print_names,
     "emails" => \$print_emails,
     "help" => \$help,
-    "date=s" => \$date,
+    "date=s" => \$date_str,
     "h" => \$help,
 );
 
@@ -60,7 +72,7 @@ sub get_date_range {
     # date when the regular update rule is first applied
     my $date_first_regular = DateTime->new(year => 2024);
 
-    if ($now->is_between($date_ga_rule, $date_first_regular)) {
+    if ($now > $date_ga_rule && $now < $date_first_regular) {
         return ($date_ga_rule->clone()->set_year($date_ga_rule->year - 3), $date_ga_rule);
     }
 
@@ -76,7 +88,8 @@ sub get_date_range {
     return ($date_since, $date_until);
 }
 
-my ($since, $until) = get_date_range(DateTime::Format::ISO8601->parse_datetime($date));
+my $date = DateTime::Format::ISO8601->parse_datetime($date_str);
+my ($since, $until) = get_date_range($date);
 
 my @shortlog = split /\n/, decode('UTF-8',
     `git log --pretty=format:"%aN <%aE>" --since="$since" --until="$until" | sort | uniq -c | sort -r`,
@@ -108,6 +121,13 @@ foreach my $line (@shortlog) {
     $assembly{$name} = $email;
 }
 
+foreach my $entry (@extra_members) {
+    my $elected = $entry->[2];
+    if ($date > $elected && $date < $elected->clone()->set_year($elected->year + 2)) {
+        $assembly{$entry->[0]} = $entry->[1];
+    }
+}
+
 # generate the output string
 my @out_lines;
 foreach my $name (sort keys %assembly) {
@@ -125,5 +145,7 @@ foreach my $name (sort keys %assembly) {
 my $out_str = join("\n", @out_lines) . "\n";
 utf8::encode($out_str);
 
-printf("# GA for $since/$until; %d people; SHA256:%s\n%s",
-       scalar @out_lines, Digest::SHA::sha256_hex($out_str), $out_str);
+printf("# GA for $since/$until; %d people; SHA256:%s; HEAD:%s%s",
+       scalar @out_lines, Digest::SHA::sha256_hex($out_str),
+       decode('UTF-8', `git rev-parse HEAD`, Encode::FB_CROAK),
+       $out_str);

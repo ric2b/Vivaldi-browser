@@ -13,9 +13,6 @@
   <message name="IDS_IMPORT_HTML_BOOKMARKS_FILE_TITLE" desc="The title of the HTML bookmark import dialog.">
     Select HTML bookmark file
   </message>
-  <message name="IDS_IMPORT_OPERA_BOOKMARKS_FILE_TITLE" desc="The title of the Opera bookmark import dialog.">
-    Select Opera bookmark file
-  </message>
   <message name="IDS_IMPORT_OPERA_PROFILE_TITLE" desc="The title of the Opera profile folder select dialog.">
     Select Opera profile folder for import
   </message>

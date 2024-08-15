@@ -16,9 +16,9 @@
 #include "core/fpdfapi/parser/cpdf_array.h"
 #include "core/fpdfapi/parser/cpdf_dictionary.h"
 #include "core/fpdfapi/parser/cpdf_object.h"
-#include "third_party/base/check.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/containers/contains.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
+#include "core/fxcrt/containers/contains.h"
 
 CPDF_Page::CPDF_Page(CPDF_Document* pDocument,
                      RetainPtr<CPDF_Dictionary> pPageDict)
@@ -104,7 +104,7 @@ CFX_FloatRect CPDF_Page::GetBox(const ByteString& name) const {
   return box;
 }
 
-absl::optional<CFX_PointF> CPDF_Page::DeviceToPage(
+std::optional<CFX_PointF> CPDF_Page::DeviceToPage(
     const FX_RECT& rect,
     int rotate,
     const CFX_PointF& device_point) const {
@@ -112,7 +112,7 @@ absl::optional<CFX_PointF> CPDF_Page::DeviceToPage(
   return page2device.GetInverse().Transform(device_point);
 }
 
-absl::optional<CFX_PointF> CPDF_Page::PageToDevice(
+std::optional<CFX_PointF> CPDF_Page::PageToDevice(
     const FX_RECT& rect,
     int rotate,
     const CFX_PointF& page_point) const {

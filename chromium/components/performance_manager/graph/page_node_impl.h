@@ -6,6 +6,7 @@
 #define COMPONENTS_PERFORMANCE_MANAGER_GRAPH_PAGE_NODE_IMPL_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/containers/enum_set.h"
@@ -20,7 +21,6 @@
 #include "components/performance_manager/public/freezing/freezing.h"
 #include "components/performance_manager/public/graph/page_node.h"
 #include "components/performance_manager/public/web_contents_proxy.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 namespace performance_manager {
@@ -82,8 +82,7 @@ class PageNodeImpl
   bool IsVisible() const override;
   base::TimeDelta GetTimeSinceLastVisibilityChange() const override;
   bool IsAudible() const override;
-  absl::optional<base::TimeDelta> GetTimeSinceLastAudibleChange()
-      const override;
+  std::optional<base::TimeDelta> GetTimeSinceLastAudibleChange() const override;
   bool HasPictureInPicture() const override;
   LoadingState GetLoadingState() const override;
   ukm::SourceId GetUkmSourceID() const override;
@@ -92,14 +91,15 @@ class PageNodeImpl
   bool IsHoldingIndexedDBLock() const override;
   int64_t GetNavigationID() const override;
   const std::string& GetContentsMimeType() const override;
+  std::optional<blink::mojom::PermissionStatus>
+  GetNotificationPermissionStatus() const override;
   base::TimeDelta GetTimeSinceLastNavigation() const override;
   const GURL& GetMainFrameUrl() const override;
   uint64_t EstimateMainFramePrivateFootprintSize() const override;
   bool HadFormInteraction() const override;
   bool HadUserEdits() const override;
   const WebContentsProxy& GetContentsProxy() const override;
-  const absl::optional<freezing::FreezingVote>& GetFreezingVote()
-      const override;
+  const std::optional<freezing::FreezingVote>& GetFreezingVote() const override;
   PageState GetPageState() const override;
   uint64_t EstimateResidentSetSize() const override;
   uint64_t EstimatePrivateFootprintSize() const override;
@@ -123,17 +123,26 @@ class PageNodeImpl
   void OnFaviconUpdated();
   void OnTitleUpdated();
   void OnAboutToBeDiscarded(base::WeakPtr<PageNode> new_page_node);
-  void OnMainFrameNavigationCommitted(bool same_document,
-                                      base::TimeTicks navigation_committed_time,
-                                      int64_t navigation_id,
-                                      const GURL& url,
-                                      const std::string& contents_mime_type);
+  void OnMainFrameNavigationCommitted(
+      bool same_document,
+      base::TimeTicks navigation_committed_time,
+      int64_t navigation_id,
+      const GURL& url,
+      const std::string& contents_mime_type,
+      std::optional<blink::mojom::PermissionStatus>
+          notification_permission_status);
+  // While notification permission status is most often updated on main frame
+  // navigation, it can also be updated independently from main frame navigation
+  // when the user grants/revokes the permission.
+  void OnNotificationPermissionStatusChange(
+      blink::mojom::PermissionStatus permission_status);
 
   // Accessors.
   FrameNodeImpl* opener_frame_node() const;
   FrameNodeImpl* embedder_frame_node() const;
   FrameNodeImpl* main_frame_node() const;
-  const base::flat_set<FrameNodeImpl*>& main_frame_nodes() const;
+  const base::flat_set<raw_ptr<FrameNodeImpl, CtnExperimental>>&
+  main_frame_nodes() const;
 
   // Invoked to set/clear the opener of this page.
   void SetOpenerFrameNode(FrameNodeImpl* opener);
@@ -145,7 +154,7 @@ class PageNodeImpl
   void ClearEmbedderFrameNodeAndEmbeddingType();
 
   void set_has_nonempty_beforeunload(bool has_nonempty_beforeunload);
-  void set_freezing_vote(absl::optional<freezing::FreezingVote> freezing_vote);
+  void set_freezing_vote(std::optional<freezing::FreezingVote> freezing_vote);
   void set_page_state(PageState page_state);
 
   void SetLifecycleStateForTesting(LifecycleState lifecycle_state) {
@@ -230,7 +239,8 @@ class PageNodeImpl
   const FrameNode* GetEmbedderFrameNode() const override;
   const FrameNode* GetMainFrameNode() const override;
   bool VisitMainFrameNodes(const FrameNodeVisitor& visitor) const override;
-  const base::flat_set<const FrameNode*> GetMainFrameNodes() const override;
+  const base::flat_set<raw_ptr<const FrameNode, CtnExperimental>>
+  GetMainFrameNodes() const override;
 
   // NodeBase:
   void OnJoiningGraph() override;
@@ -253,7 +263,7 @@ class PageNodeImpl
   // in a page, among other reasons because during main frame navigation, the
   // pending navigation will coexist with the existing main frame until it's
   // committed.
-  base::flat_set<FrameNodeImpl*> main_frame_nodes_
+  base::flat_set<raw_ptr<FrameNodeImpl, CtnExperimental>> main_frame_nodes_
       GUARDED_BY_CONTEXT(sequence_checker_);
 
   // The total count of frames that tally up to this page.
@@ -264,7 +274,7 @@ class PageNodeImpl
 
   // The last time at which the audible property changed, or nullopt if the node
   // has never been audible.
-  absl::optional<base::TimeTicks> audible_change_time_
+  std::optional<base::TimeTicks> audible_change_time_
       GUARDED_BY_CONTEXT(sequence_checker_);
 
   // The last time at which a main frame navigation was committed.
@@ -291,6 +301,11 @@ class PageNodeImpl
   // event for the main frame of this page or an empty string if the page has
   // never committed a navigation
   std::string contents_mime_type_ GUARDED_BY_CONTEXT(sequence_checker_);
+
+  // The notification permission status for the last committed main frame
+  // navigation.
+  std::optional<blink::mojom::PermissionStatus> notification_permission_status_
+      GUARDED_BY_CONTEXT(sequence_checker_);
 
   // The unique ID of the browser context that this page belongs to.
   const std::string browser_context_id_;
@@ -381,8 +396,8 @@ class PageNodeImpl
   // Page::GetFreezingVote for a description of the different values this can
   // take.
   ObservedProperty::NotifiesOnlyOnChangesWithPreviousValue<
-      absl::optional<freezing::FreezingVote>,
-      absl::optional<freezing::FreezingVote>,
+      std::optional<freezing::FreezingVote>,
+      std::optional<freezing::FreezingVote>,
       &PageNodeObserver::OnFreezingVoteChanged>
       freezing_vote_ GUARDED_BY_CONTEXT(sequence_checker_);
   // The state of this page.

@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -25,6 +26,8 @@
 #include "components/attribution_reporting/filters.h"
 #include "components/attribution_reporting/os_registration.h"
 #include "components/attribution_reporting/registration.mojom-shared.h"
+#include "components/attribution_reporting/registration_header_error.h"
+#include "components/attribution_reporting/registration_header_type.mojom-shared.h"
 #include "components/attribution_reporting/source_registration.h"
 #include "components/attribution_reporting/suitable_origin.h"
 #include "components/attribution_reporting/trigger_config.h"
@@ -34,7 +37,6 @@
 #include "net/base/schemeful_site.h"
 #include "services/network/public/cpp/schemeful_site_mojom_traits.h"
 #include "third_party/abseil-cpp/absl/numeric/int128.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/mojom/origin_mojom_traits.h"
 #include "url/origin.h"
 
@@ -70,7 +72,7 @@ bool StructTraits<attribution_reporting::mojom::FilterDataDataView,
     return false;
   }
 
-  absl::optional<attribution_reporting::FilterData> filter_data =
+  std::optional<attribution_reporting::FilterData> filter_data =
       attribution_reporting::FilterData::Create(std::move(filter_values));
   if (!filter_data.has_value()) {
     return false;
@@ -90,7 +92,7 @@ bool StructTraits<attribution_reporting::mojom::FilterConfigDataView,
     return false;
   }
 
-  absl::optional<base::TimeDelta> lookback_window;
+  std::optional<base::TimeDelta> lookback_window;
   if (!data.ReadLookbackWindow(&lookback_window)) {
     return false;
   }
@@ -115,7 +117,7 @@ bool StructTraits<attribution_reporting::mojom::AggregationKeysDataView,
     return false;
   }
 
-  absl::optional<attribution_reporting::AggregationKeys> aggregation_keys =
+  std::optional<attribution_reporting::AggregationKeys> aggregation_keys =
       attribution_reporting::AggregationKeys::FromKeys(std::move(keys));
   if (!aggregation_keys.has_value()) {
     return false;
@@ -226,7 +228,7 @@ bool StructTraits<attribution_reporting::mojom::SourceRegistrationDataView,
     return false;
   }
 
-  if (!data.ReadEventReportWindows(&out->event_report_windows)) {
+  if (!data.ReadTriggerSpecs(&out->trigger_specs)) {
     return false;
   }
 
@@ -323,6 +325,30 @@ bool StructTraits<attribution_reporting::mojom::AggregatableDedupKeyDataView,
 }
 
 // static
+bool StructTraits<attribution_reporting::mojom::AggregatableValuesDataView,
+                  attribution_reporting::AggregatableValues>::
+    Read(attribution_reporting::mojom::AggregatableValuesDataView data,
+         attribution_reporting::AggregatableValues* out) {
+  attribution_reporting::FilterPair filters;
+  if (!data.ReadFilters(&filters)) {
+    return false;
+  }
+
+  attribution_reporting::AggregatableValues::Values values;
+  if (!data.ReadValues(&values)) {
+    return false;
+  }
+  auto aggregatable_values = attribution_reporting::AggregatableValues::Create(
+      std::move(values), std::move(filters));
+  if (!aggregatable_values) {
+    return false;
+  }
+
+  *out = std::move(*aggregatable_values);
+  return true;
+}
+
+// static
 bool StructTraits<attribution_reporting::mojom::TriggerRegistrationDataView,
                   attribution_reporting::TriggerRegistration>::
     Read(attribution_reporting::mojom::TriggerRegistrationDataView data,
@@ -339,18 +365,9 @@ bool StructTraits<attribution_reporting::mojom::TriggerRegistrationDataView,
     return false;
   }
 
-  attribution_reporting::AggregatableValues::Values values;
-  if (!data.ReadAggregatableValues(&values)) {
+  if (!data.ReadAggregatableValues(&out->aggregatable_values)) {
     return false;
   }
-
-  auto aggregatable_values =
-      attribution_reporting::AggregatableValues::Create(std::move(values));
-  if (!aggregatable_values) {
-    return false;
-  }
-
-  out->aggregatable_values = std::move(*aggregatable_values);
 
   if (!data.ReadAggregatableDedupKeys(&out->aggregatable_dedup_keys)) {
     return false;
@@ -361,12 +378,12 @@ bool StructTraits<attribution_reporting::mojom::TriggerRegistrationDataView,
     return false;
   }
 
-  absl::optional<std::string> trigger_context_id;
+  std::optional<std::string> trigger_context_id;
   if (!data.ReadTriggerContextId(&trigger_context_id)) {
     return false;
   }
 
-  absl::optional<attribution_reporting::AggregatableTriggerConfig>
+  std::optional<attribution_reporting::AggregatableTriggerConfig>
       aggregatable_trigger_config =
           attribution_reporting::AggregatableTriggerConfig::Create(
               data.source_registration_time_config(),
@@ -390,6 +407,22 @@ bool StructTraits<attribution_reporting::mojom::OsRegistrationItemDataView,
     return false;
   }
   out->debug_reporting = data.debug_reporting();
+  return true;
+}
+
+// static
+bool StructTraits<attribution_reporting::mojom::RegistrationHeaderErrorDataView,
+                  attribution_reporting::RegistrationHeaderError>::
+    Read(attribution_reporting::mojom::RegistrationHeaderErrorDataView data,
+         attribution_reporting::RegistrationHeaderError* out) {
+  if (!data.ReadHeaderType(&out->header_type)) {
+    return false;
+  }
+
+  if (!data.ReadHeaderValue(&out->header_value)) {
+    return false;
+  }
+
   return true;
 }
 

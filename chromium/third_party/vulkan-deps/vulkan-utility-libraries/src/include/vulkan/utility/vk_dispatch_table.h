@@ -421,6 +421,8 @@ typedef struct VkuDeviceDispatchTable_ {
     PFN_vkWaitSemaphoresKHR WaitSemaphoresKHR;
     PFN_vkSignalSemaphoreKHR SignalSemaphoreKHR;
     PFN_vkCmdSetFragmentShadingRateKHR CmdSetFragmentShadingRateKHR;
+    PFN_vkCmdSetRenderingAttachmentLocationsKHR CmdSetRenderingAttachmentLocationsKHR;
+    PFN_vkCmdSetRenderingInputAttachmentIndicesKHR CmdSetRenderingInputAttachmentIndicesKHR;
     PFN_vkWaitForPresentKHR WaitForPresentKHR;
     PFN_vkGetBufferDeviceAddressKHR GetBufferDeviceAddressKHR;
     PFN_vkGetBufferOpaqueCaptureAddressKHR GetBufferOpaqueCaptureAddressKHR;
@@ -459,6 +461,7 @@ typedef struct VkuDeviceDispatchTable_ {
     PFN_vkGetRenderingAreaGranularityKHR GetRenderingAreaGranularityKHR;
     PFN_vkGetDeviceImageSubresourceLayoutKHR GetDeviceImageSubresourceLayoutKHR;
     PFN_vkGetImageSubresourceLayout2KHR GetImageSubresourceLayout2KHR;
+    PFN_vkCmdSetLineStippleKHR CmdSetLineStippleKHR;
     PFN_vkGetCalibratedTimestampsKHR GetCalibratedTimestampsKHR;
     PFN_vkCmdBindDescriptorSets2KHR CmdBindDescriptorSets2KHR;
     PFN_vkCmdPushConstants2KHR CmdPushConstants2KHR;
@@ -676,7 +679,6 @@ typedef struct VkuDeviceDispatchTable_ {
     PFN_vkGetPipelineIndirectMemoryRequirementsNV GetPipelineIndirectMemoryRequirementsNV;
     PFN_vkCmdUpdatePipelineIndirectBufferNV CmdUpdatePipelineIndirectBufferNV;
     PFN_vkGetPipelineIndirectDeviceAddressNV GetPipelineIndirectDeviceAddressNV;
-    PFN_vkCmdSetTessellationDomainOriginEXT CmdSetTessellationDomainOriginEXT;
     PFN_vkCmdSetDepthClampEnableEXT CmdSetDepthClampEnableEXT;
     PFN_vkCmdSetPolygonModeEXT CmdSetPolygonModeEXT;
     PFN_vkCmdSetRasterizationSamplesEXT CmdSetRasterizationSamplesEXT;
@@ -687,6 +689,7 @@ typedef struct VkuDeviceDispatchTable_ {
     PFN_vkCmdSetColorBlendEnableEXT CmdSetColorBlendEnableEXT;
     PFN_vkCmdSetColorBlendEquationEXT CmdSetColorBlendEquationEXT;
     PFN_vkCmdSetColorWriteMaskEXT CmdSetColorWriteMaskEXT;
+    PFN_vkCmdSetTessellationDomainOriginEXT CmdSetTessellationDomainOriginEXT;
     PFN_vkCmdSetRasterizationStreamEXT CmdSetRasterizationStreamEXT;
     PFN_vkCmdSetConservativeRasterizationModeEXT CmdSetConservativeRasterizationModeEXT;
     PFN_vkCmdSetExtraPrimitiveOverestimationSizeEXT CmdSetExtraPrimitiveOverestimationSizeEXT;
@@ -1014,6 +1017,8 @@ static inline void vkuInitDeviceDispatchTable(VkDevice device, VkuDeviceDispatch
     table->WaitSemaphoresKHR = (PFN_vkWaitSemaphoresKHR)gdpa(device, "vkWaitSemaphoresKHR");
     table->SignalSemaphoreKHR = (PFN_vkSignalSemaphoreKHR)gdpa(device, "vkSignalSemaphoreKHR");
     table->CmdSetFragmentShadingRateKHR = (PFN_vkCmdSetFragmentShadingRateKHR)gdpa(device, "vkCmdSetFragmentShadingRateKHR");
+    table->CmdSetRenderingAttachmentLocationsKHR = (PFN_vkCmdSetRenderingAttachmentLocationsKHR)gdpa(device, "vkCmdSetRenderingAttachmentLocationsKHR");
+    table->CmdSetRenderingInputAttachmentIndicesKHR = (PFN_vkCmdSetRenderingInputAttachmentIndicesKHR)gdpa(device, "vkCmdSetRenderingInputAttachmentIndicesKHR");
     table->WaitForPresentKHR = (PFN_vkWaitForPresentKHR)gdpa(device, "vkWaitForPresentKHR");
     table->GetBufferDeviceAddressKHR = (PFN_vkGetBufferDeviceAddressKHR)gdpa(device, "vkGetBufferDeviceAddressKHR");
     table->GetBufferOpaqueCaptureAddressKHR = (PFN_vkGetBufferOpaqueCaptureAddressKHR)gdpa(device, "vkGetBufferOpaqueCaptureAddressKHR");
@@ -1052,6 +1057,7 @@ static inline void vkuInitDeviceDispatchTable(VkDevice device, VkuDeviceDispatch
     table->GetRenderingAreaGranularityKHR = (PFN_vkGetRenderingAreaGranularityKHR)gdpa(device, "vkGetRenderingAreaGranularityKHR");
     table->GetDeviceImageSubresourceLayoutKHR = (PFN_vkGetDeviceImageSubresourceLayoutKHR)gdpa(device, "vkGetDeviceImageSubresourceLayoutKHR");
     table->GetImageSubresourceLayout2KHR = (PFN_vkGetImageSubresourceLayout2KHR)gdpa(device, "vkGetImageSubresourceLayout2KHR");
+    table->CmdSetLineStippleKHR = (PFN_vkCmdSetLineStippleKHR)gdpa(device, "vkCmdSetLineStippleKHR");
     table->GetCalibratedTimestampsKHR = (PFN_vkGetCalibratedTimestampsKHR)gdpa(device, "vkGetCalibratedTimestampsKHR");
     table->CmdBindDescriptorSets2KHR = (PFN_vkCmdBindDescriptorSets2KHR)gdpa(device, "vkCmdBindDescriptorSets2KHR");
     table->CmdPushConstants2KHR = (PFN_vkCmdPushConstants2KHR)gdpa(device, "vkCmdPushConstants2KHR");
@@ -1269,7 +1275,6 @@ static inline void vkuInitDeviceDispatchTable(VkDevice device, VkuDeviceDispatch
     table->GetPipelineIndirectMemoryRequirementsNV = (PFN_vkGetPipelineIndirectMemoryRequirementsNV)gdpa(device, "vkGetPipelineIndirectMemoryRequirementsNV");
     table->CmdUpdatePipelineIndirectBufferNV = (PFN_vkCmdUpdatePipelineIndirectBufferNV)gdpa(device, "vkCmdUpdatePipelineIndirectBufferNV");
     table->GetPipelineIndirectDeviceAddressNV = (PFN_vkGetPipelineIndirectDeviceAddressNV)gdpa(device, "vkGetPipelineIndirectDeviceAddressNV");
-    table->CmdSetTessellationDomainOriginEXT = (PFN_vkCmdSetTessellationDomainOriginEXT)gdpa(device, "vkCmdSetTessellationDomainOriginEXT");
     table->CmdSetDepthClampEnableEXT = (PFN_vkCmdSetDepthClampEnableEXT)gdpa(device, "vkCmdSetDepthClampEnableEXT");
     table->CmdSetPolygonModeEXT = (PFN_vkCmdSetPolygonModeEXT)gdpa(device, "vkCmdSetPolygonModeEXT");
     table->CmdSetRasterizationSamplesEXT = (PFN_vkCmdSetRasterizationSamplesEXT)gdpa(device, "vkCmdSetRasterizationSamplesEXT");
@@ -1280,6 +1285,7 @@ static inline void vkuInitDeviceDispatchTable(VkDevice device, VkuDeviceDispatch
     table->CmdSetColorBlendEnableEXT = (PFN_vkCmdSetColorBlendEnableEXT)gdpa(device, "vkCmdSetColorBlendEnableEXT");
     table->CmdSetColorBlendEquationEXT = (PFN_vkCmdSetColorBlendEquationEXT)gdpa(device, "vkCmdSetColorBlendEquationEXT");
     table->CmdSetColorWriteMaskEXT = (PFN_vkCmdSetColorWriteMaskEXT)gdpa(device, "vkCmdSetColorWriteMaskEXT");
+    table->CmdSetTessellationDomainOriginEXT = (PFN_vkCmdSetTessellationDomainOriginEXT)gdpa(device, "vkCmdSetTessellationDomainOriginEXT");
     table->CmdSetRasterizationStreamEXT = (PFN_vkCmdSetRasterizationStreamEXT)gdpa(device, "vkCmdSetRasterizationStreamEXT");
     table->CmdSetConservativeRasterizationModeEXT = (PFN_vkCmdSetConservativeRasterizationModeEXT)gdpa(device, "vkCmdSetConservativeRasterizationModeEXT");
     table->CmdSetExtraPrimitiveOverestimationSizeEXT = (PFN_vkCmdSetExtraPrimitiveOverestimationSizeEXT)gdpa(device, "vkCmdSetExtraPrimitiveOverestimationSizeEXT");

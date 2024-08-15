@@ -19,18 +19,21 @@ import {PivotTableTreeBuilder} from './pivot_table_controller';
 describe('Pivot Table tree builder', () => {
   test('aggregates averages correctly', () => {
     const builder = new PivotTableTreeBuilder(
-        {
-          pivotColumns: [
-            {kind: 'regular', table: 'slice', column: 'category'},
-            {kind: 'regular', table: 'slice', column: 'name'},
-          ],
-          aggregationColumns: [{
+      {
+        pivotColumns: [
+          {kind: 'regular', table: 'slice', column: 'category'},
+          {kind: 'regular', table: 'slice', column: 'name'},
+        ],
+        aggregationColumns: [
+          {
             aggregationFunction: 'AVG',
             column: {kind: 'regular', table: 'slice', column: 'dur'},
-          }],
-          countIndex: 1,
-        },
-        ['cat1', 'name1', 80.0, 2]);
+          },
+        ],
+        countIndex: 1,
+      },
+      ['cat1', 'name1', 80.0, 2],
+    );
 
     builder.ingestRow(['cat1', 'name2', 20.0, 1]);
     builder.ingestRow(['cat2', 'name3', 20.0, 1]);

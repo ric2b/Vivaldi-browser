@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/safe_browsing/model/safe_browsing_blocking_page.h"
 
 #import "base/containers/contains.h"
+#import "base/memory/raw_ptr.h"
 #import "base/strings/string_number_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "base/test/metrics/histogram_tester.h"
@@ -35,7 +36,8 @@ const char kMalwareDecisionMetric[] = "interstitial.malware.decision";
 UnsafeResource CreateResource(web::WebState* web_state, const GURL& url) {
   UnsafeResource resource;
   resource.url = url;
-  resource.threat_type = safe_browsing::SB_THREAT_TYPE_URL_MALWARE;
+  resource.threat_type =
+      safe_browsing::SBThreatType::SB_THREAT_TYPE_URL_MALWARE;
   resource.weak_web_state = web_state->GetWeakPtr();
   resource.threat_source = safe_browsing::ThreatSource::LOCAL_PVER4;
   return resource;
@@ -69,7 +71,7 @@ class SafeBrowsingBlockingPageTest : public PlatformTest {
       web::WebTaskEnvironment::IO_MAINLOOP};
   std::unique_ptr<ChromeBrowserState> browser_state_;
   web::FakeWebState web_state_;
-  web::FakeNavigationManager* navigation_manager_ = nullptr;
+  raw_ptr<web::FakeNavigationManager> navigation_manager_ = nullptr;
   GURL url_;
   UnsafeResource resource_;
   std::unique_ptr<IOSSecurityInterstitialPage> page_;

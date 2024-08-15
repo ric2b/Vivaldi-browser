@@ -33,6 +33,7 @@
 #include "dawn/common/Platform.h"
 #include "dawn/native/Blob.h"
 #include "dawn/native/CacheResult.h"
+#include "partition_alloc/pointers/raw_ptr_exclusion.h"
 
 namespace dawn::platform {
 class CachingInterface;
@@ -43,11 +44,10 @@ namespace dawn::native {
 class CacheKey;
 class InstanceBase;
 
-// This class should always be thread-safe because it may be called asynchronously. Its purpose
-// is to wrap the CachingInterface provided via a platform.
+// This class should always be thread-safe because it may be called asynchronously.
 class BlobCache {
   public:
-    explicit BlobCache(dawn::platform::CachingInterface* cachingInterface = nullptr);
+    explicit BlobCache(const dawn::native::DawnCacheDeviceDescriptor& desc);
 
     // Returns empty blob if the key is not found in the cache.
     Blob Load(const CacheKey& key);
@@ -77,7 +77,10 @@ class BlobCache {
 
     // Protects thread safety of access to mCache.
     std::mutex mMutex;
-    dawn::platform::CachingInterface* mCache;
+    // TODO(https://crbug.com/dawn/2365): Convert these members to `raw_ptr`.
+    RAW_PTR_EXCLUSION WGPUDawnLoadCacheDataFunction mLoadFunction;
+    RAW_PTR_EXCLUSION WGPUDawnStoreCacheDataFunction mStoreFunction;
+    RAW_PTR_EXCLUSION void* mFunctionUserdata;
 };
 
 }  // namespace dawn::native

@@ -246,7 +246,8 @@ class SingleTestRunner(object):
 
         fs.maybe_make_directory(output_dir)
         output_basename = fs.basename(
-            fs.splitext(self._test_name)[0] + '-expected' + extension)
+            port.output_filename(self._test_name, port.BASELINE_SUFFIX,
+                                 extension))
         output_path = fs.join(output_dir, output_basename)
 
         # Remove |output_path| if it exists and is not the generic expectation to
@@ -264,7 +265,7 @@ class SingleTestRunner(object):
         # Note that current_expected_path may change because of the above file removal.
         current_expected_path = port.expected_filename(
             self._test_name, extension, return_default=False)
-        data = data or ''
+        data = data or b''
         if (current_expected_path and fs.sha1(current_expected_path) ==
                 hashlib.sha1(data).hexdigest()):
             if self._options.reset_results:

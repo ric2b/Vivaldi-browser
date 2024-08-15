@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 #include "third_party/blink/renderer/core/timing/performance_mark.h"
 
+#include <optional>
+
 #include "third_party/blink/public/mojom/timing/performance_mark_or_measure.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
@@ -14,8 +16,6 @@
 #include "third_party/blink/renderer/core/timing/worker_global_scope_performance.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
-
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace blink {
 
@@ -48,7 +48,7 @@ PerformanceMark* PerformanceMark::Create(ScriptState* script_state,
 
   DOMHighResTimeStamp start = 0.0;
   base::TimeTicks unsafe_start_for_traces;
-  absl::optional<ScriptValue> detail;
+  std::optional<ScriptValue> detail;
   if (mark_options) {
     if (mark_options->hasStartTime()) {
       start = mark_options->startTime();
@@ -144,18 +144,34 @@ PerformanceMark::GetUseCounterMapping() {
   if (!map.IsSet()) {
     *map = {
         {"NgOptimizedImage", WebFeature::kUserFeatureNgOptimizedImage},
+        {"NgAfterRender", WebFeature::kUserFeatureNgAfterRender},
+        {"NgHydration", WebFeature::kUserFeatureNgHydration},
+        {"next-third-parties-ga", WebFeature::kUserFeatureNextThirdPartiesGA},
+        {"next-third-parties-gtm", WebFeature::kUserFeatureNextThirdPartiesGTM},
+        {"next-third-parties-YouTubeEmbed",
+         WebFeature::kUserFeatureNextThirdPartiesYouTubeEmbed},
+        {"next-third-parties-GoogleMapsEmbed",
+         WebFeature::kUserFeatureNextThirdPartiesGoogleMapsEmbed},
+        {"nuxt-image", WebFeature::kUserFeatureNuxtImage},
+        {"nuxt-picture", WebFeature::kUserFeatureNuxtPicture},
+        {"nuxt-third-parties-ga", WebFeature::kUserFeatureNuxtThirdPartiesGA},
+        {"nuxt-third-parties-gtm", WebFeature::kUserFeatureNuxtThirdPartiesGTM},
+        {"nuxt-third-parties-YouTubeEmbed",
+         WebFeature::kUserFeatureNuxtThirdPartiesYouTubeEmbed},
+        {"nuxt-third-parties-GoogleMaps",
+         WebFeature::kUserFeatureNuxtThirdPartiesGoogleMaps},
     };
   }
   return *map;
 }
 
 // static
-absl::optional<mojom::blink::WebFeature>
+std::optional<mojom::blink::WebFeature>
 PerformanceMark::GetWebFeatureForUserFeatureName(const String& feature_name) {
   auto& feature_map = PerformanceMark::GetUseCounterMapping();
   auto it = feature_map.find(feature_name);
   if (it == feature_map.end()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   return it->value;

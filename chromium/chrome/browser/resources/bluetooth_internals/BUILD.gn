@@ -56,11 +56,16 @@ build_webui("build") {
     "$root_gen_dir/device/bluetooth/public/mojom/adapter.mojom-webui.ts",
     "$root_gen_dir/device/bluetooth/public/mojom/device.mojom-webui.ts",
     "$root_gen_dir/device/bluetooth/public/mojom/uuid.mojom-webui.ts",
+    "$root_gen_dir/device/bluetooth/public/mojom/gatt_characteristic_properties.mojom-webui.ts",
+    "$root_gen_dir/device/bluetooth/public/mojom/gatt_characteristic_permissions.mojom-webui.ts",
   ]
 
+  ts_composite = true
   ts_definitions = [ "//tools/typescript/definitions/chrome_send.d.ts" ]
   ts_deps = [
     "//ui/webui/resources/js:build_ts",
     "//ui/webui/resources/mojo:build_ts",
   ]
+
+  webui_host = "bluetooth-internals"
 }

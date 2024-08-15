@@ -9,6 +9,7 @@
 
 #include <array>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "build/build_config.h"
@@ -16,9 +17,8 @@
 #include "core/fxcrt/fx_coordinates.h"
 #include "core/fxcrt/observed_ptr.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxge/freetype/fx_freetype.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/base/containers/span.h"
 
 namespace fxge {
 enum class FontEncoding : uint32_t;
@@ -67,8 +67,6 @@ class CFX_Face final : public Retainable, public Observable {
   uint16_t GetUnitsPerEm() const;
   int16_t GetAscender() const;
   int16_t GetDescender() const;
-  int GetAdjustedAscender() const;
-  int GetAdjustedDescender() const;
 #if BUILDFLAG(IS_ANDROID)
   int16_t GetHeight() const;
 #endif
@@ -79,11 +77,13 @@ class CFX_Face final : public Retainable, public Observable {
   // it is large enough to hold the data.
   size_t GetSfntTable(uint32_t table, pdfium::span<uint8_t> buffer);
 
-  absl::optional<std::array<uint32_t, 4>> GetOs2UnicodeRange();
-  absl::optional<std::array<uint32_t, 2>> GetOs2CodePageRange();
-  absl::optional<std::array<uint8_t, 2>> GetOs2Panose();
+  std::optional<std::array<uint32_t, 4>> GetOs2UnicodeRange();
+  std::optional<std::array<uint32_t, 2>> GetOs2CodePageRange();
+  std::optional<std::array<uint8_t, 2>> GetOs2Panose();
 
   int GetGlyphCount() const;
+  // TODO(crbug.com/pdfium/2037): Can this method be private?
+  FX_RECT GetGlyphBBox() const;
   std::unique_ptr<CFX_GlyphBitmap> RenderGlyph(const CFX_Font* pFont,
                                                uint32_t glyph_index,
                                                bool bFontStyle,
@@ -98,14 +98,17 @@ class CFX_Face final : public Retainable, public Observable {
                     int dest_width,
                     int weight,
                     const CFX_SubstFont* subst_font);
+  ByteString GetGlyphName(uint32_t glyph_index);
 
   int GetCharIndex(uint32_t code);
   int GetNameIndex(const char* name);
 
+  FX_RECT GetCharBBox(uint32_t code, int glyph_index);
+
   std::vector<CharCodeAndIndex> GetCharCodesAndIndices(char32_t max_char);
 
   CharMap GetCurrentCharMap() const;
-  absl::optional<fxge::FontEncoding> GetCurrentCharMapEncoding() const;
+  std::optional<fxge::FontEncoding> GetCurrentCharMapEncoding() const;
   int GetCharMapPlatformIdByIndex(size_t index) const;
   int GetCharMapEncodingIdByIndex(size_t index) const;
   fxge::FontEncoding GetCharMapEncodingByIndex(size_t index) const;
@@ -113,6 +116,8 @@ class CFX_Face final : public Retainable, public Observable {
   void SetCharMap(CharMap map);
   void SetCharMapByIndex(size_t index);
   bool SelectCharMap(fxge::FontEncoding encoding);
+
+  bool SetPixelSize(uint32_t width, uint32_t height);
 
 #if BUILDFLAG(IS_WIN)
   bool CanEmbed();

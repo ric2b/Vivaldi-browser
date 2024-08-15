@@ -21,7 +21,7 @@ Environment::Environment(ClockNowFunctionPtr now_function,
                          TaskRunner& task_runner,
                          const IPEndpoint& local_endpoint)
     : now_function_(now_function), task_runner_(task_runner) {
-  OSP_DCHECK(now_function_);
+  OSP_CHECK(now_function_);
   ErrorOr<std::unique_ptr<UdpSocket>> result =
       UdpSocket::Create(task_runner_, this, local_endpoint);
   if (result.is_error()) {
@@ -30,7 +30,7 @@ Environment::Environment(ClockNowFunctionPtr now_function,
     return;
   }
   const_cast<std::unique_ptr<UdpSocket>&>(socket_) = std::move(result.value());
-  OSP_DCHECK(socket_);
+  OSP_CHECK(socket_);
   socket_->Bind();
 }
 
@@ -68,8 +68,8 @@ void Environment::SetStatisticsCollector(StatisticsCollector* collector) {
 }
 
 void Environment::ConsumeIncomingPackets(PacketConsumer* packet_consumer) {
-  OSP_DCHECK(packet_consumer);
-  OSP_DCHECK(!packet_consumer_);
+  OSP_CHECK(packet_consumer);
+  OSP_CHECK(!packet_consumer_);
   packet_consumer_ = packet_consumer;
 }
 
@@ -93,8 +93,8 @@ int Environment::GetMaxPacketSize() const {
 }
 
 void Environment::SendPacket(ByteView packet, PacketMetadata metadata) {
-  OSP_DCHECK(remote_endpoint_.address);
-  OSP_DCHECK_NE(remote_endpoint_.port, 0);
+  OSP_CHECK(remote_endpoint_.address);
+  OSP_CHECK_NE(remote_endpoint_.port, 0);
   if (socket_) {
     socket_->SendMessage(packet.data(), packet.size(), remote_endpoint_);
   }
@@ -104,7 +104,7 @@ void Environment::SendPacket(ByteView packet, PacketMetadata metadata) {
 }
 
 void Environment::OnBound(UdpSocket* socket) {
-  OSP_DCHECK(socket == socket_.get());
+  OSP_CHECK_EQ(socket, socket_.get());
   state_ = SocketState::kReady;
 
   if (socket_subscriber_) {
@@ -113,7 +113,7 @@ void Environment::OnBound(UdpSocket* socket) {
 }
 
 void Environment::OnError(UdpSocket* socket, Error error) {
-  OSP_DCHECK(socket == socket_.get());
+  OSP_CHECK_EQ(socket, socket_.get());
   // Usually OnError() is only called for non-recoverable Errors. However,
   // OnSendError() and OnRead() delegate to this method, to handle their hard
   // error cases as well. So, return early here if |error| is recoverable.

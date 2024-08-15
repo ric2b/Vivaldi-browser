@@ -59,16 +59,16 @@ generated_file("generate_decoder_list") {
       "Unexpected format of $decoder_list_file"
   )
   assert(
-      "&ff_aac_decoder," == decoder_list_lines[5],
+      "&ff_aac_decoder," == decoder_list_lines[2],
       "Unexpected format of $decoder_list_file"
   )
   if (is_linux) {
     decoder_list_lines[1] = "//" + decoder_list_lines[1]
-    decoder_list_lines[5] = "//" + decoder_list_lines[5]
+    decoder_list_lines[2] = "//" + decoder_list_lines[2]
   }
   if (is_mac) {
     decoder_list_lines[1] = "//" + decoder_list_lines[1]
-    decoder_list_lines[5] = "&ff_aac_at_decoder,"
+    decoder_list_lines[2] = "&ff_aac_at_decoder,"
   }
   if (is_win) {
     # Declare first the decoder. On Mac it is not necessary as our decoder
@@ -76,7 +76,7 @@ generated_file("generate_decoder_list") {
     decoder_list_lines[0] = "extern const AVCodec ffwmf_aac_decoder;" +
         decoder_list_lines[0]
     decoder_list_lines[1] = "//" + decoder_list_lines[1]
-    decoder_list_lines[5] = "&ffwmf_aac_decoder,"
+    decoder_list_lines[2] = "&ffwmf_aac_decoder,"
   }
 
   outputs = [target_gen_dir + codec_subpath]

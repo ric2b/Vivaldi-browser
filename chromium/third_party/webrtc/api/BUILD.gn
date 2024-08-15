@@ -183,7 +183,9 @@ rtc_library("candidate") {
     "candidate.h",
   ]
   deps = [
+    "../p2p:p2p_constants",
     "../rtc_base:checks",
+    "../rtc_base:crc32",
     "../rtc_base:ip_address",
     "../rtc_base:logging",
     "../rtc_base:network_constants",
@@ -274,7 +276,6 @@ rtc_library("libjingle_peerconnection_api") {
   visibility = [ "*" ]
   cflags = []
   sources = [
-    "crypto_params.h",
     "data_channel_interface.cc",
     "data_channel_interface.h",
     "jsep.cc",
@@ -334,6 +335,9 @@ rtc_library("libjingle_peerconnection_api") {
     ":sequence_checker",
     ":turn_customizer",
     "../call:rtp_interfaces",
+    "../media:media_engine",
+    "../p2p:connection",
+    "../p2p:port_allocator",
     "../p2p:rtc_p2p",
     "../pc:media_factory",
     "../rtc_base:copy_on_write_buffer",
@@ -353,6 +357,7 @@ rtc_library("libjingle_peerconnection_api") {
     "neteq:neteq_api",
     "rtc_event_log",
     "task_queue",
+    "transport:bandwidth_estimation_settings",
     "transport:bitrate_settings",
     "transport:enums",
     "transport:network_control",
@@ -369,7 +374,6 @@ rtc_library("libjingle_peerconnection_api") {
     # Basically, don't add stuff here. You might break sensitive downstream
     # targets like pnacl. API should not depend on anything outside of this
     # file, really. All these should arguably go away in time.
-    "../media:rtc_media_base",
     "../media:rtc_media_config",
     "../modules/audio_processing:audio_processing_statistics",
     "../rtc_base:checks",
@@ -581,7 +585,6 @@ rtc_source_set("peer_connection_quality_test_fixture_api") {
     ":track_id_stream_info_map",
     ":video_quality_analyzer_api",
     "../media:media_constants",
-    "../media:rtc_media_base",
     "../modules/audio_processing:api",
     "../rtc_base:checks",
     "../rtc_base:network",
@@ -774,7 +777,6 @@ rtc_source_set("rtc_stats_api") {
     "stats/attribute.h",
     "stats/rtc_stats.h",
     "stats/rtc_stats_collector_callback.h",
-    "stats/rtc_stats_member.h",
     "stats/rtc_stats_report.h",
     "stats/rtcstats_objects.h",
   ]
@@ -936,6 +938,11 @@ rtc_library("ice_transport_factory") {
     ":make_ref_counted",
     ":packet_socket_factory",
     ":scoped_refptr",
+    "../p2p:connection",
+    "../p2p:ice_transport_internal",
+    "../p2p:p2p_constants",
+    "../p2p:p2p_transport_channel",
+    "../p2p:port_allocator",
     "../p2p:rtc_p2p",
     "../rtc_base:threading",
     "../rtc_base/system:rtc_export",
@@ -1147,6 +1154,16 @@ if (rtc_include_tests) {
     ]
   }
 
+  rtc_library("mock_frame_transformer") {
+    visibility = [ "*" ]
+    testonly = true
+    sources = [ "test/mock_frame_transformer.h" ]
+    deps = [
+      ":frame_transformer_interface",
+      "../test:test_support",
+    ]
+  }
+
   rtc_library("mock_encoder_selector") {
     visibility = [ "*" ]
     testonly = true
@@ -1345,6 +1362,7 @@ if (rtc_include_tests) {
     deps = [
       "../api/video_codecs:video_codecs_api",
       "../test:test_support",
+      "environment",
     ]
   }
 
@@ -1413,6 +1431,7 @@ if (rtc_include_tests) {
 
     sources = [
       "array_view_unittest.cc",
+      "candidate_unittest.cc",
       "field_trials_unittest.cc",
       "function_view_unittest.cc",
       "rtc_error_unittest.cc",
@@ -1428,6 +1447,7 @@ if (rtc_include_tests) {
 
     deps = [
       ":array_view",
+      ":candidate",
       ":create_time_controller",
       ":field_trials",
       ":field_trials_view",
@@ -1441,12 +1461,13 @@ if (rtc_include_tests) {
       ":scoped_refptr",
       ":sequence_checker",
       ":time_controller",
+      "../p2p:rtc_p2p",
       "../rtc_base:buffer",
       "../rtc_base:checks",
       "../rtc_base:gunit_helpers",
       "../rtc_base:platform_thread",
       "../rtc_base:rtc_event",
-      "../rtc_base:rtc_task_queue",
+      "../rtc_base:ssl",
       "../rtc_base:task_queue_for_test",
       "../rtc_base/containers:flat_set",
       "../rtc_base/task_utils:repeating_task",

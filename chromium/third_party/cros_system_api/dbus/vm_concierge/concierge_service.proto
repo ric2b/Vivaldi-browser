@@ -7,7 +7,7 @@ option optimize_for = LITE_RUNTIME;
 
 // This file defines messages used for starting, stopping, and managing VMs.
 package vm_tools.concierge;
-option go_package = "chromiumos/system_api/vm_concierge_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/vm_concierge_proto";
 
 import "arc/arc.proto";
 
@@ -29,20 +29,8 @@ import "arc/arc.proto";
 // TODO(crbug/1121046): This spec may be insufficient for DLC, consider
 // re-designing it.
 message VirtualMachineSpec {
-  // Path to the kernel that should be used for the VM.
-  string kernel = 1;
-
-  // Path to the disk image that should be used as the root file system for
-  // the VM.
-  string rootfs = 2;
-
-  // ID of a DLC package that contains the kernel and rootfs. If this field is
-  // set, the kernel() and rootfs() fields will be ignored when calculating the
-  // path to the VM's image files.
+  // ID of a DLC package that contains the kernel and rootfs.
   string dlc_id = 3;
-
-  // Optional path to the initrd that should be used for the VM.
-  string initrd = 4;
 
   // ID of a DLC package that contains the vm_tools.img for this vm. If empty
   // the vm_tools.img from the above dlc_id is used if available.
@@ -162,6 +150,9 @@ message VmInfo {
 
   // Whether the VM is using storage ballooning.
   bool storage_ballooning = 7;
+
+  // Status of the VM.
+  VmStatus status = 8;
 }
 
 // Optional fields for network configuration.
@@ -190,19 +181,6 @@ message StartVmRequest {
 
   // Enable Virtio GPU in the started Vm. It uses integrated GPU on the host.
   bool enable_gpu = 8;
-
-  // Provide a software-based virtual Trusted Platform Module to the VM. The TPM
-  // is backed by libtpm2's TPM simulator and does not interact with any
-  // physical TPM on the host device. TPM state does not persist across VM
-  // launches. In order for the VM to see the virtual TPM, the guest kernel must
-  // contain a virtio TPM driver.
-  bool software_tpm = 9 [deprecated = true];
-
-  // This flag is only respected in developer mode and offers two things -
-  // - It can treat a trusted VM as untrusted and run it on insecure host
-  // kernels.
-  // - It can run an untrusted VM on insecure host kernels.
-  bool run_as_untrusted = 10;
 
   // Enable audio capture in the started Vm.
   bool enable_audio_capture = 11;
@@ -234,9 +212,6 @@ message StartVmRequest {
 
   // Kernel cmdline parameters that will be passed to crosvm.
   repeated string kernel_params = 17;
-
-  // DEPRECATED: Vulkan is enabled when it's supported, and GPU is enabled.
-  bool enable_vulkan = 18 [deprecated = true];
 
   // Enable Big GL rendering for the started Vm (default is GLES).
   bool enable_big_gl = 19;
@@ -305,25 +280,9 @@ message StartPluginVmRequest {
   // Parameters to pass to the plugin process.
   repeated string params = 4;
 
-  // The IPv4 address to assign to the VM in network-byte order.  Must be in the
-  // 100.115.92.128/28 subnet and must not be already assigned to another VM.
-  // If unspecified, a /29 subnet will be dynamically allocated
-  // from 100.115.93.0/24.
-  // Note: this field will be deprecated.
-  fixed32 guest_ipv4_address = 5;
-
-  // The EUI-48 MAC address to assign to the host side of the ethernet interface
-  // to the VM. Must be exactly 6 bytes and must not be in use by another VM.
-  // Must have the locally administered bit (0x02) set and the multicast bit
-  // (0x01) unset.
-  // If empty, a random MAC address will be generated and assigned.
-  // Note: this field will be deprecated.
-  bytes host_mac_address = 6;
-
   // Indicates that a specific /29 subnet should be allocated from
   // 100.115.93.0/24 for use by this VM; and if it is not available, then the
   // request should fail.
-  // This field is only used if |guest_ipv4_address| is empty.
   // Valid values are 1 - 32, inclusive.
   uint32 subnet_index = 7;
 
@@ -402,9 +361,6 @@ message StartArcVmRequest {
   // Whether broadcast anr prenotify is enabled.
   bool enable_broadcast_anr_prenotify = 25;
 
-  // Size of logd config in kBytes, -1 if disabled
-  int32 logd_config_size = 26 [deprecated = true];
-
   // Whether virtio blk data is enabled
   bool enable_virtio_blk_data = 27;
 
@@ -433,11 +389,6 @@ message StartArcVmRequest {
   // Implementation and a more detailed description can be found in
   // src/third_party/kernel/v5.10-arcvm/mm/vmscan.c
   int32 mglru_reclaim_swappiness = 36;
-
-  // Whether updating O4C (Optimized for Chromebook applications) list via A2C2
-  // (ARC Application Compatibility Configuration Delivery) is enabled (See
-  // go/a2c2 for project details.)
-  bool update_o4c_list_via_a2c2 = 37 [deprecated = true];
 
   enum UsapProfileType {
     // Default USAP profile suitable for all devices.
@@ -470,10 +421,6 @@ message StartArcVmRequest {
 
   // Ureadahead mode used
   UreadaheadMode ureadahead_mode = 40;
-
-  // Whether rw is enabled
-  // Deprecated, rootfs_writable should be used instead
-  bool enable_rw = 41 [deprecated = true];
 
   // Controls whether WebView Zygote is lazily initialized in ARC.
   bool enable_web_view_zygote_lazy_init = 42;
@@ -516,6 +463,9 @@ enum VmStatus {
 }
 
 // Information sent back by vm_concierge in response to a StartVm dbus message.
+// StartVmResponse is returned as early as the crosvm process is started, which
+// may not be ready for control. Wait for VmStartedSignal instead before making
+// DBus requests to control the VM.
 message StartVmResponse {
   // If true, the VM was started successfully.  |vm_info| will have non-default
   // values only if this is true.
@@ -560,7 +510,8 @@ message StartVmResponse {
   bool free_bytes_has_value = 7;
 }
 
-// Message used in the signal for when a VM has started.
+// Message used in the signal for when a VM has started, and can be controlled
+// via DBus methods.
 message VmStartedSignal {
   // The name of the VM which has started.
   string name = 1;
@@ -574,6 +525,21 @@ message VmStartedSignal {
   // Status of the VM. If VM_STATUS_RUNNING, it is not necessary to wait for a
   // TremplinStartedSignal before starting a container in the VM.
   VmStatus status = 4;
+}
+
+// Message used in the signal for when a VM is about to start.
+message VmStartingUpSignal {
+  // The name of the VM which is starting.
+  string name = 1;
+
+  // The owner of the VM.
+  string owner_id = 2;
+
+  // Type of the VM which is starting.
+  VmInfo.VmType vm_type = 3;
+
+  // The virtual socket context id assigned to the VM that is starting.
+  int64 cid = 4;
 }
 
 enum GuestUserlandReady {
@@ -959,8 +925,9 @@ message ResizeDiskImageResponse {
 }
 
 // Request to concierge to export a disk image.
-// Must be accompanied by an FD, the contents of the image will be written to
-// the passed FD.
+// Must be accompanied by at least 1 FD, the contents of the image will be
+// written to the first passed FD.  Takes an optional second FD which takes the
+// sha256 digest.
 message ExportDiskImageRequest {
   // The cryptohome id for the user's encrypted storage.
   string cryptohome_id = 1;
@@ -1360,6 +1327,7 @@ message ListVmsRequest {
 }
 
 // Message used for listing VMs.
+// TODO(b/325620275): remove in favor of extending VmInfo directly.
 message ExtendedVmInfo {
   // The name of the VM which has started.
   string name = 1;
@@ -1407,16 +1375,7 @@ message AddGroupPermissionMesaRequest {
   string owner_id = 2;
 }
 
-message GetVmLaunchAllowedRequest {
-  // Request untrusted VM regardless of other arguments.
-  bool run_as_untrusted = 1;
-
-  // The VM disk image is considered trusted.
-  bool is_trusted_image = 2;
-
-  // The VM kernel is started with custom kernel parameters.
-  bool has_custom_kernel_params = 3;
-}
+message GetVmLaunchAllowedRequest {}
 
 message GetVmLaunchAllowedResponse {
   // Whether the launch would be allowed.

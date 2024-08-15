@@ -4,9 +4,11 @@
 
 import("../../../scripts/build/ninja/devtools_entrypoint.gni")
 import("../../../scripts/build/ninja/devtools_module.gni")
+import("../../../third_party/typescript/typescript.gni")
 
 devtools_module("visual_logging") {
   sources = [
+    "Debugging.ts",
     "DomState.ts",
     "Loggable.ts",
     "LoggingConfig.ts",
@@ -28,7 +30,7 @@ devtools_entrypoint("bundle") {
   deps = [ ":visual_logging" ]
 
   visibility = [
-    "../../../test/unittests/front_end/ui/visual_logging/*",
+    ":*",
     "../../entrypoints/device_mode_emulation_frame/*",
     "../../entrypoints/main/*",
     "../../panels/*",
@@ -42,5 +44,25 @@ devtools_entrypoint("testing") {
 
   deps = [ ":visual_logging" ]
 
-  visibility = [ "../../../test/unittests/front_end/ui/visual_logging/*" ]
+  visibility = [ ":unittests" ]
+}
+
+ts_library("unittests") {
+  testonly = true
+
+  sources = [
+    "Debugging.test.ts",
+    "DomState.test.ts",
+    "LoggingConfig.test.ts",
+    "LoggingDriver.test.ts",
+    "LoggingEvents.test.ts",
+    "LoggingState.test.ts",
+    "NonDomState.test.ts",
+  ]
+
+  deps = [
+    ":bundle",
+    ":testing",
+    "../../testing",
+  ]
 }

@@ -27,8 +27,6 @@ void GaiaPasswordChangedScreenHandler::DeclareLocalizedValues(
   builder->Add("oldPasswordHint", IDS_LOGIN_PASSWORD_CHANGED_OLD_PASSWORD_HINT);
   builder->Add("oldPasswordIncorrect",
                IDS_LOGIN_PASSWORD_CHANGED_INCORRECT_OLD_PASSWORD);
-  builder->Add("proceedAnywayButton",
-               IDS_LOGIN_PASSWORD_CHANGED_PROCEED_ANYWAY_BUTTON);
   builder->Add("forgotOldPasswordButtonText",
                IDS_LOGIN_PASSWORD_CHANGED_FORGOT_PASSWORD);
   builder->AddF("passwordChangedTitle", IDS_LOGIN_PASSWORD_CHANGED_TITLE,
@@ -79,6 +77,11 @@ void GaiaPasswordChangedScreenHandler::ShowWrongPasswordError() {
 
 void GaiaPasswordChangedScreenHandler::SuggestRecovery() {
   CallExternalAPI("suggestRecovery");
+}
+
+base::WeakPtr<GaiaPasswordChangedView>
+GaiaPasswordChangedScreenHandler::AsWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 }  // namespace ash

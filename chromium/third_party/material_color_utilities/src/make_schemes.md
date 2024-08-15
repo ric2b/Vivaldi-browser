@@ -45,6 +45,8 @@ contrast levels. The functionality of `Scheme` is fully replicated by
 
 <section>
 
+
+
 ###### Dart
 
 | Instead of …                 | Use …                               |
@@ -89,6 +91,8 @@ contrast levels. The functionality of `Scheme` is fully replicated by
 | `Scheme.dark(color)`         | `SchemeTonalSpot(sourceColorHct: Hct.fromInt(color), isDark: true, contrastLevel: 0.0)`  |
 | `Scheme.lightContent(color)` | `SchemeContent(sourceColorHct: Hct.fromInt(color), isDark: false, contrastLevel: 0.0)`   |
 | `Scheme.darkContent(color)`  | `SchemeContent(sourceColorHct: Hct.fromInt(color), isDark: true, contrastLevel: 0.0)`    |
+
+
 
 </section>
 
@@ -275,6 +279,13 @@ color from a given `scheme`.
 <section>
 
 ###### Dart
+
+```dart
+final argb = scheme.primary;
+final hct = scheme.getHct(MaterialDynamicColors.primary);
+```
+
+Alternatively:
 
 ```dart
 final argb = MaterialDynamicColors.primary.getArgb(scheme);

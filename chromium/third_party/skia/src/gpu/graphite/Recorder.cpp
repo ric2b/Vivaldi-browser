@@ -141,9 +141,7 @@ BackendApi Recorder::backend() const { return fSharedContext->backend(); }
 std::unique_ptr<Recording> Recorder::snap() {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
     ASSERT_SINGLE_OWNER
-    for (auto& device : fTrackedDevices) {
-        device->flushPendingWorkToRecorder();
-    }
+    this->priv().flushTrackedDevices();
 
     std::unordered_set<sk_sp<TextureProxy>, Recording::ProxyHash> nonVolatileLazyProxies;
     std::unordered_set<sk_sp<TextureProxy>, Recording::ProxyHash> volatileLazyProxies;
@@ -207,6 +205,12 @@ std::unique_ptr<Recording> Recorder::snap() {
 
 SkCanvas* Recorder::makeDeferredCanvas(const SkImageInfo& imageInfo,
                                        const TextureInfo& textureInfo) {
+    // Mipmaps can't reasonably be kept valid on a deferred surface with no actual texture.
+    if (textureInfo.mipmapped() == Mipmapped::kYes) {
+        SKGPU_LOG_W("Requested a deferred canvas with mipmapping; this is not supported");
+        return nullptr;
+    }
+
     if (fTargetProxyCanvas) {
         // Require snapping before requesting another canvas.
         SKGPU_LOG_W("Requested a new deferred canvas before snapping the previous one");

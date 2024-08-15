@@ -12,30 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {hex} from 'color-convert';
 import m from 'mithril';
 
 import {Icons} from '../base/semantic_icons';
 import {Actions} from '../common/actions';
-import {
-  getContainingTrackId,
-} from '../common/state';
+import {getContainingTrackId} from '../common/state';
 import {TrackCacheEntry} from '../common/track_cache';
 import {TrackTags} from '../public';
 
-import {
-  COLLAPSED_BACKGROUND,
-  EXPANDED_BACKGROUND,
-  TRACK_SHELL_WIDTH,
-} from './css_constants';
+import {TRACK_SHELL_WIDTH} from './css_constants';
 import {globals} from './globals';
 import {drawGridLines} from './gridline_helper';
 import {PanelSize} from './panel';
 import {Panel} from './panel_container';
-import {renderChips, TrackContent} from './track_panel';
 import {
-  drawVerticalLineAtTime,
-} from './vertical_line_helper';
+  CrashButton,
+  renderChips,
+  renderHoveredCursorVertical,
+  renderHoveredNoteVertical,
+  renderNoteVerticals,
+  renderWakeupVertical,
+  TrackContent,
+} from './track_panel';
+import {canvasClip} from '../common/canvas_utils';
 
 interface Attrs {
   trackGroupId: string;
@@ -58,15 +57,8 @@ export class TrackGroupPanel implements Panel {
     this.key = attrs.key;
   }
 
-  get mithril(): m.Children {
-    const {
-      trackGroupId,
-      title,
-      labels,
-      tags,
-      collapsed,
-      trackFSM,
-    } = this.attrs;
+  render(): m.Children {
+    const {trackGroupId, title, labels, tags, collapsed, trackFSM} = this.attrs;
 
     let name = title;
     if (name[0] === '/') {
@@ -91,12 +83,15 @@ export class TrackGroupPanel implements Panel {
     let checkBox = Icons.BlankCheckbox;
     if (selection !== null && selection.kind === 'AREA') {
       const selectedArea = globals.state.areas[selection.areaId];
-      if (selectedArea.tracks.includes(trackGroupId) &&
-          trackGroup.tracks.every((id) => selectedArea.tracks.includes(id))) {
+      if (
+        selectedArea.tracks.includes(trackGroupId) &&
+        trackGroup.tracks.every((id) => selectedArea.tracks.includes(id))
+      ) {
         checkBox = Icons.Checkbox;
       } else if (
-          selectedArea.tracks.includes(trackGroupId) ||
-          trackGroup.tracks.some((id) => selectedArea.tracks.includes(id))) {
+        selectedArea.tracks.includes(trackGroupId) ||
+        trackGroup.tracks.some((id) => selectedArea.tracks.includes(id))
+      ) {
         checkBox = Icons.IndeterminateCheckbox;
       }
     }
@@ -106,52 +101,68 @@ export class TrackGroupPanel implements Panel {
       child = labels.join(', ');
     }
 
+    const error = trackFSM?.getError();
+
     return m(
-        `.track-group-panel[collapsed=${collapsed}]`,
+      `.track-group-panel[collapsed=${collapsed}]`,
+      {
+        id: 'track_' + trackGroupId,
+        oncreate: () => this.onupdate(),
+        onupdate: () => this.onupdate(),
+      },
+      m(
+        `.shell`,
         {
-          id: 'track_' + trackGroupId,
-          oncreate: () => this.onupdate(),
-          onupdate: () => this.onupdate(),
-        },
-        m(`.shell`,
-          {
-            onclick: (e: MouseEvent) => {
-              globals.dispatch(Actions.toggleTrackGroupCollapsed({
+          onclick: (e: MouseEvent) => {
+            if (e.defaultPrevented) return;
+            globals.dispatch(
+              Actions.toggleTrackGroupCollapsed({
                 trackGroupId,
-              })),
-                  e.stopPropagation();
-            },
-            class: `${highlightClass}`,
+              }),
+            ),
+              e.stopPropagation();
           },
-
-          m('.fold-button',
-            m('i.material-icons',
-              collapsed ? Icons.ExpandDown : Icons.ExpandUp)),
-          m('.title-wrapper',
-            m(
-                'h1.track-title',
-                {title: name},
-                name,
-                renderChips(tags),
-                ),
-            (collapsed && child !== null) ? m('h2.track-subtitle', child) :
-                                            null),
-          selection && selection.kind === 'AREA' ?
-              m('i.material-icons.track-button',
-                {
-                  onclick: (e: MouseEvent) => {
-                    globals.dispatch(Actions.toggleTrackSelection(
-                        {id: trackGroupId, isTrackGroup: true}));
-                    e.stopPropagation();
-                  },
+          class: `${highlightClass}`,
+        },
+        m(
+          '.fold-button',
+          m('i.material-icons', collapsed ? Icons.ExpandDown : Icons.ExpandUp),
+        ),
+        m(
+          '.title-wrapper',
+          m('h1.track-title', {title: name}, name, renderChips(tags)),
+          collapsed && child !== null ? m('h2.track-subtitle', child) : null,
+        ),
+        error && m(CrashButton, {error}),
+        selection && selection.kind === 'AREA'
+          ? m(
+              'i.material-icons.track-button',
+              {
+                onclick: (e: MouseEvent) => {
+                  globals.dispatch(
+                    Actions.toggleTrackSelection({
+                      id: trackGroupId,
+                      isTrackGroup: true,
+                    }),
+                  );
+                  e.stopPropagation();
                 },
-                checkBox) :
-              ''),
-
-        trackFSM ? m(TrackContent,
-                     {track: trackFSM.track},
-                     (!collapsed && child !== null) ? m('span', child) : null) :
-                   null);
+              },
+              checkBox,
+            )
+          : '',
+      ),
+      trackFSM
+        ? m(
+            TrackContent,
+            {
+              track: trackFSM.track,
+              hasError: Boolean(trackFSM.getError()),
+            },
+            !collapsed && child !== null ? m('span', child) : null,
+          )
+        : null,
+    );
   }
 
   private onupdate() {
@@ -169,97 +180,50 @@ export class TrackGroupPanel implements Panel {
     if (selectedArea.tracks.includes(this.trackGroupId)) {
       ctx.fillStyle = 'rgba(131, 152, 230, 0.3)';
       ctx.fillRect(
-          visibleTimeScale.timeToPx(selectedArea.start) + TRACK_SHELL_WIDTH,
-          0,
-          visibleTimeScale.durationToPx(selectedAreaDuration),
-          size.height);
+        visibleTimeScale.timeToPx(selectedArea.start) + TRACK_SHELL_WIDTH,
+        0,
+        visibleTimeScale.durationToPx(selectedAreaDuration),
+        size.height,
+      );
     }
   }
 
   renderCanvas(ctx: CanvasRenderingContext2D, size: PanelSize) {
-    const {
-      collapsed,
-      trackFSM: track,
-    } = this.attrs;
-
-    ctx.fillStyle = collapsed ? COLLAPSED_BACKGROUND : EXPANDED_BACKGROUND;
-    ctx.fillRect(0, 0, size.width, size.height);
+    const {collapsed, trackFSM: track} = this.attrs;
 
     if (!collapsed) return;
 
-    this.highlightIfTrackSelected(ctx, size);
-
-    drawGridLines(
-        ctx,
-        size.width,
-        size.height);
-
     ctx.save();
-    ctx.translate(TRACK_SHELL_WIDTH, 0);
+    canvasClip(
+      ctx,
+      TRACK_SHELL_WIDTH,
+      0,
+      size.width - TRACK_SHELL_WIDTH,
+      size.height,
+    );
+    drawGridLines(ctx, size.width, size.height);
+
     if (track) {
+      ctx.save();
+      ctx.translate(TRACK_SHELL_WIDTH, 0);
       const trackSize = {...size, width: size.width - TRACK_SHELL_WIDTH};
-      track.update();
-      track.track.render(ctx, trackSize);
+      if (!track.getError()) {
+        track.update();
+        track.track.render(ctx, trackSize);
+      }
+      ctx.restore();
     }
-    ctx.restore();
 
     this.highlightIfTrackSelected(ctx, size);
 
     const {visibleTimeScale} = globals.timeline;
     // Draw vertical line when hovering on the notes panel.
-    if (globals.state.hoveredNoteTimestamp !== -1n) {
-      drawVerticalLineAtTime(
-          ctx,
-          visibleTimeScale,
-          globals.state.hoveredNoteTimestamp,
-          size.height,
-          `#aaa`);
-    }
-    if (globals.state.hoverCursorTimestamp !== -1n) {
-      drawVerticalLineAtTime(
-          ctx,
-          visibleTimeScale,
-          globals.state.hoverCursorTimestamp,
-          size.height,
-          `#344596`);
-    }
+    renderHoveredNoteVertical(ctx, visibleTimeScale, size);
+    renderHoveredCursorVertical(ctx, visibleTimeScale, size);
+    renderWakeupVertical(ctx, visibleTimeScale, size);
+    renderNoteVerticals(ctx, visibleTimeScale, size);
 
-    if (globals.state.currentSelection !== null) {
-      if (globals.state.currentSelection.kind === 'SLICE' &&
-          globals.sliceDetails.wakeupTs !== undefined) {
-        drawVerticalLineAtTime(
-            ctx,
-            visibleTimeScale,
-            globals.sliceDetails.wakeupTs,
-            size.height,
-            `black`);
-      }
-    }
-    // All marked areas should have semi-transparent vertical lines
-    // marking the start and end.
-    for (const note of Object.values(globals.state.notes)) {
-      if (note.noteType === 'AREA') {
-        const transparentNoteColor =
-            'rgba(' + hex.rgb(note.color.substr(1)).toString() + ', 0.65)';
-        drawVerticalLineAtTime(
-            ctx,
-            visibleTimeScale,
-            globals.state.areas[note.areaId].start,
-            size.height,
-            transparentNoteColor,
-            1);
-        drawVerticalLineAtTime(
-            ctx,
-            visibleTimeScale,
-            globals.state.areas[note.areaId].end,
-            size.height,
-            transparentNoteColor,
-            1);
-      } else if (note.noteType === 'DEFAULT') {
-        drawVerticalLineAtTime(
-            ctx, visibleTimeScale, note.timestamp, size.height, note.color);
-      }
-    }
+    ctx.restore();
   }
 }
 

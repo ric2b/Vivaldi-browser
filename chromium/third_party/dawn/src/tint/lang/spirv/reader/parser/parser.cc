@@ -165,7 +165,7 @@ class Parser {
     /// @returns a Tint type object
     const core::type::Type* Type(const spvtools::opt::analysis::Type* type,
                                  core::Access access_mode = core::Access::kUndefined) {
-        return types_.GetOrCreate(TypeKey{type, access_mode}, [&]() -> const core::type::Type* {
+        return types_.GetOrAdd(TypeKey{type, access_mode}, [&]() -> const core::type::Type* {
             switch (type->kind()) {
                 case spvtools::opt::analysis::Type::kVoid:
                     return ty_.void_();
@@ -324,7 +324,7 @@ class Parser {
     /// @param id a SPIR-V result ID for a function declaration instruction
     /// @returns a Tint function object
     core::ir::Function* Function(uint32_t id) {
-        return functions_.GetOrCreate(id, [&] {
+        return functions_.GetOrAdd(id, [&] {
             return b_.Function(ty_.void_(), core::ir::Function::PipelineStage::kUndefined,
                                std::nullopt);
         });
@@ -333,7 +333,7 @@ class Parser {
     /// @param id a SPIR-V result ID
     /// @returns a Tint value object
     core::ir::Value* Value(uint32_t id) {
-        return values_.GetOrCreate(id, [&]() -> core::ir::Value* {
+        return values_.GetOrAdd(id, [&]() -> core::ir::Value* {
             if (auto* c = spirv_context_->get_constant_mgr()->FindDeclaredConstant(id)) {
                 return b_.Constant(Constant(c));
             }
@@ -477,7 +477,7 @@ class Parser {
 
         // Handle OpExecutionMode declarations.
         for (auto& execution_mode : spirv_context_->module()->execution_modes()) {
-            auto* func = functions_.Get(execution_mode.GetSingleWordInOperand(0)).value_or(nullptr);
+            auto* func = functions_.GetOr(execution_mode.GetSingleWordInOperand(0), nullptr);
             auto mode = execution_mode.GetSingleWordInOperand(1);
             TINT_ASSERT_OR_RETURN(func);
 
@@ -669,14 +669,8 @@ class Parser {
             return type == other.type && access_mode == other.access_mode;
         }
 
-        /// Hasher provides a hash function for the TypeKey.
-        struct Hasher {
-            /// @param tk the TypeKey to create a hash for
-            /// @return the hash value
-            inline std::size_t operator()(const TypeKey& tk) const {
-                return HashCombine(Hash(tk.type), tk.access_mode);
-            }
-        };
+        /// @returns the hash code of the TypeKey
+        tint::HashCode HashCode() const { return Hash(type, access_mode); }
     };
 
     /// The generated IR module.
@@ -691,7 +685,7 @@ class Parser {
     /// The Tint IR block that is currently being emitted.
     core::ir::Block* current_block_ = nullptr;
     /// A map from a SPIR-V type declaration to the corresponding Tint type object.
-    Hashmap<TypeKey, const core::type::Type*, 16, TypeKey::Hasher> types_;
+    Hashmap<TypeKey, const core::type::Type*, 16> types_;
     /// A map from a SPIR-V function definition result ID to the corresponding Tint function object.
     Hashmap<uint32_t, core::ir::Function*, 8> functions_;
     /// A map from a SPIR-V result ID to the corresponding Tint value object.

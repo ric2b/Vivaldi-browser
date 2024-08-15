@@ -105,7 +105,7 @@ title: Server Side Test for Chromium OS Autotest Codelab
 
 ****### Syntax and style guide****
 
-****Before we start writing any code, it’s a good idea to understand and follow the Python coding style enforced in Chromium OS project. For Autotest code in Chromium OS project, the Python coding style must follow the coding style specified at the top level of the Autotest repo. This style adds a few additions to [PEP-8](http://www.python.org/dev/peps/pep-0008/) style guide, e.g., formatting on comments and Docstrings. You may also consider to follow [Python Style Guidelines in Chromium Projects](http://www.chromium.org/chromium-os/python-style-guidelines), but coding style defined in Autotest repo and [PEP-8](http://www.python.org/dev/peps/pep-0008/) style guide must take precedence.****
+****Before we start writing any code, it’s a good idea to understand and follow the Python coding style enforced in Chromium OS project. For Autotest code in Chromium OS project, the Python coding style must follow the coding style specified at the top level of the Autotest repo. This style adds a few additions to [PEP-8](http://www.python.org/dev/peps/pep-0008/) style guide, e.g., formatting on comments and Docstrings. You may also consider to follow [Python Style Guidelines](/chromium-os/developer-library/reference/style-guides/python), but coding style defined in Autotest repo and [PEP-8](http://www.python.org/dev/peps/pep-0008/) style guide must take precedence.****
 
 ****Some basic rules include:****
 

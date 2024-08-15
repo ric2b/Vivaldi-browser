@@ -68,7 +68,7 @@ export class LiveHeapProfileView extends UI.Widget.VBox {
     super(true);
     this.gridNodeByUrl = new Map();
 
-    this.setting = Common.Settings.Settings.instance().moduleSetting('memoryLiveHeapProfile');
+    this.setting = Common.Settings.Settings.instance().moduleSetting('memory-live-heap-profile');
     const toolbar = new UI.Toolbar.Toolbar('live-heap-profile-toolbar', this.contentElement);
     this.toggleRecordAction =
         UI.ActionRegistry.ActionRegistry.instance().getAction('live-heap-profile.toggle-recording');
@@ -99,9 +99,8 @@ export class LiveHeapProfileView extends UI.Widget.VBox {
   }
 
   createDataGrid(): DataGrid.SortableDataGrid.SortableDataGrid<GridNode> {
-    const k = Platform.StringUtilities.kebab;
     const defaultColumnConfig: DataGrid.DataGrid.ColumnDescriptor = {
-      id: k(''),
+      id: '',
       title: Common.UIString.LocalizedEmptyString,
       width: undefined,
       fixedWidth: true,
@@ -121,7 +120,7 @@ export class LiveHeapProfileView extends UI.Widget.VBox {
     const columns = [
       {
         ...defaultColumnConfig,
-        id: k('size'),
+        id: 'size',
         title: i18nString(UIStrings.jsHeap),
         width: '72px',
         fixedWidth: true,
@@ -132,7 +131,7 @@ export class LiveHeapProfileView extends UI.Widget.VBox {
       },
       {
         ...defaultColumnConfig,
-        id: k('isolates'),
+        id: 'isolates',
         title: i18nString(UIStrings.vms),
         width: '40px',
         fixedWidth: true,
@@ -141,13 +140,13 @@ export class LiveHeapProfileView extends UI.Widget.VBox {
       },
       {
         ...defaultColumnConfig,
-        id: k('url'),
+        id: 'url',
         title: i18nString(UIStrings.scriptUrl),
         fixedWidth: false,
         sortable: true,
         tooltip: i18nString(UIStrings.urlOfTheScriptSource),
       },
-    ];
+    ] as ({tooltip: Common.UIString.LocalizedString} & DataGrid.DataGrid.ColumnDescriptor)[];
     const dataGrid = new DataGrid.SortableDataGrid.SortableDataGrid({
       displayName: i18nString(UIStrings.heapProfile),
       columns,
@@ -238,12 +237,10 @@ export class LiveHeapProfileView extends UI.Widget.VBox {
     }
 
     for (const node of rootNode.children.slice()) {
-      // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-      // @ts-expect-error
-      if (!exisitingNodes.has(node)) {
-        node.remove();
+      const gridNode = node as GridNode;
+      if (!exisitingNodes.has(gridNode)) {
+        gridNode.remove();
       }
-      const gridNode = (node as GridNode);
       this.gridNodeByUrl.delete(gridNode.url);
     }
 
@@ -390,8 +387,8 @@ export class GridNode extends DataGrid.SortableDataGrid.SortableDataGridNode<unk
 
 export class ActionDelegate implements UI.ActionRegistration.ActionDelegate {
   handleAction(_context: UI.Context.Context, actionId: string): boolean {
-    void (async(): Promise<void> => {
-      const profileViewId = 'live_heap_profile';
+    void (async () => {
+      const profileViewId = 'live-heap-profile';
       await UI.ViewManager.ViewManager.instance().showView(profileViewId);
       const view = UI.ViewManager.ViewManager.instance().view(profileViewId);
       if (view) {

@@ -73,15 +73,15 @@ void FrameCrypto::Decrypt(const EncryptedFrame& encrypted_frame,
                           ByteBuffer out) const {
   // AES-CTC is symmetric. Thus, decryption back to the plaintext is the same as
   // encrypting the ciphertext; and both are the same size.
-  OSP_DCHECK_EQ(encrypted_frame.data.size(), out.size());
+  OSP_CHECK_EQ(encrypted_frame.data.size(), out.size());
   EncryptCommon(encrypted_frame.frame_id, encrypted_frame.data, out);
 }
 
 void FrameCrypto::EncryptCommon(FrameId frame_id,
                                 ByteView in,
                                 ByteBuffer out) const {
-  OSP_DCHECK(!frame_id.is_null());
-  OSP_DCHECK_EQ(in.size(), out.size());
+  OSP_CHECK(!frame_id.is_null());
+  OSP_CHECK_EQ(in.size(), out.size());
 
   // Compute the AES nonce for Cast Streaming payload encryption, which is based
   // on the |frame_id|.

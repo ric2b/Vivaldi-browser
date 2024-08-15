@@ -48,6 +48,10 @@
 #include "vivaldi/prefs/vivaldi_gen_pref_enums.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
+
+// locked keystore handling
+#include "extraparts/vivaldi_keystore_checker.h"
+
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #endif
@@ -145,6 +149,13 @@ void PerformUpdates(Profile* profile) {
   }
 }
 
+bool VivaldiValidateProfile(Profile* profile) {
+  // Handle locked keystore before side-effects of the loaded profile
+  // invalidate passwords. This gets called from the profile initialization
+  // code inside chrome before applying side-effects of loaded profile.
+  return !vivaldi::HasLockedKeystore(profile);
+}
+
 void VivaldiInitProfile(Profile* profile) {
   // Note that this is called for !vivaldi::IsVivaldiRunning() as well. So keep.
   if (vivaldi::IsVivaldiRunning()) {
@@ -167,6 +178,14 @@ void VivaldiInitProfile(Profile* profile) {
     if (bookmarks_model)
       vivaldi_partners::RemovedPartnersTracker::Create(profile,
                                                        bookmarks_model);
+
+#if !BUILDFLAG(IS_ANDROID)
+    // Workaround for VB-105645. The menu configuration code is located in a
+    // module that does not link to prefs and more.
+    bool compact =
+        profile->GetPrefs()->GetBoolean(vivaldiprefs::kMenuCompact);
+    vivaldi::SetUsingCompactLegacyMenu(compact);
+#endif
 
     // Manages its own lifetime.
     new VivaldiProfileObserver(profile);
@@ -226,7 +245,7 @@ void VivaldiInitProfile(Profile* profile) {
   // TODO: Move this to PerformUpdates() above.
   if (pref_service->GetInteger(vivaldiprefs::kStartupHasSeenFeature) <
       static_cast<int>(vivaldiprefs::StartupHasSeenFeatureValues::kMail)) {
-    if (IsBetaOrFinal()) {
+    if (ReleaseKind() >= Release::kBeta) {
       std::string version = ::vivaldi::GetVivaldiVersionString();
       std::vector<std::string> version_array = base::SplitString(
           version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);

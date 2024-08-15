@@ -194,10 +194,6 @@ void LayerTreeImpl::SetNeedsAnimate() {
   SetClientNeedsOneBeginFrame();
 }
 
-void LayerTreeImpl::SetNeedsRedraw() {
-  SetClientNeedsOneBeginFrame();
-}
-
 void LayerTreeImpl::MaybeCompositeNow() {
   if (frame_sink_) {
     frame_sink_->MaybeCompositeNow();
@@ -264,6 +260,13 @@ LayerTreeImpl::GetSurfaceRangesForTesting() const {
   return referenced_surfaces_;
 }
 
+void LayerTreeImpl::SetNeedsRedrawForTesting() {
+  // Clearing the previous damages, so that when the next BeginFrame arrives,
+  // the root layer will be treated as a new layer.
+  damage_from_previous_frame_.clear();
+  SetNeedsDraw();
+}
+
 bool LayerTreeImpl::BeginFrame(
     const viz::BeginFrameArgs& args,
     viz::CompositorFrame& out_frame,
@@ -328,7 +331,7 @@ void LayerTreeImpl::DidPresentCompositorFrame(
     // Only run `success_callbacks` if successful.
     if (success) {
       for (auto& callback : itr->success_callbacks) {
-        std::move(callback).Run(details.presentation_feedback.timestamp);
+        std::move(callback).Run(details);
       }
       itr->success_callbacks.clear();
     }

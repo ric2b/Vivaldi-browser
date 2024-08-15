@@ -45,6 +45,8 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.HistogramWatcher;
+import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.browser.hub.DisplayButtonData;
 import org.chromium.chrome.browser.hub.FullButtonData;
 import org.chromium.chrome.browser.hub.HubContainerView;
@@ -63,6 +65,8 @@ import org.chromium.chrome.browser.toolbar.TabSwitcherDrawable;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModel;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController.MenuOrKeyboardActionHandler;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler.BackPressResult;
+
+import java.util.function.DoubleConsumer;
 
 /** Unit tests for {@link TabSwitcherPane} and {@link TabSwitcherPaneBase}. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -84,6 +88,7 @@ public class TabSwitcherPaneUnitTest {
     @Mock private PaneHubController mPaneHubController;
     @Mock private TabSwitcherCustomViewManager.Delegate mCustomViewManagerDelegate;
     @Mock private View mCustomView;
+    @Mock private DoubleConsumer mOnAlphaChange;
 
     @Captor ArgumentCaptor<OnSharedPreferenceChangeListener> mPriceAnnotationsPrefListenerCaptor;
     @Captor ArgumentCaptor<Callback<Integer>> mOnTabClickedCallbackCaptor;
@@ -97,10 +102,14 @@ public class TabSwitcherPaneUnitTest {
     private MockTabModel mTabModel;
     private int mTimesCreated;
 
+    private UserActionTester mActionTester;
+
     @Before
     public void setUp() {
         mContext = ApplicationProvider.getApplicationContext();
         when(mHubContainerView.getContext()).thenReturn(mContext);
+
+        mActionTester = new UserActionTester();
 
         PriceTrackingFeatures.setPriceTrackingEnabledForTesting(true);
         PriceTrackingFeatures.setIsSignedInAndSyncEnabledForTesting(true);
@@ -110,6 +119,7 @@ public class TabSwitcherPaneUnitTest {
 
         mTabModel = new MockTabModel(mProfile, null);
         when(mTabModelFilter.getTabModel()).thenReturn(mTabModel);
+        when(mTabModelFilter.isTabModelRestored()).thenReturn(true);
 
         Supplier<Boolean> gridDialogVisibilitySupplier = () -> false;
         when(mTabSwitcherPaneCoordinator.getTabSwitcherCustomViewManagerDelegate())
@@ -152,7 +162,8 @@ public class TabSwitcherPaneUnitTest {
                         mTabSwitcherPaneCoordinatorFactory,
                         () -> mTabModelFilter,
                         mNewTabButtonClickListener,
-                        mTabSwitcherPaneDrawableCoordinator);
+                        mTabSwitcherPaneDrawableCoordinator,
+                        mOnAlphaChange);
         ShadowLooper.runUiThreadTasks();
         verify(mSharedPreferences)
                 .registerOnSharedPreferenceChangeListener(
@@ -245,6 +256,33 @@ public class TabSwitcherPaneUnitTest {
         assertNotNull(coordinator);
         verify(coordinator).softCleanup();
         verify(coordinator, never()).hardCleanup();
+    }
+
+    @Test
+    @SmallTest
+    public void testLoadHintColdHot_TabStateNotInitialized() {
+        when(mTabModelFilter.isCurrentlySelectedFilter()).thenReturn(true);
+        when(mTabModelFilter.isTabModelRestored()).thenReturn(false);
+
+        mTabSwitcherPane.notifyLoadHint(LoadHint.COLD);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertNull(mTabSwitcherPane.getTabSwitcherPaneCoordinator());
+
+        mTabSwitcherPane.notifyLoadHint(LoadHint.HOT);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        TabSwitcherPaneCoordinator coordinator = mTabSwitcherPane.getTabSwitcherPaneCoordinator();
+        assertNotNull(coordinator);
+        verify(coordinator, never()).resetWithTabList(mTabModelFilter);
+        verify(coordinator).setInitialScrollIndexOffset();
+        verify(coordinator).requestAccessibilityFocusOnCurrentTab();
+
+        when(mTabModelFilter.isTabModelRestored()).thenReturn(true);
+        var watcher =
+                HistogramWatcher.newSingleRecordWatcher(
+                        "Android.GridTabSwitcher.TimeToTabStateInitializedFromShown");
+        mTabSwitcherPane.showAllTabs();
+        verify(coordinator).resetWithTabList(mTabModelFilter);
+        watcher.assertExpected();
     }
 
     @Test
@@ -570,6 +608,29 @@ public class TabSwitcherPaneUnitTest {
 
         mOnTabClickedCallbackCaptor.getValue().onResult(tabId);
         verify(mPaneHubController).selectTabAndHideHub(tabId);
+    }
+
+    @Test
+    @SmallTest
+    public void testPriceDropRecord() {
+        mTabModel.addTab(TAB_ID);
+        mTabSwitcherPane.initWithNative();
+        mTabSwitcherPane.notifyLoadHint(LoadHint.HOT);
+        ShadowLooper.runUiThreadTasks();
+
+        mTabModel.setIndex(0, TabSelectionType.FROM_USER, false);
+        assertEquals(1, mActionTester.getActionCount("Commerce.TabGridSwitched.NoPriceDrop"));
+
+        mTabModel.addTab(TAB_ID + 1);
+        mTabModel.setIndex(1, TabSelectionType.FROM_USER, false);
+        assertEquals(2, mActionTester.getActionCount("Commerce.TabGridSwitched.NoPriceDrop"));
+
+        mTabSwitcherPane.notifyLoadHint(LoadHint.COLD);
+        ShadowLooper.runUiThreadTasks();
+
+        mTabModel.addTab(TAB_ID + 2);
+        mTabModel.setIndex(2, TabSelectionType.FROM_USER, false);
+        assertEquals(2, mActionTester.getActionCount("Commerce.TabGridSwitched.NoPriceDrop"));
     }
 
     private void createSelectedTab() {

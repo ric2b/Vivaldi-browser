@@ -9,6 +9,7 @@
 #include <math.h>
 
 #include <algorithm>
+#include <array>
 #include <iterator>
 #include <utility>
 
@@ -185,20 +186,20 @@ void CFX_FloatRect::Union(const CFX_FloatRect& other_rect) {
 
 FX_RECT CFX_FloatRect::GetOuterRect() const {
   FX_RECT rect;
-  rect.left = pdfium::base::saturated_cast<int>(floor(left));
-  rect.bottom = pdfium::base::saturated_cast<int>(ceil(top));
-  rect.right = pdfium::base::saturated_cast<int>(ceil(right));
-  rect.top = pdfium::base::saturated_cast<int>(floor(bottom));
+  rect.left = pdfium::saturated_cast<int>(floor(left));
+  rect.bottom = pdfium::saturated_cast<int>(ceil(top));
+  rect.right = pdfium::saturated_cast<int>(ceil(right));
+  rect.top = pdfium::saturated_cast<int>(floor(bottom));
   rect.Normalize();
   return rect;
 }
 
 FX_RECT CFX_FloatRect::GetInnerRect() const {
   FX_RECT rect;
-  rect.left = pdfium::base::saturated_cast<int>(ceil(left));
-  rect.bottom = pdfium::base::saturated_cast<int>(floor(top));
-  rect.right = pdfium::base::saturated_cast<int>(floor(right));
-  rect.top = pdfium::base::saturated_cast<int>(ceil(bottom));
+  rect.left = pdfium::saturated_cast<int>(ceil(left));
+  rect.bottom = pdfium::saturated_cast<int>(floor(top));
+  rect.right = pdfium::saturated_cast<int>(floor(right));
+  rect.top = pdfium::saturated_cast<int>(ceil(bottom));
   rect.Normalize();
   return rect;
 }
@@ -490,18 +491,18 @@ CFX_RectF CFX_Matrix::TransformRect(const CFX_RectF& rect) const {
 }
 
 CFX_FloatRect CFX_Matrix::TransformRect(const CFX_FloatRect& rect) const {
-  CFX_PointF points[] = {{rect.left, rect.top},
-                         {rect.left, rect.bottom},
-                         {rect.right, rect.top},
-                         {rect.right, rect.bottom}};
-  for (CFX_PointF& point : points)
+  std::array<CFX_PointF, 4> points = {{{rect.left, rect.top},
+                                       {rect.left, rect.bottom},
+                                       {rect.right, rect.top},
+                                       {rect.right, rect.bottom}}};
+  for (CFX_PointF& point : points) {
     point = Transform(point);
-
+  }
   float new_right = points[0].x;
   float new_left = points[0].x;
   float new_top = points[0].y;
   float new_bottom = points[0].y;
-  for (size_t i = 1; i < std::size(points); i++) {
+  for (size_t i = 1; i < points.size(); i++) {
     new_right = std::max(new_right, points[i].x);
     new_left = std::min(new_left, points[i].x);
     new_top = std::max(new_top, points[i].y);

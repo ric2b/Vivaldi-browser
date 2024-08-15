@@ -88,6 +88,15 @@ class VivaldiWindowClientView : public views::ClientView {
     return result;
   }
 
+  // Reimplemented to prevent windows to be resized into "nothing" by mistake.
+  // A typical issue is a tiny window with a blocking dialog inside.
+  // On X11 this value is forwarded as a hint to the WM for its resize actions
+  // using mouse and more. See VB-104294.
+  // This size is used by settings, regular windows and popups.
+  gfx::Size GetMinimumSize() const override {
+    return gfx::Size(100, 100);
+  }
+
  private:
   const raw_ptr<VivaldiBrowserWindow> window_;
 };

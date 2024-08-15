@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_contact_info.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_contact_property.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
@@ -90,16 +91,6 @@ TypeConverter<blink::ContactInfo*, blink::mojom::blink::ContactInfoPtr>::
 }  // namespace mojo
 
 namespace blink {
-namespace {
-
-// ContactProperty enum strings.
-constexpr char kAddress[] = "address";
-constexpr char kEmail[] = "email";
-constexpr char kName[] = "name";
-constexpr char kTel[] = "tel";
-constexpr char kIcon[] = "icon";
-
-}  // namespace
 
 // static
 const char ContactsManager::kSupplementName[] = "ContactsManager";
@@ -132,21 +123,24 @@ mojom::blink::ContactsManager* ContactsManager::GetContactsManager(
   return contacts_manager_.get();
 }
 
-const Vector<String>& ContactsManager::GetProperties(
+const Vector<V8ContactProperty>& ContactsManager::GetProperties(
     ScriptState* script_state) {
   if (properties_.empty()) {
-    properties_ = {kEmail, kName, kTel};
+    properties_ = {V8ContactProperty(V8ContactProperty::Enum::kEmail),
+                   V8ContactProperty(V8ContactProperty::Enum::kName),
+                   V8ContactProperty(V8ContactProperty::Enum::kTel)};
 
     if (RuntimeEnabledFeatures::ContactsManagerExtraPropertiesEnabled(
             ExecutionContext::From(script_state))) {
-      properties_.push_back(kAddress);
-      properties_.push_back(kIcon);
+      properties_.push_back(
+          V8ContactProperty(V8ContactProperty::Enum::kAddress));
+      properties_.push_back(V8ContactProperty(V8ContactProperty::Enum::kIcon));
     }
   }
   return properties_;
 }
 
-ScriptPromise ContactsManager::select(
+ScriptPromiseTyped<IDLSequence<ContactInfo>> ContactsManager::select(
     ScriptState* script_state,
     const Vector<V8ContactProperty>& properties,
     ContactsSelectOptions* options,
@@ -159,24 +153,24 @@ ScriptPromise ContactsManager::select(
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
         "The contacts API can only be used in the top frame");
-    return ScriptPromise();
+    return ScriptPromiseTyped<IDLSequence<ContactInfo>>();
   }
 
   if (!LocalFrame::HasTransientUserActivation(frame)) {
     exception_state.ThrowSecurityError(
         "A user gesture is required to call this method");
-    return ScriptPromise();
+    return ScriptPromiseTyped<IDLSequence<ContactInfo>>();
   }
 
   if (properties.empty()) {
     exception_state.ThrowTypeError("At least one property must be provided");
-    return ScriptPromise();
+    return ScriptPromiseTyped<IDLSequence<ContactInfo>>();
   }
 
   if (contact_picker_in_use_) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "Contacts Picker is already in use.");
-    return ScriptPromise();
+    return ScriptPromiseTyped<IDLSequence<ContactInfo>>();
   }
 
   bool include_names = false;
@@ -194,7 +188,7 @@ ScriptPromise ContactsManager::select(
       exception_state.ThrowTypeError(
           "The provided value '" + property.AsString() +
           "' is not a valid enum value of type ContactProperty");
-      return ScriptPromise();
+      return ScriptPromiseTyped<IDLSequence<ContactInfo>>();
     }
 
     switch (property.AsEnum()) {
@@ -216,9 +210,10 @@ ScriptPromise ContactsManager::select(
     }
   }
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+  auto* resolver = MakeGarbageCollected<
+      ScriptPromiseResolverTyped<IDLSequence<ContactInfo>>>(
       script_state, exception_state.GetContext());
-  ScriptPromise promise = resolver->Promise();
+  auto promise = resolver->Promise();
 
   contact_picker_in_use_ = true;
   GetContactsManager(script_state)
@@ -231,8 +226,8 @@ ScriptPromise ContactsManager::select(
 }
 
 void ContactsManager::OnContactsSelected(
-    ScriptPromiseResolver* resolver,
-    absl::optional<Vector<mojom::blink::ContactInfoPtr>> contacts) {
+    ScriptPromiseResolverTyped<IDLSequence<ContactInfo>>* resolver,
+    std::optional<Vector<mojom::blink::ContactInfoPtr>> contacts) {
   ScriptState* script_state = resolver->GetScriptState();
 
   if (!script_state->ContextIsValid()) {
@@ -258,10 +253,10 @@ void ContactsManager::OnContactsSelected(
   resolver->Resolve(contacts_list);
 }
 
-ScriptPromise ContactsManager::getProperties(ScriptState* script_state) {
-  return ScriptPromise::Cast(script_state,
-                             ToV8Traits<IDLSequence<IDLString>>::ToV8(
-                                 script_state, GetProperties(script_state)));
+ScriptPromiseTyped<IDLSequence<V8ContactProperty>>
+ContactsManager::getProperties(ScriptState* script_state) {
+  return ToResolvedPromise<IDLSequence<V8ContactProperty>>(
+      script_state, GetProperties(script_state));
 }
 
 void ContactsManager::Trace(Visitor* visitor) const {

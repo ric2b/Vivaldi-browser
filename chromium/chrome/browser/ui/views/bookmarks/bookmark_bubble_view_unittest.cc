@@ -18,7 +18,7 @@
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/commerce/mock_commerce_ui_tab_helper.h"
-#include "chrome/browser/ui/sync/bubble_sync_promo_delegate.h"
+#include "chrome/browser/ui/signin/bubble_signin_promo_delegate.h"
 #include "chrome/browser/ui/views/commerce/price_tracking_view.h"
 #include "chrome/browser/ui/views/commerce/shopping_collection_iph_view.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
@@ -32,13 +32,14 @@
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/test/mock_tracker.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
+#include "components/ukm/test_ukm_recorder.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/interaction/element_tracker.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/interaction/element_tracker_views.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/widget/unique_widget_ptr.h"
-
 using bookmarks::BookmarkModel;
 
 namespace {
@@ -110,12 +111,12 @@ class BookmarkBubbleViewTestBase : public BrowserWithTestWindowTest {
 
  protected:
   // Creates a bookmark bubble view.
-  void CreateBubbleView() {
+  void CreateBubbleView(bool already_bookmarked = true) {
     // Create a fake anchor view for the bubble.
     BookmarkBubbleView::ShowBubble(
         anchor_widget_->GetContentsView(),
         browser()->tab_strip_model()->GetActiveWebContents(), nullptr, nullptr,
-        browser(), GURL(kTestBookmarkURL), true);
+        browser(), GURL(kTestBookmarkURL), already_bookmarked);
   }
 
   const bookmarks::BookmarkNode* GetBookmark() { return bookmark_node_; }
@@ -175,6 +176,7 @@ TEST_F(BookmarkBubbleViewTest, SyncPromoNotSignedIn) {
 #if !BUILDFLAG(IS_FUCHSIA)
 // Verifies that the price tracking view is displayed for trackable product.
 TEST_F(BookmarkBubbleViewTest, PriceTrackingViewIsVisible) {
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
   commerce::MockShoppingService* mock_shopping_service =
       static_cast<commerce::MockShoppingService*>(
           commerce::ShoppingServiceFactory::GetForBrowserContext(profile()));
@@ -189,6 +191,33 @@ TEST_F(BookmarkBubbleViewTest, PriceTrackingViewIsVisible) {
   auto* price_tracking_view = GetPriceTrackingView();
   EXPECT_TRUE(price_tracking_view);
   EXPECT_FALSE(price_tracking_view->IsToggleOn());
+
+  // No Price Tracking UKM tracked for bookmark that is not new.
+  auto entries = ukm_recorder.GetEntriesByName(
+      ukm::builders::Shopping_ShoppingAction::kEntryName);
+  EXPECT_EQ(0u, entries.size());
+}
+
+TEST_F(BookmarkBubbleViewTest, RecordPriceTrackingUkmForNewBookmark) {
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  commerce::MockShoppingService* mock_shopping_service =
+      static_cast<commerce::MockShoppingService*>(
+          commerce::ShoppingServiceFactory::GetForBrowserContext(profile()));
+  mock_shopping_service->SetIsShoppingListEligible(true);
+
+  commerce::ProductInfo info;
+  info.product_cluster_id.emplace(12345L);
+  mock_shopping_service->SetIsSubscribedCallbackValue(false);
+  mock_shopping_service->SetResponseForGetProductInfoForUrl(info);
+
+  CreateBubbleView(false);
+
+  // Price Tracking UKM tracked for new bookmark.
+  auto entries = ukm_recorder.GetEntriesByName(
+      ukm::builders::Shopping_ShoppingAction::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  ukm_recorder.ExpectEntryMetric(
+      entries[0], ukm::builders::Shopping_ShoppingAction::kPriceTrackedName, 1);
 }
 
 TEST_F(BookmarkBubbleViewTest, PriceTrackingViewIsHidden) {
@@ -286,10 +315,6 @@ TEST_P(PriceTrackingViewFeatureFlagTest, PriceTrackingViewCreation) {
 class BookmarkBubbleViewShoppingCollectionTest
     : public BookmarkBubbleViewTestBase {
  public:
-  BookmarkBubbleViewShoppingCollectionTest() {
-    test_features_.InitAndEnableFeature(commerce::kShoppingCollection);
-  }
-
   void SetUp() override {
     BookmarkBubbleViewTestBase::SetUp();
 

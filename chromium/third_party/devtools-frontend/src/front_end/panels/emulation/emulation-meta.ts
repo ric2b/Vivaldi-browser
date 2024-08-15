@@ -81,7 +81,7 @@ UI.ActionRegistration.registerActionExtension({
     const Emulation = await loadEmulationModule();
     return new Emulation.DeviceModeWrapper.ActionDelegate();
   },
-  condition: Root.Runtime.ConditionName.CAN_DOCK,
+  condition: Root.Runtime.conditions.canDock,
   title: i18nLazyString(UIStrings.toggleDeviceToolbar),
   iconClass: UI.ActionRegistration.IconClass.LARGEICON_PHONE,
   bindings: [
@@ -103,7 +103,7 @@ UI.ActionRegistration.registerActionExtension({
     const Emulation = await loadEmulationModule();
     return new Emulation.DeviceModeWrapper.ActionDelegate();
   },
-  condition: Root.Runtime.ConditionName.CAN_DOCK,
+  condition: Root.Runtime.conditions.canDock,
   title: i18nLazyString(UIStrings.captureScreenshot),
 });
 
@@ -114,7 +114,7 @@ UI.ActionRegistration.registerActionExtension({
     const Emulation = await loadEmulationModule();
     return new Emulation.DeviceModeWrapper.ActionDelegate();
   },
-  condition: Root.Runtime.ConditionName.CAN_DOCK,
+  condition: Root.Runtime.conditions.canDock,
   title: i18nLazyString(UIStrings.captureFullSizeScreenshot),
 });
 
@@ -125,13 +125,13 @@ UI.ActionRegistration.registerActionExtension({
     const Emulation = await loadEmulationModule();
     return new Emulation.DeviceModeWrapper.ActionDelegate();
   },
-  condition: Root.Runtime.ConditionName.CAN_DOCK,
+  condition: Root.Runtime.conditions.canDock,
   title: i18nLazyString(UIStrings.captureNodeScreenshot),
 });
 
 Common.Settings.registerSettingExtension({
   category: Common.Settings.SettingCategory.MOBILE,
-  settingName: 'showMediaQueryInspector',
+  settingName: 'show-media-query-inspector',
   settingType: Common.Settings.SettingType.BOOLEAN,
   defaultValue: false,
   options: [
@@ -149,7 +149,7 @@ Common.Settings.registerSettingExtension({
 
 Common.Settings.registerSettingExtension({
   category: Common.Settings.SettingCategory.MOBILE,
-  settingName: 'emulation.showRulers',
+  settingName: 'emulation.show-rulers',
   settingType: Common.Settings.SettingType.BOOLEAN,
   defaultValue: false,
   options: [
@@ -167,7 +167,7 @@ Common.Settings.registerSettingExtension({
 
 Common.Settings.registerSettingExtension({
   category: Common.Settings.SettingCategory.MOBILE,
-  settingName: 'emulation.showDeviceOutline',
+  settingName: 'emulation.show-device-outline',
   settingType: Common.Settings.SettingType.BOOLEAN,
   defaultValue: false,
   options: [
@@ -185,7 +185,7 @@ Common.Settings.registerSettingExtension({
 
 UI.Toolbar.registerToolbarItem({
   actionId: 'emulation.toggle-device-mode',
-  condition: Root.Runtime.ConditionName.CAN_DOCK,
+  condition: Root.Runtime.conditions.canDock,
   location: UI.Toolbar.ToolbarItemLocation.MAIN_TOOLBAR_LEFT,
   order: 1,
   showLabel: undefined,
@@ -198,7 +198,7 @@ Common.AppProvider.registerAppProvider({
     const Emulation = await loadEmulationModule();
     return Emulation.AdvancedApp.AdvancedAppProvider.instance();
   },
-  condition: Root.Runtime.ConditionName.CAN_DOCK,
+  condition: Root.Runtime.conditions.canDock,
   order: 0,
 });
 

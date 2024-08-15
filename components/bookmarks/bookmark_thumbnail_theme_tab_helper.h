@@ -28,9 +28,8 @@ class BookmarkThumbnailThemeTabHelper
 
   // Implementing bookmarks::BaseBookmarkModelObserver
   void BookmarkModelChanged() override {}
-  void BookmarkModelLoaded(bookmarks::BookmarkModel* model,
-                           bool ids_reassigned) override;
-  void BookmarkModelBeingDeleted(bookmarks::BookmarkModel* model) override;
+  void BookmarkModelLoaded(bool ids_reassigned) override;
+  void BookmarkModelBeingDeleted() override;
 
   // content::WebContentsObserver implementation
   // Invoked when theme color is changed.

@@ -15,6 +15,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/bluetooth/bluetooth_chooser_context_factory.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/engagement/important_sites_util.h"
@@ -31,6 +32,7 @@
 #include "chrome/browser/privacy_sandbox/tracking_protection_settings_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profiles_state.h"
+#include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -57,12 +59,12 @@
 #include "components/site_engagement/content/site_engagement_service.h"
 #include "components/subresource_filter/content/browser/subresource_filter_content_settings_manager.h"
 #include "components/subresource_filter/content/browser/subresource_filter_profile_context.h"
-#include "components/supervised_user/core/common/features.h"
 #include "components/unified_consent/pref_names.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/buildflags/buildflags.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "url/origin.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -225,13 +227,6 @@ void ChromePermissionsClient::AreSitesImportant(
 bool ChromePermissionsClient::IsCookieDeletionDisabled(
     content::BrowserContext* browser_context,
     const GURL& origin) {
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-  if (!base::FeatureList::IsEnabled(
-          supervised_user::kClearingCookiesKeepsSupervisedUsersSignedIn)) {
-    return false;
-  }
-#endif
-
   if (!Profile::FromBrowserContext(browser_context)->IsChild())
     return false;
 
@@ -240,6 +235,7 @@ bool ChromePermissionsClient::IsCookieDeletionDisabled(
 }
 
 void ChromePermissionsClient::GetUkmSourceId(
+    ContentSettingsType permission_type,
     content::BrowserContext* browser_context,
     content::WebContents* web_contents,
     const GURL& requesting_origin,
@@ -247,6 +243,11 @@ void ChromePermissionsClient::GetUkmSourceId(
   if (web_contents) {
     ukm::SourceId source_id =
         web_contents->GetPrimaryMainFrame()->GetPageUkmSourceId();
+    std::move(callback).Run(source_id);
+  } else if (permission_type == ContentSettingsType::NOTIFICATIONS) {
+    ukm::SourceId source_id =
+        ukm::UkmRecorder::GetSourceIdForNotificationPermission(
+            base::PassKey<ChromePermissionsClient>(), requesting_origin);
     std::move(callback).Run(source_id);
   } else {
     // We only record a permission change if the origin is in the user's
@@ -391,6 +392,16 @@ void ChromePermissionsClient::OnPromptResolved(
              QuietUiReason::kTriggeredDueToDisruptiveBehavior)) {
       PermissionRevocationRequest::ExemptOriginFromFutureRevocations(profile,
                                                                      origin);
+    }
+    if (action == permissions::PermissionAction::GRANTED) {
+      if (g_browser_process->safe_browsing_service()) {
+        g_browser_process->safe_browsing_service()
+            ->MaybeSendNotificationsAcceptedReport(
+                web_contents->GetPrimaryMainFrame(), profile,
+                web_contents->GetLastCommittedURL(),
+                web_contents->GetController().GetLastCommittedEntry()->GetURL(),
+                origin, prompt_display_duration);
+      }
     }
   }
 

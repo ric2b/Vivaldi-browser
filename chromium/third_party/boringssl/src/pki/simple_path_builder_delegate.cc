@@ -11,11 +11,12 @@
 #include <openssl/ec_key.h>
 #include <openssl/evp.h>
 #include <openssl/nid.h>
+#include <openssl/pki/signature_verify_cache.h>
 #include <openssl/rsa.h>
+
 #include "cert_error_params.h"
 #include "cert_errors.h"
 #include "signature_algorithm.h"
-#include "signature_verify_cache.h"
 #include "verify_signed_data.h"
 
 namespace bssl {
@@ -54,6 +55,8 @@ void SimplePathBuilderDelegate::CheckPathAfterVerification(
 bool SimplePathBuilderDelegate::IsDeadlineExpired() { return false; }
 
 bool SimplePathBuilderDelegate::IsDebugLogEnabled() { return false; }
+
+bool SimplePathBuilderDelegate::AcceptPreCertificates() { return false; }
 
 void SimplePathBuilderDelegate::DebugLog(std::string_view msg) {}
 

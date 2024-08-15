@@ -6,6 +6,7 @@
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "prefs/vivaldi_pref_names.h"
 
 @interface VivaldiTabSettingsMediator () <BooleanObserver> {
@@ -54,29 +55,51 @@
   _tabBarEnabled = nil;
 }
 
+#pragma mark - Private Helpers
+- (BOOL)isBottomOmniboxEnabled {
+  if (!_bottomOmniboxEnabled) {
+    return NO;
+  }
+  return [_bottomOmniboxEnabled value];
+}
+
+- (BOOL)isReverseSearchResultOrder {
+  if (!_reverseSearchResultsEnabled) {
+    return NO;
+  }
+  return [_reverseSearchResultsEnabled value];
+}
+
+- (BOOL)isTabBarEnabled {
+  if ([VivaldiGlobalHelpers isDeviceTablet] || !_tabBarEnabled) {
+    return YES;
+  }
+  return [_tabBarEnabled value];
+}
+
 #pragma mark - Properties
 
 - (void)setConsumer:(id<VivaldiTabsSettingsConsumer>)consumer {
   _consumer = consumer;
-  [self.consumer setPreferenceForOmniboxAtBottom:[_bottomOmniboxEnabled value]];
+  [self.consumer setPreferenceForOmniboxAtBottom:[self isBottomOmniboxEnabled]];
   [self.consumer setPreferenceForReverseSearchResultOrder:
-      [_reverseSearchResultsEnabled value]];
-  [self.consumer setPreferenceForShowTabBar:[_tabBarEnabled value]];
+      [self isReverseSearchResultOrder]];
+  [self.consumer setPreferenceForShowTabBar:[self isTabBarEnabled]];
 }
 
 #pragma mark - VivaldiTabsSettingsConsumer
 - (void)setPreferenceForOmniboxAtBottom:(BOOL)omniboxAtBottom {
-  if (omniboxAtBottom != [_bottomOmniboxEnabled value])
+  if (omniboxAtBottom != [self isBottomOmniboxEnabled])
     [_bottomOmniboxEnabled setValue:omniboxAtBottom];
 }
 
 - (void)setPreferenceForReverseSearchResultOrder:(BOOL)reverseOrder {
-  if (reverseOrder != [_reverseSearchResultsEnabled value])
+  if (reverseOrder != [self isReverseSearchResultOrder])
     [_reverseSearchResultsEnabled setValue:reverseOrder];
 }
 
 - (void)setPreferenceForShowTabBar:(BOOL)showTabBar {
-  if (showTabBar != [_tabBarEnabled value])
+  if (showTabBar != [self isTabBarEnabled])
     [_tabBarEnabled setValue:showTabBar];
 }
 

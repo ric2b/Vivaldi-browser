@@ -4,10 +4,10 @@
 
 #include "third_party/blink/renderer/core/css/parser/at_rule_descriptor_parser.h"
 
-#include "third_party/blink/renderer/core/css/css_custom_property_declaration.h"
 #include "third_party/blink/renderer/core/css/css_font_face_src_value.h"
 #include "third_party/blink/renderer/core/css/css_string_value.h"
 #include "third_party/blink/renderer/core/css/css_unicode_range_value.h"
+#include "third_party/blink/renderer/core/css/css_unparsed_declaration_value.h"
 #include "third_party/blink/renderer/core/css/css_unset_value.h"
 #include "third_party/blink/renderer/core/css/css_value.h"
 #include "third_party/blink/renderer/core/css/css_value_pair.h"
@@ -296,9 +296,9 @@ CSSValue* ConsumeDescriptor(StyleRule::RuleType rule_type,
     case StyleRule::kNamespace:
     case StyleRule::kScope:
     case StyleRule::kSupports:
-    case StyleRule::kPositionFallback:
-    case StyleRule::kTry:
     case StyleRule::kStartingStyle:
+    case StyleRule::kFunction:
+    case StyleRule::kPositionTry:
       // TODO(andruud): Handle other descriptor types here.
       NOTREACHED();
       return nullptr;

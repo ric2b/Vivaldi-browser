@@ -54,9 +54,13 @@ struct BindingInfo {
     /// @returns true if this BindingInfo is not equal to `rhs`
     inline bool operator!=(const BindingInfo& rhs) const { return !(*this == rhs); }
 
+    /// @returns the hash code of the BindingInfo
+    tint::HashCode HashCode() const { return Hash(group, binding); }
+
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-    TINT_REFLECT(group, binding);
+    TINT_REFLECT(BindingInfo, group, binding);
 };
+
 using Uniform = BindingInfo;
 using Storage = BindingInfo;
 using Texture = BindingInfo;
@@ -73,7 +77,7 @@ struct ExternalTexture {
     BindingInfo plane1{};
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-    TINT_REFLECT(metadata, plane0, plane1);
+    TINT_REFLECT(ExternalTexture, metadata, plane0, plane1);
 };
 
 }  // namespace binding
@@ -107,11 +111,14 @@ struct Bindings {
     ExternalTextureBindings external_texture{};
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-    TINT_REFLECT(uniform, storage, texture, storage_texture, sampler, external_texture);
+    TINT_REFLECT(Bindings, uniform, storage, texture, storage_texture, sampler, external_texture);
 };
 
 /// Configuration options used for generating SPIR-V.
 struct Options {
+    /// The bindings
+    Bindings bindings;
+
     /// Set to `true` to disable software robustness that prevents out-of-bounds accesses.
     bool disable_robustness = false;
 
@@ -127,6 +134,9 @@ struct Options {
     /// Set to `true` to initialize workgroup memory with OpConstantNull when
     /// VK_KHR_zero_initialize_workgroup_memory is enabled.
     bool use_zero_initialize_workgroup_memory_extension = false;
+
+    /// Set to `true` to use the StorageInputOutput16 capability for shader IO that uses f16 types.
+    bool use_storage_input_output_16 = true;
 
     /// Set to `true` to generate a PointSize builtin and have it set to 1.0
     /// from all vertex shaders in the module.
@@ -149,21 +159,21 @@ struct Options {
     /// Set to `true` to disable the polyfills on integer division and modulo.
     bool disable_polyfill_integer_div_mod = false;
 
-    /// The bindings
-    Bindings bindings;
-
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-    TINT_REFLECT(disable_robustness,
+    TINT_REFLECT(Options,
+                 bindings,
+                 disable_robustness,
                  disable_image_robustness,
                  disable_runtime_sized_array_index_clamping,
                  disable_workgroup_init,
                  use_zero_initialize_workgroup_memory_extension,
+                 use_storage_input_output_16,
                  emit_vertex_point_size,
                  clamp_frag_depth,
+                 pass_matrix_by_pointer,
                  experimental_require_subgroup_uniform_control_flow,
                  polyfill_dot_4x8_packed,
-                 disable_polyfill_integer_div_mod,
-                 bindings);
+                 disable_polyfill_integer_div_mod);
 };
 
 }  // namespace tint::spirv::writer

@@ -296,18 +296,30 @@ MetricsStateManager::MetricsStateManager(
                             base::Uuid::GenerateRandomV4().AsLowercaseString());
   }
 
-  // The |initial_client_id_| should only be set if UMA is enabled or there's a
-  // provisional client id.
-  initial_client_id_ =
-      (client_id_.empty()
-           ? local_state_->GetString(prefs::kMetricsProvisionalClientID)
-           : client_id_);
-  DCHECK(!instance_exists_);
+  // `initial_client_id_` will only be set in the following cases:
+  // 1. UMA is enabled
+  // 2. there is a provisional client id (due to this being a first run)
+  // 3. there is an externally provided client ID (e.g. in Lacros, from Ash)
+  if (!client_id_.empty()) {
+    initial_client_id_ = client_id_;
+  } else if (!external_client_id_.empty()) {
+    // Typically, `client_id_` should have been set to the external client ID in
+    // the call to ForceClientIdCreation() above. However, that call is gated,
+    // and may not always happen, for example if this is a first run and the
+    // consent state is not yet known (although we know it is soon going to be
+    // set to true, since an external client ID was provided).
+    initial_client_id_ = external_client_id_;
+  } else {
+    // Note that there is possibly no provisional client ID.
+    initial_client_id_ =
+        local_state_->GetString(prefs::kMetricsProvisionalClientID);
+  }
+  CHECK(!instance_exists_);
   instance_exists_ = true;
 }
 
 MetricsStateManager::~MetricsStateManager() {
-  DCHECK(instance_exists_);
+  CHECK(instance_exists_);
   instance_exists_ = false;
 }
 
@@ -523,12 +535,18 @@ MetricsStateManager::AddOnClonedInstallDetectedCallback(
 }
 
 std::unique_ptr<const variations::EntropyProviders>
-MetricsStateManager::CreateEntropyProviders() {
+MetricsStateManager::CreateEntropyProviders(bool enable_limited_entropy_mode) {
+  // TODO(crbug.com/1508150): remove `enable_limited_entropy_mode` when it's
+  // true for all callers.
+  auto limited_entropy_randomization_source =
+      enable_limited_entropy_mode ? GetLimitedEntropyRandomizationSource()
+                                  : std::string_view();
   return std::make_unique<variations::EntropyProviders>(
       GetHighEntropySource(),
       variations::ValueInRange{
           .value = base::checked_cast<uint32_t>(GetLowEntropySource()),
           .range = EntropyState::kMaxLowEntropySize},
+      limited_entropy_randomization_source,
       ShouldEnableBenchmarking(entropy_params_.force_benchmarking_mode));
 }
 
@@ -602,10 +620,21 @@ std::unique_ptr<ClientInfo> MetricsStateManager::LoadClientInfo() {
   return client_info;
 }
 
+std::string_view MetricsStateManager::GetLimitedEntropyRandomizationSource() {
+  // No limited entropy randomization source will be generated if limited
+  // entropy randomization is not supported in this context (e.g. in Android
+  // Webview).
+  if (entropy_params_.default_entropy_provider_type ==
+      EntropyProviderType::kLow) {
+    return std::string_view();
+  }
+  return entropy_state_.GetLimitedEntropyRandomizationSource();
+}
+
 std::string MetricsStateManager::GetHighEntropySource() {
   // If high entropy randomization is not supported in this context (e.g. in
-  // webview), or if UMA is not enabled (so there is no client id), then high
-  // entropy randomization is disabled.
+  // Android Webview), or if UMA is not enabled (so there is no client id), then
+  // high entropy randomization is disabled.
   if (entropy_params_.default_entropy_provider_type ==
           EntropyProviderType::kLow ||
       initial_client_id_.empty()) {

@@ -8,7 +8,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/containers/cxx20_erase.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/ref_counted.h"
@@ -128,55 +127,57 @@ ServiceWorkerProviderContext::~ServiceWorkerProviderContext() {
 
 blink::mojom::ServiceWorkerObjectInfoPtr
 ServiceWorkerProviderContext::TakeController() {
-  DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
+  CHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
   return std::move(controller_);
 }
 
 int64_t ServiceWorkerProviderContext::GetControllerVersionId() const {
-  DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
+  CHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
   return controller_version_id_;
 }
 
 network::mojom::URLLoaderFactory*
 ServiceWorkerProviderContext::GetSubresourceLoaderFactoryInternal() {
-  if (!remote_controller_ && !controller_connector_) {
-    // No controller is attached.
-    return nullptr;
-  }
+  if (!need_router_evaluate_) {
+    if (!remote_controller_ && !controller_connector_) {
+      // No controller is attached.
+      return nullptr;
+    }
 
-  if (controller_mode_ !=
-      blink::mojom::ControllerServiceWorkerMode::kControlled) {
-    // The controller does not exist or has no fetch event handler.
-    return nullptr;
-  }
+    if (controller_mode_ !=
+        blink::mojom::ControllerServiceWorkerMode::kControlled) {
+      // The controller does not exist or has no fetch event handler.
+      return nullptr;
+    }
 
-  if (effective_fetch_handler_type_ !=
-      blink::mojom::ServiceWorkerFetchHandlerType::kNotSkippable) {
-    // The fetch handler can be skipped.  The service worker process should
-    // not be ready for this case.
-    CountFeature(
-        blink::mojom::WebFeature::kServiceWorkerSkippedForSubresourceLoad);
-    return nullptr;
-  }
+    if (effective_fetch_handler_type_ !=
+        blink::mojom::ServiceWorkerFetchHandlerType::kNotSkippable) {
+      // The fetch handler can be skipped.  The service worker process should
+      // not be ready for this case.
+      CountFeature(
+          blink::mojom::WebFeature::kServiceWorkerSkippedForSubresourceLoad);
+      return nullptr;
+    }
 
-  if (fetch_handler_bypass_option_ ==
-      blink::mojom::ServiceWorkerFetchHandlerBypassOption::
-          kBypassOnlyIfServiceWorkerNotStarted) {
-    // If the fetch handler for the main resource is skipped by
-    // ServiceWorkerBypassFetchHandler, the fetch handler doesn't handle
-    // subresources too.
-    return nullptr;
-  }
+    if (fetch_handler_bypass_option_ ==
+        blink::mojom::ServiceWorkerFetchHandlerBypassOption::
+            kBypassOnlyIfServiceWorkerNotStarted) {
+      // If the fetch handler for the main resource is skipped by
+      // ServiceWorkerBypassFetchHandler, the fetch handler doesn't handle
+      // subresources too.
+      return nullptr;
+    }
 
-  if (ShouldBypassFetchHandlerForSubresource(sha256_script_checksum_)) {
-    CountFeature(blink::mojom::WebFeature::
-                     kServiceWorkerBypassFetchHandlerForSubResource);
-    return nullptr;
+    if (ShouldBypassFetchHandlerForSubresource(sha256_script_checksum_)) {
+      CountFeature(blink::mojom::WebFeature::
+                       kServiceWorkerBypassFetchHandlerForSubResource);
+      return nullptr;
+    }
   }
 
   if (!subresource_loader_factory_) {
-    DCHECK(!controller_connector_);
-    DCHECK(remote_controller_);
+    CHECK(!controller_connector_);
+    CHECK(remote_controller_ || need_router_evaluate_);
 
     mojo::PendingRemote<blink::mojom::ServiceWorkerContainerHost>
         remote_container_host = CloneRemoteContainerHost();
@@ -200,7 +201,7 @@ ServiceWorkerProviderContext::GetSubresourceLoaderFactoryInternal() {
             subresource_loader_factory_.BindNewPipeAndPassReceiver(),
             task_runner));
 
-    DCHECK(!weak_wrapped_subresource_loader_factory_);
+    CHECK(!weak_wrapped_subresource_loader_factory_);
     weak_wrapped_subresource_loader_factory_ =
         base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
             subresource_loader_factory_.get());
@@ -222,8 +223,8 @@ ServiceWorkerProviderContext::GetSubresourceLoaderFactory() {
 
 blink::mojom::ServiceWorkerContainerHost*
 ServiceWorkerProviderContext::container_host() const {
-  DCHECK_EQ(blink::mojom::ServiceWorkerContainerType::kForWindow,
-            container_type_);
+  CHECK_EQ(blink::mojom::ServiceWorkerContainerType::kForWindow,
+           container_type_);
   return container_host_ ? container_host_.get() : nullptr;
 }
 
@@ -245,7 +246,7 @@ void ServiceWorkerProviderContext::SetWebServiceWorkerProvider(
 void ServiceWorkerProviderContext::RegisterWorkerClient(
     mojo::PendingRemote<blink::mojom::ServiceWorkerWorkerClient>
         pending_client) {
-  DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
+  CHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
   mojo::Remote<blink::mojom::ServiceWorkerWorkerClient> client(
       std::move(pending_client));
   client.set_disconnect_handler(base::BindOnce(
@@ -257,7 +258,7 @@ void ServiceWorkerProviderContext::RegisterWorkerClient(
 void ServiceWorkerProviderContext::CloneWorkerClientRegistry(
     mojo::PendingReceiver<blink::mojom::ServiceWorkerWorkerClientRegistry>
         receiver) {
-  DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
+  CHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
   worker_client_registry_receivers_.Add(this, std::move(receiver));
 }
 
@@ -266,7 +267,7 @@ void ServiceWorkerProviderContext::OnNetworkProviderDestroyed() {
 }
 
 void ServiceWorkerProviderContext::DispatchNetworkQuiet() {
-  DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
+  CHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
 
   if (controller_mode_ ==
       blink::mojom::ControllerServiceWorkerMode::kNoController) {
@@ -280,9 +281,9 @@ void ServiceWorkerProviderContext::DispatchNetworkQuiet() {
 }
 
 void ServiceWorkerProviderContext::NotifyExecutionReady() {
-  DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
-  DCHECK_EQ(container_type(),
-            blink::mojom::ServiceWorkerContainerType::kForWindow)
+  CHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
+  CHECK_EQ(container_type(),
+           blink::mojom::ServiceWorkerContainerType::kForWindow)
       << "only windows need to send this message; shared workers have "
          "execution ready set on the browser-side when the response is "
          "committed";
@@ -318,7 +319,7 @@ void ServiceWorkerProviderContext::
 blink::CrossVariantMojoRemote<
     blink::mojom::ServiceWorkerContainerHostInterfaceBase>
 ServiceWorkerProviderContext::CloneRemoteContainerHost() {
-  DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
+  CHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
   if (!container_host_) {
     return blink::CrossVariantMojoRemote<
         blink::mojom::ServiceWorkerContainerHostInterfaceBase>();
@@ -332,15 +333,15 @@ ServiceWorkerProviderContext::CloneRemoteContainerHost() {
 
 blink::mojom::ControllerServiceWorkerMode
 ServiceWorkerProviderContext::GetControllerServiceWorkerMode() const {
-  DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
+  CHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
   return controller_mode_;
 }
 
 blink::mojom::ServiceWorkerFetchHandlerType
 ServiceWorkerProviderContext::GetFetchHandlerType() const {
-  DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
-  DCHECK_NE(controller_version_id_,
-            blink::mojom::kInvalidServiceWorkerVersionId);
+  CHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
+  CHECK_NE(controller_version_id_,
+           blink::mojom::kInvalidServiceWorkerVersionId);
   return fetch_handler_type_;
 }
 
@@ -358,8 +359,8 @@ const blink::WebString ServiceWorkerProviderContext::client_id() const {
 
 void ServiceWorkerProviderContext::UnregisterWorkerFetchContext(
     blink::mojom::ServiceWorkerWorkerClient* client) {
-  DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
-  base::EraseIf(
+  CHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
+  std::erase_if(
       worker_clients_,
       [client](const mojo::Remote<blink::mojom::ServiceWorkerWorkerClient>&
                    remote_client) { return remote_client.get() == client; });
@@ -368,32 +369,33 @@ void ServiceWorkerProviderContext::UnregisterWorkerFetchContext(
 void ServiceWorkerProviderContext::SetController(
     blink::mojom::ControllerServiceWorkerInfoPtr controller_info,
     bool should_notify_controllerchange) {
-  DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
+  CHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
 
   controller_ = std::move(controller_info->object_info);
   controller_version_id_ = controller_
                                ? controller_->version_id
                                : blink::mojom::kInvalidServiceWorkerVersionId;
   // The client id should never change once set.
-  DCHECK(client_id_.empty() || client_id_ == controller_info->client_id);
+  CHECK(client_id_.empty() || client_id_ == controller_info->client_id);
   client_id_ = controller_info->client_id;
 
   if (controller_info->fetch_request_window_id) {
-    DCHECK(controller_);
+    CHECK(controller_);
     fetch_request_window_id_ = *controller_info->fetch_request_window_id;
   } else {
     fetch_request_window_id_ = base::UnguessableToken();
   }
 
-  DCHECK((controller_info->mode ==
-              blink::mojom::ControllerServiceWorkerMode::kNoController &&
-          !controller_) ||
-         (controller_info->mode !=
-              blink::mojom::ControllerServiceWorkerMode::kNoController &&
-          controller_));
+  CHECK((controller_info->mode ==
+             blink::mojom::ControllerServiceWorkerMode::kNoController &&
+         !controller_) ||
+        (controller_info->mode !=
+             blink::mojom::ControllerServiceWorkerMode::kNoController &&
+         controller_));
   controller_mode_ = controller_info->mode;
   fetch_handler_type_ = controller_info->fetch_handler_type;
   effective_fetch_handler_type_ = controller_info->effective_fetch_handler_type;
+  need_router_evaluate_ = controller_info->need_router_evaluate;
   remote_controller_ = std::move(controller_info->remote_controller);
   fetch_handler_bypass_option_ = controller_info->fetch_handler_bypass_option;
   sha256_script_checksum_ = controller_info->sha256_script_checksum;
@@ -409,8 +411,8 @@ void ServiceWorkerProviderContext::SetController(
 
   // Propagate the controller to workers related to this provider.
   if (controller_) {
-    DCHECK_NE(blink::mojom::kInvalidServiceWorkerVersionId,
-              controller_->version_id);
+    CHECK_NE(blink::mojom::kInvalidServiceWorkerVersionId,
+             controller_->version_id);
     for (const auto& worker : worker_clients_) {
       // This is a Mojo interface call to the (dedicated or shared) worker
       // thread.
@@ -456,7 +458,7 @@ void ServiceWorkerProviderContext::SetController(
 void ServiceWorkerProviderContext::PostMessageToClient(
     blink::mojom::ServiceWorkerObjectInfoPtr source,
     blink::TransferableMessage message) {
-  DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
+  CHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
 
   if (web_service_worker_provider_) {
     web_service_worker_provider_->PostMessageToClient(std::move(source),
@@ -466,7 +468,7 @@ void ServiceWorkerProviderContext::PostMessageToClient(
 
 void ServiceWorkerProviderContext::CountFeature(
     blink::mojom::WebFeature feature) {
-  DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
+  CHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
 
   // ServiceWorkerProviderContext keeps track of features in order to propagate
   // it to WebServiceWorkerProviderClient, which actually records the

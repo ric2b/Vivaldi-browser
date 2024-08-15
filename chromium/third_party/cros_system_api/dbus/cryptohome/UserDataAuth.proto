@@ -22,7 +22,7 @@ syntax = "proto3";
 option optimize_for = LITE_RUNTIME;
 
 package user_data_auth;
-option go_package = "chromiumos/system_api/user_data_auth_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/user_data_auth_proto";
 
 import "auth_factor.proto";
 import "fido.proto";
@@ -166,12 +166,13 @@ enum PrimaryAction {
   // probable_action field for more info.
   PRIMARY_INCORRECT_AUTH = 8;
 
-  // PRIMARY_LE_LOCKED_OUT indicates that authentication is attempted towards a
-  // locked out LE credential, or that its auth is incorrect and made a LE
-  // credential locked.
-  // Therefore, the caller should try another authentication method that resets
-  // the LE credential, or wait until the LE credential is available.
-  PRIMARY_LE_LOCKED_OUT = 9;
+  // PRIMARY_FACTOR_LOCKED_OUT indicates that authentication is attempted
+  // towards a locked out credential, or that its auth is incorrect and made a
+  // credential locked. For LE credentials the caller should try another
+  // authentication method that resets the LE credential, or wait until the LE
+  // credential is available. For CryptohomeRecovery the system needs to be
+  // rebooted, the caller may inform the user of the needed action.
+  PRIMARY_FACTOR_LOCKED_OUT = 9;
 
   // PRIMARY_LE_EXPIRED indicates that authentication is attempted towards an
   // expired LE credential. Therefore, the caller should try another
@@ -534,21 +535,11 @@ message LowDiskSpace {
   uint64 disk_free_bytes = 1;
 }
 
-// These flags will define any requests from the caller for how to run an
-// AuthSession.
-enum AuthSessionFlags {
-  // Default Value.
-  AUTH_SESSION_FLAGS_NONE = 0;
-  // This flag is set when auth session is used for an ephemeral user.
-  AUTH_SESSION_FLAGS_EPHEMERAL_USER = 2;
-  reserved 1;
-}
-
 message StartAuthSessionRequest {
   // The account of the user whose home directory is requested for mounting.
   cryptohome.AccountIdentifier account_id = 1;
-  // AuthSessionFlags to define AuthSession behaviour.
-  uint32 flags = 2;
+  // Specifies if this user is ephemeral or not.
+  bool is_ephemeral_user = 4;
   // The target intent of the authentication. This parameter declares which kind
   // of operations the caller wants to perform after the successful
   // authentication. During authentication, cryptohome will only offer factors
@@ -556,17 +547,28 @@ message StartAuthSessionRequest {
   // TODO(b/240596931): Stop assuming that leaving this unset is the same as
   // `AUTH_INTENT_DECRYPT`, and forbid `AUTH_INTENT_UNSPECIFIED`.
   AuthIntent intent = 3;
+
+  reserved 2;
 }
 
 message StatusInfo {
-  // This field will be used for PIN lockout time. Once an auth factor is locked
-  // out, this field will show the time the factor is locked out for in
+  // This field will be used for factor lockout time. Once an auth factor is
+  // locked out, this field will show the time the factor is locked out for in
   // milliseconds. If the auth factor is not locked, this field will be set to
   // zero. If the auth factor is locked out permanently (i.e. until it is
   // unlocked via a separate credential) this will be set to the maximum uint64
   // value. |time_available_in| would be indicated in terms of a wall clock
   // timer, and it will not be affected by sleep.
   uint64 time_available_in = 1;
+  // This field will be used for remaining time until the factor is expired.
+  // Once an auth factor is expired it needs to be unlocked via a separate
+  // credential.
+  // If the auth factor is already expired, this field will be set to zero.
+  // If the auth factor won't expire, this will be set to the maximum uint64
+  // value, and will not decrement through time.
+  // This field would be indicated in terms of a wall clock time, and keeps
+  // counting through sleep.
+  uint64 time_expiring_in = 2;
 }
 
 // AuthFactorWithStatus returns read-only AuthFactor with relevant status
@@ -576,13 +578,10 @@ message StatusInfo {
 message AuthFactorWithStatus {
   // AuthFactor read from disk.
   AuthFactor auth_factor = 1;
-  // Gives the set of possible actions available for this
-  // auth_factor. For example:
-  // 1) If a pinweaver backed pin is available for login, then the following
-  // would be returned:
-  // available_for_intents = {AUTH_INTENT_DECRYPT,AUTH_INTENT_VERIFY_ONLY}
-  // 2) If a pinweaver backed pin is not available (aka locked out), then an
-  // empty available_for_intents would be returned.
+  // Gives the set of possible actions available for this auth_factor.
+  // This reflects the user policy (through settings or enterprise policy)
+  // configured for the factor type, but not other runtime status of the
+  // factor that make it unavailable (like lockout or expiration).
   repeated AuthIntent available_for_intents = 2;
 
   StatusInfo status_info = 3;
@@ -1415,6 +1414,18 @@ message RecoveryExtendedInfoReply {
   repeated string recovery_ids = 1;
 }
 
+// Send a request to Cryptohome to lock the AuthFactor with auth_factor_type
+// against the authentication operation until the system is rebooted.
+message LockFactorUntilRebootRequest {
+  // Currently implemented only for CryptohomeRecovery factor type.
+  AuthFactorType auth_factor_type = 1;
+}
+
+message LockFactorUntilRebootReply {
+  CryptohomeErrorCode error = 1;
+  CryptohomeErrorInfo error_info = 2;
+}
+
 message GetAuthFactorExtendedInfoRequest {
   // The account of a user.
   cryptohome.AccountIdentifier account_id = 1;
@@ -1573,6 +1584,16 @@ message ModifyAuthFactorIntentsReply {
   AuthIntentsForAuthFactorType auth_intents = 3;
 }
 
+message MigrateLegacyFingerprintsRequest {
+  // The id of a running AuthSession.
+  bytes auth_session_id = 1;
+}
+
+message MigrateLegacyFingerprintsReply {
+  CryptohomeErrorCode error = 1;
+  CryptohomeErrorInfo error_info = 2;
+}
+
 // Fingerprint scan results.
 enum FingerprintScanResult {
   FINGERPRINT_SCAN_RESULT_SUCCESS = 0;
@@ -1658,24 +1679,72 @@ message PrepareAuthFactorProgress {
   }
 }
 
-// Contains the result of authenticating the auth factor.
-// Used in the AuthenticateAuthFactorCompleted signal to notify
-// if authentication was successful/failed.
+// Used to signal the start of an Authentication operation. Note that creating
+// a new user is also considered to be such an operation since creating a new
+// user implicitly authenticates.
+message AuthenticateStarted {
+  // Unique ID associated with the authenticate operation.
+  uint64 operation_id = 1;
+
+  oneof auth_factor {
+    // The type of factor being used for authentication. Set on authentication
+    // of an existing user.
+    AuthFactorType auth_factor_type = 2;
+
+    // Set to true when the authentication is an implicit result of a user
+    // creation operation.
+    bool user_creation = 3;
+  }
+
+  // The user that is authenticating.
+  string username = 4;
+  // The sanitized username, this is basically a hashed representation
+  // of the username used in the paths of user's home directory.
+  string sanitized_username = 5;
+}
+
+// Used to signal the completion of an authentication operation.
+// TODO(b/316597268): Rename to AuthenticateCompleted.
 message AuthenticateAuthFactorCompleted {
-  // error and error_info will be empty in case of success.
+  // Unique ID associated with the authenticate operation. Will match the ID of
+  // the corresponding start signal.
+  uint64 operation_id = 5;
+
+  // Set to indicate that the authentication operation failed. Unset in the
+  // case of a successful authentication.
   CryptohomeErrorCode error = 1;
   CryptohomeErrorInfo error_info = 2;
 
   oneof auth_factor {
-    // The auth factor type should be filled when it is not a new
-    // new user creation.
+    // See AuthenticateStarted.auth_factor_type.
     AuthFactorType auth_factor_type = 3;
 
-    // When a new user is created they are implicitly authenticated,
-    // so authentication does not occur.
-    // Create a new signal with this flag set on user creation instead.
+    // See AuthenticateStarted.user_creation.
     bool user_creation = 4;
   }
+
+  // See AuthenticateStarted.username.
+  string username = 6;
+  // See AuthenticateStarted.sanitized_username.
+  string sanitized_username = 7;
+}
+
+// Used to signal the start of a Mount operation.
+message MountStarted {
+  // Unique ID associated with the mount operation.
+  uint64 operation_id = 1;
+}
+
+// Used to signal the completion of a Mount operation.
+message MountCompleted {
+  // Unique ID associated with the mount operation. Will match the ID of the
+  // corresponding start signal.
+  uint64 operation_id = 1;
+
+  // Populated with error information in the case that the mount operation
+  // fails. On success these fields will be left unset.
+  CryptohomeErrorCode error = 2;
+  CryptohomeErrorInfo error_info = 3;
 }
 
 // The message sent in signal EvictedKeyRestoreSignal
@@ -1700,4 +1769,17 @@ message GetRecoverableKeyStoresReply {
   CryptohomeErrorCode error = 1;
   CryptohomeErrorInfo error_info = 2;
   repeated cryptohome.RecoverableKeyStore key_stores = 3;
+}
+
+// GetPinWeaverInfo returns the device PinWeaver information.
+message GetPinWeaverInfoRequest {
+  // No parameter is needed to retrieve PinWeaver info.
+}
+
+// The reply message of GetPinWeaverInfo.
+message GetPinWeaverInfoReply {
+  CryptohomeErrorCode error = 1;
+  CryptohomeErrorInfo error_info = 2;
+  // Whether there's any PinWeaver credential on the device.
+  bool has_credential = 3;
 }

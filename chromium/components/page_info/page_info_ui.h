@@ -14,7 +14,6 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/content_settings/core/common/cookie_blocking_3pcd_status.h"
-#include "components/content_settings/core/common/cookie_controls_status.h"
 #include "components/page_info/page_info.h"
 #include "components/permissions/object_permission_context_base.h"
 #include "components/privacy_sandbox/canonical_topic.h"
@@ -103,9 +102,6 @@ class PageInfoUI {
     // The number of sites allowed to access cookies.
     int allowed_sites_count = -1;
 
-    // The status of whether third-party cookies are blocked.
-    CookieControlsStatus status = CookieControlsStatus::kUninitialized;
-
     // Whether protections are enabled for the given site.
     bool protections_on = true;
 
@@ -119,13 +115,10 @@ class PageInfoUI {
     // The status of enforcement of blocking third-party cookies.
     CookieControlsEnforcement enforcement;
 
-    absl::optional<CookiesFpsInfo> fps_info;
+    std::optional<CookiesFpsInfo> fps_info;
 
     // The expiration of the active third-party cookie exception.
     base::Time expiration;
-
-    // The confidence level of site breakage related to third-party cookies.
-    CookieControlsBreakageConfidenceLevel confidence;
 
     // Whether the current profile is "off the record".
     bool is_otr = false;
@@ -228,7 +221,7 @@ class PageInfoUI {
   // Returns a tooltip for permission |type|.
   static std::u16string PermissionTooltipUiString(
       ContentSettingsType type,
-      const absl::optional<url::Origin>& requesting_origin);
+      const std::optional<url::Origin>& requesting_origin);
 
   static base::span<const PermissionUIInfo>
   GetContentSettingsUIInfoForTesting();

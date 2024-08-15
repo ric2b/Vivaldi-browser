@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <string_view>
 #include <tuple>
 #include <vector>
 
@@ -556,6 +557,26 @@ void FakeShillManagerClient::SetLOHSEnabled(bool enabled,
   return;
 }
 
+void FakeShillManagerClient::CreateP2PGroup(
+    const base::Value::Dict& properties,
+    base::OnceCallback<void(base::Value::Dict result)> callback,
+    ErrorCallback error_callback) {
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(error_callback), "Error", "Fake failure"));
+  return;
+}
+
+void FakeShillManagerClient::ConnectToP2PGroup(
+    const base::Value::Dict& properties,
+    base::OnceCallback<void(base::Value::Dict result)> callback,
+    ErrorCallback error_callback) {
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(error_callback), "Error", "Fake failure"));
+  return;
+}
+
 ShillManagerClient::TestInterface* FakeShillManagerClient::GetTestInterface() {
   return this;
 }
@@ -838,7 +859,7 @@ void FakeShillManagerClient::SetNetworkThrottlingStatus(
 
 bool FakeShillManagerClient::GetFastTransitionStatus() {
   std::optional<bool> fast_transition_status = stub_properties_.FindBool(
-      base::StringPiece(shill::kWifiGlobalFTEnabledProperty));
+      std::string_view(shill::kWifiGlobalFTEnabledProperty));
   return fast_transition_status && fast_transition_status.value();
 }
 

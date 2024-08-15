@@ -68,7 +68,7 @@ struct Version {
     uint32_t minor_version = 1;
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-    TINT_REFLECT(standard, major_version, minor_version);
+    TINT_REFLECT(Version, standard, major_version, minor_version);
 };
 
 }  // namespace tint::glsl::writer

@@ -15,7 +15,6 @@
 #include <vector>
 
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/containers/fixed_flat_set.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
@@ -680,7 +679,7 @@ void ThreatDetails::FinishCollection(
     int num_visit,
     std::unique_ptr<security_interstitials::InterstitialInteractionMap>
         interstitial_interactions,
-    absl::optional<int64_t> warning_shown_ts) {
+    std::optional<int64_t> warning_shown_ts) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   all_done_expected_ = true;
@@ -779,6 +778,9 @@ void ThreatDetails::OnCacheCollectionReady() {
   report_->mutable_client_properties()->set_url_api_type(
       client_report_utils::GetUrlApiTypeForThreatSource(
           resource_.threat_source));
+
+  report_->mutable_client_properties()->set_is_async_check(
+      resource_.is_async_check);
 
   // Fill the referrer chain if applicable.
   if (ShouldFillReferrerChain()) {

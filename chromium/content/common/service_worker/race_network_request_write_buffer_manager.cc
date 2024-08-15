@@ -68,10 +68,10 @@ void RaceNetworkRequestWriteBufferManager::ResetProducer() {
 }
 
 void RaceNetworkRequestWriteBufferManager::Watch(
-    mojo::SimpleWatcher::ReadyCallback callback) {
+    mojo::SimpleWatcher::ReadyCallbackWithState callback) {
   watcher_.Watch(producer_.get(),
                  MOJO_HANDLE_SIGNAL_WRITABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
-                 std::move(callback));
+                 MOJO_WATCH_CONDITION_SATISFIED, std::move(callback));
 }
 
 void RaceNetworkRequestWriteBufferManager::CancelWatching() {
@@ -96,6 +96,24 @@ MojoResult RaceNetworkRequestWriteBufferManager::EndWriteData(
 void RaceNetworkRequestWriteBufferManager::ArmOrNotify() {
   watcher_.ArmOrNotify();
 }
+
+std::tuple<MojoResult, size_t> RaceNetworkRequestWriteBufferManager::WriteData(
+    base::span<const char> read_buffer) {
+  // In order to use |MOJO_WRITE_DATA_FLAG_ALL_OR_NONE| flag to write data, the
+  // read buffer data size should be smaller than the write buffer size.
+  // Otherwise we can't finish the write operation nad `WriteData()` always
+  // return |MOJO_RESULT_OUT_OF_RANGE|.
+  auto buffer = read_buffer.size() > data_pipe_buffer_size_
+                    ? read_buffer.subspan(0, data_pipe_buffer_size_)
+                    : read_buffer;
+  uint32_t num_bytes = buffer.size();
+  MojoResult result = producer_->WriteData(buffer.data(), &num_bytes,
+                                           MOJO_WRITE_DATA_FLAG_ALL_OR_NONE);
+  num_bytes_written_ += num_bytes;
+
+  return {result, num_bytes};
+}
+
 size_t RaceNetworkRequestWriteBufferManager::CopyAndCompleteWriteData(
     base::span<const char> read_buffer) {
   return CopyAndCompleteWriteDataWithSize(read_buffer, read_buffer.size());
@@ -111,18 +129,21 @@ size_t RaceNetworkRequestWriteBufferManager::CopyAndCompleteWriteDataWithSize(
 
   SCOPED_CRASH_KEY_NUMBER("SWRace", "physical_memory_mb",
                           base::SysInfo::AmountOfPhysicalMemoryMB());
-  SCOPED_CRASH_KEY_NUMBER("SWRace", "available_physical_memory_mb",
-                          base::SysInfo::AmountOfAvailablePhysicalMemory());
-  SCOPED_CRASH_KEY_NUMBER("SWRace", "is_lowend_device",
-                          base::SysInfo::IsLowEndDevice());
-  SCOPED_CRASH_KEY_NUMBER("SWRace", "data_pipe_buffer_size",
-                          data_pipe_buffer_size_);
   SCOPED_CRASH_KEY_NUMBER("SWRace", "num_bytes_to_consume",
                           num_bytes_to_consume);
 
   CHECK_GE(data_pipe_buffer_size_, num_bytes_to_consume);
   CHECK_GE(buffer_size(), num_bytes_to_consume);
   CHECK_GE(read_buffer.size(), num_bytes_to_consume);
+  // Check if all memory spaces are available to access. `volatile` to avoid the
+  // compiler optimization.
+  // TODO(crbug.com/1502946) Remove this code once we confirmed the root cause
+  // of the crash.
+  volatile const char* read_buffer_v =
+      static_cast<volatile const char*>(read_buffer.data());
+  for (size_t i = 0; i < read_buffer.size(); ++i) {
+    read_buffer_v[i];
+  }
   memcpy(buffer_.data(), read_buffer.data(), num_bytes_to_consume);
   MojoResult result = EndWriteData(num_bytes_to_consume);
   CHECK_EQ(result, MOJO_RESULT_OK);

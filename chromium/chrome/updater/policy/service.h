@@ -108,6 +108,7 @@ class PolicyService : public base::RefCountedThreadSafe<PolicyService> {
   std::string source() const;
 
   // These methods call and aggregate the results from the policy managers.
+  PolicyStatus<bool> CloudPolicyOverridesPlatformPolicy() const;
   PolicyStatus<base::TimeDelta> GetLastCheckPeriod() const;
   PolicyStatus<UpdatesSuppressedTimes> GetUpdatesSuppressedTimes() const;
   PolicyStatus<std::string> GetDownloadPreference() const;
@@ -198,7 +199,10 @@ struct PolicyServiceProxyConfiguration {
   static std::optional<PolicyServiceProxyConfiguration> Get(
       scoped_refptr<PolicyService> policy_service);
 
-  std::optional<bool> proxy_auto_detect;
+  // Note `Get()` returns a nullopt when there's no proxy policies. Otherwise
+  // `proxy_auto_detect` must have a value, and is only set to true when the
+  // policy chooses "auto-detect".
+  bool proxy_auto_detect = false;
   std::optional<std::string> proxy_pac_url;
   std::optional<std::string> proxy_url;
 };

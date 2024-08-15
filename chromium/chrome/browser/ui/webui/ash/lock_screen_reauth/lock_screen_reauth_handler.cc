@@ -153,14 +153,13 @@ void LockScreenReauthHandler::LoadAuthenticatorParam() {
   login::GaiaContext context;
   context.force_reload = true;
   context.email = email_;
+  context.gaia_id = user_manager::UserManager::Get()
+                        ->GetActiveUser()
+                        ->GetAccountId()
+                        .GetGaiaId();
 
   user_manager::KnownUser known_user(g_browser_process->local_state());
   if (!context.email.empty()) {
-    if (const std::string* gaia_id =
-            known_user.FindGaiaID(AccountId::FromUserEmail(context.email))) {
-      context.gaia_id = *gaia_id;
-    }
-
     context.gaps_cookie = known_user.GetGAPSCookie(
         AccountId::FromUserEmail(gaia::CanonicalizeEmail(context.email)));
   }
@@ -327,17 +326,15 @@ void LockScreenReauthHandler::HandleCompleteAuthentication(
     challenge_response_key = challenge_response_key_or_error.value();
   }
 
-  // Build UserContext
-  user_context_ = std::make_unique<UserContext>();
-  login::BuildUserContextForGaiaSignIn(
+  // Build UserContext.
+  user_context_ = login::BuildUserContextForGaiaSignIn(
       login::GetUsertypeFromServicesString(services),
       AccountId::FromUserEmailGaiaId(gaia::CanonicalizeEmail(email), gaia_id),
       using_saml, false /* using_saml_api */, password,
       SamlPasswordAttributes::FromJs(password_attributes),
-      /*sync_trusted_vault_keys=*/std::nullopt, challenge_response_key,
-      user_context_.get());
+      /*sync_trusted_vault_keys=*/std::nullopt, challenge_response_key);
 
-  // Create GaiaCookiesRetriever
+  // Create GaiaCookiesRetriever.
   login::SigninPartitionManager* signin_partition_manager =
       login::SigninPartitionManager::Factory::GetForBrowserContext(
           Profile::FromWebUI(web_ui()));

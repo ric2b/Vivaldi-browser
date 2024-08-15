@@ -24,6 +24,10 @@ public class TopicSwitchPreference extends ChromeSwitchPreference {
         updateIcon();
     }
 
+    public Topic getTopic() {
+        return mTopic;
+    }
+
     @Override
     public void onBindViewHolder(PreferenceViewHolder holder) {
         super.onBindViewHolder(holder);
@@ -34,16 +38,8 @@ public class TopicSwitchPreference extends ChromeSwitchPreference {
         FaviconViewUtils.formatIconForFavicon(getContext().getResources(), icon);
     }
 
-    @SuppressWarnings("DiscouragedApi")
     private void updateIcon() {
-        String iconName =
-                String.format(
-                        "topic_taxonomy_%s_id_%s",
-                        mTopic.getTaxonomyVersion(), mTopic.getTopicId());
-        int iconId =
-                getContext()
-                        .getResources()
-                        .getIdentifier(iconName, "drawable", getContext().getPackageName());
+        int iconId = TopicsUtils.getIconResourceIdForTopic(getContext(), mTopic);
         setIcon((iconId != 0) ? iconId : R.drawable.topic_taxonomy_placeholder);
     }
 }

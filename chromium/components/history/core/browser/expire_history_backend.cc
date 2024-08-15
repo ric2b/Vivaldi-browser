@@ -10,11 +10,10 @@
 #include <limits>
 #include <memory>
 #include <utility>
-#include "app/vivaldi_apptools.h"
+#include <vector>
 
 #include "base/check.h"
 #include "base/compiler_specific.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -29,6 +28,8 @@
 #include "components/history/core/browser/history_backend_client.h"
 #include "components/history/core/browser/history_backend_notifier.h"
 #include "components/history/core/browser/history_database.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace history {
 
@@ -61,7 +62,8 @@ class AllVisitsReader : public ExpiringVisitsReader {
     DCHECK(db) << "must have a database to operate upon";
     DCHECK(visits) << "visit vector has to exist in order to populate it";
 
-    db->GetAllVisitsInRange(base::Time(), end_time, max_visits, visits);
+    db->GetAllVisitsInRange(base::Time(), end_time, kNoAppIdFilter, max_visits,
+                            visits);
     // When we got the maximum number of visits we asked for, we say there could
     // be additional things to expire now.
     return static_cast<int>(visits->size()) == max_visits;
@@ -214,7 +216,7 @@ void ExpireHistoryBackend::DeleteURLs(const std::vector<GURL>& urls,
     size_t total_visits = visits_to_delete.size();
     if (!end_time.is_null() && !end_time.is_max()) {
       // Remove all items that should not be deleted from `visits_to_delete`.
-      base::EraseIf(visits_to_delete,
+      std::erase_if(visits_to_delete,
                     [=](auto& v) { return v.visit_time > end_time; });
     }
     DeleteVisitRelatedInfo(visits_to_delete, &effects);
@@ -232,12 +234,13 @@ void ExpireHistoryBackend::DeleteURLs(const std::vector<GURL>& urls,
   DeleteFaviconsIfPossible(&effects);
 
   BroadcastNotifications(&effects, DELETION_USER_INITIATED,
-                         DeletionTimeRange::Invalid(), absl::nullopt,
+                         DeletionTimeRange::Invalid(), std::nullopt,
                          DeletionInfo::Reason::kOther);
 }
 
 void ExpireHistoryBackend::ExpireHistoryBetween(
     const std::set<GURL>& restrict_urls,
+    std::optional<std::string> restrict_app_id,
     base::Time begin_time,
     base::Time end_time,
     bool user_initiated) {
@@ -246,7 +249,8 @@ void ExpireHistoryBackend::ExpireHistoryBetween(
 
   // Find the affected visits and delete them.
   VisitVector visits;
-  main_db_->GetAllVisitsInRange(begin_time, end_time, 0, &visits);
+  main_db_->GetAllVisitsInRange(begin_time, end_time, restrict_app_id, 0,
+                                &visits);
   if (!restrict_urls.empty()) {
     std::set<URLID> url_ids;
     for (const auto& restrict_url : restrict_urls)
@@ -309,7 +313,7 @@ void ExpireHistoryBackend::ExpireVisitsInternal(
   DeleteFaviconsIfPossible(&effects);
   BroadcastNotifications(
       &effects, type, time_range,
-      restrict_urls.empty() ? absl::optional<std::set<GURL>>() : restrict_urls,
+      restrict_urls.empty() ? std::optional<std::set<GURL>>() : restrict_urls,
       deletion_reason);
 
   // Pick up any bits possibly left over.
@@ -361,7 +365,7 @@ void ExpireHistoryBackend::ClearOldOnDemandFaviconsIfPossible(
   }
 
   BroadcastNotifications(&effects, DELETION_EXPIRED,
-                         DeletionTimeRange::Invalid(), absl::nullopt,
+                         DeletionTimeRange::Invalid(), std::nullopt,
                          DeletionInfo::Reason::kOther);
 }
 
@@ -425,7 +429,7 @@ void ExpireHistoryBackend::BroadcastNotifications(
     DeleteEffects* effects,
     DeletionType type,
     const DeletionTimeRange& time_range,
-    absl::optional<std::set<GURL>> restrict_urls,
+    std::optional<std::set<GURL>> restrict_urls,
     DeletionInfo::Reason deletion_reason) {
   if (!effects->modified_urls.empty()) {
     notifier_->NotifyURLsModified(
@@ -671,7 +675,7 @@ bool ExpireHistoryBackend::ExpireSomeOldHistory(
   DeleteFaviconsIfPossible(&deleted_effects);
 
   BroadcastNotifications(&deleted_effects, DELETION_EXPIRED,
-                         DeletionTimeRange::Invalid(), absl::nullopt,
+                         DeletionTimeRange::Invalid(), std::nullopt,
                          DeletionInfo::Reason::kOther);
 
   return more_to_expire;

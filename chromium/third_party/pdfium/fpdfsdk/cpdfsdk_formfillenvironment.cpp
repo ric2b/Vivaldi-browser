@@ -16,7 +16,11 @@
 #include "core/fpdfapi/parser/cpdf_array.h"
 #include "core/fpdfapi/parser/cpdf_dictionary.h"
 #include "core/fpdfdoc/cpdf_nametree.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/data_vector.h"
+#include "core/fxcrt/notreached.h"
+#include "core/fxcrt/numerics/safe_conversions.h"
 #include "core/fxcrt/stl_util.h"
 #include "fpdfsdk/cpdfsdk_helpers.h"
 #include "fpdfsdk/cpdfsdk_interactiveform.h"
@@ -26,10 +30,6 @@
 #include "fpdfsdk/formfiller/cffl_interactiveformfiller.h"
 #include "fxjs/ijs_event_context.h"
 #include "fxjs/ijs_runtime.h"
-#include "third_party/base/check.h"
-#include "third_party/base/containers/contains.h"
-#include "third_party/base/notreached.h"
-#include "third_party/base/numerics/safe_conversions.h"
 
 #ifdef PDF_ENABLE_XFA
 #include "fpdfsdk/fpdfxfa/cpdfxfa_widget.h"
@@ -215,7 +215,7 @@ int CPDFSDK_FormFillEnvironment::JS_appResponse(
   return js_platform->app_response(
       js_platform, AsFPDFWideString(&bsQuestion), AsFPDFWideString(&bsTitle),
       AsFPDFWideString(&bsDefault), AsFPDFWideString(&bsLabel), bPassword,
-      response.data(), pdfium::base::checked_cast<int>(response.size()));
+      response.data(), pdfium::checked_cast<int>(response.size()));
 }
 
 void CPDFSDK_FormFillEnvironment::JS_appBeep(int nType) {
@@ -266,7 +266,7 @@ void CPDFSDK_FormFillEnvironment::JS_docmailForm(
   ByteString bsBcc = BCC.ToUTF16LE();
   ByteString bsMsg = Msg.ToUTF16LE();
   js_platform->Doc_mail(js_platform, const_cast<uint8_t*>(mailData.data()),
-                        pdfium::base::checked_cast<int>(mailData.size()), bUI,
+                        pdfium::checked_cast<int>(mailData.size()), bUI,
                         AsFPDFWideString(&bsTo), AsFPDFWideString(&bsSubject),
                         AsFPDFWideString(&bsCC), AsFPDFWideString(&bsBcc),
                         AsFPDFWideString(&bsMsg));
@@ -392,7 +392,7 @@ void CPDFSDK_FormFillEnvironment::OnSetFieldInputFocusInternal(
     ByteString bsUTFText = text.ToUTF16LE();
     auto* pBuffer = reinterpret_cast<const unsigned short*>(bsUTFText.c_str());
     m_pInfo->FFI_SetTextFieldFocus(
-        m_pInfo, pBuffer, pdfium::base::checked_cast<FPDF_DWORD>(nCharacters),
+        m_pInfo, pBuffer, pdfium::checked_cast<FPDF_DWORD>(nCharacters),
         bFocus);
   }
 }
@@ -408,7 +408,7 @@ void CPDFSDK_FormFillEnvironment::OnFormat(ObservedPtr<CPDFSDK_Annot>& pAnnot) {
   CPDFSDK_Widget* pWidget = ToCPDFSDKWidget(pAnnot.Get());
   DCHECK(pWidget);
 
-  absl::optional<WideString> sValue =
+  std::optional<WideString> sValue =
       m_pInteractiveForm->OnFormat(pWidget->GetFormField());
   if (!pAnnot)
     return;

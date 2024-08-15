@@ -42,7 +42,8 @@ class WebPrintingServiceChromeOS
  public:
   WebPrintingServiceChromeOS(
       content::RenderFrameHost* render_frame_host,
-      mojo::PendingReceiver<blink::mojom::WebPrintingService> receiver);
+      mojo::PendingReceiver<blink::mojom::WebPrintingService> receiver,
+      const std::string& app_id);
   ~WebPrintingServiceChromeOS() override;
 
   // blink::mojom::WebPrintingService:
@@ -84,10 +85,14 @@ class WebPrintingServiceChromeOS
 
   void OnPrintJobCreated(
       mojo::PendingRemote<blink::mojom::WebPrintJobStateObserver> observer,
+      mojo::PendingReceiver<blink::mojom::WebPrintJobController> controller,
       std::optional<PrintJobCreatedInfo> creation_info);
 
   // Stores browser-side endpoints for blink-side Printer objects.
   mojo::ReceiverSet<blink::mojom::WebPrinter, PrinterId> printers_;
+
+  // The id of the app that owns this service.
+  const std::string app_id_;
 
   std::unique_ptr<chromeos::CupsWrapper> cups_wrapper_;
   std::unique_ptr<PdfBlobDataFlattener> pdf_flattener_;

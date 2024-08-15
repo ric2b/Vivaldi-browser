@@ -43,6 +43,7 @@ struct CopyTextureToTextureCmd;
 
 namespace dawn::native::d3d {
 class Fence;
+class KeyedMutex;
 }  // namespace dawn::native::d3d
 
 namespace dawn::native::d3d11 {
@@ -67,6 +68,7 @@ class Texture final : public d3d::Texture {
         Device* device,
         const UnpackedPtr<TextureDescriptor>& descriptor,
         ComPtr<IUnknown> d3dTexture,
+        Ref<d3d::KeyedMutex> keyedMutex,
         std::vector<FenceAndSignalValue> waitFences,
         bool isSwapChainTexture,
         bool isInitialized);
@@ -76,10 +78,11 @@ class Texture final : public d3d::Texture {
     ID3D11Resource* GetD3D11Resource() const;
 
     ResultOrError<ComPtr<ID3D11RenderTargetView>> CreateD3D11RenderTargetView(
-        const Format& format,
+        wgpu::TextureFormat format,
         uint32_t mipLevel,
         uint32_t baseSlice,
-        uint32_t sliceCount) const;
+        uint32_t sliceCount,
+        uint32_t planeSlice) const;
     ResultOrError<ComPtr<ID3D11DepthStencilView>> CreateD3D11DepthStencilView(
         const SubresourceRange& singleLevelRange,
         bool depthReadOnly,
@@ -87,6 +90,8 @@ class Texture final : public d3d::Texture {
     MaybeError EnsureSubresourceContentInitialized(
         const ScopedCommandRecordingContext* commandContext,
         const SubresourceRange& range);
+
+    MaybeError SynchronizeTextureBeforeUse(const ScopedCommandRecordingContext* commandContext);
 
     MaybeError Write(const ScopedCommandRecordingContext* commandContext,
                      const SubresourceRange& subresources,
@@ -138,8 +143,7 @@ class Texture final : public d3d::Texture {
     MaybeError InitializeAsInternalTexture();
     MaybeError InitializeAsSwapChainTexture(ComPtr<ID3D11Resource> d3d11Texture);
     MaybeError InitializeAsExternalTexture(ComPtr<IUnknown> d3dTexture,
-                                           std::vector<FenceAndSignalValue> waitFences,
-                                           bool isSwapChainTexture);
+                                           Ref<d3d::KeyedMutex> keyedMutex);
     void SetLabelHelper(const char* prefix);
 
     // Dawn API
@@ -192,6 +196,11 @@ class Texture final : public d3d::Texture {
 
     const Kind mKind = Kind::Normal;
     ComPtr<ID3D11Resource> mD3d11Resource;
+    Ref<d3d::KeyedMutex> mKeyedMutex;
+
+    // TODO(crbug.com/1515640): Remove this once Chromium has migrated to SharedTextureMemory.
+    std::optional<ExecutionSerial> mLastUsageSerial;
+
     // The internal 'R8Uint' texture for sampling stencil from depth-stencil textures.
     Ref<Texture> mTextureForStencilSampling;
 };

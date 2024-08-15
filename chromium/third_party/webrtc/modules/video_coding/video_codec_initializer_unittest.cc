@@ -86,8 +86,6 @@ class VideoCodecInitializerTest : public ::testing::Test {
       vp9_settings.numberOfTemporalLayers = num_temporal_streams;
       config_.encoder_specific_settings = rtc::make_ref_counted<
           webrtc::VideoEncoderConfig::Vp9EncoderSpecificSettings>(vp9_settings);
-    } else if (type != VideoCodecType::kVideoCodecMultiplex) {
-      ADD_FAILURE() << "Unexpected codec type: " << type;
     }
   }
 
@@ -100,8 +98,6 @@ class VideoCodecInitializerTest : public ::testing::Test {
     bitrate_allocator_ = CreateBuiltinVideoBitrateAllocatorFactory()
                              ->CreateVideoBitrateAllocator(codec_out_);
     RTC_CHECK(bitrate_allocator_);
-    if (codec_out_.codecType == VideoCodecType::kVideoCodecMultiplex)
-      return true;
 
     // Make sure temporal layers instances have been created.
     if (codec_out_.codecType == VideoCodecType::kVideoCodecVP8) {
@@ -286,12 +282,6 @@ TEST_F(VideoCodecInitializerTest, HighFpsSimulcastVp8Screenshare) {
   EXPECT_EQ(kHighScreenshareTl0Bps, bitrate_allocation.GetBitrate(1, 0));
   EXPECT_EQ(kHighScreenshareTl1Bps - kHighScreenshareTl0Bps,
             bitrate_allocation.GetBitrate(1, 1));
-}
-
-TEST_F(VideoCodecInitializerTest, SingleStreamMultiplexCodec) {
-  SetUpFor(VideoCodecType::kVideoCodecMultiplex, absl::nullopt, 1, 1, true);
-  streams_.push_back(DefaultStream());
-  EXPECT_TRUE(InitializeCodec());
 }
 
 TEST_F(VideoCodecInitializerTest, Vp9SvcDefaultLayering) {
@@ -629,6 +619,27 @@ TEST_F(VideoCodecInitializerTest, Vp9TwoSpatialLayersBitratesAreConsistent) {
             codec.spatialLayers[1].maxBitrate);
   EXPECT_GT(codec.spatialLayers[1].minBitrate,
             codec.spatialLayers[0].maxBitrate);
+}
+
+TEST_F(VideoCodecInitializerTest, UpdatesVp9SpecificFieldsWithScalabilityMode) {
+  VideoEncoderConfig config;
+  config.codec_type = VideoCodecType::kVideoCodecVP9;
+  std::vector<VideoStream> streams = {DefaultStream()};
+  streams[0].scalability_mode = ScalabilityMode::kL2T3_KEY;
+
+  VideoCodec codec;
+  EXPECT_TRUE(VideoCodecInitializer::SetupCodec(config, streams, &codec));
+
+  EXPECT_EQ(codec.VP9()->numberOfSpatialLayers, 2u);
+  EXPECT_EQ(codec.VP9()->numberOfTemporalLayers, 3u);
+  EXPECT_EQ(codec.VP9()->interLayerPred, InterLayerPredMode::kOnKeyPic);
+
+  streams[0].scalability_mode = ScalabilityMode::kS3T1;
+  EXPECT_TRUE(VideoCodecInitializer::SetupCodec(config, streams, &codec));
+
+  EXPECT_EQ(codec.VP9()->numberOfSpatialLayers, 3u);
+  EXPECT_EQ(codec.VP9()->numberOfTemporalLayers, 1u);
+  EXPECT_EQ(codec.VP9()->interLayerPred, InterLayerPredMode::kOff);
 }
 
 }  // namespace webrtc

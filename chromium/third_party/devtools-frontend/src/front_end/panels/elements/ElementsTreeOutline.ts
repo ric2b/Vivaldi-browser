@@ -159,7 +159,7 @@ export class ElementsTreeOutline extends
 
     outlineDisclosureElement.appendChild(this.elementInternal);
     this.element = shadowContainer;
-    this.element.setAttribute('jslog', `${VisualLogging.tree().context('elements-tree-outline')}`);
+    this.element.setAttribute('jslog', `${VisualLogging.tree('elements')}`);
 
     this.includeRootDOMNode = !omitRootDOMNode;
     this.selectEnabled = selectEnabled;
@@ -196,7 +196,7 @@ export class ElementsTreeOutline extends
 
     this.decoratorExtensions = null;
 
-    this.showHTMLCommentsSetting = Common.Settings.Settings.instance().moduleSetting('showHTMLComments');
+    this.showHTMLCommentsSetting = Common.Settings.Settings.instance().moduleSetting('show-html-comments');
     this.showHTMLCommentsSetting.addChangeListener(this.onShowHTMLCommentsChange.bind(this));
     this.setUseLightSelectionColor(true);
     if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.HIGHLIGHT_ERRORS_ELEMENTS_PANEL)) {
@@ -233,7 +233,7 @@ export class ElementsTreeOutline extends
 
         return {
           box: hoveredNode.boxInWindow(),
-          show: async(popover: UI.GlassPane.GlassPane): Promise<boolean> => {
+          show: async (popover: UI.GlassPane.GlassPane) => {
             popover.setIgnoreLeftMargin(true);
             const openIssueEvent = (): Promise<void> => Common.Revealer.reveal(issue);
             viewIssueElement.addEventListener('click', () => openIssueEvent());
@@ -242,7 +242,7 @@ export class ElementsTreeOutline extends
             return true;
           },
         };
-      });
+      }, 'elements.issue');
       this.#popupHelper.setTimeout(300);
       this.#popupHelper.setHasPadding(true);
     }
@@ -1791,9 +1791,10 @@ export class ShortcutTreeElement extends UI.TreeOutline.TreeElement {
     adorner.data = {
       name,
       content: adornerContent,
+      jslogContext: 'reveal',
     };
     this.listItemElement.appendChild(adorner);
-    const onClick = (((): void => {
+    const onClick = ((() => {
                        Host.userMetrics.badgeActivated(Host.UserMetrics.BadgeType.REVEAL);
                        this.nodeShortcut.deferredNode.resolve(
                            node => {

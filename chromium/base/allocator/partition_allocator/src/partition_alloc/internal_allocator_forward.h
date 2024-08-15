@@ -12,8 +12,8 @@
 #include "partition_alloc/partition_alloc_forward.h"
 
 // Internal Allocator can be used to get heap allocations required to
-// implement Partition Allocator's feature.
-// As Internal Allocator being Partition Allocator with minimal configuration,
+// implement PartitionAlloc's feature.
+// As Internal Allocator being PartitionAlloc with minimal configuration,
 // it is not allowed to use this allocator for PA's core implementation to avoid
 // reentrancy issues. Also don't use this when satisfying the very first PA-E
 // allocation of the process.
@@ -27,11 +27,24 @@ PartitionRoot& InternalAllocatorRoot();
 template <typename T>
 class InternalAllocator {
  public:
-  // Member types required by allocator completeness requirements.
   using value_type = T;
-  using size_type = std::size_t;
-  using difference_type = std::ptrdiff_t;
-  using propagate_on_container_move_assignment = std::true_type;
+  using is_always_equal = std::true_type;
+
+  InternalAllocator() = default;
+
+  template <typename U>
+  InternalAllocator(const InternalAllocator<U>&) {}  // NOLINT
+
+  template <typename U>
+  InternalAllocator& operator=(const InternalAllocator<U>&) {
+    return *this;
+  }
+
+  template <typename U>
+  bool operator==(const InternalAllocator<U>&) {
+    // InternalAllocator<T> can free allocations made by InternalAllocator<U>.
+    return true;
+  }
 
   value_type* allocate(std::size_t count);
 

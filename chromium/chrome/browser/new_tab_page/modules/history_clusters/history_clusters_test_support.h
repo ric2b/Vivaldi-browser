@@ -80,38 +80,6 @@ class MockHistoryClustersModuleService : public HistoryClustersModuleService {
                callback));
 };
 
-class MockHistoryService : public history::HistoryService {
- public:
-  MockHistoryService();
-  MockHistoryService(const MockHistoryService&) = delete;
-  MockHistoryService& operator=(const MockHistoryService&) = delete;
-  ~MockHistoryService() override;
-
-  MOCK_METHOD1(ClearCachedDataForContextID,
-               void(history::ContextID context_id));
-
-  MOCK_CONST_METHOD4(
-      GetAnnotatedVisits,
-      base::CancelableTaskTracker::TaskId(
-          const history::QueryOptions& options,
-          bool compute_redirect_chain_start_properties,
-          history::HistoryService::GetAnnotatedVisitsCallback callback,
-          base::CancelableTaskTracker* tracker));
-
-  MOCK_METHOD3(HideVisits,
-               base::CancelableTaskTracker::TaskId(
-                   const std::vector<history::VisitID>& visit_ids,
-                   base::OnceClosure callback,
-                   base::CancelableTaskTracker* tracker));
-  MOCK_METHOD4(
-      UpdateVisitsInteractionState,
-      base::CancelableTaskTracker::TaskId(
-          const std::vector<history::VisitID>& visit_ids,
-          const history::ClusterVisit::InteractionState interaction_state,
-          base::OnceClosure callback,
-          base::CancelableTaskTracker* tracker));
-};
-
 history::ClusterVisit SampleVisitForURL(
     history::VisitID id,
     GURL url,

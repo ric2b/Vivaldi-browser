@@ -9,6 +9,7 @@
 
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
@@ -23,6 +24,8 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/extensions/extension_action_test_helper.h"
 #include "chrome/browser/ui/javascript_dialogs/chrome_javascript_app_modal_dialog_view_factory.h"
@@ -188,7 +191,8 @@ class NavigationCompletedObserver : public content::WebContentsObserver {
                .size() == 0;
   }
 
-  std::set<content::RenderFrameHost*> live_original_frames_;
+  std::set<raw_ptr<content::RenderFrameHost, SetExperimental>>
+      live_original_frames_;
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
 };
 

@@ -34,12 +34,15 @@
 #include "third_party/blink/public/common/page/page_zoom.h"
 
 // Vivaldi
+#include "app/vivaldi_apptools.h"
+#include "browser/vivaldi_browser_finder.h"
+#include "components/extensions/vivaldi_panel_utils.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
-#include "app/vivaldi_apptools.h"
 #include "extensions/api/tabs/tabs_private_api.h"
-#include "browser/vivaldi_browser_finder.h"
 #include "ui/vivaldi_ui_utils.h"
+
+using vivaldi::SuggestFiltering;
 
 using base::Value;
 using content::WebContents;
@@ -183,7 +186,7 @@ void TabsEventRouter::TabEntry::NavigationEntryCommitted(
 
       std::string* type = dict->FindString("type");
       std::string* expression = dict->FindString("expression");
-      absl::optional<double> workspace_id = dict->FindDouble("workspaceId");
+      std::optional<double> workspace_id = dict->FindDouble("workspaceId");
 
       if (!type || !expression || type->empty() || expression->empty() ||
           !workspace_id.has_value()) {
@@ -403,7 +406,8 @@ void TabsEventRouter::OnZoomChanged(
   DispatchEvent(profile, events::TABS_ON_ZOOM_CHANGE,
                 api::tabs::OnZoomChange::kEventName,
                 api::tabs::OnZoomChange::Create(zoom_change_info),
-                EventRouter::USER_GESTURE_UNKNOWN);
+                EventRouter::USER_GESTURE_UNKNOWN,
+                SuggestFiltering(data.web_contents));
 }
 
 void TabsEventRouter::OnFaviconUpdated(
@@ -476,7 +480,8 @@ void TabsEventRouter::DispatchTabInsertedAt(TabStripModel* tab_strip_model,
   Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
   DispatchEvent(profile, events::TABS_ON_ATTACHED,
                 api::tabs::OnAttached::kEventName, std::move(args),
-                EventRouter::USER_GESTURE_UNKNOWN);
+                EventRouter::USER_GESTURE_UNKNOWN,
+                SuggestFiltering(contents));
 }
 
 void TabsEventRouter::DispatchTabClosingAt(TabStripModel* tab_strip_model,
@@ -497,7 +502,8 @@ void TabsEventRouter::DispatchTabClosingAt(TabStripModel* tab_strip_model,
   Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
   DispatchEvent(profile, events::TABS_ON_REMOVED,
                 api::tabs::OnRemoved::kEventName, std::move(args),
-                EventRouter::USER_GESTURE_UNKNOWN);
+                EventRouter::USER_GESTURE_UNKNOWN,
+                SuggestFiltering(contents));
 
   UnregisterForTabNotifications(contents);
 }
@@ -522,7 +528,7 @@ void TabsEventRouter::DispatchTabDetachedAt(WebContents* contents,
   Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
   DispatchEvent(profile, events::TABS_ON_DETACHED,
                 api::tabs::OnDetached::kEventName, std::move(args),
-                EventRouter::USER_GESTURE_UNKNOWN);
+                EventRouter::USER_GESTURE_UNKNOWN, SuggestFiltering(contents));
 }
 
 void TabsEventRouter::DispatchActiveTabChanged(WebContents* old_contents,
@@ -541,12 +547,14 @@ void TabsEventRouter::DispatchActiveTabChanged(WebContents* old_contents,
   Profile* profile =
       Profile::FromBrowserContext(new_contents->GetBrowserContext());
 
+  auto vivpanel = SuggestFiltering(new_contents);
+
   DispatchEvent(profile, events::TABS_ON_SELECTION_CHANGED,
                 api::tabs::OnSelectionChanged::kEventName, args.Clone(),
-                EventRouter::USER_GESTURE_UNKNOWN);
+                EventRouter::USER_GESTURE_UNKNOWN, vivpanel);
   DispatchEvent(profile, events::TABS_ON_ACTIVE_CHANGED,
                 api::tabs::OnActiveChanged::kEventName, std::move(args),
-                EventRouter::USER_GESTURE_UNKNOWN);
+                EventRouter::USER_GESTURE_UNKNOWN, vivpanel);
 
   // The onActivated event takes one argument: {windowId, tabId}.
   base::Value::List on_activated_args;
@@ -554,7 +562,8 @@ void TabsEventRouter::DispatchActiveTabChanged(WebContents* old_contents,
   on_activated_args.Append(std::move(object_args));
   DispatchEvent(
       profile, events::TABS_ON_ACTIVATED, api::tabs::OnActivated::kEventName,
-      std::move(on_activated_args), EventRouter::USER_GESTURE_UNKNOWN);
+      std::move(on_activated_args), EventRouter::USER_GESTURE_UNKNOWN,
+      vivpanel);
 }
 
 void TabsEventRouter::DispatchTabSelectionChanged(
@@ -564,12 +573,17 @@ void TabsEventRouter::DispatchTabSelectionChanged(
       tab_strip_model->selection_model().selected_indices();
   base::Value::List all_tabs;
 
+  base::Value::List viv_tabs;
+
   for (int index : new_selection) {
     WebContents* contents = tab_strip_model->GetWebContentsAt(index);
     if (!contents)
       break;
     int tab_id = ExtensionTabUtil::GetTabId(contents);
+    if (!SuggestFiltering(contents)) {
     all_tabs.Append(tab_id);
+    } // vivaldi
+    viv_tabs.Append(tab_id);
   }
 
   base::Value::List args;
@@ -586,10 +600,28 @@ void TabsEventRouter::DispatchTabSelectionChanged(
   Profile* profile = tab_strip_model->profile();
   DispatchEvent(profile, events::TABS_ON_HIGHLIGHT_CHANGED,
                 api::tabs::OnHighlightChanged::kEventName, args.Clone(),
-                EventRouter::USER_GESTURE_UNKNOWN);
+                EventRouter::USER_GESTURE_UNKNOWN, Event::EXCLUDE_VIVALDI);
   DispatchEvent(profile, events::TABS_ON_HIGHLIGHTED,
                 api::tabs::OnHighlighted::kEventName, std::move(args),
-                EventRouter::USER_GESTURE_UNKNOWN);
+                EventRouter::USER_GESTURE_UNKNOWN, Event::EXCLUDE_VIVALDI);
+
+  // The same content with the vivaldi panels goes to vivaldi only.
+  args.clear();
+  select_info.Set(
+      tabs_constants::kWindowIdKey,
+      ExtensionTabUtil::GetWindowIdOfTabStripModel(tab_strip_model));
+
+  select_info.Set(tabs_constants::kTabIdsKey, std::move(viv_tabs));
+  args.Append(std::move(select_info));
+
+  // The onHighlighted event replaced onHighlightChanged.
+  profile = tab_strip_model->profile();
+  DispatchEvent(profile, events::TABS_ON_HIGHLIGHT_CHANGED,
+                api::tabs::OnHighlightChanged::kEventName, args.Clone(),
+                EventRouter::USER_GESTURE_UNKNOWN, Event::VIVALDI_ONLY);
+  DispatchEvent(profile, events::TABS_ON_HIGHLIGHTED,
+                api::tabs::OnHighlighted::kEventName, std::move(args),
+                EventRouter::USER_GESTURE_UNKNOWN, Event::VIVALDI_ONLY);
 }
 
 void TabsEventRouter::DispatchTabMoved(WebContents* contents,
@@ -607,7 +639,8 @@ void TabsEventRouter::DispatchTabMoved(WebContents* contents,
 
   Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
   DispatchEvent(profile, events::TABS_ON_MOVED, api::tabs::OnMoved::kEventName,
-                std::move(args), EventRouter::USER_GESTURE_UNKNOWN);
+                std::move(args), EventRouter::USER_GESTURE_UNKNOWN,
+                SuggestFiltering(contents));
 }
 
 void TabsEventRouter::DispatchTabReplacedAt(WebContents* old_contents,
@@ -621,9 +654,15 @@ void TabsEventRouter::DispatchTabReplacedAt(WebContents* old_contents,
   args.Append(new_tab_id);
   args.Append(old_tab_id);
 
+  Event::VivFilter vivpanel = Event::NO_FILTERING;
+  if (SuggestFiltering(old_contents) == Event::VIVALDI_ONLY ||
+      SuggestFiltering(new_contents) == Event::VIVALDI_ONLY) {
+    vivpanel = Event::VIVALDI_ONLY;
+  }
+
   DispatchEvent(Profile::FromBrowserContext(new_contents->GetBrowserContext()),
                 events::TABS_ON_REPLACED, api::tabs::OnReplaced::kEventName,
-                std::move(args), EventRouter::USER_GESTURE_UNKNOWN);
+                std::move(args), EventRouter::USER_GESTURE_UNKNOWN, vivpanel);
 
   UnregisterForTabNotifications(old_contents);
 
@@ -641,6 +680,9 @@ void TabsEventRouter::TabCreatedAt(WebContents* contents,
   event->user_gesture = EventRouter::USER_GESTURE_NOT_ENABLED;
   event->will_dispatch_callback =
       base::BindRepeating(&WillDispatchTabCreatedEvent, contents, active);
+
+  event->filter_non_vivaldi = SuggestFiltering(contents);
+
   EventRouter::Get(profile)->BroadcastEvent(std::move(event));
 
   RegisterForTabNotifications(contents);
@@ -680,7 +722,8 @@ void TabsEventRouter::DispatchEvent(
     events::HistogramValue histogram_value,
     const std::string& event_name,
     base::Value::List args,
-    EventRouter::UserGestureState user_gesture) {
+    EventRouter::UserGestureState user_gesture,
+    Event::VivFilter filter) {
   EventRouter* event_router = EventRouter::Get(profile);
   if (!profile_->IsSameOrParent(profile) || !event_router)
     return;
@@ -688,6 +731,7 @@ void TabsEventRouter::DispatchEvent(
   auto event = std::make_unique<Event>(histogram_value, event_name,
                                        std::move(args), profile);
   event->user_gesture = user_gesture;
+  event->filter_non_vivaldi = filter;
   event_router->BroadcastEvent(std::move(event));
 }
 
@@ -706,6 +750,9 @@ void TabsEventRouter::DispatchTabUpdatedEvent(
       base::Value::List(), profile);
 
   event->user_gesture = EventRouter::USER_GESTURE_NOT_ENABLED;
+
+  event->filter_non_vivaldi = SuggestFiltering(contents);
+
   event->will_dispatch_callback =
       base::BindRepeating(&WillDispatchTabUpdatedEvent, contents,
                           std::move(changed_property_names));

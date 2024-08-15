@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <utility>
 
 #include "ash/constants/ash_features.h"
@@ -85,6 +86,7 @@ const char* const kKnownSettings[] = {
     kDeviceDlcPredownloadList,
     kDeviceDockMacAddressSource,
     kDeviceEncryptedReportingPipelineEnabled,
+    kDeviceExtendedAutoUpdateEnabled,
     kDeviceHindiInscriptLayoutEnabled,
     kDeviceHostnameTemplate,
     kDeviceHostnameUserConfigurable,
@@ -112,7 +114,6 @@ const char* const kKnownSettings[] = {
     kDeviceUnaffiliatedCrostiniAllowed,
     kDeviceWebBasedAttestationAllowedUrls,
     kDeviceWiFiAllowed,
-    kDeviceWilcoDtcAllowed,
     kDisplayRotationDefault,
     kExtensionCacheSize,
     kFeatureFlags,
@@ -680,6 +681,15 @@ void DecodeAutoUpdatePolicies(const em::ChromeDeviceSettingsProto& policy,
                            new_values_cache);
     }
   }
+
+  if (policy.has_deviceextendedautoupdateenabled()) {
+    const em::BooleanPolicyProto& container(
+        policy.deviceextendedautoupdateenabled());
+    if (container.has_value()) {
+      new_values_cache->SetValue(kDeviceExtendedAutoUpdateEnabled,
+                                 base::Value(container.value()));
+    }
+  }
 }
 
 void DecodeReportingPolicies(const em::ChromeDeviceSettingsProto& policy,
@@ -1178,16 +1188,6 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
     }
   }
 
-  if (policy.has_device_wilco_dtc_allowed()) {
-    const em::DeviceWilcoDtcAllowedProto& container(
-        policy.device_wilco_dtc_allowed());
-    if (container.has_device_wilco_dtc_allowed()) {
-      new_values_cache->SetValue(
-          kDeviceWilcoDtcAllowed,
-          base::Value(container.device_wilco_dtc_allowed()));
-    }
-  }
-
   int dock_mac_address_source =
       em::DeviceDockMacAddressSourceProto::DOCK_NIC_MAC_ADDRESS;
   if (policy.has_device_dock_mac_address_source() &&
@@ -1382,7 +1382,7 @@ DeviceSettingsProvider::~DeviceSettingsProvider() {
 }
 
 // static
-bool DeviceSettingsProvider::IsDeviceSetting(base::StringPiece name) {
+bool DeviceSettingsProvider::IsDeviceSetting(std::string_view name) {
   return base::Contains(kKnownSettings, name);
 }
 
@@ -1616,7 +1616,7 @@ bool DeviceSettingsProvider::MitigateMissingPolicy() {
   return true;
 }
 
-const base::Value* DeviceSettingsProvider::Get(base::StringPiece path) const {
+const base::Value* DeviceSettingsProvider::Get(std::string_view path) const {
   if (IsDeviceSetting(path)) {
     const base::Value* value;
     if (values_cache_.GetValue(path, &value))
@@ -1636,7 +1636,7 @@ DeviceSettingsProvider::PrepareTrustedValues(base::OnceClosure* callback) {
   return status;
 }
 
-bool DeviceSettingsProvider::HandlesSetting(base::StringPiece path) const {
+bool DeviceSettingsProvider::HandlesSetting(std::string_view path) const {
   return IsDeviceSetting(path);
 }
 
@@ -1683,9 +1683,7 @@ bool DeviceSettingsProvider::UpdateFromService() {
         break;
       [[fallthrough]];
     case DeviceSettingsService::STORE_KEY_UNAVAILABLE:
-      if (base::FeatureList::IsEnabled(
-              ownership::kChromeSideOwnerKeyGeneration) &&
-          user_manager::UserManager::Get()->GetOwnerEmail().has_value()) {
+      if (user_manager::UserManager::Get()->GetOwnerEmail().has_value()) {
         // On the consumer owned device Chrome is responsible for generating a
         // new key and/or policy if they are missing (which happens after the
         // user session starts).

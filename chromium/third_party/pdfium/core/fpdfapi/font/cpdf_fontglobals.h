@@ -14,9 +14,10 @@
 
 #include "core/fpdfapi/cmaps/fpdf_cmaps.h"
 #include "core/fpdfapi/font/cpdf_cidfont.h"
+#include "core/fxcrt/raw_span.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxge/cfx_fontmapper.h"
-#include "third_party/base/containers/span.h"
 
 class CFX_StockFontArray;
 class CPDF_Font;
@@ -66,9 +67,9 @@ class CPDF_FontGlobals {
   std::map<ByteString, RetainPtr<const CPDF_CMap>> m_CMaps;
   std::array<std::unique_ptr<CPDF_CID2UnicodeMap>, CIDSET_NUM_SETS>
       m_CID2UnicodeMaps;
-  std::array<pdfium::span<const fxcmap::CMap>, CIDSET_NUM_SETS>
+  std::array<pdfium::raw_span<const fxcmap::CMap>, CIDSET_NUM_SETS>
       m_EmbeddedCharsets;
-  std::array<pdfium::span<const uint16_t>, CIDSET_NUM_SETS>
+  std::array<pdfium::raw_span<const uint16_t>, CIDSET_NUM_SETS>
       m_EmbeddedToUnicodes;
   std::map<UnownedPtr<CPDF_Document>,
            std::unique_ptr<CFX_StockFontArray>,

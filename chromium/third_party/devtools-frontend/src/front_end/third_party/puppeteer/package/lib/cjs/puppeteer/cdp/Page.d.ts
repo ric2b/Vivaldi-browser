@@ -4,17 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 /// <reference types="node" />
-/// <reference types="node" />
-import type { Readable } from 'stream';
 import type { Protocol } from 'devtools-protocol';
 import type { Browser } from '../api/Browser.js';
 import type { BrowserContext } from '../api/BrowserContext.js';
 import { type CDPSession } from '../api/CDPSession.js';
 import type { Frame, WaitForOptions } from '../api/Frame.js';
-import type { HTTPRequest } from '../api/HTTPRequest.js';
 import type { HTTPResponse } from '../api/HTTPResponse.js';
 import type { JSHandle } from '../api/JSHandle.js';
 import { Page, type GeolocationOptions, type MediaFeature, type Metrics, type NewDocumentScriptEvaluation, type ScreenshotOptions, type WaitTimeoutOptions } from '../api/Page.js';
+import type { Cookie, DeleteCookiesRequest, CookieParam } from '../common/Cookie.js';
 import { FileChooser } from '../common/FileChooser.js';
 import type { PDFOptions } from '../common/PDFOptions.js';
 import type { Viewport } from '../common/Viewport.js';
@@ -60,9 +58,9 @@ export declare class CdpPage extends Page {
     setDefaultTimeout(timeout: number): void;
     getDefaultTimeout(): number;
     queryObjects<Prototype>(prototypeHandle: JSHandle<Prototype>): Promise<JSHandle<Prototype[]>>;
-    cookies(...urls: string[]): Promise<Protocol.Network.Cookie[]>;
-    deleteCookie(...cookies: Protocol.Network.DeleteCookiesRequest[]): Promise<void>;
-    setCookie(...cookies: Protocol.Network.CookieParam[]): Promise<void>;
+    cookies(...urls: string[]): Promise<Cookie[]>;
+    deleteCookie(...cookies: DeleteCookiesRequest[]): Promise<void>;
+    setCookie(...cookies: CookieParam[]): Promise<void>;
     exposeFunction(name: string, pptrFunction: Function | {
         default: Function;
     }): Promise<void>;
@@ -73,16 +71,6 @@ export declare class CdpPage extends Page {
     metrics(): Promise<Metrics>;
     reload(options?: WaitForOptions): Promise<HTTPResponse | null>;
     createCDPSession(): Promise<CDPSession>;
-    waitForRequest(urlOrPredicate: string | ((req: HTTPRequest) => boolean | Promise<boolean>), options?: {
-        timeout?: number;
-    }): Promise<HTTPRequest>;
-    waitForResponse(urlOrPredicate: string | ((res: HTTPResponse) => boolean | Promise<boolean>), options?: {
-        timeout?: number;
-    }): Promise<HTTPResponse>;
-    waitForNetworkIdle(options?: {
-        idleTime?: number;
-        timeout?: number;
-    }): Promise<void>;
     goBack(options?: WaitForOptions): Promise<HTTPResponse | null>;
     goForward(options?: WaitForOptions): Promise<HTTPResponse | null>;
     bringToFront(): Promise<void>;
@@ -103,7 +91,7 @@ export declare class CdpPage extends Page {
     removeScriptToEvaluateOnNewDocument(identifier: string): Promise<void>;
     setCacheEnabled(enabled?: boolean): Promise<void>;
     _screenshot(options: Readonly<ScreenshotOptions>): Promise<string>;
-    createPDFStream(options?: PDFOptions): Promise<Readable>;
+    createPDFStream(options?: PDFOptions): Promise<ReadableStream<Uint8Array>>;
     pdf(options?: PDFOptions): Promise<Buffer>;
     close(options?: {
         runBeforeUnload?: boolean;

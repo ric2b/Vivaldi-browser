@@ -7,10 +7,11 @@
 
 #include <vector>
 
+#import "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 #include "components/infobars/core/infobar_manager.h"
+#import "ios/web/public/lazy_web_state_user_data.h"
 #include "ios/web/public/navigation/referrer.h"
-#import "ios/web/public/web_state_user_data.h"
 #include "url/gurl.h"
 
 class ChromeBrowserState;
@@ -27,7 +28,7 @@ class WebState;
 // allowing the user to add an exception and navigate to the site.
 class BlockedPopupTabHelper
     : public infobars::InfoBarManager::Observer,
-      public web::WebStateUserData<BlockedPopupTabHelper> {
+      public web::LazyWebStateUserData<BlockedPopupTabHelper> {
  public:
   explicit BlockedPopupTabHelper(web::WebState* web_state);
 
@@ -60,7 +61,7 @@ class BlockedPopupTabHelper
   };
 
  private:
-  friend class web::WebStateUserData<BlockedPopupTabHelper>;
+  friend class web::LazyWebStateUserData<BlockedPopupTabHelper>;
 
   friend class BlockedPopupTabHelperTest;
 
@@ -77,9 +78,9 @@ class BlockedPopupTabHelper
       infobars::InfoBarManager* infobar_manager);
 
   // The WebState that this object is attached to.
-  web::WebState* web_state_;
+  raw_ptr<web::WebState> web_state_;
   // The currently displayed infobar.
-  infobars::InfoBar* infobar_;
+  raw_ptr<infobars::InfoBar> infobar_;
   // The popups to open.
   std::vector<Popup> popups_;
   // For management of infobars::InfoBarManager::Observer registration.  This

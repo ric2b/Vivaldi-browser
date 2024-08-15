@@ -33,7 +33,7 @@ declare interface IndexableElement extends Element {
 declare interface AutofillFormFieldData {
   name: string;
   value: string;
-  unique_renderer_id: string;
+  renderer_id: string;
   form_control_type: string;
   autocomplete_attribute: string;
   max_length: number;
@@ -56,7 +56,7 @@ declare interface AutofillFormFieldData {
 
 declare interface AutofillFormData {
   name: string;
-  unique_renderer_id: string;
+  renderer_id: string;
   origin: string;
   action: string;
   fields: AutofillFormFieldData[];
@@ -64,7 +64,6 @@ declare interface AutofillFormData {
   child_frames?: FrameTokenWithPredecessor[];
   name_attribute?: string;
   id_attribute?: string;
-  is_form_tag: boolean;
 }
 
 declare interface FrameTokenWithPredecessor {
@@ -311,7 +310,7 @@ function setInputElementValue(value: string, input: HTMLInputElement): boolean {
 
   if (overrideProperty) {
     Object.defineProperty(input, propertyName, oldPropertyDescriptor);
-    if (!setterCalled && input[propertyName] !== value) {
+    if (!setterCalled) {
       // The setter was never called. This may be intentional (the framework
       // ignored the input event) or not (the event did not conform to what
       // framework expected). The whole function will likely fail, but try to

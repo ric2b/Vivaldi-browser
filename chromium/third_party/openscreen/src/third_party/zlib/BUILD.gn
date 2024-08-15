@@ -12,6 +12,7 @@ config("zlib_internal_config") {
     "-Wno-implicit-function-declaration",
     "-Wno-implicit-fallthrough",
     "-Wno-strict-prototypes",
+    "-Wno-macro-redefined",
 
     # Tracked upstream as https://github.com/madler/zlib/issues/633.
     "-Wno-deprecated-non-prototype",
@@ -20,6 +21,11 @@ config("zlib_internal_config") {
     # to eliminate version mismatch issues.
     "-Wno-unknown-warning-option",
   ]
+
+  # zlib does some strange things around macros, such as deleting fdopen.
+  if (is_mac) {
+    cflags += [ "-includestdio.h" ]
+  }
 }
 
 static_library("zlib") {

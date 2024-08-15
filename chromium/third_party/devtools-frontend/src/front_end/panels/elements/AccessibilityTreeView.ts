@@ -31,7 +31,7 @@ export class AccessibilityTreeView extends UI.Widget.VBox implements
     const container = this.contentElement.createChild('div');
 
     container.classList.add('accessibility-tree-view-container');
-    container.setAttribute('jslog', `${VisualLogging.tree().context('full-accessibility-tree')}`);
+    container.setAttribute('jslog', `${VisualLogging.tree('full-accessibility')}`);
     container.appendChild(this.toggleButton);
     container.appendChild(this.accessibilityTreeComponent);
 
@@ -99,7 +99,7 @@ export class AccessibilityTreeView extends UI.Widget.VBox implements
     this.accessibilityTreeComponent.data = {
       defaultRenderer: AccessibilityTreeUtils.accessibilityNodeRenderer,
       tree: treeData,
-      filter: (node): TreeOutline.TreeOutline.FilterOption => {
+      filter: node => {
         return node.ignored() || (node.role()?.value === 'generic' && !node.name()?.value) ?
             TreeOutline.TreeOutline.FilterOption.FLATTEN :
             TreeOutline.TreeOutline.FilterOption.SHOW;

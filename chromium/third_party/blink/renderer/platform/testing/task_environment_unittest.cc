@@ -4,11 +4,12 @@
 
 #include "third_party/blink/renderer/platform/testing/task_environment.h"
 
+#include <optional>
+
 #include "base/task/thread_pool.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/platform/scheduler/public/main_thread.h"
 
 namespace blink {
@@ -24,7 +25,7 @@ class TaskEnvironmentTest : public testing::Test {
 };
 
 TEST_F(TaskEnvironmentTest, MainThreadTaskRunner) {
-  auto quit_closure = task_environment_->QuitClosure();
+  auto quit_closure = task_environment_.QuitClosure();
   base::ThreadPool::PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         Thread::MainThread()
@@ -35,7 +36,7 @@ TEST_F(TaskEnvironmentTest, MainThreadTaskRunner) {
                        }));
       }));
 
-  task_environment_->RunUntilQuit();
+  task_environment_.RunUntilQuit();
 }
 
 TEST_F(TaskEnvironmentTest, Isolate) {

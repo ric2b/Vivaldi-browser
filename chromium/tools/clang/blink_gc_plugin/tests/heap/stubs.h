@@ -26,6 +26,9 @@ class WeakPtrFactory {
   WeakPtr<T> GetWeakPtr() { return WeakPtr<T>(); }
 };
 
+template <typename T, typename Traits = void>
+class raw_ptr {};
+
 }  // namespace base
 namespace WTF {
 
@@ -159,7 +162,16 @@ class unordered_map {};
 template <typename Elem>
 class vector {};
 template <typename Elem, size_t N>
-class array {};
+class array {
+ public:
+  const Elem& operator[](size_t n) const { return elems_[n]; }
+
+  const Elem* begin() const { return &elems_[0]; }
+  const Elem* end() const { return &elems_[N]; }
+
+ private:
+  Elem elems_[N];
+};
 template <typename T1, typename T2>
 class pair {};
 template <typename T>

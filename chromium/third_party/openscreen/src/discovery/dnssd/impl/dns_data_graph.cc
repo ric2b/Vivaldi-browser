@@ -213,7 +213,7 @@ class DnsDataGraphImpl : public DnsDataGraph {
 
 DnsDataGraphImpl::Node::Node(DomainName name, DnsDataGraphImpl* graph)
     : name_(std::move(name)), graph_(graph) {
-  OSP_DCHECK(graph_);
+  OSP_CHECK(graph_);
 
   graph_->on_node_creation_(name_);
 }
@@ -232,14 +232,14 @@ DnsDataGraphImpl::Node::~Node() {
       RemoveChild(child);
     }
 
-    OSP_DCHECK(graph_->on_node_deletion_);
+    OSP_CHECK(graph_->on_node_deletion_);
     graph_->on_node_deletion_(name_);
   }
 }
 
 Error DnsDataGraphImpl::Node::ApplyDataRecordChange(MdnsRecord record,
                                                     RecordChangedEvent event) {
-  OSP_DCHECK(record.name() == name_);
+  OSP_DCHECK_EQ(record.name(), name_);
 
   // The child domain to which the changed record points, or none. This is only
   // applicable for PTR and SRV records, and is empty in all other cases.
@@ -310,26 +310,26 @@ void DnsDataGraphImpl::Node::ApplyChildChange(DomainName child_name,
     AddChild(pair.first->second.get());
   } else if (event == RecordChangedEvent::kExpired) {
     const auto it = graph_->nodes_.find(child_name);
-    OSP_DCHECK(it != graph_->nodes_.end());
+    OSP_CHECK(it != graph_->nodes_.end());
     RemoveChild(it->second.get());
   }
 }
 
 void DnsDataGraphImpl::Node::AddChild(Node* child) {
-  OSP_DCHECK(child);
+  OSP_CHECK(child);
   children_.push_back(child);
   child->parents_.push_back(this);
 }
 
 void DnsDataGraphImpl::Node::RemoveChild(Node* child) {
-  OSP_DCHECK(child);
+  OSP_CHECK(child);
 
   auto it = std::find(children_.begin(), children_.end(), child);
-  OSP_DCHECK(it != children_.end());
+  OSP_CHECK(it != children_.end());
   children_.erase(it);
 
   it = std::find(child->parents_.begin(), child->parents_.end(), this);
-  OSP_DCHECK(it != child->parents_.end());
+  OSP_CHECK(it != child->parents_.end());
   child->parents_.erase(it);
 
   // If the node has been orphaned, remove it.
@@ -338,7 +338,7 @@ void DnsDataGraphImpl::Node::RemoveChild(Node* child) {
   if (it == child->parents_.end()) {
     DomainName child_name = child->name();
     const size_t count = graph_->nodes_.erase(child_name);
-    OSP_DCHECK(child == this || count);
+    OSP_CHECK(child == this || count);
   }
 }
 
@@ -353,9 +353,9 @@ DnsDataGraphImpl::NodeLifetimeHandler::NodeLifetimeHandler(
     DomainChangeCallback* callback_ptr,
     DomainChangeCallback callback)
     : callback_ptr_(callback_ptr), callback_(callback) {
-  OSP_DCHECK(callback_ptr_);
-  OSP_DCHECK(callback);
-  OSP_DCHECK(*callback_ptr_ == nullptr);
+  OSP_CHECK(callback_ptr_);
+  OSP_CHECK(callback);
+  OSP_CHECK(*callback_ptr_ == nullptr);
   *callback_ptr = [this](DomainName domain) {
     domains_changed.push_back(std::move(domain));
   };
@@ -389,8 +389,8 @@ void DnsDataGraphImpl::StartTracking(const DomainName& domain,
 
   auto pair = nodes_.emplace(domain, std::make_unique<Node>(domain, this));
 
-  OSP_DCHECK(pair.second);
-  OSP_DCHECK(nodes_.find(domain) != nodes_.end());
+  OSP_CHECK(pair.second);
+  OSP_CHECK(nodes_.find(domain) != nodes_.end());
 }
 
 void DnsDataGraphImpl::StopTracking(const DomainName& domain,
@@ -400,10 +400,10 @@ void DnsDataGraphImpl::StopTracking(const DomainName& domain,
 
   auto it = nodes_.find(domain);
   OSP_CHECK(it != nodes_.end());
-  OSP_DCHECK(it->second->parents().empty());
+  OSP_CHECK(it->second->parents().empty());
   it->second.reset();
   const size_t erased_count = nodes_.erase(domain);
-  OSP_DCHECK(erased_count);
+  OSP_CHECK(erased_count);
 }
 
 Error DnsDataGraphImpl::ApplyDataRecordChange(

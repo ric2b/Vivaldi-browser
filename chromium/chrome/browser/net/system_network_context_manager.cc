@@ -29,6 +29,7 @@
 #include "chrome/browser/component_updater/pki_metadata_component_installer.h"
 #include "chrome/browser/net/chrome_mojo_proxy_resolver_factory.h"
 #include "chrome/browser/net/convert_explicitly_allowed_network_ports_pref.h"
+#include "chrome/browser/net/network_annotation_monitor.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/ssl/sct_reporting_service.h"
 #include "chrome/browser/ssl/ssl_config_service_manager.h"
@@ -79,6 +80,7 @@
 #include "services/network/public/cpp/network_switches.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/cert_verifier_service.mojom.h"
+#include "services/network/public/mojom/network_annotation_monitor.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/proxy_resolver/public/mojom/proxy_resolver.mojom.h"
 #include "third_party/blink/public/common/features.h"
@@ -450,7 +452,7 @@ SystemNetworkContextManager::GetURLLoaderFactory() {
   network::mojom::URLLoaderFactoryParamsPtr params =
       network::mojom::URLLoaderFactoryParams::New();
   params->process_id = network::mojom::kBrowserProcessId;
-  params->is_corb_enabled = false;
+  params->is_orb_enabled = false;
   params->is_trusted = true;
 
   url_loader_factory_.reset();
@@ -602,7 +604,7 @@ SystemNetworkContextManager::SystemNetworkContextManager(
   // TODO(crbug.com/1501418): If this call is removed, clank crashes on startup.
   // Not sure why.
   content::GetCertVerifierServiceFactory()->SetUseChromeRootStore(
-      IsUsingChromeRootStore(), base::DoNothing());
+      true, base::DoNothing());
 #endif
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
@@ -768,8 +770,9 @@ void SystemNetworkContextManager::OnNetworkServiceCreated(
 
   int max_connections_per_proxy =
       local_state_->GetInteger(prefs::kMaxConnectionsPerProxy);
-  if (max_connections_per_proxy != -1)
-    network_service->SetMaxConnectionsPerProxy(max_connections_per_proxy);
+  if (max_connections_per_proxy != -1) {
+    network_service->SetMaxConnectionsPerProxyChain(max_connections_per_proxy);
+  }
 
   network_service_network_context_.reset();
   content::CreateNetworkContextInNetworkService(
@@ -813,6 +816,19 @@ void SystemNetworkContextManager::OnNetworkServiceCreated(
   UpdateExplicitlyAllowedNetworkPorts();
 
   UpdateIPv6ReachabilityOverrideEnabled();
+
+  if (base::FeatureList::IsEnabled(features::kNetworkAnnotationMonitoring)) {
+    // Create NetworkAnnotationMonitor.
+    if (!network_annotation_monitor_) {
+      network_annotation_monitor_ =
+          std::make_unique<NetworkAnnotationMonitor>();
+    }
+
+    // Pass NetworkAnnotationMonitor remote to NetworkService so that network
+    // calls can be reported.
+    network_service->SetNetworkAnnotationMonitor(
+        network_annotation_monitor_->GetClient());
+  }
 }
 
 void SystemNetworkContextManager::DisableQuic() {
@@ -978,6 +994,12 @@ void SystemNetworkContextManager::FlushNetworkInterfaceForTesting() {
     url_loader_factory_.FlushForTesting();
 }
 
+void SystemNetworkContextManager::FlushNetworkAnnotationMonitorForTesting() {
+  if (network_annotation_monitor_) {
+    network_annotation_monitor_->FlushForTesting();  // IN-TEST
+  }
+}
+
 network::mojom::HttpAuthStaticParamsPtr
 SystemNetworkContextManager::GetHttpAuthStaticParamsForTesting() {
   return CreateHttpAuthStaticParams(g_browser_process->local_state());
@@ -1008,13 +1030,6 @@ bool SystemNetworkContextManager::IsCertificateTransparencyEnabled() {
   return base::FeatureList::IsEnabled(
       features::kCertificateTransparencyAskBeforeEnabling);
 }
-
-#if BUILDFLAG(CHROME_ROOT_STORE_OPTIONAL)
-// static
-bool SystemNetworkContextManager::IsUsingChromeRootStore() {
-  return base::FeatureList::IsEnabled(net::features::kChromeRootStoreUsed);
-}
-#endif  // BUILDFLAG(CHROME_ROOT_STORE_OPTIONAL)
 
 network::mojom::NetworkContextParamsPtr
 SystemNetworkContextManager::CreateNetworkContextParams() {

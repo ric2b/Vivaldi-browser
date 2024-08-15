@@ -50,6 +50,7 @@
 #include "dawn/native/Texture.h"
 #include "dawn/native/ToBackend.h"
 #include "dawn/native/dawn_platform.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 
 namespace dawn::native::null {
 
@@ -221,7 +222,7 @@ class BindGroupDataHolder {
     explicit BindGroupDataHolder(size_t size);
     ~BindGroupDataHolder();
 
-    void* mBindingDataAllocation;
+    raw_ptr<void> mBindingDataAllocation;
 };
 
 // We don't have the complexity of placement-allocation of bind group data in
@@ -288,6 +289,7 @@ class Queue final : public QueueBase {
     ResultOrError<ExecutionSerial> CheckAndUpdateCompletedSerials() override;
     void ForceEventualFlushOfCommands() override;
     bool HasPendingCommands() const override;
+    MaybeError SubmitPendingCommands() override;
     ResultOrError<bool> WaitForQueueSerial(ExecutionSerial serial, Nanoseconds timeout) override;
     MaybeError WaitForIdleForDestruction() override;
 };
@@ -296,14 +298,14 @@ class ComputePipeline final : public ComputePipelineBase {
   public:
     using ComputePipelineBase::ComputePipelineBase;
 
-    MaybeError Initialize() override;
+    MaybeError InitializeImpl() override;
 };
 
 class RenderPipeline final : public RenderPipelineBase {
   public:
     using RenderPipelineBase::RenderPipelineBase;
 
-    MaybeError Initialize() override;
+    MaybeError InitializeImpl() override;
 };
 
 class ShaderModule final : public ShaderModuleBase {

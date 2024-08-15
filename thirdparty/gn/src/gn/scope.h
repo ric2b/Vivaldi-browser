@@ -393,7 +393,8 @@ class Scope {
 
   // Walk up the containing scopes and any "invoker" Value scopes to gather any
   // previous template invocations.
-  void AppendTemplateInvocationEntries(std::vector<TemplateInvocationEntry>* out) const;
+  void AppendTemplateInvocationEntries(
+      std::vector<TemplateInvocationEntry>* out) const;
 
   // Walk up the containing scopes to find a TemplateInvocationEntry.
   const TemplateInvocationEntry* FindTemplateInvocationEntry() const;

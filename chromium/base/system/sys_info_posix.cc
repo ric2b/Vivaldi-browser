@@ -19,6 +19,7 @@
 #include "base/check.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
+#include "base/notimplemented.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
@@ -41,7 +42,7 @@
 #endif
 
 #if BUILDFLAG(IS_MAC)
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include <optional>
 #endif
 
 namespace {
@@ -121,7 +122,7 @@ namespace base {
 // static
 int SysInfo::NumberOfProcessors() {
 #if BUILDFLAG(IS_MAC)
-  absl::optional<int> number_of_physical_cores =
+  std::optional<int> number_of_physical_cores =
       internal::NumberOfProcessorsWhenCpuSecurityMitigationEnabled();
   if (number_of_physical_cores.has_value()) {
     return number_of_physical_cores.value();

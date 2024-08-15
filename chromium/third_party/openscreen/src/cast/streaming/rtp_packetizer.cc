@@ -42,8 +42,8 @@ RtpPacketizer::RtpPacketizer(RtpPayloadType payload_type,
       sender_ssrc_(sender_ssrc),
       max_packet_size_(max_packet_size),
       sequence_number_(GenerateRandomSequenceNumberStart()) {
-  OSP_DCHECK(IsRtpPayloadType(payload_type_7bits_));
-  OSP_DCHECK_GT(max_packet_size_, kMaxRtpHeaderSize);
+  OSP_CHECK(IsRtpPayloadType(payload_type_7bits_));
+  OSP_CHECK_GT(max_packet_size_, kMaxRtpHeaderSize);
 }
 
 RtpPacketizer::~RtpPacketizer() = default;
@@ -54,8 +54,8 @@ ByteBuffer RtpPacketizer::GeneratePacket(const EncryptedFrame& frame,
   OSP_CHECK_GE(static_cast<int>(buffer.size()), max_packet_size_);
 
   const int num_packets = ComputeNumberOfPackets(frame);
-  OSP_DCHECK_GT(num_packets, 0);
-  OSP_DCHECK_LT(int{packet_id}, num_packets);
+  OSP_CHECK_GT(num_packets, 0);
+  OSP_CHECK_LT(int{packet_id}, num_packets);
   const bool is_last_packet = int{packet_id} == (num_packets - 1);
 
   // Compute the size of this packet, which is the number of bytes of header
@@ -66,8 +66,8 @@ ByteBuffer RtpPacketizer::GeneratePacket(const EncryptedFrame& frame,
       (packet_id == 0 &&
        frame.new_playout_delay > std::chrono::milliseconds(0));
   if (include_adaptive_latency_change) {
-    OSP_DCHECK_LE(frame.new_playout_delay.count(),
-                  int{std::numeric_limits<uint16_t>::max()});
+    OSP_CHECK_LE(frame.new_playout_delay.count(),
+                 int{std::numeric_limits<uint16_t>::max()});
     packet_size += kAdaptiveLatencyHeaderSize;
   }
   int data_chunk_size = max_payload_size();
@@ -76,7 +76,7 @@ ByteBuffer RtpPacketizer::GeneratePacket(const EncryptedFrame& frame,
     data_chunk_size = static_cast<int>(frame.data.size()) - data_chunk_start;
   }
   packet_size += data_chunk_size;
-  OSP_DCHECK_LE(packet_size, max_packet_size_);
+  OSP_CHECK_LE(packet_size, max_packet_size_);
   const ByteBuffer packet(buffer.data(), packet_size);
 
   // RTP Header.
@@ -111,7 +111,7 @@ ByteBuffer RtpPacketizer::GeneratePacket(const EncryptedFrame& frame,
 
   // Sanity-check the pointer math, to ensure the packet is being entirely
   // populated, with no underrun or overrun.
-  OSP_DCHECK_EQ(buffer.data() + data_chunk_size, packet.end());
+  OSP_CHECK_EQ(buffer.data() + data_chunk_size, packet.end());
 
   // Copy the encrypted payload data into the packet.
   auto data_chunk = frame.data.subspan(data_chunk_start, data_chunk_size);

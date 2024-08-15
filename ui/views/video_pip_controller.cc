@@ -41,7 +41,7 @@ VideoPIPController::~VideoPIPController() {
 }
 
 void VideoPIPController::MediaSessionPositionChanged(
-    const absl::optional<media_session::MediaPosition>& position) {
+    const std::optional<media_session::MediaPosition>& position) {
   // Follows the typical Chromium pattern to not accept empty positions.
   if (!position.has_value())
     return;

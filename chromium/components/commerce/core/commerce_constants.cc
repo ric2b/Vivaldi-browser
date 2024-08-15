@@ -8,6 +8,10 @@ namespace commerce {
 
 const char kChromeUICommerceInternalsHost[] = "commerce-internals";
 
+const char kChromeUICompareHost[] = "compare";
+
+const char kChromeUICompareUrl[] = "chrome://compare";
+
 const char kChromeUIShoppingInsightsSidePanelHost[] =
     "shopping-insights-side-panel.top-chrome";
 
@@ -37,6 +41,8 @@ const char kOgTypeOgProduct[] = "product";
 const char kOgTypeProductItem[] = "product.item";
 
 const char kPostHttpMethod[] = "POST";
+
+const char kProductSpecificationsUrlKey[] = "product-specifications-url";
 
 const long kToMicroCurrency = 1e6;
 

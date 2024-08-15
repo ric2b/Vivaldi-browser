@@ -17,7 +17,7 @@
 #import "components/open_from_clipboard/clipboard_recent_content.h"
 #import "components/search_engines/template_url_service.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
+#import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
@@ -143,9 +143,10 @@
 
   id<OmniboxCommands> omniboxHandler =
       HandlerForProtocol(self.browser->GetCommandDispatcher(), OmniboxCommands);
-  _editView = std::make_unique<OmniboxViewIOS>(self.textField, self.locationBar,
-                                               self.browser->GetBrowserState(),
-                                               omniboxHandler, _toolbarHandler);
+  _editView = std::make_unique<OmniboxViewIOS>(
+      self.textField, self.locationBar, self.browser->GetBrowserState(),
+      omniboxHandler, _toolbarHandler,
+      self.viewController.additionalTextConsumer);
   self.pasteDelegate = [[OmniboxTextFieldPasteDelegate alloc] init];
   [self.textField setPasteDelegate:self.pasteDelegate];
 

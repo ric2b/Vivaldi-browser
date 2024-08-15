@@ -15,6 +15,7 @@
 #include "quiche/quic/core/crypto/quic_decrypter.h"
 #include "quiche/quic/core/crypto/quic_encrypter.h"
 #include "quiche/quic/core/crypto/quic_random.h"
+#include "quiche/quic/core/frames/quic_reset_stream_at_frame.h"
 #include "quiche/quic/core/quic_connection_id.h"
 #include "quiche/quic/core/quic_packets.h"
 #include "quiche/quic/core/quic_types.h"
@@ -32,37 +33,38 @@ class QuicFramer;
 class QuicStreamFrameDataProducer;
 
 // Number of bytes reserved for the frame type preceding each frame.
-const size_t kQuicFrameTypeSize = 1;
+inline constexpr size_t kQuicFrameTypeSize = 1;
 // Number of bytes reserved for error code.
-const size_t kQuicErrorCodeSize = 4;
+inline constexpr size_t kQuicErrorCodeSize = 4;
 // Number of bytes reserved to denote the length of error details field.
-const size_t kQuicErrorDetailsLengthSize = 2;
+inline constexpr size_t kQuicErrorDetailsLengthSize = 2;
 
 // Maximum number of bytes reserved for stream id.
-const size_t kQuicMaxStreamIdSize = 4;
+inline constexpr size_t kQuicMaxStreamIdSize = 4;
 // Maximum number of bytes reserved for byte offset in stream frame.
-const size_t kQuicMaxStreamOffsetSize = 8;
+inline constexpr size_t kQuicMaxStreamOffsetSize = 8;
 // Number of bytes reserved to store payload length in stream frame.
-const size_t kQuicStreamPayloadLengthSize = 2;
+inline constexpr size_t kQuicStreamPayloadLengthSize = 2;
 // Number of bytes to reserve for IQ Error codes (for the Connection Close,
 // Application Close, and Reset Stream frames).
-const size_t kQuicIetfQuicErrorCodeSize = 2;
+inline constexpr size_t kQuicIetfQuicErrorCodeSize = 2;
 // Minimum size of the IETF QUIC Error Phrase's length field
-const size_t kIetfQuicMinErrorPhraseLengthSize = 1;
+inline constexpr size_t kIetfQuicMinErrorPhraseLengthSize = 1;
 
 // Size in bytes reserved for the delta time of the largest observed
 // packet number in ack frames.
-const size_t kQuicDeltaTimeLargestObservedSize = 2;
+inline constexpr size_t kQuicDeltaTimeLargestObservedSize = 2;
 // Size in bytes reserved for the number of received packets with timestamps.
-const size_t kQuicNumTimestampsSize = 1;
+inline constexpr size_t kQuicNumTimestampsSize = 1;
 // Size in bytes reserved for the number of missing packets in ack frames.
-const size_t kNumberOfNackRangesSize = 1;
+inline constexpr size_t kNumberOfNackRangesSize = 1;
 // Size in bytes reserved for the number of ack blocks in ack frames.
-const size_t kNumberOfAckBlocksSize = 1;
+inline constexpr size_t kNumberOfAckBlocksSize = 1;
 // Maximum number of missing packet ranges that can fit within an ack frame.
-const size_t kMaxNackRanges = (1 << (kNumberOfNackRangesSize * 8)) - 1;
+inline constexpr size_t kMaxNackRanges =
+    (1 << (kNumberOfNackRangesSize * 8)) - 1;
 // Maximum number of ack blocks that can fit within an ack frame.
-const size_t kMaxAckBlocks = (1 << (kNumberOfAckBlocksSize * 8)) - 1;
+inline constexpr size_t kMaxAckBlocks = (1 << (kNumberOfAckBlocksSize * 8)) - 1;
 
 // This class receives callbacks from the framer when packets
 // are processed.
@@ -221,6 +223,9 @@ class QUICHE_EXPORT QuicFramerVisitorInterface {
   // Called when an AckFrequencyFrame has been parsed.
   virtual bool OnAckFrequencyFrame(const QuicAckFrequencyFrame& frame) = 0;
 
+  // Called when an ResetStreamAtFrame has been parsed.
+  virtual bool OnResetStreamAtFrame(const QuicResetStreamAtFrame& frame) = 0;
+
   // Called when a packet has been completely processed.
   virtual void OnPacketComplete() = 0;
 
@@ -323,6 +328,11 @@ class QUICHE_EXPORT QuicFramer {
     receive_timestamps_exponent_ = exponent;
   }
 
+  // Allows enabling RESET_STREAM_AT frame processing.
+  void set_process_reset_stream_at(bool process_reset_stream_at) {
+    process_reset_stream_at_ = process_reset_stream_at;
+  }
+
   // Pass a UDP packet into the framer for parsing.
   // Return true if the packet was processed successfully. |packet| must be a
   // single, complete UDP packet (not a frame of a packet).  This packet
@@ -359,6 +369,8 @@ class QUICHE_EXPORT QuicFramer {
                                       const QuicRstStreamFrame& frame);
   // Size in bytes of all ack frenquency frame fields.
   static size_t GetAckFrequencyFrameSize(const QuicAckFrequencyFrame& frame);
+  // Size in bytes of all RESET_STREAM_AT frame fields.
+  static size_t GetResetStreamAtFrameSize(const QuicResetStreamAtFrame& frame);
   // Size in bytes of all connection close frame fields, including the error
   // details.
   static size_t GetConnectionCloseFrameSize(
@@ -538,6 +550,8 @@ class QUICHE_EXPORT QuicFramer {
   bool AppendCryptoFrame(const QuicCryptoFrame& frame, QuicDataWriter* writer);
   bool AppendAckFrequencyFrame(const QuicAckFrequencyFrame& frame,
                                QuicDataWriter* writer);
+  bool AppendResetFrameAtFrame(const QuicResetStreamAtFrame& frame,
+                               QuicDataWriter& writer);
 
   // SetDecrypter sets the primary decrypter, replacing any that already exists.
   // If an alternative decrypter is in place then the function QUICHE_DCHECKs.
@@ -977,6 +991,8 @@ class QUICHE_EXPORT QuicFramer {
                           QuicCryptoFrame* frame);
   bool ProcessAckFrequencyFrame(QuicDataReader* reader,
                                 QuicAckFrequencyFrame* frame);
+  bool ProcessResetStreamAtFrame(QuicDataReader& reader,
+                                 QuicResetStreamAtFrame& frame);
   // IETF frame appending methods.  All methods append the type byte as well.
   bool AppendIetfStreamFrame(const QuicStreamFrame& frame,
                              bool last_frame_in_packet, QuicDataWriter* writer);
@@ -1111,6 +1127,8 @@ class QUICHE_EXPORT QuicFramer {
   mutable uint32_t max_receive_timestamps_per_ack_;
   // The exponent to use when writing/reading ACK receive timestamps.
   mutable uint32_t receive_timestamps_exponent_;
+  // If true, process RESET_STREAM_AT frames.
+  bool process_reset_stream_at_;
   // The creation time of the connection, used to calculate timestamps.
   QuicTime creation_time_;
   // The last timestamp received if process_timestamps_ is true.

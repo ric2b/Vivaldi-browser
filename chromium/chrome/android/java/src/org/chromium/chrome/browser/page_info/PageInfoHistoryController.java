@@ -10,7 +10,6 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import org.chromium.base.ResettersForTesting;
-import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.history.BrowsingHistoryBridge;
@@ -94,9 +93,9 @@ public class PageInfoHistoryController
                         mHost,
                         /* selectionDelegate= */ null,
                         mTabSupplier,
-                        new ObservableSupplierImpl<>(),
-                        vg -> null,
-                        new BrowsingHistoryBridge(profile));
+                        new BrowsingHistoryBridge(profile),
+                        null,
+                        /* appSpecificHistory= */ false);
         mContentManager.startLoadingItems();
         return mContentManager.getRecyclerView();
     }
@@ -212,6 +211,10 @@ public class PageInfoHistoryController
         // change the name of the current clear browsing data button.
         return;
     }
+
+    // HistoryContentManager.Observer
+    @Override
+    public void onOpenFullChromeHistoryClicked() {}
 
     // HistoryContentManager.Observer
     @Override

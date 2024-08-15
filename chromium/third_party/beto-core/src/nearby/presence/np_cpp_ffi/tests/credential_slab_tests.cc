@@ -12,12 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <array>
+#include <cstdint>
+#include <span>
+#include <utility>
+
+#include "absl/status/status.h"
+#include "gtest/gtest.h"
 #include "nearby_protocol.h"
 #include "np_cpp_test.h"
-#include "shared_test_util.h"
 
-#include "gtest/gtest.h"
-
+// NOLINTBEGIN(readability-magic-numbers)
 TEST_F(NpCppTest, TestSetMaxCredSlabs) {
   auto slab1_result = nearby_protocol::CredentialSlab::TryCreate();
   ASSERT_TRUE(slab1_result.ok());
@@ -50,7 +55,7 @@ TEST_F(NpCppTest, TestSlabMoveConstructor) {
   // result in an assert failure.
   ASSERT_DEATH([[maybe_unused]] auto failure =
                    nearby_protocol::CredentialBook::TryCreateFromSlab(
-                       slab), // NOLINT(bugprone-use-after-move)
+                       slab),  // NOLINT(bugprone-use-after-move)
                "");
   ASSERT_DEATH(
       [[maybe_unused]] auto failure =
@@ -99,14 +104,14 @@ TEST_F(NpCppTest, TestSlabMoveAssignment) {
   // The old object should now lead to use after moved assert failure
   ASSERT_DEATH([[maybe_unused]] auto failure =
                    nearby_protocol::CredentialBook::TryCreateFromSlab(
-                       slab_result.value()), // NOLINT(bugprone-use-after-move)
+                       slab_result.value()),  // NOLINT(bugprone-use-after-move)
                "");
 
   // moving again should still lead to a use after moved assert failure
   auto another_moved_book = std::move(slab_result.value());
   ASSERT_DEATH([[maybe_unused]] auto failure =
                    nearby_protocol::CredentialBook::TryCreateFromSlab(
-                       another_moved_book), // NOLINT(bugprone-use-after-move)
+                       another_moved_book),  // NOLINT(bugprone-use-after-move)
                "");
 }
 
@@ -115,13 +120,13 @@ TEST_F(NpCppTest, TestAddV0Credential) {
   ASSERT_TRUE(slab_result.ok());
 
   uint8_t metadata[] = {1, 2, 3};
-  std::span<uint8_t> metadata_span(metadata);
+  const std::span<uint8_t> metadata_span(metadata);
 
-  nearby_protocol::MatchedCredentialData match_data(111, metadata_span);
-  std::array<uint8_t, 32> key_seed {1, 2, 3};
-  std::array<uint8_t, 32> legacy_metadata_key_hmac {1, 2, 3};
+  const nearby_protocol::MatchedCredentialData match_data(111, metadata_span);
+  const std::array<uint8_t, 32> key_seed{1, 2, 3};
+  const std::array<uint8_t, 32> legacy_metadata_key_hmac{1, 2, 3};
 
-  nearby_protocol::V0MatchableCredential v0_cred(
+  const nearby_protocol::V0MatchableCredential v0_cred(
       key_seed, legacy_metadata_key_hmac, match_data);
   auto add_result = slab_result.value().AddV0Credential(v0_cred);
   ASSERT_EQ(add_result, absl::OkStatus());
@@ -137,11 +142,11 @@ TEST_F(NpCppTest, TestAddV0CredentialAfterMoved) {
   ASSERT_TRUE(maybe_book.ok());
 
   uint8_t metadata[] = {1, 2, 3};
-  std::span<uint8_t> metadata_span(metadata);
-  nearby_protocol::MatchedCredentialData match_data(111, metadata_span);
-  std::array<uint8_t, 32> key_seed {1, 2, 3};
-  std::array<uint8_t, 32> legacy_metadata_key_hmac {1, 2, 3};
-  nearby_protocol::V0MatchableCredential v0_cred(
+  const std::span<uint8_t> metadata_span(metadata);
+  const nearby_protocol::MatchedCredentialData match_data(111, metadata_span);
+  const std::array<uint8_t, 32> key_seed{1, 2, 3};
+  const std::array<uint8_t, 32> legacy_metadata_key_hmac{1, 2, 3};
+  const nearby_protocol::V0MatchableCredential v0_cred(
       key_seed, legacy_metadata_key_hmac, match_data);
 
   ASSERT_DEATH([[maybe_unused]] auto add_result =
@@ -154,13 +159,13 @@ TEST_F(NpCppTest, TestAddV1Credential) {
   ASSERT_TRUE(slab_result.ok());
 
   uint8_t metadata[] = {1, 2, 3};
-  std::span<uint8_t> metadata_span(metadata);
-  nearby_protocol::MatchedCredentialData match_data(111, metadata_span);
-  std::array<uint8_t, 32> key_seed {1, 2, 3};
-  std::array<uint8_t, 32> expected_unsigned_metadata_key_hmac {1, 2, 3};
-  std::array<uint8_t, 32> expected_signed_metadata_key_hmac {1, 2, 3};
-  std::array<uint8_t, 32> pub_key {1, 2, 3};
-  nearby_protocol::V1MatchableCredential v1_cred(
+  const std::span<uint8_t> metadata_span(metadata);
+  const nearby_protocol::MatchedCredentialData match_data(111, metadata_span);
+  const std::array<uint8_t, 32> key_seed{1, 2, 3};
+  const std::array<uint8_t, 32> expected_unsigned_metadata_key_hmac{1, 2, 3};
+  const std::array<uint8_t, 32> expected_signed_metadata_key_hmac{1, 2, 3};
+  const std::array<uint8_t, 32> pub_key{1, 2, 3};
+  const nearby_protocol::V1MatchableCredential v1_cred(
       key_seed, expected_unsigned_metadata_key_hmac,
       expected_signed_metadata_key_hmac, pub_key, match_data);
 
@@ -178,13 +183,13 @@ TEST_F(NpCppTest, TestAddV1CredentialAfterMoved) {
   ASSERT_TRUE(maybe_book.ok());
 
   uint8_t metadata[] = {1, 2, 3};
-  std::span<uint8_t> metadata_span(metadata);
-  nearby_protocol::MatchedCredentialData match_data(111, metadata_span);
-  std::array<uint8_t, 32> key_seed {1, 2, 3};
-  std::array<uint8_t, 32> expected_unsigned_metadata_key_hmac {1, 2, 3};
-  std::array<uint8_t, 32> expected_signed_metadata_key_hmac {1, 2, 3};
-  std::array<uint8_t, 32> pub_key {1, 2, 3};
-  nearby_protocol::V1MatchableCredential v1_cred(
+  const std::span<uint8_t> metadata_span(metadata);
+  const nearby_protocol::MatchedCredentialData match_data(111, metadata_span);
+  const std::array<uint8_t, 32> key_seed{1, 2, 3};
+  const std::array<uint8_t, 32> expected_unsigned_metadata_key_hmac{1, 2, 3};
+  const std::array<uint8_t, 32> expected_signed_metadata_key_hmac{1, 2, 3};
+  const std::array<uint8_t, 32> pub_key{1, 2, 3};
+  const nearby_protocol::V1MatchableCredential v1_cred(
       key_seed, expected_unsigned_metadata_key_hmac,
       expected_signed_metadata_key_hmac, pub_key, match_data);
 
@@ -192,3 +197,37 @@ TEST_F(NpCppTest, TestAddV1CredentialAfterMoved) {
                    slab_result.value().AddV1Credential(v1_cred);
                , "");
 }
+
+// make sure the book can be populated with many credentials
+TEST_F(NpCppTest, TestAddManyCredentials) {
+  auto slab_result = nearby_protocol::CredentialSlab::TryCreate();
+  ASSERT_TRUE(slab_result.ok());
+
+  // Should be able to load the slab up with many credentials
+  for (int i = 0; i < 500; i++) {
+    uint8_t metadata[] = {1, 2, 3};
+    const std::span<uint8_t> metadata_span(metadata);
+    const nearby_protocol::MatchedCredentialData match_data(111, metadata_span);
+    const std::array<uint8_t, 32> key_seed{1, 2, 3};
+    const std::array<uint8_t, 32> legacy_metadata_key_hmac{1, 2, 3};
+    const nearby_protocol::V0MatchableCredential v0_cred(
+        key_seed, legacy_metadata_key_hmac, match_data);
+    auto add_result = slab_result->AddV0Credential(v0_cred);
+    ASSERT_EQ(add_result, absl::OkStatus());
+
+    const std::array<uint8_t, 32> v1_key_seed{1, 2, 3};
+    const std::array<uint8_t, 32> v1_expected_unsigned_metadata_key_hmac{1, 2,
+                                                                         3};
+    const std::array<uint8_t, 32> v1_expected_signed_metadata_key_hmac{1, 2, 3};
+    const std::array<uint8_t, 32> v1_pub_key{1, 2, 3};
+    const nearby_protocol::V1MatchableCredential v1_cred(
+        v1_key_seed, v1_expected_unsigned_metadata_key_hmac,
+        v1_expected_signed_metadata_key_hmac, v1_pub_key, match_data);
+
+    auto add_v1_result = slab_result->AddV1Credential(v1_cred);
+    ASSERT_EQ(add_v1_result, absl::OkStatus());
+  }
+  ASSERT_TRUE(
+      nearby_protocol::CredentialBook::TryCreateFromSlab(*slab_result).ok());
+}
+// NOLINTEND(readability-magic-numbers)

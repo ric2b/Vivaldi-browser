@@ -82,14 +82,14 @@ proto::OutputConfig GetTestOutputConfigForBinnedClassifier() {
 
 proto::OutputConfig GetTestOutputConfigForMultiClassClassifier(
     int top_k_outputs,
-    absl::optional<float> threshold) {
+    std::optional<float> threshold) {
   proto::SegmentationModelMetadata model_metadata;
   MetadataWriter writer(&model_metadata);
 
   std::array<const char*, 4> labels{kShareUser, kNewTabUser, kVoiceUser,
                                     kShoppingUser};
-  writer.AddOutputConfigForMultiClassClassifier(labels.begin(), labels.size(),
-                                                top_k_outputs, threshold);
+  writer.AddOutputConfigForMultiClassClassifier(labels, top_k_outputs,
+                                                threshold);
   return model_metadata.output_config();
 }
 

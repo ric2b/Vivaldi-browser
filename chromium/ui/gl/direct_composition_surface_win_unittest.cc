@@ -167,14 +167,10 @@ class DirectCompositionSurfaceTest : public testing::Test,
     DirectCompositionSurfaceWin::Settings settings;
     scoped_refptr<DirectCompositionSurfaceWin> surface =
         base::MakeRefCounted<DirectCompositionSurfaceWin>(
-            gl::GLSurfaceEGL::GetGLDisplayEGL(),
-            DirectCompositionSurfaceWin::VSyncCallback(), settings);
+            gl::GLSurfaceEGL::GetGLDisplayEGL(), settings);
     EXPECT_TRUE(surface->Initialize(GLSurfaceFormat()));
 
-    // ImageTransportSurfaceDelegate::AddChildWindowToBrowser() is called in
-    // production code here. However, to remove dependency from
-    // gpu/ipc/service/image_transport_surface_delegate.h, here we directly
-    // executes the required minimum code.
+    // Add our child window to the root window.
     if (parent_window_)
       ::SetParent(surface->window(), parent_window_);
 

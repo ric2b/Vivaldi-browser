@@ -11,6 +11,8 @@
 #include "base/strings/string_util.h"
 #include "components/enterprise/data_controls/and_condition.h"
 #include "components/enterprise/data_controls/attributes_condition.h"
+#include "components/enterprise/data_controls/not_condition.h"
+#include "components/enterprise/data_controls/or_condition.h"
 #include "components/policy/core/browser/policy_error_map.h"
 #include "components/strings/grit/components_strings.h"
 
@@ -68,6 +70,7 @@ std::vector<base::StringPiece> AnyOfConditions(const base::Value::Dict& value) {
   for (const char* anyof_condition :
        {kKeySources, kKeyDestinations, AttributesCondition::kKeyUrls,
         AttributesCondition::kKeyIncognito,
+        AttributesCondition::kKeyOtherProfile,
 #if BUILDFLAG(IS_CHROMEOS)
         AttributesCondition::kKeyComponents
 #endif  // BUILDFLAG(IS_CHROMEOS)
@@ -128,7 +131,7 @@ std::optional<Rule> Rule::Create(const base::Value::Dict& value) {
     return std::nullopt;
   }
 
-  return absl::make_optional(Rule(
+  return std::make_optional(Rule(
       GetStringOrEmpty(value, kKeyName), GetStringOrEmpty(value, kKeyRuleId),
       GetStringOrEmpty(value, kKeyDescription), std::move(condition),
       std::move(restrictions)));
@@ -164,13 +167,42 @@ const std::string& Rule::description() const {
 // static
 std::unique_ptr<const Condition> Rule::GetCondition(
     const base::Value::Dict& value) {
+  // `value` can hold different condition-related keys, namely:
+  // - The "not" key with a sub-dict that is parsed recursively.
+  // - The "and" or "not" keys with sub-arrays of conditions parsed recursively.
+  // - The "sources" and/or "destinations" keys with corresponding sub-dicts.
+  // These 3 cases are mutually exclusive and should preemptively be filtered
+  // by policy validations of the DataControlsRules policy, and as such the
+  // precedence in which these keys are parsed here should not matter.
+
+  if (const base::Value::Dict* condition = value.FindDict(kKeyNot)) {
+    return NotCondition::Create(GetCondition(*condition));
+  }
+
+  if (const base::Value::List* condition = value.FindList(kKeyAnd)) {
+    return AndCondition::Create(GetListConditions(*condition));
+  }
+
+  if (const base::Value::List* condition = value.FindList(kKeyOr)) {
+    return OrCondition::Create(GetListConditions(*condition));
+  }
+
+  // Reaching this statement implies `value` contains no boolean-logic keys
+  // ("not", "and", "or") and that it should simply be evaluated based on
+  // attributes keys ("sources", "destinations").
+  return GetSourcesAndDestinationsCondition(value);
+}
+
+// static
+std::unique_ptr<const Condition> Rule::GetSourcesAndDestinationsCondition(
+    const base::Value::Dict& value) {
   // This function will add a `Condition` for each of the following keys found
   // in `value`:
   // - "sources"
   // - "destinations"
   // Then combine them into an `AndCondition` to make an overall condition for
   // the rule being constructed.
-  std::vector<std::unique_ptr<Condition>> conditions;
+  std::vector<std::unique_ptr<const Condition>> conditions;
 
   const base::Value* sources_value = value.Find(kKeySources);
   if (sources_value) {
@@ -190,12 +222,24 @@ std::unique_ptr<const Condition> Rule::GetCondition(
     }
   }
 
-  if (conditions.empty()) {
-    // No conditions implies the rule is not valid and shouldn't be evaluated.
-    return nullptr;
-  }
-
   return AndCondition::Create(std::move(conditions));
+}
+
+// static
+std::vector<std::unique_ptr<const Condition>> Rule::GetListConditions(
+    const base::Value::List& value) {
+  std::vector<std::unique_ptr<const Condition>> sub_conditions;
+  for (const base::Value& sub_value : value) {
+    if (!sub_value.is_dict()) {
+      continue;
+    }
+
+    auto sub_condition = GetCondition(sub_value.GetDict());
+    if (sub_condition) {
+      sub_conditions.push_back(std::move(sub_condition));
+    }
+  }
+  return sub_conditions;
 }
 
 // static

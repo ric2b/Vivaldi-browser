@@ -41,4 +41,4 @@ bool InvokeNinjaRecompactTool(const base::FilePath& ninja_executable,
                               const base::FilePath& build_dir,
                               Err* err);
 
-#endif // TOOLS_GN_NINJA_TOOLS_H_
+#endif  // TOOLS_GN_NINJA_TOOLS_H_

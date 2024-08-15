@@ -25,10 +25,6 @@ namespace ui {
 NativeThemeFluent::NativeThemeFluent(bool should_only_use_dark_colors)
     : NativeThemeBase(should_only_use_dark_colors) {
   scrollbar_width_ = kFluentScrollbarThickness;
-
-  const sk_sp<SkFontMgr> font_manager(skia::DefaultFontMgr());
-  typeface_ = sk_sp<SkTypeface>(
-      font_manager->matchFamilyStyle(kFluentScrollbarFont, SkFontStyle()));
 }
 
 NativeThemeFluent::~NativeThemeFluent() = default;
@@ -47,10 +43,11 @@ void NativeThemeFluent::PaintArrowButton(
     Part direction,
     State state,
     ColorScheme color_scheme,
-    const ScrollbarArrowExtraParams& arrow) const {
-  PaintButton(canvas, color_provider, rect, direction, color_scheme, arrow);
+    const ScrollbarArrowExtraParams& extra_params) const {
+  PaintButton(canvas, color_provider, rect, direction, color_scheme,
+              extra_params);
   PaintArrow(canvas, color_provider, rect, direction, state, color_scheme,
-             arrow);
+             extra_params);
 }
 
 void NativeThemeFluent::PaintScrollbarTrack(
@@ -108,22 +105,14 @@ void NativeThemeFluent::PaintScrollbarThumb(
     ColorScheme color_scheme) const {
   DCHECK_NE(state, NativeTheme::kDisabled);
 
-  cc::PaintCanvasAutoRestore auto_restore(canvas, true);
-  SkRRect rrect =
-      SkRRect::MakeRectXY(gfx::RectToSkRect(rect), kFluentScrollbarPartsRadius,
-                          kFluentScrollbarPartsRadius);
-
-  // Clip the canvas to match the round rect and create round corners.
-  SkPath path;
-  path.addRRect(rrect);
-  canvas->clipPath(path, true);
-
-  auto get_color = [color_provider, state]() {
+  auto get_color = [color_provider, state, extra_params]() {
     ColorId thumb_color_id = kColorWebNativeControlScrollbarThumb;
     if (state == NativeTheme::kPressed) {
       thumb_color_id = kColorWebNativeControlScrollbarThumbPressed;
     } else if (state == NativeTheme::kHovered) {
       thumb_color_id = kColorWebNativeControlScrollbarThumbHovered;
+    } else if (extra_params.is_thumb_minimal_mode) {
+      thumb_color_id = kColorWebNativeControlScrollbarThumbOverlayMinimalMode;
     }
     return color_provider->GetColor(thumb_color_id);
   };
@@ -133,7 +122,17 @@ void NativeThemeFluent::PaintScrollbarThumb(
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
   flags.setColor(thumb_color);
-  canvas->drawRect(gfx::RectToSkRect(rect), flags);
+  SkRect sk_rect = gfx::RectToSkRect(rect);
+  if (extra_params.is_web_test) {
+    // Web tests draw the thumb as a square to avoid issues that come with the
+    // differences in calculation of anti-aliasing and rounding in different
+    // platforms.
+    canvas->drawRect(sk_rect, flags);
+  } else {
+    canvas->drawRRect(SkRRect::MakeRectXY(sk_rect, kFluentScrollbarPartsRadius,
+                                          kFluentScrollbarPartsRadius),
+                      flags);
+  }
 }
 
 void NativeThemeFluent::PaintScrollbarCorner(
@@ -185,11 +184,11 @@ void NativeThemeFluent::PaintButton(
     const gfx::Rect& rect,
     Part direction,
     ColorScheme color_scheme,
-    const ScrollbarArrowExtraParams& arrow) const {
+    const ScrollbarArrowExtraParams& extra_params) const {
   cc::PaintFlags flags;
   const SkColor button_color =
-      arrow.track_color.has_value()
-          ? arrow.track_color.value()
+      extra_params.track_color.has_value()
+          ? extra_params.track_color.value()
           : color_provider->GetColor(kColorWebNativeControlScrollbarTrack);
   flags.setColor(button_color);
   gfx::Rect button_fill_rect = rect;
@@ -243,18 +242,23 @@ void NativeThemeFluent::PaintArrow(
     Part part,
     State state,
     ColorScheme color_scheme,
-    const ScrollbarArrowExtraParams& arrow) const {
+    const ScrollbarArrowExtraParams& extra_params) const {
   const ColorId arrow_color_id =
       state == NativeTheme::kPressed || state == NativeTheme::kHovered
           ? kColorWebNativeControlScrollbarArrowForegroundPressed
           : kColorWebNativeControlScrollbarArrowForeground;
   // TODO(crbug.com/891944): Adjust thumb_color based on `state`.
-  const SkColor arrow_color = arrow.thumb_color.has_value()
-                                  ? arrow.thumb_color.value()
+  const SkColor arrow_color = extra_params.thumb_color.has_value()
+                                  ? extra_params.thumb_color.value()
                                   : color_provider->GetColor(arrow_color_id);
   cc::PaintFlags flags;
   flags.setColor(arrow_color);
 
+  if (!typeface_.has_value()) {
+    const sk_sp<SkFontMgr> font_manager(skia::DefaultFontMgr());
+    typeface_ = sk_sp<SkTypeface>(
+        font_manager->matchFamilyStyle(kFluentScrollbarFont, SkFontStyle()));
+  }
   if (!ArrowIconsAvailable()) {
     // Paint regular triangular arrows if the font with arrow icons is not
     // available. GetArrowRect() returns the float rect but it is expected to be
@@ -268,8 +272,8 @@ void NativeThemeFluent::PaintArrow(
   const gfx::RectF bounding_rect = GetArrowRect(rect, part, state);
   // The bounding rect for an arrow is a square, so that we can use the width
   // despite the arrow direction.
-  DCHECK(typeface_);
-  SkFont font(typeface_, bounding_rect.width());
+  CHECK(typeface_.has_value());
+  SkFont font(typeface_.value(), bounding_rect.width());
   font.setEdging(SkFont::Edging::kAntiAlias);
   font.setSubpixel(true);
   flags.setAntiAlias(true);
@@ -312,10 +316,11 @@ gfx::RectF NativeThemeFluent::GetArrowRect(const gfx::Rect& rect,
 }
 
 int NativeThemeFluent::GetArrowSideLength(State state) const {
-  if (state == NativeTheme::kPressed)
+  if (state == NativeTheme::kPressed) {
     return ArrowIconsAvailable()
                ? kFluentScrollbarPressedArrowRectLength
                : kFluentScrollbarPressedArrowRectFallbackLength;
+  }
 
   return kFluentScrollbarArrowRectLength;
 }

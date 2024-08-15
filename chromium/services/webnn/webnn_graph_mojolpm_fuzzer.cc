@@ -11,8 +11,10 @@
 #include "content/test/fuzzer/mojolpm_fuzzer_support.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "services/webnn/coreml/graph_builder.h"
 #include "services/webnn/public/mojom/webnn_graph.mojom-mojolpm.h"
 #include "services/webnn/public/mojom/webnn_graph.mojom.h"
+#include "services/webnn/tflite/graph_builder.h"
 #include "services/webnn/webnn_graph_impl.h"
 #include "services/webnn/webnn_graph_mojolpm_fuzzer.pb.h"
 #include "third_party/libprotobuf-mutator/src/src/libfuzzer/libfuzzer_macro.h"
@@ -46,7 +48,7 @@ scoped_refptr<base::SingleThreadTaskRunner> GetFuzzerTaskRunner() {
 
 class WebnnGraphLPMFuzzer {
  public:
-  WebnnGraphLPMFuzzer(
+  explicit WebnnGraphLPMFuzzer(
       const services::fuzzing::webnn_graph::proto::Testcase& testcase)
       : testcase_(testcase) {}
 
@@ -54,8 +56,18 @@ class WebnnGraphLPMFuzzer {
     const auto& action = testcase_->actions(action_index_);
     const auto& create_graph = action.create_graph();
     auto graph_info_ptr = webnn::mojom::GraphInfo::New();
+
+    // Test the cross platform webnn graph validator.
     mojolpm::FromProto(create_graph.graph_info(), graph_info_ptr);
-    webnn::WebNNGraphImpl::ValidateGraph(std::move(graph_info_ptr));
+    if (webnn::WebNNGraphImpl::ValidateGraph(graph_info_ptr)) {
+      // Test the Core ML graph builder.
+      auto coreml_graph_builder =
+          webnn::coreml::GraphBuilder::CreateAndBuild(*graph_info_ptr);
+      // Test the TFLite graph builder.
+      auto flatbuffer =
+          webnn::tflite::GraphBuilder::CreateAndBuild(*graph_info_ptr);
+    }
+
     ++action_index_;
   }
 

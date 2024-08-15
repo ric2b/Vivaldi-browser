@@ -29,7 +29,7 @@ FrameCollector::~FrameCollector() = default;
 
 bool FrameCollector::CollectRtpPacket(const RtpPacketParser::ParseResult& part,
                                       std::vector<uint8_t>* buffer) {
-  OSP_DCHECK(!frame_.frame_id.is_null());
+  OSP_CHECK(!frame_.frame_id.is_null());
 
   if (part.frame_id != frame_.frame_id) {
     OSP_LOG_WARN
@@ -91,18 +91,18 @@ bool FrameCollector::CollectRtpPacket(const RtpPacketParser::ParseResult& part,
   PayloadChunk& chunk = chunks_[part.packet_id];
   chunk.buffer.swap(*buffer);
   chunk.payload = part.payload;
-  OSP_DCHECK_GE(chunk.payload.data(), chunk.buffer.data());
-  OSP_DCHECK_LE(chunk.payload.data() + chunk.payload.size(),
-                chunk.buffer.data() + chunk.buffer.size());
+  OSP_CHECK_GE(chunk.payload.data(), chunk.buffer.data());
+  OSP_CHECK_LE(chunk.payload.data() + chunk.payload.size(),
+               chunk.buffer.data() + chunk.buffer.size());
 
   // Success!
   --num_missing_packets_;
-  OSP_DCHECK_GE(num_missing_packets_, 0);
+  OSP_CHECK_GE(num_missing_packets_, 0);
   return true;
 }
 
 void FrameCollector::GetMissingPackets(std::vector<PacketNack>* nacks) const {
-  OSP_DCHECK(!frame_.frame_id.is_null());
+  OSP_CHECK(!frame_.frame_id.is_null());
 
   if (num_missing_packets_ == 0) {
     return;
@@ -123,7 +123,7 @@ void FrameCollector::GetMissingPackets(std::vector<PacketNack>* nacks) const {
 }
 
 const EncryptedFrame& FrameCollector::PeekAtAssembledFrame() {
-  OSP_DCHECK_EQ(num_missing_packets_, 0);
+  OSP_CHECK_EQ(num_missing_packets_, 0);
 
   if (!frame_.data.data()) {
     // Allocate the frame's payload buffer once, right-sized to the sum of all

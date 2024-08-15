@@ -4,3 +4,41 @@
 
 # Set to false to build OpenScreen targets as a standalone library.
 build_with_chromium = false
+
+# Enables assertions on safety checks in libc++.
+#
+# This should be set to true whenever building with Chrome's custom libc++ in
+# order to guard against undefined behavior. However, the asserts added by
+# hardening libc++ may introduce some performance overhead, so this is
+# configurable to simplify A/B tests, and to allow performance-sensitive
+# projects embedding Chrome (e.g. ANGLE) to disable libc++ hardening.
+#
+# Note that setting this to true only has an effect when also building with
+# `use_custom_libcxx = true`.
+enable_safe_libcxx = true
+
+declare_args() {
+  # Allows googletest to pretty-print various absl types.  Disabled for nacl due
+  # to lack of toolchain support.
+  gtest_enable_absl_printers = true
+
+  # Allow projects that wish to stay on C++17 to override Chromium's default.
+  use_cxx17 = true
+}
+
+if (host_os == "mac" || is_apple) {
+  # Needed for is_apple when targeting macOS or iOS, independent of host.
+  # Needed for host_os=="mac" for running host tool such as gperf in blink
+  # even when targeting e.g. Windows.
+  declare_args() {
+    # Use the system install of Xcode for tools like ibtool, libtool, etc.
+    # This does not affect the compiler. When this variable is false, targets
+    # will instead use a hermetic install of Xcode. [The hermetic install can
+    # be obtained with gclient sync after setting the environment variable
+    # FORCE_MAC_TOOLCHAIN for target_os mac only].
+    use_system_xcode = true
+  }
+
+  assert(current_os != "ios" || use_system_xcode)
+  assert(host_os == "mac" || !use_system_xcode)
+}

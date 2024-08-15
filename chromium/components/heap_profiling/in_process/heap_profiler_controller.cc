@@ -14,8 +14,11 @@
 #include "base/check.h"
 #include "base/debug/stack_trace.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/notreached.h"
 #include "base/numerics/clamped_math.h"
 #include "base/profiler/module_cache.h"
 #include "base/rand_util.h"
@@ -97,17 +100,33 @@ std::string ProcessHistogramName(base::StringPiece base_name,
   }
 }
 
+double GetChannelProbability(version_info::Channel channel,
+                             const HeapProfilerParameters& params) {
+  switch (channel) {
+    case version_info::Channel::STABLE:
+    case version_info::Channel::UNKNOWN:
+      // If the channel can't be determined, treat it as `stable` for safety.
+      // Don't disable heap profiling completely so that developers can still
+      // enable it with --enable-feature flags.
+      return params.stable_probability;
+    case version_info::Channel::BETA:
+    case version_info::Channel::DEV:
+    case version_info::Channel::CANARY:
+      return params.nonstable_probability;
+  }
+  NOTREACHED_NORETURN();
+}
+
 ProfilingEnabled DecideIfCollectionIsEnabled(version_info::Channel channel,
                                              ProcessType process_type) {
   HeapProfilerParameters params =
       GetHeapProfilerParametersForProcess(process_type);
-  if (!params.is_supported)
+  if (!params.is_supported) {
     return ProfilingEnabled::kDisabled;
-  const double probability = (channel == version_info::Channel::STABLE)
-                                 ? params.stable_probability
-                                 : params.nonstable_probability;
-  if (base::RandDouble() >= probability)
+  }
+  if (base::RandDouble() >= GetChannelProbability(channel, params)) {
     return ProfilingEnabled::kDisabled;
+  }
   return ProfilingEnabled::kEnabled;
 }
 
@@ -225,17 +244,23 @@ class StackQualityMetricsRecorder {
 
 }  // namespace
 
+BASE_FEATURE(kHeapProfilerIncludeZero,
+             "HeapProfilerIncludeZero",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 HeapProfilerController::SnapshotParams::SnapshotParams(
     base::TimeDelta mean_interval,
     bool use_random_interval,
     scoped_refptr<StoppedFlag> stopped,
     ProcessType process_type,
-    base::TimeTicks profiler_creation_time)
+    base::TimeTicks profiler_creation_time,
+    base::OnceCallback<void(bool)> on_first_snapshot_callback)
     : mean_interval(mean_interval),
       use_random_interval(use_random_interval),
       stopped(std::move(stopped)),
       process_type(process_type),
-      profiler_creation_time(profiler_creation_time) {}
+      profiler_creation_time(profiler_creation_time),
+      on_first_snapshot_callback(std::move(on_first_snapshot_callback)) {}
 
 HeapProfilerController::SnapshotParams::~SnapshotParams() = default;
 
@@ -286,8 +311,13 @@ bool HeapProfilerController::StartIfEnabled() {
     // Also summarize over all supported process types.
     base::UmaHistogramBoolean(kEnabledHistogramName, profiling_enabled);
   }
-  if (!profiling_enabled)
+  if (!profiling_enabled) {
+    if (!on_first_snapshot_callback_.is_null()) {
+      // Snapshot will never be scheduled, so break out of any waiting loop.
+      std::move(on_first_snapshot_callback_).Run(false);
+    }
     return false;
+  }
   HeapProfilerParameters profiler_params =
       GetHeapProfilerParametersForProcess(process_type_);
   // DecideIfCollectionIsEnabled() should return false if not supported.
@@ -301,13 +331,18 @@ bool HeapProfilerController::StartIfEnabled() {
   SnapshotParams params(
       profiler_params.collection_interval,
       /*use_random_interval=*/!suppress_randomness_for_testing_, stopped_,
-      process_type_, creation_time_);
+      process_type_, creation_time_, std::move(on_first_snapshot_callback_));
   ScheduleNextSnapshot(std::move(params));
   return true;
 }
 
 void HeapProfilerController::SuppressRandomnessForTesting() {
   suppress_randomness_for_testing_ = true;
+}
+
+void HeapProfilerController::SetFirstSnapshotCallbackForTesting(
+    base::OnceCallback<void(bool)> callback) {
+  on_first_snapshot_callback_ = std::move(callback);
 }
 
 // static
@@ -326,19 +361,30 @@ void HeapProfilerController::ScheduleNextSnapshot(SnapshotParams params) {
 // static
 void HeapProfilerController::TakeSnapshot(SnapshotParams params,
                                           base::TimeDelta previous_interval) {
-  if (params.stopped->data.IsSet())
+  // Use DoNothing instead of null to simplify control flow.
+  base::OnceCallback<void(bool)> on_snapshot_callback =
+      params.on_first_snapshot_callback.is_null()
+          ? base::DoNothing()
+          : std::move(params.on_first_snapshot_callback);
+  if (params.stopped->data.IsSet()) {
+    std::move(on_snapshot_callback).Run(false);
     return;
+  }
   RecordUmaSnapshotInterval(previous_interval, "Taken", params.process_type);
   RetrieveAndSendSnapshot(
       params.process_type,
-      base::TimeTicks::Now() - params.profiler_creation_time);
+      base::TimeTicks::Now() - params.profiler_creation_time,
+      std::move(on_snapshot_callback));
+  // Callback should be left as null for next snapshot.
+  CHECK(params.on_first_snapshot_callback.is_null());
   ScheduleNextSnapshot(std::move(params));
 }
 
 // static
 void HeapProfilerController::RetrieveAndSendSnapshot(
     ProcessType process_type,
-    base::TimeDelta time_since_profiler_creation) {
+    base::TimeDelta time_since_profiler_creation,
+    base::OnceCallback<void(bool)> on_snapshot_callback) {
   using Sample = base::SamplingHeapProfiler::Sample;
 
   // Always log the total sampled memory before returning. If `samples` is empty
@@ -362,8 +408,13 @@ void HeapProfilerController::RetrieveAndSendSnapshot(
   // Also summarize over all process types.
   base::UmaHistogramCounts100000("HeapProfiling.InProcess.SamplesPerSnapshot",
                                  samples.size());
-  if (samples.empty())
+  CHECK(!on_snapshot_callback.is_null());
+  if (!base::FeatureList::IsEnabled(kHeapProfilerIncludeZero) &&
+      samples.empty()) {
+    std::move(on_snapshot_callback).Run(false);
     return;
+  }
+  std::move(on_snapshot_callback).Run(true);
 
   base::ModuleCache module_cache;
   metrics::CallStackProfileParams params(

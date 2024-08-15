@@ -11,11 +11,15 @@
 
 #include "base/functional/bind.h"
 #include "base/task/thread_pool.h"
-#include "base/values.h"
 #include "build/build_config.h"
+#include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/policy/messaging_layer/util/reporting_server_connector_test_util.h"
+#include "chrome/browser/policy/messaging_layer/util/upload_response_parser.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/encrypted_reporting_job_configuration.h"
+#include "components/policy/core/common/management/scoped_management_service_override_for_testing.h"
+#include "components/reporting/proto/synced/record.pb.h"
+#include "components/reporting/resources/resource_manager.h"
 #include "components/reporting/util/status.h"
 #include "components/reporting/util/statusor.h"
 #include "components/reporting/util/test_support_callbacks.h"
@@ -32,7 +36,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/ash/components/install_attributes/stub_install_attributes.h"
-#endif
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chromeos/startup/browser_init_params.h"
@@ -76,23 +80,29 @@ class ReportingServerConnectorTest : public ::testing::Test {
 
   content::BrowserTaskEnvironment task_environment_;
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  ash::ScopedStubInstallAttributes install_attributes_;
+#endif
+
   ReportingServerConnector::TestEnvironment test_env_;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  ash::ScopedStubInstallAttributes install_attributes_ =
-      ash::ScopedStubInstallAttributes();
-#endif
+  scoped_refptr<ResourceManager> memory_resource_ =
+      base::MakeRefCounted<ResourceManager>(4uL * 1024uL * 1024uL);
 };
 
 TEST_F(ReportingServerConnectorTest,
        ExecuteUploadEncryptedReportingOnUIThread) {
   // Call `ReportingServerConnector::UploadEncryptedReport` from the UI.
-  test::TestEvent<StatusOr<base::Value::Dict>> response_event;
+  test::TestEvent<StatusOr<UploadResponseParser>> response_event;
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
-      base::BindOnce(&ReportingServerConnector::UploadEncryptedReport,
-                     /*merging_payload=*/base::Value::Dict(),
-                     response_event.cb()));
+      base::BindOnce(
+          &ReportingServerConnector::UploadEncryptedReport,
+          /*need_encryption_key=*/false,
+          /*config_file_version=*/0,
+          /*records=*/std::vector<EncryptedRecord>(),
+          /*scoped_reservation=*/ScopedReservation(0u, memory_resource_),
+          response_event.cb()));
 
   task_environment_.RunUntilIdle();
   ASSERT_THAT(*test_env_.url_loader_factory()->pending_requests(), SizeIs(1));
@@ -108,12 +118,16 @@ TEST_F(ReportingServerConnectorTest,
        ExecuteUploadEncryptedReportingOnArbitraryThread) {
   // Call `ReportingServerConnector::UploadEncryptedReport` from the
   // thread pool.
-  test::TestEvent<StatusOr<base::Value::Dict>> response_event;
+  test::TestEvent<StatusOr<UploadResponseParser>> response_event;
   base::ThreadPool::PostTask(
       FROM_HERE,
-      base::BindOnce(&ReportingServerConnector::UploadEncryptedReport,
-                     /*merging_payload=*/base::Value::Dict(),
-                     response_event.cb()));
+      base::BindOnce(
+          &ReportingServerConnector::UploadEncryptedReport,
+          /*need_encryption_key=*/false,
+          /*config_file_version=*/0,
+          /*records=*/std::vector<EncryptedRecord>(),
+          /*scoped_reservation=*/ScopedReservation(0u, memory_resource_),
+          response_event.cb()));
 
   task_environment_.RunUntilIdle();
   ASSERT_THAT(*test_env_.url_loader_factory()->pending_requests(), SizeIs(1));
@@ -148,12 +162,16 @@ TEST_F(ReportingServerConnectorTest, UploadFromUnmanagedDevice) {
 
   // Call `ReportingServerConnector::UploadEncryptedReport` from the
   // thread pool.
-  test::TestEvent<StatusOr<base::Value::Dict>> response_event;
+  test::TestEvent<StatusOr<UploadResponseParser>> response_event;
   base::ThreadPool::PostTask(
       FROM_HERE,
-      base::BindOnce(&ReportingServerConnector::UploadEncryptedReport,
-                     /*merging_payload=*/base::Value::Dict(),
-                     response_event.cb()));
+      base::BindOnce(
+          &ReportingServerConnector::UploadEncryptedReport,
+          /*need_encryption_key=*/false,
+          /*config_file_version=*/0,
+          /*records=*/std::vector<EncryptedRecord>(),
+          /*scoped_reservation=*/ScopedReservation(0u, memory_resource_),
+          response_event.cb()));
 
   task_environment_.RunUntilIdle();
   ASSERT_THAT(*test_env_.url_loader_factory()->pending_requests(), SizeIs(1));

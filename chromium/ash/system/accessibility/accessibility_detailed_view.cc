@@ -127,7 +127,7 @@ AccessibilityDetailedView::AccessibilityDetailedView(
   Reset();
   AppendAccessibilityList();
   CreateTitleRow(IDS_ASH_STATUS_TRAY_ACCESSIBILITY_TITLE);
-  Layout();
+  DeprecatedLayoutImmediately();
 
   if (!::features::IsDictationOfflineAvailable() &&
       !captions::IsLiveCaptionFeatureSupported()) {
@@ -668,7 +668,7 @@ HoverHighlightView* AccessibilityDetailedView::AddScrollListToggleItem(
     // Ignore the toggle for accessibility.
     auto& view_accessibility = toggle->GetViewAccessibility();
     view_accessibility.OverrideIsLeaf(true);
-    view_accessibility.OverrideIsIgnored(true);
+    view_accessibility.SetIsIgnored(true);
     item->AddRightView(toggle.release());
   }
   return item;
@@ -930,7 +930,7 @@ void AccessibilityDetailedView::SetSodaFeatureSubtext(SodaFeature feature,
   }
 }
 
-BEGIN_METADATA(AccessibilityDetailedView, TrayDetailedView)
+BEGIN_METADATA(AccessibilityDetailedView)
 END_METADATA
 
 }  // namespace ash

@@ -27,6 +27,7 @@
 
 #include "dawn/native/metal/ShaderModuleMTL.h"
 
+#include "dawn/common/MatchVariant.h"
 #include "dawn/native/BindGroupLayout.h"
 #include "dawn/native/CacheRequest.h"
 #include "dawn/native/Serializable.h"
@@ -124,15 +125,20 @@ ResultOrError<CacheResult<MslCompilation>> TranslateToMSL(
     std::ostringstream errorStream;
     errorStream << "Tint MSL failure:" << std::endl;
 
-    tint::ArrayLengthFromUniformOptions arrayLengthFromUniform;
-    arrayLengthFromUniform.ubo_binding = {0, kBufferLengthBufferSlot};
+    tint::msl::writer::ArrayLengthFromUniformOptions arrayLengthFromUniform;
+    arrayLengthFromUniform.ubo_binding = kBufferLengthBufferSlot;
 
     tint::msl::writer::Bindings bindings;
 
     for (BindGroupIndex group : IterateBitSet(layout->GetBindGroupLayoutsMask())) {
         const BindGroupLayout* bgl = ToBackend(layout->GetBindGroupLayout(group));
 
-        for (const auto& [binding, bindingInfo] : moduleBindingInfo[group]) {
+        for (const auto& currentModuleBindingInfo : moduleBindingInfo[group]) {
+            // We cannot use structured binding here because lambda expressions can only capture
+            // variables, while structured binding doesn't introduce variables.
+            const auto& binding = currentModuleBindingInfo.first;
+            const auto& shaderBindingInfo = currentModuleBindingInfo.second;
+
             tint::BindingPoint srcBindingPoint{static_cast<uint32_t>(group),
                                                static_cast<uint32_t>(binding)};
 
@@ -142,19 +148,10 @@ ResultOrError<CacheResult<MslCompilation>> TranslateToMSL(
 
             tint::BindingPoint dstBindingPoint{0, shaderIndex};
 
-            // Use the ShaderIndex as the indices for the buffer size lookups in the array length
-            // uniform transform. This is used to compute the size of variable length arrays in
-            // storage buffers.
-            if (bindingInfo.buffer.type == wgpu::BufferBindingType::Storage ||
-                bindingInfo.buffer.type == wgpu::BufferBindingType::ReadOnlyStorage ||
-                bindingInfo.buffer.type == kInternalStorageBufferBinding) {
-                arrayLengthFromUniform.bindpoint_to_size_index.emplace(dstBindingPoint,
-                                                                       dstBindingPoint.binding);
-            }
-
-            switch (bindingInfo.bindingType) {
-                case BindingInfoType::Buffer:
-                    switch (bindingInfo.buffer.type) {
+            MatchVariant(
+                shaderBindingInfo.bindingInfo,
+                [&](const BufferBindingInfo& bindingInfo) {
+                    switch (bindingInfo.type) {
                         case wgpu::BufferBindingType::Uniform:
                             bindings.uniform.emplace(
                                 srcBindingPoint,
@@ -166,26 +163,31 @@ ResultOrError<CacheResult<MslCompilation>> TranslateToMSL(
                             bindings.storage.emplace(
                                 srcBindingPoint,
                                 tint::msl::writer::binding::Storage{dstBindingPoint.binding});
+                            // Use the ShaderIndex as the indices for the buffer size lookups in
+                            // the array length uniform transform. This is used to compute the
+                            // size of variable length arrays in storage buffers.
+                            arrayLengthFromUniform.bindpoint_to_size_index.emplace(
+                                srcBindingPoint, dstBindingPoint.binding);
                             break;
                         case wgpu::BufferBindingType::Undefined:
                             DAWN_UNREACHABLE();
                             break;
                     }
-                    break;
-                case BindingInfoType::Sampler:
+                },
+                [&](const SamplerBindingInfo& bindingInfo) {
                     bindings.sampler.emplace(srcBindingPoint, tint::msl::writer::binding::Sampler{
                                                                   dstBindingPoint.binding});
-                    break;
-                case BindingInfoType::Texture:
+                },
+                [&](const SampledTextureBindingInfo& bindingInfo) {
                     bindings.texture.emplace(srcBindingPoint, tint::msl::writer::binding::Texture{
                                                                   dstBindingPoint.binding});
-                    break;
-                case BindingInfoType::StorageTexture:
+                },
+                [&](const StorageTextureBindingInfo& bindingInfo) {
                     bindings.storage_texture.emplace(
                         srcBindingPoint,
                         tint::msl::writer::binding::StorageTexture{dstBindingPoint.binding});
-                    break;
-                case BindingInfoType::ExternalTexture: {
+                },
+                [&](const ExternalTextureBindingInfo& bindingInfo) {
                     const auto& etBindingMap = bgl->GetExternalTextureBindingExpansionMap();
                     const auto& expansion = etBindingMap.find(binding);
                     DAWN_ASSERT(expansion != etBindingMap.end());
@@ -201,9 +203,7 @@ ResultOrError<CacheResult<MslCompilation>> TranslateToMSL(
                     bindings.external_texture.emplace(
                         srcBindingPoint,
                         tint::msl::writer::binding::ExternalTexture{metadata, plane0, plane1});
-                    break;
-                }
-            }
+                });
         }
     }
 
@@ -227,7 +227,7 @@ ResultOrError<CacheResult<MslCompilation>> TranslateToMSL(
 
             // Use the ShaderIndex as the indices for the buffer size lookups in the array
             // length uniform transform.
-            arrayLengthFromUniform.bindpoint_to_size_index.emplace(dstBindingPoint,
+            arrayLengthFromUniform.bindpoint_to_size_index.emplace(srcBindingPoint,
                                                                    dstBindingPoint.binding);
         }
     }
@@ -252,7 +252,8 @@ ResultOrError<CacheResult<MslCompilation>> TranslateToMSL(
 
     MslCompilationRequest req = {};
     req.stage = stage;
-    req.inputProgram = programmableStage.module->GetTintProgram();
+    auto tintProgram = programmableStage.module->GetTintProgram();
+    req.inputProgram = &(tintProgram->program);
     req.vertexPullingTransformConfig = std::move(vertexPullingTransformConfig);
     req.substituteOverrideConfig = std::move(substituteOverrideConfig);
     req.entryPointName = programmableStage.entryPoint.c_str();
@@ -347,7 +348,7 @@ ResultOrError<CacheResult<MslCompilation>> TranslateToMSL(
             TRACE_EVENT0(r.platform.UnsafeGetValue(), General, "tint::msl::writer::Generate");
             auto result = tint::msl::writer::Generate(program, r.tintOptions);
             DAWN_INVALID_IF(result != tint::Success, "An error occurred while generating MSL:\n%s",
-                            result.Failure().reason.str());
+                            result.Failure().reason.Str());
 
             // Metal uses Clang to compile the shader as C++14. Disable everything in the -Wall
             // category. -Wunused-variable in particular comes up a lot in generated code, and some

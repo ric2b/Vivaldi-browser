@@ -238,7 +238,7 @@ class WaylandSurfaceFactoryTest : public WaylandTest {
             gfx::RectF(window_->GetBoundsInPixels()), {}, false,
             gfx::Rect(window_->applied_state().size_px), 1.0f,
             gfx::OverlayPriorityHint::kNone, gfx::RRectF(),
-            gfx::ColorSpace::CreateSRGB(), absl::nullopt));
+            gfx::ColorSpace::CreateSRGB(), std::nullopt));
   }
 
   uint32_t surface_id_ = 0;
@@ -246,6 +246,9 @@ class WaylandSurfaceFactoryTest : public WaylandTest {
 
 TEST_P(WaylandSurfaceFactoryTest,
        GbmSurfacelessWaylandCommitOverlaysCallbacksTest) {
+  if (!connection_->ShouldUseOverlayDelegation()) {
+    GTEST_SKIP();
+  }
   // This tests multiple buffers per-frame and order of SwapCompletionCallbacks.
   // Even when all OnSubmission from later frames are called, their
   // SwapCompletionCallbacks should not run until previous frames'
@@ -602,6 +605,9 @@ TEST_P(WaylandSurfaceFactoryTest,
 
 TEST_P(WaylandSurfaceFactoryTest,
        GbmSurfacelessWaylandGroupOnSubmissionCallbacksTest) {
+  if (!connection_->ShouldUseOverlayDelegation()) {
+    GTEST_SKIP();
+  }
   // This tests multiple buffers per-frame. GbmSurfacelessWayland receive 1
   // OnSubmission call per frame before running in submission order.
   gl::SetGLImplementation(gl::kGLImplementationEGLGLES2);
@@ -1378,7 +1384,7 @@ TEST_P(WaylandSurfaceFactoryCompositorV3, SurfaceDamageTest) {
             gfx::OverlayTransform::OVERLAY_TRANSFORM_ROTATE_CLOCKWISE_270,
             gfx::RectF(window_->GetBoundsInPixels()), crop_uv, false,
             surface_damage_rect, 1.0f, gfx::OverlayPriorityHint::kNone,
-            gfx::RRectF(), gfx::ColorSpace::CreateSRGB(), absl::nullopt));
+            gfx::RRectF(), gfx::ColorSpace::CreateSRGB(), std::nullopt));
 
     std::vector<scoped_refptr<OverlayImageHolder>> overlay_images;
     overlay_images.push_back(fake_overlay_image[0]);

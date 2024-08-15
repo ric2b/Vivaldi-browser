@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "base/base64.h"
@@ -118,11 +119,10 @@ std::string RouteMessageToString(const RouteMessagePtr& message) {
     result = "text=";
     base::EscapeJSONString(message->message.value(), true, &result);
   } else {
-    const base::StringPiece src(
+    const std::string_view src(
         reinterpret_cast<const char*>(message->data.value().data()),
         message->data.value().size());
-    base::Base64Encode(src, &result);
-    result = "binary=" + result;
+    result = "binary=" + base::Base64Encode(src);
   }
   return result;
 }

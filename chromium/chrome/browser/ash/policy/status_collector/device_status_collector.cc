@@ -8,7 +8,6 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <string_view>
 
 #include <algorithm>
 #include <cstdint>
@@ -17,6 +16,7 @@
 #include <optional>
 #include <set>
 #include <sstream>
+#include <string_view>
 #include <utility>
 
 #include "ash/components/arc/mojom/enterprise_reporting.mojom.h"
@@ -55,7 +55,6 @@
 #include "chrome/browser/ash/guest_os/guest_os_registry_service_factory.h"
 #include "chrome/browser/ash/login/demo_mode/demo_mode_dimensions.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
-#include "chrome/browser/ash/login/users/chrome_user_manager.h"
 #include "chrome/browser/ash/policy/core/device_local_account.h"
 #include "chrome/browser/ash/policy/core/reporting_user_tracker.h"
 #include "chrome/browser/ash/policy/status_collector/enterprise_activity_storage.h"
@@ -2529,7 +2528,7 @@ bool DeviceStatusCollector::GetNetworkStatus(
 
 bool DeviceStatusCollector::GetUsers(em::DeviceStatusReportRequest* status) {
   const user_manager::UserList& users =
-      ash::ChromeUserManager::Get()->GetUsers();
+      user_manager::UserManager::Get()->GetUsers();
 
   bool anything_reported = false;
   for (user_manager::User* user : users) {

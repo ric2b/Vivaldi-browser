@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
 
 class PrefService;
@@ -31,6 +32,15 @@ struct PrepopulatedEngine;
 
 extern const int kMaxPrepopulatedEngineID;
 
+// The maximum number of prepopulated search engines that can be returned in
+// any of the EEA countries by `GetPrepopulatedEngines()`.
+inline constexpr size_t kMaxEeaPrepopulatedEngines = 8;
+
+// The maximum number of prepopulated search engines that can be returned in
+// in the rest of the world by `GetPrepopulatedEngines()`.
+inline constexpr size_t kMaxRowPrepopulatedEngines = 5;
+
+// Vivaldi
 enum class SearchType {
     kMain = 0,
     kPrivate,
@@ -90,9 +100,6 @@ std::vector<std::unique_ptr<TemplateURLData>> GetLocalPrepopulatedEngines(
     std::string application_locale = "");
 #endif
 
-// Returns all prepopulated engines for all locales. Used only by tests.
-std::vector<const PrepopulatedEngine*> GetAllPrepopulatedEngines();
-
 // Removes prepopulated engines and their version stored in user prefs.
 void ClearPrepopulatedEnginesInPrefs(PrefService* prefs);
 
@@ -105,6 +112,14 @@ void ClearPrepopulatedEnginesInPrefs(PrefService* prefs);
 std::unique_ptr<TemplateURLData> GetPrepopulatedDefaultSearch(
     PrefService* prefs,
     search_engines::SearchEngineChoiceService* search_engine_choice_service, SearchType search_type = SearchType::kMain);
+
+// Test Utilities -------------------------------------------------------------
+
+// Returns all prepopulated engines for all locales. Used only by tests.
+std::vector<const PrepopulatedEngine*> GetAllPrepopulatedEngines();
+
+const std::vector<raw_ptr<const PrepopulatedEngine>>
+GetPrepopulationSetFromCountryIDForTesting(int country_id);
 
 }  // namespace TemplateURLPrepopulateData
 

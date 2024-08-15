@@ -4,11 +4,12 @@
 
 import {assert} from 'chrome://resources/js/assert.js';
 
+import {getEntryProperties} from '../../../common/js/api.js';
 import {unwrapEntry} from '../../../common/js/entry_utils.js';
 
 import {MetadataItem} from './metadata_item.js';
 import {MetadataProvider} from './metadata_provider.js';
-import {MetadataRequest} from './metadata_request.js';
+import type {MetadataRequest} from './metadata_request.js';
 
 /**
  * Metadata provider for FileEntry#getMetadata.
@@ -71,20 +72,14 @@ export class ExternalMetadataProvider extends MetadataProvider {
     }
     const properties = Array.from(nameSet);
 
-    return new Promise(fulfill => {
-      chrome.fileManagerPrivate.getEntryProperties(
-          entries, properties,
-          (results: chrome.fileManagerPrivate.EntryProperties[]) => {
-            if (!chrome.runtime.lastError) {
-              assert(results);
-              fulfill(this.convertResults_(requests, nameSet, results));
-            } else {
-              fulfill(requests.map(() => {
-                return new MetadataItem();
-              }));
-            }
-          });
-    });
+    try {
+      const props = properties as chrome.fileManagerPrivate.EntryPropertyName[];
+      const results = await getEntryProperties(entries, props);
+      assert(results);
+      return this.convertResults_(requests, nameSet, results);
+    } catch (error: any) {
+      return requests.map(() => new MetadataItem());
+    }
   }
 
   /**

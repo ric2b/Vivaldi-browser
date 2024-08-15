@@ -565,6 +565,16 @@ const UIStrings = {
    * @description Undefined.
    */
   UnloadHandler: 'Undefined',
+  // TODO(yuzus): Please provide meaningful description.
+  /**
+   * @description Undefined.
+   */
+  ParserAborted: 'Undefined',
+  // TODO(mkurumi): Please provide meaningful description.
+  /**
+   * @description Undefined.
+   */
+  BroadcastChannelOnMessage: 'Undefined',
 };
 
 const str_ = i18n.i18n.registerUIStrings('panels/application/components/BackForwardCacheStrings.ts', UIStrings);
@@ -716,4 +726,6 @@ export const NotRestoredReasonDescription = {
   'SmartCard': {name: i18nLazyString(UIStrings.SmartCard)},
   'LiveMediaStreamTrack': {name: i18nLazyString(UIStrings.LiveMediaStreamTrack)},
   'UnloadHandler': {name: i18nLazyString(UIStrings.UnloadHandler)},
+  'ParserAborted': {name: i18nLazyString(UIStrings.ParserAborted)},
+  'BroadcastChannelOnMessage': {name: i18nLazyString(UIStrings.BroadcastChannelOnMessage)},
 };

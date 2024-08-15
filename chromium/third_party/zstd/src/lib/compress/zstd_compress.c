@@ -1661,8 +1661,8 @@ ZSTD_sizeof_matchState(const ZSTD_compressionParameters* const cParams,
       + ZSTD_cwksp_aligned_alloc_size((MaxLL+1) * sizeof(U32))
       + ZSTD_cwksp_aligned_alloc_size((MaxOff+1) * sizeof(U32))
       + ZSTD_cwksp_aligned_alloc_size((1<<Litbits) * sizeof(U32))
-      + ZSTD_cwksp_aligned_alloc_size((ZSTD_OPT_NUM+1) * sizeof(ZSTD_match_t))
-      + ZSTD_cwksp_aligned_alloc_size((ZSTD_OPT_NUM+1) * sizeof(ZSTD_optimal_t));
+      + ZSTD_cwksp_aligned_alloc_size(ZSTD_OPT_SIZE * sizeof(ZSTD_match_t))
+      + ZSTD_cwksp_aligned_alloc_size(ZSTD_OPT_SIZE * sizeof(ZSTD_optimal_t));
     size_t const lazyAdditionalSpace = ZSTD_rowMatchFinderUsed(cParams->strategy, useRowMatchFinder)
                                             ? ZSTD_cwksp_aligned_alloc_size(hSize)
                                             : 0;
@@ -2045,8 +2045,8 @@ ZSTD_reset_matchState(ZSTD_matchState_t* ms,
         ms->opt.litLengthFreq = (unsigned*)ZSTD_cwksp_reserve_aligned(ws, (MaxLL+1) * sizeof(unsigned));
         ms->opt.matchLengthFreq = (unsigned*)ZSTD_cwksp_reserve_aligned(ws, (MaxML+1) * sizeof(unsigned));
         ms->opt.offCodeFreq = (unsigned*)ZSTD_cwksp_reserve_aligned(ws, (MaxOff+1) * sizeof(unsigned));
-        ms->opt.matchTable = (ZSTD_match_t*)ZSTD_cwksp_reserve_aligned(ws, (ZSTD_OPT_NUM+1) * sizeof(ZSTD_match_t));
-        ms->opt.priceTable = (ZSTD_optimal_t*)ZSTD_cwksp_reserve_aligned(ws, (ZSTD_OPT_NUM+1) * sizeof(ZSTD_optimal_t));
+        ms->opt.matchTable = (ZSTD_match_t*)ZSTD_cwksp_reserve_aligned(ws, ZSTD_OPT_SIZE * sizeof(ZSTD_match_t));
+        ms->opt.priceTable = (ZSTD_optimal_t*)ZSTD_cwksp_reserve_aligned(ws, ZSTD_OPT_SIZE * sizeof(ZSTD_optimal_t));
     }
 
     ms->cParams = *cParams;
@@ -2136,7 +2136,6 @@ static size_t ZSTD_resetCCtx_internal(ZSTD_CCtx* zc,
             ZSTD_estimateCCtxSize_usingCCtxParams_internal(
                 &params->cParams, &params->ldmParams, zc->staticSize != 0, params->useRowMatchFinder,
                 buffInSize, buffOutSize, pledgedSrcSize, ZSTD_hasExtSeqProd(params), params->maxBlockSize);
-        int resizeWorkspace;
 
         FORWARD_IF_ERROR(neededSpace, "cctx size estimate failed!");
 
@@ -2145,7 +2144,7 @@ static size_t ZSTD_resetCCtx_internal(ZSTD_CCtx* zc,
         {   /* Check if workspace is large enough, alloc a new one if needed */
             int const workspaceTooSmall = ZSTD_cwksp_sizeof(ws) < neededSpace;
             int const workspaceWasteful = ZSTD_cwksp_check_wasteful(ws, neededSpace);
-            resizeWorkspace = workspaceTooSmall || workspaceWasteful;
+            int resizeWorkspace = workspaceTooSmall || workspaceWasteful;
             DEBUGLOG(4, "Need %zu B workspace", neededSpace);
             DEBUGLOG(4, "windowSize: %zu - blockSize: %zu", windowSize, blockSize);
 
@@ -5176,14 +5175,13 @@ static size_t ZSTD_writeEpilogue(ZSTD_CCtx* cctx, void* dst, size_t dstCapacity)
 {
     BYTE* const ostart = (BYTE*)dst;
     BYTE* op = ostart;
-    size_t fhSize = 0;
 
     DEBUGLOG(4, "ZSTD_writeEpilogue");
     RETURN_ERROR_IF(cctx->stage == ZSTDcs_created, stage_wrong, "init missing");
 
     /* special case : empty frame */
     if (cctx->stage == ZSTDcs_init) {
-        fhSize = ZSTD_writeFrameHeader(dst, dstCapacity, &cctx->appliedParams, 0, 0);
+        size_t fhSize = ZSTD_writeFrameHeader(dst, dstCapacity, &cctx->appliedParams, 0, 0);
         FORWARD_IF_ERROR(fhSize, "ZSTD_writeFrameHeader failed");
         dstCapacity -= fhSize;
         op += fhSize;

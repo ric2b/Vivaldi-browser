@@ -4,7 +4,6 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
-#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -23,7 +22,7 @@ static enum xnn_status create_copy_operator(
   size_t num_values,
   struct xnn_operator_data* opdata,
   struct xnn_code_cache* code_cache,
-  struct xnn_weights_cache* weights_cache)
+  xnn_weights_cache_t weights_cache)
 {
   assert(node->num_inputs == 1);
   assert(node->num_outputs == 1);
@@ -49,7 +48,80 @@ static enum xnn_status create_copy_operator(
     default:
       XNN_UNREACHABLE;
   }
+  if (status == xnn_status_success) {
+    opdata->num_reshape_dims = node->params.static_reshape.new_shape.num_dims;
+    memcpy(opdata->reshape_dims, node->params.static_reshape.new_shape.dim, opdata->num_reshape_dims * sizeof(size_t));
+  }
   return status;
+}
+
+static enum xnn_status resize_copy_output_tensor(
+  const struct xnn_operator_data* opdata,
+  struct xnn_value* values,
+  size_t old_workspace_size)
+{
+  const uint32_t input_id = opdata->inputs[0];
+  const struct xnn_value* input = &values[input_id];
+
+  const uint32_t output_id = opdata->outputs[0];
+  struct xnn_value* output = (struct xnn_value*) &values[output_id];
+
+  const size_t num_output_dims = opdata->num_reshape_dims;
+  size_t output_axis_dynamic = XNN_MAX_TENSOR_DIMS;
+
+  // Propagate output channels.
+  output->shape.num_dims = num_output_dims;
+  for (size_t dim_idx = 0; dim_idx < num_output_dims; ++dim_idx) {
+    size_t hint_cur_dim = opdata->reshape_dims[dim_idx];
+    if (hint_cur_dim == 0) {
+      if (output_axis_dynamic < XNN_MAX_TENSOR_DIMS) {
+        return xnn_status_invalid_parameter;
+      }
+      output_axis_dynamic = dim_idx;
+      hint_cur_dim = 1;
+    }
+    enum xnn_shape_inference_status status =
+      xnn_tensor_propagate_dimension(output, dim_idx, hint_cur_dim);
+    if (status == xnn_shape_inference_status_error) {
+      return xnn_status_invalid_parameter;
+    }
+  }
+
+  const size_t input_num_elements = xnn_shape_multiply_all_dims(&input->shape);
+  if (output_axis_dynamic < XNN_MAX_TENSOR_DIMS) {
+    const size_t output_num_elements = xnn_shape_multiply_all_dims(&output->shape);
+    const size_t inferred_dim = input_num_elements / output_num_elements;
+    if (inferred_dim * output_num_elements != input_num_elements) {
+      xnn_log_error("Cannot infer output shape given input number of elements %zu, and output number of elements %zu",
+                    input_num_elements, output_num_elements);
+      return xnn_status_invalid_parameter;
+    }
+    // Infer dynamic dimension
+    enum xnn_shape_inference_status status =
+      xnn_tensor_propagate_dimension(output, output_axis_dynamic, inferred_dim);
+    if (status == xnn_shape_inference_status_error) {
+      return xnn_status_invalid_parameter;
+    }
+  } else {
+    const size_t output_num_elements = xnn_shape_multiply_all_dims(&output->shape);
+
+    if (input_num_elements != output_num_elements) {
+      xnn_log_error(
+          "failed to reshape %s operator with input ID #%" PRIu32 " and output ID #%" PRIu32
+          ": number of input elements, %zu, does not match number of output elements %zu",
+          xnn_node_type_to_string(xnn_node_type_static_reshape), input_id, output_id, input_num_elements,
+          output_num_elements);
+        return xnn_status_invalid_parameter;
+    }
+  }
+
+  const size_t new_size = xnn_tensor_get_size(output);
+  if (new_size > output->size || old_workspace_size < opdata->workspace_size) {
+    output->size = new_size;
+    return xnn_status_reallocation_required;
+  }
+
+  return xnn_status_success;
 }
 
 static enum xnn_status reshape_copy_operator(
@@ -61,23 +133,27 @@ static enum xnn_status reshape_copy_operator(
   const uint32_t input_id = opdata->inputs[0];
   assert(input_id < num_values);
   const size_t batch_size = xnn_shape_multiply_all_dims(&values[input_id].shape);
+
+  const size_t old_workspace_size = opdata->workspace_size;
+  enum xnn_status status = xnn_status_invalid_state;
+
   switch (opdata->operator_objects[0]->type) {
     case xnn_operator_type_copy_nc_x8:
-      return xnn_reshape_copy_nc_x8(
+      status = xnn_reshape_copy_nc_x8(
         opdata->operator_objects[0],
         batch_size,
         1 /* channels */, 1 /* input stride */, 1 /* output stride */,
         threadpool);
       break;
     case xnn_operator_type_copy_nc_x16:
-      return xnn_reshape_copy_nc_x16(
+      status = xnn_reshape_copy_nc_x16(
         opdata->operator_objects[0],
         batch_size,
         1 /* channels */, 1 /* input stride */, 1 /* output stride */,
         threadpool);
       break;
     case xnn_operator_type_copy_nc_x32:
-      return xnn_reshape_copy_nc_x32(
+      status = xnn_reshape_copy_nc_x32(
         opdata->operator_objects[0],
         batch_size,
         1 /* channels */, 1 /* input stride */, 1 /* output stride */,
@@ -86,6 +162,11 @@ static enum xnn_status reshape_copy_operator(
     default:
       XNN_UNREACHABLE;
   }
+
+  if (status != xnn_status_success) {
+    return status;
+  }
+  return resize_copy_output_tensor(opdata, values, old_workspace_size);
 }
 
 static enum xnn_status setup_copy_operator(
@@ -159,6 +240,7 @@ enum xnn_status xnn_define_static_reshape(
   }
 
   switch (input_value->datatype) {
+    case xnn_datatype_fp16:
     case xnn_datatype_fp32:
     case xnn_datatype_qint8:
     case xnn_datatype_quint8:
@@ -182,20 +264,11 @@ enum xnn_status xnn_define_static_reshape(
     return status;
   }
 
-  const size_t num_input_elements = xnn_shape_multiply_all_dims(&input_value->shape);
-  const size_t num_output_elements = xnn_shape_multiply_all_dims(&output_value->shape);
-
-  if (num_input_elements != num_output_elements) {
-    xnn_log_error(
-        "failed to define %s operator with input ID #%" PRIu32 " and output ID #%" PRIu32
-        ": number of input elements, %zu, does not match number of output elements %zu",
-        xnn_node_type_to_string(xnn_node_type_static_reshape), input_id, output_id, num_input_elements,
-        num_output_elements);
-      return xnn_status_invalid_parameter;
-  }
-
   enum xnn_compute_type compute_type = xnn_compute_type_invalid;
   switch (output_value->datatype) {
+    case xnn_datatype_fp16:
+      compute_type = xnn_compute_type_fp16;
+      break;
     case xnn_datatype_fp32:
       compute_type = xnn_compute_type_fp32;
       break;

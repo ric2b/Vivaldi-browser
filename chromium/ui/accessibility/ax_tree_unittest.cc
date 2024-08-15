@@ -115,7 +115,7 @@ class TestAXTreeObserver final : public AXTreeObserver {
     tree_data_changed_ = true;
   }
 
-  absl::optional<AXNodeID> unignored_parent_id_before_node_deleted;
+  std::optional<AXNodeID> unignored_parent_id_before_node_deleted;
   void OnNodeWillBeDeleted(AXTree* tree, AXNode* node) override {
     // When this observer function is called in an update, the actual node
     // deletion has not happened yet. Verify that node still exists in the tree.
@@ -340,7 +340,7 @@ class AXTreeTestWithMultipleUTFEncodings
 
 using ::testing::ElementsAre;
 
-// A macro for testing that a absl::optional has both a value and that its value
+// A macro for testing that a std::optional has both a value and that its value
 // is set to a particular expectation.
 #define EXPECT_OPTIONAL_EQ(expected, actual) \
   EXPECT_TRUE(actual.has_value());           \
@@ -1819,11 +1819,10 @@ TEST(AXTreeTest, IntReverseRelations) {
       tree.GetReverseRelations(ax::mojom::IntAttribute::kActivedescendantId, 1);
   ASSERT_EQ(0U, reverse_active_descendant.size());
 
+  // Member of does not compute a reverse relation.
   auto reverse_member_of =
       tree.GetReverseRelations(ax::mojom::IntAttribute::kMemberOfId, 1);
-  ASSERT_EQ(2U, reverse_member_of.size());
-  EXPECT_TRUE(base::Contains(reverse_member_of, 3));
-  EXPECT_TRUE(base::Contains(reverse_member_of, 4));
+  ASSERT_EQ(0U, reverse_member_of.size());
 
   AXTreeUpdate update = initial_state;
   update.nodes.resize(5);
@@ -1848,9 +1847,7 @@ TEST(AXTreeTest, IntReverseRelations) {
 
   reverse_member_of =
       tree.GetReverseRelations(ax::mojom::IntAttribute::kMemberOfId, 1);
-  ASSERT_EQ(2U, reverse_member_of.size());
-  EXPECT_TRUE(base::Contains(reverse_member_of, 4));
-  EXPECT_TRUE(base::Contains(reverse_member_of, 5));
+  ASSERT_EQ(0U, reverse_member_of.size());
 }
 
 TEST(AXTreeTest, IntListReverseRelations) {

@@ -39,28 +39,17 @@ class LoginDisplayHostWebUI;
 class OobeUI;
 
 // View used to render a WebUI supporting Widget. This widget is used for the
-// WebUI based start up and lock screens. It contains a WebView.
+// WebUI based start up. It contains a WebView.
 class WebUILoginView : public views::View,
                        public content::WebContentsDelegate,
                        public session_manager::SessionManagerObserver,
                        public ChromeWebModalDialogManagerDelegate,
                        public web_modal::WebContentsModalDialogHost,
                        public SystemTrayObserver {
+  METADATA_HEADER(WebUILoginView, views::View)
+
  public:
-  METADATA_HEADER(WebUILoginView);
-
-  struct WebViewSettings {
-    // If true, this will check for and consume a preloaded views::WebView
-    // instance.
-    bool check_for_preload = false;
-
-    // Title of the web contents. This will be shown in the task manager. If
-    // empty, the default webview title will be used.
-    std::u16string web_view_title;
-  };
-
-  WebUILoginView(const WebViewSettings& settings,
-                 base::WeakPtr<LoginDisplayHostWebUI> controller);
+  explicit WebUILoginView(base::WeakPtr<LoginDisplayHostWebUI> controller);
 
   WebUILoginView(const WebUILoginView&) = delete;
   WebUILoginView& operator=(const WebUILoginView&) = delete;
@@ -120,11 +109,8 @@ class WebUILoginView : public views::View,
   void set_shelf_enabled(bool enabled) { shelf_enabled_ = enabled; }
 
  protected:
-  static void InitializeWebView(views::WebView* web_view,
-                                const std::u16string& title);
-
   // Overridden from views::View:
-  void Layout() override;
+  void Layout(PassKey) override;
   void ChildPreferredSizeChanged(View* child) override;
   void AboutToRequestFocusFromTabTraversal(bool reverse) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
@@ -170,8 +156,6 @@ class WebUILoginView : public views::View,
   base::ScopedObservation<session_manager::SessionManager,
                           session_manager::SessionManagerObserver>
       session_observation_{this};
-  // WebView configuration options.
-  const WebViewSettings settings_;
 
   base::WeakPtr<LoginDisplayHostWebUI> controller_;
 

@@ -6,10 +6,12 @@
 
 #include <cstdint>
 #include <optional>
+
 #include "ash/constants/ash_features.h"
 #include "base/files/scoped_file.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "chromeos/ash/components/dbus/fwupd/dbus_constants.h"
@@ -62,7 +64,6 @@ class MockObserver : public ash::FwupdClient::Observer {
               OnUpdateListResponse,
               (const std::string& device_id, ash::FwupdUpdateList* updates),
               (override));
-  MOCK_METHOD(void, OnInstallResponse, (bool success), (override));
   MOCK_METHOD(void,
               OnPropertiesChangedResponse,
               (ash::FwupdProperties * properties),
@@ -95,7 +96,7 @@ class FwupdClientTest : public testing::Test {
     EXPECT_CALL(*proxy_, DoConnectToSignal(_, _, _, _))
         .WillRepeatedly(Invoke(this, &FwupdClientTest::ConnectToSignal));
 
-    expected_properties_ = std::make_unique<FwupdProperties>(
+    expected_properties_ = std::make_unique<FwupdDbusProperties>(
         bus_->GetObjectProxy(kFwupdServiceName, fwupd_service_path),
         base::DoNothing());
 
@@ -263,14 +264,13 @@ class FwupdClientTest : public testing::Test {
   void SetExpectNoUpdates(bool no_updates) { expect_no_updates_ = no_updates; }
 
   void CheckPropertyChanged(FwupdProperties* properties) {
-    if (properties->percentage.is_valid()) {
-      CHECK_EQ(expected_properties_->percentage.value(),
-               properties->percentage.value());
+    if (properties->IsPercentageValid()) {
+      CHECK_EQ(expected_properties_->GetPercentage(),
+               properties->GetPercentage());
     }
 
-    if (properties->status.is_valid()) {
-      CHECK_EQ(expected_properties_->status.value(),
-               properties->status.value());
+    if (properties->IsStatusValid()) {
+      CHECK_EQ(expected_properties_->GetStatus(), properties->GetStatus());
     }
   }
 
@@ -633,14 +633,6 @@ TEST_F(FwupdClientTest, BadFormatChecksumOnlyComma) {
 }
 
 TEST_F(FwupdClientTest, Install) {
-  // The observer will check that the update description is parsed and passed
-  // correctly.
-  MockObserver observer;
-  EXPECT_CALL(observer, OnInstallResponse(_))
-      .Times(1)
-      .WillRepeatedly(Invoke(this, &FwupdClientTest::CheckInstallState));
-  fwupd_client_->AddObserver(&observer);
-
   EXPECT_CALL(*proxy_, DoCallMethodWithErrorResponse(_, _, _))
       .WillRepeatedly(Invoke(this, &FwupdClientTest::OnMethodCalled));
 
@@ -656,18 +648,22 @@ TEST_F(FwupdClientTest, Install) {
 
   AddDbusMethodCallResultSimulation(std::move(response), nullptr);
 
-  fwupd_client_->InstallUpdate(kFakeDeviceIdForTesting, base::ScopedFD(0),
-                               std::map<std::string, bool>());
-
-  base::RunLoop().RunUntilIdle();
+  base::RunLoop run_loop;
+  fwupd_client_->InstallUpdate(
+      kFakeDeviceIdForTesting, base::ScopedFD(0), std::map<std::string, bool>(),
+      base::BindLambdaForTesting([&](FwupdResult result) {
+        EXPECT_EQ(result, FwupdResult::kSuccess);
+        run_loop.Quit();
+      }));
+  run_loop.Run();
 }
 
 TEST_F(FwupdClientTest, PropertiesChanged) {
   const uint32_t expected_percentage = 50u;
   const uint32_t expected_status = 1u;
 
-  expected_properties_->percentage.ReplaceValue(expected_percentage);
-  expected_properties_->status.ReplaceValue(expected_status);
+  expected_properties_->SetPercentage(expected_percentage);
+  expected_properties_->SetStatus(expected_status);
 
   MockObserver observer;
   EXPECT_CALL(observer, OnPropertiesChangedResponse(_))
@@ -675,8 +671,8 @@ TEST_F(FwupdClientTest, PropertiesChanged) {
       .WillRepeatedly(Invoke(this, &FwupdClientTest::CheckPropertyChanged));
   fwupd_client_->AddObserver(&observer);
 
-  GetProperties()->percentage.ReplaceValue(expected_percentage);
-  GetProperties()->status.ReplaceValue(expected_status);
+  GetProperties()->SetPercentage(expected_percentage);
+  GetProperties()->SetStatus(expected_status);
 }
 
 TEST_F(FwupdClientTest, NoDescription) {
@@ -745,7 +741,38 @@ TEST_F(FwupdClientTest, SetFeatureFlagsWithV2FlagEnabled) {
   CallSetFwupdFeatureFlags();
 }
 
-TEST_F(FwupdClientTest, OnDeviceRequestReceived) {
+struct FwupdClientTest_DeviceRequestParam {
+  std::string device_request_id_key;
+  int expected_index_of_request_id;
+};
+
+class FwupdClientTest_DeviceRequest
+    : public FwupdClientTest,
+      public testing::WithParamInterface<FwupdClientTest_DeviceRequestParam> {};
+
+INSTANTIATE_TEST_SUITE_P(
+    /* no prefix */,
+    FwupdClientTest_DeviceRequest,
+    testing::ValuesIn<FwupdClientTest_DeviceRequestParam>({
+        {/*device_request_id_key=*/kFwupdDeviceRequestId_DoNotPowerOff,
+         /*expected_index_of_request_id=*/0},
+        {/*device_request_id_key=*/kFwupdDeviceRequestId_ReplugInstall,
+         /*expected_index_of_request_id=*/1},
+        {/*device_request_id_key=*/kFwupdDeviceRequestId_InsertUSBCable,
+         /*expected_index_of_request_id=*/2},
+        {/*device_request_id_key=*/kFwupdDeviceRequestId_RemoveUSBCable,
+         /*expected_index_of_request_id=*/3},
+        {/*device_request_id_key=*/kFwupdDeviceRequestId_PressUnlock,
+         /*expected_index_of_request_id=*/4},
+        {/*device_request_id_key=*/kFwupdDeviceRequestId_RemoveReplug,
+         /*expected_index_of_request_id=*/5},
+        {/*device_request_id_key=*/kFwupdDeviceRequestId_ReplugPower,
+         /*expected_index_of_request_id=*/6},
+    }));
+
+// Test that the DeviceRequest signal is parsed correctly and the
+// DeviceRequestObserver is called with the correct information.
+TEST_P(FwupdClientTest_DeviceRequest, OnDeviceRequestReceived) {
   // Create a mock "DeviceRequest" signal
   dbus::Signal signal(kFwupdServiceName, kFwupdDeviceRequestReceivedSignalName);
 
@@ -758,7 +785,7 @@ TEST_F(FwupdClientTest, OnDeviceRequestReceived) {
   // it with fake data
   sub_writer.OpenDictEntry(&entry_writer);
   entry_writer.AppendString(kFwupdDeviceRequestKey_AppstreamId);
-  entry_writer.AppendVariantOfString(kFwupdDeviceRequestId_RemoveReplug);
+  entry_writer.AppendVariantOfString(GetParam().device_request_id_key);
   sub_writer.CloseContainer(&entry_writer);
 
   sub_writer.OpenDictEntry(&entry_writer);
@@ -793,9 +820,11 @@ TEST_F(FwupdClientTest, OnDeviceRequestReceived) {
   EXPECT_CALL(
       observer,
       OnDeviceRequestResponse(testing::AllOf(
-          // Expect the request ID int to be "5", which is the enum value of
-          // "RemoveReplug".
-          testing::ResultOf("Request ID", GetRequestId, testing::Eq(5)),
+          // Ensure that the resulting observer is triggered with the
+          // correctly-parsed DeviceRequestId.
+          testing::ResultOf(
+              "Request ID", GetRequestId,
+              testing::Eq(GetParam().expected_index_of_request_id)),
           testing::ResultOf("Request Kind", GetRequestKind, testing::Eq(2)))))
       .Times(1);
 

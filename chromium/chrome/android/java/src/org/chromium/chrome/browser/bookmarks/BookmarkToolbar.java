@@ -399,8 +399,8 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
                 : R.color.default_icon_color_disabled;
         SpannableString menuTitle = new SpannableString(
                 getContext().getString(R.string.add_page_to_reading_list));
-        menuTitle.setSpan(new AbsoluteSizeSpan(
-                        getContext().getResources().getDimensionPixelSize(R.dimen.text_size_small)),
+        menuTitle.setSpan(new AbsoluteSizeSpan( // Vivaldi Ref. VAB-8831
+                        getContext().getResources().getDimensionPixelSize(R.dimen.text_size_large)),
                 0,menuTitle.length(), 0);
         menuTitle.setSpan(new ForegroundColorSpan(
                 getContext().getColor(textColor)), 0, menuTitle.length(), 0);

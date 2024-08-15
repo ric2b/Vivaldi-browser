@@ -102,10 +102,10 @@ bool HasExpectedBookmarkGuid(const sync_pb::BookmarkSpecifics& specifics,
                              const std::string& originator_cache_guid,
                              const std::string& originator_client_item_id);
 
-absl::optional<std::string> VivaldiGetSyncedThumbnailChecksumFromSpecifics(
+std::optional<std::string> VivaldiGetSyncedThumbnailChecksumFromSpecifics(
     const sync_pb::BookmarkSpecifics& specifics);
 
-absl::optional<std::string> VivaldiGetSyncedThumbnailChecksumFromNode(
+std::optional<std::string> VivaldiGetSyncedThumbnailChecksumFromNode(
     const bookmarks::BookmarkNode* node);
 
 bool ShouldReuploadBookmarkForThumbnail(

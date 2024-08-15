@@ -40,6 +40,7 @@
 #include "components/os_crypt/sync/os_crypt.h"
 #include "components/privacy_sandbox/masked_domain_list/masked_domain_list.pb.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/scoped_message_error_crash_key.h"
 #include "mojo/public/cpp/bindings/shared_remote.h"
 #include "mojo/public/cpp/system/functions.h"
@@ -144,7 +145,7 @@ void OnGetNetworkList(std::unique_ptr<net::NetworkInterfaceList> networks,
   if (success) {
     std::move(callback).Run(*networks);
   } else {
-    std::move(callback).Run(absl::nullopt);
+    std::move(callback).Run(std::nullopt);
   }
 }
 
@@ -239,7 +240,7 @@ void AsyncResolveSystemDnsWithEmptyResult(
 
 void ResolveSystemDnsWithMojo(
     const mojo::Remote<mojom::SystemDnsResolver>& system_dns_override,
-    const absl::optional<std::string>& hostname,
+    const std::optional<std::string>& hostname,
     net::AddressFamily addr_family,
     net::HostResolverFlags flags,
     net::SystemDnsResultsCallback results_cb,
@@ -336,7 +337,8 @@ class NetworkService::DelayedDohProbeActivator {
   // service. Intended to be called on expiration of |doh_probes_timer_| to
   // activate probes for contexts registered during the initial delay.
   void ActivateAllDohProbes() {
-    for (auto* network_context : network_service_->network_contexts_) {
+    for (NetworkContext* network_context :
+         network_service_->network_contexts_) {
       MaybeActivateDohProbes(network_context);
     }
   }
@@ -475,9 +477,6 @@ void NetworkService::Initialize(mojom::NetworkServiceParamsPtr params,
       std::make_unique<NetworkServiceProxyAllowList>(
           params->ip_protection_proxy_bypass_policy);
 
-  network_service_resource_block_list_ =
-      std::make_unique<NetworkServiceResourceBlockList>();
-
 #if BUILDFLAG(IS_CT_SUPPORTED)
   constexpr size_t kMaxSCTAuditingCacheEntries = 1024;
   sct_auditing_cache_ =
@@ -531,6 +530,18 @@ void NetworkService::ReplaceSystemDnsConfigForTesting(
   // Force-disable the system resolver so that HostResolverManager will actually
   // use the replacement config.
   host_resolver_manager_->DisableSystemResolverForTesting();  // IN-TEST
+}
+
+void NetworkService::SetNetworkAnnotationMonitor(
+    mojo::PendingRemote<network::mojom::NetworkAnnotationMonitor> remote) {
+  network_annotation_monitor_.Bind(std::move(remote));
+}
+
+void NetworkService::NotifyNetworkRequestWithAnnotation(
+    net::NetworkTrafficAnnotationTag traffic_annotation) {
+  if (network_annotation_monitor_.is_bound()) {
+    network_annotation_monitor_->Report(traffic_annotation.unique_id_hash_code);
+  }
 }
 
 void NetworkService::SetTestDohConfigForTesting(
@@ -687,7 +698,7 @@ void NetworkService::ConfigureStubHostResolver(
 void NetworkService::DisableQuic() {
   quic_disabled_ = true;
 
-  for (auto* network_context : network_contexts_) {
+  for (NetworkContext* network_context : network_contexts_) {
     network_context->DisableQuic();
   }
 }
@@ -726,7 +737,7 @@ void NetworkService::SetRawHeadersAccess(
   }
 }
 
-void NetworkService::SetMaxConnectionsPerProxy(int32_t max_connections) {
+void NetworkService::SetMaxConnectionsPerProxyChain(int32_t max_connections) {
   int new_limit = max_connections;
   if (new_limit < 0) {
     new_limit = net::kDefaultMaxSocketsPerProxyChain;
@@ -813,7 +824,7 @@ void NetworkService::OnPeerToPeerConnectionsCountChange(uint32_t count) {
 #if BUILDFLAG(IS_ANDROID)
 void NetworkService::OnApplicationStateChange(
     base::android::ApplicationState state) {
-  for (auto* network_context : network_contexts_) {
+  for (NetworkContext* network_context : network_contexts_) {
     for (auto const& listener : network_context->app_status_listeners()) {
       listener->Notify(state);
     }
@@ -879,7 +890,7 @@ void NetworkService::SetCtEnforcementEnabled(
     bool enabled,
     SetCtEnforcementEnabledCallback callback) {
   ct_enforcement_enabled_ = enabled;
-  for (auto* context : network_contexts_) {
+  for (NetworkContext* context : network_contexts_) {
     context->url_request_context()
         ->transport_security_state()
         ->SetCTEmergencyDisabled(!ct_enforcement_enabled_);
@@ -912,26 +923,30 @@ void NetworkService::UpdateKeyPinsList(mojom::PinListPtr pin_list,
   }
 }
 
-void NetworkService::UpdateMaskedDomainList(const std::string& raw_mdl) {
+void NetworkService::UpdateMaskedDomainList(
+    const std::string& raw_mdl,
+    const std::vector<std::string>& exclusion_list) {
   const base::Time start_time = base::Time::Now();
   auto mdl = masked_domain_list::MaskedDomainList();
   if (mdl.ParseFromString(raw_mdl)) {
     UMA_HISTOGRAM_MEMORY_KB("NetworkService.MaskedDomainList.SizeInKB",
                             mdl.ByteSizeLong() / 1024);
 
-    network_service_proxy_allow_list_->UseMaskedDomainList(mdl);
-    network_service_resource_block_list_->UseMaskedDomainList(mdl);
+    network_service_proxy_allow_list_->UseMaskedDomainList(mdl, exclusion_list);
 
-    base::UmaHistogramBoolean("NetworkService.MaskedDomainList.UpdateSuccess",
-                              true);
+    base::UmaHistogramBoolean(
+        "NetworkService.IpProtection.ProxyAllowList."
+        "UpdateSuccess",
+        true);
   } else {
-    base::UmaHistogramBoolean("NetworkService.MaskedDomainList.UpdateSuccess",
-                              false);
+    base::UmaHistogramBoolean(
+        "NetworkService.IpProtection.ProxyAllowList.UpdateSuccess", false);
     LOG(ERROR) << "Unable to parse MDL in NetworkService";
   }
 
-  base::UmaHistogramTimes("NetworkService.MaskedDomainList.UpdateProcessTime",
-                          base::Time::Now() - start_time);
+  base::UmaHistogramTimes(
+      "NetworkService.IpProtection.ProxyAllowList.UpdateProcessTime",
+      base::Time::Now() - start_time);
 }
 
 #if BUILDFLAG(IS_ANDROID)

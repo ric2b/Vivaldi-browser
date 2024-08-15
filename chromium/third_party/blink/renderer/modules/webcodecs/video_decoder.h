@@ -40,9 +40,9 @@ class EncodedVideoChunk;
 class ExceptionState;
 class VideoDecoderConfig;
 class VideoDecoderInit;
+class VideoDecoderSupport;
 class VideoFrame;
 class V8VideoFrameOutputCallback;
-class ScriptPromise;
 
 class MODULES_EXPORT VideoDecoderTraits {
  public:
@@ -81,26 +81,25 @@ class MODULES_EXPORT VideoDecoder : public DecoderTemplate<VideoDecoderTraits> {
                               const VideoDecoderInit*,
                               ExceptionState&);
 
-  static ScriptPromise isConfigSupported(ScriptState*,
-                                         const VideoDecoderConfig*,
-                                         ExceptionState&);
+  static ScriptPromiseTyped<VideoDecoderSupport>
+  isConfigSupported(ScriptState*, const VideoDecoderConfig*, ExceptionState&);
 
   static HardwarePreference GetHardwareAccelerationPreference(
       const ConfigType& config);
 
   // Returns parsed VideoType if the configuration is valid.
-  static absl::optional<media::VideoType> IsValidVideoDecoderConfig(
+  static std::optional<media::VideoType> IsValidVideoDecoderConfig(
       const VideoDecoderConfig& config,
       String* js_error_message);
 
   // For use by MediaSource
-  static absl::optional<media::VideoDecoderConfig> MakeMediaVideoDecoderConfig(
+  static std::optional<media::VideoDecoderConfig> MakeMediaVideoDecoderConfig(
       const ConfigType& config,
       String* js_error_message,
       bool* needs_converter_out = nullptr);
 
   VideoDecoder(ScriptState*, const VideoDecoderInit*, ExceptionState&);
-  ~VideoDecoder() override = default;
+  ~VideoDecoder() override;
 
   // EventTarget interface
   const AtomicString& InterfaceName() const override;
@@ -108,7 +107,7 @@ class MODULES_EXPORT VideoDecoder : public DecoderTemplate<VideoDecoderTraits> {
  protected:
   bool IsValidConfig(const ConfigType& config,
                      String* js_error_message) override;
-  absl::optional<media::VideoDecoderConfig> MakeMediaConfig(
+  std::optional<media::VideoDecoderConfig> MakeMediaConfig(
       const ConfigType& config,
       String* js_error_message) override;
   media::DecoderStatus::Or<scoped_refptr<media::DecoderBuffer>> MakeInput(
@@ -119,20 +118,21 @@ class MODULES_EXPORT VideoDecoder : public DecoderTemplate<VideoDecoderTraits> {
       ExecutionContext*) override;
 
  private:
+  struct DecoderSpecificData;
+
   // DecoderTemplate implementation.
   HardwarePreference GetHardwarePreference(const ConfigType& config) override;
   bool GetLowDelayPreference(const ConfigType& config) override;
   void SetHardwarePreference(HardwarePreference preference) override;
   // For use by ::MakeMediaConfig
-  static absl::optional<media::VideoDecoderConfig>
+  static std::optional<media::VideoDecoderConfig>
   MakeMediaVideoDecoderConfigInternal(
       const ConfigType& config,
-      std::unique_ptr<VideoDecoderHelper>& decoder_helper,
+      DecoderSpecificData& decoder_specific_data,
       String* js_error_message,
       bool* needs_converter_out = nullptr);
 
-  // Bitstream converter to annex B for AVC/HEVC.
-  std::unique_ptr<VideoDecoderHelper> decoder_helper_;
+  std::unique_ptr<DecoderSpecificData> decoder_specific_data_;
 
   media::VideoCodec current_codec_ = media::VideoCodec::kUnknown;
 

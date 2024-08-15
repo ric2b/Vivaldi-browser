@@ -95,6 +95,17 @@ const char kRustCrateRoot_Help[] =
   only one file.
 )";
 
+const char kRustflags[] = "rustflags";
+const char kRustflags_HelpShort[] =
+    "rustflags: [string list] Flags passed to the Rust compiler.";
+const char kRustflags_Help[] =
+      R"(rustflags: Flags passed to the Rust compiler.
+
+  A list of strings.
+
+  "rustflags" are passed to all invocations of the Rust compiler.
+)";
+
 void InsertRustVariables(VariableInfoMap* info_map) {
   info_map->insert(std::make_pair(
       kRustAliasedDeps,
@@ -108,6 +119,9 @@ void InsertRustVariables(VariableInfoMap* info_map) {
   info_map->insert(std::make_pair(
       kRustCrateRoot,
       VariableInfo(kRustCrateRoot_HelpShort, kRustCrateRoot_Help)));
+  info_map->insert(std::make_pair(
+      kRustflags,
+      VariableInfo(kRustflags_HelpShort, kRustflags_Help)));
 }
 
 }  // namespace variables

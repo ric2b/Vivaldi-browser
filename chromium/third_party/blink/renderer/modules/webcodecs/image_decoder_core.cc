@@ -77,6 +77,7 @@ gfx::ColorSpace YUVColorSpaceToGfxColorSpace(
                              gfx::ColorSpace::MatrixID::BT2020_NCL,
                              gfx::ColorSpace::RangeID::LIMITED);
     case kIdentity_SkYUVColorSpace:
+    default:
       NOTREACHED();
       return gfx::ColorSpace();
   };
@@ -249,6 +250,13 @@ std::unique_ptr<ImageDecoderCore::ImageDecodeResult> ImageDecoderCore::Decode(
     NOTREACHED() << "Failed to create VideoFrame from SkImage.";
     result->status = Status::kDecodeError;
     return result;
+  }
+
+  if (auto sk_cs = decoder_->ColorSpaceForSkImages()) {
+    auto gfx_cs = gfx::ColorSpace(*sk_cs);
+    if (gfx_cs.IsValid()) {
+      frame->set_color_space(gfx_cs);
+    }
   }
 
   frame->metadata().transformation =

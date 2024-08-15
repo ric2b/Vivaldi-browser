@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "mojo/public/cpp/bindings/remote.h"
+
 #include <stdint.h>
 
+#include <optional>
 #include <tuple>
 #include <utility>
 
-#include <optional>
 #include "base/barrier_closure.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/functional/bind.h"
@@ -26,7 +28,6 @@
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
-#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/bindings/shared_associated_remote.h"

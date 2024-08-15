@@ -194,12 +194,10 @@ class PresubmitApi(recipe_api.RecipeApi):
     if raw_result.summary_markdown == '':
       raw_result.status = common_pb2.INFRA_FAILURE
       raw_result.summary_markdown = (
-        'Something unexpected occurred'
-        ' while running presubmit checks.'
-        ' Please [file a bug](https://bugs.chromium.org'
-        '/p/chromium/issues/entry?components='
-        'Infra%3EClient%3EChrome&status=Untriaged)'
-      )
+          'Something unexpected occurred'
+          ' while running presubmit checks.'
+          ' Please [file a bug](https://issues.chromium.org'
+          '/issues/new?component=1456211)')
     return raw_result
 
 

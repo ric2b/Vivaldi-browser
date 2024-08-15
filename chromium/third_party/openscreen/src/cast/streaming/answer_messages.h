@@ -31,7 +31,7 @@ namespace openscreen::cast {
 // (1) TryParse. Shall return a boolean indicating whether the out
 //     parameter is in a valid state after checking bounds and restrictions.
 // (2) ToJson. Should return a proper JSON object. Assumes that IsValid()
-//     has been called already, OSP_DCHECKs if not IsValid().
+//     has been called already, OSP_CHECKs if not IsValid().
 // (3) IsValid. Used by both TryParse and ToJson to ensure that the
 //     object is in a good state.
 struct AudioConstraints {

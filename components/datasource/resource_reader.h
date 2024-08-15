@@ -35,7 +35,7 @@ class ResourceReader {
   // Convenience method to read a resource as JSON from the given resource
   // directory and resource. `resource_directory`, when not empty, should not
   // start or end with a slash. All errors are logged.
-  static absl::optional<base::Value> ReadJSON(
+  static std::optional<base::Value> ReadJSON(
       base::StringPiece resource_directory,
       base::StringPiece resource_name);
 
@@ -51,7 +51,7 @@ class ResourceReader {
   }
 
   // Parse the asset as JSON.
-  absl::optional<base::Value> ParseJSON();
+  std::optional<base::Value> ParseJSON();
 
   std::string GetError() const;
 

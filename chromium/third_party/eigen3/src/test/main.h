@@ -176,11 +176,6 @@ inline void on_temporary_creation(long int size) {
 #define DEBUG
 #endif
 
-// bounds integer values for AltiVec
-#if defined(__ALTIVEC__) || defined(__VSX__)
-#define EIGEN_MAKING_DOCS
-#endif
-
 #define DEFAULT_REPEAT 10
 
 namespace Eigen {

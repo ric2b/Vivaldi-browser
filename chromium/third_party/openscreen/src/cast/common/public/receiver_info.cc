@@ -86,8 +86,7 @@ bool ReceiverInfo::IsValid() const {
 discovery::DnsSdInstance ReceiverInfoToDnsSdInstance(const ReceiverInfo& info) {
   OSP_DCHECK(discovery::IsServiceValid(kCastV2ServiceId));
   OSP_DCHECK(discovery::IsDomainValid(kCastV2DomainId));
-
-  OSP_DCHECK(info.IsValid());
+  OSP_CHECK(info.IsValid());
 
   discovery::DnsSdTxtRecord txt;
   const bool did_set_everything =
@@ -100,7 +99,7 @@ discovery::DnsSdInstance ReceiverInfoToDnsSdInstance(const ReceiverInfo& info) {
           .ok() &&
       txt.SetValue(kModelNameKey, info.model_name).ok() &&
       txt.SetValue(kFriendlyNameKey, info.friendly_name).ok();
-  OSP_DCHECK(did_set_everything);
+  OSP_CHECK(did_set_everything);
 
   return discovery::DnsSdInstance(info.GetInstanceId(), kCastV2ServiceId,
                                   kCastV2DomainId, std::move(txt), info.port);

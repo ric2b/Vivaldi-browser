@@ -29,7 +29,13 @@ export interface Configuration {
      * See {@link PuppeteerNode.launch | puppeteer.launch} on how executable path
      * is inferred.
      *
-     * @defaultValue A compatible-revision of the browser.
+     * Use a specific browser version (e.g., 119.0.6045.105). If you use an alias
+     * such `stable` or `canary` it will only work during the installation of
+     * Puppeteer and it will fail when launching the browser.
+     *
+     * @example 119.0.6045.105
+     * @defaultValue The pinned browser version supported by the current Puppeteer
+     * version.
      */
     browserRevision?: string;
     /**
@@ -48,19 +54,11 @@ export interface Configuration {
      * @remarks
      * This must include the protocol and may even need a path prefix.
      *
-     * @defaultValue Either https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing or
+     * @defaultValue Either https://storage.googleapis.com/chrome-for-testing-public or
      * https://archive.mozilla.org/pub/firefox/nightly/latest-mozilla-central,
      * depending on the product.
      */
     downloadBaseUrl?: string;
-    /**
-     * Specifies the path for the downloads folder.
-     *
-     * Can be overridden by `PUPPETEER_DOWNLOAD_PATH`.
-     *
-     * @defaultValue `<cacheDirectory>`
-     */
-    downloadPath?: string;
     /**
      * Specifies an executable path to be used in
      * {@link PuppeteerNode.launch | puppeteer.launch}.
@@ -92,6 +90,18 @@ export interface Configuration {
      * Can be overridden by `PUPPETEER_SKIP_DOWNLOAD`.
      */
     skipDownload?: boolean;
+    /**
+     * Tells Puppeteer to not Chrome download during installation.
+     *
+     * Can be overridden by `PUPPETEER_SKIP_CHROME_DOWNLOAD`.
+     */
+    skipChromeDownload?: boolean;
+    /**
+     * Tells Puppeteer to not chrome-headless-shell download during installation.
+     *
+     * Can be overridden by `PUPPETEER_SKIP_CHROME_HEADLESS_SHELL_DOWNLOAD`.
+     */
+    skipChromeHeadlessShellDownload?: boolean;
     /**
      * Tells Puppeteer to log at the given level.
      *

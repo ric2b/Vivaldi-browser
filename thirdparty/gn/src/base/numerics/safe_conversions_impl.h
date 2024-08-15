@@ -496,16 +496,16 @@ template <
     typename Lhs,
     typename Rhs = Lhs,
     bool is_intmax_type =
-        std::is_integral<typename MaxExponentPromotion<Lhs, Rhs>::type>::value&&
-            IntegerBitsPlusSign<typename MaxExponentPromotion<Lhs, Rhs>::type>::
+        std::is_integral<
+            typename MaxExponentPromotion<Lhs, Rhs>::type>::value &&
+        IntegerBitsPlusSign<typename MaxExponentPromotion<Lhs, Rhs>::type>::
                 value == IntegerBitsPlusSign<intmax_t>::value,
-    bool is_max_exponent =
-        StaticDstRangeRelationToSrcRange<
-            typename MaxExponentPromotion<Lhs, Rhs>::type,
-            Lhs>::value ==
-        NUMERIC_RANGE_CONTAINED&& StaticDstRangeRelationToSrcRange<
-            typename MaxExponentPromotion<Lhs, Rhs>::type,
-            Rhs>::value == NUMERIC_RANGE_CONTAINED>
+    bool is_max_exponent = StaticDstRangeRelationToSrcRange<
+                               typename MaxExponentPromotion<Lhs, Rhs>::type,
+                               Lhs>::value == NUMERIC_RANGE_CONTAINED &&
+                           StaticDstRangeRelationToSrcRange<
+                               typename MaxExponentPromotion<Lhs, Rhs>::type,
+                               Rhs>::value == NUMERIC_RANGE_CONTAINED>
 struct BigEnoughPromotion;
 
 // The side with the max exponent is big enough.

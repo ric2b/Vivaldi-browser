@@ -9,6 +9,7 @@
 
 #include <list>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "base/component_export.h"
@@ -24,7 +25,6 @@
 #include "device/fido/fido_types.h"
 #include "device/fido/large_blob.h"
 #include "device/fido/virtual_fido_device.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace device {
 
@@ -79,7 +79,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualCtap2Device
     // present then the extension will be implement, but if it's present with
     // the value false then the authenticator will report that makeCredential
     // didn't enable a large blob.
-    absl::optional<bool> large_blob_extension_support;
+    std::optional<bool> large_blob_extension_support;
     // Support for setting a min PIN length and forcing pin change.
     bool min_pin_length_support = false;
     // min_pin_length_extension_support, if true, enables support for the
@@ -113,7 +113,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualCtap2Device
     // force_cred_protect, if set and if |cred_protect_support| is true, is a
     // credProtect level that will be forced for all registrations. This
     // overrides any level requested in the makeCredential.
-    absl::optional<device::CredProtect> force_cred_protect;
+    std::optional<device::CredProtect> force_cred_protect;
 
     // default_cred_protect, if |cred_protect_support| is true, is the
     // credProtect level that will be set for makeCredential requests that do
@@ -211,6 +211,12 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualCtap2Device
     // authenticator's U2F interface not to be available over CTAP2 for
     // assertions.
     bool ignore_u2f_credentials = false;
+
+    // omit_user_entity_on_allow_credentials_requests causes get assertion
+    // requests to omit the user entity for non empty allow lists, even if the
+    // credential is discoverable. This matches the behaviour of some Android
+    // devices.
+    bool omit_user_entity_on_allow_credentials_requests = false;
 
     // pin_protocol is the PIN protocol version that this authenticator supports
     // and reports in the pinProtocols field of the authenticatorGetInfo
@@ -310,25 +316,25 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualCtap2Device
     kMakeCredential,
     kMakeCredentialUvNotRequired,
   };
-  absl::optional<CtapDeviceResponseCode> CheckUserVerification(
+  std::optional<CtapDeviceResponseCode> CheckUserVerification(
       CheckUserVerificationMode mode,
       const AuthenticatorGetInfoResponse& authenticator_info,
       const std::string& rp_id,
-      const absl::optional<std::vector<uint8_t>>& pin_auth,
-      const absl::optional<PINUVAuthProtocol>& pin_protocol,
+      const std::optional<std::vector<uint8_t>>& pin_auth,
+      const std::optional<PINUVAuthProtocol>& pin_protocol,
       base::span<const uint8_t> client_data_hash,
       UserVerificationRequirement user_verification,
       bool user_presence_required,
       bool* out_user_verified);
-  absl::optional<CtapDeviceResponseCode> OnMakeCredential(
+  std::optional<CtapDeviceResponseCode> OnMakeCredential(
       base::span<const uint8_t> request,
       std::vector<uint8_t>* response);
-  absl::optional<CtapDeviceResponseCode> OnGetAssertion(
+  std::optional<CtapDeviceResponseCode> OnGetAssertion(
       base::span<const uint8_t> request,
       std::vector<uint8_t>* response);
   CtapDeviceResponseCode OnGetNextAssertion(base::span<const uint8_t> request,
                                             std::vector<uint8_t>* response);
-  absl::optional<CtapDeviceResponseCode> OnPINCommand(
+  std::optional<CtapDeviceResponseCode> OnPINCommand(
       base::span<const uint8_t> request,
       std::vector<uint8_t>* response);
   CtapDeviceResponseCode OnCredentialManagement(

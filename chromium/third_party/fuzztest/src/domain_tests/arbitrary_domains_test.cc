@@ -35,7 +35,7 @@
 #include "absl/random/random.h"
 #include "absl/status/status.h"
 #include "absl/time/time.h"
-#include "./fuzztest/domain.h"  // IWYU pragma: keep
+#include "./fuzztest/domain_core.h"  // IWYU pragma: keep
 #include "./domain_tests/domain_testing.h"
 #include "./fuzztest/internal/domains/absl_helpers.h"
 #include "./fuzztest/internal/domains/arbitrary_impl.h"
@@ -48,6 +48,8 @@
 namespace fuzztest {
 namespace {
 
+using ::fuzztest::domain_implementor::DomainBase;
+using ::fuzztest::internal::IRObject;
 using ::testing::Contains;
 using ::testing::Each;
 using ::testing::Ge;
@@ -98,6 +100,21 @@ TEST(ArbitraryByteTest, InitGeneratesSeeds) {
   // in a uniform distribution.
   EXPECT_THAT(GenerateInitialValues(domain, 1000),
               Contains(Value(domain, std::byte{42})).Times(Ge(350)));
+}
+
+TEST(ArbitraryByteTest, GetRandomValueYieldsEveryValue) {
+  Domain<std::byte> domain = Arbitrary<std::byte>();
+
+  absl::flat_hash_set<std::byte> values;
+  absl::BitGen prng;
+  for (int i = 0;
+       values.size() < 256 &&
+       i < IterationsToHitAll(/*num_cases=*/256, /*hit_probability=*/1.0 / 256);
+       ++i) {
+    values.insert(domain.GetRandomValue(prng));
+  }
+
+  EXPECT_THAT(values, SizeIs(256));
 }
 
 struct MyStruct {
@@ -195,10 +212,10 @@ TEST(UserDefinedAggregate, NestedArbitrary) {
 }
 
 struct StatefulIncrementDomain
-    : public internal::DomainBase<StatefulIncrementDomain, int,
-                                  // Just to make sure we don't mix value_type
-                                  // with corpus_type
-                                  std::tuple<int>> {
+    : public DomainBase<StatefulIncrementDomain, int,
+                        // Just to make sure we don't mix value_type with
+                        // corpus_type
+                        std::tuple<int>> {
   corpus_type Init(absl::BitGenRef prng) {
     // Minimal code to exercise prng.
     corpus_type result = {absl::Uniform<value_type>(prng, i, i + 1)};
@@ -216,12 +233,12 @@ struct StatefulIncrementDomain
     return std::tuple{v};
   }
 
-  std::optional<corpus_type> ParseCorpus(const internal::IRObject& obj) const {
+  std::optional<corpus_type> ParseCorpus(const IRObject& obj) const {
     return obj.ToCorpus<corpus_type>();
   }
 
-  internal::IRObject SerializeCorpus(const corpus_type& v) const {
-    return internal::IRObject::FromCorpus(v);
+  IRObject SerializeCorpus(const corpus_type& v) const {
+    return IRObject::FromCorpus(v);
   }
 
   absl::Status ValidateCorpusValue(const corpus_type&) const {

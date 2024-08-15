@@ -9,12 +9,13 @@
 
 #import "base/feature_list.h"
 #import "base/ios/block_types.h"
+#import "base/memory/raw_ptr.h"
 #import "base/scoped_observation.h"
+#import "components/feature_engagement/public/event_constants.h"
+#import "components/feature_engagement/public/tracker.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/snapshots/model/snapshot_browser_agent.h"
-#import "ios/chrome/browser/snapshots/model/snapshot_storage.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
 #import "ios/chrome/browser/ui/fullscreen/animated_scoped_fullscreen_disabler.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
@@ -54,9 +55,6 @@ const CGFloat kPanGestureRecognizerThreshold = 25;
 
 // Distance between sections of iPad side swipe.
 const CGFloat kIpadTabSwipeDistance = 100;
-
-// Number of tabs to keep in the grey image cache.
-const NSUInteger kIpadGreySwipeTabCount = 8;
 
 }  // namespace
 
@@ -106,9 +104,6 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
   // gesture is being recognized.
   std::unique_ptr<AnimatedScopedFullscreenDisabler> _animatedFullscreenDisabler;
 
-  // Used to add or remove the snapshot's gray cache.
-  SnapshotBrowserAgent* _snapshotBrowserAgent;
-
   // Vivaldi
   BOOL _isDesktopTabBarEnabled;
   // End Vivaldi
@@ -127,11 +122,6 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 // Whether to allow navigating from the trailing edge.
 @property(nonatomic, assign) BOOL trailingEdgeNavigationEnabled;
 
-// Load grey snapshots for the next `kIpadGreySwipeTabCount` tabs in
-// `direction`.
-- (void)createGreyCache:(UISwipeGestureRecognizerDirection)direction;
-// Tell snapshot storage to clear grey cache.
-- (void)deleteGreyCache;
 // Handle tab side swipe for iPad.  Change tabs according to swipe distance.
 - (void)handleiPadTabSwipe:(SideSwipeGestureRecognizer*)gesture;
 // Handle tab side swipe for iPhone. Introduces a CardSideSwipeView to convey
@@ -157,7 +147,6 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 
 - (instancetype)
     initWithFullscreenController:(FullscreenController*)fullscreenController
-            snapshotBrowserAgent:(SnapshotBrowserAgent*)snapshotBrowserAgent
                     webStateList:(WebStateList*)webStateList {
   self = [super init];
   if (self) {
@@ -173,7 +162,6 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
     if (self.activeWebState) {
       _scopedWebStateObservation->Observe(self.activeWebState);
     }
-    _snapshotBrowserAgent = snapshotBrowserAgent;
   }
   return self;
 }
@@ -190,7 +178,6 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
   _scopedWebStateObservation.reset();
   _webStateObserverBridge.reset();
   _fullscreenController = nullptr;
-  _snapshotBrowserAgent = nullptr;
 }
 
 - (void)addHorizontalGesturesToView:(UIView*)view {
@@ -223,39 +210,6 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 
 - (BOOL)shouldAutorotate {
   return !([_tabSideSwipeView window] || _inSwipe);
-}
-
-- (void)createGreyCache:(UISwipeGestureRecognizerDirection)direction {
-  NSInteger dx = (direction == UISwipeGestureRecognizerDirectionLeft) ? -1 : 1;
-  NSInteger index = _startingTabIndex + dx;
-  std::vector<SnapshotID> snapshotIDs;
-  snapshotIDs.reserve(kIpadGreySwipeTabCount);
-  for (NSUInteger count = 0; count < kIpadGreySwipeTabCount; count++) {
-    // Wrap around edges.
-    if (index >= self.webStateList->count()) {
-      index = 0;
-    } else if (index < 0) {
-      index = self.webStateList->count() - 1;
-    }
-
-    // Don't wrap past the starting index.
-    if (index == (NSInteger)_startingTabIndex) {
-      break;
-    }
-
-    web::WebState* webState = self.webStateList->GetWebStateAt(index);
-    if (webState && PagePlaceholderTabHelper::FromWebState(webState)
-                        ->will_add_placeholder_for_next_navigation()) {
-      snapshotIDs.push_back(
-          SnapshotTabHelper::FromWebState(webState)->GetSnapshotID());
-    }
-    index = index + dx;
-  }
-  [_snapshotBrowserAgent->snapshot_storage() createGreyCache:snapshotIDs];
-}
-
-- (void)deleteGreyCache {
-  [_snapshotBrowserAgent->snapshot_storage() removeGreyCache];
 }
 
 - (void)handlePan:(SideSwipeGestureRecognizer*)gesture {
@@ -312,7 +266,6 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
                       object:nil];
     [self.tabStripDelegate setHighlightsSelectedTab:YES];
     _startingTabIndex = self.webStateList->active_index();
-    [self createGreyCache:gesture.direction];
   } else if (gesture.state == UIGestureRecognizerStateChanged) {
     // Side swipe for iPad involves changing the selected tab as the swipe moves
     // across the width of the view.  The screen is broken up into
@@ -370,7 +323,6 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
     // Redisplay the view if it was in overlay preview mode.
     [_swipeDelegate sideSwipeRedisplayTabView];
     [self.tabStripDelegate setHighlightsSelectedTab:NO];
-    [self deleteGreyCache];
     [[NSNotificationCenter defaultCenter]
         postNotificationName:kSideSwipeDidStopNotification
                       object:nil];
@@ -450,6 +402,9 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
     } else {
       web_navigation_util::GoForward(webState);
     }
+    CHECK(self.engagementTracker);
+    self.engagementTracker->NotifyEvent(
+        feature_engagement::events::kIOSSwipeBackForwardUsed);
   }
   __weak SideSwipeMediator* weakSelf = self;
   // Checking -IsLoading() is likely incorrect, but to narrow the scope of

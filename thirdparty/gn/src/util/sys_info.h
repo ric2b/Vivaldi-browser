@@ -7,6 +7,7 @@
 
 #include <string>
 
+bool IsLongPathsSupportEnabled();
 std::string OperatingSystemArchitecture();
 int NumberOfProcessors();
 

@@ -4,7 +4,7 @@
 
 import './accelerator_row.js';
 
-import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
+import {I18nMixin} from 'chrome://resources/ash/common/cr_elements/i18n_mixin.js';
 import {PolymerElementProperties} from 'chrome://resources/polymer/v3_0/polymer/interfaces.js';
 import {DomRepeat, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -58,11 +58,6 @@ export class AcceleratorSubsectionElement extends
         observer: AcceleratorSubsectionElement.prototype.onCategoryUpdated,
       },
 
-      /**
-       * TODO(jimmyxgong): Fetch the shortcuts and it accelerators with the
-       * mojom::source_id and mojom::subsection_id. This serves as a
-       * temporary way to populate a subsection.
-       */
       acceleratorContainer: {
         type: Array,
         value: [],
@@ -157,7 +152,7 @@ export class AcceleratorSubsectionElement extends
     if (!isCustomizationAllowed()) {
       return false;
     }
-    return this.lookupManager.isCategoryLocked(this.category);
+    return this.lookupManager.isSubcategoryLocked(this.subcategory);
   }
 }
 

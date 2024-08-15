@@ -36,6 +36,7 @@
 #include "src/tint/lang/core/builtin_value.h"
 #include "src/tint/lang/wgsl/ast/alias.h"
 #include "src/tint/lang/wgsl/ast/assignment_statement.h"
+#include "src/tint/lang/wgsl/ast/blend_src_attribute.h"
 #include "src/tint/lang/wgsl/ast/block_statement.h"
 #include "src/tint/lang/wgsl/ast/break_if_statement.h"
 #include "src/tint/lang/wgsl/ast/break_statement.h"
@@ -51,7 +52,6 @@
 #include "src/tint/lang/wgsl/ast/identifier.h"
 #include "src/tint/lang/wgsl/ast/if_statement.h"
 #include "src/tint/lang/wgsl/ast/increment_decrement_statement.h"
-#include "src/tint/lang/wgsl/ast/index_attribute.h"
 #include "src/tint/lang/wgsl/ast/internal_attribute.h"
 #include "src/tint/lang/wgsl/ast/interpolate_attribute.h"
 #include "src/tint/lang/wgsl/ast/invariant_attribute.h"
@@ -107,22 +107,16 @@ struct DependencyEdge {
     const Global* from;
     /// The Global that is depended on by #from
     const Global* to;
-};
 
-/// DependencyEdgeCmp implements the contracts of std::equal_to<DependencyEdge>
-/// and std::hash<DependencyEdge>.
-struct DependencyEdgeCmp {
+    /// @returns the hash code of the DependencyEdge
+    tint::HashCode HashCode() const { return Hash(from, to); }
+
     /// Equality operator
-    bool operator()(const DependencyEdge& lhs, const DependencyEdge& rhs) const {
-        return lhs.from == rhs.from && lhs.to == rhs.to;
-    }
-    /// Hashing operator
-    inline std::size_t operator()(const DependencyEdge& d) const { return Hash(d.from, d.to); }
+    bool operator==(const DependencyEdge& rhs) const { return from == rhs.from && to == rhs.to; }
 };
 
 /// A map of DependencyEdge to DependencyInfo
-using DependencyEdges =
-    Hashmap<DependencyEdge, DependencyInfo, 64, DependencyEdgeCmp, DependencyEdgeCmp>;
+using DependencyEdges = Hashmap<DependencyEdge, DependencyInfo, 64>;
 
 /// Global describes a module-scope variable, type or function.
 struct Global {
@@ -137,14 +131,14 @@ struct Global {
 /// A map of global name to Global
 using GlobalMap = Hashmap<Symbol, Global*, 16>;
 
-/// Raises an error diagnostic with the given message and source.
-void AddError(diag::List& diagnostics, const std::string& msg, const Source& source) {
-    diagnostics.add_error(diag::System::Resolver, msg, source);
+/// @returns a new error diagnostic with the given source.
+diag::Diagnostic& AddError(diag::List& diagnostics, const Source& source) {
+    return diagnostics.AddError(diag::System::Resolver, source);
 }
 
-/// Raises a note diagnostic with the given message and source.
-void AddNote(diag::List& diagnostics, const std::string& msg, const Source& source) {
-    diagnostics.add_note(diag::System::Resolver, msg, source);
+/// @returns a new note diagnostic with the given source.
+diag::Diagnostic& AddNote(diag::List& diagnostics, const Source& source) {
+    return diagnostics.AddNote(diag::System::Resolver, source);
 }
 
 /// DependencyScanner is used to traverse a module to build the list of
@@ -166,7 +160,7 @@ class DependencyScanner {
           graph_(graph),
           dependency_edges_(edges) {
         // Register all the globals at global-scope
-        for (auto it : globals_by_name) {
+        for (auto& it : globals_by_name) {
             scope_stack_.Set(it.key, it.value->node);
         }
     }
@@ -242,7 +236,7 @@ class DependencyScanner {
         TINT_DEFER(scope_stack_.Pop());
 
         for (auto* param : func->params) {
-            if (auto* shadows = scope_stack_.Get(param->name->symbol)) {
+            if (auto shadows = scope_stack_.Get(param->name->symbol)) {
                 graph_.shadows.Add(param, shadows);
             }
             Declare(param->name->symbol, param);
@@ -341,8 +335,8 @@ class DependencyScanner {
         auto* old = scope_stack_.Set(symbol, node);
         if (old != nullptr && node != old) {
             auto name = symbol.Name();
-            AddError(diagnostics_, "redeclaration of '" + name + "'", node->source);
-            AddNote(diagnostics_, "'" + name + "' previously declared here", old->source);
+            AddError(diagnostics_, node->source) << "redeclaration of '" << name << "'";
+            AddNote(diagnostics_, old->source) << "'" << name << "' previously declared here";
         }
     }
 
@@ -356,17 +350,12 @@ class DependencyScanner {
         Vector<const ast::Expression*, 8> pending{root_expr};
         while (!pending.IsEmpty()) {
             auto* next = pending.Pop();
-            bool ok = ast::TraverseExpressions(next, [&](const ast::Expression* expr) {
-                Switch(
-                    expr,
-                    [&](const ast::IdentifierExpression* e) {
-                        AddDependency(e->identifier, e->identifier->symbol);
-                    },
-                    [&](const ast::BitcastExpression* cast) { TraverseExpression(cast->type); });
+            bool ok = ast::TraverseExpressions(next, [&](const ast::IdentifierExpression* e) {
+                AddDependency(e->identifier, e->identifier->symbol);
                 return ast::TraverseAction::Descend;
             });
             if (!ok) {
-                AddError(diagnostics_, "TraverseExpressions failed", next->source);
+                AddError(diagnostics_, next->source) << "TraverseExpressions failed";
                 return;
             }
         }
@@ -390,7 +379,7 @@ class DependencyScanner {
             [&](const ast::ColorAttribute* color) { TraverseExpression(color->expr); },
             [&](const ast::GroupAttribute* group) { TraverseExpression(group->expr); },
             [&](const ast::IdAttribute* id) { TraverseExpression(id->expr); },
-            [&](const ast::IndexAttribute* index) { TraverseExpression(index->expr); },
+            [&](const ast::BlendSrcAttribute* index) { TraverseExpression(index->expr); },
             [&](const ast::InterpolateAttribute* interpolate) {
                 TraverseExpression(interpolate->type);
                 TraverseExpression(interpolate->sampling);
@@ -465,7 +454,7 @@ class DependencyScanner {
     /// @param symbol the symbol
     /// @returns the builtin info
     DependencyScanner::BuiltinInfo GetBuiltinInfo(Symbol symbol) {
-        return builtin_info_map.GetOrCreate(symbol, [&] {
+        return builtin_info_map.GetOrAdd(symbol, [&] {
             if (auto builtin_fn = wgsl::ParseBuiltinFn(symbol.NameView());
                 builtin_fn != wgsl::BuiltinFn::kNone) {
                 return BuiltinInfo{BuiltinType::kFunction, builtin_fn};
@@ -549,7 +538,7 @@ class DependencyScanner {
             return;
         }
 
-        if (auto global = globals_.Find(to); global && (*global)->node == resolved) {
+        if (auto global = globals_.Get(to); global && (*global)->node == resolved) {
             if (dependency_edges_.Add(DependencyEdge{current_global_, *global},
                                       DependencyInfo{from->source})) {
                 current_global_->deps.Push(*global);
@@ -600,7 +589,7 @@ struct DependencyAnalysis {
 
         graph_.ordered_globals = sorted_.Release();
 
-        return !diagnostics_.contains_errors();
+        return !diagnostics_.ContainsErrors();
     }
 
   private:
@@ -714,7 +703,7 @@ struct DependencyAnalysis {
     /// SortGlobals sorts the globals into dependency order, erroring if cyclic
     /// dependencies are found. The sorted dependencies are assigned to #sorted.
     void SortGlobals() {
-        if (diagnostics_.contains_errors()) {
+        if (diagnostics_.ContainsErrors()) {
             return;  // This code assumes there are no undeclared identifiers.
         }
 
@@ -765,7 +754,7 @@ struct DependencyAnalysis {
     /// of global `from` depending on `to`.
     /// @note will raise an ICE if the edge is not found.
     DependencyInfo DepInfoFor(const Global* from, const Global* to) const {
-        auto info = dependency_edges_.Find(DependencyEdge{from, to});
+        auto info = dependency_edges_.Get(DependencyEdge{from, to});
         if (TINT_LIKELY(info)) {
             return *info;
         }
@@ -779,8 +768,8 @@ struct DependencyAnalysis {
     /// found in `stack`.
     /// @param stack is the global dependency stack that contains a loop.
     void CyclicDependencyFound(const Global* root, VectorRef<const Global*> stack) {
-        StringStream msg;
-        msg << "cyclic dependency found: ";
+        auto& err = AddError(diagnostics_, root->node->source);
+        err << "cyclic dependency found: ";
         constexpr size_t kLoopNotStarted = ~0u;
         size_t loop_start = kLoopNotStarted;
         for (size_t i = 0; i < stack.Length(); i++) {
@@ -789,19 +778,18 @@ struct DependencyAnalysis {
                 loop_start = i;
             }
             if (loop_start != kLoopNotStarted) {
-                msg << "'" << NameOf(e->node) << "' -> ";
+                err << "'" << NameOf(e->node) << "' -> ";
             }
         }
-        msg << "'" << NameOf(root->node) << "'";
-        AddError(diagnostics_, msg.str(), root->node->source);
+        err << "'" << NameOf(root->node) << "'";
+
         for (size_t i = loop_start; i < stack.Length(); i++) {
             auto* from = stack[i];
             auto* to = (i + 1 < stack.Length()) ? stack[i + 1] : stack[loop_start];
             auto info = DepInfoFor(from, to);
-            AddNote(diagnostics_,
-                    KindOf(from->node) + " '" + NameOf(from->node) + "' references " +
-                        KindOf(to->node) + " '" + NameOf(to->node) + "' here",
-                    info.source);
+            AddNote(diagnostics_, info.source)
+                << KindOf(from->node) + " '" << NameOf(from->node) << "' references "
+                << KindOf(to->node) << " '" << NameOf(to->node) << "' here";
         }
     }
 
@@ -819,7 +807,7 @@ struct DependencyAnalysis {
         printf("------ dependencies ------ \n");
         for (auto* node : sorted_) {
             auto symbol = SymbolOf(node);
-            auto* global = *globals_.Find(symbol);
+            auto* global = *globals_.Get(symbol);
             printf("%s depends on:\n", symbol.Name().c_str());
             for (auto* dep : global->deps) {
                 printf("  %s\n", NameOf(dep->node).c_str());

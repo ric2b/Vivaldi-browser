@@ -7,15 +7,12 @@
 
 namespace vivaldi {
 
-int getAquaColor();
 std::string getActionOnDoubleClick();
 int getKeyboardUIMode();
 bool getSwipeDirection();
 int getSystemDarkMode();
 std::string getSystemAccentColor();
 std::string getSystemHighlightColor();
-bool getMenubarVisibleInFullscreen();
-bool getHideMenubar();
 
 }  // namespace vivaldi
 

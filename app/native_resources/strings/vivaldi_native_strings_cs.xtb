@@ -54,7 +54,6 @@
 <translation id="3334610655141903168">(nepojmenováno)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> je aktuálně nejnovější dostupná verze.</translation>
 <translation id="3383198080133834965">Aplikace je aktuální!</translation>
-<translation id="3402602684546832928">Vyberte soubor se záložkami Opery</translation>
 <translation id="3451317331714872347">Lesnaté úpatí (Krajina 8)</translation>
 <translation id="3457498675806041407">Potvrzení ukončení</translation>
 <translation id="3470981972195599598">Vivaldi verze <ph name="VERSION" /> je už nainstalována a bude aktivována po restartu prohlížeče.</translation>
@@ -88,7 +87,6 @@
 <translation id="443008484043213881">Nástroje</translation>
 <translation id="4456211719108566931">Hromádka neštěstí… (Příšerka 6)</translation>
 <translation id="4512900838580567989">Otevřít odkaz v novém listu na pozadí</translation>
-<translation id="4515472507709384008">Opera verze 15+</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Otevřít obrázek v novém listu na pozadí</translation>
 <translation id="4582480609585453144">Otevřít odkaz v listu na pozadí</translation>
@@ -109,7 +107,6 @@
 <translation id="5416008465899576639">Je dostupná nová verze prohlížeče Vivaldi.</translation>
 <translation id="5497042274492038489">Potvrďte uzavření okna</translation>
 <translation id="5594602170491763400">„Smějící se bestie“ (Příšerka 5)</translation>
-<translation id="5615637589913244581">Opera verze 15+ (Beta)</translation>
 <translation id="5648110075441906505">Otevřít obrázek v novém okně</translation>
 <translation id="5656371807944747581">Chyba aktualizace!</translation>
 <translation id="5732584064771442623">K dispozici je Vivaldi <ph name="NEW_VERSION" /> (nainstalována je verze <ph name="OLD_VERSION" />. Chcete ji stáhnout?</translation>
@@ -120,7 +117,6 @@
 <translation id="6040143037577758943">Zavřít</translation>
 <translation id="6229528619562190452">Klepněte sem pro aktualizaci Vivaldi.</translation>
 <translation id="6234173136417926046">Použít obrázek jako pozadí úvodní stránky</translation>
-<translation id="630690498669249215">Opera – soubor se záložkami</translation>
 <translation id="6339818817272922368">Místní účet</translation>
 <translation id="6438786710866753178">Jehličnany (Krajina 4)</translation>
 <translation id="6477028720702061455">Vyberte složku s Opera profilem</translation>
@@ -131,7 +127,6 @@
 <translation id="6635049669875534328">Poznámky k vydání:</translation>
 <translation id="6693585104974197539">Vyberte složku s Edge profilem</translation>
 <translation id="6726279523566323394">Vyberte složku s Brave profilem</translation>
-<translation id="6804831687363620480">Je nám líto, ale nemůžeme získat nastavení prohlížeče Opera 15+, běží-li zrovna. K importování těchto nastavení do Vivaldi, uložte vše potřebné a ukončete všechna okna Opery 15+. Pak klepněte na Pokračovat.</translation>
 <translation id="6892812721183419409">Otevřít odkaz jako <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopírovat</translation>
 <translation id="7086554968911045110">Noc ve skalách (Krajina 7)</translation>
@@ -162,7 +157,6 @@
 <translation id="8562339533180097902">Ukončit Vivaldi a nainstalovat</translation>
 <translation id="8567452685425968223">Rozbalování aktualizace…</translation>
 <translation id="8624587806981488221">&amp;Znovu načíst obrázek</translation>
-<translation id="864444594187862076">Opera verze 15+ (Developer)</translation>
 <translation id="8651348004684669199">Přidat aktivní list</translation>
 <translation id="8669345741879513971">Zaskočené prasítko (Příšerka 10)</translation>
 <translation id="867544375504146191">Yandex</translation>

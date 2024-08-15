@@ -5,7 +5,7 @@
  *   Basic SFNT/TrueType type definitions and interface (specification
  *   only).
  *
- * Copyright (C) 1996-2023 by
+ * Copyright (C) 1996-2024 by
  * David Turner, Robert Wilhelm, and Werner Lemberg.
  *
  * This file is part of the FreeType project, and may only be used,
@@ -24,6 +24,7 @@
 #include <freetype/tttables.h>
 #include <freetype/internal/ftobjs.h>
 #include <freetype/ftcolor.h>
+#include "freetype/fttypes.h"
 
 #ifdef TT_CONFIG_OPTION_GX_VAR_SUPPORT
 #include <freetype/ftmm.h>
@@ -1580,6 +1581,11 @@ FT_BEGIN_HEADER
     FT_UInt               num_kern_tables;
     FT_UInt32             kern_avail_bits;
     FT_UInt32             kern_order_bits;
+
+#ifdef TT_CONFIG_OPTION_GPOS_KERNING
+    FT_Byte*              gpos_table;
+    FT_Bool               gpos_kerning_available;
+#endif
 
 #ifdef TT_CONFIG_OPTION_BDF
     TT_BDFRec             bdf;

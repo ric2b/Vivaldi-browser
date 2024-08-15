@@ -201,7 +201,6 @@ public class TabGridItemTouchHelperCallback extends ItemTouchHelper.SimpleCallba
         int distance = toViewHolder.getAdapterPosition() - fromViewHolder.getAdapterPosition();
         TabModelFilter filter = mCurrentTabModelFilterSupplier.get();
         TabModel tabModel = filter.getTabModel();
-
         if (!mActionsOnAllRelatedTabs) {
             int destinationIndex =
                     tabModel.indexOf(TabModelUtils.getTabById(tabModel, destinationTabId));

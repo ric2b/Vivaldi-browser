@@ -60,20 +60,24 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.LinkedHashSet;
 
 // Vivaldi
+import android.car.Car;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.Manifest;
 import android.text.TextUtils;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentActivity;
 
 import org.chromium.base.Log;
 import org.chromium.build.BuildConfig;
+import org.vivaldi.browser.oem_extensions.CarDataProvider;
 import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoDistractionDialog;
 import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoExtensions;
 import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoExtensions.DriverDistractionObserver;
+import org.vivaldi.browser.oem_extensions.mahindra.OemMahindraDistractionDialog;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
@@ -82,7 +86,6 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
  */
 public class ChromeBaseAppCompatActivity extends AppCompatActivity
         implements NightModeStateProvider.Observer, ModalDialogManagerHolder {
-
     /**
      * Chrome in automotive needs a persistent back button toolbar above all activities because
      * AAOS/cars do not have a built in back button. This is implemented differently in each
@@ -130,8 +133,8 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
 
     private SharedPreferences.OnSharedPreferenceChangeListener mPrefsListener;
 
-    // Vivaldi OEM (Lynk&Co)
-    private static final String TAG = "OemLynkco";
+    // Vivaldi OEM
+    private static final String TAG = "OemAutomotive";
 
     ActivityResultLauncher<Intent> mStartForResult =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),
@@ -143,7 +146,11 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
     private boolean mDriverDistracted;
     private OemLynkcoExtensions.ShutdownObserver mShutdownObserver;
     private OemLynkcoDistractionDialog mDDDialog;
+
     private FragmentActivity mFragmentActivity;
+
+    private OemMahindraDistractionDialog mMahindraDistractionDialog;
+    private CarDataProvider.Observer mCarDataObserver;
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -211,12 +218,19 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
 
         setDefaultTaskDescription();
 
-        // Vivaldi OEM (Lynk&Co)
+        // Vivaldi OEM
+        mFragmentActivity = this;
         if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
             OemLynkcoExtensions.getInstance().initialize(this);
             requestAllPermissions();
-            mFragmentActivity = this;
             enableDriverDistractionAndShutdownHandling();
+        } else if (BuildConfig.IS_OEM_MAHINDRA_BUILD) {
+            if (ActivityCompat.checkSelfPermission(this, Car.PERMISSION_SPEED)
+                    != PackageManager.PERMISSION_GRANTED) {
+                CarDataProvider.initPermissions(this);
+            } else {
+                enableDriverDistractionHandlingMM();
+            }
         }
     }
 
@@ -465,8 +479,7 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
             super.setContentView(AutomotiveUtils.getAutomotiveLayoutWithBackButtonToolbar(this));
             setAutomotiveToolbarBackButtonAction();
             LinearLayout linearLayout = findViewById(R.id.automotive_base_linear_layout);
-            linearLayout.addView(
-                    view, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+            linearLayout.addView(view, LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
         } else {
             super.setContentView(view);
         }
@@ -481,8 +494,7 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
             setAutomotiveToolbarBackButtonAction();
             LinearLayout linearLayout = findViewById(R.id.automotive_base_linear_layout);
             linearLayout.setLayoutParams(params);
-            linearLayout.addView(
-                    view, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+            linearLayout.addView(view, LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
         } else {
             super.setContentView(view, params);
         }
@@ -518,8 +530,12 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
             getSupportActionBar().setHomeActionContentDescription(R.string.back);
         }
 
-        if (BuildConfig.IS_OEM_LYNKCO_BUILD)
+        if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
             resetDriverDistraction();
+        } else if (BuildConfig.IS_OEM_MAHINDRA_BUILD) {
+            if (mCarDataObserver != null)
+                CarDataProvider.getInstance().addObserver(mCarDataObserver);
+        }
 
         super.onResume();
     }
@@ -631,7 +647,7 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
         OemLynkcoExtensions.getInstance().enableDriverDistraction();
     }
 
-    // Vivaldi OEM (Lynk&Co)
+    // Vivaldi OEM
     @Override
     public void onRequestPermissionsResult(int requestCode,
                                            String[] permissions,
@@ -640,6 +656,12 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
         if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
             if (grantResults[0] == PackageManager.PERMISSION_DENIED) {
                 startOnboarding();
+            }
+        } else if (BuildConfig.IS_OEM_MAHINDRA_BUILD) {
+            if (permissions.length > 0 &&
+                    permissions[0].equals(Car.PERMISSION_SPEED) &&
+                    grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                enableDriverDistractionHandlingMM();
             }
         }
     }
@@ -653,7 +675,7 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
         }
     }
 
-    // Vivaldi OEM (Lynk&Co)
+    // Vivaldi OEM
     @Override
     protected void onStop() {
         super.onStop();
@@ -662,6 +684,39 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
                     .removeDriverDistractionObserver(mDriverDistractionObserver);
             OemLynkcoExtensions.getInstance().disableDriverDistraction();
             OemLynkcoExtensions.getInstance().disableShutdownManager();
+        } else if(BuildConfig.IS_OEM_MAHINDRA_BUILD) {
+            if (mCarDataObserver != null) {
+                CarDataProvider.getInstance().removeObserver(mCarDataObserver);
+            }
         }
+    }
+
+    // Vivaldi OEM (Mahindra)
+    private void enableDriverDistractionHandlingMM() {
+        Log.d(TAG, "enableDriverDistractionHandlingMM");
+        assert BuildConfig.IS_OEM_MAHINDRA_BUILD;
+        assert mFragmentActivity != null;
+        assert mCarDataObserver == null;
+
+        mMahindraDistractionDialog = new OemMahindraDistractionDialog();
+        mMahindraDistractionDialog.initDialog();
+
+        mCarDataObserver = new CarDataProvider.Observer() {
+            @Override
+            public void onAboveSpeedLimit(boolean isAboveSpeedLimit) {
+                Log.d(TAG, "onAboveSpeedLimit: " + isAboveSpeedLimit);
+                if (isAboveSpeedLimit == mDriverDistracted) return;
+                mDriverDistracted = isAboveSpeedLimit;
+                if (mMahindraDistractionDialog == null) return;
+                if (isAboveSpeedLimit) {
+                    Log.d(TAG, "onAboveSpeedLimit: show DD dialog");
+                    mMahindraDistractionDialog
+                            .show(mFragmentActivity.getSupportFragmentManager(), null);
+                } else {
+                    Log.d(TAG, "onAboveSpeedLimit: dismiss DD dialog");
+                    mMahindraDistractionDialog.dismissAllowingStateLoss();
+                }
+            }
+        };
     }
 }

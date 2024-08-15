@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/editing/position_with_affinity.h"
 #include "third_party/blink/renderer/core/editing/text_affinity.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
+#include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/hit_test_request.h"
 #include "third_party/blink/renderer/core/layout/physical_box_fragment.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
@@ -81,8 +82,8 @@ TEST_F(HitTestingTest, OcclusionHitTest) {
     <div id=occluder></div>
   )HTML");
 
-  Element* target = GetDocument().getElementById(AtomicString("target"));
-  Element* occluder = GetDocument().getElementById(AtomicString("occluder"));
+  Element* target = GetElementById("target");
+  Element* occluder = GetElementById("occluder");
   HitTestResult result = target->GetLayoutObject()->HitTestForOcclusion();
   EXPECT_EQ(result.InnerNode(), target);
 
@@ -107,7 +108,7 @@ TEST_F(HitTestingTest, HitTestWithCallback) {
     <div id=occluder_3></div>
   )HTML");
 
-  Element* target = GetDocument().getElementById(AtomicString("target"));
+  Element* target = GetElementById("target");
   HitNodeCb hit_node_cb;
 
   // Perform hit test without stopping, and verify that the result innernode is
@@ -131,16 +132,13 @@ TEST_F(HitTestingTest, HitTestWithCallback) {
 
   EXPECT_EQ(result.InnerNode(), target);
 
-  Element* occluder_1 =
-      GetDocument().getElementById(AtomicString("occluder_1"));
-  Element* occluder_2 =
-      GetDocument().getElementById(AtomicString("occluder_2"));
-  Element* occluder_3 =
-      GetDocument().getElementById(AtomicString("occluder_3"));
+  Element* occluder_1 = GetElementById("occluder_1");
+  Element* occluder_2 = GetElementById("occluder_2");
+  Element* occluder_3 = GetElementById("occluder_3");
 
   // Ensure that occluders intersect with the target.
   const int div_height =
-      GetLayoutObjectByElementId("target")->StyleRef().UsedHeight().IntValue();
+      GetLayoutObjectByElementId("target")->StyleRef().Height().IntValue();
   occluder_1->SetInlineStyleProperty(CSSPropertyID::kMarginTop, "-10px");
   occluder_2->SetInlineStyleProperty(
       CSSPropertyID::kMarginTop,
@@ -151,7 +149,7 @@ TEST_F(HitTestingTest, HitTestWithCallback) {
   UpdateAllLifecyclePhasesForTest();
 
   // Set up HitNodeCb helper, and the HitNodeCb expectations.
-  Node* stop_node = GetDocument().getElementById(AtomicString("occluder_2"));
+  Node* stop_node = GetElementById("occluder_2");
   HitNodeCallbackStopper hit_node_callback_stopper(stop_node);
   EXPECT_CALL(hit_node_cb, Run(_))
       .WillRepeatedly(testing::Invoke(&hit_node_callback_stopper,
@@ -187,8 +185,8 @@ TEST_F(HitTestingTest, OcclusionHitTestWithClipPath) {
     <div id=occluder></div>
   )HTML");
 
-  Element* target = GetDocument().getElementById(AtomicString("target"));
-  Element* occluder = GetDocument().getElementById(AtomicString("occluder"));
+  Element* target = GetElementById("target");
+  Element* occluder = GetElementById("occluder");
 
   // target and occluder don't overlap, no occlusion.
   HitTestResult result = target->GetLayoutObject()->HitTestForOcclusion();

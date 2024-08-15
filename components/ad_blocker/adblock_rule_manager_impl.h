@@ -43,7 +43,7 @@ class RuleManagerImpl : public RuleManager {
   // Implementing RuleManager
   bool AddRulesSource(const KnownRuleSource& known_source) override;
   void DeleteRuleSource(const KnownRuleSource& known_source) override;
-  absl::optional<RuleSource> GetRuleSource(RuleGroup group,
+  std::optional<RuleSource> GetRuleSource(RuleGroup group,
                                            uint32_t source_id) override;
   std::map<uint32_t, RuleSource> GetRuleSources(RuleGroup group) const override;
   bool FetchRuleSourceNow(RuleGroup group, uint32_t source_id) override;

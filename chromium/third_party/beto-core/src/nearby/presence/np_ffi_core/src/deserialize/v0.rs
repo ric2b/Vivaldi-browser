@@ -14,14 +14,15 @@
 //! Core NP Rust FFI structures and methods for v0 advertisement deserialization.
 
 use crate::common::*;
-use crate::credentials::credential_book::CredentialBook;
+use crate::credentials::CredentialBook;
 use crate::credentials::MatchedCredential;
-use crate::deserialize::DecryptMetadataError;
+use crate::deserialize::{
+    allocate_decrypted_metadata_handle, DecryptMetadataError, DecryptMetadataResult,
+};
 use crate::utils::{FfiEnum, LocksLongerThan};
+use crate::v0::V0DataElement;
 use crypto_provider_default::CryptoProviderImpl;
 use handle_map::{declare_handle_map, HandleLike, HandleMapDimensions, HandleMapFullError};
-use np_adv::legacy::actions::ActionsDataElement;
-use np_adv::legacy::{data_elements as np_adv_de, Ciphertext, PacketFlavorEnum, Plaintext};
 use np_adv::HasIdentityMatch;
 use std::vec::Vec;
 
@@ -348,13 +349,19 @@ fn get_v0_payload_handle_map_dimensions() -> HandleMapDimensions {
     }
 }
 
-declare_handle_map! {
-    mod v0_payload {
-        #[dimensions = super::get_v0_payload_handle_map_dimensions()]
-        type V0Payload: HandleLike<Object = super::V0PayloadInternals>;
-    }
+/// A `#[repr(C)]` handle to a value of type `V0PayloadInternals`
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct V0Payload {
+    handle_id: u64,
 }
-use v0_payload::V0Payload;
+
+declare_handle_map!(
+    v0_payload,
+    super::get_v0_payload_handle_map_dimensions(),
+    super::V0Payload,
+    super::V0PayloadInternals
+);
 
 use super::DeserializeAdvertisementError;
 
@@ -399,7 +406,7 @@ impl V0Payload {
     }
 
     /// Gets the identity details for this V0 payload,
-    /// if this payload was associted with an identity
+    /// if this payload was associated with an identity
     /// (i.e: non-public advertisements).
     pub fn get_identity_details(&self) -> GetV0IdentityDetailsResult {
         match self.get() {
@@ -410,17 +417,13 @@ impl V0Payload {
 
     /// Attempts to decrypt the metadata for the matched
     /// credential for this V0 payload (if any)
-    ///
-    /// Note that while this method is publicly exposed
-    /// from `np_ffi_core`, since it involves the (FFI-layer-unexpressed)
-    /// type `Vec<u8>`, a direct wrapper will not suffice,
-    /// and instead a language-specific binding will need to
-    /// be generated for this method which respects the
-    /// expected memory-management semantics of the target language.
-    pub fn decrypt_metadata(&self) -> Result<Vec<u8>, DecryptMetadataError> {
+    pub fn decrypt_metadata(&self) -> DecryptMetadataResult {
         match self.get() {
-            Ok(read_guard) => read_guard.decrypt_metadata(),
-            Err(_) => Err(DecryptMetadataError::EncryptedMetadataNotAvailable),
+            Ok(read_guard) => match read_guard.decrypt_metadata() {
+                Ok(decrypted_metadata) => allocate_decrypted_metadata_handle(decrypted_metadata),
+                Err(_) => DecryptMetadataResult::Error,
+            },
+            Err(_) => DecryptMetadataResult::Error,
         }
     }
 
@@ -465,209 +468,4 @@ impl FfiEnum for GetV0DEResult {
 
 impl GetV0DEResult {
     declare_enum_cast! {into_success, Success, V0DataElement}
-}
-
-/// Discriminant for `V0DataElement`.
-#[repr(u8)]
-pub enum V0DataElementKind {
-    /// A transmission Power (Tx Power) data-element.
-    /// The associated payload may be obtained via
-    /// `V0DataElement#into_tx_power`.
-    TxPower = 0,
-    /// The Actions data-element.
-    /// The associated payload may be obtained via
-    /// `V0DataElement#into_actions`.
-    Actions = 1,
-}
-
-/// Representation of a V0 data element.
-#[repr(C)]
-#[allow(missing_docs)]
-#[derive(Clone)]
-pub enum V0DataElement {
-    TxPower(TxPower),
-    Actions(V0Actions),
-}
-
-impl<F: np_adv::legacy::PacketFlavor> From<np_adv::legacy::deserialize::PlainDataElement<F>>
-    for V0DataElement
-{
-    fn from(de: np_adv::legacy::deserialize::PlainDataElement<F>) -> Self {
-        use np_adv::legacy::deserialize::PlainDataElement;
-        match de {
-            PlainDataElement::Actions(x) => V0DataElement::Actions(x.into()),
-            PlainDataElement::TxPower(x) => V0DataElement::TxPower(x.into()),
-        }
-    }
-}
-
-impl FfiEnum for V0DataElement {
-    type Kind = V0DataElementKind;
-    fn kind(&self) -> Self::Kind {
-        match self {
-            V0DataElement::Actions(_) => V0DataElementKind::Actions,
-            V0DataElement::TxPower(_) => V0DataElementKind::TxPower,
-        }
-    }
-}
-
-impl V0DataElement {
-    declare_enum_cast! {into_tx_power, TxPower, TxPower}
-    declare_enum_cast! {into_actions, Actions, V0Actions}
-}
-
-/// Representation of a transmission power,
-/// as used for the Tx Power DE in V0 and V1.
-#[derive(Clone)]
-#[repr(C)]
-pub struct TxPower {
-    tx_power: i8,
-}
-
-impl TxPower {
-    /// Yields this Tx Power value as an i8.
-    pub fn as_i8(&self) -> i8 {
-        self.tx_power
-    }
-}
-
-impl From<np_adv_de::TxPowerDataElement> for TxPower {
-    fn from(de: np_adv_de::TxPowerDataElement) -> Self {
-        Self { tx_power: de.tx_power_value() }
-    }
-}
-
-/// Representation of the Actions DE in V0.
-#[derive(Clone)]
-#[repr(C)]
-pub enum V0Actions {
-    /// A set of action bits which were present in a plaintext identity advertisement
-    Plaintext(V0ActionBits),
-    /// A set of action bits which were present in a encrypted identity advertisement
-    Encrypted(V0ActionBits),
-}
-
-impl<F: np_adv::legacy::PacketFlavor> From<np_adv::legacy::actions::ActionsDataElement<F>>
-    for V0Actions
-{
-    fn from(value: ActionsDataElement<F>) -> Self {
-        match F::ENUM_VARIANT {
-            PacketFlavorEnum::Plaintext => {
-                Self::Plaintext(V0ActionBits { bitfield: value.action.as_u32() })
-            }
-            PacketFlavorEnum::Ciphertext => {
-                Self::Encrypted(V0ActionBits { bitfield: value.action.as_u32() })
-            }
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Clone)]
-/// The bitfield data of a VOActions data element
-pub struct V0ActionBits {
-    bitfield: u32,
-}
-
-#[allow(missing_docs)]
-#[repr(u8)]
-/// The possible boolean action types which can be present in an Actions data element
-pub enum BooleanActionType {
-    ActiveUnlock = 8,
-    NearbyShare = 9,
-    InstantTethering = 10,
-    PhoneHub = 11,
-    PresenceManager = 12,
-    Finder = 13,
-    FastPairSass = 14,
-}
-
-impl From<&BooleanActionType> for np_adv::legacy::actions::ActionType {
-    fn from(value: &BooleanActionType) -> Self {
-        match value {
-            BooleanActionType::ActiveUnlock => np_adv::legacy::actions::ActionType::ActiveUnlock,
-            BooleanActionType::NearbyShare => np_adv::legacy::actions::ActionType::NearbyShare,
-            BooleanActionType::InstantTethering => {
-                np_adv::legacy::actions::ActionType::InstantTethering
-            }
-            BooleanActionType::PhoneHub => np_adv::legacy::actions::ActionType::PhoneHub,
-            BooleanActionType::Finder => np_adv::legacy::actions::ActionType::Finder,
-            BooleanActionType::FastPairSass => np_adv::legacy::actions::ActionType::FastPairSass,
-            BooleanActionType::PresenceManager => {
-                np_adv::legacy::actions::ActionType::PresenceManager
-            }
-        }
-    }
-}
-
-/// Error returned if action bits inside of a V0Actions struct are invalid. If the struct was
-/// created by the np_adv deserializer, the bits will always be valid, they are only invalid if a
-/// user reaches in and changes them to something invalid.
-#[derive(Debug)]
-pub struct InvalidActionBits;
-
-impl V0Actions {
-    /// Gets the V0 Action bits as represented by a u32 where the last 8 bits are
-    /// always 0 since V0 actions can only hold up to 24 bits.
-    pub fn as_u32(&self) -> u32 {
-        match self {
-            V0Actions::Plaintext(bits) => bits.bitfield,
-            V0Actions::Encrypted(bits) => bits.bitfield,
-        }
-    }
-
-    /// Return whether a boolean action type is set in this data element
-    #[allow(clippy::expect_used)]
-    pub fn has_action(&self, action_type: &BooleanActionType) -> Result<bool, InvalidActionBits> {
-        match self {
-            V0Actions::Plaintext(action_bits) => {
-                let bits = np_adv::legacy::actions::ActionBits::<Plaintext>::try_from(
-                    action_bits.bitfield,
-                )
-                .map_err(|_| InvalidActionBits)?;
-
-                let actions_de = np_adv::legacy::actions::ActionsDataElement::from(bits);
-                Ok(actions_de
-                    .action
-                    .has_action(&action_type.into())
-                    .expect("BooleanActionType only has one bit"))
-            }
-            V0Actions::Encrypted(action_bits) => {
-                let bits = np_adv::legacy::actions::ActionBits::<Ciphertext>::try_from(
-                    action_bits.bitfield,
-                )
-                .map_err(|_| InvalidActionBits)?;
-
-                let actions_de = np_adv::legacy::actions::ActionsDataElement::from(bits);
-                Ok(actions_de
-                    .action
-                    .has_action(&action_type.into())
-                    .expect("BooleanActionType only has one bit"))
-            }
-        }
-    }
-
-    /// Return the context sequence number from this data element
-    #[allow(clippy::expect_used)]
-    pub fn get_context_sync_seq_num(&self) -> Result<u8, InvalidActionBits> {
-        match self {
-            V0Actions::Plaintext(action_bits) => {
-                let bits = np_adv::legacy::actions::ActionBits::<Plaintext>::try_from(
-                    action_bits.bitfield,
-                )
-                .map_err(|_| InvalidActionBits)?;
-
-                let actions_de = np_adv::legacy::actions::ActionsDataElement::from(bits);
-                Ok(actions_de.action.context_sync_seq_num().as_u8())
-            }
-            V0Actions::Encrypted(action_bits) => {
-                let bits = np_adv::legacy::actions::ActionBits::<Ciphertext>::try_from(
-                    action_bits.bitfield,
-                )
-                .map_err(|_| InvalidActionBits)?;
-                let actions_de = np_adv::legacy::actions::ActionsDataElement::from(bits);
-                Ok(actions_de.action.context_sync_seq_num().as_u8())
-            }
-        }
-    }
 }

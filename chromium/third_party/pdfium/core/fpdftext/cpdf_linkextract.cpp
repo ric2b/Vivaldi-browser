@@ -176,7 +176,7 @@ void CPDF_LinkExtract::ExtractLinks() {
   }
 }
 
-absl::optional<CPDF_LinkExtract::Link> CPDF_LinkExtract::CheckWebLink(
+std::optional<CPDF_LinkExtract::Link> CPDF_LinkExtract::CheckWebLink(
     const WideString& strBeCheck) {
   static const wchar_t kHttpScheme[] = L"http";
   static const wchar_t kWWWAddrStart[] = L"www.";
@@ -227,7 +227,7 @@ absl::optional<CPDF_LinkExtract::Link> CPDF_LinkExtract::CheckWebLink(
     }
   }
 
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 bool CPDF_LinkExtract::CheckMailLink(WideString* str) {
@@ -263,7 +263,7 @@ bool CPDF_LinkExtract::CheckMailLink(WideString* str) {
   if (!aPos.has_value() || aPos.value() == 0)
     return false;
 
-  str->TrimRight(L'.');
+  str->TrimBack(L'.');
   // At least one '.' in domain name, but not at the beginning.
   // TODO(weili): RFC5322 allows domain names to be a local name without '.'.
   // Check whether we should remove this check.
@@ -311,9 +311,9 @@ std::vector<CFX_FloatRect> CPDF_LinkExtract::GetRects(size_t index) const {
                                    m_LinkArray[index].m_Count);
 }
 
-absl::optional<CPDF_LinkExtract::Range> CPDF_LinkExtract::GetTextRange(
+std::optional<CPDF_LinkExtract::Range> CPDF_LinkExtract::GetTextRange(
     size_t index) const {
   if (index >= m_LinkArray.size())
-    return absl::nullopt;
+    return std::nullopt;
   return m_LinkArray[index];
 }

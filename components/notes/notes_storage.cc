@@ -76,7 +76,7 @@ void NotesStorage::NotesModelDeleted() {
   model_ = nullptr;
 }
 
-absl::optional<std::string> NotesStorage::SerializeData() {
+std::optional<std::string> NotesStorage::SerializeData() {
   NotesCodec codec;
   std::string output;
   base::Value value(
@@ -84,7 +84,7 @@ absl::optional<std::string> NotesStorage::SerializeData() {
   JSONStringValueSerializer serializer(&output);
   serializer.set_pretty_print(true);
   if (!serializer.Serialize(value))
-    return absl::nullopt;
+    return std::nullopt;
 
   return output;
 }

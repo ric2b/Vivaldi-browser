@@ -9,14 +9,15 @@
 
 #import <Foundation/Foundation.h>
 
+class AuthenticationService;
 @protocol BookmarksEditorConsumer;
 @protocol BookmarksEditorMediatorDelegate;
 class ChromeBrowserState;
+class LegacyBookmarkModel;
 class PrefService;
 @protocol SnackbarCommands;
 
 namespace bookmarks {
-class BookmarkModel;
 class BookmarkNode;
 }  // namespace bookmarks
 
@@ -46,12 +47,14 @@ class SyncService;
 // It also must be a URL. `prefs` is the user pref service.
 - (instancetype)
     initWithLocalOrSyncableBookmarkModel:
-        (bookmarks::BookmarkModel*)localOrSyncableBookmarkModel
+        (LegacyBookmarkModel*)localOrSyncableBookmarkModel
                     accountBookmarkModel:
-                        (bookmarks::BookmarkModel*)accountBookmarkModel
+                        (LegacyBookmarkModel*)accountBookmarkModel
                             bookmarkNode:
                                 (const bookmarks::BookmarkNode*)bookmarkNode
                                    prefs:(PrefService*)prefs
+                   authenticationService:
+                       (AuthenticationService*)authenticationService
                              syncService:(syncer::SyncService*)syncService
                             browserState:(ChromeBrowserState*)browserState
     NS_DESIGNATED_INITIALIZER;

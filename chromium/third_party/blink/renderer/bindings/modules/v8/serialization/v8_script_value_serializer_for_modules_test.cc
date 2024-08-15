@@ -329,11 +329,13 @@ class WebCryptoResultAdapter : public ScriptFunction::Callable {
                                            base::RepeatingCallback<void(U)>);
 };
 
-template <typename T>
+template <typename IDLType, typename T>
 WebCryptoResult ToWebCryptoResult(ScriptState* script_state,
                                   base::RepeatingCallback<void(T)> function) {
-  auto* result = MakeGarbageCollected<CryptoResultImpl>(script_state);
-  result->Promise().Then(
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolverTyped<IDLType>>(script_state);
+  auto* result = MakeGarbageCollected<CryptoResultImpl>(script_state, resolver);
+  resolver->Promise().Then(
       (MakeGarbageCollected<ScriptFunction>(
            script_state, MakeGarbageCollected<WebCryptoResultAdapter<T>>(
                              std::move(function))))
@@ -348,13 +350,13 @@ WebCryptoResult ToWebCryptoResult(ScriptState* script_state,
   return result->Result();
 }
 
-template <typename T, typename PMF, typename... Args>
+template <typename T, typename IDLType, typename PMF, typename... Args>
 T SubtleCryptoSync(ScriptState* script_state, PMF func, Args&&... args) {
   T result;
   base::RunLoop run_loop;
   (Platform::Current()->Crypto()->*func)(
       std::forward<Args>(args)...,
-      ToWebCryptoResult(
+      ToWebCryptoResult<IDLType>(
           script_state,
           WTF::BindRepeating(
               [](T* out, base::OnceClosure quit_closure, T result) {
@@ -371,16 +373,16 @@ CryptoKey* SyncGenerateKey(ScriptState* script_state,
                            const WebCryptoAlgorithm& algorithm,
                            bool extractable,
                            WebCryptoKeyUsageMask usages) {
-  return SubtleCryptoSync<CryptoKey*>(script_state, &WebCrypto::GenerateKey,
-                                      algorithm, extractable, usages);
+  return SubtleCryptoSync<CryptoKey*, IDLAny>(
+      script_state, &WebCrypto::GenerateKey, algorithm, extractable, usages);
 }
 
 CryptoKeyPair SyncGenerateKeyPair(ScriptState* script_state,
                                   const WebCryptoAlgorithm& algorithm,
                                   bool extractable,
                                   WebCryptoKeyUsageMask usages) {
-  return SubtleCryptoSync<CryptoKeyPair>(script_state, &WebCrypto::GenerateKey,
-                                         algorithm, extractable, usages);
+  return SubtleCryptoSync<CryptoKeyPair, IDLAny>(
+      script_state, &WebCrypto::GenerateKey, algorithm, extractable, usages);
 }
 
 CryptoKey* SyncImportKey(ScriptState* script_state,
@@ -389,15 +391,15 @@ CryptoKey* SyncImportKey(ScriptState* script_state,
                          const WebCryptoAlgorithm& algorithm,
                          bool extractable,
                          WebCryptoKeyUsageMask usages) {
-  return SubtleCryptoSync<CryptoKey*>(script_state, &WebCrypto::ImportKey,
-                                      format, data, algorithm, extractable,
-                                      usages);
+  return SubtleCryptoSync<CryptoKey*, CryptoKey>(
+      script_state, &WebCrypto::ImportKey, format, data, algorithm, extractable,
+      usages);
 }
 
 WebVector<uint8_t> SyncExportKey(ScriptState* script_state,
                                  WebCryptoKeyFormat format,
                                  const WebCryptoKey& key) {
-  return SubtleCryptoSync<WebVector<uint8_t>>(
+  return SubtleCryptoSync<WebVector<uint8_t>, IDLAny>(
       script_state, &WebCrypto::ExportKey, format, key);
 }
 
@@ -405,24 +407,24 @@ WebVector<uint8_t> SyncEncrypt(ScriptState* script_state,
                                const WebCryptoAlgorithm& algorithm,
                                const WebCryptoKey& key,
                                WebVector<unsigned char> data) {
-  return SubtleCryptoSync<WebVector<uint8_t>>(script_state, &WebCrypto::Encrypt,
-                                              algorithm, key, data);
+  return SubtleCryptoSync<WebVector<uint8_t>, IDLAny>(
+      script_state, &WebCrypto::Encrypt, algorithm, key, data);
 }
 
 WebVector<uint8_t> SyncDecrypt(ScriptState* script_state,
                                const WebCryptoAlgorithm& algorithm,
                                const WebCryptoKey& key,
                                WebVector<unsigned char> data) {
-  return SubtleCryptoSync<WebVector<uint8_t>>(script_state, &WebCrypto::Decrypt,
-                                              algorithm, key, data);
+  return SubtleCryptoSync<WebVector<uint8_t>, IDLAny>(
+      script_state, &WebCrypto::Decrypt, algorithm, key, data);
 }
 
 WebVector<uint8_t> SyncSign(ScriptState* script_state,
                             const WebCryptoAlgorithm& algorithm,
                             const WebCryptoKey& key,
                             WebVector<unsigned char> message) {
-  return SubtleCryptoSync<WebVector<uint8_t>>(script_state, &WebCrypto::Sign,
-                                              algorithm, key, message);
+  return SubtleCryptoSync<WebVector<uint8_t>, IDLAny>(
+      script_state, &WebCrypto::Sign, algorithm, key, message);
 }
 
 bool SyncVerifySignature(ScriptState* script_state,
@@ -430,15 +432,16 @@ bool SyncVerifySignature(ScriptState* script_state,
                          const WebCryptoKey& key,
                          WebVector<unsigned char> signature,
                          WebVector<unsigned char> message) {
-  return SubtleCryptoSync<bool>(script_state, &WebCrypto::VerifySignature,
-                                algorithm, key, signature, message);
+  return SubtleCryptoSync<bool, IDLAny>(script_state,
+                                        &WebCrypto::VerifySignature, algorithm,
+                                        key, signature, message);
 }
 
 WebVector<uint8_t> SyncDeriveBits(ScriptState* script_state,
                                   const WebCryptoAlgorithm& algorithm,
                                   const WebCryptoKey& key,
                                   unsigned length) {
-  return SubtleCryptoSync<WebVector<uint8_t>>(
+  return SubtleCryptoSync<WebVector<uint8_t>, DOMArrayBuffer>(
       script_state, &WebCrypto::DeriveBits, algorithm, key, length);
 }
 
@@ -1419,7 +1422,7 @@ TEST(V8ScriptValueSerializerForModulesTest, TransferAudioData) {
   EXPECT_FALSE(audio_buffer->HasOneRef());
 
   // The transfer should have closed the source data.
-  EXPECT_EQ(audio_data->format(), absl::nullopt);
+  EXPECT_EQ(audio_data->format(), std::nullopt);
 
   // Closing |new_data| should remove all references to |audio_buffer|.
   new_data->close();
@@ -1502,7 +1505,7 @@ TEST(V8ScriptValueSerializerForModulesTest, TransferMediaStreamTrack) {
   EXPECT_EQ(data.content_hint,
             WebMediaStreamTrack::ContentHintType::kVideoMotion);
   EXPECT_EQ(data.ready_state, MediaStreamSource::ReadyState::kReadyStateLive);
-  EXPECT_EQ(data.sub_capture_target_version, absl::optional<uint32_t>(0));
+  EXPECT_EQ(data.sub_capture_target_version, std::optional<uint32_t>(0));
 }
 
 TEST(V8ScriptValueSerializerForModulesTest,

@@ -5,13 +5,14 @@
 #include "components/webapps/browser/banners/app_banner_manager.h"
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
@@ -24,8 +25,11 @@
 #include "components/site_engagement/content/site_engagement_service.h"
 #include "components/webapps/browser/banners/app_banner_metrics.h"
 #include "components/webapps/browser/banners/app_banner_settings_helper.h"
+#include "components/webapps/browser/banners/installable_web_app_check_result.h"
+#include "components/webapps/browser/banners/web_app_banner_data.h"
 #include "components/webapps/browser/features.h"
 #include "components/webapps/browser/installable/installable_data.h"
+#include "components/webapps/browser/installable/installable_logging.h"
 #include "components/webapps/browser/installable/installable_manager.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "components/webapps/browser/webapps_client.h"
@@ -38,7 +42,6 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/manifest/manifest_util.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/mojom/installation/installation.mojom.h"
@@ -60,7 +63,7 @@ bool IsManifestUrlChange(const InstallableData& result) {
   if (result.errors.empty()) {
     return false;
   }
-  if (result.errors[0] != MANIFEST_URL_CHANGED) {
+  if (result.errors[0] != InstallableStatusCode::MANIFEST_URL_CHANGED) {
     return false;
   }
   return true;
@@ -126,8 +129,9 @@ class TrackingStatusReporter : public AppBannerManager::StatusReporter {
   void ReportStatus(InstallableStatusCode code) override {
     // We only increment the histogram once per page load (and only if the
     // banner pipeline is triggered).
-    if (!done_ && code != NO_ERROR_DETECTED)
+    if (!done_ && code != InstallableStatusCode::NO_ERROR_DETECTED) {
       TrackInstallableStatusCode(code);
+    }
 
     done_ = true;
   }
@@ -147,9 +151,10 @@ class NullStatusReporter : public AppBannerManager::StatusReporter {
     // In general, NullStatusReporter::ReportStatus should not be called.
     // However, it may be called in cases where Stop is called without a
     // preceding call to RequestAppBanner e.g. because the WebContents is being
-    // destroyed or web app uninstalled. In that case, code should always be
-    // NO_ERROR_DETECTED or PIPELINE_RESTARTED.
-    DCHECK(code == NO_ERROR_DETECTED || code == PIPELINE_RESTARTED);
+    // destroyed, a web app uninstalled, or the manifest url changing.
+    DCHECK(code == InstallableStatusCode::NO_ERROR_DETECTED ||
+           code == InstallableStatusCode::PIPELINE_RESTARTED ||
+           code == InstallableStatusCode::MANIFEST_URL_CHANGED);
   }
 
   WebappInstallSource GetInstallSource(content::WebContents* web_contents,
@@ -272,11 +277,6 @@ bool AppBannerManager::IsPromptAvailableForTesting() const {
   return receiver_.is_bound();
 }
 
-AppBannerManager::InstallableWebAppCheckResult
-AppBannerManager::GetInstallableWebAppCheckResultForTesting() {
-  return installable_web_app_check_result_;
-}
-
 AppBannerManager::AppBannerManager(content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
       SiteEngagementObserver(site_engagement::SiteEngagementService::Get(
@@ -335,7 +335,7 @@ bool AppBannerManager::CheckIfShouldShowBanner() {
     return true;
   }
   if (GetAppIdentifier().empty()) {
-    Stop(PACKAGE_NAME_OR_START_URL_EMPTY);
+    Stop(InstallableStatusCode::PACKAGE_NAME_OR_START_URL_EMPTY);
     return false;
   }
   return true;
@@ -391,43 +391,42 @@ bool AppBannerManager::ShouldBypassEngagementChecks() const {
       switches::kBypassAppBannerEngagementChecks);
 }
 
-bool AppBannerManager::ShouldAllowWebAppReplacementInstall() {
-  return false;
-}
-
 void AppBannerManager::OnDidGetManifest(const InstallableData& data) {
   // The pipeline will be restarted from DidUpdateWebManifestURL.
   if (IsManifestUrlChange(data)) {
     return;
   }
   UpdateState(State::ACTIVE);
+
   if (!data.errors.empty()) {
     Stop(data.GetFirstError());
     return;
   }
-
+  // An empty manifest means there was a network error or a parsing error, and
+  // that case is caught in the InstallableDataFetcher and an error is produced
+  // & caught above.
+  CHECK(!blink::IsEmptyManifest(*data.manifest));
   manifest_url_ = *(data.manifest_url);
   manifest_ = data.manifest->Clone();
   web_page_metadata_ = data.web_page_metadata->Clone();
-
   manifest_id_ = manifest_->id;
-  if (!manifest_id_.is_valid()) {
-    manifest_id_ = validated_url_.GetWithoutRef();
-  }
+  CHECK(manifest_id_.is_valid());
 
   // Skip checks for PasswordManager WebUI page.
   if (content::HasWebUIScheme(validated_url_) &&
       (validated_url_.host() ==
        password_manager::kChromeUIPasswordManagerHost)) {
-    if (IsWebAppConsideredInstalled()) {
+    if (WebappsClient::Get()->DoesNewWebAppConflictWithExistingInstallation(
+            web_contents()->GetBrowserContext(), manifest_->start_url,
+            manifest_id_)) {
       TrackDisplayEvent(DISPLAY_EVENT_INSTALLED_PREVIOUSLY);
       SetInstallableWebAppCheckResult(
           InstallableWebAppCheckResult::kNo_AlreadyInstalled);
-      Stop(ALREADY_INSTALLED);
+      Stop(InstallableStatusCode::ALREADY_INSTALLED);
     } else {
       SetInstallableWebAppCheckResult(
           InstallableWebAppCheckResult::kYes_Promotable);
-      Stop(NO_ERROR_DETECTED);
+      Stop(InstallableStatusCode::NO_ERROR_DETECTED);
     }
     return;
   }
@@ -483,18 +482,21 @@ void AppBannerManager::OnDidPerformInstallableWebAppCheck(
     return;
   }
 
-  if (IsWebAppConsideredInstalled() && !ShouldAllowWebAppReplacementInstall()) {
+  WebappsClient* client = WebappsClient::Get();
+  if (client->DoesNewWebAppConflictWithExistingInstallation(
+          web_contents()->GetBrowserContext(), manifest().start_url,
+          manifest_id_)) {
     TrackDisplayEvent(DISPLAY_EVENT_INSTALLED_PREVIOUSLY);
     SetInstallableWebAppCheckResult(
         InstallableWebAppCheckResult::kNo_AlreadyInstalled);
-    Stop(ALREADY_INSTALLED);
+    Stop(InstallableStatusCode::ALREADY_INSTALLED);
     return;
   }
 
   if (ShouldDeferToRelatedNonWebApp()) {
     SetInstallableWebAppCheckResult(
         InstallableWebAppCheckResult::kYes_ByUserRequest);
-    Stop(PREFER_RELATED_APPLICATIONS);
+    Stop(InstallableStatusCode::PREFER_RELATED_APPLICATIONS);
     return;
   }
 
@@ -553,13 +555,12 @@ void AppBannerManager::ResetCurrentPageData() {
   manifest_id_ = GURL();
   manifest_url_ = GURL();
   validated_url_ = GURL();
+  screenshots_.clear();
   UpdateState(State::INACTIVE);
   SetInstallableWebAppCheckResult(InstallableWebAppCheckResult::kUnknown);
-  install_path_tracker_.Reset();
-  screenshots_.clear();
 }
 
-void AppBannerManager::Terminate() {
+void AppBannerManager::Terminate(InstallableStatusCode code) {
   switch (state_) {
     case State::PENDING_PROMPT_CANCELED:
       TrackBeforeInstallEvent(
@@ -577,23 +578,24 @@ void AppBannerManager::Terminate() {
       break;
   }
 
-  Stop(TerminationCode());
+  Stop(code);
 }
 
-InstallableStatusCode AppBannerManager::TerminationCode() const {
+InstallableStatusCode AppBannerManager::TerminationCodeFromState() const {
   switch (state_) {
     case State::PENDING_PROMPT_CANCELED:
     case State::PENDING_PROMPT_NOT_CANCELED:
-      return RENDERER_CANCELLED;
+      return InstallableStatusCode::RENDERER_CANCELLED;
     case State::PENDING_ENGAGEMENT:
-      return has_sufficient_engagement_ ? NO_ERROR_DETECTED
-                                        : INSUFFICIENT_ENGAGEMENT;
+      return has_sufficient_engagement_
+                 ? InstallableStatusCode::NO_ERROR_DETECTED
+                 : InstallableStatusCode::INSUFFICIENT_ENGAGEMENT;
     case State::FETCHING_MANIFEST:
-      return WAITING_FOR_MANIFEST;
+      return InstallableStatusCode::WAITING_FOR_MANIFEST;
     case State::FETCHING_NATIVE_DATA:
-      return WAITING_FOR_NATIVE_DATA;
+      return InstallableStatusCode::WAITING_FOR_NATIVE_DATA;
     case State::PENDING_INSTALLABLE_CHECK:
-      return WAITING_FOR_INSTALLABLE_CHECK;
+      return InstallableStatusCode::WAITING_FOR_INSTALLABLE_CHECK;
     case State::ACTIVE:
     case State::SENDING_EVENT:
     case State::SENDING_EVENT_GOT_EARLY_PROMPT:
@@ -601,21 +603,25 @@ InstallableStatusCode AppBannerManager::TerminationCode() const {
     case State::COMPLETE:
       break;
   }
-  return NO_ERROR_DETECTED;
+  return InstallableStatusCode::NO_ERROR_DETECTED;
 }
 
 void AppBannerManager::SetInstallableWebAppCheckResult(
     InstallableWebAppCheckResult result) {
-  if (installable_web_app_check_result_ == result)
+  if (installable_web_app_check_result_ == result) {
     return;
+  }
 
   installable_web_app_check_result_ = result;
+  std::optional<WebAppBannerData> web_app_data = GetCurrentWebAppBannerData();
 
   switch (result) {
     case InstallableWebAppCheckResult::kUnknown:
+      CHECK(!web_app_data.has_value());
       break;
     case InstallableWebAppCheckResult::kYes_Promotable:
-      last_promotable_web_app_scope_ = manifest().scope;
+      CHECK(web_app_data.has_value());
+      last_promotable_web_app_scope_ = web_app_data->manifest().scope;
       DCHECK(!last_promotable_web_app_scope_.is_empty());
       last_already_installed_web_app_scope_ = GURL();
       install_animation_pending_ =
@@ -623,7 +629,8 @@ void AppBannerManager::SetInstallableWebAppCheckResult(
               web_contents(), last_promotable_web_app_scope_);
       break;
     case InstallableWebAppCheckResult::kNo_AlreadyInstalled:
-      last_already_installed_web_app_scope_ = manifest().scope;
+      CHECK(web_app_data.has_value());
+      last_already_installed_web_app_scope_ = web_app_data->manifest().scope;
       DCHECK(!last_already_installed_web_app_scope_.is_empty());
       last_promotable_web_app_scope_ = GURL();
       install_animation_pending_ = false;
@@ -636,8 +643,9 @@ void AppBannerManager::SetInstallableWebAppCheckResult(
       break;
   }
 
-  for (Observer& observer : observer_list_)
-    observer.OnInstallableWebAppStatusUpdated();
+  for (Observer& observer : observer_list_) {
+    observer.OnInstallableWebAppStatusUpdated(result, web_app_data);
+  }
 }
 
 void AppBannerManager::RecheckInstallabilityForLoadedPage() {
@@ -650,15 +658,6 @@ void AppBannerManager::RecheckInstallabilityForLoadedPage() {
 
   UpdateState(State::INACTIVE);
   RequestAppBanner();
-}
-
-void AppBannerManager::TrackInstallPath(bool bottom_sheet,
-                                        WebappInstallSource install_source) {
-  install_path_tracker_.TrackInstallPath(bottom_sheet, install_source);
-}
-
-void AppBannerManager::TrackIphWasShown() {
-  install_path_tracker_.TrackIphWasShown();
 }
 
 void AppBannerManager::Stop(InstallableStatusCode code) {
@@ -708,7 +707,7 @@ void AppBannerManager::DidFinishNavigation(content::NavigationHandle* handle) {
   }
 
   if (state_ != State::COMPLETE && state_ != State::INACTIVE)
-    Terminate();
+    Terminate(TerminationCodeFromState());
   ResetCurrentPageData();
 
   if (handle->IsServedFromBackForwardCache()) {
@@ -739,29 +738,15 @@ void AppBannerManager::DidFinishLoad(
 void AppBannerManager::DidUpdateWebManifestURL(
     content::RenderFrameHost* target_frame,
     const GURL& manifest_url) {
-  GURL url = validated_url_;
-  switch (state_) {
-    case State::INACTIVE:
-      return;
-    case State::FETCHING_MANIFEST:
-    case State::PENDING_INSTALLABLE_CHECK:
-      UpdateState(State::INACTIVE);
-      RequestAppBanner();
-      return;
-    case State::ACTIVE:
-    case State::FETCHING_NATIVE_DATA:
-    case State::PENDING_ENGAGEMENT:
-    case State::SENDING_EVENT:
-    case State::SENDING_EVENT_GOT_EARLY_PROMPT:
-    case State::PENDING_PROMPT_CANCELED:
-    case State::PENDING_PROMPT_NOT_CANCELED:
-      Terminate();
-      [[fallthrough]];
-    case State::COMPLETE:
-      if (!manifest_url.is_empty()) {
-        RecheckInstallabilityForLoadedPage();
-      }
-      return;
+  if (state_ == State::INACTIVE ||
+      (state_ == State::COMPLETE && manifest_url.is_empty())) {
+    return;
+  }
+  Terminate(manifest_url.is_empty()
+                ? InstallableStatusCode::NO_MANIFEST
+                : InstallableStatusCode::MANIFEST_URL_CHANGED);
+  if (!manifest_url.is_empty()) {
+    RecheckInstallabilityForLoadedPage();
   }
 }
 
@@ -774,11 +759,11 @@ void AppBannerManager::MediaStoppedPlaying(
     const MediaPlayerInfo& media_info,
     const content::MediaPlayerId& id,
     WebContentsObserver::MediaStoppedReason reason) {
-  base::Erase(active_media_players_, id);
+  std::erase(active_media_players_, id);
 }
 
 void AppBannerManager::WebContentsDestroyed() {
-  Terminate();
+  Terminate(TerminationCodeFromState());
   manager_ = nullptr;
 }
 
@@ -865,6 +850,26 @@ std::string AppBannerManager::GetInstallableWebAppManifestId(
       return manager->manifest_id_.spec();
   }
 }
+
+InstallableWebAppCheckResult
+AppBannerManager::GetInstallableWebAppCheckResult() {
+  return installable_web_app_check_result_;
+}
+
+std::optional<WebAppBannerData> AppBannerManager::GetCurrentWebAppBannerData()
+    const {
+  if (!manifest_id_.is_valid()) {
+    return std::nullopt;
+  }
+  WebAppBannerData data = WebAppBannerData(manifest_id_, *manifest_,
+                                           *web_page_metadata_, manifest_url_);
+  data.primary_icon_url = primary_icon_url_;
+  data.primary_icon = primary_icon_;
+  data.has_maskable_primary_icon = has_maskable_primary_icon_;
+  data.screenshots = screenshots_;
+  return data;
+}
+
 bool AppBannerManager::IsProbablyPromotableWebApp(
     bool ignore_existing_installations) const {
   bool in_promotable_scope =

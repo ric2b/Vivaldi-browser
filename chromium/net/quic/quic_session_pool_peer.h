@@ -15,6 +15,8 @@
 #include "net/base/host_port_pair.h"
 #include "net/base/network_anonymization_key.h"
 #include "net/base/privacy_mode.h"
+#include "net/base/session_usage.h"
+#include "net/quic/quic_session_key.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_packets.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_server_id.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_time.h"
@@ -48,9 +50,9 @@ class QuicSessionPoolPeer {
   static bool HasActiveSession(
       QuicSessionPool* factory,
       const quic::QuicServerId& server_id,
-      const NetworkAnonymizationKey& network_anonymization_key =
-          NetworkAnonymizationKey(),
-      bool require_dns_https_alpn = false);
+      const NetworkAnonymizationKey& network_anonymization_key,
+      const ProxyChain& proxy_chain = ProxyChain::Direct(),
+      SessionUsage session_usage = SessionUsage::kDestination);
 
   static bool HasActiveJob(QuicSessionPool* factory,
                            const quic::QuicServerId& server_id,
@@ -67,11 +69,6 @@ class QuicSessionPoolPeer {
       const NetworkAnonymizationKey& network_anonymization_key =
           NetworkAnonymizationKey(),
       bool require_dns_https_alpn = false);
-
-  static bool HasLiveSession(QuicSessionPool* factory,
-                             url::SchemeHostPort destination,
-                             const quic::QuicServerId& server_id,
-                             bool require_dns_https_alpn = false);
 
   static bool IsLiveSession(QuicSessionPool* factory,
                             QuicChromiumClientSession* session);
@@ -90,18 +87,7 @@ class QuicSessionPoolPeer {
   static void SetYieldAfterDuration(QuicSessionPool* factory,
                                     quic::QuicTime::Delta yield_after_duration);
 
-  static size_t GetNumberOfActiveJobs(QuicSessionPool* factory,
-                                      const quic::QuicServerId& server_id);
-
   static bool CryptoConfigCacheIsEmpty(
-      QuicSessionPool* factory,
-      const quic::QuicServerId& quic_server_id,
-      const NetworkAnonymizationKey& network_anonymization_key);
-
-  // Creates a dummy QUIC server config and caches it. Caller must be holding
-  // onto a QuicCryptoClientConfigHandle for the corresponding
-  // |network_anonymization_key|.
-  static void CacheDummyServerConfig(
       QuicSessionPool* factory,
       const quic::QuicServerId& quic_server_id,
       const NetworkAnonymizationKey& network_anonymization_key);

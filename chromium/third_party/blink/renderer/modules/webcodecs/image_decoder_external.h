@@ -32,7 +32,6 @@ class ImageDecoderInit;
 class ImageDecodeResult;
 class ImageTrackList;
 class ReadableStreamBytesConsumer;
-class ScriptPromiseResolver;
 
 class MODULES_EXPORT ImageDecoderExternal final
     : public ScriptWrappable,
@@ -49,15 +48,17 @@ class MODULES_EXPORT ImageDecoderExternal final
   ImageDecoderExternal(ScriptState*, const ImageDecoderInit*, ExceptionState&);
   ~ImageDecoderExternal() override;
 
-  static ScriptPromise isTypeSupported(ScriptState*, String type);
+  static ScriptPromiseTyped<IDLBoolean> isTypeSupported(ScriptState*,
+                                                        String type);
 
   // image_decoder.idl implementation.
-  ScriptPromise decode(const ImageDecodeOptions* options = nullptr);
+  ScriptPromiseTyped<ImageDecodeResult> decode(
+      const ImageDecodeOptions* options = nullptr);
   void reset(DOMException* exception = nullptr);
   void close();
   String type() const;
   bool complete() const;
-  ScriptPromise completed(ScriptState* script_state);
+  ScriptPromiseTyped<IDLUndefined> completed(ScriptState* script_state);
   ImageTrackList& tracks() const;
 
   // BytesConsumer::Client implementation.
@@ -98,7 +99,7 @@ class MODULES_EXPORT ImageDecoderExternal final
   String mime_type_;
 
   // Copy of |preferAnimation| from |init_data_|.
-  absl::optional<bool> prefer_animation_;
+  std::optional<bool> prefer_animation_;
 
   // Currently configured AnimationOption for |decoder_|.
   ImageDecoder::AnimationOption animation_option_ =
@@ -140,28 +141,27 @@ class MODULES_EXPORT ImageDecoderExternal final
 
   // Pending decode() requests.
   struct DecodeRequest final : public GarbageCollected<DecodeRequest> {
-    DecodeRequest(ScriptPromiseResolver* resolver,
+    DecodeRequest(ScriptPromiseResolverTyped<ImageDecodeResult>* resolver,
                   uint32_t frame_index,
                   bool complete_frames_only);
     ~DecodeRequest();
     void Trace(Visitor*) const;
     bool IsFinal() const;
 
-    Member<ScriptPromiseResolver> resolver;
+    Member<ScriptPromiseResolverTyped<ImageDecodeResult>> resolver;
     uint32_t frame_index;
     bool complete_frames_only;
     bool pending = false;
-    absl::optional<size_t> bytes_read_index;
+    std::optional<size_t> bytes_read_index;
     Member<ImageDecodeResult> result;
     std::unique_ptr<base::AtomicFlag> abort_flag;
 
-    absl::optional<String> range_error_message;
+    std::optional<String> range_error_message;
     Member<DOMException> exception;
   };
   HeapVector<Member<DecodeRequest>> pending_decodes_;
 
-  using CompletedProperty =
-      ScriptPromiseProperty<ToV8UndefinedGenerator, Member<DOMException>>;
+  using CompletedProperty = ScriptPromiseProperty<IDLUndefined, DOMException>;
   Member<CompletedProperty> completed_property_;
 
   // WeakPtrFactory used only for decode() requests. Invalidated upon decoding

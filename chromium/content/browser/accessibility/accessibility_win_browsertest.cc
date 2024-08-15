@@ -44,6 +44,7 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "content/public/test/context_menu_interceptor.h"
 #include "content/public/test/scoped_accessibility_mode_override.h"
 #include "content/shell/browser/shell.h"
 #include "content/test/content_browser_test_utils_internal.h"
@@ -2332,8 +2333,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   EXPECT_TRUE(found);
 
   // Remove all accessibility modes.
-  content::BrowserAccessibilityStateImpl::GetInstance()
-      ->RemoveAccessibilityModeFlags(ui::kAXModeComplete);
+  content::BrowserAccessibilityState::GetInstance()->ResetAccessibilityMode();
 
   // Ensure accessibility is not enabled before we begin the test.
   EXPECT_TRUE(content::BrowserAccessibilityStateImpl::GetInstance()

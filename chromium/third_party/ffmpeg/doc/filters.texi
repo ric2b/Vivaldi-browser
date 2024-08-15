@@ -307,10 +307,6 @@ For example, in case of the @ref{drawtext,,drawtext filter}, you might prefer to
 use the @option{textfile} option in place of @option{text} to specify the text
 to render.
 
-When using the @command{ffmpeg} tool, you might consider to use the
-@ref{filter_script option,,-filter_script option,ffmpeg} or
-@ref{filter_complex_script option,,-filter_complex_script option,ffmpeg}.
-
 @chapter Timeline editing
 
 Some filters support a generic @option{enable} option. For the filters
@@ -417,6 +413,63 @@ The configure output will show the audio filters included in your
 build.
 
 Below is a description of the currently available audio filters.
+
+@section aap
+Apply Affine Projection algorithm to the first audio stream using the second audio stream.
+
+This adaptive filter is used to estimate unknown audio based on multiple input audio samples.
+Affine projection algorithm can make trade-offs between computation complexity with convergence speed.
+
+A description of the accepted options follows.
+
+@table @option
+@item order
+Set the filter order.
+
+@item projection
+Set the projection order.
+
+@item mu
+Set the filter mu.
+
+@item delta
+Set the coefficient to initialize internal covariance matrix.
+
+@item out_mode
+Set the filter output samples. It accepts the following values:
+@table @option
+@item i
+Pass the 1st input.
+
+@item d
+Pass the 2nd input.
+
+@item o
+Pass difference between desired, 2nd input and error signal estimate.
+
+@item n
+Pass difference between input, 1st input and error signal estimate.
+
+@item e
+Pass error signal estimated samples.
+
+Default value is @var{o}.
+@end table
+
+@item precision
+Set which precision to use when processing samples.
+
+@table @option
+@item auto
+Auto pick internal sample format depending on other filters.
+
+@item float
+Always use single-floating point precision sample format.
+
+@item double
+Always use double-floating point precision sample format.
+@end table
+@end table
 
 @section acompressor
 
@@ -2687,6 +2740,20 @@ Pass error signal estimated samples.
 
 Default value is @var{o}.
 @end table
+
+@item precision
+Set which precision to use when processing samples.
+
+@table @option
+@item auto
+Auto pick internal sample format depending on other filters.
+
+@item float
+Always use single-floating point precision sample format.
+
+@item double
+Always use double-floating point precision sample format.
+@end table
 @end table
 
 @subsection Examples
@@ -3026,6 +3093,20 @@ Pass difference between input, 1st input and error signal estimate.
 Pass error signal estimated samples.
 
 Default value is @var{o}.
+@end table
+
+@item precision
+Set which precision to use when processing samples.
+
+@table @option
+@item auto
+Auto pick internal sample format depending on other filters.
+
+@item float
+Always use single-floating point precision sample format.
+
+@item double
+Always use double-floating point precision sample format.
 @end table
 @end table
 
@@ -12899,7 +12980,7 @@ drawtext="fontfile=FreeSerif.ttf:fontcolor=white:x=100:y=x/dar:enable=lt(mod(t\,
 @item
 Use fontconfig to set the font. Note that the colons need to be escaped.
 @example
-drawtext='fontfile=Linux Libertine O-40\:style=Semibold:text=FFmpeg'
+drawtext='fontfile=Linux Libertine O-40\\:style=Semibold:text=FFmpeg'
 @end example
 
 @item
@@ -14041,15 +14122,6 @@ For example:
 ffmpeg -i in.vob -vf "fieldorder=bff" out.dv
 @end example
 
-@section fifo, afifo
-
-Buffer input images and send them when they are requested.
-
-It is mainly useful when auto-inserted by the libavfilter
-framework.
-
-It does not take parameters.
-
 @section fillborders
 
 Fill borders of the input video, without changing video stream dimensions.
@@ -14237,6 +14309,14 @@ It accepts the following parameters:
 @item pix_fmts
 A '|'-separated list of pixel format names, such as
 "pix_fmts=yuv420p|monow|rgb24".
+
+@item color_spaces
+A '|'-separated list of color space names, such as
+"color_spaces=bt709|bt470bg|bt2020nc".
+
+@item color_ranges
+A '|'-separated list of color range names, such as
+"color_spaces=tv|pc".
 
 @end table
 
@@ -14595,6 +14675,47 @@ option may cause flicker since the B-Frames have often larger QP. Default is
 @code{0} (not enabled).
 
 @end table
+
+@anchor{fsync}
+@section fsync
+
+Synchronize video frames with an external mapping from a file.
+
+For each input PTS given in the map file it either drops or creates as many
+frames as necessary to recreate the sequence of output frames given in the
+map file.
+
+This filter is useful to recreate the output frames of a framerate conversion
+by the @ref{fps} filter, recorded into a map file using the ffmpeg option
+@code{-stats_mux_pre}, and do further processing to the corresponding frames
+e.g. quality comparison.
+
+Each line of the map file must contain three items per input frame, the input
+PTS (decimal), the output PTS (decimal) and the
+output TIMEBASE (decimal/decimal), seperated by a space.
+This file format corresponds to the output
+of @code{-stats_mux_pre_fmt="@{ptsi@} @{pts@} @{tb@}"}.
+
+The filter assumes the map file is sorted by increasing input PTS.
+
+The filter accepts the following options:
+@table @option
+
+@item file, f
+The filename of the map file to be used.
+@end table
+
+Example:
+@example
+# Convert a video to 25 fps and record a MAP_FILE file with the default format of this filter
+ffmpeg -i INPUT -vf fps=fps=25 -stats_mux_pre MAP_FILE -stats_mux_pre_fmt "@{ptsi@} @{pts@} @{tb@}" OUTPUT
+
+# Sort MAP_FILE by increasing input PTS
+sort -n MAP_FILE
+
+# Use INPUT, OUTPUT and the MAP_FILE from above to compare the corresponding frames in INPUT and OUTPUT via SSIM
+ffmpeg -i INPUT -i OUTPUT -filter_complex '[0:v]fsync=file=MAP_FILE[ref];[1:v][ref]ssim' -f null -
+@end example
 
 @section gblur
 
@@ -15834,6 +15955,15 @@ further computations. This allows inserting the idet filter as a low computation
 method to clean up the interlaced flag
 @end table
 
+@subsection Examples
+
+Inspect the field order of the first 360 frames in a video, in verbose detail:
+@example
+ffmpeg -i INPUT -filter:v idet,metadata=mode=print -frames:v 360 -an -f null -
+@end example
+The idet filter will add analysis metadata to each frame, which will then be
+discarded. At the end, the filter will also print a final report with statistics.
+
 @section il
 
 Deinterleave or interleave fields.
@@ -16864,6 +16994,10 @@ Set the file path to be used to store log files.
 @item log_fmt
 Set the format of the log file (xml, json, csv, or sub).
 
+@item pool
+Set the pool method to be used for computing vmaf.
+Options are @code{min}, @code{harmonic_mean} or @code{mean} (default).
+
 @item n_threads
 Set number of threads to be used when initializing libvmaf.
 Default value: @code{0}, no threads.
@@ -17798,7 +17932,7 @@ Macroblock size. Default @code{16}.
 Motion estimation search parameter. Default @code{32}.
 
 @item vsbmc
-Enable variable-size block motion compensation. Motion estimation is applied with smaller block sizes at object boundaries in order to make the them less blur. Default is @code{0} (disabled).
+Enable variable-size block motion compensation. Motion estimation is applied with smaller block sizes at object boundaries in order to make them less blurry. Default is @code{0} (disabled).
 @end table
 @end table
 
@@ -19999,6 +20133,330 @@ qp=2+2*sin(PI*qp)
 @end example
 @end itemize
 
+@section qrencode
+Generate a QR code using the libqrencode library (see
+@url{https://fukuchi.org/works/qrencode/}), and overlay it on top of the current
+frame.
+
+To enable the compilation of this filter, you need to configure FFmpeg with
+@code{--enable-libqrencode}.
+
+The QR code is generated from the provided text or text pattern. The
+corresponding QR code is scaled and overlayed into the video output according to
+the specified options.
+
+In case no text is specified, no QR code is overlaied.
+
+This filter accepts the following options:
+
+@table @option
+
+@item qrcode_width, q
+@item padded_qrcode_width, Q
+Specify an expression for the width of the rendered QR code, with and without
+padding. The @var{qrcode_width} expression can reference the value set by the
+@var{padded_qrcode_width} expression, and vice versa.
+By default @var{padded_qrcode_width} is set to @var{qrcode_width}, meaning that
+there is no padding.
+
+These expressions are evaluated for each new frame.
+
+See the @ref{qrencode_expressions,,qrencode Expressions} section for details.
+
+@item x
+@item y
+Specify an expression for positioning the padded QR code top-left corner.  The
+@var{x} expression can reference the value set by the @var{y} expression, and
+vice.
+
+By default @var{x} and @var{y} are set set to @var{0}, meaning that the QR code
+is placed in the top left corner of the input.
+
+These expressions are evaluated for each new frame.
+
+See the @ref{qrencode_expressions,,qrencode Expressions} section for details.
+
+@item case_sensitive, cs
+Instruct libqrencode to use case sensitive encoding. This is enabled by
+default. This can be disabled to reduce the QR encoding size.
+
+@item level, l
+Specify the QR encoding error correction level. With an higher correction level,
+the encoding size will increase but the code will be more robust to corruption.
+Lower level is @var{L}.
+
+It accepts the following values:
+@table @samp
+@item L
+@item M
+@item Q
+@item H
+@end table
+
+@item expansion
+Select how the input text is expanded. Can be either @code{none}, or
+@code{normal} (default). See the @ref{qrencode_text_expansion,,qrencode Text expansion}
+section below for details.
+
+@item text
+@item textfile
+Define the text to be rendered. In case neither is specified, no QR is encoded
+(just an empty colored frame).
+
+In case expansion is enabled, the text is treated as a text template, using the
+qrencode expansion mechanism. See the @ref{qrencode_text_expansion,,qrencode
+Text expansion} section below for details.
+
+@item background_color, bc
+@item foreground_color, fc
+Set the QR code and background color. The default value of
+@var{foreground_color} is "black", the default value of @var{background_color}
+is "white".
+
+For the syntax of the color options, check the @ref{color syntax,,"Color"
+section in the ffmpeg-utils manual,ffmpeg-utils}.
+@end table
+
+@anchor{qrencode_expressions}
+@subsection qrencode Expressions
+
+The expressions set by the options contain the following constants and functions.
+
+@table @option
+@item dar
+input display aspect ratio, it is the same as (@var{w} / @var{h}) * @var{sar}
+
+@item duration
+the current frame's duration, in seconds
+
+@item hsub
+@item vsub
+horizontal and vertical chroma subsample values. For example for the
+pixel format "yuv422p" @var{hsub} is 2 and @var{vsub} is 1.
+
+@item main_h, H
+the input height
+
+@item main_w, W
+the input width
+
+@item n
+the number of input frame, starting from 0
+
+@item pict_type
+a number representing the picture type
+
+@item qr_w, w
+the width of the encoded QR code
+
+@item rendered_qr_w, q
+@item rendered_padded_qr_w, Q
+the width of the rendered QR code, without and without padding.
+
+These parameters allow the @var{q} and @var{Q} expressions to refer to each
+other, so you can for example specify @code{q=3/4*Q}.
+
+@item rand(min, max)
+return a random number included between @var{min} and @var{max}
+
+@item sar
+the input sample aspect ratio
+
+@item t
+timestamp expressed in seconds, NAN if the input timestamp is unknown
+
+@item x
+@item y
+the x and y offset coordinates where the text is drawn.
+
+These parameters allow the @var{x} and @var{y} expressions to refer to each
+other, so you can for example specify @code{y=x/dar}.
+@end table
+
+@anchor{qrencode_text_expansion}
+@subsection qrencode Text expansion
+
+If @option{expansion} is set to @code{none}, the text is printed verbatim.
+
+If @option{expansion} is set to @code{normal} (which is the default),
+the following expansion mechanism is used.
+
+The backslash character @samp{\}, followed by any character, always expands to
+the second character.
+
+Sequences of the form @code{%@{...@}} are expanded. The text between the
+braces is a function name, possibly followed by arguments separated by ':'.
+If the arguments contain special characters or delimiters (':' or '@}'),
+they should be escaped.
+
+Note that they probably must also be escaped as the value for the @option{text}
+option in the filter argument string and as the filter argument in the
+filtergraph description, and possibly also for the shell, that makes up to four
+levels of escaping; using a text file with the @option{textfile} option avoids
+these problems.
+
+The following functions are available:
+
+@table @command
+@item n, frame_num
+return the frame number
+
+@item pts
+Return the presentation timestamp of the current frame.
+
+It can take up to two arguments.
+
+The first argument is the format of the timestamp; it defaults to @code{flt} for
+seconds as a decimal number with microsecond accuracy; @code{hms} stands for a
+formatted @var{[-]HH:MM:SS.mmm} timestamp with millisecond accuracy.
+@code{gmtime} stands for the timestamp of the frame formatted as UTC time;
+@code{localtime} stands for the timestamp of the frame formatted as local time
+zone time. If the format is set to @code{hms24hh}, the time is formatted in 24h
+format (00-23).
+
+The second argument is an offset added to the timestamp.
+
+If the format is set to @code{localtime} or @code{gmtime}, a third argument may
+be supplied: a @code{strftime} C function format string. By default,
+@var{YYYY-MM-DD HH:MM:SS} format will be used.
+
+@item expr, e
+Evaluate the expression's value and output as a double.
+
+It must take one argument specifying the expression to be evaluated, accepting
+the constants and functions defined in @ref{qrencode_expressions}.
+
+@item expr_formatted, ef
+Evaluate the expression's value and output as a formatted string.
+
+The first argument is the expression to be evaluated, just as for the @var{expr} function.
+The second argument specifies the output format. Allowed values are @samp{x},
+@samp{X}, @samp{d} and @samp{u}. They are treated exactly as in the
+@code{printf} function.
+The third parameter is optional and sets the number of positions taken by the output.
+It can be used to add padding with zeros from the left.
+
+@item gmtime
+The time at which the filter is running, expressed in UTC.
+It can accept an argument: a @code{strftime} C function format string.
+The format string is extended to support the variable @var{%[1-6]N}
+which prints fractions of the second with optionally specified number of digits.
+
+@item localtime
+The time at which the filter is running, expressed in the local time zone.
+It can accept an argument: a @code{strftime} C function format string.
+The format string is extended to support the variable @var{%[1-6]N}
+which prints fractions of the second with optionally specified number of digits.
+
+@item metadata
+Frame metadata. Takes one or two arguments.
+
+The first argument is mandatory and specifies the metadata key.
+
+The second argument is optional and specifies a default value, used when the
+metadata key is not found or empty.
+
+Available metadata can be identified by inspecting entries starting with TAG
+included within each frame section printed by running @code{ffprobe
+-show_frames}.
+
+String metadata generated in filters leading to the qrencode filter are also
+available.
+
+@item rand(min, max)
+return a random number included between @var{min} and @var{max}
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Generate a QR code encoding the specified text with the default size, overalaid
+in the top left corner of the input video, with the default size:
+@example
+qrencode=text=www.ffmpeg.org
+@end example
+
+@item
+Same as below, but select blue on pink colors:
+@example
+qrencode=text=www.ffmpeg.org:bc=pink@@0.5:fc=blue
+@end example
+
+@item
+Place the QR code in the bottom right corner of the input video:
+@example
+qrencode=text=www.ffmpeg.org:x=W-Q:y=H-Q
+@end example
+
+@item
+Generate a QR code with width of 200 pixels and padding, making the padded width
+4/3 of the QR code width:
+@example
+qrencode=text=www.ffmpeg.org:q=200:Q=4/3*q
+@end example
+
+@item
+Generate a QR code with padded width of 200 pixels and padding, making the QR
+code width 3/4 of the padded width:
+@example
+qrencode=text=www.ffmpeg.org:Q=200:q=3/4*Q
+@end example
+
+@item
+Make the QR code a fraction of the input video width:
+@example
+qrencode=text=www.ffmpeg.org:q=W/5
+@end example
+
+@item
+Generate a QR code encoding the frame number:
+@example
+qrencode=text=%@{n@}
+@end example
+
+@item
+Generate a QR code encoding the GMT timestamp:
+@example
+qrencode=text=%@{gmtime@}
+@end example
+
+@item
+Generate a QR code encoding the timestamp expressed as a float:
+@example
+qrencode=text=%@{pts@}
+@end example
+
+@end itemize
+
+@section quirc
+
+Identify and decode a QR code using the libquirc library (see
+@url{https://github.com/dlbeer/quirc/}), and print the identified QR codes
+positions and payload as metadata.
+
+To enable the compilation of this filter, you need to configure FFmpeg with
+@code{--enable-libquirc}.
+
+For each found QR code in the input video, some metadata entries are added with
+the prefix @var{lavfi.quirc.N}, where @var{N} is the index, starting from 0,
+associated to the QR code.
+
+A description of each metadata value follows:
+
+@table @option
+@item lavfi.quirc.count
+the number of found QR codes, it is not set in case none was found
+
+@item lavfi.quirc.N.corner.M.x
+@item lavfi.quirc.N.coreer.M.y
+the x/y positions of the four corners of the square containing the QR code,
+where @var{M} is the index of the corner starting from 0
+
+@item lavfi.quirc.N.payload
+the payload of the QR code
+@end table
+
 @section random
 
 Flush video frames from internal cache of frames into a random order.
@@ -21707,6 +22165,10 @@ This filter supports the following options:
 @table @option
 @item checksum
 Calculate checksums of each plane. By default enabled.
+
+@item udu_sei_as_ascii
+Try to print user data unregistered SEI as ascii character when possible,
+in hex format otherwise.
 @end table
 
 The shown line contains a sequence of key/value pairs of the form
@@ -23096,6 +23558,69 @@ mixed flat and named options:
 tile=3x2:nb_frames=5:padding=7:margin=2
 @end example
 @end itemize
+
+@section tiltandshift
+
+What happens when you invert time and space?
+
+Normally a video is composed of several frames that represent a different
+instant of time and shows a scence that evolves in the space captured by the
+frame. This filter is the antipode of that concept, taking inspiration by
+tilt and shift photography.
+
+A filtered frame contains the whole timeline of events composing the sequence,
+and this is obtained by placing a slice of pixels from each frame into a single
+one. However, since there are no infinite-width frames, this is done up the
+width of the input frame, and a video is recomposed by shifting away one
+column for each subsequent frame. In order to map space to time, the filter
+tilts each input frame as well, so that motion is preseved. This is accomplished
+by progressively selecting a different column from each input frame.
+
+The end result is a sort of inverted parralax, so that far away objects move
+much faster that the ones in the front. The ideal conditions for this video
+effect are when there is either very little motion and the backgroud is static,
+or when there is a lot of motion and a very wide depth of field (eg. wide
+panorama, while moving on a train).
+
+The filter accepts the following parameters:
+
+@table @option
+
+@item tilt
+Tilt video while shifting (default). When unset, video will be sliding a
+static image, composed of the first column of each frame.
+
+@item start
+What to do at the start of filtering (see below).
+
+@item end
+What to do at the end of filtering (see below).
+
+@item hold
+How many columns should pass through before start of filtering.
+
+@item pad
+How many columns should be inserted before end of filtering.
+
+@end table
+
+Normally the filter shifts and tils from the very first frame, and stops when
+the last one is received. However, before filtering starts, normal video may
+be preseved, so that the effect is slowly shifted in its place. Similarly,
+the last video frame may be reconstructed at the end. Alternatively it is
+possible to just start and end with black.
+
+@table @samp
+@item none
+Filtering is starts immediately and ends when the last frame is received.
+
+@item frame
+The first frames or the very last frame are kept intact during processing.
+
+@item black
+Black is padded at the beginning or at the end of filtering.
+
+@end table
 
 @section tinterlace
 
@@ -27936,6 +28461,16 @@ Specify the timebase assumed by the timestamps of the buffered frames.
 @item frame_rate
 Specify the frame rate expected for the video stream.
 
+@item colorspace
+A string representing the color space of the buffered video frames.
+It may be a number corresponding to a color space, or a color space
+name.
+
+@item range
+A string representing the color range of the buffered video frames.
+It may be a number corresponding to a color range, or a color range
+name.
+
 @item pixel_aspect, sar
 The sample (pixel) aspect ratio of the input video.
 
@@ -28167,7 +28702,12 @@ Only affects hardware cursors. If a game or application renders its own cursor,
 it'll always be captured.
 
 @item framerate
-Framerate at which the desktop will be captured.
+Maximum framerate at which the desktop will be captured - the interval between
+successive frames will not be smaller than the inverse of the framerate. When
+@var{dup_frames} is true (the default) and the desktop is not being updated
+often enough, the filter will duplicate a previous frame. Note that there is no
+background buffering going on, so when the filter is not polled often enough
+then the actual inter-frame interval may be significantly larger.
 
 Defaults to 30 FPS.
 
@@ -28199,6 +28739,13 @@ Passes all supported output formats to DDA and returns what DDA decides to use.
 @item x2bgr10
 Filter initialization will fail if 10 bit format is requested but unavailable.
 @end table
+
+@item dup_frames
+When this option is set to true (the default), the filter will duplicate frames
+when the desktop has not been updated in order to maintain approximately
+constant target framerate. When this option is set to false, the filter will
+wait for the desktop to be updated (inter-frame intervals may vary significantly
+in this case).
 
 @end table
 
@@ -28260,9 +28807,22 @@ supposed to be generated forever.
 Set speed of gradients rotation.
 
 @item type, t
-Set type of gradients, can be @code{linear} or @code{radial} or @code{circular} or @code{spiral}.
+Set type of gradients.
+Available values are:
+@table @samp
+@item linear
+@item radial
+@item circular
+@item spiral
+@item square
 @end table
 
+Default type is @var{linear}.
+@end table
+
+@subsection Commands
+
+This source supports the some above options as @ref{commands}.
 
 @section mandelbrot
 
@@ -28555,6 +29115,137 @@ Full example with slow death effect (mold) using @command{ffplay}:
 @example
 ffplay -f lavfi life=s=300x200:mold=10:r=60:ratio=0.1:death_color=#C83232:life_color=#00ff00,scale=1200:800:flags=16
 @end example
+@end itemize
+
+@section qrencodesrc
+
+Generate a QR code using the libqrencode library (see
+@url{https://fukuchi.org/works/qrencode/}).
+
+To enable the compilation of this source, you need to configure FFmpeg with
+@code{--enable-libqrencode}.
+
+The QR code is generated from the provided text or text pattern. The
+corresponding QR code is scaled and put in the video output according to the
+specified output size options.
+
+In case no text is specified, the QR code is not generated, but an empty colored
+output is returned instead.
+
+This source accepts the following options:
+
+@table @option
+
+@item qrcode_width, q
+@item padded_qrcode_width, Q
+Specify an expression for the width of the rendered QR code, with and without
+padding. The @var{qrcode_width} expression can reference the value set by the
+@var{padded_qrcode_width} expression, and vice versa.
+By default @var{padded_qrcode_width} is set to @var{qrcode_width}, meaning that
+there is no padding.
+
+These expressions are evaluated only once, when initializing the source.
+See the @ref{qrencode_expressions,,qrencode Expressions} section for details.
+
+Note that some of the constants are missing for the source (for example the
+@var{x} or @var{t} or ¸@var{n}), since they only makes sense when evaluating the
+expression for each frame rather than at initialization time.
+
+@item rate, r
+Specify the frame rate of the sourced video, as the number of frames
+generated per second. It has to be a string in the format
+@var{frame_rate_num}/@var{frame_rate_den}, an integer number, a floating point
+number or a valid video frame rate abbreviation. The default value is
+"25".
+
+@item case_sensitive, cs
+Instruct libqrencode to use case sensitive encoding. This is enabled by
+default. This can be disabled to reduce the QR encoding size.
+
+@item level, l
+Specify the QR encoding error correction level. With an higher correction level,
+the encoding size will increase but the code will be more robust to corruption.
+Lower level is @var{L}.
+
+It accepts the following values:
+@table @samp
+@item L
+@item M
+@item Q
+@item H
+@end table
+
+@item expansion
+Select how the input text is expanded. Can be either @code{none}, or
+@code{normal} (default). See the @ref{qrencode_text_expansion,,qrencode Text expansion}
+section for details.
+
+@item text
+@item textfile
+Define the text to be rendered. In case neither is specified, no QR is encoded
+(just an empty colored frame).
+
+In case expansion is enabled, the text is treated as a text template, using the
+qrencode expansion mechanism. See the @ref{qrencode_text_expansion,,qrencode
+Text expansion} section for details.
+
+@item background_color, bc
+@item foreground_color, fc
+Set the QR code and background color. The default value of
+@var{foreground_color} is "black", the default value of @var{background_color}
+is "white".
+
+For the syntax of the color options, check the @ref{color syntax,,"Color"
+section in the ffmpeg-utils manual,ffmpeg-utils}.
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Generate a QR code encoding the specified text with the default size:
+@example
+qrencodesrc=text=www.ffmpeg.org
+@end example
+
+@item
+Same as below, but select blue on pink colors:
+@example
+qrencodesrc=text=www.ffmpeg.org:bc=pink:fc=blue
+@end example
+
+@item
+Generate a QR code with width of 200 pixels and padding, making the padded width
+4/3 of the QR code width:
+@example
+qrencodesrc=text=www.ffmpeg.org:q=200:Q=4/3*q
+@end example
+
+@item
+Generate a QR code with padded width of 200 pixels and padding, making the QR
+code width 3/4 of the padded width:
+@example
+qrencodesrc=text=www.ffmpeg.org:Q=200:q=3/4*Q
+@end example
+
+@item
+Generate a QR code encoding the frame number:
+@example
+qrencodesrc=text=%@{n@}
+@end example
+
+@item
+Generate a QR code encoding the GMT timestamp:
+@example
+qrencodesrc=text=%@{gmtime@}
+@end example
+
+@item
+Generate a QR code encoding the timestamp expressed as a float:
+@example
+qrencodesrc=text=%@{pts@}
+@end example
+
 @end itemize
 
 @anchor{allrgb}
@@ -30412,6 +31103,12 @@ setpts=2.0*PTS
 Set fixed rate of 25 frames per second:
 @example
 setpts=N/(25*TB)
+@end example
+
+@item
+Apply a random jitter effect of +/-100 TB units:
+@example
+setpts=PTS+randomi(0, -100\,100)
 @end example
 
 @item

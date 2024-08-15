@@ -15,7 +15,7 @@
 //! An abstraction layer around AES implementations.
 //!
 //! The design is an attempt to make it easy to provide implementations that are both idiomatic
-//! Rust (e.g. RustCrypto) as well as FFI-backed (e.g. openssl and other C impls).
+//! Rust (e.g. RustCrypto) as well as FFI-backed (e.g. boringSSL and other C impls).
 use core::{array, fmt};
 
 pub mod ctr;

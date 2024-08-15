@@ -453,6 +453,7 @@ config("warnings") {
       "-Wno-deprecated-declarations",
       "-Wno-maybe-uninitialized",
       "-Wno-psabi",
+      "-Wno-switch-default",  # Warns even when all enum values are covered
       "-Wno-unused-parameter",  # Re-enabled for header sources
     ]
     cflags_cc += [
@@ -602,7 +603,7 @@ config("warnings") {
       "-Wdeprecated-this-capture",
       "-Wdeprecated-volatile",
       "-Wdeprecated-writable-str",
-      "-Wc++98-compat-extra-semi",
+      "-Wextra-semi",
     ]
   }
 
@@ -611,6 +612,11 @@ config("warnings") {
     cflags += [
       "-Wno-unreachable-code",  # Causes false positives in old GCC; removed
                                 # from modern GCC entirely
+    ]
+    cflags_cc += [
+      "-Wno-dangling-reference",  # Attempt at borrow checker in C++.
+                                  # Warns on temporary views, like Span.
+                                  # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=107532
     ]
   }
 

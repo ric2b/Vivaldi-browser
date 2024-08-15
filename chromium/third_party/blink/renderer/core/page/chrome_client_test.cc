@@ -9,12 +9,14 @@
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
+#include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 #include "third_party/blink/renderer/core/testing/null_execution_context.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/testing/task_environment.h"
 
 namespace blink {
 
@@ -40,7 +42,9 @@ class ChromeClientToolTipLogger : public EmptyChromeClient {
 };
 }  // anonymous namespace
 
-class ChromeClientTest : public testing::Test {};
+class ChromeClientTest : public testing::Test {
+  test::TaskEnvironment task_environment_;
+};
 
 TEST_F(ChromeClientTest, UpdateTooltipUnderCursorFlood) {
   ChromeClientToolTipLogger logger;

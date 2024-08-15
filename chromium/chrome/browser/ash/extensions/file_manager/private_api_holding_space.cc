@@ -7,7 +7,7 @@
 #include <memory>
 #include <vector>
 
-#include "base/containers/cxx20_erase.h"
+#include "ash/public/cpp/holding_space/holding_space_metrics.h"
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -56,19 +56,21 @@ FileManagerPrivateInternalToggleAddedToHoldingSpaceFunction::Run() {
   }
 
   if (params->add) {
-    base::EraseIf(
+    std::erase_if(
         file_system_urls,
         [holding_space](const storage::FileSystemURL& file_system_url) {
           return holding_space->ContainsPinnedFile(file_system_url);
         });
-    holding_space->AddPinnedFiles(file_system_urls);
+    holding_space->AddPinnedFiles(
+        file_system_urls, ash::holding_space_metrics::EventSource::kFilesApp);
   } else {
-    base::EraseIf(
+    std::erase_if(
         file_system_urls,
         [holding_space](const storage::FileSystemURL& file_system_url) {
           return !holding_space->ContainsPinnedFile(file_system_url);
         });
-    holding_space->RemovePinnedFiles(file_system_urls);
+    holding_space->RemovePinnedFiles(
+        file_system_urls, ash::holding_space_metrics::EventSource::kFilesApp);
   }
 
   return RespondNow(NoArguments());

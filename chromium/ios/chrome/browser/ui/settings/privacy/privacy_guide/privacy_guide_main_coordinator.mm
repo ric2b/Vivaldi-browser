@@ -13,14 +13,16 @@
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_commands.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_constants.h"
+#import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_coordinator_delegate.h"
+#import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_history_sync_coordinator.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_main_coordinator_delegate.h"
+#import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_safe_browsing_coordinator.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_url_usage_coordinator.h"
-#import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_url_usage_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_guide/privacy_guide_welcome_coordinator.h"
 
 @interface PrivacyGuideMainCoordinator () <
     PrivacyGuideCommands,
-    PrivacyGuideURLUsageCoordinatorDelegate,
+    PrivacyGuideCoordinatorDelegate,
     UIAdaptivePresentationControllerDelegate>
 @end
 
@@ -35,7 +37,10 @@
   if (self) {
     // TODO: Not all steps in the list can be displayed. This will be handled
     // when optional steps are implemented.
-    _steps = @[ @(kPrivacyGuideWelcomeStep), @(kPrivacyGuideURLUsageStep) ];
+    _steps = @[
+      @(kPrivacyGuideWelcomeStep), @(kPrivacyGuideURLUsageStep),
+      @(kPrivacyGuideHistorySyncStep), @(kPrivacyGuideSafeBrowsingStep)
+    ];
   }
   return self;
 }
@@ -88,15 +93,11 @@
   [self.delegate privacyGuideMainCoordinatorDidRemove:self];
 }
 
-#pragma mark - PrivacyGuideURLUsageCoordinatorDelegate
+#pragma mark - PrivacyGuideCoordinatorDelegate
 
-- (void)privacyGuideURLUsageCoordinatorDidRemove:
-    (PrivacyGuideURLUsageCoordinator*)coordinator {
+- (void)privacyGuideCoordinatorDidRemove:(ChromeCoordinator*)coordinator {
   CHECK([self.childCoordinators containsObject:coordinator]);
-
-  coordinator.delegate = nil;
   [coordinator stop];
-
   [self.childCoordinators removeObject:coordinator];
 }
 
@@ -125,6 +126,29 @@
   [self.childCoordinators addObject:coordinator];
 }
 
+// Initializes the History Sync step and starts it.
+- (void)startHistorySyncCoordinator {
+  PrivacyGuideHistorySyncCoordinator* coordinator =
+      [[PrivacyGuideHistorySyncCoordinator alloc]
+          initWithBaseNavigationController:_navigationController
+                                   browser:self.browser];
+  coordinator.delegate = self;
+  [coordinator start];
+
+  [self.childCoordinators addObject:coordinator];
+}
+
+// Initializes the Safe Browsing step and starts it.
+- (void)startSafeBrowsingCoordinator {
+  PrivacyGuideSafeBrowsingCoordinator* coordinator =
+      [[PrivacyGuideSafeBrowsingCoordinator alloc]
+          initWithBaseNavigationController:_navigationController
+                                   browser:self.browser];
+  [coordinator start];
+
+  [self.childCoordinators addObject:coordinator];
+}
+
 - (void)startNextCoordinator {
   switch ([self nextStepType]) {
     case kPrivacyGuideWelcomeStep:
@@ -133,6 +157,11 @@
     case kPrivacyGuideURLUsageStep:
       [self startURLUsageCoordinator];
       break;
+    case kPrivacyGuideHistorySyncStep:
+      [self startHistorySyncCoordinator];
+      break;
+    case kPrivacyGuideSafeBrowsingStep:
+      [self startSafeBrowsingCoordinator];
   }
 }
 

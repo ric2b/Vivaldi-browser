@@ -10,10 +10,12 @@
 
 #import "base/callback_list.h"
 #import "base/check_is_test.h"
+#import "base/memory/raw_ptr.h"
 #import "base/containers/flat_map.h"
 #import "base/containers/flat_set.h"
 #import "base/functional/bind.h"
 #import "base/functional/callback.h"
+#import "base/memory/raw_ptr.h"
 #import "base/ranges/algorithm.h"
 #import "base/scoped_observation.h"
 #import "components/browsing_data/core/browsing_data_utils.h"
@@ -48,12 +50,12 @@ class CloseTabsAction : public Action {
     BrowserList* browser_list =
         BrowserListFactory::GetForBrowserState(browser_state);
     for (Browser* browser : browser_list->AllIncognitoBrowsers()) {
-      browser->GetWebStateList()->CloseAllWebStates(
-          WebStateList::CLOSE_NO_FLAGS);
+      CloseAllWebStates(*browser->GetWebStateList(),
+                        WebStateList::CLOSE_NO_FLAGS);
     }
     for (Browser* browser : browser_list->AllRegularBrowsers()) {
-      browser->GetWebStateList()->CloseAllWebStates(
-          WebStateList::CLOSE_NO_FLAGS);
+      CloseAllWebStates(*browser->GetWebStateList(),
+                        WebStateList::CLOSE_NO_FLAGS);
     }
 
     metrics::RecordActionsSuccess(metrics::IdleTimeoutActionType::kCloseTabs,
@@ -171,11 +173,11 @@ class ClearBrowsingDataAction : public Action,
 
  private:
   void ClearBrowsingData() {
-    incognito_scoped_observer_.Observe(incognito_browsing_data_remover_);
+    incognito_scoped_observer_.Observe(incognito_browsing_data_remover_.get());
     incognito_browsing_data_remover_->Remove(
         browsing_data::TimePeriod::ALL_TIME, mask_, {});
 
-    main_scoped_observer_.Observe(main_browsing_data_remover_);
+    main_scoped_observer_.Observe(main_browsing_data_remover_.get());
     main_browsing_data_remover_->Remove(browsing_data::TimePeriod::ALL_TIME,
                                         mask_, {});
   }
@@ -217,13 +219,13 @@ class ClearBrowsingDataAction : public Action,
 
   base::TimeTicks deletion_start_time_;
   base::flat_set<ActionType> action_types_;
-  BrowserList* browser_list_;
+  raw_ptr<BrowserList> browser_list_;
   base::ScopedObservation<BrowsingDataRemover, BrowsingDataRemoverObserver>
       main_scoped_observer_{this};
   base::ScopedObservation<BrowsingDataRemover, BrowsingDataRemoverObserver>
       incognito_scoped_observer_{this};
-  BrowsingDataRemover* main_browsing_data_remover_;
-  BrowsingDataRemover* incognito_browsing_data_remover_;
+  raw_ptr<BrowsingDataRemover> main_browsing_data_remover_;
+  raw_ptr<BrowsingDataRemover> incognito_browsing_data_remover_;
   Continuation continuation_;
   // Removal mask defined by the clear actions set in the IdleTimeoutActions
   // policy list.

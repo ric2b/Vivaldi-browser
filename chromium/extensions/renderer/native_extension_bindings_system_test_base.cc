@@ -7,7 +7,6 @@
 #include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "content/public/test/mock_render_thread.h"
-#include "extensions/common/extension_messages.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/common/mojom/frame.mojom.h"
@@ -53,6 +52,8 @@ void NativeExtensionBindingsSystemUnittest::SetUp() {
   ipc_message_sender_ = message_sender.get();
   bindings_system_ = std::make_unique<NativeExtensionBindingsSystem>(
       this, std::move(message_sender));
+  api_provider_.AddBindingsSystemHooks(/*dispatcher=*/nullptr,
+                                       bindings_system_.get());
   APIBindingTest::SetUp();
 }
 

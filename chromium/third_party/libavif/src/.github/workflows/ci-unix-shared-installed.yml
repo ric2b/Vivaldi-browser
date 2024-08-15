@@ -29,15 +29,19 @@ jobs:
     - name: Set GCC & G++ compiler (on Linux)
       if: runner.os == 'Linux'
       run: echo "CC=gcc-${{matrix.gcc}}" >> $GITHUB_ENV && echo "CXX=g++-${{matrix.gcc}}" >> $GITHUB_ENV
+    - name: Disable libyuv on macOS
+      # TODO(yguyon): Install libyuv (not available with brew).
+      if: runner.os == 'macOS'
+      run: echo "CMAKE_AVIF_FLAGS=\"-DAVIF_LIBYUV=OFF\""  >> $GITHUB_ENV
 
     - name: Cache external dependencies
       id: cache-ext
-      uses: actions/cache@704facf57e6136b1bc63b828d79edcd491f0ee84 # v3.3.2
+      uses: actions/cache@ab5e6d0c87105b4c9c2047343972218f562e4319 # v4.0.1
       with:
         path: ext
         key: ${{ runner.os }}-shared-installed-${{ hashFiles('ext/*.cmd') }}
     - name: Setup cmake
-      uses: jwlawson/actions-setup-cmake@d06b37b47cfd043ec794ffa3e40e0b6b5858a7ec # v1.14.2
+      uses: jwlawson/actions-setup-cmake@959f1116cf9f1ae42fff8ec1a4aaae6d4a0e348b # v2.0.1
       with:
         cmake-version: '3.13.x'
     - name: Print cmake version
@@ -54,7 +58,6 @@ jobs:
       run: brew install aom dav1d imagemagick
     - name: Print ImageMagick version
       run: convert --version
-      # TODO(yguyon): Install libyuv (not available with brew).
 
       # `sudo apt-get install googletest libgtest-dev` leads to the following:
       #   "libgtest.a(gtest-all.cc.o): undefined reference to `std::__throw_bad_array_new_length()'"
@@ -76,7 +79,7 @@ jobs:
         -DAVIF_BUILD_EXAMPLES=ON -DAVIF_BUILD_APPS=ON
         -DAVIF_BUILD_TESTS=ON -DAVIF_ENABLE_GTEST=ON -DAVIF_LOCAL_GTEST=ON
         -DAVIF_BUILD_GDK_PIXBUF=ON -DCMAKE_INSTALL_PREFIX=./install
-        -DAVIF_ENABLE_WERROR=ON
+        -DAVIF_ENABLE_WERROR=ON ${{ env.CMAKE_AVIF_FLAGS }}
     - name: Build libavif (ninja)
       working-directory: ./build
       run: ninja
@@ -114,7 +117,8 @@ jobs:
         -DAVIF_ENABLE_WUNUSED_RESULT=ON -DAVIF_ENABLE_WERROR=ON
         -DAVIF_BUILD_EXAMPLES=ON -DAVIF_BUILD_APPS=ON
         -DAVIF_BUILD_TESTS=ON -DAVIF_ENABLE_GTEST=ON -DAVIF_LOCAL_GTEST=ON
-        -DAVIF_BUILD_GDK_PIXBUF=ON -DCMAKE_INSTALL_PREFIX=./install
+        -DAVIF_BUILD_GDK_PIXBUF=ON  ${{ env.CMAKE_AVIF_FLAGS }}
+        -DCMAKE_INSTALL_PREFIX=./install
     - name: Build libavif with [[nodiscard]] (ninja)
       working-directory: ./build_nodiscard
       run: ninja

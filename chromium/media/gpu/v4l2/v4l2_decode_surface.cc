@@ -18,11 +18,11 @@ namespace media {
 
 V4L2DecodeSurface::V4L2DecodeSurface(V4L2WritableBufferRef input_buffer,
                                      V4L2WritableBufferRef output_buffer,
-                                     scoped_refptr<VideoFrame> frame,
+                                     scoped_refptr<FrameResource> frame,
                                      uint64_t secure_handle)
     : input_buffer_(std::move(input_buffer)),
       output_buffer_(std::move(output_buffer)),
-      video_frame_(std::move(frame)),
+      frame_(std::move(frame)),
       output_record_(output_buffer_.BufferId()),
       decoded_(false),
       secure_handle_(secure_handle) {
@@ -123,7 +123,8 @@ bool V4L2RequestDecodeSurface::Submit() {
   input_buffer().SetTimeStamp(timestamp);
 
   if (input_buffer().Memory() == V4L2_MEMORY_DMABUF) {
-    if (!std::move(input_buffer()).QueueDMABuf(&request_ref_)) {
+    if (!std::move(input_buffer())
+             .QueueDMABuf(secure_handle(), &request_ref_)) {
       return false;
     }
   } else if (!std::move(input_buffer()).QueueMMap(&request_ref_)) {
@@ -136,7 +137,7 @@ bool V4L2RequestDecodeSurface::Submit() {
       result = std::move(output_buffer()).QueueMMap();
       break;
     case V4L2_MEMORY_DMABUF:
-      result = std::move(output_buffer()).QueueDMABuf(video_frame());
+      result = std::move(output_buffer()).QueueDMABuf(frame());
       break;
     default:
       NOTREACHED() << "We should only use MMAP or DMABUF.";

@@ -8,24 +8,26 @@
 #ifndef Skottie_DEFINED
 #define Skottie_DEFINED
 
-#include "include/core/SkFontMgr.h"
 #include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "modules/skottie/include/ExternalLayer.h"
-#include "modules/skottie/include/SkottieProperty.h"
-#include "modules/skottie/include/SlotManager.h"
 #include "modules/skresources/include/SkResources.h"
 
-#include <memory>
+// TODO(kjlubick) update clients and then remove the following:
+#include "include/core/SkFontMgr.h"  // IWYU pragma: keep
+#include "modules/skottie/include/ExternalLayer.h"  // IWYU pragma: keep
+#include "modules/skottie/include/SkottieProperty.h"  // IWYU pragma: keep
+#include "modules/skottie/include/SlotManager.h"  // IWYU pragma: keep
+
+#include <cstddef>
+#include <cstdint>
 #include <vector>
 
 class SkCanvas;
-struct SkRect;
 class SkStream;
-
-namespace skjson { class ObjectValue; }
+struct SkRect;
 
 namespace sksg {
 
@@ -51,7 +53,7 @@ public:
         kError,
     };
 
-    virtual void log(Level, const char message[], const char* json = nullptr);
+    virtual void log(Level, const char message[], const char* json = nullptr) = 0;
 };
 
 // Evaluates AE expressions.

@@ -38,6 +38,8 @@ ChromiumProfileImporter::ChromiumProfileImporter() {
 #if !BUILDFLAG(IS_MAC)
   chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_VIVALDI));
 #endif
+  chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_ARC));
+  chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_OPERA_GX));
 }
 
 ChromiumProfile ChromiumProfileImporter::GetChromeProfile(
@@ -89,6 +91,16 @@ ChromiumProfile ChromiumProfileImporter::GetChromeProfile(
       prof.import_name_resource_idx = IDS_IMPORT_FROM_EDGE_CHROMIUM;
       return prof;
 
+    case ImporterType::TYPE_ARC:
+      prof.importer_type = importerType;
+      prof.import_name_resource_idx = IDS_IMPORT_FROM_ARC;
+      return prof;
+
+    case ImporterType::TYPE_OPERA_GX:
+      prof.importer_type = importerType;
+      prof.import_name_resource_idx = IDS_IMPORT_FROM_OPERA_GX;
+      return prof;
+
     default:
       return prof;
   }
@@ -118,7 +130,9 @@ void ChromiumProfileImporter::DetectChromiumProfiles(
           chromeProfiles[i].importer_type ==
               ImporterType::TYPE_OPERA_OPIUM_BETA ||
           chromeProfiles[i].importer_type ==
-              ImporterType::TYPE_OPERA_OPIUM_DEV) {
+              ImporterType::TYPE_OPERA_OPIUM_DEV ||
+          chromeProfiles[i].importer_type ==
+              ImporterType::TYPE_OPERA_GX) {
         ChromeProfileInfo operaprof;
 
         operaprof.profileDisplayName = u"Default";
@@ -153,7 +167,7 @@ void ChromiumProfileImporter::ReadProfiles(std::vector<ChromeProfileInfo>* cp,
   std::string input;
   ReadFileToString(profileFileName, &input);
 
-  absl::optional<base::Value> root_value(base::JSONReader::Read(input));
+  std::optional<base::Value> root_value(base::JSONReader::Read(input));
   if (!root_value || !root_value->is_dict())
     return;
 

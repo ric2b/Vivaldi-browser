@@ -6,14 +6,13 @@
 #define EXTENSIONS_BROWSER_SCRIPT_INJECTION_TRACKER_H_
 
 #include <optional>
+
 #include "base/debug/crash_logging.h"
 #include "base/types/pass_key.h"
 #include "extensions/common/extension_id.h"
 #include "extensions/common/mojom/context_type.mojom-forward.h"
 #include "extensions/common/mojom/host_id.mojom-forward.h"
 #include "url/gurl.h"
-
-struct HostID;
 
 namespace content {
 class BrowserContext;
@@ -24,6 +23,7 @@ class RenderProcessHost;
 
 namespace extensions {
 
+class ActiveTabPermissionGranter;
 class Extension;
 class ExtensionWebContentsObserver;
 class UserScriptLoader;
@@ -116,6 +116,12 @@ class ScriptInjectionTracker {
   static void WillExecuteCode(base::PassKey<RequestContentScript> pass_key,
                               content::RenderFrameHost* frame,
                               const Extension& extension);
+
+  // Called before renderer is notified of new tab permissions.
+  static void WillGrantActiveTab(
+      base::PassKey<ActiveTabPermissionGranter> pass_key,
+      const Extension& extension,
+      content::RenderProcessHost& process);
 
   // Called right after the given renderer `process` is notified about new
   // scripts.

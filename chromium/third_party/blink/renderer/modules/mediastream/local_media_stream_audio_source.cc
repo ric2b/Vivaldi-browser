@@ -135,10 +135,12 @@ void LocalMediaStreamAudioSource::OnCaptureStarted() {
   started_callback_.Run(this, mojom::MediaStreamRequestResult::OK, "");
 }
 
-void LocalMediaStreamAudioSource::Capture(const media::AudioBus* audio_bus,
-                                          base::TimeTicks audio_capture_time,
-                                          double volume,
-                                          bool key_pressed) {
+void LocalMediaStreamAudioSource::Capture(
+    const media::AudioBus* audio_bus,
+    base::TimeTicks audio_capture_time,
+    const media::AudioGlitchInfo& glitch_info,
+    double volume,
+    bool key_pressed) {
   DCHECK(audio_bus);
   DeliverDataToTracks(*audio_bus, audio_capture_time);
 }
@@ -170,7 +172,7 @@ void LocalMediaStreamAudioSource::ChangeSourceImpl(
 using EchoCancellationType =
     blink::AudioProcessingProperties::EchoCancellationType;
 
-absl::optional<blink::AudioProcessingProperties>
+std::optional<blink::AudioProcessingProperties>
 LocalMediaStreamAudioSource::GetAudioProcessingProperties() const {
   blink::AudioProcessingProperties properties;
   properties.DisableDefaultProperties();

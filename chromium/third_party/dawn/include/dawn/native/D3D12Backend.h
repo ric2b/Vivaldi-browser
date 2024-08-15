@@ -28,8 +28,8 @@
 #ifndef INCLUDE_DAWN_NATIVE_D3D12BACKEND_H_
 #define INCLUDE_DAWN_NATIVE_D3D12BACKEND_H_
 
-#include <DXGI1_4.h>
 #include <d3d12.h>
+#include <dxgi1_4.h>
 #include <windows.h>
 #include <wrl/client.h>
 
@@ -52,6 +52,17 @@ DAWN_NATIVE_EXPORT Microsoft::WRL::ComPtr<ID3D12Device> GetD3D12Device(WGPUDevic
 DAWN_NATIVE_EXPORT uint64_t SetExternalMemoryReservation(WGPUDevice device,
                                                          uint64_t requestedReservationSize,
                                                          MemorySegment memorySegment);
+
+// May be chained on SharedBufferMemoryDescriptor
+struct DAWN_NATIVE_EXPORT SharedBufferMemoryD3D12ResourceDescriptor : wgpu::ChainedStruct {
+    SharedBufferMemoryD3D12ResourceDescriptor() {
+        sType = static_cast<wgpu::SType>(WGPUSType_SharedBufferMemoryD3D12ResourceDescriptor);
+    }
+
+    // This ID3D12Resource object must be created from the same ID3D12Device used in the
+    // WGPUDevice.
+    Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+};
 
 }  // namespace dawn::native::d3d12
 

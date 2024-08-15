@@ -13,43 +13,54 @@ namespace base {
 class TimeDelta;
 }
 
-namespace tips_notifications {
-
 // Identifier for the tips notification.
-extern NSString* const kIdentifier;
+extern NSString* const kTipsNotificationId;
 
 // Key for tips notification type in UserInfo dictionary.
 extern NSString* const kNotificationTypeKey;
 
+// Pref that stores which notifications have been sent.
+extern const char kTipsNotificationsSentPref[];
+
 // The type of Tips Notification, for an individual notification.
-enum class NotificationType {
+// Always keep this enum in sync with
+// the corresponding IOSTipsNotificationType in enums.xml.
+// LINT.IfChange
+enum class TipsNotificationType {
   kDefaultBrowser = 0,
   kWhatsNew = 1,
   kSignin = 2,
+  kError = 3,
+  kMaxValue = kError,
 };
+// LINT.ThenChange(/tools/metrics/histograms/metadata/ios/enums.xml)
 
 // The default amount of time after which a Tips notification is triggered.
-extern const base::TimeDelta kDefaultTriggerDelta;
+extern const base::TimeDelta kTipsNotificationDefaultTriggerDelta;
 
 // Returns true if the given `notification` is a Tips notification.
 bool IsTipsNotification(UNNotificationRequest* request);
 
 // Returns a userInfo dictionary pre-filled with the notification `type`.
-NSDictionary* UserInfoForType(NotificationType type);
+NSDictionary* UserInfoForTipsNotificationType(TipsNotificationType type);
 
 // Returns the notification type found in a notification's userInfo dictionary.
-std::optional<NotificationType> ParseType(UNNotificationRequest* request);
+std::optional<TipsNotificationType> ParseTipsNotificationType(
+    UNNotificationRequest* request);
 
 // Returns a newly generated notification request, with the given type and
 // a trigger appropriate for a Tips notification.
-UNNotificationRequest* Request(NotificationType type);
+UNNotificationRequest* TipsNotificationRequest(TipsNotificationType type);
 
 // Returns the notification content for a given Tips notification type.
-UNNotificationContent* ContentForType(NotificationType type);
+UNNotificationContent* ContentForTipsNotificationType(
+    TipsNotificationType type);
 
 // Returns a trigger to be used when requesting a Tips notification.
-UNNotificationTrigger* Trigger();
+UNNotificationTrigger* TipsNotificationTrigger();
 
-}  // namespace tips_notifications
+// Returns a bitfield indicating which types of notifications should be
+// enabled. Bits are assigned based on the enum `TipsNotificationType`.
+int TipsNotificationsEnabledBitfield();
 
 #endif  // IOS_CHROME_BROWSER_TIPS_NOTIFICATIONS_MODEL_UTILS_H_

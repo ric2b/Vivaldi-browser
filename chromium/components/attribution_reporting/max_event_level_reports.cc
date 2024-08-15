@@ -4,12 +4,14 @@
 
 #include "components/attribution_reporting/max_event_level_reports.h"
 
+#include <optional>
+
 #include "base/check.h"
 #include "base/types/expected.h"
 #include "base/values.h"
+#include "components/attribution_reporting/constants.h"
 #include "components/attribution_reporting/source_registration_error.mojom.h"
 #include "components/attribution_reporting/source_type.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace attribution_reporting {
 
@@ -17,10 +19,6 @@ namespace {
 
 using ::attribution_reporting::mojom::SourceRegistrationError;
 using ::attribution_reporting::mojom::SourceType;
-
-constexpr int kMaxSettableEventLevelAttributionsPerSource = 20;
-
-constexpr char kMaxEventLevelReports[] = "max_event_level_reports";
 
 bool IsMaxEventLevelReportsValid(int i) {
   return i >= 0 && i <= kMaxSettableEventLevelAttributionsPerSource;
@@ -46,7 +44,7 @@ MaxEventLevelReports::Parse(const base::Value::Dict& dict,
     return MaxEventLevelReports(source_type);
   }
 
-  absl::optional<int> i = value->GetIfInt();
+  std::optional<int> i = value->GetIfInt();
   if (!i.has_value() || !IsMaxEventLevelReportsValid(*i)) {
     return base::unexpected(
         SourceRegistrationError::kMaxEventLevelReportsValueInvalid);

@@ -27,7 +27,7 @@ class MEDIA_EXPORT HlsRenditionImpl : public HlsRendition {
                    GURL media_playlist_uri);
 
   // `HlsRendition` implementation
-  absl::optional<base::TimeDelta> GetDuration() override;
+  std::optional<base::TimeDelta> GetDuration() override;
   void CheckState(base::TimeDelta media_time,
                   double playback_rate,
                   ManifestDemuxer::DelayCallback time_remaining_cb) override;
@@ -78,7 +78,8 @@ class MEDIA_EXPORT HlsRenditionImpl : public HlsRendition {
 
   // Callback helper to receive notice when a new manifest has been updated.
   void OnManifestUpdate(ManifestDemuxer::DelayCallback cb,
-                        base::TimeDelta delay);
+                        base::TimeDelta delay,
+                        bool success);
 
   // Helper method to use duration to determine stream liveness.
   bool IsLive() const;

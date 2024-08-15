@@ -155,14 +155,13 @@ __weak id<CWVSyncControllerDataSource> gSyncDataSource;
   autofill::prefs::SetUserOptedInWalletSyncTransport(_prefService, accountId,
                                                      /*opted_in=*/true);
   CHECK(password_manager::features_util::IsOptedInForAccountStorage(
-      _syncService));
+      _prefService, _syncService));
 }
 
 - (void)stopSyncAndClearIdentity {
   auto* primaryAccountMutator = _identityManager->GetPrimaryAccountMutator();
   primaryAccountMutator->ClearPrimaryAccount(
-      signin_metrics::ProfileSignout::kUserClickedSignoutSettings,
-      signin_metrics::SignoutDelete::kIgnoreMetric);
+      signin_metrics::ProfileSignout::kUserClickedSignoutSettings);
 }
 
 - (BOOL)unlockWithPassphrase:(NSString*)passphrase {

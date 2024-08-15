@@ -3,10 +3,11 @@
 # found in the LICENSE file.
 
 import("//build_overrides/build.gni")
+import("../gni/openscreen.gni")
 
 visibility = [ "./*" ]
 
-source_set("test_main") {
+openscreen_source_set("test_main") {
   testonly = true
   visibility += [ "../*" ]
   public = []

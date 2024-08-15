@@ -14,6 +14,7 @@
 #include <__algorithm/find_end.h>
 #include <__algorithm/find_first_of.h>
 #include <__algorithm/min.h>
+#include <__assert>
 #include <__compare/ordering.h>
 #include <__config>
 #include <__functional/hash.h>
@@ -76,7 +77,7 @@ exposition-only to document what members a char_traits specialization should pro
 // Temporary extension to provide a base template for std::char_traits.
 // TODO(LLVM-19): Remove this class.
 //
-#if !defined(_LIBCPP_CHAR_TRAITS_REMOVE_BASE_SPECIALIZATION)
+#if defined(_LIBCPP_CHAR_TRAITS_REMOVE_BASE_SPECIALIZATION)
 template <class _CharT>
 struct _LIBCPP_DEPRECATED_(
     "char_traits<T> for T not equal to char, wchar_t, char8_t, char16_t or char32_t is non-standard and is provided "

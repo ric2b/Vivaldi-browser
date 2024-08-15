@@ -13,7 +13,7 @@
     <output filename="generated_resources_ja-KS.pak" type="data_package" lang="ja-KS" />
     <output filename="generated_resources_jbo.pak" type="data_package" lang="jbo" />
     <output filename="generated_resources_kab.pak" type="data_package" lang="kab" />
-    <output filename="generated_resources_ku.pak" type="data_package" lang="ku" />
+    <output filename="generated_resources_kmr.pak" type="data_package" lang="kmr" />
     <output filename="generated_resources_nn.pak" type="data_package" lang="nn" />
     <output filename="generated_resources_sc.pak" type="data_package" lang="sc" />
     <if expr="not is_android">
@@ -70,7 +70,7 @@
     <file path="strings/vivaldi_generated_resources_km.xtb" lang="km" />
     <file path="strings/vivaldi_generated_resources_kn.xtb" lang="kn" />
     <file path="strings/vivaldi_generated_resources_ko.xtb" lang="ko" />
-    <file path="strings/vivaldi_generated_resources_ku.xtb" lang="ku" />
+    <file path="strings/vivaldi_generated_resources_kmr.xtb" lang="kmr" />
     <file path="strings/vivaldi_generated_resources_ky.xtb" lang="ky" />
     <file path="strings/vivaldi_generated_resources_lo.xtb" lang="lo" />
     <file path="strings/vivaldi_generated_resources_lt.xtb" lang="lt" />

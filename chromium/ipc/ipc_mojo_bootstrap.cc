@@ -9,11 +9,11 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <utility>
 #include <vector>
 
-#include <optional>
 #include "base/check_op.h"
 #include "base/containers/circular_deque.h"
 #include "base/containers/contains.h"
@@ -102,7 +102,8 @@ class ControllerMemoryDumpProvider
 
  private:
   base::Lock lock_;
-  std::set<ChannelAssociatedGroupController*> controllers_;
+  std::set<raw_ptr<ChannelAssociatedGroupController, SetExperimental>>
+      controllers_;
 };
 
 ControllerMemoryDumpProvider& GetMemoryDumpProvider() {
@@ -1302,7 +1303,7 @@ bool ControllerMemoryDumpProvider::OnMemoryDump(
     const base::trace_event::MemoryDumpArgs& args,
     base::trace_event::ProcessMemoryDump* pmd) {
   base::AutoLock lock(lock_);
-  for (auto* controller : controllers_) {
+  for (ChannelAssociatedGroupController* controller : controllers_) {
     base::trace_event::MemoryAllocatorDump* dump = pmd->CreateAllocatorDump(
         base::StringPrintf("mojo/queued_ipc_channel_message/0x%" PRIxPTR,
                            reinterpret_cast<uintptr_t>(controller)));

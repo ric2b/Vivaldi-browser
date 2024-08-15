@@ -12,7 +12,7 @@
     <output filename="platform_locale_settings_ja-KS.pak" type="data_package" lang="ja-KS" />
     <output filename="platform_locale_settings_jbo.pak" type="data_package" lang="jbo" />
     <output filename="platform_locale_settings_kab.pak" type="data_package" lang="kab" />
-    <output filename="platform_locale_settings_ku.pak" type="data_package" lang="ku" />
+    <output filename="platform_locale_settings_kmr.pak" type="data_package" lang="kmr" />
     <output filename="platform_locale_settings_sc.pak" type="data_package" lang="sc" />
     <output filename="platform_locale_settings_nn.pak" type="data_package" lang="nn" />
     <if expr="not is_android">
@@ -80,7 +80,7 @@
     <file path="strings/vivaldi_platform_locale_settings_km.xtb" lang="km" />
     <file path="strings/vivaldi_platform_locale_settings_kn.xtb" lang="kn" />
     <file path="strings/vivaldi_platform_locale_settings_ko.xtb" lang="ko" />
-    <file path="strings/vivaldi_platform_locale_settings_ku.xtb" lang="ku" />
+    <file path="strings/vivaldi_platform_locale_settings_kmr.xtb" lang="kmr" />
     <file path="strings/vivaldi_platform_locale_settings_ky.xtb" lang="ky" />
     <file path="strings/vivaldi_platform_locale_settings_lo.xtb" lang="lo" />
     <file path="strings/vivaldi_platform_locale_settings_lt.xtb" lang="lt" />

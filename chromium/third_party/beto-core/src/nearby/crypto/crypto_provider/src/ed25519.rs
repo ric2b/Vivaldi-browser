@@ -166,7 +166,7 @@ pub trait PublicKey {
 
     /// Builds this public key from an array of bytes in
     /// the format yielded by `to_bytes`.
-    fn from_bytes(bytes: &RawPublicKey) -> Result<Self, InvalidBytes>
+    fn from_bytes(bytes: &RawPublicKey) -> Result<Self, InvalidPublicKeyBytes>
     where
         Self: Sized;
 
@@ -183,7 +183,7 @@ pub trait PublicKey {
 
 /// error returned when bad bytes are provided to generate keypair
 #[derive(Debug)]
-pub struct InvalidBytes;
+pub struct InvalidPublicKeyBytes;
 
 /// Error returned if the verification on the signature + message fails
 #[derive(Debug)]

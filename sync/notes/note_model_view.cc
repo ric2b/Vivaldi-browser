@@ -110,9 +110,9 @@ const vivaldi::NoteNode* NoteModelView::AddFolder(
     const vivaldi::NoteNode* parent,
     size_t index,
     const std::u16string& name,
-    absl::optional<base::Time> creation_time,
-    absl::optional<base::Time> last_modified_time,
-    absl::optional<base::Uuid> uuid) {
+    std::optional<base::Time> creation_time,
+    std::optional<base::Time> last_modified_time,
+    std::optional<base::Uuid> uuid) {
   return note_model_->AddFolder(parent, index, name, creation_time,
                                 last_modified_time, uuid);
 }
@@ -123,9 +123,9 @@ const vivaldi::NoteNode* NoteModelView::AddNote(
     const std::u16string& title,
     const GURL& url,
     const std::u16string& content,
-    absl::optional<base::Time> creation_time,
-    absl::optional<base::Time> last_modified_time,
-    absl::optional<base::Uuid> uuid) {
+    std::optional<base::Time> creation_time,
+    std::optional<base::Time> last_modified_time,
+    std::optional<base::Uuid> uuid) {
   return note_model_->AddNote(parent, index, title, url, content, creation_time,
                               last_modified_time, uuid);
 }
@@ -134,8 +134,8 @@ const vivaldi::NoteNode* NoteModelView::AddSeparator(
     const vivaldi::NoteNode* parent,
     size_t index,
     const std::u16string& name,
-    absl::optional<base::Time> creation_time,
-    absl::optional<base::Uuid> uuid) {
+    std::optional<base::Time> creation_time,
+    std::optional<base::Uuid> uuid) {
   return note_model_->AddSeparator(parent, index, name, creation_time, uuid);
 }
 
@@ -145,8 +145,8 @@ const vivaldi::NoteNode* NoteModelView::AddAttachmentFromChecksum(
     const std::u16string& title,
     const GURL& url,
     const std::string& checksum,
-    absl::optional<base::Time> creation_time,
-    absl::optional<base::Uuid> uuid) {
+    std::optional<base::Time> creation_time,
+    std::optional<base::Uuid> uuid) {
   return note_model_->AddAttachmentFromChecksum(parent, index, title, url,
                                                 checksum, creation_time, uuid);
 }
@@ -187,9 +187,20 @@ void NoteModelViewUsingLocalOrSyncableNodes::EnsurePermanentNodesExist() {
 }
 
 void NoteModelViewUsingLocalOrSyncableNodes::RemoveAllSyncableNodes() {
-  // Relevant on iOS only, to delete all account notes in a dedicated
-  // NotesModel instance.
-  underlying_model()->RemoveAllUserNotes();
+  underlying_model()->BeginExtensiveChanges();
+
+  for (const auto& permanent_node : root_node()->children()) {
+    if (!IsNodeSyncable(permanent_node.get())) {
+      continue;
+    }
+
+    for (int i = static_cast<int>(permanent_node->children().size() - 1);
+         i >= 0; --i) {
+      underlying_model()->Remove(permanent_node->children()[i].get());
+    }
+  }
+
+  underlying_model()->EndExtensiveChanges();
 }
 
 }  // namespace sync_notes

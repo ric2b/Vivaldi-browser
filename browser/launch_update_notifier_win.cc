@@ -21,7 +21,6 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
@@ -167,7 +166,7 @@ bool IsStandaloneAutoUpdateEnabled() {
     base::win::RegKey key(HKEY_CURRENT_USER, vivaldi::constants::kVivaldiKey,
                           KEY_QUERY_VALUE);
     if (key.Valid()) {
-      if (absl::optional<bool> bool_value = ReadRegistryBool(
+      if (std::optional<bool> bool_value = ReadRegistryBool(
               vivaldi::constants::kVivaldiInstallerDisableStandaloneAutoupdate,
               key)) {
         // The meaning in the registry is reversed.

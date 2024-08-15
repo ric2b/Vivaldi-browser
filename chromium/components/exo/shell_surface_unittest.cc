@@ -18,6 +18,7 @@
 #include "ash/test/test_widget_builder.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_test_util.h"
+#include "ash/wm/raster_scale/raster_scale_controller.h"
 #include "ash/wm/resize_shadow.h"
 #include "ash/wm/resize_shadow_controller.h"
 #include "ash/wm/window_state.h"
@@ -34,7 +35,6 @@
 #include "components/exo/buffer.h"
 #include "components/exo/client_controlled_shell_surface.h"
 #include "components/exo/permission.h"
-#include "components/exo/security_delegate.h"
 #include "components/exo/shell_surface_util.h"
 #include "components/exo/sub_surface.h"
 #include "components/exo/surface.h"
@@ -57,6 +57,7 @@
 #include "ui/base/hit_test.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor_extra/shadow.h"
 #include "ui/display/display.h"
 #include "ui/display/display_layout_builder.h"
@@ -68,6 +69,7 @@
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/widget/any_widget_observer.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/shadow_controller.h"
 #include "ui/wm/core/shadow_types.h"
@@ -75,6 +77,8 @@
 #include "ui/wm/core/window_util.h"
 
 namespace exo {
+
+const gfx::BufferFormat kOpaqueFormat = gfx::BufferFormat::RGBX_8888;
 
 using ShellSurfaceTest = test::ExoTestBase;
 
@@ -93,6 +97,7 @@ uint32_t ConfigureFullscreen(
     bool activated,
     const gfx::Vector2d& origin_offset,
     float raster_scale,
+    aura::Window::OcclusionState occlusion_state,
     std::optional<chromeos::WindowStateType> restore_state_type) {
   EXPECT_EQ(chromeos::WindowStateType::kFullscreen, state_type);
   return serial;
@@ -127,7 +132,7 @@ struct ConfigureData {
   bool is_active = false;
   std::optional<chromeos::WindowStateType> restore_state_type = std::nullopt;
   float raster_scale = 1.0f;
-
+  aura::Window::OcclusionState occlusion_state;
   size_t count = 0;
 };
 
@@ -139,12 +144,14 @@ uint32_t Configure(
     bool activated,
     const gfx::Vector2d& origin_offset,
     float raster_scale,
+    aura::Window::OcclusionState occlusion_state,
     std::optional<chromeos::WindowStateType> restore_state_type) {
   config_data->suggested_bounds = bounds;
   config_data->state_type = state_type;
   config_data->is_resizing = resizing;
   config_data->is_active = activated;
   config_data->raster_scale = raster_scale;
+  config_data->occlusion_state = occlusion_state;
   config_data->restore_state_type = restore_state_type;
   config_data->count++;
   return 0;
@@ -158,15 +165,34 @@ uint32_t ConfigureSerial(
     bool activated,
     const gfx::Vector2d& origin_offset,
     float raster_scale,
+    aura::Window::OcclusionState occlusion_state,
     std::optional<chromeos::WindowStateType> restore_state_type) {
   config_data->suggested_bounds = bounds;
   config_data->state_type = state_type;
   config_data->is_resizing = resizing;
   config_data->is_active = activated;
   config_data->raster_scale = raster_scale;
+  config_data->occlusion_state = occlusion_state;
   config_data->restore_state_type = restore_state_type;
   config_data->count++;
   return config_data->count;
+}
+
+uint32_t ConfigureSerialVec(
+    std::vector<ConfigureData>* config_vec,
+    const gfx::Rect& bounds,
+    chromeos::WindowStateType state_type,
+    bool resizing,
+    bool activated,
+    const gfx::Vector2d& origin_offset,
+    float raster_scale,
+    aura::Window::OcclusionState occlusion_state,
+    std::optional<chromeos::WindowStateType> restore_state_type) {
+  config_vec->emplace_back(config_vec->empty() ? ConfigureData{}
+                                               : config_vec->back());
+  return ConfigureSerial(&config_vec->back(), bounds, state_type, resizing,
+                         activated, origin_offset, raster_scale,
+                         occlusion_state, restore_state_type);
 }
 
 bool IsCaptureWindow(ShellSurface* shell_surface) {
@@ -211,8 +237,8 @@ TEST_F(ShellSurfaceTest, AcknowledgeConfigure) {
   EXPECT_TRUE(compositor->IsLocked());
 
   shell_surface->AcknowledgeConfigure(kSerial);
-  std::unique_ptr<Buffer> fullscreen_buffer(new Buffer(
-      exo_test_helper()->CreateGpuMemoryBuffer(GetContext()->bounds().size())));
+  auto fullscreen_buffer =
+      test::ExoTestHelper::CreateBuffer(GetContext()->bounds().size());
   surface->Attach(fullscreen_buffer.get());
   surface->Commit();
 
@@ -272,10 +298,58 @@ TEST_F(ShellSurfaceTest, DeleteShellSurfaceWithTransientChildren) {
   parent_shell_surface.reset();
 }
 
+TEST_F(ShellSurfaceTest, CommitAndConfigure) {
+  // Test that a commit produces an expected configure. A commit to a surface
+  // without a buffer attached should produce a configure with zero size. Then
+  // once a buffer is attached, a commit should produce a configure
+  // corresponding to the size of the buffer.
+  auto shell_surface =
+      test::ShellSurfaceBuilder().SetNoCommit().BuildShellSurface();
+
+  uint32_t serial = 0;
+  gfx::Rect bounds;
+  aura::Window::OcclusionState occlusion_state;
+  auto configure_callback = base::BindRepeating(
+      [](uint32_t* const serial_ptr, gfx::Rect* bounds_ptr,
+         aura::Window::OcclusionState* occlusion_state_ptr,
+         const gfx::Rect& bounds, chromeos::WindowStateType state_type,
+         bool resizing, bool activated, const gfx::Vector2d& origin_offset,
+         float raster_scale, aura::Window::OcclusionState occlusion_state,
+         std::optional<chromeos::WindowStateType>) {
+        *bounds_ptr = bounds;
+        *occlusion_state_ptr = occlusion_state;
+        return ++(*serial_ptr);
+      },
+      &serial, &bounds, &occlusion_state);
+  shell_surface->set_configure_callback(configure_callback);
+
+  // Receiving a commit without a buffer should result in an initial configure
+  // with bounds gfx::Rect(0, 0, 0, 0). Note that although `ShellSurface` does
+  // not implement xdg-shell, in xdg-shell spec sending 0x0 bounds is used to
+  // hint to a client that the bounds should be determined by the client (i.e.
+  // ShellSurface implicitly follows xdg-shell spec here).
+  shell_surface->root_surface()->Commit();
+  ASSERT_EQ(1u, serial);
+  EXPECT_EQ(bounds, gfx::Rect(0, 0, 0, 0));
+
+  // Attaching a buffer and committing should produce a single configure with
+  // the size equal to the buffer size.
+  constexpr gfx::Size kBufferSize(64, 64);
+  auto buffer = test::ExoTestHelper::CreateBuffer(kBufferSize);
+  shell_surface->root_surface()->Attach(buffer.get());
+  shell_surface->root_surface()->Commit();
+  ASSERT_EQ(2u, serial);
+  EXPECT_EQ(bounds.size(), kBufferSize);
+  // The occlusion state should be visible since there is no other window
+  // occluding the surface.
+  EXPECT_EQ(occlusion_state, aura::Window::OcclusionState::VISIBLE);
+}
+
 TEST_F(ShellSurfaceTest, Maximize) {
   auto shell_surface =
       test::ShellSurfaceBuilder({256, 256}).BuildShellSurface();
   auto* surface = shell_surface->root_surface();
+  EXPECT_TRUE(shell_surface->IsReady());
 
   EXPECT_FALSE(HasBackdrop());
   shell_surface->Maximize();
@@ -367,16 +441,46 @@ TEST_F(ShellSurfaceTest, Minimize) {
   auto shell_surface =
       test::ShellSurfaceBuilder(kBufferSize).SetNoCommit().BuildShellSurface();
 
+  EXPECT_FALSE(shell_surface->IsReady());
   EXPECT_TRUE(shell_surface->CanMinimize());
 
   // Minimizing can be performed before the surface is committed, but
   // widget creation will be deferred.
   shell_surface->Minimize();
   EXPECT_FALSE(shell_surface->GetWidget());
+  EXPECT_FALSE(shell_surface->IsReady());
 
-  // Attaching the buffer will create a widget with minimized state.
+  // Committing the buffer will create a widget with minimized state.
+  views::NamedWidgetShownWaiter widget_waiter(
+      views::test::AnyWidgetTestPasskey{}, "ExoShellSurface-0");
+  uint32_t serial = 0;
+  chromeos::WindowStateType state[1]{chromeos::WindowStateType::kNormal};
+  auto configure_callback = base::BindRepeating(
+      [](uint32_t* const serial_ptr, chromeos::WindowStateType* state_ptr,
+         const gfx::Rect& bounds, chromeos::WindowStateType state_type,
+         bool resizing, bool activated, const gfx::Vector2d& origin_offset,
+         float raster_scale, aura::Window::OcclusionState occlusion_state,
+         std::optional<chromeos::WindowStateType>) {
+        state_ptr[*serial_ptr] = state_type;
+        CHECK(*serial_ptr < 2);
+        return ++(*serial_ptr);
+      },
+      &serial, state);
+  shell_surface->set_configure_callback(configure_callback);
+
   shell_surface->root_surface()->Commit();
   EXPECT_TRUE(shell_surface->GetWidget()->IsMinimized());
+
+  // Two configures (initial configure and the state change configure) should be
+  // sent with the minimzied state.
+  ASSERT_EQ(1u, serial);
+  EXPECT_EQ(chromeos::WindowStateType::kMinimized, state[0]);
+  shell_surface->set_configure_callback(ShellSurface::ConfigureCallback());
+
+  // Minimized widget should be Shown.
+  widget_waiter.WaitIfNeededAndGet();
+
+  EXPECT_TRUE(shell_surface->IsReady());
 
   shell_surface->Restore();
   EXPECT_FALSE(shell_surface->GetWidget()->IsMinimized());
@@ -494,8 +598,7 @@ TEST_F(ShellSurfaceTest, HostWindowIncludesAllSubSurfaces) {
   constexpr gfx::Size kChildBufferSize(32, 32);
 
   // Add child buffer at the upper-right corner of the root surface.
-  auto child_buffer1 = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kChildBufferSize));
+  auto child_buffer1 = test::ExoTestHelper::CreateBuffer(kChildBufferSize);
   auto child_surface1 = std::make_unique<Surface>();
   child_surface1->Attach(child_buffer1.get());
   auto subsurface1 = std::make_unique<SubSurface>(
@@ -504,8 +607,7 @@ TEST_F(ShellSurfaceTest, HostWindowIncludesAllSubSurfaces) {
   child_surface1->Commit();
 
   // Add child buffer at the bottom-left corner of the root surface.
-  auto child_buffer2 = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kChildBufferSize));
+  auto child_buffer2 = test::ExoTestHelper::CreateBuffer(kChildBufferSize);
   auto child_surface2 = std::make_unique<Surface>();
   child_surface2->Attach(child_buffer2.get());
   auto subsurface2 = std::make_unique<SubSurface>(
@@ -541,8 +643,7 @@ TEST_F(ShellSurfaceTest, HostWindowIncludesAllSubSurfacesWithScaleFactor) {
   constexpr gfx::Size kChildBufferSize(32, 32);
 
   // Add child buffer at the upper-right corner of the root surface.
-  auto child_buffer1 = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kChildBufferSize));
+  auto child_buffer1 = test::ExoTestHelper::CreateBuffer(kChildBufferSize);
   auto child_surface1 = std::make_unique<Surface>();
   child_surface1->Attach(child_buffer1.get());
   auto subsurface1 = std::make_unique<SubSurface>(
@@ -551,8 +652,7 @@ TEST_F(ShellSurfaceTest, HostWindowIncludesAllSubSurfacesWithScaleFactor) {
   child_surface1->Commit();
 
   // Add child buffer at the bottom-left corner of the root surface.
-  auto child_buffer2 = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kChildBufferSize));
+  auto child_buffer2 = test::ExoTestHelper::CreateBuffer(kChildBufferSize);
   auto child_surface2 = std::make_unique<Surface>();
   child_surface2->Attach(child_buffer2.get());
   auto subsurface2 = std::make_unique<SubSurface>(
@@ -573,6 +673,97 @@ TEST_F(ShellSurfaceTest, HostWindowIncludesAllSubSurfacesWithScaleFactor) {
   EXPECT_EQ(gfx::Point(10, 10), shell_surface->root_surface_origin_pixel());
 }
 
+TEST_F(ShellSurfaceTest, HostWindowNotIncludeClippedArea) {
+  constexpr gfx::Point kOrigin(20, 20);
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({256, 256})
+          .SetOrigin(kOrigin)
+          .BuildShellSurface();
+
+  constexpr gfx::Size kChildBufferSize(32, 32);
+
+  // Add child buffer at the upper-right corner of the root surface.
+  auto child_buffer1 = test::ExoTestHelper::CreateBuffer(kChildBufferSize);
+  auto child_surface1 = std::make_unique<Surface>();
+  child_surface1->Attach(child_buffer1.get());
+  child_surface1->SetClipRect(std::make_optional(gfx::RectF(5, 5, 32, 32)));
+  auto subsurface1 = std::make_unique<SubSurface>(
+      child_surface1.get(), shell_surface->root_surface());
+  subsurface1->SetPosition(gfx::PointF(-10, -10));
+  child_surface1->Commit();
+
+  // Add child buffer at the bottom-left corner of the root surface.
+  auto child_buffer2 = test::ExoTestHelper::CreateBuffer(kChildBufferSize);
+  auto child_surface2 = std::make_unique<Surface>();
+  child_surface2->Attach(child_buffer2.get());
+  child_surface2->SetClipRect(std::make_optional(gfx::RectF(0, 0, 10, 10)));
+  auto subsurface2 = std::make_unique<SubSurface>(
+      child_surface2.get(), shell_surface->root_surface());
+  subsurface2->SetPosition(gfx::PointF(250, 250));
+  child_surface2->Commit();
+
+  shell_surface->root_surface()->Commit();
+
+  ASSERT_TRUE(shell_surface->GetWidget());
+  shell_surface->SetGeometry(gfx::Rect(256, 256));
+  shell_surface->root_surface()->Commit();
+
+  // Host window must be set to include all children subsurfaces, but not the
+  // clipped area.
+  EXPECT_EQ(gfx::Rect(-5, -5, 265, 265),
+            shell_surface->host_window()->bounds());
+  // Root surface origin must be adjusted relative to host window.
+  EXPECT_EQ(gfx::Point(5, 5), shell_surface->root_surface_origin_pixel());
+}
+
+TEST_F(ShellSurfaceTest, HostWindowNotIncludeClippedAreaWithScaleFactor) {
+  constexpr gfx::Point kOrigin(20, 20);
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({256, 256})
+          .SetOrigin(kOrigin)
+          .BuildShellSurface();
+
+  // Set scale.
+  constexpr float kScaleFactor = 2.0;
+  shell_surface->set_client_submits_surfaces_in_pixel_coordinates(true);
+  shell_surface->SetScaleFactor(kScaleFactor);
+
+  constexpr gfx::Size kChildBufferSize(32, 32);
+
+  // Add child buffer at the upper-right corner of the root surface.
+  auto child_buffer1 = test::ExoTestHelper::CreateBuffer(kChildBufferSize);
+  auto child_surface1 = std::make_unique<Surface>();
+  child_surface1->Attach(child_buffer1.get());
+  child_surface1->SetClipRect(std::make_optional(gfx::RectF(5, 5, 32, 32)));
+  auto subsurface1 = std::make_unique<SubSurface>(
+      child_surface1.get(), shell_surface->root_surface());
+  subsurface1->SetPosition(gfx::PointF(-10, -10));
+  child_surface1->Commit();
+
+  // Add child buffer at the bottom-left corner of the root surface.
+  auto child_buffer2 = test::ExoTestHelper::CreateBuffer(kChildBufferSize);
+  auto child_surface2 = std::make_unique<Surface>();
+  child_surface2->Attach(child_buffer2.get());
+  child_surface2->SetClipRect(std::make_optional(gfx::RectF(10, 10)));
+  auto subsurface2 = std::make_unique<SubSurface>(
+      child_surface2.get(), shell_surface->root_surface());
+  subsurface2->SetPosition(gfx::PointF(250, 250));
+  child_surface2->Commit();
+
+  shell_surface->root_surface()->Commit();
+
+  ASSERT_TRUE(shell_surface->GetWidget());
+  shell_surface->SetGeometry(gfx::Rect(0, 0, 256, 256));
+  shell_surface->root_surface()->Commit();
+
+  // Host window must be set to include all children subsurfaces, but not the
+  // clipped area.
+  EXPECT_EQ(gfx::Rect(-2, -2, 133, 133),
+            shell_surface->host_window()->bounds());
+  // Root surface origin must be adjusted relative to host window.
+  EXPECT_EQ(gfx::Point(5, 5), shell_surface->root_surface_origin_pixel());
+}
+
 TEST_F(ShellSurfaceTest, LocalSurfaceIdUpdatedOnHostWindowOriginChanged) {
   constexpr gfx::Point kOrigin(100, 100);
   std::unique_ptr<ShellSurface> shell_surface =
@@ -583,8 +774,7 @@ TEST_F(ShellSurfaceTest, LocalSurfaceIdUpdatedOnHostWindowOriginChanged) {
 
   auto* root_surface = shell_surface->root_surface();
 
-  auto child_buffer = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(gfx::Size(200, 200)));
+  auto child_buffer = test::ExoTestHelper::CreateBuffer(gfx::Size(200, 200));
   auto child_surface = std::make_unique<Surface>();
   child_surface->Attach(child_buffer.get());
   auto subsurface =
@@ -634,8 +824,7 @@ TEST_F(ShellSurfaceTest,
 
   auto* root_surface = shell_surface->root_surface();
 
-  auto child_buffer = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(gfx::Size(200, 200)));
+  auto child_buffer = test::ExoTestHelper::CreateBuffer(gfx::Size(200, 200));
   auto child_surface = std::make_unique<Surface>();
   child_surface->Attach(child_buffer.get());
   auto subsurface =
@@ -669,13 +858,58 @@ TEST_F(ShellSurfaceTest,
             shell_surface->host_window()->layer()->GetSubpixelOffset());
 }
 
+TEST_F(ShellSurfaceTest,
+       LocalSurfaceIdNotUpdatedOnSurfaceOutOfWindowButClipped) {
+  constexpr gfx::Point kOrigin(100, 100);
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({100, 100})
+          .SetOrigin(kOrigin)
+          .SetGeometry(gfx::Rect(100, 100))
+          .BuildShellSurface();
+
+  auto* root_surface = shell_surface->root_surface();
+
+  auto child_buffer = test::ExoTestHelper::CreateBuffer(gfx::Size(200, 200));
+  auto child_surface = std::make_unique<Surface>();
+  child_surface->Attach(child_buffer.get());
+  child_surface->SetClipRect(std::make_optional(gfx::RectF(50, 50, 100, 100)));
+  auto subsurface =
+      std::make_unique<SubSurface>(child_surface.get(), root_surface);
+  subsurface->SetPosition(gfx::PointF(-50, -50));
+
+  child_surface->Commit();
+  root_surface->Commit();
+  EXPECT_EQ(gfx::Rect(100, 100), shell_surface->host_window()->bounds());
+
+  // Store the current local surface id.
+  const viz::LocalSurfaceId old_id =
+      shell_surface->GetSurfaceId().local_surface_id();
+
+  // If nothing is changed, no need to update local surface id.
+  child_surface->Commit();
+  root_surface->Commit();
+  EXPECT_EQ(shell_surface->GetSurfaceId().local_surface_id(), old_id);
+
+  // If the surface is moving around the out of window while it's clipped, we do
+  // not allocate local surface id.
+  child_surface->SetClipRect(std::make_optional(gfx::RectF(25, 25, 100, 100)));
+  subsurface->SetPosition(gfx::PointF(-25, -25));
+  child_surface->Commit();
+  root_surface->Commit();
+  EXPECT_EQ(gfx::Rect(100, 100), shell_surface->host_window()->bounds());
+  EXPECT_EQ(old_id, shell_surface->GetSurfaceId().local_surface_id());
+
+  EXPECT_EQ(gfx::Vector2dF(),
+            shell_surface->host_window()->layer()->GetSubpixelOffset());
+}
+
 TEST_F(ShellSurfaceTest, EventTargetWithNegativeHostWindowOrigin) {
   constexpr gfx::Point kOrigin(20, 20);
   std::unique_ptr<ShellSurface> shell_surface =
       test::ShellSurfaceBuilder({256, 256})
           .SetOrigin(kOrigin)
-          .SetGeometry(gfx::Rect(0, 0, 256, 256))
-          .SetInputRegion(gfx::Rect(0, 0, 256, 256))
+          .SetGeometry(gfx::Rect(256, 256))
+          .SetInputRegion(gfx::Rect(256, 256))
           .SetFrame(SurfaceFrameType::SHADOW)
           .BuildShellSurface();
 
@@ -799,8 +1033,8 @@ TEST_F(ShellSurfaceTest,
   std::unique_ptr<ShellSurface> shell_surface =
       test::ShellSurfaceBuilder({256, 256})
           .SetOrigin(kOrigin)
-          .SetGeometry(gfx::Rect(0, 0, 256, 256))
-          .SetInputRegion(gfx::Rect(0, 0, 256, 256))
+          .SetGeometry(gfx::Rect(256, 256))
+          .SetInputRegion(gfx::Rect(256, 256))
           .SetFrame(SurfaceFrameType::SHADOW)
           .BuildShellSurface();
 
@@ -1025,13 +1259,11 @@ TEST_F(ShellSurfaceTest, ActivationPermissionLegacy) {
 
 TEST_F(ShellSurfaceTest, WidgetActivationLegacy) {
   constexpr gfx::Size kBufferSize(64, 64);
-  std::unique_ptr<SecurityDelegate> default_security_delegate =
-      SecurityDelegate::GetDefaultSecurityDelegate();
+  auto security_delegate = std::make_unique<test::TestSecurityDelegate>();
 
-  auto shell_surface1 =
-      test::ShellSurfaceBuilder(kBufferSize)
-          .SetSecurityDelegate(default_security_delegate.get())
-          .BuildShellSurface();
+  auto shell_surface1 = test::ShellSurfaceBuilder(kBufferSize)
+                            .SetSecurityDelegate(security_delegate.get())
+                            .BuildShellSurface();
   auto* surface1 = shell_surface1->root_surface();
 
   // The window is active.
@@ -1039,10 +1271,9 @@ TEST_F(ShellSurfaceTest, WidgetActivationLegacy) {
   EXPECT_TRUE(widget1->IsActive());
 
   // Create a second window.
-  auto shell_surface2 =
-      test::ShellSurfaceBuilder(kBufferSize)
-          .SetSecurityDelegate(default_security_delegate.get())
-          .BuildShellSurface();
+  auto shell_surface2 = test::ShellSurfaceBuilder(kBufferSize)
+                            .SetSecurityDelegate(security_delegate.get())
+                            .BuildShellSurface();
   auto* surface2 = shell_surface2->root_surface();
 
   // Now the second window is active.
@@ -1104,8 +1335,7 @@ TEST_F(ShellSurfaceTest, WidgetActivation) {
 
 TEST_F(ShellSurfaceTest, EmulateOverrideRedirect) {
   constexpr gfx::Size kBufferSize(64, 64);
-  std::unique_ptr<Buffer> buffer(
-      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize)));
+  auto buffer = test::ExoTestHelper::CreateBuffer(kBufferSize);
   std::unique_ptr<Surface> surface(new Surface);
   std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
 
@@ -1273,8 +1503,7 @@ TEST_F(ShellSurfaceTest, StartMove) {
 
 TEST_F(ShellSurfaceTest, StartResize) {
   constexpr gfx::Size kBufferSize(64, 64);
-  std::unique_ptr<Buffer> buffer(
-      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize)));
+  auto buffer = test::ExoTestHelper::CreateBuffer(kBufferSize);
   std::unique_ptr<Surface> surface(new Surface);
   std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
 
@@ -1301,6 +1530,7 @@ TEST_F(ShellSurfaceTest, StartResizeAndDestroyShell) {
       [](uint32_t* const serial_ptr, const gfx::Rect& bounds,
          chromeos::WindowStateType state_type, bool resizing, bool activated,
          const gfx::Vector2d& origin_offset, float raster_scale,
+         aura::Window::OcclusionState occlusion_state,
          std::optional<chromeos::WindowStateType>) { return ++(*serial_ptr); },
       &serial);
 
@@ -1321,7 +1551,8 @@ TEST_F(ShellSurfaceTest, StartResizeAndDestroyShell) {
   shell_surface->set_configure_callback(base::BindRepeating(
       [](const gfx::Rect& bounds, chromeos::WindowStateType state_type,
          bool resizing, bool activated, const gfx::Vector2d& origin_offset,
-         float raster_scale, std::optional<chromeos::WindowStateType>) {
+         float raster_scale, aura::Window::OcclusionState occlusion_state,
+         std::optional<chromeos::WindowStateType>) {
         ADD_FAILURE() << "Configure Should not be called";
         return uint32_t{0};
       }));
@@ -1347,8 +1578,9 @@ TEST_F(ShellSurfaceTest, SetGeometry) {
 
 TEST_F(ShellSurfaceTest, SetMinimumSize) {
   constexpr gfx::Size kBufferSize(64, 64);
-  auto shell_surface =
-      test::ShellSurfaceBuilder(kBufferSize).BuildShellSurface();
+  auto shell_surface = test::ShellSurfaceBuilder(kBufferSize)
+                           .SetFrameColors(SK_ColorWHITE, SK_ColorWHITE)
+                           .BuildShellSurface();
   auto* surface = shell_surface->root_surface();
 
   constexpr gfx::Size kSizes[] = {{50, 50}, {100, 50}};
@@ -1525,7 +1757,7 @@ TEST_F(ShellSurfaceTest, ConfigureCallback) {
   // Commit without contents should result in a configure callback with empty
   // suggested size as a mechanisms to ask the client size itself.
   surface->Commit();
-  EXPECT_TRUE(config_data.suggested_bounds.IsEmpty());
+  ASSERT_TRUE(config_data.suggested_bounds.IsEmpty());
   EXPECT_TRUE(shell_surface->GetWidget());
   EXPECT_FALSE(shell_surface->GetWidget()->IsVisible());
   EXPECT_EQ(geometry.size(), shell_surface->CalculatePreferredSize());
@@ -1543,8 +1775,7 @@ TEST_F(ShellSurfaceTest, ConfigureCallback) {
   EXPECT_EQ(chromeos::WindowStateType::kMaximized, config_data.state_type);
 
   constexpr gfx::Size kBufferSize(64, 64);
-  std::unique_ptr<Buffer> buffer(
-      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize)));
+  auto buffer = test::ExoTestHelper::CreateBuffer(kBufferSize);
   surface->Attach(buffer.get());
   surface->Commit();
 
@@ -1674,8 +1905,7 @@ TEST_F(ShellSurfaceTest,
   EXPECT_FALSE(shell_surface->GetWidget()->IsVisible());
   EXPECT_TRUE(shell_surface->GetWidget()->IsMaximized());
 
-  auto buffer = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize));
+  auto buffer = test::ExoTestHelper::CreateBuffer(kBufferSize);
   root_surface->Attach(buffer.get());
 
   gfx::Rect geometry_full(kBufferSize);
@@ -1703,8 +1933,7 @@ TEST_F(ShellSurfaceTest, CreateMaximizedWindowWithRestoreBounds) {
   // destructor calls Configure() referencing these 4 variables.
   ConfigureData config_data;
   constexpr gfx::Size kBufferSize(256, 256);
-  std::unique_ptr<Buffer> buffer(
-      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize)));
+  auto buffer = test::ExoTestHelper::CreateBuffer(kBufferSize);
 
   auto shell_surface =
       test::ShellSurfaceBuilder().SetNoCommit().BuildShellSurface();
@@ -1924,8 +2153,7 @@ TEST_F(ShellSurfaceTest, Popup) {
 
   shell_surface->GetWidget()->SetBounds(gfx::Rect(0, 0, 256, 256));
 
-  std::unique_ptr<Buffer> popup_buffer(
-      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize)));
+  auto popup_buffer = test::ExoTestHelper::CreateBuffer(kBufferSize);
   std::unique_ptr<Surface> popup_surface(new Surface);
   popup_surface->Attach(popup_buffer.get());
   std::unique_ptr<ShellSurface> popup_shell_surface(CreatePopupShellSurface(
@@ -1945,8 +2173,7 @@ TEST_F(ShellSurfaceTest, Popup) {
   EXPECT_FALSE(popup_shell_surface->frame_enabled());
 
   // ShellSurface can capture the event even after it is created.
-  std::unique_ptr<Buffer> sub_popup_buffer(
-      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize)));
+  auto sub_popup_buffer = test::ExoTestHelper::CreateBuffer(kBufferSize);
   std::unique_ptr<Surface> sub_popup_surface(new Surface);
   sub_popup_surface->Attach(sub_popup_buffer.get());
   std::unique_ptr<ShellSurface> sub_popup_shell_surface(CreatePopupShellSurface(
@@ -2013,8 +2240,7 @@ TEST_F(ShellSurfaceTest, GainCaptureFromSiblingSubPopup) {
       test::ShellSurfaceBuilder(kBufferSize).BuildShellSurface();
   shell_surface->GetWidget()->SetBounds(gfx::Rect(0, 0, 256, 256));
 
-  auto popup_buffer = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize));
+  auto popup_buffer = test::ExoTestHelper::CreateBuffer(kBufferSize);
   auto popup_surface = std::make_unique<Surface>();
   popup_surface->Attach(popup_buffer.get());
   std::unique_ptr<ShellSurface> popup_shell_surface(CreatePopupShellSurface(
@@ -2023,8 +2249,7 @@ TEST_F(ShellSurfaceTest, GainCaptureFromSiblingSubPopup) {
   popup_surface->Commit();
   EXPECT_TRUE(IsCaptureWindow(popup_shell_surface.get()));
 
-  auto popup_buffer1 = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize));
+  auto popup_buffer1 = test::ExoTestHelper::CreateBuffer(kBufferSize);
   auto popup_surface1 = std::make_unique<Surface>();
   popup_surface1->Attach(popup_buffer1.get());
   std::unique_ptr<ShellSurface> popup_shell_surface1(CreatePopupShellSurface(
@@ -2033,8 +2258,7 @@ TEST_F(ShellSurfaceTest, GainCaptureFromSiblingSubPopup) {
   popup_surface1->Commit();
   EXPECT_TRUE(IsCaptureWindow(popup_shell_surface1.get()));
 
-  auto popup_buffer2 = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize));
+  auto popup_buffer2 = test::ExoTestHelper::CreateBuffer(kBufferSize);
   auto popup_surface2 = std::make_unique<Surface>();
   popup_surface2->Attach(popup_buffer2.get());
   std::unique_ptr<ShellSurface> popup_shell_surface2(CreatePopupShellSurface(
@@ -2066,8 +2290,7 @@ TEST_F(ShellSurfaceTest, GainCaptureFromNieceSubPopup) {
       test::ShellSurfaceBuilder(kBufferSize).BuildShellSurface();
   shell_surface->GetWidget()->SetBounds(gfx::Rect(0, 0, 256, 256));
 
-  auto popup_buffer = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize));
+  auto popup_buffer = test::ExoTestHelper::CreateBuffer(kBufferSize);
   auto popup_surface = std::make_unique<Surface>();
   popup_surface->Attach(popup_buffer.get());
   std::unique_ptr<ShellSurface> popup_shell_surface(CreatePopupShellSurface(
@@ -2076,8 +2299,7 @@ TEST_F(ShellSurfaceTest, GainCaptureFromNieceSubPopup) {
   popup_surface->Commit();
   EXPECT_TRUE(IsCaptureWindow(popup_shell_surface.get()));
 
-  auto popup_buffer1 = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize));
+  auto popup_buffer1 = test::ExoTestHelper::CreateBuffer(kBufferSize);
   auto popup_surface1 = std::make_unique<Surface>();
   popup_surface1->Attach(popup_buffer1.get());
   std::unique_ptr<ShellSurface> popup_shell_surface1(CreatePopupShellSurface(
@@ -2086,8 +2308,7 @@ TEST_F(ShellSurfaceTest, GainCaptureFromNieceSubPopup) {
   // Doesn't change capture.
   EXPECT_TRUE(IsCaptureWindow(popup_shell_surface.get()));
 
-  auto popup_buffer2 = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize));
+  auto popup_buffer2 = test::ExoTestHelper::CreateBuffer(kBufferSize);
   auto popup_surface2 = std::make_unique<Surface>();
   popup_surface2->Attach(popup_buffer2.get());
   std::unique_ptr<ShellSurface> popup_shell_surface2(CreatePopupShellSurface(
@@ -2096,8 +2317,7 @@ TEST_F(ShellSurfaceTest, GainCaptureFromNieceSubPopup) {
   popup_surface2->Commit();
   EXPECT_TRUE(IsCaptureWindow(popup_shell_surface2.get()));
 
-  auto popup_buffer3 = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize));
+  auto popup_buffer3 = test::ExoTestHelper::CreateBuffer(kBufferSize);
   auto popup_surface3 = std::make_unique<Surface>();
   popup_surface3->Attach(popup_buffer3.get());
   std::unique_ptr<ShellSurface> popup_shell_surface3(CreatePopupShellSurface(
@@ -2106,8 +2326,7 @@ TEST_F(ShellSurfaceTest, GainCaptureFromNieceSubPopup) {
   // Doesn't change capture.
   EXPECT_TRUE(IsCaptureWindow(popup_shell_surface2.get()));
 
-  auto popup_buffer4 = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize));
+  auto popup_buffer4 = test::ExoTestHelper::CreateBuffer(kBufferSize);
   auto popup_surface4 = std::make_unique<Surface>();
   popup_surface4->Attach(popup_buffer4.get());
   std::unique_ptr<ShellSurface> popup_shell_surface4(CreatePopupShellSurface(
@@ -2139,8 +2358,7 @@ TEST_F(ShellSurfaceTest, GainCaptureFromDescendantSubPopup) {
       test::ShellSurfaceBuilder(kBufferSize).BuildShellSurface();
   shell_surface->GetWidget()->SetBounds(gfx::Rect(0, 0, 256, 256));
 
-  auto popup_buffer = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize));
+  auto popup_buffer = test::ExoTestHelper::CreateBuffer(kBufferSize);
   auto popup_surface = std::make_unique<Surface>();
   popup_surface->Attach(popup_buffer.get());
   std::unique_ptr<ShellSurface> popup_shell_surface(CreatePopupShellSurface(
@@ -2149,8 +2367,7 @@ TEST_F(ShellSurfaceTest, GainCaptureFromDescendantSubPopup) {
   popup_surface->Commit();
   EXPECT_TRUE(IsCaptureWindow(popup_shell_surface.get()));
 
-  auto popup_buffer1 = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize));
+  auto popup_buffer1 = test::ExoTestHelper::CreateBuffer(kBufferSize);
   auto popup_surface1 = std::make_unique<Surface>();
   popup_surface1->Attach(popup_buffer1.get());
   std::unique_ptr<ShellSurface> popup_shell_surface1(CreatePopupShellSurface(
@@ -2159,8 +2376,7 @@ TEST_F(ShellSurfaceTest, GainCaptureFromDescendantSubPopup) {
   popup_surface1->Commit();
   EXPECT_TRUE(IsCaptureWindow(popup_shell_surface1.get()));
 
-  auto popup_buffer2 = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize));
+  auto popup_buffer2 = test::ExoTestHelper::CreateBuffer(kBufferSize);
   auto popup_surface2 = std::make_unique<Surface>();
   popup_surface2->Attach(popup_buffer2.get());
   std::unique_ptr<ShellSurface> popup_shell_surface2(CreatePopupShellSurface(
@@ -2169,8 +2385,7 @@ TEST_F(ShellSurfaceTest, GainCaptureFromDescendantSubPopup) {
   // Doesn't change capture.
   EXPECT_TRUE(IsCaptureWindow(popup_shell_surface1.get()));
 
-  auto popup_buffer3 = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize));
+  auto popup_buffer3 = test::ExoTestHelper::CreateBuffer(kBufferSize);
   auto popup_surface3 = std::make_unique<Surface>();
   popup_surface3->Attach(popup_buffer3.get());
   std::unique_ptr<ShellSurface> popup_shell_surface3(CreatePopupShellSurface(
@@ -2301,8 +2516,7 @@ TEST_F(ShellSurfaceTest, PopupWithInputRegion) {
                            .BuildShellSurface();
   auto* surface = shell_surface->root_surface();
 
-  std::unique_ptr<Buffer> child_buffer(
-      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize)));
+  auto child_buffer = test::ExoTestHelper::CreateBuffer(kBufferSize);
   std::unique_ptr<Surface> child_surface(new Surface);
   child_surface->Attach(child_buffer.get());
 
@@ -2313,8 +2527,7 @@ TEST_F(ShellSurfaceTest, PopupWithInputRegion) {
   surface->Commit();
   shell_surface->GetWidget()->SetBounds(gfx::Rect(0, 0, 256, 256));
 
-  std::unique_ptr<Buffer> popup_buffer(
-      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize)));
+  auto popup_buffer = test::ExoTestHelper::CreateBuffer(kBufferSize);
   std::unique_ptr<Surface> popup_surface(new Surface);
   popup_surface->Attach(popup_buffer.get());
   std::unique_ptr<ShellSurface> popup_shell_surface(CreatePopupShellSurface(
@@ -2385,8 +2598,7 @@ TEST_F(ShellSurfaceTest, PopupWithCaptureMode) {
   constexpr gfx::Size kBufferSize(256, 256);
   auto shell_surface =
       test::ShellSurfaceBuilder(kBufferSize).BuildShellSurface();
-  auto popup_buffer = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize));
+  auto popup_buffer = test::ExoTestHelper::CreateBuffer(kBufferSize);
   auto popup_surface = std::make_unique<Surface>();
   popup_surface->Attach(popup_buffer.get());
   std::unique_ptr<ShellSurface> popup_shell_surface(CreatePopupShellSurface(
@@ -2502,7 +2714,8 @@ TEST_F(ShellSurfaceTest, DragMaximizedWindow) {
   shell_surface->set_configure_callback(base::BindLambdaForTesting(
       [&](const gfx::Rect& bounds, chromeos::WindowStateType state,
           bool resizing, bool activated, const gfx::Vector2d& origin_offset,
-          float raster_scale, std::optional<chromeos::WindowStateType>) {
+          float raster_scale, aura::Window::OcclusionState occlusion_state,
+          std::optional<chromeos::WindowStateType>) {
         configured_state = state;
         return uint32_t{0};
       }));
@@ -2523,15 +2736,15 @@ TEST_F(ShellSurfaceTest, DragMaximizedWindow) {
 
 TEST_F(ShellSurfaceTest, CaptionWithPopup) {
   constexpr gfx::Size kBufferSize(256, 256);
-  auto shell_surface =
-      test::ShellSurfaceBuilder(kBufferSize).BuildShellSurface();
+  auto shell_surface = test::ShellSurfaceBuilder(kBufferSize)
+                           .SetRootBufferFormat(kOpaqueFormat)
+                           .SetFrame(SurfaceFrameType::NORMAL)
+                           .BuildShellSurface();
   auto* surface = shell_surface->root_surface();
+  shell_surface->GetWidget()->SetBounds(gfx::Rect(0, 0, 256, 288));
 
-  shell_surface->GetWidget()->SetBounds(gfx::Rect(0, 0, 256, 256));
-  shell_surface->OnSetFrame(SurfaceFrameType::NORMAL);
-
-  auto popup_buffer = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize));
+  auto popup_buffer =
+      test::ExoTestHelper::CreateBuffer(kBufferSize, kOpaqueFormat);
   auto popup_surface = std::make_unique<Surface>();
   popup_surface->Attach(popup_buffer.get());
   std::unique_ptr<ShellSurface> popup_shell_surface(CreatePopupShellSurface(
@@ -2568,9 +2781,10 @@ TEST_F(ShellSurfaceTest, CaptionWithPopup) {
 
 TEST_F(ShellSurfaceTest, SkipImeProcessingPropagateToSurface) {
   std::unique_ptr<ShellSurface> shell_surface =
-      test::ShellSurfaceBuilder({256, 256}).BuildShellSurface();
+      test::ShellSurfaceBuilder({256, 256})
+          .SetFrame(SurfaceFrameType::NORMAL)
+          .BuildShellSurface();
   shell_surface->GetWidget()->SetBounds(gfx::Rect(0, 0, 256, 256));
-  shell_surface->OnSetFrame(SurfaceFrameType::NORMAL);
 
   aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
   ASSERT_FALSE(window->GetProperty(aura::client::kSkipImeProcessing));
@@ -2721,6 +2935,7 @@ TEST_F(ShellSurfaceTest, ServerStartResizeComponent) {
       [](uint32_t* const serial_ptr, const gfx::Rect& bounds,
          chromeos::WindowStateType state_type, bool resizing, bool activated,
          const gfx::Vector2d& origin_offset, float raster_scale,
+         aura::Window::OcclusionState occlusion_state,
          std::optional<chromeos::WindowStateType>) { return ++(*serial_ptr); },
       &serial);
 
@@ -2790,8 +3005,7 @@ TEST_F(ShellSurfaceTest, CommitShouldNotMoveDisplay) {
   ASSERT_TRUE(shell_surface->StartMove());
 
   constexpr gfx::Size kBufferSize(256, 256);
-  auto new_buffer = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kBufferSize));
+  auto new_buffer = test::ExoTestHelper::CreateBuffer(kBufferSize);
   root_surface->Attach(new_buffer.get());
   root_surface->Commit();
 
@@ -2825,8 +3039,7 @@ TEST_F(ShellSurfaceTest, ShadowBoundsWithNegativeCoordinate) {
 
   // Create subsurface outside of root surface.
   constexpr gfx::Size kChildBufferSize(32, 32);
-  auto child_buffer = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kChildBufferSize));
+  auto child_buffer = test::ExoTestHelper::CreateBuffer(kChildBufferSize);
   auto child_surface = std::make_unique<Surface>();
   child_surface->Attach(child_buffer.get());
   auto subsurface = std::make_unique<SubSurface>(child_surface.get(),
@@ -2872,8 +3085,7 @@ TEST_F(ShellSurfaceTest, ShadowBoundsWithScaleFactor) {
 
   // Create subsurface outside of root surface.
   constexpr gfx::Size kChildBufferSize(32, 32);
-  auto child_buffer = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kChildBufferSize));
+  auto child_buffer = test::ExoTestHelper::CreateBuffer(kChildBufferSize);
   auto child_surface = std::make_unique<Surface>();
   child_surface->Attach(child_buffer.get());
   auto subsurface = std::make_unique<SubSurface>(child_surface.get(),
@@ -2996,6 +3208,7 @@ TEST_F(ShellSurfaceTest, ResizeShadowIndependentBounds) {
       [](uint32_t* const serial_ptr, const gfx::Rect& bounds,
          chromeos::WindowStateType state_type, bool resizing, bool activated,
          const gfx::Vector2d& origin_offset, float raster_scale,
+         aura::Window::OcclusionState occlusion_state,
          std::optional<chromeos::WindowStateType>) { return ++(*serial_ptr); },
       &serial);
 
@@ -3270,11 +3483,11 @@ TEST_F(ShellSurfaceTest, Overlay) {
 }
 
 TEST_F(ShellSurfaceTest, OverlayOverlapsFrame) {
-  auto shell_surface =
-      test::ShellSurfaceBuilder({100, 100}).BuildShellSurface();
+  auto shell_surface = test::ShellSurfaceBuilder({100, 100})
+                           .SetFrame(SurfaceFrameType::NORMAL)
+                           .BuildShellSurface();
   shell_surface->GetWidget()->GetNativeWindow()->SetProperty(
       aura::client::kSkipImeProcessing, true);
-  shell_surface->OnSetFrame(SurfaceFrameType::NORMAL);
 
   EXPECT_FALSE(shell_surface->HasOverlay());
 
@@ -3307,11 +3520,11 @@ TEST_F(ShellSurfaceTest, OverlayOverlapsFrame) {
 }
 
 TEST_F(ShellSurfaceTest, OverlayCanResize) {
-  auto shell_surface =
-      test::ShellSurfaceBuilder({100, 100}).BuildShellSurface();
+  auto shell_surface = test::ShellSurfaceBuilder({100, 100})
+                           .SetFrame(SurfaceFrameType::NORMAL)
+                           .BuildShellSurface();
   shell_surface->GetWidget()->GetNativeWindow()->SetProperty(
       aura::client::kSkipImeProcessing, true);
-  shell_surface->OnSetFrame(SurfaceFrameType::NORMAL);
 
   EXPECT_FALSE(shell_surface->HasOverlay());
   {
@@ -3433,6 +3646,86 @@ TEST_F(ShellSurfaceTest, ThrottleFrameRate) {
   shell_surface->root_surface()->RemoveSurfaceObserver(&observer);
 }
 
+// Tests raster scale changes happen before occlusion changes on entering
+// overview mode, and raster scale changes happen after occlusion changes on
+// exiting overview mode. This to ensure windows that become visible do not get
+// rastered twice.
+TEST_F(ShellSurfaceTest, RasterScaleChangeVsOcclusionChangeOrder) {
+  ash::Shell::Get()
+      ->raster_scale_controller()
+      ->set_raster_scale_slop_proportion_for_testing(0.0f);
+  ash::Shell::Get()->overview_controller()->set_windows_have_snapshot_for_test(
+      false);
+  auto* overview_controller = ash::Shell::Get()->overview_controller();
+  overview_controller->set_occlusion_pause_duration_for_end_for_test(
+      base::Milliseconds(1));
+  std::vector<ConfigureData> config_vec;
+  auto shell_surface =
+      test::ShellSurfaceBuilder({100, 100})
+          .SetConfigureCallback(base::BindRepeating(
+              &ConfigureSerialVec, base::Unretained(&config_vec)))
+          .BuildShellSurface();
+  auto* surface = shell_surface->root_surface();
+  aura::Window* root_window = surface->window();
+  aura::Window* widget_window = shell_surface->GetWidget()->GetNativeWindow();
+  shell_surface->Minimize();
+
+  // Initial configure and configure for minimize.
+  EXPECT_EQ(2u, config_vec.size());
+
+  ui::ScopedAnimationDurationScaleMode test_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  EXPECT_EQ(aura::Window::OcclusionState::HIDDEN,
+            root_window->GetOcclusionState());
+  EXPECT_EQ(1.0, widget_window->GetProperty(aura::client::kRasterScale));
+  overview_controller->StartOverview(ash::OverviewStartAction::kTests);
+  ash::WaitForOverviewEnterAnimation();
+
+  EXPECT_EQ(aura::Window::OcclusionState::VISIBLE,
+            root_window->GetOcclusionState());
+  EXPECT_NE(1.0, widget_window->GetProperty(aura::client::kRasterScale));
+
+  // Make sure raster scale was changed first.
+  ASSERT_EQ(4u, config_vec.size());
+  EXPECT_NE(1.0, config_vec[2].raster_scale);
+  EXPECT_EQ(aura::Window::OcclusionState::HIDDEN,
+            config_vec[2].occlusion_state);
+  EXPECT_NE(1.0, config_vec[3].raster_scale);
+  EXPECT_EQ(aura::Window::OcclusionState::VISIBLE,
+            config_vec[3].occlusion_state);
+
+  ash::WaitForOverviewEnterAnimation();
+
+  // No extra configure should occur.
+  EXPECT_EQ(4u, config_vec.size());
+
+  overview_controller->EndOverview(ash::OverviewEndAction::kTests);
+
+  EXPECT_EQ(aura::Window::OcclusionState::VISIBLE,
+            root_window->GetOcclusionState());
+  EXPECT_NE(1.0, widget_window->GetProperty(aura::client::kRasterScale));
+
+  // No extra configure should occur.
+  EXPECT_EQ(4u, config_vec.size());
+
+  ash::WaitForOverviewExitAnimation();
+
+  // Overview mode on exiting pauses the occlusion tracker for a while.
+  ash::WaitForOcclusionStateChange(root_window,
+                                   aura::Window::OcclusionState::HIDDEN);
+  EXPECT_EQ(1.0, widget_window->GetProperty(aura::client::kRasterScale));
+
+  // Make sure occlusion is updated before raster scale.
+  ASSERT_EQ(6u, config_vec.size());
+  EXPECT_NE(1.0, config_vec[4].raster_scale);
+  EXPECT_EQ(aura::Window::OcclusionState::HIDDEN,
+            config_vec[4].occlusion_state);
+  EXPECT_EQ(1.0, config_vec[5].raster_scale);
+  EXPECT_EQ(aura::Window::OcclusionState::HIDDEN,
+            config_vec[5].occlusion_state);
+}
+
 TEST_F(ShellSurfaceTest, ThrottleFrameRateViaController) {
   ash::FrameThrottlingController* frame_throttling_controller =
       ash::Shell::Get()->frame_throttling_controller();
@@ -3499,6 +3792,7 @@ struct ShellSurfaceCallbacks {
       bool activated,
       const gfx::Vector2d& origin_offset,
       float raster_scale,
+      aura::Window::OcclusionState occlusion_state,
       std::optional<chromeos::WindowStateType> restore_state_type) {
     configure_state.emplace();
     *configure_state = {bounds, state_type, resizing, activated};
@@ -3509,8 +3803,8 @@ struct ShellSurfaceCallbacks {
     configure_state.reset();
     origin.reset();
   }
-  absl::optional<ConfigureState> configure_state;
-  absl::optional<gfx::Point> origin;
+  std::optional<ConfigureState> configure_state;
+  std::optional<gfx::Point> origin;
   int32_t serial = 0;
 };
 
@@ -3601,18 +3895,20 @@ TEST_F(ShellSurfaceTest, InitialCenteredBoundsWithConfigure) {
                            .SetNoRootBuffer()
                            .SetNoCommit()
                            .BuildShellSurface();
+  EXPECT_FALSE(shell_surface->IsReady());
   ShellSurfaceCallbacks callbacks;
   shell_surface->set_configure_callback(base::BindRepeating(
       &ShellSurfaceCallbacks::OnConfigure, base::Unretained(&callbacks)));
   shell_surface->root_surface()->Commit();
   EXPECT_FALSE(shell_surface->GetWidget()->IsVisible());
+  EXPECT_FALSE(shell_surface->IsReady());
 
   gfx::Size size(256, 256);
-  auto new_buffer =
-      std::make_unique<Buffer>(exo_test_helper()->CreateGpuMemoryBuffer(size));
+  auto new_buffer = test::ExoTestHelper::CreateBuffer(size);
   shell_surface->root_surface()->Attach(new_buffer.get());
   shell_surface->root_surface()->Commit();
   EXPECT_TRUE(shell_surface->GetWidget()->IsVisible());
+  EXPECT_TRUE(shell_surface->IsReady());
 
   gfx::Rect expected =
       display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
@@ -3740,7 +4036,8 @@ TEST_F(ShellSurfaceTest, PostWindowChangeCallback) {
   auto test_callback = base::BindRepeating(
       [](chromeos::WindowStateType* state_type, const gfx::Rect&,
          chromeos::WindowStateType new_type, bool, bool, const gfx::Vector2d&,
-         float, std::optional<chromeos::WindowStateType>) -> uint32_t {
+         float, aura::Window::OcclusionState,
+         std::optional<chromeos::WindowStateType>) -> uint32_t {
         *state_type = new_type;
         return 0;
       },
@@ -3773,7 +4070,8 @@ TEST_F(ShellSurfaceTest, ConfigureOnlySentOnceForBoundsAndWindowStateChange) {
   auto test_callback = base::BindRepeating(
       [](int* times_configured, const gfx::Rect&,
          chromeos::WindowStateType new_type, bool, bool, const gfx::Vector2d&,
-         float, std::optional<chromeos::WindowStateType>) -> uint32_t {
+         float, aura::Window::OcclusionState,
+         std::optional<chromeos::WindowStateType>) -> uint32_t {
         ++(*times_configured);
         return 0;
       },
@@ -3806,7 +4104,8 @@ TEST_F(ShellSurfaceTest, SetImmersiveModeTriggersConfigure) {
   auto test_callback = base::BindRepeating(
       [](int* times_configured, const gfx::Rect&,
          chromeos::WindowStateType new_type, bool, bool, const gfx::Vector2d&,
-         float, std::optional<chromeos::WindowStateType>) -> uint32_t {
+         float, aura::Window::OcclusionState,
+         std::optional<chromeos::WindowStateType>) -> uint32_t {
         ++(*times_configured);
         return 0;
       },
@@ -3928,9 +4227,10 @@ TEST_F(ShellSurfaceTest, SetShapeAppliedAfterSurfaceCommit) {
 // when the surface commits.
 TEST_F(ShellSurfaceTest, SetShapeUpdatesAndUnsetsCorrectlyAfterCommit) {
   std::unique_ptr<ShellSurface> shell_surface =
-      test::ShellSurfaceBuilder({64, 64}).BuildShellSurface();
+      test::ShellSurfaceBuilder({64, 64})
+          .SetFrame(SurfaceFrameType::SHADOW)
+          .BuildShellSurface();
   shell_surface->OnSetServerStartResize();
-  shell_surface->OnSetFrame(SurfaceFrameType::SHADOW);
   shell_surface->root_surface()->Commit();
   const views::Widget* widget = shell_surface->GetWidget();
   ASSERT_TRUE(widget);
@@ -3970,7 +4270,7 @@ TEST_F(ShellSurfaceTest, SetShapeUpdatesAndUnsetsCorrectlyAfterCommit) {
   EXPECT_EQ(shape_region_3, CreateRegion(*layer_shape_rects));
 
   // Setting a null shape should unset the host window's layer shape.
-  shell_surface->SetShape(absl::nullopt);
+  shell_surface->SetShape(std::nullopt);
   shell_surface->root_surface()->Commit();
   layer_shape_rects = widget->GetNativeWindow()->layer()->alpha_shape();
   EXPECT_FALSE(layer_shape_rects);
@@ -3979,9 +4279,11 @@ TEST_F(ShellSurfaceTest, SetShapeUpdatesAndUnsetsCorrectlyAfterCommit) {
 // SetShape() is not supported for windows with the frame enabled.
 TEST_F(ShellSurfaceTest, SetShapeWithFrameNotSupported) {
   std::unique_ptr<ShellSurface> shell_surface =
-      test::ShellSurfaceBuilder({64, 64}).BuildShellSurface();
+      test::ShellSurfaceBuilder({64, 64})
+          .SetFrame(SurfaceFrameType::NORMAL)
+          .BuildShellSurface();
+
   shell_surface->OnSetServerStartResize();
-  shell_surface->OnSetFrame(SurfaceFrameType::NORMAL);
   shell_surface->root_surface()->Commit();
   const views::Widget* widget = shell_surface->GetWidget();
   ASSERT_TRUE(widget);
@@ -4122,8 +4424,7 @@ TEST_F(ShellSurfaceTest, MinimizedInitialState) {
   ASSERT_FALSE(shell_surface->root_surface()->GetBuffer());
 
   // Initial buffer arrives and the window should stay in minimized.
-  auto new_buffer = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kInitialBounds.size()));
+  auto new_buffer = test::ExoTestHelper::CreateBuffer(kInitialBounds.size());
   shell_surface->root_surface()->Attach(new_buffer.get());
   shell_surface->root_surface()->Commit();
   EXPECT_TRUE(shell_surface->GetWidget()->IsMinimized());
@@ -4145,8 +4446,7 @@ TEST_F(ShellSurfaceTest, NoGeometryWidgetBoundsUpdate) {
   EXPECT_EQ(kInitialSize,
             shell_surface->GetWidget()->GetWindowBoundsInScreen().size());
 
-  auto larger_buffer = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kLargerSize));
+  auto larger_buffer = test::ExoTestHelper::CreateBuffer(kLargerSize);
 
   shell_surface->root_surface()->Attach(larger_buffer.get());
   shell_surface->root_surface()->Commit();
@@ -4154,8 +4454,7 @@ TEST_F(ShellSurfaceTest, NoGeometryWidgetBoundsUpdate) {
   EXPECT_EQ(kLargerSize,
             shell_surface->GetWidget()->GetWindowBoundsInScreen().size());
 
-  auto smaller_buffer = std::make_unique<Buffer>(
-      exo_test_helper()->CreateGpuMemoryBuffer(kSmallerSize));
+  auto smaller_buffer = test::ExoTestHelper::CreateBuffer(kSmallerSize);
 
   shell_surface->root_surface()->Attach(smaller_buffer.get());
   shell_surface->root_surface()->Commit();
@@ -4169,11 +4468,10 @@ TEST_F(ShellSurfaceTest, SubpixelPositionOffset) {
   std::unique_ptr<ShellSurface> shell_surface =
       test::ShellSurfaceBuilder({256, 256})
           .SetOrigin({20, 20})
+          .SetFrame(SurfaceFrameType::NORMAL)
           .BuildShellSurface();
-  auto* surface = shell_surface->root_surface();
   // Enabling a normal frame makes `GetClientViewBounds().origin()` return
   // (0, 32), which makes the host window not align with any pixel boundary.
-  surface->SetFrame(SurfaceFrameType::NORMAL);
   shell_surface->root_surface()->SetSurfaceHierarchyContentBoundsForTest(
       gfx::Rect(-20, -20, 256, 256));
   EXPECT_TRUE(shell_surface->OnPreWidgetCommit());
@@ -4295,6 +4593,7 @@ TEST_F(ShellSurfaceTest,
       [](uint32_t* const serial_ptr, const gfx::Rect& bounds,
          chromeos::WindowStateType state_type, bool resizing, bool activated,
          const gfx::Vector2d& origin_offset, float raster_scale,
+         aura::Window::OcclusionState occlusion_state,
          std::optional<chromeos::WindowStateType>) { return ++(*serial_ptr); },
       &serial);
   shell_surface->set_configure_callback(configure_callback);
@@ -4406,37 +4705,57 @@ TEST_F(ShellSurfaceTest, DisplayLayoutConfigurationUpdatesSurfaceOrigin) {
   EXPECT_EQ(kNewOrigin + gfx::Vector2d(0, kVerticalOffset), client_origin);
 }
 
+// Tests the unnecessary occlusion events are fired when opaque buffer and no
+// frame are used.
 TEST_F(ShellSurfaceTest, DisplayScaleChangeDoesNotSendOcclusionUpdates) {
   std::unique_ptr<ShellSurface> shell_surface1 =
-      test::ShellSurfaceBuilder({256, 256}).BuildShellSurface();
+      test::ShellSurfaceBuilder({256, 256})
+          .SetRootBufferFormat(kOpaqueFormat)
+          .BuildShellSurface();
   std::unique_ptr<ShellSurface> shell_surface2 =
-      test::ShellSurfaceBuilder({256, 256}).BuildShellSurface();
+      test::ShellSurfaceBuilder({256, 256})
+          .SetRootBufferFormat(kOpaqueFormat)
+          .BuildShellSurface();
+  auto* surface1 = shell_surface1->root_surface();
+  auto* surface2 = shell_surface2->root_surface();
+  auto* window1 = shell_surface1->GetWidget()->GetNativeWindow();
+  auto* window2 = shell_surface2->GetWidget()->GetNativeWindow();
 
-  shell_surface1->GetWidget()->GetNativeWindow()->SetProperty(
-      chromeos::kWindowManagerManagesOpacityKey, true);
-  shell_surface2->GetWidget()->GetNativeWindow()->SetProperty(
-      chromeos::kWindowManagerManagesOpacityKey, true);
+  // xdg-shell without a frame type will use NOT_DRAWN layer type and
+  // should control the opacity by themselves.
+  EXPECT_EQ(ui::LAYER_NOT_DRAWN, window1->layer()->type());
+  EXPECT_FALSE(window1->GetProperty(chromeos::kWindowManagerManagesOpacityKey));
+  EXPECT_EQ(ui::LAYER_NOT_DRAWN, window2->layer()->type());
+  EXPECT_FALSE(window2->GetProperty(chromeos::kWindowManagerManagesOpacityKey));
 
-  // Do state change after setting kWindowManagerManagesOpacityKey so it
-  // applies properly.
+  const std::vector<gfx::Rect> kNormalOpaqueRegion{gfx::Rect(256, 256)};
+
+  // Normal window should have custom opacity regions.
+  EXPECT_TRUE(window1->GetTransparent());
+  EXPECT_TRUE(window2->GetTransparent());
+  EXPECT_EQ(kNormalOpaqueRegion, window1->opaque_regions_for_occlusion());
+  EXPECT_EQ(kNormalOpaqueRegion, window2->opaque_regions_for_occlusion());
+
+  // Test Maximzied State
   shell_surface1->Maximize();
   shell_surface2->Maximize();
 
-  auto* surface1 = shell_surface1->root_surface();
-  auto* surface2 = shell_surface2->root_surface();
+  EXPECT_FALSE(window1->GetTransparent());
+  EXPECT_FALSE(window2->GetTransparent());
+  const std::vector<gfx::Rect> kMaximizedOpaqueRegion{gfx::Rect(800, 552)};
+  EXPECT_EQ(kMaximizedOpaqueRegion, window1->opaque_regions_for_occlusion());
+  EXPECT_EQ(kMaximizedOpaqueRegion, window2->opaque_regions_for_occlusion());
 
   // Update root surfaces (this happens asynchronously normally) and set
   // occlusion tracking.
   surface1->SetOcclusionTracking(true);
   auto surface1_buffer =
-      std::make_unique<Buffer>(exo_test_helper()->CreateGpuMemoryBuffer(
-          shell_surface1->GetWidget()->GetWindowBoundsInScreen().size()));
+      test::ExoTestHelper::CreateBuffer(shell_surface1.get(), kOpaqueFormat);
   surface1->Attach(surface1_buffer.get());
   surface1->Commit();
   surface2->SetOcclusionTracking(true);
   auto surface2_buffer =
-      std::make_unique<Buffer>(exo_test_helper()->CreateGpuMemoryBuffer(
-          shell_surface2->GetWidget()->GetWindowBoundsInScreen().size()));
+      test::ExoTestHelper::CreateBuffer(shell_surface2.get(), kOpaqueFormat);
   surface2->Attach(surface2_buffer.get());
   surface2->Commit();
 
@@ -4457,31 +4776,181 @@ TEST_F(ShellSurfaceTest, DisplayScaleChangeDoesNotSendOcclusionUpdates) {
   EXPECT_EQ(0, observer2.num_occlusion_state_changes());
 
   display_manager->ZoomDisplay(display_id, /*up=*/true);
-
+  // Update root surfaces (this happens asynchronously normally).
+  {
+    auto surface1_buffer_zoom =
+        test::ExoTestHelper::CreateBuffer(shell_surface1.get(), kOpaqueFormat);
+    surface1->Attach(surface1_buffer_zoom.get());
+    surface1->Commit();
+    auto surface2_buffer_zoom =
+        test::ExoTestHelper::CreateBuffer(shell_surface2.get(), kOpaqueFormat);
+    surface2->Attach(surface2_buffer_zoom.get());
+    surface2->Commit();
+  }
   EXPECT_EQ(0, observer1.num_occlusion_state_changes());
   EXPECT_EQ(0, observer2.num_occlusion_state_changes());
 
-  // Update root surfaces (this happens asynchronously normally).
-  auto surface1_buffer_zoom =
-      std::make_unique<Buffer>(exo_test_helper()->CreateGpuMemoryBuffer(
-          shell_surface1->GetWidget()->GetWindowBoundsInScreen().size()));
-  surface1->Attach(surface1_buffer_zoom.get());
-  surface1->Commit();
-  auto surface2_buffer_zoom =
-      std::make_unique<Buffer>(exo_test_helper()->CreateGpuMemoryBuffer(
-          shell_surface2->GetWidget()->GetWindowBoundsInScreen().size()));
-  surface2->Attach(surface2_buffer_zoom.get());
-  surface2->Commit();
-
   display_manager->ZoomDisplay(display_id, /*up=*/false);
-
+  {
+    auto surface1_buffer_zoom =
+        test::ExoTestHelper::CreateBuffer(shell_surface1.get(), kOpaqueFormat);
+    surface1->Attach(surface1_buffer_zoom.get());
+    surface1->Commit();
+    auto surface2_buffer_zoom =
+        test::ExoTestHelper::CreateBuffer(shell_surface2.get(), kOpaqueFormat);
+    surface2->Attach(surface2_buffer_zoom.get());
+    surface2->Commit();
+  }
   // Should not get any occlusion changes - requires occlusion tracking clip
   // to the root window and that the shelf occlude what is below it, too.
   EXPECT_EQ(0, observer1.num_occlusion_state_changes());
   EXPECT_EQ(0, observer2.num_occlusion_state_changes());
 
-  surface1->RemoveSurfaceObserver(&observer1);
+  // Test Snapped State
+  ash::WindowSnapWMEvent snap_event(ash::WM_EVENT_SNAP_PRIMARY);
+  ash::WindowState* window_state1 = ash::WindowState::Get(window1);
+  ash::WindowState* window_state2 = ash::WindowState::Get(window2);
+
+  window_state1->OnWMEvent(&snap_event);
+  window_state2->OnWMEvent(&snap_event);
+  EXPECT_EQ(0, observer1.num_occlusion_state_changes());
+  EXPECT_EQ(0, observer2.num_occlusion_state_changes());
+
+  EXPECT_TRUE(window1->GetTransparent());
+  EXPECT_TRUE(window2->GetTransparent());
+
+  const std::vector<gfx::Rect> kSnappedOpaqueRegion{gfx::Rect(400, 552)};
+  EXPECT_EQ(kSnappedOpaqueRegion, window1->opaque_regions_for_occlusion());
+  EXPECT_EQ(kSnappedOpaqueRegion, window2->opaque_regions_for_occlusion());
+  {
+    auto snapped_buffer1 =
+        test::ExoTestHelper::CreateBuffer(shell_surface1.get(), kOpaqueFormat);
+    surface1->Attach(snapped_buffer1.get());
+    surface1->Commit();
+
+    auto snapped_buffer2 =
+        test::ExoTestHelper::CreateBuffer(shell_surface2.get(), kOpaqueFormat);
+    surface2->Attach(snapped_buffer2.get());
+    surface2->Commit();
+  }
+  EXPECT_EQ(0, observer1.num_occlusion_state_changes());
+  EXPECT_EQ(0, observer2.num_occlusion_state_changes());
+
+  display_manager->ZoomDisplay(display_id, /*up=*/true);
+  {
+    auto snapped_buffer1 =
+        test::ExoTestHelper::CreateBuffer(shell_surface1.get(), kOpaqueFormat);
+    surface1->Attach(snapped_buffer1.get());
+    surface1->Commit();
+
+    auto snapped_buffer2 =
+        test::ExoTestHelper::CreateBuffer(shell_surface2.get(), kOpaqueFormat);
+    surface2->Attach(snapped_buffer2.get());
+    surface2->Commit();
+  }
+  EXPECT_EQ(0, observer1.num_occlusion_state_changes());
+  EXPECT_EQ(0, observer2.num_occlusion_state_changes());
+
+  display_manager->ZoomDisplay(display_id, /*up=*/false);
+  {
+    auto snapped_buffer1 =
+        test::ExoTestHelper::CreateBuffer(shell_surface1.get(), kOpaqueFormat);
+    surface1->Attach(snapped_buffer1.get());
+    surface1->Commit();
+
+    auto snapped_buffer2 =
+        test::ExoTestHelper::CreateBuffer(shell_surface2.get(), kOpaqueFormat);
+    surface2->Attach(snapped_buffer2.get());
+    surface2->Commit();
+  }
+  EXPECT_EQ(0, observer1.num_occlusion_state_changes());
+  EXPECT_EQ(0, observer2.num_occlusion_state_changes());
+
+  // Make sure the occlusion tracking is working.
   surface2->RemoveSurfaceObserver(&observer2);
+  shell_surface2.reset();
+
+  EXPECT_EQ(1, observer1.num_occlusion_state_changes());
+
+  surface1->RemoveSurfaceObserver(&observer1);
+}
+
+TEST_F(ShellSurfaceTest, GetWidgetHitTestMask) {
+  auto shell_surface = test::ShellSurfaceBuilder({256, 256})
+                           .SetOrigin({100, 100})
+                           .BuildShellSurface();
+
+  EXPECT_TRUE(shell_surface->WidgetHasHitTestMask());
+  SkPath mask;
+  shell_surface->GetWidgetHitTestMask(&mask);
+  // Returned HitMask should be in the widget local coordinates.
+  EXPECT_EQ(SkRect::MakeLTRB(0, 0, 256, 256), mask.getBounds());
+}
+
+TEST_F(ShellSurfaceTest, InitiallyMaximizedWindowIsOpaque) {
+  auto shell_surface = test::ShellSurfaceBuilder({256, 256})
+                           .SetFrame(SurfaceFrameType::SHADOW)
+                           .SetOrigin({100, 100})
+                           .SetNoCommit()
+                           .BuildShellSurface();
+  shell_surface->Maximize();
+
+  shell_surface->root_surface()->Commit();
+
+  EXPECT_FALSE(shell_surface->GetWidget()->GetNativeWindow()->GetTransparent());
+}
+
+TEST_F(ShellSurfaceTest, ConfigureOcclusionSentAfterShellSurfaceIsReady) {
+  std::vector<ConfigureData> config_vec;
+  auto shell_surface =
+      test::ShellSurfaceBuilder({100, 100})
+          .SetConfigureCallback(base::BindRepeating(
+              &ConfigureSerialVec, base::Unretained(&config_vec)))
+          .SetWindowState(chromeos::WindowStateType::kMinimized)
+          .SetNoRootBuffer()
+          .BuildShellSurface();
+
+  Surface* root_surface = shell_surface->root_surface();
+  root_surface->Commit();
+
+  // Expect initial configure with no content (buffer for root surface).
+  EXPECT_EQ(1u, config_vec.size());
+
+  // TODO(crbug.com/328172097): We use VISIBLE window state for minimized
+  // windows on initial configure for now.
+  EXPECT_EQ(aura::Window::OcclusionState::VISIBLE,
+            config_vec[0].occlusion_state);
+
+  constexpr gfx::Size kBufferSize(256, 256);
+  auto buffer = exo_test_helper()->CreateBuffer(kBufferSize);
+  root_surface->Attach(buffer.get());
+  root_surface->Commit();
+
+  // Once we provide a buffer for the root surface, expect that the occlusion
+  // state is updated to HIDDEN, since it is a minimized window.
+  EXPECT_EQ(2u, config_vec.size());
+  EXPECT_EQ(aura::Window::OcclusionState::HIDDEN,
+            config_vec[1].occlusion_state);
+}
+
+// Regression test for crbug.com/322388171. Ensure shell surfaces with no
+// backing widget handle display changes without crashing.
+TEST_F(ShellSurfaceTest, HandlesDisplayChangeNoWidget) {
+  // Start with a single display configuration.
+  UpdateDisplay("800x600");
+
+  // Create the surface.
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({256, 256}).BuildShellSurface();
+  EXPECT_TRUE(shell_surface->GetWidget());
+
+  // Keep the shell surface alive but close the widget.
+  shell_surface->GetWidget()->CloseNow();
+  EXPECT_FALSE(shell_surface->GetWidget());
+
+  // Trigger an update to the display configuration, the shell surface should
+  // handle this without crashing.
+  UpdateDisplay("1200x800");
 }
 
 }  // namespace exo

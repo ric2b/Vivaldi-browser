@@ -83,7 +83,7 @@ base::Value NotesCodec::Encode(const NoteNode* notes_node,
   main.GetDict().Set(kChecksumKey, computed_checksum_);
   if (!sync_metadata_str.empty()) {
     std::string sync_metadata_str_base64;
-    base::Base64Encode(sync_metadata_str, &sync_metadata_str_base64);
+    sync_metadata_str_base64 = base::Base64Encode(sync_metadata_str);
     main.GetDict().Set(kSyncMetadata,
                 base::Value(std::move(sync_metadata_str_base64)));
   }
@@ -207,7 +207,7 @@ bool NotesCodec::DecodeHelper(NoteNode* notes_node,
   if (!value.is_dict())
     return false;  // Unexpected type.
 
-  absl::optional<int> version = value.GetDict().FindInt(kVersionKey);
+  std::optional<int> version = value.GetDict().FindInt(kVersionKey);
   if (!version || *version > kCurrentVersion)
     return false;  // Unknown version.
 

@@ -34,6 +34,7 @@ class BrowserContext;
 namespace service_manager {
 template <typename...>
 class BinderRegistryWithArgs;
+
 using BinderRegistry = BinderRegistryWithArgs<>;
 }  // namespace service_manager
 
@@ -91,9 +92,9 @@ class ShellContentBrowserClient : public content::ContentBrowserClient {
       content::NavigationHandle* navigation_handle) override;
   std::unique_ptr<content::NavigationUIData> GetNavigationUIData(
       content::NavigationHandle* navigation_handle) override;
-  void RegisterNonNetworkNavigationURLLoaderFactories(
-      int frame_tree_node_id,
-      NonNetworkURLLoaderFactoryMap* factories) override;
+  mojo::PendingRemote<network::mojom::URLLoaderFactory>
+  CreateNonNetworkNavigationURLLoaderFactory(const std::string& scheme,
+                                             int frame_tree_node_id) override;
   void RegisterNonNetworkWorkerMainResourceURLLoaderFactories(
       content::BrowserContext* browser_context,
       NonNetworkURLLoaderFactoryMap* factories) override;
@@ -105,7 +106,7 @@ class ShellContentBrowserClient : public content::ContentBrowserClient {
       int render_frame_id,
       const std::optional<url::Origin>& request_initiator_origin,
       NonNetworkURLLoaderFactoryMap* factories) override;
-  bool WillCreateURLLoaderFactory(
+  void WillCreateURLLoaderFactory(
       content::BrowserContext* browser_context,
       content::RenderFrameHost* frame_host,
       int render_process_id,
@@ -113,7 +114,7 @@ class ShellContentBrowserClient : public content::ContentBrowserClient {
       const url::Origin& request_initiator,
       std::optional<int64_t> navigation_id,
       ukm::SourceIdObj ukm_source_id,
-      mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
+      network::URLLoaderFactoryBuilder& factory_builder,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client,
       bool* bypass_redirect_checks,

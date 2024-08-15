@@ -163,9 +163,15 @@ void AppHomePageHandler::LaunchAppInternal(
                                      web_ui_->GetWebContents());
       return;
     } else {
-      TabDialogs::FromWebContents(web_ui_->GetWebContents())
-          ->ShowForceInstalledDeprecatedAppsDialog(app_id,
-                                                   web_ui_->GetWebContents());
+      if (extensions::IsPreinstalledAppId(app_id)) {
+        TabDialogs::FromWebContents(web_ui_->GetWebContents())
+            ->ShowForceInstalledPreinstalledDeprecatedAppDialog(
+                app_id, web_ui_->GetWebContents());
+      } else {
+        TabDialogs::FromWebContents(web_ui_->GetWebContents())
+            ->ShowForceInstalledDeprecatedAppsDialog(app_id,
+                                                     web_ui_->GetWebContents());
+      }
       return;
     }
   }
@@ -385,8 +391,7 @@ app_home::mojom::AppInfoPtr AppHomePageHandler::CreateAppInfoPtrFromExtension(
   app_info->start_url = start_url;
 
   bool deprecated_app = false;
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_FUCHSIA)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   auto* context = extension_system_->extension_service()->GetBrowserContext();
   deprecated_app =
       extensions::IsExtensionUnsupportedDeprecatedApp(context, extension->id());
@@ -449,8 +454,7 @@ void AppHomePageHandler::FillExtensionInfoList(
       continue;
     }
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_FUCHSIA)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
     auto* context = extension_system_->extension_service()->GetBrowserContext();
     const bool is_deprecated_app =
         extensions::IsExtensionUnsupportedDeprecatedApp(context,

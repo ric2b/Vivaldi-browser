@@ -47,12 +47,12 @@
 namespace blink {
 
 class AudioSourceProvider;
+class DOMException;
 class ImageCapture;
 class MediaTrackCapabilities;
 class MediaTrackConstraints;
 class MediaStream;
 class MediaTrackSettings;
-class ScriptPromiseResolver;
 class ScriptState;
 
 // Primary implementation of the MediaStreamTrack interface and idl type.
@@ -93,8 +93,9 @@ class MODULES_EXPORT MediaStreamTrackImpl : public MediaStreamTrack,
   MediaTrackSettings* getSettings() const override;
   MediaStreamTrackVideoStats* stats() override;
   CaptureHandle* getCaptureHandle() const override;
-  ScriptPromise applyConstraints(ScriptState*,
-                                 const MediaTrackConstraints*) override;
+  ScriptPromiseTyped<IDLUndefined> applyConstraints(
+      ScriptState*,
+      const MediaTrackConstraints*) override;
 
   // These two functions are called when constraints have been successfully
   // applied.
@@ -128,30 +129,27 @@ class MODULES_EXPORT MediaStreamTrackImpl : public MediaStreamTrack,
                           RegisteredEventListener&) override;
 
 #if !BUILDFLAG(IS_ANDROID)
-  void SendWheel(
-      double relative_x,
-      double relative_y,
-      int wheel_delta_x,
-      int wheel_delta_y,
-      base::OnceCallback<void(bool, const String&)> callback) override;
-  void GetZoomLevel(base::OnceCallback<void(absl::optional<int>, const String&)>
-                        callback) override;
-  void SetZoomLevel(
-      int zoom_level,
-      base::OnceCallback<void(bool, const String&)> callback) override;
+  void SendWheel(double relative_x,
+                 double relative_y,
+                 int wheel_delta_x,
+                 int wheel_delta_y,
+                 base::OnceCallback<void(DOMException*)> callback) override;
+  void SetZoomLevel(int zoom_level,
+                    base::OnceCallback<void(DOMException*)> callback) override;
 #endif
 
   // ScriptWrappable
   bool HasPendingActivity() const final;
 
   std::unique_ptr<AudioSourceProvider> CreateWebAudioSource(
-      int context_sample_rate) override;
+      int context_sample_rate,
+      base::TimeDelta platform_buffer_duration) override;
 
   MediaStreamTrackPlatform::VideoFrameStats GetVideoFrameStats() const;
 
   ImageCapture* GetImageCapture() override { return image_capture_.Get(); }
 
-  absl::optional<const MediaStreamDevice> device() const override;
+  std::optional<const MediaStreamDevice> device() const override;
 
   void BeingTransferred(const base::UnguessableToken& transfer_id) override;
   bool TransferAllowed(String& message) const override;
@@ -172,14 +170,16 @@ class MODULES_EXPORT MediaStreamTrackImpl : public MediaStreamTrack,
   friend class InternalsMediaStream;
 
   // MediaStreamTrack
-  void applyConstraints(ScriptPromiseResolver*,
+  void applyConstraints(ScriptPromiseResolverTyped<IDLUndefined>*,
                         const MediaTrackConstraints*) override;
 
   // MediaStreamSource::Observer
   void SourceChangedState() override;
   void SourceChangedCaptureConfiguration() override;
   void SourceChangedCaptureHandle() override;
-
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  void SourceChangedZoomLevel(int) override {}
+#endif
   void PropagateTrackEnded();
 
   void SendLogMessage(const WTF::String& message);
@@ -223,7 +223,7 @@ class MODULES_EXPORT MediaStreamTrackImpl : public MediaStreamTrack,
   HeapHashSet<WeakMember<MediaStreamTrack::Observer>> observers_;
   bool muted_ = false;
   MediaConstraints constraints_;
-  absl::optional<bool> suppress_local_audio_playback_setting_;
+  std::optional<bool> suppress_local_audio_playback_setting_;
   Member<MediaStreamTrackVideoStats> video_stats_;
 };
 

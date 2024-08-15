@@ -349,12 +349,17 @@ export const isModifierKey = (keycode: number): boolean => {
   return ModifierKeyCodes.includes(keycode);
 };
 
-export const isValidDefaultAccelerator =
-    (accelerator: Accelerator): boolean => {
-      // A valid default accelerator is one that has modifier(s) and a key or
-      // is function key.
-      return (accelerator.modifiers > 0 && accelerator.keyCode > 0) ||
-          isFunctionKey(accelerator.keyCode);
+export const isValidAccelerator = (accelerator: Accelerator): boolean => {
+  // A valid default accelerator is one that has modifier(s) and a key or
+  // is function key.
+  return (accelerator.modifiers > 0 && accelerator.keyCode > 0) ||
+      isFunctionKey(accelerator.keyCode);
+};
+
+export const containsAccelerator =
+    (accelerators: Accelerator[], accelerator: Accelerator): boolean => {
+      return accelerators.some(
+          accel => areAcceleratorsEqual(accel, accelerator));
     };
 
 export const getSourceAndActionFromAcceleratorId =
@@ -370,12 +375,12 @@ export const getSourceAndActionFromAcceleratorId =
 /**
  *
  * @param keyOrIcon the text for an individual accelerator key.
- * @returns the associated icon name for the given `keyOrIcon` text if it
+ * @returns the associated icon label for the given `keyOrIcon` text if it
  *     exists, otherwise returns `keyOrIcon` itself.
  */
 export const getKeyDisplay = (keyOrIcon: string): string => {
   const iconName = keyToIconNameMap[keyOrIcon];
-  return iconName ? iconName : keyOrIcon;
+  return iconName ? loadTimeData.getString(`iconLabel${keyOrIcon}`) : keyOrIcon;
 };
 
 /**

@@ -134,32 +134,27 @@ bool IsApplicationTarget(const Target* target) {
 
 bool IsXCUITestRunnerTarget(const Target* target) {
   return IsApplicationTarget(target) &&
-         base::EndsWith(target->label().name(),
-                        kXCUITestRunnerTargetNamePostfix,
-                        base::CompareCase::SENSITIVE);
+         target->label().name().ends_with(kXCUITestRunnerTargetNamePostfix);
 }
 
 bool IsXCTestModuleTarget(const Target* target) {
   return target->output_type() == Target::CREATE_BUNDLE &&
          target->bundle_data().product_type() ==
              "com.apple.product-type.bundle.unit-test" &&
-         base::EndsWith(target->label().name(), kXCTestModuleTargetNamePostfix,
-                        base::CompareCase::SENSITIVE);
+         target->label().name().ends_with(kXCTestModuleTargetNamePostfix);
 }
 
 bool IsXCUITestModuleTarget(const Target* target) {
   return target->output_type() == Target::CREATE_BUNDLE &&
          target->bundle_data().product_type() ==
              "com.apple.product-type.bundle.ui-testing" &&
-         base::EndsWith(target->label().name(), kXCTestModuleTargetNamePostfix,
-                        base::CompareCase::SENSITIVE);
+         target->label().name().ends_with(kXCTestModuleTargetNamePostfix);
 }
 
 bool IsXCTestFile(const SourceFile& file) {
   std::string file_name = file.GetName();
   for (size_t i = 0; i < std::size(kXCTestFileSuffixes); ++i) {
-    if (base::EndsWith(file_name, kXCTestFileSuffixes[i],
-                       base::CompareCase::SENSITIVE)) {
+    if (file_name.ends_with(kXCTestFileSuffixes[i])) {
       return true;
     }
   }
@@ -538,8 +533,7 @@ bool XcodeWorkspace::WriteSettingsFile(const std::string& name,
       break;
   }
 
-  out << "</dict>\n"
-      << "</plist>\n";
+  out << "</dict>\n" << "</plist>\n";
 
   return storage.WriteToFileIfChanged(build_settings_->GetFullPath(source_file),
                                       err);
@@ -1039,8 +1033,7 @@ void XcodeProject::WriteFileContent(std::ostream& out) const {
       << "\tobjects = {\n";
 
   for (auto& pair : CollectPBXObjectsPerClass(&project_)) {
-    out << "\n"
-        << "/* Begin " << ToString(pair.first) << " section */\n";
+    out << "\n" << "/* Begin " << ToString(pair.first) << " section */\n";
     std::sort(pair.second.begin(), pair.second.end(),
               [](const PBXObject* a, const PBXObject* b) {
                 return a->id() < b->id();

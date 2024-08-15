@@ -34,7 +34,9 @@
 #include "dawn/common/Ref.h"
 #include "dawn/native/CallbackTaskManager.h"
 #include "dawn/native/Error.h"
+#include "dawn/native/Pipeline.h"
 #include "dawn/webgpu.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 
 namespace dawn::native {
 
@@ -61,7 +63,12 @@ class CreateComputePipelineAsyncTask {
   private:
     Ref<ComputePipelineBase> mComputePipeline;
     WGPUCreateComputePipelineAsyncCallback mCallback;
-    void* mUserdata;
+    // TODO(https://crbug.com/2364): The pointer is dangling in
+    // webgpu_cts_with_validation_tests. We should investigate, and decide if
+    // this should be fixed, or turned into a DisableDanglingPtrDetection.
+    raw_ptr<void, DanglingUntriaged> mUserdata;
+    // Used to keep ShaderModuleBase::mTintProgram alive until pipeline initialization is done.
+    PipelineBase::ScopedUseShaderPrograms mScopedUseShaderPrograms;
 };
 
 // CreateRenderPipelineAsyncTask defines all the inputs and outputs of
@@ -80,7 +87,9 @@ class CreateRenderPipelineAsyncTask {
   private:
     Ref<RenderPipelineBase> mRenderPipeline;
     WGPUCreateRenderPipelineAsyncCallback mCallback;
-    void* mUserdata;
+    raw_ptr<void> mUserdata;
+    // Used to keep ShaderModuleBase::mTintProgram alive until pipeline initialization is done.
+    PipelineBase::ScopedUseShaderPrograms mScopedUseShaderPrograms;
 };
 
 }  // namespace dawn::native

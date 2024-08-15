@@ -63,6 +63,7 @@
 #include "src/shaders/SkImageShader.h"
 #include "src/shaders/SkLocalMatrixShader.h"
 #include "src/shaders/SkPerlinNoiseShaderImpl.h"
+#include "src/shaders/SkPerlinNoiseShaderType.h"
 #include "src/shaders/SkPictureShader.h"
 #include "src/shaders/SkRuntimeShader.h"
 #include "src/shaders/SkShaderBase.h"
@@ -337,7 +338,7 @@ GradientShaderBlocks::GradientData::GradientData(SkShaderBase::GradientType type
 }
 
 void GradientShaderBlocks::AddBlock(const KeyContext& keyContext,
-                                    PaintParamsKeyBuilder *builder,
+                                    PaintParamsKeyBuilder* builder,
                                     PipelineDataGatherer* gatherer,
                                     const GradientData& gradData) {
     auto dict = keyContext.dict();
@@ -973,7 +974,9 @@ void RuntimeEffectBlock::BeginBlock(const KeyContext& keyContext,
     ShaderCodeDictionary* dict = keyContext.dict();
     int codeSnippetID = dict->findOrCreateRuntimeEffectSnippet(shaderData.fEffect.get());
 
-    keyContext.rtEffectDict()->set(codeSnippetID, shaderData.fEffect);
+    if (codeSnippetID >= SkKnownRuntimeEffects::kUnknownRuntimeEffectIDStart) {
+        keyContext.rtEffectDict()->set(codeSnippetID, shaderData.fEffect);
+    }
 
     const ShaderSnippet* entry = dict->getEntry(codeSnippetID);
     SkASSERT(entry);
@@ -1315,7 +1318,10 @@ static void add_to_key(const KeyContext& keyContext,
                        const SkColor4Shader* shader) {
     SkASSERT(shader);
 
-    SolidColorShaderBlock::AddBlock(keyContext, builder, gatherer, shader->color().premul());
+    SkPMColor4f color = map_color(shader->color(), shader->colorSpace().get(),
+                                  keyContext.dstColorInfo().colorSpace());
+
+    SolidColorShaderBlock::AddBlock(keyContext, builder, gatherer, color);
 }
 
 static void add_to_key(const KeyContext& keyContext,
@@ -1350,7 +1356,7 @@ static void add_to_key(const KeyContext& keyContext,
                        PaintParamsKeyBuilder* builder,
                        PipelineDataGatherer* gatherer,
                        const SkEmptyShader*) {
-    // The empty shader acts as a no-op
+    builder->addBlock(BuiltInCodeSnippetID::kPriorOutput);
 }
 
 static void add_yuv_image_to_key(const KeyContext& keyContext,
@@ -1557,9 +1563,9 @@ static void add_to_key(const KeyContext& keyContext,
 
 // If either of these change then the corresponding change must also be made in the SkSL
 // perlin_noise_shader function.
-static_assert((int)SkPerlinNoiseShader::kFractalNoise_Type ==
+static_assert((int)SkPerlinNoiseShaderType::kFractalNoise ==
               (int)PerlinNoiseShaderBlock::Type::kFractalNoise);
-static_assert((int)SkPerlinNoiseShader::kTurbulence_Type ==
+static_assert((int)SkPerlinNoiseShaderType::kTurbulence ==
               (int)PerlinNoiseShaderBlock::Type::kTurbulence);
 static void add_to_key(const KeyContext& keyContext,
                        PaintParamsKeyBuilder* builder,
@@ -1568,21 +1574,7 @@ static void add_to_key(const KeyContext& keyContext,
     SkASSERT(shader);
     SkASSERT(shader->numOctaves());
 
-    SkMatrix totalMatrix = keyContext.local2Dev().asM33();
-    if (keyContext.localMatrix()) {
-        totalMatrix.preConcat(*keyContext.localMatrix());
-    }
-
-    SkMatrix invTotal;
-    bool result = totalMatrix.invert(&invTotal);
-    if (!result) {
-        SKGPU_LOG_W("Couldn't invert totalMatrix for PerlinNoiseShader");
-        builder->addBlock(BuiltInCodeSnippetID::kError);
-        return;
-    }
-
-    std::unique_ptr<SkPerlinNoiseShader::PaintingData> paintingData =
-        shader->getPaintingData(totalMatrix);
+    std::unique_ptr<SkPerlinNoiseShader::PaintingData> paintingData = shader->getPaintingData();
     paintingData->generateBitmaps();
 
     sk_sp<TextureProxy> perm = RecorderPriv::CreateCachedProxy(
@@ -1606,21 +1598,7 @@ static void add_to_key(const KeyContext& keyContext,
     perlinData.fPermutationsProxy = std::move(perm);
     perlinData.fNoiseProxy = std::move(noise);
 
-    // This (1,1) translation is due to WebKit's 1 based coordinates for the noise
-    // (as opposed to 0 based, usually). Remember: this matrix (shader2World) is going to be
-    // inverted before being applied.
-    SkMatrix shader2Local =
-            SkMatrix::Translate(-1 + totalMatrix.getTranslateX(), -1 + totalMatrix.getTranslateY());
-    shader2Local.postConcat(invTotal);
-
-    LocalMatrixShaderBlock::LMShaderData lmShaderData(shader2Local);
-
-    KeyContextWithLocalMatrix newContext(keyContext, shader2Local);
-
-    LocalMatrixShaderBlock::BeginBlock(newContext, builder, gatherer, lmShaderData);
-        PerlinNoiseShaderBlock::AddBlock(newContext, builder, gatherer, perlinData);
-    builder->endBlock();
-
+    PerlinNoiseShaderBlock::AddBlock(keyContext, builder, gatherer, perlinData);
 }
 
 static void add_to_key(const KeyContext& keyContext,
@@ -1633,8 +1611,7 @@ static void add_to_key(const KeyContext& keyContext,
     const Caps* caps = recorder->priv().caps();
 
     // TODO: We'll need additional plumbing to get the correct props from our callers. In
-    // particular we'll need to expand the keyContext to have the surfaceProps, the dstColorType
-    // and dstColorSpace.
+    // particular we'll need to expand the keyContext to have the surfaceProps.
     SkSurfaceProps props{};
 
     SkMatrix totalM = keyContext.local2Dev().asM33();
@@ -1643,8 +1620,8 @@ static void add_to_key(const KeyContext& keyContext,
     }
     auto info = SkPictureShader::CachedImageInfo::Make(shader->tile(),
                                                        totalM,
-                                                       /* dstColorType= */ kRGBA_8888_SkColorType,
-                                                       /* dstColorSpace= */ nullptr,
+                                                       keyContext.dstColorInfo().colorType(),
+                                                       keyContext.dstColorInfo().colorSpace(),
                                                        caps->maxTextureSize(),
                                                        props);
     if (!info.success) {

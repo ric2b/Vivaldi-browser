@@ -15,7 +15,7 @@ import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/zip.gni")
 import("//build/toolchain/toolchain.gni")
 
-import("//vivaldi/gn/config/product.gni")
+import("//vivaldi/android/vivaldi_template_defines.gni")
 
 assert(
     is_android || is_robolectric,
@@ -469,12 +469,6 @@ if (enable_java_templates && is_android) {
             rebase_path(invoker.native_libraries_list_file, root_build_dir),
             "--depfile",
             rebase_path(depfile, root_build_dir),
-          ]
-        }
-        if (defined(invoker.main_component_library)) {
-          args += [
-            "--main-component-library",
-            invoker.main_component_library,
           ]
         }
         if (defined(invoker.enable_chromium_linker) &&
@@ -1191,6 +1185,7 @@ if (enable_java_templates && is_android) {
       arsc_output = _resource_arsc_output
       min_sdk_version = default_min_sdk_version
       target_sdk_version = android_sdk_version
+      forward_variables_from(invoker, [ "override_target_sdk" ])
     }
 
     # apkbuilder step needed only to add android assets to the .ap_ file.
@@ -1960,42 +1955,7 @@ if (enable_java_templates && is_android) {
         defines += [ "_WRITE_CLANG_PROFILING_DATA" ]
       }
 
-      if (is_vivaldi) {
-        defines += [ "_IS_VIVALDI" ]
-      }
-      if (is_official_build) {
-        defines += [ "_IS_OFFICIAL_VIVALDI_BUILD" ]
-      }
-      if (force_sopranos_build) {
-        defines += [ "_IS_FORCE_SOPRANOS_BUILD" ]
-      }
-      if (is_final_build) {
-        defines += [ "_IS_FINAL_BUILD" ]
-      }
-      if (is_vivaldi_automotive) {
-        defines += [ "_IS_OEM_AUTOMOTIVE_BUILD" ]
-      }
-      if (is_vivaldi_preloaded) {
-        defines += [ "_IS_OEM_PRELOADED_BUILD" ]
-      }
-      if (is_vivaldi_polestar) {
-        defines += [ "_IS_OEM_POLESTAR_BUILD" ]
-      }
-      if (is_vivaldi_renault) {
-        defines += [ "_IS_OEM_RENAULT_BUILD" ]
-      }
-      if (is_vivaldi_lynkco) {
-        defines += [ "_IS_OEM_LYNKCO_BUILD" ]
-      }
-      if (is_vivaldi_mercedes) {
-        defines += [ "_IS_OEM_MERCEDES_BUILD" ]
-      }
-      if (is_vivaldi_volvo) {
-        defines += [ "_IS_OEM_VOLVO_BUILD" ]
-      }
-      if (is_vivaldi_gas) {
-        defines += [ "_IS_OEM_GAS_BUILD" ]
-      }
+      defines += vivaldi_template_defines
     }
   }
 
@@ -2051,9 +2011,8 @@ if (enable_java_templates && is_android) {
   #   loadable_modules: List of paths to native libraries to include. Different
   #     from |shared_libraries| in that:
   #       * dependencies of this .so are not automatically included
-  #       * ".cr.so" is never added
   #       * they are not side-loaded when incremental_install=true.
-  #       * use_chromium_linker, and enable_relocation_packing do not apply
+  #       * they are not included in NativeLibraries.java
   #     Use this instead of shared_libraries when you are going to load the library
   #     conditionally, and only when shared_libraries doesn't work for you.
   #   secondary_abi_loadable_modules: This is the loadable_modules analog to
@@ -2134,9 +2093,6 @@ if (enable_java_templates && is_android) {
   #     compiling sources given to this target (optional).
   #   bundles_supported: Enable Java code to treat this target as a bundle
   #     whether (by default determined by the target type).
-  #   main_component_library: Specifies the name of the base component's library
-  #     in a component build. If given, the system will find dependent native
-  #     libraries at runtime by inspecting this library (optional).
   #   expected_libs_and_assets: Verify the list of included native libraries
   #     and assets is consistent with the given expectation file.
   #   expected_libs_and_assets_base: Treat expected_libs_and_assets as a diff
@@ -2311,9 +2267,10 @@ if (enable_java_templates && is_android) {
     _uses_static_library = defined(invoker.static_library_provider)
 
     # TODO(crbug.com/864142): Allow incremental installs of bundle modules.
-    _incremental_apk = !_is_bundle_module &&
-                       !(defined(invoker.never_incremental) &&
-                         invoker.never_incremental) && incremental_install
+    _incremental_apk =
+        !_is_bundle_module &&
+        !(defined(invoker.never_incremental) && invoker.never_incremental) &&
+        incremental_install && _min_sdk_version >= default_min_sdk_version
     if (_incremental_apk) {
       _target_dir_name = get_label_info(target_name, "dir")
       _incremental_install_json_path = "$root_out_dir/gen.runtime/$_target_dir_name/$target_name.incremental.json"
@@ -2408,6 +2365,7 @@ if (enable_java_templates && is_android) {
             "expected_android_manifest_version_code_offset",
             "manifest_package",
             "max_sdk_version",
+            "override_target_sdk",
             "package_id",
             "png_to_webp",
             "r_java_root_package_name",
@@ -2595,7 +2553,6 @@ if (enable_java_templates && is_android) {
     }
     if (_generate_native_libraries_java) {
       write_native_libraries_java("${_template_name}__native_libraries") {
-        forward_variables_from(invoker, [ "main_component_library" ])
         deps = [
           ":${_template_name}__shared_library_list",
         ]
@@ -2713,6 +2670,7 @@ if (enable_java_templates && is_android) {
                                "android_manifest_dep",
                                "annotation_processor_deps",
                                "apk_under_test",
+                               "asset_deps",
                                "base_module_target",
                                "chromium_code",
                                "deps",
@@ -2750,6 +2708,9 @@ if (enable_java_templates && is_android) {
       merged_android_manifest = _android_manifest
       if (defined(_final_dex_path)) {
         final_dex_path = _final_dex_path
+      }
+      if (defined(invoker.assert_no_native_deps)) {
+        assert_no_deps = invoker.assert_no_native_deps
       }
 
       if (_is_bundle_module) {
@@ -2934,6 +2895,9 @@ if (enable_java_templates && is_android) {
                        ":$_compile_resources_target",
                        ":$_merge_manifest_target",
                      ] + _all_native_libs_deps
+      if (defined(invoker.asset_deps)) {
+        _final_deps += invoker.asset_deps
+      }
       if (_optimize_resources) {
         _final_deps += [ ":$_optimize_resources_target" ]
       }
@@ -2958,6 +2922,9 @@ if (enable_java_templates && is_android) {
               ":$_compile_resources_target",
               ":$_java_target_name",
             ]
+            if (defined(invoker.asset_deps)) {
+              deps += invoker.asset_deps
+            }
           }
           _final_deps += [ ":$_size_info_target" ]
         } else {
@@ -2994,6 +2961,9 @@ if (enable_java_templates && is_android) {
         # Need full deps rather than _non_java_deps, because loadable_modules
         # may include .so files extracted by __unpack_aar targets.
         deps = _invoker_deps + [ ":$_build_config_target" ]
+        if (defined(invoker.asset_deps)) {
+          deps += invoker.asset_deps
+        }
 
         if (_incremental_apk) {
           _dex_target = "//build/android/incremental_install:apk_dex"
@@ -3175,6 +3145,9 @@ if (enable_java_templates && is_android) {
         if (defined(invoker.lint_suppressions_dep)) {
           deps += [ invoker.lint_suppressions_dep ]
         }
+        if (defined(invoker.asset_deps)) {
+          deps += invoker.asset_deps
+        }
         if (defined(invoker.lint_min_sdk_version)) {
           min_sdk_version = invoker.lint_min_sdk_version
         }
@@ -3271,6 +3244,8 @@ if (enable_java_templates && is_android) {
             "app_as_shared_lib",
             "art_profile_path",
             "assert_no_deps",
+            "assert_no_native_deps",
+            "asset_deps",
             "baseline_profile_path",
             "build_config_include_product_version_resource",
             "bundles_supported",
@@ -3310,7 +3285,6 @@ if (enable_java_templates && is_android) {
             "max_sdk_version",
             "mergeable_android_manifests",
             "product_config_java_packages",
-            "main_component_library",
             "min_sdk_version",
             "native_lib_placeholders",
             "never_incremental",
@@ -3422,6 +3396,8 @@ if (enable_java_templates && is_android) {
             "annotation_processor_deps",
             "app_as_shared_lib",
             "assert_no_deps",
+            "assert_no_native_deps",
+            "asset_deps",
             "base_module_target",
             "build_config_include_product_version_resource",
             "bundle_target",
@@ -3445,11 +3421,11 @@ if (enable_java_templates && is_android) {
             "javac_args",
             "loadable_modules",
             "product_config_java_packages",
-            "main_component_library",
             "manifest_package",
             "max_sdk_version",
             "min_sdk_version",
             "mergeable_android_manifests",
+            "override_target_sdk",
             "module_name",
             "native_lib_placeholders",
             "package_id",
@@ -3673,7 +3649,9 @@ if (enable_java_templates && is_android) {
         data += invoker.data
       }
 
-      deps = [ "//testing/android/broker:broker_java" ]
+      deps = [
+        "//testing/android/instrumentation:instrumentation_test_runner_java",
+      ]
       if (defined(invoker.deps)) {
         deps += invoker.deps
       }
@@ -4399,6 +4377,8 @@ if (enable_java_templates && is_android) {
         if (!defined(requires_android)) {
           requires_android = true
         }
+        include_java_resources = !defined(invoker.include_java_resources) ||
+                                 invoker.include_java_resources
         supports_android = true
         jar_path = "$_output_path/classes.jar"
         aar_path = invoker.aar_path
@@ -4734,11 +4714,10 @@ if (enable_java_templates && is_android) {
         _stamp = "${target_out_dir}/${target_name}.trace_event_rewrite.stamp"
         action_with_pydeps(_rewritten_jar_target_name) {
           script = "//build/android/gyp/trace_event_bytecode_rewriter.py"
-          inputs = [
-            java_path_for_inputs,
-            _rewriter_path,
-            _build_config,
-          ]
+          inputs = java_paths_for_inputs + [
+                     _rewriter_path,
+                     _build_config,
+                   ]
           outputs = [ _stamp ]
           depfile = "$target_gen_dir/$_rewritten_jar_target_name.d"
           args = [
@@ -4994,10 +4973,8 @@ if (enable_java_templates && is_android) {
     _bundle_target_name = "${_target_name}__bundle"
     action_with_pydeps(_bundle_target_name) {
       script = "//build/android/gyp/create_app_bundle.py"
-      inputs = _all_module_zip_paths + _all_module_build_configs + [
-                 _BUNDLETOOL_JAR_PATH,
-                 java_path_for_inputs,
-               ]
+      inputs = _all_module_zip_paths + _all_module_build_configs +
+               [ _BUNDLETOOL_JAR_PATH ] + java_paths_for_inputs
       outputs = [ _bundle_path ]
       deps = _all_create_module_targets + [ ":$_build_config_target" ]
       args = [
@@ -5229,11 +5206,10 @@ if (enable_java_templates && is_android) {
     _apks_path = "$root_build_dir/apks/$_bundle_name.apks"
     action_with_pydeps("${_target_name}_apks") {
       script = "//build/android/gyp/create_app_bundle_apks.py"
-      inputs = [
-        java_path_for_inputs,
-        _bundle_path,
-        _BUNDLETOOL_JAR_PATH,
-      ]
+      inputs = java_paths_for_inputs + [
+                 _bundle_path,
+                 _BUNDLETOOL_JAR_PATH,
+               ]
       outputs = [ _apks_path ]
       data = [ _apks_path ]
       args = [
@@ -5292,10 +5268,7 @@ if (enable_java_templates && is_android) {
       _name = get_path_info(invoker.bundle_path, "name")
       _output_path = "$_dir/$_name.minimal.apks"
       outputs = [ _output_path ]
-      inputs = [
-        invoker.bundle_path,
-        java_path_for_inputs,
-      ]
+      inputs = [ invoker.bundle_path ] + java_paths_for_inputs
       args = [
         "--bundle",
         rebase_path(invoker.bundle_path, root_build_dir),

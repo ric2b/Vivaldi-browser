@@ -10,7 +10,6 @@
 
 #import "base/barrier_callback.h"
 #import "base/barrier_closure.h"
-#import "base/containers/cxx20_erase.h"
 #import "base/json/json_string_value_serializer.h"
 #import "base/logging.h"
 #import "base/strings/string_number_conversions.h"
@@ -68,7 +67,7 @@ class AdBlockerContentRuleListProviderImpl
       __weak WKUserContentController* user_content_controller);
 
   web::BrowserState* browser_state_;
-  web::BrowserState* incognito_browser_state_;
+  web::BrowserState* incognito_browser_state_ = nullptr;
   bool can_apply_rules_ = false;
   RuleGroup group_;
   __weak WKUserContentController* user_content_controller_;
@@ -216,7 +215,7 @@ void AdBlockerContentRuleListProviderImpl::DidCreateNewConfiguration(
 void AdBlockerContentRuleListProviderImpl::DoInstallContentRuleLists(
     int64_t rule_list_timestamp,
     std::vector<WKContentRuleList*> content_rule_lists) {
-  base::EraseIf(content_rule_lists,
+  std::erase_if(content_rule_lists,
                 [](const WKContentRuleList* content_rule_list) {
                   return content_rule_list == nullptr;
                 });

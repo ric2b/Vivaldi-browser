@@ -36,13 +36,21 @@ using on_device_model::mojom::LoadModelResult;
 namespace ml {
 namespace {
 
-const base::FeatureParam<double> kTemperature{
+const base::FeatureParam<int> kMaxTopK{
     &optimization_guide::features::kOptimizationGuideOnDeviceModel,
-    "on_device_model_temperature", 0.2};
+    "on_device_model_max_topk", 128};
 
-const base::FeatureParam<int> kTopK{
+const base::FeatureParam<bool> kPreferTextureWeights{
     &optimization_guide::features::kOptimizationGuideOnDeviceModel,
-    "on_device_model_topk", 3};
+    "on_device_model_prefer_texture_weights", true};
+
+const base::FeatureParam<bool> kEnableHostMappedPointer{
+    &optimization_guide::features::kOptimizationGuideOnDeviceModel,
+    "on_device_model_enable_host_mapped_pointer", true};
+
+const base::FeatureParam<bool> kUseLowPower{
+    &optimization_guide::features::kOptimizationGuideOnDeviceModel,
+    "on_device_model_use_low_power", false};
 
 // Helper to bind object methods as weak task-posting callback functions.
 template <typename R, typename C, typename... Args>
@@ -63,6 +71,15 @@ int CalculateTokensPerSecond(int num_tokens, base::TimeDelta duration) {
   }
   return (num_tokens / static_cast<float>(duration.InMicroseconds())) *
          base::Time::kMicrosecondsPerSecond;
+}
+
+float GetTemperature(std::optional<float> temperature) {
+  return std::max(0.0f, temperature.value_or(0.0f));
+}
+
+uint32_t GetTopK(std::optional<uint32_t> top_k) {
+  return std::min(static_cast<uint32_t>(kMaxTopK.Get()),
+                  std::max(1u, top_k.value_or(1)));
 }
 
 // Handles sending and canceling responses.
@@ -225,10 +242,12 @@ class SessionImpl : public on_device_model::OnDeviceModel::Session {
  public:
   SessionImpl(const ChromeML& chrome_ml,
               ChromeMLModel model,
-              scoped_refptr<LanguageDetector> language_detector)
+              scoped_refptr<LanguageDetector> language_detector,
+              std::optional<uint32_t> adaptation_id)
       : chrome_ml_(chrome_ml),
         model_(model),
-        language_detector_(std::move(language_detector)) {}
+        language_detector_(std::move(language_detector)),
+        adaptation_id_(adaptation_id) {}
   ~SessionImpl() override = default;
 
   SessionImpl(const SessionImpl&) = delete;
@@ -248,7 +267,13 @@ class SessionImpl : public on_device_model::OnDeviceModel::Session {
         .context_mode = GetContextMode(*input) | ContextMode::kSave,
         .max_tokens = input->max_tokens.value_or(0),
         .token_offset = input->token_offset.value_or(0),
-        .context_saved_fn = &context_saved_fn};
+        .context_saved_fn = &context_saved_fn,
+        .top_k = GetTopK(input->top_k),
+        .temperature = GetTemperature(input->temperature),
+    };
+    if (adaptation_id_) {
+      options.adaptation_id = &adaptation_id_.value();
+    }
     chrome_ml_->api().ExecuteModel(model_, &options,
                                    context_holder->GetCancelFn());
     context_holders_.insert(std::move(context_holder));
@@ -276,7 +301,12 @@ class SessionImpl : public on_device_model::OnDeviceModel::Session {
         .max_output_tokens = input->max_output_tokens.value_or(0),
         .score_ts_interval = ts_interval,
         .execution_output_fn = &output_fn,
+        .top_k = GetTopK(input->top_k),
+        .temperature = GetTemperature(input->temperature),
     };
+    if (adaptation_id_) {
+      options.adaptation_id = &adaptation_id_.value();
+    }
     chrome_ml_->api().ExecuteModel(model_, &options, responder_->GetCancelFn());
   }
 
@@ -302,6 +332,7 @@ class SessionImpl : public on_device_model::OnDeviceModel::Session {
   const scoped_refptr<LanguageDetector> language_detector_;
   std::unique_ptr<Responder> responder_;
   std::set<std::unique_ptr<ContextHolder>> context_holders_;
+  std::optional<uint32_t> adaptation_id_;
 };
 
 }  // namespace
@@ -335,8 +366,40 @@ OnDeviceModelExecutor::CreateWithResult(
 }
 
 std::unique_ptr<on_device_model::OnDeviceModel::Session>
-OnDeviceModelExecutor::CreateSession() {
-  return std::make_unique<SessionImpl>(*chrome_ml_, model_, language_detector_);
+OnDeviceModelExecutor::CreateSession(std::optional<uint32_t> adaptation_id) {
+  return std::make_unique<SessionImpl>(*chrome_ml_, model_, language_detector_,
+                                       adaptation_id);
+}
+
+DISABLE_CFI_DLSYM
+base::expected<uint32_t, LoadModelResult> OnDeviceModelExecutor::LoadAdaptation(
+    on_device_model::mojom::LoadAdaptationParamsPtr params) {
+  if (!chrome_ml_->api().CreateAdaptation) {
+    return base::unexpected(LoadModelResult::kFailedToLoadLibrary);
+  }
+
+  on_device_model::AdaptationAssets assets = std::move(params->assets);
+  auto model_proto = std::make_unique<base::MemoryMappedFile>();
+  if (!assets.model.IsValid() ||
+      !model_proto->Initialize(std::move(assets.model))) {
+    LOG(ERROR) << "Unable to load model";
+    return base::unexpected(LoadModelResult::kFailedToLoadLibrary);
+  }
+
+  uint32_t id;
+  const ChromeMLModelData data = {
+      .model_proto_data = model_proto->data(),
+      .model_proto_size = model_proto->length(),
+      .weights_file = assets.weights.TakePlatformFile(),
+  };
+  ChromeMLAdaptationDescriptor descriptor = {
+      .model_data = &data,
+  };
+  if (!chrome_ml_->api().CreateAdaptation(model_, &descriptor, id)) {
+    return base::unexpected(LoadModelResult::kFailedToLoadLibrary);
+  }
+  adaptation_data_.push_back(std::move(model_proto));
+  return base::ok(id);
 }
 
 DISABLE_CFI_DLSYM
@@ -360,14 +423,6 @@ LoadModelResult OnDeviceModelExecutor::Init(
     return LoadModelResult::kFailedToLoadLibrary;
   }
 
-  weights_ = std::make_unique<base::MemoryMappedFile>();
-  if (!assets.weights.IsValid() ||
-      !weights_->Initialize(std::move(assets.weights),
-                            base::MemoryMappedFile::READ_WRITE_COPY)) {
-    LOG(ERROR) << "Unable to load weights";
-    return LoadModelResult::kFailedToLoadLibrary;
-  }
-
   if (assets.ts_data.IsValid()) {
     if (!ts_data_.Initialize(std::move(assets.ts_data)) ||
         !assets.ts_sp_model.IsValid() ||
@@ -388,15 +443,11 @@ LoadModelResult OnDeviceModelExecutor::Init(
 
   auto model_proto_dispose =
       CreateWeakCallbackFn(&OnDeviceModelExecutor::DisposeModelProto, this);
-  auto weights_dispose =
-      CreateWeakCallbackFn(&OnDeviceModelExecutor::DisposeWeights, this);
   const ChromeMLModelData data = {
       .model_proto_data = model_proto_->data(),
       .model_proto_size = model_proto_->length(),
       .model_proto_dispose = &model_proto_dispose,
-      .weights_data = weights_->mutable_bytes().data(),
-      .weights_size = weights_->length(),
-      .weights_dispose = &weights_dispose,
+      .weights_file = assets.weights.TakePlatformFile(),
   };
   auto sentencepiece_model_proto_dispose =
       CreateWeakCallbackFn(&OnDeviceModelExecutor::DisposeSentencepiece, this);
@@ -406,9 +457,14 @@ LoadModelResult OnDeviceModelExecutor::Init(
       .sentencepiece_model_proto_dispose = &sentencepiece_model_proto_dispose,
       .model_data = &data,
       .max_tokens = params->max_tokens,
-      .temperature = static_cast<float>(kTemperature.Get()),
-      .top_k = kTopK.Get(),
+      .temperature = 0.0f,
+      .top_k = kMaxTopK.Get(),
       .ts_dimension = params->ts_dimension.value_or(0),
+      .adaptation_ranks = params->adaptation_ranks.data(),
+      .adaptation_ranks_size = params->adaptation_ranks.size(),
+      .prefer_texture_weights = kPreferTextureWeights.Get(),
+      .enable_host_mapped_pointer = kEnableHostMappedPointer.Get(),
+      .use_low_power = kUseLowPower.Get(),
   };
   if (ts_data_.IsValid()) {
     CHECK(ts_sp_model_.IsValid());
@@ -430,10 +486,6 @@ void OnDeviceModelExecutor::DisposeSentencepiece() {
 
 void OnDeviceModelExecutor::DisposeModelProto() {
   model_proto_ = nullptr;
-}
-
-void OnDeviceModelExecutor::DisposeWeights() {
-  weights_ = nullptr;
 }
 
 // static

@@ -8,10 +8,44 @@
 
 #include "base/functional/callback.h"
 #include "base/time/time.h"
+#include "components/history/core/browser/keyword_id.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
 namespace history {
+
+struct TypedUrlResult {
+  TypedUrlResult();
+  TypedUrlResult& operator=(const TypedUrlResult&);
+  TypedUrlResult(const TypedUrlResult&);
+
+  GURL url;
+  std::string title;
+  KeywordID keyword_id = -1;
+  std::string terms;
+  int typed_count;
+};
+
+typedef std::vector<TypedUrlResult> TypedUrlResults;
+
+struct DetailedUrlResult {
+  ~DetailedUrlResult();
+  DetailedUrlResult();
+  DetailedUrlResult& operator=(const DetailedUrlResult&);
+  DetailedUrlResult(const DetailedUrlResult&);
+
+  std::string id;
+  GURL url;
+  std::string title;
+  base::Time last_visit_time;
+  int visit_count;
+  int typed_count;
+  bool is_bookmarked;
+  ui::PageTransition transition_type;
+  bool is_redirect;
+};
+
+typedef std::vector<DetailedUrlResult> DetailedUrlResults;
 
 class UrlVisitCount {
  public:
@@ -64,41 +98,6 @@ class Visit {
   int source;
 };
 
-class DetailedHistory {
-  public:
-   DetailedHistory();
-   DetailedHistory(const DetailedHistory& other);
-   ~DetailedHistory();
-
-   typedef std::vector<DetailedHistory> DetailedHistoryList;
-
-  // The unique identifier for the item.
-  std::string id;
-
-  // The URL navigated to by a user.
-  GURL url;
-
-  // The title of the page when it was last loaded.
-  std::string title;
-
-  // When this page was last loaded, represented in milliseconds since the epoch.
-  base::Time last_visit_time;
-
-  // The number of times the user has navigated to this page.
-  int visit_count;
-
-  // The number of times the user has navigated to this page by typing in the
-  // address.
-  int typed_count;
-
-  // States if the URL is bookmarked.
-  bool is_bookmarked;
-
-  // The transition type for this visit from its referrer.
-  ui::PageTransition transition_type;
-
-  int source;
-};
 }  //  namespace history
 
 #endif  // DB_VIVALDI_HISTORY_TYPES_H_

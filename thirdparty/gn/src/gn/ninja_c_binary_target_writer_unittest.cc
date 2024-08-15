@@ -50,6 +50,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, SourceSet) {
         "cflags =\n"
         "cflags_cc =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
@@ -82,6 +83,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, SourceSet) {
         "defines =\n"
         "include_dirs =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = libshlib\n"
         "\n"
@@ -118,6 +120,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, SourceSet) {
         "defines =\n"
         "include_dirs =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = libstlib\n"
         "\n"
@@ -143,6 +146,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, SourceSet) {
         "defines =\n"
         "include_dirs =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = libstlib\n"
         "\n"
@@ -205,6 +209,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, StaticLibrary) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/foo\n"
       "target_out_dir = obj/foo\n"
       "target_output_name = libbar\n"
       "\n"
@@ -253,6 +258,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, CompleteStaticLibrary) {
         "cflags =\n"
         "cflags_cc =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = libbar\n"
         "\n"
@@ -284,6 +290,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, CompleteStaticLibrary) {
         "cflags =\n"
         "cflags_cc =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = libbar\n"
         "\n"
@@ -336,6 +343,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, OutputExtensionAndInputDeps) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/foo\n"
       "target_out_dir = obj/foo\n"
       "target_output_name = libshlib\n"
       "\n"
@@ -403,6 +411,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, NoHardDepsToNoPublicHeaderTarget) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/foo\n"
       "target_out_dir = obj/foo\n"
       "target_output_name = gen_obj\n"
       "\n"
@@ -439,6 +448,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, NoHardDepsToNoPublicHeaderTarget) {
       "defines =\n"
       "include_dirs =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/foo\n"
       "target_out_dir = obj/foo\n"
       "target_output_name = libgen_lib\n"
       "\n"
@@ -480,6 +490,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, NoHardDepsToNoPublicHeaderTarget) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/foo\n"
       "target_out_dir = obj/foo\n"
       "target_output_name = final_target\n"
       "\n"
@@ -509,7 +520,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, LibsAndLibDirs) {
   Target target(setup.settings(), Label(SourceDir("//foo/"), "shlib"));
   target.set_output_type(Target::SHARED_LIBRARY);
   target.config_values().libs().push_back(LibFile(SourceFile("//foo/lib1.a")));
-  target.config_values().libs().push_back(LibFile(SourceFile("//sysroot/DIA SDK/diaguids.lib")));
+  target.config_values().libs().push_back(
+      LibFile(SourceFile("//sysroot/DIA SDK/diaguids.lib")));
   target.config_values().libs().push_back(LibFile("foo"));
   target.config_values().lib_dirs().push_back(SourceDir("//foo/bar/"));
   target.SetToolchain(setup.toolchain());
@@ -523,14 +535,17 @@ TEST_F(NinjaCBinaryTargetWriterTest, LibsAndLibDirs) {
       "defines =\n"
       "include_dirs =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/foo\n"
       "target_out_dir = obj/foo\n"
       "target_output_name = libshlib\n"
       "\n"
       "\n"
-      "build ./libshlib.so: solink | ../../foo/lib1.a ../../sysroot/DIA$ SDK/diaguids.lib\n"
+      "build ./libshlib.so: solink | ../../foo/lib1.a ../../sysroot/DIA$ "
+      "SDK/diaguids.lib\n"
       "  ldflags = -L../../foo/bar\n"
 #ifdef _WIN32
-      "  libs = ../../foo/lib1.a \"../../sysroot/DIA$ SDK/diaguids.lib\" -lfoo\n"
+      "  libs = ../../foo/lib1.a \"../../sysroot/DIA$ SDK/diaguids.lib\" "
+      "-lfoo\n"
 #else
       "  libs = ../../foo/lib1.a ../../sysroot/DIA\\$ SDK/diaguids.lib -lfoo\n"
 #endif
@@ -583,6 +598,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, FrameworksAndFrameworkDirs) {
       "defines =\n"
       "include_dirs =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/foo\n"
       "target_out_dir = obj/foo\n"
       "target_output_name = libshlib\n"
       "\n"
@@ -628,6 +644,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, EmptyOutputExtension) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/foo\n"
       "target_out_dir = obj/foo\n"
       "target_output_name = shlib\n"
       "\n"
@@ -686,6 +703,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, SourceSetDataDeps) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/foo\n"
       "target_out_dir = obj/foo\n"
       "target_output_name = inter\n"
       "\n"
@@ -721,6 +739,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, SourceSetDataDeps) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/foo\n"
       "target_out_dir = obj/foo\n"
       "target_output_name = exe\n"
       "\n"
@@ -762,6 +781,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, SharedLibraryModuleDefinitionFile) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/foo\n"
       "target_out_dir = obj/foo\n"
       "target_output_name = libbar\n"
       "\n"
@@ -801,6 +821,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, LoadableModule) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/foo\n"
       "target_out_dir = obj/foo\n"
       "target_output_name = libbar\n"
       "\n"
@@ -838,6 +859,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, LoadableModule) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/foo\n"
       "target_out_dir = obj/foo\n"
       "target_output_name = exe\n"
       "\n"
@@ -1192,6 +1214,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, InputFiles) {
         "cflags =\n"
         "cflags_cc =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
@@ -1227,6 +1250,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, InputFiles) {
         "defines =\n"
         "include_dirs =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = libbar\n"
         "\n"
@@ -1265,6 +1289,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, InputFiles) {
         "cflags =\n"
         "cflags_cc =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
@@ -1319,6 +1344,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, InputFiles) {
         "cflags =\n"
         "cflags_cc =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
@@ -1375,6 +1401,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, RustStaticLib) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/bar\n"
       "target_out_dir = obj/bar\n"
       "target_output_name = bar\n"
       "\n"
@@ -1541,7 +1568,6 @@ TEST_F(NinjaCBinaryTargetWriterTest, RlibInLibrary) {
   target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
-
   std::ostringstream out;
   NinjaCBinaryTargetWriter writer(&target, out);
   writer.Run();
@@ -1552,6 +1578,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, RlibInLibrary) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/exe\n"
       "target_out_dir = obj/exe\n"
       "target_output_name = exe\n"
       "\n"
@@ -1719,6 +1746,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, RlibsWithProcMacros) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/exe\n"
       "target_out_dir = obj/exe\n"
       "target_output_name = exe\n"
       "\n"
@@ -1795,6 +1823,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, ProcMacroInRustStaticLib) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/bar\n"
       "target_out_dir = obj/bar\n"
       "target_output_name = bar\n"
       "\n"
@@ -1897,6 +1926,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, RustDepsOverDynamicLinking) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/exe\n"
       "target_out_dir = obj/exe\n"
       "target_output_name = binary\n"
       "\n"
@@ -1992,6 +2022,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, LinkingWithRustLibraryDepsOnCdylib) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/exe\n"
       "target_out_dir = obj/exe\n"
       "target_output_name = binary\n"
       "\n"
@@ -2089,6 +2120,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, LinkingWithRustLibraryDepsOnDylib) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/exe\n"
       "target_out_dir = obj/exe\n"
       "target_output_name = binary\n"
       "\n"
@@ -2119,7 +2151,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, RustLibAfterSharedLib) {
   TestWithScope setup;
 
   Target static1(setup.settings(),
-                Label(SourceDir("//static1/"), "staticlib1"));
+                 Label(SourceDir("//static1/"), "staticlib1"));
   static1.set_output_type(Target::STATIC_LIBRARY);
   static1.visibility().SetPublic();
   static1.sources().push_back(SourceFile("//static1/c.cc"));
@@ -2128,7 +2160,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, RustLibAfterSharedLib) {
   ASSERT_TRUE(static1.OnResolved(&err));
 
   Target static2(setup.settings(),
-                Label(SourceDir("//static2/"), "staticlib2"));
+                 Label(SourceDir("//static2/"), "staticlib2"));
   static2.set_output_type(Target::STATIC_LIBRARY);
   static2.visibility().SetPublic();
   static2.sources().push_back(SourceFile("//static2/c.cc"));
@@ -2137,7 +2169,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, RustLibAfterSharedLib) {
   ASSERT_TRUE(static2.OnResolved(&err));
 
   Target static3(setup.settings(),
-                Label(SourceDir("//static3/"), "staticlib3"));
+                 Label(SourceDir("//static3/"), "staticlib3"));
   static3.set_output_type(Target::STATIC_LIBRARY);
   static3.visibility().SetPublic();
   static3.sources().push_back(SourceFile("//static3/c.cc"));
@@ -2146,7 +2178,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, RustLibAfterSharedLib) {
   ASSERT_TRUE(static3.OnResolved(&err));
 
   Target shared1(setup.settings(),
-                    Label(SourceDir("//shared1"), "mysharedlib1"));
+                 Label(SourceDir("//shared1"), "mysharedlib1"));
   shared1.set_output_type(Target::SHARED_LIBRARY);
   shared1.set_output_name("mysharedlib1");
   shared1.set_output_prefix_override("");
@@ -2168,7 +2200,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, RustLibAfterSharedLib) {
   ASSERT_TRUE(rlib2.OnResolved(&err));
 
   Target shared3(setup.settings(),
-                    Label(SourceDir("//shared3"), "mysharedlib3"));
+                 Label(SourceDir("//shared3"), "mysharedlib3"));
   shared3.set_output_type(Target::SHARED_LIBRARY);
   shared3.set_output_name("mysharedlib3");
   shared3.set_output_prefix_override("");
@@ -2198,6 +2230,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, RustLibAfterSharedLib) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/exe\n"
       "target_out_dir = obj/exe\n"
       "target_output_name = binary\n"
       "\n"
@@ -2247,10 +2280,12 @@ TEST_F(NinjaCBinaryTargetWriterTest, ModuleMapInStaticLibrary) {
       "cflags =\n"
       "cflags_cc =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/foo\n"
       "target_out_dir = obj/foo\n"
       "target_output_name = libbar\n"
       "\n"
-      "build obj/foo/libbar.bar.o: cxx ../../foo/bar.cc | obj/foo/libbar.bar.pcm\n"
+      "build obj/foo/libbar.bar.o: cxx ../../foo/bar.cc | "
+      "obj/foo/libbar.bar.pcm\n"
       "  source_file_part = bar.cc\n"
       "  source_name_part = bar\n"
       "build obj/foo/libbar.bar.pcm: cxx_module ../../foo/bar.modulemap\n"
@@ -2292,15 +2327,16 @@ TEST_F(NinjaCBinaryTargetWriterTest, SwiftModule) {
         "module_name = Foo\n"
         "module_dirs =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/foo\n"
         "target_out_dir = obj/foo\n"
         "target_output_name = foo\n"
         "\n"
-        "build obj/foo/Foo.swiftmodule: swift"
-        " ../../foo/file1.swift ../../foo/file2.swift\n"
-        "\n"
-        "build obj/foo/file1.o obj/foo/file2.o: stamp obj/foo/Foo.swiftmodule\n"
+        "build gen/foo/foo.h obj/foo/Foo.swiftmodule obj/foo/file1.o "
+        "obj/foo/file2.o: swift ../../foo/file1.swift ../../foo/file2.swift\n"
+        "  restat = 1\n"
         "\n"
         "build obj/foo/foo.stamp: stamp"
+        " gen/foo/foo.h obj/foo/Foo.swiftmodule"
         " obj/foo/file1.o obj/foo/file2.o\n";
 
     const std::string out_str = out.str();
@@ -2329,16 +2365,16 @@ TEST_F(NinjaCBinaryTargetWriterTest, SwiftModule) {
         "module_name = Bar\n"
         "module_dirs = -Iobj/foo\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/bar\n"
         "target_out_dir = obj/bar\n"
         "target_output_name = bar\n"
         "\n"
-        "build obj/bar/Bar.swiftmodule: swift ../../bar/bar.swift"
-        " || obj/foo/foo.stamp\n"
+        "build gen/bar/bar.h obj/bar/Bar.swiftmodule obj/bar/bar.o: swift "
+        "../../bar/bar.swift || obj/foo/foo.stamp\n"
+        "  restat = 1\n"
         "\n"
-        "build obj/bar/bar.o: stamp obj/bar/Bar.swiftmodule"
-        " || obj/foo/foo.stamp\n"
-        "\n"
-        "build obj/bar/bar.stamp: stamp obj/bar/bar.o "
+        "build obj/bar/bar.stamp: stamp"
+        " gen/bar/bar.h obj/bar/Bar.swiftmodule obj/bar/bar.o "
         "|| obj/foo/foo.stamp\n";
 
     const std::string out_str = out.str();
@@ -2375,16 +2411,16 @@ TEST_F(NinjaCBinaryTargetWriterTest, SwiftModule) {
         "module_name = Bar\n"
         "module_dirs = -Iobj/foo\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/bar\n"
         "target_out_dir = obj/bar\n"
         "target_output_name = bar\n"
         "\n"
-        "build obj/bar/Bar.swiftmodule: swift ../../bar/bar.swift"
-        " || obj/bar/group.stamp obj/foo/foo.stamp\n"
+        "build gen/bar/bar.h obj/bar/Bar.swiftmodule obj/bar/bar.o: swift "
+        "../../bar/bar.swift || obj/bar/group.stamp obj/foo/foo.stamp\n"
+        "  restat = 1\n"
         "\n"
-        "build obj/bar/bar.o: stamp obj/bar/Bar.swiftmodule"
-        " || obj/bar/group.stamp obj/foo/foo.stamp\n"
-        "\n"
-        "build obj/bar/bar.stamp: stamp obj/bar/bar.o "
+        "build obj/bar/bar.stamp: stamp"
+        " gen/bar/bar.h obj/bar/Bar.swiftmodule obj/bar/bar.o "
         "|| obj/bar/group.stamp obj/foo/foo.stamp\n";
 
     const std::string out_str = out.str();
@@ -2408,6 +2444,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, SwiftModule) {
         "defines =\n"
         "include_dirs =\n"
         "root_out_dir = .\n"
+        "target_gen_dir = gen/bar\n"
         "target_out_dir = obj/bar\n"
         "target_output_name = bar\n"
         "\n"
@@ -2697,6 +2734,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, SolibsEscaping) {
   const char expected[] = R"(defines =
 include_dirs =
 root_out_dir = .
+target_gen_dir = gen/launchpad
 target_out_dir = obj/launchpad
 target_output_name = main
 
@@ -2713,9 +2751,9 @@ build ./main: link obj/launchpad/main.main.o | ./Space$ Cadet.so.TOC
   output_dir = 
 )"
 #if defined(OS_WIN)
-  "  solibs = \"./Space$ Cadet.so\"\n";
+                          "  solibs = \"./Space$ Cadet.so\"\n";
 #else
-  "  solibs = ./Space\\$ Cadet.so\n";
+                          "  solibs = ./Space\\$ Cadet.so\n";
 #endif
 
   std::string out_str = out.str();
@@ -2747,6 +2785,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, Pool) {
       "defines =\n"
       "include_dirs =\n"
       "root_out_dir = .\n"
+      "target_gen_dir = gen/foo\n"
       "target_out_dir = obj/foo\n"
       "target_output_name = bar\n"
       "\n"

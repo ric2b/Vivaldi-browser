@@ -23,6 +23,21 @@
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 
+namespace content {
+class BrowserContext;
+}  // namespace content
+
+namespace net {
+class HttpRequestHeaders;
+class HttpResponseHeaders;
+class IPEndPoint;
+struct RedirectInfo;
+}  // namespace net
+
+namespace network {
+struct URLLoaderCompletionStatus;
+}
+
 namespace vivaldi {
 
 // Owns URLLoaderFactory bindings for RequestFilterManager proxies with the
@@ -239,9 +254,7 @@ class RequestFilterProxyingURLLoaderFactory
       RequestFilterManager::RequestHandler* request_handler,
       RequestFilterManager::RequestIDGenerator* request_id_generator,
       std::optional<int64_t> navigation_id,
-      mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
-      mojo::PendingRemote<network::mojom::URLLoaderFactory>
-          target_factory_remote,
+      network::URLLoaderFactoryBuilder& factory_builder,
       mojo::PendingReceiver<network::mojom::TrustedURLLoaderHeaderClient>
           header_client_receiver,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
@@ -265,9 +278,7 @@ class RequestFilterProxyingURLLoaderFactory
       RequestFilterManager::RequestHandler* request_handler,
       RequestFilterManager::RequestIDGenerator* request_id_generator,
       std::optional<int64_t> navigation_id,
-      mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
-      mojo::PendingRemote<network::mojom::URLLoaderFactory>
-          target_factory_remote,
+      network::URLLoaderFactoryBuilder& factory_builder,
       mojo::PendingReceiver<network::mojom::TrustedURLLoaderHeaderClient>
           header_client_receiver,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>

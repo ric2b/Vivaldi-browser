@@ -13,7 +13,7 @@
       <output filename="components_google_chrome_strings_ja-KS.pak" type="data_package" lang="ja-KS" />
       <output filename="components_google_chrome_strings_jbo.pak" type="data_package" lang="jbo" />
       <output filename="components_google_chrome_strings_kab.pak" type="data_package" lang="kab" />
-      <output filename="components_google_chrome_strings_ku.pak" type="data_package" lang="ku" />
+      <output filename="components_google_chrome_strings_kmr.pak" type="data_package" lang="kmr" />
       <output filename="components_google_chrome_strings_sc.pak" type="data_package" lang="sc" />
       <output filename="components_google_chrome_strings_nn.pak" type="data_package" lang="nn" />
       <if expr="not is_android">
@@ -71,7 +71,7 @@
     <file path="strings/vivaldi_components_km.xtb" lang="km" />
     <file path="strings/vivaldi_components_kn.xtb" lang="kn" />
     <file path="strings/vivaldi_components_ko.xtb" lang="ko" />
-    <file path="strings/vivaldi_components_ku.xtb" lang="ku" />
+    <file path="strings/vivaldi_components_kmr.xtb" lang="kmr" />
     <file path="strings/vivaldi_components_ky.xtb" lang="ky" />
     <file path="strings/vivaldi_components_lo.xtb" lang="lo" />
     <file path="strings/vivaldi_components_lt.xtb" lang="lt" />

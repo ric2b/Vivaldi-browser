@@ -147,6 +147,19 @@ class AlpsFrameDecoder : public HttpDecoder::Visitor {
       WebTransportSessionId /*session_id*/) override {
     QUICHE_NOTREACHED();
   }
+  bool OnMetadataFrameStart(QuicByteCount /*header_length*/,
+                            QuicByteCount /*payload_length*/) override {
+    error_detail_ = "METADATA frame forbidden";
+    return false;
+  }
+  bool OnMetadataFramePayload(absl::string_view /*payload*/) override {
+    QUICHE_NOTREACHED();
+    return false;
+  }
+  bool OnMetadataFrameEnd() override {
+    QUICHE_NOTREACHED();
+    return false;
+  }
   bool OnUnknownFrameStart(uint64_t /*frame_type*/,
                            QuicByteCount
                            /*header_length*/,
@@ -522,7 +535,7 @@ void QuicSpdySession::Initialize() {
     headers_stream_ = headers_stream.get();
     ActivateStream(std::move(headers_stream));
   } else {
-    qpack_encoder_ = std::make_unique<QpackEncoder>(this);
+    qpack_encoder_ = std::make_unique<QpackEncoder>(this, huffman_encoding_);
     qpack_decoder_ =
         std::make_unique<QpackDecoder>(qpack_maximum_dynamic_table_capacity_,
                                        qpack_maximum_blocked_streams_, this);

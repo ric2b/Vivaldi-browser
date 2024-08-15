@@ -49,7 +49,7 @@ class VivaldiContextMenuViews : public VivaldiContextMenu {
   VivaldiContextMenuViews& operator=(const VivaldiContextMenuViews&) = delete;
 
   void Init(ui::SimpleMenuModel* menu_model,
-            ContextMenuPostitionDelegate* delegate) override;
+            base::WeakPtr<ContextMenuPostitionDelegate> delegate) override;
   bool Show() override;
   void SetIcon(const gfx::Image& icon, int id) override;
   void UpdateMenu(ui::SimpleMenuModel* menu_model, int id) override;

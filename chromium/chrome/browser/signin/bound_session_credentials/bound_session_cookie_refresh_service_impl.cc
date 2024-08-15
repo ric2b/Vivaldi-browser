@@ -12,11 +12,13 @@
 #include "base/functional/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/strings/string_util.h"
 #include "chrome/browser/signin/bound_session_credentials/bound_session_cookie_controller.h"
 #include "chrome/browser/signin/bound_session_credentials/bound_session_cookie_controller_impl.h"
 #include "chrome/browser/signin/bound_session_credentials/bound_session_params_storage.h"
 #include "chrome/browser/signin/bound_session_credentials/bound_session_registration_fetcher_impl.h"
 #include "chrome/common/renderer_configuration.mojom.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "content/public/browser/storage_partition.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
@@ -30,11 +32,13 @@ BoundSessionCookieRefreshServiceImpl::BoundSessionCookieRefreshServiceImpl(
     unexportable_keys::UnexportableKeyService& key_service,
     std::unique_ptr<BoundSessionParamsStorage> session_params_storage,
     content::StoragePartition* storage_partition,
-    network::NetworkConnectionTracker* network_connection_tracker)
+    network::NetworkConnectionTracker* network_connection_tracker,
+    bool is_off_the_record_profile)
     : key_service_(key_service),
       session_params_storage_(std::move(session_params_storage)),
       storage_partition_(storage_partition),
-      network_connection_tracker_(network_connection_tracker) {
+      network_connection_tracker_(network_connection_tracker),
+      is_off_the_record_profile_(is_off_the_record_profile) {
   CHECK(session_params_storage_);
   CHECK(storage_partition_);
   data_removal_observation_.Observe(storage_partition_);
@@ -127,7 +131,9 @@ void BoundSessionCookieRefreshServiceImpl::HandleRequestBlockedOnCookie(
     HandleRequestBlockedOnCookieCallback resume_blocked_request) {
   if (!cookie_controller_) {
     // Session has been terminated.
-    std::move(resume_blocked_request).Run();
+    std::move(resume_blocked_request)
+        .Run(chrome::mojom::ResumeBlockedRequestsTrigger::
+                 kShutdownOrSessionTermination);
     return;
   }
   cookie_controller_->HandleRequestBlockedOnCookie(
@@ -136,6 +142,19 @@ void BoundSessionCookieRefreshServiceImpl::HandleRequestBlockedOnCookie(
 
 void BoundSessionCookieRefreshServiceImpl::CreateRegistrationRequest(
     BoundSessionRegistrationFetcherParam registration_params) {
+  // Guardrail against registering non-SIDTS DBSC sessions while the client
+  // lacks support for running multiple sessions at the same time. Can be
+  // overridden with a Finch config parameter.
+  // TODO(http://b/274774185): Remove this guardrail once ready.
+  std::string exclusive_registration_path =
+      switches::kEnableBoundSessionCredentialsExclusiveRegistrationPath.Get();
+  if (!exclusive_registration_path.empty() &&
+      !base::EqualsCaseInsensitiveASCII(
+          registration_params.RegistrationEndpoint().path_piece(),
+          exclusive_registration_path)) {
+    return;
+  }
+
   if (active_registration_request_) {
     // If there are multiple racing registration requests, only one will be
     // processed and it will contain the most up-to-date set of cookies.
@@ -143,10 +162,13 @@ void BoundSessionCookieRefreshServiceImpl::CreateRegistrationRequest(
   }
 
   active_registration_request_ =
-      std::make_unique<BoundSessionRegistrationFetcherImpl>(
-          std::move(registration_params),
-          storage_partition_->GetURLLoaderFactoryForBrowserProcess(),
-          key_service_.get());
+      registration_fetcher_factory_for_testing_.is_null()
+          ? std::make_unique<BoundSessionRegistrationFetcherImpl>(
+                std::move(registration_params),
+                storage_partition_->GetURLLoaderFactoryForBrowserProcess(),
+                key_service_.get(), is_off_the_record_profile_)
+          : registration_fetcher_factory_for_testing_.Run(
+                std::move(registration_params));
   // `base::Unretained(this)` is safe here because `this` owns the fetcher via
   // `active_registration_requests_`
   active_registration_request_->Start(base::BindOnce(
@@ -224,18 +246,21 @@ void BoundSessionCookieRefreshServiceImpl::OnStorageKeyDataCleared(
 
 std::unique_ptr<BoundSessionCookieController>
 BoundSessionCookieRefreshServiceImpl::CreateBoundSessionCookieController(
-    const bound_session_credentials::BoundSessionParams& bound_session_params) {
+    const bound_session_credentials::BoundSessionParams& bound_session_params,
+    bool is_off_the_record_profile) {
   return controller_factory_for_testing_.is_null()
              ? std::make_unique<BoundSessionCookieControllerImpl>(
                    key_service_.get(), storage_partition_,
-                   network_connection_tracker_, bound_session_params, this)
+                   network_connection_tracker_, bound_session_params, this,
+                   is_off_the_record_profile)
              : controller_factory_for_testing_.Run(bound_session_params, this);
 }
 
 void BoundSessionCookieRefreshServiceImpl::InitializeBoundSession(
     const bound_session_credentials::BoundSessionParams& bound_session_params) {
   CHECK(!cookie_controller_);
-  cookie_controller_ = CreateBoundSessionCookieController(bound_session_params);
+  cookie_controller_ = CreateBoundSessionCookieController(
+      bound_session_params, is_off_the_record_profile_);
   cookie_controller_->Initialize();
   UpdateAllRenderers();
 }

@@ -53,6 +53,11 @@ class CompositorFrame;
 }
 
 namespace exo {
+
+// Occluded surfaces can be detected and not emitted as a quad in the
+// corresponding compositor frame.
+BASE_DECLARE_FEATURE(kExoPerSurfaceOcclusion);
+
 class Buffer;
 class SecurityDelegate;
 class FrameSinkResourceManager;
@@ -194,28 +199,26 @@ class Surface final : public ui::PropertyHandler {
   using SubSurfaceEntryList = std::list<SubSurfaceEntry>;
   SubSurfaceEntryList& sub_surfaces() { return sub_surfaces_; }
 
-  // `is_root_coordinates` specifies whether `rounded_corners_bounds` is on its
-  // root surface coordinates or on the local surface coordinates.
+  // `rounded_corners_bounds` is on the local surface coordinates.
   // If `commit` is true, rounded corner bounds are add to committed state,
   // overriding the previously committed value.
   void SetRoundedCorners(const gfx::RRectF& rounded_corners_bounds,
-                         bool is_root_coordinates,
                          bool commit_override);
   void SetOverlayPriorityHint(OverlayPriority hint);
 
   // Sets the surface's clip rectangle.
-  void SetClipRect(const absl::optional<gfx::RectF>& clip_rect);
+  void SetClipRect(const std::optional<gfx::RectF>& clip_rect);
 
-  // Sets the surface's clip rectangle on parent surface coordinates.
-  // TODO(crbug.com/1457446): Remove this.
-  void SetClipRectOnParentSurface(const absl::optional<gfx::RectF>& clip_rect);
+  // Sets the trace ID for tracking frame submission, which is used for the next
+  // surface commit.
+  void SetFrameTraceId(int64_t frame_trace_id);
 
   // Sets the surface's transformation matrix.
   void SetSurfaceTransform(const gfx::Transform& transform);
 
   // Sets the background color that shall be associated with the next buffer
   // commit.
-  void SetBackgroundColor(absl::optional<SkColor4f> background_color);
+  void SetBackgroundColor(std::optional<SkColor4f> background_color);
 
   // Sets that this surface uses trusted damage.
   void SetTrustedDamage(bool trusted_damage);
@@ -327,7 +330,7 @@ class Surface final : public ui::PropertyHandler {
       const gfx::PointF& to_parent_dp,
       bool needs_full_damage,
       FrameSinkResourceManager* resource_manager,
-      absl::optional<float> device_scale_factor,
+      std::optional<float> device_scale_factor,
       viz::CompositorFrame* frame);
 
   // Returns true if surface is in synchronized mode.
@@ -366,8 +369,8 @@ class Surface final : public ui::PropertyHandler {
   // Called when the begin frame source has changed.
   void SetBeginFrameSource(viz::BeginFrameSource* begin_frame_source);
 
-  // Returns the active content size.
-  const gfx::SizeF& content_size() const { return content_size_; }
+  // Returns the active visual rect.
+  const gfx::RectF& visual_rect() const { return visual_rect_; }
 
   // Returns the active content bounds for surface hierarchy. ie. the bounding
   // box of the surface and its descendants, in the local coordinate space of
@@ -496,8 +499,13 @@ class Surface final : public ui::PropertyHandler {
   // Returns the buffer scale of the last committed buffer.
   float GetBufferScale() const { return state_.basic_state.buffer_scale; }
 
+  int64_t GetFrameTraceId() const { return state_.frame_trace_id; }
+
   // Returns the last committed buffer.
   Buffer* GetBuffer();
+
+  // Dump Debug Info.
+  std::string DumpDebugInfo() const;
 
  private:
   struct State {
@@ -508,7 +516,7 @@ class Surface final : public ui::PropertyHandler {
     bool operator!=(const State& other) const { return !(*this == other); }
 
     cc::Region opaque_region;
-    absl::optional<cc::Region> input_region;
+    std::optional<cc::Region> input_region;
     int input_outset = 0;
     float buffer_scale = 1.0f;
     Transform buffer_transform = Transform::NORMAL;
@@ -522,7 +530,7 @@ class Surface final : public ui::PropertyHandler {
     bool is_tracking_occlusion = false;
     // Represents optional background color that must be associated with the
     // next buffer commit.
-    absl::optional<SkColor4f> background_color;
+    std::optional<SkColor4f> background_color;
     bool contains_video = false;
   };
   class BufferAttachment {
@@ -558,7 +566,7 @@ class Surface final : public ui::PropertyHandler {
   // Some fields are persisted between commits (e.g. which buffer is attached),
   // and some fields are not (e.g. acquire fence). For fields that are
   // persisted, they either need to be copyable, or if they are move only, they
-  // need to be wrapped in absl::optional and only copied on commit if they
+  // need to be wrapped in std::optional and only copied on commit if they
   // have been changed. Not doing this can lead to broken behaviour, such as
   // losing the attached buffer if some unrelated field is updated in a commit.
   // If you add new fields to this struct, please document whether the field
@@ -572,17 +580,10 @@ class Surface final : public ui::PropertyHandler {
 
     // The buffer that will become the content of surface.
     // Persisted between commits.
-    absl::optional<BufferAttachment> buffer;
+    std::optional<BufferAttachment> buffer;
     // The rounded corners bounds for the surface.
     // Persisted between commits.
     gfx::RRectF rounded_corners_bounds;
-    // True if `rounded_corners_bounds` is on root surface coordinate space.
-    // `rounded_corners_bounds` should be on local surface coordinates, but the
-    // outdated implementation was on root surface coordinate space. This flag
-    // is to support the fallback implementation.
-    // Persisted between commits.
-    // TODO(crbug.com/1470955): Remove this.
-    bool rounded_corners_is_root_coordinates = false;
     // The damage region to schedule paint for.
     // Not persisted between commits.
     cc::Region damage;
@@ -609,18 +610,15 @@ class Surface final : public ui::PropertyHandler {
     // The clip rect for this surface, in the local coordinate space. This
     // should only be set for subsurfaces.
     // Persisted between commits.
-    absl::optional<gfx::RectF> clip_rect;
-    // True if `clip_rect` is on parent coordinate space. `clip_rect` should be
-    // on local surface coordinates, but the outdated implementation was on
-    // parent coordinate space. This flag is to support the fallback
-    // implementation.
-    // Persisted between commits.
-    // TODO(crbug.com/1457446): Remove this.
-    bool clip_rect_is_parent_coordinates = false;
+    std::optional<gfx::RectF> clip_rect;
     // The transform to apply when drawing this surface. This should only be set
     // for subsurfaces, and doesn't apply to children of this surface.
     // Persisted between commits.
     gfx::Transform surface_transform;
+
+    // Trace ID for tracking frame submission.
+    // Not persisted between commits.
+    int64_t frame_trace_id = -1;
   };
 
   friend class subtle::PropertyHelper;
@@ -642,11 +640,12 @@ class Surface final : public ui::PropertyHandler {
   void AppendContentsToFrame(const gfx::PointF& parent_to_root_px,
                              const gfx::PointF& to_parent_dp,
                              bool needs_full_damage,
-                             absl::optional<float> device_scale_factor,
+                             std::optional<float> device_scale_factor,
                              viz::CompositorFrame* frame);
 
-  // Update surface content size base on current buffer size.
-  void UpdateContentSize();
+  // Update surface content size and visual rect based on the current buffer
+  // size or viewport rect.
+  void UpdateContentSizeAndVisualRect();
 
   // This returns true when the surface has some contents assigned to it.
   bool has_contents() const {
@@ -664,6 +663,9 @@ class Surface final : public ui::PropertyHandler {
 
   // This is the size of the last committed contents.
   gfx::SizeF content_size_;
+
+  // This is the bounds of the last committed contents that are not clipped.
+  gfx::RectF visual_rect_;
 
   // This is the bounds of the last committed surface hierarchy contents.
   gfx::Rect surface_hierarchy_content_bounds_;

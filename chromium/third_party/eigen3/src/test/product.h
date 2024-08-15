@@ -53,7 +53,7 @@ void product(const MatrixType& m) {
                  MatrixType::Flags & RowMajorBit ? ColMajor : RowMajor>
       OtherMajorMatrixType;
 
-  // Wwe want a tighter epsilon for not-approx tests.  Otherwise, for certain
+  // We want a tighter epsilon for not-approx tests.  Otherwise, for certain
   // low-precision types (e.g. bfloat16), the bound ends up being relatively large
   // (e.g. 0.12), causing flaky tests.
   RealScalar not_approx_epsilon = RealScalar(0.1) * NumTraits<RealScalar>::dummy_precision();
@@ -69,6 +69,15 @@ void product(const MatrixType& m) {
   ColSquareMatrixType square2 = ColSquareMatrixType::Random(cols, cols), res2 = ColSquareMatrixType::Random(cols, cols);
   RowVectorType v1 = RowVectorType::Random(rows);
   ColVectorType vc2 = ColVectorType::Random(cols), vcres(cols);
+
+  // Prevent overflows for integer types.
+  if (Eigen::NumTraits<Scalar>::IsInteger) {
+    Scalar kMaxVal = Scalar(10000);
+    m1.array() = m1.array() - kMaxVal * (m1.array() / kMaxVal);
+    m2.array() = m2.array() - kMaxVal * (m2.array() / kMaxVal);
+    v1.array() = v1.array() - kMaxVal * (v1.array() / kMaxVal);
+  }
+
   OtherMajorMatrixType tm1 = m1;
 
   Scalar s1 = internal::random<Scalar>();

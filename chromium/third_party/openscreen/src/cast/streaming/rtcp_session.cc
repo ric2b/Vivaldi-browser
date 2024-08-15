@@ -15,9 +15,9 @@ RtcpSession::RtcpSession(Ssrc sender_ssrc,
       receiver_ssrc_(receiver_ssrc),
       start_time_(start_time),
       ntp_converter_(start_time) {
-  OSP_DCHECK_NE(sender_ssrc_, kNullSsrc);
-  OSP_DCHECK_NE(receiver_ssrc_, kNullSsrc);
-  OSP_DCHECK_NE(sender_ssrc_, receiver_ssrc_);
+  OSP_CHECK_NE(sender_ssrc_, kNullSsrc);
+  OSP_CHECK_NE(receiver_ssrc_, kNullSsrc);
+  OSP_CHECK_NE(sender_ssrc_, receiver_ssrc_);
 }
 
 RtcpSession::~RtcpSession() = default;

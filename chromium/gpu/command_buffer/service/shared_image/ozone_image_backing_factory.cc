@@ -40,12 +40,12 @@ namespace gpu {
 namespace {
 
 gfx::BufferUsage GetBufferUsage(uint32_t usage) {
-  if (usage & SHARED_IMAGE_USAGE_WEBGPU) {
+  if (usage &
+      (SHARED_IMAGE_USAGE_WEBGPU_READ | SHARED_IMAGE_USAGE_WEBGPU_WRITE)) {
     // Just use SCANOUT for WebGPU since the memory doesn't need to be linear.
     return gfx::BufferUsage::SCANOUT;
   } else if (usage & SHARED_IMAGE_USAGE_SCANOUT) {
-    if (base::FeatureList::IsEnabled(features::kOzoneFrontBufferUsage) &&
-        usage & SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE) {
+    if (usage & SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE) {
       // Example usage here is low latency (desynchronized) 2d canvas. Note that
       // this does not imply CPU read/write.
       return gfx::BufferUsage::SCANOUT_FRONT_RENDERING;
@@ -58,12 +58,14 @@ gfx::BufferUsage GetBufferUsage(uint32_t usage) {
 
 constexpr uint32_t kSupportedUsage =
     SHARED_IMAGE_USAGE_GLES2_READ | SHARED_IMAGE_USAGE_GLES2_WRITE |
+    SHARED_IMAGE_USAGE_GLES2_FOR_RASTER_ONLY |
     SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
     SHARED_IMAGE_USAGE_DISPLAY_WRITE | SHARED_IMAGE_USAGE_DISPLAY_READ |
     SHARED_IMAGE_USAGE_RASTER_READ | SHARED_IMAGE_USAGE_RASTER_WRITE |
+    SHARED_IMAGE_USAGE_RASTER_OVER_GLES2_ONLY |
     SHARED_IMAGE_USAGE_OOP_RASTERIZATION | SHARED_IMAGE_USAGE_SCANOUT |
-    SHARED_IMAGE_USAGE_WEBGPU | SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE |
-    SHARED_IMAGE_USAGE_VIDEO_DECODE |
+    SHARED_IMAGE_USAGE_WEBGPU_READ | SHARED_IMAGE_USAGE_WEBGPU_WRITE |
+    SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE | SHARED_IMAGE_USAGE_VIDEO_DECODE |
     SHARED_IMAGE_USAGE_WEBGPU_SWAP_CHAIN_TEXTURE |
     SHARED_IMAGE_USAGE_RASTER_DELEGATED_COMPOSITING |
     SHARED_IMAGE_USAGE_HIGH_PERFORMANCE_GPU | SHARED_IMAGE_USAGE_CPU_UPLOAD |
@@ -73,13 +75,10 @@ constexpr uint32_t kSupportedUsage =
 
 OzoneImageBackingFactory::OzoneImageBackingFactory(
     SharedContextState* shared_context_state,
-    const GpuDriverBugWorkarounds& workarounds,
-    const GpuPreferences& gpu_preferences)
+    const GpuDriverBugWorkarounds& workarounds)
     : SharedImageBackingFactory(kSupportedUsage),
       shared_context_state_(shared_context_state),
-      workarounds_(workarounds),
-      use_passthrough_(gpu_preferences.use_passthrough_cmd_decoder &&
-                       gles2::PassthroughCommandDecoderSupported()) {}
+      workarounds_(workarounds) {}
 
 OzoneImageBackingFactory::~OzoneImageBackingFactory() = default;
 
@@ -93,6 +92,7 @@ OzoneImageBackingFactory::CreateSharedImageInternal(
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
+    std::string debug_label,
     std::optional<gfx::BufferUsage> buffer_usage) {
   gfx::BufferFormat buffer_format = ToBufferFormat(format);
   VulkanDeviceQueue* device_queue = nullptr;
@@ -123,8 +123,8 @@ OzoneImageBackingFactory::CreateSharedImageInternal(
   }
   return std::make_unique<OzoneImageBacking>(
       mailbox, format, gfx::BufferPlane::DEFAULT, size, color_space,
-      surface_origin, alpha_type, usage, shared_context_state_.get(),
-      std::move(pixmap), workarounds_, use_passthrough_,
+      surface_origin, alpha_type, usage, std::move(debug_label),
+      shared_context_state_.get(), std::move(pixmap), workarounds_,
       std::move(buffer_usage));
 }
 
@@ -142,7 +142,7 @@ std::unique_ptr<SharedImageBacking> OzoneImageBackingFactory::CreateSharedImage(
   DCHECK(!is_thread_safe);
   return CreateSharedImageInternal(mailbox, format, surface_handle, size,
                                    color_space, surface_origin, alpha_type,
-                                   usage);
+                                   usage, std::move(debug_label));
 }
 
 std::unique_ptr<SharedImageBacking> OzoneImageBackingFactory::CreateSharedImage(
@@ -156,9 +156,9 @@ std::unique_ptr<SharedImageBacking> OzoneImageBackingFactory::CreateSharedImage(
     std::string debug_label,
     base::span<const uint8_t> pixel_data) {
   SurfaceHandle surface_handle = SurfaceHandle();
-  auto backing =
-      CreateSharedImageInternal(mailbox, format, surface_handle, size,
-                                color_space, surface_origin, alpha_type, usage);
+  auto backing = CreateSharedImageInternal(
+      mailbox, format, surface_handle, size, color_space, surface_origin,
+      alpha_type, usage, std::move(debug_label));
 
   if (!backing) {
     return nullptr;
@@ -207,8 +207,8 @@ std::unique_ptr<SharedImageBacking> OzoneImageBackingFactory::CreateSharedImage(
       GetPlaneBufferFormat(plane, buffer_format));
   auto backing = std::make_unique<OzoneImageBacking>(
       mailbox, plane_format, plane, plane_size, color_space, surface_origin,
-      alpha_type, usage, shared_context_state_.get(), std::move(pixmap),
-      workarounds_, use_passthrough_);
+      alpha_type, usage, std::move(debug_label), shared_context_state_.get(),
+      std::move(pixmap), workarounds_);
   backing->SetCleared();
 
   return backing;
@@ -238,8 +238,8 @@ std::unique_ptr<SharedImageBacking> OzoneImageBackingFactory::CreateSharedImage(
 
   auto backing = std::make_unique<OzoneImageBacking>(
       mailbox, format, gfx::BufferPlane::DEFAULT, size, color_space,
-      surface_origin, alpha_type, usage, shared_context_state_.get(),
-      std::move(pixmap), workarounds_, use_passthrough_);
+      surface_origin, alpha_type, usage, std::move(debug_label),
+      shared_context_state_.get(), std::move(pixmap), workarounds_);
   backing->SetCleared();
 
   return backing;
@@ -260,7 +260,7 @@ std::unique_ptr<SharedImageBacking> OzoneImageBackingFactory::CreateSharedImage(
   DCHECK(!is_thread_safe);
   return CreateSharedImageInternal(mailbox, format, surface_handle, size,
                                    color_space, surface_origin, alpha_type,
-                                   usage, buffer_usage);
+                                   usage, std::move(debug_label), buffer_usage);
 }
 
 bool OzoneImageBackingFactory::IsSupported(
@@ -286,7 +286,8 @@ bool OzoneImageBackingFactory::IsSupported(
                       (usage & SHARED_IMAGE_USAGE_DISPLAY_WRITE);
   bool used_by_vulkan =
       used_by_skia && gr_context_type == GrContextType::kVulkan;
-  bool used_by_webgpu = usage & SHARED_IMAGE_USAGE_WEBGPU;
+  bool used_by_webgpu = usage & (SHARED_IMAGE_USAGE_WEBGPU_READ |
+                                 SHARED_IMAGE_USAGE_WEBGPU_WRITE);
   bool used_by_gl = (HasGLES2ReadOrWriteUsage(usage)) ||
                     (used_by_skia && gr_context_type == GrContextType::kGL);
   if (used_by_vulkan && !CanImportNativePixmapToVulkan()) {
@@ -422,6 +423,10 @@ bool OzoneImageBackingFactory::CanWebGPUSynchronizeGpuFence() {
   // TODO: somehow check if Dawn is using sync files.
   return false;
 #endif
+}
+
+SharedImageBackingType OzoneImageBackingFactory::GetBackingType() {
+  return SharedImageBackingType::kOzone;
 }
 
 }  // namespace gpu

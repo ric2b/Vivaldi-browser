@@ -33,7 +33,6 @@
 #include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/browsing_data/core/features.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_constraints.h"
@@ -52,7 +51,6 @@
 #include "components/subresource_filter/content/browser/subresource_filter_profile_context.h"
 #include "content/public/browser/ssl_host_state_delegate.h"
 #include "content/public/browser/ssl_status.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/web_contents_tester.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -153,7 +151,6 @@ class PageInfoTest : public ChromeRenderViewHostTestHarness {
     // TODO(crbug.com/1344787): Fix tests and enable the feature.
     scoped_feature_list_.InitWithFeatures(
         {
-            permissions::features::kPermissionStorageAccessAPI,
 #if !BUILDFLAG(IS_ANDROID)
             features::kFileSystemAccessPersistentPermissions,
 #endif
@@ -206,15 +203,7 @@ class PageInfoTest : public ChromeRenderViewHostTestHarness {
 
   void ExpectInitialSetCookieInfoCall(MockPageInfoUI* mock_ui) {
 #if !BUILDFLAG(IS_ANDROID)
-    // TODO(crbug.com/1430440): SetCookiesInfo is called twice on creation, once
-    // when the observation of web_contents starts and once when PageInfoUI is
-    // initialized. Clean this up after it is fixed.
-    int set_cookie_info_calls =
-        base::FeatureList::IsEnabled(
-            browsing_data::features::kMigrateStorageToBDM)
-            ? 1
-            : 2;
-    EXPECT_CALL(*mock_ui, SetCookieInfo(_)).Times(set_cookie_info_calls);
+    EXPECT_CALL(*mock_ui, SetCookieInfo(_)).Times(1);
 #else
     EXPECT_CALL(*mock_ui, SetCookieInfo(_));
 #endif
@@ -375,7 +364,6 @@ TEST_F(PageInfoTest, PermissionStringsHaveMidSentenceVersion) {
     std::u16string mid_sentence =
         l10n_util::GetStringUTF16(info.string_id_mid_sentence);
     switch (info.type) {
-      case ContentSettingsType::MIDI:
       case ContentSettingsType::MIDI_SYSEX:
       case ContentSettingsType::NFC:
       case ContentSettingsType::USB_GUARD:
@@ -521,7 +509,7 @@ TEST_F(PageInfoTest, StorageAccessGrantsAreFiltered) {
   // First-party-set exceptions are hidden based on their SessionModel.
   content_settings::ContentSettingConstraints constraint;
   constraint.set_session_model(
-      content_settings::SessionModel::NonRestorableUserSession);
+      content_settings::mojom::SessionModel::NON_RESTORABLE_USER_SESSION);
   map->SetContentSettingDefaultScope(kEmbedded1, url(), type,
                                      CONTENT_SETTING_ALLOW, constraint);
   page_info()->PresentSitePermissionsForTesting();
@@ -586,7 +574,7 @@ TEST_F(PageInfoTest, ShowAutograntedRWSPermissions) {
   auto* map = HostContentSettingsMapFactory::GetForProfile(profile());
   content_settings::ContentSettingConstraints constraint;
   constraint.set_session_model(
-      content_settings::SessionModel::NonRestorableUserSession);
+      content_settings::mojom::SessionModel::NON_RESTORABLE_USER_SESSION);
   map->SetContentSettingDefaultScope(GURL(kEmbeddedURL), GURL(kToplevelURL),
                                      ContentSettingsType::STORAGE_ACCESS,
                                      CONTENT_SETTING_BLOCK, constraint);
@@ -613,7 +601,7 @@ TEST_F(PageInfoTest, HideAutograntedRWSPermissions) {
   auto* map = HostContentSettingsMapFactory::GetForProfile(profile());
   content_settings::ContentSettingConstraints constraint;
   constraint.set_session_model(
-      content_settings::SessionModel::NonRestorableUserSession);
+      content_settings::mojom::SessionModel::NON_RESTORABLE_USER_SESSION);
   map->SetContentSettingDefaultScope(GURL(kEmbeddedURL), GURL(kToplevelURL),
                                      ContentSettingsType::STORAGE_ACCESS,
                                      CONTENT_SETTING_ALLOW, constraint);
@@ -1562,23 +1550,17 @@ TEST_F(PageInfoTest, ShowInfoBarWhenAllowingThirdPartyCookies) {
   SetDefaultUIExpectations(mock_ui());
   NavigateAndCommit(url());
 
-  // When `kMigrateStorageToBDM` is enabled calls to `PresentSiteDataInternal`
-  // from `PresentSiteData` are synchronous vs. async when it's disabled due to
-  // the UpdateIgnoredEmptyStorageKeys binding the call. This makes calls to
-  // `SetCookieInfo` appear as they're called.
-  if (base::FeatureList::IsEnabled(
-          browsing_data::features::kMigrateStorageToBDM)) {
-    // This call is needed to satisfy the default expectations after navigation.
-    page_info();
-    Mock::VerifyAndClearExpectations(mock_ui());
-    // `SetCookieInfo` is called once through `OnStatusChanged` and another time
-    // through `OnThirdPartyToggleClicked` which calls `OnStatusChanged` down
-    // its call chain.
-    EXPECT_CALL(*mock_ui(), SetCookieInfo(_)).Times(2);
-  }
+  // Calls to `PresentSiteDataInternal` from `PresentSiteData` are synchronous
+  // which makes calls to `SetCookieInfo` appear as they're called.
+  // This call is needed to satisfy the default expectations after navigation.
+  page_info();
+  Mock::VerifyAndClearExpectations(mock_ui());
+  // `SetCookieInfo` is called once through `OnStatusChanged` and another time
+  // through `OnThirdPartyToggleClicked` which calls `OnStatusChanged` down
+  // its call chain.
+  EXPECT_CALL(*mock_ui(), SetCookieInfo(_)).Times(2);
 
   page_info()->OnStatusChanged(
-      CookieControlsStatus::kEnabled,
       /*controls_visible=*/true, /*protections_on=*/true,
       CookieControlsEnforcement::kNoEnforcement,
       CookieBlocking3pcdStatus::kNotIn3pcd, base::Time());
@@ -1595,16 +1577,13 @@ TEST_F(PageInfoTest, ShowInfoBarWhenBlockingThirdPartyCookies) {
   SetDefaultUIExpectations(mock_ui());
   NavigateAndCommit(url());
 
-  // As above, expectations need to be cleared.
-  if (base::FeatureList::IsEnabled(
-          browsing_data::features::kMigrateStorageToBDM)) {
-    page_info();
-    Mock::VerifyAndClearExpectations(mock_ui());
-    EXPECT_CALL(*mock_ui(), SetCookieInfo(_)).Times(2);
-  }
+  // As in `ShowInfoBarWhenAllowingThirdPartyCookies` above, expectations need
+  // to be cleared.
+  page_info();
+  Mock::VerifyAndClearExpectations(mock_ui());
+  EXPECT_CALL(*mock_ui(), SetCookieInfo(_)).Times(2);
 
   page_info()->OnStatusChanged(
-      CookieControlsStatus::kDisabledForSite,
       /*controls_visible=*/true, /*protections_on=*/false,
       CookieControlsEnforcement::kNoEnforcement,
       CookieBlocking3pcdStatus::kNotIn3pcd, base::Time());
@@ -1715,7 +1694,7 @@ TEST_F(PageInfoTest, TimeOpenMetrics) {
     const std::string url;
     const security_state::SecurityLevel security_level;
     const std::string security_level_name;
-    const PageInfo::PageInfoAction action;
+    const page_info::PageInfoAction action;
   };
 
   const std::string kHistogramPrefix("Security.PageInfo.TimeOpen.");
@@ -1723,13 +1702,13 @@ TEST_F(PageInfoTest, TimeOpenMetrics) {
   const TestCase kTestCases[] = {
       // PAGE_INFO_OPENED used as shorthand for "take no action".
       {"https://example.test", security_state::SECURE, "SECURE",
-       PageInfo::PAGE_INFO_OPENED},
+       page_info::PAGE_INFO_OPENED},
       {"http://example.test", security_state::NONE, "NONE",
-       PageInfo::PAGE_INFO_OPENED},
+       page_info::PAGE_INFO_OPENED},
       {"https://example.test", security_state::SECURE, "SECURE",
-       PageInfo::PAGE_INFO_SITE_SETTINGS_OPENED},
+       page_info::PAGE_INFO_SITE_SETTINGS_OPENED},
       {"http://example.test", security_state::NONE, "NONE",
-       PageInfo::PAGE_INFO_SITE_SETTINGS_OPENED},
+       page_info::PAGE_INFO_SITE_SETTINGS_OPENED},
   };
 
   for (const auto& test : kTestCases) {
@@ -1747,14 +1726,14 @@ TEST_F(PageInfoTest, TimeOpenMetrics) {
         kHistogramPrefix + "NoAction." + test.security_level_name, 0);
 
     PageInfo* test_page_info = page_info();
-    if (test.action != PageInfo::PAGE_INFO_OPENED) {
+    if (test.action != page_info::PAGE_INFO_OPENED) {
       test_page_info->RecordPageInfoAction(test.action);
     }
     ClearPageInfo();
 
     histograms.ExpectTotalCount(kHistogramPrefix + test.security_level_name, 1);
 
-    if (test.action != PageInfo::PAGE_INFO_OPENED) {
+    if (test.action != page_info::PAGE_INFO_OPENED) {
       histograms.ExpectTotalCount(
           kHistogramPrefix + "Action." + test.security_level_name, 1);
     } else {
@@ -1827,13 +1806,13 @@ TEST_F(PageInfoTest, MAYBE_SafetyTipMetrics) {
 
     histograms.ExpectTotalCount(kGenericHistogram, 0);
 
-    page_info()->RecordPageInfoAction(PageInfo::PAGE_INFO_OPENED);
+    page_info()->RecordPageInfoAction(page_info::PAGE_INFO_OPENED);
 
     // RecordPageInfoAction() is called during PageInfo
     // creation in addition to the explicit RecordPageInfoAction()
     // call, so it is called twice in total.
     histograms.ExpectTotalCount(kGenericHistogram, 2);
-    histograms.ExpectBucketCount(kGenericHistogram, PageInfo::PAGE_INFO_OPENED,
+    histograms.ExpectBucketCount(kGenericHistogram, page_info::PAGE_INFO_OPENED,
                                  2);
   }
 }
@@ -1844,7 +1823,7 @@ TEST_F(PageInfoTest, SafetyTipTimeOpenMetrics) {
   struct TestCase {
     const security_state::SafetyTipStatus safety_tip_status;
     const std::string safety_tip_status_name;
-    const PageInfo::PageInfoAction action;
+    const page_info::PageInfoAction action;
   };
 
   const std::string kHistogramPrefix("Security.PageInfo.TimeOpen.");
@@ -1852,13 +1831,13 @@ TEST_F(PageInfoTest, SafetyTipTimeOpenMetrics) {
   const TestCase kTestCases[] = {
       // PAGE_INFO_COUNT used as shorthand for "take no action".
       {security_state::SafetyTipStatus::kNone, "SafetyTip_None",
-       PageInfo::PAGE_INFO_OPENED},
+       page_info::PAGE_INFO_OPENED},
       {security_state::SafetyTipStatus::kLookalike, "SafetyTip_Lookalike",
-       PageInfo::PAGE_INFO_OPENED},
+       page_info::PAGE_INFO_OPENED},
       {security_state::SafetyTipStatus::kNone, "SafetyTip_None",
-       PageInfo::PAGE_INFO_SITE_SETTINGS_OPENED},
+       page_info::PAGE_INFO_SITE_SETTINGS_OPENED},
       {security_state::SafetyTipStatus::kLookalike, "SafetyTip_Lookalike",
-       PageInfo::PAGE_INFO_SITE_SETTINGS_OPENED},
+       page_info::PAGE_INFO_SITE_SETTINGS_OPENED},
   };
 
   for (const auto& test : kTestCases) {
@@ -1877,7 +1856,7 @@ TEST_F(PageInfoTest, SafetyTipTimeOpenMetrics) {
         kHistogramPrefix + "NoAction." + test.safety_tip_status_name, 0);
 
     PageInfo* test_page_info = page_info();
-    if (test.action != PageInfo::PAGE_INFO_OPENED) {
+    if (test.action != page_info::PAGE_INFO_OPENED) {
       test_page_info->RecordPageInfoAction(test.action);
     }
     ClearPageInfo();
@@ -1885,7 +1864,7 @@ TEST_F(PageInfoTest, SafetyTipTimeOpenMetrics) {
     histograms.ExpectTotalCount(kHistogramPrefix + test.safety_tip_status_name,
                                 1);
 
-    if (test.action != PageInfo::PAGE_INFO_OPENED) {
+    if (test.action != page_info::PAGE_INFO_OPENED) {
       histograms.ExpectTotalCount(
           kHistogramPrefix + "Action." + test.safety_tip_status_name, 1);
     } else {
@@ -2435,10 +2414,7 @@ TEST_F(PageInfoTest, WithoutPageSpecificContentSettings) {
   page_info();
 }
 
-TEST_F(PageInfoTest, MidiGrantsAreFilteredWhenAllowMidi) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(features::kBlockMidiByDefault);
-
+TEST_F(PageInfoTest, MidiGrantsAreFilteredWhenAllowSysex) {
   std::set<ContentSettingsType> expected_visible_permissions;
 
   auto* map = HostContentSettingsMapFactory::GetForProfile(profile());
@@ -2453,196 +2429,6 @@ TEST_F(PageInfoTest, MidiGrantsAreFilteredWhenAllowMidi) {
   ExpectPermissionInfoList(expected_visible_permissions,
                            last_permission_info_list());
 
-  map->SetContentSettingDefaultScope(url(), url(), ContentSettingsType::MIDI,
-                                     CONTENT_SETTING_ALLOW);
-  page_info()->PresentSitePermissionsForTesting();
-  expected_visible_permissions.insert(ContentSettingsType::MIDI);
-  ExpectPermissionInfoList(expected_visible_permissions,
-                           last_permission_info_list());
-}
-
-TEST_F(PageInfoTest, MidiGrantsAreFilteredWhenBlockMidi) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(features::kBlockMidiByDefault);
-
-  std::set<ContentSettingsType> expected_visible_permissions;
-
-  auto* map = HostContentSettingsMapFactory::GetForProfile(profile());
-  page_info()->PresentSitePermissionsForTesting();
-
-#if BUILDFLAG(IS_ANDROID)
-  // Geolocation is always allowed to pass through to Android-specific logic to
-  // check for DSE settings (so expect 1 item), but isn't actually shown later
-  // on because this test isn't testing with a default search engine origin.
-  expected_visible_permissions.insert(ContentSettingsType::GEOLOCATION);
-#endif
-  ExpectPermissionInfoList(expected_visible_permissions,
-                           last_permission_info_list());
-
-  map->SetContentSettingDefaultScope(url(), url(), ContentSettingsType::MIDI,
-                                     CONTENT_SETTING_BLOCK);
-  page_info()->PresentSitePermissionsForTesting();
-  expected_visible_permissions.insert(ContentSettingsType::MIDI);
-  ExpectPermissionInfoList(expected_visible_permissions,
-                           last_permission_info_list());
-}
-
-TEST_F(PageInfoTest, MidiGrantsAreFilteredWhenBlockMidiAllowSysex) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(features::kBlockMidiByDefault);
-
-  std::set<ContentSettingsType> expected_visible_permissions;
-
-  auto* map = HostContentSettingsMapFactory::GetForProfile(profile());
-  page_info()->PresentSitePermissionsForTesting();
-
-#if BUILDFLAG(IS_ANDROID)
-  // Geolocation is always allowed to pass through to Android-specific logic to
-  // check for DSE settings (so expect 1 item), but isn't actually shown later
-  // on because this test isn't testing with a default search engine origin.
-  expected_visible_permissions.insert(ContentSettingsType::GEOLOCATION);
-#endif
-  ExpectPermissionInfoList(expected_visible_permissions,
-                           last_permission_info_list());
-
-  map->SetContentSettingDefaultScope(url(), url(), ContentSettingsType::MIDI,
-                                     CONTENT_SETTING_ALLOW);
-  map->SetContentSettingDefaultScope(
-      url(), url(), ContentSettingsType::MIDI_SYSEX, CONTENT_SETTING_BLOCK);
-  page_info()->PresentSitePermissionsForTesting();
-  expected_visible_permissions.insert(ContentSettingsType::MIDI);
-  ExpectPermissionInfoList(expected_visible_permissions,
-                           last_permission_info_list());
-}
-
-TEST_F(PageInfoTest, MidiGrantsAreFilteredWhenAllowkMidiAllowSysex) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(features::kBlockMidiByDefault);
-
-  std::set<ContentSettingsType> expected_visible_permissions;
-
-  auto* map = HostContentSettingsMapFactory::GetForProfile(profile());
-  page_info()->PresentSitePermissionsForTesting();
-
-#if BUILDFLAG(IS_ANDROID)
-  // Geolocation is always allowed to pass through to Android-specific logic to
-  // check for DSE settings (so expect 1 item), but isn't actually shown later
-  // on because this test isn't testing with a default search engine origin.
-  expected_visible_permissions.insert(ContentSettingsType::GEOLOCATION);
-#endif
-  ExpectPermissionInfoList(expected_visible_permissions,
-                           last_permission_info_list());
-
-  map->SetContentSettingDefaultScope(url(), url(), ContentSettingsType::MIDI,
-                                     CONTENT_SETTING_ALLOW);
-  map->SetContentSettingDefaultScope(
-      url(), url(), ContentSettingsType::MIDI_SYSEX, CONTENT_SETTING_ALLOW);
-  page_info()->PresentSitePermissionsForTesting();
-  expected_visible_permissions.insert(ContentSettingsType::MIDI_SYSEX);
-  ExpectPermissionInfoList(expected_visible_permissions,
-                           last_permission_info_list());
-}
-
-TEST_F(PageInfoTest, MidiGrantsAreFilteredWhenNotBlockMidiByDefaultAllowMidi) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(features::kBlockMidiByDefault);
-
-  std::set<ContentSettingsType> expected_visible_permissions;
-
-  auto* map = HostContentSettingsMapFactory::GetForProfile(profile());
-  page_info()->PresentSitePermissionsForTesting();
-
-#if BUILDFLAG(IS_ANDROID)
-  // Geolocation is always allowed to pass through to Android-specific logic to
-  // check for DSE settings (so expect 1 item), but isn't actually shown later
-  // on because this test isn't testing with a default search engine origin.
-  expected_visible_permissions.insert(ContentSettingsType::GEOLOCATION);
-#endif
-  ExpectPermissionInfoList(expected_visible_permissions,
-                           last_permission_info_list());
-
-  map->SetContentSettingDefaultScope(url(), url(), ContentSettingsType::MIDI,
-                                     CONTENT_SETTING_ALLOW);
-  page_info()->PresentSitePermissionsForTesting();
-  ExpectPermissionInfoList(expected_visible_permissions,
-                           last_permission_info_list());
-}
-
-TEST_F(PageInfoTest, MidiGrantsAreFilteredWhenNotBlockMidiByDefaultBlockMidi) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(features::kBlockMidiByDefault);
-
-  std::set<ContentSettingsType> expected_visible_permissions;
-
-  auto* map = HostContentSettingsMapFactory::GetForProfile(profile());
-  page_info()->PresentSitePermissionsForTesting();
-
-#if BUILDFLAG(IS_ANDROID)
-  // Geolocation is always allowed to pass through to Android-specific logic to
-  // check for DSE settings (so expect 1 item), but isn't actually shown later
-  // on because this test isn't testing with a default search engine origin.
-  expected_visible_permissions.insert(ContentSettingsType::GEOLOCATION);
-#endif
-  ExpectPermissionInfoList(expected_visible_permissions,
-                           last_permission_info_list());
-
-  map->SetContentSettingDefaultScope(url(), url(), ContentSettingsType::MIDI,
-                                     CONTENT_SETTING_BLOCK);
-  page_info()->PresentSitePermissionsForTesting();
-  ExpectPermissionInfoList(expected_visible_permissions,
-                           last_permission_info_list());
-}
-
-TEST_F(PageInfoTest,
-       MidiGrantsAreFilteredWhenNotBlockMidiByDefaultBlockMidiAllowSysex) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(features::kBlockMidiByDefault);
-
-  std::set<ContentSettingsType> expected_visible_permissions;
-
-  auto* map = HostContentSettingsMapFactory::GetForProfile(profile());
-  page_info()->PresentSitePermissionsForTesting();
-
-#if BUILDFLAG(IS_ANDROID)
-  // Geolocation is always allowed to pass through to Android-specific logic to
-  // check for DSE settings (so expect 1 item), but isn't actually shown later
-  // on because this test isn't testing with a default search engine origin.
-  expected_visible_permissions.insert(ContentSettingsType::GEOLOCATION);
-#endif
-  ExpectPermissionInfoList(expected_visible_permissions,
-                           last_permission_info_list());
-
-  map->SetContentSettingDefaultScope(url(), url(), ContentSettingsType::MIDI,
-                                     CONTENT_SETTING_ALLOW);
-  map->SetContentSettingDefaultScope(
-      url(), url(), ContentSettingsType::MIDI_SYSEX, CONTENT_SETTING_BLOCK);
-  page_info()->PresentSitePermissionsForTesting();
-  expected_visible_permissions.insert(ContentSettingsType::MIDI_SYSEX);
-  ExpectPermissionInfoList(expected_visible_permissions,
-                           last_permission_info_list());
-}
-
-TEST_F(PageInfoTest,
-       MidiGrantsAreFilteredWhenNotBlockMidiByDefaultAllowkMidiAllowSysex) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(features::kBlockMidiByDefault);
-
-  std::set<ContentSettingsType> expected_visible_permissions;
-
-  auto* map = HostContentSettingsMapFactory::GetForProfile(profile());
-  page_info()->PresentSitePermissionsForTesting();
-
-#if BUILDFLAG(IS_ANDROID)
-  // Geolocation is always allowed to pass through to Android-specific logic to
-  // check for DSE settings (so expect 1 item), but isn't actually shown later
-  // on because this test isn't testing with a default search engine origin.
-  expected_visible_permissions.insert(ContentSettingsType::GEOLOCATION);
-#endif
-  ExpectPermissionInfoList(expected_visible_permissions,
-                           last_permission_info_list());
-
-  map->SetContentSettingDefaultScope(url(), url(), ContentSettingsType::MIDI,
-                                     CONTENT_SETTING_ALLOW);
   map->SetContentSettingDefaultScope(
       url(), url(), ContentSettingsType::MIDI_SYSEX, CONTENT_SETTING_ALLOW);
   page_info()->PresentSitePermissionsForTesting();

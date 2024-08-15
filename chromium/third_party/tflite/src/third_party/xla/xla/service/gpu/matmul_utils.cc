@@ -1,4 +1,4 @@
-/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2022 The OpenXLA Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,11 +26,13 @@ limitations under the License.
 
 #include "absl/algorithm/container.h"
 #include "absl/log/check.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/types/span.h"
+#include "xla/autotuning.pb.h"
 #include "xla/hlo/ir/hlo_instruction.h"
-#include "xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.h"
 #include "xla/primitive_util.h"
+#include "xla/service/gpu/backend_configs.pb.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
 #include "xla/status.h"
@@ -54,7 +56,7 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
-StatusOr<std::vector<int64_t>> GetNonContractingDims(
+absl::StatusOr<std::vector<int64_t>> GetNonContractingDims(
     const Shape& shape, absl::Span<const int64_t> batch_dims,
     absl::Span<const int64_t> contracting_dims) {
   std::vector<int64_t> non_contracting_dims;
@@ -94,7 +96,7 @@ int64_t ContractingDimensionIndex(const HloInstruction& dot,
 
 int64_t NonContractingDimensionIndex(const HloInstruction& dot,
                                      const int operand_number) {
-  StatusOr<std::vector<int64_t>> non_contracting_dims =
+  absl::StatusOr<std::vector<int64_t>> non_contracting_dims =
       GetNonContractingDims(dot.operand(operand_number)->shape(),
                             BatchDimensionsForOperand(dot, operand_number),
                             {ContractingDimensionIndex(dot, operand_number)});
@@ -103,10 +105,9 @@ int64_t NonContractingDimensionIndex(const HloInstruction& dot,
   return non_contracting_dims->front();
 }
 
-StatusOr<Shape> GetBatchRowColumnShape(const Shape& shape,
-                                       absl::Span<const int64_t> batch_dims,
-                                       absl::Span<const int64_t> row_dims,
-                                       absl::Span<const int64_t> col_dims) {
+absl::StatusOr<Shape> GetBatchRowColumnShape(
+    const Shape& shape, absl::Span<const int64_t> batch_dims,
+    absl::Span<const int64_t> row_dims, absl::Span<const int64_t> col_dims) {
   TF_RET_CHECK(shape.has_layout());
 
   std::vector<int64_t> minor_to_major;
@@ -120,7 +121,7 @@ StatusOr<Shape> GetBatchRowColumnShape(const Shape& shape,
         if (*it != shape.layout().minor_to_major()[i++])
           return InvalidArgument("dims not physically_sequential");
       }
-      return OkStatus();
+      return absl::OkStatus();
     };
 
     int64_t dim = shape.layout().minor_to_major()[i];
@@ -155,7 +156,7 @@ StatusOr<Shape> GetBatchRowColumnShape(const Shape& shape,
 }
 
 // Returns the matrix layout for a logical shape (batch, rows, columns).
-/*static*/ StatusOr<MatrixLayout> MatrixLayout::For(const Shape& shape) {
+/*static*/ absl::StatusOr<MatrixLayout> MatrixLayout::For(const Shape& shape) {
   TF_RET_CHECK(shape.rank() == 3);
   TF_RET_CHECK(shape.has_layout());
 
@@ -198,7 +199,7 @@ StatusOr<Shape> GetBatchRowColumnShape(const Shape& shape,
                                             leading_dim_stride, batch_stride}};
 }
 
-/*static*/ StatusOr<MatrixLayout> MatrixLayout::For(
+/*static*/ absl::StatusOr<MatrixLayout> MatrixLayout::For(
     const Shape& shape, absl::Span<const int64_t> batch_dims,
     absl::Span<const int64_t> row_dims, absl::Span<const int64_t> col_dims) {
   TF_ASSIGN_OR_RETURN(
@@ -207,11 +208,9 @@ StatusOr<Shape> GetBatchRowColumnShape(const Shape& shape,
   return MatrixLayout::For(batch_row_col_shape);
 }
 
-/*static*/ StatusOr<MatrixLayout> MatrixLayout::For(const Shape& shape,
-                                                    size_t lhs_num_batch_dims,
-                                                    size_t lhs_num_row_dims,
-                                                    size_t rhs_num_batch_dims,
-                                                    size_t rhs_num_col_dims) {
+/*static*/ absl::StatusOr<MatrixLayout> MatrixLayout::For(
+    const Shape& shape, size_t lhs_num_batch_dims, size_t lhs_num_row_dims,
+    size_t rhs_num_batch_dims, size_t rhs_num_col_dims) {
   size_t num_batch_dims = std::max(lhs_num_batch_dims, rhs_num_batch_dims);
 
   TF_RET_CHECK(shape.rank() ==
@@ -243,8 +242,8 @@ std::vector<int64_t> NormalizedRelativeOrder(absl::Span<const int64_t> dims) {
 }
 }  // namespace
 
-StatusOr<bool> CanFoldTransposeOperandIntoDot(const HloInstruction& dot,
-                                              int64_t operand_idx) {
+absl::StatusOr<bool> CanFoldTransposeOperandIntoDot(const HloInstruction& dot,
+                                                    int64_t operand_idx) {
   TF_RET_CHECK(dot.opcode() == HloOpcode::kDot);
   TF_RET_CHECK(dot.operand_count() > operand_idx);
 
@@ -288,7 +287,7 @@ StatusOr<bool> CanFoldTransposeOperandIntoDot(const HloInstruction& dot,
       .ok();
 }
 
-/*static*/ StatusOr<GemmConfig> GemmConfig::For(
+/*static*/ absl::StatusOr<GemmConfig> GemmConfig::For(
     const Shape& lhs_shape, absl::Span<const int64_t> lhs_batch_dims,
     absl::Span<const int64_t> lhs_contracting_dims, const Shape& rhs_shape,
     absl::Span<const int64_t> rhs_batch_dims,
@@ -303,7 +302,7 @@ StatusOr<bool> CanFoldTransposeOperandIntoDot(const HloInstruction& dot,
                          compute_precision, grad_x, grad_y);
 }
 
-/*static*/ StatusOr<GemmConfig> GemmConfig::For(
+/*static*/ absl::StatusOr<GemmConfig> GemmConfig::For(
     const Shape& lhs_shape, absl::Span<const int64_t> lhs_batch_dims,
     absl::Span<const int64_t> lhs_contracting_dims, const Shape& rhs_shape,
     absl::Span<const int64_t> rhs_batch_dims,
@@ -398,7 +397,7 @@ StatusOr<bool> CanFoldTransposeOperandIntoDot(const HloInstruction& dot,
       TF_RET_CHECK(alpha_imag == 0);
       if (lhs_layout.dtype != PrimitiveType::S8 ||
           rhs_layout.dtype != PrimitiveType::S8) {
-        return InternalError(
+        return Internal(
             "For int32 gemm output only int8 input is supported, got input: "
             "%s, %s",
             primitive_util::LowercasePrimitiveTypeName(lhs_layout.dtype),
@@ -406,9 +405,9 @@ StatusOr<bool> CanFoldTransposeOperandIntoDot(const HloInstruction& dot,
       }
       break;
     default:
-      return InternalError("Unexpected GEMM datatype: %s",
-                           primitive_util::LowercasePrimitiveTypeName(
-                               output_shape.element_type()));
+      return Internal("Unexpected GEMM datatype: %s",
+                      primitive_util::LowercasePrimitiveTypeName(
+                          output_shape.element_type()));
   }
 
   return GemmConfig{lhs_layout,
@@ -423,10 +422,11 @@ StatusOr<bool> CanFoldTransposeOperandIntoDot(const HloInstruction& dot,
                     grad_y};
 }
 
-/*static*/ StatusOr<GemmConfig> GemmConfig::For(const HloInstruction* gemm) {
-  TF_ASSIGN_OR_RETURN(GemmBackendConfig config,
-                      gemm->backend_config<GemmBackendConfig>());
-
+/*static*/ absl::StatusOr<GemmConfig> GemmConfig::For(
+    const HloInstruction* gemm) {
+  TF_ASSIGN_OR_RETURN(GpuBackendConfig gpu_config,
+                      gemm->backend_config<GpuBackendConfig>());
+  const GemmBackendConfig& config = gpu_config.gemm_backend_config();
   std::optional<int64_t> algorithm;
   if (config.algorithm_case() != GemmBackendConfig::ALGORITHM_NOT_SET) {
     algorithm = config.selected_algorithm();
@@ -457,47 +457,12 @@ StatusOr<bool> CanFoldTransposeOperandIntoDot(const HloInstruction& dot,
                          config.beta(), algorithm, precision, grad_x, grad_y);
 }
 
-/*static*/ StatusOr<GemmConfig> GemmConfig::For(mlir::lmhlo_gpu::GEMMOp op) {
-  mlir::mhlo::DotDimensionNumbersAttr dot_dims = op.getDotDimensionNumbers();
-
-  std::optional<int64_t> algorithm;
-  if (op.getAlgorithm()) algorithm = *op.getAlgorithm();
-
-  bool grad_x = false;
-  bool grad_y = false;
-  auto attr_grad_x = op.getGradX();
-  if (attr_grad_x) grad_x = attr_grad_x.value();
-  auto attr_grad_y = op.getGradY();
-  if (attr_grad_y) grad_y = attr_grad_y.value();
-
-  int64_t compute_precision = 0;  // Default
-  if (op.getPrecisionConfig().has_value()) {
-    auto precision_config = op.getPrecisionConfig();
-    for (auto attr : precision_config.value()) {
-      int64_t value = static_cast<int64_t>(
-          attr.template cast<mlir::mhlo::PrecisionAttr>().getValue());
-      if (value > compute_precision) {
-        compute_precision = value;
-      }
-    }
-  }
-
-  return GemmConfig::For(
-      GetShape(op.getA()), dot_dims.getLhsBatchingDimensions(),
-      dot_dims.getLhsContractingDimensions(), GetShape(op.getB()),
-      dot_dims.getRhsBatchingDimensions(),
-      dot_dims.getRhsContractingDimensions(), GetShape(op.getC()),
-      op.getAlphaReal().convertToDouble(), op.getAlphaImag().convertToDouble(),
-      op.getBeta().convertToDouble(), algorithm, compute_precision, grad_x,
-      grad_y);
-}
-
-StatusOr<GemmConfig::DescriptorsTuple> GemmConfig::GetMatrixDescriptors(
+absl::StatusOr<GemmConfig::DescriptorsTuple> GemmConfig::GetMatrixDescriptors(
     se::DeviceMemoryBase lhs_buf, se::DeviceMemoryBase rhs_buf,
     se::DeviceMemoryBase out_buf) const {
-  auto create_matrix_desc =
-      [](const se::gpu::MatrixLayout& layout,
-         se::DeviceMemoryBase data) -> StatusOr<se::gpu::MatrixDescriptor> {
+  auto create_matrix_desc = [](const se::gpu::MatrixLayout& layout,
+                               se::DeviceMemoryBase data)
+      -> absl::StatusOr<se::gpu::MatrixDescriptor> {
     TF_ASSIGN_OR_RETURN(se::blas::DataType type,
                         se::gpu::AsBlasDataType(layout.dtype));
     return se::gpu::MatrixDescriptor{
@@ -507,7 +472,7 @@ StatusOr<GemmConfig::DescriptorsTuple> GemmConfig::GetMatrixDescriptors(
              ? se::blas::Transpose::kNoTranspose
              : se::blas::Transpose::kTranspose)};
   };
-  // make a local copy to prevent modification of layouts,
+  // TODO: make a local copy to prevent modification of layouts,
   // but maybe we can modify them once instead during creation ?
   se::gpu::MatrixLayout lhs = lhs_layout, rhs = rhs_layout, out = output_layout;
 
@@ -538,16 +503,16 @@ StatusOr<GemmConfig::DescriptorsTuple> GemmConfig::GetMatrixDescriptors(
 namespace {
 
 template <typename Scale, typename Input, typename Output>
-Status DoGemmWithAlgorithm(const se::gpu::MatrixDescriptor& lhs,
-                           const se::gpu::MatrixDescriptor& rhs,
-                           const se::gpu::OutputMatrixDescriptor& output,
-                           se::DeviceMemoryBase workspace, Scale alpha,
-                           Scale beta, se::Stream* stream,
-                           se::blas::AlgorithmType algorithm,
-                           se::blas::ComputePrecision compute_precision,
-                           const se::NumericOptions& numeric_options,
-                           se::blas::ProfileResult* profile_result,
-                           se::blas::CallContext context) {
+absl::Status DoGemmWithAlgorithm(const se::gpu::MatrixDescriptor& lhs,
+                                 const se::gpu::MatrixDescriptor& rhs,
+                                 const se::gpu::OutputMatrixDescriptor& output,
+                                 se::DeviceMemoryBase workspace, Scale alpha,
+                                 Scale beta, se::Stream* stream,
+                                 se::blas::AlgorithmType algorithm,
+                                 se::blas::ComputePrecision compute_precision,
+                                 const se::NumericOptions& numeric_options,
+                                 se::blas::ProfileResult* profile_result,
+                                 se::blas::CallContext context) {
   CHECK(output.transpose == se::blas::Transpose::kNoTranspose);
   PrimitiveType lhs_type = primitive_util::NativeToPrimitiveType<Input>();
   PrimitiveType output_type = primitive_util::NativeToPrimitiveType<Output>();
@@ -557,78 +522,82 @@ Status DoGemmWithAlgorithm(const se::gpu::MatrixDescriptor& lhs,
   se::DeviceMemory<Output> output_data(output.data);
 
   // Set a workspace for all Blas operations launched below.
-  se::blas::BlasSupport::ScopedWorkspace scoped_workspace(
-      stream->parent()->AsBlas(), &workspace);
+  auto* blas = stream->parent()->AsBlas();
+  if (blas == nullptr) {
+    return absl::InternalError("No Blas support for stream");
+  }
+
+  se::blas::BlasSupport::ScopedWorkspace scoped_workspace(blas, &workspace);
 
   if (output.batch_size != 1) {
-    return stream->ThenBlasGemmStridedBatchedWithAlgorithm(
-        lhs.transpose, rhs.transpose, output.m, output.n, output.k, alpha,
-        lhs.cast<Input>(), lhs.leading_dim_stride, lhs.batch_stride,
+    return blas->BlasGemmStridedBatchedWithAlgorithm(
+        stream, lhs.transpose, rhs.transpose, output.m, output.n, output.k,
+        alpha, lhs.cast<Input>(), lhs.leading_dim_stride, lhs.batch_stride,
         rhs.cast<Input>(), rhs.leading_dim_stride, rhs.batch_stride, beta,
         &output_data, output.leading_dim_stride, output.batch_stride,
         output.batch_size, computation_type, algorithm, numeric_options,
         profile_result, context);
   } else {
-    return stream->ThenBlasGemmWithAlgorithm(
-        lhs.transpose, rhs.transpose, output.m, output.n, output.k, alpha,
-        lhs.cast<Input>(), lhs.leading_dim_stride, rhs.cast<Input>(),
+    return blas->BlasGemmWithAlgorithm(
+        stream, lhs.transpose, rhs.transpose, output.m, output.n, output.k,
+        alpha, lhs.cast<Input>(), lhs.leading_dim_stride, rhs.cast<Input>(),
         rhs.leading_dim_stride, beta, &output_data, output.leading_dim_stride,
         computation_type, algorithm, numeric_options, profile_result, context);
   }
 }
 
 template <typename Scale, typename Input, typename Output>
-Status DoGemm(const se::gpu::MatrixDescriptor& lhs,
-              const se::gpu::MatrixDescriptor& rhs,
-              const se::gpu::OutputMatrixDescriptor& output,
-              se::DeviceMemoryBase workspace, Scale alpha, Scale beta,
-              se::Stream* stream,
-              std::optional<se::blas::AlgorithmType> algorithm,
-              se::blas::ComputePrecision compute_precision,
-              const se::NumericOptions& numeric_options,
-              se::blas::ProfileResult* profile_result,
-              se::blas::CallContext context) {
+absl::Status DoGemm(const se::gpu::MatrixDescriptor& lhs,
+                    const se::gpu::MatrixDescriptor& rhs,
+                    const se::gpu::OutputMatrixDescriptor& output,
+                    se::DeviceMemoryBase workspace, Scale alpha, Scale beta,
+                    se::Stream* stream,
+                    std::optional<se::blas::AlgorithmType> algorithm,
+                    se::blas::ComputePrecision compute_precision,
+                    const se::NumericOptions& numeric_options,
+                    se::blas::ProfileResult* profile_result,
+                    se::blas::CallContext context) {
   CHECK(output.transpose == se::blas::Transpose::kNoTranspose);
   se::DeviceMemory<Output> output_data(output.data);
+  auto* blas = stream->parent()->AsBlas();
+  if (blas == nullptr) {
+    return absl::InternalError("No Blas support for stream");
+  }
 
   // Set a workspace for all Blas operations launched below.
-  se::blas::BlasSupport::ScopedWorkspace scoped_workspace(
-      stream->parent()->AsBlas(), &workspace);
+  se::blas::BlasSupport::ScopedWorkspace scoped_workspace(blas, &workspace);
 
-// TODO: enable DoGemmWithAlgorithm for ROCm !
-#if GOOGLE_CUDA
   if (algorithm) {
     return DoGemmWithAlgorithm<Scale, Input, Output>(
         lhs, rhs, output, workspace, alpha, beta, stream, *algorithm,
         compute_precision, numeric_options, profile_result, context);
   }
-#endif
 
   if (output.batch_size != 1) {
-    return stream->ThenBlasGemmStridedBatched(
-        lhs.transpose, rhs.transpose, output.m, output.n, output.k, alpha,
-        lhs.cast<Input>(), lhs.leading_dim_stride, lhs.batch_stride,
+    return blas->BlasGemmStridedBatched(
+        stream, lhs.transpose, rhs.transpose, output.m, output.n, output.k,
+        alpha, lhs.cast<Input>(), lhs.leading_dim_stride, lhs.batch_stride,
         rhs.cast<Input>(), rhs.leading_dim_stride, rhs.batch_stride, beta,
         &output_data, output.leading_dim_stride, output.batch_stride,
         output.batch_size, numeric_options, context);
   }
 
-  return stream->ThenBlasGemm(
-      lhs.transpose, rhs.transpose, output.m, output.n, output.k, alpha,
-      lhs.cast<Input>(), lhs.leading_dim_stride, rhs.cast<Input>(),
-      rhs.leading_dim_stride, beta, &output_data, output.leading_dim_stride,
-      numeric_options, context);
+  return blas->BlasGemm(stream, lhs.transpose, rhs.transpose, output.m,
+                        output.n, output.k, alpha, lhs.cast<Input>(),
+                        lhs.leading_dim_stride, rhs.cast<Input>(),
+                        rhs.leading_dim_stride, beta, &output_data,
+                        output.leading_dim_stride, numeric_options, context);
 }
 
 }  // namespace
 
-Status RunGemm(const GemmConfig& config, se::DeviceMemoryBase lhs_buffer,
-               se::DeviceMemoryBase rhs_buffer,
-               se::DeviceMemoryBase output_buffer,
-               se::DeviceMemoryBase workspace_buffer, bool deterministic_ops,
-               se::Stream* stream,
-               std::optional<se::blas::AlgorithmType> algorithm,
-               se::blas::ProfileResult* profile_result) {
+absl::Status RunGemm(const GemmConfig& config, se::DeviceMemoryBase lhs_buffer,
+                     se::DeviceMemoryBase rhs_buffer,
+                     se::DeviceMemoryBase output_buffer,
+                     se::DeviceMemoryBase workspace_buffer,
+                     bool deterministic_ops, se::Stream* stream,
+                     std::optional<se::blas::AlgorithmType> algorithm,
+                     se::blas::ProfileResult* profile_result) {
   VLOG(2) << "Executing a GemmThunk";
 
   TF_ASSIGN_OR_RETURN(
@@ -661,8 +630,7 @@ Status RunGemm(const GemmConfig& config, se::DeviceMemoryBase lhs_buffer,
   // graphs, so we are making sure we do not trigger it).
   if (config.alpha.real() == 0.0 && config.alpha.imag() == 0.0 &&
       config.beta == 0.0) {
-    stream->ThenMemZero(&output_buffer, output_buffer.size());
-    return tsl::OkStatus();
+    return stream->MemZero(&output_buffer, output_buffer.size());
   }
 
 #define TYPED_GEMM(SCALENTYPE, ATYPE, BTYPE, CTYPE)                          \
@@ -713,7 +681,7 @@ Status RunGemm(const GemmConfig& config, se::DeviceMemoryBase lhs_buffer,
 
 #undef TYPED_GEMM
 #undef TYPED_GEMM_COMPLEX
-  return InternalError(
+  return Internal(
       "Unexpected GEMM dtype: %s %s %s",
       primitive_util::LowercasePrimitiveTypeName(config.lhs_layout.dtype),
       primitive_util::LowercasePrimitiveTypeName(config.rhs_layout.dtype),
@@ -722,7 +690,8 @@ Status RunGemm(const GemmConfig& config, se::DeviceMemoryBase lhs_buffer,
 
 namespace gpublas_lt {
 
-StatusOr<bool> EpilogueAddsVectorBias(GemmBackendConfig_Epilogue epilogue) {
+absl::StatusOr<bool> EpilogueAddsVectorBias(
+    GemmBackendConfig_Epilogue epilogue) {
   switch (epilogue) {
     case GemmBackendConfig::DEFAULT:
     case GemmBackendConfig::RELU:
@@ -735,11 +704,12 @@ StatusOr<bool> EpilogueAddsVectorBias(GemmBackendConfig_Epilogue epilogue) {
     case GemmBackendConfig::BIAS_GELU_AUX:
       return true;
     default:
-      return InternalError("Unknown Epilogue.");
+      return Internal("Unknown Epilogue.");
   }
 }
 
-StatusOr<bool> EpilogueHasAuxiliaryOutput(GemmBackendConfig_Epilogue epilogue) {
+absl::StatusOr<bool> EpilogueHasAuxiliaryOutput(
+    GemmBackendConfig_Epilogue epilogue) {
   switch (epilogue) {
     case GemmBackendConfig::DEFAULT:
     case GemmBackendConfig::RELU:
@@ -752,46 +722,50 @@ StatusOr<bool> EpilogueHasAuxiliaryOutput(GemmBackendConfig_Epilogue epilogue) {
     case GemmBackendConfig::BIAS_GELU_AUX:
       return true;
     default:
-      return InternalError("Unknown Epilogue.");
+      return Internal("Unknown Epilogue.");
   }
 }
 
-StatusOr<se::gpu::BlasLt::Epilogue> AsBlasLtEpilogue(
-    mlir::lmhlo_gpu::CublasLtMatmulEpilogue epilogue) {
-  using mlir::lmhlo_gpu::CublasLtMatmulEpilogue;
+absl::StatusOr<se::gpu::BlasLt::Epilogue> AsBlasLtEpilogue(
+    GemmBackendConfig_Epilogue epilogue) {
   switch (epilogue) {
-    case CublasLtMatmulEpilogue::Default:
+    case GemmBackendConfig::DEFAULT:
       return se::gpu::BlasLt::Epilogue::kDefault;
-    case CublasLtMatmulEpilogue::Relu:
+    case GemmBackendConfig::RELU:
       return se::gpu::BlasLt::Epilogue::kReLU;
-    case CublasLtMatmulEpilogue::Gelu:
+    case GemmBackendConfig::GELU:
       return se::gpu::BlasLt::Epilogue::kGELU;
-    case CublasLtMatmulEpilogue::GeluAux:
+    case GemmBackendConfig::GELU_AUX:
       return se::gpu::BlasLt::Epilogue::kGELUWithAux;
-    case CublasLtMatmulEpilogue::Bias:
+    case GemmBackendConfig::BIAS:
       return se::gpu::BlasLt::Epilogue::kBias;
-    case CublasLtMatmulEpilogue::BiasRelu:
+    case GemmBackendConfig::BIAS_RELU:
       return se::gpu::BlasLt::Epilogue::kBiasThenReLU;
-    case CublasLtMatmulEpilogue::BiasGelu:
+    case GemmBackendConfig::BIAS_GELU:
       return se::gpu::BlasLt::Epilogue::kBiasThenGELU;
-    case CublasLtMatmulEpilogue::BiasGeluAux:
+    case GemmBackendConfig::BIAS_GELU_AUX:
       return se::gpu::BlasLt::Epilogue::kBiasThenGELUWithAux;
+    default:
+      return Internal("unexpected epilogue value");
   }
-  return InternalError("unexpected epilogue value");
 }
 
 }  // namespace gpublas_lt
 
-/*static*/ TritonGemmConfig TritonGemmConfig::FromProto(
+/*static*/ absl::StatusOr<TritonGemmConfig> TritonGemmConfig::FromProto(
     const AutotuneResult::TritonGemmKey& proto) {
-  TritonGemmConfig config;
-  config.block_m = proto.block_m();
-  config.block_n = proto.block_n();
-  config.block_k = proto.block_k();
-  config.split_k = proto.split_k();
-  config.num_stages = proto.num_stages();
-  config.num_warps = proto.num_warps();
-  return config;
+  // Sanity check to avoid loading incomplete data.
+  TF_RET_CHECK(proto.block_m() > 0);
+  TF_RET_CHECK(proto.block_n() > 0);
+  TF_RET_CHECK(proto.block_k() > 0);
+  TF_RET_CHECK(proto.split_k() > 0);
+  TF_RET_CHECK(proto.num_stages() > 0);
+  TF_RET_CHECK(proto.num_warps() > 0);
+  TF_RET_CHECK(proto.num_ctas() > 0);
+
+  return TritonGemmConfig(proto.block_m(), proto.block_n(), proto.block_k(),
+                          proto.split_k(), proto.num_stages(),
+                          proto.num_warps(), proto.num_ctas());
 }
 
 AutotuneResult::TritonGemmKey TritonGemmConfig::ToProto() const {
@@ -802,6 +776,7 @@ AutotuneResult::TritonGemmKey TritonGemmConfig::ToProto() const {
   key.set_split_k(split_k);
   key.set_num_stages(num_stages);
   key.set_num_warps(num_warps);
+  key.set_num_ctas(num_ctas);
   return key;
 }
 
@@ -809,7 +784,7 @@ std::string TritonGemmConfig::ToString() const {
   return absl::StrCat("{block_m:", block_m, ",block_n:", block_n,
                       ",block_k:", block_k, ",split_k:", split_k,
                       ",num_stages:", num_stages, ",num_warps:", num_warps,
-                      "}");
+                      ",num_ctas:", num_ctas, "}");
 }
 
 }  // namespace gpu

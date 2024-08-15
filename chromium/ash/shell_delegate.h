@@ -58,6 +58,8 @@ class ASH_EXPORT ShellDelegate {
   enum class FeedbackSource {
     kFocusMode,
     kGameDashboard,
+    kOverview,
+    kSnapGroups,
     kWindowLayoutMenu,
   };
 
@@ -184,7 +186,8 @@ class ASH_EXPORT ShellDelegate {
   // `description_template` fields. Note, this will only be used by features
   // before they are fully launched or removed.
   virtual void OpenFeedbackDialog(FeedbackSource source,
-                                  const std::string& description_template) = 0;
+                                  const std::string& description_template,
+                                  const std::string& category_tag) = 0;
 
   // Calls browser service to open the profile manager.
   virtual void OpenProfileManager() = 0;
@@ -214,6 +217,9 @@ class ASH_EXPORT ShellDelegate {
   // Returns the DeskProfilesDelegate, or nullptr if it isn't available. The
   // delegate (when available) is owned by `CrosapiAsh`.
   virtual DeskProfilesDelegate* GetDeskProfilesDelegate();
+
+  // Opens the Multitasking OS Settings page.
+  virtual void OpenMultitaskingSettings() = 0;
 };
 
 }  // namespace ash

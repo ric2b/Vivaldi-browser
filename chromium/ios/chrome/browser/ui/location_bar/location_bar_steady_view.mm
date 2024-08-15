@@ -167,6 +167,9 @@ const CGFloat kLeadingMargin = 20;
 
 @implementation LocationBarSteadyView {
   NSLayoutConstraint* _xConstraint;
+
+  // The trailing view that is hidden by default, shown for highlight mode.
+  UIView* _trailingButtonSpotlightView;
 }
 
 - (instancetype)init {
@@ -193,6 +196,12 @@ const CGFloat kLeadingMargin = 20;
     // Make the pointer shape fit the location bar's semi-circle end shape.
     _trailingButton.pointerStyleProvider =
         CreateLiftEffectCirclePointerStyleProvider();
+
+    __weak __typeof(self) weakSelf = self;
+    CustomHighlightableButtonHighlightHandler handler = ^(BOOL highlighted) {
+      [weakSelf updateTrailingButtonWithHighlightedStatus:highlighted];
+    };
+    [_trailingButton setCustomHighlightHandler:handler];
 
     // Setup label.
     _locationLabel.lineBreakMode = NSLineBreakByTruncatingHead;
@@ -270,10 +279,20 @@ const CGFloat kLeadingMargin = 20;
 
     [NSLayoutConstraint activateConstraints:_showLocationImageConstraints];
 
+    _trailingButtonSpotlightView = [[UIView alloc] init];
+    _trailingButtonSpotlightView.translatesAutoresizingMaskIntoConstraints = NO;
+    _trailingButtonSpotlightView.hidden = YES;
+    _trailingButtonSpotlightView.userInteractionEnabled = NO;
+    _trailingButtonSpotlightView.backgroundColor =
+        [UIColor colorNamed:kBlueColor];
+
     _locationButton = [[LocationBarSteadyButton alloc] init];
     _locationButton.translatesAutoresizingMaskIntoConstraints = NO;
     [_locationButton addSubview:_trailingButton];
+    [_locationButton insertSubview:_trailingButtonSpotlightView
+                      belowSubview:_trailingButton];
     [_locationButton addSubview:_locationContainerView];
+    AddSameCenterConstraints(_trailingButton, _trailingButtonSpotlightView);
 
     [self addSubview:_locationButton];
 
@@ -346,6 +365,10 @@ const CGFloat kLeadingMargin = 20;
       _trailingButtonTrailingAnchorConstraint,
       _xConstraint,
       _locationContainerViewLeadingAnchorConstraint,
+      [_trailingButtonSpotlightView.trailingAnchor
+          constraintEqualToAnchor:self.trailingAnchor],
+      [_trailingButtonSpotlightView.heightAnchor
+          constraintEqualToAnchor:self.heightAnchor],
     ]];
     } // End Vivaldi
   }
@@ -369,6 +392,12 @@ const CGFloat kLeadingMargin = 20;
   [self updateAccessibility];
 
   return self;
+}
+
+- (void)layoutSubviews {
+  [super layoutSubviews];
+  _trailingButtonSpotlightView.layer.cornerRadius =
+      _trailingButtonSpotlightView.bounds.size.height / 2;
 }
 
 - (CGFloat)trailingButtonTrailingSpacing {
@@ -645,6 +674,14 @@ const CGFloat kLeadingMargin = 20;
   return LocationBarSteadyViewFont(
       self.traitCollection.preferredContentSizeCategory);
 }
+
+- (void)updateTrailingButtonWithHighlightedStatus:(BOOL)highlighted {
+  self.trailingButton.tintColor =
+      highlighted ? [UIColor colorNamed:kSolidButtonTextColor]
+                  : [UIColor colorNamed:kToolbarButtonColor];
+  _trailingButtonSpotlightView.hidden = !highlighted;
+}
+
 
 #pragma mark - VIVALDI
 #pragma mark - SharingPositioner

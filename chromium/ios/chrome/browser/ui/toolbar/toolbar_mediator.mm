@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/toolbar/toolbar_mediator.h"
 
+#import "base/memory/raw_ptr.h"
 #import "base/metrics/field_trial_params.h"
 #import "base/metrics/histogram_functions.h"
 #import "components/segmentation_platform/embedder/default_model/device_switcher_result_dispatcher.h"
@@ -70,7 +71,7 @@ using vivaldi::IsVivaldiRunning;
   /// Observes web state activation.
   std::unique_ptr<WebStateListObserverBridge> _webStateListObserverBridge;
 
-  WebStateList* _webStateList;
+  raw_ptr<WebStateList> _webStateList;
 
   /// Pref tracking if bottom omnibox is enabled.
   PrefBackedBoolean* _bottomOmniboxEnabled;
@@ -296,8 +297,7 @@ using vivaldi::IsVivaldiRunning;
   NewTabPageTabHelper* NTPHelper = NewTabPageTabHelper::FromWebState(webState);
   _isNTP = NTPHelper && NTPHelper->IsActive();
   if (IsBottomOmniboxSteadyStateEnabled()) {
-    if (_shouldCheckSafariSwitcherOnFRE &&
-        IsBottomOmniboxDeviceSwitcherResultsEnabled()) {
+    if (_shouldCheckSafariSwitcherOnFRE) {
       [self checkSafariSwitcherOnFRE];
     }
     [self updateOmniboxPosition];
@@ -466,8 +466,7 @@ using vivaldi::IsVivaldiRunning;
 
   // Call `isSafariSwitcherAtStartup` in all cases to collect metrics on the
   // device switcher result availability.
-  if (IsBottomOmniboxDeviceSwitcherResultsEnabled() &&
-      [self isSafariSwitcherAtStartup:bottomOmniboxEnabledByDefault] &&
+  if ([self isSafariSwitcherAtStartup:bottomOmniboxEnabledByDefault] &&
       featureParam == kBottomOmniboxDefaultSettingParamSafariSwitcher) {
     bottomOmniboxEnabledByDefault = YES;
   }

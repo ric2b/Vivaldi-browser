@@ -4,24 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { Dialog } from '../api/Dialog.js';
-/**
- * @internal
- */
 export class BidiDialog extends Dialog {
-    #context;
-    /**
-     * @internal
-     */
-    constructor(context, type, message, defaultValue) {
-        super(type, message, defaultValue);
-        this.#context = context;
+    static from(prompt) {
+        return new BidiDialog(prompt);
     }
-    /**
-     * @internal
-     */
-    async sendCommand(options) {
-        await this.#context.connection.send('browsingContext.handleUserPrompt', {
-            context: this.#context.id,
+    #prompt;
+    constructor(prompt) {
+        super(prompt.info.type, prompt.info.message, prompt.info.defaultValue);
+        this.#prompt = prompt;
+    }
+    async handle(options) {
+        await this.#prompt.handle({
             accept: options.accept,
             userText: options.text,
         });

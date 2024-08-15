@@ -10,9 +10,6 @@
 #import "ios/chrome/browser/metrics/model/new_tab_page_uma.h"
 
 class PrefService;
-namespace web {
-class WebState;
-}
 
 typedef NS_ENUM(NSInteger, NTPCollectionShortcutType);
 
@@ -30,11 +27,6 @@ enum class SetUpListItemType;
 
 // Cleans up this class's saved properties before deallocation.
 - (void)disconnect;
-
-// Logs a metric for when a module of `type` is shown as the first module in the
-// Magic Stack.
-- (void)recordMagicStackTopModuleImpressionForType:
-    (ContentSuggestionsModuleType)type;
 
 // Logs a metric for when the user taps on a module of `type` in the Magic
 // Stack.
@@ -63,8 +55,7 @@ enum class SetUpListItemType;
 
 // Logs a most visited tile `item` being opened at `index` in `webState`.
 - (void)recordMostVisitedTileOpened:(ContentSuggestionsMostVisitedItem*)item
-                            atIndex:(NSInteger)index
-                           webState:(web::WebState*)webState;
+                            atIndex:(NSInteger)index;
 
 // Logs a most visited tile being removed.
 - (void)recordMostVisitedTileRemoved;

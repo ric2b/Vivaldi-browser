@@ -4,8 +4,10 @@
 
 // clang-format off
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {LanguagesBrowserProxyImpl, SettingsEditDictionaryPageElement} from 'chrome://settings/lazy_load.js';
-import {CrSettingsPrefs, SettingsPrefsElement} from 'chrome://settings/settings.js';
+import type {SettingsEditDictionaryPageElement} from 'chrome://settings/lazy_load.js';
+import {LanguagesBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
+import type {SettingsPrefsElement} from 'chrome://settings/settings.js';
+import {CrSettingsPrefs} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {FakeSettingsPrivate} from 'chrome://webui-test/fake_settings_private.js';
 
@@ -52,8 +54,7 @@ suite('settings-edit-dictionary-page', function() {
   setup(function() {
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     settingsPrefs = document.createElement('settings-prefs');
-    const settingsPrivate = new FakeSettingsPrivate(getFakePrefs()) as
-        unknown as typeof chrome.settingsPrivate;
+    const settingsPrivate = new FakeSettingsPrivate(getFakePrefs());
     settingsPrefs.initialize(settingsPrivate);
 
     languageSettingsPrivate = new FakeLanguageSettingsPrivate();
@@ -68,19 +69,22 @@ suite('settings-edit-dictionary-page', function() {
 
     // Prefs would normally be data-bound to settings-languages.
     document.body.appendChild(editDictPage);
+    return languageSettingsPrivate.whenCalled('getSpellcheckWords');
   });
 
   teardown(function() {
     editDictPage.remove();
   });
 
-  test('add word validation', function() {
+  test('add word validation', async () => {
     // Check addWord enable/disable logic
     const addWordButton = editDictPage.$.addWord;
     assertTrue(!!addWordButton);
     editDictPage.$.newWord.value = '';
+    await editDictPage.$.newWord.updateComplete;
     assertTrue(addWordButton.disabled);
     editDictPage.$.newWord.value = 'valid word';
+    await editDictPage.$.newWord.updateComplete;
     assertFalse(addWordButton.disabled);
     assertFalse(
         window.getComputedStyle(addWordButton)
@@ -88,14 +92,16 @@ suite('settings-edit-dictionary-page', function() {
         'none');  // Make sure add-word button actually clickable.
   });
 
-  test('add duplicate word', function() {
+  test('add duplicate word', async () => {
     const WORD = 'unique';
     languageSettingsPrivate.onCustomDictionaryChanged.callListeners([WORD], []);
     editDictPage.$.newWord.value = `${WORD} ${WORD}`;
+    await editDictPage.$.newWord.updateComplete;
     flush();
     assertFalse(editDictPage.$.addWord.disabled);
 
     editDictPage.$.newWord.value = WORD;
+    await editDictPage.$.newWord.updateComplete;
     flush();
     assertTrue(editDictPage.$.addWord.disabled);
 
@@ -114,11 +120,13 @@ suite('settings-edit-dictionary-page', function() {
     assertFalse(!!editDictPage.shadowRoot!.querySelector('iron-list'));
   });
 
-  test('spellcheck edit dictionary page list has words', function() {
+  test('spellcheck edit dictionary page list has words', async () => {
     const addWordButton = editDictPage.$.addWord;
     editDictPage.$.newWord.value = 'valid word';
+    await editDictPage.$.newWord.updateComplete;
     addWordButton.click();
     editDictPage.$.newWord.value = 'valid word2';
+    await editDictPage.$.newWord.updateComplete;
     addWordButton.click();
     flush();
 
@@ -128,9 +136,10 @@ suite('settings-edit-dictionary-page', function() {
         2, editDictPage.shadowRoot!.querySelector('iron-list')!.items!.length);
   });
 
-  test('spellcheck edit dictionary page remove is in tab order', function() {
+  test('spellcheck edit dictionary page remove is in tab order', async () => {
     const addWordButton = editDictPage.$.addWord;
     editDictPage.$.newWord.value = 'valid word';
+    await editDictPage.$.newWord.updateComplete;
     addWordButton.click();
     flush();
 
@@ -149,6 +158,7 @@ suite('settings-edit-dictionary-page', function() {
     assertFalse(editDictPage.$.noWordsLabel.hidden);
 
     editDictPage.$.newWord.value = 'valid word2';
+    await editDictPage.$.newWord.updateComplete;
     addWordButton.click();
     flush();
 

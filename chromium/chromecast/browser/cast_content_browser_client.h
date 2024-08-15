@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/task/sequenced_task_runner.h"
@@ -168,7 +169,7 @@ class CastContentBrowserClient
       const service_manager::Identity& identity,
       mojo::PendingReceiver<service_manager::mojom::Service>* receiver);
   virtual std::optional<service_manager::Manifest> GetServiceManifestOverlay(
-      base::StringPiece service_name);
+      std::string_view service_name);
   std::vector<service_manager::Manifest> GetExtraServiceManifests();
   std::vector<std::string> GetStartupServices();
 
@@ -238,9 +239,6 @@ class CastContentBrowserClient
   bool ShouldEnableStrictSiteIsolation() override;
   std::vector<std::unique_ptr<content::NavigationThrottle>>
   CreateThrottlesForNavigation(content::NavigationHandle* handle) override;
-  void RegisterNonNetworkNavigationURLLoaderFactories(
-      int frame_tree_node_id,
-      NonNetworkURLLoaderFactoryMap* factories) override;
   void RegisterNonNetworkSubresourceURLLoaderFactories(
       int render_process_id,
       int render_frame_id,
@@ -269,7 +267,7 @@ class CastContentBrowserClient
       const base::RepeatingCallback<content::WebContents*()>& wc_getter,
       content::NavigationUIData* navigation_ui_data,
       int frame_tree_node_id,
-      absl::optional<int64_t> navigation_id) override;
+      std::optional<int64_t> navigation_id) override;
 
   CastFeatureListCreator* GetCastFeatureListCreator() {
     return cast_feature_list_creator_;

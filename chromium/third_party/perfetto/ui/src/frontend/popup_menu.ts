@@ -27,7 +27,9 @@ export interface RegularPopupMenuItem {
 
 // Helper function for simplifying defining menus.
 export function menuItem(
-    text: string, action: () => void): RegularPopupMenuItem {
+  text: string,
+  action: () => void,
+): RegularPopupMenuItem {
   return {
     itemType: 'regular',
     text,
@@ -42,7 +44,7 @@ export interface GroupPopupMenuItem {
   children: PopupMenuItem[];
 }
 
-export type PopupMenuItem = RegularPopupMenuItem|GroupPopupMenuItem;
+export type PopupMenuItem = RegularPopupMenuItem | GroupPopupMenuItem;
 
 export interface PopupMenuButtonAttrs {
   // Icon for button opening a menu
@@ -57,7 +59,7 @@ export interface PopupMenuButtonAttrs {
 class PopupHolder {
   // Invariant: global listener should be register if and only if this.popup is
   // not undefined.
-  popup: PopupMenuButton|undefined = undefined;
+  popup: PopupMenuButton | undefined = undefined;
   initialized = false;
   listener: (e: MouseEvent) => void;
 
@@ -65,7 +67,7 @@ class PopupHolder {
     this.listener = (e: MouseEvent) => {
       // Only handle those events that are not part of dropdown menu themselves.
       const hasDropdown =
-          e.composedPath().find(PopupHolder.isDropdownElement) !== undefined;
+        e.composedPath().find(PopupHolder.isDropdownElement) !== undefined;
       if (!hasDropdown) {
         this.ensureHidden();
       }
@@ -136,52 +138,62 @@ export class PopupMenuButton implements m.ClassComponent<PopupMenuButtonAttrs> {
     switch (item.itemType) {
       case 'regular':
         return m(
-            'button.open-menu',
-            {
-              onclick: () => {
-                item.callback();
-                // Hide the menu item after the action has been invoked
-                this.setVisible(false);
-              },
+          'button.open-menu',
+          {
+            onclick: () => {
+              item.callback();
+              // Hide the menu item after the action has been invoked
+              this.setVisible(false);
             },
-            item.text);
+          },
+          item.text,
+        );
       case 'group':
         const isExpanded = this.expandedGroups.has(item.itemId);
         return m(
-            'div',
-            m('button.open-menu.disallow-selection',
-              {
-                onclick: () => {
-                  if (this.expandedGroups.has(item.itemId)) {
-                    this.expandedGroups.delete(item.itemId);
-                  } else {
-                    this.expandedGroups.add(item.itemId);
-                  }
-                  raf.scheduleFullRedraw();
-                },
+          'div',
+          m(
+            'button.open-menu.disallow-selection',
+            {
+              onclick: () => {
+                if (this.expandedGroups.has(item.itemId)) {
+                  this.expandedGroups.delete(item.itemId);
+                } else {
+                  this.expandedGroups.add(item.itemId);
+                }
+                raf.scheduleFullRedraw();
               },
-              // Show text with up/down arrow, depending on expanded state.
-              item.text + (isExpanded ? ' \u25B2' : ' \u25BC')),
-            isExpanded ? m('div.nested-menu',
-                           item.children.map((item) => this.renderItem(item))) :
-                         null);
+            },
+            // Show text with up/down arrow, depending on expanded state.
+            item.text + (isExpanded ? ' \u25B2' : ' \u25BC'),
+          ),
+          isExpanded
+            ? m(
+                'div.nested-menu',
+                item.children.map((item) => this.renderItem(item)),
+              )
+            : null,
+        );
     }
   }
 
   view(vnode: m.Vnode<PopupMenuButtonAttrs, this>) {
     return m(
-        '.dropdown',
-        m(
-            '.dropdown-button',
-            {
-              onclick: () => {
-                this.setVisible(!this.popupShown);
-              },
-            },
-            vnode.children,
-            m('i.material-icons', vnode.attrs.icon),
-            ),
-        m(this.popupShown ? '.popup-menu.opened' : '.popup-menu.closed',
-          vnode.attrs.items.map((item) => this.renderItem(item))));
+      '.dropdown',
+      m(
+        '.dropdown-button',
+        {
+          onclick: () => {
+            this.setVisible(!this.popupShown);
+          },
+        },
+        vnode.children,
+        m('i.material-icons', vnode.attrs.icon),
+      ),
+      m(
+        this.popupShown ? '.popup-menu.opened' : '.popup-menu.closed',
+        vnode.attrs.items.map((item) => this.renderItem(item)),
+      ),
+    );
   }
 }

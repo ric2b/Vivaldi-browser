@@ -68,7 +68,12 @@ MasqueClientSession::MasqueClientSession(
                             crypto_config),
       masque_mode_(masque_mode),
       uri_template_(uri_template),
-      owner_(owner) {}
+      owner_(owner) {
+  // We don't currently use `masque_mode_` but will in the future. To silence
+  // clang's `-Wunused-private-field` warning for this when building QUICHE for
+  // Chrome, add a use of it here.
+  (void)masque_mode_;
+}
 
 void MasqueClientSession::OnMessageAcked(QuicMessageId message_id,
                                          QuicTime /*receive_timestamp*/) {
@@ -169,7 +174,6 @@ MasqueClientSession::GetOrCreateConnectUdpClientState(
   headers[":scheme"] = scheme;
   headers[":authority"] = authority;
   headers[":path"] = canonicalized_path;
-  headers["connect-udp-version"] = "12";
   AddAdditionalHeaders(headers, url);
   QUIC_DVLOG(1) << "Sending request headers: " << headers.DebugString();
   size_t bytes_sent =

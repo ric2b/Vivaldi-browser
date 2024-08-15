@@ -115,7 +115,7 @@ export function sortAndMergeRanges(locationRanges: Protocol.Debugger.LocationRan
   if (locationRanges.length === 0) {
     return [];
   }
-  locationRanges.sort((r1, r2): number => {
+  locationRanges.sort((r1, r2) => {
     if (r1.scriptId < r2.scriptId) {
       return -1;
     }
@@ -205,19 +205,19 @@ export class DebuggerModel extends SDKModel<EventTypes> {
 
     this.#isPausingInternal = false;
     Common.Settings.Settings.instance()
-        .moduleSetting('pauseOnExceptionEnabled')
+        .moduleSetting('pause-on-exception-enabled')
         .addChangeListener(this.pauseOnExceptionStateChanged, this);
     Common.Settings.Settings.instance()
-        .moduleSetting('pauseOnCaughtException')
+        .moduleSetting('pause-on-caught-exception')
         .addChangeListener(this.pauseOnExceptionStateChanged, this);
     Common.Settings.Settings.instance()
-        .moduleSetting('pauseOnUncaughtException')
+        .moduleSetting('pause-on-uncaught-exception')
         .addChangeListener(this.pauseOnExceptionStateChanged, this);
     Common.Settings.Settings.instance()
-        .moduleSetting('disableAsyncStackTraces')
+        .moduleSetting('disable-async-stack-traces')
         .addChangeListener(this.asyncStackTracesStateChanged, this);
     Common.Settings.Settings.instance()
-        .moduleSetting('breakpointsActive')
+        .moduleSetting('breakpoints-active')
         .addChangeListener(this.breakpointsActiveChanged, this);
 
     if (!target.suspended()) {
@@ -225,9 +225,9 @@ export class DebuggerModel extends SDKModel<EventTypes> {
     }
 
     this.#sourceMapManagerInternal.setEnabled(
-        Common.Settings.Settings.instance().moduleSetting('jsSourceMapsEnabled').get());
+        Common.Settings.Settings.instance().moduleSetting('js-source-maps-enabled').get());
     Common.Settings.Settings.instance()
-        .moduleSetting('jsSourceMapsEnabled')
+        .moduleSetting('js-source-maps-enabled')
         .addChangeListener(event => this.#sourceMapManagerInternal.setEnabled((event.data as boolean)));
 
     const resourceTreeModel = (target.model(ResourceTreeModel) as ResourceTreeModel);
@@ -271,7 +271,7 @@ export class DebuggerModel extends SDKModel<EventTypes> {
     }
     this.pauseOnExceptionStateChanged();
     void this.asyncStackTracesStateChanged();
-    if (!Common.Settings.Settings.instance().moduleSetting('breakpointsActive').get()) {
+    if (!Common.Settings.Settings.instance().moduleSetting('breakpoints-active').get()) {
       this.breakpointsActiveChanged();
     }
     this.dispatchEventToListeners(Events.DebuggerWasEnabled, this);
@@ -300,7 +300,7 @@ export class DebuggerModel extends SDKModel<EventTypes> {
       return;
     }
     const {debuggerId} = response;
-    _debuggerIdToModel.set(debuggerId, this);
+    debuggerIdToModel.set(debuggerId, this);
     this.#debuggerId = debuggerId;
     this.dispatchEventToListeners(Events.DebuggerIsReadyToPause, this);
   }
@@ -314,11 +314,11 @@ export class DebuggerModel extends SDKModel<EventTypes> {
       await DebuggerModel.resyncDebuggerIdForModels();
       DebuggerModel.shouldResyncDebuggerId = false;
     }
-    return _debuggerIdToModel.get(debuggerId) || null;
+    return debuggerIdToModel.get(debuggerId) || null;
   }
 
   static async resyncDebuggerIdForModels(): Promise<void> {
-    const dbgModels = _debuggerIdToModel.values();
+    const dbgModels = debuggerIdToModel.values();
     for (const dbgModel of dbgModels) {
       if (dbgModel.debuggerEnabled()) {
         await dbgModel.syncDebuggerId();
@@ -338,7 +338,7 @@ export class DebuggerModel extends SDKModel<EventTypes> {
     this.globalObjectCleared();
     this.dispatchEventToListeners(Events.DebuggerWasDisabled, this);
     if (typeof this.#debuggerId === 'string') {
-      _debuggerIdToModel.delete(this.#debuggerId);
+      debuggerIdToModel.delete(this.#debuggerId);
     }
     this.#debuggerId = null;
   }
@@ -361,10 +361,11 @@ export class DebuggerModel extends SDKModel<EventTypes> {
   }
 
   private pauseOnExceptionStateChanged(): void {
-    const pauseOnCaughtEnabled = Common.Settings.Settings.instance().moduleSetting('pauseOnCaughtException').get();
+    const pauseOnCaughtEnabled = Common.Settings.Settings.instance().moduleSetting('pause-on-caught-exception').get();
     let state: Protocol.Debugger.SetPauseOnExceptionsRequestState;
 
-    const pauseOnUncaughtEnabled = Common.Settings.Settings.instance().moduleSetting('pauseOnUncaughtException').get();
+    const pauseOnUncaughtEnabled =
+        Common.Settings.Settings.instance().moduleSetting('pause-on-uncaught-exception').get();
     if (pauseOnCaughtEnabled && pauseOnUncaughtEnabled) {
       state = Protocol.Debugger.SetPauseOnExceptionsRequestState.All;
     } else if (pauseOnCaughtEnabled) {
@@ -379,7 +380,7 @@ export class DebuggerModel extends SDKModel<EventTypes> {
 
   private asyncStackTracesStateChanged(): Promise<Protocol.ProtocolResponseWithError> {
     const maxAsyncStackChainDepth = 32;
-    const enabled = !Common.Settings.Settings.instance().moduleSetting('disableAsyncStackTraces').get() &&
+    const enabled = !Common.Settings.Settings.instance().moduleSetting('disable-async-stack-traces').get() &&
         this.#debuggerEnabledInternal;
     const maxDepth = enabled ? maxAsyncStackChainDepth : 0;
     return this.agent.invoke_setAsyncCallStackDepth({maxDepth});
@@ -387,7 +388,7 @@ export class DebuggerModel extends SDKModel<EventTypes> {
 
   private breakpointsActiveChanged(): void {
     void this.agent.invoke_setBreakpointsActive(
-        {active: Common.Settings.Settings.instance().moduleSetting('breakpointsActive').get()});
+        {active: Common.Settings.Settings.instance().moduleSetting('breakpoints-active').get()});
   }
 
   setComputeAutoStepRangesCallback(callback: ((arg0: StepMode, arg1: CallFrame) => Promise<LocationRange[]>)|
@@ -893,16 +894,16 @@ export class DebuggerModel extends SDKModel<EventTypes> {
   override dispose(): void {
     this.#sourceMapManagerInternal.dispose();
     if (this.#debuggerId) {
-      _debuggerIdToModel.delete(this.#debuggerId);
+      debuggerIdToModel.delete(this.#debuggerId);
     }
     Common.Settings.Settings.instance()
-        .moduleSetting('pauseOnExceptionEnabled')
+        .moduleSetting('pause-on-exception-enabled')
         .removeChangeListener(this.pauseOnExceptionStateChanged, this);
     Common.Settings.Settings.instance()
-        .moduleSetting('pauseOnCaughtException')
+        .moduleSetting('pause-on-caught-exception')
         .removeChangeListener(this.pauseOnExceptionStateChanged, this);
     Common.Settings.Settings.instance()
-        .moduleSetting('disableAsyncStackTraces')
+        .moduleSetting('disable-async-stack-traces')
         .removeChangeListener(this.asyncStackTracesStateChanged, this);
   }
 
@@ -926,9 +927,7 @@ export class DebuggerModel extends SDKModel<EventTypes> {
   }
 }
 
-// TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-// eslint-disable-next-line @typescript-eslint/naming-convention
-export const _debuggerIdToModel = new Map<string, DebuggerModel>();
+const debuggerIdToModel = new Map<string, DebuggerModel>();
 
 /**
  * Keep these in sync with WebCore::V8Debugger

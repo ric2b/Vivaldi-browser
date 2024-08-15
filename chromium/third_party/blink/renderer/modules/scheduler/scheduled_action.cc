@@ -30,6 +30,7 @@
 
 #include "third_party/blink/renderer/modules/scheduler/scheduled_action.h"
 
+#include <optional>
 #include <tuple>
 
 #include "base/trace_event/trace_event.h"
@@ -45,7 +46,7 @@
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
-#include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
+#include "third_party/blink/renderer/platform/scheduler/public/task_attribution_tracker.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
@@ -56,15 +57,16 @@ ScheduledAction::ScheduledAction(ScriptState* script_state,
                                  const HeapVector<ScriptValue>& arguments)
     : script_state_(
           MakeGarbageCollected<ScriptStateProtectingContext>(script_state)) {
-  if (script_state->World().IsWorkerWorld() ||
+  if (script_state->World().IsWorkerOrWorkletWorld() ||
       BindingSecurity::ShouldAllowAccessTo(
           EnteredDOMWindow(script_state->GetIsolate()),
           To<LocalDOMWindow>(&target))) {
     function_ = handler;
     arguments_ = arguments;
-    auto* tracker = ThreadScheduler::Current()->GetTaskAttributionTracker();
+    auto* tracker =
+        scheduler::TaskAttributionTracker::From(script_state->GetIsolate());
     if (tracker && script_state->World().IsMainWorld()) {
-      function_->SetParentTask(tracker->RunningTask(script_state));
+      function_->SetParentTask(tracker->RunningTask());
     }
   } else {
     UseCounter::Count(target, WebFeature::kScheduledActionIgnored);
@@ -76,14 +78,15 @@ ScheduledAction::ScheduledAction(ScriptState* script_state,
                                  const String& handler)
     : script_state_(
           MakeGarbageCollected<ScriptStateProtectingContext>(script_state)) {
-  if (script_state->World().IsWorkerWorld() ||
+  if (script_state->World().IsWorkerOrWorkletWorld() ||
       BindingSecurity::ShouldAllowAccessTo(
           EnteredDOMWindow(script_state->GetIsolate()),
           To<LocalDOMWindow>(&target))) {
     code_ = handler;
-    auto* tracker = ThreadScheduler::Current()->GetTaskAttributionTracker();
+    auto* tracker =
+        scheduler::TaskAttributionTracker::From(script_state->GetIsolate());
     if (tracker && script_state->World().IsMainWorld()) {
-      code_parent_task_ = tracker->RunningTask(script_state);
+      code_parent_task_ = tracker->RunningTask();
     }
   } else {
     UseCounter::Count(target, WebFeature::kScheduledActionIgnored);
@@ -154,9 +157,10 @@ void ScheduledAction::Execute(ExecutionContext* context) {
 
   // We create a TaskScope, to ensure code strings passed to ScheduledAction
   // APIs properly track their ancestor as the registering task.
-  std::unique_ptr<scheduler::TaskAttributionTracker::TaskScope>
+  std::optional<scheduler::TaskAttributionTracker::TaskScope>
       task_attribution_scope;
-  auto* tracker = ThreadScheduler::Current()->GetTaskAttributionTracker();
+  auto* tracker =
+      scheduler::TaskAttributionTracker::From(script_state->GetIsolate());
   if (tracker && script_state->World().IsMainWorld()) {
     task_attribution_scope = tracker->CreateTaskScope(
         script_state, code_parent_task_,

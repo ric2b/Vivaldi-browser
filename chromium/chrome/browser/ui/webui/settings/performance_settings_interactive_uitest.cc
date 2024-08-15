@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/json/values_util.h"
 #include "base/power_monitor/battery_state_sampler.h"
 #include "base/strings/string_util.h"
 #include "base/test/bind.h"
@@ -119,9 +120,6 @@ class MemorySettingsInteractiveTest
           static_cast<int>(state), expected_count);
     }));
   }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(MemorySettingsInteractiveTest, MemorySaverPrefChanged) {
@@ -433,9 +431,6 @@ class BatterySettingsInteractiveTest
           static_cast<int>(state), expected_count);
     }));
   }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(BatterySettingsInteractiveTest,
@@ -601,13 +596,6 @@ class TabDiscardExceptionsSettingsInteractiveTest
     : public MemorySaverInteractiveTestMixin<
           WebUiInteractiveTestMixin<InteractiveBrowserTest>> {
  public:
-  void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(
-        performance_manager::features::kDiscardExceptionsImprovements);
-
-    MemorySaverInteractiveTestMixin::SetUp();
-  }
-
   auto WaitForElementToHide(const ui::ElementIdentifier& contents_id,
                             const DeepQuery& element) {
     StateChange element_renders;
@@ -666,9 +654,6 @@ class TabDiscardExceptionsSettingsInteractiveTest
         {"(el) => el.disabled === ", is_disabled ? "true" : "false"});
     return WaitForStateChange(contents_id, toggle_selection_change);
   }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(TabDiscardExceptionsSettingsInteractiveTest,
@@ -729,11 +714,7 @@ IN_PROC_BROWSER_TEST_F(TabDiscardExceptionsSettingsInteractiveTest,
 // non-chrome sites and have not been added to the exceptions list yet
 IN_PROC_BROWSER_TEST_F(TabDiscardExceptionsSettingsInteractiveTest,
                        IgnoreIneligibleTabs) {
-  base::Value::List exclusion_list;
-  exclusion_list.Append("example.com");
-  browser()->profile()->GetPrefs()->SetList(
-      performance_manager::user_tuning::prefs::kTabDiscardingExceptions,
-      std::move(exclusion_list));
+  SetTabDiscardExceptionsMap({"example.com"});
 
   RunTestSequence(
       InstrumentTab(kPerformanceSettingsPage),

@@ -21,7 +21,7 @@ use crate::extended::data_elements::TxPowerDataElement;
 use crate::extended::deserialize::{
     DataElementParseError, DecryptedSection, EncryptionInfo, RawV1Salt, SectionContents,
 };
-use crate::extended::serialize::AdvertisementType;
+use crate::extended::serialize::{AdvertisementType, DeSalt};
 use crate::shared_data::TxPower;
 use crate::{
     credential::v1::*,
@@ -72,7 +72,7 @@ fn deserialize_signature_encrypted_correct_keys() {
     let mut section_builder = adv_builder
         .section_builder(SignedEncryptedSectionEncoder::<CryptoProviderImpl>::new(
             identity_type,
-            V1Salt::from(*section_salt.as_array_ref()),
+            raw_salt,
             &broadcast_cm,
         ))
         .unwrap();
@@ -129,12 +129,13 @@ fn deserialize_signature_encrypted_correct_keys() {
 
     // plaintext is correct
     {
-        let crypto_material = V1DiscoveryCredential::new(
+        let crypto_material = V1DiscoveryCredential::new::<CryptoProviderImpl>(
             key_seed,
             key_seed_hkdf.extended_unsigned_metadata_key_hmac_key().calculate_hmac(&metadata_key.0),
             key_seed_hkdf.extended_signed_metadata_key_hmac_key().calculate_hmac(&metadata_key.0),
             key_pair.public().to_bytes(),
-        );
+        )
+        .expect("public key bytes are valid since they are generated from a key pair");
         let signed_identity_resolution_material =
             crypto_material.signed_identity_resolution_material::<CryptoProviderImpl>();
         let identity_resolution_contents =
@@ -179,12 +180,13 @@ fn deserialize_signature_encrypted_correct_keys() {
 
     // deserialization to Section works
     {
-        let crypto_material = V1DiscoveryCredential::new(
+        let crypto_material = V1DiscoveryCredential::new::<CryptoProviderImpl>(
             key_seed,
             key_seed_hkdf.extended_unsigned_metadata_key_hmac_key().calculate_hmac(&metadata_key.0),
             key_seed_hkdf.extended_signed_metadata_key_hmac_key().calculate_hmac(&metadata_key.0),
             key_pair.public().to_bytes(),
-        );
+        )
+        .expect("public key bytes are valid since they are generated from a key pair");
         let signed_identity_resolution_material =
             crypto_material.signed_identity_resolution_material::<CryptoProviderImpl>();
         let signed_verification_material =
@@ -377,12 +379,14 @@ fn do_bad_deserialize_params<C: CryptoProvider>(
     let mut section_builder = adv_builder
         .section_builder(SignedEncryptedSectionEncoder::new(
             identity_type,
-            section_salt,
+            section_salt.into(),
             &broadcast_cm,
         ))
         .unwrap();
 
-    section_builder.add_de_res(|_| TxPower::try_from(2).map(TxPowerDataElement::from)).unwrap();
+    section_builder
+        .add_de_res(|_: DeSalt<C>| TxPower::try_from(2).map(TxPowerDataElement::from))
+        .unwrap();
 
     section_builder.add_to_advertisement();
 
@@ -422,7 +426,10 @@ fn do_bad_deserialize_params<C: CryptoProvider>(
         });
 
     let signed_verification_material = SignedSectionVerificationMaterial {
-        pub_key: pub_key.unwrap_or_else(|| key_pair.public()).to_bytes(),
+        validated_public_key: ValidatedPublicKey::from_raw_bytes::<CryptoProviderImpl>(
+            pub_key.unwrap_or_else(|| key_pair.public()).to_bytes(),
+        )
+        .expect("public key should be valid bytes"),
     };
 
     assert_eq!(
@@ -469,12 +476,16 @@ fn do_bad_deserialize_tampered(
     let mut section_builder = adv_builder
         .section_builder(SignedEncryptedSectionEncoder::new(
             identity_type,
-            section_salt,
+            section_salt.into(),
             &broadcast_cm,
         ))
         .unwrap();
 
-    section_builder.add_de_res(|_| TxPower::try_from(2).map(TxPowerDataElement::from)).unwrap();
+    section_builder
+        .add_de_res(|_: DeSalt<CryptoProviderImpl>| {
+            TxPower::try_from(2).map(TxPowerDataElement::from)
+        })
+        .unwrap();
 
     mangle_section(&mut section_builder.section);
 
@@ -526,12 +537,13 @@ fn do_bad_deserialize_tampered(
         contents
     );
 
-    let crypto_material = V1DiscoveryCredential::new(
+    let crypto_material = V1DiscoveryCredential::new::<CryptoProviderImpl>(
         key_seed,
         key_seed_hkdf.extended_unsigned_metadata_key_hmac_key().calculate_hmac(&metadata_key.0),
         key_seed_hkdf.extended_signed_metadata_key_hmac_key().calculate_hmac(&metadata_key.0),
         key_pair.public().to_bytes(),
-    );
+    )
+    .expect("public key bytes are valid since they are generated from a key pair");
     let identity_resolution_material =
         crypto_material.signed_identity_resolution_material::<CryptoProviderImpl>();
     let verification_material =

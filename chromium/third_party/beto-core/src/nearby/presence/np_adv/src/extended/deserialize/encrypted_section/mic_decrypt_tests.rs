@@ -58,7 +58,7 @@ fn deserialize_mic_encrypted_correct_keys() {
     let mut section_builder = adv_builder
         .section_builder(MicEncryptedSectionEncoder::<CryptoProviderImpl>::new(
             identity_type,
-            V1Salt::from(*section_salt.as_array_ref()),
+            raw_salt,
             &broadcast_cm,
         ))
         .unwrap();
@@ -318,7 +318,7 @@ fn do_bad_deserialize_params<C: CryptoProvider>(
     let mut section_builder = adv_builder
         .section_builder(MicEncryptedSectionEncoder::<C>::new(
             identity_type,
-            section_salt,
+            section_salt.into(),
             &broadcast_cm,
         ))
         .unwrap();
@@ -403,7 +403,7 @@ fn do_bad_deserialize_tampered(
     let mut section_builder = adv_builder
         .section_builder(MicEncryptedSectionEncoder::<CryptoProviderImpl>::new(
             identity_type,
-            section_salt,
+            section_salt.into(),
             &broadcast_cm,
         ))
         .unwrap();

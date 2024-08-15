@@ -15,10 +15,13 @@
 #include "core/fpdfapi/page/cpdf_annotcontext.h"
 #include "core/fpdfapi/parser/cpdf_array.h"
 #include "core/fpdfapi/parser/cpdf_dictionary.h"
+#include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/fx_system.h"
+#include "core/fxcrt/span.h"
 #include "core/fxge/cfx_defaultrenderdevice.h"
 #include "fpdfsdk/cpdfsdk_helpers.h"
 #include "public/cpp/fpdf_scopers.h"
+#include "public/fpdf_attachment.h"
 #include "public/fpdf_edit.h"
 #include "public/fpdf_formfill.h"
 #include "public/fpdfview.h"
@@ -28,8 +31,6 @@
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/utils/hash.h"
-#include "third_party/base/containers/contains.h"
-#include "third_party/base/containers/span.h"
 
 using pdfium::AnnotationStampWithApChecksum;
 
@@ -102,7 +103,7 @@ void VerifyUriActionInLink(FPDF_DOCUMENT doc,
   std::vector<char> buffer(bufsize);
   EXPECT_EQ(bufsize,
             FPDFAction_GetURIPath(doc, action, buffer.data(), bufsize));
-  EXPECT_STREQ(expected_uri.c_str(), buffer.data());
+  EXPECT_EQ(expected_uri, buffer.data());
 }
 
 }  // namespace
@@ -550,11 +551,11 @@ TEST_F(FPDFAnnotEmbedderTest, ExtractInkMultiple) {
     const char* expected_hash = []() {
       if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
-        return "d9411907a883f25ba51e71c8359c10fe";
+        return "0fe22dc3ba150abd42a47de6c9379aa7";
 #elif BUILDFLAG(IS_APPLE)
-        return "6e00cc75639c5314c8273072915d8f92";
+        return "d2efb19ab7c0d1b2d475323badfe395c";
 #else
-        return "1fb0dd8dd5f0b9bb8d076e48eb59296d";
+        return "f9597c25e438a30fb143385254039f5e";
 #endif
       }
       return "354002e1c4386d38fdde29ef8d61074a";
@@ -1141,11 +1142,11 @@ TEST_F(FPDFAnnotEmbedderTest, AddAndModifyPath) {
   const char* md5_modified_path = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
-      return "ab475e8230c6aab366073bdb70eb6953";
+      return "9445f64c47079ce107adf0e20fb6a119";
 #elif BUILDFLAG(IS_APPLE)
-      return "6d9247e3a0ecdf5627f365eded71307c";
+      return "1b21450aff5cba6b800e327a22a9d900";
 #else
-      return "fb4d5fac05f7eb5d84a4100898c11197";
+      return "777f77f363824cab5ac61ceea87cd2ce";
 #endif
     }
 #if BUILDFLAG(IS_APPLE)
@@ -1157,11 +1158,11 @@ TEST_F(FPDFAnnotEmbedderTest, AddAndModifyPath) {
   const char* md5_two_paths = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
-      return "ce7f5271ff51096a15861619fb789d5b";
+      return "1007f4eae1c0fd25a369e0d80d0ec859";
 #elif BUILDFLAG(IS_APPLE)
-      return "d8a7ac6a292fbf1403effb0788599ee2";
+      return "449d3626fd5883bd5795aa722cbcbcda";
 #else
-      return "fcf3e79b2a91d1294b9bbccff727d3c2";
+      return "c51e2e05981e1b89a7be066de638822a";
 #endif
     }
 #if BUILDFLAG(IS_APPLE)
@@ -1173,11 +1174,11 @@ TEST_F(FPDFAnnotEmbedderTest, AddAndModifyPath) {
   const char* md5_new_annot = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
-      return "b627d1be207a1f090db9cf122bc198ae";
+      return "ee341aa74baea8a8e2dacffc3c758caa";
 #elif BUILDFLAG(IS_APPLE)
-      return "8f537dae2460736988530430b904bb55";
+      return "77f3b04a1679d631eb31d92e207a9270";
 #else
-      return "7db6321c8ffe502f4e60622aa16d5417";
+      return "e42ca08e1dc790541d0ffff0001836a4";
 #endif
     }
 #if BUILDFLAG(IS_APPLE)
@@ -1383,11 +1384,11 @@ TEST_F(FPDFAnnotEmbedderTest, AddAndModifyImage) {
   const char* md5_new_image = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
-      return "5b7ce251f51f50c1c76d3b09c47a87f9";
+      return "76445ac9fa2ec579ceffcb010b8b09cf";
 #elif BUILDFLAG(IS_APPLE)
-      return "d1f632f3a8bf0917eeece36e23dc3708";
+      return "9df43e8e9c9b00d247d46bab2110e070";
 #else
-      return "476596330c0e7daa31f115005c1d36eb";
+      return "584e9a0e9b02a03025e08c81476522cb";
 #endif
     }
 #if BUILDFLAG(IS_APPLE)
@@ -1399,11 +1400,11 @@ TEST_F(FPDFAnnotEmbedderTest, AddAndModifyImage) {
   const char* md5_modified_image = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
-      return "f9af241702961e8ed59306a7084548bf";
+      return "12b5eb7fea4e8656253bbe0d257f2332";
 #elif BUILDFLAG(IS_APPLE)
-      return "1a86f152a7ef8ac6bf8d8e5aee09bd65";
+      return "dfa2a2c3e9135e4c83433532fc36ea8c";
 #else
-      return "0047c3e7ea7658e1a963fc339f1c587d";
+      return "5f16a909217f0a2efe8e2464bb854672";
 #endif
     }
 #if BUILDFLAG(IS_APPLE)
@@ -1488,11 +1489,11 @@ TEST_F(FPDFAnnotEmbedderTest, AddAndModifyText) {
   const char* md5_new_text = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
-      return "2752b71ff3373a8a427fbc4145018ee8";
+      return "a7c7cb8f7c8e7a320b414c153bffa254";
 #elif BUILDFLAG(IS_APPLE)
-      return "660063559c20b80e66c2702d44400eb2";
+      return "4e8aa29188c3ae53201bbbc9670cf88e";
 #else
-      return "1e7f98c18775d6e0f4f454747b77cc1a";
+      return "9972f90afd472e62eef7cced1f5c75e2";
 #endif
     }
 #if BUILDFLAG(IS_APPLE) && defined(ARCH_CPU_ARM64)
@@ -1506,11 +1507,11 @@ TEST_F(FPDFAnnotEmbedderTest, AddAndModifyText) {
   const char* md5_modified_text = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
-      return "064468521e40694712422c9a1b5212c4";
+      return "196fb5c63e2f8e14cbcaae86040166da";
 #elif BUILDFLAG(IS_APPLE)
-      return "1e93d904e7a6f6d72062e014c58c8df2";
+      return "e53f99a8a266d45709c8bfe4c78065c1";
 #else
-      return "37e35705946806f8f98c51e4e25647a2";
+      return "04d03c51137439280a2563827798e357";
 #endif
     }
 #if BUILDFLAG(IS_APPLE) && defined(ARCH_CPU_ARM64)
@@ -1651,11 +1652,11 @@ TEST_F(FPDFAnnotEmbedderTest, GetSetStringValue) {
   const char* md5 = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
-      return "5060b231fef2504446a5d44474869326";
+      return "fca5db70c84dc93d4175d0ec5c2a4551";
 #elif BUILDFLAG(IS_APPLE)
-      return "88528466e6e6da2915ae024b497e3d4a";
+      return "9393901838ba556e589df752f1222247";
 #else
-      return "a95a65d109eda5671c793ff5f7d2a2df";
+      return "7b7248803a26ce8916fc9828f4bdc2cb";
 #endif
     }
 #if BUILDFLAG(IS_APPLE)
@@ -2202,7 +2203,7 @@ TEST_F(FPDFAnnotEmbedderTest, Bug1206) {
     }
     return "0d9fc05c6762fd788bd23fd87a4967bc";
   }();
-  static constexpr size_t kExpectedSize = 1601;
+  static constexpr size_t kExpectedMinimumOriginalSize = 1601;
 
   ASSERT_TRUE(OpenDocument("bug_1206.pdf"));
 
@@ -2210,7 +2211,8 @@ TEST_F(FPDFAnnotEmbedderTest, Bug1206) {
   ASSERT_TRUE(page);
 
   ASSERT_TRUE(FPDF_SaveAsCopy(document(), this, 0));
-  EXPECT_EQ(kExpectedSize, GetString().size());
+  const size_t original_size = GetString().size();
+  EXPECT_LE(kExpectedMinimumOriginalSize, original_size);  // Sanity check.
   ClearString();
 
   for (size_t i = 0; i < 10; ++i) {
@@ -2220,7 +2222,7 @@ TEST_F(FPDFAnnotEmbedderTest, Bug1206) {
     ASSERT_TRUE(FPDF_SaveAsCopy(document(), this, 0));
     // TODO(https://crbug.com/pdfium/1206): This is wrong. The size should be
     // equal, not bigger.
-    EXPECT_LT(kExpectedSize, GetString().size());
+    EXPECT_GT(GetString().size(), original_size);
     ClearString();
   }
 
@@ -3124,11 +3126,11 @@ TEST_F(FPDFAnnotEmbedderTest, FocusableAnnotRendering) {
     const char* md5_sum = []() {
       if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
-        return "911a6dbe2209b5e9e7e0a09b98c12d2e";
+        return "f8c17a0b11d5e152d9a90d6469c6be96";
 #elif BUILDFLAG(IS_APPLE)
-        return "be6dcf7a2129469020ec60e56c905a6e";
+        return "cd02e06aeb6555ca7d03136cb8f2e336";
 #else
-        return "c09b129c071ec1569deb003676b617b0";
+        return "a08901d205e54530e76f5fc81846eb6a";
 #endif
       }
 #if BUILDFLAG(IS_APPLE)
@@ -3159,11 +3161,11 @@ TEST_F(FPDFAnnotEmbedderTest, FocusableAnnotRendering) {
     const char* md5_sum = []() {
       if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
-        return "27777b11ea1498200b42d00a083a598f";
+        return "29886792e8942117a291dee7acdbf39f";
 #elif BUILDFLAG(IS_APPLE)
-        return "6b820388ace6004e83cd17392dddf32e";
+        return "7e85e4675adccb100fc2cf1037f65f4a";
 #else
-        return "277f1b9e70031539d034d22bc6064838";
+        return "de2186f2f36169d0002257a810435648";
 #endif
       }
 #if BUILDFLAG(IS_APPLE)
@@ -3185,11 +3187,11 @@ TEST_F(FPDFAnnotEmbedderTest, FocusableAnnotRendering) {
     const char* md5_sum = []() {
       if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
-        return "61594e370efd7cb9097d8036b168ff1f";
+        return "651517d1a58558c6eae18ebb3ff90784";
 #elif BUILDFLAG(IS_APPLE)
-        return "4d41eddb0aadc3db440cb83877bd52e4";
+        return "96f271ee3f1520d174f887f33989bbcb";
 #else
-        return "d980005939cd4ae0a199d8600a0abdf3";
+        return "27bb036f3a507fce66a74a00daf558ec";
 #endif
       }
 #if BUILDFLAG(IS_APPLE)
@@ -3829,4 +3831,117 @@ TEST_F(FPDFAnnotEmbedderTest, AnnotationBorderRendering) {
 
   CloseSavedPage(page);
   CloseSavedDocument();
+}
+
+TEST_F(FPDFAnnotEmbedderTest, GetAndAddFileAttachmentAnnotation) {
+  ASSERT_TRUE(OpenDocument("annotation_fileattachment.pdf"));
+  FPDF_PAGE page = LoadPage(0);
+  ASSERT_TRUE(page);
+  EXPECT_EQ(1, FPDFPage_GetAnnotCount(page));
+
+  {
+    ScopedFPDFAnnotation annot(FPDFPage_GetAnnot(page, 0));
+    ASSERT_TRUE(annot);
+    EXPECT_EQ(FPDF_ANNOT_FILEATTACHMENT, FPDFAnnot_GetSubtype(annot.get()));
+
+    FPDF_ATTACHMENT attachment = FPDFAnnot_GetFileAttachment(annot.get());
+    ASSERT_TRUE(attachment);
+
+    // Check that the name of the attachment is correct.
+    unsigned long length_bytes = FPDFAttachment_GetName(attachment, nullptr, 0);
+    ASSERT_EQ(18u, length_bytes);
+    std::vector<FPDF_WCHAR> buf = GetFPDFWideStringBuffer(length_bytes);
+    EXPECT_EQ(18u,
+              FPDFAttachment_GetName(attachment, buf.data(), length_bytes));
+    EXPECT_EQ(L"test.txt", GetPlatformWString(buf.data()));
+
+    // Check that the content of the attachment is correct.
+    ASSERT_TRUE(FPDFAttachment_GetFile(attachment, nullptr, 0, &length_bytes));
+    std::vector<uint8_t> content_buf(length_bytes);
+    unsigned long actual_length_bytes;
+    ASSERT_TRUE(FPDFAttachment_GetFile(attachment, content_buf.data(),
+                                       length_bytes, &actual_length_bytes));
+    ASSERT_THAT(content_buf, testing::ElementsAre('t', 'e', 's', 't', ' ', 't',
+                                                  'e', 'x', 't'));
+  }
+
+  {
+    // Add a file attachment annotation to the page.
+    ScopedFPDFAnnotation annot(
+        FPDFPage_CreateAnnot(page, FPDF_ANNOT_FILEATTACHMENT));
+    ASSERT_TRUE(annot);
+
+    // Check that there is now 2 annotations on this page.
+    EXPECT_EQ(2, FPDFPage_GetAnnotCount(page));
+
+    ScopedFPDFWideString file_name = GetFPDFWideString(L"0.txt");
+    FPDF_ATTACHMENT attachment =
+        FPDFAnnot_AddFileAttachment(annot.get(), file_name.get());
+    ASSERT_TRUE(attachment);
+
+    // The filling of the FPDF_ATTACHMENT has been tested in
+    // fpdf_attachment_embeddertest.cpp
+  }
+
+  {
+    ScopedFPDFAnnotation annot(FPDFPage_GetAnnot(page, 1));
+    ASSERT_TRUE(annot);
+    EXPECT_EQ(FPDF_ANNOT_FILEATTACHMENT, FPDFAnnot_GetSubtype(annot.get()));
+
+    // Check that we can read newly created file spec
+    FPDF_ATTACHMENT attachment = FPDFAnnot_GetFileAttachment(annot.get());
+    ASSERT_TRUE(attachment);
+
+    // Verify the name of the new attachment.
+    unsigned long length_bytes = FPDFAttachment_GetName(attachment, nullptr, 0);
+    ASSERT_EQ(12u, length_bytes);
+    std::vector<FPDF_WCHAR> buf = GetFPDFWideStringBuffer(length_bytes);
+    EXPECT_EQ(12u,
+              FPDFAttachment_GetName(attachment, buf.data(), length_bytes));
+    EXPECT_EQ(L"0.txt", GetPlatformWString(buf.data()));
+  }
+
+  UnloadPage(page);
+}
+
+TEST_F(FPDFAnnotEmbedderTest, BadCasesFileAttachmentAnnotation) {
+  ASSERT_TRUE(OpenDocument("annotation_fileattachment.pdf"));
+  FPDF_PAGE page = LoadPage(0);
+  ASSERT_TRUE(page);
+  EXPECT_EQ(1, FPDFPage_GetAnnotCount(page));
+
+  {
+    ASSERT_FALSE(FPDFAnnot_GetFileAttachment(nullptr));
+
+    ScopedFPDFAnnotation text_annot(
+        FPDFPage_CreateAnnot(page, FPDF_ANNOT_TEXT));
+    ASSERT_TRUE(text_annot);
+    ASSERT_FALSE(FPDFAnnot_GetFileAttachment(text_annot.get()));
+
+    ScopedFPDFAnnotation newly_file_annot(
+        FPDFPage_CreateAnnot(page, FPDF_ANNOT_FILEATTACHMENT));
+    ASSERT_TRUE(newly_file_annot);
+    ASSERT_FALSE(FPDFAnnot_GetFileAttachment(newly_file_annot.get()));
+  }
+
+  {
+    ScopedFPDFWideString empty_name = GetFPDFWideString(L"");
+    ScopedFPDFWideString not_empty_name = GetFPDFWideString(L"0.txt");
+
+    ASSERT_FALSE(FPDFAnnot_AddFileAttachment(nullptr, nullptr));
+    ASSERT_FALSE(FPDFAnnot_AddFileAttachment(nullptr, empty_name.get()));
+    ASSERT_FALSE(FPDFAnnot_AddFileAttachment(nullptr, not_empty_name.get()));
+
+    ScopedFPDFAnnotation annot(FPDFPage_GetAnnot(page, 0));
+    ASSERT_TRUE(annot);
+
+    ASSERT_FALSE(FPDFAnnot_AddFileAttachment(annot.get(), nullptr));
+    ASSERT_FALSE(FPDFAnnot_AddFileAttachment(annot.get(), empty_name.get()));
+
+    FPDF_ATTACHMENT old_attachment = FPDFAnnot_GetFileAttachment(annot.get());
+    EXPECT_NE(old_attachment,
+              FPDFAnnot_AddFileAttachment(annot.get(), not_empty_name.get()));
+  }
+
+  UnloadPage(page);
 }

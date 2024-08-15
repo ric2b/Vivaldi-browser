@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">风景 12</translation>
 <translation id="1158503667684816647">不再显示确认对话框</translation>
 <translation id="1222195720020481779">正在加载安装程序...</translation>
+<translation id="1270785070369717623">很遗憾，当该浏览器运行时，您的 Opera GX 设置不可用。要将这些设置导入 Vivaldi，请保存您的工作并关闭所有 Opera GX 窗口，然后单击继续。</translation>
 <translation id="1276145862619442150">快速拨号</translation>
 <translation id="1281950884873973195">动物 6</translation>
 <translation id="1411638389238344450">使用邮件发送链接</translation>
@@ -12,6 +13,7 @@
 <translation id="1462666970065907900">确认要关闭此窗口？</translation>
 <translation id="1480046233931937785">第三方开源软件</translation>
 <translation id="1526344461589023948">保存下载的更新文件时出错。请检查是否有足够的存储空间然后重试。</translation>
+<translation id="1635542496948266458">切换配置文件</translation>
 <translation id="1657174850639146440">怪兽 9</translation>
 <translation id="1676595396635191120">新建隐身窗口</translation>
 <translation id="1702758681952953055">如果错误持续发生，请发送报告并包含下列详情：</translation>
@@ -27,12 +29,14 @@
 <translation id="1985669426322966465">软件更新</translation>
 <translation id="2079036669923635404">点击此处更新Vivaldi到版本 <ph name="VERSION" />。</translation>
 <translation id="2141974047387702305">下载更新文件时出现一个错误。请检查您的互联网连接并重试。</translation>
+<translation id="2226825946708954262">⚠ 放弃数据继续</translation>
 <translation id="2339641773402824483">检查更新...</translation>
 <translation id="2441056087170876076">怪兽 2</translation>
 <translation id="2444387452209867610">插入笔记</translation>
 <translation id="2486841023299517366">动物 4</translation>
 <translation id="2612127540243995147">准备安装。Vivaldi 将被关闭，随后重新打开。</translation>
 <translation id="2613387515621326337">显示更新网站</translation>
+<translation id="2645477450146475243">很遗憾，当该浏览器运行时，您的 Opera 设置不可用。要将这些设置导入 Vivaldi，请保存您的工作并关闭所有 Opera 窗口，然后单击继续。</translation>
 <translation id="2647368062414805334">遗憾，无法在Edge浏览器运行期间导入它的设置。请保存当前工作并关闭所有Edge窗口，然后点击“继续”。</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">动物 3</translation>
@@ -41,11 +45,14 @@
 <translation id="2923448633003185837">粘贴并转到</translation>
 <translation id="2953943267837858202">不允许自动播放视频</translation>
 <translation id="2977472760057091832">在隐身窗口中打开链接</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">在新标签页中打开</translation>
 <translation id="3027988479108856431">很遗憾，你的 Yandex 浏览器设置不能在浏览器运行时使用。要导入这些配置到 Vivaldi，你需要保存工作并关闭 Yandex 窗口然后点击继续。</translation>
 <translation id="3084011186245865060">风景 6</translation>
+<translation id="3085906383264247940">Opera (Beta)</translation>
 <translation id="3093931836425623631">Vivaldi 的开发依赖于 Chromium 开源项目及其他开源软件。</translation>
 <translation id="3127383884976966729">动物 7</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">新建书签</translation>
 <translation id="3255747772218936245">安装更新</translation>
 <translation id="3259769196742189631">校验</translation>
@@ -54,7 +61,6 @@
 <translation id="3334610655141903168">（无标题）</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> 为当前最新版。</translation>
 <translation id="3383198080133834965">当前已是最新版！</translation>
-<translation id="3402602684546832928">选择 Opera 书签文件</translation>
 <translation id="3451317331714872347">风景 8</translation>
 <translation id="3457498675806041407">确认退出</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" />安装完毕并将在重启浏览器后生效。</translation>
@@ -65,6 +71,7 @@
 <translation id="3588820906588687999">在新标签页中打开图片</translation>
 <translation id="3601066750251199488">怪兽 3</translation>
 <translation id="3620979700683094848">网站可以自动播放视频</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Vivaldi 新版本已发布！</translation>
 <translation id="3708982624815781692">下载被取消。</translation>
 <translation id="3732157130969736834">保存链接为书签</translation>
@@ -76,6 +83,9 @@
 <translation id="3914946330804881301">从 Opera 导入</translation>
 <translation id="3921292902397893431">怪兽 8</translation>
 <translation id="3943857333388298514">粘贴</translation>
+<translation id="3974783668264968389">Vivaldi 无法解锁您的安全密钥存储空间。如果没有密钥存储空间，您将丢失已保存的登录信息和安全 cookie，而且某些功能（如同步、邮件和日历）也将停止工作。
+
+    请立即退出，解锁或修复密钥存储空间，然后再试一次。如果真的要继续，请单击复选框并按下 "放弃数据继续 "按钮。</translation>
 <translation id="4005270918754737597">跳过此版本</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4074744496918018786">在隐身窗口中打开图片</translation>
@@ -88,7 +98,6 @@
 <translation id="443008484043213881">工具</translation>
 <translation id="4456211719108566931">怪兽 6</translation>
 <translation id="4512900838580567989">在后台标签页中打开链接</translation>
-<translation id="4515472507709384008">Opera 15+ 浏览器</translation>
 <translation id="4545097004879999966">Opera邮件</translation>
 <translation id="4548358047305717967">在后台标签页中打开图片</translation>
 <translation id="4582480609585453144">在后台标签页中打开链接</translation>
@@ -100,16 +109,17 @@
 <translation id="498766871928286903">已下载 <ph name="DOWNLOADED" />，共 <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">导入的快速拨号</translation>
 <translation id="5092656712000637858">添加页面到网页面板</translation>
+<translation id="5106275083540628394">解密失败： 存在数据丢失风险</translation>
 <translation id="5177818338935286353">怪兽 7</translation>
 <translation id="5213743983876949565">动物 1</translation>
 <translation id="5238244642230426581">导入的书签</translation>
 <translation id="527605719918376753">使此页面静音</translation>
 <translation id="5305569355661722298">确认关闭窗口</translation>
+<translation id="5322922669477407077">Opera (Developer)</translation>
 <translation id="5388358297987318779">打开图片</translation>
 <translation id="5416008465899576639">有新版本 Vivaldi。</translation>
 <translation id="5497042274492038489">确认关闭窗口</translation>
 <translation id="5594602170491763400">怪兽 5</translation>
-<translation id="5615637589913244581">Opera 15+ （Beta 版浏览器）</translation>
 <translation id="5648110075441906505">在新窗口中打开图片</translation>
 <translation id="5656371807944747581">更新出错！</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> 版更新已可用 (当前版本为 <ph name="OLD_VERSION" />)。现在下载吗？</translation>
@@ -120,8 +130,8 @@
 <translation id="6040143037577758943">关闭</translation>
 <translation id="6229528619562190452">点击此处更新 Vivaldi。</translation>
 <translation id="6234173136417926046">使用图片作为起始页背景</translation>
-<translation id="630690498669249215">Opera 书签文件</translation>
 <translation id="6339818817272922368">本地账号</translation>
+<translation id="6398710281890660037">保护我的个人资料</translation>
 <translation id="6438786710866753178">风景 4</translation>
 <translation id="6477028720702061455">选择 Opera 配置文件夹以导入</translation>
 <translation id="6510706699590490869">更新 Vivaldi (&amp;U)</translation>
@@ -131,11 +141,13 @@
 <translation id="6635049669875534328">发行注记：</translation>
 <translation id="6693585104974197539">选择Edge的配置文件夹以导入其配置</translation>
 <translation id="6726279523566323394">选择Brave的配置文件夹以导入其配置</translation>
-<translation id="6804831687363620480">很遗憾，你的 Opera 15+ 浏览器设置不能在浏览器运行时使用。要导入这些配置到 Vivaldi，你需要保存工作并关闭 Opera 15+ 窗口然后点击继续。</translation>
 <translation id="6892812721183419409">以<ph name="USER" />身份打开链接</translation>
 <translation id="6896758677409633944">复制</translation>
+<translation id="6960139763942959188">此配置文件目前以未加密格式不安全地存储。Vivaldi 即将把您的配置文件升级为更安全的加密格式。您应立即退出，并在继续之前备份您的配置文件。</translation>
 <translation id="7086554968911045110">风景 7</translation>
+<translation id="7099506190679014195">安全密钥库升级</translation>
 <translation id="7111492742514999492">风景 9</translation>
+<translation id="7208252576848052204">很遗憾，当该浏览器运行时，您的 Arc 设置不可用。要将这些设置导入 Vivaldi，请保存您的工作并关闭所有 Arc 窗口。然后单击继续。</translation>
 <translation id="7337881442233988129">Chromium 浏览器</translation>
 <translation id="7581266044164103589">启动更新安装器失败。请检查是否有足够的内存或存储空间然后重试。</translation>
 <translation id="7658239707568436148">取消</translation>
@@ -162,7 +174,6 @@
 <translation id="8562339533180097902">立即关闭 Vivaldi 并开始安装</translation>
 <translation id="8567452685425968223">正在执行更新...</translation>
 <translation id="8624587806981488221">重新加载图片(&amp;R)</translation>
-<translation id="864444594187862076">Opera 15+ （开发版浏览器）</translation>
 <translation id="8651348004684669199">添加活动标签页</translation>
 <translation id="8669345741879513971">怪兽 10</translation>
 <translation id="867544375504146191">Yandex 浏览器</translation>
@@ -178,6 +189,7 @@
 <translation id="9048058608784130603">准备更新至 <ph name="VERSION" /></translation>
 <translation id="9048224371732578627">允许自动播放视频</translation>
 <translation id="9065203028668620118">编辑</translation>
+<translation id="9090254883741610153">让我继续</translation>
 <translation id="910680796491389880">雷鸟</translation>
 <translation id="912022491595344261">以<ph name="USER" />身份打开图像</translation>
 <translation id="9157539936604258187">打开链接</translation>

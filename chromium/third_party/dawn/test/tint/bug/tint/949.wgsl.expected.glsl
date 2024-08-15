@@ -1,5 +1,6 @@
 #version 310 es
 precision highp float;
+precision highp int;
 
 layout(location = 1) in vec2 vMainuv_param_1;
 layout(location = 0) in vec4 v_output1_param_1;
@@ -33,8 +34,8 @@ struct Light0 {
   uint padding_2;
   vec4 shadowsInfo;
   vec2 depthValues;
-  uint pad_2;
-  uint pad_3;
+  uint pad;
+  uint pad_1;
 };
 
 float u_Float = 0.0f;

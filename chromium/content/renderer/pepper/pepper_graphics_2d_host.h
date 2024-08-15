@@ -47,9 +47,8 @@ class PepperPluginInstanceImpl;
 class PPB_ImageData_Impl;
 class RendererPpapiHost;
 
-class CONTENT_EXPORT PepperGraphics2DHost
-    : public ppapi::host::ResourceHost,
-      public base::SupportsWeakPtr<PepperGraphics2DHost> {
+class CONTENT_EXPORT PepperGraphics2DHost final
+    : public ppapi::host::ResourceHost {
  public:
   static PepperGraphics2DHost* Create(
       RendererPpapiHost* host,
@@ -197,13 +196,13 @@ class CONTENT_EXPORT PepperGraphics2DHost
       const gpu::SyncToken& sync_token,
       bool lost);
 
-  raw_ptr<RendererPpapiHost, ExperimentalRenderer> renderer_ppapi_host_;
+  raw_ptr<RendererPpapiHost> renderer_ppapi_host_;
 
   scoped_refptr<PPB_ImageData_Impl> image_data_;
 
   // Non-owning pointer to the plugin instance this context is currently bound
   // to, if any. If the context is currently unbound, this will be NULL.
-  raw_ptr<PepperPluginInstanceImpl, ExperimentalRenderer> bound_instance_;
+  raw_ptr<PepperPluginInstanceImpl> bound_instance_;
 
   // Keeps track of all drawing commands queued before a Flush call.
   struct QueuedOperation;
@@ -263,6 +262,8 @@ class CONTENT_EXPORT PepperGraphics2DHost
 
   // Whether to use gpu memory for compositor resources.
   const bool enable_gpu_memory_buffer_;
+
+  base::WeakPtrFactory<PepperGraphics2DHost> weak_ptr_factory_{this};
 
   friend class PepperGraphics2DHostTest;
 };

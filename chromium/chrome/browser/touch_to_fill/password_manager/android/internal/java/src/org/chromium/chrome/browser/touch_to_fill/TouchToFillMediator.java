@@ -94,16 +94,13 @@ class TouchToFillMediator {
     private List<Credential> mCredentials;
     private boolean mManagePasskeysHidesPasswords;
     private BottomSheetFocusHelper mBottomSheetFocusHelper;
-    private final ImageFetcher mImageFetcher;
-
-    public TouchToFillMediator(ImageFetcher imageFetcher) {
-        mImageFetcher = imageFetcher;
-    }
+    private ImageFetcher mImageFetcher;
 
     void initialize(
             Context context,
             TouchToFillComponent.Delegate delegate,
             PropertyModel model,
+            ImageFetcher imageFetcher,
             LargeIconBridge largeIconBridge,
             @Px int desiredIconSize,
             BottomSheetFocusHelper bottomSheetFocusHelper) {
@@ -111,6 +108,7 @@ class TouchToFillMediator {
         mContext = context;
         mDelegate = delegate;
         mModel = model;
+        mImageFetcher = imageFetcher;
         mLargeIconBridge = largeIconBridge;
         mDesiredIconSize = desiredIconSize;
         mBottomSheetFocusHelper = bottomSheetFocusHelper;
@@ -259,33 +257,28 @@ class TouchToFillMediator {
                 UrlFormatter.formatUrlForSecurityDisplay(url, SchemeDisplay.OMIT_HTTP_AND_HTTPS);
         List<Credential> sharedCredentials = getSharedPasswordsThatRequireNotification(credentials);
         if (sharedCredentials.size() == 1) {
-            return String.format(
-                    mContext.getString(
-                            R.string.touch_to_fill_sheet_shared_passwords_one_password_subtitle),
+            return mContext.getString(
+                    R.string.touch_to_fill_sheet_shared_passwords_one_password_subtitle,
                     "<b>" + sharedCredentials.get(0).getSenderName() + "</b>",
                     formattedUrl);
         }
         if (sharedCredentials.size() > 1) {
-            return String.format(
-                    mContext.getString(
-                            R.string
-                                    .touch_to_fill_sheet_shared_passwords_multiple_passwords_subtitle),
+            return mContext.getString(
+                    R.string.touch_to_fill_sheet_shared_passwords_multiple_passwords_subtitle,
                     formattedUrl);
         }
 
         if (triggerSubmission) {
-            return String.format(
-                    mContext.getString(
-                            isOriginSecure
-                                    ? R.string.touch_to_fill_sheet_subtitle_submission
-                                    : R.string.touch_to_fill_sheet_subtitle_insecure_submission),
+            return mContext.getString(
+                    isOriginSecure
+                            ? R.string.touch_to_fill_sheet_subtitle_submission
+                            : R.string.touch_to_fill_sheet_subtitle_insecure_submission,
                     formattedUrl);
         } else {
             return isOriginSecure
                     ? formattedUrl
-                    : String.format(
-                            mContext.getString(R.string.touch_to_fill_sheet_subtitle_not_secure),
-                            formattedUrl);
+                    : mContext.getString(
+                            R.string.touch_to_fill_sheet_subtitle_not_secure, formattedUrl);
         }
     }
 

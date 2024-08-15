@@ -5,10 +5,10 @@
 #ifndef STORAGE_BROWSER_FILE_SYSTEM_FILE_SYSTEM_URL_H_
 #define STORAGE_BROWSER_FILE_SYSTEM_FILE_SYSTEM_URL_H_
 
+#include <optional>
 #include <set>
 #include <string>
 
-#include <optional>
 #include "base/component_export.h"
 #include "base/files/file_path.h"
 #include "components/services/storage/public/cpp/buckets/bucket_locator.h"
@@ -58,6 +58,12 @@ namespace storage {
 //  - its 'origin' has grown from an `url::Origin` to be a `blink::StorageKey`.
 //    The distinction can matter for web pages containing third-party iframes.
 //  - see the "Cracking" section, below.
+//
+// Buckets and storage keys are relevant for the kFileSystemTypeTemporary mount
+// type.
+//
+// Cracking is relevant for kFileSystemTypeIsolated and kFileSystemTypeExternal
+// mount types.
 //
 // This extra data isn't part of the string form. Creating a `FileSystemURL`
 // (from a factory method) and then optionally calling its setter methods

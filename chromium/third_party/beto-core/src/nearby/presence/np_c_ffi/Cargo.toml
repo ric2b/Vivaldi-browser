@@ -5,27 +5,18 @@ edition = "2021"
 publish = false
 
 [dependencies]
-np_ffi_core = { path = "../np_ffi_core" }
-lock_adapter = {path = "../../util/lock_adapter"}
+np_ffi_core = {workspace = true, default-features=false}
+lock_adapter.workspace = true
 
 [build-dependencies]
-cbindgen = "0.24.5"
+cbindgen.workspace = true
 
 [features]
 default = ["rustcrypto"]
 rustcrypto = ["np_ffi_core/rustcrypto"]
 boringssl = ["np_ffi_core/boringssl"]
 
+
 [lib]
 # boringssl and bssl-sys are built as a static lib, so we need to as well
 crate-type = ["staticlib"]
-
-# build profile optimized for size
-[profile.release-min-size]
-inherits = "release"
-panic = "abort"
-codegen-units = 1
-lto = true
-# z optimizes for size
-opt-level = "z"
-strip = true

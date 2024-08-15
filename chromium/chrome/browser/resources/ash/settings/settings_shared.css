@@ -4,11 +4,11 @@
 
 /* #css_wrapper_metadata_start
  * #type=style
- * #import=//resources/cr_elements/cr_shared_style.css.js
- * #import=//resources/cr_elements/cr_shared_vars.css.js
- * #import=//resources/cr_elements/search_highlight_style.css.js
+ * #import=//resources/ash/common/cr_elements/cr_shared_style.css.js
+ * #import=//resources/ash/common/cr_elements/cr_shared_vars.css.js
+ * #import=//resources/ash/common/cr_elements/search_highlight_style.css.js
  * #import=./settings_vars.css.js
- * #import=//resources/cr_elements/chromeos/cros_color_overrides.css.js
+ * #import=//resources/ash/common/cr_elements/cros_color_overrides.css.js
  * #include=cr-shared-style search-highlight-style cros-color-overrides
  * #css_wrapper_metadata_end */
 
@@ -77,12 +77,21 @@ a[href] {
   color: var(--cr-link-color);
 }
 
-settings-toggle-button.primary-toggle {
+a[href]:focus {
+  outline-color: var(--cros-sys-focus_ring);
+}
+
+/**
+ * primary-toggle is a row containing a toggle that represents some setting's
+ * on/off state. Examples: bluetooth primary toggle, wifi primary toggle, etc.
+ */
+.primary-toggle {
   color: var(--cros-sys-on_surface_variant);
   font: var(--cros-button-2-font);
 }
 
-settings-toggle-button.primary-toggle[checked] {
+.primary-toggle[on],
+.primary-toggle[checked] {
   color: var(--cros-sys-primary);
 }
 

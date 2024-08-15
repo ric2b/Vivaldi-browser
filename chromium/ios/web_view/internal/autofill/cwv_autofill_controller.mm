@@ -49,13 +49,12 @@
 #import "ios/web_view/internal/signin/web_view_identity_manager_factory.h"
 #import "ios/web_view/internal/web_view_browser_state.h"
 #import "ios/web_view/public/cwv_autofill_controller_delegate.h"
-#import "net/base/mac/url_conversions.h"
+#import "net/base/apple/url_conversions.h"
 
 using autofill::FieldRendererId;
 using autofill::FormData;
 using autofill::FormRendererId;
-using UserDecision =
-    autofill::AutofillClient::SaveAddressProfileOfferUserDecision;
+using UserDecision = autofill::AutofillClient::AddressPromptUserDecision;
 
 @implementation CWVAutofillController {
   // Bridge to observe the |webState|.

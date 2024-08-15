@@ -63,7 +63,7 @@ struct AllowedFeatures {
     }
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField().
-    TINT_REFLECT(extensions, features);
+    TINT_REFLECT(AllowedFeatures, extensions, features);
 };
 
 }  // namespace tint::wgsl

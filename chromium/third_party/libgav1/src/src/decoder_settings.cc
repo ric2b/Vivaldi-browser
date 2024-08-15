@@ -28,6 +28,7 @@ void Libgav1DecoderSettingsInitDefault(Libgav1DecoderSettings* settings) {
   settings->output_all_layers = 0;  // false
   settings->operating_point = 0;
   settings->post_filter_mask = 0x1f;
+  settings->parse_only = 0;  // false
 }
 
 }  // extern "C"

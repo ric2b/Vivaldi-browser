@@ -8,8 +8,9 @@
 #include <vector>
 
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
+#include "cc/base/features.h"
 #include "cc/metrics/compositor_frame_reporting_controller.h"
 #include "cc/metrics/frame_sequence_tracker.h"
 
@@ -201,40 +202,49 @@ void FrameSequenceTrackerCollection::NotifyBeginImplFrame(
 
 void FrameSequenceTrackerCollection::NotifyBeginMainFrame(
     const viz::BeginFrameArgs& args) {
-  for (auto& tracker : frame_trackers_)
+  for (auto& tracker : frame_trackers_) {
     tracker.second->ReportBeginMainFrame(args);
-  for (auto& tracker : custom_frame_trackers_)
+  }
+  for (auto& tracker : custom_frame_trackers_) {
     tracker.second->ReportBeginMainFrame(args);
+  }
 }
 
 void FrameSequenceTrackerCollection::NotifyMainFrameProcessed(
     const viz::BeginFrameArgs& args) {
-  for (auto& tracker : frame_trackers_)
+  for (auto& tracker : frame_trackers_) {
     tracker.second->ReportMainFrameProcessed(args);
-  for (auto& tracker : custom_frame_trackers_)
+  }
+  for (auto& tracker : custom_frame_trackers_) {
     tracker.second->ReportMainFrameProcessed(args);
+  }
 }
 
 void FrameSequenceTrackerCollection::NotifyImplFrameCausedNoDamage(
     const viz::BeginFrameAck& ack) {
-  for (auto& tracker : frame_trackers_)
+  for (auto& tracker : frame_trackers_) {
     tracker.second->ReportImplFrameCausedNoDamage(ack);
-  for (auto& tracker : custom_frame_trackers_)
+  }
+  for (auto& tracker : custom_frame_trackers_) {
     tracker.second->ReportImplFrameCausedNoDamage(ack);
+  }
 
   // Removal trackers continue to process any frames which they started
   // observing.
-  for (auto& tracker : removal_trackers_)
+  for (auto& tracker : removal_trackers_) {
     tracker->ReportImplFrameCausedNoDamage(ack);
+  }
 }
 
 void FrameSequenceTrackerCollection::NotifyMainFrameCausedNoDamage(
     const viz::BeginFrameArgs& args,
     bool aborted) {
-  for (auto& tracker : frame_trackers_)
+  for (auto& tracker : frame_trackers_) {
     tracker.second->ReportMainFrameCausedNoDamage(args, aborted);
-  for (auto& tracker : custom_frame_trackers_)
+  }
+  for (auto& tracker : custom_frame_trackers_) {
     tracker.second->ReportMainFrameCausedNoDamage(args, aborted);
+  }
 }
 
 void FrameSequenceTrackerCollection::NotifyPauseFrameProduction() {
@@ -267,7 +277,9 @@ void FrameSequenceTrackerCollection::NotifySubmitFrame(
 
   // TODO(crbug.com/1072482): find a proper way to terminate a tracker. Please
   // refer to details in FrameSequenceTracker::ReportSubmitFrame
-  DestroyTrackers();
+  if (base::FeatureList::IsEnabled(::features::kUseV1MetricsTermination)) {
+    DestroyTrackers();
+  }
 }
 
 void FrameSequenceTrackerCollection::NotifyFrameEnd(
@@ -288,14 +300,19 @@ void FrameSequenceTrackerCollection::NotifyFrameEnd(
 void FrameSequenceTrackerCollection::NotifyFramePresented(
     uint32_t frame_token,
     const gfx::PresentationFeedback& feedback) {
-  for (auto& tracker : frame_trackers_)
+  for (auto& tracker : frame_trackers_) {
     tracker.second->ReportFramePresented(frame_token, feedback);
-  for (auto& tracker : custom_frame_trackers_)
+  }
+  for (auto& tracker : custom_frame_trackers_) {
     tracker.second->ReportFramePresented(frame_token, feedback);
-  for (auto& tracker : removal_trackers_)
+  }
+  for (auto& tracker : removal_trackers_) {
     tracker->ReportFramePresented(frame_token, feedback);
+  }
 
-  DestroyTrackers();
+  if (base::FeatureList::IsEnabled(::features::kUseV1MetricsTermination)) {
+    DestroyTrackers();
+  }
 }
 
 void FrameSequenceTrackerCollection::DestroyTrackers() {
@@ -329,7 +346,7 @@ void FrameSequenceTrackerCollection::DestroyTrackers() {
     }
   }
 
-  base::EraseIf(
+  std::erase_if(
       removal_trackers_,
       [](const std::unique_ptr<FrameSequenceTracker>& tracker) {
         return tracker->termination_status() ==
@@ -411,7 +428,9 @@ void FrameSequenceTrackerCollection::AddSortedFrame(
     tracker->AddSortedFrame(args, frame_info);
   }
 
-  DestroyTrackers();
+  if (!base::FeatureList::IsEnabled(::features::kUseV1MetricsTermination)) {
+    DestroyTrackers();
+  }
 }
 
 }  // namespace cc

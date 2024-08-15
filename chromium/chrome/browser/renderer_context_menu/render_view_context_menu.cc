@@ -92,6 +92,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/exclusive_access/keyboard_lock_controller.h"
@@ -126,8 +127,8 @@
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
+#include "components/autofill/core/browser/ui/popup_hiding_reasons.h"
 #include "components/autofill/core/browser/ui/popup_item_ids.h"
-#include "components/autofill/core/browser/ui/popup_types.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/password_generation_util.h"
 #include "components/autofill/core/common/unique_ids.h"
@@ -135,7 +136,6 @@
 #include "components/compose/core/browser/compose_features.h"
 #include "components/custom_handlers/protocol_handler.h"
 #include "components/download/public/common/download_url_parameters.h"
-#include "components/feature_engagement/public/feature_constants.h"
 #include "components/feed/feed_feature_list.h"
 #include "components/google/core/common/google_util.h"
 #include "components/guest_view/browser/guest_view_base.h"
@@ -161,7 +161,6 @@
 #include "components/search_engines/template_url_service.h"
 #include "components/send_tab_to_self/metrics_util.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
-#include "components/services/screen_ai/buildflags/buildflags.h"
 #include "components/spellcheck/browser/pref_names.h"
 #include "components/spellcheck/browser/spellcheck_host_metrics.h"
 #include "components/spellcheck/common/spellcheck_common.h"
@@ -201,6 +200,7 @@
 #include "printing/buildflags/buildflags.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "services/screen_ai/buildflags/buildflags.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/context_menu_data/context_menu_data.h"
@@ -286,6 +286,7 @@
 
 #if BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
 #include "chrome/browser/lens/region_search/lens_region_search_controller.h"
+#include "chrome/browser/ui/lens/lens_overlay_controller.h"
 #include "chrome/browser/ui/lens/lens_side_panel_helper.h"
 #include "chrome/grit/theme_resources.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -300,7 +301,7 @@
 #include "chrome/browser/chromeos/arc/start_smart_selection_action_menu.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_factory.h"
-#include "chrome/browser/renderer_context_menu/quick_answers_menu_observer.h"
+#include "chrome/browser/renderer_context_menu/read_write_card_observer.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/ui/clipboard_history/clipboard_history_submenu_model.h"
 #include "chromeos/ui/clipboard_history/clipboard_history_util.h"
@@ -385,7 +386,7 @@ const std::map<int, int>& GetIdcToUmaMap(UmaEnumIdLookupType type) {
   // These maps are from IDC_* -> UMA value. Never alter UMA ids. You may remove
   // items, but add a line to keep the old value from being reused.
 
-  // These UMA values are for the the RenderViewContextMenuItem enum, used for
+  // These UMA values are for the RenderViewContextMenuItem enum, used for
   // the RenderViewContextMenu.Shown and RenderViewContextMenu.Used histograms.
   static const base::NoDestructor<std::map<int, int>> kGeneralMap(
       {// NB: UMA values for 0 and 1 are detected using
@@ -525,15 +526,16 @@ const std::map<int, int>& GetIdcToUmaMap(UmaEnumIdLookupType type) {
        {IDC_CONTENT_CONTEXT_SEARCHLENSFORVIDEOFRAME, 142},
        {IDC_CONTENT_CONTEXT_SEARCHWEBFORVIDEOFRAME, 143},
        {IDC_CONTENT_CONTEXT_OPENLINKPREVIEW, 144},
+       {IDC_CONTENT_CONTEXT_AUTOFILL_FALLBACK_PLUS_ADDRESS, 145},
        // To add new items:
        //   - Add one more line above this comment block, using the UMA value
        //     from the line below this comment block.
        //   - Increment the UMA value in that latter line.
        //   - Add the new item to the RenderViewContextMenuItem enum in
        //     tools/metrics/histograms/enums.xml.
-       {0, 145}});
+       {0, 146}});
 
-  // These UMA values are for the the ContextMenuOptionDesktop enum, used for
+  // These UMA values are for the ContextMenuOptionDesktop enum, used for
   // the ContextMenu.SelectedOptionDesktop histograms.
   static const base::NoDestructor<std::map<int, int>> kSpecificMap(
       {{IDC_CONTENT_CONTEXT_OPENLINKNEWTAB, 0},
@@ -689,7 +691,9 @@ void AddAvatarToLastMenuItem(const gfx::Image& icon,
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
-void OnBrowserCreated(const GURL& link_url, Browser* browser) {
+void OnBrowserCreated(const GURL& link_url,
+                      url::Origin initiator_origin,
+                      Browser* browser) {
   if (!browser) {
     // TODO(crbug.com/1374315): Make sure we do something or log an error if
     // opening a browser window was not possible.
@@ -704,6 +708,7 @@ void OnBrowserCreated(const GURL& link_url, Browser* browser) {
          the browser it opens in implying a link from the active tab in the
          destination browser which is not correct. */
       ui::PAGE_TRANSITION_TYPED);
+  nav_params.initiator_origin = initiator_origin;
   nav_params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   // We are opening the link across profiles, so sending the referer
   // header is a privacy risk.
@@ -756,6 +761,12 @@ int GetClipboardHistoryCommandId() {
   return chromeos::features::IsClipboardHistoryRefreshEnabled()
              ? IDC_CONTENT_PASTE_FROM_CLIPBOARD
              : IDC_CONTENT_CLIPBOARD_HISTORY_MENU;
+}
+
+bool IsCaptivePortalProfile(Profile* profile) {
+  return chromeos::features::IsCaptivePortalPopupWindowEnabled() &&
+         profile->IsOffTheRecord() &&
+         profile->GetOTRProfileID().IsCaptivePortal();
 }
 
 #endif  // BUILDFLAG(IS_CHROMEOS)
@@ -842,8 +853,7 @@ RenderViewContextMenu::RenderViewContextMenu(
       autofill_context_menu_manager_(
           autofill::PersonalDataManagerFactory::GetForProfile(GetProfile()),
           this,
-          &menu_model_),
-      new_badge_tracker_(GetProfile()) {
+          &menu_model_) {
   if (!g_custom_id_ranges_initialized) {
     g_custom_id_ranges_initialized = true;
     SetContentCustomCommandIdRange(IDC_CONTENT_CONTEXT_CUSTOM_FIRST,
@@ -953,8 +963,8 @@ void RenderViewContextMenu::AppendAllExtensionItems() {
   std::map<std::u16string, std::vector<const Extension*>>
       title_to_extensions_map;
   for (const auto& id : menu_manager->ExtensionIds()) {
-    const Extension* extension = registry->GetExtensionById(
-        id.extension_id, extensions::ExtensionRegistry::ENABLED);
+    const Extension* extension =
+        registry->enabled_extensions().GetByID(id.extension_id);
     // Platform apps have their context menus created directly in
     // AppendPlatformAppItems.
     // andre@vivaldi.com, that is not true as of now so lets use this.
@@ -1329,10 +1339,10 @@ void RenderViewContextMenu::InitMenu() {
     menu_model_.RemoveItemAt(0);
   }
 
-  // Always add Quick Answers view last, as it is rendered next to the context
+  // Always add read write cards UI last, as it is rendered next to the context
   // menu, meaning that each menu item added/removed in this function will cause
   // it to visibly jump on the screen (see b/173569669).
-  AppendQuickAnswersItems();
+  AppendReadWriteCardItems();
 
   if (base::FeatureList::IsEnabled(
           autofill::features::kAutofillPopupDoesNotOverlapWithContextMenu)) {
@@ -1435,7 +1445,7 @@ void RenderViewContextMenu::RecordUsedItem(int id) {
   int enum_id =
       FindUMAEnumValueForCommand(id, UmaEnumIdLookupType::GeneralEnumId);
   if (enum_id == -1) {
-    NOTREACHED() << "Update kUmaEnumToControlId. Unhanded IDC: " << id;
+    NOTREACHED() << "Update GetIdcToUmaMap. Unhandled IDC: " << id;
     return;
   }
 
@@ -1548,7 +1558,7 @@ void RenderViewContextMenu::RecordShownItem(int id, bool is_submenu) {
     } else {
       // Just warning here. It's harder to maintain list of all possibly
       // visible items than executable items.
-      DLOG(ERROR) << "Update kUmaEnumToControlId. Unhanded IDC: " << id;
+      DLOG(ERROR) << "Update GetIdcToUmaMap. Unhandled IDC: " << id;
     }
   }
 
@@ -1687,11 +1697,20 @@ void RenderViewContextMenu::AppendLinkItems() {
       show_open_in_new_window = false;
     }
 
+#if BUILDFLAG(IS_CHROMEOS)
+    Profile* profile = GetProfile();
+
+    // Disable opening links in a new tab or window for captive portal signin.
+    if (IsCaptivePortalProfile(profile)) {
+      show_open_in_new_tab = false;
+      show_open_in_new_window = false;
+      show_open_link_off_the_record = false;
+    }
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     const bool in_system_web_dialog =
         ash::SystemWebDialogDelegate::HasInstance(current_url_);
 
-    Profile* profile = GetProfile();
     std::optional<ash::SystemWebAppType> link_system_app_type =
         GetLinkSystemAppType(profile, params_.link_url);
 
@@ -1700,7 +1719,9 @@ void RenderViewContextMenu::AppendLinkItems() {
 
     // Opening a WebUI page in an incognito window makes little sense, so we
     // don't show the item.
-    show_open_link_off_the_record = !link_to_webui;
+    if (link_to_webui) {
+      show_open_link_off_the_record = false;
+    }
 
     // Basically, we don't show "Open link in new tab" and "Open link in new
     // window" items inside SWAs/SystemWebDialogs if that link is to WebUI.
@@ -1735,6 +1756,7 @@ void RenderViewContextMenu::AppendLinkItems() {
       show_open_link_off_the_record = false;
     }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
     if (show_open_in_new_tab) {
       menu_model_.AddItemWithStringId(
@@ -1765,6 +1787,27 @@ void RenderViewContextMenu::AppendLinkItems() {
       menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_OPENLINKPREVIEW,
                                       IDS_CONTENT_CONTEXT_OPENLINKPREVIEW);
       menu_model_.SetIsNewFeatureAt(menu_model_.GetItemCount() - 1, true);
+      // We don't show in-production-help for ChromeOS for now because we should
+      // use a different trigger.
+      //
+      // TODO(b:325390312): Update trigger for ChromeOS and show
+      // in-production-help.
+#if !BUILDFLAG(IS_CHROMEOS)
+      int string_id;
+      switch (blink::features::kLinkPreviewTriggerType.Get()) {
+        case blink::features::LinkPreviewTriggerType::kAltClick:
+          string_id = IDS_CONTENT_CONTEXT_OPENLINKPREVIEW_TRIGGER_ALTCLICK;
+          break;
+        case blink::features::LinkPreviewTriggerType::kAltHover:
+          string_id = IDS_CONTENT_CONTEXT_OPENLINKPREVIEW_TRIGGER_ALTHOVER;
+          break;
+        case blink::features::LinkPreviewTriggerType::kLongPress:
+          string_id = IDS_CONTENT_CONTEXT_OPENLINKPREVIEW_TRIGGER_LONGPRESS;
+          break;
+      }
+      menu_model_.SetMinorText(menu_model_.GetItemCount() - 1,
+                               l10n_util::GetStringUTF16(string_id));
+#endif  // !BUILDFLAG(IS_CHROMEOS)
     }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
@@ -1875,15 +1918,15 @@ void RenderViewContextMenu::AppendOpenWithLinkItems() {
 #endif
 }
 
-void RenderViewContextMenu::AppendQuickAnswersItems() {
+void RenderViewContextMenu::AppendReadWriteCardItems() {
 #if BUILDFLAG(IS_CHROMEOS)
-  if (!quick_answers_menu_observer_) {
-    quick_answers_menu_observer_ =
-        std::make_unique<QuickAnswersMenuObserver>(this, GetProfile());
+  if (!read_write_card_observer_) {
+    read_write_card_observer_ =
+        std::make_unique<ReadWriteCardObserver>(this, GetProfile());
   }
 
-  observers_.AddObserver(quick_answers_menu_observer_.get());
-  quick_answers_menu_observer_->InitMenu(params_);
+  observers_.AddObserver(read_write_card_observer_.get());
+  read_write_card_observer_->InitMenu(params_);
 #endif
 }
 
@@ -2052,7 +2095,6 @@ void RenderViewContextMenu::AppendVideoItems() {
   if (base::FeatureList::IsEnabled(media::kContextMenuSaveVideoFrameAs)) {
     menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEVIDEOFRAMEAS,
                                     IDS_CONTENT_CONTEXT_SAVEVIDEOFRAMEAS);
-    menu_model_.SetIsNewFeatureAt(menu_model_.GetItemCount() - 1, true);
   }
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEAVAS,
                                   IDS_CONTENT_CONTEXT_SAVEVIDEOAS);
@@ -2155,10 +2197,6 @@ void RenderViewContextMenu::AppendPageItems() {
   // Note: `has_sharing_menu_items = true` also implies a separator was added
   // for sharing section.
   bool has_sharing_menu_items = false;
-  if (base::FeatureList::IsEnabled(feed::kWebUiFeed)) {
-    has_sharing_menu_items |= AppendFollowUnfollowItem();
-  }
-
   // Send-Tab-To-Self (user's other devices), page level.
   if (GetBrowser() &&
       send_tab_to_self::ShouldDisplayEntryPoint(embedder_web_contents_)) {
@@ -2410,10 +2448,8 @@ void RenderViewContextMenu::AppendSpellingAndSearchSuggestionItems() {
       // TODO(b/303646344): Remove new feature tag when no longer new.
       menu_model_.SetIsNewFeatureAt(
           menu_model_.GetItemCount() - 1,
-          new_badge_tracker_.TryShowNewBadge(
-              feature_engagement::kIPHComposeMenuNewBadgeFeature,
-              &compose::features::kEnableCompose));
-
+          GetBrowser()->window()->MaybeShowNewBadgeFor(
+              compose::features::kEnableCompose));
       render_separator = true;
     }
   }
@@ -2730,6 +2766,17 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
     return params_.link_url.is_valid();
   }
 
+  // On ChromeOS a dedicated OTR profile is used for captive portal signin to
+  // protect user privacy. Since some policies prevent Incognito browsing,
+  // disable options that trigger navigation in the context menu.
+  bool navigation_allowed = true;
+#if BUILDFLAG(IS_CHROMEOS)
+  Profile* profile = GetProfile();
+  if (IsCaptivePortalProfile(profile)) {
+    navigation_allowed = false;
+  }
+#endif
+
   switch (id) {
     case IDC_BACK:
       return embedder_web_contents_->GetController().CanGoBack();
@@ -2754,17 +2801,17 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
       return IsDevCommandEnabled(id);
 
     case IDC_CONTENT_CONTEXT_TRANSLATE:
-      return IsTranslateEnabled();
+      return navigation_allowed && IsTranslateEnabled();
 
     case IDC_CONTENT_CONTEXT_PARTIAL_TRANSLATE:
-      return true;
+      return navigation_allowed;
 
     case IDC_CONTENT_CONTEXT_OPENLINKNEWTAB:
     case IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW:
     case IDC_CONTENT_CONTEXT_OPENLINKINPROFILE:
     case IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP:
     case IDC_CONTENT_CONTEXT_OPENLINKPREVIEW:
-      return params_.link_url.is_valid() &&
+      return navigation_allowed && params_.link_url.is_valid() &&
              IsOpenLinkAllowedByDlp(params_.link_url);
 
     case IDC_CONTENT_CONTEXT_COPYLINKLOCATION:
@@ -2788,7 +2835,7 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
     case IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE:
     case IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHWEB:
     case IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHLENS:
-      return params_.src_url.is_valid() &&
+      return navigation_allowed && params_.src_url.is_valid() &&
              (params_.src_url.scheme() != content::kChromeUIScheme);
 
     case IDC_CONTENT_CONTEXT_COPYIMAGE:
@@ -2835,7 +2882,8 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
       // Currently, a media element can be opened in a new tab iff it can
       // be saved. So rather than duplicating the MediaCanSave flag, we rely
       // on that here.
-      return !!(params_.media_flags & ContextMenuData::kMediaCanSave);
+      return navigation_allowed &&
+             !!(params_.media_flags & ContextMenuData::kMediaCanSave);
 
     case IDC_SAVE_PAGE:
       return IsSavePageEnabled();
@@ -2870,7 +2918,7 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
       return !!(params_.edit_flags & ContextMenuDataEditFlags::kCanSelectAll);
 
     case IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD:
-      return IsOpenLinkOTREnabled();
+      return navigation_allowed && IsOpenLinkOTREnabled();
 
     case IDC_PRINT:
       return IsPrintPreviewEnabled();
@@ -2878,7 +2926,8 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
     case IDC_CONTENT_CONTEXT_SEARCHWEBFOR:
     case IDC_CONTENT_CONTEXT_SEARCHWEBFORNEWTAB:
     case IDC_CONTENT_CONTEXT_GOTOURL:
-      return IsOpenLinkAllowedByDlp(selection_navigation_url_);
+      return navigation_allowed &&
+             IsOpenLinkAllowedByDlp(selection_navigation_url_);
 
     case IDC_SPELLPANEL_TOGGLE:
     case IDC_CONTENT_CONTEXT_LANGUAGE_SETTINGS:
@@ -2889,7 +2938,7 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
     case IDC_CONTENT_CONTEXT_WEB_REGION_SEARCH:
       // These region search items will not be added if there is no default
       // search provider available.
-      return true;
+      return navigation_allowed;
 
     case IDC_CONTENT_CONTEXT_GENERATE_QR_CODE:
       return IsQRCodeGeneratorEnabled();
@@ -2917,7 +2966,7 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
       return IsRouteMediaEnabled();
 
     case IDC_CONTENT_CONTEXT_OPEN_IN_READING_MODE:
-      return true;
+      return navigation_allowed;
 
     case IDC_CONTENT_CONTEXT_ADD_A_NOTE:
       return IsAddANoteEnabled();
@@ -3479,7 +3528,7 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
       break;
 
     default:
-      NOTREACHED() << "Unhandled id: " << id;
+      DUMP_WILL_BE_NOTREACHED_NORETURN() << "Unhandled id: " << id;
       break;
   }
 }
@@ -3652,7 +3701,7 @@ bool RenderViewContextMenu::IsSaveLinkAsEnabled() const {
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   Profile* const profile = Profile::FromBrowserContext(browser_context_);
   CHECK(profile);
-  if (supervised_user::IsUrlFilteringEnabled(*profile->GetPrefs())) {
+  if (supervised_user::IsSubjectToParentalControls(*profile->GetPrefs())) {
     supervised_user::SupervisedUserService* supervised_user_service =
         SupervisedUserServiceFactory::GetForProfile(profile);
     supervised_user::SupervisedUserURLFilter* url_filter =
@@ -3986,7 +4035,8 @@ void RenderViewContextMenu::ExecOpenLinkInProfile(int profile_index) {
   base::FilePath profile_path = profile_link_paths_[profile_index];
   profiles::SwitchToProfile(
       profile_path, false,
-      base::BindRepeating(OnBrowserCreated, params_.link_url));
+      base::BindRepeating(OnBrowserCreated, params_.link_url,
+                          params_.frame_origin));
 }
 
 #if BUILDFLAG(ENABLE_COMPOSE)
@@ -4013,7 +4063,8 @@ void RenderViewContextMenu::ExecOpenCompose() {
         autofill::FieldGlobalId(
             frame_token, autofill::FieldRendererId(params_.field_renderer_id)),
         compose::ComposeManagerImpl::UiEntryPoint::kContextMenu);
-    new_badge_tracker_.ActionPerformed("compose_menu_item_activated");
+    GetBrowser()->window()->NotifyPromoFeatureUsed(
+        compose::features::kEnableCompose);
   } else {
     compose::LogOpenComposeDialogResult(
         compose::OpenComposeDialogResult::kNoContentAutofillDriver);
@@ -4051,7 +4102,7 @@ void RenderViewContextMenu::ExecInspectBackgroundPage() {
 void RenderViewContextMenu::CheckSupervisedUserURLFilterAndSaveLinkAs() {
   Profile* const profile = Profile::FromBrowserContext(browser_context_);
   CHECK(profile);
-  if (supervised_user::IsUrlFilteringEnabled(*profile->GetPrefs())) {
+  if (supervised_user::IsSubjectToParentalControls(*profile->GetPrefs())) {
     supervised_user::SupervisedUserService* supervised_user_service =
         SupervisedUserServiceFactory::GetForProfile(profile);
     supervised_user::SupervisedUserURLFilter* url_filter =
@@ -4240,6 +4291,15 @@ void RenderViewContextMenu::ExecRegionSearch(
   CHECK(browser);
   if (lens::features::IsLensRegionSearchStaticPageEnabled()) {
     lens::OpenLensStaticPage(browser);
+    return;
+  }
+
+  if (is_google_default_search_provider &&
+      lens::features::IsLensOverlayEnabled()) {
+    browser->tab_strip_model()
+        ->GetActiveTab()
+        ->lens_overlay_controller()
+        ->ShowUI();
     return;
   }
 
@@ -4474,7 +4534,10 @@ void RenderViewContextMenu::ExecLanguageSettings(int event_flags) {
 // added benefit of also doing the right thing when Lacros is enabled).
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
-      GetProfile(), chromeos::settings::mojom::kLanguagesAndInputSectionPath);
+      GetProfile(),
+      ash::features::IsOsSettingsRevampWayfindingEnabled()
+          ? chromeos::settings::mojom::kLanguagesSubpagePath
+          : chromeos::settings::mojom::kLanguagesAndInputSectionPath);
 #else
   WindowOpenDisposition disposition = ui::DispositionFromEventFlags(
       event_flags, WindowOpenDisposition::NEW_FOREGROUND_TAB);

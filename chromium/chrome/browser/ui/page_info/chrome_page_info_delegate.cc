@@ -201,7 +201,7 @@ void ChromePageInfoDelegate::FocusWebContents() {
 std::optional<std::u16string> ChromePageInfoDelegate::GetFpsOwner(
     const GURL& site_url) {
   if (!PrivacySandboxServiceFactory::GetForProfile(GetProfile()))
-    return absl::nullopt;
+    return std::nullopt;
   return PrivacySandboxServiceFactory::GetForProfile(GetProfile())
       ->GetFirstPartySetOwnerForDisplay(site_url);
 }
@@ -299,14 +299,19 @@ void ChromePageInfoDelegate::OpenSafetyTipHelpCenterPage() {
 
 void ChromePageInfoDelegate::OpenContentSettingsExceptions(
     ContentSettingsType content_settings_type) {
+  if (content_settings_type == ContentSettingsType::FILE_SYSTEM_WRITE_GUARD) {
+    const GURL& url = web_contents_->GetLastCommittedURL();
+    chrome::ShowSiteSettingsFileSystem(GetProfile(), url);
+    return;
+  }
   chrome::ShowContentSettingsExceptionsForProfile(GetProfile(),
                                                   content_settings_type);
 }
 
 void ChromePageInfoDelegate::OnPageInfoActionOccurred(
-    PageInfo::PageInfoAction action) {
+    page_info::PageInfoAction action) {
   if (sentiment_service_) {
-    if (action == PageInfo::PAGE_INFO_OPENED) {
+    if (action == page_info::PAGE_INFO_OPENED) {
       sentiment_service_->PageInfoOpened();
     } else {
       sentiment_service_->InteractedWithPageInfo();

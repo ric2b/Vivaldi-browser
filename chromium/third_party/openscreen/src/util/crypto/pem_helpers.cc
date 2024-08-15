@@ -50,7 +50,7 @@ bssl::UniquePtr<EVP_PKEY> ReadKeyFromPemFile(std::string_view filename) {
   long length;  // NOLINT
   while (PEM_read(fp, &name, &header, &data, &length) == 1) {
     if (stringutil::starts_with(name, "RSA PRIVATE KEY")) {
-      OSP_DCHECK(!pkey);
+      OSP_CHECK(!pkey);
       CBS cbs;
       CBS_init(&cbs, data, length);
       RSA* rsa = RSA_parse_private_key(&cbs);

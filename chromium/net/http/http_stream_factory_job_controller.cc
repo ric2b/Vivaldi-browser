@@ -21,6 +21,7 @@
 #include "net/base/privacy_mode.h"
 #include "net/base/proxy_chain.h"
 #include "net/base/proxy_string_util.h"
+#include "net/base/session_usage.h"
 #include "net/base/url_util.h"
 #include "net/http/bidirectional_stream_impl.h"
 #include "net/http/transport_security_state.h"
@@ -29,6 +30,7 @@
 #include "net/log/net_log_with_source.h"
 #include "net/proxy_resolution/proxy_resolution_request.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
+#include "net/quic/quic_session_key.h"
 #include "net/spdy/spdy_session.h"
 #include "url/gurl.h"
 #include "url/scheme_host_port.h"
@@ -89,9 +91,7 @@ void HistogramProxyUsed(const ProxyInfo& proxy_info, bool success) {
     }
     proxy_scheme = proxy_info.proxy_chain().is_direct()
                        ? static_cast<ProxyServer::Scheme>(1)
-                       : proxy_info.proxy_chain()
-                             .GetProxyServer(/*chain_index=*/0)
-                             .scheme();
+                       : proxy_info.proxy_chain().First().scheme();
   }
   if (success) {
     UMA_HISTOGRAM_ENUMERATION("Net.HttpJob.ProxyTypeSuccess", proxy_scheme,
@@ -1296,8 +1296,10 @@ HttpStreamFactory::JobController::GetAlternativeServiceInfoInternal(
     // Check whether there is an existing QUIC session to use for this origin.
     GURL mapped_origin = original_url;
     RewriteUrlWithHostMappingRules(mapped_origin);
+    CHECK(proxy_info_.proxy_chain().is_direct());
     QuicSessionKey session_key(
         HostPortPair::FromURL(mapped_origin), request_info.privacy_mode,
+        proxy_info_.proxy_chain(), SessionUsage::kDestination,
         request_info.socket_tag, request_info.network_anonymization_key,
         request_info.secure_dns_policy, /*require_dns_https_alpn=*/false);
 
@@ -1402,13 +1404,15 @@ int HttpStreamFactory::JobController::ReconsiderProxyAfterError(Job* job,
     return error;
   }
 
-  if (proxy_info_.is_secure_http_like()) {
-    // TODO(https://crbug.com/1491092): Should do this for every proxy in the
-    // chain as part of adding support for client certificates.
-    session_->ssl_client_context()->ClearClientCertificate(
-        proxy_info_.proxy_chain()
-            .GetProxyServer(/*chain_index=*/0)
-            .host_port_pair());
+  // Clear client certificates for all proxies in the chain.
+  // TODO(https://crbug.com/1491092): client certificates for multi-proxy
+  // chains are not yet supported, and this is only tested with single-proxy
+  // chains.
+  for (auto& proxy_server : proxy_info_.proxy_chain().proxy_servers()) {
+    if (proxy_server.is_secure_http_like()) {
+      session_->ssl_client_context()->ClearClientCertificate(
+          proxy_server.host_port_pair());
+    }
   }
 
   if (!proxy_info_.Fallback(error, net_log_)) {

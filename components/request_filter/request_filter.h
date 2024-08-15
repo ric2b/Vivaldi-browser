@@ -81,6 +81,8 @@ class RequestFilter {
 
   using HeadersReceivedCallback =
       base::OnceCallback<void(bool cancel,
+                              //Ignored when responding asynchronously
+                              bool collapse,
                               const GURL& new_url,
                               ResponseHeaderChanges header_changes)>;
 

@@ -267,6 +267,8 @@ struct MockConfig {
   std::string metrics_endpoint;
   std::string idp_login_url;
   std::string disconnect_endpoint;
+  std::optional<SkColor> brand_background_color;
+  std::optional<SkColor> brand_text_color;
 };
 
 struct MockIdpInfo {
@@ -304,6 +306,13 @@ enum class ErrorDialogAction {
   kMoreDetails,
 };
 
+// Action on loading dialog taken by TestDialogController.
+// Does not indicate a test expectation.
+enum class LoadingDialogAction {
+  kNone,
+  kClose,
+};
+
 struct MockConfiguration {
   const char* token;
   base::flat_map<std::string, MockIdpInfo> idp_info;
@@ -312,6 +321,7 @@ struct MockConfiguration {
   AccountsDialogAction accounts_dialog_action;
   IdpSigninStatusMismatchDialogAction idp_signin_status_mismatch_dialog_action;
   ErrorDialogAction error_dialog_action;
+  LoadingDialogAction loading_dialog_action;
   std::optional<GURL> continue_on;
   MediationRequirement mediation_requirement = MediationRequirement::kOptional;
   std::optional<TokenError> token_error;
@@ -338,15 +348,15 @@ static const RequestParameters kDefaultRequestParameters{
 
 static const MockIdpInfo kDefaultIdentityProviderInfo{
     {kWellKnown, {ParseStatus::kSuccess, net::HTTP_OK}},
-    {
-        {ParseStatus::kSuccess, net::HTTP_OK},
-        kAccountsEndpoint,
-        kTokenEndpoint,
-        kClientMetadataEndpoint,
-        kMetricsEndpoint,
-        kIdpLoginUrl,
-        kIdpDisconnectUrl,
-    },
+    {{ParseStatus::kSuccess, net::HTTP_OK},
+     kAccountsEndpoint,
+     kTokenEndpoint,
+     kClientMetadataEndpoint,
+     kMetricsEndpoint,
+     kIdpLoginUrl,
+     kIdpDisconnectUrl,
+     /*brand_background_color=*/std::nullopt,
+     /*brand_text_color=*/std::nullopt},
     kDefaultClientMetadata,
     {ParseStatus::kSuccess, net::HTTP_OK},
     kSingleAccount,
@@ -358,15 +368,15 @@ static const base::flat_map<std::string, MockIdpInfo> kSingleProviderInfo{
 constexpr char kProviderTwoUrlFull[] = "https://idp2.example/fedcm.json";
 static const MockIdpInfo kProviderTwoInfo{
     {{kProviderTwoUrlFull}},
-    {
-        {ParseStatus::kSuccess, net::HTTP_OK},
-        "https://idp2.example/accounts",
-        "https://idp2.example/token",
-        "https://idp2.example/client_metadata",
-        "https://idp2.example/metrics",
-        "https://idp2.example/login_url",
-        "https://idp2.example/disconnect",
-    },
+    {{ParseStatus::kSuccess, net::HTTP_OK},
+     "https://idp2.example/accounts",
+     "https://idp2.example/token",
+     "https://idp2.example/client_metadata",
+     "https://idp2.example/metrics",
+     "https://idp2.example/login_url",
+     "https://idp2.example/disconnect",
+     /*brand_background_color=*/std::nullopt,
+     /*brand_text_color=*/std::nullopt},
     kDefaultClientMetadata,
     {ParseStatus::kSuccess, net::HTTP_OK},
     kMultipleAccounts};
@@ -378,7 +388,8 @@ static const MockConfiguration kConfigurationValid{
     /*delay_token_response=*/false,
     AccountsDialogAction::kSelectFirstAccount,
     IdpSigninStatusMismatchDialogAction::kNone,
-    ErrorDialogAction::kClose};
+    ErrorDialogAction::kClose,
+    LoadingDialogAction::kNone};
 
 static const RequestExpectations kExpectationSuccess{
     RequestTokenStatus::kSuccess, FederatedAuthRequestResult::kSuccess,
@@ -401,7 +412,8 @@ MockConfiguration kConfigurationMultiIdpValid{
     false /* delay_token_response */,
     AccountsDialogAction::kSelectFirstAccount,
     IdpSigninStatusMismatchDialogAction::kNone,
-    ErrorDialogAction::kClose};
+    ErrorDialogAction::kClose,
+    LoadingDialogAction::kNone};
 
 url::Origin OriginFromString(const std::string& url_string) {
   return url::Origin::Create(GURL(url_string));
@@ -454,22 +466,19 @@ class TestIdpNetworkRequestManager : public MockIdpNetworkRequestManager {
     ++num_fetched_[FetchedEndpoint::CONFIG];
 
     std::string provider_key = provider.spec();
+    const MockConfig& config = config_.idp_info[provider_key].config;
     IdpNetworkRequestManager::Endpoints endpoints;
-    endpoints.token =
-        GURL(config_.idp_info[provider_key].config.token_endpoint);
-    endpoints.accounts =
-        GURL(config_.idp_info[provider_key].config.accounts_endpoint);
-    endpoints.client_metadata =
-        GURL(config_.idp_info[provider_key].config.client_metadata_endpoint);
-    endpoints.metrics =
-        GURL(config_.idp_info[provider_key].config.metrics_endpoint);
-    endpoints.disconnect =
-        GURL(config_.idp_info[provider_key].config.disconnect_endpoint);
+    endpoints.token = GURL(config.token_endpoint);
+    endpoints.accounts = GURL(config.accounts_endpoint);
+    endpoints.client_metadata = GURL(config.client_metadata_endpoint);
+    endpoints.metrics = GURL(config.metrics_endpoint);
+    endpoints.disconnect = GURL(config.disconnect_endpoint);
 
     IdentityProviderMetadata idp_metadata;
     idp_metadata.config_url = provider;
-    idp_metadata.idp_login_url =
-        GURL(config_.idp_info[provider_key].config.idp_login_url);
+    idp_metadata.idp_login_url = GURL(config.idp_login_url);
+    idp_metadata.brand_background_color = config.brand_background_color;
+    idp_metadata.brand_text_color = config.brand_text_color;
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(std::move(callback),
@@ -642,13 +651,16 @@ class TestDialogController
     AccountList displayed_accounts;
     std::optional<IdentityRequestAccount::SignInMode> sign_in_mode;
     blink::mojom::RpContext rp_context;
+    // The last seen background/text color from IdP metadata.
+    std::optional<SkColor> brand_background_color;
+    std::optional<SkColor> brand_text_color;
     // State related to ShowFailureDialog().
     size_t num_show_idp_signin_status_mismatch_dialog_requests{0u};
-    // State related to ShowIdpSigninFailureDialog().
-    bool did_show_idp_signin_failure_dialog{false};
     // State related to ShowErrorDialog().
     bool did_show_error_dialog{false};
     std::optional<TokenError> token_error;
+    // State related to ShowLoadingDialog().
+    bool did_show_loading_dialog{false};
     // List of IDP strings for which a mismatch is shown in a test.
     std::vector<std::string> displayed_mismatch_idps;
   };
@@ -657,7 +669,8 @@ class TestDialogController
       : accounts_dialog_action_(config.accounts_dialog_action),
         idp_signin_status_mismatch_dialog_action_(
             config.idp_signin_status_mismatch_dialog_action),
-        error_dialog_action_(config.error_dialog_action) {}
+        error_dialog_action_(config.error_dialog_action),
+        loading_dialog_action_(config.loading_dialog_action) {}
 
   ~TestDialogController() override = default;
   TestDialogController(TestDialogController&) = delete;
@@ -676,11 +689,12 @@ class TestDialogController
       const std::vector<IdentityProviderData>& identity_provider_data,
       IdentityRequestAccount::SignInMode sign_in_mode,
       blink::mojom::RpMode rp_mode,
-      bool show_auto_reauthn_checkbox,
+      const std::optional<content::IdentityProviderData>& new_account_idp,
       IdentityRequestDialogController::AccountSelectionCallback on_selected,
       IdentityRequestDialogController::LoginToIdPCallback on_add_account,
-      IdentityRequestDialogController::DismissCallback dismiss_callback)
-      override {
+      IdentityRequestDialogController::DismissCallback dismiss_callback,
+      IdentityRequestDialogController::AccountsDisplayedCallback
+          accounts_displayed_callback) override {
     if (!state_) {
       return;
     }
@@ -696,6 +710,9 @@ class TestDialogController
       if (idp_data.has_login_status_mismatch) {
         state_->displayed_mismatch_idps.push_back(idp_data.idp_for_display);
       }
+      state_->brand_background_color =
+          idp_data.idp_metadata.brand_background_color;
+      state_->brand_text_color = idp_data.idp_metadata.brand_text_color;
     }
 
     switch (accounts_dialog_action_) {
@@ -719,6 +736,7 @@ class TestDialogController
             FROM_HERE,
             base::BindOnce(
                 std::move(on_add_account),
+                identity_provider_data.data()->idp_metadata.config_url,
                 identity_provider_data.data()->idp_metadata.idp_login_url));
         break;
       case AccountsDialogAction::kNone:
@@ -800,14 +818,26 @@ class TestDialogController
     }
   }
 
-  void ShowIdpSigninFailureDialog(base::OnceClosure dismiss_callback) override {
+  void ShowLoadingDialog(const std::string& top_frame_for_display,
+                         const std::string& idp_for_display,
+                         blink::mojom::RpContext rp_context,
+                         blink::mojom::RpMode rp_mode,
+                         IdentityRequestDialogController::DismissCallback
+                             dismiss_callback) override {
     if (!state_) {
       return;
     }
 
-    state_->did_show_idp_signin_failure_dialog = true;
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, std::move(dismiss_callback));
+    state_->did_show_loading_dialog = true;
+    switch (loading_dialog_action_) {
+      case LoadingDialogAction::kClose:
+        base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+            FROM_HERE, base::BindOnce(std::move(dismiss_callback),
+                                      DismissReason::kCloseButton));
+        break;
+      case LoadingDialogAction::kNone:
+        break;
+    }
   }
 
   base::WeakPtr<TestDialogController> AsWeakPtr() {
@@ -819,6 +849,7 @@ class TestDialogController
   IdpSigninStatusMismatchDialogAction idp_signin_status_mismatch_dialog_action_{
       IdpSigninStatusMismatchDialogAction::kNone};
   ErrorDialogAction error_dialog_action_{ErrorDialogAction::kNone};
+  LoadingDialogAction loading_dialog_action_{LoadingDialogAction::kNone};
 
   // Pointer so that the state can be queried after FederatedAuthRequestImpl
   // destroys TestDialogController.
@@ -906,10 +937,9 @@ class TestIdentityRegistry : public NiceMock<MockIdentityRegistry> {
   explicit TestIdentityRegistry(
       content::WebContents* web_contents,
       base::WeakPtr<FederatedIdentityModalDialogViewDelegate> delegate,
-      const url::Origin& registry_origin)
-      : NiceMock<MockIdentityRegistry>(web_contents,
-                                       delegate,
-                                       registry_origin) {}
+      const GURL& idp_config_url)
+      : NiceMock<MockIdentityRegistry>(web_contents, delegate, idp_config_url) {
+  }
 
   void NotifyClose(const url::Origin& notifier_origin) override {
     notified_ = true;
@@ -934,8 +964,7 @@ class FederatedAuthRequestImplTest : public RenderViewHostImplTestHarness {
     test_auto_reauthn_permission_delegate_ =
         std::make_unique<TestAutoReauthnPermissionDelegate>();
     test_identity_registry_ = std::make_unique<TestIdentityRegistry>(
-        web_contents(), /*delegate=*/nullptr,
-        url::Origin::Create(GURL(kIdpUrl)));
+        web_contents(), /*delegate=*/nullptr, GURL(kIdpUrl));
 
     static_cast<TestWebContents*>(web_contents())
         ->NavigateAndCommit(GURL(rp_url_), ui::PAGE_TRANSITION_LINK);
@@ -994,7 +1023,7 @@ class FederatedAuthRequestImplTest : public RenderViewHostImplTestHarness {
 
     // If multiple IdPs are received, add them to a single get call. Unittests
     // for multiple get calls can be added later as needed.
-    std::vector<blink::mojom::IdentityProviderPtr> idp_ptrs;
+    std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> idp_ptrs;
     for (const auto& identity_provider :
          request_parameters.identity_providers) {
       blink::mojom::IdentityProviderRequestOptionsPtr options =
@@ -1006,9 +1035,7 @@ class FederatedAuthRequestImplTest : public RenderViewHostImplTestHarness {
       options->login_hint = identity_provider.login_hint;
       options->domain_hint = identity_provider.domain_hint;
       options->scope = std::move(identity_provider.scope);
-      blink::mojom::IdentityProviderPtr idp_ptr =
-          blink::mojom::IdentityProvider::NewFederated(std::move(options));
-      idp_ptrs.push_back(std::move(idp_ptr));
+      idp_ptrs.push_back(std::move(options));
     }
     blink::mojom::IdentityProviderGetParametersPtr get_params =
         blink::mojom::IdentityProviderGetParameters::New(
@@ -1107,13 +1134,15 @@ class FederatedAuthRequestImplTest : public RenderViewHostImplTestHarness {
     base::RunLoop().RunUntilIdle();
   }
 
-  void WaitForCurrentAuthRequest() {
+  void WaitForCurrentAuthRequest(bool should_fast_forward = true) {
     request_remote_.set_disconnect_handler(auth_helper_.quit_closure());
 
     // Fast forward clock so that the pending
     // FederatedAuthRequestImpl::OnRejectRequest() task, if any, gets a
     // chance to run.
-    task_environment()->FastForwardBy(base::Minutes(10));
+    if (should_fast_forward) {
+      task_environment()->FastForwardBy(base::Minutes(10));
+    }
     auth_helper_.WaitForCallback();
 
     request_remote_.set_disconnect_handler(base::OnceClosure());
@@ -1133,6 +1162,14 @@ class FederatedAuthRequestImplTest : public RenderViewHostImplTestHarness {
   bool did_show_idp_signin_status_mismatch_dialog() const {
     return dialog_controller_state_
         .num_show_idp_signin_status_mismatch_dialog_requests;
+  }
+
+  std::optional<SkColor> brand_background_color() const {
+    return dialog_controller_state_.brand_background_color;
+  }
+
+  std::optional<SkColor> brand_text_color() const {
+    return dialog_controller_state_.brand_text_color;
   }
 
   int CountNumLoginStateIsSignin() {
@@ -1247,6 +1284,19 @@ class FederatedAuthRequestImplTest : public RenderViewHostImplTestHarness {
       }
     }
     SUCCEED();
+  }
+
+  void ExpectUKMCount(const std::string& metric_name,
+                      const char* entry_name,
+                      int expected_count) {
+    int count = 0;
+    auto entries = ukm_recorder()->GetEntriesByName(entry_name);
+    for (const ukm::mojom::UkmEntry* const entry : entries) {
+      if (ukm_recorder()->GetEntryMetric(entry, metric_name)) {
+        ++count;
+      }
+    }
+    EXPECT_EQ(count, expected_count);
   }
 
   void ExpectSignInStateMatchStatusUKM(SignInStateMatchStatus status) {
@@ -1374,41 +1424,38 @@ class FederatedAuthRequestImplTest : public RenderViewHostImplTestHarness {
     CheckAllFedCmSessionIDs();
   }
 
-  void CheckAllFedCmSessionIDs() {
-    std::optional<int> session_id;
+  void CheckAllFedCmSessionIDs(size_t expected_num_session_ids = 1u) {
+    std::set<int> session_ids;
     auto CheckUKMSessionID = [&](const auto& ukm_entries) {
       ASSERT_FALSE(ukm_entries.empty());
       for (const ukm::mojom::UkmEntry* const entry : ukm_entries) {
-        const auto* const metric =
-            ukm_recorder()->GetEntryMetric(entry, "FedCmSessionID");
-        ASSERT_TRUE(metric)
-            << "All UKM events should have the SessionID metric";
-        if (!session_id.has_value()) {
-          session_id = *metric;
-        } else {
-          EXPECT_EQ(*metric, *session_id)
-              << "All UKM events should have the same SessionID";
+        const auto* metric =
+            ukm_recorder()->GetEntryMetric(entry, "NumRequestsPerDocument");
+        if (metric) {
+          continue;
         }
+        metric = ukm_recorder()->GetEntryMetric(entry, "FedCmSessionID");
+        ASSERT_TRUE(metric)
+            << "All UKM events except for NumRequestsPerDocument should have "
+               "the SessionID metric";
+        session_ids.insert(*metric);
       }
+      EXPECT_EQ(session_ids.size(), expected_num_session_ids);
     };
     CheckUKMSessionID(ukm_recorder()->GetEntriesByName(FedCmEntry::kEntryName));
     CheckUKMSessionID(
         ukm_recorder()->GetEntriesByName(FedCmIdpEntry::kEntryName));
   }
 
-  void ComputeLoginStateAndReorderAccounts(const std::string& config_url,
-                                           AccountList& accounts) {
-    federated_auth_request_impl_->ComputeLoginStateAndReorderAccounts(
-        url::Origin::Create(GURL(config_url)), accounts);
-  }
-
-  std::vector<blink::mojom::IdentityProviderPtr> MaybeAddRegisteredProviders(
-      std::vector<blink::mojom::IdentityProviderPtr>& providers) {
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr>
+  MaybeAddRegisteredProviders(
+      std::vector<blink::mojom::IdentityProviderRequestOptionsPtr>& providers) {
     return federated_auth_request_impl_->MaybeAddRegisteredProviders(providers);
   }
 
-  blink::mojom::IdentityProviderPtr NewNamedIdP(GURL config_url,
-                                                std::string client_id) {
+  blink::mojom::IdentityProviderRequestOptionsPtr NewNamedIdP(
+      GURL config_url,
+      std::string client_id) {
     blink::mojom::IdentityProviderRequestOptionsPtr options =
         blink::mojom::IdentityProviderRequestOptions::New();
     blink::mojom::IdentityProviderConfigPtr config =
@@ -1416,10 +1463,11 @@ class FederatedAuthRequestImplTest : public RenderViewHostImplTestHarness {
     config->config_url = config_url;
     config->client_id = client_id;
     options->config = std::move(config);
-    return blink::mojom::IdentityProvider::NewFederated(std::move(options));
+    return options;
   }
 
-  blink::mojom::IdentityProviderPtr NewRegisteredIdP(std::string client_id) {
+  blink::mojom::IdentityProviderRequestOptionsPtr NewRegisteredIdP(
+      std::string client_id) {
     blink::mojom::IdentityProviderConfigPtr config =
         blink::mojom::IdentityProviderConfig::New();
     config->use_registered_config_urls = true;
@@ -1428,12 +1476,12 @@ class FederatedAuthRequestImplTest : public RenderViewHostImplTestHarness {
         blink::mojom::IdentityProviderRequestOptions::New();
 
     options->config = std::move(config);
-    return blink::mojom::IdentityProvider::NewFederated(std::move(options));
+    return options;
   }
 
   void SimulateLoginToIdP(std::string login_url = kIdpLoginUrl) {
     federated_auth_request_impl_->LoginToIdP(/*can_append_hints=*/true,
-                                             GURL(login_url));
+                                             GURL(kIdpUrl), GURL(login_url));
   }
 
   void ExpectSuccessfulButtonFlow() {
@@ -1479,7 +1527,7 @@ class FederatedAuthRequestImplTest : public RenderViewHostImplTestHarness {
     federated_auth_request_impl_->OnIdpSigninStatusReceived(
         OriginFromString(kProviderUrlFull), true);
 
-    WaitForCurrentAuthRequest();
+    WaitForCurrentAuthRequest(/*should_fast_forward=*/false);
     CheckAuthExpectations(kConfigurationValid, kExpectationSuccess);
   }
 
@@ -1728,7 +1776,8 @@ TEST_F(FederatedAuthRequestImplTest, ProviderNotTrustworthy) {
       /*domain_hint=*/""};
   RequestParameters request{
       std::vector<IdentityProviderParameters>{identity_provider},
-      /*rp_context=*/blink::mojom::RpContext::kSignIn};
+      /*rp_context=*/blink::mojom::RpContext::kSignIn,
+      /*rp_mode=*/blink::mojom::RpMode::kWidget};
   MockConfiguration configuration = kConfigurationValid;
   RequestExpectations expectations = {
       RequestTokenStatus::kError, FederatedAuthRequestResult::kError,
@@ -1768,6 +1817,9 @@ TEST_F(FederatedAuthRequestImplTest, AccountsCannotBeParsed) {
   RunAuthTest(kDefaultRequestParameters, expectations, configuration);
   EXPECT_TRUE(DidFetch(FetchedEndpoint::ACCOUNTS));
   EXPECT_FALSE(did_show_accounts_dialog());
+
+  histogram_tester_.ExpectTotalCount("Blink.FedCm.AccountsSize.Raw", 0);
+  histogram_tester_.ExpectTotalCount("Blink.FedCm.AccountsSize.ReadyToShow", 0);
 }
 
 // Test that privacy policy URL or terms of service is not required in client
@@ -2694,6 +2746,9 @@ TEST_F(FederatedAuthRequestImplTest, MetricsForSuccessfulSignInCase) {
       "Blink.FedCm.Timing.MismatchDialogShownDuration", 0);
 
   histogram_tester_.ExpectUniqueSample("Blink.FedCm.IsSignInUser", 1, 1);
+  histogram_tester_.ExpectUniqueSample("Blink.FedCm.AccountsSize.Raw", 1, 1);
+  histogram_tester_.ExpectUniqueSample("Blink.FedCm.AccountsSize.ReadyToShow",
+                                       1, 1);
 
   ExpectUKMPresence("Timing.ShowAccountsDialog");
   ExpectUKMPresence("Timing.ContinueOnDialog");
@@ -2810,9 +2865,11 @@ TEST_F(FederatedAuthRequestImplTest, MetricsForWebContentsVisible) {
   EXPECT_EQ(LoginState::kSignIn, displayed_accounts()[0].login_state);
 
   histogram_tester_.ExpectUniqueSample("Blink.FedCm.WebContentsVisible", 1, 1);
+  histogram_tester_.ExpectUniqueSample("Blink.FedCm.WebContentsActive", 1, 1);
 }
 
-// Test that request fails if the web contents are hidden.
+// Test that request could succeed with auto re-authn even if the web contents
+// invisible.
 TEST_F(FederatedAuthRequestImplTest, MetricsForWebContentsInvisible) {
   base::HistogramTester histogram_tester;
   test_rvh()->SimulateWasShown();
@@ -2824,16 +2881,19 @@ TEST_F(FederatedAuthRequestImplTest, MetricsForWebContentsInvisible) {
   ASSERT_NE(test_rvh()->GetMainRenderFrameHost()->GetVisibilityState(),
             content::PageVisibilityState::kVisible);
 
-  RequestExpectations expectations = {
-      RequestTokenStatus::kError,
-      FederatedAuthRequestResult::kErrorRpPageNotVisible,
-      /*standalone_console_message=*/std::nullopt,
-      /*selected_idp_config_url=*/std::nullopt};
-  RunAuthTest(kDefaultRequestParameters, expectations, kConfigurationValid);
-  EXPECT_TRUE(DidFetch(FetchedEndpoint::ACCOUNTS));
-  EXPECT_FALSE(did_show_accounts_dialog());
+  // Pretends that the sharing permission has been granted for this account.
+  EXPECT_CALL(*test_permission_delegate_,
+              HasSharingPermission(_, _, OriginFromString(kProviderUrlFull),
+                                   Optional(std::string(kAccountId))))
+      .Times(2)
+      .WillRepeatedly(Return(true));
+
+  RunAuthTest(kDefaultRequestParameters, kExpectationSuccess,
+              kConfigurationValid);
+  EXPECT_EQ(LoginState::kSignIn, displayed_accounts()[0].login_state);
 
   histogram_tester_.ExpectUniqueSample("Blink.FedCm.WebContentsVisible", 0, 1);
+  histogram_tester_.ExpectUniqueSample("Blink.FedCm.WebContentsActive", 1, 1);
 }
 
 TEST_F(FederatedAuthRequestImplTest, MetricsForFeatureIsDisabled) {
@@ -3128,11 +3188,12 @@ class DisableApiWhenDialogShownDialogController : public TestDialogController {
       const std::vector<IdentityProviderData>& identity_provider_data,
       SignInMode sign_in_mode,
       blink::mojom::RpMode rp_mode,
-      bool show_auto_reauthn_checkbox,
+      const std::optional<content::IdentityProviderData>& new_account_idp,
       IdentityRequestDialogController::AccountSelectionCallback on_selected,
       IdentityRequestDialogController::LoginToIdPCallback on_add_account,
-      IdentityRequestDialogController::DismissCallback dismiss_callback)
-      override {
+      IdentityRequestDialogController::DismissCallback dismiss_callback,
+      IdentityRequestDialogController::AccountsDisplayedCallback
+          accounts_displayed_callback) override {
     // Disable FedCM API
     api_permission_delegate_->permission_override_ = std::make_pair(
         rp_origin_to_disable_, ApiPermissionStatus::BLOCKED_SETTINGS);
@@ -3141,8 +3202,8 @@ class DisableApiWhenDialogShownDialogController : public TestDialogController {
     TestDialogController::ShowAccountsDialog(
         top_frame_for_display, iframe_for_display,
         std::move(identity_provider_data), sign_in_mode, rp_mode,
-        show_auto_reauthn_checkbox, std::move(on_selected),
-        std::move(on_add_account), std::move(dismiss_callback));
+        new_account_idp, std::move(on_selected), std::move(on_add_account),
+        std::move(dismiss_callback), std::move(accounts_displayed_callback));
   }
 
  private:
@@ -3459,6 +3520,8 @@ TEST_F(FederatedAuthRequestImplTest,
   RunAuthTest(kDefaultRequestParameters, expectations, kConfigurationValid);
   EXPECT_TRUE(DidFetch(FetchedEndpoint::ACCOUNTS));
   EXPECT_FALSE(did_show_accounts_dialog());
+
+  histogram_tester_.ExpectUniqueSample("Blink.FedCm.WebContentsActive", 0, 1);
 }
 
 // Test that the account chooser is not shown if the page navigates prior to the
@@ -3490,18 +3553,15 @@ TEST_F(FederatedAuthRequestImplTest,
 // Test that the accounts are reordered so that accounts with a LoginState equal
 // to kSignIn are listed before accounts with a LoginState equal to kSignUp.
 TEST_F(FederatedAuthRequestImplTest, ReorderMultipleAccounts) {
-  // Run an auth test to initialize variables.
-  RunAuthTest(kDefaultRequestParameters, kExpectationSuccess,
-              kConfigurationValid);
-
-  AccountList multiple_accounts = kMultipleAccounts;
-  ComputeLoginStateAndReorderAccounts(kProviderUrlFull, multiple_accounts);
+  MockConfiguration configuration = kConfigurationValid;
+  configuration.idp_info[kProviderUrlFull].accounts = kMultipleAccounts;
+  RunAuthTest(kDefaultRequestParameters, kExpectationSuccess, configuration);
 
   // Check the account order using the account ids.
-  ASSERT_EQ(multiple_accounts.size(), 3u);
-  EXPECT_EQ(multiple_accounts[0].id, kAccountIdPeter);
-  EXPECT_EQ(multiple_accounts[1].id, kAccountIdNicolas);
-  EXPECT_EQ(multiple_accounts[2].id, kAccountIdZach);
+  ASSERT_EQ(displayed_accounts().size(), 3u);
+  EXPECT_EQ(displayed_accounts()[0].id, kAccountIdPeter);
+  EXPECT_EQ(displayed_accounts()[1].id, kAccountIdNicolas);
+  EXPECT_EQ(displayed_accounts()[2].id, kAccountIdZach);
 }
 
 // Test that first API call with a given IDP is not affected by the
@@ -3851,7 +3911,6 @@ TEST_F(FederatedAuthRequestImplTest, FailureUiAccountEndpointKeepsFailing) {
 
   EXPECT_EQ(2u, dialog_controller_state_
                     .num_show_idp_signin_status_mismatch_dialog_requests);
-  EXPECT_FALSE(dialog_controller_state_.did_show_idp_signin_failure_dialog);
 
   // After the IdP sign-in status was updated, the endpoints should have been
   // fetched a 2nd time.
@@ -3921,124 +3980,11 @@ TEST_F(FederatedAuthRequestImplTest, FailureUiThenFailDifferentEndpoint) {
   EXPECT_FALSE(did_show_accounts_dialog());
   EXPECT_EQ(1u, dialog_controller_state_
                     .num_show_idp_signin_status_mismatch_dialog_requests);
-  EXPECT_TRUE(dialog_controller_state_.did_show_idp_signin_failure_dialog);
 
   // After the IdP sign-in status was updated, the endpoints should have been
   // fetched a 2nd time.
   EXPECT_EQ(NumFetched(FetchedEndpoint::WELL_KNOWN), 2u);
   EXPECT_EQ(NumFetched(FetchedEndpoint::ACCOUNTS), 1u);
-
-  histogram_tester_.ExpectTotalCount(
-      "Blink.FedCm.Timing.AccountsDialogShownDuration2", 0);
-  histogram_tester_.ExpectTotalCount(
-      "Blink.FedCm.Timing.MismatchDialogShownDuration", 1);
-
-  ExpectNoUKMPresence("AccountsDialogShown");
-  ExpectUKMPresence("MismatchDialogShown");
-  ExpectNoUKMPresence("Timing.AccountsDialogShownDuration");
-  ExpectUKMPresence("Timing.MismatchDialogShownDuration");
-  CheckAllFedCmSessionIDs();
-}
-
-// Test that the IdP-sign-in-failure-dialog is not shown if there is an error
-// after the user has selected an account.
-TEST_F(FederatedAuthRequestImplTest,
-       FailAfterAccountSelectionHideDialogDoesNotShowIdpSigninFailureDialog) {
-  base::test::ScopedFeatureList list;
-  list.InitAndEnableFeature(features::kFedCmIdpSigninStatusEnabled);
-
-  // Setup dialog controller to fail FedCM request after the user has selected
-  // an account.
-  url::Origin rp_origin_to_disable = main_test_rfh()->GetLastCommittedOrigin();
-  SetDialogController(
-      std::make_unique<DisableApiWhenDialogShownDialogController>(
-          kConfigurationValid, test_api_permission_delegate_.get(),
-          rp_origin_to_disable));
-
-  SetNetworkRequestManager(
-      std::make_unique<ParseStatusOverrideIdpNetworkRequestManager>());
-  auto* network_manager =
-      static_cast<ParseStatusOverrideIdpNetworkRequestManager*>(
-          test_network_request_manager_.get());
-
-  url::Origin kIdpOrigin = OriginFromString(kProviderUrlFull);
-
-  // Setup IdP sign-in status mismatch.
-  network_manager->accounts_parse_status_ = ParseStatus::kInvalidResponseError;
-  test_permission_delegate_->idp_signin_statuses_[kIdpOrigin] = true;
-
-  RunAuthDontWaitForCallback(kDefaultRequestParameters, kConfigurationValid);
-  EXPECT_TRUE(did_show_idp_signin_status_mismatch_dialog());
-  EXPECT_FALSE(did_show_accounts_dialog());
-
-  // Simulate user signing into IdP by updating the IdP signin status and
-  // calling the observer.
-  test_permission_delegate_->idp_signin_statuses_[kIdpOrigin] = true;
-  network_manager->accounts_parse_status_ = ParseStatus::kSuccess;
-  federated_auth_request_impl_->OnIdpSigninStatusReceived(
-      kIdpOrigin, /*idp_signin_status=*/true);
-  WaitForCurrentAuthRequest();
-
-  // Check that the FedCM request failed after the account picker was shown.
-  RequestExpectations expectations = {
-      RequestTokenStatus::kError,
-      FederatedAuthRequestResult::kErrorDisabledInSettings,
-      /*standalone_console_message=*/std::nullopt,
-      /*selected_idp_config_url=*/std::nullopt};
-  CheckAuthExpectations(kConfigurationValid, expectations);
-  EXPECT_TRUE(did_show_accounts_dialog());
-
-  // Check that the IdP-sign-in-failure dialog is not shown.
-  EXPECT_FALSE(dialog_controller_state_.did_show_idp_signin_failure_dialog);
-  histogram_tester_.ExpectTotalCount(
-      "Blink.FedCm.Timing.AccountsDialogShownDuration2", 1);
-  histogram_tester_.ExpectTotalCount(
-      "Blink.FedCm.Timing.MismatchDialogShownDuration", 1);
-
-  ExpectUKMPresence("AccountsDialogShown");
-  ExpectUKMPresence("MismatchDialogShown");
-  ExpectUKMPresence("Timing.AccountsDialogShownDuration");
-  ExpectUKMPresence("Timing.MismatchDialogShownDuration");
-  CheckAllFedCmSessionIDs();
-}
-
-// Test that the IdP-sign-in-failure dialog is not shown in the
-// following sequence of events:
-// 1) Failure dialog is shown due to IdP sign-in status mismatch
-// 2) FedCM call is aborted.
-TEST_F(FederatedAuthRequestImplTest,
-       FailureUiAbortDoesNotShowIdpSigninFailureDialog) {
-  base::test::ScopedFeatureList list;
-  list.InitAndEnableFeature(features::kFedCmIdpSigninStatusEnabled);
-
-  SetNetworkRequestManager(
-      std::make_unique<ParseStatusOverrideIdpNetworkRequestManager>());
-  auto* network_manager =
-      static_cast<ParseStatusOverrideIdpNetworkRequestManager*>(
-          test_network_request_manager_.get());
-
-  url::Origin kIdpOrigin = OriginFromString(kProviderUrlFull);
-
-  // Setup IdP sign-in status mismatch.
-  network_manager->accounts_parse_status_ = ParseStatus::kInvalidResponseError;
-  test_permission_delegate_->idp_signin_statuses_[kIdpOrigin] = true;
-
-  RunAuthDontWaitForCallback(kDefaultRequestParameters, kConfigurationValid);
-  EXPECT_TRUE(did_show_idp_signin_status_mismatch_dialog());
-  EXPECT_FALSE(did_show_accounts_dialog());
-
-  // Abort the request before DelayTimer kicks in.
-  federated_auth_request_impl_->CancelTokenRequest();
-
-  RequestExpectations expectations{RequestTokenStatus::kErrorCanceled,
-                                   FederatedAuthRequestResult::kErrorCanceled,
-                                   /*standalone_console_message=*/std::nullopt,
-                                   /*selected_idp_config_url=*/std::nullopt};
-  WaitForCurrentAuthRequest();
-  CheckAuthExpectations(kConfigurationValid, expectations);
-
-  // Abort should not trigger IdP-sign-in-failure dialog.
-  EXPECT_FALSE(dialog_controller_state_.did_show_idp_signin_failure_dialog);
 
   histogram_tester_.ExpectTotalCount(
       "Blink.FedCm.Timing.AccountsDialogShownDuration2", 0);
@@ -4134,6 +4080,10 @@ TEST_F(FederatedAuthRequestImplTest,
   base::test::ScopedFeatureList list;
   list.InitAndEnableFeature(features::kFedCmMultipleIdentityProviders);
 
+  base::RunLoop ukm_loop;
+  ukm_recorder()->SetOnAddEntryCallback(FedCmEntry::kEntryName,
+                                        ukm_loop.QuitClosure());
+
   // Set the account from the first IDP as returning as well, so the first
   // selected account should be that one (second IDP also has returning accounts
   // and no reordering should happen).
@@ -4142,6 +4092,17 @@ TEST_F(FederatedAuthRequestImplTest,
       LoginState::kSignIn;
   RunAuthTest(kDefaultMultiIdpRequestParameters, kExpectationSuccess, config);
   EXPECT_EQ(2u, NumFetched(FetchedEndpoint::ACCOUNTS));
+
+  // Check that the appropriate metrics are recorded upon destruction.
+  federated_auth_request_impl_->ResetAndDeleteThis();
+  ukm_loop.Run();
+  histogram_tester_.ExpectUniqueSample("Blink.FedCm.NumRequestsPerDocument", 1,
+                                       1);
+  histogram_tester_.ExpectTotalCount("Blink.FedCm.Timing.ShowAccountsDialog",
+                                     1);
+  ExpectUKMCount("Timing.ShowAccountsDialog", FedCmEntry::kEntryName, 1);
+  ExpectUKMCount("Timing.ShowAccountsDialog", FedCmIdpEntry::kEntryName, 2);
+  ExpectUKMPresenceInternal("NumRequestsPerDocument", FedCmEntry::kEntryName);
 }
 
 // Test successful multi IDP FedCM request.
@@ -4158,6 +4119,11 @@ TEST_F(FederatedAuthRequestImplTest,
   RunAuthTest(kDefaultMultiIdpRequestParameters, expectations,
               kConfigurationMultiIdpValid);
   EXPECT_EQ(2u, NumFetched(FetchedEndpoint::ACCOUNTS));
+
+  histogram_tester_.ExpectTotalCount("Blink.FedCm.Timing.ShowAccountsDialog",
+                                     1);
+  ExpectUKMCount("Timing.ShowAccountsDialog", FedCmEntry::kEntryName, 1);
+  ExpectUKMCount("Timing.ShowAccountsDialog", FedCmIdpEntry::kEntryName, 2);
 }
 
 // Test fetching information for the 1st IdP failing, and succeeding for the
@@ -4575,6 +4541,32 @@ TEST_F(FederatedAuthRequestImplTest,
   EXPECT_TRUE(DidFetch(FetchedEndpoint::ACCOUNTS));
 }
 
+TEST_F(FederatedAuthRequestImplTest, MultiIdpLoggedOut) {
+  base::test::ScopedFeatureList list;
+  list.InitAndEnableFeature(features::kFedCmMultipleIdentityProviders);
+
+  // Mark both IDPs as logged out so the request fails early.
+  test_permission_delegate_
+      ->idp_signin_statuses_[OriginFromString(kProviderUrlFull)] = false;
+  test_permission_delegate_
+      ->idp_signin_statuses_[OriginFromString(kProviderTwoUrlFull)] = false;
+
+  RequestExpectations expectations = {
+      RequestTokenStatus::kError, FederatedAuthRequestResult::kError,
+      /*standalone_console_message=*/std::nullopt,
+      /*selected_idp_config_url=*/std::nullopt};
+
+  request_remote_.set_disconnect_handler(auth_helper_.quit_closure());
+
+  RunAuthDontWaitForCallback(kDefaultMultiIdpRequestParameters,
+                             kConfigurationMultiIdpValid);
+  base::RunLoop().RunUntilIdle();
+  // The callback must be delayed.
+  EXPECT_FALSE(auth_helper_.was_callback_called());
+  WaitForCurrentAuthRequest();
+  CheckAuthExpectations(kConfigurationMultiIdpValid, expectations);
+}
+
 TEST_F(FederatedAuthRequestImplTest, TooManyRequests) {
   base::RunLoop ukm_loop;
   ukm_recorder()->SetOnAddEntryCallback(FedCmEntry::kEntryName,
@@ -4798,6 +4790,9 @@ TEST_F(FederatedAuthRequestImplTest, LoginHintLastAccountMatch) {
   histogram_tester_.ExpectUniqueSample(
       "Blink.FedCm.LoginHint.NumMatchingAccounts",
       FedCmMetrics::NumAccounts::kOne, 1);
+  histogram_tester_.ExpectUniqueSample("Blink.FedCm.AccountsSize.Raw", 3, 1);
+  histogram_tester_.ExpectUniqueSample("Blink.FedCm.AccountsSize.ReadyToShow",
+                                       1, 1);
 }
 
 TEST_F(FederatedAuthRequestImplTest, LoginHintMultipleAccountsNoMatch) {
@@ -4820,6 +4815,8 @@ TEST_F(FederatedAuthRequestImplTest, LoginHintMultipleAccountsNoMatch) {
   histogram_tester_.ExpectUniqueSample(
       "Blink.FedCm.LoginHint.NumMatchingAccounts",
       FedCmMetrics::NumAccounts::kZero, 1);
+  histogram_tester_.ExpectUniqueSample("Blink.FedCm.AccountsSize.Raw", 3, 1);
+  histogram_tester_.ExpectTotalCount("Blink.FedCm.AccountsSize.ReadyToShow", 0);
 }
 
 TEST_F(FederatedAuthRequestImplTest, DomainHintDisabled) {
@@ -4930,6 +4927,8 @@ TEST_F(FederatedAuthRequestImplTest, DomainHintSingleAccountNoMatch) {
   histogram_tester_.ExpectUniqueSample(
       "Blink.FedCm.DomainHint.NumMatchingAccounts",
       FedCmMetrics::NumAccounts::kZero, 1);
+  histogram_tester_.ExpectUniqueSample("Blink.FedCm.AccountsSize.Raw", 1, 1);
+  histogram_tester_.ExpectTotalCount("Blink.FedCm.AccountsSize.ReadyToShow", 0);
 }
 
 TEST_F(FederatedAuthRequestImplTest, DomainHintNoMatch) {
@@ -4971,6 +4970,9 @@ TEST_F(FederatedAuthRequestImplTest, DomainHintMultipleAccountsSingleMatch) {
   histogram_tester_.ExpectUniqueSample(
       "Blink.FedCm.DomainHint.NumMatchingAccounts",
       FedCmMetrics::NumAccounts::kOne, 1);
+  histogram_tester_.ExpectUniqueSample("Blink.FedCm.AccountsSize.Raw", 3, 1);
+  histogram_tester_.ExpectUniqueSample("Blink.FedCm.AccountsSize.ReadyToShow",
+                                       1, 1);
 }
 
 TEST_F(FederatedAuthRequestImplTest,
@@ -4993,6 +4995,9 @@ TEST_F(FederatedAuthRequestImplTest,
   histogram_tester_.ExpectUniqueSample(
       "Blink.FedCm.DomainHint.NumMatchingAccounts",
       FedCmMetrics::NumAccounts::kMultiple, 1);
+  histogram_tester_.ExpectUniqueSample("Blink.FedCm.AccountsSize.Raw", 3, 1);
+  histogram_tester_.ExpectUniqueSample("Blink.FedCm.AccountsSize.ReadyToShow",
+                                       2, 1);
 }
 
 TEST_F(FederatedAuthRequestImplTest, DomainHintMultipleAccountsStar) {
@@ -5237,16 +5242,11 @@ TEST_F(FederatedAuthRequestImplTest, SuccessfulAuthZRequestWithPopUpWindow) {
   auto impl = federated_auth_request_impl_;
   EXPECT_CALL(*weak_dialog_controller, ShowModalDialog(_, _))
       .WillOnce(::testing::WithArg<0>([&modal, &impl](const GURL& url) {
-        impl->NotifyResolve("an-access-token");
+        impl->OnResolve(GURL(kProviderUrlFull), "an-access-token");
         return modal.get();
       }));
 
-  RequestExpectations success = {RequestTokenStatus::kSuccess,
-                                 FederatedAuthRequestResult::kSuccess,
-                                 /*standalone_console_message=*/std::nullopt,
-                                 /*selected_idp_config_url=*/std::nullopt};
-
-  RunAuthTest(parameters, success, config);
+  RunAuthTest(parameters, kExpectationSuccess, config);
 
   // When the authorization is delegated and the feature is enabled
   // we don't fetch the client metadata endpoint (which is used to
@@ -5292,8 +5292,7 @@ TEST_F(FederatedAuthRequestImplTest,
 // Test button flow failure outside of user activation.
 TEST_F(FederatedAuthRequestImplTest, ButtonFlowRequiresUserActivation) {
   base::test::ScopedFeatureList list;
-  list.InitWithFeatures(
-      {features::kFedCmAuthz, features::kFedCmIdpSigninStatusEnabled}, {});
+  list.InitAndEnableFeature(features::kFedCmButtonMode);
 
   test_permission_delegate_
       ->idp_signin_statuses_[OriginFromString(kProviderUrlFull)] = false;
@@ -5308,9 +5307,137 @@ TEST_F(FederatedAuthRequestImplTest, ButtonFlowRequiresUserActivation) {
                                /*standalone_console_message=*/std::nullopt,
                                /*selected_idp_config_url=*/std::nullopt};
 
-  RunAuthTest(parameters, error, kConfigurationValid);
+  // Button flow request gets rejected without delay.
+  RunAuthDontWaitForCallback(parameters, kConfigurationValid);
+  CheckAuthExpectations(kConfigurationValid, error);
 
   EXPECT_FALSE(DidFetchAnyEndpoint());
+}
+
+// Test the button flow request fails without delay if IdP config is wrong.
+TEST_F(FederatedAuthRequestImplTest, ButtonFlowWellKnownNotInList) {
+  base::test::ScopedFeatureList list;
+  list.InitAndEnableFeature(features::kFedCmButtonMode);
+
+  RequestExpectations request_not_in_list = {
+      RequestTokenStatus::kError,
+      FederatedAuthRequestResult::kErrorConfigNotInWellKnown,
+      /*standalone_console_message=*/std::nullopt,
+      /*selected_idp_config_url=*/std::nullopt};
+
+  const char* idp_config_url =
+      kDefaultRequestParameters.identity_providers[0].provider;
+  const char* kWellKnownMismatchConfigUrl = "https://mismatch.example";
+  EXPECT_NE(std::string(idp_config_url), kWellKnownMismatchConfigUrl);
+
+  MockConfiguration config = kConfigurationValid;
+  config.idp_info[idp_config_url].well_known = {
+      {kWellKnownMismatchConfigUrl}, {ParseStatus::kSuccess, net::HTTP_OK}};
+
+  RequestParameters parameters = kDefaultRequestParameters;
+  parameters.rp_mode = blink::mojom::RpMode::kButton;
+
+  static_cast<TestRenderFrameHost*>(web_contents()->GetPrimaryMainFrame())
+      ->SimulateUserActivation();
+
+  // Button flow request gets rejected without delay.
+  RunAuthDontWaitForCallback(parameters, config);
+  CheckAuthExpectations(config, request_not_in_list);
+
+  EXPECT_TRUE(DidFetchWellKnownAndConfig());
+  EXPECT_FALSE(DidFetch(FetchedEndpoint::ACCOUNTS));
+}
+
+TEST_F(FederatedAuthRequestImplTest, ButtonFlowWithUnknownLoginStatus) {
+  base::test::ScopedFeatureList list;
+  list.InitAndEnableFeature(features::kFedCmButtonMode);
+
+  url::Origin kIdpOrigin = OriginFromString(kProviderUrlFull);
+  MockConfiguration configuration = kConfigurationValid;
+  configuration.idp_info[kProviderUrlFull].accounts_response.parse_status =
+      ParseStatus::kInvalidResponseError;
+
+  // Check that the LoginStatus is "unknown".
+  EXPECT_EQ(test_permission_delegate_->idp_signin_statuses_.count(kIdpOrigin),
+            0u);
+
+  auto dialog_controller =
+      std::make_unique<TestDialogController>(configuration);
+  base::WeakPtr<TestDialogController> weak_dialog_controller =
+      dialog_controller->AsWeakPtr();
+  SetDialogController(std::move(dialog_controller));
+
+  // Check that the pop-up window is displayed.
+  EXPECT_CALL(*weak_dialog_controller, ShowModalDialog(_, _))
+      .WillOnce(Return(nullptr));
+
+  RequestParameters parameters = kDefaultRequestParameters;
+  parameters.rp_mode = blink::mojom::RpMode::kButton;
+
+  static_cast<TestRenderFrameHost*>(web_contents()->GetPrimaryMainFrame())
+      ->SimulateUserActivation();
+
+  RunAuthDontWaitForCallback(parameters, configuration);
+}
+
+// Test that button flow can skip the mismatch UI.
+TEST_F(FederatedAuthRequestImplTest, ButtonFlowSkipsMismatchUI) {
+  base::test::ScopedFeatureList list;
+  list.InitAndEnableFeature(features::kFedCmButtonMode);
+
+  test_permission_delegate_
+      ->idp_signin_statuses_[OriginFromString(kProviderUrlFull)] = true;
+  MockConfiguration configuration = kConfigurationValid;
+  configuration.idp_info[kProviderUrlFull].accounts_response.parse_status =
+      ParseStatus::kInvalidResponseError;
+
+  auto dialog_controller =
+      std::make_unique<TestDialogController>(configuration);
+  base::WeakPtr<TestDialogController> weak_dialog_controller =
+      dialog_controller->AsWeakPtr();
+  SetDialogController(std::move(dialog_controller));
+  // Check that the pop-up window is displayed.
+  EXPECT_CALL(*weak_dialog_controller, ShowModalDialog(_, _))
+      .WillOnce(Return(nullptr));
+
+  RequestParameters parameters = kDefaultRequestParameters;
+  parameters.rp_mode = blink::mojom::RpMode::kButton;
+  static_cast<TestRenderFrameHost*>(web_contents()->GetPrimaryMainFrame())
+      ->SimulateUserActivation();
+
+  RunAuthDontWaitForCallback(parameters, configuration);
+
+  EXPECT_TRUE(DidFetch(FetchedEndpoint::ACCOUNTS));
+  EXPECT_FALSE(did_show_idp_signin_status_mismatch_dialog());
+}
+
+// Test that button flow shows the loading dialog.
+TEST_F(FederatedAuthRequestImplTest, ButtonFlowShowsLoadingUI) {
+  ExpectSuccessfulButtonFlow();
+  EXPECT_TRUE(dialog_controller_state_.did_show_loading_dialog);
+}
+
+// Test dismissing a button flow through the loading UI.
+TEST_F(FederatedAuthRequestImplTest, ButtonFlowDismissLoadingUI) {
+  base::test::ScopedFeatureList list;
+  list.InitAndEnableFeature(features::kFedCmButtonMode);
+
+  static_cast<TestRenderFrameHost*>(web_contents()->GetPrimaryMainFrame())
+      ->SimulateUserActivation();
+
+  RequestParameters parameters = kDefaultRequestParameters;
+  parameters.rp_mode = blink::mojom::RpMode::kButton;
+
+  RequestExpectations expectations = {
+      RequestTokenStatus::kError, FederatedAuthRequestResult::kError,
+      /*standalone_console_message=*/std::nullopt,
+      /*selected_idp_config_url=*/std::nullopt};
+
+  MockConfiguration configuration = kConfigurationValid;
+  configuration.loading_dialog_action = LoadingDialogAction::kClose;
+
+  RunAuthTest(parameters, expectations, configuration);
+  EXPECT_TRUE(dialog_controller_state_.did_show_loading_dialog);
 }
 
 TEST_F(FederatedAuthRequestImplTest, CloseModalDialogView) {
@@ -5379,8 +5506,7 @@ class FederatedAuthRequestImplNewTabTest : public FederatedAuthRequestImplTest {
     test_auto_reauthn_permission_delegate_ =
         std::make_unique<TestAutoReauthnPermissionDelegate>();
     test_identity_registry_ = std::make_unique<TestIdentityRegistry>(
-        web_contents(), /*delegate=*/nullptr,
-        url::Origin::Create(GURL(kIdpUrl)));
+        web_contents(), /*delegate=*/nullptr, GURL(kIdpUrl));
 
     static_cast<TestWebContents*>(web_contents())
         ->NavigateAndCommit(GURL("chrome://newtab/"), ui::PAGE_TRANSITION_LINK);
@@ -5695,7 +5821,7 @@ TEST_F(FederatedAuthRequestImplTest, RecordNumRequestsPerDocumentMetric) {
 
   // Check for RP-keyed UKM presence.
   ExpectUKMPresenceInternal("NumRequestsPerDocument", FedCmEntry::kEntryName);
-  CheckAllFedCmSessionIDs();
+  CheckAllFedCmSessionIDs(2u);
 }
 
 // Test that an error dialog is shown when the token response is invalid.
@@ -5904,9 +6030,9 @@ TEST_F(FederatedAuthRequestImplTest, IdpSigninStatusClosePopupEmbargo) {
 
 // Test that no registered IdP is added without a registry requested.
 TEST_F(FederatedAuthRequestImplTest, MaybeAddRegisteredProvidersEmptyList) {
-  std::vector<blink::mojom::IdentityProviderPtr> providers;
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> providers;
 
-  std::vector<blink::mojom::IdentityProviderPtr> result =
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> result =
       MaybeAddRegisteredProviders(providers);
 
   EXPECT_TRUE(result.empty());
@@ -5914,14 +6040,14 @@ TEST_F(FederatedAuthRequestImplTest, MaybeAddRegisteredProvidersEmptyList) {
 
 // Test that no registered IdP with only named providers requested.
 TEST_F(FederatedAuthRequestImplTest, MaybeAddRegisteredProvidersNamed) {
-  std::vector<blink::mojom::IdentityProviderPtr> providers;
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> providers;
   providers.emplace_back(NewNamedIdP(GURL("https://idp.example"), kClientId));
 
-  std::vector<blink::mojom::IdentityProviderPtr> result =
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> result =
       MaybeAddRegisteredProviders(providers);
 
   // Expects the vector to be the same.
-  std::vector<blink::mojom::IdentityProviderPtr> expected;
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> expected;
   expected.emplace_back(NewNamedIdP(GURL("https://idp.example"), kClientId));
 
   EXPECT_EQ(expected, result);
@@ -5929,7 +6055,7 @@ TEST_F(FederatedAuthRequestImplTest, MaybeAddRegisteredProvidersNamed) {
 
 // Test that a registered provider is added.
 TEST_F(FederatedAuthRequestImplTest, MaybeAddRegisteredProvidersAdded) {
-  std::vector<blink::mojom::IdentityProviderPtr> providers;
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> providers;
   providers.emplace_back(NewRegisteredIdP(kClientId));
 
   std::vector<GURL> registry;
@@ -5938,11 +6064,11 @@ TEST_F(FederatedAuthRequestImplTest, MaybeAddRegisteredProvidersAdded) {
   EXPECT_CALL(*test_permission_delegate_, GetRegisteredIdPs())
       .WillOnce(Return(registry));
 
-  std::vector<blink::mojom::IdentityProviderPtr> result =
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> result =
       MaybeAddRegisteredProviders(providers);
 
   // Expects that the registered IdP gets replaced by a named IdP.
-  std::vector<blink::mojom::IdentityProviderPtr> expected;
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> expected;
   expected.emplace_back(NewNamedIdP(GURL("https://idp.example"), kClientId));
 
   EXPECT_EQ(expected, result);
@@ -5951,7 +6077,7 @@ TEST_F(FederatedAuthRequestImplTest, MaybeAddRegisteredProvidersAdded) {
 // Test that all registered IdPs are expanded.
 TEST_F(FederatedAuthRequestImplTest,
        MaybeAddRegisteredProvidersAllRequestsForRegisteredIdPsAreExpanded) {
-  std::vector<blink::mojom::IdentityProviderPtr> providers;
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> providers;
   providers.emplace_back(NewRegisteredIdP(kClientId));
   providers.emplace_back(NewRegisteredIdP(kClientId));
 
@@ -5961,11 +6087,11 @@ TEST_F(FederatedAuthRequestImplTest,
   EXPECT_CALL(*test_permission_delegate_, GetRegisteredIdPs())
       .WillOnce(Return(registry));
 
-  std::vector<blink::mojom::IdentityProviderPtr> result =
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> result =
       MaybeAddRegisteredProviders(providers);
 
   // Expects that the registered IdP gets replaced by a named IdP.
-  std::vector<blink::mojom::IdentityProviderPtr> expected;
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> expected;
   expected.emplace_back(NewNamedIdP(GURL("https://idp.example"), kClientId));
   expected.emplace_back(NewNamedIdP(GURL("https://idp.example"), kClientId));
 
@@ -5975,7 +6101,7 @@ TEST_F(FederatedAuthRequestImplTest,
 // Test that the registry can add two idps.
 TEST_F(FederatedAuthRequestImplTest,
        MaybeAddRegisteredProvidersTwoRegisteredIdPs) {
-  std::vector<blink::mojom::IdentityProviderPtr> providers;
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> providers;
   providers.emplace_back(NewRegisteredIdP(kClientId));
 
   std::vector<GURL> registry;
@@ -5985,10 +6111,10 @@ TEST_F(FederatedAuthRequestImplTest,
   EXPECT_CALL(*test_permission_delegate_, GetRegisteredIdPs())
       .WillOnce(Return(registry));
 
-  std::vector<blink::mojom::IdentityProviderPtr> result =
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> result =
       MaybeAddRegisteredProviders(providers);
 
-  std::vector<blink::mojom::IdentityProviderPtr> expected;
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> expected;
   expected.emplace_back(NewNamedIdP(GURL("https://idp2.example"), kClientId));
   expected.emplace_back(NewNamedIdP(GURL("https://idp1.example"), kClientId));
 
@@ -5998,7 +6124,7 @@ TEST_F(FederatedAuthRequestImplTest,
 // Test that registered idps are inserted inline.
 TEST_F(FederatedAuthRequestImplTest,
        MaybeAddRegisteredProvidersInsertedInline) {
-  std::vector<blink::mojom::IdentityProviderPtr> providers;
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> providers;
   providers.emplace_back(NewNamedIdP(GURL("https://idp1.example"), kClientId));
   providers.emplace_back(NewRegisteredIdP(kClientId));
   providers.emplace_back(NewNamedIdP(GURL("https://idp2.example"), kClientId));
@@ -6010,11 +6136,11 @@ TEST_F(FederatedAuthRequestImplTest,
   EXPECT_CALL(*test_permission_delegate_, GetRegisteredIdPs())
       .WillOnce(Return(registry));
 
-  std::vector<blink::mojom::IdentityProviderPtr> result =
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> result =
       MaybeAddRegisteredProviders(providers);
 
   // Expects that the registered IdP gets replaced by a named IdP.
-  std::vector<blink::mojom::IdentityProviderPtr> expected;
+  std::vector<blink::mojom::IdentityProviderRequestOptionsPtr> expected;
   expected.emplace_back(NewNamedIdP(GURL("https://idp1.example"), kClientId));
   expected.emplace_back(
       NewNamedIdP(GURL("https://idp-registered2.example"), kClientId));
@@ -6408,10 +6534,11 @@ TEST_F(FederatedAuthRequestImplTest, AutoReauthnInButtonMode) {
 
   std::unique_ptr<IdpNetworkRequestManagerParamChecker> checker =
       std::make_unique<IdpNetworkRequestManagerParamChecker>();
-  checker->SetExpectedTokenPostData(
-      "client_id=" + std::string(kClientId) + "&nonce=" + std::string(kNonce) +
-      "&account_id=" + std::string(kAccountId) +
-      "&disclosure_text_shown=false" + "&is_auto_selected=true");
+  checker->SetExpectedTokenPostData("client_id=" + std::string(kClientId) +
+                                    "&nonce=" + std::string(kNonce) +
+                                    "&account_id=" + std::string(kAccountId) +
+                                    "&disclosure_text_shown=false" +
+                                    "&is_auto_selected=true" + "&mode=button");
   SetNetworkRequestManager(std::move(checker));
 
   static_cast<TestRenderFrameHost*>(web_contents()->GetPrimaryMainFrame())
@@ -6527,6 +6654,42 @@ TEST_F(FederatedAuthRequestImplTest, ButtonFlowNotAffectEmbargo) {
       main_test_rfh()->GetLastCommittedOrigin()));
 }
 
+// Tests that when background text is passed but no background color, the
+// background text is ignored.
+TEST_F(FederatedAuthRequestImplTest,
+       BrandingWithTextColorAndNoBackgroundColor) {
+  MockConfiguration configuration = kConfigurationValid;
+  configuration.idp_info[kProviderUrlFull].config.brand_text_color =
+      SkColorSetRGB(10, 10, 10);
+  RequestExpectations expectations = kExpectationSuccess;
+  expectations.standalone_console_message =
+      "The FedCM text color is ignored because background color was not "
+      "provided";
+  RunAuthTest(kDefaultRequestParameters, expectations, configuration);
+
+  EXPECT_EQ(brand_background_color(), std::nullopt);
+  EXPECT_EQ(brand_text_color(), std::nullopt);
+}
+
+// Tests that when background text does not contrast enough with the background
+// color, the text color is ignored.
+TEST_F(FederatedAuthRequestImplTest,
+       BrandingWithInsufficientContrastTextColor) {
+  MockConfiguration configuration = kConfigurationValid;
+  configuration.idp_info[kProviderUrlFull].config.brand_background_color =
+      SkColorSetRGB(0, 0, 0);
+  configuration.idp_info[kProviderUrlFull].config.brand_text_color =
+      SkColorSetRGB(1, 1, 1);
+  RequestExpectations expectations = kExpectationSuccess;
+  expectations.standalone_console_message =
+      "The FedCM text color is ignored because it does not contrast enough "
+      "with the provided background color";
+  RunAuthTest(kDefaultRequestParameters, expectations, configuration);
+
+  EXPECT_EQ(brand_background_color(), SkColorSetRGB(0, 0, 0));
+  EXPECT_EQ(brand_text_color(), std::nullopt);
+}
+
 class FederatedAuthRequestExampleOrgTest : public FederatedAuthRequestImplTest {
  public:
   FederatedAuthRequestExampleOrgTest()
@@ -6563,6 +6726,51 @@ TEST_F(FederatedAuthRequestExampleOrgTest, WellKnownSameSiteFlag) {
   expectation.selected_idp_config_url = kExampleOrgProviderUrl;
 
   RunAuthTest(request, expectation, configuration);
+}
+
+class TestDialogControllerWithImmediateDismiss : public TestDialogController {
+ public:
+  explicit TestDialogControllerWithImmediateDismiss(
+      MockConfiguration configuration)
+      : TestDialogController(configuration) {}
+
+  ~TestDialogControllerWithImmediateDismiss() override = default;
+
+  TestDialogControllerWithImmediateDismiss(
+      const TestDialogControllerWithImmediateDismiss&) = delete;
+  TestDialogControllerWithImmediateDismiss& operator=(
+      TestDialogControllerWithImmediateDismiss&) = delete;
+
+  void ShowAccountsDialog(
+      const std::string& top_frame_for_display,
+      const std::optional<std::string>& iframe_for_display,
+      const std::vector<IdentityProviderData>& identity_provider_data,
+      IdentityRequestAccount::SignInMode sign_in_mode,
+      blink::mojom::RpMode rp_mode,
+      const std::optional<content::IdentityProviderData>& new_account_idp,
+      IdentityRequestDialogController::AccountSelectionCallback on_selected,
+      IdentityRequestDialogController::LoginToIdPCallback on_add_account,
+      IdentityRequestDialogController::DismissCallback dismiss_callback,
+      IdentityRequestDialogController::AccountsDisplayedCallback
+          accounts_displayed_callback) override {
+    std::move(dismiss_callback).Run(DismissReason::kOther);
+  }
+};
+
+// Crash test for crbug.com/328945371.
+TEST_F(FederatedAuthRequestImplTest, ImmediateDismiss) {
+  RequestExpectations expectations = {
+      RequestTokenStatus::kError, FederatedAuthRequestResult::kError,
+      /*standalone_console_message=*/std::nullopt,
+      /*selected_idp_config_url=*/std::nullopt};
+
+  SetDialogController(
+      std::make_unique<TestDialogControllerWithImmediateDismiss>(
+          kConfigurationValid));
+
+  RunAuthTest(kDefaultRequestParameters, expectations, kConfigurationValid);
+  histogram_tester_.ExpectTotalCount(
+      "Blink.FedCm.Timing.AccountsDialogShownDuration2", 0);
 }
 
 }  // namespace content

@@ -182,6 +182,34 @@ Examples
   gn gen //out/Default --root-target="//third_party/grpc"
 )";
 
+const char kRootPattern[] = "root-pattern";
+const char kRootPattern_HelpShort[] =
+    "--root-pattern: Add root pattern override.";
+const char kRootPattern_Help[] =
+    R"(--root-pattern: Add root pattern override.
+
+  The root patterns is a list of label patterns used to control which
+  targets are defined when evaluating BUILD.gn files in the default toolchain.
+
+  The list is empty by default, meaning that all targets defined in all
+  BUILD.gn files evaluated in the default toolchain will be added to the
+  final GN build graph (GN's default behavior for historical reasons).
+
+  When this list is not empty, only targets matching any of the root patterns,
+  as well as their transitive dependencies, will be defined in the default
+  toolchain instead. This is a way to restrict the size of the final build graph
+  for projects with a very large number of target definitions per BUILD.gn file.
+
+  Using --root-pattern overrides the root_patterns value specified in the .gn file.
+
+  The argument must be a GN label pattern, and each --root-pattern=<pattern>
+  on the command-line will append a pattern to the list.
+
+Example
+
+  gn gen //out/Default --root-pattern="//:*"
+)";
+
 const char kRuntimeDepsListFile[] = "runtime-deps-list-file";
 const char kRuntimeDepsListFile_HelpShort[] =
     "--runtime-deps-list-file: Save runtime dependencies for targets in file.";

@@ -15,7 +15,7 @@ thread_local MsgLoop* g_current;
 __tlssim<MsgLoop*> __g_current_impl(nullptr);
 #define g_current (*__g_current_impl.access())
 #endif
-}
+}  // namespace
 
 MsgLoop::MsgLoop() {
   DCHECK(g_current == nullptr);

@@ -54,6 +54,7 @@ import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelega
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate.SelectionObserver;
 import org.chromium.components.commerce.core.CommerceSubscription;
 import org.chromium.components.commerce.core.ShoppingService;
+import org.chromium.components.commerce.core.SubscriptionsObserver;
 import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.power_bookmarks.PowerBookmarkMeta;
@@ -410,6 +411,48 @@ class BookmarkManagerMediator
                 }
             };
 
+    private final SubscriptionsObserver mSubscriptionsObserver =
+            new SubscriptionsObserver() {
+                @Override
+                public void onSubscribe(CommerceSubscription subscription, boolean succeeded) {
+                    // Bookmark updates are pushed prior to subscriptions being updated, so we can
+                    // safely check the folder for product items before initiating a full refresh of
+                    // the list. The same applies for the unsubscribe event below.
+                    if (hasShoppingItems(mModelList)) {
+                        mPendingRefresh.post();
+                    }
+                }
+
+                @Override
+                public void onUnsubscribe(CommerceSubscription subscription, boolean succeeded) {
+                    if (hasShoppingItems(mModelList)) {
+                        mPendingRefresh.post();
+                    }
+                }
+
+                private static boolean hasShoppingItems(ModelList list) {
+                    for (ListItem item : list) {
+                        if (isShoppingItem(item)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                private static boolean isShoppingItem(ListItem item) {
+                    if (!item.model.containsKey(BookmarkManagerProperties.BOOKMARK_LIST_ENTRY)
+                            || item.model.get(BookmarkManagerProperties.BOOKMARK_LIST_ENTRY)
+                                    == null) {
+                        return false;
+                    }
+                    PowerBookmarkMeta meta =
+                            item.model
+                                    .get(BookmarkManagerProperties.BOOKMARK_LIST_ENTRY)
+                                    .getPowerBookmarkMeta();
+                    return meta != null && meta.hasShoppingSpecifics();
+                }
+            };
+
     private final ObserverList<BookmarkUiObserver> mUiObservers = new ObserverList<>();
     private final BookmarkDragStateDelegate mDragStateDelegate = new BookmarkDragStateDelegate();
     private final Context mContext;
@@ -443,6 +486,7 @@ class BookmarkManagerMediator
     private final PendingRunnable mPendingRefresh =
             new PendingRunnable(
                     TaskTraits.UI_DEFAULT, mCallbackController.makeCancelable(this::refresh));
+    private final BookmarkMoveSnackbarManager mBookmarkMoveSnackbarManager;
 
     // Whether this instance has been destroyed.
     private boolean mIsDestroyed;
@@ -480,7 +524,8 @@ class BookmarkManagerMediator
             BookmarkImageFetcher bookmarkImageFetcher,
             ShoppingService shoppingService,
             SnackbarManager snackbarManager,
-            Consumer<OnScrollListener> onScrollListenerConsumer) {
+            Consumer<OnScrollListener> onScrollListenerConsumer,
+            BookmarkMoveSnackbarManager bookmarkMoveSnackbarManager) {
         mContext = context;
         mBookmarkModel = bookmarkModel;
         mBookmarkModel.addObserver(mBookmarkModelObserver);
@@ -510,6 +555,11 @@ class BookmarkManagerMediator
                 new BookmarkPromoHeader(
                         mContext, mProfile.getOriginalProfile(), this::updateHeader);
         mBookmarkUndoController = bookmarkUndoController;
+        mBookmarkMoveSnackbarManager = bookmarkMoveSnackbarManager;
+
+        if (mShoppingService.isShoppingListEligible()) {
+            mShoppingService.addSubscriptionsObserver(mSubscriptionsObserver);
+        }
 
         if (BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) {
             mBookmarkQueryHandler =
@@ -520,7 +570,8 @@ class BookmarkManagerMediator
                     new LegacyBookmarkQueryHandler(
                             mBookmarkModel,
                             bookmarkUiPrefs,
-                            SyncServiceFactory.getForProfile(mProfile.getOriginalProfile()));
+                            SyncServiceFactory.getForProfile(mProfile.getOriginalProfile()),
+                            mShoppingService);
         }
 
         if (BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) {
@@ -598,6 +649,11 @@ class BookmarkManagerMediator
         mCallbackController.destroy();
 
         mBookmarkUiPrefs.removeObserver(mBookmarkUiPrefsObserver);
+        mBookmarkMoveSnackbarManager.destroy();
+
+        if (mShoppingService != null && mShoppingService.isShoppingListEligible()) {
+            mShoppingService.removeSubscriptionsObserver(mSubscriptionsObserver);
+        }
 
         for (BookmarkUiObserver observer : mUiObservers) {
             observer.onDestroy();
@@ -703,6 +759,10 @@ class BookmarkManagerMediator
     }
 
     public boolean isReorderable(BookmarkListEntry entry) {
+        if (!mCurrentPowerFilter.isEmpty()) {
+            return false;
+        }
+
         return entry != null
                 && entry.getBookmarkItem() != null
                 && entry.getBookmarkItem().isReorderable();
@@ -1429,7 +1489,7 @@ class BookmarkManagerMediator
         listItems.add(buildMenuListItem(R.string.bookmark_item_move, 0, 0, canMove));
         listItems.add(buildMenuListItem(R.string.bookmark_item_delete, 0, 0));
 
-        boolean canReorder = bookmarkItem != null && bookmarkItem.isReorderable();
+        boolean canReorder = isReorderable(entry);
         if (getCurrentUiMode() == BookmarkUiMode.SEARCHING) {
             listItems.add(buildMenuListItem(R.string.bookmark_show_in_folder, 0, 0));
         } else if (getCurrentUiMode() == BookmarkUiMode.FOLDER
@@ -1496,7 +1556,8 @@ class BookmarkManagerMediator
                         RecordUserAction.record("Android.BookmarkPage.ReadingList.MarkAsUnread");
                     } else if (textId == R.string.bookmark_item_move) {
                         if (BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) {
-                            BookmarkUtils.startFolderPickerActivity(mContext, bookmarkId);
+                            mBookmarkMoveSnackbarManager.startFolderPickerAndObserveResult(
+                                    bookmarkId);
                         } else {
                             BookmarkFolderSelectActivity.startFolderSelectActivity(
                                     mContext, bookmarkId);
@@ -1722,12 +1783,9 @@ class BookmarkManagerMediator
     private void updateSearchBoxShoppingFilterVisibility(PropertyModel searchBoxPropertyModel) {
         // We purposefully hide the shopping filter in reading list even though search is
         // global to avoid confusing users.
-        // TODO(crbug.com/1501998): Add account reading list folder support here.
         boolean filterVisible =
                 mShoppingFilterAvailable
-                        && !Objects.equals(
-                                mBookmarkModel.getLocalOrSyncableReadingListFolder(),
-                                getCurrentFolderId());
+                        && !BookmarkUtils.isReadingListFolder(mBookmarkModel, getCurrentFolderId());
         searchBoxPropertyModel.set(
                 BookmarkSearchBoxRowProperties.SHOPPING_CHIP_VISIBILITY, filterVisible);
         Set<PowerBookmarkType> powerFilter = mCurrentPowerFilter;
@@ -1805,6 +1863,9 @@ class BookmarkManagerMediator
             Collections.sort(entries, new Comparator<BookmarkListEntry>() {
                 @Override
                 public int compare(BookmarkListEntry entry, BookmarkListEntry t1) {
+                    if (entry.getBookmarkItem().isFolder() !=
+                        t1.getBookmarkItem().isFolder())
+                        return entry.getBookmarkItem().isFolder() ? -1 : 1;
                     switch (sortOrder) {
                         case TITLE:
                             return entry.getBookmarkItem().getTitle()

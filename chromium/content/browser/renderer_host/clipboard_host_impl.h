@@ -18,6 +18,7 @@
 #include "build/build_config.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/clipboard_types.h"
 #include "content/public/browser/document_service.h"
 #include "mojo/public/cpp/base/big_buffer.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -33,6 +34,23 @@ class ScopedClipboardWriter;
 namespace content {
 
 class ClipboardHostImplTest;
+
+// Returns a representation of the last source ClipboardEndpoint. This will
+// either match the last clipboard write if `seqno` matches the last browser tab
+// write, or an endpoint built from `Clipboard::GetSource()` called with
+// `clipboard_buffer` otherwise.
+//
+// //content maintains additional metadata on top of what the //ui layer already
+// tracks about clipboard data's source, e.g. the WebContents that provided the
+// data. This function allows retrieving both the //ui metadata and the
+// //content metadata in a single call.
+//
+// To avoid returning stale //content metadata if the writer has changed, the
+// sequence number is used to validate if the writer has changed or not since
+// the //content metadata was last updated.
+CONTENT_EXPORT ClipboardEndpoint
+GetSourceClipboardEndpoint(ui::ClipboardSequenceNumberToken seqno,
+                           ui::ClipboardBuffer clipboard_buffer);
 
 class CONTENT_EXPORT ClipboardHostImpl
     : public DocumentService<blink::mojom::ClipboardHost> {
@@ -68,17 +86,22 @@ class CONTENT_EXPORT ClipboardHostImpl
     IsPasteAllowedRequest();
     ~IsPasteAllowedRequest();
 
-    // Adds |callback| to be notified when the request completes.  If the
-    // request is already completed |callback| is invoked immediately.  Returns
-    // true if a request should be started after adding this callback.
+    // Adds `callback` to be notified when the request completes. Returns true
+    // if this is the first callback added and a request should be started,
+    // returns false otherwise.
     bool AddCallback(IsClipboardPasteAllowedCallback callback);
+
+    // Merge `data` into the existing internal `data_` member so that the
+    // currently pending request will have the appropriate fields for all added
+    // callbacks, not just the initial one that created the request.
+    void AddData(ClipboardPasteData data);
 
     // Mark this request as completed with the specified result.
     // Invoke all callbacks now.
     void Complete(IsClipboardPasteAllowedCallbackArgType data);
 
     // Returns true if the request has completed.
-    bool is_complete() const { return data_.has_value(); }
+    bool is_complete() const { return data_allowed_.has_value(); }
 
     // Returns true if this request is obsolete.  An obsolete request
     // is one that is completed, all registered callbacks have been
@@ -100,9 +123,11 @@ class CONTENT_EXPORT ClipboardHostImpl
     // value is undefined.
     base::Time completed_time_;
 
-    // The data argument to pass to the IsClipboardPasteAllowedCallback.
     // This member is null until Complete() is called.
-    std::optional<IsClipboardPasteAllowedCallbackArgType> data_;
+    std::optional<bool> data_allowed_;
+
+    // The data argument to pass to the IsClipboardPasteAllowedCallback.
+    ClipboardPasteData data_;
     std::vector<IsClipboardPasteAllowedCallback> callbacks_;
   };
 
@@ -162,6 +187,7 @@ class CONTENT_EXPORT ClipboardHostImpl
                            PerformPasteIfAllowed_SameHost_NotStarted);
   FRIEND_TEST_ALL_PREFIXES(ClipboardHostImplScanTest,
                            PerformPasteIfAllowed_External_Started);
+  FRIEND_TEST_ALL_PREFIXES(ClipboardHostImplScanTest, GetSourceEndpoint);
 
   // mojom::ClipboardHost
   void GetSequenceNumber(ui::ClipboardBuffer clipboard_buffer,
@@ -212,18 +238,28 @@ class CONTENT_EXPORT ClipboardHostImpl
   bool IsRendererPasteAllowed(ui::ClipboardBuffer clipboard_buffer,
                               RenderFrameHost& render_frame_host);
 
+  // Helpers to be used when checking if data is allowed to be copied.
+  // If `replacement_data` is null, `clipboard_writer_` will be used to write
+  // the corresponding text/markup data to the clipboard. If it is not, instead
+  // write the replacement string to the clipboard as plaintext. This can be
+  // called asynchronously.
+  void OnCopyTextAllowedResult(const ClipboardPasteData& data,
+                               std::optional<std::u16string> replacement_data);
+  void OnCopyHtmlAllowedResult(const GURL& url,
+                               const ClipboardPasteData& data,
+                               std::optional<std::u16string> replacement_data);
+
   using CopyAllowedCallback = base::OnceCallback<void()>;
-  void CopyIfAllowed(size_t data_size_in_bytes, CopyAllowedCallback callback);
 
   void OnReadPng(ui::ClipboardBuffer clipboard_buffer,
                  ReadPngCallback callback,
                  const std::vector<uint8_t>& data);
 
   // Creates a `ui::DataTransferEndpoint` representing the last committed URL.
-  // Returns null if the browser context is OTR, unless `include_otr` is set to
-  // true.
-  std::unique_ptr<ui::DataTransferEndpoint> CreateDataEndpoint(
-      bool include_otr = false);
+  std::unique_ptr<ui::DataTransferEndpoint> CreateDataEndpoint();
+
+  // Creates a `content::ClipboardEndpoint` representing the last committed URL.
+  ClipboardEndpoint CreateClipboardEndpoint();
 
   std::unique_ptr<ui::ScopedClipboardWriter> clipboard_writer_;
 

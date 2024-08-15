@@ -88,10 +88,11 @@ void CPDF_SimpleFont::LoadCharMetrics(int charcode) {
   if (err)
     return;
 
-  m_CharBBox[charcode] = GetCharBBoxForFace(face);
+  m_CharBBox[charcode] = face->GetGlyphBBox();
 
   if (m_bUseFontWidth) {
-    int TT_Width = TT2PDF(FXFT_Get_Glyph_HoriAdvance(face_rec), face);
+    int TT_Width = NormalizeFontMetric(FXFT_Get_Glyph_HoriAdvance(face_rec),
+                                       face->GetUnitsPerEm());
     if (m_CharWidth[charcode] == 0xffff) {
       m_CharWidth[charcode] = TT_Width;
     } else if (TT_Width && !IsEmbedded()) {

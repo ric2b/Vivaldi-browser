@@ -8,8 +8,10 @@
 
 #include <memory>
 
+#include "ash/constants/ash_features.h"
 #include "ash/webui/shortcut_customization_ui/url_constants.h"
 #include "base/containers/fixed_flat_map.h"
+#include "base/containers/map_util.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/user_metrics.h"
@@ -118,7 +120,12 @@ void OpenBookmarkManagerForNode(Browser* browser, int64_t node_id) {
 void LaunchReleaseNotesImpl(Profile* profile, apps::LaunchSource source) {
   base::RecordAction(UserMetricsAction("ReleaseNotes.ShowReleaseNotes"));
   ash::SystemAppLaunchParams params;
-  params.url = GURL("chrome://help-app/updates");
+  params.url =
+      base::FeatureList::IsEnabled(
+          ash::features::kHelpAppOpensInsteadOfReleaseNotesNotification) &&
+              source == apps::LaunchSource::kFromReleaseNotesNotification
+          ? GURL("chrome://help-app/updates?launchSource=version-update")
+          : GURL("chrome://help-app/updates");
   params.launch_source = source;
   LaunchSystemWebAppAsync(profile, ash::SystemWebAppType::HELP, params);
 }
@@ -204,7 +211,7 @@ std::string GenerateContentSettingsExceptionsSubPage(ContentSettingsType type) {
   // will no longer be needed.
 
   static constexpr auto kSettingsPathOverrides =
-      base::MakeFixedFlatMap<ContentSettingsType, base::StringPiece>({
+      base::MakeFixedFlatMap<ContentSettingsType, std::string_view>({
           {ContentSettingsType::AUTOMATIC_DOWNLOADS, "automaticDownloads"},
           {ContentSettingsType::BACKGROUND_SYNC, "backgroundSync"},
           {ContentSettingsType::MEDIASTREAM_MIC, "microphone"},
@@ -214,14 +221,15 @@ std::string GenerateContentSettingsExceptionsSubPage(ContentSettingsType type) {
           {ContentSettingsType::HID_CHOOSER_DATA, "hidDevices"},
           {ContentSettingsType::STORAGE_ACCESS, "storageAccess"},
           {ContentSettingsType::USB_CHOOSER_DATA, "usbDevices"},
+          {ContentSettingsType::WEB_PRINTING, "webPrinting"},
       });
 
-  const auto* it = kSettingsPathOverrides.find(type);
-
-  return base::StrCat({kContentSettingsSubPage, "/",
-                       (it == kSettingsPathOverrides.end())
-                           ? site_settings::ContentSettingsTypeToGroupName(type)
-                           : it->second});
+  const std::string_view* override =
+      base::FindOrNull(kSettingsPathOverrides, type);
+  return base::StrCat(
+      {kContentSettingsSubPage, "/",
+       override ? *override
+                : site_settings::ContentSettingsTypeToGroupName(type)});
 }
 
 bool SiteGURLIsValid(const GURL& url) {
@@ -250,8 +258,6 @@ void ShowSiteSettingsImpl(Browser* browser, Profile* profile, const GURL& url) {
   Navigate(&params);
 }
 
-// TODO(crbug.com/1011533): Remove `kFileSystemAccessPersistentPermissions`
-// flag after FSA Persistent Permissions feature launch.
 // TODO(crbug.com/1011533): Add a browsertest that parallels the existing site
 // settings browsertests that open the page info button, and click through to
 // the file system site settings page for a given origin.
@@ -506,6 +512,16 @@ void ShowPasswordManager(Browser* browser) {
   }
   ShowSingletonTabIgnorePathOverwriteNTP(browser,
                                          GURL(kChromeUIPasswordManagerURL));
+}
+
+void ShowPasswordDetailsPage(Browser* browser,
+                             const std::string& password_domain_name) {
+  base::RecordAction(
+      UserMetricsAction("Options_ShowPasswordDetailsInPasswordManager"));
+  std::string url =
+      base::StrCat({kChromeUIPasswordManagerURL, "/", kPasswordManagerSubPage,
+                    "/", password_domain_name});
+  ShowSingletonTabIgnorePathOverwriteNTP(browser, GURL(url));
 }
 
 void ShowPasswordCheck(Browser* browser) {

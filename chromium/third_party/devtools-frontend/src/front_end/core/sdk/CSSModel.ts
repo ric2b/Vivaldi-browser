@@ -107,9 +107,10 @@ export class CSSModel extends SDKModel<EventTypes> {
     this.#isTrackingRequestPending = false;
     this.#stylePollingThrottler = new Common.Throttler.Throttler(StylePollingInterval);
 
-    this.#sourceMapManager.setEnabled(Common.Settings.Settings.instance().moduleSetting('cssSourceMapsEnabled').get());
+    this.#sourceMapManager.setEnabled(
+        Common.Settings.Settings.instance().moduleSetting('css-source-maps-enabled').get());
     Common.Settings.Settings.instance()
-        .moduleSetting('cssSourceMapsEnabled')
+        .moduleSetting('css-source-maps-enabled')
         .addChangeListener(event => this.#sourceMapManager.setEnabled((event.data as boolean)));
   }
 
@@ -341,6 +342,7 @@ export class CSSModel extends SDKModel<EventTypes> {
       animationsPayload: response.cssKeyframesRules || [],
       parentLayoutNodeId: response.parentLayoutNodeId,
       positionFallbackRules: response.cssPositionFallbackRules || [],
+      positionTryRules: response.cssPositionTryRules || [],
       propertyRules: response.cssPropertyRules ?? [],
       cssPropertyRegistrations: response.cssPropertyRegistrations ?? [],
       fontPaletteValuesRule: response.cssFontPaletteValuesRule,

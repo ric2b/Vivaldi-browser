@@ -7,8 +7,6 @@
 #import <UIKit/UIKit.h>
 
 #pragma mark - NOTIFICATION
-// Notification name for start page layout change
-extern NSString* vStartPageLayoutChangeDidChange;
 // Speed dial item change notification
 extern NSString* vSpeedDialPropertyDidChange;
 extern NSString* vSpeedDialIdentifierKey;
@@ -44,55 +42,6 @@ extern const CGSize vSpeedDialItemFaviconSizeListLayout;
 // Speed Dial favicon corner radius
 extern const CGFloat vSpeedDialFaviconCornerRadius;
 
-// LAYOUT --> Common
-// Speed dial container top padding
-extern const CGFloat vSDContainerTopPadding;
-// Speed dial container bottom padding
-extern const CGFloat vSDContainerBottomPadding;
-// Speed dial item height for layout style 'List'
-extern const CGFloat vSDItemHeightListLayout;
-
-// LAYOUT --> IPhone
-// Speed dial item size multiplier for iPhone 'Large' style
-extern const CGFloat vSDWidthiPhoneLarge;
-// Speed dial item size multiplier for iPhone 'Large' style landscape
-extern const CGFloat vSDWidthiPhoneLargeLand;
-// Speed dial item size multiplier for iPhone 'Medium' style
-extern const CGFloat vSDWidthiPhoneMedium;
-// Speed dial item size multiplier for iPhone 'Medium' style landscape
-extern const CGFloat vSDWidthiPhoneMediumLand;
-// Speed dial item size multiplier for iPhone 'Small' style
-extern const CGFloat vSDWidthiPhoneSmall;
-// Speed dial item size multiplier for iPhone 'Small' style landscape
-extern const CGFloat vSDWidthiPhoneSmallLand;
-// Speed dial item size multiplier for iPhone 'List' style
-extern const CGFloat vSDWidthiPhoneList;
-// Speed dial item size multiplier for iPhone 'List' style landscape
-extern const CGFloat vSDWidthiPhoneListLand;
-
-// Speed dial section padding for iPhone portrait
-extern const CGFloat vSDSectionPaddingiPhonePortrait;
-// Speed dial section padding for iPhone landscape
-extern const CGFloat vSDSectionPaddingiPhoneLandscape;
-// Speed dial item padding for iPhone
-extern const CGFloat vSDPaddingiPhone;
-
-// LAYOUT --> IPad
-// Speed dial item size multiplier for iPad 'Large' style
-extern const CGFloat vSDWidthiPadLarge;
-// Speed dial item size multiplier for iPad 'Medium' style
-extern const CGFloat vSDWidthiPadMedium;
-// Speed dial item size multiplier for iPad 'Small' style
-extern const CGFloat vSDWidthiPadSmall;
-// Speed dial item size multiplier for iPad 'List' style
-extern const CGFloat vSDWidthiPadList;
-
-// Speed dial item padding for iPad
-extern const CGFloat vSDPaddingiPad;
-// Speed dial section padding for iPad portrait
-extern const CGFloat vSDSectionPaddingiPadPortrait;
-// Speed dial section padding for iPad landscape
-extern const CGFloat vSDSectionPaddingiPadLandscape;
 
 #pragma mark - COLORS
 // Color for the shadow of the speed dial item

@@ -23,16 +23,16 @@
 #include "core/fpdfapi/parser/cpdf_dictionary.h"
 #include "core/fpdfapi/parser/cpdf_stream.h"
 #include "core/fpdfapi/parser/cpdf_stream_acc.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
 #include "core/fxcrt/fixed_size_data_vector.h"
 #include "core/fxcrt/fx_codepage.h"
 #include "core/fxcrt/fx_memory.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/fx_unicode.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxge/fx_font.h"
-#include "third_party/base/check.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/containers/span.h"
 
 namespace {
 
@@ -133,16 +133,6 @@ constexpr CIDTransform kJapan1VerticalCIDs[] = {
     {8816, 0, 129, 127, 0, 19, 114}, {8817, 0, 129, 127, 0, 19, 127},
     {8818, 0, 129, 127, 0, 19, 114}, {8819, 0, 129, 127, 0, 218, 108},
 };
-
-// Boundary value to avoid integer overflow when adding 1/64th of the value.
-constexpr int kMaxRectTop = 2114445437;
-
-int FTPosToCBoxInt(FT_Pos pos) {
-  // Boundary values to avoid integer overflow when multiplied by 1000.
-  constexpr FT_Pos kMinCBox = -2147483;
-  constexpr FT_Pos kMaxCBox = 2147483;
-  return static_cast<int>(std::clamp(pos, kMinCBox, kMaxCBox));
-}
 
 #if !BUILDFLAG(IS_WIN)
 
@@ -528,45 +518,7 @@ FX_RECT CPDF_CIDFont::GetCharBBox(uint32_t charcode) {
   int glyph_index = GlyphFromCharCode(charcode, &bVert);
   RetainPtr<CFX_Face> face = m_Font.GetFace();
   if (face) {
-    FXFT_FaceRec* face_rec = face->GetRec();
-    if (face->IsTricky()) {
-      int err = FT_Load_Glyph(face_rec, glyph_index,
-                              FT_LOAD_IGNORE_GLOBAL_ADVANCE_WIDTH);
-      if (!err) {
-        FT_Glyph glyph;
-        err = FT_Get_Glyph(face_rec->glyph, &glyph);
-        if (!err) {
-          FT_BBox cbox;
-          FT_Glyph_Get_CBox(glyph, FT_GLYPH_BBOX_PIXELS, &cbox);
-          const int xMin = FTPosToCBoxInt(cbox.xMin);
-          const int xMax = FTPosToCBoxInt(cbox.xMax);
-          const int yMin = FTPosToCBoxInt(cbox.yMin);
-          const int yMax = FTPosToCBoxInt(cbox.yMax);
-          const int pixel_size_x = face_rec->size->metrics.x_ppem;
-          const int pixel_size_y = face_rec->size->metrics.y_ppem;
-          if (pixel_size_x == 0 || pixel_size_y == 0) {
-            rect = FX_RECT(xMin, yMax, xMax, yMin);
-          } else {
-            rect =
-                FX_RECT(xMin * 1000 / pixel_size_x, yMax * 1000 / pixel_size_y,
-                        xMax * 1000 / pixel_size_x, yMin * 1000 / pixel_size_y);
-          }
-          rect.top = std::min(rect.top, static_cast<int>(face->GetAscender()));
-          rect.bottom =
-              std::max(rect.bottom, static_cast<int>(face->GetDescender()));
-          FT_Done_Glyph(glyph);
-        }
-      }
-    } else {
-      int err = FT_Load_Glyph(face_rec, glyph_index, FT_LOAD_NO_SCALE);
-      if (err == 0) {
-        rect = GetCharBBoxForFace(face);
-        if (rect.top <= kMaxRectTop)
-          rect.top += rect.top / 64;
-        else
-          rect.top = std::numeric_limits<int>::max();
-      }
-    }
+    rect = face->GetCharBBox(charcode, glyph_index);
   }
   if (!m_pFontFile && m_Charset == CIDSET_JAPAN1) {
     uint16_t cid = CIDFromCharCode(charcode);
@@ -811,7 +763,7 @@ int CPDF_CIDFont::GlyphFromCharCode(uint32_t charcode, bool* pVertGlyph) {
       return cid;
     }
 
-    absl::optional<fxge::FontEncoding> charmap =
+    std::optional<fxge::FontEncoding> charmap =
         face->GetCurrentCharMapEncoding();
     if (!charmap.has_value()) {
       return cid;

@@ -24,15 +24,757 @@
 #include "gemm-microkernel-tester.h"
 
 
+#if XNN_ENABLE_AVX512AMX && (XNN_ARCH_X86 || XNN_ARCH_X86_64)
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, k_eq_64) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    GemmMicrokernelTester()
+      .mr(7)
+      .nr(16)
+      .kr(4)
+      .m(7)
+      .n(16)
+      .k(64)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, strided_cn) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    GemmMicrokernelTester()
+      .mr(7)
+      .nr(16)
+      .kr(4)
+      .m(7)
+      .n(16)
+      .k(64)
+      .cn_stride(19)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, k_eq_64_strided_a) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    GemmMicrokernelTester()
+      .mr(7)
+      .nr(16)
+      .kr(4)
+      .m(7)
+      .n(16)
+      .k(64)
+      .a_stride(67)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, k_eq_64_subtile) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 1; n <= 16; n++) {
+      for (uint32_t m = 1; m <= 7; m++) {
+        GemmMicrokernelTester()
+          .mr(7)
+          .nr(16)
+          .kr(4)
+          .m(m)
+          .n(n)
+          .k(64)
+          .iterations(1)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, k_eq_64_subtile_m) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t m = 1; m <= 7; m++) {
+      GemmMicrokernelTester()
+        .mr(7)
+        .nr(16)
+        .kr(4)
+        .m(m)
+        .n(16)
+        .k(64)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, k_eq_64_subtile_n) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 1; n <= 16; n++) {
+      GemmMicrokernelTester()
+        .mr(7)
+        .nr(16)
+        .kr(4)
+        .m(7)
+        .n(n)
+        .k(64)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, k_lt_64) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (size_t k = 1; k < 64; k++) {
+      GemmMicrokernelTester()
+        .mr(7)
+        .nr(16)
+        .kr(4)
+        .m(7)
+        .n(16)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, k_lt_64_strided_a) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (size_t k = 1; k < 64; k++) {
+      GemmMicrokernelTester()
+        .mr(7)
+        .nr(16)
+        .kr(4)
+        .m(7)
+        .n(16)
+        .k(k)
+        .a_stride(67)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, k_lt_64_subtile) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (size_t k = 1; k < 64; k++) {
+      for (uint32_t n = 1; n <= 16; n++) {
+        for (uint32_t m = 1; m <= 7; m++) {
+          GemmMicrokernelTester()
+            .mr(7)
+            .nr(16)
+            .kr(4)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, k_gt_64) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (size_t k = 65; k < 128; k++) {
+      GemmMicrokernelTester()
+        .mr(7)
+        .nr(16)
+        .kr(4)
+        .m(7)
+        .n(16)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, k_gt_64_subtile) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (size_t k = 65; k < 128; k++) {
+      for (uint32_t n = 1; n <= 16; n++) {
+        for (uint32_t m = 1; m <= 7; m++) {
+          GemmMicrokernelTester()
+            .mr(7)
+            .nr(16)
+            .kr(4)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, k_div_64) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (size_t k = 128; k <= 640; k += 64) {
+      GemmMicrokernelTester()
+        .mr(7)
+        .nr(16)
+        .kr(4)
+        .m(7)
+        .n(16)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, k_div_64_subtile) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (size_t k = 128; k <= 640; k += 64) {
+      for (uint32_t n = 1; n <= 16; n++) {
+        for (uint32_t m = 1; m <= 7; m++) {
+          GemmMicrokernelTester()
+            .mr(7)
+            .nr(16)
+            .kr(4)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, n_gt_16) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 17; n < 32; n++) {
+      for (size_t k = 1; k <= 320; k += 65) {
+        GemmMicrokernelTester()
+          .mr(7)
+          .nr(16)
+          .kr(4)
+          .m(7)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, n_gt_16_strided_cn) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 17; n < 32; n++) {
+      for (size_t k = 1; k <= 320; k += 65) {
+        GemmMicrokernelTester()
+          .mr(7)
+          .nr(16)
+          .kr(4)
+          .m(7)
+          .n(n)
+          .k(k)
+          .cn_stride(19)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, n_gt_16_strided_a) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 17; n < 32; n++) {
+      for (size_t k = 1; k <= 320; k += 65) {
+        GemmMicrokernelTester()
+          .mr(7)
+          .nr(16)
+          .kr(4)
+          .m(7)
+          .n(n)
+          .k(k)
+          .a_stride(331)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, n_gt_16_subtile) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 17; n < 32; n++) {
+      for (size_t k = 1; k <= 320; k += 65) {
+        for (uint32_t m = 1; m <= 7; m++) {
+          GemmMicrokernelTester()
+            .mr(7)
+            .nr(16)
+            .kr(4)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, n_div_16) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 32; n <= 48; n += 16) {
+      for (size_t k = 1; k <= 320; k += 65) {
+        GemmMicrokernelTester()
+          .mr(7)
+          .nr(16)
+          .kr(4)
+          .m(7)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, n_div_16_strided_cn) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 32; n <= 48; n += 16) {
+      for (size_t k = 1; k <= 320; k += 65) {
+        GemmMicrokernelTester()
+          .mr(7)
+          .nr(16)
+          .kr(4)
+          .m(7)
+          .n(n)
+          .k(k)
+          .cn_stride(19)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, n_div_16_strided_a) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 32; n <= 48; n += 16) {
+      for (size_t k = 1; k <= 320; k += 65) {
+        GemmMicrokernelTester()
+          .mr(7)
+          .nr(16)
+          .kr(4)
+          .m(7)
+          .n(n)
+          .k(k)
+          .a_stride(331)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, n_div_16_subtile) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 32; n <= 48; n += 16) {
+      for (size_t k = 1; k <= 320; k += 65) {
+        for (uint32_t m = 1; m <= 7; m++) {
+          GemmMicrokernelTester()
+            .mr(7)
+            .nr(16)
+            .kr(4)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, strided_cm_subtile) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (size_t k = 1; k <= 320; k += 65) {
+      for (uint32_t n = 1; n <= 16; n++) {
+        for (uint32_t m = 1; m <= 7; m++) {
+          GemmMicrokernelTester()
+            .mr(7)
+            .nr(16)
+            .kr(4)
+            .m(m)
+            .n(n)
+            .k(k)
+            .cm_stride(19)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_7X16C4__AVX512AMX, strided_cm) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    GemmMicrokernelTester()
+      .mr(7)
+      .nr(16)
+      .kr(4)
+      .m(7)
+      .n(16)
+      .k(64)
+      .cm_stride(19)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_7x16c4__avx512amx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+#endif  // XNN_ENABLE_AVX512AMX && (XNN_ARCH_X86 || XNN_ARCH_X86_64)
+
+
+#if XNN_ENABLE_AVX512AMX && (XNN_ARCH_X86 || XNN_ARCH_X86_64)
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, k_eq_64) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    GemmMicrokernelTester()
+      .mr(16)
+      .nr(16)
+      .kr(4)
+      .m(16)
+      .n(16)
+      .k(64)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, strided_cn) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    GemmMicrokernelTester()
+      .mr(16)
+      .nr(16)
+      .kr(4)
+      .m(16)
+      .n(16)
+      .k(64)
+      .cn_stride(19)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, k_eq_64_strided_a) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    GemmMicrokernelTester()
+      .mr(16)
+      .nr(16)
+      .kr(4)
+      .m(16)
+      .n(16)
+      .k(64)
+      .a_stride(67)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, k_eq_64_subtile) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 1; n <= 16; n++) {
+      for (uint32_t m = 1; m <= 16; m++) {
+        GemmMicrokernelTester()
+          .mr(16)
+          .nr(16)
+          .kr(4)
+          .m(m)
+          .n(n)
+          .k(64)
+          .iterations(1)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, k_eq_64_subtile_m) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t m = 1; m <= 16; m++) {
+      GemmMicrokernelTester()
+        .mr(16)
+        .nr(16)
+        .kr(4)
+        .m(m)
+        .n(16)
+        .k(64)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, k_eq_64_subtile_n) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 1; n <= 16; n++) {
+      GemmMicrokernelTester()
+        .mr(16)
+        .nr(16)
+        .kr(4)
+        .m(16)
+        .n(n)
+        .k(64)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, k_lt_64) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (size_t k = 1; k < 64; k++) {
+      GemmMicrokernelTester()
+        .mr(16)
+        .nr(16)
+        .kr(4)
+        .m(16)
+        .n(16)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, k_lt_64_strided_a) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (size_t k = 1; k < 64; k++) {
+      GemmMicrokernelTester()
+        .mr(16)
+        .nr(16)
+        .kr(4)
+        .m(16)
+        .n(16)
+        .k(k)
+        .a_stride(67)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, k_lt_64_subtile) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (size_t k = 1; k < 64; k++) {
+      for (uint32_t n = 1; n <= 16; n++) {
+        for (uint32_t m = 1; m <= 16; m++) {
+          GemmMicrokernelTester()
+            .mr(16)
+            .nr(16)
+            .kr(4)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, k_gt_64) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (size_t k = 65; k < 128; k++) {
+      GemmMicrokernelTester()
+        .mr(16)
+        .nr(16)
+        .kr(4)
+        .m(16)
+        .n(16)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, k_gt_64_subtile) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (size_t k = 65; k < 128; k++) {
+      for (uint32_t n = 1; n <= 16; n++) {
+        for (uint32_t m = 1; m <= 16; m++) {
+          GemmMicrokernelTester()
+            .mr(16)
+            .nr(16)
+            .kr(4)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, k_div_64) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (size_t k = 128; k <= 640; k += 64) {
+      GemmMicrokernelTester()
+        .mr(16)
+        .nr(16)
+        .kr(4)
+        .m(16)
+        .n(16)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, k_div_64_subtile) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (size_t k = 128; k <= 640; k += 64) {
+      for (uint32_t n = 1; n <= 16; n++) {
+        for (uint32_t m = 1; m <= 16; m++) {
+          GemmMicrokernelTester()
+            .mr(16)
+            .nr(16)
+            .kr(4)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, n_gt_16) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 17; n < 32; n++) {
+      for (size_t k = 1; k <= 320; k += 65) {
+        GemmMicrokernelTester()
+          .mr(16)
+          .nr(16)
+          .kr(4)
+          .m(16)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, n_gt_16_strided_cn) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 17; n < 32; n++) {
+      for (size_t k = 1; k <= 320; k += 65) {
+        GemmMicrokernelTester()
+          .mr(16)
+          .nr(16)
+          .kr(4)
+          .m(16)
+          .n(n)
+          .k(k)
+          .cn_stride(19)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, n_gt_16_strided_a) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 17; n < 32; n++) {
+      for (size_t k = 1; k <= 320; k += 65) {
+        GemmMicrokernelTester()
+          .mr(16)
+          .nr(16)
+          .kr(4)
+          .m(16)
+          .n(n)
+          .k(k)
+          .a_stride(331)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, n_gt_16_subtile) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 17; n < 32; n++) {
+      for (size_t k = 1; k <= 320; k += 65) {
+        for (uint32_t m = 1; m <= 16; m++) {
+          GemmMicrokernelTester()
+            .mr(16)
+            .nr(16)
+            .kr(4)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, n_div_16) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 32; n <= 48; n += 16) {
+      for (size_t k = 1; k <= 320; k += 65) {
+        GemmMicrokernelTester()
+          .mr(16)
+          .nr(16)
+          .kr(4)
+          .m(16)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, n_div_16_strided_cn) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 32; n <= 48; n += 16) {
+      for (size_t k = 1; k <= 320; k += 65) {
+        GemmMicrokernelTester()
+          .mr(16)
+          .nr(16)
+          .kr(4)
+          .m(16)
+          .n(n)
+          .k(k)
+          .cn_stride(19)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, n_div_16_strided_a) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 32; n <= 48; n += 16) {
+      for (size_t k = 1; k <= 320; k += 65) {
+        GemmMicrokernelTester()
+          .mr(16)
+          .nr(16)
+          .kr(4)
+          .m(16)
+          .n(n)
+          .k(k)
+          .a_stride(331)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, n_div_16_subtile) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (uint32_t n = 32; n <= 48; n += 16) {
+      for (size_t k = 1; k <= 320; k += 65) {
+        for (uint32_t m = 1; m <= 16; m++) {
+          GemmMicrokernelTester()
+            .mr(16)
+            .nr(16)
+            .kr(4)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, strided_cm_subtile) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    for (size_t k = 1; k <= 320; k += 65) {
+      for (uint32_t n = 1; n <= 16; n++) {
+        for (uint32_t m = 1; m <= 16; m++) {
+          GemmMicrokernelTester()
+            .mr(16)
+            .nr(16)
+            .kr(4)
+            .m(m)
+            .n(n)
+            .k(k)
+            .cm_stride(19)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_16X16C4__AVX512AMX_PRFM, strided_cm) {
+    TEST_REQUIRES_X86_AVX512AMX;
+    GemmMicrokernelTester()
+      .mr(16)
+      .nr(16)
+      .kr(4)
+      .m(16)
+      .n(16)
+      .k(64)
+      .cm_stride(19)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+#endif  // XNN_ENABLE_AVX512AMX && (XNN_ARCH_X86 || XNN_ARCH_X86_64)
+
+
 #if XNN_ARCH_ARM && XNN_ENABLE_ASSEMBLY
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8__ASM_AARCH32_NEONV8_MLAL_LANE_CORTEX_A35_PRFM, k_eq_8) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
-      .kr(1)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(8)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8__asm_aarch32_neonv8_mlal_lane_cortex_a35_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -41,11 +783,7 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8__ASM_AARCH32_NEONV8_MLAL_LANE_CORTEX_A35_PRFM, strided_cn) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
-      .kr(1)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(8)
       .cn_stride(11)
@@ -55,11 +793,7 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8__ASM_AARCH32_NEONV8_MLAL_LANE_CORTEX_A35_PRFM, k_eq_8_strided_a) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
-      .kr(1)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(8)
       .a_stride(11)
@@ -71,10 +805,7 @@
     for (uint32_t n = 1; n <= 8; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -88,10 +819,7 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(8)
         .k(8)
@@ -104,11 +832,7 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (uint32_t n = 1; n <= 8; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(8)
         .iterations(1)
@@ -120,11 +844,7 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8__asm_aarch32_neonv8_mlal_lane_cortex_a35_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -135,11 +855,7 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .a_stride(11)
@@ -153,10 +869,7 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -171,11 +884,7 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 9; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8__asm_aarch32_neonv8_mlal_lane_cortex_a35_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -188,10 +897,7 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -206,11 +912,7 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 16; k <= 80; k += 8) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8__asm_aarch32_neonv8_mlal_lane_cortex_a35_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -223,10 +925,7 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -242,11 +941,7 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
-          .kr(1)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8__asm_aarch32_neonv8_mlal_lane_cortex_a35_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -259,11 +954,7 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
-          .kr(1)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -277,11 +968,7 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
-          .kr(1)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -296,10 +983,7 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -315,11 +999,7 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
-          .kr(1)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8__asm_aarch32_neonv8_mlal_lane_cortex_a35_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -332,11 +1012,7 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
-          .kr(1)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -350,11 +1026,7 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
-          .kr(1)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -369,10 +1041,7 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -389,10 +1058,7 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -407,11 +1073,7 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8__ASM_AARCH32_NEONV8_MLAL_LANE_CORTEX_A35_PRFM, strided_cm) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
-      .kr(1)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(8)
       .cm_stride(11)
@@ -426,8 +1088,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -439,8 +1099,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -453,8 +1111,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -469,8 +1125,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -486,8 +1140,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(8)
         .k(8)
@@ -502,8 +1154,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -518,8 +1168,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -533,8 +1181,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -551,8 +1197,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -569,8 +1213,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -586,8 +1228,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -604,8 +1244,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -621,8 +1259,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -640,8 +1276,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -657,8 +1291,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -675,8 +1307,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -694,8 +1324,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -713,8 +1341,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -730,8 +1356,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -748,8 +1372,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -767,8 +1389,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -787,8 +1407,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -805,8 +1423,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -822,8 +1438,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -835,8 +1449,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -849,8 +1461,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -865,8 +1475,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -882,8 +1490,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(8)
         .k(8)
@@ -898,8 +1504,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -914,8 +1518,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -929,8 +1531,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -947,8 +1547,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -965,8 +1563,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -982,8 +1578,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -1000,8 +1594,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -1017,8 +1609,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -1036,8 +1626,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -1053,8 +1641,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -1071,8 +1657,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -1090,8 +1674,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -1109,8 +1691,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -1126,8 +1706,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -1144,8 +1722,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -1163,8 +1739,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -1183,8 +1757,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -1201,8 +1773,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -1218,8 +1788,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -1231,8 +1799,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -1245,8 +1811,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -1261,8 +1825,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -1278,8 +1840,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(8)
         .k(8)
@@ -1294,8 +1854,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -1310,8 +1868,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -1325,8 +1881,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -1343,8 +1897,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -1361,8 +1913,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -1378,8 +1928,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -1396,8 +1944,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -1413,8 +1959,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -1432,8 +1976,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -1449,8 +1991,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -1467,8 +2007,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -1486,8 +2024,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -1505,8 +2041,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -1522,8 +2056,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -1540,8 +2072,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -1559,8 +2089,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -1579,8 +2107,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -1597,8 +2123,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -1614,8 +2138,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -1627,8 +2149,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -1641,8 +2161,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -1657,8 +2175,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -1674,8 +2190,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(8)
         .k(8)
@@ -1690,8 +2204,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -1706,8 +2218,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -1721,8 +2231,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -1739,8 +2247,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -1757,8 +2263,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -1774,8 +2278,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -1792,8 +2294,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -1809,8 +2309,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -1828,8 +2326,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -1845,8 +2341,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -1863,8 +2357,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -1882,8 +2374,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -1901,8 +2391,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -1918,8 +2406,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -1936,8 +2422,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -1955,8 +2439,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -1975,8 +2457,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -1993,8 +2473,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -2010,8 +2488,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -2023,8 +2499,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -2037,8 +2511,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -2053,8 +2525,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -2070,8 +2540,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(8)
         .k(8)
@@ -2086,8 +2554,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -2102,8 +2568,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -2117,8 +2581,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -2135,8 +2597,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -2153,8 +2613,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -2170,8 +2628,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -2188,8 +2644,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -2205,8 +2659,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -2224,8 +2676,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -2241,8 +2691,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -2259,8 +2707,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -2278,8 +2724,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -2297,8 +2741,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -2314,8 +2756,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -2332,8 +2772,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -2351,8 +2789,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -2371,8 +2807,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -2389,8 +2823,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -2406,8 +2838,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -2419,8 +2849,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -2433,8 +2861,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -2449,8 +2875,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -2466,8 +2890,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(8)
         .k(8)
@@ -2482,8 +2904,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -2498,8 +2918,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -2513,8 +2931,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -2531,8 +2947,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -2549,8 +2963,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -2566,8 +2978,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -2584,8 +2994,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -2601,8 +3009,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -2620,8 +3026,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -2637,8 +3041,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -2655,8 +3057,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -2674,8 +3074,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -2693,8 +3091,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -2710,8 +3106,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -2728,8 +3122,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -2747,8 +3139,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -2767,8 +3157,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -2785,8 +3173,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -2800,11 +3186,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__ASM_AARCH64_NEON_MLAL_CORTEX_A53, k_eq_16) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__asm_aarch64_neon_mlal_cortex_a53, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -2813,11 +3196,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__ASM_AARCH64_NEON_MLAL_CORTEX_A53, strided_cn) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cn_stride(11)
@@ -2827,11 +3207,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__ASM_AARCH64_NEON_MLAL_CORTEX_A53, k_eq_16_strided_a) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .a_stride(19)
@@ -2843,10 +3220,8 @@
     for (uint32_t n = 1; n <= 8; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -2860,10 +3235,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -2876,11 +3249,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (uint32_t n = 1; n <= 8; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(16)
         .iterations(1)
@@ -2892,11 +3262,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__asm_aarch64_neon_mlal_cortex_a53, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -2907,11 +3274,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .a_stride(19)
@@ -2925,10 +3289,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -2943,11 +3305,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 17; k < 32; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__asm_aarch64_neon_mlal_cortex_a53, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -2960,10 +3319,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -2978,11 +3335,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 32; k <= 160; k += 16) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__asm_aarch64_neon_mlal_cortex_a53, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -2995,10 +3349,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -3014,11 +3366,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__asm_aarch64_neon_mlal_cortex_a53, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -3031,11 +3380,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -3049,11 +3395,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -3068,10 +3411,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -3087,11 +3428,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__asm_aarch64_neon_mlal_cortex_a53, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -3104,11 +3442,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -3122,11 +3457,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -3141,10 +3473,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -3161,10 +3491,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -3179,11 +3507,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__ASM_AARCH64_NEON_MLAL_CORTEX_A53, strided_cm) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cm_stride(11)
@@ -3196,11 +3521,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__ASM_AARCH64_NEON_MLAL_CORTEX_A53_PRFM, k_eq_16) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__asm_aarch64_neon_mlal_cortex_a53_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -3209,11 +3531,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__ASM_AARCH64_NEON_MLAL_CORTEX_A53_PRFM, strided_cn) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cn_stride(11)
@@ -3223,11 +3542,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__ASM_AARCH64_NEON_MLAL_CORTEX_A53_PRFM, k_eq_16_strided_a) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .a_stride(19)
@@ -3239,10 +3555,8 @@
     for (uint32_t n = 1; n <= 8; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -3256,10 +3570,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -3272,11 +3584,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (uint32_t n = 1; n <= 8; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(16)
         .iterations(1)
@@ -3288,11 +3597,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__asm_aarch64_neon_mlal_cortex_a53_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -3303,11 +3609,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .a_stride(19)
@@ -3321,10 +3624,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -3339,11 +3640,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 17; k < 32; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__asm_aarch64_neon_mlal_cortex_a53_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -3356,10 +3654,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -3374,11 +3670,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 32; k <= 160; k += 16) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__asm_aarch64_neon_mlal_cortex_a53_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -3391,10 +3684,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -3410,11 +3701,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__asm_aarch64_neon_mlal_cortex_a53_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -3427,11 +3715,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -3445,11 +3730,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -3464,10 +3746,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -3483,11 +3763,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__asm_aarch64_neon_mlal_cortex_a53_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -3500,11 +3777,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -3518,11 +3792,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -3537,10 +3808,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -3557,10 +3826,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -3575,11 +3842,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__ASM_AARCH64_NEON_MLAL_CORTEX_A53_PRFM, strided_cm) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cm_stride(11)
@@ -3592,11 +3856,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X16C4__ASM_AARCH64_NEONDOT_LD32, k_eq_4) {
     TEST_REQUIRES_ARM_NEON_DOT;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(16)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(16)
       .k(4)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16c4__asm_aarch64_neondot_ld32, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -3605,11 +3866,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X16C4__ASM_AARCH64_NEONDOT_LD32, strided_cn) {
     TEST_REQUIRES_ARM_NEON_DOT;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(16)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(16)
       .k(4)
       .cn_stride(19)
@@ -3619,11 +3877,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X16C4__ASM_AARCH64_NEONDOT_LD32, k_eq_4_strided_a) {
     TEST_REQUIRES_ARM_NEON_DOT;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(16)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(16)
       .k(4)
       .a_stride(7)
@@ -3635,10 +3890,8 @@
     for (uint32_t n = 1; n <= 16; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(m)
           .n(n)
           .k(4)
@@ -3652,10 +3905,8 @@
     TEST_REQUIRES_ARM_NEON_DOT;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(m)
         .n(16)
         .k(4)
@@ -3668,11 +3919,8 @@
     TEST_REQUIRES_ARM_NEON_DOT;
     for (uint32_t n = 1; n <= 16; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(4)
         .iterations(1)
@@ -3684,11 +3932,8 @@
     TEST_REQUIRES_ARM_NEON_DOT;
     for (size_t k = 1; k < 4; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(16)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16c4__asm_aarch64_neondot_ld32, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -3699,11 +3944,8 @@
     TEST_REQUIRES_ARM_NEON_DOT;
     for (size_t k = 1; k < 4; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(16)
         .k(k)
         .a_stride(7)
@@ -3717,10 +3959,8 @@
       for (uint32_t n = 1; n <= 16; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -3735,11 +3975,8 @@
     TEST_REQUIRES_ARM_NEON_DOT;
     for (size_t k = 5; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(16)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16c4__asm_aarch64_neondot_ld32, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -3752,10 +3989,8 @@
       for (uint32_t n = 1; n <= 16; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -3770,11 +4005,8 @@
     TEST_REQUIRES_ARM_NEON_DOT;
     for (size_t k = 8; k <= 40; k += 4) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(16)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16c4__asm_aarch64_neondot_ld32, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -3787,10 +4019,8 @@
       for (uint32_t n = 1; n <= 16; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -3806,11 +4036,8 @@
     for (uint32_t n = 17; n < 32; n++) {
       for (size_t k = 1; k <= 20; k += 5) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16c4__asm_aarch64_neondot_ld32, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -3823,11 +4050,8 @@
     for (uint32_t n = 17; n < 32; n++) {
       for (size_t k = 1; k <= 20; k += 5) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(19)
@@ -3841,11 +4065,8 @@
     for (uint32_t n = 17; n < 32; n++) {
       for (size_t k = 1; k <= 20; k += 5) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(23)
@@ -3860,10 +4081,8 @@
       for (size_t k = 1; k <= 20; k += 5) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -3879,11 +4098,8 @@
     for (uint32_t n = 32; n <= 48; n += 16) {
       for (size_t k = 1; k <= 20; k += 5) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16c4__asm_aarch64_neondot_ld32, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -3896,11 +4112,8 @@
     for (uint32_t n = 32; n <= 48; n += 16) {
       for (size_t k = 1; k <= 20; k += 5) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(19)
@@ -3914,11 +4127,8 @@
     for (uint32_t n = 32; n <= 48; n += 16) {
       for (size_t k = 1; k <= 20; k += 5) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(23)
@@ -3933,10 +4143,8 @@
       for (size_t k = 1; k <= 20; k += 5) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -3953,10 +4161,8 @@
       for (uint32_t n = 1; n <= 16; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -3971,11 +4177,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X16C4__ASM_AARCH64_NEONDOT_LD32, strided_cm) {
     TEST_REQUIRES_ARM_NEON_DOT;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(16)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(16)
       .k(4)
       .cm_stride(19)
@@ -3991,7 +4194,6 @@
       .mr(2)
       .nr(8)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -4004,7 +4206,6 @@
       .mr(2)
       .nr(8)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -4018,7 +4219,6 @@
       .mr(2)
       .nr(8)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -4034,7 +4234,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -4051,7 +4250,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -4067,7 +4265,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(n)
         .k(16)
@@ -4083,7 +4280,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -4098,7 +4294,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -4116,7 +4311,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -4134,7 +4328,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -4151,7 +4344,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -4169,7 +4361,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -4186,7 +4377,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -4205,7 +4395,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -4222,7 +4411,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -4240,7 +4428,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -4259,7 +4446,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -4278,7 +4464,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -4295,7 +4480,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -4313,7 +4497,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -4332,7 +4515,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -4352,7 +4534,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -4370,7 +4551,6 @@
       .mr(2)
       .nr(8)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -4387,7 +4567,6 @@
       .mr(2)
       .nr(8)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(8)
       .k(8)
@@ -4400,7 +4579,6 @@
       .mr(2)
       .nr(8)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(8)
       .k(8)
@@ -4414,7 +4592,6 @@
       .mr(2)
       .nr(8)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(8)
       .k(8)
@@ -4430,7 +4607,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -4447,7 +4623,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(8)
         .k(8)
@@ -4463,7 +4638,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(n)
         .k(8)
@@ -4479,7 +4653,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -4494,7 +4667,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -4512,7 +4684,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -4530,7 +4701,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -4547,7 +4717,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -4565,7 +4734,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -4582,7 +4750,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -4601,7 +4768,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -4618,7 +4784,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -4636,7 +4801,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -4655,7 +4819,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -4674,7 +4837,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -4691,7 +4853,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -4709,7 +4870,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -4728,7 +4888,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -4748,7 +4907,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -4766,7 +4924,6 @@
       .mr(2)
       .nr(8)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(8)
       .k(8)
@@ -4782,8 +4939,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -4795,8 +4950,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -4809,8 +4962,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -4825,8 +4976,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -4842,8 +4991,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -4858,8 +5005,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -4874,8 +5019,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -4889,8 +5032,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -4907,8 +5048,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -4925,8 +5064,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -4942,8 +5079,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -4960,8 +5095,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -4977,8 +5110,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -4996,8 +5127,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -5013,8 +5142,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -5031,8 +5158,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -5050,8 +5175,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -5069,8 +5192,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -5086,8 +5207,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -5104,8 +5223,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -5123,8 +5240,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -5143,8 +5258,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -5161,8 +5274,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -5178,8 +5289,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -5191,8 +5300,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -5205,8 +5312,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -5221,8 +5326,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -5238,8 +5341,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -5254,8 +5355,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -5270,8 +5369,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -5285,8 +5382,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -5303,8 +5398,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -5321,8 +5414,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -5338,8 +5429,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -5356,8 +5445,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -5373,8 +5460,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -5392,8 +5477,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -5409,8 +5492,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -5427,8 +5508,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -5446,8 +5525,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -5465,8 +5542,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -5482,8 +5557,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -5500,8 +5573,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -5519,8 +5590,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -5539,8 +5608,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -5557,8 +5624,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -5575,7 +5640,6 @@
       .mr(4)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(4)
       .n(16)
       .k(4)
@@ -5588,7 +5652,6 @@
       .mr(4)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(4)
       .n(16)
       .k(4)
@@ -5602,7 +5665,6 @@
       .mr(4)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(4)
       .n(16)
       .k(4)
@@ -5618,7 +5680,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(m)
           .n(n)
           .k(4)
@@ -5635,7 +5696,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(m)
         .n(16)
         .k(4)
@@ -5651,7 +5711,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(n)
         .k(4)
@@ -5667,7 +5726,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -5682,7 +5740,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -5700,7 +5757,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -5718,7 +5774,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -5735,7 +5790,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -5753,7 +5807,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -5770,7 +5823,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -5789,7 +5841,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -5806,7 +5857,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -5824,7 +5874,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -5843,7 +5892,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -5862,7 +5910,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -5879,7 +5926,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -5897,7 +5943,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -5916,7 +5961,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -5936,7 +5980,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -5954,7 +5997,6 @@
       .mr(4)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(4)
       .n(16)
       .k(4)
@@ -5971,7 +6013,6 @@
       .mr(4)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -5984,7 +6025,6 @@
       .mr(4)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -5998,7 +6038,6 @@
       .mr(4)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -6014,7 +6053,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -6031,7 +6069,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -6047,7 +6084,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -6063,7 +6099,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -6078,7 +6113,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -6096,7 +6130,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -6114,7 +6147,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -6131,7 +6163,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -6149,7 +6180,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -6166,7 +6196,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -6185,7 +6214,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -6202,7 +6230,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -6220,7 +6247,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -6239,7 +6265,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -6258,7 +6283,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -6275,7 +6299,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -6293,7 +6316,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -6312,7 +6334,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -6332,7 +6353,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -6350,7 +6370,6 @@
       .mr(4)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -6367,7 +6386,6 @@
       .mr(4)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(4)
       .n(16)
       .k(16)
@@ -6380,7 +6398,6 @@
       .mr(4)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(4)
       .n(16)
       .k(16)
@@ -6394,7 +6411,6 @@
       .mr(4)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(4)
       .n(16)
       .k(16)
@@ -6410,7 +6426,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -6427,7 +6442,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(m)
         .n(16)
         .k(16)
@@ -6443,7 +6457,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(n)
         .k(16)
@@ -6459,7 +6472,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -6474,7 +6486,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -6492,7 +6503,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -6510,7 +6520,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -6527,7 +6536,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -6545,7 +6553,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -6562,7 +6569,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -6581,7 +6587,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -6598,7 +6603,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -6616,7 +6620,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -6635,7 +6638,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -6654,7 +6656,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -6671,7 +6672,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -6689,7 +6689,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -6708,7 +6707,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -6728,7 +6726,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -6746,7 +6743,6 @@
       .mr(4)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(4)
       .n(16)
       .k(16)
@@ -6760,11 +6756,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2C4__ARMSIMD32, k_eq_4) {
     TEST_REQUIRES_ARM_SIMD32;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(2)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(2)
       .k(4)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x2c4__armsimd32, xnn_init_qs8_qc8w_conv_minmax_fp32_armsimd32_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -6773,11 +6766,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2C4__ARMSIMD32, strided_cn) {
     TEST_REQUIRES_ARM_SIMD32;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(2)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(2)
       .k(4)
       .cn_stride(5)
@@ -6787,11 +6777,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2C4__ARMSIMD32, k_eq_4_strided_a) {
     TEST_REQUIRES_ARM_SIMD32;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(2)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(2)
       .k(4)
       .a_stride(7)
@@ -6803,10 +6790,8 @@
     for (uint32_t n = 1; n <= 2; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(2)
           .kr(4)
-          .sr(1)
           .m(m)
           .n(n)
           .k(4)
@@ -6820,10 +6805,8 @@
     TEST_REQUIRES_ARM_SIMD32;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(2)
         .kr(4)
-        .sr(1)
         .m(m)
         .n(2)
         .k(4)
@@ -6836,11 +6819,8 @@
     TEST_REQUIRES_ARM_SIMD32;
     for (uint32_t n = 1; n <= 2; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(2)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(4)
         .iterations(1)
@@ -6852,11 +6832,8 @@
     TEST_REQUIRES_ARM_SIMD32;
     for (size_t k = 1; k < 4; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(2)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(2)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x2c4__armsimd32, xnn_init_qs8_qc8w_conv_minmax_fp32_armsimd32_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -6867,11 +6844,8 @@
     TEST_REQUIRES_ARM_SIMD32;
     for (size_t k = 1; k < 4; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(2)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(2)
         .k(k)
         .a_stride(7)
@@ -6885,10 +6859,8 @@
       for (uint32_t n = 1; n <= 2; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(2)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -6903,11 +6875,8 @@
     TEST_REQUIRES_ARM_SIMD32;
     for (size_t k = 5; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(2)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(2)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x2c4__armsimd32, xnn_init_qs8_qc8w_conv_minmax_fp32_armsimd32_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -6920,10 +6889,8 @@
       for (uint32_t n = 1; n <= 2; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(2)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -6938,11 +6905,8 @@
     TEST_REQUIRES_ARM_SIMD32;
     for (size_t k = 8; k <= 40; k += 4) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(2)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(2)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x2c4__armsimd32, xnn_init_qs8_qc8w_conv_minmax_fp32_armsimd32_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -6955,10 +6919,8 @@
       for (uint32_t n = 1; n <= 2; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(2)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -6974,11 +6936,8 @@
     for (uint32_t n = 3; n < 4; n++) {
       for (size_t k = 1; k <= 20; k += 5) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(2)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x2c4__armsimd32, xnn_init_qs8_qc8w_conv_minmax_fp32_armsimd32_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -6991,11 +6950,8 @@
     for (uint32_t n = 3; n < 4; n++) {
       for (size_t k = 1; k <= 20; k += 5) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(2)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(5)
@@ -7009,11 +6965,8 @@
     for (uint32_t n = 3; n < 4; n++) {
       for (size_t k = 1; k <= 20; k += 5) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(2)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(23)
@@ -7028,10 +6981,8 @@
       for (size_t k = 1; k <= 20; k += 5) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(2)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -7047,11 +6998,8 @@
     for (uint32_t n = 4; n <= 6; n += 2) {
       for (size_t k = 1; k <= 20; k += 5) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(2)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x2c4__armsimd32, xnn_init_qs8_qc8w_conv_minmax_fp32_armsimd32_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -7064,11 +7012,8 @@
     for (uint32_t n = 4; n <= 6; n += 2) {
       for (size_t k = 1; k <= 20; k += 5) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(2)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(5)
@@ -7082,11 +7027,8 @@
     for (uint32_t n = 4; n <= 6; n += 2) {
       for (size_t k = 1; k <= 20; k += 5) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(2)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(23)
@@ -7101,10 +7043,8 @@
       for (size_t k = 1; k <= 20; k += 5) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(2)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -7121,10 +7061,8 @@
       for (uint32_t n = 1; n <= 2; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(2)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -7139,11 +7077,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2C4__ARMSIMD32, strided_cm) {
     TEST_REQUIRES_ARM_SIMD32;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(2)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(2)
       .k(4)
       .cm_stride(5)
@@ -7157,11 +7092,8 @@
     TEST_REQUIRES_ARM_SIMD32;
     GemmMicrokernelTester()
       .mr(2)
-      .nr(1)
       .kr(4)
-      .sr(1)
       .m(2)
-      .n(1)
       .k(4)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x1c4__armsimd32, xnn_init_qs8_qc8w_conv_minmax_fp32_armsimd32_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
   }
@@ -7170,11 +7102,8 @@
     TEST_REQUIRES_ARM_SIMD32;
     GemmMicrokernelTester()
       .mr(2)
-      .nr(1)
       .kr(4)
-      .sr(1)
       .m(2)
-      .n(1)
       .k(4)
       .cn_stride(3)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x1c4__armsimd32, xnn_init_qs8_qc8w_conv_minmax_fp32_armsimd32_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -7184,11 +7113,8 @@
     TEST_REQUIRES_ARM_SIMD32;
     GemmMicrokernelTester()
       .mr(2)
-      .nr(1)
       .kr(4)
-      .sr(1)
       .m(2)
-      .n(1)
       .k(4)
       .a_stride(7)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x1c4__armsimd32, xnn_init_qs8_qc8w_conv_minmax_fp32_armsimd32_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -7200,9 +7126,7 @@
       for (uint32_t m = 1; m <= 2; m++) {
         GemmMicrokernelTester()
           .mr(2)
-          .nr(1)
           .kr(4)
-          .sr(1)
           .m(m)
           .n(n)
           .k(4)
@@ -7217,11 +7141,8 @@
     for (uint32_t m = 1; m <= 2; m++) {
       GemmMicrokernelTester()
         .mr(2)
-        .nr(1)
         .kr(4)
-        .sr(1)
         .m(m)
-        .n(1)
         .k(4)
         .iterations(1)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x1c4__armsimd32, xnn_init_qs8_qc8w_conv_minmax_fp32_armsimd32_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -7233,9 +7154,7 @@
     for (uint32_t n = 1; n <= 1; n++) {
       GemmMicrokernelTester()
         .mr(2)
-        .nr(1)
         .kr(4)
-        .sr(1)
         .m(2)
         .n(n)
         .k(4)
@@ -7249,11 +7168,8 @@
     for (size_t k = 1; k < 4; k++) {
       GemmMicrokernelTester()
         .mr(2)
-        .nr(1)
         .kr(4)
-        .sr(1)
         .m(2)
-        .n(1)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x1c4__armsimd32, xnn_init_qs8_qc8w_conv_minmax_fp32_armsimd32_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
     }
@@ -7264,11 +7180,8 @@
     for (size_t k = 1; k < 4; k++) {
       GemmMicrokernelTester()
         .mr(2)
-        .nr(1)
         .kr(4)
-        .sr(1)
         .m(2)
-        .n(1)
         .k(k)
         .a_stride(7)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x1c4__armsimd32, xnn_init_qs8_qc8w_conv_minmax_fp32_armsimd32_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -7282,9 +7195,7 @@
         for (uint32_t m = 1; m <= 2; m++) {
           GemmMicrokernelTester()
             .mr(2)
-            .nr(1)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -7300,11 +7211,8 @@
     for (size_t k = 5; k < 8; k++) {
       GemmMicrokernelTester()
         .mr(2)
-        .nr(1)
         .kr(4)
-        .sr(1)
         .m(2)
-        .n(1)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x1c4__armsimd32, xnn_init_qs8_qc8w_conv_minmax_fp32_armsimd32_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
     }
@@ -7317,9 +7225,7 @@
         for (uint32_t m = 1; m <= 2; m++) {
           GemmMicrokernelTester()
             .mr(2)
-            .nr(1)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -7335,11 +7241,8 @@
     for (size_t k = 8; k <= 40; k += 4) {
       GemmMicrokernelTester()
         .mr(2)
-        .nr(1)
         .kr(4)
-        .sr(1)
         .m(2)
-        .n(1)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x1c4__armsimd32, xnn_init_qs8_qc8w_conv_minmax_fp32_armsimd32_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
     }
@@ -7352,9 +7255,7 @@
         for (uint32_t m = 1; m <= 2; m++) {
           GemmMicrokernelTester()
             .mr(2)
-            .nr(1)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -7371,9 +7272,7 @@
       for (size_t k = 1; k <= 20; k += 5) {
         GemmMicrokernelTester()
           .mr(2)
-          .nr(1)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -7388,9 +7287,7 @@
       for (size_t k = 1; k <= 20; k += 5) {
         GemmMicrokernelTester()
           .mr(2)
-          .nr(1)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -7406,9 +7303,7 @@
       for (size_t k = 1; k <= 20; k += 5) {
         GemmMicrokernelTester()
           .mr(2)
-          .nr(1)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -7425,9 +7320,7 @@
         for (uint32_t m = 1; m <= 2; m++) {
           GemmMicrokernelTester()
             .mr(2)
-            .nr(1)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -7444,9 +7337,7 @@
       for (size_t k = 1; k <= 20; k += 5) {
         GemmMicrokernelTester()
           .mr(2)
-          .nr(1)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -7461,9 +7352,7 @@
       for (size_t k = 1; k <= 20; k += 5) {
         GemmMicrokernelTester()
           .mr(2)
-          .nr(1)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -7479,9 +7368,7 @@
       for (size_t k = 1; k <= 20; k += 5) {
         GemmMicrokernelTester()
           .mr(2)
-          .nr(1)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -7498,9 +7385,7 @@
         for (uint32_t m = 1; m <= 2; m++) {
           GemmMicrokernelTester()
             .mr(2)
-            .nr(1)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -7518,9 +7403,7 @@
         for (uint32_t m = 1; m <= 2; m++) {
           GemmMicrokernelTester()
             .mr(2)
-            .nr(1)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -7536,11 +7419,8 @@
     TEST_REQUIRES_ARM_SIMD32;
     GemmMicrokernelTester()
       .mr(2)
-      .nr(1)
       .kr(4)
-      .sr(1)
       .m(2)
-      .n(1)
       .k(4)
       .cm_stride(3)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x1c4__armsimd32, xnn_init_qs8_qc8w_conv_minmax_fp32_armsimd32_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -7552,11 +7432,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__NEONI8MM, k_eq_16) {
     TEST_REQUIRES_ARM_NEON_I8MM;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__neoni8mm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -7565,11 +7442,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__NEONI8MM, strided_cn) {
     TEST_REQUIRES_ARM_NEON_I8MM;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cn_stride(11)
@@ -7579,11 +7453,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__NEONI8MM, k_eq_16_strided_a) {
     TEST_REQUIRES_ARM_NEON_I8MM;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .a_stride(19)
@@ -7595,10 +7466,8 @@
     for (uint32_t n = 1; n <= 8; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -7612,10 +7481,8 @@
     TEST_REQUIRES_ARM_NEON_I8MM;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -7628,11 +7495,8 @@
     TEST_REQUIRES_ARM_NEON_I8MM;
     for (uint32_t n = 1; n <= 8; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(16)
         .iterations(1)
@@ -7644,11 +7508,8 @@
     TEST_REQUIRES_ARM_NEON_I8MM;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__neoni8mm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -7659,11 +7520,8 @@
     TEST_REQUIRES_ARM_NEON_I8MM;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .a_stride(19)
@@ -7677,10 +7535,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -7695,11 +7551,8 @@
     TEST_REQUIRES_ARM_NEON_I8MM;
     for (size_t k = 17; k < 32; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__neoni8mm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -7712,10 +7565,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -7730,11 +7581,8 @@
     TEST_REQUIRES_ARM_NEON_I8MM;
     for (size_t k = 32; k <= 160; k += 16) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__neoni8mm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -7747,10 +7595,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -7766,11 +7612,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__neoni8mm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -7783,11 +7626,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -7801,11 +7641,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -7820,10 +7657,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -7839,11 +7674,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__neoni8mm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -7856,11 +7688,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -7874,11 +7703,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -7893,10 +7719,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -7913,10 +7737,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -7931,11 +7753,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__NEONI8MM, strided_cm) {
     TEST_REQUIRES_ARM_NEON_I8MM;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cm_stride(11)
@@ -7951,7 +7770,6 @@
       .mr(2)
       .nr(8)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -7964,7 +7782,6 @@
       .mr(2)
       .nr(8)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -7978,7 +7795,6 @@
       .mr(2)
       .nr(8)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -7994,7 +7810,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -8011,7 +7826,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -8027,7 +7841,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(n)
         .k(16)
@@ -8043,7 +7856,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -8058,7 +7870,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -8076,7 +7887,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -8094,7 +7904,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -8111,7 +7920,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -8129,7 +7937,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -8146,7 +7953,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -8165,7 +7971,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -8182,7 +7987,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -8200,7 +8004,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -8219,7 +8022,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -8238,7 +8040,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -8255,7 +8056,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -8273,7 +8073,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -8292,7 +8091,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -8312,7 +8110,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -8330,7 +8127,6 @@
       .mr(2)
       .nr(8)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -8347,7 +8143,6 @@
       .mr(2)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(16)
       .k(16)
@@ -8360,7 +8155,6 @@
       .mr(2)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(16)
       .k(16)
@@ -8374,7 +8168,6 @@
       .mr(2)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(16)
       .k(16)
@@ -8390,7 +8183,6 @@
           .mr(2)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -8407,7 +8199,6 @@
         .mr(2)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(16)
         .k(16)
@@ -8423,7 +8214,6 @@
         .mr(2)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(n)
         .k(16)
@@ -8439,7 +8229,6 @@
         .mr(2)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -8454,7 +8243,6 @@
         .mr(2)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -8472,7 +8260,6 @@
             .mr(2)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -8490,7 +8277,6 @@
         .mr(2)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -8507,7 +8293,6 @@
             .mr(2)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -8525,7 +8310,6 @@
         .mr(2)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -8542,7 +8326,6 @@
             .mr(2)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -8561,7 +8344,6 @@
           .mr(2)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -8578,7 +8360,6 @@
           .mr(2)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -8596,7 +8377,6 @@
           .mr(2)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -8615,7 +8395,6 @@
             .mr(2)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -8634,7 +8413,6 @@
           .mr(2)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -8651,7 +8429,6 @@
           .mr(2)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -8669,7 +8446,6 @@
           .mr(2)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -8688,7 +8464,6 @@
             .mr(2)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -8708,7 +8483,6 @@
             .mr(2)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -8726,7 +8500,6 @@
       .mr(2)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(16)
       .k(16)
@@ -8743,7 +8516,6 @@
       .mr(3)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(3)
       .n(16)
       .k(16)
@@ -8756,7 +8528,6 @@
       .mr(3)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(3)
       .n(16)
       .k(16)
@@ -8770,7 +8541,6 @@
       .mr(3)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(3)
       .n(16)
       .k(16)
@@ -8786,7 +8556,6 @@
           .mr(3)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -8803,7 +8572,6 @@
         .mr(3)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(16)
         .k(16)
@@ -8819,7 +8587,6 @@
         .mr(3)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(n)
         .k(16)
@@ -8835,7 +8602,6 @@
         .mr(3)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -8850,7 +8616,6 @@
         .mr(3)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -8868,7 +8633,6 @@
             .mr(3)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -8886,7 +8650,6 @@
         .mr(3)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -8903,7 +8666,6 @@
             .mr(3)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -8921,7 +8683,6 @@
         .mr(3)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -8938,7 +8699,6 @@
             .mr(3)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -8957,7 +8717,6 @@
           .mr(3)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -8974,7 +8733,6 @@
           .mr(3)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -8992,7 +8750,6 @@
           .mr(3)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -9011,7 +8768,6 @@
             .mr(3)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -9030,7 +8786,6 @@
           .mr(3)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -9047,7 +8802,6 @@
           .mr(3)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -9065,7 +8819,6 @@
           .mr(3)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -9084,7 +8837,6 @@
             .mr(3)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -9104,7 +8856,6 @@
             .mr(3)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -9122,7 +8873,6 @@
       .mr(3)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(3)
       .n(16)
       .k(16)
@@ -9139,7 +8889,6 @@
       .mr(4)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(4)
       .n(16)
       .k(16)
@@ -9152,7 +8901,6 @@
       .mr(4)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(4)
       .n(16)
       .k(16)
@@ -9166,7 +8914,6 @@
       .mr(4)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(4)
       .n(16)
       .k(16)
@@ -9182,7 +8929,6 @@
           .mr(4)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -9199,7 +8945,6 @@
         .mr(4)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(16)
         .k(16)
@@ -9215,7 +8960,6 @@
         .mr(4)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(4)
         .n(n)
         .k(16)
@@ -9231,7 +8975,6 @@
         .mr(4)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -9246,7 +8989,6 @@
         .mr(4)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -9264,7 +9006,6 @@
             .mr(4)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -9282,7 +9023,6 @@
         .mr(4)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -9299,7 +9039,6 @@
             .mr(4)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -9317,7 +9056,6 @@
         .mr(4)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -9334,7 +9072,6 @@
             .mr(4)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -9353,7 +9090,6 @@
           .mr(4)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -9370,7 +9106,6 @@
           .mr(4)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -9388,7 +9123,6 @@
           .mr(4)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -9407,7 +9141,6 @@
             .mr(4)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -9426,7 +9159,6 @@
           .mr(4)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -9443,7 +9175,6 @@
           .mr(4)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -9461,7 +9192,6 @@
           .mr(4)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -9480,7 +9210,6 @@
             .mr(4)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -9500,7 +9229,6 @@
             .mr(4)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -9518,7 +9246,6 @@
       .mr(4)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(4)
       .n(16)
       .k(16)
@@ -9532,11 +9259,7 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8__NEONV8_MLAL_LANE, k_eq_8) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
-      .kr(1)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(8)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8__neonv8_mlal_lane, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -9545,11 +9268,7 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8__NEONV8_MLAL_LANE, strided_cn) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
-      .kr(1)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(8)
       .cn_stride(11)
@@ -9559,11 +9278,7 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8__NEONV8_MLAL_LANE, k_eq_8_strided_a) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
-      .kr(1)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(8)
       .a_stride(11)
@@ -9575,10 +9290,7 @@
     for (uint32_t n = 1; n <= 8; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -9592,10 +9304,7 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(8)
         .k(8)
@@ -9608,11 +9317,7 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (uint32_t n = 1; n <= 8; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(8)
         .iterations(1)
@@ -9624,11 +9329,7 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8__neonv8_mlal_lane, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -9639,11 +9340,7 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .a_stride(11)
@@ -9657,10 +9354,7 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -9675,11 +9369,7 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 9; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8__neonv8_mlal_lane, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -9692,10 +9382,7 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -9710,11 +9397,7 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 16; k <= 80; k += 8) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8__neonv8_mlal_lane, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -9727,10 +9410,7 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -9746,11 +9426,7 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
-          .kr(1)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8__neonv8_mlal_lane, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -9763,11 +9439,7 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
-          .kr(1)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -9781,11 +9453,7 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
-          .kr(1)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -9800,10 +9468,7 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -9819,11 +9484,7 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
-          .kr(1)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8__neonv8_mlal_lane, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -9836,11 +9497,7 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
-          .kr(1)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -9854,11 +9511,7 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
-          .kr(1)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -9873,10 +9526,7 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -9893,10 +9543,7 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -9911,11 +9558,7 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8__NEONV8_MLAL_LANE, strided_cm) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
-      .kr(1)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(8)
       .cm_stride(11)
@@ -9928,11 +9571,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C2__NEON_MLAL_DUP, k_eq_16) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2__neon_mlal_dup, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -9941,11 +9581,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C2__NEON_MLAL_DUP, strided_cn) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cn_stride(11)
@@ -9955,11 +9592,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C2__NEON_MLAL_DUP, k_eq_16_strided_a) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .a_stride(19)
@@ -9971,10 +9605,8 @@
     for (uint32_t n = 1; n <= 8; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -9988,10 +9620,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -10004,11 +9634,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (uint32_t n = 1; n <= 8; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(16)
         .iterations(1)
@@ -10020,11 +9647,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2__neon_mlal_dup, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -10035,11 +9659,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .a_stride(19)
@@ -10053,10 +9674,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -10071,11 +9690,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 17; k < 32; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2__neon_mlal_dup, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -10088,10 +9704,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -10106,11 +9720,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 32; k <= 160; k += 16) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2__neon_mlal_dup, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -10123,10 +9734,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -10142,11 +9751,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2__neon_mlal_dup, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -10159,11 +9765,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -10177,11 +9780,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -10196,10 +9796,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -10215,11 +9813,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2__neon_mlal_dup, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -10232,11 +9827,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -10250,11 +9842,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -10269,10 +9858,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -10289,10 +9876,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -10307,11 +9892,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C2__NEON_MLAL_DUP, strided_cm) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cm_stride(11)
@@ -10324,11 +9906,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C2__NEON_MLAL_LD4R, k_eq_16) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2__neon_mlal_ld4r, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -10337,11 +9916,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C2__NEON_MLAL_LD4R, strided_cn) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cn_stride(11)
@@ -10351,11 +9927,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C2__NEON_MLAL_LD4R, k_eq_16_strided_a) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .a_stride(19)
@@ -10367,10 +9940,8 @@
     for (uint32_t n = 1; n <= 8; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -10384,10 +9955,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -10400,11 +9969,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (uint32_t n = 1; n <= 8; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(16)
         .iterations(1)
@@ -10416,11 +9982,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2__neon_mlal_ld4r, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -10431,11 +9994,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .a_stride(19)
@@ -10449,10 +10009,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -10467,11 +10025,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 17; k < 32; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2__neon_mlal_ld4r, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -10484,10 +10039,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -10502,11 +10055,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 32; k <= 160; k += 16) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2__neon_mlal_ld4r, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -10519,10 +10069,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -10538,11 +10086,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2__neon_mlal_ld4r, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -10555,11 +10100,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -10573,11 +10115,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -10592,10 +10131,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -10611,11 +10148,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2__neon_mlal_ld4r, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -10628,11 +10162,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -10646,11 +10177,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -10665,10 +10193,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -10685,10 +10211,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -10703,11 +10227,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C2__NEON_MLAL_LD4R, strided_cm) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cm_stride(11)
@@ -10720,11 +10241,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C2__NEONV8_MLAL_LD1R, k_eq_16) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2__neonv8_mlal_ld1r, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -10733,11 +10251,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C2__NEONV8_MLAL_LD1R, strided_cn) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cn_stride(11)
@@ -10747,11 +10262,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C2__NEONV8_MLAL_LD1R, k_eq_16_strided_a) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .a_stride(19)
@@ -10763,10 +10275,8 @@
     for (uint32_t n = 1; n <= 8; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -10780,10 +10290,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -10796,11 +10304,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (uint32_t n = 1; n <= 8; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(16)
         .iterations(1)
@@ -10812,11 +10317,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2__neonv8_mlal_ld1r, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -10827,11 +10329,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .a_stride(19)
@@ -10845,10 +10344,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -10863,11 +10360,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 17; k < 32; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2__neonv8_mlal_ld1r, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -10880,10 +10374,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -10898,11 +10390,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 32; k <= 160; k += 16) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2__neonv8_mlal_ld1r, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -10915,10 +10404,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -10934,11 +10421,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2__neonv8_mlal_ld1r, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -10951,11 +10435,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -10969,11 +10450,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -10988,10 +10466,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -11007,11 +10483,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2__neonv8_mlal_ld1r, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -11024,11 +10497,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -11042,11 +10512,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -11061,10 +10528,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -11081,10 +10546,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -11099,11 +10562,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C2__NEONV8_MLAL_LD1R, strided_cm) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cm_stride(11)
@@ -11116,11 +10576,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C2S4__NEONV8_MLAL, k_eq_16) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(2)
       .sr(4)
-      .m(1)
       .n(8)
       .k(16)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2s4__neonv8_mlal, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -11129,11 +10587,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C2S4__NEONV8_MLAL, strided_cn) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(2)
       .sr(4)
-      .m(1)
       .n(8)
       .k(16)
       .cn_stride(11)
@@ -11143,11 +10599,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C2S4__NEONV8_MLAL, k_eq_16_strided_a) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(2)
       .sr(4)
-      .m(1)
       .n(8)
       .k(16)
       .a_stride(19)
@@ -11159,7 +10613,6 @@
     for (uint32_t n = 1; n <= 8; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
           .sr(4)
@@ -11176,7 +10629,6 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
         .sr(4)
@@ -11192,11 +10644,9 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (uint32_t n = 1; n <= 8; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(n)
         .k(16)
         .iterations(1)
@@ -11208,11 +10658,9 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2s4__neonv8_mlal, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -11223,11 +10671,9 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(8)
         .k(k)
         .a_stride(19)
@@ -11241,7 +10687,6 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
             .sr(4)
@@ -11259,11 +10704,9 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 17; k < 32; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2s4__neonv8_mlal, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -11276,7 +10719,6 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
             .sr(4)
@@ -11294,11 +10736,9 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 32; k <= 160; k += 16) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2s4__neonv8_mlal, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -11311,7 +10751,6 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
             .sr(4)
@@ -11330,11 +10769,9 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2s4__neonv8_mlal, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -11347,11 +10784,9 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -11365,11 +10800,9 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -11384,7 +10817,6 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
             .sr(4)
@@ -11403,11 +10835,9 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c2s4__neonv8_mlal, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -11420,11 +10850,9 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -11438,11 +10866,9 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -11457,7 +10883,6 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
             .sr(4)
@@ -11477,7 +10902,6 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(2)
             .sr(4)
@@ -11495,11 +10919,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C2S4__NEONV8_MLAL, strided_cm) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(2)
       .sr(4)
-      .m(1)
       .n(8)
       .k(16)
       .cm_stride(11)
@@ -11512,11 +10934,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEON_MLAL_DUP, k_eq_16) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neon_mlal_dup, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -11525,11 +10944,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEON_MLAL_DUP, strided_cn) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cn_stride(11)
@@ -11539,11 +10955,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEON_MLAL_DUP, k_eq_16_strided_a) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .a_stride(19)
@@ -11555,10 +10968,8 @@
     for (uint32_t n = 1; n <= 8; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -11572,10 +10983,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -11588,11 +10997,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (uint32_t n = 1; n <= 8; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(16)
         .iterations(1)
@@ -11604,11 +11010,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neon_mlal_dup, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -11619,11 +11022,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .a_stride(19)
@@ -11637,10 +11037,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -11655,11 +11053,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 17; k < 32; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neon_mlal_dup, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -11672,10 +11067,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -11690,11 +11083,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 32; k <= 160; k += 16) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neon_mlal_dup, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -11707,10 +11097,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -11726,11 +11114,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neon_mlal_dup, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -11743,11 +11128,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -11761,11 +11143,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -11780,10 +11159,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -11799,11 +11176,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neon_mlal_dup, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -11816,11 +11190,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -11834,11 +11205,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -11853,10 +11221,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -11873,10 +11239,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -11891,11 +11255,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEON_MLAL_DUP, strided_cm) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cm_stride(11)
@@ -11908,11 +11269,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEON_MLAL_LD2R, k_eq_16) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neon_mlal_ld2r, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -11921,11 +11279,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEON_MLAL_LD2R, strided_cn) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cn_stride(11)
@@ -11935,11 +11290,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEON_MLAL_LD2R, k_eq_16_strided_a) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .a_stride(19)
@@ -11951,10 +11303,8 @@
     for (uint32_t n = 1; n <= 8; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -11968,10 +11318,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -11984,11 +11332,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (uint32_t n = 1; n <= 8; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(16)
         .iterations(1)
@@ -12000,11 +11345,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neon_mlal_ld2r, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -12015,11 +11357,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .a_stride(19)
@@ -12033,10 +11372,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -12051,11 +11388,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 17; k < 32; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neon_mlal_ld2r, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -12068,10 +11402,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -12086,11 +11418,8 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 32; k <= 160; k += 16) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neon_mlal_ld2r, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -12103,10 +11432,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -12122,11 +11449,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neon_mlal_ld2r, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -12139,11 +11463,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -12157,11 +11478,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -12176,10 +11494,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -12195,11 +11511,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neon_mlal_ld2r, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -12212,11 +11525,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -12230,11 +11540,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -12249,10 +11556,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -12269,10 +11574,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -12287,11 +11590,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEON_MLAL_LD2R, strided_cm) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cm_stride(11)
@@ -12304,11 +11604,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEONV8_MLAL_DUP, k_eq_16) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neonv8_mlal_dup, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -12317,11 +11614,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEONV8_MLAL_DUP, strided_cn) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cn_stride(11)
@@ -12331,11 +11625,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEONV8_MLAL_DUP, k_eq_16_strided_a) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .a_stride(19)
@@ -12347,10 +11638,8 @@
     for (uint32_t n = 1; n <= 8; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -12364,10 +11653,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -12380,11 +11667,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (uint32_t n = 1; n <= 8; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(16)
         .iterations(1)
@@ -12396,11 +11680,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neonv8_mlal_dup, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -12411,11 +11692,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .a_stride(19)
@@ -12429,10 +11707,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -12447,11 +11723,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 17; k < 32; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neonv8_mlal_dup, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -12464,10 +11737,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -12482,11 +11753,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 32; k <= 160; k += 16) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neonv8_mlal_dup, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -12499,10 +11767,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -12518,11 +11784,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neonv8_mlal_dup, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -12535,11 +11798,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -12553,11 +11813,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -12572,10 +11829,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -12591,11 +11846,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neonv8_mlal_dup, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -12608,11 +11860,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -12626,11 +11875,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -12645,10 +11891,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -12665,10 +11909,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -12683,11 +11925,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEONV8_MLAL_DUP, strided_cm) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cm_stride(11)
@@ -12700,11 +11939,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEONV8_MLAL_LD1R, k_eq_16) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neonv8_mlal_ld1r, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -12713,11 +11949,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEONV8_MLAL_LD1R, strided_cn) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cn_stride(11)
@@ -12727,11 +11960,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEONV8_MLAL_LD1R, k_eq_16_strided_a) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .a_stride(19)
@@ -12743,10 +11973,8 @@
     for (uint32_t n = 1; n <= 8; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -12760,10 +11988,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -12776,11 +12002,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (uint32_t n = 1; n <= 8; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(16)
         .iterations(1)
@@ -12792,11 +12015,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neonv8_mlal_ld1r, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -12807,11 +12027,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .a_stride(19)
@@ -12825,10 +12042,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -12843,11 +12058,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 17; k < 32; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neonv8_mlal_ld1r, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -12860,10 +12072,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -12878,11 +12088,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 32; k <= 160; k += 16) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neonv8_mlal_ld1r, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -12895,10 +12102,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -12914,11 +12119,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neonv8_mlal_ld1r, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -12931,11 +12133,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -12949,11 +12148,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -12968,10 +12164,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -12987,11 +12181,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neonv8_mlal_ld1r, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -13004,11 +12195,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -13022,11 +12210,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -13041,10 +12226,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -13061,10 +12244,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -13079,11 +12260,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEONV8_MLAL_LD1R, strided_cm) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cm_stride(11)
@@ -13096,11 +12274,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEONV8_MLAL_LD2R, k_eq_16) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neonv8_mlal_ld2r, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -13109,11 +12284,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEONV8_MLAL_LD2R, strided_cn) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cn_stride(11)
@@ -13123,11 +12295,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEONV8_MLAL_LD2R, k_eq_16_strided_a) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .a_stride(19)
@@ -13139,10 +12308,8 @@
     for (uint32_t n = 1; n <= 8; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -13156,10 +12323,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -13172,11 +12337,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (uint32_t n = 1; n <= 8; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(16)
         .iterations(1)
@@ -13188,11 +12350,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neonv8_mlal_ld2r, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -13203,11 +12362,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .a_stride(19)
@@ -13221,10 +12377,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -13239,11 +12393,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 17; k < 32; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neonv8_mlal_ld2r, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -13256,10 +12407,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -13274,11 +12423,8 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 32; k <= 160; k += 16) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neonv8_mlal_ld2r, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -13291,10 +12437,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -13310,11 +12454,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neonv8_mlal_ld2r, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -13327,11 +12468,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -13345,11 +12483,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -13364,10 +12499,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -13383,11 +12516,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4__neonv8_mlal_ld2r, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -13400,11 +12530,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -13418,11 +12545,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -13437,10 +12561,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -13457,10 +12579,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -13475,11 +12595,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4__NEONV8_MLAL_LD2R, strided_cm) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cm_stride(11)
@@ -13492,11 +12609,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4S2__NEON_MLAL, k_eq_16) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
       .sr(2)
-      .m(1)
       .n(8)
       .k(16)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4s2__neon_mlal, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -13505,11 +12620,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4S2__NEON_MLAL, strided_cn) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
       .sr(2)
-      .m(1)
       .n(8)
       .k(16)
       .cn_stride(11)
@@ -13519,11 +12632,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4S2__NEON_MLAL, k_eq_16_strided_a) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
       .sr(2)
-      .m(1)
       .n(8)
       .k(16)
       .a_stride(19)
@@ -13535,7 +12646,6 @@
     for (uint32_t n = 1; n <= 8; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
           .sr(2)
@@ -13552,7 +12662,6 @@
     TEST_REQUIRES_ARM_NEON;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
         .sr(2)
@@ -13568,11 +12677,9 @@
     TEST_REQUIRES_ARM_NEON;
     for (uint32_t n = 1; n <= 8; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
         .sr(2)
-        .m(1)
         .n(n)
         .k(16)
         .iterations(1)
@@ -13584,11 +12691,9 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
         .sr(2)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4s2__neon_mlal, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -13599,11 +12704,9 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
         .sr(2)
-        .m(1)
         .n(8)
         .k(k)
         .a_stride(19)
@@ -13617,7 +12720,6 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
             .sr(2)
@@ -13635,11 +12737,9 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 17; k < 32; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
         .sr(2)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4s2__neon_mlal, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -13652,7 +12752,6 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
             .sr(2)
@@ -13670,11 +12769,9 @@
     TEST_REQUIRES_ARM_NEON;
     for (size_t k = 32; k <= 160; k += 16) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
         .sr(2)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4s2__neon_mlal, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -13687,7 +12784,6 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
             .sr(2)
@@ -13706,11 +12802,9 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
           .sr(2)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4s2__neon_mlal, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -13723,11 +12817,9 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
           .sr(2)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -13741,11 +12833,9 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
           .sr(2)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -13760,7 +12850,6 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
             .sr(2)
@@ -13779,11 +12868,9 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
           .sr(2)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4s2__neon_mlal, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -13796,11 +12883,9 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
           .sr(2)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -13814,11 +12899,9 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
           .sr(2)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -13833,7 +12916,6 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
             .sr(2)
@@ -13853,7 +12935,6 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
             .sr(2)
@@ -13871,11 +12952,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4S2__NEON_MLAL, strided_cm) {
     TEST_REQUIRES_ARM_NEON;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
       .sr(2)
-      .m(1)
       .n(8)
       .k(16)
       .cm_stride(11)
@@ -13888,11 +12967,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4S2__NEONV8_MLAL, k_eq_16) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
       .sr(2)
-      .m(1)
       .n(8)
       .k(16)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4s2__neonv8_mlal, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -13901,11 +12978,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4S2__NEONV8_MLAL, strided_cn) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
       .sr(2)
-      .m(1)
       .n(8)
       .k(16)
       .cn_stride(11)
@@ -13915,11 +12990,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4S2__NEONV8_MLAL, k_eq_16_strided_a) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
       .sr(2)
-      .m(1)
       .n(8)
       .k(16)
       .a_stride(19)
@@ -13931,7 +13004,6 @@
     for (uint32_t n = 1; n <= 8; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
           .sr(2)
@@ -13948,7 +13020,6 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
         .sr(2)
@@ -13964,11 +13035,9 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (uint32_t n = 1; n <= 8; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
         .sr(2)
-        .m(1)
         .n(n)
         .k(16)
         .iterations(1)
@@ -13980,11 +13049,9 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
         .sr(2)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4s2__neonv8_mlal, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -13995,11 +13062,9 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
         .sr(2)
-        .m(1)
         .n(8)
         .k(k)
         .a_stride(19)
@@ -14013,7 +13078,6 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
             .sr(2)
@@ -14031,11 +13095,9 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 17; k < 32; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
         .sr(2)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4s2__neonv8_mlal, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -14048,7 +13110,6 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
             .sr(2)
@@ -14066,11 +13127,9 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 32; k <= 160; k += 16) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(4)
         .sr(2)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4s2__neonv8_mlal, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -14083,7 +13142,6 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
             .sr(2)
@@ -14102,11 +13160,9 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
           .sr(2)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4s2__neonv8_mlal, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -14119,11 +13175,9 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
           .sr(2)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -14137,11 +13191,9 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
           .sr(2)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -14156,7 +13208,6 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
             .sr(2)
@@ -14175,11 +13226,9 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
           .sr(2)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c4s2__neonv8_mlal, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -14192,11 +13241,9 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
           .sr(2)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -14210,11 +13257,9 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(4)
           .sr(2)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -14229,7 +13274,6 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
             .sr(2)
@@ -14249,7 +13293,6 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(4)
             .sr(2)
@@ -14267,11 +13310,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C4S2__NEONV8_MLAL, strided_cm) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(4)
       .sr(2)
-      .m(1)
       .n(8)
       .k(16)
       .cm_stride(11)
@@ -14284,11 +13325,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AARCH64_NEONDOT_LD128, k_eq_16) {
     TEST_REQUIRES_ARM_NEON_DOT;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__aarch64_neondot_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -14297,11 +13335,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AARCH64_NEONDOT_LD128, strided_cn) {
     TEST_REQUIRES_ARM_NEON_DOT;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cn_stride(11)
@@ -14311,11 +13346,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AARCH64_NEONDOT_LD128, k_eq_16_strided_a) {
     TEST_REQUIRES_ARM_NEON_DOT;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .a_stride(19)
@@ -14327,10 +13359,8 @@
     for (uint32_t n = 1; n <= 8; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -14344,10 +13374,8 @@
     TEST_REQUIRES_ARM_NEON_DOT;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -14360,11 +13388,8 @@
     TEST_REQUIRES_ARM_NEON_DOT;
     for (uint32_t n = 1; n <= 8; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(16)
         .iterations(1)
@@ -14376,11 +13401,8 @@
     TEST_REQUIRES_ARM_NEON_DOT;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__aarch64_neondot_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -14391,11 +13413,8 @@
     TEST_REQUIRES_ARM_NEON_DOT;
     for (size_t k = 1; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .a_stride(19)
@@ -14409,10 +13428,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -14427,11 +13444,8 @@
     TEST_REQUIRES_ARM_NEON_DOT;
     for (size_t k = 17; k < 32; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__aarch64_neondot_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -14444,10 +13458,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -14462,11 +13474,8 @@
     TEST_REQUIRES_ARM_NEON_DOT;
     for (size_t k = 32; k <= 160; k += 16) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(8)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__aarch64_neondot_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -14479,10 +13488,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -14498,11 +13505,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__aarch64_neondot_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -14515,11 +13519,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -14533,11 +13534,8 @@
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -14552,10 +13550,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -14571,11 +13567,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__aarch64_neondot_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -14588,11 +13581,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(11)
@@ -14606,11 +13596,8 @@
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 80; k += 17) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(83)
@@ -14625,10 +13612,8 @@
       for (size_t k = 1; k <= 80; k += 17) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -14645,10 +13630,8 @@
       for (uint32_t n = 1; n <= 8; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -14663,11 +13646,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AARCH64_NEONDOT_LD128, strided_cm) {
     TEST_REQUIRES_ARM_NEON_DOT;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(8)
       .k(16)
       .cm_stride(11)
@@ -14680,11 +13660,7 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X16__NEONV8_MLAL_LANE_PRFM, k_eq_8) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(16)
-      .kr(1)
-      .sr(1)
-      .m(1)
       .n(16)
       .k(8)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16__neonv8_mlal_lane_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -14693,11 +13669,7 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X16__NEONV8_MLAL_LANE_PRFM, strided_cn) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(16)
-      .kr(1)
-      .sr(1)
-      .m(1)
       .n(16)
       .k(8)
       .cn_stride(19)
@@ -14707,11 +13679,7 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X16__NEONV8_MLAL_LANE_PRFM, k_eq_8_strided_a) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(16)
-      .kr(1)
-      .sr(1)
-      .m(1)
       .n(16)
       .k(8)
       .a_stride(11)
@@ -14723,10 +13691,7 @@
     for (uint32_t n = 1; n <= 16; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -14740,10 +13705,7 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -14756,11 +13718,7 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (uint32_t n = 1; n <= 16; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(8)
         .iterations(1)
@@ -14772,11 +13730,7 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(16)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16__neonv8_mlal_lane_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -14787,11 +13741,7 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(16)
         .k(k)
         .a_stride(11)
@@ -14805,10 +13755,7 @@
       for (uint32_t n = 1; n <= 16; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -14823,11 +13770,7 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 9; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(16)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16__neonv8_mlal_lane_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -14840,10 +13783,7 @@
       for (uint32_t n = 1; n <= 16; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -14858,11 +13798,7 @@
     TEST_REQUIRES_ARM_NEON_V8;
     for (size_t k = 16; k <= 80; k += 8) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(16)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16__neonv8_mlal_lane_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -14875,10 +13811,7 @@
       for (uint32_t n = 1; n <= 16; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -14894,11 +13827,7 @@
     for (uint32_t n = 17; n < 32; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
-          .kr(1)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16__neonv8_mlal_lane_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -14911,11 +13840,7 @@
     for (uint32_t n = 17; n < 32; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
-          .kr(1)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(19)
@@ -14929,11 +13854,7 @@
     for (uint32_t n = 17; n < 32; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
-          .kr(1)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -14948,10 +13869,7 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -14967,11 +13885,7 @@
     for (uint32_t n = 32; n <= 48; n += 16) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
-          .kr(1)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16__neonv8_mlal_lane_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -14984,11 +13898,7 @@
     for (uint32_t n = 32; n <= 48; n += 16) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
-          .kr(1)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(19)
@@ -15002,11 +13912,7 @@
     for (uint32_t n = 32; n <= 48; n += 16) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
-          .kr(1)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -15021,10 +13927,7 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -15041,10 +13944,7 @@
       for (uint32_t n = 1; n <= 16; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -15059,11 +13959,7 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X16__NEONV8_MLAL_LANE_PRFM, strided_cm) {
     TEST_REQUIRES_ARM_NEON_V8;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(16)
-      .kr(1)
-      .sr(1)
-      .m(1)
       .n(16)
       .k(8)
       .cm_stride(19)
@@ -15076,11 +13972,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X16C8__NEONDOT_LD64, k_eq_8) {
     TEST_REQUIRES_ARM_NEON_DOT;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(16)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(16)
       .k(8)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16c8__neondot_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -15089,11 +13982,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X16C8__NEONDOT_LD64, strided_cn) {
     TEST_REQUIRES_ARM_NEON_DOT;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(16)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(16)
       .k(8)
       .cn_stride(19)
@@ -15103,11 +13993,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X16C8__NEONDOT_LD64, k_eq_8_strided_a) {
     TEST_REQUIRES_ARM_NEON_DOT;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(16)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(16)
       .k(8)
       .a_stride(11)
@@ -15119,10 +14006,8 @@
     for (uint32_t n = 1; n <= 16; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -15136,10 +14021,8 @@
     TEST_REQUIRES_ARM_NEON_DOT;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -15152,11 +14035,8 @@
     TEST_REQUIRES_ARM_NEON_DOT;
     for (uint32_t n = 1; n <= 16; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(8)
         .iterations(1)
@@ -15168,11 +14048,8 @@
     TEST_REQUIRES_ARM_NEON_DOT;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(16)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16c8__neondot_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -15183,11 +14060,8 @@
     TEST_REQUIRES_ARM_NEON_DOT;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(16)
         .k(k)
         .a_stride(11)
@@ -15201,10 +14075,8 @@
       for (uint32_t n = 1; n <= 16; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -15219,11 +14091,8 @@
     TEST_REQUIRES_ARM_NEON_DOT;
     for (size_t k = 9; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(16)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16c8__neondot_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -15236,10 +14105,8 @@
       for (uint32_t n = 1; n <= 16; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -15254,11 +14121,8 @@
     TEST_REQUIRES_ARM_NEON_DOT;
     for (size_t k = 16; k <= 80; k += 8) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(16)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16c8__neondot_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -15271,10 +14135,8 @@
       for (uint32_t n = 1; n <= 16; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -15290,11 +14152,8 @@
     for (uint32_t n = 17; n < 32; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16c8__neondot_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -15307,11 +14166,8 @@
     for (uint32_t n = 17; n < 32; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(19)
@@ -15325,11 +14181,8 @@
     for (uint32_t n = 17; n < 32; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -15344,10 +14197,8 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -15363,11 +14214,8 @@
     for (uint32_t n = 32; n <= 48; n += 16) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16c8__neondot_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -15380,11 +14228,8 @@
     for (uint32_t n = 32; n <= 48; n += 16) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(19)
@@ -15398,11 +14243,8 @@
     for (uint32_t n = 32; n <= 48; n += 16) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -15417,10 +14259,8 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -15437,10 +14277,8 @@
       for (uint32_t n = 1; n <= 16; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -15455,11 +14293,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X16C8__NEONDOT_LD64, strided_cm) {
     TEST_REQUIRES_ARM_NEON_DOT;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(16)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(16)
       .k(8)
       .cm_stride(19)
@@ -15474,8 +14309,6 @@
     GemmMicrokernelTester()
       .mr(2)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(8)
       .k(8)
@@ -15487,8 +14320,6 @@
     GemmMicrokernelTester()
       .mr(2)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(8)
       .k(8)
@@ -15501,8 +14332,6 @@
     GemmMicrokernelTester()
       .mr(2)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(8)
       .k(8)
@@ -15517,8 +14346,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -15534,8 +14361,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(8)
         .k(8)
@@ -15550,8 +14375,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(8)
@@ -15566,8 +14389,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -15581,8 +14402,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -15599,8 +14418,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -15617,8 +14434,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -15634,8 +14449,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -15652,8 +14465,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -15669,8 +14480,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -15688,8 +14497,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -15705,8 +14512,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -15723,8 +14528,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -15742,8 +14545,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -15761,8 +14562,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -15778,8 +14577,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -15796,8 +14593,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -15815,8 +14610,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -15835,8 +14628,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -15853,8 +14644,6 @@
     GemmMicrokernelTester()
       .mr(2)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(8)
       .k(8)
@@ -15871,7 +14660,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -15884,7 +14672,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -15898,7 +14685,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -15914,7 +14700,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -15931,7 +14716,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -15947,7 +14731,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(n)
         .k(16)
@@ -15963,7 +14746,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -15978,7 +14760,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -15996,7 +14777,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -16014,7 +14794,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -16031,7 +14810,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -16049,7 +14827,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -16066,7 +14843,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -16085,7 +14861,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -16102,7 +14877,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -16120,7 +14894,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -16139,7 +14912,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -16158,7 +14930,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -16175,7 +14946,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -16193,7 +14963,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -16212,7 +14981,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -16232,7 +15000,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -16250,7 +15017,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -16267,7 +15033,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -16280,7 +15045,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -16294,7 +15058,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -16310,7 +15073,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -16327,7 +15089,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -16343,7 +15104,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(n)
         .k(16)
@@ -16359,7 +15119,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -16374,7 +15133,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -16392,7 +15150,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -16410,7 +15167,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -16427,7 +15183,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -16445,7 +15200,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -16462,7 +15216,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -16481,7 +15234,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -16498,7 +15250,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -16516,7 +15267,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -16535,7 +15285,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -16554,7 +15303,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -16571,7 +15319,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -16589,7 +15336,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -16608,7 +15354,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -16628,7 +15373,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -16646,7 +15390,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -16663,7 +15406,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -16676,7 +15418,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -16690,7 +15431,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -16706,7 +15446,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -16723,7 +15462,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -16739,7 +15477,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(n)
         .k(16)
@@ -16755,7 +15492,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -16770,7 +15506,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -16788,7 +15523,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -16806,7 +15540,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -16823,7 +15556,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -16841,7 +15573,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -16858,7 +15589,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -16877,7 +15607,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -16894,7 +15623,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -16912,7 +15640,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -16931,7 +15658,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -16950,7 +15676,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -16967,7 +15692,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -16985,7 +15709,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -17004,7 +15727,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -17024,7 +15746,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -17042,7 +15763,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -17059,7 +15779,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -17072,7 +15791,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -17086,7 +15804,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -17102,7 +15819,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -17119,7 +15835,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -17135,7 +15850,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(n)
         .k(16)
@@ -17151,7 +15865,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -17166,7 +15879,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -17184,7 +15896,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -17202,7 +15913,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -17219,7 +15929,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -17237,7 +15946,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -17254,7 +15962,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -17273,7 +15980,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -17290,7 +15996,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -17308,7 +16013,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -17327,7 +16031,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -17346,7 +16049,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -17363,7 +16065,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -17381,7 +16082,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -17400,7 +16100,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -17420,7 +16119,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -17438,7 +16136,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -17455,7 +16152,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -17468,7 +16164,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -17482,7 +16177,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -17498,7 +16192,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -17515,7 +16208,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -17531,7 +16223,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(n)
         .k(16)
@@ -17547,7 +16238,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -17562,7 +16252,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -17580,7 +16269,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -17598,7 +16286,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -17615,7 +16302,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -17633,7 +16319,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -17650,7 +16335,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -17669,7 +16353,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -17686,7 +16369,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -17704,7 +16386,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -17723,7 +16404,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -17742,7 +16422,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -17759,7 +16438,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -17777,7 +16455,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -17796,7 +16473,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -17816,7 +16492,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -17834,7 +16509,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -17851,7 +16525,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -17864,7 +16537,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -17878,7 +16550,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -17894,7 +16565,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -17911,7 +16581,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -17927,7 +16596,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(n)
         .k(16)
@@ -17943,7 +16611,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -17958,7 +16625,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -17976,7 +16642,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -17994,7 +16659,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -18011,7 +16675,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -18029,7 +16692,6 @@
         .mr(2)
         .nr(8)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -18046,7 +16708,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -18065,7 +16726,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -18082,7 +16742,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -18100,7 +16759,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -18119,7 +16777,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -18138,7 +16795,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -18155,7 +16811,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -18173,7 +16828,6 @@
           .mr(2)
           .nr(8)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -18192,7 +16846,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -18212,7 +16865,6 @@
             .mr(2)
             .nr(8)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -18230,7 +16882,6 @@
       .mr(2)
       .nr(8)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -18643,7 +17294,6 @@
       .mr(2)
       .nr(8)
       .kr(4)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -18656,7 +17306,6 @@
       .mr(2)
       .nr(8)
       .kr(4)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -18670,7 +17319,6 @@
       .mr(2)
       .nr(8)
       .kr(4)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -18686,7 +17334,6 @@
           .mr(2)
           .nr(8)
           .kr(4)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -18703,7 +17350,6 @@
         .mr(2)
         .nr(8)
         .kr(4)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -18719,7 +17365,6 @@
         .mr(2)
         .nr(8)
         .kr(4)
-        .sr(1)
         .m(2)
         .n(n)
         .k(16)
@@ -18735,7 +17380,6 @@
         .mr(2)
         .nr(8)
         .kr(4)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -18750,7 +17394,6 @@
         .mr(2)
         .nr(8)
         .kr(4)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -18768,7 +17411,6 @@
             .mr(2)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -18786,7 +17428,6 @@
         .mr(2)
         .nr(8)
         .kr(4)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -18803,7 +17444,6 @@
             .mr(2)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -18821,7 +17461,6 @@
         .mr(2)
         .nr(8)
         .kr(4)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -18838,7 +17477,6 @@
             .mr(2)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -18857,7 +17495,6 @@
           .mr(2)
           .nr(8)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -18874,7 +17511,6 @@
           .mr(2)
           .nr(8)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -18892,7 +17528,6 @@
           .mr(2)
           .nr(8)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -18911,7 +17546,6 @@
             .mr(2)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -18930,7 +17564,6 @@
           .mr(2)
           .nr(8)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -18947,7 +17580,6 @@
           .mr(2)
           .nr(8)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -18965,7 +17597,6 @@
           .mr(2)
           .nr(8)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -18984,7 +17615,6 @@
             .mr(2)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -19004,7 +17634,6 @@
             .mr(2)
             .nr(8)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -19022,7 +17651,6 @@
       .mr(2)
       .nr(8)
       .kr(4)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -19831,7 +18459,6 @@
       .mr(2)
       .nr(8)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -19844,7 +18471,6 @@
       .mr(2)
       .nr(8)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -19858,7 +18484,6 @@
       .mr(2)
       .nr(8)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -19874,7 +18499,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -19891,7 +18515,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(8)
         .k(16)
@@ -19907,7 +18530,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(n)
         .k(16)
@@ -19923,7 +18545,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -19938,7 +18559,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -19956,7 +18576,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -19974,7 +18593,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -19991,7 +18609,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -20009,7 +18626,6 @@
         .mr(2)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(8)
         .k(k)
@@ -20026,7 +18642,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -20045,7 +18660,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -20062,7 +18676,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -20080,7 +18693,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -20099,7 +18711,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -20118,7 +18729,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -20135,7 +18745,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -20153,7 +18762,6 @@
           .mr(2)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -20172,7 +18780,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -20192,7 +18799,6 @@
             .mr(2)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -20210,7 +18816,6 @@
       .mr(2)
       .nr(8)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(8)
       .k(16)
@@ -20226,8 +18831,6 @@
     GemmMicrokernelTester()
       .mr(2)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -20239,8 +18842,6 @@
     GemmMicrokernelTester()
       .mr(2)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -20253,8 +18854,6 @@
     GemmMicrokernelTester()
       .mr(2)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -20269,8 +18868,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -20286,8 +18883,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -20302,8 +18897,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(8)
@@ -20318,8 +18911,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -20333,8 +18924,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -20351,8 +18940,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -20369,8 +18956,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -20386,8 +18971,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -20404,8 +18987,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -20421,8 +19002,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -20440,8 +19019,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -20457,8 +19034,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -20475,8 +19050,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -20494,8 +19067,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -20513,8 +19084,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -20530,8 +19099,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -20548,8 +19115,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -20567,8 +19132,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -20587,8 +19150,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -20605,8 +19166,6 @@
     GemmMicrokernelTester()
       .mr(2)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -20622,8 +19181,6 @@
     GemmMicrokernelTester()
       .mr(2)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -20635,8 +19192,6 @@
     GemmMicrokernelTester()
       .mr(2)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -20649,8 +19204,6 @@
     GemmMicrokernelTester()
       .mr(2)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -20665,8 +19218,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -20682,8 +19233,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -20698,8 +19247,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(8)
@@ -20714,8 +19261,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -20729,8 +19274,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -20747,8 +19290,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -20765,8 +19306,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -20782,8 +19321,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -20800,8 +19337,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -20817,8 +19352,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -20836,8 +19369,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -20853,8 +19384,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -20871,8 +19400,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -20890,8 +19417,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -20909,8 +19434,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -20926,8 +19449,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -20944,8 +19465,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -20963,8 +19482,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -20983,8 +19500,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -21001,8 +19516,6 @@
     GemmMicrokernelTester()
       .mr(2)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -21018,8 +19531,6 @@
     GemmMicrokernelTester()
       .mr(2)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -21031,8 +19542,6 @@
     GemmMicrokernelTester()
       .mr(2)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -21045,8 +19554,6 @@
     GemmMicrokernelTester()
       .mr(2)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -21061,8 +19568,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -21078,8 +19583,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -21094,8 +19597,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(8)
@@ -21110,8 +19611,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -21125,8 +19624,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -21143,8 +19640,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -21161,8 +19656,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -21178,8 +19671,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -21196,8 +19687,6 @@
       GemmMicrokernelTester()
         .mr(2)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -21213,8 +19702,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -21232,8 +19719,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -21249,8 +19734,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -21267,8 +19750,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -21286,8 +19767,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -21305,8 +19784,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -21322,8 +19799,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -21340,8 +19815,6 @@
         GemmMicrokernelTester()
           .mr(2)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -21359,8 +19832,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -21379,8 +19850,6 @@
           GemmMicrokernelTester()
             .mr(2)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -21397,8 +19866,6 @@
     GemmMicrokernelTester()
       .mr(2)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -21414,8 +19881,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(8)
       .k(8)
@@ -21427,8 +19892,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(8)
       .k(8)
@@ -21441,8 +19904,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(8)
       .k(8)
@@ -21457,8 +19918,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -21474,8 +19933,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(8)
         .k(8)
@@ -21490,8 +19947,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(8)
@@ -21506,8 +19961,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(8)
         .k(k)
@@ -21521,8 +19974,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(8)
         .k(k)
@@ -21539,8 +19990,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -21557,8 +20006,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(8)
         .k(k)
@@ -21574,8 +20021,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -21592,8 +20037,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(8)
         .k(k)
@@ -21609,8 +20052,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -21628,8 +20069,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -21645,8 +20084,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -21663,8 +20100,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -21682,8 +20117,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -21701,8 +20134,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -21718,8 +20149,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -21736,8 +20165,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -21755,8 +20182,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -21775,8 +20200,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -21793,8 +20216,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(8)
       .k(8)
@@ -21810,8 +20231,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(8)
       .k(8)
@@ -21823,8 +20242,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(8)
       .k(8)
@@ -21837,8 +20254,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(8)
       .k(8)
@@ -21853,8 +20268,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -21870,8 +20283,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(8)
         .k(8)
@@ -21886,8 +20297,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(8)
@@ -21902,8 +20311,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(8)
         .k(k)
@@ -21917,8 +20324,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(8)
         .k(k)
@@ -21935,8 +20340,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -21953,8 +20356,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(8)
         .k(k)
@@ -21970,8 +20371,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -21988,8 +20387,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(8)
         .k(k)
@@ -22005,8 +20402,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -22024,8 +20419,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -22041,8 +20434,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -22059,8 +20450,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -22078,8 +20467,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -22097,8 +20484,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -22114,8 +20499,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -22132,8 +20515,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -22151,8 +20532,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -22171,8 +20550,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -22189,8 +20566,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(8)
       .k(8)
@@ -22206,8 +20581,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(16)
       .k(8)
@@ -22219,8 +20592,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(16)
       .k(8)
@@ -22233,8 +20604,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(16)
       .k(8)
@@ -22249,8 +20618,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -22266,8 +20633,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -22282,8 +20647,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(8)
@@ -22298,8 +20661,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -22313,8 +20674,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -22331,8 +20690,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -22349,8 +20706,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -22366,8 +20721,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -22384,8 +20737,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -22401,8 +20752,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -22420,8 +20769,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -22437,8 +20784,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -22455,8 +20800,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -22474,8 +20817,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -22493,8 +20834,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -22510,8 +20849,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -22528,8 +20865,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -22547,8 +20882,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -22567,8 +20900,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -22585,8 +20916,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(16)
       .k(8)
@@ -22602,8 +20931,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(16)
       .k(8)
@@ -22615,8 +20942,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(16)
       .k(8)
@@ -22629,8 +20954,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(16)
       .k(8)
@@ -22645,8 +20968,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -22662,8 +20983,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -22678,8 +20997,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(8)
@@ -22694,8 +21011,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -22709,8 +21024,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -22727,8 +21040,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -22745,8 +21056,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -22762,8 +21071,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -22780,8 +21087,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -22797,8 +21102,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -22816,8 +21119,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -22833,8 +21134,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -22851,8 +21150,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -22870,8 +21167,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -22889,8 +21184,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -22906,8 +21199,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -22924,8 +21215,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -22943,8 +21232,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -22963,8 +21250,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -22981,8 +21266,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(16)
       .k(8)
@@ -22998,8 +21281,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(16)
       .k(8)
@@ -23011,8 +21292,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(16)
       .k(8)
@@ -23025,8 +21304,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(16)
       .k(8)
@@ -23041,8 +21318,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -23058,8 +21333,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -23074,8 +21347,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(8)
@@ -23090,8 +21361,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -23105,8 +21374,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -23123,8 +21390,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -23141,8 +21406,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -23158,8 +21421,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -23176,8 +21437,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -23193,8 +21452,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -23212,8 +21469,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -23229,8 +21484,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -23247,8 +21500,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -23266,8 +21517,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -23285,8 +21534,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -23302,8 +21549,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -23320,8 +21565,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -23339,8 +21582,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -23359,8 +21600,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -23377,8 +21616,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(16)
       .k(8)
@@ -23394,8 +21631,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -23407,8 +21642,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -23421,8 +21654,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -23437,8 +21668,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -23454,8 +21683,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(8)
         .k(8)
@@ -23470,8 +21697,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -23486,8 +21711,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -23501,8 +21724,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -23519,8 +21740,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -23537,8 +21756,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -23554,8 +21771,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -23572,8 +21787,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(8)
         .k(k)
@@ -23589,8 +21802,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -23608,8 +21819,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -23625,8 +21834,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -23643,8 +21850,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -23662,8 +21867,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -23681,8 +21884,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -23698,8 +21899,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -23716,8 +21915,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -23735,8 +21932,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -23755,8 +21950,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -23773,8 +21966,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(8)
       .k(8)
@@ -23790,8 +21981,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -23803,8 +21992,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -23817,8 +22004,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -23833,8 +22018,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -23850,8 +22033,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -23866,8 +22047,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -23882,8 +22061,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -23897,8 +22074,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -23915,8 +22090,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -23933,8 +22106,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -23950,8 +22121,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -23968,8 +22137,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -23985,8 +22152,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -24004,8 +22169,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -24021,8 +22184,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -24039,8 +22200,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -24058,8 +22217,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -24077,8 +22234,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -24094,8 +22249,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -24112,8 +22265,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -24131,8 +22282,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -24151,8 +22300,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -24169,8 +22316,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -24186,8 +22331,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -24199,8 +22342,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -24213,8 +22354,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -24229,8 +22368,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -24246,8 +22383,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -24262,8 +22397,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -24278,8 +22411,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -24293,8 +22424,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -24311,8 +22440,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -24329,8 +22456,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -24346,8 +22471,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -24364,8 +22487,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -24381,8 +22502,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -24400,8 +22519,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -24417,8 +22534,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -24435,8 +22550,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -24454,8 +22567,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -24473,8 +22584,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -24490,8 +22599,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -24508,8 +22615,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -24527,8 +22632,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -24547,8 +22650,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -24565,8 +22666,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -24582,8 +22681,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -24595,8 +22692,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -24609,8 +22704,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -24625,8 +22718,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -24642,8 +22733,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -24658,8 +22747,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -24674,8 +22761,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -24689,8 +22774,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -24707,8 +22790,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -24725,8 +22806,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -24742,8 +22821,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -24760,8 +22837,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -24777,8 +22852,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -24796,8 +22869,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -24813,8 +22884,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -24831,8 +22900,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -24850,8 +22917,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -24869,8 +22934,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -24886,8 +22949,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -24904,8 +22965,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -24923,8 +22982,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -24943,8 +23000,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -24961,8 +23016,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -24978,8 +23031,6 @@
     GemmMicrokernelTester()
       .mr(6)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(6)
       .n(8)
       .k(8)
@@ -24991,8 +23042,6 @@
     GemmMicrokernelTester()
       .mr(6)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(6)
       .n(8)
       .k(8)
@@ -25005,8 +23054,6 @@
     GemmMicrokernelTester()
       .mr(6)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(6)
       .n(8)
       .k(8)
@@ -25021,8 +23068,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -25038,8 +23083,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(8)
         .k(8)
@@ -25054,8 +23097,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(n)
         .k(8)
@@ -25070,8 +23111,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(8)
         .k(k)
@@ -25085,8 +23124,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(8)
         .k(k)
@@ -25103,8 +23140,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -25121,8 +23156,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(8)
         .k(k)
@@ -25138,8 +23171,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -25156,8 +23187,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(8)
         .k(k)
@@ -25173,8 +23202,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -25192,8 +23219,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -25209,8 +23234,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -25227,8 +23250,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -25246,8 +23267,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -25265,8 +23284,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -25282,8 +23299,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -25300,8 +23315,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -25319,8 +23332,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -25339,8 +23350,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -25357,8 +23366,6 @@
     GemmMicrokernelTester()
       .mr(6)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(6)
       .n(8)
       .k(8)
@@ -25374,8 +23381,6 @@
     GemmMicrokernelTester()
       .mr(6)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(6)
       .n(8)
       .k(8)
@@ -25387,8 +23392,6 @@
     GemmMicrokernelTester()
       .mr(6)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(6)
       .n(8)
       .k(8)
@@ -25401,8 +23404,6 @@
     GemmMicrokernelTester()
       .mr(6)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(6)
       .n(8)
       .k(8)
@@ -25417,8 +23418,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -25434,8 +23433,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(8)
         .k(8)
@@ -25450,8 +23447,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(n)
         .k(8)
@@ -25466,8 +23461,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(8)
         .k(k)
@@ -25481,8 +23474,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(8)
         .k(k)
@@ -25499,8 +23490,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -25517,8 +23506,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(8)
         .k(k)
@@ -25534,8 +23521,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -25552,8 +23537,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(8)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(8)
         .k(k)
@@ -25569,8 +23552,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -25588,8 +23569,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -25605,8 +23584,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -25623,8 +23600,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -25642,8 +23617,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -25661,8 +23634,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -25678,8 +23649,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -25696,8 +23665,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(8)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -25715,8 +23682,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -25735,8 +23700,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(8)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -25753,8 +23716,6 @@
     GemmMicrokernelTester()
       .mr(6)
       .nr(8)
-      .kr(1)
-      .sr(1)
       .m(6)
       .n(8)
       .k(8)
@@ -25770,8 +23731,6 @@
     GemmMicrokernelTester()
       .mr(6)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(6)
       .n(16)
       .k(8)
@@ -25783,8 +23742,6 @@
     GemmMicrokernelTester()
       .mr(6)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(6)
       .n(16)
       .k(8)
@@ -25797,8 +23754,6 @@
     GemmMicrokernelTester()
       .mr(6)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(6)
       .n(16)
       .k(8)
@@ -25813,8 +23768,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -25830,8 +23783,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -25846,8 +23797,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(n)
         .k(8)
@@ -25862,8 +23811,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -25877,8 +23824,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -25895,8 +23840,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -25913,8 +23856,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -25930,8 +23871,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -25948,8 +23887,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -25965,8 +23902,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -25984,8 +23919,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -26001,8 +23934,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -26019,8 +23950,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -26038,8 +23967,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -26057,8 +23984,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -26074,8 +23999,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -26092,8 +24015,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -26111,8 +24032,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -26131,8 +24050,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -26149,8 +24066,6 @@
     GemmMicrokernelTester()
       .mr(6)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(6)
       .n(16)
       .k(8)
@@ -26166,8 +24081,6 @@
     GemmMicrokernelTester()
       .mr(6)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(6)
       .n(16)
       .k(8)
@@ -26179,8 +24092,6 @@
     GemmMicrokernelTester()
       .mr(6)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(6)
       .n(16)
       .k(8)
@@ -26193,8 +24104,6 @@
     GemmMicrokernelTester()
       .mr(6)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(6)
       .n(16)
       .k(8)
@@ -26209,8 +24118,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -26226,8 +24133,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -26242,8 +24147,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(n)
         .k(8)
@@ -26258,8 +24161,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -26273,8 +24174,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -26291,8 +24190,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -26309,8 +24206,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -26326,8 +24221,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -26344,8 +24237,6 @@
       GemmMicrokernelTester()
         .mr(6)
         .nr(16)
-        .kr(1)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -26361,8 +24252,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -26380,8 +24269,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -26397,8 +24284,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -26415,8 +24300,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -26434,8 +24317,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -26453,8 +24334,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -26470,8 +24349,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -26488,8 +24365,6 @@
         GemmMicrokernelTester()
           .mr(6)
           .nr(16)
-          .kr(1)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -26507,8 +24382,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -26527,8 +24400,6 @@
           GemmMicrokernelTester()
             .mr(6)
             .nr(16)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -26545,8 +24416,6 @@
     GemmMicrokernelTester()
       .mr(6)
       .nr(16)
-      .kr(1)
-      .sr(1)
       .m(6)
       .n(16)
       .k(8)
@@ -26563,7 +24432,6 @@
       .mr(6)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(6)
       .n(16)
       .k(8)
@@ -26576,7 +24444,6 @@
       .mr(6)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(6)
       .n(16)
       .k(8)
@@ -26590,7 +24457,6 @@
       .mr(6)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(6)
       .n(16)
       .k(8)
@@ -26606,7 +24472,6 @@
           .mr(6)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -26623,7 +24488,6 @@
         .mr(6)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -26639,7 +24503,6 @@
         .mr(6)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(6)
         .n(n)
         .k(8)
@@ -26655,7 +24518,6 @@
         .mr(6)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -26670,7 +24532,6 @@
         .mr(6)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -26688,7 +24549,6 @@
             .mr(6)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -26706,7 +24566,6 @@
         .mr(6)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -26723,7 +24582,6 @@
             .mr(6)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -26741,7 +24599,6 @@
         .mr(6)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -26758,7 +24615,6 @@
             .mr(6)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -26777,7 +24633,6 @@
           .mr(6)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -26794,7 +24649,6 @@
           .mr(6)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -26812,7 +24666,6 @@
           .mr(6)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -26831,7 +24684,6 @@
             .mr(6)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -26850,7 +24702,6 @@
           .mr(6)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -26867,7 +24718,6 @@
           .mr(6)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -26885,7 +24735,6 @@
           .mr(6)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -26904,7 +24753,6 @@
             .mr(6)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -26924,7 +24772,6 @@
             .mr(6)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -26942,7 +24789,6 @@
       .mr(6)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(6)
       .n(16)
       .k(8)
@@ -26959,7 +24805,6 @@
       .mr(8)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(8)
       .n(16)
       .k(8)
@@ -26972,7 +24817,6 @@
       .mr(8)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(8)
       .n(16)
       .k(8)
@@ -26986,7 +24830,6 @@
       .mr(8)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(8)
       .n(16)
       .k(8)
@@ -27002,7 +24845,6 @@
           .mr(8)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -27019,7 +24861,6 @@
         .mr(8)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -27035,7 +24876,6 @@
         .mr(8)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(8)
         .n(n)
         .k(8)
@@ -27051,7 +24891,6 @@
         .mr(8)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(8)
         .n(16)
         .k(k)
@@ -27066,7 +24905,6 @@
         .mr(8)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(8)
         .n(16)
         .k(k)
@@ -27084,7 +24922,6 @@
             .mr(8)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -27102,7 +24939,6 @@
         .mr(8)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(8)
         .n(16)
         .k(k)
@@ -27119,7 +24955,6 @@
             .mr(8)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -27137,7 +24972,6 @@
         .mr(8)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(8)
         .n(16)
         .k(k)
@@ -27154,7 +24988,6 @@
             .mr(8)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -27173,7 +25006,6 @@
           .mr(8)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(8)
           .n(n)
           .k(k)
@@ -27190,7 +25022,6 @@
           .mr(8)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(8)
           .n(n)
           .k(k)
@@ -27208,7 +25039,6 @@
           .mr(8)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(8)
           .n(n)
           .k(k)
@@ -27227,7 +25057,6 @@
             .mr(8)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -27246,7 +25075,6 @@
           .mr(8)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(8)
           .n(n)
           .k(k)
@@ -27263,7 +25091,6 @@
           .mr(8)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(8)
           .n(n)
           .k(k)
@@ -27281,7 +25108,6 @@
           .mr(8)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(8)
           .n(n)
           .k(k)
@@ -27300,7 +25126,6 @@
             .mr(8)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -27320,7 +25145,6 @@
             .mr(8)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -27338,7 +25162,6 @@
       .mr(8)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(8)
       .n(16)
       .k(8)
@@ -27355,7 +25178,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -27368,7 +25190,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -27382,7 +25203,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -27398,7 +25218,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -27415,7 +25234,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(4)
         .k(8)
@@ -27431,7 +25249,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -27447,7 +25264,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -27462,7 +25278,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -27480,7 +25295,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -27498,7 +25312,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -27515,7 +25328,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -27533,7 +25345,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -27550,7 +25361,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -27569,7 +25379,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -27586,7 +25395,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -27604,7 +25412,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -27623,7 +25430,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -27642,7 +25448,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -27659,7 +25464,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -27677,7 +25481,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -27696,7 +25499,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -27716,7 +25518,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -27734,7 +25535,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -27748,11 +25548,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2__AVX_LD64, k_eq_8) {
     TEST_REQUIRES_X86_AVX;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(4)
       .k(8)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2__avx_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -27761,11 +25558,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2__AVX_LD64, strided_cn) {
     TEST_REQUIRES_X86_AVX;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(4)
       .k(8)
       .cn_stride(7)
@@ -27775,11 +25569,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2__AVX_LD64, k_eq_8_strided_a) {
     TEST_REQUIRES_X86_AVX;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(4)
       .k(8)
       .a_stride(11)
@@ -27791,10 +25582,8 @@
     for (uint32_t n = 1; n <= 4; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -27808,10 +25597,8 @@
     TEST_REQUIRES_X86_AVX;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(4)
         .k(8)
@@ -27824,11 +25611,8 @@
     TEST_REQUIRES_X86_AVX;
     for (uint32_t n = 1; n <= 4; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(8)
         .iterations(1)
@@ -27840,11 +25624,8 @@
     TEST_REQUIRES_X86_AVX;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2__avx_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -27855,11 +25636,8 @@
     TEST_REQUIRES_X86_AVX;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(4)
         .k(k)
         .a_stride(11)
@@ -27873,10 +25651,8 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -27891,11 +25667,8 @@
     TEST_REQUIRES_X86_AVX;
     for (size_t k = 9; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2__avx_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -27908,10 +25681,8 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -27926,11 +25697,8 @@
     TEST_REQUIRES_X86_AVX;
     for (size_t k = 16; k <= 80; k += 8) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2__avx_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -27943,10 +25711,8 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -27962,11 +25728,8 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2__avx_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -27979,11 +25742,8 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(7)
@@ -27997,11 +25757,8 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -28016,10 +25773,8 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -28035,11 +25790,8 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2__avx_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -28052,11 +25804,8 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(7)
@@ -28070,11 +25819,8 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -28089,10 +25835,8 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -28109,10 +25853,8 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -28127,11 +25869,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2__AVX_LD64, strided_cm) {
     TEST_REQUIRES_X86_AVX;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(4)
       .k(8)
       .cm_stride(7)
@@ -28144,11 +25883,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2__XOP_LD64, k_eq_8) {
     TEST_REQUIRES_X86_XOP;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(4)
       .k(8)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2__xop_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -28157,11 +25893,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2__XOP_LD64, strided_cn) {
     TEST_REQUIRES_X86_XOP;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(4)
       .k(8)
       .cn_stride(7)
@@ -28171,11 +25904,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2__XOP_LD64, k_eq_8_strided_a) {
     TEST_REQUIRES_X86_XOP;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(4)
       .k(8)
       .a_stride(11)
@@ -28187,10 +25917,8 @@
     for (uint32_t n = 1; n <= 4; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -28204,10 +25932,8 @@
     TEST_REQUIRES_X86_XOP;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(4)
         .k(8)
@@ -28220,11 +25946,8 @@
     TEST_REQUIRES_X86_XOP;
     for (uint32_t n = 1; n <= 4; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(8)
         .iterations(1)
@@ -28236,11 +25959,8 @@
     TEST_REQUIRES_X86_XOP;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2__xop_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -28251,11 +25971,8 @@
     TEST_REQUIRES_X86_XOP;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(4)
         .k(k)
         .a_stride(11)
@@ -28269,10 +25986,8 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -28287,11 +26002,8 @@
     TEST_REQUIRES_X86_XOP;
     for (size_t k = 9; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2__xop_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -28304,10 +26016,8 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -28322,11 +26032,8 @@
     TEST_REQUIRES_X86_XOP;
     for (size_t k = 16; k <= 80; k += 8) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2__xop_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -28339,10 +26046,8 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -28358,11 +26063,8 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2__xop_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -28375,11 +26077,8 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(7)
@@ -28393,11 +26092,8 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -28412,10 +26108,8 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -28431,11 +26125,8 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2__xop_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -28448,11 +26139,8 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(7)
@@ -28466,11 +26154,8 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -28485,10 +26170,8 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -28505,10 +26188,8 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -28523,11 +26204,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2__XOP_LD64, strided_cm) {
     TEST_REQUIRES_X86_XOP;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(4)
       .k(8)
       .cm_stride(7)
@@ -28543,7 +26221,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -28556,7 +26233,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -28570,7 +26246,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -28586,7 +26261,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -28603,7 +26277,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(4)
         .k(8)
@@ -28619,7 +26292,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -28635,7 +26307,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -28650,7 +26321,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -28668,7 +26338,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -28686,7 +26355,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -28703,7 +26371,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -28721,7 +26388,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -28738,7 +26404,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -28757,7 +26422,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -28774,7 +26438,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -28792,7 +26455,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -28811,7 +26473,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -28830,7 +26491,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -28847,7 +26507,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -28865,7 +26524,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -28884,7 +26542,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -28904,7 +26561,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -28922,7 +26578,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -28939,7 +26594,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -28952,7 +26606,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -28966,7 +26619,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -28982,7 +26634,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -28999,7 +26650,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(4)
         .k(8)
@@ -29015,7 +26665,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -29031,7 +26680,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -29046,7 +26694,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -29064,7 +26711,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -29082,7 +26728,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -29099,7 +26744,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -29117,7 +26761,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -29134,7 +26777,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -29153,7 +26795,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -29170,7 +26811,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -29188,7 +26828,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -29207,7 +26846,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -29226,7 +26864,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -29243,7 +26880,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -29261,7 +26897,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -29280,7 +26915,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -29300,7 +26934,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -29318,7 +26951,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -29332,11 +26964,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2__SSE2_LD128, k_eq_8) {
     TEST_REQUIRES_X86_SSE2;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(4)
       .k(8)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2__sse2_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_sse2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -29345,11 +26974,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2__SSE2_LD128, strided_cn) {
     TEST_REQUIRES_X86_SSE2;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(4)
       .k(8)
       .cn_stride(7)
@@ -29359,11 +26985,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2__SSE2_LD128, k_eq_8_strided_a) {
     TEST_REQUIRES_X86_SSE2;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(4)
       .k(8)
       .a_stride(11)
@@ -29375,10 +26998,8 @@
     for (uint32_t n = 1; n <= 4; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -29392,10 +27013,8 @@
     TEST_REQUIRES_X86_SSE2;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(4)
         .k(8)
@@ -29408,11 +27027,8 @@
     TEST_REQUIRES_X86_SSE2;
     for (uint32_t n = 1; n <= 4; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(8)
         .iterations(1)
@@ -29424,11 +27040,8 @@
     TEST_REQUIRES_X86_SSE2;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2__sse2_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_sse2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -29439,11 +27052,8 @@
     TEST_REQUIRES_X86_SSE2;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(4)
         .k(k)
         .a_stride(11)
@@ -29457,10 +27067,8 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -29475,11 +27083,8 @@
     TEST_REQUIRES_X86_SSE2;
     for (size_t k = 9; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2__sse2_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_sse2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -29492,10 +27097,8 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -29510,11 +27113,8 @@
     TEST_REQUIRES_X86_SSE2;
     for (size_t k = 16; k <= 80; k += 8) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
-        .sr(1)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2__sse2_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_sse2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -29527,10 +27127,8 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -29546,11 +27144,8 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2__sse2_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_sse2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -29563,11 +27158,8 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(7)
@@ -29581,11 +27173,8 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -29600,10 +27189,8 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -29619,11 +27206,8 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2__sse2_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_sse2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -29636,11 +27220,8 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(7)
@@ -29654,11 +27235,8 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -29673,10 +27251,8 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -29693,10 +27269,8 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -29711,11 +27285,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2__SSE2_LD128, strided_cm) {
     TEST_REQUIRES_X86_SSE2;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
-      .sr(1)
-      .m(1)
       .n(4)
       .k(8)
       .cm_stride(7)
@@ -29731,7 +27302,6 @@
       .mr(2)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -29744,7 +27314,6 @@
       .mr(2)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -29758,7 +27327,6 @@
       .mr(2)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -29774,7 +27342,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -29791,7 +27358,6 @@
         .mr(2)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(4)
         .k(8)
@@ -29807,7 +27373,6 @@
         .mr(2)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(n)
         .k(8)
@@ -29823,7 +27388,6 @@
         .mr(2)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -29838,7 +27402,6 @@
         .mr(2)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -29856,7 +27419,6 @@
             .mr(2)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -29874,7 +27436,6 @@
         .mr(2)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -29891,7 +27452,6 @@
             .mr(2)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -29909,7 +27469,6 @@
         .mr(2)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -29926,7 +27485,6 @@
             .mr(2)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -29945,7 +27503,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -29962,7 +27519,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -29980,7 +27536,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -29999,7 +27554,6 @@
             .mr(2)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -30018,7 +27572,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -30035,7 +27588,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -30053,7 +27605,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -30072,7 +27623,6 @@
             .mr(2)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -30092,7 +27642,6 @@
             .mr(2)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -30110,7 +27659,6 @@
       .mr(2)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -30127,7 +27675,6 @@
       .mr(2)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -30140,7 +27687,6 @@
       .mr(2)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -30154,7 +27700,6 @@
       .mr(2)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -30170,7 +27715,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -30187,7 +27731,6 @@
         .mr(2)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(4)
         .k(8)
@@ -30203,7 +27746,6 @@
         .mr(2)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(n)
         .k(8)
@@ -30219,7 +27761,6 @@
         .mr(2)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -30234,7 +27775,6 @@
         .mr(2)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -30252,7 +27792,6 @@
             .mr(2)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -30270,7 +27809,6 @@
         .mr(2)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -30287,7 +27825,6 @@
             .mr(2)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -30305,7 +27842,6 @@
         .mr(2)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -30322,7 +27858,6 @@
             .mr(2)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -30341,7 +27876,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -30358,7 +27892,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -30376,7 +27909,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -30395,7 +27927,6 @@
             .mr(2)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -30414,7 +27945,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -30431,7 +27961,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -30449,7 +27978,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -30468,7 +27996,6 @@
             .mr(2)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -30488,7 +28015,6 @@
             .mr(2)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -30506,7 +28032,6 @@
       .mr(2)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -30523,7 +28048,6 @@
       .mr(3)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(3)
       .n(4)
       .k(8)
@@ -30536,7 +28060,6 @@
       .mr(3)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(3)
       .n(4)
       .k(8)
@@ -30550,7 +28073,6 @@
       .mr(3)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(3)
       .n(4)
       .k(8)
@@ -30566,7 +28088,6 @@
           .mr(3)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -30583,7 +28104,6 @@
         .mr(3)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(4)
         .k(8)
@@ -30599,7 +28119,6 @@
         .mr(3)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(3)
         .n(n)
         .k(8)
@@ -30615,7 +28134,6 @@
         .mr(3)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(3)
         .n(4)
         .k(k)
@@ -30630,7 +28148,6 @@
         .mr(3)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(3)
         .n(4)
         .k(k)
@@ -30648,7 +28165,6 @@
             .mr(3)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -30666,7 +28182,6 @@
         .mr(3)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(3)
         .n(4)
         .k(k)
@@ -30683,7 +28198,6 @@
             .mr(3)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -30701,7 +28215,6 @@
         .mr(3)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(3)
         .n(4)
         .k(k)
@@ -30718,7 +28231,6 @@
             .mr(3)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -30737,7 +28249,6 @@
           .mr(3)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -30754,7 +28265,6 @@
           .mr(3)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -30772,7 +28282,6 @@
           .mr(3)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -30791,7 +28300,6 @@
             .mr(3)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -30810,7 +28318,6 @@
           .mr(3)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -30827,7 +28334,6 @@
           .mr(3)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -30845,7 +28351,6 @@
           .mr(3)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -30864,7 +28369,6 @@
             .mr(3)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -30884,7 +28388,6 @@
             .mr(3)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -30902,7 +28405,6 @@
       .mr(3)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(3)
       .n(4)
       .k(8)
@@ -30919,7 +28421,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -30932,7 +28433,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -30946,7 +28446,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -30962,7 +28461,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -30979,7 +28477,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(4)
         .k(8)
@@ -30995,7 +28492,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -31011,7 +28507,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -31026,7 +28521,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -31044,7 +28538,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -31062,7 +28555,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -31079,7 +28571,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -31097,7 +28588,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -31114,7 +28604,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -31133,7 +28622,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -31150,7 +28638,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -31168,7 +28655,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -31187,7 +28673,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -31206,7 +28691,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -31223,7 +28707,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -31241,7 +28724,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -31260,7 +28742,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -31280,7 +28761,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -31298,7 +28778,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -31312,11 +28791,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2S4__SSE2_LD64, k_eq_8) {
     TEST_REQUIRES_X86_SSE2;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
       .sr(4)
-      .m(1)
       .n(4)
       .k(8)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2s4__sse2_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_sse2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -31325,11 +28802,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2S4__SSE2_LD64, strided_cn) {
     TEST_REQUIRES_X86_SSE2;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
       .sr(4)
-      .m(1)
       .n(4)
       .k(8)
       .cn_stride(7)
@@ -31339,11 +28814,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2S4__SSE2_LD64, k_eq_8_strided_a) {
     TEST_REQUIRES_X86_SSE2;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
       .sr(4)
-      .m(1)
       .n(4)
       .k(8)
       .a_stride(11)
@@ -31355,7 +28828,6 @@
     for (uint32_t n = 1; n <= 4; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
@@ -31372,7 +28844,6 @@
     TEST_REQUIRES_X86_SSE2;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
         .sr(4)
@@ -31388,11 +28859,9 @@
     TEST_REQUIRES_X86_SSE2;
     for (uint32_t n = 1; n <= 4; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(n)
         .k(8)
         .iterations(1)
@@ -31404,11 +28873,9 @@
     TEST_REQUIRES_X86_SSE2;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2s4__sse2_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_sse2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -31419,11 +28886,9 @@
     TEST_REQUIRES_X86_SSE2;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(4)
         .k(k)
         .a_stride(11)
@@ -31437,7 +28902,6 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
             .sr(4)
@@ -31455,11 +28919,9 @@
     TEST_REQUIRES_X86_SSE2;
     for (size_t k = 9; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2s4__sse2_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_sse2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -31472,7 +28934,6 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
             .sr(4)
@@ -31490,11 +28951,9 @@
     TEST_REQUIRES_X86_SSE2;
     for (size_t k = 16; k <= 80; k += 8) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2s4__sse2_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_sse2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -31507,7 +28966,6 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
             .sr(4)
@@ -31526,11 +28984,9 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2s4__sse2_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_sse2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -31543,11 +28999,9 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(7)
@@ -31561,11 +29015,9 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -31580,7 +29032,6 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
             .sr(4)
@@ -31599,11 +29050,9 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2s4__sse2_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_sse2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -31616,11 +29065,9 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(7)
@@ -31634,11 +29081,9 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -31653,7 +29098,6 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
             .sr(4)
@@ -31673,7 +29117,6 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
             .sr(4)
@@ -31691,11 +29134,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2S4__SSE2_LD64, strided_cm) {
     TEST_REQUIRES_X86_SSE2;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
       .sr(4)
-      .m(1)
       .n(4)
       .k(8)
       .cm_stride(7)
@@ -35668,11 +33109,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2S4__AVX_LD128, k_eq_8) {
     TEST_REQUIRES_X86_AVX;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
       .sr(4)
-      .m(1)
       .n(4)
       .k(8)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2s4__avx_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -35681,11 +33120,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2S4__AVX_LD128, strided_cn) {
     TEST_REQUIRES_X86_AVX;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
       .sr(4)
-      .m(1)
       .n(4)
       .k(8)
       .cn_stride(7)
@@ -35695,11 +33132,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2S4__AVX_LD128, k_eq_8_strided_a) {
     TEST_REQUIRES_X86_AVX;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
       .sr(4)
-      .m(1)
       .n(4)
       .k(8)
       .a_stride(11)
@@ -35711,7 +33146,6 @@
     for (uint32_t n = 1; n <= 4; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
@@ -35728,7 +33162,6 @@
     TEST_REQUIRES_X86_AVX;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
         .sr(4)
@@ -35744,11 +33177,9 @@
     TEST_REQUIRES_X86_AVX;
     for (uint32_t n = 1; n <= 4; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(n)
         .k(8)
         .iterations(1)
@@ -35760,11 +33191,9 @@
     TEST_REQUIRES_X86_AVX;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2s4__avx_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -35775,11 +33204,9 @@
     TEST_REQUIRES_X86_AVX;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(4)
         .k(k)
         .a_stride(11)
@@ -35793,7 +33220,6 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
             .sr(4)
@@ -35811,11 +33237,9 @@
     TEST_REQUIRES_X86_AVX;
     for (size_t k = 9; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2s4__avx_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -35828,7 +33252,6 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
             .sr(4)
@@ -35846,11 +33269,9 @@
     TEST_REQUIRES_X86_AVX;
     for (size_t k = 16; k <= 80; k += 8) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2s4__avx_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -35863,7 +33284,6 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
             .sr(4)
@@ -35882,11 +33302,9 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2s4__avx_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -35899,11 +33317,9 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(7)
@@ -35917,11 +33333,9 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -35936,7 +33350,6 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
             .sr(4)
@@ -35955,11 +33368,9 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2s4__avx_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -35972,11 +33383,9 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(7)
@@ -35990,11 +33399,9 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -36009,7 +33416,6 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
             .sr(4)
@@ -36029,7 +33435,6 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
             .sr(4)
@@ -36047,11 +33452,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2S4__AVX_LD128, strided_cm) {
     TEST_REQUIRES_X86_AVX;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
       .sr(4)
-      .m(1)
       .n(4)
       .k(8)
       .cm_stride(7)
@@ -37255,7 +34658,6 @@
       .mr(2)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -37268,7 +34670,6 @@
       .mr(2)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -37282,7 +34683,6 @@
       .mr(2)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -37298,7 +34698,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -37315,7 +34714,6 @@
         .mr(2)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(4)
         .k(8)
@@ -37331,7 +34729,6 @@
         .mr(2)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(n)
         .k(8)
@@ -37347,7 +34744,6 @@
         .mr(2)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -37362,7 +34758,6 @@
         .mr(2)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -37380,7 +34775,6 @@
             .mr(2)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -37398,7 +34792,6 @@
         .mr(2)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -37415,7 +34808,6 @@
             .mr(2)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -37433,7 +34825,6 @@
         .mr(2)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -37450,7 +34841,6 @@
             .mr(2)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -37469,7 +34859,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -37486,7 +34875,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -37504,7 +34892,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -37523,7 +34910,6 @@
             .mr(2)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -37542,7 +34928,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -37559,7 +34944,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -37577,7 +34961,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -37596,7 +34979,6 @@
             .mr(2)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -37616,7 +34998,6 @@
             .mr(2)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -37634,7 +35015,6 @@
       .mr(2)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -37651,7 +35031,6 @@
       .mr(2)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -37664,7 +35043,6 @@
       .mr(2)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -37678,7 +35056,6 @@
       .mr(2)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -37694,7 +35071,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -37711,7 +35087,6 @@
         .mr(2)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(4)
         .k(8)
@@ -37727,7 +35102,6 @@
         .mr(2)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(n)
         .k(8)
@@ -37743,7 +35117,6 @@
         .mr(2)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -37758,7 +35131,6 @@
         .mr(2)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -37776,7 +35148,6 @@
             .mr(2)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -37794,7 +35165,6 @@
         .mr(2)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -37811,7 +35181,6 @@
             .mr(2)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -37829,7 +35198,6 @@
         .mr(2)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -37846,7 +35214,6 @@
             .mr(2)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -37865,7 +35232,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -37882,7 +35248,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -37900,7 +35265,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -37919,7 +35283,6 @@
             .mr(2)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -37938,7 +35301,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -37955,7 +35317,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -37973,7 +35334,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -37992,7 +35352,6 @@
             .mr(2)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -38012,7 +35371,6 @@
             .mr(2)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -38030,7 +35388,6 @@
       .mr(2)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -38044,11 +35401,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C8__SSE41_LD128, k_eq_8) {
     TEST_REQUIRES_X86_SSE41;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(4)
       .k(8)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c8__sse41_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -38057,11 +35411,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C8__SSE41_LD128, strided_cn) {
     TEST_REQUIRES_X86_SSE41;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(4)
       .k(8)
       .cn_stride(7)
@@ -38071,11 +35422,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C8__SSE41_LD128, k_eq_8_strided_a) {
     TEST_REQUIRES_X86_SSE41;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(4)
       .k(8)
       .a_stride(11)
@@ -38087,10 +35435,8 @@
     for (uint32_t n = 1; n <= 4; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -38104,10 +35450,8 @@
     TEST_REQUIRES_X86_SSE41;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(4)
         .k(8)
@@ -38120,11 +35464,8 @@
     TEST_REQUIRES_X86_SSE41;
     for (uint32_t n = 1; n <= 4; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(8)
         .iterations(1)
@@ -38136,11 +35477,8 @@
     TEST_REQUIRES_X86_SSE41;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c8__sse41_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -38151,11 +35489,8 @@
     TEST_REQUIRES_X86_SSE41;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(4)
         .k(k)
         .a_stride(11)
@@ -38169,10 +35504,8 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -38187,11 +35520,8 @@
     TEST_REQUIRES_X86_SSE41;
     for (size_t k = 9; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c8__sse41_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -38204,10 +35534,8 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -38222,11 +35550,8 @@
     TEST_REQUIRES_X86_SSE41;
     for (size_t k = 16; k <= 80; k += 8) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c8__sse41_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -38239,10 +35564,8 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -38258,11 +35581,8 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c8__sse41_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -38275,11 +35595,8 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(7)
@@ -38293,11 +35610,8 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -38312,10 +35626,8 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -38331,11 +35643,8 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c8__sse41_ld128, xnn_init_qs8_qc8w_conv_minmax_fp32_sse4_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -38348,11 +35657,8 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(7)
@@ -38366,11 +35672,8 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -38385,10 +35688,8 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -38405,10 +35706,8 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -38423,11 +35722,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C8__SSE41_LD128, strided_cm) {
     TEST_REQUIRES_X86_SSE41;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(4)
       .k(8)
       .cm_stride(7)
@@ -38443,7 +35739,6 @@
       .mr(2)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -38456,7 +35751,6 @@
       .mr(2)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -38470,7 +35764,6 @@
       .mr(2)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -38486,7 +35779,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -38503,7 +35795,6 @@
         .mr(2)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(4)
         .k(8)
@@ -38519,7 +35810,6 @@
         .mr(2)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(n)
         .k(8)
@@ -38535,7 +35825,6 @@
         .mr(2)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -38550,7 +35839,6 @@
         .mr(2)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -38568,7 +35856,6 @@
             .mr(2)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -38586,7 +35873,6 @@
         .mr(2)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -38603,7 +35889,6 @@
             .mr(2)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -38621,7 +35906,6 @@
         .mr(2)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -38638,7 +35922,6 @@
             .mr(2)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -38657,7 +35940,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -38674,7 +35956,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -38692,7 +35973,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -38711,7 +35991,6 @@
             .mr(2)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -38730,7 +36009,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -38747,7 +36025,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -38765,7 +36042,6 @@
           .mr(2)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -38784,7 +36060,6 @@
             .mr(2)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -38804,7 +36079,6 @@
             .mr(2)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -38822,7 +36096,6 @@
       .mr(2)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -38839,7 +36112,6 @@
       .mr(3)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(3)
       .n(4)
       .k(8)
@@ -38852,7 +36124,6 @@
       .mr(3)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(3)
       .n(4)
       .k(8)
@@ -38866,7 +36137,6 @@
       .mr(3)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(3)
       .n(4)
       .k(8)
@@ -38882,7 +36152,6 @@
           .mr(3)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -38899,7 +36168,6 @@
         .mr(3)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(4)
         .k(8)
@@ -38915,7 +36183,6 @@
         .mr(3)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(n)
         .k(8)
@@ -38931,7 +36198,6 @@
         .mr(3)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(4)
         .k(k)
@@ -38946,7 +36212,6 @@
         .mr(3)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(4)
         .k(k)
@@ -38964,7 +36229,6 @@
             .mr(3)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -38982,7 +36246,6 @@
         .mr(3)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(4)
         .k(k)
@@ -38999,7 +36262,6 @@
             .mr(3)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -39017,7 +36279,6 @@
         .mr(3)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(4)
         .k(k)
@@ -39034,7 +36295,6 @@
             .mr(3)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -39053,7 +36313,6 @@
           .mr(3)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -39070,7 +36329,6 @@
           .mr(3)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -39088,7 +36346,6 @@
           .mr(3)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -39107,7 +36364,6 @@
             .mr(3)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -39126,7 +36382,6 @@
           .mr(3)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -39143,7 +36398,6 @@
           .mr(3)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -39161,7 +36415,6 @@
           .mr(3)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -39180,7 +36433,6 @@
             .mr(3)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -39200,7 +36452,6 @@
             .mr(3)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -39218,7 +36469,6 @@
       .mr(3)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(3)
       .n(4)
       .k(8)
@@ -39229,420 +36479,1082 @@
 
 
 #if XNN_ARCH_X86 || XNN_ARCH_X86_64
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, k_eq_8) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, k_eq_8) {
+    TEST_REQUIRES_X86_AVX512SKX;
     GemmMicrokernelTester()
-      .extended_weights(true)
-      .mr(3)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(3)
       .n(8)
       .k(8)
-      .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, strided_cn) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, strided_cn) {
+    TEST_REQUIRES_X86_AVX512SKX;
     GemmMicrokernelTester()
-      .extended_weights(true)
-      .mr(3)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(3)
       .n(8)
       .k(8)
       .cn_stride(11)
-      .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, k_eq_8_strided_a) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, k_eq_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512SKX;
     GemmMicrokernelTester()
-      .extended_weights(true)
-      .mr(3)
       .nr(8)
       .kr(8)
-      .sr(1)
-      .m(3)
       .n(8)
       .k(8)
       .a_stride(11)
-      .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, k_eq_8_subtile) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, k_eq_8_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
     for (uint32_t n = 1; n <= 8; n++) {
-      for (uint32_t m = 1; m <= 3; m++) {
+      for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .extended_weights(true)
-          .mr(3)
           .nr(8)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
           .iterations(1)
-          .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
       }
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, k_eq_8_subtile_m) {
-    TEST_REQUIRES_X86_AVX2;
-    for (uint32_t m = 1; m <= 3; m++) {
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, k_eq_8_subtile_m) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .extended_weights(true)
-        .mr(3)
         .nr(8)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(8)
         .k(8)
         .iterations(1)
-        .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, k_eq_8_subtile_n) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, k_eq_8_subtile_n) {
+    TEST_REQUIRES_X86_AVX512SKX;
     for (uint32_t n = 1; n <= 8; n++) {
       GemmMicrokernelTester()
-        .extended_weights(true)
-        .mr(3)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(3)
         .n(n)
         .k(8)
         .iterations(1)
-        .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, k_lt_8) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, k_lt_8) {
+    TEST_REQUIRES_X86_AVX512SKX;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .extended_weights(true)
-        .mr(3)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(3)
         .n(8)
         .k(k)
-        .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, k_lt_8_strided_a) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, k_lt_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512SKX;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .extended_weights(true)
-        .mr(3)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(3)
         .n(8)
         .k(k)
         .a_stride(11)
-        .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, k_lt_8_subtile) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, k_lt_8_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
     for (size_t k = 1; k < 8; k++) {
       for (uint32_t n = 1; n <= 8; n++) {
-        for (uint32_t m = 1; m <= 3; m++) {
+        for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .extended_weights(true)
-            .mr(3)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
             .iterations(1)
-            .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
         }
       }
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, k_gt_8) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, k_gt_8) {
+    TEST_REQUIRES_X86_AVX512SKX;
     for (size_t k = 9; k < 16; k++) {
       GemmMicrokernelTester()
-        .extended_weights(true)
-        .mr(3)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(3)
         .n(8)
         .k(k)
-        .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, k_gt_8_subtile) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, k_gt_8_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
     for (size_t k = 9; k < 16; k++) {
       for (uint32_t n = 1; n <= 8; n++) {
-        for (uint32_t m = 1; m <= 3; m++) {
+        for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .extended_weights(true)
-            .mr(3)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
             .iterations(1)
-            .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
         }
       }
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, k_div_8) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, k_div_8) {
+    TEST_REQUIRES_X86_AVX512SKX;
     for (size_t k = 16; k <= 80; k += 8) {
       GemmMicrokernelTester()
-        .extended_weights(true)
-        .mr(3)
         .nr(8)
         .kr(8)
-        .sr(1)
-        .m(3)
         .n(8)
         .k(k)
-        .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, k_div_8_subtile) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, k_div_8_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
     for (size_t k = 16; k <= 80; k += 8) {
       for (uint32_t n = 1; n <= 8; n++) {
-        for (uint32_t m = 1; m <= 3; m++) {
+        for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .extended_weights(true)
-            .mr(3)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
             .iterations(1)
-            .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
         }
       }
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, n_gt_8) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, n_gt_8) {
+    TEST_REQUIRES_X86_AVX512SKX;
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .extended_weights(true)
-          .mr(3)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(3)
           .n(n)
           .k(k)
-          .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
       }
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, n_gt_8_strided_cn) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, n_gt_8_strided_cn) {
+    TEST_REQUIRES_X86_AVX512SKX;
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .extended_weights(true)
-          .mr(3)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(3)
           .n(n)
           .k(k)
           .cn_stride(11)
-          .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
       }
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, n_gt_8_strided_a) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, n_gt_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512SKX;
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .extended_weights(true)
-          .mr(3)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(3)
           .n(n)
           .k(k)
           .a_stride(43)
-          .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
       }
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, n_gt_8_subtile) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, n_gt_8_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
     for (uint32_t n = 9; n < 16; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
-        for (uint32_t m = 1; m <= 3; m++) {
+        for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .extended_weights(true)
-            .mr(3)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
             .iterations(1)
-            .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
         }
       }
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, n_div_8) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, n_div_8) {
+    TEST_REQUIRES_X86_AVX512SKX;
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .extended_weights(true)
-          .mr(3)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(3)
           .n(n)
           .k(k)
-          .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
       }
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, n_div_8_strided_cn) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, n_div_8_strided_cn) {
+    TEST_REQUIRES_X86_AVX512SKX;
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .extended_weights(true)
-          .mr(3)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(3)
           .n(n)
           .k(k)
           .cn_stride(11)
-          .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
       }
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, n_div_8_strided_a) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, n_div_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512SKX;
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .extended_weights(true)
-          .mr(3)
           .nr(8)
           .kr(8)
-          .sr(1)
-          .m(3)
           .n(n)
           .k(k)
           .a_stride(43)
-          .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
       }
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, n_div_8_subtile) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, n_div_8_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
     for (uint32_t n = 16; n <= 24; n += 8) {
       for (size_t k = 1; k <= 40; k += 9) {
-        for (uint32_t m = 1; m <= 3; m++) {
+        for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .extended_weights(true)
-            .mr(3)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
             .iterations(1)
-            .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
         }
       }
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, strided_cm_subtile) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, strided_cm_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
     for (size_t k = 1; k <= 40; k += 9) {
       for (uint32_t n = 1; n <= 8; n++) {
-        for (uint32_t m = 1; m <= 3; m++) {
+        for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .extended_weights(true)
-            .mr(3)
             .nr(8)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
             .cm_stride(11)
             .iterations(1)
-            .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
         }
       }
     }
   }
 
-  TEST(QS8_QC8W_GEMM_XW_MINMAX_FP32_3X8C8__AVX2, strided_cm) {
-    TEST_REQUIRES_X86_AVX2;
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512SKX, strided_cm) {
+    TEST_REQUIRES_X86_AVX512SKX;
     GemmMicrokernelTester()
-      .extended_weights(true)
+      .nr(8)
+      .kr(8)
+      .n(8)
+      .k(8)
+      .cm_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
+
+
+#if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, k_eq_8) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    GemmMicrokernelTester()
+      .mr(2)
+      .nr(8)
+      .kr(8)
+      .m(2)
+      .n(8)
+      .k(8)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, strided_cn) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    GemmMicrokernelTester()
+      .mr(2)
+      .nr(8)
+      .kr(8)
+      .m(2)
+      .n(8)
+      .k(8)
+      .cn_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, k_eq_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    GemmMicrokernelTester()
+      .mr(2)
+      .nr(8)
+      .kr(8)
+      .m(2)
+      .n(8)
+      .k(8)
+      .a_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, k_eq_8_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 1; n <= 8; n++) {
+      for (uint32_t m = 1; m <= 2; m++) {
+        GemmMicrokernelTester()
+          .mr(2)
+          .nr(8)
+          .kr(8)
+          .m(m)
+          .n(n)
+          .k(8)
+          .iterations(1)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, k_eq_8_subtile_m) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t m = 1; m <= 2; m++) {
+      GemmMicrokernelTester()
+        .mr(2)
+        .nr(8)
+        .kr(8)
+        .m(m)
+        .n(8)
+        .k(8)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, k_eq_8_subtile_n) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 1; n <= 8; n++) {
+      GemmMicrokernelTester()
+        .mr(2)
+        .nr(8)
+        .kr(8)
+        .m(2)
+        .n(n)
+        .k(8)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, k_lt_8) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (size_t k = 1; k < 8; k++) {
+      GemmMicrokernelTester()
+        .mr(2)
+        .nr(8)
+        .kr(8)
+        .m(2)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, k_lt_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (size_t k = 1; k < 8; k++) {
+      GemmMicrokernelTester()
+        .mr(2)
+        .nr(8)
+        .kr(8)
+        .m(2)
+        .n(8)
+        .k(k)
+        .a_stride(11)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, k_lt_8_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (size_t k = 1; k < 8; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 2; m++) {
+          GemmMicrokernelTester()
+            .mr(2)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, k_gt_8) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (size_t k = 9; k < 16; k++) {
+      GemmMicrokernelTester()
+        .mr(2)
+        .nr(8)
+        .kr(8)
+        .m(2)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, k_gt_8_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (size_t k = 9; k < 16; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 2; m++) {
+          GemmMicrokernelTester()
+            .mr(2)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, k_div_8) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (size_t k = 16; k <= 80; k += 8) {
+      GemmMicrokernelTester()
+        .mr(2)
+        .nr(8)
+        .kr(8)
+        .m(2)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, k_div_8_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (size_t k = 16; k <= 80; k += 8) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 2; m++) {
+          GemmMicrokernelTester()
+            .mr(2)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, n_gt_8) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 40; k += 9) {
+        GemmMicrokernelTester()
+          .mr(2)
+          .nr(8)
+          .kr(8)
+          .m(2)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, n_gt_8_strided_cn) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 40; k += 9) {
+        GemmMicrokernelTester()
+          .mr(2)
+          .nr(8)
+          .kr(8)
+          .m(2)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, n_gt_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 40; k += 9) {
+        GemmMicrokernelTester()
+          .mr(2)
+          .nr(8)
+          .kr(8)
+          .m(2)
+          .n(n)
+          .k(k)
+          .a_stride(43)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, n_gt_8_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 40; k += 9) {
+        for (uint32_t m = 1; m <= 2; m++) {
+          GemmMicrokernelTester()
+            .mr(2)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, n_div_8) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 40; k += 9) {
+        GemmMicrokernelTester()
+          .mr(2)
+          .nr(8)
+          .kr(8)
+          .m(2)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, n_div_8_strided_cn) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 40; k += 9) {
+        GemmMicrokernelTester()
+          .mr(2)
+          .nr(8)
+          .kr(8)
+          .m(2)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, n_div_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 40; k += 9) {
+        GemmMicrokernelTester()
+          .mr(2)
+          .nr(8)
+          .kr(8)
+          .m(2)
+          .n(n)
+          .k(k)
+          .a_stride(43)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, n_div_8_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 40; k += 9) {
+        for (uint32_t m = 1; m <= 2; m++) {
+          GemmMicrokernelTester()
+            .mr(2)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, strided_cm_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (size_t k = 1; k <= 40; k += 9) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 2; m++) {
+          GemmMicrokernelTester()
+            .mr(2)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .cm_stride(11)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X8C8__AVX512SKX, strided_cm) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    GemmMicrokernelTester()
+      .mr(2)
+      .nr(8)
+      .kr(8)
+      .m(2)
+      .n(8)
+      .k(8)
+      .cm_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_2x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
+
+
+#if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, k_eq_8) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    GemmMicrokernelTester()
       .mr(3)
       .nr(8)
       .kr(8)
-      .sr(1)
+      .m(3)
+      .n(8)
+      .k(8)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, strided_cn) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    GemmMicrokernelTester()
+      .mr(3)
+      .nr(8)
+      .kr(8)
+      .m(3)
+      .n(8)
+      .k(8)
+      .cn_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, k_eq_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    GemmMicrokernelTester()
+      .mr(3)
+      .nr(8)
+      .kr(8)
+      .m(3)
+      .n(8)
+      .k(8)
+      .a_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, k_eq_8_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 1; n <= 8; n++) {
+      for (uint32_t m = 1; m <= 3; m++) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(m)
+          .n(n)
+          .k(8)
+          .iterations(1)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, k_eq_8_subtile_m) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t m = 1; m <= 3; m++) {
+      GemmMicrokernelTester()
+        .mr(3)
+        .nr(8)
+        .kr(8)
+        .m(m)
+        .n(8)
+        .k(8)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, k_eq_8_subtile_n) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 1; n <= 8; n++) {
+      GemmMicrokernelTester()
+        .mr(3)
+        .nr(8)
+        .kr(8)
+        .m(3)
+        .n(n)
+        .k(8)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, k_lt_8) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (size_t k = 1; k < 8; k++) {
+      GemmMicrokernelTester()
+        .mr(3)
+        .nr(8)
+        .kr(8)
+        .m(3)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, k_lt_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (size_t k = 1; k < 8; k++) {
+      GemmMicrokernelTester()
+        .mr(3)
+        .nr(8)
+        .kr(8)
+        .m(3)
+        .n(8)
+        .k(k)
+        .a_stride(11)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, k_lt_8_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (size_t k = 1; k < 8; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 3; m++) {
+          GemmMicrokernelTester()
+            .mr(3)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, k_gt_8) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (size_t k = 9; k < 16; k++) {
+      GemmMicrokernelTester()
+        .mr(3)
+        .nr(8)
+        .kr(8)
+        .m(3)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, k_gt_8_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (size_t k = 9; k < 16; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 3; m++) {
+          GemmMicrokernelTester()
+            .mr(3)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, k_div_8) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (size_t k = 16; k <= 80; k += 8) {
+      GemmMicrokernelTester()
+        .mr(3)
+        .nr(8)
+        .kr(8)
+        .m(3)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, k_div_8_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (size_t k = 16; k <= 80; k += 8) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 3; m++) {
+          GemmMicrokernelTester()
+            .mr(3)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, n_gt_8) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 40; k += 9) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(3)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, n_gt_8_strided_cn) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 40; k += 9) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(3)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, n_gt_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 40; k += 9) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(3)
+          .n(n)
+          .k(k)
+          .a_stride(43)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, n_gt_8_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 40; k += 9) {
+        for (uint32_t m = 1; m <= 3; m++) {
+          GemmMicrokernelTester()
+            .mr(3)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, n_div_8) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 40; k += 9) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(3)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, n_div_8_strided_cn) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 40; k += 9) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(3)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, n_div_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 40; k += 9) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(3)
+          .n(n)
+          .k(k)
+          .a_stride(43)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, n_div_8_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 40; k += 9) {
+        for (uint32_t m = 1; m <= 3; m++) {
+          GemmMicrokernelTester()
+            .mr(3)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, strided_cm_subtile) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    for (size_t k = 1; k <= 40; k += 9) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 3; m++) {
+          GemmMicrokernelTester()
+            .mr(3)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .cm_stride(11)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVX512SKX, strided_cm) {
+    TEST_REQUIRES_X86_AVX512SKX;
+    GemmMicrokernelTester()
+      .mr(3)
+      .nr(8)
+      .kr(8)
       .m(3)
       .n(8)
       .k(8)
       .cm_stride(11)
-      .Test(xnn_qs8_qc8w_gemm_xw_minmax_fp32_ukernel_3x8c8__avx2, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_xw_goi_w, xnn_qs8_requantize_fp32);
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avx512skx, xnn_init_qs8_qc8w_conv_minmax_fp32_avx2_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
   }
 #endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
@@ -39654,7 +37566,6 @@
       .mr(2)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -39667,7 +37578,6 @@
       .mr(2)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -39681,7 +37591,6 @@
       .mr(2)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -39697,7 +37606,6 @@
           .mr(2)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -39714,7 +37622,6 @@
         .mr(2)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -39730,7 +37637,6 @@
         .mr(2)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(n)
         .k(8)
@@ -39746,7 +37652,6 @@
         .mr(2)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -39761,7 +37666,6 @@
         .mr(2)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -39779,7 +37683,6 @@
             .mr(2)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -39797,7 +37700,6 @@
         .mr(2)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -39814,7 +37716,6 @@
             .mr(2)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -39832,7 +37733,6 @@
         .mr(2)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -39849,7 +37749,6 @@
             .mr(2)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -39868,7 +37767,6 @@
           .mr(2)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -39885,7 +37783,6 @@
           .mr(2)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -39903,7 +37800,6 @@
           .mr(2)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -39922,7 +37818,6 @@
             .mr(2)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -39941,7 +37836,6 @@
           .mr(2)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -39958,7 +37852,6 @@
           .mr(2)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -39976,7 +37869,6 @@
           .mr(2)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -39995,7 +37887,6 @@
             .mr(2)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -40015,7 +37906,6 @@
             .mr(2)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -40033,7 +37923,6 @@
       .mr(2)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -40047,11 +37936,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X16C8__AVX512SKX_PRFM, k_eq_8) {
     TEST_REQUIRES_X86_AVX512SKX;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(16)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(16)
       .k(8)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16c8__avx512skx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -40060,11 +37946,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X16C8__AVX512SKX_PRFM, strided_cn) {
     TEST_REQUIRES_X86_AVX512SKX;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(16)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(16)
       .k(8)
       .cn_stride(19)
@@ -40074,11 +37957,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X16C8__AVX512SKX_PRFM, k_eq_8_strided_a) {
     TEST_REQUIRES_X86_AVX512SKX;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(16)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(16)
       .k(8)
       .a_stride(11)
@@ -40090,10 +37970,8 @@
     for (uint32_t n = 1; n <= 16; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -40107,10 +37985,8 @@
     TEST_REQUIRES_X86_AVX512SKX;
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -40123,11 +37999,8 @@
     TEST_REQUIRES_X86_AVX512SKX;
     for (uint32_t n = 1; n <= 16; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(8)
         .iterations(1)
@@ -40139,11 +38012,8 @@
     TEST_REQUIRES_X86_AVX512SKX;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(16)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16c8__avx512skx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -40154,11 +38024,8 @@
     TEST_REQUIRES_X86_AVX512SKX;
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(16)
         .k(k)
         .a_stride(11)
@@ -40172,10 +38039,8 @@
       for (uint32_t n = 1; n <= 16; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -40190,11 +38055,8 @@
     TEST_REQUIRES_X86_AVX512SKX;
     for (size_t k = 9; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(16)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16c8__avx512skx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -40207,10 +38069,8 @@
       for (uint32_t n = 1; n <= 16; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -40225,11 +38085,8 @@
     TEST_REQUIRES_X86_AVX512SKX;
     for (size_t k = 16; k <= 80; k += 8) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(16)
         .kr(8)
-        .sr(1)
-        .m(1)
         .n(16)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16c8__avx512skx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -40242,10 +38099,8 @@
       for (uint32_t n = 1; n <= 16; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -40261,11 +38116,8 @@
     for (uint32_t n = 17; n < 32; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16c8__avx512skx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -40278,11 +38130,8 @@
     for (uint32_t n = 17; n < 32; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(19)
@@ -40296,11 +38145,8 @@
     for (uint32_t n = 17; n < 32; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -40315,10 +38161,8 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -40334,11 +38178,8 @@
     for (uint32_t n = 32; n <= 48; n += 16) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x16c8__avx512skx_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avx512_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -40351,11 +38192,8 @@
     for (uint32_t n = 32; n <= 48; n += 16) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(19)
@@ -40369,11 +38207,8 @@
     for (uint32_t n = 32; n <= 48; n += 16) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(16)
           .kr(8)
-          .sr(1)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -40388,10 +38223,8 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -40408,10 +38241,8 @@
       for (uint32_t n = 1; n <= 16; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -40426,11 +38257,8 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X16C8__AVX512SKX_PRFM, strided_cm) {
     TEST_REQUIRES_X86_AVX512SKX;
     GemmMicrokernelTester()
-      .mr(1)
       .nr(16)
       .kr(8)
-      .sr(1)
-      .m(1)
       .n(16)
       .k(8)
       .cm_stride(19)
@@ -40446,7 +38274,6 @@
       .mr(3)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(3)
       .n(16)
       .k(8)
@@ -40459,7 +38286,6 @@
       .mr(3)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(3)
       .n(16)
       .k(8)
@@ -40473,7 +38299,6 @@
       .mr(3)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(3)
       .n(16)
       .k(8)
@@ -40489,7 +38314,6 @@
           .mr(3)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -40506,7 +38330,6 @@
         .mr(3)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -40522,7 +38345,6 @@
         .mr(3)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(n)
         .k(8)
@@ -40538,7 +38360,6 @@
         .mr(3)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -40553,7 +38374,6 @@
         .mr(3)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -40571,7 +38391,6 @@
             .mr(3)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -40589,7 +38408,6 @@
         .mr(3)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -40606,7 +38424,6 @@
             .mr(3)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -40624,7 +38441,6 @@
         .mr(3)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(16)
         .k(k)
@@ -40641,7 +38457,6 @@
             .mr(3)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -40660,7 +38475,6 @@
           .mr(3)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -40677,7 +38491,6 @@
           .mr(3)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -40695,7 +38508,6 @@
           .mr(3)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -40714,7 +38526,6 @@
             .mr(3)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -40733,7 +38544,6 @@
           .mr(3)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -40750,7 +38560,6 @@
           .mr(3)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -40768,7 +38577,6 @@
           .mr(3)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -40787,7 +38595,6 @@
             .mr(3)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -40807,7 +38614,6 @@
             .mr(3)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -40825,7 +38631,6 @@
       .mr(3)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(3)
       .n(16)
       .k(8)
@@ -40842,7 +38647,6 @@
       .mr(5)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(5)
       .n(16)
       .k(8)
@@ -40855,7 +38659,6 @@
       .mr(5)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(5)
       .n(16)
       .k(8)
@@ -40869,7 +38672,6 @@
       .mr(5)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(5)
       .n(16)
       .k(8)
@@ -40885,7 +38687,6 @@
           .mr(5)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -40902,7 +38703,6 @@
         .mr(5)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -40918,7 +38718,6 @@
         .mr(5)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(5)
         .n(n)
         .k(8)
@@ -40934,7 +38733,6 @@
         .mr(5)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(5)
         .n(16)
         .k(k)
@@ -40949,7 +38747,6 @@
         .mr(5)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(5)
         .n(16)
         .k(k)
@@ -40967,7 +38764,6 @@
             .mr(5)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -40985,7 +38781,6 @@
         .mr(5)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(5)
         .n(16)
         .k(k)
@@ -41002,7 +38797,6 @@
             .mr(5)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -41020,7 +38814,6 @@
         .mr(5)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(5)
         .n(16)
         .k(k)
@@ -41037,7 +38830,6 @@
             .mr(5)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -41056,7 +38848,6 @@
           .mr(5)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(5)
           .n(n)
           .k(k)
@@ -41073,7 +38864,6 @@
           .mr(5)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(5)
           .n(n)
           .k(k)
@@ -41091,7 +38881,6 @@
           .mr(5)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(5)
           .n(n)
           .k(k)
@@ -41110,7 +38899,6 @@
             .mr(5)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -41129,7 +38917,6 @@
           .mr(5)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(5)
           .n(n)
           .k(k)
@@ -41146,7 +38933,6 @@
           .mr(5)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(5)
           .n(n)
           .k(k)
@@ -41164,7 +38950,6 @@
           .mr(5)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(5)
           .n(n)
           .k(k)
@@ -41183,7 +38968,6 @@
             .mr(5)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -41203,7 +38987,6 @@
             .mr(5)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -41221,7 +39004,6 @@
       .mr(5)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(5)
       .n(16)
       .k(8)
@@ -41238,7 +39020,6 @@
       .mr(6)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(6)
       .n(16)
       .k(8)
@@ -41251,7 +39032,6 @@
       .mr(6)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(6)
       .n(16)
       .k(8)
@@ -41265,7 +39045,6 @@
       .mr(6)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(6)
       .n(16)
       .k(8)
@@ -41281,7 +39060,6 @@
           .mr(6)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -41298,7 +39076,6 @@
         .mr(6)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -41314,7 +39091,6 @@
         .mr(6)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(6)
         .n(n)
         .k(8)
@@ -41330,7 +39106,6 @@
         .mr(6)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -41345,7 +39120,6 @@
         .mr(6)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -41363,7 +39137,6 @@
             .mr(6)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -41381,7 +39154,6 @@
         .mr(6)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -41398,7 +39170,6 @@
             .mr(6)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -41416,7 +39187,6 @@
         .mr(6)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -41433,7 +39203,6 @@
             .mr(6)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -41452,7 +39221,6 @@
           .mr(6)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -41469,7 +39237,6 @@
           .mr(6)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -41487,7 +39254,6 @@
           .mr(6)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -41506,7 +39272,6 @@
             .mr(6)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -41525,7 +39290,6 @@
           .mr(6)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -41542,7 +39306,6 @@
           .mr(6)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -41560,7 +39323,6 @@
           .mr(6)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -41579,7 +39341,6 @@
             .mr(6)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -41599,7 +39360,6 @@
             .mr(6)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -41617,7 +39377,6 @@
       .mr(6)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(6)
       .n(16)
       .k(8)
@@ -41634,7 +39393,6 @@
       .mr(7)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(7)
       .n(16)
       .k(8)
@@ -41647,7 +39405,6 @@
       .mr(7)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(7)
       .n(16)
       .k(8)
@@ -41661,7 +39418,6 @@
       .mr(7)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(7)
       .n(16)
       .k(8)
@@ -41677,7 +39433,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -41694,7 +39449,6 @@
         .mr(7)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -41710,7 +39464,6 @@
         .mr(7)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(7)
         .n(n)
         .k(8)
@@ -41726,7 +39479,6 @@
         .mr(7)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(7)
         .n(16)
         .k(k)
@@ -41741,7 +39493,6 @@
         .mr(7)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(7)
         .n(16)
         .k(k)
@@ -41759,7 +39510,6 @@
             .mr(7)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -41777,7 +39527,6 @@
         .mr(7)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(7)
         .n(16)
         .k(k)
@@ -41794,7 +39543,6 @@
             .mr(7)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -41812,7 +39560,6 @@
         .mr(7)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(7)
         .n(16)
         .k(k)
@@ -41829,7 +39576,6 @@
             .mr(7)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -41848,7 +39594,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(7)
           .n(n)
           .k(k)
@@ -41865,7 +39610,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(7)
           .n(n)
           .k(k)
@@ -41883,7 +39627,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(7)
           .n(n)
           .k(k)
@@ -41902,7 +39645,6 @@
             .mr(7)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -41921,7 +39663,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(7)
           .n(n)
           .k(k)
@@ -41938,7 +39679,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(7)
           .n(n)
           .k(k)
@@ -41956,7 +39696,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(7)
           .n(n)
           .k(k)
@@ -41975,7 +39714,6 @@
             .mr(7)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -41995,7 +39733,6 @@
             .mr(7)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -42013,7 +39750,6 @@
       .mr(7)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(7)
       .n(16)
       .k(8)
@@ -42030,7 +39766,6 @@
       .mr(8)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(8)
       .n(16)
       .k(8)
@@ -42043,7 +39778,6 @@
       .mr(8)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(8)
       .n(16)
       .k(8)
@@ -42057,7 +39791,6 @@
       .mr(8)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(8)
       .n(16)
       .k(8)
@@ -42073,7 +39806,6 @@
           .mr(8)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -42090,7 +39822,6 @@
         .mr(8)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -42106,7 +39837,6 @@
         .mr(8)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(8)
         .n(n)
         .k(8)
@@ -42122,7 +39852,6 @@
         .mr(8)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(8)
         .n(16)
         .k(k)
@@ -42137,7 +39866,6 @@
         .mr(8)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(8)
         .n(16)
         .k(k)
@@ -42155,7 +39883,6 @@
             .mr(8)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -42173,7 +39900,6 @@
         .mr(8)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(8)
         .n(16)
         .k(k)
@@ -42190,7 +39916,6 @@
             .mr(8)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -42208,7 +39933,6 @@
         .mr(8)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(8)
         .n(16)
         .k(k)
@@ -42225,7 +39949,6 @@
             .mr(8)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -42244,7 +39967,6 @@
           .mr(8)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(8)
           .n(n)
           .k(k)
@@ -42261,7 +39983,6 @@
           .mr(8)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(8)
           .n(n)
           .k(k)
@@ -42279,7 +40000,6 @@
           .mr(8)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(8)
           .n(n)
           .k(k)
@@ -42298,7 +40018,6 @@
             .mr(8)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -42317,7 +40036,6 @@
           .mr(8)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(8)
           .n(n)
           .k(k)
@@ -42334,7 +40052,6 @@
           .mr(8)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(8)
           .n(n)
           .k(k)
@@ -42352,7 +40069,6 @@
           .mr(8)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(8)
           .n(n)
           .k(k)
@@ -42371,7 +40087,6 @@
             .mr(8)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -42391,7 +40106,6 @@
             .mr(8)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -42409,7 +40123,6 @@
       .mr(8)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(8)
       .n(16)
       .k(8)
@@ -42426,7 +40139,6 @@
       .mr(2)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -42439,7 +40151,6 @@
       .mr(2)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -42453,7 +40164,6 @@
       .mr(2)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -42469,7 +40179,6 @@
           .mr(2)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -42486,7 +40195,6 @@
         .mr(2)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -42502,7 +40210,6 @@
         .mr(2)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(2)
         .n(n)
         .k(8)
@@ -42518,7 +40225,6 @@
         .mr(2)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -42533,7 +40239,6 @@
         .mr(2)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -42551,7 +40256,6 @@
             .mr(2)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -42569,7 +40273,6 @@
         .mr(2)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -42586,7 +40289,6 @@
             .mr(2)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -42604,7 +40306,6 @@
         .mr(2)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -42621,7 +40322,6 @@
             .mr(2)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -42640,7 +40340,6 @@
           .mr(2)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -42657,7 +40356,6 @@
           .mr(2)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -42675,7 +40373,6 @@
           .mr(2)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -42694,7 +40391,6 @@
             .mr(2)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -42713,7 +40409,6 @@
           .mr(2)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -42730,7 +40425,6 @@
           .mr(2)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -42748,7 +40442,6 @@
           .mr(2)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -42767,7 +40460,6 @@
             .mr(2)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -42787,7 +40479,6 @@
             .mr(2)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -42805,7 +40496,6 @@
       .mr(2)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -42822,7 +40512,6 @@
       .mr(5)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(5)
       .n(16)
       .k(8)
@@ -42835,7 +40524,6 @@
       .mr(5)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(5)
       .n(16)
       .k(8)
@@ -42849,7 +40537,6 @@
       .mr(5)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(5)
       .n(16)
       .k(8)
@@ -42865,7 +40552,6 @@
           .mr(5)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -42882,7 +40568,6 @@
         .mr(5)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -42898,7 +40583,6 @@
         .mr(5)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(5)
         .n(n)
         .k(8)
@@ -42914,7 +40598,6 @@
         .mr(5)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(5)
         .n(16)
         .k(k)
@@ -42929,7 +40612,6 @@
         .mr(5)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(5)
         .n(16)
         .k(k)
@@ -42947,7 +40629,6 @@
             .mr(5)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -42965,7 +40646,6 @@
         .mr(5)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(5)
         .n(16)
         .k(k)
@@ -42982,7 +40662,6 @@
             .mr(5)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -43000,7 +40679,6 @@
         .mr(5)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(5)
         .n(16)
         .k(k)
@@ -43017,7 +40695,6 @@
             .mr(5)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -43036,7 +40713,6 @@
           .mr(5)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(5)
           .n(n)
           .k(k)
@@ -43053,7 +40729,6 @@
           .mr(5)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(5)
           .n(n)
           .k(k)
@@ -43071,7 +40746,6 @@
           .mr(5)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(5)
           .n(n)
           .k(k)
@@ -43090,7 +40764,6 @@
             .mr(5)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -43109,7 +40782,6 @@
           .mr(5)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(5)
           .n(n)
           .k(k)
@@ -43126,7 +40798,6 @@
           .mr(5)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(5)
           .n(n)
           .k(k)
@@ -43144,7 +40815,6 @@
           .mr(5)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(5)
           .n(n)
           .k(k)
@@ -43163,7 +40833,6 @@
             .mr(5)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -43183,7 +40852,6 @@
             .mr(5)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -43201,7 +40869,6 @@
       .mr(5)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(5)
       .n(16)
       .k(8)
@@ -43218,7 +40885,6 @@
       .mr(2)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -43231,7 +40897,6 @@
       .mr(2)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -43245,7 +40910,6 @@
       .mr(2)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -43261,7 +40925,6 @@
           .mr(2)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -43278,7 +40941,6 @@
         .mr(2)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -43294,7 +40956,6 @@
         .mr(2)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(2)
         .n(n)
         .k(8)
@@ -43310,7 +40971,6 @@
         .mr(2)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -43325,7 +40985,6 @@
         .mr(2)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -43343,7 +41002,6 @@
             .mr(2)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -43361,7 +41019,6 @@
         .mr(2)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -43378,7 +41035,6 @@
             .mr(2)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -43396,7 +41052,6 @@
         .mr(2)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(2)
         .n(16)
         .k(k)
@@ -43413,7 +41068,6 @@
             .mr(2)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -43432,7 +41086,6 @@
           .mr(2)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -43449,7 +41102,6 @@
           .mr(2)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -43467,7 +41119,6 @@
           .mr(2)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -43486,7 +41137,6 @@
             .mr(2)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -43505,7 +41155,6 @@
           .mr(2)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -43522,7 +41171,6 @@
           .mr(2)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -43540,7 +41188,6 @@
           .mr(2)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -43559,7 +41206,6 @@
             .mr(2)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -43579,7 +41225,6 @@
             .mr(2)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -43597,7 +41242,6 @@
       .mr(2)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(2)
       .n(16)
       .k(8)
@@ -43614,7 +41258,6 @@
       .mr(4)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -43627,7 +41270,6 @@
       .mr(4)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -43641,7 +41283,6 @@
       .mr(4)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -43657,7 +41298,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -43674,7 +41314,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(m)
         .n(16)
         .k(8)
@@ -43690,7 +41329,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -43706,7 +41344,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -43721,7 +41358,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -43739,7 +41375,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -43757,7 +41392,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -43774,7 +41408,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -43792,7 +41425,6 @@
         .mr(4)
         .nr(16)
         .kr(4)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -43809,7 +41441,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -43828,7 +41459,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -43845,7 +41475,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -43863,7 +41492,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -43882,7 +41510,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -43901,7 +41528,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -43918,7 +41544,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -43936,7 +41561,6 @@
           .mr(4)
           .nr(16)
           .kr(4)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -43955,7 +41579,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -43975,7 +41598,6 @@
             .mr(4)
             .nr(16)
             .kr(4)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -43993,7 +41615,6 @@
       .mr(4)
       .nr(16)
       .kr(4)
-      .sr(1)
       .m(4)
       .n(16)
       .k(8)
@@ -44010,7 +41631,6 @@
       .mr(6)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(6)
       .n(16)
       .k(16)
@@ -44023,7 +41643,6 @@
       .mr(6)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(6)
       .n(16)
       .k(16)
@@ -44037,7 +41656,6 @@
       .mr(6)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(6)
       .n(16)
       .k(16)
@@ -44053,7 +41671,6 @@
           .mr(6)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -44070,7 +41687,6 @@
         .mr(6)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(16)
         .k(16)
@@ -44086,7 +41702,6 @@
         .mr(6)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(6)
         .n(n)
         .k(16)
@@ -44102,7 +41717,6 @@
         .mr(6)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -44117,7 +41731,6 @@
         .mr(6)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -44135,7 +41748,6 @@
             .mr(6)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -44153,7 +41765,6 @@
         .mr(6)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -44170,7 +41781,6 @@
             .mr(6)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -44188,7 +41798,6 @@
         .mr(6)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(6)
         .n(16)
         .k(k)
@@ -44205,7 +41814,6 @@
             .mr(6)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -44224,7 +41832,6 @@
           .mr(6)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -44241,7 +41848,6 @@
           .mr(6)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -44259,7 +41865,6 @@
           .mr(6)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -44278,7 +41883,6 @@
             .mr(6)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -44297,7 +41901,6 @@
           .mr(6)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -44314,7 +41917,6 @@
           .mr(6)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -44332,7 +41934,6 @@
           .mr(6)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(6)
           .n(n)
           .k(k)
@@ -44351,7 +41952,6 @@
             .mr(6)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -44371,7 +41971,6 @@
             .mr(6)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -44389,7 +41988,6 @@
       .mr(6)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(6)
       .n(16)
       .k(16)
@@ -44406,7 +42004,6 @@
       .mr(7)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(7)
       .n(16)
       .k(16)
@@ -44419,7 +42016,6 @@
       .mr(7)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(7)
       .n(16)
       .k(16)
@@ -44433,7 +42029,6 @@
       .mr(7)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(7)
       .n(16)
       .k(16)
@@ -44449,7 +42044,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -44466,7 +42060,6 @@
         .mr(7)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(16)
         .k(16)
@@ -44482,7 +42075,6 @@
         .mr(7)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(7)
         .n(n)
         .k(16)
@@ -44498,7 +42090,6 @@
         .mr(7)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(7)
         .n(16)
         .k(k)
@@ -44513,7 +42104,6 @@
         .mr(7)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(7)
         .n(16)
         .k(k)
@@ -44531,7 +42121,6 @@
             .mr(7)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -44549,7 +42138,6 @@
         .mr(7)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(7)
         .n(16)
         .k(k)
@@ -44566,7 +42154,6 @@
             .mr(7)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -44584,7 +42171,6 @@
         .mr(7)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(7)
         .n(16)
         .k(k)
@@ -44601,7 +42187,6 @@
             .mr(7)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -44620,7 +42205,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(7)
           .n(n)
           .k(k)
@@ -44637,7 +42221,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(7)
           .n(n)
           .k(k)
@@ -44655,7 +42238,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(7)
           .n(n)
           .k(k)
@@ -44674,7 +42256,6 @@
             .mr(7)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -44693,7 +42274,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(7)
           .n(n)
           .k(k)
@@ -44710,7 +42290,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(7)
           .n(n)
           .k(k)
@@ -44728,7 +42307,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(7)
           .n(n)
           .k(k)
@@ -44747,7 +42325,6 @@
             .mr(7)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -44767,7 +42344,6 @@
             .mr(7)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -44785,7 +42361,6 @@
       .mr(7)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(7)
       .n(16)
       .k(16)
@@ -44802,7 +42377,6 @@
       .mr(4)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(4)
       .n(16)
       .k(16)
@@ -44815,7 +42389,6 @@
       .mr(4)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(4)
       .n(16)
       .k(16)
@@ -44829,7 +42402,6 @@
       .mr(4)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(4)
       .n(16)
       .k(16)
@@ -44845,7 +42417,6 @@
           .mr(4)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -44862,7 +42433,6 @@
         .mr(4)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(16)
         .k(16)
@@ -44878,7 +42448,6 @@
         .mr(4)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(4)
         .n(n)
         .k(16)
@@ -44894,7 +42463,6 @@
         .mr(4)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -44909,7 +42477,6 @@
         .mr(4)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -44927,7 +42494,6 @@
             .mr(4)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -44945,7 +42511,6 @@
         .mr(4)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -44962,7 +42527,6 @@
             .mr(4)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -44980,7 +42544,6 @@
         .mr(4)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(4)
         .n(16)
         .k(k)
@@ -44997,7 +42560,6 @@
             .mr(4)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -45016,7 +42578,6 @@
           .mr(4)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -45033,7 +42594,6 @@
           .mr(4)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -45051,7 +42611,6 @@
           .mr(4)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -45070,7 +42629,6 @@
             .mr(4)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -45089,7 +42647,6 @@
           .mr(4)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -45106,7 +42663,6 @@
           .mr(4)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -45124,7 +42680,6 @@
           .mr(4)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -45143,7 +42698,6 @@
             .mr(4)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -45163,7 +42717,6 @@
             .mr(4)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -45181,7 +42734,6 @@
       .mr(4)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(4)
       .n(16)
       .k(16)
@@ -45198,7 +42750,6 @@
       .mr(5)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(5)
       .n(16)
       .k(16)
@@ -45211,7 +42762,6 @@
       .mr(5)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(5)
       .n(16)
       .k(16)
@@ -45225,7 +42775,6 @@
       .mr(5)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(5)
       .n(16)
       .k(16)
@@ -45241,7 +42790,6 @@
           .mr(5)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -45258,7 +42806,6 @@
         .mr(5)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(16)
         .k(16)
@@ -45274,7 +42821,6 @@
         .mr(5)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(5)
         .n(n)
         .k(16)
@@ -45290,7 +42836,6 @@
         .mr(5)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(5)
         .n(16)
         .k(k)
@@ -45305,7 +42850,6 @@
         .mr(5)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(5)
         .n(16)
         .k(k)
@@ -45323,7 +42867,6 @@
             .mr(5)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -45341,7 +42884,6 @@
         .mr(5)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(5)
         .n(16)
         .k(k)
@@ -45358,7 +42900,6 @@
             .mr(5)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -45376,7 +42917,6 @@
         .mr(5)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(5)
         .n(16)
         .k(k)
@@ -45393,7 +42933,6 @@
             .mr(5)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -45412,7 +42951,6 @@
           .mr(5)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(5)
           .n(n)
           .k(k)
@@ -45429,7 +42967,6 @@
           .mr(5)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(5)
           .n(n)
           .k(k)
@@ -45447,7 +42984,6 @@
           .mr(5)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(5)
           .n(n)
           .k(k)
@@ -45466,7 +43002,6 @@
             .mr(5)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -45485,7 +43020,6 @@
           .mr(5)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(5)
           .n(n)
           .k(k)
@@ -45502,7 +43036,6 @@
           .mr(5)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(5)
           .n(n)
           .k(k)
@@ -45520,7 +43053,6 @@
           .mr(5)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(5)
           .n(n)
           .k(k)
@@ -45539,7 +43071,6 @@
             .mr(5)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -45559,7 +43090,6 @@
             .mr(5)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -45577,7 +43107,6 @@
       .mr(5)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(5)
       .n(16)
       .k(16)
@@ -45594,7 +43123,6 @@
       .mr(7)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(7)
       .n(16)
       .k(16)
@@ -45607,7 +43135,6 @@
       .mr(7)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(7)
       .n(16)
       .k(16)
@@ -45621,7 +43148,6 @@
       .mr(7)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(7)
       .n(16)
       .k(16)
@@ -45637,7 +43163,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -45654,7 +43179,6 @@
         .mr(7)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(16)
         .k(16)
@@ -45670,7 +43194,6 @@
         .mr(7)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(7)
         .n(n)
         .k(16)
@@ -45686,7 +43209,6 @@
         .mr(7)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(7)
         .n(16)
         .k(k)
@@ -45701,7 +43223,6 @@
         .mr(7)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(7)
         .n(16)
         .k(k)
@@ -45719,7 +43240,6 @@
             .mr(7)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -45737,7 +43257,6 @@
         .mr(7)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(7)
         .n(16)
         .k(k)
@@ -45754,7 +43273,6 @@
             .mr(7)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -45772,7 +43290,6 @@
         .mr(7)
         .nr(16)
         .kr(8)
-        .sr(1)
         .m(7)
         .n(16)
         .k(k)
@@ -45789,7 +43306,6 @@
             .mr(7)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -45808,7 +43324,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(7)
           .n(n)
           .k(k)
@@ -45825,7 +43340,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(7)
           .n(n)
           .k(k)
@@ -45843,7 +43357,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(7)
           .n(n)
           .k(k)
@@ -45862,7 +43375,6 @@
             .mr(7)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -45881,7 +43393,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(7)
           .n(n)
           .k(k)
@@ -45898,7 +43409,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(7)
           .n(n)
           .k(k)
@@ -45916,7 +43426,6 @@
           .mr(7)
           .nr(16)
           .kr(8)
-          .sr(1)
           .m(7)
           .n(n)
           .k(k)
@@ -45935,7 +43444,6 @@
             .mr(7)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -45955,7 +43463,6 @@
             .mr(7)
             .nr(16)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -45973,7 +43480,6 @@
       .mr(7)
       .nr(16)
       .kr(8)
-      .sr(1)
       .m(7)
       .n(16)
       .k(16)
@@ -45983,14 +43489,3666 @@
 #endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
 
+#if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, k_eq_16) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    GemmMicrokernelTester()
+      .nr(8)
+      .kr(8)
+      .n(8)
+      .k(16)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, strided_cn) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    GemmMicrokernelTester()
+      .nr(8)
+      .kr(8)
+      .n(8)
+      .k(16)
+      .cn_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, k_eq_16_strided_a) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    GemmMicrokernelTester()
+      .nr(8)
+      .kr(8)
+      .n(8)
+      .k(16)
+      .a_stride(19)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, k_eq_16_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      for (uint32_t m = 1; m <= 1; m++) {
+        GemmMicrokernelTester()
+          .nr(8)
+          .kr(8)
+          .m(m)
+          .n(n)
+          .k(16)
+          .iterations(1)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, k_eq_16_subtile_m) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t m = 1; m <= 1; m++) {
+      GemmMicrokernelTester()
+        .nr(8)
+        .kr(8)
+        .m(m)
+        .n(8)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, k_eq_16_subtile_n) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      GemmMicrokernelTester()
+        .nr(8)
+        .kr(8)
+        .n(n)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, k_lt_16) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .nr(8)
+        .kr(8)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, k_lt_16_strided_a) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .nr(8)
+        .kr(8)
+        .n(8)
+        .k(k)
+        .a_stride(19)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, k_lt_16_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 1; k < 16; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 1; m++) {
+          GemmMicrokernelTester()
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, k_gt_16) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 17; k < 32; k++) {
+      GemmMicrokernelTester()
+        .nr(8)
+        .kr(8)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, k_gt_16_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 17; k < 32; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 1; m++) {
+          GemmMicrokernelTester()
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, k_div_16) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      GemmMicrokernelTester()
+        .nr(8)
+        .kr(8)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, k_div_16_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 1; m++) {
+          GemmMicrokernelTester()
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, n_gt_8) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .nr(8)
+          .kr(8)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, n_gt_8_strided_cn) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .nr(8)
+          .kr(8)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, n_gt_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .nr(8)
+          .kr(8)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, n_gt_8_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 1; m++) {
+          GemmMicrokernelTester()
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, n_div_8) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .nr(8)
+          .kr(8)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, n_div_8_strided_cn) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .nr(8)
+          .kr(8)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, n_div_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .nr(8)
+          .kr(8)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, n_div_8_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 1; m++) {
+          GemmMicrokernelTester()
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, strided_cm_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 1; k <= 80; k += 17) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 1; m++) {
+          GemmMicrokernelTester()
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .cm_stride(11)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVX512VNNI, strided_cm) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    GemmMicrokernelTester()
+      .nr(8)
+      .kr(8)
+      .n(8)
+      .k(16)
+      .cm_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
+
+
+#if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, k_eq_16) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    GemmMicrokernelTester()
+      .mr(8)
+      .nr(8)
+      .kr(8)
+      .m(8)
+      .n(8)
+      .k(16)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, strided_cn) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    GemmMicrokernelTester()
+      .mr(8)
+      .nr(8)
+      .kr(8)
+      .m(8)
+      .n(8)
+      .k(16)
+      .cn_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, k_eq_16_strided_a) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    GemmMicrokernelTester()
+      .mr(8)
+      .nr(8)
+      .kr(8)
+      .m(8)
+      .n(8)
+      .k(16)
+      .a_stride(19)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, k_eq_16_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      for (uint32_t m = 1; m <= 8; m++) {
+        GemmMicrokernelTester()
+          .mr(8)
+          .nr(8)
+          .kr(8)
+          .m(m)
+          .n(n)
+          .k(16)
+          .iterations(1)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, k_eq_16_subtile_m) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t m = 1; m <= 8; m++) {
+      GemmMicrokernelTester()
+        .mr(8)
+        .nr(8)
+        .kr(8)
+        .m(m)
+        .n(8)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, k_eq_16_subtile_n) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      GemmMicrokernelTester()
+        .mr(8)
+        .nr(8)
+        .kr(8)
+        .m(8)
+        .n(n)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, k_lt_16) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .mr(8)
+        .nr(8)
+        .kr(8)
+        .m(8)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, k_lt_16_strided_a) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .mr(8)
+        .nr(8)
+        .kr(8)
+        .m(8)
+        .n(8)
+        .k(k)
+        .a_stride(19)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, k_lt_16_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 1; k < 16; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 8; m++) {
+          GemmMicrokernelTester()
+            .mr(8)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, k_gt_16) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 17; k < 32; k++) {
+      GemmMicrokernelTester()
+        .mr(8)
+        .nr(8)
+        .kr(8)
+        .m(8)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, k_gt_16_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 17; k < 32; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 8; m++) {
+          GemmMicrokernelTester()
+            .mr(8)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, k_div_16) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      GemmMicrokernelTester()
+        .mr(8)
+        .nr(8)
+        .kr(8)
+        .m(8)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, k_div_16_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 8; m++) {
+          GemmMicrokernelTester()
+            .mr(8)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, n_gt_8) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(8)
+          .nr(8)
+          .kr(8)
+          .m(8)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, n_gt_8_strided_cn) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(8)
+          .nr(8)
+          .kr(8)
+          .m(8)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, n_gt_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(8)
+          .nr(8)
+          .kr(8)
+          .m(8)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, n_gt_8_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 8; m++) {
+          GemmMicrokernelTester()
+            .mr(8)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, n_div_8) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(8)
+          .nr(8)
+          .kr(8)
+          .m(8)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, n_div_8_strided_cn) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(8)
+          .nr(8)
+          .kr(8)
+          .m(8)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, n_div_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(8)
+          .nr(8)
+          .kr(8)
+          .m(8)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, n_div_8_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 8; m++) {
+          GemmMicrokernelTester()
+            .mr(8)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, strided_cm_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 1; k <= 80; k += 17) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 8; m++) {
+          GemmMicrokernelTester()
+            .mr(8)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .cm_stride(11)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI, strided_cm) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    GemmMicrokernelTester()
+      .mr(8)
+      .nr(8)
+      .kr(8)
+      .m(8)
+      .n(8)
+      .k(16)
+      .cm_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
+
+
+#if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, k_eq_16) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    GemmMicrokernelTester()
+      .mr(4)
+      .nr(8)
+      .kr(8)
+      .m(4)
+      .n(8)
+      .k(16)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, strided_cn) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    GemmMicrokernelTester()
+      .mr(4)
+      .nr(8)
+      .kr(8)
+      .m(4)
+      .n(8)
+      .k(16)
+      .cn_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, k_eq_16_strided_a) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    GemmMicrokernelTester()
+      .mr(4)
+      .nr(8)
+      .kr(8)
+      .m(4)
+      .n(8)
+      .k(16)
+      .a_stride(19)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, k_eq_16_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      for (uint32_t m = 1; m <= 4; m++) {
+        GemmMicrokernelTester()
+          .mr(4)
+          .nr(8)
+          .kr(8)
+          .m(m)
+          .n(n)
+          .k(16)
+          .iterations(1)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, k_eq_16_subtile_m) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t m = 1; m <= 4; m++) {
+      GemmMicrokernelTester()
+        .mr(4)
+        .nr(8)
+        .kr(8)
+        .m(m)
+        .n(8)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, k_eq_16_subtile_n) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      GemmMicrokernelTester()
+        .mr(4)
+        .nr(8)
+        .kr(8)
+        .m(4)
+        .n(n)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, k_lt_16) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .mr(4)
+        .nr(8)
+        .kr(8)
+        .m(4)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, k_lt_16_strided_a) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .mr(4)
+        .nr(8)
+        .kr(8)
+        .m(4)
+        .n(8)
+        .k(k)
+        .a_stride(19)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, k_lt_16_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 1; k < 16; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 4; m++) {
+          GemmMicrokernelTester()
+            .mr(4)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, k_gt_16) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 17; k < 32; k++) {
+      GemmMicrokernelTester()
+        .mr(4)
+        .nr(8)
+        .kr(8)
+        .m(4)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, k_gt_16_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 17; k < 32; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 4; m++) {
+          GemmMicrokernelTester()
+            .mr(4)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, k_div_16) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      GemmMicrokernelTester()
+        .mr(4)
+        .nr(8)
+        .kr(8)
+        .m(4)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, k_div_16_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 4; m++) {
+          GemmMicrokernelTester()
+            .mr(4)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, n_gt_8) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(4)
+          .nr(8)
+          .kr(8)
+          .m(4)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, n_gt_8_strided_cn) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(4)
+          .nr(8)
+          .kr(8)
+          .m(4)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, n_gt_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(4)
+          .nr(8)
+          .kr(8)
+          .m(4)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, n_gt_8_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 4; m++) {
+          GemmMicrokernelTester()
+            .mr(4)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, n_div_8) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(4)
+          .nr(8)
+          .kr(8)
+          .m(4)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, n_div_8_strided_cn) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(4)
+          .nr(8)
+          .kr(8)
+          .m(4)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, n_div_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(4)
+          .nr(8)
+          .kr(8)
+          .m(4)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, n_div_8_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 4; m++) {
+          GemmMicrokernelTester()
+            .mr(4)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, strided_cm_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 1; k <= 80; k += 17) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 4; m++) {
+          GemmMicrokernelTester()
+            .mr(4)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .cm_stride(11)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVX512VNNI_PRFM, strided_cm) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    GemmMicrokernelTester()
+      .mr(4)
+      .nr(8)
+      .kr(8)
+      .m(4)
+      .n(8)
+      .k(16)
+      .cm_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
+
+
+#if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, k_eq_16) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    GemmMicrokernelTester()
+      .mr(8)
+      .nr(8)
+      .kr(8)
+      .m(8)
+      .n(8)
+      .k(16)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, strided_cn) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    GemmMicrokernelTester()
+      .mr(8)
+      .nr(8)
+      .kr(8)
+      .m(8)
+      .n(8)
+      .k(16)
+      .cn_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, k_eq_16_strided_a) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    GemmMicrokernelTester()
+      .mr(8)
+      .nr(8)
+      .kr(8)
+      .m(8)
+      .n(8)
+      .k(16)
+      .a_stride(19)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, k_eq_16_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      for (uint32_t m = 1; m <= 8; m++) {
+        GemmMicrokernelTester()
+          .mr(8)
+          .nr(8)
+          .kr(8)
+          .m(m)
+          .n(n)
+          .k(16)
+          .iterations(1)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, k_eq_16_subtile_m) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t m = 1; m <= 8; m++) {
+      GemmMicrokernelTester()
+        .mr(8)
+        .nr(8)
+        .kr(8)
+        .m(m)
+        .n(8)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, k_eq_16_subtile_n) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      GemmMicrokernelTester()
+        .mr(8)
+        .nr(8)
+        .kr(8)
+        .m(8)
+        .n(n)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, k_lt_16) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .mr(8)
+        .nr(8)
+        .kr(8)
+        .m(8)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, k_lt_16_strided_a) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .mr(8)
+        .nr(8)
+        .kr(8)
+        .m(8)
+        .n(8)
+        .k(k)
+        .a_stride(19)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, k_lt_16_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 1; k < 16; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 8; m++) {
+          GemmMicrokernelTester()
+            .mr(8)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, k_gt_16) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 17; k < 32; k++) {
+      GemmMicrokernelTester()
+        .mr(8)
+        .nr(8)
+        .kr(8)
+        .m(8)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, k_gt_16_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 17; k < 32; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 8; m++) {
+          GemmMicrokernelTester()
+            .mr(8)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, k_div_16) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      GemmMicrokernelTester()
+        .mr(8)
+        .nr(8)
+        .kr(8)
+        .m(8)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, k_div_16_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 8; m++) {
+          GemmMicrokernelTester()
+            .mr(8)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, n_gt_8) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(8)
+          .nr(8)
+          .kr(8)
+          .m(8)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, n_gt_8_strided_cn) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(8)
+          .nr(8)
+          .kr(8)
+          .m(8)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, n_gt_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(8)
+          .nr(8)
+          .kr(8)
+          .m(8)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, n_gt_8_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 8; m++) {
+          GemmMicrokernelTester()
+            .mr(8)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, n_div_8) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(8)
+          .nr(8)
+          .kr(8)
+          .m(8)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, n_div_8_strided_cn) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(8)
+          .nr(8)
+          .kr(8)
+          .m(8)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, n_div_8_strided_a) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(8)
+          .nr(8)
+          .kr(8)
+          .m(8)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, n_div_8_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 8; m++) {
+          GemmMicrokernelTester()
+            .mr(8)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, strided_cm_subtile) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    for (size_t k = 1; k <= 80; k += 17) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 8; m++) {
+          GemmMicrokernelTester()
+            .mr(8)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .cm_stride(11)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_8X8C8__AVX512VNNI_PRFM, strided_cm) {
+    TEST_REQUIRES_X86_AVX512VNNI;
+    GemmMicrokernelTester()
+      .mr(8)
+      .nr(8)
+      .kr(8)
+      .m(8)
+      .n(8)
+      .k(16)
+      .cm_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_8x8c8__avx512vnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
+
+
+#if XNN_ENABLE_AVXVNNI && (XNN_ARCH_X86 || XNN_ARCH_X86_64)
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, k_eq_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(3)
+      .nr(8)
+      .kr(8)
+      .m(3)
+      .n(8)
+      .k(16)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, strided_cn) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(3)
+      .nr(8)
+      .kr(8)
+      .m(3)
+      .n(8)
+      .k(16)
+      .cn_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, k_eq_16_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(3)
+      .nr(8)
+      .kr(8)
+      .m(3)
+      .n(8)
+      .k(16)
+      .a_stride(19)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, k_eq_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      for (uint32_t m = 1; m <= 3; m++) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(m)
+          .n(n)
+          .k(16)
+          .iterations(1)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, k_eq_16_subtile_m) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t m = 1; m <= 3; m++) {
+      GemmMicrokernelTester()
+        .mr(3)
+        .nr(8)
+        .kr(8)
+        .m(m)
+        .n(8)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, k_eq_16_subtile_n) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      GemmMicrokernelTester()
+        .mr(3)
+        .nr(8)
+        .kr(8)
+        .m(3)
+        .n(n)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, k_lt_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .mr(3)
+        .nr(8)
+        .kr(8)
+        .m(3)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, k_lt_16_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .mr(3)
+        .nr(8)
+        .kr(8)
+        .m(3)
+        .n(8)
+        .k(k)
+        .a_stride(19)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, k_lt_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k < 16; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 3; m++) {
+          GemmMicrokernelTester()
+            .mr(3)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, k_gt_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 17; k < 32; k++) {
+      GemmMicrokernelTester()
+        .mr(3)
+        .nr(8)
+        .kr(8)
+        .m(3)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, k_gt_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 17; k < 32; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 3; m++) {
+          GemmMicrokernelTester()
+            .mr(3)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, k_div_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      GemmMicrokernelTester()
+        .mr(3)
+        .nr(8)
+        .kr(8)
+        .m(3)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, k_div_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 3; m++) {
+          GemmMicrokernelTester()
+            .mr(3)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, n_gt_8) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(3)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, n_gt_8_strided_cn) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(3)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, n_gt_8_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(3)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, n_gt_8_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 3; m++) {
+          GemmMicrokernelTester()
+            .mr(3)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, n_div_8) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(3)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, n_div_8_strided_cn) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(3)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, n_div_8_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(3)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, n_div_8_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 3; m++) {
+          GemmMicrokernelTester()
+            .mr(3)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, strided_cm_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k <= 80; k += 17) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 3; m++) {
+          GemmMicrokernelTester()
+            .mr(3)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .cm_stride(11)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI, strided_cm) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(3)
+      .nr(8)
+      .kr(8)
+      .m(3)
+      .n(8)
+      .k(16)
+      .cm_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+#endif  // XNN_ENABLE_AVXVNNI && (XNN_ARCH_X86 || XNN_ARCH_X86_64)
+
+
+#if XNN_ENABLE_AVXVNNI && (XNN_ARCH_X86 || XNN_ARCH_X86_64)
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, k_eq_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(5)
+      .nr(8)
+      .kr(8)
+      .m(5)
+      .n(8)
+      .k(16)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, strided_cn) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(5)
+      .nr(8)
+      .kr(8)
+      .m(5)
+      .n(8)
+      .k(16)
+      .cn_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, k_eq_16_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(5)
+      .nr(8)
+      .kr(8)
+      .m(5)
+      .n(8)
+      .k(16)
+      .a_stride(19)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, k_eq_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      for (uint32_t m = 1; m <= 5; m++) {
+        GemmMicrokernelTester()
+          .mr(5)
+          .nr(8)
+          .kr(8)
+          .m(m)
+          .n(n)
+          .k(16)
+          .iterations(1)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, k_eq_16_subtile_m) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t m = 1; m <= 5; m++) {
+      GemmMicrokernelTester()
+        .mr(5)
+        .nr(8)
+        .kr(8)
+        .m(m)
+        .n(8)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, k_eq_16_subtile_n) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      GemmMicrokernelTester()
+        .mr(5)
+        .nr(8)
+        .kr(8)
+        .m(5)
+        .n(n)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, k_lt_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .mr(5)
+        .nr(8)
+        .kr(8)
+        .m(5)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, k_lt_16_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .mr(5)
+        .nr(8)
+        .kr(8)
+        .m(5)
+        .n(8)
+        .k(k)
+        .a_stride(19)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, k_lt_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k < 16; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 5; m++) {
+          GemmMicrokernelTester()
+            .mr(5)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, k_gt_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 17; k < 32; k++) {
+      GemmMicrokernelTester()
+        .mr(5)
+        .nr(8)
+        .kr(8)
+        .m(5)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, k_gt_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 17; k < 32; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 5; m++) {
+          GemmMicrokernelTester()
+            .mr(5)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, k_div_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      GemmMicrokernelTester()
+        .mr(5)
+        .nr(8)
+        .kr(8)
+        .m(5)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, k_div_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 5; m++) {
+          GemmMicrokernelTester()
+            .mr(5)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, n_gt_8) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(5)
+          .nr(8)
+          .kr(8)
+          .m(5)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, n_gt_8_strided_cn) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(5)
+          .nr(8)
+          .kr(8)
+          .m(5)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, n_gt_8_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(5)
+          .nr(8)
+          .kr(8)
+          .m(5)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, n_gt_8_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 5; m++) {
+          GemmMicrokernelTester()
+            .mr(5)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, n_div_8) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(5)
+          .nr(8)
+          .kr(8)
+          .m(5)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, n_div_8_strided_cn) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(5)
+          .nr(8)
+          .kr(8)
+          .m(5)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, n_div_8_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(5)
+          .nr(8)
+          .kr(8)
+          .m(5)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, n_div_8_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 5; m++) {
+          GemmMicrokernelTester()
+            .mr(5)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, strided_cm_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k <= 80; k += 17) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 5; m++) {
+          GemmMicrokernelTester()
+            .mr(5)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .cm_stride(11)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_5X8C8__AVXVNNI, strided_cm) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(5)
+      .nr(8)
+      .kr(8)
+      .m(5)
+      .n(8)
+      .k(16)
+      .cm_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_5x8c8__avxvnni, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+#endif  // XNN_ENABLE_AVXVNNI && (XNN_ARCH_X86 || XNN_ARCH_X86_64)
+
+
+#if XNN_ENABLE_AVXVNNI && (XNN_ARCH_X86 || XNN_ARCH_X86_64)
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, k_eq_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .nr(8)
+      .kr(8)
+      .n(8)
+      .k(16)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, strided_cn) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .nr(8)
+      .kr(8)
+      .n(8)
+      .k(16)
+      .cn_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, k_eq_16_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .nr(8)
+      .kr(8)
+      .n(8)
+      .k(16)
+      .a_stride(19)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, k_eq_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      for (uint32_t m = 1; m <= 1; m++) {
+        GemmMicrokernelTester()
+          .nr(8)
+          .kr(8)
+          .m(m)
+          .n(n)
+          .k(16)
+          .iterations(1)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, k_eq_16_subtile_m) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t m = 1; m <= 1; m++) {
+      GemmMicrokernelTester()
+        .nr(8)
+        .kr(8)
+        .m(m)
+        .n(8)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, k_eq_16_subtile_n) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      GemmMicrokernelTester()
+        .nr(8)
+        .kr(8)
+        .n(n)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, k_lt_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .nr(8)
+        .kr(8)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, k_lt_16_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .nr(8)
+        .kr(8)
+        .n(8)
+        .k(k)
+        .a_stride(19)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, k_lt_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k < 16; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 1; m++) {
+          GemmMicrokernelTester()
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, k_gt_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 17; k < 32; k++) {
+      GemmMicrokernelTester()
+        .nr(8)
+        .kr(8)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, k_gt_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 17; k < 32; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 1; m++) {
+          GemmMicrokernelTester()
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, k_div_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      GemmMicrokernelTester()
+        .nr(8)
+        .kr(8)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, k_div_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 1; m++) {
+          GemmMicrokernelTester()
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, n_gt_8) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .nr(8)
+          .kr(8)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, n_gt_8_strided_cn) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .nr(8)
+          .kr(8)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, n_gt_8_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .nr(8)
+          .kr(8)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, n_gt_8_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 1; m++) {
+          GemmMicrokernelTester()
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, n_div_8) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .nr(8)
+          .kr(8)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, n_div_8_strided_cn) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .nr(8)
+          .kr(8)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, n_div_8_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .nr(8)
+          .kr(8)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, n_div_8_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 1; m++) {
+          GemmMicrokernelTester()
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, strided_cm_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k <= 80; k += 17) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 1; m++) {
+          GemmMicrokernelTester()
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .cm_stride(11)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X8C8__AVXVNNI_PRFM, strided_cm) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .nr(8)
+      .kr(8)
+      .n(8)
+      .k(16)
+      .cm_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+#endif  // XNN_ENABLE_AVXVNNI && (XNN_ARCH_X86 || XNN_ARCH_X86_64)
+
+
+#if XNN_ENABLE_AVXVNNI && (XNN_ARCH_X86 || XNN_ARCH_X86_64)
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, k_eq_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(3)
+      .nr(8)
+      .kr(8)
+      .m(3)
+      .n(8)
+      .k(16)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, strided_cn) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(3)
+      .nr(8)
+      .kr(8)
+      .m(3)
+      .n(8)
+      .k(16)
+      .cn_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, k_eq_16_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(3)
+      .nr(8)
+      .kr(8)
+      .m(3)
+      .n(8)
+      .k(16)
+      .a_stride(19)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, k_eq_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      for (uint32_t m = 1; m <= 3; m++) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(m)
+          .n(n)
+          .k(16)
+          .iterations(1)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, k_eq_16_subtile_m) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t m = 1; m <= 3; m++) {
+      GemmMicrokernelTester()
+        .mr(3)
+        .nr(8)
+        .kr(8)
+        .m(m)
+        .n(8)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, k_eq_16_subtile_n) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      GemmMicrokernelTester()
+        .mr(3)
+        .nr(8)
+        .kr(8)
+        .m(3)
+        .n(n)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, k_lt_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .mr(3)
+        .nr(8)
+        .kr(8)
+        .m(3)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, k_lt_16_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .mr(3)
+        .nr(8)
+        .kr(8)
+        .m(3)
+        .n(8)
+        .k(k)
+        .a_stride(19)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, k_lt_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k < 16; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 3; m++) {
+          GemmMicrokernelTester()
+            .mr(3)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, k_gt_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 17; k < 32; k++) {
+      GemmMicrokernelTester()
+        .mr(3)
+        .nr(8)
+        .kr(8)
+        .m(3)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, k_gt_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 17; k < 32; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 3; m++) {
+          GemmMicrokernelTester()
+            .mr(3)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, k_div_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      GemmMicrokernelTester()
+        .mr(3)
+        .nr(8)
+        .kr(8)
+        .m(3)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, k_div_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 3; m++) {
+          GemmMicrokernelTester()
+            .mr(3)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, n_gt_8) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(3)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, n_gt_8_strided_cn) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(3)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, n_gt_8_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(3)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, n_gt_8_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 3; m++) {
+          GemmMicrokernelTester()
+            .mr(3)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, n_div_8) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(3)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, n_div_8_strided_cn) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(3)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, n_div_8_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(3)
+          .nr(8)
+          .kr(8)
+          .m(3)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, n_div_8_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 3; m++) {
+          GemmMicrokernelTester()
+            .mr(3)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, strided_cm_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k <= 80; k += 17) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 3; m++) {
+          GemmMicrokernelTester()
+            .mr(3)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .cm_stride(11)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X8C8__AVXVNNI_PRFM, strided_cm) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(3)
+      .nr(8)
+      .kr(8)
+      .m(3)
+      .n(8)
+      .k(16)
+      .cm_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_3x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+#endif  // XNN_ENABLE_AVXVNNI && (XNN_ARCH_X86 || XNN_ARCH_X86_64)
+
+
+#if XNN_ENABLE_AVXVNNI && (XNN_ARCH_X86 || XNN_ARCH_X86_64)
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, k_eq_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(4)
+      .nr(8)
+      .kr(8)
+      .m(4)
+      .n(8)
+      .k(16)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, strided_cn) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(4)
+      .nr(8)
+      .kr(8)
+      .m(4)
+      .n(8)
+      .k(16)
+      .cn_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, k_eq_16_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(4)
+      .nr(8)
+      .kr(8)
+      .m(4)
+      .n(8)
+      .k(16)
+      .a_stride(19)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, k_eq_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      for (uint32_t m = 1; m <= 4; m++) {
+        GemmMicrokernelTester()
+          .mr(4)
+          .nr(8)
+          .kr(8)
+          .m(m)
+          .n(n)
+          .k(16)
+          .iterations(1)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, k_eq_16_subtile_m) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t m = 1; m <= 4; m++) {
+      GemmMicrokernelTester()
+        .mr(4)
+        .nr(8)
+        .kr(8)
+        .m(m)
+        .n(8)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, k_eq_16_subtile_n) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      GemmMicrokernelTester()
+        .mr(4)
+        .nr(8)
+        .kr(8)
+        .m(4)
+        .n(n)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, k_lt_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .mr(4)
+        .nr(8)
+        .kr(8)
+        .m(4)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, k_lt_16_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .mr(4)
+        .nr(8)
+        .kr(8)
+        .m(4)
+        .n(8)
+        .k(k)
+        .a_stride(19)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, k_lt_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k < 16; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 4; m++) {
+          GemmMicrokernelTester()
+            .mr(4)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, k_gt_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 17; k < 32; k++) {
+      GemmMicrokernelTester()
+        .mr(4)
+        .nr(8)
+        .kr(8)
+        .m(4)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, k_gt_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 17; k < 32; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 4; m++) {
+          GemmMicrokernelTester()
+            .mr(4)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, k_div_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      GemmMicrokernelTester()
+        .mr(4)
+        .nr(8)
+        .kr(8)
+        .m(4)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, k_div_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 4; m++) {
+          GemmMicrokernelTester()
+            .mr(4)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, n_gt_8) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(4)
+          .nr(8)
+          .kr(8)
+          .m(4)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, n_gt_8_strided_cn) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(4)
+          .nr(8)
+          .kr(8)
+          .m(4)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, n_gt_8_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(4)
+          .nr(8)
+          .kr(8)
+          .m(4)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, n_gt_8_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 4; m++) {
+          GemmMicrokernelTester()
+            .mr(4)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, n_div_8) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(4)
+          .nr(8)
+          .kr(8)
+          .m(4)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, n_div_8_strided_cn) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(4)
+          .nr(8)
+          .kr(8)
+          .m(4)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, n_div_8_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(4)
+          .nr(8)
+          .kr(8)
+          .m(4)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, n_div_8_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 4; m++) {
+          GemmMicrokernelTester()
+            .mr(4)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, strided_cm_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k <= 80; k += 17) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 4; m++) {
+          GemmMicrokernelTester()
+            .mr(4)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .cm_stride(11)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_4X8C8__AVXVNNI_PRFM, strided_cm) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(4)
+      .nr(8)
+      .kr(8)
+      .m(4)
+      .n(8)
+      .k(16)
+      .cm_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_4x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+#endif  // XNN_ENABLE_AVXVNNI && (XNN_ARCH_X86 || XNN_ARCH_X86_64)
+
+
+#if XNN_ENABLE_AVXVNNI && (XNN_ARCH_X86 || XNN_ARCH_X86_64)
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, k_eq_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(6)
+      .nr(8)
+      .kr(8)
+      .m(6)
+      .n(8)
+      .k(16)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, strided_cn) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(6)
+      .nr(8)
+      .kr(8)
+      .m(6)
+      .n(8)
+      .k(16)
+      .cn_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, k_eq_16_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(6)
+      .nr(8)
+      .kr(8)
+      .m(6)
+      .n(8)
+      .k(16)
+      .a_stride(19)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, k_eq_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      for (uint32_t m = 1; m <= 6; m++) {
+        GemmMicrokernelTester()
+          .mr(6)
+          .nr(8)
+          .kr(8)
+          .m(m)
+          .n(n)
+          .k(16)
+          .iterations(1)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, k_eq_16_subtile_m) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t m = 1; m <= 6; m++) {
+      GemmMicrokernelTester()
+        .mr(6)
+        .nr(8)
+        .kr(8)
+        .m(m)
+        .n(8)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, k_eq_16_subtile_n) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 1; n <= 8; n++) {
+      GemmMicrokernelTester()
+        .mr(6)
+        .nr(8)
+        .kr(8)
+        .m(6)
+        .n(n)
+        .k(16)
+        .iterations(1)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, k_lt_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .mr(6)
+        .nr(8)
+        .kr(8)
+        .m(6)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, k_lt_16_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k < 16; k++) {
+      GemmMicrokernelTester()
+        .mr(6)
+        .nr(8)
+        .kr(8)
+        .m(6)
+        .n(8)
+        .k(k)
+        .a_stride(19)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, k_lt_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k < 16; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 6; m++) {
+          GemmMicrokernelTester()
+            .mr(6)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, k_gt_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 17; k < 32; k++) {
+      GemmMicrokernelTester()
+        .mr(6)
+        .nr(8)
+        .kr(8)
+        .m(6)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, k_gt_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 17; k < 32; k++) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 6; m++) {
+          GemmMicrokernelTester()
+            .mr(6)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, k_div_16) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      GemmMicrokernelTester()
+        .mr(6)
+        .nr(8)
+        .kr(8)
+        .m(6)
+        .n(8)
+        .k(k)
+        .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, k_div_16_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 32; k <= 160; k += 16) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 6; m++) {
+          GemmMicrokernelTester()
+            .mr(6)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, n_gt_8) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(6)
+          .nr(8)
+          .kr(8)
+          .m(6)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, n_gt_8_strided_cn) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(6)
+          .nr(8)
+          .kr(8)
+          .m(6)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, n_gt_8_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(6)
+          .nr(8)
+          .kr(8)
+          .m(6)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, n_gt_8_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 9; n < 16; n++) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 6; m++) {
+          GemmMicrokernelTester()
+            .mr(6)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, n_div_8) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(6)
+          .nr(8)
+          .kr(8)
+          .m(6)
+          .n(n)
+          .k(k)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, n_div_8_strided_cn) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(6)
+          .nr(8)
+          .kr(8)
+          .m(6)
+          .n(n)
+          .k(k)
+          .cn_stride(11)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, n_div_8_strided_a) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        GemmMicrokernelTester()
+          .mr(6)
+          .nr(8)
+          .kr(8)
+          .m(6)
+          .n(n)
+          .k(k)
+          .a_stride(83)
+          .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, n_div_8_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (uint32_t n = 16; n <= 24; n += 8) {
+      for (size_t k = 1; k <= 80; k += 17) {
+        for (uint32_t m = 1; m <= 6; m++) {
+          GemmMicrokernelTester()
+            .mr(6)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, strided_cm_subtile) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    for (size_t k = 1; k <= 80; k += 17) {
+      for (uint32_t n = 1; n <= 8; n++) {
+        for (uint32_t m = 1; m <= 6; m++) {
+          GemmMicrokernelTester()
+            .mr(6)
+            .nr(8)
+            .kr(8)
+            .m(m)
+            .n(n)
+            .k(k)
+            .cm_stride(11)
+            .iterations(1)
+            .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+        }
+      }
+    }
+  }
+
+  TEST(QS8_QC8W_GEMM_MINMAX_FP32_6X8C8__AVXVNNI_PRFM, strided_cm) {
+    TEST_REQUIRES_X86_AVXVNNI;
+    GemmMicrokernelTester()
+      .mr(6)
+      .nr(8)
+      .kr(8)
+      .m(6)
+      .n(8)
+      .k(16)
+      .cm_stride(11)
+      .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_6x8c8__avxvnni_prfm, xnn_init_qs8_qc8w_conv_minmax_fp32_avxvnni_params, xnn_pack_qs8_to_qu8_gemm_goi_w, xnn_qs8_requantize_fp32);
+  }
+#endif  // XNN_ENABLE_AVXVNNI && (XNN_ARCH_X86 || XNN_ARCH_X86_64)
+
+
 #if XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2S4__WASMSIMD_DOT16X2_LD64, k_eq_8) {
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
       .sr(4)
-      .m(1)
       .n(4)
       .k(8)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2s4__wasmsimd_dot16x2_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_wasmsimd_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -45998,11 +47156,9 @@
 
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2S4__WASMSIMD_DOT16X2_LD64, strided_cn) {
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
       .sr(4)
-      .m(1)
       .n(4)
       .k(8)
       .cn_stride(7)
@@ -46011,11 +47167,9 @@
 
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2S4__WASMSIMD_DOT16X2_LD64, k_eq_8_strided_a) {
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
       .sr(4)
-      .m(1)
       .n(4)
       .k(8)
       .a_stride(11)
@@ -46026,7 +47180,6 @@
     for (uint32_t n = 1; n <= 4; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
@@ -46042,7 +47195,6 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2S4__WASMSIMD_DOT16X2_LD64, k_eq_8_subtile_m) {
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
         .sr(4)
@@ -46057,11 +47209,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2S4__WASMSIMD_DOT16X2_LD64, k_eq_8_subtile_n) {
     for (uint32_t n = 1; n <= 4; n++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(n)
         .k(8)
         .iterations(1)
@@ -46072,11 +47222,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2S4__WASMSIMD_DOT16X2_LD64, k_lt_8) {
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2s4__wasmsimd_dot16x2_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_wasmsimd_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -46086,11 +47234,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2S4__WASMSIMD_DOT16X2_LD64, k_lt_8_strided_a) {
     for (size_t k = 1; k < 8; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(4)
         .k(k)
         .a_stride(11)
@@ -46103,7 +47249,6 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
             .sr(4)
@@ -46120,11 +47265,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2S4__WASMSIMD_DOT16X2_LD64, k_gt_8) {
     for (size_t k = 9; k < 16; k++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2s4__wasmsimd_dot16x2_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_wasmsimd_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -46136,7 +47279,6 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
             .sr(4)
@@ -46153,11 +47295,9 @@
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2S4__WASMSIMD_DOT16X2_LD64, k_div_8) {
     for (size_t k = 16; k <= 80; k += 8) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
         .kr(2)
         .sr(4)
-        .m(1)
         .n(4)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2s4__wasmsimd_dot16x2_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_wasmsimd_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -46169,7 +47309,6 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
             .sr(4)
@@ -46187,11 +47326,9 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2s4__wasmsimd_dot16x2_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_wasmsimd_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -46203,11 +47340,9 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(7)
@@ -46220,11 +47355,9 @@
     for (uint32_t n = 5; n < 8; n++) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -46238,7 +47371,6 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
             .sr(4)
@@ -46256,11 +47388,9 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4c2s4__wasmsimd_dot16x2_ld64, xnn_init_qs8_qc8w_conv_minmax_fp32_wasmsimd_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -46272,11 +47402,9 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .cn_stride(7)
@@ -46289,11 +47417,9 @@
     for (uint32_t n = 8; n <= 12; n += 4) {
       for (size_t k = 1; k <= 40; k += 9) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
           .kr(2)
           .sr(4)
-          .m(1)
           .n(n)
           .k(k)
           .a_stride(43)
@@ -46307,7 +47433,6 @@
       for (size_t k = 1; k <= 40; k += 9) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
             .sr(4)
@@ -46326,7 +47451,6 @@
       for (uint32_t n = 1; n <= 4; n++) {
         for (uint32_t m = 1; m <= 1; m++) {
           GemmMicrokernelTester()
-            .mr(1)
             .nr(4)
             .kr(2)
             .sr(4)
@@ -46343,11 +47467,9 @@
 
   TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4C2S4__WASMSIMD_DOT16X2_LD64, strided_cm) {
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
       .kr(2)
       .sr(4)
-      .m(1)
       .n(4)
       .k(8)
       .cm_stride(7)
@@ -46362,7 +47484,6 @@
       .mr(2)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -46374,7 +47495,6 @@
       .mr(2)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -46387,7 +47507,6 @@
       .mr(2)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -46402,7 +47521,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -46418,7 +47536,6 @@
         .mr(2)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(4)
         .k(8)
@@ -46433,7 +47550,6 @@
         .mr(2)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(n)
         .k(8)
@@ -46448,7 +47564,6 @@
         .mr(2)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -46462,7 +47577,6 @@
         .mr(2)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -46479,7 +47593,6 @@
             .mr(2)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -46496,7 +47609,6 @@
         .mr(2)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -46512,7 +47624,6 @@
             .mr(2)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -46529,7 +47640,6 @@
         .mr(2)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(2)
         .n(4)
         .k(k)
@@ -46545,7 +47655,6 @@
             .mr(2)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -46563,7 +47672,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -46579,7 +47687,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -46596,7 +47703,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -46614,7 +47720,6 @@
             .mr(2)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -46632,7 +47737,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -46648,7 +47752,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -46665,7 +47768,6 @@
           .mr(2)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(2)
           .n(n)
           .k(k)
@@ -46683,7 +47785,6 @@
             .mr(2)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -46702,7 +47803,6 @@
             .mr(2)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -46719,7 +47819,6 @@
       .mr(2)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(2)
       .n(4)
       .k(8)
@@ -47108,7 +48207,6 @@
       .mr(3)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(3)
       .n(4)
       .k(8)
@@ -47120,7 +48218,6 @@
       .mr(3)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(3)
       .n(4)
       .k(8)
@@ -47133,7 +48230,6 @@
       .mr(3)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(3)
       .n(4)
       .k(8)
@@ -47148,7 +48244,6 @@
           .mr(3)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -47164,7 +48259,6 @@
         .mr(3)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(m)
         .n(4)
         .k(8)
@@ -47179,7 +48273,6 @@
         .mr(3)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(n)
         .k(8)
@@ -47194,7 +48287,6 @@
         .mr(3)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(4)
         .k(k)
@@ -47208,7 +48300,6 @@
         .mr(3)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(4)
         .k(k)
@@ -47225,7 +48316,6 @@
             .mr(3)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -47242,7 +48332,6 @@
         .mr(3)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(4)
         .k(k)
@@ -47258,7 +48347,6 @@
             .mr(3)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -47275,7 +48363,6 @@
         .mr(3)
         .nr(4)
         .kr(8)
-        .sr(1)
         .m(3)
         .n(4)
         .k(k)
@@ -47291,7 +48378,6 @@
             .mr(3)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -47309,7 +48395,6 @@
           .mr(3)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -47325,7 +48410,6 @@
           .mr(3)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -47342,7 +48426,6 @@
           .mr(3)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -47360,7 +48443,6 @@
             .mr(3)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -47378,7 +48460,6 @@
           .mr(3)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -47394,7 +48475,6 @@
           .mr(3)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -47411,7 +48491,6 @@
           .mr(3)
           .nr(4)
           .kr(8)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -47429,7 +48508,6 @@
             .mr(3)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -47448,7 +48526,6 @@
             .mr(3)
             .nr(4)
             .kr(8)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -47465,7 +48542,6 @@
       .mr(3)
       .nr(4)
       .kr(8)
-      .sr(1)
       .m(3)
       .n(4)
       .k(8)
@@ -47481,7 +48557,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -47493,7 +48568,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -47506,7 +48580,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -47521,7 +48594,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(m)
           .n(n)
           .k(8)
@@ -47537,7 +48609,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(m)
         .n(4)
         .k(8)
@@ -47552,7 +48623,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(n)
         .k(8)
@@ -47567,7 +48637,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -47581,7 +48650,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -47598,7 +48666,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -47615,7 +48682,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -47631,7 +48697,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -47648,7 +48713,6 @@
         .mr(4)
         .nr(4)
         .kr(2)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -47664,7 +48728,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -47682,7 +48745,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -47698,7 +48760,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -47715,7 +48776,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -47733,7 +48793,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -47751,7 +48810,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -47767,7 +48825,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -47784,7 +48841,6 @@
           .mr(4)
           .nr(4)
           .kr(2)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -47802,7 +48858,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -47821,7 +48876,6 @@
             .mr(4)
             .nr(4)
             .kr(2)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -47838,7 +48892,6 @@
       .mr(4)
       .nr(4)
       .kr(2)
-      .sr(1)
       .m(4)
       .n(4)
       .k(8)
@@ -48601,7 +49654,6 @@
       .mr(4)
       .nr(4)
       .kr(16)
-      .sr(1)
       .m(4)
       .n(4)
       .k(16)
@@ -48614,7 +49666,6 @@
       .mr(4)
       .nr(4)
       .kr(16)
-      .sr(1)
       .m(4)
       .n(4)
       .k(16)
@@ -48628,7 +49679,6 @@
       .mr(4)
       .nr(4)
       .kr(16)
-      .sr(1)
       .m(4)
       .n(4)
       .k(16)
@@ -48644,7 +49694,6 @@
           .mr(4)
           .nr(4)
           .kr(16)
-          .sr(1)
           .m(m)
           .n(n)
           .k(16)
@@ -48661,7 +49710,6 @@
         .mr(4)
         .nr(4)
         .kr(16)
-        .sr(1)
         .m(m)
         .n(4)
         .k(16)
@@ -48677,7 +49725,6 @@
         .mr(4)
         .nr(4)
         .kr(16)
-        .sr(1)
         .m(4)
         .n(n)
         .k(16)
@@ -48693,7 +49740,6 @@
         .mr(4)
         .nr(4)
         .kr(16)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -48708,7 +49754,6 @@
         .mr(4)
         .nr(4)
         .kr(16)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -48726,7 +49771,6 @@
             .mr(4)
             .nr(4)
             .kr(16)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -48744,7 +49788,6 @@
         .mr(4)
         .nr(4)
         .kr(16)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -48761,7 +49804,6 @@
             .mr(4)
             .nr(4)
             .kr(16)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -48779,7 +49821,6 @@
         .mr(4)
         .nr(4)
         .kr(16)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -48796,7 +49837,6 @@
             .mr(4)
             .nr(4)
             .kr(16)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -48815,7 +49855,6 @@
           .mr(4)
           .nr(4)
           .kr(16)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -48832,7 +49871,6 @@
           .mr(4)
           .nr(4)
           .kr(16)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -48850,7 +49888,6 @@
           .mr(4)
           .nr(4)
           .kr(16)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -48869,7 +49906,6 @@
             .mr(4)
             .nr(4)
             .kr(16)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -48888,7 +49924,6 @@
           .mr(4)
           .nr(4)
           .kr(16)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -48905,7 +49940,6 @@
           .mr(4)
           .nr(4)
           .kr(16)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -48923,7 +49957,6 @@
           .mr(4)
           .nr(4)
           .kr(16)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -48942,7 +49975,6 @@
             .mr(4)
             .nr(4)
             .kr(16)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -48962,7 +49994,6 @@
             .mr(4)
             .nr(4)
             .kr(16)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -48980,7 +50011,6 @@
       .mr(4)
       .nr(4)
       .kr(16)
-      .sr(1)
       .m(4)
       .n(4)
       .k(16)
@@ -48995,8 +50025,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(2)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(2)
       .k(1)
@@ -49007,8 +50035,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(2)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(2)
       .k(1)
@@ -49020,8 +50046,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(2)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(2)
       .k(1)
@@ -49035,8 +50059,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(1)
@@ -49051,8 +50073,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(2)
         .k(1)
@@ -49066,8 +50086,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(1)
@@ -49081,8 +50099,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(2)
         .k(k)
@@ -49097,8 +50113,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(2)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -49115,8 +50129,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -49131,8 +50143,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -49148,8 +50158,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -49166,8 +50174,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(2)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -49184,8 +50190,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -49200,8 +50204,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -49217,8 +50219,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -49235,8 +50235,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(2)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -49254,8 +50252,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(2)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -49271,8 +50267,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(2)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(2)
       .k(1)
@@ -49287,8 +50281,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(4)
       .k(1)
@@ -49299,8 +50291,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(4)
       .k(1)
@@ -49312,8 +50302,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(4)
       .k(1)
@@ -49327,8 +50315,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(1)
@@ -49343,8 +50329,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(4)
         .k(1)
@@ -49358,8 +50342,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(1)
@@ -49373,8 +50355,6 @@
       GemmMicrokernelTester()
         .mr(3)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(4)
         .k(k)
@@ -49389,8 +50369,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(4)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -49407,8 +50385,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -49423,8 +50399,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -49440,8 +50414,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -49458,8 +50430,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(4)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -49476,8 +50446,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -49492,8 +50460,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -49509,8 +50475,6 @@
         GemmMicrokernelTester()
           .mr(3)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(3)
           .n(n)
           .k(k)
@@ -49527,8 +50491,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(4)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -49546,8 +50508,6 @@
           GemmMicrokernelTester()
             .mr(3)
             .nr(4)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -49563,8 +50523,6 @@
     GemmMicrokernelTester()
       .mr(3)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(4)
       .k(1)
@@ -49579,8 +50537,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(4)
       .k(1)
@@ -49591,8 +50547,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(4)
       .k(1)
@@ -49604,8 +50558,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(4)
       .k(1)
@@ -49619,8 +50571,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(1)
@@ -49635,8 +50585,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(4)
         .k(1)
@@ -49650,8 +50598,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(n)
         .k(1)
@@ -49665,8 +50611,6 @@
       GemmMicrokernelTester()
         .mr(4)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(4)
         .n(4)
         .k(k)
@@ -49681,8 +50625,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(4)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -49699,8 +50641,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -49715,8 +50655,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -49732,8 +50670,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -49750,8 +50686,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(4)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -49768,8 +50702,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -49784,8 +50716,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -49801,8 +50731,6 @@
         GemmMicrokernelTester()
           .mr(4)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(4)
           .n(n)
           .k(k)
@@ -49819,8 +50747,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(4)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -49838,8 +50764,6 @@
           GemmMicrokernelTester()
             .mr(4)
             .nr(4)
-            .kr(1)
-            .sr(1)
             .m(m)
             .n(n)
             .k(k)
@@ -49855,8 +50779,6 @@
     GemmMicrokernelTester()
       .mr(4)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(4)
       .n(4)
       .k(1)
@@ -49868,11 +50790,7 @@
 
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, k_eq_1) {
   GemmMicrokernelTester()
-    .mr(1)
     .nr(2)
-    .kr(1)
-    .sr(1)
-    .m(1)
     .n(2)
     .k(1)
     .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x2__scalar_fmagic, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_fmagic_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -49880,11 +50798,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, k_eq_1) {
 
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, strided_cn) {
   GemmMicrokernelTester()
-    .mr(1)
     .nr(2)
-    .kr(1)
-    .sr(1)
-    .m(1)
     .n(2)
     .k(1)
     .cn_stride(5)
@@ -49893,11 +50807,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, strided_cn) {
 
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, k_eq_1_strided_a) {
   GemmMicrokernelTester()
-    .mr(1)
     .nr(2)
-    .kr(1)
-    .sr(1)
-    .m(1)
     .n(2)
     .k(1)
     .a_stride(3)
@@ -49908,10 +50818,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, k_eq_1_subtile) {
   for (uint32_t n = 1; n <= 2; n++) {
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(n)
         .k(1)
@@ -49924,10 +50831,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, k_eq_1_subtile) {
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, k_eq_1_subtile_m) {
   for (uint32_t m = 1; m <= 1; m++) {
     GemmMicrokernelTester()
-      .mr(1)
       .nr(2)
-      .kr(1)
-      .sr(1)
       .m(m)
       .n(2)
       .k(1)
@@ -49939,11 +50843,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, k_eq_1_subtile_m) {
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, k_eq_1_subtile_n) {
   for (uint32_t n = 1; n <= 2; n++) {
     GemmMicrokernelTester()
-      .mr(1)
       .nr(2)
-      .kr(1)
-      .sr(1)
-      .m(1)
       .n(n)
       .k(1)
       .iterations(1)
@@ -49954,11 +50854,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, k_eq_1_subtile_n) {
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, k_gt_1) {
   for (size_t k = 2; k < 10; k++) {
     GemmMicrokernelTester()
-      .mr(1)
       .nr(2)
-      .kr(1)
-      .sr(1)
-      .m(1)
       .n(2)
       .k(k)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x2__scalar_fmagic, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_fmagic_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -49970,10 +50866,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, k_gt_1_subtile) {
     for (uint32_t n = 1; n <= 2; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -49988,11 +50881,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, n_gt_2) {
   for (uint32_t n = 3; n < 4; n++) {
     for (size_t k = 1; k <= 5; k += 2) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(2)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x2__scalar_fmagic, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_fmagic_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -50004,11 +50893,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, n_gt_2_strided_cn) {
   for (uint32_t n = 3; n < 4; n++) {
     for (size_t k = 1; k <= 5; k += 2) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(2)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(k)
         .cn_stride(5)
@@ -50021,11 +50906,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, n_gt_2_strided_a) {
   for (uint32_t n = 3; n < 4; n++) {
     for (size_t k = 1; k <= 5; k += 2) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(2)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(k)
         .a_stride(7)
@@ -50039,10 +50920,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, n_gt_2_subtile) {
     for (size_t k = 1; k <= 5; k += 2) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -50057,11 +50935,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, n_div_2) {
   for (uint32_t n = 4; n <= 6; n += 2) {
     for (size_t k = 1; k <= 5; k += 2) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(2)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x2__scalar_fmagic, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_fmagic_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -50073,11 +50947,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, n_div_2_strided_cn) {
   for (uint32_t n = 4; n <= 6; n += 2) {
     for (size_t k = 1; k <= 5; k += 2) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(2)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(k)
         .cn_stride(5)
@@ -50090,11 +50960,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, n_div_2_strided_a) {
   for (uint32_t n = 4; n <= 6; n += 2) {
     for (size_t k = 1; k <= 5; k += 2) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(2)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(k)
         .a_stride(7)
@@ -50108,10 +50974,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, n_div_2_subtile) {
     for (size_t k = 1; k <= 5; k += 2) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -50127,10 +50990,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, strided_cm_subtile) {
     for (uint32_t n = 1; n <= 2; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -50144,11 +51004,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, strided_cm_subtile) {
 
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, strided_cm) {
   GemmMicrokernelTester()
-    .mr(1)
     .nr(2)
-    .kr(1)
-    .sr(1)
-    .m(1)
     .n(2)
     .k(1)
     .cm_stride(5)
@@ -50158,11 +51014,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X2__SCALAR_FMAGIC, strided_cm) {
 
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, k_eq_1) {
   GemmMicrokernelTester()
-    .mr(1)
     .nr(4)
-    .kr(1)
-    .sr(1)
-    .m(1)
     .n(4)
     .k(1)
     .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4__scalar_imagic, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_imagic_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -50170,11 +51022,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, k_eq_1) {
 
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, strided_cn) {
   GemmMicrokernelTester()
-    .mr(1)
     .nr(4)
-    .kr(1)
-    .sr(1)
-    .m(1)
     .n(4)
     .k(1)
     .cn_stride(7)
@@ -50183,11 +51031,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, strided_cn) {
 
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, k_eq_1_strided_a) {
   GemmMicrokernelTester()
-    .mr(1)
     .nr(4)
-    .kr(1)
-    .sr(1)
-    .m(1)
     .n(4)
     .k(1)
     .a_stride(3)
@@ -50198,10 +51042,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, k_eq_1_subtile) {
   for (uint32_t n = 1; n <= 4; n++) {
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(n)
         .k(1)
@@ -50214,10 +51055,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, k_eq_1_subtile) {
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, k_eq_1_subtile_m) {
   for (uint32_t m = 1; m <= 1; m++) {
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(m)
       .n(4)
       .k(1)
@@ -50229,11 +51067,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, k_eq_1_subtile_m) {
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, k_eq_1_subtile_n) {
   for (uint32_t n = 1; n <= 4; n++) {
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
-      .kr(1)
-      .sr(1)
-      .m(1)
       .n(n)
       .k(1)
       .iterations(1)
@@ -50244,11 +51078,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, k_eq_1_subtile_n) {
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, k_gt_1) {
   for (size_t k = 2; k < 10; k++) {
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
-      .kr(1)
-      .sr(1)
-      .m(1)
       .n(4)
       .k(k)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4__scalar_imagic, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_imagic_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -50260,10 +51090,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, k_gt_1_subtile) {
     for (uint32_t n = 1; n <= 4; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -50278,11 +51105,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, n_gt_4) {
   for (uint32_t n = 5; n < 8; n++) {
     for (size_t k = 1; k <= 5; k += 2) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4__scalar_imagic, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_imagic_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -50294,11 +51117,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, n_gt_4_strided_cn) {
   for (uint32_t n = 5; n < 8; n++) {
     for (size_t k = 1; k <= 5; k += 2) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(k)
         .cn_stride(7)
@@ -50311,11 +51130,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, n_gt_4_strided_a) {
   for (uint32_t n = 5; n < 8; n++) {
     for (size_t k = 1; k <= 5; k += 2) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(k)
         .a_stride(7)
@@ -50329,10 +51144,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, n_gt_4_subtile) {
     for (size_t k = 1; k <= 5; k += 2) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -50347,11 +51159,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, n_div_4) {
   for (uint32_t n = 8; n <= 12; n += 4) {
     for (size_t k = 1; k <= 5; k += 2) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4__scalar_imagic, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_imagic_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -50363,11 +51171,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, n_div_4_strided_cn) {
   for (uint32_t n = 8; n <= 12; n += 4) {
     for (size_t k = 1; k <= 5; k += 2) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(k)
         .cn_stride(7)
@@ -50380,11 +51184,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, n_div_4_strided_a) {
   for (uint32_t n = 8; n <= 12; n += 4) {
     for (size_t k = 1; k <= 5; k += 2) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(k)
         .a_stride(7)
@@ -50398,10 +51198,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, n_div_4_subtile) {
     for (size_t k = 1; k <= 5; k += 2) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -50417,10 +51214,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, strided_cm_subtile) {
     for (uint32_t n = 1; n <= 4; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -50434,11 +51228,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, strided_cm_subtile) {
 
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, strided_cm) {
   GemmMicrokernelTester()
-    .mr(1)
     .nr(4)
-    .kr(1)
-    .sr(1)
-    .m(1)
     .n(4)
     .k(1)
     .cm_stride(7)
@@ -50448,11 +51238,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_IMAGIC, strided_cm) {
 
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, k_eq_1) {
   GemmMicrokernelTester()
-    .mr(1)
     .nr(4)
-    .kr(1)
-    .sr(1)
-    .m(1)
     .n(4)
     .k(1)
     .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4__scalar_lrintf, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_lrintf_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -50460,11 +51246,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, k_eq_1) {
 
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, strided_cn) {
   GemmMicrokernelTester()
-    .mr(1)
     .nr(4)
-    .kr(1)
-    .sr(1)
-    .m(1)
     .n(4)
     .k(1)
     .cn_stride(7)
@@ -50473,11 +51255,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, strided_cn) {
 
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, k_eq_1_strided_a) {
   GemmMicrokernelTester()
-    .mr(1)
     .nr(4)
-    .kr(1)
-    .sr(1)
-    .m(1)
     .n(4)
     .k(1)
     .a_stride(3)
@@ -50488,10 +51266,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, k_eq_1_subtile) {
   for (uint32_t n = 1; n <= 4; n++) {
     for (uint32_t m = 1; m <= 1; m++) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(n)
         .k(1)
@@ -50504,10 +51279,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, k_eq_1_subtile) {
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, k_eq_1_subtile_m) {
   for (uint32_t m = 1; m <= 1; m++) {
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(m)
       .n(4)
       .k(1)
@@ -50519,11 +51291,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, k_eq_1_subtile_m) {
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, k_eq_1_subtile_n) {
   for (uint32_t n = 1; n <= 4; n++) {
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
-      .kr(1)
-      .sr(1)
-      .m(1)
       .n(n)
       .k(1)
       .iterations(1)
@@ -50534,11 +51302,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, k_eq_1_subtile_n) {
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, k_gt_1) {
   for (size_t k = 2; k < 10; k++) {
     GemmMicrokernelTester()
-      .mr(1)
       .nr(4)
-      .kr(1)
-      .sr(1)
-      .m(1)
       .n(4)
       .k(k)
       .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4__scalar_lrintf, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_lrintf_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -50550,10 +51314,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, k_gt_1_subtile) {
     for (uint32_t n = 1; n <= 4; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -50568,11 +51329,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, n_gt_4) {
   for (uint32_t n = 5; n < 8; n++) {
     for (size_t k = 1; k <= 5; k += 2) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4__scalar_lrintf, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_lrintf_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -50584,11 +51341,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, n_gt_4_strided_cn) {
   for (uint32_t n = 5; n < 8; n++) {
     for (size_t k = 1; k <= 5; k += 2) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(k)
         .cn_stride(7)
@@ -50601,11 +51354,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, n_gt_4_strided_a) {
   for (uint32_t n = 5; n < 8; n++) {
     for (size_t k = 1; k <= 5; k += 2) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(k)
         .a_stride(7)
@@ -50619,10 +51368,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, n_gt_4_subtile) {
     for (size_t k = 1; k <= 5; k += 2) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -50637,11 +51383,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, n_div_4) {
   for (uint32_t n = 8; n <= 12; n += 4) {
     for (size_t k = 1; k <= 5; k += 2) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(k)
         .Test(xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_1x4__scalar_lrintf, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_lrintf_params, xnn_pack_qs8_gemm_goi_w, xnn_qs8_requantize_fp32);
@@ -50653,11 +51395,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, n_div_4_strided_cn) {
   for (uint32_t n = 8; n <= 12; n += 4) {
     for (size_t k = 1; k <= 5; k += 2) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(k)
         .cn_stride(7)
@@ -50670,11 +51408,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, n_div_4_strided_a) {
   for (uint32_t n = 8; n <= 12; n += 4) {
     for (size_t k = 1; k <= 5; k += 2) {
       GemmMicrokernelTester()
-        .mr(1)
         .nr(4)
-        .kr(1)
-        .sr(1)
-        .m(1)
         .n(n)
         .k(k)
         .a_stride(7)
@@ -50688,10 +51422,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, n_div_4_subtile) {
     for (size_t k = 1; k <= 5; k += 2) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -50707,10 +51438,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, strided_cm_subtile) {
     for (uint32_t n = 1; n <= 4; n++) {
       for (uint32_t m = 1; m <= 1; m++) {
         GemmMicrokernelTester()
-          .mr(1)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -50724,11 +51452,7 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, strided_cm_subtile) {
 
 TEST(QS8_QC8W_GEMM_MINMAX_FP32_1X4__SCALAR_LRINTF, strided_cm) {
   GemmMicrokernelTester()
-    .mr(1)
     .nr(4)
-    .kr(1)
-    .sr(1)
-    .m(1)
     .n(4)
     .k(1)
     .cm_stride(7)
@@ -50740,8 +51464,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_IMAGIC, k_eq_1) {
   GemmMicrokernelTester()
     .mr(2)
     .nr(2)
-    .kr(1)
-    .sr(1)
     .m(2)
     .n(2)
     .k(1)
@@ -50752,8 +51474,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_IMAGIC, strided_cn) {
   GemmMicrokernelTester()
     .mr(2)
     .nr(2)
-    .kr(1)
-    .sr(1)
     .m(2)
     .n(2)
     .k(1)
@@ -50765,8 +51485,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_IMAGIC, k_eq_1_strided_a) {
   GemmMicrokernelTester()
     .mr(2)
     .nr(2)
-    .kr(1)
-    .sr(1)
     .m(2)
     .n(2)
     .k(1)
@@ -50780,8 +51498,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_IMAGIC, k_eq_1_subtile) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(n)
         .k(1)
@@ -50796,8 +51512,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_IMAGIC, k_eq_1_subtile_m) {
     GemmMicrokernelTester()
       .mr(2)
       .nr(2)
-      .kr(1)
-      .sr(1)
       .m(m)
       .n(2)
       .k(1)
@@ -50811,8 +51525,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_IMAGIC, k_eq_1_subtile_n) {
     GemmMicrokernelTester()
       .mr(2)
       .nr(2)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(n)
       .k(1)
@@ -50826,8 +51538,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_IMAGIC, k_gt_1) {
     GemmMicrokernelTester()
       .mr(2)
       .nr(2)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(2)
       .k(k)
@@ -50842,8 +51552,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_IMAGIC, k_gt_1_subtile) {
         GemmMicrokernelTester()
           .mr(2)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -50860,8 +51568,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_IMAGIC, n_gt_2) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(k)
@@ -50876,8 +51582,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_IMAGIC, n_gt_2_strided_cn) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(k)
@@ -50893,8 +51597,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_IMAGIC, n_gt_2_strided_a) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(k)
@@ -50911,8 +51613,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_IMAGIC, n_gt_2_subtile) {
         GemmMicrokernelTester()
           .mr(2)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -50929,8 +51629,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_IMAGIC, n_div_2) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(k)
@@ -50945,8 +51643,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_IMAGIC, n_div_2_strided_cn) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(k)
@@ -50962,8 +51658,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_IMAGIC, n_div_2_strided_a) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(k)
@@ -50980,8 +51674,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_IMAGIC, n_div_2_subtile) {
         GemmMicrokernelTester()
           .mr(2)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -50999,8 +51691,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_IMAGIC, strided_cm_subtile) {
         GemmMicrokernelTester()
           .mr(2)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -51016,8 +51706,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_IMAGIC, strided_cm) {
   GemmMicrokernelTester()
     .mr(2)
     .nr(2)
-    .kr(1)
-    .sr(1)
     .m(2)
     .n(2)
     .k(1)
@@ -51030,8 +51718,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_LRINTF, k_eq_1) {
   GemmMicrokernelTester()
     .mr(2)
     .nr(2)
-    .kr(1)
-    .sr(1)
     .m(2)
     .n(2)
     .k(1)
@@ -51042,8 +51728,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_LRINTF, strided_cn) {
   GemmMicrokernelTester()
     .mr(2)
     .nr(2)
-    .kr(1)
-    .sr(1)
     .m(2)
     .n(2)
     .k(1)
@@ -51055,8 +51739,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_LRINTF, k_eq_1_strided_a) {
   GemmMicrokernelTester()
     .mr(2)
     .nr(2)
-    .kr(1)
-    .sr(1)
     .m(2)
     .n(2)
     .k(1)
@@ -51070,8 +51752,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_LRINTF, k_eq_1_subtile) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(n)
         .k(1)
@@ -51086,8 +51766,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_LRINTF, k_eq_1_subtile_m) {
     GemmMicrokernelTester()
       .mr(2)
       .nr(2)
-      .kr(1)
-      .sr(1)
       .m(m)
       .n(2)
       .k(1)
@@ -51101,8 +51779,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_LRINTF, k_eq_1_subtile_n) {
     GemmMicrokernelTester()
       .mr(2)
       .nr(2)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(n)
       .k(1)
@@ -51116,8 +51792,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_LRINTF, k_gt_1) {
     GemmMicrokernelTester()
       .mr(2)
       .nr(2)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(2)
       .k(k)
@@ -51132,8 +51806,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_LRINTF, k_gt_1_subtile) {
         GemmMicrokernelTester()
           .mr(2)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -51150,8 +51822,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_LRINTF, n_gt_2) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(k)
@@ -51166,8 +51836,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_LRINTF, n_gt_2_strided_cn) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(k)
@@ -51183,8 +51851,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_LRINTF, n_gt_2_strided_a) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(k)
@@ -51201,8 +51867,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_LRINTF, n_gt_2_subtile) {
         GemmMicrokernelTester()
           .mr(2)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -51219,8 +51883,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_LRINTF, n_div_2) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(k)
@@ -51235,8 +51897,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_LRINTF, n_div_2_strided_cn) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(k)
@@ -51252,8 +51912,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_LRINTF, n_div_2_strided_a) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(k)
@@ -51270,8 +51928,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_LRINTF, n_div_2_subtile) {
         GemmMicrokernelTester()
           .mr(2)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -51289,8 +51945,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_LRINTF, strided_cm_subtile) {
         GemmMicrokernelTester()
           .mr(2)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -51306,8 +51960,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X2__SCALAR_LRINTF, strided_cm) {
   GemmMicrokernelTester()
     .mr(2)
     .nr(2)
-    .kr(1)
-    .sr(1)
     .m(2)
     .n(2)
     .k(1)
@@ -51320,8 +51972,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X4__SCALAR_IMAGIC, k_eq_1) {
   GemmMicrokernelTester()
     .mr(2)
     .nr(4)
-    .kr(1)
-    .sr(1)
     .m(2)
     .n(4)
     .k(1)
@@ -51332,8 +51982,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X4__SCALAR_IMAGIC, strided_cn) {
   GemmMicrokernelTester()
     .mr(2)
     .nr(4)
-    .kr(1)
-    .sr(1)
     .m(2)
     .n(4)
     .k(1)
@@ -51345,8 +51993,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X4__SCALAR_IMAGIC, k_eq_1_strided_a) {
   GemmMicrokernelTester()
     .mr(2)
     .nr(4)
-    .kr(1)
-    .sr(1)
     .m(2)
     .n(4)
     .k(1)
@@ -51360,8 +52006,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X4__SCALAR_IMAGIC, k_eq_1_subtile) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(n)
         .k(1)
@@ -51376,8 +52020,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X4__SCALAR_IMAGIC, k_eq_1_subtile_m) {
     GemmMicrokernelTester()
       .mr(2)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(m)
       .n(4)
       .k(1)
@@ -51391,8 +52033,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X4__SCALAR_IMAGIC, k_eq_1_subtile_n) {
     GemmMicrokernelTester()
       .mr(2)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(n)
       .k(1)
@@ -51406,8 +52046,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X4__SCALAR_IMAGIC, k_gt_1) {
     GemmMicrokernelTester()
       .mr(2)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(2)
       .n(4)
       .k(k)
@@ -51422,8 +52060,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X4__SCALAR_IMAGIC, k_gt_1_subtile) {
         GemmMicrokernelTester()
           .mr(2)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -51440,8 +52076,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X4__SCALAR_IMAGIC, n_gt_4) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(k)
@@ -51456,8 +52090,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X4__SCALAR_IMAGIC, n_gt_4_strided_cn) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(k)
@@ -51473,8 +52105,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X4__SCALAR_IMAGIC, n_gt_4_strided_a) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(k)
@@ -51491,8 +52121,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X4__SCALAR_IMAGIC, n_gt_4_subtile) {
         GemmMicrokernelTester()
           .mr(2)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -51509,8 +52137,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X4__SCALAR_IMAGIC, n_div_4) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(k)
@@ -51525,8 +52151,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X4__SCALAR_IMAGIC, n_div_4_strided_cn) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(k)
@@ -51542,8 +52166,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X4__SCALAR_IMAGIC, n_div_4_strided_a) {
       GemmMicrokernelTester()
         .mr(2)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(2)
         .n(n)
         .k(k)
@@ -51560,8 +52182,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X4__SCALAR_IMAGIC, n_div_4_subtile) {
         GemmMicrokernelTester()
           .mr(2)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -51579,8 +52199,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X4__SCALAR_IMAGIC, strided_cm_subtile) {
         GemmMicrokernelTester()
           .mr(2)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -51596,8 +52214,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_2X4__SCALAR_IMAGIC, strided_cm) {
   GemmMicrokernelTester()
     .mr(2)
     .nr(4)
-    .kr(1)
-    .sr(1)
     .m(2)
     .n(4)
     .k(1)
@@ -51610,8 +52226,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X2__SCALAR_LRINTF, k_eq_1) {
   GemmMicrokernelTester()
     .mr(3)
     .nr(2)
-    .kr(1)
-    .sr(1)
     .m(3)
     .n(2)
     .k(1)
@@ -51622,8 +52236,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X2__SCALAR_LRINTF, strided_cn) {
   GemmMicrokernelTester()
     .mr(3)
     .nr(2)
-    .kr(1)
-    .sr(1)
     .m(3)
     .n(2)
     .k(1)
@@ -51635,8 +52247,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X2__SCALAR_LRINTF, k_eq_1_strided_a) {
   GemmMicrokernelTester()
     .mr(3)
     .nr(2)
-    .kr(1)
-    .sr(1)
     .m(3)
     .n(2)
     .k(1)
@@ -51650,8 +52260,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X2__SCALAR_LRINTF, k_eq_1_subtile) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(n)
         .k(1)
@@ -51666,8 +52274,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X2__SCALAR_LRINTF, k_eq_1_subtile_m) {
     GemmMicrokernelTester()
       .mr(3)
       .nr(2)
-      .kr(1)
-      .sr(1)
       .m(m)
       .n(2)
       .k(1)
@@ -51681,8 +52287,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X2__SCALAR_LRINTF, k_eq_1_subtile_n) {
     GemmMicrokernelTester()
       .mr(3)
       .nr(2)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(n)
       .k(1)
@@ -51696,8 +52300,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X2__SCALAR_LRINTF, k_gt_1) {
     GemmMicrokernelTester()
       .mr(3)
       .nr(2)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(2)
       .k(k)
@@ -51712,8 +52314,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X2__SCALAR_LRINTF, k_gt_1_subtile) {
         GemmMicrokernelTester()
           .mr(3)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -51730,8 +52330,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X2__SCALAR_LRINTF, n_gt_2) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(k)
@@ -51746,8 +52344,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X2__SCALAR_LRINTF, n_gt_2_strided_cn) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(k)
@@ -51763,8 +52359,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X2__SCALAR_LRINTF, n_gt_2_strided_a) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(k)
@@ -51781,8 +52375,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X2__SCALAR_LRINTF, n_gt_2_subtile) {
         GemmMicrokernelTester()
           .mr(3)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -51799,8 +52391,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X2__SCALAR_LRINTF, n_div_2) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(k)
@@ -51815,8 +52405,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X2__SCALAR_LRINTF, n_div_2_strided_cn) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(k)
@@ -51832,8 +52420,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X2__SCALAR_LRINTF, n_div_2_strided_a) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(2)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(k)
@@ -51850,8 +52436,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X2__SCALAR_LRINTF, n_div_2_subtile) {
         GemmMicrokernelTester()
           .mr(3)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -51869,8 +52453,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X2__SCALAR_LRINTF, strided_cm_subtile) {
         GemmMicrokernelTester()
           .mr(3)
           .nr(2)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -51886,8 +52468,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X2__SCALAR_LRINTF, strided_cm) {
   GemmMicrokernelTester()
     .mr(3)
     .nr(2)
-    .kr(1)
-    .sr(1)
     .m(3)
     .n(2)
     .k(1)
@@ -51900,8 +52480,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_IMAGIC, k_eq_1) {
   GemmMicrokernelTester()
     .mr(3)
     .nr(4)
-    .kr(1)
-    .sr(1)
     .m(3)
     .n(4)
     .k(1)
@@ -51912,8 +52490,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_IMAGIC, strided_cn) {
   GemmMicrokernelTester()
     .mr(3)
     .nr(4)
-    .kr(1)
-    .sr(1)
     .m(3)
     .n(4)
     .k(1)
@@ -51925,8 +52501,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_IMAGIC, k_eq_1_strided_a) {
   GemmMicrokernelTester()
     .mr(3)
     .nr(4)
-    .kr(1)
-    .sr(1)
     .m(3)
     .n(4)
     .k(1)
@@ -51940,8 +52514,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_IMAGIC, k_eq_1_subtile) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(n)
         .k(1)
@@ -51956,8 +52528,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_IMAGIC, k_eq_1_subtile_m) {
     GemmMicrokernelTester()
       .mr(3)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(m)
       .n(4)
       .k(1)
@@ -51971,8 +52541,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_IMAGIC, k_eq_1_subtile_n) {
     GemmMicrokernelTester()
       .mr(3)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(n)
       .k(1)
@@ -51986,8 +52554,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_IMAGIC, k_gt_1) {
     GemmMicrokernelTester()
       .mr(3)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(4)
       .k(k)
@@ -52002,8 +52568,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_IMAGIC, k_gt_1_subtile) {
         GemmMicrokernelTester()
           .mr(3)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -52020,8 +52584,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_IMAGIC, n_gt_4) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(k)
@@ -52036,8 +52598,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_IMAGIC, n_gt_4_strided_cn) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(k)
@@ -52053,8 +52613,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_IMAGIC, n_gt_4_strided_a) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(k)
@@ -52071,8 +52629,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_IMAGIC, n_gt_4_subtile) {
         GemmMicrokernelTester()
           .mr(3)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -52089,8 +52645,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_IMAGIC, n_div_4) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(k)
@@ -52105,8 +52659,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_IMAGIC, n_div_4_strided_cn) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(k)
@@ -52122,8 +52674,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_IMAGIC, n_div_4_strided_a) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(k)
@@ -52140,8 +52690,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_IMAGIC, n_div_4_subtile) {
         GemmMicrokernelTester()
           .mr(3)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -52159,8 +52707,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_IMAGIC, strided_cm_subtile) {
         GemmMicrokernelTester()
           .mr(3)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -52176,8 +52722,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_IMAGIC, strided_cm) {
   GemmMicrokernelTester()
     .mr(3)
     .nr(4)
-    .kr(1)
-    .sr(1)
     .m(3)
     .n(4)
     .k(1)
@@ -52190,8 +52734,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_LRINTF, k_eq_1) {
   GemmMicrokernelTester()
     .mr(3)
     .nr(4)
-    .kr(1)
-    .sr(1)
     .m(3)
     .n(4)
     .k(1)
@@ -52202,8 +52744,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_LRINTF, strided_cn) {
   GemmMicrokernelTester()
     .mr(3)
     .nr(4)
-    .kr(1)
-    .sr(1)
     .m(3)
     .n(4)
     .k(1)
@@ -52215,8 +52755,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_LRINTF, k_eq_1_strided_a) {
   GemmMicrokernelTester()
     .mr(3)
     .nr(4)
-    .kr(1)
-    .sr(1)
     .m(3)
     .n(4)
     .k(1)
@@ -52230,8 +52768,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_LRINTF, k_eq_1_subtile) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(m)
         .n(n)
         .k(1)
@@ -52246,8 +52782,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_LRINTF, k_eq_1_subtile_m) {
     GemmMicrokernelTester()
       .mr(3)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(m)
       .n(4)
       .k(1)
@@ -52261,8 +52795,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_LRINTF, k_eq_1_subtile_n) {
     GemmMicrokernelTester()
       .mr(3)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(n)
       .k(1)
@@ -52276,8 +52808,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_LRINTF, k_gt_1) {
     GemmMicrokernelTester()
       .mr(3)
       .nr(4)
-      .kr(1)
-      .sr(1)
       .m(3)
       .n(4)
       .k(k)
@@ -52292,8 +52822,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_LRINTF, k_gt_1_subtile) {
         GemmMicrokernelTester()
           .mr(3)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -52310,8 +52838,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_LRINTF, n_gt_4) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(k)
@@ -52326,8 +52852,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_LRINTF, n_gt_4_strided_cn) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(k)
@@ -52343,8 +52867,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_LRINTF, n_gt_4_strided_a) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(k)
@@ -52361,8 +52883,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_LRINTF, n_gt_4_subtile) {
         GemmMicrokernelTester()
           .mr(3)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -52379,8 +52899,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_LRINTF, n_div_4) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(k)
@@ -52395,8 +52913,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_LRINTF, n_div_4_strided_cn) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(k)
@@ -52412,8 +52928,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_LRINTF, n_div_4_strided_a) {
       GemmMicrokernelTester()
         .mr(3)
         .nr(4)
-        .kr(1)
-        .sr(1)
         .m(3)
         .n(n)
         .k(k)
@@ -52430,8 +52944,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_LRINTF, n_div_4_subtile) {
         GemmMicrokernelTester()
           .mr(3)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -52449,8 +52961,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_LRINTF, strided_cm_subtile) {
         GemmMicrokernelTester()
           .mr(3)
           .nr(4)
-          .kr(1)
-          .sr(1)
           .m(m)
           .n(n)
           .k(k)
@@ -52466,8 +52976,6 @@ TEST(QS8_QC8W_GEMM_MINMAX_FP32_3X4__SCALAR_LRINTF, strided_cm) {
   GemmMicrokernelTester()
     .mr(3)
     .nr(4)
-    .kr(1)
-    .sr(1)
     .m(3)
     .n(4)
     .k(1)

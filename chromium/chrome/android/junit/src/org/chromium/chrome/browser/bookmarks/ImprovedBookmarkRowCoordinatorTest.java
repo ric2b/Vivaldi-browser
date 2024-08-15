@@ -28,7 +28,6 @@ import androidx.test.ext.junit.rules.ActivityScenarioRule;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
@@ -38,12 +37,9 @@ import org.robolectric.annotation.Config;
 import org.chromium.base.Callback;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Batch;
-import org.chromium.base.test.util.Features;
-import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayPref;
 import org.chromium.chrome.browser.commerce.ShoppingFeatures;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.bookmarks.BookmarkType;
@@ -70,7 +66,6 @@ public class ImprovedBookmarkRowCoordinatorTest {
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
     @Rule public JniMocker mJniMocker = new JniMocker();
-    @Rule public TestRule mFeaturesProcessorRule = new Features.JUnitProcessor();
 
     @Mock private BookmarkImageFetcher mBookmarkImageFetcher;
     @Mock private BookmarkModel mBookmarkModel;
@@ -87,6 +82,7 @@ public class ImprovedBookmarkRowCoordinatorTest {
 
     @Before
     public void setUp() {
+        doReturn(false).when(mBookmarkModel).areAccountBookmarkFoldersActive();
         mActivityScenarioRule.getScenario().onActivity((activity) -> mActivity = activity);
 
         // Setup BookmarkModel.
@@ -197,6 +193,25 @@ public class ImprovedBookmarkRowCoordinatorTest {
     }
 
     @Test
+    public void testFolder_local() {
+        FakeBookmarkModel bookmarkModel = FakeBookmarkModel.createModel();
+        bookmarkModel.setAreAccountBookmarkFoldersActive(true);
+
+        mCoordinator =
+                new ImprovedBookmarkRowCoordinator(
+                        mActivity,
+                        mBookmarkImageFetcher,
+                        bookmarkModel,
+                        mBookmarkUiPrefs,
+                        mShoppingService);
+        PropertyModel model =
+                mCoordinator.createBasePropertyModel(bookmarkModel.getMobileFolderId());
+        assertEquals(
+                "Mobile bookmarks 1 bookmark Only on this device",
+                model.get(ImprovedBookmarkRowProperties.CONTENT_DESCRIPTION));
+    }
+
+    @Test
     public void testFolder_compactConversionString() {
         // Need to be careful when formatting user generating content, https://crbug.com/1509959.
         BookmarkId folderId = new BookmarkId(100, BookmarkType.NORMAL);
@@ -261,9 +276,9 @@ public class ImprovedBookmarkRowCoordinatorTest {
     }
 
     @Test
-    @EnableFeatures(ChromeFeatureList.ENABLE_BOOKMARK_FOLDERS_FOR_ACCOUNT_STORAGE)
     public void testBookmark_accountAndLocal() throws Exception {
-        BookmarkModel bookmarkModel = FakeBookmarkModel.createModel();
+        FakeBookmarkModel bookmarkModel = FakeBookmarkModel.createModel();
+        bookmarkModel.setAreAccountBookmarkFoldersActive(true);
         mCoordinator =
                 new ImprovedBookmarkRowCoordinator(
                         mActivity,

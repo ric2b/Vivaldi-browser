@@ -67,6 +67,7 @@
 #include "third_party/blink/renderer/core/html/plugin_document.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/core/speculation_rules/document_speculation_rules.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
@@ -118,11 +119,11 @@ WebString WebDocument::GetReferrer() const {
   return ConstUnwrap<Document>()->referrer();
 }
 
-absl::optional<SkColor> WebDocument::ThemeColor() {
-  absl::optional<Color> color = Unwrap<Document>()->ThemeColor();
+std::optional<SkColor> WebDocument::ThemeColor() {
+  std::optional<Color> color = Unwrap<Document>()->ThemeColor();
   if (color)
     return color->Rgb();
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 WebURL WebDocument::OpenSearchDescriptionURL() const {
@@ -216,6 +217,17 @@ WebVector<WebFormElement> WebDocument::Forms() const {
     form_elements.emplace_back(blink::To<HTMLFormElement>(element));
   }
   return form_elements;
+}
+
+WebVector<WebFormElement> WebDocument::GetTopLevelForms() const {
+  Vector<WebFormElement> web_forms;
+  HeapVector<Member<HTMLFormElement>> forms =
+      const_cast<Document*>(ConstUnwrap<Document>())->GetTopLevelForms();
+  web_forms.reserve(forms.size());
+  for (auto& form : forms) {
+    web_forms.push_back(form.Get());
+  }
+  return web_forms;
 }
 
 WebURL WebDocument::CompleteURL(const WebString& partial_url) const {
@@ -355,6 +367,20 @@ net::ReferrerPolicy WebDocument::GetReferrerPolicy() const {
 
 WebString WebDocument::OutgoingReferrer() const {
   return WebString(ConstUnwrap<Document>()->domWindow()->OutgoingReferrer());
+}
+
+void WebDocument::InitiatePreview(const WebURL& url) {
+  if (!url.IsValid()) {
+    return;
+  }
+
+  Document* document = blink::To<Document>(private_.Get());
+  if (!document) {
+    return;
+  }
+
+  KURL kurl(url);
+  DocumentSpeculationRules::From(*document).InitiatePreview(kurl);
 }
 
 }  // namespace blink

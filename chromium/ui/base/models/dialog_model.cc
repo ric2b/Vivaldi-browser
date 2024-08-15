@@ -37,7 +37,7 @@ DialogModel::Button::Params& DialogModel::Button::Params::SetLabel(
 }
 
 DialogModel::Button::Params& DialogModel::Button::Params::SetStyle(
-    absl::optional<ButtonStyle> style) {
+    std::optional<ButtonStyle> style) {
   CHECK(style_ != style, base::NotFatalUntil::M123);
   style_ = style;
   return *this;
@@ -105,7 +105,7 @@ DialogModel::Builder& DialogModel::Builder::AddCancelButton(
 DialogModel::Builder& DialogModel::Builder::AddButtonInternal(
     ButtonCallbackVariant callback,
     const DialogModel::Button::Params& params,
-    absl::optional<ui::DialogModel::Button>& model_button,
+    std::optional<ui::DialogModel::Button>& model_button,
     ButtonCallbackVariant& model_callback) {
   CHECK(params.is_visible_);
   CHECK(!model_button.has_value());
@@ -280,6 +280,15 @@ void DialogModel::SetButtonLabel(DialogModel::Button* button,
                                  const std::u16string& label) {
   CHECK(button);
   button->label_ = label;
+
+  if (host_) {
+    host_->OnDialogButtonChanged();
+  }
+}
+
+void DialogModel::SetButtonEnabled(DialogModel::Button* button, bool enabled) {
+  CHECK(button);
+  button->is_enabled_ = enabled;
 
   if (host_) {
     host_->OnDialogButtonChanged();

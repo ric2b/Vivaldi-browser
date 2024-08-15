@@ -14,6 +14,7 @@ class EventGenerator;
 
 namespace ash {
 
+class OverviewGrid;
 class OverviewItemBase;
 
 void SendKey(ui::KeyboardCode key, int flags = ui::EF_NONE);
@@ -33,6 +34,10 @@ void ToggleOverview(
 // returns if animations are disabled.
 void WaitForOverviewEnterAnimation();
 void WaitForOverviewExitAnimation();
+
+// Like `WaitForOverviewEnterAnimation()` but waits even if using zero duration.
+// Used to wait for async pine image read operation.
+void WaitForOverviewEntered();
 
 OverviewGrid* GetOverviewGridForRoot(aura::Window* root);
 
@@ -59,6 +64,14 @@ void DragItemToPoint(OverviewItemBase* item,
 // Press the key repeatedly until a window is focused, i.e. ignoring any
 // desk items.
 void SendKeyUntilOverviewItemIsFocused(ui::KeyboardCode key);
+
+// Waits until the occlusion state for window is equal to `target_state`.
+void WaitForOcclusionStateChange(aura::Window* window,
+                                 aura::Window::OcclusionState target_state);
+
+// Returns true if the given `window` is on its corresponding overview grid,
+// returns false otherwise.
+bool IsWindowInItsCorrespondingOverviewGrid(aura::Window* window);
 
 }  // namespace ash
 

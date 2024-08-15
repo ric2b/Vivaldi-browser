@@ -8,7 +8,7 @@ option optimize_for = LITE_RUNTIME;
 
 package biod;
 
-option go_package = "chromiumos/system_api/biod_messages_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/biod_messages_proto";
 
 import "constants.proto";
 
@@ -71,22 +71,7 @@ message FpPublicKey {
   optional bytes y = 2;
 }
 
-// TODO(b/298346899): This proto is deprecated and will be removed after
-// callers migrate to the new proto. Note that the new service itself
-// hasn't launched yet so we didn't keep the implementation backward
-// compatible with this proto. As of now, usage of this proto will already
-// result in failures.
 message CreateCredentialRequest {
-  optional string user_id = 1;
-  optional bytes gsc_nonce = 2;
-  optional bytes encrypted_label_seed = 3;
-  optional bytes iv = 4;
-  optional FpPublicKey pub = 5;
-}
-
-// TODO(b/298346899): Rename this back to CreateCredentialRequest after callers
-// have switched over.
-message CreateCredentialRequestV2 {
   optional FpPublicKey pub = 1;
 }
 
@@ -109,21 +94,7 @@ message CreateCredentialReply {
   optional string record_id = 5;
 }
 
-// TODO(b/298346899): This proto is deprecated and will be removed after
-// callers migrate to the new proto. Note that the new service itself
-// hasn't launched yet so we didn't keep the implementation backward
-// compatible with this proto. As of now, usage of this proto will already
-// result in failures.
 message AuthenticateCredentialRequest {
-  optional bytes gsc_nonce = 1;
-  optional bytes encrypted_label_seed = 2;
-  optional bytes iv = 3;
-  optional FpPublicKey pub = 4;
-}
-
-// TODO(b/298346899): Rename this back to AuthenticateCredentialRequest after
-// callers have switched over.
-message AuthenticateCredentialRequestV2 {
   optional FpPublicKey pub = 1;
 }
 
@@ -166,4 +137,26 @@ message DeleteCredentialReply {
     DELETION_FAILED = 4;
   }
   optional DeleteCredentialStatus status = 1;
+}
+
+message EnrollLegacyTemplateRequest {
+  optional bytes legacy_record_id = 1;
+  optional bytes gsc_nonce = 2;
+  optional bytes encrypted_label_seed = 3;
+  optional bytes iv = 4;
+}
+
+message LegacyRecord {
+  optional string legacy_record_id = 1;
+  // user supplied description of the finger.
+  optional string label = 2;
+}
+
+message ListLegacyRecordsReply {
+  enum ListLegacyRecordsStatus {
+    UNKNOWN = 0;
+    SUCCESS = 1;
+  }
+  optional ListLegacyRecordsStatus status = 2;
+  repeated LegacyRecord legacy_records = 1;
 }

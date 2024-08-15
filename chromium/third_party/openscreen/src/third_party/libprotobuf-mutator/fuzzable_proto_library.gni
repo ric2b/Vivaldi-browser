@@ -11,6 +11,7 @@
 # protobuf runtime. tl;dr: A fuzzable_proto_library is a proto_library that can
 # be fuzzed with libprotobuf-mutator and shipped in Chrome.
 
+import("//build/config/sanitizers/sanitizers.gni")
 import("//build_overrides/build.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//third_party/protobuf/proto_library.gni")

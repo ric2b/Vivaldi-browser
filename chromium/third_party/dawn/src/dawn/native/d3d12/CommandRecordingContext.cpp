@@ -34,7 +34,6 @@
 #include <utility>
 
 #include "dawn/native/d3d/D3DError.h"
-#include "dawn/native/d3d12/CommandAllocatorManager.h"
 #include "dawn/native/d3d12/DeviceD3D12.h"
 #include "dawn/native/d3d12/HeapD3D12.h"
 #include "dawn/native/d3d12/ResidencyManagerD3D12.h"
@@ -44,48 +43,21 @@
 namespace dawn::native::d3d12 {
 
 void CommandRecordingContext::AddToSharedTextureList(Texture* texture) {
-    DAWN_ASSERT(IsOpen());
     mSharedTextures.insert(texture);
 }
 
-MaybeError CommandRecordingContext::Open(ID3D12Device* d3d12Device,
-                                         CommandAllocatorManager* commandAllocationManager) {
-    DAWN_ASSERT(!IsOpen());
-    ID3D12CommandAllocator* commandAllocator;
-    DAWN_TRY_ASSIGN(commandAllocator, commandAllocationManager->ReserveCommandAllocator());
-    if (mD3d12CommandList != nullptr) {
-        MaybeError error = CheckHRESULT(mD3d12CommandList->Reset(commandAllocator, nullptr),
-                                        "D3D12 resetting command list");
-        if (error.IsError()) {
-            mD3d12CommandList.Reset();
-            DAWN_TRY(std::move(error));
-        }
-    } else {
-        ComPtr<ID3D12GraphicsCommandList> d3d12GraphicsCommandList;
-        DAWN_TRY(CheckHRESULT(
-            d3d12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator,
-                                           nullptr, IID_PPV_ARGS(&d3d12GraphicsCommandList)),
-            "D3D12 creating direct command list"));
-        mD3d12CommandList = std::move(d3d12GraphicsCommandList);
-        // Store a cast to ID3D12GraphicsCommandList4. This is required to use the D3D12 render
-        // pass APIs introduced in Windows build 1809.
-        mD3d12CommandList.As(&mD3d12CommandList4);
-    }
-
-    mIsOpen = true;
+void CommandRecordingContext::Open(ComPtr<ID3D12GraphicsCommandList> commandList) {
+    mD3d12CommandList = std::move(commandList);
+    mD3d12CommandList.As(&mD3d12CommandList4);
     mNeedsSubmit = false;
-
-    return {};
 }
 
 MaybeError CommandRecordingContext::ExecuteCommandList(Device* device,
                                                        ID3D12CommandQueue* commandQueue) {
-    if (!IsOpen()) {
-        return {};
-    }
+    DAWN_ASSERT(mD3d12CommandList != nullptr);
 
     for (Texture* texture : mSharedTextures) {
-        DAWN_TRY(texture->SynchronizeImportedTextureBeforeUse());
+        DAWN_TRY(texture->SynchronizeTextureBeforeUse(this));
     }
 
     MaybeError error =
@@ -135,16 +107,7 @@ MaybeError CommandRecordingContext::ExecuteCommandList(Device* device,
     ID3D12CommandList* d3d12CommandList = GetCommandList();
     commandQueue->ExecuteCommandLists(1, &d3d12CommandList);
 
-    for (Texture* texture : mSharedTextures) {
-        DAWN_TRY(texture->SynchronizeImportedTextureAfterUse());
-    }
-
-    mIsOpen = false;
-    mNeedsSubmit = false;
-    mSharedTextures.clear();
-    mHeapsPendingUsage.clear();
-    mTempBuffers.clear();
-
+    Release();
     return {};
 }
 
@@ -159,14 +122,12 @@ void CommandRecordingContext::TrackHeapUsage(Heap* heap, ExecutionSerial serial)
 
 ID3D12GraphicsCommandList* CommandRecordingContext::GetCommandList() const {
     DAWN_ASSERT(mD3d12CommandList != nullptr);
-    DAWN_ASSERT(IsOpen());
     return mD3d12CommandList.Get();
 }
 
 // This function will fail on Windows versions prior to 1809. Support must be queried through
 // the device before calling.
 ID3D12GraphicsCommandList4* CommandRecordingContext::GetCommandList4() const {
-    DAWN_ASSERT(IsOpen());
     DAWN_ASSERT(mD3d12CommandList != nullptr);
     return mD3d12CommandList4.Get();
 }
@@ -174,15 +135,14 @@ ID3D12GraphicsCommandList4* CommandRecordingContext::GetCommandList4() const {
 void CommandRecordingContext::Release() {
     mD3d12CommandList.Reset();
     mD3d12CommandList4.Reset();
-    mIsOpen = false;
+
     mNeedsSubmit = false;
+
     mSharedTextures.clear();
     mHeapsPendingUsage.clear();
     mTempBuffers.clear();
-}
 
-bool CommandRecordingContext::IsOpen() const {
-    return mIsOpen;
+    ReleaseKeyedMutexes();
 }
 
 bool CommandRecordingContext::NeedsSubmit() const {
@@ -195,6 +155,21 @@ void CommandRecordingContext::SetNeedsSubmit() {
 
 void CommandRecordingContext::AddToTempBuffers(Ref<Buffer> tempBuffer) {
     mTempBuffers.emplace_back(tempBuffer);
+}
+
+MaybeError CommandRecordingContext::AcquireKeyedMutex(Ref<d3d::KeyedMutex> keyedMutex) {
+    if (!mAcquiredKeyedMutexes.contains(keyedMutex)) {
+        DAWN_TRY(keyedMutex->AcquireKeyedMutex());
+        mAcquiredKeyedMutexes.emplace(std::move(keyedMutex));
+    }
+    return {};
+}
+
+void CommandRecordingContext::ReleaseKeyedMutexes() {
+    for (auto& keyedMutex : mAcquiredKeyedMutexes) {
+        keyedMutex->ReleaseKeyedMutex();
+    }
+    mAcquiredKeyedMutexes.clear();
 }
 
 }  // namespace dawn::native::d3d12

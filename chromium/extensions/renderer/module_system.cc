@@ -57,7 +57,7 @@ bool ShouldSuppressFatalErrors() {
 
 // Logs an error for the calling context in preparation for potentially
 // crashing the renderer, with some added metadata about the context:
-//  - Its type (blessed, unblessed, etc).
+//  - Its type (privileged, unprivileged, etc).
 //  - Whether it's valid.
 //  - The extension ID, if one exists.
 // Crashing won't happen in stable/beta releases, but is encouraged to happen
@@ -201,6 +201,9 @@ ModuleSystem::ModuleSystem(ScriptContext* context, const SourceMap* source_map)
   if (context_->GetRenderFrame() &&
       context_->context_type() == mojom::ContextType::kPrivilegedExtension &&
       !context_->IsForServiceWorker() && ContextNeedsMojoBindings(context_)) {
+    // Valid enablement code path, so need to ensure MojoJS is allowed for the
+    // process before attempting to enable it.
+    blink::WebV8Features::AllowMojoJSForProcess();
     blink::WebV8Features::EnableMojoJS(context->v8_context(), true);
   }
 }

@@ -28,7 +28,7 @@ BASE_FEATURE(kAndroidDownloadableFontsMatching,
 // without an origin trial token.
 BASE_FEATURE(kAttributionReportingCrossAppWebOverride,
              "AttributionReportingCrossAppWebOverride",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables controlling the time to live for pages in the BackForwardCache.
 // The time to live is defined by the param 'time_to_live_seconds'; if this
@@ -70,6 +70,13 @@ BASE_FEATURE(kBrowserVerifiedUserActivationKeyboard,
              "BrowserVerifiedUserActivationKeyboard",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// If enabled, changes to the zoom level are temporary and are forgotten when
+// the tab is closed. If disabled, changes to the zoom level persist, as though
+// the user affected them through the browser's UX.
+BASE_FEATURE(kCapturedSurfaceControlTemporaryZoom,
+             "CapturedSurfaceControlTemporaryZoom",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // If Canvas2D Image Chromium is allowed, this feature controls whether it is
 // enabled.
 BASE_FEATURE(kCanvas2DImageChromium,
@@ -91,11 +98,7 @@ BASE_FEATURE(kCodeCacheDeletionWithoutFilter,
 // proxy.
 BASE_FEATURE(kConsolidatedIPCForProxyCreation,
              "ConsolidatedIPCForProxyCreation",
-#if BUILDFLAG(IS_ANDROID)
              base::FEATURE_ENABLED_BY_DEFAULT);
-#else
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#endif
 
 // When enabled, event.movement is calculated in blink instead of in browser.
 BASE_FEATURE(kConsolidatedMovementXY,
@@ -198,6 +201,13 @@ BASE_FEATURE(kFedCmIdpSigninStatusMetrics,
              "FedCmIdpSigninStatusMetrics",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Enables sending only SameSite=None cookies in credentialed FedCM requests
+// (accounts endpoint and ID assertion endpoint). If kFedCmIdAssertionCORS
+// is enabled, this is a no-op for the ID assertion endpoint.
+BASE_FEATURE(kFedCmSameSiteNone,
+             "FedCmSameSiteNone",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // If enabled, limits the number of FLEDGE auctions that can be run between page
 // load and unload -- any attempt to run more than this number of auctions will
 // fail (return null to JavaScript).
@@ -233,6 +243,14 @@ BASE_FEATURE(kForwardMemoryPressureEventsToGpuProcess,
              "ForwardMemoryPressureEventsToGpuProcess",
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
+
+// Whether to use the Frame Routing Cache to avoid synchronous IPCs from the
+// renderer side for iframe creation.
+BASE_FEATURE(kFrameRoutingCache,
+             "FrameRoutingCache",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+const base::FeatureParam<int> kFrameRoutingCacheResponseSize{
+    &kFrameRoutingCache, "responseSize", 4};
 
 // Adds "/prefetch:8" (which is the "other" category of process - i.e. not
 // browser, gpu, crashpad, etc.) to the info collection GPU process' command
@@ -360,17 +378,6 @@ BASE_FEATURE(kPrivacySandboxAdsAPIsM1Override,
              "PrivacySandboxAdsAPIsM1Override",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enables Private Network Access checks in warning mode for navigations.
-//
-// Does nothing if `kPrivateNetworkAccessForNavigations` is disabled.
-//
-// If both this and `kPrivateNetworkAccessForNavigations` are enabled, then PNA
-// preflight requests for navigations are not required to succeed. If
-// one fails, a warning is simply displayed in DevTools.
-BASE_FEATURE(kPrivateNetworkAccessForNavigationsWarningOnly,
-             "PrivateNetworkAccessForNavigationsWarningOnly",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enables reporting ResourceTiming entries for document, who initiated a
 // cancelled navigation in one of their <iframe>.
 BASE_FEATURE(kResourceTimingForCancelledNavigationInFrame,
@@ -406,6 +413,13 @@ BASE_FEATURE(kRequestFileSetCheckedInCanRequestURL,
 // Make sendBeacon throw for a Blob with a non simple type.
 BASE_FEATURE(kSendBeaconThrowForBlobWithNonSimpleType,
              "SendBeaconThrowForBlobWithNonSimpleType",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, try to reuse an unlocked renderer process when COOP swap is
+// happening on prerender initial navigation. Please see crbug.com/1519131 for
+// more details.
+BASE_FEATURE(kProcessReuseOnPrerenderCOOPSwap,
+             "ProcessReuseOnPrerenderCOOPSwap",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables process sharing for sites that do not require a dedicated process

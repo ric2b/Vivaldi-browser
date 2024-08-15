@@ -10,41 +10,48 @@ namespace data_controls {
 
 // static
 Verdict Verdict::NotSet() {
-  return Verdict(Rule::Level::kNotSet);
+  return Verdict(Rule::Level::kNotSet, {});
 }
 
 // static
-Verdict Verdict::Report(base::OnceClosure initial_report_closure) {
-  return Verdict(Rule::Level::kReport, std::move(initial_report_closure));
+Verdict Verdict::Report(TriggeredRules triggered_rules) {
+  return Verdict(Rule::Level::kReport, triggered_rules);
 }
 
 // static
-Verdict Verdict::Warn(base::OnceClosure initial_report_closure,
-                      base::OnceClosure bypass_report_closure) {
-  return Verdict(Rule::Level::kWarn, std::move(initial_report_closure),
-                 std::move(bypass_report_closure));
+Verdict Verdict::Warn(TriggeredRules triggered_rules) {
+  return Verdict(Rule::Level::kWarn, triggered_rules);
 }
 
 // static
-Verdict Verdict::Block(base::OnceClosure initial_report_closure) {
-  return Verdict(Rule::Level::kBlock, std::move(initial_report_closure));
+Verdict Verdict::Block(TriggeredRules triggered_rules) {
+  return Verdict(Rule::Level::kBlock, triggered_rules);
 }
 
 // static
 Verdict Verdict::Allow() {
-  return Verdict(Rule::Level::kAllow);
+  return Verdict(Rule::Level::kAllow, {});
 }
 
-Verdict::Verdict(Rule::Level level,
-                 base::OnceClosure initial_report_closure,
-                 base::OnceClosure bypass_report_closure)
-    : level_(level),
-      initial_report_closure_(std::move(initial_report_closure)),
-      bypass_report_closure_(std::move(bypass_report_closure)) {
-  DCHECK_EQ(level == Rule::Level::kNotSet || level == Rule::Level::kAllow,
-            initial_report_closure_.is_null());
-  DCHECK_EQ(level == Rule::Level::kWarn, !bypass_report_closure_.is_null());
+// static
+Verdict Verdict::Merge(Verdict verdict_1, Verdict verdict_2) {
+  if (verdict_2.level() > verdict_1.level()) {
+    verdict_1.level_ = verdict_2.level();
+  }
+
+  for (auto& id_and_name : verdict_2.triggered_rules_) {
+    if (verdict_1.triggered_rules_.count(id_and_name.first)) {
+      continue;
+    }
+    verdict_1.triggered_rules_[id_and_name.first] =
+        std::move(id_and_name.second);
+  }
+
+  return verdict_1;
 }
+
+Verdict::Verdict(Rule::Level level, TriggeredRules triggered_rules)
+    : level_(level), triggered_rules_(std::move(triggered_rules)) {}
 
 Verdict::~Verdict() = default;
 Verdict::Verdict(Verdict&& other) = default;
@@ -54,12 +61,8 @@ Rule::Level Verdict::level() const {
   return level_;
 }
 
-base::OnceClosure Verdict::TakeInitialReportClosure() {
-  return std::move(initial_report_closure_);
-}
-
-base::OnceClosure Verdict::TakeBypassReportClosure() {
-  return std::move(bypass_report_closure_);
+const Verdict::TriggeredRules& Verdict::triggered_rules() const {
+  return triggered_rules_;
 }
 
 }  // namespace data_controls

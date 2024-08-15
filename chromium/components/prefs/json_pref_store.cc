@@ -120,12 +120,12 @@ const char* GetHistogramSuffix(const base::FilePath& path) {
                      &spaceless_basename);
   static constexpr std::array<const char*, 3> kAllowList{
       "Secure_Preferences", "Preferences", "Local_State"};
-  const char* const* it = base::ranges::find(kAllowList, spaceless_basename);
+  auto it = base::ranges::find(kAllowList, spaceless_basename);
   return it != kAllowList.end() ? *it : "";
 }
 
-absl::optional<std::string> DoSerialize(base::ValueView value,
-                                        const base::FilePath& path) {
+std::optional<std::string> DoSerialize(base::ValueView value,
+                                       const base::FilePath& path) {
   std::string output;
   if (!base::JSONWriter::Write(value, &output)) {
     // Failed to serialize prefs file. Backup the existing prefs file and
@@ -482,7 +482,7 @@ JsonPrefStore::~JsonPrefStore() {
   CommitPendingWrite();
 }
 
-absl::optional<std::string> JsonPrefStore::SerializeData() {
+std::optional<std::string> JsonPrefStore::SerializeData() {
   PerformPreserializationTasks();
   return DoSerialize(prefs_, path_);
 }

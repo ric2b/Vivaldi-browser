@@ -105,7 +105,7 @@ void ChromiumImporter::ImportPasswords(importer::ImporterType importer_type) {
     return;
   }
 
-  absl::optional<base::Value> local_state(
+  std::optional<base::Value> local_state(
       base::JSONReader::Read(local_state_string));
   if (!local_state) {
     LOG(ERROR) << "Unable to parse JSON in Local State.";
@@ -216,6 +216,14 @@ bool ChromiumImporter::ReadAndParseSignons(
     if (importer_type == importer::TYPE_CHROMIUM) {
       service_name = "Chromium Safe Storage";
       account_name = "Chromium";
+    }
+    if (importer_type == importer::TYPE_ARC) {
+      service_name = "Arc Safe Storage";
+      account_name = "Arc";
+    }
+    if (importer_type == importer::TYPE_OPERA_GX) {
+      service_name = "Opera GX Safe Storage";
+      account_name = "Opera GX";
     }
     OSCryptImpl::GetInstance()->DecryptImportedString16(cipher_text, &plain_text, service_name,
                                      account_name);

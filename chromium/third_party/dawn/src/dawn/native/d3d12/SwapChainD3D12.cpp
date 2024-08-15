@@ -88,9 +88,8 @@ MaybeError SwapChain::PresentImpl() {
     // Transition the texture to the present state as required by IDXGISwapChain1::Present()
     // TODO(crbug.com/dawn/269): Remove the need for this by eagerly transitioning the
     // presentable texture to present at the end of submits that use them.
-    CommandRecordingContext* commandContext;
-    DAWN_TRY_ASSIGN(commandContext, queue->GetPendingCommandContext());
-    mApiTexture->TrackUsageAndTransitionNow(commandContext, kPresentTextureUsage,
+    CommandRecordingContext* commandContext = queue->GetPendingCommandContext();
+    mApiTexture->TrackUsageAndTransitionNow(commandContext, kPresentReleaseTextureUsage,
                                             mApiTexture->GetAllSubresources());
     DAWN_TRY(queue->SubmitPendingCommands());
 
@@ -131,7 +130,7 @@ MaybeError SwapChain::DetachAndWaitForDeallocation() {
     // before it is finished being used. Flush the commands and wait for that serial to be
     // passed, then Tick the device to make sure the reference to the D3D12 texture is removed.
     Queue* queue = ToBackend(GetDevice()->GetQueue());
-    DAWN_TRY(queue->NextSerial());
+    DAWN_TRY(queue->EnsureCommandsFlushed(queue->GetPendingCommandSerial()));
     DAWN_TRY(queue->WaitForSerial(queue->GetLastSubmittedCommandSerial()));
     return ToBackend(GetDevice())->TickImpl();
 }

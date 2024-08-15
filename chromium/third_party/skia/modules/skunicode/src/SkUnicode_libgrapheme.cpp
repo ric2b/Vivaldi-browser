@@ -215,7 +215,10 @@ public:
     }
 
     SkString toUpper(const SkString& str) override {
+        return this->toUpper(str, nullptr);
+    }
 
+    SkString toUpper(const SkString& str, const char* locale) override {
         SkString res(" ", str.size());
         grapheme_to_uppercase_utf8(str.data(), str.size(), res.data(), res.size());
         return res;
@@ -233,38 +236,39 @@ private:
 class SkBreakIterator_libgrapheme: public SkBreakIterator {
     SkUnicode_libgrapheme* fUnicode;
     std::vector<SkUnicode::LineBreakBefore> fLineBreaks;
-    Position fLastResult;
-    Position fStart;
-    Position fEnd;
+    Position fLineBreakIndex;
+    static constexpr const int kDone = -1;
 public:
     explicit SkBreakIterator_libgrapheme(SkUnicode_libgrapheme* unicode) : fUnicode(unicode) { }
     Position first() override
-      { return fLineBreaks[fStart + (fLastResult = 0)].pos; }
+      { return fLineBreaks[(fLineBreakIndex = 0)].pos; }
     Position current() override
-      { return fLineBreaks[fStart + fLastResult].pos; }
+      { return fLineBreaks[fLineBreakIndex].pos; }
     Position next() override
-      { return fLineBreaks[fStart + fLastResult + 1].pos; }
+      { return fLineBreaks[++fLineBreakIndex].pos; }
     Status status() override {
-        return fLineBreaks[fStart + fLastResult].breakType ==
+        return fLineBreaks[fLineBreakIndex].breakType ==
                        SkUnicode::LineBreakType::kHardLineBreak
                        ? SkUnicode::CodeUnitFlags::kHardLineBreakBefore
                        : SkUnicode::CodeUnitFlags::kSoftLineBreakBefore;
     }
-    bool isDone() override { return fStart + fLastResult == fEnd; }
+    bool isDone() override { return fLineBreaks[fLineBreakIndex].pos == kDone; }
     bool setText(const char utftext8[], int utf8Units) override {
         fLineBreaks.clear();
         size_t lineBreak = 0;
-        for (size_t pos = 0; pos < utf8Units; pos += lineBreak) {
-            lineBreak = grapheme_next_line_break_utf8(utftext8 + pos, utf8Units - pos);
-            auto codePoint = utftext8[lineBreak];
-            fLineBreaks.emplace_back(lineBreak,
+        // first() must always go to the beginning of the string.
+        fLineBreaks.emplace_back(0, SkUnicode::LineBreakType::kHardLineBreak);
+        for (size_t pos = 0; pos < utf8Units;) {
+            pos += grapheme_next_line_break_utf8(utftext8 + pos, utf8Units - pos);
+            auto codePoint = utftext8[pos];
+            fLineBreaks.emplace_back(pos,
                                      fUnicode->isHardBreak(codePoint)
                                     ? SkUnicode::LineBreakType::kHardLineBreak
                                     : SkUnicode::LineBreakType::kSoftLineBreak);
         }
-        fStart = 0;
-        fEnd = utf8Units;
-        fLastResult = 0;
+        // There is always an "end" which signals "done".
+        fLineBreaks.emplace_back(kDone, SkUnicode::LineBreakType::kHardLineBreak);
+        fLineBreakIndex = 0;
         return true;
     }
     bool setText(const char16_t utftext16[], int utf16Units) override {

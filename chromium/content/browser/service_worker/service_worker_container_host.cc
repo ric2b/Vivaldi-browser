@@ -9,6 +9,7 @@
 
 #include "base/containers/adapters.h"
 #include "base/containers/contains.h"
+#include "base/debug/crash_logging.h"
 #include "base/functional/callback_helpers.h"
 #include "base/functional/overloaded.h"
 #include "base/strings/stringprintf.h"
@@ -120,7 +121,7 @@ class ServiceWorkerContainerHost::PendingUpdateVersion {
 // and make the update notified to all the renderers via mojo IPC.
 //
 // See:
-// https://github.com/WICG/service-worker-static-routing-api/blob/main/final-form.md#use-service-worker-iif-running
+// https://w3c.github.io/ServiceWorker/#dom-routercondition-runningstatus
 class ServiceWorkerContainerHost::ServiceWorkerRunningStatusObserver final
     : public ServiceWorkerVersion::Observer {
  public:
@@ -619,6 +620,7 @@ void ServiceWorkerContainerHost::PostMessageToClient(
 void ServiceWorkerContainerHost::CountFeature(
     blink::mojom::WebFeature feature) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  SCOPED_CRASH_KEY_NUMBER("SWCH_CF", "feature", static_cast<int32_t>(feature));
 
   // CountFeature is a message about the client's controller. It should be sent
   // only for clients.
@@ -629,10 +631,12 @@ void ServiceWorkerContainerHost::CountFeature(
     return;
 
   // `container_` shouldn't be disconnected during the lifetime of `this` but
-  // there seems a situation where `container_` is disconnected.
-  // TODO(crbug.com/1136843): Figure out the cause and remove this check.
-  if (!container_.is_connected())
+  // there seems a situation where `container_` is disconnected or unbound.
+  // TODO(crbug.com/1136843, crbug.com/40918057): Figure out the cause and
+  // remove this check.
+  if (!container_.is_bound() || !container_.is_connected()) {
     return;
+  }
 
   container_->CountFeature(feature);
 }
@@ -651,6 +655,7 @@ ServiceWorkerContainerHost::CreateControllerServiceWorkerInfo() {
       controller()->fetch_handler_bypass_option();
   controller_info->sha256_script_checksum =
       controller()->sha256_script_checksum();
+  controller_info->need_router_evaluate = controller()->NeedRouterEvaluate();
 
   if (controller()->router_evaluator()) {
     controller_info->router_data = blink::mojom::ServiceWorkerRouterData::New();
@@ -698,12 +703,20 @@ void ServiceWorkerContainerHost::SendSetControllerServiceWorker(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(IsContainerForClient());
 
-  if (!controller_) {
+  if (!controller_ || !context_) {
     // Do not set |fetch_request_window_id| when |controller_| is not available.
     // Setting |fetch_request_window_id| should not affect correctness, however,
     // we have the extensions bug, https://crbug.com/963748, which we don't yet
     // understand.  That is why we don't set |fetch_request_window_id| if there
     // is no controller, at least, until we can fix the extension bug.
+    //
+    // Also check if |context_| is not null. This is a speculative fix for
+    // crbug.com/324559079. When |controller_info->fetch_request_window_id|
+    // is set, the renderer expects that |controller_info->object_info| is also
+    // set as a controller. |controller_info->object_info| is set in
+    // `GetOrCreateServiceWorkerObjectHost()`, but that may return null if
+    // |context_| does not exist. To avoid the potential inconsistency with the
+    // renderer side, setController as no-controller.
     auto controller_info = blink::mojom::ControllerServiceWorkerInfo::New();
     controller_info->client_id = client_uuid();
     container_->SetController(std::move(controller_info),
@@ -1852,8 +1865,9 @@ void ServiceWorkerContainerHost::InheritControllerFrom(
     const GURL& blob_url) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(IsContainerForClient());
-  DCHECK_EQ(blink::mojom::ServiceWorkerClientType::kDedicatedWorker,
-            GetClientType());
+  DCHECK(base::FeatureList::IsEnabled(kSharedWorkerBlobURLFix) ||
+         blink::mojom::ServiceWorkerClientType::kDedicatedWorker ==
+             GetClientType());
   DCHECK(blob_url.SchemeIsBlob());
 
   UpdateUrls(blob_url, creator_host.top_frame_origin(), creator_host.key());
@@ -1891,17 +1905,9 @@ ServiceWorkerContainerHost::GetRemoteCacheStorage() {
     return mojo::NullRemote();
   }
 
-  // Clone the COEP reporter if available.
-  mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
-      coep_reporter_to_be_passed;
-  if (coep_reporter_) {
-    coep_reporter_->Clone(
-        coep_reporter_to_be_passed.InitWithNewPipeAndPassReceiver());
-  }
-
   mojo::PendingRemote<blink::mojom::CacheStorage> remote;
   control->AddReceiver(
-      *coep, std::move(coep_reporter_to_be_passed),
+      *coep, controller_->embedded_worker()->GetCoepReporter(),
       storage::BucketLocator::ForDefaultBucket(controller_->key()),
       storage::mojom::CacheStorageOwner::kCacheAPI,
       remote.InitWithNewPipeAndPassReceiver());
@@ -1923,5 +1929,37 @@ ServiceWorkerContainerHost::GetRunningStatusCallbackReceiver() {
   running_status_observer_->AddCallback(std::move(remote_callback));
   return receiver;
 }
+
+SubresourceLoaderParams
+ServiceWorkerContainerHost::MaybeCreateSubresourceLoaderParams(
+    base::WeakPtr<ServiceWorkerContainerHost> container_host) {
+  // We didn't find a matching service worker for this request, and
+  // ServiceWorkerContainerHost::SetControllerRegistration() was not called.
+  if (!container_host || !container_host->controller()) {
+    return {};
+  }
+
+  // Otherwise let's send the controller service worker information along
+  // with the navigation commit.
+  SubresourceLoaderParams params;
+  params.controller_service_worker_info =
+      container_host->CreateControllerServiceWorkerInfo();
+  if (base::WeakPtr<ServiceWorkerObjectHost> object_host =
+          container_host->GetOrCreateServiceWorkerObjectHost(
+              container_host->controller())) {
+    params.controller_service_worker_object_host = object_host;
+    params.controller_service_worker_info->object_info =
+        object_host->CreateIncompleteObjectInfo();
+  }
+  params.container_host = container_host->GetWeakPtr();
+
+  return params;
+}
+
+// If a blob URL is used for a SharedWorker script's URL, a controller will be
+// inherited.
+BASE_FEATURE(kSharedWorkerBlobURLFix,
+             "SharedWorkerBlobURLFix",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace content

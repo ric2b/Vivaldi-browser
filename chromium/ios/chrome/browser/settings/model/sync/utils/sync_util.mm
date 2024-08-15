@@ -27,6 +27,11 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+// End Vivaldi
+
 namespace {
 
 // Enumerated constants for logging when a sign-in error infobar was shown
@@ -85,6 +90,12 @@ NSString* GetIdentityErrorInfoBarMessage(
     syncer::SyncService::UserActionableError error) {
   switch (error) {
     case syncer::SyncService::UserActionableError::kNeedsPassphrase:
+
+      if (vivaldi::IsVivaldiRunning()) {
+        return l10n_util::GetNSString(
+            IDS_IOS_IDENTITY_ERROR_INFOBAR_KEEP_USING_YOUR_VIVALDI_DATA_MESSAGE);
+      } // End Vivaldi
+
       return l10n_util::GetNSString(
           IDS_IOS_IDENTITY_ERROR_INFOBAR_KEEP_USING_YOUR_CHROME_DATA_MESSAGE);
     case syncer::SyncService::UserActionableError::
@@ -300,7 +311,7 @@ bool DisplaySyncErrors(ChromeBrowserState* browser_state,
 
     signin::IdentityManager* identityManager =
         IdentityManagerFactory::GetForBrowserState(browser_state);
-    // TODO(crbug.com/1462552): Simplify this (remove the whole
+    // TODO(crbug.com/40066949): Simplify this (remove the whole
     // `if (!UseIdentityErrorInfobar(syncService)) {...}`) after kSync users are
     // migrated to kSignin in phase 3. See ConsentLevel::kSync documentation for
     // details.

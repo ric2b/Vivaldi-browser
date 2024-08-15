@@ -3,8 +3,11 @@
 // found in the LICENSE file.
 
 #include "chromeos/ash/components/growth/campaigns_matcher.h"
-#include <memory>
 
+#include <memory>
+#include <string_view>
+
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "base/containers/contains.h"
 #include "base/logging.h"
@@ -19,8 +22,10 @@
 namespace growth {
 namespace {
 
+inline constexpr char kCampaignsExperimentTag[] = "exp_tag";
+
 bool MatchPref(const base::Value::List* criterias,
-               base::StringPiece pref_path,
+               std::string_view pref_path,
                const PrefService* pref_service) {
   if (!pref_service) {
     LOG(ERROR) << "Matching pref before pref service is available";
@@ -51,12 +56,15 @@ int GetMilestone() {
 // Matched if any of the given `scheduling_targetings` is matched.
 bool MatchSchedulings(const std::vector<std::unique_ptr<SchedulingTargeting>>&
                           scheduling_targetings) {
+  if (scheduling_targetings.empty()) {
+    // Match campaign if there is no scheduling targeting criteria.
+    return true;
+  }
+
   const auto now = base::Time::Now();
   for (const auto& scheduling_targeting : scheduling_targetings) {
-    if (scheduling_targeting->GetStartTime().ToDeltaSinceWindowsEpoch() <=
-            now.ToDeltaSinceWindowsEpoch() &&
-        scheduling_targeting->GetEndTime().ToDeltaSinceWindowsEpoch() >=
-            now.ToDeltaSinceWindowsEpoch()) {
+    if (scheduling_targeting->GetStartTime() <= now &&
+        scheduling_targeting->GetEndTime() >= now) {
       return true;
     }
   }
@@ -64,13 +72,29 @@ bool MatchSchedulings(const std::vector<std::unique_ptr<SchedulingTargeting>>&
   return false;
 }
 
-bool MatchSessionTargeting(const SessionTargeting& targeting) {
-  if (!targeting.IsValid()) {
-    // Campaigns matched if there is no demo mode targeting.
+bool MatchExperimentTags(const base::Value::List* experiment_tags) {
+  if (!ash::features::IsGrowthCampaignsExperimentTagTargetingEnabled()) {
+    // Campaign not match if experiment tag targeting is not enabled.
+    return false;
+  }
+
+  if (!experiment_tags || experiment_tags->empty()) {
+    // Campaign matched if there is no experiment tag targeting.
     return true;
   }
 
-  return MatchSchedulings(targeting.GetSchedulings());
+  const auto exp_tag = base::GetFieldTrialParamValueByFeature(
+      ash::features::kGrowthCampaignsExperimentTagTargeting,
+      kCampaignsExperimentTag);
+
+  if (exp_tag.empty()) {
+    // Campaign not match if no experiment tag exists.
+    return false;
+  }
+
+  // Campaign is matched if the tag from field trail param matches any of the
+  // tag in the targeting criteria.
+  return base::Contains(*experiment_tags, exp_tag);
 }
 
 }  // namespace
@@ -82,6 +106,10 @@ CampaignsMatcher::~CampaignsMatcher() = default;
 
 void CampaignsMatcher::SetCampaigns(const CampaignsPerSlot* campaigns) {
   campaigns_ = campaigns;
+}
+
+void CampaignsMatcher::SetOpenedApp(const std::string& app_id) {
+  opened_app_id_ = app_id;
 }
 
 void CampaignsMatcher::SetPrefs(PrefService* prefs) {
@@ -225,6 +253,13 @@ bool CampaignsMatcher::MatchDeviceTargeting(
     return true;
   }
 
+  auto target_feature_aware_device = targeting.GetFeatureAwareDevice();
+  if (target_feature_aware_device &&
+      target_feature_aware_device.value() !=
+          ash::features::IsFeatureManagementGrowthFrameworkEnabled()) {
+    return false;
+  }
+
   auto* targeting_locales = targeting.GetLocales();
   if (targeting_locales &&
       !Contains(*targeting_locales, client_->GetApplicationLocale())) {
@@ -232,6 +267,40 @@ bool CampaignsMatcher::MatchDeviceTargeting(
   }
 
   return MatchMilestone(targeting);
+}
+
+bool CampaignsMatcher::MatchOpenedApp(
+    std::vector<std::unique_ptr<AppTargeting>> apps_opened_targeting) const {
+  if (apps_opened_targeting.empty()) {
+    // Campaigns matched if apps opened targeting is empty.
+    return true;
+  }
+
+  for (const auto& app : apps_opened_targeting) {
+    auto* app_id = app->GetAppId();
+
+    if (!app_id) {
+      // Ignore if app id is missing from the targeting.
+      continue;
+    }
+
+    if (*app_id == opened_app_id_) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool CampaignsMatcher::MatchSessionTargeting(
+    const SessionTargeting& targeting) const {
+  if (!targeting.IsValid()) {
+    // Campaigns matched if there is no demo mode targeting.
+    return true;
+  }
+
+  return MatchSchedulings(targeting.GetSchedulings()) &&
+         MatchExperimentTags(targeting.GetExperimentTags()) &&
+         MatchOpenedApp(targeting.GetAppsOpened());
 }
 
 bool CampaignsMatcher::Matched(const Targetings* targetings) const {

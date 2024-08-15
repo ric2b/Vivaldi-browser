@@ -6,8 +6,8 @@ const cases = (['f32', 'f16', 'abstract'] as const)
   .map(trait => ({
     [`${trait}`]: () => {
       return FP[trait].generateScalarPairToIntervalCases(
-        FP[trait].scalarRange(),
-        FP[trait].scalarRange(),
+        FP[trait].sparseScalarRange(),
+        FP[trait].sparseScalarRange(),
         'unfiltered',
         FP[trait].minInterval
       );

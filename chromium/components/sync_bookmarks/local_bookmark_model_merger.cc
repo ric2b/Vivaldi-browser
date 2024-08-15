@@ -6,6 +6,7 @@
 #include "components/sync_bookmarks/local_bookmark_model_merger.h"
 
 #include <list>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -15,7 +16,6 @@
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "components/sync_bookmarks/bookmark_model_view.h"
 #include "components/sync_bookmarks/bookmark_specifics_conversions.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/models/tree_node_iterator.h"
 #include "url/gurl.h"
 
@@ -29,7 +29,7 @@ namespace {
 struct SiblingSemanticMatchKey {
   // Bookmarked URL or nullopt for folders. This also means a URL node never
   // matches semantically with a folder.
-  absl::optional<GURL> url;
+  std::optional<GURL> url;
   // Title equality is required, but the fact that Sync used to truncate the
   // title to a maximum size is incorporated here (i.e. the truncated title is
   // represented here).
@@ -94,6 +94,10 @@ LocalBookmarkModelMerger::LocalBookmarkModelMerger(
 LocalBookmarkModelMerger::~LocalBookmarkModelMerger() = default;
 
 void LocalBookmarkModelMerger::Merge() {
+  CHECK(account_model_->bookmark_bar_node());
+  CHECK(account_model_->mobile_node());
+  CHECK(account_model_->other_node());
+
   // Algorithm description:
   // Match up the roots and recursively do the following:
   // * For each local node for the current local parent node, either
@@ -178,9 +182,11 @@ void LocalBookmarkModelMerger::MergeSubtree(
     const bookmarks::BookmarkNode* const account_child =
         account_child_ptr.get();
 
-    // Non-syncable nodes (e.g. managed nodes) are not expected to exist in the
-    // account BookmarkModel instance.
-    CHECK(account_model_->IsNodeSyncable(account_child));
+    // Ignore non-syncable nodes (e.g. managed bookmarks), which don't need
+    // merging.
+    if (!account_model_->IsNodeSyncable(account_child)) {
+      continue;
+    }
 
     // If a UUID match exists, it takes precedence over semantic matching.
     if (FindMatchingLocalNodeByUuid(account_child)) {

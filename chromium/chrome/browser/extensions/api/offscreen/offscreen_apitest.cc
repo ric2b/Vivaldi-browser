@@ -11,10 +11,13 @@
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_util.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/extensions/extension_action_test_helper.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/version_info/channel.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/api/offscreen/audio_lifetime_enforcer.h"
 #include "extensions/browser/api/offscreen/offscreen_document_manager.h"
 #include "extensions/browser/background_script_executor.h"
@@ -22,6 +25,7 @@
 #include "extensions/browser/lazy_context_id.h"
 #include "extensions/browser/lazy_context_task_queue.h"
 #include "extensions/browser/offscreen_document_host.h"
+#include "extensions/browser/script_executor.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/features/feature_channel.h"
@@ -560,6 +564,8 @@ IN_PROC_BROWSER_TEST_F(GetAllScreensMediaOffscreenApiTest,
   // An offscreen document that knows how to capture all screens.
   static constexpr char kOffscreenJs[] =
       R"(
+        'use strict';
+
         let streams;
 
         async function captureAllScreens() {
@@ -606,12 +612,22 @@ IN_PROC_BROWSER_TEST_F(GetAllScreensMediaOffscreenApiTest,
           } else {
             console.error('Unexpected message: ' + msg);
           }
-        }))";
+        })
+        R)";
   TestExtensionDir test_dir;
   test_dir.WriteManifest(kManifest);
   test_dir.WriteFile(FILE_PATH_LITERAL("background.js"), "// Blank.");
   test_dir.WriteFile(FILE_PATH_LITERAL("offscreen.html"),
-                     R"(<html><script src="offscreen.js"></script></html>)");
+                     R"(
+    <html>
+      <script src="offscreen.js"></script>
+      <meta http-equiv="Content-Security-Policy"
+        content="object-src 'none'; base-uri 'none';
+        script-src 'strict-dynamic'
+        'sha256-Y55VppSZfjQ4A035BPDo9OMXignyoxRXv+KKCZpnWiM=';
+        require-trusted-types-for 'script';trusted-types a;">
+    </html>
+    )");
   test_dir.WriteFile(FILE_PATH_LITERAL("offscreen.js"), kOffscreenJs);
 
   scoped_refptr<const Extension> extension =

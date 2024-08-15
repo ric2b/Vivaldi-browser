@@ -53,7 +53,7 @@ namespace blink {
 class ComputedStyleTest : public testing::Test {
  protected:
   void SetUp() override {
-    initial_style_ = ComputedStyle::CreateInitialStyleSingleton();
+    initial_style_ = ComputedStyle::GetInitialStyleSingleton();
   }
 
   const ComputedStyle* InitialComputedStyle() { return initial_style_; }
@@ -231,7 +231,8 @@ TEST_F(ComputedStyleTest,
   // An operation is necessary since having either a non-empty transform list
   // or a transform animation will set HasTransform();
   operations.Operations().push_back(
-      ScaleTransformOperation::Create(1, 1, TransformOperation::kScale));
+      MakeGarbageCollected<ScaleTransformOperation>(
+          1, 1, TransformOperation::kScale));
 
   ComputedStyleBuilder builder = CreateComputedStyleBuilder();
   builder.SetTransform(operations);
@@ -849,7 +850,7 @@ TEST_F(ComputedStyleTest, ApplyColorSchemeLightOnDark) {
             state.StyleBuilder().UsedColorScheme());
 }
 
-TEST_F(ComputedStyleTest, ApplyInternalLightDarkColor) {
+TEST_F(ComputedStyleTest, ApplyLightDarkColor) {
   using css_test_helpers::ParseDeclarationBlock;
 
   std::unique_ptr<DummyPageHolder> dummy_page_holder =
@@ -874,30 +875,32 @@ TEST_F(ComputedStyleTest, ApplyInternalLightDarkColor) {
   light_value->Append(*CSSIdentifierValue::Create(CSSValueID::kLight));
 
   auto* color_declaration = ParseDeclarationBlock(
-      "color:-internal-light-dark(black, white)", CSSParserMode::kUASheetMode);
+      "color:light-dark(black, white)", CSSParserMode::kUASheetMode);
   auto* dark_declaration = ParseDeclarationBlock("color-scheme:dark");
   auto* light_declaration = ParseDeclarationBlock("color-scheme:light");
 
   StyleCascade cascade1(state);
+  cascade1.MutableMatchResult().BeginAddingAuthorRulesForTreeScope(document);
   cascade1.MutableMatchResult().AddMatchedProperties(color_declaration,
-                                                     CascadeOrigin::kNone);
+                                                     CascadeOrigin::kAuthor);
   cascade1.MutableMatchResult().AddMatchedProperties(dark_declaration,
-                                                     CascadeOrigin::kNone);
+                                                     CascadeOrigin::kAuthor);
   cascade1.Apply();
   const ComputedStyle* style = state.StyleBuilder().CloneStyle();
   EXPECT_EQ(Color::kWhite, style->VisitedDependentColor(GetCSSPropertyColor()));
 
   StyleCascade cascade2(state);
+  cascade2.MutableMatchResult().BeginAddingAuthorRulesForTreeScope(document);
   cascade2.MutableMatchResult().AddMatchedProperties(color_declaration,
-                                                     CascadeOrigin::kNone);
+                                                     CascadeOrigin::kAuthor);
   cascade2.MutableMatchResult().AddMatchedProperties(light_declaration,
-                                                     CascadeOrigin::kNone);
+                                                     CascadeOrigin::kAuthor);
   cascade2.Apply();
   style = state.StyleBuilder().CloneStyle();
   EXPECT_EQ(Color::kBlack, style->VisitedDependentColor(GetCSSPropertyColor()));
 }
 
-TEST_F(ComputedStyleTest, ApplyInternalLightDarkBackgroundImage) {
+TEST_F(ComputedStyleTest, ApplyLightDarkBackgroundImage) {
   using css_test_helpers::ParseDeclarationBlock;
 
   std::unique_ptr<DummyPageHolder> dummy_page_holder =
@@ -916,26 +919,27 @@ TEST_F(ComputedStyleTest, ApplyInternalLightDarkBackgroundImage) {
   state.SetStyle(*initial);
 
   auto* bgimage_declaration = ParseDeclarationBlock(
-      "background-image:-internal-light-dark(none, url(dummy.png))",
-      kUASheetMode);
+      "background-image:light-dark(none, url(dummy.png))", kUASheetMode);
   auto* dark_declaration = ParseDeclarationBlock("color-scheme:dark");
   auto* light_declaration = ParseDeclarationBlock("color-scheme:light");
 
   StyleCascade cascade1(state);
+  cascade1.MutableMatchResult().BeginAddingAuthorRulesForTreeScope(document);
   cascade1.MutableMatchResult().AddMatchedProperties(bgimage_declaration,
-                                                     CascadeOrigin::kNone);
+                                                     CascadeOrigin::kAuthor);
   cascade1.MutableMatchResult().AddMatchedProperties(dark_declaration,
-                                                     CascadeOrigin::kNone);
+                                                     CascadeOrigin::kAuthor);
   cascade1.Apply();
   EXPECT_TRUE(state.TakeStyle()->HasBackgroundImage());
 
   state.SetStyle(*initial);
 
   StyleCascade cascade2(state);
+  cascade2.MutableMatchResult().BeginAddingAuthorRulesForTreeScope(document);
   cascade2.MutableMatchResult().AddMatchedProperties(bgimage_declaration,
-                                                     CascadeOrigin::kNone);
+                                                     CascadeOrigin::kAuthor);
   cascade2.MutableMatchResult().AddMatchedProperties(light_declaration,
-                                                     CascadeOrigin::kNone);
+                                                     CascadeOrigin::kAuthor);
   cascade2.Apply();
   EXPECT_FALSE(state.TakeStyle()->HasBackgroundImage());
 }
@@ -961,10 +965,11 @@ TEST_F(ComputedStyleTest, StrokeWidthZoomAndCalc) {
   To<Longhand>(GetCSSPropertyStrokeWidth())
       .ApplyValue(state, *calc_value, CSSProperty::ValueMode::kNormal);
   const ComputedStyle* style = state.TakeStyle();
-  auto* computed_value = To<Longhand>(GetCSSPropertyStrokeWidth())
-                             .CSSValueFromComputedStyleInternal(
-                                 *style, nullptr /* layout_object */,
-                                 false /* allow_visited_style */);
+  auto* computed_value =
+      To<Longhand>(GetCSSPropertyStrokeWidth())
+          .CSSValueFromComputedStyleInternal(
+              *style, nullptr /* layout_object */,
+              false /* allow_visited_style */, CSSValuePhase::kComputedValue);
   ASSERT_TRUE(computed_value);
   ASSERT_EQ("calc(10px)", computed_value->CssText());
 }
@@ -1212,7 +1217,7 @@ TEST_F(ComputedStyleTest, BorderWidthZoom) {
       const Longhand& longhand = To<Longhand>(*property);
       auto* computed_value = longhand.CSSValueFromComputedStyleInternal(
           *test.style, nullptr /* layout_object */,
-          false /* allow_visited_style */);
+          false /* allow_visited_style */, CSSValuePhase::kComputedValue);
       AtomicString prop_name = longhand.GetCSSPropertyName().ToAtomicString();
       ASSERT_TRUE(computed_value) << prop_name;
       auto* numeric_value = DynamicTo<CSSNumericLiteralValue>(computed_value);
@@ -1290,7 +1295,7 @@ TEST_F(ComputedStyleTest, BorderWidthConversion) {
           static_cast<const Longhand*>(&GetCSSPropertyColumnRuleWidth())}) {
       auto* computed_value = longhand->CSSValueFromComputedStyleInternal(
           *test.style, nullptr /* layout_object */,
-          false /* allow_visited_style */);
+          false /* allow_visited_style */, CSSValuePhase::kComputedValue);
       ASSERT_NE(computed_value, nullptr);
       auto* numeric_value = DynamicTo<CSSNumericLiteralValue>(computed_value);
       ASSERT_NE(numeric_value, nullptr);
@@ -1980,10 +1985,11 @@ TEST_F(ComputedStyleTest, BackgroundRepeat) {
   To<Longhand>(GetCSSPropertyBackgroundRepeat())
       .ApplyValue(state, *repeat_style_value, CSSProperty::ValueMode::kNormal);
   const ComputedStyle* style = state.TakeStyle();
-  auto* computed_value = To<Longhand>(GetCSSPropertyBackgroundRepeat())
-                             .CSSValueFromComputedStyleInternal(
-                                 *style, nullptr /* layout_object */,
-                                 false /* allow_visited_style */);
+  auto* computed_value =
+      To<Longhand>(GetCSSPropertyBackgroundRepeat())
+          .CSSValueFromComputedStyleInternal(
+              *style, nullptr /* layout_object */,
+              false /* allow_visited_style */, CSSValuePhase::kComputedValue);
   ASSERT_TRUE(computed_value);
   ASSERT_EQ("repeat-x", computed_value->CssText());
 }
@@ -2007,10 +2013,11 @@ TEST_F(ComputedStyleTest, MaskRepeat) {
   To<Longhand>(GetCSSPropertyMaskRepeat())
       .ApplyValue(state, *repeat_style_value, CSSProperty::ValueMode::kNormal);
   const ComputedStyle* style = state.TakeStyle();
-  auto* computed_value = To<Longhand>(GetCSSPropertyMaskRepeat())
-                             .CSSValueFromComputedStyleInternal(
-                                 *style, nullptr /* layout_object */,
-                                 false /* allow_visited_style */);
+  auto* computed_value =
+      To<Longhand>(GetCSSPropertyMaskRepeat())
+          .CSSValueFromComputedStyleInternal(
+              *style, nullptr /* layout_object */,
+              false /* allow_visited_style */, CSSValuePhase::kComputedValue);
   ASSERT_TRUE(computed_value);
   ASSERT_EQ("repeat-y", computed_value->CssText());
 }
@@ -2033,10 +2040,11 @@ TEST_F(ComputedStyleTest, MaskMode) {
   To<Longhand>(GetCSSPropertyMaskMode())
       .ApplyValue(state, *mode_style_value, CSSProperty::ValueMode::kNormal);
   const ComputedStyle* style = state.TakeStyle();
-  auto* computed_value = To<Longhand>(GetCSSPropertyMaskMode())
-                             .CSSValueFromComputedStyleInternal(
-                                 *style, nullptr /* layout_object */,
-                                 false /* allow_visited_style */);
+  auto* computed_value =
+      To<Longhand>(GetCSSPropertyMaskMode())
+          .CSSValueFromComputedStyleInternal(
+              *style, nullptr /* layout_object */,
+              false /* allow_visited_style */, CSSValuePhase::kComputedValue);
   ASSERT_TRUE(computed_value);
   ASSERT_EQ("alpha", computed_value->CssText());
 }
@@ -2048,9 +2056,9 @@ TEST_F(ComputedStyleTest, DynamicRangeLimitMixStandardToConstrainedHigh) {
   builder.SetDynamicRangeLimit(limit);
   auto* dynamic_range_limit_mix_value =
       To<Longhand>(GetCSSPropertyDynamicRangeLimit())
-          .CSSValueFromComputedStyleInternal(*builder.TakeStyle(),
-                                             nullptr /* layout_object */,
-                                             false /* allow_visited_style */);
+          .CSSValueFromComputedStyleInternal(
+              *builder.TakeStyle(), nullptr /* layout_object */,
+              false /* allow_visited_style */, CSSValuePhase::kComputedValue);
   ASSERT_NE(dynamic_range_limit_mix_value, nullptr);
 
   EXPECT_EQ(dynamic_range_limit_mix_value->CssText(),
@@ -2086,9 +2094,9 @@ TEST_F(ComputedStyleTest, DynamicRangeLimitMixStandardToHigh) {
   builder.SetDynamicRangeLimit(limit);
   auto* dynamic_range_limit_mix_value =
       To<Longhand>(GetCSSPropertyDynamicRangeLimit())
-          .CSSValueFromComputedStyleInternal(*builder.TakeStyle(),
-                                             nullptr /* layout_object */,
-                                             false /* allow_visited_style */);
+          .CSSValueFromComputedStyleInternal(
+              *builder.TakeStyle(), nullptr /* layout_object */,
+              false /* allow_visited_style */, CSSValuePhase::kComputedValue);
   ASSERT_NE(dynamic_range_limit_mix_value, nullptr);
 
   EXPECT_EQ(dynamic_range_limit_mix_value->CssText(),
@@ -2124,9 +2132,9 @@ TEST_F(ComputedStyleTest, DynamicRangeLimitMixConstrainedHighToHigh) {
   builder.SetDynamicRangeLimit(limit);
   auto* dynamic_range_limit_mix_value =
       To<Longhand>(GetCSSPropertyDynamicRangeLimit())
-          .CSSValueFromComputedStyleInternal(*builder.TakeStyle(),
-                                             nullptr /* layout_object */,
-                                             false /* allow_visited_style */);
+          .CSSValueFromComputedStyleInternal(
+              *builder.TakeStyle(), nullptr /* layout_object */,
+              false /* allow_visited_style */, CSSValuePhase::kComputedValue);
   ASSERT_NE(dynamic_range_limit_mix_value, nullptr);
 
   EXPECT_EQ(dynamic_range_limit_mix_value->CssText(),
@@ -2162,9 +2170,9 @@ TEST_F(ComputedStyleTest, DynamicRangeLimitMixAllThree) {
   builder.SetDynamicRangeLimit(limit);
   auto* dynamic_range_limit_mix_value =
       To<Longhand>(GetCSSPropertyDynamicRangeLimit())
-          .CSSValueFromComputedStyleInternal(*builder.TakeStyle(),
-                                             nullptr /* layout_object */,
-                                             false /* allow_visited_style */);
+          .CSSValueFromComputedStyleInternal(
+              *builder.TakeStyle(), nullptr /* layout_object */,
+              false /* allow_visited_style */, CSSValuePhase::kComputedValue);
   ASSERT_NE(dynamic_range_limit_mix_value, nullptr);
 
   EXPECT_EQ(dynamic_range_limit_mix_value->CssText(),

@@ -131,7 +131,7 @@ ExtensionFunction::ResponseValue TranslateHistoryGetFunction::RunWithModel(
 
 ExtensionFunction::ResponseValue TranslateHistoryAddFunction::RunWithModel(
     translate_history::TH_Model* model) {
-  absl::optional<vivaldi::translate_history::Add::Params> params(
+  std::optional<vivaldi::translate_history::Add::Params> params(
       vivaldi::translate_history::Add::Params::Create(args()));
   HistoryItem& item = params->item;
 
@@ -167,7 +167,7 @@ ExtensionFunction::ResponseValue TranslateHistoryAddFunction::RunWithModel(
 ExtensionFunction::ResponseAction TranslateHistoryRemoveFunction::Run() {
   TH_Model* model = TH_ServiceFactory::GetForBrowserContext(browser_context());
   if (model && model->loaded()) {
-    absl::optional<vivaldi::translate_history::Remove::Params> params(
+    std::optional<vivaldi::translate_history::Remove::Params> params(
         vivaldi::translate_history::Remove::Params::Create(args()));
 
     if (params->ids.size() == 0) {
@@ -189,7 +189,7 @@ ExtensionFunction::ResponseAction TranslateHistoryRemoveFunction::Run() {
 ExtensionFunction::ResponseAction TranslateHistoryResetFunction::Run() {
   TH_Model* model = TH_ServiceFactory::GetForBrowserContext(browser_context());
   if (model && model->loaded()) {
-    absl::optional<vivaldi::translate_history::Reset::Params> params(
+    std::optional<vivaldi::translate_history::Reset::Params> params(
         vivaldi::translate_history::Reset::Params::Create(args()));
     model->Reset(params->since);
     Respond(

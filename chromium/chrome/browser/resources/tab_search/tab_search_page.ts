@@ -19,17 +19,23 @@ import {ColorChangeUpdater} from '//resources/cr_components/color_change_listene
 import {CrSearchFieldMixin} from 'chrome://resources/cr_elements/cr_search_field/cr_search_field_mixin.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {MetricsReporter, MetricsReporterImpl} from 'chrome://resources/js/metrics_reporter/metrics_reporter.js';
+import type {MetricsReporter} from 'chrome://resources/js/metrics_reporter/metrics_reporter.js';
+import {MetricsReporterImpl} from 'chrome://resources/js/metrics_reporter/metrics_reporter.js';
 import {listenOnce} from 'chrome://resources/js/util.js';
-import {Token} from 'chrome://resources/mojo/mojo/public/mojom/base/token.mojom-webui.js';
+import type {Token} from 'chrome://resources/mojo/mojo/public/mojom/base/token.mojom-webui.js';
 import {IronA11yAnnouncer} from 'chrome://resources/polymer/v3_0/iron-a11y-announcer/iron-a11y-announcer.js';
-import {DomRepeatEvent, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import type {DomRepeatEvent} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {fuzzySearch, FuzzySearchOptions} from './fuzzy_search.js';
-import {InfiniteList, NO_SELECTION, selectorNavigationKeys} from './infinite_list.js';
-import {ariaLabel, ItemData, TabData, TabGroupData, TabItemType, tokenEquals, tokenToString} from './tab_data.js';
-import {ProfileData, RecentlyClosedTab, RecentlyClosedTabGroup, Tab, TabGroup, TabsRemovedInfo, TabUpdateInfo} from './tab_search.mojom-webui.js';
-import {TabSearchApiProxy, TabSearchApiProxyImpl} from './tab_search_api_proxy.js';
+import type {FuzzySearchOptions} from './fuzzy_search.js';
+import {fuzzySearch} from './fuzzy_search.js';
+import type {InfiniteList} from './infinite_list.js';
+import {NO_SELECTION, selectorNavigationKeys} from './infinite_list.js';
+import type {ItemData} from './tab_data.js';
+import {ariaLabel, TabData, TabGroupData, TabItemType, tokenEquals, tokenToString} from './tab_data.js';
+import type {ProfileData, RecentlyClosedTab, RecentlyClosedTabGroup, Tab, TabGroup, TabsRemovedInfo, TabUpdateInfo} from './tab_search.mojom-webui.js';
+import type {TabSearchApiProxy} from './tab_search_api_proxy.js';
+import {TabSearchApiProxyImpl} from './tab_search_api_proxy.js';
 import {getTemplate} from './tab_search_page.html.js';
 import {tabHasMediaAlerts} from './tab_search_utils.js';
 import {TitleItem} from './title_item.js';
@@ -151,7 +157,6 @@ export class TabSearchPageElement extends TabSearchSearchFieldBase {
 
   private apiProxy_: TabSearchApiProxy = TabSearchApiProxyImpl.getInstance();
   private metricsReporter_: MetricsReporter|null;
-  private useMetricsReporter_: boolean;
   private listenerIds_: number[] = [];
   private tabGroupsMap_: Map<string, TabGroup> = new Map();
   private recentlyClosedTabGroups_: TabGroupData[] = [];
@@ -228,8 +233,6 @@ export class TabSearchPageElement extends TabSearchSearchFieldBase {
         },
       ],
     });
-
-    this.useMetricsReporter_ = loadTimeData.getBoolean('useMetricsReporter');
   }
 
   override connectedCallback() {
@@ -324,35 +327,25 @@ export class TabSearchPageElement extends TabSearchSearchFieldBase {
   }
 
   private updateTabs_() {
-    const getTabsStartTimestamp = Date.now();
-
-    if (this.useMetricsReporter_) {
-      const isMarkOverlap =
-          this.metricsReporter.hasLocalMark('TabListDataReceived');
-      chrome.metricsPrivate.recordBoolean(
-          'Tabs.TabSearch.WebUI.TabListDataReceived2.IsOverlap', isMarkOverlap);
-      if (!isMarkOverlap) {
-        this.metricsReporter.mark('TabListDataReceived');
-      }
+    const isMarkOverlap =
+        this.metricsReporter.hasLocalMark('TabListDataReceived');
+    chrome.metricsPrivate.recordBoolean(
+        'Tabs.TabSearch.WebUI.TabListDataReceived2.IsOverlap', isMarkOverlap);
+    if (!isMarkOverlap) {
+      this.metricsReporter.mark('TabListDataReceived');
     }
 
     this.apiProxy_.getProfileData().then(({profileData}) => {
-      chrome.metricsPrivate.recordTime(
-          'Tabs.TabSearch.WebUI.TabListDataReceived',
-          Math.round(Date.now() - getTabsStartTimestamp));
+      // TODO(crbug.com/1269417): this is a side-by-side comparison of metrics
+      // reporter histogram vs. old histogram. Cleanup when the experiment ends.
+      this.metricsReporter.measure('TabListDataReceived')
+          .then(
+              e => this.metricsReporter.umaReportTime(
+                  'Tabs.TabSearch.WebUI.TabListDataReceived2', e))
+          .then(() => this.metricsReporter.clearMark('TabListDataReceived'))
+          // Ignore silently if mark 'TabListDataReceived' is missing.
+          .catch(() => {});
 
-      if (this.useMetricsReporter_) {
-        // TODO(crbug.com/1269417): this is a side-by-side comparison of
-        // metrics reporter histogram vs. old histogram. Cleanup when the
-        // experiment ends.
-        this.metricsReporter.measure('TabListDataReceived')
-            .then(
-                e => this.metricsReporter.umaReportTime(
-                    'Tabs.TabSearch.WebUI.TabListDataReceived2', e))
-            .then(() => this.metricsReporter.clearMark('TabListDataReceived'))
-            // Ignore silently if mark 'TabListDataReceived' is missing.
-            .catch(() => {});
-      }
       // The infinite-list produces viewport-filled events whenever a data or
       // scroll position change triggers the the viewport fill logic.
       listenOnce(this.$.tabsList, 'viewport-filled', () => {
@@ -392,15 +385,13 @@ export class TabSearchPageElement extends TabSearchSearchFieldBase {
       this.updateFilteredTabs_();
     }
 
-    if (this.useMetricsReporter_) {
-      this.metricsReporter.measure('TabUpdated')
-          .then(
-              e => this.metricsReporter.umaReportTime(
-                  'Tabs.TabSearch.Mojo.TabUpdated', e))
-          .then(() => this.metricsReporter.clearMark('TabUpdated'))
-          // Ignore silently if mark 'TabUpdated' is missing.
-          .catch(() => {});
-    }
+    this.metricsReporter.measure('TabUpdated')
+        .then(
+            e => this.metricsReporter.umaReportTime(
+                'Tabs.TabSearch.Mojo.TabUpdated', e))
+        .then(() => this.metricsReporter.clearMark('TabUpdated'))
+        // Ignore silently if mark 'TabUpdated' is missing.
+        .catch(() => {});
   }
 
   private onTabsRemoved_(tabsRemovedInfo: TabsRemovedInfo) {
@@ -488,14 +479,11 @@ export class TabSearchPageElement extends TabSearchSearchFieldBase {
     let action;
     switch (itemData.type) {
       case TabItemType.OPEN_TAB:
-        if (this.useMetricsReporter_) {
-          const isMarkOverlap =
-              this.metricsReporter.hasLocalMark('SwitchToTab');
-          chrome.metricsPrivate.recordBoolean(
-              'Tabs.TabSearch.Mojo.SwitchToTab.IsOverlap', isMarkOverlap);
-          if (!isMarkOverlap) {
-            this.metricsReporter.mark('SwitchToTab');
-          }
+        const isMarkOverlap = this.metricsReporter.hasLocalMark('SwitchToTab');
+        chrome.metricsPrivate.recordBoolean(
+            'Tabs.TabSearch.Mojo.SwitchToTab.IsOverlap', isMarkOverlap);
+        if (!isMarkOverlap) {
+          this.metricsReporter.mark('SwitchToTab');
         }
 
         this.recordMetricsForAction('SwitchTab', tabIndex);
@@ -591,6 +579,9 @@ export class TabSearchPageElement extends TabSearchSearchFieldBase {
     // updateFilteredTabs_ function.
     const expanded = e.detail.value;
     const titleItem = e.model.item;
+    if (titleItem.expanded === expanded) {
+      return;
+    }
     titleItem.expanded = expanded;
     this.apiProxy_.saveRecentlyClosedExpandedPref(expanded);
 

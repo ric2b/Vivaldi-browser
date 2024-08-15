@@ -167,6 +167,18 @@ void NotSizeTSize() {
   span s2(vector.data(), kSize2);              // expected-error@*:* {{The source type is out of range for the destination type}}
 }
 
+void BadConstConversionsWithStdSpan() {
+  int kData[] = {10, 11, 12};
+  {
+    base::span<const int, 3u> fixed_base_span(kData);
+    std::span<int, 3u> s(fixed_base_span);  // expected-error {{no matching constructor}}
+  }
+  {
+    std::span<const int, 3u> fixed_std_span(kData);
+    base::span<int, 3u> s(fixed_std_span);  // expected-error {{no matching constructor}}
+  }
+}
+
 void FromVolatileArrayDisallowed() {
   static volatile int array[] = {1, 2, 3};
   span<int> s(array);  // expected-error {{no matching constructor for initialization of 'span<int>'}}
@@ -175,7 +187,14 @@ void FromVolatileArrayDisallowed() {
 void FixedSizeCopyTooSmall() {
   const int src[] = {1, 2, 3};
   int dst[2];
-  base::make_span(dst).copy_from(base::make_span(src));  // expected-error@*:* {{span size mismatch}}
+  base::span(dst).copy_from(base::make_span(src));  // expected-error@*:* {{no viable conversion}}
+
+  base::span(dst).copy_from(src);  // expected-error@*:* {{no viable conversion}}
+}
+
+void FixedSizeSplitAtOutOfBounds() {
+  const int arr[] = {1, 2, 3};
+  base::span(arr).split_at<4u>();  // expected-error@*:* {{no matching member function for call to 'split_at'}}
 }
 
 void FromRefNoSuchFunctionForIntLiteral() {
@@ -197,6 +216,64 @@ void FromRefLifetimeBoundErrorForTemporaryStringObject() {
   // Testing that `ABSL_ATTRIBUTE_LIFETIME_BOUND` works as intended.
   [[maybe_unused]] auto wont_work =
       span_from_ref<const std::string>("temporary string");  // expected-error@*:* {{temporary whose address is used as value of local variable 'wont_work' will be destroyed at the end of the full-expression}}
+}
+
+void RvalueArrayLifetime() {
+  [[maybe_unused]] auto wont_work =
+      as_byte_span({1, 2});  // expected-error@*:* {{temporary whose address is used as value of local variable 'wont_work' will be destroyed at the end of the full-expression}}
+}
+
+void FromCStringThatIsntStaticLifetime() {
+  [[maybe_unused]] auto wont_work =
+      span_from_cstring({'a', 'b', '\0'});  // expected-error@*:* {{temporary whose address is used as value of local variable 'wont_work' will be destroyed at the end of the full-expression}}
+
+  [[maybe_unused]] auto wont_work2 =
+      byte_span_from_cstring({'a', 'b', '\0'});  // expected-error@*:* {{temporary whose address is used as value of local variable 'wont_work2' will be destroyed at the end of the full-expression}}
+}
+
+void CompareFixedSizeMismatch() {
+  const int arr[] = {1, 2, 3};
+  const int arr2[] = {1, 2, 3, 4};
+  (void)(span(arr) == arr2);  // expected-error@*:* {{invalid operands to binary expression}}
+  (void)(span(arr) == span(arr2));  // expected-error@*:* {{invalid operands to binary expression}}
+}
+
+void CompareNotComparable() {
+  struct NoEq { int i; };
+  static_assert(!std::equality_comparable<NoEq>);
+
+  const NoEq arr[] = {{1}, {2}, {3}};
+  (void)(span(arr) == arr);  // expected-error@*:* {{invalid operands to binary expression}}
+  (void)(span(arr) == span(arr));  // expected-error@*:* {{invalid operands to binary expression}}
+
+  struct SelfEq {
+    constexpr bool operator==(SelfEq s) const { return i == s.i; }
+    int i;
+  };
+  static_assert(std::equality_comparable<SelfEq>);
+  static_assert(!std::equality_comparable_with<SelfEq, int>);
+
+  const SelfEq self_arr[] = {{1}, {2}, {3}};
+  const int int_arr[] = {1, 2, 3};
+
+  (void)(span(self_arr) == int_arr);  // expected-error@*:* {{invalid operands to binary expression}}
+  (void)(span(self_arr) == span(int_arr));  // expected-error@*:* {{invalid operands to binary expression}}
+
+  // Span's operator== works on `const T` and thus won't be able to use the
+  // non-const operator here. We get this from equality_comparable which also
+  // requires it.
+  struct NonConstEq {
+    constexpr bool operator==(NonConstEq s) { return i == s.i; }
+    int i;
+  };
+  const NonConstEq non_arr[] = {{1}, {2}, {3}};
+  (void)(span(non_arr) == non_arr);  // expected-error@*:* {{invalid operands to binary expression}}
+  (void)(span(non_arr) == span(non_arr));  // expected-error@*:* {{invalid operands to binary expression}}
+}
+
+void AsStringViewNotBytes() {
+  const int arr[] = {1, 2, 3};
+  as_string_view(base::span(arr));  // expected-error@*:* {{no matching function for call to 'as_string_view'}}
 }
 
 }  // namespace base

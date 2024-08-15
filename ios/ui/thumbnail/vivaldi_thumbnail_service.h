@@ -7,9 +7,7 @@
 
 @class VivaldiSpeedDialItem;
 
-namespace bookmarks {
-class BookmarkModel;
-}
+class LegacyBookmarkModel;
 
 // Class responsible for storing, updating and returning speed dial thumbnails.
 @interface VivaldiThumbnailService: NSObject
@@ -21,7 +19,7 @@ class BookmarkModel;
                        snapshot:(UIImage*)snapshot
                         replace:(BOOL)replace
                     isMigrating:(BOOL)isMigrating
-                      bookmarks:(bookmarks::BookmarkModel*)bookmarks;
+                      bookmarks:(LegacyBookmarkModel*)bookmarks;
 /// Removes the thumbnail from either legacy or new directory if any.
 - (void)removeThumbnailForSDItem:(VivaldiSpeedDialItem*)item;
 /// Removes the thumbnail from legacy directory. Should be triggered

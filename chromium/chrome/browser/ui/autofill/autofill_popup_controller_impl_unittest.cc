@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/ui/autofill/autofill_popup_controller_impl.h"
+
 #include <stddef.h>
 
 #include <memory>
@@ -20,7 +22,6 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/accessibility/accessibility_state_utils.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
-#include "chrome/browser/ui/autofill/autofill_popup_controller_impl.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
@@ -38,8 +39,8 @@
 #include "components/autofill/core/browser/browser_autofill_manager_test_api.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
 #include "components/autofill/core/browser/ui/autofill_popup_delegate.h"
+#include "components/autofill/core/browser/ui/popup_hiding_reasons.h"
 #include "components/autofill/core/browser/ui/popup_item_ids.h"
-#include "components/autofill/core/browser/ui/popup_types.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
 #include "components/autofill/core/common/aliases.h"
 #include "components/autofill/core/common/unique_ids.h"
@@ -47,6 +48,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/browser/video_picture_in_picture_window_controller.h"
 #include "content/public/browser/weak_document_ptr.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/input/native_web_keyboard_event.h"
@@ -72,11 +74,11 @@
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/autofill/manual_filling_controller_impl.h"
-#include "chrome/browser/autofill/mock_address_accessory_controller.h"
-#include "chrome/browser/autofill/mock_credit_card_accessory_controller.h"
 #include "chrome/browser/autofill/mock_manual_filling_view.h"
-#include "chrome/browser/autofill/mock_password_accessory_controller.h"
+#include "chrome/browser/keyboard_accessory/android/manual_filling_controller_impl.h"
+#include "chrome/browser/keyboard_accessory/test_utils/android/mock_address_accessory_controller.h"
+#include "chrome/browser/keyboard_accessory/test_utils/android/mock_credit_card_accessory_controller.h"
+#include "chrome/browser/keyboard_accessory/test_utils/android/mock_password_accessory_controller.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
 namespace autofill {
@@ -196,6 +198,7 @@ class TestAutofillPopupController : public AutofillPopupControllerImpl {
             nullptr,
             element_bounds,
             base::i18n::UNKNOWN_DIRECTION,
+            /*form_control_ax_id=*/0,
             std::move(show_pwd_migration_warning_callback),
             parent) {}
   ~TestAutofillPopupController() override = default;
@@ -229,9 +232,8 @@ class TestAutofillPopupController : public AutofillPopupControllerImpl {
 
 class BrowserAutofillManagerWithMockDelegate : public BrowserAutofillManager {
  public:
-  BrowserAutofillManagerWithMockDelegate(AutofillDriver* driver,
-                                         ContentAutofillClient* client)
-      : BrowserAutofillManager(driver, client, "en-US") {
+  explicit BrowserAutofillManagerWithMockDelegate(AutofillDriver* driver)
+      : BrowserAutofillManager(driver, "en-US") {
     test_api(*this).SetExternalDelegate(
         std::make_unique<NiceMock<MockAutofillExternalDelegate>>(this));
   }
@@ -514,6 +516,15 @@ TEST_F(AutofillPopupControllerImplTest, RemoveSuggestion) {
   EXPECT_TRUE(client().popup_controller(manager()).RemoveSuggestion(
       0,
       AutofillMetrics::SingleEntryRemovalMethod::kKeyboardShiftDeletePressed));
+}
+
+// Regression test for (crbug.com/1513574): Showing an Autofill Compose
+// suggestion twice does not crash.
+TEST_F(AutofillPopupControllerImplTest, ShowTwice) {
+  ShowSuggestions(manager(),
+                  {Suggestion(u"Help me write", PopupItemId::kCompose)});
+  ShowSuggestions(manager(),
+                  {Suggestion(u"Help me write", PopupItemId::kCompose)});
 }
 
 TEST_F(AutofillPopupControllerImplTest,
@@ -876,7 +887,8 @@ TEST_F(AutofillPopupControllerImplTest, GetOrCreateAndroid) {
       AutofillPopupControllerImpl::GetOrCreate(
           WeakPtr<AutofillPopupControllerImpl>(),
           manager().external_delegate().GetWeakPtrForTest(), web_contents(),
-          nullptr, gfx::RectF(), base::i18n::UNKNOWN_DIRECTION);
+          nullptr, gfx::RectF(), base::i18n::UNKNOWN_DIRECTION,
+          /*form_control_ax_id=*/0);
   EXPECT_TRUE(controller);
 
   controller->Hide(PopupHidingReason::kViewDestroyed);
@@ -885,13 +897,15 @@ TEST_F(AutofillPopupControllerImplTest, GetOrCreateAndroid) {
   controller = AutofillPopupControllerImpl::GetOrCreate(
       WeakPtr<AutofillPopupControllerImpl>(),
       manager().external_delegate().GetWeakPtrForTest(), web_contents(),
-      nullptr, gfx::RectF(), base::i18n::UNKNOWN_DIRECTION);
+      nullptr, gfx::RectF(), base::i18n::UNKNOWN_DIRECTION,
+      /*form_control_ax_id=*/0);
   EXPECT_TRUE(controller);
 
   WeakPtr<AutofillPopupControllerImpl> controller2 =
       AutofillPopupControllerImpl::GetOrCreate(
           controller, manager().external_delegate().GetWeakPtrForTest(),
-          web_contents(), nullptr, gfx::RectF(), base::i18n::UNKNOWN_DIRECTION);
+          web_contents(), nullptr, gfx::RectF(), base::i18n::UNKNOWN_DIRECTION,
+          /*form_control_ax_id=*/0);
   EXPECT_EQ(controller.get(), controller2.get());
 
   controller->Hide(PopupHidingReason::kViewDestroyed);
@@ -905,7 +919,8 @@ TEST_F(AutofillPopupControllerImplTest, GetOrCreateAndroid) {
       AutofillPopupControllerImpl::GetOrCreate(
           client().popup_controller(manager()).GetWeakPtr(),
           manager().external_delegate().GetWeakPtrForTest(), web_contents(),
-          nullptr, bounds, base::i18n::UNKNOWN_DIRECTION);
+          nullptr, bounds, base::i18n::UNKNOWN_DIRECTION,
+          /*form_control_ax_id=*/0);
   EXPECT_EQ(&client().popup_controller(manager()), controller3.get());
   EXPECT_EQ(bounds, static_cast<AutofillPopupController*>(controller3.get())
                         ->element_bounds());
@@ -917,7 +932,8 @@ TEST_F(AutofillPopupControllerImplTest, GetOrCreateAndroid) {
       AutofillPopupControllerImpl::GetOrCreate(
           client().popup_controller(manager()).GetWeakPtr(),
           manager().external_delegate().GetWeakPtrForTest(), web_contents(),
-          nullptr, bounds, base::i18n::UNKNOWN_DIRECTION);
+          nullptr, bounds, base::i18n::UNKNOWN_DIRECTION,
+          /*form_control_ax_id=*/0);
   EXPECT_EQ(&client().popup_controller(manager()), controller4.get());
   EXPECT_EQ(bounds,
             static_cast<const AutofillPopupController*>(controller4.get())
@@ -935,7 +951,8 @@ TEST_F(AutofillPopupControllerImplTest, ProperlyResetController) {
       AutofillPopupControllerImpl::GetOrCreate(
           client().popup_controller(manager()).GetWeakPtr(),
           manager().external_delegate().GetWeakPtrForTest(), nullptr, nullptr,
-          gfx::RectF(), base::i18n::UNKNOWN_DIRECTION);
+          gfx::RectF(), base::i18n::UNKNOWN_DIRECTION,
+          /*form_control_ax_id=*/0);
   EXPECT_EQ(0, controller->GetLineCountForTesting());
 }
 
@@ -980,7 +997,7 @@ TEST_F(AutofillPopupControllerImplTest, SelectInvalidSuggestion) {
 
   // The following should not crash:
   client().popup_controller(manager()).AcceptSuggestion(
-      /*index=*/1, base::TimeTicks::Now());  // Out of bounds!
+      /*index=*/1);  // Out of bounds!
 }
 
 TEST_F(AutofillPopupControllerImplTest, AcceptSuggestionRespectsTimeout) {
@@ -989,16 +1006,13 @@ TEST_F(AutofillPopupControllerImplTest, AcceptSuggestionRespectsTimeout) {
 
   // Calls before the threshold are ignored.
   EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion).Times(0);
-  client().popup_controller(manager()).AcceptSuggestion(0,
-                                                        base::TimeTicks::Now());
+  client().popup_controller(manager()).AcceptSuggestion(0);
   task_environment()->FastForwardBy(base::Milliseconds(100));
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0,
-                                                        base::TimeTicks::Now());
+  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
 
   EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion);
   task_environment()->FastForwardBy(base::Milliseconds(400));
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0,
-                                                        base::TimeTicks::Now());
+  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
 
   histogram_tester.ExpectTotalCount(
       "Autofill.Popup.AcceptanceDelayThresholdNotMet", 2);
@@ -1011,11 +1025,9 @@ TEST_F(AutofillPopupControllerImplTest,
 
   // Calls before the threshold are ignored.
   EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion).Times(0);
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0,
-                                                        base::TimeTicks::Now());
+  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
   task_environment()->FastForwardBy(base::Milliseconds(100));
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0,
-                                                        base::TimeTicks::Now());
+  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
 
   histogram_tester.ExpectTotalCount(
       "Autofill.Popup.AcceptanceDelayThresholdNotMet", 2);
@@ -1025,16 +1037,14 @@ TEST_F(AutofillPopupControllerImplTest,
   ShowSuggestions(manager(), {PopupItemId::kAddressEntry});
 
   EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion).Times(0);
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0,
-                                                        base::TimeTicks::Now());
+  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
   histogram_tester.ExpectTotalCount(
       "Autofill.Popup.AcceptanceDelayThresholdNotMet", 3);
 
   EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion);
   // After waiting, suggestions are accepted again.
   task_environment()->FastForwardBy(base::Milliseconds(500));
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0,
-                                                        base::TimeTicks::Now());
+  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
   histogram_tester.ExpectTotalCount(
       "Autofill.Popup.AcceptanceDelayThresholdNotMet", 3);
 }
@@ -1044,12 +1054,11 @@ TEST_F(AutofillPopupControllerImplTest,
 // picture-in-picture window.
 TEST_F(AutofillPopupControllerImplTest,
        CheckBoundsOverlapWithPictureInPicture) {
-  client().popup_controller(manager());  // Creates the controller.
-  EXPECT_CALL(client().popup_view(), OverlapsWithPictureInPictureWindow)
-      .Times(1);
+  ShowSuggestions(manager(), {PopupItemId::kAddressEntry});
   PictureInPictureWindowManager* picture_in_picture_window_manager =
       PictureInPictureWindowManager::GetInstance();
-  picture_in_picture_window_manager->EnterVideoPictureInPicture(web_contents());
+  EXPECT_CALL(client().popup_view(), OverlapsWithPictureInPictureWindow);
+  picture_in_picture_window_manager->NotifyObserversOnEnterPictureInPicture();
 }
 
 TEST_F(AutofillPopupControllerImplTest,
@@ -1182,8 +1191,8 @@ TEST_F(AutofillPopupControllerImplTest,
               Run(_, _,
                   password_manager::metrics_util::
                       PasswordMigrationWarningTriggers::kKeyboardAcessoryBar));
-  client().popup_controller(manager()).AcceptSuggestion(
-      0, base::TimeTicks::Now() + base::Milliseconds(500));
+  task_environment()->FastForwardBy(base::Milliseconds(500));
+  client().popup_controller(manager()).AcceptSuggestion(0);
 }
 
 TEST_F(AutofillPopupControllerImplTest,
@@ -1191,13 +1200,13 @@ TEST_F(AutofillPopupControllerImplTest,
   base::test::ScopedFeatureList scoped_feature_list(
       password_manager::features::
           kUnifiedPasswordManagerLocalPasswordsMigrationWarning);
-  ShowSuggestions(manager(), {PopupItemId::kUsernameEntry});
+  ShowSuggestions(manager(), {PopupItemId::kPasswordEntry});
 
   // Calls are accepted immediately.
   EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion).Times(1);
   EXPECT_CALL(client().show_pwd_migration_warning_callback(), Run);
-  client().popup_controller(manager()).AcceptSuggestion(
-      0, base::TimeTicks::Now() + base::Milliseconds(500));
+  task_environment()->FastForwardBy(base::Milliseconds(500));
+  client().popup_controller(manager()).AcceptSuggestion(0);
 }
 
 TEST_F(AutofillPopupControllerImplTest,
@@ -1211,8 +1220,8 @@ TEST_F(AutofillPopupControllerImplTest,
   // Calls are accepted immediately.
   EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion).Times(1);
   EXPECT_CALL(client().show_pwd_migration_warning_callback(), Run).Times(0);
-  client().popup_controller(manager()).AcceptSuggestion(
-      0, base::TimeTicks::Now() + base::Milliseconds(500));
+  task_environment()->FastForwardBy(base::Milliseconds(500));
+  client().popup_controller(manager()).AcceptSuggestion(0);
 }
 
 TEST_F(AutofillPopupControllerImplTest, AcceptAddressNoPwdWarningAndroid) {
@@ -1224,9 +1233,26 @@ TEST_F(AutofillPopupControllerImplTest, AcceptAddressNoPwdWarningAndroid) {
   // Calls are accepted immediately.
   EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion).Times(1);
   EXPECT_CALL(client().show_pwd_migration_warning_callback(), Run).Times(0);
-  client().popup_controller(manager()).AcceptSuggestion(
-      0, base::TimeTicks::Now() + base::Milliseconds(500));
+  task_environment()->FastForwardBy(base::Milliseconds(500));
+  client().popup_controller(manager()).AcceptSuggestion(0);
 }
+
+// When a suggestion is accepted, the popup is hidden inside
+// `delegate->DidAcceptSuggestion()`. On Android, some code is still being
+// executed after hiding. This test makes sure no use-after-free, null pointer
+// dereferencing or other memory violations occur.
+TEST_F(AutofillPopupControllerImplTest, AcceptSuggestionIsMemorySafe) {
+  ShowSuggestions(manager(), {PopupItemId::kPasswordEntry});
+  task_environment()->FastForwardBy(base::Milliseconds(500));
+
+  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion)
+      .WillOnce([this]() {
+        client().popup_controller(manager()).Hide(
+            PopupHidingReason::kAcceptSuggestion);
+      });
+  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
+}
+
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -1294,7 +1320,7 @@ TEST_F(AutofillPopupControllerImplTest, PopupForwardsSuggestionPosition) {
                                          {.row = 0, .sub_popup_level = 1})));
 
   task_environment()->FastForwardBy(base::Milliseconds(1000));
-  sub_controller->AcceptSuggestion(/*index=*/0, base::TimeTicks::Now());
+  sub_controller->AcceptSuggestion(/*index=*/0);
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
@@ -1474,6 +1500,8 @@ class AutofillPopupControllerImplTestHidingLogic
  public:
   void SetUp() override {
     AutofillPopupControllerImplTest::SetUp();
+#if !BUILDFLAG(IS_ANDROID)
+#endif  // BUILDFLAG(IS_ANDROID)
     sub_frame_ = CreateAndNavigateChildFrame(
                      main_frame(), GURL("https://bar.com"), "sub_frame")
                      ->GetWeakDocumentPtr();
@@ -1526,8 +1554,6 @@ TEST_F(AutofillPopupControllerImplTestHidingLogic, HideOnWebContentsDestroyed) {
   test::GenerateTestAutofillPopup(&manager().external_delegate());
   EXPECT_CALL(client().popup_controller(manager()),
               Hide(PopupHidingReason::kRendererEvent));
-  EXPECT_CALL(client().popup_controller(manager()),
-              Hide(PopupHidingReason::kTabGone));
   DeleteContents();
 }
 
@@ -1539,11 +1565,6 @@ TEST_F(AutofillPopupControllerImplTestHidingLogic,
   test::GenerateTestAutofillPopup(&manager().external_delegate());
   EXPECT_CALL(client().popup_controller(manager()),
               Hide(PopupHidingReason::kRendererEvent));
-  // There seems to be no way to destroy only the main frame in a test. We
-  // therefore let the test fixture's TearDown() destroy the main frame. As a
-  // side-effect, the WebContents will also be destroyed and call Hide().
-  EXPECT_CALL(client().popup_controller(manager()),
-              Hide(PopupHidingReason::kTabGone));
 }
 
 // Tests that if the popup is shown in the *sub frame*, destruction of the
@@ -1578,13 +1599,13 @@ TEST_F(AutofillPopupControllerImplTestHidingLogic,
        HideInSubFrameOnSubFrameNavigation) {
   ShowSuggestions(sub_manager(), {PopupItemId::kAddressEntry});
   test::GenerateTestAutofillPopup(&sub_manager().external_delegate());
-  EXPECT_CALL(client().popup_controller(sub_manager()),
-              Hide(PopupHidingReason::kNavigation));
   if (sub_frame()->ShouldChangeRenderFrameHostOnSameSiteNavigation()) {
-    // If the RenderFrameHost changes, a RenderFrameDeleted will fire after
-    // navigation, also triggering a `Hide()` call.
+    // If the RenderFrameHost changes, a RenderFrameDeleted will fire first.
     EXPECT_CALL(client().popup_controller(sub_manager()),
                 Hide(PopupHidingReason::kRendererEvent));
+  } else {
+    EXPECT_CALL(client().popup_controller(sub_manager()),
+                Hide(PopupHidingReason::kNavigation));
   }
   NavigateAndCommitFrame(sub_frame(), GURL("https://bar.com/"));
   // Verify and clear before TearDown() closes the popup.
@@ -1605,9 +1626,48 @@ TEST_F(AutofillPopupControllerImplTestHidingLogic,
   EXPECT_CALL(client().popup_controller(sub_manager()),
               Hide(PopupHidingReason::kRendererEvent));
   NavigateAndCommitFrame(main_frame(), GURL("https://bar.com/"));
-  // The WebContents will also be destroyed and call Hide().
-  EXPECT_CALL(client().popup_controller(sub_manager()),
-              Hide(PopupHidingReason::kTabGone));
 }
+
+// Tests that Compose saved state notification popup gets hidden after 2
+// seconds, but not after 1 second.
+TEST_F(AutofillPopupControllerImplTestHidingLogic,
+       TimedHideComposeSavedStateNotification) {
+  ShowSuggestions(manager(), {PopupItemId::kComposeSavedStateNotification});
+  test::GenerateTestAutofillPopup(&manager().external_delegate());
+  ::testing::MockFunction<void()> check;
+  {
+    ::testing::InSequence s;
+    EXPECT_CALL(check, Call);
+    EXPECT_CALL(client().popup_controller(manager()),
+                Hide(PopupHidingReason::kFadeTimerExpired));
+  }
+  task_environment()->FastForwardBy(base::Seconds(1));
+  check.Call();
+  task_environment()->FastForwardBy(base::Seconds(1));
+  Mock::VerifyAndClearExpectations(&client().popup_controller(manager()));
+}
+
+#if !BUILDFLAG(IS_ANDROID)
+// Tests that if the popup is shown in the *main frame*, changing the zoom hides
+// the popup.
+TEST_F(AutofillPopupControllerImplTestHidingLogic,
+       HideInMainFrameOnZoomChange) {
+  zoom::ZoomController::CreateForWebContents(web_contents());
+  ShowSuggestions(manager(), {PopupItemId::kAddressEntry});
+  test::GenerateTestAutofillPopup(&manager().external_delegate());
+  // Triggered by OnZoomChanged().
+  EXPECT_CALL(client().popup_controller(manager()),
+              Hide(PopupHidingReason::kContentAreaMoved));
+  // Override the default ON_CALL behavior to do nothing to avoid destroying the
+  // hide helper. We want to test ZoomObserver events explicitly.
+  EXPECT_CALL(client().popup_controller(manager()),
+              Hide(PopupHidingReason::kWidgetChanged))
+      .WillOnce(Return());
+  auto* zoom_controller = zoom::ZoomController::FromWebContents(web_contents());
+  zoom_controller->SetZoomLevel(zoom_controller->GetZoomLevel() + 1.0);
+  // Verify and clear before TearDown() closes the popup.
+  Mock::VerifyAndClearExpectations(&client().popup_controller(manager()));
+}
+#endif  // BUILDFLAG(IS_ANDROID)
 
 }  // namespace autofill

@@ -4,15 +4,14 @@
 
 from __future__ import absolute_import
 import json
+import logging
 import os
 import shutil
 import sys
 import tempfile
 import unittest
-import logging
+from unittest import mock
 import six
-
-import mock
 
 from py_utils import cloud_storage
 from py_utils.constants import exit_codes
@@ -629,7 +628,8 @@ class FakeStoryFilter():
     return [story for story in story_set
             if story.name not in self._stories_to_filter]
 
-  def ShouldSkip(self, story):
+  def ShouldSkip(self, story, should_log=False):
+    del should_log  # unused
     return 'fake_reason' if story.name in self._stories_to_skip else ''
 
 

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 export class BigintMath {
-  static INT64_MAX: bigint = (2n ** 63n) - 1n;
+  static INT64_MAX: bigint = 2n ** 63n - 1n;
   static INT64_MIN: bigint = -(2n ** 63n);
 
   // Returns the smallest integral power of 2 that is not smaller than n.
@@ -24,23 +24,23 @@ export class BigintMath {
       result <<= 1n;
     }
     return result;
-  };
+  }
 
   // Returns the largest integral power of 2 which is not greater than n.
   // If n is less than or equal to 0, returns 1.
   static bitFloor(n: bigint): bigint {
     let result = 1n;
-    while ((result << 1n) <= n) {
+    while (result << 1n <= n) {
       result <<= 1n;
     }
     return result;
-  };
+  }
 
   // Returns the largest integral value x where 2^x is not greater than n.
   static log2(n: bigint): number {
     let result = 1n;
     let log2 = 0;
-    while ((result << 1n) <= n) {
+    while (result << 1n <= n) {
       result <<= 1n;
       ++log2;
     }
@@ -59,19 +59,24 @@ export class BigintMath {
   // If step is less than or equal to 0, returns n.
   static quantFloor(n: bigint, step: bigint): bigint {
     step = BigintMath.max(1n, step);
-    return step * (n / step);
+    if (n >= 0) {
+      return n - (n % step);
+    } else {
+      // If we're negative, just subtract one more "step", unless we're already
+      // aligned to a step then do nothing.
+      return n - (n % step) - (n % step === 0n ? 0n : step);
+    }
   }
 
   // Returns the smallest integral multiple of step which is not smaller than n.
   // If step is less than or equal to 0, returns n.
   static quantCeil(n: bigint, step: bigint): bigint {
     step = BigintMath.max(1n, step);
-    const remainder = n % step;
-    if (remainder === 0n) {
-      return n;
+    if (n >= 0) {
+      return n - (n % step) + (n % step === 0n ? 0n : step);
+    } else {
+      return n - (n % step);
     }
-    const quotient = n / step;
-    return (quotient + 1n) * step;
   }
 
   // Returns the greater of a and b.

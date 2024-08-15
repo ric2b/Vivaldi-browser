@@ -63,7 +63,8 @@ bool NinjaToolchainWriter::RunAndWriteFile(
     const std::vector<NinjaWriter::TargetRulePair>& rules) {
   base::FilePath ninja_file(settings->build_settings()->GetFullPath(
       GetNinjaFileForToolchain(settings)));
-  ScopedTrace trace(TraceItem::TRACE_FILE_WRITE_NINJA, FilePathToUTF8(ninja_file));
+  ScopedTrace trace(TraceItem::TRACE_FILE_WRITE_NINJA,
+                    FilePathToUTF8(ninja_file));
 
   base::CreateDirectory(ninja_file.DirName());
 
@@ -136,7 +137,7 @@ void NinjaToolchainWriter::WriteCommandRulePattern(
     const SubstitutionPattern& command,
     const EscapeOptions& options) {
   CHECK(!command.empty()) << "Command should not be empty";
-  out_ << kIndent << name << " = " ;
+  out_ << kIndent << name << " = ";
   if (!launcher.empty())
     out_ << launcher << " ";
   SubstitutionWriter::WriteWithNinjaVariables(command, options, out_);

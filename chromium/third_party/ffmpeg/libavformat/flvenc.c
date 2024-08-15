@@ -208,10 +208,10 @@ error:
             flags |= FLV_CODECID_NELLYMOSER            | FLV_SAMPLESSIZE_16BIT;
         break;
     case AV_CODEC_ID_PCM_MULAW:
-        flags = FLV_CODECID_PCM_MULAW | FLV_SAMPLERATE_SPECIAL | FLV_SAMPLESSIZE_16BIT;
+        flags |= FLV_CODECID_PCM_MULAW | FLV_SAMPLESSIZE_16BIT;
         break;
     case AV_CODEC_ID_PCM_ALAW:
-        flags = FLV_CODECID_PCM_ALAW  | FLV_SAMPLERATE_SPECIAL | FLV_SAMPLESSIZE_16BIT;
+        flags |= FLV_CODECID_PCM_ALAW | FLV_SAMPLESSIZE_16BIT;
         break;
     case 0:
         flags |= par->codec_tag << 4;
@@ -1072,6 +1072,8 @@ static int flv_check_bitstream(AVFormatContext *s, AVStream *st,
     }
     if (!st->codecpar->extradata_size &&
             (st->codecpar->codec_id == AV_CODEC_ID_H264 ||
+             st->codecpar->codec_id == AV_CODEC_ID_HEVC ||
+             st->codecpar->codec_id == AV_CODEC_ID_AV1 ||
              st->codecpar->codec_id == AV_CODEC_ID_MPEG4))
         return ff_stream_add_bitstream_filter(st, "extract_extradata", NULL);
     return 1;
@@ -1092,12 +1094,12 @@ static void flv_deinit(AVFormatContext *s)
 }
 
 static const AVOption options[] = {
-    { "flvflags", "FLV muxer flags", offsetof(FLVContext, flags), AV_OPT_TYPE_FLAGS, {.i64 = 0}, INT_MIN, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM, "flvflags" },
-    { "aac_seq_header_detect", "Put AAC sequence header based on stream data", 0, AV_OPT_TYPE_CONST, {.i64 = FLV_AAC_SEQ_HEADER_DETECT}, INT_MIN, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM, "flvflags" },
-    { "no_sequence_end", "disable sequence end for FLV", 0, AV_OPT_TYPE_CONST, {.i64 = FLV_NO_SEQUENCE_END}, INT_MIN, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM, "flvflags" },
-    { "no_metadata", "disable metadata for FLV", 0, AV_OPT_TYPE_CONST, {.i64 = FLV_NO_METADATA}, INT_MIN, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM, "flvflags" },
-    { "no_duration_filesize", "disable duration and filesize zero value metadata for FLV", 0, AV_OPT_TYPE_CONST, {.i64 = FLV_NO_DURATION_FILESIZE}, INT_MIN, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM, "flvflags" },
-    { "add_keyframe_index", "Add keyframe index metadata", 0, AV_OPT_TYPE_CONST, {.i64 = FLV_ADD_KEYFRAME_INDEX}, INT_MIN, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM, "flvflags" },
+    { "flvflags", "FLV muxer flags", offsetof(FLVContext, flags), AV_OPT_TYPE_FLAGS, {.i64 = 0}, INT_MIN, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM, .unit = "flvflags" },
+    { "aac_seq_header_detect", "Put AAC sequence header based on stream data", 0, AV_OPT_TYPE_CONST, {.i64 = FLV_AAC_SEQ_HEADER_DETECT}, INT_MIN, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM, .unit = "flvflags" },
+    { "no_sequence_end", "disable sequence end for FLV", 0, AV_OPT_TYPE_CONST, {.i64 = FLV_NO_SEQUENCE_END}, INT_MIN, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM, .unit = "flvflags" },
+    { "no_metadata", "disable metadata for FLV", 0, AV_OPT_TYPE_CONST, {.i64 = FLV_NO_METADATA}, INT_MIN, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM, .unit = "flvflags" },
+    { "no_duration_filesize", "disable duration and filesize zero value metadata for FLV", 0, AV_OPT_TYPE_CONST, {.i64 = FLV_NO_DURATION_FILESIZE}, INT_MIN, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM, .unit = "flvflags" },
+    { "add_keyframe_index", "Add keyframe index metadata", 0, AV_OPT_TYPE_CONST, {.i64 = FLV_ADD_KEYFRAME_INDEX}, INT_MIN, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM, .unit = "flvflags" },
     { NULL },
 };
 

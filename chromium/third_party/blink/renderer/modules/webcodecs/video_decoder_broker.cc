@@ -60,8 +60,8 @@ struct CrossThreadCopier<media::DecoderStatus>
 };
 
 template <>
-struct CrossThreadCopier<absl::optional<DecoderDetails>>
-    : public CrossThreadCopierPassThrough<absl::optional<DecoderDetails>> {
+struct CrossThreadCopier<std::optional<DecoderDetails>>
+    : public CrossThreadCopierPassThrough<std::optional<DecoderDetails>> {
   STATIC_ONLY(CrossThreadCopier);
 };
 
@@ -77,7 +77,7 @@ class MediaVideoTaskWrapper {
  public:
   using CrossThreadOnceInitCB =
       WTF::CrossThreadOnceFunction<void(media::DecoderStatus status,
-                                        absl::optional<DecoderDetails>)>;
+                                        std::optional<DecoderDetails>)>;
   using CrossThreadOnceDecodeCB =
       WTF::CrossThreadOnceFunction<void(const media::DecoderStatus&)>;
   using CrossThreadOnceResetCB = WTF::CrossThreadOnceClosure;
@@ -273,7 +273,7 @@ class MediaVideoTaskWrapper {
     decoder_ = std::move(decoder);
 
     media::DecoderStatus status = media::DecoderStatus::Codes::kOk;
-    absl::optional<DecoderDetails> decoder_details = absl::nullopt;
+    std::optional<DecoderDetails> decoder_details = std::nullopt;
 
     if (decoder_) {
       decoder_details = DecoderDetails({decoder_->GetDecoderType(),
@@ -324,7 +324,7 @@ class MediaVideoTaskWrapper {
   base::WeakPtr<CrossThreadVideoDecoderClient> weak_client_;
   scoped_refptr<base::SequencedTaskRunner> media_task_runner_;
   scoped_refptr<base::SequencedTaskRunner> main_task_runner_;
-  raw_ptr<media::GpuVideoAcceleratorFactories, ExperimentalRenderer>
+  raw_ptr<media::GpuVideoAcceleratorFactories, DanglingUntriaged>
       gpu_factories_;
   std::unique_ptr<media::MediaLog> media_log_;
   mojo::Remote<media::mojom::InterfaceFactory> media_interface_factory_;
@@ -433,7 +433,7 @@ int VideoDecoderBroker::CreateCallbackId() {
 }
 
 void VideoDecoderBroker::OnInitialize(media::DecoderStatus status,
-                                      absl::optional<DecoderDetails> details) {
+                                      std::optional<DecoderDetails> details) {
   DVLOG(2) << __func__;
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(init_cb_);

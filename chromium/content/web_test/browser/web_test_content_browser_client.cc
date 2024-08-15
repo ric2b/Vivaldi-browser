@@ -311,7 +311,7 @@ WebTestContentBrowserClient::GetNextFakeBluetoothChooser() {
 void WebTestContentBrowserClient::BrowserChildProcessHostCreated(
     BrowserChildProcessHost* host) {
   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner =
-      content::GetUIThreadTaskRunner({});
+      GetUIThreadTaskRunner({});
   ui_task_runner->PostTask(FROM_HERE,
                            base::BindOnce(&CreateChildProcessCrashWatcher));
 }
@@ -321,7 +321,7 @@ void WebTestContentBrowserClient::ExposeInterfacesToRenderer(
     blink::AssociatedInterfaceRegistry* associated_registry,
     RenderProcessHost* render_process_host) {
   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner =
-      content::GetUIThreadTaskRunner({});
+      GetUIThreadTaskRunner({});
   registry->AddInterface(base::BindRepeating(&MojoWebTestCounterImpl::Bind),
                          ui_task_runner);
   registry->AddInterface(base::BindRepeating(&MojoEcho::Bind), ui_task_runner);
@@ -616,6 +616,10 @@ void WebTestContentBrowserClient::BindWebSensorProviderAutomation(
         WebContents::FromRenderFrameHost(render_frame_host));
   }
   sensor_provider_manager_->Bind(std::move(receiver));
+}
+
+void WebTestContentBrowserClient::ResetWebSensorProviderAutomation() {
+  sensor_provider_manager_.reset();
 }
 
 std::unique_ptr<LoginDelegate> WebTestContentBrowserClient::CreateLoginDelegate(

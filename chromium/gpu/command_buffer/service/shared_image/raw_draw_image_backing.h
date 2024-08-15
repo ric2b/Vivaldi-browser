@@ -6,6 +6,7 @@
 #define GPU_COMMAND_BUFFER_SERVICE_SHARED_IMAGE_RAW_DRAW_IMAGE_BACKING_H_
 
 #include <optional>
+
 #include "base/functional/callback.h"
 #include "base/thread_annotations.h"
 #include "base/threading/thread_checker.h"
@@ -27,7 +28,8 @@ class RawDrawImageBacking : public ClearTrackingSharedImageBacking {
                       const gfx::ColorSpace& color_space,
                       GrSurfaceOrigin surface_origin,
                       SkAlphaType alpha_type,
-                      uint32_t usage);
+                      uint32_t usage,
+                      std::string debug_label);
   ~RawDrawImageBacking() override;
 
   // SharedImageBacking implementation.

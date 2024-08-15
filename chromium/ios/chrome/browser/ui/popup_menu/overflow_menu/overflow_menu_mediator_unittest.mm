@@ -6,15 +6,15 @@
 
 #import "base/files/scoped_temp_dir.h"
 #import "base/ios/ios_util.h"
+#import "base/memory/raw_ptr.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "base/test/metrics/histogram_tester.h"
 #import "base/test/scoped_feature_list.h"
 #import "base/time/default_clock.h"
-#import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/browser/bookmark_utils.h"
+#import "components/bookmarks/browser/core_bookmark_model.h"
 #import "components/bookmarks/common/bookmark_pref_names.h"
-#import "components/bookmarks/test/bookmark_test_helpers.h"
 #import "components/feature_engagement/test/mock_tracker.h"
 #import "components/language/ios/browser/ios_language_detection_tab_helper.h"
 #import "components/language/ios/browser/language_detection_java_script_feature.h"
@@ -38,6 +38,9 @@
 #import "components/translate/core/browser/translate_prefs.h"
 #import "components/translate/core/language_detection/language_detection_model.h"
 #import "ios/chrome/browser/bookmarks/model/account_bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
+#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model_test_helpers.h"
 #import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_presenter.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_request.h"
@@ -47,7 +50,7 @@
 #import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
 #import "ios/chrome/browser/policy/model/cloud/user_policy_constants.h"
 #import "ios/chrome/browser/policy/model/enterprise_policy_test_helper.h"
-#import "ios/chrome/browser/promos_manager/mock_promos_manager.h"
+#import "ios/chrome/browser/promos_manager/model/mock_promos_manager.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_model_factory.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_test_utils.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
@@ -96,7 +99,6 @@
 #import "testing/platform_test.h"
 #import "ui/base/device_form_factor.h"
 
-using bookmarks::BookmarkModel;
 using sync_preferences::PrefServiceMockFactory;
 using sync_preferences::PrefServiceSyncable;
 using testing::Return;
@@ -179,6 +181,8 @@ class OverflowMenuMediatorTest : public PlatformTest {
     builder.AddTestingFactory(
         ios::LocalOrSyncableBookmarkModelFactory::GetInstance(),
         ios::LocalOrSyncableBookmarkModelFactory::GetDefaultFactory());
+    builder.AddTestingFactory(ios::BookmarkModelFactory::GetInstance(),
+                              ios::BookmarkModelFactory::GetDefaultFactory());
     builder.AddTestingFactory(
         IOSChromeProfilePasswordStoreFactory::GetInstance(),
         base::BindRepeating(&password_manager::BuildPasswordStoreInterface<
@@ -231,8 +235,7 @@ class OverflowMenuMediatorTest : public PlatformTest {
     web_state_->SetWebFramesManager(content_world, std::move(frames_manager));
 
     browser_->GetWebStateList()->InsertWebState(
-        0, std::move(test_web_state), WebStateList::INSERT_FORCE_INDEX,
-        WebStateOpener());
+        std::move(test_web_state), WebStateList::InsertionParams::AtIndex(0));
     for (int i = 1; i < kNumberOfWebStates; i++) {
       InsertNewWebState(i);
     }
@@ -308,11 +311,9 @@ class OverflowMenuMediatorTest : public PlatformTest {
         ios::AccountBookmarkModelFactory::GetForBrowserState(
             browser_state_.get());
 
-    // TODO(crbug.com/1448010): Use two-model `WaitForBookmarkModelToLoad`.
-    bookmarks::test::WaitForBookmarkModelToLoad(
-        local_or_syncable_bookmark_model_);
+    WaitForLegacyBookmarkModelToLoad(local_or_syncable_bookmark_model_);
     if (account_bookmark_model_) {
-      bookmarks::test::WaitForBookmarkModelToLoad(account_bookmark_model_);
+      WaitForLegacyBookmarkModelToLoad(account_bookmark_model_);
     }
     mediator_.localOrSyncableBookmarkModel = local_or_syncable_bookmark_model_;
     mediator_.accountBookmarkModel = account_bookmark_model_;
@@ -345,8 +346,7 @@ class OverflowMenuMediatorTest : public PlatformTest {
     web_state->SetWebFramesManager(content_world, std::move(frames_manager));
 
     browser_->GetWebStateList()->InsertWebState(
-        index, std::move(web_state), WebStateList::INSERT_FORCE_INDEX,
-        WebStateOpener());
+        std::move(web_state), WebStateList::InsertionParams::AtIndex(index));
   }
 
   void SetUpActiveWebState() {
@@ -438,12 +438,12 @@ class OverflowMenuMediatorTest : public PlatformTest {
   OverflowMenuModel* model_;
   OverflowMenuMediator* mediator_;
   OverflowMenuOrderer* orderer_;
-  BookmarkModel* local_or_syncable_bookmark_model_;
-  BookmarkModel* account_bookmark_model_;
-  ReadingListModel* reading_list_model_;
+  raw_ptr<LegacyBookmarkModel> local_or_syncable_bookmark_model_;
+  raw_ptr<LegacyBookmarkModel> account_bookmark_model_;
+  raw_ptr<ReadingListModel> reading_list_model_;
   std::unique_ptr<TestingPrefServiceSimple> browserStatePrefs_;
   std::unique_ptr<TestingPrefServiceSimple> localStatePrefs_;
-  web::FakeWebState* web_state_;
+  raw_ptr<web::FakeWebState> web_state_;
   std::unique_ptr<web::NavigationItem> navigation_item_;
   UIViewController* baseViewController_;
   translate::LanguageDetectionModel language_detection_model_;
@@ -734,10 +734,9 @@ TEST_F(OverflowMenuMediatorTest, TestBookmarksToolsMenuButtons) {
   CreateMediator(/*is_incognito=*/NO);
   CreateBrowserStatePrefs();
   SetUpBookmarks();
-  // TODO(crbug.com/1448014): Revise this test to ensure account model support.
-  bookmarks::AddIfNotBookmarked(local_or_syncable_bookmark_model_,
-                                bookmarkedURL,
-                                base::SysNSStringToUTF16(@"Test bookmark"));
+  local_or_syncable_bookmark_model_->AddURL(
+      local_or_syncable_bookmark_model_->mobile_node(), 0,
+      base::SysNSStringToUTF16(@"Test bookmark"), bookmarkedURL);
   mediator_.webStateList = browser_->GetWebStateList();
   mediator_.browserStatePrefs = browserStatePrefs_.get();
 
@@ -754,7 +753,8 @@ TEST_F(OverflowMenuMediatorTest, TestBookmarksToolsMenuButtons) {
   EXPECT_FALSE(HasItem(kToolsMenuAddToBookmarks, /*enabled=*/YES));
   EXPECT_TRUE(HasItem(kToolsMenuEditBookmark, /*enabled=*/YES));
 
-  local_or_syncable_bookmark_model_->RemoveAllUserBookmarks();
+  ios::BookmarkModelFactory::GetForBrowserState(browser_state_.get())
+      ->RemoveAllUserBookmarks();
   EXPECT_TRUE(HasItem(kToolsMenuAddToBookmarks, /*enabled=*/YES));
   EXPECT_FALSE(HasItem(kToolsMenuEditBookmark, /*enabled=*/YES));
 }

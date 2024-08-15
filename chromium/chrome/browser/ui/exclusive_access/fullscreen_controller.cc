@@ -48,24 +48,11 @@ using content::WebContents;
 
 namespace {
 
-int64_t GetDisplayId(const WebContents& web_contents) {
-  if (auto* screen = display::Screen::GetScreen()) {
-    // crbug.com/1347558 WebContents::GetNativeView is const-incorrect.
-    // const_cast is used to access GetNativeView(). Also GetDisplayNearestView
-    // should accept const gfx::NativeView, but there is other const
-    // incorrectness down the call chain in some implementations.
-    auto display = screen->GetDisplayNearestView(
-        const_cast<WebContents&>(web_contents).GetNativeView());
-    return display.id();
-  }
-  return display::kInvalidDisplayId;
-}
-
 bool IsAnotherScreen(const WebContents& web_contents,
                      const int64_t display_id) {
   if (display_id == display::kInvalidDisplayId)
     return false;
-  return display_id != GetDisplayId(web_contents);
+  return display_id != FullscreenController::GetDisplayId(web_contents);
 }
 
 }  // namespace
@@ -81,6 +68,19 @@ void FullscreenController::AddObserver(FullscreenObserver* observer) {
 
 void FullscreenController::RemoveObserver(FullscreenObserver* observer) {
   observer_list_.RemoveObserver(observer);
+}
+
+int64_t FullscreenController::GetDisplayId(const WebContents& web_contents) {
+  if (auto* screen = display::Screen::GetScreen()) {
+    // crbug.com/1347558 WebContents::GetNativeView is const-incorrect.
+    // const_cast is used to access GetNativeView(). Also GetDisplayNearestView
+    // should accept const gfx::NativeView, but there is other const
+    // incorrectness down the call chain in some implementations.
+    auto display = screen->GetDisplayNearestView(
+        const_cast<WebContents&>(web_contents).GetNativeView());
+    return display.id();
+  }
+  return display::kInvalidDisplayId;
 }
 
 bool FullscreenController::IsFullscreenForBrowser() const {
@@ -240,12 +240,6 @@ void FullscreenController::EnterFullscreenModeForTab(
 }
 
 void FullscreenController::ExitFullscreenModeForTab(WebContents* web_contents) {
-  // Reset the popunder preventer after the window exits content fullscreen.
-  // This activates any popup windows that were created while fullscreen.
-  base::ScopedClosureRunner reset_popunder_preventer(
-      base::BindOnce(&std::unique_ptr<PopunderPreventer>::reset,
-                     base::Unretained(&popunder_preventer_), nullptr));
-
   if (MaybeToggleFullscreenWithinTab(web_contents, false)) {
     // During tab capture of fullscreen-within-tab views, the browser window
     // fullscreen state is unchanged, so return now.
@@ -394,6 +388,10 @@ void FullscreenController::FullscreenTransitionCompleted() {
 #endif  // DCHECK_IS_ON()
   tab_fullscreen_target_display_id_ = display::kInvalidDisplayId;
   started_fullscreen_transition_ = false;
+  if (!IsTabFullscreen()) {
+    // Activate any popup windows created while content fullscreen, after exit.
+    popunder_preventer_.reset();
+  }
 }
 
 void FullscreenController::RunOrDeferUntilTransitionIsComplete(
@@ -419,6 +417,18 @@ bool FullscreenController::HandleUserPressedEscape() {
   ExitExclusiveAccessIfNecessary();
   base::RecordAction(base::UserMetricsAction("ExitFullscreen_Esc"));
   return true;
+}
+
+void FullscreenController::HandleUserHeldEscape() {
+  if (RequiresPressAndHoldEscToExit()) {
+    ExitFullscreenModeInternal();
+  }
+}
+
+void FullscreenController::HandleUserReleasedEscapeEarly() {}
+
+bool FullscreenController::RequiresPressAndHoldEscToExit() const {
+  return IsFullscreenForBrowser();
 }
 
 void FullscreenController::ExitExclusiveAccessToPreviousState() {
@@ -551,8 +561,8 @@ void FullscreenController::ExitFullscreenModeInternal() {
   if (chrome::IsRunningInAppMode())
     return;
 
-  CHECK(fullscreen_start_time_);
-  if (exclusive_access_tab()) {
+  // `fullscreen_start_time_` is null if a fullscreen tab moves to a new window.
+  if (fullscreen_start_time_ && exclusive_access_tab()) {
     ukm::SourceId source_id =
         exclusive_access_tab()->GetPrimaryMainFrame()->GetPageUkmSourceId();
     ukm::builders::Fullscreen_Exit(source_id)

@@ -667,15 +667,10 @@ TEST_F(ReceiverTest, RequestsKeyFrameToRectifyPictureLoss) {
 TEST_F(ReceiverTest, PLICanBeDisabled) {
   receiver()->SetPliEnabledForTesting(false);
 
-#if OSP_DCHECK_IS_ON()
-  EXPECT_DEATH_IF_SUPPORTED(receiver()->RequestKeyFrame(),
-                            ".*PLI is not enabled.*");
-#else
   EXPECT_CALL(*sender(), OnReceiverIndicatesPictureLoss()).Times(0);
   receiver()->RequestKeyFrame();
   AdvanceClockAndRunTasks(kOneWayNetworkDelay);
   testing::Mock::VerifyAndClearExpectations(sender());
-#endif
 }
 
 // Tests that the Receiver will start dropping packets once its frame queue is

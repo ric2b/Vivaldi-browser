@@ -62,7 +62,7 @@ void OverlayDialog::AddedToWidget() {
     return;
 
   auto& view_ax = GetWidget()->GetRootView()->GetViewAccessibility();
-  view_ax.OverrideIsIgnored(true);
+  view_ax.SetIsIgnored(true);
 }
 
 void OverlayDialog::OnThemeChanged() {
@@ -88,7 +88,7 @@ OverlayDialog::OverlayDialog(base::OnceClosure on_destroying,
   }
 }
 
-BEGIN_METADATA(OverlayDialog, views::FlexLayoutView)
+BEGIN_METADATA(OverlayDialog)
 END_METADATA
 
 }  // namespace arc

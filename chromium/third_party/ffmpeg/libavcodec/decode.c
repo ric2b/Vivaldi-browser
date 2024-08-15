@@ -1434,6 +1434,7 @@ static const struct {
     { AV_PKT_DATA_CONTENT_LIGHT_LEVEL,        AV_FRAME_DATA_CONTENT_LIGHT_LEVEL },
     { AV_PKT_DATA_ICC_PROFILE,                AV_FRAME_DATA_ICC_PROFILE },
     { AV_PKT_DATA_DYNAMIC_HDR10_PLUS,         AV_FRAME_DATA_DYNAMIC_HDR_PLUS },
+    { AV_PKT_DATA_AMBIENT_VIEWING_ENVIRONMENT,AV_FRAME_DATA_AMBIENT_VIEWING_ENVIRONMENT },
 };
 
 int ff_decode_frame_props_from_pkt(const AVCodecContext *avctx,
@@ -1838,17 +1839,26 @@ int ff_copy_palette(void *dst, const AVPacket *src, void *logctx)
 int ff_hwaccel_frame_priv_alloc(AVCodecContext *avctx, void **hwaccel_picture_private)
 {
     const FFHWAccel *hwaccel = ffhwaccel(avctx->hwaccel);
-    AVHWFramesContext *frames_ctx;
 
     if (!hwaccel || !hwaccel->frame_priv_data_size)
         return 0;
 
     av_assert0(!*hwaccel_picture_private);
 
-    frames_ctx = (AVHWFramesContext *)avctx->hw_frames_ctx->data;
-    *hwaccel_picture_private = ff_refstruct_alloc_ext(hwaccel->frame_priv_data_size, 0,
-                                                      frames_ctx->device_ctx,
-                                                      hwaccel->free_frame_priv);
+    if (hwaccel->free_frame_priv) {
+        AVHWFramesContext *frames_ctx;
+
+        if (!avctx->hw_frames_ctx)
+            return AVERROR(EINVAL);
+
+        frames_ctx = (AVHWFramesContext *) avctx->hw_frames_ctx->data;
+        *hwaccel_picture_private = ff_refstruct_alloc_ext(hwaccel->frame_priv_data_size, 0,
+                                                          frames_ctx->device_ctx,
+                                                          hwaccel->free_frame_priv);
+    } else {
+        *hwaccel_picture_private = ff_refstruct_allocz(hwaccel->frame_priv_data_size);
+    }
+
     if (!*hwaccel_picture_private)
         return AVERROR(ENOMEM);
 

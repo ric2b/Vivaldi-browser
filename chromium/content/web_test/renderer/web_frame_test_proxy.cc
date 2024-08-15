@@ -232,7 +232,7 @@ class TestRenderFrameObserver : public RenderFrameObserver {
     render_frame()->GetWebFrame()->PrintEnd();
   }
 
-  const raw_ptr<TestRunner, ExperimentalRenderer> test_runner_;
+  const raw_ptr<TestRunner> test_runner_;
 };
 
 }  // namespace
@@ -559,6 +559,10 @@ void WebFrameTestProxy::BeginNavigation(
 void WebFrameTestProxy::PostAccessibilityEvent(const ui::AXEvent& event) {
   HandleWebAccessibilityEventForTest(event);
   RenderFrameImpl::PostAccessibilityEvent(event);
+}
+
+void WebFrameTestProxy::HandleAXObjectDetachedForTest(unsigned axid) {
+  accessibility_controller_.Remove(axid);
 }
 
 void WebFrameTestProxy::HandleWebAccessibilityEventForTest(

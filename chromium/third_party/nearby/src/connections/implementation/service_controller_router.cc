@@ -19,9 +19,9 @@
 #include <string>
 #include <utility>
 
-#include "absl/memory/memory.h"
 #include "connections/discovery_options.h"
 #include "connections/implementation/client_proxy.h"
+#include "connections/implementation/flags/nearby_connections_feature_flags.h"
 #include "connections/implementation/offline_service_controller.h"
 #include "connections/listeners.h"
 #include "connections/params.h"
@@ -30,6 +30,8 @@
 #include "connections/v3/connection_result.h"
 #include "connections/v3/connections_device.h"
 #include "connections/v3/listening_result.h"
+#include "internal/flags/nearby_flags.h"
+#include "internal/platform/feature_flags.h"
 #include "internal/platform/logging.h"
 
 // TODO(b/285657711): Add tests for uncovered logic, even if trivial.
@@ -84,6 +86,23 @@ v3::Quality ServiceControllerRouter::GetMediumQuality(Medium medium) {
 
 ServiceControllerRouter::ServiceControllerRouter() {
   NEARBY_LOGS(INFO) << "ServiceControllerRouter going up.";
+}
+
+// Constructor called by the CrOS platform implementation to override the
+// kEnableBleV2 flag.
+ServiceControllerRouter::ServiceControllerRouter(bool enable_ble_v2)
+    : ServiceControllerRouter() {
+  if (NearbyFlags::GetInstance().GetBoolFlag(
+          config_package_nearby::nearby_connections_feature::kEnableBleV2) !=
+      enable_ble_v2) {
+    NearbyFlags::GetInstance().OverrideBoolFlagValue(
+        config_package_nearby::nearby_connections_feature::kEnableBleV2,
+        enable_ble_v2);
+    // CrOS uses the async methods for Scanning and Advertising, and has
+    // no support for the sync version of those methods.
+    const_cast<FeatureFlags&>(FeatureFlags::GetInstance())
+      .SetFlags({.enable_ble_v2_async_scanning_advertising = true});
+  }
 }
 
 ServiceControllerRouter::~ServiceControllerRouter() {
@@ -432,6 +451,8 @@ void ServiceControllerRouter::RequestConnectionV3(
                           response_info.raw_authentication_token.string_data(),
                       .is_incoming_connection =
                           response_info.is_incoming_connection,
+                      .authentication_status =
+                          response_info.authentication_status,
                   };
                   v3_info.listener.initiated_cb(remote_device, new_info);
                 },

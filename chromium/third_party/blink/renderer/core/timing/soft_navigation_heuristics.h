@@ -5,7 +5,11 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_TIMING_SOFT_NAVIGATION_HEURISTICS_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_TIMING_SOFT_NAVIGATION_HEURISTICS_H_
 
+#include <optional>
+
 #include "base/containers/enum_set.h"
+#include "base/gtest_prod_util.h"
+#include "base/memory/stack_allocated.h"
 #include "third_party/blink/public/common/scheduler/task_attribution_id.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -49,44 +53,61 @@ class CORE_EXPORT SoftNavigationHeuristics
     : public GarbageCollected<SoftNavigationHeuristics>,
       public Supplement<LocalDOMWindow>,
       public scheduler::TaskAttributionTracker::Observer {
+  USING_PRE_FINALIZER(SoftNavigationHeuristics, Dispose);
+
  public:
+  FRIEND_TEST_ALL_PREFIXES(SoftNavigationHeuristicsTest,
+                           EarlyReturnOnInvalidPendingInteractionTimestamp);
+
+  // This class defines a scope that would cover click or navigation related
+  // events, in order for the SoftNavigationHeuristics class to be able to keep
+  // track of them and their descendant tasks.
+  class CORE_EXPORT EventScope {
+    STACK_ALLOCATED();
+
+   public:
+    enum class Type { kKeyboard, kClick, kNavigate };
+
+    ~EventScope();
+
+    EventScope(EventScope&&);
+    EventScope& operator=(EventScope&&);
+
+   private:
+    friend class SoftNavigationHeuristics;
+
+    EventScope(SoftNavigationHeuristics*, scheduler::TaskAttributionTracker*);
+
+    SoftNavigationHeuristics* heuristics_;
+    std::optional<scheduler::TaskAttributionTracker::ObserverScope>
+        observer_scope_;
+  };
+
   // Supplement boilerplate.
   static const char kSupplementName[];
   explicit SoftNavigationHeuristics(LocalDOMWindow& window);
   virtual ~SoftNavigationHeuristics() = default;
   static SoftNavigationHeuristics* From(LocalDOMWindow&);
 
-  enum class EventScopeType { kKeyboard, kClick, kNavigate };
-
   // GarbageCollected boilerplate.
   void Trace(Visitor*) const override;
 
+  void Dispose();
+
   // The class's API.
-  void InteractionCallbackCalled(const scheduler::TaskAttributionInfo& task,
-                                 EventScopeType,
-                                 bool is_new_interaction);
-  void UserInitiatedInteraction();
-  void SameDocumentNavigationStarted(ScriptState*);
-  void SameDocumentNavigationCommitted(ScriptState*, const String& url);
-  bool ModifiedDOM(ScriptState*);
+  void SameDocumentNavigationStarted();
+  void SameDocumentNavigationCommitted(const String& url);
+  bool ModifiedDOM();
   uint32_t SoftNavigationCount() { return soft_navigation_count_; }
 
   // TaskAttributionTracker::Observer's implementation.
-  void OnCreateTaskScope(scheduler::TaskAttributionInfo&,
-                         ScriptState*) override;
-  ExecutionContext* GetExecutionContext() override;
+  void OnCreateTaskScope(scheduler::TaskAttributionInfo&) override;
 
   void RecordPaint(LocalFrame*,
                    uint64_t painted_area,
                    bool is_modified_by_soft_navigation);
 
-  void SetEventParametersAndQueueNestedOnes(EventScopeType type,
-                                            bool is_new_interaction,
-                                            bool is_nested);
-  // If there are nested EventParameters, pop one, restore it to the
-  // current_event_parameters_ and return true. Otherwise, return false.
-  bool PopNestedEventParametersIfNeeded();
-  void SetCurrentTimeAsStartTime();
+  EventScope CreateEventScope(EventScope::Type type, bool is_new_interaction);
 
   // This method is called during the weakness processing stage of garbage
   // collection, and it's used to detect `potential_soft_navigation_tasks_`
@@ -106,6 +127,7 @@ class CORE_EXPORT SoftNavigationHeuristics
     kURLChange,
     kMainModification,
   };
+
   using FlagTypeSet = base::EnumSet<FlagType, kURLChange, kMainModification>;
   struct PerInteractionData : public GarbageCollected<PerInteractionData> {
     // The timestamp just before the event responding to the user's interaction
@@ -119,34 +141,51 @@ class CORE_EXPORT SoftNavigationHeuristics
     void Trace(Visitor*) const {}
   };
 
+  struct EventParameters {
+    explicit EventParameters() = default;
+    EventParameters(bool is_new_interaction, EventScope::Type type)
+        : is_new_interaction(is_new_interaction), type(type) {}
+
+    bool is_new_interaction = false;
+    EventScope::Type type = EventScope::Type::kClick;
+  };
+
   void ReportSoftNavigationToMetrics(LocalFrame* frame) const;
-  void CheckSoftNavigationConditions(const PerInteractionData& data,
-                                     ScriptState* script_state);
+  void RecordUmaForNonSoftNavigationInteractions() const;
+  void CheckSoftNavigationConditions(const PerInteractionData& data);
   void SetIsTrackingSoftNavigationHeuristicsOnDocument(bool value) const;
 
-  absl::optional<scheduler::TaskAttributionId>
-  GetUserInteractionAncestorTaskIfAny(ScriptState*);
-  absl::optional<scheduler::TaskAttributionId> SetFlagIfDescendantAndCheck(
-      ScriptState*,
+  std::optional<scheduler::TaskAttributionId>
+  GetUserInteractionAncestorTaskIfAny();
+  std::optional<scheduler::TaskAttributionId> SetFlagIfDescendantAndCheck(
       FlagType);
   void ResetHeuristic();
   void ResetPaintsIfNeeded();
   void CommitPreviousPaints(LocalFrame*);
   void EmitSoftNavigationEntryIfAllConditionsMet(LocalFrame*);
+  LocalFrame* GetLocalFrameIfNotDetached() const;
+  void UserInitiatedInteraction();
+  void SetCurrentTimeAsStartTime();
+  void OnSoftNavigationEventScopeDestroyed();
 
   PerInteractionData* GetCurrentInteractionData(scheduler::TaskAttributionId);
+
+  // This must only be called when `all_event_parameters_` is non-empty.
+  const EventParameters& CurrentEventParameters() {
+    return all_event_parameters_.back();
+  }
 
   HeapHashSet<WeakMember<const scheduler::TaskAttributionInfo>>
       potential_soft_navigation_tasks_;
   WTF::HashMap<scheduler::TaskAttributionIdType,
-               absl::optional<scheduler::TaskAttributionId>>
+               std::optional<scheduler::TaskAttributionId>>
       soft_navigation_descendant_cache_;
   bool did_reset_paints_ = false;
   bool did_commit_previous_paints_ = false;
   HeapHashMap<scheduler::TaskAttributionIdType, Member<PerInteractionData>>
       interaction_task_id_to_interaction_data_;
   base::TimeTicks pending_interaction_timestamp_;
-  absl::optional<scheduler::TaskAttributionId>
+  std::optional<scheduler::TaskAttributionId>
       last_soft_navigation_ancestor_task_;
   Member<const PerInteractionData> soft_navigation_interaction_data_;
   WTF::HashMap<scheduler::TaskAttributionIdType,
@@ -160,35 +199,13 @@ class CORE_EXPORT SoftNavigationHeuristics
   bool soft_navigation_conditions_met_ = false;
   bool paint_conditions_met_ = false;
   bool initial_interaction_encountered_ = false;
-  struct EventParameters {
-    explicit EventParameters() = default;
-    EventParameters(bool is_new_interaction, EventScopeType type)
-        : is_new_interaction(is_new_interaction), type(type) {}
-
-    bool is_new_interaction = false;
-    EventScopeType type = EventScopeType::kClick;
-  };
-  EventParameters top_event_parameters_;
-  WTF::Deque<EventParameters> nested_event_parameters_;
-  EventParameters* current_event_parameters_ = nullptr;
+  // `SoftNavigationEventScope`s can be nested in case a click/keyboard event
+  // synchronously initiates a navigation. `all_event_parameters_` stores one
+  // `EventParameters` per scope, with the most recent one in the back.
+  WTF::Deque<EventParameters> all_event_parameters_;
   // Used to synchronize resetting the heuristic when
   // `potential_soft_navigation_tasks_` becomes empty during GC.
   bool has_potential_soft_navigation_task_ = false;
-  bool seen_first_observer = false;
-};
-
-// This class defines a scope that would cover click or navigation related
-// events, in order for the SoftNavigationHeuristics class to be able to keep
-// track of them and their descendant tasks.
-class CORE_EXPORT SoftNavigationEventScope {
- public:
-  SoftNavigationEventScope(SoftNavigationHeuristics* heuristics,
-                           SoftNavigationHeuristics::EventScopeType type,
-                           bool is_new_interaction);
-  ~SoftNavigationEventScope();
-
- private:
-  Persistent<SoftNavigationHeuristics> heuristics_;
 };
 
 }  // namespace blink

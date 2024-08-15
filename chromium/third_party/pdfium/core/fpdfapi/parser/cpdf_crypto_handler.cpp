@@ -23,8 +23,8 @@
 #include "core/fpdfapi/parser/cpdf_stream.h"
 #include "core/fpdfapi/parser/cpdf_stream_acc.h"
 #include "core/fpdfapi/parser/cpdf_string.h"
-#include "third_party/base/check.h"
-#include "third_party/base/check_op.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
 
 namespace {
 
@@ -68,7 +68,7 @@ void CPDF_CryptoHandler::EncryptContent(uint32_t objnum,
   }
   if (m_Cipher == Cipher::kAES) {
     CRYPT_AESSetKey(m_pAESContext.get(),
-                    m_KeyLen == 32 ? m_EncryptKey : realkey, m_KeyLen);
+                    m_KeyLen == 32 ? m_EncryptKey.data() : realkey, m_KeyLen);
     uint8_t iv[16];
     for (int i = 0; i < 16; i++) {
       iv[i] = (uint8_t)rand();
@@ -108,7 +108,7 @@ void* CPDF_CryptoHandler::DecryptStart(uint32_t objnum, uint32_t gennum) {
     AESCryptContext* pContext = FX_Alloc(AESCryptContext, 1);
     pContext->m_bIV = true;
     pContext->m_BlockOffset = 0;
-    CRYPT_AESSetKey(&pContext->m_Context, m_EncryptKey, 32);
+    CRYPT_AESSetKey(&pContext->m_Context, m_EncryptKey.data(), 32);
     return pContext;
   }
   uint8_t key1[48];
@@ -214,7 +214,7 @@ ByteString CPDF_CryptoHandler::Decrypt(uint32_t objnum,
                                        const ByteString& str) {
   BinaryBuffer dest_buf;
   void* context = DecryptStart(objnum, gennum);
-  DecryptStream(context, str.raw_span(), dest_buf);
+  DecryptStream(context, str.unsigned_span(), dest_buf);
   DecryptFinish(context, dest_buf);
   return ByteString(dest_buf.GetSpan());
 }
@@ -323,7 +323,7 @@ CPDF_CryptoHandler::CPDF_CryptoHandler(Cipher cipher,
   DCHECK(cipher != Cipher::kRC4 || (keylen >= 5 && keylen <= 16));
 
   if (m_Cipher != Cipher::kNone)
-    memcpy(m_EncryptKey, key, m_KeyLen);
+    memcpy(m_EncryptKey.data(), key, m_KeyLen);
 
   if (m_Cipher == Cipher::kAES)
     m_pAESContext.reset(FX_Alloc(CRYPT_aes_context, 1));
@@ -334,7 +334,7 @@ CPDF_CryptoHandler::~CPDF_CryptoHandler() = default;
 void CPDF_CryptoHandler::PopulateKey(uint32_t objnum,
                                      uint32_t gennum,
                                      uint8_t* key) const {
-  memcpy(key, m_EncryptKey, m_KeyLen);
+  memcpy(key, m_EncryptKey.data(), m_KeyLen);
   key[m_KeyLen + 0] = (uint8_t)objnum;
   key[m_KeyLen + 1] = (uint8_t)(objnum >> 8);
   key[m_KeyLen + 2] = (uint8_t)(objnum >> 16);

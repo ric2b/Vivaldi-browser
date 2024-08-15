@@ -109,14 +109,7 @@ README: $(srcdir)/README.in
 	cd ../fc-lang && $(MAKE) $(AM_MAKEFLAGS) $(top_builddir)/conf.d/35-lang-normalize.conf
 
 install-data-hook:
-	mkdir -p $(DESTDIR)$(configdir)
-	@(echo cd $(DESTDIR)$(configdir);			\
-	  cd $(DESTDIR)$(configdir);				\
-	  for i in $(CONF_LINKS); do				\
-	    echo $(RM) $$i";" ln -s $(templatedir)/$$i .;	\
-	    $(RM) $$i;						\
-	    ln -s $(templatedir)/$$i .;				\
-	  done)
+	$(PYTHON) $(srcdir)/link_confs.py $(templatedir) $(configdir) $(CONF_LINKS)
 uninstall-local:
 	@(echo cd $(DESTDIR)$(configdir);			\
 	  cd $(DESTDIR)$(configdir);				\

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/compose/chrome_compose_dialog_controller.h"
 
+#include "base/functional/callback.h"
+#include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -11,16 +13,9 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/compose/core/browser/compose_features.h"
 #include "components/compose/core/browser/compose_metrics.h"
+#include "components/compose/core/browser/config.h"
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
-
-// Default size from Figma spec. The size of the view will follow the requested
-// size of the WebUI, once these are connected.
-namespace {
-
-const char kComposeURL[] = "chrome://compose/";
-
-}
 
 namespace chrome {
 
@@ -56,8 +51,10 @@ void ChromeComposeDialogController::ShowComposeDialog(
 
   Profile* profile =
       Profile::FromBrowserContext(web_contents_->GetBrowserContext());
-  auto bubble_wrapper = std::make_unique<BubbleContentsWrapperT<ComposeUI>>(
-      GURL(kComposeURL), profile, IDS_COMPOSE_DIALOG_TITLE);
+  auto bubble_wrapper =
+      std::make_unique<WebUIContentsWrapperT<ComposeUntrustedUI>>(
+          GURL(chrome::kChromeUIUntrustedComposeUrl), profile,
+          IDS_COMPOSE_DIALOG_TITLE);
   bubble_wrapper->ReloadWebContents();
 
   // This WebUI needs to know the calling BrowserContents so that the compose
@@ -85,16 +82,9 @@ void ChromeComposeDialogController::ShowComposeDialog(
 
     if (base::FeatureList::IsEnabled(
             compose::features::kEnableComposeSavedStateNotification)) {
-      // Prevent closing when losing focus to show saved state notification.
-      bubble_->set_close_on_deactivate(false);
-
-      // Observe parent widget for resize and repositioning events.
-      if (bubble_->GetWidget() && bubble_->GetWidget()->parent()) {
-        widget_observation_.Observe(bubble_->GetWidget()->parent());
+      if (bubble_->GetWidget()) {
+        widget_observation_.Observe(bubble_->GetWidget());
       }
-
-      zoom_observation_.Observe(
-          zoom::ZoomController::FromWebContents(web_contents_.get()));
     }
   } else {
     compose::LogOpenComposeDialogResult(
@@ -102,7 +92,7 @@ void ChromeComposeDialogController::ShowComposeDialog(
   }
 }
 
-BubbleContentsWrapperT<ComposeUI>*
+WebUIContentsWrapperT<ComposeUntrustedUI>*
 ChromeComposeDialogController::GetBubbleWrapper() const {
   if (bubble_) {
     return bubble_->bubble_wrapper();
@@ -110,7 +100,9 @@ ChromeComposeDialogController::GetBubbleWrapper() const {
   return nullptr;
 }
 
-void ChromeComposeDialogController::ShowUI() {
+void ChromeComposeDialogController::ShowUI(
+    base::OnceClosure focus_lost_callback) {
+  focus_lost_callback_ = std::move(focus_lost_callback);
   if (bubble_) {
     bubble_->ShowUI();
   }
@@ -120,7 +112,7 @@ void ChromeComposeDialogController::ShowUI() {
 void ChromeComposeDialogController::Close() {
   // This will no-op if there is no observation.
   widget_observation_.Reset();
-  zoom_observation_.Reset();
+  focus_lost_callback_.Reset();
   auto* wrapper = GetBubbleWrapper();
   if (wrapper) {
     wrapper->CloseUI();
@@ -131,38 +123,25 @@ bool ChromeComposeDialogController::IsDialogShowing() {
   return bubble_ && !bubble_->GetWidget()->IsClosed();
 }
 
-void ChromeComposeDialogController::OnWidgetBoundsChanged(
-    views::Widget* widget,
-    const gfx::Rect& new_bounds) {
-  if (base::FeatureList::IsEnabled(
-          compose::features::kEnableComposeSavedStateNotification) &&
-      IsDialogShowing() && widget == bubble_->GetWidget()->parent()) {
-    // Resizing or repositioning the parent view should close the compose
-    // dialog since it does not yet follow the associated HTML element.
-    Close();
-  }
-}
-
 void ChromeComposeDialogController::OnWidgetDestroying(views::Widget* widget) {
+  if (focus_lost_callback_) {
+    const compose::Config& config = compose::GetComposeConfig();
+    // TODO(b/328730979): Add slight delay so that focus lost callback can be
+    // called after all focus-related events have been processed.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&ChromeComposeDialogController::OnAfterWidgetDestroyed,
+                       weak_ptr_factory_.GetWeakPtr()),
+        base::Milliseconds(config.focus_lost_delay_milliseconds));
+  }
   // This will no-op if there is no observation.
   widget_observation_.Reset();
 }
 
-void ChromeComposeDialogController::OnZoomChanged(
-    const zoom::ZoomController::ZoomChangedEventData& data) {
-  if (base::FeatureList::IsEnabled(
-          compose::features::kEnableComposeSavedStateNotification) &&
-      IsDialogShowing()) {
-    // Zooming should close the compose dialog since it does not yet change
-    // position to follow the associated HTML element.
-    Close();
+void ChromeComposeDialogController::OnAfterWidgetDestroyed() {
+  if (focus_lost_callback_) {
+    std::move(focus_lost_callback_).Run();
   }
-}
-
-void ChromeComposeDialogController::OnZoomControllerDestroyed(
-    zoom::ZoomController* zoom_controller) {
-  // This will no-op if there is no observation.
-  zoom_observation_.Reset();
 }
 
 ChromeComposeDialogController::ChromeComposeDialogController(

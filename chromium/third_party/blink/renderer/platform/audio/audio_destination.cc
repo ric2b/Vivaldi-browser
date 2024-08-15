@@ -57,7 +57,7 @@ namespace blink {
 
 namespace {
 
-// This FIFO size of 16,384 was chosend based on the UMA data. It's the nearest
+// This FIFO size of 16,384 was chosen based on the UMA data. It's the nearest
 // multiple of 128 to 16,354 sample-frames, which represents 100% of the
 // histogram from "WebAudio.AudioDestination.HardwareBufferSize".
 // Although a buffer this big is atypical, some Android phones with a Bluetooth
@@ -83,7 +83,7 @@ scoped_refptr<AudioDestination> AudioDestination::Create(
     const WebAudioSinkDescriptor& sink_descriptor,
     unsigned number_of_output_channels,
     const WebAudioLatencyHint& latency_hint,
-    absl::optional<float> context_sample_rate,
+    std::optional<float> context_sample_rate,
     unsigned render_quantum_frames) {
   TRACE_EVENT0("webaudio", "AudioDestination::Create");
   return base::AdoptRef(
@@ -211,7 +211,9 @@ int AudioDestination::Render(base::TimeDelta delay,
 }
 
 void AudioDestination::OnRenderError() {
-  // TODO(crbug.com/1406088)
+  if (base::FeatureList::IsEnabled(features::kWebAudioHandleOnRenderError)) {
+    callback_->OnRenderError();
+  }
 }
 
 void AudioDestination::Start() {
@@ -319,6 +321,12 @@ int AudioDestination::FramesPerBuffer() const {
   return web_audio_device_->FramesPerBuffer();
 }
 
+base::TimeDelta AudioDestination::GetPlatformBufferDuration() const {
+  DCHECK(IsMainThread());
+  return audio_utilities::FramesToTime(web_audio_device_->FramesPerBuffer(),
+                                       web_audio_device_->SampleRate());
+}
+
 uint32_t AudioDestination::MaxChannelCount() {
   return web_audio_device_->MaxChannelCount();
 }
@@ -342,7 +350,7 @@ AudioDestination::AudioDestination(
     const WebAudioSinkDescriptor& sink_descriptor,
     unsigned number_of_output_channels,
     const WebAudioLatencyHint& latency_hint,
-    absl::optional<float> context_sample_rate,
+    std::optional<float> context_sample_rate,
     unsigned render_quantum_frames)
     : web_audio_device_(
           Platform::Current()->CreateAudioDevice(sink_descriptor,
@@ -357,9 +365,10 @@ AudioDestination::AudioDestination(
           context_sample_rate.has_value()
               ? context_sample_rate.value()
               : (web_audio_device_ ? web_audio_device_->SampleRate() : 0)),
-      fifo_(std::make_unique<PushPullFIFO>(number_of_output_channels,
-                                           kFIFOSize,
-                                           render_quantum_frames)),
+      fifo_(std::make_unique<PushPullFIFO>(
+          number_of_output_channels,
+          std::max(kFIFOSize, callback_buffer_size_ + render_quantum_frames),
+          render_quantum_frames)),
       output_bus_(AudioBus::Create(number_of_output_channels,
                                    render_quantum_frames,
                                    false)),

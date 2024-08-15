@@ -737,9 +737,7 @@ void Scheduler::ScheduleBeginImplFrameDeadline() {
       // Send early DidNotProduceFrame if we don't expect to produce a frame
       // soon so that display scheduler doesn't wait unnecessarily.
       // Note: This will only send one DidNotProduceFrame ack per begin frame.
-      if (!base::FeatureList::IsEnabled(
-              features::kResetTimerWhenNoActiveTreeLikely) &&
-          !state_machine_.NewActiveTreeLikely()) {
+      if (!state_machine_.NewActiveTreeLikely()) {
         SendDidNotProduceFrame(begin_impl_frame_tracker_.Current(),
                                FrameSkippedReason::kNoDamage);
       }
@@ -887,8 +885,10 @@ void Scheduler::ProcessScheduledActions() {
     action = state_machine_.NextAction();
     TRACE_EVENT(TRACE_DISABLED_BY_DEFAULT("cc.debug.scheduler"),
                 "SchedulerStateMachine", [this](perfetto::EventContext ctx) {
-                  this->AsProtozeroInto(ctx,
-                                        ctx.event()->set_cc_scheduler_state());
+                  this->AsProtozeroInto(
+                      ctx,
+                      ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>()
+                          ->set_cc_scheduler_state());
                 });
     base::AutoReset<SchedulerStateMachine::Action> mark_inside_action(
         &inside_action_, action);
@@ -978,7 +978,7 @@ void Scheduler::ProcessScheduledActions() {
 
 void Scheduler::AsProtozeroInto(
     perfetto::EventContext& ctx,
-    perfetto::protos::pbzero::ChromeCompositorSchedulerState* state) const {
+    perfetto::protos::pbzero::ChromeCompositorSchedulerStateV2* state) const {
   base::TimeTicks now = Now();
 
   state_machine_.AsProtozeroInto(state->set_state_machine());

@@ -199,7 +199,13 @@ class Environment : public ::testing::Environment {
  public:
   Environment(const char* name, const char* value)
       : name_(name), value_(value) {}
-  void SetUp() override { setenv(name_, value_, 1); }
+  void SetUp() override {
+#ifdef _WIN32
+    _putenv_s(name_, value_);  // Defined in stdlib.h.
+#else
+    setenv(name_, value_, /*overwrite=*/1);
+#endif
+  }
 
  private:
   const char* name_;
@@ -239,7 +245,7 @@ std::vector<std::string> GetTestImagesContents(
     // Only a warning because this can happen when running the binary with
     // --list_fuzz_tests (such as with gtest_discover_tests() in cmake).
     std::cerr << "WARNING: TEST_DATA_DIRS env variable not set, unable to read "
-                 "seed files";
+                 "seed files\n";
     return {};
   }
 

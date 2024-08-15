@@ -13,12 +13,11 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "base/time/time.h"
-#import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/browser/bookmark_node.h"
 #import "components/bookmarks/common/bookmark_features.h"
-#import "components/sync/base/features.h"
 #import "components/sync/test/test_sync_service.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_ios_unit_test_support.h"
+#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
 #import "testing/gmock/include/gmock/gmock.h"
 #import "testing/gtest_mac.h"
 
@@ -77,8 +76,8 @@ TEST_F(BookmarkIOSUtilsUnitTest, CreateOrUpdateNoop) {
   const BookmarkNode* node = AddBookmark(mobile_node, title);
 
   GURL url_copy = node->GetTitledUrlNodeUrl();
-  // This call is a no-op, , so `CreateOrUpdateBookmark` should return `false`.
-  EXPECT_FALSE(bookmark_utils_ios::CreateOrUpdateBookmark(
+  // This call is a no-op, , so `UpdateBookmark` should return `false`.
+  EXPECT_FALSE(bookmark_utils_ios::UpdateBookmark(
       node, base::SysUTF16ToNSString(title), url_copy, mobile_node,
       local_or_syncable_bookmark_model_, account_bookmark_model_));
   EXPECT_EQ(node->GetTitle(), title);
@@ -92,7 +91,7 @@ TEST_F(BookmarkIOSUtilsUnitTest, CreateOrUpdateWithinModel) {
 
   NSString* new_title = @"b";
   GURL new_url("http://example.com");
-  EXPECT_TRUE(bookmark_utils_ios::CreateOrUpdateBookmark(
+  EXPECT_TRUE(bookmark_utils_ios::UpdateBookmark(
       node, new_title, new_url, folder, local_or_syncable_bookmark_model_,
       account_bookmark_model_));
 
@@ -103,7 +102,7 @@ TEST_F(BookmarkIOSUtilsUnitTest, CreateOrUpdateWithinModel) {
   EXPECT_EQ(node->GetTitledUrlNodeUrl(), new_url);
 }
 
-// TODO(crbug.com/1446407): Add tests that call `CreateOrUpdateBookmark` with
+// TODO(crbug.com/1446407): Add tests that call `UpdateBookmark` with
 //                          the account storage.
 
 TEST_F(BookmarkIOSUtilsUnitTest, CreateOrUpdateBetweenModels) {
@@ -115,7 +114,7 @@ TEST_F(BookmarkIOSUtilsUnitTest, CreateOrUpdateBetweenModels) {
 
   NSString* new_title = @"b";
   GURL new_url("http://example.com");
-  EXPECT_TRUE(bookmark_utils_ios::CreateOrUpdateBookmark(
+  EXPECT_TRUE(bookmark_utils_ios::UpdateBookmark(
       node, new_title, new_url, account_mobile_node,
       local_or_syncable_bookmark_model_, account_bookmark_model_));
 
@@ -224,7 +223,6 @@ TEST_F(BookmarkIOSUtilsUnitTest, TestCreateBookmarkPath) {
   NSArray<NSNumber*>* path = bookmark_utils_ios::CreateBookmarkPath(
       local_or_syncable_bookmark_model_, f1->id());
   NSMutableArray<NSNumber*>* expectedPath = [NSMutableArray array];
-  [expectedPath addObject:@0];
   [expectedPath addObject:[NSNumber numberWithLongLong:mobileNode->id()]];
   [expectedPath addObject:[NSNumber numberWithLongLong:f1->id()]];
   EXPECT_TRUE([expectedPath isEqualToArray:path]);
@@ -460,50 +458,6 @@ TEST_F(BookmarkIOSUtilsUnitTest, IsAccountBookmarkStorageOptedIn) {
       /*sync_everything=*/false, /*types=*/syncer::UserSelectableTypeSet());
   EXPECT_FALSE(
       bookmark_utils_ios::IsAccountBookmarkStorageOptedIn(&sync_service));
-}
-
-TEST_F(BookmarkIOSUtilsUnitTest, IsBookmarkedNoMatches) {
-  AddBookmark(local_or_syncable_bookmark_model_->mobile_node(), u"a",
-              GURL("http://example.com/a"));
-  AddBookmark(account_bookmark_model_->mobile_node(), u"b",
-              GURL("http://example.com/b"));
-
-  EXPECT_FALSE(bookmark_utils_ios::IsBookmarked(
-      GURL("http://example.com/c"), local_or_syncable_bookmark_model_,
-      account_bookmark_model_));
-}
-
-TEST_F(BookmarkIOSUtilsUnitTest, IsBookmarkedLocalMatch) {
-  AddBookmark(local_or_syncable_bookmark_model_->mobile_node(), u"a",
-              GURL("http://example.com/a"));
-  AddBookmark(account_bookmark_model_->mobile_node(), u"b",
-              GURL("http://example.com/b"));
-
-  EXPECT_TRUE(bookmark_utils_ios::IsBookmarked(
-      GURL("http://example.com/a"), local_or_syncable_bookmark_model_,
-      account_bookmark_model_));
-}
-
-TEST_F(BookmarkIOSUtilsUnitTest, IsBookmarkedAccountMatch) {
-  AddBookmark(local_or_syncable_bookmark_model_->mobile_node(), u"a",
-              GURL("http://example.com/a"));
-  AddBookmark(account_bookmark_model_->mobile_node(), u"b",
-              GURL("http://example.com/b"));
-
-  EXPECT_TRUE(bookmark_utils_ios::IsBookmarked(
-      GURL("http://example.com/b"), local_or_syncable_bookmark_model_,
-      account_bookmark_model_));
-}
-
-TEST_F(BookmarkIOSUtilsUnitTest, IsBookmarkedBothStoragesMatch) {
-  AddBookmark(local_or_syncable_bookmark_model_->mobile_node(), u"a",
-              GURL("http://example.com/a"));
-  AddBookmark(account_bookmark_model_->mobile_node(), u"b",
-              GURL("http://example.com/a"));
-
-  EXPECT_TRUE(bookmark_utils_ios::IsBookmarked(
-      GURL("http://example.com/a"), local_or_syncable_bookmark_model_,
-      account_bookmark_model_));
 }
 
 TEST_F(BookmarkIOSUtilsUnitTest, GetMostRecentlyAddedNoMatchingBookmarks) {

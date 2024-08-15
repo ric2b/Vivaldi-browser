@@ -38,16 +38,16 @@ const diag::Formatter::Style formatter_style{/* print_file: */ true, /* print_se
 
 class ParserImplErrorTest : public WGSLParserTest {};
 
-#define EXPECT(SOURCE, EXPECTED)                                                   \
-    do {                                                                           \
-        std::string source = SOURCE;                                               \
-        std::string expected = EXPECTED;                                           \
-        auto p = parser(source);                                                   \
-        p->set_max_errors(5);                                                      \
-        EXPECT_EQ(false, p->Parse());                                              \
-        auto diagnostics = p->builder().Diagnostics();                             \
-        EXPECT_EQ(true, diagnostics.contains_errors());                            \
-        EXPECT_EQ(expected, diag::Formatter(formatter_style).format(diagnostics)); \
+#define EXPECT(SOURCE, EXPECTED)                                                           \
+    do {                                                                                   \
+        std::string source = SOURCE;                                                       \
+        std::string expected = EXPECTED;                                                   \
+        auto p = parser(source);                                                           \
+        p->set_max_errors(5);                                                              \
+        EXPECT_EQ(false, p->Parse());                                                      \
+        auto diagnostics = p->builder().Diagnostics();                                     \
+        EXPECT_EQ(true, diagnostics.ContainsErrors());                                     \
+        EXPECT_EQ(expected, diag::Formatter(formatter_style).Format(diagnostics).Plain()); \
     } while (false)
 
 TEST_F(ParserImplErrorTest, AdditiveInvalidExpr) {
@@ -134,30 +134,6 @@ TEST_F(ParserImplErrorTest, AssignmentStmtInvalidRHS) {
            R"(test.wgsl:1:14 error: unable to parse right side of assignment
 fn f() { a = >; }
              ^
-)");
-}
-
-TEST_F(ParserImplErrorTest, BitcastExprMissingLessThan) {
-    EXPECT("fn f() { x = bitcast(y); }",
-           R"(test.wgsl:1:21 error: expected '<' for bitcast expression
-fn f() { x = bitcast(y); }
-                    ^
-)");
-}
-
-TEST_F(ParserImplErrorTest, BitcastExprMissingGreaterThan) {
-    EXPECT("fn f() { x = bitcast<u32(y); }",
-           R"(test.wgsl:1:21 error: missing closing '>' for bitcast expression
-fn f() { x = bitcast<u32(y); }
-                    ^
-)");
-}
-
-TEST_F(ParserImplErrorTest, BitcastExprMissingType) {
-    EXPECT("fn f() { x = bitcast<>(y); }",
-           R"(test.wgsl:1:22 error: invalid type for bitcast expression
-fn f() { x = bitcast<>(y); }
-                     ^
 )");
 }
 

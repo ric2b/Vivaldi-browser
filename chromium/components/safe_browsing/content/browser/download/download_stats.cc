@@ -49,6 +49,7 @@ std::string GetDangerTypeMetricSuffix(
     case download::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
     case download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
     case download::DOWNLOAD_DANGER_TYPE_ALLOWLISTED_BY_POLICY:
+    case download::DOWNLOAD_DANGER_TYPE_BLOCKED_SCAN_FAILED:
     case download::DOWNLOAD_DANGER_TYPE_MAX:
       return ".Others";
   }
@@ -133,7 +134,7 @@ void RecordDownloadFileTypeAttributes(
     DownloadFileType::DangerLevel danger_level,
     bool has_user_gesture,
     bool visited_referrer_before,
-    absl::optional<base::Time> last_bypass_time) {
+    std::optional<base::Time> last_bypass_time) {
   if (danger_level != DownloadFileType::ALLOW_ON_USER_GESTURE) {
     return;
   }

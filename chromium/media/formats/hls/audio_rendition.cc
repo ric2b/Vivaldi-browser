@@ -4,10 +4,11 @@
 
 #include "media/formats/hls/audio_rendition.h"
 
+#include <optional>
+
 #include "base/types/pass_key.h"
 #include "media/formats/hls/parse_status.h"
 #include "media/formats/hls/tags.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace media::hls {
@@ -46,12 +47,12 @@ ParseStatus::Or<absl::monostate> AudioRenditionGroup::AddRendition(
     XMediaTag tag,
     const GURL& playlist_uri) {
   DCHECK(tag.type == MediaType::kAudio);
-  DCHECK(tag.instream_id == absl::nullopt);
+  DCHECK(tag.instream_id == std::nullopt);
   DCHECK(tag.group_id.Str() == id_);
   DCHECK(tag.forced == false);
   DCHECK(playlist_uri.is_valid());
 
-  absl::optional<GURL> uri;
+  std::optional<GURL> uri;
   if (tag.uri.has_value()) {
     uri = playlist_uri.Resolve(tag.uri->Str());
     if (!uri->is_valid()) {
@@ -64,12 +65,12 @@ ParseStatus::Or<absl::monostate> AudioRenditionGroup::AddRendition(
     return ParseStatusCode::kRenditionGroupHasDuplicateRenditionNames;
   }
 
-  absl::optional<std::string> language;
+  std::optional<std::string> language;
   if (tag.language.has_value()) {
     language = std::string(tag.language->Str());
   }
 
-  absl::optional<std::string> associated_language;
+  std::optional<std::string> associated_language;
   if (tag.associated_language.has_value()) {
     associated_language = std::string(tag.associated_language->Str());
   }
@@ -105,7 +106,7 @@ ParseStatus::Or<absl::monostate> AudioRenditionGroup::AddRendition(
 }
 
 const AudioRendition* AudioRenditionGroup::GetRendition(
-    base::StringPiece name) const {
+    std::string_view name) const {
   auto iter = renditions_map_.find(name);
   if (iter == renditions_map_.end()) {
     return nullptr;

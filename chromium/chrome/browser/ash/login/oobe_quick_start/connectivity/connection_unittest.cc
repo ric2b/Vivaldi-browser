@@ -22,6 +22,7 @@
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/advertising_id.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/fido_assertion_info.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/handshake_helpers.h"
+#include "chrome/browser/ash/login/oobe_quick_start/connectivity/session_context.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/target_device_connection_broker.h"
 #include "chrome/browser/nearby_sharing/fake_nearby_connection.h"
 #include "chrome/browser/nearby_sharing/public/cpp/nearby_connection.h"
@@ -54,6 +55,11 @@ const char kDeviceTypeKey[] = "deviceType";
 const int kAccountRequirementSingle = 2;
 const int kFlowTypeTargetChallenge = 2;
 const int kDeviceTypeChrome = 7;
+const char kPostTransferActionKey[] = "PostTransferAction";
+const char kURIKey[] = "uri";
+const char kURIValue[] =
+    "intent:#Intent;action=com.google.android.gms.quickstart.LANDING_SCREEN;"
+    "package=com.google.android.gms;end";
 
 const char kChallengeBase64[] = "aQ==";
 
@@ -112,10 +118,8 @@ class ConnectionTest : public testing::Test {
     fake_nearby_connection_ = std::make_unique<FakeNearbyConnection>();
     NearbyConnection* nearby_connection = fake_nearby_connection_.get();
     fake_quick_start_decoder_ = std::make_unique<FakeQuickStartDecoder>();
-    session_context_ = std::make_unique<SessionContext>(
-        kSessionId, advertising_id_, kSharedSecret, kSecondarySharedSecret);
     connection_ = std::make_unique<Connection>(
-        nearby_connection, *session_context_,
+        nearby_connection, &session_context_,
         mojo::SharedRemote<ash::quick_start::mojom::QuickStartDecoder>(
             fake_quick_start_decoder_->GetRemote()),
         /*on_connection_closed=*/base::DoNothing(),
@@ -335,8 +339,11 @@ class ConnectionTest : public testing::Test {
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   std::unique_ptr<FakeNearbyConnection> fake_nearby_connection_;
   std::unique_ptr<Connection> connection_;
-  std::unique_ptr<SessionContext> session_context_;
   AdvertisingId advertising_id_ = AdvertisingId(kAdvertisingId);
+  SessionContext session_context_ = SessionContext(kSessionId,
+                                                   advertising_id_,
+                                                   kSharedSecret,
+                                                   kSecondarySharedSecret);
   bool ran_assertion_response_callback_ = false;
   bool ran_connection_authenticated_callback_ = false;
   base::WeakPtr<TargetDeviceConnectionBroker::AuthenticatedConnection>
@@ -442,6 +449,9 @@ TEST_F(ConnectionTest, RequestAccountInfo) {
             kAccountRequirementSingle);
   EXPECT_EQ(*bootstrap_options.FindInt(kFlowTypeKey), kFlowTypeTargetChallenge);
   EXPECT_EQ(*bootstrap_options.FindInt(kDeviceTypeKey), kDeviceTypeChrome);
+  EXPECT_EQ(
+      *bootstrap_options.FindDict(kPostTransferActionKey)->FindString(kURIKey),
+      kURIValue);
 
   // Emulate a BootstrapConfigurations response.
   std::vector<uint8_t> instance_id = {0x01, 0x02, 0x03};
@@ -721,7 +731,7 @@ TEST_F(ConnectionTest, TestClose) {
       future;
   std::unique_ptr<Connection> connection_under_test =
       std::make_unique<Connection>(
-          fake_nearby_connection_.get(), *session_context_,
+          fake_nearby_connection_.get(), &session_context_,
           mojo::SharedRemote<ash::quick_start::mojom::QuickStartDecoder>(
               fake_quick_start_decoder_->GetRemote()),
           /*on_connection_closed=*/future.GetCallback(),
@@ -744,7 +754,7 @@ TEST_F(ConnectionTest, TestDisconnectsWithoutCloseIssueUnknownError) {
       future;
   std::unique_ptr<Connection> connection_under_test =
       std::make_unique<Connection>(
-          fake_nearby_connection_.get(), *session_context_,
+          fake_nearby_connection_.get(), &session_context_,
           mojo::SharedRemote<ash::quick_start::mojom::QuickStartDecoder>(
               fake_quick_start_decoder_->GetRemote()),
           /*on_connection_closed=*/future.GetCallback(),

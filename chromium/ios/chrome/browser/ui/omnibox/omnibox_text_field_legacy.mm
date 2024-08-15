@@ -23,6 +23,7 @@
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_constants.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_util.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/common/material_timing.h"
@@ -386,6 +387,18 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
   return !![self preEditText];
 }
 
+- (CGSize)intrinsicContentSize {
+  if (!IsRichAutocompletionEnabled()) {
+    return [super intrinsicContentSize];
+  }
+
+  if (_selection) {
+    return [_selection intrinsicContentSize];
+  } else {
+    return [super intrinsicContentSize];
+  }
+}
+
 #pragma mark - TestingUtilities category
 
 // Exposed for testing.
@@ -744,7 +757,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 
 - (void)forwardKeyCommandRight {
   [self.omniboxKeyboardDelegate
-      performKeyboardAction:OmniboxKeyboardActionDownArrow];
+      performKeyboardAction:OmniboxKeyboardActionRightArrow];
 }
 
 - (NSArray<UIKeyCommand*>*)keyCommands {
@@ -765,14 +778,10 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
                           modifierFlags:0
                                  action:@selector(forwardKeyCommandRight)];
 
-#if defined(__IPHONE_15_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_15_0
-  if (@available(iOS 15, *)) {
-    commandUp.wantsPriorityOverSystemBehavior = YES;
-    commandDown.wantsPriorityOverSystemBehavior = YES;
-    commandLeft.wantsPriorityOverSystemBehavior = YES;
-    commandRight.wantsPriorityOverSystemBehavior = YES;
-  }
-#endif
+  commandUp.wantsPriorityOverSystemBehavior = YES;
+  commandDown.wantsPriorityOverSystemBehavior = YES;
+  commandLeft.wantsPriorityOverSystemBehavior = YES;
+  commandRight.wantsPriorityOverSystemBehavior = YES;
   return @[ commandUp, commandDown, commandLeft, commandRight ];
 }
 

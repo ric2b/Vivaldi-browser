@@ -41,14 +41,13 @@ import * as Host from '../host/host.js';
 import * as i18n from '../i18n/i18n.js';
 import * as Platform from '../platform/platform.js';
 
-import {ContentData as ContentDataClass, type ContentDataOrError} from './ContentData.js';
 import {Cookie} from './Cookie.js';
-import {parseContentType} from './MimeType.js';
 import {
   type BlockedCookieWithReason,
   Events as NetworkRequestEvents,
   type ExtraRequestInfo,
   type ExtraResponseInfo,
+  type IncludedCookieWithReason,
   type NameValue,
   NetworkRequest,
   type WebBundleInfo,
@@ -135,21 +134,22 @@ export class NetworkManager extends SDKModel<EventTypes> {
     this.#networkAgent = target.networkAgent();
     target.registerNetworkDispatcher(this.dispatcher);
     target.registerFetchDispatcher(this.fetchDispatcher);
-    if (Common.Settings.Settings.instance().moduleSetting('cacheDisabled').get()) {
+    if (Common.Settings.Settings.instance().moduleSetting('cache-disabled').get()) {
       void this.#networkAgent.invoke_setCacheDisabled({cacheDisabled: true});
     }
 
     void this.#networkAgent.invoke_enable({maxPostDataSize: MAX_EAGER_POST_REQUEST_BODY_LENGTH});
     void this.#networkAgent.invoke_setAttachDebugStack({enabled: true});
 
-    this.#bypassServiceWorkerSetting = Common.Settings.Settings.instance().createSetting('bypassServiceWorker', false);
+    this.#bypassServiceWorkerSetting =
+        Common.Settings.Settings.instance().createSetting('bypass-service-worker', false);
     if (this.#bypassServiceWorkerSetting.get()) {
       this.bypassServiceWorkerChanged();
     }
     this.#bypassServiceWorkerSetting.addChangeListener(this.bypassServiceWorkerChanged, this);
 
     Common.Settings.Settings.instance()
-        .moduleSetting('cacheDisabled')
+        .moduleSetting('cache-disabled')
         .addChangeListener(this.cacheDisabledSettingChanged, this);
   }
 
@@ -183,7 +183,7 @@ export class NetworkManager extends SDKModel<EventTypes> {
     return TextUtils.TextUtils.performSearchInSearchMatches(response.result || [], query, caseSensitive, isRegex);
   }
 
-  static async requestContentData(request: NetworkRequest): Promise<ContentDataOrError> {
+  static async requestContentData(request: NetworkRequest): Promise<TextUtils.ContentData.ContentDataOrError> {
     if (request.resourceType() === Common.ResourceType.resourceTypes.WebSocket) {
       return {error: i18nString(UIStrings.noContentForWebSocket)};
     }
@@ -209,8 +209,33 @@ export class NetworkManager extends SDKModel<EventTypes> {
     if (error) {
       return {error};
     }
-    return new ContentDataClass(
+    return new TextUtils.ContentData.ContentData(
         response.body, response.base64Encoded, request.mimeType, request.charset() ?? undefined);
+  }
+
+  /**
+   * Returns the already received bytes for an in-flight request. After calling this method
+   * "dataReceived" events will contain additional data.
+   */
+  static async streamResponseBody(request: NetworkRequest): Promise<TextUtils.ContentData.ContentDataOrError> {
+    if (request.finished) {
+      return {error: 'Streaming the response body is only available for in-flight requests.'};
+    }
+    const manager = NetworkManager.forRequest(request);
+    if (!manager) {
+      return {error: 'No network manager for request'};
+    }
+    const requestId = request.backendRequestId();
+    if (!requestId) {
+      return {error: 'No backend request id for request'};
+    }
+    const response = await manager.#networkAgent.invoke_streamResourceContent({requestId});
+    const error = response.getError();
+    if (error) {
+      return {error};
+    }
+    return new TextUtils.ContentData.ContentData(
+        response.bufferedData, /* isBase64=*/ true, request.mimeType, request.charset() ?? undefined);
   }
 
   static async requestPostData(request: NetworkRequest): Promise<string|null> {
@@ -272,7 +297,7 @@ export class NetworkManager extends SDKModel<EventTypes> {
 
   override dispose(): void {
     Common.Settings.Settings.instance()
-        .moduleSetting('cacheDisabled')
+        .moduleSetting('cache-disabled')
         .removeChangeListener(this.cacheDisabledSettingChanged, this);
   }
 
@@ -471,6 +496,7 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
       networkRequest.setUrl(response.url as Platform.DevToolsPath.UrlString);
     }
     networkRequest.mimeType = response.mimeType;
+    networkRequest.setCharset(response.charset);
     if (!networkRequest.statusCode || networkRequest.wasIntercepted()) {
       networkRequest.statusCode = response.status;
     }
@@ -693,21 +719,15 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
     this.#manager.dispatchEventToListeners(Events.ResponseReceived, {request: networkRequest, response});
   }
 
-  dataReceived({requestId, timestamp, dataLength, encodedDataLength}: Protocol.Network.DataReceivedEvent): void {
-    let networkRequest: NetworkRequest|null|undefined = this.#requestsById.get(requestId);
+  dataReceived(event: Protocol.Network.DataReceivedEvent): void {
+    let networkRequest: NetworkRequest|null|undefined = this.#requestsById.get(event.requestId);
     if (!networkRequest) {
-      networkRequest = this.maybeAdoptMainResourceRequest(requestId);
+      networkRequest = this.maybeAdoptMainResourceRequest(event.requestId);
     }
     if (!networkRequest) {
       return;
     }
-
-    networkRequest.resourceSize += dataLength;
-    if (encodedDataLength !== -1) {
-      networkRequest.increaseTransferSize(encodedDataLength);
-    }
-    networkRequest.endTime = timestamp;
-
+    networkRequest.addDataReceivedEvent(event);
     this.updateNetworkRequest(networkRequest);
   }
 
@@ -862,10 +882,10 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
       {requestId, associatedCookies, headers, clientSecurityState, connectTiming, siteHasCookieInOtherPartition}:
           Protocol.Network.RequestWillBeSentExtraInfoEvent): void {
     const blockedRequestCookies: BlockedCookieWithReason[] = [];
-    const includedRequestCookies = [];
-    for (const {blockedReasons, cookie} of associatedCookies) {
+    const includedRequestCookies: IncludedCookieWithReason[] = [];
+    for (const {blockedReasons, exemptionReason, cookie} of associatedCookies) {
       if (blockedReasons.length === 0) {
-        includedRequestCookies.push(Cookie.fromProtocolCookie(cookie));
+        includedRequestCookies.push({exemptionReason, cookie: Cookie.fromProtocolCookie(cookie)});
       } else {
         blockedRequestCookies.push({blockedReasons, cookie: Cookie.fromProtocolCookie(cookie)});
       }
@@ -890,21 +910,25 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
     statusCode,
     cookiePartitionKey,
     cookiePartitionKeyOpaque,
+    exemptedCookies,
   }: Protocol.Network.ResponseReceivedExtraInfoEvent): void {
     const extraResponseInfo: ExtraResponseInfo = {
-      blockedResponseCookies: blockedCookies.map(blockedCookie => {
-        return {
-          blockedReasons: blockedCookie.blockedReasons,
-          cookieLine: blockedCookie.cookieLine,
-          cookie: blockedCookie.cookie ? Cookie.fromProtocolCookie(blockedCookie.cookie) : null,
-        };
-      }),
+      blockedResponseCookies:
+          blockedCookies.map(blockedCookie => ({
+                               blockedReasons: blockedCookie.blockedReasons,
+                               cookieLine: blockedCookie.cookieLine,
+                               cookie: blockedCookie.cookie ? Cookie.fromProtocolCookie(blockedCookie.cookie) : null,
+                             })),
       responseHeaders: this.headersMapToHeadersArray(headers),
       responseHeadersText: headersText,
       resourceIPAddressSpace,
       statusCode,
       cookiePartitionKey,
       cookiePartitionKeyOpaque,
+      exemptedResponseCookies: exemptedCookies?.map(exemptedCookie => ({
+                                                      cookie: Cookie.fromProtocolCookie(exemptedCookie.cookie),
+                                                      exemptionReason: exemptedCookie.exemptionReason,
+                                                    })),
     };
     this.getExtraInfoBuilder(requestId).addResponseExtraInfo(extraResponseInfo);
   }
@@ -1010,7 +1034,7 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
     this.#manager.dispatchEventToListeners(Events.RequestFinished, networkRequest);
     MultitargetNetworkManager.instance().inflightMainResourceRequests.delete(networkRequest.requestId());
 
-    if (Common.Settings.Settings.instance().moduleSetting('monitoringXHREnabled').get() &&
+    if (Common.Settings.Settings.instance().moduleSetting('monitoring-xhr-enabled').get() &&
         networkRequest.resourceType().category() === Common.ResourceType.resourceCategories.XHR) {
       let message;
       const failedToLoad = networkRequest.failed || networkRequest.hasErrorStatusCode();
@@ -1198,8 +1222,8 @@ export class MultitargetNetworkManager extends Common.ObjectWrapper.ObjectWrappe
     this.#updatingInterceptionPatternsPromise = null;
 
     // TODO(allada) Remove these and merge it with request interception.
-    this.#blockingEnabledSetting = Common.Settings.Settings.instance().moduleSetting('requestBlockingEnabled');
-    this.#blockedPatternsSetting = Common.Settings.Settings.instance().createSetting('networkBlockedPatterns', []);
+    this.#blockingEnabledSetting = Common.Settings.Settings.instance().moduleSetting('request-blocking-enabled');
+    this.#blockedPatternsSetting = Common.Settings.Settings.instance().createSetting('network-blocked-patterns', []);
     this.#effectiveBlockedURLs = [];
     this.updateBlockedPatterns();
 
@@ -1333,14 +1357,21 @@ export class MultitargetNetworkManager extends Common.ObjectWrapper.ObjectWrappe
   private updateNetworkConditions(networkAgent: ProtocolProxyApi.NetworkApi): void {
     const conditions = this.#networkConditionsInternal;
     if (!this.isThrottling()) {
-      void networkAgent.invoke_emulateNetworkConditions(
-          {offline: false, latency: 0, downloadThroughput: 0, uploadThroughput: 0});
+      void networkAgent.invoke_emulateNetworkConditions({
+        offline: false,
+        latency: 0,
+        downloadThroughput: 0,
+        uploadThroughput: 0,
+      });
     } else {
       void networkAgent.invoke_emulateNetworkConditions({
         offline: this.isOffline(),
         latency: conditions.latency,
         downloadThroughput: conditions.download < 0 ? 0 : conditions.download,
         uploadThroughput: conditions.upload < 0 ? 0 : conditions.upload,
+        packetLoss: (conditions.packetLoss ?? 0) < 0 ? 0 : conditions.packetLoss,
+        packetQueueLength: conditions.packetQueueLength,
+        packetReordering: conditions.packetReordering,
         connectionType: NetworkManager.connectionType(conditions),
       });
     }
@@ -1488,8 +1519,8 @@ export class MultitargetNetworkManager extends Common.ObjectWrapper.ObjectWrappe
   }
 
   private async updateInterceptionPatterns(): Promise<void> {
-    if (!Common.Settings.Settings.instance().moduleSetting('cacheDisabled').get()) {
-      Common.Settings.Settings.instance().moduleSetting('cacheDisabled').set(true);
+    if (!Common.Settings.Settings.instance().moduleSetting('cache-disabled').get()) {
+      Common.Settings.Settings.instance().moduleSetting('cache-disabled').set(true);
     }
     this.#updatingInterceptionPatternsPromise = null;
     const promises = ([] as Promise<unknown>[]);
@@ -1552,7 +1583,7 @@ export class MultitargetNetworkManager extends Common.ObjectWrapper.ObjectWrappe
       headers['User-Agent'] = currentUserAgent;
     }
 
-    if (Common.Settings.Settings.instance().moduleSetting('cacheDisabled').get()) {
+    if (Common.Settings.Settings.instance().moduleSetting('cache-disabled').get()) {
       headers['Cache-Control'] = 'no-cache';
     }
 
@@ -1733,7 +1764,7 @@ export class InterceptedRequest {
     void this.#fetchAgent.invoke_failRequest({requestId: this.requestId, errorReason});
   }
 
-  async responseBody(): Promise<ContentDataOrError> {
+  async responseBody(): Promise<TextUtils.ContentData.ContentDataOrError> {
     const response = await this.#fetchAgent.invoke_getResponseBody({requestId: this.requestId});
     const error = response.getError();
     if (error) {
@@ -1741,7 +1772,7 @@ export class InterceptedRequest {
     }
 
     const {mimeType, charset} = this.getMimeTypeAndCharset();
-    return new ContentDataClass(
+    return new TextUtils.ContentData.ContentData(
         response.body, response.base64Encoded, mimeType ?? 'application/octet-stream', charset ?? undefined);
   }
 
@@ -1757,7 +1788,7 @@ export class InterceptedRequest {
   getMimeTypeAndCharset(): {mimeType: string|null, charset: string|null} {
     for (const header of this.responseHeaders ?? []) {
       if (header.name.toLowerCase() === 'content-type') {
-        return parseContentType(header.value);
+        return Platform.MimeType.parseContentType(header.value);
       }
     }
 
@@ -1886,13 +1917,17 @@ export function networkConditionsEqual(first: Conditions, second: Conditions): b
   const firstTitle = typeof first.title === 'function' ? first.title() : first.title;
   const secondTitle = typeof second.title === 'function' ? second.title() : second.title;
   return second.download === first.download && second.upload === first.upload && second.latency === first.latency &&
-      secondTitle === firstTitle;
+      first.packetLoss === second.packetLoss && first.packetQueueLength === second.packetQueueLength &&
+      first.packetReordering === second.packetReordering && secondTitle === firstTitle;
 }
 
 export interface Conditions {
   download: number;
   upload: number;
   latency: number;
+  packetLoss?: number;
+  packetQueueLength?: number;
+  packetReordering?: boolean;
   // TODO(crbug.com/1219425): In the future, it might be worthwhile to
   // consider avoiding mixing up presentation state (e.g.: displayed
   // titles) with behavioral state (e.g.: the throttling amounts). In

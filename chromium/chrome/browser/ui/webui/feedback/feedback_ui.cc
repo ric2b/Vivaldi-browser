@@ -19,7 +19,6 @@
 #include "ui/webui/color_change_listener/color_change_handler.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/constants/ash_features.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -29,20 +28,16 @@ void AddStringResources(content::WebUIDataSource* source,
   static constexpr webui::LocalizedString kStrings[] = {
       {"additionalInfo", IDS_FEEDBACK_ADDITIONAL_INFO_LABEL},
       {"anonymousUser", IDS_FEEDBACK_ANONYMOUS_EMAIL_OPTION},
-      {"appTitle", IDS_FEEDBACK_REPORT_APP_TITLE},
-      {"assistantInfo", IDS_FEEDBACK_INCLUDE_ASSISTANT_INFORMATION_CHKBOX},
-      {"assistantLogsMessage", IDS_FEEDBACK_ASSISTANT_LOGS_MESSAGE},
       {"attachFileLabel", IDS_FEEDBACK_ATTACH_FILE_LABEL},
       {"attachFileNote", IDS_FEEDBACK_ATTACH_FILE_NOTE},
       {"attachFileToBig", IDS_FEEDBACK_ATTACH_FILE_TO_BIG},
       {"autofillMetadataPageTitle", IDS_FEEDBACK_AUTOFILL_METADATA_PAGE_TITLE},
       {"autofillMetadataInfo", IDS_FEEDBACK_INCLUDE_AUTOFILL_METADATA_CHECKBOX},
-      {"bluetoothLogsInfo", IDS_FEEDBACK_BLUETOOTH_LOGS_CHECKBOX},
-      {"bluetoothLogsMessage", IDS_FEEDBACK_BLUETOOTH_LOGS_MESSAGE},
       {"cancel", IDS_CANCEL},
       {"consentCheckboxLabel", IDS_FEEDBACK_CONSENT_CHECKBOX_LABEL},
       {"freeFormText", IDS_FEEDBACK_FREE_TEXT_LABEL},
       {"freeFormTextAi", IDS_FEEDBACK_FREE_TEXT_AI_LABEL},
+      {"appTitle", IDS_FEEDBACK_REPORT_APP_TITLE},
       {"logIdCheckboxLabel", IDS_FEEDBACK_LOG_ID_CHECKBOX_LABEL},
       {"logsMapPageCollapseAllBtn", IDS_ABOUT_SYS_COLLAPSE_ALL},
       {"logsMapPageCollapseBtn", IDS_ABOUT_SYS_COLLAPSE},
@@ -55,7 +50,6 @@ void AddStringResources(content::WebUIDataSource* source,
       {"offensiveCheckboxLabel", IDS_FEEDBACK_OFFENSIVE_CHECKBOX_LABEL},
       {"pageTitle", IDS_FEEDBACK_REPORT_PAGE_TITLE},
       {"pageUrl", IDS_FEEDBACK_REPORT_URL_LABEL},
-      {"performanceTrace", IDS_FEEDBACK_INCLUDE_PERFORMANCE_TRACE_CHECKBOX},
       {"privacyNote", IDS_FEEDBACK_PRIVACY_NOTE},
       {"screenshot", IDS_FEEDBACK_SCREENSHOT_LABEL},
       {"screenshotA11y", IDS_FEEDBACK_SCREENSHOT_A11Y_TEXT},
@@ -67,11 +61,6 @@ void AddStringResources(content::WebUIDataSource* source,
 
   source->AddLocalizedStrings(kStrings);
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  // Jelly colors should only be considered enabled when jelly styling is
-  // enabled for Feedback on ChromeOS.
-  source->AddBoolean("isJellyEnabledForOsFeedback",
-                     ash::features::IsJellyEnabledForOsFeedback());
-
   source->AddLocalizedString("mayBeSharedWithPartnerNote",
                              IDS_FEEDBACK_TOOL_MAY_BE_SHARED_NOTE);
   source->AddLocalizedString(
@@ -90,7 +79,7 @@ void CreateAndAddFeedbackHTMLSource(Profile* profile) {
       profile, chrome::kChromeUIFeedbackHost);
   webui::SetupWebUIDataSource(
       source, base::make_span(kFeedbackResources, kFeedbackResourcesSize),
-      IDR_FEEDBACK_HTML_DEFAULT_HTML);
+      IDR_FEEDBACK_FEEDBACK_HTML);
 
   AddStringResources(source, profile);
 }
@@ -108,7 +97,6 @@ bool FeedbackUI::IsFeedbackEnabled(Profile* profile) {
 void FeedbackUI::BindInterface(
     mojo::PendingReceiver<color_change_listener::mojom::PageHandler> receiver) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  DCHECK(ash::features::IsJellyEnabledForOsFeedback());
   color_provider_handler_ = std::make_unique<ui::ColorChangeHandler>(
       web_ui()->GetWebContents(), std::move(receiver));
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)

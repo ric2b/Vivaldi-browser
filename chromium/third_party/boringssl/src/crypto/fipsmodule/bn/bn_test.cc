@@ -884,9 +884,7 @@ static void TestNotModSquare(BIGNUMFileTest *t, BN_CTX *ctx) {
   EXPECT_FALSE(BN_mod_sqrt(ret.get(), not_mod_square.get(), p.get(), ctx))
       << "BN_mod_sqrt unexpectedly succeeded.";
 
-  uint32_t err = ERR_peek_error();
-  EXPECT_EQ(ERR_LIB_BN, ERR_GET_LIB(err));
-  EXPECT_EQ(BN_R_NOT_A_SQUARE, ERR_GET_REASON(err));
+  EXPECT_TRUE(ErrorEquals(ERR_peek_error(), ERR_LIB_BN, BN_R_NOT_A_SQUARE));
   ERR_clear_error();
 }
 
@@ -2881,10 +2879,44 @@ TEST_F(BNTest, BNMulMontABI) {
     a[0] = 1;
     b[0] = 42;
 
+#if defined(OPENSSL_X86_64)
+    if (bn_mulx4x_mont_capable(words)) {
+      CHECK_ABI(bn_mulx4x_mont, r.data(), a.data(), b.data(), mont->N.d,
+                mont->n0, words);
+      CHECK_ABI(bn_mulx4x_mont, r.data(), a.data(), a.data(), mont->N.d,
+                mont->n0, words);
+    }
+    if (bn_mul4x_mont_capable(words)) {
+      CHECK_ABI(bn_mul4x_mont, r.data(), a.data(), b.data(), mont->N.d,
+                mont->n0, words);
+      CHECK_ABI(bn_mul4x_mont, r.data(), a.data(), a.data(), mont->N.d,
+                mont->n0, words);
+    }
+    CHECK_ABI(bn_mul_mont_nohw, r.data(), a.data(), b.data(), mont->N.d,
+              mont->n0, words);
+    CHECK_ABI(bn_mul_mont_nohw, r.data(), a.data(), a.data(), mont->N.d,
+              mont->n0, words);
+    if (bn_sqr8x_mont_capable(words)) {
+      CHECK_ABI(bn_sqr8x_mont, r.data(), a.data(), bn_mulx_adx_capable(),
+                mont->N.d, mont->n0, words);
+    }
+#elif defined(OPENSSL_ARM)
+    if (bn_mul8x_mont_neon_capable(words)) {
+      CHECK_ABI(bn_mul8x_mont_neon, r.data(), a.data(), b.data(), mont->N.d,
+                mont->n0, words);
+      CHECK_ABI(bn_mul8x_mont_neon, r.data(), a.data(), a.data(), mont->N.d,
+                mont->n0, words);
+    }
+    CHECK_ABI(bn_mul_mont_nohw, r.data(), a.data(), b.data(), mont->N.d,
+              mont->n0, words);
+    CHECK_ABI(bn_mul_mont_nohw, r.data(), a.data(), a.data(), mont->N.d,
+              mont->n0, words);
+#else
     CHECK_ABI(bn_mul_mont, r.data(), a.data(), b.data(), mont->N.d, mont->n0,
               words);
     CHECK_ABI(bn_mul_mont, r.data(), a.data(), a.data(), mont->N.d, mont->n0,
               words);
+#endif
   }
 }
 #endif   // OPENSSL_BN_ASM_MONT && SUPPORTS_ABI_TEST

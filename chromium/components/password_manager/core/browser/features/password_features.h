@@ -7,6 +7,8 @@
 
 // This file defines all password manager features used in the browser process.
 // Prefer adding new features here instead of "core/common/".
+#include <limits>
+
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "build/build_config.h"
@@ -19,6 +21,12 @@ namespace password_manager::features {
 // auto-approved.
 BASE_DECLARE_FEATURE(kAutoApproveSharedPasswordUpdatesFromSameSender);
 
+#if BUILDFLAG(IS_WIN)
+// OS authentication will use UserConsentVerifier api to trigger Windows Hello
+// authentication.
+BASE_DECLARE_FEATURE(kAuthenticateUsingNewWindowsHelloApi);
+#endif  // BUILDFLAG(IS_WIN)
+
 // Enables Biometrics for the Touch To Fill feature. This only effects Android.
 BASE_DECLARE_FEATURE(kBiometricTouchToFill);
 
@@ -28,20 +36,6 @@ BASE_DECLARE_FEATURE(kButterOnDesktopFollowup);
 
 // Delete undecryptable passwords from the store when Sync is active.
 BASE_DECLARE_FEATURE(kClearUndecryptablePasswordsOnSync);
-
-// Disables fallback filling if the server or the autocomplete attribute says it
-// is a credit card field.
-BASE_DECLARE_FEATURE(kDisablePasswordsDropdownForCvcFields);
-
-#if BUILDFLAG(IS_ANDROID)
-// Disables eviction from UPM when error occurs and instead disables password
-// manager until the error is gone.
-BASE_DECLARE_FEATURE(kRemoveUPMUnenrollment);
-#endif  // BUILDFLAG(IS_ANDROID)
-
-// Enables a second, Gaia-account-scoped password store for users who are signed
-// in but not syncing.
-BASE_DECLARE_FEATURE(kEnablePasswordsAccountStorage);
 
 #if BUILDFLAG(IS_ANDROID)
 // Enables filling password on a website when there is saved password on
@@ -64,6 +58,9 @@ BASE_DECLARE_FEATURE(kFillOnAccountSelect);
 // Enables filling for sign-in UFF on iOS.
 BASE_DECLARE_FEATURE(kIOSPasswordSignInUff);
 #endif
+
+// Enables saving enterprise password hashes to a local state preference.
+BASE_DECLARE_FEATURE(kLocalStateEnterprisePasswordHashes);
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 // Enables new confirmation bubble flow if generated password was used in a
@@ -94,10 +91,13 @@ BASE_DECLARE_FEATURE(kPasswordManagerEnableSenderService);
 // terminal.
 BASE_DECLARE_FEATURE(kPasswordManagerLogToTerminal);
 
+// Enables triggering password suggestions through the context menu.
+BASE_DECLARE_FEATURE(kPasswordManualFallbackAvailable);
+
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 // Enables "Needs access to keychain, restart chrome" bubble and banner.
 BASE_DECLARE_FEATURE(kRestartToGainAccessToKeychain);
-#endif  // BUILDFLAG(IS_MAC)
+#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
 // Enables the notification UI that is displayed to the user when visiting a
 // website for which a stored password has been shared by another user.
@@ -113,11 +113,36 @@ BASE_DECLARE_FEATURE(kSkipUndecryptablePasswords);
 // UnifiedPasswordManagerLocalPasswordsAndroidWithMigration will replace this
 // feature once UPM starts to be rolled out to users who have saved local
 // passwords.
+// See also kLocalUpmMinGmsVersionParam below.
 BASE_DECLARE_FEATURE(kUnifiedPasswordManagerLocalPasswordsAndroidNoMigration);
 
 // Enables use of Google Mobile services for non-synced password storage add for
 // users who have local passwords saved.
+// See also kLocalUpmMinGmsVersionParam below.
 BASE_DECLARE_FEATURE(kUnifiedPasswordManagerLocalPasswordsAndroidWithMigration);
+
+// Helper function which returns the delay when the local passwords migration is
+// triggered after Chrome startup in seconds.
+int GetLocalPasswordsMigrationToAndroidBackendDelay();
+
+// Enables UPM M4 that no longer needs Password sync engine to sync passwords.
+BASE_DECLARE_FEATURE(kUnifiedPasswordManagerSyncOnlyInGMSCore);
+
+// A parameter for both the NoMigration and WithMigration features above. It
+// dictates the min value of base::android::BuildInfo::gms_version_code() for
+// the flag take effect.
+inline constexpr char kLocalUpmMinGmsVersionParam[] = "min_gms_version";
+// Default value of kLocalUpmMinGmsVersionParam.
+inline constexpr int kDefaultLocalUpmMinGmsVersion = 240212000;
+// The min GMS version, which supports UPM for syncing users.
+inline constexpr int kAccountUpmMinGmsVersion = 223012000;
+
+// Same as above, but for automotive.
+inline constexpr char kLocalUpmMinGmsVersionParamForAuto[] =
+    "min_gms_version_for_auto";
+inline constexpr int kDefaultLocalUpmMinGmsVersionForAuto =
+    std::numeric_limits<int>::max();
+
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 // Improves PSL matching capabilities by utilizing PSL-extension list from
@@ -173,14 +198,6 @@ BASE_DECLARE_FEATURE(kUseGMSCoreForBrandingInfo);
 #endif
 
 // All features parameters in alphabetical order.
-
-#if BUILDFLAG(IS_ANDROID)
-// Minimum GMSCore version required to remove unenrollment. Setting version
-// lower than the default one will have no effect.
-inline constexpr base::FeatureParam<int>
-    kMinimumGMSCoreVersionToRemoveUnenrollment{
-        &kRemoveUPMUnenrollment, "min_gms_core_version", 225012000};
-#endif
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)  // Desktop
 // This enum supports enabling specific arms of the

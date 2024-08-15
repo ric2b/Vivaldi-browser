@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import '//resources/cr_elements/cr_input/cr_input.js';
-import '//resources/cr_elements/cr_shared_style.css.js';
+import '//resources/ash/common/cr_elements/cr_input/cr_input.js';
+import '//resources/ash/common/cr_elements/cr_shared_style.css.js';
 import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '../../components/oobe_icons.html.js';
 import '../../components/common_styles/oobe_common_styles.css.js';
@@ -20,8 +20,8 @@ import {mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/p
 
 import {LoginScreenBehavior, LoginScreenBehaviorInterface} from '../../components/behaviors/login_screen_behavior.js';
 import {MultiStepBehavior, MultiStepBehaviorInterface} from '../../components/behaviors/multi_step_behavior.js';
-import {OobeI18nBehavior, OobeI18nBehaviorInterface} from '../../components/behaviors/oobe_i18n_behavior.js';
-import {OOBE_UI_STATE} from '../../components/display_manager_types.js';
+import {OobeI18nMixin, OobeI18nMixinInterface} from '../../components/mixins/oobe_i18n_mixin.js';
+import {OobeUiState} from '../../components/display_manager_types.js';
 import {OobeTypes} from '../../components/oobe_types.js';
 
 import {getTemplate} from './pin_setup.html.js';
@@ -34,9 +34,9 @@ enum PinSetupState {
 
 const PinSetupBase =
     mixinBehaviors(
-        [OobeI18nBehavior, LoginScreenBehavior, MultiStepBehavior],
-        PolymerElement) as {
-      new (): PolymerElement & OobeI18nBehaviorInterface &
+        [LoginScreenBehavior, MultiStepBehavior],
+        OobeI18nMixin(PolymerElement)) as {
+      new (): PolymerElement & OobeI18nMixinInterface &
           LoginScreenBehaviorInterface & MultiStepBehaviorInterface,
     };
 
@@ -117,8 +117,8 @@ class PinSetup extends PinSetupBase {
 
   /** Initial UI State for screen */
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  override getOobeUIInitialState(): OOBE_UI_STATE {
-    return OOBE_UI_STATE.ONBOARDING;
+  override getOobeUIInitialState(): OobeUiState {
+    return OobeUiState.ONBOARDING;
   }
 
   override ready(): void {

@@ -703,8 +703,7 @@ void EdidParser::ParseEdid(const std::vector<uint8_t>& edid) {
             if (supported_eotfs_bitfield[entry])
               supported_color_transfer_ids_.insert(kTransferIDMap[entry]);
           }
-          hdr_static_metadata_ =
-              absl::make_optional<gfx::HDRStaticMetadata>({});
+          hdr_static_metadata_ = std::make_optional<gfx::HDRStaticMetadata>({});
           hdr_static_metadata_->supported_eotf_mask =
               base::checked_cast<uint8_t>(supported_eotfs_bitfield.to_ulong());
 
@@ -794,7 +793,8 @@ void EdidParser::ParseDisplayIdExtension(const std::vector<uint8_t>& edid,
   const size_t max_offset =
       std::min(edid.size(),
                displayid_data_block_base + num_bytes_in_section_data_blocks);
-  while (current_data_block_offset < max_offset
+  while (current_data_block_offset + kDataBlockNumPayloadBytesOffset <
+             max_offset
          // If there are no remaining data blocks before the fixed 121 bytes of
          // section data block space runs out, the remaining space is padded
          // with 0. Since there are no data block tag with ID 0, if a data block
@@ -832,6 +832,10 @@ void EdidParser::ParseTiledDisplayBlock(const std::vector<uint8_t>& edid,
   constexpr size_t kTileCapabilitiesOffset = 3;
   constexpr uint8_t kSingleTileBehaviorBitmask = 0b111;
   constexpr uint8_t kSingleTileStretchToFit = 0x02;
+
+  if (edid.size() <= block_offset + kTileCapabilitiesOffset) {
+    return;
+  }
 
   tile_can_scale_to_fit_ =
       (edid[block_offset + kTileCapabilitiesOffset] &

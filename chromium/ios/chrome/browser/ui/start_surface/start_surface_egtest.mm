@@ -6,9 +6,11 @@
 
 #import "base/test/ios/wait_util.h"
 #import "base/time/time.h"
+#import "build/branding_buildflags.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/tab_resumption/tab_resumption_constants.h"
+#import "ios/chrome/browser/ui/ntp/ntp_app_interface.h"
 #import "ios/chrome/browser/ui/start_surface/start_surface_features.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -61,9 +63,8 @@ void WaitUntilTabResumptionTileVisibleOrTimeout(bool should_show) {
   config.relaunch_policy = ForceRelaunchByCleanShutdown;
   config.additional_args.push_back(
       "--enable-features=" + std::string(kStartSurface.name) + "<" +
-      std::string(kStartSurface.name) + "," + std::string(kMagicStack.name) +
-      "," + std::string(kTabResumption.name) + ":" +
-      kTabResumptionParameterName + "/" + kTabResumptionAllTabsParam);
+      std::string(kStartSurface.name) + "," + std::string(kTabResumption.name) +
+      ":" + kTabResumptionParameterName + "/" + kTabResumptionAllTabsParam);
   config.additional_args.push_back(
       "--force-fieldtrials=" + std::string(kStartSurface.name) + "/Test");
   config.additional_args.push_back(
@@ -75,6 +76,8 @@ void WaitUntilTabResumptionTileVisibleOrTimeout(bool should_show) {
 
 - (void)setUp {
   [super setUp];
+  [NTPAppInterface recordModuleFreshnessSignalForType:
+                       ContentSuggestionsModuleType::kTabResumption];
   [[self class] closeAllTabs];
   [ChromeEarlGrey openNewTab];
 }

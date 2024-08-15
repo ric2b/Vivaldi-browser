@@ -173,7 +173,7 @@ bool Frame::Detach(FrameDetachType type) {
   // the frame tree. https://crbug.com/578349.
   DisconnectOwnerElement();
   page_ = nullptr;
-  embedding_token_ = absl::nullopt;
+  embedding_token_ = std::nullopt;
 
   return true;
 }
@@ -288,10 +288,21 @@ void Frame::DidChangeVisibilityState() {
     child_frames[i]->DidChangeVisibilityState();
 }
 
+void Frame::NotifyUserActivationInFrameTreeStickyOnly() {
+  NotifyUserActivationInFrameTree(
+      mojom::blink::UserActivationNotificationType::kNone,
+      /*sticky_only=*/true);
+}
+
 void Frame::NotifyUserActivationInFrameTree(
-    mojom::blink::UserActivationNotificationType notification_type) {
+    mojom::blink::UserActivationNotificationType notification_type,
+    bool sticky_only) {
   for (Frame* node = this; node; node = node->Tree().Parent()) {
-    node->user_activation_state_.Activate(notification_type);
+    if (sticky_only) {
+      node->user_activation_state_.SetHasBeenActive();
+    } else {
+      node->user_activation_state_.Activate(notification_type);
+    }
     auto* local_node = DynamicTo<LocalFrame>(node);
     if (local_node) {
       local_node->SetHadUserInteraction(true);
@@ -312,7 +323,11 @@ void Frame::NotifyUserActivationInFrameTree(
       if (local_frame_node &&
           security_origin->CanAccess(
               local_frame_node->GetSecurityContext()->GetSecurityOrigin())) {
-        node->user_activation_state_.Activate(notification_type);
+        if (sticky_only) {
+          node->user_activation_state_.SetHasBeenActive();
+        } else {
+          node->user_activation_state_.Activate(notification_type);
+        }
         local_frame_node->SetHadUserInteraction(true);
       }
     }
@@ -380,15 +395,15 @@ bool Frame::IsFencedFrameRoot() const {
   return IsInFencedFrameTree() && IsMainFrame();
 }
 
-absl::optional<blink::FencedFrame::DeprecatedFencedFrameMode>
+std::optional<blink::FencedFrame::DeprecatedFencedFrameMode>
 Frame::GetDeprecatedFencedFrameMode() const {
   DCHECK(!IsDetached());
 
   if (!features::IsFencedFramesEnabled())
-    return absl::nullopt;
+    return std::nullopt;
 
   if (!IsInFencedFrameTree())
-    return absl::nullopt;
+    return std::nullopt;
 
   return GetPage()->DeprecatedFencedFrameMode();
 }

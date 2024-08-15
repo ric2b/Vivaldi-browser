@@ -46,7 +46,7 @@ class FakeWebGraphicsContext3DProvider : public WebGraphicsContext3DProvider {
           std::make_unique<gpu::raster::RasterImplementationGLES>(
               gl_, nullptr, capabilities_);
       test_shared_image_interface_ =
-          std::make_unique<viz::TestSharedImageInterface>();
+          base::MakeRefCounted<viz::TestSharedImageInterface>();
     }
 
     webgpu_interface_ = std::make_unique<gpu::webgpu::WebGPUInterfaceStub>();
@@ -68,7 +68,7 @@ class FakeWebGraphicsContext3DProvider : public WebGraphicsContext3DProvider {
 
     if (!raster_context_provider_) {
       test_shared_image_interface_ =
-          std::make_unique<viz::TestSharedImageInterface>();
+          base::MakeRefCounted<viz::TestSharedImageInterface>();
     }
     webgpu_interface_ = std::make_unique<gpu::webgpu::WebGPUInterfaceStub>();
 
@@ -147,19 +147,19 @@ class FakeWebGraphicsContext3DProvider : public WebGraphicsContext3DProvider {
 
  private:
   cc::StubDecodeCache stub_image_decode_cache_;
-  std::unique_ptr<viz::TestSharedImageInterface> test_shared_image_interface_;
-  raw_ptr<gpu::gles2::GLES2Interface, ExperimentalRenderer> gl_ = nullptr;
+  scoped_refptr<viz::TestSharedImageInterface> test_shared_image_interface_;
+  raw_ptr<gpu::gles2::GLES2Interface, DanglingUntriaged> gl_ = nullptr;
   std::unique_ptr<gpu::raster::RasterInterface> raster_interface_;
-  raw_ptr<gpu::raster::RasterInterface, ExperimentalRenderer>
+  raw_ptr<gpu::raster::RasterInterface, DanglingUntriaged>
       external_raster_interface_ = nullptr;
   std::unique_ptr<gpu::webgpu::WebGPUInterfaceStub> webgpu_interface_;
   sk_sp<GrDirectContext> gr_context_;
   gpu::Capabilities capabilities_;
   gpu::GpuFeatureInfo gpu_feature_info_;
   WebglPreferences webgl_preferences_;
-  raw_ptr<cc::ImageDecodeCache, ExperimentalRenderer> image_decode_cache_ =
+  raw_ptr<cc::ImageDecodeCache, DanglingUntriaged> image_decode_cache_ =
       nullptr;
-  raw_ptr<viz::TestContextProvider, ExperimentalRenderer>
+  raw_ptr<viz::TestContextProvider, DanglingUntriaged>
       raster_context_provider_ = nullptr;
 };
 

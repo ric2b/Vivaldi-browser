@@ -182,19 +182,13 @@ void OffscreenCanvas::SetSize(gfx::Size size) {
   if (context_) {
     if (context_->IsWebGL() || IsWebGPU()) {
       context_->Reshape(Size().width(), Size().height());
-    } else if (context_->IsRenderingContext2D()) {
+    } else if (context_->IsRenderingContext2D() ||
+               context_->IsImageBitmapRenderingContext()) {
       context_->Reset();
       origin_clean_ = true;
     }
     context_->DidDraw(CanvasPerformanceMonitor::DrawType::kOther);
   }
-}
-
-ScriptPromise OffscreenCanvas::convertToBlob(ScriptState* script_state,
-                                             const ImageEncodeOptions* options,
-                                             ExceptionState& exception_state) {
-  return CanvasRenderingContextHost::convertToBlob(script_state, options,
-                                                   exception_state, context_);
 }
 
 void OffscreenCanvas::RecordTransfer() {
@@ -221,6 +215,12 @@ ImageBitmap* OffscreenCanvas::transferToImageBitmap(
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "Cannot transfer an ImageBitmap from an "
                                       "OffscreenCanvas with no context");
+    return nullptr;
+  }
+  if (ContextHasOpenLayers(context_)) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "`transferToImageBitmap()` cannot be called with open layers.");
     return nullptr;
   }
 
@@ -262,6 +262,10 @@ scoped_refptr<Image> OffscreenCanvas::GetSourceImageForCanvas(
                          surface->makeImageSnapshot())
                    : nullptr;
   }
+  if (ContextHasOpenLayers(context_)) {
+    *status = kLayersOpenInCanvasSource;
+    return nullptr;
+  }
   if (!size.width() || !size.height()) {
     *status = kZeroSizeCanvasSourceImageStatus;
     return nullptr;
@@ -282,11 +286,17 @@ gfx::Size OffscreenCanvas::BitmapSourceSize() const {
   return Size();
 }
 
-ScriptPromise OffscreenCanvas::CreateImageBitmap(
+ScriptPromiseTyped<ImageBitmap> OffscreenCanvas::CreateImageBitmap(
     ScriptState* script_state,
-    absl::optional<gfx::Rect> crop_rect,
+    std::optional<gfx::Rect> crop_rect,
     const ImageBitmapOptions* options,
     ExceptionState& exception_state) {
+  if (ContextHasOpenLayers(context_)) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "`createImageBitmap()` cannot be called with open layers.");
+    return ScriptPromiseTyped<ImageBitmap>();
+  }
   if (context_) {
     context_->FinalizeFrame(FlushReason::kCreateImageBitmap);
   }
@@ -296,6 +306,78 @@ ScriptPromise OffscreenCanvas::CreateImageBitmap(
           ? MakeGarbageCollected<ImageBitmap>(this, crop_rect, options)
           : nullptr,
       options, exception_state);
+}
+
+ScriptPromiseTyped<Blob> OffscreenCanvas::convertToBlob(
+    ScriptState* script_state,
+    const ImageEncodeOptions* options,
+    ExceptionState& exception_state) {
+  DCHECK(IsOffscreenCanvas());
+  WTF::String object_name = "OffscreenCanvas";
+  std::stringstream error_msg;
+
+  if (is_neutered_) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "OffscreenCanvas object is detached.");
+    return ScriptPromiseTyped<Blob>();
+  }
+
+  if (ContextHasOpenLayers(context_)) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "`convertToBlob()` cannot be called while layers are opened.");
+    return ScriptPromiseTyped<Blob>();
+  }
+
+  if (!OriginClean()) {
+    error_msg << "Tainted " << object_name << " may not be exported.";
+    exception_state.ThrowSecurityError(error_msg.str().c_str());
+    return ScriptPromiseTyped<Blob>();
+  }
+
+  // It's possible that there are recorded commands that have not been resolved
+  // Finalize frame will be called in GetImage, but if there's no
+  // resourceProvider yet then the IsPaintable check will fail
+  if (context_) {
+    context_->FinalizeFrame(FlushReason::kToBlob);
+  }
+
+  if (!IsPaintable() || Size().IsEmpty()) {
+    error_msg << "The size of " << object_name << " is zero.";
+    exception_state.ThrowDOMException(DOMExceptionCode::kIndexSizeError,
+                                      error_msg.str().c_str());
+    return ScriptPromiseTyped<Blob>();
+  }
+
+  if (!context_) {
+    error_msg << object_name << " has no rendering context.";
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      error_msg.str().c_str());
+    return ScriptPromiseTyped<Blob>();
+  }
+
+  base::TimeTicks start_time = base::TimeTicks::Now();
+  scoped_refptr<StaticBitmapImage> image_bitmap =
+      context_->GetImage(FlushReason::kToBlob);
+  if (image_bitmap) {
+    auto* resolver = MakeGarbageCollected<ScriptPromiseResolverTyped<Blob>>(
+        script_state, exception_state.GetContext());
+    CanvasAsyncBlobCreator::ToBlobFunctionType function_type =
+        CanvasAsyncBlobCreator::kOffscreenCanvasConvertToBlobPromise;
+    auto* execution_context = ExecutionContext::From(script_state);
+    auto* async_creator = MakeGarbageCollected<CanvasAsyncBlobCreator>(
+        image_bitmap, options, function_type, start_time, execution_context,
+        IdentifiabilityStudySettings::Get()->ShouldSampleType(
+            IdentifiableSurface::Type::kCanvasReadback)
+            ? IdentifiabilityInputDigest(context_)
+            : 0,
+        resolver);
+    async_creator->ScheduleAsyncBlobCreation(options->quality());
+    return resolver->Promise();
+  }
+  exception_state.ThrowDOMException(DOMExceptionCode::kNotReadableError,
+                                    "Readback of the source image has failed.");
+  return ScriptPromiseTyped<Blob>();
 }
 
 bool OffscreenCanvas::IsOpaque() const {
@@ -446,6 +528,7 @@ CanvasResourceProvider* OffscreenCanvas::GetOrCreateResourceProvider() {
       (HasPlaceholderCanvas() && SharedGpuContext::IsGpuCompositingEnabled());
   const bool use_scanout =
       use_shared_image && HasPlaceholderCanvas() &&
+      SharedGpuContext::MaySupportImageChromium() &&
       (IsWebGPU() ||
        (IsWebGL() && RuntimeEnabledFeatures::WebGLImageChromiumEnabled()) ||
        (IsRenderingContext2D() &&
@@ -529,6 +612,9 @@ void OffscreenCanvas::SetFilterQualityInResource(
   SetFilterQuality(filter_quality);
   if (ResourceProvider())
     GetOrCreateResourceProvider()->SetFilterQuality(filter_quality);
+  if (context_ && (IsWebGL() || IsWebGPU())) {
+    context_->SetFilterQuality(filter_quality);
+  }
 }
 
 bool OffscreenCanvas::PushFrameIfNeeded() {
@@ -586,10 +672,10 @@ void OffscreenCanvas::NotifyGpuContextLost() {
 void OffscreenCanvas::CheckForGpuContextLost() {
   // If the GPU has crashed, it is necessary to notify the OffscreenCanvas so
   // the context can be recovered.
-  if (ResourceProvider() && ResourceProvider()->IsAccelerated() &&
+  if (!context_lost() && ResourceProvider() &&
+      ResourceProvider()->IsAccelerated() &&
       ResourceProvider()->IsGpuContextLost()) {
     set_context_lost(true);
-    ReplaceResourceProvider(nullptr);
     NotifyGpuContextLost();
   }
 }

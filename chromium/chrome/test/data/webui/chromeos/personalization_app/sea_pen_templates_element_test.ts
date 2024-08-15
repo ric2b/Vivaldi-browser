@@ -30,16 +30,14 @@ suite('SeaPenTemplatesElementTest', function() {
     seaPenTemplatesElement = initElement(SeaPenTemplatesElement);
     await waitAfterNextRender(seaPenTemplatesElement);
 
-    const templates =
-        seaPenTemplatesElement.shadowRoot!
-            .querySelectorAll<WallpaperGridItemElement>(
-                `${WallpaperGridItemElement.is}[data-sea-pen-image]`);
-    assertEquals(12, templates.length, 'there are 12 templates');
-    assertEquals(templates[1]!.innerText, 'Minerals');
+    const templates = seaPenTemplatesElement.shadowRoot!.querySelectorAll<
+        WallpaperGridItemElement>(
+        `${WallpaperGridItemElement.is}[data-sea-pen-image]:not([hidden])`);
+    assertEquals(8, templates.length, 'there are 8 templates');
+    await waitAfterNextRender(templates[1]!);
+    assertEquals(templates[1]!.innerText, 'Airbrushed');
     templates[1]!.dispatchEvent(new CustomEvent('mouseover', {bubbles: true}));
-    await waitAfterNextRender(seaPenTemplatesElement);
-    assertEquals(
-        templates[1]!.innerText,
-        'A close-up image of\nagate\nwith\nwarm\nhues');
+    await waitAfterNextRender(templates[1]!);
+    assertEquals(templates[1]!.innerText, 'A radiant\npink\norchid\nin bloom');
   });
 });

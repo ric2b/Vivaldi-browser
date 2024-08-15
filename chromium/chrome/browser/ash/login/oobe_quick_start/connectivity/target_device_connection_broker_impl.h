@@ -50,7 +50,7 @@ class TargetDeviceConnectionBrokerImpl
   };
 
   TargetDeviceConnectionBrokerImpl(
-      SessionContext session_context,
+      SessionContext* session_context,
       QuickStartConnectivityService* quick_start_connectivity_service,
       std::unique_ptr<Connection::Factory> connection_factory);
   TargetDeviceConnectionBrokerImpl(TargetDeviceConnectionBrokerImpl&) = delete;
@@ -114,14 +114,12 @@ class TargetDeviceConnectionBrokerImpl
   scoped_refptr<device::BluetoothAdapter> bluetooth_adapter_;
   base::OnceClosure deferred_start_advertising_callback_;
 
-  SessionContext session_context_;
+  raw_ptr<SessionContext> session_context_;
   std::unique_ptr<FastPairAdvertiser> fast_pair_advertiser_;
 
   raw_ptr<QuickStartConnectivityService> quick_start_connectivity_service_;
   std::unique_ptr<Connection::Factory> connection_factory_;
   std::unique_ptr<Connection> connection_;
-
-  bool is_resume_after_update_;
 
   base::OneShotTimer
       nearby_connections_advertisement_after_update_timeout_timer_;

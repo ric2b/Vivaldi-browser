@@ -33,7 +33,6 @@ class ASH_PUBLIC_EXPORT LoginScreenTestApi {
   static bool IsRestartButtonShown();
   static bool IsShutdownButtonShown();
   static bool IsAppsButtonShown();
-  static bool IsAuthErrorBubbleShown();
   static bool IsGuestButtonShown();
   static bool IsAddUserButtonShown();
   static bool IsCancelButtonShown();
@@ -99,6 +98,7 @@ class ASH_PUBLIC_EXPORT LoginScreenTestApi {
   static std::u16string GetShutDownButtonLabel();
   static gfx::Rect GetShutDownButtonTargetBounds();
   static gfx::Rect GetShutDownButtonMirroredBounds();
+  static std::string GetAppsButtonClassName();
 
   static void SetPinRequestWidgetShownCallback(
       base::RepeatingClosure on_pin_request_widget_shown);
@@ -106,10 +106,18 @@ class ASH_PUBLIC_EXPORT LoginScreenTestApi {
   static void SubmitPinRequestWidget(const std::string& pin);
   static void CancelPinRequestWidget();
 
+  // Local authentication dialog methods.
   static bool IsLocalAuthenticationDialogVisible();
   static void CancelLocalAuthenticationDialog();
   static void SubmitPasswordLocalAuthenticationDialog(
       const std::string& password);
+
+  // AuthErrorBubble methods.
+  static bool IsAuthErrorBubbleShown();
+  static void ShowAuthError(int unlock_attempt);
+  static void HideAuthError();
+  static void PressAuthErrorRecoveryButton();
+  static void PressAuthErrorLearnMoreButton();
 };
 
 }  // namespace ash

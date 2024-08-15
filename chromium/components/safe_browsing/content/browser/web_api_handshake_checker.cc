@@ -31,17 +31,10 @@ class WebApiHandshakeChecker::CheckerOnSB {
     DCHECK(handshake_checker_);
     DCHECK(delegate_getter_);
     DCHECK(web_contents_getter_);
-
-    content::WebContents* contents = web_contents_getter_.Run();
-    if (!!contents) {
-      last_committed_url_ = contents->GetLastCommittedURL();
-    }
   }
 
   void Check(const GURL& url) {
-    DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(kSafeBrowsingOnUIThread)
-                            ? content::BrowserThread::UI
-                            : content::BrowserThread::IO);
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     DCHECK(delegate_getter_);
     DCHECK(web_contents_getter_);
 
@@ -76,16 +69,16 @@ class WebApiHandshakeChecker::CheckerOnSB {
         url_checker_delegate, web_contents_getter_, /*weak_web_state=*/nullptr,
         /*render_process_id=*/content::ChildProcessHost::kInvalidUniqueID,
         /*render_frame_token=*/std::nullopt, frame_tree_node_id_,
-        /*navigation_id=*/absl::nullopt,
+        /*navigation_id=*/std::nullopt,
         /*url_real_time_lookup_enabled=*/false,
-        /*can_urt_check_subresource_url=*/false,
         /*can_check_db=*/true, /*can_check_high_confidence_allowlist=*/true,
-        /*url_lookup_service_metric_suffix=*/".None", last_committed_url_,
+        /*url_lookup_service_metric_suffix=*/".None",
         content::GetUIThreadTaskRunner({}),
         /*url_lookup_service=*/nullptr,
         /*hash_realtime_service_on_ui=*/nullptr,
         /*hash_realtime_selection=*/
-        hash_realtime_utils::HashRealTimeSelection::kNone);
+        hash_realtime_utils::HashRealTimeSelection::kNone,
+        /*is_async_check=*/false, SessionID::InvalidValue());
     url_checker_->CheckUrl(
         url, "GET",
         base::BindOnce(&WebApiHandshakeChecker::CheckerOnSB::OnCheckUrlResult,
@@ -102,9 +95,7 @@ class WebApiHandshakeChecker::CheckerOnSB {
       bool showed_interstitial,
       bool has_post_commit_interstitial_skipped,
       SafeBrowsingUrlCheckerImpl::PerformedCheck performed_check) {
-    DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(kSafeBrowsingOnUIThread)
-                            ? content::BrowserThread::UI
-                            : content::BrowserThread::IO);
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     if (!slow_check_notifier) {
       OnCompleteCheckInternal(proceed);
       return;
@@ -124,23 +115,14 @@ class WebApiHandshakeChecker::CheckerOnSB {
   }
 
   void OnCompleteCheckInternal(bool proceed) {
-    DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(kSafeBrowsingOnUIThread)
-                            ? content::BrowserThread::UI
-                            : content::BrowserThread::IO);
-    if (base::FeatureList::IsEnabled(kSafeBrowsingOnUIThread)) {
-      handshake_checker_->OnCompleteCheck(proceed);
-    } else {
-      content::GetUIThreadTaskRunner({})->PostTask(
-          FROM_HERE, base::BindOnce(&WebApiHandshakeChecker::OnCompleteCheck,
-                                    handshake_checker_, proceed));
-    }
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+    handshake_checker_->OnCompleteCheck(proceed);
   }
 
   base::WeakPtr<WebApiHandshakeChecker> handshake_checker_;
   GetDelegateCallback delegate_getter_;
   GetWebContentsCallback web_contents_getter_;
   const int frame_tree_node_id_;
-  GURL last_committed_url_;
   std::unique_ptr<SafeBrowsingUrlCheckerImpl> url_checker_;
   base::WeakPtrFactory<CheckerOnSB> weak_factory_{this};
 };
@@ -157,23 +139,13 @@ WebApiHandshakeChecker::WebApiHandshakeChecker(
 
 WebApiHandshakeChecker::~WebApiHandshakeChecker() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (!base::FeatureList::IsEnabled(kSafeBrowsingOnUIThread)) {
-    content::GetIOThreadTaskRunner({})->DeleteSoon(FROM_HERE,
-                                                   std::move(sb_checker_));
-  }
 }
 
 void WebApiHandshakeChecker::Check(const GURL& url, CheckCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(!check_callback_);
   check_callback_ = std::move(callback);
-  if (base::FeatureList::IsEnabled(kSafeBrowsingOnUIThread)) {
-    sb_checker_->Check(url);
-  } else {
-    content::GetIOThreadTaskRunner({})->PostTask(
-        FROM_HERE, base::BindOnce(&WebApiHandshakeChecker::CheckerOnSB::Check,
-                                  sb_checker_->AsWeakPtr(), url));
-  }
+  sb_checker_->Check(url);
 }
 
 void WebApiHandshakeChecker::OnCompleteCheck(bool proceed) {

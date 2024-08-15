@@ -121,8 +121,8 @@ CompoundRtcpParser::CompoundRtcpParser(RtcpSession* session,
     : session_(session),
       client_(client),
       latest_receiver_timestamp_(kNullTimePoint) {
-  OSP_DCHECK(session_);
-  OSP_DCHECK(client_);
+  OSP_CHECK(session_);
+  OSP_CHECK(client_);
 }
 
 CompoundRtcpParser::~CompoundRtcpParser() = default;
@@ -351,7 +351,7 @@ bool CompoundRtcpParser::ParseFeedback(ByteView in,
                                        milliseconds* target_playout_delay,
                                        std::vector<FrameId>* received_frames,
                                        std::vector<PacketNack>& packet_nacks) {
-  OSP_DCHECK(!max_feedback_frame_id.is_null());
+  OSP_CHECK(!max_feedback_frame_id.is_null());
 
   if (static_cast<int>(in.size()) < kRtcpFeedbackHeaderSize) {
     return false;

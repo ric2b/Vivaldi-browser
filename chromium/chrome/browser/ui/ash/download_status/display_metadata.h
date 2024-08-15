@@ -11,6 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "chromeos/crosapi/mojom/download_status_updater.mojom.h"
 #include "ui/gfx/image/image_skia.h"
 
 namespace gfx {
@@ -22,11 +23,13 @@ namespace ash::download_status {
 // Lists the types of commands that can be performed on a displayed download.
 enum class CommandType {
   kCancel,
+  kCopyToClipboard,
   kOpenFile,
   kPause,
   kResume,
   kShowInBrowser,
   kShowInFolder,
+  kViewDetailsInBrowser,
 };
 
 // The metadata to display a download command.
@@ -58,8 +61,7 @@ class Progress {
  public:
   Progress();
 
-  // Creates an instance for the specified `received_bytes`, `total_bytes` and
-  // `complete`. NOTE:
+  // Creates an instance for the specified progress attributes. NOTE:
   // 1. The values of `received_bytes` and `total_bytes`, if any, must be
   //    non-negative.
   // 2. `received_bytes` must not be greater than `total_bytes` unless the
@@ -68,9 +70,12 @@ class Progress {
   //    values and be equal.
   Progress(const std::optional<int64_t>& received_bytes,
            const std::optional<int64_t>& total_bytes,
-           bool complete);
+           bool complete,
+           bool hidden);
 
   bool complete() const { return complete_; }
+
+  bool hidden() const { return hidden_; }
 
   const std::optional<int64_t>& received_bytes() const {
     return received_bytes_;
@@ -82,6 +87,9 @@ class Progress {
   std::optional<int64_t> received_bytes_;
   std::optional<int64_t> total_bytes_;
   bool complete_;
+
+  // True if progress data should not be visibly represented.
+  bool hidden_;
 };
 
 // The metadata used to display downloads.
@@ -97,6 +105,10 @@ struct DisplayMetadata {
   // The path to the file that bytes are actually written to during download.
   // NOTE: This path is different from the download target path.
   base::FilePath file_path;
+
+  // Points to valid dark/light mode download status icons. Null if either icon
+  // is missing or invalid.
+  crosapi::mojom::DownloadStatusIconsPtr icons;
 
   // A nullable image that represents the underlying download.
   gfx::ImageSkia image;

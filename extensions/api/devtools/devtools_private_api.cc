@@ -26,7 +26,7 @@ DevtoolsPrivateGetDockingStateSizesFunction::Run() {
   using vivaldi::devtools_private::GetDockingStateSizes::Params;
   namespace Results = vivaldi::devtools_private::GetDockingStateSizes::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   int tab_id = params->tab_id;
@@ -62,7 +62,7 @@ ExtensionFunction::ResponseAction DevtoolsPrivateCloseDevtoolsFunction::Run() {
   using vivaldi::devtools_private::CloseDevtools::Params;
   namespace Results = vivaldi::devtools_private::CloseDevtools::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   int tab_id = params->tab_id;
@@ -110,7 +110,7 @@ ExtensionFunction::ResponseAction DevtoolsPrivateCloseDevtoolsFunction::Run() {
 ExtensionFunction::ResponseAction DevtoolsPrivateToggleDevtoolsFunction::Run() {
   using vivaldi::devtools_private::ToggleDevtools::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   PanelType panelType = params->panel_type;

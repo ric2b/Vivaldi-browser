@@ -46,12 +46,10 @@ Result<SuccessType> ValidateBindingOptions(const Options& options) {
 
     auto wgsl_seen = [&diagnostics, &seen_wgsl_bindings](const tint::BindingPoint& src,
                                                          const binding::BindingInfo& dst) -> bool {
-        if (auto binding = seen_wgsl_bindings.Find(src)) {
+        if (auto binding = seen_wgsl_bindings.Get(src)) {
             if (*binding != dst) {
-                std::stringstream str;
-                str << "found duplicate WGSL binding point: " << src;
-
-                diagnostics.add_error(diag::System::Writer, str.str());
+                diagnostics.AddError(diag::System::Writer, Source{})
+                    << "found duplicate WGSL binding point: " << src;
                 return true;
             }
         }
@@ -61,12 +59,11 @@ Result<SuccessType> ValidateBindingOptions(const Options& options) {
 
     auto spirv_seen = [&diagnostics, &seen_spirv_bindings](const binding::BindingInfo& src,
                                                            const tint::BindingPoint& dst) -> bool {
-        if (auto binding = seen_spirv_bindings.Find(src)) {
+        if (auto binding = seen_spirv_bindings.Get(src)) {
             if (*binding != dst) {
-                std::stringstream str;
-                str << "found duplicate SPIR-V binding point: [group: " << src.group
+                diagnostics.AddError(diag::System::Writer, Source{})
+                    << "found duplicate SPIR-V binding point: [group: " << src.group
                     << ", binding: " << src.binding << "]";
-                diagnostics.add_error(diag::System::Writer, str.str());
                 return true;
             }
         }
@@ -91,23 +88,23 @@ Result<SuccessType> ValidateBindingOptions(const Options& options) {
     };
 
     if (!valid(options.bindings.uniform)) {
-        diagnostics.add_note(diag::System::Writer, "when processing uniform", {});
+        diagnostics.AddNote(diag::System::Writer, Source{}) << "when processing uniform";
         return Failure{std::move(diagnostics)};
     }
     if (!valid(options.bindings.storage)) {
-        diagnostics.add_note(diag::System::Writer, "when processing storage", {});
+        diagnostics.AddNote(diag::System::Writer, Source{}) << "when processing storage";
         return Failure{std::move(diagnostics)};
     }
     if (!valid(options.bindings.texture)) {
-        diagnostics.add_note(diag::System::Writer, "when processing texture", {});
+        diagnostics.AddNote(diag::System::Writer, Source{}) << "when processing texture";
         return Failure{std::move(diagnostics)};
     }
     if (!valid(options.bindings.storage_texture)) {
-        diagnostics.add_note(diag::System::Writer, "when processing storage_texture", {});
+        diagnostics.AddNote(diag::System::Writer, Source{}) << "when processing storage_texture";
         return Failure{std::move(diagnostics)};
     }
     if (!valid(options.bindings.sampler)) {
-        diagnostics.add_note(diag::System::Writer, "when processing sampler", {});
+        diagnostics.AddNote(diag::System::Writer, Source{}) << "when processing sampler";
         return Failure{std::move(diagnostics)};
     }
 
@@ -119,20 +116,24 @@ Result<SuccessType> ValidateBindingOptions(const Options& options) {
 
         // Validate with the actual source regardless of what the remapper will do
         if (wgsl_seen(src_binding, plane0)) {
-            diagnostics.add_note(diag::System::Writer, "when processing external_texture", {});
+            diagnostics.AddNote(diag::System::Writer, Source{})
+                << "when processing external_texture";
             return Failure{std::move(diagnostics)};
         }
 
         if (spirv_seen(plane0, src_binding)) {
-            diagnostics.add_note(diag::System::Writer, "when processing external_texture", {});
+            diagnostics.AddNote(diag::System::Writer, Source{})
+                << "when processing external_texture";
             return Failure{std::move(diagnostics)};
         }
         if (spirv_seen(plane1, src_binding)) {
-            diagnostics.add_note(diag::System::Writer, "when processing external_texture", {});
+            diagnostics.AddNote(diag::System::Writer, Source{})
+                << "when processing external_texture";
             return Failure{std::move(diagnostics)};
         }
         if (spirv_seen(metadata, src_binding)) {
-            diagnostics.add_note(diag::System::Writer, "when processing external_texture", {});
+            diagnostics.AddNote(diag::System::Writer, Source{})
+                << "when processing external_texture";
             return Failure{std::move(diagnostics)};
         }
     }
@@ -187,7 +188,7 @@ void PopulateRemapperAndMultiplanarOptions(const Options& options,
     auto create_remappings = [&remapper_data](const auto& hsh) {
         for (const auto& it : hsh) {
             const BindingPoint& src_binding_point = it.first;
-            const binding::Uniform& dst_binding_point = it.second;
+            const binding::BindingInfo& dst_binding_point = it.second;
 
             // Bindings which go to the same slot in SPIR-V do not need to be re-bound.
             if (src_binding_point.group == dst_binding_point.group &&
@@ -233,19 +234,3 @@ void PopulateRemapperAndMultiplanarOptions(const Options& options,
 }
 
 }  // namespace tint::spirv::writer
-
-namespace std {
-
-/// Custom std::hash specialization for tint::spirv::writer::binding::BindingInfo so
-/// they can be used as keys for std::unordered_map and std::unordered_set.
-template <>
-class hash<tint::spirv::writer::binding::BindingInfo> {
-  public:
-    /// @param info the binding to create a hash for
-    /// @return the hash value
-    inline std::size_t operator()(const tint::spirv::writer::binding::BindingInfo& info) const {
-        return tint::Hash(info.group, info.binding);
-    }
-};
-
-}  // namespace std

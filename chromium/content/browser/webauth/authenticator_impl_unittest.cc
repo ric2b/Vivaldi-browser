@@ -6724,8 +6724,8 @@ class ResidentKeyTestAuthenticatorRequestDelegate
         [](const device::AuthenticatorGetAssertionResponse& response) {
           const device::PublicKeyCredentialUserEntity& user =
               response.user_entity.value();
-          return base::HexEncode(user.id.data(), user.id.size()) + ":" +
-                 user.name.value_or("") + ":" + user.display_name.value_or("");
+          return base::HexEncode(user.id) + ":" + user.name.value_or("") + ":" +
+                 user.display_name.value_or("");
         });
 
     EXPECT_EQ(config_.expected_accounts, base::JoinString(string_reps, "/"));
@@ -6774,13 +6774,11 @@ class ResidentKeyTestAuthenticatorRequestDelegate
       EXPECT_EQ(info.has_platform_authenticator_credential,
                 device::FidoRequestHandlerBase::RecognizedCredential::
                     kHasRecognizedCredential);
-      EXPECT_TRUE(base::Contains(
+      const auto cred = std::ranges::find(
           info.recognized_credentials, *config_.preselected_credential_id,
-          &device::DiscoverableCredentialMetadata::cred_id));
-      std::move(account_preselected_callback_)
-          .Run(device::PublicKeyCredentialDescriptor(
-              device::CredentialType::kPublicKey,
-              *config_.preselected_credential_id));
+          &device::DiscoverableCredentialMetadata::cred_id);
+      ASSERT_NE(cred, info.recognized_credentials.end());
+      std::move(account_preselected_callback_).Run(*cred);
       request_callback_.Run(*config_.preselected_authenticator_id);
     }
   }
@@ -8182,6 +8180,99 @@ TEST_F(ResidentKeyAuthenticatorImplTest, PRFExtension) {
   }
 }
 
+// Tests that the PRF function is evaluated for all credentials in an empty
+// allow-list request. Regression test for crbug.com/1520646.
+TEST_F(ResidentKeyAuthenticatorImplTest, PRFEvaluationForMultipleCreds) {
+  NavigateAndCommit(GURL(kTestOrigin1));
+  device::PublicKeyCredentialDescriptor cred1;
+  device::PublicKeyCredentialDescriptor cred2;
+  device::VirtualCtap2Device::Config config;
+  config.prf_support = false;
+  config.hmac_secret_support = true;
+  config.pin_support = true;
+  config.resident_key_support = true;
+  virtual_device_factory_->SetCtap2Config(config);
+  {
+    PublicKeyCredentialCreationOptionsPtr options =
+        GetTestPublicKeyCredentialCreationOptions();
+    options->prf_enable = true;
+    options->authenticator_selection->resident_key =
+        device::ResidentKeyRequirement::kRequired;
+    options->user.id = {1};
+    options->user.name = "noah";
+    options->user.display_name = "Noah";
+    MakeCredentialResult result =
+        AuthenticatorMakeCredential(std::move(options));
+    EXPECT_EQ(result.status, AuthenticatorStatus::SUCCESS);
+    ASSERT_TRUE(result.response->echo_prf);
+    ASSERT_EQ(result.response->prf, true);
+    device::AuthenticatorData auth_data =
+        AuthDataFromMakeCredentialResponse(result.response);
+    cred1 = device::PublicKeyCredentialDescriptor(
+        device::CredentialType::kPublicKey, auth_data.GetCredentialId());
+  }
+  {
+    PublicKeyCredentialCreationOptionsPtr options =
+        GetTestPublicKeyCredentialCreationOptions();
+    options->prf_enable = true;
+    options->authenticator_selection->resident_key =
+        device::ResidentKeyRequirement::kRequired;
+    options->user.id = {2};
+    options->user.name = "mio";
+    options->user.display_name = "Mio";
+    MakeCredentialResult result =
+        AuthenticatorMakeCredential(std::move(options));
+    EXPECT_EQ(result.status, AuthenticatorStatus::SUCCESS);
+    ASSERT_TRUE(result.response->echo_prf);
+    ASSERT_EQ(result.response->prf, true);
+    device::AuthenticatorData auth_data =
+        AuthDataFromMakeCredentialResponse(result.response);
+    cred2 = device::PublicKeyCredentialDescriptor(
+        device::CredentialType::kPublicKey, auth_data.GetCredentialId());
+  }
+
+  const std::vector<uint8_t> salt(32, 1);
+  std::vector<uint8_t> salt1_eval;
+  std::vector<uint8_t> salt2_eval;
+  {
+    PublicKeyCredentialRequestOptionsPtr options =
+        GetTestPublicKeyCredentialRequestOptions();
+    options->extensions->prf = true;
+    auto prf_value = blink::mojom::PRFValues::New();
+    prf_value->first = salt;
+    std::vector<blink::mojom::PRFValuesPtr> inputs;
+    inputs.emplace_back(std::move(prf_value));
+    options->extensions->prf_inputs = std::move(inputs);
+    options->allow_credentials.clear();
+    test_client_.delegate_config.expected_accounts = "01:noah:Noah/02:mio:Mio";
+    test_client_.delegate_config.selected_user_id = {1};
+    GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
+    EXPECT_EQ(result.status, AuthenticatorStatus::SUCCESS);
+    ASSERT_TRUE(result.response->extensions->prf_results);
+    ASSERT_FALSE(result.response->extensions->prf_results->id);
+    salt1_eval = result.response->extensions->prf_results->first;
+  }
+  {
+    PublicKeyCredentialRequestOptionsPtr options =
+        GetTestPublicKeyCredentialRequestOptions();
+    options->extensions->prf = true;
+    auto prf_value = blink::mojom::PRFValues::New();
+    prf_value->first = salt;
+    std::vector<blink::mojom::PRFValuesPtr> inputs;
+    inputs.emplace_back(std::move(prf_value));
+    options->extensions->prf_inputs = std::move(inputs);
+    options->allow_credentials.clear();
+    test_client_.delegate_config.expected_accounts = "01:noah:Noah/02:mio:Mio";
+    test_client_.delegate_config.selected_user_id = {2};
+    GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
+    EXPECT_EQ(result.status, AuthenticatorStatus::SUCCESS);
+    ASSERT_TRUE(result.response->extensions->prf_results);
+    ASSERT_FALSE(result.response->extensions->prf_results->id);
+    salt2_eval = result.response->extensions->prf_results->first;
+  }
+  EXPECT_NE(salt1_eval, salt2_eval);
+}
+
 TEST_F(ResidentKeyAuthenticatorImplTest, PRFEvaluationDuringMakeCredential) {
   // The WebAuthn "prf" extension supports evaluating the PRF when making a
   // credential. The hmac-secret extension does not support this, but hybrid
@@ -8327,6 +8418,40 @@ TEST_F(ResidentKeyAuthenticatorImplTest, PreselectDiscoverableCredential) {
     EXPECT_EQ(result.status, AuthenticatorStatus::SUCCESS);
     EXPECT_EQ(result.response->info->raw_id, id);
   }
+}
+
+// Tests that preselecting a credential sets the response user entity to that of
+// the credential metadata if it is not present in the response.
+// Regression test for crbug.com/329412574.
+TEST_F(ResidentKeyAuthenticatorImplTest, PreselectCredentialUserEntity) {
+  device::VirtualCtap2Device::Config config;
+  config.resident_key_support = true;
+  config.internal_uv_support = true;
+  config.omit_user_entity_on_allow_credentials_requests = true;
+  virtual_device_factory_->SetCtap2Config(config);
+  virtual_device_factory_->SetTransport(
+      device::FidoTransportProtocol::kInternal);
+  virtual_device_factory_->mutable_state()->fingerprints_enrolled = true;
+  constexpr char kAuthenticatorId[] = "internal-authenticator";
+  virtual_device_factory_->mutable_state()->device_id_override =
+      kAuthenticatorId;
+  std::vector<uint8_t> kCredId{{1, 2, 3, 4}};
+  std::vector<uint8_t> kUserId{{5, 6, 7, 8}};
+
+  ASSERT_TRUE(virtual_device_factory_->mutable_state()->InjectResidentKey(
+      kCredId, kTestRelyingPartyId, kUserId, std::nullopt, std::nullopt));
+
+  // |SelectAccount| should not be called if an account was chosen from
+  // pre-select UI.
+  test_client_.delegate_config.expected_accounts = "<invalid>";
+
+  test_client_.delegate_config.preselected_credential_id = kCredId;
+  test_client_.delegate_config.preselected_authenticator_id = kAuthenticatorId;
+  PublicKeyCredentialRequestOptionsPtr options(get_credential_options());
+  GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
+  EXPECT_EQ(result.status, AuthenticatorStatus::SUCCESS);
+  EXPECT_EQ(result.response->info->raw_id, kCredId);
+  EXPECT_EQ(result.response->user_handle, kUserId);
 }
 
 class InternalAuthenticatorImplTest : public AuthenticatorTestBase {
@@ -8680,6 +8805,7 @@ class ICloudKeychainAuthenticatorImplTest : public AuthenticatorImplTest {
         RequestSource request_source,
         device::FidoRequestType request_type,
         std::optional<device::ResidentKeyRequirement> resident_key_requirement,
+        device::UserVerificationRequirement user_verification_requirement,
         base::span<const device::CableDiscoveryData> pairings_from_extension,
         bool is_enclave_authenticator_available,
         device::FidoDiscoveryFactory* fido_discovery_factory) override {

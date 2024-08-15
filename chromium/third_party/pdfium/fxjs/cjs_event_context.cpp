@@ -8,12 +8,12 @@
 
 #include "core/fpdfdoc/cpdf_formfield.h"
 #include "core/fxcrt/autorestorer.h"
+#include "core/fxcrt/check.h"
 #include "fpdfsdk/cpdfsdk_formfillenvironment.h"
 #include "fxjs/cjs_field.h"
 #include "fxjs/cjs_runtime.h"
 #include "fxjs/js_define.h"
 #include "fxjs/js_resources.h"
-#include "third_party/base/check.h"
 #include "v8/include/v8-context.h"
 #include "v8/include/v8-isolate.h"
 
@@ -22,7 +22,7 @@ CJS_EventContext::CJS_EventContext(CJS_Runtime* pRuntime)
 
 CJS_EventContext::~CJS_EventContext() = default;
 
-absl::optional<IJS_Runtime::JS_Error> CJS_EventContext::RunScript(
+std::optional<IJS_Runtime::JS_Error> CJS_EventContext::RunScript(
     const WideString& script) {
   v8::Isolate::Scope isolate_scope(m_pRuntime->GetIsolate());
   v8::HandleScope handle_scope(m_pRuntime->GetIsolate());
@@ -44,7 +44,7 @@ absl::optional<IJS_Runtime::JS_Error> CJS_EventContext::RunScript(
         1, 1, JSGetStringFromID(JSMessage::kDuplicateEventError));
   }
 
-  absl::optional<IJS_Runtime::JS_Error> err;
+  std::optional<IJS_Runtime::JS_Error> err;
   if (script.GetLength() > 0)
     err = m_pRuntime->ExecuteScript(script);
 

@@ -27,8 +27,8 @@ static constexpr char kLocalDomain[] = "local";
 void ProcessErrors(std::vector<ErrorOr<DnsSdInstanceEndpoint>>* old_endpoints,
                    std::vector<ErrorOr<DnsSdInstanceEndpoint>>* new_endpoints,
                    std::function<void(Error)> log) {
-  OSP_DCHECK(old_endpoints);
-  OSP_DCHECK(new_endpoints);
+  OSP_CHECK(old_endpoints);
+  OSP_CHECK(new_endpoints);
 
   auto old_it = old_endpoints->begin();
   auto new_it = new_endpoints->begin();
@@ -101,7 +101,7 @@ bool IsEqualOrUpdate(const std::optional<DnsSdInstanceEndpoint>& first,
 
   // All endpoints from this querier should have the same network interface
   // because the querier is only associated with a single network interface.
-  OSP_DCHECK_EQ(a.network_interface(), b.network_interface());
+  OSP_CHECK_EQ(a.network_interface(), b.network_interface());
 
   // Function returns true if first < second.
   return a.instance_id() == b.instance_id() &&
@@ -126,9 +126,9 @@ void CalculateChangeSets(std::vector<DnsSdInstanceEndpoint> old_endpoints,
                          std::vector<DnsSdInstanceEndpoint>* created_out,
                          std::vector<DnsSdInstanceEndpoint>* updated_out,
                          std::vector<DnsSdInstanceEndpoint>* deleted_out) {
-  OSP_DCHECK(created_out);
-  OSP_DCHECK(updated_out);
-  OSP_DCHECK(deleted_out);
+  OSP_CHECK(created_out);
+  OSP_CHECK(updated_out);
+  OSP_CHECK(deleted_out);
 
   // Use set difference with default operators to find the elements present in
   // one list but not the others.
@@ -183,19 +183,19 @@ void CalculateChangeSets(std::vector<DnsSdInstanceEndpoint> old_endpoints,
   // Return the calculated elements back to the caller in the output variables.
   created_out->reserve(created.size());
   for (std::optional<DnsSdInstanceEndpoint>& endpoint : created) {
-    OSP_DCHECK(endpoint.has_value());
+    OSP_CHECK(endpoint.has_value());
     created_out->push_back(std::move(endpoint.value()));
   }
 
   updated_out->reserve(updated.size());
   for (std::optional<DnsSdInstanceEndpoint>& endpoint : updated) {
-    OSP_DCHECK(endpoint.has_value());
+    OSP_CHECK(endpoint.has_value());
     updated_out->push_back(std::move(endpoint.value()));
   }
 
   deleted_out->reserve(deleted.size());
   for (std::optional<DnsSdInstanceEndpoint>& endpoint : deleted) {
-    OSP_DCHECK(endpoint.has_value());
+    OSP_CHECK(endpoint.has_value());
     deleted_out->push_back(std::move(endpoint.value()));
   }
 }
@@ -209,17 +209,16 @@ QuerierImpl::QuerierImpl(MdnsService* mdns_querier,
     : mdns_querier_(mdns_querier),
       task_runner_(task_runner),
       reporting_client_(reporting_client) {
-  OSP_DCHECK(mdns_querier_);
-
-  OSP_DCHECK(network_config);
+  OSP_CHECK(mdns_querier_);
+  OSP_CHECK(network_config);
   graph_ = DnsDataGraph::Create(network_config->network_interface());
 }
 
 QuerierImpl::~QuerierImpl() = default;
 
 void QuerierImpl::StartQuery(const std::string& service, Callback* callback) {
-  OSP_DCHECK(callback);
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(callback);
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 
   OSP_DVLOG << "Starting DNS-SD query for service '" << service << "'";
 
@@ -255,8 +254,8 @@ void QuerierImpl::StartQuery(const std::string& service, Callback* callback) {
 }
 
 void QuerierImpl::StopQuery(const std::string& service, Callback* callback) {
-  OSP_DCHECK(callback);
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(callback);
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 
   OSP_DVLOG << "Stopping DNS-SD query for service '" << service << "'";
 
@@ -289,13 +288,13 @@ void QuerierImpl::StopQuery(const std::string& service, Callback* callback) {
 }
 
 bool QuerierImpl::IsQueryRunning(const std::string& service) const {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
   const ServiceKey key(service, kLocalDomain);
   return graph_->IsTracked(key.GetName());
 }
 
 void QuerierImpl::ReinitializeQueries(const std::string& service) {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 
   OSP_DVLOG << "Re-initializing query for service '" << service << "'";
 
@@ -321,7 +320,7 @@ void QuerierImpl::ReinitializeQueries(const std::string& service) {
 std::vector<PendingQueryChange> QuerierImpl::OnRecordChanged(
     const MdnsRecord& record,
     RecordChangedEvent event) {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 
 #ifdef _DEBUG
   OSP_DVLOG << "Record " << record << " has received change of type '" << event
@@ -380,14 +379,10 @@ std::vector<PendingQueryChange> QuerierImpl::OnRecordChanged(
   // Log all errors and erase them.
   ProcessErrors(&old_endpoints_or_errors, &new_endpoints_or_errors,
                 std::move(log));
-  const size_t old_endpoints_or_errors_count = old_endpoints_or_errors.size();
-  const size_t new_endpoints_or_errors_count = new_endpoints_or_errors.size();
   std::vector<DnsSdInstanceEndpoint> old_endpoints =
       GetValues(std::move(old_endpoints_or_errors));
   std::vector<DnsSdInstanceEndpoint> new_endpoints =
       GetValues(std::move(new_endpoints_or_errors));
-  OSP_DCHECK_EQ(old_endpoints.size(), old_endpoints_or_errors_count);
-  OSP_DCHECK_EQ(new_endpoints.size(), new_endpoints_or_errors_count);
 
   // Calculate the changes and call callbacks.
   //

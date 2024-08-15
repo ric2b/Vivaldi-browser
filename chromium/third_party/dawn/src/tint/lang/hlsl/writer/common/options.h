@@ -34,18 +34,123 @@
 #include <vector>
 
 #include "src/tint/api/common/binding_point.h"
-#include "src/tint/api/options/array_length_from_uniform.h"
 #include "src/tint/api/options/binding_remapper.h"
 #include "src/tint/api/options/external_texture.h"
 #include "src/tint/api/options/pixel_local.h"
 #include "src/tint/lang/core/access.h"
+#include "src/tint/utils/math/hash.h"
 #include "src/tint/utils/reflection/reflection.h"
 
 namespace tint::hlsl::writer {
 
+namespace binding {
+
+/// Generic binding point
+struct BindingInfo {
+    /// The group
+    uint32_t group = 0;
+    /// The binding
+    uint32_t binding = 0;
+
+    /// Equality operator
+    /// @param rhs the BindingInfo to compare against
+    /// @returns true if this BindingInfo is equal to `rhs`
+    inline bool operator==(const BindingInfo& rhs) const {
+        return group == rhs.group && binding == rhs.binding;
+    }
+    /// Inequality operator
+    /// @param rhs the BindingInfo to compare against
+    /// @returns true if this BindingInfo is not equal to `rhs`
+    inline bool operator!=(const BindingInfo& rhs) const { return !(*this == rhs); }
+
+    /// @returns the hash code of the BindingInfo
+    tint::HashCode HashCode() const { return Hash(group, binding); }
+
+    /// Reflect the fields of this class so that it can be used by tint::ForeachField()
+    TINT_REFLECT(BindingInfo, group, binding);
+};
+
+using Uniform = BindingInfo;
+using Storage = BindingInfo;
+using Texture = BindingInfo;
+using StorageTexture = BindingInfo;
+using Sampler = BindingInfo;
+
+/// An external texture
+struct ExternalTexture {
+    /// Metadata
+    BindingInfo metadata{};
+    /// Plane0 binding data
+    BindingInfo plane0{};
+    /// Plane1 binding data;
+    BindingInfo plane1{};
+
+    /// Reflect the fields of this class so that it can be used by tint::ForeachField()
+    TINT_REFLECT(ExternalTexture, metadata, plane0, plane1);
+};
+
+}  // namespace binding
+
+/// Maps the WGSL binding point to the SPIR-V group,binding for uniforms
+using UniformBindings = std::unordered_map<BindingPoint, binding::Uniform>;
+/// Maps the WGSL binding point to the SPIR-V group,binding for storage
+using StorageBindings = std::unordered_map<BindingPoint, binding::Storage>;
+/// Maps the WGSL binding point to the SPIR-V group,binding for textures
+using TextureBindings = std::unordered_map<BindingPoint, binding::Texture>;
+/// Maps the WGSL binding point to the SPIR-V group,binding for storage textures
+using StorageTextureBindings = std::unordered_map<BindingPoint, binding::StorageTexture>;
+/// Maps the WGSL binding point to the SPIR-V group,binding for samplers
+using SamplerBindings = std::unordered_map<BindingPoint, binding::Sampler>;
+/// Maps the WGSL binding point to the plane0, plane1, and metadata for external textures
+using ExternalTextureBindings = std::unordered_map<BindingPoint, binding::ExternalTexture>;
+
+/// Binding information
+struct Bindings {
+    /// Uniform bindings
+    UniformBindings uniform{};
+    /// Storage bindings
+    StorageBindings storage{};
+    /// Texture bindings
+    TextureBindings texture{};
+    /// Storage texture bindings
+    StorageTextureBindings storage_texture{};
+    /// Sampler bindings
+    SamplerBindings sampler{};
+    /// External bindings
+    ExternalTextureBindings external_texture{};
+    /// Mapping of BindingPoint to new Access
+    std::unordered_map<BindingPoint, tint::core::Access> access_controls;
+    /// The binding points that will be ignored by the rebustness transform.
+    std::vector<BindingPoint> ignored_by_robustness_transform;
+
+    /// Reflect the fields of this class so that it can be used by tint::ForeachField()
+    TINT_REFLECT(Bindings,
+                 uniform,
+                 storage,
+                 texture,
+                 storage_texture,
+                 sampler,
+                 external_texture,
+                 access_controls,
+                 ignored_by_robustness_transform);
+};
+
 /// kMaxInterStageLocations == D3D11_PS_INPUT_REGISTER_COUNT - 2
 /// D3D11_PS_INPUT_REGISTER_COUNT == D3D12_PS_INPUT_REGISTER_COUNT
 constexpr uint32_t kMaxInterStageLocations = 30;
+
+/// Options used to specify a mapping of binding points to indices into a UBO
+/// from which to load buffer sizes.
+struct ArrayLengthFromUniformOptions {
+    /// The HLSL binding point to use to generate a uniform buffer from which to read buffer sizes.
+    binding::Uniform ubo_binding;
+    /// The mapping from the storage buffer binding points in WGSL binding-point space to the index
+    /// into the uniform buffer where the length of the buffer is stored.
+    std::unordered_map<BindingPoint, uint32_t> bindpoint_to_size_index;
+
+    /// Reflect the fields of this class so that it can be used by tint::ForeachField()
+    TINT_REFLECT(ArrayLengthFromUniformOptions, ubo_binding, bindpoint_to_size_index);
+};
 
 /// Configuration options used for generating HLSL.
 struct Options {
@@ -92,23 +197,15 @@ struct Options {
     /// The binding point to use for information passed via root constants.
     std::optional<BindingPoint> root_constant_binding_point;
 
-    /// Options used in the binding mappings for external textures
-    ExternalTextureOptions external_texture_options = {};
-
-    /// Options used in the bindings remapper
-    BindingRemapperOptions binding_remapper_options = {};
-
-    /// The binding points that will be ignored in the rebustness transform.
-    std::vector<BindingPoint> binding_points_ignored_in_robustness_transform;
-
-    /// AccessControls is a map of old binding point to new access control
-    std::unordered_map<BindingPoint, core::Access> access_controls;
+    /// The bindings
+    Bindings bindings;
 
     /// Options used to deal with pixel local storage variables
     PixelLocalOptions pixel_local_options = {};
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-    TINT_REFLECT(disable_robustness,
+    TINT_REFLECT(Options,
+                 disable_robustness,
                  disable_workgroup_init,
                  truncate_interstage_variables,
                  polyfill_reflect_vec2_f32,
@@ -118,10 +215,7 @@ struct Options {
                  array_length_from_uniform,
                  interstage_locations,
                  root_constant_binding_point,
-                 external_texture_options,
-                 binding_remapper_options,
-                 binding_points_ignored_in_robustness_transform,
-                 access_controls,
+                 bindings,
                  pixel_local_options);
 };
 

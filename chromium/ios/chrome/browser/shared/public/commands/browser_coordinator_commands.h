@@ -46,9 +46,8 @@ class GURL;
 // Vivaldi
 // Shows notes manager.
 - (void)showNotesManager;
-
+- (void)showHistoryPanel;
 - (void)showPanel;
-
 - (void)dismissPanel;
 // End Vivaldi
 
@@ -110,11 +109,14 @@ class GURL;
 // Dismiss the payments suggestions.
 - (void)dismissPaymentSuggestions;
 
+// Dismiss the card unmask authentication prompt.
+- (void)dismissCardUnmaskAuthentication;
+
 // Dismiss the plus address bottom sheet.
 - (void)dismissPlusAddressBottomSheet;
 
-// Shows the plus addresses management page in a tab, much like `showHelpPage`.
-- (void)showPlusAddressManagementPage;
+// Dismiss the virtual card enrollment bottom sheet.
+- (void)dismissVirtualCardEnrollmentBottomSheet;
 
 // Shows the omnibox position choice screen.
 - (void)showOmniboxPositionChoice;

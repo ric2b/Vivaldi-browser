@@ -171,13 +171,21 @@ class BuganizerClient:
     if not response:
       return []
 
-    return [{
-        'id': update.get('version'),
+    issueUpdates = response.get('issueUpdates', [])
+    # the issue updates are in reverse order that index 0 is the latest.
+    # reverse the order to follow the monorail style.
+    issueUpdates.reverse()
+    comments = []
+    for index, update in enumerate(issueUpdates):
+      comment = {
+        'id': index,
         'author': update.get('author', {}).get('emailAddress', ''),
         'content': update.get('issueComment', {}).get('comment', ''),
         'published': update.get('timestamp'),
         'updates': b_utils.GetBuganizerStatusUpdate(update, status_enum) or {}
-    } for update in response.get('issueUpdates')]
+      }
+      comments.append(comment)
+    return comments
 
 
   def NewIssue(self,
@@ -257,6 +265,11 @@ class BuganizerClient:
       new_issue_state['ccs'] = [
         {'emailAddress': email} for email in emails if email
       ]
+
+    # Add the service account as collaborator in order to keep access
+    # to the issue even if it is set limit_view_trusted.
+    service_account = {'emailAddress': utils.ServiceAccount()}
+    new_issue_state['collaborators'] = [service_account]
 
     if labels and 'Restrict-View-Google' in labels:
       access_limit = {
@@ -496,6 +509,15 @@ class BuganizerClient:
         '[PerfIssueService] Issue %s marked as duplicate of %s',
         issue_id, merge_issue)
       logging.debug('[PerfIssueSeervice] Merge response: %s', response)
+      if add_issue_state:
+        if 'assignee' in add_issue_state:
+          logging.debug(
+            '[PerfIssueSeervice] Assignee %s removed before merge.',
+            add_issue_state.pop('assignee'))
+        if 'status' in add_issue_state:
+          logging.debug(
+            '[PerfIssueSeervice] Status %s removed before merge.',
+            add_issue_state.pop('status'))
 
     modify_request = {}
     if comment:

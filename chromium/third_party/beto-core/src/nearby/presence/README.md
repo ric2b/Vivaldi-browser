@@ -59,17 +59,6 @@ brew install protobuf rapidjson google-benchmark
 We depend on OpenSSL of version at least 3.0.5 being installed on your machine
 to build the fuzzers, for macOS run:
 
-```
-brew install openssl@3
-```
-
-Your build system may still be picking up an older version so you will have to
-symlink to the brew installed version:
-
-```
-brew link --force openssl
-```
-
 The in-box version of Clang which comes from XCode developer tools does not have
 a fuzzer runtime so we will have to use our own
 

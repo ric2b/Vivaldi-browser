@@ -27,7 +27,7 @@
 
 #include "src/tint/lang/wgsl/inspector/inspector.h"
 
-#include <limits>
+#include <unordered_set>
 #include <utility>
 
 #include "src/tint/lang/core/builtin_value.h"
@@ -173,6 +173,8 @@ EntryPoint Inspector::GetEntryPoint(const tint::ast::Function* func) {
             break;
         }
     }
+
+    entry_point.push_constant_size = ComputePushConstantSize(func);
 
     for (auto* param : sem->Parameters()) {
         AddEntryPointInOutVariables(param->Declaration()->name->symbol.Name(),
@@ -569,12 +571,13 @@ std::vector<std::pair<std::string, Source>> Inspector::GetEnableDirectives() {
 const ast::Function* Inspector::FindEntryPointByName(const std::string& name) {
     auto* func = program_.AST().Functions().Find(program_.Symbols().Get(name));
     if (!func) {
-        diagnostics_.add_error(diag::System::Inspector, name + " was not found!");
+        diagnostics_.AddError(diag::System::Inspector, Source{}) << name << " was not found!";
         return nullptr;
     }
 
     if (!func->IsEntryPoint()) {
-        diagnostics_.add_error(diag::System::Inspector, name + " is not an entry point!");
+        diagnostics_.AddError(diag::System::Inspector, Source{})
+            << name << " is not an entry point!";
         return nullptr;
     }
 
@@ -814,14 +817,14 @@ void Inspector::GenerateSamplerTargets() {
         }
 
         auto* call_func = call->Stmt()->Function();
-        std::vector<const sem::Function*> entry_points;
+        Vector<const sem::Function*, 4> entry_points;
         if (call_func->Declaration()->IsEntryPoint()) {
             entry_points = {call_func};
         } else {
             entry_points = call_func->AncestorEntryPoints();
         }
 
-        if (entry_points.empty()) {
+        if (entry_points.IsEmpty()) {
             continue;
         }
 
@@ -920,11 +923,23 @@ uint32_t Inspector::ComputeWorkgroupStorageSize(const ast::Function* func) const
             // turn specified as an upper bound for Vulkan layout sizing. Since D3D
             // and Metal are even less specific, we assume Vulkan behavior as a
             // good-enough approximation everywhere.
-            total_size += tint::RoundUp(align, size);
+            total_size += tint::RoundUp(16u, tint::RoundUp(align, size));
         }
     }
 
     return total_size;
+}
+
+uint32_t Inspector::ComputePushConstantSize(const ast::Function* func) const {
+    uint32_t size = 0;
+    auto* func_sem = program_.Sem().Get(func);
+    for (const sem::Variable* var : func_sem->TransitivelyReferencedGlobals()) {
+        if (var->AddressSpace() == core::AddressSpace::kPushConstant) {
+            size += var->Type()->UnwrapRef()->Size();
+        }
+    }
+
+    return size;
 }
 
 std::vector<PixelLocalMemberType> Inspector::ComputePixelLocalMemberTypes(
@@ -974,7 +989,7 @@ void Inspector::GetOriginatingResources(std::array<const ast::Expression*, N> ex
             globals[i] = global;
         } else if (auto* param = root_ident->As<sem::Parameter>()) {
             auto* func = tint::As<sem::Function>(param->Owner());
-            if (func->CallSites().empty()) {
+            if (func->CallSites().IsEmpty()) {
                 // One or more of the expressions is a parameter, but this function
                 // is not called. Ignore.
                 return;
@@ -1007,6 +1022,135 @@ void Inspector::GetOriginatingResources(std::array<const ast::Expression*, N> ex
         // All the expressions resolved to globals
         callback(globals);
     }
+}
+
+std::vector<Inspector::LevelSampleInfo> Inspector::GetTextureQueries(const std::string& ep_name) {
+    std::vector<LevelSampleInfo> res;
+
+    std::unordered_set<BindingPoint> seen = {};
+
+    auto sample_type_for_call_and_type = [](wgsl::BuiltinFn builtin, const core::type::Type* ty) {
+        if (builtin == wgsl::BuiltinFn::kTextureNumLevels) {
+            return TextureQueryType::kTextureNumLevels;
+        }
+        if (builtin == wgsl::BuiltinFn::kTextureLoad) {
+            if (!ty->UnwrapRef()
+                     ->IsAnyOf<core::type::MultisampledTexture,
+                               core::type::DepthMultisampledTexture>()) {
+                return TextureQueryType::kTextureNumLevels;
+            }
+        }
+
+        return TextureQueryType::kTextureNumSamples;
+    };
+
+    Hashmap<const sem::Function*, Hashmap<const ast::Parameter*, TextureQueryType, 4>, 8>
+        fn_to_data;
+
+    auto record_function_param = [&fn_to_data](const sem::Function* func,
+                                               const ast::Parameter* param, TextureQueryType type) {
+        fn_to_data.GetOrAddZero(func).Add(param, type);
+    };
+
+    auto save_if_needed = [&res, &seen](const sem::GlobalVariable* global, TextureQueryType type) {
+        auto binding = global->Attributes().binding_point.value();
+        if (seen.insert(binding).second) {
+            res.emplace_back(LevelSampleInfo{type, binding.group, binding.binding});
+        }
+    };
+
+    auto& sem = program_.Sem();
+
+    const auto* ep = FindEntryPointByName(ep_name);
+    if (!ep) {
+        return {};
+    }
+
+    // This works in dependency order such that we'll see the texture call first and can record
+    // any function parameter information and then as we walk up the function chain we can look
+    // the call data.
+    for (auto* fn_decl : sem.Module()->DependencyOrderedDeclarations()) {
+        auto* fn = sem.Get<sem::Function>(fn_decl);
+        if (!fn) {
+            continue;
+        }
+
+        // This is an entrypoint, make sure it's the requested entry point
+        if (fn->Declaration()->IsEntryPoint()) {
+            if (fn->Declaration() != ep) {
+                continue;
+            }
+        } else {
+            // Not an entry point, make sure it was called from the requested entry point
+            if (!fn->HasAncestorEntryPoint(ep->name->symbol)) {
+                continue;
+            }
+        }
+
+        for (auto* call : fn->DirectCalls()) {
+            // Builtin function call, record the texture information. If the used texture maps
+            // back up to a function parameter just store the type of the call and we'll track the
+            // function callback up in the `sem::Function` branch.
+            tint::Switch(
+                call->Target(),
+                [&](const sem::BuiltinFn* builtin) {
+                    if (builtin->Fn() != wgsl::BuiltinFn::kTextureNumLevels &&
+                        builtin->Fn() != wgsl::BuiltinFn::kTextureNumSamples &&
+                        builtin->Fn() != wgsl::BuiltinFn::kTextureLoad) {
+                        return;
+                    }
+
+                    auto* texture_expr = call->Declaration()->args[0];
+                    auto* texture_sem = sem.GetVal(texture_expr)->RootIdentifier();
+                    TINT_ASSERT(texture_sem);
+
+                    auto type = sample_type_for_call_and_type(builtin->Fn(), texture_sem->Type());
+
+                    tint::Switch(
+                        texture_sem,  //
+                        [&](const sem::GlobalVariable* global) { save_if_needed(global, type); },
+                        [&](const sem::Parameter* param) {
+                            record_function_param(fn, param->Declaration(), type);
+                        },
+                        TINT_ICE_ON_NO_MATCH);
+                },
+                [&](const sem::Function* func) {
+                    // A function call, check to see if any params needed to be tracked back to a
+                    // global texture.
+
+                    auto param_to_type = fn_to_data.Get(func);
+                    if (!param_to_type) {
+                        return;
+                    }
+                    TINT_ASSERT(call->Arguments().Length() == func->Declaration()->params.Length());
+
+                    for (size_t i = 0; i < call->Arguments().Length(); i++) {
+                        auto param = func->Declaration()->params[i];
+
+                        // Determine if this had a texture we cared about
+                        auto type = param_to_type->Get(param);
+                        if (!type) {
+                            continue;
+                        }
+
+                        auto* arg = call->Arguments()[i];
+                        auto* texture_sem = arg->RootIdentifier();
+
+                        tint::Switch(
+                            texture_sem,
+                            [&](const sem::GlobalVariable* global) {
+                                save_if_needed(global, *type);
+                            },
+                            [&](const sem::Parameter* p) {
+                                record_function_param(fn, p->Declaration(), *type);
+                            },
+                            TINT_ICE_ON_NO_MATCH);
+                    }
+                });
+        }
+    }
+
+    return res;
 }
 
 }  // namespace tint::inspector

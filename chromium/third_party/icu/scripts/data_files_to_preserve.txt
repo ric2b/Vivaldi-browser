@@ -18,4 +18,4 @@ lang/ku.txt
 lang/tg.txt
 lang/wa.txt
 misc/langInfo.txt
-msic/likelySubtags.txt
+misc/likelySubtags.txt

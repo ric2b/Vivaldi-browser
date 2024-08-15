@@ -34,21 +34,12 @@ import {
   closeTab,
   NewBottomTabArgs,
 } from './bottom_tab';
-import {globals} from './globals';
 import {QueryTable} from './query_table';
-
-export function runQueryInNewTab(query: string, title: string, tag?: string) {
-  return addTab({
-    kind: QueryResultTab.kind,
-    tag,
-    config: {
-      query,
-      title,
-    },
-  });
-}
-
-globals.registerOpenQueryHandler(runQueryInNewTab);
+import {TABS_V2_FLAG} from '../core/feature_flags';
+import {globals} from './globals';
+import {Actions} from '../common/actions';
+import {BottomTabToTabAdapter} from '../public/utils';
+import {EngineProxy} from '../public';
 
 interface QueryResultTabConfig {
   readonly query: string;
@@ -58,23 +49,61 @@ interface QueryResultTabConfig {
   readonly prefetchedResponse?: QueryResponse;
 }
 
+// External interface for adding a new query results tab
+// Automatically decided whether to add v1 or v2 tab
+export function addQueryResultsTab(
+  config: QueryResultTabConfig,
+  tag?: string,
+): void {
+  if (TABS_V2_FLAG.get()) {
+    const queryResultsTab = new QueryResultTab({
+      config,
+      engine: getEngine(),
+      uuid: uuidv4(),
+    });
+
+    const uri = 'queryResults#' + (tag ?? uuidv4());
+
+    globals.tabManager.registerTab({
+      uri,
+      content: new BottomTabToTabAdapter(queryResultsTab),
+      isEphemeral: true,
+    });
+
+    globals.dispatch(Actions.showTab({uri}));
+  } else {
+    return addTab({
+      kind: QueryResultTab.kind,
+      tag,
+      config,
+    });
+  }
+}
+
+// TODO(stevegolton): Find a way to make this more elegant.
+function getEngine(): EngineProxy {
+  const engConfig = globals.getCurrentEngine();
+  const engineId = assertExists(engConfig).id;
+  return assertExists(globals.engines.get(engineId)).getProxy('QueryResult');
+}
+
 export class QueryResultTab extends BottomTab<QueryResultTabConfig> {
   static readonly kind = 'dev.perfetto.QueryResultTab';
 
   queryResponse?: QueryResponse;
   sqlViewName?: string;
 
-  static create(args: NewBottomTabArgs): QueryResultTab {
+  static create(args: NewBottomTabArgs<QueryResultTabConfig>): QueryResultTab {
     return new QueryResultTab(args);
   }
 
-  constructor(args: NewBottomTabArgs) {
+  constructor(args: NewBottomTabArgs<QueryResultTabConfig>) {
     super(args);
 
     this.initTrack(args);
   }
 
-  async initTrack(args: NewBottomTabArgs) {
+  async initTrack(args: NewBottomTabArgs<QueryResultTabConfig>) {
     let uuid = '';
     if (this.config.prefetchedResponse !== undefined) {
       this.queryResponse = this.config.prefetchedResponse;
@@ -99,8 +128,9 @@ export class QueryResultTab extends BottomTab<QueryResultTabConfig> {
   }
 
   getTitle(): string {
-    const suffix =
-        this.queryResponse ? ` (${this.queryResponse.rows.length})` : '';
+    const suffix = this.queryResponse
+      ? ` (${this.queryResponse.rows.length})`
+      : '';
     return `${this.config.title}${suffix}`;
   }
 
@@ -111,9 +141,10 @@ export class QueryResultTab extends BottomTab<QueryResultTabConfig> {
       fillParent: true,
       onClose: () => closeTab(this.uuid),
       contextButtons: [
-        this.sqlViewName === undefined ?
-            null :
-            m(PopupMenu2,
+        this.sqlViewName === undefined
+          ? null
+          : m(
+              PopupMenu2,
               {
                 trigger: m(Button, {label: 'Show debug track', minimal: true}),
                 popupPosition: PopupPosition.Top,
@@ -124,7 +155,8 @@ export class QueryResultTab extends BottomTab<QueryResultTabConfig> {
                   columns: assertExists(this.queryResponse).columns,
                 },
                 engine: this.engine,
-              })),
+              }),
+            ),
       ],
     });
   }
@@ -138,13 +170,14 @@ export class QueryResultTab extends BottomTab<QueryResultTabConfig> {
     // Assuming that the query results come from a SELECT query, try creating a
     // view to allow us to reuse it for further queries.
     const hasValidQueryResponse =
-        this.queryResponse && this.queryResponse.error === undefined;
-    const sqlQuery = hasValidQueryResponse ?
-        this.queryResponse!.lastStatementSql :
-        this.config.query;
+      this.queryResponse && this.queryResponse.error === undefined;
+    const sqlQuery = hasValidQueryResponse
+      ? this.queryResponse!.lastStatementSql
+      : this.config.query;
     try {
-      const createViewResult =
-          await this.engine.query(`create view ${viewId} as ${sqlQuery}`);
+      const createViewResult = await this.engine.query(
+        `create view ${viewId} as ${sqlQuery}`,
+      );
       if (createViewResult.error()) {
         // If it failed, do nothing.
         return '';

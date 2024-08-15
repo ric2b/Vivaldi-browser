@@ -17,9 +17,11 @@
 #include <algorithm>
 #include <atomic>
 #include <cassert>
+#include <cmath>
 #include <iterator>
 #include <new>
 #include <utility>
+#include <vector>
 
 #include "src/dsp/common.h"
 #include "src/dsp/constants.h"
@@ -211,6 +213,16 @@ StatusCode DecodeTilesThreadedNonFrameParallel(
   return kStatusOk;
 }
 
+StatusCode ParseTiles(const Vector<std::unique_ptr<Tile>>& tiles) {
+  for (const auto& tile : tiles) {
+    if (!tile->Parse()) {
+      LIBGAV1_DLOG(ERROR, "Failed to parse tile number: %d\n", tile->number());
+      return kStatusUnknownError;
+    }
+  }
+  return kStatusOk;
+}
+
 StatusCode DecodeTilesFrameParallel(
     const ObuSequenceHeader& sequence_header,
     const ObuFrameHeader& frame_header,
@@ -220,12 +232,8 @@ StatusCode DecodeTilesFrameParallel(
     FrameScratchBuffer* const frame_scratch_buffer,
     PostFilter* const post_filter, RefCountedBuffer* const current_frame) {
   // Parse the frame.
-  for (const auto& tile : tiles) {
-    if (!tile->Parse()) {
-      LIBGAV1_DLOG(ERROR, "Failed to parse tile number: %d\n", tile->number());
-      return kStatusUnknownError;
-    }
-  }
+  StatusCode status = ParseTiles(tiles);
+  if (status != kStatusOk) return status;
   if (frame_header.enable_frame_end_update_cdf) {
     frame_scratch_buffer->symbol_decoder_context = saved_symbol_decoder_context;
   }
@@ -580,6 +588,22 @@ StatusCode DecodeTilesThreadedFrameParallel(
   return kStatusOk;
 }
 
+int CalcFrameMeanQp(const Vector<std::unique_ptr<Tile>>& tiles) {
+  int cumulative_frame_qp = 0;
+  for (const auto& tile : tiles) {
+    cumulative_frame_qp += tile->GetTileMeanQP();
+  }
+  const int frame_mean_qp = static_cast<int>(
+      std::round(cumulative_frame_qp / static_cast<float>(tiles.size())));
+  if (frame_mean_qp > 255 || frame_mean_qp < 0) {
+    LIBGAV1_DLOG(
+        WARNING,
+        "The mean QP value for the frame is %d, i.e., out of bounds for AV1.",
+        frame_mean_qp);
+  }
+  return frame_mean_qp;
+}
+
 }  // namespace
 
 // static
@@ -596,6 +620,14 @@ StatusCode DecoderImpl::Create(const DecoderSettings* settings,
                    "frame_parallel is true.");
       return kStatusInvalidArgument;
     }
+  }
+  if (settings->parse_only &&
+      (settings->threads > 1 || settings->frame_parallel)) {
+    LIBGAV1_DLOG(
+        ERROR,
+        "The number of threads cannot be more than 1 (default) and "
+        "the frame_parallel option cannot be used in the parse_only mode.");
+    return kStatusInvalidArgument;
   }
   std::unique_ptr<DecoderImpl> impl(new (std::nothrow) DecoderImpl(settings));
   if (impl == nullptr) {
@@ -824,6 +856,8 @@ StatusCode DecoderImpl::DequeueFrame(const DecoderBuffer** out_ptr) {
   return kStatusOk;
 }
 
+std::vector<int> DecoderImpl::GetFrameQps() { return frame_mean_qps_; }
+
 StatusCode DecoderImpl::ParseAndSchedule(const uint8_t* data, size_t size,
                                          int64_t user_private_data,
                                          void* buffer_private_data) {
@@ -1023,6 +1057,7 @@ StatusCode DecoderImpl::DecodeTemporalUnit(const TemporalUnit& temporal_unit,
     LIBGAV1_DLOG(ERROR, "Failed to allocate OBU parser.");
     return kStatusOutOfMemory;
   }
+  frame_mean_qps_.clear();
   if (has_sequence_header_) {
     obu->set_sequence_header(sequence_header_);
   }
@@ -1081,6 +1116,9 @@ StatusCode DecoderImpl::DecodeTemporalUnit(const TemporalUnit& temporal_unit,
       status = DecodeTiles(obu->sequence_header(), obu->frame_header(),
                            obu->tile_buffers(), state_,
                            frame_scratch_buffer.get(), current_frame.get());
+      if (settings_.parse_only) {
+        frame_mean_qps_.push_back(frame_mean_qp_);
+      }
       if (status != kStatusOk) {
         return status;
       }
@@ -1097,13 +1135,15 @@ StatusCode DecoderImpl::DecodeTemporalUnit(const TemporalUnit& temporal_unit,
         assert(output_frame_queue_.Size() == 1);
         output_frame_queue_.Pop();
       }
-      RefCountedBufferPtr film_grain_frame;
-      status = ApplyFilmGrain(
-          obu->sequence_header(), obu->frame_header(), current_frame,
-          &film_grain_frame,
-          frame_scratch_buffer->threading_strategy.film_grain_thread_pool());
-      if (status != kStatusOk) return status;
-      output_frame_queue_.Push(std::move(film_grain_frame));
+      if (!settings_.parse_only) {
+        RefCountedBufferPtr film_grain_frame;
+        status = ApplyFilmGrain(
+            obu->sequence_header(), obu->frame_header(), current_frame,
+            &film_grain_frame,
+            frame_scratch_buffer->threading_strategy.film_grain_thread_pool());
+        if (status != kStatusOk) return status;
+        output_frame_queue_.Push(std::move(film_grain_frame));
+      }
     }
   }
   if (output_frame_queue_.Empty()) {
@@ -1327,7 +1367,8 @@ StatusCode DecoderImpl::DecodeTiles(
     return kStatusOutOfMemory;
   }
 
-  if (threading_strategy.row_thread_pool(0) != nullptr || is_frame_parallel_) {
+  if (threading_strategy.row_thread_pool(0) != nullptr || is_frame_parallel_ ||
+      settings_.parse_only) {
     if (frame_scratch_buffer->residual_buffer_pool == nullptr) {
       frame_scratch_buffer->residual_buffer_pool.reset(
           new (std::nothrow) ResidualBufferPool(
@@ -1528,7 +1569,8 @@ StatusCode DecoderImpl::DecodeTiles(
         current_frame, state, frame_scratch_buffer, wedge_masks_,
         quantizer_matrix_, &saved_symbol_decoder_context, prev_segment_ids,
         &post_filter, dsp, threading_strategy.row_thread_pool(tile_number),
-        &pending_tiles, is_frame_parallel_, use_intra_prediction_buffer);
+        &pending_tiles, is_frame_parallel_, use_intra_prediction_buffer,
+        settings_.parse_only);
     if (tile == nullptr) {
       LIBGAV1_DLOG(ERROR, "Failed to create tile.");
       return kStatusOutOfMemory;
@@ -1536,25 +1578,34 @@ StatusCode DecoderImpl::DecodeTiles(
     tiles.push_back_unchecked(std::move(tile));
   }
   assert(tiles.size() == static_cast<size_t>(tile_count));
-  if (is_frame_parallel_) {
-    if (frame_scratch_buffer->threading_strategy.thread_pool() == nullptr) {
-      return DecodeTilesFrameParallel(
+  if (settings_.parse_only) {  // Parse only.
+    if (ParseTiles(tiles) != kStatusOk) {
+      return kStatusUnknownError;
+    }
+    frame_mean_qp_ = CalcFrameMeanQp(tiles);
+  } else {  // Decode.
+    if (is_frame_parallel_) {
+      if (frame_scratch_buffer->threading_strategy.thread_pool() == nullptr) {
+        return DecodeTilesFrameParallel(sequence_header, frame_header, tiles,
+                                        saved_symbol_decoder_context,
+                                        prev_segment_ids, frame_scratch_buffer,
+                                        &post_filter, current_frame);
+      }
+      return DecodeTilesThreadedFrameParallel(
           sequence_header, frame_header, tiles, saved_symbol_decoder_context,
           prev_segment_ids, frame_scratch_buffer, &post_filter, current_frame);
     }
-    return DecodeTilesThreadedFrameParallel(
-        sequence_header, frame_header, tiles, saved_symbol_decoder_context,
-        prev_segment_ids, frame_scratch_buffer, &post_filter, current_frame);
+    StatusCode status;
+    if (settings_.threads == 1) {
+      status = DecodeTilesNonFrameParallel(sequence_header, frame_header, tiles,
+                                           frame_scratch_buffer, &post_filter);
+    } else {
+      status = DecodeTilesThreadedNonFrameParallel(
+          tiles, frame_scratch_buffer, &post_filter, &pending_tiles);
+    }
+    if (status != kStatusOk) return status;
   }
-  StatusCode status;
-  if (settings_.threads == 1) {
-    status = DecodeTilesNonFrameParallel(sequence_header, frame_header, tiles,
-                                         frame_scratch_buffer, &post_filter);
-  } else {
-    status = DecodeTilesThreadedNonFrameParallel(tiles, frame_scratch_buffer,
-                                                 &post_filter, &pending_tiles);
-  }
-  if (status != kStatusOk) return status;
+
   if (frame_header.enable_frame_end_update_cdf) {
     frame_scratch_buffer->symbol_decoder_context = saved_symbol_decoder_context;
   }

@@ -35,17 +35,11 @@ struct Holder {
   std::unique_ptr<exo::SecurityDelegate> security_delegate_;
 
   void AddRootSurface(const gfx::Size& size,
-                      absl::optional<gfx::BufferFormat> buffer_format) {
+                      std::optional<gfx::BufferFormat> buffer_format) {
     auto surface = std::make_unique<exo::Surface>();
     std::unique_ptr<exo::Buffer> buffer;
     if (!size.IsEmpty() && buffer_format) {
-      buffer = std::make_unique<exo::Buffer>(
-          aura::Env::GetInstance()
-              ->context_factory()
-              ->GetGpuMemoryBufferManager()
-              ->CreateGpuMemoryBuffer(size, *buffer_format,
-                                      gfx::BufferUsage::GPU_READ,
-                                      gpu::kNullSurfaceHandle, nullptr));
+      buffer = exo::test::ExoTestHelper::CreateBuffer(size, *buffer_format);
       surface->Attach(buffer.get());
     }
     root_surface = surface.get();
@@ -54,14 +48,7 @@ struct Holder {
   }
 
   exo::Surface* AddChildSurface(exo::Surface* parent, const gfx::Rect& bounds) {
-    auto buffer = std::make_unique<exo::Buffer>(
-        aura::Env::GetInstance()
-            ->context_factory()
-            ->GetGpuMemoryBufferManager()
-            ->CreateGpuMemoryBuffer(bounds.size(), gfx::BufferFormat::RGBA_8888,
-                                    gfx::BufferUsage::GPU_READ,
-                                    gpu::kNullSurfaceHandle, nullptr));
-
+    auto buffer = exo::test::ExoTestHelper::CreateBuffer(bounds.size());
     auto surface = std::make_unique<exo::Surface>();
     surface->Attach(buffer.get());
     auto sub_surface = std::make_unique<exo::SubSurface>(surface.get(), parent);
@@ -202,6 +189,14 @@ ShellSurfaceBuilder& ShellSurfaceBuilder::SetFrame(SurfaceFrameType type) {
   return *this;
 }
 
+ShellSurfaceBuilder& ShellSurfaceBuilder::SetFrameColors(SkColor active,
+                                                         SkColor inactive) {
+  DCHECK(!built_);
+  active_frame_color_ = active;
+  inactive_frame_color_ = inactive;
+  return *this;
+}
+
 ShellSurfaceBuilder& ShellSurfaceBuilder::SetApplicationId(
     const std::string& application_id) {
   DCHECK(!built_);
@@ -334,7 +329,7 @@ std::unique_ptr<ShellSurface> ShellSurfaceBuilder::BuildShellSurface() {
 
   auto holder = std::make_unique<Holder>();
   holder->AddRootSurface(root_buffer_size_, root_buffer_format_);
-  auto shell_surface = std::make_unique<ShellSurface>(
+  auto shell_surface = std::make_unique<XdgShellSurface>(
       holder->root_surface, origin_, can_minimize_, GetContainer());
 
   if (!configure_callback_.is_null()) {
@@ -503,6 +498,11 @@ void ShellSurfaceBuilder::SetCommonPropertiesAndCommitIfNecessary(
 
   if (type_.has_value()) {
     shell_surface->root_surface()->SetFrame(type_.value());
+  }
+
+  if (active_frame_color_.has_value()) {
+    shell_surface->root_surface()->SetFrameColors(
+        active_frame_color_.value(), inactive_frame_color_.value());
   }
 
   if (system_modal_) {

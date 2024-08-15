@@ -7,6 +7,7 @@
 #import <UIKit/UIKit.h>
 
 #import "base/apple/foundation_util.h"
+#import "base/memory/raw_ptr.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/metrics/histogram_tester.h"
 #import "base/test/mock_callback.h"
@@ -116,12 +117,12 @@ class SignoutActionSheetCoordinatorTest : public PlatformTest {
   id<SystemIdentity> identity_ = nil;
   id<SystemIdentity> managed_identity_ = nil;
 
-  syncer::MockSyncService* sync_service_mock_ = nullptr;
+  raw_ptr<syncer::MockSyncService> sync_service_mock_ = nullptr;
 };
 
 // Tests that a signed-in user with Sync enabled will have an action sheet with
 // a sign-out title.
-// TODO(crbug.com/1462552): Remove this test once ConsentLevel::kSync does not
+// TODO(crbug.com/40066949): Remove this test once ConsentLevel::kSync does not
 // exist on iOS anymore.
 TEST_F(SignoutActionSheetCoordinatorTest, SignedInUserWithSync) {
   authentication_service()->SignIn(
@@ -140,7 +141,7 @@ TEST_F(SignoutActionSheetCoordinatorTest, SignedInUserWithSync) {
 
 // Tests that a signed-in user with Sync disabled will have an action sheet with
 // no title.
-// TODO(crbug.com/1462858): Remove this test once
+// TODO(crbug.com/40067025): Remove this test once
 // kReplaceSyncPromosWithSignInPromos is launched - with that feature, signed-in
 // non-syncing users do *not* get a signout action sheet anymore.
 TEST_F(SignoutActionSheetCoordinatorTest, SignedInUserWithoutSync) {
@@ -162,7 +163,7 @@ TEST_F(SignoutActionSheetCoordinatorTest, SignedInUserWithoutSync) {
 
 // Tests that a signed-in user with the forced sign-in policy enabled will have
 // an action sheet with a title and a message.
-// TODO(crbug.com/1462858): Remove this test once
+// TODO(crbug.com/40067025): Remove this test once
 // kReplaceSyncPromosWithSignInPromos is launched - with that feature, signed-in
 // non-syncing users do *not* get a signout action sheet anymore.
 TEST_F(SignoutActionSheetCoordinatorTest, SignedInUserWithForcedSignin) {
@@ -189,7 +190,7 @@ TEST_F(SignoutActionSheetCoordinatorTest, SignedInUserWithForcedSignin) {
 
 // Tests that a signed-in managed user with Sync enabled will have an action
 // sheet with a sign-out title.
-// TODO(crbug.com/1462552): Remove this test once ConsentLevel::kSync does not
+// TODO(crbug.com/40066949): Remove this test once ConsentLevel::kSync does not
 // exist on iOS anymore.
 TEST_F(SignoutActionSheetCoordinatorTest, SignedInManagedUserWithSync) {
   authentication_service()->SignIn(
@@ -210,7 +211,7 @@ TEST_F(SignoutActionSheetCoordinatorTest, SignedInManagedUserWithSync) {
 
 // Tests that a signed-in managed user with Sync disabled will have an action
 // sheet with no title.
-// TODO(crbug.com/1462858): Remove this test once
+// TODO(crbug.com/40067025): Remove this test once
 // kReplaceSyncPromosWithSignInPromos is launched - with that feature, signed-in
 // non-syncing users do *not* get a signout action sheet anymore.
 TEST_F(SignoutActionSheetCoordinatorTest, SignedInManagedUserWithoutSync) {

@@ -109,8 +109,9 @@ SkColor GetContrastingGoogleColor(SkColor light_mode_color,
 // Note that the back button on the header is drawn instead by the parent
 // PaymentRequestSheetController class in the current UX.
 class ReadOnlyOriginView : public views::View {
+  METADATA_HEADER(ReadOnlyOriginView, views::View)
+
  public:
-  METADATA_HEADER(ReadOnlyOriginView);
   ReadOnlyOriginView(const std::u16string& page_title,
                      const url::Origin& origin,
                      const SkBitmap* icon_bitmap,
@@ -193,14 +194,15 @@ class ReadOnlyOriginView : public views::View {
   ~ReadOnlyOriginView() override = default;
 };
 
-BEGIN_METADATA(ReadOnlyOriginView, views::View)
+BEGIN_METADATA(ReadOnlyOriginView)
 END_METADATA
 
 // The close ('X') button used in the minimal PaymentHandler header UX. See
 // |PopulateSheetHeaderView|.
 class PaymentHandlerCloseButton : public views::ImageButton {
+  METADATA_HEADER(PaymentHandlerCloseButton, views::ImageButton)
+
  public:
-  METADATA_HEADER(PaymentHandlerCloseButton);
   explicit PaymentHandlerCloseButton(
       views::Button::PressedCallback pressed_callback,
       const SkColor enabled_color,
@@ -221,7 +223,7 @@ class PaymentHandlerCloseButton : public views::ImageButton {
   }
 };
 
-BEGIN_METADATA(PaymentHandlerCloseButton, views::ImageButton)
+BEGIN_METADATA(PaymentHandlerCloseButton)
 END_METADATA
 
 PaymentHandlerWebFlowViewController::PaymentHandlerWebFlowViewController(
@@ -588,7 +590,7 @@ void PaymentHandlerWebFlowViewController::LoadProgressChanged(double progress) {
 
     // The progress bar is accessibility-visible while loading, and then ignored
     // once it just serves as a separator.
-    progress_bar_->GetViewAccessibility().OverrideIsIgnored(progress == 1.0);
+    progress_bar_->GetViewAccessibility().SetIsIgnored(progress == 1.0);
     progress_bar_->GetViewAccessibility().OverrideIsLeaf(progress == 1.0);
   } else {
     progress_bar_->SetValue(progress);

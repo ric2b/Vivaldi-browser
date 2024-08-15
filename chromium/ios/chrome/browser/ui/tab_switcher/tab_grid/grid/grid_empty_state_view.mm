@@ -15,7 +15,6 @@
 #import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_empty_state_view_delegate.h"
-#import "ios/chrome/common/button_configuration_util.h"
 #import "ios/ui/helpers/vivaldi_colors_helper.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
@@ -211,6 +210,7 @@ const UIEdgeInsets bottomLabelPadding =
     UIEdgeInsetsMake(kTabGridEmptyStateVerticalMargin, 12, 0, 12);
 const UIEdgeInsets buttonsContainerPadding =
     UIEdgeInsetsMake(kVerticalMargin*2, 0, kVerticalMargin, 0);
+const CGFloat buttonContentsPadding = 20;
 
 // End Vivaldi
 
@@ -365,7 +365,12 @@ const UIEdgeInsets buttonsContainerPadding =
     [loginButton addTarget:self
                     action:@selector(handleLoginButtonTap)
           forControlEvents:UIControlEventTouchUpInside];
-    SetContentEdgeInsets(loginButton, buttonContentsInsets);
+    UIButtonConfiguration* buttonConfiguration =
+        [UIButtonConfiguration plainButtonConfiguration];
+    buttonConfiguration.contentInsets =
+        NSDirectionalEdgeInsetsMake(0, buttonContentsPadding,
+                                    0, buttonContentsPadding);
+    loginButton.configuration = buttonConfiguration;
 
     UIButton* registerButton = VivaldiRegisterButton();
     _registerButton = registerButton;
@@ -378,7 +383,7 @@ const UIEdgeInsets buttonsContainerPadding =
     [enableSyncButton addTarget:self
                      action:@selector(handleEnableSyncButtonTap)
                     forControlEvents:UIControlEventTouchUpInside];
-    SetContentEdgeInsets(enableSyncButton, buttonContentsInsets);
+    enableSyncButton.configuration = buttonConfiguration;
 
     UIActivityIndicatorView* activityIndicator =
         VivaldiEnableSyncActivityIndicator();

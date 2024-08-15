@@ -6,6 +6,7 @@
 #define MEDIA_VIDEO_VPX_VIDEO_ENCODER_H_
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "base/time/time.h"
@@ -40,10 +41,10 @@ class MEDIA_EXPORT VpxVideoEncoder : public VideoEncoder {
 
  private:
   base::TimeDelta GetFrameDuration(const VideoFrame& frame);
-  void DrainOutputs(int temporal_id,
-                    base::TimeDelta ts,
-                    gfx::ColorSpace color_space);
-
+  VideoEncoderOutput GetEncoderOutput(int temporal_id,
+                                      base::TimeDelta timestamp,
+                                      gfx::ColorSpace color_space) const;
+  void RecreateVpxImageIfNeeded(vpx_img_fmt fmt, bool needs_memory);
   void UpdateEncoderColorSpace();
 
   using vpx_codec_unique_ptr =

@@ -22,6 +22,19 @@ RuleService* RuleServiceFactory::GetForBrowserState(
 }
 
 // static
+RuleService* RuleServiceFactory::GetForBrowserStateIfExists(
+    ChromeBrowserState* browser_state) {
+  // Since this is called as part of destroying the browser state, we need this
+  // extra test to avoid running into code that tests whether the browser state
+  // is still valid.
+  if (!GetInstance()->IsServiceCreated(browser_state)) {
+    return nullptr;
+  }
+  return static_cast<RuleService*>(
+      GetInstance()->GetServiceForBrowserState(browser_state, false));
+}
+
+// static
 RuleServiceFactory* RuleServiceFactory::GetInstance() {
   static base::NoDestructor<RuleServiceFactory> instance;
   return instance.get();

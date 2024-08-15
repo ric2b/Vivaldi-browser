@@ -32,6 +32,7 @@
 #include "third_party/blink/renderer/core/page/chrome_client_impl.h"
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "base/debug/alias.h"
@@ -40,7 +41,6 @@
 #include "cc/animation/animation_timeline.h"
 #include "cc/layers/picture_layer.h"
 #include "cc/trees/paint_holding_reason.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/common/widget/constants.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
@@ -981,19 +981,7 @@ PopupMenu* ChromeClientImpl::OpenPopupMenu(LocalFrame& frame,
                                            HTMLSelectElement& select) {
   NotifyPopupOpeningObservers();
 
-  bool use_external_popup_menus = WebViewImpl::UseExternalPopupMenus();
-#if BUILDFLAG(IS_MAC)
-  // There is a bug that is causing popup menus in PWA windows on macOS to
-  // sometimes not appear if using external popup menus. Until that bug is
-  // fixed, use internal menus if this is a PWA window on mac.
-  // TODO(https://crbug.com/1488347): Remove this workaround when the bug
-  // is fixed.
-  if (frame.GetSettings() && !frame.GetSettings()->GetWebAppScope().empty()) {
-    use_external_popup_menus = false;
-  }
-#endif
-
-  if (use_external_popup_menus) {
+  if (WebViewImpl::UseExternalPopupMenus()) {
     return MakeGarbageCollected<ExternalPopupMenu>(frame, select);
   }
 
@@ -1153,7 +1141,7 @@ std::unique_ptr<cc::ScopedPauseRendering> ChromeClientImpl::PauseRendering(
       ->PauseRendering();
 }
 
-absl::optional<int> ChromeClientImpl::GetMaxRenderBufferBounds(
+std::optional<int> ChromeClientImpl::GetMaxRenderBufferBounds(
     LocalFrame& frame) const {
   return WebLocalFrameImpl::FromFrame(frame)
       ->LocalRootFrameWidget()
@@ -1359,13 +1347,13 @@ void ChromeClientImpl::AjaxSucceeded(LocalFrame* frame) {
     fill_client->AjaxSucceeded();
 }
 
-void ChromeClientImpl::JavaScriptChangedAutofilledValue(
-    HTMLFormControlElement& element,
-    const String& old_value) {
+void ChromeClientImpl::JavaScriptChangedValue(HTMLFormControlElement& element,
+                                              const String& old_value,
+                                              bool was_autofilled) {
   Document& doc = element.GetDocument();
   if (auto* fill_client = AutofillClientFromFrame(doc.GetFrame())) {
-    fill_client->JavaScriptChangedAutofilledValue(
-        WebFormControlElement(&element), old_value);
+    fill_client->JavaScriptChangedValue(WebFormControlElement(&element),
+                                        old_value, was_autofilled);
   }
 }
 

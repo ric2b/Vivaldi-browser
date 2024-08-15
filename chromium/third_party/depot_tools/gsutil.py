@@ -37,7 +37,7 @@ LUCI_AUTH_SCOPES = [
 
 
 # Platforms unsupported by luci-auth.
-LUCI_AUTH_UNSUPPORTED_PLATFORMS = ['aix']
+LUCI_AUTH_UNSUPPORTED_PLATFORMS = ['aix', 'zos']
 
 
 class InvalidGsutilError(Exception):

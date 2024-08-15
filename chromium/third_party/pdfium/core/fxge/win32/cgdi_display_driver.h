@@ -27,10 +27,8 @@ class CGdiDisplayDriver final : public CGdiDeviceDriver {
  private:
   // CGdiDisplayDriver:
   int GetDeviceCaps(int caps_id) const override;
-  bool GetDIBits(const RetainPtr<CFX_DIBitmap>& pBitmap,
-                 int left,
-                 int top) override;
-  bool SetDIBits(const RetainPtr<const CFX_DIBBase>& pBitmap,
+  bool GetDIBits(RetainPtr<CFX_DIBitmap> bitmap, int left, int top) override;
+  bool SetDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                  uint32_t color,
                  const FX_RECT& src_rect,
                  int left,

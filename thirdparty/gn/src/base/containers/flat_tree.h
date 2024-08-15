@@ -546,7 +546,7 @@ auto flat_tree<Key, Value, GetKeyFromValue, KeyCompare>::operator=(
     const flat_tree&) -> flat_tree& = default;
 
 template <class Key, class Value, class GetKeyFromValue, class KeyCompare>
-auto flat_tree<Key, Value, GetKeyFromValue, KeyCompare>::operator=(flat_tree &&)
+auto flat_tree<Key, Value, GetKeyFromValue, KeyCompare>::operator=(flat_tree&&)
     -> flat_tree& = default;
 
 template <class Key, class Value, class GetKeyFromValue, class KeyCompare>

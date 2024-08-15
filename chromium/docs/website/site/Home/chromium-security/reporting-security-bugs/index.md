@@ -33,7 +33,7 @@ FAQ.](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/security/faq.md
 These are the criteria that we expect from a good security bug report:
 
 *   Was filed via the [security
-            template](https://code.google.com/p/chromium/issues/entry?template=Security%20Bug).
+            template](https://issues.chromium.org/issues/new?component=1363614&template=1922342).
 *   Contains a clear and descriptive title.
 *   Includes the Chromium/Chrome version number and [release
             channel](/getting-involved/dev-channel).
@@ -120,7 +120,7 @@ for a larger award:
 *   Any noteworthy cooperation in the reporting and resolution that goes
             significantly beyond the normal reporting guidelines.
 *   We reward more where the reporter [provides a good analysis
-            demonstrating probable exploitability](https://bugs.chromium.org/p/chromium/issues/detail?id=1307610).
+            demonstrating probable exploitability](https://crbug.com/1307610).
 
 ### Bug Visibility
 

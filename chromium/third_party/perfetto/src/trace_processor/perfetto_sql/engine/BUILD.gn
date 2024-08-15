@@ -35,7 +35,10 @@ source_set("engine") {
     "../..:metatrace",
     "../../../../gn:default_deps",
     "../../../../gn:sqlite",
+    "../../../../include/perfetto/trace_processor:basic_types",
+    "../../../../protos/perfetto/trace_processor:zero",
     "../../../base",
+    "../../containers",
     "../../db",
     "../../perfetto_sql/intrinsics/functions:interface",
     "../../perfetto_sql/intrinsics/table_functions:interface",
@@ -61,6 +64,7 @@ perfetto_unittest_source_set("unittests") {
     "../../../../gn:gtest_and_gmock",
     "../../../../gn:sqlite",
     "../../../base",
+    "../..//tables:tables_python",
     "../../perfetto_sql/intrinsics/table_functions:interface",
     "../../sqlite",
   ]

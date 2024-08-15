@@ -48,8 +48,7 @@ def fetch_remotes(branch_tree):
     tag_set = git.tags()
     fetchspec_map = {}
     all_fetchspec_configs = git.get_config_regexp(r'^remote\..*\.fetch')
-    for fetchspec_config in all_fetchspec_configs:
-        key, _, fetchspec = fetchspec_config.partition(' ')
+    for key, fetchspec in all_fetchspec_configs:
         dest_spec = fetchspec.partition(':')[2]
         remote_name = key.split('.')[1]
         fetchspec_map[dest_spec] = remote_name

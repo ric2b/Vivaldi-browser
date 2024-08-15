@@ -12,6 +12,7 @@
 #include "ash/style/style_util.h"
 #include "ash/style/typography.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/compositor/layer.h"
@@ -370,6 +371,10 @@ void PillButton::SetEnableBackgroundBlur(bool enable) {
   UpdateBackgroundColor();
 }
 
+void PillButton::SetTextWithStringId(int message_id) {
+  SetText(l10n_util::GetStringUTF16(message_id));
+}
+
 void PillButton::Init() {
   if (type_ & kIconFollowing) {
     SetHorizontalAlignment(gfx::ALIGN_RIGHT);
@@ -460,7 +465,7 @@ int PillButton::GetHorizontalSpacingWithIcon() const {
   return std::max(horizontal_spacing_ - padding_reduction_for_icon_, 0);
 }
 
-BEGIN_METADATA(PillButton, views::LabelButton)
+BEGIN_METADATA(PillButton)
 END_METADATA
 
 }  // namespace ash

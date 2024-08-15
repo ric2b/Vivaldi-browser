@@ -63,11 +63,9 @@ class CFX_AggDeviceDriver final : public RenderDeviceDriverIface {
                          uint32_t fill_color,
                          BlendMode blend_type) override;
   bool GetClipBox(FX_RECT* pRect) override;
-  bool GetDIBits(const RetainPtr<CFX_DIBitmap>& pBitmap,
-                 int left,
-                 int top) override;
+  bool GetDIBits(RetainPtr<CFX_DIBitmap> bitmap, int left, int top) override;
   RetainPtr<CFX_DIBitmap> GetBackDrop() override;
-  bool SetDIBits(const RetainPtr<const CFX_DIBBase>& pBitmap,
+  bool SetDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                  uint32_t argb,
                  const FX_RECT& src_rect,
                  int left,
@@ -99,7 +97,7 @@ class CFX_AggDeviceDriver final : public RenderDeviceDriverIface {
                       const CFX_TextRenderOptions& options) override;
   int GetDriverType() const override;
   bool MultiplyAlpha(float alpha) override;
-  bool MultiplyAlphaMask(const RetainPtr<const CFX_DIBBase>& mask) override;
+  bool MultiplyAlphaMask(RetainPtr<const CFX_DIBitmap> mask) override;
 
   void Clear(uint32_t color);
 

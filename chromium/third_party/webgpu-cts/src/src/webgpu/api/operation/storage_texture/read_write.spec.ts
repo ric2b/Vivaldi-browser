@@ -3,11 +3,11 @@ Tests for the behavior of read-write storage textures.
 
 TODO:
 - Test resource usage transitions with read-write storage textures
-- Test 1D and 3D textures
 `;
 
 import { makeTestGroup } from '../../../../common/framework/test_group.js';
 import { assert, unreachable } from '../../../../common/util/util.js';
+import { kTextureDimensions } from '../../../capability_info.js';
 import { kColorTextureFormats, kTextureFormatInfo } from '../../../format_info.js';
 import { GPUTest } from '../../../gpu_test.js';
 import { align } from '../../../util/math.js';
@@ -24,10 +24,10 @@ class F extends GPUTest {
 
     const width = storageTexture.width;
     const height = storageTexture.height;
-    const arrayLayers = storageTexture.depthOrArrayLayers;
-    const initialData = new ArrayBuffer(bytesPerBlock * width * height * arrayLayers);
+    const depthOrArrayLayers = storageTexture.depthOrArrayLayers;
+    const initialData = new ArrayBuffer(bytesPerBlock * width * height * depthOrArrayLayers);
     const initialTypedData = this.GetTypedArrayBuffer(initialData, format);
-    for (let z = 0; z < arrayLayers; ++z) {
+    for (let z = 0; z < depthOrArrayLayers; ++z) {
       for (let y = 0; y < height; ++y) {
         for (let x = 0; x < width; ++x) {
           const index = z * width * height + y * width + x;
@@ -73,16 +73,16 @@ class F extends GPUTest {
 
     const width = storageTexture.width;
     const height = storageTexture.height;
-    const arrayLayers = storageTexture.depthOrArrayLayers;
+    const depthOrArrayLayers = storageTexture.depthOrArrayLayers;
     const bytesPerRowAlignment = align(bytesPerBlock * width, 256);
     const itemsPerRow = bytesPerRowAlignment / bytesPerBlock;
 
     const expectedData = new ArrayBuffer(
-      bytesPerRowAlignment * (height * arrayLayers - 1) + bytesPerBlock * width
+      bytesPerRowAlignment * (height * depthOrArrayLayers - 1) + bytesPerBlock * width
     );
     const expectedTypedData = this.GetTypedArrayBuffer(expectedData, format);
     const initialTypedData = this.GetTypedArrayBuffer(initialData, format);
-    for (let z = 0; z < arrayLayers; ++z) {
+    for (let z = 0; z < depthOrArrayLayers; ++z) {
       for (let y = 0; y < height; ++y) {
         for (let x = 0; x < width; ++x) {
           const expectedIndex = z * itemsPerRow * height + y * itemsPerRow + x;
@@ -90,7 +90,9 @@ class F extends GPUTest {
             case 'compute': {
               // In the compute shader we flip the texture along the diagonal.
               const initialIndex =
-                (arrayLayers - 1 - z) * width * height + (height - 1 - y) * width + (width - 1 - x);
+                (depthOrArrayLayers - 1 - z) * width * height +
+                (height - 1 - y) * width +
+                (width - 1 - x);
               expectedTypedData[expectedIndex] = initialTypedData[initialIndex];
               break;
             }
@@ -114,10 +116,21 @@ class F extends GPUTest {
     commandEncoder: GPUCommandEncoder,
     rwTexture: GPUTexture
   ) {
-    const isArray = rwTexture.depthOrArrayLayers > 1;
+    let declaration = '';
+    switch (rwTexture.dimension) {
+      case '1d':
+        declaration = 'texture_storage_1d';
+        break;
+      case '2d':
+        declaration =
+          rwTexture.depthOrArrayLayers > 1 ? 'texture_storage_2d_array' : 'texture_storage_2d';
+        break;
+      case '3d':
+        declaration = 'texture_storage_3d';
+        break;
+    }
     const textureDeclaration = `
-    @group(0) @binding(0) var rwTexture:
-    texture_storage_2d${isArray ? '_array' : ''}<${rwTexture.format}, read_write>;
+    @group(0) @binding(0) var rwTexture: ${declaration}<${rwTexture.format}, read_write>;
     `;
 
     switch (shaderStage) {
@@ -135,16 +148,29 @@ class F extends GPUTest {
             return vec4f(pos[VertexIndex], 0.0, 1.0);
         }
         `;
+        let textureLoadStoreCoord = '';
+        switch (rwTexture.dimension) {
+          case '1d':
+            textureLoadStoreCoord = 'textureCoord.x';
+            break;
+          case '2d':
+            textureLoadStoreCoord =
+              rwTexture.depthOrArrayLayers > 1 ? 'textureCoord, z' : 'textureCoord';
+            break;
+          case '3d':
+            textureLoadStoreCoord = 'vec3u(textureCoord, z)';
+            break;
+        }
         const fragmentShader = `
         ${textureDeclaration}
         @fragment
         fn main(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
           let textureCoord = vec2u(fragCoord.xy);
 
-          for (var z = 0; z < ${rwTexture.depthOrArrayLayers}; z++) {
-            let initialValue = textureLoad(rwTexture, textureCoord${isArray ? ', z' : ''});
+          for (var z = 0u; z < ${rwTexture.depthOrArrayLayers}; z++) {
+            let initialValue = textureLoad(rwTexture, ${textureLoadStoreCoord});
             let outputValue = initialValue * 2;
-            textureStore(rwTexture, textureCoord, ${isArray ? 'z, ' : ''}outputValue);
+            textureStore(rwTexture, ${textureLoadStoreCoord}, outputValue);
           }
 
           return vec4f(0.0, 1.0, 0.0, 1.0);
@@ -182,16 +208,17 @@ class F extends GPUTest {
           ],
         });
 
-        const dummyColorTexture = device.createTexture({
+        const placeholderColorTexture = device.createTexture({
           size: [rwTexture.width, rwTexture.height, 1],
           usage: GPUTextureUsage.RENDER_ATTACHMENT,
           format: 'rgba8unorm',
         });
+        this.trackForCleanup(placeholderColorTexture);
 
         const renderPassEncoder = commandEncoder.beginRenderPass({
           colorAttachments: [
             {
-              view: dummyColorTexture.createView(),
+              view: placeholderColorTexture.createView(),
               loadOp: 'clear',
               clearValue: { r: 0, g: 0, b: 0, a: 0 },
               storeOp: 'store',
@@ -205,6 +232,32 @@ class F extends GPUTest {
         break;
       }
       case 'compute': {
+        let textureLoadCoord = '';
+        let textureStoreCoord = '';
+        switch (rwTexture.dimension) {
+          case '1d':
+            textureLoadCoord = 'dimension - 1u - invocationID.x';
+            textureStoreCoord = 'invocationID.x';
+            break;
+          case '2d':
+            textureLoadCoord =
+              rwTexture.depthOrArrayLayers > 1
+                ? `vec2u(dimension.x - 1u - invocationID.x, dimension.y - 1u - invocationID.y),
+                   textureNumLayers(rwTexture) - 1u - invocationID.z`
+                : `vec2u(dimension.x - 1u - invocationID.x, dimension.y - 1u - invocationID.y)`;
+            textureStoreCoord =
+              rwTexture.depthOrArrayLayers > 1
+                ? 'invocationID.xy, invocationID.z'
+                : 'invocationID.xy';
+            break;
+          case '3d':
+            textureLoadCoord = `
+              vec3u(dimension.x - 1u - invocationID.x, dimension.y - 1u - invocationID.y,
+                    dimension.z - 1u - invocationID.z)`;
+            textureStoreCoord = 'invocationID';
+            break;
+        }
+
         const computeShader = `
         ${textureDeclaration}
         @compute
@@ -212,17 +265,10 @@ class F extends GPUTest {
         fn main(@builtin(local_invocation_id) invocationID: vec3u) {
           let dimension = textureDimensions(rwTexture);
 
-          let initialIndex = vec2u(
-            dimension.x - 1u - invocationID.x, dimension.y - 1u - invocationID.y);
-          let initialValue = textureLoad(
-            rwTexture,
-            initialIndex${isArray ? ', textureNumLayers(rwTexture) - 1u - invocationID.z' : ''});
-
+          let initialValue = textureLoad(rwTexture, ${textureLoadCoord});
           textureBarrier();
 
-          textureStore(rwTexture, invocationID.xy, ${
-            isArray ? 'invocationID.z, ' : ''
-          }initialValue);
+          textureStore(rwTexture, ${textureStoreCoord}, initialValue);
         }`;
 
         const computePipeline = device.createComputePipeline({
@@ -266,19 +312,28 @@ g.test('basic')
       .combine('format', kColorTextureFormats)
       .filter(p => kTextureFormatInfo[p.format].color?.readWriteStorage === true)
       .combine('shaderStage', kShaderStagesForReadWriteStorageTexture)
-      .combine('arrayLayers', [1, 2] as const)
+      .combine('textureDimension', kTextureDimensions)
+      .combine('depthOrArrayLayers', [1, 2] as const)
+      .unless(p => p.textureDimension === '1d' && p.depthOrArrayLayers > 1)
   )
+  .beforeAllSubcases(t => {
+    t.skipIfTextureFormatNotUsableAsStorageTexture(t.params.format);
+  })
   .fn(t => {
-    const { format, shaderStage, arrayLayers } = t.params;
+    const { format, shaderStage, textureDimension, depthOrArrayLayers } = t.params;
 
-    const kWidth = 16;
-    const kHeight = 8;
-    const kTextureSize = [kWidth, kHeight, arrayLayers] as const;
+    // In compatibility mode the lowest maxComputeInvocationsPerWorkgroup is 128 vs non-compat which is 256
+    // So in non-compat we get 16 * 8 * 2, vs compat where we get 8 * 8 * 2
+    const kWidth = t.isCompatibility ? 8 : 16;
+    const height = textureDimension === '1d' ? 1 : 8;
+    const textureSize = [kWidth, height, depthOrArrayLayers] as const;
     const storageTexture = t.device.createTexture({
       format,
-      size: kTextureSize,
+      dimension: textureDimension,
+      size: textureSize,
       usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING,
     });
+    t.trackForCleanup(storageTexture);
 
     const bytesPerBlock = kTextureFormatInfo[format].bytesPerBlock;
     const initialData = t.GetInitialData(storageTexture);
@@ -287,9 +342,9 @@ g.test('basic')
       initialData,
       {
         bytesPerRow: bytesPerBlock * kWidth,
-        rowsPerImage: kHeight,
+        rowsPerImage: height,
       },
-      kTextureSize
+      textureSize
     );
 
     const commandEncoder = t.device.createCommandEncoder();
@@ -301,6 +356,7 @@ g.test('basic')
       size: expectedData.byteLength,
       usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
     });
+    t.trackForCleanup(readbackBuffer);
     const bytesPerRow = align(bytesPerBlock * kWidth, 256);
     commandEncoder.copyTextureToBuffer(
       {
@@ -309,9 +365,9 @@ g.test('basic')
       {
         buffer: readbackBuffer,
         bytesPerRow,
-        rowsPerImage: kHeight,
+        rowsPerImage: height,
       },
-      kTextureSize
+      textureSize
     );
     t.queue.submit([commandEncoder.finish()]);
 

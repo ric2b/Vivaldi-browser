@@ -1253,6 +1253,10 @@
     "vivaldi.mail.search_folder": {
       "id": 313,
       "merge_method": "none"
+    },
+    "vivaldi.address_bar.search.direct_match_enabled": {
+      "id": 316,
+      "merge_method": "none"
     }
   },
   "vivaldi": {
@@ -3794,6 +3798,10 @@
           "type": "boolean",
           "default": true
         },
+        "direct_match_enabled": {
+          "type": "boolean",
+          "default": true
+        },
         "display": {
           "description": "Search field visibility; 'disabled' option (2) is no longer in use",
           "type": "enum",
@@ -4087,7 +4095,8 @@
         "default": {
           "Mail": true,
           "Calendar": true,
-          "oAuth": true
+          "oAuth": true,
+          "Feeds": true
         }
       }
     },
@@ -4856,7 +4865,7 @@
         "default": "ascending"
       },
       "search_sort_field": {
-        "description": "The field used when sorting mail messages",
+        "description": "The field used when sorting mail messages - default for folders other than sent",
         "type": "enum",
         "enum_values": {
           "sentDate": 0,
@@ -4865,6 +4874,22 @@
           "threads": 3
         },
         "default": "threads"
+      },
+      "search_sort_field_sent": {
+        "description": "The field used when sorting mail messages - default for sent folders",
+        "type": "enum",
+        "enum_values": {
+          "sentDate": 0,
+          "sender": 1,
+          "subject": 2,
+          "threads": 3
+        },
+        "default": "sentDate"
+      },
+      "search_sort_field_per_folder": {
+        "description": "The field used when sorting mail messages - per folder excepction from default (search_sort_field)",
+        "type": "dictionary",
+        "default": {}
       },
       "show_unsubscribed": {
         "description": "Show unsubscribed mailboxes",
@@ -4968,6 +4993,11 @@
       }
     },
     "menu": {
+      "compact": {
+        "description": "Layout menus in a compact manner to save space",
+        "type": "boolean",
+        "default": false
+      },
       "display": {
         "description": "App menu display on Linux and Windows",
         "type": "enum",
@@ -5111,8 +5141,8 @@
         "sorting": {
           "type": "dictionary",
           "default": {
-            "sortOrder": 1,
-            "sortField": "manually"
+            "sortOrder": 3,
+            "sortField": "dateModified"
           }
         }
       },
@@ -5146,8 +5176,8 @@
         "sorting": {
           "type": "dictionary",
           "default": {
-            "sortOrder": 1,
-            "sortField": "manually"
+            "sortOrder": 3,
+            "sortField": "dateModified"
           }
         }
       }
@@ -5665,6 +5695,11 @@
         "type": "boolean",
         "default": false
       },
+      "nickname_match_in_new_tab": {
+        "description": "Open QC bookmark match in a new tab",
+        "type": "boolean",
+        "default": false
+      },
       "show_bookmarks": {
         "description": "Include bookmarks in QC search results",
         "type": "boolean",
@@ -5754,7 +5789,7 @@
       "connectStrategy": {
         "description": "How a relay server is selected when a connection is made.",
         "type": "string",
-        "default": "random"
+        "default": "fastest"
       },
       "seen": {
         "description": "Timestamp to show a survey dialog. Set to 'now' first time popup opens and 0 once dialog has been shown",
@@ -5763,6 +5798,11 @@
       },
       "token": {
         "description": "For setting up connection.",
+        "type": "string",
+        "default": ""
+      },
+      "webRTCIPHandlingPolicy": {
+        "description": "WebRTC IP broadcast state before connecting.",
         "type": "string",
         "default": ""
       }
@@ -6009,6 +6049,16 @@
       },
       "last_seen_version": {
         "description": "Most recent version number seen on startup",
+        "type": "string",
+        "default": ""
+      },
+      "was_encryption_used": {
+        "description": "Stores the status of encrypted keychain usage.",
+        "type": "boolean",
+        "default": false
+      },
+      "keystore_canary": {
+        "description": "Stores a known canary value encrypted with our current encryption. Is used to detect changes in encryption",
         "type": "string",
         "default": ""
       },
@@ -6919,13 +6969,13 @@
           "PanelNotes",
           "PanelTranslate",
           "PanelWindow",
+          "PanelSession",
           "PanelMail",
           "PanelCalendar",
           "PanelTasks",
           "PanelFeeds",
           "PanelContacts",
           "PanelChat",
-          "PanelSession",
           "WEBPANEL_949d4873-deed-4168-b306-92d1848687a5",
           "WEBPANEL_ckmam0bsw00002y5xoafpww5i",
           "WEBPANEL_ckn7fhhqx0000hc2roo8jshm4",
@@ -7440,14 +7490,6 @@
           "type": "string",
           "default": null
         },
-        "aqua_color_variant": {
-          "type": "integer",
-          "default": null
-        },
-        "hide_menubar": {
-          "type": "boolean",
-          "default": false
-        },
         "interface_style": {
           "type": "integer",
           "default": null
@@ -7455,10 +7497,6 @@
         "keyboard_ui_mode": {
           "type": "integer",
           "default": null
-        },
-        "menubar_visible_in_fullscreen": {
-          "type": "boolean",
-          "default": false
         },
         "swipe_scroll_direction": {
           "type": "boolean",
@@ -7652,10 +7690,6 @@
       "path": "plugins.always_open_pdf_externally",
       "type": "boolean"
     },
-    "kPreferredColorScheme": {
-      "path": "browser.theme.color_scheme",
-      "type": "integer"
-    },
     "kSafeBrowsingEnabled": {
       "path": "safebrowsing.enabled",
       "type": "boolean"
@@ -7711,10 +7745,6 @@
     "kCustomHandlersEnabled": {
       "path": "custom_handlers.enabled",
       "type": "boolean"
-    },
-    "kVivaldiAddressBarSearchDirectMatchEnabled": {
-      "path": "vivaldi.address_bar.search.direct_match_enabled",
-      "type": "boolean"
     }
   },
   "chromium_local": {
@@ -7725,6 +7755,14 @@
     "kHardwareAccelerationModeEnabled": {
       "path": "hardware_acceleration_mode.enabled",
       "type": "boolean"
+    },
+    "kMemorySaverModeState": {
+      "path": "performance_tuning.high_efficiency_mode.state",
+      "type": "integer"
+    },
+    "kMemorySaverModeTimeBeforeDiscardInMinutes": {
+      "path": "performance_tuning.high_efficiency_mode.time_before_discard_in_minutes",
+      "type": "integer"
     },
     "kApplicationLocale": {
       "path": "intl.app_locale",
@@ -7758,6 +7796,10 @@
     "kVivaldiClientHintsBrandCustomBrandVersion": {
       "path": "vivaldi.ClientHintsCustomBrandVersion",
       "type": "string"
+    },
+    "kVivaldiPreferredColorScheme": {
+      "path": "vivaldi.PreferredColorScheme",
+      "type": "integer"
     }
   }
 }

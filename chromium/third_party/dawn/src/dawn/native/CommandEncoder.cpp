@@ -102,7 +102,7 @@ std::string_view GetAttachmentTypeStr(AttachmentType type) {
 // attachment.
 class RenderPassValidationState final : public NonMovable {
   public:
-    RenderPassValidationState() = default;
+    explicit RenderPassValidationState(bool unsafeApi) : mUnsafeApi(unsafeApi) {}
     ~RenderPassValidationState() = default;
 
     // Record the attachment in the render pass if it passes all validations:
@@ -134,14 +134,67 @@ class RenderPassValidationState final : public NonMovable {
             implicitPrefixStr = "implicit ";
         }
 
-        Extent3D attachmentSize = attachment->GetSingleSubresourceVirtualSize();
-
+        Extent3D renderSize = attachment->GetSingleSubresourceVirtualSize();
+        Extent3D attachmentValidationSize = renderSize;
+        if (attachment->GetTexture()->GetFormat().IsMultiPlanar()) {
+            // For multi-planar texture, D3D requires depth stencil buffer size mush be equal to the
+            // size of the plane 0 for the color attachment texture (`attachmentValidationSize`).
+            // Vulkan, Metal and GL requires buffer size equal or bigger than render size. To make
+            // all dawn backends work, dawn requires depth attachment's size equal to the
+            // `attachmentValidationSize`.
+            // Vulkan:
+            // https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkFramebufferCreateInfo.html#VUID-VkFramebufferCreateInfo-flags-04533
+            // OpenGLES3.0 (https://www.khronos.org/registry/OpenGL/specs/es/3.0/es_spec_3.0.pdf
+            // section 4.4.4.2) allows attachments have unequal size.
+            attachmentValidationSize =
+                attachment->GetTexture()->GetMipLevelSingleSubresourceVirtualSize(
+                    attachment->GetBaseMipLevel(), Aspect::Plane0);
+        }
         if (HasAttachment()) {
-            DAWN_INVALID_IF(attachmentSize.width != mWidth || attachmentSize.height != mHeight,
-                            "The %s %s size (width: %u, height: %u) does not match the size of the "
-                            "other attachments (width: %u, height: %u).",
-                            attachmentTypeStr, attachment, attachmentSize.width,
-                            attachmentSize.height, mWidth, mHeight);
+            switch (attachmentType) {
+                case AttachmentType::ColorAttachment:
+                case AttachmentType::StorageAttachment: {
+                    DAWN_INVALID_IF(
+                        renderSize.width != mRenderWidth || renderSize.height != mRenderHeight,
+                        "The %s %s size (width: %u, height: %u) does not match the size of the "
+                        "other attachments (width: %u, height: %u).",
+                        attachmentTypeStr, attachment, renderSize.width, renderSize.height,
+                        mRenderWidth, mRenderHeight);
+                    break;
+                }
+                case AttachmentType::ResolveTarget: {
+                    // TODO(chromium:324422644): support using multi-planar texture as resolve
+                    // target.
+                    DAWN_INVALID_IF(attachment->GetTexture()->GetFormat().IsMultiPlanar(),
+                                    "The resolve target %s used as resolve target is from a "
+                                    "multi-planar texture. It is not supported by dawn yet.",
+                                    attachment);
+                    DAWN_INVALID_IF(
+                        renderSize.width != mRenderWidth || renderSize.height != mRenderHeight,
+                        "The resolve target %s size (width: %u, height: %u) does not match the "
+                        "size of the other attachments (width: %u, height: %u).",
+                        attachment, renderSize.width, renderSize.height, mRenderWidth,
+                        mRenderHeight);
+                    break;
+                }
+                case AttachmentType::DepthStencilAttachment: {
+                    // TODO(chromium:324422644): re-enable this validation code.
+                    // This validation code will block skia to chromium autoroll, so disable it
+                    // temporarily.
+                    const bool disableValidation =
+                        mUnsafeApi && mAttachmentValidationWidth != mRenderWidth;
+                    DAWN_INVALID_IF(
+                        !disableValidation &&
+                            (attachmentValidationSize.width != mAttachmentValidationWidth ||
+                             attachmentValidationSize.height != mAttachmentValidationHeight),
+                        "The depth stencil attachment %s size (width: %u, height: %u) does not "
+                        "match the size of the other attachments' base plane (width: %u, height: "
+                        "%u).",
+                        attachment, attachmentValidationSize.width, attachmentValidationSize.height,
+                        mAttachmentValidationWidth, mAttachmentValidationHeight);
+                    break;
+                }
+            }
 
             // Skip the sampleCount validation for resolve target
             DAWN_INVALID_IF(attachmentType != AttachmentType::ResolveTarget &&
@@ -151,12 +204,16 @@ class RenderPassValidationState final : public NonMovable {
                             attachmentTypeStr, attachment, implicitPrefixStr,
                             attachment->GetTexture()->GetSampleCount(), mSampleCount);
         } else {
-            mWidth = attachmentSize.width;
-            mHeight = attachmentSize.height;
+            mRenderWidth = renderSize.width;
+            mRenderHeight = renderSize.height;
+            mAttachmentValidationWidth = attachmentValidationSize.width;
+            mAttachmentValidationHeight = attachmentValidationSize.height;
             mSampleCount = mImplicitSampleCount > 1 ? mImplicitSampleCount
                                                     : attachment->GetTexture()->GetSampleCount();
-            DAWN_ASSERT(mWidth != 0);
-            DAWN_ASSERT(mHeight != 0);
+            DAWN_ASSERT(mRenderWidth != 0);
+            DAWN_ASSERT(mRenderHeight != 0);
+            DAWN_ASSERT(mAttachmentValidationWidth != 0);
+            DAWN_ASSERT(mAttachmentValidationHeight != 0);
             DAWN_ASSERT(mSampleCount != 0);
         }
 
@@ -186,13 +243,13 @@ class RenderPassValidationState final : public NonMovable {
     bool HasAttachment() const { return mRecords->size() != 0; }
 
     bool IsValidState() const {
-        return ((mWidth > 0) && (mHeight > 0) && (mSampleCount > 0) &&
+        return ((mRenderWidth > 0) && (mRenderHeight > 0) && (mSampleCount > 0) &&
                 (mImplicitSampleCount == 0 || mImplicitSampleCount == mSampleCount));
     }
 
-    uint32_t GetWidth() const { return mWidth; }
+    uint32_t GetRenderWidth() const { return mRenderWidth; }
 
-    uint32_t GetHeight() const { return mHeight; }
+    uint32_t GetRenderHeight() const { return mRenderHeight; }
 
     uint32_t GetSampleCount() const { return mSampleCount; }
 
@@ -203,12 +260,17 @@ class RenderPassValidationState final : public NonMovable {
     }
 
   private:
+    const bool mUnsafeApi;
+
     // The attachment's width, height and sample count.
-    uint32_t mWidth = 0;
-    uint32_t mHeight = 0;
+    uint32_t mRenderWidth = 0;
+    uint32_t mRenderHeight = 0;
     uint32_t mSampleCount = 0;
     // The implicit multisample count used by MSAA render to single sampled.
     uint32_t mImplicitSampleCount = 0;
+
+    uint32_t mAttachmentValidationWidth = 0;
+    uint32_t mAttachmentValidationHeight = 0;
 
     // The records of the attachments that were validated in render pass.
     StackVector<RecordedAttachment, kMaxColorAttachments> mRecords;
@@ -515,15 +577,6 @@ MaybeError ValidateRenderPassDepthStencilAttachment(
     DAWN_INVALID_IF(!format.isRenderable,
                     "The depth stencil attachment %s format (%s) is not renderable.", attachment,
                     format.format);
-
-    if (!device->IsToggleEnabled(Toggle::AllowUnsafeAPIs)) {
-        DAWN_INVALID_IF(
-            attachment->GetAspects() == (Aspect::Depth | Aspect::Stencil) &&
-                depthStencilAttachment->depthReadOnly != depthStencilAttachment->stencilReadOnly,
-            "depthReadOnly (%u) and stencilReadOnly (%u) must be the same when texture aspect "
-            "is 'all'.",
-            depthStencilAttachment->depthReadOnly, depthStencilAttachment->stencilReadOnly);
-    }
 
     // Read only, or depth doesn't exist.
     if (depthStencilAttachment->depthReadOnly ||
@@ -879,6 +932,22 @@ bool ShouldUseTextureToBufferBlit(const DeviceBase* device,
     return false;
 }
 
+bool ShouldUseT2B2TForT2T(const DeviceBase* device,
+                          const Format& srcFormat,
+                          const Format& dstFormat) {
+    // RGB9E5Ufloat
+    if (srcFormat.baseFormat == wgpu::TextureFormat::RGB9E5Ufloat &&
+        device->IsToggleEnabled(Toggle::UseBlitForRGB9E5UfloatTextureCopy)) {
+        return true;
+    }
+    // sRGB <-> non-sRGB
+    if (srcFormat.format != dstFormat.format && srcFormat.baseFormat == dstFormat.baseFormat &&
+        device->IsToggleEnabled(Toggle::UseT2B2TForSRGBTextureCopy)) {
+        return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 Color ClampClearColorValueToLegalRange(const Color& originalColor, const Format& format) {
@@ -1069,7 +1138,9 @@ Ref<RenderPassEncoder> CommandEncoder::BeginRenderPass(const RenderPassDescripto
     bool depthReadOnly = false;
     bool stencilReadOnly = false;
     Ref<AttachmentState> attachmentState;
-    RenderPassValidationState validationState;
+
+    RenderPassValidationState validationState(
+        GetDevice()->IsToggleEnabled(Toggle::AllowUnsafeAPIs));
 
     std::function<void()> passEndCallback = nullptr;
 
@@ -1231,8 +1302,8 @@ Ref<RenderPassEncoder> CommandEncoder::BeginRenderPass(const RenderPassDescripto
                 }
             }
 
-            cmd->width = validationState.GetWidth();
-            cmd->height = validationState.GetHeight();
+            cmd->width = validationState.GetRenderWidth();
+            cmd->height = validationState.GetRenderHeight();
 
             cmd->occlusionQuerySet = descriptor->occlusionQuerySet;
 
@@ -1286,8 +1357,8 @@ Ref<RenderPassEncoder> CommandEncoder::BeginRenderPass(const RenderPassDescripto
     if (success) {
         Ref<RenderPassEncoder> passEncoder = RenderPassEncoder::Create(
             device, descriptor, this, &mEncodingContext, std::move(usageTracker),
-            std::move(attachmentState), validationState.GetWidth(), validationState.GetHeight(),
-            depthReadOnly, stencilReadOnly, passEndCallback);
+            std::move(attachmentState), validationState.GetRenderWidth(),
+            validationState.GetRenderHeight(), depthReadOnly, stencilReadOnly, passEndCallback);
 
         mEncodingContext.EnterPass(passEncoder.Get());
 
@@ -1788,7 +1859,8 @@ void CommandEncoder::APICopyTextureToTexture(const ImageCopyTexture* sourceOrig,
                 DAWN_TRY_CONTEXT(ValidateTextureCopyRange(GetDevice(), destination, *copySize),
                                  "validating source %s copy range.", destination.texture);
 
-                DAWN_TRY(ValidateTextureToTextureCopyRestrictions(source, destination, *copySize));
+                DAWN_TRY(ValidateTextureToTextureCopyRestrictions(GetDevice(), source, destination,
+                                                                  *copySize));
 
                 DAWN_TRY(ValidateCanUseAs(source.texture, wgpu::TextureUsage::CopySrc,
                                           mUsageValidationMode));
@@ -1820,13 +1892,9 @@ void CommandEncoder::APICopyTextureToTexture(const ImageCopyTexture* sourceOrig,
             dst.mipLevel = destination.mipLevel;
             dst.aspect = aspect;
 
-            // Emulate RGB9E5Ufloat T2T copy by calling a T2B copy and then a B2T copy
-            // for OpenGL/ES.
-            if (src.texture->GetFormat().baseFormat == wgpu::TextureFormat::RGB9E5Ufloat &&
-                GetDevice()->IsToggleEnabled(Toggle::UseBlitForRGB9E5UfloatTextureCopy)) {
-                DAWN_ASSERT(dst.texture->GetFormat().baseFormat ==
-                            wgpu::TextureFormat::RGB9E5Ufloat);
-
+            // Emulate a T2T copy with a T2B copy and a B2T copy.
+            if (ShouldUseT2B2TForT2T(GetDevice(), src.texture->GetFormat(),
+                                     dst.texture->GetFormat())) {
                 // Calculate needed buffer size to hold copied texel data.
                 const TexelBlockInfo& blockInfo =
                     source.texture->GetFormat().GetAspectInfo(aspect).block;

@@ -1,4 +1,5 @@
 import("//build/config/ui.gni")
+import("//extensions/buildflags/buildflags.gni")
 
 if (!is_android && !is_mac) {
   update_target("//chrome:chrome_initial") {

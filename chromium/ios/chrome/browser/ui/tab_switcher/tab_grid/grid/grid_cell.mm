@@ -11,6 +11,7 @@
 #import "base/check_op.h"
 #import "base/debug/dump_without_crashing.h"
 #import "base/notreached.h"
+#import "ios/chrome/browser/shared/ui/elements/extended_touch_target_button.h"
 #import "ios/chrome/browser/shared/ui/elements/top_aligned_image_view.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
@@ -150,7 +151,7 @@ void PositionView(UIView* view, CGPoint point) {
     snapshotView.translatesAutoresizingMaskIntoConstraints = NO;
 
     UIButton* closeTapTargetButton =
-        [UIButton buttonWithType:UIButtonTypeCustom];
+        [ExtendedTouchTargetButton buttonWithType:UIButtonTypeCustom];
     closeTapTargetButton.translatesAutoresizingMaskIntoConstraints = NO;
     [closeTapTargetButton addTarget:self
                              action:@selector(closeButtonTapped:)
@@ -245,6 +246,19 @@ void PositionView(UIView* view, CGPoint point) {
     [self setSelected:self.isItemSelected];
   } // End Vivaldi
 
+}
+
+- (void)didMoveToWindow {
+  if (self.window) {
+    if (self.theme == GridThemeLight) {
+      UIUserInterfaceStyle previousStyle =
+          self.window.overrideUserInterfaceStyle;
+      self.window.overrideUserInterfaceStyle = UIUserInterfaceStyleUnspecified;
+      self.overrideUserInterfaceStyle =
+          self.window.traitCollection.userInterfaceStyle;
+      self.window.overrideUserInterfaceStyle = previousStyle;
+    }
+  }
 }
 
 #pragma mark - UICollectionViewCell

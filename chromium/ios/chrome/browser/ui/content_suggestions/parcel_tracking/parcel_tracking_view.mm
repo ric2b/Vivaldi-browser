@@ -9,6 +9,7 @@
 #import "base/time/time.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/content_suggestions/parcel_tracking/parcel_tracking_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/parcel_tracking/parcel_tracking_item.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
@@ -16,7 +17,6 @@
 #import "ios/public/provider/chrome/browser/branded_images/branded_images_api.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "url/gurl.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
 
 namespace {
 
@@ -48,7 +48,7 @@ const CGFloat kStatusBarViewSpacing = 6.0f;
 const CGFloat kStatusBarWidth = 61.0f;
 const CGFloat kStatusBarHeight = 6.0f;
 const CGFloat kStatusBarCornerRadius = 3.0f;
-const CGFloat kStatusBarMarginFromBottom = 5.0f;
+const CGFloat kStatusBarBottomMarginViewHeight = .01f;
 
 }  // namespace
 
@@ -203,9 +203,17 @@ const CGFloat kStatusBarMarginFromBottom = 5.0f;
   UIView* emptySpaceFiller = [[UIView alloc] init];
   [emptySpaceFiller setContentHuggingPriority:UILayoutPriorityDefaultLow
                                       forAxis:UILayoutConstraintAxisVertical];
+  // Add empty view to trigger spacing between status bars and bottom alignment
+  // with the image.
+  UIView* statusBarBottomMarginView = [[UIView alloc] init];
+  [NSLayoutConstraint activateConstraints:@[
+    [statusBarBottomMarginView.heightAnchor
+        constraintEqualToConstant:kStatusBarBottomMarginViewHeight]
+  ]];
   UIStackView* rightVerticalStackView =
       [[UIStackView alloc] initWithArrangedSubviews:@[
-        _titleLabel, _subtitleLabel, emptySpaceFiller, statusBarStackView
+        _titleLabel, _subtitleLabel, emptySpaceFiller, statusBarStackView,
+        statusBarBottomMarginView
       ]];
   rightVerticalStackView.axis = UILayoutConstraintAxisVertical;
   rightVerticalStackView.alignment = UIStackViewAlignmentLeading;
@@ -217,6 +225,7 @@ const CGFloat kStatusBarMarginFromBottom = 5.0f;
 
   // Container allows for margins between icon a border.
   _imageContainer = [[UIView alloc] init];
+  _imageContainer.translatesAutoresizingMaskIntoConstraints = NO;
   _imageContainer.layer.cornerRadius = kIconContainerCornerRadius;
   _imageContainer.layer.masksToBounds = YES;
   _imageContainer.layer.borderColor =
@@ -236,22 +245,14 @@ const CGFloat kStatusBarMarginFromBottom = 5.0f;
   horizontalStackView.alignment = UIStackViewAlignmentTrailing;
   horizontalStackView.spacing = kIconContainerTextSpacing;
   [self addSubview:horizontalStackView];
+  AddSameConstraints(horizontalStackView, self);
 
   [NSLayoutConstraint activateConstraints:@[
     [_imageContainer.widthAnchor constraintEqualToConstant:kIconContainerWidth],
     [_imageContainer.heightAnchor
         constraintEqualToAnchor:_imageContainer.widthAnchor],
-    [rightVerticalStackView.bottomAnchor
-        constraintEqualToAnchor:_imageContainer.bottomAnchor
-                       constant:-kStatusBarMarginFromBottom],
     [rightVerticalStackView.topAnchor
         constraintLessThanOrEqualToAnchor:_imageContainer.topAnchor],
-    [horizontalStackView.centerYAnchor
-        constraintEqualToAnchor:self.centerYAnchor],
-    [horizontalStackView.leadingAnchor
-        constraintEqualToAnchor:self.leadingAnchor],
-    [horizontalStackView.trailingAnchor
-        constraintEqualToAnchor:self.trailingAnchor],
   ]];
 
   // Set up the tap gesture recognizer.

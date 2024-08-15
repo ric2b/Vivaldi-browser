@@ -14,6 +14,12 @@
 #import "ios/chrome/browser/ui/overlays/overlay_request_mediator+subclassing.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/settings/vivaldi_settings_constants.h"
+#import "ios/ui/vivaldi_colors/vivaldi_colors_constants.h"
+// End Vivaldi
+
 @interface SyncErrorInfobarBannerOverlayMediator ()
 // The sync error banner config from the request.
 @property(nonatomic, readonly) DefaultInfobarOverlayRequestConfig* config;
@@ -71,9 +77,19 @@
   UIImage* iconImage = DefaultSymbolTemplateWithPointSize(
       kSyncErrorSymbol, kInfobarSymbolPointSize);
 
+  if (vivaldi::IsVivaldiRunning()) {
+    iconImage = CustomSymbolTemplateWithPointSize(
+      vSyncSetting, kInfobarSymbolPointSize);
+  } // End Vivaldi
+
   [consumer setIconImage:iconImage];
   [consumer setUseIconBackgroundTint:YES];
   [consumer setIconBackgroundColor:[UIColor colorNamed:kRed500Color]];
+
+  if (vivaldi::IsVivaldiRunning()) {
+    [consumer setIconBackgroundColor:[UIColor colorNamed:vSystemRed]];
+  } // End Vivaldi
+
   [consumer setIconImageTintColor:[UIColor colorNamed:kPrimaryBackgroundColor]];
 
   [consumer setPresentsModal:NO];

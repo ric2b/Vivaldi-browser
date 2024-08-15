@@ -15,6 +15,7 @@
 #include "components/global_media_controls/public/constants.h"
 #include "components/global_media_controls/public/media_dialog_delegate.h"
 #include "components/global_media_controls/public/media_item_ui_observer.h"
+#include "components/media_message_center/notification_theme.h"
 #include "components/soda/constants.h"
 #include "components/soda/soda_installer.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -32,6 +33,7 @@ class WebContents;
 
 namespace global_media_controls {
 class MediaItemUIListView;
+class MediaItemUIUpdatedView;
 class MediaItemUIView;
 }  // namespace global_media_controls
 
@@ -155,6 +157,10 @@ class MediaDialogView : public views::BubbleDialogDelegateView,
   std::unique_ptr<global_media_controls::MediaItemUIView> BuildMediaItemUIView(
       const std::string& id,
       base::WeakPtr<media_message_center::MediaNotificationItem> item);
+  std::unique_ptr<global_media_controls::MediaItemUIUpdatedView>
+  BuildMediaItemUIUpdatedView(
+      const std::string& id,
+      base::WeakPtr<media_message_center::MediaNotificationItem> item);
 
   const raw_ptr<MediaNotificationService> service_;
 
@@ -166,9 +172,13 @@ class MediaDialogView : public views::BubbleDialogDelegateView,
 
   base::ObserverList<MediaDialogViewObserver> observers_;
 
-  // A map of all containers we're currently observing.
+  // A map of all the media item UIs that `MediaDialogView` is currently
+  // observing. If media::kGlobalMediaControlsUpdatedUI on non-CrOS is enabled,
+  // `updated_items_` is used, otherwise `observed_items_` is used.
   std::map<const std::string, global_media_controls::MediaItemUIView*>
       observed_items_;
+  std::map<const std::string, global_media_controls::MediaItemUIUpdatedView*>
+      updated_items_;
 
   raw_ptr<views::View> live_caption_container_ = nullptr;
   raw_ptr<views::Label> live_caption_title_ = nullptr;
@@ -178,7 +188,6 @@ class MediaDialogView : public views::BubbleDialogDelegateView,
   raw_ptr<views::View> live_translate_container_ = nullptr;
   raw_ptr<views::View> live_translate_label_wrapper_ = nullptr;
   raw_ptr<views::Label> live_translate_title_ = nullptr;
-  raw_ptr<views::Label> live_translate_subtitle_ = nullptr;
   raw_ptr<views::ToggleButton> live_translate_button_ = nullptr;
   raw_ptr<views::View> live_translate_settings_container_ = nullptr;
 
@@ -194,6 +203,9 @@ class MediaDialogView : public views::BubbleDialogDelegateView,
   const raw_ptr<content::WebContents, AcrossTasksDanglingUntriaged>
       web_contents_for_presentation_request_ = nullptr;
   const global_media_controls::GlobalMediaControlsEntryPoint entry_point_;
+
+  // Only sets colors for the updated UI if it is enabled.
+  std::optional<media_message_center::MediaColorTheme> media_color_theme_;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_GLOBAL_MEDIA_CONTROLS_MEDIA_DIALOG_VIEW_H_

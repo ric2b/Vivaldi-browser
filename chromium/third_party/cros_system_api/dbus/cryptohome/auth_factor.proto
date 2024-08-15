@@ -12,7 +12,7 @@ syntax = "proto3";
 option optimize_for = LITE_RUNTIME;
 
 package user_data_auth;
-option go_package = "chromiumos/system_api/user_data_auth_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/user_data_auth_proto";
 
 import "recoverable_key_store.proto";
 
@@ -66,6 +66,13 @@ enum AuthIntent {
   // Intent to specify the WebAuthn secret should be populated after authorizing
   // when applicable, i.e., when the AuthFactor type isn't kLegacyFingerprint.
   AUTH_INTENT_WEBAUTHN = 3;
+  // Intent to authenticate user and authorize user for KeyRestore on lock
+  // screen. This intent drives a full authentication.
+  AUTH_INTENT_RESTORE_KEY = 4;
+  // Intent to allow forensic access to homedir for an enterprise user. This
+  // will only allow login with recovery key and only updating the recovery key.
+  // The mount will only be read-only to preserve against any data change.
+  AUTH_INTENT_FORENSICS = 5;
 }
 
 // Password AuthFactor requires a secret to be passed for derivation and

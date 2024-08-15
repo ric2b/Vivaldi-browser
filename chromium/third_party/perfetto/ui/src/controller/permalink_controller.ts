@@ -37,14 +37,16 @@ import {Router} from '../frontend/router';
 
 import {Controller} from './controller';
 import {RecordConfig, recordConfigValidator} from './record_config_types';
+import {showModal} from '../widgets/modal';
 
 interface MultiEngineState {
   currentEngineId?: string;
-  engines: ObjectById<EngineConfig>
+  engines: ObjectById<EngineConfig>;
 }
 
-function isMultiEngineState(state: State|
-                            MultiEngineState): state is MultiEngineState {
+function isMultiEngineState(
+  state: State | MultiEngineState,
+): state is MultiEngineState {
   if ((state as MultiEngineState).engines !== undefined) {
     return true;
   }
@@ -58,8 +60,10 @@ export class PermalinkController extends Controller<'main'> {
   }
 
   run() {
-    if (globals.state.permalink.requestId === undefined ||
-        globals.state.permalink.requestId === this.lastRequestId) {
+    if (
+      globals.state.permalink.requestId === undefined ||
+      globals.state.permalink.requestId === this.lastRequestId
+    ) {
       return;
     }
     const requestId = assertExists(globals.state.permalink.requestId);
@@ -67,8 +71,9 @@ export class PermalinkController extends Controller<'main'> {
 
     // if the |hash| is not set, this is a request to create a permalink.
     if (globals.state.permalink.hash === undefined) {
-      const isRecordingConfig =
-          assertExists(globals.state.permalink.isRecordingConfig);
+      const isRecordingConfig = assertExists(
+        globals.state.permalink.isRecordingConfig,
+      );
 
       const jobName = 'create_permalink';
       publishConversionJobStatusUpdate({
@@ -77,37 +82,56 @@ export class PermalinkController extends Controller<'main'> {
       });
 
       PermalinkController.createPermalink(isRecordingConfig)
-          .then((hash) => {
-            globals.dispatch(Actions.setPermalink({requestId, hash}));
-          })
-          .finally(() => {
-            publishConversionJobStatusUpdate({
-              jobName,
-              jobStatus: ConversionJobStatus.NotRunning,
-            });
+        .then((hash) => {
+          globals.dispatch(Actions.setPermalink({requestId, hash}));
+        })
+        .finally(() => {
+          publishConversionJobStatusUpdate({
+            jobName,
+            jobStatus: ConversionJobStatus.NotRunning,
           });
+        });
       return;
     }
 
     // Otherwise, this is a request to load the permalink.
-    PermalinkController.loadState(globals.state.permalink.hash)
-        .then((stateOrConfig) => {
-          if (PermalinkController.isRecordConfig(stateOrConfig)) {
-            // This permalink state only contains a RecordConfig. Show the
-            // recording page with the config, but keep other state as-is.
-            const validConfig =
-                runValidator(recordConfigValidator, stateOrConfig as unknown)
-                    .result;
-            globals.dispatch(Actions.setRecordConfig({config: validConfig}));
-            Router.navigate('#!/record');
-            return;
-          }
-          globals.dispatch(Actions.setState({newState: stateOrConfig}));
-          this.lastRequestId = stateOrConfig.permalink.requestId;
-        });
+    PermalinkController.loadState(globals.state.permalink.hash).then(
+      (stateOrConfig) => {
+        if (PermalinkController.isRecordConfig(stateOrConfig)) {
+          // This permalink state only contains a RecordConfig. Show the
+          // recording page with the config, but keep other state as-is.
+          const validConfig = runValidator(
+            recordConfigValidator,
+            stateOrConfig as unknown,
+          ).result;
+          globals.dispatch(Actions.setRecordConfig({config: validConfig}));
+          Router.navigate('#!/record');
+          return;
+        }
+        globals.dispatch(Actions.setState({newState: stateOrConfig}));
+        this.lastRequestId = stateOrConfig.permalink.requestId;
+      },
+    );
   }
 
   private static upgradeState(state: State): State {
+    if (state.engine !== undefined && state.engine.source.type !== 'URL') {
+      // All permalink traces should be modified to have a source.type=URL
+      // pointing to the uploaded trace. Due to a bug in some older version
+      // of the UI (b/327049372), an upload failure can end up with a state that
+      // has type=FILE but a null file object. If this happens, invalidate the
+      // trace and show a message.
+      showModal({
+        title: 'Cannot load trace permalink',
+        content: m(
+          'div',
+          'The permalink stored on the server is corrupted ' +
+            'and cannot be loaded.',
+        ),
+      });
+      return createEmptyState();
+    }
+
     if (state.version !== STATE_VERSION) {
       const newState = createEmptyState();
       // Old permalinks from state versions prior to version 24
@@ -125,9 +149,9 @@ export class PermalinkController extends Controller<'main'> {
       if (newState.engine !== undefined) {
         newState.engine.ready = false;
       }
-
-      const message = `Unable to parse old state version. Discarding state ` +
-          `and loading trace.`;
+      const message =
+        `Unable to parse old state version. Discarding state ` +
+        `and loading trace.`;
       console.warn(message);
       PermalinkController.updateStatus(message);
       return newState;
@@ -140,22 +164,26 @@ export class PermalinkController extends Controller<'main'> {
     return state;
   }
 
-  private static isRecordConfig(stateOrConfig: State|
-                                RecordConfig): stateOrConfig is RecordConfig {
+  private static isRecordConfig(
+    stateOrConfig: State | RecordConfig,
+  ): stateOrConfig is RecordConfig {
     const mode = (stateOrConfig as {mode?: string}).mode;
-    return mode !== undefined &&
-        ['STOP_WHEN_FULL', 'RING_BUFFER', 'LONG_TRACE'].includes(mode);
+    return (
+      mode !== undefined &&
+      ['STOP_WHEN_FULL', 'RING_BUFFER', 'LONG_TRACE'].includes(mode)
+    );
   }
 
-  private static async createPermalink(isRecordingConfig: boolean):
-      Promise<string> {
-    let uploadState: State|RecordConfig = globals.state;
+  private static async createPermalink(
+    isRecordingConfig: boolean,
+  ): Promise<string> {
+    let uploadState: State | RecordConfig = globals.state;
 
     if (isRecordingConfig) {
       uploadState = globals.state.recordConfig;
     } else {
       const engine = assertExists(globals.getCurrentEngine());
-      let dataToUpload: File|ArrayBuffer|undefined = undefined;
+      let dataToUpload: File | ArrayBuffer | undefined = undefined;
       let traceName = `trace ${engine.id}`;
       if (engine.source.type === 'FILE') {
         dataToUpload = engine.source.file;
@@ -184,10 +212,11 @@ export class PermalinkController extends Controller<'main'> {
               break;
             case 'ERROR':
               PermalinkController.updateStatus(
-                  `Upload failed ${uploader.error}`);
+                `Upload failed ${uploader.error}`,
+              );
               break;
-          }  // switch (state)
-        });  // onProgress
+          } // switch (state)
+        }); // onProgress
         await uploader.waitForCompletion();
       }
     }
@@ -199,14 +228,15 @@ export class PermalinkController extends Controller<'main'> {
     return hash;
   }
 
-  private static async loadState(id: string): Promise<State|RecordConfig> {
+  private static async loadState(id: string): Promise<State | RecordConfig> {
     const url = `https://storage.googleapis.com/${BUCKET_NAME}/${id}`;
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(
-          `Could not fetch permalink.\n` +
+        `Could not fetch permalink.\n` +
           `Are you sure the id (${id}) is correct?\n` +
-          `URL: ${url}`);
+          `URL: ${url}`,
+      );
     }
     const text = await response.text();
     const stateHash = await toSha256(text);
@@ -229,9 +259,11 @@ export class PermalinkController extends Controller<'main'> {
 
   private static updateStatus(msg: string): void {
     // TODO(hjd): Unify loading updates.
-    globals.dispatch(Actions.updateStatus({
-      msg,
-      timestamp: Date.now() / 1000,
-    }));
+    globals.dispatch(
+      Actions.updateStatus({
+        msg,
+        timestamp: Date.now() / 1000,
+      }),
+    );
   }
 }

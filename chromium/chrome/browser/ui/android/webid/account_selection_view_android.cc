@@ -156,7 +156,7 @@ void AccountSelectionViewAndroid::Show(
     const std::vector<content::IdentityProviderData>& identity_provider_data,
     Account::SignInMode sign_in_mode,
     blink::mojom::RpMode rp_mode,
-    bool show_auto_reauthn_checkbox) {
+    const std::optional<content::IdentityProviderData>& new_account_idp) {
   // TODO(crbug.com/1518356): Use rp_mode for button flows on Android.
   if (!MaybeCreateJavaObject()) {
     // It's possible that the constructor cannot access the bottom sheet clank
@@ -181,6 +181,7 @@ void AccountSelectionViewAndroid::Show(
       ConvertToJavaClientIdMetadata(env,
                                     identity_provider_data[0].client_metadata);
 
+  // TODO(crbug.com/41490360): Use `new_account_idp` on Android.
   Java_AccountSelectionBridge_showAccounts(
       env, java_object_internal_,
       ConvertUTF8ToJavaString(env, top_frame_for_display),
@@ -188,7 +189,8 @@ void AccountSelectionViewAndroid::Show(
       ConvertUTF8ToJavaString(env, identity_provider_data[0].idp_for_display),
       accounts_obj, idp_metadata_obj, client_id_metadata_obj,
       sign_in_mode == Account::SignInMode::kAuto,
-      ConvertRpContextToJavaString(env, identity_provider_data[0].rp_context));
+      ConvertRpContextToJavaString(env, identity_provider_data[0].rp_context),
+      identity_provider_data[0].request_permission);
 }
 
 void AccountSelectionViewAndroid::ShowFailureDialog(
@@ -243,6 +245,14 @@ void AccountSelectionViewAndroid::ShowErrorDialog(
       ConvertUTF8ToJavaString(env, idp_for_display), idp_metadata_obj,
       ConvertRpContextToJavaString(env, rp_context),
       ConvertToJavaIdentityCredentialTokenError(env, error));
+}
+
+void AccountSelectionViewAndroid::ShowLoadingDialog(
+    const std::string& top_frame_for_display,
+    const std::string& idp_for_display,
+    blink::mojom::RpContext rp_context,
+    blink::mojom::RpMode rp_mode) {
+  // TODO(crbug.com/327273595): Prototype button flow on Android.
 }
 
 std::string AccountSelectionViewAndroid::GetTitle() const {
@@ -317,13 +327,19 @@ void AccountSelectionViewAndroid::OnDismiss(JNIEnv* env, jint dismiss_reason) {
 
 void AccountSelectionViewAndroid::OnLoginToIdP(
     JNIEnv* env,
+    const JavaParamRef<jobject>& idp_config_url,
     const JavaParamRef<jobject>& idp_login_url) {
+  GURL config_url = *url::GURLAndroid::ToNativeGURL(env, idp_config_url);
   GURL login_url = *url::GURLAndroid::ToNativeGURL(env, idp_login_url);
-  delegate_->OnLoginToIdP(login_url);
+  delegate_->OnLoginToIdP(config_url, login_url);
 }
 
 void AccountSelectionViewAndroid::OnMoreDetails(JNIEnv* env) {
   delegate_->OnMoreDetails();
+}
+
+void AccountSelectionViewAndroid::OnAccountsDisplayed(JNIEnv* env) {
+  delegate_->OnAccountsDisplayed();
 }
 
 bool AccountSelectionViewAndroid::MaybeCreateJavaObject() {

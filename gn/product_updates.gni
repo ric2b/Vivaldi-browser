@@ -1,6 +1,7 @@
 import("//vivaldi/gn/config/features.gni")
 import("//vivaldi/gn/config/product.gni")
 import("//vivaldi/gn/config/version.gni")
+import("//vivaldi/testing/testing.gni")
 import("//build/config/compiler/pgo/pgo.gni")
 import("//vivaldi/gn/config/signer_features.gni")
 
@@ -48,15 +49,19 @@ if (is_win) {
     output = "$root_build_dir/$vivaldi_version_full.manifest"
   }
 
-  update_template_instance("//chrome/test:browser_tests") {
-    data_deps -= [
-      "//chrome/browser/extensions/api:native_messaging_test_echo_&_host"
-    ]
+  if (vivaldi_build_tests) {
+    update_template_instance("//chrome/test:browser_tests") {
+      data_deps -= [
+        "//chrome/browser/extensions/api:native_messaging_test_echo_&_host"
+      ]
+    }
   }
 
   _platform_suffix = ""
   if (target_cpu == "x64") {
     _platform_suffix = ".x64"
+  } else if (target_cpu == "arm64") {
+    _platform_suffix = ".arm64"
   }
 
   update_target(
@@ -149,7 +154,11 @@ if (is_android) {
     lint_baseline_file = "//chrome/android/expectations/lint-baseline.xml"
     lint_suppressions_file = "$root_gen_dir/vivaldi/android/merged_suppression.xml"
     lint_suppressions_dep = "//vivaldi/android:generate_merged_lint_suppression_file"
-    not_needed(["lint_suppressions_dep"])
+    not_needed([
+      "lint_suppressions_dep",
+      "lint_baseline_file",
+      "lint_suppressions_file",
+      ])
   }
 
   update_template_instance("//chrome/android:chrome_public_bundle") {
@@ -160,11 +169,19 @@ if (is_android) {
     lint_baseline_file = "//chrome/android/expectations/lint-baseline.xml"
     lint_suppressions_file = "$root_gen_dir/vivaldi/android/merged_suppression.xml"
     lint_suppressions_dep = "//vivaldi/android:generate_merged_lint_suppression_file"
-    not_needed(["lint_suppressions_dep"])
+    not_needed([
+      "lint_suppressions_dep",
+      "lint_baseline_file",
+      "lint_suppressions_file",
+      ])
   }
 }
 
 if(!is_ios) {
+  update_template_instance("//chrome/app/vector_icons:chrome_vector_icons") {
+    sources -= ["browser_logo.icon"]
+    sources += ["//vivaldi/app/resources/vector_icons/browser_logo.icon"]
+  }
   update_template_instance("//components/vector_icons:components_vector_icons") {
     sources -= ["${branding_path_component}/product.icon"]
     sources += ["//vivaldi/app/resources/vector_icons/product.icon"]

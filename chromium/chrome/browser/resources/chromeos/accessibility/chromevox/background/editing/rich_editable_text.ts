@@ -5,11 +5,12 @@
 /**
  * @fileoverview Handle processing for richly editable text.
  */
-import {AutomationPredicate} from '../../../common/automation_predicate.js';
-import {AutomationUtil} from '../../../common/automation_util.js';
-import {constants} from '../../../common/constants.js';
-import {Cursor} from '../../../common/cursors/cursor.js';
-import {CursorRange} from '../../../common/cursors/range.js';
+import {AutomationPredicate} from '/common/automation_predicate.js';
+import {AutomationUtil} from '/common/automation_util.js';
+import {constants} from '/common/constants.js';
+import {Cursor} from '/common/cursors/cursor.js';
+import {CursorRange} from '/common/cursors/range.js';
+
 import {NavBraille} from '../../common/braille/nav_braille.js';
 import {Msgs} from '../../common/msgs.js';
 import {SettingsManager} from '../../common/settings_manager.js';
@@ -558,7 +559,7 @@ export class RichEditableText extends AutomationEditableText {
 
   override describeSelectionChanged(evt: TextChangeEvent): void {
     // Note that since Chrome allows for selection to be placed immediately at
-    // the end of a line (i.e. end == value.length) and since we try to describe
+    // the end of a line (i.e. end === value.length) and since we try to describe
     // the character to the right, just describe it as a new line.
     if ((this.start + 1) === evt.start && evt.start === this.value.length) {
       this.speak('\n', evt.triggeredByUser);

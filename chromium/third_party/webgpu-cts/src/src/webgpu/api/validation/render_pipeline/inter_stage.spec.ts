@@ -97,8 +97,18 @@ g.test('location,mismatch')
   });
 
 g.test('location,superset')
-  .desc(`TODO: implement after spec is settled: https://github.com/gpuweb/gpuweb/issues/2038`)
-  .unimplemented();
+  .desc(`Tests that validation should succeed when vertex output is superset of fragment input`)
+  .params(u => u.combine('isAsync', [false, true]))
+  .fn(t => {
+    const { isAsync } = t.params;
+
+    const descriptor = t.getDescriptorWithStates(
+      t.getVertexStateWithOutputs(['@location(0) vout0: f32', '@location(1) vout1: f32']),
+      t.getFragmentStateWithInputs(['@location(1) fin1: f32'])
+    );
+
+    t.doCreateRenderPipelineTest(isAsync, true, descriptor);
+  });
 
 g.test('location,subset')
   .desc(`Tests that validation should fail when vertex output is a subset of fragment input.`)

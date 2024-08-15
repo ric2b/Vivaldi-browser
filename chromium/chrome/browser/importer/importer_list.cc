@@ -29,6 +29,7 @@
 #endif
 
 #include "app/vivaldi_resources.h"
+#include "app/vivaldi_apptools.h"
 #include "browser/shell_integration/vivaldi_shell_integration.h"
 #include "importer/viv_importer.h"
 #include "importer/chromium_profile_importer.h"
@@ -78,7 +79,11 @@ void DetectSafariProfiles(std::vector<importer::SourceProfile>* profiles) {
                                                 base::BlockingType::MAY_BLOCK);
 
   uint16_t items = importer::NONE;
-  if (!SafariImporterCanImport(base::apple::GetUserLibraryPath(), &items)) {
+  // Safari should be present on macOS, add it even if it wasn't found
+  // (that would usually happen when Vivaldi doesn't have permission
+  // to read ~/Library/Safari)
+  if (!SafariImporterCanImport(base::apple::GetUserLibraryPath(), &items) &&
+      !vivaldi::IsVivaldiRunning()) {
     return;
   }
 
@@ -86,6 +91,10 @@ void DetectSafariProfiles(std::vector<importer::SourceProfile>* profiles) {
   safari.importer_name = l10n_util::GetStringUTF16(IDS_IMPORT_FROM_SAFARI);
   safari.importer_type = importer::TYPE_SAFARI;
   safari.services_supported = items;
+  if (vivaldi::IsVivaldiRunning() && items != importer::NONE) {
+    base::FilePath safari_dir = base::apple::GetUserLibraryPath().Append("Safari");
+    safari.source_path = safari_dir;
+  }
   profiles->push_back(safari);
 }
 #endif  // BUILDFLAG(IS_MAC)
@@ -245,13 +254,6 @@ std::vector<importer::SourceProfile> DetectSourceProfilesWorker(
   }
 
   viv_importer::DetectThunderbirdProfiles(&profiles);
-
-  importer::SourceProfile opera_bookmarks_file;
-  opera_bookmarks_file.importer_name =
-      l10n_util::GetStringUTF16(IDS_OPERA_IMPORT_FROM_BOOKMARKS_HTML_FILE);
-  opera_bookmarks_file.importer_type = importer::TYPE_OPERA_BOOKMARK_FILE;
-  opera_bookmarks_file.services_supported = importer::FAVORITES;
-  profiles.push_back(opera_bookmarks_file );
 
   return profiles;
 }

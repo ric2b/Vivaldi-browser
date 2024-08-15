@@ -67,8 +67,6 @@ class InProcessContextFactory : public ContextFactory {
   // ContextFactory implementation.
   void CreateLayerTreeFrameSink(base::WeakPtr<Compositor> compositor) override;
 
-  scoped_refptr<viz::ContextProvider> SharedMainThreadContextProvider()
-      override;
   scoped_refptr<viz::RasterContextProvider>
   SharedMainThreadRasterContextProvider() override;
 
@@ -83,7 +81,7 @@ class InProcessContextFactory : public ContextFactory {
   gfx::DisplayColorSpaces GetDisplayColorSpaces(Compositor* compositor) const;
   base::TimeTicks GetDisplayVSyncTimeBase(Compositor* compositor) const;
   base::TimeDelta GetDisplayVSyncTimeInterval(Compositor* compositor) const;
-  absl::optional<base::TimeDelta> GetMaxVrrInterval(
+  std::optional<base::TimeDelta> GetMaxVrrInterval(
       Compositor* compositor) const;
   void ResetDisplayOutputParameters(Compositor* compositor);
 

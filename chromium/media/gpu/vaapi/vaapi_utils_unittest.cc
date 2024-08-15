@@ -45,7 +45,8 @@ class VaapiUtilsTest : public testing::Test {
                              EncryptionScheme::kUnencrypted,
                              base::BindRepeating([](VaapiFunctions function) {
                                LOG(FATAL) << "Oh noes! Decoder failed";
-                             }));
+                             }))
+            .value_or(nullptr);
     ASSERT_TRUE(vaapi_wrapper_);
   }
 
@@ -153,7 +154,7 @@ TEST_F(VaapiUtilsTest, ScopedVASurface) {
   auto scoped_va_surfaces = vaapi_wrapper_->CreateContextAndScopedVASurfaces(
       VA_RT_FORMAT_YUV420, coded_size,
       {VaapiWrapper::SurfaceUsageHint::kGeneric}, 1u,
-      /*visible_size=*/absl::nullopt);
+      /*visible_size=*/std::nullopt);
   ASSERT_FALSE(scoped_va_surfaces.empty());
 
   auto scoped_va_surface = std::move(scoped_va_surfaces[0]);
@@ -188,7 +189,7 @@ TEST_F(VaapiUtilsTest, ScopedVASurfaceInvalidSizeRequest) {
                   ->CreateContextAndScopedVASurfaces(
                       VA_RT_FORMAT_YUV420, invalid_size,
                       {VaapiWrapper::SurfaceUsageHint::kGeneric}, 1u,
-                      /*visible_size=*/absl::nullopt)
+                      /*visible_size=*/std::nullopt)
                   .empty());
 }
 
@@ -200,7 +201,7 @@ TEST_F(VaapiUtilsTest, ScopedVASurfaceInvalidRTFormatRequest) {
                   ->CreateContextAndScopedVASurfaces(
                       kInvalidVaRtFormat, coded_size,
                       {VaapiWrapper::SurfaceUsageHint::kGeneric}, 1u,
-                      /*visible_size=*/absl::nullopt)
+                      /*visible_size=*/std::nullopt)
                   .empty());
 }
 

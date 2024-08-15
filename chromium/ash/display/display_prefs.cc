@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <string>
+#include <utility>
 
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
@@ -21,6 +22,7 @@
 #include "base/system/sys_info.h"
 #include "base/values.h"
 #include "components/metrics/structured/structured_events.h"
+#include "components/metrics/structured/structured_metrics_client.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -195,10 +197,10 @@ bool UserCanSaveDisplayPreference() {
     return false;
   }
 
-  return *user_type == user_manager::USER_TYPE_REGULAR ||
-         *user_type == user_manager::USER_TYPE_CHILD ||
-         *user_type == user_manager::USER_TYPE_KIOSK_APP ||
-         (*user_type == user_manager::USER_TYPE_PUBLIC_ACCOUNT &&
+  return *user_type == user_manager::UserType::kRegular ||
+         *user_type == user_manager::UserType::kChild ||
+         *user_type == user_manager::UserType::kKioskApp ||
+         (*user_type == user_manager::UserType::kPublicAccount &&
           Shell::Get()->local_state()->GetBoolean(
               prefs::kAllowMGSToStoreDisplayProperties));
 }
@@ -813,18 +815,19 @@ void ReportToPopularityMetricsAndStore(PrefService* pref_service) {
     int product_id;
     base::StringToInt(display.product_id(), &product_id);
 
-    metrics::structured::events::v2::popular_displays::MonitorInfo()
-        .SetDisplayName(display.name())
-        .SetManufacturerId(display.manufacturer_id())
-        .SetProductId(product_id)
-        .SetNativeModeSize(native_mode->size().ToString())
-        .SetNativeModeRefreshRate(native_mode->refresh_rate())
-        .SetPhysicalSize(display.physical_size().ToString())
-        .SetConnectionType(
-            display::DisplayConnectionTypeString(display.connection_type()))
-        .SetIsVrrCapable(display.variable_refresh_rate_state() <
-                         display::VariableRefreshRateState::kVrrNotCapable)
-        .Record();
+    metrics::structured::StructuredMetricsClient::Record(std::move(
+        metrics::structured::events::v2::popular_displays::MonitorInfo()
+            .SetDisplayName(display.name())
+            .SetManufacturerId(display.manufacturer_id())
+            .SetProductId(product_id)
+            .SetNativeModeSize(native_mode->size().ToString())
+            .SetNativeModeRefreshRate(native_mode->refresh_rate())
+            .SetPhysicalSize(display.physical_size().ToString())
+            .SetConnectionType(
+                display::DisplayConnectionTypeString(display.connection_type()))
+            .SetIsVrrCapable(
+                display.variable_refresh_rate_state() <
+                display::VariableRefreshRateState::kVrrNotCapable)));
 
     cached_list.Append(display_id);
   }

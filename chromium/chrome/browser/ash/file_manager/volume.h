@@ -88,12 +88,11 @@ class Volume {
                                               bool read_only,
                                               bool use_fusebox = false);
 
-  static std::unique_ptr<Volume> CreateForMediaView(
-      const std::string& root_document_id);
+  static std::unique_ptr<Volume> CreateForMediaView(const std::string& root_id);
 
   static std::unique_ptr<Volume> CreateMediaViewForTesting(
       base::FilePath mount_path,
-      const std::string& root_document_id);
+      const std::string& root_id);
 
   static std::unique_ptr<Volume> CreateForSshfsCrostini(
       base::FilePath crostini_path,
@@ -111,7 +110,6 @@ class Volume {
   static std::unique_ptr<Volume> CreateForDocumentsProvider(
       const std::string& authority,
       const std::string& root_id,
-      const std::string& document_id,
       const std::string& title,
       const std::string& summary,
       const GURL& icon_url,
@@ -217,12 +215,11 @@ class Volume {
 
   // The source path of the volume.
   // E.g.:
-  // - /home/chronos/user/Downloads/zipfile_path.zip
+  // - /home/chronos/user/MyFiles/Downloads/zipfile_path.zip
   base::FilePath source_path_;
 
   // The mount path of the volume.
   // E.g.:
-  // - /home/chronos/user/Downloads
   // - /media/removable/usb1
   // - /media/archive/zip1
   base::FilePath mount_path_;

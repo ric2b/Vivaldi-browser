@@ -4,12 +4,13 @@
 
 #include "ui/native_theme/native_theme_win.h"
 
-#include <windows.h>
 #include <stddef.h>
 #include <uxtheme.h>
 #include <vsstyle.h>
 #include <vssym32.h>
+#include <windows.h>
 
+#include <optional>
 #include <tuple>
 
 #include "base/check.h"
@@ -20,6 +21,7 @@
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
 #include "base/win/dark_mode_support.h"
 #include "base/win/scoped_gdi_object.h"
 #include "base/win/scoped_hdc.h"
@@ -29,7 +31,6 @@
 #include "cc/paint/paint_flags.h"
 #include "skia/ext/platform_canvas.h"
 #include "skia/ext/skia_utils_win.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkColorPriv.h"
@@ -48,6 +49,7 @@
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/native_theme/common_theme.h"
+#include "ui/native_theme/native_theme.h"
 
 // This was removed from Winvers.h but is still used.
 #if !defined(COLOR_MENUHIGHLIGHT)
@@ -264,7 +266,7 @@ void NativeThemeWin::Paint(cc::PaintCanvas* canvas,
                            const gfx::Rect& rect,
                            const ExtraParams& extra,
                            ColorScheme color_scheme,
-                           const absl::optional<SkColor>& accent_color) const {
+                           const std::optional<SkColor>& accent_color) const {
   if (rect.IsEmpty())
     return;
 
@@ -340,15 +342,12 @@ NativeThemeWin::NativeThemeWin(bool configure_web_instance,
 }
 
 void NativeThemeWin::ConfigureWebInstance() {
-  if (!IsForcedDarkMode() && !IsForcedHighContrast() &&
-      base::SequencedTaskRunner::HasCurrentDefault()) {
-    // Add the web native theme as an observer to stay in sync with color scheme
-    // changes.
-    color_scheme_observer_ =
-        std::make_unique<NativeTheme::ColorSchemeNativeThemeObserver>(
-            NativeTheme::GetInstanceForWeb());
-    AddObserver(color_scheme_observer_.get());
-  }
+  // Add the web native theme as an observer to stay in sync with color scheme
+  // changes.
+  color_scheme_observer_ =
+      std::make_unique<NativeTheme::ColorSchemeNativeThemeObserver>(
+          NativeTheme::GetInstanceForWeb());
+  AddObserver(color_scheme_observer_.get());
 
   // Initialize the native theme web instance with the system color info.
   NativeTheme* web_instance = NativeTheme::GetInstanceForWeb();
@@ -361,6 +360,16 @@ void NativeThemeWin::ConfigureWebInstance() {
   web_instance->set_system_colors(GetSystemColors());
   web_instance->set_should_use_system_accent_color(
       should_use_system_accent_color());
+}
+
+std::optional<base::TimeDelta> NativeThemeWin::GetPlatformCaretBlinkInterval()
+    const {
+  static const size_t system_value = ::GetCaretBlinkTime();
+  if (system_value != 0) {
+    return (system_value == INFINITE) ? base::TimeDelta()
+                                      : base::Milliseconds(system_value);
+  }
+  return std::nullopt;
 }
 
 NativeThemeWin::~NativeThemeWin() {

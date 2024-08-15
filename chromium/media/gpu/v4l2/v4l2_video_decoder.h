@@ -9,6 +9,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -30,7 +31,6 @@
 #include "media/gpu/v4l2/v4l2_device.h"
 #include "media/gpu/v4l2/v4l2_status.h"
 #include "media/gpu/v4l2/v4l2_video_decoder_backend.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace media {
@@ -49,14 +49,14 @@ class MEDIA_GPU_EXPORT V4L2VideoDecoder
       scoped_refptr<base::SequencedTaskRunner> decoder_task_runner,
       base::WeakPtr<VideoDecoderMixin::Client> client);
 
-  static absl::optional<SupportedVideoDecoderConfigs> GetSupportedConfigs();
+  static std::optional<SupportedVideoDecoderConfigs> GetSupportedConfigs();
 
   // VideoDecoderMixin implementation, VideoDecoder part.
   void Initialize(const VideoDecoderConfig& config,
                   bool low_delay,
                   CdmContext* cdm_context,
                   InitCB init_cb,
-                  const OutputCB& output_cb,
+                  const PipelineOutputCB& output_cb,
                   const WaitingCB& waiting_cb) override;
   void Decode(scoped_refptr<DecoderBuffer> buffer, DecodeCB decode_cb) override;
   void Reset(base::OnceClosure reset_cb) override;
@@ -82,7 +82,7 @@ class MEDIA_GPU_EXPORT V4L2VideoDecoder
                         gfx::Rect visible_rect,
                         size_t num_codec_reference_frames,
                         uint8_t bit_depth) override;
-  void OutputFrame(scoped_refptr<VideoFrame> frame,
+  void OutputFrame(scoped_refptr<FrameResource> frame,
                    const gfx::Rect& visible_rect,
                    const VideoColorSpace& color_space,
                    base::TimeDelta timestamp) override;
@@ -134,6 +134,12 @@ class MEDIA_GPU_EXPORT V4L2VideoDecoder
                               const gfx::Rect& visible_rect,
                               size_t num_codec_reference_frames,
                               uint8_t bit_depth);
+
+  // Sends the EXT_CTRLS ioctl for 10-bit video at the specified |size|. This
+  // will enable retrieving the proper format from the CAPTURE queue. |size| is
+  // needed so that we are passing in all the information that might be needed
+  // by the driver to know what the format is.
+  CroStatus SetExtCtrls10Bit(const gfx::Size& size);
 
   // Start streaming V4L2 input and (if |start_output_queue| is true) output
   // queues. Attempt to start |device_poll_thread_| after streaming starts.
@@ -201,7 +207,7 @@ class MEDIA_GPU_EXPORT V4L2VideoDecoder
   VideoAspectRatio aspect_ratio_;
 
   // Callbacks passed from Initialize().
-  OutputCB output_cb_;
+  PipelineOutputCB output_cb_;
 
   // Hold onto profile and color space passed in from Initialize() so that
   // it is available for InitializeBackend().

@@ -110,14 +110,13 @@ LoaderImpl::AsyncLoadFileCallback MockInputFileManager::GetAsyncCallback() {
 }
 
 InputFileManager::SyncLoadFileCallback MockInputFileManager::GetSyncCallback() {
-  return
-      [this](const SourceFile& file_name, InputFile* file) {
-        CannedResponseMap::const_iterator found = canned_responses_.find(file_name);
-        if (found == canned_responses_.end())
-          return false;
-        file->SetContents(found->second->input_file->contents());
-        return true;
-      };
+  return [this](const SourceFile& file_name, InputFile* file) {
+    CannedResponseMap::const_iterator found = canned_responses_.find(file_name);
+    if (found == canned_responses_.end())
+      return false;
+    file->SetContents(found->second->input_file->contents());
+    return true;
+  };
 }
 
 // Sets a given response for a given source file.

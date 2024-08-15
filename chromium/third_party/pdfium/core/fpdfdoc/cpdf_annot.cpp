@@ -23,11 +23,11 @@
 #include "core/fpdfapi/render/cpdf_rendercontext.h"
 #include "core/fpdfapi/render/cpdf_renderoptions.h"
 #include "core/fpdfdoc/cpdf_generateap.h"
+#include "core/fxcrt/check.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
 #include "core/fxge/cfx_graphstatedata.h"
 #include "core/fxge/cfx_path.h"
 #include "core/fxge/cfx_renderdevice.h"
-#include "third_party/base/check.h"
 
 namespace {
 
@@ -225,9 +225,9 @@ void CPDF_Annot::SetPopupAnnotOpenState(bool bOpenState) {
     m_pPopupAnnot->SetOpenState(bOpenState);
 }
 
-absl::optional<CFX_FloatRect> CPDF_Annot::GetPopupAnnotRect() const {
+std::optional<CFX_FloatRect> CPDF_Annot::GetPopupAnnotRect() const {
   if (!m_pPopupAnnot)
-    return absl::nullopt;
+    return std::nullopt;
   return m_pPopupAnnot->GetRect();
 }
 

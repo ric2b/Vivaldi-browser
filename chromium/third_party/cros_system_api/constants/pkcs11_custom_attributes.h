@@ -9,14 +9,9 @@
 
 namespace pkcs11_custom_attributes {
 
-// Matches CK_ATTRIBUTE_TYPE unsigned long int from pkcs11t.h
-// TODO(https://crbug.com/1068991): Move pkcs11t.h to a place accessible by
-// system_api and reuse the type.
-using CkAttributeType = unsigned long int;
+using CkAttributeType = uint32_t;
 
-// Matches CKA_VENDOR_DEFINED from pkcs11t.h
-// TODO(https://crbug.com/1068991): Move pkcs11t.h to a place accessible by
-// system_api and reuse the constant.
+// PKCS #11 v2.20 section A Manifest constants page 377.
 constexpr CkAttributeType kCkaVendorDefined = 0x80000000;
 
 // Attributes for storing metadata with keys.
@@ -40,6 +35,13 @@ constexpr CkAttributeType kCkaChromeOsKeyPermissions =
 // this, without appending a null terminator.
 constexpr CkAttributeType kCkaChromeOsBuiltinProvisioningProfileId =
     kCkaChromeOsFirstAttribute + 1;
+
+// This attribute contains a boolean that indicates whether the object was
+// created as a part of migration from NSS public slot into Chaps
+// software-backed storage (see b/264387231). Usually should either be unset or
+// contain CK_TRUE.
+constexpr CkAttributeType kCkaChromeOsMigratedFromNss =
+    kCkaChromeOsFirstAttribute + 2;
 
 }  // namespace pkcs11_custom_attributes
 

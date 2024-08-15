@@ -10,9 +10,13 @@
 #include "vivaldi/prefs/vivaldi_gen_pref_enums.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
+#include "base/threading/thread_restrictions.h"
+
 namespace extensions {
 
 void ComponentLoader::AddVivaldiApp(const base::FilePath* path) {
+  base::VivaldiScopedAllowBlocking allow_blocking;
+
   if (path) {
     // Custom path, don't load it from the resources section but from disk
     // instead.

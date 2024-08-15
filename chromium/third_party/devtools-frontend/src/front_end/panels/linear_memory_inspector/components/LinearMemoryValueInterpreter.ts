@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import * as i18n from '../../../core/i18n/i18n.js';
-import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
+import * as Platform from '../../../core/platform/platform.js';
 import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
@@ -95,7 +95,7 @@ export class LinearMemoryValueInterpreter extends HTMLElement {
           ${this.#renderEndiannessSetting()}
           <button data-settings="true" class="settings-toolbar-button ${this.#showSettings ? 'active' : ''}"
               title=${i18nString(UIStrings.toggleValueTypeSettings)} @click=${this.#onSettingsToggle}
-              jslog=${VisualLogging.action().track({click: true}).context('linear-memory-inspector.toggle-value-settings')}>
+              jslog=${VisualLogging.toggleSubpane('linear-memory-inspector.toggle-value-settings').track({click: true})}>
             <${IconButton.Icon.Icon.litTagName} name=${this.#showSettings ? 'gear-filled' : 'gear'}></${IconButton.Icon.Icon.litTagName}>
           </button>
         </div>
@@ -139,11 +139,12 @@ export class LinearMemoryValueInterpreter extends HTMLElement {
     return html`
     <label data-endianness-setting="true" title=${i18nString(UIStrings.changeEndianness)}>
       <select class="chrome-select"
-        jslog=${VisualLogging.toggle().track({change: true}).context('linear-memory-inspector.endianess')}
+        jslog=${VisualLogging.dropDown('linear-memory-inspector.endianess').track({change: true})}
         style="border: none; background-color: transparent; cursor: pointer;"
         data-endianness="true" @change=${onEnumSettingChange}>
         ${[Endianness.Little, Endianness.Big].map(endianness => {
-            return html`<option value=${endianness} .selected=${this.#endianness === endianness}>${
+            return html`<option value=${endianness} .selected=${this.#endianness === endianness}
+            jslog=${VisualLogging.item(Platform.StringUtilities.toKebabCase(endianness)).track({click: true})}>${
                 i18n.i18n.lockedString(endianness)}</option>`;
         })}
       </select>
@@ -162,11 +163,9 @@ export class LinearMemoryValueInterpreter extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent(
-    'devtools-linear-memory-inspector-interpreter', LinearMemoryValueInterpreter);
+customElements.define('devtools-linear-memory-inspector-interpreter', LinearMemoryValueInterpreter);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-linear-memory-inspector-interpreter': LinearMemoryValueInterpreter;
   }

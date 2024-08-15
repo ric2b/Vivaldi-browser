@@ -4,12 +4,14 @@
 
 from __future__ import absolute_import
 import functools
+import json
 import logging
 import socket
 import sys
 import time
 import six
 from six.moves import input # pylint: disable=redefined-builtin
+from six.moves.urllib.parse import urlparse
 
 from py_trace_event import trace_event
 
@@ -134,6 +136,31 @@ class InspectorBackend(six.with_metaclass(trace_event.TracedMetaClass, object)):
 
   def ClearDataForOrigin(self, url, timeout):
     self._storage.ClearDataForOrigin(url, timeout)
+
+  def EnableSharedStorageNotifications(self, timeout=60):
+    self._storage.EnableSharedStorageNotifications(timeout)
+
+  def DisableSharedStorageNotifications(self, timeout=60):
+    self._storage.DisableSharedStorageNotifications(timeout)
+
+  @property
+  def shared_storage_notifications(self):
+    return self._storage.shared_storage_notifications
+
+  def ClearSharedStorageNotifications(self):
+    self._storage.ClearSharedStorageNotifications()
+
+  @property
+  def shared_storage_notifications_enabled(self):
+    return self._storage.shared_storage_notifications_enabled
+
+  def GetSharedStorageMetadata(self, origin, timeout=60):
+    return self._storage.GetSharedStorageMetadata(origin=origin,
+                                                  timeout=timeout)
+
+  def GetSharedStorageEntries(self, origin, timeout=60):
+    return self._storage.GetSharedStorageEntries(origin=origin,
+                                                  timeout=timeout)
 
   def GetWebviewInspectorBackends(self):
     """Returns a list of InspectorBackend instances associated with webviews.
@@ -351,6 +378,145 @@ class InspectorBackend(six.with_metaclass(trace_event.TracedMetaClass, object)):
         console.timeEnd({{ marker }});
         """,
         marker=str(marker))
+
+  def WaitForSharedStorageEvents(self,
+                                 expected_events,
+                                 mode='strict',
+                                 timeout=60):
+    """Wait for list of expected Shared Storage notifications to be received.
+
+    Example:
+      event_list = [
+        {'type': 'documentAppend', 'params': {'key': 'a', 'value': 'b'}},
+        {'type': 'documentDelete', 'params': {'key': 'a'}},
+      ]
+      runner.WaitForSharedStorageEvents(event_list)
+
+    Args:
+      expected_events: The expected event list, provided as a list of
+        dictionaries of event params.
+          Note that for an expected event and an actually received event to
+          match, the actually received event must contain all of the key-value
+          pairs listed in the expected event, but the actually received event
+          may also contain additional keys that were not listed.
+      mode: 'strict' or 'relaxed'.
+        - 'strict': expected events must exactly match received events in terms
+          of params listed (although any unlisted parameters can differ) and
+          order
+        - 'relaxed': expected events must exactly match some sublist of received
+          events in terms of params listed (although any unlisted parameters
+          can differ) and order. Additional events are allowed to be received
+          that were not expected.
+      timeout: The timeout for waiting for event(s).
+
+    Returns:
+      A boolean denoting whether or not the expected event(s) were received
+      within the timeout.
+
+    Raises:
+      py_utils.TimeoutException
+      exceptions.StoryActionError
+      exceptions.DevtoolsTargetCrashException
+    """
+
+    if mode not in ['strict', 'relaxed']:
+      raise exceptions.StoryActionError('mode %s is unrecognized' % mode)
+
+    def AreEventsEquivalent(expected_event, actual_event):
+      # For `expected_event` and `actual_event` as dictionaries.
+      for param_key in expected_event:
+        if not param_key in actual_event:
+          return False
+        if expected_event[param_key] != actual_event[param_key]:
+          return False
+
+      # It's permitted for `actual_event` to have keys that are not listed in
+      # `expected_event`.
+      return True
+
+    def AreEventsReceivedStrict(actual_events):
+      if len(expected_events) != len(actual_events):
+        return False
+      for i, expected_event in enumerate(expected_events):
+        if not AreEventsEquivalent(expected_event, actual_events[i]):
+          return False
+      return True
+
+    def AreEventsReceivedRelaxed(actual_events):
+      if len(expected_events) > len(actual_events):
+        return False
+      actual_index = 0
+      for expected_event in expected_events:
+        while actual_index < len(actual_events) and not AreEventsEquivalent(
+            expected_event, actual_events[actual_index]):
+          actual_index += 1
+        if actual_index == len(actual_events):
+          return False
+        actual_index += 1
+      return True
+
+    def AreEventsReceived():
+      try:
+        received_events = self.shared_storage_notifications
+        if mode == 'strict':
+          return AreEventsReceivedStrict(received_events)
+        return AreEventsReceivedRelaxed(received_events)
+      except exceptions.DevtoolsTargetClosedException:
+        # Ignore errors caused by navigation.
+        return False
+
+    if not self.shared_storage_notifications_enabled:
+      message = "".join(['Did not enable shared storage notifications:\n',
+                         'call EnableSharedStorageNotifications() before ',
+                         'any shared storage calls that you want to track'])
+      raise exceptions.StoryActionError(message)
+
+    try:
+      return py_utils.WaitFor(AreEventsReceived, timeout)
+    except py_utils.TimeoutException as toe:
+      metadata_dump = ''
+      try:
+        # Try to request shared storage metadata. This will send a sync request
+        # to the websocket that will also open the websocket to receive any
+        # backlogged messages.
+        parse_result = urlparse(self.url)
+        origin = '://'.join([parse_result[0], parse_result[1]])
+        metadata = self.GetSharedStorageMetadata(origin)
+        metadata_dump = json.dumps(metadata, indent=2)
+        if AreEventsReceived():
+          logging.info('Expected events were received after getting metadata: ')
+          logging.info(metadata_dump)
+          return True
+      except Exception as me: # pylint: disable=broad-except
+        # If we are unable to get metadata, we move on. We don't want to
+        # confuse the debug message below by adding in another exception,
+        # so we keep it separate.
+        logging.info('Unable to get metadata: %s' % repr(me))
+      # Try to make timeouts a little more actionable by dumping console output.
+      debug_message = None
+      try:
+        debug_message = (
+            'Console output:\n%s' %
+            self.GetCurrentConsoleOutputBuffer())
+      except Exception as e: # pylint: disable=broad-except
+        debug_message = (
+            'Exception thrown when trying to capture console output: %s' %
+            repr(e))
+      # Rethrow with the original stack trace for better debugging.
+      actual_events = self.shared_storage_notifications
+      six.reraise(
+          py_utils.TimeoutException,
+          py_utils.TimeoutException(
+              ''.join(['Timeout after %d while waiting ' % timeout,
+                       'for Expected Shared Storage Events:\n',
+                       json.dumps(expected_events, indent=2), '\n',
+                       'Actual Events Received:\n',
+                       json.dumps(actual_events, indent=2),
+                       '\n', 'Metadata:\n', metadata_dump, '\n', repr(toe),
+                       '\n', debug_message])
+          ),
+          sys.exc_info()[2]
+      )
 
   @_HandleInspectorWebSocketExceptions
   def EnableAllContexts(self):

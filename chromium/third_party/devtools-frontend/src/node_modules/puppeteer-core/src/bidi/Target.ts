@@ -1,128 +1,170 @@
 /**
- * Copyright 2023 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2023 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {CDPSession} from '../api/CDPSession.js';
 import {Target, TargetType} from '../api/Target.js';
+import {UnsupportedOperation} from '../common/Errors.js';
+import type {CDPSession} from '../puppeteer-core.js';
 
 import type {BidiBrowser} from './Browser.js';
 import type {BidiBrowserContext} from './BrowserContext.js';
-import {type BrowsingContext, CdpSessionWrapper} from './BrowsingContext.js';
+import type {BidiFrame} from './Frame.js';
 import {BidiPage} from './Page.js';
+import type {BidiWebWorker} from './WebWorker.js';
 
 /**
  * @internal
  */
-export class BidiTarget extends Target {
-  protected _browserContext: BidiBrowserContext;
+export class BidiBrowserTarget extends Target {
+  #browser: BidiBrowser;
 
-  constructor(browserContext: BidiBrowserContext) {
+  constructor(browser: BidiBrowser) {
     super();
-    this._browserContext = browserContext;
+    this.#browser = browser;
   }
 
-  override async worker(): Promise<null> {
-    return null;
+  override asPage(): Promise<BidiPage> {
+    throw new UnsupportedOperation();
   }
-
-  override browser(): BidiBrowser {
-    return this._browserContext.browser();
-  }
-
-  override browserContext(): BidiBrowserContext {
-    return this._browserContext;
-  }
-
-  override opener(): Target | undefined {
-    throw new Error('Not implemented');
-  }
-
-  _setBrowserContext(browserContext: BidiBrowserContext): void {
-    this._browserContext = browserContext;
-  }
-}
-
-/**
- * @internal
- */
-export class BiDiBrowserTarget extends BidiTarget {
   override url(): string {
     return '';
   }
-
+  override createCDPSession(): Promise<CDPSession> {
+    throw new UnsupportedOperation();
+  }
   override type(): TargetType {
     return TargetType.BROWSER;
   }
+  override browser(): BidiBrowser {
+    return this.#browser;
+  }
+  override browserContext(): BidiBrowserContext {
+    return this.#browser.defaultBrowserContext();
+  }
+  override opener(): Target | undefined {
+    throw new UnsupportedOperation();
+  }
 }
 
 /**
  * @internal
  */
-export class BiDiBrowsingContextTarget extends BidiTarget {
-  protected _browsingContext: BrowsingContext;
+export class BidiPageTarget extends Target {
+  #page: BidiPage;
 
-  constructor(
-    browserContext: BidiBrowserContext,
-    browsingContext: BrowsingContext
-  ) {
-    super(browserContext);
-
-    this._browsingContext = browsingContext;
+  constructor(page: BidiPage) {
+    super();
+    this.#page = page;
   }
 
-  override url(): string {
-    return this._browsingContext.url;
+  override async page(): Promise<BidiPage> {
+    return this.#page;
   }
-
-  override async createCDPSession(): Promise<CDPSession> {
-    const {sessionId} = await this._browsingContext.cdpSession.send(
-      'Target.attachToTarget',
-      {
-        targetId: this._browsingContext.id,
-        flatten: true,
-      }
+  override async asPage(): Promise<BidiPage> {
+    return BidiPage.from(
+      this.browserContext(),
+      this.#page.mainFrame().browsingContext
     );
-    return new CdpSessionWrapper(this._browsingContext, sessionId);
   }
-
+  override url(): string {
+    return this.#page.url();
+  }
+  override createCDPSession(): Promise<CDPSession> {
+    return this.#page.createCDPSession();
+  }
   override type(): TargetType {
     return TargetType.PAGE;
   }
+  override browser(): BidiBrowser {
+    return this.browserContext().browser();
+  }
+  override browserContext(): BidiBrowserContext {
+    return this.#page.browserContext();
+  }
+  override opener(): Target | undefined {
+    throw new UnsupportedOperation();
+  }
 }
 
 /**
  * @internal
  */
-export class BiDiPageTarget extends BiDiBrowsingContextTarget {
-  #page: BidiPage;
+export class BidiFrameTarget extends Target {
+  #frame: BidiFrame;
+  #page: BidiPage | undefined;
 
-  constructor(
-    browserContext: BidiBrowserContext,
-    browsingContext: BrowsingContext
-  ) {
-    super(browserContext, browsingContext);
-
-    this.#page = new BidiPage(browsingContext, browserContext);
+  constructor(frame: BidiFrame) {
+    super();
+    this.#frame = frame;
   }
 
-  override async page(): Promise<BidiPage | null> {
+  override async page(): Promise<BidiPage> {
+    if (this.#page === undefined) {
+      this.#page = BidiPage.from(
+        this.browserContext(),
+        this.#frame.browsingContext
+      );
+    }
     return this.#page;
   }
+  override async asPage(): Promise<BidiPage> {
+    return BidiPage.from(this.browserContext(), this.#frame.browsingContext);
+  }
+  override url(): string {
+    return this.#frame.url();
+  }
+  override createCDPSession(): Promise<CDPSession> {
+    return this.#frame.createCDPSession();
+  }
+  override type(): TargetType {
+    return TargetType.PAGE;
+  }
+  override browser(): BidiBrowser {
+    return this.browserContext().browser();
+  }
+  override browserContext(): BidiBrowserContext {
+    return this.#frame.page().browserContext();
+  }
+  override opener(): Target | undefined {
+    throw new UnsupportedOperation();
+  }
+}
 
-  override _setBrowserContext(browserContext: BidiBrowserContext): void {
-    super._setBrowserContext(browserContext);
-    this.#page._setBrowserContext(browserContext);
+/**
+ * @internal
+ */
+export class BidiWorkerTarget extends Target {
+  #worker: BidiWebWorker;
+
+  constructor(worker: BidiWebWorker) {
+    super();
+    this.#worker = worker;
+  }
+
+  override async page(): Promise<BidiPage> {
+    throw new UnsupportedOperation();
+  }
+  override async asPage(): Promise<BidiPage> {
+    throw new UnsupportedOperation();
+  }
+  override url(): string {
+    return this.#worker.url();
+  }
+  override createCDPSession(): Promise<CDPSession> {
+    throw new UnsupportedOperation();
+  }
+  override type(): TargetType {
+    return TargetType.OTHER;
+  }
+  override browser(): BidiBrowser {
+    return this.browserContext().browser();
+  }
+  override browserContext(): BidiBrowserContext {
+    return this.#worker.frame.page().browserContext();
+  }
+  override opener(): Target | undefined {
+    throw new UnsupportedOperation();
   }
 }

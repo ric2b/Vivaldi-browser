@@ -72,9 +72,9 @@ fn license_ignore() -> Result<globset::GlobSet, globset::Error> {
 }
 
 fn license_ignore_dirs() -> Vec<&'static str> {
+    // These will be checked against the absolute path of each file.
     vec![
         "**/android/build/**",
-        "target/**",
         "**/target/**",
         "**/.idea/**",
         "**/cmake-build/**",
@@ -109,5 +109,16 @@ fn license_ignore_dirs() -> Vec<&'static str> {
         "**/*.class",
         "**/fuzz/artifacts/**",
         "**/cmake-build-debug/**",
+        "**/tags",
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn new_ignore_is_likely_buggy() {
+        for dir in super::license_ignore_dirs() {
+            assert!(dir.starts_with("**/"), "Matching on the root filesystem is likely unintended");
+        }
+    }
 }

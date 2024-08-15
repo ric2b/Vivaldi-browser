@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.firstrun;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -33,13 +34,19 @@ import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.HistogramWatcher;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileProvider;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
+import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.identitymanager.IdentityManager;
+import org.chromium.components.sync.SyncService;
+import org.chromium.components.sync.UserSelectableType;
+
+import java.util.Set;
 
 /**
  * Tests FirstRunFlowSequencer which contains the core logic of what should be shown during the
@@ -63,26 +70,18 @@ public class FirstRunFlowSequencerTest {
     /** Testing version of FirstRunFlowSequencer that allows us to override all needed checks. */
     private static class TestFirstRunFlowSequencerDelegate
             extends FirstRunFlowSequencer.FirstRunFlowSequencerDelegate {
-        private final boolean mIsSyncAllowed;
         private final boolean mShouldShowSearchEnginePage;
 
         TestFirstRunFlowSequencerDelegate(
                 OneshotSupplier<ProfileProvider> profileSupplier,
-                boolean isSyncAllowed,
                 boolean shouldShowSearchEnginePage) {
             super(profileSupplier);
-            mIsSyncAllowed = isSyncAllowed;
             mShouldShowSearchEnginePage = shouldShowSearchEnginePage;
         }
 
         @Override
         public boolean shouldShowSearchEnginePage() {
             return mShouldShowSearchEnginePage;
-        }
-
-        @Override
-        public boolean isSyncAllowed() {
-            return mIsSyncAllowed;
         }
     }
 
@@ -93,7 +92,6 @@ public class FirstRunFlowSequencerTest {
         public TestFirstRunFlowSequencer(
                 Activity activity, OneshotSupplier<ProfileProvider> profileSupplier) {
             super(
-                    activity,
                     profileSupplier,
                     new ChildAccountStatusSupplier(
                             AccountManagerFacadeProvider.getInstance(),
@@ -109,6 +107,7 @@ public class FirstRunFlowSequencerTest {
     }
 
     @Mock private IdentityManager mIdentityManagerMock;
+    @Mock private SyncService mSyncServiceMock;
 
     private ActivityController<Activity> mActivityController;
     private Activity mActivity;
@@ -118,11 +117,18 @@ public class FirstRunFlowSequencerTest {
     public void setUp() {
         Profile profile = mock(Profile.class);
         ProfileProvider profileProvider = mock(ProfileProvider.class);
+
         IdentityServicesProvider.setInstanceForTests(mock(IdentityServicesProvider.class));
         when(IdentityServicesProvider.get().getIdentityManager(profile))
                 .thenReturn(mIdentityManagerMock);
         when(mIdentityManagerMock.hasPrimaryAccount(ConsentLevel.SIGNIN)).thenReturn(false);
         when(mIdentityManagerMock.hasPrimaryAccount(ConsentLevel.SYNC)).thenReturn(false);
+
+        SyncServiceFactory.setInstanceForTesting(mSyncServiceMock);
+        when(mSyncServiceMock.getSelectedTypes()).thenReturn(Set.of());
+        when(mSyncServiceMock.isSyncDisabledByEnterprisePolicy()).thenReturn(false);
+        when(mSyncServiceMock.isTypeManagedByPolicy(anyInt())).thenReturn(false);
+        when(mSyncServiceMock.isTypeManagedByCustodian(anyInt())).thenReturn(false);
 
         mActivityController = Robolectric.buildActivity(Activity.class);
         mActivity = mActivityController.setup().get();
@@ -136,19 +142,20 @@ public class FirstRunFlowSequencerTest {
         mActivityController.pause().stop().destroy();
     }
 
-    private void setDelegateFactory(boolean isSyncAllowed, boolean shouldShowSearchEnginePage) {
+    private void setDelegateFactory(boolean shouldShowSearchEnginePage) {
         FirstRunFlowSequencer.setDelegateFactoryForTesting(
                 (profileSupplier) -> {
                     return new TestFirstRunFlowSequencerDelegate(
-                            profileSupplier, isSyncAllowed, shouldShowSearchEnginePage);
+                            profileSupplier, shouldShowSearchEnginePage);
                 });
     }
 
     @Test
     @Feature({"FirstRun"})
+    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     public void testFlowOneChildAccount() {
         mAccountManagerTestRule.addAccount(CHILD_ACCOUNT_NAME);
-        setDelegateFactory(true, false);
+        setDelegateFactory(false);
         HistogramWatcher numberOfAccountsHistogram =
                 HistogramWatcher.newSingleRecordWatcher(
                         "Signin.AndroidDeviceAccountsNumberWhenEnteringFRE", 1);
@@ -162,15 +169,68 @@ public class FirstRunFlowSequencerTest {
 
         Bundle bundle = sequencer.returnedBundle;
         assertTrue(bundle.getBoolean(FirstRunActivityBase.SHOW_SYNC_CONSENT_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_HISTORY_SYNC_PAGE));
         assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
         assertTrue(bundle.getBoolean(SyncConsentFirstRunFragment.IS_CHILD_ACCOUNT));
-        assertEquals(3, bundle.size());
+        assertEquals(4, bundle.size());
     }
 
     @Test
     @Feature({"FirstRun"})
+    @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    public void testFlowOneChildAccount_historySyncEnabled() {
+        mAccountManagerTestRule.addAccount(CHILD_ACCOUNT_NAME);
+        setDelegateFactory(false);
+        HistogramWatcher numberOfAccountsHistogram =
+                HistogramWatcher.newSingleRecordWatcher(
+                        "Signin.AndroidDeviceAccountsNumberWhenEnteringFRE", 1);
+
+        TestFirstRunFlowSequencer sequencer =
+                new TestFirstRunFlowSequencer(mActivity, mProfileSupplier);
+        sequencer.start();
+
+        numberOfAccountsHistogram.assertExpected();
+        assertTrue(sequencer.calledOnFlowIsKnown);
+
+        Bundle bundle = sequencer.returnedBundle;
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SYNC_CONSENT_PAGE));
+        assertTrue(bundle.getBoolean(FirstRunActivityBase.SHOW_HISTORY_SYNC_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
+        assertTrue(bundle.getBoolean(SyncConsentFirstRunFragment.IS_CHILD_ACCOUNT));
+        assertEquals(4, bundle.size());
+    }
+
+    @Test
+    @Feature({"FirstRun"})
+    @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    public void testFlowOneChildAccount_historySyncManagedByCustodian_historySyncEnabled() {
+        when(mSyncServiceMock.isTypeManagedByCustodian(anyInt())).thenReturn(true);
+        mAccountManagerTestRule.addAccount(CHILD_ACCOUNT_NAME);
+        setDelegateFactory(false);
+        HistogramWatcher numberOfAccountsHistogram =
+                HistogramWatcher.newSingleRecordWatcher(
+                        "Signin.AndroidDeviceAccountsNumberWhenEnteringFRE", 1);
+
+        TestFirstRunFlowSequencer sequencer =
+                new TestFirstRunFlowSequencer(mActivity, mProfileSupplier);
+        sequencer.start();
+
+        numberOfAccountsHistogram.assertExpected();
+        assertTrue(sequencer.calledOnFlowIsKnown);
+
+        Bundle bundle = sequencer.returnedBundle;
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SYNC_CONSENT_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_HISTORY_SYNC_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
+        assertTrue(bundle.getBoolean(SyncConsentFirstRunFragment.IS_CHILD_ACCOUNT));
+        assertEquals(4, bundle.size());
+    }
+
+    @Test
+    @Feature({"FirstRun"})
+    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     public void testFlowShowSearchEnginePage() {
-        setDelegateFactory(true, true);
+        setDelegateFactory(true);
         HistogramWatcher numberOfAccountsHistogram =
                 HistogramWatcher.newSingleRecordWatcher(
                         "Signin.AndroidDeviceAccountsNumberWhenEnteringFRE", 0);
@@ -184,15 +244,41 @@ public class FirstRunFlowSequencerTest {
 
         Bundle bundle = sequencer.returnedBundle;
         assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SYNC_CONSENT_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_HISTORY_SYNC_PAGE));
         assertTrue(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
         assertFalse(bundle.getBoolean(SyncConsentFirstRunFragment.IS_CHILD_ACCOUNT));
-        assertEquals(3, bundle.size());
+        assertEquals(4, bundle.size());
     }
 
     @Test
     @Feature({"FirstRun"})
+    @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    public void testFlowShowSearchEnginePage_historySyncEnabled() {
+        setDelegateFactory(true);
+        HistogramWatcher numberOfAccountsHistogram =
+                HistogramWatcher.newSingleRecordWatcher(
+                        "Signin.AndroidDeviceAccountsNumberWhenEnteringFRE", 0);
+
+        TestFirstRunFlowSequencer sequencer =
+                new TestFirstRunFlowSequencer(mActivity, mProfileSupplier);
+        sequencer.start();
+
+        numberOfAccountsHistogram.assertExpected();
+        assertTrue(sequencer.calledOnFlowIsKnown);
+
+        Bundle bundle = sequencer.returnedBundle;
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SYNC_CONSENT_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_HISTORY_SYNC_PAGE));
+        assertTrue(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
+        assertFalse(bundle.getBoolean(SyncConsentFirstRunFragment.IS_CHILD_ACCOUNT));
+        assertEquals(4, bundle.size());
+    }
+
+    @Test
+    @Feature({"FirstRun"})
+    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     public void testFlowHideSyncConsentPageWhenUserIsNotSignedIn() {
-        setDelegateFactory(true, false);
+        setDelegateFactory(false);
         HistogramWatcher numberOfAccountsHistogram =
                 HistogramWatcher.newSingleRecordWatcher(
                         "Signin.AndroidDeviceAccountsNumberWhenEnteringFRE", 0);
@@ -205,17 +291,42 @@ public class FirstRunFlowSequencerTest {
         assertTrue(sequencer.calledOnFlowIsKnown);
         final Bundle bundle = sequencer.returnedBundle;
         assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SYNC_CONSENT_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_HISTORY_SYNC_PAGE));
         assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
         assertFalse(bundle.getBoolean(SyncConsentFirstRunFragment.IS_CHILD_ACCOUNT));
-        assertEquals(3, bundle.size());
+        assertEquals(4, bundle.size());
     }
 
     @Test
     @Feature({"FirstRun"})
+    @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    public void testFlowHideHistorySyncPageWhenUserIsNotSignedIn() {
+        setDelegateFactory(false);
+        HistogramWatcher numberOfAccountsHistogram =
+                HistogramWatcher.newSingleRecordWatcher(
+                        "Signin.AndroidDeviceAccountsNumberWhenEnteringFRE", 0);
+
+        TestFirstRunFlowSequencer sequencer =
+                new TestFirstRunFlowSequencer(mActivity, mProfileSupplier);
+        sequencer.start();
+
+        numberOfAccountsHistogram.assertExpected();
+        assertTrue(sequencer.calledOnFlowIsKnown);
+        final Bundle bundle = sequencer.returnedBundle;
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SYNC_CONSENT_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_HISTORY_SYNC_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
+        assertFalse(bundle.getBoolean(SyncConsentFirstRunFragment.IS_CHILD_ACCOUNT));
+        assertEquals(4, bundle.size());
+    }
+
+    @Test
+    @Feature({"FirstRun"})
+    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     public void testFlowShowSyncConsentPageWhenUserIsSignedIn() {
         mAccountManagerTestRule.addAccount(ADULT_ACCOUNT_NAME);
         when(mIdentityManagerMock.hasPrimaryAccount(ConsentLevel.SIGNIN)).thenReturn(true);
-        setDelegateFactory(true, false);
+        setDelegateFactory(false);
         HistogramWatcher numberOfAccountsHistogram =
                 HistogramWatcher.newSingleRecordWatcher(
                         "Signin.AndroidDeviceAccountsNumberWhenEnteringFRE", 1);
@@ -228,8 +339,164 @@ public class FirstRunFlowSequencerTest {
         assertTrue(sequencer.calledOnFlowIsKnown);
         final Bundle bundle = sequencer.returnedBundle;
         assertTrue(bundle.getBoolean(FirstRunActivityBase.SHOW_SYNC_CONSENT_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_HISTORY_SYNC_PAGE));
         assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
         assertFalse(bundle.getBoolean(SyncConsentFirstRunFragment.IS_CHILD_ACCOUNT));
-        assertEquals(3, bundle.size());
+        assertEquals(4, bundle.size());
+    }
+
+    @Test
+    @Feature({"FirstRun"})
+    @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    public void testFlowShowHistorySyncPageWhenUserIsSignedIn() {
+        mAccountManagerTestRule.addAccount(ADULT_ACCOUNT_NAME);
+        when(mIdentityManagerMock.hasPrimaryAccount(ConsentLevel.SIGNIN)).thenReturn(true);
+        setDelegateFactory(false);
+        HistogramWatcher numberOfAccountsHistogram =
+                HistogramWatcher.newSingleRecordWatcher(
+                        "Signin.AndroidDeviceAccountsNumberWhenEnteringFRE", 1);
+
+        TestFirstRunFlowSequencer sequencer =
+                new TestFirstRunFlowSequencer(mActivity, mProfileSupplier);
+        sequencer.start();
+
+        numberOfAccountsHistogram.assertExpected();
+        assertTrue(sequencer.calledOnFlowIsKnown);
+        final Bundle bundle = sequencer.returnedBundle;
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SYNC_CONSENT_PAGE));
+        assertTrue(bundle.getBoolean(FirstRunActivityBase.SHOW_HISTORY_SYNC_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
+        assertFalse(bundle.getBoolean(SyncConsentFirstRunFragment.IS_CHILD_ACCOUNT));
+        assertEquals(4, bundle.size());
+    }
+
+    @Test
+    @Feature({"FirstRun"})
+    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    public void testFlowUserIsSignedIn_syncDisabledByPolicy() {
+        when(mSyncServiceMock.isSyncDisabledByEnterprisePolicy()).thenReturn(true);
+        mAccountManagerTestRule.addAccount(ADULT_ACCOUNT_NAME);
+        when(mIdentityManagerMock.hasPrimaryAccount(ConsentLevel.SIGNIN)).thenReturn(true);
+        setDelegateFactory(false);
+        HistogramWatcher numberOfAccountsHistogram =
+                HistogramWatcher.newSingleRecordWatcher(
+                        "Signin.AndroidDeviceAccountsNumberWhenEnteringFRE", 1);
+
+        TestFirstRunFlowSequencer sequencer =
+                new TestFirstRunFlowSequencer(mActivity, mProfileSupplier);
+        sequencer.start();
+
+        numberOfAccountsHistogram.assertExpected();
+        assertTrue(sequencer.calledOnFlowIsKnown);
+        final Bundle bundle = sequencer.returnedBundle;
+        assertTrue(bundle.getBoolean(FirstRunActivityBase.SHOW_SYNC_CONSENT_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_HISTORY_SYNC_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
+        assertFalse(bundle.getBoolean(SyncConsentFirstRunFragment.IS_CHILD_ACCOUNT));
+        assertEquals(4, bundle.size());
+    }
+
+    @Test
+    @Feature({"FirstRun"})
+    @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    public void testFlowUserIsSignedIn_syncDisabledByPolicy_historySyncEnabled() {
+        when(mSyncServiceMock.isSyncDisabledByEnterprisePolicy()).thenReturn(true);
+        mAccountManagerTestRule.addAccount(ADULT_ACCOUNT_NAME);
+        when(mIdentityManagerMock.hasPrimaryAccount(ConsentLevel.SIGNIN)).thenReturn(true);
+        setDelegateFactory(false);
+        HistogramWatcher numberOfAccountsHistogram =
+                HistogramWatcher.newSingleRecordWatcher(
+                        "Signin.AndroidDeviceAccountsNumberWhenEnteringFRE", 1);
+
+        TestFirstRunFlowSequencer sequencer =
+                new TestFirstRunFlowSequencer(mActivity, mProfileSupplier);
+        sequencer.start();
+
+        numberOfAccountsHistogram.assertExpected();
+        assertTrue(sequencer.calledOnFlowIsKnown);
+        final Bundle bundle = sequencer.returnedBundle;
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SYNC_CONSENT_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_HISTORY_SYNC_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
+        assertFalse(bundle.getBoolean(SyncConsentFirstRunFragment.IS_CHILD_ACCOUNT));
+        assertEquals(4, bundle.size());
+    }
+
+    @Test
+    @Feature({"FirstRun"})
+    @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    public void testFlowUserIsSignedIn_historySyncDisabledByPolicy_historySyncEnabled() {
+        when(mSyncServiceMock.isTypeManagedByPolicy(anyInt())).thenReturn(true);
+        mAccountManagerTestRule.addAccount(ADULT_ACCOUNT_NAME);
+        when(mIdentityManagerMock.hasPrimaryAccount(ConsentLevel.SIGNIN)).thenReturn(true);
+        setDelegateFactory(false);
+        HistogramWatcher numberOfAccountsHistogram =
+                HistogramWatcher.newSingleRecordWatcher(
+                        "Signin.AndroidDeviceAccountsNumberWhenEnteringFRE", 1);
+
+        TestFirstRunFlowSequencer sequencer =
+                new TestFirstRunFlowSequencer(mActivity, mProfileSupplier);
+        sequencer.start();
+
+        numberOfAccountsHistogram.assertExpected();
+        assertTrue(sequencer.calledOnFlowIsKnown);
+        final Bundle bundle = sequencer.returnedBundle;
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SYNC_CONSENT_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_HISTORY_SYNC_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
+        assertFalse(bundle.getBoolean(SyncConsentFirstRunFragment.IS_CHILD_ACCOUNT));
+        assertEquals(4, bundle.size());
+    }
+
+    @Test
+    @Feature({"FirstRun"})
+    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    public void testFlowUserIsSignedInAndSyncing() {
+        mAccountManagerTestRule.addAccount(ADULT_ACCOUNT_NAME);
+        when(mIdentityManagerMock.hasPrimaryAccount(ConsentLevel.SYNC)).thenReturn(true);
+        setDelegateFactory(false);
+        HistogramWatcher numberOfAccountsHistogram =
+                HistogramWatcher.newSingleRecordWatcher(
+                        "Signin.AndroidDeviceAccountsNumberWhenEnteringFRE", 1);
+
+        TestFirstRunFlowSequencer sequencer =
+                new TestFirstRunFlowSequencer(mActivity, mProfileSupplier);
+        sequencer.start();
+
+        numberOfAccountsHistogram.assertExpected();
+        assertTrue(sequencer.calledOnFlowIsKnown);
+        final Bundle bundle = sequencer.returnedBundle;
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SYNC_CONSENT_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_HISTORY_SYNC_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
+        assertFalse(bundle.getBoolean(SyncConsentFirstRunFragment.IS_CHILD_ACCOUNT));
+        assertEquals(4, bundle.size());
+    }
+
+    @Test
+    @Feature({"FirstRun"})
+    @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    public void testFlowUserIsSignedIn_userAlreadySyncsHistory_historySyncEnabled() {
+        when(mSyncServiceMock.getSelectedTypes())
+                .thenReturn(Set.of(UserSelectableType.HISTORY, UserSelectableType.TABS));
+        mAccountManagerTestRule.addAccount(ADULT_ACCOUNT_NAME);
+        when(mIdentityManagerMock.hasPrimaryAccount(ConsentLevel.SIGNIN)).thenReturn(true);
+        setDelegateFactory(false);
+        HistogramWatcher numberOfAccountsHistogram =
+                HistogramWatcher.newSingleRecordWatcher(
+                        "Signin.AndroidDeviceAccountsNumberWhenEnteringFRE", 1);
+
+        TestFirstRunFlowSequencer sequencer =
+                new TestFirstRunFlowSequencer(mActivity, mProfileSupplier);
+        sequencer.start();
+
+        numberOfAccountsHistogram.assertExpected();
+        assertTrue(sequencer.calledOnFlowIsKnown);
+        final Bundle bundle = sequencer.returnedBundle;
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SYNC_CONSENT_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_HISTORY_SYNC_PAGE));
+        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
+        assertFalse(bundle.getBoolean(SyncConsentFirstRunFragment.IS_CHILD_ACCOUNT));
+        assertEquals(4, bundle.size());
     }
 }

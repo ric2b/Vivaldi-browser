@@ -11,6 +11,11 @@
 #include "components/crashreport/crashreport_accessor.h"
 #include "prefs/vivaldi_pref_names.h"
 
+#if defined(IS_WIN)
+#include "chrome/install_static/install_util.h"
+#include "components/crash/core/app/crash_export_thunks.h"
+#endif
+
 namespace vivaldi {
 
 CrashReportObserver::CrashReportObserver(content::BrowserContext*) {
@@ -32,9 +37,17 @@ void CrashReportObserver::Shutdown() {}
 void CrashReportObserver::OnPrefChange() {
   GoogleUpdateSettings::CollectStatsConsentTaskRunner()->PostTask(
       FROM_HERE,
-      base::BindOnce(
-          base::IgnoreResult(&GoogleUpdateSettings::SetCollectStatsConsent),
-          vivaldi::IsVivaldiCrashReportingEnabled()));
+      base::BindOnce(base::IgnoreResult([](bool consent) {
+#if defined(IS_WIN)
+                       // ChromeMetricsServicesManagerClient::UpdateRunningServices
+                       // can override those settings, but won't react to pref
+                       // change.
+                       install_static::SetCollectStatsInSample(consent);
+                       SetUploadConsent_ExportThunk(consent);
+#endif
+                       GoogleUpdateSettings::SetCollectStatsConsent(consent);
+                     }),
+                     vivaldi::IsVivaldiCrashReportingEnabled()));
 }
 
 static base::LazyInstance<extensions::BrowserContextKeyedAPIFactory<

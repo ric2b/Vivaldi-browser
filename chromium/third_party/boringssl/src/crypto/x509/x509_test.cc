@@ -36,6 +36,7 @@
 
 #include "internal.h"
 #include "../internal.h"
+#include "../test/file_util.h"
 #include "../test/test_util.h"
 
 #if defined(OPENSSL_THREADS)
@@ -1382,6 +1383,11 @@ TEST(X509Test, StoreThreads) {
     threads.emplace_back([&] {
       ASSERT_TRUE(X509_STORE_add_cert(store.get(), other2.get()));
     });
+    threads.emplace_back([&] {
+      bssl::UniquePtr<STACK_OF(X509_OBJECT)> objs(
+          X509_STORE_get1_objects(store.get()));
+      ASSERT_TRUE(objs);
+    });
   }
   for (auto &thread : threads) {
     thread.join();
@@ -1696,18 +1702,27 @@ static bssl::UniquePtr<GENERAL_NAME> MakeGeneralName(int type,
   return name;
 }
 
+static bssl::UniquePtr<X509_NAME> MakeTestName(const char *common_name) {
+  bssl::UniquePtr<X509_NAME> name(X509_NAME_new());
+  if (name == nullptr ||
+      !X509_NAME_add_entry_by_txt(
+          name.get(), "CN", MBSTRING_UTF8,
+          reinterpret_cast<const uint8_t *>(common_name), -1, -1, 0)) {
+    return nullptr;
+  }
+  return name;
+}
+
 static bssl::UniquePtr<X509> MakeTestCert(const char *issuer,
                                           const char *subject, EVP_PKEY *key,
                                           bool is_ca) {
+  bssl::UniquePtr<X509_NAME> issuer_name = MakeTestName(issuer);
+  bssl::UniquePtr<X509_NAME> subject_name = MakeTestName(subject);
   bssl::UniquePtr<X509> cert(X509_new());
-  if (!cert ||  //
+  if (issuer_name == nullptr || subject_name == nullptr || cert == nullptr ||
       !X509_set_version(cert.get(), X509_VERSION_3) ||
-      !X509_NAME_add_entry_by_txt(
-          X509_get_issuer_name(cert.get()), "CN", MBSTRING_UTF8,
-          reinterpret_cast<const uint8_t *>(issuer), -1, -1, 0) ||
-      !X509_NAME_add_entry_by_txt(
-          X509_get_subject_name(cert.get()), "CN", MBSTRING_UTF8,
-          reinterpret_cast<const uint8_t *>(subject), -1, -1, 0) ||
+      !X509_set_issuer_name(cert.get(), issuer_name.get()) ||
+      !X509_set_subject_name(cert.get(), subject_name.get()) ||
       !X509_set_pubkey(cert.get(), key) ||
       !ASN1_TIME_adj(X509_getm_notBefore(cert.get()), kReferenceTime, -1, 0) ||
       !ASN1_TIME_adj(X509_getm_notAfter(cert.get()), kReferenceTime, 1, 0)) {
@@ -1723,6 +1738,125 @@ static bssl::UniquePtr<X509> MakeTestCert(const char *issuer,
     return nullptr;
   }
   return cert;
+}
+
+static bool AddExtendedKeyUsage(X509 *x509, const std::vector<int> &eku_nids) {
+  bssl::UniquePtr<STACK_OF(ASN1_OBJECT)> objs(sk_ASN1_OBJECT_new_null());
+  if (objs == nullptr) {
+    return false;
+  }
+  for (int nid : eku_nids) {
+    if (!sk_ASN1_OBJECT_push(objs.get(), OBJ_nid2obj(nid))) {
+      return false;
+    }
+  }
+  return X509_add1_ext_i2d(x509, NID_ext_key_usage, objs.get(), /*crit=*/1,
+                           /*flags=*/0);
+}
+
+enum class KeyUsage : int {
+  kDigitalSignature = 0,
+  kNonRepudiation = 1,
+  kKeyEncipherment = 2,
+  kDataEncipherment = 3,
+  kKeyAgreement = 4,
+  kKeyCertSign = 5,
+  kCRLSign = 6,
+  kEncipherOnly = 7,
+  kDecipherOnly = 8,
+};
+
+static bool AddKeyUsage(X509 *x509, const std::vector<KeyUsage> usages) {
+  bssl::UniquePtr<ASN1_BIT_STRING> str(ASN1_BIT_STRING_new());
+  if (str == nullptr) {
+    return false;
+  }
+  for (KeyUsage usage : usages) {
+    if (!ASN1_BIT_STRING_set_bit(str.get(), static_cast<int>(usage), 1)) {
+      return false;
+    }
+  }
+  return X509_add1_ext_i2d(x509, NID_key_usage, str.get(), /*crit=*/1,
+                           /*flags=*/0);
+}
+
+static bool AddSubjectKeyIdentifier(X509 *x509,
+                                    bssl::Span<const uint8_t> key_id) {
+  bssl::UniquePtr<ASN1_OCTET_STRING> oct(ASN1_OCTET_STRING_new());
+  return oct != nullptr &&
+         ASN1_STRING_set(oct.get(), key_id.data(), key_id.size()) &&
+         X509_add1_ext_i2d(x509, NID_subject_key_identifier, oct.get(),
+                           /*crit=*/0, /*flags=*/0);
+}
+
+static bool AddAuthorityKeyIdentifer(X509 *x509, bssl::Span<const uint8_t> key_id) {
+  bssl::UniquePtr<AUTHORITY_KEYID> akid(AUTHORITY_KEYID_new());
+  if (akid == nullptr) {
+    return false;
+  }
+  akid->keyid = ASN1_OCTET_STRING_new();
+  if (akid->keyid == nullptr ||
+      !ASN1_STRING_set(akid->keyid, key_id.data(), key_id.size()) ||
+      !X509_add1_ext_i2d(x509, NID_authority_key_identifier, akid.get(),
+                         /*crit=*/0, /*flags=*/0)) {
+    return false;
+  }
+  return true;
+}
+
+static bssl::UniquePtr<X509_CRL> MakeTestCRL(const char *issuer,
+                                             int this_update_offset_day,
+                                             int next_update_offset_day) {
+  bssl::UniquePtr<X509_NAME> issuer_name = MakeTestName(issuer);
+  bssl::UniquePtr<X509_CRL> crl(X509_CRL_new());
+  bssl::UniquePtr<ASN1_TIME> this_update(ASN1_TIME_adj(
+      nullptr, kReferenceTime, this_update_offset_day, /*offset_sec=*/0));
+  bssl::UniquePtr<ASN1_TIME> next_update(ASN1_TIME_adj(
+      nullptr, kReferenceTime, next_update_offset_day, /*offset_sec=*/0));
+  if (crl == nullptr || issuer_name == nullptr || this_update == nullptr ||
+      next_update == nullptr ||
+      !X509_CRL_set_version(crl.get(), X509_CRL_VERSION_2) ||
+      !X509_CRL_set_issuer_name(crl.get(), issuer_name.get()) ||
+      // OpenSSL's API is named incorrectly. The field is called thisUpdate.
+      !X509_CRL_set1_lastUpdate(crl.get(), this_update.get()) ||
+      !X509_CRL_set1_nextUpdate(crl.get(), next_update.get())) {
+    return nullptr;
+  }
+
+  return crl;
+}
+
+static bool AddRevokedSerialU64(X509_CRL *crl, uint64_t serial,
+                                int offset_day) {
+  bssl::UniquePtr<X509_REVOKED> rev(X509_REVOKED_new());
+  bssl::UniquePtr<ASN1_INTEGER> serial_asn1(ASN1_INTEGER_new());
+  bssl::UniquePtr<ASN1_TIME> rev_date(
+      ASN1_TIME_adj(nullptr, kReferenceTime, offset_day, /*offset_sec=*/0));
+  if (rev == nullptr || serial_asn1 == nullptr || rev_date == nullptr ||
+      !ASN1_INTEGER_set_uint64(serial_asn1.get(), serial) ||
+      !X509_REVOKED_set_serialNumber(rev.get(), serial_asn1.get()) ||
+      !X509_REVOKED_set_revocationDate(rev.get(), rev_date.get()) ||
+      !X509_CRL_add0_revoked(crl, rev.get())) {
+    return false;
+  }
+  rev.release();  // X509_CRL_add0_revoked takes ownership on success.
+  return true;
+}
+
+static bool AddAuthorityKeyIdentifer(X509_CRL *crl,
+                                     bssl::Span<const uint8_t> key_id) {
+  bssl::UniquePtr<AUTHORITY_KEYID> akid(AUTHORITY_KEYID_new());
+  if (akid == nullptr) {
+    return false;
+  }
+  akid->keyid = ASN1_OCTET_STRING_new();
+  if (akid->keyid == nullptr ||
+      !ASN1_STRING_set(akid->keyid, key_id.data(), key_id.size()) ||
+      !X509_CRL_add1_ext_i2d(crl, NID_authority_key_identifier, akid.get(),
+                             /*crit=*/0, /*flags=*/0)) {
+    return false;
+  }
+  return true;
 }
 
 TEST(X509Test, NameConstraints) {
@@ -1968,9 +2102,8 @@ TEST(X509Test, TestEd25519BadParameters) {
 
   ASSERT_FALSE(X509_verify(cert.get(), pkey.get()));
 
-  uint32_t err = ERR_get_error();
-  ASSERT_EQ(ERR_LIB_X509, ERR_GET_LIB(err));
-  ASSERT_EQ(X509_R_INVALID_PARAMETER, ERR_GET_REASON(err));
+  EXPECT_TRUE(
+      ErrorEquals(ERR_get_error(), ERR_LIB_X509, X509_R_INVALID_PARAMETER));
   ERR_clear_error();
 }
 
@@ -2780,6 +2913,15 @@ TEST(X509Test, NoBasicConstraintsCertSign) {
   // basicConstraints.
   EXPECT_EQ(X509_V_ERR_INVALID_CA,
             Verify(leaf.get(), {root.get()}, {intermediate.get()}, {}, 0));
+
+  // |X509_check_purpose| with |X509_PURPOSE_ANY| and purpose -1 do not check
+  // basicConstraints, but other purpose types do. (This is redundant with the
+  // actual basicConstraints check, but |X509_check_purpose| is public API.)
+  EXPECT_TRUE(X509_check_purpose(intermediate.get(), -1, /*ca=*/1));
+  EXPECT_TRUE(
+      X509_check_purpose(intermediate.get(), X509_PURPOSE_ANY, /*ca=*/1));
+  EXPECT_FALSE(X509_check_purpose(intermediate.get(), X509_PURPOSE_SSL_SERVER,
+                                  /*ca=*/1));
 }
 
 TEST(X509Test, NoBasicConstraintsNetscapeCA) {
@@ -2806,9 +2948,8 @@ TEST(X509Test, MismatchAlgorithms) {
   ASSERT_TRUE(pkey);
 
   EXPECT_FALSE(X509_verify(cert.get(), pkey.get()));
-  uint32_t err = ERR_get_error();
-  EXPECT_EQ(ERR_LIB_X509, ERR_GET_LIB(err));
-  EXPECT_EQ(X509_R_SIGNATURE_ALGORITHM_MISMATCH, ERR_GET_REASON(err));
+  EXPECT_TRUE(ErrorEquals(ERR_get_error(), ERR_LIB_X509,
+                          X509_R_SIGNATURE_ALGORITHM_MISMATCH));
 }
 
 TEST(X509Test, PEMX509Info) {
@@ -2941,9 +3082,8 @@ TEST(X509Test, ReadBIOEmpty) {
   // certificates.
   bssl::UniquePtr<X509> x509(d2i_X509_bio(bio.get(), nullptr));
   EXPECT_FALSE(x509);
-  uint32_t err = ERR_get_error();
-  EXPECT_EQ(ERR_LIB_ASN1, ERR_GET_LIB(err));
-  EXPECT_EQ(ASN1_R_HEADER_TOO_LONG, ERR_GET_REASON(err));
+  EXPECT_TRUE(
+      ErrorEquals(ERR_get_error(), ERR_LIB_ASN1, ASN1_R_HEADER_TOO_LONG));
 }
 
 TEST(X509Test, ReadBIOOneByte) {
@@ -2955,9 +3095,8 @@ TEST(X509Test, ReadBIOOneByte) {
   // to signal EOF.
   bssl::UniquePtr<X509> x509(d2i_X509_bio(bio.get(), nullptr));
   EXPECT_FALSE(x509);
-  uint32_t err = ERR_get_error();
-  EXPECT_EQ(ERR_LIB_ASN1, ERR_GET_LIB(err));
-  EXPECT_EQ(ASN1_R_NOT_ENOUGH_DATA, ERR_GET_REASON(err));
+  EXPECT_TRUE(
+      ErrorEquals(ERR_get_error(), ERR_LIB_ASN1, ASN1_R_NOT_ENOUGH_DATA));
 }
 
 TEST(X509Test, PartialBIOReturn) {
@@ -3670,9 +3809,8 @@ TEST(X509Test, AlgorithmParameters) {
   cert = CertFromPEM(kP256InvalidParam);
   ASSERT_TRUE(cert);
   EXPECT_FALSE(X509_verify(cert.get(), key.get()));
-  uint32_t err = ERR_get_error();
-  EXPECT_EQ(ERR_LIB_X509, ERR_GET_LIB(err));
-  EXPECT_EQ(X509_R_INVALID_PARAMETER, ERR_GET_REASON(err));
+  EXPECT_TRUE(
+      ErrorEquals(ERR_get_error(), ERR_LIB_X509, X509_R_INVALID_PARAMETER));
 
   // RSA parameters should be NULL, but we accept omitted ones.
   key = PrivateKeyFromPEM(kRSAKey);
@@ -3689,9 +3827,8 @@ TEST(X509Test, AlgorithmParameters) {
   cert = CertFromPEM(kRSAInvalidParam);
   ASSERT_TRUE(cert);
   EXPECT_FALSE(X509_verify(cert.get(), key.get()));
-  err = ERR_get_error();
-  EXPECT_EQ(ERR_LIB_X509, ERR_GET_LIB(err));
-  EXPECT_EQ(X509_R_INVALID_PARAMETER, ERR_GET_REASON(err));
+  EXPECT_TRUE(
+      ErrorEquals(ERR_get_error(), ERR_LIB_X509, X509_R_INVALID_PARAMETER));
 }
 
 TEST(X509Test, GeneralName)  {
@@ -4275,6 +4412,17 @@ TEST(X509Test, Expiry) {
                                     {}, {}, flags));
     }
   }
+
+  // X509_V_FLAG_USE_CHECK_TIME is an internal flag, but one caller relies on
+  // being able to clear it to restore the system time. Using the system time,
+  // all certificates in this test should read as expired.
+  EXPECT_EQ(X509_V_ERR_CERT_HAS_EXPIRED,
+            Verify(leaf.valid.get(), {root.valid.get()},
+                   {intermediate.valid.get()}, {}, 0, [](X509_STORE_CTX *ctx) {
+                     X509_VERIFY_PARAM *param = X509_STORE_CTX_get0_param(ctx);
+                     X509_VERIFY_PARAM_clear_flags(param,
+                                                   X509_V_FLAG_USE_CHECK_TIME);
+                   }));
 }
 
 TEST(X509Test, SignatureVerification) {
@@ -7308,4 +7456,1066 @@ TEST(X509Test, PublicKeyCache) {
   // The cached key should no longer be returned.
   key2.reset(X509_PUBKEY_get(pub));
   EXPECT_FALSE(key2);
+}
+
+// Tests some unusual behavior in |X509_STORE_CTX_set_purpose| and
+// |X509_STORE_CTX_set_trust|.
+TEST(X509Test, ContextTrustAndPurpose) {
+  bssl::UniquePtr<X509_STORE> store(X509_STORE_new());
+  ASSERT_TRUE(store);
+  bssl::UniquePtr<X509> leaf(CertFromPEM(kLeafPEM));
+  ASSERT_TRUE(leaf);
+
+  bssl::UniquePtr<X509_STORE_CTX> ctx(X509_STORE_CTX_new());
+  ASSERT_TRUE(ctx);
+  ASSERT_TRUE(X509_STORE_CTX_init(ctx.get(), store.get(), leaf.get(), nullptr));
+
+  // Initially, neither parameter is set.
+  EXPECT_EQ(ctx->param->purpose, 0);
+  EXPECT_EQ(ctx->param->trust, 0);
+
+  // Invalid purpose and trust types fail.
+  EXPECT_FALSE(X509_STORE_CTX_set_purpose(ctx.get(), 999));
+  EXPECT_FALSE(X509_STORE_CTX_set_trust(ctx.get(), 999));
+
+  // It is not possible to set |X509_PURPOSE_ANY| with this API, because there
+  // is no corresponding trust.
+  EXPECT_FALSE(X509_STORE_CTX_set_purpose(ctx.get(), X509_PURPOSE_ANY));
+
+  // Setting a purpose also sets the corresponding trust.
+  ASSERT_TRUE(X509_STORE_CTX_set_purpose(ctx.get(), X509_PURPOSE_SSL_SERVER));
+  EXPECT_EQ(ctx->param->purpose, X509_PURPOSE_SSL_SERVER);
+  EXPECT_EQ(ctx->param->trust, X509_TRUST_SSL_SERVER);
+
+  // Once set, the functions silently do nothing.
+  ASSERT_TRUE(X509_STORE_CTX_set_purpose(ctx.get(), X509_PURPOSE_SSL_CLIENT));
+  ASSERT_TRUE(X509_STORE_CTX_set_trust(ctx.get(), X509_TRUST_SSL_CLIENT));
+  EXPECT_EQ(ctx->param->purpose, X509_PURPOSE_SSL_SERVER);
+  EXPECT_EQ(ctx->param->trust, X509_TRUST_SSL_SERVER);
+
+  // Start over.
+  ctx.reset(X509_STORE_CTX_new());
+  ASSERT_TRUE(ctx);
+  ASSERT_TRUE(X509_STORE_CTX_init(ctx.get(), store.get(), leaf.get(), nullptr));
+  EXPECT_EQ(ctx->param->purpose, 0);
+  EXPECT_EQ(ctx->param->trust, 0);
+
+  // Setting trust leaves purpose unset.
+  ASSERT_TRUE(X509_STORE_CTX_set_trust(ctx.get(), X509_TRUST_SSL_SERVER));
+  EXPECT_EQ(ctx->param->purpose, 0);
+  EXPECT_EQ(ctx->param->trust, X509_TRUST_SSL_SERVER);
+
+  // If trust is set, but not purpose, |X509_STORE_CTX_set_purpose| only sets
+  // purpose.
+  ASSERT_TRUE(X509_STORE_CTX_set_purpose(ctx.get(), X509_PURPOSE_SSL_CLIENT));
+  EXPECT_EQ(ctx->param->purpose, X509_PURPOSE_SSL_CLIENT);
+  EXPECT_EQ(ctx->param->trust, X509_TRUST_SSL_SERVER);
+
+  // Start over.
+  ctx.reset(X509_STORE_CTX_new());
+  ASSERT_TRUE(ctx);
+  ASSERT_TRUE(X509_STORE_CTX_init(ctx.get(), store.get(), leaf.get(), nullptr));
+  EXPECT_EQ(ctx->param->purpose, 0);
+  EXPECT_EQ(ctx->param->trust, 0);
+
+  // If purpose is set, but not trust, |X509_STORE_CTX_set_purpose| only sets
+  // trust.
+  ASSERT_TRUE(X509_VERIFY_PARAM_set_purpose(
+      X509_STORE_CTX_get0_param(ctx.get()), X509_PURPOSE_SSL_CLIENT));
+  EXPECT_EQ(ctx->param->purpose, X509_PURPOSE_SSL_CLIENT);
+  EXPECT_EQ(ctx->param->trust, 0);
+
+  ASSERT_TRUE(X509_STORE_CTX_set_purpose(ctx.get(), X509_PURPOSE_SSL_SERVER));
+  EXPECT_EQ(ctx->param->purpose, X509_PURPOSE_SSL_CLIENT);
+  EXPECT_EQ(ctx->param->trust, X509_TRUST_SSL_SERVER);
+}
+
+TEST(X509Test, Purpose) {
+  bssl::UniquePtr<EVP_PKEY> key = PrivateKeyFromPEM(kP256Key);
+  ASSERT_TRUE(key);
+
+  struct {
+    int purpose;
+    int eku_nid;
+    std::vector<KeyUsage> key_usages;
+  } kTests[] = {
+      {X509_PURPOSE_SSL_CLIENT,
+       NID_client_auth,
+       {KeyUsage::kDigitalSignature, KeyUsage::kKeyAgreement}},
+      {X509_PURPOSE_SSL_SERVER,
+       NID_server_auth,
+       {KeyUsage::kDigitalSignature, KeyUsage::kKeyAgreement,
+        KeyUsage::kKeyEncipherment}},
+      {X509_PURPOSE_NS_SSL_SERVER,
+       NID_server_auth,
+       {KeyUsage::kKeyEncipherment}},
+      {X509_PURPOSE_SMIME_SIGN,
+       NID_email_protect,
+       {KeyUsage::kDigitalSignature, KeyUsage::kNonRepudiation}},
+      {X509_PURPOSE_SMIME_ENCRYPT,
+       NID_email_protect,
+       {KeyUsage::kKeyEncipherment}},
+      {X509_PURPOSE_CRL_SIGN, NID_undef, {KeyUsage::kCRLSign}},
+  };
+  for (const auto &t : kTests) {
+    SCOPED_TRACE(t.purpose);
+
+    auto configure_callback = [&](X509_STORE_CTX *ctx) {
+      X509_STORE_CTX_set_purpose(ctx, t.purpose);
+    };
+
+    // An unconstrained cert chain is valid.
+    bssl::UniquePtr<X509> root =
+        MakeTestCert("Root", "Root", key.get(), /*is_ca=*/true);
+    ASSERT_TRUE(root);
+    ASSERT_TRUE(X509_sign(root.get(), key.get(), EVP_sha256()));
+
+    bssl::UniquePtr<X509> intermediate =
+        MakeTestCert("Root", "Intermediate", key.get(), /*is_ca=*/true);
+    ASSERT_TRUE(intermediate);
+    ASSERT_TRUE(X509_sign(intermediate.get(), key.get(), EVP_sha256()));
+
+    bssl::UniquePtr<X509> leaf =
+        MakeTestCert("Intermediate", "Leaf", key.get(), /*is_ca=*/false);
+    ASSERT_TRUE(leaf);
+    ASSERT_TRUE(X509_sign(leaf.get(), key.get(), EVP_sha256()));
+
+    EXPECT_EQ(X509_V_OK, Verify(leaf.get(), {root.get()}, {intermediate.get()},
+                                {}, 0, configure_callback));
+
+    // A leaf and intermediate with compatible constraints is valid.
+    intermediate =
+        MakeTestCert("Root", "Intermediate", key.get(), /*is_ca=*/true);
+    ASSERT_TRUE(intermediate);
+    ASSERT_TRUE(AddKeyUsage(intermediate.get(), {KeyUsage::kKeyCertSign}));
+    if (t.eku_nid != NID_undef) {
+      ASSERT_TRUE(AddExtendedKeyUsage(intermediate.get(), {t.eku_nid}));
+    }
+    ASSERT_TRUE(X509_sign(intermediate.get(), key.get(), EVP_sha256()));
+
+    leaf = MakeTestCert("Intermediate", "Leaf", key.get(), /*is_ca=*/false);
+    ASSERT_TRUE(leaf);
+    if (t.eku_nid != NID_undef) {
+      ASSERT_TRUE(AddExtendedKeyUsage(leaf.get(), {t.eku_nid}));
+    }
+    ASSERT_TRUE(AddKeyUsage(leaf.get(), t.key_usages));
+    ASSERT_TRUE(X509_sign(leaf.get(), key.get(), EVP_sha256()));
+
+    EXPECT_EQ(X509_V_OK, Verify(leaf.get(), {root.get()}, {intermediate.get()},
+                                {}, 0, configure_callback));
+
+    // Each key usage asserted individually is valid.
+    for (KeyUsage usage : t.key_usages) {
+      SCOPED_TRACE(static_cast<int>(usage));
+      leaf = MakeTestCert("Intermediate", "Leaf", key.get(), /*is_ca=*/false);
+      ASSERT_TRUE(leaf);
+      if (t.eku_nid != NID_undef) {
+        ASSERT_TRUE(AddExtendedKeyUsage(leaf.get(), {t.eku_nid}));
+      }
+      ASSERT_TRUE(AddKeyUsage(leaf.get(), {usage}));
+      ASSERT_TRUE(X509_sign(leaf.get(), key.get(), EVP_sha256()));
+      EXPECT_EQ(X509_V_OK,
+                Verify(leaf.get(), {root.get()}, {intermediate.get()}, {}, 0,
+                       configure_callback));
+    }
+
+    // A leaf with the wrong EKU is invalid.
+    if (t.eku_nid != NID_undef) {
+      leaf = MakeTestCert("Intermediate", "Leaf", key.get(), /*is_ca=*/false);
+      ASSERT_TRUE(leaf);
+      ASSERT_TRUE(AddExtendedKeyUsage(leaf.get(), {NID_rsaEncryption}));
+      ASSERT_TRUE(AddKeyUsage(leaf.get(), t.key_usages));
+      ASSERT_TRUE(X509_sign(leaf.get(), key.get(), EVP_sha256()));
+      EXPECT_EQ(X509_V_ERR_INVALID_PURPOSE,
+                Verify(leaf.get(), {root.get()}, {intermediate.get()}, {}, 0,
+                       configure_callback));
+    }
+
+    // A leaf without any of the requested key usages is invalid.
+    std::vector<KeyUsage> usages;
+    for (int i = 0; i < 10; i++) {
+      auto k = static_cast<KeyUsage>(i);
+      if (std::find(t.key_usages.begin(), t.key_usages.end(), k) ==
+          t.key_usages.end()) {
+        usages.push_back(k);
+      }
+    }
+    leaf = MakeTestCert("Intermediate", "Leaf", key.get(), /*is_ca=*/false);
+    ASSERT_TRUE(leaf);
+    if (t.eku_nid != NID_undef) {
+      ASSERT_TRUE(AddExtendedKeyUsage(leaf.get(), {t.eku_nid}));
+    }
+    ASSERT_TRUE(AddKeyUsage(leaf.get(), usages));
+    ASSERT_TRUE(X509_sign(leaf.get(), key.get(), EVP_sha256()));
+    EXPECT_EQ(X509_V_ERR_INVALID_PURPOSE,
+              Verify(leaf.get(), {root.get()}, {intermediate.get()}, {}, 0,
+                     configure_callback));
+
+    // Extra EKUs and key usages are fine.
+    usages.clear();
+    for (int i = 0; i < 10; i++) {
+      usages.push_back(static_cast<KeyUsage>(i));
+    }
+    leaf = MakeTestCert("Intermediate", "Leaf", key.get(), /*is_ca=*/false);
+    ASSERT_TRUE(leaf);
+    if (t.eku_nid != NID_undef) {
+      ASSERT_TRUE(
+          AddExtendedKeyUsage(leaf.get(), {t.eku_nid, NID_rsaEncryption}));
+    }
+    ASSERT_TRUE(AddKeyUsage(leaf.get(), usages));
+    ASSERT_TRUE(X509_sign(leaf.get(), key.get(), EVP_sha256()));
+    EXPECT_EQ(X509_V_OK, Verify(leaf.get(), {root.get()}, {intermediate.get()},
+                                {}, 0, configure_callback));
+
+    // anyExtendedKeyUsage is not allowed in place of a concrete EKU.
+    if (t.eku_nid != NID_undef) {
+      leaf = MakeTestCert("Intermediate", "Leaf", key.get(), /*is_ca=*/false);
+      ASSERT_TRUE(leaf);
+      ASSERT_TRUE(AddExtendedKeyUsage(leaf.get(), {NID_anyExtendedKeyUsage}));
+      ASSERT_TRUE(AddKeyUsage(leaf.get(), t.key_usages));
+      ASSERT_TRUE(X509_sign(leaf.get(), key.get(), EVP_sha256()));
+      EXPECT_EQ(X509_V_ERR_INVALID_PURPOSE,
+                Verify(leaf.get(), {root.get()}, {intermediate.get()}, {}, 0,
+                       configure_callback));
+    }
+
+    // Restore |leaf| to a valid option.
+    leaf = MakeTestCert("Intermediate", "Leaf", key.get(), /*is_ca=*/false);
+    ASSERT_TRUE(leaf);
+    ASSERT_TRUE(X509_sign(leaf.get(), key.get(), EVP_sha256()));
+
+    // The intermediate must have the keyCertSign bit. This bit is checked in
+    // multiple places. The first place that fails is in looking for candidate
+    // issuers.
+    intermediate =
+        MakeTestCert("Root", "Intermediate", key.get(), /*is_ca=*/true);
+    ASSERT_TRUE(intermediate);
+    ASSERT_TRUE(AddKeyUsage(intermediate.get(), {KeyUsage::kDigitalSignature}));
+    if (t.eku_nid != NID_undef) {
+      ASSERT_TRUE(AddExtendedKeyUsage(intermediate.get(), {t.eku_nid}));
+    }
+    ASSERT_TRUE(X509_sign(intermediate.get(), key.get(), EVP_sha256()));
+    EXPECT_EQ(X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY,
+              Verify(leaf.get(), {root.get()}, {intermediate.get()}, {}, 0,
+                     configure_callback));
+
+    // The intermediate must have the EKU asserted.
+    if (t.eku_nid != NID_undef) {
+      intermediate =
+          MakeTestCert("Root", "Intermediate", key.get(), /*is_ca=*/true);
+      ASSERT_TRUE(intermediate);
+      ASSERT_TRUE(AddKeyUsage(intermediate.get(), {KeyUsage::kKeyCertSign}));
+      ASSERT_TRUE(AddExtendedKeyUsage(intermediate.get(), {NID_rsaEncryption}));
+      ASSERT_TRUE(X509_sign(intermediate.get(), key.get(), EVP_sha256()));
+      EXPECT_EQ(X509_V_ERR_INVALID_PURPOSE,
+                Verify(leaf.get(), {root.get()}, {intermediate.get()}, {}, 0,
+                       configure_callback));
+    }
+  }
+}
+
+TEST(X509Test, Trust) {
+  struct Certs {
+    bssl::UniquePtr<X509> normal;
+    bssl::UniquePtr<X509> trusted_server, distrusted_server;
+    bssl::UniquePtr<X509> trusted_any, distrusted_any;
+  };
+  auto certs_from_pem = [](const char *pem) -> Certs {
+    Certs certs;
+    certs.normal = CertFromPEM(pem);
+    certs.trusted_server = CertFromPEM(pem);
+    certs.distrusted_server = CertFromPEM(pem);
+    certs.trusted_any = CertFromPEM(pem);
+    certs.distrusted_any = CertFromPEM(pem);
+    if (certs.normal == nullptr || certs.trusted_server == nullptr ||
+        certs.distrusted_server == nullptr || certs.trusted_any == nullptr ||
+        certs.distrusted_any == nullptr ||
+        !X509_add1_trust_object(certs.trusted_server.get(),
+                                OBJ_nid2obj(NID_server_auth)) ||
+        !X509_add1_reject_object(certs.distrusted_server.get(),
+                                 OBJ_nid2obj(NID_server_auth)) ||
+        !X509_add1_trust_object(certs.trusted_any.get(),
+                                OBJ_nid2obj(NID_anyExtendedKeyUsage)) ||
+        !X509_add1_reject_object(certs.distrusted_any.get(),
+                                 OBJ_nid2obj(NID_anyExtendedKeyUsage))) {
+      return Certs{};
+    }
+    return certs;
+  };
+
+  Certs root = certs_from_pem(kRootCAPEM);
+  Certs intermediate = certs_from_pem(kIntermediatePEM);
+  Certs leaf = certs_from_pem(kLeafPEM);
+  ASSERT_TRUE(root.normal);
+  ASSERT_TRUE(intermediate.normal);
+  ASSERT_TRUE(leaf.normal);
+
+  // By default, trust is determined by a combination of self-signedness and
+  // NID_anyExtendedKeyUsage.
+  EXPECT_EQ(X509_V_OK, Verify(leaf.normal.get(), {root.normal.get()},
+                              {intermediate.normal.get()}, {}));
+  EXPECT_EQ(X509_V_OK, Verify(leaf.normal.get(), {root.trusted_any.get()},
+                              {intermediate.normal.get()}, {}));
+  EXPECT_EQ(X509_V_ERR_CERT_REJECTED,
+            Verify(leaf.normal.get(), {root.distrusted_any.get()},
+                   {intermediate.normal.get()}, {}));
+
+  // Intermediate certificates are not self-signed, so must have an
+  // NID_anyExtendedKeyUsage trust setting.
+  EXPECT_EQ(X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT,
+            Verify(leaf.normal.get(), {intermediate.normal.get()}, {}, {}));
+  EXPECT_EQ(X509_V_OK, Verify(leaf.normal.get(),
+                              {intermediate.trusted_any.get()}, {}, {}));
+  EXPECT_EQ(
+      X509_V_ERR_CERT_REJECTED,
+      Verify(leaf.normal.get(), {intermediate.distrusted_any.get()}, {}, {}));
+
+  // If a certificate has trust settings, but only for a different OID, the
+  // self-signed rule still takes effect.
+  EXPECT_EQ(X509_V_OK, Verify(leaf.normal.get(), {root.trusted_server.get()},
+                              {intermediate.normal.get()}, {}));
+  EXPECT_EQ(X509_V_OK, Verify(leaf.normal.get(), {root.distrusted_server.get()},
+                              {intermediate.normal.get()}, {}));
+  EXPECT_EQ(
+      X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT,
+      Verify(leaf.normal.get(), {intermediate.trusted_server.get()}, {}, {}));
+
+  // |X509_TRUST_SSL_SERVER| should instead look at self-signedness and
+  // |NID_server_auth|.
+  auto set_server_trust = [](X509_STORE_CTX *ctx) {
+    X509_STORE_CTX_set_trust(ctx, X509_TRUST_SSL_SERVER);
+  };
+  EXPECT_EQ(X509_V_OK, Verify(leaf.normal.get(), {root.normal.get()},
+                              {intermediate.normal.get()}, {}, /*flags=*/0,
+                              set_server_trust));
+  EXPECT_EQ(X509_V_OK, Verify(leaf.normal.get(), {root.trusted_server.get()},
+                              {intermediate.normal.get()}, {}, /*flags=*/0,
+                              set_server_trust));
+  EXPECT_EQ(
+      X509_V_ERR_CERT_REJECTED,
+      Verify(leaf.normal.get(), {root.distrusted_server.get()},
+             {intermediate.normal.get()}, {}, /*flags=*/0, set_server_trust));
+
+  EXPECT_EQ(X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT,
+            Verify(leaf.normal.get(), {intermediate.normal.get()}, {}, {},
+                   /*flags=*/0, set_server_trust));
+  EXPECT_EQ(X509_V_OK, Verify(leaf.normal.get(),
+                              {intermediate.trusted_server.get()}, {}, {},
+                              /*flags=*/0, set_server_trust));
+  EXPECT_EQ(X509_V_ERR_CERT_REJECTED,
+            Verify(leaf.normal.get(), {intermediate.distrusted_server.get()},
+                   {}, {}, /*flags=*/0, set_server_trust));
+
+  // NID_anyExtendedKeyUsage is just an unrelated OID to X509_TRUST_SSL_SERVER.
+  // Unlike the default behavior, once a certificate has explicit trust settings
+  // for any OID, the self-signed check is disabled.
+  EXPECT_EQ(
+      X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT,
+      Verify(leaf.normal.get(), {root.trusted_any.get()},
+             {intermediate.normal.get()}, {}, /*flags=*/0, set_server_trust));
+
+  // Trust settings on a certificate are ignored if the leaf did not come from
+  // |X509_STORE|. This is important because trust settings may be serialized
+  // via |d2i_X509_AUX|. It is often not obvious which functions may trigger
+  // this, so callers may inadvertently run with attacker-supplied trust
+  // settings on untrusted certificates.
+  EXPECT_EQ(X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY,
+            Verify(leaf.trusted_server.get(), /*roots=*/{},
+                   /*intermediates=*/{intermediate.trusted_server.get()}, {},
+                   /*flags=*/0, set_server_trust));
+  EXPECT_EQ(
+      X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN,
+      Verify(leaf.trusted_server.get(), /*roots=*/{},
+             /*intermediates=*/
+             {intermediate.trusted_server.get(), root.trusted_server.get()}, {},
+             /*flags=*/0, set_server_trust));
+
+  // Likewise, distrusts only take effect from |X509_STORE|.
+  EXPECT_EQ(X509_V_OK, Verify(leaf.distrusted_server.get(), {root.normal.get()},
+                              {intermediate.normal.get()}, {},
+                              /*flags=*/0, set_server_trust));
+}
+
+// Test some APIs that rust-openssl uses to look up purposes by name.
+TEST(X509Test, PurposeByShortName) {
+  int idx = X509_PURPOSE_get_by_sname("sslserver");
+  ASSERT_NE(idx, -1);
+  const X509_PURPOSE *purpose = X509_PURPOSE_get0(idx);
+  ASSERT_TRUE(purpose);
+  EXPECT_EQ(X509_PURPOSE_get_id(purpose), X509_PURPOSE_SSL_SERVER);
+}
+
+TEST(X509Test, CriticalExtension) {
+  bssl::UniquePtr<EVP_PKEY> key = PrivateKeyFromPEM(kP256Key);
+  ASSERT_TRUE(key);
+
+  bssl::UniquePtr<X509> root =
+      MakeTestCert("Root", "Root", key.get(), /*is_ca=*/true);
+  ASSERT_TRUE(root);
+  ASSERT_TRUE(X509_sign(root.get(), key.get(), EVP_sha256()));
+
+  // Issue a certificate with a critical Netscape certificate type extension. We
+  // do not recognize this extension, so this certificate should be rejected.
+  bssl::UniquePtr<X509> leaf =
+      MakeTestCert("Root", "Leaf", key.get(), /*is_ca=*/false);
+  ASSERT_TRUE(leaf);
+  bssl::UniquePtr<ASN1_BIT_STRING> cert_type(ASN1_BIT_STRING_new());
+  ASSERT_TRUE(cert_type);
+  ASSERT_TRUE(ASN1_BIT_STRING_set_bit(cert_type.get(), /*n=*/0, /*value=*/1));
+  ASSERT_TRUE(X509_add1_ext_i2d(leaf.get(), NID_netscape_cert_type,
+                                cert_type.get(),
+                                /*crit=*/1, /*flags=*/0));
+  ASSERT_TRUE(X509_sign(leaf.get(), key.get(), EVP_sha256()));
+
+  EXPECT_EQ(X509_V_ERR_UNHANDLED_CRITICAL_EXTENSION,
+            Verify(leaf.get(), {root.get()}, {}, {}));
+  EXPECT_EQ(X509_V_OK, Verify(leaf.get(), {root.get()}, {}, {},
+                              X509_V_FLAG_IGNORE_CRITICAL));
+}
+
+enum NameHash { kOldHash, kNewHash };
+
+// TemporaryHashDir constructs a temporary directory in the format of
+// |X509_LOOKUP_hash_dir|.
+class TemporaryHashDir {
+ public:
+  explicit TemporaryHashDir(int type) : type_(type) {}
+
+  bool Init() { return dir_.Init(); }
+  const std::string &path() const { return dir_.path(); }
+
+  size_t num_cert_hashes() const { return next_cert_.size(); }
+  size_t num_crl_hashes() const { return next_crl_.size(); }
+
+  bool AddCert(X509 *x509, NameHash name_hash) {
+    return AddCertWithHash(HashName(name_hash, X509_get_subject_name(x509)),
+                           x509);
+  }
+
+  bool AddCRL(X509_CRL *crl, NameHash name_hash) {
+    return AddCRLWithHash(HashName(name_hash, X509_CRL_get_issuer(crl)), crl);
+  }
+
+  bool AddCertWithHash(uint32_t hash, X509 *cert) {
+    std::vector<uint8_t> data = EncodeCert(cert);
+    if (data.empty()) {
+      return false;
+    }
+    auto &num = next_cert_[hash];
+    char path[32];
+    snprintf(path, sizeof(path), "%08x.%d", hash, num);
+    if (!dir_.AddFile(path, data)) {
+      return false;
+    }
+    num++;
+    return true;
+  }
+
+  bool AddCRLWithHash(uint32_t hash, X509_CRL *crl) {
+    std::vector<uint8_t> data = EncodeCRL(crl);
+    if (data.empty()) {
+      return false;
+    }
+    auto &num = next_crl_[hash];
+    char path[32];
+    snprintf(path, sizeof(path), "%08x.r%d", hash, num);
+    if (!dir_.AddFile(path, data)) {
+      return false;
+    }
+    num++;
+    return true;
+  }
+
+  bool ReplaceLastCRL(X509_CRL *crl, NameHash name_hash) {
+    uint32_t hash = HashName(name_hash, X509_CRL_get_issuer(crl));
+    auto iter = next_crl_.find(hash);
+    if (iter == next_crl_.end()) {
+      return false;
+    }
+    std::vector<uint8_t> data = EncodeCRL(crl);
+    if (data.empty()) {
+      return false;
+    }
+    char path[32];
+    snprintf(path, sizeof(path), "%08x.r%d", hash, iter->second - 1);
+    return dir_.AddFile(path, data);
+  }
+
+ private:
+  static uint32_t HashName(NameHash name_hash, X509_NAME *name) {
+    return name_hash == kOldHash ? X509_NAME_hash_old(name)
+                                 : X509_NAME_hash(name);
+  }
+
+  std::vector<uint8_t> EncodeCert(X509 *cert) {
+    if (type_ == X509_FILETYPE_ASN1) {
+      uint8_t *der = nullptr;
+      int der_len = i2d_X509(cert, &der);
+      if (der_len < 0) {
+        return {};
+      }
+      bssl::UniquePtr<uint8_t> free_der(der);
+      return std::vector<uint8_t>(der, der + der_len);
+    }
+
+    bssl::UniquePtr<BIO> bio(BIO_new(BIO_s_mem()));
+    const uint8_t *pem;
+    size_t pem_len;
+    if (bio == nullptr ||  //
+        !PEM_write_bio_X509(bio.get(), cert) ||
+        !BIO_mem_contents(bio.get(), &pem, &pem_len)) {
+      return {};
+    }
+    return std::vector<uint8_t>(pem, pem + pem_len);
+  }
+
+  std::vector<uint8_t> EncodeCRL(X509_CRL *crl) {
+    if (type_ == X509_FILETYPE_ASN1) {
+      uint8_t *der = nullptr;
+      int der_len = i2d_X509_CRL(crl, &der);
+      if (der_len < 0) {
+        return {};
+      }
+      bssl::UniquePtr<uint8_t> free_der(der);
+      return std::vector<uint8_t>(der, der + der_len);
+    }
+
+    bssl::UniquePtr<BIO> bio(BIO_new(BIO_s_mem()));
+    const uint8_t *pem;
+    size_t pem_len;
+    if (bio == nullptr ||  //
+        !PEM_write_bio_X509_CRL(bio.get(), crl) ||
+        !BIO_mem_contents(bio.get(), &pem, &pem_len)) {
+      return {};
+    }
+    return std::vector<uint8_t>(pem, pem + pem_len);
+  }
+
+  int type_;
+  TemporaryDirectory dir_;
+  std::map<uint32_t, int> next_cert_;
+  std::map<uint32_t, int> next_crl_;
+};
+
+// TODO(davidben): Also test CRL handling. There are some interesting behaviors
+// in here.
+TEST(X509Test, DirHash) {
+  if (SkipTempFileTests()) {
+    GTEST_SKIP();
+  }
+
+  bssl::UniquePtr<EVP_PKEY> key = PrivateKeyFromPEM(kP256Key);
+  ASSERT_TRUE(key);
+
+  // Test both formats.
+  for (int type : {X509_FILETYPE_PEM, X509_FILETYPE_ASN1}) {
+    SCOPED_TRACE(type);
+
+    // Generate some roots and fill a directory with OpenSSL's directory hash
+    // format. The hash depends only on the name, so we do not need to
+    // pre-generate the certificates. Test both DER and PEM.
+    TemporaryHashDir dir(type);
+    ASSERT_TRUE(dir.Init());
+
+    auto add_root = [&](const std::string &name, NameHash name_hash) -> bool {
+      bssl::UniquePtr<X509> ca =
+          MakeTestCert(name.c_str(), name.c_str(), key.get(), /*is_ca=*/true);
+      if (ca == nullptr || !X509_sign(ca.get(), key.get(), EVP_sha256())) {
+        return false;
+      }
+      return dir.AddCert(ca.get(), name_hash);
+    };
+
+    auto issue_crl =
+        [&](const std::string &name, int this_update_offset_day,
+            const std::vector<uint64_t> &serials) -> bssl::UniquePtr<X509_CRL> {
+      bssl::UniquePtr<X509_CRL> crl = MakeTestCRL(
+          name.c_str(), this_update_offset_day, /*next_update_offset_day=*/1);
+      if (crl == nullptr) {
+        return nullptr;
+      }
+      for (uint64_t serial : serials) {
+        // The revocation time does not matter for this test. Pretend the
+        // certificate was just revoked.
+        if (!AddRevokedSerialU64(crl.get(), serial,
+                                 /*offset_day=*/this_update_offset_day)) {
+          return nullptr;
+        }
+      }
+      if (!X509_CRL_sign(crl.get(), key.get(), EVP_sha256())) {
+        return nullptr;
+      }
+      return crl;
+    };
+
+    auto add_crl = [&](const std::string &name, NameHash name_hash,
+                       int this_update_offset_day,
+                       const std::vector<uint64_t> &serials) -> bool {
+      bssl::UniquePtr<X509_CRL> crl =
+          issue_crl(name, this_update_offset_day, serials);
+      return crl != nullptr && dir.AddCRL(crl.get(), name_hash);
+    };
+
+    std::string ca1 = "Test CA 1";
+    ASSERT_TRUE(add_root(ca1, kNewHash));
+
+    std::string ca2 = "Test CA 2";
+    ASSERT_TRUE(add_root(ca2, kOldHash));
+
+    // Install CA 3 at its new hash. CA 3's name is not canonical, but the new
+    // hash runs after canonicalization, so OpenSSL should be able to find it.
+    std::string ca3 = "Test CA 3";
+    std::string ca3_noncanonical = "   test   ca   3   ";
+    ASSERT_TRUE(add_root(ca3_noncanonical, kNewHash));
+
+    // These two CAs collide under |X509_NAME_hash|.
+    std::string collide_name1 = "Test CA 1191514847";
+    std::string collide_name2 = "Test CA 1570301806";
+    size_t num_cert_hashes = dir.num_cert_hashes();
+    ASSERT_TRUE(add_root(collide_name1, kNewHash));
+    EXPECT_EQ(dir.num_cert_hashes(), num_cert_hashes + 1);
+    ASSERT_TRUE(add_root(collide_name2, kNewHash));
+    EXPECT_EQ(dir.num_cert_hashes(), num_cert_hashes + 1);
+
+    // These two CAs collide under |X509_NAME_hash_old|.
+    std::string old_collide_name1 = "Test CA 1069881739";
+    std::string old_collide_name2 = "Test CA 940754110";
+    num_cert_hashes = dir.num_cert_hashes();
+    ASSERT_TRUE(add_root(old_collide_name1, kOldHash));
+    EXPECT_EQ(dir.num_cert_hashes(), num_cert_hashes + 1);
+    ASSERT_TRUE(add_root(old_collide_name2, kOldHash));
+    EXPECT_EQ(dir.num_cert_hashes(), num_cert_hashes + 1);
+
+    // Make an |X509_STORE| that gets CAs from |dir|.
+    bssl::UniquePtr<X509_STORE> store(X509_STORE_new());
+    ASSERT_TRUE(store);
+    X509_LOOKUP *lookup =
+        X509_STORE_add_lookup(store.get(), X509_LOOKUP_hash_dir());
+    ASSERT_TRUE(lookup);
+    ASSERT_TRUE(X509_LOOKUP_add_dir(lookup, dir.path().c_str(), type));
+
+    auto test_issuer_flags = [&](const std::string &issuer, uint64_t serial,
+                                 unsigned long flags) -> int {
+      bssl::UniquePtr<X509> cert =
+          MakeTestCert(issuer.c_str(), "Leaf", key.get(), /*is_ca=*/false);
+      bssl::UniquePtr<ASN1_INTEGER> serial_asn1(ASN1_INTEGER_new());
+      if (cert == nullptr || serial_asn1 == nullptr ||
+          !ASN1_INTEGER_set_uint64(serial_asn1.get(), serial) ||
+          !X509_set_serialNumber(cert.get(), serial_asn1.get()) ||
+          !X509_sign(cert.get(), key.get(), EVP_sha256())) {
+        return X509_V_ERR_UNSPECIFIED;
+      }
+
+      bssl::UniquePtr<X509_STORE_CTX> ctx(X509_STORE_CTX_new());
+      if (ctx == nullptr ||
+          !X509_STORE_CTX_init(ctx.get(), store.get(), cert.get(),
+                               /*chain=*/nullptr)) {
+        return X509_V_ERR_UNSPECIFIED;
+      }
+      X509_STORE_CTX_set_flags(ctx.get(), flags);
+      X509_STORE_CTX_set_time_posix(ctx.get(), /*flags=*/0, kReferenceTime);
+
+      return X509_verify_cert(ctx.get()) ? X509_V_OK
+                                         : X509_STORE_CTX_get_error(ctx.get());
+    };
+
+    auto test_issuer = [&](const std::string &issuer) -> int {
+      return test_issuer_flags(issuer, /*serial=*/0, /*flags=*/0);
+    };
+    auto test_issuer_crl = [&](const std::string &issuer,
+                               uint64_t serial) -> int {
+      return test_issuer_flags(issuer, serial, X509_V_FLAG_CRL_CHECK);
+    };
+
+    // All these roots are in the store and should be found. Although Test CA
+    // 3 was installed under a non-canonical name, the new hash accounts for
+    // this.
+    EXPECT_EQ(X509_V_OK, test_issuer(ca1));
+    EXPECT_EQ(X509_V_OK, test_issuer(ca2));
+    EXPECT_EQ(X509_V_OK, test_issuer(ca3));
+    EXPECT_EQ(X509_V_OK, test_issuer(collide_name1));
+    EXPECT_EQ(X509_V_OK, test_issuer(collide_name2));
+    EXPECT_EQ(X509_V_OK, test_issuer(old_collide_name1));
+    EXPECT_EQ(X509_V_OK, test_issuer(old_collide_name2));
+
+    // Repeat the tests. This time it will pick up the certificate from the
+    // cache.
+    EXPECT_EQ(X509_V_OK, test_issuer(ca1));
+    EXPECT_EQ(X509_V_OK, test_issuer(ca2));
+    EXPECT_EQ(X509_V_OK, test_issuer(ca3));
+    EXPECT_EQ(X509_V_OK, test_issuer(collide_name1));
+    EXPECT_EQ(X509_V_OK, test_issuer(collide_name2));
+    EXPECT_EQ(X509_V_OK, test_issuer(old_collide_name1));
+    EXPECT_EQ(X509_V_OK, test_issuer(old_collide_name2));
+
+    // Test a certificate not in the store.
+    EXPECT_EQ(X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY,
+              test_issuer("Not In Store"));
+
+    // Test CRL handling. First, if we cannot find a CRL, verification will
+    // fail.
+    //
+    // TODO(crbug.com/boringssl/690): We should test both the old and new hash,
+    // but the CRL reloading process does not work for the old hash due to a
+    // bug. It notices the cached old CRL, mistakes it for something loaded via
+    // the new hash, and never bothers checking the old hash.
+    EXPECT_EQ(X509_V_ERR_UNABLE_TO_GET_CRL,
+              test_issuer_crl(collide_name1, /*serial=*/1));
+
+    // Install an empty CRL. Verification should now succeed.
+    ASSERT_TRUE(add_crl(collide_name1, kNewHash,
+                        /*this_update_offset_day=*/-10, /*serials=*/{}));
+    EXPECT_EQ(X509_V_OK, test_issuer_crl(collide_name1, /*serial=*/1));
+
+    // Verify again. Unlike roots, which are cached, this will query the
+    // directory again.
+    EXPECT_EQ(X509_V_OK, test_issuer_crl(collide_name1, /*serial=*/1));
+
+    // The extra query is so that a newer CRL is picked up, at an incrementing
+    // number. This feature is less useful than it sounds because all CRLs are
+    // persistently cached.
+    ASSERT_TRUE(add_crl(collide_name1, kNewHash,
+                        /*this_update_offset_day=*/-9, /*serials=*/{1}));
+    EXPECT_EQ(X509_V_ERR_CERT_REVOKED,
+              test_issuer_crl(collide_name1, /*serial=*/1));
+
+    // Serial number 2 is not revoked.
+    EXPECT_EQ(X509_V_OK, test_issuer_crl(collide_name1, /*serial=*/2));
+
+    // A new CRL at an already loaded name is ignored because OpenSSL skips
+    // loading the older ones and relies on them being persistently cached in
+    // memory.
+    //
+    // TODO(crbug.com/boringssl/690): This behavior is almost certainly not what
+    // anyone wants. Rework this.
+    bssl::UniquePtr<X509_CRL> crl = issue_crl(
+        collide_name1, /*this_update_offset_day=*/-8, /*serials=*/{1, 2});
+    ASSERT_TRUE(crl);
+    ASSERT_TRUE(dir.ReplaceLastCRL(crl.get(), kNewHash));
+    EXPECT_EQ(X509_V_OK, test_issuer_crl(collide_name1, /*serial=*/2));
+
+    // If there are many new CRLs, they are all loaded and the newest is wins.
+    ASSERT_TRUE(add_crl(collide_name1, kNewHash,
+                        /*this_update_offset_day=*/-7, /*serials=*/{1, 2}));
+    ASSERT_TRUE(add_crl(collide_name1, kNewHash,
+                        /*this_update_offset_day=*/-5, /*serials=*/{1, 2, 3}));
+    ASSERT_TRUE(add_crl(collide_name1, kNewHash,
+                        /*this_update_offset_day=*/-6, /*serials=*/{1, 2}));
+
+    // r3 should have won, which revokes all three serials:
+    EXPECT_EQ(X509_V_ERR_CERT_REVOKED,
+              test_issuer_crl(collide_name1, /*serial=*/1));
+    EXPECT_EQ(X509_V_ERR_CERT_REVOKED,
+              test_issuer_crl(collide_name1, /*serial=*/2));
+    EXPECT_EQ(X509_V_ERR_CERT_REVOKED,
+              test_issuer_crl(collide_name1, /*serial=*/3));
+
+    // If the new CRL is older than a previously loaded one, it is ignored.
+    ASSERT_TRUE(add_crl(collide_name1, kNewHash,
+                        /*this_update_offset_day=*/-100, /*serials=*/{}));
+
+    // Finally, test hash collisions. The internal book-keeping for where to
+    // start loading should be compatible with a second CA whose hash collides.
+    EXPECT_EQ(X509_V_ERR_UNABLE_TO_GET_CRL,
+              test_issuer_crl(collide_name2, /*serial=*/1));
+    EXPECT_EQ(X509_V_ERR_UNABLE_TO_GET_CRL,
+              test_issuer_crl(collide_name2, /*serial=*/2));
+    ASSERT_TRUE(add_crl(collide_name2, kNewHash,
+                        /*this_update_offset_day=*/-10, /*serials=*/{1}));
+    EXPECT_EQ(X509_V_ERR_CERT_REVOKED,
+              test_issuer_crl(collide_name2, /*serial=*/1));
+    EXPECT_EQ(X509_V_OK, test_issuer_crl(collide_name2, /*serial=*/2));
+
+    // Confirm all CRLs we added had the same hash.
+    EXPECT_EQ(dir.num_crl_hashes(), 1u);
+  }
+}
+
+// Test that two directory hash paths are treated as a sequence of paths,
+// separated by a separator.
+TEST(X509Test, DirHashSeparator) {
+#if defined(OPENSSL_WINDOWS)
+  const char kSeparator = ';';
+#else
+  const char kSeparator = ':';
+#endif
+
+  if (SkipTempFileTests()) {
+    GTEST_SKIP();
+  }
+
+  bssl::UniquePtr<EVP_PKEY> key = PrivateKeyFromPEM(kP256Key);
+  ASSERT_TRUE(key);
+
+  // Make two directories and place one CA in each.
+  TemporaryHashDir dir1(X509_FILETYPE_PEM), dir2(X509_FILETYPE_PEM);
+  ASSERT_TRUE(dir1.Init());
+  ASSERT_TRUE(dir2.Init());
+
+  bssl::UniquePtr<X509> ca1 =
+      MakeTestCert("Test CA 1", "Test CA 1", key.get(), /*is_ca=*/true);
+  ASSERT_TRUE(ca1);
+  ASSERT_TRUE(X509_sign(ca1.get(), key.get(), EVP_sha256()));
+  ASSERT_TRUE(dir1.AddCert(ca1.get(), kNewHash));
+
+  bssl::UniquePtr<X509> ca2 =
+      MakeTestCert("Test CA 2", "Test CA 2", key.get(), /*is_ca=*/true);
+  ASSERT_TRUE(ca2);
+  ASSERT_TRUE(X509_sign(ca2.get(), key.get(), EVP_sha256()));
+  ASSERT_TRUE(dir1.AddCert(ca2.get(), kNewHash));
+
+  // Make an |X509_STORE| that gets CAs from |dir1| and |dir2|.
+  bssl::UniquePtr<X509_STORE> store(X509_STORE_new());
+  ASSERT_TRUE(store);
+  std::string paths = dir1.path() + kSeparator + dir2.path();
+  ASSERT_TRUE(
+      X509_STORE_load_locations(store.get(), /*file=*/nullptr, paths.c_str()));
+
+  // Both CAs should work.
+  {
+    bssl::UniquePtr<X509> cert =
+        MakeTestCert("Test CA 1", "Leaf", key.get(), /*is_ca=*/false);
+    ASSERT_TRUE(cert);
+    ASSERT_TRUE(X509_sign(cert.get(), key.get(), EVP_sha256()));
+    bssl::UniquePtr<X509_STORE_CTX> ctx(X509_STORE_CTX_new());
+    ASSERT_TRUE(ctx);
+    ASSERT_TRUE(X509_STORE_CTX_init(ctx.get(), store.get(), cert.get(),
+                                    /*chain=*/nullptr));
+    X509_STORE_CTX_set_time_posix(ctx.get(), /*flags=*/0, kReferenceTime);
+    EXPECT_TRUE(X509_verify_cert(ctx.get()))
+        << X509_verify_cert_error_string(X509_STORE_CTX_get_error(ctx.get()));
+  }
+
+  {
+    bssl::UniquePtr<X509> cert =
+        MakeTestCert("Test CA 2", "Leaf", key.get(), /*is_ca=*/false);
+    ASSERT_TRUE(cert);
+    ASSERT_TRUE(X509_sign(cert.get(), key.get(), EVP_sha256()));
+    bssl::UniquePtr<X509_STORE_CTX> ctx(X509_STORE_CTX_new());
+    ASSERT_TRUE(ctx);
+    ASSERT_TRUE(X509_STORE_CTX_init(ctx.get(), store.get(), cert.get(),
+                                    /*chain=*/nullptr));
+    X509_STORE_CTX_set_time_posix(ctx.get(), /*flags=*/0, kReferenceTime);
+    EXPECT_TRUE(X509_verify_cert(ctx.get()))
+        << X509_verify_cert_error_string(X509_STORE_CTX_get_error(ctx.get()));
+  }
+}
+
+#if defined(OPENSSL_THREADS)
+// Test that directory hash lookup is thread-safe.
+TEST(X509Test, DirHashThreads) {
+  if (SkipTempFileTests()) {
+    GTEST_SKIP();
+  }
+
+  bssl::UniquePtr<EVP_PKEY> key = PrivateKeyFromPEM(kP256Key);
+  ASSERT_TRUE(key);
+
+  // Generate some roots and fill a directory with OpenSSL's directory hash
+  // format. The hash depends only on the name, so we do not need to
+  // pre-generate the certificates. Test both DER and PEM.
+  TemporaryHashDir dir(X509_FILETYPE_PEM);
+  ASSERT_TRUE(dir.Init());
+
+  auto add_root = [&](const std::string &name, NameHash name_hash) -> bool {
+    bssl::UniquePtr<X509> ca =
+        MakeTestCert(name.c_str(), name.c_str(), key.get(), /*is_ca=*/true);
+    return ca != nullptr &&  //
+           X509_sign(ca.get(), key.get(), EVP_sha256()) &&
+           dir.AddCert(ca.get(), name_hash);
+  };
+
+  auto issue_cert = [&](const std::string &issuer) -> bssl::UniquePtr<X509> {
+    bssl::UniquePtr<X509> cert =
+        MakeTestCert(issuer.c_str(), "Leaf", key.get(), /*is_ca=*/false);
+    if (cert == nullptr || !X509_sign(cert.get(), key.get(), EVP_sha256())) {
+      return nullptr;
+    }
+    return cert;
+  };
+
+  auto add_crl = [&](const std::string &name,
+                     int this_update_offset_day, NameHash name_hash) -> bool {
+    bssl::UniquePtr<X509_CRL> crl = MakeTestCRL(
+        name.c_str(), this_update_offset_day, /*next_update_offset_day=*/1);
+    return crl != nullptr &&
+           X509_CRL_sign(crl.get(), key.get(), EVP_sha256()) &&
+           dir.AddCRL(crl.get(), name_hash);
+  };
+
+  // These two CAs collide under |X509_NAME_hash|.
+  std::string ca1 = "Test CA 1191514847";
+  std::string ca2 = "Test CA 1570301806";
+  ASSERT_TRUE(add_root(ca1, kNewHash));
+  ASSERT_TRUE(add_root(ca2, kNewHash));
+  ASSERT_TRUE(add_crl(ca1, -2, kNewHash));
+  ASSERT_TRUE(add_crl(ca2, -1, kNewHash));
+  ASSERT_TRUE(add_crl(ca2, -2, kNewHash));
+  ASSERT_TRUE(add_crl(ca1, -1, kNewHash));
+  // Verify the hashes collided.
+  ASSERT_EQ(dir.num_cert_hashes(), 1u);
+  ASSERT_EQ(dir.num_crl_hashes(), 1u);
+  bssl::UniquePtr<X509> leaf1 = issue_cert(ca1);
+  ASSERT_TRUE(leaf1);
+  bssl::UniquePtr<X509> leaf2 = issue_cert(ca2);
+  ASSERT_TRUE(leaf2);
+
+  // These two CAs collide under |X509_NAME_hash_old|.
+  std::string old_ca1 = "Test CA 1069881739";
+  std::string old_ca2 = "Test CA 940754110";
+  ASSERT_TRUE(add_root(old_ca1, kOldHash));
+  ASSERT_TRUE(add_root(old_ca2, kOldHash));
+  ASSERT_TRUE(add_crl(old_ca1, -2, kOldHash));
+  ASSERT_TRUE(add_crl(old_ca2, -1, kOldHash));
+  ASSERT_TRUE(add_crl(old_ca2, -2, kOldHash));
+  ASSERT_TRUE(add_crl(old_ca1, -1, kOldHash));
+  // Verify the hashes collided.
+  ASSERT_EQ(dir.num_cert_hashes(), 2u);
+  ASSERT_EQ(dir.num_crl_hashes(), 2u);
+  bssl::UniquePtr<X509> old_leaf1 = issue_cert(old_ca1);
+  ASSERT_TRUE(old_leaf1);
+  bssl::UniquePtr<X509> old_leaf2 = issue_cert(old_ca2);
+  ASSERT_TRUE(old_leaf2);
+
+  // Make an |X509_STORE| that gets CAs from |dir|.
+  bssl::UniquePtr<X509_STORE> store(X509_STORE_new());
+  ASSERT_TRUE(store);
+  ASSERT_TRUE(X509_STORE_load_locations(store.get(), /*file=*/nullptr,
+                                        dir.path().c_str()));
+
+  auto verify = [&](X509 *cert, bool crl_check) {
+    bssl::UniquePtr<X509_STORE_CTX> ctx(X509_STORE_CTX_new());
+    ASSERT_TRUE(ctx);
+    ASSERT_TRUE(X509_STORE_CTX_init(ctx.get(), store.get(), cert,
+                                    /*chain=*/nullptr));
+    X509_STORE_CTX_set_flags(ctx.get(), crl_check ? X509_V_FLAG_CRL_CHECK : 0);
+    X509_STORE_CTX_set_time_posix(ctx.get(), /*flags=*/0, kReferenceTime);
+    EXPECT_TRUE(X509_verify_cert(ctx.get()))
+        << X509_verify_cert_error_string(X509_STORE_CTX_get_error(ctx.get()));
+  };
+
+  const size_t kNumThreads = 10;
+  std::vector<std::thread> threads;
+  for (size_t i = 0; i < kNumThreads; i++) {
+    threads.emplace_back([&] { verify(leaf1.get(), false); });
+    threads.emplace_back([&] { verify(leaf1.get(), true); });
+    threads.emplace_back([&] { verify(leaf2.get(), false); });
+    threads.emplace_back([&] { verify(leaf2.get(), true); });
+
+    threads.emplace_back([&] { verify(old_leaf1.get(), false); });
+    threads.emplace_back([&] { verify(old_leaf1.get(), true); });
+    threads.emplace_back([&] { verify(old_leaf2.get(), false); });
+    threads.emplace_back([&] { verify(old_leaf2.get(), true); });
+  }
+  for (auto &thread : threads) {
+    thread.join();
+  }
+}
+#endif  // OPENSSL_THREADS
+
+// Test that, when there are two CAs with the same name, but different key
+// identifiers, certificate and CRL lookup can disambiguate correctly.
+TEST(X509Test, DuplicateName) {
+  // Make two certificate chains and empty CRLs, with the same names but
+  // different keys.
+  bssl::UniquePtr<EVP_PKEY> key1 = PrivateKeyFromPEM(kP256Key);
+  ASSERT_TRUE(key1);
+  uint8_t key_id1[] = {'K', 'e', 'y', '1'};
+  bssl::UniquePtr<X509> ca1 =
+      MakeTestCert("CA", "CA", key1.get(), /*is_ca=*/true);
+  ASSERT_TRUE(ca1);
+  ASSERT_TRUE(AddSubjectKeyIdentifier(ca1.get(), key_id1));
+  ASSERT_TRUE(X509_sign(ca1.get(), key1.get(), EVP_sha256()));
+  bssl::UniquePtr<X509> leaf1 =
+      MakeTestCert("CA", "Leaf", key1.get(), /*is_ca=*/false);
+  ASSERT_TRUE(leaf1);
+  ASSERT_TRUE(AddAuthorityKeyIdentifer(leaf1.get(), key_id1));
+  ASSERT_TRUE(X509_sign(leaf1.get(), key1.get(), EVP_sha256()));
+  bssl::UniquePtr<X509_CRL> crl1 = MakeTestCRL("CA", -1, 1);
+  ASSERT_TRUE(crl1);
+  ASSERT_TRUE(AddAuthorityKeyIdentifer(crl1.get(), key_id1));
+  ASSERT_TRUE(X509_CRL_sign(crl1.get(), key1.get(), EVP_sha256()));
+  // TODO(davidben): Some state in CRLs does not get correctly set up unless it
+  // is parsed from data. |X509_CRL_sign| should reset it internally.
+  crl1 = ReencodeCRL(crl1.get());
+  ASSERT_TRUE(crl1);
+
+  bssl::UniquePtr<EVP_PKEY> key2 = PrivateKeyFromPEM(kRSAKey);
+  ASSERT_TRUE(key2);
+  uint8_t key_id2[] = {'K', 'e', 'y', '2'};
+  bssl::UniquePtr<X509> ca2 =
+      MakeTestCert("CA", "CA", key2.get(), /*is_ca=*/true);
+  ASSERT_TRUE(ca2);
+  ASSERT_TRUE(AddSubjectKeyIdentifier(ca2.get(), key_id2));
+  ASSERT_TRUE(X509_sign(ca2.get(), key2.get(), EVP_sha256()));
+  bssl::UniquePtr<X509> leaf2 =
+      MakeTestCert("CA", "Leaf", key2.get(), /*is_ca=*/false);
+  ASSERT_TRUE(leaf2);
+  ASSERT_TRUE(AddAuthorityKeyIdentifer(leaf2.get(), key_id2));
+  ASSERT_TRUE(X509_sign(leaf2.get(), key2.get(), EVP_sha256()));
+  bssl::UniquePtr<X509_CRL> crl2 = MakeTestCRL("CA", -2, 2);
+  ASSERT_TRUE(crl2);
+  ASSERT_TRUE(AddAuthorityKeyIdentifer(crl2.get(), key_id2));
+  ASSERT_TRUE(X509_CRL_sign(crl2.get(), key2.get(), EVP_sha256()));
+  // TODO(davidben): Some state in CRLs does not get correctly set up unless it
+  // is parsed from data. |X509_CRL_sign| should reset it internally.
+  crl2 = ReencodeCRL(crl2.get());
+  ASSERT_TRUE(crl2);
+
+  for (bool key1_first : {false, true}) {
+    SCOPED_TRACE(key1_first);
+    X509 *first_leaf = leaf1.get();
+    X509 *second_leaf = leaf2.get();
+    if (!key1_first) {
+      std::swap(first_leaf, second_leaf);
+    }
+
+    for (bool use_dir : {false, true}) {
+      SCOPED_TRACE(use_dir);
+      bssl::UniquePtr<X509_STORE> store(X509_STORE_new());
+      ASSERT_TRUE(store);
+      TemporaryHashDir dir(X509_FILETYPE_PEM);
+      if (use_dir) {
+        ASSERT_TRUE(dir.Init());
+        ASSERT_TRUE(dir.AddCert(ca1.get(), kNewHash));
+        ASSERT_TRUE(dir.AddCert(ca2.get(), kNewHash));
+        ASSERT_TRUE(dir.AddCRL(crl1.get(), kNewHash));
+        ASSERT_TRUE(dir.AddCRL(crl2.get(), kNewHash));
+        ASSERT_EQ(dir.num_cert_hashes(), 1u);
+        ASSERT_EQ(dir.num_crl_hashes(), 1u);
+        ASSERT_TRUE(X509_STORE_load_locations(store.get(), /*file=*/nullptr,
+                                              dir.path().c_str()));
+      } else {
+        ASSERT_TRUE(X509_STORE_add_cert(store.get(), ca1.get()));
+        ASSERT_TRUE(X509_STORE_add_cert(store.get(), ca2.get()));
+        ASSERT_TRUE(X509_STORE_add_crl(store.get(), crl1.get()));
+        ASSERT_TRUE(X509_STORE_add_crl(store.get(), crl2.get()));
+      }
+
+      // Verify the two certificates. Whichever comes first, we should
+      // successfully find their CA and CRL.
+      {
+        bssl::UniquePtr<X509_STORE_CTX> ctx(X509_STORE_CTX_new());
+        ASSERT_TRUE(ctx);
+        ASSERT_TRUE(
+            X509_STORE_CTX_init(ctx.get(), store.get(), first_leaf, nullptr));
+        X509_STORE_CTX_set_flags(ctx.get(), X509_V_FLAG_CRL_CHECK);
+        X509_STORE_CTX_set_time_posix(ctx.get(), /*flags=*/0, kReferenceTime);
+        EXPECT_TRUE(X509_verify_cert(ctx.get()))
+            << X509_verify_cert_error_string(
+                   X509_STORE_CTX_get_error(ctx.get()));
+      }
+      {
+        bssl::UniquePtr<X509_STORE_CTX> ctx(X509_STORE_CTX_new());
+        ASSERT_TRUE(ctx);
+        ASSERT_TRUE(
+            X509_STORE_CTX_init(ctx.get(), store.get(), second_leaf, nullptr));
+        X509_STORE_CTX_set_flags(ctx.get(), X509_V_FLAG_CRL_CHECK);
+        X509_STORE_CTX_set_time_posix(ctx.get(), /*flags=*/0, kReferenceTime);
+        EXPECT_TRUE(X509_verify_cert(ctx.get()))
+            << X509_verify_cert_error_string(
+                   X509_STORE_CTX_get_error(ctx.get()));
+      }
+    }
+  }
 }

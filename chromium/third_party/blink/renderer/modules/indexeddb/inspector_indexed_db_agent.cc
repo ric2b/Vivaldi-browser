@@ -65,7 +65,6 @@
 #include "third_party/blink/renderer/modules/indexeddb/idb_open_db_request.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_request.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_transaction.h"
-#include "third_party/blink/renderer/modules/indexeddb/web_idb_cursor.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
@@ -211,7 +210,7 @@ void OnGotDatabaseNames(
     std::unique_ptr<RequestDatabaseNamesCallback> request_callback,
     Vector<mojom::blink::IDBNameAndVersionPtr> names_and_versions,
     mojom::blink::IDBErrorPtr error) {
-  if (error) {
+  if (error->error_code != mojom::blink::IDBException::kNoError) {
     request_callback->sendFailure(
         protocol::Response::ServerError("Could not obtain database names."));
     return;
@@ -716,7 +715,7 @@ class OpenCursorCallback final : public NativeEventListener {
   }
 
  private:
-  raw_ptr<v8_inspector::V8InspectorSession, ExperimentalRenderer> v8_session_;
+  raw_ptr<v8_inspector::V8InspectorSession> v8_session_;
   Member<ScriptState> script_state_;
   std::unique_ptr<RequestDataCallback> request_callback_;
   int skip_count_;
@@ -797,7 +796,7 @@ class DataLoader final : public ExecutableWithDatabase<RequestDataCallback> {
         skip_count_(skip_count),
         page_size_(page_size) {}
 
-  raw_ptr<v8_inspector::V8InspectorSession, ExperimentalRenderer> v8_session_;
+  raw_ptr<v8_inspector::V8InspectorSession> v8_session_;
   std::unique_ptr<RequestDataCallback> request_callback_;
   String object_store_name_;
   String index_name_;
@@ -959,7 +958,7 @@ class GetMetadataListener final : public NativeEventListener {
   void NotifySubtaskDone(scoped_refptr<GetMetadata> owner,
                          const String& error) const;
   scoped_refptr<GetMetadata> owner_;
-  raw_ptr<int64_t, ExperimentalRenderer> result_;
+  raw_ptr<int64_t> result_;
 };
 
 class GetMetadata final : public ExecutableWithDatabase<GetMetadataCallback> {

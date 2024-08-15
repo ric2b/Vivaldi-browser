@@ -17,6 +17,8 @@
 #include "ash/public/cpp/new_window_delegate.h"
 #include "ash/public/cpp/system_sounds_delegate.h"
 #include "ash/shell_delegate.h"
+#include "ash/webui/settings/public/constants/routes.mojom.h"
+#include "ash/webui/settings/public/constants/setting.mojom-shared.h"
 #include "ash/wm/window_state.h"
 #include "base/check.h"
 #include "base/command_line.h"
@@ -28,6 +30,7 @@
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/ash/assistant/assistant_util.h"
+#include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
 #include "chrome/browser/ash/crosapi/desk_profiles_ash.h"
@@ -62,6 +65,7 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/chromeos/window_pin_util.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
+#include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/views/chrome_browser_main_extra_parts_views.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/tabs/tab_scrubber_chromeos.h"
@@ -124,6 +128,10 @@ chrome::FeedbackSource ToChromeFeedbackSource(
       return chrome::FeedbackSource::kFeedbackSourceFocusMode;
     case ash::ShellDelegate::FeedbackSource::kGameDashboard:
       return chrome::FeedbackSource::kFeedbackSourceGameDashboard;
+    case ash::ShellDelegate::FeedbackSource::kOverview:
+      return chrome::FeedbackSource::kFeedbackSourceOverview;
+    case ash::ShellDelegate::FeedbackSource::kSnapGroups:
+      return chrome::FeedbackSource::kFeedbackSourceSnapGroups;
     case ash::ShellDelegate::FeedbackSource::kWindowLayoutMenu:
       return chrome::FeedbackSource::kFeedbackSourceWindowLayoutMenu;
   }
@@ -392,10 +400,11 @@ base::FilePath ChromeShellDelegate::GetPrimaryUserDownloadsFolder() const {
 
 void ChromeShellDelegate::OpenFeedbackDialog(
     ShellDelegate::FeedbackSource source,
-    const std::string& description_template) {
+    const std::string& description_template,
+    const std::string& category_tag) {
   chrome::OpenFeedbackDialog(/*browser=*/nullptr,
                              ToChromeFeedbackSource(source),
-                             description_template);
+                             description_template, category_tag);
 }
 
 void ChromeShellDelegate::OpenProfileManager() {
@@ -469,4 +478,14 @@ void ChromeShellDelegate::ShouldExitFullscreenBeforeLock(
 
 ash::DeskProfilesDelegate* ChromeShellDelegate::GetDeskProfilesDelegate() {
   return crosapi::CrosapiManager::Get()->crosapi_ash()->desk_profiles_ash();
+}
+
+void ChromeShellDelegate::OpenMultitaskingSettings() {
+  const auto& sub_page_path =
+      ash::features::IsOsSettingsRevampWayfindingEnabled()
+          ? chromeos::settings::mojom::kSystemPreferencesSectionPath
+          : chromeos::settings::mojom::kPersonalizationSectionPath;
+  chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
+      ProfileManager::GetActiveUserProfile(), sub_page_path,
+      chromeos::settings::mojom::Setting::kSnapWindowSuggestions);
 }

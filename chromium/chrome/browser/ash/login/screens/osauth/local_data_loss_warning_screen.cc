@@ -79,7 +79,7 @@ void LocalDataLossWarningScreen::OnUserAction(const base::Value::List& args) {
                        weak_factory_.GetWeakPtr()));
     return;
   } else if (action_id == kUserActionPowerwash) {
-    if (isOwner(context()->user_context->GetAccountId())) {
+    if (!isOwner(context()->user_context->GetAccountId())) {
       LOG(ERROR) << "Non owner user requesting powerwash, ignoring";
       return;
     }
@@ -127,6 +127,8 @@ void LocalDataLossWarningScreen::OnRemovedUserDirectory(
   // related to cryptohome state.
   context()->user_context->ResetAuthSessionIds();
   context()->user_context->ClearAuthFactorsConfiguration();
+  context()->knowledge_factor_setup.auth_setup_flow =
+      WizardContext::AuthChangeFlow::kInitialSetup;
 
   // Move online password back so that it can be used as key.
   // See `ShowImpl()` to see where it was stored.

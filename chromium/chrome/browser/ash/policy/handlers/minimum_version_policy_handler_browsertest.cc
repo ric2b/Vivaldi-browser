@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/ash/policy/handlers/minimum_version_policy_handler.h"
+
 #include <optional>
 #include <string>
 
@@ -37,7 +39,6 @@
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/policy/core/device_policy_builder.h"
 #include "chrome/browser/ash/policy/core/device_policy_cros_browser_test.h"
-#include "chrome/browser/ash/policy/handlers/minimum_version_policy_handler.h"
 #include "chrome/browser/ash/policy/handlers/minimum_version_policy_handler_delegate_impl.h"
 #include "chrome/browser/ash/policy/handlers/minimum_version_policy_test_helpers.h"
 #include "chrome/browser/browser_process.h"
@@ -960,7 +961,7 @@ class MinimumVersionPolicyChildUser : public MinimumVersionPolicyTestBase {
     login_manager_.WaitForActiveSession();
     EXPECT_EQ(user_manager::UserManager::Get()->GetLoggedInUsers().size(), 1u);
     EXPECT_EQ(user_manager::UserManager::Get()->GetActiveUser()->GetType(),
-              user_manager::USER_TYPE_CHILD);
+              user_manager::UserType::kChild);
     EXPECT_EQ(session_manager::SessionManager::Get()->session_state(),
               session_manager::SessionState::ACTIVE);
   }

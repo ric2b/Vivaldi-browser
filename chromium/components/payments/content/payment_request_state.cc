@@ -6,9 +6,9 @@
 
 #include <set>
 #include <utility>
+#include <vector>
 
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
@@ -195,9 +195,8 @@ void PaymentRequestState::OnDoneCreatingPaymentApps() {
     bool has_preferred_app = base::ranges::any_of(
         available_apps_, [](const auto& app) { return app->IsPreferred(); });
     if (has_preferred_app) {
-      base::EraseIf(available_apps_, [](const auto& app) {
-        return !app->IsPreferred();
-      });
+      std::erase_if(available_apps_,
+                    [](const auto& app) { return !app->IsPreferred(); });
 
       // By design, only one payment app can be preferred.
       DCHECK_EQ(available_apps_.size(), 1u);
@@ -244,10 +243,10 @@ void PaymentRequestState::SetOptOutOffered() {
     journey_logger_->SetOptOutOffered();
 }
 
-absl::optional<base::UnguessableToken>
+std::optional<base::UnguessableToken>
 PaymentRequestState::GetChromeOSTWAInstanceId() const {
   if (!payment_request_delegate_) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   return payment_request_delegate_->GetChromeOSTWAInstanceId();
@@ -425,7 +424,7 @@ void PaymentRequestState::SetAvailablePaymentAppForRetry() {
   if (!selected_app_)
     return;
 
-  base::EraseIf(available_apps_, [this](const auto& payment_app) {
+  std::erase_if(available_apps_, [this](const auto& payment_app) {
     // Remove the app if it is not selected.
     return payment_app.get() != selected_app_.get();
   });

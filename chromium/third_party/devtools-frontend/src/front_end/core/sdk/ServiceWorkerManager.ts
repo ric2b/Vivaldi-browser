@@ -114,7 +114,8 @@ export class ServiceWorkerManager extends SDKModel<EventTypes> {
     this.#registrationsInternal = new Map();
     this.#enabled = false;
     void this.enable();
-    this.#forceUpdateSetting = Common.Settings.Settings.instance().createSetting('serviceWorkerUpdateOnReload', false);
+    this.#forceUpdateSetting =
+        Common.Settings.Settings.instance().createSetting('service-worker-update-on-reload', false);
     if (this.#forceUpdateSetting.get()) {
       this.forceUpdateSettingChanged();
     }
@@ -345,9 +346,7 @@ class ServiceWorkerDispatcher implements ProtocolProxyApi.ServiceWorkerDispatche
 export class ServiceWorkerVersionState {
   runningStatus: Protocol.ServiceWorker.ServiceWorkerVersionRunningStatus;
   status: Protocol.ServiceWorker.ServiceWorkerVersionStatus;
-  // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  last_updated_timestamp: number;
+  lastUpdatedTimestamp: number;
   previousState: ServiceWorkerVersionState|null;
   constructor(
       runningStatus: Protocol.ServiceWorker.ServiceWorkerVersionRunningStatus,
@@ -355,7 +354,7 @@ export class ServiceWorkerVersionState {
       timestamp: number) {
     this.runningStatus = runningStatus;
     this.status = status;
-    this.last_updated_timestamp = timestamp;
+    this.lastUpdatedTimestamp = timestamp;
     this.previousState = previousState;
   }
 }

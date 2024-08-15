@@ -56,7 +56,7 @@ namespace {
 
 int GetElementSpacing() {
   return ChromeLayoutProvider::Get()->GetDistanceMetric(
-      DISTANCE_UNRELATED_CONTROL_HORIZONTAL);
+      views::DISTANCE_UNRELATED_CONTROL_HORIZONTAL);
 }
 
 gfx::Insets GetCloseButtonSpacing() {
@@ -146,7 +146,7 @@ void InfoBarView::RecalculateHeight() {
   SetTargetHeight(height + infobar_margins.height());
 }
 
-void InfoBarView::Layout() {
+void InfoBarView::Layout(PassKey) {
   const int spacing = GetElementSpacing();
   int start_x = 0;
   if (icon_) {

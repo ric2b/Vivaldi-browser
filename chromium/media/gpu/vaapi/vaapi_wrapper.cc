@@ -19,12 +19,13 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/containers/fixed_flat_set.h"
 #include "base/cpu.h"
 #include "base/environment.h"
+#include "base/feature_list.h"
 #include "base/files/scoped_file.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -548,8 +549,8 @@ bool IsGen9Gpu() {
   return is_gen9_gpu;
 }
 
-// Returns true if the SoC has a 9.5 GPU. CPU model IDs are referenced from the
-// following file in the kernel source:  arch/x86/include/asm/intel-family.h.
+// Returns true if the SoC has a Gen9.5 GPU. CPU model IDs are referenced from
+// the following file in the kernel source: arch/x86/include/asm/intel-family.h.
 bool IsGen95Gpu() {
   constexpr int kPentiumAndLaterFamily = 0x06;
   constexpr int kKabyLakeModelId = 0x9E;
@@ -566,6 +567,17 @@ bool IsGen95Gpu() {
                                     cpuid->model() == kCometLakeModelId ||
                                     cpuid->model() == kCometLake_LModelId);
   return is_gen95_gpu;
+}
+
+// Returns true if the SoC has a Gen11 GPU. CPU model IDs are referenced from
+// the following file in the kernel source: arch/x86/include/asm/intel-family.h.
+bool IsGen11Gpu() {
+  constexpr int kPentiumAndLaterFamily = 0x06;
+  constexpr int kJasperLakeModelId = 0x9C;
+  static const base::NoDestructor<base::CPU> cpuid;
+  static const bool is_gen11_gpu = cpuid->family() == kPentiumAndLaterFamily &&
+                                   (cpuid->model() == kJasperLakeModelId);
+  return is_gen11_gpu;
 }
 
 // Returns true if the intel hybrid driver is used for decoding |va_profile|.
@@ -1638,7 +1650,26 @@ VAImplementation VaapiWrapper::GetImplementationType() {
 }
 
 // static
-scoped_refptr<VaapiWrapper> VaapiWrapper::Create(
+int VaapiWrapper::GetMaxNumDecoderInstances() {
+  if (!base::FeatureList::IsEnabled(media::kLimitConcurrentDecoderInstances)) {
+    return std::numeric_limits<int>::max();
+  }
+
+  // Chromebook "grunt", with an AMD Radeon R5 (Stoney Ridge) GPU, b/266003084.
+  constexpr int kAMDStoneyRidgeMaxNumOfInstances = 10;
+  auto va_display_state_handle = VADisplayStateSingleton::GetHandle();
+  if (va_display_state_handle &&
+      base::Contains(va_display_state_handle->vendor_string(), "stoney")) {
+    return kAMDStoneyRidgeMaxNumOfInstances;
+  }
+  // TODO(andrescj): we can relax this once we extract video decoding into its
+  // own process.
+  constexpr int kDefaultMaxNumOfInstances = 16;
+  return kDefaultMaxNumOfInstances;
+}
+
+// static
+base::expected<scoped_refptr<VaapiWrapper>, DecoderStatus> VaapiWrapper::Create(
     CodecMode mode,
     VAProfile va_profile,
     EncryptionScheme encryption_scheme,
@@ -1646,7 +1677,7 @@ scoped_refptr<VaapiWrapper> VaapiWrapper::Create(
     bool enforce_sequence_affinity) {
   if (!VASupportedProfiles::Get().IsProfileSupported(mode, va_profile)) {
     DVLOG(1) << "Unsupported va_profile: " << vaProfileStr(va_profile);
-    return nullptr;
+    return base::unexpected(DecoderStatus::Codes::kUnsupportedProfile);
   }
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // In protected decode |mode| we need to ensure that |va_profile| is supported
@@ -1656,28 +1687,44 @@ scoped_refptr<VaapiWrapper> VaapiWrapper::Create(
       !VASupportedProfiles::Get().IsProfileSupported(mode,
                                                      VAProfileProtected)) {
     LOG(ERROR) << "Protected content profile not supported";
-    return nullptr;
+    return base::unexpected(DecoderStatus::Codes::kUnsupportedEncryptionMode);
   }
 #endif
 
   auto va_display_state_handle = VADisplayStateSingleton::GetHandle();
   if (!va_display_state_handle) {
-    return nullptr;
+    return base::unexpected(DecoderStatus::Codes::kFailed);
+  }
+
+  if (mode == kDecode) {
+    static const auto decoder_instances_limit =
+        VaapiWrapper::GetMaxNumDecoderInstances();
+    const bool can_create_decoder =
+        num_decoder_instances_.Increment() < decoder_instances_limit ||
+        !base::FeatureList::IsEnabled(media::kLimitConcurrentDecoderInstances);
+    if (!can_create_decoder) {
+      num_decoder_instances_.Decrement();
+      return base::unexpected(DecoderStatus::Codes::kTooManyDecoders);
+    }
   }
 
   scoped_refptr<VaapiWrapper> vaapi_wrapper(new VaapiWrapper(
       std::move(va_display_state_handle), mode, enforce_sequence_affinity));
-  if (vaapi_wrapper->VaInitialize(report_error_to_uma_cb)) {
-    if (vaapi_wrapper->Initialize(va_profile, encryption_scheme))
-      return vaapi_wrapper;
-  }
+  vaapi_wrapper->VaInitialize(report_error_to_uma_cb);
+  if (vaapi_wrapper->Initialize(va_profile, encryption_scheme))
+    return vaapi_wrapper;
+
   LOG(ERROR) << "Failed to create VaapiWrapper for va_profile: "
              << vaProfileStr(va_profile);
-  return nullptr;
+  return base::unexpected(DecoderStatus::Codes::kFailed);
 }
 
 // static
-scoped_refptr<VaapiWrapper> VaapiWrapper::CreateForVideoCodec(
+base::AtomicRefCount VaapiWrapper::num_decoder_instances_(0);
+
+// static
+base::expected<scoped_refptr<VaapiWrapper>, DecoderStatus>
+VaapiWrapper::CreateForVideoCodec(
     CodecMode mode,
     VideoCodecProfile profile,
     EncryptionScheme encryption_scheme,
@@ -1698,9 +1745,10 @@ std::vector<SVCScalabilityMode> VaapiWrapper::GetSupportedScalabilityModes(
   if (media_profile == VP9PROFILE_PROFILE0) {
     scalability_modes.push_back(SVCScalabilityMode::kL1T2);
     scalability_modes.push_back(SVCScalabilityMode::kL1T3);
-    if (GetDefaultVaEntryPoint(
-            VaapiWrapper::kEncodeConstantQuantizationParameter, va_profile) ==
-        VAEntrypointEncSliceLP) {
+    const VAEntrypoint va_entry_point = GetDefaultVaEntryPoint(
+        VaapiWrapper::kEncodeConstantQuantizationParameter, va_profile);
+    if (va_entry_point == VAEntrypointEncSliceLP ||
+        va_entry_point == VAEntrypointEncSlice) {
       scalability_modes.push_back(SVCScalabilityMode::kL2T2Key);
       scalability_modes.push_back(SVCScalabilityMode::kL2T3Key);
       scalability_modes.push_back(SVCScalabilityMode::kL3T2Key);
@@ -2072,7 +2120,7 @@ VaapiWrapper::CreateContextAndScopedVASurfaces(
     const gfx::Size& size,
     const std::vector<SurfaceUsageHint>& usage_hints,
     size_t num_surfaces,
-    const absl::optional<gfx::Size>& visible_size) {
+    const std::optional<gfx::Size>& visible_size) {
   CHECK(!enforce_sequence_affinity_ ||
         sequence_checker_.CalledOnValidSequence());
   if (va_context_id_ != VA_INVALID_ID) {
@@ -2083,7 +2131,7 @@ VaapiWrapper::CreateContextAndScopedVASurfaces(
 
   std::vector<std::unique_ptr<ScopedVASurface>> scoped_va_surfaces =
       CreateScopedVASurfaces(va_format, size, usage_hints, num_surfaces,
-                             visible_size, /*va_fourcc=*/absl::nullopt);
+                             visible_size, /*va_fourcc=*/std::nullopt);
   if (scoped_va_surfaces.empty())
     return {};
 
@@ -2873,7 +2921,7 @@ uint64_t VaapiWrapper::GetEncodedChunkSize(VABufferID buffer_id,
 
 bool VaapiWrapper::DownloadFromVABuffer(
     VABufferID buffer_id,
-    absl::optional<VASurfaceID> sync_surface_id,
+    std::optional<VASurfaceID> sync_surface_id,
     uint8_t* target_ptr,
     size_t target_size,
     size_t* coded_data_size) NO_THREAD_SAFETY_ANALYSIS {
@@ -2988,8 +3036,8 @@ bool VaapiWrapper::GetMinAV1SegmentSize(VideoCodecProfile profile,
 
 bool VaapiWrapper::BlitSurface(const VASurface& va_surface_src,
                                const VASurface& va_surface_dest,
-                               absl::optional<gfx::Rect> src_rect,
-                               absl::optional<gfx::Rect> dest_rect
+                               std::optional<gfx::Rect> src_rect,
+                               std::optional<gfx::Rect> dest_rect
 #if BUILDFLAG(IS_CHROMEOS_ASH)
                                ,
                                VAProtectedSessionID va_protected_session_id
@@ -3045,7 +3093,17 @@ bool VaapiWrapper::BlitSurface(const VASurface& va_surface_src,
     pipeline_param->output_region = &output_region;
     pipeline_param->output_background_color = 0xff000000;
     pipeline_param->output_color_standard = VAProcColorStandardNone;
-    pipeline_param->filter_flags = VA_FILTER_SCALING_DEFAULT;
+    // SFC-AVS is the default iHD driver scaling setting on all Intel platforms,
+    // however, it has limitation on the older GPU before Gen12, EU-Bilinear is
+    // reconmmended on Intel GPUs before Gen12.
+    if (IsGen8Gpu() || IsGen9Gpu() || IsGen95Gpu() || IsGen11Gpu()) {
+      // EU-bilinear.
+      pipeline_param->filter_flags =
+          VA_FILTER_SCALING_HQ | VA_FILTER_INTERPOLATION_BILINEAR;
+    } else {
+      // SFC-AVS on Intel iHD driver.
+      pipeline_param->filter_flags = VA_FILTER_SCALING_DEFAULT;
+    }
     pipeline_param->rotation_state = VA_ROTATION_NONE;
   }
 
@@ -3144,6 +3202,9 @@ VaapiWrapper::~VaapiWrapper() {
   DestroyPendingBuffers();
   DestroyContext();
   Deinitialize();
+  if (mode_ == kDecode) {
+    num_decoder_instances_.Decrement();
+  }
 }
 
 bool VaapiWrapper::Initialize(VAProfile va_profile,
@@ -3229,7 +3290,7 @@ void VaapiWrapper::Deinitialize() {
   }
 }
 
-bool VaapiWrapper::VaInitialize(
+void VaapiWrapper::VaInitialize(
     const ReportErrorToUMACB& report_error_to_uma_cb) {
   CHECK(!enforce_sequence_affinity_ ||
         sequence_checker_.CalledOnValidSequence());
@@ -3240,8 +3301,6 @@ bool VaapiWrapper::VaInitialize(
       !UseGlobalVaapiLock(va_display_state_handle_->implementation_type())) {
     va_lock_ = nullptr;
   }
-
-  return true;
 }
 
 bool VaapiWrapper::HasContext() const {
@@ -3315,8 +3374,8 @@ VaapiWrapper::CreateScopedVASurfaces(
     const gfx::Size& size,
     const std::vector<SurfaceUsageHint>& usage_hints,
     size_t num_surfaces,
-    const absl::optional<gfx::Size>& visible_size,
-    const absl::optional<uint32_t>& va_fourcc) {
+    const std::optional<gfx::Size>& visible_size,
+    const std::optional<uint32_t>& va_fourcc) {
   CHECK(!enforce_sequence_affinity_ ||
         sequence_checker_.CalledOnValidSequence());
   if (kInvalidVaRtFormat == va_rt_format) {
@@ -3378,7 +3437,7 @@ void VaapiWrapper::DestroySurfaces(std::vector<VASurfaceID> va_surfaces) {
   DVLOG(2) << "Destroying " << va_surfaces.size() << " surfaces";
 
   // vaDestroySurfaces() makes no guarantees about VA_INVALID_SURFACE.
-  base::Erase(va_surfaces, VA_INVALID_SURFACE);
+  std::erase(va_surfaces, VA_INVALID_SURFACE);
   if (va_surfaces.empty())
     return;
 

@@ -17,9 +17,9 @@ pub struct Sha256;
 
 impl crypto_provider::sha2::Sha256 for Sha256 {
     fn sha256(input: &[u8]) -> [u8; 32] {
-        let mut digest = bssl_crypto::digest::Sha256::new_digest();
+        let mut digest = bssl_crypto::digest::Sha256::new();
         digest.update(input);
-        digest.finalize()
+        digest.digest()
     }
 }
 
@@ -28,8 +28,8 @@ pub struct Sha512;
 
 impl crypto_provider::sha2::Sha512 for Sha512 {
     fn sha512(input: &[u8]) -> [u8; 64] {
-        let mut digest = bssl_crypto::digest::Sha512::new_digest();
+        let mut digest = bssl_crypto::digest::Sha512::new();
         digest.update(input);
-        digest.finalize()
+        digest.digest()
     }
 }

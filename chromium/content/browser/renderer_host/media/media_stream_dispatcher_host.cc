@@ -326,6 +326,21 @@ void MediaStreamDispatcherHost::OnDeviceCaptureHandleChange(
   GetMediaStreamDeviceObserver()->OnDeviceCaptureHandleChange(label, device);
 }
 
+void MediaStreamDispatcherHost::OnZoomLevelChange(
+    const std::string& label,
+    const blink::MediaStreamDevice& device,
+    int zoom_level) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK(device.display_media_info);
+
+  if (!base::FeatureList::IsEnabled(
+          features::kCapturedSurfaceControlKillswitch)) {
+    return;
+  }
+
+  GetMediaStreamDeviceObserver()->OnZoomLevelChange(label, device, zoom_level);
+}
+
 void MediaStreamDispatcherHost::OnWebContentsFocused() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -350,7 +365,9 @@ void MediaStreamDispatcherHost::OnWebContentsFocused() {
             weak_factory_.GetWeakPtr()),
         base::BindRepeating(
             &MediaStreamDispatcherHost::OnDeviceCaptureHandleChange,
-            weak_factory_.GetWeakPtr()));
+            weak_factory_.GetWeakPtr()),
+        base::BindRepeating(&MediaStreamDispatcherHost::OnZoomLevelChange,
+                            weak_factory_.GetWeakPtr()));
     pending_requests_.pop_front();
   }
 }
@@ -454,15 +471,6 @@ void MediaStreamDispatcherHost::GenerateStreams(
     return;
   }
 
-  if (audio_stream_selection_info_ptr->strategy ==
-          blink::mojom::StreamSelectionStrategy::SEARCH_BY_SESSION_ID &&
-      (!audio_stream_selection_info_ptr->session_id.has_value() ||
-       audio_stream_selection_info_ptr->session_id->is_empty())) {
-    ReceivedBadMessage(render_frame_host_id_.child_id,
-                       bad_message::MDDH_INVALID_STREAM_SELECTION_INFO);
-    return;
-  }
-
   GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(
@@ -541,7 +549,9 @@ void MediaStreamDispatcherHost::DoGenerateStreams(
           weak_factory_.GetWeakPtr()),
       base::BindRepeating(
           &MediaStreamDispatcherHost::OnDeviceCaptureHandleChange,
-          weak_factory_.GetWeakPtr()));
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&MediaStreamDispatcherHost::OnZoomLevelChange,
+                          weak_factory_.GetWeakPtr()));
 }
 
 void MediaStreamDispatcherHost::CancelRequest(int page_request_id) {
@@ -718,22 +728,6 @@ void MediaStreamDispatcherHost::SendWheel(
                                    std::move(action), std::move(callback));
 }
 
-void MediaStreamDispatcherHost::GetZoomLevel(
-    const base::UnguessableToken& device_id,
-    GetZoomLevelCallback callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  if (!base::FeatureList::IsEnabled(
-          features::kCapturedSurfaceControlKillswitch)) {
-    std::move(callback).Run(std::nullopt,
-                            CapturedSurfaceControlResult::kUnknownError);
-    return;
-  }
-
-  media_stream_manager_->GetZoomLevel(render_frame_host_id_, device_id,
-                                      std::move(callback));
-}
-
 void MediaStreamDispatcherHost::SetZoomLevel(
     const base::UnguessableToken& device_id,
     int32_t zoom_level,
@@ -838,7 +832,9 @@ void MediaStreamDispatcherHost::DoGetOpenDevice(
           weak_factory_.GetWeakPtr()),
       base::BindRepeating(
           &MediaStreamDispatcherHost::OnDeviceCaptureHandleChange,
-          weak_factory_.GetWeakPtr()));
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&MediaStreamDispatcherHost::OnZoomLevelChange,
+                          weak_factory_.GetWeakPtr()));
 }
 
 std::optional<bad_message::BadMessageReason>

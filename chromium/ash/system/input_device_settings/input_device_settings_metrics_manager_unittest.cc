@@ -4,6 +4,8 @@
 
 #include "ash/system/input_device_settings/input_device_settings_metrics_manager.h"
 
+#include <string_view>
+
 #include "ash/accelerators/accelerator_encoding.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/accelerator_actions.h"
@@ -59,7 +61,7 @@ constexpr int kKeyboardInternalId = 1;
 constexpr struct TimePeriodMetricData {
   TimePeriod time_period;
   base::TimeDelta time_delta;
-  base::StringPiece metric_name;
+  std::string_view metric_name;
 } kTimePeriodMetricData[] = {
     {TimePeriod::kOneHour, base::Minutes(0), "OneHour"},
     {TimePeriod::kThreeHours, base::Hours(2), "ThreeHours"},
@@ -69,7 +71,7 @@ constexpr struct TimePeriodMetricData {
 
 constexpr struct CategoryMetricNameData {
   Category category;
-  base::StringPiece metric_name;
+  std::string_view metric_name;
 } kCategoryMetricNameData[] = {
     {Category::kFirstEver, "FirstEver"},
     {Category::kDefault, "FromDefaults"},
@@ -96,6 +98,13 @@ class InputDeviceSettingsMetricsManagerTest : public AshTestBase {
 
   // testing::Test:
   void SetUp() override {
+    scoped_feature_list_.InitWithFeatures(
+        {
+            features::kInputDeviceSettingsSplit,
+            features::kAltClickAndSixPackCustomization,
+            ::features::kSupportF11AndF12KeyShortcuts,
+        },
+        /*disabled_features=*/{});
     AshTestBase::SetUp();
     manager_ = std::make_unique<InputDeviceSettingsMetricsManager>();
   }
@@ -103,6 +112,7 @@ class InputDeviceSettingsMetricsManagerTest : public AshTestBase {
   void TearDown() override {
     manager_.reset();
     AshTestBase::TearDown();
+    scoped_feature_list_.Reset();
   }
 
   // Add a fake keyboard to DeviceDataManagerTestApi and provide layout info to
@@ -134,13 +144,6 @@ class InputDeviceSettingsMetricsManagerTest : public AshTestBase {
 };
 
 TEST_F(InputDeviceSettingsMetricsManagerTest, RecordsKeyboardSettings) {
-  scoped_feature_list_.InitWithFeatures(
-      {
-          features::kInputDeviceSettingsSplit,
-          features::kAltClickAndSixPackCustomization,
-          ::features::kSupportF11AndF12KeyShortcuts,
-      },
-      /*disabled_features=*/{});
   mojom::Keyboard keyboard_external;
   keyboard_external.device_key = kExternalKeyboardId;
   keyboard_external.is_external = true;
@@ -554,10 +557,6 @@ TEST_F(InputDeviceSettingsMetricsManagerTest, RecordPointingStickSettings) {
 }
 
 TEST_F(InputDeviceSettingsMetricsManagerTest, RecordTouchpadSettings) {
-  scoped_feature_list_.InitWithFeatures(
-      {features::kInputDeviceSettingsSplit,
-       features::kAltClickAndSixPackCustomization},
-      /*disabled_features=*/{});
   mojom::Touchpad touchpad_external;
   touchpad_external.device_key = kExternalTouchpadId;
   touchpad_external.is_external = true;

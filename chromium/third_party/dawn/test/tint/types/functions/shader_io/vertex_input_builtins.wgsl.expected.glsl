@@ -1,7 +1,12 @@
 #version 310 es
 
+struct PushConstants {
+  uint first_instance;
+};
+
+layout(location=0) uniform PushConstants push_constants;
 vec4 tint_symbol(uint vertex_index, uint instance_index) {
-  uint foo = (vertex_index + instance_index);
+  uint foo = (vertex_index + (instance_index + push_constants.first_instance));
   return vec4(0.0f);
 }
 

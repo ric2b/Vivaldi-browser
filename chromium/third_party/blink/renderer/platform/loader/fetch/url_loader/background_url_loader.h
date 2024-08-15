@@ -61,7 +61,7 @@ class BLINK_PLATFORM_EXPORT BackgroundURLLoader : public URLLoader {
                          base::TimeDelta timeout_interval,
                          URLLoaderClient* client,
                          WebURLResponse& response,
-                         absl::optional<WebURLError>& error,
+                         std::optional<WebURLError>& error,
                          scoped_refptr<SharedBuffer>& data,
                          int64_t& encoded_data_length,
                          uint64_t& encoded_body_length,
@@ -81,6 +81,11 @@ class BLINK_PLATFORM_EXPORT BackgroundURLLoader : public URLLoader {
 
   void DidChangePriority(WebURLRequest::Priority new_priority,
                          int intra_priority_value) override;
+
+  bool CanHandleResponseOnBackground() override { return true; }
+  void SetBackgroundResponseProcessor(
+      scoped_refptr<BackgroundResponseProcessor> background_response_processor)
+      override;
 
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunnerForBodyLoader()
       override;

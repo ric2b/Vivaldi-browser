@@ -144,6 +144,8 @@ HotspotMetricsHelper::GetSetEnabledMetricsResult(
       return HotspotMetricsSetEnabledResult::kAlreadyFulfilled;
     case HotspotControlResult::kAborted:
       return HotspotMetricsSetEnabledResult::kAborted;
+    case HotspotControlResult::kInvalid:
+      return HotspotMetricsSetEnabledResult::kInvalid;
     default:
       return HotspotMetricsSetEnabledResult::kUnknownFailure;
   }
@@ -233,6 +235,10 @@ HotspotMetricsHelper::GetMetricsDisableReason(
       return HotspotMetricsDisableReason::kRestart;
     case DisableReason::kUpstreamNoInternet:
       return HotspotMetricsDisableReason::kUpstreamNoInternet;
+    case DisableReason::kDownstreamLinkDisconnect:
+      return HotspotMetricsDisableReason::kDownstreamLinkDisconnect;
+    case DisableReason::kDownstreamNetworkDisconnect:
+      return HotspotMetricsDisableReason::kDownstreamNetworkDisconnect;
   }
   NOTREACHED() << "Unknown hotspot disable reason.";
 }

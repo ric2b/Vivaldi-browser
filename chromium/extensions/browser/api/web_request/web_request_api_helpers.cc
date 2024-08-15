@@ -38,11 +38,10 @@
 #include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/api/web_request/web_request_api_constants.h"
 #include "extensions/browser/api/web_request/web_request_info.h"
-#include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/common/api/declarative_net_request.h"
-#include "extensions/common/extension_messages.h"
+#include "extensions/common/extension_id.h"
 #include "net/cookies/cookie_util.h"
 #include "net/cookies/parsed_cookie.h"
 #include "net/http/http_request_headers.h"
@@ -213,7 +212,7 @@ static_assert(ValidateHeaderEntries(kRequestHeaderEntries),
 void RecordRequestHeader(const std::string& header,
                          void (*record_func)(RequestHeaderType)) {
   DCHECK(IsStringLowerCaseASCII(header));
-  const auto* it = kRequestHeaderEntries.find(header);
+  const auto it = kRequestHeaderEntries.find(header);
   record_func(it != kRequestHeaderEntries.end() ? it->second
                                                 : RequestHeaderType::kOther);
 }
@@ -321,7 +320,7 @@ constexpr auto kResponseHeaderEntries =
 void RecordResponseHeader(std::string_view header,
                           void (*record_func)(ResponseHeaderType)) {
   DCHECK(IsStringLowerCaseASCII(header));
-  const auto* it = kResponseHeaderEntries.find(header);
+  const auto it = kResponseHeaderEntries.find(header);
   record_func(it != kResponseHeaderEntries.end() ? it->second
                                                  : ResponseHeaderType::kOther);
 }
@@ -348,7 +347,7 @@ std::string GetDNRNewRequestHeaderValue(net::HttpRequestHeaders* headers,
   bool has_header = headers->GetHeader(header_name, &existing_value);
 
   if (has_header && operation == dnr_api::HeaderOperation::kAppend) {
-    const auto* it = dnr::kDNRRequestHeaderAppendAllowList.find(header_name);
+    const auto it = dnr::kDNRRequestHeaderAppendAllowList.find(header_name);
     DCHECK(it != dnr::kDNRRequestHeaderAppendAllowList.end());
     return base::StrCat({existing_value, it->second, header_value});
   }
@@ -494,7 +493,7 @@ bool ModifyResponseHeadersForAction(
   auto create_override_headers_if_needed =
       [&original_response_headers](
           scoped_refptr<net::HttpResponseHeaders>* override_response_headers) {
-        if (override_response_headers->get() == nullptr) {
+        if (!override_response_headers->get()) {
           *override_response_headers =
               base::MakeRefCounted<net::HttpResponseHeaders>(
                   original_response_headers->raw_headers());
@@ -727,8 +726,9 @@ ResponseCookieModification ResponseCookieModification::Clone() const {
   return clone;
 }
 
-EventResponseDelta::EventResponseDelta(const std::string& extension_id,
-                                       const base::Time& extension_install_time)
+EventResponseDelta::EventResponseDelta(
+    const extensions::ExtensionId& extension_id,
+    const base::Time& extension_install_time)
     : extension_id(extension_id),
       extension_install_time(extension_install_time),
       cancel(false) {}
@@ -768,7 +768,7 @@ bool CharListToString(const base::Value::List& list, std::string* out) {
 }
 
 EventResponseDelta CalculateOnBeforeRequestDelta(
-    const std::string& extension_id,
+    const extensions::ExtensionId& extension_id,
     const base::Time& extension_install_time,
     bool cancel,
     const GURL& new_url) {
@@ -780,7 +780,7 @@ EventResponseDelta CalculateOnBeforeRequestDelta(
 
 EventResponseDelta CalculateOnBeforeSendHeadersDelta(
     content::BrowserContext* browser_context,
-    const std::string& extension_id,
+    const extensions::ExtensionId& extension_id,
     const base::Time& extension_install_time,
     bool cancel,
     net::HttpRequestHeaders* old_headers,
@@ -825,7 +825,7 @@ EventResponseDelta CalculateOnBeforeSendHeadersDelta(
 }
 
 EventResponseDelta CalculateOnHeadersReceivedDelta(
-    const std::string& extension_id,
+    const extensions::ExtensionId& extension_id,
     const base::Time& extension_install_time,
     bool cancel,
     const GURL& old_url,
@@ -893,7 +893,7 @@ EventResponseDelta CalculateOnHeadersReceivedDelta(
 }
 
 EventResponseDelta CalculateOnAuthRequiredDelta(
-    const std::string& extension_id,
+    const extensions::ExtensionId& extension_id,
     const base::Time& extension_install_time,
     bool cancel,
     std::optional<net::AuthCredentials> auth_credentials) {
@@ -1655,10 +1655,9 @@ void MergeOnHeadersReceivedResponses(
           base::MakeRefCounted<net::HttpResponseHeaders>(
               original_response_headers->raw_headers());
     }
-    (*override_response_headers)->ReplaceStatusLine("HTTP/1.1 302 Found");
-    (*override_response_headers)->SetHeader("Location", new_url.spec());
-    // Prevent the original URL's fragment from being added to the new URL.
-    *preserve_fragment_on_redirect_url = new_url;
+
+    RedirectRequestAfterHeadersReceived(new_url, **override_response_headers,
+                                        preserve_fragment_on_redirect_url);
   }
 
   // Record metrics.
@@ -1769,6 +1768,16 @@ bool ShouldHideRequestHeader(content::BrowserContext* browser_context,
 bool ShouldHideResponseHeader(int extra_info_spec, const std::string& name) {
   return !(extra_info_spec & ExtraInfoSpec::EXTRA_HEADERS) &&
          base::EqualsCaseInsensitiveASCII(name, "set-cookie");
+}
+
+void RedirectRequestAfterHeadersReceived(
+    const GURL& new_url,
+    net::HttpResponseHeaders& override_response_headers,
+    GURL* preserve_fragment_on_redirect_url) {
+  override_response_headers.ReplaceStatusLine("HTTP/1.1 302 Found");
+  override_response_headers.SetHeader("Location", new_url.spec());
+  // Prevent the original URL's fragment from being added to the new URL.
+  *preserve_fragment_on_redirect_url = new_url;
 }
 
 }  // namespace extension_web_request_api_helpers

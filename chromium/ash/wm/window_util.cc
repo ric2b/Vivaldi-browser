@@ -17,7 +17,6 @@
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/mojom/input_device_settings.mojom.h"
 #include "ash/root_window_controller.h"
-#include "ash/scoped_animation_disabler.h"
 #include "ash/screen_util.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
@@ -35,16 +34,19 @@
 #include "ash/wm/splitview/split_view_utils.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_state.h"
+#include "ash/wm/wm_constants.h"
 #include "ash/wm/wm_event.h"
 #include "base/containers/adapters.h"
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/ui/base/chromeos_ui_constants.h"
 #include "chromeos/ui/base/window_state_type.h"
 #include "chromeos/ui/frame/caption_buttons/snap_controller.h"
 #include "chromeos/ui/frame/interior_resize_handler_targeter.h"
+#include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
@@ -62,11 +64,13 @@
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/transform_util.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/core/easy_resize_window_targeter.h"
+#include "ui/wm/core/scoped_animation_disabler.h"
 #include "ui/wm/core/window_animations.h"
 #include "ui/wm/public/activation_client.h"
 
@@ -166,39 +170,47 @@ aura::Window* FindTopMostChild(aura::Window* parent,
   return nullptr;
 }
 
-// Returns true if there is another window snapped to the opposite side of
-// `window` and we can't start partial overview.
-bool IsAnotherWindowSnappedOppositeOf(aura::Window* window) {
-  const auto windows =
-      Shell::Get()->mru_window_tracker()->BuildMruWindowList(kActiveDesk);
-  const auto snap_type = WindowState::Get(window)->GetStateType();
-  const auto opposite_snap_type = GetOppositeSnapType(window);
-  for (aura::Window* top_window : base::Reversed(windows)) {
-    if (top_window == window) {
-      // Skip `window` itself.
-      continue;
-    }
-    auto* top_window_state = WindowState::Get(top_window);
-    if (top_window_state->IsFloated()) {
-      // Skip any floated windows that are on top of the snapped windows.
-      continue;
-    }
-    if (!top_window_state->IsSnapped()) {
-      // Otherwise if `top_window` is not snapped, return false.
-      return false;
-    }
-    if (top_window_state->GetStateType() == snap_type) {
-      // Skip any windows that are snapped to the *same* side as `window`.
-      continue;
-    }
-    // Else `top_window` is snapped to the opposite side of `window`.
-    CHECK_EQ(top_window_state->GetStateType(), opposite_snap_type);
-    return true;
-  }
-  return false;
+}  // namespace
+
+int GetMiniWindowRoundedCornerRadius() {
+  return chromeos::features::IsRoundedWindowsEnabled()
+             ? chromeos::features::RoundedWindowsRadius()
+             : kWindowMiniViewCornerRadius;
 }
 
-}  // namespace
+gfx::RoundedCornersF GetMiniWindowRoundedCorners(const aura::Window* window,
+                                                 bool include_header_rounding,
+                                                 std::optional<float> scale) {
+  const int corner_radius = window_util::GetMiniWindowRoundedCornerRadius();
+  const float scaled_corner_radius = corner_radius / scale.value_or(1.0f);
+
+  if (SnapGroupController* snap_group_controller = SnapGroupController::Get()) {
+    if (SnapGroup* snap_group =
+            snap_group_controller->GetSnapGroupForGivenWindow(window)) {
+      return window == snap_group->window1()
+                 ? gfx::RoundedCornersF(
+                       /*upper_left=*/include_header_rounding
+                           ? scaled_corner_radius
+                           : 0,
+                       /*upper_right=*/0, /*lower_right=*/0,
+                       /*lower_left=*/
+                       scaled_corner_radius)
+                 : gfx::RoundedCornersF(
+                       /*upper_left=*/0,
+                       /*upper_right=*/
+                       include_header_rounding ? scaled_corner_radius : 0,
+                       /*lower_right=*/
+                       scaled_corner_radius,
+                       /*lower_left=*/0);
+    }
+  }
+
+  return gfx::RoundedCornersF(
+      /*upper_left=*/include_header_rounding ? scaled_corner_radius : 0,
+      /*upper_right=*/include_header_rounding ? scaled_corner_radius : 0,
+      /*lower_right=*/scaled_corner_radius,
+      /*lower_left=*/scaled_corner_radius);
+}
 
 aura::Window* GetActiveWindow() {
   if (auto* activation_client =
@@ -233,13 +245,13 @@ aura::Window* GetTopMostWindow(const aura::Window::Windows& windows) {
 }
 
 std::vector<aura::Window*> SortWindowsBottomToTop(
-    std::set<aura::Window*> window_set) {
+    std::set<raw_ptr<aura::Window, SetExperimental>> window_set) {
   std::vector<aura::Window*> ordered;
   std::vector<aura::Window*> root_windows;
   std::stack<aura::Window*> stack;
 
   // Collect unique root windows and put them on the stack.
-  for (auto* window : window_set) {
+  for (aura::Window* window : window_set) {
     // The call to `GetRootWindow` here traverses up the window tree to the
     // root, so this is technically quadratic time in the worst case, but is
     // effectively linear time for shallow trees, which are common.
@@ -400,28 +412,18 @@ bool ShouldExcludeForCycleList(const aura::Window* window) {
 }
 
 bool ShouldExcludeForOverview(const aura::Window* window) {
-  // If we're currently in tablet splitview or in clamshell mode with
-  // `IsFasterSplitScreenOrSnapGroupEnabledInClamshell()`, remove the default
-  // snapped window from the window list. The default snapped window occupies
-  // one side of the screen, while the other windows occupy the other side of
-  // the screen in overview mode. The default snap position is the position
-  // where the window was first snapped. See `default_snap_position_` in
-  // SplitViewController for more details.
-
   // A window should be excluded from being shown in overview when:
   // 1. In tablet split view mode on one window snapped;
-  // 2. During split view overview session in clamshell mode,
+  // 2. In clamshell `SplitViewOverviewSession`,
   // 3. If the window is not the mru window in snap group i.e. the corresponding
   // overview item representation for the snap group has been created.
   auto should_exclude_in_clamshell = [&]() -> bool {
-    if (IsFasterSplitScreenOrSnapGroupEnabledInClamshell()) {
-      if (auto* split_view_overview_session =
-              RootWindowController::ForWindow(window)
-                  ->split_view_overview_session();
-          split_view_overview_session &&
-          split_view_overview_session->window() == window) {
-        return true;
-      }
+    if (auto* split_view_overview_session =
+            RootWindowController::ForWindow(window)
+                ->split_view_overview_session();
+        split_view_overview_session &&
+        split_view_overview_session->window() == window) {
+      return true;
     }
 
     if (auto* snap_group_controller = SnapGroupController::Get()) {
@@ -464,7 +466,7 @@ void EnsureTransientRoots(
 void MinimizeAndHideWithoutAnimation(
     const std::vector<raw_ptr<aura::Window, VectorExperimental>>& windows) {
   for (aura::Window* window : windows) {
-    ScopedAnimationDisabler disable(window);
+    wm::ScopedAnimationDisabler disable(window);
 
     // ARC windows are minimized asynchronously, so we hide them after
     // minimization. We minimize ARC windows first so they receive occlusion
@@ -764,77 +766,43 @@ float GetSnapRatioForWindow(aura::Window* window) {
   return window_state->snap_ratio().value_or(chromeos::kDefaultSnapRatio);
 }
 
+void RegisterProfilePrefs(PrefRegistrySimple* registry) {
+  // TODO(sophiewen): Determine whether to enable the setting by default.
+  registry->RegisterBooleanPref(prefs::kSnapWindowSuggestions, true);
+}
+
 bool IsFasterSplitScreenOrSnapGroupEnabledInClamshell() {
   return !Shell::Get()->IsInTabletMode() &&
          (features::IsFasterSplitScreenSetupEnabled() ||
           SnapGroupController::Get());
 }
 
-chromeos::WindowStateType GetOppositeSnapType(aura::Window* window) {
-  CHECK(window);
-  WindowState* window_state = WindowState::Get(window);
-  CHECK(window_state->IsSnapped());
-  return window_state->GetStateType() ==
-                 chromeos::WindowStateType::kPrimarySnapped
-             ? chromeos::WindowStateType::kSecondarySnapped
-             : chromeos::WindowStateType::kPrimarySnapped;
+bool IsInFasterSplitScreenSetupSession(const aura::Window* window) {
+  SplitViewOverviewSession* split_view_overview_session =
+      RootWindowController::ForWindow(window)->split_view_overview_session();
+  return !Shell::Get()->IsInTabletMode() && split_view_overview_session &&
+         split_view_overview_session->setup_type() ==
+             SplitViewOverviewSetupType::kSnapThenAutomaticOverview;
 }
 
-void MaybeStartSplitViewOverview(aura::Window* window,
-                                 WindowSnapActionSource snap_action_source) {
-  if (!IsFasterSplitScreenOrSnapGroupEnabledInClamshell()) {
-    return;
+bool IsInFasterSplitScreenSetupSession() {
+  if (!IsInOverviewSession() || display::Screen::GetScreen()->InTabletMode()) {
+    return false;
   }
+  auto* overview_session = GetOverviewSession();
+  for (const auto& grid : overview_session->grid_list()) {
+    // Return true if any grid is in faster splitscreen setup.
+    if (IsInFasterSplitScreenSetupSession(grid->root_window())) {
+      return true;
+    }
+  }
+  return false;
+}
 
-  switch (snap_action_source) {
-    case WindowSnapActionSource::kDragWindowToEdgeToSnap:
-    case WindowSnapActionSource::kSnapByWindowLayoutMenu:
-    case WindowSnapActionSource::kLongPressCaptionButtonToSnap:
-    case WindowSnapActionSource::kTest:
-      // We only start partial overview for the above snap sources.
-      break;
-    default:
-      return;
-  }
-
-  auto* snap_group_controller = SnapGroupController::Get();
-  if (snap_group_controller &&
-      snap_group_controller->GetSnapGroupForGivenWindow(window)) {
-    // `SnapGroupController` needs to check if the window belongs to a snap
-    // group first.
-    return;
-  }
-
-  auto* root_window_controller = RootWindowController::ForWindow(window);
-  if (auto* split_view_overview_session =
-          root_window_controller->split_view_overview_session();
-      split_view_overview_session) {
-    // If split view overview is already active, which may be the case if this
-    // was the selected window from overview, return.
-    return;
-  }
-
-  // If `SnapGroups` is not enabled and the topmost window (excluding
-  // `window` itself) is snapped on the opposite side, don't start partial
-  // overview.
-  // TODO(b/319295505): We still need to define the behavior when there is
-  // another snapped window for `SnapGroups`.
-  if (!snap_group_controller && IsAnotherWindowSnappedOppositeOf(window)) {
-    return;
-  }
-
-  if (!IsInOverviewSession()) {
-    root_window_controller->StartSplitViewOverviewSession(
-        window, OverviewStartAction::kFasterSplitScreenSetup,
-        OverviewEnterExitType::kNormal, snap_action_source);
-  } else {
-    // If overview has already started, we may need to update the bounds. This
-    // may happen if a snapped window swaps positions or ratios during split
-    // view overview.
-    GetOverviewSession()
-        ->GetGridWithRootWindow(window->GetRootWindow())
-        ->RefreshGridBounds(/*animate=*/false);
-  }
+gfx::Rect GetTargetScreenBounds(aura::Window* window) {
+  gfx::Rect bounds_in_screen(window->GetTargetBounds());
+  wm::ConvertRectToScreen(window->parent(), &bounds_in_screen);
+  return bounds_in_screen;
 }
 
 }  // namespace ash::window_util

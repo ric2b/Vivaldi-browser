@@ -17,7 +17,7 @@ import {describe, it} from '../../shared/mocha-extensions.js';
 import {getCurrentUrl} from '../helpers/layers-helpers.js';
 import {openPanelViaMoreTools} from '../helpers/settings-helpers.js';
 
-describe('The Layers Panel', async () => {
+describe('The Layers Panel', () => {
   // See crbug.com/1261763 for details.
   it.skip('[crbug.com/1261763] should keep the currently inspected url as an attribute', async () => {
     const {target, frontend} = getBrowserAndPages();
@@ -39,7 +39,8 @@ describe('The Layers Panel', async () => {
     });
   });
 
-  it('should update the layers view when going offline', async () => {
+  // Flaky test.
+  it.skipOnPlatforms(['linux'], '[crbug.com/327062511] should update the layers view when going offline', async () => {
     // neterror.js started serving sourcemaps and we're requesting it unnecessarily.
     expectError('Request Network.loadNetworkResource failed. {"code":-32602,"message":"Unsupported URL scheme"}');
     expectError(

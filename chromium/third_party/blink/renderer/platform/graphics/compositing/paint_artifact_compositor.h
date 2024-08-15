@@ -97,7 +97,7 @@ class SynthesizedClip : private cc::ContentLayerClient {
   gfx::Transform projection_;
   bool rrect_is_local_ = false;
   SkRRect rrect_;
-  absl::optional<Path> path_;
+  std::optional<Path> path_;
   CompositorElementId mask_isolation_id_;
   CompositorElementId mask_effect_id_;
 };
@@ -118,16 +118,14 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   ~PaintArtifactCompositor() override;
 
   struct ViewportProperties {
-    raw_ptr<const TransformPaintPropertyNode, ExperimentalRenderer>
-        overscroll_elasticity_transform = nullptr;
-    raw_ptr<const TransformPaintPropertyNode, ExperimentalRenderer> page_scale =
+    raw_ptr<const TransformPaintPropertyNode> overscroll_elasticity_transform =
         nullptr;
-    raw_ptr<const TransformPaintPropertyNode, ExperimentalRenderer>
-        inner_scroll_translation = nullptr;
-    raw_ptr<const ClipPaintPropertyNode, ExperimentalRenderer> outer_clip =
+    raw_ptr<const TransformPaintPropertyNode> page_scale = nullptr;
+    raw_ptr<const TransformPaintPropertyNode> inner_scroll_translation =
         nullptr;
-    raw_ptr<const TransformPaintPropertyNode, ExperimentalRenderer>
-        outer_scroll_translation = nullptr;
+    raw_ptr<const ClipPaintPropertyNode> outer_clip = nullptr;
+    raw_ptr<const TransformPaintPropertyNode> outer_scroll_translation =
+        nullptr;
   };
 
   // Updates the cc layer list and property trees to match those provided in

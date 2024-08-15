@@ -13,7 +13,7 @@ syntax = "proto3";
 
 option optimize_for = LITE_RUNTIME;
 package cryptohome.fido;
-option go_package = "chromiumos/system_api/cryptohome_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/cryptohome_proto";
 
 message Url {
   string url = 1;

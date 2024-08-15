@@ -306,6 +306,7 @@ std::map<std::string, DescHandlerFunc> GetHandlers() {
           {variables::kWriteOutputConversion, DefaultHandler},
           {variables::kRustCrateName, DefaultHandler},
           {variables::kRustCrateRoot, DefaultHandler},
+          {variables::kRustflags, DefaultHandler},
           {variables::kSwiftModuleName, DefaultHandler},
           {variables::kSwiftBridgeHeader, DefaultHandler},
           {variables::kMnemonic, DefaultHandler},
@@ -399,6 +400,7 @@ bool PrintTarget(const Target* target,
   HandleProperty(variables::kLibDirs, handler_map, v, dict);
   HandleProperty(variables::kDataKeys, handler_map, v, dict);
   HandleProperty(variables::kRebase, handler_map, v, dict);
+  HandleProperty(variables::kRustflags, handler_map, v, dict);
   HandleProperty(variables::kWalkKeys, handler_map, v, dict);
   HandleProperty(variables::kWeakFrameworks, handler_map, v, dict);
   HandleProperty(variables::kWriteOutputConversion, handler_map, v, dict);
@@ -463,6 +465,7 @@ bool PrintConfig(const Config* config,
   HandleProperty(variables::kLibDirs, handler_map, v, dict);
   HandleProperty(variables::kPrecompiledHeader, handler_map, v, dict);
   HandleProperty(variables::kPrecompiledSource, handler_map, v, dict);
+  HandleProperty(variables::kRustflags, handler_map, v, dict);
   HandleProperty(variables::kWeakFrameworks, handler_map, v, dict);
 
 #undef HandleProperty

@@ -28,10 +28,6 @@ class Image;
 
 namespace message_center {
 
-namespace test {
-class NotificationListTest;
-}
-
 class Notification;
 class NotificationDelegate;
 struct NotifierId;
@@ -70,7 +66,8 @@ class MESSAGE_CENTER_EXPORT NotificationList {
 
   // Auto-sorted set. Matches the order in which Notifications are shown in
   // Notification Center.
-  using Notifications = std::set<Notification*, ComparePriorityTimestampSerial>;
+  using Notifications = std::set<raw_ptr<Notification, SetExperimental>,
+                                 ComparePriorityTimestampSerial>;
   using OwnedNotifications =
       std::map<std::unique_ptr<Notification>,
                NotificationState,
@@ -86,6 +83,14 @@ class MESSAGE_CENTER_EXPORT NotificationList {
   NotificationList& operator=(const NotificationList&) = delete;
 
   virtual ~NotificationList();
+
+  int size() const { return notifications_.size(); }
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // Returns the oldest child (not group parent, and not pinned) notification.
+  // Returns an empty string if there is no valid notification to return.
+  std::string GetOldestNonGroupedNotificationId();
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   // Makes a message "read". Collects the set of ids whose state have changed
   // and set to |udpated_ids|. NULL if updated ids don't matter.

@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+
 #include "base/functional/callback_forward.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
@@ -29,7 +30,6 @@
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/public/mojom/url_loader.mojom-forward.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
@@ -209,7 +209,7 @@ class ExtensionsBrowserClient {
 
   // Returns true if |extension_id| can run in an incognito window.
   virtual bool IsExtensionIncognitoEnabled(
-      const std::string& extension_id,
+      const ExtensionId& extension_id,
       content::BrowserContext* context) const = 0;
 
   // Returns true if |extension| can see events and data from another
@@ -402,7 +402,7 @@ class ExtensionsBrowserClient {
   // Unloaded extensions will return true if they are not blocked, disabled,
   // blocklisted or uninstalled (for external extensions). The default return
   // value of this function is false.
-  virtual bool IsExtensionEnabled(const std::string& extension_id,
+  virtual bool IsExtensionEnabled(const ExtensionId& extension_id,
                                   content::BrowserContext* context) const;
 
   // http://crbug.com/829412
@@ -436,7 +436,7 @@ class ExtensionsBrowserClient {
 
   // Returns true if the |extension_id| requires its own isolated storage
   // partition.
-  virtual bool HasIsolatedStorage(const std::string& extension_id,
+  virtual bool HasIsolatedStorage(const ExtensionId& extension_id,
                                   content::BrowserContext* context);
 
   // Returns whether screenshot of |web_contents| is restricted due to Data Leak

@@ -9,11 +9,17 @@ import type * as Bidi from 'chromium-bidi/lib/cjs/protocol/protocol.js';
 import {CallbackRegistry} from '../common/CallbackRegistry.js';
 import type {ConnectionTransport} from '../common/ConnectionTransport.js';
 import {debug} from '../common/Debug.js';
+import type {EventsWithWildcard} from '../common/EventEmitter.js';
 import {EventEmitter} from '../common/EventEmitter.js';
 import {debugError} from '../common/util.js';
 import {assert} from '../util/assert.js';
 
-import {type BrowsingContext, cdpSessions} from './BrowsingContext.js';
+import {BidiCdpSession} from './CDPSession.js';
+import type {
+  Commands as BidiCommands,
+  BidiEvents,
+  Connection,
+} from './core/Connection.js';
 
 const debugProtocolSend = debug('puppeteer:webDriverBiDi:SEND ►');
 const debugProtocolReceive = debug('puppeteer:webDriverBiDi:RECV ◀');
@@ -21,107 +27,7 @@ const debugProtocolReceive = debug('puppeteer:webDriverBiDi:RECV ◀');
 /**
  * @internal
  */
-export interface Commands {
-  'script.evaluate': {
-    params: Bidi.Script.EvaluateParameters;
-    returnType: Bidi.Script.EvaluateResult;
-  };
-  'script.callFunction': {
-    params: Bidi.Script.CallFunctionParameters;
-    returnType: Bidi.Script.EvaluateResult;
-  };
-  'script.disown': {
-    params: Bidi.Script.DisownParameters;
-    returnType: Bidi.EmptyResult;
-  };
-  'script.addPreloadScript': {
-    params: Bidi.Script.AddPreloadScriptParameters;
-    returnType: Bidi.Script.AddPreloadScriptResult;
-  };
-  'script.removePreloadScript': {
-    params: Bidi.Script.RemovePreloadScriptParameters;
-    returnType: Bidi.EmptyResult;
-  };
-
-  'browser.close': {
-    params: Bidi.EmptyParams;
-    returnType: Bidi.EmptyResult;
-  };
-
-  'browsingContext.activate': {
-    params: Bidi.BrowsingContext.ActivateParameters;
-    returnType: Bidi.EmptyResult;
-  };
-  'browsingContext.create': {
-    params: Bidi.BrowsingContext.CreateParameters;
-    returnType: Bidi.BrowsingContext.CreateResult;
-  };
-  'browsingContext.close': {
-    params: Bidi.BrowsingContext.CloseParameters;
-    returnType: Bidi.EmptyResult;
-  };
-  'browsingContext.getTree': {
-    params: Bidi.BrowsingContext.GetTreeParameters;
-    returnType: Bidi.BrowsingContext.GetTreeResult;
-  };
-  'browsingContext.navigate': {
-    params: Bidi.BrowsingContext.NavigateParameters;
-    returnType: Bidi.BrowsingContext.NavigateResult;
-  };
-  'browsingContext.reload': {
-    params: Bidi.BrowsingContext.ReloadParameters;
-    returnType: Bidi.BrowsingContext.NavigateResult;
-  };
-  'browsingContext.print': {
-    params: Bidi.BrowsingContext.PrintParameters;
-    returnType: Bidi.BrowsingContext.PrintResult;
-  };
-  'browsingContext.captureScreenshot': {
-    params: Bidi.BrowsingContext.CaptureScreenshotParameters;
-    returnType: Bidi.BrowsingContext.CaptureScreenshotResult;
-  };
-  'browsingContext.handleUserPrompt': {
-    params: Bidi.BrowsingContext.HandleUserPromptParameters;
-    returnType: Bidi.EmptyResult;
-  };
-  'browsingContext.setViewport': {
-    params: Bidi.BrowsingContext.SetViewportParameters;
-    returnType: Bidi.EmptyResult;
-  };
-  'browsingContext.traverseHistory': {
-    params: Bidi.BrowsingContext.TraverseHistoryParameters;
-    returnType: Bidi.EmptyResult;
-  };
-
-  'input.performActions': {
-    params: Bidi.Input.PerformActionsParameters;
-    returnType: Bidi.EmptyResult;
-  };
-  'input.releaseActions': {
-    params: Bidi.Input.ReleaseActionsParameters;
-    returnType: Bidi.EmptyResult;
-  };
-
-  'session.end': {
-    params: Bidi.EmptyParams;
-    returnType: Bidi.EmptyResult;
-  };
-  'session.new': {
-    params: Bidi.Session.NewParameters;
-    returnType: Bidi.Session.NewResult;
-  };
-  'session.status': {
-    params: object;
-    returnType: Bidi.Session.StatusResult;
-  };
-  'session.subscribe': {
-    params: Bidi.Session.SubscriptionRequest;
-    returnType: Bidi.EmptyResult;
-  };
-  'session.unsubscribe': {
-    params: Bidi.Session.SubscriptionRequest;
-    returnType: Bidi.EmptyResult;
-  };
+export interface Commands extends BidiCommands {
   'cdp.sendCommand': {
     params: Bidi.Cdp.SendCommandParameters;
     returnType: Bidi.Cdp.SendCommandResult;
@@ -130,29 +36,26 @@ export interface Commands {
     params: Bidi.Cdp.GetSessionParameters;
     returnType: Bidi.Cdp.GetSessionResult;
   };
+  'cdp.resolveRealm': {
+    params: Bidi.Cdp.ResolveRealmParameters;
+    returnType: Bidi.Cdp.ResolveRealmResult;
+  };
 }
 
 /**
  * @internal
  */
-export type BidiEvents = {
-  [K in Bidi.ChromiumBidi.Event['method']]: Extract<
-    Bidi.ChromiumBidi.Event,
-    {method: K}
-  >['params'];
-};
-
-/**
- * @internal
- */
-export class BidiConnection extends EventEmitter<BidiEvents> {
+export class BidiConnection
+  extends EventEmitter<BidiEvents>
+  implements Connection
+{
   #url: string;
   #transport: ConnectionTransport;
   #delay: number;
   #timeout? = 0;
   #closed = false;
   #callbacks = new CallbackRegistry();
-  #browsingContexts = new Map<string, BrowsingContext>();
+  #emitters: Array<EventEmitter<any>> = [];
 
   constructor(
     url: string,
@@ -176,6 +79,20 @@ export class BidiConnection extends EventEmitter<BidiEvents> {
 
   get url(): string {
     return this.#url;
+  }
+
+  pipeTo<Events extends BidiEvents>(emitter: EventEmitter<Events>): void {
+    this.#emitters.push(emitter);
+  }
+
+  override emit<Key extends keyof EventsWithWildcard<BidiEvents>>(
+    type: Key,
+    event: EventsWithWildcard<BidiEvents>[Key]
+  ): boolean {
+    for (const emitter of this.#emitters) {
+      emitter.emit(type, event);
+    }
+    return super.emit(type, event);
   }
 
   send<T extends keyof Commands>(
@@ -223,12 +140,11 @@ export class BidiConnection extends EventEmitter<BidiEvents> {
           return;
         case 'event':
           if (isCdpEvent(object)) {
-            cdpSessions
+            BidiCdpSession.sessions
               .get(object.params.session)
               ?.emit(object.params.event, object.params.params);
             return;
           }
-          this.#maybeEmitOnContext(object);
           // SAFETY: We know the method and parameter still match here.
           this.emit(
             object.method,
@@ -249,52 +165,6 @@ export class BidiConnection extends EventEmitter<BidiEvents> {
     debugError(object);
   }
 
-  #maybeEmitOnContext(event: Bidi.ChromiumBidi.Event) {
-    let context: BrowsingContext | undefined;
-    // Context specific events
-    if ('context' in event.params && event.params.context !== null) {
-      context = this.#browsingContexts.get(event.params.context);
-      // `log.entryAdded` specific context
-    } else if (
-      'source' in event.params &&
-      event.params.source.context !== undefined
-    ) {
-      context = this.#browsingContexts.get(event.params.source.context);
-    }
-    context?.emit(event.method, event.params);
-  }
-
-  registerBrowsingContexts(context: BrowsingContext): void {
-    this.#browsingContexts.set(context.id, context);
-  }
-
-  getBrowsingContext(contextId: string): BrowsingContext {
-    const currentContext = this.#browsingContexts.get(contextId);
-    if (!currentContext) {
-      throw new Error(`BrowsingContext ${contextId} does not exist.`);
-    }
-    return currentContext;
-  }
-
-  getTopLevelContext(contextId: string): BrowsingContext {
-    let currentContext = this.#browsingContexts.get(contextId);
-    if (!currentContext) {
-      throw new Error(`BrowsingContext ${contextId} does not exist.`);
-    }
-    while (currentContext.parent) {
-      contextId = currentContext.parent;
-      currentContext = this.#browsingContexts.get(contextId);
-      if (!currentContext) {
-        throw new Error(`BrowsingContext ${contextId} does not exist.`);
-      }
-    }
-    return currentContext;
-  }
-
-  unregisterBrowsingContexts(id: string): void {
-    this.#browsingContexts.delete(id);
-  }
-
   /**
    * Unbinds the connection, but keeps the transport open. Useful when the transport will
    * be reused by other connection e.g. with different protocol.
@@ -309,7 +179,6 @@ export class BidiConnection extends EventEmitter<BidiEvents> {
     this.#transport.onmessage = () => {};
     this.#transport.onclose = () => {};
 
-    this.#browsingContexts.clear();
     this.#callbacks.clear();
   }
 
@@ -319,6 +188,10 @@ export class BidiConnection extends EventEmitter<BidiEvents> {
   dispose(): void {
     this.unbind();
     this.#transport.close();
+  }
+
+  getPendingProtocolErrors(): Error[] {
+    return this.#callbacks.getPendingProtocolErrors();
   }
 }
 

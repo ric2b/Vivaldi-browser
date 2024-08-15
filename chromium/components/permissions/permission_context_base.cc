@@ -372,7 +372,7 @@ content::PermissionResult PermissionContextBase::GetPermissionStatus(
   }
 
   if (UsesAutomaticEmbargo()) {
-    absl::optional<content::PermissionResult> result =
+    std::optional<content::PermissionResult> result =
         PermissionsClient::Get()
             ->GetPermissionDecisionAutoBlocker(browser_context_)
             ->GetEmbargoResult(requesting_origin, content_settings_type_);
@@ -644,9 +644,9 @@ void PermissionContextBase::UpdateContentSetting(const GURL& requesting_origin,
          content_setting == CONTENT_SETTING_BLOCK);
 
   content_settings::ContentSettingConstraints constraints;
-  constraints.set_session_model(is_one_time
-                                    ? content_settings::SessionModel::OneTime
-                                    : content_settings::SessionModel::Durable);
+  constraints.set_session_model(
+      is_one_time ? content_settings::mojom::SessionModel::ONE_TIME
+                  : content_settings::mojom::SessionModel::DURABLE);
 
 #if !BUILDFLAG(IS_ANDROID)
   // The Permissions module in Safety check will revoke permissions after

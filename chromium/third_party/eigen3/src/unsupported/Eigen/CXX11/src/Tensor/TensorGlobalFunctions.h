@@ -23,9 +23,12 @@ namespace Eigen {
 template <typename ADerived, typename BDerived, typename XDerived>
 EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const TensorCwiseTernaryOp<internal::scalar_betainc_op<typename XDerived::Scalar>,
                                                                  const ADerived, const BDerived, const XDerived>
-betainc(const ADerived& a, const BDerived& b, const XDerived& x) {
+betainc(const Eigen::TensorBase<ADerived, ReadOnlyAccessors>& a,
+        const Eigen::TensorBase<BDerived, ReadOnlyAccessors>& b,
+        const Eigen::TensorBase<XDerived, ReadOnlyAccessors>& x) {
   return TensorCwiseTernaryOp<internal::scalar_betainc_op<typename XDerived::Scalar>, const ADerived, const BDerived,
-                              const XDerived>(a, b, x, internal::scalar_betainc_op<typename XDerived::Scalar>());
+                              const XDerived>(a.derived(), b.derived(), x.derived(),
+                                              internal::scalar_betainc_op<typename XDerived::Scalar>());
 }
 
 }  // end namespace Eigen

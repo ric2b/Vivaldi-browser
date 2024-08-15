@@ -55,7 +55,7 @@ def main(args):
     # Invocations of `python` from GN should never inherit the gn.py's own
     # VirtualEnv. This also helps to ensure that generated ninja files do not
     # reference python.exe from the VirtualEnv generated from depot_tools' own
-    # .vpython file (or lack thereof), but instead reference the default python
+    # .vpython3 file (or lack thereof), but instead reference the default python
     # from the PATH.
     PruneVirtualEnv()
 

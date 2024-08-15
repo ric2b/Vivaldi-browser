@@ -45,8 +45,8 @@ void MergeAllDependentConfigsFrom(const Target* from_target,
 
 Err MakeTestOnlyError(const Item* from, const Item* to) {
   bool with_toolchain = from->settings()->ShouldShowToolchain({
-    &from->label(),
-    &to->label(),
+      &from->label(),
+      &to->label(),
   });
   return Err(
       from->defined_from(), "Test-only dependency not allowed.",
@@ -544,6 +544,15 @@ bool Target::IsDataOnly() const {
   return output_type_ == BUNDLE_DATA;
 }
 
+bool Target::ShouldGenerate() const {
+  const auto& root_patterns = settings()->build_settings()->root_patterns();
+  if (root_patterns.empty()) {
+    // By default, generate all targets that belong to the default toolchain.
+    return settings()->is_default();
+  }
+  return LabelPattern::VectorMatches(root_patterns, label());
+}
+
 DepsIteratorRange Target::GetDeps(DepsIterationType type) const {
   if (type == DEPS_LINKED) {
     return DepsIteratorRange(
@@ -566,9 +575,7 @@ std::string Target::GetComputedOutputName() const {
   if (tool) {
     // Only add the prefix if the name doesn't already have it and it's not
     // being overridden.
-    if (!output_prefix_override_ &&
-        !base::StartsWith(name, tool->output_prefix(),
-                          base::CompareCase::SENSITIVE))
+    if (!output_prefix_override_ && !name.starts_with(tool->output_prefix()))
       result = tool->output_prefix();
   }
   result.append(name);
@@ -924,9 +931,9 @@ bool Target::ResolvePrecompiledHeaders(Err* err) {
       if (config_values_->precompiled_header() != cur.precompiled_header() ||
           config_values_->precompiled_source() != cur.precompiled_source()) {
         bool with_toolchain = settings()->ShouldShowToolchain({
-          &label(),
-          pch_header_settings_from,
-          &config->label(),
+            &label(),
+            pch_header_settings_from,
+            &config->label(),
         });
         *err = Err(
             defined_from(), "Precompiled header setting conflict.",

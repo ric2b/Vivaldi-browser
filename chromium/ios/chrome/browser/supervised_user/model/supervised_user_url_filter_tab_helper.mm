@@ -12,16 +12,16 @@
 #import "components/supervised_user/core/browser/supervised_user_preferences.h"
 #import "components/supervised_user/core/browser/supervised_user_service.h"
 #import "components/supervised_user/core/browser/supervised_user_url_filter.h"
+#import "components/supervised_user/core/browser/supervised_user_utils.h"
 #import "components/supervised_user/core/common/features.h"
 #import "components/supervised_user/core/common/pref_names.h"
 #import "components/supervised_user/core/common/supervised_user_constants.h"
-#import "components/supervised_user/core/common/supervised_user_utils.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_error.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_error_container.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_service_factory.h"
 #import "ios/net/protocol_handler_util.h"
-#import "net/base/mac/url_conversions.h"
+#import "net/base/apple/url_conversions.h"
 #import "net/base/net_errors.h"
 #import "url/gurl.h"
 
@@ -82,7 +82,7 @@ void SupervisedUserURLFilterTabHelper::ShouldAllowRequest(
     return;
   }
 
-  if (!supervised_user::IsUrlFilteringEnabled(
+  if (!supervised_user::IsSubjectToParentalControls(
           *chrome_browser_state->GetPrefs())) {
     std::move(callback).Run(PolicyDecision::Allow());
     return;

@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as ComponentHelpers from '../../components/helpers/helpers.js';
 import * as LitHtml from '../../lit-html/lit-html.js';
 import * as VisualLogging from '../../visual_logging/visual_logging.js';
 
@@ -49,9 +48,9 @@ export class ExpandableList extends HTMLElement {
         <div>
           ${this.#rows.length > 1 ?
             LitHtml.html`
-              <button title='${this.#title}' aria-label='${this.#title}' aria-expanded=${this.#expanded ? 'true' : 'false'} @click=${(): void => this.#onArrowClick()} class="arrow-icon-button">
+              <button title='${this.#title}' aria-label='${this.#title}' aria-expanded=${this.#expanded ? 'true' : 'false'} @click=${() => this.#onArrowClick()} class="arrow-icon-button">
                 <span class="arrow-icon ${this.#expanded ? 'expanded' : ''}"
-                jslog=${VisualLogging.treeItemExpand().track({click: true})}></span>
+                jslog=${VisualLogging.expand().track({click: true})}></span>
               </button>
             `
           : LitHtml.nothing}
@@ -68,10 +67,9 @@ export class ExpandableList extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-expandable-list', ExpandableList);
+customElements.define('devtools-expandable-list', ExpandableList);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-expandable-list': ExpandableList;
   }

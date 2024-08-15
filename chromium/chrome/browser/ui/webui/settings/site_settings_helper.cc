@@ -8,6 +8,7 @@
 #include <functional>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/containers/adapters.h"
@@ -103,7 +104,6 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::MEDIASTREAM_CAMERA, "media-stream-camera"},
     {ContentSettingsType::PROTOCOL_HANDLERS, "register-protocol-handler"},
     {ContentSettingsType::AUTOMATIC_DOWNLOADS, "multiple-automatic-downloads"},
-    {ContentSettingsType::MIDI, "midi"},
     {ContentSettingsType::MIDI_SYSEX, "midi-sysex"},
     {ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER, "protected-content"},
     {ContentSettingsType::BACKGROUND_SYNC, "background-sync"},
@@ -140,6 +140,10 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::AUTO_PICTURE_IN_PICTURE, "auto-picture-in-picture"},
     {ContentSettingsType::CAPTURED_SURFACE_CONTROL, "captured-surface-control"},
     {ContentSettingsType::WEB_PRINTING, "web-printing"},
+    {ContentSettingsType::SPEAKER_SELECTION, "speaker-selection"},
+    {ContentSettingsType::AUTOMATIC_FULLSCREEN, "automatic-fullscreen"},
+    {ContentSettingsType::KEYBOARD_LOCK, "keyboard-lock"},
+    {ContentSettingsType::POINTER_LOCK, "pointer-lock"},
 
     // Add new content settings here if a corresponding Javascript string
     // representation for it is not required, for example if the content setting
@@ -155,6 +159,7 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::IMPORTANT_SITE_INFO, nullptr},
     {ContentSettingsType::PERMISSION_AUTOBLOCKER_DATA, nullptr},
     {ContentSettingsType::ADS_DATA, nullptr},
+    {ContentSettingsType::MIDI, nullptr},
     {ContentSettingsType::PASSWORD_PROTECTION, nullptr},
     {ContentSettingsType::MEDIA_ENGAGEMENT, nullptr},
     {ContentSettingsType::CLIENT_HINTS, nullptr},
@@ -211,13 +216,17 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::SMART_CARD_GUARD, nullptr},
     {ContentSettingsType::SMART_CARD_DATA, nullptr},
     {ContentSettingsType::TOP_LEVEL_TPCD_TRIAL, nullptr},
+    {ContentSettingsType::SUB_APP_INSTALLATION_PROMPTS, nullptr},
+    {ContentSettingsType::DIRECT_SOCKETS, nullptr},
 };
 
-static_assert(std::size(kContentSettingsTypeGroupNames) ==
-                  // ContentSettingsType starts at -1, so add 1 here.
-                  static_cast<int32_t>(ContentSettingsType::NUM_TYPES) + 1,
-              "kContentSettingsTypeGroupNames should have "
-              "CONTENT_SETTINGS_NUM_TYPES elements");
+static_assert(
+    std::size(kContentSettingsTypeGroupNames) ==
+        // Add one since the sequence is kMinValue = -1, 0, ..., kMaxValue
+        1 + static_cast<int32_t>(ContentSettingsType::kMaxValue) -
+            static_cast<int32_t>(ContentSettingsType::kMinValue),
+    "kContentSettingsTypeGroupNames should have the correct number "
+    "of elements");
 
 struct SiteSettingSourceStringMapping {
   SiteSettingSource source;
@@ -403,8 +412,7 @@ std::string GetSourceStringForChooserException(
   // the |kSafeBrowsingSubresourceFilter| feature flag enabled, so an empty GURL
   // is used.
   SiteSettingSource calculated_source = CalculateSiteSettingSource(
-      profile, content_type, /*origin=*/GURL::EmptyGURL(), info,
-      permission_result);
+      profile, content_type, /*origin=*/GURL(), info, permission_result);
   DCHECK(calculated_source == SiteSettingSource::kPolicy ||
          calculated_source == SiteSettingSource::kPreference);
   return SiteSettingSourceToString(calculated_source);
@@ -524,7 +532,9 @@ base::StringPiece ContentSettingsTypeToGroupName(ContentSettingsType type) {
   return base::StringPiece();
 }
 
-const std::vector<ContentSettingsType>& GetVisiblePermissionCategories() {
+std::vector<ContentSettingsType> GetVisiblePermissionCategories(
+    const std::string& origin,
+    Profile* profile) {
   // First build the list of permissions that will be shown regardless of
   // `origin`. Some categories such as COOKIES store their data in a custom way,
   // so are not included here.
@@ -542,6 +552,7 @@ const std::vector<ContentSettingsType>& GetVisiblePermissionCategories() {
       ContentSettingsType::LOCAL_FONTS,
       ContentSettingsType::MEDIASTREAM_CAMERA,
       ContentSettingsType::MEDIASTREAM_MIC,
+      ContentSettingsType::MIDI_SYSEX,
       ContentSettingsType::MIXEDSCRIPT,
       ContentSettingsType::JAVASCRIPT_JIT,
       ContentSettingsType::NOTIFICATIONS,
@@ -597,20 +608,36 @@ const std::vector<ContentSettingsType>& GetVisiblePermissionCategories() {
       base_types->push_back(ContentSettingsType::AUTO_PICTURE_IN_PICTURE);
     }
 
-    if (base::FeatureList::IsEnabled(features::kBlockMidiByDefault)) {
-      base_types->push_back(ContentSettingsType::MIDI);
-    } else {
-      base_types->push_back(ContentSettingsType::MIDI_SYSEX);
-    }
-
     if (base::FeatureList::IsEnabled(blink::features::kWebPrinting)) {
       base_types->push_back(ContentSettingsType::WEB_PRINTING);
+    }
+
+    if (base::FeatureList::IsEnabled(blink::features::kSpeakerSelection)) {
+      base_types->push_back(ContentSettingsType::SPEAKER_SELECTION);
     }
 
     initialized = true;
   }
 
-  return *base_types;
+  // The permission categories below are only shown for certain origins.
+  std::vector<ContentSettingsType> types_for_origin = *base_types;
+  if (base::FeatureList::IsEnabled(
+          features::kAutomaticFullscreenContentSetting)) {
+    // Show for non-origin-specific lists, IWAs, and non-default values.
+    if (origin.empty() || GURL(origin).SchemeIs(chrome::kIsolatedAppScheme)) {
+      types_for_origin.push_back(ContentSettingsType::AUTOMATIC_FULLSCREEN);
+    } else if (profile) {
+      std::string source;
+      GetContentSettingForOrigin(
+          profile, HostContentSettingsMapFactory::GetForProfile(profile),
+          GURL(origin), ContentSettingsType::AUTOMATIC_FULLSCREEN, &source);
+      if (source != SiteSettingSourceToString(SiteSettingSource::kDefault)) {
+        types_for_origin.push_back(ContentSettingsType::AUTOMATIC_FULLSCREEN);
+      }
+    }
+  }
+
+  return types_for_origin;
 }
 
 std::string SiteSettingSourceToString(const SiteSettingSource source) {
@@ -653,7 +680,7 @@ base::Value::Dict GetFileSystemExceptionForPage(
     bool is_embargoed) {
   base::Value::Dict exception;
   exception.Set(kOrigin, origin);
-  // TODO(crbug.com/1373962): Replace `LossyDisplayName` method with a
+  // TODO(crbug.com/1011533): Replace `LossyDisplayName` method with a
   // new method that returns the full file path in a human-readable format.
   exception.Set(kDisplayName, file_path.LossyDisplayName());
   std::string setting_string =
@@ -984,8 +1011,6 @@ void GetExceptionsForContentType(ContentSettingsType type,
 
   // Display the URLs with File System entries that are granted
   // permissions via File System Access Persistent Permissions.
-  // TODO(crbug.com/1467574): Remove `kFileSystemAccessPersistentPermissions`
-  // flag after FSA Persistent Permissions feature launch.
   if (base::FeatureList::IsEnabled(
           features::kFileSystemAccessPersistentPermissions) &&
       (type == ContentSettingsType::FILE_SYSTEM_READ_GUARD ||
@@ -1109,7 +1134,7 @@ ContentSetting GetContentSettingForOrigin(Profile* profile,
       CalculateSiteSettingSource(profile, content_type, origin, info, result));
 
   if (info.metadata.session_model() ==
-      content_settings::SessionModel::OneTime) {
+      content_settings::mojom::SessionModel::ONE_TIME) {
     DCHECK(
         permissions::PermissionUtil::CanPermissionBeAllowedOnce(content_type));
     DCHECK_EQ(result.status, PermissionStatus::GRANTED);
@@ -1125,7 +1150,7 @@ GetSingleOriginExceptionsForContentType(HostContentSettingsMap* map,
   ContentSettingsForOneType entries = map->GetSettingsForOneType(content_type);
   // Exclude any entries that are allowlisted or don't represent a single
   // top-frame origin.
-  base::EraseIf(entries, [](const ContentSettingPatternSource& e) {
+  std::erase_if(entries, [](const ContentSettingPatternSource& e) {
     return !content_settings::PatternAppliesToSingleOrigin(
                e.primary_pattern, e.secondary_pattern) ||
            IsFromWebUIAllowlistSource(e);

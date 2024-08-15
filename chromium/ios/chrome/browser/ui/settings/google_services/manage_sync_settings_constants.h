@@ -36,6 +36,11 @@ extern NSString* const kBatchUploadRecommendationItemAccessibilityIdentifier;
 // Accessibility identifier for batch upload item.
 extern NSString* const kBatchUploadAccessibilityIdentifier;
 
+// Accessibility identifier for the Personalize Google Services item.
+extern NSString* const kPersonalizeGoogleServicesIdentifier;
+// Accessibility identifier for the Personalize Google Services view.
+extern NSString* const kPersonalizeGoogleServicesViewIdentifier;
+
 // Sections used in Sync Settings page.
 typedef NS_ENUM(NSInteger, SyncSettingsSectionIdentifier) {
   // Section for all the sync settings.
@@ -46,8 +51,6 @@ typedef NS_ENUM(NSInteger, SyncSettingsSectionIdentifier) {
   AdvancedSettingsSectionIdentifier,
   // Sync errors.
   SyncErrorsSectionIdentifier,
-  // Section to show the signed-in account.
-  AccountSectionIdentifier,
   // Section to show the batch upload option.
   BatchUploadSectionIdentifier,
 };
@@ -94,6 +97,8 @@ typedef NS_ENUM(NSInteger, SyncSettingsItemType) {
   GoogleActivityControlsItemType,
   // Data from Chrome sync.
   DataFromChromeSync,
+  // Personalize Google services item.
+  PersonalizeGoogleServicesItemType,
   // SyncErrorsSectionIdentifier section.
   // Sync errors.
   PrimaryAccountReauthErrorItemType,
@@ -103,9 +108,6 @@ typedef NS_ENUM(NSInteger, SyncSettingsItemType) {
   SyncDisabledByAdministratorErrorItemType,
   // Indicates the errors related to the signed in not syncing account.
   AccountErrorMessageItemType,
-  // AccountSectionIdentifier section.
-  // Item for the signed in identity.
-  IdentityAccountItemType,
   // BatchUploadSectionIdentifier section.
   // Item for the batch upload button.
   BatchUploadButtonItemType,
@@ -116,12 +118,12 @@ typedef NS_ENUM(NSInteger, SyncSettingsItemType) {
 // States for Sync Settings page to be in.
 enum class SyncSettingsAccountState {
   // The user clicked "settings" in the Sync opt-in screen.
-  // TODO(crbug.com/1462552): Remove usage of kAdvancedInitialSyncSetup
+  // TODO(crbug.com/40066949): Remove usage of kAdvancedInitialSyncSetup
   // after kSync users are migrated to kSignin in phase 3. See
   // ConsentLevel::kSync documentation for details.
   kAdvancedInitialSyncSetup,
   // The user is viewing sync settings page when Sync-the-feature is on.
-  // TODO(crbug.com/1462552): Remove usage of kSyncing after kSync users are
+  // TODO(crbug.com/40066949): Remove usage of kSyncing after kSync users are
   // migrated to kSignin in phase 3. See ConsentLevel::kSync documentation for
   // details.
   kSyncing,

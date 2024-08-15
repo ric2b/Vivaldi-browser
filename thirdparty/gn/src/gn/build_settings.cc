@@ -30,6 +30,10 @@ void BuildSettings::SetRootTargetLabel(const Label& r) {
   root_target_label_ = r;
 }
 
+void BuildSettings::SetRootPatterns(std::vector<LabelPattern>&& patterns) {
+  root_patterns_ = std::move(patterns);
+}
+
 void BuildSettings::SetRootPath(const base::FilePath& r) {
   DCHECK(r.value()[r.value().size() - 1] != base::FilePath::kSeparators[0]);
   root_path_ = r.NormalizePathSeparatorsTo('/');

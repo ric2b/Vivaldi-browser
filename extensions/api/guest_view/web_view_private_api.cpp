@@ -57,7 +57,7 @@ bool VivaldiWebViewWithGuestFunction::PreRunValidation(std::string* error) {
   if (!ExtensionFunction::PreRunValidation(error))
     return false;
 
-  absl::optional<int> instance_id = args()[0].GetIfInt();
+  std::optional<int> instance_id = args()[0].GetIfInt();
   EXTENSION_FUNCTION_PRERUN_VALIDATE(instance_id.has_value());
   guest_ = WebViewGuest::FromInstanceID(
       render_frame_host()->GetProcess()->GetID(), instance_id.value());
@@ -84,7 +84,7 @@ WebViewPrivateGetThumbnailFunction::~WebViewPrivateGetThumbnailFunction() =
 ExtensionFunction::ResponseAction WebViewPrivateGetThumbnailFunction::Run() {
   using vivaldi::web_view_private::GetThumbnail::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   return RunImpl(params->params);
@@ -185,7 +185,7 @@ void WebViewPrivateGetThumbnailFunction::SendResult() {
 ExtensionFunction::ResponseAction WebViewPrivateShowPageInfoFunction::Run() {
   using vivaldi::web_view_private::ShowPageInfo::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   gfx::Point pos(params->position.left, params->position.top);
@@ -196,7 +196,7 @@ ExtensionFunction::ResponseAction WebViewPrivateShowPageInfoFunction::Run() {
 ExtensionFunction::ResponseAction WebViewPrivateSetIsFullscreenFunction::Run() {
   using vivaldi::web_view_private::SetIsFullscreen::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   guest_->SetIsFullscreen(params->is_fullscreen);
@@ -207,7 +207,7 @@ ExtensionFunction::ResponseAction WebViewPrivateGetPageHistoryFunction::Run() {
   using vivaldi::web_view_private::GetPageHistory::Params;
   namespace Results = vivaldi::web_view_private::GetPageHistory::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   content::NavigationController& controller =
@@ -232,7 +232,7 @@ ExtensionFunction::ResponseAction
 WebViewPrivateAllowBlockedInsecureContentFunction::Run() {
   using vivaldi::web_view_private::AllowBlockedInsecureContent::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   guest_->AllowRunningInsecureContent();
@@ -242,7 +242,7 @@ WebViewPrivateAllowBlockedInsecureContentFunction::Run() {
 ExtensionFunction::ResponseAction WebViewPrivateSendRequestFunction::Run() {
   using vivaldi::web_view_private::SendRequest::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   ui::PageTransition transition =
@@ -266,6 +266,14 @@ ExtensionFunction::ResponseAction WebViewPrivateSendRequestFunction::Run() {
 
   guest_->NavigateGuest(params->url, true, transition, url_params);
   return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+WebViewPrivateGetPageSelectionFunction::Run() {
+  content::RenderWidgetHostView* rwhv =
+      guest_->web_contents()->GetRenderWidgetHostView();
+    std::u16string text(*rwhv->GetVisibleSelectedText());
+    return RespondNow(WithArguments(std::move(text)));
 }
 
 }  // namespace vivaldi

@@ -6,6 +6,7 @@
 #define SYSTEM_API_DBUS_CHAPS_DBUS_CONSTANTS_H_
 
 #include <stdint.h>
+#include <cstdint>
 
 namespace chaps {
 
@@ -32,6 +33,56 @@ inline constexpr uint32_t kKeyInSoftwareAttribute =
 // hardware-backed security element.
 inline constexpr uint32_t kAllowSoftwareGenAttribute =
     PKCS11_CKA_VENDOR_DEFINED + 6;
+// If this attribute is set to true at creation or generation time, then the
+// object can be wrapped with the kChapsKeyWrapMechanism (define below). The
+// attribute can be changed from CK_TRUE to CK_FALSE, but not the other way
+// around.
+inline constexpr uint32_t kChapsWrappableAttribute =
+    PKCS11_CKA_VENDOR_DEFINED + 7;
+
+// Chaps-specific mechanisms:
+
+// PKCS #11 v2.20 section A Manifest constants page 381. PKCS11_ prefix is added
+// to avoid name collisions with #define-d constants.
+inline constexpr uint32_t PKCS11_CKM_VENDOR_DEFINED = 0x80000000UL;
+inline constexpr uint32_t CKM_CHAPS_SPECIFIC_FIRST =
+    PKCS11_CKM_VENDOR_DEFINED + 0x10000000;
+
+// The kChapsKeyWrapMechanism mechanism can wrap and unwrap a target key of any
+// length and type using chaps' internal random seed during the wrapping/
+// unwrapping process. This mechanism is used when we want to securely move a
+// key between tokens on the same device (specifically, from the system-token to
+// the user-token), while the wrapped_key cannot be decrypted without having
+// access to chaps' internal random seed.
+//
+// The mechanism is designed based on the CKM_AES_KEY_WRAP_KWP, which is using
+// a same AES key to wrap/unwrap the target key. However, instead of retrieving
+// the wrapping/unwrapping key from the handle, kChapsKeyWrapMechanism uses
+// chaps' internal random seed (which is shared between chaps tokens) to derive
+// the temporary AES key. As a result, no wrapping/unwrapping key is needed for
+// this mechanism.
+//
+// For wrapping, the mechanism -
+//  1. Generates a random blob of length=32.
+//  2. Use HmacSha512() with input [random blob] and [Chaps' random seed] to
+//     derive a temporary AES key.
+//  3. Wraps the target key with the temporary AES key using
+//     CKM_AES_KEY_WRAP_KWP ([AES KEYWRAP] section 6.3).
+//  4. Zeroizes the temporary AES key
+//  5. Fill the [random blob] and the wrapped target key into some protobuf and
+//     output the serialized result.
+//
+// For unwrapping, the mechanism -
+//  1. Deserializes the input protobuf and obtains the [random blob] and the
+//     wrapped target key.
+//  2. Use HmacSha512() with input [random blob] and [Chaps' random seed] to
+//     derive a temporary AES key. Note that [Chaps' random seed] is shared
+//     across tokens so we'll obtain the same temporary AES key.
+//  3. Unwraps the target key with the temporary AES key using
+//     CKM_AES_KEY_WRAP_KWP ([AES KEYWRAP] section 6.3).
+//  4. Zeroizes the temporary AES key.
+//  5. Returns the handle to the newly unwrapped target key.
+inline constexpr uint32_t kChapsKeyWrapMechanism = CKM_CHAPS_SPECIFIC_FIRST + 1;
 
 // Chaps-specific return values:
 

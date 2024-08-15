@@ -126,6 +126,11 @@ void EnumerateOverlayInfo(const gpu::OverlayInfo& info,
                         gpu::OverlaySupportToString(info.yuy2_overlay_support));
   enumerator->AddString("nv12OverlaySupport",
                         gpu::OverlaySupportToString(info.nv12_overlay_support));
+  enumerator->AddString("bgra8OverlaySupport", gpu::OverlaySupportToString(
+                                                   info.bgra8_overlay_support));
+  enumerator->AddString(
+      "rgb10a2OverlaySupport",
+      gpu::OverlaySupportToString(info.rgb10a2_overlay_support));
   enumerator->EndOverlayInfo();
 }
 #endif
@@ -328,7 +333,6 @@ void GPUInfo::EnumerateFields(Enumerator* enumerator) const {
     uint32_t macos_specific_texture_target;
 #endif  // BUILDFLAG(IS_MAC)
 #if BUILDFLAG(IS_WIN)
-    DxDiagNode dx_diagnostics;
     uint32_t d3d12_feature_level;
     uint32_t vulkan_version;
     OverlayInfo overlay_info;

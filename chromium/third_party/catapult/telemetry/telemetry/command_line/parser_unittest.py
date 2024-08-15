@@ -4,13 +4,12 @@
 
 from __future__ import absolute_import
 import argparse
-import optparse  # pylint: disable=deprecated-module
 import sys
 import unittest
-
-import mock
+from unittest import mock
 
 from telemetry.command_line import parser
+from telemetry.core import optparse_argparse_migration as oam
 from telemetry import benchmark
 from telemetry import project_config
 
@@ -41,11 +40,11 @@ class ParseArgsTests(unittest.TestCase):
     mock.patch.object(
         argparse.ArgumentParser, 'exit', side_effect=ParserExit).start()
     mock.patch.object(
-        optparse.OptionParser, 'exit', side_effect=ParserExit).start()
+        oam.ArgumentParser, 'exit', side_effect=ParserExit).start()
     self._argparse_error = mock.patch.object(
         argparse.ArgumentParser, 'error', side_effect=ParserError).start()
     self._optparse_error = mock.patch.object(
-        optparse.OptionParser, 'error', side_effect=ParserError).start()
+        oam.ArgumentParser, 'error', side_effect=ParserError).start()
 
     self.benchmarks = [ExampleBenchmark]
     def find_by_name(name):
@@ -73,12 +72,12 @@ class ParseArgsTests(unittest.TestCase):
   def testRunHelp(self):
     with self.assertRaises(ParserExit):
       parser.ParseArgs(self.mock_config, ['run', '--help'])
-    self.assertIn('--browser=BROWSER_TYPE', sys.stdout.getvalue())
+    self.assertIn('--browser BROWSER_TYPE', sys.stdout.getvalue())
 
   def testRunBenchmarkHelp(self):
     with self.assertRaises(ParserExit):
       parser.ParseArgs(self.mock_config, ['example_benchmark', '--help'])
-    self.assertIn('--browser=BROWSER_TYPE', sys.stdout.getvalue())
+    self.assertIn('--browser BROWSER_TYPE', sys.stdout.getvalue())
 
   def testListBenchmarks(self):
     args = parser.ParseArgs(self.mock_config, ['list', '--json', 'output.json'])
@@ -179,7 +178,7 @@ class ParseArgsTests(unittest.TestCase):
     with self.assertRaises(ParserExit):
       parser.ParseArgs(
           self.mock_config, ['run', '--help'], results_arg_parser=my_parser)
-    self.assertIn('--browser=BROWSER_TYPE', sys.stdout.getvalue())
+    self.assertIn('--browser BROWSER_TYPE', sys.stdout.getvalue())
     self.assertIn('--extra-special-option', sys.stdout.getvalue())
 
   def testListBenchmarks_WithExternalHelp(self):
@@ -190,5 +189,5 @@ class ParseArgsTests(unittest.TestCase):
     with self.assertRaises(ParserExit):
       parser.ParseArgs(
           self.mock_config, ['list', '--help'], results_arg_parser=my_parser)
-    self.assertIn('--browser=BROWSER_TYPE', sys.stdout.getvalue())
+    self.assertIn('--browser BROWSER_TYPE', sys.stdout.getvalue())
     self.assertNotIn('--extra-special-option', sys.stdout.getvalue())

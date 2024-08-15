@@ -219,8 +219,7 @@ void CodeSerializer::SerializeObjectImpl(Handle<HeapObject> obj,
   // --interpreted-frames-native-stack is on. See v8:9122 for more context
   if (V8_UNLIKELY(v8_flags.interpreted_frames_native_stack) &&
       IsInterpreterData(*obj)) {
-    obj = handle(InterpreterData::cast(*obj)->bytecode_array(isolate()),
-                 isolate());
+    obj = handle(InterpreterData::cast(*obj)->bytecode_array(), isolate());
   }
 
   // Past this point we should not see any (context-specific) maps anymore.
@@ -612,7 +611,7 @@ MaybeHandle<SharedFunctionInfo> CodeSerializer::FinishOffThreadDeserialize(
     DCHECK(Object::StrictEquals(Script::cast(result->script())->source(),
                                 *source));
     DCHECK(isolate->factory()->script_list()->Contains(
-        MaybeObject::MakeWeak(MaybeObject::FromObject(result->script()))));
+        MakeWeak(result->script())));
   } else {
     Handle<Script> script(Script::cast(result->script()), isolate);
     // Fix up the source on the script. This should be the only deserialized

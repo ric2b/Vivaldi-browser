@@ -11,8 +11,6 @@ Here are some ways you can get involved with Chromium:
   Center](https://productforums.google.com/forum/#!forum/chrome) and
   answer users' questions
 * Help with [Testing](/for-testers)
-  * Provide [reduced test cases](/system/errors/NodeNotFound) to
-    help improve web compatibility
   * Get on the [Beta or Dev channel](/getting-involved/dev-channel)
     or grab the [latest trunk build of
     Chromium](/getting-involved/download-chromium)

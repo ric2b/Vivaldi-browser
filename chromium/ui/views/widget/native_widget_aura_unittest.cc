@@ -23,6 +23,7 @@
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/layer_animator.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
@@ -159,7 +160,6 @@ class EventHandlingView : public View {
   }
 
   // View:
-  const char* GetClassName() const override { return "EventHandlingView"; }
   void OnMouseEvent(ui::MouseEvent* event) override { event->SetHandled(); }
   void OnGestureEvent(ui::GestureEvent* event) override {
     // Record the handled gesture event.

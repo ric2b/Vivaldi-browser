@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_VIZ_COMMON_FEATURES_H_
 #define COMPONENTS_VIZ_COMMON_FEATURES_H_
 
+#include <optional>
 #include <string>
 
 #include "base/feature_list.h"
@@ -12,13 +13,13 @@
 #include "build/build_config.h"
 #include "components/viz/common/delegated_ink_prediction_configuration.h"
 #include "components/viz/common/viz_common_export.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 // See the following for guidance on adding new viz feature flags:
 // https://cs.chromium.org/chromium/src/components/viz/README.md#runtime-features
 
 namespace features {
 
+VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kBackdropFilterMirrorEdgeMode);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kDelegatedCompositing);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kDelegateTransforms);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kRecordSkPicture);
@@ -68,7 +69,6 @@ VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(
     kAllowForceMergeRenderPassWithRequireOverlayQuads);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kAggressiveFrameCulling);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEagerSurfaceGarbageCollection);
-VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kOverrideThrottledFrameRateParams);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kRendererAllocatesImages);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kBufferQueueImageSetPurgeable);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kOnBeginFrameAcks);
@@ -100,6 +100,10 @@ VIZ_COMMON_EXPORT extern const char kPredictorLsq[];
 
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kDrawImmediatelyWhenInteractive);
 
+VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kSnapshotEvictedRootSurface);
+VIZ_COMMON_EXPORT extern const base::FeatureParam<double>
+    kSnapshotEvictedRootSurfaceScale;
+
 #if BUILDFLAG(IS_ANDROID)
 VIZ_COMMON_EXPORT bool IsDynamicColorGamutEnabled();
 #endif
@@ -112,19 +116,19 @@ VIZ_COMMON_EXPORT bool ShouldWebRtcLogCapturePipeline();
 #if BUILDFLAG(IS_WIN)
 VIZ_COMMON_EXPORT bool ShouldUseSetPresentDuration();
 #endif  // BUILDFLAG(IS_WIN)
-VIZ_COMMON_EXPORT absl::optional<int> ShouldDrawPredictedInkPoints();
+VIZ_COMMON_EXPORT std::optional<int> ShouldDrawPredictedInkPoints();
 VIZ_COMMON_EXPORT std::string InkPredictor();
 VIZ_COMMON_EXPORT bool ShouldUsePlatformDelegatedInk();
 VIZ_COMMON_EXPORT bool UseSurfaceLayerForVideo();
-VIZ_COMMON_EXPORT absl::optional<double> IsDynamicSchedulerEnabledForDraw();
-VIZ_COMMON_EXPORT absl::optional<double> IsDynamicSchedulerEnabledForClients();
+VIZ_COMMON_EXPORT std::optional<double> IsDynamicSchedulerEnabledForDraw();
+VIZ_COMMON_EXPORT std::optional<double> IsDynamicSchedulerEnabledForClients();
 VIZ_COMMON_EXPORT int MaxOverlaysConsidered();
 VIZ_COMMON_EXPORT bool ShouldVideoDetectorIgnoreNonVideoFrames();
-VIZ_COMMON_EXPORT bool ShouldOverrideThrottledFrameRateParams();
 VIZ_COMMON_EXPORT bool ShouldOnBeginFrameThrottleVideo();
 VIZ_COMMON_EXPORT bool ShouldRendererAllocateImages();
 VIZ_COMMON_EXPORT bool IsOnBeginFrameAcksEnabled();
 VIZ_COMMON_EXPORT bool ShouldDrawImmediatelyWhenInteractive();
+VIZ_COMMON_EXPORT std::optional<double> SnapshotEvictedRootSurfaceScale();
 
 }  // namespace features
 

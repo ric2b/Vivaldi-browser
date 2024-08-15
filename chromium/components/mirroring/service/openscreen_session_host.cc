@@ -199,8 +199,7 @@ const std::string ToString(const media::VideoCaptureParams& params) {
       static_cast<int>(params.resolution_change_policy));
 }
 
-void RecordRemotePlaybackSessionLoadTime(
-    absl::optional<base::Time> start_time) {
+void RecordRemotePlaybackSessionLoadTime(std::optional<base::Time> start_time) {
   if (!start_time) {
     return;
   }
@@ -245,6 +244,7 @@ class OpenscreenSessionHost::AudioCapturingCallback final
   // Called on audio thread.
   void Capture(const media::AudioBus* audio_bus,
                base::TimeTicks audio_capture_time,
+               const media::AudioGlitchInfo& glitch_info,
                double volume,
                bool key_pressed) override {
     // TODO(crbug.com/1015467): Don't copy the audio data. Instead, send
@@ -379,7 +379,7 @@ void OpenscreenSessionHost::OnNegotiated(
   if (state_ == State::kStopped)
     return;
 
-  absl::optional<FrameSenderConfig> audio_config;
+  std::optional<FrameSenderConfig> audio_config;
   if (last_offered_audio_config_ && senders.audio_sender) {
     base::UmaHistogramEnumeration(
         "CastStreaming.Sender.Audio.NegotiatedCodec",
@@ -389,7 +389,7 @@ void OpenscreenSessionHost::OnNegotiated(
     audio_config = last_offered_audio_config_;
   }
 
-  absl::optional<FrameSenderConfig> video_config;
+  std::optional<FrameSenderConfig> video_config;
   if (senders.video_sender) {
     base::UmaHistogramEnumeration(
         "CastStreaming.Sender.Video.NegotiatedCodec",
@@ -471,9 +471,9 @@ void OpenscreenSessionHost::OnNegotiated(
     audio_capturing_callback_ = std::make_unique<AudioCapturingCallback>(
         base::BindPostTaskToCurrentDefault(base::BindRepeating(
             &AudioRtpStream::InsertAudio, audio_stream_->AsWeakPtr())),
-        base::BindOnce(&OpenscreenSessionHost::ReportAndLogError,
-                       weak_factory_.GetWeakPtr(),
-                       SessionError::AUDIO_CAPTURE_ERROR));
+        base::BindPostTaskToCurrentDefault(base::BindOnce(
+            &OpenscreenSessionHost::ReportAndLogError,
+            weak_factory_.GetWeakPtr(), SessionError::AUDIO_CAPTURE_ERROR)));
     audio_input_device_ = new media::AudioInputDevice(
         std::make_unique<CapturedAudioInput>(base::BindRepeating(
             &OpenscreenSessionHost::CreateAudioStream, base::Unretained(this))),
@@ -847,8 +847,8 @@ void OpenscreenSessionHost::StopSession() {
 
 void OpenscreenSessionHost::SetConstraints(
     const Recommendations& recommendations,
-    absl::optional<FrameSenderConfig>& audio_config,
-    absl::optional<FrameSenderConfig>& video_config) {
+    std::optional<FrameSenderConfig>& audio_config,
+    std::optional<FrameSenderConfig>& video_config) {
   const auto& audio = recommendations.audio;
   const auto& video = recommendations.video;
 
@@ -1039,7 +1039,7 @@ void OpenscreenSessionHost::Negotiate() {
 }
 
 void OpenscreenSessionHost::NegotiateMirroring() {
-  last_offered_audio_config_ = absl::nullopt;
+  last_offered_audio_config_ = std::nullopt;
   last_offered_video_configs_.clear();
   std::vector<openscreen::cast::AudioCaptureConfig> audio_configs;
   std::vector<openscreen::cast::VideoCaptureConfig> video_configs;

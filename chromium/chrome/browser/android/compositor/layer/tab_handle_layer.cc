@@ -41,6 +41,7 @@ void TabHandleLayer::SetProperties(
     ui::NinePatchResource* tab_handle_resource,
     ui::NinePatchResource* tab_handle_outline_resource,
     bool foreground,
+    bool shouldShowTabOutline,
     bool close_pressed,
     float toolbar_width,
     float x,
@@ -157,6 +158,14 @@ void TabHandleLayer::SetProperties(
   } else {
     decoration_tab_->SetPosition(gfx::PointF(0, 0));
     tab_outline_->SetPosition(gfx::PointF(0, 0));
+  }
+
+  // Display the tab outline only for the currently selected tab in group when
+  // TabGroupIndicator is enabled.
+  if (shouldShowTabOutline) {
+    tab_outline_->SetIsDrawable(true);
+  } else {
+    tab_outline_->SetIsDrawable(false);
   }
 
   close_button_->SetUIResourceId(close_button_resource->ui_resource()->id());

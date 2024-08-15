@@ -8,18 +8,19 @@
 
 #include <stdint.h>
 
+#include <array>
 #include <iterator>
 
 #include "build/build_config.h"
 #include "core/fxcrt/bytestring.h"
 #include "core/fxcrt/code_point_view.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_extension.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/span_util.h"
 #include "core/fxcrt/string_view_template.h"
 #include "core/fxcrt/utf16.h"
 #include "core/fxcrt/widestring.h"
-#include "third_party/base/compiler_specific.h"
-#include "third_party/base/containers/span.h"
 
 #if !defined(WCHAR_T_IS_16_BIT) && !defined(WCHAR_T_IS_32_BIT)
 #error "Unknown wchar_t size"
@@ -54,7 +55,7 @@ void AppendCodePointToByteString(char32_t code_point, ByteString& buffer) {
     byte_size = 4;
   }
 
-  static constexpr uint8_t kPrefix[] = {0xc0, 0xe0, 0xf0};
+  static constexpr std::array<uint8_t, 3> kPrefix = {{0xc0, 0xe0, 0xf0}};
   int order = 1 << ((byte_size - 1) * 6);
   buffer += kPrefix[byte_size - 2] | (code_point / order);
   for (int i = 0; i < byte_size - 1; i++) {

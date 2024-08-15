@@ -6,28 +6,30 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/time/time.h"
 #include "ios/ad_blocker/ios_rules_compiler.h"
 #include "ios/ad_blocker/utils.h"
 
 namespace adblock_filter {
 
 namespace {
-constexpr size_t kOldMaxRules = 50000;
-constexpr size_t kMaxRules = 150000;
+// This is not the maximum amount allowed by webkit. We have been tweaking these
+// values to find a sweet spot in terms of performance. WebKit seem to struggle
+// processing very large lists instead of many small lists.
+constexpr size_t kMaxRules = 15000;
 
 // This restriction isn't imposed by iOS, but since we are going to have a copy
 // of all allow rules in every rule list, we better make sure there is
 // resaonable space left for other rules.
-constexpr size_t kMaxAllowRules = 20000;
-constexpr size_t kMaxGenericAllowRules = 10000;
+constexpr size_t kMaxAllowRules = 5000;
+constexpr size_t kMaxGenericAllowRules = 500;
 constexpr size_t kMaxAllowAndGenericAllowRules =
     kMaxAllowRules + kMaxGenericAllowRules;
 
 class BlockListListMaker {
  public:
   BlockListListMaker(base::Value::List&& allow_rules)
-      : max_rules_(base::ios::IsRunningOnIOS15OrLater() ? kMaxRules
-                                                        : kOldMaxRules),
+      : max_rules_(kMaxRules),
         allow_rules_(std::move(allow_rules)) {
     next_list_.reserve(kMaxAllowRules);
   }
@@ -139,7 +141,6 @@ base::Value OrganizeRules(
   base::Value::Dict merged_scriptlet_rules;
 
   base::Value::Dict metadata;
-  metadata.Set(rules_json::kVersion, GetOrganizedRulesVersionNumber());
 
   for (const auto& [id, compiled_rules] : all_compiled_rules) {
     // Record this to ensure we can find out if the organized rules set still
@@ -352,6 +353,8 @@ base::Value OrganizeRules(
   }
 
   base::Value::Dict non_ios_rules_and_metadata;
+  non_ios_rules_and_metadata.Set(rules_json::kVersion,
+                                 GetOrganizedRulesVersionNumber());
   non_ios_rules_and_metadata.Set(rules_json::kMetadata, std::move(metadata));
   non_ios_rules_and_metadata.Set(rules_json::kScriptletRules,
                                  std::move(merged_scriptlet_rules));

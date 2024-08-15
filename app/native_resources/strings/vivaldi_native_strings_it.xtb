@@ -54,7 +54,6 @@
 <translation id="3334610655141903168">(nessun titolo)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> è attualmente la versione più recente.</translation>
 <translation id="3383198080133834965">Sei aggiornato!</translation>
-<translation id="3402602684546832928">Seleziona file Opera dei segnalibri</translation>
 <translation id="3451317331714872347">Paesaggio 8</translation>
 <translation id="3457498675806041407">Conferma l'uscita</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> è già installato e sarà attivo dopo il riavvio del browser.</translation>
@@ -88,7 +87,6 @@
 <translation id="443008484043213881">Strumenti</translation>
 <translation id="4456211719108566931">Mostro 6</translation>
 <translation id="4512900838580567989">Apri link in una nuova scheda in secondo piano</translation>
-<translation id="4515472507709384008">Opera versione 15+</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Apri immagine in una nuova scheda in secondo piano</translation>
 <translation id="4582480609585453144">Apri link in una scheda in secondo piano</translation>
@@ -109,7 +107,6 @@
 <translation id="5416008465899576639">È disponibile una nuova versione di Vivaldi.</translation>
 <translation id="5497042274492038489">Conferma la chiusura della finestra</translation>
 <translation id="5594602170491763400">Mostro 5</translation>
-<translation id="5615637589913244581">Opera versione 15+ (Beta)</translation>
 <translation id="5648110075441906505">Apri immagine in una nuova finestra</translation>
 <translation id="5656371807944747581">Errore di aggiornamento!</translation>
 <translation id="5732584064771442623">È disponibile Vivaldi <ph name="NEW_VERSION" /> (tu hai <ph name="OLD_VERSION" />). Vuoi scaricare subito questa versione?</translation>
@@ -120,7 +117,6 @@
 <translation id="6040143037577758943">Chiudi</translation>
 <translation id="6229528619562190452">Clicca qui per aggiornare Vivaldi.</translation>
 <translation id="6234173136417926046">Usa immagine come sfondo per la pagina iniziale</translation>
-<translation id="630690498669249215">File Segnalibri Opera</translation>
 <translation id="6339818817272922368">Account locale</translation>
 <translation id="6438786710866753178">Paesaggio 4</translation>
 <translation id="6477028720702061455">Seleziona cartella profilo Opera per l'importazione</translation>
@@ -131,7 +127,6 @@
 <translation id="6635049669875534328">Note di rilascio:</translation>
 <translation id="6693585104974197539">Seleziona la cartella del profilo di Edge per l'importazione</translation>
 <translation id="6726279523566323394">Seleziona la cartella del profilo di Brave per l'importazione</translation>
-<translation id="6804831687363620480">Purtroppo le impostazioni di Opera 15+ non sono disponibili mentre il browser è in uso. Per importare queste impostazioni in Vivaldi, salvare il lavoro e chiudere tutte le finestre di Opera 15+. Poi clicca su Continua.</translation>
 <translation id="6892812721183419409">Apri link come <ph name="USER" /></translation>
 <translation id="6896758677409633944">Copia</translation>
 <translation id="7086554968911045110">Paesaggio 7</translation>
@@ -162,7 +157,6 @@
 <translation id="8562339533180097902">Chiudi Vivaldi e installa ora</translation>
 <translation id="8567452685425968223">Estrazione aggiornamento...</translation>
 <translation id="8624587806981488221">&amp;Ricarica immagine</translation>
-<translation id="864444594187862076">Opera versione 15+ (Developer)</translation>
 <translation id="8651348004684669199">Aggiungi scheda attiva</translation>
 <translation id="8669345741879513971">Mostro 10</translation>
 <translation id="867544375504146191">Yandex</translation>

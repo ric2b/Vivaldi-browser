@@ -182,8 +182,9 @@ BOOL emailIsValid;
   nextButton.buttonText =
       l10n_util::GetNSString(IDS_VIVALDI_CREATE_ACCOUNT_NEXT);
   nextButton.textAlignment = NSTextAlignmentNatural;
-  nextButton.buttonBackgroundColor = [UIColor clearColor];
-  nextButton.buttonTextColor = [UIColor colorNamed:kBlueColor];
+  nextButton.buttonBackgroundColor = [UIColor colorNamed:kBlueColor];
+  nextButton.buttonTextColor = [UIColor colorNamed:kSolidButtonTextColor];
+  nextButton.cellBackgroundColor = nextButton.buttonBackgroundColor;
   nextButton.disableButtonIntrinsicWidth = YES;
 
   [self.tableViewModel addItem:nextButton
@@ -297,7 +298,7 @@ BOOL emailIsValid;
 - (void)onEmailValidationResponse:(NSData*)data
                          response:(NSURLResponse*)response
                             error:(NSError*)error {
-  absl::optional<base::Value> readResult = NSDataToDict(data);
+  std::optional<base::Value> readResult = NSDataToDict(data);
   if (error || !readResult.has_value()) {
     emailIsValid = NO;
     [self showErrorCellWithMessage:
@@ -336,7 +337,7 @@ BOOL emailIsValid;
 - (void)onUserNameValidationResponse:(NSData*)data
                             response:(NSURLResponse*)response
                                error:(NSError*)error {
-  absl::optional<base::Value> readResult = NSDataToDict(data);
+  std::optional<base::Value> readResult = NSDataToDict(data);
   if (error || !readResult.has_value()) {
     usernameIsValid = NO;
     [self showErrorCellWithMessage:

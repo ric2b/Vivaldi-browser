@@ -16,38 +16,58 @@
 
 #include "src/trace_processor/db/column/selector_overlay.h"
 
-#include "protos/perfetto/trace_processor/serialization.pbzero.h"
+#include <algorithm>
+#include <cstdint>
+#include <memory>
+#include <utility>
+#include <vector>
+
+#include "perfetto/base/logging.h"
+#include "perfetto/trace_processor/basic_types.h"
 #include "src/trace_processor/containers/bit_vector.h"
+#include "src/trace_processor/db/column/data_layer.h"
 #include "src/trace_processor/db/column/types.h"
 #include "src/trace_processor/tp_metatrace.h"
 
-namespace perfetto {
-namespace trace_processor {
-namespace column {
+#include "protos/perfetto/trace_processor/metatrace_categories.pbzero.h"
+#include "protos/perfetto/trace_processor/serialization.pbzero.h"
 
-SelectorOverlay::SelectorOverlay(std::unique_ptr<Column> inner,
-                                 const BitVector* selector)
+namespace perfetto::trace_processor::column {
+
+SelectorOverlay::ChainImpl::ChainImpl(std::unique_ptr<DataLayerChain> inner,
+                                      const BitVector* selector)
     : inner_(std::move(inner)), selector_(selector) {}
 
-SearchValidationResult SelectorOverlay::ValidateSearchConstraints(
-    SqlValue sql_val,
-    FilterOp op) const {
-  return inner_->ValidateSearchConstraints(sql_val, op);
+SingleSearchResult SelectorOverlay::ChainImpl::SingleSearch(FilterOp op,
+                                                            SqlValue sql_val,
+                                                            uint32_t i) const {
+  return inner_->SingleSearch(op, sql_val, selector_->IndexOfNthSet(i));
 }
 
-RangeOrBitVector SelectorOverlay::Search(FilterOp op,
-                                         SqlValue sql_val,
-                                         Range in) const {
-  PERFETTO_TP_TRACE(metatrace::Category::DB, "SelectorOverlay::Search");
+SearchValidationResult SelectorOverlay::ChainImpl::ValidateSearchConstraints(
+    FilterOp op,
+    SqlValue sql_val) const {
+  return inner_->ValidateSearchConstraints(op, sql_val);
+}
 
-  // Figure out the bounds of the indices in the underlying storage and search
-  // it.
+RangeOrBitVector SelectorOverlay::ChainImpl::SearchValidated(FilterOp op,
+                                                             SqlValue sql_val,
+                                                             Range in) const {
+  PERFETTO_TP_TRACE(metatrace::Category::DB,
+                    "SelectorOverlay::ChainImpl::Search");
+
+  // Figure out the bounds of the OrderedIndices in the underlying storage and
+  // search it.
   uint32_t start_idx = selector_->IndexOfNthSet(in.start);
   uint32_t end_idx = selector_->IndexOfNthSet(in.end - 1) + 1;
 
-  auto storage_result = inner_->Search(op, sql_val, Range(start_idx, end_idx));
+  auto storage_result =
+      inner_->SearchValidated(op, sql_val, Range(start_idx, end_idx));
   if (storage_result.IsRange()) {
     Range storage_range = std::move(storage_result).TakeIfRange();
+    if (storage_range.empty()) {
+      return RangeOrBitVector(Range());
+    }
     uint32_t out_start = selector_->CountSetBits(storage_range.start);
     uint32_t out_end = selector_->CountSetBits(storage_range.end);
     return RangeOrBitVector(Range(out_start, out_end));
@@ -55,55 +75,58 @@ RangeOrBitVector SelectorOverlay::Search(FilterOp op,
 
   BitVector storage_bitvector = std::move(storage_result).TakeIfBitVector();
   PERFETTO_DCHECK(storage_bitvector.size() <= selector_->size());
-
-  // TODO(b/283763282): implement ParallelExtractBits to optimize this
-  // operation.
-  BitVector::Builder res(in.end);
-  for (auto it = selector_->IterateSetBits();
-       it && it.index() < storage_bitvector.size(); it.Next()) {
-    res.Append(storage_bitvector.IsSet(it.index()));
+  storage_bitvector.SelectBits(*selector_);
+  if (storage_bitvector.size() == 0) {
+    return RangeOrBitVector(std::move(storage_bitvector));
   }
-  return RangeOrBitVector(std::move(res).Build());
+  PERFETTO_DCHECK(storage_bitvector.size() == in.end);
+  return RangeOrBitVector(std::move(storage_bitvector));
 }
 
-RangeOrBitVector SelectorOverlay::IndexSearch(FilterOp op,
-                                              SqlValue sql_val,
-                                              uint32_t* indices,
-                                              uint32_t indices_size,
-                                              bool sorted) const {
-  PERFETTO_DCHECK(indices_size == 0 ||
-                  *std::max_element(indices, indices + indices_size) <=
-                      selector_->size());
-
-  PERFETTO_TP_TRACE(metatrace::Category::DB, "SelectorOverlay::IndexSearch");
+void SelectorOverlay::ChainImpl::IndexSearchValidated(FilterOp op,
+                                                      SqlValue sql_val,
+                                                      Indices& indices) const {
+  PERFETTO_TP_TRACE(metatrace::Category::DB,
+                    "SelectorOverlay::ChainImpl::IndexSearch");
 
   // To go from TableIndexVector to StorageIndexVector we need to find index in
   // |selector_| by looking only into set bits.
-  std::vector<uint32_t> storage_iv;
-  storage_iv.reserve(indices_size);
-  for (const uint32_t* it = indices; it != indices + indices_size; ++it) {
-    storage_iv.push_back(selector_->IndexOfNthSet(*it));
+  for (auto& token : indices.tokens) {
+    token.index = selector_->IndexOfNthSet(token.index);
   }
-  return inner_->IndexSearch(op, sql_val, storage_iv.data(),
-                             static_cast<uint32_t>(storage_iv.size()), sorted);
+  return inner_->IndexSearchValidated(op, sql_val, indices);
 }
 
-void SelectorOverlay::StableSort(uint32_t*, uint32_t) const {
-  // TODO(b/307482437): Implement.
-  PERFETTO_FATAL("Not implemented");
+Range SelectorOverlay::ChainImpl::OrderedIndexSearchValidated(
+    FilterOp op,
+    SqlValue sql_val,
+    const OrderedIndices& indices) const {
+  // To go from TableIndexVector to StorageIndexVector we need to find index in
+  // |selector_| by looking only into set bits.
+  std::vector<uint32_t> inner_indices(indices.size);
+  for (uint32_t i = 0; i < indices.size; ++i) {
+    inner_indices[i] = selector_->IndexOfNthSet(indices.data[i]);
+  }
+  return inner_->OrderedIndexSearchValidated(
+      op, sql_val,
+      OrderedIndices{inner_indices.data(),
+                     static_cast<uint32_t>(inner_indices.size()),
+                     indices.state});
 }
 
-void SelectorOverlay::Sort(uint32_t*, uint32_t) const {
-  // TODO(b/307482437): Implement.
-  PERFETTO_FATAL("Not implemented");
+void SelectorOverlay::ChainImpl::StableSort(SortToken* start,
+                                            SortToken* end,
+                                            SortDirection direction) const {
+  for (SortToken* it = start; it != end; ++it) {
+    it->index = selector_->IndexOfNthSet(it->index);
+  }
+  inner_->StableSort(start, end, direction);
 }
 
-void SelectorOverlay::Serialize(StorageProto* storage) const {
+void SelectorOverlay::ChainImpl::Serialize(StorageProto* storage) const {
   auto* selector_overlay = storage->set_selector_overlay();
   inner_->Serialize(selector_overlay->set_storage());
   selector_->Serialize(selector_overlay->set_bit_vector());
 }
 
-}  // namespace column
-}  // namespace trace_processor
-}  // namespace perfetto
+}  // namespace perfetto::trace_processor::column

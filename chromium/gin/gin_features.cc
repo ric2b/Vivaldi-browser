@@ -172,6 +172,9 @@ BASE_FEATURE(kV8SlowHistograms,
 BASE_FEATURE(kV8SlowHistogramsCodeMemoryWriteProtection,
              "V8SlowHistogramsCodeMemoryWriteProtection",
              base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kV8SlowHistogramsIntelJCCErratumMitigation,
+             "V8SlowHistogramsIntelJCCErratumMitigation",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kV8SlowHistogramsSparkplug,
              "V8SlowHistogramsSparkplug",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -201,6 +204,14 @@ BASE_FEATURE(kV8UseLibmTrigFunctions,
 BASE_FEATURE(kV8IgnitionElideRedundantTdzChecks,
              "V8IgnitionElideRedundantTdzChecks",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Add additional alignment for some jumps in generated x64 code, to mitigate
+// the performance impact of the Intel JCC erratum (https://crbug.com/v8/14225).
+// Currently disabled by default in V8, but adding here temporarily to test
+// real-world performance impact via a Finch experiment.
+BASE_FEATURE(kV8IntelJCCErratumMitigation,
+             "V8IntelJCCErratumMitigation",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // JavaScript language features.
 
@@ -256,12 +267,17 @@ BASE_FEATURE(kJavaScriptRegExpModifiers,
 
 // Enables the `with` syntax for the Import Attributes proposal.
 BASE_FEATURE(kJavaScriptImportAttributes,
-             "kJavaScriptImportAttributes",
+             "JavaScriptImportAttributes",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables the set methods proposal.
 BASE_FEATURE(kJavaScriptSetMethods,
              "JavaScriptSetMethods",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables the RegExp duplicate named capture groups proposal.
+BASE_FEATURE(kJavaScriptRegExpDuplicateNamedGroups,
+             "JavaScriptRegExpDuplicateNamedGroups",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // WebAssembly features.

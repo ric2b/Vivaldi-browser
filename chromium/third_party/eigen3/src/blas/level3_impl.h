@@ -9,13 +9,14 @@
 #include <iostream>
 #include "common.h"
 
-int EIGEN_BLAS_FUNC(gemm)(const char *opa, const char *opb, const int *m, const int *n, const int *k,
-                          const RealScalar *palpha, const RealScalar *pa, const int *lda, const RealScalar *pb,
-                          const int *ldb, const RealScalar *pbeta, RealScalar *pc, const int *ldc) {
+EIGEN_BLAS_FUNC(gemm)
+(const char *opa, const char *opb, const int *m, const int *n, const int *k, const RealScalar *palpha,
+ const RealScalar *pa, const int *lda, const RealScalar *pb, const int *ldb, const RealScalar *pbeta, RealScalar *pc,
+ const int *ldc) {
   //   std::cerr << "in gemm " << *opa << " " << *opb << " " << *m << " " << *n << " " << *k << " " << *lda << " " <<
   //   *ldb << " " << *ldc << " " << *palpha << " " << *pbeta << "\n";
   typedef void (*functype)(DenseIndex, DenseIndex, DenseIndex, const Scalar *, DenseIndex, const Scalar *, DenseIndex,
-                           Scalar *, DenseIndex, DenseIndex, Scalar, internal::level3_blocking<Scalar, Scalar> &,
+                           Scalar *, DenseIndex, DenseIndex, Scalar, Eigen::internal::level3_blocking<Scalar, Scalar> &,
                            Eigen::internal::GemmParallelInfo<DenseIndex> *);
   static const functype func[12] = {
       // array index: NOTR  | (NOTR << 2)
@@ -72,9 +73,9 @@ int EIGEN_BLAS_FUNC(gemm)(const char *opa, const char *opb, const int *m, const 
     info = 10;
   else if (*ldc < std::max(1, *m))
     info = 13;
-  if (info) return xerbla_(SCALAR_SUFFIX_UP "GEMM ", &info, 6);
+  if (info) return xerbla_(SCALAR_SUFFIX_UP "GEMM ", &info);
 
-  if (*m == 0 || *n == 0) return 0;
+  if (*m == 0 || *n == 0) return;
 
   if (beta != Scalar(1)) {
     if (beta == Scalar(0))
@@ -83,22 +84,21 @@ int EIGEN_BLAS_FUNC(gemm)(const char *opa, const char *opb, const int *m, const 
       matrix(c, *m, *n, *ldc) *= beta;
   }
 
-  if (*k == 0) return 0;
+  if (*k == 0) return;
 
   internal::gemm_blocking_space<ColMajor, Scalar, Scalar, Dynamic, Dynamic, Dynamic> blocking(*m, *n, *k, 1, true);
 
   int code = OP(*opa) | (OP(*opb) << 2);
   func[code](*m, *n, *k, a, *lda, b, *ldb, c, 1, *ldc, alpha, blocking, 0);
-  return 0;
 }
 
-int EIGEN_BLAS_FUNC(trsm)(const char *side, const char *uplo, const char *opa, const char *diag, const int *m,
-                          const int *n, const RealScalar *palpha, const RealScalar *pa, const int *lda, RealScalar *pb,
-                          const int *ldb) {
+EIGEN_BLAS_FUNC(trsm)
+(const char *side, const char *uplo, const char *opa, const char *diag, const int *m, const int *n,
+ const RealScalar *palpha, const RealScalar *pa, const int *lda, RealScalar *pb, const int *ldb) {
   //   std::cerr << "in trsm " << *side << " " << *uplo << " " << *opa << " " << *diag << " " << *m << "," << *n << " "
   //   << *palpha << " " << *lda << " " << *ldb<< "\n";
   typedef void (*functype)(DenseIndex, DenseIndex, const Scalar *, DenseIndex, Scalar *, DenseIndex, DenseIndex,
-                           internal::level3_blocking<Scalar, Scalar> &);
+                           Eigen::internal::level3_blocking<Scalar, Scalar> &);
   static const functype func[32] = {
       // array index: NOTR  | (LEFT  << 2) | (UP << 3) | (NUNIT << 4)
       (internal::triangular_solve_matrix<Scalar, DenseIndex, OnTheLeft, Upper | 0, false, ColMajor, ColMajor, 1>::run),
@@ -190,9 +190,9 @@ int EIGEN_BLAS_FUNC(trsm)(const char *side, const char *uplo, const char *opa, c
     info = 9;
   else if (*ldb < std::max(1, *m))
     info = 11;
-  if (info) return xerbla_(SCALAR_SUFFIX_UP "TRSM ", &info, 6);
+  if (info) return xerbla_(SCALAR_SUFFIX_UP "TRSM ", &info);
 
-  if (*m == 0 || *n == 0) return 0;
+  if (*m == 0 || *n == 0) return;
 
   int code = OP(*opa) | (SIDE(*side) << 2) | (UPLO(*uplo) << 3) | (DIAG(*diag) << 4);
 
@@ -207,15 +207,13 @@ int EIGEN_BLAS_FUNC(trsm)(const char *side, const char *uplo, const char *opa, c
   }
 
   if (alpha != Scalar(1)) matrix(b, *m, *n, *ldb) *= alpha;
-
-  return 0;
 }
 
 // b = alpha*op(a)*b  for side = 'L'or'l'
 // b = alpha*b*op(a)  for side = 'R'or'r'
-int EIGEN_BLAS_FUNC(trmm)(const char *side, const char *uplo, const char *opa, const char *diag, const int *m,
-                          const int *n, const RealScalar *palpha, const RealScalar *pa, const int *lda, RealScalar *pb,
-                          const int *ldb) {
+EIGEN_BLAS_FUNC(trmm)
+(const char *side, const char *uplo, const char *opa, const char *diag, const int *m, const int *n,
+ const RealScalar *palpha, const RealScalar *pa, const int *lda, RealScalar *pb, const int *ldb) {
   //   std::cerr << "in trmm " << *side << " " << *uplo << " " << *opa << " " << *diag << " " << *m << " " << *n << " "
   //   << *lda << " " << *ldb << " " << *palpha << "\n";
   typedef void (*functype)(DenseIndex, DenseIndex, DenseIndex, const Scalar *, DenseIndex, const Scalar *, DenseIndex,
@@ -324,11 +322,11 @@ int EIGEN_BLAS_FUNC(trmm)(const char *side, const char *uplo, const char *opa, c
     info = 9;
   else if (*ldb < std::max(1, *m))
     info = 11;
-  if (info) return xerbla_(SCALAR_SUFFIX_UP "TRMM ", &info, 6);
+  if (info) return xerbla_(SCALAR_SUFFIX_UP "TRMM ", &info);
 
   int code = OP(*opa) | (SIDE(*side) << 2) | (UPLO(*uplo) << 3) | (DIAG(*diag) << 4);
 
-  if (*m == 0 || *n == 0) return 1;
+  if (*m == 0 || *n == 0) return;
 
   // FIXME find a way to avoid this copy
   Matrix<Scalar, Dynamic, Dynamic, ColMajor> tmp = matrix(b, *m, *n, *ldb);
@@ -343,14 +341,13 @@ int EIGEN_BLAS_FUNC(trmm)(const char *side, const char *uplo, const char *opa, c
                                                                                                    false);
     func[code](*m, *n, *n, tmp.data(), tmp.outerStride(), a, *lda, b, 1, *ldb, alpha, blocking);
   }
-  return 1;
 }
 
 // c = alpha*a*b + beta*c  for side = 'L'or'l'
 // c = alpha*b*a + beta*c  for side = 'R'or'r
-int EIGEN_BLAS_FUNC(symm)(const char *side, const char *uplo, const int *m, const int *n, const RealScalar *palpha,
-                          const RealScalar *pa, const int *lda, const RealScalar *pb, const int *ldb,
-                          const RealScalar *pbeta, RealScalar *pc, const int *ldc) {
+EIGEN_BLAS_FUNC(symm)
+(const char *side, const char *uplo, const int *m, const int *n, const RealScalar *palpha, const RealScalar *pa,
+ const int *lda, const RealScalar *pb, const int *ldb, const RealScalar *pbeta, RealScalar *pc, const int *ldc) {
   //   std::cerr << "in symm " << *side << " " << *uplo << " " << *m << "x" << *n << " lda:" << *lda << " ldb:" << *ldb
   //   << " ldc:" << *ldc << " alpha:" << *palpha << " beta:" << *pbeta << "\n";
   const Scalar *a = reinterpret_cast<const Scalar *>(pa);
@@ -374,7 +371,7 @@ int EIGEN_BLAS_FUNC(symm)(const char *side, const char *uplo, const int *m, cons
     info = 9;
   else if (*ldc < std::max(1, *m))
     info = 12;
-  if (info) return xerbla_(SCALAR_SUFFIX_UP "SYMM ", &info, 6);
+  if (info) return xerbla_(SCALAR_SUFFIX_UP "SYMM ", &info);
 
   if (beta != Scalar(1)) {
     if (beta == Scalar(0))
@@ -383,9 +380,7 @@ int EIGEN_BLAS_FUNC(symm)(const char *side, const char *uplo, const int *m, cons
       matrix(c, *m, *n, *ldc) *= beta;
   }
 
-  if (*m == 0 || *n == 0) {
-    return 1;
-  }
+  if (*m == 0 || *n == 0) return;
 
   int size = (SIDE(*side) == LEFT) ? (*m) : (*n);
 #if ISCOMPLEX
@@ -413,7 +408,7 @@ int EIGEN_BLAS_FUNC(symm)(const char *side, const char *uplo, const int *m, cons
       internal::product_selfadjoint_matrix<Scalar, DenseIndex, ColMajor, true, false, ColMajor, false, false, ColMajor,
                                            1>::run(*m, *n, a, *lda, b, *ldb, c, 1, *ldc, alpha, blocking);
     else
-      return 0;
+      return;
   else if (SIDE(*side) == RIGHT)
     if (UPLO(*uplo) == UP)
       internal::product_selfadjoint_matrix<Scalar, DenseIndex, ColMajor, false, false, RowMajor, true, false, ColMajor,
@@ -422,19 +417,17 @@ int EIGEN_BLAS_FUNC(symm)(const char *side, const char *uplo, const int *m, cons
       internal::product_selfadjoint_matrix<Scalar, DenseIndex, ColMajor, false, false, ColMajor, true, false, ColMajor,
                                            1>::run(*m, *n, b, *ldb, a, *lda, c, 1, *ldc, alpha, blocking);
     else
-      return 0;
+      return;
   else
-    return 0;
+    return;
 #endif
-
-  return 0;
 }
 
 // c = alpha*a*a' + beta*c  for op = 'N'or'n'
 // c = alpha*a'*a + beta*c  for op = 'T'or't','C'or'c'
-int EIGEN_BLAS_FUNC(syrk)(const char *uplo, const char *op, const int *n, const int *k, const RealScalar *palpha,
-                          const RealScalar *pa, const int *lda, const RealScalar *pbeta, RealScalar *pc,
-                          const int *ldc) {
+EIGEN_BLAS_FUNC(syrk)
+(const char *uplo, const char *op, const int *n, const int *k, const RealScalar *palpha, const RealScalar *pa,
+ const int *lda, const RealScalar *pbeta, RealScalar *pc, const int *ldc) {
   //   std::cerr << "in syrk " << *uplo << " " << *op << " " << *n << " " << *k << " " << *palpha << " " << *lda << " "
   //   << *pbeta << " " << *ldc << "\n";
 #if !ISCOMPLEX
@@ -481,7 +474,7 @@ int EIGEN_BLAS_FUNC(syrk)(const char *uplo, const char *op, const int *n, const 
     info = 7;
   else if (*ldc < std::max(1, *n))
     info = 10;
-  if (info) return xerbla_(SCALAR_SUFFIX_UP "SYRK ", &info, 6);
+  if (info) return xerbla_(SCALAR_SUFFIX_UP "SYRK ", &info);
 
   if (beta != Scalar(1)) {
     if (UPLO(*uplo) == UP)
@@ -495,7 +488,7 @@ int EIGEN_BLAS_FUNC(syrk)(const char *uplo, const char *op, const int *n, const 
       matrix(c, *n, *n, *ldc).triangularView<Lower>() *= beta;
   }
 
-  if (*n == 0 || *k == 0) return 0;
+  if (*n == 0 || *k == 0) return;
 
 #if ISCOMPLEX
   // FIXME add support for symmetric complex matrix
@@ -520,15 +513,13 @@ int EIGEN_BLAS_FUNC(syrk)(const char *uplo, const char *op, const int *n, const 
   int code = OP(*op) | (UPLO(*uplo) << 2);
   func[code](*n, *k, a, *lda, a, *lda, c, 1, *ldc, alpha, blocking);
 #endif
-
-  return 0;
 }
 
 // c = alpha*a*b' + alpha*b*a' + beta*c  for op = 'N'or'n'
 // c = alpha*a'*b + alpha*b'*a + beta*c  for op = 'T'or't'
-int EIGEN_BLAS_FUNC(syr2k)(const char *uplo, const char *op, const int *n, const int *k, const RealScalar *palpha,
-                           const RealScalar *pa, const int *lda, const RealScalar *pb, const int *ldb,
-                           const RealScalar *pbeta, RealScalar *pc, const int *ldc) {
+EIGEN_BLAS_FUNC(syr2k)
+(const char *uplo, const char *op, const int *n, const int *k, const RealScalar *palpha, const RealScalar *pa,
+ const int *lda, const RealScalar *pb, const int *ldb, const RealScalar *pbeta, RealScalar *pc, const int *ldc) {
   const Scalar *a = reinterpret_cast<const Scalar *>(pa);
   const Scalar *b = reinterpret_cast<const Scalar *>(pb);
   Scalar *c = reinterpret_cast<Scalar *>(pc);
@@ -553,7 +544,7 @@ int EIGEN_BLAS_FUNC(syr2k)(const char *uplo, const char *op, const int *n, const
     info = 9;
   else if (*ldc < std::max(1, *n))
     info = 12;
-  if (info) return xerbla_(SCALAR_SUFFIX_UP "SYR2K", &info, 6);
+  if (info) return xerbla_(SCALAR_SUFFIX_UP "SYR2K", &info);
 
   if (beta != Scalar(1)) {
     if (UPLO(*uplo) == UP)
@@ -567,7 +558,7 @@ int EIGEN_BLAS_FUNC(syr2k)(const char *uplo, const char *op, const int *n, const
       matrix(c, *n, *n, *ldc).triangularView<Lower>() *= beta;
   }
 
-  if (*k == 0) return 1;
+  if (*k == 0) return;
 
   if (OP(*op) == NOTR) {
     if (UPLO(*uplo) == UP) {
@@ -588,17 +579,15 @@ int EIGEN_BLAS_FUNC(syr2k)(const char *uplo, const char *op, const int *n, const
           alpha * matrix(a, *k, *n, *lda).transpose() * matrix(b, *k, *n, *ldb) +
           alpha * matrix(b, *k, *n, *ldb).transpose() * matrix(a, *k, *n, *lda);
   }
-
-  return 0;
 }
 
 #if ISCOMPLEX
 
 // c = alpha*a*b + beta*c  for side = 'L'or'l'
 // c = alpha*b*a + beta*c  for side = 'R'or'r
-int EIGEN_BLAS_FUNC(hemm)(const char *side, const char *uplo, const int *m, const int *n, const RealScalar *palpha,
-                          const RealScalar *pa, const int *lda, const RealScalar *pb, const int *ldb,
-                          const RealScalar *pbeta, RealScalar *pc, const int *ldc) {
+EIGEN_BLAS_FUNC(hemm)
+(const char *side, const char *uplo, const int *m, const int *n, const RealScalar *palpha, const RealScalar *pa,
+ const int *lda, const RealScalar *pb, const int *ldb, const RealScalar *pbeta, RealScalar *pc, const int *ldc) {
   const Scalar *a = reinterpret_cast<const Scalar *>(pa);
   const Scalar *b = reinterpret_cast<const Scalar *>(pb);
   Scalar *c = reinterpret_cast<Scalar *>(pc);
@@ -623,16 +612,14 @@ int EIGEN_BLAS_FUNC(hemm)(const char *side, const char *uplo, const int *m, cons
     info = 9;
   else if (*ldc < std::max(1, *m))
     info = 12;
-  if (info) return xerbla_(SCALAR_SUFFIX_UP "HEMM ", &info, 6);
+  if (info) return xerbla_(SCALAR_SUFFIX_UP "HEMM ", &info);
 
   if (beta == Scalar(0))
     matrix(c, *m, *n, *ldc).setZero();
   else if (beta != Scalar(1))
     matrix(c, *m, *n, *ldc) *= beta;
 
-  if (*m == 0 || *n == 0) {
-    return 1;
-  }
+  if (*m == 0 || *n == 0) return;
 
   int size = (SIDE(*side) == LEFT) ? (*m) : (*n);
   internal::gemm_blocking_space<ColMajor, Scalar, Scalar, Dynamic, Dynamic, Dynamic> blocking(*m, *n, size, 1, false);
@@ -645,7 +632,7 @@ int EIGEN_BLAS_FUNC(hemm)(const char *side, const char *uplo, const int *m, cons
       internal::product_selfadjoint_matrix<Scalar, DenseIndex, ColMajor, true, false, ColMajor, false, false, ColMajor,
                                            1>::run(*m, *n, a, *lda, b, *ldb, c, 1, *ldc, alpha, blocking);
     else
-      return 0;
+      return;
   } else if (SIDE(*side) == RIGHT) {
     if (UPLO(*uplo) == UP)
       matrix(c, *m, *n, *ldc) +=
@@ -658,24 +645,22 @@ RowMajor,true,Conj,  ColMajor, 1>
       internal::product_selfadjoint_matrix<Scalar, DenseIndex, ColMajor, false, false, ColMajor, true, false, ColMajor,
                                            1>::run(*m, *n, b, *ldb, a, *lda, c, 1, *ldc, alpha, blocking);
     else
-      return 0;
+      return;
   } else {
-    return 0;
+    return;
   }
-
-  return 0;
 }
 
 // c = alpha*a*conj(a') + beta*c  for op = 'N'or'n'
 // c = alpha*conj(a')*a + beta*c  for op  = 'C'or'c'
-int EIGEN_BLAS_FUNC(herk)(const char *uplo, const char *op, const int *n, const int *k, const RealScalar *palpha,
-                          const RealScalar *pa, const int *lda, const RealScalar *pbeta, RealScalar *pc,
-                          const int *ldc) {
+EIGEN_BLAS_FUNC(herk)
+(const char *uplo, const char *op, const int *n, const int *k, const RealScalar *palpha, const RealScalar *pa,
+ const int *lda, const RealScalar *pbeta, RealScalar *pc, const int *ldc) {
   //   std::cerr << "in herk " << *uplo << " " << *op << " " << *n << " " << *k << " " << *palpha << " " << *lda << " "
   //   << *pbeta << " " << *ldc << "\n";
 
   typedef void (*functype)(DenseIndex, DenseIndex, const Scalar *, DenseIndex, const Scalar *, DenseIndex, Scalar *,
-                           DenseIndex, DenseIndex, const Scalar &, internal::level3_blocking<Scalar, Scalar> &);
+                           DenseIndex, DenseIndex, const Scalar &, Eigen::internal::level3_blocking<Scalar, Scalar> &);
   static const functype func[8] = {
       // array index: NOTR  | (UP << 2)
       (internal::general_matrix_matrix_triangular_product<DenseIndex, Scalar, ColMajor, false, Scalar, RowMajor, Conj,
@@ -715,7 +700,7 @@ int EIGEN_BLAS_FUNC(herk)(const char *uplo, const char *op, const int *n, const 
     info = 7;
   else if (*ldc < std::max(1, *n))
     info = 10;
-  if (info) return xerbla_(SCALAR_SUFFIX_UP "HERK ", &info, 6);
+  if (info) return xerbla_(SCALAR_SUFFIX_UP "HERK ", &info);
 
   int code = OP(*op) | (UPLO(*uplo) << 2);
 
@@ -741,14 +726,13 @@ int EIGEN_BLAS_FUNC(herk)(const char *uplo, const char *op, const int *n, const 
     func[code](*n, *k, a, *lda, a, *lda, c, 1, *ldc, alpha, blocking);
     matrix(c, *n, *n, *ldc).diagonal().imag().setZero();
   }
-  return 0;
 }
 
 // c = alpha*a*conj(b') + conj(alpha)*b*conj(a') + beta*c,  for op = 'N'or'n'
 // c = alpha*conj(a')*b + conj(alpha)*conj(b')*a + beta*c,  for op = 'C'or'c'
-int EIGEN_BLAS_FUNC(her2k)(const char *uplo, const char *op, const int *n, const int *k, const RealScalar *palpha,
-                           const RealScalar *pa, const int *lda, const RealScalar *pb, const int *ldb,
-                           const RealScalar *pbeta, RealScalar *pc, const int *ldc) {
+EIGEN_BLAS_FUNC(her2k)
+(const char *uplo, const char *op, const int *n, const int *k, const RealScalar *palpha, const RealScalar *pa,
+ const int *lda, const RealScalar *pb, const int *ldb, const RealScalar *pbeta, RealScalar *pc, const int *ldc) {
   const Scalar *a = reinterpret_cast<const Scalar *>(pa);
   const Scalar *b = reinterpret_cast<const Scalar *>(pb);
   Scalar *c = reinterpret_cast<Scalar *>(pc);
@@ -773,7 +757,7 @@ int EIGEN_BLAS_FUNC(her2k)(const char *uplo, const char *op, const int *n, const
     info = 9;
   else if (*ldc < std::max(1, *n))
     info = 12;
-  if (info) return xerbla_(SCALAR_SUFFIX_UP "HER2K", &info, 6);
+  if (info) return xerbla_(SCALAR_SUFFIX_UP "HER2K", &info);
 
   if (beta != RealScalar(1)) {
     if (UPLO(*uplo) == UP)
@@ -793,7 +777,7 @@ int EIGEN_BLAS_FUNC(her2k)(const char *uplo, const char *op, const int *n, const
   } else if (*k > 0 && alpha != Scalar(0))
     matrix(c, *n, *n, *ldc).diagonal().imag().setZero();
 
-  if (*k == 0) return 1;
+  if (*k == 0) return;
 
   if (OP(*op) == NOTR) {
     if (UPLO(*uplo) == UP) {
@@ -814,8 +798,6 @@ int EIGEN_BLAS_FUNC(her2k)(const char *uplo, const char *op, const int *n, const
           alpha * matrix(a, *k, *n, *lda).adjoint() * matrix(b, *k, *n, *ldb) +
           numext::conj(alpha) * matrix(b, *k, *n, *ldb).adjoint() * matrix(a, *k, *n, *lda);
   }
-
-  return 1;
 }
 
 #endif  // ISCOMPLEX

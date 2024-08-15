@@ -127,6 +127,43 @@
   return [self luminanceForColor:color] >= 0.6;
 }
 
++ (BOOL)shouldUseDarkTextForImage:(UIImage* _Nonnull)image {
+
+  CIImage *inputImage = [[CIImage alloc] initWithImage:image];
+  if (!inputImage) return NO;
+  CIVector *extentVector = [CIVector vectorWithX:inputImage.extent.origin.x
+                                               Y:inputImage.extent.origin.y
+                                               Z:inputImage.extent.size.width
+                                               W:inputImage.extent.size.height];
+
+  CIFilter *filter = [CIFilter filterWithName:@"CIAreaAverage"
+                                keysAndValues:kCIInputImageKey, inputImage,
+                      kCIInputExtentKey, extentVector, nil];
+  if (!filter) return NO;
+
+  CIImage *outputImage = filter.outputImage;
+  if (!outputImage) return NO;
+
+  CIContext *context =
+      [CIContext
+          contextWithOptions:@{kCIContextWorkingColorSpace: [NSNull null]}];
+  size_t count = 4;
+  UInt8 bitmap[count];
+  [context render:outputImage
+         toBitmap:&bitmap
+         rowBytes:4
+           bounds:CGRectMake(0, 0, 1, 1)
+           format:kCIFormatRGBA8
+       colorSpace:nil];
+
+  UIColor *dominantColor = [UIColor colorWithRed:((CGFloat)bitmap[0]/255.0)
+                                           green:((CGFloat)bitmap[1]/255.0)
+                                            blue:((CGFloat)bitmap[2]/255.0)
+                                           alpha:((CGFloat)bitmap[3]/255.0)];
+
+  return [self shouldUseDarkTextForColor:dominantColor];
+}
+
 + (BOOL)shouldUseDefaultThemeColor:(UIColor* _Nonnull)color {
   // Convert UIColor to CIColor
   CIColor *ciColor = [[CIColor alloc] initWithColor:color];
@@ -253,6 +290,18 @@
     }
   }
   return result;
+}
+
++ (NSComparisonResult)compare:(BOOL)first
+                       second:(BOOL)second
+                 foldersFirst:(BOOL)foldersFirst {
+  if (first && !second) {
+    return foldersFirst ? NSOrderedAscending : NSOrderedDescending;
+  } else if (!first && second) {
+    return foldersFirst ? NSOrderedDescending : NSOrderedAscending;
+  } else {
+    return NSOrderedSame;
+  }
 }
 
 + (BOOL)areHostsEquivalentForURL:(NSURL* _Nonnull)aURL

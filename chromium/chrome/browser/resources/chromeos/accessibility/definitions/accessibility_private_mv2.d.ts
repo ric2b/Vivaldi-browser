@@ -13,7 +13,7 @@
  * regenerate.
  */
 
-import {ChromeEvent} from '../../../../../../tools/typescript/definitions/chrome_event';
+import {ChromeEvent} from '../../../../../../tools/typescript/definitions/chrome_event.js';
 
 declare global {
   export namespace chrome {
@@ -320,12 +320,21 @@ declare global {
         es_es_pumpkin_config_binarypb: ArrayBuffer;
       }
 
+      export interface FaceGazeAssets {
+        model: ArrayBuffer;
+        wasm: ArrayBuffer;
+      }
+
       export function getDisplayNameForLocale(
           localeCodeToTranslate: string, displayLocaleCode: string): string;
 
       type GetBatteryDescriptionCallback = (description: string) => void;
       export function getBatteryDescription(
           callback: GetBatteryDescriptionCallback): void;
+
+      type InstallFaceGazeAssetsCallback = (assets: FaceGazeAssets) => void;
+      export function installFaceGazeAssets(
+          callback: InstallFaceGazeAssetsCallback): void;
 
       type InstallPumpkinForDictationCallback = (data: PumpkinData) => void;
       export function installPumpkinForDictation(
@@ -435,10 +444,6 @@ declare global {
 
       export const onAccessibilityGesture:
           ChromeEvent<(gesture: Gesture, x: number, y: number) => void>;
-
-      export const onTwoFingerTouchStart: ChromeEvent<() => void>;
-
-      export const onTwoFingerTouchStop: ChromeEvent<() => void>;
 
       export const onSelectToSpeakContextMenuClicked: ChromeEvent<() => void>;
 

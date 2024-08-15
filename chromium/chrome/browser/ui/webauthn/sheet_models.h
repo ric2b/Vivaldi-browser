@@ -610,7 +610,7 @@ class AuthenticatorPhoneConfirmationSheet : public AuthenticatorSheetModelBase {
   ~AuthenticatorPhoneConfirmationSheet() override;
 
  private:
-  // AuthenticatorSheetModelbase:
+  // AuthenticatorSheetModelBase:
   std::u16string GetStepTitle() const override;
   std::u16string GetStepDescription() const override;
   bool IsAcceptButtonVisible() const override;
@@ -650,7 +650,7 @@ class AuthenticatorMultiSourcePickerSheetModel
   std::u16string& primary_passkeys_label() { return primary_passkeys_label_; }
 
  private:
-  // AuthenticatorSheetModelbase:
+  // AuthenticatorSheetModelBase:
   bool IsManageDevicesButtonVisible() const override;
   void OnManageDevices() override;
   std::u16string GetStepTitle() const override;
@@ -669,13 +669,89 @@ class AuthenticatorPriorityMechanismSheetModel
   ~AuthenticatorPriorityMechanismSheetModel() override;
 
  private:
-  // AuthenticatorSheetModelbase:
+  // AuthenticatorSheetModelBase:
   std::u16string GetStepTitle() const override;
   std::u16string GetStepDescription() const override;
   bool IsAcceptButtonEnabled() const override;
   bool IsAcceptButtonVisible() const override;
   std::u16string GetAcceptButtonLabel() const override;
   void OnAccept() override;
+};
+
+// The sheet shown when the user is entering a digit-only GPM pin.
+class AuthenticatorGPMPinSheetModel : public AuthenticatorSheetModelBase {
+ public:
+  // Indicates whether the view should accommodate creating a new pin or
+  // entering an existing one.
+  enum class Mode { kPinCreate, kPinEntry };
+
+  explicit AuthenticatorGPMPinSheetModel(
+      AuthenticatorRequestDialogModel* dialog_model,
+      int pin_digits_count,
+      Mode mode,
+      AuthenticatorRequestDialogModel::GpmPinError error);
+  ~AuthenticatorGPMPinSheetModel() override;
+
+  int pin_digits_count() const;
+
+  // Sets currently typed pin in the sheet.
+  void SetPin(std::u16string pin);
+
+ private:
+  bool FullPinTyped() const;
+
+  // AuthenticatorSheetModelBase:
+  std::u16string GetStepTitle() const override;
+  std::u16string GetStepDescription() const override;
+  std::u16string GetError() const override;
+  bool IsAcceptButtonEnabled() const override;
+  bool IsAcceptButtonVisible() const override;
+  bool IsForgotGPMPinButtonVisible() const override;
+  bool IsGPMPinOptionsButtonVisible() const override;
+  std::u16string GetAcceptButtonLabel() const override;
+  void OnAccept() override;
+  void OnGPMPinOptionChosen(bool is_arbitrary) const override;
+
+  std::u16string pin_;
+  const int pin_digits_count_;
+  const Mode mode_;
+  const AuthenticatorRequestDialogModel::GpmPinError error_;
+};
+
+// The sheet shown when the user is entering an arbitrary (alphanumeric) pin.
+class AuthenticatorGPMArbitraryPinSheetModel
+    : public AuthenticatorSheetModelBase {
+ public:
+  // Indicates whether the view should accommodate creating a new pin or
+  // entering an existing one.
+  enum class Mode { kPinCreate, kPinEntry };
+
+  explicit AuthenticatorGPMArbitraryPinSheetModel(
+      AuthenticatorRequestDialogModel* dialog_model,
+      Mode mode,
+      AuthenticatorRequestDialogModel::GpmPinError error);
+  ~AuthenticatorGPMArbitraryPinSheetModel() override;
+
+  // Sets currently typed pin in the sheet.
+  void SetPin(std::u16string pin);
+
+  Mode mode() { return mode_; }
+
+ private:
+  // AuthenticatorSheetModelBase:
+  std::u16string GetStepTitle() const override;
+  std::u16string GetStepDescription() const override;
+  std::u16string GetError() const override;
+  bool IsAcceptButtonEnabled() const override;
+  bool IsAcceptButtonVisible() const override;
+  bool IsGPMPinOptionsButtonVisible() const override;
+  std::u16string GetAcceptButtonLabel() const override;
+  void OnAccept() override;
+  void OnGPMPinOptionChosen(bool is_arbitrary) const override;
+
+  std::u16string pin_;
+  const Mode mode_;
+  const AuthenticatorRequestDialogModel::GpmPinError error_;
 };
 
 #endif  // CHROME_BROWSER_UI_WEBAUTHN_SHEET_MODELS_H_

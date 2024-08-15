@@ -33,9 +33,9 @@ class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
                                public IMEObserver,
                                public KeyboardControllerObserver,
                                public VirtualKeyboardObserver {
- public:
-  METADATA_HEADER(ImeMenuTray);
+  METADATA_HEADER(ImeMenuTray, TrayBackgroundView)
 
+ public:
   explicit ImeMenuTray(Shelf* shelf);
   ImeMenuTray(const ImeMenuTray&) = delete;
   ImeMenuTray& operator=(const ImeMenuTray&) = delete;
@@ -57,7 +57,7 @@ class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
   std::u16string GetAccessibleNameForTray() override;
   void HandleLocaleChange() override;
   void HideBubbleWithView(const TrayBubbleView* bubble_view) override;
-  void ClickedOutsideBubble() override;
+  void ClickedOutsideBubble(const ui::LocatedEvent& event) override;
   void UpdateTrayItemColor(bool is_active) override;
   void CloseBubble() override;
   void ShowBubble() override;

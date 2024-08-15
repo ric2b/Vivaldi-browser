@@ -168,7 +168,7 @@ private:
         float                                fLength = 0; // total path length
     };
 
-    void shapePendingBuffer(const SkFont&);
+    void shapePendingBuffer(const SkFont&, sk_sp<SkFontMgr> fallback);
 
     SkRSXform computeGlyphXform(SkGlyphID, const SkFont&, const SkPoint& glyph_pos,
                                 const PositionAdjustment&) const;
@@ -179,7 +179,7 @@ private:
     void commitRunInfo() override {}
     Buffer runBuffer(const RunInfo& ri) override;
     void commitRunBuffer(const RunInfo& ri) override;
-    void commitLine() override {}
+    void commitLine() override;
 
     // http://www.w3.org/TR/SVG11/text.html#TextLayout
     const SkSVGRenderContext&       fRenderContext; // original render context

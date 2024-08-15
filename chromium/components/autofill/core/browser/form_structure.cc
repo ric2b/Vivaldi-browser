@@ -87,12 +87,8 @@ namespace {
 // Returns true if the scheme given by |url| is one for which autofill is
 // allowed to activate. By default this only returns true for HTTP and HTTPS.
 bool HasAllowedScheme(const GURL& url) {
-  return url.SchemeIsHTTPOrHTTPS() ||
-         base::FeatureList::IsEnabled(
-             features::test::kAutofillAllowNonHttpActivation);
+  return url.SchemeIsHTTPOrHTTPS();
 }
-
-
 
 std::string ServerTypesToString(const AutofillField* field) {
   const std::vector<
@@ -126,12 +122,12 @@ FormStructure::FormStructure(const FormData& form)
       full_source_url_(form.full_url),
       target_url_(form.action),
       main_frame_origin_(form.main_frame_origin),
-      is_form_tag_(form.is_form_tag),
       all_fields_are_passwords_(!form.fields.empty()),
       form_parsed_timestamp_(base::TimeTicks::Now()),
       host_frame_(form.host_frame),
       version_(form.version),
-      unique_renderer_id_(form.unique_renderer_id) {
+      renderer_id_(form.renderer_id),
+      child_frames_(form.child_frames) {
   // Copy the form fields.
   for (const FormFieldData& field : form.fields) {
     if (!IsCheckable(field.check_status)) {
@@ -201,21 +197,13 @@ void FormStructure::DetermineHeuristicTypes(
                          log_manager);
 
   // The active heuristic source might not be a pattern source.
+  std::optional<FieldCandidatesMap> active_predictions;
   if (std::optional<PatternSource> pattern_source = GetActivePatternSource()) {
     context.pattern_source = *pattern_source;
-    ParseFieldTypesWithPatterns(context);
+    active_predictions = ParseFieldTypesWithPatterns(context);
+    AssignBestFieldTypes(*active_predictions, *pattern_source);
   }
-
-  if (!base::FeatureList::IsEnabled(
-          features::kAutofillDisableShadowHeuristics)) {
-    for (HeuristicSource heuristic_source : GetNonActiveHeuristicSources()) {
-      if (auto shadow_source =
-              HeuristicSourceToPatternSource(heuristic_source)) {
-        context.pattern_source = *shadow_source;
-        ParseFieldTypesWithPatterns(context);
-      }
-    }
-  }
+  DetermineNonActiveHeuristicTypes(std::move(active_predictions), context);
 
   UpdateAutofillCount();
   IdentifySections(/*ignore_autocomplete=*/false);
@@ -247,6 +235,34 @@ void FormStructure::DetermineHeuristicTypes(
   }
 
   LogDetermineHeuristicTypesMetrics();
+}
+
+void FormStructure::DetermineNonActiveHeuristicTypes(
+    std::optional<FieldCandidatesMap> active_predictions,
+    ParsingContext& context) {
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillDisableShadowHeuristics)) {
+    return;
+  }
+  std::optional<PatternSource> active_pattern_source =
+      HeuristicSourceToPatternSource(GetActiveHeuristicSource());
+  for (HeuristicSource heuristic_source : GetNonActiveHeuristicSources()) {
+    std::optional<PatternSource> pattern_source =
+        HeuristicSourceToPatternSource(heuristic_source);
+    if (!pattern_source) {
+      continue;
+    }
+    if (active_pattern_source &&
+        AreMatchingPatternsEqual(*active_pattern_source, *pattern_source,
+                                 context.page_language)) {
+      // No need to recompute the predictions - just copy the results.
+      AssignBestFieldTypes(*active_predictions, *pattern_source);
+    } else {
+      // Run heuristics.
+      context.pattern_source = *pattern_source;
+      ParseFieldTypesWithPatterns(context);
+    }
+  }
 }
 
 // static
@@ -528,7 +544,6 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
     field->set_may_use_prefilled_placeholder(
         cached_field->may_use_prefilled_placeholder());
     field->set_previously_autofilled(cached_field->previously_autofilled());
-    field->set_was_context_menu_shown(cached_field->was_context_menu_shown());
 
     // During form parsing, we don't care for heuristic field classifications
     // and information derived from the autocomplete attribute as those are
@@ -642,27 +657,34 @@ bool FormStructure::SetSectionsFromAutocompleteOrReset() {
   return has_autocomplete;
 }
 
-void FormStructure::ParseFieldTypesWithPatterns(ParsingContext& context) {
+FieldCandidatesMap FormStructure::ParseFieldTypesWithPatterns(
+    ParsingContext& context) const {
   FieldCandidatesMap field_type_map;
 
   if (ShouldRunHeuristics()) {
-    FormFieldParser::ParseFormFields(context, fields_, is_form_tag_,
+    FormFieldParser::ParseFormFields(context, fields_, is_form_element(),
                                      field_type_map);
   } else if (ShouldRunHeuristicsForSingleFieldForms()) {
-    FormFieldParser::ParseSingleFieldForms(context, fields_, is_form_tag_,
+    FormFieldParser::ParseSingleFieldForms(context, fields_, is_form_element(),
                                            field_type_map);
     FormFieldParser::ParseStandaloneCVCFields(context, fields_, field_type_map);
 
     // For standalone email fields inside a form tag, allow heuristics even
     // when the minimum number of fields is not met. See similar comments
     // in `FormFieldParser::ClearCandidatesIfHeuristicsDidNotFindEnoughFields`.
-    if (is_form_tag_ &&
+    if (is_form_element() &&
         base::FeatureList::IsEnabled(
             features::kAutofillEnableEmailHeuristicOnlyAddressForms)) {
       FormFieldParser::ParseStandaloneEmailFields(context, fields_,
                                                   field_type_map);
     }
   }
+  return field_type_map;
+}
+
+void FormStructure::AssignBestFieldTypes(
+    const FieldCandidatesMap& field_type_map,
+    PatternSource pattern_source) {
   if (field_type_map.empty()) {
     return;
   }
@@ -676,18 +698,16 @@ void FormStructure::ParseFieldTypesWithPatterns(ParsingContext& context) {
       continue;
 
     const FieldCandidates& candidates = iter->second;
-    field->set_heuristic_type(
-        PatternSourceToHeuristicSource(context.pattern_source),
-        candidates.BestHeuristicType());
+    field->set_heuristic_type(PatternSourceToHeuristicSource(pattern_source),
+                              candidates.BestHeuristicType());
 
     ++field_rank_map[field->GetFieldSignature()];
     // Log the field type predicted from local heuristics.
     field->AppendLogEventIfNotRepeated(HeuristicPredictionFieldLogEvent{
         .field_type = field->heuristic_type(
-            PatternSourceToHeuristicSource(context.pattern_source)),
-        .pattern_source = context.pattern_source,
-        .is_active_pattern_source =
-            GetActivePatternSource() == context.pattern_source,
+            PatternSourceToHeuristicSource(pattern_source)),
+        .pattern_source = pattern_source,
+        .is_active_pattern_source = GetActivePatternSource() == pattern_source,
         .rank_in_field_signature_group =
             field_rank_map[field->GetFieldSignature()],
     });
@@ -725,6 +745,14 @@ size_t FormStructure::active_field_count() const {
   return active_field_count_;
 }
 
+bool FormStructure::is_form_element() const {
+  return !renderer_id_.is_null() ||
+         (!fields_.empty() &&
+          fields_.begin()->get()->form_control_type ==
+              FormControlType::kContentEditable &&
+          *fields_.begin()->get()->renderer_id == *renderer_id_);
+}
+
 FormData FormStructure::ToFormData() const {
   FormData data;
   data.id_attribute = id_attribute_;
@@ -735,10 +763,10 @@ FormData FormStructure::ToFormData() const {
   data.full_url = full_source_url_;
   data.action = target_url_;
   data.main_frame_origin = main_frame_origin_;
-  data.is_form_tag = is_form_tag_;
-  data.unique_renderer_id = unique_renderer_id_;
+  data.renderer_id = renderer_id_;
   data.host_frame = host_frame_;
   data.version = version_;
+  data.child_frames = child_frames_;
 
   for (const auto& field : fields_) {
     data.fields.push_back(*field);
@@ -1140,13 +1168,13 @@ std::ostream& operator<<(std::ostream& buffer, const FormStructure& form) {
     buffer << "\n Field " << i << ": ";
     const AutofillField* field = form.field(i);
     buffer << "\n  Identifiers:"
-           << base::StrCat(
-                  {"renderer id: ",
-                   base::NumberToString(field->unique_renderer_id.value()),
-                   ", host frame: ",
-                   field->renderer_form_id().frame_token.ToString(), " (",
-                   field->origin.Serialize(), "), host form renderer id: ",
-                   base::NumberToString(field->host_form_id.value())});
+           << base::StrCat({"renderer id: ",
+                            base::NumberToString(field->renderer_id.value()),
+                            ", host frame: ",
+                            field->renderer_form_id().frame_token.ToString(),
+                            " (", field->origin.Serialize(),
+                            "), host form renderer id: ",
+                            base::NumberToString(field->host_form_id.value())});
     buffer << "\n  Signature: "
            << base::StrCat(
                   {base::NumberToString(field->GetFieldSignature().value()),
@@ -1199,6 +1227,12 @@ LogBuffer& operator<<(LogBuffer& buffer, const FormStructure& form) {
                           " - ",
                           base::NumberToString(
                               HashFormSignature(form.form_signature()))});
+  buffer << Tr{} << "Form alternative signature:"
+         << base::StrCat({base::NumberToString(
+                              form.alternative_form_signature().value()),
+                          " - ",
+                          base::NumberToString(HashFormSignature(
+                              form.alternative_form_signature()))});
   buffer << Tr{} << "Form name:" << form.form_name();
   buffer << Tr{} << "Identifiers: "
          << base::StrCat(
@@ -1215,13 +1249,13 @@ LogBuffer& operator<<(LogBuffer& buffer, const FormStructure& form) {
     buffer << Tag{"td"};
     buffer << Tag{"table"};
     buffer << Tr{} << "Identifiers:"
-           << base::StrCat(
-                  {"renderer id: ",
-                   base::NumberToString(field->unique_renderer_id.value()),
-                   ", host frame: ",
-                   field->renderer_form_id().frame_token.ToString(), " (",
-                   field->origin.Serialize(), "), host form renderer id: ",
-                   base::NumberToString(field->host_form_id.value())});
+           << base::StrCat({"renderer id: ",
+                            base::NumberToString(field->renderer_id.value()),
+                            ", host frame: ",
+                            field->renderer_form_id().frame_token.ToString(),
+                            " (", field->origin.Serialize(),
+                            "), host form renderer id: ",
+                            base::NumberToString(field->host_form_id.value())});
     buffer << Tr{} << "Signature:"
            << base::StrCat(
                   {base::NumberToString(field->GetFieldSignature().value()),
@@ -1280,6 +1314,13 @@ LogBuffer& operator<<(LogBuffer& buffer, const FormStructure& form) {
                   field->rank(), field->rank_in_signature_group(),
                   field->rank_in_host_form(),
                   field->rank_in_host_form_signature_group());
+    if (field->may_use_prefilled_placeholder().has_value()) {
+      buffer << Tr{} << "Pre-filled value:"
+             << base::StrCat(
+                    {"is classified as ",
+                     (*field->may_use_prefilled_placeholder() ? "a placeholder"
+                                                              : "meaningful")});
+    }
     buffer << CTag{"table"};
     buffer << CTag{"td"};
     buffer << CTag{"tr"};

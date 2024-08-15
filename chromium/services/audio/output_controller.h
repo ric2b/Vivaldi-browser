@@ -6,7 +6,9 @@
 #define SERVICES_AUDIO_OUTPUT_CONTROLLER_H_
 
 #include <stdint.h>
+
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -26,7 +28,6 @@
 #include "media/audio/audio_manager.h"
 #include "media/base/audio_power_monitor.h"
 #include "services/audio/loopback_group_member.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 // An OutputController controls an AudioOutputStream and provides data to this
 // output stream. It executes audio operations like play, pause, stop, etc. on
@@ -94,7 +95,10 @@ class OutputController : public media::AudioOutputStream::AudioSourceCallback,
     // Attempts to completely fill `dest`, zeroing `dest` if the request can not
     // be fulfilled (due to timeout). If `is_mixing` is set, the SyncReader
     // might use a mixing-specific timeout.
-    virtual void Read(media::AudioBus* dest, bool is_mixing) = 0;
+    // Returns true if data was read, false if there was a timeout. This helps
+    // distinguish between `dest` being zero'ed due to timeout, and `dest` being
+    // successfully filled with zero'ed audio data.
+    virtual bool Read(media::AudioBus* dest, bool is_mixing) = 0;
 
     // Close this synchronous reader.
     virtual void Close() = 0;
@@ -345,7 +349,7 @@ class OutputController : public media::AudioOutputStream::AudioSourceCallback,
   // Used for keeping track of and logging stats. Created when a stream starts
   // and destroyed when a stream stops. Also reset every time there is a stream
   // being created due to device changes.
-  absl::optional<ErrorStatisticsTracker> stats_tracker_;
+  std::optional<ErrorStatisticsTracker> stats_tracker_;
 };
 
 }  // namespace audio

@@ -104,9 +104,17 @@ void ff_h264_draw_horiz_band(const H264Context *h, H264SliceContext *sl,
 {
     AVCodecContext *avctx = h->avctx;
     const AVFrame   *src  = h->cur_pic.f;
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(avctx->pix_fmt);
-    int vshift = desc->log2_chroma_h;
+    const AVPixFmtDescriptor *desc;
+    int offset[AV_NUM_DATA_POINTERS];
+    int vshift;
     const int field_pic = h->picture_structure != PICT_FRAME;
+
+    if (!avctx->draw_horiz_band)
+        return;
+
+    if (field_pic && h->first_field && !(avctx->slice_flags & SLICE_FLAG_ALLOW_FIELD))
+        return;
+
     if (field_pic) {
         height <<= 1;
         y      <<= 1;
@@ -114,24 +122,19 @@ void ff_h264_draw_horiz_band(const H264Context *h, H264SliceContext *sl,
 
     height = FFMIN(height, avctx->height - y);
 
-    if (field_pic && h->first_field && !(avctx->slice_flags & SLICE_FLAG_ALLOW_FIELD))
-        return;
+    desc   = av_pix_fmt_desc_get(avctx->pix_fmt);
+    vshift = desc->log2_chroma_h;
 
-    if (avctx->draw_horiz_band) {
-        int offset[AV_NUM_DATA_POINTERS];
-        int i;
+    offset[0] = y * src->linesize[0];
+    offset[1] =
+    offset[2] = (y >> vshift) * src->linesize[1];
+    for (int i = 3; i < AV_NUM_DATA_POINTERS; i++)
+        offset[i] = 0;
 
-        offset[0] = y * src->linesize[0];
-        offset[1] =
-        offset[2] = (y >> vshift) * src->linesize[1];
-        for (i = 3; i < AV_NUM_DATA_POINTERS; i++)
-            offset[i] = 0;
+    emms_c();
 
-        emms_c();
-
-        avctx->draw_horiz_band(avctx, src, offset,
-                               y, h->picture_structure, height);
-    }
+    avctx->draw_horiz_band(avctx, src, offset,
+                           y, h->picture_structure, height);
 }
 
 void ff_h264_free_tables(H264Context *h)
@@ -1097,8 +1100,8 @@ static const AVOption h264_options[] = {
     { "nal_length_size", "nal_length_size", OFFSET(nal_length_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 4, VDX },
     { "enable_er", "Enable error resilience on damaged frames (unsafe)", OFFSET(enable_er), AV_OPT_TYPE_BOOL, { .i64 = -1 }, -1, 1, VD },
     { "x264_build", "Assume this x264 version if no x264 version found in any SEI", OFFSET(x264_build), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, VD },
-    { "skip_gray", "Do not return gray gap frames", OFFSET(skip_gray), AV_OPT_TYPE_INT, {.i64 = -1}, -1, 1, VD },
-    { "noref_gray", "Avoid using gray gap frames as references", OFFSET(noref_gray), AV_OPT_TYPE_INT, {.i64 = 1}, -1, 1, VD },
+    { "skip_gray", "Do not return gray gap frames", OFFSET(skip_gray), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, VD },
+    { "noref_gray", "Avoid using gray gap frames as references", OFFSET(noref_gray), AV_OPT_TYPE_BOOL, {.i64 = 1}, 0, 1, VD },
     { NULL },
 };
 
@@ -1130,6 +1133,9 @@ const FFCodec ff_h264_decoder = {
 #endif
 #if CONFIG_H264_D3D11VA2_HWACCEL
                                HWACCEL_D3D11VA2(h264),
+#endif
+#if CONFIG_H264_D3D12VA_HWACCEL
+                               HWACCEL_D3D12VA(h264),
 #endif
 #if CONFIG_H264_NVDEC_HWACCEL
                                HWACCEL_NVDEC(h264),

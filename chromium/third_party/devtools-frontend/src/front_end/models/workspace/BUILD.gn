@@ -4,6 +4,7 @@
 
 import("../../../scripts/build/ninja/devtools_entrypoint.gni")
 import("../../../scripts/build/ninja/devtools_module.gni")
+import("../../../third_party/typescript/typescript.gni")
 import("../visibility.gni")
 
 devtools_module("workspace") {
@@ -30,7 +31,7 @@ devtools_entrypoint("bundle") {
 
   visibility = [
     ":*",
-    "../../../test/unittests/*",
+    "../../core/sdk:unittests",
     "../../entrypoints/main/*",
     "../../legacy_test_runner/*",
     "../../panels/application/*",
@@ -46,6 +47,7 @@ devtools_entrypoint("bundle") {
     "../../panels/snippets/*",
     "../../panels/sources/*",
     "../../panels/timeline/*",
+    "../../testing/*",
     "../../ui/components/docs/performance_panel/*",
     "../../ui/legacy/components/perf_ui/*",
     "../../ui/legacy/components/source_frame/*",
@@ -61,4 +63,21 @@ devtools_entrypoint("bundle") {
   ]
 
   visibility += devtools_models_visibility
+}
+
+ts_library("unittests") {
+  testonly = true
+
+  sources = [
+    "SearchConfig.test.ts",
+    "UISourceCode.test.ts",
+    "WorkspaceImpl.test.ts",
+  ]
+
+  deps = [
+    ":bundle",
+    "../../core/common:bundle",
+    "../../testing",
+    "../persistence:bundle",
+  ]
 }

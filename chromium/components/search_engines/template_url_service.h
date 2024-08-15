@@ -393,7 +393,7 @@ class TemplateURLService final : public WebDataServiceConsumer,
       const std::u16string& search_terms) const;
 
   // Returns search metadata if |url| is a valid Search URL.
-  absl::optional<SearchMetadata> ExtractSearchMetadata(const GURL& url) const;
+  std::optional<SearchMetadata> ExtractSearchMetadata(const GURL& url) const;
 
   // Returns true if the default search provider supports the side search
   // feature.
@@ -492,10 +492,10 @@ class TemplateURLService final : public WebDataServiceConsumer,
 
   // Returns the locale-direction-adjusted short name for the given keyword.
   // Also sets the out param to indicate whether the keyword belongs to an
-  // Omnibox extension.
-  std::u16string GetKeywordShortName(
-      const std::u16string& keyword,
-      bool* is_omnibox_api_extension_keyword) const;
+  // Omnibox extension or the AskGoogle starter pack engine.
+  std::u16string GetKeywordShortName(const std::u16string& keyword,
+                                     bool* is_omnibox_api_extension_keyword,
+                                     bool* is_ask_google_keyword) const;
 
   // Called by the history service when a URL is visited.
   void OnHistoryURLVisited(const URLVisitedDetails& details);
@@ -514,13 +514,13 @@ class TemplateURLService final : public WebDataServiceConsumer,
   // Process new search engine changes from Sync, merging them into our local
   // data. This may send notifications if local search engines are added,
   // updated or removed.
-  absl::optional<syncer::ModelError> ProcessSyncChanges(
+  std::optional<syncer::ModelError> ProcessSyncChanges(
       const base::Location& from_here,
       const syncer::SyncChangeList& change_list) override;
   // Merge initial search engine data from Sync and push any local changes up
   // to Sync. This may send notifications if local search engines are added,
   // updated or removed.
-  absl::optional<syncer::ModelError> MergeDataAndStartSyncing(
+  std::optional<syncer::ModelError> MergeDataAndStartSyncing(
       syncer::ModelType type,
       const syncer::SyncDataList& initial_sync_data,
       std::unique_ptr<syncer::SyncChangeProcessor> sync_processor) override;
@@ -631,8 +631,12 @@ class TemplateURLService final : public WebDataServiceConsumer,
   // This is done as a workaround helper for android and the change is not
   // persisted.
   void VivaldiSetDefaultOverride(TemplateURL* url);
+  bool VivaldiIsDefaultOverridden();
   void VivaldiResetDefaultOverride();
-
+  std::array<DefaultSearchManager, TemplateURLService::kDefaultSearchTypeCount>
+  VivaldiGetDefaultSearchManagers(
+      PrefService* prefs,
+      search_engines::SearchEngineChoiceService* search_engine_choice_service);
  private:
   FRIEND_TEST_ALL_PREFIXES(TemplateURLServiceTest, TestManagedDefaultSearch);
   FRIEND_TEST_ALL_PREFIXES(TemplateURLServiceTest,

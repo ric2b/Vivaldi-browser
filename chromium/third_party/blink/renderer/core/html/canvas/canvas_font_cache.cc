@@ -29,17 +29,15 @@ const int defaultFontSize = 10;
 
 const ComputedStyle* CreateDefaultFontStyle(const Document& document) {
   const AtomicString& default_font_family = font_family_names::kSansSerif;
-  FontFamily font_family;
-  font_family.SetFamily(default_font_family,
-                        FontFamily::InferredTypeFor(default_font_family));
   FontDescription default_font_description;
-  default_font_description.SetFamily(font_family);
+  default_font_description.SetFamily(FontFamily(
+      default_font_family, FontFamily::InferredTypeFor(default_font_family)));
   default_font_description.SetSpecifiedSize(defaultFontSize);
   default_font_description.SetComputedSize(defaultFontSize);
   ComputedStyleBuilder builder =
       document.IsActive()
           ? document.GetStyleResolver().CreateComputedStyleBuilder()
-          : ComputedStyleBuilder(*ComputedStyle::CreateInitialStyleSingleton());
+          : ComputedStyleBuilder(*ComputedStyle::GetInitialStyleSingleton());
   builder.SetFontDescription(default_font_description);
   return builder.TakeStyle();
 }

@@ -138,7 +138,7 @@ void AdSamplerTrigger::CreateAdSampleReport() {
   const content::GlobalRenderFrameHostId primary_main_frame_id =
       primary_main_frame->GetGlobalId();
   security_interstitials::UnsafeResource resource;
-  resource.threat_type = SB_THREAT_TYPE_AD_SAMPLE;
+  resource.threat_type = SBThreatType::SB_THREAT_TYPE_AD_SAMPLE;
   resource.url = web_contents()->GetURL();
   resource.render_process_id = primary_main_frame_id.child_id;
   resource.render_frame_token = primary_main_frame->GetFrameToken().value();
@@ -162,7 +162,7 @@ void AdSamplerTrigger::CreateAdSampleReport() {
           base::Unretained(trigger_manager_), TriggerType::AD_SAMPLE,
           GetWebContentsKey(web_contents()), base::TimeDelta(),
           /*did_proceed=*/false, /*num_visits=*/0, error_options,
-          /*warning_shown_ts=*/absl::nullopt,
+          /*warning_shown_ts=*/std::nullopt,
           /*is_hats_candidate=*/false),
       base::Milliseconds(finish_report_delay_ms_));
 

@@ -13,7 +13,6 @@
 #include "ash/style/ash_color_provider_source.h"
 #include "ash/wm/overview/overview_metrics.h"
 #include "ash/wm/overview/overview_types.h"
-#include "ash/wm/splitview/split_view_overview_session.h"
 #include "ash/wm/wm_metrics.h"
 #include "base/memory/raw_ptr.h"
 #include "ui/aura/window_tree_host.h"
@@ -54,7 +53,6 @@ class SplitViewController;
 class SplitViewOverviewSession;
 class StatusAreaWidget;
 class SystemModalContainerLayoutManager;
-class SystemWallpaperController;
 class TouchExplorationManager;
 class TouchHudDebug;
 class TouchHudProjection;
@@ -62,6 +60,7 @@ class WallpaperWidgetController;
 class WindowParentingController;
 class WorkAreaInsets;
 enum class LoginStatus;
+enum class SplitViewOverviewSessionExitPoint;
 
 namespace curtain {
 class SecurityCurtainWidgetController;
@@ -301,10 +300,13 @@ class ASH_EXPORT RootWindowController {
                                 const char* name,
                                 aura::Window* parent);
 
-  // Initializes |system_wallpaper_| and possibly also |boot_splash_screen_|.
-  // The initial color is determined by the |root_window_type| and whether or
-  // not this is the first boot.
-  void CreateSystemWallpaper(RootWindowType root_window_type);
+  // Build a menu model adapter to configure birch bar in Overview.
+  std::unique_ptr<AppMenuModelAdapter> BuildBirchMenuModelAdapter(
+      ui::MenuSourceType source_type);
+
+  // Build a menu model adapter to configure shelf.
+  std::unique_ptr<AppMenuModelAdapter> BuildShelfMenuModelAdapter(
+      ui::MenuSourceType source_type);
 
   // Callback for MenuRunner.
   void OnMenuClosed();
@@ -343,8 +345,6 @@ class ASH_EXPORT RootWindowController {
   // of the RootWindowController so that it is safe for observers to be added
   // to it during construction of the shelf widget and status tray.
   std::unique_ptr<Shelf> shelf_;
-
-  std::unique_ptr<SystemWallpaperController> system_wallpaper_;
 
   // Responsible for initializing TouchExplorationController when spoken
   // feedback is on.

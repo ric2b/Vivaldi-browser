@@ -40,16 +40,19 @@ import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingUtilities;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tasks.ReturnToChromeUtil;
+import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
 import org.chromium.chrome.browser.tasks.pseudotab.TabAttributeCache;
+import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListMode;
 import org.chromium.chrome.browser.tasks.tab_management.suggestions.TabSuggestionsOrchestrator;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.tab_ui.R;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator.SystemUiScrimDelegate;
@@ -104,6 +107,7 @@ public class TabSwitcherCoordinator
     private final ViewGroup mCoordinatorView;
     private final ViewGroup mRootView;
     private TabContentManager mTabContentManager;
+    private final @NonNull BottomSheetController mBottomSheetController;
 
     /**
      * TODO(crbug.com/1227656): Refactor this to pass a supplier instead to ensure we re-use the
@@ -141,6 +145,7 @@ public class TabSwitcherCoordinator
             @NonNull Supplier<DynamicResourceLoader> dynamicResourceLoaderSupplier,
             @NonNull SnackbarManager snackbarManager,
             @NonNull ModalDialogManager modalDialogManager,
+            @NonNull BottomSheetController bottomSheetController,
             @Nullable OneshotSupplier<IncognitoReauthController> incognitoReauthControllerSupplier,
             @Nullable BackPressManager backPressManager,
             @Nullable OneshotSupplier<LayoutStateProvider> layoutStateProviderSupplier) {
@@ -165,6 +170,7 @@ public class TabSwitcherCoordinator
             mDynamicResourceLoaderSupplier = dynamicResourceLoaderSupplier;
             mSnackbarManager = snackbarManager;
             mModalDialogManager = modalDialogManager;
+            mBottomSheetController = bottomSheetController;
 
             PropertyModel containerViewModel =
                     new PropertyModel.Builder(TabListContainerProperties.ALL_KEYS)
@@ -191,7 +197,6 @@ public class TabSwitcherCoordinator
                             tabModelSelector,
                             browserControls,
                             container,
-                            tabContentManager,
                             new Handler(),
                             mode,
                             incognitoReauthControllerSupplier,
@@ -212,12 +217,19 @@ public class TabSwitcherCoordinator
                             currentTabModelFilterSupplier);
 
             PseudoTab.TitleProvider titleProvider =
-                    (context, tab) -> {
-                        int numRelatedTabs =
-                                PseudoTab.getRelatedTabs(context, tab, tabModelSelector).size();
-                        if (numRelatedTabs == 1) return tab.getTitle();
+                    (context, pseudoTab) -> {
+                        TabGroupModelFilter filter =
+                                (TabGroupModelFilter)
+                                        tabModelSelector
+                                                .getTabModelFilterProvider()
+                                                .getCurrentTabModelFilterSupplier()
+                                                .get();
+                        Tab tab = TabModelUtils.getTabById(filter.getTabModel(), pseudoTab.getId());
+                        assert tab != null;
+                        if (!filter.isTabInTabGroup(tab)) return tab.getTitle();
 
-                        return TabGroupTitleEditor.getDefaultTitle(context, numRelatedTabs);
+                        return TabGroupTitleEditor.getDefaultTitle(
+                                context, filter.getRelatedTabCountForRootId(tab.getRootId()));
                     };
 
             long startTimeMs = SystemClock.uptimeMillis();
@@ -231,7 +243,7 @@ public class TabSwitcherCoordinator
                 // The TabSwitcherView is the horizontal main recycler view which holds instance of the
                 // different tab grids like normal/private/trashed/synced tabs.
                 mTabSwitcherView =
-                        new TabSwitcherView(container, tabModelSelector);
+                        new TabSwitcherView(container, tabModelSelector, layoutStateProviderSupplier);
                 for (int i = 0; i <= TabSwitcherView.PAGE.PRIVATE; i++) {
                     TabSwitcherView.CurrentTabViewInstance = i;
                     final int isIncognitoView = i;
@@ -250,7 +262,7 @@ public class TabSwitcherCoordinator
                                     -> tabModelSelector.getModel(false),
                             mMultiThumbnailCardProvider, titleProvider, true, mMediator, null,
                             TabProperties.UiType.CLOSABLE, null, this ::getMessageManager,
-                            container, false, COMPONENT_NAME, mRootView, null, true, emptyImageResId,
+                            container, false, COMPONENT_NAME, mRootView, null, false, emptyImageResId,
                             emptyHeadingStringResId, emptySubheadingStringResId);
                     mTabGridCoordinators.add(tabListCoordinator);
                     mContainerViewChangeProcessors.add(PropertyModelChangeProcessor.create(
@@ -263,7 +275,6 @@ public class TabSwitcherCoordinator
                             TabProperties.UiType.MESSAGE);
                 }
                 mTabSwitcherView.initialize();
-                mMediator.addTabSwitcherViewObserver(mTabSwitcherView.getEmptyOverviewModeObserver());
                 mTabListCoordinator =
                         mTabGridCoordinators.get(TabSwitcherView.PAGE.NORMAL);
             } else {
@@ -387,6 +398,7 @@ public class TabSwitcherCoordinator
                 new TabGridDialogCoordinator(
                         mActivity,
                         mBrowserControlsStateProvider,
+                        mBottomSheetController,
                         currentTabModelFilterSupplier,
                         () -> mTabModelSelector.getModel(false),
                         mTabContentManager,
@@ -424,8 +436,7 @@ public class TabSwitcherCoordinator
             final boolean shouldUseDynamicResource =
                     mMode == TabListCoordinator.TabListMode.GRID
                             && !DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivity)
-                            && !(ChromeFeatureList.sGridTabSwitcherAndroidAnimations.isEnabled()
-                                    && ReturnToChromeUtil.isStartSurfaceRefactorEnabled(mActivity));
+                            && !ChromeFeatureList.sGridTabSwitcherAndroidAnimations.isEnabled();
 
             Profile profile = mTabModelSelector.getModel(false).getProfile();
             assert profile != null;
@@ -530,11 +541,6 @@ public class TabSwitcherCoordinator
         // should listen for |requestFocusOnCurrentTab| signal implicitly and apply changes. This
         // would require refactoring TabSwitcher.TabListDelegate and its implementation.
         mMediator.requestAccessibilityFocusOnCurrentTab();
-    }
-
-    @Override
-    public void prepareTabGridView() {
-        mTabListCoordinator.prepareTabGridView();
     }
 
     @Override
@@ -661,8 +667,6 @@ public class TabSwitcherCoordinator
 
         if (ChromeApplicationImpl.isVivaldi()) {
             mTabListCoordinator.onDestroy();
-            mMediator.removeTabSwitcherViewObserver(
-                    mTabSwitcherView.getEmptyOverviewModeObserver());
             mTabSwitcherView.onDestroy();
             for (int i = 0; i <= TabSwitcherView.PAGE.PRIVATE; i++) {
                 mTabGridCoordinators.get(i).onDestroy();
@@ -691,7 +695,17 @@ public class TabSwitcherCoordinator
 
     @Override
     public void runAnimationOnNextLayout(Runnable runnable) {
+        // Note(david@vivaldi.com): Select the correct |TabListCoordinator|.
+        if (ChromeApplicationImpl.isVivaldi() && mTabModelSelector != null)
+            mTabListCoordinator = mTabGridCoordinators.get(mTabModelSelector.isIncognitoSelected()
+                            ? TabSwitcherView.PAGE.PRIVATE
+                            : TabSwitcherView.PAGE.NORMAL);
         mTabListCoordinator.runAnimationOnNextLayout(runnable);
+    }
+
+    @Override
+    public void showQuickDeleteAnimation(Runnable onAnimationEnd, List<Tab> tabs) {
+        mTabListCoordinator.showQuickDeleteAnimation(onAnimationEnd, tabs);
     }
 
     private TabSwitcherMessageManager getMessageManager() {

@@ -41,6 +41,14 @@ constexpr CGFloat kNewIPHBadgeFontSize = 10.0;
 // labels when no dot is present.
 constexpr CGFloat kDefaultTextLabelSpacing = 4;
 
+// By default, the maximum number of lines to be displayed for the detail text
+// should be one.
+const NSInteger kDefaultDetailTextNumberOfLines = 1;
+
+// The extra vertical spacing of the icon when it's top aligned with the text
+// labels.
+constexpr CGFloat kIconTopAlignmentVerticalSpacing = 2.0;
+
 // Returns the notification dot view for `TableViewDetailIconCell`.
 UIView* NotificationDotView() {
   UIView* notificationDotUIView = [[UIView alloc] init];
@@ -83,6 +91,8 @@ NewFeatureBadgeView* NewIPHBadgeView() {
   if (self) {
     self.cellClass = [TableViewDetailIconCell class];
     self.badgeType = BadgeType::kNone;
+    _detailTextNumberOfLines = kDefaultDetailTextNumberOfLines;
+    _iconCenteredVertically = YES;
   }
   return self;
 }
@@ -101,6 +111,9 @@ NewFeatureBadgeView* NewIPHBadgeView() {
          cornerRadius:self.iconCornerRadius];
   [cell setTextLayoutConstraintAxis:self.textLayoutConstraintAxis];
   [cell setBadgeType:self.badgeType];
+
+  [cell setDetailTextNumberOfLines:self.detailTextNumberOfLines];
+  [cell setIconCenteredVertically:self.iconCenteredVertically];
 }
 
 @end
@@ -128,6 +141,8 @@ NewFeatureBadgeView* NewIPHBadgeView() {
   UIImageView* _iconImageView;
   NSLayoutConstraint* _iconHiddenConstraint;
   NSLayoutConstraint* _iconVisibleConstraint;
+  NSLayoutConstraint* _iconCenterAlignment;
+  NSLayoutConstraint* _iconTopAlignment;
 
   // View representing the current badge view.
   UIView* _badgeView;
@@ -142,6 +157,9 @@ NewFeatureBadgeView* NewIPHBadgeView() {
               reuseIdentifier:(NSString*)reuseIdentifier {
   self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
   if (self) {
+    _detailTextNumberOfLines = kDefaultDetailTextNumberOfLines;
+    _iconCenteredVertically = YES;
+
     self.isAccessibilityElement = YES;
     UIView* contentView = self.contentView;
 
@@ -189,6 +207,15 @@ NewFeatureBadgeView* NewIPHBadgeView() {
     _minimumCellHeightConstraint.priority = UILayoutPriorityDefaultHigh - 1;
     _minimumCellHeightConstraint.active = YES;
 
+    // Set up the constrains for the icon's vertical alignment. One of these
+    // will be active at the time, defaulting to center alignment.
+    _iconCenterAlignment = [_iconBackground.centerYAnchor
+        constraintEqualToAnchor:contentView.centerYAnchor];
+    _iconTopAlignment = [_iconBackground.topAnchor
+        constraintEqualToAnchor:_textStackView.topAnchor
+                       constant:kIconTopAlignmentVerticalSpacing];
+    [self updateIconAlignment];
+
     [NSLayoutConstraint activateConstraints:@[
       // Icon.
       [_iconBackground.leadingAnchor
@@ -198,8 +225,6 @@ NewFeatureBadgeView* NewIPHBadgeView() {
           constraintEqualToConstant:kTableViewIconImageSize],
       [_iconBackground.heightAnchor
           constraintEqualToAnchor:_iconBackground.widthAnchor],
-      [_iconBackground.centerYAnchor
-          constraintEqualToAnchor:contentView.centerYAnchor],
 
       // Text labels.
       [_textStackView.trailingAnchor
@@ -253,6 +278,19 @@ NewFeatureBadgeView* NewIPHBadgeView() {
 }
 
 #pragma mark - Properties
+
+- (void)setIconCenteredVertically:(BOOL)iconCenteredVertically {
+  _iconCenteredVertically = iconCenteredVertically;
+  [self updateIconAlignment];
+}
+
+- (void)setDetailTextNumberOfLines:(NSInteger)detailTextNumberOfLines {
+  _detailTextNumberOfLines = detailTextNumberOfLines;
+
+  [self updateCellForAccessibilityContentSizeCategory:
+            UIContentSizeCategoryIsAccessibilityCategory(
+                self.traitCollection.preferredContentSizeCategory)];
+}
 
 - (void)setTextLayoutConstraintAxis:
     (UILayoutConstraintAxis)textLayoutConstraintAxis {
@@ -333,6 +371,16 @@ NewFeatureBadgeView* NewIPHBadgeView() {
 }
 
 #pragma mark - Private
+
+- (void)updateIconAlignment {
+  if (_iconCenteredVertically) {
+    _iconTopAlignment.active = NO;
+    _iconCenterAlignment.active = YES;
+  } else {
+    _iconCenterAlignment.active = NO;
+    _iconTopAlignment.active = YES;
+  }
+}
 
 - (void)createDetailTextLabel {
   if (self.detailTextLabel) {
@@ -454,10 +502,11 @@ NewFeatureBadgeView* NewIPHBadgeView() {
                   UIUserInterfaceLayoutDirectionLeftToRight
               ? NSTextAlignmentRight
               : NSTextAlignmentLeft;
+      _detailTextLabel.numberOfLines = kDefaultDetailTextNumberOfLines;
     } else {
       _detailTextLabel.textAlignment = NSTextAlignmentNatural;
+      _detailTextLabel.numberOfLines = _detailTextNumberOfLines;
     }
-    _detailTextLabel.numberOfLines = 1;
     _textLabel.numberOfLines = 2;
   }
   UIFontTextStyle preferredFont =

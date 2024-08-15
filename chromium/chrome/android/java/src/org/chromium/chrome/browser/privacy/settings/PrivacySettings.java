@@ -16,6 +16,7 @@ import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 
+import androidx.annotation.VisibleForTesting;
 import androidx.preference.Preference;
 
 import org.chromium.base.metrics.RecordHistogram;
@@ -31,6 +32,7 @@ import org.chromium.chrome.browser.privacy_guide.PrivacyGuideInteractions;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxBridge;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxReferrer;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxSettingsBaseFragment;
+import org.chromium.chrome.browser.quick_delete.QuickDeleteController;
 import org.chromium.chrome.browser.safe_browsing.SafeBrowsingBridge;
 import org.chromium.chrome.browser.safe_browsing.metrics.SettingsAccessPoint;
 import org.chromium.chrome.browser.safe_browsing.settings.SafeBrowsingSettingsFragment;
@@ -56,7 +58,7 @@ import org.chromium.ui.text.SpanApplier;
 // Vivaldi
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
-import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 import org.chromium.build.BuildConfig;
 
@@ -76,6 +78,11 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
     private static final String PREF_INCOGNITO_LOCK = "incognito_lock";
     private static final String PREF_THIRD_PARTY_COOKIES = "third_party_cookies";
     private static final String PREF_TRACKING_PROTECTION = "tracking_protection";
+    private static final String PREF_IP_PROTECTION = "ip_protection";
+    @VisibleForTesting static final String PREF_CLEAR_BROWSING_DATA = "clear_browsing_data";
+
+    @VisibleForTesting
+    static final String PREF_CLEAR_BROWSING_DATA_ADVANCED = "clear_browsing_data_advanced";
 
     // Vivaldi
     private static final String PREF_CLEAR_SESSION_BROWSING_DATA = "clear_session_browsing_data";
@@ -102,6 +109,14 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
         SettingsUtils.addPreferencesFromResource(this, R.xml.privacy_preferences);
 
         if (!ChromeApplicationImpl.isVivaldi()) {
+        Preference ipProtectionPreference = findPreference(PREF_IP_PROTECTION);
+        ipProtectionPreference.setVisible(shouldShowIpProtectionUI());
+        ipProtectionPreference.setOnPreferenceClickListener(
+                preference -> {
+                    RecordUserAction.record("Settings.IpProtection.OpenedFromPrivacyPage");
+                    return false;
+                });
+
         Preference sandboxPreference = findPreference(PREF_PRIVACY_SANDBOX);
         // Overwrite the click listener to pass a correct referrer to the fragment.
         sandboxPreference.setOnPreferenceClickListener(
@@ -249,12 +264,20 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
                             thirdPartyCookies.getTitle().toString());
         }
 
+        if (QuickDeleteController.isQuickDeleteFollowupEnabled()) {
+            Preference clearBrowsingDataPreference = findPreference(PREF_CLEAR_BROWSING_DATA);
+            Preference clearBrowsingDataAdvancedPreference =
+                    findPreference(PREF_CLEAR_BROWSING_DATA_ADVANCED);
+            clearBrowsingDataPreference.setVisible(false);
+            clearBrowsingDataAdvancedPreference.setVisible(true);
+        }
+
         // Vivaldi
         ChromeSwitchPreference webRtcBroadcastIpPref =
                 (ChromeSwitchPreference) findPreference(PREF_WEBRTC_BROADCAST_IP);
         if (webRtcBroadcastIpPref != null) {
             webRtcBroadcastIpPref.setOnPreferenceChangeListener(this);
-            String policy = UserPrefs.get(Profile.getLastUsedRegularProfile()).getString(
+            String policy = UserPrefs.get(ProfileManager.getLastUsedRegularProfile()).getString(
                     Pref.WEB_RTCIP_HANDLING_POLICY);
             webRtcBroadcastIpPref.setChecked(policy.equals(WEBRTC_IP_HANDLING_POLICY_DEFAULT));
             webRtcBroadcastIpPref.setSummaryOn(
@@ -312,7 +335,7 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
         }
         // Vivaldi
         else if (PREF_WEBRTC_BROADCAST_IP.equals(key)) {
-            UserPrefs.get(Profile.getLastUsedRegularProfile()).setString(
+            UserPrefs.get(ProfileManager.getLastUsedRegularProfile()).setString(
                     Pref.WEB_RTCIP_HANDLING_POLICY, ((boolean) newValue)
                         ? WEBRTC_IP_HANDLING_POLICY_DEFAULT
                         : WEBRTC_IP_HANDLING_POLICY_DISABLE_NON_PROXIED_UDP);
@@ -340,6 +363,14 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
         if (doNotTrackPref != null) {
             doNotTrackPref.setSummary(
                     UserPrefs.get(getProfile()).getBoolean(Pref.ENABLE_DO_NOT_TRACK)
+                            ? R.string.text_on
+                            : R.string.text_off);
+        }
+
+        Preference ipProtectionPref = findPreference(PREF_IP_PROTECTION);
+        if (ipProtectionPref != null) {
+            ipProtectionPref.setSummary(
+                    UserPrefs.get(getProfile()).getBoolean(Pref.IP_PROTECTION_ENABLED)
                             ? R.string.text_on
                             : R.string.text_off);
         }
@@ -396,7 +427,7 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
         Preference contextualPref = findPreference(PREF_CONTEXTUAL_SEARCH);
         if (contextualPref != null)
             contextualPref.setSummary(
-                    ContextualSearchManager.isContextualSearchDisabled() ?
+                    ContextualSearchManager.isContextualSearchDisabled(getProfile()) ?
                             R.string.text_off : R.string.text_on);
 
         Preference clearSessionBrowsingDataPref = findPreference(PREF_CLEAR_SESSION_BROWSING_DATA);
@@ -445,6 +476,10 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
     private boolean showTrackingProtectionUI() {
         return UserPrefs.get(getProfile()).getBoolean(Pref.TRACKING_PROTECTION3PCD_ENABLED)
                 || ChromeFeatureList.isEnabled(ChromeFeatureList.TRACKING_PROTECTION_3PCD);
+    }
+
+    private boolean shouldShowIpProtectionUI() {
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.IP_PROTECTION_UX);
     }
 
     @Override

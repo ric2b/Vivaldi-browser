@@ -15,7 +15,7 @@ ExtensionFunction::ResponseAction
 AccessKeysGetAccessKeysForPageFunction::Run() {
   using vivaldi::access_keys::GetAccessKeysForPage::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string error;
@@ -57,7 +57,7 @@ void AccessKeysGetAccessKeysForPageFunction::AccessKeysReceived(
 ExtensionFunction::ResponseAction AccessKeysActionFunction::Run() {
   using vivaldi::access_keys::Action::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string id = params->id;

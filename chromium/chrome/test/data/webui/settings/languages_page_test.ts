@@ -6,14 +6,17 @@
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
 import {keyDownOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {LanguageHelper, LanguagesBrowserProxyImpl, SettingsAddLanguagesDialogElement, SettingsLanguagesPageElement} from 'chrome://settings/lazy_load.js';
-import {SettingsCheckboxListEntryElement, CrActionMenuElement, CrButtonElement, CrSettingsPrefs, loadTimeData} from 'chrome://settings/settings.js';
+import type {LanguageHelper, SettingsAddLanguagesDialogElement, SettingsLanguagesPageElement} from 'chrome://settings/lazy_load.js';
+import {LanguagesBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
+import type {SettingsCheckboxListEntryElement, CrActionMenuElement, CrButtonElement} from 'chrome://settings/settings.js';
+import {CrSettingsPrefs, loadTimeData} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertGE, assertGT, assertLT, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {FakeSettingsPrivate} from 'chrome://webui-test/fake_settings_private.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
 import {fakeDataBind} from 'chrome://webui-test/polymer_test_util.js';
 
-import {FakeLanguageSettingsPrivate, getFakeLanguagePrefs} from './fake_language_settings_private.js';
+import type {FakeLanguageSettingsPrivate} from './fake_language_settings_private.js';
+import {getFakeLanguagePrefs} from './fake_language_settings_private.js';
 import {TestLanguagesBrowserProxy} from './test_languages_browser_proxy.js';
 
 // clang-format on
@@ -49,8 +52,7 @@ suite('LanguagesPage', function() {
   setup(function() {
     const settingsPrefs = document.createElement('settings-prefs');
     const settingsPrivate = new FakeSettingsPrivate(getFakeLanguagePrefs());
-    settingsPrefs.initialize(
-        settingsPrivate as unknown as typeof chrome.settingsPrivate);
+    settingsPrefs.initialize(settingsPrivate);
     document.body.appendChild(settingsPrefs);
     return CrSettingsPrefs.initialized.then(function() {
       // Set up test browser proxy.
@@ -175,10 +177,12 @@ suite('LanguagesPage', function() {
       return dialogClosedResolver.promise;
     });
 
-    test('add languages and cancel', function() {
+    test('add languages and cancel', async function() {
       // Check some languages.
       dialogItems[1]!.click();  // en-CA.
+      await dialogItems[1]!.$.checkbox.updateComplete;
       dialogItems[2]!.click();  // tk.
+      await dialogItems[2]!.$.checkbox.updateComplete;
 
       // Canceling the dialog should close and remove it without enabling
       // the checked languages.
@@ -190,7 +194,7 @@ suite('LanguagesPage', function() {
       });
     });
 
-    test('add languages and confirm', function() {
+    test('add languages and confirm', async function() {
       // No languages have been checked, so the action button is inert.
       actionButton.click();
       flush();
@@ -201,13 +205,17 @@ suite('LanguagesPage', function() {
 
       // Check and uncheck one language.
       dialogItems[0]!.click();
+      await dialogItems[0]!.$.checkbox.updateComplete;
       assertFalse(actionButton.disabled);
       dialogItems[0]!.click();
+      await dialogItems[0]!.$.checkbox.updateComplete;
       assertTrue(actionButton.disabled);
 
       // Check multiple languages.
       dialogItems[0]!.click();  // en.
+      await dialogItems[0]!.$.checkbox.updateComplete;
       dialogItems[2]!.click();  // tk.
+      await dialogItems[2]!.$.checkbox.updateComplete;
       assertFalse(actionButton.disabled);
 
       // The action button should close and remove the dialog, enabling the

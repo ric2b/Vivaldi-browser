@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 import("//build/buildflag_header.gni")
-import("//build/config/cast.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/linux/pkg_config.gni")
@@ -295,6 +294,7 @@ component("gl") {
       "dcomp_surface_registry.h",
       "debug_utils.cc",
       "debug_utils.h",
+      "delegated_ink_point_renderer_gpu.cc",
       "delegated_ink_point_renderer_gpu.h",
       "direct_composition_child_surface_win.cc",
       "direct_composition_child_surface_win.h",
@@ -310,7 +310,6 @@ component("gl") {
       "hdr_metadata_helper_win.h",
       "swap_chain_presenter.cc",
       "swap_chain_presenter.h",
-      "vsync_observer.h",
       "vsync_provider_win.cc",
       "vsync_provider_win.h",
       "vsync_thread_win.cc",
@@ -496,10 +495,6 @@ static_library("test_support") {
 
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
-
-    if (is_chromeos) {
-      deps += [ "//ui/gfx/linux:gbm" ]
-    }
   }
 
   # If the run-time search path isn't set properly when we use ANGLE with its

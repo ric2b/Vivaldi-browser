@@ -14,6 +14,7 @@ import android.util.Pair;
 import android.util.SparseArray;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.NonNull;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
@@ -100,6 +101,7 @@ public class TabWindowManagerImpl implements ActivityStateListener, TabWindowMan
             OneshotSupplier<ProfileProvider> profileProviderSupplier,
             TabCreatorManager tabCreatorManager,
             NextTabPolicySupplier nextTabPolicySupplier,
+            @NonNull MismatchedIndicesHandler mismatchedIndicesHandler,
             int index) {
         if (index < 0 || index >= mSelectors.size()) return null;
 
@@ -108,14 +110,20 @@ public class TabWindowManagerImpl implements ActivityStateListener, TabWindowMan
             TabModelSelector assignedSelector = mAssignments.get(activity);
             for (int i = 0; i < mSelectors.size(); i++) {
                 if (mSelectors.get(i) == assignedSelector) {
-                    Pair res = Pair.create(i, assignedSelector);
+                    var assignedIndex =
+                            assertIndicesMatch(
+                                    index,
+                                    i,
+                                    "Activity already mapped; ",
+                                    activity,
+                                    mismatchedIndicesHandler);
+                    var res = Pair.create(assignedIndex, assignedSelector);
                     Log.i(
                             TAG_MULTI_INSTANCE,
                             "Returning existing selector with index: "
                                     + res
                                     + ". Requested index: "
                                     + index);
-                    assertIndicesMatch(index, i, "Activity already mapped; ", activity);
                     return res;
                 }
             }
@@ -138,34 +146,46 @@ public class TabWindowManagerImpl implements ActivityStateListener, TabWindowMan
         // Too many activities going at once.
         if (mSelectors.get(index) != null) return null;
 
+        var assignedIndex =
+                assertIndicesMatch(
+                        originalIndex, index, "Index in use; ", activity, mismatchedIndicesHandler);
         TabModelSelector selector =
                 mSelectorFactory.buildSelector(
                         activity,
                         profileProviderSupplier,
                         tabCreatorManager,
                         nextTabPolicySupplier);
-        mSelectors.set(index, selector);
+        mSelectors.set(assignedIndex, selector);
         mAssignments.put(activity, selector);
 
-        Pair res = Pair.create(index, selector);
+        Pair res = Pair.create(assignedIndex, selector);
         Log.i(TAG_MULTI_INSTANCE, "Returning new selector for " + activity + " with index: " + res);
-        assertIndicesMatch(originalIndex, index, "Index in use; ", activity);
         return res;
     }
 
-    private void assertIndicesMatch(
-            int requestedIndex, int returnedIndex, String type, Activity newActivity) {
-        if (requestedIndex == returnedIndex
+    /**
+     * Check whether the requested and originally assigned index for the current
+     * Activity/TabModelSelector are the same, and potentially reassign the index to match the
+     * requested index.
+     */
+    private int assertIndicesMatch(
+            int requestedIndex,
+            int originallyAssignedIndex,
+            String type,
+            Activity newActivity,
+            MismatchedIndicesHandler mismatchedIndicesHandler) {
+        int assignedIndex = originallyAssignedIndex;
+        if (requestedIndex == originallyAssignedIndex
                 // Needed for ActivityManager.RecentTaskInfo.taskId
                 || VERSION.SDK_INT < VERSION_CODES.Q) {
-            return;
+            return assignedIndex;
         }
 
         boolean assertMismatch = !BuildConfig.IS_FOR_TEST && BuildConfig.ENABLE_ASSERTS;
         boolean forceReportMismatch =
                 ChromeFeatureList.sTabWindowManagerReportIndicesMismatch.isEnabled();
         if (!forceReportMismatch && !assertMismatch) {
-            return;
+            return assignedIndex;
         }
 
         TabModelSelector selectorAtRequestedIndex = mSelectors.get(requestedIndex);
@@ -181,19 +201,22 @@ public class TabWindowManagerImpl implements ActivityStateListener, TabWindowMan
                 type
                         + "Requested "
                         + requestedIndex
-                        + " and returned "
-                        + returnedIndex
+                        + " and originally assigned "
+                        + originallyAssignedIndex
                         + " new activity: "
                         + newActivity
                         + " new activity task id: "
                         + newActivity.getTaskId()
+                        + " new activity is finishing? "
+                        + newActivity.isFinishing()
                         + " activity at requested index: "
                         + activityAtRequestedIndex;
         if (activityAtRequestedIndex == null) {
-            recordUmaForAssertIndicesMatch(PreAssignedActivityState.UNKNOWN);
+            recordUmaForAssertIndicesMatch(PreAssignedActivityState.UNKNOWN, false);
         } else {
             int activityAtRequestedIndexTaskId = activityAtRequestedIndex.getTaskId();
             boolean isFinishing = activityAtRequestedIndex.isFinishing();
+
             message +=
                     " ApplicationStatus activity state: "
                             + ApplicationStatus.getStateForActivity(activityAtRequestedIndex)
@@ -218,9 +241,28 @@ public class TabWindowManagerImpl implements ActivityStateListener, TabWindowMan
             message += "]";
 
             boolean isSameTask = activityAtRequestedIndexTaskId == newActivity.getTaskId();
+            message +=
+                    " Activity at requested index is in app tasks? "
+                            + isInAppTask
+                            + ", is in same task? "
+                            + isSameTask;
+
+            // Try to reassign the originally assigned index to match the requested index.
+            assignedIndex =
+                    reassignIndex(
+                            mismatchedIndicesHandler,
+                            activityAtRequestedIndex,
+                            requestedIndex,
+                            originallyAssignedIndex,
+                            isInAppTask,
+                            isSameTask);
+            message +=
+                    " Reassigned index for new activity? "
+                            + (assignedIndex != originallyAssignedIndex);
+
             @PreAssignedActivityState
             int state = getPreAssignedActivityState(isInAppTask, isSameTask, isFinishing);
-            recordUmaForAssertIndicesMatch(state);
+            recordUmaForAssertIndicesMatch(state, assignedIndex != originallyAssignedIndex);
 
             // Start actively listen to activity status once conflict at index is found.
             ApplicationStatus.registerStateListenerForActivity(
@@ -229,9 +271,11 @@ public class TabWindowManagerImpl implements ActivityStateListener, TabWindowMan
         }
 
         if (!BuildConfig.IS_FOR_TEST) {
-            assert requestedIndex == returnedIndex : message;
+            assert requestedIndex == assignedIndex : message;
+            assert assignedIndex == originallyAssignedIndex : message;
         }
         Log.i(TAG_MULTI_INSTANCE, message);
+        return assignedIndex;
     }
 
     private @PreAssignedActivityState int getPreAssignedActivityState(
@@ -251,11 +295,15 @@ public class TabWindowManagerImpl implements ActivityStateListener, TabWindowMan
                 : PreAssignedActivityState.IN_APP_TASK_DIFFERENT_TASK_NOT_FINISHING;
     }
 
-    private void recordUmaForAssertIndicesMatch(@PreAssignedActivityState int state) {
+    private void recordUmaForAssertIndicesMatch(
+            @PreAssignedActivityState int state, boolean indexReassigned) {
+        String histogramSuffix =
+                indexReassigned
+                        ? ASSERT_INDICES_MATCH_HISTOGRAM_SUFFIX_REASSIGNED
+                        : ASSERT_INDICES_MATCH_HISTOGRAM_SUFFIX_NOT_REASSIGNED;
+        String histogramName = ASSERT_INDICES_MATCH_HISTOGRAM_NAME + histogramSuffix;
         RecordHistogram.recordEnumeratedHistogram(
-                "Android.MultiWindowMode.AssertIndicesMatch",
-                state,
-                PreAssignedActivityState.NUM_ENTRIES);
+                histogramName, state, PreAssignedActivityState.NUM_ENTRIES);
     }
 
     private ActivityStateListener getActivityStateListenerForPreAssignedActivity(
@@ -280,6 +328,30 @@ public class TabWindowManagerImpl implements ActivityStateListener, TabWindowMan
                         PreAssignedActivityState.NUM_ENTRIES);
             }
         };
+    }
+
+    private int reassignIndex(
+            MismatchedIndicesHandler mismatchedIndicesHandler,
+            Activity activityAtRequestedIndex,
+            int requestedIndex,
+            int originallyAssignedIndexForNewActivity,
+            boolean isActivityAtRequestedIndexInAppTasks,
+            boolean isActivityAtRequestedIndexInSameTask) {
+        boolean handled =
+                mismatchedIndicesHandler.handleMismatchedIndices(
+                        activityAtRequestedIndex,
+                        isActivityAtRequestedIndexInAppTasks,
+                        isActivityAtRequestedIndexInSameTask);
+        if (!handled) return originallyAssignedIndexForNewActivity;
+        int releasedIndex = clearSelectorAndIndexAssignments(activityAtRequestedIndex);
+        if (releasedIndex == INVALID_WINDOW_INDEX) {
+            // If the index mapping is already cleared for |activityAtRequestedIndex| by this time,
+            // simply return the requested index.
+            return requestedIndex;
+        }
+        assert releasedIndex == requestedIndex
+                : "Released activity index should match the requested index.";
+        return requestedIndex;
     }
 
     @Override
@@ -355,12 +427,18 @@ public class TabWindowManagerImpl implements ActivityStateListener, TabWindowMan
     // ActivityStateListener
     @Override
     public void onActivityStateChange(Activity activity, int newState) {
-        if (newState == ActivityState.DESTROYED && mAssignments.containsKey(activity)) {
-            int index = mSelectors.indexOf(mAssignments.remove(activity));
-            if (index >= 0) {
-                mSelectors.set(index, null);
-            }
+        if (newState == ActivityState.DESTROYED) {
+            clearSelectorAndIndexAssignments(activity);
             // TODO(dtrainor): Move TabModelSelector#destroy() calls here.
         }
+    }
+
+    private int clearSelectorAndIndexAssignments(Activity activity) {
+        if (!mAssignments.containsKey(activity)) return INVALID_WINDOW_INDEX;
+        int index = mSelectors.indexOf(mAssignments.remove(activity));
+        if (index >= 0) {
+            mSelectors.set(index, null);
+        }
+        return index;
     }
 }

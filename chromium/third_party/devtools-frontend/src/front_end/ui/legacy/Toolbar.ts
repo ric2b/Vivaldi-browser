@@ -224,16 +224,12 @@ export class Toolbar {
       button.setText(options.label?.() || action.title());
     }
 
-    let handler = (_event: {
-      // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      data: any,
-    }): void => {
+    let handler = (): void => {
       void action.execute();
     };
     if (options.userActionCode) {
       const actionCode = options.userActionCode;
-      handler = (): void => {
+      handler = () => {
         Host.userMetrics.actionTaken(actionCode);
         void action.execute();
       };
@@ -691,7 +687,7 @@ export class ToolbarInput extends ToolbarItem<ToolbarInput.EventTypes> {
     this.proxyElement.classList.add('toolbar-prompt-proxy');
     this.proxyElement.addEventListener('keydown', (event: Event) => this.onKeydownCallback(event as KeyboardEvent));
     this.prompt.initialize(
-        completions || ((): Promise<never[]> => Promise.resolve([])),
+        completions || (() => Promise.resolve([])),
         ' ',
         dynamicCompletions,
     );
@@ -827,6 +823,9 @@ export class ToolbarMenuButton extends ToolbarButton {
   private triggerTimeout?: number;
   constructor(contextMenuHandler: (arg0: ContextMenu) => void, useSoftMenu?: boolean, jslogContext?: string) {
     super('', 'dots-vertical', undefined, jslogContext);
+    if (jslogContext) {
+      this.element.setAttribute('jslog', `${VisualLogging.dropDown().track({click: true}).context(jslogContext)}`);
+    }
     this.contextMenuHandler = contextMenuHandler;
     this.useSoftMenu = Boolean(useSoftMenu);
     ARIAUtils.markAsMenuButton(this.element);
@@ -961,6 +960,8 @@ export class ToolbarComboBox extends ToolbarItem<void> {
     if (typeof value !== 'undefined') {
       option.value = value;
     }
+    const jslogContext = value ? Platform.StringUtilities.toKebabCase(value) : undefined;
+    option.setAttribute('jslog', `${VisualLogging.item(jslogContext).track({click: true})}`);
     return option;
   }
 
@@ -985,10 +986,7 @@ export class ToolbarComboBox extends ToolbarItem<void> {
   }
 
   select(option: Element): void {
-    this.selectElementInternal.selectedIndex =
-        // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        Array.prototype.indexOf.call((this.selectElementInternal as any), option);
+    this.selectElementInternal.selectedIndex = Array.prototype.indexOf.call(this.selectElementInternal, option);
   }
 
   setSelectedIndex(index: number): void {
@@ -1128,7 +1126,7 @@ export interface ToolbarItemRegistration {
   label?: () => Platform.UIString.LocalizedString;
   showLabel?: boolean;
   actionId?: string;
-  condition?: string;
+  condition?: Root.Runtime.Condition;
   loadItem?: (() => Promise<Provider>);
   experiment?: string;
   jslog?: string;

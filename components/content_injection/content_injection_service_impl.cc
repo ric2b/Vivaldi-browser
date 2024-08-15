@@ -15,13 +15,13 @@ ServiceImpl::ServiceImpl(content::BrowserContext* browser_context)
     : browser_context_(browser_context) {}
 ServiceImpl::~ServiceImpl() = default;
 
-absl::optional<int> ServiceImpl::RegisterWorldForJSInjection(
+std::optional<int> ServiceImpl::RegisterWorldForJSInjection(
     mojom::JavascriptWorldInfoPtr world_info) {
   static int g_next_world_id = ISOLATED_WORLD_ID_VIVALDI_CONTENT_INJECTION;
   static base::NoDestructor<std::map<std::string, int>> g_assigned_world_ids;
 
   if (g_next_world_id == ISOLATED_WORLD_ID_VIVALDI_CONTENT_INJECTION_END)
-    return absl::nullopt;
+    return std::nullopt;
 
   const auto existing_id = g_assigned_world_ids->find(world_info->stable_id);
 

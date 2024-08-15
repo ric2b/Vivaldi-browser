@@ -39,7 +39,7 @@ struct Options {
     AllowedFeatures allowed_features{};
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField().
-    TINT_REFLECT(allowed_features);
+    TINT_REFLECT(Options, allowed_features);
 };
 
 }  // namespace tint::wgsl::reader

@@ -16,6 +16,7 @@
 #include <filesystem>  // NOLINT
 #include <string>
 
+#include "absl/base/nullability.h"
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
@@ -25,7 +26,7 @@
 #include "./centipede/seed_corpus_maker_lib.h"
 #include "./centipede/util.h"
 
-int main(int argc, char** argv) {
+int main(int argc, absl::Nonnull<char**> argv) {
   (void)centipede::config::InitRuntime(argc, argv);
 
   const std::string config = absl::GetFlag(FLAGS_config);
@@ -37,11 +38,12 @@ int main(int argc, char** argv) {
       << "--coverage_binary_path yields empty basename";
   std::string binary_hash = absl::GetFlag(FLAGS_coverage_binary_hash);
   if (binary_hash.empty()) {
-    LOG(INFO) << "--coverage_binary_hash was not provided: computing hash from "
-                 "actual file at --coverage_binary_path";
     QCHECK(centipede::RemotePathExists(binary_path))
         << "--coverage_binary_path doesn't exist";
     binary_hash = centipede::HashOfFileContents(binary_path);
+    LOG(INFO) << "--coverage_binary_hash was not provided: computed "
+              << binary_hash
+              << " from actual file at --coverage_binary_path=" << binary_path;
   }
 
   centipede::GenerateSeedCorpusFromConfig(  //

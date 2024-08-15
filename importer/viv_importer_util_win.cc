@@ -33,7 +33,7 @@ base::FilePath GetOperaInstallPathFromRegistry() {
   return (result != ERROR_SUCCESS) ? base::FilePath() : base::FilePath(buffer);
 }
 
-base::FilePath GetProfileDir(bool mail) {
+base::FilePath GetProfileDir() {
   base::FilePath profile_dir;
   // The default location of the profile folder containing user data is
   // under the "Application Data" folder in Windows XP, Vista, and 7.
@@ -42,31 +42,27 @@ base::FilePath GetProfileDir(bool mail) {
 
   // Tree is Opera/Opera (for 32 bit) and Opera/Opera x64 (64 bit).
   // Use 64 bit if found otherwise 32 bit.
-  profile_dir = profile_dir.Append(mail ? kOperaMail : kOpera);
+  profile_dir = profile_dir.Append(kOpera);
 
-  if (base::PathExists(
-          profile_dir.Append(mail ? kOperaMail64bitFolder : kOpera64bitFolder)))
-    return profile_dir.Append(mail ? kOperaMail64bitFolder : kOpera64bitFolder);
-  else if (base::PathExists(profile_dir.Append(mail ? kOperaMail : kOpera)))
-    return profile_dir.Append(mail ? kOperaMail : kOpera);
+  if (base::PathExists(profile_dir.Append(kOpera64bitFolder)))
+    return profile_dir.Append(kOpera64bitFolder);
+  else if (base::PathExists(profile_dir.Append(kOpera)))
+    return profile_dir.Append(kOpera);
   else
     return base::FilePath();
 }
 
-base::FilePath GetMailDirectory(bool mail) {
+base::FilePath GetMailDirectory() {
   base::FilePath profile_dir;
   if (!PathService::Get(base::DIR_LOCAL_APP_DATA, &profile_dir))
     return base::FilePath();
 
-  profile_dir = profile_dir.Append(mail ? kOperaMail : kOpera);
+  profile_dir = profile_dir.Append(kOperaMail);
   if (base::PathExists(
-          profile_dir.Append(mail ? kOperaMail64bitFolder : kOpera64bitFolder)
-              .Append(kMailFolder)))
-    return profile_dir.Append(mail ? kOperaMail64bitFolder : kOpera64bitFolder)
-        .Append(kMailFolder);
-  else if (base::PathExists(profile_dir.Append(mail ? kOperaMail : kOpera)
-                                .Append(kMailFolder)))
-    return profile_dir.Append(mail ? kOperaMail : kOpera).Append(kMailFolder);
+          profile_dir.Append(kOperaMail64bitFolder).Append(kMailFolder)))
+    return profile_dir.Append(kOperaMail64bitFolder).Append(kMailFolder);
+  else if (base::PathExists(profile_dir.Append(kOperaMail).Append(kMailFolder)))
+    return profile_dir.Append(kOperaMail).Append(kMailFolder);
   else
     return base::FilePath();
 }

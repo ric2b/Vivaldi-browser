@@ -12,6 +12,8 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/api/commands/command_service.h"
 #include "chrome/browser/extensions/extension_apitest.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/test/browser_test.h"
@@ -131,8 +133,8 @@ std::string CommandServiceMv3UpgradeTest::LoadExtensionMv2(
     ADD_FAILURE() << "Couldn't load extension successfully for test setup.";
   }
   const std::string unpacked_extension_id = extension->id();
-  EXPECT_TRUE(extension_registry()->GetExtensionById(
-      unpacked_extension_id, ExtensionRegistry::ENABLED));
+  EXPECT_TRUE(extension_registry()->enabled_extensions().Contains(
+      unpacked_extension_id));
 
   // Verify it has an MV2 action command of Alt+N.
   EXPECT_TRUE(CommandHasAltPlusKeybinding(unpacked_extension_id.c_str(),

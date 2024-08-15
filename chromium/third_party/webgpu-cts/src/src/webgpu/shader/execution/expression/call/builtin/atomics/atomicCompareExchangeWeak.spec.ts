@@ -48,7 +48,7 @@ struct __atomic_compare_exchange_result<T> {
       .combine('workgroupSize', workgroupSizes)
       .combine('dispatchSize', dispatchSizes)
       .combine('mapId', keysOf(kMapId))
-      .combine('scalarType', ['u32', 'i32'])
+      .combine('scalarType', ['u32', 'i32'] as const)
   )
   .fn(async t => {
     const numInvocations = t.params.workgroupSize * t.params.dispatchSize;
@@ -187,7 +187,7 @@ struct __atomic_compare_exchange_result<T> {
       .combine('workgroupSize', workgroupSizes)
       .combine('dispatchSize', dispatchSizes)
       .combine('mapId', keysOf(kMapId))
-      .combine('scalarType', ['u32', 'i32'])
+      .combine('scalarType', ['u32', 'i32'] as const)
   )
   .fn(async t => {
     const numInvocations = t.params.workgroupSize;
@@ -333,7 +333,7 @@ struct __atomic_compare_exchange_result<T> {
   .params(u =>
     u
       .combine('workgroupSize', onlyWorkgroupSizes) //
-      .combine('scalarType', ['u32', 'i32'])
+      .combine('scalarType', ['u32', 'i32'] as const)
   )
   .fn(async t => {
     const numInvocations = t.params.workgroupSize;
@@ -555,7 +555,7 @@ struct __atomic_compare_exchange_result<T> {
   .params(u =>
     u
       .combine('workgroupSize', onlyWorkgroupSizes) //
-      .combine('scalarType', ['u32', 'i32'])
+      .combine('scalarType', ['u32', 'i32'] as const)
   )
   .fn(async t => {
     const numInvocations = t.params.workgroupSize;

@@ -15,14 +15,15 @@
 #include <functional>
 #include <iosfwd>
 #include <iterator>
+#include <optional>
 #include <utility>
 
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/string_data_template.h"
+#include "core/fxcrt/string_template.h"
 #include "core/fxcrt/string_view_template.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/base/check.h"
-#include "third_party/base/containers/span.h"
 
 namespace fxcrt {
 
@@ -30,23 +31,21 @@ class ByteString;
 
 // A mutable string with shared buffers using copy-on-write semantics that
 // avoids the cost of std::string's iterator stability guarantees.
-class WideString {
+// TODO(crbug.com/pdfium/2031): Consider switching to `char16_t` instead.
+class WideString : public StringTemplate<wchar_t> {
  public:
-  // TODO(crbug.com/pdfium/2031): Consider switching to `char16_t` instead.
-  using CharType = wchar_t;
-  using const_iterator = const CharType*;
-  using const_reverse_iterator = std::reverse_iterator<const_iterator>;
-
   [[nodiscard]] static WideString FormatInteger(int i);
   [[nodiscard]] static WideString Format(const wchar_t* pFormat, ...);
   [[nodiscard]] static WideString FormatV(const wchar_t* lpszFormat,
                                           va_list argList);
 
-  WideString();
-  WideString(const WideString& other);
+  WideString() = default;
+  WideString(const WideString& other) = default;
 
   // Move-construct a WideString. After construction, |other| is empty.
-  WideString(WideString&& other) noexcept;
+  WideString(WideString&& other) noexcept = default;
+
+  ~WideString() = default;
 
   // Make a one-character string from one wide char.
   explicit WideString(wchar_t ch);
@@ -65,8 +64,6 @@ class WideString {
   WideString(WideStringView str1, WideStringView str2);
   WideString(const std::initializer_list<WideStringView>& list);
 
-  ~WideString();
-
   [[nodiscard]] static WideString FromASCII(ByteStringView str);
   [[nodiscard]] static WideString FromLatin1(ByteStringView str);
   [[nodiscard]] static WideString FromDefANSI(ByteStringView str);
@@ -74,50 +71,15 @@ class WideString {
   [[nodiscard]] static WideString FromUTF16LE(pdfium::span<const uint8_t> data);
   [[nodiscard]] static WideString FromUTF16BE(pdfium::span<const uint8_t> data);
 
-  [[nodiscard]] static size_t WStringLength(const unsigned short* str);
-
-  // Explicit conversion to C-style wide string.
+  // Explicit conversion to C-style wide string.  The result is never nullptr,
+  // and is always NUL terminated.
   // Note: Any subsequent modification of |this| will invalidate the result.
   const wchar_t* c_str() const { return m_pData ? m_pData->m_String : L""; }
 
-  // Explicit conversion to WideStringView.
-  // Note: Any subsequent modification of |this| will invalidate the result.
-  WideStringView AsStringView() const {
-    return WideStringView(c_str(), GetLength());
-  }
 
-  // Explicit conversion to span.
-  // Note: Any subsequent modification of |this| will invalidate the result.
-  pdfium::span<const wchar_t> span() const {
-    return pdfium::make_span(m_pData ? m_pData->m_String : nullptr,
-                             GetLength());
-  }
-
-  // Note: Any subsequent modification of |this| will invalidate iterators.
-  const_iterator begin() const { return m_pData ? m_pData->m_String : nullptr; }
-  const_iterator end() const {
-    return m_pData ? m_pData->m_String + m_pData->m_nDataLength : nullptr;
-  }
-
-  // Note: Any subsequent modification of |this| will invalidate iterators.
-  const_reverse_iterator rbegin() const {
-    return const_reverse_iterator(end());
-  }
-  const_reverse_iterator rend() const {
-    return const_reverse_iterator(begin());
-  }
-
-  // Holds on to buffer if possible for later re-use. Assign WideString()
-  // to force immediate release if desired.
-  void clear();
-
-  size_t GetLength() const { return m_pData ? m_pData->m_nDataLength : 0; }
   size_t GetStringLength() const {
     return m_pData ? wcslen(m_pData->m_String) : 0;
   }
-  bool IsEmpty() const { return !GetLength(); }
-  bool IsValidIndex(size_t index) const { return index < GetLength(); }
-  bool IsValidLength(size_t length) const { return length <= GetLength(); }
 
   WideString& operator=(const wchar_t* str);
   WideString& operator=(WideStringView str);
@@ -143,16 +105,6 @@ class WideString {
   bool operator<(WideStringView str) const;
   bool operator<(const WideString& other) const;
 
-  CharType operator[](const size_t index) const {
-    CHECK(IsValidIndex(index));
-    return m_pData->m_String[index];
-  }
-
-  CharType Front() const { return GetLength() ? (*this)[0] : 0; }
-  CharType Back() const { return GetLength() ? (*this)[GetLength() - 1] : 0; }
-
-  void SetAt(size_t index, wchar_t c);
-
   int Compare(const wchar_t* str) const;
   int Compare(const WideString& str) const;
   int CompareNoCase(const wchar_t* str) const;
@@ -162,55 +114,15 @@ class WideString {
   WideString First(size_t count) const;
   WideString Last(size_t count) const;
 
-  size_t Insert(size_t index, wchar_t ch);
-  size_t InsertAtFront(wchar_t ch) { return Insert(0, ch); }
-  size_t InsertAtBack(wchar_t ch) { return Insert(GetLength(), ch); }
-  size_t Delete(size_t index, size_t count = 1);
-
   void MakeLower();
   void MakeUpper();
 
-  void Trim();
-  void Trim(wchar_t target);
-  void Trim(WideStringView targets);
-
-  void TrimLeft();
-  void TrimLeft(wchar_t target);
-  void TrimLeft(WideStringView targets);
-
-  void TrimRight();
-  void TrimRight(wchar_t target);
-  void TrimRight(WideStringView targets);
-
-  void Reserve(size_t len);
-
-  // Increase the backing store of the string so that it is capable of storing
-  // at least `nMinBufLength` wchars. Returns a span to the entire buffer,
-  // which may be larger than `nMinBufLength` due to rounding by allocators.
-  // Note: any modification of the string (including ReleaseBuffer()) may
-  // invalidate the span, which must not outlive its buffer.
-  pdfium::span<wchar_t> GetBuffer(size_t nMinBufLength);
-
-  // Sets the size of the string to `nNewLength` wchars. Call this after a call
-  // to GetBuffer(), to indicate how much of the buffer was actually used.
-  void ReleaseBuffer(size_t nNewLength);
+  // Trim a canonical set of characters from the widestring.
+  void TrimWhitespace();
+  void TrimWhitespaceFront();
+  void TrimWhitespaceBack();
 
   int GetInteger() const;
-
-  absl::optional<size_t> Find(WideStringView subStr, size_t start = 0) const;
-  absl::optional<size_t> Find(wchar_t ch, size_t start = 0) const;
-  absl::optional<size_t> ReverseFind(wchar_t ch) const;
-
-  bool Contains(WideStringView lpszSub, size_t start = 0) const {
-    return Find(lpszSub, start).has_value();
-  }
-
-  bool Contains(char ch, size_t start = 0) const {
-    return Find(ch, start).has_value();
-  }
-
-  size_t Replace(WideStringView pOld, WideStringView pNew);
-  size_t Remove(wchar_t ch);
 
   bool IsASCII() const { return AsStringView().IsASCII(); }
   bool EqualsASCII(ByteStringView that) const {
@@ -225,25 +137,17 @@ class WideString {
   ByteString ToDefANSI() const;
   ByteString ToUTF8() const;
 
-  // This method will add \0\0 to the end of the string to represent the
-  // wide string terminator. These values are in the string, not just the data,
-  // so GetLength() will include them.
+  // These methods will add \0\0 to the end of the string to represent the
+  // two-byte terminator. These values are part of the string itself, so
+  // GetLength() will include them.
   ByteString ToUTF16LE() const;
+  ByteString ToUCS2LE() const;
 
   // Replace the characters &<>'" with HTML entities.
   WideString EncodeEntities() const;
 
  protected:
-  using StringData = StringDataTemplate<wchar_t>;
-
-  void ReallocBeforeWrite(size_t nNewLength);
-  void AllocBeforeWrite(size_t nNewLength);
-  void AllocCopy(WideString& dest, size_t nCopyLen, size_t nCopyIndex) const;
-  void AssignCopy(const wchar_t* pSrcData, size_t nSrcLen);
-  void Concat(const wchar_t* pSrcData, size_t nSrcLen);
   intptr_t ReferenceCountForTesting() const;
-
-  RetainPtr<StringData> m_pData;
 
   friend class WideString_Assign_Test;
   friend class WideString_ConcatInPlace_Test;

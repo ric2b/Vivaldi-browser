@@ -13,6 +13,7 @@ import gpu_path_util
 from gpu_tests import common_browser_args as cba
 from gpu_tests import common_typing as ct
 from gpu_tests import gpu_integration_test
+from gpu_tests.util import host_information
 
 html_path = os.path.join(gpu_path_util.CHROMIUM_SRC_DIR, 'content', 'test',
                          'data', 'gpu', 'webcodecs')
@@ -40,13 +41,23 @@ class WebCodecsIntegrationTest(gpu_integration_test.GpuIntegrationTest):
 
   def _GetSerialGlobs(self) -> Set[str]:
     serial_globs = set()
-    if sys.platform == 'win32':
+    if host_information.IsWindows() and host_information.IsNvidiaGpu():
       serial_globs |= {
           # crbug.com/1473480. Windows + NVIDIA has a maximum parallel encode
           # limit of 2, so serialize hardware encoding tests on Windows.
           'WebCodecs_*prefer-hardware*',
       }
     return serial_globs
+
+  def _GetSerialTests(self) -> Set[str]:
+    serial_tests = set()
+    if host_information.IsWindows() and host_information.IsArmCpu():
+      serial_tests |= {
+          # crbug.com/323824490. Seems to flakily lose the D3D11 device when
+          # run in parallel.
+          'WebCodecs_FrameSizeChange_vp09.00.10.08_hw_decoder',
+      }
+    return serial_tests
 
 # pylint: disable=too-many-branches
 
@@ -247,9 +258,8 @@ class WebCodecsIntegrationTest(gpu_integration_test.GpuIntegrationTest):
 
     # If we don't call CustomizeBrowserArgs cls.platform is None
     cls.CustomizeBrowserArgs(args)
-    platform = cls.platform
 
-    if cls.CameraCanShowFourColors(platform.GetOSName()):
+    if cls.CameraCanShowFourColors(cls.platform.GetOSName()):
       args.append('--use-file-for-fake-video-capture=' + four_colors_img_path)
       cls.CustomizeBrowserArgs(args)
 

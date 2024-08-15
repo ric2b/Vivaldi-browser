@@ -15,10 +15,10 @@ namespace openscreen {
 std::string GetExePath() {
   uint32_t path_size = 0;
   _NSGetExecutablePath(nullptr, &path_size);
-  OSP_DCHECK(path_size > 0u);
+  OSP_CHECK_GT(path_size, 0u);
   std::string exe_path(path_size, 0);
   int ret = _NSGetExecutablePath(data(exe_path), &path_size);
-  OSP_DCHECK_EQ(ret, 0);
+  OSP_CHECK_EQ(ret, 0);
   char* resolved = realpath(exe_path.c_str(), nullptr);
   std::string final_path(resolved);
   free(resolved);

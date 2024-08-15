@@ -1,7 +1,7 @@
 ; SPIR-V
 ; Version: 1.3
 ; Generator: Google Tint Compiler; 0
-; Bound: 59
+; Bound: 68
 ; Schema: 0
                OpCapability Shader
                OpMemoryModel Logical GLSL450
@@ -16,6 +16,8 @@
                OpName %storages_block "storages_block"
                OpMemberName %storages_block 0 "inner"
                OpName %storages "storages"
+               OpName %tint_zero_workgroup_memory "tint_zero_workgroup_memory"
+               OpName %local_idx "local_idx"
                OpName %no_uses "no_uses"
                OpName %zoo "zoo"
                OpName %bar "bar"
@@ -55,60 +57,74 @@
 %_ptr_StorageBuffer_storages_block = OpTypePointer StorageBuffer %storages_block
    %storages = OpVariable %_ptr_StorageBuffer_storages_block StorageBuffer
        %void = OpTypeVoid
-         %18 = OpTypeFunction %void
-    %float_2 = OpConstant %float 2
-         %27 = OpTypeFunction %void %float %float
-     %uint_0 = OpConstant %uint 0
-        %int = OpTypeInt 32 1
-         %34 = OpConstantNull %int
-%_ptr_StorageBuffer_float = OpTypePointer StorageBuffer %float
-         %40 = OpTypeFunction %void %float
-         %46 = OpTypeFunction %void %uint
+         %18 = OpTypeFunction %void %uint
+     %uint_1 = OpConstant %uint 1
+       %bool = OpTypeBool
      %uint_2 = OpConstant %uint 2
    %uint_264 = OpConstant %uint 264
+         %31 = OpTypeFunction %void
+    %float_2 = OpConstant %float 2
+         %39 = OpTypeFunction %void %float %float
+     %uint_0 = OpConstant %uint 0
+        %int = OpTypeInt 32 1
+         %46 = OpConstantNull %int
+%_ptr_StorageBuffer_float = OpTypePointer StorageBuffer %float
+         %52 = OpTypeFunction %void %float
     %float_1 = OpConstant %float 1
-    %no_uses = OpFunction %void None %18
-         %21 = OpLabel
+%tint_zero_workgroup_memory = OpFunction %void None %18
+  %local_idx = OpFunctionParameter %uint
+         %22 = OpLabel
+         %24 = OpULessThan %bool %local_idx %uint_1
+               OpSelectionMerge %26 None
+               OpBranchConditional %24 %27 %26
+         %27 = OpLabel
+               OpStore %w %7
+               OpBranch %26
+         %26 = OpLabel
+               OpControlBarrier %uint_2 %uint_2 %uint_264
                OpReturn
                OpFunctionEnd
-        %zoo = OpFunction %void None %18
-         %23 = OpLabel
-         %24 = OpLoad %float %p
-         %26 = OpFMul %float %24 %float_2
-               OpStore %p %26
+    %no_uses = OpFunction %void None %31
+         %33 = OpLabel
                OpReturn
                OpFunctionEnd
-        %bar = OpFunction %void None %27
+        %zoo = OpFunction %void None %31
+         %35 = OpLabel
+         %36 = OpLoad %float %p
+         %38 = OpFMul %float %36 %float_2
+               OpStore %p %38
+               OpReturn
+               OpFunctionEnd
+        %bar = OpFunction %void None %39
           %a = OpFunctionParameter %float
           %b = OpFunctionParameter %float
-         %31 = OpLabel
+         %43 = OpLabel
                OpStore %p %a
                OpStore %w %b
-         %36 = OpAccessChain %_ptr_StorageBuffer_float %storages %uint_0 %34
-         %37 = OpAccessChain %_ptr_StorageBuffer_float %uniforms %uint_0 %uint_0
-         %38 = OpLoad %float %37
-               OpStore %36 %38
-         %39 = OpFunctionCall %void %zoo
+         %48 = OpAccessChain %_ptr_StorageBuffer_float %storages %uint_0 %46
+         %49 = OpAccessChain %_ptr_StorageBuffer_float %uniforms %uint_0 %uint_0
+         %50 = OpLoad %float %49
+               OpStore %48 %50
+         %51 = OpFunctionCall %void %zoo
                OpReturn
                OpFunctionEnd
-        %foo = OpFunction %void None %40
+        %foo = OpFunction %void None %52
         %a_0 = OpFunctionParameter %float
-         %43 = OpLabel
-         %44 = OpFunctionCall %void %bar %a_0 %float_2
-         %45 = OpFunctionCall %void %no_uses
+         %55 = OpLabel
+         %56 = OpFunctionCall %void %bar %a_0 %float_2
+         %57 = OpFunctionCall %void %no_uses
                OpReturn
                OpFunctionEnd
- %main_inner = OpFunction %void None %46
+ %main_inner = OpFunction %void None %18
 %local_invocation_index = OpFunctionParameter %uint
-         %49 = OpLabel
-               OpStore %w %7
-               OpControlBarrier %uint_2 %uint_2 %uint_264
-         %53 = OpFunctionCall %void %foo %float_1
+         %60 = OpLabel
+         %61 = OpFunctionCall %void %tint_zero_workgroup_memory %local_invocation_index
+         %62 = OpFunctionCall %void %foo %float_1
                OpReturn
                OpFunctionEnd
-       %main = OpFunction %void None %18
-         %56 = OpLabel
-         %58 = OpLoad %uint %local_invocation_index_1
-         %57 = OpFunctionCall %void %main_inner %58
+       %main = OpFunction %void None %31
+         %65 = OpLabel
+         %67 = OpLoad %uint %local_invocation_index_1
+         %66 = OpFunctionCall %void %main_inner %67
                OpReturn
                OpFunctionEnd

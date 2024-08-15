@@ -61,7 +61,7 @@ SourceFile::Type GetSourceFileType(const std::string& file) {
       case TAG2('g', 'o'):
         return SourceFile::SOURCE_GO;  // .go
       case TAG2('h', 'h'):
-        return SourceFile::SOURCE_H;   // .hh
+        return SourceFile::SOURCE_H;  // .hh
       case TAG2('m', 'm'):
         return SourceFile::SOURCE_MM;  // .mm
       case TAG2('r', 'c'):

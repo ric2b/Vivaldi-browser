@@ -68,8 +68,8 @@ std::string StatsReporterImpl::GetClientHints() {
       network::GetClientHintToNameMap().at(WebClientHintsType::kUAWoW64),
       base::Value(metadata.wow64));
   client_hints.Set(
-      network::GetClientHintToNameMap().at(WebClientHintsType::kUAFormFactor),
-      base::Value(metadata.SerializeFormFactor()));
+      network::GetClientHintToNameMap().at(WebClientHintsType::kUAFormFactors),
+      base::Value(metadata.SerializeFormFactors()));
 
   std::string result;
 

@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Пејзаж 12</translation>
 <translation id="1158503667684816647">Не приказуј поново потврду</translation>
 <translation id="1222195720020481779">Покретање инсталације...</translation>
+<translation id="1270785070369717623">Нажалост, ваша подешавања Opera GX прегледача нису доступна док тај прегледач ради. Да бисте увезли та подешавања у Vivaldi, сачувајте свој рад и затворите све прозоре Opera GX прегледача а затим кликните на Настави.</translation>
 <translation id="1276145862619442150">Брза бирања</translation>
 <translation id="1281950884873973195">Животиња 6</translation>
 <translation id="1411638389238344450">Пошаљи везу поштом</translation>
@@ -12,6 +13,7 @@
 <translation id="1462666970065907900">Да ли заиста желите да затворите овај прозор?</translation>
 <translation id="1480046233931937785">Заслуге</translation>
 <translation id="1526344461589023948">Дошло је до грешке приликом покушаја чувања преузетог ажурирања. Проверите да ли рачунар има довољно простора на диску и покушајте поново касније.</translation>
+<translation id="1635542496948266458">Промени профил</translation>
 <translation id="1657174850639146440">Чудовиште 9</translation>
 <translation id="1676595396635191120">Нови приватни прозор</translation>
 <translation id="1702758681952953055">Ако се грешка и даље јавља, пријавите је и укључите следеће детаље:</translation>
@@ -27,12 +29,14 @@
 <translation id="1985669426322966465">Ажурирање програма</translation>
 <translation id="2079036669923635404">Кликните овде да бисте ажурирали Vivaldi на верзију <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Дошло је до грешке приликом преузимања датотека за ажурирање. Проверите интернет везу и покушајте поново касније.</translation>
+<translation id="2226825946708954262">⚠ Настави са губитком података</translation>
 <translation id="2339641773402824483">Проверавање ажурирања...</translation>
 <translation id="2441056087170876076">Чудовиште 2</translation>
-<translation id="2444387452209867610">Убаци белешку</translation>
+<translation id="2444387452209867610">Уметни белешку</translation>
 <translation id="2486841023299517366">Животиња 4</translation>
 <translation id="2612127540243995147">Спремно за инсталацију. Vivaldi ће се затворити и поново покренути.</translation>
 <translation id="2613387515621326337">Прикажи веб сајт за ажурирање</translation>
+<translation id="2645477450146475243">Нажалост, ваша подешавања Opera прегледача нису доступна док тај прегледач ради. Да бисте увезли та подешавања у Vivaldi, сачувајте свој рад и затворите све прозоре Opera прегледача а затим кликните на Настави.</translation>
 <translation id="2647368062414805334">Нажалост, ваша подешавања Edge прегледача нису доступна док је тај прегледач отворен. Да бисте увезли та подешавања у Vivaldi, сачувајте свој рад и затворите све прозоре Edge прегледача. Затим кликните на Настави.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Животиња 3</translation>
@@ -41,11 +45,14 @@
 <translation id="2923448633003185837">Налепи и иди</translation>
 <translation id="2953943267837858202">Није дозвољена аутоматска репродукција видеа</translation>
 <translation id="2977472760057091832">Отвори везу у приватном прозору</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Отвори у новој картици</translation>
 <translation id="3027988479108856431">На жалост, подешавања Yandex прегледача нису доступна док је прегледач покренут. За увоз тих подешавања у Vivaldi, сачувајте ваш рад и затворите све прозоре Yandex прегледача. Након тога кликните на Настави.</translation>
 <translation id="3084011186245865060">Пејзаж 6</translation>
+<translation id="3085906383264247940">Opera (Beta)</translation>
 <translation id="3093931836425623631">Vivaldi су омогућили пројекат отвореног кода Chromium и други софтвер отвореног кода.</translation>
 <translation id="3127383884976966729">Животиња 7</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">Нови обележивач</translation>
 <translation id="3255747772218936245">Инсталирај ажурирање</translation>
 <translation id="3259769196742189631">Провери ваљаност на W3C</translation>
@@ -54,7 +61,6 @@
 <translation id="3334610655141903168">(без наслова)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> је тренутно најновија доступна верзија.</translation>
 <translation id="3383198080133834965">Имате најновију верзију!</translation>
-<translation id="3402602684546832928">Изаберите датотеку са обележивачима из Opera</translation>
 <translation id="3451317331714872347">Пејзаж 8</translation>
 <translation id="3457498675806041407">Потврда изласка</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> је већ инсталиран и активираће се након поновног покретања прегледача.</translation>
@@ -65,6 +71,7 @@
 <translation id="3588820906588687999">Отвори слику у новој картици</translation>
 <translation id="3601066750251199488">Чудовиште 3</translation>
 <translation id="3620979700683094848">Сајтови могу аутоматски да репродукују видео</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Нова верзија Vivaldi прегледача је доступна!</translation>
 <translation id="3708982624815781692">Преузимање је отказано.</translation>
 <translation id="3732157130969736834">Додај везу у обележиваче</translation>
@@ -76,6 +83,9 @@
 <translation id="3914946330804881301">Увезено из Opera</translation>
 <translation id="3921292902397893431">Чудовиште 8</translation>
 <translation id="3943857333388298514">Налепи</translation>
+<translation id="3974783668264968389">Vivaldi није могао да откључа ваше безбедно складиште кључева. Без складишта кључева, изгубићете сачуване податке за пријављивање, безбедне колачиће, а неке функције као што су синхронизација, пошта и календар ће престати да раде.
+
+     Изађите сада, откључајте или поправите складиште кључева, а затим покушајте поново. Ако заиста желите да наставите, кликните на поље за потврду и притисните дугме „Настави са губитком података”.</translation>
 <translation id="4005270918754737597">Прескочи ову верзију</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4074744496918018786">Отвори слику у приватном прозору</translation>
@@ -88,7 +98,6 @@
 <translation id="443008484043213881">Алати</translation>
 <translation id="4456211719108566931">Чудовиште 6</translation>
 <translation id="4512900838580567989">Отвори везу у новој картици у позадини</translation>
-<translation id="4515472507709384008">Opera 15+</translation>
 <translation id="4545097004879999966">Opera пошта</translation>
 <translation id="4548358047305717967">Отвори слику у новој картици у позадини</translation>
 <translation id="4582480609585453144">Отвори везу у картици у позадини</translation>
@@ -100,16 +109,17 @@
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> од <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Увезено брзо бирање</translation>
 <translation id="5092656712000637858">Додај страницу као веб панел</translation>
+<translation id="5106275083540628394">Дешифровање није успело: ризик од губитка података</translation>
 <translation id="5177818338935286353">Чудовиште 7</translation>
 <translation id="5213743983876949565">Животиња 1</translation>
 <translation id="5238244642230426581">Увезени обележивачи</translation>
 <translation id="527605719918376753">Искључи звук картице</translation>
 <translation id="5305569355661722298">Потврда затварања прозора</translation>
+<translation id="5322922669477407077">Opera (Developer)</translation>
 <translation id="5388358297987318779">Отвори слику</translation>
 <translation id="5416008465899576639">Нова верзија Vivaldi прегледача је доступна.</translation>
 <translation id="5497042274492038489">Потврда затварања прозора</translation>
 <translation id="5594602170491763400">Чудовиште 5</translation>
-<translation id="5615637589913244581">Opera 15+ (Бета)</translation>
 <translation id="5648110075441906505">Отвори слику у новом прозору</translation>
 <translation id="5656371807944747581">Грешка при ажурирању!</translation>
 <translation id="5732584064771442623">Доступан је Vivaldi <ph name="NEW_VERSION" /> (имате <ph name="OLD_VERSION" />). Да ли желите да преузмете сада?</translation>
@@ -120,8 +130,8 @@
 <translation id="6040143037577758943">Затвори</translation>
 <translation id="6229528619562190452">Кликните овде да бисте ажурирали Vivaldi.</translation>
 <translation id="6234173136417926046">Користи слику као позадину брзог бирања</translation>
-<translation id="630690498669249215">Датотека са обележивачима Opera прегледача</translation>
 <translation id="6339818817272922368">Локални налог</translation>
+<translation id="6398710281890660037">Обезбеди мој профил</translation>
 <translation id="6438786710866753178">Пејзаж 4</translation>
 <translation id="6477028720702061455">Изаберите фасциклу профила Opera прегледача за увоз</translation>
 <translation id="6510706699590490869">Ажурирај Vivaldi</translation>
@@ -131,11 +141,13 @@
 <translation id="6635049669875534328">Белешке о издању:</translation>
 <translation id="6693585104974197539">Изаберите фасциклу профила прегледача Edge за увоз</translation>
 <translation id="6726279523566323394">Изаберите фасциклу профила прегледача Brave за увоз</translation>
-<translation id="6804831687363620480">На жалост, подешавања Opera 15+ прегледача нису доступна док је прегледач покренут. За увоз тих подешавања у Vivaldi, сачувајте ваш рад и затворите све прозоре Opera 15+ прегледача. Након тога кликните на Настави.</translation>
 <translation id="6892812721183419409">Отвори везу као <ph name="USER" /></translation>
 <translation id="6896758677409633944">Копирај</translation>
+<translation id="6960139763942959188">Овај профил се тренутно небезбедно чува у нешифрованом формату. Vivaldi ће надоградити ваш профил на безбеднији шифровани формат. Требало би да изађете сада и направите резервну копију свог профила пре него што наставите.</translation>
 <translation id="7086554968911045110">Пејзаж 7</translation>
+<translation id="7099506190679014195">Надоградња безбедног складишта кључева</translation>
 <translation id="7111492742514999492">Пејзаж 9</translation>
+<translation id="7208252576848052204">Нажалост, ваша подешавања Arc прегледача нису доступна док тај прегледач ради. Да бисте увезли та подешавања у Vivaldi, сачувајте свој рад и затворите све прозоре Arc прегледача а затим кликните на Настави.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Покретање програма за ажурирање није успело. Проверите да ли рачунар има довољно меморије или простора на диску и покушајте поново касније.</translation>
 <translation id="7658239707568436148">Откажи</translation>
@@ -162,7 +174,6 @@
 <translation id="8562339533180097902">Затвори Vivaldi и инсталирај сада</translation>
 <translation id="8567452685425968223">Издвајање ажурирања...</translation>
 <translation id="8624587806981488221">&amp;Поново учитај слику</translation>
-<translation id="864444594187862076">Opera 15+ (Developer)</translation>
 <translation id="8651348004684669199">Додај активну картицу</translation>
 <translation id="8669345741879513971">Чудовиште 10</translation>
 <translation id="867544375504146191">Yandex</translation>
@@ -178,6 +189,7 @@
 <translation id="9048058608784130603">Ажурирање <ph name="VERSION" /> је на чекању</translation>
 <translation id="9048224371732578627">Дозвољена аутоматска репродукција видеа</translation>
 <translation id="9065203028668620118">Уреди</translation>
+<translation id="9090254883741610153">Желим да наставим</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Отвори слику као <ph name="USER" /></translation>
 <translation id="9157539936604258187">Отвори везу</translation>

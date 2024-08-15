@@ -93,12 +93,13 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "base/files/scoped_temp_dir.h"
-#include "chrome/browser/ash/login/users/scoped_test_user_manager.h"
+#include "chrome/browser/ash/login/users/chrome_user_manager_impl.h"
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/extensions/load_error_reporter.h"
 #include "chrome/browser/extensions/updater/chromeos_extension_cache_delegate.h"
 #include "chrome/browser/extensions/updater/extension_cache_impl.h"
 #include "chrome/browser/extensions/updater/local_extension_cache.h"
+#include "components/user_manager/scoped_user_manager.h"
 #endif
 
 using base::Time;
@@ -159,15 +160,14 @@ const char kFakeOAuth2Token[] = "ce n'est pas un jeton";
 // Extracts the integer value of the |authuser| query parameter. Returns 0 if
 // the parameter is not set.
 int GetAuthUserQueryValue(const GURL& url) {
-  std::string query_string = url.query();
-  url::Component query(0, query_string.length());
+  std::string_view query_piece = url.query_piece();
+  url::Component query(0, query_piece.length());
   url::Component key, value;
-  while (
-      url::ExtractQueryKeyValue(query_string.c_str(), &query, &key, &value)) {
-    std::string key_string = query_string.substr(key.begin, key.len);
+  while (url::ExtractQueryKeyValue(query_piece, &query, &key, &value)) {
+    std::string_view key_string = query_piece.substr(key.begin, key.len);
     if (key_string == kAuthUserQueryKey) {
       int user_index = 0;
-      base::StringToInt(query_string.substr(value.begin, value.len),
+      base::StringToInt(query_piece.substr(value.begin, value.len),
                         &user_index);
       return user_index;
     }
@@ -2315,7 +2315,8 @@ class ExtensionUpdaterTest : public testing::Test {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   ash::ScopedCrosSettingsTestHelper cros_settings_test_helper_;
-  ash::ScopedTestUserManager test_user_manager_;
+  user_manager::ScopedUserManager test_user_manager_{
+      ash::ChromeUserManagerImpl::CreateChromeUserManager()};
 #endif
 };
 

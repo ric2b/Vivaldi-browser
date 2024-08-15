@@ -5,11 +5,12 @@
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 
 #include <memory>
+#include <optional>
+#include <string>
 #include <vector>
 
 #include "base/barrier_closure.h"
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/functional/bind.h"
 #include "base/notreached.h"
 #include "base/run_loop.h"
@@ -42,6 +43,8 @@
 #include "components/sync/protocol/web_app_specifics.pb.h"
 #include "components/sync/test/mock_model_type_change_processor.h"
 #include "components/webapps/browser/install_result_code.h"
+#include "components/webapps/browser/installable/installable_metrics.h"
+#include "components/webapps/browser/uninstall_result_code.h"
 #include "components/webapps/common/web_app_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -64,7 +67,7 @@ using sync_pb::WebAppSpecifics_UserDisplayMode_UNSPECIFIED;
 
 void RemoveWebAppFromAppsList(AppsList* apps_list,
                               const webapps::AppId& app_id) {
-  base::EraseIf(*apps_list, [app_id](const std::unique_ptr<WebApp>& app) {
+  std::erase_if(*apps_list, [app_id](const std::unique_ptr<WebApp>& app) {
     return app->app_id() == app_id;
   });
 }
@@ -1034,13 +1037,16 @@ TEST_F(WebAppSyncBridgeTest, CommitUpdate_UpdateSyncApp) {
 }
 
 TEST_F(WebAppSyncBridgeTest, CommitUpdate_DeleteSyncApp) {
-  AppsList sync_apps = CreateAppsList("https://example.com/", 10);
+  const int kNumApps = 5;
+  AppsList sync_apps = CreateAppsList("https://example.com/", kNumApps);
   Registry registry;
   InsertAppsListIntoRegistry(&registry, sync_apps);
   database_factory().WriteRegistry(registry);
   StartWebAppProvider();
 
-  EXPECT_CALL(processor(), Put(_, _, _)).Times(0);
+  // Put() is called kNumApps times, since UninstallWebApp() calls Put() to
+  // update the `is_uninstalling` field.
+  EXPECT_CALL(processor(), Put(_, _, _)).Times(kNumApps);
   ON_CALL(processor(), Delete(_, _))
       .WillByDefault([&](const std::string& storage_key,
                          syncer::MetadataChangeList* metadata) {
@@ -1050,16 +1056,10 @@ TEST_F(WebAppSyncBridgeTest, CommitUpdate_DeleteSyncApp) {
         registry.erase(storage_key);
       });
 
-  base::test::TestFuture<bool> future;
-  {
-    ScopedRegistryUpdate update =
-        sync_bridge().BeginUpdate(future.GetCallback());
-
-    for (const std::unique_ptr<WebApp>& app : sync_apps) {
-      update->DeleteApp(app->app_id());
-    }
-  }
-  EXPECT_TRUE(future.Take());
+  base::test::TestFuture<const std::optional<std::string>&> final_callback;
+  fake_provider().scheduler().UninstallAllUserInstalledWebApps(
+      webapps::WebappUninstallSource::kSync, final_callback.GetCallback());
+  EXPECT_TRUE(final_callback.Wait());
 
   EXPECT_TRUE(sync_apps.empty());
   EXPECT_TRUE(IsRegistryEqual(registrar_registry(), registry,
@@ -1536,7 +1536,7 @@ class WebAppSyncBridgeTest_UserDisplayModeSplit
 TEST_P(WebAppSyncBridgeTest_UserDisplayModeSplit, SyncUpdateToUserDisplayMode) {
   GURL start_url = GURL("https://example.com/app");
   webapps::AppId app_id =
-      GenerateAppId(/*manifest_id_path=*/absl::nullopt, start_url);
+      GenerateAppId(/*manifest_id_path=*/std::nullopt, start_url);
 
   // Install an app.
   if (installed_before_sync()) {
@@ -1557,7 +1557,7 @@ TEST_P(WebAppSyncBridgeTest_UserDisplayModeSplit, SyncUpdateToUserDisplayMode) {
       WebApp* web_app = update->UpdateApp(app_id);
       DCHECK(web_app);
       if (IsChromeOs()) {
-        web_app->SetUserDisplayModeNonCrOS(local_other_platform_udm().value());
+        web_app->SetUserDisplayModeDefault(local_other_platform_udm().value());
       } else {
         web_app->SetUserDisplayModeCrOS(local_other_platform_udm().value());
       }
@@ -1578,7 +1578,7 @@ TEST_P(WebAppSyncBridgeTest_UserDisplayModeSplit, SyncUpdateToUserDisplayMode) {
     sync_proto.set_user_display_mode_cros(sync_cros_udm().value());
   }
   if (sync_non_cros_udm()) {
-    sync_proto.set_user_display_mode_non_cros(sync_non_cros_udm().value());
+    sync_proto.set_user_display_mode_default(sync_non_cros_udm().value());
   }
 
   EXPECT_FALSE(sync_bridge().ApplyIncrementalSyncChanges(
@@ -1596,7 +1596,7 @@ TEST_P(WebAppSyncBridgeTest_UserDisplayModeSplit, SyncUpdateToUserDisplayMode) {
   //// kSeparateUserDisplayModeForCrOS Disabled ////
 
   if (!flag_enabled()) {
-    EXPECT_EQ(app->user_display_mode(), app->user_display_mode_non_cros());
+    EXPECT_EQ(app->user_display_mode(), app->user_display_mode_default());
 
     // Expect to always overwrite local UDM state with non-CrOS sync data,
     // including treating absent/unspecified as standalone.
@@ -1653,9 +1653,9 @@ TEST_P(WebAppSyncBridgeTest_UserDisplayModeSplit, SyncUpdateToUserDisplayMode) {
   std::optional<UserDisplayMode> app_other_platform_udm;
   if (IsChromeOs()) {
     app_this_platform_udm = app->user_display_mode_cros();
-    app_other_platform_udm = app->user_display_mode_non_cros();
+    app_other_platform_udm = app->user_display_mode_default();
   } else {
-    app_this_platform_udm = app->user_display_mode_non_cros();
+    app_this_platform_udm = app->user_display_mode_default();
     app_other_platform_udm = app->user_display_mode_cros();
   }
   EXPECT_EQ(app->user_display_mode(), app_this_platform_udm);

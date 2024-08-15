@@ -7,7 +7,7 @@
 
 #import <Foundation/Foundation.h>
 
-#include "components/autofill/core/browser/ui/popup_types.h"
+#include "components/autofill/core/browser/filling_product.h"
 #include "components/autofill/core/common/unique_ids.h"
 
 @class FormSuggestion;
@@ -34,8 +34,8 @@
 // Enables or disables the previous button if any.
 @property(nonatomic) BOOL formInputPreviousButtonEnabled;
 
-// Type of the form suggestions.
-@property(nonatomic) autofill::PopupType suggestionType;
+// Main type of the form suggestions.
+@property(nonatomic) autofill::FillingProduct mainFillingProduct;
 
 // ID of the field that currently has focus.
 @property(nonatomic) autofill::FieldRendererId currentFieldId;
@@ -44,10 +44,19 @@
 // And form navigation buttons on iPhone (iPad already includes those).
 - (void)showAccessorySuggestions:(NSArray<FormSuggestion*>*)suggestions;
 
-// Invoked after the user taps the `manual fill` button.
+// Invoked after the user taps the "manual fill" button.
 - (void)manualFillButtonPressed:(UIButton*)button;
 
-// Preferred omnibox position was updated. `isBottomOmnibox`: whether the new
+// Invoked after the user taps the "password manual fill" button.
+- (void)passwordManualFillButtonPressed:(UIButton*)button;
+
+// Invoked after the user taps the "credit card manual fill" button.
+- (void)creditCardManualFillButtonPressed:(UIButton*)button;
+
+// Invoked after the user taps the "address manual fill" button.
+- (void)addressManualFillButtonPressed:(UIButton*)button;
+
+// Preferred omnibox position was updated. "isBottomOmnibox": whether the new
 // position is bottom omnibox.
 - (void)newOmniboxPositionIsBottom:(BOOL)isBottomOmnibox;
 

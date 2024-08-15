@@ -153,7 +153,7 @@ class DiscoveryE2ETest : public testing::Test {
   }
 
   void SetUpService(const discovery::Config& config) {
-    OSP_DCHECK(!dnssd_service_.get());
+    OSP_CHECK(!dnssd_service_);
     std::atomic_bool done{false};
     task_runner_->PostTask([this, &config, &done]() {
       dnssd_service_ = discovery::CreateDnsSdService(
@@ -168,14 +168,14 @@ class DiscoveryE2ETest : public testing::Test {
   }
 
   void StartDiscovery() {
-    OSP_DCHECK(dnssd_service_.get());
+    OSP_CHECK(dnssd_service_);
     task_runner_->PostTask([this]() { receiver_->StartDiscovery(); });
   }
 
   template <typename... RecordTypes>
   void UpdateRecords(RecordTypes... records) {
-    OSP_DCHECK(dnssd_service_.get());
-    OSP_DCHECK(publisher_.get());
+    OSP_CHECK(dnssd_service_);
+    OSP_CHECK(publisher_);
 
     std::vector<ReceiverInfo> record_set{std::move(records)...};
     for (ReceiverInfo& record : record_set) {
@@ -189,8 +189,8 @@ class DiscoveryE2ETest : public testing::Test {
 
   template <typename... RecordTypes>
   void PublishRecords(RecordTypes... records) {
-    OSP_DCHECK(dnssd_service_.get());
-    OSP_DCHECK(publisher_.get());
+    OSP_CHECK(dnssd_service_);
+    OSP_CHECK(publisher_);
 
     std::vector<ReceiverInfo> record_set{std::move(records)...};
     for (ReceiverInfo& record : record_set) {
@@ -204,7 +204,7 @@ class DiscoveryE2ETest : public testing::Test {
 
   template <typename... AtomicBoolPtrs>
   void WaitUntilSeen(bool should_be_seen, AtomicBoolPtrs... bools) {
-    OSP_DCHECK(dnssd_service_.get());
+    OSP_CHECK(dnssd_service_);
     std::vector<std::atomic_bool*> atomic_bools{bools...};
 
     int waiting_on = atomic_bools.size();
@@ -230,7 +230,7 @@ class DiscoveryE2ETest : public testing::Test {
 
   void CheckForClaimedIds(ReceiverInfo receiver_info,
                           std::atomic_bool* has_been_seen) {
-    OSP_DCHECK(dnssd_service_.get());
+    OSP_CHECK(dnssd_service_);
     task_runner_->PostTask(
         [this, info = std::move(receiver_info), has_been_seen]() mutable {
           CheckForClaimedIds(std::move(info), has_been_seen, 0);
@@ -239,7 +239,7 @@ class DiscoveryE2ETest : public testing::Test {
 
   void CheckForPublishedService(ReceiverInfo receiver_info,
                                 std::atomic_bool* has_been_seen) {
-    OSP_DCHECK(dnssd_service_.get());
+    OSP_CHECK(dnssd_service_);
     task_runner_->PostTask(
         [this, info = std::move(receiver_info), has_been_seen]() mutable {
           CheckForPublishedService(std::move(info), has_been_seen, 0, true);
@@ -251,7 +251,7 @@ class DiscoveryE2ETest : public testing::Test {
   // if it exists, so waits throughout this file can be removed.
   void CheckNotPublishedService(ReceiverInfo receiver_info,
                                 std::atomic_bool* has_been_seen) {
-    OSP_DCHECK(dnssd_service_.get());
+    OSP_CHECK(dnssd_service_.get());
     task_runner_->PostTask(
         [this, info = std::move(receiver_info), has_been_seen]() mutable {
           CheckForPublishedService(std::move(info), has_been_seen, 0, false);

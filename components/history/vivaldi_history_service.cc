@@ -36,22 +36,37 @@ base::CancelableTaskTracker::TaskId HistoryService::VisitSearch(
 }
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-base::CancelableTaskTracker::TaskId
-HistoryService::QueryDetailedHistoryWStatement(
-    const char* sql_statement,
-    const std::string& search_string,
-    int max_hits,
-    DetailedHistoryCallback callback,
+base::CancelableTaskTracker::TaskId HistoryService::GetVivaldiTypedHistory(
+    const std::string query,
+    KeywordID prefix_keyword,
+    int max_results,
+    TypedHistoryCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "History service being called after cleanup";
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
-      base::BindOnce(&HistoryBackend::QueryDetailedHistoryWStatement,
-                     history_backend_.get(), sql_statement, search_string,
-                     max_hits),
+      base::BindOnce(&HistoryBackend::QueryTypedHistory, history_backend_.get(),
+                     query, prefix_keyword, max_results),
       std::move(callback));
 }
+
+base::CancelableTaskTracker::TaskId HistoryService::GetVivaldiDetailedHistory(
+    const std::string query,
+    int max_results,
+    DetailUrlResultsCallback callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "History service being called after cleanup";
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  return tracker->PostTaskAndReplyWithResult(
+      backend_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&HistoryBackend::GetVivaldiDetailedHistory,
+                     history_backend_.get(), query, max_results),
+      std::move(callback));
+}
+
 #endif
 
 }  // namespace history

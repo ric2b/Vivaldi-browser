@@ -38,7 +38,7 @@ ApplicationAgent::ApplicationAgent(
 }
 
 ApplicationAgent::~ApplicationAgent() {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 
   idle_screen_app_ = nullptr;  // Prevent re-launching the idle screen app.
   SwitchToApplication({}, {}, nullptr);
@@ -48,17 +48,17 @@ ApplicationAgent::~ApplicationAgent() {
 
 void ApplicationAgent::RegisterApplication(Application* app,
                                            bool auto_launch_for_idle_screen) {
-  OSP_DCHECK(app);
+  OSP_CHECK(app);
 
   for (const std::string& app_id : app->GetAppIds()) {
-    OSP_DCHECK(!app_id.empty());
+    OSP_CHECK(!app_id.empty());
     const auto insert_result = registered_applications_.insert({app_id, app});
     // The insert must not fail (prior entry for same key).
-    OSP_DCHECK(insert_result.second);
+    OSP_CHECK(insert_result.second);
   }
 
   if (auto_launch_for_idle_screen) {
-    OSP_DCHECK(!idle_screen_app_);
+    OSP_CHECK(!idle_screen_app_);
     idle_screen_app_ = app;
     // Launch the idle screen app, if no app was running.
     if (!launched_app_) {
@@ -108,7 +108,7 @@ void ApplicationAgent::OnMessage(VirtualConnectionRouter* router,
   if (message_port_.GetSocketId() == ToCastSocketId(socket) &&
       !message_port_.source_id().empty() &&
       message_port_.source_id() == message.destination_id()) {
-    OSP_DCHECK(message_port_.source_id() != kPlatformReceiverId);
+    OSP_CHECK_NE(message_port_.source_id(), kPlatformReceiverId);
     message_port_.OnMessage(router, socket, std::move(message));
     return;
   }

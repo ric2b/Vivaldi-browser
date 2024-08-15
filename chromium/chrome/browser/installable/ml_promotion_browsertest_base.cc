@@ -4,12 +4,16 @@
 
 #include "chrome/browser/installable/ml_promotion_browsertest_base.h"
 
+#include <memory>
 #include <optional>
 #include <string>
 
 #include "base/functional/callback_helpers.h"
+#include "base/test/gmock_callback_support.h"
 #include "base/test/test_future.h"
+#include "components/segmentation_platform/public/constants.h"
 #include "components/segmentation_platform/public/testing/mock_segmentation_platform_service.h"
+#include "components/webapps/browser/webapps_client.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_mock_cert_verifier.h"
@@ -68,6 +72,26 @@ void MLPromotionBrowserTestBase::SetUpOnMainThread() {
   host_resolver()->AddRule("*", "127.0.0.1");
   ASSERT_TRUE(https_server()->Start());
 
+  // Create default responses for the ML system.
+  WebappsClient* client = WebappsClient::Get();
+  service_override_ = client->OverrideSegmentationServiceForTesting(
+      std::make_unique<
+          segmentation_platform::MockSegmentationPlatformService>());
+  segmentation_platform::ClassificationResult result(
+      segmentation_platform::PredictionStatus::kSucceeded);
+  result.ordered_labels.push_back("DontShow");
+  ON_CALL(*GetMockSegmentation(),
+          GetClassificationResult(
+              segmentation_platform::kWebAppInstallationPromoKey, testing::_,
+              testing::_, base::test::IsNotNullCallback()))
+      .WillByDefault(base::test::RunOnceCallbackRepeatedly<3>(result));
+  ON_CALL(*GetMockSegmentation(),
+          CollectTrainingData(
+              segmentation_platform::proto::SegmentId::
+                  OPTIMIZATION_TARGET_WEB_APP_INSTALLATION_PROMO,
+              testing::_, testing::_, base::test::IsNotNullCallback()))
+      .WillByDefault(base::test::RunOnceCallbackRepeatedly<3>(true));
+
 // TODO(b/287255120) : Build functionalities for Android.
 #if !BUILDFLAG(IS_ANDROID)
   web_app::test::WaitUntilReady(
@@ -89,7 +113,8 @@ bool MLPromotionBrowserTestBase::InstallAppForCurrentWebContents(
   provider->scheduler().FetchManifestAndInstall(
       WebappInstallSource::OMNIBOX_INSTALL_ICON, web_contents()->GetWeakPtr(),
       base::BindOnce(web_app::test::TestAcceptDialogCallback),
-      install_future.GetCallback(), /*use_fallback=*/false);
+      install_future.GetCallback(),
+      web_app::FallbackBehavior::kUseFallbackInfoWhenNotInstallable);
 
   bool success = install_future.Wait();
   if (!success) {
@@ -153,17 +178,16 @@ bool MLPromotionBrowserTestBase::NavigateAndAwaitInstallabilityCheck(
 }
 
 segmentation_platform::MockSegmentationPlatformService*
-MLPromotionBrowserTestBase::GetMockSegmentation(
-    content::WebContents* custom_web_contents) {
-  if (!custom_web_contents) {
-    custom_web_contents = web_contents();
-  }
+MLPromotionBrowserTestBase::GetMockSegmentation() {
 #if BUILDFLAG(IS_ANDROID)
   // TODO(b/287255120) : Build functionalities for Android.
   return nullptr;
 #else
-  return TestAppBannerManagerDesktop::FromWebContents(custom_web_contents)
-      ->GetMockSegmentationPlatformService();
+  // Since we've mocked out the segmentation platform, no browser context is
+  // needed.
+  return static_cast<segmentation_platform::MockSegmentationPlatformService*>(
+      WebappsClient::Get()->GetSegmentationPlatformService(
+          /*browsing_context=*/nullptr));
 #endif  // BUILDFLAG(IS_ANDROID)
 }
 

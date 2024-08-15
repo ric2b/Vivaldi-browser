@@ -10,6 +10,7 @@
 #include "chrome/browser/extensions/api/history/history_api.h"
 #include "chrome/browser/profiles/profile.h"
 #include "db/vivaldi_history_database.h"
+#include "db/vivaldi_history_types.h"
 #include "extensions/schema/history_private.h"
 #include "ui/base/page_transition_types.h"
 
@@ -134,7 +135,8 @@ class HistoryPrivateVisitSearchFunction : public HistoryFunctionWithCallback {
   void VisitsComplete(const history::Visit::VisitsList& visit_list);
 };
 
-class HistoryPrivateGetTypedHistoryFunction : public HistoryFunction {
+class HistoryPrivateGetTypedHistoryFunction
+    : public HistoryFunctionWithCallback {
  public:
   DECLARE_EXTENSION_FUNCTION("historyPrivate.getTypedHistory",
                              HISTORYPRIVATE_GETTYPEDURLSANDSEARCHES)
@@ -142,9 +144,11 @@ class HistoryPrivateGetTypedHistoryFunction : public HistoryFunction {
  private:
   ~HistoryPrivateGetTypedHistoryFunction() override = default;
   ExtensionFunction::ResponseAction Run() override;
+  void TypedHistorySearchComplete(const history::TypedUrlResults& results);
 };
 
-class HistoryPrivateGetDetailedHistoryFunction : public HistoryFunctionWithCallback {
+class HistoryPrivateGetDetailedHistoryFunction
+    : public HistoryFunctionWithCallback {
  public:
   DECLARE_EXTENSION_FUNCTION("historyPrivate.getDetailedHistory",
                              HISTORYPRIVATE_GETDETAILEDHISTORY)
@@ -153,8 +157,7 @@ class HistoryPrivateGetDetailedHistoryFunction : public HistoryFunctionWithCallb
   ~HistoryPrivateGetDetailedHistoryFunction() override {}
   ExtensionFunction::ResponseAction Run() override;
   // Callback for the history function to provide results.
-  void SearchComplete(
-      const history::DetailedHistory::DetailedHistoryList& results);
+  void SearchComplete(const history::DetailedUrlResults& results);
 };
 
 }  // namespace extensions

@@ -1029,8 +1029,8 @@ Value RunPrintStackTrace(Scope* scope,
   std::string location_str = function->GetRange().begin().Describe(false);
   std::string toolchain =
       scope->settings()->toolchain_label().GetUserVisibleName(false);
-  std::string output =
-      "print_stack_trace() initiated at:  " + location_str + "  using: " + toolchain;
+  std::string output = "print_stack_trace() initiated at:  " + location_str +
+                       "  using: " + toolchain;
   output.push_back('\n');
 
   for (const auto& entry : scope->GetTemplateInvocationEntries()) {
@@ -1651,6 +1651,8 @@ struct FunctionInfoInitializer {
     INSERT_FUNCTION(ExecScript, false)
     INSERT_FUNCTION(FilterExclude, false)
     INSERT_FUNCTION(FilterInclude, false)
+    INSERT_FUNCTION(FilterLabelsInclude, false)
+    INSERT_FUNCTION(FilterLabelsExclude, false)
     INSERT_FUNCTION(ForEach, false)
     INSERT_FUNCTION(ForwardVariablesFrom, false)
     INSERT_FUNCTION(GetEnv, false)
@@ -1658,6 +1660,7 @@ struct FunctionInfoInitializer {
     INSERT_FUNCTION(GetPathInfo, false)
     INSERT_FUNCTION(GetTargetOutputs, false)
     INSERT_FUNCTION(Import, false)
+    INSERT_FUNCTION(LabelMatches, false)
     INSERT_FUNCTION(NotNeeded, false)
     INSERT_FUNCTION(Pool, false)
     INSERT_FUNCTION(Print, false)

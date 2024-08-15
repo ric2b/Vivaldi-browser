@@ -113,6 +113,7 @@ class MockSeaPenProvider
               (mojo::PendingReceiver<
                   ::ash::personalization_app::mojom::SeaPenProvider> receiver),
               (override));
+  bool IsEligibleForSeaPen() override { return true; }
   // ::ash::personalization_app::mojom::SeaPenProvider:
   MOCK_METHOD(void,
               SearchWallpaper,
@@ -124,8 +125,7 @@ class MockSeaPenProvider
               (override));
   MOCK_METHOD(void,
               SelectRecentSeaPenImage,
-              (const base::FilePath& file_path,
-               SelectRecentSeaPenImageCallback),
+              (uint32_t id, SelectRecentSeaPenImageCallback),
               (override));
   MOCK_METHOD(void,
               GetRecentSeaPenImages,
@@ -133,13 +133,11 @@ class MockSeaPenProvider
               (override));
   MOCK_METHOD(void,
               GetRecentSeaPenImageThumbnail,
-              (const base::FilePath& file_path,
-               GetRecentSeaPenImageThumbnailCallback),
+              (uint32_t id, GetRecentSeaPenImageThumbnailCallback),
               (override));
   MOCK_METHOD(void,
               DeleteRecentSeaPenImage,
-              (const base::FilePath& file_path,
-               DeleteRecentSeaPenImageCallback),
+              (uint32_t id, DeleteRecentSeaPenImageCallback),
               (override));
   MOCK_METHOD(void,
               OpenFeedbackDialog,

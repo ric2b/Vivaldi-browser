@@ -500,9 +500,6 @@ def RenameToSha1(output):
 
 
 def main():
-    if sys.version_info[0] < 3:
-        print('This script requires Python 3')
-        sys.exit(10)
     usage = 'usage: %prog [options] 2022'
     parser = optparse.OptionParser(usage)
     parser.add_option('-w',

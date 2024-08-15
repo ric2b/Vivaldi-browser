@@ -19,7 +19,12 @@ class AddressFieldParserTest
     : public FormFieldParserTestBase,
       public ::testing::TestWithParam<PatternProviderFeatureState> {
  public:
-  AddressFieldParserTest() : FormFieldParserTestBase(GetParam()) {}
+  AddressFieldParserTest() : FormFieldParserTestBase(GetParam()) {
+    default_features.InitWithFeatures({features::kAutofillUseI18nAddressModel,
+                                       features::kAutofillUseBRAddressModel,
+                                       features::kAutofillUseINAddressModel},
+                                      {});
+  }
   AddressFieldParserTest(const AddressFieldParserTest&) = delete;
   AddressFieldParserTest& operator=(const AddressFieldParserTest&) = delete;
 
@@ -29,8 +34,7 @@ class AddressFieldParserTest
     return AddressFieldParser::Parse(context, scanner);
   }
 
-  base::test::ScopedFeatureList default_features{
-      features::kAutofillUseI18nAddressModel};
+  base::test::ScopedFeatureList default_features;
 };
 
 INSTANTIATE_TEST_SUITE_P(
@@ -39,12 +43,12 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::ValuesIn(PatternProviderFeatureState::All()));
 
 TEST_P(AddressFieldParserTest, Empty) {
-  ClassifyAndVerify(ParseResult::NOT_PARSED);
+  ClassifyAndVerify(ParseResult::kNotParsed);
 }
 
 TEST_P(AddressFieldParserTest, NonParse) {
   AddTextFormFieldData("", "", UNKNOWN_TYPE);
-  ClassifyAndVerify(ParseResult::NOT_PARSED);
+  ClassifyAndVerify(ParseResult::kNotParsed);
 }
 
 TEST_P(AddressFieldParserTest, ParseOneLineAddress) {
@@ -95,7 +99,7 @@ TEST_P(AddressFieldParserTest,
   AddTextFormFieldData("house-number", "House number",
                        ADDRESS_HOME_HOUSE_NUMBER);
   AddTextFormFieldData("apartment", "apartment", ADDRESS_HOME_APT_NUM);
-  ClassifyAndVerify(ParseResult::PARSED, GeoIpCountryCode("XX"),
+  ClassifyAndVerify(ParseResult::kParsed, GeoIpCountryCode("XX"),
                     LanguageCode("en"));
 }
 
@@ -134,7 +138,7 @@ TEST_P(AddressFieldParserTest, NotParseStreetNameWithoutHouseNumber) {
 // |ADDRESS_HOME_STREET_NAME| is absent.
 TEST_P(AddressFieldParserTest, NotParseHouseNumberWithoutStreetName) {
   AddTextFormFieldData("house-number", "House number", UNKNOWN_TYPE);
-  ClassifyAndVerify(ParseResult::NOT_PARSED);
+  ClassifyAndVerify(ParseResult::kNotParsed);
 }
 
 // Tests that the dependent locality is correctly classified with
@@ -157,7 +161,7 @@ TEST_P(AddressFieldParserTest, ParseLandmark) {
       features::kAutofillEnableSupportForLandmark};
 
   AddTextFormFieldData("landmark", "Landmark", ADDRESS_HOME_LANDMARK);
-  ClassifyAndVerify(ParseResult::PARSED, GeoIpCountryCode("BR"),
+  ClassifyAndVerify(ParseResult::kParsed, GeoIpCountryCode("BR"),
                     LanguageCode("pt"));
 }
 
@@ -165,20 +169,23 @@ TEST_P(AddressFieldParserTest, ParseLandmark) {
 TEST_P(AddressFieldParserTest, ParseBetweenStreets) {
   // TODO(crbug.com/1441904): Remove once launched.
   base::test::ScopedFeatureList enabled;
-  enabled.InitAndEnableFeature(
-      features::kAutofillEnableSupportForBetweenStreets);
+  enabled.InitWithFeatures({features::kAutofillEnableSupportForBetweenStreets,
+                            features::kAutofillUseMXAddressModel},
+                           {});
 
   AddTextFormFieldData("entre-calles", "Entre calles",
                        ADDRESS_HOME_BETWEEN_STREETS);
-  ClassifyAndVerify(ParseResult::PARSED, GeoIpCountryCode("MX"),
+  ClassifyAndVerify(ParseResult::kParsed, GeoIpCountryCode("MX"),
                     LanguageCode("es"));
 }
 
 // Tests that multiple between streets field are correctly classified.
 TEST_P(AddressFieldParserTest, ParseBetweenStreetsLines) {
   // TODO(crbug.com/1441904): Remove once launched.
-  base::test::ScopedFeatureList scoped_feature_list{
-      features::kAutofillEnableSupportForBetweenStreets};
+  base::test::ScopedFeatureList enabled;
+  enabled.InitWithFeatures({features::kAutofillEnableSupportForBetweenStreets,
+                            features::kAutofillUseMXAddressModel},
+                           {});
 
   std::vector<std::pair<std::pair<std::string, std::string>,
                         std::pair<std::string, std::string>>>
@@ -197,7 +204,7 @@ TEST_P(AddressFieldParserTest, ParseBetweenStreetsLines) {
                          ADDRESS_HOME_BETWEEN_STREETS_1);
     AddTextFormFieldData(second_field.first, second_field.second,
                          ADDRESS_HOME_BETWEEN_STREETS_2);
-    ClassifyAndVerify(ParseResult::PARSED, GeoIpCountryCode("MX"),
+    ClassifyAndVerify(ParseResult::kParsed, GeoIpCountryCode("MX"),
                       LanguageCode("es"));
   }
 }
@@ -206,21 +213,25 @@ TEST_P(AddressFieldParserTest, ParseBetweenStreetsLines) {
 TEST_P(AddressFieldParserTest, ParseAdminLevel2) {
   // TODO(crbug.com/1441904): Remove once launched.
   base::test::ScopedFeatureList enabled;
-  enabled.InitAndEnableFeature(features::kAutofillEnableSupportForAdminLevel2);
+  enabled.InitWithFeatures({features::kAutofillEnableSupportForAdminLevel2,
+                            features::kAutofillUseMXAddressModel},
+                           {});
 
   AddTextFormFieldData("municipio", "Municipio", ADDRESS_HOME_ADMIN_LEVEL2);
-  ClassifyAndVerify(ParseResult::PARSED, GeoIpCountryCode("MX"),
+  ClassifyAndVerify(ParseResult::kParsed, GeoIpCountryCode("MX"),
                     LanguageCode("es"));
 }
 
 // Tests that overflow field is correctly classified.
 TEST_P(AddressFieldParserTest, ParseOverflow) {
   // TODO(crbug.com/1441904): Remove once launched.
-  base::test::ScopedFeatureList enabled(
-      features::kAutofillEnableSupportForAddressOverflow);
+  base::test::ScopedFeatureList enabled;
+  enabled.InitWithFeatures({features::kAutofillEnableSupportForAddressOverflow,
+                            features::kAutofillUseBRAddressModel},
+                           {});
 
   AddTextFormFieldData("complemento", "Complemento", ADDRESS_HOME_OVERFLOW);
-  ClassifyAndVerify(ParseResult::PARSED, GeoIpCountryCode("BR"),
+  ClassifyAndVerify(ParseResult::kParsed, GeoIpCountryCode("BR"),
                     LanguageCode("pt"));
 }
 
@@ -231,12 +242,13 @@ TEST_P(AddressFieldParserTest, ParseOverflowAndLandmark) {
   features.InitWithFeatures(
       /*enabled_features=*/
       {features::kAutofillEnableSupportForAddressOverflow,
-       features::kAutofillEnableSupportForAddressOverflowAndLandmark},
+       features::kAutofillEnableSupportForAddressOverflowAndLandmark,
+       features::kAutofillUseBRAddressModel},
       /*disabled_features=*/{});
 
   AddTextFormFieldData("additional_info", "Complemento e ponto de referência",
                        ADDRESS_HOME_OVERFLOW_AND_LANDMARK);
-  ClassifyAndVerify(ParseResult::PARSED, GeoIpCountryCode("BR"),
+  ClassifyAndVerify(ParseResult::kParsed, GeoIpCountryCode("BR"),
                     LanguageCode("pt"));
 }
 
@@ -258,7 +270,7 @@ TEST_P(AddressFieldParserTest, ParseZip) {
 TEST_P(AddressFieldParserTest, ParseZipFileExtension) {
   AddTextFormFieldData("filename", "Supported formats: .zip, .rar",
                        UNKNOWN_TYPE);
-  ClassifyAndVerify(ParseResult::NOT_PARSED);
+  ClassifyAndVerify(ParseResult::kNotParsed);
 }
 
 TEST_P(AddressFieldParserTest, ParseStateAndZipOneLabel) {
@@ -292,6 +304,7 @@ TEST_P(AddressFieldParserTest,
           features::kAutofillEnableSupportForLandmark,
           features::kAutofillEnableSupportForBetweenStreets,
           features::kAutofillEnableSupportForAdminLevel2,
+          features::kAutofillUseMXAddressModel,
       },
       {});
 
@@ -306,7 +319,7 @@ TEST_P(AddressFieldParserTest,
                        ADDRESS_HOME_BETWEEN_STREETS);
   AddTextFormFieldData("municipio", "Municipio", ADDRESS_HOME_ADMIN_LEVEL2);
   AddTextFormFieldData("complemento", "Complemento", ADDRESS_HOME_OVERFLOW);
-  ClassifyAndVerify(ParseResult::PARSED, GeoIpCountryCode("MX"),
+  ClassifyAndVerify(ParseResult::kParsed, GeoIpCountryCode("MX"),
                     LanguageCode("es"));
 }
 
@@ -336,14 +349,14 @@ TEST_P(AddressFieldParserTest, ParseTurkishCityStateWithLabelPrecedence) {
 
   AddTextFormFieldData("city", "Il", ADDRESS_HOME_STATE);
   AddTextFormFieldData("county", "Ilce", ADDRESS_HOME_CITY);
-  ClassifyAndVerify(ParseResult::PARSED, GeoIpCountryCode("TR"),
+  ClassifyAndVerify(ParseResult::kParsed, GeoIpCountryCode("TR"),
                     LanguageCode("tr"));
 }
 
 // Tests that address name is not misclassified as address.
 TEST_P(AddressFieldParserTest, NotParseAddressName_TR) {
   AddTextFormFieldData("address", "Adres Başlığı", UNKNOWN_TYPE);
-  ClassifyAndVerify(ParseResult::NOT_PARSED, GeoIpCountryCode("TR"),
+  ClassifyAndVerify(ParseResult::kNotParsed, GeoIpCountryCode("TR"),
                     LanguageCode("tr"));
 }
 
@@ -351,7 +364,7 @@ TEST_P(AddressFieldParserTest, NotParseAddressName_TR) {
 // field mentions the word city.
 TEST_P(AddressFieldParserTest, NotParseAddressName_BR) {
   AddTextFormFieldData("-", "nombre de la dirección, city", UNKNOWN_TYPE);
-  ClassifyAndVerify(ParseResult::NOT_PARSED, GeoIpCountryCode("BR"),
+  ClassifyAndVerify(ParseResult::kNotParsed, GeoIpCountryCode("BR"),
                     LanguageCode("es"));
 }
 
@@ -359,7 +372,7 @@ TEST_P(AddressFieldParserTest, NotParseAddressName_BR) {
 // as |ADDRESS_HOME_LINE1|.
 TEST_P(AddressFieldParserTest, ParseAddressComponentsSequenceAsAddressLine1) {
   AddTextFormFieldData("detail", "Улица, дом, квартира", ADDRESS_HOME_LINE1);
-  ClassifyAndVerify(ParseResult::PARSED, GeoIpCountryCode("RU"),
+  ClassifyAndVerify(ParseResult::kParsed, GeoIpCountryCode("RU"),
                     LanguageCode("ru"));
 }
 
@@ -369,7 +382,7 @@ TEST_P(AddressFieldParserTest, ParseAddressComponentsSequenceAsStreetAddress) {
   AddFormFieldData(FormControlType::kTextArea, "detail",
                    "Mahalle, sokak, cadde ve diğer bilgilerinizi girin",
                    ADDRESS_HOME_STREET_ADDRESS);
-  ClassifyAndVerify(ParseResult::PARSED, GeoIpCountryCode("TR"),
+  ClassifyAndVerify(ParseResult::kParsed, GeoIpCountryCode("TR"),
                     LanguageCode("tr"));
 }
 

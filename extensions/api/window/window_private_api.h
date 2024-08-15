@@ -6,6 +6,7 @@
 #include "extensions/browser/extension_function.h"
 #include "extensions/schema/window_private.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/gfx/native_widget_types.h"
 
 class Browser;
 class Profile;
@@ -115,6 +116,23 @@ class WindowPrivateIsOnScreenWithNotchFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   bool IsWindowOnScreenWithNotch(VivaldiBrowserWindow* window);
+};
+
+class WindowPrivateSetControlButtonsPaddingFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("windowPrivate.setControlButtonsPadding",
+                             WINDOW_PRIVATE_SET_CONTROL_BUTTONS_PADDING)
+
+  WindowPrivateSetControlButtonsPaddingFunction() = default;
+
+ protected:
+  ~WindowPrivateSetControlButtonsPaddingFunction() override = default;
+
+ private:
+  ResponseAction Run() override;
+
+  void RequestChange(gfx::NativeWindow window,
+                     vivaldi::window_private::ControlButtonsPadding padding);
 };
 
 }  // namespace extensions

@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_WEB_CONTENTS_WEB_CONTENTS_VIEW_DRAG_SECURITY_INFO_H_
 #define CONTENT_BROWSER_WEB_CONTENTS_WEB_CONTENTS_VIEW_DRAG_SECURITY_INFO_H_
 
+#include "base/memory/raw_ptr.h"
 #include "content/browser/site_instance_group.h"
 
 namespace content {
@@ -56,6 +57,10 @@ class WebContentsViewDragSecurityInfo {
   // A boolean to hold the accessibility value retrieved from the `DropData`.
   // See https://crbug.com/1264873.
   bool image_accessible_from_frame_ = true;
+
+  // Vivaldi additions for checking target and source webcontents and see if
+  // they are WebViewGuests.
+  raw_ptr<RenderWidgetHostImpl> source_rwh_;
 };
 
 }  // namespace content

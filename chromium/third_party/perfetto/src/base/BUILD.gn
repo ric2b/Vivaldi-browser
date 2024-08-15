@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import("//build_overrides/build.gni")
 import("../../gn/gen_perfetto_version_header.gni")
 import("../../gn/perfetto.gni")
 import("../../gn/perfetto_component.gni")
@@ -47,6 +46,7 @@ perfetto_component("base") {
     "paged_memory.cc",
     "periodic_task.cc",
     "pipe.cc",
+    "scoped_mmap.cc",
     "status.cc",
     "string_splitter.cc",
     "string_utils.cc",
@@ -202,6 +202,7 @@ perfetto_unittest_source_set("unittests") {
     "paged_memory_unittest.cc",
     "periodic_task_unittest.cc",
     "scoped_file_unittest.cc",
+    "scoped_mmap_unittest.cc",
     "small_vector_unittest.cc",
     "status_or_unittest.cc",
     "status_unittest.cc",
@@ -232,7 +233,7 @@ perfetto_unittest_source_set("unittests") {
     ]
   }
   if (is_fuchsia) {
-    deps += [ "//third_party/fuchsia-sdk/sdk/pkg/fdio" ]
+    deps += [ "//third_party/fuchsia-sdk/sdk/pkg/fdio" ]  # nogncheck
   }
   if (perfetto_build_standalone || perfetto_build_with_android) {
     sources += [ "unix_socket_unittest.cc" ]
@@ -260,8 +261,6 @@ if (enable_perfetto_benchmarks) {
       "../../gn:default_deps",
     ]
     if (perfetto_benchmark_3p_libs_prefix != "") {
-      configs -= [ "//gn/standalone:c++11" ]
-      configs += [ "//gn/standalone:c++17" ]
       defines = [ "PERFETTO_HASH_MAP_COMPARE_THIRD_PARTY_LIBS" ]
       cflags = [ "-isystem${perfetto_benchmark_3p_libs_prefix}/include" ]
       libs = [

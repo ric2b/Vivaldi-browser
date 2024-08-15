@@ -206,7 +206,7 @@ void Resources::OnLoadFinished(base::Value* destination,
 }
 
 #if !BUILDFLAG(IS_IOS)
-absl::optional<std::string> Resources::GetRedirect(
+std::optional<std::string> Resources::GetRedirect(
     const std::string& name,
     flat::ResourceType resource_type) const {
   // If resources aren't yet loaded, then we'll just block the request.
@@ -214,7 +214,7 @@ absl::optional<std::string> Resources::GetRedirect(
       resource_type == flat::ResourceType_WEBSOCKET ||
       resource_type == flat::ResourceType_WEBRTC ||
       resource_type == flat::ResourceType_PING)
-    return absl::nullopt;
+    return std::nullopt;
 
   base::StringPiece actual_name(name);
   auto* actual_name_it = kAliasMap.find(name);
@@ -224,23 +224,23 @@ absl::optional<std::string> Resources::GetRedirect(
   if (actual_name == "empty") {
     auto* mimetype_it = kMimetypeForEmpty.find(resource_type);
     if (mimetype_it == kMimetypeForEmpty.end())
-      return absl::nullopt;
+      return std::nullopt;
     return std::string("data:") + std::string(mimetype_it->second);
   }
 
   const std::string* resource =
       redirectable_resources_.GetDict().FindString(actual_name);
   if (!resource)
-    return absl::nullopt;
+    return std::nullopt;
 
   size_t extension_separator_position = actual_name.find_last_of('.');
   if (extension_separator_position == base::StringPiece::npos)
-    return absl::nullopt;
+    return std::nullopt;
 
   auto* mimetype_it = kMimeTypeForExtension.find(
       actual_name.substr(extension_separator_position));
   if (mimetype_it == kMimeTypeForExtension.end())
-    return absl::nullopt;
+    return std::nullopt;
 
   return std::string("data:") + std::string(mimetype_it->second) +
          base::EscapeUrlEncodedData(*resource, false);

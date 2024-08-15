@@ -2,6 +2,7 @@
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   uvec3 inner;
+  uint pad;
 } prevent_dce;
 
 void reverseBits_a6ccd4() {
@@ -25,9 +26,11 @@ void main() {
 }
 #version 310 es
 precision highp float;
+precision highp int;
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   uvec3 inner;
+  uint pad;
 } prevent_dce;
 
 void reverseBits_a6ccd4() {
@@ -48,6 +51,7 @@ void main() {
 
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   uvec3 inner;
+  uint pad;
 } prevent_dce;
 
 void reverseBits_a6ccd4() {

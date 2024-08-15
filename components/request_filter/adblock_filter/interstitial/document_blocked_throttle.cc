@@ -31,7 +31,7 @@ DocumentBlockedThrottle::WillFailRequest() {
   auto* service = RuleServiceFactory::GetForBrowserContext(
       web_contents->GetBrowserContext());
 
-  absl::optional<RuleGroup> blocking_group;
+  std::optional<RuleGroup> blocking_group;
   if (service->IsDocumentBlocked(RuleGroup::kTrackingRules,
                                  navigation_handle()->GetRenderFrameHost(),
                                  url))
@@ -50,7 +50,7 @@ DocumentBlockedThrottle::WillFailRequest() {
       new DocumentBlockedInterstitial(web_contents, url, blocking_group.value(),
                                       std::move(controller)));
 
-  absl::optional<std::string> error_page_contents =
+  std::optional<std::string> error_page_contents =
       blocking_page->GetHTMLContents();
 
   security_interstitials::SecurityInterstitialTabHelper::AssociateBlockingPage(

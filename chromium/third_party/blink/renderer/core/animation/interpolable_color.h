@@ -13,6 +13,10 @@
 #include "third_party/blink/renderer/core/css_value_keywords.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
 
+namespace ui {
+class ColorProvider;
+}  // namespace ui
+
 namespace blink {
 
 // InterpolableColors are created and manipulated by CSSColorInterpolationType.
@@ -42,7 +46,9 @@ class CORE_EXPORT InterpolableColor : public BaseInterpolableColor {
 
   static InterpolableColor* Create(Color color);
   static InterpolableColor* Create(ColorKeyword color_keyword);
-  static InterpolableColor* Create(CSSValueID keyword);
+  static InterpolableColor* Create(CSSValueID keyword,
+                                   mojom::blink::ColorScheme color_scheme,
+                                   const ui::ColorProvider* color_provider);
 
   Color GetColor() const;
   bool IsColor() const final { return true; }
@@ -109,14 +115,14 @@ class CORE_EXPORT InterpolableColor : public BaseInterpolableColor {
     v->Trace(quirk_inherit_);
   }
 
-  InterpolableColor(InlinedInterpolableNumber param0,
-                    InlinedInterpolableNumber param1,
-                    InlinedInterpolableNumber param2,
-                    InlinedInterpolableNumber alpha,
-                    InlinedInterpolableNumber current_color,
-                    InlinedInterpolableNumber webkit_active_link,
-                    InlinedInterpolableNumber webkit_link,
-                    InlinedInterpolableNumber quirk_inherit,
+  InterpolableColor(InlinedInterpolableDouble param0,
+                    InlinedInterpolableDouble param1,
+                    InlinedInterpolableDouble param2,
+                    InlinedInterpolableDouble alpha,
+                    InlinedInterpolableDouble current_color,
+                    InlinedInterpolableDouble webkit_active_link,
+                    InlinedInterpolableDouble webkit_link,
+                    InlinedInterpolableDouble quirk_inherit,
                     Color::ColorSpace color_space);
 
  private:
@@ -126,15 +132,15 @@ class CORE_EXPORT InterpolableColor : public BaseInterpolableColor {
 
   // All color params are stored premultiplied by alpha.
   // https://csswg.sesse.net/css-color-4/#interpolation-space
-  InlinedInterpolableNumber param0_;
-  InlinedInterpolableNumber param1_;
-  InlinedInterpolableNumber param2_;
-  InlinedInterpolableNumber alpha_;
+  InlinedInterpolableDouble param0_;
+  InlinedInterpolableDouble param1_;
+  InlinedInterpolableDouble param2_;
+  InlinedInterpolableDouble alpha_;
 
-  InlinedInterpolableNumber current_color_;
-  InlinedInterpolableNumber webkit_active_link_;
-  InlinedInterpolableNumber webkit_link_;
-  InlinedInterpolableNumber quirk_inherit_;
+  InlinedInterpolableDouble current_color_;
+  InlinedInterpolableDouble webkit_active_link_;
+  InlinedInterpolableDouble webkit_link_;
+  InlinedInterpolableDouble quirk_inherit_;
 
   Color::ColorSpace color_space_ = Color::ColorSpace::kNone;
 };

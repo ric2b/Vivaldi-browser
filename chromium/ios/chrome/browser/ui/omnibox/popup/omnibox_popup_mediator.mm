@@ -7,6 +7,7 @@
 
 #import "base/feature_list.h"
 #import "base/ios/ios_util.h"
+#import "base/memory/raw_ptr.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/metrics/user_metrics.h"
@@ -27,11 +28,10 @@
 #import "components/strings/grit/components_strings.h"
 #import "components/variations/variations_associated_data.h"
 #import "components/variations/variations_ids_provider.h"
-#import "ios/chrome/browser/default_browser/model/utils.h"
-#import "ios/chrome/browser/favicon/favicon_loader.h"
+#import "ios/chrome/browser/default_browser/model/default_browser_interest_signals.h"
+#import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
-#import "ios/chrome/browser/shared/coordinator/default_browser_promo/default_browser_promo_scene_agent_utils.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
@@ -54,6 +54,7 @@
 #import "ios/chrome/browser/ui/omnibox/popup/remote_suggestions_service_observer_bridge.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_omnibox_consumer.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
+#import "third_party/omnibox_proto/groups.pb.h"
 #import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
@@ -103,7 +104,7 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
   std::unique_ptr<RemoteSuggestionsServiceObserverBridge>
       _remoteSuggestionsServiceObserverBridge;
 
-  OmniboxPopupMediatorDelegate* _delegate;  // weak
+  raw_ptr<OmniboxPopupMediatorDelegate> _delegate;  // weak
 
   /// Preferred omnibox position, logged in omnibox logs.
   metrics::OmniboxEventProto::OmniboxPosition _preferredOmniboxPosition;
@@ -232,6 +233,8 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
         [[PrefBackedBoolean alloc]
            initWithPrefService:originalPrefService
               prefName:vivaldiprefs::kVivaldiReverseSearchResultsEnabled];
+    [_reverseSearchResultsEnabled setObserver:self];
+    [self booleanDidChange:_reverseSearchResultsEnabled];
     // End Vivaldi
 
   } else {
@@ -241,6 +244,7 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
 
     // Vivaldi
     [_reverseSearchResultsEnabled stop];
+    [_reverseSearchResultsEnabled setObserver:nil];
     _reverseSearchResultsEnabled = nil;
     // End Vivaldi
 
@@ -306,11 +310,16 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
     const AutocompleteMatch& match =
         autocompleteMatchFormatter.autocompleteMatch;
 
-    // Don't log pastes in incognito.
-    if (!self.incognito && match.type == AutocompleteMatchType::CLIPBOARD_URL) {
-      NotifyDefaultBrowserPromoUserPastedInOmnibox(self.sceneState);
-      LogToFETUserPastedURLIntoOmnibox(self.tracker);
+    // A search using clipboard link or text is activity that should indicate a
+    // user that would be interested in setting the browser as the default.
+    if (match.type == AutocompleteMatchType::CLIPBOARD_URL) {
+      default_browser::NotifyOmniboxURLCopyPasteAndNavigate(
+          self.incognito, self.tracker, self.sceneState);
     }
+    if (match.type == AutocompleteMatchType::CLIPBOARD_TEXT) {
+      default_browser::NotifyOmniboxTextCopyPasteAndNavigate();
+    }
+
     if (!self.incognito &&
         match.type == AutocompleteMatchType::TILE_NAVSUGGEST) {
       [self logSelectedAutocompleteTile:match];
@@ -406,6 +415,11 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
           _preferredOmniboxPosition);
     }
   }
+
+  // Vivaldi
+  [self.reverseSearchResultsProvider
+      omniboxSearchResultsShouldReverse:[self isReverseSearchResultsEnabled]];
+  // End Vivaldi
 }
 
 #pragma mark - ImageFetcher
@@ -535,10 +549,6 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
     }
   }
 
-  if (vivaldi::IsVivaldiRunning())
-    return [self autoCompleteResultsVivaldiFromMatches:wrappedMatches];
-  // End Vivaldi
-
   return wrappedMatches;
 }
 
@@ -576,9 +586,17 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
     SuggestionGroupDisplayStyle displayStyle =
         SuggestionGroupDisplayStyleDefault;
 
-    if (currentSectionId &&
-        static_cast<omnibox::GroupSection>(currentSectionId.intValue) ==
-            omnibox::SECTION_MOBILE_MOST_VISITED) {
+    if (base::FeatureList::IsEnabled(
+            omnibox::kMostVisitedTilesHorizontalRenderGroup)) {
+      omnibox::GroupConfig_RenderType renderType =
+          headerMap.GetRenderTypeForSuggestionGroup(
+              static_cast<omnibox::GroupId>([currentGroupId intValue]));
+      displayStyle = (renderType == omnibox::GroupConfig_RenderType_HORIZONTAL)
+                         ? SuggestionGroupDisplayStyleCarousel
+                         : SuggestionGroupDisplayStyleDefault;
+    } else if (currentSectionId &&
+               static_cast<omnibox::GroupSection>(currentSectionId.intValue) ==
+                   omnibox::SECTION_MOBILE_MOST_VISITED) {
       displayStyle = SuggestionGroupDisplayStyleCarousel;
     }
 
@@ -850,46 +868,17 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
 }
 
 #pragma mark - Vivaldi
-// Returns search suggestion based on omnibox position and search results
-// reverse order settings
--(NSMutableArray<id<AutocompleteSuggestion>>*)
-    autoCompleteResultsVivaldiFromMatches:
-        (NSMutableArray<id<AutocompleteSuggestion>>*)wrappedMatches {
+- (BOOL)isBottomOmniboxEnabled {
+  if (!_bottomOmniboxEnabled)
+    return NO;
+  return [_bottomOmniboxEnabled value];
+}
 
-  // Reverse order for search results when bottom omnibox and the settings for
-  // reverse order is enabled.
-  BOOL isReverse = [_bottomOmniboxEnabled value] &&
-      [_reverseSearchResultsEnabled value];
-
-  [wrappedMatches sortUsingComparator:
-      ^NSComparisonResult(id<AutocompleteSuggestion> firstMatch,
-                          id<AutocompleteSuggestion> secondMatch) {
-    if (![firstMatch isKindOfClass:[AutocompleteMatchFormatter class]] ||
-        ![secondMatch isKindOfClass:[AutocompleteMatchFormatter class]]) {
-      return NSOrderedSame;
-    }
-
-    AutocompleteMatchFormatter* firstFormatter =
-        (AutocompleteMatchFormatter*)firstMatch;
-    AutocompleteMatchFormatter* secondFormatter =
-        (AutocompleteMatchFormatter*)secondMatch;
-
-    if (!firstFormatter || !secondFormatter) {
-      return NSOrderedSame;
-    }
-
-    if (firstFormatter.autocompleteMatch.relevance <
-        secondFormatter.autocompleteMatch.relevance) {
-      return isReverse ? NSOrderedAscending : NSOrderedDescending;
-    } else if (firstFormatter.autocompleteMatch.relevance >
-               secondFormatter.autocompleteMatch.relevance) {
-      return isReverse ? NSOrderedDescending:  NSOrderedAscending;
-    } else {
-      return NSOrderedSame;
-    }
-  }];
-
-  return wrappedMatches;
+// Returns YES when bottom omnibox and the settings for reverse order is enabled
+- (BOOL)isReverseSearchResultsEnabled {
+  if (!_reverseSearchResultsEnabled || ![self isBottomOmniboxEnabled])
+    return NO;
+  return [_reverseSearchResultsEnabled value];
 }
 
 @end

@@ -94,13 +94,19 @@ func (c *Content) Update(results result.List, testlist []query.Query, verbose bo
 		defer pb.Stop()
 	}
 
+	testQueryTree, _ := query.NewTree[struct{}]()
+	for _, query := range testlist {
+		testQueryTree.Add(query, struct{}{})
+	}
+
 	u := updater{
-		in:       *c,
-		out:      Content{},
-		qt:       newQueryTree(results),
-		variants: variants,
-		tagSets:  tagSets,
-		pb:       pb,
+		in:              *c,
+		out:             Content{},
+		resultQueryTree: buildResultQueryTree(results),
+		testQueryTree:   testQueryTree,
+		variants:        variants,
+		tagSets:         tagSets,
+		pb:              pb,
 	}
 
 	if err := u.preserveRetryOnFailures(); err != nil {
@@ -118,13 +124,14 @@ func (c *Content) Update(results result.List, testlist []query.Query, verbose bo
 
 // updater holds the state used for updating the expectations
 type updater struct {
-	in       Content   // the original expectations Content
-	out      Content   // newly built expectations Content
-	qt       queryTree // the query tree
-	variants []container.Set[string]
-	diags    []Diagnostic             // diagnostics raised during update
-	tagSets  []result.Tags            // reverse-ordered tag-sets of 'in'
-	pb       *progressbar.ProgressBar // Progress bar, may be nil
+	in              Content         // the original expectations Content
+	out             Content         // newly built expectations Content
+	resultQueryTree resultQueryTree // the results query tree
+	testQueryTree   query.Tree[struct{}]
+	variants        []container.Set[string]
+	diags           []Diagnostic             // diagnostics raised during update
+	tagSets         []result.Tags            // reverse-ordered tag-sets of 'in'
+	pb              *progressbar.ProgressBar // Progress bar, may be nil
 }
 
 // Returns 'results' with additional 'consumed' results for tests that have
@@ -204,10 +211,10 @@ const (
 	newFailuresComment = "# New failures. Please triage:"
 )
 
-// queryTree holds tree of queries to all results (no filtering by tag or
-// status). The queryTree is used to glob all the results that match a
+// resultQueryTree holds tree of queries to all results (no filtering by tag or
+// status). The resultQueryTree is used to glob all the results that match a
 // particular query.
-type queryTree struct {
+type resultQueryTree struct {
 	// All the results.
 	results result.List
 	// consumedAt is a list of line numbers for the i'th result in 'results'
@@ -218,8 +225,8 @@ type queryTree struct {
 	tree query.Tree[[]int]
 }
 
-// newQueryTree builds the queryTree from the list of results.
-func newQueryTree(results result.List) queryTree {
+// buildResultQueryTree builds the queryTree from the list of results.
+func buildResultQueryTree(results result.List) resultQueryTree {
 	log.Println("building query tree...")
 
 	// Build a map of query to result indices
@@ -241,12 +248,12 @@ func newQueryTree(results result.List) queryTree {
 	}
 
 	consumedAt := make([]int, len(results))
-	return queryTree{results, consumedAt, tree}
+	return resultQueryTree{results, consumedAt, tree}
 }
 
 // glob returns the list of results matching the given tags under (or with) the
 // given query.
-func (qt *queryTree) glob(q query.Query) (result.List, error) {
+func (qt *resultQueryTree) glob(q query.Query) (result.List, error) {
 	glob, err := qt.tree.Glob(q)
 	if err != nil {
 		return nil, fmt.Errorf("while gathering results for query '%v': %w", q, err)
@@ -264,7 +271,7 @@ func (qt *queryTree) glob(q query.Query) (result.List, error) {
 
 // globTags returns the list of results matching the given tags under (or with)
 // the given query.
-func (qt *queryTree) globTags(q query.Query, t result.Tags) (result.List, error) {
+func (qt *resultQueryTree) globTags(q query.Query, t result.Tags) (result.List, error) {
 	glob, err := qt.tree.Glob(q)
 	if err != nil {
 		return nil, err
@@ -286,7 +293,7 @@ func (qt *queryTree) globTags(q query.Query, t result.Tags) (result.List, error)
 // line is used to record the line at which the results were consumed. If the
 // results were consumed as part of generating new expectations then line should
 // be 0.
-func (qt *queryTree) markAsConsumed(q query.Query, t result.Tags, line int) {
+func (qt *resultQueryTree) markAsConsumed(q query.Query, t result.Tags, line int) {
 	if glob, err := qt.tree.Glob(q); err == nil {
 		for _, indices := range glob {
 			for _, idx := range indices.Data {
@@ -313,7 +320,7 @@ func (u *updater) preserveRetryOnFailures() error {
 
 			q := query.Parse(ex.Query)
 
-			glob, err := u.qt.tree.Glob(q)
+			glob, err := u.resultQueryTree.tree.Glob(q)
 			if err != nil {
 				if errors.As(err, &query.ErrNoDataForQuery{}) {
 					// No results for this RetryOnFailure expectation.
@@ -325,8 +332,8 @@ func (u *updater) preserveRetryOnFailures() error {
 			}
 			for _, indices := range glob {
 				for _, idx := range indices.Data {
-					if u.qt.results[idx].Tags.ContainsAll(ex.Tags) {
-						u.qt.results[idx].Status = result.RetryOnFailure
+					if u.resultQueryTree.results[idx].Tags.ContainsAll(ex.Tags) {
+						u.resultQueryTree.results[idx].Status = result.RetryOnFailure
 					}
 				}
 			}
@@ -427,11 +434,8 @@ func (u *updater) chunk(in Chunk, isImmutable bool, progress *Progress) Chunk {
 		}
 	}
 
-	// Begin building the output chunk.
-	// Copy over the chunk's comments.
-	out := Chunk{Comments: in.Comments}
-
 	// Build the new chunk's expectations
+	newExpectations := container.NewMap[string, Expectation]()
 	for _, exIn := range in.Expectations {
 		if u.pb != nil {
 			u.pb.Update(progressbar.Status{Total: progress.totalExpectations, Segments: []progressbar.Segment{
@@ -440,67 +444,82 @@ func (u *updater) chunk(in Chunk, isImmutable bool, progress *Progress) Chunk {
 			progress.currentExpectation++
 		}
 
-		exOut := u.expectation(exIn, isImmutable)
-		out.Expectations = append(out.Expectations, exOut...)
+		u.addExpectations(newExpectations, exIn, isImmutable)
 	}
 
 	// Sort the expectations to keep things clean and tidy.
-	out.Expectations.Sort()
-	return out
+	return Chunk{Comments: in.Comments, Expectations: newExpectations.Values()}
 }
 
 // expectation returns a new list of Expectations, based on the Expectation 'in',
 // using the new result data.
-func (u *updater) expectation(in Expectation, immutable bool) []Expectation {
-	// noResults is a helper for returning when the expectation has no test
-	// results.
-	noResults := func() []Expectation {
-		if len(in.Tags) > 0 {
-			u.diag(Warning, in.Line, "no results found for '%v' with tags %v", in.Query, in.Tags)
-		} else {
-			u.diag(Warning, in.Line, "no results found for '%v'", in.Query)
-		}
-		// Remove the no-results expectation
-		return []Expectation{}
-	}
-
+func (u *updater) addExpectations(out container.Map[string, Expectation], in Expectation, isImmutable bool) {
 	q := query.Parse(in.Query)
+
+	// keyOf returns the map key for out
+	keyOf := func(e Expectation) string { return fmt.Sprint(e.Tags, e.Query, e.Status) }
+
+	// noResults is a helper for returning when the expectation has no test results.
+	noResults := func() {
+		if glob, err := u.testQueryTree.Glob(q); err == nil && len(glob) > 0 {
+			// At least one test is found with the query in the test list - likely a variant that is not being run.
+			if len(in.Tags) > 0 {
+				u.diag(Note, in.Line, "no results found for query '%v' with tags %v", in.Query, in.Tags)
+			} else {
+				u.diag(Note, in.Line, "no results found for query '%v'", in.Query)
+			}
+			// Preserve.
+			out.Add(keyOf(in), in)
+		} else {
+			// Remove the no-results expectation (do not add to out)
+			u.diag(Warning, in.Line, "no tests exist with query '%v' - removing", in.Query)
+		}
+	}
 
 	// Glob the results for the expectation's query + tag combination.
 	// Ensure that none of these are already consumed.
-	results, err := u.qt.globTags(q, in.Tags)
+	results, err := u.resultQueryTree.globTags(q, in.Tags)
 	// If we can't find any results for this query + tag combination, then bail.
 	switch {
 	case errors.As(err, &query.ErrNoDataForQuery{}):
-		return noResults()
+		noResults()
+		return
 	case err != nil:
 		u.diag(Error, in.Line, "%v", err)
-		return []Expectation{}
+		return
 	case len(results) == 0:
-		return noResults()
+		noResults()
+		return
 	}
 
 	// Before returning, mark all the results as consumed.
 	// Note: this has to happen *after* we've generated the new expectations, as
 	// marking the results as 'consumed' will impact the logic of
 	// expectationsForRoot()
-	defer u.qt.markAsConsumed(q, in.Tags, in.Line)
+	defer u.resultQueryTree.markAsConsumed(q, in.Tags, in.Line)
 
-	if immutable { // Expectation chunk was marked with 'KEEP'
+	if isImmutable { // Expectation chunk was marked with 'KEEP'
 		// Add a diagnostic if all tests of the expectation were 'Pass'
 		if s := results.Statuses(); len(s) == 1 && s.One() == result.Pass {
 			u.diagAllPass(in.Line, results)
 		}
-		return []Expectation{in}
+		out.Add(keyOf(in), in)
+		return
 	}
 
 	// Rebuild the expectations for this query.
 	expectations, somePass, someConsumed := u.expectationsForRoot(q, in.Line, in.Bug, in.Comment)
 
+	// Add the new expectations to out
+	for _, expectation := range expectations {
+		out.Add(keyOf(expectation), expectation)
+	}
+
 	// Add a diagnostic if the expectation is filtered away
-	if len(expectations) == 0 {
+	if !out.Contains(keyOf(in)) && len(expectations) == 0 {
 		switch {
 		case somePass && someConsumed:
+			fmt.Println("\n", strings.Join(out.Keys(), "\n"))
 			u.diag(Note, in.Line, "expectation is partly covered by previous expectations and the remaining tests all pass")
 		case someConsumed:
 			u.diag(Note, in.Line, "expectation is fully covered by previous expectations")
@@ -509,7 +528,6 @@ func (u *updater) expectation(in Expectation, immutable bool) []Expectation {
 		}
 	}
 
-	return expectations
 }
 
 // addNewExpectations (potentially) appends to 'u.out' chunks for new flaky and
@@ -531,7 +549,7 @@ func (u *updater) addNewExpectations() error {
 		}
 
 		// Build a tree from the results matching the given variant.
-		filtered := u.qt.results.FilterByVariant(variant)
+		filtered := u.resultQueryTree.results.FilterByVariant(variant)
 		tree, err := filtered.StatusTree()
 		if err != nil {
 			return fmt.Errorf("while building tree for tags '%v': %w", variant, err)
@@ -541,8 +559,7 @@ func (u *updater) addNewExpectations() error {
 		// Add all the reduced leaf nodes to 'roots'.
 		for _, qd := range tree.List() {
 			if qd.Data != result.Pass {
-				// Use Split() to ensure that only the leaves have data (true) in the tree
-				roots.Split(qd.Query, true)
+				roots.Add(qd.Query, true)
 			}
 		}
 	}
@@ -613,7 +630,7 @@ func (u *updater) expectationsForRoot(
 	somePass bool, // Some of the results for the query had a Pass status
 	someConsumed bool, // The query was at least partly consumed by previous expectations
 ) {
-	results, err := u.qt.glob(root)
+	results, err := u.resultQueryTree.glob(root)
 	if err != nil {
 		u.diag(Error, line, "%v", err)
 		return nil, false, false
@@ -666,7 +683,7 @@ func (u *updater) expectationsForRoot(
 
 	// Mark all the new expectation results as consumed.
 	for _, r := range filtered {
-		u.qt.markAsConsumed(r.Query, r.Tags, 0)
+		u.resultQueryTree.markAsConsumed(r.Query, r.Tags, 0)
 	}
 
 	// Transform the results to expectations.

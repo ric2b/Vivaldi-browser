@@ -56,7 +56,7 @@ RpcMessenger::Handle RpcMessenger::GetUniqueHandle() {
 void RpcMessenger::RegisterMessageReceiverCallback(
     RpcMessenger::Handle handle,
     ReceiveMessageCallback callback) {
-  OSP_DCHECK(receive_callbacks_.find(handle) == receive_callbacks_.end())
+  OSP_CHECK(receive_callbacks_.find(handle) == receive_callbacks_.end())
       << "must deregister before re-registering";
   receive_callbacks_.emplace_back(handle, std::move(callback));
 }

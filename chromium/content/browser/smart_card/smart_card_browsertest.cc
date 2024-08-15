@@ -140,6 +140,11 @@ class FakeSmartCardDelegate : public SmartCardDelegate {
   GetSmartCardContextFactory(BrowserContext& browser_context) override;
 
   MOCK_METHOD(bool,
+              IsPermissionBlocked,
+              (RenderFrameHost & render_frame_host),
+              (override));
+
+  MOCK_METHOD(bool,
               HasReaderPermission,
               (content::RenderFrameHost & render_frame_host,
                const std::string& reader_name),
@@ -173,14 +178,12 @@ class SmartCardTestContentBrowserClient
   void SetSmartCardDelegate(std::unique_ptr<SmartCardDelegate>);
 
   // ContentBrowserClient:
-  SmartCardDelegate* GetSmartCardDelegate(
-      content::BrowserContext* browser_context) override;
+  SmartCardDelegate* GetSmartCardDelegate() override;
   bool ShouldUrlUseApplicationIsolationLevel(BrowserContext* browser_context,
                                              const GURL& url) override;
   std::optional<blink::ParsedPermissionsPolicy>
-  GetPermissionsPolicyForIsolatedWebApp(
-      content::BrowserContext* browser_context,
-      const url::Origin& app_origin) override;
+  GetPermissionsPolicyForIsolatedWebApp(WebContents* web_contents,
+                                        const url::Origin& app_origin) override;
 
  private:
   std::unique_ptr<SmartCardDelegate> delegate_;
@@ -198,7 +201,7 @@ class SmartCardTest : public ContentBrowserTest {
 
   FakeSmartCardDelegate& GetFakeSmartCardDelegate() {
     return *static_cast<FakeSmartCardDelegate*>(
-        test_client_->GetSmartCardDelegate(nullptr));
+        test_client_->GetSmartCardDelegate());
   }
 
   void TestEmptyTransaction(std::string expected_result,
@@ -294,8 +297,7 @@ SmartCardTestContentBrowserClient::SmartCardTestContentBrowserClient() =
 SmartCardTestContentBrowserClient::~SmartCardTestContentBrowserClient() =
     default;
 
-SmartCardDelegate* SmartCardTestContentBrowserClient::GetSmartCardDelegate(
-    content::BrowserContext* browser_context) {
+SmartCardDelegate* SmartCardTestContentBrowserClient::GetSmartCardDelegate() {
   return delegate_.get();
 }
 
@@ -312,7 +314,7 @@ bool SmartCardTestContentBrowserClient::ShouldUrlUseApplicationIsolationLevel(
 
 std::optional<blink::ParsedPermissionsPolicy>
 SmartCardTestContentBrowserClient::GetPermissionsPolicyForIsolatedWebApp(
-    content::BrowserContext* browser_context,
+    WebContents* web_contents,
     const url::Origin& app_origin) {
   blink::ParsedPermissionsPolicyDeclaration coi_decl(
       blink::mojom::PermissionsPolicyFeature::kCrossOriginIsolated,
@@ -1611,7 +1613,7 @@ class NoCoiPermissionSmartCardTestContentBrowserClient
  public:
   std::optional<blink::ParsedPermissionsPolicy>
   GetPermissionsPolicyForIsolatedWebApp(
-      content::BrowserContext* browser_context,
+      WebContents* web_contents,
       const url::Origin& app_origin) override {
     return {{blink::ParsedPermissionsPolicyDeclaration(
         blink::mojom::PermissionsPolicyFeature::kSmartCard,
@@ -1750,6 +1752,22 @@ IN_PROC_BROWSER_TEST_F(SmartCardTest, EndTransactionAfterContextOperation) {
 
       return "ok";
     })())"));
+}
+
+IN_PROC_BROWSER_TEST_F(SmartCardTest, EstablishContextDenied) {
+  ASSERT_TRUE(NavigateToURL(shell(), GetIsolatedContextUrl()));
+
+  EXPECT_CALL(GetFakeSmartCardDelegate(), IsPermissionBlocked(_))
+      .WillOnce(Return(true));
+
+  EXPECT_EQ("NotAllowedError", EvalJs(shell(), R"((async () => {
+      try {
+         let context = await navigator.smartCard.establishContext();
+      } catch (e) {
+         return e.name;
+      }
+      return "ok";
+     })())"));
 }
 
 }  // namespace content

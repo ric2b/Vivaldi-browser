@@ -149,7 +149,7 @@ std::string EncodeBitmapAsDataUrl(SkBitmap bitmap,
   std::string data_url;
   base::StringPiece base64_input(
       reinterpret_cast<const char*>(image_bytes.data()), image_bytes.size());
-  base::Base64Encode(base64_input, &data_url);
+  data_url = base::Base64Encode(base64_input);
   data_url.insert(0, base::StringPrintf("data:%s;base64,", mime_type));
   return data_url;
 }

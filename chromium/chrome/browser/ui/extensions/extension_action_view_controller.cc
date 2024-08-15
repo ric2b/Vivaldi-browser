@@ -219,6 +219,17 @@ std::u16string ExtensionActionViewController::GetActionName() const {
   return base::UTF8ToUTF16(extension_->name());
 }
 
+std::u16string ExtensionActionViewController::GetActionTitle(
+    content::WebContents* web_contents) const {
+  if (!ExtensionIsValid()) {
+    return std::u16string();
+  }
+
+  std::string title = extension_action_->GetTitle(
+      sessions::SessionTabHelper::IdForTab(web_contents).id());
+  return base::UTF8ToUTF16(title);
+}
+
 std::u16string ExtensionActionViewController::GetAccessibleName(
     content::WebContents* web_contents) const {
   if (!ExtensionIsValid())
@@ -229,11 +240,9 @@ std::u16string ExtensionActionViewController::GetAccessibleName(
   if (!web_contents)
     return base::UTF8ToUTF16(extension()->name());
 
-  std::string title = extension_action()->GetTitle(
-      sessions::SessionTabHelper::IdForTab(web_contents).id());
-
-  std::u16string title_utf16 =
-      base::UTF8ToUTF16(title.empty() ? extension()->name() : title);
+  std::u16string action_title = GetActionTitle(web_contents);
+  std::u16string accessible_name =
+      action_title.empty() ? GetActionName() : action_title;
 
   // Include a "host access" portion of the tooltip if the extension has active
   // or pending interaction with the site.
@@ -253,16 +262,57 @@ std::u16string ExtensionActionViewController::GetAccessibleName(
   }
 
   if (site_interaction_description_id != -1) {
-    title_utf16 = base::StrCat(
-        {title_utf16, u"\n",
+    accessible_name = base::StrCat(
+        {accessible_name, u"\n",
          l10n_util::GetStringUTF16(site_interaction_description_id)});
   }
 
-  return title_utf16;
+  return accessible_name;
 }
 
 std::u16string ExtensionActionViewController::GetTooltip(
     content::WebContents* web_contents) const {
+  if (base::FeatureList::IsEnabled(
+          extensions_features::kExtensionsMenuAccessControl)) {
+    std::u16string action_title = GetActionTitle(web_contents);
+    std::u16string tooltip =
+        action_title.empty() ? GetActionName() : action_title;
+
+    url::Origin origin =
+        web_contents->GetPrimaryMainFrame()->GetLastCommittedOrigin();
+    auto* permissions_manager =
+        extensions::PermissionsManager::Get(browser_->profile());
+    ToolbarActionViewController::HoverCardState::SiteAccess site_access =
+        GetHoverCardSiteAccessState(
+            permissions_manager->GetUserSiteSetting(origin),
+            GetSiteInteraction(web_contents));
+
+    int tooltip_site_access_id;
+    switch (site_access) {
+      case HoverCardState::SiteAccess::kAllExtensionsAllowed:
+      case HoverCardState::SiteAccess::kExtensionHasAccess:
+        tooltip_site_access_id =
+            IDS_EXTENSIONS_MENU_MAIN_PAGE_EXTENSION_BUTTON_HAS_ACCESS_TOOLTIP;
+        break;
+      case HoverCardState::SiteAccess::kAllExtensionsBlocked:
+        tooltip_site_access_id =
+            IDS_EXTENSIONS_MENU_MAIN_PAGE_EXTENSION_BUTTON_BLOCKED_ACCESS_TOOLTIP;
+        break;
+      case HoverCardState::SiteAccess::kExtensionRequestsAccess:
+        tooltip_site_access_id =
+            IDS_EXTENSIONS_MENU_MAIN_PAGE_EXTENSION_BUTTON_REQUESTS_TOOLTIP;
+        break;
+      case HoverCardState::SiteAccess::kExtensionDoesNotWantAccess:
+        tooltip_site_access_id = -1;
+    }
+
+    return tooltip_site_access_id == -1
+               ? tooltip
+               : base::JoinString({tooltip, l10n_util::GetStringUTF16(
+                                                tooltip_site_access_id)},
+                                  u"\n");
+  }
+
   return GetAccessibleName(web_contents);
 }
 
@@ -545,6 +595,12 @@ void ExtensionActionViewController::TriggerPopup(PopupShowAction show_action,
   DCHECK(extension_action_->HasPopup(tab_id));
 
   const GURL popup_url = extension_action_->GetPopupUrl(tab_id);
+
+  // Skip popup if there is an open security UI that would be covered by it,
+  // mitigation occlusion/spoofing risks.
+  if (extensions_container_->HasBlockingSecurityUI()) {
+    return;
+  }
 
   std::unique_ptr<extensions::ExtensionViewHost> host =
       extensions::ExtensionViewHostFactory::CreatePopupHost(popup_url,

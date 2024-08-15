@@ -51,7 +51,6 @@ source_set("util") {
     "//ios/chrome/browser/shared/public/features:system_flags",
     "//ios/chrome/browser/shared/ui/symbols",
     "//ios/chrome/browser/shared/ui/util/image",
-    "//ios/chrome/common:button_config",
     "//ios/chrome/common:timing",
     "//ios/chrome/common/ui/util",
     "//ios/chrome/common/ui/util:dynamic_type_util",
@@ -70,6 +69,14 @@ source_set("util") {
     "QuartzCore.framework",
     "UniformTypeIdentifiers.framework",
   ]
+}
+
+source_set("util_bridge") {
+  sources = [
+    "uikit_ui_util_bridge.h",
+    "uikit_ui_util_bridge.mm",
+  ]
+  deps = [ ":util" ]
 }
 
 swift_source_set("util_swift") {

@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/browsing_data/chrome_browsing_data_model_delegate.h"
-#include "base/containers/cxx20_erase_vector.h"
+
+#include <vector>
+
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/callback_helpers.h"
 #include "base/test/bind.h"
@@ -25,10 +27,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "url/gurl.h"
-
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "components/supervised_user/core/common/features.h"
-#endif
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/web_applications/web_app_command_manager.h"
@@ -74,9 +72,6 @@ class ChromeBrowsingDataModelDelegateTest : public testing::Test {
     feature_list_.InitWithFeatures(
         /*enabled_features=*/
         {
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-          supervised_user::kClearingCookiesKeepsSupervisedUsersSignedIn,
-#endif
               media_device_salt::kMediaDeviceIdPartitioning
         },
         /*disabled_features=*/{});
@@ -218,7 +213,7 @@ TEST_F(ChromeBrowsingDataModelDelegateTest, GetAllDataKeysAndGetDataOwner) {
         absl::get_if<blink::StorageKey>(&entry.data_key);
     ASSERT_TRUE(storage_key);
     EXPECT_THAT(expected_keys, Contains(*storage_key));
-    base::Erase(expected_keys, *storage_key);
+    std::erase(expected_keys, *storage_key);
 
     EXPECT_GT(entry.storage_size, 0u);
 

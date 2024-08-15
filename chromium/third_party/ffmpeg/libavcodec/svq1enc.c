@@ -634,18 +634,13 @@ static av_cold int svq1_encode_init(AVCodecContext *avctx)
                                         s->y_block_height * sizeof(int32_t));
     s->m.me.map            = av_mallocz(2 * ME_MAP_SIZE * sizeof(*s->m.me.map));
     s->m.new_picture       = av_frame_alloc();
-    s->svq1encdsp.ssd_int8_vs_int16 = ssd_int8_vs_int16_c;
 
     if (!s->m.me.scratchpad || !s->m.me.map ||
         !s->mb_type || !s->dummy || !s->m.new_picture)
         return AVERROR(ENOMEM);
     s->m.me.score_map = s->m.me.map + ME_MAP_SIZE;
 
-#if ARCH_PPC
-    ff_svq1enc_init_ppc(&s->svq1encdsp);
-#elif ARCH_X86
-    ff_svq1enc_init_x86(&s->svq1encdsp);
-#endif
+    ff_svq1enc_init(&s->svq1encdsp);
 
     ff_h263_encode_init(&s->m); // mv_penalty
 
@@ -660,7 +655,7 @@ static int svq1_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     int i, ret;
 
     ret = ff_alloc_packet(avctx, pkt, s->y_block_width * s->y_block_height *
-                          MAX_MB_BYTES * 3 + AV_INPUT_BUFFER_MIN_SIZE);
+                          MAX_MB_BYTES * 3 + FF_INPUT_BUFFER_MIN_SIZE);
     if (ret < 0)
         return ret;
 
@@ -735,10 +730,10 @@ static int svq1_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
 #define OFFSET(x) offsetof(struct SVQ1EncContext, x)
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption options[] = {
-    { "motion-est", "Motion estimation algorithm", OFFSET(motion_est), AV_OPT_TYPE_INT, { .i64 = FF_ME_EPZS }, FF_ME_ZERO, FF_ME_XONE, VE, "motion-est"},
-        { "zero", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = FF_ME_ZERO }, 0, 0, FF_MPV_OPT_FLAGS, "motion-est" },
-        { "epzs", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = FF_ME_EPZS }, 0, 0, FF_MPV_OPT_FLAGS, "motion-est" },
-        { "xone", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = FF_ME_XONE }, 0, 0, FF_MPV_OPT_FLAGS, "motion-est" },
+    { "motion-est", "Motion estimation algorithm", OFFSET(motion_est), AV_OPT_TYPE_INT, { .i64 = FF_ME_EPZS }, FF_ME_ZERO, FF_ME_XONE, VE, .unit = "motion-est"},
+        { "zero", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = FF_ME_ZERO }, 0, 0, FF_MPV_OPT_FLAGS, .unit = "motion-est" },
+        { "epzs", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = FF_ME_EPZS }, 0, 0, FF_MPV_OPT_FLAGS, .unit = "motion-est" },
+        { "xone", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = FF_ME_XONE }, 0, 0, FF_MPV_OPT_FLAGS, .unit = "motion-est" },
 
     { NULL },
 };
@@ -765,3 +760,16 @@ const FFCodec ff_svq1_encoder = {
                                                      AV_PIX_FMT_NONE },
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
 };
+
+void ff_svq1enc_init(SVQ1EncDSPContext *c)
+{
+    c->ssd_int8_vs_int16 = ssd_int8_vs_int16_c;
+
+#if ARCH_PPC
+    ff_svq1enc_init_ppc(c);
+#elif ARCH_RISCV
+    ff_svq1enc_init_riscv(c);
+#elif ARCH_X86
+    ff_svq1enc_init_x86(c);
+#endif
+}

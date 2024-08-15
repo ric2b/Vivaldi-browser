@@ -16,6 +16,7 @@
 #include "ash/webui/personalization_app/personalization_app_url_constants.h"
 #include "ash/webui/personalization_app/proto/backdrop_wallpaper.pb.h"
 #include "ash/webui/system_apps/public/system_web_app_type.h"
+#include "base/check_is_test.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/hash/hash.h"
@@ -74,7 +75,7 @@ bool IsKnownUser(const AccountId& account_id) {
   return user_manager::UserManager::Get()->IsKnownUser(account_id);
 }
 
-// Returns the type of the user with the specified |id| or USER_TYPE_REGULAR.
+// Returns the type of the user with the specified |id| or kRegular.
 user_manager::UserType GetUserType(const AccountId& id) {
   if (user_manager::UserManager::IsInitialized()) {
     if (auto* user = user_manager::UserManager::Get()->FindUser(id))
@@ -83,7 +84,7 @@ user_manager::UserType GetUserType(const AccountId& id) {
   // TODO(crbug.com/1329256): Convert this to a DCHECK when tests are fixed.
   LOG(WARNING) << "No matching user. This should only happen in tests.";
   // Unit tests may not have a UserManager.
-  return user_manager::USER_TYPE_REGULAR;
+  return user_manager::UserType::kRegular;
 }
 
 // This has once been copied from
@@ -113,7 +114,7 @@ std::string HashWallpaperFilesIdStr(const std::string& files_id_unhashed) {
   std::vector<uint8_t> data = *salt;
   base::ranges::copy(files_id_unhashed, std::back_inserter(data));
   base::SHA1HashBytes(data.data(), data.size(), binmd);
-  std::string result = base::HexEncode(binmd, sizeof(binmd));
+  std::string result = base::HexEncode(binmd);
   base::ranges::transform(result, result.begin(), ::tolower);
   return result;
 }
@@ -155,8 +156,9 @@ bool HasNonDeviceLocalAccounts(const user_manager::UserList& users) {
 // none.
 user_manager::User* FindPublicSession(const user_manager::UserList& users) {
   for (size_t i = 0; i < users.size(); ++i) {
-    if (users[i]->GetType() == user_manager::USER_TYPE_PUBLIC_ACCOUNT)
+    if (users[i]->GetType() == user_manager::UserType::kPublicAccount) {
       return users[i];
+    }
   }
   return nullptr;
 }
@@ -182,6 +184,12 @@ WallpaperControllerClientImpl::WallpaperControllerClientImpl(
   // SessionManager might not exist in unit tests.
   if (session_manager)
     session_observation_.Observe(session_manager);
+
+  if (user_manager::UserManager::IsInitialized()) {
+    user_manager_observation_.Observe(user_manager::UserManager::Get());
+  } else {
+    CHECK_IS_TEST();
+  }
 }
 
 WallpaperControllerClientImpl::~WallpaperControllerClientImpl() {
@@ -357,6 +365,16 @@ void WallpaperControllerClientImpl::OnUserProfileLoaded(
     const AccountId& account_id) {
   wallpaper_controller_->SyncLocalAndRemotePrefs(account_id);
   ObserveVolumeManagerForAccountId(account_id);
+}
+
+void WallpaperControllerClientImpl::OnUserLoggedIn(
+    const user_manager::User& user) {
+  // For public account, it's possible that the user-policy controlled wallpaper
+  // was fetched/cleared at the login screen (while for a regular user it was
+  // always fetched/cleared inside a user session), in the case the user-policy
+  // controlled wallpaper was fetched/cleared but not updated in the login
+  // screen, we need to update the wallpaper after the public user logged in.
+  ShowUserWallpaper(user.GetAccountId());
 }
 
 void WallpaperControllerClientImpl::DeviceWallpaperImageFilePathChanged() {

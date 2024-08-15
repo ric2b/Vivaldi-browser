@@ -5,6 +5,7 @@
 #include "extensions/browser/api/declarative/declarative_rule.h"
 
 #include <optional>
+
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
@@ -13,6 +14,7 @@
 #include "base/values.h"
 #include "components/url_matcher/url_matcher_constants.h"
 #include "extensions/common/extension_builder.h"
+#include "extensions/common/extension_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -237,7 +239,7 @@ class SummingAction : public base::RefCounted<SummingAction> {
         new SummingAction(*increment, min_priority));
   }
 
-  void Apply(const std::string& extension_id,
+  void Apply(const ExtensionId& extension_id,
              const base::Time& install_time,
              int* sum) const {
     *sum += increment_;

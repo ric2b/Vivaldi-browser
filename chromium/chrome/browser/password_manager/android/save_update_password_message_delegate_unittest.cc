@@ -35,6 +35,7 @@
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
 #include "components/password_manager/core/common/password_manager_features.h"
+#include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/signin/public/identity_manager/account_capabilities_test_mutator.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/test/web_contents_tester.h"
@@ -129,7 +130,7 @@ class MockPasswordEditDialog : public PasswordEditDialog {
               (const std::vector<std::u16string>& usernames,
                const std::u16string& username,
                const std::u16string& password,
-               const std::string& account_email),
+               const std::optional<std::string>& account_email),
               (override));
   MOCK_METHOD(void, Dismiss, (), (override));
 };
@@ -145,12 +146,14 @@ class SaveUpdatePasswordMessageDelegateTest
 
   std::unique_ptr<MockPasswordFormManagerForUI> CreateFormManager(
       const GURL& password_form_url,
-      const std::vector<raw_ptr<const PasswordForm, VectorExperimental>>*
-          best_matches);
+      const std::vector<PasswordForm>& best_matches);
   void RecordPasswordSaved();
-  void SetPendingCredentials(std::u16string username, std::u16string password);
+  void SetPendingCredentials(std::u16string username,
+                             std::u16string password,
+                             bool is_account_store = false);
   static PasswordForm CreatePasswordForm(std::u16string username,
-                                         std::u16string password);
+                                         std::u16string password,
+                                         bool is_account_store = false);
 
   void EnqueueMessage(std::unique_ptr<PasswordFormManagerForUI> form_to_save,
                       bool user_signed_in,
@@ -175,8 +178,7 @@ class SaveUpdatePasswordMessageDelegateTest
   // PreparePasswordEditDialog. Captures accept and dismiss callbacks.
   std::unique_ptr<PasswordEditDialog> CreatePasswordEditDialog(
       content::WebContents* web_contents,
-      PasswordEditDialog::DialogAcceptedCallback dialog_accepted_callback,
-      PasswordEditDialog::DialogDismissedCallback dialog_dismissed_callback);
+      PasswordEditDialogBridgeDelegate* pasword_edit_dialog_bridge_delegate);
 
   // Creates a mock of PasswordEditDialog that will be passed to
   // SaveUpdatePasswordMessageDelegate through CreatePasswordEditDialog factory.
@@ -203,37 +205,30 @@ class SaveUpdatePasswordMessageDelegateTest
   void VerifyUkmMetrics(const ukm::TestUkmRecorder& ukm_recorder,
                         PasswordFormMetricsRecorder::BubbleDismissalReason
                             expected_dismissal_reason);
+  void EnableUseUPMLocalAndSeparateStores();
 
   messages::MockMessageDispatcherBridge* message_dispatcher_bridge() {
     return &message_dispatcher_bridge_;
   }
 
-  const std::vector<raw_ptr<const PasswordForm, VectorExperimental>>*
-  empty_best_matches() {
-    return &kEmptyBestMatches;
+  std::vector<PasswordForm> empty_best_matches() { return {}; }
+
+  std::vector<PasswordForm> two_forms_best_matches() {
+    return {CreatePasswordForm(kUsername, kPassword),
+            CreatePasswordForm(kUsername2, kPassword)};
   }
 
-  const std::vector<raw_ptr<const PasswordForm, VectorExperimental>>*
-  two_forms_best_matches() {
-    return &kTwoFormsBestMatches;
+  PasswordEditDialogBridgeDelegate* get_password_edit_dialog_bridge_delegate() {
+    return delegate_.get();
   }
 
  private:
-  const PasswordForm kPasswordForm1 = CreatePasswordForm(kUsername, kPassword);
-  const PasswordForm kPasswordForm2 = CreatePasswordForm(kUsername2, kPassword);
-  const std::vector<raw_ptr<const PasswordForm, VectorExperimental>>
-      kEmptyBestMatches = {};
-  const std::vector<raw_ptr<const PasswordForm, VectorExperimental>>
-      kTwoFormsBestMatches = {&kPasswordForm1, &kPasswordForm2};
-
   PasswordForm pending_credentials_;
   GURL password_form_url_;
   scoped_refptr<PasswordFormMetricsRecorder> metrics_recorder_;
   ukm::SourceId ukm_source_id_;
   messages::MockMessageDispatcherBridge message_dispatcher_bridge_;
   std::unique_ptr<MockPasswordEditDialog> mock_password_edit_dialog_;
-  PasswordEditDialog::DialogAcceptedCallback dialog_accepted_callback_;
-  PasswordEditDialog::DialogDismissedCallback dialog_dismissed_callback_;
   base::MockCallback<RepeatingCallback<void(
       gfx::NativeWindow,
       Profile*,
@@ -277,8 +272,7 @@ void SaveUpdatePasswordMessageDelegateTest::TearDown() {
 std::unique_ptr<MockPasswordFormManagerForUI>
 SaveUpdatePasswordMessageDelegateTest::CreateFormManager(
     const GURL& password_form_url,
-    const std::vector<raw_ptr<const PasswordForm, VectorExperimental>>*
-        best_matches) {
+    const std::vector<PasswordForm>& best_matches) {
   password_form_url_ = password_form_url;
   auto form_manager =
       std::make_unique<testing::NiceMock<MockPasswordFormManagerForUI>>();
@@ -288,8 +282,7 @@ SaveUpdatePasswordMessageDelegateTest::CreateFormManager(
       .WillByDefault(Return(password_manager::metrics_util::
                                 CredentialSourceType::kPasswordManager));
   ON_CALL(*form_manager, GetURL()).WillByDefault(ReturnRef(password_form_url_));
-  ON_CALL(*form_manager, GetBestMatches())
-      .WillByDefault(ReturnRef(*best_matches));
+  ON_CALL(*form_manager, GetBestMatches()).WillByDefault(Return(best_matches));
   ON_CALL(*form_manager, GetFederatedMatches())
       .WillByDefault(Return(
           std::vector<raw_ptr<const PasswordForm, VectorExperimental>>{}));
@@ -307,19 +300,27 @@ void SaveUpdatePasswordMessageDelegateTest::RecordPasswordSaved() {
 
 void SaveUpdatePasswordMessageDelegateTest::SetPendingCredentials(
     std::u16string username,
-    std::u16string password) {
+    std::u16string password,
+    bool is_account_store) {
   pending_credentials_.username_value = std::move(username);
   pending_credentials_.password_value = std::move(password);
+  pending_credentials_.in_store =
+      is_account_store ? password_manager::PasswordForm::Store::kAccountStore
+                       : password_manager::PasswordForm::Store::kProfileStore;
 }
 
 // static
 PasswordForm SaveUpdatePasswordMessageDelegateTest::CreatePasswordForm(
     std::u16string username,
-    std::u16string password) {
+    std::u16string password,
+    bool is_account_store) {
   PasswordForm password_form;
   password_form.username_value = std::move(username);
   password_form.password_value = std::move(password);
   password_form.match_type = PasswordForm::MatchType::kExact;
+  password_form.in_store =
+      is_account_store ? password_manager::PasswordForm::Store::kAccountStore
+                       : password_manager::PasswordForm::Store::kProfileStore;
   return password_form;
 }
 
@@ -409,10 +410,7 @@ SaveUpdatePasswordMessageDelegateTest::GetMessageWrapper() {
 std::unique_ptr<PasswordEditDialog>
 SaveUpdatePasswordMessageDelegateTest::CreatePasswordEditDialog(
     content::WebContents* web_contents,
-    PasswordEditDialog::DialogAcceptedCallback dialog_accepted_callback,
-    PasswordEditDialog::DialogDismissedCallback dialog_dismissed_callback) {
-  dialog_accepted_callback_ = std::move(dialog_accepted_callback);
-  dialog_dismissed_callback_ = std::move(dialog_dismissed_callback);
+    PasswordEditDialogBridgeDelegate* pasword_edit_dialog_bridge_delegate) {
   return std::move(mock_password_edit_dialog_);
 }
 
@@ -433,12 +431,15 @@ SaveUpdatePasswordMessageDelegateTest::GetMigrationWarningCallback() {
 void SaveUpdatePasswordMessageDelegateTest::TriggerDialogAcceptedCallback(
     const std::u16string& username,
     const std::u16string& password) {
-  std::move(dialog_accepted_callback_).Run(username, password);
+  // std::move(dialog_accepted_callback_).Run(username, password);
+  delegate_->HandleSavePasswordFromDialog(username, password);
 }
 
 void SaveUpdatePasswordMessageDelegateTest::TriggerDialogDismissedCallback(
     bool dialog_accepted) {
-  std::move(dialog_dismissed_callback_).Run(dialog_accepted);
+  // std::move(dialog_dismissed_callback_).Run(dialog_accepted);
+
+  delegate_->HandleDialogDismissed(dialog_accepted);
 }
 
 std::u16string
@@ -483,6 +484,14 @@ void SaveUpdatePasswordMessageDelegateTest::VerifyUkmMetrics(
         entry, ukm::builders::PasswordForm::kSaving_Prompt_InteractionName,
         static_cast<int64_t>(expected_dismissal_reason));
   }
+}
+
+void SaveUpdatePasswordMessageDelegateTest::
+    EnableUseUPMLocalAndSeparateStores() {
+  profile()->GetPrefs()->SetInteger(
+      password_manager::prefs::kPasswordsUseUPMLocalAndSeparateStores,
+      static_cast<int>(
+          password_manager::prefs::UseUpmLocalAndSeparateStoresState::kOn));
 }
 
 // Tests that secondary menu icon is set for the save password message
@@ -647,11 +656,10 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
       password_manager::features::
           kUnifiedPasswordManagerLocalPasswordsMigrationWarning);
   SetPendingCredentials(kUsername, kPassword);
-  PasswordForm password_form = CreatePasswordForm(kUsername, kPassword);
-  std::vector<raw_ptr<const PasswordForm, VectorExperimental>>
-      single_form_best_matches = {&password_form};
+  std::vector<PasswordForm> single_form_best_matches = {
+      CreatePasswordForm(kUsername, kPassword)};
   auto form_manager =
-      CreateFormManager(GURL(kDefaultUrl), &single_form_best_matches);
+      CreateFormManager(GURL(kDefaultUrl), single_form_best_matches);
   EXPECT_CALL(*form_manager, Save());
   EnqueueMessage(std::move(form_manager), /*user_signed_in=*/true,
                  /*update_password=*/true);
@@ -671,11 +679,10 @@ TEST_F(
       password_manager::features::
           kUnifiedPasswordManagerLocalPasswordsMigrationWarning);
   SetPendingCredentials(kUsername, kPassword);
-  PasswordForm password_form = CreatePasswordForm(kUsername, kPassword);
-  std::vector<raw_ptr<const PasswordForm, VectorExperimental>>
-      single_form_best_matches = {&password_form};
+  std::vector<PasswordForm> single_form_best_matches = {
+      CreatePasswordForm(kUsername, kPassword)};
   auto form_manager =
-      CreateFormManager(GURL(kDefaultUrl), &single_form_best_matches);
+      CreateFormManager(GURL(kDefaultUrl), single_form_best_matches);
   EnqueueMessage(std::move(form_manager), /*user_signed_in=*/true,
                  /*update_password=*/true);
   EXPECT_NE(nullptr, GetMessageWrapper());
@@ -804,11 +811,10 @@ TEST_F(
     SaveUpdatePasswordMessageDelegateTest,
     DontTriggerLocalPasswordMigrationWarning_OnUpdateMessageAutodismissTimer) {
   SetPendingCredentials(kUsername, kPassword);
-  PasswordForm password_form = CreatePasswordForm(kUsername, kPassword);
-  std::vector<raw_ptr<const PasswordForm, VectorExperimental>>
-      single_form_best_matches = {&password_form};
+  std::vector<PasswordForm> single_form_best_matches = {
+      CreatePasswordForm(kUsername, kPassword)};
   auto form_manager =
-      CreateFormManager(GURL(kDefaultUrl), &single_form_best_matches);
+      CreateFormManager(GURL(kDefaultUrl), single_form_best_matches);
   EnqueueMessage(std::move(form_manager), /*user_signed_in=*/true,
                  /*update_password=*/true);
   EXPECT_NE(nullptr, GetMessageWrapper());
@@ -824,11 +830,10 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest, UpdatePasswordWithSingleForm) {
   ukm::TestAutoSetUkmRecorder test_ukm_recorder;
 
   SetPendingCredentials(kUsername, kPassword);
-  PasswordForm password_form = CreatePasswordForm(kUsername, kPassword);
-  std::vector<raw_ptr<const PasswordForm, VectorExperimental>>
-      single_form_best_matches = {&password_form};
+  std::vector<PasswordForm> single_form_best_matches = {
+      CreatePasswordForm(kUsername, kPassword)};
   auto form_manager =
-      CreateFormManager(GURL(kDefaultUrl), &single_form_best_matches);
+      CreateFormManager(GURL(kDefaultUrl), single_form_best_matches);
   EXPECT_CALL(*form_manager, Save());
   EnqueueMessage(std::move(form_manager), /*user_signed_in=*/true,
                  /*update_password=*/true);
@@ -1312,6 +1317,84 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
   DismissMessage(messages::DismissReason::UNKNOWN);
 }
 
+// Tests that the description is set correctly when the signed in user updated
+// the password in the local store.
+TEST_F(SaveUpdatePasswordMessageDelegateTest,
+       SignedInDescription_UpdatePasswordInAccountStore) {
+  // Enables using split storages (local and account).
+  profile()->GetPrefs()->SetInteger(
+      password_manager::prefs::kPasswordsUseUPMLocalAndSeparateStores,
+      static_cast<int>(
+          password_manager::prefs::UseUpmLocalAndSeparateStoresState::kOn));
+
+  SetPendingCredentials(kUsername, kPassword, /*is_account_store=*/true);
+  std::vector<PasswordForm> single_form_best_matches = {
+      CreatePasswordForm(kUsername, kPassword, true)};
+  auto form_manager =
+      CreateFormManager(GURL(kDefaultUrl), single_form_best_matches);
+  const bool is_signed_in = true;
+  const bool is_update = true;
+  EnqueueMessage(std::move(form_manager), /*user_signed_in=*/is_signed_in,
+                 /*update_password=*/is_update);
+
+  EXPECT_EQ(GetExpectedUPMMessageDescription(is_update, is_signed_in,
+                                             kAccountEmail16),
+            GetMessageWrapper()->GetDescription());
+
+  DismissMessage(messages::DismissReason::UNKNOWN);
+}
+
+// Tests that the description is set correctly when the signed in user updated
+// the password in the local store.
+TEST_F(SaveUpdatePasswordMessageDelegateTest,
+       SignedOutDescription_UpdatePasswordInLocalStore) {
+  // Enables using split storages (local and account).
+  EnableUseUPMLocalAndSeparateStores();
+
+  SetPendingCredentials(kUsername, kPassword, /*is_account_store=*/false);
+  std::vector<PasswordForm> single_form_best_matches = {
+      CreatePasswordForm(kUsername, kPassword, false)};
+  auto form_manager =
+      CreateFormManager(GURL(kDefaultUrl), single_form_best_matches);
+  const bool is_update = true;
+  EnqueueMessage(std::move(form_manager), /*user_signed_in=*/true,
+                 /*update_password=*/is_update);
+
+  // Should display signed out message for updating the password in the local
+  // store (even when the user is signed in).
+  EXPECT_EQ(GetExpectedUPMMessageDescription(is_update, false, kAccountEmail16),
+            GetMessageWrapper()->GetDescription());
+
+  DismissMessage(messages::DismissReason::UNKNOWN);
+}
+
+// Tests that the description is set correctly when the signed in user updated
+// the password, which is stored in both local and account stores.
+TEST_F(SaveUpdatePasswordMessageDelegateTest,
+       SignedInDescription_UpdatePasswordInBothStores) {
+  // Enables using split storages (local and account).
+  EnableUseUPMLocalAndSeparateStores();
+
+  SetPendingCredentials(kUsername, kPassword);
+  PasswordForm password_form = CreatePasswordForm(kUsername, kPassword);
+  password_form.in_store =
+      password_manager::PasswordForm::Store::kProfileStore |
+      password_manager::PasswordForm::Store::kAccountStore;
+  std::vector<PasswordForm> single_form_best_matches = {password_form};
+  auto form_manager =
+      CreateFormManager(GURL(kDefaultUrl), single_form_best_matches);
+  const bool is_update = true;
+  EnqueueMessage(std::move(form_manager), /*user_signed_in=*/true,
+                 /*update_password=*/is_update);
+
+  // Should display signed out message for updating the password in the local
+  // store (even when the user is signed in).
+  EXPECT_EQ(GetExpectedUPMMessageDescription(is_update, true, kAccountEmail16),
+            GetMessageWrapper()->GetDescription());
+
+  DismissMessage(messages::DismissReason::UNKNOWN);
+}
+
 // Tests that the description is set correctly when the signed-in user with a
 // non-displayable email updates a password.
 TEST_F(SaveUpdatePasswordMessageDelegateTest,
@@ -1334,5 +1417,55 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
     EXPECT_EQ(GetExpectedUPMMessageDescription(is_update, is_signed_in,
                                                kAccountFullName16),
               GetMessageWrapper()->GetDescription());
+  DismissMessage(messages::DismissReason::UNKNOWN);
+}
+
+// Tests that SaveUpdatePasswordMessageDelegate::IsUsingAccountStorage returns
+// correct value for the updated credential.
+TEST_F(SaveUpdatePasswordMessageDelegateTest,
+       IsUsingProfileStore_UpdatingExistingValue) {
+  EnableUseUPMLocalAndSeparateStores();
+  SetPendingCredentials(kUsername, kPassword);
+  PasswordForm password_form1 = CreatePasswordForm(kUsername, kPassword, true);
+  PasswordForm password_form2 =
+      CreatePasswordForm(kUsername2, kPassword, false);
+  std::vector<PasswordForm> single_form_best_matches = {password_form1,
+                                                        password_form2};
+  auto form_manager =
+      CreateFormManager(GURL(kDefaultUrl), single_form_best_matches);
+
+  EnqueueMessage(std::move(form_manager), /*user_signed_in=*/true,
+                 /*update_password=*/true);
+
+  EXPECT_TRUE(get_password_edit_dialog_bridge_delegate()->IsUsingAccountStorage(
+      kUsername));
+  EXPECT_FALSE(
+      get_password_edit_dialog_bridge_delegate()->IsUsingAccountStorage(
+          kUsername2));
+
+  DismissMessage(messages::DismissReason::UNKNOWN);
+}
+
+// Tests that SaveUpdatePasswordMessageDelegate::IsUsingAccountStorage returns
+// correct value for the saved credential.
+TEST_F(SaveUpdatePasswordMessageDelegateTest,
+       IsUsingProfileStore_SavingNewCredentialFromUpdateDialog) {
+  EnableUseUPMLocalAndSeparateStores();
+  SetPendingCredentials(kUsername, kPassword);
+  PasswordForm password_form1 = CreatePasswordForm(kUsername, kPassword, false);
+  std::vector<PasswordForm> single_form_best_matches = {
+      CreatePasswordForm(kUsername, kPassword, false)};
+  auto form_manager =
+      CreateFormManager(GURL(kDefaultUrl), single_form_best_matches);
+
+  EnqueueMessage(std::move(form_manager), /*user_signed_in=*/true,
+                 /*update_password=*/true);
+
+  EXPECT_FALSE(
+      get_password_edit_dialog_bridge_delegate()->IsUsingAccountStorage(
+          kUsername));
+  EXPECT_TRUE(get_password_edit_dialog_bridge_delegate()->IsUsingAccountStorage(
+      kUsername2));
+
   DismissMessage(messages::DismissReason::UNKNOWN);
 }

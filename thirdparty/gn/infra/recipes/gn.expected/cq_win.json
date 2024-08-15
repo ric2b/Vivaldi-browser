@@ -187,7 +187,7 @@
       "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
       "@@@STEP_LOG_LINE@json.output@    \"\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
-      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-version:1.8.2---\", @@@",
+      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-version:1.8.2---\",@@@",
       "@@@STEP_LOG_LINE@json.output@        \"package\": \"infra/ninja/resolved-platform\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }@@@",
       "@@@STEP_LOG_LINE@json.output@    ]@@@",
@@ -203,7 +203,7 @@
       "-root",
       "[CACHE]\\windows_sdk",
       "-ensure-file",
-      "chrome_internal/third_party/sdk/windows uploaded:2019-09-06",
+      "chrome_internal/third_party/sdk/windows uploaded:2024-01-11",
       "-max-threads",
       "0",
       "-json-output",
@@ -228,7 +228,7 @@
       "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
       "@@@STEP_LOG_LINE@json.output@    \"\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
-      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-uploaded:2019-09\", @@@",
+      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-uploaded:2024-01\",@@@",
       "@@@STEP_LOG_LINE@json.output@        \"package\": \"chrome_internal/third_party/sdk/windows\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }@@@",
       "@@@STEP_LOG_LINE@json.output@    ]@@@",
@@ -242,7 +242,7 @@
       "python3",
       "-u",
       "RECIPE_MODULE[recipe_engine::json]\\resources\\read.py",
-      "[CACHE]\\windows_sdk\\win_sdk\\bin\\SetEnv.x64.json",
+      "[CACHE]\\windows_sdk\\Windows Kits\\10\\bin\\SetEnv.x64.json",
       "/path/to/tmp/json"
     ],
     "luci_context": {
@@ -263,17 +263,16 @@
       "@@@STEP_LOG_LINE@json.output@  \"env\": {@@@",
       "@@@STEP_LOG_LINE@json.output@    \"PATH\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      [@@@",
-      "@@@STEP_LOG_LINE@json.output@        \"..\", @@@",
-      "@@@STEP_LOG_LINE@json.output@        \"..\", @@@",
-      "@@@STEP_LOG_LINE@json.output@        \"win_sdk\", @@@",
-      "@@@STEP_LOG_LINE@json.output@        \"bin\", @@@",
+      "@@@STEP_LOG_LINE@json.output@        \"Windows Kits\",@@@",
+      "@@@STEP_LOG_LINE@json.output@        \"10\",@@@",
+      "@@@STEP_LOG_LINE@json.output@        \"bin\",@@@",
+      "@@@STEP_LOG_LINE@json.output@        \"10.0.19041.0\",@@@",
       "@@@STEP_LOG_LINE@json.output@        \"x64\"@@@",
       "@@@STEP_LOG_LINE@json.output@      ]@@@",
-      "@@@STEP_LOG_LINE@json.output@    ], @@@",
+      "@@@STEP_LOG_LINE@json.output@    ],@@@",
       "@@@STEP_LOG_LINE@json.output@    \"VSINSTALLDIR\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      [@@@",
-      "@@@STEP_LOG_LINE@json.output@        \"..\", @@@",
-      "@@@STEP_LOG_LINE@json.output@        \"..\\\\\"@@@",
+      "@@@STEP_LOG_LINE@json.output@        \".\\\\\"@@@",
       "@@@STEP_LOG_LINE@json.output@      ]@@@",
       "@@@STEP_LOG_LINE@json.output@    ]@@@",
       "@@@STEP_LOG_LINE@json.output@  }@@@",
@@ -301,11 +300,11 @@
     ],
     "cwd": "[START_DIR]\\gn",
     "env": {
-      "VSINSTALLDIR": "[CACHE]\\windows_sdk"
+      "VSINSTALLDIR": "[CACHE]\\windows_sdk\\.\\"
     },
     "env_prefixes": {
       "PATH": [
-        "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
+        "[CACHE]\\windows_sdk\\Windows Kits\\10\\bin\\10.0.19041.0\\x64"
       ]
     },
     "luci_context": {
@@ -333,11 +332,11 @@
     ],
     "cwd": "[START_DIR]\\gn",
     "env": {
-      "VSINSTALLDIR": "[CACHE]\\windows_sdk"
+      "VSINSTALLDIR": "[CACHE]\\windows_sdk\\.\\"
     },
     "env_prefixes": {
       "PATH": [
-        "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
+        "[CACHE]\\windows_sdk\\Windows Kits\\10\\bin\\10.0.19041.0\\x64"
       ]
     },
     "luci_context": {
@@ -363,11 +362,11 @@
     ],
     "cwd": "[START_DIR]\\gn",
     "env": {
-      "VSINSTALLDIR": "[CACHE]\\windows_sdk"
+      "VSINSTALLDIR": "[CACHE]\\windows_sdk\\.\\"
     },
     "env_prefixes": {
       "PATH": [
-        "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
+        "[CACHE]\\windows_sdk\\Windows Kits\\10\\bin\\10.0.19041.0\\x64"
       ]
     },
     "luci_context": {
@@ -408,11 +407,11 @@
     ],
     "cwd": "[START_DIR]\\gn",
     "env": {
-      "VSINSTALLDIR": "[CACHE]\\windows_sdk"
+      "VSINSTALLDIR": "[CACHE]\\windows_sdk\\.\\"
     },
     "env_prefixes": {
       "PATH": [
-        "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
+        "[CACHE]\\windows_sdk\\Windows Kits\\10\\bin\\10.0.19041.0\\x64"
       ]
     },
     "luci_context": {
@@ -440,11 +439,11 @@
     ],
     "cwd": "[START_DIR]\\gn",
     "env": {
-      "VSINSTALLDIR": "[CACHE]\\windows_sdk"
+      "VSINSTALLDIR": "[CACHE]\\windows_sdk\\.\\"
     },
     "env_prefixes": {
       "PATH": [
-        "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
+        "[CACHE]\\windows_sdk\\Windows Kits\\10\\bin\\10.0.19041.0\\x64"
       ]
     },
     "luci_context": {
@@ -470,11 +469,11 @@
     ],
     "cwd": "[START_DIR]\\gn",
     "env": {
-      "VSINSTALLDIR": "[CACHE]\\windows_sdk"
+      "VSINSTALLDIR": "[CACHE]\\windows_sdk\\.\\"
     },
     "env_prefixes": {
       "PATH": [
-        "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
+        "[CACHE]\\windows_sdk\\Windows Kits\\10\\bin\\10.0.19041.0\\x64"
       ]
     },
     "luci_context": {
@@ -514,11 +513,11 @@
     ],
     "cwd": "[START_DIR]\\gn",
     "env": {
-      "VSINSTALLDIR": "[CACHE]\\windows_sdk"
+      "VSINSTALLDIR": "[CACHE]\\windows_sdk\\.\\"
     },
     "env_prefixes": {
       "PATH": [
-        "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
+        "[CACHE]\\windows_sdk\\Windows Kits\\10\\bin\\10.0.19041.0\\x64"
       ]
     },
     "infra_step": true,
@@ -558,15 +557,15 @@
       "ensure-directory",
       "--mode",
       "0777",
-      "[START_DIR]\\cipd_tool\\infra\\tools\\luci\\cas\\git_revision%3Amock_infra_git_revision"
+      "[START_DIR]\\cipd_tool\\infra\\tools\\luci\\cas\\33f9d887e5b8aeaaf9d65506acccfa8da2c480712e534a23a79e92c342c44bee"
     ],
     "cwd": "[START_DIR]\\gn",
     "env": {
-      "VSINSTALLDIR": "[CACHE]\\windows_sdk"
+      "VSINSTALLDIR": "[CACHE]\\windows_sdk\\.\\"
     },
     "env_prefixes": {
       "PATH": [
-        "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
+        "[CACHE]\\windows_sdk\\Windows Kits\\10\\bin\\10.0.19041.0\\x64"
       ]
     },
     "infra_step": true,
@@ -592,7 +591,7 @@
       "cipd.bat",
       "ensure",
       "-root",
-      "[START_DIR]\\cipd_tool\\infra\\tools\\luci\\cas\\git_revision%3Amock_infra_git_revision",
+      "[START_DIR]\\cipd_tool\\infra\\tools\\luci\\cas\\33f9d887e5b8aeaaf9d65506acccfa8da2c480712e534a23a79e92c342c44bee",
       "-ensure-file",
       "infra/tools/luci/cas/${platform} git_revision:mock_infra_git_revision",
       "-max-threads",
@@ -602,11 +601,11 @@
     ],
     "cwd": "[START_DIR]\\gn",
     "env": {
-      "VSINSTALLDIR": "[CACHE]\\windows_sdk"
+      "VSINSTALLDIR": "[CACHE]\\windows_sdk\\.\\"
     },
     "env_prefixes": {
       "PATH": [
-        "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
+        "[CACHE]\\windows_sdk\\Windows Kits\\10\\bin\\10.0.19041.0\\x64"
       ]
     },
     "infra_step": true,
@@ -629,7 +628,7 @@
       "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
       "@@@STEP_LOG_LINE@json.output@    \"\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
-      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-git_revision:moc\", @@@",
+      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-git_revision:moc\",@@@",
       "@@@STEP_LOG_LINE@json.output@        \"package\": \"infra/tools/luci/cas/resolved-platform\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }@@@",
       "@@@STEP_LOG_LINE@json.output@    ]@@@",
@@ -640,22 +639,24 @@
   },
   {
     "cmd": [
-      "[START_DIR]\\cipd_tool\\infra\\tools\\luci\\cas\\git_revision%3Amock_infra_git_revision\\cas",
+      "[START_DIR]\\cipd_tool\\infra\\tools\\luci\\cas\\33f9d887e5b8aeaaf9d65506acccfa8da2c480712e534a23a79e92c342c44bee\\cas",
       "archive",
+      "-log-level",
+      "info",
       "-cas-instance",
       "projects/example-cas-server/instances/default_instance",
       "-dump-digest",
       "/path/to/tmp/",
-      "-paths",
-      "[START_DIR]\\gn\\out:gn.exe"
+      "-paths-json",
+      "[[\"[START_DIR]\\\\gn\\\\out\", \"gn.exe\"]]"
     ],
     "cwd": "[START_DIR]\\gn",
     "env": {
-      "VSINSTALLDIR": "[CACHE]\\windows_sdk"
+      "VSINSTALLDIR": "[CACHE]\\windows_sdk\\.\\"
     },
     "env_prefixes": {
       "PATH": [
-        "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
+        "[CACHE]\\windows_sdk\\Windows Kits\\10\\bin\\10.0.19041.0\\x64"
       ]
     },
     "infra_step": true,
@@ -685,6 +686,14 @@
       "/im",
       "mspdbsrv.exe"
     ],
+    "env": {
+      "VSINSTALLDIR": "[CACHE]\\windows_sdk\\.\\"
+    },
+    "env_prefixes": {
+      "PATH": [
+        "[CACHE]\\windows_sdk\\Windows Kits\\10\\bin\\10.0.19041.0\\x64"
+      ]
+    },
     "luci_context": {
       "realm": {
         "name": "gn:try"

@@ -46,6 +46,8 @@
 #include "dawn/native/opengl/SamplerGL.h"
 #include "dawn/native/opengl/ShaderModuleGL.h"
 #include "dawn/native/opengl/TextureGL.h"
+#include "dawn/native/opengl/UtilsGL.h"
+#include "dawn/native/opengl/opengl_platform.h"
 
 namespace {
 
@@ -181,7 +183,6 @@ MaybeError Device::Initialize(const UnpackedPtr<DeviceDescriptor>& descriptor) {
     // Set initial state.
     gl.Enable(GL_DEPTH_TEST);
     gl.Enable(GL_SCISSOR_TEST);
-    gl.Enable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
     if (gl.GetVersion().IsDesktop()) {
         // These are not necessary on GLES. The functionality is enabled by default, and
         // works by specifying sample counts and SRGB textures, respectively.
@@ -192,6 +193,9 @@ MaybeError Device::Initialize(const UnpackedPtr<DeviceDescriptor>& descriptor) {
 
     Ref<Queue> queue;
     DAWN_TRY_ASSIGN(queue, Queue::Create(this, &descriptor->defaultQueue));
+    if (HasAnisotropicFiltering(gl)) {
+        gl.GetIntegerv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &mMaxTextureMaxAnisotropy);
+    }
     return DeviceBase::Initialize(std::move(queue));
 }
 
@@ -421,10 +425,22 @@ float Device::GetTimestampPeriodInNS() const {
     return 1.0f;
 }
 
+bool Device::MayRequireDuplicationOfIndirectParameters() const {
+    return true;
+}
+
+bool Device::ShouldApplyIndexBufferOffsetToFirstIndex() const {
+    return true;
+}
+
 const OpenGLFunctions& Device::GetGL() const {
     mContext->MakeCurrent();
     ToBackend(GetQueue())->OnGLUsed();
     return mGL;
+}
+
+int Device::GetMaxTextureMaxAnisotropy() const {
+    return mMaxTextureMaxAnisotropy;
 }
 
 }  // namespace dawn::native::opengl

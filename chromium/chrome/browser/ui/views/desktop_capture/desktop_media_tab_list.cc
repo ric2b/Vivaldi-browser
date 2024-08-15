@@ -244,7 +244,8 @@ DesktopMediaTabList::DesktopMediaTabList(DesktopMediaListController* controller,
       model_.get(), std::vector<ui::TableColumn>(1),
       views::TableType::kIconAndText, true);
   table->set_observer(view_observer_.get());
-  table->GetViewAccessibility().OverrideName(accessible_name);
+  table->GetViewAccessibility().SetName(accessible_name,
+                                        ax::mojom::NameFrom::kAttribute);
   table_ = table.get();
 
   AddChildView(BuildUI(std::move(table)));
@@ -327,6 +328,7 @@ DesktopMediaTabList::~DesktopMediaTabList() {
       highlighted_tabs);
 
   table_->SetModel(nullptr);
+  table_->set_observer(nullptr);
 }
 
 gfx::Size DesktopMediaTabList::CalculatePreferredSize() const {

@@ -6,6 +6,7 @@
 <translation id="1110994991967754504">Абраць правы доступу для <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885">Сервер <ph name="HOST_NAME" /> нечакана разарваў злучэнне.</translation>
 <translation id="1161325031994447685">Падлучыцеся да WI-FI яшчэ раз</translation>
+<translation id="1175364870820465910">&amp;Друкаванне...</translation>
 <translation id="1375198122581997741">Звесткі пра версію</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> не адправіў даных.</translation>
 <translation id="1559528461873125649">Такога файла або каталога няма</translation>
@@ -28,6 +29,7 @@
 <translation id="2355395290879513365">Злачынцы могуць бачыць выявы, якія бачыце вы, і змяняць іх у злачынных мэтах.</translation>
 <translation id="2356070529366658676">Пытацца</translation>
 <translation id="2359808026110333948">Працягнуць</translation>
+<translation id="2388886110302389394">Адкрыць старонку ў новым прыватным акне(Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Запуск дыягностыкі сеткі<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Старонка была заблакаваная пашырэннем</translation>
 <translation id="2501278716633472235">Назад</translation>
@@ -77,6 +79,7 @@
 <translation id="3950820424414687140">Увайсці</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> заблакаваны</translation>
 <translation id="3987940399970879459">Менш за 1 МБ</translation>
+<translation id="4075123085690634698">Адкрыць старонку ў новым прыватным акне (⇧⌘N)</translation>
 <translation id="4075732493274867456">Кліент і сервер не падтрымліваюць агульнай версіі пратакола SSL або шыфравання.</translation>
 <translation id="4116663294526079822">Заўсёды дазваляць на гэтым сайце</translation>
 <translation id="4130226655945681476">Праверце правады, мадэм і роўтар</translation>
@@ -153,6 +156,7 @@
 <translation id="6757797048963528358">Ваша прылада перайшла ў рэжым сну.</translation>
 <translation id="6890956352250146925">Ппраметры файлаў cookie і даных сайтаў</translation>
 <translation id="6897140037006041989">Агент карыстальніка</translation>
+<translation id="6957624206566198865">Адкрыць старонку ў новай прыватнай укладцы</translation>
 <translation id="7053983685419859001">Заблакаваць</translation>
 <translation id="7079718277001814089">Гэты сайт змяшчае шкоднаснае праграмнае забеспячэнне</translation>
 <translation id="7096937462164235847">Сапраўднасць гэтага вэб-сайта не спраўджаная.</translation>
@@ -181,6 +185,7 @@
 <translation id="7834399512844817676">Звычайна сайт <ph name="SITE" /> для абароны вашых даных выкарыстоўвае шыфраванне. Але падчас злучэння <ph name="SITE" /> адправіў няправільныя ўліковыя даныя. Магчыма, злачынцы спрабавалі замаскіравацца пад сайт <ph name="SITE" /> або акно падлучэння да WiFi перарвала злучэнне. Вашыя даныя засталіся ў бяспецы, бо браўзер разарваў злучэнне да таго, як абмен адбыўся.</translation>
 <translation id="7878562273885520351">Злачынцы могуць даведацца ваш пароль</translation>
 <translation id="7951415247503192394">(32 бітны)</translation>
+<translation id="7953236668995583915">Каб ужыць абноўленыя налады на гэтым сайце, абнавіце старонку</translation>
 <translation id="8025119109950072390">Злачынцы могуць выкарыстоўваць гэты сайт, каб усталяваць на вашым камп'ютары шкоднаснае праграмнае забеспячэнне або раскрыць вашу асабістую інфармацыю (паролі, нумары тэлефонаў або крэдытных картак).</translation>
 <translation id="8037357227543935929">Пытацца (прадвызначана)</translation>
 <translation id="8041940743680923270">Выкарыстоўваць глабальна (пытацца)</translation>
@@ -199,11 +204,12 @@
 <translation id="8498891568109133222">Сервер <ph name="HOST_NAME" /> занадта доўга не адказвае.</translation>
 <translation id="8503813439785031346">Імя карыстальніка</translation>
 <translation id="8703575177326907206">Злучэнне з <ph name="DOMAIN" /> не зашыфравана.</translation>
-<translation id="8740359287975076522">Не атрымліваецца знайсці &lt;abbr id="dnsDefinition"&gt;DNS-адрас&lt;/abbr&gt; сайта <ph name="HOST_NAME" /> . Выконваецца дыягностыка.</translation>
+<translation id="8740359287975076522">Не ўдаецца знайсці &lt;abbr id="dnsDefinition"&gt;DNS-адрас&lt;/abbr&gt; сайта <ph name="HOST_NAME" /> . Выконваецца дыягностыка.</translation>
 <translation id="8820817407110198400">Закладкі</translation>
 <translation id="8940028675168378100">Заблакавана <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Перайсці да налад сайта</translation>
 <translation id="9001074447101275817">Проксі-сервер <ph name="DOMAIN" /> патрабуе імя карыстальніка і пароль.</translation>
+<translation id="9008201768610948239">Не зважаць</translation>
 <translation id="9025348182339809926">(хібны)</translation>
 <translation id="9039213469156557790">Таксама на старонцы выяўлена небяспечнае змесціва. Гэтае змесціва падчас перадачы могуць праглядаць іншыя, а злачынцы могуць мадыфікаваць яго, каб змяніць паводзіны старонкі.</translation>
 <translation id="9062620674789239642">Магчыма, ён быў перамешчаны, зменены або выдалены.</translation>

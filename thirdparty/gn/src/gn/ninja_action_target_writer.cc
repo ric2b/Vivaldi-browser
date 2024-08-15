@@ -87,7 +87,7 @@ void NinjaActionTargetWriter::Run() {
     out_ << "build";
     SubstitutionWriter::GetListAsOutputFiles(
         settings_, target_->action_values().outputs(), &output_files);
-    path_output_.WriteFiles(out_, output_files);
+    WriteOutputs(output_files);
 
     out_ << ": " << custom_rule_name;
     if (!input_deps.empty()) {
@@ -275,7 +275,7 @@ void NinjaActionTargetWriter::WriteOutputFilesForBuildLine(
 
   for (size_t i = first_output_index; i < output_files->size(); i++) {
     out_ << " ";
-    path_output_.WriteFile(out_, (*output_files)[i]);
+    WriteOutput((*output_files)[i]);
   }
 }
 

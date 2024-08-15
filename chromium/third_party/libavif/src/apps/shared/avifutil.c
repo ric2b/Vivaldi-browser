@@ -321,6 +321,7 @@ avifAppFileFormat avifReadImage(const char * filename,
             *outDepth = image->depth;
         }
     } else if (format == AVIF_APP_FILE_FORMAT_JPEG) {
+        // imageSizeLimit is also used to limit Exif and XMP metadata here.
         if (!avifJPEGRead(filename, image, requestedFormat, requestedDepth, chromaDownsampling, ignoreColorProfile, ignoreExif, ignoreXMP, ignoreGainMap, imageSizeLimit)) {
             return AVIF_APP_FILE_FORMAT_UNKNOWN;
         }
@@ -346,6 +347,36 @@ avifAppFileFormat avifReadImage(const char * filename,
         return AVIF_APP_FILE_FORMAT_UNKNOWN;
     }
     return format;
+}
+
+avifBool avifReadEntireFile(const char * filename, avifRWData * raw)
+{
+    FILE * f = fopen(filename, "rb");
+    if (!f) {
+        return AVIF_FALSE;
+    }
+
+    fseek(f, 0, SEEK_END);
+    long pos = ftell(f);
+    if (pos <= 0) {
+        fclose(f);
+        return AVIF_FALSE;
+    }
+    size_t fileSize = (size_t)pos;
+    fseek(f, 0, SEEK_SET);
+
+    if (avifRWDataRealloc(raw, fileSize) != AVIF_RESULT_OK) {
+        fclose(f);
+        return AVIF_FALSE;
+    }
+    size_t bytesRead = fread(raw->data, 1, fileSize, f);
+    fclose(f);
+
+    if (bytesRead != fileSize) {
+        avifRWDataFree(raw);
+        return AVIF_FALSE;
+    }
+    return AVIF_TRUE;
 }
 
 void avifImageFixXMP(avifImage * image)

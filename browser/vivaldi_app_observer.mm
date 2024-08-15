@@ -2,7 +2,9 @@
 
 #include "browser/vivaldi_app_observer.h"
 
+#include "base/apple/foundation_util.h"
 #include "base/lazy_instance.h"
+#include "chrome/browser/app_controller_mac.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "ui/vivaldi_browser_window.h"
 
@@ -36,13 +38,24 @@ void VivaldiAppObserver::SetCommand(int tag, Browser* browser) {
   tag_ = tag;
 }
 
+void VivaldiAppObserver::SetUrlsToOpen(const std::vector<GURL>& urls) {
+  urls_.insert(urls_.end(), urls.begin(), urls.end());
+}
+
 // AppWindowRegistry::Observer
 void VivaldiAppObserver::OnWindowShown(VivaldiBrowserWindow* window,
                                        bool was_hidden) {
+
   if (browser_ && tag_ > 0) {
     chrome::ExecuteCommand(browser_, tag_);
-    browser_ = nullptr;
     tag_ = 0;
+    browser_ = nullptr;
+  }
+  if (urls_.size() > 0) {
+    AppController* controller =
+        base::apple::ObjCCastStrict<AppController>([NSApp delegate]);
+    [controller openUrlsInVivaldi:urls_];
+    urls_.clear();
   }
 }
 

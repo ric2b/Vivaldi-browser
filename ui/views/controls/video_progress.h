@@ -19,8 +19,8 @@ namespace vivaldi {
 
 // Progress bar is a control that indicates progress visually.
 class VIEWS_EXPORT VideoProgress : public views::View {
+  METADATA_HEADER(VideoProgress, views::View)
  public:
-  METADATA_HEADER(VideoProgress);
 
   VideoProgress();
   ~VideoProgress() override;

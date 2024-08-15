@@ -582,8 +582,8 @@ EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS
 
 // Subtract y * Pi/2 to reduce x to the interval -Pi/4 <= x <= +Pi/4
 // using "Extended precision modular arithmetic"
-#if defined(EIGEN_HAS_SINGLE_INSTRUCTION_MADD)
-  // This version requires true FMA for high accuracy
+#if defined(EIGEN_VECTORIZE_FMA)
+  // This version requires true FMA for high accuracy.
   // It provides a max error of 1ULP up to (with absolute_error < 5.9605e-08):
   const float huge_th = ComputeSine ? 117435.992f : 71476.0625f;
   x = pmadd(y, pset1<Packet>(-1.57079601287841796875f), x);
@@ -965,6 +965,34 @@ EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet pdiv_complex(const Pa
 }
 
 template <typename Packet>
+EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet plog_complex(const Packet& x) {
+  typedef typename unpacket_traits<Packet>::type Scalar;
+  typedef typename Scalar::value_type RealScalar;
+  typedef typename unpacket_traits<Packet>::as_real RealPacket;
+
+  RealPacket real_mask_rp = peven_mask(x.v);
+  Packet real_mask(real_mask_rp);
+
+  // Real part
+  RealPacket x_flip = pcplxflip(x).v;  // b, a
+  Packet x_norm = phypot_complex(x);   // sqrt(a^2 + b^2), sqrt(a^2 + b^2)
+  RealPacket xlogr = plog(x_norm.v);   // log(sqrt(a^2 + b^2)), log(sqrt(a^2 + b^2))
+
+  // Imag part
+  RealPacket ximg = patan2(x.v, x_flip);  // atan2(a, b), atan2(b, a)
+
+  const RealPacket cst_pos_inf = pset1<RealPacket>(NumTraits<RealScalar>::infinity());
+  RealPacket x_abs = pabs(x.v);
+  RealPacket is_x_pos_inf = pcmp_eq(x_abs, cst_pos_inf);
+  RealPacket is_y_pos_inf = pcplxflip(Packet(is_x_pos_inf)).v;
+  RealPacket is_any_inf = por(is_x_pos_inf, is_y_pos_inf);
+  RealPacket xreal = pselect(is_any_inf, cst_pos_inf, xlogr);
+
+  Packet xres = pselect(real_mask, Packet(xreal), Packet(ximg));  // log(sqrt(a^2 + b^2)), atan2(b, a)
+  return xres;
+}
+
+template <typename Packet>
 EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet psqrt_complex(const Packet& a) {
   typedef typename unpacket_traits<Packet>::type Scalar;
   typedef typename Scalar::value_type RealScalar;
@@ -1076,6 +1104,41 @@ EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet psqrt_complex(const P
   return pselect(is_imag_inf, imag_inf_result, pselect(is_real_inf, real_inf_result, result));
 }
 
+// \internal \returns the norm of a complex number z = x + i*y, defined as sqrt(x^2 + y^2).
+// Implemented using the hypot(a,b) algorithm from https://doi.org/10.48550/arXiv.1904.09481
+template <typename Packet>
+EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet phypot_complex(const Packet& a) {
+  typedef typename unpacket_traits<Packet>::type Scalar;
+  typedef typename Scalar::value_type RealScalar;
+  typedef typename unpacket_traits<Packet>::as_real RealPacket;
+
+  const RealPacket cst_zero_rp = pset1<RealPacket>(static_cast<RealScalar>(0.0));
+  const RealPacket cst_minus_one_rp = pset1<RealPacket>(static_cast<RealScalar>(-1.0));
+  const RealPacket cst_two_rp = pset1<RealPacket>(static_cast<RealScalar>(2.0));
+  const RealPacket evenmask = peven_mask(a.v);
+
+  RealPacket a_abs = pabs(a.v);
+  RealPacket a_flip = pcplxflip(Packet(a_abs)).v;       // |b|, |a|
+  RealPacket a_all = pselect(evenmask, a_abs, a_flip);  // |a|, |a|
+  RealPacket b_all = pselect(evenmask, a_flip, a_abs);  // |b|, |b|
+
+  RealPacket a2 = pmul(a.v, a.v);                    // |a^2, b^2|
+  RealPacket a2_flip = pcplxflip(Packet(a2)).v;      // |b^2, a^2|
+  RealPacket h = psqrt(padd(a2, a2_flip));           // |sqrt(a^2 + b^2), sqrt(a^2 + b^2)|
+  RealPacket h_sq = pmul(h, h);                      // |a^2 + b^2, a^2 + b^2|
+  RealPacket a_sq = pselect(evenmask, a2, a2_flip);  // |a^2, a^2|
+  RealPacket m_h_sq = pmul(h_sq, cst_minus_one_rp);
+  RealPacket m_a_sq = pmul(a_sq, cst_minus_one_rp);
+  RealPacket x = psub(psub(pmadd(h, h, m_h_sq), pmadd(b_all, b_all, psub(a_sq, h_sq))), pmadd(a_all, a_all, m_a_sq));
+  h = psub(h, pdiv(x, pmul(cst_two_rp, h)));  // |h - x/(2*h), h - x/(2*h)|
+
+  // handle zero-case
+  RealPacket iszero = pcmp_eq(por(a_abs, a_flip), cst_zero_rp);
+
+  h = pandnot(h, iszero);  // |sqrt(a^2+b^2), sqrt(a^2+b^2)|
+  return Packet(h);        // |sqrt(a^2+b^2), sqrt(a^2+b^2)|
+}
+
 template <typename Packet>
 struct psign_impl<Packet, std::enable_if_t<!NumTraits<typename unpacket_traits<Packet>::type>::IsComplex &&
                                            !NumTraits<typename unpacket_traits<Packet>::type>::IsInteger>> {
@@ -1181,7 +1244,7 @@ EIGEN_STRONG_INLINE void fast_twosum(const Packet& x, const Packet& y, Packet& s
   s_lo = psub(y, t);
 }
 
-#ifdef EIGEN_HAS_SINGLE_INSTRUCTION_MADD
+#ifdef EIGEN_VECTORIZE_FMA
 // This function implements the extended precision product of
 // a pair of floating point numbers. Given {x, y}, it computes the pair
 // {p_hi, p_lo} such that x * y = p_hi + p_lo holds exactly and
@@ -1227,7 +1290,7 @@ EIGEN_STRONG_INLINE void twoprod(const Packet& x, const Packet& y, Packet& p_hi,
   p_lo = pmadd(x_lo, y_lo, p_lo);
 }
 
-#endif  // EIGEN_HAS_SINGLE_INSTRUCTION_MADD
+#endif  // EIGEN_VECTORIZE_FMA
 
 // This function implements Dekker's algorithm for the addition
 // of two double word numbers represented by {x_hi, x_lo} and {y_hi, y_lo}.

@@ -9,20 +9,20 @@
 import '//resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '//resources/polymer/v3_0/paper-spinner/paper-spinner-lite.js';
-import '//resources/cr_elements/cr_input/cr_input.js';
+import '//resources/ash/common/cr_elements/cr_input/cr_input.js';
 import './base_page.js';
 import './cellular_setup_icons.html.js';
 
 import {assert} from 'chrome://resources/js/assert.js';
 import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
-import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
+import {I18nMixin} from 'chrome://resources/ash/common/cr_elements/i18n_mixin.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {MojoInterfaceProviderImpl} from 'chrome://resources/ash/common/network/mojo_interface_provider.js';
 import {afterNextRender, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {CrosNetworkConfigInterface} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
 import {NetworkType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 
-import {CrInputElement} from 'chrome://resources/cr_elements/cr_input/cr_input.js';
+import {CrInputElement} from 'chrome://resources/ash/common/cr_elements/cr_input/cr_input.js';
 
 import {getTemplate} from './activation_code_page.html.js';
 
@@ -385,7 +385,8 @@ export class ActivationCodePageElement extends ActivationCodePageElementBase {
         .then(stream => {
           this.stream_ = stream;
           if (this.stream_) {
-            const videoElement = this.shadowRoot!.querySelector('#video') as HTMLVideoElement | null;
+            const videoElement =
+                this.shadowRoot!.querySelector<HTMLVideoElement>('#video');
             if (videoElement) {
               videoElement.srcObject = stream;
               this.playVideo_();
@@ -671,6 +672,12 @@ export class ActivationCodePageElement extends ActivationCodePageElementBase {
     // Because this string contains '<' and '>' characters, we cannot use i18n
     // methods.
     return loadTimeData.getString('scanQrCodeInputError');
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [ActivationCodePageElement.is]: ActivationCodePageElement;
   }
 }
 

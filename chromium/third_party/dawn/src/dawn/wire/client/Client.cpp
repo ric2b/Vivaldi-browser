@@ -99,10 +99,8 @@ ReservedTexture Client::ReserveTexture(WGPUDevice device, const WGPUTextureDescr
 
     ReservedTexture result;
     result.texture = ToAPI(texture);
-    result.id = texture->GetWireId();
-    result.generation = texture->GetWireGeneration();
-    result.deviceId = FromAPI(device)->GetWireId();
-    result.deviceGeneration = FromAPI(device)->GetWireGeneration();
+    result.handle = texture->GetWireHandle();
+    result.deviceHandle = FromAPI(device)->GetWireHandle();
     return result;
 }
 
@@ -112,20 +110,8 @@ ReservedSwapChain Client::ReserveSwapChain(WGPUDevice device,
 
     ReservedSwapChain result;
     result.swapchain = ToAPI(swapChain);
-    result.id = swapChain->GetWireId();
-    result.generation = swapChain->GetWireGeneration();
-    result.deviceId = FromAPI(device)->GetWireId();
-    result.deviceGeneration = FromAPI(device)->GetWireGeneration();
-    return result;
-}
-
-ReservedDevice Client::ReserveDevice(WGPUInstance instance) {
-    Device* device = Make<Device>(FromAPI(instance)->GetEventManagerHandle(), nullptr);
-
-    ReservedDevice result;
-    result.device = ToAPI(device);
-    result.id = device->GetWireId();
-    result.generation = device->GetWireGeneration();
+    result.handle = swapChain->GetWireHandle();
+    result.deviceHandle = FromAPI(device)->GetWireHandle();
     return result;
 }
 
@@ -134,7 +120,7 @@ ReservedInstance Client::ReserveInstance(const WGPUInstanceDescriptor* descripto
 
     if (instance->Initialize(descriptor) != WireResult::Success) {
         Free(instance);
-        return {nullptr, 0, 0};
+        return {nullptr, {0, 0}};
     }
 
     // Reserve an EventManager for the given instance and make the association in the map.
@@ -143,8 +129,7 @@ ReservedInstance Client::ReserveInstance(const WGPUInstanceDescriptor* descripto
 
     ReservedInstance result;
     result.instance = ToAPI(instance);
-    result.id = instance->GetWireId();
-    result.generation = instance->GetWireGeneration();
+    result.handle = instance->GetWireHandle();
     return result;
 }
 

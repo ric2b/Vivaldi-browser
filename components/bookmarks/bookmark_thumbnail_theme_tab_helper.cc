@@ -23,14 +23,11 @@ BookmarkThumbnailThemeTabHelper::BookmarkThumbnailThemeTabHelper(
 BookmarkThumbnailThemeTabHelper::~BookmarkThumbnailThemeTabHelper() = default;
 
 void BookmarkThumbnailThemeTabHelper::BookmarkModelLoaded(
-    bookmarks::BookmarkModel* model,
     bool ids_reassigned) {
-  DCHECK(model == bookmark_model_);
   UpdateBookmarkThemeColor();
 }
 
-void BookmarkThumbnailThemeTabHelper::BookmarkModelBeingDeleted(
-    bookmarks::BookmarkModel* model) {
+void BookmarkThumbnailThemeTabHelper::BookmarkModelBeingDeleted() {
   bookmark_model_ = nullptr;
 }
 
@@ -57,7 +54,7 @@ void BookmarkThumbnailThemeTabHelper::UpdateBookmarkThemeColor() {
   if (!bookmark_model_ || !bookmark_model_->loaded())
     return;
 
-  absl::optional<SkColor> theme_color = web_contents()->GetThemeColor();
+  std::optional<SkColor> theme_color = web_contents()->GetThemeColor();
   if (!theme_color)
     return;
 

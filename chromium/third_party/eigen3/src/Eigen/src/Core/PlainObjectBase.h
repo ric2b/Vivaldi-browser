@@ -204,7 +204,9 @@ class PlainObjectBase : public internal::dense_xpr_base<Derived>::type
    * provided to by-pass the creation of an evaluator of the expression, thus saving compilation efforts.
    *
    * See DenseCoeffsBase<Derived,ReadOnlyAccessors>::coeff(Index) const for details. */
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const Scalar& coeff(Index index) const { return m_storage.data()[index]; }
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE constexpr const Scalar& coeff(Index index) const {
+    return m_storage.data()[index];
+  }
 
   /** This is an overloaded version of DenseCoeffsBase<Derived,WriteAccessors>::coeffRef(Index,Index) const
    * provided to by-pass the creation of an evaluator of the expression, thus saving compilation efforts.

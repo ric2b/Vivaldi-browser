@@ -99,8 +99,8 @@ class ContentInjectionHandlerImpl
                                 ScriptMessageReplyHandler reply_handler);
 
   web::BrowserState* browser_state_;
-  web::BrowserState* incognito_browser_state_;
-  std::array<absl::optional<base::Value::Dict>, kRuleGroupCount>
+  web::BrowserState* incognito_browser_state_ = nullptr;
+  std::array<std::optional<base::Value::Dict>, kRuleGroupCount>
       injection_rules_;
 
   Resources* resources_;

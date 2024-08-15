@@ -126,7 +126,7 @@ CSSPrimitiveValue::UnitCategory CSSPrimitiveValue::UnitTypeToUnitCategory(
 bool CSSPrimitiveValue::IsCalculatedPercentageWithLength() const {
   // TODO(crbug.com/979895): Move this function to |CSSMathFunctionValue|.
   return IsCalculated() &&
-         To<CSSMathFunctionValue>(this)->Category() == kCalcPercentLength;
+         To<CSSMathFunctionValue>(this)->Category() == kCalcLengthFunction;
 }
 
 bool CSSPrimitiveValue::IsResolution() const {
@@ -193,7 +193,7 @@ bool CSSPrimitiveValue::IsPercentage() const {
 }
 
 bool CSSPrimitiveValue::IsResolvableLength() const {
-  return IsLength() && !InvolvesPercentage();
+  return IsLength() && !InvolvesLayout();
 }
 
 bool CSSPrimitiveValue::HasPercentage() const {
@@ -203,11 +203,11 @@ bool CSSPrimitiveValue::HasPercentage() const {
   return To<CSSMathFunctionValue>(this)->ExpressionNode()->HasPercentage();
 }
 
-bool CSSPrimitiveValue::InvolvesPercentage() const {
+bool CSSPrimitiveValue::InvolvesLayout() const {
   if (IsNumericLiteralValue()) {
     return To<CSSNumericLiteralValue>(this)->IsPercentage();
   }
-  return To<CSSMathFunctionValue>(this)->ExpressionNode()->InvolvesPercentage();
+  return To<CSSMathFunctionValue>(this)->ExpressionNode()->InvolvesLayout();
 }
 
 bool CSSPrimitiveValue::IsTime() const {
@@ -294,6 +294,24 @@ double CSSPrimitiveValue::ComputeDotsPerPixel() const {
   return To<CSSNumericLiteralValue>(this)->ComputeDotsPerPixel();
 }
 
+double CSSPrimitiveValue::ComputeDegrees(
+    const CSSLengthResolver& length_resolver) const {
+  double result =
+      IsCalculated()
+          ? To<CSSMathFunctionValue>(this)->ComputeDegrees(length_resolver)
+          : To<CSSNumericLiteralValue>(this)->ComputeDegrees();
+  return CSSValueClampingUtils::ClampAngle(result);
+}
+
+double CSSPrimitiveValue::ComputeSeconds(
+    const CSSLengthResolver& length_resolver) const {
+  double result =
+      IsCalculated()
+          ? To<CSSMathFunctionValue>(this)->ComputeSeconds(length_resolver)
+          : To<CSSNumericLiteralValue>(this)->ComputeSeconds();
+  return CSSValueClampingUtils::ClampTime(result);
+}
+
 template <>
 int CSSPrimitiveValue::ComputeLength(
     const CSSLengthResolver& length_resolver) const {
@@ -363,6 +381,14 @@ double CSSPrimitiveValue::ComputeNumber(
   return IsCalculated()
              ? To<CSSMathFunctionValue>(this)->ComputeNumber(length_resolver)
              : To<CSSNumericLiteralValue>(this)->ComputeNumber();
+}
+
+double CSSPrimitiveValue::ComputePercentage(
+    const CSSLengthResolver& length_resolver) const {
+  DCHECK(IsPercentage());
+  return IsCalculated() ? To<CSSMathFunctionValue>(this)->ComputePercentage(
+                              length_resolver)
+                        : To<CSSNumericLiteralValue>(this)->ComputePercentage();
 }
 
 double CSSPrimitiveValue::ComputeLengthDouble(

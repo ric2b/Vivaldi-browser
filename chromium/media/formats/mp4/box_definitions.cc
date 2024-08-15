@@ -23,10 +23,11 @@
 #include "media/media_buildflags.h"
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
+#include <optional>
+
 #include "media/formats/mp4/avc.h"
 #include "media/formats/mp4/dolby_vision.h"
 #include "media/video/h264_parser.h"  // nogncheck
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(ENABLE_PLATFORM_HEVC)
 #include "media/formats/mp4/hevc.h"
@@ -44,10 +45,10 @@ const size_t kFlacMetadataBlockStreaminfoSize = 34;
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
 // Try to parse dvcC or dvvC box if exists, return `video_info` and an optional
 // `dv_info` based on the configuration.
-std::tuple<CodecProfileLevel, absl::optional<CodecProfileLevel>> MaybeParseDOVI(
+std::tuple<CodecProfileLevel, std::optional<CodecProfileLevel>> MaybeParseDOVI(
     BoxReader* reader,
     CodecProfileLevel video_info) {
-  absl::optional<DOVIDecoderConfigurationRecord> dovi_config;
+  std::optional<DOVIDecoderConfigurationRecord> dovi_config;
 
   {
     DolbyVisionConfiguration dvcc;
@@ -68,7 +69,7 @@ std::tuple<CodecProfileLevel, absl::optional<CodecProfileLevel>> MaybeParseDOVI(
   }
 
   if (!dovi_config.has_value()) {
-    return {video_info, absl::nullopt};
+    return {video_info, std::nullopt};
   }
 
   constexpr int kHDR10CompatibilityId = 1;
@@ -83,7 +84,7 @@ std::tuple<CodecProfileLevel, absl::optional<CodecProfileLevel>> MaybeParseDOVI(
     return {video_info, dv_info};
   }
   // If the buffer is not backward compatible, always treat it as Dolby Vision.
-  return {dv_info, absl::nullopt};
+  return {dv_info, std::nullopt};
 }
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
@@ -167,7 +168,8 @@ bool ProtectionSystemSpecificHeader::Parse(BoxReader* reader) {
   // Don't bother validating the box's contents.
   // Copy the entire box, including the header, for passing to EME as initData.
   DCHECK(raw_box.empty());
-  raw_box.assign(reader->buffer(), reader->buffer() + reader->box_size());
+  base::span<const uint8_t> buffer = reader->buffer().first(reader->box_size());
+  raw_box.assign(buffer.begin(), buffer.end());
   return true;
 }
 
@@ -342,8 +344,9 @@ FourCC SampleEncryption::BoxType() const {
 bool SampleEncryption::Parse(BoxReader* reader) {
   RCHECK(reader->ReadFullBoxHeader());
   use_subsample_encryption = (reader->flags() & kUseSubsampleEncryption) != 0;
-  sample_encryption_data.assign(reader->buffer() + reader->pos(),
-                                reader->buffer() + reader->box_size());
+  base::span<const uint8_t> buffer =
+      reader->buffer().first(reader->box_size()).subspan(reader->pos());
+  sample_encryption_data.assign(buffer.begin(), buffer.end());
   return true;
 }
 
@@ -1684,8 +1687,9 @@ FourCC IamfSpecificBox::BoxType() const {
 
 bool IamfSpecificBox::Parse(BoxReader* reader) {
   const int obu_bitstream_size = reader->box_size() - reader->pos();
-  const uint8_t* buf = reader->buffer() + reader->pos();
-  ia_descriptors.assign(buf, buf + obu_bitstream_size);
+  base::span<const uint8_t> buffer =
+      reader->buffer().subspan(reader->pos(), obu_bitstream_size);
+  ia_descriptors.assign(buffer.begin(), buffer.end());
 
   RCHECK(reader->SkipBytes(obu_bitstream_size));
 

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
+import * as Root from '../../core/root/root.js';
 import type * as TimelineModel from '../../models/timeline_model/timeline_model.js';
 import * as TraceEngine from '../../models/trace/trace.js';
 import type * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
@@ -177,36 +178,6 @@ export class CompatibilityTracksAppender {
 
   getFlameChartTimelineData(): PerfUI.FlameChart.FlameChartTimelineData {
     return this.#flameChartData;
-  }
-
-  modifyTree(
-      group: PerfUI.FlameChart.Group, node: TraceEngine.Types.TraceEvents.SyntheticTraceEntry,
-      action: TraceEngine.EntriesFilter.FilterAction): void {
-    const threadTrackAppender = this.#trackForGroup.get(group);
-    if (threadTrackAppender instanceof ThreadAppender) {
-      threadTrackAppender.modifyTree(node, action);
-    } else {
-      console.warn('Could not modify tree in not thread track');
-    }
-  }
-
-  findPossibleContextMenuActions(
-      group: PerfUI.FlameChart.Group,
-      node: TraceEngine.Types.TraceEvents.SyntheticTraceEntry): TraceEngine.EntriesFilter.PossibleFilterActions|void {
-    const threadTrackAppender = this.#trackForGroup.get(group);
-    if (threadTrackAppender instanceof ThreadAppender) {
-      return threadTrackAppender.findPossibleContextMenuActions(node);
-    }
-    console.warn('Could not modify tree in not thread track');
-  }
-
-  findHiddenDescendantsAmount(group: PerfUI.FlameChart.Group, node: TraceEngine.Types.TraceEvents.SyntheticTraceEntry):
-      number|void {
-    const threadTrackAppender = this.#trackForGroup.get(group);
-    if (threadTrackAppender instanceof ThreadAppender) {
-      return threadTrackAppender.findHiddenDescendantsAmount(node);
-    }
-    console.warn('Could not find hidden entries because non thread tracks are not modifiable');
   }
 
   #addThreadAppenders(): void {
@@ -564,6 +535,12 @@ export class CompatibilityTracksAppender {
       // Therefore we mark them as visible so they are appended onto the Thread
       // track, and hence accessible by the CountersGraph view.
       return true;
+    }
+
+    // Gate the visibility of post message events behind the experiement flag
+    if (TraceEngine.Types.TraceEvents.isTraceEventSchedulePostMessage(entry) ||
+        TraceEngine.Types.TraceEvents.isTraceEventHandlePostMessage(entry)) {
+      return Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_SHOW_POST_MESSAGE_EVENTS);
     }
 
     // Default styles are globally defined for each event name. Some

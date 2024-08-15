@@ -19,6 +19,8 @@ extern NSString* vBookmarkFolderSelectionChevron;
 extern NSString* vBookmarkFolderSelectionCheckmark;
 // Image name for add folder
 extern NSString* vBookmarkAddFolder;
+// Image name for add group illustration
+extern NSString* vBookmarkAddGroupIllustration;
 
 #pragma mark - COLOR
 // Underline color for bookmark text field underline

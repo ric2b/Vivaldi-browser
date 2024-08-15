@@ -26,19 +26,19 @@ base::span<const MatchPatternRef> GetMatchPatterns(
     std::string_view name,
     std::string_view language_code,
     PatternSource pattern_source) {
-  auto* it = kPatternMap.find(std::make_pair(name, language_code));
+  auto it = kPatternMap.find(std::make_pair(name, language_code));
   if (!language_code.empty() && it == kPatternMap.end())
     it = kPatternMap.find(std::make_pair(name, ""));
   CHECK(it != kPatternMap.end());
 #if BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
   switch (pattern_source) {
-    case PatternSource::kDefault:
-      return it->second[0];
-    case PatternSource::kExperimental:
-      return it->second[1];
-    case PatternSource::kNextGen:
-      return it->second[2];
     case PatternSource::kLegacy:
+      return it->second[0];
+    case PatternSource::kDefault:
+      return it->second[1];
+    case PatternSource::kExperimental:
+      return it->second[2];
+    case PatternSource::kNextGen:
       return it->second[3];
   }
 #else
@@ -91,6 +91,12 @@ MatchingPattern MatchPatternRef::operator*() const {
                              : p.match_field_attributes,
       .form_control_types = p.form_control_types,
   };
+}
+
+bool AreMatchingPatternsEqual(PatternSource a,
+                              PatternSource b,
+                              LanguageCode language_code) {
+  return AreMatchingPatternsEqualImpl(a, b, language_code);
 }
 
 }  // namespace autofill

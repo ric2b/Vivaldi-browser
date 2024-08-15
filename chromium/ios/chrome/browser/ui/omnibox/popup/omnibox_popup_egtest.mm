@@ -246,8 +246,14 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
   [ChromeEarlGreyUI focusOmniboxAndType:omniboxInput];
 
   // Swipe one of the historical suggestions, to the left.
-  [[EarlGrey selectElementWithMatcher:PopupRowWithUrl(_URL1)]
-      performAction:grey_swipeSlowInDirection(kGREYDirectionLeft)];
+  if ([ChromeEarlGrey isIPadIdiom]) {
+    [[EarlGrey selectElementWithMatcher:PopupRowWithUrl(_URL1)]
+        performAction:GREYSwipeSlowInDirectionWithStartPoint(kGREYDirectionLeft,
+                                                             0.09, 0.5)];
+  } else {
+    [[EarlGrey selectElementWithMatcher:PopupRowWithUrl(_URL1)]
+        performAction:grey_swipeSlowInDirection(kGREYDirectionLeft)];
+  }
 
   // Delete button is displayed.
   [[EarlGrey selectElementWithMatcher:grey_kindOfClassName(
@@ -416,6 +422,7 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
 
 // Tests that having multiple suggestions with corresponding opened tabs display
 // multiple buttons.
+
 - (void)testMultiplePageOpened {
   // Open the first page.
   [ChromeEarlGrey loadURL:_URL1];

@@ -42,6 +42,7 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) FakeUserDataAuthClient
     kPrepareVaultForMigration,
     kAddAuthFactor,
     kUpdateAuthFactor,
+    kUpdateAuthFactorMetadata,
     kListAuthFactors,
     kStartMigrateToDircrypto,
     kRemove,
@@ -173,8 +174,7 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) FakeUserDataAuthClient
     // AuthSession id.
     std::string id;
     std::string broadcast_id;
-    // Whether the `AUTH_SESSION_FLAGS_EPHEMERAL_USER` flag was passed on
-    // creation.
+    // Whether the is_ephemeral_user flag was set on creation.
     bool ephemeral = false;
     // Account associated with the session.
     cryptohome::AccountIdentifier account;
@@ -268,6 +268,9 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) FakeUserDataAuthClient
   void UpdateAuthFactor(
       const ::user_data_auth::UpdateAuthFactorRequest& request,
       UpdateAuthFactorCallback callback) override;
+  void UpdateAuthFactorMetadata(
+      const ::user_data_auth::UpdateAuthFactorMetadataRequest& request,
+      UpdateAuthFactorMetadataCallback callback) override;
   void RemoveAuthFactor(
       const ::user_data_auth::RemoveAuthFactorRequest& request,
       RemoveAuthFactorCallback callback) override;
@@ -322,6 +325,8 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) FakeUserDataAuthClient
                         PrepareVaultForMigrationRequest);
   FUDAC_OPERATION_TYPES(kAddAuthFactor, AddAuthFactorRequest);
   FUDAC_OPERATION_TYPES(kUpdateAuthFactor, UpdateAuthFactorRequest);
+  FUDAC_OPERATION_TYPES(kUpdateAuthFactorMetadata,
+                        UpdateAuthFactorMetadataRequest);
   FUDAC_OPERATION_TYPES(kListAuthFactors, ListAuthFactorsRequest);
   FUDAC_OPERATION_TYPES(kStartMigrateToDircrypto,
                         StartMigrateToDircryptoRequest);

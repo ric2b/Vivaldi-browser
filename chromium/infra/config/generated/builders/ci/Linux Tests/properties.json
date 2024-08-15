@@ -7,7 +7,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux Builder",
-              "project": "chromium-m122"
+              "project": "chromium-m124"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-linux-archive",
@@ -19,7 +19,8 @@
                 ],
                 "build_config": "Release",
                 "config": "chromium",
-                "target_bits": 64
+                "target_bits": 64,
+                "target_platform": "linux"
               },
               "legacy_gclient_config": {
                 "apply_configs": [
@@ -33,7 +34,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux Tests",
-              "project": "chromium-m122"
+              "project": "chromium-m124"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-linux-archive",
@@ -57,7 +58,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Linux Builder",
-                "project": "chromium-m122"
+                "project": "chromium-m124"
               }
             }
           }
@@ -67,7 +68,7 @@
         {
           "bucket": "ci",
           "builder": "Linux Tests",
-          "project": "chromium-m122"
+          "project": "chromium-m124"
         }
       ],
       "mirroring_builder_group_and_names": [

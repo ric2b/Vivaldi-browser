@@ -7,7 +7,7 @@ through 8×i+7 of e as an unsigned integer.
 
 import { makeTestGroup } from '../../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../../gpu_test.js';
-import { TypeF32, TypeU32, TypeVec } from '../../../../../util/conversion.js';
+import { Type } from '../../../../../util/conversion.js';
 import { allInputSources, run } from '../../expression.js';
 
 import { builtin } from './builtin.js';
@@ -25,5 +25,5 @@ g.test('unpack')
   .params(u => u.combine('inputSource', allInputSources))
   .fn(async t => {
     const cases = await d.get(t.params.inputSource === 'const' ? 'u32_const' : 'u32_non_const');
-    await run(t, builtin('unpack4x8unorm'), [TypeU32], TypeVec(4, TypeF32), t.params, cases);
+    await run(t, builtin('unpack4x8unorm'), [Type.u32], Type.vec4f, t.params, cases);
   });

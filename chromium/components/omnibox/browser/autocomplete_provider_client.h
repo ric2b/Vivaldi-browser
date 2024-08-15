@@ -34,7 +34,7 @@ class OnDeviceTailModelService;
 struct ProviderStateService;
 
 namespace bookmarks {
-class BookmarkModel;
+class CoreBookmarkModel;
 }
 
 namespace history {
@@ -79,8 +79,7 @@ class AutocompleteProviderClient : public OmniboxAction::Client {
   virtual history::HistoryService* GetHistoryService() = 0;
   virtual history_clusters::HistoryClustersService* GetHistoryClustersService();
   virtual scoped_refptr<history::TopSites> GetTopSites() = 0;
-  virtual bookmarks::BookmarkModel* GetLocalOrSyncableBookmarkModel() = 0;
-  virtual bookmarks::BookmarkModel* GetAccountBookmarkModel() = 0;
+  virtual bookmarks::CoreBookmarkModel* GetBookmarkModel() = 0;
   virtual history::URLDatabase* GetInMemoryDatabase() = 0;
   virtual InMemoryURLIndex* GetInMemoryURLIndex() = 0;
   virtual TemplateURLService* GetTemplateURLService() = 0;
@@ -195,6 +194,11 @@ class AutocompleteProviderClient : public OmniboxAction::Client {
 
   // Returns true if the sharing hub command is enabled.
   virtual bool IsSharingHubAvailable() const;
+
+  // Returns whether the app is currently in the background state (Mobile only).
+  virtual bool in_background_state() const;
+
+  virtual void set_in_background_state(bool in_background_state) {}
 
   // Gets a weak pointer to the client. Used when providers need to use the
   // client when the client may no longer be around.

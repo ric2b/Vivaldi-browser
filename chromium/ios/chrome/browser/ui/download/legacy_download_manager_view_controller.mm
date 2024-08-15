@@ -344,9 +344,7 @@ NSString* GetSizeString(long long size_in_bytes) {
 - (void)setIncognito:(BOOL)incognito {
   _incognito = incognito;
   self.overrideUserInterfaceStyle =
-      incognito && base::FeatureList::IsEnabled(kIOSIncognitoDownloadsWarning)
-          ? UIUserInterfaceStyleDark
-          : UIUserInterfaceStyleUnspecified;
+      incognito ? UIUserInterfaceStyleDark : UIUserInterfaceStyleUnspecified;
 }
 
 - (void)setFileName:(NSString*)fileName {
@@ -406,6 +404,11 @@ NSString* GetSizeString(long long size_in_bytes) {
                    }];
 }
 
+- (void)setFullscreenController:(FullscreenController*)fullscreenController {
+  // Unsupported by this version of the DownloadManagerViewController.
+  // This method will still be called, but do nothing.
+}
+
 #pragma mark - UI elements
 
 - (UIImageView*)background {
@@ -451,6 +454,8 @@ NSString* GetSizeString(long long size_in_bytes) {
            forControlEvents:UIControlEventTouchUpInside];
 
     _closeButton.pointerInteractionEnabled = YES;
+    _closeButton.accessibilityIdentifier =
+        kDownloadManagerCloseButtonAccessibilityIdentifier;
   }
   return _closeButton;
 }
@@ -747,8 +752,7 @@ NSString* GetSizeString(long long size_in_bytes) {
   self.statusLabel.numberOfLines = kNumberOfLines;
   switch (_state) {
     case kDownloadManagerStateNotStarted:
-      if (base::FeatureList::IsEnabled(kIOSIncognitoDownloadsWarning) &&
-          self.incognito) {
+      if (self.incognito) {
         _incognitoDownloadsWarningVisible = YES;
         statusText =
             l10n_util::GetNSString(IDS_IOS_DOWNLOAD_INCOGNITO_WARNING_MESSAGE);

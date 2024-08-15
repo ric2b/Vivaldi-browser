@@ -21,6 +21,8 @@ export function getLocalizationStringForContentType(
       return 'siteSettingsAutoPictureInPictureMidSentence';
     case ContentSettingsTypes.AUTOMATIC_DOWNLOADS:
       return 'siteSettingsAutomaticDownloadsMidSentence';
+    case ContentSettingsTypes.AUTOMATIC_FULLSCREEN:
+      return 'siteSettingsAutomaticFullscreenMidSentence';
     case ContentSettingsTypes.BACKGROUND_SYNC:
       return 'siteSettingsBackgroundSyncMidSentence';
     case ContentSettingsTypes.BLUETOOTH_DEVICES:
@@ -51,7 +53,6 @@ export function getLocalizationStringForContentType(
       return 'siteSettingsFontAccessMidSentence';
     case ContentSettingsTypes.MIC:
       return 'siteSettingsMicMidSentence';
-    case ContentSettingsTypes.MIDI:
     case ContentSettingsTypes.MIDI_DEVICES:
       return 'siteSettingsMidiDevicesMidSentence';
     case ContentSettingsTypes.MIXEDSCRIPT:

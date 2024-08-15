@@ -14,7 +14,6 @@
 
 import {Duration} from '../../base/time';
 import {ColumnDef} from '../../common/aggregation_data';
-import {pluginManager} from '../../common/plugins';
 import {Area, Sorting} from '../../common/state';
 import {globals} from '../../frontend/globals';
 import {Engine} from '../../trace_processor/engine';
@@ -26,11 +25,11 @@ export class CounterAggregationController extends AggregationController {
   async createAggregateView(engine: Engine, area: Area) {
     await engine.query(`drop view if exists ${this.kind};`);
 
-    const trackIds: (string|number)[] = [];
+    const trackIds: (string | number)[] = [];
     for (const trackKey of area.tracks) {
       const track = globals.state.tracks[trackKey];
       if (track?.uri) {
-        const trackInfo = pluginManager.resolveTrackInfo(track.uri);
+        const trackInfo = globals.trackManager.resolveTrackInfo(track.uri);
         if (trackInfo?.kind === COUNTER_TRACK_KIND) {
           trackInfo.trackIds && trackIds.push(...trackInfo.trackIds);
         }
@@ -128,7 +127,6 @@ export class CounterAggregationController extends AggregationController {
         columnConstructor: Float64Array,
         columnId: 'max_value',
       },
-
     ];
   }
 

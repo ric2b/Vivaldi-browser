@@ -222,6 +222,24 @@ void MailClientBackend::DeleteMailDB() {
       mail_client_database_dir_.Append(FILE_PATH_LITERAL("MailDB-journal")));
 }
 
+bool MailClientBackend::DeleteMailSearchDB() {
+  db_->Close();
+
+  bool delete_result = base::DeleteFile(mail_client_database_dir_.Append(
+                           FILE_PATH_LITERAL("MailSearchDB"))) &&
+                       base::DeleteFile(mail_client_database_dir_.Append(
+                           FILE_PATH_LITERAL("MailSearchDB-journal")));
+
+  if (delete_result) {
+    sql::InitStatus status = db_->Init(
+        mail_client_database_dir_.Append(FILE_PATH_LITERAL("MailSearchDB")));
+    if (sql::INIT_OK == status) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool MailClientBackend::MigrateSearchDB() {
   bool mail_db_exists = base::PathExists(
       mail_client_database_dir_.Append(FILE_PATH_LITERAL("MailDB")));

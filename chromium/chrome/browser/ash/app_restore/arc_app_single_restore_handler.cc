@@ -61,8 +61,10 @@ void ArcAppSingleRestoreHandler::LaunchGhostWindowWithApp(
     arc::mojom::WindowInfoPtr window_info) {
   // Activate ARC in case still not active. ArcSessionManager may null in test
   // env.
-  if (arc::ArcSessionManager::Get())
-    arc::ArcSessionManager::Get()->AllowActivation();
+  if (arc::ArcSessionManager::Get()) {
+    arc::ArcSessionManager::Get()->AllowActivation(
+        arc::ArcSessionManager::AllowActivationReason::kRestoreApps);
+  }
 
   // The ghost window and corresponding shelf item need to be added after ash
   // shelf ready.
@@ -93,21 +95,24 @@ void ArcAppSingleRestoreHandler::LaunchGhostWindowWithApp(
   // Fill restore data by launch parameter to reuse full restore related
   // functions.
   ::app_restore::AppRestoreData restore_data;
-  restore_data.current_bounds = restore_data.bounds_in_root =
-      window_info->bounds;
+  restore_data.window_info.current_bounds = window_info->bounds;
+  restore_data.window_info.arc_extra_info = {.bounds_in_root =
+                                                 window_info->bounds};
 
   // TODO: Remove this workaround.
   // Currently `ArcGhostWindowHandler::LaunchArcGhostWindow` assume all launch
   // bounds is from "recording data" in ash wm side, so it will reduce the top
   // caption bar size when launch ghost window. However, if here use the bounds
   // from Android side, the bounds should be added a "caption" size.
-  if (restore_data.bounds_in_root.has_value()) {
-    restore_data.bounds_in_root->Inset(gfx::Insets().set_top(
-        -views::GetCaptionButtonLayoutSize(
-             views::CaptionButtonLayoutSize::kNonBrowserCaption)
-             .height()));
+  if (restore_data.window_info.arc_extra_info->bounds_in_root.has_value()) {
+    restore_data.window_info.arc_extra_info->bounds_in_root->Inset(
+        gfx::Insets().set_top(
+            -views::GetCaptionButtonLayoutSize(
+                 views::CaptionButtonLayoutSize::kNonBrowserCaption)
+                 .height()));
   }
-  restore_data.window_state_type =
+
+  restore_data.window_info.window_state_type =
       static_cast<chromeos::WindowStateType>(window_info->state);
   restore_data.event_flag = event_flags;
   restore_data.display_id = window_info->display_id;

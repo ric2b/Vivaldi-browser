@@ -9,12 +9,12 @@
 #include <cstdlib>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "base/at_exit.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/logging.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -269,7 +269,7 @@ void SetSoftwareWebGLCommandLineSwitches(base::CommandLine* command_line) {
                                   kANGLEImplementationSwiftShaderForWebGLName);
 }
 
-absl::optional<GLImplementationParts>
+std::optional<GLImplementationParts>
 GetRequestedGLImplementationFromCommandLine(
     const base::CommandLine* command_line,
     bool* fallback_to_software_gl) {
@@ -292,7 +292,7 @@ GetRequestedGLImplementationFromCommandLine(
 
   if (!command_line->HasSwitch(switches::kUseGL) &&
       !command_line->HasSwitch(switches::kUseANGLE)) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   std::string gl_name = command_line->GetSwitchValueASCII(switches::kUseGL);
@@ -307,7 +307,7 @@ GetRequestedGLImplementationFromCommandLine(
 
   if (gl_name == "any") {
     *fallback_to_software_gl = true;
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   if ((gl_name == kGLImplementationANGLEName) &&
@@ -426,7 +426,7 @@ std::string FilterGLExtensionList(
   auto is_disabled = [&disabled_extensions](const base::StringPiece& ext) {
     return base::Contains(disabled_extensions, ext);
   };
-  base::EraseIf(extension_vec, is_disabled);
+  std::erase_if(extension_vec, is_disabled);
 
   return base::JoinString(extension_vec, " ");
 }

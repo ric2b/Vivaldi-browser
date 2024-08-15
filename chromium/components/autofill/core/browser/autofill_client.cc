@@ -9,13 +9,13 @@
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_ablation_study.h"
 #include "components/autofill/core/browser/autofill_compose_delegate.h"
+#include "components/autofill/core/browser/autofill_plus_address_delegate.h"
 #include "components/autofill/core/browser/payments/credit_card_access_manager.h"
 #include "components/autofill/core/browser/payments/mandatory_reauth_manager.h"
 #include "components/autofill/core/browser/payments/payments_window_manager.h"
 #include "components/autofill/core/browser/payments/virtual_card_enrollment_manager.h"
 #include "components/autofill/core/browser/ui/payments/bubble_show_options.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
-#include "components/plus_addresses/plus_address_types.h"
 #include "components/version_info/channel.h"
 
 namespace autofill {
@@ -25,11 +25,13 @@ AutofillClient::PopupOpenArgs::PopupOpenArgs(
     const gfx::RectF& element_bounds,
     base::i18n::TextDirection text_direction,
     std::vector<Suggestion> suggestions,
-    AutofillSuggestionTriggerSource trigger_source)
+    AutofillSuggestionTriggerSource trigger_source,
+    int32_t form_control_ax_id)
     : element_bounds(element_bounds),
       text_direction(text_direction),
       suggestions(std::move(suggestions)),
-      trigger_source(trigger_source) {}
+      trigger_source(trigger_source),
+      form_control_ax_id(form_control_ax_id) {}
 AutofillClient::PopupOpenArgs::PopupOpenArgs(
     const AutofillClient::PopupOpenArgs&) = default;
 AutofillClient::PopupOpenArgs::PopupOpenArgs(AutofillClient::PopupOpenArgs&&) =
@@ -44,7 +46,7 @@ version_info::Channel AutofillClient::GetChannel() const {
   return version_info::Channel::UNKNOWN;
 }
 
-bool AutofillClient::IsOffTheRecord() {
+bool AutofillClient::IsOffTheRecord() const {
   return false;
 }
 
@@ -78,14 +80,13 @@ AutofillComposeDelegate* AutofillClient::GetComposeDelegate() {
   return nullptr;
 }
 
-plus_addresses::PlusAddressService* AutofillClient::GetPlusAddressService() {
+AutofillPlusAddressDelegate* AutofillClient::GetPlusAddressDelegate() {
   return nullptr;
 }
 
 void AutofillClient::OfferPlusAddressCreation(
     const url::Origin& main_frame_origin,
-    plus_addresses::PlusAddressCallback callback) {
-}
+    PlusAddressCallback callback) {}
 
 MerchantPromoCodeManager* AutofillClient::GetMerchantPromoCodeManager() {
   return nullptr;
@@ -236,9 +237,6 @@ void AutofillClient::ConfirmUploadIbanToCloud(
     bool should_show_prompt,
     SaveIbanPromptCallback callback) {}
 
-void AutofillClient::CreditCardUploadCompleted(bool card_saved) {
-}
-
 void AutofillClient::ShowUnmaskPrompt(
     const CreditCard& card,
     const CardUnmaskPromptOptions& card_unmask_prompt_options,
@@ -260,20 +258,6 @@ void AutofillClient::OnVirtualCardDataAvailable(
     const VirtualCardManualFallbackBubbleOptions& options) {
 }
 
-void AutofillClient::ShowAutofillErrorDialog(
-    const AutofillErrorDialogContext& context) {
-}
-
-void AutofillClient::ShowAutofillProgressDialog(
-    AutofillProgressDialogType autofill_progress_dialog_type,
-    base::OnceClosure cancel_callback) {
-}
-
-void AutofillClient::CloseAutofillProgressDialog(
-    bool show_confirmation_before_closing,
-    base::OnceClosure no_interactive_authentication_callback) {
-}
-
 LogManager* AutofillClient::GetLogManager() const {
   return nullptr;
 }
@@ -286,6 +270,10 @@ const AutofillAblationStudy& AutofillClient::GetAblationStudy() const {
 
 void AutofillClient::OpenPromoCodeOfferDetailsURL(const GURL& url) {
   NOTIMPLEMENTED();
+}
+
+bool AutofillClient::ShouldFormatForLargeKeyboardAccessory() const {
+  return false;
 }
 
 void AutofillClient::TriggerUserPerceptionOfAutofillSurvey(

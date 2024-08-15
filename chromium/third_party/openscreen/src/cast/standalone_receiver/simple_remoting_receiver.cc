@@ -88,7 +88,7 @@ void SimpleRemotingReceiver::SendPlaybackRateMessage(double playback_rate) {
 
 void SimpleRemotingReceiver::OnInitializeCallbackMessage(
     std::unique_ptr<RpcMessage> message) {
-  OSP_DCHECK(message->proc() == RpcMessage::RPC_DS_INITIALIZE_CALLBACK);
+  OSP_CHECK_EQ(message->proc(), RpcMessage::RPC_DS_INITIALIZE_CALLBACK);
   if (!initialize_cb_) {
     OSP_DLOG_INFO << "Received an initialization callback message but no "
                      "callback was set.";

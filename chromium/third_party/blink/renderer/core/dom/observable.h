@@ -17,8 +17,11 @@ class ObservableInternalObserver;
 class ScriptState;
 class Subscriber;
 class SubscribeOptions;
+class V8Mapper;
+class V8Predicate;
 class V8SubscribeCallback;
 class V8UnionObserverOrObserverCallback;
+class V8Visitor;
 
 // Implementation of the DOM `Observable` API. See
 // https://github.com/WICG/observable and
@@ -51,13 +54,40 @@ class CORE_EXPORT Observable final : public ScriptWrappable,
                  V8UnionObserverOrObserverCallback*,
                  SubscribeOptions*);
 
+  static Observable* from(ScriptState* script_state,
+                          ScriptValue value,
+                          ExceptionState& exception_state);
+
+  // Observable-returning operators. See
+  // https://wicg.github.io/observable/#observable-returning-operators.
+  Observable* takeUntil(ScriptState*, Observable*);
+  Observable* map(ScriptState*, V8Mapper*);
+  Observable* filter(ScriptState*, V8Predicate*);
+  Observable* take(ScriptState*, uint64_t);
+  Observable* drop(ScriptState*, uint64_t);
+
   // Promise-returning operators. See
   // https://wicg.github.io/observable/#promise-returning-operators.
-  ScriptPromise toArray(ScriptState*, SubscribeOptions*);
+  ScriptPromiseTyped<IDLSequence<IDLAny>> toArray(ScriptState*,
+                                                  SubscribeOptions*);
+  ScriptPromiseTyped<IDLUndefined> forEach(ScriptState*,
+                                           V8Visitor*,
+                                           SubscribeOptions*);
 
   void Trace(Visitor*) const override;
 
+  // The `subscribe()` API is used when web content subscribes to an Observable
+  // with a `V8UnionObserverOrObserverCallback`, whereas this API is used when
+  // native code subscribes to an `Observable` with a native internal observer.
+  // For consistency with the web-exposed `subscribe()` method, the
+  // `ScriptState` does not have to be associated with a valid context.
+  void SubscribeWithNativeObserver(ScriptState*,
+                                   ObservableInternalObserver*,
+                                   SubscribeOptions*);
+
  private:
+  // The `ScriptState` argument does not need to be associated with a valid
+  // context (this method early-returns in that case).
   void SubscribeInternal(ScriptState*,
                          V8UnionObserverOrObserverCallback*,
                          ObservableInternalObserver*,

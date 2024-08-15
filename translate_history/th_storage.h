@@ -39,7 +39,7 @@ class TH_Storage : public base::ImportantFileWriter::DataSerializer {
   void OnModelWillBeDeleted();
 
   // ImportantFileWriter::DataSerializer implementation.
-  absl::optional<std::string> SerializeData() override;
+  std::optional<std::string> SerializeData() override;
 
  private:
   friend class base::RefCountedThreadSafe<TH_Storage>;

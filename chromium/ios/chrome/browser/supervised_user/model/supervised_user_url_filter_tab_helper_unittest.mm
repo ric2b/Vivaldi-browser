@@ -7,16 +7,15 @@
 #import "base/memory/scoped_refptr.h"
 #import "base/task/single_thread_task_runner.h"
 #import "base/test/metrics/histogram_tester.h"
-#import "base/test/scoped_feature_list.h"
 #import "components/signin/public/identity_manager/account_capabilities_test_mutator.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/signin/public/identity_manager/identity_test_utils.h"
 #import "components/supervised_user/core/browser/supervised_user_preferences.h"
 #import "components/supervised_user/core/browser/supervised_user_service.h"
 #import "components/supervised_user/core/browser/supervised_user_settings_service.h"
+#import "components/supervised_user/core/browser/supervised_user_utils.h"
 #import "components/supervised_user/core/common/features.h"
 #import "components/supervised_user/core/common/supervised_user_constants.h"
-#import "components/supervised_user/core/common/supervised_user_utils.h"
 #import "components/sync_preferences/pref_service_mock_factory.h"
 #import "components/sync_preferences/pref_service_syncable.h"
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
@@ -62,12 +61,6 @@ class SupervisedUserURLFilterTabHelperTest : public PlatformTest {
         &web_state_);
   }
 
-  void SetUp() override {
-    scoped_feature_list_.InitWithFeatures(
-        {supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS},
-        {});
-  }
-
   // Signs the user into `email` as the primary Chrome account and sets the
   // given parental control capabilities on this account.
   void SignIn(const std::string& email, bool is_subject_to_parental_controls) {
@@ -95,9 +88,9 @@ class SupervisedUserURLFilterTabHelperTest : public PlatformTest {
             chrome_browser_state_.get());
     supervised_user_service->Init();
 
-    EXPECT_EQ(
-        supervised_user::IsChildAccount(*chrome_browser_state_->GetPrefs()),
-        is_subject_to_parental_controls);
+    EXPECT_EQ(supervised_user::IsSubjectToParentalControls(
+                  *chrome_browser_state_->GetPrefs()),
+              is_subject_to_parental_controls);
   }
 
   // Calls `ShouldAllowRequest` for a request with the given `url_string`.
@@ -107,6 +100,7 @@ class SupervisedUserURLFilterTabHelperTest : public PlatformTest {
     const web::WebStatePolicyDecider::RequestInfo request_info(
         ui::PageTransition::PAGE_TRANSITION_LINK, /*target_frame_is_main=*/true,
         /*target_frame_is_cross_origin=*/false,
+        /*target_window_is_cross_origin=*/false,
         /*is_user_initiated=*/false, /*user_tapped_recently=*/false);
     __block bool callback_called = false;
     __block web::WebStatePolicyDecider::PolicyDecision request_policy =
@@ -149,7 +143,6 @@ class SupervisedUserURLFilterTabHelperTest : public PlatformTest {
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
   web::WebTaskEnvironment task_environment_;
   network::TestURLLoaderFactory test_url_loader_factory_;
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;

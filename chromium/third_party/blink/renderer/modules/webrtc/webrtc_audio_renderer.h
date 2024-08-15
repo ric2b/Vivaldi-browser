@@ -10,6 +10,7 @@
 #include <atomic>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -28,7 +29,6 @@
 #include "media/base/audio_pull_fifo.h"
 #include "media/base/audio_renderer_sink.h"
 #include "media/base/channel_layout.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_audio_renderer.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/allow_discouraged_type.h"
@@ -197,7 +197,7 @@ class MODULES_EXPORT WebRtcAudioRenderer
 
     // Using a raw pointer is safe since the OC instance will outlive this
     // object.
-    WebRtcAudioRenderer* const renderer_;
+    const raw_ptr<WebRtcAudioRenderer> renderer_;
 
     // Stores when the timer starts. Used to calculate the stream duration.
     const base::TimeTicks start_time_;
@@ -325,7 +325,7 @@ class MODULES_EXPORT WebRtcAudioRenderer
   // Audio data source from the browser process.
   //
   // TODO(crbug.com/704136): Make it a Member.
-  raw_ptr<WebRtcAudioRendererSource, ExperimentalRenderer> source_;
+  raw_ptr<WebRtcAudioRendererSource> source_;
 
   // Protects access to |state_|, |source_|, |audio_fifo_|,
   // |audio_delay_milliseconds_|, |fifo_delay_milliseconds_|, |current_time_|,
@@ -373,7 +373,7 @@ class MODULES_EXPORT WebRtcAudioRenderer
   // Used for keeping track of and logging stats for playing audio streams.
   // Created when a stream starts and destroyed when a stream stops.
   // See comments for AudioStreamTracker for more details.
-  absl::optional<AudioStreamTracker> audio_stream_tracker_;
+  std::optional<AudioStreamTracker> audio_stream_tracker_;
 
   base::RepeatingCallback<void()> on_render_error_callback_;
 

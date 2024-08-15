@@ -50,10 +50,7 @@ cc_library(
 
 cc_library(
     name = "quic_flags_list",
-    textual_hdrs = [
-        "quic/core/quic_flags_list.h",
-        "quic/core/quic_protocol_flags_list.h",
-    ],
+    textual_hdrs = ["quic/core/quic_flags_list.h"],
 )
 
 cc_library(
@@ -131,6 +128,7 @@ cc_library(
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:optional",
+        "@com_google_absl//absl/types:span",
         "@com_google_googleurl//url",
     ],
 )

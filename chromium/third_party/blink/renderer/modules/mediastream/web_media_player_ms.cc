@@ -8,6 +8,7 @@
 
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -30,7 +31,6 @@
 #include "media/mojo/mojom/media_metrics_provider.mojom.h"
 #include "media/video/gpu_memory_buffer_video_frame_pool.h"
 #include "services/viz/public/cpp/gpu/context_provider_command_buffer.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-blink.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_audio_renderer.h"
@@ -331,8 +331,7 @@ class WebMediaPlayerMS::FrameDeliverer {
   const scoped_refptr<base::SequencedTaskRunner> media_task_runner_;
   const scoped_refptr<base::TaskRunner> worker_task_runner_;
 
-  const raw_ptr<media::GpuVideoAcceleratorFactories, ExperimentalRenderer>
-      gpu_factories_;
+  const raw_ptr<media::GpuVideoAcceleratorFactories> gpu_factories_;
 
   // Used for DCHECKs to ensure method calls are executed on the correct thread.
   SEQUENCE_CHECKER(video_sequence_checker_);
@@ -668,10 +667,10 @@ int WebMediaPlayerMS::GetDelegateId() {
   return delegate_id_;
 }
 
-absl::optional<viz::SurfaceId> WebMediaPlayerMS::GetSurfaceId() {
+std::optional<viz::SurfaceId> WebMediaPlayerMS::GetSurfaceId() {
   if (bridge_)
     return bridge_->GetSurfaceId();
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 base::WeakPtr<WebMediaPlayer> WebMediaPlayerMS::AsWeakPtr() {
@@ -1090,7 +1089,7 @@ scoped_refptr<media::VideoFrame> WebMediaPlayerMS::GetCurrentFrameThenUpdate() {
   return compositor_->GetCurrentFrame();
 }
 
-absl::optional<media::VideoFrame::ID> WebMediaPlayerMS::CurrentFrameId() const {
+std::optional<media::VideoFrame::ID> WebMediaPlayerMS::CurrentFrameId() const {
   DVLOG(3) << __func__;
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   return compositor_->GetCurrentFrame()->unique_id();
@@ -1443,7 +1442,7 @@ void WebMediaPlayerMS::MaybeCreateWatchTimeReporter() {
   if (!HasAudio() && !HasVideo())
     return;
 
-  absl::optional<media::mojom::MediaStreamType> media_stream_type =
+  std::optional<media::mojom::MediaStreamType> media_stream_type =
       GetMediaStreamType();
   if (!media_stream_type)
     return;
@@ -1564,10 +1563,10 @@ media::PipelineStatistics WebMediaPlayerMS::GetPipelineStatistics() {
   return stats;
 }
 
-absl::optional<media::mojom::MediaStreamType>
+std::optional<media::mojom::MediaStreamType>
 WebMediaPlayerMS::GetMediaStreamType() {
   if (web_stream_.IsNull())
-    return absl::nullopt;
+    return std::nullopt;
 
   // If either the first video or audio source is remote, the media stream is
   // of remote source.
@@ -1583,13 +1582,13 @@ WebMediaPlayerMS::GetMediaStreamType() {
     media_source = audio_components[0]->Source();
   }
   if (!media_source)
-    return absl::nullopt;
+    return std::nullopt;
   if (media_source->Remote())
     return media::mojom::MediaStreamType::kRemote;
 
   auto* platform_source = media_source->GetPlatformSource();
   if (!platform_source)
-    return absl::nullopt;
+    return std::nullopt;
   switch (platform_source->device().type) {
     case mojom::blink::MediaStreamType::NO_SERVICE:
       // Element capture uses the default NO_SERVICE value since it does not set
@@ -1611,10 +1610,10 @@ WebMediaPlayerMS::GetMediaStreamType() {
       return media::mojom::MediaStreamType::kLocalDisplayCapture;
     case mojom::blink::MediaStreamType::NUM_MEDIA_TYPES:
       NOTREACHED();
-      return absl::nullopt;
+      return std::nullopt;
   }
 
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 void WebMediaPlayerMS::RegisterFrameSinkHierarchy() {
@@ -1625,10 +1624,6 @@ void WebMediaPlayerMS::RegisterFrameSinkHierarchy() {
 void WebMediaPlayerMS::UnregisterFrameSinkHierarchy() {
   if (bridge_)
     bridge_->UnregisterFrameSinkHierarchy();
-}
-
-WebLocalFrame* WebMediaPlayerMS::VivaldiGetOwnerWebFrame() {
-  return internal_frame_->web_frame();
 }
 
 }  // namespace blink

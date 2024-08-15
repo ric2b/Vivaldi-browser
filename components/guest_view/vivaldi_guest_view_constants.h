@@ -13,6 +13,7 @@ extern const char kMimeType[];
 extern const char kSuggestedFilename[];
 extern const char kProtocolDisplayName[];
 extern const char kSuppressedPrompt[];
+extern const char kMixedDownload[];
 
 }  // namespace guest_view
 

@@ -11,8 +11,8 @@
 
 #import "base/containers/small_map.h"
 #import "base/strings/sys_string_conversions.h"
-#import "ios/chrome/browser/promos_manager/constants.h"
-#import "ios/chrome/browser/promos_manager/promo_config.h"
+#import "ios/chrome/browser/promos_manager/model/constants.h"
+#import "ios/chrome/browser/promos_manager/model/promo_config.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 
 @implementation PromosManagerMediator
@@ -32,8 +32,8 @@
   _promosManager->DeregisterPromo(promo);
 }
 
-- (void)recordImpression:(promos_manager::Promo)promo {
-  _promosManager->RecordImpression(promo);
+- (void)deregisterAfterDisplay:(promos_manager::Promo)promo {
+  _promosManager->DeregisterAfterDisplay(promo);
 }
 
 - (std::optional<PromoDisplayData>)nextPromoForDisplay:(BOOL)isFirstShownPromo {

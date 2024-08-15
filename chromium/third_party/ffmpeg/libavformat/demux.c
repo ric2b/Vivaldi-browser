@@ -540,6 +540,73 @@ static int update_wrap_reference(AVFormatContext *s, AVStream *st, int stream_in
     return 1;
 }
 
+static void update_timestamps(AVFormatContext *s, AVStream *st, AVPacket *pkt)
+{
+    FFStream *const sti = ffstream(st);
+
+    av_assert0(pkt->stream_index < (unsigned)s->nb_streams &&
+               "Invalid stream index.\n");
+
+    if (update_wrap_reference(s, st, pkt->stream_index, pkt) && sti->pts_wrap_behavior == AV_PTS_WRAP_SUB_OFFSET) {
+        // correct first time stamps to negative values
+        if (!is_relative(sti->first_dts))
+            sti->first_dts = wrap_timestamp(st, sti->first_dts);
+        if (!is_relative(st->start_time))
+            st->start_time = wrap_timestamp(st, st->start_time);
+        if (!is_relative(sti->cur_dts))
+            sti->cur_dts = wrap_timestamp(st, sti->cur_dts);
+    }
+
+    pkt->dts = wrap_timestamp(st, pkt->dts);
+    pkt->pts = wrap_timestamp(st, pkt->pts);
+
+    force_codec_ids(s, st);
+
+    /* TODO: audio: time filter; video: frame reordering (pts != dts) */
+    if (s->use_wallclock_as_timestamps)
+        pkt->dts = pkt->pts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, st->time_base);
+}
+
+int ff_buffer_packet(AVFormatContext *s, AVPacket *pkt)
+{
+    FFFormatContext *const si = ffformatcontext(s);
+    AVStream *st  = s->streams[pkt->stream_index];
+    FFStream *sti = ffstream(st);
+    int err;
+
+    if (pkt->flags & AV_PKT_FLAG_CORRUPT) {
+        av_log(s, AV_LOG_WARNING,
+               "Packet corrupt (stream = %d, dts = %s)",
+               pkt->stream_index, av_ts2str(pkt->dts));
+        if (s->flags & AVFMT_FLAG_DISCARD_CORRUPT) {
+            av_log(s, AV_LOG_WARNING, ", dropping it.\n");
+            av_packet_unref(pkt);
+            return 0;
+        }
+        av_log(s, AV_LOG_WARNING, ".\n");
+    }
+
+    update_timestamps(s, st, pkt);
+
+    err = avpriv_packet_list_put(&si->raw_packet_buffer, pkt, NULL, 0);
+    if (err < 0) {
+        av_packet_unref(pkt);
+        return err;
+    }
+
+    pkt = &si->raw_packet_buffer.tail->pkt;
+    si->raw_packet_buffer_size += pkt->size;
+
+    if (sti->request_probe <= 0)
+        return 0;
+
+    err = probe_codec(s, st, pkt);
+    if (err < 0)
+        return err;
+
+    return 0;
+}
+
 int ff_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     FFFormatContext *const si = ffformatcontext(s);
@@ -613,30 +680,10 @@ FF_ENABLE_DEPRECATION_WARNINGS
             av_log(s, AV_LOG_WARNING, ".\n");
         }
 
-        av_assert0(pkt->stream_index < (unsigned)s->nb_streams &&
-                   "Invalid stream index.\n");
-
         st  = s->streams[pkt->stream_index];
         sti = ffstream(st);
 
-        if (update_wrap_reference(s, st, pkt->stream_index, pkt) && sti->pts_wrap_behavior == AV_PTS_WRAP_SUB_OFFSET) {
-            // correct first time stamps to negative values
-            if (!is_relative(sti->first_dts))
-                sti->first_dts = wrap_timestamp(st, sti->first_dts);
-            if (!is_relative(st->start_time))
-                st->start_time = wrap_timestamp(st, st->start_time);
-            if (!is_relative(sti->cur_dts))
-                sti->cur_dts = wrap_timestamp(st, sti->cur_dts);
-        }
-
-        pkt->dts = wrap_timestamp(st, pkt->dts);
-        pkt->pts = wrap_timestamp(st, pkt->pts);
-
-        force_codec_ids(s, st);
-
-        /* TODO: audio: time filter; video: frame reordering (pts != dts) */
-        if (s->use_wallclock_as_timestamps)
-            pkt->dts = pkt->pts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, st->time_base);
+        update_timestamps(s, st, pkt);
 
         if (!pktl && sti->request_probe <= 0)
             return 0;
@@ -1250,6 +1297,53 @@ static int64_t ts_to_samples(AVStream *st, int64_t ts)
     return av_rescale(ts, st->time_base.num * st->codecpar->sample_rate, st->time_base.den);
 }
 
+static int codec_close(FFStream *sti)
+{
+    AVCodecContext *avctx_new = NULL;
+    AVCodecParameters *par_tmp = NULL;
+    int ret;
+
+    avctx_new = avcodec_alloc_context3(sti->avctx->codec);
+    if (!avctx_new) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
+
+    par_tmp = avcodec_parameters_alloc();
+    if (!par_tmp) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
+
+    ret = avcodec_parameters_from_context(par_tmp, sti->avctx);
+    if (ret < 0)
+        goto fail;
+
+    ret = avcodec_parameters_to_context(avctx_new, par_tmp);
+    if (ret < 0)
+        goto fail;
+
+    avctx_new->pkt_timebase = sti->avctx->pkt_timebase;
+
+#if FF_API_TICKS_PER_FRAME
+FF_DISABLE_DEPRECATION_WARNINGS
+    avctx_new->ticks_per_frame = sti->avctx->ticks_per_frame;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
+
+    avcodec_free_context(&sti->avctx);
+    sti->avctx = avctx_new;
+
+    avctx_new = NULL;
+    ret       = 0;
+
+fail:
+    avcodec_free_context(&avctx_new);
+    avcodec_parameters_free(&par_tmp);
+
+    return ret;
+}
+
 static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
 {
     FFFormatContext *const si = ffformatcontext(s);
@@ -1286,8 +1380,10 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
         if (sti->need_context_update) {
             if (avcodec_is_open(sti->avctx)) {
                 av_log(s, AV_LOG_DEBUG, "Demuxer context update while decoder is open, closing and trying to re-open\n");
-                avcodec_close(sti->avctx);
+                ret = codec_close(sti);
                 sti->info->found_decoder = 0;
+                if (ret < 0)
+                    return ret;
             }
 
             /* close parser, because it depends on the codec */
@@ -3013,14 +3109,16 @@ find_stream_info_err:
     for (unsigned i = 0; i < ic->nb_streams; i++) {
         AVStream *const st  = ic->streams[i];
         FFStream *const sti = ffstream(st);
+        int err;
+
         if (sti->info) {
             av_freep(&sti->info->duration_error);
             av_freep(&sti->info);
         }
-        avcodec_close(sti->avctx);
-        // FIXME: avcodec_close() frees AVOption settable fields which includes ch_layout,
-        //        so we need to restore it.
-        av_channel_layout_copy(&sti->avctx->ch_layout, &st->codecpar->ch_layout);
+
+        err = codec_close(sti);
+        if (err < 0 && ret >= 0)
+            ret = err;
         av_bsf_free(&sti->extract_extradata.bsf);
     }
     if (ic->pb) {

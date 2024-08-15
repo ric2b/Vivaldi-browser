@@ -28,6 +28,8 @@
 
 #include "third_party/blink/renderer/core/loader/mixed_content_checker.h"
 
+#include <optional>
+
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/features.h"
@@ -36,7 +38,6 @@
 #include "build/chromecast_buildflags.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/security_context/insecure_request_policy.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
@@ -548,9 +549,16 @@ bool MixedContentChecker::ShouldBlockFetch(
           network::features::kPrivateNetworkAccessPermissionPrompt) &&
       RuntimeEnabledFeatures::PrivateNetworkAccessPermissionPromptEnabled(
           frame->DomWindow())) {
-    if (target_address_space ==
-            network::mojom::blink::IPAddressSpace::kPrivate ||
-        target_address_space == network::mojom::blink::IPAddressSpace::kLocal) {
+    // TODO(crbug.com/323583084): Re-enable PNA permission prompt for documents
+    // fetched via service worker.
+    if (!frame->Loader()
+             .GetDocumentLoader()
+             ->GetResponse()
+             .WasFetchedViaServiceWorker() &&
+        (target_address_space ==
+             network::mojom::blink::IPAddressSpace::kPrivate ||
+         target_address_space ==
+             network::mojom::blink::IPAddressSpace::kLocal)) {
       UseCounter::Count(frame->GetDocument(),
                         WebFeature::kPrivateNetworkAccessPermissionPrompt);
       allowed = true;

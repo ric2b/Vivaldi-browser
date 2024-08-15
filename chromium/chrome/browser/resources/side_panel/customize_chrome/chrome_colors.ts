@@ -10,18 +10,21 @@ import 'chrome://resources/cr_elements/cr_grid/cr_grid.js';
 import 'chrome://resources/cr_elements/cr_icons.css.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 
-import {SpHeading} from 'chrome://customize-chrome-side-panel.top-chrome/shared/sp_heading.js';
+import type {SpHeading} from 'chrome://customize-chrome-side-panel.top-chrome/shared/sp_heading.js';
 import {ThemeColorPickerBrowserProxy} from 'chrome://resources/cr_components/theme_color_picker/browser_proxy.js';
-import {Color, ColorType, DARK_DEFAULT_COLOR, LIGHT_DEFAULT_COLOR, SelectedColor} from 'chrome://resources/cr_components/theme_color_picker/color_utils.js';
-import {ThemeColorElement} from 'chrome://resources/cr_components/theme_color_picker/theme_color.js';
-import {ChromeColor, Theme, ThemeColorPickerHandlerInterface} from 'chrome://resources/cr_components/theme_color_picker/theme_color_picker.mojom-webui.js';
+import type {Color, SelectedColor} from 'chrome://resources/cr_components/theme_color_picker/color_utils.js';
+import {ColorType, DARK_DEFAULT_COLOR, LIGHT_DEFAULT_COLOR} from 'chrome://resources/cr_components/theme_color_picker/color_utils.js';
+import type {ThemeColorElement} from 'chrome://resources/cr_components/theme_color_picker/theme_color.js';
+import type {ChromeColor, Theme, ThemeColorPickerHandlerInterface} from 'chrome://resources/cr_components/theme_color_picker/theme_color_picker.mojom-webui.js';
 import {hexColorToSkColor, skColorToRgba} from 'chrome://resources/js/color_utils.js';
 import {FocusOutlineManager} from 'chrome://resources/js/focus_outline_manager.js';
-import {SkColor} from 'chrome://resources/mojo/skia/public/mojom/skcolor.mojom-webui.js';
+import type {SkColor} from 'chrome://resources/mojo/skia/public/mojom/skcolor.mojom-webui.js';
 import {BrowserColorVariant} from 'chrome://resources/mojo/ui/base/mojom/themes.mojom-webui.js';
-import {DomRepeatEvent, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import type {DomRepeatEvent} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './chrome_colors.html.js';
+import {CustomizeChromeAction, recordCustomizeChromeAction} from './common.js';
 
 export interface ChromeColorsElement {
   $: {
@@ -171,17 +174,20 @@ export class ChromeColorsElement extends PolymerElement {
   }
 
   private onDefaultColorClick_() {
+    recordCustomizeChromeAction(CustomizeChromeAction.DEFAULT_COLOR_CLICKED);
     this.pageHandler_.setDefaultColor();
     this.pageHandler_.removeBackgroundImage();
   }
 
   private onChromeColorClick_(e: DomRepeatEvent<ChromeColor>) {
+    recordCustomizeChromeAction(CustomizeChromeAction.CHROME_COLOR_CLICKED);
     this.pageHandler_.setSeedColor(
         e.model.item.seed, BrowserColorVariant.kTonalSpot);
     this.pageHandler_.removeBackgroundImage();
   }
 
   private onCustomColorClick_() {
+    recordCustomizeChromeAction(CustomizeChromeAction.CUSTOM_COLOR_CLICKED);
     this.$.colorPicker.focus();
     this.$.colorPicker.click();
   }

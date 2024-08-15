@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_PASSWORD_MANAGER_ANDROID_PASSWORD_MANAGER_ANDROID_UTIL_H_
 #define CHROME_BROWSER_PASSWORD_MANAGER_ANDROID_PASSWORD_MANAGER_ANDROID_UTIL_H_
 
+#include "components/password_manager/core/common/password_manager_pref_names.h"
+
 class PrefService;
 
 namespace base {
@@ -12,10 +14,11 @@ class FilePath;
 }  // namespace base
 
 namespace password_manager_android_util {
-//  Checks whether the UPM for local users is activated for this client.
-//  This also means that the single password store has been split in
-//  account and local stores.
-bool UsesSplitStoresAndUPMForLocal(PrefService* pref_service);
+
+// Used to prevent static casting issues with
+// `PasswordsUseUPMLocalAndSeparateStores` pref.
+password_manager::prefs::UseUpmLocalAndSeparateStoresState
+GetSplitStoresAndLocalUpmPrefValue(PrefService* pref_service);
 
 // Checks that the GMS backend can be used, irrespective of whether for account
 // or local passwords.
@@ -23,10 +26,8 @@ bool CanUseUPMBackend(bool is_pwd_sync_enabled, PrefService* pref_service);
 
 // Called on startup to update the value of UsesSplitStoresAndUPMForLocal(),
 // based on feature flags, minimum GmsCore version and other criteria.
-// If kSkipLocalUpmGmsCoreVersionCheckForTesting is added to the command-line,
-// the GmsCore version check will be skipped.
-inline constexpr char kSkipLocalUpmGmsCoreVersionCheckForTesting[] =
-    "skip-local-upm-gms-core-version-check-for-testing";
+// If switches::kSkipLocalUpmGmsCoreVersionCheckForTesting is added to the
+// command-line, the GmsCore version check will be skipped.
 void SetUsesSplitStoresAndUPMForLocal(PrefService* pref_service,
                                       const base::FilePath& login_db_directory);
 

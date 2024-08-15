@@ -304,6 +304,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(ALL, "test", ALL, "ImageReadPixels_Gpu")
 			skip(ALL, "test", ALL, "ImageScalePixels_Gpu")
 			skip(ALL, "test", ALL, "ImageShaderTest")
+			skip(ALL, "test", ALL, "ImageWrapTextureMipmapsTest")
 			skip(ALL, "test", ALL, "MatrixColorFilter_TransparentBlack")
 			skip(ALL, "test", ALL, "MorphologyFilterRadiusWithMirrorCTM_Gpu")
 			skip(ALL, "test", ALL, "MultisampleRetainTest")
@@ -418,9 +419,13 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				skip(ALL, "test", ALL, "GraphitePurgeNotUsedSinceResourcesTest")
 				skip(ALL, "test", ALL, "PaintParamsKeyTest")
 
-				if b.matchOs("Win10") {
-					// The Dawn Win10 job OOMs (skbug.com/14410)
+				if b.matchOs("Win10") || b.matchGpu("MaliG78", "Adreno620") {
+					// The Dawn Win10 and some Android device jobs OOMs (skbug.com/14410, b/318725123)
 					skip(ALL, "test", ALL, "BigImageTest_Graphite")
+				}
+				if b.matchGpu("Adreno620") {
+					// The Dawn Pixel5 device job fails one compute test (b/318725123)
+					skip(ALL, "test", ALL, "Compute_AtomicOperationsOverArrayAndStructTest")
 				}
 			} else if b.extraConfig("Native") {
 				if b.extraConfig("Metal") {
@@ -1457,13 +1462,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	// existing behavior, but we should verify that it's needed.
 	if b.model("Nexus5", "Nexus5x", "Nexus9", "JioNext") {
 		args = append(args, "--noRAW_threading")
-	}
-
-	if b.extraConfig("FSAA") {
-		args = append(args, "--analyticAA", "false")
-	}
-	if b.extraConfig("FAAA") {
-		args = append(args, "--forceAnalyticAA")
 	}
 
 	if b.extraConfig("NativeFonts") {

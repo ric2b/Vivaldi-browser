@@ -364,8 +364,6 @@ void TestingProfile::Init(bool is_supervised_profile) {
   else
     CreateTestingPrefService();
 
-  MigrateObsoleteProfilePrefs(prefs_.get(), GetPath());
-
   if (is_supervised_profile)
     SetIsSupervisedProfile();
 
@@ -450,6 +448,7 @@ void TestingProfile::Init(bool is_supervised_profile) {
     simple_dependency_manager_->RegisterProfilePrefsForServices(pref_registry);
     browser_context_dependency_manager_->RegisterProfilePrefsForServices(
         pref_registry);
+    MigrateObsoleteProfilePrefs(prefs_.get(), GetPath());
   }
 
   FullBrowserTransitionManager::Get()->OnProfileCreated(this);
@@ -874,6 +873,12 @@ TestingProfile::GetPolicySchemaRegistryService() {
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+void TestingProfile::SetUserCloudPolicyManagerAsh(
+    std::unique_ptr<policy::UserCloudPolicyManagerAsh>
+        user_cloud_policy_manager) {
+  user_cloud_policy_manager_ = std::move(user_cloud_policy_manager);
+}
+
 policy::UserCloudPolicyManagerAsh*
 TestingProfile::GetUserCloudPolicyManagerAsh() {
   return user_cloud_policy_manager_.get();

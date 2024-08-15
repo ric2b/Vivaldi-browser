@@ -5,9 +5,9 @@
 #include "chrome/browser/media/webrtc/tab_desktop_media_list.h"
 
 #include <memory>
+#include <vector>
 
 #include "base/command_line.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
@@ -23,6 +23,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/apps/chrome_app_delegate.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/tabs/tab_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/fake_profile_manager.h"
@@ -47,8 +48,9 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/login/users/scoped_test_user_manager.h"
+#include "chrome/browser/ash/login/users/chrome_user_manager_impl.h"
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
+#include "components/user_manager/scoped_user_manager.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 using content::WebContents;
@@ -345,7 +347,8 @@ class TabDesktopMediaListTest : public testing::Test,
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   ash::ScopedCrosSettingsTestHelper cros_settings_test_helper_;
-  ash::ScopedTestUserManager test_user_manager_;
+  user_manager::ScopedUserManager test_user_manager_{
+      ash::ChromeUserManagerImpl::CreateChromeUserManager()};
 #endif
 };
 
@@ -386,9 +389,9 @@ TEST_P(TabDesktopMediaListTest, RemoveTab) {
   base::RunLoop loop;
   TabStripModel* tab_strip_model = browser_->tab_strip_model();
   ASSERT_TRUE(tab_strip_model);
-  std::unique_ptr<WebContents> released_web_contents =
-      tab_strip_model->DetachWebContentsAtForInsertion(kDefaultSourceCount - 1);
-  base::Erase(manually_added_web_contents_, released_web_contents.get());
+  std::unique_ptr<tabs::TabModel> detached_tab =
+      tab_strip_model->DetachTabAtForInsertion(kDefaultSourceCount - 1);
+  std::erase(manually_added_web_contents_, detached_tab.get()->contents());
 
   EXPECT_CALL(observer_, OnSourceRemoved(0))
       .WillOnce(

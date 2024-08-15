@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_throw_dom_exception.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_union_routerrule_routerrulesequence.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_global_scope.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_router_type_converter.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
@@ -22,11 +23,7 @@ namespace blink {
 
 namespace {
 
-void DidRegisterRouter(ScriptPromiseResolver* resolver) {
-  if (!resolver->GetExecutionContext() ||
-      resolver->GetExecutionContext()->IsContextDestroyed()) {
-    return;
-  }
+void DidRegisterRouter(ScriptPromiseResolverTyped<IDLUndefined>* resolver) {
   resolver->Resolve();
 }
 
@@ -61,14 +58,14 @@ InstallEvent::InstallEvent(const AtomicString& type,
                            WaitUntilObserver* observer)
     : ExtendableEvent(type, initializer, observer), event_id_(event_id) {}
 
-ScriptPromise InstallEvent::registerRouter(
+ScriptPromiseTyped<IDLUndefined> InstallEvent::registerRouter(
     ScriptState* script_state,
     const V8UnionRouterRuleOrRouterRuleSequence* v8_rules,
     ExceptionState& exception_state) {
   ServiceWorkerGlobalScope* global_scope =
       To<ServiceWorkerGlobalScope>(ExecutionContext::From(script_state));
   if (!global_scope) {
-    return ScriptPromise::Reject(
+    return ScriptPromiseTyped<IDLUndefined>::Reject(
         script_state,
         V8ThrowDOMException::CreateOrDie(script_state->GetIsolate(),
                                          DOMExceptionCode::kInvalidStateError,
@@ -78,12 +75,12 @@ ScriptPromise InstallEvent::registerRouter(
     case RouterRegistrationMethod::Uninitialized:
       break;
     case RouterRegistrationMethod::RegisterRouter:
-      return ScriptPromise::Reject(
+      return ScriptPromiseTyped<IDLUndefined>::Reject(
           script_state, V8ThrowException::CreateTypeError(
                             script_state->GetIsolate(),
                             "registerRouter is called multiple times."));
     case RouterRegistrationMethod::AddRoutes:
-      return ScriptPromise::Reject(
+      return ScriptPromiseTyped<IDLUndefined>::Reject(
           script_state,
           V8ThrowDOMException::CreateOrDie(
               script_state->GetIsolate(), DOMExceptionCode::kNotAllowedError,
@@ -91,29 +88,38 @@ ScriptPromise InstallEvent::registerRouter(
               "registerRouter() and addRoutes() can not be called at the same "
               "time."));
   }
+  global_scope->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+      mojom::blink::ConsoleMessageSource::kJavaScript,
+      mojom::blink::ConsoleMessageLevel::kWarning,
+      "registerRouter() has been deprecated and will be removed from M125."
+      "Please use addRoutes() instead."));
 
   blink::ServiceWorkerRouterRules rules;
   ConvertServiceWorkerRouterRules(script_state, v8_rules, exception_state,
-                                  global_scope->BaseURL(), rules);
+                                  global_scope->BaseURL(),
+                                  global_scope->FetchHandlerType(), rules);
   if (exception_state.HadException()) {
-    ScriptPromise::Reject(script_state, exception_state);
+    return ScriptPromiseTyped<IDLUndefined>::Reject(script_state,
+                                                    exception_state);
   }
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolverTyped<IDLUndefined>>(
+          script_state);
   global_scope->GetServiceWorkerHost()->RegisterRouter(
       rules, WTF::BindOnce(&DidRegisterRouter, WrapPersistent(resolver)));
   router_registration_method_ = RouterRegistrationMethod::RegisterRouter;
   return resolver->Promise();
 }
 
-ScriptPromise InstallEvent::addRoutes(
+ScriptPromiseTyped<IDLUndefined> InstallEvent::addRoutes(
     ScriptState* script_state,
     const V8UnionRouterRuleOrRouterRuleSequence* v8_rules,
     ExceptionState& exception_state) {
   ServiceWorkerGlobalScope* global_scope =
       To<ServiceWorkerGlobalScope>(ExecutionContext::From(script_state));
   if (!global_scope) {
-    return ScriptPromise::Reject(
+    return ScriptPromiseTyped<IDLUndefined>::Reject(
         script_state,
         V8ThrowDOMException::CreateOrDie(script_state->GetIsolate(),
                                          DOMExceptionCode::kInvalidStateError,
@@ -121,7 +127,7 @@ ScriptPromise InstallEvent::addRoutes(
   }
   switch (router_registration_method_) {
     case RouterRegistrationMethod::RegisterRouter:
-      return ScriptPromise::Reject(
+      return ScriptPromiseTyped<IDLUndefined>::Reject(
           script_state,
           V8ThrowDOMException::CreateOrDie(
               script_state->GetIsolate(), DOMExceptionCode::kNotAllowedError,
@@ -135,12 +141,16 @@ ScriptPromise InstallEvent::addRoutes(
 
   blink::ServiceWorkerRouterRules rules;
   ConvertServiceWorkerRouterRules(script_state, v8_rules, exception_state,
-                                  global_scope->BaseURL(), rules);
+                                  global_scope->BaseURL(),
+                                  global_scope->FetchHandlerType(), rules);
   if (exception_state.HadException()) {
-    ScriptPromise::Reject(script_state, exception_state);
+    return ScriptPromiseTyped<IDLUndefined>::Reject(script_state,
+                                                    exception_state);
   }
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolverTyped<IDLUndefined>>(
+          script_state);
   global_scope->GetServiceWorkerHost()->AddRoutes(
       rules, WTF::BindOnce(&DidRegisterRouter, WrapPersistent(resolver)));
   router_registration_method_ = RouterRegistrationMethod::AddRoutes;
@@ -152,11 +162,12 @@ void InstallEvent::ConvertServiceWorkerRouterRules(
     const V8UnionRouterRuleOrRouterRuleSequence* v8_rules,
     ExceptionState& exception_state,
     const KURL& base_url,
+    mojom::blink::ServiceWorkerFetchHandlerType fetch_handler_type,
     blink::ServiceWorkerRouterRules& rules) {
   if (v8_rules->IsRouterRule()) {
     auto r = ConvertV8RouterRuleToBlink(script_state->GetIsolate(),
                                         v8_rules->GetAsRouterRule(), base_url,
-                                        exception_state);
+                                        fetch_handler_type, exception_state);
     if (!r) {
       CHECK(exception_state.HadException());
       return;
@@ -170,8 +181,9 @@ void InstallEvent::ConvertServiceWorkerRouterRules(
       return;
     }
     for (const blink::RouterRule* rule : v8_rules->GetAsRouterRuleSequence()) {
-      auto r = ConvertV8RouterRuleToBlink(script_state->GetIsolate(), rule,
-                                          base_url, exception_state);
+      auto r =
+          ConvertV8RouterRuleToBlink(script_state->GetIsolate(), rule, base_url,
+                                     fetch_handler_type, exception_state);
       if (!r) {
         CHECK(exception_state.HadException());
         return;

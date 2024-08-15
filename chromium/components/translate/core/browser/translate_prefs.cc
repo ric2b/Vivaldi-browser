@@ -9,9 +9,9 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/feature_list.h"
 #include "base/i18n/rtl.h"
 #include "base/json/values_util.h"
@@ -84,7 +84,7 @@ void PurgeUnsupportedLanguagesInLanguageFamily(base::StringPiece language,
   }
 
   // Purge all languages in the same family as |language|.
-  base::EraseIf(*list, [base_language](const std::string& lang) {
+  std::erase_if(*list, [base_language](const std::string& lang) {
     return base_language == language::ExtractBaseLanguage(lang);
   });
 }
@@ -632,7 +632,7 @@ std::vector<std::string> TranslatePrefs::GetNeverPromptSitesBetween(
   std::vector<std::string> result;
   const auto& dict = prefs_->GetDict(prefs::kPrefNeverPromptSitesWithTime);
   for (const auto entry : dict) {
-    absl::optional<base::Time> time = base::ValueToTime(entry.second);
+    std::optional<base::Time> time = base::ValueToTime(entry.second);
     if (!time) {
       // Badly formatted preferences may be synced from the server, see
       // https://crbug.com/1295549

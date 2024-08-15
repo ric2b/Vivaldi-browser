@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.bookmarks;
 
-
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
 
@@ -90,7 +89,7 @@ public class BookmarkFolderPickerRenderTest {
     @Rule
     public final ChromeRenderTestRule mRenderTestRule =
             ChromeRenderTestRule.Builder.withPublicCorpus()
-                    .setRevision(4)
+                    .setRevision(6)
                     .setBugComponent(ChromeRenderTestRule.Component.UI_BROWSER_BOOKMARKS)
                     .build();
 
@@ -109,7 +108,7 @@ public class BookmarkFolderPickerRenderTest {
     private BookmarkFolderPickerCoordinator mCoordinator;
     private ImprovedBookmarkRowCoordinator mImprovedBookmarkRowCoordinator;
     private RecyclerView mRecyclerView;
-    private BookmarkModel mBookmarkModel;
+    private FakeBookmarkModel mBookmarkModel;
 
     public BookmarkFolderPickerRenderTest(boolean useVisualRowLayout, boolean nightModeEnabled) {
         mUseVisualRowLayout = useVisualRowLayout;
@@ -123,14 +122,13 @@ public class BookmarkFolderPickerRenderTest {
     @Before
     public void setUp() throws Exception {
         mBookmarkModel = runOnUiThreadBlocking(() -> FakeBookmarkModel.createModel());
+        mBookmarkModel.setAreAccountBookmarkFoldersActive(false);
         mActivityTestRule.launchActivity(null);
         mActivity = mActivityTestRule.getActivity();
         mActivity.setTheme(R.style.Theme_BrowserUI_DayNight);
 
         // Setup profile-related factories.
-        Profile.setLastUsedProfileForTesting(mProfile);
         TrackerFactory.setTrackerForTests(mTracker);
-
 
         // Setup BookmarkImageFetcher.
         final Resources resources = mActivity.getResources();
@@ -271,8 +269,8 @@ public class BookmarkFolderPickerRenderTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    @EnableFeatures(ChromeFeatureList.ENABLE_BOOKMARK_FOLDERS_FOR_ACCOUNT_STORAGE)
     public void testMoveBookmarkFromRoot_withAccountFolders() throws Exception {
+        mBookmarkModel.setAreAccountBookmarkFoldersActive(true);
         BookmarkId bookmarkId =
                 runOnUiThreadBlocking(
                         () ->

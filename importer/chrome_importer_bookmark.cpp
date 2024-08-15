@@ -61,7 +61,7 @@ void ChromeBookmarkReader::LoadFile(const base::FilePath& file) {
   std::string input;
   ReadFileToString(file, &input);
 
-  absl::optional<base::Value> root_value(base::JSONReader::Read(input));
+  std::optional<base::Value> root_value(base::JSONReader::Read(input));
   if (!root_value)
     return;
   base::Value::Dict* root_dict = root_value->GetIfDict();
@@ -151,10 +151,6 @@ void ChromeBookmarkReader::DecodeNode(const base::Value::Dict& dict) {
     nickname = dict.FindString("Nickname");
   }
 
-  if (is_folder) {
-    current_folder_.push_back(name);
-  }
-
   ImportedBookmarkEntry entry;
   entry.in_toolbar = false;  // on_personal_bar;
   entry.is_folder = is_folder;
@@ -168,6 +164,8 @@ void ChromeBookmarkReader::DecodeNode(const base::Value::Dict& dict) {
   bookmarks_.push_back(entry);
 
   if (is_folder) {
+    current_folder_.push_back(name);
+
     for (auto& child_value : *children) {
       if (const base::Value::Dict* child = child_value.GetIfDict()) {
         DecodeNode(*child);

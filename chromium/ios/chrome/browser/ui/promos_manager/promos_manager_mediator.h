@@ -11,7 +11,7 @@
 #import <optional>
 
 #import "base/containers/small_map.h"
-#import "ios/chrome/browser/promos_manager/promos_manager.h"
+#import "ios/chrome/browser/promos_manager/model/promos_manager.h"
 
 // Data used and cached to know what promo to show.
 struct PromoDisplayData {
@@ -34,8 +34,8 @@ struct PromoDisplayData {
 // Deregisters `promo` (stopping `promo` from being displayed).
 - (void)deregisterPromo:(promos_manager::Promo)promo;
 
-// Records the display impression of `promo`.
-- (void)recordImpression:(promos_manager::Promo)promo;
+// Deregisters `promo` after display.
+- (void)deregisterAfterDisplay:(promos_manager::Promo)promo;
 
 // Queries the PromosManager for the next promo (promos_manager::Promo) to
 // display, if any. Allows for special behavior if this is the first promo

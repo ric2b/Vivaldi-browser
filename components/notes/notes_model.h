@@ -101,9 +101,9 @@ class NotesModel : public KeyedService {
       const NoteNode* parent,
       size_t index,
       const std::u16string& name,
-      absl::optional<base::Time> creation_time = absl::nullopt,
-      absl::optional<base::Time> last_modification_time = absl::nullopt,
-      absl::optional<base::Uuid> uuid = absl::nullopt);
+      std::optional<base::Time> creation_time = std::nullopt,
+      std::optional<base::Time> last_modification_time = std::nullopt,
+      std::optional<base::Uuid> uuid = std::nullopt);
 
   // Adds a note at the specified position with the given |creation_time|,
   // |last_modification_time|, and |uuid|. If no UUID is provided (i.e. nullopt),
@@ -115,9 +115,9 @@ class NotesModel : public KeyedService {
       const std::u16string& title,
       const GURL& url,
       const std::u16string& content,
-      absl::optional<base::Time> creation_time = absl::nullopt,
-      absl::optional<base::Time> last_modification_time = absl::nullopt,
-      absl::optional<base::Uuid> uuid = absl::nullopt);
+      std::optional<base::Time> creation_time = std::nullopt,
+      std::optional<base::Time> last_modification_time = std::nullopt,
+      std::optional<base::Uuid> uuid = std::nullopt);
 
   // Adds a separator at the specified position with the given |creation_time|
   // and |uuid|. If no UUID is provided (i.e. nullopt), then a random one will
@@ -125,9 +125,9 @@ class NotesModel : public KeyedService {
   const NoteNode* AddSeparator(
       const NoteNode* parent,
       size_t index,
-      absl::optional<std::u16string> name = absl::nullopt,
-      absl::optional<base::Time> creation_time = absl::nullopt,
-      absl::optional<base::Uuid> uuid = absl::nullopt);
+      std::optional<std::u16string> name = std::nullopt,
+      std::optional<base::Time> creation_time = std::nullopt,
+      std::optional<base::Uuid> uuid = std::nullopt);
 
   // Adds an attachment for which only the |checksum| is known at the specified
   // position with the given |creation_time| and |uuid|. If no UUID is provided
@@ -139,8 +139,8 @@ class NotesModel : public KeyedService {
       const std::u16string& title,
       const GURL& url,
       const std::string& checksum,
-      absl::optional<base::Time> creation_time = absl::nullopt,
-      absl::optional<base::Uuid> uuid = absl::nullopt);
+      std::optional<base::Time> creation_time = std::nullopt,
+      std::optional<base::Uuid> uuid = std::nullopt);
 
   // Adds an attachment at the specified position with the given |creation_time|
   // and |uuid|. If no UUID is provided (i.e. nullopt), then a random one will
@@ -151,8 +151,8 @@ class NotesModel : public KeyedService {
       const std::u16string& title,
       const GURL& url,
       std::vector<uint8_t> content,
-      absl::optional<base::Time> creation_time = absl::nullopt,
-      absl::optional<base::Uuid> uuid = absl::nullopt);
+      std::optional<base::Time> creation_time = std::nullopt,
+      std::optional<base::Uuid> uuid = std::nullopt);
 
   const NoteNode* ImportNote(const NoteNode* parent,
                              size_t index,

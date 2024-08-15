@@ -41,6 +41,11 @@ NSString* const kToolbarShadowColor = @"toolbar_shadow_color";
 NSString* const kOmniboxKeyboardButtonColor = @"omnibox_keyboard_button_color";
 NSString* const kOmniboxSuggestionRowSeparatorColor =
     @"omnibox_suggestion_row_separator_color";
+NSString* const kOmniboxPopoutSuggestionRowSeparatorColor =
+    @"omnibox_popout_suggestion_row_separator_color";
+NSString* const kTabGroupFaviconBackgroundColor =
+    @"tab_group_favicons_background_color";
+NSString* const kOmniboxPopoutOverlayColor = @"omnibox_popout_overlay_color";
 
 #pragma mark - Standard Colors
 NSString* const kSolidBlackColor = @"solid_black_color";
@@ -94,6 +99,7 @@ NSString* const kGrey700Color = @"grey_700_color";
 NSString* const kGrey800Color = @"grey_800_color";
 NSString* const kGrey900Color = @"grey_900_color";
 NSString* const kStaticGrey300Color = @"static_grey_300_color";
+NSString* const kStaticGrey900Color = @"static_grey_900_color";
 
 #pragma mark - Light only colors
 

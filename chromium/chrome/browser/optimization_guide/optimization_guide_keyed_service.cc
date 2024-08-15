@@ -24,6 +24,8 @@
 #include "chrome/browser/download/background_download_service_factory.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/optimization_guide/chrome_hints_manager.h"
+#include "chrome/browser/optimization_guide/chrome_model_quality_logs_uploader_service.h"
+#include "chrome/browser/optimization_guide/chrome_prediction_model_store.h"
 #include "chrome/browser/optimization_guide/model_execution/chrome_on_device_model_service_controller.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -58,7 +60,6 @@
 #include "components/optimization_guide/core/optimization_guide_store.h"
 #include "components/optimization_guide/core/optimization_guide_util.h"
 #include "components/optimization_guide/core/prediction_manager.h"
-#include "components/optimization_guide/core/prediction_model_store.h"
 #include "components/optimization_guide/core/tab_url_provider.h"
 #include "components/optimization_guide/core/top_host_provider.h"
 #include "components/optimization_guide/proto/hints.pb.h"
@@ -90,13 +91,10 @@ void DeleteOldStorePaths(const base::FilePath& profile_path) {
   //
   // Delete the old profile-wide model download store path, since
   // the install-wide model store is enabled now.
-  if (optimization_guide::features::IsInstallWideModelStoreEnabled()) {
-    base::ThreadPool::PostTask(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-        base::GetDeletePathRecursivelyCallback(profile_path.Append(
-            optimization_guide::
-                kOldOptimizationGuidePredictionModelDownloads)));
-  }
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+      base::GetDeletePathRecursivelyCallback(profile_path.Append(
+          optimization_guide::kOldOptimizationGuidePredictionModelDownloads)));
 }
 
 // Returns the profile to use for when setting up the keyed service when the
@@ -225,16 +223,6 @@ class OnDeviceModelComponentStateManagerDelegate
   }
 };
 
-void RecordUploadStatusHistogram(
-    optimization_guide::proto::ModelExecutionFeature feature,
-    optimization_guide::ModelQualityLogsUploadStatus status) {
-  base::UmaHistogramEnumeration(
-      base::StrCat(
-          {"OptimizationGuide.ModelQualityLogsUploadService.UploadStatus.",
-           optimization_guide::GetStringNameForModelExecutionFeature(feature)}),
-      status);
-}
-
 }  // namespace
 
 // static
@@ -323,8 +311,6 @@ void OptimizationGuideKeyedService::Initialize() {
   // profile's store and do not fetch any new hints or models.
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory;
   base::WeakPtr<optimization_guide::OptimizationGuideStore> hint_store;
-  base::WeakPtr<optimization_guide::OptimizationGuideStore>
-      prediction_model_and_features_store;
   base::FilePath model_downloads_dir;
   if (profile->IsOffTheRecord()) {
     OptimizationGuideKeyedService* original_ogks =
@@ -332,8 +318,6 @@ void OptimizationGuideKeyedService::Initialize() {
             GetProfileForOTROptimizationGuide(profile));
     DCHECK(original_ogks);
     hint_store = original_ogks->GetHintsManager()->hint_store();
-    prediction_model_and_features_store =
-        original_ogks->GetPredictionManager()->model_and_features_store();
   } else {
     // Use the database associated with the original profile.
     auto* proto_db_provider = profile->GetOriginalProfile()
@@ -376,28 +360,6 @@ void OptimizationGuideKeyedService::Initialize() {
                   profile->GetPrefs())
             : nullptr;
     hint_store = hint_store_ ? hint_store_->AsWeakPtr() : nullptr;
-
-    if (!optimization_guide::features::IsInstallWideModelStoreEnabled()) {
-      // Do not explicitly hand off the model downloads directory to
-      // off-the-record profiles. Underneath the hood, this variable is only
-      // used in non off-the-record profiles to know where to download the model
-      // files to. Off-the-record profiles read the model locations from the
-      // original profiles they are associated with.
-      model_downloads_dir = profile_path.Append(
-          optimization_guide::kOldOptimizationGuidePredictionModelDownloads);
-      prediction_model_and_features_store_ =
-          std::make_unique<optimization_guide::OptimizationGuideStore>(
-              proto_db_provider,
-              profile_path.Append(
-                  optimization_guide::
-                      kOldOptimizationGuidePredictionModelMetadataStore),
-              model_downloads_dir,
-              base::ThreadPool::CreateSequencedTaskRunner(
-                  {base::MayBlock(), base::TaskPriority::BEST_EFFORT}),
-              profile->GetPrefs());
-      prediction_model_and_features_store =
-          prediction_model_and_features_store_->AsWeakPtr();
-    }
   }
 
   optimization_guide_logger_ = std::make_unique<OptimizationGuideLogger>();
@@ -409,10 +371,7 @@ void OptimizationGuideKeyedService::Initialize() {
       optimization_guide_logger_.get());
 
   prediction_manager_ = std::make_unique<optimization_guide::PredictionManager>(
-      prediction_model_and_features_store,
-      optimization_guide::features::IsInstallWideModelStoreEnabled()
-          ? optimization_guide::PredictionModelStore::GetInstance()
-          : nullptr,
+      optimization_guide::ChromePredictionModelStore::GetInstance(),
       url_loader_factory, profile->GetPrefs(), profile->IsOffTheRecord(),
       g_browser_process->GetApplicationLocale(), model_downloads_dir,
       optimization_guide_logger_.get(),
@@ -449,7 +408,9 @@ void OptimizationGuideKeyedService::Initialize() {
           optimization_guide::features::GetOnDeviceStartupMetricDelay());
     }
 
-    if (base::FeatureList::IsEnabled(
+    if (browser_context_ && !browser_context_->IsOffTheRecord() &&
+        !profile->IsGuestSession() &&
+        base::FeatureList::IsEnabled(
             optimization_guide::features::kOptimizationGuideModelExecution)) {
       scoped_refptr<optimization_guide::OnDeviceModelServiceController>
           service_controller;
@@ -458,24 +419,34 @@ void OptimizationGuideKeyedService::Initialize() {
         service_controller = GetOnDeviceModelServiceController(
             on_device_component_manager_->GetWeakPtr());
       }
-      model_execution_manager_ =
-          std::make_unique<optimization_guide::ModelExecutionManager>(
-              url_loader_factory,
-              IdentityManagerFactory::GetForProfile(profile),
-              std::move(service_controller), this,
-              optimization_guide_logger_.get());
-    }
-  }
 
-  if (!profile->IsOffTheRecord() &&
+      model_execution_features_controller_ = std::make_unique<
+          optimization_guide::ModelExecutionFeaturesController>(
+          profile->GetPrefs(), IdentityManagerFactory::GetForProfile(profile));
+
       // Don't create logs uploader service when feature is disabled. All the
       // logs upload get route through this service which exists one per
-      // session.
-      base::FeatureList::IsEnabled(
-          optimization_guide::features::kModelQualityLogging)) {
-    model_quality_logs_uploader_service_ =
-        std::make_unique<optimization_guide::ModelQualityLogsUploaderService>(
-            url_loader_factory, g_browser_process->local_state());
+      // profile.
+      if (base::FeatureList::IsEnabled(
+              optimization_guide::features::kModelQualityLogging)) {
+        model_quality_logs_uploader_service_ = std::make_unique<
+            optimization_guide::ChromeModelQualityLogsUploaderService>(
+            url_loader_factory, g_browser_process->local_state(),
+            model_execution_features_controller_
+                ? model_execution_features_controller_->GetWeakPtr()
+                : nullptr);
+      }
+
+      model_execution_manager_ =
+          std::make_unique<optimization_guide::ModelExecutionManager>(
+              url_loader_factory, g_browser_process->local_state(),
+              IdentityManagerFactory::GetForProfile(profile),
+              std::move(service_controller), this,
+              optimization_guide_logger_.get(),
+              model_quality_logs_uploader_service_
+                  ? model_quality_logs_uploader_service_->GetWeakPtr()
+                  : nullptr);
+    }
   }
 
   // Register for profile initialization event to initialize the model
@@ -498,16 +469,6 @@ void OptimizationGuideKeyedService::Initialize() {
   optimization_guide::LogFeatureFlagsInfo(optimization_guide_logger_.get(),
                                           profile->IsOffTheRecord(),
                                           profile->GetPrefs());
-
-  if (base::FeatureList::IsEnabled(
-          optimization_guide::features::kOptimizationGuideModelExecution) &&
-      browser_context_ && !browser_context_->IsOffTheRecord() &&
-      !profile->IsGuestSession()) {
-    model_execution_features_controller_ =
-        std::make_unique<optimization_guide::ModelExecutionFeaturesController>(
-            profile->GetPrefs(),
-            IdentityManagerFactory::GetForProfile(profile));
-  }
 }
 
 optimization_guide::ChromeHintsManager*
@@ -598,7 +559,7 @@ void OptimizationGuideKeyedService::CanApplyOptimizationOnDemand(
     optimization_guide::proto::RequestContext request_context,
     optimization_guide::OnDemandOptimizationGuideDecisionRepeatingCallback
         callback,
-    optimization_guide::proto::RequestContextMetadata*
+    std::optional<optimization_guide::proto::RequestContextMetadata>
         request_context_metadata) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(request_context !=
@@ -611,11 +572,13 @@ void OptimizationGuideKeyedService::CanApplyOptimizationOnDemand(
 
 std::unique_ptr<optimization_guide::OptimizationGuideModelExecutor::Session>
 OptimizationGuideKeyedService::StartSession(
-    optimization_guide::proto::ModelExecutionFeature feature) {
+    optimization_guide::proto::ModelExecutionFeature feature,
+    const std::optional<optimization_guide::SessionConfigParams>&
+        config_params) {
   if (!model_execution_manager_) {
     return nullptr;
   }
-  return model_execution_manager_->StartSession(feature);
+  return model_execution_manager_->StartSession(feature, config_params);
 }
 
 void OptimizationGuideKeyedService::ExecuteModel(
@@ -661,46 +624,14 @@ void OptimizationGuideKeyedService::UploadModelQualityLogs(
       "feature",
       optimization_guide::GetStringNameForModelExecutionFeature(feature));
 
-  // Model quality logging requires user consent. Skip upload if consent is
-  // missing.
-  if (!g_browser_process->GetMetricsServicesManager()
-           ->IsMetricsConsentGiven()) {
-    RecordUploadStatusHistogram(
-        feature,
-        optimization_guide::ModelQualityLogsUploadStatus::kNoMetricsConsent);
-    return;
-  }
-
-  // Don't upload logs if logging is disabled by enterprise policy.
-  if (!ShouldFeatureBeCurrentlyAllowedForLogging(feature)) {
-    RecordUploadStatusHistogram(
-        feature, optimization_guide::ModelQualityLogsUploadStatus::
-                     kDisabledDueToEnterprisePolicy);
-    return;
-  }
-
-  // Set system profile proto before uploading.
-  metrics::MetricsLog::RecordCoreSystemProfile(
-      metrics::GetVersionString(),
-      metrics::AsProtobufChannel(chrome::GetChannel()),
-      chrome::IsExtendedStableChannel(),
-      g_browser_process->GetApplicationLocale(), metrics::GetAppPackageName(),
-      log_entry->logging_metadata()->mutable_system_profile());
-
-  CHECK(log_entry->logging_metadata()->has_system_profile())
-      << "System Profile Proto not set\n";
-  model_quality_logs_uploader_service_.get()->UploadModelQualityLogs(
-      std::move(log_entry));
+  // This uploads the logs on ModelQualityLogEntry destruction.
+  log_entry.reset();
 }
 
 void OptimizationGuideKeyedService::OnProfileInitializationComplete(
     Profile* profile) {
   DCHECK(profile_observation_.IsObservingSource(profile));
   profile_observation_.Reset();
-
-  if (!optimization_guide::features::IsInstallWideModelStoreEnabled()) {
-    return;
-  }
 
   if (profile->IsOffTheRecord()) {
     return;
@@ -723,6 +654,9 @@ void OptimizationGuideKeyedService::ClearData() {
 
 void OptimizationGuideKeyedService::Shutdown() {
   hints_manager_->Shutdown();
+  if (model_execution_manager_) {
+    model_execution_manager_->Shutdown();
+  }
 }
 
 void OptimizationGuideKeyedService::OverrideTargetModelForTesting(

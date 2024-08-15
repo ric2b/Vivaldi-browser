@@ -37,6 +37,7 @@ message BlinkTaskScope {
     TASK_SCOPE_POP_STATE = 5;
     TASK_SCOPE_SCHEDULER_POST_TASK = 6;
     TASK_SCOPE_REQUEST_IDLE_CALLBACK = 7;
+    TASK_SCOPE_XML_HTTP_REQUEST = 8;
   }
   optional TaskScopeType type = 1;
   optional int64 scope_task_id = 2;
@@ -86,6 +87,8 @@ message ChromeRasterTask {
 message ChromeMessagePumpForUI {
   // The MSG defined in winuser.h.
   optional uint32 message_id = 1;
+  // The result of the Win32 API call WaitForMultipleObjectsEx().
+  optional uint32 wait_for_object_result = 2;
 }
 
 // An enumeration specifying the reason of the RenderFrame deletion.
@@ -659,6 +662,7 @@ message BackForwardCacheCanStoreDocumentResult {
     COOKIE_DISABLED = 56;
     HTTP_AUTH_REQUIRED = 57;
     COOKIE_FLUSHED = 58;
+    BROADCAST_CHANNEL_ON_MESSAGE = 59;
   }
 
   optional BackForwardCacheNotRestoredReason
@@ -1385,6 +1389,40 @@ message ChromeGraphicsPipeline {
     STEP_BUFFER_SWAP_POST_SUBMIT = 12;
     STEP_FINISH_BUFFER_SWAP = 13;
     STEP_SWAP_BUFFERS_ACK = 14;
+
+    // While the above steps are part of the cc/viz/gpu pipeline, the STEP_EXO*
+    // and STEP_BACKEND* are somehow special.
+    //
+    // STEP_BACKEND* is platform independent and it can be used to trace any of
+    // the backends. For example, it perfectly fits in ozone/drm, ozone/wayland
+    // or x11 and can be set before and after buffer swap or overlay submission
+    // that helps to understand the flow better.
+    //
+    // The STEP_EXO* is used only by EXO (see below). It relies on a trace id
+    // from a Wayland client, which can use the "augmented_surface" protocol's
+    // "augmented_surface.set_frame_trace_id" to pass that value. As a result,
+    // any of the Wayland clients that use EXO will be able to have a nice trace
+    // connection and see their buffer submissions' flows.
+    //
+    // Speaking about the example, Lacros combines both STEP_BACKEND* and
+    // STEP_EXO* so that developers are able to trace the frame submission from
+    // Lacros (cc/viz/gpu) to Ozone/Wayland backend, then to EXO and to Ash
+    // (viz/gpu).
+
+    // Frame submission stages when Exo (Wayland server implementation in Ash
+    // browser process) is involved. Wayland clients (such as Lacros or ARC++)
+    // submit visual contents via Wayland surface commits, with which Exo
+    // constructs compositor frames and forwards to Ash Viz.
+    STEP_EXO_CONSTRUCT_COMPOSITOR_FRAME = 15;
+    STEP_EXO_SUBMIT_COMPOSITOR_FRAME = 16;
+    STEP_EXO_DISCARD_COMPOSITOR_FRAME = 17;
+
+    // Frame submission stages in backends that viz uses to submit frames to
+    // the gpu or to the system compositor. See the explanation above how these
+    // stages can be used.
+    STEP_BACKEND_SEND_BUFFER_SWAP = 18;
+    STEP_BACKEND_SEND_BUFFER_POST_SUBMIT = 19;
+    STEP_BACKEND_FINISH_BUFFER_SWAP = 20;
   }
   enum FrameSkippedReason {
     SKIPPED_REASON_UNKNOWN = 0;
@@ -1399,6 +1437,9 @@ message ChromeGraphicsPipeline {
   optional LocalSurfaceId local_surface_id = 4;
   optional int64 frame_sequence = 5;
   optional FrameSkippedReason frame_skipped_reason = 6;
+
+  // Optional variable that can be set together with STEP_BACKEND*.
+  optional int64 backend_frame_id = 7;
 };
 
 message LibunwindstackUnwinder {
@@ -1503,9 +1544,47 @@ message WebContentInteraction {
   optional int64 total_duration_ms = 2;
 }
 
+// The EventForwarder is a subsystem in android that forwards events from Java
+// code to Chromium's native implementation. In this case we register how many
+// events there was, what time this event occurred and the current x & y on the
+// device screen (pixels).
+//
+// All data comes from MotionEvent getters so read these for more context:
+// https://developer.android.com/reference/android/view/MotionEvent
+message EventForwarder {
+  // The events getHistorySize().
+  optional int32 history_size = 1;
+  // The time of the oldest event (getHistoricalEventTimeNanos(0)).
+  optional int64 oldest_time_ns = 2;
+  // The time of the newest event (getEventTimeNanos(0)).
+  optional int64 latest_time_ns = 5;
+  // The X coordinate of the event as reported by MotionEvent.getX().
+  optional float x_pixel = 3;
+  // The Y coordinate of the event as reported by MotionEvent.getY().
+  optional float y_pixel = 4;
+  // Determine if the previous forwarded event changed x coordinate.
+  optional bool has_x_movement = 6;
+  // Determine if the previous forwarded event changed y coordinate.
+  optional bool has_y_movement = 7;
+}
+
+// TouchDispositionGestureFilter is a class on android that detects and forwards
+// along gesture events based on touch acks and other information.
+message TouchDispositionGestureFilter {
+  // The number of gesture's inside of a GestureEventDataPacket.
+  optional int32 gesture_count = 1;
+}
+
+message ViewClassName {
+  // The name associated with a View class in browser UI. The class name is set
+  // by the view class itself through metadata macros and contains no data that
+  // can be modified by a user.
+  optional string name = 1;
+}
+
 message ChromeTrackEvent {
   // Extension range for Chrome: 1000-1999
-  // Next ID: 1059
+  // Next ID: 1061
   extend TrackEvent {
     optional ChromeAppState chrome_app_state = 1000;
 
@@ -1629,5 +1708,12 @@ message ChromeTrackEvent {
     optional StartUp startup = 1057;
 
     optional WebContentInteraction web_content_interaction = 1058;
+
+    optional EventForwarder event_forwarder = 1059;
+
+    optional TouchDispositionGestureFilter touch_disposition_gesture_filter =
+        1060;
+
+    optional ViewClassName view_class_name = 1061;
   }
 }

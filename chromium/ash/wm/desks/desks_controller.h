@@ -11,6 +11,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/public/cpp/autotest_desks_api.h"
+#include "ash/public/cpp/desk_profiles_delegate.h"
 #include "ash/public/cpp/desk_template.h"
 #include "ash/public/cpp/session/session_observer.h"
 #include "ash/wm/desks/desks_histogram_enums.h"
@@ -22,6 +23,7 @@
 #include "base/memory/raw_ptr_exclusion.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/uuid.h"
@@ -43,7 +45,7 @@ namespace ash {
 // and providing an undo toast when done manually.
 // These values are logged to UMA. Entries should not be renumbered and
 // numeric values should never be reused. Please keep in sync with
-// DeskCloseType in src/tools/metrics/histograms/enums.xml.
+// `DeskCloseType` in src/tools/metrics/histograms/metadata/ash/enums.xml.
 enum class DeskCloseType {
   // Closes the target desk and moves its windows to another desk.
   kCombineDesks = 0,
@@ -65,7 +67,8 @@ class DeskTemplate;
 // their windows.
 class ASH_EXPORT DesksController : public chromeos::DesksHelper,
                                    public wm::ActivationChangeObserver,
-                                   public SessionObserver {
+                                   public SessionObserver,
+                                   public DeskProfilesDelegate::Observer {
  public:
   using GetDeskTemplateCallback =
       base::OnceCallback<void(std::unique_ptr<DeskTemplate>)>;
@@ -133,7 +136,8 @@ class ASH_EXPORT DesksController : public chromeos::DesksHelper,
 
   const Desk* active_desk() const { return active_desk_; }
 
-  const base::flat_set<aura::Window*>& visible_on_all_desks_windows() const {
+  const base::flat_set<raw_ptr<aura::Window, CtnExperimental>>&
+  visible_on_all_desks_windows() const {
     return visible_on_all_desks_windows_;
   }
 
@@ -393,6 +397,9 @@ class ASH_EXPORT DesksController : public chromeos::DesksHelper,
   void OnActiveUserSessionChanged(const AccountId& account_id) override;
   void OnFirstSessionStarted() override;
 
+  // DeskProfilesDelegate::Observer:
+  void OnProfileRemoved(uint64_t profile_id) override;
+
   // Fires the timer used for recording desk traversals immediately.
   void FireMetricsTimerForTesting();
 
@@ -528,7 +535,8 @@ class ASH_EXPORT DesksController : public chromeos::DesksHelper,
   // Stores visible on all desks windows, that is normal type windows with
   // normal z-ordering and are visible on all workspaces. Store here to prevent
   // repeatedly retrieving these windows on desk switches.
-  base::flat_set<aura::Window*> visible_on_all_desks_windows_;
+  base::flat_set<raw_ptr<aura::Window, CtnExperimental>>
+      visible_on_all_desks_windows_;
 
   // True when desks addition, removal, or activation change are in progress.
   // This can be checked when overview mode is active to avoid exiting overview
@@ -561,6 +569,9 @@ class ASH_EXPORT DesksController : public chromeos::DesksHelper,
 
   // Does the job for the `CaptureActiveDeskAsSavedDesk()` method.
   mutable RestoreDataCollector restore_data_collector_;
+
+  base::ScopedObservation<DeskProfilesDelegate, DeskProfilesDelegate::Observer>
+      desk_profiles_observer_{this};
 
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.

@@ -200,9 +200,9 @@ growth. Here’s the current layout:
 |  6        | kernel C                             | Minimal-size partition for future third kernel. There are rare cases where a third partition could help us avoid recovery mode (AU in progress + random corruption on boot partition + system crash). We decided it's not worth the space in V1, but that may change. |
 |  7        | rootfs C                             | Minimal-size partition for future third rootfs. Same reasons as above.                                                                                                                                                                                                |
 |  8        | OEM customization                    | Web pages, links, themes, etc. from OEM.                                                                                                                                                                                                                              |
-|  9        | minios A                             | MiniOS recovery partition A (Only supported on disk layout v3 and newer).                                                                                                                                                                                                             |
-| 10        | minios B                             | MiniOS recovery partition B (Only supported on disk layout v3 and newer).                                                                                                                                                                                                                       |
-| 11        | Powerwash data                       | Powerwash data, including enterprise rollback data (Only supported on disk layout v3 and newer).                                                                                                                                                                                                                       |
+|  9        | minios A                             | MiniOS recovery partition A (Only supported on disk layout v3 and newer).                                                                                                                                                                                             |
+| 10        | minios B                             | MiniOS recovery partition B (Only supported on disk layout v3 and newer).                                                                                                                                                                                             |
+| 11        | Powerwash data                       | Powerwash data, including enterprise rollback data (Only supported on disk layout v3 and newer).                                                                                                                                                                      |
 | 12        | EFI System Partition                 | Contains 64-bit grub2 bootloader for EFI BIOSes, and second-stage syslinux bootloader for legacy BIOSes.                                                                                                                                                              |
 
 Note that the reserved partitions will actually be present on the image, so that
@@ -296,7 +296,7 @@ Resizing] document for details.
 
 Here’s the current fixed-disk layout:
 
-![Current fixed-disk layout](images/disk_layout.png)
+![Current fixed-disk layout](/chromium-os/developer-library/reference/device/disk-format/disk_layout.png)
 
 ## Secure boot
 
@@ -383,7 +383,7 @@ partition.
 
 Here’s the flow in graphical form:
 
-![Boot flow](images/boot_flow.png)
+![Boot flow](/chromium-os/developer-library/reference/device/disk-format/boot_flow.png)
 
 ## Kernel partition format
 
@@ -391,7 +391,7 @@ The same library that sanity-checks the GPT and selects the kernel partition
 also checks the kernel’s cryptographic signature. The kernel partition consists
 of the following structure:
 
-![Kernel partition layout](images/kernel_partition_layout.png)
+![Kernel partition layout](/chromium-os/developer-library/reference/device/disk-format/kernel_partition_layout.png)
 
 The first 64K bytes are the cryptographic signature header blob, which contains
 the keys and signatures needed to verify the rest of the kernel blob (plus a few
@@ -423,13 +423,11 @@ procedure may help:
    `src/build/images/<board>/latest/` by the last `cros build-image` run.
 6. Create and sign the kernel partition image like this (in chroot):
    ```
-   vbutil_kernel --pack new_kern.bin \
-     --keyblock /usr/share/vboot/devkeys/kernel.keyblock \
-     --signprivate /usr/share/vboot/devkeys/kernel_data_key.vbprivk \
-     --version 1 \
+   futility sign \
      --config config.txt \
-     --bootloader /lib64/bootstub/bootstub.efi \
-     --vmlinuz /build/x86-generic/boot/vmlinuz
+     --arch x86 \
+     --vmlinuz /build/x86-generic/boot/vmlinuz \
+     --outfile new_kern.bin
    ```
 7. Copy `new_kern.bin` into partition 4 on the target (from console):
    ```
@@ -455,18 +453,18 @@ sudo dd if=/dev/<src_part> of=/tmp/kernel.old
 Save the old kernel command line to a file:
 
 ```
-vbutil_kernel --verify /tmp/kernel.old --verbose | \
-  tail -1 > /tmp/cmd.line.old
+dump_kernel_config /tmp/kernel.old > /tmp/cmd.line.old
 ```
 
 Modify the command line as required and save it in a file (say
 `/tmp/cmd.line.new`). Repack the kernel blob using the new command line:
 
 ```
-vbutil_kernel --repack /tmp/kernel.new \
-  --config /tmp/cmd.line.new \
+futility sign \
   --signprivate <private_key> \
-  --oldblob /tmp/kern.old
+  --config /tmp/cmd.line.new \
+  --infile /tmp/kernel.old \
+  --outfile /tmp/kernel.new
 ```
 
 For the recovery kernel on a removeable device, `<private_key>` above is
@@ -477,7 +475,7 @@ is required, of course.
 Then verify things look OK:
 
 ```
-vbutil_kernel --verify /tmp/kernel.new --verbose
+futility show /tmp/kernel.new
 ```
 
 Finally get your kernel back to the device it came from:

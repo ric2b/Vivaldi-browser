@@ -1519,6 +1519,138 @@ IN_PROC_BROWSER_TEST_P(FencedFrameWithSiteIsolationDisabledBrowserTest,
   ASSERT_EQ(ff_rfh->GetProcess(), primary_main_frame_host()->GetProcess());
 }
 
+class FencedFrameIsolatedSandboxedIframesBrowserTest
+    : public FencedFrameMPArchBrowserTest,
+      public ::testing::WithParamInterface<bool> {
+ public:
+  FencedFrameIsolatedSandboxedIframesBrowserTest() {
+    if (GetParam()) {
+      // Run test with both isolation features enabled.
+      feature_list_.InitWithFeatures({blink::features::kIsolateSandboxedIframes,
+                                      features::kIsolateFencedFrames},
+                                     {});
+    } else {
+      // Run test with only isolated sandboxed iframes enabled.
+      feature_list_.InitWithFeatures(
+          {blink::features::kIsolateSandboxedIframes},
+          {features::kIsolateFencedFrames});
+    }
+  }
+  ~FencedFrameIsolatedSandboxedIframesBrowserTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// This is a basic test to make sure the kIsolateSandboxedIframes (OOPSIF) load
+// properly with FencedFrames, both when FencedFrames isolation mode is off and
+// on. The OOPSIF frame is sandboxed due to a CSP sandbox header delivered with
+// the page loaded into the FencedFrame. The FencedFrame element doesn't support
+// the 'sandbox' attribute directly, nor can it be loaded inside an OOPSIF since
+// OOPSIFs by definition disallow same-origin, whereas the FencedFrame element
+// will only load inside a sandbox if allow-same-origin is specified on the
+// sandbox. See kFencedFrameMandatoryUnsandboxedFlags.
+IN_PROC_BROWSER_TEST_P(FencedFrameIsolatedSandboxedIframesBrowserTest,
+                       CSP_Mainframe) {
+  bool testing_with_isolate_fenced_frames = GetParam();
+  IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
+  ASSERT_TRUE(AreAllSitesIsolatedForTesting());
+  ASSERT_TRUE(https_server()->Start());
+
+  const GURL main_url = https_server()->GetURL("a.test", "/title1.html");
+  const GURL fenced_frame_url =
+      https_server()->GetURL("a.test", "/fenced_frames/sandbox_flags.html");
+
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+  RenderFrameHostImpl* ff_rfh = static_cast<RenderFrameHostImpl*>(
+      fenced_frame_test_helper().CreateFencedFrame(primary_main_frame_host(),
+                                                   fenced_frame_url));
+  EXPECT_TRUE(ff_rfh->IsSandboxed(blink::kFencedFrameForcedSandboxFlags));
+
+  EXPECT_NE(ff_rfh->GetProcess(), primary_main_frame_host()->GetProcess());
+  // This next result may seem weird, but the is_fenced() bit only gets
+  // set if SiteIsolationPolicy::IsProcessIsolationForFencedFramesEnabled()
+  // returns true in SiteInstanceImpl::CreateForFencedFrame().
+  // The bit is picked up from the fenced frame's BrowsingInstance's
+  // IsolationContext when the SiteInfo is created.
+  EXPECT_EQ(testing_with_isolate_fenced_frames,
+            ff_rfh->GetSiteInstance()->GetSiteInfo().is_fenced());
+  EXPECT_TRUE(ff_rfh->GetSiteInstance()->GetSiteInfo().is_sandboxed());
+  EXPECT_NE(
+      primary_main_frame_host()->GetSiteInstance()->GetBrowsingInstanceId(),
+      ff_rfh->GetSiteInstance()->GetBrowsingInstanceId());
+}
+
+// Similar to CSP_Mainframe, but in this test OOPSIF doesn't isolate the fenced
+// frames, while kIsolateFencedFrames does.
+IN_PROC_BROWSER_TEST_P(FencedFrameIsolatedSandboxedIframesBrowserTest,
+                       Non_CSP_Mainframe) {
+  bool testing_with_isolate_fenced_frames = GetParam();
+  IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
+  ASSERT_TRUE(AreAllSitesIsolatedForTesting());
+  ASSERT_TRUE(https_server()->Start());
+
+  const GURL main_url = https_server()->GetURL("a.test", "/title1.html");
+  const GURL fenced_frame_url =
+      https_server()->GetURL("a.test", "/fenced_frames/title1.html");
+
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+  RenderFrameHostImpl* ff_rfh = static_cast<RenderFrameHostImpl*>(
+      fenced_frame_test_helper().CreateFencedFrame(primary_main_frame_host(),
+                                                   fenced_frame_url));
+  EXPECT_TRUE(ff_rfh->IsSandboxed(blink::kFencedFrameForcedSandboxFlags));
+
+  EXPECT_EQ(testing_with_isolate_fenced_frames,
+            ff_rfh->GetSiteInstance()->GetSiteInfo().is_fenced());
+  if (testing_with_isolate_fenced_frames) {
+    EXPECT_NE(ff_rfh->GetProcess(), primary_main_frame_host()->GetProcess());
+  } else {
+    EXPECT_EQ(ff_rfh->GetProcess(), primary_main_frame_host()->GetProcess());
+  }
+  EXPECT_FALSE(ff_rfh->GetSiteInstance()->GetSiteInfo().is_sandboxed());
+  EXPECT_NE(
+      primary_main_frame_host()->GetSiteInstance()->GetBrowsingInstanceId(),
+      ff_rfh->GetSiteInstance()->GetBrowsingInstanceId());
+}
+
+// A test to confirm that a FencedFrame fails to create inside a CSP sandbox
+// frame without allow-same-origin. This test should fail regardless of the
+// state of kIsolateSandboxedIframes or kIsolateFencedFrames.
+IN_PROC_BROWSER_TEST_P(FencedFrameIsolatedSandboxedIframesBrowserTest,
+                       NoFencedFramesInIsolatedSandboxedIframes) {
+  IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
+  ASSERT_TRUE(AreAllSitesIsolatedForTesting());
+  ASSERT_TRUE(https_server()->Start());
+
+  // Load CSP sandboxed frame as mainframe.
+  const GURL main_url =
+      https_server()->GetURL("a.test", "/fenced_frames/sandbox_flags.html");
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+  EXPECT_TRUE(primary_main_frame_host()
+                  ->GetSiteInstance()
+                  ->GetSiteInfo()
+                  .is_sandboxed());
+
+  // Try to load FencedFrame inside the CSP sandboxed frame.
+  const GURL fenced_frame_url =
+      https_server()->GetURL("a.test", "/fenced_frames/title1.html");
+  // Extracted from CreateFencedFrame, which doesn't expect to fail.
+  constexpr char kAddFencedFrameScript[] = R"({
+    const fenced_frame = document.createElement('fencedframe');
+    document.body.appendChild(fenced_frame);
+  })";
+  size_t previous_fenced_frame_count =
+      primary_main_frame_host()->GetFencedFrames().size();
+  EXPECT_EQ(0U, previous_fenced_frame_count);
+  // The following attempt to create a fenced frame is expected to fail since
+  // it would otherwise be contained in a sandbox that doesn't have the
+  // allow-same-origin attribute. See kFencedFrameMandatoryUnsandboxedFlags.
+  EXPECT_FALSE(ExecJs(primary_main_frame_host(), kAddFencedFrameScript,
+                      EvalJsOptions::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  EXPECT_EQ(previous_fenced_frame_count,
+            primary_main_frame_host()->GetFencedFrames().size());
+}
+
 class FencedFrameProcessIsolationBrowserTest
     : public FencedFrameMPArchBrowserTest {
  public:
@@ -1545,6 +1677,9 @@ IN_PROC_BROWSER_TEST_F(FencedFrameProcessIsolationBrowserTest, BasicTest) {
                                                    fenced_frame_url));
   EXPECT_TRUE(ff_rfh->GetSiteInstance()->GetSiteInfo().is_fenced());
   EXPECT_NE(ff_rfh->GetProcess(), primary_main_frame_host()->GetProcess());
+  EXPECT_NE(
+      primary_main_frame_host()->GetSiteInstance()->GetBrowsingInstanceId(),
+      ff_rfh->GetSiteInstance()->GetBrowsingInstanceId());
 }
 
 // Tests that fenced frames that are same-origin with each other are put in
@@ -2093,7 +2228,6 @@ class FencedFrameParameterizedBrowserTest : public FencedFrameBrowserTestBase {
     scoped_feature_list_.InitWithFeaturesAndParameters(
         {{blink::features::kFencedFrames, {}},
          {net::features::kThirdPartyStoragePartitioning, {}},
-         {net::features::kPartitionedCookies, {}},
          {features::kPrivacySandboxAdsAPIsOverride, {}},
          {blink::features::kInterestGroupStorage, {}},
          {blink::features::kAdInterestGroupAPI, {}},
@@ -4230,8 +4364,8 @@ IN_PROC_BROWSER_TEST_F(FencedFrameParameterizedBrowserTest,
   std::vector<std::unique_ptr<NavigationEntry>> entries;
   entries.push_back(std::move(restored_entry));
 
-  Shell* new_shell = Shell::CreateNewWindow(
-      controller.GetBrowserContext(), GURL::EmptyGURL(), nullptr, gfx::Size());
+  Shell* new_shell = Shell::CreateNewWindow(controller.GetBrowserContext(),
+                                            GURL(), nullptr, gfx::Size());
   FrameTreeNode* new_root =
       static_cast<WebContentsImpl*>(new_shell->web_contents())
           ->GetPrimaryFrameTree()
@@ -4903,8 +5037,7 @@ class FencedFrameReportEventBrowserTest
   // supporting iframes.
   FencedFrameReportEventBrowserTest() {
     scoped_feature_list_.InitWithFeaturesAndParameters(
-        {{blink::features::kAllowURNsInIframes, {}},
-         {features::kAttributionFencedFrameReportingBeacon, {}}},
+        {{blink::features::kAllowURNsInIframes, {}}},
         {/* disabled_features */});
   }
 
@@ -6222,7 +6355,7 @@ IN_PROC_BROWSER_TEST_F(FencedFrameReportEventBrowserTest,
       browser_client,
       GetAttributionSupport(
           ContentBrowserClient::AttributionReportingOsApiState::kDisabled,
-          testing::_))
+          /*client_os_disabled=*/false))
       .WillRepeatedly(
           testing::Return(network::mojom::AttributionSupport::kNone));
   ON_CALL(browser_client, IsPrivacySandboxReportingDestinationAttested)
@@ -6497,92 +6630,6 @@ IN_PROC_BROWSER_TEST_F(FencedFrameReportEventBrowserTest,
   // Now `reportEvent()` should succeed.
   reporting_response.WaitForRequest();
   EXPECT_EQ(reporting_response.http_request()->content, event_data);
-}
-
-class FencedFrameReportEventAttributionDisabledBrowserTest
-    : public FencedFrameReportEventBrowserTest {
- public:
-  FencedFrameReportEventAttributionDisabledBrowserTest() {
-    scoped_feature_list_.InitAndDisableFeature(
-        features::kAttributionFencedFrameReportingBeacon);
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-IN_PROC_BROWSER_TEST_F(FencedFrameReportEventAttributionDisabledBrowserTest,
-                       FeatureDisabled_EligibleHeaderNotSet) {
-  net::test_server::ControllableHttpResponse response(https_server(),
-                                                      kReportingURL);
-  ASSERT_TRUE(https_server()->Start());
-
-  GURL main_url = https_server()->GetURL("a.test", "/hello.html");
-  EXPECT_TRUE(NavigateToURL(shell(), main_url));
-  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
-                            ->GetPrimaryFrameTree()
-                            .root();
-  EXPECT_TRUE(ExecJs(root,
-                     "var f = document.createElement('fencedframe');"
-                     "document.body.appendChild(f);"));
-
-  EXPECT_EQ(1U, root->child_count());
-  FrameTreeNode* fenced_frame_root_node =
-      GetFencedFrameRootNode(root->child_at(0));
-  EXPECT_TRUE(fenced_frame_root_node->IsFencedFrameRoot());
-  EXPECT_TRUE(fenced_frame_root_node->IsInFencedFrameTree());
-
-  GURL https_url(
-      https_server()->GetURL("a.test", "/fenced_frames/title1.html"));
-
-  // Create a FencedFrameReporter and pass it reporting metadata.
-  scoped_refptr<FencedFrameReporter> fenced_frame_reporter =
-      CreateFencedFrameReporter();
-  GURL reporting_url(https_server()->GetURL("a.test", kReportingURL));
-  // Set valid reporting metadata for buyer.
-  fenced_frame_reporter->OnUrlMappingReady(
-      blink::FencedFrame::ReportingDestination::kBuyer,
-      url::Origin::Create(GURL()), {{"click", reporting_url}});
-
-  // Get the urn mapping object.
-  FencedFrameURLMapping& url_mapping =
-      root->current_frame_host()->GetPage().fenced_frame_urls_map();
-
-  // Add url and its reporting metadata to fenced frame url mapping.
-  auto urn_uuid = test::AddAndVerifyFencedFrameURL(&url_mapping, https_url,
-                                                   fenced_frame_reporter);
-
-  TestFencedFrameURLMappingResultObserver mapping_observer;
-  url_mapping.ConvertFencedFrameURNToURL(urn_uuid, &mapping_observer);
-  TestFrameNavigationObserver observer(
-      fenced_frame_root_node->current_frame_host());
-
-  // Navigate the fenced frame.
-  EXPECT_TRUE(ExecJs(
-      root, JsReplace("f.config = new FencedFrameConfig($1);", urn_uuid)));
-
-  observer.WaitForCommit();
-  EXPECT_TRUE(mapping_observer.mapping_complete_observed());
-  EXPECT_EQ(fenced_frame_reporter, mapping_observer.fenced_frame_reporter());
-
-  // Perform the reportEvent call, with a unique body.
-  std::string event_data = "this is a click";
-  std::string report_event_script = JsReplace(R"(
-        window.fence.reportEvent({
-          eventType: 'click',
-          eventData: $1,
-          destination: ['buyer'],
-        });
-      )",
-                                              event_data);
-  EXPECT_TRUE(ExecJs(fenced_frame_root_node, report_event_script));
-
-  response.WaitForRequest();
-  EXPECT_EQ(response.http_request()->content, event_data);
-  EXPECT_FALSE(base::Contains(response.http_request()->headers,
-                              "Attribution-Reporting-Eligible"));
-  EXPECT_FALSE(base::Contains(response.http_request()->headers,
-                              "Attribution-Reporting-Support"));
 }
 
 class FencedFrameReportEventAttributionCrossAppWebEnabledBrowserTest
@@ -7510,5 +7557,13 @@ INSTANTIATE_TEST_SUITE_P(All,
                          UUIDFrameTreeBrowserTest,
                          ::testing::Combine(testing::Bool(), testing::Bool()),
                          &UUIDFrameTreeBrowserTest::DescribeParams);
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         FencedFrameIsolatedSandboxedIframesBrowserTest,
+                         ::testing::Bool(),
+                         [](const testing::TestParamInfo<bool>& info) {
+                           return info.param ? "kIsolateFencedFramesEnabled"
+                                             : "kIsolateFencedFramesDisabled";
+                         });
 
 }  // namespace content

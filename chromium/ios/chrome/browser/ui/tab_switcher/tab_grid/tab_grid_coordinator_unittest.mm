@@ -7,13 +7,15 @@
 #import <UIKit/UIKit.h>
 
 #import "base/apple/foundation_util.h"
+#import "base/memory/raw_ptr.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "base/test/metrics/histogram_tester.h"
 #import "base/test/scoped_mock_clock_override.h"
 #import "base/test/test_timeouts.h"
-#import "components/bookmarks/browser/bookmark_model.h"
-#import "components/bookmarks/test/bookmark_test_helpers.h"
+#import "ios/chrome/browser/bookmarks/model/account_bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model_test_helpers.h"
 #import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
@@ -22,6 +24,7 @@
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
@@ -112,32 +115,32 @@ class TabGridCoordinatorTest : public BlockCleanupTest {
     test_cbs_builder.AddTestingFactory(
         ios::LocalOrSyncableBookmarkModelFactory::GetInstance(),
         ios::LocalOrSyncableBookmarkModelFactory::GetDefaultFactory());
+    test_cbs_builder.AddTestingFactory(
+        ios::AccountBookmarkModelFactory::GetInstance(),
+        ios::AccountBookmarkModelFactory::GetDefaultFactory());
+    test_cbs_builder.AddTestingFactory(
+        ios::BookmarkModelFactory::GetInstance(),
+        ios::BookmarkModelFactory::GetDefaultFactory());
     chrome_browser_state_ = test_cbs_builder.Build();
     AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
         chrome_browser_state_.get(),
         std::make_unique<FakeAuthenticationServiceDelegate>());
-    bookmark_model_ =
+    WaitForLegacyBookmarkModelToLoad(
         ios::LocalOrSyncableBookmarkModelFactory::GetForBrowserState(
-            chrome_browser_state_.get());
-    bookmarks::test::WaitForBookmarkModelToLoad(bookmark_model_);
+            chrome_browser_state_.get()));
+    WaitForLegacyBookmarkModelToLoad(
+        ios::AccountBookmarkModelFactory::GetForBrowserState(
+            chrome_browser_state_.get()));
 
     browser_ = std::make_unique<TestBrowser>(chrome_browser_state_.get(),
                                              scene_state_);
 
-    // Set up ApplicationCommands mock. Because ApplicationCommands conforms
-    // to ApplicationSettingsCommands, that needs to be mocked and dispatched
-    // as well.
-    id mockApplicationCommandHandler =
+    // Set up ApplicationCommands mock.
+    id mock_application_handler =
         OCMProtocolMock(@protocol(ApplicationCommands));
-    id mockApplicationSettingsCommandHandler =
-        OCMProtocolMock(@protocol(ApplicationSettingsCommands));
-
     CommandDispatcher* dispatcher = browser_->GetCommandDispatcher();
-    [dispatcher startDispatchingToTarget:mockApplicationCommandHandler
+    [dispatcher startDispatchingToTarget:mock_application_handler
                              forProtocol:@protocol(ApplicationCommands)];
-    [dispatcher
-        startDispatchingToTarget:mockApplicationSettingsCommandHandler
-                     forProtocol:@protocol(ApplicationSettingsCommands)];
 
     AddAgentsToBrowser(browser_.get());
 
@@ -146,9 +149,9 @@ class TabGridCoordinatorTest : public BlockCleanupTest {
         scene_state_);
     AddAgentsToBrowser(incognito_browser_.get());
 
-    IncognitoReauthSceneAgent* reauthAgent = [[IncognitoReauthSceneAgent alloc]
+    IncognitoReauthSceneAgent* reauth_agent = [[IncognitoReauthSceneAgent alloc]
         initWithReauthModule:[[ReauthenticationModule alloc] init]];
-    [scene_state_ addAgent:reauthAgent];
+    [scene_state_ addAgent:reauth_agent];
 
     UIWindow* window = GetAnyKeyWindow();
 
@@ -195,9 +198,6 @@ class TabGridCoordinatorTest : public BlockCleanupTest {
   web::WebTaskEnvironment task_environment_;
   IOSChromeScopedTestingLocalState local_state_;
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
-
-  // Model for bookmarks.
-  bookmarks::BookmarkModel* bookmark_model_;
 
   // Browser for the coordinator.
   std::unique_ptr<Browser> browser_;

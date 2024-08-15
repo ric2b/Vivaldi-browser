@@ -6,24 +6,27 @@ import 'chrome://customize-chrome-side-panel.top-chrome/wallpaper_search/wallpap
 import 'chrome://customize-chrome-side-panel.top-chrome/strings.m.js';
 
 import {CustomizeChromeAction} from 'chrome://customize-chrome-side-panel.top-chrome/common.js';
-import {CustomizeChromePageRemote} from 'chrome://customize-chrome-side-panel.top-chrome/customize_chrome.mojom-webui.js';
+import type {CustomizeChromePageRemote} from 'chrome://customize-chrome-side-panel.top-chrome/customize_chrome.mojom-webui.js';
 import {CustomizeChromeApiProxy} from 'chrome://customize-chrome-side-panel.top-chrome/customize_chrome_api_proxy.js';
-import {DescriptorDName, Descriptors, InspirationGroup, ResultDescriptors, UserFeedback, WallpaperSearchClientCallbackRouter, WallpaperSearchClientRemote, WallpaperSearchHandlerInterface, WallpaperSearchHandlerRemote, WallpaperSearchStatus} from 'chrome://customize-chrome-side-panel.top-chrome/wallpaper_search.mojom-webui.js';
-import {CustomizeChromeCombobox} from 'chrome://customize-chrome-side-panel.top-chrome/wallpaper_search/combobox/customize_chrome_combobox.js';
-import {DESCRIPTOR_D_VALUE, WallpaperSearchElement} from 'chrome://customize-chrome-side-panel.top-chrome/wallpaper_search/wallpaper_search.js';
+import type {Descriptors, InspirationGroup, ResultDescriptors, WallpaperSearchClientRemote, WallpaperSearchHandlerInterface} from 'chrome://customize-chrome-side-panel.top-chrome/wallpaper_search.mojom-webui.js';
+import {DescriptorDName, UserFeedback, WallpaperSearchClientCallbackRouter, WallpaperSearchHandlerRemote, WallpaperSearchStatus} from 'chrome://customize-chrome-side-panel.top-chrome/wallpaper_search.mojom-webui.js';
+import type {CustomizeChromeCombobox} from 'chrome://customize-chrome-side-panel.top-chrome/wallpaper_search/combobox/customize_chrome_combobox.js';
+import type {WallpaperSearchElement} from 'chrome://customize-chrome-side-panel.top-chrome/wallpaper_search/wallpaper_search.js';
+import {DESCRIPTOR_D_VALUE} from 'chrome://customize-chrome-side-panel.top-chrome/wallpaper_search/wallpaper_search.js';
 import {WallpaperSearchProxy} from 'chrome://customize-chrome-side-panel.top-chrome/wallpaper_search/wallpaper_search_proxy.js';
 import {WindowProxy} from 'chrome://customize-chrome-side-panel.top-chrome/window_proxy.js';
-import {CrAutoImgElement} from 'chrome://resources/cr_elements/cr_auto_img/cr_auto_img.js';
+import type {CrAutoImgElement} from 'chrome://resources/cr_elements/cr_auto_img/cr_auto_img.js';
 import {CrFeedbackOption} from 'chrome://resources/cr_elements/cr_feedback_buttons/cr_feedback_buttons.js';
-import {CrIconButtonElement} from 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
+import type {CrIconButtonElement} from 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import {hexColorToSkColor} from 'chrome://resources/js/color_utils.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
-import {IronCollapseElement} from 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
+import type {IronCollapseElement} from 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertGE, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {fakeMetricsPrivate, MetricsTracker} from 'chrome://webui-test/metrics_test_support.js';
+import type {MetricsTracker} from 'chrome://webui-test/metrics_test_support.js';
+import {fakeMetricsPrivate} from 'chrome://webui-test/metrics_test_support.js';
 import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
-import {TestMock} from 'chrome://webui-test/test_mock.js';
+import type {TestMock} from 'chrome://webui-test/test_mock.js';
 import {eventToPromise, isVisible, whenCheck} from 'chrome://webui-test/test_util.js';
 
 import {$$, assertNotStyle, assertStyle, createBackgroundImage, createTheme, installMock} from '../test_support.js';
@@ -222,8 +225,7 @@ suite('WallpaperSearchTest', () => {
       wallpaperSearchElement.$.submitButton.click();
       await flushTasks();
       assertEquals(1, handler.getCallCount('getWallpaperSearchResults'));
-      assertEquals(
-          undefined, handler.getArgs('getWallpaperSearchResults')[0].color);
+      assertEquals(null, handler.getArgs('getWallpaperSearchResults')[0].color);
     });
 
     test('unselects hue', async () => {
@@ -256,8 +258,7 @@ suite('WallpaperSearchTest', () => {
       wallpaperSearchElement.$.submitButton.click();
       await flushTasks();
       assertEquals(1, handler.getCallCount('getWallpaperSearchResults'));
-      assertEquals(
-          undefined, handler.getArgs('getWallpaperSearchResults')[0].color);
+      assertEquals(null, handler.getArgs('getWallpaperSearchResults')[0].color);
     });
   });
 
@@ -370,9 +371,9 @@ suite('WallpaperSearchTest', () => {
       const resultDescriptors: ResultDescriptors =
           handler.getArgs('getWallpaperSearchResults')[0];
       assertEquals('bar', resultDescriptors.subject);
-      assertEquals(undefined, resultDescriptors.style);
-      assertEquals(undefined, resultDescriptors.mood);
-      assertEquals(undefined, resultDescriptors.color);
+      assertEquals(null, resultDescriptors.style);
+      assertEquals(null, resultDescriptors.mood);
+      assertEquals(null, resultDescriptors.color);
     });
 
     test('empty result shows no tiles', async () => {
@@ -539,8 +540,16 @@ suite('WallpaperSearchTest', () => {
       handler.setResultFor('getWallpaperSearchResults', Promise.resolve({
         status: WallpaperSearchStatus.kOk,
         results: [
-          {image: '123', id: {high: BigInt(10), low: BigInt(1)}},
-          {image: '456', id: {high: BigInt(8), low: BigInt(2)}},
+          {
+            image: '123',
+            id: {high: BigInt(10), low: BigInt(1)},
+            descriptors: null,
+          },
+          {
+            image: '456',
+            id: {high: BigInt(8), low: BigInt(2)},
+            descriptors: null,
+          },
         ],
       }));
       createWallpaperSearchElementWithDescriptors();
@@ -807,8 +816,16 @@ suite('WallpaperSearchTest', () => {
       assertTrue(!!wallpaperSearchElement.$.historyCard.hidden);
 
       wallpaperSearchCallbackRouterRemote.setHistory([
-        {image: '123', id: {high: BigInt(10), low: BigInt(1)}},
-        {image: '456', id: {high: BigInt(8), low: BigInt(2)}},
+        {
+          image: '123',
+          id: {high: BigInt(10), low: BigInt(1)},
+          descriptors: null,
+        },
+        {
+          image: '456',
+          id: {high: BigInt(8), low: BigInt(2)},
+          descriptors: null,
+        },
       ]);
       await wallpaperSearchCallbackRouterRemote.$.flushForTesting();
 
@@ -838,9 +855,14 @@ suite('WallpaperSearchTest', () => {
             subject: 'foo',
             mood: 'bar',
             style: 'foobar',
+            color: null,
           },
         },
-        {image: '456', id: {high: BigInt(8), low: BigInt(2)}},
+        {
+          image: '456',
+          id: {high: BigInt(8), low: BigInt(2)},
+          descriptors: null,
+        },
       ]);
       await wallpaperSearchCallbackRouterRemote.$.flushForTesting();
 
@@ -862,8 +884,16 @@ suite('WallpaperSearchTest', () => {
       createWallpaperSearchElement();
 
       wallpaperSearchCallbackRouterRemote.setHistory([
-        {image: '123', id: {high: BigInt(10), low: BigInt(1)}},
-        {image: '456', id: {high: BigInt(8), low: BigInt(2)}},
+        {
+          image: '123',
+          id: {high: BigInt(10), low: BigInt(1)},
+          descriptors: null,
+        },
+        {
+          image: '456',
+          id: {high: BigInt(8), low: BigInt(2)},
+          descriptors: null,
+        },
       ]);
       await wallpaperSearchCallbackRouterRemote.$.flushForTesting();
 
@@ -903,12 +933,19 @@ suite('WallpaperSearchTest', () => {
       createWallpaperSearchElement();
 
       wallpaperSearchCallbackRouterRemote.setHistory([
-        {image: '123', id: {high: BigInt(10), low: BigInt(1)}},
+        {
+          image: '123',
+          id: {high: BigInt(10), low: BigInt(1)},
+          descriptors: null,
+        },
         {
           image: '456',
           id: {high: BigInt(8), low: BigInt(2)},
           descriptors: {
             subject: 'foo',
+            style: null,
+            mood: null,
+            color: null,
           },
         },
         {
@@ -917,6 +954,8 @@ suite('WallpaperSearchTest', () => {
           descriptors: {
             subject: 'foo',
             mood: 'bar',
+            style: null,
+            color: null,
           },
         },
         {
@@ -925,6 +964,8 @@ suite('WallpaperSearchTest', () => {
           descriptors: {
             subject: 'foo',
             style: 'foobar',
+            mood: null,
+            color: null,
           },
         },
         {
@@ -934,6 +975,7 @@ suite('WallpaperSearchTest', () => {
             subject: 'foo',
             mood: 'bar',
             style: 'foobar',
+            color: null,
           },
         },
       ]);
@@ -963,37 +1005,42 @@ suite('WallpaperSearchTest', () => {
             $$(wallpaperSearchElement, '#wallpaperSearch')!, 'display', 'none');
       });
 
-      test('reattempts failed descriptor fetch for generic error', async () => {
-        loadTimeData.overrideValues({genericErrorDescription: 'generic error'});
-        createWallpaperSearchElement();
-        await flushTasks();
+      test(
+          'clicking generic cta for descriptors creates back-click event',
+          async () => {
+            loadTimeData.overrideValues(
+                {genericErrorDescription: 'generic error'});
+            createWallpaperSearchElement();
+            await flushTasks();
 
-        assertEquals(1, handler.getCallCount('getDescriptors'));
-        assertNotStyle(
-            $$(wallpaperSearchElement, '#error')!, 'display', 'none');
-        assertEquals(
-            $$<HTMLElement>(
-                wallpaperSearchElement, '#errorDescription')!.textContent,
-            'generic error');
-        assertStyle(
-            $$(wallpaperSearchElement, '#wallpaperSearch')!, 'display', 'none');
+            assertEquals(1, handler.getCallCount('getDescriptors'));
+            assertNotStyle(
+                $$(wallpaperSearchElement, '#error')!, 'display', 'none');
+            assertEquals(
+                $$<HTMLElement>(
+                    wallpaperSearchElement, '#errorDescription')!.textContent,
+                'generic error');
+            assertStyle(
+                $$(wallpaperSearchElement, '#wallpaperSearch')!, 'display',
+                'none');
 
-        handler.setResultFor('getDescriptors', Promise.resolve({
-          status: WallpaperSearchStatus.kOk,
-          descriptors: {
-            descriptorA: [{category: 'foo', labels: ['bar', 'baz']}],
-            descriptorB: [{label: 'foo', imagePath: 'bar.png'}],
-            descriptorC: ['foo', 'bar', 'baz'],
-          },
-        }));
-        $$<HTMLElement>(wallpaperSearchElement, '#errorCTA')!.click();
-        await waitAfterNextRender(wallpaperSearchElement);
 
-        assertEquals(2, handler.getCallCount('getDescriptors'));
-        assertStyle($$(wallpaperSearchElement, '#error')!, 'display', 'none');
-        assertNotStyle(
-            $$(wallpaperSearchElement, '#wallpaperSearch')!, 'display', 'none');
-      });
+            handler.setResultFor('getDescriptors', Promise.resolve({
+              status: WallpaperSearchStatus.kOk,
+              descriptors: {
+                descriptorA: [{category: 'foo', labels: ['bar', 'baz']}],
+                descriptorB: [{label: 'foo', imagePath: 'bar.png'}],
+                descriptorC: ['foo', 'bar', 'baz'],
+              },
+            }));
+            const eventPromise =
+                eventToPromise('back-click', wallpaperSearchElement);
+            $$<HTMLElement>(wallpaperSearchElement, '#errorCTA')!.click();
+            const event = await eventPromise;
+
+            assertTrue(!!event);
+            assertEquals(1, handler.getCallCount('getDescriptors'));
+          });
 
       test('shows history description for generic error', async () => {
         loadTimeData.overrideValues(
@@ -1001,8 +1048,16 @@ suite('WallpaperSearchTest', () => {
         createWallpaperSearchElement();
 
         wallpaperSearchCallbackRouterRemote.setHistory([
-          {image: '123', id: {high: BigInt(10), low: BigInt(1)}},
-          {image: '456', id: {high: BigInt(8), low: BigInt(2)}},
+          {
+            image: '123',
+            id: {high: BigInt(10), low: BigInt(1)},
+            descriptors: null,
+          },
+          {
+            image: '456',
+            id: {high: BigInt(8), low: BigInt(2)},
+            descriptors: null,
+          },
         ]);
         await wallpaperSearchCallbackRouterRemote.$.flushForTesting();
 
@@ -1027,9 +1082,9 @@ suite('WallpaperSearchTest', () => {
               {
                 descriptors: {
                   subject: 'foobar',
-                  style: undefined,
-                  mood: undefined,
-                  color: undefined,
+                  style: null,
+                  mood: null,
+                  color: null,
                 },
                 inspirations: [
                   {
@@ -1066,9 +1121,9 @@ suite('WallpaperSearchTest', () => {
                   {
                     descriptors: {
                       subject: 'foobar',
-                      style: undefined,
-                      mood: undefined,
-                      color: undefined,
+                      style: null,
+                      mood: null,
+                      color: null,
                     },
                     inspirations: [
                       {
@@ -1082,8 +1137,16 @@ suite('WallpaperSearchTest', () => {
                 ]);
 
             wallpaperSearchCallbackRouterRemote.setHistory([
-              {image: '123', id: {high: BigInt(10), low: BigInt(1)}},
-              {image: '456', id: {high: BigInt(8), low: BigInt(2)}},
+              {
+                image: '123',
+                id: {high: BigInt(10), low: BigInt(1)},
+                descriptors: null,
+              },
+              {
+                image: '456',
+                id: {high: BigInt(8), low: BigInt(2)},
+                descriptors: null,
+              },
             ]);
             await wallpaperSearchCallbackRouterRemote.$.flushForTesting();
 
@@ -1099,7 +1162,8 @@ suite('WallpaperSearchTest', () => {
           });
 
       test(
-          'reattempts failed descriptor fetch with offline error', async () => {
+          'clicking offline cta for descriptors creates back-click event',
+          async () => {
             loadTimeData.overrideValues({offlineDescription: 'offline error'});
             windowProxy.setResultFor('onLine', false);
             createWallpaperSearchElement();
@@ -1116,24 +1180,13 @@ suite('WallpaperSearchTest', () => {
                 $$(wallpaperSearchElement, '#wallpaperSearch')!, 'display',
                 'none');
 
-            windowProxy.setResultFor('onLine', true);
-            handler.setResultFor('getDescriptors', Promise.resolve({
-              status: WallpaperSearchStatus.kOk,
-              descriptors: {
-                descriptorA: [{category: 'foo', labels: ['bar', 'baz']}],
-                descriptorB: [{label: 'foo', imagePath: 'bar.png'}],
-                descriptorC: ['foo', 'bar', 'baz'],
-              },
-            }));
+            const eventPromise =
+                eventToPromise('back-click', wallpaperSearchElement);
             $$<HTMLElement>(wallpaperSearchElement, '#errorCTA')!.click();
-            await waitAfterNextRender(wallpaperSearchElement);
+            const event = await eventPromise;
 
-            assertEquals(2, handler.getCallCount('getDescriptors'));
-            assertStyle(
-                $$(wallpaperSearchElement, '#error')!, 'display', 'none');
-            assertNotStyle(
-                $$(wallpaperSearchElement, '#wallpaperSearch')!, 'display',
-                'none');
+            assertTrue(!!event);
+            assertEquals(1, handler.getCallCount('getDescriptors'));
           });
 
       test('shows history description for offline error', async () => {
@@ -1143,8 +1196,16 @@ suite('WallpaperSearchTest', () => {
 
         windowProxy.setResultFor('onLine', false);
         wallpaperSearchCallbackRouterRemote.setHistory([
-          {image: '123', id: {high: BigInt(10), low: BigInt(1)}},
-          {image: '456', id: {high: BigInt(8), low: BigInt(2)}},
+          {
+            image: '123',
+            id: {high: BigInt(10), low: BigInt(1)},
+            descriptors: null,
+          },
+          {
+            image: '456',
+            id: {high: BigInt(8), low: BigInt(2)},
+            descriptors: null,
+          },
         ]);
         await wallpaperSearchCallbackRouterRemote.$.flushForTesting();
 
@@ -1219,11 +1280,13 @@ suite('WallpaperSearchTest', () => {
 
       [[WallpaperSearchStatus.kError, 'generic error'],
        [WallpaperSearchStatus.kRequestThrottled, 'throttle error'],
+       [WallpaperSearchStatus.kSignedOut, 'signed out error'],
       ].forEach(([status, description]) => {
         test(`shows correct error for status ${status}`, async () => {
           loadTimeData.overrideValues({
             genericErrorDescription: 'generic error',
             requestThrottledDescription: 'throttle error',
+            signedOutDescription: 'signed out error',
           });
           handler.setResultFor(
               'getWallpaperSearchResults',
@@ -1257,8 +1320,16 @@ suite('WallpaperSearchTest', () => {
         await flushTasks();
 
         wallpaperSearchCallbackRouterRemote.setHistory([
-          {image: '123', id: {high: BigInt(10), low: BigInt(1)}},
-          {image: '456', id: {high: BigInt(8), low: BigInt(2)}},
+          {
+            image: '123',
+            id: {high: BigInt(10), low: BigInt(1)},
+            descriptors: null,
+          },
+          {
+            image: '456',
+            id: {high: BigInt(8), low: BigInt(2)},
+            descriptors: null,
+          },
         ]);
         await wallpaperSearchCallbackRouterRemote.$.flushForTesting();
         wallpaperSearchElement.$.submitButton.click();
@@ -1287,9 +1358,9 @@ suite('WallpaperSearchTest', () => {
         createWallpaperSearchElementWithDescriptors([{
           descriptors: {
             subject: 'foobar',
-            style: undefined,
-            mood: undefined,
-            color: undefined,
+            style: null,
+            mood: null,
+            color: null,
           },
           inspirations: [
             {
@@ -1330,9 +1401,9 @@ suite('WallpaperSearchTest', () => {
             createWallpaperSearchElementWithDescriptors([{
               descriptors: {
                 subject: 'foobar',
-                style: undefined,
-                mood: undefined,
-                color: undefined,
+                style: null,
+                mood: null,
+                color: null,
               },
               inspirations: [
                 {
@@ -1346,8 +1417,16 @@ suite('WallpaperSearchTest', () => {
             await flushTasks();
 
             wallpaperSearchCallbackRouterRemote.setHistory([
-              {image: '123', id: {high: BigInt(10), low: BigInt(1)}},
-              {image: '456', id: {high: BigInt(8), low: BigInt(2)}},
+              {
+                image: '123',
+                id: {high: BigInt(10), low: BigInt(1)},
+                descriptors: null,
+              },
+              {
+                image: '456',
+                id: {high: BigInt(8), low: BigInt(2)},
+                descriptors: null,
+              },
             ]);
             await wallpaperSearchCallbackRouterRemote.$.flushForTesting();
             wallpaperSearchElement.$.submitButton.click();
@@ -1363,31 +1442,6 @@ suite('WallpaperSearchTest', () => {
                 $$(wallpaperSearchElement, '#wallpaperSearch')!, 'display',
                 'none');
           });
-    });
-
-    test('maintains focus on error ui if error is unresolved', async () => {
-      loadTimeData.overrideValues({offlineDescription: 'offline error'});
-      windowProxy.setResultFor('onLine', false);
-      createWallpaperSearchElement();
-      await flushTasks();
-      assertEquals(
-          $$<HTMLElement>(
-              wallpaperSearchElement, '#errorDescription')!.textContent,
-          'offline error');
-      assertEquals(
-          wallpaperSearchElement.$.error,
-          wallpaperSearchElement.shadowRoot!.activeElement);
-
-      $$<HTMLElement>(wallpaperSearchElement, '#errorCTA')!.click();
-      await waitAfterNextRender(wallpaperSearchElement);
-
-      assertEquals(
-          $$<HTMLElement>(
-              wallpaperSearchElement, '#errorDescription')!.textContent,
-          'offline error');
-      assertEquals(
-          wallpaperSearchElement.$.error,
-          wallpaperSearchElement.shadowRoot!.activeElement);
     });
 
     test('refocuses on search ui after error is resolved', async () => {
@@ -1534,8 +1588,16 @@ suite('WallpaperSearchTest', () => {
       createWallpaperSearchElement();
 
       wallpaperSearchCallbackRouterRemote.setHistory([
-        {image: '123', id: {high: BigInt(10), low: BigInt(1)}},
-        {image: '456', id: {high: BigInt(8), low: BigInt(2)}},
+        {
+          image: '123',
+          id: {high: BigInt(10), low: BigInt(1)},
+          descriptors: null,
+        },
+        {
+          image: '456',
+          id: {high: BigInt(8), low: BigInt(2)},
+          descriptors: null,
+        },
       ]);
       await wallpaperSearchCallbackRouterRemote.$.flushForTesting();
 
@@ -1717,9 +1779,9 @@ suite('WallpaperSearchTest', () => {
             {
               descriptors: {
                 subject: 'foobar',
-                style: undefined,
-                mood: undefined,
-                color: undefined,
+                style: null,
+                mood: null,
+                color: null,
               },
               inspirations: [
                 {
@@ -1774,9 +1836,9 @@ suite('WallpaperSearchTest', () => {
             {
               descriptors: {
                 subject: 'foobar',
-                style: undefined,
-                mood: undefined,
-                color: undefined,
+                style: null,
+                mood: null,
+                color: null,
               },
               inspirations: [
                 {
@@ -1796,9 +1858,9 @@ suite('WallpaperSearchTest', () => {
             {
               descriptors: {
                 subject: 'baz',
-                style: undefined,
-                mood: undefined,
-                color: undefined,
+                style: null,
+                mood: null,
+                color: null,
               },
               inspirations: [
                 {
@@ -1876,9 +1938,9 @@ suite('WallpaperSearchTest', () => {
             {
               descriptors: {
                 subject: 'foo',
-                style: undefined,
+                style: null,
                 mood: 'baz',
-                color: undefined,
+                color: null,
               },
               inspirations: [
                 {
@@ -1910,9 +1972,9 @@ suite('WallpaperSearchTest', () => {
             {
               descriptors: {
                 subject: 'foobar',
-                style: undefined,
-                mood: undefined,
-                color: undefined,
+                style: null,
+                mood: null,
+                color: null,
               },
               inspirations: [
                 {
@@ -1973,6 +2035,8 @@ suite('WallpaperSearchTest', () => {
               descriptors: {
                 subject: 'bar',
                 mood: 'baz',
+                style: null,
+                color: null,
               },
               inspirations: [
                 {
@@ -2075,6 +2139,9 @@ suite('WallpaperSearchTest', () => {
             {
               descriptors: {
                 subject: 'bar',
+                style: null,
+                mood: null,
+                color: null,
               },
               inspirations: [
                 {
@@ -2217,8 +2284,16 @@ suite('WallpaperSearchTest', () => {
 
       // Card collapses if there is history.
       wallpaperSearchCallbackRouterRemote.setHistory([
-        {image: '123', id: {high: BigInt(10), low: BigInt(1)}},
-        {image: '456', id: {high: BigInt(8), low: BigInt(2)}},
+        {
+          image: '123',
+          id: {high: BigInt(10), low: BigInt(1)},
+          descriptors: null,
+        },
+        {
+          image: '456',
+          id: {high: BigInt(8), low: BigInt(2)},
+          descriptors: null,
+        },
       ]);
       await wallpaperSearchCallbackRouterRemote.$.flushForTesting();
 
@@ -2241,9 +2316,9 @@ suite('WallpaperSearchTest', () => {
             {
               descriptors: {
                 subject: 'foobar',
-                style: undefined,
-                mood: undefined,
-                color: undefined,
+                style: null,
+                mood: null,
+                color: null,
               },
               inspirations: [
                 {
@@ -2268,9 +2343,9 @@ suite('WallpaperSearchTest', () => {
             {
               descriptors: {
                 subject: 'foobar',
-                style: undefined,
-                mood: undefined,
-                color: undefined,
+                style: null,
+                mood: null,
+                color: null,
               },
               inspirations: [
                 {

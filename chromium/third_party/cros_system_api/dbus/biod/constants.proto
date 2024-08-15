@@ -8,7 +8,7 @@ option optimize_for = LITE_RUNTIME;
 
 package biod;
 
-option go_package = "chromiumos/system_api/biod_messages_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/biod_messages_proto";
 
 // Included in FingerprintMessage.
 // Android codes end at 1000. Everything above is intended to be used for
@@ -48,7 +48,9 @@ enum ScanResult {
 
   // Chrome OS specific error codes.
   SCAN_RESULT_NO_MATCH = 10000;  // Scan was success, but no template matched.
-  SCAN_RESULT_MAX = 10001;
+  // Power button event seen along with match. Treat as an error to prevent
+  // accidental unlock.
+  SCAN_RESULT_POWER_BUTTON_PRESSED = 10001;
 }
 
 // Included in biod's BiometricsManagerStatusChanged.

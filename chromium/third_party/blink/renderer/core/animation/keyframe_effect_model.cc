@@ -44,6 +44,7 @@
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
 #include "ui/gfx/geometry/transform.h"
 
@@ -60,6 +61,21 @@ PropertyHandleSet KeyframeEffectModelBase::Properties() const {
     }
     for (const auto& property : keyframe->Properties()) {
       result.insert(property);
+    }
+  }
+  return result;
+}
+
+PropertyHandleSet KeyframeEffectModelBase::DynamicProperties() const {
+  if (!RuntimeEnabledFeatures::StaticAnimationOptimizationEnabled()) {
+    return Properties();
+  }
+
+  PropertyHandleSet result;
+  EnsureKeyframeGroups();
+  for (const auto& entry : *keyframe_groups_) {
+    if (!entry.value->IsStatic()) {
+      result.insert(entry.key);
     }
   }
   return result;
@@ -263,7 +279,7 @@ Vector<double> KeyframeEffectModelBase::GetComputedOffsets(
   offset_types.reserve(keyframes.size());
 
   for (const auto& keyframe : keyframes) {
-    absl::optional<double> offset = keyframe->Offset();
+    std::optional<double> offset = keyframe->Offset();
     if (offset && !keyframe->GetTimelineOffset()) {
       DCHECK_GE(offset.value(), last_offset);
       last_offset = offset.value();
@@ -419,13 +435,14 @@ void KeyframeEffectModelBase::EnsureKeyframeGroups() const {
     }
   }
 
-  // Add synthetic keyframes.
+  // Add synthetic keyframes and determine if the keyframe values are static.
   has_synthetic_keyframes_ = false;
   for (const auto& entry : *keyframe_groups_) {
     if (entry.value->AddSyntheticKeyframeIfRequired(zero_offset_easing))
       has_synthetic_keyframes_ = true;
 
     entry.value->RemoveRedundantKeyframes();
+    entry.value->CheckIfStatic();
   }
 }
 
@@ -525,9 +542,9 @@ void KeyframeEffectModelBase::ClearCachedData() {
   last_fraction_ = std::numeric_limits<double>::quiet_NaN();
   needs_compositor_keyframes_snapshot_ = true;
 
-  last_timeline_range_ = absl::nullopt;
-  last_range_start_ = absl::nullopt;
-  last_range_end_ = absl::nullopt;
+  last_timeline_range_ = std::nullopt;
+  last_range_start_ = std::nullopt;
+  last_range_end_ = std::nullopt;
 }
 
 bool KeyframeEffectModelBase::IsReplaceOnly() const {
@@ -566,6 +583,49 @@ void KeyframeEffectModelBase::PropertySpecificKeyframeGroup::
       keyframes_.EraseAt(i);
   }
   DCHECK_GE(keyframes_.size(), 2U);
+}
+
+void KeyframeEffectModelBase::PropertySpecificKeyframeGroup::CheckIfStatic() {
+  has_static_value_ = false;
+
+  DCHECK_GE(keyframes_.size(), 2U);
+  const PropertySpecificKeyframe* first = keyframes_[0];
+  const CSSPropertySpecificKeyframe* css_keyframe =
+      DynamicTo<CSSPropertySpecificKeyframe>(first);
+
+  // Transitions are only started if the end-points mismatch with caveat for
+  // visited/unvisited properties. For now, limit to detected static properties
+  // in a CSS animations since a common source of static properties is expansion
+  // of shorthand properties to their longhand counterparts.
+  if (!css_keyframe) {
+    return;
+  }
+
+  const CSSValue* target_value = css_keyframe->Value();
+  CompositeOperation target_composite_operation = css_keyframe->Composite();
+
+  for (wtf_size_t i = 1; i < keyframes_.size(); i++) {
+    const CSSPropertySpecificKeyframe* keyframe =
+        To<CSSPropertySpecificKeyframe>(keyframes_[i].Get());
+    if (keyframe->Composite() != target_composite_operation) {
+      return;
+    }
+    // A neutral keyframe has a null value. Either all keyframes must be
+    // neutral or none to be static. If any of the values are non-null their
+    // CSS values must precisely match. It is not enough to resolve to the same
+    // value.
+    if (target_value) {
+      if (!keyframe->Value() || *keyframe->Value() != *target_value) {
+        return;
+      }
+    } else {
+      if (keyframe->Value()) {
+        return;
+      }
+    }
+  }
+
+  has_static_value_ = true;
 }
 
 bool KeyframeEffectModelBase::PropertySpecificKeyframeGroup::

@@ -11,11 +11,11 @@ namespace user_education::test {
 TestFeaturePromoStorageService::TestFeaturePromoStorageService() = default;
 TestFeaturePromoStorageService::~TestFeaturePromoStorageService() = default;
 
-absl::optional<FeaturePromoData> TestFeaturePromoStorageService::ReadPromoData(
+std::optional<FeaturePromoData> TestFeaturePromoStorageService::ReadPromoData(
     const base::Feature& iph_feature) const {
   const auto it = promo_data_.find(&iph_feature);
-  return it == promo_data_.end() ? absl::nullopt
-                                 : absl::make_optional(it->second);
+  return it == promo_data_.end() ? std::nullopt
+                                 : std::make_optional(it->second);
 }
 
 void TestFeaturePromoStorageService::SavePromoData(
@@ -53,6 +53,23 @@ void TestFeaturePromoStorageService::SavePolicyData(
 
 void TestFeaturePromoStorageService::ResetPolicy() {
   policy_data_ = FeaturePromoPolicyData();
+}
+
+user_education::NewBadgeData TestFeaturePromoStorageService::ReadNewBadgeData(
+    const base::Feature& new_badge_feature) const {
+  const auto it = new_badge_data_.find(&new_badge_feature);
+  return it == new_badge_data_.end() ? NewBadgeData() : it->second;
+}
+
+void TestFeaturePromoStorageService::SaveNewBadgeData(
+    const base::Feature& new_badge_feature,
+    const NewBadgeData& new_badge_data) {
+  new_badge_data_[&new_badge_feature] = new_badge_data;
+}
+
+void TestFeaturePromoStorageService::ResetNewBadge(
+    const base::Feature& new_badge_feature) {
+  new_badge_data_.erase(&new_badge_feature);
 }
 
 }  // namespace user_education::test

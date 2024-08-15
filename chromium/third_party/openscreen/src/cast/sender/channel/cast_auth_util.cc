@@ -111,7 +111,7 @@ class CastNonce {
 // library client.  If crl_required is set to false, all revocation related
 // errors are ignored.
 //
-// TODO(https://issuetracker.google.com/issues/193164666): It would be simpler
+// TODO(issuetracker.google.com/193164666): It would be simpler
 // to just pass the underlying verification error directly to the client.
 Error MapToOpenscreenError(Error verify_error, bool crl_required) {
   switch (verify_error.code()) {
@@ -142,7 +142,7 @@ Error MapToOpenscreenError(Error verify_error, bool crl_required) {
                                 verify_error.message()));
     case Error::Code::kErrCrlInvalid:
       // This error is only encountered if |crl_required| is true.
-      OSP_DCHECK(crl_required);
+      OSP_CHECK(crl_required);
       return Error(Error::Code::kErrCrlInvalid,
                    absl::StrCat("Failed to provide a valid CRL: ",
                                 verify_error.message()));
@@ -197,7 +197,7 @@ AuthContext AuthContext::CreateForTest(const std::string& nonce_data) {
     }
     nonce.erase(kNonceSizeInBytes);
   }
-  OSP_DCHECK_EQ(nonce.size(), kNonceSizeInBytes);
+  OSP_CHECK_EQ(nonce.size(), kNonceSizeInBytes);
   return AuthContext(nonce);
 }
 

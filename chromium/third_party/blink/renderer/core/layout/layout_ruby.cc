@@ -41,13 +41,12 @@ namespace blink {
 // === generic helper functions to avoid excessive code duplication ===
 
 // static
-LayoutRubyColumn* LayoutRubyAsInline::LastRubyColumn(const LayoutObject& ruby) {
+LayoutRubyColumn* LayoutRuby::LastRubyColumn(const LayoutObject& ruby) {
   return To<LayoutRubyColumn>(ruby.SlowLastChild());
 }
 
 // static
-LayoutRubyColumn* LayoutRubyAsInline::FindRubyColumnParent(
-    LayoutObject* child) {
+LayoutRubyColumn* LayoutRuby::FindRubyColumnParent(LayoutObject* child) {
   while (child && !child->IsRubyColumn()) {
     child = child->Parent();
   }
@@ -56,32 +55,30 @@ LayoutRubyColumn* LayoutRubyAsInline::FindRubyColumnParent(
 
 // === ruby as inline object ===
 
-LayoutRubyAsInline::LayoutRubyAsInline(Element* element)
+LayoutRuby::LayoutRuby(Element* element)
     : LayoutInline(element),
-      ruby_container_(RuntimeEnabledFeatures::RubySimplePairingEnabled()
-                          ? MakeGarbageCollected<RubyContainer>(*this)
-                          : nullptr) {
+      ruby_container_(MakeGarbageCollected<RubyContainer>(*this)) {
+  DCHECK(!RuntimeEnabledFeatures::RubyLineBreakableEnabled());
   if (element) {
     UseCounter::Count(GetDocument(), WebFeature::kRenderRuby);
   }
 }
 
-LayoutRubyAsInline::~LayoutRubyAsInline() = default;
+LayoutRuby::~LayoutRuby() = default;
 
-void LayoutRubyAsInline::Trace(Visitor* visitor) const {
+void LayoutRuby::Trace(Visitor* visitor) const {
   visitor->Trace(ruby_container_);
   LayoutInline::Trace(visitor);
 }
 
-void LayoutRubyAsInline::StyleDidChange(StyleDifference diff,
-                                        const ComputedStyle* old_style) {
+void LayoutRuby::StyleDidChange(StyleDifference diff,
+                                const ComputedStyle* old_style) {
   NOT_DESTROYED();
   LayoutInline::StyleDidChange(diff, old_style);
   PropagateStyleToAnonymousChildren();
 }
 
-void LayoutRubyAsInline::AddChild(LayoutObject* child,
-                                  LayoutObject* before_child) {
+void LayoutRuby::AddChild(LayoutObject* child, LayoutObject* before_child) {
   NOT_DESTROYED();
   // If the child is a ruby column, just add it normally.
   if (child->IsRubyColumn()) {
@@ -89,42 +86,10 @@ void LayoutRubyAsInline::AddChild(LayoutObject* child,
     return;
   }
 
-  if (RuntimeEnabledFeatures::RubySimplePairingEnabled()) {
-    ruby_container_->AddChild(child, before_child);
-    return;
-  }
-
-  if (before_child) {
-    // Insert the child into a column.
-    LayoutObject* column = before_child;
-    while (column && !column->IsRubyColumn()) {
-      column = column->Parent();
-    }
-    if (column) {
-      if (before_child == column) {
-        before_child = To<LayoutRubyColumn>(before_child)->FirstChild();
-      }
-      DCHECK(!before_child || before_child->IsDescendantOf(column));
-      column->AddChild(child, before_child);
-      return;
-    }
-    NOTREACHED();  // before_child should always have a column as parent!
-                   // Emergency fallback: fall through and just append.
-  }
-
-  // If the new child would be appended, try to add the child to the previous
-  // column if possible, or create a new column otherwise.
-  // (The LayoutRubyColumn object will handle the details)
-  auto* last_column = LastRubyColumn(*this);
-  if (!last_column || last_column->HasRubyText()) {
-    last_column = &LayoutRubyColumn::Create(this, *ContainingBlock());
-    LayoutInline::AddChild(last_column, before_child);
-    last_column->EnsureRubyBase();
-  }
-  last_column->AddChild(child);
+  ruby_container_->AddChild(child, before_child);
 }
 
-void LayoutRubyAsInline::RemoveChild(LayoutObject* child) {
+void LayoutRuby::RemoveChild(LayoutObject* child) {
   NOT_DESTROYED();
   // If the child's parent is *this (must be a ruby column), just use the normal
   // remove method.
@@ -134,18 +99,10 @@ void LayoutRubyAsInline::RemoveChild(LayoutObject* child) {
     return;
   }
 
-  if (RuntimeEnabledFeatures::RubySimplePairingEnabled()) {
-    NOTREACHED();
-    return;
-  }
-
-  // Otherwise find the containing column and remove it from there.
-  auto* column = FindRubyColumnParent(child);
-  DCHECK(column);
-  column->RemoveChild(child);
+  NOTREACHED() << child;
 }
 
-void LayoutRubyAsInline::DidRemoveChildFromColumn(LayoutObject& child) {
+void LayoutRuby::DidRemoveChildFromColumn(LayoutObject& child) {
   ruby_container_->DidRemoveChildFromColumn(child);
 }
 

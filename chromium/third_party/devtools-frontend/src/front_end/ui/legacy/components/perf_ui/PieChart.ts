@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as ComponentHelpers from '../../../components/helpers/helpers.js';
 import * as LitHtml from '../../../lit-html/lit-html.js';
 import * as VisualLogging from '../../../visual_logging/visual_logging.js';
 
@@ -98,15 +97,15 @@ export class PieChart extends HTMLElement {
           `}
           <div class="pie-chart-foreground">
             <div class="pie-chart-total ${this.totalSelected ? 'selected' : ''}" @click=${this.selectTotal}
-                jslog=${VisualLogging.pieChartTotal().track({click: true}).context('select-total')}
+                jslog=${VisualLogging.pieChartTotal('select-total').track({click: true})}
                 tabIndex=${this.totalSelected && !this.showLegend ? '1' : '-1'}>
               ${this.total ? this.formatter(this.total) : ''}
             </div>
           </div>
         </div>
         ${this.showLegend ? html`
-        <div class="pie-chart-legend" jslog=${VisualLogging.section().context('legend')}>
-          ${this.slices.map((slice, index): LitHtml.TemplateResult => {
+        <div class="pie-chart-legend" jslog=${VisualLogging.section('legend')}>
+          ${this.slices.map((slice, index) => {
             const selected = this.sliceSelected === index;
             return html`
               <div class="pie-chart-legend-row ${selected ? 'selected' : ''}"
@@ -118,7 +117,7 @@ export class PieChart extends HTMLElement {
               </div>`;
           })}
           <div class="pie-chart-legend-row ${this.totalSelected ? 'selected' : ''}"
-              jslog=${VisualLogging.pieChartTotal().track({click: true}).context('select-total')}
+              jslog=${VisualLogging.pieChartTotal('select-total').track({click: true})}
               @click=${this.selectTotal} tabIndex=${this.totalSelected ? '0' : '-1'}>
             <div class="pie-chart-size">${this.formatter(this.total)}</div>
             <div class="pie-chart-swatch"></div>
@@ -233,10 +232,9 @@ export class PieChart extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-perf-piechart', PieChart);
+customElements.define('devtools-perf-piechart', PieChart);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-perf-piechart': PieChart;
   }

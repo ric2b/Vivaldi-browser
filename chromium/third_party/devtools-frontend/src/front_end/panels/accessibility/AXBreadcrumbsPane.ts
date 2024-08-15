@@ -58,6 +58,7 @@ export class AXBreadcrumbsPane extends AccessibilitySubPane {
 
     this.element.classList.add('ax-subpane');
     this.element.tabIndex = -1;
+    this.element.setAttribute('jslog', `${VisualLogging.section('accessibility-tree')}`);
 
     this.axSidebarView = axSidebarView;
     this.preselectedBreadcrumb = null;
@@ -69,7 +70,7 @@ export class AXBreadcrumbsPane extends AccessibilitySubPane {
 
     this.hoveredBreadcrumb = null;
     const previewToggle = new Feedback.PreviewToggle.PreviewToggle();
-    previewToggle.setAttribute('jslog', `${VisualLogging.toggle().context('full-accessibility-tree')}`);
+    previewToggle.setAttribute('jslog', `${VisualLogging.toggle('full-accessibility-tree')}`);
     const name = i18nString(UIStrings.fullTreeExperimentName);
     const experiment = Root.Runtime.ExperimentName.FULL_ACCESSIBILITY_TREE;
     const onChangeCallback: (checked: boolean) => void = checked => {
@@ -415,7 +416,7 @@ export class AXBreadcrumbsPane extends AccessibilitySubPane {
         }
         void domNode.scrollIntoView();
       });
-    });
+    }, {jslogContext: 'scroll-into-view'});
 
     const deferredNode = axNode.deferredDOMNode();
     if (deferredNode) {
@@ -449,7 +450,9 @@ export class AXBreadcrumb {
 
     this.elementInternal = document.createElement('div');
     this.elementInternal.classList.add('ax-breadcrumb');
-    this.elementInternal.setAttribute('jslog', `${VisualLogging.treeItem().track({click: true})}`);
+    this.elementInternal.setAttribute(
+        'jslog',
+        `${VisualLogging.treeItem().track({click: true, keydown: 'ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Enter'})}`);
     elementsToAXBreadcrumb.set(this.elementInternal, this);
 
     this.nodeElementInternal = document.createElement('div');
@@ -495,7 +498,7 @@ export class AXBreadcrumb {
     if (!this.axNodeInternal.ignored() && this.axNodeInternal.hasOnlyUnloadedChildren()) {
       this.nodeElementInternal.classList.add('children-unloaded');
       UI.ARIAUtils.setExpanded(this.nodeElementInternal, false);
-      VisualLogging.registerLoggable(this.expandLoggable, `${VisualLogging.treeItemExpand()}`, this.elementInternal);
+      VisualLogging.registerLoggable(this.expandLoggable, `${VisualLogging.expand()}`, this.elementInternal);
     }
 
     if (!this.axNodeInternal.isDOMNode()) {
@@ -517,7 +520,7 @@ export class AXBreadcrumb {
     this.nodeElementInternal.classList.add('parent');
     UI.ARIAUtils.setExpanded(this.nodeElementInternal, true);
     this.childrenGroupElement.appendChild(breadcrumb.element());
-    VisualLogging.registerLoggable(this.expandLoggable, `${VisualLogging.treeItemExpand()}`, this.elementInternal);
+    VisualLogging.registerLoggable(this.expandLoggable, `${VisualLogging.expand()}`, this.elementInternal);
   }
 
   hasExpandedChildren(): number {

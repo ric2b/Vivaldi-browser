@@ -411,15 +411,13 @@ void Printer::SortIfApplicable(const BinaryOpNode* binop) {
        binop->op().value() == "-=") &&
       ident) {
     const std::string_view lhs = ident->value().value();
-    if (base::EndsWith(lhs, "sources", base::CompareCase::SENSITIVE) ||
-        lhs == "public") {
+    if (lhs.ends_with("sources") || lhs == "public") {
       TraverseBinaryOpNode(binop->right(), [](const ParseNode* node) {
         const ListNode* list = node->AsList();
         if (list)
           const_cast<ListNode*>(list)->SortAsStringsList();
       });
-    } else if (base::EndsWith(lhs, "deps", base::CompareCase::SENSITIVE) ||
-               lhs == "visibility") {
+    } else if (lhs.ends_with("deps") || lhs == "visibility") {
       TraverseBinaryOpNode(binop->right(), [](const ParseNode* node) {
         const ListNode* list = node->AsList();
         if (list)
@@ -543,7 +541,7 @@ int SuffixCommentTreeWalk(const ParseNode* node) {
 
 #define RETURN_IF_SET(x)             \
   if (int result = (x); result >= 0) \
-    return result
+  return result
 
   if (const AccessorNode* accessor = node->AsAccessor()) {
     RETURN_IF_SET(SuffixCommentTreeWalk(accessor->subscript()));

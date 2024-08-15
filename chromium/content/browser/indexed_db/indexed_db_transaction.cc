@@ -10,6 +10,7 @@
 #include "base/check_op.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
@@ -23,6 +24,7 @@
 #include "content/browser/indexed_db/indexed_db_cursor.h"
 #include "content/browser/indexed_db/indexed_db_database.h"
 #include "content/browser/indexed_db/indexed_db_database_callbacks.h"
+#include "content/browser/indexed_db/indexed_db_lock_request_data.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom.h"
 #include "third_party/leveldatabase/env_chromium.h"
@@ -51,7 +53,6 @@ std::string WriteBlobToFileResultToString(
   return "";
 }
 
-const int64_t kInactivityTimeoutPeriodSeconds = 60;
 // Disabled in some tests.
 bool g_inactivity_timeout_enabled = true;
 
@@ -139,6 +140,10 @@ IndexedDBTransaction::IndexedDBTransaction(
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("IndexedDB",
                                     "IndexedDBTransaction::lifetime", this);
 
+  locks_receiver_.SetUserData(
+      IndexedDBLockRequestData::kKey,
+      std::make_unique<IndexedDBLockRequestData>(connection->client_token()));
+
   database_ = connection_->database();
   if (database_) {
     database_->TransactionCreated();
@@ -193,7 +198,7 @@ void IndexedDBTransaction::ScheduleTask(blink::mojom::IDBTaskType type,
   if (state_ == FINISHED)
     return;
 
-  timeout_timer_.Stop();
+  ResetTimeoutTimer();
   used_ = true;
   if (type == blink::mojom::IDBTaskType::Normal) {
     task_queue_.push(std::move(task));
@@ -221,7 +226,7 @@ leveldb::Status IndexedDBTransaction::Abort(
                                 UmaIDBExceptionExclusiveMaxValue);
 
   aborted_ = true;
-  timeout_timer_.Stop();
+  ResetTimeoutTimer();
 
   state_ = FINISHED;
 
@@ -283,6 +288,37 @@ void IndexedDBTransaction::UnregisterOpenCursor(IndexedDBCursor* cursor) {
   open_cursors_.erase(cursor);
 }
 
+void IndexedDBTransaction::DontAllowInactiveClientToBlockOthers(
+    storage::mojom::DisallowInactiveClientReason reason) {
+  if (state_ == STARTED && IsTransactionBlockingOtherClients()) {
+    connection_->DisallowInactiveClient(reason, base::DoNothing());
+  }
+}
+
+bool IndexedDBTransaction::IsTransactionBlockingOtherClients() const {
+  CHECK_EQ(state_, STARTED);
+  for (const PartitionedLockId& lock_id : lock_ids_) {
+    std::set<PartitionedLockHolder*> blocked_requests =
+        bucket_context_->lock_manager().GetQueuedRequests(lock_id);
+    if (std::any_of(blocked_requests.begin(), blocked_requests.end(),
+                    [&](PartitionedLockHolder* blocked_lock_holder) {
+                      auto* lock_request_data =
+                          static_cast<IndexedDBLockRequestData*>(
+                              blocked_lock_holder->GetUserData(
+                                  IndexedDBLockRequestData::kKey));
+                      if (!lock_request_data) {
+                        return true;
+                      }
+                      return lock_request_data->client_token !=
+                             connection_->client_token();
+                    })) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void IndexedDBTransaction::Start() {
   // The transaction has the potential to be aborted after the Start() task was
   // posted.
@@ -294,6 +330,12 @@ void IndexedDBTransaction::Start() {
   state_ = STARTED;
   DCHECK(!locks_receiver_.locks.empty());
   diagnostics_.start_time = base::Time::Now();
+
+  // If the client is in BFCache, the transaction will get stuck, so evict it if
+  // necessary.
+  DontAllowInactiveClientToBlockOthers(
+      storage::mojom::DisallowInactiveClientReason::
+          kTransactionIsStartingWhileBlockingOthers);
 
   const base::TimeDelta time_queued =
       diagnostics_.start_time - diagnostics_.creation_time;
@@ -504,8 +546,9 @@ leveldb::Status IndexedDBTransaction::BlobWriteComplete(
           base::ASCIIToUTF16(base::StringPrintf(
               "Failed to write blobs (%s)",
               WriteBlobToFileResultToString(error).c_str()))));
-      if (!status.ok())
-        bucket_context_->delegate().on_fatal_error.Run(status, {});
+      if (!status.ok()) {
+        bucket_context_->OnDatabaseError(status, {});
+      }
       // The result is ignored.
       return leveldb::Status::OK();
     }
@@ -524,7 +567,7 @@ leveldb::Status IndexedDBTransaction::DoPendingCommit() {
   TRACE_EVENT1("IndexedDB", "IndexedDBTransaction::DoPendingCommit", "txn.id",
                id());
 
-  timeout_timer_.Stop();
+  ResetTimeoutTimer();
 
   // In multiprocess ports, front-end may have requested a commit but
   // an abort has already been initiated asynchronously by the
@@ -670,7 +713,7 @@ leveldb::Status IndexedDBTransaction::CommitPhaseTwo() {
           mode() == blink::mojom::IDBTransactionMode::VersionChange ||
           backing_store_transaction_->durability() ==
               blink::mojom::IDBTransactionDurability::Strict;
-      bucket_context_->delegate().on_writing_transaction_complete.Run(did_sync);
+      bucket_context_->delegate().on_files_written.Run(did_sync);
     }
 
     if (database_) {
@@ -761,27 +804,37 @@ IndexedDBTransaction::RunTasks() {
 
   DCHECK(state_ == STARTED || state_ == COMMITTING) << state_;
 
-  // Otherwise, start a timer in case the front-end gets wedged and
-  // never requests further activity. Read-only transactions don't
-  // block other transactions, so don't time those out.
-  if (!HasPendingTasks() &&
-      mode_ != blink::mojom::IDBTransactionMode::ReadOnly &&
-      state_ == STARTED && g_inactivity_timeout_enabled) {
-    timeout_timer_.Start(FROM_HERE,
-                         base::Seconds(kInactivityTimeoutPeriodSeconds),
-                         base::BindOnce(&IndexedDBTransaction::Timeout,
-                                        ptr_factory_.GetWeakPtr()));
+  // Otherwise, start a timer in case the front-end gets wedged and never
+  // requests further activity.
+  if (!HasPendingTasks() && state_ == STARTED && g_inactivity_timeout_enabled) {
+    timeout_timer_.Start(
+        FROM_HERE, kInactivityTimeoutPollPeriod,
+        base::BindRepeating(&IndexedDBTransaction::TimeoutFired,
+                            ptr_factory_.GetWeakPtr()));
   }
   processing_event_queue_ = false;
   return {RunTasksResult::kNotFinished, leveldb::Status::OK()};
 }
 
-void IndexedDBTransaction::Timeout() {
-  leveldb::Status result = Abort(
-      IndexedDBDatabaseError(blink::mojom::IDBException::kTimeoutError,
-                             u"Transaction timed out due to inactivity."));
-  if (!result.ok())
-    bucket_context_->delegate().on_fatal_error.Run(result, {});
+void IndexedDBTransaction::TimeoutFired() {
+  if (!IsTransactionBlockingOtherClients()) {
+    return;
+  }
+
+  if (++timeout_strikes_ >= kMaxTimeoutStrikes) {
+    leveldb::Status result = Abort(
+        IndexedDBDatabaseError(blink::mojom::IDBException::kTimeoutError,
+                               u"Transaction timed out due to inactivity."));
+    if (!result.ok()) {
+      bucket_context_->OnDatabaseError(result, {});
+    }
+    ResetTimeoutTimer();
+  }
+}
+
+void IndexedDBTransaction::ResetTimeoutTimer() {
+  timeout_timer_.Stop();
+  timeout_strikes_ = 0;
 }
 
 void IndexedDBTransaction::CloseOpenCursors() {
@@ -790,10 +843,12 @@ void IndexedDBTransaction::CloseOpenCursors() {
 
   // IndexedDBCursor::Close() indirectly mutates |open_cursors_|, when it calls
   // IndexedDBTransaction::UnregisterOpenCursor().
-  std::set<IndexedDBCursor*> open_cursors = std::move(open_cursors_);
+  std::set<raw_ptr<IndexedDBCursor, SetExperimental>> open_cursors =
+      std::move(open_cursors_);
   open_cursors_.clear();
-  for (auto* cursor : open_cursors)
+  for (IndexedDBCursor* cursor : open_cursors) {
     cursor->Close();
+  }
 }
 
 std::vector<PartitionedLockManager::PartitionedLockRequest>

@@ -109,7 +109,7 @@ std::u16string NodeTitleFromSpecifics(
   return base::UTF8ToUTF16(node_title);
 }
 
-absl::optional<base::Time> NodeLastModificationTimeFromSpecifics(
+std::optional<base::Time> NodeLastModificationTimeFromSpecifics(
     const sync_pb::NotesSpecifics& specifics) {
   if (specifics.has_last_modification_time_us()) {
     return base::Time::FromDeltaSinceWindowsEpoch(
@@ -117,7 +117,7 @@ absl::optional<base::Time> NodeLastModificationTimeFromSpecifics(
         // has always used the Windows epoch.
         base::Microseconds(specifics.last_modification_time_us()));
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 void MoveAllChildren(NoteModelView* model,

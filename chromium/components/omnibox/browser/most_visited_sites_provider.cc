@@ -5,6 +5,7 @@
 #include "components/omnibox/browser/most_visited_sites_provider.h"
 
 #include <string>
+#include <vector>
 
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
@@ -119,6 +120,8 @@ bool BuildTileSuggest(AutocompleteProvider* provider,
                      is_search ? AutocompleteMatchType::TILE_REPEATABLE_QUERY
                                : AutocompleteMatchType::TILE_MOST_VISITED_SITE);
       if (is_search) {
+        match.subtypes.emplace(
+            omnibox::SUBTYPE_ZERO_PREFIX_LOCAL_FREQUENT_QUERIES);
         match.keyword = dse->keyword();
         std::u16string query = tile.title;
 
@@ -136,6 +139,9 @@ bool BuildTileSuggest(AutocompleteProvider* provider,
             std::make_unique<TemplateURLRef::SearchTermsArgs>(query);
         num_search_tiles++;
       } else {
+        match.subtypes.emplace(
+            omnibox::SUBTYPE_ZERO_PREFIX_LOCAL_FREQUENT_URLS);
+        match.subtypes.emplace(omnibox::SUBTYPE_URL_BASED);
         num_url_tiles++;
       }
       matches.emplace_back(std::move(match));
@@ -151,7 +157,7 @@ bool BuildTileSuggest(AutocompleteProvider* provider,
     }
   } else {
     AutocompleteMatch match =
-        BuildMatch(provider, client, std::u16string(), GURL::EmptyGURL(),
+        BuildMatch(provider, client, std::u16string(), GURL(),
                    kMostVisitedTilesAggregateRelevance,
                    AutocompleteMatchType::TILE_NAVSUGGEST);
 
@@ -175,6 +181,8 @@ bool BuildTileSuggest(AutocompleteProvider* provider,
       }
     }
 
+    match.subtypes.emplace(omnibox::SUBTYPE_ZERO_PREFIX_LOCAL_FREQUENT_URLS);
+    match.subtypes.emplace(omnibox::SUBTYPE_URL_BASED);
     matches.push_back(std::move(match));
   }
 
@@ -343,7 +351,7 @@ void MostVisitedSitesProvider::DeleteMatchElement(
 
   BlockURL(tile_to_delete.url);
   auto& tiles_to_update = matches_[0].suggest_tiles;
-  base::EraseIf(tiles_to_update, [&tile_to_delete](const auto& tile) {
+  std::erase_if(tiles_to_update, [&tile_to_delete](const auto& tile) {
     return tile.url == tile_to_delete.url;
   });
 

@@ -8,6 +8,7 @@
 
 #include "base/callback_list.h"
 #include "base/check_deref.h"
+#include "base/check_is_test.h"
 #include "base/command_line.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/json/json_reader.h"
@@ -24,6 +25,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/eea_countries_ids.h"
 #include "components/search_engines/search_engine_choice_utils.h"
+#include "components/search_engines/search_engine_type.h"
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/search_engines/search_engines_switches.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
@@ -68,14 +70,16 @@ bool IsSearchEngineChoiceScreenAllowedByPolicy(
   return false;
 }
 
-bool IsDefaultSearchProviderSetOrBlockedByPolicy(
-    const TemplateURLService& template_url_service) {
-  const TemplateURL* default_search_engine =
-      template_url_service.GetDefaultSearchProvider();
-
+bool IsSetOrBlockedByPolicy(const TemplateURL* default_search_engine) {
   return !default_search_engine ||
          default_search_engine->created_by_policy() ==
              TemplateURLData::CreatedByPolicy::kDefaultSearchProvider;
+}
+
+bool IsDefaultSearchProviderSetOrBlockedByPolicy(
+    const TemplateURLService& template_url_service) {
+  return IsSetOrBlockedByPolicy(
+      template_url_service.GetDefaultSearchProvider());
 }
 #endif
 
@@ -95,6 +99,13 @@ bool IsSearchEngineChoiceCompleted(const PrefService& prefs) {
              prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp) &&
          prefs.HasPrefPath(
              prefs::kDefaultSearchProviderChoiceScreenCompletionVersion);
+}
+
+void MarkSearchEngineChoiceCompleted(PrefService& prefs) {
+  prefs.SetInt64(prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp,
+                 base::Time::Now().ToDeltaSinceWindowsEpoch().InSeconds());
+  prefs.SetString(prefs::kDefaultSearchProviderChoiceScreenCompletionVersion,
+                  version_info::GetVersionNumber());
 }
 
 // Returns true if the version is valid and can be compared to the current
@@ -136,37 +147,15 @@ using NativeCallbackType = base::OnceCallback<void(int)>;
 SearchEngineChoiceService::SearchEngineChoiceService(PrefService& profile_prefs,
                                                      int variations_country_id)
     : profile_prefs_(profile_prefs),
-      variations_country_id_(variations_country_id) {}
+      variations_country_id_(variations_country_id) {
+  PreprocessPrefsForReprompt();
+}
 
 SearchEngineChoiceService::~SearchEngineChoiceService() = default;
 
 bool SearchEngineChoiceService::ShouldShowUpdatedSettings() {
-#if BUILDFLAG(IS_IOS)
-  // TODO(b/318820137): There should not be a dependency on the country here.
-  if (!IsEeaChoiceCountry(GetCountryId())) {
-    return false;
-  }
-#endif
   return IsChoiceScreenFlagEnabled(ChoicePromo::kAny);
 }
-
-#if BUILDFLAG(IS_IOS)
-bool SearchEngineChoiceService::ShouldShowChoiceScreen(
-    const policy::PolicyService& policy_service,
-    bool is_regular_profile,
-    TemplateURLService* template_url_service) {
-  PreprocessPrefsForReprompt();
-  auto condition = GetStaticChoiceScreenConditions(
-      policy_service, is_regular_profile, CHECK_DEREF(template_url_service));
-
-  if (condition == SearchEngineChoiceScreenConditions::kEligible) {
-    condition = GetDynamicChoiceScreenConditions(*template_url_service);
-  }
-
-  RecordChoiceScreenProfileInitCondition(condition);
-  return condition == SearchEngineChoiceScreenConditions::kEligible;
-}
-#endif
 
 SearchEngineChoiceScreenConditions
 SearchEngineChoiceService::GetStaticChoiceScreenConditions(
@@ -208,11 +197,6 @@ SearchEngineChoiceService::GetStaticChoiceScreenConditions(
     return SearchEngineChoiceScreenConditions::kFeatureSuppressed;
   }
 
-  // Force triggering the choice screen for testing the screen itself.
-  if (command_line->HasSwitch(switches::kForceSearchEngineChoiceScreen)) {
-    return SearchEngineChoiceScreenConditions::kEligible;
-  }
-
   if (IsSearchEngineChoiceCompleted(*profile_prefs_)) {
     return SearchEngineChoiceScreenConditions::kAlreadyCompleted;
   }
@@ -247,30 +231,34 @@ SearchEngineChoiceService::GetDynamicChoiceScreenConditions(
   // TODO(b/319050536): Remove the function declaration on these platforms.
   return SearchEngineChoiceScreenConditions::kUnsupportedBrowserType;
 #else
+  // Don't show the dialog if the choice has already been made.
+  if (IsSearchEngineChoiceCompleted(*profile_prefs_)) {
+    return SearchEngineChoiceScreenConditions::kAlreadyCompleted;
+  }
+
   // Don't show the dialog if the default search engine is set by an extension.
   if (template_url_service.IsExtensionControlledDefaultSearch()) {
     return SearchEngineChoiceScreenConditions::kExtensionControlled;
   }
 
-  if (IsDefaultSearchProviderSetOrBlockedByPolicy(template_url_service)) {
-    return SearchEngineChoiceScreenConditions::kControlledByPolicy;
-  }
-
   const TemplateURL* default_search_engine =
       template_url_service.GetDefaultSearchProvider();
-  if (!default_search_engine) {
-    // It is possible to not have a default search provider if the
-    // "DefaultSearchProviderEnabled" policy is set to `false`.
-    // It is somewhat that we could reach this, as
-    // `GetStaticChoiceScreenConditions()` should already check for that.
-    // Hypothetically, a race condition between a policy getting newly
-    // downloaded and the user making their choice on the dialog could trigger
-    // this (But not at profile creation, we wait for policies to finish
-    // applying before proceeding to the choice screen).
-    // If we proceeded here, the choice screen could be shown and we might
-    // attempt to set a DSE based on the user selection, but that would be
-    // ignored.
+  if (IsSetOrBlockedByPolicy(default_search_engine)) {
+    // It is possible that between the static checks at service creation (around
+    // the time the profile was loaded) and the moment a compatible URL is
+    // loaded to show the search engine choice dialog, some new policies come in
+    // and take control of the default search provider. If we proceeded here,
+    // the choice screen could be shown and we might attempt to set a DSE based
+    // on the user selection, but that would be ignored.
     return SearchEngineChoiceScreenConditions::kControlledByPolicy;
+  }
+  CHECK(default_search_engine);
+
+  if (switches::kSearchEngineChoiceTriggerSkipFor3p.Get()) {
+    if (default_search_engine->GetEngineType(
+            template_url_service.search_terms_data()) != SEARCH_ENGINE_GOOGLE) {
+      return SearchEngineChoiceScreenConditions::kHasNonGoogleSearchEngine;
+    }
   }
 
   if (!template_url_service.IsPrepopulatedOrDefaultProviderByPolicy(
@@ -278,6 +266,7 @@ SearchEngineChoiceService::GetDynamicChoiceScreenConditions(
     return SearchEngineChoiceScreenConditions::kHasCustomSearchEngine;
   }
 
+#if 0 // Vivaldi
   if (default_search_engine->prepopulate_id() >
       TemplateURLPrepopulateData::kMaxPrepopulatedEngineID) {
     // Don't show a choice screen when the user has a distribution custom search
@@ -286,6 +275,7 @@ SearchEngineChoiceService::GetDynamicChoiceScreenConditions(
     return SearchEngineChoiceScreenConditions::
         kHasDistributionCustomSearchEngine;
   }
+#endif // Vivaldi
 
   if (!TemplateURLPrepopulateData::GetPrepopulatedEngineFromFullList(
           &profile_prefs_.get(), this,
@@ -297,20 +287,6 @@ SearchEngineChoiceService::GetDynamicChoiceScreenConditions(
     RecordUnexpectedSearchProvider(default_search_engine->data());
     return SearchEngineChoiceScreenConditions::
         kHasRemovedPrepopulatedSearchEngine;
-  }
-
-  // Force triggering the choice screen for testing the screen itself.
-  // Deliberately checked after the conditions overriding the default search
-  // engine with some custom one because they would put the choice screens in
-  // some unstable state and they are rather easy to change if we want to
-  // re-enable the triggering.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kForceSearchEngineChoiceScreen)) {
-    return SearchEngineChoiceScreenConditions::kEligible;
-  }
-
-  if (IsSearchEngineChoiceCompleted(*profile_prefs_)) {
-    return SearchEngineChoiceScreenConditions::kAlreadyCompleted;
   }
 
   return SearchEngineChoiceScreenConditions::kEligible;
@@ -360,12 +336,7 @@ void SearchEngineChoiceService::RecordChoiceMade(
 
   RecordChoiceScreenDefaultSearchProviderType(
       GetDefaultSearchEngineType(CHECK_DEREF(template_url_service)));
-  profile_prefs_->SetInt64(
-      prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp,
-      base::Time::Now().ToDeltaSinceWindowsEpoch().InSeconds());
-  profile_prefs_->SetString(
-      prefs::kDefaultSearchProviderChoiceScreenCompletionVersion,
-      version_info::GetVersionNumber());
+  MarkSearchEngineChoiceCompleted(*profile_prefs_);
 
   if (profile_prefs_->HasPrefPath(prefs::kDefaultSearchProviderChoicePending)) {
     DVLOG(1) << "Choice made, removing profile tag.";
@@ -375,6 +346,29 @@ void SearchEngineChoiceService::RecordChoiceMade(
 
 void SearchEngineChoiceService::PreprocessPrefsForReprompt() {
   if (!IsChoiceScreenFlagEnabled(ChoicePromo::kAny)) {
+    return;
+  }
+
+  // Allow re-triggering the choice screen for testing the screen itself.
+  // This flag is deliberately only clearing the prefs instead of more
+  // forcefully triggering the screen because this allows to more easily test
+  // the flows without risking to put the choice screens in some unstable state.
+  // The other conditions (e.g. country, policies, etc) are rather easy to
+  // change if we want to re-enable the triggering.
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kForceSearchEngineChoiceScreen)) {
+    WipeSearchEngineChoicePrefs(profile_prefs_.get(),
+                                WipeSearchEngineChoiceReason::kCommandLineFlag);
+    return;
+  }
+
+  // Check parameters from `switches::kSearchEngineChoiceTriggerRepromptParams`.
+  std::optional<base::Value::Dict> reprompt_params = base::JSONReader::ReadDict(
+      switches::kSearchEngineChoiceTriggerRepromptParams.Get());
+  if (!reprompt_params) {
+    // No valid reprompt parameters.
+    base::UmaHistogramEnumeration(kSearchEngineChoiceRepromptHistogram,
+                                  RepromptResult::kInvalidDictionary);
     return;
   }
 
@@ -393,17 +387,6 @@ void SearchEngineChoiceService::PreprocessPrefsForReprompt() {
     WipeSearchEngineChoicePrefs(
         profile_prefs_.get(),
         WipeSearchEngineChoiceReason::kInvalidChoiceVersion);
-    return;
-  }
-
-  // Check parameters from `switches::kSearchEngineChoiceTriggerRepromptParams`.
-  absl::optional<base::Value::Dict> reprompt_params =
-      base::JSONReader::ReadDict(
-          switches::kSearchEngineChoiceTriggerRepromptParams.Get());
-  if (!reprompt_params) {
-    // No valid reprompt parameters.
-    base::UmaHistogramEnumeration(kSearchEngineChoiceRepromptHistogram,
-                                  RepromptResult::kInvalidDictionary);
     return;
   }
 
@@ -511,6 +494,12 @@ void SearchEngineChoiceService::ProcessGetCountryResponseFromPlayApi(
   profile_prefs_->SetInteger(country_codes::kCountryIDAtInstall, country_id);
 }
 #endif
+
+// static
+void MarkSearchEngineChoiceCompletedForTesting(PrefService& prefs) {
+  CHECK_IS_TEST();
+  MarkSearchEngineChoiceCompleted(prefs);
+}
 
 }  // namespace search_engines
 

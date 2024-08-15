@@ -9,6 +9,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -37,9 +38,9 @@
 #include "services/network/network_service.h"
 #include "services/network/network_service_memory_cache.h"
 #include "services/network/private_network_access_checker.h"
-#include "services/network/public/cpp/corb/corb_api.h"
 #include "services/network/public/cpp/cors/cors_error_status.h"
 #include "services/network/public/cpp/initiator_lock_compatibility.h"
+#include "services/network/public/cpp/orb/orb_api.h"
 #include "services/network/public/cpp/private_network_access_check_result.h"
 #include "services/network/public/mojom/accept_ch_frame_observer.mojom.h"
 #include "services/network/public/mojom/cookie_access_observer.mojom.h"
@@ -62,13 +63,13 @@
 #include "services/network/trust_tokens/trust_token_request_helper_factory.h"
 #include "services/network/upload_progress_tracker.h"
 #include "services/network/url_loader_context.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace net {
 class HttpResponseHeaders;
+class IOBufferWithSize;
 class IPEndPoint;
-struct RedirectInfo;
 class URLRequestContext;
+struct RedirectInfo;
 }  // namespace net
 
 namespace network {
@@ -193,7 +194,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       const std::vector<std::string>& removed_headers,
       const net::HttpRequestHeaders& modified_headers,
       const net::HttpRequestHeaders& modified_cors_exempt_headers,
-      const absl::optional<GURL>& new_url) override;
+      const std::optional<GURL>& new_url) override;
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override;
   void PauseReadingBodyFromNet() override;
@@ -227,7 +228,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       const net::HttpResponseHeaders* original_response_headers,
       scoped_refptr<net::HttpResponseHeaders>* override_response_headers,
       const net::IPEndPoint& endpoint,
-      absl::optional<GURL>* preserve_fragment_on_redirect_url);
+      std::optional<GURL>* preserve_fragment_on_redirect_url);
 
   mojom::URLLoaderNetworkServiceObserver* GetURLLoaderNetworkServiceObserver()
       const {
@@ -236,7 +237,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   // mojom::AuthChallengeResponder:
   void OnAuthCredentials(
-      const absl::optional<net::AuthCredentials>& credentials) override;
+      const std::optional<net::AuthCredentials>& credentials) override;
 
   // mojom::ClientCertificateResponder:
   void ContinueWithCertificate(
@@ -253,11 +254,25 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   int32_t GetProcessId() const;
   uint32_t GetResourceType() const;
 
+  // Whether this URLLoader should allow sending/setting any cookies.
+  // This decision is based on the options passed to
+  // URLLoaderFactory::CreateLoaderAndStart().
+  bool CookiesDisabled() const;
+
   // Whether this URLLoader should allow sending/setting cookies for requests
   // with |url| and |site_for_cookies|. This decision is based on the options
   // passed to URLLoaderFactory::CreateLoaderAndStart().
-  bool AllowCookies(const GURL& url,
-                    const net::SiteForCookies& site_for_cookies) const;
+  // If this returns false, partitioned cookies could still be provided if
+  // CookiesDisabled returns false.
+  bool AllowFullCookies(const GURL& url,
+                        const net::SiteForCookies& site_for_cookies) const;
+
+  // Returns whether a particular cookie is allowed to be sent for requests
+  // with |url| and |site_for_cookies|. This decision is based on the options
+  // passed to URLLoaderFactory::CreateLoaderAndStart().
+  bool AllowCookie(const net::CanonicalCookie& cookie,
+                   const GURL& url,
+                   const net::SiteForCookies& site_for_cookies) const;
 
   const net::HttpRequestHeaders& custom_proxy_pre_cache_headers() const {
     return custom_proxy_pre_cache_headers_;
@@ -267,11 +282,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
     return custom_proxy_post_cache_headers_;
   }
 
-  const absl::optional<GURL>& new_redirect_url() const {
+  const std::optional<GURL>& new_redirect_url() const {
     return new_redirect_url_;
   }
 
-  const absl::optional<std::string>& devtools_request_id() const {
+  const std::optional<std::string>& devtools_request_id() const {
     return devtools_request_id_;
   }
 
@@ -296,7 +311,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   static bool HasFetchStreamingUploadBody(const ResourceRequest*);
 
-  static absl::optional<net::IsolationInfo> GetIsolationInfo(
+  static std::optional<net::IsolationInfo> GetIsolationInfo(
       const net::IsolationInfo& factory_isolation_info,
       bool automatically_assign_isolation_info,
       const ResourceRequest& request);
@@ -474,7 +489,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       mojom::TrustTokenOperationType type,
       TrustTokenStatusOrRequestHelper status_or_helper);
   void OnDoneBeginningTrustTokenOperation(
-      absl::optional<net::HttpRequestHeaders> headers,
+      std::optional<net::HttpRequestHeaders> headers,
       mojom::TrustTokenOperationStatus status);
   void OnDoneFinalizingTrustTokenOperation(
       mojom::TrustTokenOperationStatus status);
@@ -514,34 +529,34 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   void OnBeforeSendHeadersComplete(
       net::NetworkDelegate::OnBeforeStartTransactionCallback callback,
       int result,
-      const absl::optional<net::HttpRequestHeaders>& headers);
+      const std::optional<net::HttpRequestHeaders>& headers);
   void OnHeadersReceivedComplete(
       net::CompletionOnceCallback callback,
       scoped_refptr<net::HttpResponseHeaders>* out_headers,
-      absl::optional<GURL>* out_preserve_fragment_on_redirect_url,
+      std::optional<GURL>* out_preserve_fragment_on_redirect_url,
       int result,
-      const absl::optional<std::string>& headers,
-      const absl::optional<GURL>& preserve_fragment_on_redirect_url);
+      const std::optional<std::string>& headers,
+      const std::optional<GURL>& preserve_fragment_on_redirect_url);
 
   void CompleteBlockedResponse(
       int error_code,
-      bool should_report_corb_blocking,
-      absl::optional<mojom::BlockedByResponseReason> reason = absl::nullopt);
+      bool should_report_orb_blocking,
+      std::optional<mojom::BlockedByResponseReason> reason = std::nullopt);
 
-  enum BlockResponseForCorbResult {
-    // Returned when caller of BlockResponseForCorb doesn't need to continue,
+  enum BlockResponseForOrbResult {
+    // Returned when caller of BlockResponseForOrb doesn't need to continue,
     // because the request will be cancelled soon.
     kWillCancelRequest,
 
-    // Returned when the caller of BlockResponseForCorb should continue
+    // Returned when the caller of BlockResponseForOrb should continue
     // processing the request (e.g. by calling ReadMore as necessary).
     kContinueRequest,
   };
-  // Block the response because of CORB (or ORB).
-  BlockResponseForCorbResult BlockResponseForCorb();
-  // Decide whether to call block a response via BlockResponseForCorb.
+  // Block the response because of ORB.
+  BlockResponseForOrbResult BlockResponseForOrb();
+  // Decide whether to call block a response via BlockResponseForOrb.
   // Returns true if the request should be cancelled.
-  bool MaybeBlockResponseForCorb(corb::ResponseAnalyzer::Decision);
+  bool MaybeBlockResponseForOrb(orb::ResponseAnalyzer::Decision);
 
   void ReportFlaggedResponseCookies(bool call_cookie_observer);
   void StartReading();
@@ -582,7 +597,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   DeleteCallback delete_callback_;
 
   int32_t options_;
-  const bool corb_detachable_;
   const int resource_type_;
   const bool is_load_timing_enabled_;
   bool has_received_response_ = false;
@@ -613,23 +627,25 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   mojo::SimpleWatcher writable_handle_watcher_;
   mojo::SimpleWatcher peer_closed_handle_watcher_;
 
+  scoped_refptr<net::IOBufferWithSize> discard_buffer_;
+
   // True if there's a URLRequest::Read() call in progress.
   bool read_in_progress_ = false;
 
   // Stores any CORS error encountered while processing |url_request_|.
-  absl::optional<CorsErrorStatus> cors_error_status_;
+  std::optional<CorsErrorStatus> cors_error_status_;
 
   // Used when deferring sending the data to the client until mime sniffing is
   // finished.
   mojom::URLResponseHeadPtr response_;
   mojo::ScopedDataPipeConsumerHandle consumer_handle_;
 
-  // Sniffing state and CORB state.
-  bool is_more_corb_sniffing_needed_ = false;
+  // Sniffing state and ORB state.
+  bool is_more_orb_sniffing_needed_ = false;
   bool is_more_mime_sniffing_needed_ = false;
-  const raw_ref<corb::PerFactoryState> per_factory_corb_state_;
-  // `corb_analyzer_` must be destructed before `per_factory_corb_state_`.
-  std::unique_ptr<corb::ResponseAnalyzer> corb_analyzer_;
+  const raw_ref<orb::PerFactoryState> per_factory_orb_state_;
+  // `orb_analyzer_` must be destructed before `per_factory_orb_state_`.
+  std::unique_ptr<orb::ResponseAnalyzer> orb_analyzer_;
 
   std::unique_ptr<ResourceScheduler::ScheduledResourceRequest>
       resource_scheduler_request_handle_;
@@ -646,12 +662,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // If |new_url| is given to FollowRedirect() it's saved here, so that it can
   // be later referred to from NetworkContext::OnBeforeURLRequestInternal, which
   // is called from NetworkDelegate::NotifyBeforeURLRequest.
-  absl::optional<GURL> new_redirect_url_;
+  std::optional<GURL> new_redirect_url_;
 
   // The ID that DevTools uses to track network requests. It is generated in the
   // renderer process and is only present when DevTools is enabled in the
   // renderer.
-  const absl::optional<std::string> devtools_request_id_;
+  const std::optional<std::string> devtools_request_id_;
 
   bool should_pause_reading_body_ = false;
   // The response body stream is open, but transferring data is paused.
@@ -687,7 +703,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   // Indicates the originating frame of the request, see
   // network::ResourceRequest::fetch_window_id for details.
-  absl::optional<base::UnguessableToken> fetch_window_id_;
+  std::optional<base::UnguessableToken> fetch_window_id_;
 
   PrivateNetworkAccessChecker private_network_access_checker_;
 
@@ -712,7 +728,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // protocol step or an inbound (response header reading) step; some error
   // codes, like kFailedPrecondition (outbound) and kBadResponse (inbound) are
   // specific to one direction.
-  absl::optional<mojom::TrustTokenOperationStatus> trust_token_status_;
+  std::optional<mojom::TrustTokenOperationStatus> trust_token_status_;
 
   // This is used to determine whether it is allowed to use a dictionary when
   // there is a matching shared dictionary for the request.

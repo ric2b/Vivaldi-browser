@@ -147,12 +147,8 @@ update_target("//ios/chrome/browser/ui/bookmarks/home:home") {
 }
 
 update_target("//ios/chrome/browser/ui/badges:badges") {
-  deps -= [
-    "resources:incognito_badge_ios14",
-  ]
   deps += [
     "//vivaldi/ios/chrome/browser/ui/badges/resources:incognito_badge",
-    "//vivaldi/ios/chrome/browser/ui/badges/resources:incognito_badge_ios14",
     "//vivaldi/ios/chrome/browser/ui/badges/resources:incognito_small_badge",
   ]
 }

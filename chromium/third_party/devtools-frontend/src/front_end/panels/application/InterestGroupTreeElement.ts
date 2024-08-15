@@ -39,7 +39,7 @@ export class InterestGroupTreeElement extends ApplicationPanelTreeElement {
     return 'interest-groups://' as Platform.DevToolsPath.UrlString;
   }
 
-  async getInterestGroupDetails(owner: string, name: string): Promise<Protocol.Storage.InterestGroupDetails|null> {
+  async getInterestGroupDetails(owner: string, name: string): Promise<object|null> {
     const mainTarget = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
     if (!mainTarget) {
       return null;
@@ -52,7 +52,7 @@ export class InterestGroupTreeElement extends ApplicationPanelTreeElement {
   override onselect(selectedByUser?: boolean): boolean {
     super.onselect(selectedByUser);
     this.showView(this.view);
-    Host.userMetrics.panelShown(Host.UserMetrics.PanelCodes[Host.UserMetrics.PanelCodes.interest_groups]);
+    Host.userMetrics.panelShown('interest-groups');
     return false;
   }
 

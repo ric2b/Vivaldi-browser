@@ -20,13 +20,14 @@ import("../../../gn/proto_library.gni")
 # 2. Minimal set: :minimal_zero, :minimal_lite. These are mainly for chrome, to
 #    avoid bloating binary size by pulling unnecessary protos.
 #
-# In practice, however, we need to split them in disjoint targets (minmal and
+# In practice, however, we need to split them in disjoint targets (minimal and
 # non-minimal) and then use a group() target for the full protos. This is
 # because build systems don't like two targets having genrules for the same
 # .proto files.
 
 # By default add new protos here.
 proto_sources_non_minimal = [
+  "remote_clock_sync.proto",
   "trace_packet_defaults.proto",
   "test_event.proto",
   "test_extensions.proto",

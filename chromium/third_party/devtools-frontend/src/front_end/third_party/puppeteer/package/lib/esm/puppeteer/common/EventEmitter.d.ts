@@ -3,6 +3,7 @@
  * Copyright 2022 Google Inc.
  * SPDX-License-Identifier: Apache-2.0
  */
+import { type Emitter } from '../../third_party/mitt/mitt.js';
 import { disposeSymbol } from '../util/disposable.js';
 /**
  * @public
@@ -19,8 +20,6 @@ export interface CommonEventEmitter<Events extends Record<EventType, unknown>> {
     on<Key extends keyof Events>(type: Key, handler: Handler<Events[Key]>): this;
     off<Key extends keyof Events>(type: Key, handler?: Handler<Events[Key]>): this;
     emit<Key extends keyof Events>(type: Key, event: Events[Key]): boolean;
-    addListener<Key extends keyof Events>(type: Key, handler: Handler<Events[Key]>): this;
-    removeListener<Key extends keyof Events>(type: Key, handler: Handler<Events[Key]>): this;
     once<Key extends keyof Events>(type: Key, handler: Handler<Events[Key]>): this;
     listenerCount(event: keyof Events): number;
     removeAllListeners(event?: keyof Events): this;
@@ -46,9 +45,11 @@ export type EventsWithWildcard<Events extends Record<EventType, unknown>> = Even
 export declare class EventEmitter<Events extends Record<EventType, unknown>> implements CommonEventEmitter<EventsWithWildcard<Events>> {
     #private;
     /**
+     * If you pass an emitter, the returned emitter will wrap the passed emitter.
+     *
      * @internal
      */
-    constructor();
+    constructor(emitter?: Emitter<EventsWithWildcard<Events>> | EventEmitter<Events>);
     /**
      * Bind an event listener to fire when an event occurs.
      * @param type - the event type you'd like to listen to. Can be a string or symbol.
@@ -63,18 +64,6 @@ export declare class EventEmitter<Events extends Record<EventType, unknown>> imp
      * @returns `this` to enable you to chain method calls.
      */
     off<Key extends keyof EventsWithWildcard<Events>>(type: Key, handler?: Handler<EventsWithWildcard<Events>[Key]>): this;
-    /**
-     * Remove an event listener.
-     *
-     * @deprecated please use {@link EventEmitter.off} instead.
-     */
-    removeListener<Key extends keyof EventsWithWildcard<Events>>(type: Key, handler: Handler<EventsWithWildcard<Events>[Key]>): this;
-    /**
-     * Add an event listener.
-     *
-     * @deprecated please use {@link EventEmitter.on} instead.
-     */
-    addListener<Key extends keyof EventsWithWildcard<Events>>(type: Key, handler: Handler<EventsWithWildcard<Events>[Key]>): this;
     /**
      * Emit an event and call any associated listeners.
      *
@@ -105,6 +94,10 @@ export declare class EventEmitter<Events extends Record<EventType, unknown>> imp
      * @returns `this` to enable you to chain method calls.
      */
     removeAllListeners(type?: keyof EventsWithWildcard<Events>): this;
+    /**
+     * @internal
+     */
+    [disposeSymbol](): void;
 }
 /**
  * @internal

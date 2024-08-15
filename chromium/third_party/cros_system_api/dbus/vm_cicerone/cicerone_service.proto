@@ -8,7 +8,7 @@ option optimize_for = LITE_RUNTIME;
 // This file defines messages used for interacting directly with containers
 // running inside of a VM.
 package vm_tools.cicerone;
-option go_package = "chromiumos/system_api/vm_cicerone_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/vm_cicerone_proto";
 
 import "vm_applications/apps.proto";
 

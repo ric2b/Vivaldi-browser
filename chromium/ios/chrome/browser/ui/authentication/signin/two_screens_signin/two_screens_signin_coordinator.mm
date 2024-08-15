@@ -179,6 +179,7 @@ using base::UserMetricsAction;
     case kDefaultBrowserPromo:
     case kChoice:
     case kOmniboxPosition:
+    case kDockingPromo:
     case kStepsCompleted:
       break;
   }
@@ -221,10 +222,6 @@ using base::UserMetricsAction;
   [_childCoordinator stop];
   _childCoordinator = nil;
   [self presentScreen:[_screenProvider nextScreenType]];
-}
-
-- (void)skipAllScreens {
-  [self finishPresentingScreens];
 }
 
 #pragma mark - SigninCoordinator

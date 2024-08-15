@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Tájkép 12</translation>
 <translation id="1158503667684816647">Ne mutassa újra</translation>
 <translation id="1222195720020481779">A telepítő indítása...</translation>
+<translation id="1270785070369717623">Sajnos az Opera GX beállításai nem érhetők el, míg a böngésző fut. A beállítások Vivaldiba importálásához mentsd el a munkáid és zárj be minden Opera GX ablakot. Majd Tovább gomb.</translation>
 <translation id="1276145862619442150">Gyorshívók</translation>
 <translation id="1281950884873973195">Állat 6</translation>
 <translation id="1411638389238344450">Hivatkozás küldése levélben</translation>
@@ -33,6 +34,7 @@
 <translation id="2486841023299517366">Állat 4</translation>
 <translation id="2612127540243995147">Telepítésre kész. A Vivaldi most bezáródik, majd újraindul.</translation>
 <translation id="2613387515621326337">Frissítési weboldal megjelenítése</translation>
+<translation id="2645477450146475243">Sajnos az Opera beállításai nem érhetők el, míg a böngésző fut. A beállítások Vivaldiba importálásához mentsd el a munkáid és zárj be minden Opera ablakot. Majd Tovább gomb.</translation>
 <translation id="2647368062414805334">Sajnos az Edge beállításai nem érhetők el, míg a böngésző fut. A beállítások Vivaldiba importálásához mentsd el a munkáid és zárj be minden Edge ablakot. Majd Tovább gomb.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Állat 3</translation>
@@ -41,11 +43,14 @@
 <translation id="2923448633003185837">Beillesztés és felkeresés</translation>
 <translation id="2953943267837858202">A videók automatikus lejátszása nem engedélyezett</translation>
 <translation id="2977472760057091832">Hivatkozás megnyitása privát ablakban</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Megnyitás új lapon</translation>
 <translation id="3027988479108856431">Sajnos a Yandex beállításaid nem érhetők el, míg a böngésző fut. Hogy beimportáld azon beállításokat a Vivaldiba, mentsd el a munkáidat és zárj be minden Yandex ablakot, majd kattints a Folytatás gombra.</translation>
 <translation id="3084011186245865060">Tájkép 6</translation>
+<translation id="3085906383264247940">Opera (Béta)</translation>
 <translation id="3093931836425623631">A Vivaldi működését a Chromium nyílt forráskódú projekt és egyéb nyílt forráskódú szoftverek teszik lehetővé.</translation>
 <translation id="3127383884976966729">Állat 7</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">Új könyvjelző</translation>
 <translation id="3255747772218936245">Frissítés telepítése</translation>
 <translation id="3259769196742189631">Érvényesítés</translation>
@@ -54,7 +59,6 @@
 <translation id="3334610655141903168">(nincs cím)</translation>
 <translation id="3372505110412186107">A Vivaldi <ph name="VERSION" /> a jelenlegi legfrissebb verzió.</translation>
 <translation id="3383198080133834965">Naprakész vagy!</translation>
-<translation id="3402602684546832928">Opera könyvjelző fájl kiválasztása</translation>
 <translation id="3451317331714872347">Tájkép 8</translation>
 <translation id="3457498675806041407">Kilépés megerősítése</translation>
 <translation id="3470981972195599598">A Vivaldi <ph name="VERSION" /> már telepítve van és a böngésző újraindítását követően aktiválódik.</translation>
@@ -65,6 +69,7 @@
 <translation id="3588820906588687999">Kép megnyitása új lapon</translation>
 <translation id="3601066750251199488">Szörny 3</translation>
 <translation id="3620979700683094848">A webhelyek automatikusan lejátszhatnak videókat</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Új Vivaldi verzió érhető el!</translation>
 <translation id="3708982624815781692">A letöltés megszakítva.</translation>
 <translation id="3732157130969736834">Könyvjelző hivatkozás</translation>
@@ -88,7 +93,6 @@
 <translation id="443008484043213881">Eszközök</translation>
 <translation id="4456211719108566931">Szörny 6</translation>
 <translation id="4512900838580567989">Hivatkozás megnyitása új háttérbeli lapon</translation>
-<translation id="4515472507709384008">Opera verzió 15+</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Kép megnyitása háttérbeli lapon</translation>
 <translation id="4582480609585453144">Hivatkozás megnyitása háttérbeli lapon</translation>
@@ -105,11 +109,11 @@
 <translation id="5238244642230426581">Importált könyvjelzők</translation>
 <translation id="527605719918376753">Lap hangjának némítása</translation>
 <translation id="5305569355661722298">Ablak bezárásának megerősítése</translation>
+<translation id="5322922669477407077">Opera (Fejlesztői)</translation>
 <translation id="5388358297987318779">Kép megnyitása</translation>
 <translation id="5416008465899576639">Új Vivaldi verzió érhető el.</translation>
 <translation id="5497042274492038489">Ablak bezárásának megerősítése</translation>
 <translation id="5594602170491763400">Szörny 5</translation>
-<translation id="5615637589913244581">Opera verzió 15+ (Béta)</translation>
 <translation id="5648110075441906505">Kép megnyitása új ablakban</translation>
 <translation id="5656371807944747581">Frissítési hiba!</translation>
 <translation id="5732584064771442623">Elérhető a Vivaldi <ph name="NEW_VERSION" /> (telepített: <ph name="OLD_VERSION" />). Szeretnéd most letölteni?</translation>
@@ -120,7 +124,6 @@
 <translation id="6040143037577758943">Bezárás</translation>
 <translation id="6229528619562190452">Kattints ide a Vivaldi frissítéséhez.</translation>
 <translation id="6234173136417926046">Kép beállítása Induló oldal háttereként</translation>
-<translation id="630690498669249215">Opera könyvjelző fájl</translation>
 <translation id="6339818817272922368">Helyi fiók</translation>
 <translation id="6438786710866753178">Tájkép 4</translation>
 <translation id="6477028720702061455">Opera profil mappa kiválasztása importáláshoz</translation>
@@ -131,11 +134,11 @@
 <translation id="6635049669875534328">Kiadási megjegyzések:</translation>
 <translation id="6693585104974197539">Importálandó Edge profil kiválasztása</translation>
 <translation id="6726279523566323394">Importálandó Brave profil kiválasztása</translation>
-<translation id="6804831687363620480">Sajnos az Opera 15+ beállításaid nem érhetők el, míg a böngésző fut. Hogy beimportáld azon beállításokat a Vivaldiba, mentsd el a munkáidat és zárj be minden Opera 15+ ablakot, majd kattints a Folytatás gombra.</translation>
 <translation id="6892812721183419409">Hivatkozás megnyitása mint <ph name="USER" /></translation>
 <translation id="6896758677409633944">Másolás</translation>
 <translation id="7086554968911045110">Tájkép 7</translation>
 <translation id="7111492742514999492">Tájkép 9</translation>
+<translation id="7208252576848052204">Sajnos az Arc beállításai nem érhetők el, míg a böngésző fut. A beállítások Vivaldiba importálásához mentsd el a munkáid és zárj be minden Arc ablakot. Majd Tovább gomb.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">A frissítés telepítőjét nem sikerült elindítani. Ellenőrizd, hogy a számítógépben van elegendő memória és lemezterület, és később próbáld újra.</translation>
 <translation id="7658239707568436148">Mégse</translation>
@@ -162,7 +165,6 @@
 <translation id="8562339533180097902">Vivaldi bezárása és telepítés</translation>
 <translation id="8567452685425968223">Frissítés kibontása...</translation>
 <translation id="8624587806981488221">Kép új&amp;ratöltése</translation>
-<translation id="864444594187862076">Opera verzió 15+ (Fejlesztői)</translation>
 <translation id="8651348004684669199">Aktív fül hozzáadása</translation>
 <translation id="8669345741879513971">Szörny 10</translation>
 <translation id="867544375504146191">Yandex</translation>
@@ -178,6 +180,7 @@
 <translation id="9048058608784130603">Függő <ph name="VERSION" /> frissítés</translation>
 <translation id="9048224371732578627">Videók automatikus lejátszásának engedélyezése</translation>
 <translation id="9065203028668620118">Szerkesztés</translation>
+<translation id="9090254883741610153">Folytatni szeretném</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Kép megnyitása mint <ph name="USER" /></translation>
 <translation id="9157539936604258187">Hivatkozás megnyitása</translation>

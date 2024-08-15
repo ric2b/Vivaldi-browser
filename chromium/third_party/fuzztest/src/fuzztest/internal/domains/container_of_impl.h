@@ -77,9 +77,9 @@ using ContainerOfImplBaseCorpusType = std::conditional_t<
 
 // Common base for container domains. Provides common APIs.
 template <typename Derived>
-class ContainerOfImplBase
-    : public DomainBase<Derived, ExtractTemplateParameter<0, Derived>,
-                        ContainerOfImplBaseCorpusType<Derived>> {
+class ContainerOfImplBase : public domain_implementor::DomainBase<
+                                Derived, ExtractTemplateParameter<0, Derived>,
+                                ContainerOfImplBaseCorpusType<Derived>> {
   using InnerDomainT = ExtractTemplateParameter<1, Derived>;
 
  public:
@@ -247,7 +247,8 @@ class ContainerOfImplBase
   }
 
   auto GetPrinter() const {
-    if constexpr (std::is_same_v<value_type, std::string>) {
+    if constexpr (std::is_same_v<value_type, std::string> ||
+                  std::is_same_v<value_type, std::vector<uint8_t>>) {
       // std::string has special handling for better output
       return StringPrinter{};
     } else {

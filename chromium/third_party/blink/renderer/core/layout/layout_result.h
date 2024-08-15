@@ -5,9 +5,10 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_RESULT_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_RESULT_H_
 
+#include <optional>
+
 #include "base/check_op.h"
 #include "base/dcheck_is_on.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/block_node.h"
@@ -53,7 +54,8 @@ class CORE_EXPORT LayoutResult final : public GarbageCollected<LayoutResult> {
     kNeedsRelayoutWithNoForcedTruncateAtLineClamp = 4,
     kDisableFragmentation = 5,
     kNeedsRelayoutWithNoChildScrollbarChanges = 6,
-    kAlgorithmSpecific1 = 7,  // Save bits by using the same value for mutually
+    kTextBoxTrimEndDidNotApply = 7,
+    kAlgorithmSpecific1 = 8,  // Save bits by using the same value for mutually
                               // exclusive results.
     kNeedsRelayoutWithRowCrossSizeChanges = kAlgorithmSpecific1,
     kNeedsRelayoutAsLastTableBox = kAlgorithmSpecific1,
@@ -78,7 +80,7 @@ class CORE_EXPORT LayoutResult final : public GarbageCollected<LayoutResult> {
                const ConstraintSpace& new_space,
                const MarginStrut& new_end_margin_strut,
                LayoutUnit bfc_line_offset,
-               absl::optional<LayoutUnit> bfc_block_offset,
+               std::optional<LayoutUnit> bfc_block_offset,
                LayoutUnit block_offset_delta);
 
   // Creates a copy of LayoutResult with a new (but "identical") fragment.
@@ -109,6 +111,10 @@ class CORE_EXPORT LayoutResult final : public GarbageCollected<LayoutResult> {
 
   int LinesUntilClamp() const {
     return rare_data_ ? rare_data_->lines_until_clamp : 0;
+  }
+
+  bool IsTextBoxTrimApplied() const {
+    return rare_data_ && rare_data_->text_box_trim_is_applied();
   }
 
   // Return true if this is an orthogonal writing-mode root that depends on the
@@ -171,15 +177,6 @@ class CORE_EXPORT LayoutResult final : public GarbageCollected<LayoutResult> {
   // positioned nodes are set.
   void CopyMutableOutOfFlowData(const LayoutResult& previous_result) const;
 
-  // Returns if we can use the first-tier OOF-positioned cache.
-  bool CanUseOutOfFlowPositionedFirstTierCache() const {
-    DCHECK(physical_fragment_->IsOutOfFlowPositioned());
-    return bitfields_.can_use_out_of_flow_positioned_first_tier_cache;
-  }
-
-  absl::optional<wtf_size_t> PositionFallbackIndex() const {
-    return rare_data_ ? rare_data_->PositionFallbackIndex() : absl::nullopt;
-  }
   const Vector<NonOverflowingScrollRange>*
   PositionFallbackNonOverflowingRanges() const {
     return rare_data_ ? rare_data_->PositionFallbackNonOverflowingRanges()
@@ -243,14 +240,14 @@ class CORE_EXPORT LayoutResult final : public GarbageCollected<LayoutResult> {
     return bfc_offset_.line_offset;
   }
 
-  const absl::optional<LayoutUnit> BfcBlockOffset() const {
+  const std::optional<LayoutUnit> BfcBlockOffset() const {
     if (bitfields_.has_oof_insets_for_get_computed_style) {
       DCHECK(physical_fragment_->IsOutOfFlowPositioned());
       return LayoutUnit();
     }
 
     if (bitfields_.is_bfc_block_offset_nullopt)
-      return absl::nullopt;
+      return std::nullopt;
 
     return bfc_offset_.block_offset;
   }
@@ -268,15 +265,16 @@ class CORE_EXPORT LayoutResult final : public GarbageCollected<LayoutResult> {
   //
   // In the above example the |BfcBlockOffset()| will be at 0px, where-as the
   // |LineBoxBfcBlockOffset()| will be at 20px.
-  absl::optional<LayoutUnit> LineBoxBfcBlockOffset() const {
+  std::optional<LayoutUnit> LineBoxBfcBlockOffset() const {
     if (Status() != kSuccess || !GetPhysicalFragment().IsLineBox()) {
-      return absl::nullopt;
+      return std::nullopt;
     }
 
     if (rare_data_) {
-      if (absl::optional<LayoutUnit> offset =
-              rare_data_->LineBoxBfcBlockOffset())
+      if (std::optional<LayoutUnit> offset =
+              rare_data_->LineBoxBfcBlockOffset()) {
         return offset;
+      }
     }
 
     return BfcBlockOffset();
@@ -315,10 +313,10 @@ class CORE_EXPORT LayoutResult final : public GarbageCollected<LayoutResult> {
     return data ? data->clearance_after_line : LayoutUnit();
   }
 
-  absl::optional<LayoutUnit> MinimalSpaceShortage() const {
+  std::optional<LayoutUnit> MinimalSpaceShortage() const {
     if (!rare_data_ || space_.IsInitialColumnBalancingPass() ||
         rare_data_->minimal_space_shortage == kIndefiniteSize) {
-      return absl::nullopt;
+      return std::nullopt;
     }
     return rare_data_->minimal_space_shortage;
   }
@@ -489,18 +487,13 @@ class CORE_EXPORT LayoutResult final : public GarbageCollected<LayoutResult> {
    protected:
     friend class OutOfFlowLayoutPart;
 
-    void SetOutOfFlowInsetsForGetComputedStyle(
-        const BoxStrut& insets,
-        bool can_use_out_of_flow_positioned_first_tier_cache) {
+    void SetOutOfFlowInsetsForGetComputedStyle(const BoxStrut& insets) {
       // OOF-positioned nodes *must* always have an initial BFC-offset.
       DCHECK(layout_result_->physical_fragment_->IsOutOfFlowPositioned());
       DCHECK_EQ(layout_result_->BfcLineOffset(), LayoutUnit());
       DCHECK_EQ(layout_result_->BfcBlockOffset().value_or(LayoutUnit()),
                 LayoutUnit());
 
-      layout_result_->bitfields_
-          .can_use_out_of_flow_positioned_first_tier_cache =
-          can_use_out_of_flow_positioned_first_tier_cache;
       layout_result_->bitfields_.has_oof_insets_for_get_computed_style = true;
       layout_result_->oof_insets_for_get_computed_style_ = insets;
     }
@@ -534,10 +527,9 @@ class CORE_EXPORT LayoutResult final : public GarbageCollected<LayoutResult> {
     }
 
     void SetPositionFallbackResult(
-        absl::optional<wtf_size_t> fallback_index,
         const Vector<NonOverflowingScrollRange>& non_overflowing_ranges) {
       layout_result_->EnsureRareData()->SetPositionFallbackResult(
-          fallback_index, non_overflowing_ranges);
+          non_overflowing_ranges);
     }
 
    private:
@@ -625,7 +617,7 @@ class CORE_EXPORT LayoutResult final : public GarbageCollected<LayoutResult> {
       kTableData,
     };
 
-    using BitField = WTF::ConcurrentlyReadBitField<uint8_t>;
+    using BitField = WTF::ConcurrentlyReadBitField<uint16_t>;
     using LineBoxBfcBlockOffsetIsSetFlag = BitField::DefineFirstValue<bool, 1>;
     using PositionFallbackResultIsSetFlag =
         LineBoxBfcBlockOffsetIsSetFlag::DefineNextValue<bool, 1>;
@@ -637,6 +629,8 @@ class CORE_EXPORT LayoutResult final : public GarbageCollected<LayoutResult> {
         NeedsAnchorPositionScrollAdjustmentInXFlag::DefineNextValue<bool, 1>;
     using DataUnionTypeValue =
         NeedsAnchorPositionScrollAdjustmentInYFlag::DefineNextValue<uint8_t, 3>;
+    using TextBoxTrimIsAppliedFlag =
+        DataUnionTypeValue::DefineNextValue<bool, 1>;
 
     struct BlockData {
       GC_PLUGIN_IGNORE("crbug.com/1146383")
@@ -726,6 +720,14 @@ class CORE_EXPORT LayoutResult final : public GarbageCollected<LayoutResult> {
       return bit_field.set<DataUnionTypeValue>(static_cast<uint8_t>(data_type));
     }
 
+    bool text_box_trim_is_applied() const {
+      return bit_field.get<TextBoxTrimIsAppliedFlag>();
+    }
+
+    void set_text_box_trim_is_applied() {
+      bit_field.set<TextBoxTrimIsAppliedFlag>(true);
+    }
+
     template <typename DataType>
     DataType* EnsureData(DataType* address, DataUnionType data_type) {
       DataUnionType old_data_type = data_union_type();
@@ -794,7 +796,6 @@ class CORE_EXPORT LayoutResult final : public GarbageCollected<LayoutResult> {
           block_end_annotation_space(rare_data.block_end_annotation_space),
           lines_until_clamp(rare_data.lines_until_clamp),
           line_box_bfc_block_offset(rare_data.line_box_bfc_block_offset),
-          position_fallback_index(rare_data.position_fallback_index),
           position_fallback_non_overflowing_ranges(
               rare_data.position_fallback_non_overflowing_ranges),
           oof_positioned_offset(rare_data.oof_positioned_offset),
@@ -856,21 +857,16 @@ class CORE_EXPORT LayoutResult final : public GarbageCollected<LayoutResult> {
       line_box_bfc_block_offset = offset;
       set_line_box_bfc_block_offset_is_set(true);
     }
-    absl::optional<LayoutUnit> LineBoxBfcBlockOffset() const {
+    std::optional<LayoutUnit> LineBoxBfcBlockOffset() const {
       if (!line_box_bfc_block_offset_is_set())
-        return absl::nullopt;
+        return std::nullopt;
       return line_box_bfc_block_offset;
     }
 
     void SetPositionFallbackResult(
-        absl::optional<wtf_size_t> fallback_index,
         const Vector<NonOverflowingScrollRange>& non_overflowing_ranges) {
-      position_fallback_index = fallback_index;
       position_fallback_non_overflowing_ranges = non_overflowing_ranges;
       set_position_fallback_result_is_set(true);
-    }
-    absl::optional<wtf_size_t> PositionFallbackIndex() const {
-      return position_fallback_index;
     }
     const Vector<NonOverflowingScrollRange>*
     PositionFallbackNonOverflowingRanges() const {
@@ -918,8 +914,6 @@ class CORE_EXPORT LayoutResult final : public GarbageCollected<LayoutResult> {
     // Only valid if line_box_bfc_block_offset_is_set
     LayoutUnit line_box_bfc_block_offset;
 
-    absl::optional<wtf_size_t> position_fallback_index;
-
     // Only valid if position_fallback_result_is_set
     Vector<NonOverflowingScrollRange> position_fallback_non_overflowing_ranges;
 
@@ -962,7 +956,6 @@ class CORE_EXPORT LayoutResult final : public GarbageCollected<LayoutResult> {
               bool subtree_modified_margin_strut)
         : has_rare_data_exclusion_space(false),
           has_oof_insets_for_get_computed_style(false),
-          can_use_out_of_flow_positioned_first_tier_cache(false),
           is_bfc_block_offset_nullopt(false),
           has_forced_break(false),
           break_appeal(kBreakAppealPerfect),
@@ -984,7 +977,6 @@ class CORE_EXPORT LayoutResult final : public GarbageCollected<LayoutResult> {
 
     unsigned has_rare_data_exclusion_space : 1;
     unsigned has_oof_insets_for_get_computed_style : 1;
-    unsigned can_use_out_of_flow_positioned_first_tier_cache : 1;
     unsigned is_bfc_block_offset_nullopt : 1;
 
     unsigned has_forced_break : 1;
@@ -1005,7 +997,7 @@ class CORE_EXPORT LayoutResult final : public GarbageCollected<LayoutResult> {
     unsigned initial_break_before : 4;  // EBreakBetween
     unsigned final_break_after : 4;     // EBreakBetween
 
-    unsigned status : 3;  // EStatus
+    unsigned status : 4;  // EStatus
     unsigned is_truncated_by_fragmentation_line : 1;
     unsigned has_orthogonal_fallback_size_descendant : 1;
   };

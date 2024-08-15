@@ -55,7 +55,7 @@ const deletePropertyByBackspace = async (selector: string, root?: puppeteer.Elem
   await waitFor('.tree-outline .child-editing', root);
 };
 
-describe('The Styles pane', async () => {
+describe('The Styles pane', () => {
   it(
       'can display the CSS properties of the selected element', async () => {
         await goToResourceAndWaitForStyleSection('elements/simple-styled-page.html');
@@ -245,7 +245,13 @@ describe('The Styles pane', async () => {
             selectorText: '#properties-to-inspect',
             propertyData: [{propertyName: 'width', isOverLoaded: false, isInherited: false}],
           },
-          {selectorText: 'div', propertyData: [{propertyName: 'display', isOverLoaded: false, isInherited: false}]},
+          {
+            selectorText: 'div',
+            propertyData: [
+              {propertyName: 'display', isOverLoaded: false, isInherited: false},
+              {propertyName: 'unicode-bidi', isOverLoaded: false, isInherited: false},
+            ],
+          },
         ],
         'The correct rule is displayed');
   });
@@ -383,7 +389,7 @@ describe('The Styles pane', async () => {
     const rule1PropertiesSection = await getStyleRule(RULE1_SELECTOR);
     const supportsQuery = await waitFor('.query.editable', rule1PropertiesSection);
     const supportsQueryText = await supportsQuery.evaluate(node => (node as HTMLElement).innerText as string);
-    assert.deepEqual(supportsQueryText, '@supports (width: 10px)', 'incorrectly displayed @supports rule');
+    assert.deepEqual(supportsQueryText, '@supports (width: 10px) {', 'incorrectly displayed @supports rule');
   });
 
   it('can display @layer separators', async () => {
@@ -397,7 +403,6 @@ describe('The Styles pane', async () => {
       const layers = await $$(LAYER_SEPARATOR_SELECTOR);
       return layers.length === 6 ? layers : null;
     });
-    assertNotNullOrUndefined(layerSeparators);
 
     const layerText = await Promise.all(layerSeparators.map(element => element.evaluate(node => node.textContent)));
     assert.deepEqual(layerText, [
@@ -522,7 +527,6 @@ describe('The Styles pane', async () => {
       const separators = await $$(SIDEBAR_SEPARATOR_SELECTOR);
       return separators.length === 8 ? separators : null;
     });
-    assertNotNullOrUndefined(sidebarSeparators);
 
     const layerText = await Promise.all(sidebarSeparators.map(element => element.evaluate(node => node.textContent)));
     assert.deepEqual(layerText, [
@@ -807,6 +811,7 @@ describe('The Styles pane', async () => {
       'margin-left: 10px;',
       'margin-left: 20px;',
       'display: block;',
+      'unicode-bidi: isolate;',
     ]);
   });
 

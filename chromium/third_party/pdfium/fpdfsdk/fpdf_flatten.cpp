@@ -30,8 +30,8 @@
 #include "core/fpdfapi/parser/fpdf_parser_utility.h"
 #include "core/fpdfdoc/cpdf_annot.h"
 #include "core/fxcrt/fx_string_wrappers.h"
+#include "core/fxcrt/notreached.h"
 #include "fpdfsdk/cpdfsdk_helpers.h"
-#include "third_party/base/notreached.h"
 
 enum FPDF_TYPE { MAX, MIN };
 enum FPDF_VALUE { TOP, LEFT, RIGHT, BOTTOM };
@@ -182,7 +182,7 @@ RetainPtr<CPDF_Reference> NewIndirectContentsStreamReference(
     const ByteString& contents) {
   auto pNewContents =
       pDocument->NewIndirect<CPDF_Stream>(pDocument->New<CPDF_Dictionary>());
-  pNewContents->SetData(contents.raw_span());
+  pNewContents->SetData(contents.unsigned_span());
   return pNewContents->MakeReference(pDocument);
 }
 
@@ -215,7 +215,7 @@ void SetPageContents(const ByteString& key,
       sStream += ByteString(pAcc->GetSpan());
       sStream += "\nQ";
     }
-    pContentsStream->SetDataAndRemoveFilter(sStream.raw_span());
+    pContentsStream->SetDataAndRemoveFilter(sStream.unsigned_span());
     pContentsArray = pDocument->NewIndirect<CPDF_Array>();
     pContentsArray->AppendNew<CPDF_Reference>(pDocument,
                                               pContentsStream->GetObjNum());
@@ -338,59 +338,65 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFPage_Flatten(FPDF_PAGE page, int nFlag) {
     if (!pAnnotAP)
       continue;
 
-    RetainPtr<CPDF_Stream> pAPStream = pAnnotAP->GetMutableStreamFor("N");
-    if (!pAPStream) {
-      RetainPtr<CPDF_Dictionary> pAPDict = pAnnotAP->GetMutableDictFor("N");
-      if (!pAPDict)
+    RetainPtr<CPDF_Stream> original_ap_stream =
+        pAnnotAP->GetMutableStreamFor("N");
+    if (!original_ap_stream) {
+      RetainPtr<CPDF_Dictionary> original_ap_dict =
+          pAnnotAP->GetMutableDictFor("N");
+      if (!original_ap_dict) {
         continue;
+      }
 
       if (!sAnnotState.IsEmpty()) {
-        pAPStream = pAPDict->GetMutableStreamFor(sAnnotState);
+        original_ap_stream = original_ap_dict->GetMutableStreamFor(sAnnotState);
       } else {
-        if (pAPDict->size() > 0) {
-          CPDF_DictionaryLocker locker(pAPDict);
+        if (original_ap_dict->size() > 0) {
+          CPDF_DictionaryLocker locker(original_ap_dict);
           RetainPtr<CPDF_Object> pFirstObj = locker.begin()->second;
           if (pFirstObj) {
             if (pFirstObj->IsReference())
               pFirstObj = pFirstObj->GetMutableDirect();
             if (!pFirstObj->IsStream())
               continue;
-            pAPStream.Reset(pFirstObj->AsMutableStream());
+            original_ap_stream.Reset(pFirstObj->AsMutableStream());
           }
         }
       }
     }
-    if (!pAPStream)
+    if (!original_ap_stream) {
       continue;
+    }
 
-    RetainPtr<const CPDF_Dictionary> pAPDict = pAPStream->GetDict();
+    RetainPtr<const CPDF_Dictionary> original_ap_stream_dict =
+        original_ap_stream->GetDict();
     CFX_FloatRect rcStream;
-    if (pAPDict->KeyExist("Rect"))
-      rcStream = pAPDict->GetRectFor("Rect");
-    else if (pAPDict->KeyExist("BBox"))
-      rcStream = pAPDict->GetRectFor("BBox");
+    if (original_ap_stream_dict->KeyExist("Rect")) {
+      rcStream = original_ap_stream_dict->GetRectFor("Rect");
+    } else if (original_ap_stream_dict->KeyExist("BBox")) {
+      rcStream = original_ap_stream_dict->GetRectFor("BBox");
+    }
     rcStream.Normalize();
 
     if (rcStream.IsEmpty())
       continue;
 
-    RetainPtr<CPDF_Object> pObj = pAPStream;
-    if (pObj->IsInline()) {
-      pObj = pObj->Clone();
-      pDocument->AddIndirectObject(pObj);
+    RetainPtr<CPDF_Stream> ap_stream;
+    if (original_ap_stream->IsInline()) {
+      ap_stream = ToStream(original_ap_stream->Clone());
+      pDocument->AddIndirectObject(ap_stream);
+    } else {
+      ap_stream = original_ap_stream;
     }
 
-    RetainPtr<CPDF_Dictionary> pObjDict = pObj->GetMutableDict();
-    if (pObjDict) {
-      pObjDict->SetNewFor<CPDF_Name>("Type", "XObject");
-      pObjDict->SetNewFor<CPDF_Name>("Subtype", "Form");
-    }
+    RetainPtr<CPDF_Dictionary> ap_stream_dict = ap_stream->GetMutableDict();
+    ap_stream_dict->SetNewFor<CPDF_Name>("Type", "XObject");
+    ap_stream_dict->SetNewFor<CPDF_Name>("Subtype", "Form");
 
     RetainPtr<CPDF_Dictionary> pXObject =
         pNewXORes->GetOrCreateDictFor("XObject");
     ByteString sFormName = ByteString::Format("F%d", i);
     pXObject->SetNewFor<CPDF_Reference>(sFormName, pDocument,
-                                        pObj->GetObjNum());
+                                        ap_stream->GetObjNum());
 
     ByteString sStream;
     {
@@ -398,7 +404,7 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFPage_Flatten(FPDF_PAGE page, int nFlag) {
       pAcc->LoadAllDataFiltered();
       sStream = ByteString(pAcc->GetSpan());
     }
-    CFX_Matrix matrix = pAPDict->GetMatrixFor("Matrix");
+    CFX_Matrix matrix = original_ap_stream_dict->GetMatrixFor("Matrix");
     CFX_Matrix m = GetMatrix(rcAnnot, rcStream, matrix);
     m.b = 0;
     m.c = 0;
@@ -407,7 +413,7 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFPage_Flatten(FPDF_PAGE page, int nFlag) {
     ByteString str(buf);
     sStream += ByteString::Format("q %s cm /%s Do Q\n", str.c_str(),
                                   sFormName.c_str());
-    pNewXObject->SetDataAndRemoveFilter(sStream.raw_span());
+    pNewXObject->SetDataAndRemoveFilter(sStream.unsigned_span());
   }
   pPageDict->RemoveFor("Annots");
   return FLATTEN_SUCCESS;

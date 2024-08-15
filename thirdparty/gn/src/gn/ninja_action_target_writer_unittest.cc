@@ -217,7 +217,6 @@ TEST(NinjaActionTargetWriter, ActionWithOrderOnlyDeps) {
   EXPECT_EQ(expected, out.str());
 }
 
-
 TEST(NinjaActionTargetWriter, ForEach) {
   Err err;
   TestWithScope setup;
@@ -635,12 +634,15 @@ TEST(NinjaActionTargetWriter, ActionWithSpaces) {
   writer.Run();
 
   const char expected[] =
-      R"(rule __foo_bar___rule)" "\n"
+      R"(rule __foo_bar___rule)"
+      "\n"
 // Escaping is different between Windows and Posix.
 #if defined(OS_WIN)
-      R"(  command = "/Program$ Files/python" "../../foo/my$ script.py" "my$ argument")" "\n"
+      R"(  command = "/Program$ Files/python" "../../foo/my$ script.py" "my$ argument")"
+      "\n"
 #else
-      R"(  command = /Program\$ Files/python ../../foo/my\$ script.py my\$ argument)" "\n"
+      R"(  command = /Program\$ Files/python ../../foo/my\$ script.py my\$ argument)"
+      "\n"
 #endif
       R"(  description = ACTION //foo:bar()
   restat = 1

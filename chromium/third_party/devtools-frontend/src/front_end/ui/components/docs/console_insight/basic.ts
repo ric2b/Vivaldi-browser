@@ -2,31 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as FrontendHelpers from '../../../../../test/unittests/front_end/helpers/EnvironmentHelpers.js';
-import * as ComponentHelpers from '../../helpers/helpers.js';
 import * as Explain from '../../../../panels/explain/explain.js';
+import * as FrontendHelpers from '../../../../testing/EnvironmentHelpers.js';
+import * as ComponentHelpers from '../../helpers/helpers.js';
 
 await ComponentHelpers.ComponentServerSetup.setup();
 await FrontendHelpers.initializeGlobalVars();
 
 const ConsoleInsight = Explain.ConsoleInsight;
 
-let count = 0;
-
 const component = new ConsoleInsight(
     {
+      getSearchQuery() {
+        return '';
+      },
       async buildPrompt() {
-        count++;
-
-        if (count === 1) {
-          return {
-            prompt: '',
-            sources: [{
-              type: Explain.SourceType.MESSAGE,
-              value: 'Something went wrong\n\nSomething went wrong',
-            }],
-          };
-        }
         return {
           prompt: '',
           sources: [
@@ -80,10 +70,11 @@ Response status: 404`,
       },
     },
     {
-      async getInsights() {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        if (count > 1) {
-          return `Some text with \`code\`. Some code:
+      async *
+          fetch() {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            yield {
+              explanation: `Some text with \`code\`. Some code:
 \`\`\`ts
 console.log('test');
 document.querySelector('test').style = 'black';
@@ -98,28 +89,13 @@ Some text with \`code\`. Some code:
 console.log('test');
 document.querySelector('test').style = 'black';
 \`\`\`
-`;
-        }
-        return `## Result
-
-Some text with \`code\`. Some code:
-\`\`\`ts
-console.log('test');
-document.querySelector('test').style = 'black';
-\`\`\`
-
-Links: [https://example.com](https://example.com)
-Images: ![https://example.com](https://example.com)
-`;
-      },
+`,
+              metadata: {},
+            };
+          },
+    },
+    {
+      isSyncActive: true,
+      accountEmail: 'some-email',
     });
-void component.update();
 document.getElementById('container')?.appendChild(component);
-
-const button = document.createElement('button');
-button.innerText = 'Toogle dogfood';
-button.style.margin = '10px';
-button.onclick = () => {
-  component.dogfood = !component.dogfood;
-};
-document.getElementById('container')?.append(button);

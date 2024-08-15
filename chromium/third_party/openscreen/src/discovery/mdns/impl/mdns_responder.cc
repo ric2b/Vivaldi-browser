@@ -105,7 +105,7 @@ inline AddResult AddAdditionalRecords(
     DnsType type,
     DnsClass clazz,
     bool add_negative_on_unknown) {
-  OSP_DCHECK(IsValidAdditionalRecordType(type));
+  OSP_CHECK(IsValidAdditionalRecordType(type));
 
   auto add_func = [message](MdnsRecord record) {
     message->AddAdditionalRecord(std::move(record));
@@ -136,7 +136,7 @@ void ApplyQueryResults(MdnsMessage* message,
                        DnsType type,
                        DnsClass clazz,
                        bool is_exclusive_owner) {
-  OSP_DCHECK(type != DnsType::kNSEC);
+  OSP_CHECK(type != DnsType::kNSEC);
 
   // All records matching the provided query which have been published by this
   // host should be added to the response message per RFC 6762 section 6. If
@@ -158,7 +158,7 @@ void ApplyQueryResults(MdnsMessage* message,
   if (type == DnsType::kPTR) {
     // Add all SRV and TXT records to the additional records section.
     for (const MdnsRecord& record : message->answers()) {
-      OSP_DCHECK(record.dns_type() == DnsType::kPTR);
+      OSP_CHECK(record.dns_type() == DnsType::kPTR);
 
       const DomainName& target =
           absl::get<PtrRecordRdata>(record.rdata()).ptr_domain();
@@ -201,7 +201,7 @@ void ApplyQueryResults(MdnsMessage* message,
     // their name and class match that which is being queried for, a negative
     // response NSEC record may be added to show their non-existence.
     for (const auto& srv_record : message->answers()) {
-      OSP_DCHECK(srv_record.dns_type() == DnsType::kSRV);
+      OSP_CHECK(srv_record.dns_type() == DnsType::kSRV);
 
       const DomainName& target =
           absl::get<SrvRecordRdata>(srv_record.rdata()).target();
@@ -298,15 +298,15 @@ MdnsResponder::TruncatedQuery::TruncatedQuery(MdnsResponder* responder,
       questions_(message.questions()),
       known_answers_(message.answers()),
       alarm_(now_function, task_runner) {
-  OSP_DCHECK(responder_);
-  OSP_DCHECK_GT(max_allowed_messages_, 0);
-  OSP_DCHECK_GT(max_allowed_records_, 0);
+  OSP_CHECK(responder_);
+  OSP_CHECK_GT(max_allowed_messages_, 0);
+  OSP_CHECK_GT(max_allowed_records_, 0);
 
   RescheduleSend();
 }
 
 void MdnsResponder::TruncatedQuery::SetQuery(const MdnsMessage& message) {
-  OSP_DCHECK(questions_.empty());
+  OSP_CHECK(questions_.empty());
   questions_.insert(questions_.end(), message.questions().begin(),
                     message.questions().end());
 
@@ -378,13 +378,13 @@ MdnsResponder::MdnsResponder(RecordHandler* record_handler,
       now_function_(now_function),
       random_delay_(random_delay),
       config_(config) {
-  OSP_DCHECK(record_handler_);
-  OSP_DCHECK(ownership_handler_);
-  OSP_DCHECK(sender_);
-  OSP_DCHECK(receiver_);
-  OSP_DCHECK(random_delay_);
-  OSP_DCHECK_GT(config_.maximum_truncated_messages_per_query, 0);
-  OSP_DCHECK_GT(config_.maximum_concurrent_truncated_queries_per_interface, 0);
+  OSP_CHECK(record_handler_);
+  OSP_CHECK(ownership_handler_);
+  OSP_CHECK(sender_);
+  OSP_CHECK(receiver_);
+  OSP_CHECK(random_delay_);
+  OSP_CHECK_GT(config_.maximum_truncated_messages_per_query, 0);
+  OSP_CHECK_GT(config_.maximum_concurrent_truncated_queries_per_interface, 0);
 
   auto func = [this](const MdnsMessage& message, const IPEndpoint& src) {
     OnMessageReceived(message, src);
@@ -398,8 +398,8 @@ MdnsResponder::~MdnsResponder() {
 
 void MdnsResponder::OnMessageReceived(const MdnsMessage& message,
                                       const IPEndpoint& src) {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
-  OSP_DCHECK(message.type() == MessageType::Query);
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(message.type() == MessageType::Query);
 
   // Handle multi-packet known answer suppression.
   if (IsMultiPacketTruncatedQueryMessage(message)) {
@@ -442,7 +442,7 @@ void MdnsResponder::ProcessMultiPacketTruncatedMessage(
 
   const bool message_has_question = !message.questions().empty();
   const bool message_is_truncated = message.is_truncated();
-  OSP_DCHECK(!message_has_question || message_is_truncated);
+  OSP_CHECK(!message_has_question || message_is_truncated);
 
   auto pair =
       truncated_queries_.emplace(src, std::unique_ptr<TruncatedQuery>());
@@ -551,7 +551,7 @@ void MdnsResponder::ProcessQueries(
         sender_->SendMulticast(message);
       };
     } else {
-      OSP_DCHECK(question.response_type() == ResponseType::kUnicast);
+      OSP_CHECK(question.response_type() == ResponseType::kUnicast);
       send_response = [this, src](const MdnsMessage& message) {
         sender_->SendMessage(message, src);
       };
@@ -579,7 +579,7 @@ void MdnsResponder::SendResponse(
     const std::vector<MdnsRecord>& known_answers,
     std::function<void(const MdnsMessage&)> send_response,
     bool is_exclusive_owner) {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 
   MdnsMessage message(CreateMessageId(), MessageType::Response);
 

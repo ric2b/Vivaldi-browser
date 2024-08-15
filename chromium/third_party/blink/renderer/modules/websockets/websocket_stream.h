@@ -5,7 +5,12 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_WEBSOCKETS_WEBSOCKET_STREAM_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_WEBSOCKETS_WEBSOCKET_STREAM_H_
 
+#include <stdint.h>
+
+#include <optional>
+
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise_property.h"
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
@@ -22,12 +27,11 @@ namespace blink {
 
 class ExceptionState;
 class ExecutionContext;
-class ScriptPromise;
-class ScriptPromiseResolver;
 class ScriptState;
 class ScriptValue;
 class WebSocketChannel;
 class WebSocketCloseInfo;
+class WebSocketOpenInfo;
 class WebSocketStreamOptions;
 
 // Implements of JavaScript-exposed WebSocketStream API. See design doc at
@@ -59,8 +63,8 @@ class MODULES_EXPORT WebSocketStream final
 
   // IDL properties
   const KURL& url() const { return common_.Url(); }
-  ScriptPromise opened(ScriptState*) const;
-  ScriptPromise closed(ScriptState*) const;
+  ScriptPromiseTyped<WebSocketOpenInfo> opened(ScriptState*) const;
+  ScriptPromiseTyped<WebSocketCloseInfo> closed(ScriptState*) const;
 
   // IDL functions
   void close(WebSocketCloseInfo*, ExceptionState&);
@@ -105,23 +109,22 @@ class MODULES_EXPORT WebSocketStream final
   void CloseMaybeWithReason(ScriptValue maybe_reason, ExceptionState&);
 
   void CloseWithUnspecifiedCode(ExceptionState&);
-  void CloseInternal(int code,
+  void CloseInternal(std::optional<uint16_t> code,
                      const String& reason,
                      ExceptionState& exception_state);
   void OnAbort();
 
-  v8::Local<v8::Value> CreateNetworkErrorDOMException();
-  static WebSocketCloseInfo* MakeCloseInfo(uint16_t code, const String& reason);
+  // Create a WebSocketError with the supplied arguments.
+  v8::Local<v8::Value> CreateWebSocketError(
+      String message,
+      std::optional<uint16_t> close_code = std::nullopt,
+      String reason = String());
+  static WebSocketCloseInfo* MakeCloseInfo(uint16_t close_code,
+                                           const String& reason);
 
   const Member<ScriptState> script_state_;
-  const Member<ScriptPromiseResolver> opened_resolver_;
-  const Member<ScriptPromiseResolver> closed_resolver_;
-
-  // These need to be cached because the Promise() method on
-  // ScriptPromiseResolver doesn't work any more once the promise is resolved or
-  // rejected.
-  const TraceWrapperV8Reference<v8::Promise> opened_;
-  const TraceWrapperV8Reference<v8::Promise> closed_;
+  const Member<ScriptPromiseProperty<WebSocketOpenInfo, IDLAny>> opened_;
+  const Member<ScriptPromiseProperty<WebSocketCloseInfo, IDLAny>> closed_;
 
   Member<WebSocketChannel> channel_;
 

@@ -15,8 +15,7 @@ namespace blink {
 namespace {
 
 struct SameSizeAsInlineItem {
-  void* pointers[1];
-  UntracedMember<void*> members[1];
+  UntracedMember<void*> members[2];
   unsigned integers[3];
   unsigned bit_fields : 32;
 };
@@ -95,11 +94,11 @@ InlineItem::InlineItem(InlineItemType type,
 InlineItem::InlineItem(const InlineItem& other,
                        unsigned start,
                        unsigned end,
-                       scoped_refptr<const ShapeResult> shape_result)
+                       const ShapeResult* shape_result)
     : start_offset_(start),
       end_offset_(end),
-      shape_result_(shape_result),
       // Use atomic construction to allow for concurrently marking InlineItem.
+      shape_result_(shape_result, Member<ShapeResult>::AtomicInitializerTag{}),
       layout_object_(other.layout_object_,
                      Member<LayoutObject>::AtomicInitializerTag{}),
       type_(other.type_),
@@ -174,6 +173,10 @@ const char* InlineItem::InlineItemTypeToString(InlineItemType val) const {
       return "ListMarker";
     case kBidiControl:
       return "BidiControl";
+    case kOpenRubyColumn:
+      return "OpenRubyColumn";
+    case kCloseRubyColumn:
+      return "CloseRubyColumn";
   }
   NOTREACHED_NORETURN();
 }
@@ -239,7 +242,7 @@ String InlineItem::ToString() const {
   String object_info;
   if (const auto* layout_text = DynamicTo<LayoutText>(GetLayoutObject())) {
     object_info = layout_text->TransformedText().EncodeForDebugging();
-  } else {
+  } else if (GetLayoutObject()) {
     object_info = GetLayoutObject()->ToString();
   }
   return String::Format("InlineItem %s. %s", InlineItemTypeToString(Type()),
@@ -297,6 +300,7 @@ void InlineItem::CheckTextType(const String& text_content) const {
 #endif
 
 void InlineItem::Trace(Visitor* visitor) const {
+  visitor->Trace(shape_result_);
   visitor->Trace(layout_object_);
 }
 

@@ -23,19 +23,19 @@
 
 namespace blink {
 namespace {
-absl::optional<base::TimeTicks> MergeLargestContentfulPaintValues(
+std::optional<base::TimeTicks> MergeLargestContentfulPaintValues(
     const LargestContentfulPaintDetails& timing) {
   const uint64_t text_paint_size = timing.largest_text_paint_size;
   const uint64_t image_paint_size = timing.largest_image_paint_size;
   if (text_paint_size == 0 && image_paint_size == 0) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   const base::TimeTicks largest_text_paint = timing.largest_text_paint_time;
   const base::TimeTicks largest_image_paint = timing.largest_image_paint_time;
 
   if (text_paint_size == image_paint_size) {
-    return std::max(largest_text_paint, largest_image_paint);
+    return std::min(largest_text_paint, largest_image_paint);
   }
   return text_paint_size > image_paint_size ? largest_text_paint
                                             : largest_image_paint;
@@ -67,23 +67,20 @@ LargestContentfulPaintDetailsForReporting PerformanceTimingForReporting::
           MonotonicTimeToIntegerMilliseconds(timing.largest_text_paint_time))
           .InSecondsF();
 
-  absl::optional<base::TimeDelta> largest_image_discovery_time =
-      MonotonicTimeToPseudoWallTime(timing.largest_image_discovery_time);
+  ResourceLoadTimingsForReporting resource_load_timings = {
+      MonotonicTimeToPseudoWallTime(
+          timing.resource_load_timings.discovery_time),
+      MonotonicTimeToPseudoWallTime(timing.resource_load_timings.load_start),
+      MonotonicTimeToPseudoWallTime(timing.resource_load_timings.load_end)
 
-  absl::optional<base::TimeDelta> largest_image_load_start =
-      MonotonicTimeToPseudoWallTime(timing.largest_image_load_start);
+  };
 
-  absl::optional<base::TimeDelta> largest_image_load_end =
-      MonotonicTimeToPseudoWallTime(timing.largest_image_load_end);
-
-  absl::optional<base::TimeTicks> merged_unclamped_paint_time =
+  std::optional<base::TimeTicks> merged_unclamped_paint_time =
       MergeLargestContentfulPaintValues(timing);
 
   return {largest_image_paint_time,
           timing.largest_image_paint_size,
-          largest_image_discovery_time,
-          largest_image_load_start,
-          largest_image_load_end,
+          resource_load_timings,
           timing.largest_contentful_paint_type,
 
           timing.largest_contentful_paint_image_bpp,
@@ -145,7 +142,7 @@ PerformanceTimingForReporting::BackForwardCacheRestore() const {
           kRequestAnimationFramesToRecordAfterBackForwardCacheRestore>>
       request_animation_frames =
           paint_timing->RequestAnimationFramesAfterBackForwardCacheRestore();
-  WTF::Vector<absl::optional<base::TimeDelta>> first_input_delays =
+  WTF::Vector<std::optional<base::TimeDelta>> first_input_delays =
       interactive_detector->GetFirstInputDelaysAfterBackForwardCacheRestore();
   DCHECK_EQ(navigation_starts.size(), first_paints.size());
   DCHECK_EQ(navigation_starts.size(), request_animation_frames.size());
@@ -275,48 +272,48 @@ uint64_t PerformanceTimingForReporting::FirstInputOrScrollNotifiedTimestamp()
       paint_timing_detector->FirstInputOrScrollNotifiedTimestamp());
 }
 
-absl::optional<base::TimeDelta> PerformanceTimingForReporting::FirstInputDelay()
+std::optional<base::TimeDelta> PerformanceTimingForReporting::FirstInputDelay()
     const {
   const InteractiveDetector* interactive_detector = GetInteractiveDetector();
   if (!interactive_detector)
-    return absl::nullopt;
+    return std::nullopt;
 
   return interactive_detector->GetFirstInputDelay();
 }
 
-absl::optional<base::TimeDelta>
+std::optional<base::TimeDelta>
 PerformanceTimingForReporting::FirstInputTimestamp() const {
   const InteractiveDetector* interactive_detector = GetInteractiveDetector();
   if (!interactive_detector)
-    return absl::nullopt;
+    return std::nullopt;
 
   return MonotonicTimeToPseudoWallTime(
       interactive_detector->GetFirstInputTimestamp());
 }
 
-absl::optional<base::TimeTicks>
+std::optional<base::TimeTicks>
 PerformanceTimingForReporting::FirstInputTimestampAsMonotonicTime() const {
   const InteractiveDetector* interactive_detector = GetInteractiveDetector();
   if (!interactive_detector)
-    return absl::nullopt;
+    return std::nullopt;
 
   return interactive_detector->GetFirstInputTimestamp();
 }
 
-absl::optional<base::TimeDelta>
-PerformanceTimingForReporting::FirstScrollDelay() const {
+std::optional<base::TimeDelta> PerformanceTimingForReporting::FirstScrollDelay()
+    const {
   const InteractiveDetector* interactive_detector = GetInteractiveDetector();
   if (!interactive_detector)
-    return absl::nullopt;
+    return std::nullopt;
 
   return interactive_detector->GetFirstScrollDelay();
 }
 
-absl::optional<base::TimeDelta>
+std::optional<base::TimeDelta>
 PerformanceTimingForReporting::FirstScrollTimestamp() const {
   const InteractiveDetector* interactive_detector = GetInteractiveDetector();
   if (!interactive_detector)
-    return absl::nullopt;
+    return std::nullopt;
 
   return MonotonicTimeToPseudoWallTime(
       interactive_detector->GetFirstScrollTimestamp());
@@ -380,78 +377,78 @@ uint64_t PerformanceTimingForReporting::
       cross_origin_isolated_capability_);
 }
 
-absl::optional<base::TimeTicks>
+std::optional<base::TimeTicks>
 PerformanceTimingForReporting::LastPortalActivatedPaint() const {
   const PaintTiming* timing = GetPaintTiming();
   if (!timing)
-    return absl::nullopt;
+    return std::nullopt;
 
   return timing->LastPortalActivatedPaint();
 }
 
-absl::optional<base::TimeDelta>
+std::optional<base::TimeDelta>
 PerformanceTimingForReporting::PrerenderActivationStart() const {
   DocumentLoadTiming* timing = GetDocumentLoadTiming();
   if (!timing)
-    return absl::nullopt;
+    return std::nullopt;
 
   base::TimeTicks activation_start = timing->ActivationStart();
   if (activation_start.is_null())
-    return absl::nullopt;
+    return std::nullopt;
 
   return timing->MonotonicTimeToZeroBasedDocumentTime(activation_start);
 }
 
-absl::optional<base::TimeTicks> PerformanceTimingForReporting::UnloadStart()
+std::optional<base::TimeTicks> PerformanceTimingForReporting::UnloadStart()
     const {
   DocumentLoadTiming* timing = GetDocumentLoadTiming();
   if (!timing)
-    return absl::nullopt;
+    return std::nullopt;
 
   return timing->UnloadEventStart();
 }
 
-absl::optional<base::TimeTicks> PerformanceTimingForReporting::UnloadEnd()
+std::optional<base::TimeTicks> PerformanceTimingForReporting::UnloadEnd()
     const {
   DocumentLoadTiming* timing = GetDocumentLoadTiming();
   if (!timing)
-    return absl::nullopt;
+    return std::nullopt;
 
   return timing->UnloadEventEnd();
 }
 
-absl::optional<base::TimeTicks>
+std::optional<base::TimeTicks>
 PerformanceTimingForReporting::CommitNavigationEnd() const {
   DocumentLoadTiming* timing = GetDocumentLoadTiming();
   if (!timing)
-    return absl::nullopt;
+    return std::nullopt;
 
   return timing->CommitNavigationEnd();
 }
 
-absl::optional<base::TimeDelta>
+std::optional<base::TimeDelta>
 PerformanceTimingForReporting::UserTimingMarkFullyLoaded() const {
   DocumentLoadTiming* timing = GetDocumentLoadTiming();
   if (!timing)
-    return absl::nullopt;
+    return std::nullopt;
 
   return timing->UserTimingMarkFullyLoaded();
 }
 
-absl::optional<base::TimeDelta>
+std::optional<base::TimeDelta>
 PerformanceTimingForReporting::UserTimingMarkFullyVisible() const {
   DocumentLoadTiming* timing = GetDocumentLoadTiming();
   if (!timing)
-    return absl::nullopt;
+    return std::nullopt;
 
   return timing->UserTimingMarkFullyVisible();
 }
 
-absl::optional<base::TimeDelta>
+std::optional<base::TimeDelta>
 PerformanceTimingForReporting::UserTimingMarkInteractive() const {
   DocumentLoadTiming* timing = GetDocumentLoadTiming();
   if (!timing)
-    return absl::nullopt;
+    return std::nullopt;
 
   return timing->UserTimingMarkInteractive();
 }
@@ -503,15 +500,15 @@ PaintTimingDetector* PerformanceTimingForReporting::GetPaintTimingDetector()
   return &DomWindow()->GetFrame()->View()->GetPaintTimingDetector();
 }
 
-absl::optional<base::TimeDelta>
+std::optional<base::TimeDelta>
 PerformanceTimingForReporting::MonotonicTimeToPseudoWallTime(
-    const absl::optional<base::TimeTicks>& time) const {
+    const std::optional<base::TimeTicks>& time) const {
   if (!time.has_value())
-    return absl::nullopt;
+    return std::nullopt;
 
   const DocumentLoadTiming* timing = GetDocumentLoadTiming();
   if (!timing)
-    return absl::nullopt;
+    return std::nullopt;
 
   return timing->MonotonicTimeToPseudoWallTime(*time);
 }

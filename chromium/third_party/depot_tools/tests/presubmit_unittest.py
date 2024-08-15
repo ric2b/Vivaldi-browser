@@ -385,7 +385,7 @@ class PresubmitUnittest(PresubmitTestsBase):
                                      0,
                                      0,
                                      None,
-                                     upstream=None)
+                                     upstream='upstream')
         self.assertIsNotNone(change.Name() == 'mychange')
         self.assertIsNotNone(change.DescriptionText(
         ) == 'Hello there\nthis is a change\nand some more regular text')
@@ -444,8 +444,13 @@ class PresubmitUnittest(PresubmitTestsBase):
 
     def testInvalidChange(self):
         with self.assertRaises(AssertionError):
-            presubmit.GitChange('mychange', 'description', self.fake_root_dir,
-                                ['foo/blat.cc', 'bar'], 0, 0, None)
+            presubmit.GitChange('mychange',
+                                'description',
+                                self.fake_root_dir, ['foo/blat.cc', 'bar'],
+                                0,
+                                0,
+                                None,
+                                upstream='upstream')
 
     def testExecPresubmitScript(self):
         description_lines = ('Hello there', 'this is a change', 'BUG=123')
@@ -904,47 +909,6 @@ def CheckChangeOnCommit(input_api, output_api):
                                 patchset=0,
                                 author=None)
 
-    def testMergeMasters(self):
-        merge = presubmit._MergeMasters
-        self.assertEqual({}, merge({}, {}))
-        self.assertEqual({'m1': {}}, merge({}, {'m1': {}}))
-        self.assertEqual({'m1': {}}, merge({'m1': {}}, {}))
-        parts = [
-            {
-                'try1.cr': {
-                    'win': set(['defaulttests'])
-                }
-            },
-            {
-                'try1.cr': {
-                    'linux1': set(['test1'])
-                },
-                'try2.cr': {
-                    'linux2': set(['defaulttests'])
-                }
-            },
-            {
-                'try1.cr': {
-                    'mac1': set(['defaulttests']),
-                    'mac2': set(['test1', 'test2']),
-                    'linux1': set(['defaulttests'])
-                }
-            },
-        ]
-        expected = {
-            'try1.cr': {
-                'win': set(['defaulttests']),
-                'linux1': set(['defaulttests', 'test1']),
-                'mac1': set(['defaulttests']),
-                'mac2': set(['test1', 'test2'])
-            },
-            'try2.cr': {
-                'linux2': set(['defaulttests'])
-            },
-        }
-        for permutation in itertools.permutations(parts):
-            self.assertEqual(expected, functools.reduce(merge, permutation, {}))
-
     def testMainPostUpload(self):
         os.path.isfile.side_effect = lambda f: 'PRESUBMIT.py' in f
         os.listdir.return_value = ['PRESUBMIT.py']
@@ -995,8 +959,8 @@ def CheckChangeOnCommit(input_api, output_api):
         self.assertEqual(
             sys.stderr.getvalue(),
             'usage: presubmit_unittest.py [options] <files...>\n'
-            'presubmit_unittest.py: error: <files> is not optional for unversioned '
-            'directories.\n')
+            'presubmit_unittest.py: error: unversioned directories must '
+            'specify <files> or <diff_file>.\n')
 
     @mock.patch('presubmit_support.Change', mock.Mock())
     def testParseChange_Files(self):
@@ -1006,14 +970,10 @@ def CheckChangeOnCommit(input_api, output_api):
 
         change = presubmit._parse_change(None, options)
         self.assertEqual(presubmit.Change.return_value, change)
-        presubmit.Change.assert_called_once_with(options.name,
-                                                 options.description,
-                                                 options.root,
-                                                 [('M', 'random_file.txt')],
-                                                 options.issue,
-                                                 options.patchset,
-                                                 options.author,
-                                                 upstream=options.upstream)
+        presubmit.Change.assert_called_once_with(
+            options.name, options.description, options.root,
+            [('M', 'random_file.txt')], options.issue, options.patchset,
+            options.author)
         presubmit._parse_files.assert_called_once_with(options.files,
                                                        options.recursive)
 
@@ -1022,12 +982,12 @@ def CheckChangeOnCommit(input_api, output_api):
         scm.determine_scm.return_value = None
         parser = mock.Mock()
         parser.error.side_effect = [SystemExit]
-        options = mock.Mock(files=[], all_files=False)
+        options = mock.Mock(files=[], diff_file='', all_files=False)
 
         with self.assertRaises(SystemExit):
             presubmit._parse_change(parser, options)
         parser.error.assert_called_once_with(
-            '<files> is not optional for unversioned directories.')
+            'unversioned directories must specify <files> or <diff_file>.')
 
     def testParseChange_FilesAndAllFiles(self):
         parser = mock.Mock()
@@ -1038,6 +998,16 @@ def CheckChangeOnCommit(input_api, output_api):
             presubmit._parse_change(parser, options)
         parser.error.assert_called_once_with(
             '<files> cannot be specified when --all-files is set.')
+
+    def testParseChange_DiffAndAllFiles(self):
+        parser = mock.Mock()
+        parser.error.side_effect = [SystemExit]
+        options = mock.Mock(files=[], all_files=True, diff_file='foo.diff')
+
+        with self.assertRaises(SystemExit):
+            presubmit._parse_change(parser, options)
+        parser.error.assert_called_once_with(
+            '<diff_file> cannot be specified when --all-files is set.')
 
     @mock.patch('presubmit_support.GitChange', mock.Mock())
     def testParseChange_FilesAndGit(self):
@@ -1063,7 +1033,7 @@ def CheckChangeOnCommit(input_api, output_api):
     def testParseChange_NoFilesAndGit(self):
         scm.determine_scm.return_value = 'git'
         scm.GIT.CaptureStatus.return_value = [('A', 'added.txt')]
-        options = mock.Mock(all_files=False, files=[])
+        options = mock.Mock(all_files=False, files=[], diff_file='')
 
         change = presubmit._parse_change(None, options)
         self.assertEqual(presubmit.GitChange.return_value, change)
@@ -1084,7 +1054,7 @@ def CheckChangeOnCommit(input_api, output_api):
     def testParseChange_AllFilesAndGit(self):
         scm.determine_scm.return_value = 'git'
         scm.GIT.GetAllFiles.return_value = ['foo.txt', 'bar.txt']
-        options = mock.Mock(all_files=True, files=[])
+        options = mock.Mock(all_files=True, files=[], diff_file='')
 
         change = presubmit._parse_change(None, options)
         self.assertEqual(presubmit.GitChange.return_value, change)
@@ -1098,6 +1068,49 @@ def CheckChangeOnCommit(input_api, output_api):
                                                     options.author,
                                                     upstream=options.upstream)
         scm.GIT.GetAllFiles.assert_called_once_with(options.root)
+
+    def testParseChange_EmptyDiffFile(self):
+        gclient_utils.FileRead.return_value = ''
+        options = mock.Mock(all_files=False, files=[], diff_file='foo.diff')
+        with self.assertRaises(presubmit.PresubmitFailure):
+            presubmit._parse_change(None, options)
+
+    @mock.patch('presubmit_support.ProvidedDiffChange', mock.Mock())
+    def testParseChange_ProvidedDiffFile(self):
+        diff = """
+diff --git a/foo b/foo
+new file mode 100644
+index 0000000..9daeafb
+--- /dev/null
++++ b/foo
+@@ -0,0 +1 @@
++test
+diff --git a/bar b/bar
+deleted file mode 100644
+index f675c2a..0000000
+--- a/bar
++++ /dev/null
+@@ -1,1 +0,0 @@
+-bar
+diff --git a/baz b/baz
+index d7ba659f..b7957f3 100644
+--- a/baz
++++ b/baz
+@@ -1,1 +1,1 @@
+-baz
++bat"""
+        gclient_utils.FileRead.return_value = diff
+        options = mock.Mock(all_files=False, files=[], diff_file='foo.diff')
+        change = presubmit._parse_change(None, options)
+        self.assertEqual(presubmit.ProvidedDiffChange.return_value, change)
+        presubmit.ProvidedDiffChange.assert_called_once_with(
+            options.name,
+            options.description,
+            options.root, [('A', 'foo'), ('D', 'bar'), ('M', 'baz')],
+            options.issue,
+            options.patchset,
+            options.author,
+            diff=diff)
 
     def testParseGerritOptions_NoGerritUrl(self):
         options = mock.Mock(gerrit_url=None,
@@ -1226,9 +1239,14 @@ class InputApiUnittest(PresubmitTestsBase):
         os.path.isfile.side_effect = lambda f: f in known_files
         presubmit.scm.GIT.GenerateDiff.return_value = '\n'.join(diffs)
 
-        change = presubmit.GitChange('mychange', '\n'.join(description_lines),
+        change = presubmit.GitChange('mychange',
+                                     '\n'.join(description_lines),
                                      self.fake_root_dir,
-                                     [[f[0], f[1]] for f in files], 0, 0, None)
+                                     [[f[0], f[1]] for f in files],
+                                     0,
+                                     0,
+                                     None,
+                                     upstream='upstream')
         input_api = presubmit.InputApi(
             change, os.path.join(self.fake_root_dir, 'foo', 'PRESUBMIT.py'),
             False, None, False)
@@ -1282,9 +1300,14 @@ class InputApiUnittest(PresubmitTestsBase):
         known_files = [os.path.join(self.fake_root_dir, f) for _, f in files]
         os.path.isfile.side_effect = lambda f: f in known_files
 
-        change = presubmit.GitChange('mychange', 'description\nlines\n',
+        change = presubmit.GitChange('mychange',
+                                     'description\nlines\n',
                                      self.fake_root_dir,
-                                     [[f[0], f[1]] for f in files], 0, 0, None)
+                                     [[f[0], f[1]] for f in files],
+                                     0,
+                                     0,
+                                     None,
+                                     upstream='upstream')
         input_api = presubmit.InputApi(
             change, os.path.join(self.fake_root_dir, 'foo', 'PRESUBMIT.py'),
             False, None, False)
@@ -1412,8 +1435,14 @@ class InputApiUnittest(PresubmitTestsBase):
         ]
         os.path.isfile.side_effect = lambda f: f in known_files
 
-        change = presubmit.GitChange('mychange', '', self.fake_root_dir, files,
-                                     0, 0, None)
+        change = presubmit.GitChange('mychange',
+                                     '',
+                                     self.fake_root_dir,
+                                     files,
+                                     0,
+                                     0,
+                                     None,
+                                     upstream='upstream')
         input_api = presubmit.InputApi(
             change, os.path.join(self.fake_root_dir, 'PRESUBMIT.py'), False,
             None, False)
@@ -1433,8 +1462,14 @@ class InputApiUnittest(PresubmitTestsBase):
         ]
         os.path.isfile.side_effect = lambda f: f in known_files
 
-        change = presubmit.GitChange('mychange', '', self.fake_root_dir, files,
-                                     0, 0, None)
+        change = presubmit.GitChange('mychange',
+                                     '',
+                                     self.fake_root_dir,
+                                     files,
+                                     0,
+                                     0,
+                                     None,
+                                     upstream='upstream')
         input_api = presubmit.InputApi(
             change, os.path.join(self.fake_root_dir, 'PRESUBMIT.py'), False,
             None, False)
@@ -1724,21 +1759,40 @@ class AffectedFileUnittest(PresubmitTestsBase):
 
 class ChangeUnittest(PresubmitTestsBase):
 
-    @mock.patch('scm.GIT.ListSubmodules', return_value=['BB'])
-    def testAffectedFiles(self, mockListSubmodules):
+    def testAffectedFiles(self):
         change = presubmit.Change('', '', self.fake_root_dir, [('Y', 'AA'),
                                                                ('A', 'BB')], 3,
                                   5, '')
-        self.assertEqual(1, len(change.AffectedFiles()))
+        self.assertEqual(2, len(change.AffectedFiles()))
         self.assertEqual('Y', change.AffectedFiles()[0].Action())
 
     @mock.patch('scm.GIT.ListSubmodules', return_value=['BB'])
     def testAffectedSubmodules(self, mockListSubmodules):
-        change = presubmit.Change('', '', self.fake_root_dir, [('Y', 'AA'),
-                                                               ('A', 'BB')], 3,
-                                  5, '')
+        change = presubmit.GitChange('',
+                                     '',
+                                     self.fake_root_dir, [('Y', 'AA'),
+                                                          ('A', 'BB')],
+                                     3,
+                                     5,
+                                     '',
+                                     upstream='upstream')
         self.assertEqual(1, len(change.AffectedSubmodules()))
         self.assertEqual('A', change.AffectedSubmodules()[0].Action())
+
+    @mock.patch('scm.GIT.ListSubmodules', return_value=['BB'])
+    def testAffectedSubmodulesCachesSubmodules(self, mockListSubmodules):
+        change = presubmit.GitChange('',
+                                     '',
+                                     self.fake_root_dir, [('Y', 'AA'),
+                                                          ('A', 'BB')],
+                                     3,
+                                     5,
+                                     '',
+                                     upstream='upstream')
+        change.AffectedSubmodules()
+        mockListSubmodules.assert_called_once()
+        change.AffectedSubmodules()
+        mockListSubmodules.assert_called_once()
 
     def testSetDescriptionText(self):
         change = presubmit.Change('', 'foo\nDRU=ro', self.fake_root_dir, [], 3,
@@ -2033,6 +2087,33 @@ class CannedChecksUnittest(PresubmitTestsBase):
                          'chromium.googlesource.com', None,
                          'chromium.git.corp.google.com', None,
                          presubmit.OutputApi.PresubmitPromptWarning)
+
+    def testCannedCheckLargeScaleChange(self):
+        input_api = self.MockInputApi(
+            presubmit.Change('foo', 'foo1', self.fake_root_dir, None, 0, 0,
+                             None), False)
+        affected_files = []
+        for i in range(100):
+            affected_file = mock.MagicMock(presubmit.GitAffectedFile)
+            affected_file.LocalPath.return_value = f'foo{i}.cc'
+            affected_files.append(affected_file)
+        input_api.AffectedFiles = lambda **_: affected_files
+
+        # Don't warn if less than or equal to 100 files.
+        results = presubmit_canned_checks.CheckLargeScaleChange(
+            input_api, presubmit.OutputApi)
+        self.assertEqual(len(results), 0)
+
+        # Warn if greater than 100 files.
+        affected_files.append('bar.cc')
+
+        results = presubmit_canned_checks.CheckLargeScaleChange(
+            input_api, presubmit.OutputApi)
+        self.assertEqual(len(results), 1)
+        result = results[0]
+        self.assertEqual(result.__class__,
+                         presubmit.OutputApi.PresubmitPromptWarning)
+        self.assertIn("large scale change", result.json_format()['message'])
 
     def testCheckChangeHasNoStrayWhitespace(self):
         self.ContentTest(

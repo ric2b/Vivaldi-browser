@@ -5,7 +5,7 @@
 import 'chrome://os-settings/lazy_load.js';
 
 import {CellularRoamingToggleButtonElement, NetworkProxySectionElement, PasspointRemoveDialogElement, SettingsInternetDetailPageElement} from 'chrome://os-settings/lazy_load.js';
-import {CrDialogElement, InternetPageBrowserProxyImpl, LocalizedLinkElement, Router, routes, settingMojom, SettingsToggleButtonElement, setUserActionRecorderForTesting, userActionRecorderMojom} from 'chrome://os-settings/os_settings.js';
+import {CrDialogElement, CrLinkRowElement, InternetPageBrowserProxyImpl, LocalizedLinkElement, Router, routes, settingMojom, SettingsToggleButtonElement, setUserActionRecorderForTesting, userActionRecorderMojom} from 'chrome://os-settings/os_settings.js';
 import {MojoConnectivityProvider} from 'chrome://resources/ash/common/connectivity/mojo_connectivity_provider.js';
 import {PasspointSubscription} from 'chrome://resources/ash/common/connectivity/passpoint.mojom-webui.js';
 import {MojoInterfaceProviderImpl} from 'chrome://resources/ash/common/network/mojo_interface_provider.js';
@@ -18,7 +18,7 @@ import {NetworkPropertyListMojoElement} from 'chrome://resources/ash/common/netw
 import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {getDeepActiveElement} from 'chrome://resources/js/util.js';
-import {ActivationStateType, ApnAuthenticationType, ApnIpType, ApnState, DeviceStateProperties, GlobalPolicy, InhibitReason, ManagedOpenVPNProperties, ManagedProperties, MatchType, NetworkStateProperties, ProxyMode, SuppressionType, VpnType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
+import {ActivationStateType, ApnAuthenticationType, ApnIpType, ApnSource, ApnState, DeviceStateProperties, GlobalPolicy, InhibitReason, ManagedOpenVPNProperties, ManagedProperties, MatchType, NetworkStateProperties, ProxyMode, SuppressionType, VpnType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
 import {ConnectionStateType, DeviceStateType, IPConfigType, NetworkType, OncSource, PolicySource, PortalState} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {assertEquals, assertFalse, assertNotEquals, assertNull, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {FakeNetworkConfig} from 'chrome://webui-test/chromeos/fake_network_config_mojom.js';
@@ -216,7 +216,6 @@ suite('<settings-internet-detail-subpage>', () => {
       internetDetailPageTitle: 'internetDetailPageTitle',
       internetKnownNetworksPageTitle: 'internetKnownNetworksPageTitle',
       showMeteredToggle: true,
-      isSuppressTextMessagesEnabled: false,
     });
 
     mojoApi.resetForTest();
@@ -626,7 +625,6 @@ suite('<settings-internet-detail-subpage>', () => {
 
     test('WiFi Passpoint removal shows a dialog', async () => {
       loadTimeData.overrideValues({
-        isPasspointEnabled: true,
         isPasspointSettingsEnabled: false,
       });
       init();
@@ -685,7 +683,6 @@ suite('<settings-internet-detail-subpage>', () => {
 
     test('WiFi Passpoint removal leads to subscription page', async () => {
       loadTimeData.overrideValues({
-        isPasspointEnabled: true,
         isPasspointSettingsEnabled: true,
       });
       init();
@@ -697,6 +694,7 @@ suite('<settings-internet-detail-subpage>', () => {
         domains: [],
         provisioningSource: '',
         expirationEpochMs: 0n,
+        trustedCa: null,
       });
 
       mojoApi.resetForTest();
@@ -743,40 +741,36 @@ suite('<settings-internet-detail-subpage>', () => {
       assertEquals(subId, showDetailEvent.detail.id);
     });
 
-    [true, false].forEach(isPasspointEnabled => {
-      test(
-          'WiFi network removal without Passpoint does not show a dialog',
-          async () => {
-            loadTimeData.overrideValues({
-              isPasspointEnabled,
-              isPasspointSettingsEnabled: false,
-            });
-            init();
-            mojoApi.setNetworkTypeEnabledState(NetworkType.kWiFi, true);
-            const wifiNetwork = getManagedProperties(NetworkType.kWiFi, 'wifi');
-            wifiNetwork.source = OncSource.kUser;
-            wifiNetwork.connectable = true;
-            mojoApi.setManagedPropertiesForTest(wifiNetwork);
-
-            internetDetailPage.init('wifi_guid', 'WiFi', 'wifi');
-            await flushTasks();
-
-            const forgetButton = getButton('forgetButton');
-            assertFalse(forgetButton.hidden);
-            assertFalse(forgetButton.disabled);
-
-            // Click the button and check the dialog is displayed.
-            forgetButton.click();
-            await flushTasks();
-            assertNull(internetDetailPage.shadowRoot!.querySelector(
-                '#passpointRemovalDialog'));
+    test(
+        'WiFi network removal without Passpoint does not show a dialog',
+        async () => {
+          loadTimeData.overrideValues({
+            isPasspointSettingsEnabled: false,
           });
-    });
+          init();
+          mojoApi.setNetworkTypeEnabledState(NetworkType.kWiFi, true);
+          const wifiNetwork = getManagedProperties(NetworkType.kWiFi, 'wifi');
+          wifiNetwork.source = OncSource.kUser;
+          wifiNetwork.connectable = true;
+          mojoApi.setManagedPropertiesForTest(wifiNetwork);
+
+          internetDetailPage.init('wifi_guid', 'WiFi', 'wifi');
+          await flushTasks();
+
+          const forgetButton = getButton('forgetButton');
+          assertFalse(forgetButton.hidden);
+          assertFalse(forgetButton.disabled);
+
+          // Click the button and check the dialog is displayed.
+          forgetButton.click();
+          await flushTasks();
+          assertNull(internetDetailPage.shadowRoot!.querySelector(
+              '#passpointRemovalDialog'));
+        });
 
     [true, false].forEach(isPasspointSettingsEnabled => {
       test('WiFi network with Passpoint shows provider row', async () => {
         loadTimeData.overrideValues({
-          isPasspointEnabled: true,
           isPasspointSettingsEnabled,
         });
         init();
@@ -788,6 +782,7 @@ suite('<settings-internet-detail-subpage>', () => {
           domains: [],
           provisioningSource: '',
           expirationEpochMs: 0n,
+          trustedCa: null,
         });
         mojoApi.resetForTest();
         mojoApi.setNetworkTypeEnabledState(NetworkType.kWiFi, true);
@@ -824,7 +819,6 @@ suite('<settings-internet-detail-subpage>', () => {
         'WiFi network without Passpoint does not show provider row',
         async () => {
           loadTimeData.overrideValues({
-            isPasspointEnabled: true,
             isPasspointSettingsEnabled: true,
           });
           init();
@@ -843,7 +837,6 @@ suite('<settings-internet-detail-subpage>', () => {
 
     test('WiFi network with Passpoint has no configure button', async () => {
       loadTimeData.overrideValues({
-        isPasspointEnabled: true,
         isPasspointSettingsEnabled: true,
       });
       init();
@@ -855,6 +848,7 @@ suite('<settings-internet-detail-subpage>', () => {
         domains: [],
         provisioningSource: '',
         expirationEpochMs: 0n,
+        trustedCa: null,
       });
       mojoApi.resetForTest();
       mojoApi.setNetworkTypeEnabledState(NetworkType.kWiFi, true);
@@ -1172,6 +1166,15 @@ suite('<settings-internet-detail-subpage>', () => {
       assertEquals(
           internetDetailPage.i18nAdvanced('networkCarrierLocked').toString(),
           carrierLockedText.localizedString.toString());
+
+      // Verify network state
+      const networkStateText =
+          internetDetailPage.shadowRoot!.querySelector('#networkState');
+      assertTrue(!!networkStateText);
+      assertTrue(networkStateText.hasAttribute('warning'));
+      assertEquals(
+          internetDetailPage.i18n('networkMobileProviderLocked'),
+          networkStateText.textContent!.trim());
     });
 
     test(
@@ -1697,9 +1700,7 @@ suite('<settings-internet-detail-subpage>', () => {
           `Page disabled when inhibited, ApnRevamp enabled is: ${
               isApnRevampEnabled}`,
           async () => {
-            loadTimeData.overrideValues({
-              apnRevamp: isApnRevampEnabled,
-            });
+            loadTimeData.overrideValues({isApnRevampEnabled});
             init();
 
             mojoApi.setNetworkTypeEnabledState(NetworkType.kCellular, true);
@@ -1758,11 +1759,11 @@ suite('<settings-internet-detail-subpage>', () => {
                 internetDetailPage.shadowRoot!
                     .querySelector<NetworkChooseMobileElement>(
                         'network-choose-mobile');
-            let apnList = null;
-            if (isApnRevampEnabled) {
-              // TODO(b/318561207): Get <apn-list> element.
-            } else {
-              apnList =
+            let apnElement: CrLinkRowElement|NetworkApnListElement|null =
+                internetDetailPage.shadowRoot!.querySelector<CrLinkRowElement>(
+                    '#apnSubpageButton');
+            if (!isApnRevampEnabled) {
+              apnElement =
                   internetDetailPage.shadowRoot!
                       .querySelector<NetworkApnListElement>('network-apnlist');
             }
@@ -1780,9 +1781,7 @@ suite('<settings-internet-detail-subpage>', () => {
 
             assertTrue(!!allowDataRoamingButton);
             assertTrue(!!networkChooseMobile);
-            if (apnList) {
-              assertTrue(!!apnList);
-            }
+            assertTrue(!!apnElement);
             assertTrue(!!networkIpConfig);
             assertTrue(!!networkNameservers);
             assertTrue(!!networkProxySection);
@@ -1794,9 +1793,7 @@ suite('<settings-internet-detail-subpage>', () => {
             assertFalse(advancedFields.disabled);
             assertFalse(deviceFields.disabled);
             assertFalse(networkChooseMobile.disabled);
-            if (apnList) {
-              assertFalse(apnList.disabled);
-            }
+            assertFalse(apnElement.disabled);
             assertFalse(networkIpConfig.disabled);
             assertFalse(networkNameservers.disabled);
             assertFalse(networkProxySection.disabled);
@@ -1822,9 +1819,7 @@ suite('<settings-internet-detail-subpage>', () => {
             assertTrue(advancedFields.disabled);
             assertTrue(deviceFields.disabled);
             assertTrue(networkChooseMobile.disabled);
-            if (apnList) {
-              assertTrue(apnList.disabled);
-            }
+            assertTrue(apnElement.disabled);
             assertTrue(networkIpConfig.disabled);
             assertTrue(networkNameservers.disabled);
             assertTrue(networkProxySection.disabled);
@@ -1849,9 +1844,7 @@ suite('<settings-internet-detail-subpage>', () => {
             assertFalse(advancedFields.disabled);
             assertFalse(deviceFields.disabled);
             assertFalse(networkChooseMobile.disabled);
-            if (apnList) {
-              assertFalse(apnList.disabled);
-            }
+            assertFalse(apnElement.disabled);
             assertFalse(networkIpConfig.disabled);
             assertFalse(networkNameservers.disabled);
             assertFalse(networkProxySection.disabled);
@@ -1942,6 +1935,7 @@ suite('<settings-internet-detail-subpage>', () => {
           state: ApnState.kEnabled,
           ipType: ApnIpType.kAutomatic,
           apnTypes: [],
+          source: ApnSource.kModb,
         };
         cellularNetwork.typeProperties.cellular!.connectedApn!.accessPointName =
             apnName;
@@ -2046,13 +2040,9 @@ suite('<settings-internet-detail-subpage>', () => {
       assertEquals(routes.INTERNET_NETWORKS, Router.getInstance().currentRoute);
     });
 
-    // Syntactic sugar for running test twice with different values for the
-    // suppressTextMessages feature flag.
-    [true, false].forEach(isSuppressTextMessagesEnabled => {
       test(
           'Show/Hide toggle correspondingly to SuppressTextMessages flag',
           async () => {
-            loadTimeData.overrideValues({isSuppressTextMessagesEnabled});
             init();
             mojoApi.setNetworkTypeEnabledState(NetworkType.kCellular, true);
             const TEST_ICCID = '11111111111111111';
@@ -2075,16 +2065,11 @@ suite('<settings-internet-detail-subpage>', () => {
             const getSuppressTextMessagesToggle = () =>
                 internetDetailPage.shadowRoot!.querySelector(
                     '#suppressTextMessagesToggle');
-            if (isSuppressTextMessagesEnabled) {
               assertTrue(!!getSuppressTextMessagesToggle());
-            } else {
-              assertNull(getSuppressTextMessagesToggle());
-            }
+
           });
-    });
 
     test('Suppress text messages manually', async () => {
-      loadTimeData.overrideValues({isSuppressTextMessagesEnabled: true});
       init();
       mojoApi.setNetworkTypeEnabledState(NetworkType.kCellular, true);
 
@@ -2126,7 +2111,6 @@ suite('<settings-internet-detail-subpage>', () => {
 
     test(
         'Suppress text messages toggle only shown for active SIM', async () => {
-          loadTimeData.overrideValues({isSuppressTextMessagesEnabled: true});
           init();
           mojoApi.setNetworkTypeEnabledState(NetworkType.kCellular, true);
 
@@ -2156,7 +2140,6 @@ suite('<settings-internet-detail-subpage>', () => {
         });
 
     test('Suppress text messages via policy', async () => {
-      loadTimeData.overrideValues({isSuppressTextMessagesEnabled: true});
       init();
       mojoApi.setNetworkTypeEnabledState(NetworkType.kCellular, true);
 

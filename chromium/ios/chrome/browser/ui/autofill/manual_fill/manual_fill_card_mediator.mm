@@ -11,6 +11,7 @@
 #import "base/strings/utf_string_conversions.h"
 #import "components/autofill/core/browser/browser_autofill_manager.h"
 #import "components/autofill/core/browser/data_model/credit_card.h"
+#import "components/autofill/core/common/autofill_payments_features.h"
 #import "ios/chrome/browser/shared/ui/list_model/list_model.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_model.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
@@ -33,10 +34,10 @@ class CreditCard;
 
 namespace manual_fill {
 
-NSString* const ManageCardsAccessibilityIdentifier =
-    @"kManualFillManageCardsAccessibilityIdentifier";
-NSString* const kAddCreditCardsAccessibilityIdentifier =
-    @"kAddCreditCardsAccessibilityIdentifier";
+NSString* const kManagePaymentMethodsAccessibilityIdentifier =
+    @"kManagePaymentMethodsAccessibilityIdentifier";
+NSString* const kAddPaymentMethodAccessibilityIdentifier =
+    @"kAddPaymentMethodAccessibilityIdentifier";
 
 }  // namespace manual_fill
 
@@ -92,19 +93,38 @@ NSString* const kAddCreditCardsAccessibilityIdentifier =
     return;
   }
 
-  NSMutableArray* items =
+  NSMutableArray* cardItems =
       [[NSMutableArray alloc] initWithCapacity:self.cards.size()];
   for (autofill::CreditCard* card : self.cards) {
     ManualFillCreditCard* manualFillCreditCard =
         [[ManualFillCreditCard alloc] initWithCreditCard:*card];
-    auto item =
-        [[ManualFillCardItem alloc] initWithCreditCard:manualFillCreditCard
-                                       contentInjector:self.contentInjector
-                                    navigationDelegate:self.navigationDelegate];
-    [items addObject:item];
+
+    // If this card is enrolled to have a virtual card, create the virtual card
+    // and order it directly before the original card.
+    if (base::FeatureList::IsEnabled(
+            autofill::features::kAutofillEnableVirtualCards) &&
+        card->virtual_card_enrollment_state() ==
+            autofill::CreditCard::VirtualCardEnrollmentState::kEnrolled) {
+      [cardItems addObject:[self createVirtualCardItem:card]];
+    }
+    [cardItems addObject:[[ManualFillCardItem alloc]
+                             initWithCreditCard:manualFillCreditCard
+                                contentInjector:self.contentInjector
+                             navigationDelegate:self.navigationDelegate]];
   }
 
-  [self.consumer presentCards:items];
+  [self.consumer presentCards:cardItems];
+}
+
+- (ManualFillCardItem*)createVirtualCardItem:(autofill::CreditCard*)card {
+  std::unique_ptr<autofill::CreditCard> virtualCard =
+      autofill::CreditCard::CreateVirtualCardWithGuidSuffix(*card);
+  ManualFillCreditCard* manualFillVirtualCreditCard =
+      [[ManualFillCreditCard alloc] initWithCreditCard:*virtualCard];
+  return
+      [[ManualFillCardItem alloc] initWithCreditCard:manualFillVirtualCreditCard
+                                     contentInjector:self.contentInjector
+                                  navigationDelegate:self.navigationDelegate];
 }
 
 - (void)postActionsToConsumer {
@@ -122,7 +142,7 @@ NSString* const kAddCreditCardsAccessibilityIdentifier =
                [weakSelf.navigationDelegate openCardSettings];
              }];
   manageCreditCardsItem.accessibilityIdentifier =
-      manual_fill::ManageCardsAccessibilityIdentifier;
+      manual_fill::kManagePaymentMethodsAccessibilityIdentifier;
 
   NSString* addCreditCardsTitle =
       l10n_util::GetNSString(IDS_IOS_MANUAL_FALLBACK_ADD_PAYMENT_METHOD);
@@ -135,7 +155,7 @@ NSString* const kAddCreditCardsAccessibilityIdentifier =
                [weakSelf.navigationDelegate openAddCreditCard];
              }];
   addCreditCardsItem.accessibilityIdentifier =
-      manual_fill::kAddCreditCardsAccessibilityIdentifier;
+      manual_fill::kAddPaymentMethodAccessibilityIdentifier;
   [self.consumer presentActions:@[ addCreditCardsItem, manageCreditCardsItem ]];
 }
 

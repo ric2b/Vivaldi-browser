@@ -21,6 +21,10 @@
 #include "net/base/load_timing_info.h"
 #include "net/base/load_timing_info_test_util.h"
 #include "net/base/net_errors.h"
+#include "net/base/network_anonymization_key.h"
+#include "net/base/privacy_mode.h"
+#include "net/base/proxy_chain.h"
+#include "net/base/session_usage.h"
 #include "net/dns/public/host_resolver_results.h"
 #include "net/dns/public/secure_dns_policy.h"
 #include "net/http/bidirectional_stream_request_info.h"
@@ -39,6 +43,7 @@
 #include "net/quic/quic_crypto_client_config_handle.h"
 #include "net/quic/quic_http_utils.h"
 #include "net/quic/quic_server_info.h"
+#include "net/quic/quic_session_key.h"
 #include "net/quic/quic_session_pool.h"
 #include "net/quic/quic_test_packet_maker.h"
 #include "net/quic/quic_test_packet_printer.h"
@@ -527,7 +532,8 @@ class BidirectionalStreamQuicImplTest
         &transport_security_state_, &ssl_config_service_,
         base::WrapUnique(static_cast<QuicServerInfo*>(nullptr)),
         QuicSessionKey(kDefaultServerHostName, kDefaultServerPort,
-                       PRIVACY_MODE_DISABLED, SocketTag(),
+                       PRIVACY_MODE_DISABLED, ProxyChain::Direct(),
+                       SessionUsage::kDestination, SocketTag(),
                        NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
                        /*require_dns_https_alpn=*/false),
         /*require_confirmation=*/false,
@@ -546,7 +552,8 @@ class BidirectionalStreamQuicImplTest
             kQuicYieldAfterDurationMilliseconds),
         /*cert_verify_flags=*/0, quic::test::DefaultQuicConfig(),
         std::make_unique<TestQuicCryptoClientConfigHandle>(&crypto_config_),
-        dns_start, dns_end, base::DefaultTickClock::GetInstance(),
+        "CONNECTION_UNKNOWN", dns_start, dns_end,
+        base::DefaultTickClock::GetInstance(),
         base::SingleThreadTaskRunner::GetCurrentDefault().get(),
         /*socket_performance_watcher=*/nullptr, HostResolverEndpointResult(),
         NetLog::Get());

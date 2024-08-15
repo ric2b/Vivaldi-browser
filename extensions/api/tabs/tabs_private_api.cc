@@ -110,9 +110,9 @@ namespace tabs_private = vivaldi::tabs_private;
 bool IsTabMuted(const WebContents* web_contents) {
   std::string viv_extdata = web_contents->GetVivExtData();
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> json =
+  std::optional<base::Value> json =
       base::JSONReader::Read(viv_extdata, options);
-  absl::optional<bool> mute = absl::nullopt;
+  std::optional<bool> mute = std::nullopt;
   if (json && json->is_dict()) {
     mute = json->GetDict().FindBool(kVivaldiTabMuted);
   }
@@ -127,11 +127,11 @@ bool IsTabInAWorkspace(const std::string& viv_extdata) {
   return GetTabWorkspaceId(viv_extdata).has_value();
 }
 
-absl::optional<double> GetTabWorkspaceId(const std::string& viv_extdata) {
+std::optional<double> GetTabWorkspaceId(const std::string& viv_extdata) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> json =
+  std::optional<base::Value> json =
       base::JSONReader::Read(viv_extdata, options);
-  absl::optional<double> value;
+  std::optional<double> value;
   if (json && json->is_dict()) {
     value = json->GetDict().FindDouble(kVivaldiWorkspace);
   }
@@ -158,11 +158,11 @@ Browser* GetWorkspaceBrowser(const double workspace_id) {
   return nullptr;
 }
 
-absl::optional<double> GetActiveWorkspaceId(Browser* browser) {
+std::optional<double> GetActiveWorkspaceId(Browser* browser) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> json =
+  std::optional<base::Value> json =
       base::JSONReader::Read(browser->viv_ext_data(), options);
-  absl::optional<double> value;
+  std::optional<double> value;
   if (json && json->is_dict()) {
     value = json->GetDict().FindDouble("activeWorkspaceId");
   }
@@ -528,7 +528,7 @@ void VivaldiPrivateTabObserver::BroadcastTabInfo(
 const int kThemeColorBufferSize = 8;
 
 void VivaldiPrivateTabObserver::DidChangeThemeColor() {
-  absl::optional<SkColor> theme_color = web_contents()->GetThemeColor();
+  std::optional<SkColor> theme_color = web_contents()->GetThemeColor();
   if (!theme_color)
     return;
 
@@ -548,20 +548,20 @@ bool ValueToJSONString(const base::Value& value, std::string& json_string) {
   return serializer.Serialize(value);
 }
 
-absl::optional<base::Value> GetDictValueFromVivExtData(
+std::optional<base::Value> GetDictValueFromVivExtData(
     std::string& viv_extdata) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> value =
+  std::optional<base::Value> value =
       base::JSONReader::Read(viv_extdata, options);
   if (value && value->is_dict()) {
     return value;
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 bool SetTabWorkspaceId(content::WebContents* contents, double workspace_id) {
   auto viv_ext_data = contents->GetVivExtData();
-  absl::optional<base::Value> json =
+  std::optional<base::Value> json =
     GetDictValueFromVivExtData(viv_ext_data);
   if (json) {
     json->GetDict().Set("workspaceId", workspace_id);
@@ -579,10 +579,10 @@ bool SetTabWorkspaceId(content::WebContents* contents, double workspace_id) {
 void VivaldiPrivateTabObserver::RenderFrameCreated(
     content::RenderFrameHost* render_frame_host) {
   std::string viv_ext_data = web_contents()->GetVivExtData();
-  absl::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
+  std::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
   if (::vivaldi::IsTabZoomEnabled(web_contents())) {
-    absl::optional<double> zoom =
-        json ? json->GetDict().FindDouble(kVivaldiTabZoom) : absl::nullopt;
+    std::optional<double> zoom =
+        json ? json->GetDict().FindDouble(kVivaldiTabZoom) : std::nullopt;
     if (zoom) {
       tab_zoom_level_ = *zoom;
     } else {
@@ -614,7 +614,7 @@ void VivaldiPrivateTabObserver::RenderFrameCreated(
 
 void VivaldiPrivateTabObserver::SaveZoomLevelToExtData(double zoom_level) {
   std::string viv_ext_data = web_contents()->GetVivExtData();
-  absl::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
+  std::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
   if (json) {
     json->GetDict().Set(kVivaldiTabZoom, zoom_level);
     std::string json_string;
@@ -682,9 +682,9 @@ void VivaldiPrivateTabObserver::SetLoadFromCacheOnly(
 void VivaldiPrivateTabObserver::SetMuted(bool mute) {
   mute_ = mute;
   std::string viv_ext_data = web_contents()->GetVivExtData();
-  absl::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
+  std::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
   if (json) {
-    absl::optional<bool> existing = json->GetDict().FindBool(kVivaldiTabMuted);
+    std::optional<bool> existing = json->GetDict().FindBool(kVivaldiTabMuted);
     if ((existing && *existing != mute) || (!existing && mute)) {
       json->GetDict().Set(kVivaldiTabMuted, mute);
       std::string json_string;
@@ -1039,7 +1039,7 @@ ExtensionFunction::ResponseAction TabsPrivateUpdateFunction::Run() {
   using tabs_private::Update::Params;
   namespace Results = tabs_private::Update::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   tabs_private::UpdateTabInfo* info = &params->tab_info;
@@ -1068,7 +1068,7 @@ ExtensionFunction::ResponseAction TabsPrivateGetFunction::Run() {
   using tabs_private::Get::Params;
   namespace Results = tabs_private::Get::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string error;
@@ -1086,7 +1086,7 @@ ExtensionFunction::ResponseAction TabsPrivateGetFunction::Run() {
 ExtensionFunction::ResponseAction TabsPrivateInsertTextFunction::Run() {
   using tabs_private::InsertText::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string error;
@@ -1106,7 +1106,7 @@ TabsPrivateStartDragFunction::~TabsPrivateStartDragFunction() = default;
 ExtensionFunction::ResponseAction TabsPrivateStartDragFunction::Run() {
   using tabs_private::StartDrag::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   SessionID::id_type window_id = params->drag_data.window_id;
@@ -1238,10 +1238,10 @@ ExtensionFunction::ResponseAction TabsPrivateScrollPageFunction::Run() {
   using tabs_private::ScrollPage::Params;
   namespace Results = tabs_private::ScrollPage::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  absl::optional<::vivaldi::mojom::ScrollType> scroll_type;
+  std::optional<::vivaldi::mojom::ScrollType> scroll_type;
   static const std::pair<base::StringPiece, ::vivaldi::mojom::ScrollType>
       scroll_type_names[] = {
           {"up", ::vivaldi::mojom::ScrollType::kUp},
@@ -1293,7 +1293,7 @@ void TabsPrivateMoveSpatnavRectFunction::SpatnavRectReceived(
 ExtensionFunction::ResponseAction TabsPrivateMoveSpatnavRectFunction::Run() {
   using tabs_private::MoveSpatnavRect::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   ::vivaldi::mojom::SpatnavDirection dir;
@@ -1329,7 +1329,7 @@ ExtensionFunction::ResponseAction
 TabsPrivateActivateSpatnavElementFunction::Run() {
   using tabs_private::ActivateSpatnavElement::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   int modifiers = params->modifiers;
@@ -1348,7 +1348,7 @@ ExtensionFunction::ResponseAction
 TabsPrivateCloseSpatnavOrCurrentOpenMenuFunction::Run() {
   using tabs_private::CloseSpatnavOrCurrentOpenMenu::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string error;
@@ -1379,7 +1379,7 @@ TabsPrivateHasBeforeUnloadOrUnloadFunction::Run() {
   using tabs_private::HasBeforeUnloadOrUnload::Params;
   namespace Results = tabs_private::HasBeforeUnloadOrUnload::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   content::WebContents* contents =
@@ -1393,7 +1393,7 @@ ExtensionFunction::ResponseAction TabsPrivateTranslatePageFunction::Run() {
   using tabs_private::TranslatePage::Params;
   namespace Results = tabs_private::TranslatePage::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string source = params->src_lang;
@@ -1421,7 +1421,7 @@ TabsPrivateRevertTranslatePageFunction::Run() {
   using tabs_private::RevertTranslatePage::Params;
   namespace Results = tabs_private::RevertTranslatePage::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   content::WebContents* contents =
@@ -1440,7 +1440,7 @@ ExtensionFunction::ResponseAction
 TabsPrivateDetermineTextLanguageFunction::Run() {
   using tabs_private::DetermineTextLanguage::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string error;

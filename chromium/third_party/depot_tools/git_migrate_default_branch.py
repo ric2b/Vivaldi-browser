@@ -4,7 +4,6 @@
 # found in the LICENSE file.
 """Migrate local repository onto new default branch."""
 
-import fix_encoding
 import gerrit_util
 import git_common
 import metrics
@@ -91,7 +90,6 @@ def main():
 
 
 if __name__ == '__main__':
-    fix_encoding.fix_encoding()
     logging.basicConfig(level=logging.INFO)
     with metrics.collector.print_notice_and_exit():
         try:

@@ -5,9 +5,8 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_MEDIA_PREVIEW_CAMERA_PREVIEW_VIDEO_STREAM_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_MEDIA_PREVIEW_CAMERA_PREVIEW_VIDEO_STREAM_VIEW_H_
 
-#include <utility>
-
 #include "base/memory/scoped_refptr.h"
+#include "components/viz/common/gpu/context_lost_observer.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "media/base/video_frame.h"
 #include "media/renderers/paint_canvas_video_renderer.h"
@@ -15,7 +14,7 @@
 #include "ui/views/view.h"
 
 // The camera live video feed view.
-class VideoStreamView : public views::View {
+class VideoStreamView : public views::View, public viz::ContextLostObserver {
   METADATA_HEADER(VideoStreamView, views::View)
 
  public:
@@ -24,13 +23,12 @@ class VideoStreamView : public views::View {
   VideoStreamView& operator=(const VideoStreamView&) = delete;
   ~VideoStreamView() override;
 
-  void SetRasterContextProvider(
-      scoped_refptr<viz::RasterContextProvider> raster_context_provider) {
-    raster_context_provider_ = std::move(raster_context_provider);
-  }
+  // viz::ContextLostObserver.
+  void OnContextLost() override;
 
   void ScheduleFramePaint(scoped_refptr<media::VideoFrame> frame);
   void ClearFrame();
+  size_t GetRenderedFrameCount();
 
  protected:
   // views::View overrides
@@ -46,6 +44,7 @@ class VideoStreamView : public views::View {
   media::PaintCanvasVideoRenderer video_renderer_;
   scoped_refptr<media::VideoFrame> latest_frame_;
   scoped_refptr<viz::RasterContextProvider> raster_context_provider_;
+  size_t rendered_frame_count_ = 0;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_MEDIA_PREVIEW_CAMERA_PREVIEW_VIDEO_STREAM_VIEW_H_

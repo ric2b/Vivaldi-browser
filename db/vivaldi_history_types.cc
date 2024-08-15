@@ -4,6 +4,20 @@
 
 namespace history {
 
+TypedUrlResult::TypedUrlResult() {}
+
+TypedUrlResult& TypedUrlResult::operator=(const TypedUrlResult&) = default;
+
+TypedUrlResult::TypedUrlResult(const TypedUrlResult&) = default;
+
+DetailedUrlResult::DetailedUrlResult() {}
+DetailedUrlResult::~DetailedUrlResult() {}
+
+DetailedUrlResult& DetailedUrlResult::operator=(const DetailedUrlResult&) =
+    default;
+
+DetailedUrlResult::DetailedUrlResult(const DetailedUrlResult&) = default;
+
 UrlVisitCount::UrlVisitCount(std::string date, GURL url, int count)
     : date_(date), url_(url), count_(count) {}
 
@@ -24,17 +38,10 @@ Visit::Visit(std::string id,
       title(title),
       transition(transition),
       visit_count(visit_count),
-      source(source)
-{}
+      source(source) {}
 
 Visit::~Visit() {}
 
 Visit::Visit(const Visit& other) = default;
-
-DetailedHistory::DetailedHistory() = default;
-
-DetailedHistory::DetailedHistory(const DetailedHistory&) = default;
-
-DetailedHistory::~DetailedHistory() = default;
 
 }  //  namespace history

@@ -36,6 +36,8 @@ template <int DataLayout>
 static void test_static_dimension_failure() {
   Tensor<int, 2, DataLayout> left(2, 3);
   Tensor<int, 3, DataLayout> right(2, 3, 1);
+  left.setRandom();
+  right.setRandom();
 
 #ifdef CXX11_TENSOR_CONCATENATION_STATIC_DIMENSION_FAILURE
   // Technically compatible, but we static assert that the inputs have same

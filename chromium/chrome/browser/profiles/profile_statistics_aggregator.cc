@@ -17,8 +17,8 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_statistics.h"
 #include "chrome/browser/profiles/profile_statistics_factory.h"
-#include "chrome/browser/web_data_service_factory.h"
 #include "chrome/browser/webauthn/chrome_authenticator_request_delegate.h"
+#include "chrome/browser/webdata_services/web_data_service_factory.h"
 #include "components/browsing_data/core/counters/autofill_counter.h"
 #include "components/browsing_data/core/counters/bookmark_counter.h"
 #include "components/browsing_data/core/counters/history_counter.h"
@@ -95,10 +95,11 @@ void ProfileStatisticsAggregator::StartAggregator() {
 #else
       nullptr;
 #endif
+  // Only count local passwords.
   AddCounter(std::make_unique<browsing_data::SigninDataCounter>(
       ProfilePasswordStoreFactory::GetForProfile(
           profile_, ServiceAccessType::EXPLICIT_ACCESS),
-      /*account_store=*/nullptr, /*sync_service=*/nullptr,
+      /*account_store=*/nullptr, profile_->GetPrefs(), /*sync_service=*/nullptr,
       std::move(credential_store)));
 
   // Initiate autofill counting.

@@ -7,6 +7,7 @@
 #include <array>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -15,7 +16,6 @@
 #include "base/containers/flat_map.h"
 #include "base/logging.h"
 #include "base/sequence_checker.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/ash/scanning/zeroconf_scanner_detector_utils.h"
@@ -54,13 +54,14 @@ class ParsedMetadata {
     // are not present in the metadata, attempt to set them using ty.
     std::string ty;
     for (const std::string& entry : service_description.metadata) {
-      const base::StringPiece key_value(entry);
+      const std::string_view key_value(entry);
       const size_t equal_pos = key_value.find("=");
-      if (equal_pos == base::StringPiece::npos)
+      if (equal_pos == std::string_view::npos) {
         continue;
+      }
 
-      const base::StringPiece key = key_value.substr(0, equal_pos);
-      const base::StringPiece value = key_value.substr(equal_pos + 1);
+      const std::string_view key = key_value.substr(0, equal_pos);
+      const std::string_view value = key_value.substr(equal_pos + 1);
       if (key == "rs") {
         rs_ = std::string(value);
       } else if (key == "usb_MFG" || key == "mfg") {
@@ -115,6 +116,26 @@ class ParsedMetadata {
   std::vector<std::string> pdl_;
 };
 
+// Some scanners return zeroconf responses for multiple protocols where some
+// protocols are known to work better than others.  This function looks at
+// |service_type| and |metadata| and returns true if this record represents a
+// protocol/device combination that should be skipped.
+bool ShouldSkipZeroconfScanner(const std::string& service_type,
+                               const ParsedMetadata& metadata) {
+  if (service_type != ZeroconfScannerDetector::kGenericScannerServiceType) {
+    return false;
+  }
+
+  if (metadata.manufacturer() == "EPSON") {
+    // Prefer eSCL for XP-7100 (b/288301496).
+    if (metadata.model().find("XP-7100") != std::string::npos) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 // Attempts to create a Scanner using the information in |service_description|
 // and |metadata|. Returns the Scanner on success, std::nullopt on failure.
 std::optional<Scanner> CreateScanner(
@@ -129,12 +150,23 @@ std::optional<Scanner> CreateScanner(
       service_description.ip_address.empty() ||
       service_description.address.port() == 0) {
     PRINTER_LOG(ERROR) << "Found zeroconf " << service_type
-                       << " scanner that isn't usable";
+                       << " scanner that isn't usable: "
+                       << service_description.service_name << "("
+                       << service_description.address.ToString() << ")";
     return std::nullopt;
   }
 
-  PRINTER_LOG(EVENT) << "Found zeroconf " << service_type
-                     << " scanner: " << service_description.instance_name();
+  if (ShouldSkipZeroconfScanner(service_type, metadata)) {
+    PRINTER_LOG(DEBUG) << "Skipped zeroconf " << service_type
+                       << " scanner named '"
+                       << service_description.instance_name() << "' at "
+                       << service_description.address.ToString();
+    return std::nullopt;
+  }
+
+  PRINTER_LOG(EVENT) << "Found zeroconf " << service_type << " scanner named '"
+                     << service_description.instance_name() << "' at "
+                     << service_description.address.ToString();
 
   return CreateSaneScanner(service_description.instance_name(), service_type,
                            metadata.manufacturer(), metadata.model(),

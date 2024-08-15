@@ -108,13 +108,12 @@ void WaylandBufferManagerGpu::Initialize(
       supported_surface_augmentor_version >=
       AUGMENTED_SUB_SURFACE_SET_TRANSFORM_SINCE_VERSION;
 
-  // Clients at version 8 think clip rect is in parent surface's space, while
-  // clients at version 9 or above think it's in local surface's space.
-  // Unfortunately, clipping in version 9 is implemented incorrectly. It has
-  // been fixed in version 10, so use version 10 instead.
+  // HitTestMask fix landed in https://crrev.com/c/5252908. This is required to
+  // support DnD behavior when the target window has out-of-window frames.
   supports_out_of_window_clip_rect_ =
-      supported_surface_augmentor_version >=
-      AUGMENTED_SURFACE_SET_CLIP_RECT_SINCE_VERSION + 2;
+      server_version.IsValid() &&
+      server_version >= base::Version("123.0.6274.0");
+
   // Exo transformation fix landed in https://crrev.com/c/4961473
   has_transformation_fix_ = server_version.IsValid() &&
                             server_version >= base::Version("121.0.6113.0");
@@ -314,7 +313,7 @@ void WaylandBufferManagerGpu::CommitBuffer(gfx::AcceleratedWidget widget,
           gfx::RectF(bounds_rect), gfx::RectF(1.f, 1.f) /* no crop */, false,
           damage_region, 1.0f /*opacity*/, gfx::OverlayPriorityHint::kNone,
           gfx::RRectF(gfx::RectF(bounds_rect), corners), gfx::ColorSpace(),
-          absl::nullopt),
+          std::nullopt),
       nullptr, buffer_id, surface_scale_factor);
   CommitOverlays(widget, frame_id, data, std::move(overlay_configs));
 }

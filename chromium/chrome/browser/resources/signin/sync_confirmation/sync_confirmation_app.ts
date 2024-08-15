@@ -21,7 +21,9 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './sync_confirmation_app.html.js';
-import {SyncBenefit, SyncConfirmationBrowserProxy, SyncConfirmationBrowserProxyImpl} from './sync_confirmation_browser_proxy.js';
+import {ScreenMode} from './sync_confirmation_browser_proxy.js';
+import type {SyncBenefit, SyncConfirmationBrowserProxy} from './sync_confirmation_browser_proxy.js';
+import {SyncConfirmationBrowserProxyImpl} from './sync_confirmation_browser_proxy.js';
 
 
 interface AccountInfo {
@@ -84,6 +86,12 @@ export class SyncConfirmationAppElement extends SyncConfirmationAppElementBase {
           return loadTimeData.getBoolean('useClickableSyncInfoDesc');
         },
       },
+
+      /** Determines the screen mode. */
+      screenMode_: {
+        type: ScreenMode,
+        value: ScreenMode.PENDING,
+      },
     };
   }
 
@@ -95,6 +103,7 @@ export class SyncConfirmationAppElement extends SyncConfirmationAppElementBase {
   private syncConfirmationBrowserProxy_: SyncConfirmationBrowserProxy =
       SyncConfirmationBrowserProxyImpl.getInstance();
   private useClickableSyncInfoDesc_: boolean;
+  private screenMode_: ScreenMode;
 
 
   override connectedCallback() {
@@ -102,6 +111,8 @@ export class SyncConfirmationAppElement extends SyncConfirmationAppElementBase {
 
     this.addWebUiListener(
         'account-info-changed', this.handleAccountInfoChanged_.bind(this));
+    this.addWebUiListener(
+        'screen-mode-changed', this.handleScreenModeChanged_.bind(this));
     this.syncConfirmationBrowserProxy_.requestAccountInfo();
   }
 
@@ -109,19 +120,21 @@ export class SyncConfirmationAppElement extends SyncConfirmationAppElementBase {
     this.anyButtonClicked_ = true;
     this.syncConfirmationBrowserProxy_.confirm(
         this.getConsentDescription_(),
-        this.getConsentConfirmation_(e.composedPath() as HTMLElement[]));
+        this.getConsentConfirmation_(e.composedPath() as HTMLElement[]),
+        this.screenMode_);
   }
 
   private onUndo_() {
     this.anyButtonClicked_ = true;
-    this.syncConfirmationBrowserProxy_.undo();
+    this.syncConfirmationBrowserProxy_.undo(this.screenMode_);
   }
 
   private onGoToSettings_(e: Event) {
     this.anyButtonClicked_ = true;
     this.syncConfirmationBrowserProxy_.goToSettings(
         this.getConsentDescription_(),
-        this.getConsentConfirmation_(e.composedPath() as HTMLElement[]));
+        this.getConsentConfirmation_(e.composedPath() as HTMLElement[]),
+        this.screenMode_);
   }
 
   /**
@@ -156,10 +169,43 @@ export class SyncConfirmationAppElement extends SyncConfirmationAppElementBase {
     return consentDescription;
   }
 
-  // Called when the account image changes.
+  // Called when the account information changes: it might be either the image
+  // or determined mode of screen restriction (derived from the
+  // canShowHistorySyncOptInsWithoutMinorModeRestriction capability).
   private handleAccountInfoChanged_(accountInfo: AccountInfo) {
     this.accountImageSrc_ = accountInfo.src;
     this.showEnterpriseBadge_ = accountInfo.showEnterpriseBadge;
+  }
+
+  private handleScreenModeChanged_(screenMode: ScreenMode) {
+    this.screenMode_ = screenMode;
+  }
+
+  private getConfirmButtonClass_() {
+    // TODO(b/326912202): Replace with observer pattern on screenMode_.
+    switch (this.screenMode_) {
+      case ScreenMode.UNRESTRICTED:
+        return 'action-button';
+      case ScreenMode.RESTRICTED:
+        return '';
+      case ScreenMode.PENDING:
+        return 'visibility-hidden';
+      default:
+        return '';
+    }
+  }
+
+  private getNotNowButtonClass_() {
+    return this.screenMode_ === ScreenMode.PENDING ? 'visibility-hidden' : '';
+  }
+
+  private isPending_(screenMode: ScreenMode) {
+    return screenMode === ScreenMode.PENDING;
+  }
+
+  private shouldHideEnterpriseBadge_(
+      screenMode: ScreenMode, showEnterpriseBadge: boolean) {
+    return !showEnterpriseBadge || screenMode === ScreenMode.PENDING;
   }
 
   /**

@@ -74,13 +74,13 @@ class ValueParseRequest : public base::RefCounted<ValueParseRequest<T, V>> {
     return receiver;
   }
 
-  void OnServiceValue(absl::optional<V> value) {
-    OnServiceValueOrError(std::move(value), absl::nullopt);
+  void OnServiceValue(std::optional<V> value) {
+    OnServiceValueOrError(std::move(value), std::nullopt);
   }
 
   // Handles a successful parse from the service.
-  void OnServiceValueOrError(absl::optional<V> value,
-                             const absl::optional<std::string>& error) {
+  void OnServiceValueOrError(std::optional<V> value,
+                             const std::optional<std::string>& error) {
     if (!callback() || is_cancelled_->data)
       return;
 
@@ -342,6 +342,40 @@ void DataDecoder::ParseStructuredHeaderListIsolated(
           [](std::unique_ptr<DataDecoder>,
              StructuredHeaderParseListCallback callback,
              base::expected<net::structured_headers::List, std::string>
+                 result) { std::move(callback).Run(std::move(result)); },
+          std::move(decoder), std::move(callback)));
+}
+
+void DataDecoder::ParseStructuredHeaderDictionary(
+    const std::string& header,
+    StructuredHeaderParseDictionaryCallback callback) {
+  auto request = base::MakeRefCounted<ValueParseRequest<
+      mojom::StructuredHeadersParser, net::structured_headers::Dictionary>>(
+      std::move(callback), cancel_requests_);
+  GetService()->BindStructuredHeadersParser(request->BindRemote());
+  request->remote()->ParseDictionary(
+      header,
+      base::BindOnce(&ValueParseRequest<
+                         mojom::StructuredHeadersParser,
+                         net::structured_headers::Dictionary>::OnServiceValue,
+                     request));
+}
+
+// static
+void DataDecoder::ParseStructuredHeaderDictionaryIsolated(
+    const std::string& header,
+    StructuredHeaderParseDictionaryCallback callback) {
+  auto decoder = std::make_unique<DataDecoder>();
+  auto* raw_decoder = decoder.get();
+
+  // We bind the DataDecoder's ownership into the result callback to ensure that
+  // it stays alive until the operation is complete.
+  raw_decoder->ParseStructuredHeaderDictionary(
+      header,
+      base::BindOnce(
+          [](std::unique_ptr<DataDecoder>,
+             StructuredHeaderParseDictionaryCallback callback,
+             base::expected<net::structured_headers::Dictionary, std::string>
                  result) { std::move(callback).Run(std::move(result)); },
           std::move(decoder), std::move(callback)));
 }

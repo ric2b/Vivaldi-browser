@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// IWYU pragma: private, include "fuzztest/fuzztest.h"
+// IWYU pragma: friend fuzztest/.*
+
 #ifndef FUZZTEST_FUZZTEST_DOMAIN_CORE_H_
 #define FUZZTEST_FUZZTEST_DOMAIN_CORE_H_
 
 #include <array>
 #include <cmath>
-#include <cstdint>
 #include <deque>
 #include <initializer_list>
 #include <limits>
@@ -38,17 +40,16 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/random/bit_gen_ref.h"
-#include "absl/random/random.h"
-#include "absl/strings/str_format.h"
+#include "absl/status/status.h"
 #include "absl/strings/string_view.h"
-#include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "./fuzztest/internal/any.h"
 #include "./fuzztest/internal/domains/aggregate_of_impl.h"
 #include "./fuzztest/internal/domains/arbitrary_impl.h"
 #include "./fuzztest/internal/domains/bit_flag_combination_of_impl.h"
 #include "./fuzztest/internal/domains/container_of_impl.h"
-#include "./fuzztest/internal/domains/domain_base.h"
+#include "./fuzztest/internal/domains/domain.h"  // IWYU pragma: export
+#include "./fuzztest/internal/domains/domain_base.h"  // IWYU pragma: export
 #include "./fuzztest/internal/domains/element_of_impl.h"
 #include "./fuzztest/internal/domains/filter_impl.h"
 #include "./fuzztest/internal/domains/flat_map_impl.h"
@@ -61,134 +62,11 @@
 #include "./fuzztest/internal/domains/variant_of_impl.h"
 #include "./fuzztest/internal/logging.h"
 #include "./fuzztest/internal/meta.h"
+#include "./fuzztest/internal/printer.h"  // IWYU pragma: export
 #include "./fuzztest/internal/serialization.h"
 #include "./fuzztest/internal/type_support.h"
 
 namespace fuzztest {
-
-// Type erased version of the domain concept.
-// It can be constructed from any object that follows the domain concept for the
-// right `value_type`. This class implements the domain concept too.
-// TODO(sbenzaquen): Document the domain concept when it is stable enough.
-
-template <typename T>
-class Domain {
- public:
-  using value_type = T;
-  using corpus_type = internal::GenericDomainCorpusType;
-  static constexpr bool has_custom_corpus_type = true;
-
-  // Intentionally not marked as explicit to allow implicit conversion from the
-  // internal domain implementations.
-  template <int&... ExplicitArgumentBarrier, typename Inner,
-            typename CorpusType>
-  Domain(const internal::DomainBase<Inner, T, CorpusType>& inner)
-      : inner_(new auto(static_cast<const Inner&>(inner))) {}
-
-  Domain(const Domain& other) { *this = other; }
-  Domain& operator=(const Domain& other) {
-    inner_.reset(static_cast<internal::TypedDomainInterface<T>*>(
-        other.inner_->Clone().release()));
-    return *this;
-  }
-  // No default constructor or move operations to avoid a null state.
-
-  // Init() generates a random value of corpus_type.
-  //
-  // The generated value can often be a "special value" (e.g., 0, MAX_INT, NaN,
-  // infinity, empty vector, etc.). For basic, fixed sized data types (e.g.,
-  // optional<int>) Init() might give any value. For variable-sized data types
-  // (e.g., containers, linked lists, trees, etc) Init() typically returns a
-  // smaller sized value. Larger sized values however can be created through
-  // Mutate() calls.
-  //
-  // ENSURES: That Init() is non-deterministic, i.e., it doesn't always return
-  // the same value. This is because Mutate() often relies on Init() giving
-  // different values (e.g., when growing a std::set<T> and adding new T
-  // values).
-  corpus_type Init(absl::BitGenRef prng) { return inner_->UntypedInit(prng); }
-
-  // Mutate() makes a relatively small modification on `val` of corpus_type.
-  //
-  // When `only_shrink` is enabled, the mutated value is always "simpler" (e.g.,
-  // smaller).
-  //
-  // ENSURES: That the mutated value is not the same as the original.
-  void Mutate(corpus_type& val, absl::BitGenRef prng, bool only_shrink) {
-    return inner_->UntypedMutate(val, prng, only_shrink);
-  }
-
-  // Try to update the dynamic memory dictionary.
-  // If it propagates to a domain that's compatible with dynamic
-  // dictionary, it will try to match and save dictionary entries from
-  // dynamic data collected by SanCov.
-  void UpdateMemoryDictionary(const corpus_type& val) {
-    return inner_->UntypedUpdateMemoryDictionary(val);
-  }
-
-  auto GetPrinter() const { return Printer{*inner_}; }
-
-  value_type GetValue(const corpus_type& v) const {
-    return inner_->TypedGetValue(v);
-  }
-
-  std::optional<corpus_type> FromValue(const value_type& v) const {
-    return inner_->TypedFromValue(v);
-  }
-
-  // Parses corpus value _without validating it_. Validation must be done with
-  // ValidateCorpusValue().
-  //
-  // TODO(lszekeres): Return StatusOr<corpus_type>.
-  std::optional<corpus_type> ParseCorpus(const internal::IRObject& obj) const {
-    return inner_->UntypedParseCorpus(obj);
-  }
-
-  internal::IRObject SerializeCorpus(const corpus_type& v) const {
-    return inner_->UntypedSerializeCorpus(v);
-  }
-
-  // After creating a corpus value, either via ParseCorpus() or via FromValue()
-  // this method is used to determine if the corpus value is valid.
-  absl::Status ValidateCorpusValue(const corpus_type& corpus_value) const {
-    return inner_->UntypedValidateCorpusValue(corpus_value);
-  }
-
-  // TODO(JunyangShao): Get rid of this API so it won't be exposed
-  // to outside.
-  // Return the field counts of `val` if `val` is
-  // a `ProtobufDomainImpl::corpus_type`. Otherwise propagate it
-  // to inner domains and returns the sum of inner results.
-  uint64_t CountNumberOfFields(const corpus_type& val) {
-    return inner_->UntypedCountNumberOfFields(val);
-  }
-
-  // Mutate the selected protobuf field using `selected_field_index`.
-  // Return value is the same as CountNumberOfFields.
-  uint64_t MutateSelectedField(corpus_type& val, absl::BitGenRef prng,
-                               bool only_shrink,
-                               uint64_t selected_field_index) {
-    return inner_->UntypedMutateSelectedField(val, prng, only_shrink,
-                                              selected_field_index);
-  }
-
-  auto Clone() const { return inner_->Clone(); }
-
- private:
-  // Have a subinterface just for the type traits to not expose more than
-  // necessary through GetPrinter().
-  friend class DomainBuilder;
-
-  struct Printer {
-    const internal::UntypedDomainInterface& inner;
-    void PrintCorpusValue(const corpus_type& val, absl::FormatRawSink out,
-                          internal::PrintMode mode) const {
-      inner.UntypedPrintCorpusValue(val, out, mode);
-    }
-  };
-
-  std::unique_ptr<internal::TypedDomainInterface<T>> inner_;
-};
 
 class DomainBuilder {
  public:
@@ -269,9 +147,9 @@ class DomainBuilder {
   // for recursive data structures.
   template <typename T>
   class IndirectDomain
-      : public internal::DomainBase<IndirectDomain<T>,
-                                    internal::value_type_t<Domain<T>>,
-                                    internal::corpus_type_t<Domain<T>>> {
+      : public domain_implementor::DomainBase<
+            IndirectDomain<T>, internal::value_type_t<Domain<T>>,
+            internal::corpus_type_t<Domain<T>>> {
    public:
     using typename IndirectDomain::DomainBase::corpus_type;
     using typename IndirectDomain::DomainBase::value_type;
@@ -324,10 +202,9 @@ class DomainBuilder {
   // Same as Domain<T>, but also holds ownership of the lookup table.
   // This is for toplevel domains.
   template <typename T>
-  class OwningDomain
-      : public internal::DomainBase<OwningDomain<T>,
-                                    internal::value_type_t<Domain<T>>,
-                                    internal::corpus_type_t<Domain<T>>> {
+  class OwningDomain : public domain_implementor::DomainBase<
+                           OwningDomain<T>, internal::value_type_t<Domain<T>>,
+                           internal::corpus_type_t<Domain<T>>> {
    public:
     using typename OwningDomain::DomainBase::corpus_type;
     using typename OwningDomain::DomainBase::value_type;
@@ -502,8 +379,8 @@ auto NonNegative() {
 template <typename T>
 auto Negative() {
   static_assert(!std::is_unsigned_v<T>,
-                "Negative<T>() can only be used with with signed T-s! "
-                "For char, consider using signed char.");
+                "Negative<T>() can only be used with signed T-s! For char, "
+                "consider using signed char.");
   if constexpr (std::is_floating_point_v<T>) {
     return InRange<T>(std::numeric_limits<T>::lowest(),
                       -std::numeric_limits<T>::denorm_min());
@@ -521,8 +398,8 @@ auto Negative() {
 template <typename T>
 auto NonPositive() {
   static_assert(!std::is_unsigned_v<T>,
-                "NonPositive<T>() can only be used with with signed T-s! "
-                "For char, consider using signed char.");
+                "NonPositive<T>() can only be used with signed T-s! For char, "
+                "consider using signed char.");
   return InRange<T>(std::numeric_limits<T>::lowest(), T{});
 }
 

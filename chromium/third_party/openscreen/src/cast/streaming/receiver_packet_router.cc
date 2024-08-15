@@ -16,16 +16,16 @@ namespace openscreen::cast {
 
 ReceiverPacketRouter::ReceiverPacketRouter(Environment* environment)
     : environment_(environment) {
-  OSP_DCHECK(environment_);
+  OSP_CHECK(environment_);
 }
 
 ReceiverPacketRouter::~ReceiverPacketRouter() {
-  OSP_DCHECK(receivers_.empty());
+  OSP_CHECK(receivers_.empty());
 }
 
 void ReceiverPacketRouter::OnReceiverCreated(Ssrc sender_ssrc,
                                              Receiver* receiver) {
-  OSP_DCHECK(receivers_.find(sender_ssrc) == receivers_.end());
+  OSP_CHECK(receivers_.find(sender_ssrc) == receivers_.end());
   receivers_.emplace_back(sender_ssrc, receiver);
 
   // If there were no Receiver instances before, resume receiving packets for
@@ -46,7 +46,7 @@ void ReceiverPacketRouter::OnReceiverDestroyed(Ssrc sender_ssrc) {
 }
 
 void ReceiverPacketRouter::SendRtcpPacket(ByteView packet) {
-  OSP_DCHECK(InspectPacketForRouting(packet).first == ApparentPacketType::RTCP);
+  OSP_CHECK(InspectPacketForRouting(packet).first == ApparentPacketType::RTCP);
 
   // Do not proceed until the remote endpoint is known. See OnReceivedPacket().
   if (environment_->remote_endpoint().port == 0) {
@@ -60,7 +60,7 @@ void ReceiverPacketRouter::SendRtcpPacket(ByteView packet) {
 void ReceiverPacketRouter::OnReceivedPacket(const IPEndpoint& source,
                                             Clock::time_point arrival_time,
                                             std::vector<uint8_t> packet) {
-  OSP_DCHECK_NE(source.port, uint16_t{0});
+  OSP_CHECK_NE(source.port, uint16_t{0});
 
   // If the sender endpoint is known, ignore any packet that did not come from
   // that same endpoint.

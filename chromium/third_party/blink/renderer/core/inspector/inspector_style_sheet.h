@@ -42,10 +42,10 @@
 
 namespace blink {
 
-class CSSTryRule;
 class CSSKeyframeRule;
 class CSSMediaRule;
 class CSSContainerRule;
+class CSSPositionTryRule;
 class CSSPropertyRule;
 class CSSStyleDeclaration;
 class CSSStyleRule;
@@ -224,7 +224,8 @@ class InspectorStyleSheet : public InspectorStyleSheetBase {
       const AtomicString& pseudo_argument = g_null_atom);
   std::unique_ptr<protocol::CSS::RuleUsage> BuildObjectForRuleUsage(CSSRule*,
                                                                     bool);
-  std::unique_ptr<protocol::CSS::CSSTryRule> BuildObjectForTryRule(CSSTryRule*);
+  std::unique_ptr<protocol::CSS::CSSPositionTryRule>
+  BuildObjectForPositionTryRule(CSSPositionTryRule*);
   std::unique_ptr<protocol::CSS::CSSFontPaletteValuesRule>
   BuildObjectForFontPaletteValuesRule(CSSFontPaletteValuesRule*);
   std::unique_ptr<protocol::CSS::CSSPropertyRule> BuildObjectForPropertyRule(
@@ -304,7 +305,7 @@ class InspectorStyleSheet : public InspectorStyleSheetBase {
   InspectorIndexMap rule_to_source_data_;
   InspectorIndexMap source_data_to_rule_;
   String source_url_;
-  absl::optional<bool> request_failed_to_load_;
+  std::optional<bool> request_failed_to_load_;
   // True means that CSSOM rules are to be synced with the original source text.
   bool marked_for_sync_;
 };

@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/check.h"
 #include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
 #include "build/build_config.h"
@@ -94,7 +95,7 @@ class DialogClientView::ButtonRowContainer : public View {
   const raw_ptr<DialogClientView> owner_;
 };
 
-BEGIN_METADATA(DialogClientView, ButtonRowContainer, View)
+BEGIN_METADATA(DialogClientView, ButtonRowContainer)
 END_METADATA
 
 DialogClientView::DialogClientView(Widget* owner, View* contents_view)
@@ -103,6 +104,7 @@ DialogClientView::DialogClientView(Widget* owner, View* contents_view)
           LayoutProvider::Get()->GetInsetsMetric(INSETS_DIALOG_BUTTON_ROW)),
       input_protector_(
           std::make_unique<views::InputEventActivationProtector>()) {
+  SetLayoutManager(std::make_unique<DelegatingLayoutManager>(this));
   // Doing this now ensures this accelerator will have lower priority than
   // one set by the contents view.
   AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
@@ -180,15 +182,43 @@ void DialogClientView::VisibilityChanged(View* starting_from, bool is_visible) {
   input_protector_->VisibilityChanged(is_visible);
 }
 
-void DialogClientView::Layout() {
-  button_row_container_->SetSize(
-      gfx::Size(width(), button_row_container_->GetHeightForWidth(width())));
-  button_row_container_->SetY(height() - button_row_container_->height());
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+
+void DialogClientView::UpdateWindowRoundedCorners(int corner_radius) {
+  DCHECK(GetWidget());
+
+  const gfx::RoundedCornersF radii(0, 0, corner_radius, corner_radius);
+
+  // Chromeos has rounded windows. A dialog can use native frame i.e look like
+  // a top-level window. For ChromeOS, dialogs use `NonClientFrameViewAsh`
+  // as native frame. The top corners will be rounded by the frame_view and
+  // client-view is responsible for rounding the bottom corners.
+  SetBackgroundRadii(radii);
+}
+
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+ProposedLayout DialogClientView::CalculateProposedLayout(
+    const SizeBounds& size_bounds) const {
+  ProposedLayout layouts;
+  DCHECK(size_bounds.is_fully_bounded());
+  const int container_height =
+      button_row_container_->GetHeightForWidth(size_bounds.width().value());
+  const int container_y = size_bounds.height().value() - container_height;
+  layouts.child_layouts.emplace_back(
+      button_row_container_.get(), button_row_container_->GetVisible(),
+      gfx::Rect(0, container_y, size_bounds.width().value(), container_height),
+      size_bounds);
   if (contents_view()) {
-    gfx::Rect contents_bounds(width(), button_row_container_->y());
+    gfx::Rect contents_bounds(size_bounds.width().value(), container_y);
     contents_bounds.Inset(GetDialogDelegate()->margins());
-    contents_view()->SetBoundsRect(contents_bounds);
+    layouts.child_layouts.emplace_back(contents_view(),
+                                       contents_view()->GetVisible(),
+                                       contents_bounds, size_bounds);
   }
+  layouts.host_size =
+      gfx::Size(size_bounds.width().value(), size_bounds.height().value());
+  return layouts;
 }
 
 bool DialogClientView::AcceleratorPressed(const ui::Accelerator& accelerator) {
@@ -242,14 +272,8 @@ void DialogClientView::ViewHierarchyChanged(
 
 void DialogClientView::OnThemeChanged() {
   ClientView::OnThemeChanged();
-  // The old dialog style needs an explicit background color, while the new
-  // dialog style simply inherits the bubble's frame view color.
-  const DialogDelegate* dialog = GetDialogDelegate();
 
-  if (dialog && !dialog->use_custom_frame()) {
-    SetBackground(views::CreateSolidBackground(
-        GetColorProvider()->GetColor(ui::kColorDialogBackground)));
-  }
+  UpdateBackground();
 }
 
 void DialogClientView::UpdateInputProtectorTimeStamp() {
@@ -266,6 +290,27 @@ bool DialogClientView::IsPossiblyUnintendedInteraction(const ui::Event& event) {
 
 DialogDelegate* DialogClientView::GetDialogDelegate() const {
   return GetWidget()->widget_delegate()->AsDialogDelegate();
+}
+
+void DialogClientView::SetBackgroundRadii(const gfx::RoundedCornersF& radii) {
+  if (background_radii_ == radii) {
+    return;
+  }
+
+  background_radii_ = radii;
+  UpdateBackground();
+}
+
+void DialogClientView::UpdateBackground() {
+  // The old dialog style needs an explicit background color, while the new
+  // dialog style simply inherits the bubble's frame view color.
+  const DialogDelegate* dialog = GetDialogDelegate();
+
+  if (dialog && !dialog->use_custom_frame()) {
+    SetBackground(views::CreateRoundedRectBackground(
+        GetColorProvider()->GetColor(ui::kColorDialogBackground),
+        background_radii_));
+  }
 }
 
 void DialogClientView::OnButtonVisibilityChanged(View* child) {
@@ -289,8 +334,9 @@ void DialogClientView::UpdateDialogButtons() {
   InvalidateLayout();
 }
 
-void DialogClientView::UpdateDialogButton(raw_ptr<MdTextButton>* member,
-                                          ui::DialogButton type) {
+void DialogClientView::UpdateDialogButton(
+    raw_ptr<MdTextButton, DanglingUntriaged>* member,
+    ui::DialogButton type) {
   DialogDelegate* const delegate = GetDialogDelegate();
   if (!(delegate->GetDialogButtons() & type)) {
     if (*member) {
@@ -373,8 +419,9 @@ DialogClientView::GetButtonRowViews() {
 }
 
 void DialogClientView::UpdateExtraViewFromDelegate() {
-  auto new_extra_view = GetDialogDelegate()->DisownExtraView();
-  if (!new_extra_view) {
+  // DisownExtraView() returns nullopt if the extra view was not updated.
+  auto maybe_new_extra_view = GetDialogDelegate()->DisownExtraView();
+  if (!maybe_new_extra_view.has_value()) {
     return;
   }
 
@@ -386,6 +433,10 @@ void DialogClientView::UpdateExtraViewFromDelegate() {
     button_row_container_->RemoveChildViewT(old_extra_view);
   }
 
+  auto new_extra_view = std::move(maybe_new_extra_view.value());
+  if (!new_extra_view) {
+    return;
+  }
   extra_view_ =
       button_row_container_->AddChildViewAt(std::move(new_extra_view), 0);
   if (IsViewClass<Button>(extra_view_)) {

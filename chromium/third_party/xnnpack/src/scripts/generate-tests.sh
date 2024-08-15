@@ -68,15 +68,6 @@ tools/generate-gemm-test.py --spec test/f32-qc8w-gemm.yaml        --output-test 
 tools/generate-gemm-test.py --spec test/f32-qc8w-gemm-relu.yaml   --output-test test/f32-qc8w-gemm-relu.cc   &
 tools/generate-gemm-test.py --spec test/f32-qc8w-gemm-minmax.yaml --output-test test/f32-qc8w-gemm-minmax.cc &
 
-tools/generate-gemm-test.py --spec test/qs8-gemm-minmax-fp32.yaml \
-  --output-test test/qs8-gemm-minmax-fp32.cc --output-test test/qs8-gemm-minmax-fp32-2.cc \
-  --output-test test/qs8-gemm-minmax-fp32-3.cc --output-test test/qs8-gemm-minmax-fp32-4.cc \
-  --output-bench bench/qs8-gemm-fp32.cc &
-tools/generate-gemm-test.py --spec test/qs8-gemm-minmax-rndnu.yaml \
-  --output-test test/qs8-gemm-minmax-rndnu.cc --output-test test/qs8-gemm-minmax-rndnu-2.cc --output-test test/qs8-gemm-minmax-rndnu-3.cc \
-  --output-test test/qs8-gemm-minmax-rndnu-4.cc --output-test test/qs8-gemm-minmax-rndnu-5.cc \
-  --output-bench bench/qs8-gemm-rndnu.cc &
-tools/generate-gemm-test.py --spec test/qs8-gemm-jit-rndnu.yaml --output-test test/qs8-gemm-jit-rndnu.cc &
 tools/generate-gemm-test.py --spec test/qu8-gemm-minmax-fp32.yaml \
   --output-test test/qu8-gemm-minmax-fp32.cc --output-test test/qu8-gemm-minmax-fp32-2.cc \
   --output-bench bench/qu8-gemm-fp32.cc &
@@ -107,10 +98,6 @@ tools/generate-gemm-test.py --spec test/f32-igemm-jit.yaml --output-test test/f3
 tools/generate-gemm-test.py --spec test/qd8-f16-qc8w-igemm-minmax.yaml --output-test test/qd8-f16-qc8w-igemm-minmax.cc --output-test test/qd8-f16-qc8w-igemm-minmax-2.cc --output-test test/qd8-f16-qc8w-igemm-minmax-3.cc --output-test test/qd8-f16-qc8w-igemm-minmax-4.cc &
 tools/generate-gemm-test.py --spec test/qd8-f32-qc8w-igemm-minmax.yaml --output-test test/qd8-f32-qc8w-igemm-minmax.cc --output-test test/qd8-f32-qc8w-igemm-minmax-2.cc --output-test test/qd8-f32-qc8w-igemm-minmax-3.cc &
 
-tools/generate-gemm-test.py --spec test/qs8-igemm-minmax-fp32.yaml --output-test test/qs8-igemm-minmax-fp32.cc --output-test test/qs8-igemm-minmax-fp32-2.cc &
-tools/generate-gemm-test.py --spec test/qs8-igemm-minmax-rndnu.yaml --output-test test/qs8-igemm-minmax-rndnu.cc --output-test test/qs8-igemm-minmax-rndnu-2.cc --output-test test/qs8-igemm-minmax-rndnu-3.cc --output-test test/qs8-igemm-minmax-rndnu-4.cc &
-tools/generate-gemm-test.py --spec test/qs8-igemm-jit-rndnu.yaml --output-test test/qs8-igemm-jit-rndnu.cc &
-
 tools/generate-gemm-test.py --spec test/qu8-igemm-minmax-fp32.yaml --output-test test/qu8-igemm-minmax-fp32.cc --output-test test/qu8-igemm-minmax-fp32-2.cc &
 tools/generate-gemm-test.py --spec test/qu8-igemm-minmax-rndnu.yaml --output-test test/qu8-igemm-minmax-rndnu.cc --output-test test/qu8-igemm-minmax-rndnu-2.cc &
 
@@ -121,8 +108,8 @@ tools/generate-gemm-test.py --spec test/qs8-qc8w-igemm-jit-fp32.yaml --output-te
 tools/generate-gemm-test.py --spec test/f32-ppmm-minmax.yaml --output-test test/f32-ppmm-minmax.cc &
 
 ### Tests for SPMM micro-kernels
-tools/generate-spmm-test.py --spec test/f16-spmm-minmax.yaml --output test/f16-spmm-minmax.cc &
-tools/generate-spmm-test.py --spec test/f32-spmm-minmax.yaml --output test/f32-spmm-minmax.cc &
+tools/generate-spmm-test.py --spec test/f16-spmm-minmax.yaml --output-test test/f16-spmm-minmax.cc &
+tools/generate-spmm-test.py --spec test/f32-spmm-minmax.yaml --output-test test/f32-spmm-minmax.cc  --output-test test/f32-spmm-minmax-2.cc  --output-test test/f32-spmm-minmax-3.cc  --output-test test/f32-spmm-minmax-4.cc --output-bench bench/f32-spmm.cc &
 
 ### Tests for VBinary micro-kernels
 tools/generate-vbinary-test.py --tester VBinaryMicrokernelTester  --spec test/f16-vadd-minmax.yaml --output test/f16-vadd-minmax.cc &
@@ -214,17 +201,18 @@ tools/generate-vunary-test.py --spec test/f16-vsigmoid.yaml --output test/f16-vs
 tools/generate-vunary-test.py --spec test/f16-vsqrt.yaml --output test/f16-vsqrt.cc &
 tools/generate-vunary-test.py --spec test/f16-vtanh.yaml --output test/f16-vtanh.cc &
 
+tools/generate-vunary-test.py --spec test/f32-vabs.yaml --output test/f32-vabs.cc &
 tools/generate-vunary-test.py --spec test/f32-vclamp.yaml --output test/f32-vclamp.cc &
 tools/generate-vunary-test.py --spec test/f32-velu.yaml --output test/f32-velu.cc &
-tools/generate-vunary-test.py --spec test/f32-vabs.yaml --output test/f32-vabs.cc &
 tools/generate-vunary-test.py --spec test/f32-vneg.yaml --output test/f32-vneg.cc &
-tools/generate-vunary-test.py --spec test/f32-vsqr.yaml --output test/f32-vsqr.cc &
 tools/generate-vunary-test.py --spec test/f32-vrelu.yaml --output test/f32-vrelu.cc &
-tools/generate-vunary-test.py --spec test/f32-vrndne.yaml --output test/f32-vrndne.cc &
-tools/generate-vunary-test.py --spec test/f32-vrndz.yaml  --output test/f32-vrndz.cc &
-tools/generate-vunary-test.py --spec test/f32-vrndu.yaml  --output test/f32-vrndu.cc &
 tools/generate-vunary-test.py --spec test/f32-vrndd.yaml  --output test/f32-vrndd.cc &
+tools/generate-vunary-test.py --spec test/f32-vrndne.yaml --output test/f32-vrndne.cc &
+tools/generate-vunary-test.py --spec test/f32-vrndu.yaml  --output test/f32-vrndu.cc &
+tools/generate-vunary-test.py --spec test/f32-vrndz.yaml  --output test/f32-vrndz.cc &
+tools/generate-vunary-test.py --spec test/f32-vrsqrt.yaml --output test/f32-vrsqrt.cc &
 tools/generate-vunary-test.py --spec test/f32-vsigmoid.yaml --output test/f32-vsigmoid.cc &
+tools/generate-vunary-test.py --spec test/f32-vsqr.yaml --output test/f32-vsqr.cc &
 tools/generate-vunary-test.py --spec test/f32-vsqrt.yaml --output test/f32-vsqrt.cc &
 tools/generate-vunary-test.py --spec test/f32-vtanh.yaml --output test/f32-vtanh.cc &
 

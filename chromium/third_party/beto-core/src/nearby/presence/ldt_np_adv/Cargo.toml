@@ -21,7 +21,6 @@ ldt_tbc.workspace = true
 
 [dev-dependencies]
 crypto_provider_default = { workspace = true, features = ["rustcrypto", "std"] }
-crypto_provider_openssl.workspace = true
 rand_ext.workspace = true
 test_helper.workspace = true
 

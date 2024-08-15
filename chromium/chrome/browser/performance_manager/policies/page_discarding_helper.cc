@@ -187,8 +187,16 @@ void PageDiscardingHelper::DiscardMultiplePages(
       // RSS value to 80 MiB for these nodes. 80 MiB is the average
       // Memory.Renderer.PrivateMemoryFootprint histogram value on Windows in
       // August 2021.
-      total_reclaim_kb +=
+      uint64_t node_reclaim_kb =
           (page_node_rss_kb[node]) ? page_node_rss_kb[node] : 80 * 1024;
+      total_reclaim_kb += node_reclaim_kb;
+
+      LOG(WARNING) << "Queueing discard attempt, type="
+                   << performance_manager::PageNode::ToString(node->GetType())
+                   << ", flags=[" << (candidate.is_focused() ? " focused" : "")
+                   << (candidate.is_protected() ? " protected" : "")
+                   << (candidate.is_visible() ? " visible" : "")
+                   << " ] to save " << node_reclaim_kb << " KiB";
     }
   }
 
@@ -205,8 +213,6 @@ void PageDiscardingHelper::DiscardMultiplePages(
 
   // Got to the end successfully, don't call the early return callback.
   run_post_discard_cb_on_return.ReplaceClosure(base::DoNothing());
-
-  LOG(WARNING) << "Discarding " << discard_attempts.size() << " pages";
 
   page_discarder_->DiscardPageNodes(
       discard_attempts, discard_reason,
@@ -367,6 +373,11 @@ PageDiscardingHelper::CanDiscardResult PageDiscardingHelper::CanDiscard(
     return CanDiscardResult::kProtected;
   }
 
+  if (is_proactive && page_node->GetNotificationPermissionStatus() ==
+                          blink::mojom::PermissionStatus::GRANTED) {
+    return CanDiscardResult::kProtected;
+  }
+
   const auto* live_state_data = GetPageNodeLiveStateData(page_node);
 
   // The live state data won't be available if none of these events ever
@@ -413,14 +424,8 @@ PageDiscardingHelper::CanDiscardResult PageDiscardingHelper::CanDiscard(
     if (live_state_data->IsDevToolsOpen()) {
       return CanDiscardResult::kProtected;
     }
-    if (is_proactive) {
-      if (live_state_data->IsContentSettingTypeAllowed(
-              ContentSettingsType::NOTIFICATIONS)) {
-        return CanDiscardResult::kProtected;
-      }
-      if (live_state_data->UpdatedTitleOrFaviconInBackground()) {
-        return CanDiscardResult::kProtected;
-      }
+    if (is_proactive && live_state_data->UpdatedTitleOrFaviconInBackground()) {
+      return CanDiscardResult::kProtected;
     }
 #if !BUILDFLAG(IS_CHROMEOS)
     // TODO(sebmarchand): Skip this check if the Entreprise memory limit is set.

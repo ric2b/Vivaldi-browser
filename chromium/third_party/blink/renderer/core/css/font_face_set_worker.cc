@@ -55,7 +55,8 @@ void FontFaceSetWorker::NotifyError(FontFace* font_face) {
   RemoveFromLoadingFonts(font_face);
 }
 
-ScriptPromise FontFaceSetWorker::ready(ScriptState* script_state) {
+ScriptPromiseTyped<FontFaceSet> FontFaceSetWorker::ready(
+    ScriptState* script_state) {
   return ready_->Promise(script_state->World());
 }
 
@@ -83,13 +84,10 @@ bool FontFaceSetWorker::ResolveFontStyle(const String& font_string,
     return false;
   }
 
-  FontFamily font_family;
-  font_family.SetFamily(
-      FontFaceSet::DefaultFontFamily(),
-      FontFamily::InferredTypeFor(FontFaceSet::DefaultFontFamily()));
-
   FontDescription default_font_description;
-  default_font_description.SetFamily(font_family);
+  default_font_description.SetFamily(FontFamily(
+      FontFaceSet::DefaultFontFamily(),
+      FontFamily::InferredTypeFor(FontFaceSet::DefaultFontFamily())));
   default_font_description.SetSpecifiedSize(FontFaceSet::kDefaultFontSize);
   default_font_description.SetComputedSize(FontFaceSet::kDefaultFontSize);
 

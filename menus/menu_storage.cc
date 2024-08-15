@@ -325,15 +325,15 @@ void MenuStorage::OnModelWillBeDeleted() {
   model_ = nullptr;
 }
 
-absl::optional<std::string> MenuStorage::SerializeData() {
+std::optional<std::string> MenuStorage::SerializeData() {
   if (!model_) {
     // We can get into this state if there is a pending save on exit. It will
-    // only happen if a forced save fails (eg absl::nullopt is returned below)
+    // only happen if a forced save fails (eg std::nullopt is returned below)
     // A forced save is initiated from ~Menu_Model() which calls
     // MenuStorage::OnModelWillBeDeleted(). The forced save will clear the
     // pending save request in the file writer only if it succeeds. If not we
     // can end up here with model_ set to nullptr.
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   MenuCodec codec;
@@ -342,7 +342,7 @@ absl::optional<std::string> MenuStorage::SerializeData() {
   serializer.set_pretty_print(true);
   base::Value value = codec.Encode(model_);
   if (!serializer.Serialize(value))
-    return absl::nullopt;
+    return std::nullopt;
 
   return output;
 }
@@ -364,7 +364,7 @@ bool MenuStorage::SaveNow() {
     return false;
   }
 
-  absl::optional<std::string> data = SerializeData();
+  std::optional<std::string> data = SerializeData();
   if (!data)
     return false;
   writer_.WriteNow(data.value());
@@ -375,7 +375,7 @@ bool MenuStorage::SaveValue(const std::unique_ptr<base::Value>& value) {
   std::unique_ptr<std::string> data(new std::string);
   JSONStringValueSerializer serializer(data.get());
   serializer.set_pretty_print(true);
-  absl::optional<std::string> datavalue = SerializeData();
+  std::optional<std::string> datavalue = SerializeData();
   if (!datavalue)
     return false;
   writer_.WriteNow(datavalue.value());

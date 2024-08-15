@@ -7,11 +7,13 @@
 #include <memory>
 
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/media_preview/media_preview_metrics.h"
 #include "chrome/browser/ui/views/media_preview/media_view.h"
 #include "ui/color/color_id.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/view.h"
+#include "ui/views/view_observer.h"
 
 MediaCoordinator::EligibleDevices::EligibleDevices() = default;
 MediaCoordinator::EligibleDevices::EligibleDevices(
@@ -22,15 +24,20 @@ MediaCoordinator::EligibleDevices::~EligibleDevices() = default;
 MediaCoordinator::EligibleDevices::EligibleDevices(const EligibleDevices&) =
     default;
 
-MediaCoordinator::MediaCoordinator(ViewType view_type,
-                                   views::View& parent_view,
-                                   std::optional<size_t> index,
-                                   bool is_subsection,
-                                   EligibleDevices eligible_devices,
-                                   PrefService& prefs) {
+MediaCoordinator::MediaCoordinator(
+    ViewType view_type,
+    views::View& parent_view,
+    bool is_subsection,
+    EligibleDevices eligible_devices,
+    PrefService& prefs,
+    bool allow_device_selection,
+    media_preview_metrics::Context metrics_context)
+    : view_type_(view_type) {
   media_view_ =
-      parent_view.AddChildViewAt(std::make_unique<MediaView>(is_subsection),
-                                 index.value_or(parent_view.children().size()));
+      parent_view.AddChildView(std::make_unique<MediaView>(is_subsection));
+  media_view_->SetBetweenChildSpacing(
+      ChromeLayoutProvider::Get()->GetDistanceMetric(
+          views::DISTANCE_RELATED_CONTROL_VERTICAL));
 
   if (!is_subsection) {
     auto* provider = ChromeLayoutProvider::Get();
@@ -47,12 +54,19 @@ MediaCoordinator::MediaCoordinator(ViewType view_type,
 
   if (view_type != ViewType::kMicOnly) {
     camera_coordinator_.emplace(*media_view_, /*needs_borders=*/!is_subsection,
-                                eligible_devices.cameras, prefs);
+                                eligible_devices.cameras, prefs,
+                                allow_device_selection, metrics_context);
   }
 
   if (view_type != ViewType::kCameraOnly) {
     mic_coordinator_.emplace(*media_view_, /*needs_borders=*/!is_subsection,
-                             eligible_devices.mics, prefs);
+                             eligible_devices.mics, prefs,
+                             allow_device_selection, metrics_context);
+  }
+
+  if (metrics_context.ui_location ==
+      media_preview_metrics::UiLocation::kPermissionPrompt) {
+    permission_prompt_start_time_ = base::TimeTicks::Now();
   }
 }
 
@@ -64,6 +78,7 @@ MediaCoordinator::~MediaCoordinator() {
     media_view_->parent()->RemoveChildViewT(
         std::exchange(media_view_, nullptr));
   }
+  RecordPreviewDurationForPermissionPrompt();
 }
 
 void MediaCoordinator::UpdateDevicePreferenceRanking() {
@@ -74,3 +89,31 @@ void MediaCoordinator::UpdateDevicePreferenceRanking() {
     mic_coordinator_->UpdateDevicePreferenceRanking();
   }
 }
+
+void MediaCoordinator::RecordPreviewDurationForPermissionPrompt() {
+  if (!permission_prompt_start_time_) {
+    return;
+  }
+
+  media_preview_metrics::RecordMediaPreviewDuration(
+      {media_preview_metrics::UiLocation::kPermissionPrompt,
+       media_coordinator::GetPreviewTypeFromMediaCoordinatorViewType(
+           view_type_)},
+      base::TimeTicks::Now() - permission_prompt_start_time_.value());
+}
+
+namespace media_coordinator {
+
+media_preview_metrics::PreviewType GetPreviewTypeFromMediaCoordinatorViewType(
+    MediaCoordinator::ViewType view_type) {
+  switch (view_type) {
+    case MediaCoordinator::ViewType::kBoth:
+      return media_preview_metrics::PreviewType::kCameraAndMic;
+    case MediaCoordinator::ViewType::kCameraOnly:
+      return media_preview_metrics::PreviewType::kCamera;
+    case MediaCoordinator::ViewType::kMicOnly:
+      return media_preview_metrics::PreviewType::kMic;
+  }
+}
+
+}  // namespace media_coordinator

@@ -55,7 +55,6 @@ import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.HistogramWatcher;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.RequiresRestart;
 import org.chromium.components.autofill.AutofillHintsServiceTestHelper;
 import org.chromium.components.autofill.AutofillManagerWrapper;
@@ -97,16 +96,18 @@ public class AwAutofillTest extends AwParameterizedTest {
     public static final int AUTOFILL_VIEW_EXITED = 1;
     public static final int AUTOFILL_VALUE_CHANGED = 2;
     public static final int AUTOFILL_COMMIT = 3;
-    public static final int AUTOFILL_CANCEL = 4;
-    public static final int AUTOFILL_SESSION_STARTED = 5;
-    public static final int AUTOFILL_PREDICTIONS_AVAILABLE = 6;
-    public static final int AUTOFILL_EVENT_MAX = 7;
+    public static final int AUTOFILL_CANCEL_PRE_P = 4;
+    public static final int AUTOFILL_CANCEL = 5;
+    public static final int AUTOFILL_SESSION_STARTED = 6;
+    public static final int AUTOFILL_PREDICTIONS_AVAILABLE = 7;
+    public static final int AUTOFILL_EVENT_MAX = 8;
 
     public static final String[] EVENT = {
         "VIEW_ENTERED",
         "VIEW_EXITED",
         "VALUE_CHANGED",
         "COMMIT",
+        "CANCEL_PRE_P",
         "CANCEL",
         "SESSION_STARTED",
         "QUERY_DONE"
@@ -184,7 +185,6 @@ public class AwAutofillTest extends AwParameterizedTest {
             mEventQueue.add(AUTOFILL_CANCEL);
             mCallbackHelper.notifyCalled();
         }
-
         @Override
         public void notifyNewSessionStarted(boolean hasServerPrediction) {
             if (DEBUG) Log.i(TAG, "notifyNewSessionStarted");
@@ -260,7 +260,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                     mTest.waitForCallbackAndVerifyTypes(
                             mCnt,
                             new Integer[] {
-                                AUTOFILL_CANCEL,
+                                AUTOFILL_CANCEL_PRE_P,
                                 AUTOFILL_VIEW_ENTERED,
                                 AUTOFILL_SESSION_STARTED,
                                 AUTOFILL_VALUE_CHANGED
@@ -278,7 +278,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                     mTest.waitForCallbackAndVerifyTypes(
                             mCnt,
                             new Integer[] {
-                                AUTOFILL_CANCEL,
+                                AUTOFILL_CANCEL_PRE_P,
                                 AUTOFILL_VIEW_ENTERED,
                                 AUTOFILL_SESSION_STARTED,
                                 AUTOFILL_VALUE_CHANGED
@@ -326,7 +326,23 @@ public class AwAutofillTest extends AwParameterizedTest {
             mTest.executeJavaScriptAndWaitForResult("document.getElementById('formid').submit();");
             mCnt +=
                     mTest.waitForCallbackAndVerifyTypes(
-                            mCnt, new Integer[] {AUTOFILL_VALUE_CHANGED, AUTOFILL_COMMIT});
+                            mCnt,
+                            new Integer[] {
+                                AUTOFILL_VALUE_CHANGED, AUTOFILL_COMMIT, AUTOFILL_CANCEL
+                            });
+        }
+
+        public void reload() throws Throwable {
+            mTest.executeJavaScriptAndWaitForResult("location.reload();");
+            mCnt +=
+                    mTest.waitForCallbackAndVerifyTypes(
+                            mCnt,
+                            new Integer[] {
+                                AUTOFILL_VIEW_EXITED,
+                                AUTOFILL_VALUE_CHANGED,
+                                AUTOFILL_COMMIT,
+                                AUTOFILL_CANCEL
+                            });
         }
 
         public void startNewSession() throws Throwable {
@@ -338,7 +354,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                             mCnt,
                             new Integer[] {
                                 AUTOFILL_VIEW_EXITED,
-                                AUTOFILL_CANCEL,
+                                AUTOFILL_CANCEL_PRE_P,
                                 AUTOFILL_VIEW_ENTERED,
                                 AUTOFILL_SESSION_STARTED,
                                 AUTOFILL_VALUE_CHANGED
@@ -470,7 +486,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL, AUTOFILL_VIEW_ENTERED, AUTOFILL_SESSION_STARTED
+                            AUTOFILL_CANCEL_PRE_P, AUTOFILL_VIEW_ENTERED, AUTOFILL_SESSION_STARTED
                         });
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
         waitForCallbackAndVerifyTypes(cnt, new Integer[] {AUTOFILL_VALUE_CHANGED});
@@ -483,40 +499,34 @@ public class AwAutofillTest extends AwParameterizedTest {
     @SmallTest
     @Feature({"AndroidWebView"})
     public void testBasicAutofill() throws Throwable {
-        final String data =
-                """
-                    <html>
-                    <head></head>
-                    <body>
-                        <form action='a.html' name='formname'>
-                            <label>User Name:</label>
-                            <input type='text' id='text1' name='name' maxlength='30'
-                                placeholder='placeholder@placeholder.com'
-                                    autocomplete='name given-name'>
-                            <input type='checkbox' id='checkbox1' name='showpassword'>
-                            <select id='select1' name='month'>
-                                    <option value='1'>Jan</option>
-                                    <option value='2'>Feb</option>
-                            </select><textarea id='textarea1'></textarea>
-                            <div contenteditable id='div1'>hello</div>
-                            <input type='submit'>
-                            <input type='reset' id='reset1'>
-                            <input type='color' id='color1'><input type='file' id='file1'>
-                            <input type='image' id='image1'>
-                        </form>
-                    </body>
-                    </html>""";
+        final String url =
+                loadHTML(
+                        """
+                            <form action='a.html' name='formname'>
+                                <label>User Name:</label>
+                                    <input type='text' id='text1' name='name' maxlength='30'
+                                        placeholder='placeholder@placeholder.com'
+                                        autocomplete='name given-name'>
+                                    <input type='checkbox' id='checkbox1' name='showpassword'>
+                                    <select id='select1' name='month'>
+                                        <option value='1'>Jan</option>
+                                        <option value='2'>Feb</option>
+                                    </select><textarea id='textarea1'></textarea>
+                                    <div contenteditable id='div1'>hello</div>
+                                    <input type='submit'>
+                                    <input type='reset' id='reset1'>
+                                    <input type='color' id='color1'><input type='file' id='file1'>
+                                    <input type='image' id='image1'>
+                            </form>""");
         final int totalControls = 4; // text1, checkbox1, select1, textarea1
         int cnt = 0;
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
         executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
         cnt +=
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -655,19 +665,14 @@ public class AwAutofillTest extends AwParameterizedTest {
     @CommandLineFlags.Add({"enable-features=AutofillAcrossIframes"})
     @DisabledTest(message = "https://crbug.com/1401726")
     public void testCrossFrameAutofill() throws Throwable {
-        final String data =
+        loadHTML(
                 """
-                    <html>
-                    <body>
-                        <form>
-                            <input autocomplete=cc-name>
-                            <iframe srcdoc='<input autocomplete=cc-number>'></iframe>
-                            <iframe srcdoc='<input autocomplete=cc-exp>'></iframe>
-                            <iframe srcdoc='<input autocomplete=cc-csc>'></iframe>
-                        </form>
-                    </body>
-                    </html>""";
-        loadUrlSync(mWebServer.setResponse(FILE, data, null));
+                    <form>
+                        <input autocomplete=cc-name>
+                        <iframe srcdoc='<input autocomplete=cc-number>'></iframe>
+                        <iframe srcdoc='<input autocomplete=cc-exp>'></iframe>
+                        <iframe srcdoc='<input autocomplete=cc-csc>'></iframe>
+                   </form>""");
         int cnt = 0;
         executeJavaScriptAndWaitForResult(
                 "window.frames[0].document.body.firstElementChild.select();");
@@ -676,7 +681,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VIEW_EXITED,
@@ -722,14 +727,15 @@ public class AwAutofillTest extends AwParameterizedTest {
     }
 
     /**
-     * This test is verifying that a user interacting with a form after reloading a webpage
-     * triggers a new autofill session rather than continuing a session that was started before the
-     * reload. This is necessary to ensure that autofill is properly triggered in this case (see
+     * This test is verifying that a user interacting with a form after reloading a webpage triggers
+     * a new autofill session rather than continuing a session that was started before the reload.
+     * This is necessary to ensure that autofill is properly triggered in this case (see
      * crbug.com/1117563 for details).
      */
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
     public void testAutofillTriggersAfterReload() throws Throwable {
         int cnt = 0;
 
@@ -742,7 +748,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL, AUTOFILL_VIEW_ENTERED, AUTOFILL_SESSION_STARTED
+                            AUTOFILL_CANCEL_PRE_P, AUTOFILL_VIEW_ENTERED, AUTOFILL_SESSION_STARTED
                         });
 
         // Reload the page and check that the user clicking on the same form field ends the current
@@ -757,6 +763,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                         new Integer[] {
                             AUTOFILL_VIEW_EXITED,
                             AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED
                         });
@@ -776,7 +783,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -811,7 +818,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -842,23 +849,17 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
     public void testCommit() throws Throwable {
-        final String data =
+        loadHTML(
                 """
-                        <html>
-                        <head></head>
-                        <body>
-                            <form action='a.html' name='formname' id='formid'>
-                                <input type='text' id='text1' name='username'
-                                    placeholder='placeholder@placeholder.com'
-                                    autocomplete='username name'>
-                                <input type='password' id='passwordid' name='passwordname'
-                                <input type='submit'>
-                            </form>
-                        </body>
-                        </html>""";
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
+                    <form action='a.html' name='formname' id='formid'>
+                        <input type='text' id='text1' name='username'
+                            placeholder='placeholder@placeholder.com'
+                            autocomplete='username name'>
+                        <input type='password' id='passwordid' name='passwordname'
+                        <input type='submit'>
+                    </form>""");
         int cnt = 0;
         executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
@@ -866,7 +867,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -887,7 +888,9 @@ public class AwAutofillTest extends AwParameterizedTest {
         executeJavaScriptAndWaitForResult("document.getElementById('formid').submit();");
         waitForCallbackAndVerifyTypes(
                 cnt,
-                new Integer[] {AUTOFILL_VALUE_CHANGED, AUTOFILL_VALUE_CHANGED, AUTOFILL_COMMIT});
+                new Integer[] {
+                    AUTOFILL_VALUE_CHANGED, AUTOFILL_VALUE_CHANGED, AUTOFILL_COMMIT, AUTOFILL_CANCEL
+                });
         ArrayList<Pair<Integer, AutofillValue>> values = getChangedValues();
         assertEquals(2, values.size());
         assertEquals("a", values.get(0).second.getTextValue());
@@ -900,24 +903,20 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @CommandLineFlags.Add({"enable-features=AndroidAutofillFormSubmissionCheckById"})
+    @CommandLineFlags.Add({
+        "enable-features=AndroidAutofillFormSubmissionCheckById,"
+            + " AndroidAutofillCancelSessionOnNavigation"
+    })
     public void testCommitWithChangedFormProperties() throws Throwable {
-        final String data =
+        loadHTML(
                 """
-                    <html>
-                    <head></head>
-                    <body>
-                        <form action='a.html' name='formname' id='formid'>
-                            <input type='text' id='text1' name='username'
-                                placeholder='placeholder@placeholder.com'
-                                autocomplete='username name'>
-                            <input type='password' id='passwordid' name='passwordname'
-                            <input type='submit'>
-                        </form>
-                    </body>
-                    </html>""";
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
+                    <form action='a.html' name='formname' id='formid'>
+                        <input type='text' id='text1' name='username'
+                            placeholder='placeholder@placeholder.com'
+                            autocomplete='username name'>
+                        <input type='password' id='passwordid' name='passwordname'
+                        <input type='submit'>
+                    </form>""");
         int cnt = 0;
         executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
@@ -925,7 +924,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -950,7 +949,9 @@ public class AwAutofillTest extends AwParameterizedTest {
         executeJavaScriptAndWaitForResult("document.getElementById('formid').submit();");
         waitForCallbackAndVerifyTypes(
                 cnt,
-                new Integer[] {AUTOFILL_VALUE_CHANGED, AUTOFILL_VALUE_CHANGED, AUTOFILL_COMMIT});
+                new Integer[] {
+                    AUTOFILL_VALUE_CHANGED, AUTOFILL_VALUE_CHANGED, AUTOFILL_COMMIT, AUTOFILL_CANCEL
+                });
         ArrayList<Pair<Integer, AutofillValue>> values = getChangedValues();
         assertEquals(2, values.size());
         assertEquals("a", values.get(0).second.getTextValue());
@@ -965,27 +966,23 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @CommandLineFlags.Add({"enable-features=AutofillAcrossIframes"})
+    @CommandLineFlags.Add({
+        "enable-features=AutofillAcrossIframes, AndroidAutofillCancelSessionOnNavigation"
+    })
     public void testCrossFrameCommit() throws Throwable {
         // The only reason we use a <form> inside the iframe is that this makes it easiest to
         // trigger a form submission in that frame.
         // TODO(crbug.com/1385768): Need to set the "id" so GetSimilarFieldIndex() doesn't confuse
         // the fields.
-        final String data =
+        loadHTML(
                 """
-                    <html>
-                    <head></head>
-                    <body>
-                        <form>
-                            <input id=name>
-                            <iframe srcdoc='<form action=arbitrary.html method=GET>
-                                        <input id=num></form>'></iframe>
-                            <iframe srcdoc='<input id=exp>'></iframe>
-                            <iframe srcdoc='<input id=csc>'></iframe>
-                        </form>
-                    </body>
-                    </html>""";
-        loadUrlSync(mWebServer.setResponse(FILE, data, null));
+                    <form>
+                        <input id=name>
+                        <iframe srcdoc='<form action=arbitrary.html method=GET>
+                            <input id=num></form>'></iframe>
+                        <iframe srcdoc='<input id=exp>'></iframe>
+                        <iframe srcdoc='<input id=csc>'></iframe>
+                   </form>""");
         int cnt = 0;
         // Fill name field.
         executeJavaScriptAndWaitForResult("document.forms[0].elements[0].select();");
@@ -994,7 +991,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -1045,7 +1042,8 @@ public class AwAutofillTest extends AwParameterizedTest {
                     AUTOFILL_VALUE_CHANGED,
                     AUTOFILL_VALUE_CHANGED,
                     AUTOFILL_VALUE_CHANGED,
-                    AUTOFILL_COMMIT
+                    AUTOFILL_COMMIT,
+                    AUTOFILL_CANCEL
                 });
         ArrayList<Pair<Integer, AutofillValue>> values = getChangedValues();
         assertEquals(4, values.size());
@@ -1068,7 +1066,7 @@ public class AwAutofillTest extends AwParameterizedTest {
         waitForCallbackAndVerifyTypes(
                 cnt,
                 new Integer[] {
-                    AUTOFILL_CANCEL,
+                    AUTOFILL_CANCEL_PRE_P,
                     AUTOFILL_VIEW_ENTERED,
                     AUTOFILL_SESSION_STARTED,
                     AUTOFILL_VALUE_CHANGED
@@ -1079,35 +1077,28 @@ public class AwAutofillTest extends AwParameterizedTest {
     @SmallTest
     @Feature({"AndroidWebView"})
     public void testMovingToOtherForm() throws Throwable {
-        final String data =
+        loadHTML(
                 """
-                    <html>
-                    <head></head>
-                    <body>
-                        <form action='a.html' name='formname' id='formid'>
-                            <input type='text' id='text1' name='username'
-                                placeholder='placeholder@placeholder.com'
-                                autocomplete='username name'>
-                            <input type='submit'>
-                        </form>
-                        <form action='a.html' name='formname' id='formid2'>
-                            <input type='text' id='text2' name='username'
-                                placeholder='placeholder@placeholder.com'
-                                autocomplete='username name'>
-                            <input type='submit'>
-                        </form>
-                    </body>
-                    </html>""";
+                    <form action='a.html' name='formname' id='formid'>
+                        <input type='text' id='text1' name='username'
+                            placeholder='placeholder@placeholder.com'
+                            autocomplete='username name'>
+                        <input type='submit'>
+                    </form>
+                    <form action='a.html' name='formname' id='formid2'>
+                        <input type='text' id='text2' name='username'
+                            placeholder='placeholder@placeholder.com'
+                            autocomplete='username name'>
+                        <input type='submit'>
+                    </form>""");
         int cnt = 0;
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
         executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
         cnt +=
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -1119,7 +1110,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 cnt,
                 new Integer[] {
                     AUTOFILL_VIEW_EXITED,
-                    AUTOFILL_CANCEL,
+                    AUTOFILL_CANCEL_PRE_P,
                     AUTOFILL_VIEW_ENTERED,
                     AUTOFILL_SESSION_STARTED,
                     AUTOFILL_VALUE_CHANGED
@@ -1192,7 +1183,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         count,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -1211,7 +1202,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 count,
                 new Integer[] {
                     AUTOFILL_VIEW_EXITED,
-                    AUTOFILL_CANCEL,
+                    AUTOFILL_CANCEL_PRE_P,
                     AUTOFILL_VIEW_ENTERED,
                     AUTOFILL_SESSION_STARTED,
                     AUTOFILL_VALUE_CHANGED
@@ -1232,19 +1223,12 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Feature({"AndroidWebView"})
     public void testTouchingPasswordFieldTriggerQuery() throws Throwable {
         int cnt = 0;
-        final String data =
+        loadHTML(
                 """
-                    <html>
-                        <head></head>
-                        <body>
-                            <form action='a.html' name='formname' id='formid'>
-                                <input type='password' id='passwordid'
-                                    name='passwordname' <input type='submit'>
-                            </form>
-                        </body>
-                        </html>""";
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
+                    <form action='a.html' name='formname' id='formid'>
+                        <input type='password' id='passwordid'
+                            name='passwordname' <input type='submit'>
+                    </form>""");
         DOMUtils.waitForNonZeroNodeBounds(mAwContents.getWebContents(), "passwordid");
         // Note that we currently depend on keyboard app's behavior.
         // TODO(changwan): mock out IME interaction.
@@ -1253,7 +1237,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL, AUTOFILL_VIEW_ENTERED, AUTOFILL_SESSION_STARTED
+                            AUTOFILL_CANCEL_PRE_P, AUTOFILL_VIEW_ENTERED, AUTOFILL_SESSION_STARTED
                         });
     }
 
@@ -1266,21 +1250,14 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Feature({"AndroidWebView"})
     public void testFocusRemovedAndRestored() throws Throwable {
         int cnt = 0;
-        final String data =
+        loadHTML(
                 """
-                    <!DOCTYPE html>
-                    <html>
-                    <body>
-                        <form action='a.html' name='formname' id='formid'>
-                            <input type='text' id='text1' name='username'
-                                placeholder='placeholder@placeholder.com'
-                                autocomplete='username name'>
-                            <input type='password' id='passwordid' name='passwordname'>
-                        </form>
-                    </body>
-                    </html>""";
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
+                    <form action='a.html' name='formname' id='formid'>
+                        <input type='text' id='text1' name='username'
+                            placeholder='placeholder@placeholder.com'
+                            autocomplete='username name'>
+                        <input type='password' id='passwordid' name='passwordname'>
+                    </form>""");
 
         // Start the session by clicking on the username element.
         DOMUtils.waitForNonZeroNodeBounds(mAwContents.getWebContents(), "text1");
@@ -1290,7 +1267,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL, AUTOFILL_VIEW_ENTERED, AUTOFILL_SESSION_STARTED
+                            AUTOFILL_CANCEL_PRE_P, AUTOFILL_VIEW_ENTERED, AUTOFILL_SESSION_STARTED
                         });
 
         // Removing focus from this element should cause a notification that the autofill view was
@@ -1310,38 +1287,34 @@ public class AwAutofillTest extends AwParameterizedTest {
     }
 
     /**
-     * This test is verifying that a navigation occurring while there is a probably-submitted
-     * form will trigger commit of the current autofill session.
+     * This test is verifying that a navigation occurring while there is a probably-submitted form
+     * will trigger commit of the current autofill session.
      */
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
     public void testNavigationAfterProbableSubmitResultsInSessionCommit() throws Throwable {
         int cnt = 0;
-        final String data =
+        loadHTML(
                 """
-                    <!DOCTYPE html>
-                    <html>
-                    <body>
-                        <form action='a.html' name='formname' id='formid'>
-                            <input type='text' id='text1' name='username'
-                                placeholder='placeholder@placeholder.com'
-                                autocomplete='username name'>
-                            <input type='password' id='passwordid' name='passwordname'>
-                        </form>
-                    </body>
-                    </html>""";
+                    <form action='a.html' name='formname' id='formid'>
+                        <input type='text' id='text1' name='username'
+                            placeholder='placeholder@placeholder.com'
+                            autocomplete='username name'>
+                        <input type='password' id='passwordid' name='passwordname'>
+                    </form>
+                    >""");
         final String success = "<!DOCTYPE html>" + "<html>" + "<body>" + "</body>" + "</html>";
         mWebServer.setResponse("/success.html", success, null);
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
+
         executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
         cnt +=
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -1353,7 +1326,8 @@ public class AwAutofillTest extends AwParameterizedTest {
                     AUTOFILL_VIEW_EXITED,
                     AUTOFILL_VALUE_CHANGED,
                     AUTOFILL_VALUE_CHANGED,
-                    AUTOFILL_COMMIT
+                    AUTOFILL_COMMIT,
+                    AUTOFILL_CANCEL
                 });
         assertEquals(SubmissionSource.PROBABLY_FORM_SUBMITTED, mSubmissionSource);
     }
@@ -1366,23 +1340,16 @@ public class AwAutofillTest extends AwParameterizedTest {
     @SmallTest
     @Feature({"AndroidWebView"})
     public void testNoSubmissionWithoutFillingForm() throws Throwable {
-        final String data =
+        loadHTML(
                 """
-                    <!DOCTYPE html>
-                    <html>
-                    <body>
-                        <form action='a.html' name='formname' id='formid'>
-                            <input type='text' id='text1' name='username'
-                            placeholder='placeholder@placeholder.com'
-                                autocomplete='username name'>
-                            <input type='password' id='passwordid' name='passwordname'>
-                        </form>
-                    </body>
-                    </html>""";
+                    <form action='a.html' name='formname' id='formid'>
+                        <input type='text' id='text1' name='username'
+                        placeholder='placeholder@placeholder.com'
+                            autocomplete='username name'>
+                        <input type='password' id='passwordid' name='passwordname'>
+                    </form>""");
         final String success = "<!DOCTYPE html>" + "<html>" + "<body>" + "</body>" + "</html>";
         mWebServer.setResponse("/success.html", success, null);
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
         executeJavaScriptAndWaitForResult("window.location.href = 'success.html'; ");
         // There is no callback. AUTOFILL_CANCEL shouldn't be invoked.
         assertEquals(0, getCallbackCount());
@@ -1396,29 +1363,22 @@ public class AwAutofillTest extends AwParameterizedTest {
             message = "This test is disabled on Android O because of https://crbug.com/997362")
     public void testSelectControlChangeNotification() throws Throwable {
         int cnt = 0;
-        final String data =
+        loadHTML(
                 """
-                    <!DOCTYPE html>
-                    <html>
-                    <body>
-                        <form action='a.html' name='formname' id='formid'>
-                            <input type='text' id='text1' name='username'>
-                            <select id='color' autofocus>
-                                <option value='red'>red</option>
-                                <option value='blue' id='blue'>blue</option>
-                            </select>
-                        </form>
-                    </body>
-                    </html>""";
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
+                    <form action='a.html' name='formname' id='formid'>
+                        <input type='text' id='text1' name='username'>
+                        <select id='color' autofocus>
+                            <option value='red'>red</option>
+                            <option value='blue' id='blue'>blue</option>
+                        </select>
+                    </form>""");
         executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
         cnt +=
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -1448,22 +1408,15 @@ public class AwAutofillTest extends AwParameterizedTest {
             message = "This test is disabled on Android O because of https://crbug.com/997362")
     public void testSelectControlChangeStartAutofillSession() throws Throwable {
         int cnt = 0;
-        final String data =
+        loadHTML(
                 """
-                    <!DOCTYPE html>
-                    <html>
-                    <body>
-                        <form action='a.html' name='formname' id='formid'>
-                            <input type='text' id='text1' name='username'>
-                            <select id='color' autofocus>
-                                <option value='red'>red</option>
-                                <option value='blue' id='blue'>blue</option>
-                            </select>
-                        </form>
-                    </body>
-                    </html>""";
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
+                    <form action='a.html' name='formname' id='formid'>
+                        <input type='text' id='text1' name='username'>
+                        <select id='color' autofocus>
+                            <option value='red'>red</option>
+                            <option value='blue' id='blue'>blue</option>
+                        </select>
+                    </form>""");
         // Change select control first shall start autofill session.
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_SPACE);
         // Use key B to select 'blue'.
@@ -1472,7 +1425,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -1502,34 +1455,27 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Feature({"AndroidWebView"})
     public void testUserInitiatedJavascriptSelectControlChangeNotification() throws Throwable {
         int cnt = 0;
-        final String data =
+        loadHTML(
                 """
-                    <!DOCTYPE html>
-                    <html>
-                    <body>
-                        <script>
-                            function myFunction() {
-                                document.getElementById('color').value = 'blue';
-                            }
-                        </script>
-                        <form action='a.html' name='formname' id='formid'>
-                            <button onclick='myFunction();' autofocus>button </button>
-                            <select id='color'>
-                                <option value='red'>red</option>
-                                <option value='blue' id='blue'>blue</option>
-                            </select>
-                        </form>
-                    </body>
-                    </html>""";
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
+                    <script>
+                        function myFunction() {
+                            document.getElementById('color').value = 'blue';
+                        }
+                    </script>
+                    <form action='a.html' name='formname' id='formid'>
+                        <button onclick='myFunction();' autofocus>button </button>
+                        <select id='color'>
+                            <option value='red'>red</option>
+                            <option value='blue' id='blue'>blue</option>
+                        </select>
+                    </form>""");
         // Change select control first shall start autofill session.
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_SPACE);
         cnt +=
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -1545,27 +1491,23 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Feature({"AndroidWebView"})
     public void testJavascriptNotTriggerSelectControlChangeNotification() throws Throwable {
         int cnt = 0;
-        final String data =
+        loadHTML(
                 """
-                    <!DOCTYPE html>
-                    <html>
-                    <body onload='myFunction();'>
-                        <script>
-                            function myFunction() {
-                                document.getElementById('color').value = 'blue';
-                            }
-                        </script>
-                        <form action='a.html' name='formname' id='formid'>
-                            <button onclick='myFunction();' autofocus>button </button>
-                            <select id='color'>
-                                <option value='red'>red</option>
-                                <option value='blue' id='blue'>blue</option>
-                            </select>
-                        </form>
-                    </body>
-                    </html>""";
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
+                    <script>
+                        function myFunction() {
+                            document.getElementById('color').value = 'blue';
+                        }
+                    </script>
+                    <script defer>
+                        myFunction();
+                    </script>
+                    <form action='a.html' name='formname' id='formid'>
+                        <button onclick='myFunction();' autofocus>button </button>
+                        <select id='color'>
+                            <option value='red'>red</option>
+                            <option value='blue' id='blue'>blue</option>
+                        </select>
+                    </form>""");
         // There is no good way to verify no callback occurred, we just simulate user trigger
         // the autofill and verify autofill is only triggered once, then this proves javascript
         // didn't trigger the autofill, since
@@ -1576,7 +1518,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -1591,38 +1533,31 @@ public class AwAutofillTest extends AwParameterizedTest {
     @SmallTest
     @Feature({"AndroidWebView"})
     public void testUaAutofillHints() throws Throwable {
-        final String data =
+        loadHTML(
                 """
-                    <html>
-                    <head></head>
-                    <body>
-                        <form action='a.html' name='formname'>
-                            <label for=\"frmAddressB\">Address</label>
-                            <input name=\"bill-address\" id=\"frmAddressB\">
-                            <label for=\"frmCityB\">City</label>
-                            <input name=\"bill-city\" id=\"frmCityB\">
-                            <label for=\"frmStateB\">State</label>
-                            <input name=\"bill-state\" id=\"frmStateB\">
-                            <label for=\"frmZipB\">Zip</label>
-                            <input name=\"bill-zip\" id=\"frmZipB\">
-                            <input type='checkbox' id='checkbox1' name='showpassword'>
-                            <label for=\"frmCountryB\">Country</label>
-                            <input name=\"bill-country\" id=\"frmCountryB\">
-                            <input type='submit'>
-                        </form>
-                    </body>
-                    </html>""";
+                    <form action='a.html' name='formname'>
+                        <label for=\"frmAddressB\">Address</label>
+                        <input name=\"bill-address\" id=\"frmAddressB\">
+                        <label for=\"frmCityB\">City</label>
+                        <input name=\"bill-city\" id=\"frmCityB\">
+                        <label for=\"frmStateB\">State</label>
+                        <input name=\"bill-state\" id=\"frmStateB\">
+                        <label for=\"frmZipB\">Zip</label>
+                        <input name=\"bill-zip\" id=\"frmZipB\">
+                        <input type='checkbox' id='checkbox1' name='showpassword'>
+                        <label for=\"frmCountryB\">Country</label>
+                        <input name=\"bill-country\" id=\"frmCountryB\">
+                        <input type='submit'>
+                    </form>""");
         final int totalControls = 6;
         int cnt = 0;
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
         executeJavaScriptAndWaitForResult("document.getElementById('frmAddressB').select();");
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
         cnt +=
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -1660,6 +1595,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
     public void testUMAUserSelectSuggestionUserChangeFormFormSubmitted() throws Throwable {
         var histograms =
                 TestThreadUtils.runOnUiThreadBlocking(
@@ -1693,6 +1629,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
     public void testUMAUserSelectSuggestionUserChangeFormNoFormSubmitted() throws Throwable {
         var histograms =
                 TestThreadUtils.runOnUiThreadBlocking(
@@ -1725,6 +1662,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
     public void testUMASessionMetricsRecordedOnAwContentsDestruction() throws Throwable {
         var histograms =
                 TestThreadUtils.runOnUiThreadBlocking(
@@ -1759,6 +1697,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
     public void testUMAUserSelectNotSuggestionUserChangeFormNoFormSubmitted() throws Throwable {
         var histograms =
                 TestThreadUtils.runOnUiThreadBlocking(
@@ -1791,6 +1730,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
     public void testUMAUserNotSelectSuggestionUserChangeFormFormSubmitted() throws Throwable {
         var histograms =
                 TestThreadUtils.runOnUiThreadBlocking(
@@ -1823,6 +1763,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
     public void testUMANoSuggestionUserChangeFormNoFormSubmitted() throws Throwable {
         var histograms =
                 TestThreadUtils.runOnUiThreadBlocking(
@@ -1837,10 +1778,6 @@ public class AwAutofillTest extends AwParameterizedTest {
                                     .expectNoRecords(
                                             AutofillProviderUMA
                                                     .UMA_AUTOFILL_AWG_SUGGESTION_AVAILABILITY)
-                                    .expectBooleanRecord(
-                                            AutofillProviderUMA
-                                                    .UMA_AUTOFILL_USER_CHANGED_AUTOFILLED_FIELD,
-                                            false)
                                     .build();
                         });
         mUMATestHelper.triggerAutofill();
@@ -1856,6 +1793,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
     public void testUMANoSuggestionUserChangeFormFormSubmitted() throws Throwable {
         var histograms =
                 TestThreadUtils.runOnUiThreadBlocking(
@@ -1872,10 +1810,6 @@ public class AwAutofillTest extends AwParameterizedTest {
                                             AutofillProviderUMA
                                                     .UMA_AUTOFILL_AWG_SUGGESTION_AVAILABILITY,
                                             AutofillProviderUMA.AWG_NO_SUGGESTION)
-                                    .expectBooleanRecord(
-                                            AutofillProviderUMA
-                                                    .UMA_AUTOFILL_USER_CHANGED_AUTOFILLED_FIELD,
-                                            false)
                                     .build();
                         });
         mUMATestHelper.triggerAutofill();
@@ -1891,6 +1825,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
     public void testUMAUserSelectSuggestionUserNotChangeFormFormSubmitted() throws Throwable {
         var histograms =
                 TestThreadUtils.runOnUiThreadBlocking(
@@ -1907,9 +1842,6 @@ public class AwAutofillTest extends AwParameterizedTest {
                                             AutofillProviderUMA
                                                     .UMA_AUTOFILL_AWG_SUGGESTION_AVAILABILITY,
                                             AutofillProviderUMA.AWG_HAS_SUGGESTION_AUTOFILLED)
-                                    .expectNoRecords(
-                                            AutofillProviderUMA
-                                                    .UMA_AUTOFILL_USER_CHANGED_AUTOFILLED_FIELD)
                                     .build();
                         });
         mUMATestHelper.triggerAutofill();
@@ -1926,6 +1858,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
     public void testUMAUserSelectSuggestionUserNotChangeFormNoFormSubmitted() throws Throwable {
         var histograms =
                 TestThreadUtils.runOnUiThreadBlocking(
@@ -1940,9 +1873,6 @@ public class AwAutofillTest extends AwParameterizedTest {
                                     .expectNoRecords(
                                             AutofillProviderUMA
                                                     .UMA_AUTOFILL_AWG_SUGGESTION_AVAILABILITY)
-                                    .expectNoRecords(
-                                            AutofillProviderUMA
-                                                    .UMA_AUTOFILL_USER_CHANGED_AUTOFILLED_FIELD)
                                     .build();
                         });
         mUMATestHelper.triggerAutofill();
@@ -1959,6 +1889,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
     public void testUMAUserNotSelectSuggestionUserNotChangeFormNoFormSubmitted() throws Throwable {
         var histograms =
                 TestThreadUtils.runOnUiThreadBlocking(
@@ -1973,9 +1904,6 @@ public class AwAutofillTest extends AwParameterizedTest {
                                     .expectNoRecords(
                                             AutofillProviderUMA
                                                     .UMA_AUTOFILL_AWG_SUGGESTION_AVAILABILITY)
-                                    .expectNoRecords(
-                                            AutofillProviderUMA
-                                                    .UMA_AUTOFILL_USER_CHANGED_AUTOFILLED_FIELD)
                                     .build();
                         });
         mUMATestHelper.triggerAutofill();
@@ -1991,6 +1919,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
     public void testUMAUserNotSelectSuggestionUserNotChangeFormFormSubmitted() throws Throwable {
         var histograms =
                 TestThreadUtils.runOnUiThreadBlocking(
@@ -2007,9 +1936,6 @@ public class AwAutofillTest extends AwParameterizedTest {
                                             AutofillProviderUMA
                                                     .UMA_AUTOFILL_AWG_SUGGESTION_AVAILABILITY,
                                             AutofillProviderUMA.AWG_HAS_SUGGESTION_NO_AUTOFILL)
-                                    .expectNoRecords(
-                                            AutofillProviderUMA
-                                                    .UMA_AUTOFILL_USER_CHANGED_AUTOFILLED_FIELD)
                                     .build();
                         });
         mUMATestHelper.triggerAutofill();
@@ -2025,6 +1951,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
     public void testUMANoSuggestionUserNotChangeFormNoFormSubmitted() throws Throwable {
         var histograms =
                 TestThreadUtils.runOnUiThreadBlocking(
@@ -2039,9 +1966,6 @@ public class AwAutofillTest extends AwParameterizedTest {
                                     .expectNoRecords(
                                             AutofillProviderUMA
                                                     .UMA_AUTOFILL_AWG_SUGGESTION_AVAILABILITY)
-                                    .expectNoRecords(
-                                            AutofillProviderUMA
-                                                    .UMA_AUTOFILL_USER_CHANGED_AUTOFILLED_FIELD)
                                     .build();
                         });
         mUMATestHelper.triggerAutofill();
@@ -2056,6 +1980,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
     public void testUMANoSuggestionUserNotChangeFormFormSubmitted() throws Throwable {
         var histograms =
                 TestThreadUtils.runOnUiThreadBlocking(
@@ -2072,9 +1997,6 @@ public class AwAutofillTest extends AwParameterizedTest {
                                             AutofillProviderUMA
                                                     .UMA_AUTOFILL_AWG_SUGGESTION_AVAILABILITY,
                                             AutofillProviderUMA.AWG_NO_SUGGESTION)
-                                    .expectNoRecords(
-                                            AutofillProviderUMA
-                                                    .UMA_AUTOFILL_USER_CHANGED_AUTOFILLED_FIELD)
                                     .build();
                         });
         mUMATestHelper.triggerAutofill();
@@ -2086,6 +2008,10 @@ public class AwAutofillTest extends AwParameterizedTest {
                 });
     }
 
+    /**
+     * Tests that the proper histograms are reocrded when no virtual structure is provided before
+     * session start.
+     */
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
@@ -2103,43 +2029,6 @@ public class AwAutofillTest extends AwParameterizedTest {
                         });
         mUMATestHelper.triggerAutofill();
         mUMATestHelper.startNewSession();
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    histograms.assertExpected();
-                });
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"AndroidWebView"})
-    @MinAndroidSdkLevel(Build.VERSION_CODES.P)
-    public void testUMAAwGIsCurrentService() throws Throwable {
-        var histograms =
-                TestThreadUtils.runOnUiThreadBlocking(
-                        () -> {
-                            return HistogramWatcher.newSingleRecordWatcher(
-                                    AutofillProviderUMA.UMA_AUTOFILL_AWG_IS_CURRENT_SERVICE, true);
-                        });
-        doSetUp(/* isAwGCurrentAutofillService= */ true);
-        mUMATestHelper.triggerAutofill();
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    histograms.assertExpected();
-                });
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"AndroidWebView"})
-    @MinAndroidSdkLevel(Build.VERSION_CODES.P)
-    public void testUMAAwGIsNotCurrentService() throws Throwable {
-        var histograms =
-                TestThreadUtils.runOnUiThreadBlocking(
-                        () -> {
-                            return HistogramWatcher.newSingleRecordWatcher(
-                                    AutofillProviderUMA.UMA_AUTOFILL_AWG_IS_CURRENT_SERVICE, false);
-                        });
-        setUpAwGNotCurrent();
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     histograms.assertExpected();
@@ -2261,33 +2150,207 @@ public class AwAutofillTest extends AwParameterizedTest {
                 });
     }
 
+    /**
+     * Tests recording of the `PROBABLY_FORM_SUBMITTED` bucket for the
+     * "Autofill.WebView.SubmissionSource" histogram. This event is fired on a navigation not
+     * resulting from a link click (in this case the test uses a reload).
+     */
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    public void testUMAUserChangeAutofilledField() throws Throwable {
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
+    public void testUMAFormSubmissionProbablyFormSubmitted() throws Throwable {
         var histograms =
                 TestThreadUtils.runOnUiThreadBlocking(
                         () -> {
                             return HistogramWatcher.newBuilder()
                                     .expectIntRecord(
-                                            AutofillProviderUMA.UMA_AUTOFILL_AUTOFILL_SESSION,
-                                            AutofillProviderUMA
-                                                    .USER_SELECT_SUGGESTION_USER_CHANGE_FORM_FORM_SUBMITTED)
-                                    .expectIntRecord(
                                             AutofillProviderUMA.UMA_AUTOFILL_SUBMISSION_SOURCE,
-                                            AutofillProviderUMA.FORM_SUBMISSION)
-                                    .expectBooleanRecord(
-                                            AutofillProviderUMA
-                                                    .UMA_AUTOFILL_USER_CHANGED_AUTOFILLED_FIELD,
-                                            true)
+                                            AutofillProviderUMA.PROBABLY_FORM_SUBMITTED)
                                     .build();
                         });
         mUMATestHelper.triggerAutofill();
         invokeOnProvideAutoFillVirtualStructure();
-        invokeOnInputUIShown();
-        mUMATestHelper.simulateUserSelectSuggestion();
-        mUMATestHelper.simulateUserChangeAutofilledField();
-        mUMATestHelper.submitForm();
+        mUMATestHelper.reload();
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    histograms.assertExpected();
+                });
+    }
+
+    /**
+     * Tests recording of the `FRAME_DETACHED` bucket for the "Autofill.WebView.SubmissionSource"
+     * histogram. This event is fired when a non-main frame is detached.
+     */
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
+    public void testUMAFormSubmissionFrameDetached() throws Throwable {
+        var histograms =
+                TestThreadUtils.runOnUiThreadBlocking(
+                        () -> {
+                            return HistogramWatcher.newBuilder()
+                                    .expectIntRecord(
+                                            AutofillProviderUMA.UMA_AUTOFILL_SUBMISSION_SOURCE,
+                                            AutofillProviderUMA.FRAME_DETACHED)
+                                    .build();
+                        });
+        loadHTML(
+                """
+                    <div id='parent'>
+                        <iframe id='frame' srcdoc='<input id="username">'></iframe>
+                    </div>""");
+
+        int cnt = 0;
+        executeJavaScriptAndWaitForResult(
+                """
+                    var iframe = document.getElementById('frame');
+                    var frame_doc = iframe.contentDocument;
+                    frame_doc.getElementById('username').select();""");
+        dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
+        cnt +=
+                waitForCallbackAndVerifyTypes(
+                        cnt,
+                        new Integer[] {
+                            AUTOFILL_CANCEL_PRE_P,
+                            AUTOFILL_VIEW_ENTERED,
+                            AUTOFILL_SESSION_STARTED,
+                            AUTOFILL_VALUE_CHANGED
+                        });
+        invokeOnProvideAutoFillVirtualStructure();
+        executeJavaScriptAndWaitForResult(
+                "document.getElementById('parent').removeChild(document.getElementById('frame'));");
+        cnt +=
+                waitForCallbackAndVerifyTypes(
+                        cnt,
+                        new Integer[] {
+                            AUTOFILL_VIEW_EXITED,
+                            AUTOFILL_VALUE_CHANGED,
+                            AUTOFILL_COMMIT,
+                            AUTOFILL_CANCEL
+                        });
+
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    histograms.assertExpected();
+                });
+    }
+
+    /**
+     * Tests recording of the `SAME_DOCUMENT_NAVIGATION` bucket for the
+     * "Autofill.WebView.SubmissionSource" histogram. This event is fired when clicking a link that
+     * jumps through the same document and the tracked element disappears.
+     */
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
+    public void testUMAFormSubmissionSameDocumentNavigation() throws Throwable {
+        var histograms =
+                TestThreadUtils.runOnUiThreadBlocking(
+                        () -> {
+                            return HistogramWatcher.newBuilder()
+                                    .expectIntRecord(
+                                            AutofillProviderUMA.UMA_AUTOFILL_SUBMISSION_SOURCE,
+                                            AutofillProviderUMA.SAME_DOCUMENT_NAVIGATION)
+                                    .build();
+                        });
+
+        loadHTML(
+                """
+                    <input id='username'>
+                    <a id='link' href='#destination'></a>
+                    <div id='destination'></div>""");
+
+        int cnt = 0;
+        executeJavaScriptAndWaitForResult("document.getElementById('username').select();");
+        dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
+        cnt +=
+                waitForCallbackAndVerifyTypes(
+                        cnt,
+                        new Integer[] {
+                            AUTOFILL_CANCEL_PRE_P,
+                            AUTOFILL_VIEW_ENTERED,
+                            AUTOFILL_SESSION_STARTED,
+                            AUTOFILL_VALUE_CHANGED
+                        });
+        invokeOnProvideAutoFillVirtualStructure();
+        executeJavaScriptAndWaitForResult(
+                """
+                    document.getElementById('link').click();
+                    document.getElementById('username').remove();""");
+        cnt +=
+                waitForCallbackAndVerifyTypes(
+                        cnt,
+                        new Integer[] {
+                            AUTOFILL_VIEW_EXITED,
+                            AUTOFILL_VALUE_CHANGED,
+                            AUTOFILL_COMMIT,
+                            AUTOFILL_CANCEL
+                        });
+
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    histograms.assertExpected();
+                });
+    }
+
+    /**
+     * Tests recording of the `XHR_SUCCEEDED` bucket for the "Autofill.WebView.SubmissionSource"
+     * histogram. This event is fired when a successful XHR request occurs and the tracked element
+     * disappears.
+     */
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
+    public void testUMAFormSubmissionXHRSucceeded() throws Throwable {
+        var histograms =
+                TestThreadUtils.runOnUiThreadBlocking(
+                        () -> {
+                            return HistogramWatcher.newBuilder()
+                                    .expectIntRecord(
+                                            AutofillProviderUMA.UMA_AUTOFILL_SUBMISSION_SOURCE,
+                                            AutofillProviderUMA.XHR_SUCCEEDED)
+                                    .build();
+                        });
+
+        loadHTML("<input id='username'>");
+
+        int cnt = 0;
+        executeJavaScriptAndWaitForResult("document.getElementById('username').select();");
+        dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
+        cnt +=
+                waitForCallbackAndVerifyTypes(
+                        cnt,
+                        new Integer[] {
+                            AUTOFILL_CANCEL_PRE_P,
+                            AUTOFILL_VIEW_ENTERED,
+                            AUTOFILL_SESSION_STARTED,
+                            AUTOFILL_VALUE_CHANGED
+                        });
+        invokeOnProvideAutoFillVirtualStructure();
+
+        final String xhrUrl = mWebServer.setEmptyResponse(FILE);
+        executeJavaScriptAndWaitForResult(
+                String.format(
+                        """
+                    document.getElementById('username').remove();
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('GET', '%s', true);
+                    xhr.send(null);""",
+                        xhrUrl));
+        cnt +=
+                waitForCallbackAndVerifyTypes(
+                        cnt,
+                        new Integer[] {
+                            AUTOFILL_VIEW_EXITED,
+                            AUTOFILL_VALUE_CHANGED,
+                            AUTOFILL_COMMIT,
+                            AUTOFILL_CANCEL
+                        });
+
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     histograms.assertExpected();
@@ -2355,21 +2418,14 @@ public class AwAutofillTest extends AwParameterizedTest {
     @SmallTest
     @Feature({"AndroidWebView"})
     public void testPageScrollTriggerViewExitAndEnter() throws Throwable {
-        final String data =
+        loadHTML(
                 """
-                    <html>
-                    <head></head>
-                    <body>
-                        <form action='a.html' name='formname'>
-                            <input type='text' id='text1' name='username'
-                                placeholder='placeholder@placeholder.com'
-                                autocomplete='username name'>
-                        </form>
-                        <p style='height: 100vh'>Hello</p>
-                    </body>
-                    </html>""";
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
+                    <form action='a.html' name='formname'>
+                        <input type='text' id='text1' name='username'
+                            placeholder='placeholder@placeholder.com'
+                            autocomplete='username name'>
+                    </form>
+                    <p style='height: 100vh'>Hello</p>""");
         int cnt = 0;
         executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
@@ -2378,7 +2434,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -2417,7 +2473,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -2450,7 +2506,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -2491,7 +2547,7 @@ public class AwAutofillTest extends AwParameterizedTest {
         // datalist.
         cnt +=
                 waitForCallbackAndVerifyTypes(
-                        cnt, new Integer[] {AUTOFILL_CANCEL, AUTOFILL_SESSION_STARTED});
+                        cnt, new Integer[] {AUTOFILL_CANCEL_PRE_P, AUTOFILL_SESSION_STARTED});
         // Verify input accepted.
         String value1 =
                 executeJavaScriptAndWaitForResult("document.getElementById('text2').value;");
@@ -2541,19 +2597,12 @@ public class AwAutofillTest extends AwParameterizedTest {
     @SmallTest
     @Feature({"AndroidWebView"})
     public void testVisibility() throws Throwable {
-        final String data =
+        loadHTML(
                 """
-                    <html>
-                    <head></head>
-                    <body>
-                        <form action='a.html' name='formname'>
-                            <input type='text' id='text1' name='username'>
-                            <input type='text' name='email' id='text2' style='display: none;' />
-                        </form>
-                    </body>
-                    </html>""";
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
+                    <form action='a.html' name='formname'>
+                        <input type='text' id='text1' name='username'>
+                        <input type='text' name='email' id='text2' style='display: none;' />
+                    </form>""");
         int cnt = 0;
         executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
@@ -2562,7 +2611,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -2580,19 +2629,12 @@ public class AwAutofillTest extends AwParameterizedTest {
     @SmallTest
     @Feature({"AndroidWebView"})
     public void testServerPredictionArrivesBeforeAutofillStart() throws Throwable {
-        final String data =
+        loadHTML(
                 """
-                    <html>
-                    <head></head>
-                    <body>
-                        <form action='a.html' name='formname'>
-                            <input type='text' id='text1' name='username'>
-                            <input type='text' name='email' id='text2' autocomplete='email' />
-                        </form>
-                    </body>
-                    </html>""";
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
+                    <form action='a.html' name='formname'>
+                        <input type='text' id='text1' name='username'>
+                        <input type='text' name='email' id='text2' autocomplete='email' />
+                    </form>""");
         TestThreadUtils.runOnUiThreadBlocking(
                 () ->
                         AutofillProviderTestHelper
@@ -2612,7 +2654,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -2663,22 +2705,15 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Feature({"AndroidWebView"})
     @CommandLineFlags.Add({"enable-features=AutofillAcrossIframes"})
     public void testCrossFrameServerPredictionArrivesBeforeAutofillStart() throws Throwable {
-        final String data =
+        loadHTML(
                 """
-                    <html>
-                    <head></head>
-                    <body>
-                        <form>
-                            <input id=name>
-                            <iframe srcdoc='<form action=arbitrary.html method=GET>
-                                        <input id=num autocomplete=cc-number></form>' sandbox></iframe>
-                            <iframe srcdoc='<input id=exp>'></iframe>
-                            <iframe srcdoc='<input id=csc>'></iframe>
-                        </form>
-                    </body>
-                    </html>""";
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
+                    <form>
+                        <input id=name>
+                        <iframe srcdoc='<form action=arbitrary.html method=GET>
+                                    <input id=num autocomplete=cc-number></form>' sandbox></iframe>
+                        <iframe srcdoc='<input id=exp>'></iframe>
+                        <iframe srcdoc='<input id=csc>'></iframe>
+                    </form>""");
         TestThreadUtils.runOnUiThreadBlocking(
                 () ->
                         AutofillProviderTestHelper
@@ -2703,7 +2738,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -2786,19 +2821,12 @@ public class AwAutofillTest extends AwParameterizedTest {
     @SmallTest
     @Feature({"AndroidWebView"})
     public void testServerPredictionPrimaryTypeArrivesBeforeAutofillStart() throws Throwable {
-        final String data =
+        loadHTML(
                 """
-                    <html>
-                    <head></head>
-                    <body>
-                        <form action='a.html' name='formname'>
-                            <input type='text' id='text1' name='username'>
-                            <input type='text' name='email' id='text2' autocomplete='email' />
-                        </form>
-                    </body>
-                    </html>""";
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
+                    <form action='a.html' name='formname'>
+                        <input type='text' id='text1' name='username'>
+                        <input type='text' name='email' id='text2' autocomplete='email' />
+                    </form>""");
         TestThreadUtils.runOnUiThreadBlocking(
                 () ->
                         AutofillProviderTestHelper
@@ -2815,7 +2843,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -2864,20 +2892,12 @@ public class AwAutofillTest extends AwParameterizedTest {
     @SmallTest
     @Feature({"AndroidWebView"})
     public void testServerPredictionArrivesAfterAutofillStart() throws Throwable {
-        final String data =
+        loadHTML(
                 """
-                    <html>
-                    <head></head>
-                    <body>
-                        <form action='a.html' name='formname'>
-                            <input type='text' id='text1' name='username'>
-                            <input type='text' name='email' id='text2' autocomplete='email' />
-                        </form>
-                    </body>
-                    </html>""";
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
-
+                    <form action='a.html' name='formname'>
+                        <input type='text' id='text1' name='username'>
+                        <input type='text' name='email' id='text2' autocomplete='email' />
+                    </form>""");
         int cnt = 0;
         executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
@@ -2886,7 +2906,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -2963,20 +2983,12 @@ public class AwAutofillTest extends AwParameterizedTest {
     @SmallTest
     @Feature({"AndroidWebView"})
     public void testServerPredictionPrimaryTypeArrivesAfterAutofillStart() throws Throwable {
-        final String data =
+        loadHTML(
                 """
-                    <html>
-                    <head></head>
-                    <body>
-                        <form action='a.html' name='formname'>
-                            <input type='text' id='text1' name='username'>
-                            <input type='text' name='email' id='text2' autocomplete='email' />
-                        </form>
-                    </body>
-                    </html>""";
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
-
+                    <form action='a.html' name='formname'>
+                        <input type='text' id='text1' name='username'>
+                        <input type='text' name='email' id='text2' autocomplete='email' />
+                    </form>""");
         int cnt = 0;
         executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
@@ -2985,7 +2997,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -3057,20 +3069,12 @@ public class AwAutofillTest extends AwParameterizedTest {
     @SmallTest
     @Feature({"AndroidWebView"})
     public void testServerPredictionArrivesBeforeCallbackRegistered() throws Throwable {
-        final String data =
+        loadHTML(
                 """
-                    <html>
-                    <head></head>
-                    <body>
-                        <form action='a.html' name='formname'>
-                            <input type='text' id='text1' name='username'>
-                            <input type='text' name='email' id='text2' autocomplete='email' />
-                        </form>
-                    </body>
-                    </html>""";
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
-
+                    <form action='a.html' name='formname'>
+                        <input type='text' id='text1' name='username'>
+                        <input type='text' name='email' id='text2' autocomplete='email' />
+                    </form>""");
         int cnt = 0;
         executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
@@ -3079,7 +3083,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -3159,29 +3163,22 @@ public class AwAutofillTest extends AwParameterizedTest {
         // This test verifies that form filling works even in the case that the form has been
         // modified (field was added) in the DOM between the decision to fill and executing the
         // fill.
-        final String data =
+        loadHTML(
                 """
-                    <html>
-                    <head></head>
-                    <body>
-                        <form action='a.html' name='formname'>
-                            <label>User Name:</label>
-                            <input type='text' id='text1' name='name' />
-                            <label>Password:</label>
-                            <input type='password' id='pwdid' name='pwd' />
-                        </form>
-                    </body>
-                    </html>""";
+                    <form action='a.html' name='formname'>
+                        <label>User Name:</label>
+                        <input type='text' id='text1' name='name' />
+                        <label>Password:</label>
+                        <input type='password' id='pwdid' name='pwd' />
+                    </form>""");
         int cnt = 0;
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
         executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
         cnt +=
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -3226,22 +3223,15 @@ public class AwAutofillTest extends AwParameterizedTest {
         // This test verifies that form filling works even if an element of the form that was
         // supposed to be filled has been deleted between the time of decision to fill the form and
         // executing the fill.
-        final String data =
+        loadHTML(
                 """
-                    <html>
-                    <head></head>
-                    <body>
-                        <form action='a.html' name='formname'>
-                            <label>User Name:</label>
-                            <input type='text' id='text1' name='name' />
-                            <label>Password:</label>
-                            <input type='password' id='pwdid' name='pwd' />
-                        </form>
-                    </body>
-                    </html>""";
+                    <form action='a.html' name='formname'>
+                        <label>User Name:</label>
+                        <input type='text' id='text1' name='name' />
+                        <label>Password:</label>
+                        <input type='password' id='pwdid' name='pwd' />
+                    </form>""");
         int cnt = 0;
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
         // Focus on the second element, since the first one is about to be removed. Removing the
         // element on which the fill was triggered would cancel the filling operation.
         executeJavaScriptAndWaitForResult("document.getElementById('pwdid').select();");
@@ -3250,7 +3240,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -3282,25 +3272,8 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
     public void testFrameDetachedOnFormSubmission() throws Throwable {
-        final String mainFrame =
-                """
-                    <html>
-                    <body>
-                        <script>
-                            function receiveMessage(event) {
-                                var address_iframe = document.getElementById('address_iframe');
-                                address_iframe.parentNode.removeChild(address_iframe);
-                                setTimeout(delayedUpload, 0);
-                            }
-                            window.addEventListener('message', receiveMessage, false);
-                        </script>
-                        <iframe src='inner_frame_address_form.html' id='address_iframe'
-                            name='address_iframe'>
-                        </iframe>
-                    </body>
-                    </html>""";
-        final String url = mWebServer.setResponse(FILE, mainFrame, null);
         final String subFrame =
                 """
                     <html>
@@ -3322,8 +3295,21 @@ public class AwAutofillTest extends AwParameterizedTest {
         final String subFrameURL =
                 mWebServer.setResponse("/inner_frame_address_form.html", subFrame, null);
         assertTrue(Uri.parse(subFrameURL).getPath().equals("/inner_frame_address_form.html"));
+        loadHTML(
+                """
+                    <script>
+                        function receiveMessage(event) {
+                            var address_iframe = document.getElementById('address_iframe');
+                            address_iframe.parentNode.removeChild(address_iframe);
+                            setTimeout(delayedUpload, 0);
+                        }
+                        window.addEventListener('message', receiveMessage, false);
+                    </script>
+                    <iframe src='inner_frame_address_form.html' id='address_iframe'
+                        name='address_iframe'>
+                    </iframe>""");
+
         int cnt = 0;
-        loadUrlSync(url);
         pollJavascriptResult(
                 """
                     var iframe = document.getElementById('address_iframe');
@@ -3336,7 +3322,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -3346,30 +3332,16 @@ public class AwAutofillTest extends AwParameterizedTest {
                     var iframe = document.getElementById('address_iframe');
                     var frame_doc = iframe.contentDocument;
                     frame_doc.getElementById('submit_button').click();""");
-        waitForCallbackAndVerifyTypes(cnt, new Integer[] {AUTOFILL_VALUE_CHANGED, AUTOFILL_COMMIT});
+        waitForCallbackAndVerifyTypes(
+                cnt, new Integer[] {AUTOFILL_VALUE_CHANGED, AUTOFILL_COMMIT, AUTOFILL_CANCEL});
         assertEquals(SubmissionSource.FORM_SUBMISSION, mSubmissionSource);
     }
 
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
     public void testFrameDetachedOnFormlessSubmission() throws Throwable {
-        final String mainFrame =
-                """
-                    <html>
-                    <body>
-                        <script>
-                            function receiveMessage(event) {
-                                var address_iframe = document.getElementById('address_iframe');
-                                address_iframe.parentNode.removeChild(address_iframe);
-                            }
-                            window.addEventListener('message', receiveMessage, false);
-                        </script>
-                        <iframe src='inner_frame_address_formless.html' id='address_iframe' name='address_iframe'>
-                        </iframe>
-                    </body>
-                    </html>""";
-        final String url = mWebServer.setResponse(FILE, mainFrame, null);
         final String subFrame =
                 """
                     <html>
@@ -3386,8 +3358,19 @@ public class AwAutofillTest extends AwParameterizedTest {
         final String subFrameURL =
                 mWebServer.setResponse("/inner_frame_address_formless.html", subFrame, null);
         assertTrue(Uri.parse(subFrameURL).getPath().equals("/inner_frame_address_formless.html"));
+        loadHTML(
+                """
+                    <script>
+                        function receiveMessage(event) {
+                            var address_iframe = document.getElementById('address_iframe');
+                            address_iframe.parentNode.removeChild(address_iframe);
+                        }
+                        window.addEventListener('message', receiveMessage, false);
+                    </script>
+                    <iframe src='inner_frame_address_formless.html' id='address_iframe' name='address_iframe'>
+                    </iframe>""");
+
         int cnt = 0;
-        loadUrlSync(url);
         pollJavascriptResult(
                 """
                     var iframe = document.getElementById('address_iframe');
@@ -3400,7 +3383,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -3412,7 +3395,10 @@ public class AwAutofillTest extends AwParameterizedTest {
                     frame_doc.getElementById('submit_button').click();""");
         // The additional AUTOFILL_VIEW_EXITED event caused by 'click' of the button.
         waitForCallbackAndVerifyTypes(
-                cnt, new Integer[] {AUTOFILL_VIEW_EXITED, AUTOFILL_VALUE_CHANGED, AUTOFILL_COMMIT});
+                cnt,
+                new Integer[] {
+                    AUTOFILL_VIEW_EXITED, AUTOFILL_VALUE_CHANGED, AUTOFILL_COMMIT, AUTOFILL_CANCEL
+                });
         assertEquals(SubmissionSource.FRAME_DETACHED, mSubmissionSource);
     }
 
@@ -3420,30 +3406,23 @@ public class AwAutofillTest extends AwParameterizedTest {
     @SmallTest
     @Feature({"AndroidWebView"})
     public void testLabelChange() throws Throwable {
-        final String data =
+        loadHTML(
                 """
-                    <html>
-                    <head></head>
-                    <body>
-                        <form action='a.html'>
-                            <label id='label_id'> Address </label>
-                            <input type='text' id='address' name='address' autocomplete='on' />
-                            <p id='p_id'>Address 1</p>
-                            <input type='text' name='address1' autocomplete='on' />
-                            <input type='submit' id='submit_button' name='submit_button' />
-                        </form>
-                    </body>
-                    </html>""";
+                    <form action='a.html'>
+                        <label id='label_id'> Address </label>
+                        <input type='text' id='address' name='address' autocomplete='on' />
+                        <p id='p_id'>Address 1</p>
+                        <input type='text' name='address1' autocomplete='on' />
+                        <input type='submit' id='submit_button' name='submit_button' />
+                    </form>""");
         int cnt = 0;
-        final String url = mWebServer.setResponse(FILE, data, null);
-        loadUrlSync(url);
         executeJavaScriptAndWaitForResult("document.getElementById('address').focus();");
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
         cnt +=
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
                             AUTOFILL_VALUE_CHANGED
@@ -3457,7 +3436,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 waitForCallbackAndVerifyTypes(
                         cnt,
                         new Integer[] {
-                            AUTOFILL_CANCEL,
+                            AUTOFILL_CANCEL_PRE_P,
                             AUTOFILL_VIEW_EXITED,
                             AUTOFILL_VIEW_ENTERED,
                             AUTOFILL_SESSION_STARTED,
@@ -3584,17 +3563,21 @@ public class AwAutofillTest extends AwParameterizedTest {
     private int waitForCallbackAndVerifyTypes(int currentCallCount, Integer[] expectedEventArray)
             throws TimeoutException {
         Integer[] adjustedEventArray;
-        // Didn't call cancel after Android P.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            ArrayList<Integer> adjusted = new ArrayList<Integer>();
+        ArrayList<Integer> adjusted = new ArrayList<>();
             for (Integer event : expectedEventArray) {
-                if (event != AUTOFILL_CANCEL) adjusted.add(event);
+            // Filter out AUTOFILL_CANCEL_PRE_P.
+            // TODO(b/326551145): clean that up once we stop supporting android O.
+            if (event == AUTOFILL_CANCEL_PRE_P) {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+                    adjusted.add(AUTOFILL_CANCEL);
+                }
+                continue;
             }
-            adjustedEventArray = new Integer[adjusted.size()];
-            adjusted.toArray(adjustedEventArray);
-        } else {
-            adjustedEventArray = expectedEventArray;
+            adjusted.add(event);
         }
+
+        adjustedEventArray = new Integer[adjusted.size()];
+        adjusted.toArray(adjustedEventArray);
         try {
             // Check against the call count to avoid missing out a callback in between waits, while
             // exposing it so that the test can control where the call count starts.
@@ -3681,5 +3664,30 @@ public class AwAutofillTest extends AwParameterizedTest {
                         return mTestContainerView.dispatchKeyEvent(event);
                     }
                 });
+    }
+
+    /**
+     * Loads an HTML snippet which will be used by the test to execute JS commands on. This snipped
+     * is loaded on the test web server.
+     *
+     * @param htmlBody The body of the HTML snippet to be loaded.
+     * @return The url where the loaded HTML can be found on the test web server.
+     * @throws Exception
+     */
+    private String loadHTML(String htmlBody) throws Exception {
+        final String data =
+                String.format(
+                        """
+                    <html>
+                    <head></head>
+                    <body>
+                    %s
+                    </body>
+                    </html>
+                        """,
+                        htmlBody);
+        final String url = mWebServer.setResponse(FILE, data, null);
+        loadUrlSync(url);
+        return url;
     }
 }

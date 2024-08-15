@@ -669,6 +669,8 @@ export class OncMojo {
         networkState.typeState.cellular.eid = cellularProperties.eid || '';
         networkState.typeState.cellular.activationState =
             cellularProperties.activationState;
+        networkState.typeState.cellular.paymentPortal =
+            cellularProperties.paymentPortal;
         networkState.typeState.cellular.networkTechnology =
             cellularProperties.networkTechnology || '';
         networkState.typeState.cellular.roaming =
@@ -677,6 +679,8 @@ export class OncMojo {
             cellularProperties.signalStrength;
         networkState.typeState.cellular.simLocked =
             cellularProperties.simLocked;
+        networkState.typeState.cellular.simLockType =
+            cellularProperties.simLockType;
         break;
       case NetworkType.kEthernet:
         networkState.typeState.ethernet.authentication =
@@ -741,6 +745,7 @@ export class OncMojo {
             activationState: ActivationStateType.kUnknown,
             signalStrength: 0,
             simLocked: false,
+            simLockType: '',
             supportNetworkScan: false,
           },
         };

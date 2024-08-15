@@ -7,6 +7,7 @@
 #include <dlfcn.h>
 #include <sys/stat.h>
 
+#include "base/process/process_metrics.h"
 #include "base/strings/stringprintf.h"
 #include "media/gpu/buildflags.h"
 #include "sandbox/policy/linux/bpf_hardware_video_decoding_policy_linux.h"
@@ -73,6 +74,13 @@ bool HardwareVideoDecodingPreSandboxHookForVaapiOnIntel(
   // TODO(b/210759684): we probably will need to do this for Linux as well.
   command_set.set(sandbox::syscall_broker::COMMAND_STAT);
 
+  // This is added because libdrm calls access() from drmGetMinorType() that is
+  // called from drmGetNodeTypeFromFd(). libva calls drmGetNodeTypeFromFd()
+  // during initialization.
+  //
+  // TODO(b/210759684): we probably will need to do this for Linux as well.
+  command_set.set(sandbox::syscall_broker::COMMAND_ACCESS);
+
   AllowAccessToRenderNodes(permissions, /*include_sys_dev_char=*/true,
                            /*read_write=*/false);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -90,6 +98,15 @@ bool HardwareVideoDecodingPreSandboxHookForVaapiOnAMD(
   command_set.set(sandbox::syscall_broker::COMMAND_OPEN);
   command_set.set(sandbox::syscall_broker::COMMAND_STAT);
   command_set.set(sandbox::syscall_broker::COMMAND_READLINK);
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // This is added because libdrm calls access() from drmGetMinorType() that is
+  // called from drmGetNodeTypeFromFd(). libva calls drmGetNodeTypeFromFd()
+  // during initialization.
+  //
+  // TODO(b/210759684): we probably will need to do this for Linux as well.
+  command_set.set(sandbox::syscall_broker::COMMAND_ACCESS);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   AllowAccessToRenderNodes(permissions, /*include_sys_dev_char=*/true,
                            /*read_write=*/true);
@@ -185,6 +202,15 @@ bool HardwareVideoDecodingPreSandboxHook(
   using PolicyType =
       sandbox::policy::HardwareVideoDecodingProcessPolicy::PolicyType;
 
+  // When decoding many video streams at once, the video utility process can hit
+  // FD limits. Increase the limit of maximum FDs allowed to (at least) 8192.
+  // IncreaseFdLimitTo() will only increase the FD limit to a value in:
+  // [max(soft limit, requested value), min(hard limit, requested value)], never
+  // decrease it. See https://man7.org/linux/man-pages/man2/getrlimit.2.html for
+  // context on resource limits.
+  constexpr unsigned int kAttemptedFdSoftLimit = 1u << 13;
+  base::IncreaseFdLimitTo(kAttemptedFdSoftLimit);
+
   const PolicyType policy_type =
       HardwareVideoDecodingProcessPolicy::ComputePolicyType(
           options.use_amd_specific_policies);
@@ -215,8 +241,7 @@ bool HardwareVideoDecodingPreSandboxHook(
   // TODO(b/210759684): should this still be called if |command_set| or
   // |permissions| is empty?
   sandbox::policy::SandboxLinux::GetInstance()->StartBrokerProcess(
-      command_set, permissions, sandbox::policy::SandboxLinux::PreSandboxHook(),
-      options);
+      command_set, permissions, options);
   return true;
 }
 

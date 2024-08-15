@@ -81,12 +81,13 @@ LcpCriticalPathPredictorPageLoadMetricsObserver::OnCommit(
   const blink::mojom::LCPCriticalPathPredictorNavigationTimeHintPtr& hint =
       navigation_handle->GetLCPPNavigationHint();
   if (hint && (!hint->lcp_element_locators.empty() ||
-               !hint->lcp_influencer_scripts.empty())) {
+               !hint->lcp_influencer_scripts.empty() ||
+               !hint->preconnect_origins.empty())) {
     is_lcpp_hinted_navigation_ = true;
   }
 
   commit_url_ = navigation_handle->GetURL();
-  if (net::IsLocalhost(*commit_url_) || !commit_url_->SchemeIsHTTPOrHTTPS()) {
+  if (!predictors::ResourcePrefetchPredictor::IsURLValidForLcpp(*commit_url_)) {
     return STOP_OBSERVING;
   }
   LcpCriticalPathPredictorPageLoadMetricsObserver::PageData::GetOrCreateForPage(
@@ -168,7 +169,7 @@ void LcpCriticalPathPredictorPageLoadMetricsObserver::FinalizeLCP() {
     RemoveFetchedSubresourceUrlsAfterLCP(
         lcpp_data_inputs_->subresource_urls,
         largest_contentful_paint.Time().value());
-    predictor->LearnLcpp(commit_url_->host(), *lcpp_data_inputs_);
+    predictor->LearnLcpp(*commit_url_, *lcpp_data_inputs_);
   }
 
   // * Emit LCPP breakdown PageLoad UMAs.
@@ -256,6 +257,14 @@ void LcpCriticalPathPredictorPageLoadMetricsObserver::
     lcpp_data_inputs_.emplace();
   }
   lcpp_data_inputs_->lcp_influencer_scripts = lcp_influencer_scripts;
+}
+
+void LcpCriticalPathPredictorPageLoadMetricsObserver::SetPreconnectOrigins(
+    const std::vector<GURL>& origins) {
+  if (!lcpp_data_inputs_) {
+    lcpp_data_inputs_.emplace();
+  }
+  lcpp_data_inputs_->preconnect_origins = origins;
 }
 
 void LcpCriticalPathPredictorPageLoadMetricsObserver::

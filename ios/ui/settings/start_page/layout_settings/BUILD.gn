@@ -5,6 +5,7 @@ source_set("layout_settings") {
     "vivaldi_start_page_layout_settings_view_controller.h",
     "vivaldi_start_page_layout_settings_view_controller.mm",
     "vivaldi_start_page_layout_style.h",
+    "vivaldi_start_page_layout_column.h",
     "vivaldi_start_page_layout_preview_view.h",
     "vivaldi_start_page_layout_preview_view.mm"
   ]

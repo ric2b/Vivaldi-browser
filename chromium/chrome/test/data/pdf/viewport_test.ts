@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {FittingType, PAGE_SHADOW, Point, Rect, SwipeDirection, Viewport} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
+import type {Point, Rect, Viewport} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
+import {FittingType, PAGE_SHADOW, SwipeDirection} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
 import {isMac} from 'chrome://resources/js/platform.js';
 
-import {createMockPdfPluginForTest, getZoomableViewport, MockDocumentDimensions, MockElement, MockPdfPluginElement, MockSizer, MockViewportChangedCallback} from './test_util.js';
+import type {MockPdfPluginElement} from './test_util.js';
+import {createMockPdfPluginForTest, getZoomableViewport, MockDocumentDimensions, MockElement, MockSizer, MockViewportChangedCallback} from './test_util.js';
 
 const SCROLLBAR_WIDTH: number = 15;
 
@@ -60,7 +62,7 @@ const tests = [
     const viewport = getZoomableViewport(
         new MockElement(100, 100, null), new MockSizer(), 43, 1);
 
-    chrome.test.assertEq(isMac ? 16 : 0, viewport.overlayScrollbarWidth);
+    chrome.test.assertEq(16, viewport.overlayScrollbarWidth);
     chrome.test.succeed();
   },
 

@@ -88,7 +88,7 @@ public class ImprovedBookmarkRowRenderTest {
     @Rule
     public ChromeRenderTestRule mRenderTestRule =
             ChromeRenderTestRule.Builder.withPublicCorpus()
-                    .setRevision(3)
+                    .setRevision(6)
                     .setBugComponent(ChromeRenderTestRule.Component.UI_BROWSER_BOOKMARKS)
                     .build();
 
@@ -207,6 +207,17 @@ public class ImprovedBookmarkRowRenderTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
+    public void testDisabled() throws IOException {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    mModel.set(ImprovedBookmarkRowProperties.ENABLED, false);
+                });
+        mRenderTestRule.render(mContentView, "disabled");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
     public void testEndImageVisibility() throws IOException {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -229,6 +240,23 @@ public class ImprovedBookmarkRowRenderTest {
                     mModel.set(ImprovedBookmarkRowProperties.IS_LOCAL_BOOKMARK, true);
                 });
         mRenderTestRule.render(mContentView, "local_bookmark");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    public void testLocalBookmarkItemWithChevron() throws IOException {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    mModel.set(ImprovedBookmarkRowProperties.IS_LOCAL_BOOKMARK, true);
+                    mModel.set(
+                            ImprovedBookmarkRowProperties.END_IMAGE_VISIBILITY,
+                            ImageVisibility.DRAWABLE);
+                    mModel.set(
+                            ImprovedBookmarkRowProperties.END_IMAGE_RES,
+                            R.drawable.outline_chevron_right_24dp);
+                });
+        mRenderTestRule.render(mContentView, "local_bookmark_wtih_chevron");
     }
 
     @Test
@@ -300,11 +328,7 @@ public class ImprovedBookmarkRowRenderTest {
                                     mActivityTestRule.getActivity(), specifics, mShoppingService);
                     coordinator.setPriceTrackingEnabled(false);
 
-                    if (mUseVisualRowLayout) {
-                        mModel.set(
-                                ImprovedBookmarkRowProperties.ACCESSORY_VIEW,
-                                coordinator.getView());
-                    }
+                    mModel.set(ImprovedBookmarkRowProperties.ACCESSORY_VIEW, coordinator.getView());
                 });
         mRenderTestRule.render(mContentView, "normal_with_price_tracking_disabled");
     }

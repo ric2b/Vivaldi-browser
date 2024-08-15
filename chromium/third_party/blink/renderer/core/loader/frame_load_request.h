@@ -26,11 +26,12 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LOADER_FRAME_LOAD_REQUEST_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LOADER_FRAME_LOAD_REQUEST_H_
 
+#include <optional>
+
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/referrer_policy.mojom-blink.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/navigation/impression.h"
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/policy_container.mojom-blink.h"
@@ -102,14 +103,14 @@ struct CORE_EXPORT FrameLoadRequest {
     triggering_event_info_ = info;
   }
 
-  mojo::PendingRemote<mojom::blink::PolicyContainerHostKeepAliveHandle>
-  TakeInitiatorPolicyContainerKeepAliveHandle() {
-    return std::move(initiator_policy_container_keep_alive_handle_);
+  mojo::PendingRemote<mojom::blink::NavigationStateKeepAliveHandle>
+  TakeInitiatorNavigationStateKeepAliveHandle() {
+    return std::move(initiator_navigation_state_keep_alive_handle_);
   }
-  void SetInitiatorPolicyContainerKeepAliveHandle(
-      mojo::PendingRemote<mojom::blink::PolicyContainerHostKeepAliveHandle>
+  void SetInitiatorNavigationStateKeepAliveHandle(
+      mojo::PendingRemote<mojom::blink::NavigationStateKeepAliveHandle>
           handle) {
-    initiator_policy_container_keep_alive_handle_ = std::move(handle);
+    initiator_navigation_state_keep_alive_handle_ = std::move(handle);
   }
 
   std::unique_ptr<SourceLocation> TakeSourceLocation() {
@@ -133,9 +134,7 @@ struct CORE_EXPORT FrameLoadRequest {
   }
 
   // The javascript world in which this request initiated.
-  const scoped_refptr<const DOMWrapperWorld>& JavascriptWorld() const {
-    return world_;
-  }
+  const DOMWrapperWorld* JavascriptWorld() const { return world_; }
 
   // The BlobURLToken that should be used when fetching the resource. This
   // is needed for blob URLs, because the blob URL might be revoked before the
@@ -163,7 +162,7 @@ struct CORE_EXPORT FrameLoadRequest {
     window_features_ = features;
   }
 
-  const absl::optional<WebPictureInPictureWindowOptions>&
+  const std::optional<WebPictureInPictureWindowOptions>&
   GetPictureInPictureWindowOptions() const {
     return picture_in_picture_window_options_;
   }
@@ -182,11 +181,11 @@ struct CORE_EXPORT FrameLoadRequest {
 
   // Impressions are set when a FrameLoadRequest is created for a click on an
   // anchor tag that has conversion measurement attributes.
-  void SetImpression(const absl::optional<Impression>& impression) {
+  void SetImpression(const std::optional<Impression>& impression) {
     impression_ = impression;
   }
 
-  const absl::optional<blink::Impression>& Impression() const {
+  const std::optional<blink::Impression>& Impression() const {
     return impression_;
   }
 
@@ -233,19 +232,19 @@ struct CORE_EXPORT FrameLoadRequest {
       mojom::blink::TriggeringEventInfo::kNotFromEvent;
   Element* source_element_ = nullptr;
   ShouldSendReferrer should_send_referrer_;
-  scoped_refptr<const DOMWrapperWorld> world_;
+  const DOMWrapperWorld* world_ = nullptr;
   scoped_refptr<base::RefCountedData<mojo::Remote<mojom::blink::BlobURLToken>>>
       blob_url_token_;
   base::TimeTicks input_start_time_;
   mojom::RequestContextFrameType frame_type_ =
       mojom::RequestContextFrameType::kNone;
   WebWindowFeatures window_features_;
-  absl::optional<WebPictureInPictureWindowOptions>
+  std::optional<WebPictureInPictureWindowOptions>
       picture_in_picture_window_options_;
-  absl::optional<blink::Impression> impression_;
-  absl::optional<LocalFrameToken> initiator_frame_token_;
-  mojo::PendingRemote<mojom::blink::PolicyContainerHostKeepAliveHandle>
-      initiator_policy_container_keep_alive_handle_;
+  std::optional<blink::Impression> impression_;
+  std::optional<LocalFrameToken> initiator_frame_token_;
+  mojo::PendingRemote<mojom::blink::NavigationStateKeepAliveHandle>
+      initiator_navigation_state_keep_alive_handle_;
   std::unique_ptr<SourceLocation> source_location_;
   KURL requestor_base_url_;
 

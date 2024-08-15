@@ -51,16 +51,11 @@ class CPDF_Stream final : public CPDF_Object {
   void SetDataAndRemoveFilter(pdfium::span<const uint8_t> pData);
   void SetDataFromStringstreamAndRemoveFilter(fxcrt::ostringstream* stream);
 
-  void InitStreamWithEmptyData(RetainPtr<CPDF_Dictionary> pDict);
-  void InitStreamFromFile(RetainPtr<IFX_SeekableReadStream> pFile,
-                          RetainPtr<CPDF_Dictionary> pDict);
+  void InitStreamFromFile(RetainPtr<IFX_SeekableReadStream> file);
 
   // Can only be called when a stream is not memory-based.
   DataVector<uint8_t> ReadAllRawData() const;
 
-  bool IsUninitialized() const {
-    return absl::holds_alternative<absl::monostate>(data_);
-  }
   bool IsFileBased() const {
     return absl::holds_alternative<RetainPtr<IFX_SeekableReadStream>>(data_);
   }
@@ -72,13 +67,23 @@ class CPDF_Stream final : public CPDF_Object {
  private:
   friend class CPDF_Dictionary;
 
-  // Uninitialized.
-  CPDF_Stream();
+  // Initializes with empty data and /Length set to 0 in `dict`.
+  // `dict` must be non-null and be a direct object.
+  explicit CPDF_Stream(RetainPtr<CPDF_Dictionary> dict);
 
-  // Initializes with empty data.
-  explicit CPDF_Stream(RetainPtr<CPDF_Dictionary> pDict);
+  // Copies `span` and `stream`, respectively. Creates a new dictionary with the
+  // /Length set.
+  explicit CPDF_Stream(pdfium::span<const uint8_t> span);
+  explicit CPDF_Stream(fxcrt::ostringstream* stream);
 
-  CPDF_Stream(DataVector<uint8_t> pData, RetainPtr<CPDF_Dictionary> pDict);
+  // Reads data from `file`. `dict` will have its /Length set based on `file`.
+  // `dict` must be non-null and be a direct object.
+  CPDF_Stream(RetainPtr<IFX_SeekableReadStream> file,
+              RetainPtr<CPDF_Dictionary> dict);
+
+  // Takes `data`.
+  // `dict` must be non-null and be a direct object.
+  CPDF_Stream(DataVector<uint8_t> data, RetainPtr<CPDF_Dictionary> dict);
   ~CPDF_Stream() override;
 
   const CPDF_Dictionary* GetDictInternal() const override;
@@ -88,10 +93,7 @@ class CPDF_Stream final : public CPDF_Object {
 
   void SetLengthInDict(int length);
 
-  absl::variant<absl::monostate,
-                RetainPtr<IFX_SeekableReadStream>,
-                DataVector<uint8_t>>
-      data_;
+  absl::variant<RetainPtr<IFX_SeekableReadStream>, DataVector<uint8_t>> data_;
   RetainPtr<CPDF_Dictionary> dict_;
 };
 

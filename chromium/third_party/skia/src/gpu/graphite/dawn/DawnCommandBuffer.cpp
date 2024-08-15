@@ -122,7 +122,15 @@ bool DawnCommandBuffer::onAddComputePass(const DispatchGroupList& groups) {
         for (const auto& dispatch : group->dispatches()) {
             this->bindComputePipeline(group->getPipeline(dispatch.fPipelineIndex));
             this->bindDispatchResources(*group, dispatch);
-            this->dispatchWorkgroups(dispatch.fParams.fGlobalDispatchSize);
+            if (const WorkgroupSize* globalSize =
+                        std::get_if<WorkgroupSize>(&dispatch.fGlobalSizeOrIndirect)) {
+                this->dispatchWorkgroups(*globalSize);
+            } else {
+                SkASSERT(std::holds_alternative<BufferView>(dispatch.fGlobalSizeOrIndirect));
+                const BufferView& indirect =
+                        *std::get_if<BufferView>(&dispatch.fGlobalSizeOrIndirect);
+                this->dispatchWorkgroupsIndirect(indirect.fInfo.fBuffer, indirect.fInfo.fOffset);
+            }
         }
     }
     this->endComputePass();
@@ -220,7 +228,7 @@ bool DawnCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
     auto& depthStencilInfo = renderPassDesc.fDepthStencilAttachment;
     if (depthStencilTexture) {
         const auto* dawnDepthStencilTexture = static_cast<const DawnTexture*>(depthStencilTexture);
-        auto format = dawnDepthStencilTexture->textureInfo().dawnTextureSpec().fFormat;
+        auto format = dawnDepthStencilTexture->textureInfo().dawnTextureSpec().getViewFormat();
         SkASSERT(DawnFormatIsDepthOrStencil(format));
 
         // TODO: check Texture matches RenderPassDesc
@@ -660,9 +668,12 @@ void DawnCommandBuffer::preprocessViewport(const SkRect& viewport) {
         size_t bufferSize;
 
         if constexpr (kNumSlotsForIntrinsicConstantBuffer > 1) {
+            // With multipule slots in the one constant buffer, each slot must be bindable,
+            // slot's offset must be aligned.
             bufferSize = kIntrinsicConstantAlignedSize * kNumSlotsForIntrinsicConstantBuffer;
         } else {
-            bufferSize = kIntrinsicConstantAlignedSize;
+            // For single slot case, the slot offset is always 0.
+            bufferSize = sizeof(IntrinsicConstant);
         }
 
         fIntrinsicConstantBuffer = fResourceProvider->findOrCreateDawnBuffer(
@@ -846,6 +857,15 @@ void DawnCommandBuffer::dispatchWorkgroups(const WorkgroupSize& globalSize) {
 
     fActiveComputePassEncoder.DispatchWorkgroups(
             globalSize.fWidth, globalSize.fHeight, globalSize.fDepth);
+}
+
+void DawnCommandBuffer::dispatchWorkgroupsIndirect(const Buffer* indirectBuffer,
+                                                   size_t indirectBufferOffset) {
+    SkASSERT(fActiveComputePassEncoder);
+    SkASSERT(fActiveComputePipeline);
+
+    auto& wgpuIndirectBuffer = static_cast<const DawnBuffer*>(indirectBuffer)->dawnBuffer();
+    fActiveComputePassEncoder.DispatchWorkgroupsIndirect(wgpuIndirectBuffer, indirectBufferOffset);
 }
 
 void DawnCommandBuffer::endComputePass() {

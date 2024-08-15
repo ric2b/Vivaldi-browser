@@ -679,6 +679,10 @@ void QuicSession::OnCanWrite() {
              quic_no_write_control_frame_upon_connection_close) &&
          !connection_->connected()) ||
         crypto_stream->HasBufferedCryptoFrames()) {
+      if (!connection_->connected()) {
+        QUIC_RELOADABLE_FLAG_COUNT(
+            quic_no_write_control_frame_upon_connection_close);
+      }
       // Cannot finish writing buffered crypto frames, connection is either
       // write blocked or closed.
       return;
@@ -921,14 +925,6 @@ bool QuicSession::WriteControlFrame(const QuicFrame& frame,
   if (!IsEncryptionEstablished()) {
     // Suppress the write before encryption gets established.
     return false;
-  }
-  if (GetQuicRestartFlag(quic_allow_control_frames_while_procesing)) {
-    QUIC_RESTART_FLAG_COUNT_N(quic_allow_control_frames_while_procesing, 1, 3);
-  } else {
-    if (connection_->framer().is_processing_packet()) {
-      // The frame will be sent when OnCanWrite() is called.
-      return false;
-    }
   }
   SetTransmissionType(type);
   QuicConnection::ScopedEncryptionLevelContext context(
@@ -1384,7 +1380,7 @@ void QuicSession::OnConfigNegotiated() {
 
   if (perspective_ == Perspective::IS_SERVER && version().HasIetfQuicFrames() &&
       connection_->effective_peer_address().IsInitialized()) {
-    if (config_.HasClientSentConnectionOption(kSPAD, perspective_)) {
+    if (config_.SupportsServerPreferredAddress(perspective_)) {
       quiche::IpAddressFamily address_family =
           connection_->effective_peer_address()
               .Normalized()

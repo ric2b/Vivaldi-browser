@@ -79,6 +79,10 @@ class PersistedData {
   // "InstallDate" is not known, -2 is returned.
   virtual int GetInstallDate(const std::string& id) const = 0;
 
+  // Sets InstallDate. This method should only be used for importing data from
+  // other data stores.
+  virtual void SetInstallDate(const std::string& id, int install_date) = 0;
+
   // These functions return cohort data for the specified |id|. "Cohort"
   // indicates the membership of the client in any release channels components
   // have set up in a machine-readable format, while "CohortName" does so in a
@@ -116,6 +120,15 @@ class PersistedData {
   virtual base::Version GetProductVersion(const std::string& id) const = 0;
   virtual void SetProductVersion(const std::string& id,
                                  const base::Version& pv) = 0;
+
+  // These functions access the maximum previous product version for the
+  // specified |id|. Returns an empty version if the version is not found.
+  // It will only be set if |max_version| exceeds the the existing value.
+  virtual base::Version GetMaxPreviousProductVersion(
+      const std::string& id) const = 0;
+  virtual void SetMaxPreviousProductVersion(
+      const std::string& id,
+      const base::Version& max_version) = 0;
 
   // These functions access the fingerprint for the specified |id|.
   virtual std::string GetFingerprint(const std::string& id) const = 0;

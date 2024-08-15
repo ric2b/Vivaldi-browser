@@ -200,7 +200,7 @@ class VIEWS_EXPORT RootView : public View,
   // Tree operations -----------------------------------------------------------
 
   // The host Widget
-  const raw_ptr<Widget> widget_;
+  const raw_ptr<Widget, DanglingUntriaged> widget_;
 
   // Input ---------------------------------------------------------------------
 

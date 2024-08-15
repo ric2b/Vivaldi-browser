@@ -4,7 +4,8 @@
 
 import {MetricsReporterImpl} from 'chrome://resources/js/metrics_reporter/metrics_reporter.js';
 import {keyDownOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
-import {ProfileData, RecentlyClosedTab, Tab, TabGroupColor, TabSearchApiProxyImpl, TabSearchItem, TabSearchPageElement} from 'chrome://tab-search.top-chrome/tab_search.js';
+import type {ProfileData, RecentlyClosedTab, Tab, TabSearchItem, TabSearchPageElement} from 'chrome://tab-search.top-chrome/tab_search.js';
+import {TabGroupColor, TabSearchApiProxyImpl} from 'chrome://tab-search.top-chrome/tab_search.js';
 import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {MockedMetricsReporter} from 'chrome://webui-test/mocked_metrics_reporter.js';
 import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
@@ -231,6 +232,7 @@ suite('TabSearchAppTest', () => {
       url: {url: 'https://www.paypal.com'},
       lastActiveElapsedText: '',
       lastActiveTime: {internalValue: BigInt(11)},
+      groupId: null,
     };
 
     await setupTest(createProfileData({
@@ -490,6 +492,7 @@ suite('TabSearchAppTest', () => {
     testProxy.getCallbackRouterRemote().tabsRemoved({
       tabIds: [1],
       recentlyClosedTabs: [{
+        groupId: null,
         tabId: 3,
         title: `SampleTab`,
         url: {url: 'https://www.sampletab.com'},
@@ -707,14 +710,16 @@ suite('TabSearchAppTest', () => {
     assertTrue(!!recentlyClosedTitleExpandButton);
 
     // Collapse the `Recently Closed` section and assert item count.
-    recentlyClosedTitleExpandButton!.click();
+    recentlyClosedTitleExpandButton.click();
     const [expanded] =
         await testProxy.whenCalled('saveRecentlyClosedExpandedPref');
     assertFalse(expanded);
     assertEquals(1, queryRows().length);
 
     // Expand the `Recently Closed` section and assert item count.
-    recentlyClosedTitleExpandButton!.click();
+    recentlyClosedTitleExpandButton.click();
+
+    await testProxy.whenCalled('saveRecentlyClosedExpandedPref');
     assertEquals(2, testProxy.getCallCount('saveRecentlyClosedExpandedPref'));
     assertEquals(3, queryRows().length);
   });

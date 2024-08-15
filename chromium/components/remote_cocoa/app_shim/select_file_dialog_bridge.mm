@@ -20,6 +20,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/hang_watcher.h"
 #include "base/threading/thread_restrictions.h"
+#import "components/remote_cocoa/app_shim/native_widget_mac_nswindow.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/strings/grit/ui_strings.h"
 
@@ -410,7 +411,13 @@ void SelectFileDialogBridge::Show(
   // Ensure that |callback| (rather than |this|) be retained by the block.
   auto ended_callback = base::BindRepeating(
       &SelectFileDialogBridge::OnPanelEnded, weak_factory_.GetWeakPtr());
-  [panel_ beginSheetModalForWindow:owning_window_
+
+  NSWindow* sheet_parent = owning_window_;
+  if (NativeWidgetMacNSWindow* sheet_parent_widget_window =
+          base::apple::ObjCCast<NativeWidgetMacNSWindow>(sheet_parent)) {
+    sheet_parent = [sheet_parent_widget_window preferredSheetParent];
+  }
+  [panel_ beginSheetModalForWindow:sheet_parent
                  completionHandler:^(NSInteger result) {
                    ended_callback.Run(result != NSModalResponseOK);
                  }];

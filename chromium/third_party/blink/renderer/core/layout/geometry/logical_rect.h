@@ -9,6 +9,11 @@
 #include "third_party/blink/renderer/core/layout/geometry/logical_offset.h"
 #include "third_party/blink/renderer/core/layout/geometry/logical_size.h"
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
+#include "ui/gfx/geometry/rect_f.h"
+
+namespace WTF {
+class String;
+}  // namespace WTF
 
 namespace blink {
 
@@ -134,7 +139,7 @@ struct CORE_EXPORT LogicalRect {
       : offset(LayoutUnit(r.x()), LayoutUnit(r.y())),
         size(LayoutUnit(r.width()), LayoutUnit(r.height())) {}
 
-  String ToString() const;
+  WTF::String ToString() const;
 };
 
 CORE_EXPORT std::ostream& operator<<(std::ostream&, const LogicalRect&);

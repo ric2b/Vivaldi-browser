@@ -190,7 +190,7 @@ export class NetworkLogViewColumns {
       networkLogLargeRowsSetting: Common.Settings.Setting<boolean>) {
     this.networkLogView = networkLogView;
 
-    this.persistantSettings = Common.Settings.Settings.instance().createSetting('networkLogColumns', {});
+    this.persistantSettings = Common.Settings.Settings.instance().createSetting('network-log-columns', {});
 
     this.networkLogLargeRowsSetting = networkLogLargeRowsSetting;
     this.networkLogLargeRowsSetting.addChangeListener(this.updateRowsSize, this);
@@ -252,8 +252,8 @@ export class NetworkLogViewColumns {
   }
 
   private setupDataGrid(): void {
-    const defaultColumns = _defaultColumns;
-    const defaultColumnConfig = _defaultColumnConfig;
+    const defaultColumns = DEFAULT_COLUMNS;
+    const defaultColumnConfig = DEFAULT_COLUMN_CONFIG;
     this.columns = ([] as Descriptor[]);
     for (const currentConfigColumn of defaultColumns) {
       const descriptor = Object.assign({}, defaultColumnConfig, currentConfigColumn);
@@ -268,8 +268,8 @@ export class NetworkLogViewColumns {
     }
     this.loadCustomColumnsAndSettings();
 
-    this.popoverHelper =
-        new UI.PopoverHelper.PopoverHelper(this.networkLogView.element, this.getPopoverRequest.bind(this));
+    this.popoverHelper = new UI.PopoverHelper.PopoverHelper(
+        this.networkLogView.element, this.getPopoverRequest.bind(this), 'network.initiator-stacktrace');
     this.popoverHelper.setHasPadding(true);
     this.popoverHelper.setTimeout(300, 300);
     this.dataGridInternal = new DataGrid.SortableDataGrid.SortableDataGrid<NetworkNode>(({
@@ -291,9 +291,9 @@ export class NetworkLogViewColumns {
     this.dataGridInternal.setHeaderContextMenuCallback(this.innerHeaderContextMenu.bind(this));
 
     this.activeWaterfallSortId = WaterfallSortIds.StartTime;
-    this.dataGridInternal.markColumnAsSortedBy(_initialSortColumn, DataGrid.DataGrid.Order.Ascending);
+    this.dataGridInternal.markColumnAsSortedBy(INITIAL_SORT_COLUMN, DataGrid.DataGrid.Order.Ascending);
 
-    this.splitWidget = new UI.SplitWidget.SplitWidget(true, true, 'networkPanelSplitViewWaterfall', 200);
+    this.splitWidget = new UI.SplitWidget.SplitWidget(true, true, 'network-panel-split-view-waterfall', 200);
     const widget = this.dataGridInternal.asWidget();
     widget.setMinimumSize(150, 0);
     this.splitWidget.setMainWidget(widget);
@@ -417,8 +417,7 @@ export class NetworkLogViewColumns {
   private createWaterfallHeader(): void {
     this.waterfallHeaderElement =
         (this.waterfallColumn.contentElement.createChild('div', 'network-waterfall-header') as HTMLElement);
-    this.waterfallHeaderElement.setAttribute(
-        'jslog', `${VisualLogging.tableHeader().track({click: true}).context('waterfall')}`);
+    this.waterfallHeaderElement.setAttribute('jslog', `${VisualLogging.tableHeader('waterfall').track({click: true})}`);
     this.waterfallHeaderElement.addEventListener('click', waterfallHeaderClicked.bind(this));
     this.waterfallHeaderElement.addEventListener(
         'contextmenu', event => this.innerHeaderContextMenu(new UI.ContextMenu.ContextMenu(event)));
@@ -649,11 +648,12 @@ export class NetworkLogViewColumns {
 
       for (const columnConfig of group) {
         // Make sure that at least one item in every group is enabled
-        const isDisabled = visibleColumns.length === 1 && visibleColumns[0] === columnConfig;
+        const disabled = visibleColumns.length === 1 && visibleColumns[0] === columnConfig;
         const title = columnConfig.title instanceof Function ? columnConfig.title() : columnConfig.title;
 
         contextMenu.headerSection().appendCheckboxItem(
-            title, this.toggleColumnVisibility.bind(this, columnConfig), columnConfig.visible, isDisabled);
+            title, this.toggleColumnVisibility.bind(this, columnConfig),
+            {checked: columnConfig.visible, disabled, jslogContext: columnConfig.id});
       }
 
       contextMenu.headerSection().appendSeparator();
@@ -663,37 +663,42 @@ export class NetworkLogViewColumns {
     for (const columnConfig of nonResponseHeadersWithoutGroup) {
       const title = columnConfig.title instanceof Function ? columnConfig.title() : columnConfig.title;
       contextMenu.headerSection().appendCheckboxItem(
-          title, this.toggleColumnVisibility.bind(this, columnConfig), columnConfig.visible);
+          title, this.toggleColumnVisibility.bind(this, columnConfig),
+          {checked: columnConfig.visible, jslogContext: columnConfig.id});
     }
 
-    const responseSubMenu = contextMenu.footerSection().appendSubMenuItem(i18nString(UIStrings.responseHeaders));
+    const responseSubMenu =
+        contextMenu.footerSection().appendSubMenuItem(i18nString(UIStrings.responseHeaders), false, 'response-headers');
     const responseHeaders = columnConfigs.filter(columnConfig => columnConfig.isResponseHeader);
     for (const columnConfig of responseHeaders) {
       const title = columnConfig.title instanceof Function ? columnConfig.title() : columnConfig.title;
       responseSubMenu.defaultSection().appendCheckboxItem(
-          title, this.toggleColumnVisibility.bind(this, columnConfig), columnConfig.visible);
+          title, this.toggleColumnVisibility.bind(this, columnConfig),
+          {checked: columnConfig.visible, jslogContext: columnConfig.id});
     }
 
     responseSubMenu.footerSection().appendItem(
-        i18nString(UIStrings.manageHeaderColumns), this.manageCustomHeaderDialog.bind(this));
+        i18nString(UIStrings.manageHeaderColumns), this.manageCustomHeaderDialog.bind(this),
+        {jslogContext: 'manage-header-columns'});
 
     const waterfallSortIds = WaterfallSortIds;
-    const waterfallSubMenu = contextMenu.footerSection().appendSubMenuItem(i18nString(UIStrings.waterfall));
+    const waterfallSubMenu =
+        contextMenu.footerSection().appendSubMenuItem(i18nString(UIStrings.waterfall), false, 'waterfall');
     waterfallSubMenu.defaultSection().appendCheckboxItem(
         i18nString(UIStrings.startTime), setWaterfallMode.bind(this, waterfallSortIds.StartTime),
-        this.activeWaterfallSortId === waterfallSortIds.StartTime);
+        {checked: this.activeWaterfallSortId === waterfallSortIds.StartTime, jslogContext: 'start-time'});
     waterfallSubMenu.defaultSection().appendCheckboxItem(
         i18nString(UIStrings.responseTime), setWaterfallMode.bind(this, waterfallSortIds.ResponseTime),
-        this.activeWaterfallSortId === waterfallSortIds.ResponseTime);
+        {checked: this.activeWaterfallSortId === waterfallSortIds.ResponseTime, jslogContext: 'response-time'});
     waterfallSubMenu.defaultSection().appendCheckboxItem(
         i18nString(UIStrings.endTime), setWaterfallMode.bind(this, waterfallSortIds.EndTime),
-        this.activeWaterfallSortId === waterfallSortIds.EndTime);
+        {checked: this.activeWaterfallSortId === waterfallSortIds.EndTime, jslogContext: 'end-time'});
     waterfallSubMenu.defaultSection().appendCheckboxItem(
         i18nString(UIStrings.totalDuration), setWaterfallMode.bind(this, waterfallSortIds.Duration),
-        this.activeWaterfallSortId === waterfallSortIds.Duration);
+        {checked: this.activeWaterfallSortId === waterfallSortIds.Duration, jslogContext: 'total-duration'});
     waterfallSubMenu.defaultSection().appendCheckboxItem(
         i18nString(UIStrings.latency), setWaterfallMode.bind(this, waterfallSortIds.Latency),
-        this.activeWaterfallSortId === waterfallSortIds.Latency);
+        {checked: this.activeWaterfallSortId === waterfallSortIds.Latency, jslogContext: 'latency'});
 
     function setWaterfallMode(this: NetworkLogViewColumns, sortId: WaterfallSortIds): void {
       let calculator = this.calculatorsMap.get(CalculatorTypes.Time);
@@ -720,7 +725,7 @@ export class NetworkLogViewColumns {
     const manageCustomHeaders = new NetworkManageCustomHeadersView(
         customHeaders, headerTitle => Boolean(this.addCustomHeader(headerTitle)), this.changeCustomHeader.bind(this),
         this.removeCustomHeader.bind(this));
-    const dialog = new UI.Dialog.Dialog();
+    const dialog = new UI.Dialog.Dialog('manage-custom-headers');
     manageCustomHeaders.show(dialog.contentElement);
     dialog.setSizeBehavior(UI.GlassPane.SizeBehavior.MeasureContent);
     // @ts-ignore
@@ -756,7 +761,7 @@ export class NetworkLogViewColumns {
       return null;
     }
 
-    const columnConfigBase = Object.assign({}, _defaultColumnConfig, {
+    const columnConfigBase = Object.assign({}, DEFAULT_COLUMN_CONFIG, {
       id: headerId,
       title: headerTitle,
       isResponseHeader: true,
@@ -815,7 +820,7 @@ export class NetworkLogViewColumns {
     }
     return {
       box: anchor.boxInWindow(),
-      show: async(popover: UI.GlassPane.GlassPane): Promise<boolean> => {
+      show: async (popover: UI.GlassPane.GlassPane) => {
         this.popupLinkifier.addEventListener(Components.Linkifier.Events.LiveLocationUpdated, () => {
           popover.setSizeBehavior(UI.GlassPane.SizeBehavior.MeasureContent);
         });
@@ -860,28 +865,24 @@ export class NetworkLogViewColumns {
   }
 
   selectFilmStripFrame(time: number): void {
-    this.eventDividers.set(_filmStripDividerColor, [time]);
+    this.eventDividers.set(FILM_STRIP_DIVIDER_COLOR, [time]);
     this.redrawWaterfallColumn();
   }
 
   clearFilmStripFrame(): void {
-    this.eventDividers.delete(_filmStripDividerColor);
+    this.eventDividers.delete(FILM_STRIP_DIVIDER_COLOR);
     this.redrawWaterfallColumn();
   }
 }
 
-// TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-// eslint-disable-next-line @typescript-eslint/naming-convention
-export const _initialSortColumn = 'waterfall';
+const INITIAL_SORT_COLUMN = 'waterfall';
 
 const enum CalculatorTypes {
   Duration = 'Duration',
   Time = 'Time',
 }
 
-// TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-// eslint-disable-next-line @typescript-eslint/naming-convention
-export const _defaultColumnConfig: Object = {
+const DEFAULT_COLUMN_CONFIG = {
   subtitle: null,
   visible: false,
   weight: 6,
@@ -894,9 +895,7 @@ export const _defaultColumnConfig: Object = {
   allowInSortByEvenWhenHidden: false,
 };
 
-// TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-// eslint-disable-next-line @typescript-eslint/naming-convention
-const _temporaryDefaultColumns = [
+const DEFAULT_COLUMNS = [
   {
     id: 'name',
     title: i18nLazyString(UIStrings.name),
@@ -949,14 +948,14 @@ const _temporaryDefaultColumns = [
     sortingFunction: NetworkRequestNode.RequestPropertyComparator.bind(null, 'domain'),
   },
   {
-    id: 'remoteaddress',
+    id: 'remote-address',
     title: i18nLazyString(UIStrings.remoteAddress),
     weight: 10,
     align: DataGrid.DataGrid.Align.Right,
     sortingFunction: NetworkRequestNode.RemoteAddressComparator,
   },
   {
-    id: 'remoteaddress-space',
+    id: 'remote-address-space',
     title: i18nLazyString(UIStrings.remoteAddressSpace),
     visible: false,
     weight: 10,
@@ -989,7 +988,7 @@ const _temporaryDefaultColumns = [
     sortingFunction: NetworkRequestNode.RequestCookiesCountComparator,
   },
   {
-    id: 'setcookies',
+    id: 'set-cookies',
     title: i18nLazyString(UIStrings.setCookies),
     align: DataGrid.DataGrid.Align.Right,
     sortingFunction: NetworkRequestNode.ResponseCookiesCountComparator,
@@ -1012,7 +1011,7 @@ const _temporaryDefaultColumns = [
   },
   {id: 'priority', title: i18nLazyString(UIStrings.priority), sortingFunction: NetworkRequestNode.PriorityComparator},
   {
-    id: 'connectionid',
+    id: 'connection-id',
     title: i18nLazyString(UIStrings.connectionId),
     sortingFunction: NetworkRequestNode.RequestPropertyComparator.bind(null, 'connectionId'),
   },
@@ -1086,13 +1085,7 @@ const _temporaryDefaultColumns = [
   },
 ];
 
-// TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-// eslint-disable-next-line @typescript-eslint/naming-convention, @typescript-eslint/no-explicit-any
-const _defaultColumns = (_temporaryDefaultColumns as any);
-
-// TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-// eslint-disable-next-line @typescript-eslint/naming-convention
-export const _filmStripDividerColor = '#fccc49';
+const FILM_STRIP_DIVIDER_COLOR = '#fccc49';
 
 enum WaterfallSortIds {
   StartTime = 'startTime',

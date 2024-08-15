@@ -18,14 +18,15 @@ try_.defaults.set(
     cores = 8,
     os = os.LINUX_DEFAULT,
     compilator_cores = 8,
-    compilator_reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
     execution_timeout = try_.DEFAULT_EXECUTION_TIMEOUT,
     orchestrator_cores = 2,
+    orchestrator_reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
     reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
     service_account = try_.DEFAULT_SERVICE_ACCOUNT,
     siso_configs = ["builder"],
     siso_enable_cloud_profiler = True,
     siso_enable_cloud_trace = True,
+    siso_enabled = True,
     siso_project = siso.project.DEFAULT_UNTRUSTED,
 )
 
@@ -71,7 +72,6 @@ try_.builder(
             "dcheck_always_on",
             "chromeos_codecs",
             "pdf_xfa",
-            "disable_nacl",
             "optimize_for_fuzzing",
             "mojo_fuzzer",
             "skip_generate_fuzzer_owners",
@@ -90,25 +90,6 @@ try_.builder(
         ],
     ),
     reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
-)
-
-try_.builder(
-    name = "linux-arm64-castos",
-    mirrors = [
-        "ci/Cast Linux ARM64",
-    ],
-    gn_args = gn_args.config(
-        configs = [
-            "ci/Cast Linux ARM64",
-        ],
-    ),
-    main_list_view = "try",
-    reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
-    tryjob = try_.job(
-        location_filters = [
-            "chromecast/.+",
-        ],
-    ),
 )
 
 try_.builder(
@@ -147,7 +128,6 @@ try_.builder(
             "dcheck_always_on",
             "chromeos_codecs",
             "pdf_xfa",
-            "disable_nacl",
             "optimize_for_fuzzing",
             "mojo_fuzzer",
             "skip_generate_fuzzer_owners",
@@ -160,7 +140,7 @@ try_.builder(
     mirrors = [
         "ci/linux-archive-rel",
     ],
-    try_settings = builder_config.try_settings(
+    builder_config_settings = builder_config.try_settings(
         include_all_triggered_testers = True,
         is_compile_only = True,
     ),
@@ -328,14 +308,19 @@ try_.builder(
             "dcheck_always_on",
             "chromeos_codecs",
             "pdf_xfa",
-            "disable_nacl",
             "optimize_for_fuzzing",
             "mojo_fuzzer",
             "skip_generate_fuzzer_owners",
         ],
     ),
     builderless = not settings.is_main,
+    experiments = {
+        # crbug/940930
+        "chromium.enable_cleandead": 100,
+    },
     main_list_view = "try",
+    # TODO: b/311312613 - enable Siso after fixing sanitizer build performance.
+    siso_enabled = False,
     tryjob = try_.job(),
 )
 
@@ -376,8 +361,6 @@ try_.orchestrator_builder(
             "release_try_builder",
             "use_clang_coverage",
             "partial_code_coverage_instrumentation",
-            "enable_dangling_raw_ptr_feature_flag",
-            "enable_backup_ref_ptr_feature_flag",
         ],
     ),
     compilator = "linux-rel-compilator",
@@ -385,12 +368,13 @@ try_.orchestrator_builder(
     experiments = {
         # go/nplus1shardsproposal
         "chromium.add_one_test_shard": 10,
+        # crbug/940930
+        "chromium.enable_cleandead": 100,
     },
     main_list_view = "try",
     # TODO(crbug.com/1372179): Use orchestrator pool once overloaded test pools
     # are addressed
     # use_orchestrator_pool = True,
-    siso_enabled = True,
     tryjob = try_.job(),
     use_clang_coverage = True,
 )
@@ -398,12 +382,7 @@ try_.orchestrator_builder(
 try_.compilator_builder(
     name = "linux-rel-compilator",
     branch_selector = branches.selector.LINUX_BRANCHES,
-    experiments = {
-        # crbug/940930
-        "chromium.enable_cleandead": 50,
-    },
     main_list_view = "try",
-    siso_enabled = True,
 )
 
 # TODO(crbug.com/1394755): Remove this builder after burning down failures
@@ -432,7 +411,16 @@ try_.builder(
             "partial_code_coverage_instrumentation",
         ],
     ),
+    ssd = True,
     coverage_test_types = ["unit", "overall"],
+    tryjob = try_.job(
+        location_filters = [
+            "ui/ozone/platform/wayland/.+",
+            "chrome/browser/.+(ui|browser)test.+",
+            "chrome/browser/ui/views/.+test.+",
+            "ui/views/widget/.+test.+",
+        ],
+    ),
     use_clang_coverage = True,
 )
 
@@ -494,45 +482,6 @@ try_.builder(
 )
 
 try_.builder(
-    name = "linux-x64-castos",
-    branch_selector = branches.selector.LINUX_BRANCHES,
-    mirrors = [
-        "ci/Cast Linux",
-    ],
-    gn_args = gn_args.config(
-        configs = [
-            "ci/Cast Linux",
-            "release_try_builder",
-        ],
-    ),
-    builderless = not settings.is_main,
-    main_list_view = "try",
-    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
-    siso_enabled = True,
-    tryjob = try_.job(),
-)
-
-try_.builder(
-    name = "linux-x64-castos-dbg",
-    branch_selector = branches.selector.LINUX_BRANCHES,
-    mirrors = [
-        "ci/Cast Linux Debug",
-    ],
-    gn_args = gn_args.config(
-        configs = [
-            "ci/Cast Linux Debug",
-        ],
-    ),
-    main_list_view = "try",
-    reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
-    tryjob = try_.job(
-        location_filters = [
-            "chromecast/.+",
-        ],
-    ),
-)
-
-try_.builder(
     name = "linux_chromium_archive_rel_ng",
     mirrors = [
         "ci/linux-archive-rel",
@@ -559,18 +508,24 @@ try_.orchestrator_builder(
         # go/nplus1shardsproposal
         "chromium.add_one_test_shard": 10,
         "chromium.compilator_can_outlive_parent": 100,
+        # crbug/940930
+        "chromium.enable_cleandead": 100,
     },
     main_list_view = "try",
-    tryjob = try_.job(),
     # TODO (crbug.com/1372179): Use orchestrator pool once overloaded test pools
     # are addressed
     # use_orchestrator_pool = True,
+    # TODO: b/311312613 - enable Siso after fixing sanitizer build performance.
+    siso_enabled = False,
+    tryjob = try_.job(),
 )
 
 try_.compilator_builder(
     name = "linux_chromium_asan_rel_ng-compilator",
     branch_selector = branches.selector.LINUX_BRANCHES,
     main_list_view = "try",
+    # TODO: b/311312613 - enable Siso after fixing sanitizer build performance.
+    siso_enabled = False,
 )
 
 # TODO: crbug.com/1502025 - Reduce duplicated configs from the shadow builder.
@@ -581,7 +536,7 @@ This builder shadows linux_chromium_asan_rel_ng builder to compare between Siso 
 This builder should be removed after migrating linux_chromium_asan_rel_ng from Ninja to Siso. b/277863839
 """,
     mirrors = builder_config.copy_from("try/linux_chromium_asan_rel_ng"),
-    try_settings = builder_config.try_settings(
+    builder_config_settings = builder_config.try_settings(
         is_compile_only = True,
     ),
     gn_args = "try/linux_chromium_asan_rel_ng",
@@ -591,7 +546,9 @@ This builder should be removed after migrating linux_chromium_asan_rel_ng from N
         "chromium.add_one_test_shard": 10,
     },
     main_list_view = "try",
-    siso_enabled = True,
+    # b/311312613 - Siso's sanitizer builds are slower than Ninja builds.
+    # Many concurrent compile jobs may cause the slowness.
+    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
     tryjob = try_.job(
         experiment_percentage = 10,
     ),
@@ -600,7 +557,6 @@ This builder should be removed after migrating linux_chromium_asan_rel_ng from N
 try_.compilator_builder(
     name = "linux_chromium_asan_siso_rel_ng-compilator",
     main_list_view = "try",
-    siso_enabled = True,
 )
 
 try_.builder(
@@ -615,6 +571,8 @@ try_.builder(
     ),
     cores = 32,
     ssd = True,
+    check_for_flakiness = False,
+    check_for_flakiness_with_resultdb = False,
     # TODO(thakis): Remove once https://crbug.com/927738 is resolved.
     execution_timeout = 7 * time.hour,
     reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
@@ -688,7 +646,7 @@ try_.builder(
     name = "linux_chromium_compile_dbg_ng",
     branch_selector = branches.selector.LINUX_BRANCHES,
     mirrors = ["ci/Linux Builder (dbg)"],
-    try_settings = builder_config.try_settings(
+    builder_config_settings = builder_config.try_settings(
         include_all_triggered_testers = True,
         is_compile_only = True,
     ),
@@ -705,38 +663,13 @@ try_.builder(
             path = "linux_debug",
         ),
     ],
+    experiments = {
+        # crbug/940930
+        "chromium.enable_cleandead": 100,
+    },
     main_list_view = "try",
     reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
     tryjob = try_.job(),
-)
-
-# TODO: crbug.com/1502025 - Reduce duplicated configs from the shadow builder.
-try_.builder(
-    name = "linux_chromium_compile_siso_dbg_ng",
-    description_html = """\
-This builder shadows linux_chromium_compile_dbg_ng builder to compare between Siso builds and Ninja builds.<br/>
-This builder should be removed after migrating linux_chromium_compile_dbg_ng from Ninja to Siso. b/277863839
-""",
-    mirrors = builder_config.copy_from("try/linux_chromium_compile_dbg_ng"),
-    try_settings = builder_config.try_settings(
-        include_all_triggered_testers = True,
-        is_compile_only = True,
-    ),
-    gn_args = "try/linux_chromium_compile_dbg_ng",
-    builderless = False,
-    caches = [
-        swarming.cache(
-            name = "builder",
-            path = "linux_debug",
-        ),
-    ],
-    contact_team_email = "chrome-build-team@google.com",
-    main_list_view = "try",
-    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
-    siso_enabled = True,
-    tryjob = try_.job(
-        experiment_percentage = 10,
-    ),
 )
 
 try_.builder(
@@ -744,7 +677,7 @@ try_.builder(
     mirrors = [
         "ci/Linux Builder",
     ],
-    try_settings = builder_config.try_settings(
+    builder_config_settings = builder_config.try_settings(
         include_all_triggered_testers = True,
         is_compile_only = True,
     ),
@@ -823,18 +756,24 @@ try_.orchestrator_builder(
     experiments = {
         # go/nplus1shardsproposal
         "chromium.add_one_test_shard": 10,
+        # crbug/940930
+        "chromium.enable_cleandead": 100,
     },
     main_list_view = "try",
-    tryjob = try_.job(),
     # TODO (crbug.com/1372179): Use orchestrator pool once overloaded test pools
     # are addressed
     # use_orchestrator_pool = True,
+    # TODO: b/311312613 - enable Siso after fixing sanitizer build performance.
+    siso_enabled = False,
+    tryjob = try_.job(),
 )
 
 try_.compilator_builder(
     name = "linux_chromium_tsan_rel_ng-compilator",
     branch_selector = branches.selector.LINUX_BRANCHES,
     main_list_view = "try",
+    # TODO: b/311312613 - enable Siso after fixing sanitizer build performance.
+    siso_enabled = False,
 )
 
 # TODO: crbug.com/1502025 - Reduce duplicated configs from the shadow builder.
@@ -845,7 +784,7 @@ This builder shadows linux_chromium_tsan_rel_ng builder to compare between Siso 
 This builder should be removed after migrating linux_chromium_tsan_rel_ng from Ninja to Siso. b/277863839
 """,
     mirrors = builder_config.copy_from("try/linux_chromium_tsan_rel_ng"),
-    try_settings = builder_config.try_settings(
+    builder_config_settings = builder_config.try_settings(
         is_compile_only = True,
     ),
     gn_args = "try/linux_chromium_tsan_rel_ng",
@@ -855,7 +794,9 @@ This builder should be removed after migrating linux_chromium_tsan_rel_ng from N
         "chromium.add_one_test_shard": 10,
     },
     main_list_view = "try",
-    siso_enabled = True,
+    # b/311312613 - Siso's sanitizer builds are slower than Ninja builds.
+    # Many concurrent compile jobs may cause the slowness.
+    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
     tryjob = try_.job(
         experiment_percentage = 10,
     ),
@@ -864,7 +805,6 @@ This builder should be removed after migrating linux_chromium_tsan_rel_ng from N
 try_.compilator_builder(
     name = "linux_chromium_tsan_siso_rel_ng-compilator",
     main_list_view = "try",
-    siso_enabled = True,
 )
 
 try_.builder(
@@ -982,7 +922,7 @@ try_.gpu.optional_tests_builder(
         ),
         build_gs_bucket = "chromium-gpu-fyi-archive",
     ),
-    try_settings = builder_config.try_settings(
+    builder_config_settings = builder_config.try_settings(
         retry_failed_shards = False,
     ),
     gn_args = gn_args.config(
@@ -992,7 +932,6 @@ try_.gpu.optional_tests_builder(
             "reclient",
             "minimal_symbols",
             "dcheck_always_on",
-            "disable_nacl",
         ],
     ),
     main_list_view = "try",

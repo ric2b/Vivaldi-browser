@@ -13,7 +13,7 @@ syntax = "proto3";
 option optimize_for = LITE_RUNTIME;
 
 package device_management;
-option go_package = "chromiumos/system_api/device_management_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/device_management_proto";
 
 ///////////////////////////////////////////////////////////////////////////////
 // Messages that's used by the actual request/reply goes below

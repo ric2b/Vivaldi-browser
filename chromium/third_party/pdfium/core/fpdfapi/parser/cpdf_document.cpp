@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <optional>
 #include <utility>
 
 #include "core/fpdfapi/parser/cpdf_array.h"
@@ -22,14 +23,13 @@
 #include "core/fpdfapi/parser/cpdf_stream_acc.h"
 #include "core/fpdfapi/parser/fpdf_parser_utility.h"
 #include "core/fxcodec/jbig2/JBig2_DocumentContext.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
+#include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/fx_codepage.h"
 #include "core/fxcrt/scoped_set_insertion.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/stl_util.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/base/check.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/containers/contains.h"
-#include "third_party/base/containers/span.h"
 
 namespace {
 
@@ -64,7 +64,7 @@ NodeType GetNodeType(RetainPtr<CPDF_Dictionary> kid_dict) {
 // violations. By normalizing the in-memory representation, other code that
 // reads the object do not have to deal with the same spec violations again.
 // If the PDF gets saved, the saved copy will also be more spec-compliant.
-absl::optional<int> CountPages(
+std::optional<int> CountPages(
     RetainPtr<CPDF_Dictionary> pages_dict,
     std::set<RetainPtr<CPDF_Dictionary>>* visited_pages) {
   // Required. See ISO 32000-1:2008 spec, table 29, but tolerate page tree nodes
@@ -91,10 +91,10 @@ absl::optional<int> CountPages(
       // Use |visited_pages| to help detect circular references of pages.
       ScopedSetInsertion<RetainPtr<CPDF_Dictionary>> local_add(visited_pages,
                                                                kid_dict);
-      absl::optional<int> local_count =
+      std::optional<int> local_count =
           CountPages(std::move(kid_dict), visited_pages);
       if (!local_count.has_value()) {
-        return absl::nullopt;  // Propagate error.
+        return std::nullopt;  // Propagate error.
       }
       count += local_count.value();
     } else {
@@ -103,7 +103,7 @@ absl::optional<int> CountPages(
     }
 
     if (count >= CPDF_Document::kPageMaxNum) {
-      return absl::nullopt;  // Error: too many pages.
+      return std::nullopt;  // Error: too many pages.
     }
   }
   // Fix the in-memory representation for page tree nodes that violate the spec.
@@ -383,8 +383,9 @@ JBig2_DocumentContext* CPDF_Document::GetOrCreateCodecContext() {
   return m_pCodecContext.get();
 }
 
-RetainPtr<CPDF_Stream> CPDF_Document::CreateModifiedAPStream() {
-  auto stream = NewIndirect<CPDF_Stream>();
+RetainPtr<CPDF_Stream> CPDF_Document::CreateModifiedAPStream(
+    RetainPtr<CPDF_Dictionary> dict) {
+  auto stream = NewIndirect<CPDF_Stream>(std::move(dict));
   m_ModifiedAPStreamIDs.insert(stream->GetObjNum());
   return stream;
 }

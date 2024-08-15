@@ -8,6 +8,7 @@
 #include "base/base_paths.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
@@ -40,7 +41,7 @@ class ClipboardHostImplBrowserTest : public ContentBrowserTest {
   };
 
   void SetUp() override {
-    ASSERT_TRUE(embedded_test_server()->Start());
+    ASSERT_TRUE(embedded_https_test_server().Start());
     ui::TestClipboard::CreateForCurrentThread();
     ContentBrowserTest::SetUp();
   }
@@ -52,8 +53,8 @@ class ClipboardHostImplBrowserTest : public ContentBrowserTest {
   }
 
   void CopyPasteFiles(std::vector<File> files) {
-    ASSERT_TRUE(
-        NavigateToURL(shell(), embedded_test_server()->GetURL("/title1.html")));
+    ASSERT_TRUE(NavigateToURL(
+        shell(), embedded_https_test_server().GetURL("/title1.html")));
     // Create a promise that will resolve on paste with comma-separated
     // '<name>:<type>:<b64-content>' of each file on the clipboard.
     ASSERT_TRUE(
@@ -152,7 +153,7 @@ INSTANTIATE_TEST_SUITE_P(ClipboardDocUrlBrowserTests,
                          testing::Values(true, false));
 
 IN_PROC_BROWSER_TEST_P(ClipboardDocUrlBrowserTestP, HtmlUrl) {
-  GURL main_url(embedded_test_server()->GetURL("/title1.html"));
+  GURL main_url(embedded_https_test_server().GetURL("/title1.html"));
   ASSERT_TRUE(NavigateToURL(shell(), main_url));
   PermissionController* permission_controller =
       GetRenderFrameHost()->GetBrowserContext()->GetPermissionController();
@@ -189,20 +190,42 @@ class ClipboardBrowserTest : public ClipboardHostImplBrowserTest {
         blink::features::kEmptyClipboardRead, /*enabled*/ true);
   }
 
+  void SetPermissionOverrideForAsyncClipboardTests(
+      blink::mojom::PermissionStatus status) {
+    content::PermissionController* permission_controller =
+        GetRenderFrameHost()->GetBrowserContext()->GetPermissionController();
+    url::Origin origin = url::Origin::Create(
+        embedded_https_test_server().GetURL("/title1.html"));
+    SetPermissionControllerOverrideForDevTools(
+        permission_controller, origin,
+        blink::PermissionType::CLIPBOARD_READ_WRITE, status);
+  }
+
+  void SetPermissionOverrideForStrictlyProcessedWriteTests(
+      blink::mojom::PermissionStatus status) {
+    content::PermissionController* permission_controller =
+        GetRenderFrameHost()->GetBrowserContext()->GetPermissionController();
+    url::Origin origin = url::Origin::Create(
+        embedded_https_test_server().GetURL("/title1.html"));
+    SetPermissionControllerOverrideForDevTools(
+        permission_controller, origin,
+        blink::PermissionType::CLIPBOARD_SANITIZED_WRITE, status);
+  }
+
+  void NavigateAndSetFocusToPage() {
+    ASSERT_TRUE(NavigateToURL(
+        shell(), embedded_https_test_server().GetURL("/title1.html")));
+    shell()->web_contents()->Focus();
+  }
+
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(ClipboardBrowserTest, EmptyClipboard) {
   base::HistogramTester histogram_tester;
-  GURL main_url(embedded_test_server()->GetURL("/title1.html"));
-  ASSERT_TRUE(NavigateToURL(shell(), main_url));
-  PermissionController* permission_controller =
-      GetRenderFrameHost()->GetBrowserContext()->GetPermissionController();
-  url::Origin origin = url::Origin::Create(main_url);
-  SetPermissionControllerOverrideForDevTools(
-      permission_controller, origin,
-      blink::PermissionType::CLIPBOARD_READ_WRITE,
+  NavigateAndSetFocusToPage();
+  SetPermissionOverrideForAsyncClipboardTests(
       blink::mojom::PermissionStatus::GRANTED);
   ui::Clipboard::GetForCurrentThread()->Clear(ui::ClipboardBuffer::kCopyPaste);
   ASSERT_TRUE(ExecJs(shell(), " navigator.clipboard.read()"));
@@ -213,20 +236,12 @@ IN_PROC_BROWSER_TEST_F(ClipboardBrowserTest, EmptyClipboard) {
 
 IN_PROC_BROWSER_TEST_F(ClipboardBrowserTest, NumberOfFormatsOnRead) {
   base::HistogramTester histogram_tester;
-  GURL main_url(embedded_test_server()->GetURL("/title1.html"));
-  ASSERT_TRUE(NavigateToURL(shell(), main_url));
-  PermissionController* permission_controller =
-      GetRenderFrameHost()->GetBrowserContext()->GetPermissionController();
-  url::Origin origin = url::Origin::Create(main_url);
-  SetPermissionControllerOverrideForDevTools(
-      permission_controller, origin,
-      blink::PermissionType::CLIPBOARD_READ_WRITE,
+  NavigateAndSetFocusToPage();
+  SetPermissionOverrideForAsyncClipboardTests(
       blink::mojom::PermissionStatus::GRANTED);
   ui::Clipboard::GetForCurrentThread()->Clear(ui::ClipboardBuffer::kCopyPaste);
   ASSERT_TRUE(ExecJs(shell(), " navigator.clipboard.read()"));
-  SetPermissionControllerOverrideForDevTools(
-      permission_controller, origin,
-      blink::PermissionType::CLIPBOARD_SANITIZED_WRITE,
+  SetPermissionOverrideForStrictlyProcessedWriteTests(
       blink::mojom::PermissionStatus::GRANTED);
   ASSERT_TRUE(ExecJs(
       shell(),

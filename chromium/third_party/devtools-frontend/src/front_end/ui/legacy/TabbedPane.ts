@@ -235,8 +235,9 @@ export class TabbedPane extends Common.ObjectWrapper.eventMixin<EventTypes, type
     console.assert(!this.tabsById.has(id), `Tabbed pane already contains a tab with id '${id}'`);
     this.tabsById.set(id, tab);
     tab.tabElement.tabIndex = -1;
+    const context = id === 'console-view' ? 'console' : id;
     tab.tabElement.setAttribute(
-        'jslog', `${VisualLogging.panelTabHeader().track({click: true, drag: true}).context(id)}`);
+        'jslog', `${VisualLogging.panelTabHeader().track({click: true, drag: true}).context(context)}`);
     if (index !== undefined) {
       this.tabs.splice(index, 0, tab);
     } else {
@@ -592,7 +593,7 @@ export class TabbedPane extends Common.ObjectWrapper.eventMixin<EventTypes, type
   private createDropDownButton(): HTMLDivElement {
     const dropDownContainer = document.createElement('div');
     dropDownContainer.classList.add('tabbed-pane-header-tabs-drop-down-container');
-    dropDownContainer.setAttribute('jslog', `${VisualLogging.dropDown().track({click: true}).context('more')}`);
+    dropDownContainer.setAttribute('jslog', `${VisualLogging.dropDown('more-tabs').track({click: true})}`);
     const chevronIcon = IconButton.Icon.create('chevron-double-right', 'chevron-icon');
     const moreTabsString = i18nString(UIStrings.moreTabs);
     dropDownContainer.title = moreTabsString;
@@ -626,7 +627,7 @@ export class TabbedPane extends Common.ObjectWrapper.eventMixin<EventTypes, type
       useSoftMenu: false,
       x: rect.left,
       y: rect.bottom,
-      onSoftMenuClosed: (): void => {
+      onSoftMenuClosed: () => {
         ARIAUtils.setExpanded(this.dropDownButton, false);
       },
     });
@@ -636,9 +637,10 @@ export class TabbedPane extends Common.ObjectWrapper.eventMixin<EventTypes, type
       }
       if (this.numberOfTabsShown() === 0 && this.tabsHistory[0] === tab) {
         menu.defaultSection().appendCheckboxItem(
-            tab.title, this.dropDownMenuItemSelected.bind(this, tab), /* checked */ true);
+            tab.title, this.dropDownMenuItemSelected.bind(this, tab), {checked: true, jslogContext: tab.id});
       } else {
-        menu.defaultSection().appendItem(tab.title, this.dropDownMenuItemSelected.bind(this, tab));
+        menu.defaultSection().appendItem(
+            tab.title, this.dropDownMenuItemSelected.bind(this, tab), {jslogContext: tab.id});
       }
     }
     void menu.show().then(() => ARIAUtils.setExpanded(this.dropDownButton, menu.isHostedMenuOpen()));
@@ -1170,9 +1172,10 @@ export class TabbedPaneTab {
     return tabElement as HTMLElement;
   }
 
-  private createCloseIconButton(): HTMLDivElement {
-    const closeIconContainer = document.createElement('div');
+  private createCloseIconButton(): HTMLButtonElement {
+    const closeIconContainer = document.createElement('button');
     closeIconContainer.classList.add('close-button', 'tabbed-pane-close-button');
+    closeIconContainer.setAttribute('jslog', `${VisualLogging.close().track({click: true})}`);
     const closeIcon = new IconButton.Icon.Icon();
     closeIcon.data = {
       iconName: 'cross',
@@ -1261,10 +1264,14 @@ export class TabbedPaneTab {
 
     const contextMenu = new ContextMenu(event);
     if (this.closeable) {
-      contextMenu.defaultSection().appendItem(i18nString(UIStrings.close), close.bind(this));
-      contextMenu.defaultSection().appendItem(i18nString(UIStrings.closeOthers), closeOthers.bind(this));
-      contextMenu.defaultSection().appendItem(i18nString(UIStrings.closeTabsToTheRight), closeToTheRight.bind(this));
-      contextMenu.defaultSection().appendItem(i18nString(UIStrings.closeAll), closeAll.bind(this));
+      contextMenu.defaultSection().appendItem(i18nString(UIStrings.close), close.bind(this), {jslogContext: 'close'});
+      contextMenu.defaultSection().appendItem(
+          i18nString(UIStrings.closeOthers), closeOthers.bind(this), {jslogContext: 'close-others'});
+      contextMenu.defaultSection().appendItem(
+          i18nString(UIStrings.closeTabsToTheRight), closeToTheRight.bind(this),
+          {jslogContext: 'close-tabs-to-the-right'});
+      contextMenu.defaultSection().appendItem(
+          i18nString(UIStrings.closeAll), closeAll.bind(this), {jslogContext: 'close-all'});
     }
     if (this.delegate) {
       this.delegate.onContextMenu(this.id, contextMenu);

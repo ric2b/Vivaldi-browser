@@ -4,13 +4,22 @@
 
 #import "ios/chrome/app/docking_promo_app_agent.h"
 
+#import <optional>
+
 #import "base/check.h"
+#import "base/feature_list.h"
+#import "base/memory/raw_ptr.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/application_delegate/app_state_observer.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
-#import "ios/chrome/browser/promos_manager/constants.h"
-#import "ios/chrome/browser/promos_manager/promos_manager.h"
+#import "ios/chrome/browser/docking_promo/model/utils.h"
+#import "ios/chrome/browser/promos_manager/model/constants.h"
+#import "ios/chrome/browser/promos_manager/model/promos_manager.h"
+#import "ios/chrome/browser/promos_manager/model/promos_manager_factory.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state_manager.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/ui/start_surface/start_surface_util.h"
 
 @interface DockingPromoAppAgent () <AppStateObserver>
 @end
@@ -18,20 +27,6 @@
 @implementation DockingPromoAppAgent {
   // The app state for the app.
   __weak AppState* _appState;
-
-  // Stores the PromosManager, which is used to register the Docking Promo, when
-  // appropriate.
-  PromosManager* _promosManager;
-}
-
-#pragma mark - Initializers
-
-- (instancetype)initWithPromosManager:(PromosManager*)promosManager {
-  if ([super init]) {
-    _promosManager = promosManager;
-  }
-
-  return self;
 }
 
 #pragma mark - AppStateAgent
@@ -66,10 +61,24 @@
   }
 }
 
+#pragma mark - Private
+
 // Register the promo with the PromosManager, if the conditions are met.
 - (void)maybeRegisterPromo {
-  if (IsChromeLikelyDefaultBrowser()) {
-    [self deregisterPromo];
+  if (IsDockingPromoForcedForDisplay()) {
+    [self registerPromo];
+    return;
+  }
+
+  std::optional<base::TimeDelta> timeSinceLastForeground =
+      MinTimeSinceLastForeground(_appState.foregroundScenes);
+
+  if (!CanShowDockingPromo(
+          timeSinceLastForeground.value_or(base::TimeDelta::Min()))) {
+    if (!base::FeatureList::IsEnabled(
+            kIOSDockingPromoPreventDeregistrationKillswitch)) {
+      [self deregisterPromo];
+    }
     return;
   }
 
@@ -78,17 +87,29 @@
 
 // Registers the Docking Promo with the PromosManager.
 - (void)registerPromo {
-  CHECK(_promosManager);
-
-  _promosManager->RegisterPromoForSingleDisplay(
-      promos_manager::Promo::DockingPromo);
+  std::vector<ChromeBrowserState*> loadedBrowserStates =
+      GetApplicationContext()
+          ->GetChromeBrowserStateManager()
+          ->GetLoadedBrowserStates();
+  for (ChromeBrowserState* browserState : loadedBrowserStates) {
+    PromosManager* promosManager =
+        PromosManagerFactory::GetForBrowserState(browserState);
+    promosManager->RegisterPromoForSingleDisplay(
+        promos_manager::Promo::DockingPromo);
+  }
 }
 
 // Deregisters the Docking Promo from the PromosManager.
 - (void)deregisterPromo {
-  CHECK(_promosManager);
-
-  _promosManager->DeregisterPromo(promos_manager::Promo::DockingPromo);
+  std::vector<ChromeBrowserState*> loadedBrowserStates =
+      GetApplicationContext()
+          ->GetChromeBrowserStateManager()
+          ->GetLoadedBrowserStates();
+  for (ChromeBrowserState* browserState : loadedBrowserStates) {
+    PromosManager* promosManager =
+        PromosManagerFactory::GetForBrowserState(browserState);
+    promosManager->DeregisterPromo(promos_manager::Promo::DockingPromo);
+  }
 }
 
 @end

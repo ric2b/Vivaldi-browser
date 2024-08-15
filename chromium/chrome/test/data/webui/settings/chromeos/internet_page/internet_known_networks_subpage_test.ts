@@ -184,6 +184,7 @@ suite('<settings-internet-known-networks-subpage>', () => {
         domains: [],
         provisioningSource: '',
         expirationEpochMs: 0n,
+        trustedCa: null,
       });
       const preferredWifi =
           OncMojo.getDefaultNetworkState(NetworkType.kWiFi, 'wifi2');
@@ -242,6 +243,7 @@ suite('<settings-internet-known-networks-subpage>', () => {
         domains: [],
         provisioningSource: '',
         expirationEpochMs: 0n,
+        trustedCa: null,
       });
       passpointServiceApi.addSubscription({
         id: 'passpoint_id_2',
@@ -249,6 +251,7 @@ suite('<settings-internet-known-networks-subpage>', () => {
         domains: [],
         provisioningSource: '',
         expirationEpochMs: 0n,
+        trustedCa: null,
       });
       const preferredWifi =
           OncMojo.getDefaultNetworkState(NetworkType.kWiFi, 'wifi2');
@@ -293,6 +296,7 @@ suite('<settings-internet-known-networks-subpage>', () => {
         domains: [],
         provisioningSource: '',
         expirationEpochMs: 0n,
+        trustedCa: null,
       });
       const preferredWifi =
           OncMojo.getDefaultNetworkState(NetworkType.kWiFi, 'wifi2');
@@ -329,6 +333,15 @@ suite('<settings-internet-known-networks-subpage>', () => {
               .querySelector<CrActionMenuElement>('#subscriptionDotsMenu');
       assertTrue(!!menu);
       assertTrue(menu.open);
+
+      const forgetButton =
+          menu.querySelector<HTMLButtonElement>('.dropdown-item');
+      assertTrue(!!forgetButton);
+      forgetButton.click();
+      await waitAfterNextRender(forgetButton);
+
+      const resp = await passpointServiceApi.listPasspointSubscriptions();
+      assertTrue(resp.result.length === 0);
     });
   });
 });

@@ -10,15 +10,15 @@
  */
 
 // TODO(xdai): Rename it to 'settings-cups-printers-page'.
-import 'chrome://resources/cr_elements/cr_button/cr_button.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
-import 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
-import 'chrome://resources/cr_elements/policy/cr_policy_pref_indicator.js';
+import 'chrome://resources/ash/common/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/ash/common/cr_elements/cr_icon_button/cr_icon_button.js';
+import 'chrome://resources/ash/common/cr_elements/cr_toast/cr_toast.js';
+import 'chrome://resources/ash/common/cr_elements/policy/cr_policy_pref_indicator.js';
 import 'chrome://resources/js/action_link.js';
-import 'chrome://resources/cr_elements/action_link.css.js';
+import 'chrome://resources/ash/common/cr_elements/action_link.css.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
-import 'chrome://resources/cr_components/localized_link/localized_link.js';
+import 'chrome://resources/ash/common/cr_elements/localized_link/localized_link.js';
 import '../icons.html.js';
 import './cups_edit_printer_dialog.js';
 import './cups_enterprise_printers.js';
@@ -32,9 +32,9 @@ import './cups_settings_add_printer_dialog.js';
 
 import {MojoInterfaceProviderImpl} from 'chrome://resources/ash/common/network/mojo_interface_provider.js';
 import {NetworkListenerBehavior, NetworkListenerBehaviorInterface} from 'chrome://resources/ash/common/network/network_listener_behavior.js';
-import {CrIconButtonElement} from 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
-import {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
-import {WebUiListenerMixin, WebUiListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {CrIconButtonElement} from 'chrome://resources/ash/common/cr_elements/cr_icon_button/cr_icon_button.js';
+import {CrToastElement} from 'chrome://resources/ash/common/cr_elements/cr_toast/cr_toast.js';
+import {WebUiListenerMixin, WebUiListenerMixinInterface} from 'chrome://resources/ash/common/cr_elements/web_ui_listener_mixin.js';
 import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
 import {addWebUiListener, removeWebUiListener, WebUiListener} from 'chrome://resources/js/cr.js';
 import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
@@ -227,18 +227,6 @@ export class SettingsCupsPrintersElement extends
         reflectToAttribute: true,
       },
 
-      /**
-       * True when the "printer-settings-revamp" feature flag is enabled.
-       */
-      isPrinterSettingsRevampEnabled_: {
-        type: Boolean,
-        value: () => {
-          return loadTimeData.getBoolean('isPrinterSettingsRevampEnabled');
-        },
-        readOnly: true,
-        reflectToAttribute: true,
-      },
-
       isRevampWayfindingEnabled_: {
         type: Boolean,
         value: () => {
@@ -274,7 +262,6 @@ export class SettingsCupsPrintersElement extends
   private showCupsEditPrinterDialog_: boolean;
   private nearbyPrintersExpanded_: boolean;
   private nearbyPrintersEmpty_: boolean;
-  private isPrinterSettingsRevampEnabled_: boolean;
 
   constructor() {
     super();
@@ -289,17 +276,12 @@ export class SettingsCupsPrintersElement extends
 
     this.browserProxy_ = CupsPrintersBrowserProxyImpl.getInstance();
 
-    if (this.isPrinterSettingsRevampEnabled_) {
-      // This request is made in the constructor to fetch the # of saved
-      // printers for determining whether the nearby printers section should
-      // start open or closed.
-      this.browserProxy_.getCupsSavedPrintersList().then(
-          savedPrinters => this.nearbyPrintersExpanded_ =
-              savedPrinters.printerList.length === 0);
-    } else {
-      // Nearby printers should always show when the revamp flag is disabled.
-      this.nearbyPrintersExpanded_ = true;
-    }
+    // This request is made in the constructor to fetch the # of saved
+    // printers for determining whether the nearby printers section should
+    // start open or closed.
+    this.browserProxy_.getCupsSavedPrintersList().then(
+        savedPrinters => this.nearbyPrintersExpanded_ =
+            savedPrinters.printerList.length === 0);
   }
 
   override connectedCallback(): void {
@@ -489,7 +471,7 @@ export class SettingsCupsPrintersElement extends
 
   private onAddPrinterDialogClose_(): void {
     const icon = this.shadowRoot!.querySelector<CrIconButtonElement>(
-        '#addManualPrinterIcon');
+        '#addManualPrinterButton');
     assert(icon);
     focusWithoutInk(icon);
   }
@@ -519,11 +501,6 @@ export class SettingsCupsPrintersElement extends
   private addPrinterButtonActive_(
       connectedToNetwork: boolean, userPrintersAllowed: boolean): boolean {
     return connectedToNetwork && userPrintersAllowed;
-  }
-
-  private showSavedPrintersSection_(): boolean {
-    return this.isPrinterSettingsRevampEnabled_ ||
-        this.doesAccountHaveSavedPrinters_();
   }
 
   private doesAccountHaveSavedPrinters_(): boolean {
@@ -571,7 +548,6 @@ export class SettingsCupsPrintersElement extends
   }
 
   private toggleClicked_(): void {
-    assert(this.isPrinterSettingsRevampEnabled_);
     this.nearbyPrintersExpanded_ = !this.nearbyPrintersExpanded_;
 
     // The iron list containing nearby printers does not get rendered while
@@ -593,11 +569,6 @@ export class SettingsCupsPrintersElement extends
 
   private computeNearbyPrintersEmpty_(): boolean {
     return this.nearbyPrinterCount_ === 0;
-  }
-
-  private showNearbyPrintersRevampSection_(): boolean {
-    return this.isPrinterSettingsRevampEnabled_ &&
-        this.hasActiveNetworkConnection;
   }
 
   private onClickPrintManagement_(): void {

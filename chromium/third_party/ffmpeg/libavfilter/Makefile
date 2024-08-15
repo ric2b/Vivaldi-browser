@@ -16,7 +16,6 @@ OBJS = allfilters.o                                                     \
        colorspace.o                                                     \
        ccfifo.o                                                         \
        drawutils.o                                                      \
-       fifo.o                                                           \
        formats.o                                                        \
        framepool.o                                                      \
        framequeue.o                                                     \
@@ -35,6 +34,7 @@ OBJS-$(CONFIG_DNN)                           += dnn_filter_common.o
 include $(SRC_PATH)/libavfilter/dnn/Makefile
 
 # audio filters
+OBJS-$(CONFIG_AAP_FILTER)                    += af_aap.o
 OBJS-$(CONFIG_ABENCH_FILTER)                 += f_bench.o
 OBJS-$(CONFIG_ACOMPRESSOR_FILTER)            += af_sidechaincompress.o
 OBJS-$(CONFIG_ACONTRAST_FILTER)              += af_acontrast.o
@@ -290,7 +290,7 @@ OBJS-$(CONFIG_DOUBLEWEAVE_FILTER)            += vf_weave.o
 OBJS-$(CONFIG_DRAWBOX_FILTER)                += vf_drawbox.o
 OBJS-$(CONFIG_DRAWGRAPH_FILTER)              += f_drawgraph.o
 OBJS-$(CONFIG_DRAWGRID_FILTER)               += vf_drawbox.o
-OBJS-$(CONFIG_DRAWTEXT_FILTER)               += vf_drawtext.o
+OBJS-$(CONFIG_DRAWTEXT_FILTER)               += vf_drawtext.o textutils.o
 OBJS-$(CONFIG_EDGEDETECT_FILTER)             += vf_edgedetect.o edge_common.o
 OBJS-$(CONFIG_ELBG_FILTER)                   += vf_elbg.o
 OBJS-$(CONFIG_ENTROPY_FILTER)                += vf_entropy.o
@@ -322,6 +322,7 @@ OBJS-$(CONFIG_FREEZEDETECT_FILTER)           += vf_freezedetect.o
 OBJS-$(CONFIG_FREEZEFRAMES_FILTER)           += vf_freezeframes.o
 OBJS-$(CONFIG_FREI0R_FILTER)                 += vf_frei0r.o
 OBJS-$(CONFIG_FSPP_FILTER)                   += vf_fspp.o qp_table.o
+OBJS-$(CONFIG_FSYNC_FILTER)                  += vf_fsync.o
 OBJS-$(CONFIG_GBLUR_FILTER)                  += vf_gblur.o
 OBJS-$(CONFIG_GBLUR_VULKAN_FILTER)           += vf_gblur_vulkan.o vulkan.o vulkan_filter.o
 OBJS-$(CONFIG_GEQ_FILTER)                    += vf_geq.o
@@ -436,6 +437,7 @@ OBJS-$(CONFIG_PSEUDOCOLOR_FILTER)            += vf_pseudocolor.o
 OBJS-$(CONFIG_PSNR_FILTER)                   += vf_psnr.o framesync.o
 OBJS-$(CONFIG_PULLUP_FILTER)                 += vf_pullup.o
 OBJS-$(CONFIG_QP_FILTER)                     += vf_qp.o
+OBJS-$(CONFIG_QUIRC_FILTER)                  += vf_quirc.o
 OBJS-$(CONFIG_RANDOM_FILTER)                 += vf_random.o
 OBJS-$(CONFIG_READEIA608_FILTER)             += vf_readeia608.o
 OBJS-$(CONFIG_READVITC_FILTER)               += vf_readvitc.o
@@ -513,6 +515,7 @@ OBJS-$(CONFIG_THUMBNAIL_FILTER)              += vf_thumbnail.o
 OBJS-$(CONFIG_THUMBNAIL_CUDA_FILTER)         += vf_thumbnail_cuda.o vf_thumbnail_cuda.ptx.o \
                                                 cuda/load_helper.o
 OBJS-$(CONFIG_TILE_FILTER)                   += vf_tile.o
+OBJS-$(CONFIG_TILTANDSHIFT_FILTER)           += vf_tiltandshift.o
 OBJS-$(CONFIG_TINTERLACE_FILTER)             += vf_tinterlace.o
 OBJS-$(CONFIG_TLUT2_FILTER)                  += vf_lut2.o framesync.o
 OBJS-$(CONFIG_TMEDIAN_FILTER)                += vf_xmedian.o framesync.o
@@ -597,6 +600,8 @@ OBJS-$(CONFIG_NULLSRC_FILTER)                += vsrc_testsrc.o
 OBJS-$(CONFIG_OPENCLSRC_FILTER)              += vf_program_opencl.o opencl.o
 OBJS-$(CONFIG_PAL75BARS_FILTER)              += vsrc_testsrc.o
 OBJS-$(CONFIG_PAL100BARS_FILTER)             += vsrc_testsrc.o
+OBJS-$(CONFIG_QRENCODE_FILTER)               += qrencode.o textutils.o
+OBJS-$(CONFIG_QRENCODESRC_FILTER)            += qrencode.o textutils.o
 OBJS-$(CONFIG_RGBTESTSRC_FILTER)             += vsrc_testsrc.o
 OBJS-$(CONFIG_SIERPINSKI_FILTER)             += vsrc_sierpinski.o
 OBJS-$(CONFIG_SMPTEBARS_FILTER)              += vsrc_testsrc.o

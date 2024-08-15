@@ -31,13 +31,13 @@
 #include "third_party/webrtc_overrides/p2p/base/ice_prune_proposal.h"
 #include "third_party/webrtc_overrides/p2p/base/ice_switch_proposal.h"
 
-namespace {
-
 namespace cricket {
 // This is an opaque type for the purposes of this test, so a forward
 // declaration suffices
-class IceConfig;
+struct IceConfig;
 }  // namespace cricket
+
+namespace {
 
 using ::blink::BridgeIceController;
 using ::blink::FakeConnectionFactory;
@@ -705,8 +705,8 @@ class BridgeIceControllerInvalidProposalTest : public BridgeIceControllerTest {
   void Recheck() { env.FastForwardBy(base::Milliseconds(recheck_delay_ms)); }
 
   const int recheck_delay_ms = 10;
-  raw_ptr<const Connection, ExperimentalRenderer> conn = nullptr;
-  raw_ptr<const Connection, ExperimentalRenderer> conn_two = nullptr;
+  raw_ptr<const Connection> conn = nullptr;
+  raw_ptr<const Connection> conn_two = nullptr;
   // This field is not vector<raw_ptr<...>> due to interaction with third_party
   // api.
   RAW_PTR_EXCLUSION const std::vector<const Connection*>
@@ -776,7 +776,7 @@ TEST_F(BridgeIceControllerDeathTest, RejectUnsolicitedSwitchProposal) {
 
 TEST_F(BridgeIceControllerDeathTest, AcceptEmptySwitchProposal) {
   const IceControllerInterface::SwitchResult switch_result{
-      absl::nullopt, recheck_event, empty_conns_to_forget};
+      std::nullopt, recheck_event, empty_conns_to_forget};
   const IceSwitchProposal proposal(reason, switch_result,
                                    /*reply_expected=*/true);
   EXPECT_DCHECK_DEATH_WITH(interaction_agent->AcceptSwitchProposal(proposal),
@@ -785,7 +785,7 @@ TEST_F(BridgeIceControllerDeathTest, AcceptEmptySwitchProposal) {
 
 TEST_F(BridgeIceControllerDeathTest, AcceptNullSwitchProposal) {
   const IceControllerInterface::SwitchResult switch_result{
-      absl::optional<const Connection*>(nullptr), recheck_event,
+      std::optional<const Connection*>(nullptr), recheck_event,
       empty_conns_to_forget};
   const IceSwitchProposal proposal(reason, switch_result,
                                    /*reply_expected=*/true);
@@ -921,12 +921,12 @@ TEST_F(BridgeIceControllerTest, HandlesPruneRequest) {
       .WillRepeatedly(Return(connection_set));
 
   const std::vector<const Connection*> conns_to_prune{conn};
-  const std::vector<const IceConnection> valid_ice_conns_to_prune{
+  const std::vector<IceConnection> valid_ice_conns_to_prune{
       IceConnection(conn)};
   const std::vector<const Connection*> partial_conns_to_prune{conn_two};
-  const std::vector<const IceConnection> mixed_ice_conns_to_prune{
+  const std::vector<IceConnection> mixed_ice_conns_to_prune{
       IceConnection(conn_two), IceConnection(conn_three)};
-  const std::vector<const IceConnection> invalid_ice_conns_to_prune{
+  const std::vector<IceConnection> invalid_ice_conns_to_prune{
       IceConnection(conn_three)};
 
   EXPECT_CALL(agent, PruneConnections(ElementsAreArray(conns_to_prune)));

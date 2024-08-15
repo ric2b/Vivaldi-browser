@@ -5,11 +5,14 @@
 #ifndef CHROME_BROWSER_WEB_APPLICATIONS_WEB_APP_INSTALL_UTILS_H_
 #define CHROME_BROWSER_WEB_APPLICATIONS_WEB_APP_INSTALL_UTILS_H_
 
+#include <string_view>
 #include <vector>
 
-#include "base/strings/string_piece.h"
+#include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
+#include "chrome/browser/web_applications/web_app_icon_operations.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
@@ -33,10 +36,6 @@ enum class WebappInstallSource;
 enum class WebappUninstallSource;
 }  // namespace webapps
 
-namespace gfx {
-class Size;
-}  // namespace gfx
-
 namespace web_app {
 
 class WebApp;
@@ -49,27 +48,22 @@ enum class ForInstallableSite {
   kUnknown,
 };
 
-// An empty gfx::Size() (where width & height are both 0) signifies no preferred
-// download size.
-using IconUrlsWithSizes = std::tuple<GURL, gfx::Size>;
+// A map of |IconUrlWithSize| to http status results. `http_status_code` is
+// never 0.
+using DownloadedIconsHttpResults =
+    base::flat_map<IconUrlWithSize, int /*http_status_code*/>;
 
-struct IconUrlsWithSizesComparator {
-  constexpr bool operator()(const IconUrlsWithSizes& lhs,
-                            const IconUrlsWithSizes& rhs) const {
-    return (get<GURL>(lhs) < get<GURL>(rhs)) ||
-           (get<gfx::Size>(lhs).width() < get<gfx::Size>(rhs).width()) ||
-           (get<gfx::Size>(lhs).height() < get<gfx::Size>(rhs).height());
-  }
-};
-
-using IconUrlSizeSet =
-    base::flat_set<IconUrlsWithSizes, IconUrlsWithSizesComparator>;
+// A map of |IconUrlWithSize| to http status results. `http_status_code` is
+// never 0.
+using DownloadedIconsHttpResults =
+    base::flat_map<IconUrlWithSize, int /*http_status_code*/>;
 
 // Converts from the manifest type to the Chrome type.
-apps::FileHandlers CreateFileHandlersFromManifest(
+void PopulateFileHandlerInfoFromManifest(
     const std::vector<blink::mojom::ManifestFileHandlerPtr>&
         manifest_file_handlers,
-    const GURL& app_scope);
+    const GURL& app_scope,
+    WebAppInstallInfo* web_app_info);
 
 // Update the given WebAppInstallInfo with information from the manifest.
 // Will sanitise the manifest fields to be suitable for installation to prevent
@@ -82,11 +76,6 @@ void UpdateWebAppInfoFromManifest(const blink::mojom::Manifest& manifest,
 WebAppInstallInfo CreateWebAppInfoFromManifest(
     const blink::mojom::Manifest& manifest,
     const GURL& manifest_url);
-
-// Form a list of icons and their sizes to download: Remove icons with invalid
-// urls.
-IconUrlSizeSet GetValidIconUrlsToDownload(
-    const WebAppInstallInfo& web_app_info);
 
 // Populate non-product icons in WebAppInstallInfo using the IconsMap. This
 // currently covers shortcut item icons and file handler icons. It ignores
@@ -111,13 +100,13 @@ void RecordDownloadedIconsResultAndHttpStatusCodes(
 // Records the class of http status code (2XX, 3XX, 4XX, 5XX) for each processed
 // icon url.
 void RecordDownloadedIconsHttpResultsCodeClass(
-    base::StringPiece histogram_name,
+    std::string_view histogram_name,
     IconsDownloadedResult result,
     const DownloadedIconsHttpResults& icons_http_results);
 
 // Records http status code for each processed icon url.
 void RecordDownloadedIconHttpStatusCodes(
-    base::StringPiece histogram_name,
+    std::string_view histogram_name,
     const DownloadedIconsHttpResults& icons_http_results);
 
 WebAppManagement::Type ConvertExternalInstallSourceToSource(
@@ -134,17 +123,6 @@ WebAppManagement::Type ConvertInstallSurfaceToWebAppSource(
     webapps::WebappInstallSource install_surface);
 
 void CreateWebAppInstallTabHelpers(content::WebContents* web_contents);
-
-// The function should be called before removing a source from the WebApp.
-void MaybeRegisterOsUninstall(const WebApp* web_app,
-                              WebAppManagement::Type source_uninstalling,
-                              OsIntegrationManager& os_integration_manager,
-                              InstallOsHooksCallback callback);
-
-// The function should be called before adding source to the WebApp.
-void MaybeUnregisterOsUninstall(const WebApp* web_app,
-                                WebAppManagement::Type source_installing,
-                                OsIntegrationManager& os_integration_manager);
 
 // Updates |web_app| using |web_app_info|
 void SetWebAppManifestFields(const WebAppInstallInfo& web_app_info,
@@ -169,6 +147,10 @@ void ApplyParamsToWebAppInstallInfo(const WebAppInstallParams& install_params,
 void ApplyParamsToFinalizeOptions(
     const WebAppInstallParams& install_params,
     WebAppInstallFinalizer::FinalizeOptions& options);
+
+// Returns whether the home tab icons exist.
+bool HomeTabIconsExistInTabStrip(const WebAppInstallInfo& web_app_info);
+
 }  // namespace web_app
 
 #endif  // CHROME_BROWSER_WEB_APPLICATIONS_WEB_APP_INSTALL_UTILS_H_

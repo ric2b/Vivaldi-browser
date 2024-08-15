@@ -73,7 +73,7 @@ const base::FilePath& ResourceReader::GetResourceDirectory() {
 #endif  // !IS_ANDROID
 
 /* static */
-absl::optional<base::Value> ResourceReader::ReadJSON(
+std::optional<base::Value> ResourceReader::ReadJSON(
     base::StringPiece resource_directory,
     base::StringPiece resource_name) {
   DCHECK(resource_directory.empty() || resource_directory.front() != '/');
@@ -88,7 +88,7 @@ absl::optional<base::Value> ResourceReader::ReadJSON(
   resource_path.append(resource_name.data(), resource_name.size());
 
   ResourceReader reader(std::move(resource_path));
-  absl::optional<base::Value> json = reader.ParseJSON();
+  std::optional<base::Value> json = reader.ParseJSON();
   if (!json) {
     LOG(ERROR) << reader.GetError();
   }
@@ -169,9 +169,9 @@ std::string ResourceReader::GetError() const {
   return error_;
 }
 
-absl::optional<base::Value> ResourceReader::ParseJSON() {
+std::optional<base::Value> ResourceReader::ParseJSON() {
   if (!IsValid())
-    return absl::nullopt;
+    return std::nullopt;
   DCHECK(mapped_file_.IsValid());
   auto v = base::JSONReader::ReadAndReturnValueWithError(as_string_view());
   if (!v.has_value()) {

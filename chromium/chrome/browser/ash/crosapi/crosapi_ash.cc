@@ -88,6 +88,7 @@
 #include "chrome/browser/ash/crosapi/networking_attributes_ash.h"
 #include "chrome/browser/ash/crosapi/networking_private_ash.h"
 #include "chrome/browser/ash/crosapi/nonclosable_app_toast_service_ash.h"
+#include "chrome/browser/ash/crosapi/one_drive_integration_service_ash.h"
 #include "chrome/browser/ash/crosapi/one_drive_notification_service_ash.h"
 #include "chrome/browser/ash/crosapi/parent_access_ash.h"
 #include "chrome/browser/ash/crosapi/payment_app_instance_ash.h"
@@ -103,6 +104,7 @@
 #include "chrome/browser/ash/crosapi/sharesheet_ash.h"
 #include "chrome/browser/ash/crosapi/speech_recognition_ash.h"
 #include "chrome/browser/ash/crosapi/structured_metrics_service_ash.h"
+#include "chrome/browser/ash/crosapi/suggestion_service_ash.h"
 #include "chrome/browser/ash/crosapi/task_manager_ash.h"
 #include "chrome/browser/ash/crosapi/time_zone_service_ash.h"
 #include "chrome/browser/ash/crosapi/url_handler_ash.h"
@@ -116,7 +118,7 @@
 #include "chrome/browser/ash/crosapi/web_page_info_ash.h"
 #include "chrome/browser/ash/input_method/editor_mediator_factory.h"
 #include "chrome/browser/ash/login/quick_unlock/quick_unlock_factory.h"
-#include "chrome/browser/ash/mahi/mahi_manager_ash.h"
+#include "chrome/browser/ash/mahi/mahi_browser_delegate_ash.h"
 #include "chrome/browser/ash/passkeys/passkey_authenticator_service_ash.h"
 #include "chrome/browser/ash/passkeys/passkey_authenticator_service_factory_ash.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -159,6 +161,7 @@
 #include "chromeos/crosapi/mojom/keystore_service.mojom.h"
 #include "chromeos/crosapi/mojom/lacros_shelf_item_tracker.mojom.h"
 #include "chromeos/crosapi/mojom/local_printer.mojom.h"
+#include "chromeos/crosapi/mojom/mahi.mojom.h"
 #include "chromeos/crosapi/mojom/message_center.mojom.h"
 #include "chromeos/crosapi/mojom/multi_capture_service.mojom.h"
 #include "chromeos/crosapi/mojom/passkeys.mojom.h"
@@ -210,6 +213,8 @@ Profile* GetAshProfile() {
 }
 
 }  // namespace
+
+CrosapiAsh::TestControllerReceiver::~TestControllerReceiver() = default;
 
 CrosapiAsh::CrosapiAsh(CrosapiDependencyRegistry* registry)
     : arc_ash_(std::make_unique<ArcAsh>()),
@@ -277,9 +282,8 @@ CrosapiAsh::CrosapiAsh(CrosapiDependencyRegistry* registry)
       login_ash_(std::make_unique<LoginAsh>()),
       login_screen_storage_ash_(std::make_unique<LoginScreenStorageAsh>()),
       login_state_ash_(std::make_unique<LoginStateAsh>()),
-      mahi_manager_ash_(chromeos::features::IsMahiEnabled()
-                            ? std::make_unique<ash::MahiManagerAsh>()
-                            : nullptr),
+      mahi_browser_delegate_ash_(
+          std::make_unique<ash::MahiBrowserDelegateAsh>()),
       media_ui_ash_(std::make_unique<MediaUIAsh>()),
       message_center_ash_(std::make_unique<MessageCenterAsh>()),
       metrics_ash_(std::make_unique<MetricsAsh>()),
@@ -294,6 +298,8 @@ CrosapiAsh::CrosapiAsh(CrosapiDependencyRegistry* registry)
           g_browser_process->platform_part()->ash_proxy_monitor())),
       one_drive_notification_service_ash_(
           std::make_unique<OneDriveNotificationServiceAsh>()),
+      one_drive_integration_service_ash_(
+          std::make_unique<OneDriveIntegrationServiceAsh>()),
       parent_access_ash_(std::make_unique<ParentAccessAsh>()),
       payment_app_instance_ash_(std::make_unique<PaymentAppInstanceAsh>()),
       policy_service_ash_(std::make_unique<PolicyServiceAsh>()),
@@ -324,6 +330,7 @@ CrosapiAsh::CrosapiAsh(CrosapiDependencyRegistry* registry)
       speech_recognition_ash_(std::make_unique<SpeechRecognitionAsh>()),
       structured_metrics_service_ash_(
           std::make_unique<StructuredMetricsServiceAsh>()),
+      suggestion_service_ash_(std::make_unique<SuggestionServiceAsh>()),
       task_manager_ash_(std::make_unique<TaskManagerAsh>()),
       time_zone_service_ash_(std::make_unique<TimeZoneServiceAsh>()),
       tts_ash_(std::make_unique<TtsAsh>(g_browser_process->profile_manager())),
@@ -767,6 +774,11 @@ void CrosapiAsh::BindMachineLearningService(
       ->BindMachineLearningService(std::move(receiver));
 }
 
+void CrosapiAsh::BindMahiBrowserDelegate(
+    mojo::PendingReceiver<mojom::MahiBrowserDelegate> receiver) {
+  mahi_browser_delegate_ash_->BindReceiver(std::move(receiver));
+}
+
 void CrosapiAsh::BindMediaUI(mojo::PendingReceiver<mojom::MediaUI> receiver) {
   media_ui_ash_->BindReceiver(std::move(receiver));
 }
@@ -838,6 +850,11 @@ void CrosapiAsh::BindNetworkingPrivate(
 void CrosapiAsh::BindOneDriveNotificationService(
     mojo::PendingReceiver<mojom::OneDriveNotificationService> receiver) {
   one_drive_notification_service_ash_->BindReceiver(std::move(receiver));
+}
+
+void CrosapiAsh::BindOneDriveIntegrationService(
+    mojo::PendingReceiver<mojom::OneDriveIntegrationService> receiver) {
+  one_drive_integration_service_ash_->BindReceiver(std::move(receiver));
 }
 
 void CrosapiAsh::BindParentAccess(
@@ -979,6 +996,11 @@ void CrosapiAsh::BindStableVideoDecoderFactory(
 void CrosapiAsh::BindStructuredMetricsService(
     mojo::PendingReceiver<crosapi::mojom::StructuredMetricsService> receiver) {
   structured_metrics_service_ash_->BindReceiver(std::move(receiver));
+}
+
+void CrosapiAsh::BindSuggestionService(
+    mojo::PendingReceiver<crosapi::mojom::SuggestionService> receiver) {
+  suggestion_service_ash_->BindReceiver(std::move(receiver));
 }
 
 void CrosapiAsh::BindSyncService(
@@ -1144,8 +1166,8 @@ void CrosapiAsh::REMOVED_62(
 }
 
 void CrosapiAsh::SetTestControllerForTesting(
-    TestControllerReceiver* test_controller) {
-  test_controller_ = test_controller;
+    std::unique_ptr<TestControllerReceiver> test_controller) {
+  test_controller_ = std::move(test_controller);
 }
 
 void CrosapiAsh::OnDisconnected() {

@@ -78,14 +78,13 @@ RealTimeUrlLookupService::RealTimeUrlLookupService(
 
 void RealTimeUrlLookupService::GetAccessToken(
     const GURL& url,
-    const GURL& last_committed_url,
-    bool is_mainframe,
     RTLookupResponseCallback response_callback,
-    scoped_refptr<base::SequencedTaskRunner> callback_task_runner) {
+    scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
+    SessionID tab_id) {
   token_fetcher_->Start(base::BindOnce(
       &RealTimeUrlLookupService::OnGetAccessToken, weak_factory_.GetWeakPtr(),
-      url, last_committed_url, is_mainframe, std::move(response_callback),
-      std::move(callback_task_runner), base::TimeTicks::Now()));
+      url, std::move(response_callback), std::move(callback_task_runner),
+      base::TimeTicks::Now(), tab_id));
 }
 
 void RealTimeUrlLookupService::OnPrefChanged() {
@@ -96,11 +95,10 @@ void RealTimeUrlLookupService::OnPrefChanged() {
 
 void RealTimeUrlLookupService::OnGetAccessToken(
     const GURL& url,
-    const GURL& last_committed_url,
-    bool is_mainframe,
     RTLookupResponseCallback response_callback,
     scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
     base::TimeTicks get_token_start_time,
+    SessionID tab_id,
     const std::string& access_token) {
   if (shutting_down_)
     return;
@@ -109,9 +107,9 @@ void RealTimeUrlLookupService::OnGetAccessToken(
                           base::TimeTicks::Now() - get_token_start_time);
   base::UmaHistogramBoolean("SafeBrowsing.RT.HasTokenFromFetcher",
                             !access_token.empty());
-  SendRequest(url, last_committed_url, is_mainframe, access_token,
-              std::move(response_callback), std::move(callback_task_runner),
-              /* is_sampled_report */ false);
+  MaybeSendRequest(url, access_token, std::move(response_callback),
+                   std::move(callback_task_runner),
+                   /* is_sampled_report */ false, tab_id);
 }
 
 void RealTimeUrlLookupService::OnResponseUnauthorized(
@@ -140,7 +138,7 @@ bool RealTimeUrlLookupService::CanSendPageLoadToken() const {
   return true;
 }
 
-bool RealTimeUrlLookupService::CanCheckSubresourceURL() const {
+bool RealTimeUrlLookupService::CanIncludeSubframeUrlInReferrerChain() const {
   return IsEnhancedProtectionEnabled(*pref_service_) &&
          CanPerformFullURLLookup();
 }
@@ -218,9 +216,9 @@ RealTimeUrlLookupService::GetTrafficAnnotationTag() const {
         })");
 }
 
-absl::optional<std::string> RealTimeUrlLookupService::GetDMTokenString() const {
+std::optional<std::string> RealTimeUrlLookupService::GetDMTokenString() const {
   // DM token should only be set for enterprise requests.
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 std::string RealTimeUrlLookupService::GetMetricSuffix() const {
@@ -231,7 +229,7 @@ bool RealTimeUrlLookupService::ShouldIncludeCredentials() const {
   return true;
 }
 
-absl::optional<base::Time>
+std::optional<base::Time>
 RealTimeUrlLookupService::GetMinAllowedTimestampForReferrerChains() const {
   return url_lookup_enabled_timestamp_;
 }

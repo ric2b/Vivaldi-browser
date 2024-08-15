@@ -119,7 +119,7 @@ class RtpTimeDelta : public ExpandedValueBase<int64_t, RtpTimeDelta> {
   // zero-valued RtpTimeDelta.
   template <typename Duration>
   Duration ToDuration(int rtp_timebase) const {
-    OSP_DCHECK_GT(rtp_timebase, 0);
+    OSP_CHECK_GT(rtp_timebase, 0);
     constexpr Duration kOneSecond =
         std::chrono::duration_cast<Duration>(std::chrono::seconds(1));
     return Duration(ToNearestRepresentativeValue<typename Duration::rep>(

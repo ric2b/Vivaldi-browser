@@ -11,5 +11,4 @@ workspace = true
 array_view.workspace = true
 np_adv = { workspace = true, features = ["alloc"] }
 crypto_provider.workspace = true
-thiserror.workspace = true
 sink.workspace = true

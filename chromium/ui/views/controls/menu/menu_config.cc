@@ -12,6 +12,8 @@
 #include "ui/views/style/typography.h"
 #include "ui/views/style/typography_provider.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace views {
 
 MenuConfig::MenuConfig() {
@@ -27,10 +29,20 @@ int MenuConfig::CornerRadiusForMenu(const MenuController* controller) const {
                                                      : touchable_corner_radius;
   }
 
+  if (vivaldi::IsVivaldiRunning()) {
+    // Always 0 for main menus as those can not have a border that obstructs
+    // navigation on the menu bar.
+    if (vivaldi::UsingCompactLegacyMenu() ||
+        (controller && !controller->IsContextMenu())) {
+      return 0;
+    }
+  }
+
   if (controller && (controller->IsCombobox() ||
                      (!use_bubble_border && controller->IsContextMenu()))) {
     return auxiliary_corner_radius;
   }
+
   return corner_radius;
 }
 
@@ -50,7 +62,7 @@ bool MenuConfig::ShouldShowAcceleratorText(const MenuItemView* item,
 }
 
 void MenuConfig::InitCR2023() {
-  if (!features::IsChromeRefresh2023()) {
+  if (vivaldi::UsingCompactLegacyMenu() || !features::IsChromeRefresh2023()) {
     return;
   }
 

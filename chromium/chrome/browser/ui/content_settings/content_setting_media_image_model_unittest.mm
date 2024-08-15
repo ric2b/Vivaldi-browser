@@ -97,9 +97,10 @@ TEST_F(ContentSettingMediaImageModelTest, MediaUpdate) {
     auth_wrapper.SetMockMediaPermissionStatus(AVAuthorizationStatusDenied);
     content_setting_image_model->Update(web_contents());
     ExpectImageModelState(
-        *content_setting_image_model, /*is_visible=*/true, /*has_icon=*/true,
-        l10n_util::GetStringUTF16(IDS_CAMERA_BLOCKED), IDS_CAMERA_TURNED_OFF,
-        &vector_icons::kBlockedBadgeIcon);
+        *content_setting_image_model, /*is_visible=*/true,
+        /*has_icon=*/true,
+        l10n_util::GetStringUTF16(IDS_CAMERA_TURNED_OFF_IN_MACOS),
+        IDS_CAMERA_TURNED_OFF, &gfx::kNoneIcon);
     auth_wrapper.SetMockMediaPermissionStatus(
         AVAuthorizationStatusNotDetermined);
     content_setting_image_model->Update(web_contents());
@@ -117,10 +118,11 @@ TEST_F(ContentSettingMediaImageModelTest, MediaUpdate) {
         l10n_util::GetStringUTF16(IDS_MICROPHONE_ACCESSED), 0, &gfx::kNoneIcon);
     auth_wrapper.SetMockMediaPermissionStatus(AVAuthorizationStatusDenied);
     content_setting_image_model->Update(web_contents());
-    ExpectImageModelState(*content_setting_image_model, /*is_visible=*/true,
-                          /*has_icon=*/true,
-                          l10n_util::GetStringUTF16(IDS_MICROPHONE_BLOCKED),
-                          IDS_MIC_TURNED_OFF, &vector_icons::kBlockedBadgeIcon);
+    ExpectImageModelState(
+        *content_setting_image_model, /*is_visible=*/true,
+        /*has_icon=*/true,
+        l10n_util::GetStringUTF16(IDS_MIC_TURNED_OFF_IN_MACOS),
+        IDS_MIC_TURNED_OFF, &gfx::kNoneIcon);
     auth_wrapper.SetMockMediaPermissionStatus(
         AVAuthorizationStatusNotDetermined);
     content_setting_image_model->Update(web_contents());
@@ -144,8 +146,8 @@ TEST_F(ContentSettingMediaImageModelTest, MediaUpdate) {
     content_setting_image_model->Update(web_contents());
     ExpectImageModelState(
         *content_setting_image_model, /*is_visible=*/true, /*has_icon=*/true,
-        l10n_util::GetStringUTF16(IDS_MICROPHONE_CAMERA_BLOCKED),
-        IDS_CAMERA_TURNED_OFF, &vector_icons::kBlockedBadgeIcon);
+        l10n_util::GetStringUTF16(IDS_CAMERA_MIC_TURNED_OFF_IN_MACOS),
+        IDS_CAMERA_TURNED_OFF, &gfx::kNoneIcon);
     auth_wrapper.SetMockMediaPermissionStatus(
         AVAuthorizationStatusNotDetermined);
     auth_wrapper.SetMockMediaPermissionStatus(
@@ -171,7 +173,7 @@ TEST_F(ContentSettingMediaImageModelTest, MediaUpdate) {
       ExpectImageModelState(*content_setting_image_model, /*is_visible=*/true,
                             /*has_icon=*/true,
                             l10n_util::GetStringUTF16(IDS_CAMERA_BLOCKED), 0,
-                            &vector_icons::kBlockedBadgeIcon);
+                            &gfx::kNoneIcon);
     }
 
     // Microphone blocked per site.
@@ -183,7 +185,7 @@ TEST_F(ContentSettingMediaImageModelTest, MediaUpdate) {
       ExpectImageModelState(*content_setting_image_model, /*is_visible=*/true,
                             /*has_icon=*/true,
                             l10n_util::GetStringUTF16(IDS_MICROPHONE_BLOCKED),
-                            0, &vector_icons::kBlockedBadgeIcon);
+                            0, &gfx::kNoneIcon);
     }
 
     // Microphone & camera blocked per site
@@ -197,7 +199,7 @@ TEST_F(ContentSettingMediaImageModelTest, MediaUpdate) {
       ExpectImageModelState(
           *content_setting_image_model, /*is_visible=*/true, /*has_icon=*/true,
           l10n_util::GetStringUTF16(IDS_MICROPHONE_CAMERA_BLOCKED), 0,
-          &vector_icons::kBlockedBadgeIcon);
+          &gfx::kNoneIcon);
     }
   }
 }

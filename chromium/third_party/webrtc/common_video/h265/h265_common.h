@@ -16,6 +16,7 @@
 
 #include "common_video/h265/h265_inline.h"
 #include "rtc_base/buffer.h"
+#include "rtc_base/system/rtc_export.h"
 
 namespace webrtc {
 
@@ -55,11 +56,15 @@ enum NaluType : uint8_t {
   kAud = 35,
   kPrefixSei = 39,
   kSuffixSei = 40,
+  // Aggregation packets, refer to section 4.4.2 in RFC 7798.
   kAp = 48,
-  kFu = 49
+  // Fragmentation units, refer to section 4.4.3 in RFC 7798.
+  kFu = 49,
+  // PACI packets, refer to section 4.4.4 in RFC 7798.
+  kPaci = 50
 };
 
-// Slice type definition. See table 7-7 of the H265 spec
+// Slice type definition. See table 7-7 of the H.265 spec
 enum SliceType : uint8_t { kB = 0, kP = 1, kI = 2 };
 
 struct NaluIndex {
@@ -72,13 +77,13 @@ struct NaluIndex {
 };
 
 // Returns a vector of the NALU indices in the given buffer.
-std::vector<NaluIndex> FindNaluIndices(const uint8_t* buffer,
-                                       size_t buffer_size);
+RTC_EXPORT std::vector<NaluIndex> FindNaluIndices(const uint8_t* buffer,
+                                                  size_t buffer_size);
 
 // Get the NAL type from the header byte immediately following start sequence.
-NaluType ParseNaluType(uint8_t data);
+RTC_EXPORT NaluType ParseNaluType(uint8_t data);
 
-// Methods for parsing and writing RBSP. See section 7.4.2 of the H265 spec.
+// Methods for parsing and writing RBSP. See section 7.4.2 of the H.265 spec.
 //
 // The following sequences are illegal, and need to be escaped when encoding:
 // 00 00 00 -> 00 00 03 00

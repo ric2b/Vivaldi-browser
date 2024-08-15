@@ -5,12 +5,12 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_BINDINGS_CORE_V8_TO_V8_TRAITS_H_
 #define THIRD_PARTY_BLINK_RENDERER_BINDINGS_CORE_V8_TO_V8_TRAITS_H_
 
+#include <optional>
+
 #include "base/numerics/safe_conversions.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
 #include "third_party/blink/renderer/platform/bindings/dom_data_store.h"
-#include "third_party/blink/renderer/platform/bindings/frozen_array_base.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_deque.h"
 #include "third_party/blink/renderer/platform/wtf/type_traits.h"
@@ -21,6 +21,9 @@ namespace blink {
 class CallbackFunctionBase;
 class CallbackInterfaceBase;
 class ScriptWrappable;
+
+template <typename IDLType>
+class FrozenArray;
 
 namespace bindings {
 
@@ -40,6 +43,23 @@ class UnionBase;
 // Primary template for ToV8Traits.
 template <typename T, typename SFINAEHelper = void>
 struct ToV8Traits;
+
+// Used only for allowing a ScriptPromiseProperty to specify that it will
+// resolve/reject with v8::Undefined.
+struct ToV8UndefinedGenerator {
+  DISALLOW_NEW();
+  using ImplType = ToV8UndefinedGenerator;
+};
+
+// undefined
+template <>
+struct ToV8Traits<IDLUndefined> {
+  [[nodiscard]] static v8::Local<v8::Value> ToV8(
+      ScriptState* script_state,
+      const ToV8UndefinedGenerator&) {
+    return v8::Undefined(script_state->GetIsolate());
+  }
+};
 
 // Any
 template <>
@@ -173,12 +193,9 @@ struct ToV8Traits<IDLFloatingPointNumberTypeBase<T, mode>> {
                                                  T value) {
     return v8::Number::New(script_state->GetIsolate(), value);
   }
-};
 
-// DOMHighResTimeStamp
-// https://w3c.github.io/hr-time/#sec-domhighrestimestamp
-template <>
-struct ToV8Traits<IDLDOMHighResTimeStamp> {
+  // DOMHighResTimeStamp
+  // https://w3c.github.io/hr-time/#sec-domhighrestimestamp
   [[nodiscard]] static v8::Local<v8::Value> ToV8(ScriptState* script_state,
                                                  base::Time value) {
     return v8::Number::New(script_state->GetIsolate(),
@@ -240,9 +257,10 @@ namespace bindings {
     ScriptState* script_state,
     ScriptWrappable* script_wrappable) {
   CHECK(script_wrappable);
-  v8::Local<v8::Value> wrapper =
-      DOMDataStore::GetWrapper(script_wrappable, script_state->GetIsolate());
-  if (LIKELY(!wrapper.IsEmpty())) {
+  v8::Local<v8::Object> wrapper;
+  if (LIKELY(
+          DOMDataStore::GetWrapper(script_state->GetIsolate(), script_wrappable)
+              .ToLocal(&wrapper))) {
     return wrapper;
   }
 
@@ -255,9 +273,9 @@ namespace bindings {
     ScriptWrappable* script_wrappable,
     v8::Local<v8::Object> creation_context_object) {
   CHECK(script_wrappable);
-  v8::Local<v8::Value> wrapper =
-      DOMDataStore::GetWrapper(script_wrappable, isolate);
-  if (LIKELY(!wrapper.IsEmpty())) {
+  v8::Local<v8::Object> wrapper;
+  if (LIKELY(DOMDataStore::GetWrapper(isolate, script_wrappable)
+                 .ToLocal(&wrapper))) {
     return wrapper;
   }
 
@@ -567,17 +585,8 @@ struct ToV8Traits<
 // IDLArray
 template <typename T>
 struct ToV8Traits<IDLArray<T>> {
-  // TODO(yukishiino): Make the signature of this function
-  //   ToV8(ScriptState*, const bindings::FrozenArrayBase&)
-  // and make this de-templated.
-  //
-  // This function is templated only in order to have a priority over the
-  // other function template (without 'requires'). Once we remove the other
-  // function template, we can make this de-templated.
-  template <typename ContainerType>
-    requires std::derived_from<ContainerType, bindings::FrozenArrayBase>
   [[nodiscard]] static v8::Local<v8::Value> ToV8(ScriptState* script_state,
-                                                 const ContainerType& value) {
+                                                 const FrozenArray<T>& value) {
     return value.ToV8(script_state);
   }
 
@@ -627,7 +636,7 @@ template <>
 struct ToV8Traits<IDLNullable<IDLBoolean>> {
   [[nodiscard]] static v8::Local<v8::Value> ToV8(
       ScriptState* script_state,
-      const absl::optional<bool>& value) {
+      const std::optional<bool>& value) {
     if (!value)
       return v8::Null(script_state->GetIsolate());
     return ToV8Traits<IDLBoolean>::ToV8(script_state, *value);
@@ -639,10 +648,23 @@ template <typename T, bindings::IDLIntegerConvMode mode>
 struct ToV8Traits<IDLNullable<IDLIntegerTypeBase<T, mode>>> {
   [[nodiscard]] static v8::Local<v8::Value> ToV8(
       ScriptState* script_state,
-      const absl::optional<T>& value) {
+      const std::optional<T>& value) {
     if (!value)
       return v8::Null(script_state->GetIsolate());
     return ToV8Traits<IDLIntegerTypeBase<T, mode>>::ToV8(script_state, *value);
+  }
+};
+
+// Nullable Bigints
+template <>
+struct ToV8Traits<IDLNullable<IDLBigint>> {
+  [[nodiscard]] static v8::Local<v8::Value> ToV8(
+      ScriptState* script_state,
+      const std::optional<BigInt>& value) {
+    if (!value) {
+      return v8::Null(script_state->GetIsolate());
+    }
+    return ToV8Traits<IDLBigint>::ToV8(script_state, *value);
   }
 };
 
@@ -651,20 +673,17 @@ template <typename T, bindings::IDLFloatingPointNumberConvMode mode>
 struct ToV8Traits<IDLNullable<IDLFloatingPointNumberTypeBase<T, mode>>> {
   [[nodiscard]] static v8::Local<v8::Value> ToV8(
       ScriptState* script_state,
-      const absl::optional<T>& value) {
+      const std::optional<T>& value) {
     if (!value)
       return v8::Null(script_state->GetIsolate());
     return ToV8Traits<IDLFloatingPointNumberTypeBase<T, mode>>::ToV8(
         script_state, *value);
   }
-};
 
-// Nullable DOMHighResTimeStamp
-template <>
-struct ToV8Traits<IDLNullable<IDLDOMHighResTimeStamp>> {
+  // Nullable DOMHighResTimeStamp
   [[nodiscard]] static v8::Local<v8::Value> ToV8(
       ScriptState* script_state,
-      const absl::optional<base::Time>& value) {
+      const std::optional<base::Time>& value) {
     if (!value) {
       return v8::Null(script_state->GetIsolate());
     }
@@ -769,7 +788,7 @@ struct ToV8Traits<
     std::enable_if_t<std::is_base_of<bindings::EnumerationBase, T>::value>> {
   [[nodiscard]] static v8::Local<v8::Value> ToV8(
       ScriptState* script_state,
-      const absl::optional<T>& enumeration) {
+      const std::optional<T>& enumeration) {
     if (!enumeration)
       return v8::Null(script_state->GetIsolate());
     return ToV8Traits<T>::ToV8(script_state, *enumeration);
@@ -811,7 +830,7 @@ template <typename T>
 struct ToV8Traits<IDLNullable<IDLSequence<T>>> {
   [[nodiscard]] static v8::Local<v8::Value> ToV8(
       ScriptState* script_state,
-      const absl::optional<typename IDLSequence<T>::ImplType>& value) {
+      const std::optional<typename IDLSequence<T>::ImplType>& value) {
     if (!value)
       return v8::Null(script_state->GetIsolate());
     return ToV8Traits<IDLSequence<T>>::ToV8(script_state, *value);
@@ -829,14 +848,32 @@ struct ToV8Traits<IDLNullable<IDLSequence<T>>> {
 // Nullable Frozen Array
 template <typename T>
 struct ToV8Traits<IDLNullable<IDLArray<T>>> {
+  [[nodiscard]] static v8::Local<v8::Value> ToV8(ScriptState* script_state,
+                                                 const FrozenArray<T>* value) {
+    if (!value) {
+      return v8::Null(script_state->GetIsolate());
+    }
+    return ToV8Traits<IDLArray<T>>::ToV8(script_state, *value);
+  }
+
+  // TODO(yukishiino): Remove this overload as IDL FrozenArray should be
+  // implemented as FrozenArray<T> rather than (Heap)Vector<T>.
+  //
+  // Note that IDLArray<T>::ImplType is not FrozenArray<T>. See also
+  // IDLArray<T>::ImplType's comment.
   [[nodiscard]] static v8::Local<v8::Value> ToV8(
       ScriptState* script_state,
-      const absl::optional<typename IDLArray<T>::ImplType>& value) {
+      const std::optional<typename IDLArray<T>::ImplType>& value) {
     if (!value)
       return v8::Null(script_state->GetIsolate());
     return ToV8Traits<IDLArray<T>>::ToV8(script_state, *value);
   }
 
+  // TODO(yukishiino): Remove this overload as IDL FrozenArray should be
+  // implemented as FrozenArray<T> rather than (Heap)Vector<T>.
+  //
+  // Note that IDLArray<T>::ImplType is not FrozenArray<T>. See also
+  // IDLArray<T>::ImplType's comment.
   [[nodiscard]] static v8::Local<v8::Value> ToV8(
       ScriptState* script_state,
       const typename IDLArray<T>::ImplType* value) {
@@ -851,7 +888,7 @@ template <typename K, typename V>
 struct ToV8Traits<IDLNullable<IDLRecord<K, V>>> {
   [[nodiscard]] static v8::Local<v8::Value> ToV8(
       ScriptState* script_state,
-      const absl::optional<typename IDLRecord<K, V>::ImplType>& value) {
+      const std::optional<typename IDLRecord<K, V>::ImplType>& value) {
     if (!value)
       return v8::Null(script_state->GetIsolate());
     return ToV8Traits<IDLRecord<K, V>>::ToV8(script_state, *value);
@@ -872,7 +909,7 @@ template <>
 struct ToV8Traits<IDLNullable<IDLDate>> {
   [[nodiscard]] static v8::Local<v8::Value> ToV8(
       ScriptState* script_state,
-      const absl::optional<base::Time> date) {
+      const std::optional<base::Time> date) {
     if (!date)
       return v8::Null(script_state->GetIsolate());
     return v8::Date::New(script_state->GetContext(),
@@ -927,15 +964,14 @@ struct ToV8Traits<IDLOptional<T>> {
   }
 };
 
-// Cannot define in ScriptValue because of the circular dependency between toV8
-// and ScriptValue
-template <typename T>
-  requires std::derived_from<T, bindings::DictionaryBase> ||
-           std::derived_from<T, ScriptWrappable> ||
-           std::derived_from<T, bindings::UnionBase>
-inline ScriptValue ScriptValue::From(ScriptState* script_state, T* value) {
-  v8::Local<v8::Value> v8_value = ToV8Traits<T>::ToV8(script_state, value);
-  return ScriptValue(script_state->GetIsolate(), v8_value);
+template <typename IDLType, typename BlinkType>
+ScriptPromiseTyped<IDLType> ToResolvedPromise(ScriptState* script_state,
+                                              BlinkType value) {
+  typename ScriptPromiseTyped<IDLType>::InternalResolverTyped resolver(
+      script_state);
+  auto promise = resolver.Promise();
+  resolver.Resolve(ToV8Traits<IDLType>::ToV8(script_state, value));
+  return promise;
 }
 
 }  // namespace blink

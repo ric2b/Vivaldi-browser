@@ -9,7 +9,6 @@ import type * as SDK from '../../../core/sdk/sdk.js';
 import type * as Protocol from '../../../generated/protocol.js';
 import type * as Logs from '../../../models/logs/logs.js';
 import * as NetworkForward from '../../../panels/network/forward/forward.js';
-import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as Coordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
@@ -183,7 +182,7 @@ export class RequestLinkIcon extends HTMLElement {
       LitHtml.render(LitHtml.html`
       <button class=${LitHtml.Directives.classMap({'link': Boolean(this.#request)})}
               title=${this.#getTooltip()}
-              jslog=${VisualLogging.link().track({click: true}).context('request-link')}
+              jslog=${VisualLogging.link('request').track({click: true})}
               @click=${this.handleClick}>
         <${IconButton.Icon.Icon.litTagName} name="arrow-up-down-circle"></${IconButton.Icon.Icon.litTagName}>
         ${this.#maybeRenderURL()}
@@ -194,10 +193,9 @@ export class RequestLinkIcon extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-request-link-icon', RequestLinkIcon);
+customElements.define('devtools-request-link-icon', RequestLinkIcon);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-request-link-icon': RequestLinkIcon;
   }

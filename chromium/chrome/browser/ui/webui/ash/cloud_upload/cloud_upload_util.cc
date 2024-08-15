@@ -9,14 +9,17 @@
 #include "ash/webui/system_apps/public/system_web_app_type.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
+#include "base/ranges/algorithm.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/ash/file_manager/io_task.h"
+#include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/file_manager/volume.h"
 #include "chrome/browser/ash/file_manager/volume_manager.h"
 #include "chrome/browser/ash/file_system_provider/provided_file_system_info.h"
 #include "chrome/browser/ash/file_system_provider/service.h"
+#include "chrome/browser/chromeos/upload_office_to_cloud/upload_office_to_cloud.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -53,6 +56,10 @@ std::string GetGenericErrorMessage() {
 std::string GetReauthenticationRequiredMessage() {
   return l10n_util::GetStringUTF8(
       IDS_OFFICE_UPLOAD_ERROR_REAUTHENTICATION_REQUIRED);
+}
+
+std::string GetNotAValidDocumentErrorMessage() {
+  return l10n_util::GetStringUTF8(IDS_OFFICE_UPLOAD_ERROR_NOT_A_VALID_DOCUMENT);
 }
 
 storage::FileSystemURL FilePathToFileSystemURL(
@@ -206,16 +213,35 @@ ProvidedFileSystemInterface* GetODFS(Profile* profile) {
                                         odfs_info->file_system_id());
 }
 
-bool IsODFSInstalled(Profile* profile) {
-  auto* service = ash::file_system_provider::Service::Get(profile);
-  for (const auto& [provider_id, provider] : service->GetProviders()) {
-    if (provider_id.GetType() ==
-            ash::file_system_provider::ProviderId::EXTENSION &&
-        provider_id.GetExtensionId() == extension_misc::kODFSExtensionId) {
-      return true;
+base::FilePath GetODFSFuseboxMount(Profile* profile) {
+  const auto odfs_info = GetODFSInfo(profile);
+  if (!odfs_info) {
+    return base::FilePath();
+  }
+
+  file_manager::VolumeManager* volume_manager =
+      file_manager::VolumeManager::Get(profile);
+  if (!volume_manager) {
+    return base::FilePath();
+  }
+
+  for (const auto& volume : volume_manager->GetVolumeList()) {
+    if (volume->volume_label() == odfs_info->display_name() &&
+        volume->file_system_type() == file_manager::util::kFuseBox) {
+      return volume->mount_path();
     }
   }
-  return false;
+  return base::FilePath();
+}
+
+bool IsODFSInstalled(Profile* profile) {
+  auto* service = ash::file_system_provider::Service::Get(profile);
+  return base::ranges::any_of(
+      service->GetProviders(), [](const auto& provider) {
+        return provider.first ==
+               ash::file_system_provider::ProviderId::CreateFromExtensionId(
+                   extension_misc::kODFSExtensionId);
+      });
 }
 
 bool IsODFSMounted(Profile* profile) {
@@ -236,7 +262,14 @@ bool IsOfficeWebAppInstalled(Profile* profile) {
   return installed;
 }
 
-bool UrlIsOnODFS(Profile* profile, const FileSystemURL& url) {
+bool IsMicrosoftOfficeOneDriveIntegrationAllowedAndOdfsInstalled(
+    Profile* profile) {
+  return chromeos::cloud_upload::IsMicrosoftOfficeOneDriveIntegrationAllowed(
+             profile) &&
+         IsODFSInstalled(profile);
+}
+
+bool UrlIsOnODFS(const FileSystemURL& url) {
   ash::file_system_provider::util::FileSystemURLParser parser(url);
   if (!parser.Parse()) {
     return false;

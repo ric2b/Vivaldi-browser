@@ -10,21 +10,27 @@
 # and run ci-fairy generate-template. For details, see
 # https://freedesktop.pages.freedesktop.org/ci-templates/ci-fairy.html#templating-gitlab-ci-yml
 
-.templates_sha: &template_sha 81a36b5c5349fd3222036bb3caa0166083a3fd44
+.templates_sha: &template_sha d11c0dd4c1c9a69c14b4af9b50cdd12b89d24672
 
 include:
   # Fedora container builder template
   - project: 'freedesktop/ci-templates'
     ref: *template_sha
     file: '/templates/fedora.yml'
+  # Freebsd container builder template
+  - project: 'freedesktop/ci-templates'
+    ref: *template_sha
+    file: '/templates/freebsd.yml'
   - project: 'freedesktop/ci-templates'
     ref: *template_sha
     file: '/templates/ci-fairy.yml'
   - local: '.gitlab-ci/other.yml'
 
 stages:
+  - sanity check
   - prep
   - test
+  - deploy
   - container_clean
 
 variables:
@@ -35,9 +41,45 @@ variables:
 # changing these will force rebuilding the associated image
 # Note: these tags have no meaning and are not tied to a particular
 # fontconfig version
-  FEDORA_TAG:  '2023-07-15.0-029bccad11f1'
+  FEDORA_TAG:    '2024-01-11.1-21391676125f'
+  FREEBSD_TAG:   '2024-01-11.1-6ddd7d2cf9ad'
 
-  FEDORA_EXEC: 'bash .gitlab-ci/fedora-install.sh'
+  FEDORA_EXEC:   'bash .gitlab-ci/fedora-install.sh'
+  FREEBSD_EXEC:  'bash .gitlab-ci/freebsd-install.sh'
+
+#######################################
+#                                     #
+#            sanity check             #
+#                                     #
+#######################################
+
+fail-if-fork-is-not-public:
+  stage: sanity check
+  script:
+    - |
+      if [ $CI_PROJECT_VISIBILITY != "public" ]; then
+          echo "*************************************************************************************"
+          echo "Project visibility must be set to 'public'."
+          echo "Change this in $CI_PROJECT_URL/edit under 'Visibility, project features, permissions'"
+          echo "*************************************************************************************"
+          exit 1
+      fi
+  except:
+    - main@fontconfig/fontconfig
+
+check-ci-script:
+  extends:
+    - .fdo.ci-fairy
+  stage: sanity check
+  script:
+    - ci-fairy generate-template --verify && exit 0 || true
+    - >
+      printf "%s\n" \
+        "Committed gitlab-ci.yml differs from generated gitlab-ci.yml." \
+        "To change the gitlab CI, edit .gitlab-ci/ci.template and/or .gitlab-ci/config.yml" \
+        " and run ci-fairy generate-template. For details, see " \
+        "https://freedesktop.pages.freedesktop.org/ci-templates/ci-fairy.html#templating-gitlab-ci-yml"
+    - exit 1
 
 #######################################
 #                                     #
@@ -58,6 +100,16 @@ fedora:rawhide@container-prep:
     FDO_DISTRIBUTION_TAG: $FEDORA_TAG
     FDO_DISTRIBUTION_EXEC: $FEDORA_EXEC
 
+fedora:39@container-prep:
+  extends: .fdo.container-build@fedora
+  stage: prep
+  variables:
+    GIT_STRATEGY: none
+    FDO_DISTRIBUTION_VERSION: '39'
+    FDO_DISTRIBUTION_PACKAGES: '@buildsys-build autoconf automake libtool gettext gettext-devel gperf expat-devel libxml2-devel freetype-devel json-c-devel git docbook-utils docbook-utils-pdf bubblewrap ninja-build wget python3-pip mingw64-gettext mingw64-freetype mingw64-libxml2 wine'
+    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
+    FDO_DISTRIBUTION_EXEC: $FEDORA_EXEC
+
 fedora:38@container-prep:
   extends: .fdo.container-build@fedora
   stage: prep
@@ -68,15 +120,29 @@ fedora:38@container-prep:
     FDO_DISTRIBUTION_TAG: $FEDORA_TAG
     FDO_DISTRIBUTION_EXEC: $FEDORA_EXEC
 
-fedora:37@container-prep:
-  extends: .fdo.container-build@fedora
+freebsd:14.0@container-prep:
+  extends: .fdo.qemu-build@freebsd
+  tags:
+    - kvm
   stage: prep
   variables:
     GIT_STRATEGY: none
-    FDO_DISTRIBUTION_VERSION: '37'
-    FDO_DISTRIBUTION_PACKAGES: '@buildsys-build autoconf automake libtool gettext gettext-devel gperf expat-devel libxml2-devel freetype-devel json-c-devel git docbook-utils docbook-utils-pdf bubblewrap ninja-build wget python3-pip mingw64-gettext mingw64-freetype mingw64-libxml2 wine'
-    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
-    FDO_DISTRIBUTION_EXEC: $FEDORA_EXEC
+    FDO_DISTRIBUTION_VERSION: '14.0'
+    FDO_DISTRIBUTION_PACKAGES: 'gcc autoconf automake libtool gettext gperf expat libxml2 freetype2 json-c git ninja wget python3 py39-pip pkgconf gmake'
+    FDO_DISTRIBUTION_TAG: $FREEBSD_TAG
+    FDO_DISTRIBUTION_EXEC: $FREEBSD_EXEC
+
+freebsd:13.2@container-prep:
+  extends: .fdo.qemu-build@freebsd
+  tags:
+    - kvm
+  stage: prep
+  variables:
+    GIT_STRATEGY: none
+    FDO_DISTRIBUTION_VERSION: '13.2'
+    FDO_DISTRIBUTION_PACKAGES: 'gcc autoconf automake libtool gettext gperf expat libxml2 freetype2 json-c git ninja wget python3 py39-pip pkgconf gmake'
+    FDO_DISTRIBUTION_TAG: $FREEBSD_TAG
+    FDO_DISTRIBUTION_EXEC: $FREEBSD_EXEC
 
 #######################################
 #                                     #
@@ -120,6 +186,15 @@ fedora:rawhide@container-clean:
     FDO_DISTRIBUTION_VERSION: 'rawhide'
     FDO_DISTRIBUTION_TAG: $FEDORA_TAG
 
+fedora:39@container-clean:
+  extends:
+    - .container-clean
+  variables:
+    GIT_STRATEGY: none
+    CURRENT_CONTAINER_IMAGE: $CI_REGISTRY_IMAGE/fedora/$FDO_DISTRIBUTION_VERSION:$FDO_DISTRIBUTION_TAG
+    FDO_DISTRIBUTION_VERSION: '39'
+    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
+
 fedora:38@container-clean:
   extends:
     - .container-clean
@@ -129,14 +204,23 @@ fedora:38@container-clean:
     FDO_DISTRIBUTION_VERSION: '38'
     FDO_DISTRIBUTION_TAG: $FEDORA_TAG
 
-fedora:37@container-clean:
+freebsd:14.0@container-clean:
   extends:
     - .container-clean
   variables:
     GIT_STRATEGY: none
-    CURRENT_CONTAINER_IMAGE: $CI_REGISTRY_IMAGE/fedora/$FDO_DISTRIBUTION_VERSION:$FDO_DISTRIBUTION_TAG
-    FDO_DISTRIBUTION_VERSION: '37'
-    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
+    CURRENT_CONTAINER_IMAGE: $CI_REGISTRY_IMAGE/freebsd/$FDO_DISTRIBUTION_VERSION:$FDO_DISTRIBUTION_TAG
+    FDO_DISTRIBUTION_VERSION: '14.0'
+    FDO_DISTRIBUTION_TAG: $FREEBSD_TAG
+
+freebsd:13.2@container-clean:
+  extends:
+    - .container-clean
+  variables:
+    GIT_STRATEGY: none
+    CURRENT_CONTAINER_IMAGE: $CI_REGISTRY_IMAGE/freebsd/$FDO_DISTRIBUTION_VERSION:$FDO_DISTRIBUTION_TAG
+    FDO_DISTRIBUTION_VERSION: '13.2'
+    FDO_DISTRIBUTION_TAG: $FREEBSD_TAG
 
 
 #######################################
@@ -145,9 +229,68 @@ fedora:37@container-clean:
 #                                     #
 #######################################
 
+.check_tainted: &check_tainted |
+  # make sure the kernel is not tainted
+  if [[ "$(ssh localhost -p 5555 cat /proc/sys/kernel/tainted)" -gt 0 ]];
+  then
+    echo tainted kernel ;
+    exit 1 ;
+  fi
+
+.build-in-qemu@template:
+  tags:
+    - kvm
+  script:
+    - /app/vmctl start || (echo "Error - Failed to start the VM." && exit 1)
+
+    - *check_tainted
+
+    - export BUILD_ID="fontconfig-$CI_JOB_NAME_$CI_COMMIT_SHA-$CI_JOB_ID"
+    - export PREFIX="$(pwd)/prefix-$BUILD_ID"
+    - export BUILDDIR="$(pwd)/build-$BUILD_ID"
+    - export MAKEFLAGS="-j4"
+    - |
+      buildopt=()
+      for bo in $FC_BUILD_ENABLED; do
+        buildopt+=(-e $bo)
+      done
+      for bo in $FC_BUILD_DISABLED; do
+        buildopt+=(-d $bo)
+      done
+      [ -n "$FC_BUILD_ARCH" ] && buildopt+=(-a $FC_BUILD_ARCH)
+      [ $FC_BUILD_DISTCHECK -eq 1 ] && buildopt+=(-c)
+      [ $FC_BUILD_NO_INSTALL -eq 1 ] && buildopt+=(-I)
+      [ $FC_BUILD_NO_CHECK -eq 1 ] && buildopt+=(-C)
+      buildopt+=(-s $FC_BUILDSYS)
+      buildopt+=(-t $FC_BUILD_TYPE)
+      buildopt+=(-X $FC_XML_BACKEND)
+      export buildopt
+    - "scp -r $(pwd) vm:"
+    - echo "CI_JOB_ID=\"$CI_JOB_ID\"" > fcenv
+    - echo "CI_JOB_NAME=\"$CI_JOB_NAME\"" >> fcenv
+    - echo "BUILD_ID=\"$BUILD_ID\"" >> fcenv
+    - echo "MAKEFLAGS=\"$MAKEFLAGS\"" >> fcenv
+    - echo "MAKE=\"$MAKE\"" >> fcenv
+    - "scp fcenv vm:~/$CI_PROJECT_NAME/.gitlab-ci/fcenv"
+    - /app/vmctl exec "cd $CI_PROJECT_NAME ; bash .gitlab-ci/build.sh ${buildopt[@]}" && touch .success || true
+    - scp -r vm:$CI_PROJECT_NAME/build $BUILDDIR
+
+    - *check_tainted
+
+    - /app/vmctl stop
+    - if [[ ! -e .success ]];
+      then
+        exit 1 ;
+      fi
+  variables:
+    FC_BUILDSYS: autotools
+    FC_XML_BACKEND: expat
+    FC_BUILD_TYPE: both
+    FC_BUILD_DISTCHECK: 0
+    FC_BUILD_NO_INSTALL: 0
+    FC_BUILD_NO_CHECK: 0
+
 .build@template:
-  before_script:
-    - pip install meson
   script:
     - export BUILD_ID="fontconfig-$CI_JOB_NAME_$CI_COMMIT_SHA-$CI_JOB_ID"
     - export PREFIX="$(pwd)/prefix-$BUILD_ID"
@@ -164,16 +307,18 @@ fedora:37@container-clean:
       [ -n "$FC_BUILD_ARCH" ] && buildopt+=(-a $FC_BUILD_ARCH)
       [ $FC_BUILD_DISTCHECK -eq 1 ] && buildopt+=(-c)
       [ $FC_BUILD_NO_INSTALL -eq 1 ] && buildopt+=(-I)
+      [ $FC_BUILD_NO_CHECK -eq 1 ] && buildopt+=(-C)
       buildopt+=(-s $FC_BUILDSYS)
       buildopt+=(-t $FC_BUILD_TYPE)
       buildopt+=(-X $FC_XML_BACKEND)
-      sh .gitlab-ci/build.sh ${buildopt[*]}
+      sh .gitlab-ci/build.sh ${buildopt[@]}
   variables:
     FC_BUILDSYS: autotools
     FC_XML_BACKEND: expat
     FC_BUILD_TYPE: both
     FC_BUILD_DISTCHECK: 0
     FC_BUILD_NO_INSTALL: 0
+    FC_BUILD_NO_CHECK: 0
 
 .fc_artifacts:
   artifacts:
@@ -181,9 +326,13 @@ fedora:37@container-clean:
     when: always
     expire_in: 5 days
     paths:
-      - fc-build.log
-      - build-*/fontconfig-*.tar.*
-      - build-*/fontconfig*/_build
+      - build*/doc/fontconfig-user.html
+      - build*/doc/fontconfig-devel/*
+      - build*/fc-build.log
+      - build*/fontconfig-*.tar.*
+      - build*/test/*log
+      - build*/fontconfig*/_build
+      - build*/meson-logs/*
 
 #######################################
 #                                     #
@@ -225,6 +374,22 @@ t_fedora:rawhide:autotools shared libxml2:
     - 'fedora:rawhide@container-prep'
 
 
+t_fedora:rawhide:meson shared expat:
+  extends:
+    - .build@template
+    - .fdo.distribution-image@fedora
+    - .fc_artifacts
+  variables:
+    FC_DISTRO_NAME: fedora
+    FDO_DISTRIBUTION_VERSION: 'rawhide'
+    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
+    FC_BUILDSYS: meson
+    FC_BUILD_TYPE: shared
+    FC_XML_BACKEND: expat
+  needs:
+    - 'fedora:rawhide@container-prep'
+
+
 t_fedora:rawhide:autotools static expat:
   extends:
     - .build@template
@@ -257,6 +422,22 @@ t_fedora:rawhide:autotools static libxml2:
     - 'fedora:rawhide@container-prep'
 
 
+t_fedora:rawhide:meson static expat:
+  extends:
+    - .build@template
+    - .fdo.distribution-image@fedora
+    - .fc_artifacts
+  variables:
+    FC_DISTRO_NAME: fedora
+    FDO_DISTRIBUTION_VERSION: 'rawhide'
+    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
+    FC_BUILDSYS: meson
+    FC_BUILD_TYPE: static
+    FC_XML_BACKEND: expat
+  needs:
+    - 'fedora:rawhide@container-prep'
+
+
 t_fedora:rawhide:mingw autotools static libxml2:
   extends:
     - .build@template
@@ -271,38 +452,6 @@ t_fedora:rawhide:mingw autotools static libxml2:
     FC_XML_BACKEND: libxml2
     FC_BUILD_PLATFORM: mingw
     FC_BUILD_ARCH: x86_64-mingw32
-  needs:
-    - 'fedora:rawhide@container-prep'
-
-
-t_fedora:rawhide:meson shared expat:
-  extends:
-    - .build@template
-    - .fdo.distribution-image@fedora
-    - .fc_artifacts
-  variables:
-    FC_DISTRO_NAME: fedora
-    FDO_DISTRIBUTION_VERSION: 'rawhide'
-    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
-    FC_BUILDSYS: meson
-    FC_BUILD_TYPE: shared
-    FC_XML_BACKEND: expat
-  needs:
-    - 'fedora:rawhide@container-prep'
-
-
-t_fedora:rawhide:meson static expat:
-  extends:
-    - .build@template
-    - .fdo.distribution-image@fedora
-    - .fc_artifacts
-  variables:
-    FC_DISTRO_NAME: fedora
-    FDO_DISTRIBUTION_VERSION: 'rawhide'
-    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
-    FC_BUILDSYS: meson
-    FC_BUILD_TYPE: static
-    FC_XML_BACKEND: expat
   needs:
     - 'fedora:rawhide@container-prep'
 
@@ -324,6 +473,65 @@ t_fedora:rawhide:mingw meson static expat:
     FC_BUILD_NO_INSTALL: 1
   needs:
     - 'fedora:rawhide@container-prep'
+
+
+t_fedora:39:autotools shared expat:
+  extends:
+    - .build@template
+    - .fdo.distribution-image@fedora
+    - .fc_artifacts
+  variables:
+    FC_DISTRO_NAME: fedora
+    FDO_DISTRIBUTION_VERSION: '39'
+    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
+    FC_BUILDSYS: autotools
+    FC_BUILD_TYPE: shared
+    FC_XML_BACKEND: expat
+  needs:
+    - 'fedora:39@container-prep'
+
+
+t_fedora:39:autotools shared libxml2:
+  extends:
+    - .build@template
+    - .fdo.distribution-image@fedora
+    - .fc_artifacts
+  variables:
+    FC_DISTRO_NAME: fedora
+    FDO_DISTRIBUTION_VERSION: '39'
+    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
+    FC_BUILDSYS: autotools
+    FC_BUILD_TYPE: shared
+    FC_XML_BACKEND: libxml2
+    FC_BUILD_DISTCHECK: 1
+  needs:
+    - 'fedora:39@container-prep'
+
+
+t_fedora:39:meson shared expat:
+  extends:
+    - .build@template
+    - .fdo.distribution-image@fedora
+    - .fc_artifacts
+  variables:
+    FC_DISTRO_NAME: fedora
+    FDO_DISTRIBUTION_VERSION: '39'
+    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
+    FC_BUILDSYS: meson
+    FC_BUILD_TYPE: shared
+    FC_XML_BACKEND: expat
+  needs:
+    - 'fedora:39@container-prep'
+
+
+
+
+
+
+
+
+
+
 
 
 t_fedora:38:autotools shared expat:
@@ -359,56 +567,6 @@ t_fedora:38:autotools shared libxml2:
     - 'fedora:38@container-prep'
 
 
-t_fedora:38:autotools static expat:
-  extends:
-    - .build@template
-    - .fdo.distribution-image@fedora
-    - .fc_artifacts
-  variables:
-    FC_DISTRO_NAME: fedora
-    FDO_DISTRIBUTION_VERSION: '38'
-    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
-    FC_BUILDSYS: autotools
-    FC_BUILD_TYPE: static
-    FC_XML_BACKEND: expat
-  needs:
-    - 'fedora:38@container-prep'
-
-
-t_fedora:38:autotools static libxml2:
-  extends:
-    - .build@template
-    - .fdo.distribution-image@fedora
-    - .fc_artifacts
-  variables:
-    FC_DISTRO_NAME: fedora
-    FDO_DISTRIBUTION_VERSION: '38'
-    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
-    FC_BUILDSYS: autotools
-    FC_BUILD_TYPE: static
-    FC_XML_BACKEND: libxml2
-  needs:
-    - 'fedora:38@container-prep'
-
-
-t_fedora:38:mingw autotools static libxml2:
-  extends:
-    - .build@template
-    - .fdo.distribution-image@fedora
-    - .fc_artifacts
-  variables:
-    FC_DISTRO_NAME: fedora
-    FDO_DISTRIBUTION_VERSION: '38'
-    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
-    FC_BUILDSYS: autotools
-    FC_BUILD_TYPE: static
-    FC_XML_BACKEND: libxml2
-    FC_BUILD_PLATFORM: mingw
-    FC_BUILD_ARCH: x86_64-mingw32
-  needs:
-    - 'fedora:38@container-prep'
-
-
 t_fedora:38:meson shared expat:
   extends:
     - .build@template
@@ -425,172 +583,152 @@ t_fedora:38:meson shared expat:
     - 'fedora:38@container-prep'
 
 
-t_fedora:38:meson static expat:
+
+
+
+
+
+
+
+
+
+
+t_freebsd:14.0:autotools shared expat:
   extends:
-    - .build@template
-    - .fdo.distribution-image@fedora
+    - .build-in-qemu@template
+    - .fdo.distribution-image@freebsd
     - .fc_artifacts
   variables:
-    FC_DISTRO_NAME: fedora
-    FDO_DISTRIBUTION_VERSION: '38'
-    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
-    FC_BUILDSYS: meson
-    FC_BUILD_TYPE: static
-    FC_XML_BACKEND: expat
-  needs:
-    - 'fedora:38@container-prep'
-
-
-t_fedora:38:mingw meson static expat:
-  extends:
-    - .build@template
-    - .fdo.distribution-image@fedora
-    - .fc_artifacts
-  variables:
-    FC_DISTRO_NAME: fedora
-    FDO_DISTRIBUTION_VERSION: '38'
-    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
-    FC_BUILDSYS: meson
-    FC_BUILD_TYPE: static
-    FC_XML_BACKEND: expat
-    FC_BUILD_PLATFORM: mingw
-    FC_BUILD_ARCH: linux-mingw-w64-64bit
-    FC_BUILD_NO_INSTALL: 1
-  needs:
-    - 'fedora:38@container-prep'
-
-
-t_fedora:37:autotools shared expat:
-  extends:
-    - .build@template
-    - .fdo.distribution-image@fedora
-    - .fc_artifacts
-  variables:
-    FC_DISTRO_NAME: fedora
-    FDO_DISTRIBUTION_VERSION: '37'
-    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
+    FC_DISTRO_NAME: freebsd
+    FDO_DISTRIBUTION_VERSION: '14.0'
+    FDO_DISTRIBUTION_TAG: $FREEBSD_TAG
     FC_BUILDSYS: autotools
     FC_BUILD_TYPE: shared
     FC_XML_BACKEND: expat
+    MAKE: gmake
+    FC_BUILD_NO_CHECK: 1
   needs:
-    - 'fedora:37@container-prep'
+    - 'freebsd:14.0@container-prep'
 
 
-t_fedora:37:autotools shared libxml2:
+t_freebsd:14.0:autotools shared libxml2:
   extends:
-    - .build@template
-    - .fdo.distribution-image@fedora
+    - .build-in-qemu@template
+    - .fdo.distribution-image@freebsd
     - .fc_artifacts
   variables:
-    FC_DISTRO_NAME: fedora
-    FDO_DISTRIBUTION_VERSION: '37'
-    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
+    FC_DISTRO_NAME: freebsd
+    FDO_DISTRIBUTION_VERSION: '14.0'
+    FDO_DISTRIBUTION_TAG: $FREEBSD_TAG
     FC_BUILDSYS: autotools
     FC_BUILD_TYPE: shared
     FC_XML_BACKEND: libxml2
-    FC_BUILD_DISTCHECK: 1
+    MAKE: gmake
+    FC_BUILD_NO_CHECK: 1
   needs:
-    - 'fedora:37@container-prep'
+    - 'freebsd:14.0@container-prep'
 
 
-t_fedora:37:autotools static expat:
+t_freebsd:14.0:meson shared expat:
   extends:
-    - .build@template
-    - .fdo.distribution-image@fedora
+    - .build-in-qemu@template
+    - .fdo.distribution-image@freebsd
     - .fc_artifacts
   variables:
-    FC_DISTRO_NAME: fedora
-    FDO_DISTRIBUTION_VERSION: '37'
-    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
-    FC_BUILDSYS: autotools
-    FC_BUILD_TYPE: static
-    FC_XML_BACKEND: expat
-  needs:
-    - 'fedora:37@container-prep'
-
-
-t_fedora:37:autotools static libxml2:
-  extends:
-    - .build@template
-    - .fdo.distribution-image@fedora
-    - .fc_artifacts
-  variables:
-    FC_DISTRO_NAME: fedora
-    FDO_DISTRIBUTION_VERSION: '37'
-    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
-    FC_BUILDSYS: autotools
-    FC_BUILD_TYPE: static
-    FC_XML_BACKEND: libxml2
-  needs:
-    - 'fedora:37@container-prep'
-
-
-t_fedora:37:mingw autotools static libxml2:
-  extends:
-    - .build@template
-    - .fdo.distribution-image@fedora
-    - .fc_artifacts
-  variables:
-    FC_DISTRO_NAME: fedora
-    FDO_DISTRIBUTION_VERSION: '37'
-    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
-    FC_BUILDSYS: autotools
-    FC_BUILD_TYPE: static
-    FC_XML_BACKEND: libxml2
-    FC_BUILD_PLATFORM: mingw
-    FC_BUILD_ARCH: x86_64-mingw32
-  needs:
-    - 'fedora:37@container-prep'
-
-
-t_fedora:37:meson shared expat:
-  extends:
-    - .build@template
-    - .fdo.distribution-image@fedora
-    - .fc_artifacts
-  variables:
-    FC_DISTRO_NAME: fedora
-    FDO_DISTRIBUTION_VERSION: '37'
-    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
+    FC_DISTRO_NAME: freebsd
+    FDO_DISTRIBUTION_VERSION: '14.0'
+    FDO_DISTRIBUTION_TAG: $FREEBSD_TAG
     FC_BUILDSYS: meson
     FC_BUILD_TYPE: shared
     FC_XML_BACKEND: expat
+    FC_BUILD_NO_CHECK: 1
   needs:
-    - 'fedora:37@container-prep'
+    - 'freebsd:14.0@container-prep'
 
 
-t_fedora:37:meson static expat:
+t_freebsd:13.2:autotools shared expat:
   extends:
-    - .build@template
-    - .fdo.distribution-image@fedora
+    - .build-in-qemu@template
+    - .fdo.distribution-image@freebsd
     - .fc_artifacts
   variables:
-    FC_DISTRO_NAME: fedora
-    FDO_DISTRIBUTION_VERSION: '37'
-    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
-    FC_BUILDSYS: meson
-    FC_BUILD_TYPE: static
+    FC_DISTRO_NAME: freebsd
+    FDO_DISTRIBUTION_VERSION: '13.2'
+    FDO_DISTRIBUTION_TAG: $FREEBSD_TAG
+    FC_BUILDSYS: autotools
+    FC_BUILD_TYPE: shared
     FC_XML_BACKEND: expat
+    MAKE: gmake
+    FC_BUILD_NO_CHECK: 1
   needs:
-    - 'fedora:37@container-prep'
+    - 'freebsd:13.2@container-prep'
 
 
-t_fedora:37:mingw meson static expat:
+t_freebsd:13.2:autotools shared libxml2:
   extends:
-    - .build@template
-    - .fdo.distribution-image@fedora
+    - .build-in-qemu@template
+    - .fdo.distribution-image@freebsd
     - .fc_artifacts
   variables:
-    FC_DISTRO_NAME: fedora
-    FDO_DISTRIBUTION_VERSION: '37'
-    FDO_DISTRIBUTION_TAG: $FEDORA_TAG
-    FC_BUILDSYS: meson
-    FC_BUILD_TYPE: static
-    FC_XML_BACKEND: expat
-    FC_BUILD_PLATFORM: mingw
-    FC_BUILD_ARCH: linux-mingw-w64-64bit
-    FC_BUILD_NO_INSTALL: 1
+    FC_DISTRO_NAME: freebsd
+    FDO_DISTRIBUTION_VERSION: '13.2'
+    FDO_DISTRIBUTION_TAG: $FREEBSD_TAG
+    FC_BUILDSYS: autotools
+    FC_BUILD_TYPE: shared
+    FC_XML_BACKEND: libxml2
+    MAKE: gmake
+    FC_BUILD_NO_CHECK: 1
   needs:
-    - 'fedora:37@container-prep'
+    - 'freebsd:13.2@container-prep'
 
 
+t_freebsd:13.2:meson shared expat:
+  extends:
+    - .build-in-qemu@template
+    - .fdo.distribution-image@freebsd
+    - .fc_artifacts
+  variables:
+    FC_DISTRO_NAME: freebsd
+    FDO_DISTRIBUTION_VERSION: '13.2'
+    FDO_DISTRIBUTION_TAG: $FREEBSD_TAG
+    FC_BUILDSYS: meson
+    FC_BUILD_TYPE: shared
+    FC_XML_BACKEND: expat
+    FC_BUILD_NO_CHECK: 1
+  needs:
+    - 'freebsd:13.2@container-prep'
+
+
+#######################################
+#                                     #
+#            deploy stage             #
+#                                     #
+#######################################
+
+check-merge-request:
+  extends:
+    - .fdo.ci-fairy
+  stage: deploy
+  script:
+    - ci-fairy check-merge-request --require-allow-collaboration --junit-xml=results.xml
+  artifacts:
+    when: on_failure
+    reports:
+      junit: results.xml
+  allow_failure: true
+
+pages:
+  stage: deploy
+  script:
+    - |
+      mkdir public || :
+      cp -a build*/doc/fontconfig-user.html build*/doc/fontconfig-devel public/
+  artifacts:
+    paths:
+      - public
+  dependencies:
+    - t_fedora:rawhide:autotools shared libxml2
+  needs:
+    - t_fedora:rawhide:autotools shared libxml2
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"

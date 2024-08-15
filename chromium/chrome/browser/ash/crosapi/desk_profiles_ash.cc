@@ -6,10 +6,10 @@
 
 #include <cstddef>
 #include <utility>
+#include <vector>
 
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
-#include "base/containers/cxx20_erase_vector.h"
 #include "base/ranges/algorithm.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 
@@ -20,8 +20,8 @@ ash::LacrosProfileSummary ConvertProfileSummary(
     mojom::LacrosProfileSummaryPtr profile) {
   ash::LacrosProfileSummary result;
   result.profile_id = profile->profile_id;
-  result.name = std::move(profile->name);
-  result.email = std::move(profile->email);
+  result.name = base::UTF8ToUTF16(profile->name);
+  result.email = base::UTF8ToUTF16(profile->email);
   result.icon = std::move(profile->icon);
 
   return result;
@@ -51,14 +51,12 @@ void DeskProfilesAsh::OnProfileUpsert(
   }
 
   for (auto& prof : profiles) {
-    ash::LacrosProfileSummary summary = ConvertProfileSummary(std::move(prof));
-
     if (!primary_user_email.empty() &&
-        gaia::AreEmailsSame(primary_user_email, summary.email)) {
-      primary_user_profile_id_ = summary.profile_id;
+        gaia::AreEmailsSame(primary_user_email, prof->email)) {
+      primary_user_profile_id_ = prof->profile_id;
     }
 
-    auto& entry = UpsertProfile(std::move(summary));
+    auto& entry = UpsertProfile(ConvertProfileSummary(std::move(prof)));
     for (auto& observer : observers_) {
       observer.OnProfileUpsert(entry);
     }
@@ -80,6 +78,11 @@ DeskProfilesAsh::GetProfilesSnapshot() const {
 
 const ash::LacrosProfileSummary*
 DeskProfilesAsh::GetProfilesSnapshotByProfileId(uint64_t profile_id) const {
+  // Profile ID 0 is an alias for the primary user.
+  if (profile_id == 0) {
+    profile_id = primary_user_profile_id_;
+  }
+
   for (auto& profile : profiles_) {
     if (profile.profile_id == profile_id) {
       return &profile;
@@ -116,7 +119,7 @@ ash::LacrosProfileSummary& DeskProfilesAsh::UpsertProfile(
 }
 
 bool DeskProfilesAsh::RemoveProfile(uint64_t profile_id) {
-  return base::EraseIf(profiles_,
+  return std::erase_if(profiles_,
                        [profile_id](const ash::LacrosProfileSummary& summary) {
                          return summary.profile_id == profile_id;
                        }) != 0;

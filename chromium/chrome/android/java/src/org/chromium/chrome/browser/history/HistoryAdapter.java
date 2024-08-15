@@ -17,7 +17,6 @@ import androidx.annotation.VisibleForTesting;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.RecyclerView.ViewHolder;
 
-import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.history.HistoryProvider.BrowsingHistoryObserver;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper.DefaultFaviconHelper;
@@ -29,7 +28,6 @@ import org.chromium.ui.text.SpanApplier;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Function;
 
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 
@@ -45,10 +43,11 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
 
     // Headers
     private View mPrivacyDisclaimerBottomSpace;
+    private Button mHistoryOpenInChromeButton;
     private Button mClearBrowsingDataButton;
     private HeaderItem mPrivacyDisclaimerHeaderItem;
     private HeaderItem mClearBrowsingDataButtonHeaderItem;
-    private HeaderItem mHistoryToggleHeaderItem;
+    private HeaderItem mHistoryOpenInChromeHeaderItem;
 
     // Footers
     private MoreProgressButton mMoreProgressButton;
@@ -68,21 +67,12 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
     private String mAppId; // Not used if null i.e. query all entries regardless of app ID
 
     private boolean mDisableScrollToLoadForTest;
-    private ObservableSupplier<Boolean> mShowHistoryToggleSupplier;
-    private Function<ViewGroup, ViewGroup> mToggleViewFactory;
 
-    public HistoryAdapter(
-            HistoryContentManager manager,
-            HistoryProvider provider,
-            ObservableSupplier<Boolean> showHistoryToggleSupplier,
-            Function<ViewGroup, ViewGroup> toggleViewFactory) {
-        mToggleViewFactory = toggleViewFactory;
+    public HistoryAdapter(HistoryContentManager manager, HistoryProvider provider) {
         setHasStableIds(true);
         mHistoryProvider = provider;
         mHistoryProvider.setObserver(this);
         mManager = manager;
-        mShowHistoryToggleSupplier = showHistoryToggleSupplier;
-        mShowHistoryToggleSupplier.addObserver((unused) -> setHeaders());
         mFaviconHelper = new DefaultFaviconHelper();
         mItemViews = new ArrayList<>();
     }
@@ -339,9 +329,14 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
                         clearBrowsingDataButtonContainer.findViewById(
                                 R.id.clear_browsing_data_button);
 
-        ViewGroup toggleContainer = mToggleViewFactory.apply(null);
-        if (toggleContainer != null) {
-            mHistoryToggleHeaderItem = new HeaderItem(2, toggleContainer);
+        if (mManager.getShouldShowOpenInChrome()) {
+            ViewGroup historyOpenInChromeButtonContainer = getCctOpenInChromeButtonContainer(null);
+
+            mHistoryOpenInChromeHeaderItem = new HeaderItem(1, historyOpenInChromeButtonContainer);
+            mHistoryOpenInChromeButton =
+                    (Button)
+                            historyOpenInChromeButtonContainer.findViewById(
+                                    R.id.open_full_chrome_history_button);
         }
 
         updateClearBrowsingDataButtonVisibility();
@@ -357,6 +352,17 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
         Button clearBrowsingDataButton =
                 (Button) viewGroup.findViewById(R.id.clear_browsing_data_button);
         clearBrowsingDataButton.setOnClickListener(v -> mManager.onClearBrowsingDataClicked());
+        return viewGroup;
+    }
+
+    ViewGroup getCctOpenInChromeButtonContainer(ViewGroup parent) {
+        ViewGroup viewGroup =
+                (ViewGroup)
+                        LayoutInflater.from(mManager.getContext())
+                                .inflate(R.layout.open_full_chrome_history_header, parent, true);
+        Button clearBrowsingDataButton =
+                (Button) viewGroup.findViewById(R.id.open_full_chrome_history_button);
+        clearBrowsingDataButton.setOnClickListener(v -> mManager.onOpenFullChromeHistoryClicked());
         return viewGroup;
     }
 
@@ -388,12 +394,9 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
         ArrayList<HeaderItem> args = new ArrayList<>();
         if (mPrivacyDisclaimersVisible) args.add(mPrivacyDisclaimerHeaderItem);
         if (mClearBrowsingDataButtonVisible) args.add(mClearBrowsingDataButtonHeaderItem);
-        boolean showHistoryToggle =
-                mShowHistoryToggleSupplier.get() != null && mShowHistoryToggleSupplier.get();
-        if (showHistoryToggle && mHistoryToggleHeaderItem != null) {
-            args.add(mHistoryToggleHeaderItem);
+        if (mManager.getShouldShowOpenInChrome()) {
+            args.add(mHistoryOpenInChromeHeaderItem);
         }
-
         setHeaders(args.toArray(new HeaderItem[args.size()]));
     }
 

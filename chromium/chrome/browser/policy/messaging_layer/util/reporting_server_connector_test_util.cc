@@ -27,7 +27,6 @@
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
 #include "components/policy/core/common/cloud/dm_token.h"
-#include "components/policy/core/common/cloud/encrypted_reporting_job_configuration.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_service.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_store.h"
@@ -106,11 +105,11 @@ ReportingServerConnector::TestEnvironment::TestEnvironment()
   auto delegate =
       std::make_unique<FakeDelegate>(device_management_service_.get());
   SetEncryptedReportingClient(
-      std::make_unique<EncryptedReportingClient>(std::move(delegate)));
+      EncryptedReportingClient::Create(std::move(delegate)));
 }
 
 ReportingServerConnector::TestEnvironment::~TestEnvironment() {
-  policy::EncryptedReportingJobConfiguration::ResetUploadsStateForTest();
+  EncryptedReportingClient::ResetUploadsStateForTest();
   base::Singleton<ReportingServerConnector>::OnExit(nullptr);
 }
 

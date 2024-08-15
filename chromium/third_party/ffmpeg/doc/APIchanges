@@ -2,6 +2,55 @@ The last version increases of all libraries were on 2023-02-09
 
 API changes, most recent first:
 
+2024-02-21 - xxxxxxxxxx - lavc 60.40.100 - avcodec.h
+  Deprecate AV_INPUT_BUFFER_MIN_SIZE without replacement.
+
+2024-02-16 - xxxxxxxxxx - lavu 58.39.100 - pixfmt.h
+  Add AV_VIDEO_MAX_PLANES
+
+2024-02-13 - xxxxxxxxxx - lavf 60.21.100 - avformat.h
+  Add AVStreamGroup.disposition.
+
+2024-02-xx - xxxxxxxxxx - lavu 58.38.100 - channel_layout.h
+  Add av_channel_layout_retype().
+
+2024-02-xx - xxxxxxxxxx - lavu 58.37.100 - channel_layout.h
+  Add av_channel_layout_custom_init().
+
+2024-02-04 - xxxxxxxxxx - lavc 60.39.100 - packet.h
+  Add AV_PKT_DATA_AMBIENT_VIEWING_ENVIRONMENT.
+
+2023-11-xx - xxxxxxxxxx - lavfi 9.16.100 - buffersink.h buffersrc.h
+  Add av_buffersink_get_colorspace and av_buffersink_get_color_range.
+  Add AVBufferSrcParameters.color_space and AVBufferSrcParameters.color_range.
+
+2023-11-xx - xxxxxxxxxx - lavfi 9.15.100 - avfilter.h
+  Add AVFilterLink.colorspace, AVFilterLink.color_range
+
+2023-12-xx - xxxxxxxxxx - lavu 58.36.100 - pixfmt.h hwcontext.h hwcontext_d3d12va.h
+  Add AV_HWDEVICE_TYPE_D3D12VA and AV_PIX_FMT_D3D12.
+  Add AVD3D12VADeviceContext, AVD3D12VASyncContext, AVD3D12VAFrame and
+  AVD3D12VAFramesContext.
+
+2023-12-18 - 74279227dd2 - lavc 60.36.100 - packet.h
+  Add AV_PKT_DATA_IAMF_MIX_GAIN_PARAM, AV_PKT_DATA_IAMF_DEMIXING_INFO_PARAM
+  and AV_PKT_DATA_IAMF_RECON_GAIN_INFO_PARAM.
+
+2023-12-18 - xxxxxxxxxxx - lavc 60.19.100 - avformat.h
+  Add AVStreamGroup struct.
+  Add AVFormatContext.stream_groups and AVFormatContext.nb_stream_groups
+  Add avformat_stream_group_create(), avformat_stream_group_add_stream(),
+  and av_stream_group_get_class().
+  Add enum AVStreamGroupParamsType with values AV_STREAM_GROUP_PARAMS_NONE,
+  AV_STREAM_GROUP_PARAMS_IAMF_AUDIO_ELEMENT and
+  AV_STREAM_GROUP_PARAMS_IAMF_MIX_PRESENTATION.
+
+2023-12-18 - xxxxxxxxxxx - lavu 58.35.100 - iamf.h
+  Add a new API to support Immersive Audio Model and Formats.
+
+2023-12-xx - xxxxxxxxxxx - lavu 58.33.100 - imgutils.h
+  Add av_image_fill_color().
+
 2023-11-08 - b82957a66a7 - lavu 58.32.100 - channel_layout.h
   Add AV_CH_LAYOUT_7POINT2POINT3 and AV_CHANNEL_LAYOUT_7POINT2POINT3.
   Add AV_CH_LAYOUT_9POINT1POINT4_BACK and AV_CHANNEL_LAYOUT_9POINT1POINT4_BACK.

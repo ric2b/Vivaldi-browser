@@ -1016,10 +1016,10 @@ TEST_P(AnimationAnimationTestNoCompositing, SetEffectUnlimitsAnimation) {
 TEST_P(AnimationAnimationTestNoCompositing, EmptyAnimationsDontUpdateEffects) {
   animation = timeline->Play(nullptr);
   animation->Update(kTimingUpdateOnDemand);
-  EXPECT_EQ(absl::nullopt, animation->TimeToEffectChange());
+  EXPECT_EQ(std::nullopt, animation->TimeToEffectChange());
 
   SimulateFrame(1234);
-  EXPECT_EQ(absl::nullopt, animation->TimeToEffectChange());
+  EXPECT_EQ(std::nullopt, animation->TimeToEffectChange());
 }
 
 TEST_P(AnimationAnimationTestNoCompositing, AnimationsDisassociateFromEffect) {
@@ -1072,7 +1072,7 @@ TEST_P(AnimationAnimationTestNoCompositing, AnimationsReturnTimeToNextEffect) {
 
   // Still in effect if fillmode = forward|both.
   SimulateFrame(3000);
-  EXPECT_EQ(absl::nullopt, animation->TimeToEffectChange());
+  EXPECT_EQ(std::nullopt, animation->TimeToEffectChange());
 
   // Reset to start of animation. Next effect at the end of the start delay.
   animation->setCurrentTime(MakeGarbageCollected<V8CSSNumberish>(0),
@@ -1090,7 +1090,7 @@ TEST_P(AnimationAnimationTestNoCompositing, AnimationsReturnTimeToNextEffect) {
   // Effectively a paused animation.
   animation->setPlaybackRate(0);
   animation->Update(kTimingUpdateOnDemand);
-  EXPECT_EQ(absl::nullopt, animation->TimeToEffectChange());
+  EXPECT_EQ(std::nullopt, animation->TimeToEffectChange());
 
   // Reversed animation from end time. Next effect after end delay.
   animation->setCurrentTime(MakeGarbageCollected<V8CSSNumberish>(3000),
@@ -1118,7 +1118,7 @@ TEST_P(AnimationAnimationTestNoCompositing, TimeToNextEffectWhenPaused) {
   SimulateAwaitReady();
   EXPECT_FALSE(animation->pending());
   animation->Update(kTimingUpdateOnDemand);
-  EXPECT_EQ(absl::nullopt, animation->TimeToEffectChange());
+  EXPECT_EQ(std::nullopt, animation->TimeToEffectChange());
 }
 
 TEST_P(AnimationAnimationTestNoCompositing,
@@ -1135,7 +1135,7 @@ TEST_P(AnimationAnimationTestNoCompositing,
   animation->Update(kTimingUpdateOnDemand);
   // This frame will fire the finish event event though no start time has been
   // received from the compositor yet, as cancel() nukes start times.
-  EXPECT_EQ(absl::nullopt, animation->TimeToEffectChange());
+  EXPECT_EQ(std::nullopt, animation->TimeToEffectChange());
 }
 
 TEST_P(AnimationAnimationTestNoCompositing,
@@ -1150,7 +1150,7 @@ TEST_P(AnimationAnimationTestNoCompositing,
   EXPECT_EQ("idle", animation->playState());
   EXPECT_FALSE(animation->pending());
   animation->Update(kTimingUpdateOnDemand);
-  EXPECT_EQ(absl::nullopt, animation->TimeToEffectChange());
+  EXPECT_EQ(std::nullopt, animation->TimeToEffectChange());
 }
 
 TEST_P(AnimationAnimationTestNoCompositing,
@@ -1162,7 +1162,7 @@ TEST_P(AnimationAnimationTestNoCompositing,
   EXPECT_EQ("idle", animation->playState());
   EXPECT_FALSE(animation->pending());
   animation->Update(kTimingUpdateOnDemand);
-  EXPECT_EQ(absl::nullopt, animation->TimeToEffectChange());
+  EXPECT_EQ(std::nullopt, animation->TimeToEffectChange());
 }
 
 TEST_P(AnimationAnimationTestNoCompositing, AttachedAnimations) {
@@ -1296,7 +1296,7 @@ TEST_P(AnimationAnimationTestNoCompositing, SetPlaybackRateAfterFinish) {
   animation->finish();
   animation->Update(kTimingUpdateOnDemand);
   EXPECT_EQ("finished", animation->playState());
-  EXPECT_EQ(absl::nullopt, animation->TimeToEffectChange());
+  EXPECT_EQ(std::nullopt, animation->TimeToEffectChange());
 
   // Reversing a finished animation marks the animation as outdated. Required
   // to recompute the time to next interval.
@@ -1315,7 +1315,7 @@ TEST_P(AnimationAnimationTestNoCompositing, UpdatePlaybackRateAfterFinish) {
   animation->finish();
   animation->Update(kTimingUpdateOnDemand);
   EXPECT_EQ("finished", animation->playState());
-  EXPECT_EQ(absl::nullopt, animation->TimeToEffectChange());
+  EXPECT_EQ(std::nullopt, animation->TimeToEffectChange());
 
   // Reversing a finished animation marks the animation as outdated. Required
   // to recompute the time to next interval. The pending playback rate is
@@ -2261,7 +2261,7 @@ TEST_P(AnimationPendingAnimationsTest,
 }
 
 TEST_P(AnimationAnimationTestCompositing,
-       ScrollLinkedAnimationNotCompositedIfSourceIsNotComposited) {
+       ScrollLinkedAnimationCompositedEvenIfSourceIsNotComposited) {
   SetPreferCompositingToLCDText(false);
   SetBodyInnerHTML(R"HTML(
     <style>
@@ -2320,8 +2320,11 @@ TEST_P(AnimationAnimationTestCompositing,
   UpdateAllLifecyclePhasesForTest();
   scroll_animation->play();
   scroll_animation->SetDeferredStartTimeForTesting();
-  EXPECT_EQ(scroll_animation->CheckCanStartAnimationOnCompositor(nullptr),
-            CompositorAnimations::kTimelineSourceHasInvalidCompositingState);
+  EXPECT_EQ(
+      scroll_animation->CheckCanStartAnimationOnCompositor(nullptr),
+      RuntimeEnabledFeatures::ScrollTimelineAlwaysOnCompositorEnabled()
+          ? CompositorAnimations::kNoFailure
+          : CompositorAnimations::kTimelineSourceHasInvalidCompositingState);
 }
 
 #if BUILDFLAG(IS_MAC) && defined(ARCH_CPU_ARM64)
@@ -2425,7 +2428,7 @@ TEST_P(AnimationAnimationTestCompositing, HiddenAnimationsDoNotTick) {
   // The animation should run on main because compositor properties are missing.
   EXPECT_EQ(
       animation->CheckCanStartAnimationOnCompositor(paint_artifact_compositor),
-      CompositorAnimations::kCompositorPropertyAnimationsHaveNoEffect);
+      CompositorAnimations::kAnimationHasNoVisibleChange);
   EXPECT_TRUE(animation->CompositorPropertyAnimationsHaveNoEffectForTesting());
   EXPECT_TRUE(animation->AnimationHasNoEffect());
 
@@ -2468,7 +2471,7 @@ TEST_P(AnimationAnimationTestCompositing, HiddenAnimationsTickWhenVisible) {
   // The animation should run on main because compositor properties are missing.
   EXPECT_EQ(
       animation->CheckCanStartAnimationOnCompositor(paint_artifact_compositor),
-      CompositorAnimations::kCompositorPropertyAnimationsHaveNoEffect);
+      CompositorAnimations::kAnimationHasNoVisibleChange);
   EXPECT_TRUE(animation->CompositorPropertyAnimationsHaveNoEffectForTesting());
   EXPECT_TRUE(animation->AnimationHasNoEffect());
 

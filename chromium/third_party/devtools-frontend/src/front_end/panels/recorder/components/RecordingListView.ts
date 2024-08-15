@@ -7,6 +7,7 @@ import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import * as Models from '../models/models.js';
 import * as Actions from '../recorder-actions/recorder-actions.js';
 
@@ -92,6 +93,10 @@ export class RecordingListView extends HTMLElement {
     replayAllowed: true,
   };
 
+  constructor() {
+    super();
+  }
+
   connectedCallback(): void {
     this.#shadow.adoptedStyleSheets = [recordingListViewStyles];
     void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
@@ -151,6 +156,7 @@ export class RecordingListView extends HTMLElement {
                 i18nString(UIStrings.createRecording),
                 Actions.RecorderActions.CreateRecording,
               )}
+              .jslogContext=${'create-recording'}
             >
               ${i18nString(UIStrings.createRecording)}
             </${Buttons.Button.Button.litTagName}>
@@ -158,12 +164,22 @@ export class RecordingListView extends HTMLElement {
           <div class="table">
             ${this.#props.recordings.map(recording => {
               return LitHtml.html`
-                  <div role="button" tabindex="0" aria-label=${i18nString(
-                    UIStrings.openRecording,
-                  )} class="row" @keydown=${this.#onKeyDown.bind(
-                this,
-                recording.storageName,
-              )} @click=${this.#onOpenClick.bind(this, recording.storageName)}>
+                  <div
+                    role="button"
+                    tabindex="0"
+                    aria-label=${i18nString(UIStrings.openRecording)}
+                    class="row"
+                    @keydown=${this.#onKeyDown.bind(
+                      this,
+                      recording.storageName,
+                    )}
+                    @click=${this.#onOpenClick.bind(
+                      this,
+                      recording.storageName,
+                    )}
+                    jslog=${VisualLogging.item()
+                      .track({ click: true })
+                      .context('recording')}>
                     <div class="icon">
                       <${IconButton.Icon.Icon.litTagName} name="flow">
                       </${IconButton.Icon.Icon.litTagName}>
@@ -179,6 +195,7 @@ export class RecordingListView extends HTMLElement {
                                   {
                                     variant: Buttons.Button.Variant.ROUND,
                                     iconName: 'play',
+                                     jslogContext: 'play-recording',
                                   } as Buttons.Button.ButtonData
                                 }
                                 @click=${this.#onPlayRecordingClick.bind(
@@ -197,9 +214,13 @@ export class RecordingListView extends HTMLElement {
                           {
                             variant: Buttons.Button.Variant.ROUND,
                             iconName: 'bin',
+                            jslogContext: 'delete-recording',
                           } as Buttons.Button.ButtonData
                         }
-                        @click=${this.#onDeleteClick.bind(this, recording.storageName)}
+                        @click=${this.#onDeleteClick.bind(
+                          this,
+                          recording.storageName,
+                        )}
                         @keydown=${this.#stopPropagation}
                       ></${Buttons.Button.Button.litTagName}>
                     </div>
@@ -216,7 +237,7 @@ export class RecordingListView extends HTMLElement {
   };
 }
 
-ComponentHelpers.CustomElements.defineComponent(
+customElements.define(
     'devtools-recording-list-view',
     RecordingListView,
 );

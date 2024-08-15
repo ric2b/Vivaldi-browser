@@ -288,7 +288,7 @@ template("generate_icui18n") {
     defines = [ "U_I18N_IMPLEMENTATION" ]
     deps = icuuc_deps
 
-    # TODO(fxbug.dev/98632): workaround for toolchain issues, see bug
+    # TODO(fxbug.dev/42180987): workaround for toolchain issues, see bug
     if (icu_is_in_fuchsia && is_fuchsia) {
       deps += [ "//build/config/fuchsia:uses-outline-atomics-fxbug98632" ]
     }
@@ -338,7 +338,7 @@ template("generate_icuuc") {
 
     defines += [ "U_ICUDATAENTRY_IN_COMMON" ]
 
-    # TODO(fxbug.dev/98632): workaround for toolchain issues, see bug
+    # TODO(fxbug.dev/42180987): workaround for toolchain issues, see bug
     if (icu_is_in_fuchsia && is_fuchsia) {
       deps += [ "//build/config/fuchsia:uses-outline-atomics-fxbug98632" ]
     }
@@ -482,7 +482,11 @@ if (icu_use_data_file) {
       if (is_mac || is_ios) {
         args += [ "--mac" ]
       } else if (is_win) {
-        args += [ "--win" ]
+        if (host_os == "linux") {
+          args += [ "--win-on-linux" ]
+        } else {
+          args += [ "--win" ]
+        }
       }
     }
   }

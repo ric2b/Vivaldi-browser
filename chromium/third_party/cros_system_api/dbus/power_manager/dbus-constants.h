@@ -112,6 +112,8 @@ enum RequestRestartReason {
   REQUEST_RESTART_REMOTE_ACTION_REBOOT = 4,
   // chrome.runtime.restart API.
   REQUEST_RESTART_API = 5,
+  // From heartbeat service heartd.
+  REQUEST_RESTART_HEARTD = 6,
 };
 enum RequestShutdownReason {
   // An explicit user request (e.g. clicking a button).

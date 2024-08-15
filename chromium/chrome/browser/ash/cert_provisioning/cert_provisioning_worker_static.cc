@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <optional>
+#include <string_view>
 #include <vector>
 
 #include "base/base64.h"
@@ -16,7 +17,6 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/syslog_logging.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
@@ -184,7 +184,7 @@ std::string ConstructFailureMessage(
 
 // TODO(b/192071491): Remove the use of this function by changing the
 // dependencies.
-std::vector<uint8_t> StrToBytes(base::StringPiece str) {
+std::vector<uint8_t> StrToBytes(std::string_view str) {
   return std::vector<uint8_t>(str.begin(), str.end());
 }
 
@@ -945,7 +945,13 @@ void CertProvisioningWorkerStatic::OnCleanUpDone() {
 
   RecordResult(cert_profile_.protocol_version, cert_scope_, state_,
                prev_state_);
-  std::move(result_callback_).Run(cert_profile_, state_);
+
+  // The worked is likely to be deleted in `result_callback_`. Run it
+  // asynchronously in case something is still interacting with it in the
+  // current call stack.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(result_callback_), cert_profile_, state_));
 }
 
 CertProvisioningClient::ProvisioningProcess

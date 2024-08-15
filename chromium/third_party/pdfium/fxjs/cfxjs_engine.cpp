@@ -9,14 +9,14 @@
 #include <memory>
 #include <utility>
 
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxcrt/unowned_ptr.h"
 #include "fxjs/cfx_v8_array_buffer_allocator.h"
 #include "fxjs/cjs_object.h"
 #include "fxjs/fxv8.h"
 #include "fxjs/xfa/cfxjse_runtimedata.h"
-#include "third_party/base/check.h"
-#include "third_party/base/check_op.h"
 #include "v8/include/v8-context.h"
 #include "v8/include/v8-exception.h"
 #include "v8/include/v8-isolate.h"
@@ -199,8 +199,8 @@ class CFXJS_ObjDefinition {
   }
 
   void DefineProperty(v8::Local<v8::String> sPropName,
-                      v8::AccessorGetterCallback pPropGet,
-                      v8::AccessorSetterCallback pPropPut) {
+                      v8::AccessorNameGetterCallback pPropGet,
+                      v8::AccessorNameSetterCallback pPropPut) {
     GetInstanceTemplate()->SetAccessor(sPropName, pPropGet, pPropPut);
   }
 
@@ -435,8 +435,8 @@ void CFXJS_Engine::DefineObjMethod(uint32_t nObjDefnID,
 
 void CFXJS_Engine::DefineObjProperty(uint32_t nObjDefnID,
                                      const char* sPropName,
-                                     v8::AccessorGetterCallback pPropGet,
-                                     v8::AccessorSetterCallback pPropPut) {
+                                     v8::AccessorNameGetterCallback pPropGet,
+                                     v8::AccessorNameSetterCallback pPropPut) {
   v8::Isolate::Scope isolate_scope(GetIsolate());
   v8::HandleScope handle_scope(GetIsolate());
   FXJS_PerIsolateData* pIsolateData = FXJS_PerIsolateData::Get(GetIsolate());
@@ -574,7 +574,7 @@ void CFXJS_Engine::ReleaseEngine() {
   GetIsolate()->SetData(g_embedderDataSlot, nullptr);
 }
 
-absl::optional<IJS_Runtime::JS_Error> CFXJS_Engine::Execute(
+std::optional<IJS_Runtime::JS_Error> CFXJS_Engine::Execute(
     const WideString& script) {
   v8::Isolate::Scope isolate_scope(GetIsolate());
   v8::TryCatch try_catch(GetIsolate());
@@ -599,7 +599,7 @@ absl::optional<IJS_Runtime::JS_Error> CFXJS_Engine::Execute(
     std::tie(line, column) = GetLineAndColumnFromError(msg, context);
     return IJS_Runtime::JS_Error(line, column, WideString::FromUTF8(*error));
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 v8::Local<v8::Object> CFXJS_Engine::NewFXJSBoundObject(uint32_t nObjDefnID,

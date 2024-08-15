@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/autofill/autofill_profile_edit_mediator.h"
 
+#import "base/memory/raw_ptr.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/scoped_feature_list.h"
 #import "components/autofill/core/browser/autofill_test_utils.h"
@@ -18,7 +19,6 @@
 #import "ios/chrome/browser/ui/autofill/autofill_profile_edit_consumer.h"
 #import "ios/chrome/browser/ui/autofill/autofill_profile_edit_mediator_delegate.h"
 #import "ios/chrome/browser/ui/autofill/cells/country_item.h"
-#import "ios/chrome/browser/ui/settings/personal_data_manager_finished_profile_tasks_waiter.h"
 #import "ios/chrome/browser/webdata_services/model/web_data_service_factory.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/web/public/test/web_task_environment.h"
@@ -149,7 +149,7 @@ class AutofillProfileEditMediatorTest : public PlatformTest {
   web::WebTaskEnvironment task_environment_;
   IOSChromeScopedTestingLocalState local_state_;
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
-  autofill::PersonalDataManager* personal_data_manager_;
+  raw_ptr<autofill::PersonalDataManager> personal_data_manager_;
   autofill::CountryComboboxModel country_model_;
 };
 

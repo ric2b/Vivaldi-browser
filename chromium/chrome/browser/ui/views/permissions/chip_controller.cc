@@ -23,8 +23,8 @@
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/browser/ui/views/permissions/chip/permission_dashboard_controller.h"
 #include "chrome/browser/ui/views/permissions/chip/permission_dashboard_view.h"
+#include "chrome/browser/ui/views/permissions/chip/permission_prompt_chip_model.h"
 #include "chrome/browser/ui/views/permissions/permission_prompt_bubble_view_factory.h"
-#include "chrome/browser/ui/views/permissions/permission_prompt_chip_model.h"
 #include "chrome/browser/ui/views/permissions/permission_prompt_style.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -83,7 +83,7 @@ class BubbleButtonController : public views::ButtonController {
 
 ChipController::ChipController(
     Browser* browser,
-    OmniboxChipButton* chip_view,
+    PermissionChipView* chip_view,
     PermissionDashboardView* permission_dashboard_view,
     PermissionDashboardController* permission_dashboard_controller)
     : browser_(browser),
@@ -314,9 +314,12 @@ void ChipController::ShowPermissionPrompt(
 
   AnnouncePermissionRequestForAccessibility(
       permission_prompt_model_->GetAccessibilityChipText());
+
   chip_->SetVisible(true);
+
   if (permission_dashboard_view_) {
     permission_dashboard_view_->SetVisible(true);
+    permission_dashboard_view_->UpdateDividerViewVisibility();
   }
 
   SyncChipWithModel();
@@ -522,9 +525,15 @@ void ChipController::HideChip() {
     return;
 
   chip_->SetVisible(false);
-  if (permission_dashboard_view_ &&
-      !permission_dashboard_view_->GetIndicatorChip()->GetVisible()) {
-    permission_dashboard_view_->SetVisible(false);
+  if (permission_dashboard_view_) {
+    // The request chip is gone, the divider view is no longer needed.
+    permission_dashboard_view_->UpdateDividerViewVisibility();
+
+    // Hide the parent view `permission_dashboard_view_` if no children are
+    // visible.
+    if (!permission_dashboard_view_->GetIndicatorChip()->GetVisible()) {
+      permission_dashboard_view_->SetVisible(false);
+    }
   }
   // When the chip visibility changed from visible -> hidden, the locationbar
   // layout should be updated.

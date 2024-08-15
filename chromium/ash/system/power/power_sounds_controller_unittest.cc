@@ -41,7 +41,8 @@ constexpr int kLowPowerMinutes = 15;
 
 class PowerSoundsControllerTest : public AshTestBase {
  public:
-  PowerSoundsControllerTest(absl::optional<bool> battery_saver_allowed = false)
+  explicit PowerSoundsControllerTest(
+      std::optional<bool> battery_saver_allowed = false)
       : battery_saver_allowed_(battery_saver_allowed) {}
 
   PowerSoundsControllerTest(const PowerSoundsControllerTest&) = delete;
@@ -52,8 +53,7 @@ class PowerSoundsControllerTest : public AshTestBase {
 
   // AshTestBase:
   void SetUp() override {
-    scoped_feature_.InitWithFeatures(
-        {features::kSystemSounds, features::kBatterySaver}, {});
+    scoped_feature_.InitWithFeatures({features::kBatterySaver}, {});
     AshTestBase::SetUp();
     OverrideIsBatterySaverAllowedForTesting(battery_saver_allowed_);
     SetInitialPowerStatus();
@@ -61,7 +61,7 @@ class PowerSoundsControllerTest : public AshTestBase {
 
   void TearDown() override {
     AshTestBase::TearDown();
-    OverrideIsBatterySaverAllowedForTesting(absl::nullopt);
+    OverrideIsBatterySaverAllowedForTesting(std::nullopt);
   }
 
   TestSystemSoundsDelegate* GetSystemSoundsDelegate() const {
@@ -151,7 +151,7 @@ class PowerSoundsControllerTest : public AshTestBase {
 
  private:
   bool is_ac_charger_connected_;
-  absl::optional<bool> battery_saver_allowed_;
+  std::optional<bool> battery_saver_allowed_;
 };
 
 class PowerSoundsControllerWithBatterySaverTest

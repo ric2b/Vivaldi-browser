@@ -102,6 +102,14 @@ def _is_google_corp_machine():
 
 
 def _is_google_corp_machine_using_external_account():
+    if os.environ.get("AUTONINJA_SKIP_EXTERNAL_ACCOUNT_CHECK") == "1":
+        print(
+            "WARNING: AUTONINJA_SKIP_EXTERNAL_ACCOUNT_CHECK env var is set.\n"
+            "This is only for some infra, do not set this in personal"
+            " development machine.",
+            file=sys.stderr)
+        return False
+
     if not _is_google_corp_machine():
         return False
 
@@ -210,9 +218,9 @@ def main(args):
             output_dir = arg[2:]
         elif arg in ("-o", "--offline"):
             offline = True
-        elif arg == "-h":
+        elif arg in ("-h", "--help"):
             print(
-                "autoninja: Use -o/--offline to temporary disable goma.",
+                "autoninja: Use -o/--offline to temporary disable remote execution.",
                 file=sys.stderr,
             )
             print(file=sys.stderr)
@@ -371,7 +379,6 @@ def main(args):
                 "Please use `use_remoteexec=true` instead. "
                 "If you are a googler see http://go/building-chrome-mac"
                 "#using-remote-execution for setup instructions. ",
-                "Goma-based builds will have startup delays added Jan 22nd 2024",
                 file=sys.stderr,
             )
         else:
@@ -380,9 +387,18 @@ def main(args):
                 "Please use `use_remoteexec=true` instead. See "
                 "https://chromium.googlesource.com/chromium/src/+/main/docs/"
                 "linux/build_instructions.md#use-reclient for setup instructions.",
-                "Goma-based builds will have startup delays added Jan 22nd 2024",
                 file=sys.stderr,
             )
+        if not sys.platform.startswith("win"):
+            # Artificial build delay is for linux/mac for now.
+            t = 5
+            while t > 0:
+                print(
+                    f"The build will start in {t} seconds.",
+                    file=sys.stderr,
+                )
+                time.sleep(1)
+                t = t - 1
 
 
     # A large build (with or without goma) tends to hog all system resources.

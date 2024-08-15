@@ -27,7 +27,7 @@
 #include "absl/numeric/int128.h"
 #include "absl/random/random.h"
 #include "absl/types/span.h"
-#include "./fuzztest/domain.h"
+#include "./fuzztest/domain_core.h"
 #include "./domain_tests/domain_testing.h"
 #include "./fuzztest/internal/meta.h"
 #include "./fuzztest/internal/type_support.h"
@@ -90,6 +90,18 @@ TEST(BitFlagCombinationOf, InvalidInputReportsErrors) {
   EXPECT_DEATH_IF_SUPPORTED(
       BitFlagCombinationOf({1, 2, 3}),
       "BitFlagCombinationOf requires flags to be mutually exclusive.");
+}
+
+TEST(BitFlagCombinationOf, ValidationRejectsInvalidValue) {
+  auto domain = BitFlagCombinationOf({1, 4});
+  EXPECT_OK(domain.ValidateCorpusValue(0));
+  EXPECT_OK(domain.ValidateCorpusValue(1));
+  EXPECT_OK(domain.ValidateCorpusValue(4));
+  EXPECT_OK(domain.ValidateCorpusValue(5));
+  EXPECT_THAT(domain.ValidateCorpusValue(2),
+              IsInvalid("Invalid bit flag combination."));
+  EXPECT_THAT(domain.ValidateCorpusValue(17),
+              IsInvalid("Invalid bit flag combination."));
 }
 
 TEST(OneOf, InitGeneratesSeeds) {

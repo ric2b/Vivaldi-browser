@@ -16,8 +16,6 @@
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "services/device/binder_overrides.h"
 #include "services/device/compute_pressure/pressure_manager_impl.h"
-#include "services/device/device_posture/device_posture_platform_provider.h"
-#include "services/device/device_posture/device_posture_provider_impl.h"
 #include "services/device/fingerprint/fingerprint.h"
 #include "services/device/generic_sensor/platform_sensor_provider.h"
 #include "services/device/generic_sensor/sensor_provider_impl.h"
@@ -94,7 +92,8 @@ std::unique_ptr<DeviceService> CreateDeviceService(
     mojo::PendingReceiver<mojom::DeviceService> receiver) {
   GeolocationProviderImpl::SetGeolocationConfiguration(
       params->url_loader_factory, params->geolocation_api_key,
-      params->custom_location_provider_callback, params->geolocation_manager,
+      params->custom_location_provider_callback,
+      params->geolocation_system_permission_manager,
       params->use_gms_core_location_provider);
   return std::make_unique<DeviceService>(std::move(params),
                                          std::move(receiver));
@@ -328,18 +327,6 @@ void DeviceService::BindSensorProvider(
         std::make_unique<SensorProviderImpl>(std::move(platform_provider));
   }
   sensor_provider_->Bind(std::move(receiver));
-}
-
-void DeviceService::BindDevicePostureProvider(
-    mojo::PendingReceiver<mojom::DevicePostureProvider> receiver) {
-  if (!device_posture_provider_) {
-    auto posture_platform_provider_ = DevicePosturePlatformProvider::Create();
-    if (!posture_platform_provider_)
-      return;
-    device_posture_provider_ = std::make_unique<DevicePostureProviderImpl>(
-        std::move(posture_platform_provider_));
-  }
-  device_posture_provider_->Bind(std::move(receiver));
 }
 
 void DeviceService::BindSerialPortManager(

@@ -14,8 +14,8 @@
 #include "core/fxcrt/fx_coordinates.h"
 #include "core/fxcrt/retain_ptr.h"
 #include "core/fxcrt/shared_copy_on_write.h"
+#include "core/fxcrt/span.h"
 #include "core/fxge/dib/fx_dib.h"
-#include "third_party/base/containers/span.h"
 
 class CPDF_Dictionary;
 class CPDF_Object;
@@ -79,9 +79,6 @@ class CPDF_GeneralState {
   void SetAlphaSource(bool source);
   void SetTextKnockout(bool knockout);
 
-  void SetMatrix(const CFX_Matrix& matrix);
-  CFX_Matrix* GetMutableMatrix();
-
   void SetGraphicsResourceNames(std::vector<ByteString> names);
   void AppendGraphicsResourceName(ByteString name);
   pdfium::span<const ByteString> GetGraphicsResourceNames() const;
@@ -101,7 +98,6 @@ class CPDF_GeneralState {
     float m_FillAlpha = 1.0f;
     RetainPtr<const CPDF_Object> m_pTR;
     RetainPtr<CPDF_TransferFunc> m_pTransferFunc;
-    CFX_Matrix m_Matrix;
     int m_RenderIntent = 0;
     bool m_StrokeAdjust = false;
     bool m_AlphaSource = false;

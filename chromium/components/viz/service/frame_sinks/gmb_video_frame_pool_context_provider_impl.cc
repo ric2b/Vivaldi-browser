@@ -84,8 +84,8 @@ class GmbVideoFramePoolContext
       uint32_t usage,
       gpu::SyncToken& sync_token) override {
     auto client_shared_image = sii_in_process_->CreateSharedImage(
-        si_format, gpu_memory_buffer->GetSize(), color_space, surface_origin,
-        alpha_type, usage, "VizGmbVideoFramePool",
+        {si_format, gpu_memory_buffer->GetSize(), color_space, surface_origin,
+         alpha_type, usage, "VizGmbVideoFramePool"},
         gpu_memory_buffer->CloneHandle());
     CHECK(client_shared_image);
     sync_token = sii_in_process_->GenVerifiedSyncToken();
@@ -104,8 +104,9 @@ class GmbVideoFramePoolContext
       uint32_t usage,
       gpu::SyncToken& sync_token) override {
     auto client_shared_image = sii_in_process_->CreateSharedImage(
-        gpu_memory_buffer, gpu_memory_buffer_manager_, plane, color_space,
-        surface_origin, alpha_type, usage, "VizGmbVideoFramePool");
+        gpu_memory_buffer, gpu_memory_buffer_manager_, plane,
+        {color_space, surface_origin, alpha_type, usage,
+         "VizGmbVideoFramePool"});
     CHECK(client_shared_image);
     sync_token = sii_in_process_->GenVerifiedSyncToken();
     return client_shared_image;
@@ -132,7 +133,7 @@ class GmbVideoFramePoolContext
     // TODO(bialpio): Move construction to the viz thread once it is no longer
     // necessary to dereference `shared_context_state_` to grab the memory
     // tracker from it.
-    sii_in_process_ = std::make_unique<gpu::SharedImageInterfaceInProcess>(
+    sii_in_process_ = base::MakeRefCounted<gpu::SharedImageInterfaceInProcess>(
         sequence_.get(), gpu_service_->sync_point_manager(),
         gpu_service_->gpu_preferences(),
         gpu_service_->gpu_driver_bug_workarounds(),
@@ -176,7 +177,7 @@ class GmbVideoFramePoolContext
   std::unique_ptr<gpu::SchedulerSequence> sequence_;
   scoped_refptr<gpu::SharedContextState> shared_context_state_;
 
-  std::unique_ptr<gpu::SharedImageInterfaceInProcess> sii_in_process_;
+  scoped_refptr<gpu::SharedImageInterfaceInProcess> sii_in_process_;
 
   SEQUENCE_CHECKER(gpu_sequence_checker_);
 };

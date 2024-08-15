@@ -148,6 +148,9 @@ fonthashint     Bool    Whether the font has hinting
 order           Int     Order number of the font
 desktop         String  Current desktop name
 namedinstance   Bool    Whether font is a named instance
+fontwarapper    String  The font wrapper format, current values are WOFF, WOFF2,
+                        SFNT for any other SFNT font, and CFF for standalone
+                        CFF fonts.
     </programlisting>
   </refsect2>
   <refsect2>

@@ -104,13 +104,12 @@ const char kBlueDotPromoSettingsDismissed[] =
     "blue_dot_promo_settings_dismissed";
 const char kCredentialProviderExtensionPromoSnoozed[] =
     "credential_provider_extension_promo_snoozed";
+const char kDockingPromoRemindMeLater[] = "docking_promo_remind_me_later";
 const char kOpenUrlFromOmnibox[] = "open_url_from_omnibox";
 const char kNewTabToolbarItemUsed[] = "new_tab_toolbar_item_used";
 const char kTabGridToolbarItemUsed[] = "tab_grid_toolbar_item_used";
 const char kHistoryOnOverflowMenuUsed[] = "history_on_overflow_menu_used";
 const char kShareToolbarItemUsed[] = "share_toolbar_item_used";
-const char kDefaultBrowserVideoPromoConditionsMet[] =
-    "default_browser_video_promo_conditions_met";
 const char kLensButtonKeyboardUsed[] = "lens_keyboard_used";
 const char kOmniboxPositionPromoShown[] = "omnibox_position_promo_shown";
 const char kParcelTrackingTriggered[] = "parcel_tracking_triggered";
@@ -118,11 +117,16 @@ const char kParcelTracked[] = "parcel_tracked";
 const char kIOSMultiGestureRefreshUsed[] = "multi_gesture_refresh_used";
 const char kIOSPullToRefreshUsed[] = "pull_to_refresh_feature_used";
 const char kIOSIncognitoPageControlTapped[] = "incognito_page_control_tapped";
-const char kIOSSwipeLeftForIncognitoUsed[] = "swipe_left_for_incognito_used";
-const char kEnhancedSafeBrowsingPromoCriterionMet[] =
-    "enhanced_safe_browsing_promo_criterion_met";
-const char kEnhancedSafeBrowsingInlinePromoClosed[] =
-    "enhanced_safe_browsing_inline_promo_closed";
+const char kIOSSwipeRightForIncognitoUsed[] = "swipe_right_for_incognito_used";
+const char kIOSBackForwardButtonTapped[] = "back_forward_button_tapped";
+const char kIOSSwipeBackForwardUsed[] = "swiped_back_forward_used";
+const char kIOSTabGridAdjacentTabTapped[] = "tab_grid_adjacent_tab_tapped";
+const char kIOSSwipeToolbarToChangeTabUsed[] =
+    "swipe_toolbar_to_change_tab_used";
+const char kIOSOverflowMenuCustomizationUsed[] =
+    "overflow_menu_customization_used";
+const char kIOSOverflowMenuOffscreenItemUsed[] =
+    "overflow_menu_offscreen_item_used";
 #endif  // BUILDFLAG(IS_IOS)
 
 #if BUILDFLAG(IS_ANDROID)

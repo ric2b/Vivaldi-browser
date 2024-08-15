@@ -11,7 +11,8 @@
 class ComposeTest : public WebUIMochaBrowserTest {
  protected:
   ComposeTest() {
-    set_test_loader_host(chrome::kChromeUIComposeHost);
+    set_test_loader_host(chrome::kChromeUIUntrustedComposeHost);
+    set_test_loader_scheme(content::kChromeUIUntrustedScheme);
     scoped_compose_enabled_ = ComposeEnabling::ScopedEnableComposeForTesting();
   }
 
@@ -31,4 +32,12 @@ IN_PROC_BROWSER_TEST_F(ComposeTest, Textarea) {
 
 IN_PROC_BROWSER_TEST_F(ComposeTest, Animator) {
   RunTest("compose/compose_animator_test.js", "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ComposeTest, WordStreamer) {
+  RunTest("compose/word_streamer_test.js", "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ComposeTest, ResultText) {
+  RunTest("compose/result_text_test.js", "mocha.run()");
 }

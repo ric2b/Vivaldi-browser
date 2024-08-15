@@ -26,9 +26,9 @@
 #include "third_party/blink/renderer/core/clipboard/data_transfer.h"
 
 #include <memory>
+#include <optional>
 
 #include "build/build_config.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/core/clipboard/clipboard_mime_types.h"
 #include "third_party/blink/renderer/core/clipboard/clipboard_utilities.h"
 #include "third_party/blink/renderer/core/clipboard/data_object.h"
@@ -130,11 +130,11 @@ class DraggedNodeImageBuilder {
     OverriddenCullRectScope cull_rect_scope(
         *layer, CullRect(gfx::ToEnclosingRect(cull_rect)),
         /*disable_expansion*/ true);
-    auto* builder = MakeGarbageCollected<PaintRecordBuilder>();
+    PaintRecordBuilder builder;
 
     dragged_layout_object->GetDocument().Lifecycle().AdvanceTo(
         DocumentLifecycle::kInPaint);
-    PaintLayerPainter(*layer).Paint(builder->Context(),
+    PaintLayerPainter(*layer).Paint(builder.Context(),
                                     PaintFlag::kOmitCompositingInfo);
     dragged_layout_object->GetDocument().Lifecycle().AdvanceTo(
         DocumentLifecycle::kPaintClean);
@@ -150,7 +150,7 @@ class DraggedNodeImageBuilder {
         gfx::Vector2dF(layer->GetLayoutObject().FirstFragment().PaintOffset());
 
     return DataTransfer::CreateDragImageForFrame(
-        *local_frame_, 1.0f, bounding_box.size(), paint_offset, *builder,
+        *local_frame_, 1.0f, bounding_box.size(), paint_offset, builder,
         border_box_properties);
   }
 
@@ -162,7 +162,7 @@ class DraggedNodeImageBuilder {
 #endif
 };
 
-absl::optional<DragOperationsMask> ConvertEffectAllowedToDragOperationsMask(
+std::optional<DragOperationsMask> ConvertEffectAllowedToDragOperationsMask(
     const AtomicString& op) {
   // Values specified in
   // https://html.spec.whatwg.org/multipage/dnd.html#dom-datatransfer-effectallowed
@@ -190,7 +190,7 @@ absl::optional<DragOperationsMask> ConvertEffectAllowedToDragOperationsMask(
   }
   if (op == "all")
     return kDragOperationEvery;
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 AtomicString ConvertDragOperationsMaskToEffectAllowed(DragOperationsMask op) {
@@ -534,7 +534,7 @@ void DataTransfer::WriteSelection(const FrameSelection& selection) {
     return;
 
   if (!EnclosingTextControl(
-          selection.ComputeVisibleSelectionInDOMTreeDeprecated().Start())) {
+          selection.ComputeVisibleSelectionInDOMTree().Start())) {
     data_object_->SetHTMLAndBaseURL(selection.SelectedHTMLForClipboard(),
                                     selection.GetFrame()->GetDocument()->Url());
   }
@@ -575,7 +575,7 @@ bool DataTransfer::CanSetDragImage() const {
 }
 
 DragOperationsMask DataTransfer::SourceOperation() const {
-  absl::optional<DragOperationsMask> op =
+  std::optional<DragOperationsMask> op =
       ConvertEffectAllowedToDragOperationsMask(effect_allowed_);
   DCHECK(op);
   return *op;
@@ -583,7 +583,7 @@ DragOperationsMask DataTransfer::SourceOperation() const {
 
 ui::mojom::blink::DragOperation DataTransfer::DestinationOperation() const {
   DCHECK(DropEffectIsInitialized());
-  absl::optional<DragOperationsMask> op =
+  std::optional<DragOperationsMask> op =
       ConvertEffectAllowedToDragOperationsMask(drop_effect_);
   return static_cast<ui::mojom::blink::DragOperation>(*op);
 }

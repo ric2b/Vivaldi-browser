@@ -14,6 +14,7 @@
 #include "base/observer_list.h"
 #include "chromeos/ash/components/dbus/fwupd/fwupd_device.h"
 #include "chromeos/ash/components/dbus/fwupd/fwupd_properties.h"
+#include "chromeos/ash/components/dbus/fwupd/fwupd_properties_dbus.h"
 #include "chromeos/ash/components/dbus/fwupd/fwupd_request.h"
 #include "chromeos/ash/components/dbus/fwupd/fwupd_update.h"
 #include "chromeos/dbus/common/dbus_client.h"
@@ -27,11 +28,42 @@ enum DeviceRequestId {
   kRemoveUSBCable,
   kPressUnlock,
   kRemoveReplug,
+  kReplugPower,
 };
 
 namespace ash {
+
+// All values returnable by fwupd dbus signal
+// The errors are consistent with
+// https://fwupd.github.io/libfwupd/error.Error.html
+enum class FwupdResult {
+  kSuccess,
+  kInternalError,
+  kVersionNewerError,
+  kVersionSameError,
+  kAlreadyPendingError,
+  kAuthFailedError,
+  kReadError,
+  kWriteError,
+  kInvalidFileError,
+  kNotFoundError,
+  kNothingToDoError,
+  kNotSupportedError,
+  kSignatureInvalidError,
+  kAcPowerRequiredError,
+  kPermissionDeniedError,
+  kBrokenSystemError,
+  kBatteryLevelTooLowError,
+  kNeedsUserActionError,
+  kAuthExpiredError,
+  kUnknownError,
+  kMaxValue = kUnknownError,
+};
+
 using FirmwareInstallOptions = std::map<std::string, bool>;
 using FwupdStringToRequestIdMap = std::map<std::string, DeviceRequestId>;
+
+class FakeFwupdClient;
 
 // FwupdClient is used for handling signals from the fwupd daemon.
 class COMPONENT_EXPORT(ASH_DBUS_FWUPD) FwupdClient
@@ -43,7 +75,6 @@ class COMPONENT_EXPORT(ASH_DBUS_FWUPD) FwupdClient
     virtual void OnDeviceListResponse(FwupdDeviceList* devices) = 0;
     virtual void OnUpdateListResponse(const std::string& device_id,
                                       FwupdUpdateList* updates) = 0;
-    virtual void OnInstallResponse(bool success) = 0;
     virtual void OnPropertiesChangedResponse(FwupdProperties* properties) = 0;
     virtual void OnDeviceRequestResponse(FwupdRequest request) = 0;
   };
@@ -57,6 +88,9 @@ class COMPONENT_EXPORT(ASH_DBUS_FWUPD) FwupdClient
   // Returns the global instance if initialized. May return null.
   static FwupdClient* Get();
 
+  // Returns the global fake instance if initialized. May return null.
+  static FakeFwupdClient* GetFake();
+
   // Creates and initializes the global instance. |bus| must not be null.
   static void Initialize(dbus::Bus* bus);
 
@@ -67,8 +101,8 @@ class COMPONENT_EXPORT(ASH_DBUS_FWUPD) FwupdClient
   static void Shutdown();
 
   void SetPropertiesForTesting(uint32_t percentage, uint32_t status) {
-    properties_->percentage.ReplaceValue(percentage);
-    properties_->status.ReplaceValue(status);
+    properties_->SetPercentage(percentage);
+    properties_->SetStatus(status);
   }
 
   // Query fwupd for updates that are available for a particular device.
@@ -77,9 +111,13 @@ class COMPONENT_EXPORT(ASH_DBUS_FWUPD) FwupdClient
   // Query fwupd for devices that are currently connected.
   virtual void RequestDevices() = 0;
 
-  virtual void InstallUpdate(const std::string& device_id,
-                             base::ScopedFD file_descriptor,
-                             FirmwareInstallOptions options) = 0;
+  // Install an update for |device_id|. Invokes |callback| when the operation
+  // completes.
+  virtual void InstallUpdate(
+      const std::string& device_id,
+      base::ScopedFD file_descriptor,
+      FirmwareInstallOptions options,
+      base::OnceCallback<void(FwupdResult)> callback) = 0;
 
  protected:
   friend class FwupdClientTest;
@@ -99,7 +137,7 @@ class COMPONENT_EXPORT(ASH_DBUS_FWUPD) FwupdClient
   int device_signal_call_count_for_testing_ = 0;
 
   // Holds the Fwupd Dbus properties for percentage and status.
-  std::unique_ptr<FwupdProperties> properties_;
+  std::unique_ptr<FwupdDbusProperties> properties_;
 
   base::ObserverList<Observer> observers_;
 };

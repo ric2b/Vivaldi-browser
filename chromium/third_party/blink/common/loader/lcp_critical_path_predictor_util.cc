@@ -19,7 +19,19 @@ bool LcppEnabled() {
          base::FeatureList::IsEnabled(
              blink::features::kDelayAsyncScriptExecution) ||
          base::FeatureList::IsEnabled(
-             blink::features::kHttpDiskCachePrewarming);
+             blink::features::kHttpDiskCachePrewarming) ||
+         base::FeatureList::IsEnabled(
+             blink::features::kLCPPAutoPreconnectLcpOrigin) ||
+         base::FeatureList::IsEnabled(
+             blink::features::kLCPTimingPredictorPrerender2);
+}
+
+bool LcppScriptObserverEnabled() {
+  return base::FeatureList::IsEnabled(blink::features::kLCPScriptObserver) ||
+         (base::FeatureList::IsEnabled(
+              features::kLowPriorityAsyncScriptExecution) &&
+          features::kLowPriorityAsyncScriptExecutionExcludeLcpInfluencersParam
+              .Get());
 }
 
 }  // namespace blink

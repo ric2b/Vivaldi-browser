@@ -41,5 +41,4 @@ doc](/developers/design-documents/constrained-popup-windows).
 
 ## Report a bug
 
-*   [Chromium bug
-            system](http://code.google.com/p/chromium/issues/entry)
+*   [Chromium bug system](https://issues.chromium.org/new)

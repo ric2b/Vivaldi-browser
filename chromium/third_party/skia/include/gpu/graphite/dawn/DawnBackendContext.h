@@ -15,7 +15,8 @@ namespace skgpu::graphite {
 
 /**
  * WebGPU needs to allow the main thread loop to run to detect GPU progress. Dawn native has a
- * function wgpu::Dawn::Tick(), not present in WebGPU, that can be used to detect GPU progress.
+ * function wgpu::Instance::ProcessEvents, not (currently) present in WebGPU, that can be used to
+ * detect GPU progress.
  *
  * When compiling using Emscripten/WASM the -s ASYNCIFY option can be used to yield. E.g.:
  *
@@ -38,16 +39,19 @@ namespace skgpu::graphite {
  * Using a non-yielding Context makes it possible to build and run Graphite/Dawn on WebGPU without
  * -s ASYNCIFY.
  */
-using DawnTickFunction = void(const wgpu::Device& device);
+using DawnTickFunction = void(const wgpu::Instance& device);
 
 #if !defined(__EMSCRIPTEN__)
-SK_API inline void DawnNativeTickFunction(const wgpu::Device& device) { device.Tick(); }
+SK_API inline void DawnNativeProcessEventsFunction(const wgpu::Instance& instance) {
+    instance.ProcessEvents();
+}
 #endif
 
 // The DawnBackendContext contains all of the base Dawn objects needed by the graphite Dawn
 // backend. The client will create this object and pass it into the Context::MakeDawn factory call
 // when setting up Skia.
 struct SK_API DawnBackendContext {
+    wgpu::Instance fInstance;
     wgpu::Device fDevice;
     wgpu::Queue fQueue;
     // See comment on DawnTickFunction.
@@ -55,7 +59,7 @@ struct SK_API DawnBackendContext {
 #if defined(__EMSCRIPTEN__)
             nullptr;
 #else
-            DawnNativeTickFunction;
+            DawnNativeProcessEventsFunction;
 #endif
 };
 

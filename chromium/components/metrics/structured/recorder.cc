@@ -10,6 +10,7 @@
 #include "base/task/current_thread.h"
 #include "base/task/sequenced_task_runner.h"
 #include "components/metrics/structured/histogram_util.h"
+#include "components/metrics/structured/lib/histogram_util.h"
 #include "components/metrics/structured/structured_metrics_features.h"
 
 namespace metrics::structured {
@@ -54,20 +55,6 @@ void Recorder::RecordEvent(Event&& event) {
     // StructuredMetricsProvider::OnRecord.
     LogEventRecordingState(EventRecordingState::kProviderMissing);
   }
-}
-
-void Recorder::ProfileAdded(const base::FilePath& profile_path) {
-  // All calls to the StructuredMetricsProvider (the observer) must be on the UI
-  // sequence.
-  DCHECK(base::CurrentUIThread::IsSet());
-  // TODO(crbug.com/1016655 ): investigate whether we can verify that
-  // |profile_path| corresponds to a valid (non-guest, non-signin) profile.
-  for (auto& observer : observers_) {
-    observer.OnProfileAdded(profile_path);
-  }
-
-  // Notify the event processors.
-  delegating_events_processor_.OnProfileAdded(profile_path);
 }
 
 void Recorder::OnSystemProfileInitialized() {

@@ -8,7 +8,7 @@
 #import "base/memory/ptr_util.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/task/sequenced_task_runner.h"
-#import "ios/chrome/browser/snapshots/model/snapshot_generator.h"
+#import "ios/chrome/browser/snapshots/model/legacy_snapshot_generator.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_manager.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_storage.h"
 #import "ios/web/public/web_state.h"
@@ -79,14 +79,6 @@ void SnapshotTabHelper::IgnoreNextLoad() {
   ignore_next_load_ = true;
 }
 
-void SnapshotTabHelper::WillBeSavedGreyWhenBackgrounding() {
-  [snapshot_manager_ willBeSavedGreyWhenBackgrounding];
-}
-
-void SnapshotTabHelper::SaveGreyInBackground() {
-  [snapshot_manager_ saveGreyInBackground];
-}
-
 SnapshotID SnapshotTabHelper::GetSnapshotID() const {
   return snapshot_manager_.snapshotID;
 }
@@ -95,9 +87,10 @@ SnapshotTabHelper::SnapshotTabHelper(web::WebState* web_state)
     : web_state_(web_state) {
   DCHECK(web_state_);
   snapshot_manager_ = [[SnapshotManager alloc]
-      initWithGenerator:[[SnapshotGenerator alloc] initWithWebState:web_state_]
+      initWithGenerator:[[LegacySnapshotGenerator alloc]
+                            initWithWebState:web_state_]
              snapshotID:GenerateSnapshotID(web_state_)];
-  web_state_observation_.Observe(web_state_);
+  web_state_observation_.Observe(web_state_.get());
 }
 
 void SnapshotTabHelper::PageLoaded(

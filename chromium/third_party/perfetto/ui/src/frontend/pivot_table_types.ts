@@ -31,7 +31,7 @@ export interface PivotTree {
   rows: ColumnType[][];
 }
 
-export type AggregationFunction = 'COUNT'|'SUM'|'MIN'|'MAX'|'AVG';
+export type AggregationFunction = 'COUNT' | 'SUM' | 'MIN' | 'MAX' | 'AVG';
 
 // Queried "table column" is either:
 // 1. A real one, represented as object with table and column name.
@@ -49,7 +49,7 @@ export interface ArgumentColumn {
   argument: string;
 }
 
-export type TableColumn = RegularColumn|ArgumentColumn;
+export type TableColumn = RegularColumn | ArgumentColumn;
 
 export function tableColumnEquals(t1: TableColumn, t2: TableColumn): boolean {
   switch (t1.kind) {
@@ -57,17 +57,21 @@ export function tableColumnEquals(t1: TableColumn, t2: TableColumn): boolean {
       return t2.kind === 'argument' && t1.argument === t2.argument;
     }
     case 'regular': {
-      return t2.kind === 'regular' && t1.table === t2.table &&
-          t1.column === t2.column;
+      return (
+        t2.kind === 'regular' &&
+        t1.table === t2.table &&
+        t1.column === t2.column
+      );
     }
   }
 }
 
 export function toggleEnabled<T>(
-    compare: (fst: T, snd: T) => boolean,
-    arr: T[],
-    column: T,
-    enabled: boolean): void {
+  compare: (fst: T, snd: T) => boolean,
+  arr: T[],
+  column: T,
+  enabled: boolean,
+): void {
   if (enabled && arr.find((value) => compare(column, value)) === undefined) {
     arr.push(column);
   }
@@ -89,9 +93,9 @@ export interface Aggregation {
 
 export function aggregationEquals(agg1: Aggregation, agg2: Aggregation) {
   return new EqualsBuilder(agg1, agg2)
-      .comparePrimitive((agg) => agg.aggregationFunction)
-      .compare(tableColumnEquals, (agg) => agg.column)
-      .equals();
+    .comparePrimitive((agg) => agg.aggregationFunction)
+    .compare(tableColumnEquals, (agg) => agg.column)
+    .equals();
 }
 
 // Used to convert TableColumn to a string in order to store it in a Map, as

@@ -157,6 +157,10 @@ class AURA_EXPORT WindowOcclusionTracker : public ui::LayerAnimationObserver,
  private:
   friend class test::WindowOcclusionTrackerTestApi;
   friend class Env;
+  friend void Window::GetDebugInfo(const aura::Window* active_window,
+                                   const aura::Window* focused_window,
+                                   const aura::Window* capture_window,
+                                   std::ostringstream* out) const;
   friend std::unique_ptr<WindowOcclusionTracker>::deleter_type;
 
   struct RootWindowState {
@@ -207,10 +211,10 @@ class AURA_EXPORT WindowOcclusionTracker : public ui::LayerAnimationObserver,
   // Returns true if |window| can occlude other windows (e.g. because it is
   // not transparent or has opaque regions for occlusion).
   // |window| must be visible.
-  bool VisibleWindowCanOccludeOtherWindows(Window* window) const;
+  bool VisibleWindowCanOccludeOtherWindows(const Window* window) const;
 
   // Returns true if |window| has content.
-  bool WindowHasContent(Window* window) const;
+  bool WindowHasContent(const Window* window) const;
 
   // Removes windows whose bounds and transform are not animated from
   // |animated_windows_|. Marks the root of those windows as dirty.
@@ -371,11 +375,11 @@ class AURA_EXPORT WindowOcclusionTracker : public ui::LayerAnimationObserver,
   // windows. A window is added to this set the first time that occlusion is
   // computed after it was animated. It is removed when the animation ends or is
   // aborted.
-  base::flat_set<Window*> animated_windows_;
+  base::flat_set<raw_ptr<Window, CtnExperimental>> animated_windows_;
 
   // Windows that are excluded from occlustion tracking. See comment on
   // ScopedExclude.
-  base::flat_set<Window*> excluded_windows_;
+  base::flat_set<raw_ptr<Window, CtnExperimental>> excluded_windows_;
 
   // Root Windows of Windows in |tracked_windows_|.
   base::flat_map<Window*, RootWindowState> root_windows_;

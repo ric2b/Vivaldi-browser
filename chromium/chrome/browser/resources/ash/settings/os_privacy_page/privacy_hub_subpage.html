@@ -31,7 +31,8 @@
         </div>
       </template>
       <template is="dom-if" if="[[!isCameraListEmpty_]]" restamp>
-        <template id="cameraList" is="dom-repeat" items="[[camerasConnected_]]">
+        <template id="cameraList" is="dom-repeat"
+            items="[[connectedCameraNames_]]">
           <div class="list-item">
             [[item]]
           </div>
@@ -56,7 +57,7 @@
             checked="{{prefs.ash.user.camera_allowed.value}}"
             disabled="[[shouldDisableCameraToggle_]]"
             aria-label="$i18n{cameraToggleTitle}"
-            aria-description="[[cameraSubLabel_]]">
+            aria-description="[[cameraRowSubtext_]]">
         </cr-toggle>
       </div>
       <paper-tooltip
@@ -99,7 +100,7 @@
         <template
             id="micList"
             is="dom-repeat"
-            items="[[microphonesConnected_]]">
+            items="[[connectedMicrophoneNames_]]">
           <div class="list-item">
             [[item]]
           </div>

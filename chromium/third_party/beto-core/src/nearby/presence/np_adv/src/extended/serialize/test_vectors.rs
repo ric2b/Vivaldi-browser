@@ -16,6 +16,7 @@
 
 extern crate std;
 
+use crate::extended::deserialize::RawV1Salt;
 use crate::extended::serialize::AdvertisementType;
 use crate::{
     credential::{v1::V1, SimpleBroadcastCryptoMaterial},
@@ -30,7 +31,6 @@ use anyhow::anyhow;
 use crypto_provider::{aes::ctr::AES_CTR_NONCE_LEN, aes::AesKey};
 use crypto_provider_default::CryptoProviderImpl;
 use np_hkdf::v1_salt;
-use np_hkdf::v1_salt::V1Salt;
 use rand_ext::rand::{prelude::SliceRandom as _, Rng as _, SeedableRng as _};
 use serde_json::json;
 use std::{fs, io::Read as _, prelude::rust_2021::*, println};
@@ -94,7 +94,7 @@ fn mic_encrypted_test_vectors() -> Result<(), anyhow::Error> {
             let mut section_builder = adv_builder
                 .section_builder(MicEncryptedSectionEncoder::<CryptoProviderImpl>::new(
                     identity_type,
-                    section_salt,
+                    section_salt.into(),
                     &broadcast_cm,
                 ))
                 .unwrap();
@@ -145,11 +145,12 @@ fn gen_mic_encrypted_test_vectors() {
 
         let mut adv_builder = AdvBuilder::new(AdvertisementType::Encrypted);
 
-        let section_salt = v1_salt::V1Salt::<CryptoProviderImpl>::from(rng.gen::<[u8; 16]>());
+        let salt = rng.gen::<[u8; 16]>();
+        let section_salt = v1_salt::V1Salt::<CryptoProviderImpl>::from(salt);
         let mut section_builder = adv_builder
             .section_builder(MicEncryptedSectionEncoder::<CryptoProviderImpl>::new(
                 identity_type,
-                V1Salt::from(*section_salt.as_array_ref()),
+                RawV1Salt(salt),
                 &broadcast_cm,
             ))
             .unwrap();

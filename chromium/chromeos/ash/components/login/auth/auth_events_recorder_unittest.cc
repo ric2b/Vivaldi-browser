@@ -8,6 +8,7 @@
 
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "chromeos/ash/components/cryptohome/auth_factor.h"
 #include "chromeos/ash/components/login/auth/public/cryptohome_key_constants.h"
@@ -56,6 +57,7 @@ cryptohome::AuthFactor MakeLegacyAuthFactor(int legacy_key_index) {
                                 cryptohome::AuthFactorCommonMetadata());
 }
 
+#if !defined(COMPONENT_BUILD)
 std::string GetSessionStateCrashKeyValue() {
   return crash_reporter::GetCrashKeyValue("session-state");
 }
@@ -78,6 +80,7 @@ std::string GetAuthEventsCrashKeyValue() {
   } while (chunk.length() > 0);
   return result;
 }
+#endif  // !defined(COMPONENT_BUILD)
 
 }  // namespace
 
@@ -92,6 +95,8 @@ class AuthEventsRecorderTest : public ::testing::Test {
   ~AuthEventsRecorderTest() override { recorder_.reset(); }
 
  protected:
+  base::test::SingleThreadTaskEnvironment task_environment_{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   std::unique_ptr<session_manager::SessionManager> session_manager_;
   std::unique_ptr<ash::AuthEventsRecorder> recorder_;
 };
@@ -367,6 +372,10 @@ TEST_F(AuthEventsRecorderTest, OnRecoveryDone) {
       "Login.CryptohomeRecoveryDuration.Failure", two_seconds, 1);
 }
 
+// These tests fail on the component build because
+// GetSessionStateCrashKeyValue() doesn't pull from the same crashpad instance
+// that is used by AuthEventsRecorder.
+#if !defined(COMPONENT_BUILD)
 TEST_F(AuthEventsRecorderTest, SessionStateCrashKey) {
   session_manager_->SetSessionState(
       session_manager::SessionState::LOGIN_PRIMARY);
@@ -458,5 +467,38 @@ TEST_F(AuthEventsRecorderTest, AuthEventsCrashKeyOnFailureUnlock) {
             "auth_surface_change_Lock,update_lock_screen_view,auth_submit,"
             "auth_complete_failure,");
 }
+
+TEST_F(AuthEventsRecorderTest, PostFactorsAdjustmentTimings) {
+  base::HistogramTester histogram_tester;
+
+  recorder_->StartPostLoginFactorAdjustments();
+  task_environment_.AdvanceClock(base::Milliseconds(10));
+  recorder_->OnEarlyPrefsRead();
+  task_environment_.AdvanceClock(base::Milliseconds(20));
+  recorder_->OnEarlyPrefsParsed();
+  // This time does not have individual bucket, but it falls
+  // into the total bucket.
+  task_environment_.AdvanceClock(base::Milliseconds(40));
+  recorder_->OnFactorUpdateStarted();
+  task_environment_.AdvanceClock(base::Milliseconds(80));
+  recorder_->OnMigrationsCompleted();
+  task_environment_.AdvanceClock(base::Milliseconds(160));
+  recorder_->OnPoliciesApplied();
+  recorder_->FinishPostLoginFactorAdjustments();
+
+  histogram_tester.ExpectTimeBucketCount(
+      "Ash.OSAuth.Login.Times.FactorConfigTotal",
+      base::Milliseconds(10 + 20 + 40 + 80 + 160), 1);
+  histogram_tester.ExpectTimeBucketCount(
+      "Ash.OSAuth.Login.Times.EarlyPrefsRead", base::Milliseconds(10), 1);
+  histogram_tester.ExpectTimeBucketCount(
+      "Ash.OSAuth.Login.Times.EarlyPrefsParse", base::Milliseconds(20), 1);
+  histogram_tester.ExpectTimeBucketCount(
+      "Ash.OSAuth.Login.Times.FactorMigrations", base::Milliseconds(80), 1);
+  histogram_tester.ExpectTimeBucketCount(
+      "Ash.OSAuth.Login.Times.PolicyEnforcement", base::Milliseconds(160), 1);
+}
+
+#endif  // !defined(COMPONENT_BUILD)
 
 }  // namespace ash

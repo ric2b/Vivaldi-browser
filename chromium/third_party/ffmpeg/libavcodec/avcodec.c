@@ -377,7 +377,7 @@ end:
 
     return ret;
 free_and_end:
-    avcodec_close(avctx);
+    ff_codec_close(avctx);
     goto end;
 }
 
@@ -432,12 +432,12 @@ void avsubtitle_free(AVSubtitle *sub)
     memset(sub, 0, sizeof(*sub));
 }
 
-av_cold int avcodec_close(AVCodecContext *avctx)
+av_cold void ff_codec_close(AVCodecContext *avctx)
 {
     int i;
 
     if (!avctx)
-        return 0;
+        return;
 
     if (avcodec_is_open(avctx)) {
         AVCodecInternal *avci = avctx->internal;
@@ -497,9 +497,15 @@ av_cold int avcodec_close(AVCodecContext *avctx)
 
     avctx->codec = NULL;
     avctx->active_thread_type = 0;
+}
 
+#if FF_API_AVCODEC_CLOSE
+int avcodec_close(AVCodecContext *avctx)
+{
+    ff_codec_close(avctx);
     return 0;
 }
+#endif
 
 static const char *unknown_if_null(const char *str)
 {
@@ -619,6 +625,7 @@ void avcodec_string(char *buf, int buf_size, AVCodecContext *enc, int encode)
                        enc->width, enc->height);
 
             if (av_log_get_level() >= AV_LOG_VERBOSE &&
+                enc->coded_width && enc->coded_height &&
                 (enc->width != enc->coded_width ||
                  enc->height != enc->coded_height))
                 av_bprintf(&bprint, " (%dx%d)",
@@ -656,12 +663,7 @@ void avcodec_string(char *buf, int buf_size, AVCodecContext *enc, int encode)
         if (enc->sample_rate) {
             av_bprintf(&bprint, "%d Hz, ", enc->sample_rate);
         }
-        {
-            char buf[512];
-            int ret = av_channel_layout_describe(&enc->ch_layout, buf, sizeof(buf));
-            if (ret >= 0)
-                av_bprintf(&bprint, "%s", buf);
-        }
+        av_channel_layout_describe_bprint(&enc->ch_layout, &bprint);
         if (enc->sample_fmt != AV_SAMPLE_FMT_NONE &&
             (str = av_get_sample_fmt_name(enc->sample_fmt))) {
             av_bprintf(&bprint, ", %s", str);

@@ -42,6 +42,7 @@
 #include "ash/system/tray/tray_constants.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
+#include "ash/test/ash_test_util.h"
 #include "ash/test/view_drawn_waiter.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_item.h"
@@ -88,6 +89,7 @@ namespace {
 using ::base::test::RunUntil;
 using ::testing::_;
 using ::testing::ElementsAre;
+using ::testing::Eq;
 using ::testing::IsTrue;
 using ::testing::Property;
 
@@ -106,45 +108,6 @@ HoldingSpaceItem::InProgressCommand CreateInProgressCommand(
 // A wrapper around `views::View::GetVisible()` with a null check for `view`.
 bool IsViewVisible(const views::View* view) {
   return view && view->GetVisible();
-}
-
-// Returns a pointer to the `ui::Layer` in the layer tree associated with the
-// specified `layer` which has the specified `name`. In the event that no such
-// layer is found, `nullptr` is returned.
-ui::Layer* FindLayerWithName(ui::Layer* layer, const char* name) {
-  if (!layer)
-    return nullptr;
-
-  if (strcmp(layer->name().c_str(), name) == 0)
-    return layer;
-
-  for (ui::Layer* child : layer->children()) {
-    layer = FindLayerWithName(child, name);
-    if (layer)
-      return layer;
-  }
-
-  return nullptr;
-}
-
-// Returns a pointer to the `ui::Layer` in the layer tree associated with the
-// specified `view` which has the specified `name`. In the event that no such
-// layer is found, `nullptr` is returned.
-ui::Layer* FindLayerWithName(views::View* view, const char* name) {
-  if (!view)
-    return nullptr;
-
-  ui::Layer* layer = FindLayerWithName(view->layer(), name);
-  if (layer)
-    return layer;
-
-  for (views::View* child : view->children()) {
-    layer = FindLayerWithName(child, name);
-    if (layer)
-      return layer;
-  }
-
-  return nullptr;
 }
 
 void Click(const views::View* view, int flags = ui::EF_NONE) {
@@ -1334,8 +1297,11 @@ TEST_F(HoldingSpaceTrayTest, EnterKeyOpensSelectedFiles) {
   EXPECT_FALSE(item_views[2]->selected());
 
   // Press the enter key. We expect the client to open the selected item.
-  EXPECT_CALL(*client(), OpenItems(testing::ElementsAre(item_views[0]->item()),
-                                   testing::_));
+  EXPECT_CALL(
+      *client(),
+      OpenItems(ElementsAre(item_views[0]->item()),
+                Eq(holding_space_metrics::EventSource::kHoldingSpaceBubble),
+                /*callback=*/_));
   PressAndReleaseKey(ui::KeyboardCode::VKEY_RETURN);
   testing::Mock::VerifyAndClearExpectations(client());
 
@@ -1345,9 +1311,11 @@ TEST_F(HoldingSpaceTrayTest, EnterKeyOpensSelectedFiles) {
   EXPECT_TRUE(item_views[1]->selected());
 
   // Press the enter key. We expect the client to open the selected items.
-  EXPECT_CALL(*client(), OpenItems(testing::ElementsAre(item_views[0]->item(),
-                                                        item_views[1]->item()),
-                                   testing::_));
+  EXPECT_CALL(
+      *client(),
+      OpenItems(ElementsAre(item_views[0]->item(), item_views[1]->item()),
+                Eq(holding_space_metrics::EventSource::kHoldingSpaceBubble),
+                /*callback=*/_));
   PressAndReleaseKey(ui::KeyboardCode::VKEY_RETURN);
   testing::Mock::VerifyAndClearExpectations(client());
 
@@ -1356,8 +1324,11 @@ TEST_F(HoldingSpaceTrayTest, EnterKeyOpensSelectedFiles) {
 
   // Press the enter key. The client should open only the focused item since
   // it was *not* selected prior to pressing the enter key.
-  EXPECT_CALL(*client(), OpenItems(testing::ElementsAre(item_views[2]->item()),
-                                   testing::_));
+  EXPECT_CALL(
+      *client(),
+      OpenItems(ElementsAre(item_views[2]->item()),
+                Eq(holding_space_metrics::EventSource::kHoldingSpaceItem),
+                /*callback=*/_));
   PressAndReleaseKey(ui::KeyboardCode::VKEY_RETURN);
   EXPECT_FALSE(item_views[0]->selected());
   EXPECT_FALSE(item_views[1]->selected());
@@ -1621,9 +1592,12 @@ TEST_F(HoldingSpaceTrayTest, MultiselectInTouchMode) {
   EXPECT_CALL(*client(), OpenItems)
       .WillOnce(
           testing::Invoke([&](const std::vector<const HoldingSpaceItem*>& items,
+                              holding_space_metrics::EventSource event_source,
                               HoldingSpaceClient::SuccessCallback callback) {
             ASSERT_EQ(items.size(), 1u);
             EXPECT_EQ(items[0], item_views[2]->item());
+            EXPECT_EQ(event_source,
+                      holding_space_metrics::EventSource::kHoldingSpaceItem);
           }));
   GestureTap(item_views[2]);
   testing::Mock::VerifyAndClearExpectations(client());
@@ -1781,19 +1755,29 @@ TEST_F(HoldingSpaceTrayTest, SelectionWithPrimaryAndSecondaryActions) {
         {CreateInProgressCommand(
              HoldingSpaceCommandId::kCancelItem,
              IDS_ASH_HOLDING_SPACE_CONTEXT_MENU_CANCEL,
-             base::BindLambdaForTesting([&](const HoldingSpaceItem* item,
-                                            HoldingSpaceCommandId command_id) {
-               DCHECK_EQ(command_id, HoldingSpaceCommandId::kCancelItem);
-               cancelled_items.push_back(item);
-             })),
+             base::BindLambdaForTesting(
+                 [&](const HoldingSpaceItem* item,
+                     HoldingSpaceCommandId command_id,
+                     holding_space_metrics::EventSource event_source) {
+                   EXPECT_EQ(command_id, HoldingSpaceCommandId::kCancelItem);
+                   EXPECT_EQ(
+                       event_source,
+                       holding_space_metrics::EventSource::kHoldingSpaceItem);
+                   cancelled_items.push_back(item);
+                 })),
          CreateInProgressCommand(
              HoldingSpaceCommandId::kPauseItem,
              IDS_ASH_HOLDING_SPACE_CONTEXT_MENU_PAUSE,
-             base::BindLambdaForTesting([&](const HoldingSpaceItem* item,
-                                            HoldingSpaceCommandId command_id) {
-               DCHECK_EQ(command_id, HoldingSpaceCommandId::kPauseItem);
-               paused_items.push_back(item);
-             }))}));
+             base::BindLambdaForTesting(
+                 [&](const HoldingSpaceItem* item,
+                     HoldingSpaceCommandId command_id,
+                     holding_space_metrics::EventSource event_source) {
+                   EXPECT_EQ(command_id, HoldingSpaceCommandId::kPauseItem);
+                   EXPECT_EQ(
+                       event_source,
+                       holding_space_metrics::EventSource::kHoldingSpaceItem);
+                   paused_items.push_back(item);
+                 }))}));
   }
 
   // Show UI.
@@ -1923,7 +1907,11 @@ TEST_F(HoldingSpaceTrayTest, OpenItemsViaDoubleClickWithEventModifiers) {
 
   // Double click an item with the control key down. Expect the clicked holding
   // space item to be opened.
-  EXPECT_CALL(*client(), OpenItems(ElementsAre(item_views[0]->item()), _));
+  EXPECT_CALL(
+      *client(),
+      OpenItems(ElementsAre(item_views[0]->item()),
+                Eq(holding_space_metrics::EventSource::kHoldingSpaceItem),
+                /*callback=*/_));
   DoubleClick(item_views[0], ui::EF_CONTROL_DOWN);
   testing::Mock::VerifyAndClearExpectations(client());
 
@@ -1933,7 +1921,11 @@ TEST_F(HoldingSpaceTrayTest, OpenItemsViaDoubleClickWithEventModifiers) {
 
   // Double click an item with the shift key down. Expect the clicked holding
   // space item to be opened.
-  EXPECT_CALL(*client(), OpenItems(ElementsAre(item_views[0]->item()), _));
+  EXPECT_CALL(
+      *client(),
+      OpenItems(ElementsAre(item_views[0]->item()),
+                Eq(holding_space_metrics::EventSource::kHoldingSpaceItem),
+                /*callback=*/_));
   DoubleClick(item_views[0], ui::EF_SHIFT_DOWN);
   testing::Mock::VerifyAndClearExpectations(client());
 
@@ -1943,7 +1935,11 @@ TEST_F(HoldingSpaceTrayTest, OpenItemsViaDoubleClickWithEventModifiers) {
 
   // Click a holding space item. Then double click the same item with the
   // control key down. Expect the clicked holding space item to be opened.
-  EXPECT_CALL(*client(), OpenItems(ElementsAre(item_views[0]->item()), _));
+  EXPECT_CALL(
+      *client(),
+      OpenItems(ElementsAre(item_views[0]->item()),
+                Eq(holding_space_metrics::EventSource::kHoldingSpaceItem),
+                /*callback=*/_));
   Click(item_views[0]);
   DoubleClick(item_views[0], ui::EF_CONTROL_DOWN);
   testing::Mock::VerifyAndClearExpectations(client());
@@ -1954,7 +1950,11 @@ TEST_F(HoldingSpaceTrayTest, OpenItemsViaDoubleClickWithEventModifiers) {
 
   // Click a holding space item. Then double click the same item with the
   // shift key down. Expect the clicked holding space item to be opened.
-  EXPECT_CALL(*client(), OpenItems(ElementsAre(item_views[0]->item()), _));
+  EXPECT_CALL(
+      *client(),
+      OpenItems(ElementsAre(item_views[0]->item()),
+                Eq(holding_space_metrics::EventSource::kHoldingSpaceItem),
+                /*callback=*/_));
   Click(item_views[0]);
   DoubleClick(item_views[0], ui::EF_SHIFT_DOWN);
   testing::Mock::VerifyAndClearExpectations(client());
@@ -1967,7 +1967,9 @@ TEST_F(HoldingSpaceTrayTest, OpenItemsViaDoubleClickWithEventModifiers) {
   // control key down. Expect both holding space items to be opened.
   EXPECT_CALL(
       *client(),
-      OpenItems(ElementsAre(item_views[0]->item(), item_views[1]->item()), _));
+      OpenItems(ElementsAre(item_views[0]->item(), item_views[1]->item()),
+                Eq(holding_space_metrics::EventSource::kHoldingSpaceItem),
+                /*callback=*/_));
   Click(item_views[0]);
   DoubleClick(item_views[1], ui::EF_CONTROL_DOWN);
   testing::Mock::VerifyAndClearExpectations(client());
@@ -1980,7 +1982,9 @@ TEST_F(HoldingSpaceTrayTest, OpenItemsViaDoubleClickWithEventModifiers) {
   // shift key down. Expect both holding space items to be opened.
   EXPECT_CALL(
       *client(),
-      OpenItems(ElementsAre(item_views[0]->item(), item_views[1]->item()), _));
+      OpenItems(ElementsAre(item_views[0]->item(), item_views[1]->item()),
+                Eq(holding_space_metrics::EventSource::kHoldingSpaceItem),
+                /*callback=*/_));
   Click(item_views[0]);
   DoubleClick(item_views[1], ui::EF_SHIFT_DOWN);
   testing::Mock::VerifyAndClearExpectations(client());

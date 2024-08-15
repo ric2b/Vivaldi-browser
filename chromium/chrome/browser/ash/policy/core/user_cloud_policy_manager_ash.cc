@@ -25,8 +25,8 @@
 #include "chrome/browser/ash/login/helper.h"
 #include "chrome/browser/ash/login/session/user_session_manager.h"
 #include "chrome/browser/ash/login/users/affiliation.h"
-#include "chrome/browser/ash/login/users/chrome_user_manager_impl.h"
 #include "chrome/browser/ash/policy/core/policy_oauth2_token_fetcher.h"
+#include "chrome/browser/ash/policy/local_user_files/local_files_cleanup.h"
 #include "chrome/browser/ash/policy/login/wildcard_login_checker.h"
 #include "chrome/browser/ash/policy/remote_commands/user_commands_factory_ash.h"
 #include "chrome/browser/ash/policy/reporting/arc_app_install_event_log_uploader.h"
@@ -94,7 +94,7 @@ void RegistrationResultUMA(RegistrationResult registration_result) {
 bool IsChildUser(const AccountId& account_id) {
   const user_manager::User* const user =
       user_manager::UserManager::Get()->FindUser(account_id);
-  return user && user->GetType() == user_manager::USER_TYPE_CHILD;
+  return user && user->GetType() == user_manager::UserType::kChild;
 }
 
 // This class is used to subscribe for notifications that the current profile is
@@ -249,6 +249,8 @@ void UserCloudPolicyManagerAsh::ConnectManagementService(
 
   app_install_event_log_uploader_ =
       std::make_unique<ArcAppInstallEventLogUploader>(client(), profile_);
+  local_files_cleanup_ =
+      std::make_unique<local_user_files::LocalFilesCleanup>();
 }
 
 void UserCloudPolicyManagerAsh::OnAccessTokenAvailable(
@@ -322,6 +324,7 @@ UserCloudPolicyManagerAsh::GetAppInstallEventLogUploader() {
 
 void UserCloudPolicyManagerAsh::Shutdown() {
   observed_profile_.Reset();
+  local_files_cleanup_.reset();
   app_install_event_log_uploader_.reset();
   report_scheduler_.reset();
   if (client())
@@ -453,7 +456,7 @@ void UserCloudPolicyManagerAsh::OnClientError(
     RegistrationResultUMA(RegistrationResult::kReregistrationUnsuccessful);
     LOG(ERROR) << "Re-registration failed, requiring the user to perform an "
                   "online sign-in.";
-    ash::ChromeUserManager::Get()->SaveForceOnlineSignin(account_id_, true);
+    user_manager::UserManager::Get()->SaveForceOnlineSignin(account_id_, true);
   }
 }
 
@@ -494,7 +497,7 @@ void UserCloudPolicyManagerAsh::OnStoreLoaded(
     enforcement_type_ = PolicyEnforcement::kPolicyOptional;
 
     DCHECK(policy_data->has_username());
-    ash::ChromeUserManager::Get()->SetUserAffiliation(
+    user_manager::UserManager::Get()->SetUserAffiliation(
         account_id_,
         base::flat_set<std::string>(policy_data->user_affiliation_ids().begin(),
                                     policy_data->user_affiliation_ids().end()));
@@ -502,7 +505,7 @@ void UserCloudPolicyManagerAsh::OnStoreLoaded(
 }
 
 void UserCloudPolicyManagerAsh::SetPolicyRequired(bool policy_required) {
-  auto* user_manager = ash::ChromeUserManager::Get();
+  auto* user_manager = user_manager::UserManager::Get();
   user_manager::KnownUser known_user(local_state_);
   known_user.SetProfileRequiresPolicy(
       account_id_,

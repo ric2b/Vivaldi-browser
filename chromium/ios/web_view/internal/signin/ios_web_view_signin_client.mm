@@ -40,6 +40,10 @@ network::mojom::CookieManager* IOSWebViewSigninClient::GetCookieManager() {
   return browser_state_->GetCookieManager();
 }
 
+network::mojom::NetworkContext* IOSWebViewSigninClient::GetNetworkContext() {
+  return browser_state_->GetNetworkContext();
+}
+
 void IOSWebViewSigninClient::DoFinalInit() {}
 
 bool IOSWebViewSigninClient::AreSigninCookiesAllowed() {
@@ -88,7 +92,5 @@ version_info::Channel IOSWebViewSigninClient::GetClientChannel() {
   return version_info::Channel::STABLE;
 }
 
-void IOSWebViewSigninClient::OnPrimaryAccountChangedWithEventSource(
-    signin::PrimaryAccountChangeEvent event_details,
-    absl::variant<signin_metrics::AccessPoint, signin_metrics::ProfileSignout>
-        event_source) {}
+void IOSWebViewSigninClient::OnPrimaryAccountChanged(
+    signin::PrimaryAccountChangeEvent event_details) {}

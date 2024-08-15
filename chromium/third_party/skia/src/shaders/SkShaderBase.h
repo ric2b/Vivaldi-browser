@@ -343,7 +343,7 @@ public:
      *  Note: if this returns true, the returned color will always be opaque, as only the RGB
      *  components are used to compute luminance.
      */
-    bool asLuminanceColor(SkColor*) const;
+    bool asLuminanceColor(SkColor4f*) const;
 
     /**
      * If this returns false, then we draw nothing (do not fall back to shader context). This should
@@ -357,7 +357,7 @@ public:
      * in r,g MatrixRec::apply() must be called (unless the shader doesn't require it's input
      * coords). The default impl creates shadercontext and calls that (not very efficient).
      */
-    virtual bool appendStages(const SkStageRec&, const SkShaders::MatrixRec&) const;
+    virtual bool appendStages(const SkStageRec&, const SkShaders::MatrixRec&) const = 0;
 
     virtual SkImage* onIsAImage(SkMatrix*, SkTileMode[2]) const {
         return nullptr;
@@ -403,7 +403,7 @@ protected:
     }
 #endif
 
-    virtual bool onAsLuminanceColor(SkColor*) const {
+    virtual bool onAsLuminanceColor(SkColor4f*) const {
         return false;
     }
 

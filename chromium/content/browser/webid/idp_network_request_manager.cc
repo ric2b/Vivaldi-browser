@@ -315,16 +315,8 @@ void ParseIdentityProviderMetadata(const base::Value::Dict& idp_metadata_value,
                                    IdentityProviderMetadata& idp_metadata) {
   idp_metadata.brand_background_color =
       ParseCssColor(idp_metadata_value.FindString(kIdpBrandingBackgroundColor));
-  if (idp_metadata.brand_background_color) {
-    idp_metadata.brand_text_color = ParseCssColor(
-        idp_metadata_value.FindString(kIdpBrandingForegroundColor));
-    if (idp_metadata.brand_text_color) {
-      float text_contrast_ratio = color_utils::GetContrastRatio(
-          *idp_metadata.brand_background_color, *idp_metadata.brand_text_color);
-      if (text_contrast_ratio < color_utils::kMinimumReadableContrastRatio)
-        idp_metadata.brand_text_color = std::nullopt;
-    }
-  }
+  idp_metadata.brand_text_color =
+      ParseCssColor(idp_metadata_value.FindString(kIdpBrandingForegroundColor));
 
   const base::Value::List* icons_value =
       idp_metadata_value.FindList(kIdpBrandingIcons);
@@ -543,7 +535,7 @@ void OnConfigParsed(const GURL& provider,
   }
   idp_metadata.idp_login_url =
       ExtractEndpoint(provider, response, kLoginUrlKey);
-  if (IsFedCmAddAccountEnabled()) {
+  if (IsFedCmUseOtherAccountEnabled(rp_mode == blink::mojom::RpMode::kButton)) {
     const base::Value::Dict* modes_dict = response.FindDict(kModesKey);
     const base::Value::Dict* selected_mode_dict = nullptr;
     if (modes_dict) {
@@ -721,6 +713,9 @@ void OnTokenRequestParsed(
       if (fetch_status.response_code == net::HTTP_INTERNAL_SERVER_ERROR) {
         token_result.error = TokenError{kServerError, GURL()};
         type = ErrorDialogType::kServerErrorWithoutUrl;
+      } else if (fetch_status.response_code == net::HTTP_SERVICE_UNAVAILABLE) {
+        token_result.error = TokenError{kTemporarilyUnavailable, GURL()};
+        type = ErrorDialogType::kTemporarilyUnavailableWithoutUrl;
       } else {
         token_result.error = TokenError{kGenericEmpty, GURL()};
         type = ErrorDialogType::kGenericEmptyWithoutUrl;
@@ -1167,14 +1162,22 @@ IdpNetworkRequestManager::CreateCredentialedResourceRequest(
   auto resource_request = std::make_unique<network::ResourceRequest>();
   auto target_origin = url::Origin::Create(target_url);
   auto site_for_cookies = net::SiteForCookies::FromOrigin(target_origin);
-  // We set the initiator to nullopt to denote browser-initiated so that this
-  // request is considered first-party. We want to send first-party cookies
-  // because this is not a real third-party request as it is mediated by the
-  // browser, and third-party cookies will be going away with 3pc deprecation,
-  // but we still need to send cookies in these requests.
-  // We use nullopt instead of target_origin because we want to send a
-  // `Sec-Fetch-Site: none` header instead of `Sec-Fetch-Site: same-origin`.
-  resource_request->request_initiator = std::nullopt;
+
+  if (IsFedCmSameSiteNoneEnabled()) {
+    // Setting the initiator to relying_party_origin_ ensures that we don't send
+    // SameSite=Strict cookies.
+    resource_request->request_initiator = relying_party_origin_;
+  } else {
+    // We set the initiator to nullopt to denote browser-initiated so that this
+    // request is considered first-party. We want to send first-party cookies
+    // because this is not a real third-party request as it is mediated by the
+    // browser, and third-party cookies will be going away with 3pc deprecation,
+    // but we still need to send cookies in these requests.
+    // We use nullopt instead of target_origin because we want to send a
+    // `Sec-Fetch-Site: none` header instead of `Sec-Fetch-Site: same-origin`.
+    resource_request->request_initiator = std::nullopt;
+  }
+
   resource_request->destination =
       network::mojom::RequestDestination::kWebIdentity;
   resource_request->url = target_url;

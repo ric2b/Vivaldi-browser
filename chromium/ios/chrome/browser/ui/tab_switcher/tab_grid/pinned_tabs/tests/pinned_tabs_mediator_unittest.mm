@@ -6,6 +6,7 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/pinned_tabs/pinned_tabs_mediator.h"
 
+#import "base/memory/raw_ptr.h"
 #import "base/test/scoped_feature_list.h"
 #import "base/test/task_environment.h"
 #import "ios/chrome/browser/drag_and_drop/model/drag_item_util.h"
@@ -18,7 +19,7 @@
 #import "ios/chrome/browser/tabs/model/features.h"
 #import "ios/chrome/browser/ui/tab_switcher/test/fake_drag_session.h"
 #import "ios/chrome/browser/ui/tab_switcher/test/fake_drop_session.h"
-#import "ios/chrome/browser/ui/tab_switcher/test/fake_tab_collection_consumer.h"
+#import "ios/chrome/browser/ui/tab_switcher/test/fake_pinned_tab_collection_consumer.h"
 #import "ios/web/public/test/fakes/fake_navigation_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
 #import "testing/platform_test.h"
@@ -59,7 +60,7 @@ class PinnedTabsMediatorTest : public PlatformTest {
 
     // The Pinned Tabs feature is not available on iPad.
     if (ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET) {
-      consumer_ = [[FakeTabCollectionConsumer alloc] init];
+      consumer_ = [[FakePinnedTabCollectionConsumer alloc] init];
       mediator_ = [[PinnedTabsMediator alloc] initWithConsumer:consumer_];
       mediator_.browser = regular_browser_.get();
     }
@@ -85,13 +86,13 @@ class PinnedTabsMediatorTest : public PlatformTest {
  protected:
   std::unique_ptr<TestBrowser> regular_browser_;
   std::unique_ptr<Browser> incognito_browser_;
-  FakeTabCollectionConsumer* consumer_;
+  FakePinnedTabCollectionConsumer* consumer_;
   PinnedTabsMediator* mediator_;
 
  private:
   base::test::TaskEnvironment task_environment_;
   base::test::ScopedFeatureList feature_list_;
-  BrowserList* browser_list_;
+  raw_ptr<BrowserList> browser_list_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
 };
 
@@ -106,31 +107,32 @@ TEST_F(PinnedTabsMediatorTest, ConsumerInsertItem) {
   std::unique_ptr<web::WebState> web_state1 =
       CreateFakeWebStateWithURL(GURLWithIndex(1));
   regular_browser_->GetWebStateList()->InsertWebState(
-      0, std::move(web_state1), WebStateList::INSERT_PINNED, WebStateOpener());
+      std::move(web_state1),
+      WebStateList::InsertionParams::Automatic().Pinned());
   std::unique_ptr<web::WebState> web_state2 =
       CreateFakeWebStateWithURL(GURLWithIndex(2));
   regular_browser_->GetWebStateList()->InsertWebState(
-      0, std::move(web_state2), WebStateList::INSERT_PINNED, WebStateOpener());
+      std::move(web_state2),
+      WebStateList::InsertionParams::Automatic().Pinned());
   EXPECT_EQ(2UL, consumer_.items.size());
 
-  // Inserts one regular and one incoginto tab.
+  // Inserts one regular and one incognito tab.
   std::unique_ptr<web::WebState> web_state3 =
       CreateFakeWebStateWithURL(GURLWithIndex(3));
   regular_browser_->GetWebStateList()->InsertWebState(
-      0, std::move(web_state3), WebStateList::INSERT_FORCE_INDEX,
-      WebStateOpener());
+      std::move(web_state3), WebStateList::InsertionParams::AtIndex(0));
   std::unique_ptr<web::WebState> web_state4 =
       CreateFakeWebStateWithURL(GURLWithIndex(4));
   incognito_browser_->GetWebStateList()->InsertWebState(
-      0, std::move(web_state4), WebStateList::INSERT_FORCE_INDEX,
-      WebStateOpener());
+      std::move(web_state4), WebStateList::InsertionParams::AtIndex(0));
   EXPECT_EQ(2UL, consumer_.items.size());
 
   // Inserts a third pinned tab.
   std::unique_ptr<web::WebState> web_state5 =
       CreateFakeWebStateWithURL(GURLWithIndex(5));
   regular_browser_->GetWebStateList()->InsertWebState(
-      0, std::move(web_state5), WebStateList::INSERT_PINNED, WebStateOpener());
+      std::move(web_state5),
+      WebStateList::InsertionParams::Automatic().Pinned());
   EXPECT_EQ(3UL, consumer_.items.size());
 }
 
@@ -145,8 +147,7 @@ TEST_F(PinnedTabsMediatorTest, DropOperation) {
   // Tests a regular tab.
   auto regular_web_state = CreateFakeWebStateWithURL(GURLWithIndex(1));
   regular_browser_->GetWebStateList()->InsertWebState(
-      0, std::move(regular_web_state), WebStateList::INSERT_FORCE_INDEX,
-      WebStateOpener());
+      std::move(regular_web_state), WebStateList::InsertionParams::AtIndex(0));
 
   FakeDropSession* regular_drop_session = FakeDropSessionWithWebState(
       regular_browser_->GetWebStateList()->GetWebStateAt(0));
@@ -156,8 +157,8 @@ TEST_F(PinnedTabsMediatorTest, DropOperation) {
   // Tests an incognito tab.
   auto incognito_web_state = CreateFakeWebStateWithURL(GURLWithIndex(2));
   incognito_browser_->GetWebStateList()->InsertWebState(
-      0, std::move(incognito_web_state), WebStateList::INSERT_FORCE_INDEX,
-      WebStateOpener());
+      std::move(incognito_web_state),
+      WebStateList::InsertionParams::AtIndex(0));
   FakeDropSession* incognito_drop_session = FakeDropSessionWithWebState(
       incognito_browser_->GetWebStateList()->GetWebStateAt(0));
   EXPECT_EQ([mediator_ dropOperationForDropSession:incognito_drop_session],
@@ -175,13 +176,14 @@ TEST_F(PinnedTabsMediatorTest, DragAndDropReorder) {
       CreateFakeWebStateWithURL(GURLWithIndex(1));
   web::WebState* web_state_to_move = web_state1.get();
   regular_browser_->GetWebStateList()->InsertWebState(
-      0, std::move(web_state1), WebStateList::INSERT_PINNED, WebStateOpener());
+      std::move(web_state1),
+      WebStateList::InsertionParams::Automatic().Pinned());
   regular_browser_->GetWebStateList()->InsertWebState(
-      1, CreateFakeWebStateWithURL(GURLWithIndex(2)),
-      WebStateList::INSERT_PINNED, WebStateOpener());
+      CreateFakeWebStateWithURL(GURLWithIndex(2)),
+      WebStateList::InsertionParams::Automatic().Pinned());
   regular_browser_->GetWebStateList()->InsertWebState(
-      2, CreateFakeWebStateWithURL(GURLWithIndex(3)),
-      WebStateList::INSERT_PINNED, WebStateOpener());
+      CreateFakeWebStateWithURL(GURLWithIndex(3)),
+      WebStateList::InsertionParams::Automatic().Pinned());
 
   ASSERT_EQ(web_state_to_move,
             regular_browser_->GetWebStateList()->GetWebStateAt(0));

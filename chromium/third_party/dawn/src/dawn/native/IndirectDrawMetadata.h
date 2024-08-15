@@ -39,6 +39,7 @@
 #include "dawn/native/Buffer.h"
 #include "dawn/native/CommandBufferStateTracker.h"
 #include "dawn/native/Commands.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 
 namespace dawn::native {
 
@@ -58,10 +59,12 @@ class IndirectDrawMetadata : public NonCopyable {
     struct IndirectDraw {
         uint64_t inputBufferOffset;
         uint64_t numIndexBufferElements;
+        uint64_t indexBufferOffsetInElements;
         // This is a pointer to the command that should be populated with the validated
         // indirect scratch buffer. It is only valid up until the encoded command buffer
         // is submitted.
-        DrawIndirectCmd* cmd;
+        // TODO(https://crbug.com/dawn/2349): Investigate DanglingUntriaged in dawn/native.
+        raw_ptr<DrawIndirectCmd, DanglingUntriaged> cmd;
     };
 
     struct IndirectValidationBatch {
@@ -92,7 +95,10 @@ class IndirectDrawMetadata : public NonCopyable {
 
         const std::vector<IndirectValidationBatch>& GetBatches() const;
 
+        BufferBase* GetIndirectBuffer() const;
+
       private:
+        friend class IndirectDrawMetadata;
         Ref<BufferBase> mIndirectBuffer;
 
         // A list of information about validation batches that will need to be executed for the
@@ -111,7 +117,7 @@ class IndirectDrawMetadata : public NonCopyable {
         Indexed,
     };
     struct IndexedIndirectConfig {
-        BufferBase* inputIndirectBuffer;
+        uintptr_t inputIndirectBufferPtr;
         bool duplicateBaseVertexInstance;
         DrawType drawType;
 
@@ -133,6 +139,7 @@ class IndirectDrawMetadata : public NonCopyable {
     void AddBundle(RenderBundleBase* bundle);
     void AddIndexedIndirectDraw(wgpu::IndexFormat indexFormat,
                                 uint64_t indexBufferSize,
+                                uint64_t indexBufferOffset,
                                 BufferBase* indirectBuffer,
                                 uint64_t indirectOffset,
                                 bool duplicateBaseVertexInstance,

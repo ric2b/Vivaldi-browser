@@ -357,6 +357,9 @@ class CORE_EXPORT CSSPrimitiveValue : public CSSValue {
   double ComputeSeconds() const;
   double ComputeDotsPerPixel() const;
 
+  double ComputeDegrees(const CSSLengthResolver&) const;
+  double ComputeSeconds(const CSSLengthResolver&) const;
+
   // Computes a length in pixels, resolving relative lengths
   template <typename T>
   T ComputeLength(const CSSLengthResolver&) const;
@@ -390,6 +393,7 @@ class CORE_EXPORT CSSPrimitiveValue : public CSSValue {
 
   int ComputeInteger(const CSSLengthResolver&) const;
   double ComputeNumber(const CSSLengthResolver&) const;
+  double ComputePercentage(const CSSLengthResolver&) const;
 
   static const char* UnitTypeToString(UnitType);
   static UnitType StringToUnitType(StringView string) {
@@ -425,7 +429,7 @@ class CORE_EXPORT CSSPrimitiveValue : public CSSValue {
   bool IsResolvableLength() const;
 
  private:
-  bool InvolvesPercentage() const;
+  bool InvolvesLayout() const;
 };
 
 using CSSLengthArray = CSSPrimitiveValue::CSSLengthArray;

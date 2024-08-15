@@ -20,9 +20,9 @@ class BlurredBackgroundShield;
 // inside as well, and its text and background colors will be different based on
 // the type of the button.
 class ASH_EXPORT PillButton : public views::LabelButton {
- public:
-  METADATA_HEADER(PillButton);
+  METADATA_HEADER(PillButton, views::LabelButton)
 
+ public:
   using ColorVariant = absl::variant<SkColor, ui::ColorId>;
 
   static constexpr int kPillButtonHorizontalSpacing = 16;
@@ -208,6 +208,8 @@ class ASH_EXPORT PillButton : public views::LabelButton {
   // background which is performance consuming so only use it as needed.
   void SetEnableBackgroundBlur(bool enable);
 
+  void SetTextWithStringId(int message_id);
+
  private:
   // Initializes the button layout, focus ring and background according to the
   // button type.
@@ -251,6 +253,7 @@ VIEW_BUILDER_PROPERTY(const SkColor, IconColor)
 VIEW_BUILDER_PROPERTY(ui::ColorId, IconColorId)
 VIEW_BUILDER_PROPERTY(PillButton::Type, PillButtonType)
 VIEW_BUILDER_PROPERTY(bool, EnableBackgroundBlur)
+VIEW_BUILDER_PROPERTY(int, TextWithStringId)
 END_VIEW_BUILDER
 
 }  // namespace ash

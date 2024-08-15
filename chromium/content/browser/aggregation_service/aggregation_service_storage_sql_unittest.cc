@@ -93,6 +93,13 @@ class AggregationServiceStorageSqlTest : public testing::Test {
 
   void CloseDatabase() { storage_.reset(); }
 
+  std::vector<RequestAndId> GetRequestsReportingOnOrBefore(
+      base::Time not_after_time) {
+    CHECK(storage_);
+    return storage_->GetRequestsReportingOnOrBefore(not_after_time,
+                                                    /*limit=*/std::nullopt);
+  }
+
   base::FilePath db_path() {
     return temp_directory_.GetPath().Append(
         FILE_PATH_LITERAL("AggregationService"));
@@ -117,6 +124,13 @@ class AggregationServiceStorageSqlInMemoryTest : public testing::Test {
   }
 
   void CloseDatabase() { storage_.reset(); }
+
+  std::vector<RequestAndId> GetRequestsReportingOnOrBefore(
+      base::Time not_after_time) {
+    CHECK(storage_);
+    return storage_->GetRequestsReportingOnOrBefore(not_after_time,
+                                                    /*limit=*/std::nullopt);
+  }
 
  protected:
   std::unique_ptr<AggregationServiceStorage> storage_;
@@ -475,8 +489,7 @@ TEST_F(AggregationServiceStorageSqlTest, StoreRequest_ExpectedResult) {
   OpenDatabase();
 
   EXPECT_FALSE(storage_->NextReportTimeAfter(base::Time::Min()).has_value());
-  EXPECT_TRUE(
-      storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).empty());
+  EXPECT_TRUE(GetRequestsReportingOnOrBefore(base::Time::Max()).empty());
 
   AggregatableReportRequest request =
       aggregation_service::CreateExampleRequest();
@@ -487,7 +500,7 @@ TEST_F(AggregationServiceStorageSqlTest, StoreRequest_ExpectedResult) {
             request.shared_info().scheduled_report_time);
 
   std::vector<AggregationServiceStorage::RequestAndId> stored_requests_and_ids =
-      storage_->GetRequestsReportingOnOrBefore(base::Time::Max());
+      GetRequestsReportingOnOrBefore(base::Time::Max());
 
   ASSERT_EQ(stored_requests_and_ids.size(), 1u);
 
@@ -498,7 +511,7 @@ TEST_F(AggregationServiceStorageSqlTest, StoreRequest_ExpectedResult) {
 
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       0);
 }
 
@@ -509,17 +522,15 @@ TEST_F(AggregationServiceStorageSqlTest, DeleteRequest_ExpectedResult) {
       aggregation_service::CreateExampleRequest();
 
   storage_->StoreRequest(aggregation_service::CloneReportRequest(request));
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
-            1u);
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(), 1u);
 
   // IDs autoincrement from 1.
   storage_->DeleteRequest(RequestId(1));
-  EXPECT_TRUE(
-      storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).empty());
+  EXPECT_TRUE(GetRequestsReportingOnOrBefore(base::Time::Max()).empty());
 
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       0);
 }
 
@@ -542,11 +553,10 @@ TEST_F(AggregationServiceStorageSqlTest,
 
   // Report time is updated as expected
   std::vector<RequestAndId> requests_before_next_run_time =
-      storage_->GetRequestsReportingOnOrBefore(next_run_time -
-                                               base::Microseconds(1));
+      GetRequestsReportingOnOrBefore(next_run_time - base::Microseconds(1));
   EXPECT_EQ(requests_before_next_run_time.size(), 0u);
   std::vector<RequestAndId> requests_at_run_time =
-      storage_->GetRequestsReportingOnOrBefore(next_run_time);
+      GetRequestsReportingOnOrBefore(next_run_time);
   ASSERT_EQ(requests_at_run_time.size(), 1u);
 
   // Failed send attempts has been increased
@@ -554,14 +564,13 @@ TEST_F(AggregationServiceStorageSqlTest,
 
   // Fail again to ensure the number of failed attempts is increased
   storage_->UpdateReportForSendFailure(RequestId(1), next_run_time);
-  requests_at_run_time =
-      storage_->GetRequestsReportingOnOrBefore(next_run_time);
+  requests_at_run_time = GetRequestsReportingOnOrBefore(next_run_time);
   ASSERT_EQ(requests_at_run_time.size(), 1u);
   EXPECT_EQ(requests_at_run_time[0].request.failed_send_attempts(), 2);
 
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       2);
 }
 
@@ -578,13 +587,13 @@ TEST_F(AggregationServiceStorageSqlTest,
             request.shared_info().scheduled_report_time);
 
   std::vector<AggregationServiceStorage::RequestAndId> stored_requests =
-      storage_->GetRequestsReportingOnOrBefore(base::Time::Max());
+      GetRequestsReportingOnOrBefore(base::Time::Max());
 
   ASSERT_EQ(stored_requests.size(), 1u);
   EXPECT_TRUE(aggregation_service::ReportRequestsEqual(
       stored_requests[0].request, request));
 
-  stored_requests = storage_->GetRequestsReportingOnOrBefore(base::Time::Max());
+  stored_requests = GetRequestsReportingOnOrBefore(base::Time::Max());
 
   ASSERT_EQ(stored_requests.size(), 1u);
   EXPECT_TRUE(aggregation_service::ReportRequestsEqual(
@@ -595,7 +604,7 @@ TEST_F(AggregationServiceStorageSqlTest,
 
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       0);
 }
 
@@ -612,7 +621,7 @@ TEST_F(AggregationServiceStorageSqlTest, DatabaseReopened_RequestsPersisted) {
   OpenDatabase();
 
   std::vector<AggregationServiceStorage::RequestAndId> stored_requests =
-      storage_->GetRequestsReportingOnOrBefore(base::Time::Max());
+      GetRequestsReportingOnOrBefore(base::Time::Max());
 
   ASSERT_EQ(stored_requests.size(), 1u);
   EXPECT_TRUE(aggregation_service::ReportRequestsEqual(
@@ -620,7 +629,7 @@ TEST_F(AggregationServiceStorageSqlTest, DatabaseReopened_RequestsPersisted) {
 
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       0);
 }
 
@@ -644,15 +653,14 @@ TEST_F(AggregationServiceStorageSqlTest,
   };
 
   for (const auto& test_case : kTestCases) {
-    EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(test_case.not_after_time)
-                  .size(),
+    EXPECT_EQ(GetRequestsReportingOnOrBefore(test_case.not_after_time).size(),
               test_case.number_requests)
         << test_case.not_after_time;
   }
 
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       2);
 }
 
@@ -671,13 +679,13 @@ TEST_F(AggregationServiceStorageSqlTest,
       ElementsAre(RequestIdIs(RequestId(1)), RequestIdIs(RequestId(2))));
 
   EXPECT_THAT(storage_->GetRequestsReportingOnOrBefore(
-                  /*not_after_time=*/base::Time::Max()),
+                  /*not_after_time=*/base::Time::Max(), /*limit=*/std::nullopt),
               ElementsAre(RequestIdIs(RequestId(1)), RequestIdIs(RequestId(2)),
                           RequestIdIs(RequestId(3))));
 
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       0);
 }
 
@@ -755,8 +763,7 @@ TEST_F(AggregationServiceStorageSqlTest,
             kExampleTime);
 
   EXPECT_TRUE(
-      storage_
-          ->GetRequestsReportingOnOrBefore(kExampleTime - base::Milliseconds(1))
+      GetRequestsReportingOnOrBefore(kExampleTime - base::Milliseconds(1))
           .empty());
 
   ASSERT_TRUE(
@@ -767,11 +774,11 @@ TEST_F(AggregationServiceStorageSqlTest,
             kExampleTime);
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       0);
 
   std::vector<AggregationServiceStorage::RequestAndId> example_time_reports =
-      storage_->GetRequestsReportingOnOrBefore(kExampleTime);
+      GetRequestsReportingOnOrBefore(kExampleTime);
   ASSERT_EQ(example_time_reports.size(), 2u);
 
   EXPECT_EQ(base::flat_set<RequestId>(
@@ -784,35 +791,33 @@ TEST_F(AggregationServiceStorageSqlTest,
             kExampleTime + base::Hours(1));
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       2);
 
-  EXPECT_EQ(storage_
-                ->GetRequestsReportingOnOrBefore(kExampleTime + base::Hours(1) -
-                                                 base::Milliseconds(1))
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(kExampleTime + base::Hours(1) -
+                                           base::Milliseconds(1))
                 .size(),
             2u);
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       4);
 
   std::vector<AggregationServiceStorage::RequestAndId> all_reports =
-      storage_->GetRequestsReportingOnOrBefore(kExampleTime + base::Hours(1));
+      GetRequestsReportingOnOrBefore(kExampleTime + base::Hours(1));
   ASSERT_EQ(all_reports.size(), 3u);
   EXPECT_EQ(all_reports[2].id, RequestId(3));
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       7);
 
   EXPECT_FALSE(
       storage_->NextReportTimeAfter(kExampleTime + base::Hours(1)).has_value());
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
-            3u);
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(), 3u);
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       7);
 }
 
@@ -823,17 +828,15 @@ TEST_F(AggregationServiceStorageSqlTest,
   storage_->StoreRequest(aggregation_service::CreateExampleRequest());
   storage_->StoreRequest(aggregation_service::CreateExampleRequest());
 
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
-            2u);
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(), 2u);
 
   storage_->ClearDataBetween(base::Time(), base::Time(), base::NullCallback());
 
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
-            0u);
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(), 0u);
 
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       0);
 }
 
@@ -853,15 +856,14 @@ TEST_F(AggregationServiceStorageSqlTest,
   clock_.Advance(base::Hours(1));
   storage_->StoreRequest(aggregation_service::CreateExampleRequest());
 
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
-            3u);
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(), 3u);
 
   // As the times are inclusive, this should delete the first two requests.
   storage_->ClearDataBetween(kExampleTime, kExampleTime + base::Hours(1),
                              base::NullCallback());
 
   std::vector<AggregationServiceStorage::RequestAndId> stored_reports =
-      storage_->GetRequestsReportingOnOrBefore(base::Time::Max());
+      GetRequestsReportingOnOrBefore(base::Time::Max());
   ASSERT_EQ(stored_reports.size(), 1u);
 
   // Only the last request should be left. Request IDs start from 1.
@@ -869,7 +871,7 @@ TEST_F(AggregationServiceStorageSqlTest,
 
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       0);
 }
 
@@ -894,8 +896,7 @@ TEST_F(AggregationServiceStorageSqlTest,
             .value());
   }
 
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
-            3u);
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(), 3u);
 
   storage_->ClearDataBetween(
       base::Time::Min(), base::Time::Max(),
@@ -906,7 +907,7 @@ TEST_F(AggregationServiceStorageSqlTest,
           }));
 
   std::vector<AggregationServiceStorage::RequestAndId> stored_reports =
-      storage_->GetRequestsReportingOnOrBefore(base::Time::Max());
+      GetRequestsReportingOnOrBefore(base::Time::Max());
   ASSERT_EQ(stored_reports.size(), 1u);
 
   // Only the last request should be left. Request IDs start from 1.
@@ -914,7 +915,7 @@ TEST_F(AggregationServiceStorageSqlTest,
 
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       0);
 }
 
@@ -1059,8 +1060,7 @@ TEST_F(AggregationServiceStorageSqlTest,
 
   EXPECT_EQ(storage_->NextReportTimeAfter(base::Time::Min()),
             kExampleTime - base::Hours(1));
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
-            3u);
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(), 3u);
 
   // Should only affect the third report.
   EXPECT_EQ(storage_->AdjustOfflineReportTimes(
@@ -1082,13 +1082,12 @@ TEST_F(AggregationServiceStorageSqlTest,
 
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       0);
 }
 
-// This test corrupts the SQLite database on disk and verifies that
-// AdjustOfflineReportTimes() encounters SQLITE_CORRUPT errors. There's nothing
-// special about this function besides the fact that it attempts to run a query.
+// This test verifies that `AggregationServiceStorageSql::Open()` deletes the
+// database file when it encounters catastrophic errors.
 TEST_F(AggregationServiceStorageSqlTest,
        AdjustOfflineReportTimes_DiskCorruption) {
   constexpr auto kExampleTime =
@@ -1104,31 +1103,27 @@ TEST_F(AggregationServiceStorageSqlTest,
   ASSERT_TRUE(sql::test::CorruptSizeInHeader(db_path()));
   OpenDatabase();
 
-#if DCHECK_IS_ON()
-  // AggregationServiceStorageSql::DatabaseErrorCallback() intentionally crashes
-  // in debug builds. Note that death tests run in a forked process, so this
-  // call should have no visible effects on the following lines.
-  ASSERT_DEATH_IF_SUPPORTED(storage_->AdjustOfflineReportTimes(
-                                kExampleTime, base::Hours(1), base::Hours(2)),
-                            "database disk image is malformed");
-#endif
-
-  // Suppress the crash in with `ScopedErrorExpecter`.
   {
     sql::test::ScopedErrorExpecter expecter;
     expecter.ExpectError(SQLITE_CORRUPT);
     storage_->AdjustOfflineReportTimes(kExampleTime, base::Hours(1),
                                        base::Hours(2));
-    ASSERT_TRUE(expecter.SawExpectedErrors());
+    EXPECT_TRUE(expecter.SawExpectedErrors());
   }
 
+  EXPECT_FALSE(base::PathExists(db_path()));
+
+  // Internally, `sql::Database::Open()` will attempt to open the database a
+  // second time when it detects that it was poisoned during the first attempt.
   histograms_.ExpectUniqueSample(
       "PrivacySandbox.AggregationService.Storage.Sql.Error",
       base::checked_cast<base::HistogramBase::Sample>(
           sql::SqliteLoggedResultCode::kCorrupt),
-      /*expected_bucket_count=*/1);
+      /*expected_bucket_count=*/2);
 
-  CloseDatabase();
+  histograms_.ExpectBucketCount(
+      "PrivacySandbox.AggregationService.Storage.Sql.InitStatus",
+      AggregationServiceStorageSql::InitStatus::kFailedToOpenDbFile, 1);
 }
 
 TEST_F(AggregationServiceStorageSqlTest, StoreRequest_RespectsLimit) {
@@ -1136,33 +1131,32 @@ TEST_F(AggregationServiceStorageSqlTest, StoreRequest_RespectsLimit) {
   OpenDatabase(example_limit);
 
   for (size_t i = 0; i < example_limit; ++i) {
-    EXPECT_EQ(
-        storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(), i);
+    EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(), i);
 
     storage_->StoreRequest(aggregation_service::CreateExampleRequest());
   }
 
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
             example_limit);
 
   // Storing one more report will silently fail.
   storage_->StoreRequest(aggregation_service::CreateExampleRequest());
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
             example_limit);
 
   // Deleting a request frees up space.
   storage_->DeleteRequest(RequestId{5});
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
             example_limit - 1);
 
   // We can then store another request.
   storage_->StoreRequest(aggregation_service::CreateExampleRequest());
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
             example_limit);
 
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       0);
   histograms_.ExpectBucketCount(
       "PrivacySandbox.AggregationService.Storage.Sql.StoreRequestHasCapacity",
@@ -1170,6 +1164,10 @@ TEST_F(AggregationServiceStorageSqlTest, StoreRequest_RespectsLimit) {
   histograms_.ExpectBucketCount(
       "PrivacySandbox.AggregationService.Storage.Sql.StoreRequestHasCapacity",
       false, 1);
+  histograms_.ExpectTotalCount(
+      "PrivacySandbox.AggregationService.Storage.Sql."
+      "StoredRequestsPerReportingOrigin",
+      example_limit + 2);
 }
 
 TEST_F(AggregationServiceStorageSqlTest, StoreRequest_LimitIsScopedCorrectly) {
@@ -1177,18 +1175,17 @@ TEST_F(AggregationServiceStorageSqlTest, StoreRequest_LimitIsScopedCorrectly) {
   OpenDatabase(example_limit);
 
   for (size_t i = 0; i < example_limit; ++i) {
-    EXPECT_EQ(
-        storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(), i);
+    EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(), i);
 
     storage_->StoreRequest(aggregation_service::CreateExampleRequest());
   }
 
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
             example_limit);
 
   // Storing one more report will silently fail.
   storage_->StoreRequest(aggregation_service::CreateExampleRequest());
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
             example_limit);
 
   AggregatableReportRequest example_request =
@@ -1203,7 +1200,7 @@ TEST_F(AggregationServiceStorageSqlTest, StoreRequest_LimitIsScopedCorrectly) {
       AggregatableReportRequest::Create(example_request.payload_contents(),
                                         std::move(different_api_shared_info))
           .value());
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
             example_limit);
 
   // Different reporting origins have separate limits so storage will succeed.
@@ -1215,12 +1212,12 @@ TEST_F(AggregationServiceStorageSqlTest, StoreRequest_LimitIsScopedCorrectly) {
                              example_request.payload_contents(),
                              std::move(different_reporting_origin_shared_info))
                              .value());
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
             example_limit + 1);
 
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       0);
   histograms_.ExpectBucketCount(
       "PrivacySandbox.AggregationService.Storage.Sql.StoreRequestHasCapacity",
@@ -1228,6 +1225,10 @@ TEST_F(AggregationServiceStorageSqlTest, StoreRequest_LimitIsScopedCorrectly) {
   histograms_.ExpectBucketCount(
       "PrivacySandbox.AggregationService.Storage.Sql.StoreRequestHasCapacity",
       false, 2);
+  histograms_.ExpectTotalCount(
+      "PrivacySandbox.AggregationService.Storage.Sql."
+      "StoredRequestsPerReportingOrigin",
+      example_limit + 3);
 }
 
 TEST_F(AggregationServiceStorageSqlTest,
@@ -1235,8 +1236,7 @@ TEST_F(AggregationServiceStorageSqlTest,
   OpenDatabase();
 
   EXPECT_FALSE(storage_->NextReportTimeAfter(base::Time::Min()).has_value());
-  EXPECT_TRUE(
-      storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).empty());
+  EXPECT_TRUE(GetRequestsReportingOnOrBefore(base::Time::Max()).empty());
 
   AggregatableReportRequest example_request =
       aggregation_service::CreateExampleRequest();
@@ -1253,7 +1253,7 @@ TEST_F(AggregationServiceStorageSqlTest,
   storage_->StoreRequest(aggregation_service::CloneReportRequest(request));
 
   std::vector<AggregationServiceStorage::RequestAndId> stored_requests_and_ids =
-      storage_->GetRequestsReportingOnOrBefore(base::Time::Max());
+      GetRequestsReportingOnOrBefore(base::Time::Max());
 
   ASSERT_EQ(stored_requests_and_ids.size(), 1u);
   EXPECT_TRUE(aggregation_service::ReportRequestsEqual(
@@ -1261,7 +1261,7 @@ TEST_F(AggregationServiceStorageSqlTest,
 
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       0);
 }
 
@@ -1270,8 +1270,7 @@ TEST_F(AggregationServiceStorageSqlTest,
   OpenDatabase();
 
   EXPECT_FALSE(storage_->NextReportTimeAfter(base::Time::Min()).has_value());
-  EXPECT_TRUE(
-      storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).empty());
+  EXPECT_TRUE(GetRequestsReportingOnOrBefore(base::Time::Max()).empty());
 
   AggregatableReportRequest example_request =
       aggregation_service::CreateExampleRequest();
@@ -1288,7 +1287,7 @@ TEST_F(AggregationServiceStorageSqlTest,
   storage_->StoreRequest(aggregation_service::CloneReportRequest(request));
 
   std::vector<AggregationServiceStorage::RequestAndId> stored_requests_and_ids =
-      storage_->GetRequestsReportingOnOrBefore(base::Time::Max());
+      GetRequestsReportingOnOrBefore(base::Time::Max());
 
   ASSERT_EQ(stored_requests_and_ids.size(), 1u);
   EXPECT_TRUE(aggregation_service::ReportRequestsEqual(
@@ -1296,7 +1295,7 @@ TEST_F(AggregationServiceStorageSqlTest,
 
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       0);
 }
 
@@ -1310,8 +1309,7 @@ TEST_F(AggregationServiceStorageSqlTest,
   OpenDatabase();
 
   EXPECT_FALSE(storage_->NextReportTimeAfter(base::Time::Min()).has_value());
-  EXPECT_TRUE(
-      storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).empty());
+  EXPECT_TRUE(GetRequestsReportingOnOrBefore(base::Time::Max()).empty());
 
   AggregatableReportRequest example_request =
       aggregation_service::CreateExampleRequest();
@@ -1332,14 +1330,14 @@ TEST_F(AggregationServiceStorageSqlTest,
   storage_->StoreRequest(aggregation_service::CloneReportRequest(request));
 
   std::vector<AggregationServiceStorage::RequestAndId> stored_requests_and_ids =
-      storage_->GetRequestsReportingOnOrBefore(base::Time::Max());
+      GetRequestsReportingOnOrBefore(base::Time::Max());
 
   ASSERT_EQ(stored_requests_and_ids.size(), 1u);
   EXPECT_TRUE(aggregation_service::ReportRequestsEqual(
       stored_requests_and_ids[0].request, request));
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       0);
 }
 
@@ -1352,19 +1350,17 @@ TEST_F(AggregationServiceStorageSqlInMemoryTest,
       aggregation_service::CreateExampleRequest();
 
   storage_->StoreRequest(aggregation_service::CloneReportRequest(request));
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
-            1u);
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(), 1u);
 
   CloseDatabase();
 
   OpenDatabase();
 
   EXPECT_FALSE(storage_->NextReportTimeAfter(base::Time::Min()).has_value());
-  EXPECT_TRUE(
-      storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).empty());
+  EXPECT_TRUE(GetRequestsReportingOnOrBefore(base::Time::Max()).empty());
   histograms.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       0);
 }
 
@@ -1380,8 +1376,7 @@ TEST_F(AggregationServiceStorageSqlTest,
 
   storage_->StoreRequest(
       aggregation_service::CloneReportRequest(example_request));
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
-            1u);
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(), 1u);
 
   // Turning the feature on should not affect the report loading.
   scoped_feature_list.Reset();
@@ -1390,9 +1385,8 @@ TEST_F(AggregationServiceStorageSqlTest,
       {{"aws_cloud", "https://aws.example.test"},
        {"gcp_cloud", "https://gcp.example.test"}});
 
-  ASSERT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
-            1u);
-  EXPECT_FALSE(storage_->GetRequestsReportingOnOrBefore(base::Time::Max())[0]
+  ASSERT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(), 1u);
+  EXPECT_FALSE(GetRequestsReportingOnOrBefore(base::Time::Max())[0]
                    .request.payload_contents()
                    .aggregation_coordinator_origin.has_value());
 
@@ -1407,9 +1401,8 @@ TEST_F(AggregationServiceStorageSqlTest,
       AggregatableReportRequest::Create(payload_contents,
                                         example_request.shared_info().Clone())
           .value());
-  ASSERT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
-            1u);
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max())[0]
+  ASSERT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(), 1u);
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max())[0]
                 .request.payload_contents()
                 .aggregation_coordinator_origin.value()
                 .GetURL()
@@ -1421,9 +1414,14 @@ TEST_F(AggregationServiceStorageSqlTest,
   scoped_feature_list.InitAndDisableFeature(
       ::aggregation_service::kAggregationServiceMultipleCloudProviders);
 
-  ASSERT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
+  ASSERT_EQ(storage_
+                ->GetRequestsReportingOnOrBefore(base::Time::Max(),
+                                                 /*limit=*/std::nullopt)
+                .size(),
             1u);
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max())[0]
+  EXPECT_EQ(storage_
+                ->GetRequestsReportingOnOrBefore(base::Time::Max(),
+                                                 /*limit=*/std::nullopt)[0]
                 .request.payload_contents()
                 .aggregation_coordinator_origin.value()
                 .GetURL()
@@ -1431,7 +1429,7 @@ TEST_F(AggregationServiceStorageSqlTest,
             "https://aws.example.test/");
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       0);
 }
 
@@ -1456,8 +1454,7 @@ TEST_F(AggregationServiceStorageSqlTest,
       AggregatableReportRequest::Create(payload_contents,
                                         example_request.shared_info().Clone())
           .value());
-  EXPECT_EQ(storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).size(),
-            1u);
+  EXPECT_EQ(GetRequestsReportingOnOrBefore(base::Time::Max()).size(), 1u);
 
   // If the origin is removed from the allowlist, the report is dropped.
   scoped_feature_list.Reset();
@@ -1466,8 +1463,7 @@ TEST_F(AggregationServiceStorageSqlTest,
       {{"aws_cloud", "https://aws2.example.test"},
        {"gcp_cloud", "https://gcp.example.test"}});
 
-  EXPECT_TRUE(
-      storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).empty());
+  EXPECT_TRUE(GetRequestsReportingOnOrBefore(base::Time::Max()).empty());
 
   // Check that the report is not just ignored, but actually deleted.
   scoped_feature_list.Reset();
@@ -1476,12 +1472,11 @@ TEST_F(AggregationServiceStorageSqlTest,
       {{"aws_cloud", "https://aws.example.test"},
        {"gcp_cloud", "https://gcp.example.test"}});
 
-  EXPECT_TRUE(
-      storage_->GetRequestsReportingOnOrBefore(base::Time::Max()).empty());
+  EXPECT_TRUE(GetRequestsReportingOnOrBefore(base::Time::Max()).empty());
 
   histograms_.ExpectTotalCount(
       "PrivacySandbox.AggregationService.Storage.Sql."
-      "RequestDelayFromUpdatedReportTime",
+      "RequestDelayFromUpdatedReportTime2",
       0);
 }
 

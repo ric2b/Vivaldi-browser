@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_SIGNIN_PUBLIC_IDENTITY_MANAGER_IDENTITY_TEST_UTILS_H_
 #define COMPONENTS_SIGNIN_PUBLIC_IDENTITY_MANAGER_IDENTITY_TEST_UTILS_H_
 
+#include <optional>
 #include <string>
 
 #include "base/functional/callback_forward.h"
@@ -14,7 +15,6 @@
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/identity_manager/account_info.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace network {
 class TestURLLoaderFactory;
@@ -51,8 +51,8 @@ class IdentityManager;
 void WaitForRefreshTokensLoaded(IdentityManager* identity_manager);
 
 // Returns the current exact consent level for the primary account, or
-// `absl::nullopt` if there is no primary account set.
-absl::optional<signin::ConsentLevel> GetPrimaryAccountConsentLevel(
+// `std::nullopt` if there is no primary account set.
+std::optional<signin::ConsentLevel> GetPrimaryAccountConsentLevel(
     IdentityManager* identity_manager);
 
 // Sets the primary account (which must not already be set) to the given email
@@ -71,6 +71,11 @@ absl::optional<signin::ConsentLevel> GetPrimaryAccountConsentLevel(
 CoreAccountInfo SetPrimaryAccount(IdentityManager* identity_manager,
                                   const std::string& email,
                                   ConsentLevel consent_level);
+
+// When this is set for the given `identity_manager`, access token requests
+// will be automatically granted with an access token value of "access_token".
+void SetAutomaticIssueOfAccessTokens(IdentityManager* identity_manager,
+                                     bool grant);
 
 // Sets a refresh token for the primary account (which must already be set).
 // Blocks until the refresh token is set. If |token_value| is empty a default
@@ -111,7 +116,7 @@ AccountInfo MakePrimaryAccountAvailable(IdentityManager* identity_manager,
 // NOTE: See disclaimer at top of file re: direct usage.
 // NOTE:`ConsentLevel::kSync` is deprecated, see the `ConsentLevel`
 // documentation.
-// TODO(crbug.com/1462978): remove this function once `ConsentLevel::kSync` is
+// TODO(crbug.com/40067058): remove this function once `ConsentLevel::kSync` is
 // removed.
 void RevokeSyncConsent(IdentityManager* identity_manager);
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
@@ -144,13 +149,13 @@ struct AccountAvailabilityOptions {
 
   // If present, the account to be created should be set as primary at
   // `consent_level`.
-  const absl::optional<ConsentLevel> consent_level = absl::nullopt;
+  const std::optional<ConsentLevel> consent_level = std::nullopt;
 
   // If present, a refresh token will be set for the account to be created. Can
   // be an empty string (this is the default), in this case the token's value
   // will be auto-generated. If non-empty, the value of `refresh_token` will be
   // used as the token.
-  const absl::optional<std::string> refresh_token = std::string();
+  const std::optional<std::string> refresh_token = std::string();
 
   // If non-null, the account to be created will be marked as present in the
   // Gaia cookie, by using `url_loader_factory_for_cookies` to mock the
@@ -159,7 +164,7 @@ struct AccountAvailabilityOptions {
       nullptr;
 
   const signin_metrics::AccessPoint access_point =
-      signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN;
+      signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS;
 
   explicit AccountAvailabilityOptions(base::StringPiece email);
   ~AccountAvailabilityOptions();
@@ -171,8 +176,8 @@ struct AccountAvailabilityOptions {
   AccountAvailabilityOptions(
       base::StringPiece email,
       base::StringPiece gaia_id,
-      absl::optional<ConsentLevel> consent_level,
-      absl::optional<std::string> refresh_token,
+      std::optional<ConsentLevel> consent_level,
+      std::optional<std::string> refresh_token,
       raw_ptr<network::TestURLLoaderFactory> url_loader_factory_for_cookies,
       signin_metrics::AccessPoint access_point);
 };
@@ -226,11 +231,11 @@ class AccountAvailabilityOptionsBuilder {
       nullptr;
 
   std::string gaia_id_;
-  absl::optional<ConsentLevel> primary_account_consent_level_;
-  absl::optional<std::string> refresh_token_ = std::string();
+  std::optional<ConsentLevel> primary_account_consent_level_;
+  std::optional<std::string> refresh_token_ = std::string();
   bool with_cookie_ = false;
   signin_metrics::AccessPoint access_point_ =
-      signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN;
+      signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS;
 };
 
 // Sets up an account identified by `email` according to options provided. See

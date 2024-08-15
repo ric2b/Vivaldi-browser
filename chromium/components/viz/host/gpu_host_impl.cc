@@ -58,40 +58,35 @@ class FontRenderParams {
   FontRenderParams(const FontRenderParams&) = delete;
   FontRenderParams& operator=(const FontRenderParams&) = delete;
 
-  void Set(const gfx::FontRenderParams& params);
-  void Reset();
-  const absl::optional<gfx::FontRenderParams>& Get();
+  void Set(const gfx::FontRenderParams& params) {
+    DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+    params_ = params;
+    if (gpu_host_impl_) {
+      gpu_host_impl_->MaybeSendFontRenderParams();
+    }
+  }
+
+  const std::optional<gfx::FontRenderParams>& Get() {
+    DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+    return params_;
+  }
+
+  void SetGpuHostImpl(GpuHostImpl* gpu_host_impl) {
+    DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+    gpu_host_impl_ = gpu_host_impl;
+  }
 
  private:
   friend class base::NoDestructor<FontRenderParams>;
 
-  FontRenderParams();
-  ~FontRenderParams();
+  FontRenderParams() = default;
+
+  ~FontRenderParams() { NOTREACHED(); }
 
   THREAD_CHECKER(thread_checker_);
-  absl::optional<gfx::FontRenderParams> params_;
+  std::optional<gfx::FontRenderParams> params_;
+  raw_ptr<GpuHostImpl> gpu_host_impl_ = nullptr;
 };
-
-void FontRenderParams::Set(const gfx::FontRenderParams& params) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  params_ = params;
-}
-
-void FontRenderParams::Reset() {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  params_ = absl::nullopt;
-}
-
-const absl::optional<gfx::FontRenderParams>& FontRenderParams::Get() {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  return params_;
-}
-
-FontRenderParams::FontRenderParams() = default;
-
-FontRenderParams::~FontRenderParams() {
-  NOTREACHED();
-}
 
 FontRenderParams& GetFontRenderParams() {
   static base::NoDestructor<FontRenderParams> instance;
@@ -131,7 +126,6 @@ GpuHostImpl::GpuHostImpl(Delegate* delegate,
   delegate_->BindDiscardableMemoryReceiver(
       discardable_manager_remote.InitWithNewPipeAndPassReceiver());
 
-  DCHECK(GetFontRenderParams().Get());
   scoped_refptr<base::SequencedTaskRunner> task_runner = nullptr;
 #if BUILDFLAG(IS_MAC)
   if (params_.main_thread_task_runner->BelongsToCurrentThread())
@@ -146,8 +140,8 @@ GpuHostImpl::GpuHostImpl(Delegate* delegate,
       gpu_service_remote_.BindNewPipeAndPassReceiver(task_runner),
       gpu_host_receiver_.BindNewPipeAndPassRemote(task_runner),
       std::move(discardable_manager_remote),
-      use_shader_cache_shm_count_.CloneRegion(),
-      GetFontRenderParams().Get()->subpixel_rendering);
+      use_shader_cache_shm_count_.CloneRegion());
+  MaybeSendFontRenderParams();
 
 #if BUILDFLAG(IS_OZONE)
   InitOzone();
@@ -155,6 +149,7 @@ GpuHostImpl::GpuHostImpl(Delegate* delegate,
 }
 
 GpuHostImpl::~GpuHostImpl() {
+  GetFontRenderParams().SetGpuHostImpl(nullptr);
   SendOutstandingReplies();
 }
 
@@ -162,12 +157,6 @@ GpuHostImpl::~GpuHostImpl() {
 void GpuHostImpl::InitFontRenderParams(const gfx::FontRenderParams& params) {
   DCHECK(!GetFontRenderParams().Get());
   GetFontRenderParams().Set(params);
-}
-
-// static
-void GpuHostImpl::ResetFontRenderParams() {
-  DCHECK(GetFontRenderParams().Get());
-  GetFontRenderParams().Reset();
 }
 
 void GpuHostImpl::SetProcessId(base::ProcessId pid) {
@@ -469,7 +458,8 @@ void GpuHostImpl::LoadedBlob(const gpu::GpuDiskCacheHandle& handle,
         }
         break;
       }
-      case gpu::GpuDiskCacheType::kDawnWebGPU: {
+      case gpu::GpuDiskCacheType::kDawnWebGPU:
+      case gpu::GpuDiskCacheType::kDawnGraphite: {
         gpu_service_remote_->LoadedBlob(handle, key, data);
         break;
       }
@@ -500,14 +490,23 @@ void GpuHostImpl::OnChannelEstablished(
   auto callback = std::move(it->second);
   channel_requests_.erase(it);
 
+  // If the GPU process sent an empty handle back, it could be a transient error
+  // in which case the client should try again so return kGpuHostInvalid.
+  if (!channel_handle.is_valid()) {
+    std::move(callback).Run(mojo::ScopedMessagePipeHandle(), gpu::GPUInfo(),
+                            gpu::GpuFeatureInfo(),
+                            gpu::SharedImageCapabilities(),
+                            EstablishChannelStatus::kGpuHostInvalid);
+    return;
+  }
+
   // Currently if any of the GPU features are blocklisted, we don't establish a
   // GPU channel.
   bool gpu_channel_allowed = shared_bitmap_to_shared_image_flag_
                                  ? true
                                  : delegate_->GpuAccessAllowed();
   // FEATURE_FORCE_ACCESS_TO_GPU
-  if (channel_handle.is_valid() &&
-    !(force_allow_access_to_gpu_ || gpu_channel_allowed)) {
+  if (!(force_allow_access_to_gpu_ || gpu_channel_allowed)) {
     gpu_service_remote_->CloseChannel(client_id);
     std::move(callback).Run(mojo::ScopedMessagePipeHandle(), gpu::GPUInfo(),
                             gpu::GpuFeatureInfo(),
@@ -538,9 +537,8 @@ void GpuHostImpl::OnChannelEstablished(
 void GpuHostImpl::DidInitialize(
     const gpu::GPUInfo& gpu_info,
     const gpu::GpuFeatureInfo& gpu_feature_info,
-    const absl::optional<gpu::GPUInfo>& gpu_info_for_hardware_gpu,
-    const absl::optional<gpu::GpuFeatureInfo>&
-        gpu_feature_info_for_hardware_gpu,
+    const std::optional<gpu::GPUInfo>& gpu_info_for_hardware_gpu,
+    const std::optional<gpu::GpuFeatureInfo>& gpu_feature_info_for_hardware_gpu,
     const gfx::GpuExtraInfo& gpu_extra_info) {
   delegate_->DidInitialize(gpu_info, gpu_feature_info,
                            gpu_info_for_hardware_gpu,
@@ -664,6 +662,15 @@ void GpuHostImpl::AddChildWindow(gpu::SurfaceHandle parent_window,
 }
 #endif  // BUILDFLAG(IS_WIN)
 
+void GpuHostImpl::MaybeSendFontRenderParams() {
+  if (const auto& params = GetFontRenderParams().Get()) {
+    viz_main_->SetRenderParams(params->subpixel_rendering,
+                               params->text_contrast, params->text_gamma);
+  } else {
+    GetFontRenderParams().SetGpuHostImpl(this);
+  }
+}
+
 void GpuHostImpl::StoreBlobToDisk(const gpu::GpuDiskCacheHandle& handle,
                                   const std::string& key,
                                   const std::string& blob) {
@@ -688,7 +695,8 @@ void GpuHostImpl::StoreBlobToDisk(const gpu::GpuDiskCacheHandle& handle,
         cache->Cache(base::StrCat({prefix, ":", key}), blob);
         break;
       }
-      case gpu::GpuDiskCacheType::kDawnWebGPU: {
+      case gpu::GpuDiskCacheType::kDawnWebGPU:
+      case gpu::GpuDiskCacheType::kDawnGraphite: {
         cache->Cache(key, blob);
         break;
       }

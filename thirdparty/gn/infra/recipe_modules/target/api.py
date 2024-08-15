@@ -10,6 +10,7 @@ PLATFORM_TO_TRIPLE = {
   'fuchsia-arm64': 'aarch64-fuchsia',
   'linux-amd64': 'x86_64-linux-gnu',
   'linux-arm64': 'aarch64-linux-gnu',
+  'linux-riscv64': 'riscv64-linux-gnu',
   'mac-amd64': 'x86_64-apple-darwin',
   'mac-arm64': 'arm64-apple-darwin',
 }

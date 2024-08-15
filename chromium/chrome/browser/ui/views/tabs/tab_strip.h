@@ -317,14 +317,16 @@ class TabStrip : public views::View,
   views::SizeBounds GetAvailableSize(const View* child) const override;
   gfx::Size GetMinimumSize() const override;
   gfx::Size CalculatePreferredSize() const override;
-  void Layout() override;
+  void Layout(PassKey) override;
   void ChildPreferredSizeChanged(views::View* child) override;
 
   // BrowserRootView::DropTarget:
   // These methods handle link drag & drop.
-  // TODO(1307594): Use the standard views::View drag and drop methods instead.
-  BrowserRootView::DropIndex GetDropIndex(
-      const ui::DropTargetEvent& event) override;
+  // TODO(https://crbug.com/40828528): Use the standard views::View drag and
+  // drop methods instead.
+  std::optional<BrowserRootView::DropIndex> GetDropIndex(
+      const ui::DropTargetEvent& event,
+      bool allow_replacement) override;
   BrowserRootView::DropTarget* GetDropTarget(
       gfx::Point loc_in_local_coords) override;
   views::View* GetViewForDrop() override;

@@ -62,10 +62,22 @@ Config::Config() {
       features::kEnableComposeSavedStateNotification,
       "saved_state_timeout_milliseconds", saved_state_timeout_milliseconds);
 
+  focus_lost_delay_milliseconds = base::GetFieldTrialParamByFeatureAsInt(
+      features::kEnableComposeSavedStateNotification,
+      "focus_lost_delay_milliseconds", focus_lost_delay_milliseconds);
+
+  stay_in_window_bounds = base::GetFieldTrialParamByFeatureAsBool(
+      features::kComposeUiParams, "stay_in_window_bounds",
+      stay_in_window_bounds);
+
   positioning_strategy = static_cast<DialogFallbackPositioningStrategy>(
       base::GetFieldTrialParamByFeatureAsInt(
           features::kComposeUiParams, "positioning_strategy",
           base::to_underlying(positioning_strategy)));
+
+  request_latency_timeout_seconds = base::GetFieldTrialParamByFeatureAsInt(
+      features::kComposeRequestLatencyTimeout,
+      "request_latency_timeout_seconds", request_latency_timeout_seconds);
 }
 
 Config::Config(const Config& other) = default;

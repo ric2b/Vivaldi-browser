@@ -25,6 +25,7 @@ BASE_DECLARE_FEATURE(kCacheOneGoogleBar);
 BASE_DECLARE_FEATURE(kCustomizeChromeColorExtraction);
 BASE_DECLARE_FEATURE(kCustomizeChromeSidePanelExtensionsCard);
 BASE_DECLARE_FEATURE(kCustomizeChromeWallpaperSearch);
+BASE_DECLARE_FEATURE(kCustomizeChromeWallpaperSearchButton);
 BASE_DECLARE_FEATURE(kCustomizeChromeWallpaperSearchInspirationCard);
 BASE_DECLARE_FEATURE(kCwsDarkLogo);
 BASE_DECLARE_FEATURE(kDismissPromos);
@@ -95,6 +96,10 @@ BASE_DECLARE_FEATURE(kNtpHistoryClustersModuleFetchClustersUntilExhausted);
 BASE_DECLARE_FEATURE(kNtpHistoryClustersModuleIncludeSyncedVisits);
 BASE_DECLARE_FEATURE(kNtpHistoryClustersModuleEnableContentClustering);
 BASE_DECLARE_FEATURE(kNtpTabResumptionModule);
+BASE_DECLARE_FEATURE(kNtpTabResumptionModuleCategories);
+BASE_DECLARE_FEATURE(kNtpTabResumptionModuleTimeLimit);
+BASE_DECLARE_FEATURE(kNtpWallpaperSearchButton);
+BASE_DECLARE_FEATURE(kNtpWallpaperSearchButtonAnimation);
 
 // Parameter for controlling the luminosity difference for NTP elements on light
 // backgrounds.
@@ -203,7 +208,13 @@ extern const char kNtpHistoryClustersModuleMinCategoryWeightToRecordParam[];
 extern const char kNtpHistoryClustersModuleRankingMetricsQueryDaysParam[];
 extern const char kNtpHistoryClustersModuleScoreThresholdParam[];
 extern const char kNtpRealboxWidthBehaviorParam[];
+// Parameter for determining the categories a tab must not fall into
+// to be shown.
+extern const char kNtpTabResumptionModuleCategoriesBlocklistParam[];
 extern const char kNtpTabResumptionModuleDataParam[];
+// Parameter determining the recency of tabs in the Tab Resumption module.
+extern const char kNtpTabResumptionModuleTimeLimitParam[];
+extern const char kNtpTabResumptionModuleVisibilityThresholdDataParam[];
 // Parameter determining the trigger delay of the Wallpaper Search HaTS survey.
 extern const char kWallpaperSearchHatsDelayParam[];
 

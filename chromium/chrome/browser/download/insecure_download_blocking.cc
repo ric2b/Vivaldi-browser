@@ -30,6 +30,8 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
+#include "app/vivaldi_apptools.h"
+
 using download::DownloadSource;
 using InsecureDownloadStatus = download::DownloadItem::InsecureDownloadStatus;
 
@@ -463,11 +465,10 @@ InsecureDownloadStatus GetInsecureDownloadStatusForDownload(
     return InsecureDownloadStatus::SAFE;
   }
 
-  // When enabled, show a visible (bypassable) warning on insecure downloads.
+  // Show a visible (bypassable) warning on insecure downloads.
   // Since mixed download blocking is more severe, exclude mixed downloads from
   // this early-return to let the mixed download logic below apply.
-  if (base::FeatureList::IsEnabled(features::kInsecureDownloadWarnings) &&
-      data.is_insecure_download_ && !data.is_mixed_content_) {
+  if (data.is_insecure_download_ && !data.is_mixed_content_) {
     // Except when using HFM, don't warn on files that are likely to be safe.
     if (!IsHttpsFirstModeEnabled(profile) &&
         ContainsExtension(kSafeExtensions, data.extension_)) {
@@ -490,11 +491,16 @@ InsecureDownloadStatus GetInsecureDownloadStatusForDownload(
     // Only permit silent blocking when not initiated by an explicit user
     // action.  Otherwise, fall back to visible blocking.
     auto download_source = data.item_->GetDownloadSource();
+
+  // NOTE(andre@vivaldi.com) : We show a download dialog for insecure
+    // downloads and won't block this silently regardless of type.
+    if (vivaldi::IsVivaldiRunning()) {
+      return InsecureDownloadStatus::BLOCK;
+    }
     if (download_source == DownloadSource::CONTEXT_MENU ||
         download_source == DownloadSource::WEB_CONTENTS_API) {
       return InsecureDownloadStatus::BLOCK;
     }
-
     return InsecureDownloadStatus::SILENT_BLOCK;
   }
 

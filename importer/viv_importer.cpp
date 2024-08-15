@@ -57,45 +57,42 @@ void OperaImporter::StartImport(const importer::SourceProfile& source_profile,
 
   base::FilePath file = profile_dir_;
 
-  if (source_profile.importer_type == importer::TYPE_OPERA_BOOKMARK_FILE) {
-    bookmarkfilename_ = file.value();
-  } else {
-    if (base::EqualsCaseInsensitiveASCII(file.BaseName().MaybeAsASCII(),
-                                   OPERA_PREFS_NAME)) {
-      profile_dir_ = profile_dir_.DirName();
-      file = profile_dir_;
-    }
-    master_password_required_ = false;
-
-    // Read Inifile
-    DictionaryValueINIParser inifile_parser;
-    if (ReadOperaIniFile(profile_dir_, &inifile_parser)) {
-      const base::Value::Dict& inifile = inifile_parser.root();
-
-      bookmarkfilename_ =
-          StringToPath(inifile.FindStringByDottedPath("User Prefs.Hot List File Ver2"));
-      notesfilename_ =
-          StringToPath(inifile.FindStringByDottedPath("MailBox.NotesFile"));
-      if (const std::string* s = inifile.FindStringByDottedPath("Security Prefs.Use Paranoid Mailpassword")) {
-        master_password_required_ = !s->empty() && atoi(s->c_str()) != 0;
-      }
-
-      wandfilename_ =
-          StringToPath(inifile.FindStringByDottedPath("User Prefs.WandStorageFile"));
-      masterpassword_filename_ =
-          profile_dir_.AppendASCII("opcert6.dat").value();
-    }
-    // Fallbacks if the ini file was not found or didn't have paths.
-    if (bookmarkfilename_.empty()) {
-      bookmarkfilename_ = profile_dir_.AppendASCII("bookmarks.adr").value();
-    }
-    if (notesfilename_.empty()) {
-      notesfilename_ = profile_dir_.AppendASCII("notes.adr").value();
-    }
-    if (wandfilename_.empty()) {
-      wandfilename_ = profile_dir_.AppendASCII("wand.dat").value();
-    }
+  if (base::EqualsCaseInsensitiveASCII(file.BaseName().MaybeAsASCII(),
+                                  OPERA_PREFS_NAME)) {
+    profile_dir_ = profile_dir_.DirName();
+    file = profile_dir_;
   }
+  master_password_required_ = false;
+
+  // Read Inifile
+  DictionaryValueINIParser inifile_parser;
+  if (ReadOperaIniFile(profile_dir_, &inifile_parser)) {
+    const base::Value::Dict& inifile = inifile_parser.root();
+
+    bookmarkfilename_ =
+        StringToPath(inifile.FindStringByDottedPath("User Prefs.Hot List File Ver2"));
+    notesfilename_ =
+        StringToPath(inifile.FindStringByDottedPath("MailBox.NotesFile"));
+    if (const std::string* s = inifile.FindStringByDottedPath("Security Prefs.Use Paranoid Mailpassword")) {
+      master_password_required_ = !s->empty() && atoi(s->c_str()) != 0;
+    }
+
+    wandfilename_ =
+        StringToPath(inifile.FindStringByDottedPath("User Prefs.WandStorageFile"));
+    masterpassword_filename_ =
+        profile_dir_.AppendASCII("opcert6.dat").value();
+  }
+  // Fallbacks if the ini file was not found or didn't have paths.
+  if (bookmarkfilename_.empty()) {
+    bookmarkfilename_ = profile_dir_.AppendASCII("bookmarks.adr").value();
+  }
+  if (notesfilename_.empty()) {
+    notesfilename_ = profile_dir_.AppendASCII("notes.adr").value();
+  }
+  if (wandfilename_.empty()) {
+    wandfilename_ = profile_dir_.AppendASCII("wand.dat").value();
+  }
+
   bridge_->NotifyStarted();
 
   std::string error;

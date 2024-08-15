@@ -917,7 +917,7 @@ static int qsv_process_data(AVCodecContext *avctx, QSVContext *q,
         ret = qsv_decode_header(avctx, q, pkt, pix_fmt, &param);
         if (ret < 0) {
             if (ret == AVERROR(EAGAIN))
-                av_log(avctx, AV_LOG_INFO, "More data is required to decode header\n");
+                av_log(avctx, AV_LOG_VERBOSE, "More data is required to decode header\n");
             else
                 av_log(avctx, AV_LOG_ERROR, "Error decoding header\n");
             goto reinit_fail;
@@ -1076,6 +1076,9 @@ static int qsv_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
         ret = qsv_process_data(avctx, &s->qsv, frame, got_frame, &s->buffer_pkt);
         if (ret < 0){
+            if (ret == AVERROR(EAGAIN))
+                ret = 0;
+
             /* Drop buffer_pkt when failed to decode the packet. Otherwise,
                the decoder will keep decoding the failure packet. */
             av_packet_unref(&s->buffer_pkt);
@@ -1124,17 +1127,6 @@ const FFCodec ff_##x##_qsv_decoder = { \
     .bsfs           = bsf_name, \
     .p.capabilities = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_DR1 | AV_CODEC_CAP_AVOID_PROBING | AV_CODEC_CAP_HYBRID, \
     .p.priv_class   = &x##_qsv_class, \
-    .p.pix_fmts     = (const enum AVPixelFormat[]){ AV_PIX_FMT_NV12, \
-                                                    AV_PIX_FMT_P010, \
-                                                    AV_PIX_FMT_P012, \
-                                                    AV_PIX_FMT_YUYV422, \
-                                                    AV_PIX_FMT_Y210, \
-                                                    AV_PIX_FMT_Y212, \
-                                                    AV_PIX_FMT_VUYX, \
-                                                    AV_PIX_FMT_XV30, \
-                                                    AV_PIX_FMT_XV36, \
-                                                    AV_PIX_FMT_QSV, \
-                                                    AV_PIX_FMT_NONE }, \
     .hw_configs     = qsv_hw_configs, \
     .p.wrapper_name = "qsv", \
     .caps_internal  = FF_CODEC_CAP_NOT_INIT_THREADSAFE, \
@@ -1146,18 +1138,18 @@ const FFCodec ff_##x##_qsv_decoder = { \
 static const AVOption hevc_options[] = {
     { "async_depth", "Internal parallelization depth, the higher the value the higher the latency.", OFFSET(qsv.async_depth), AV_OPT_TYPE_INT, { .i64 = ASYNC_DEPTH_DEFAULT }, 1, INT_MAX, VD },
 
-    { "load_plugin", "A user plugin to load in an internal session", OFFSET(load_plugin), AV_OPT_TYPE_INT, { .i64 = LOAD_PLUGIN_HEVC_HW }, LOAD_PLUGIN_NONE, LOAD_PLUGIN_HEVC_HW, VD, "load_plugin" },
-    { "none",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = LOAD_PLUGIN_NONE },    0, 0, VD, "load_plugin" },
-    { "hevc_sw",  NULL, 0, AV_OPT_TYPE_CONST, { .i64 = LOAD_PLUGIN_HEVC_SW }, 0, 0, VD, "load_plugin" },
-    { "hevc_hw",  NULL, 0, AV_OPT_TYPE_CONST, { .i64 = LOAD_PLUGIN_HEVC_HW }, 0, 0, VD, "load_plugin" },
+    { "load_plugin", "A user plugin to load in an internal session", OFFSET(load_plugin), AV_OPT_TYPE_INT, { .i64 = LOAD_PLUGIN_HEVC_HW }, LOAD_PLUGIN_NONE, LOAD_PLUGIN_HEVC_HW, VD, .unit = "load_plugin" },
+    { "none",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = LOAD_PLUGIN_NONE },    0, 0, VD, .unit = "load_plugin" },
+    { "hevc_sw",  NULL, 0, AV_OPT_TYPE_CONST, { .i64 = LOAD_PLUGIN_HEVC_SW }, 0, 0, VD, .unit = "load_plugin" },
+    { "hevc_hw",  NULL, 0, AV_OPT_TYPE_CONST, { .i64 = LOAD_PLUGIN_HEVC_HW }, 0, 0, VD, .unit = "load_plugin" },
 
     { "load_plugins", "A :-separate list of hexadecimal plugin UIDs to load in an internal session",
         OFFSET(qsv.load_plugins), AV_OPT_TYPE_STRING, { .str = "" }, 0, 0, VD },
 
-    { "gpu_copy", "A GPU-accelerated copy between video and system memory", OFFSET(qsv.gpu_copy), AV_OPT_TYPE_INT, { .i64 = MFX_GPUCOPY_DEFAULT }, MFX_GPUCOPY_DEFAULT, MFX_GPUCOPY_OFF, VD, "gpu_copy"},
-        { "default", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_GPUCOPY_DEFAULT }, 0, 0, VD, "gpu_copy"},
-        { "on",      NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_GPUCOPY_ON },      0, 0, VD, "gpu_copy"},
-        { "off",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_GPUCOPY_OFF },     0, 0, VD, "gpu_copy"},
+    { "gpu_copy", "A GPU-accelerated copy between video and system memory", OFFSET(qsv.gpu_copy), AV_OPT_TYPE_INT, { .i64 = MFX_GPUCOPY_DEFAULT }, MFX_GPUCOPY_DEFAULT, MFX_GPUCOPY_OFF, VD, .unit = "gpu_copy"},
+        { "default", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_GPUCOPY_DEFAULT }, 0, 0, VD, .unit = "gpu_copy"},
+        { "on",      NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_GPUCOPY_ON },      0, 0, VD, .unit = "gpu_copy"},
+        { "off",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_GPUCOPY_OFF },     0, 0, VD, .unit = "gpu_copy"},
     { NULL },
 };
 DEFINE_QSV_DECODER_WITH_OPTION(hevc, HEVC, "hevc_mp4toannexb", hevc_options)
@@ -1166,10 +1158,10 @@ DEFINE_QSV_DECODER_WITH_OPTION(hevc, HEVC, "hevc_mp4toannexb", hevc_options)
 static const AVOption options[] = {
     { "async_depth", "Internal parallelization depth, the higher the value the higher the latency.", OFFSET(qsv.async_depth), AV_OPT_TYPE_INT, { .i64 = ASYNC_DEPTH_DEFAULT }, 1, INT_MAX, VD },
 
-    { "gpu_copy", "A GPU-accelerated copy between video and system memory", OFFSET(qsv.gpu_copy), AV_OPT_TYPE_INT, { .i64 = MFX_GPUCOPY_DEFAULT }, MFX_GPUCOPY_DEFAULT, MFX_GPUCOPY_OFF, VD, "gpu_copy"},
-        { "default", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_GPUCOPY_DEFAULT }, 0, 0, VD, "gpu_copy"},
-        { "on",      NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_GPUCOPY_ON },      0, 0, VD, "gpu_copy"},
-        { "off",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_GPUCOPY_OFF },     0, 0, VD, "gpu_copy"},
+    { "gpu_copy", "A GPU-accelerated copy between video and system memory", OFFSET(qsv.gpu_copy), AV_OPT_TYPE_INT, { .i64 = MFX_GPUCOPY_DEFAULT }, MFX_GPUCOPY_DEFAULT, MFX_GPUCOPY_OFF, VD, .unit = "gpu_copy"},
+        { "default", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_GPUCOPY_DEFAULT }, 0, 0, VD, .unit = "gpu_copy"},
+        { "on",      NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_GPUCOPY_ON },      0, 0, VD, .unit = "gpu_copy"},
+        { "off",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_GPUCOPY_OFF },     0, 0, VD, .unit = "gpu_copy"},
     { NULL },
 };
 

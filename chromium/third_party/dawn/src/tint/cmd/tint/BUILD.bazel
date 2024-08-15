@@ -51,6 +51,7 @@ cc_binary(
     "//src/tint/lang/core/ir",
     "//src/tint/lang/core/type",
     "//src/tint/lang/hlsl/writer/common",
+    "//src/tint/lang/hlsl/writer/helpers",
     "//src/tint/lang/wgsl",
     "//src/tint/lang/wgsl/ast",
     "//src/tint/lang/wgsl/ast/transform",
@@ -75,6 +76,7 @@ cc_binary(
     "//src/tint/utils/rtti",
     "//src/tint/utils/strconv",
     "//src/tint/utils/symbol",
+    "//src/tint/utils/system",
     "//src/tint/utils/text",
     "//src/tint/utils/traits",
   ] + select({

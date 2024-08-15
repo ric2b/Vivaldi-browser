@@ -127,7 +127,7 @@
     EXPECT_CALL(mDeviceErrorCallback,                                             \
                 Call(testing::Ne(WGPUErrorType_NoError), matcher, device.Get())); \
     statement;                                                                    \
-    device.Tick();                                                                \
+    instance.ProcessEvents();                                                     \
     FlushWire();                                                                  \
     testing::Mock::VerifyAndClearExpectations(&mDeviceErrorCallback);             \
     do {                                                                          \
@@ -377,7 +377,7 @@ class DawnTestBase {
                                               wgpu::TextureAspect aspect = wgpu::TextureAspect::All,
                                               uint32_t bytesPerRow = 0) {
         uint32_t texelBlockSize = utils::GetTexelBlockSizeInBytes(format);
-        uint32_t texelComponentCount = utils::GetWGSLRenderableColorTextureComponentCount(format);
+        uint32_t texelComponentCount = utils::GetTextureComponentCount(format);
 
         return AddTextureExpectationImpl(
             file, line, std::move(targetDevice),

@@ -37,14 +37,15 @@ import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.bookmarks.PowerBookmarkUtils;
-import org.chromium.chrome.browser.commerce.ShoppingFeatures;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.layouts.LayoutTestUtils;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.layouts.animation.CompositorAnimationHandler;
-import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.quick_delete.QuickDeleteMetricsDelegate;
+import org.chromium.chrome.browser.sync.FakeSyncServiceImpl;
+import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuItemProperties;
@@ -56,6 +57,7 @@ import org.chromium.chrome.test.util.ActivityTestUtils;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.MenuUtils;
+import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
 import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -74,10 +76,17 @@ public class TabbedAppMenuTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
+    @Rule public final SigninTestRule mSigninTestRule = new SigninTestRule();
+
+    private static final int RENDER_TEST_REVISION = 2;
+    private static final String RENDER_TEST_DESCRIPTION =
+            "Badge on settings menu item icon on identity and sync errors.";
+
     @Rule
     public ChromeRenderTestRule mRenderTestRule =
             ChromeRenderTestRule.Builder.withPublicCorpus()
-                    .setRevision(1)
+                    .setRevision(RENDER_TEST_REVISION)
+                    .setDescription(RENDER_TEST_DESCRIPTION)
                     .setBugComponent(ChromeRenderTestRule.Component.UI_BROWSER_MOBILE_APP_MENU)
                     .build();
 
@@ -120,7 +129,7 @@ public class TabbedAppMenuTest {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     WebsitePreferenceBridge.setCategoryEnabled(
-                            Profile.getLastUsedRegularProfile(),
+                            ProfileManager.getLastUsedRegularProfile(),
                             ContentSettingsType.REQUEST_DESKTOP_SITE,
                             false);
                 });
@@ -348,7 +357,7 @@ public class TabbedAppMenuTest {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     WebsitePreferenceBridge.setCategoryEnabled(
-                            Profile.getLastUsedRegularProfile(),
+                            ProfileManager.getLastUsedRegularProfile(),
                             ContentSettingsType.REQUEST_DESKTOP_SITE,
                             true);
                     tab.reload();
@@ -373,48 +382,6 @@ public class TabbedAppMenuTest {
                         .getChildAt(
                                 requestDesktopSiteIndex - getListView().getFirstVisiblePosition()),
                 "request_mobile_site_check");
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"Browser", "Main"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-    public void testAddBookmarkMenuItem() throws IOException {
-        ShoppingFeatures.setShoppingListEligibleForTesting(true);
-        TestThreadUtils.runOnUiThreadBlocking(() -> mAppMenuHandler.hideAppMenu());
-        showAppMenuAndAssertMenuShown();
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-        int addBookmark =
-                AppMenuTestSupport.findIndexOfMenuItemById(
-                        mActivityTestRule.getAppMenuCoordinator(), R.id.add_bookmark_menu_id);
-        Assert.assertNotEquals("No add bookmark found.", -1, addBookmark);
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"Browser", "Main", "RenderTest"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-    public void testEditBookmarkMenuItem() throws IOException {
-        ShoppingFeatures.setShoppingListEligibleForTesting(true);
-        TestThreadUtils.runOnUiThreadBlocking(() -> mAppMenuHandler.hideAppMenu());
-        AppMenuPropertiesDelegateImpl.setPageBookmarkedForTesting(true);
-        showAppMenuAndAssertMenuShown();
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-
-        PropertyModel bookmarkStarPropertyModel =
-                AppMenuTestSupport.getMenuItemPropertyModel(
-                        mActivityTestRule.getAppMenuCoordinator(), R.id.edit_bookmark_menu_id);
-        assertEquals(
-                "Add Bookmark item should be tint blue.",
-                R.color.default_icon_color_accent1_tint_list,
-                bookmarkStarPropertyModel.get(AppMenuItemProperties.ICON_COLOR_RES));
-
-        int editBookmarkMenuItemIndex =
-                AppMenuTestSupport.findIndexOfMenuItemById(
-                        mActivityTestRule.getAppMenuCoordinator(), R.id.edit_bookmark_menu_id);
-        Assert.assertNotEquals("No add bookmark menu item found.", -1, editBookmarkMenuItemIndex);
-        mRenderTestRule.render(
-                getListView().getChildAt(editBookmarkMenuItemIndex), "edit_bookmark_list_item");
     }
 
     @Test
@@ -473,6 +440,102 @@ public class TabbedAppMenuTest {
                 -1,
                 AppMenuTestSupport.findIndexOfMenuItemById(
                         mActivityTestRule.getAppMenuCoordinator(), R.id.quick_delete_menu_id));
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"Browser", "Main", "RenderTest"})
+    @EnableFeatures(ChromeFeatureList.SYNC_SHOW_IDENTITY_ERRORS_FOR_SIGNED_IN_USERS)
+    public void testSettingsMenuItem_NoBadgeShownForNotSignedInUsers() throws IOException {
+        View view = getSettingsMenuItemView();
+        Assert.assertNull(view.findViewById(R.id.menu_item_text).getContentDescription());
+        mRenderTestRule.render(view, "settings_menu_item_not_signed_in_user");
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"Browser", "Main", "RenderTest"})
+    @EnableFeatures(ChromeFeatureList.SYNC_SHOW_IDENTITY_ERRORS_FOR_SIGNED_IN_USERS)
+    public void testSettingsMenuItem_BadgeShownForSignedInUsersOnIdentityError()
+            throws IOException {
+        TestThreadUtils.runOnUiThreadBlocking(() -> mAppMenuHandler.hideAppMenu());
+
+        FakeSyncServiceImpl fakeSyncService =
+                TestThreadUtils.runOnUiThreadBlockingNoException(
+                        () -> {
+                            FakeSyncServiceImpl fakeSyncServiceImpl = new FakeSyncServiceImpl();
+                            SyncServiceFactory.setInstanceForTesting(fakeSyncServiceImpl);
+                            return fakeSyncServiceImpl;
+                        });
+        // Fake an identity error.
+        fakeSyncService.setRequiresClientUpgrade(true);
+        // Sign in and wait for sync machinery to be active.
+        mSigninTestRule.addTestAccountThenSignin();
+
+        showAppMenuAndAssertMenuShown();
+        View view = getSettingsMenuItemView();
+        assertEquals(
+                "Content description should mention an error.",
+                view.findViewById(R.id.menu_item_text).getContentDescription(),
+                mActivityTestRule.getActivity().getString(R.string.menu_settings_account_error));
+        mRenderTestRule.render(view, "settings_menu_item_signed_in_user_identity_error");
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"Browser", "Main", "RenderTest"})
+    @EnableFeatures(ChromeFeatureList.SYNC_SHOW_IDENTITY_ERRORS_FOR_SIGNED_IN_USERS)
+    public void testSettingsMenuItem_NoBadgeShownForSignedInUsersIfNoError() throws IOException {
+        TestThreadUtils.runOnUiThreadBlocking(() -> mAppMenuHandler.hideAppMenu());
+        // Sign in and wait for sync machinery to be active.
+        mSigninTestRule.addTestAccountThenSignin();
+
+        showAppMenuAndAssertMenuShown();
+        View view = getSettingsMenuItemView();
+        Assert.assertNull(view.findViewById(R.id.menu_item_text).getContentDescription());
+        mRenderTestRule.render(view, "settings_menu_item_signed_in_user_no_error");
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"Browser", "Main", "RenderTest"})
+    @EnableFeatures(ChromeFeatureList.SYNC_SHOW_IDENTITY_ERRORS_FOR_SIGNED_IN_USERS)
+    public void testSettingsMenuItem_BadgeShownForSyncingUsersOnSyncError() throws IOException {
+        TestThreadUtils.runOnUiThreadBlocking(() -> mAppMenuHandler.hideAppMenu());
+        FakeSyncServiceImpl fakeSyncService =
+                TestThreadUtils.runOnUiThreadBlockingNoException(
+                        () -> {
+                            FakeSyncServiceImpl fakeSyncServiceImpl = new FakeSyncServiceImpl();
+                            SyncServiceFactory.setInstanceForTesting(fakeSyncServiceImpl);
+                            return fakeSyncServiceImpl;
+                        });
+        // Fake an identity error.
+        fakeSyncService.setRequiresClientUpgrade(true);
+        // Sign in and wait for sync machinery to be active.
+        mSigninTestRule.addTestAccountThenSigninAndEnableSync();
+
+        showAppMenuAndAssertMenuShown();
+        View view = getSettingsMenuItemView();
+        assertEquals(
+                "Content description should mention an error.",
+                view.findViewById(R.id.menu_item_text).getContentDescription(),
+                mActivityTestRule.getActivity().getString(R.string.menu_settings_account_error));
+        mRenderTestRule.render(view, "settings_menu_item_syncing_user_sync_error");
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"Browser", "Main", "RenderTest"})
+    @EnableFeatures(ChromeFeatureList.SYNC_SHOW_IDENTITY_ERRORS_FOR_SIGNED_IN_USERS)
+    public void testSettingsMenuItem_NoBadgeShownForSyncingUsersIfNoError() throws IOException {
+        TestThreadUtils.runOnUiThreadBlocking(() -> mAppMenuHandler.hideAppMenu());
+        // Sign in and wait for sync machinery to be active.
+        mSigninTestRule.addTestAccountThenSigninAndEnableSync();
+
+        showAppMenuAndAssertMenuShown();
+        View view = getSettingsMenuItemView();
+        Assert.assertNull(view.findViewById(R.id.menu_item_text).getContentDescription());
+        mRenderTestRule.render(view, "settings_menu_item_syncing_user_no_error");
     }
 
     private void showAppMenuAndAssertMenuShown() {
@@ -540,5 +603,35 @@ public class TabbedAppMenuTest {
 
     private ListView getListView() {
         return AppMenuTestSupport.getListView(mActivityTestRule.getAppMenuCoordinator());
+    }
+
+    private View getSettingsMenuItemView() {
+        int position =
+                AppMenuTestSupport.findIndexOfMenuItemById(
+                        mActivityTestRule.getAppMenuCoordinator(), R.id.preferences_id);
+        Assert.assertTrue("No settings menu item found.", position != -1);
+
+        CriteriaHelper.pollUiThread(() -> getListView().getChildAt(0) != null);
+
+        Callable<Boolean> isVisible =
+                () -> {
+                    int visibleStart = getListView().getFirstVisiblePosition();
+                    int visibleEnd = visibleStart + getListView().getChildCount() - 1;
+                    return position >= visibleStart && position <= visibleEnd;
+                };
+
+        if (!TestThreadUtils.runOnUiThreadBlockingNoException(isVisible)) {
+            TestThreadUtils.runOnUiThreadBlocking(() -> getListView().setSelection(position));
+            CriteriaHelper.pollUiThread(isVisible);
+        }
+
+        View view =
+                TestThreadUtils.runOnUiThreadBlockingNoException(
+                        () -> {
+                            return getListView()
+                                    .getChildAt(position - getListView().getFirstVisiblePosition());
+                        });
+        Assert.assertNotNull("No settings menu item view found.", view);
+        return view;
     }
 }

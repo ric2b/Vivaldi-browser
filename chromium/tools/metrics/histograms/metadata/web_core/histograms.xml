@@ -29,7 +29,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="WebCore.DistillabilityUs" units="microseconds"
-    expires_after="2024-05-19">
+    expires_after="2024-07-21">
   <owner>wychen@chromium.org</owner>
   <owner>gilmanmh@google.com</owner>
   <summary>
@@ -113,7 +113,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.Fullscreen.LockStateAtEntryViaApi"
-    enum="FullscreenLockState" expires_after="2024-06-07">
+    enum="FullscreenLockState" expires_after="2024-08-11">
   <owner>takumif@chromium.org</owner>
   <owner>openscreen-eng@google.com</owner>
   <summary>
@@ -126,7 +126,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.Fullscreen.LockStateAtEntryViaBrowserUi"
-    enum="FullscreenLockState" expires_after="2024-06-07">
+    enum="FullscreenLockState" expires_after="2024-08-11">
   <owner>takumif@chromium.org</owner>
   <owner>openscreen-eng@google.com</owner>
   <summary>
@@ -139,30 +139,6 @@ chromium-metrics-reviews@google.com.
 
     Canary/Dev data from December 2023 - January 2024 may be inaccurate due to a
     bug.
-  </summary>
-</histogram>
-
-<histogram name="WebCore.HTMLDocumentParser.PreloadScannerAppCacheDelayTime"
-    units="microseconds" expires_after="2019-09-30">
-  <owner>yoavweiss@chromium.org</owner>
-  <owner>csharrison@chromium.org</owner>
-  <summary>
-    Time in which non-AppCache requests have been delayed after being discovered
-    by the HTMLPreloadScanner, due to document element not being yet available,
-    which is required for AppCache support. Recorded per document.
-  </summary>
-</histogram>
-
-<histogram
-    name="WebCore.HTMLDocumentParser.PreloadScannerAppCacheDelayTime.MainFrame"
-    units="microseconds" expires_after="2019-09-30">
-  <owner>yoavweiss@chromium.org</owner>
-  <owner>csharrison@chromium.org</owner>
-  <summary>
-    Time in which non-AppCache requests have been delayed after being discovered
-    by the HTMLPreloadScanner, due to document element not being yet available,
-    which is required for AppCache support. Recorded per document, but applies
-    only to main frames.
   </summary>
 </histogram>
 
@@ -179,7 +155,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.BackingStore.ConsistencyError"
-    enum="IDBLevelDBBackingStoreInternalErrorType" expires_after="2024-05-24">
+    enum="IDBLevelDBBackingStoreInternalErrorType" expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -225,7 +201,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.BackingStore.OpenFirstTrySuccessTime"
-    units="ms" expires_after="2024-05-24">
+    units="ms" expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -286,7 +262,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.BackingStore.ReadError"
-    enum="IDBLevelDBBackingStoreInternalErrorType" expires_after="2024-05-24">
+    enum="IDBLevelDBBackingStoreInternalErrorType" expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -295,19 +271,12 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.BackingStore.WriteError"
-    enum="IDBLevelDBBackingStoreInternalErrorType" expires_after="2024-05-24">
+    enum="IDBLevelDBBackingStoreInternalErrorType" expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
     Methods that encountered leveldb errors while trying to write to disk.
   </summary>
-</histogram>
-
-<histogram name="WebCore.IndexedDB.Context.ForceCloseReason"
-    enum="IDBContextForcedCloseReason" expires_after="2024-05-24">
-  <owner>estade@chromium.org</owner>
-  <owner>chrome-owp-storage@google.com</owner>
-  <summary>The reason that a forced-close of a backing store occurred.</summary>
 </histogram>
 
 <histogram name="WebCore.IndexedDB.FoundBlobFileForValue" enum="Boolean"
@@ -324,7 +293,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.LevelDB.CloseTime" units="ms"
-    expires_after="2024-05-24">
+    expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -333,7 +302,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.LevelDB.OpenTime" units="ms"
-    expires_after="2024-05-24">
+    expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -342,7 +311,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.LevelDB.WriteTime" units="ms"
-    expires_after="2024-05-24">
+    expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -352,7 +321,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.LevelDBOpenErrors" enum="LevelDBErrorTypes"
-    expires_after="2024-05-24">
+    expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -371,7 +340,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.LevelDBOpenErrors.Corruption"
-    enum="LevelDBCorruptionTypes" expires_after="2024-05-24">
+    enum="LevelDBCorruptionTypes" expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -380,7 +349,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.LevelDBOpenErrors.EnvMethod"
-    enum="LevelDBIOErrorMethods" expires_after="2024-05-24">
+    enum="LevelDBIOErrorMethods" expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -389,7 +358,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.LevelDBReadErrors" enum="LevelDBErrorTypes"
-    expires_after="2024-05-24">
+    expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -408,7 +377,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.LevelDBReadErrors.Corruption"
-    enum="LevelDBCorruptionTypes" expires_after="2024-05-24">
+    enum="LevelDBCorruptionTypes" expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -417,7 +386,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.LevelDBReadErrors.EnvMethod"
-    enum="LevelDBIOErrorMethods" expires_after="2024-05-24">
+    enum="LevelDBIOErrorMethods" expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -426,7 +395,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.LevelDBWriteErrors" enum="LevelDBErrorTypes"
-    expires_after="2024-05-24">
+    expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -445,7 +414,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.LevelDBWriteErrors.Corruption"
-    enum="LevelDBCorruptionTypes" expires_after="2024-05-24">
+    enum="LevelDBCorruptionTypes" expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -455,7 +424,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.LevelDBWriteErrors.EnvMethod"
-    enum="LevelDBIOErrorMethods" expires_after="2024-05-24">
+    enum="LevelDBIOErrorMethods" expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -464,7 +433,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.OpenTime.Cold" units="ms"
-    expires_after="2024-05-24">
+    expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -479,7 +448,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.OpenTime.Warm" units="ms"
-    expires_after="2024-05-24">
+    expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -524,7 +493,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.PutValueSize2" units="KB"
-    expires_after="2024-05-24">
+    expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -572,7 +541,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.TombstoneSweeper.DeletionTotalTime.Complete"
-    units="ms" expires_after="2024-05-24">
+    units="ms" expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -608,7 +577,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.TombstoneSweeper.NumDeletedTombstones"
-    units="Index Tombstones" expires_after="2024-05-24">
+    units="Index Tombstones" expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -629,7 +598,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.Transaction.{TransactionType}.SizeOnCommit2"
-    units="KB" expires_after="2024-05-24">
+    units="KB" expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -641,7 +610,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.Transaction.{TransactionType}.TimeActive"
-    units="ms" expires_after="2024-05-24">
+    units="ms" expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -680,7 +649,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.IndexedDB.TransactionAbortReason" enum="IDBException"
-    expires_after="2024-05-24">
+    expires_after="2024-07-28">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -710,10 +679,15 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.Scripts.Async.NotStreamingReason"
-    enum="NotStreamingReason" expires_after="2023-12-10">
+    enum="NotStreamingReason" expires_after="2024-09-18">
   <owner>leszeks@chromium.org</owner>
   <owner>v8-runtime@google.com</owner>
-  <summary>Reason for not streaming an async script.</summary>
+  <summary>
+    Reason for not streaming an async script.
+
+    Warning: This histogram was expired from 2023-12-10 to 2024-03-19. Data may
+    be missing.
+  </summary>
 </histogram>
 
 <histogram name="WebCore.Scripts.Async.StartedStreaming" enum="BooleanStreamed"
@@ -724,10 +698,15 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.Scripts.Deferred.NotStreamingReason"
-    enum="NotStreamingReason" expires_after="2023-12-10">
+    enum="NotStreamingReason" expires_after="2024-09-18">
   <owner>leszeks@chromium.org</owner>
   <owner>v8-runtime@google.com</owner>
-  <summary>Reason for not streaming a deferred script.</summary>
+  <summary>
+    Reason for not streaming a deferred script.
+
+    Warning: This histogram was expired from 2023-12-10 to 2024-03-19. Data may
+    be missing.
+  </summary>
 </histogram>
 
 <histogram name="WebCore.Scripts.Deferred.StartedStreaming"
@@ -762,12 +741,15 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.Scripts.Other.NotStreamingReason"
-    enum="NotStreamingReason" expires_after="2023-12-10">
+    enum="NotStreamingReason" expires_after="2024-09-18">
   <owner>leszeks@chromium.org</owner>
   <owner>v8-runtime@google.com</owner>
   <summary>
     Reason for not streaming an other (not async, deferred or parser blocking)
     script.
+
+    Warning: This histogram was expired from 2023-12-10 to 2024-03-19. Data may
+    be missing.
   </summary>
 </histogram>
 
@@ -782,10 +764,15 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.Scripts.ParsingBlocking.NotStreamingReason"
-    enum="NotStreamingReason" expires_after="2023-10-08">
+    enum="NotStreamingReason" expires_after="2024-09-18">
   <owner>leszeks@chromium.org</owner>
   <owner>v8-runtime@google.com</owner>
-  <summary>Reason for not streaming a parsing blocking script.</summary>
+  <summary>
+    Reason for not streaming a parsing blocking script.
+
+    Warning: This histogram was expired from 2023-10-08 to 2024-03-19. Data may
+    be missing.
+  </summary>
 </histogram>
 
 <histogram name="WebCore.Scripts.ParsingBlocking.StartedStreaming"
@@ -796,7 +783,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebCore.Scripts.V8CompileHintsStatus"
-    enum="V8CompileHintsStatus" expires_after="2024-03-12">
+    enum="V8CompileHintsStatus" expires_after="2024-06-12">
   <owner>marja@chromium.org</owner>
   <owner>v8-loading@google.com</owner>
   <owner>chrome-intelligence-core@google.com</owner>
@@ -814,6 +801,17 @@ chromium-metrics-reviews@google.com.
   <owner>chrome-intelligence-core@google.com</owner>
   <summary>
     Whether we got a V8CompileHints model and whether it was good quality.
+  </summary>
+</histogram>
+
+<histogram name="WebCore.Scripts.V8LocalCompileHintsGenerated"
+    enum="V8LocalCompileHintsGenerated" expires_after="2024-06-11">
+  <owner>marja@chromium.org</owner>
+  <owner>v8-runtime@google.com</owner>
+  <summary>
+    Whether we produced the non-final or the final version of local compile
+    hints. This can be used for approximating how often we end up not generating
+    compile hints if we wait too long for the final compile hints generation.
   </summary>
 </histogram>
 

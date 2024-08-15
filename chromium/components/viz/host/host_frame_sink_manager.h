@@ -6,6 +6,7 @@
 #define COMPONENTS_VIZ_HOST_HOST_FRAME_SINK_MANAGER_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -30,7 +31,6 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/viz/privileged/mojom/compositing/frame_sink_manager.mojom.h"
 #include "services/viz/public/mojom/compositing/frame_sink_bundle.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -239,6 +239,9 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
   void StopFrameCountingForTest(
       mojom::FrameSinkManager::StopFrameCountingForTestCallback callback);
 
+  void ClearUnclaimedViewTransitionResources(const NavigationId& navigation_id);
+  bool HasUnclaimedViewTransitionResourcesForTest();
+
   const DebugRendererSettings& debug_renderer_settings() const {
     return debug_renderer_settings_;
   }
@@ -293,7 +296,7 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
 
   void CreateFrameSink(
       const FrameSinkId& frame_sink_id,
-      absl::optional<FrameSinkBundleId> bundle_id,
+      std::optional<FrameSinkBundleId> bundle_id,
       mojo::PendingReceiver<mojom::CompositorFrameSink> receiver,
       mojo::PendingRemote<mojom::CompositorFrameSinkClient> client);
 

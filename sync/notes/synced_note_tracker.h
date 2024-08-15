@@ -11,12 +11,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/uuid.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "components/sync/base/client_tag_hash.h"
 #include "components/sync/protocol/model_type_state.pb.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace sync_pb {
 class NotesModelMetadata;
@@ -201,16 +200,16 @@ class SyncedNoteTracker {
   // unsupported permanent folder).
   void RecordIgnoredServerUpdateDueToMissingParent(int64_t server_version);
 
-  absl::optional<int64_t> GetNumIgnoredUpdatesDueToMissingParentForTest() const;
-  absl::optional<int64_t>
+  std::optional<int64_t> GetNumIgnoredUpdatesDueToMissingParentForTest() const;
+  std::optional<int64_t>
   GetMaxVersionAmongIgnoredUpdatesDueToMissingParentForTest() const;
 
  private:
   explicit SyncedNoteTracker(
       sync_pb::ModelTypeState model_type_state,
       bool notes_reuploaded,
-      absl::optional<int64_t> num_ignored_updates_due_to_missing_parent,
-      absl::optional<int64_t>
+      std::optional<int64_t> num_ignored_updates_due_to_missing_parent,
+      std::optional<int64_t>
           max_version_among_ignored_updates_due_to_missing_parent,
       file_sync::SyncedFileStore* synced_file_store);
 
@@ -275,8 +274,8 @@ class SyncedNoteTracker {
   bool notes_reuploaded_ = false;
 
   // See corresponding proto fields in NotesModelMetadata.
-  absl::optional<int64_t> num_ignored_updates_due_to_missing_parent_;
-  absl::optional<int64_t>
+  std::optional<int64_t> num_ignored_updates_due_to_missing_parent_;
+  std::optional<int64_t>
       max_version_among_ignored_updates_due_to_missing_parent_;
 };
 

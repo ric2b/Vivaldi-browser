@@ -50,6 +50,9 @@ Browser* FindBrowserWithTab(const content::WebContents* web_contents) {
 
 Browser* FindBrowserWithNonTabContent(
     const content::WebContents* web_contents) {
+  if (!web_contents) {
+    return nullptr;
+  }
   if (VivaldiTabCheck::IsOwnedByDevTools(
           const_cast<content::WebContents*>(web_contents))) {
     return nullptr;

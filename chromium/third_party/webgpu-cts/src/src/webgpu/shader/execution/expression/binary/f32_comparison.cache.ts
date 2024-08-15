@@ -1,5 +1,5 @@
 import { anyOf } from '../../../../util/compare.js';
-import { bool, f32, Scalar } from '../../../../util/conversion.js';
+import { bool, f32, ScalarValue } from '../../../../util/conversion.js';
 import { flushSubnormalNumberF32, vectorF32Range } from '../../../../util/math.js';
 import { Case } from '../case.js';
 import { makeCaseCache } from '../case_cache.js';
@@ -11,7 +11,7 @@ import { makeCaseCache } from '../case_cache.js';
 function makeCase(
   lhs: number,
   rhs: number,
-  truthFunc: (lhs: Scalar, rhs: Scalar) => boolean
+  truthFunc: (lhs: ScalarValue, rhs: ScalarValue) => boolean
 ): Case {
   // Subnormal float values may be flushed at any time.
   // https://www.w3.org/TR/WGSL/#floating-point-evaluation
@@ -19,7 +19,7 @@ function makeCase(
   const f32_rhs = f32(rhs);
   const lhs_options = new Set([f32_lhs, f32(flushSubnormalNumberF32(lhs))]);
   const rhs_options = new Set([f32_rhs, f32(flushSubnormalNumberF32(rhs))]);
-  const expected: Array<Scalar> = [];
+  const expected: Array<ScalarValue> = [];
   lhs_options.forEach(l => {
     rhs_options.forEach(r => {
       const result = bool(truthFunc(l, r));
@@ -34,7 +34,7 @@ function makeCase(
 
 export const d = makeCaseCache('binary/f32_logical', {
   equals_non_const: () => {
-    const truthFunc = (lhs: Scalar, rhs: Scalar): boolean => {
+    const truthFunc = (lhs: ScalarValue, rhs: ScalarValue): boolean => {
       return (lhs.value as number) === (rhs.value as number);
     };
 
@@ -43,7 +43,7 @@ export const d = makeCaseCache('binary/f32_logical', {
     });
   },
   equals_const: () => {
-    const truthFunc = (lhs: Scalar, rhs: Scalar): boolean => {
+    const truthFunc = (lhs: ScalarValue, rhs: ScalarValue): boolean => {
       return (lhs.value as number) === (rhs.value as number);
     };
 
@@ -52,7 +52,7 @@ export const d = makeCaseCache('binary/f32_logical', {
     });
   },
   not_equals_non_const: () => {
-    const truthFunc = (lhs: Scalar, rhs: Scalar): boolean => {
+    const truthFunc = (lhs: ScalarValue, rhs: ScalarValue): boolean => {
       return (lhs.value as number) !== (rhs.value as number);
     };
 
@@ -61,7 +61,7 @@ export const d = makeCaseCache('binary/f32_logical', {
     });
   },
   not_equals_const: () => {
-    const truthFunc = (lhs: Scalar, rhs: Scalar): boolean => {
+    const truthFunc = (lhs: ScalarValue, rhs: ScalarValue): boolean => {
       return (lhs.value as number) !== (rhs.value as number);
     };
 
@@ -70,7 +70,7 @@ export const d = makeCaseCache('binary/f32_logical', {
     });
   },
   less_than_non_const: () => {
-    const truthFunc = (lhs: Scalar, rhs: Scalar): boolean => {
+    const truthFunc = (lhs: ScalarValue, rhs: ScalarValue): boolean => {
       return (lhs.value as number) < (rhs.value as number);
     };
 
@@ -79,7 +79,7 @@ export const d = makeCaseCache('binary/f32_logical', {
     });
   },
   less_than_const: () => {
-    const truthFunc = (lhs: Scalar, rhs: Scalar): boolean => {
+    const truthFunc = (lhs: ScalarValue, rhs: ScalarValue): boolean => {
       return (lhs.value as number) < (rhs.value as number);
     };
 
@@ -88,7 +88,7 @@ export const d = makeCaseCache('binary/f32_logical', {
     });
   },
   less_equals_non_const: () => {
-    const truthFunc = (lhs: Scalar, rhs: Scalar): boolean => {
+    const truthFunc = (lhs: ScalarValue, rhs: ScalarValue): boolean => {
       return (lhs.value as number) <= (rhs.value as number);
     };
 
@@ -97,7 +97,7 @@ export const d = makeCaseCache('binary/f32_logical', {
     });
   },
   less_equals_const: () => {
-    const truthFunc = (lhs: Scalar, rhs: Scalar): boolean => {
+    const truthFunc = (lhs: ScalarValue, rhs: ScalarValue): boolean => {
       return (lhs.value as number) <= (rhs.value as number);
     };
 
@@ -106,7 +106,7 @@ export const d = makeCaseCache('binary/f32_logical', {
     });
   },
   greater_than_non_const: () => {
-    const truthFunc = (lhs: Scalar, rhs: Scalar): boolean => {
+    const truthFunc = (lhs: ScalarValue, rhs: ScalarValue): boolean => {
       return (lhs.value as number) > (rhs.value as number);
     };
 
@@ -115,7 +115,7 @@ export const d = makeCaseCache('binary/f32_logical', {
     });
   },
   greater_than_const: () => {
-    const truthFunc = (lhs: Scalar, rhs: Scalar): boolean => {
+    const truthFunc = (lhs: ScalarValue, rhs: ScalarValue): boolean => {
       return (lhs.value as number) > (rhs.value as number);
     };
 
@@ -124,7 +124,7 @@ export const d = makeCaseCache('binary/f32_logical', {
     });
   },
   greater_equals_non_const: () => {
-    const truthFunc = (lhs: Scalar, rhs: Scalar): boolean => {
+    const truthFunc = (lhs: ScalarValue, rhs: ScalarValue): boolean => {
       return (lhs.value as number) >= (rhs.value as number);
     };
 
@@ -133,7 +133,7 @@ export const d = makeCaseCache('binary/f32_logical', {
     });
   },
   greater_equals_const: () => {
-    const truthFunc = (lhs: Scalar, rhs: Scalar): boolean => {
+    const truthFunc = (lhs: ScalarValue, rhs: ScalarValue): boolean => {
       return (lhs.value as number) >= (rhs.value as number);
     };
 

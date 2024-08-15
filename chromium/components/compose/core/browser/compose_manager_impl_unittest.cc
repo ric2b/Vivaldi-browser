@@ -2,19 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/compose/core/browser/compose_manager_impl.h"
+
 #include <memory>
 #include <optional>
 #include <utility>
 
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
-#include "components/autofill/core/browser/autofill_manager.h"
+#include "components/autofill/core/browser/mock_autofill_manager.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/browser/test_autofill_driver.h"
 #include "components/autofill/core/common/autofill_test_utils.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/compose/core/browser/compose_client.h"
-#include "components/compose/core/browser/compose_manager_impl.h"
 #include "components/compose/core/browser/compose_metrics.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -45,113 +46,20 @@ class MockComposeClient : public compose::ComposeClient {
               (override));
   MOCK_METHOD(bool,
               ShouldTriggerPopup,
-              (const autofill::FormFieldData& trigger_field),
+              (const autofill::FormFieldData& trigger_field,
+               autofill::AutofillSuggestionTriggerSource trigger_source),
               (override));
   MOCK_METHOD(compose::PageUkmTracker*, getPageUkmTracker, (), (override));
 };
 
 class MockAutofillDriver : public autofill::TestAutofillDriver {
  public:
+  using autofill::TestAutofillDriver::TestAutofillDriver;
   MOCK_METHOD(void,
               ExtractForm,
               (autofill::FormGlobalId form,
                AutofillDriver::BrowserFormHandler response_handler),
               (override));
-};
-
-// TODO(b/318841248): deduplicate with the mock in autofill_manager_unittest.cc.
-class MockAutofillManager : public autofill::AutofillManager {
- public:
-  MockAutofillManager(autofill::AutofillDriver* driver,
-                      autofill::AutofillClient* client)
-      : autofill::AutofillManager(driver, client) {}
-
-  base::WeakPtr<autofill::AutofillManager> GetWeakPtr() override {
-    return weak_ptr_factory_.GetWeakPtr();
-  }
-
-  MOCK_METHOD(bool, ShouldClearPreviewedForm, (), (override));
-  MOCK_METHOD(void,
-              OnFocusNoLongerOnFormImpl,
-              (bool had_interacted_form),
-              (override));
-  MOCK_METHOD(void,
-              OnDidFillAutofillFormDataImpl,
-              (const autofill::FormData& form, const base::TimeTicks timestamp),
-              (override));
-  MOCK_METHOD(void, OnDidEndTextFieldEditingImpl, (), (override));
-  MOCK_METHOD(void, OnHidePopupImpl, (), (override));
-  MOCK_METHOD(void,
-              OnSelectOrSelectListFieldOptionsDidChangeImpl,
-              (const autofill::FormData& form),
-              (override));
-  MOCK_METHOD(void,
-              OnJavaScriptChangedAutofilledValueImpl,
-              (const autofill::FormData& form,
-               const autofill::FormFieldData& field,
-               const std::u16string& old_value),
-              (override));
-  MOCK_METHOD(void,
-              OnFormSubmittedImpl,
-              (const autofill::FormData& form,
-               bool known_success,
-               autofill::mojom::SubmissionSource source),
-              (override));
-  MOCK_METHOD(void,
-              OnTextFieldDidChangeImpl,
-              (const autofill::FormData& form,
-               const autofill::FormFieldData& field,
-               const gfx::RectF& bounding_box,
-               const base::TimeTicks timestamp),
-              (override));
-  MOCK_METHOD(void,
-              OnTextFieldDidScrollImpl,
-              (const autofill::FormData& form,
-               const autofill::FormFieldData& field,
-               const gfx::RectF& bounding_box),
-              (override));
-  MOCK_METHOD(void,
-              OnAskForValuesToFillImpl,
-              (const autofill::FormData& form,
-               const autofill::FormFieldData& field,
-               const gfx::RectF& bounding_box,
-               autofill::AutofillSuggestionTriggerSource trigger_source),
-              (override));
-  MOCK_METHOD(void,
-              OnFocusOnFormFieldImpl,
-              (const autofill::FormData& form,
-               const autofill::FormFieldData& field,
-               const gfx::RectF& bounding_box),
-              (override));
-  MOCK_METHOD(void,
-              OnSelectControlDidChangeImpl,
-              (const autofill::FormData& form,
-               const autofill::FormFieldData& field,
-               const gfx::RectF& bounding_box),
-              (override));
-  MOCK_METHOD(bool, ShouldParseForms, (), (override));
-  MOCK_METHOD(void, OnBeforeProcessParsedForms, (), (override));
-  MOCK_METHOD(void,
-              OnFormProcessed,
-              (const autofill::FormData& form_data,
-               const autofill::FormStructure& form_structure),
-              (override));
-  MOCK_METHOD(void,
-              OnAfterProcessParsedForms,
-              (const autofill::DenseSet<autofill::FormType>& form_types),
-              (override));
-  MOCK_METHOD(void,
-              ReportAutofillWebOTPMetrics,
-              (bool used_web_otp),
-              (override));
-  MOCK_METHOD(void,
-              OnContextMenuShownInField,
-              (const autofill::FormGlobalId& form_global_id,
-               const autofill::FieldGlobalId& field_global_id),
-              (override));
-
- private:
-  base::WeakPtrFactory<MockAutofillManager> weak_ptr_factory_{this};
 };
 
 }  // namespace
@@ -165,10 +73,10 @@ class ComposeManagerImplTest : public testing::Test {
     page_ukm_tracker_ =
         std::make_unique<compose::PageUkmTracker>(valid_test_source_id);
 
-    std::unique_ptr<testing::NiceMock<MockAutofillManager>>
+    std::unique_ptr<testing::NiceMock<autofill::MockAutofillManager>>
         mock_autofill_manager =
-            std::make_unique<testing::NiceMock<MockAutofillManager>>(
-                &mock_autofill_driver_, &test_autofill_client_);
+            std::make_unique<testing::NiceMock<autofill::MockAutofillManager>>(
+                &mock_autofill_driver_);
     mock_autofill_driver_.set_autofill_manager(
         std::move(mock_autofill_manager));
 
@@ -228,7 +136,8 @@ class ComposeManagerImplTest : public testing::Test {
   testing::NiceMock<MockComposeClient> mock_compose_client_;
   autofill::TestAutofillClient test_autofill_client_;
   autofill::FormFieldData last_form_field_to_client_;
-  testing::NiceMock<MockAutofillDriver> mock_autofill_driver_;
+  testing::NiceMock<MockAutofillDriver> mock_autofill_driver_{
+      &test_autofill_client_};
   std::unique_ptr<compose::PageUkmTracker> page_ukm_tracker_;
   base::HistogramTester histogram_tester_;
   std::unique_ptr<compose::ComposeManagerImpl> compose_manager_impl_;

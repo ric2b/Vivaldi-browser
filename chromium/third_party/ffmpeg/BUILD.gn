@@ -92,9 +92,7 @@ if (is_win) {
   action("ffmpeg_generate_def") {
     script = generate_stubs_script
     sources = sig_files
-    outputs = [
-      "$target_gen_dir/ffmpeg.def",
-    ]
+    outputs = [ "$target_gen_dir/ffmpeg.def" ]
     args = [
              "-i",
              rebase_path(target_out_dir, root_build_dir),
@@ -290,14 +288,10 @@ target(link_target_type, "ffmpeg_internal") {
       "-Wno-deprecated-declarations",
     ]
 
-    if (!(is_android && use_call_graph)) {
-      # Remove default stack frames config so we can force -fomit-frame-pointer.
-      configs -= [ "//build/config/compiler:default_stack_frames" ]
+    # Remove default stack frames config so we can force -fomit-frame-pointer.
+    configs -= [ "//build/config/compiler:default_stack_frames" ]
 
-      cflags += [
-        "-fomit-frame-pointer",
-      ]
-    }
+    cflags += [ "-fomit-frame-pointer" ]
 
     if (!is_clang) {
       # gcc doesn't have flags for specific warnings, so disable them
@@ -367,9 +361,7 @@ target(link_target_type, "ffmpeg_internal") {
 
     defines += [ "_DARWIN_C_SOURCE" ]
     if (is_ios) {
-      libs -= [
-        "rt",
-      ]
+      libs -= [ "rt" ]
     }
   } else if (is_win) {
     defines += [
@@ -429,9 +421,7 @@ if (is_component_ffmpeg) {
       configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
     }
     public_configs = [ ":ffmpeg_dependent_config" ]
-    deps = [
-      ":ffmpeg_internal",
-    ]
+    deps = [ ":ffmpeg_internal" ]
 
     # So we can append below and assume they're defined.
     ldflags = []
@@ -446,26 +436,21 @@ if (is_component_ffmpeg) {
     } else if (is_win) {
       # Windows component build needs the .def file to export ffmpeg symbols.
       deps += [ ":ffmpeg_generate_def" ]
-      sources = [
-        "$target_gen_dir/ffmpeg.def",
-      ]
+      sources = [ "$target_gen_dir/ffmpeg.def" ]
     }
 
     if (!is_component_build) {
       if (is_mac) {
         ldflags += [ "-Wl,-install_name,@rpath/libffmpeg.dylib" ]
       } else if (is_linux) {
-        all_dependent_configs = [
-          "//build/config/gcc:rpath_for_built_shared_libraries",
-        ]
+        all_dependent_configs =
+            [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
       }
     }
   }
 } else {
   source_set("ffmpeg") {
     public_configs = [ ":ffmpeg_dependent_config" ]
-    deps = [
-      ":ffmpeg_internal",
-    ]
+    deps = [ ":ffmpeg_internal" ]
   }
 }

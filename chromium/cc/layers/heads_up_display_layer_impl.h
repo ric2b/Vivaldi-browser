@@ -41,8 +41,10 @@ class CC_EXPORT HeadsUpDisplayLayerImpl : public LayerImpl {
  public:
   static std::unique_ptr<HeadsUpDisplayLayerImpl> Create(
       LayerTreeImpl* tree_impl,
-      int id) {
-    return base::WrapUnique(new HeadsUpDisplayLayerImpl(tree_impl, id));
+      int id,
+      const std::string& paused_localized_message) {
+    return base::WrapUnique(
+        new HeadsUpDisplayLayerImpl(tree_impl, id, paused_localized_message));
   }
   HeadsUpDisplayLayerImpl(const HeadsUpDisplayLayerImpl&) = delete;
   ~HeadsUpDisplayLayerImpl() override;
@@ -54,6 +56,7 @@ class CC_EXPORT HeadsUpDisplayLayerImpl : public LayerImpl {
 
   bool WillDraw(DrawMode draw_mode,
                 viz::ClientResourceProvider* resource_provider) override;
+  void DidDraw(viz::ClientResourceProvider* resource_provider) override;
   void AppendQuads(viz::CompositorRenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override;
   void UpdateHudTexture(DrawMode draw_mode,
@@ -83,7 +86,9 @@ class CC_EXPORT HeadsUpDisplayLayerImpl : public LayerImpl {
   void PushPropertiesTo(LayerImpl* layer) override;
 
  private:
-  HeadsUpDisplayLayerImpl(LayerTreeImpl* tree_impl, int id);
+  HeadsUpDisplayLayerImpl(LayerTreeImpl* tree_impl,
+                          int id,
+                          const std::string& paused_localized_message);
 
   const char* LayerTypeAsString() const override;
 
@@ -91,6 +96,7 @@ class CC_EXPORT HeadsUpDisplayLayerImpl : public LayerImpl {
 
   void UpdateHudContents();
   void DrawHudContents(PaintCanvas* canvas);
+  void DrawDebuggerPaused(PaintCanvas* canvas);
   void DrawText(PaintCanvas* canvas,
                 const PaintFlags& flags,
                 const std::string& text,
@@ -204,6 +210,8 @@ class CC_EXPORT HeadsUpDisplayLayerImpl : public LayerImpl {
   std::unique_ptr<WebVitalMetrics> web_vital_metrics_;
 
   base::TimeTicks time_of_last_graph_update_;
+
+  std::string paused_localized_message_;
 };
 
 }  // namespace cc

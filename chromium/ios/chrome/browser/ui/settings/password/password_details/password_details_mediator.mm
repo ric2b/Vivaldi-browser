@@ -10,7 +10,6 @@
 #import <vector>
 
 #import "base/containers/contains.h"
-#import "base/containers/cxx20_erase.h"
 #import "base/containers/flat_set.h"
 #import "base/memory/raw_ptr.h"
 #import "base/ranges/algorithm.h"
@@ -232,7 +231,7 @@ bool ShouldDisplayCredentialAsMuted(
     return;
   }
 
-  // Use the iterator before base::Erase() makes it invalid.
+  // Use the iterator before std::erase() makes it invalid.
   self.savedPasswordsPresenter->RemoveCredential(*it);
   // TODO(crbug.com/1359392). Once kPasswordsGrouping launches, the mediator
   // should update the passwords model and receive the updates via
@@ -241,7 +240,7 @@ bool ShouldDisplayCredentialAsMuted(
   // flag is disabled and the password is edited, it's impossible to identify
   // the new object to show (sign-on realm can't be used as an id, there might
   // be multiple credentials; nor username/password since the values changed).
-  base::Erase(_credentials, *it);
+  std::erase(_credentials, *it);
   [self providePasswordsToConsumer];
 
   // Update form managers so the list of password suggestions shown to the user
@@ -420,7 +419,7 @@ bool ShouldDisplayCredentialAsMuted(
   CHECK(self.credentials.size() == 1);
   password_manager::CredentialUIEntry credential = self.credentials[0];
   _manager->UnmuteCredential(credential);
-  base::Erase(_credentials, credential);
+  std::erase(_credentials, credential);
   [self providePasswordsToConsumer];
 }
 
@@ -507,7 +506,7 @@ bool ShouldDisplayCredentialAsMuted(
     password.shouldOfferToMoveToAccount =
         self.context == DetailsContext::kPasswordSettings &&
         password_manager::features_util::IsOptedInForAccountStorage(
-            _syncService) &&
+            _prefService, _syncService) &&
         ShouldShowLocalOnlyIcon(credential, _syncService);
     [passwords addObject:password];
   }
@@ -559,7 +558,8 @@ bool ShouldDisplayCredentialAsMuted(
 // * User is syncing or signed in and opted in to account storage.
 // * Password sending feature is enabled.
 - (BOOL)shouldDisplayShareButton {
-  return password_manager::sync_util::GetAccountForSaving(_syncService) &&
+  return password_manager::sync_util::GetAccountForSaving(_prefService,
+                                                          _syncService) &&
          base::FeatureList::IsEnabled(
              password_manager::features::kSendPasswords);
 }

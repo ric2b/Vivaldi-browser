@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Paysage 12</translation>
 <translation id="1158503667684816647">Ne plus afficher cette boîte de dialogue de confirmation</translation>
 <translation id="1222195720020481779">Démarrage du programme d’installation…</translation>
+<translation id="1270785070369717623">Malheureusement, les paramètres d’Opera GX ne sont pas disponibles lorsque ce navigateur est en cours d’exécution. Pour importer ces paramètres dans Vivaldi, sauvegardez votre travail et fermez toutes les fenêtres d’Opera GX. Cliquez ensuite sur Continuer.</translation>
 <translation id="1276145862619442150">Speed Dials</translation>
 <translation id="1281950884873973195">Animal 6</translation>
 <translation id="1411638389238344450">Envoyer le lien par mail</translation>
@@ -12,6 +13,7 @@
 <translation id="1462666970065907900">Voulez-vous vraiment fermer cette fenêtre ?</translation>
 <translation id="1480046233931937785">Crédits</translation>
 <translation id="1526344461589023948">Une erreur est survenue lors de l’enregistrement de la mise à jour téléchargée. Veuillez vérifier l’espace disque disponible sur votre ordinateur et essayer plus tard.</translation>
+<translation id="1635542496948266458">Basculer d’un profil à un autre</translation>
 <translation id="1657174850639146440">Monstre 9</translation>
 <translation id="1676595396635191120">Nouvelle fenêtre privée</translation>
 <translation id="1702758681952953055">Si l’erreur persiste, veuillez la rapporter en incluant les détails suivants :</translation>
@@ -27,12 +29,14 @@
 <translation id="1985669426322966465">Mise à jour du logiciel</translation>
 <translation id="2079036669923635404">Cliquer ici pour mettre à jour Vivaldi en version <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Une erreur est survenue lors du téléchargement des fichiers de mise à jour. Veuillez vérifier votre connexion et essayer plus tard.</translation>
+<translation id="2226825946708954262">⚠ Continuer avec perte de données</translation>
 <translation id="2339641773402824483">Recherche des mises à jour…</translation>
 <translation id="2441056087170876076">Monstre 2</translation>
 <translation id="2444387452209867610">Insérer une note</translation>
 <translation id="2486841023299517366">Animal 4</translation>
 <translation id="2612127540243995147">La nouvelle version est prête à être installée. Vivaldi sera fermé puis relancé automatiquement.</translation>
 <translation id="2613387515621326337">Afficher le site de la mise à jour</translation>
+<translation id="2645477450146475243">Malheureusement, les paramètres d’Opera ne sont pas disponibles lorsque le navigateur est en cours d’exécution. Pour importer ces paramètres dans Vivaldi, sauvegardez votre travail et fermez toutes les fenêtres d’Opera. Cliquez ensuite sur Continuer.</translation>
 <translation id="2647368062414805334">Malheureusement, vos paramètres Edge ne sont pas disponibles lorsque ce navigateur est lancé. Pour importer ces paramètres sur Vivaldi, enregistrez votre travail et fermez toutes les fenêtres de Edge. Cliquez ensuite sur Continuer.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Animal 3</translation>
@@ -41,11 +45,14 @@
 <translation id="2923448633003185837">Coller et aller</translation>
 <translation id="2953943267837858202">Lecture automatique des vidéos non autorisée</translation>
 <translation id="2977472760057091832">Ouvrir le lien dans une nouvelle &amp;fenêtre de navigation privée</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Ouvrir dans un nouvel onglet</translation>
 <translation id="3027988479108856431">Malheureusement, les données de Yandex ne sont pas accessibles lorsque ce navigateur est lancé. Pour importer ces données dans Vivaldi, enregistrez votre travail en cours et fermez toutes les fenêtres Yandex. Puis cliquez sur « Continuer ».</translation>
 <translation id="3084011186245865060">Paysage 6</translation>
+<translation id="3085906383264247940">Opera (Beta)</translation>
 <translation id="3093931836425623631">Vivaldi est rendu possible grâce au projet Open-Source Chromium et d’autres logiciels Open-Source.</translation>
 <translation id="3127383884976966729">Animal 7</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">Nouveau signet</translation>
 <translation id="3255747772218936245">Installer la mise à jour</translation>
 <translation id="3259769196742189631">Valider cette page (W3C)</translation>
@@ -54,7 +61,6 @@
 <translation id="3334610655141903168">(pas de titre)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> est actuellement la dernière version disponible.</translation>
 <translation id="3383198080133834965">Vivaldi est bien à jour !</translation>
-<translation id="3402602684546832928">Sélectionner le fichier de signets d’Opera</translation>
 <translation id="3451317331714872347">Paysage 8</translation>
 <translation id="3457498675806041407">Confirmer la fermeture</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> est déjà installé et sera activé après le redémarrage du navigateur.</translation>
@@ -65,6 +71,7 @@
 <translation id="3588820906588687999">Ouvrir l’image dans un nouvel onglet</translation>
 <translation id="3601066750251199488">Monstre 3</translation>
 <translation id="3620979700683094848">Les sites peuvent automatiquement lire les vidéos</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Une nouvelle version de Vivaldi est disponible !</translation>
 <translation id="3708982624815781692">Le téléchargement a été annulé.</translation>
 <translation id="3732157130969736834">Enregistrer le lien dans les signets</translation>
@@ -76,6 +83,9 @@
 <translation id="3914946330804881301">Importés d’Opera</translation>
 <translation id="3921292902397893431">Monstre 8</translation>
 <translation id="3943857333388298514">Coller</translation>
+<translation id="3974783668264968389">Vivaldi ne peut pas déverrouiller votre stockage sécurisé de clés. Sans ce stockage, vous allez perdre les mots de passe enregistrés, les cookies sécurisés et quelques fonctions comme la synchronisation, le courrier et l’agenda cesseront de fonctionner.
+
+    Veuillez fermer le navigateur, déverrouiller ou réparer votre stockage de clés et réessayer. Si vous souhaitez vraiment continuer, cochez la case et cliquez sur le bouton « Continuer avec perte de données ».</translation>
 <translation id="4005270918754737597">Ignorer cette version</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4074744496918018786">Ouvrir l’image dans une fenêtre de navigation privée</translation>
@@ -88,7 +98,6 @@
 <translation id="443008484043213881">Outils</translation>
 <translation id="4456211719108566931">Monstre 6</translation>
 <translation id="4512900838580567989">Ouvrir le lien dans un nouvel onglet en arrière-plan</translation>
-<translation id="4515472507709384008">Opera version 15+</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Ouvrir l’image dans un nouvel onglet en arrière-plan</translation>
 <translation id="4582480609585453144">Ouvrir le lien en arrière-plan</translation>
@@ -100,16 +109,17 @@
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> sur <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Speed Dials importés</translation>
 <translation id="5092656712000637858">Ajouter cette page à un panneau Web</translation>
+<translation id="5106275083540628394">Échec au déchiffrement : Risque de perte de données</translation>
 <translation id="5177818338935286353">Monstre 7</translation>
 <translation id="5213743983876949565">Animal 1</translation>
 <translation id="5238244642230426581">Signets importés</translation>
 <translation id="527605719918376753">Mettre l’onglet en sourdine</translation>
 <translation id="5305569355661722298">Confirmer la fermeture de la fenêtre</translation>
+<translation id="5322922669477407077">Opera (Developer)</translation>
 <translation id="5388358297987318779">Ouvrir l’image</translation>
 <translation id="5416008465899576639">Une nouvelle version de Vivaldi est disponible.</translation>
 <translation id="5497042274492038489">Confirmer la fermeture de la fenêtre</translation>
 <translation id="5594602170491763400">Monstre 5</translation>
-<translation id="5615637589913244581">Opera version 15+ (Beta)</translation>
 <translation id="5648110075441906505">Ouvrir l’image dans une nouvelle fenêtre</translation>
 <translation id="5656371807944747581">Erreur durant la mise à jour !</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> est désormais disponible (vous avez actuellement <ph name="OLD_VERSION" />). Voulez-vous faire la mise à jour maintenant ?</translation>
@@ -120,8 +130,8 @@
 <translation id="6040143037577758943">Fermer</translation>
 <translation id="6229528619562190452">Cliquez ici pour mettre à jour Vivaldi.</translation>
 <translation id="6234173136417926046">Utiliser cette image comme image de fond de Speed Dial</translation>
-<translation id="630690498669249215">Fichier de signets d’Opera</translation>
 <translation id="6339818817272922368">Compte local</translation>
+<translation id="6398710281890660037">Sécuriser mon profil</translation>
 <translation id="6438786710866753178">Paysage 4</translation>
 <translation id="6477028720702061455">Sélectionner le répertoire du profil d’Opera à importer</translation>
 <translation id="6510706699590490869">Mettre à &amp;jour Vivaldi</translation>
@@ -131,11 +141,13 @@
 <translation id="6635049669875534328">Notes de version :</translation>
 <translation id="6693585104974197539">Sélectionner le profil de Edge à importer</translation>
 <translation id="6726279523566323394">Sélectionner le dossier de profil Brave à importer</translation>
-<translation id="6804831687363620480">Malheureusement, les données d’Opera 15+ ne sont pas accessibles lorsque ce navigateur est lancé. Pour importer ces données dans Vivaldi, enregistrez votre travail en cours et fermez toutes les fenêtres Opera 15+. Puis cliquez sur « Continuer ».</translation>
 <translation id="6892812721183419409">Ouvrir le lien en tant que <ph name="USER" /></translation>
 <translation id="6896758677409633944">Copier</translation>
+<translation id="6960139763942959188">Ce profil est actuellement stocké dans un format non chiffré, donc peu sécurisé. Vivaldi va mettre à jour votre profil de manière à le chiffrer, pour plus de sécurité. Vous devriez quitter le navigateur maintenant et sauvegarder votre profil actuel avant de continuer.</translation>
 <translation id="7086554968911045110">Paysage 7</translation>
+<translation id="7099506190679014195">Mise à jour du stockage de clés sécurisé</translation>
 <translation id="7111492742514999492">Paysage 9</translation>
+<translation id="7208252576848052204">Malheureusement, vos paramètres d’Arc ne sont pas disponibles lorsque ce navigateur est en cours d’exécution. Pour importer ces paramètres dans Vivaldi, sauvegardez votre travail et fermez toutes les fenêtres d’Arc. Cliquez ensuite sur Continuer.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Échec de lancement de l’installeur de la mise à jour. Veuillez vérifier que l’ordinateur dispose d’assez de mémoire et d’espace disque et réessayer plus tard.</translation>
 <translation id="7658239707568436148">Annuler</translation>
@@ -162,7 +174,6 @@
 <translation id="8562339533180097902">Fermer Vivaldi et procéder à l’installation</translation>
 <translation id="8567452685425968223">Extraction de la mise à jour…</translation>
 <translation id="8624587806981488221">&amp;Recharger l’image</translation>
-<translation id="864444594187862076">Opera version 15+ (Dév.)</translation>
 <translation id="8651348004684669199">Ajouter l’onglet actif aux signets</translation>
 <translation id="8669345741879513971">Monstre 10</translation>
 <translation id="867544375504146191">Yandex</translation>
@@ -178,6 +189,7 @@
 <translation id="9048058608784130603">Mise à jour <ph name="VERSION" /> en attente</translation>
 <translation id="9048224371732578627">Autorisé pour jouer automatiquement les vidéos</translation>
 <translation id="9065203028668620118">Modifier</translation>
+<translation id="9090254883741610153">Laissez-moi continuer</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Ouvrir l’image en tant que <ph name="USER" /></translation>
 <translation id="9157539936604258187">Ouvrir le lien</translation>

@@ -201,8 +201,8 @@ EVENT_TYPE(HOST_RESOLVER_MANAGER_JOB_REQUEST_DETACH)
 //   }
 EVENT_TYPE(HOST_RESOLVER_SYSTEM_TASK)
 
-// The creation/completion of a HostResolverManager::DnsTask to manage a
-// DnsTransaction. The BEGIN phase contains the following parameters:
+// The creation/completion of a HostResolverDnsTask to manage a DnsTransaction.
+// The BEGIN phase contains the following parameters:
 //
 //   {
 //     "secure": <Whether or not the task will use secure DNS>,
@@ -223,19 +223,27 @@ EVENT_TYPE(HOST_RESOLVER_SYSTEM_TASK)
 //     "saved_results": <HostCache::Entry of any previously completed
 //                       transactions>,
 //   }
-EVENT_TYPE(HOST_RESOLVER_MANAGER_DNS_TASK)
+EVENT_TYPE(HOST_RESOLVER_DNS_TASK)
 
 // Logged when DnsResponseResultExtractor returns an error to
-// HostResolverManager::DnsTask when attempting to extract results from a
-// DnsResponse. Contains the following parameters:
+// HostResolverDnsTask when attempting to extract results from a DnsResponse.
+// Contains the following parameters:
 //
 //   {
 //     "extraction_error": <The DnsResponseResultExtractor::ExtractionError>
 //     "dns_query_type": <The DnsQueryType requested from the extractor>
 //   }
-EVENT_TYPE(HOST_RESOLVER_MANAGER_DNS_TASK_EXTRACTION_FAILURE)
+EVENT_TYPE(HOST_RESOLVER_DNS_TASK_EXTRACTION_FAILURE)
 
-// Logged when a HostResolverManager::DnsTask times out and cancels unfinished
+// Logged when a HostResolverDnsTask extracted HostResolverInternalResults from
+// a DnsResponse. Contains the following parameters:
+//
+//   {
+//     "results": <List of HostResolverInternalResult>,
+//   }
+EVENT_TYPE(HOST_RESOLVER_DNS_TASK_EXTRACTION_RESULTS)
+
+// Logged when a HostResolverDnsTask times out and cancels unfinished
 // transactions.
 // The event contains the following parameters:
 //
@@ -248,7 +256,27 @@ EVENT_TYPE(HOST_RESOLVER_MANAGER_DNS_TASK_EXTRACTION_FAILURE)
 //       "dns_query_type": <DnsQueryType of a not-yet-started transaction>,
 //     }],
 //   }
-EVENT_TYPE(HOST_RESOLVER_MANAGER_DNS_TASK_TIMEOUT)
+EVENT_TYPE(HOST_RESOLVER_DNS_TASK_TIMEOUT)
+
+// Logged when a ServiceEndpointListBuilder updates intermediate service
+// endpoints. Contains the following parameters:
+//
+//   {
+//      "endpoints": [{
+//        "ipv4_endpoints": <List of IPv4 endpoint>,
+//        "ipv6_endpoints": <List of IPv6 endpoint>,
+//        "metadata": <ConnectionEndpointMetadata of this service endpoint>
+//      }]
+//   }
+EVENT_TYPE(HOST_RESOLVER_SERVICE_ENDPOINTS_UPDATED)
+
+// Logged when a ServiceEndpointListBuilder's resolution timer is timed out,
+// or AAAA response is received before the timer timed out.
+//   {
+//      "timedout": <Whether or not the timer is timed out>,
+//      "elapsed": <Elapsed time in milliseconds>
+//   }
+EVENT_TYPE(HOST_RESOLVER_SERVICE_ENDPOINTS_RESOLUTION_DELAY)
 
 // ------------------------------------------------------------------------
 // InitProxyResolver

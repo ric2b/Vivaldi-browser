@@ -44,25 +44,25 @@ SenderSocketFactory::SenderSocketFactory(
       task_runner_(task_runner),
       cast_trust_store_(std::move(cast_trust_store)),
       crl_trust_store_(std::move(crl_trust_store)) {
-  OSP_DCHECK(client);
-  OSP_DCHECK(cast_trust_store_);
-  OSP_DCHECK(crl_trust_store_);
+  OSP_CHECK(client);
+  OSP_CHECK(cast_trust_store_);
+  OSP_CHECK(crl_trust_store_);
 }
 
 SenderSocketFactory::~SenderSocketFactory() {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 }
 
 void SenderSocketFactory::set_factory(TlsConnectionFactory* factory) {
-  OSP_DCHECK(factory);
+  OSP_CHECK(factory);
   factory_ = factory;
 }
 
 void SenderSocketFactory::Connect(const IPEndpoint& endpoint,
                                   DeviceMediaPolicy media_policy,
                                   CastSocket::Client* client) {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
-  OSP_DCHECK(client);
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(client);
   auto it = FindPendingConnection(endpoint);
   if (it == pending_connections_.end()) {
     pending_connections_.emplace_back(

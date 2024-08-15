@@ -206,12 +206,12 @@ bool PickleIterator::ReadData(const char** data, size_t* length) {
   return ReadBytes(data, *length);
 }
 
-absl::optional<base::span<const uint8_t>> PickleIterator::ReadData() {
+std::optional<base::span<const uint8_t>> PickleIterator::ReadData() {
   const char* ptr;
   size_t length;
 
   if (!ReadData(&ptr, &length))
-    return absl::nullopt;
+    return std::nullopt;
 
   return base::as_bytes(base::make_span(ptr, length));
 }
@@ -322,16 +322,20 @@ void Pickle::WriteString16(const StringPiece16& value) {
 }
 
 void Pickle::WriteData(const char* data, size_t length) {
-  WriteData(std::string_view(data, length));
+  WriteData(as_bytes(span(data, length)));
 }
 
 void Pickle::WriteData(std::string_view data) {
+  WriteData(as_byte_span(data));
+}
+
+void Pickle::WriteData(base::span<const uint8_t> data) {
   WriteInt(checked_cast<int>(data.size()));
-  WriteBytes(as_byte_span(data));
+  WriteBytes(data);
 }
 
 void Pickle::WriteBytes(const void* data, size_t length) {
-  WriteBytesCommon(make_span(reinterpret_cast<const uint8_t*>(data), length));
+  WriteBytesCommon(make_span(static_cast<const uint8_t*>(data), length));
 }
 
 void Pickle::WriteBytes(span<const uint8_t> data) {
@@ -423,7 +427,7 @@ bool Pickle::PeekNext(size_t header_size,
 
 template <size_t length>
 void Pickle::WriteBytesStatic(const void* data) {
-  WriteBytesCommon(make_span(reinterpret_cast<const uint8_t*>(data), length));
+  WriteBytesCommon(make_span(static_cast<const uint8_t*>(data), length));
 }
 
 template void Pickle::WriteBytesStatic<2>(const void* data);

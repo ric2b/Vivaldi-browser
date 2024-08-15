@@ -55,19 +55,23 @@ declare_overrides() {
     if (is_official_build) {
       symbol_level = 1
     }
+    is_component_ffmpeg = true
   }
 
   if (is_android) {
     if (is_official_build) {
       symbol_level = 1
+      use_relr_relocations = false
     }
     enable_cardboard = false
     enable_arcore = false
     enable_vr = false
     ffmpeg_branding = "Chrome"
-    if (is_vivaldi_automotive) { # Potential fix for VAB-7448.
-      ffmpeg_branding = "Chromium"
-    }
+    # NOTE(jarle@vivaldi.com):
+    # Ref. AUTO-128/AUTO-136, disable fix for VAB-7448 for now.
+    #if (is_vivaldi_automotive) { # Potential fix for VAB-7448.
+    #  ffmpeg_branding = "Chromium"
+    #}
     android_channel = "stable"
     chrome_public_manifest_package = android_vivaldi_manifest_package
     if (!is_debug) {
@@ -88,6 +92,7 @@ declare_overrides() {
   }
 
   enable_precompiled_headers = !is_official_build && cc_wrapper == "" && !use_goma && !use_remoteexec
+  enable_nocompile_tests = false
 
   if (is_mac) {
     use_system_xcode = true
@@ -130,5 +135,8 @@ declare_overrides() {
 
     ios_application_icons_target = "//vivaldi/ios/app/resources/appicons:vivaldi_appicons"
     ios_launchscreen_assets_target = "//vivaldi/ios/app/resources:launchscreen_assets"
+
+    # Just making sure it stays off
+    ios_enable_memory_debugging = false
   }
 }

@@ -8,6 +8,8 @@
 #include <vector>
 
 #include "base/bits.h"
+#include "base/files/file_util.h"
+#include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
@@ -80,10 +82,16 @@ const char* help_msg =
     "  --gtest_help          display the gtest help and exit.\n"
     "  --help                display this help and exit.\n"
     "  --source_directory    specify test input files location.\n"
+    "  --output_directory    specify test output file location. Defaults to "
+    "                        execution directory if not specified.\n"
     "   -v                   enable verbose mode, e.g. -v=2.\n"
     "  --vmodule             enable verbose mode for the specified module.\n";
 
 media::test::VideoTestEnvironment* g_env;
+
+// Default output folder used to store performance metrics.
+base::FilePath g_output_directory =
+    base::FilePath(base::FilePath::kCurrentDirectory);
 
 base::FilePath g_source_directory =
     base::FilePath(base::FilePath::kCurrentDirectory);
@@ -188,6 +196,29 @@ scoped_refptr<VideoFrame> CreateRandomMM21Frame(const gfx::Size& size,
   return frame;
 }
 
+void WriteJsonResult(std::vector<std::pair<std::string, double>> data) {
+  base::Value::Dict metrics;
+  for (auto i : data) {
+    metrics.Set(i.first, i.second);
+  }
+
+  const auto output_folder_path = base::FilePath(g_output_directory);
+  std::string metrics_str;
+  ASSERT_TRUE(base::JSONWriter::WriteWithOptions(
+      metrics, base::JSONWriter::OPTIONS_PRETTY_PRINT, &metrics_str));
+  const base::FilePath metrics_file_path = output_folder_path.Append(
+      g_env->GetTestOutputFilePath().AddExtension(FILE_PATH_LITERAL(".json")));
+  // Make sure that the directory into which json is saved is created.
+  LOG_ASSERT(base::CreateDirectory(metrics_file_path.DirName()));
+  base::File metrics_output_file(
+      base::FilePath(metrics_file_path),
+      base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
+  const int bytes_written = metrics_output_file.WriteAtCurrentPos(
+      metrics_str.data(), metrics_str.length());
+  ASSERT_EQ(bytes_written, static_cast<int>(metrics_str.length()));
+  LOG(INFO) << "Wrote performance metrics to: " << metrics_file_path;
+}
+
 class ImageProcessorPerfTest : public ::testing::Test {
  public:
   enum TestType {
@@ -243,8 +274,8 @@ class ImageProcessorPerfTest : public ::testing::Test {
         client_task_runner_, quit_closure_, &image_processor_error_);
 
     pick_format_cb_ = base::BindRepeating(
-        [](const std::vector<Fourcc>&, absl::optional<Fourcc>) {
-          return absl::make_optional<Fourcc>(Fourcc::NV12);
+        [](const std::vector<Fourcc>&, std::optional<Fourcc>) {
+          return std::make_optional<Fourcc>(Fourcc::NV12);
         });
   }
 
@@ -325,16 +356,9 @@ TEST_F(ImageProcessorPerfTest, UncappedGLImageProcessorPerfTest) {
   base::TimeDelta delta_time = end_time - start_time;
   const double fps = (kNumberOfTestCycles / delta_time.InSecondsF());
 
-  perf_test::PerfResultReporter reporter("GLImageProcessor", "Uncapped Test");
-  reporter.RegisterImportantMetric(".frames_decoded", "frames");
-  reporter.RegisterImportantMetric(".total_duration", "us");
-  reporter.RegisterImportantMetric(".frames_per_second", "fps");
-
-  reporter.AddResult(".frames_decoded",
-                     static_cast<double>(kNumberOfTestCycles));
-  reporter.AddResult(".total_duration",
-                     static_cast<double>(delta_time.InMicroseconds()));
-  reporter.AddResult(".frames_per_second", fps);
+  WriteJsonResult({{"FramesDecoded", kNumberOfTestCycles},
+                   {"TotalDurationMs", delta_time.InMicrosecondsF()},
+                   {"FramesPerSecond", fps}});
 }
 
 // Tests the LibYUV by feeding in |kNumberOfTestFrames| unique input
@@ -377,16 +401,9 @@ TEST_F(ImageProcessorPerfTest, UncappedLibYUVPerfTest) {
   // Preventing integer division inaccuracies with |delta_time|.
   const double fps = (kNumberOfTestCycles / delta_time.InSecondsF());
 
-  perf_test::PerfResultReporter reporter("LibYUV", "Uncapped Test");
-  reporter.RegisterImportantMetric(".frames_decoded", "frames");
-  reporter.RegisterImportantMetric(".total_duration", "us");
-  reporter.RegisterImportantMetric(".frames_per_second", "fps");
-
-  reporter.AddResult(".frames_decoded",
-                     static_cast<double>(kNumberOfTestCycles));
-  reporter.AddResult(".total_duration",
-                     static_cast<double>(delta_time.InMicroseconds()));
-  reporter.AddResult(".frames_per_second", fps);
+  WriteJsonResult({{"FramesDecoded", kNumberOfTestCycles},
+                   {"TotalDurationMs", delta_time.InMicroseconds()},
+                   {"FramesPerSecond", fps}});
 }
 
 // Tests GLImageProcessor by feeding in |kNumberOfTestFrames| unique input
@@ -449,16 +466,9 @@ TEST_F(ImageProcessorPerfTest, CappedGLImageProcessorPerfTest) {
   const double fps =
       (kNumberOfCappedTestCycles / total_delta_time.InSecondsF());
 
-  perf_test::PerfResultReporter reporter("GLImageProcessor", "Capped Test");
-  reporter.RegisterImportantMetric(".frames_decoded", "frames");
-  reporter.RegisterImportantMetric(".total_duration", "us");
-  reporter.RegisterImportantMetric(".frames_per_second", "fps");
-
-  reporter.AddResult(".frames_decoded",
-                     static_cast<double>(kNumberOfCappedTestCycles));
-  reporter.AddResult(".total_duration",
-                     static_cast<double>(total_delta_time.InMicroseconds()));
-  reporter.AddResult(".frames_per_second", fps);
+  WriteJsonResult({{"FramesDecoded", kNumberOfCappedTestCycles},
+                   {"TotalDurationMs", total_delta_time.InMicroseconds()},
+                   {"FramesPerSecond", fps}});
 }
 
 // Tests LibYUV by feeding in |kNumberOfTestFrames| unique input
@@ -519,23 +529,16 @@ TEST_F(ImageProcessorPerfTest, CappedLibYUVPerfTest) {
   const double fps =
       (kNumberOfCappedTestCycles / total_delta_time.InSecondsF());
 
-  perf_test::PerfResultReporter reporter("LibYUV", "Capped Test");
-  reporter.RegisterImportantMetric(".frames_decoded", "frames");
-  reporter.RegisterImportantMetric(".total_duration", "us");
-  reporter.RegisterImportantMetric(".frames_per_second", "fps");
-
-  reporter.AddResult(".frames_decoded",
-                     static_cast<double>(kNumberOfCappedTestCycles));
-  reporter.AddResult(".total_duration",
-                     static_cast<double>(total_delta_time.InMicroseconds()));
-  reporter.AddResult(".frames_per_second", fps);
+  WriteJsonResult({{"FramesDecoded", kNumberOfCappedTestCycles},
+                   {"TotalDurationMs", total_delta_time.InMicroseconds()},
+                   {"FramesPerSecond", fps}});
 }
 
 // Tests the GLImageProcessor by feeding in a 1280x720 NV12 input frame and
 // scaling it up to 1920x1080 and then scaling it back down to its original
 // size. Will print out the PSNR calculation for each plane and verify that
 // the PSNR values are greater than 40.0.
-TEST_F(ImageProcessorPerfTest, NV12ScalingComparisonTest) {
+TEST_F(ImageProcessorPerfTest, GLNV12ScalingComparisonTest) {
   InitializeInputImage(/*use_cpu_memory=*/false);
 
   base::RunLoop run_loop;
@@ -551,8 +554,8 @@ TEST_F(ImageProcessorPerfTest, NV12ScalingComparisonTest) {
       },
       client_task_runner, quit_closure, &image_processor_error);
   ImageProcessorFactory::PickFormatCB pick_format_cb = base::BindRepeating(
-      [](const std::vector<Fourcc>&, absl::optional<Fourcc>) {
-        return absl::make_optional<Fourcc>(Fourcc::NV12);
+      [](const std::vector<Fourcc>&, std::optional<Fourcc>) {
+        return std::make_optional<Fourcc>(Fourcc::NV12);
       });
 
   std::unique_ptr<ImageProcessor> gl_upscaling_image_processor =
@@ -681,6 +684,8 @@ TEST_F(ImageProcessorPerfTest, NV12ScalingComparisonTest) {
                                          "PSNR Test");
   reporter.RegisterImportantMetric(".PSNR", "decibels");
   reporter.AddResult(".PSNR", psnr_test);
+
+  WriteJsonResult({{"PSNR", psnr_test}});
 }
 
 // Tests GLImageProcessor by feeding in |kNumberOfTestFrames| unique NV12 input
@@ -719,16 +724,9 @@ TEST_F(ImageProcessorPerfTest, GLImageProcessorNV12DownscalingTest) {
   base::TimeDelta delta_time = end_time - start_time;
   const double fps = (kNumberOfTestCycles / delta_time.InSecondsF());
 
-  perf_test::PerfResultReporter reporter("GLImageProcessor",
-                                         "NV12 Downscaling Test");
-  reporter.RegisterImportantMetric(".frames_decoded", "frames");
-  reporter.RegisterImportantMetric(".total_duration", "us");
-  reporter.RegisterImportantMetric(".frames_per_second", "fps");
-
-  reporter.AddResult(".frames_decoded",
-                     static_cast<double>(kNumberOfTestCycles));
-  reporter.AddResult(".total_duration", delta_time.InMicrosecondsF());
-  reporter.AddResult(".frames_per_second", fps);
+  WriteJsonResult({{"FramesDecoded", kNumberOfTestCycles},
+                   {"TotalDurationMs", delta_time.InMicrosecondsF()},
+                   {"FramesPerSecond", fps}});
 }
 
 // Tests GLImageProcessor by feeding in |kNumberOfTestFrames| unique NV12 input
@@ -767,16 +765,9 @@ TEST_F(ImageProcessorPerfTest, GLImageProcessorNV12UpscalingTest) {
   base::TimeDelta delta_time = end_time - start_time;
   const double fps = (kNumberOfTestCycles / delta_time.InSecondsF());
 
-  perf_test::PerfResultReporter reporter("GLImageProcessor",
-                                         "NV12 Upscaling Test");
-  reporter.RegisterImportantMetric(".frames_decoded", "frames");
-  reporter.RegisterImportantMetric(".total_duration", "us");
-  reporter.RegisterImportantMetric(".frames_per_second", "fps");
-
-  reporter.AddResult(".frames_decoded",
-                     static_cast<double>(kNumberOfTestCycles));
-  reporter.AddResult(".total_duration", delta_time.InMicrosecondsF());
-  reporter.AddResult(".frames_per_second", fps);
+  WriteJsonResult({{"FramesDecoded", kNumberOfTestCycles},
+                   {"TotalDurationMs", delta_time.InMicrosecondsF()},
+                   {"FramesPerSecond", fps}});
 }
 
 // Tests LibYUV by feeding in |kNumberOfTestFrames| unique NV12 input
@@ -820,15 +811,9 @@ TEST_F(ImageProcessorPerfTest, LibYUVNV12DownscalingTest) {
   // Preventing integer division inaccuracies with |delta_time|.
   const double fps = (kNumberOfTestCycles / delta_time.InSecondsF());
 
-  perf_test::PerfResultReporter reporter("LibYUV", "NV12 Downscaling Test");
-  reporter.RegisterImportantMetric(".frames_decoded", "frames");
-  reporter.RegisterImportantMetric(".total_duration", "us");
-  reporter.RegisterImportantMetric(".frames_per_second", "fps");
-
-  reporter.AddResult(".frames_decoded",
-                     static_cast<double>(kNumberOfTestCycles));
-  reporter.AddResult(".total_duration", delta_time.InMicrosecondsF());
-  reporter.AddResult(".frames_per_second", fps);
+  WriteJsonResult({{"FramesDecoded", kNumberOfTestCycles},
+                   {"TotalDurationMs", delta_time.InMicrosecondsF()},
+                   {"FramesPerSecond", fps}});
 }
 
 // Tests LibYUV by feeding in |kNumberOfTestFrames| unique NV12 input
@@ -872,19 +857,23 @@ TEST_F(ImageProcessorPerfTest, LibYUVNV12UpscalingTest) {
   // Preventing integer division inaccuracies with |delta_time|.
   const double fps = (kNumberOfTestCycles / delta_time.InSecondsF());
 
-  perf_test::PerfResultReporter reporter("LibYUV", "NV12 Upscaling Test");
-  reporter.RegisterImportantMetric(".frames_decoded", "frames");
-  reporter.RegisterImportantMetric(".total_duration", "us");
-  reporter.RegisterImportantMetric(".frames_per_second", "fps");
-
-  reporter.AddResult(".frames_decoded",
-                     static_cast<double>(kNumberOfTestCycles));
-  reporter.AddResult(".total_duration", delta_time.InMicrosecondsF());
-  reporter.AddResult(".frames_per_second", fps);
+  WriteJsonResult({{"FramesDecoded", kNumberOfTestCycles},
+                   {"TotalDurationMs", delta_time.InMicrosecondsF()},
+                   {"FramesPerSecond", fps}});
 }
 
 #if BUILDFLAG(ENABLE_VULKAN)
-TEST_F(ImageProcessorPerfTest, VulkanImageProcessorPerfTest) {
+// TODO(b/330167382): Refactor these into parameterized tests.
+void BenchmarkVulkanImageProcessor(bool is_10bit) {
+  const size_t bpp_numerator = is_10bit ? 5 : 1;
+  const size_t bpp_denom = is_10bit ? 4 : 1;
+  const VideoPixelFormat out_video_format =
+      is_10bit ? VideoPixelFormat::PIXEL_FORMAT_XR30
+               : VideoPixelFormat::PIXEL_FORMAT_ARGB;
+  const viz::SharedImageFormat out_viz_format =
+      is_10bit ? viz::SinglePlaneFormat::kBGRA_1010102
+               : viz::SinglePlaneFormat::kRGBA_8888;
+
   // Initialize shared image infrastructure.
   auto share_group = base::MakeRefCounted<gl::GLShareGroup>();
   auto surface =
@@ -920,32 +909,35 @@ TEST_F(ImageProcessorPerfTest, VulkanImageProcessorPerfTest) {
       viz::SharedImageFormat::ChannelFormat::k8);
   format_nv12.SetPrefersExternalSampler();
   for (size_t i = 0; i < kNumberOfTestFrames; i++) {
-    input_frames[i] =
-        CreateRandomMM21Frame(test_image_size, VideoFrame::STORAGE_DMABUFS);
+    input_frames[i] = CreateRandomMM21Frame(
+        gfx::Size(test_image_size.width(),
+                  test_image_size.height() * bpp_numerator / bpp_denom),
+        VideoFrame::STORAGE_DMABUFS);
     input_mailboxes[i] = gpu::Mailbox::GenerateForSharedImage();
     auto input_gmb = CreateGpuMemoryBufferHandle(input_frames[i].get());
     shared_image_factory.CreateSharedImage(
-        input_mailboxes[i], format_nv12, test_coded_size,
+        input_mailboxes[i], format_nv12, input_frames[i]->coded_size(),
         gfx::ColorSpace::CreateSRGB(), kTopLeft_GrSurfaceOrigin,
         kOpaque_SkAlphaType,
         gpu::SharedImageUsage::SHARED_IMAGE_USAGE_DISPLAY_READ, "TestLabel",
         std::move(input_gmb));
 
     output_frames[i] = CreateGpuMemoryBufferVideoFrame(
-        VideoPixelFormat::PIXEL_FORMAT_ARGB, test_coded_size,
-        gfx::Rect(test_image_size), test_coded_size, kNullTimestamp,
+        out_video_format, test_coded_size, gfx::Rect(test_image_size),
+        test_coded_size, kNullTimestamp,
         gfx::BufferUsage::SCANOUT_CPU_READ_WRITE);
     output_mailboxes[i] = gpu::Mailbox::GenerateForSharedImage();
     auto output_gmb = CreateGpuMemoryBufferHandle(output_frames[i].get());
     shared_image_factory.CreateSharedImage(
-        output_mailboxes[i], viz::SinglePlaneFormat::kRGBA_8888,
-        test_coded_size, gfx::ColorSpace::CreateSRGB(),
-        kTopLeft_GrSurfaceOrigin, kUnpremul_SkAlphaType,
+        output_mailboxes[i], out_viz_format, test_coded_size,
+        gfx::ColorSpace::CreateSRGB(), kTopLeft_GrSurfaceOrigin,
+        kUnpremul_SkAlphaType,
         gpu::SharedImageUsage::SHARED_IMAGE_USAGE_DISPLAY_WRITE, "TestLabel",
         std::move(output_gmb));
   }
 
-  auto vulkan_image_processor = VulkanImageProcessor::Create();
+  auto vulkan_image_processor =
+      VulkanImageProcessor::Create(is_10bit ? kMT2T : kMM21);
   ASSERT_TRUE(vulkan_image_processor);
 
   auto start_time = base::TimeTicks::Now();
@@ -969,10 +961,16 @@ TEST_F(ImageProcessorPerfTest, VulkanImageProcessorPerfTest) {
           gpu::RepresentationAccessMode::kWrite, begin_semaphores,
           end_semaphores);
 
+      // TODO(b/251458823): Add tests for more interesting crop and rotation
+      // parameters. Preliminary testing indicates that rotation in particular
+      // might have a substantial impact on performance.
       vulkan_image_processor->Process(
-          input_access->GetVulkanImage(), test_coded_size, test_image_size,
-          output_access->GetVulkanImage(), test_coded_size, test_image_size,
-          begin_semaphores, end_semaphores);
+          input_access->GetVulkanImage(), test_image_size,
+          output_access->GetVulkanImage(),
+          gfx::RectF(static_cast<float>(test_coded_size.width()),
+                     static_cast<float>(test_coded_size.height())),
+          gfx::RectF(1.0f, 1.0f), gfx::OVERLAY_TRANSFORM_NONE, begin_semaphores,
+          end_semaphores);
     }
   }
   // This implicitly waits for all semaphores to signal.
@@ -984,15 +982,18 @@ TEST_F(ImageProcessorPerfTest, VulkanImageProcessorPerfTest) {
   base::TimeDelta delta_time = end_time - start_time;
   // Preventing integer division inaccuracies with |delta_time|.
   const double fps = (kNumberOfTestCycles / delta_time.InSecondsF());
-  perf_test::PerfResultReporter reporter(
-      "VulkanImageProcessor", "Vulkan Detile Scale Performance Test");
-  reporter.RegisterImportantMetric(".frames_decoded", "frames");
-  reporter.RegisterImportantMetric(".total_duration", "us");
-  reporter.RegisterImportantMetric(".frames_per_second", "fps");
-  reporter.AddResult(".frames_decoded",
-                     static_cast<double>(kNumberOfTestCycles));
-  reporter.AddResult(".total_duration", delta_time.InMicrosecondsF());
-  reporter.AddResult(".frames_per_second", fps);
+
+  WriteJsonResult({{"FramesDecoded", kNumberOfTestCycles},
+                   {"TotalDurationMs", delta_time.InMicrosecondsF()},
+                   {"FramesPerSecond", fps}});
+}
+
+TEST_F(ImageProcessorPerfTest, VulkanImageProcessorPerfTest) {
+  BenchmarkVulkanImageProcessor(/*is_10bit=*/false);
+}
+
+TEST_F(ImageProcessorPerfTest, VulkanMT2TImageProcessorPerfTest) {
+  BenchmarkVulkanImageProcessor(/*is_10bit=*/true);
 }
 #endif
 
@@ -1021,6 +1022,8 @@ int main(int argc, char** argv) {
 
     if (it->first == "source_directory") {
       media::g_source_directory = base::FilePath(it->second);
+    } else if (it->first == "output_directory") {
+      media::g_output_directory = base::FilePath(it->second);
     } else {
       std::cout << "unknown option: --" << it->first << "\n"
                 << media::usage_msg;
@@ -1038,7 +1041,7 @@ int main(int argc, char** argv) {
 #if BUILDFLAG(IS_OZONE)
   ui::OzonePlatform::InitParams ozone_param;
   ozone_param.single_process = true;
-#if BUILDFLAG(ENABLE_VULKAN)
+#if BUILDFLAG(ENABLE_VULKAN) && BUILDFLAG(USE_V4L2_CODEC)
   ui::OzonePlatform::InitializeForUI(ozone_param);
 #endif
   ui::OzonePlatform::InitializeForGPU(ozone_param);

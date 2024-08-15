@@ -32,11 +32,11 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_PEERCONNECTION_RTC_PEER_CONNECTION_H_
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "base/gtest_prod_util.h"
 #include "base/time/time.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -66,9 +66,9 @@
 namespace blink {
 
 class ExceptionState;
-class GoogMediaConstraints;
 class MediaStreamTrack;
 class RTCAnswerOptions;
+class RTCCertificate;
 class RTCConfiguration;
 class RTCDataChannel;
 class RTCDTMFSender;
@@ -84,6 +84,7 @@ class RTCRtpTransceiverInit;
 class RTCSctpTransport;
 class RTCSessionDescription;
 class RTCSessionDescriptionInit;
+class RTCStatsReport;
 class ScriptState;
 class V8RTCPeerConnectionErrorCallback;
 class V8RTCSessionDescriptionCallback;
@@ -102,41 +103,37 @@ class MODULES_EXPORT RTCPeerConnection final
  public:
   static RTCPeerConnection* Create(ExecutionContext*,
                                    const RTCConfiguration*,
-                                   GoogMediaConstraints*,
-                                   ExceptionState&);
-  static RTCPeerConnection* Create(ExecutionContext*,
-                                   const RTCConfiguration*,
                                    ExceptionState&);
 
   RTCPeerConnection(ExecutionContext*,
                     webrtc::PeerConnectionInterface::RTCConfiguration,
                     bool encoded_insertable_streams,
-                    GoogMediaConstraints*,
                     ExceptionState&);
   ~RTCPeerConnection() override;
 
-  ScriptPromise createOffer(ScriptState*,
-                            const RTCOfferOptions*,
-                            ExceptionState&);
-  ScriptPromise createOffer(ScriptState*,
-                            V8RTCSessionDescriptionCallback*,
-                            V8RTCPeerConnectionErrorCallback*,
-                            const RTCOfferOptions*,
-                            ExceptionState&);
+  ScriptPromiseTyped<RTCSessionDescriptionInit>
+  createOffer(ScriptState*, const RTCOfferOptions*, ExceptionState&);
+  ScriptPromiseTyped<IDLUndefined> createOffer(
+      ScriptState*,
+      V8RTCSessionDescriptionCallback*,
+      V8RTCPeerConnectionErrorCallback*,
+      const RTCOfferOptions*,
+      ExceptionState&);
 
-  ScriptPromise createAnswer(ScriptState*,
-                             const RTCAnswerOptions*,
-                             ExceptionState&);
-  ScriptPromise createAnswer(ScriptState*,
-                             V8RTCSessionDescriptionCallback*,
-                             V8RTCPeerConnectionErrorCallback*,
-                             ExceptionState&);
+  ScriptPromiseTyped<RTCSessionDescriptionInit>
+  createAnswer(ScriptState*, const RTCAnswerOptions*, ExceptionState&);
+  ScriptPromiseTyped<IDLUndefined> createAnswer(
+      ScriptState*,
+      V8RTCSessionDescriptionCallback*,
+      V8RTCPeerConnectionErrorCallback*,
+      ExceptionState&);
 
-  ScriptPromise setLocalDescription(ScriptState*);
-  ScriptPromise setLocalDescription(ScriptState*,
-                                    const RTCSessionDescriptionInit*,
-                                    ExceptionState&);
-  ScriptPromise setLocalDescription(
+  ScriptPromiseTyped<IDLUndefined> setLocalDescription(ScriptState*);
+  ScriptPromiseTyped<IDLUndefined> setLocalDescription(
+      ScriptState*,
+      const RTCSessionDescriptionInit*,
+      ExceptionState&);
+  ScriptPromiseTyped<IDLUndefined> setLocalDescription(
       ScriptState*,
       const RTCSessionDescriptionInit*,
       V8VoidFunction*,
@@ -145,10 +142,11 @@ class MODULES_EXPORT RTCPeerConnection final
   RTCSessionDescription* currentLocalDescription() const;
   RTCSessionDescription* pendingLocalDescription() const;
 
-  ScriptPromise setRemoteDescription(ScriptState*,
-                                     const RTCSessionDescriptionInit*,
-                                     ExceptionState&);
-  ScriptPromise setRemoteDescription(
+  ScriptPromiseTyped<IDLUndefined> setRemoteDescription(
+      ScriptState*,
+      const RTCSessionDescriptionInit*,
+      ExceptionState&);
+  ScriptPromiseTyped<IDLUndefined> setRemoteDescription(
       ScriptState*,
       const RTCSessionDescriptionInit*,
       V8VoidFunction*,
@@ -164,19 +162,20 @@ class MODULES_EXPORT RTCPeerConnection final
 
   // Certificate management
   // http://w3c.github.io/webrtc-pc/#sec.cert-mgmt
-  static ScriptPromise generateCertificate(
+  static ScriptPromiseTyped<RTCCertificate> generateCertificate(
       ScriptState* script_state,
       const V8AlgorithmIdentifier* keygen_algorithm,
       ExceptionState& exception_state);
 
-  ScriptPromise addIceCandidate(ScriptState*,
-                                const RTCIceCandidateInit*,
-                                ExceptionState&);
-  ScriptPromise addIceCandidate(ScriptState*,
-                                const RTCIceCandidateInit*,
-                                V8VoidFunction*,
-                                V8RTCPeerConnectionErrorCallback*,
-                                ExceptionState&);
+  ScriptPromiseTyped<IDLUndefined> addIceCandidate(ScriptState*,
+                                                   const RTCIceCandidateInit*,
+                                                   ExceptionState&);
+  ScriptPromiseTyped<IDLUndefined> addIceCandidate(
+      ScriptState*,
+      const RTCIceCandidateInit*,
+      V8VoidFunction*,
+      V8RTCPeerConnectionErrorCallback*,
+      ExceptionState&);
 
   String iceGatheringState() const;
 
@@ -184,7 +183,7 @@ class MODULES_EXPORT RTCPeerConnection final
 
   String connectionState() const;
 
-  absl::optional<bool> canTrickleIceCandidates() const;
+  std::optional<bool> canTrickleIceCandidates() const;
 
   void restartIce();
 
@@ -199,9 +198,9 @@ class MODULES_EXPORT RTCPeerConnection final
 
   void removeStream(MediaStream*, ExceptionState&);
 
-  ScriptPromise getStats(ScriptState* script_state,
-                         MediaStreamTrack* selector,
-                         ExceptionState&);
+  ScriptPromiseTyped<RTCStatsReport> getStats(ScriptState* script_state,
+                                              MediaStreamTrack* selector,
+                                              ExceptionState&);
 
   const HeapVector<Member<RTCRtpTransceiver>>& getTransceivers() const;
   const HeapVector<Member<RTCRtpSender>>& getSenders() const;
@@ -252,7 +251,7 @@ class MODULES_EXPORT RTCPeerConnection final
 
   // Called in response to CreateOffer / CreateAnswer to update `last_offer_` or
   // `last_answer_`.
-  void NoteSdpCreated(const RTCSessionDescription&);
+  void NoteSdpCreated(const RTCSessionDescriptionInit&);
   // Utility to report SDP usage of setLocalDescription / setRemoteDescription.
   enum class SetSdpOperationType {
     kSetLocalDescription,
@@ -272,7 +271,7 @@ class MODULES_EXPORT RTCPeerConnection final
 
   void DidGenerateICECandidate(RTCIceCandidatePlatform*) override;
   void DidFailICECandidate(const String& address,
-                           absl::optional<uint16_t> port,
+                           std::optional<uint16_t> port,
                            const String& host_candidate,
                            const String& url,
                            int error_code,
@@ -315,7 +314,7 @@ class MODULES_EXPORT RTCPeerConnection final
   static int PeerConnectionCountLimit();
 
   static void GenerateCertificateCompleted(
-      ScriptPromiseResolver* resolver,
+      ScriptPromiseResolverTyped<RTCCertificate>* resolver,
       rtc::scoped_refptr<rtc::RTCCertificate> certificate);
 
   // Called by RTCIceTransport::OnStateChange to update the ice connection
@@ -505,7 +504,7 @@ class MODULES_EXPORT RTCPeerConnection final
   HeapVector<Member<RTCRtpTransceiver>> transceivers_;
   // Always has a value if initialization was successful (the constructor did
   // not throw an exception).
-  absl::optional<RtpContributingSourceCache> rtp_contributing_source_cache_;
+  std::optional<RtpContributingSourceCache> rtp_contributing_source_cache_;
 
   // A map of all webrtc::DtlsTransports that have a corresponding
   // RTCDtlsTransport object. Garbage collection will remove map entries

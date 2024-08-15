@@ -34,6 +34,12 @@ class MODULES_EXPORT RTCEncodedVideoFrame final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
+  static RTCEncodedVideoFrame* Create(RTCEncodedVideoFrame* original_frame,
+                                      ExceptionState& exception_state);
+  static RTCEncodedVideoFrame* Create(
+      RTCEncodedVideoFrame* original_frame,
+      RTCEncodedVideoFrameMetadata* new_metadata,
+      ExceptionState& exception_state);
   explicit RTCEncodedVideoFrame(
       std::unique_ptr<webrtc::TransformableVideoFrameInterface> webrtc_frame);
   explicit RTCEncodedVideoFrame(
@@ -46,11 +52,12 @@ class MODULES_EXPORT RTCEncodedVideoFrame final : public ScriptWrappable {
   void setTimestamp(uint32_t timestamp, ExceptionState& exception_state);
   DOMArrayBuffer* data() const;
   RTCEncodedVideoFrameMetadata* getMetadata() const;
+  bool SetMetadata(const RTCEncodedVideoFrameMetadata* metadata,
+                   String& error_message);
   void setMetadata(RTCEncodedVideoFrameMetadata* metadata,
                    ExceptionState& exception_state);
   void setData(DOMArrayBuffer*);
   String toString() const;
-  RTCEncodedVideoFrame* clone(ExceptionState& exception_state) const;
 
   scoped_refptr<RTCEncodedVideoFrameDelegate> Delegate() const;
   void SyncDelegate() const;

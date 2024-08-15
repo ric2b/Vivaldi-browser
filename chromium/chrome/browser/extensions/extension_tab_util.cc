@@ -70,10 +70,12 @@
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "third_party/blink/public/common/chrome_debug_urls.h"
+#include "third_party/blink/public/common/features.h"
 #include "url/gurl.h"
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
+#include "components/extensions/vivaldi_panel_utils.h"
 #include "content/browser/site_instance_impl.h"
 
 using content::NavigationEntry;
@@ -541,7 +543,9 @@ api::tabs::Tab ExtensionTabUtil::CreateTabObject(
 
   ScrubTabForExtension(extension, contents, &tab_object, scrub_tab_behavior);
 
-  tab_object.viv_ext_data = contents->GetVivExtData();
+  if (extension && vivaldi::IsVivaldiApp(extension->id())) {
+    tab_object.viv_ext_data = contents->GetVivExtData();
+  }
 
   return tab_object;
 }
@@ -555,6 +559,13 @@ base::Value::List ExtensionTabUtil::CreateTabList(const Browser* browser,
     WebContents* web_contents = tab_strip->GetWebContentsAt(i);
     ExtensionTabUtil::ScrubTabBehavior scrub_tab_behavior =
         ExtensionTabUtil::GetScrubTabBehavior(extension, context, web_contents);
+
+    if (!::vivaldi::IsVivaldiApp(extension->id())) {
+      if (::vivaldi::GetVivPanelId(web_contents)) {
+        continue;
+      }
+    }
+
     tab_list.Append(CreateTabObject(web_contents, scrub_tab_behavior, extension,
                                     tab_strip, i)
                         .ToValue());
@@ -795,6 +806,66 @@ bool ExtensionTabUtil::GetTabById(int tab_id,
       }
     }
   }
+
+  if (base::FeatureList::IsEnabled(blink::features::kPrerender2InNewTab)) {
+    // Prerendering tab is not visible and it cannot be in `TabStripModel`, if
+    // the tab id exists as a prerendering tab, and the API will returns
+    // `api::tabs::TAB_INDEX_NONE` for `tab_index` and a valid `WebContents`.
+    for (auto rph_iterator = content::RenderProcessHost::AllHostsIterator();
+         !rph_iterator.IsAtEnd(); rph_iterator.Advance()) {
+      content::RenderProcessHost* rph = rph_iterator.GetCurrentValue();
+
+      // Ignore renderers that aren't ready.
+      if (!rph->IsInitializedAndNotDead()) {
+        continue;
+      }
+      // Ignore renderers that aren't from a valid profile. This is either the
+      // same profile or the incognito profile if `include_incognito` is true.
+      Profile* process_profile =
+          Profile::FromBrowserContext(rph->GetBrowserContext());
+      if (process_profile != profile &&
+          !(include_incognito && profile->IsSameOrParent(process_profile))) {
+        continue;
+      }
+
+      rph->ForEachRenderFrameHost([&contents, &tab_index, &tab_strip,
+                                   tab_id](content::RenderFrameHost* rfh) {
+        CHECK(rfh);
+        WebContents* web_contents = WebContents::FromRenderFrameHost(rfh);
+        CHECK(web_contents);
+        if (sessions::SessionTabHelper::IdForTab(web_contents).id() != tab_id) {
+          return;
+        }
+        // We only consider prerendered frames in this loop. Otherwise, we could
+        // end up returning a tab for a different web contents that shouldn't be
+        // exposed to extensions.
+        if (!web_contents->IsPrerenderedFrame(rfh->GetFrameTreeNodeId())) {
+          return;
+        }
+
+        // TODO(https://crbug.com/1350676): tab_strip and tab_index are tied to
+        // a specific window, and related APIs return WINDOW_ID_NONE for
+        // prerendering-into-a-new-tab tabs as a tentaive solution. So these
+        // values are set to be invalid here.
+        if (tab_strip) {
+          *tab_strip = nullptr;
+        }
+
+        if (tab_index) {
+          *tab_index = api::tabs::TAB_INDEX_NONE;
+        }
+
+        if (contents) {
+          *contents = web_contents;
+        }
+      });
+
+      if (contents && *contents) {
+        return true;
+      }
+    }
+  }
+
   return false;
 }
 
@@ -1147,8 +1218,9 @@ bool ExtensionTabUtil::TabIsInSavedTabGroup(content::WebContents* contents,
     tab_strip_model = browser->tab_strip_model();
   }
 
-  SavedTabGroupKeyedService* saved_tab_group_service =
-      SavedTabGroupServiceFactory::GetForProfile(tab_strip_model->profile());
+  tab_groups::SavedTabGroupKeyedService* saved_tab_group_service =
+      tab_groups::SavedTabGroupServiceFactory::GetForProfile(
+          tab_strip_model->profile());
 
   // If the service failed to start, then there are no saved tab groups.
   if (!saved_tab_group_service) {

@@ -12,7 +12,6 @@
 #include "input.h"
 #include "parse_values.h"
 #include "parser.h"
-#include "tag.h"
 
 namespace bssl {
 
@@ -64,7 +63,7 @@ bool ParsePolicyQualifiers(bool restrict_to_known_qualifiers,
     }
     //      policyQualifierId  PolicyQualifierId,
     der::Input qualifier_oid;
-    if (!policy_information_parser.ReadTag(der::kOid, &qualifier_oid)) {
+    if (!policy_information_parser.ReadTag(CBS_ASN1_OBJECT, &qualifier_oid)) {
       return false;
     }
     if (restrict_to_known_qualifiers &&
@@ -130,7 +129,7 @@ bool ParsePolicyQualifiers(bool restrict_to_known_qualifiers,
 //      bmpString        BMPString      (SIZE (1..200)),
 //      utf8String       UTF8String     (SIZE (1..200)) }
 bool ParseCertificatePoliciesExtensionImpl(
-    const der::Input &extension_value, bool fail_parsing_unknown_qualifier_oids,
+    der::Input extension_value, bool fail_parsing_unknown_qualifier_oids,
     std::vector<der::Input> *policy_oids,
     std::vector<PolicyInformation> *policy_informations, CertErrors *errors) {
   BSSL_CHECK(policy_oids);
@@ -164,7 +163,7 @@ bool ParseCertificatePoliciesExtensionImpl(
     }
     //      policyIdentifier   CertPolicyId,
     der::Input policy_oid;
-    if (!policy_information_parser.ReadTag(der::kOid, &policy_oid)) {
+    if (!policy_information_parser.ReadTag(CBS_ASN1_OBJECT, &policy_oid)) {
       return false;
     }
 
@@ -227,7 +226,7 @@ PolicyInformation::~PolicyInformation() = default;
 PolicyInformation::PolicyInformation(const PolicyInformation &) = default;
 PolicyInformation::PolicyInformation(PolicyInformation &&) = default;
 
-bool ParseCertificatePoliciesExtension(const der::Input &extension_value,
+bool ParseCertificatePoliciesExtension(der::Input extension_value,
                                        std::vector<PolicyInformation> *policies,
                                        CertErrors *errors) {
   std::vector<der::Input> unused_policy_oids;
@@ -237,7 +236,7 @@ bool ParseCertificatePoliciesExtension(const der::Input &extension_value,
 }
 
 bool ParseCertificatePoliciesExtensionOids(
-    const der::Input &extension_value, bool fail_parsing_unknown_qualifier_oids,
+    der::Input extension_value, bool fail_parsing_unknown_qualifier_oids,
     std::vector<der::Input> *policy_oids, CertErrors *errors) {
   return ParseCertificatePoliciesExtensionImpl(
       extension_value, fail_parsing_unknown_qualifier_oids, policy_oids,
@@ -251,7 +250,7 @@ bool ParseCertificatePoliciesExtensionOids(
 //        inhibitPolicyMapping            [1] SkipCerts OPTIONAL }
 //
 //   SkipCerts ::= INTEGER (0..MAX)
-bool ParsePolicyConstraints(const der::Input &policy_constraints_tlv,
+bool ParsePolicyConstraints(der::Input policy_constraints_tlv,
                             ParsedPolicyConstraints *out) {
   der::Parser parser(policy_constraints_tlv);
 
@@ -273,7 +272,7 @@ bool ParsePolicyConstraints(const der::Input &policy_constraints_tlv,
   }
 
   std::optional<der::Input> require_value;
-  if (!sequence_parser.ReadOptionalTag(der::ContextSpecificPrimitive(0),
+  if (!sequence_parser.ReadOptionalTag(CBS_ASN1_CONTEXT_SPECIFIC | 0,
                                        &require_value)) {
     return false;
   }
@@ -289,7 +288,7 @@ bool ParsePolicyConstraints(const der::Input &policy_constraints_tlv,
   }
 
   std::optional<der::Input> inhibit_value;
-  if (!sequence_parser.ReadOptionalTag(der::ContextSpecificPrimitive(1),
+  if (!sequence_parser.ReadOptionalTag(CBS_ASN1_CONTEXT_SPECIFIC | 1,
                                        &inhibit_value)) {
     return false;
   }
@@ -318,7 +317,7 @@ bool ParsePolicyConstraints(const der::Input &policy_constraints_tlv,
 //
 //   SkipCerts ::= INTEGER (0..MAX)
 std::optional<uint8_t> ParseInhibitAnyPolicy(
-    const der::Input &inhibit_any_policy_tlv) {
+    der::Input inhibit_any_policy_tlv) {
   der::Parser parser(inhibit_any_policy_tlv);
   std::optional<uint8_t> num_certs = std::make_optional<uint8_t>();
 
@@ -340,7 +339,7 @@ std::optional<uint8_t> ParseInhibitAnyPolicy(
 //   PolicyMappings ::= SEQUENCE SIZE (1..MAX) OF SEQUENCE {
 //        issuerDomainPolicy      CertPolicyId,
 //        subjectDomainPolicy     CertPolicyId }
-bool ParsePolicyMappings(const der::Input &policy_mappings_tlv,
+bool ParsePolicyMappings(der::Input policy_mappings_tlv,
                          std::vector<ParsedPolicyMapping> *mappings) {
   mappings->clear();
 
@@ -364,10 +363,12 @@ bool ParsePolicyMappings(const der::Input &policy_mappings_tlv,
     }
 
     ParsedPolicyMapping mapping;
-    if (!mapping_parser.ReadTag(der::kOid, &mapping.issuer_domain_policy)) {
+    if (!mapping_parser.ReadTag(CBS_ASN1_OBJECT,
+                                &mapping.issuer_domain_policy)) {
       return false;
     }
-    if (!mapping_parser.ReadTag(der::kOid, &mapping.subject_domain_policy)) {
+    if (!mapping_parser.ReadTag(CBS_ASN1_OBJECT,
+                                &mapping.subject_domain_policy)) {
       return false;
     }
 

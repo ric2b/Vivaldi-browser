@@ -227,7 +227,7 @@ ContextMtl::ContextMtl(const gl::State &state,
 
 ContextMtl::~ContextMtl() {}
 
-angle::Result ContextMtl::initialize()
+angle::Result ContextMtl::initialize(const angle::ImageLoadContext &imageLoadContext)
 {
     for (mtl::BlendDesc &blendDesc : mBlendDescArray)
     {
@@ -247,6 +247,8 @@ angle::Result ContextMtl::initialize()
                                                kMaxTriFanLineLoopBuffersPerFrame);
 
     mContextDevice.set(mDisplay->getMetalDevice());
+
+    mImageLoadContext = imageLoadContext;
 
     return angle::Result::Continue;
 }
@@ -1822,6 +1824,12 @@ void ContextMtl::endEncoding(bool forceSaveRenderPassContent)
 
         endRenderEncoding(&mRenderEncoder);
     }
+    // End blit encoder after render encoder, as endRenderEncoding() might create a
+    // blit encoder to resolve the visibility results.
+    if (mBlitEncoder.valid())
+    {
+        mBlitEncoder.endEncoding();
+    }
 }
 
 void ContextMtl::flushCommandBuffer(mtl::CommandBufferFinishOperation operation)
@@ -2353,8 +2361,11 @@ void ContextMtl::onTransformFeedbackInactive(const gl::Context *context, Transfo
 uint64_t ContextMtl::queueEventSignal(id<MTLEvent> event, uint64_t value)
 {
     ensureCommandBufferReady();
-    mCmdBuffer.queueEventSignal(event, value);
-    return mCmdBuffer.getQueueSerial();
+    // Event is queued to be signaled after current render pass. If we have helper blit or
+    // compute encoders, avoid queueing by stopping them immediately so we get to insert the event
+    // right away.
+    endBlitAndComputeEncoding();
+    return mCmdBuffer.queueEventSignal(event, value);
 }
 
 void ContextMtl::serverWaitEvent(id<MTLEvent> event, uint64_t value)
@@ -2985,10 +2996,5 @@ angle::Result ContextMtl::copyTextureSliceLevelToWorkBuffer(
                                                     mWorkBuffer));
 
     return angle::Result::Continue;
-}
-
-angle::ImageLoadContext ContextMtl::getImageLoadContext() const
-{
-    return getDisplay()->getDisplay()->getImageLoadContext();
 }
 }  // namespace rx

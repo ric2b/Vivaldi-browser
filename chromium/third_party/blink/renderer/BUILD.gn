@@ -123,12 +123,18 @@ config("config") {
       "blink-gc-plugin",
     ]
 
-    # Enable GC plugin forbidding off-heap collections of GCed:
     cflags += [
       "-Xclang",
       "-plugin-arg-blink-gc-plugin",
       "-Xclang",
-      "enable-off-heap-collections-of-gced-check",
+      "enable-optional-of-traceable-check",
+    ]
+
+    cflags += [
+      "-Xclang",
+      "-plugin-arg-blink-gc-plugin",
+      "-Xclang",
+      "enable-raw-ptr-of-gced-or-traceable-check",
     ]
 
     # Add arguments for enabled GC plugin options:

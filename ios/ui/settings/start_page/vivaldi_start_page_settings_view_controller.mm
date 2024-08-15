@@ -169,7 +169,8 @@ NSString* const kStartPageWallpaperSettingsCellId =
 
 - (void)showWallpaperSettings {
   UIViewController *controller =
-      [VivaldiWallpaperSettingsViewProvider makeViewController];
+      [VivaldiWallpaperSettingsViewProvider
+          makeViewControllerWithHorizontalLayout:NO];
   controller.title =
       l10n_util::GetNSString(IDS_IOS_VIVALDI_START_PAGE_WALLPAPER_TITLE);
   controller.navigationItem.largeTitleDisplayMode =

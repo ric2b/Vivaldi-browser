@@ -311,25 +311,25 @@ browser_repositories(
 
 http_archive(
     name = "rules_rust",
-    sha256 = "950a3ad4166ae60c8ccd628d1a8e64396106e7f98361ebe91b0bcfe60d8e4b60",
+    integrity = "sha256-GuRaQT0LlDOYcyDfKtQQ22oV+vtsiM8P0b87qsvoJts=",
     urls = gcs_mirror_url(
-        sha256 = "950a3ad4166ae60c8ccd628d1a8e64396106e7f98361ebe91b0bcfe60d8e4b60",
-        url = "https://github.com/bazelbuild/rules_rust/releases/download/0.20.0/rules_rust-v0.20.0.tar.gz",
+        sha256 = "1ae45a413d0b9433987320df2ad410db6a15fafb6c88cf0fd1bf3baacbe826db",
+        url = "https://github.com/bazelbuild/rules_rust/releases/download/0.39.0/rules_rust-v0.39.0.tar.gz",
     ),
 )
 
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")
 
-# https://github.com/bazelbuild/rules_rust/blob/eaf51386596523af4d9d5b1b5d2dcc6fe39a8465/rust/repositories.bzl#L48
+# https://github.com/bazelbuild/rules_rust/blob/5c715ec50602e2ba6ca2ebfdd870662a6e6d1eda/rust/repositories.bzl#L48
 rules_rust_dependencies()
 
 rust_register_toolchains(
     edition = "2021",
     extra_target_triples = ["aarch64-apple-darwin"],
     versions = [
-        # supported versions from https://github.com/bazelbuild/rules_rust/blob/dab425760656c449d3a0f73c490be92c240b6ef2/util/fetch_shas_VERSIONS.txt
-        # The rust rules validate a toolchain by sha256 hash, as listed in https://github.com/bazelbuild/rules_rust/blob/dab425760656c449d3a0f73c490be92c240b6ef2/rust/known_shas.bzl
-        "1.68.2",
+        # supported versions from https://github.com/bazelbuild/rules_rust/blob/5c715ec50602e2ba6ca2ebfdd870662a6e6d1eda/util/fetch_shas_VERSIONS.txt
+        # The rust rules validate a toolchain by sha256 hash, as listed in https://github.com/bazelbuild/rules_rust/blob/5c715ec50602e2ba6ca2ebfdd870662a6e6d1eda/rust/known_shas.bzl
+        "1.76.0",
     ],
 )
 
@@ -653,7 +653,7 @@ load(
 # Pulls the gcr.io/skia-public/debugger-app-base container.
 container_pull(
     name = "debugger-app-base",
-    digest = "sha256:067d72e0dddf5375ff28b82df97d488eead14d1920fdb096a54d29698a1a4c60",
+    digest = "sha256:24edbde4082b5bbfc6b52ca8a88d974a6898a134bca815348a72e89598fba4a9",
     registry = "gcr.io",
     repository = "skia-public/debugger-app-base",
 )
@@ -661,7 +661,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/jsfiddle-base container.
 container_pull(
     name = "jsfiddle-base",
-    digest = "sha256:f6c22747cda4e4b47aed9322e94a3ec0fcba058f6b44482e5f194c24fbeb3218",
+    digest = "sha256:453d00b44c6baac7c5a6a27d00a0b51805e8636cbfb8da176c7c33dc3728bb3f",
     registry = "gcr.io",
     repository = "skia-public/jsfiddle-base",
 )
@@ -669,7 +669,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/shaders-base container.
 container_pull(
     name = "shaders-base",
-    digest = "sha256:e7695f0fdff5e79fad84833284284bd69f970df240fd166b7219896d603771ae",
+    digest = "sha256:cbf986e97789cab9c3fc6bdb82c12a2330ca75ba473607f5daf29f9747ae9a45",
     registry = "gcr.io",
     repository = "skia-public/shaders-base",
 )
@@ -677,7 +677,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/skottie-base container.
 container_pull(
     name = "skottie-base",
-    digest = "sha256:f4b64e5c220e0c50c8bce825095966cda6e0c3c65746f9bc6380c266677f19bd",
+    digest = "sha256:d9ecf127ac942343097c3ba0ba85f56f63a37147854ef5094299598b432a153d",
     registry = "gcr.io",
     repository = "skia-public/skottie-base",
 )

@@ -7,9 +7,11 @@
 
 #include <memory>
 
+#import "base/memory/raw_ptr.h"
 #import "ios/web/public/web_client.h"
 
 namespace web {
+class BrowserState;
 class ShellBrowserState;
 class ShellWebMainParts;
 
@@ -33,11 +35,12 @@ class ShellWebClient : public WebClient {
       WebState* web_state,
       mojo::GenericPendingReceiver receiver) override;
   bool EnableLongPressUIContextMenu() const override;
+  bool EnableWebInspector(BrowserState* browser_state) const override;
 
   ShellBrowserState* browser_state() const;
 
  private:
-  ShellWebMainParts* web_main_parts_;
+  raw_ptr<ShellWebMainParts> web_main_parts_;
 };
 
 }  // namespace web

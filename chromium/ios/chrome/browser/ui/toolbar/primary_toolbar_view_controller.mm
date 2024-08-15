@@ -66,8 +66,15 @@ using vivaldi::IsVivaldiRunning;
   // hidden and display a blank view by using the NTP background and by hidding
   // the location bar.
   self.view.hidden = NO;
+
+  if (IsVivaldiRunning()) {
+    self.view.backgroundColor =
+        [self toolbarBackgroundColorForType:ToolbarType::kPrimary];
+  } else {
   self.view.backgroundColor =
       self.buttonFactory.toolbarConfiguration.NTPBackgroundColor;
+  } // End Vivaldi
+
   self.view.locationBarContainer.hidden = YES;
 }
 
@@ -75,8 +82,15 @@ using vivaldi::IsVivaldiRunning;
   [super resetAfterSideSwipeSnapshot];
   // Note: the view is made visible or not by an `updateToolbar` call when the
   // snapshot animation ends.
+
+  if (IsVivaldiRunning()) {
+    self.view.backgroundColor =
+        [self toolbarBackgroundColorForType:ToolbarType::kPrimary];
+  } else {
   self.view.backgroundColor =
       self.buttonFactory.toolbarConfiguration.backgroundColor;
+  } // End Vivaldi
+
   if (self.hasOmnibox) {
     self.view.locationBarContainer.hidden = NO;
   } else {
@@ -112,11 +126,6 @@ using vivaldi::IsVivaldiRunning;
       [self updateToolbarButtonsTintColor];
     }];
   } else {
-  if (base::FeatureList::IsEnabled(kDynamicThemeColor) ||
-      base::FeatureList::IsEnabled(kDynamicBackgroundColor)) {
-    [super updateBackgroundColor];
-    return;
-  }
   UIColor* backgroundColor =
       self.buttonFactory.toolbarConfiguration.backgroundColor;
   if (base::FeatureList::IsEnabled(kThemeColorInTopToolbar) &&
@@ -283,13 +292,25 @@ using vivaldi::IsVivaldiRunning;
 
 #pragma mark - ToolbarAnimatee
 
-- (void)expandLocationBar {
+- (void)expandLocationBar:(BOOL)animated {
   [self deactivateViewLocationBarConstraints];
   [NSLayoutConstraint activateConstraints:self.view.expandedConstraints];
-  [self.view layoutIfNeeded];
+  if (base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
+    // No need to force the view to layout immediately when no animation is
+    // required, the pending layout updates can be calculated and rendered in
+    // the next runloop. Otherwise, this unnecessary layout will affect startup
+    // performance. And it is necessary to force the view to update its layout
+    // when it's animated. This is because there are following animations that
+    // need the final frame of the location bar.
+    if (animated) {
+      [self.view layoutIfNeeded];
+    }
+  } else {
+    [self.view layoutIfNeeded];
+  }
 }
 
-- (void)contractLocationBar {
+- (void)contractLocationBar:(BOOL)animated {
   [self deactivateViewLocationBarConstraints];
   if (IsSplitToolbarMode(self)) {
     [NSLayoutConstraint
@@ -297,7 +318,19 @@ using vivaldi::IsVivaldiRunning;
   } else {
     [NSLayoutConstraint activateConstraints:self.view.contractedConstraints];
   }
-  [self.view layoutIfNeeded];
+  if (base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
+    // No need to force the view to layout immediately when no animation is
+    // required, the pending layout updates can be calculated and rendered in
+    // the next runloop. Otherwise, this unnecessary layout will affect startup
+    // performance. And it is necessary to force the view to update its layout
+    // when it's animated. This is because there are following animations that
+    // need the final frame of the location bar.
+    if (animated) {
+      [self.view layoutIfNeeded];
+    }
+  } else {
+    [self.view layoutIfNeeded];
+  }
 }
 
 - (void)showCancelButton {

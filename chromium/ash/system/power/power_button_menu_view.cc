@@ -74,9 +74,10 @@ PowerButtonMenuView::PowerButtonMenuView(
     layer()->SetBackgroundBlur(ColorProvider::kBackgroundBlurSigma);
     layer()->SetBackdropFilterQuality(ColorProvider::kBackgroundBlurQuality);
   }
-  GetViewAccessibility().OverrideRole(ax::mojom::Role::kMenu);
-  GetViewAccessibility().OverrideName(
-      l10n_util::GetStringUTF16(IDS_ASH_POWER_BUTTON_MENU_ACCESSIBLE));
+  GetViewAccessibility().SetRole(ax::mojom::Role::kMenu);
+  GetViewAccessibility().SetName(
+      l10n_util::GetStringUTF16(IDS_ASH_POWER_BUTTON_MENU_ACCESSIBLE),
+      ax::mojom::NameFrom::kAttribute);
   RecreateItems();
 
   // Create a system shadow for current view.
@@ -250,11 +251,7 @@ void PowerButtonMenuView::RecreateItems() {
       &feedback_item_);
 }
 
-const char* PowerButtonMenuView::GetClassName() const {
-  return "PowerButtonMenuView";
-}
-
-void PowerButtonMenuView::Layout() {
+void PowerButtonMenuView::Layout(PassKey) {
   gfx::Rect rect(GetContentsBounds().origin(),
                  power_off_item_->GetPreferredSize());
   const int y_offset =

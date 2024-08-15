@@ -18,6 +18,8 @@ import org.chromium.chrome.browser.download.DownloadDirectoryProvider;
 import org.chromium.chrome.browser.download.DownloadLocationDialogType;
 import org.chromium.chrome.browser.download.DownloadPromptStatus;
 import org.chromium.chrome.browser.download.R;
+import org.chromium.chrome.browser.download.settings.DownloadLocationHelperImpl;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.browser_ui.util.DownloadUtils;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -29,10 +31,9 @@ import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 import java.io.File;
 import java.util.ArrayList;
 
-import android.os.Build;
-import org.chromium.base.ContextUtils;
 // Vivaldi
 import org.chromium.build.BuildConfig;
+
 /**
  * The factory class that contains all dependencies for the download location dialog.
  * Also provides the public functionalties to interact with dialog.
@@ -50,7 +51,7 @@ public class DownloadLocationDialogCoordinator implements ModalDialogProperties.
     private String mSuggestedPath;
     private Context mContext;
     private boolean mHasMultipleDownloadLocations;
-    private boolean mIsIncognito;
+    private Profile mProfile;
     private boolean mLocationDialogManaged;
 
     /**
@@ -63,6 +64,7 @@ public class DownloadLocationDialogCoordinator implements ModalDialogProperties.
 
     /**
      * Shows the download location dialog.
+     *
      * @param context The {@link Context} for the dialog.
      * @param modalDialogManager {@link ModalDialogManager} to control the dialog.
      * @param totalBytes The total download file size. May be 0 if not available.
@@ -75,7 +77,7 @@ public class DownloadLocationDialogCoordinator implements ModalDialogProperties.
             long totalBytes,
             @DownloadLocationDialogType int dialogType,
             String suggestedPath,
-            boolean isIncognito) {
+            Profile profile) {
         if (context == null || modalDialogManager == null) {
             onDismiss(null, DialogDismissalCause.ACTIVITY_DESTROYED);
             return;
@@ -86,8 +88,8 @@ public class DownloadLocationDialogCoordinator implements ModalDialogProperties.
         mTotalBytes = totalBytes;
         mDialogType = dialogType;
         mSuggestedPath = suggestedPath;
-        mLocationDialogManaged = DownloadDialogBridge.isLocationDialogManaged();
-        mIsIncognito = isIncognito;
+        mLocationDialogManaged = DownloadDialogBridge.isLocationDialogManaged(profile);
+        mProfile = profile;
 
         DownloadDirectoryProvider.getInstance()
                 .getAllDirectoriesOptions(
@@ -154,16 +156,17 @@ public class DownloadLocationDialogCoordinator implements ModalDialogProperties.
         if (dirs.size() == 1
                 && !mLocationDialogManaged
                 && mDialogType == DownloadLocationDialogType.DEFAULT
-                && !shouldShowIncognitoWarning()) {
+                && !mProfile.isOffTheRecord()) {
             final DirectoryOption dir = dirs.get(0);
             if (dir.type == DirectoryOption.DownloadLocationDirectoryType.DEFAULT) {
                 assert (!TextUtils.isEmpty(dir.location));
-                DownloadDialogBridge.setDownloadAndSaveFileDefaultDirectory(dir.location);
+                DownloadDialogBridge.setDownloadAndSaveFileDefaultDirectory(mProfile, dir.location);
                 mController.onDownloadLocationDialogComplete(mSuggestedPath);
             }
             return;
         }
-        }
+        } // Vivaldi
+
         // Already showing the dialog.
         if (mDialogModel != null) return;
 
@@ -175,7 +178,17 @@ public class DownloadLocationDialogCoordinator implements ModalDialogProperties.
                 (DownloadLocationCustomView)
                         LayoutInflater.from(mContext)
                                 .inflate(R.layout.download_location_dialog, null);
-        mCustomView.initialize(mDialogType, mTotalBytes);
+        mCustomView.initialize(
+                mDialogType,
+                mTotalBytes,
+                (isChecked) -> {
+                    DownloadDialogBridge.setPromptForDownloadAndroid(
+                            mProfile,
+                            isChecked
+                                    ? DownloadPromptStatus.DONT_SHOW
+                                    : DownloadPromptStatus.SHOW_PREFERENCE);
+                },
+                new DownloadLocationHelperImpl(mProfile));
         mPropertyModelChangeProcessor =
                 PropertyModelChangeProcessor.create(
                         mDownloadLocationDialogModel,
@@ -206,7 +219,7 @@ public class DownloadLocationDialogCoordinator implements ModalDialogProperties.
 
     private PropertyModel getLocationDialogModel() {
         boolean isInitial =
-                DownloadDialogBridge.getPromptForDownloadAndroid()
+                DownloadDialogBridge.getPromptForDownloadAndroid(mProfile)
                         == DownloadPromptStatus.SHOW_INITIAL;
 
         PropertyModel.Builder builder =
@@ -279,7 +292,7 @@ public class DownloadLocationDialogCoordinator implements ModalDialogProperties.
                 break;
         }
 
-        if (shouldShowIncognitoWarning()) {
+        if (mProfile.isOffTheRecord()) {
             builder.with(DownloadLocationDialogProperties.SHOW_INCOGNITO_WARNING, true);
             builder.with(DownloadLocationDialogProperties.DONT_SHOW_AGAIN_CHECKBOX_SHOWN, false);
         }
@@ -290,13 +303,9 @@ public class DownloadLocationDialogCoordinator implements ModalDialogProperties.
     private String getDefaultTitle() {
         return mContext.getString(
                 mLocationDialogManaged
-                                || (shouldShowIncognitoWarning() && !mHasMultipleDownloadLocations)
+                                || (mProfile.isOffTheRecord() && !mHasMultipleDownloadLocations)
                         ? R.string.download_location_dialog_title_confirm_download
                         : R.string.download_location_dialog_title);
-    }
-
-    private boolean shouldShowIncognitoWarning() {
-        return DownloadDialogUtils.shouldShowIncognitoWarning(mIsIncognito);
     }
 
     /**
@@ -315,7 +324,8 @@ public class DownloadLocationDialogCoordinator implements ModalDialogProperties.
         }
 
         // Update native with new path.
-        DownloadDialogBridge.setDownloadAndSaveFileDefaultDirectory(directoryOption.location);
+        DownloadDialogBridge.setDownloadAndSaveFileDefaultDirectory(
+                mProfile, directoryOption.location);
 
         RecordHistogram.recordEnumeratedHistogram(
                 "MobileDownload.Location.Dialog.DirectoryType",
@@ -331,6 +341,7 @@ public class DownloadLocationDialogCoordinator implements ModalDialogProperties.
         // click the positive button.
         if (!mLocationDialogManaged) {
             DownloadDialogBridge.setPromptForDownloadAndroid(
+                    mProfile,
                     dontShowAgain
                             ? DownloadPromptStatus.DONT_SHOW
                             : DownloadPromptStatus.SHOW_PREFERENCE);

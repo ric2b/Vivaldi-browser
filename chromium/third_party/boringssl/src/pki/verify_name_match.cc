@@ -6,12 +6,12 @@
 
 #include <openssl/base.h>
 #include <openssl/bytestring.h>
+
 #include "cert_error_params.h"
 #include "cert_errors.h"
 #include "input.h"
 #include "parse_name.h"
 #include "parser.h"
-#include "tag.h"
 
 namespace bssl {
 
@@ -127,15 +127,15 @@ enum CharsetEnforcement {
 
   bool success = false;
   switch (attribute.value_tag) {
-    case der::kPrintableString:
+    case CBS_ASN1_PRINTABLESTRING:
       success = NormalizeDirectoryString(ENFORCE_PRINTABLE_STRING, output);
       break;
-    case der::kBmpString:
-    case der::kUniversalString:
-    case der::kUtf8String:
+    case CBS_ASN1_BMPSTRING:
+    case CBS_ASN1_UNIVERSALSTRING:
+    case CBS_ASN1_UTF8STRING:
       success = NormalizeDirectoryString(NO_ENFORCEMENT, output);
       break;
-    case der::kIA5String:
+    case CBS_ASN1_IA5STRING:
       success = NormalizeDirectoryString(ENFORCE_ASCII, output);
       break;
     default:
@@ -153,15 +153,15 @@ enum CharsetEnforcement {
 }
 
 // Returns true if |tag| is a string type that NormalizeValue can handle.
-bool IsNormalizableDirectoryString(der::Tag tag) {
+bool IsNormalizableDirectoryString(CBS_ASN1_TAG tag) {
   switch (tag) {
-    case der::kPrintableString:
-    case der::kUtf8String:
+    case CBS_ASN1_PRINTABLESTRING:
+    case CBS_ASN1_UTF8STRING:
     // RFC 5280 only requires handling IA5String for comparing domainComponent
     // values, but handling it here avoids the need to special case anything.
-    case der::kIA5String:
-    case der::kUniversalString:
-    case der::kBmpString:
+    case CBS_ASN1_IA5STRING:
+    case CBS_ASN1_UNIVERSALSTRING:
+    case CBS_ASN1_BMPSTRING:
       return true;
     // TeletexString isn't normalized. Section 8 of RFC 5280 briefly
     // describes the historical confusion between treating TeletexString
@@ -258,7 +258,7 @@ enum NameMatchType {
 //
 // RelativeDistinguishedName ::=
 //   SET SIZE (1..MAX) OF AttributeTypeAndValue
-bool VerifyNameMatchInternal(const der::Input &a, const der::Input &b,
+bool VerifyNameMatchInternal(der::Input a, der::Input b,
                              NameMatchType match_type) {
   // Empty Names are allowed.  RFC 5280 section 4.1.2.4 requires "The issuer
   // field MUST contain a non-empty distinguished name (DN)", while section
@@ -274,8 +274,8 @@ bool VerifyNameMatchInternal(const der::Input &a, const der::Input &b,
   der::Parser a_rdn_sequence_counter(a);
   der::Parser b_rdn_sequence_counter(b);
   while (a_rdn_sequence_counter.HasMore() && b_rdn_sequence_counter.HasMore()) {
-    if (!a_rdn_sequence_counter.SkipTag(der::kSet) ||
-        !b_rdn_sequence_counter.SkipTag(der::kSet)) {
+    if (!a_rdn_sequence_counter.SkipTag(CBS_ASN1_SET) ||
+        !b_rdn_sequence_counter.SkipTag(CBS_ASN1_SET)) {
       return false;
     }
   }
@@ -294,8 +294,8 @@ bool VerifyNameMatchInternal(const der::Input &a, const der::Input &b,
   der::Parser b_rdn_sequence(b);
   while (a_rdn_sequence.HasMore() && b_rdn_sequence.HasMore()) {
     der::Parser a_rdn, b_rdn;
-    if (!a_rdn_sequence.ReadConstructed(der::kSet, &a_rdn) ||
-        !b_rdn_sequence.ReadConstructed(der::kSet, &b_rdn)) {
+    if (!a_rdn_sequence.ReadConstructed(CBS_ASN1_SET, &a_rdn) ||
+        !b_rdn_sequence.ReadConstructed(CBS_ASN1_SET, &b_rdn)) {
       return false;
     }
     if (!VerifyRdnMatch(&a_rdn, &b_rdn)) {
@@ -308,7 +308,7 @@ bool VerifyNameMatchInternal(const der::Input &a, const der::Input &b,
 
 }  // namespace
 
-bool NormalizeName(const der::Input &name_rdn_sequence,
+bool NormalizeName(der::Input name_rdn_sequence,
                    std::string *normalized_rdn_sequence, CertErrors *errors) {
   BSSL_CHECK(errors);
 
@@ -324,7 +324,7 @@ bool NormalizeName(const der::Input &name_rdn_sequence,
   while (rdn_sequence_parser.HasMore()) {
     // RelativeDistinguishedName ::= SET SIZE (1..MAX) OF AttributeTypeAndValue
     der::Parser rdn_parser;
-    if (!rdn_sequence_parser.ReadConstructed(der::kSet, &rdn_parser)) {
+    if (!rdn_sequence_parser.ReadConstructed(CBS_ASN1_SET, &rdn_parser)) {
       return false;
     }
     RelativeDistinguishedName type_and_values;
@@ -350,8 +350,8 @@ bool NormalizeName(const der::Input &name_rdn_sequence,
       // AttributeType ::= OBJECT IDENTIFIER
       if (!CBB_add_asn1(&attribute_type_and_value_cbb, &type_cbb,
                         CBS_ASN1_OBJECT) ||
-          !CBB_add_bytes(&type_cbb, type_and_value.type.UnsafeData(),
-                         type_and_value.type.Length())) {
+          !CBB_add_bytes(&type_cbb, type_and_value.type.data(),
+                         type_and_value.type.size())) {
         return false;
       }
 
@@ -372,8 +372,8 @@ bool NormalizeName(const der::Input &name_rdn_sequence,
       } else {
         if (!CBB_add_asn1(&attribute_type_and_value_cbb, &value_cbb,
                           type_and_value.value_tag) ||
-            !CBB_add_bytes(&value_cbb, type_and_value.value.UnsafeData(),
-                           type_and_value.value.Length())) {
+            !CBB_add_bytes(&value_cbb, type_and_value.value.data(),
+                           type_and_value.value.size())) {
           return false;
         }
       }
@@ -394,26 +394,25 @@ bool NormalizeName(const der::Input &name_rdn_sequence,
   return true;
 }
 
-bool VerifyNameMatch(const der::Input &a_rdn_sequence,
-                     const der::Input &b_rdn_sequence) {
+bool VerifyNameMatch(der::Input a_rdn_sequence, der::Input b_rdn_sequence) {
   return VerifyNameMatchInternal(a_rdn_sequence, b_rdn_sequence, EXACT_MATCH);
 }
 
-bool VerifyNameInSubtree(const der::Input &name_rdn_sequence,
-                         const der::Input &parent_rdn_sequence) {
+bool VerifyNameInSubtree(der::Input name_rdn_sequence,
+                         der::Input parent_rdn_sequence) {
   return VerifyNameMatchInternal(name_rdn_sequence, parent_rdn_sequence,
                                  SUBTREE_MATCH);
 }
 
 bool FindEmailAddressesInName(
-    const der::Input &name_rdn_sequence,
+    der::Input name_rdn_sequence,
     std::vector<std::string> *contained_email_addresses) {
   contained_email_addresses->clear();
 
   der::Parser rdn_sequence_parser(name_rdn_sequence);
   while (rdn_sequence_parser.HasMore()) {
     der::Parser rdn_parser;
-    if (!rdn_sequence_parser.ReadConstructed(der::kSet, &rdn_parser)) {
+    if (!rdn_sequence_parser.ReadConstructed(CBS_ASN1_SET, &rdn_parser)) {
       return false;
     }
 

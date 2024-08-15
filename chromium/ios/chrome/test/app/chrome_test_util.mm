@@ -40,7 +40,7 @@
 #import "ios/web/public/navigation/navigation_context.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state_observer.h"
-#import "net/base/mac/url_conversions.h"
+#import "net/base/apple/url_conversions.h"
 
 // A subclass to pass instances of UIOpenURLContext to scene delegate during
 // testing. UIOpenURLContext has no init available, so this can only be
@@ -105,6 +105,8 @@ ChromeBrowserState* GetCurrentIncognitoBrowserState() {
   return GetBrowserState(true);
 }
 
+// TODO(crbug.com/327330176): Avoid using
+// mainController.browserProviderInterface.
 Browser* GetMainBrowser() {
   return GetMainController()
       .browserProviderInterface.mainBrowserProvider.browser;

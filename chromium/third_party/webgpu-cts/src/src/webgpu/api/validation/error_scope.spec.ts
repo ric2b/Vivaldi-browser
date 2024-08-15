@@ -33,6 +33,7 @@ class ErrorScopeTests extends Fixture {
       await adapter.requestDevice({
         requiredLimits: {
           maxTextureDimension2D: adapter.limits.maxTextureDimension2D,
+          maxTextureArrayLayers: adapter.limits.maxTextureArrayLayers,
         },
       })
     );

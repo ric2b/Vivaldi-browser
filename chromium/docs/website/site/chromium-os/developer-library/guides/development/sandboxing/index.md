@@ -6,6 +6,7 @@ page_name: sandboxing
 title: Sandboxing ChromeOS system services
 ---
 
+
 [TOC]
 
 In ChromeOS, OS-level functionality (such as configuring network interfaces)
@@ -52,6 +53,17 @@ preferably more than one of, and ideally all of:
 You don't normally need both Seccomp and SELinux but for very security-sensitive
 workloads this can be required.
 
+### Note on SELinux support
+
+SELinux should be used exclusively when other sandboxing approaches are not
+feasible. Examples of this include:
+
+*   Services that need to run as root or with `CAP_SYS_ADMIN`, or
+*   Services that require privileged access to the filesystem:
+    *   Writing to root-owned files or directories, or
+    *   Mounting paths where existing sandboxing tools cannot restrict
+    mount paths.
+
 ## Best practices for writing secure system services
 
 Just remember that code has bugs, and these bugs can be used to take control
@@ -74,6 +86,10 @@ separated from your main service, use programs written in a primary programming
 language like C++ or Rust, not shell scripts. Moreover, when you execute them,
 consider further restricting their privileges.
 
+It is strongly recommended to [enable CFI] for code for code not written in a
+memory safe language whenever it handles untrusted inputs or runs without all
+three techniques mentioned in the Forbidden intersection section.
+
 ## Just tell me what I need to do
 
 *   Create a new user for your service ([example](https://crrev.com/c/225257)).
@@ -82,15 +98,82 @@ consider further restricting their privileges.
 *   Optionally, create a new group to control access to a resource and add the
     new user to that group ([example](https://crrev.com/c/242551)).
 *   Use Minijail to run your service as the user (and group) created in the
-    previous steps. In your init script:
-    *   `exec minijail0 -u <user> -g <group> /full/path/to/binary`
-    *   See [User IDs].
+    previous steps. See [User IDs] and [Minijail configuration].
 *   If your service fails, you might need to grant it capabilities. See
     [Capabilities].
 *   Use as many namespaces as possible. See [Namespaces].
+*   If possible, use `-n` to set [`no_new_privs`].
 *   Consider reducing the kernel attack surface exposed to your service by
     using Seccomp filters. See [Seccomp filters].
 *   Add your sandboxed service to the [security.SandboxedServices] test.
+*   Enable the `cfi` and `thinlto` USE flags.
+
+## Minijail configuration
+
+Minijail can be configured via command-line arguments or a
+[configuration file][minijail config]. Prefer using a configuration
+file, as it's easier to read and can include comments.
+
+Minijail configuration files should be installed to
+`/usr/share/minijail/`. An upstart service can invoke minijail with a
+configuration file like this:
+
+```
+exec minijail0 --config /usr/share/minijail/my_service.conf -- /usr/bin/my_service
+```
+
+Example configuration:
+
+```conf
+% minijail-config-file v0
+
+# Copyright 2024 The ChromiumOS Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Enable network, ipc, cgroup, pid, and uts namespaces.
+e
+l
+N
+p
+uts
+
+# Minimal mount namespace.
+profile=minimalistic-mountns
+# If you don't need /dev, use minimalistic-mountns-nodev instead.
+
+# Set no_new_privs.
+n
+
+# Enable seccomp policy.
+S = /usr/share/policy/my_service-seccomp.policy
+
+# Set user and group.
+u = my_service
+g = my_service
+
+# Set up mounts. These will be specific to your service, these are just common examples:
+
+# Mount a tmpfs at /dev and /run.
+mount = /dev,/dev,tmpfs,MS_NODEV|MS_NOEXEC|MS_NOSUID,mode=755,size=10M
+mount = /run,/run,tmpfs,MS_NODEV|MS_NOEXEC|MS_NOSUID,mode=755,size=10M
+
+# Allow syslog.
+bind-mount = /dev/log
+
+# Allow D-Bus.
+bind-mount = /run/dbus
+
+# Allow mojo.
+bind-mount = /run/mojo,,1
+
+# Allow DNS resolution.
+bind-mount = /run/dns-proxy
+bind-mount = /run/shill
+
+# Allow UMA metrics.
+bind-mount = /var/lib/metrics,,1
+```
 
 ## User IDs
 
@@ -233,19 +316,17 @@ run in the init mount or PID namespace.
 When using many namespaces to isolate a service, there are some resources
 that the service still reasonably should be able to access.
 
-*** note
-If bind-mounting on top of /run, you need to mount a *tmpfs* /run:
-
-```bash
--k 'none,/run,tmpfs,MS_NODEV|MS_NOEXEC|MS_NOSUID,mode=755,size=10M'
-```
-
-If bind-mounting on top of /sys, you need to mount a *tmpfs* /sys:
-
-```bash
--k 'none,/sys,sysfs,MS_NODEV|MS_NOEXEC|MS_NOSUID,mode=755,size=10M'
-```
-***
+> If bind-mounting on top of /run, you need to mount a *tmpfs* /run:
+>
+> ```bash
+> -k 'none,/run,tmpfs,MS_NODEV|MS_NOEXEC|MS_NOSUID,mode=755,size=10M'
+> ```
+>
+> If bind-mounting on top of /sys, you need to mount a *tmpfs* /sys:
+>
+> ```bash
+> -k 'none,/sys,sysfs,MS_NODEV|MS_NOEXEC|MS_NOSUID,mode=755,size=10M'
+> ```
 
 *   syslog: If using `-d` to mount a minimal /dev, you can pass access to the
     syslog daemon by using `-b /dev/log`. If your process mounts all of /dev,
@@ -361,14 +442,12 @@ being killed. The policy file can also tell the kernel to fail the system call
 execve: return 1
 ```
 
-*** note
-**NOTE**: `mmap` and `mprotect` both have argument filters to prevent writeable
-executable memory since that makes certain classes of attacks much easier. In
-most cases `mprotect` does not need `PROT_EXEC`, but you might have to use `arg2
-in ~PROT_EXEC || arg2 in ~PROT_WRITE` just like `mmap` in cases where child
-processes are executed and need to dynamically link shared libraries or the code
-implements a JIT compiler.
-***
+> **NOTE**: `mmap` and `mprotect` both have argument filters to prevent
+> writeable executable memory since that makes certain classes of attacks much
+> easier. In most cases `mprotect` does not need `PROT_EXEC`, but you might have
+> to use `arg2 in ~PROT_EXEC || arg2 in ~PROT_WRITE` just like `mmap` in cases
+> where child processes are executed and need to dynamically link shared
+> libraries or the code implements a JIT compiler.
 
 ### Generating Seccomp policies using audit (on 4.14+ kernels)
 
@@ -385,11 +464,9 @@ can run the process with `-L`, get a list of all the syscalls not included in
 the policy, review them, and automatically generate or augment a policy, all
 in one step.
 
-*** note
-**NOTE**: Minijail's `-L` flag requires minijail to be built with
-`USE=cros-debug`. Generally, this means that it will not work out of the box in
-prebuilt (e.g Goldeneye, CPFE, etc.) OS images.
-***
+> **NOTE**: Minijail's `-L` flag requires minijail to be built with
+> `USE=cros-debug`. Generally, this means that it will not work out of the box
+> in prebuilt (e.g Goldeneye, CPFE, etc.) OS images.
 
 Our recommended way of using this functionality is to start with an empty
 policy which will cause all syscalls to be logged-but-allowed. The resulting
@@ -411,15 +488,13 @@ not require a minijail build with `USE=cros-debug`. Similar to audit logs above,
 the [generate_seccomp_policy.py script] can accept strace logs from an
 unsandboxed process to generate a policy.
 
-*** note
-**NOTE**: When creating `strace` logs for arm64, make sure you're running it in
-arm64 userland as most devices that support arm64 kernels run 32-bit arm
-userland by default. The image running on the device should be built for 64-bit
-arm userland e.g. kevin device can run the image built for 32-bit arm userland
-with the `--board=kevin` flag and run the image for 64-bit arm userland built
-with the `--board=kevin64` flag. You can run `file -L /bin/sh` command to check
-which environment you're running on.
-***
+> **NOTE**: When creating `strace` logs for arm64, make sure you're running it
+> in arm64 userland as most devices that support arm64 kernels run 32-bit arm
+> userland by default. The image running on the device should be built for
+> 64-bit arm userland e.g. kevin device can run the image built for 32-bit arm
+> userland with the `--board=kevin` flag and run the image for 64-bit arm
+> userland built with the `--board=kevin64` flag. You can run `file -L /bin/sh`
+> command to check which environment you're running on.
 
 #### Generate and pre-process the strace log
 
@@ -594,10 +669,12 @@ exec minijail0 -i -I -p -l -r -v -t -u mtp -g mtp -G \
 ## Securely mounting cryptohome daemon store folders
 
 Some daemons store user data on the user's cryptohome under
-`/home/.shadow/<user_hash>/mount/root/<daemon_name>` or equivalently
-`/home/root/<user_hash>/<daemon_name>`. For instance, Session Manager stores
-user policy under `/home/root/<user_hash>/session_manager/policy`. This is
-useful if the data should be protected from other users since the user's
+`/home/.shadow/<user_hash>/mount/root/<daemon_name>` (or equivalently
+`/home/root/<user_hash>/<daemon_name>`) and
+`/home/.shadow/<user_hash>/mount/root/.cache/<daemon_name>` (or equivalent
+`/home/root/<user_hash>/.cache/<daemon_name>`). For instance, Session Manager
+stores user policy under `/home/root/<user_hash>/session_manager/policy`. This
+is useful if the data should be protected from other users since the user's
 cryptohome is only mounted (and therefore decrypted) when the user logs in. If
 the user is not logged in, it is encrypted with the user's password.
 
@@ -621,30 +698,32 @@ fowners <daemon_user>:<daemon_group> "${daemon_store}"
 
 This directory is never used directly. It merely serves as a secure template for
 the `chromeos_startup` script, which picks it up and creates
-`/run/daemon-store/<daemon_name>` as a shared mount.
+`/run/daemon-store/<daemon_name>` and `/run/daemon-store-cache/<daemon_name>` as
+shared mounts.
 
 Next, move the user/group setup to `pkg_setup()` since `pkg_preinst()`, where
 this is usually done, runs after `src_install()`:
 
 ```bash
 pkg_setup() {
-	# Has to be done in pkg_setup() instead of pkg_preinst() since
-	# src_install() needs <daemon_user> and <daemon_group>.
-	enewuser <daemon_user>
-	enewgroup <daemon_group>
-	cros-workon_pkg_setup
+    # Has to be done in pkg_setup() instead of pkg_preinst() since
+    # src_install() needs <daemon_user> and <daemon_group>.
+    enewuser <daemon_user>
+    enewgroup <daemon_group>
+    cros-workon_pkg_setup
 }
 ```
-
-In your daemon's init script, mount the daemon store folder as `MS_SLAVE` in
-your mount namespace. Be sure not to mount all of `/run`. Make sure to mount
-with the `MS_REC` flag to propagate any already-mounted cryptohome bind mounts
-into the mount namespace.
+In your daemon's init script, the default is to mount with `MS_SLAVE`
+for minijail0 (`MS_PRIVATE` for libminijail) unless `-K<mode>` is passed
+when creating your mount namespace. Be sure not to mount all of `/run`. Make
+sure to mount with the `MS_REC` flag to propagate any already-mounted cryptohome
+bind mounts into the mount namespace.
 
 ```bash
 minijail0 -v -Kslave \
           -k 'tmpfs,/run,tmpfs,MS_NOSUID|MS_NODEV|MS_NOEXEC' \
           -k '/run/daemon-store/<daemon_name>,/run/daemon-store/<daemon_name>,none,MS_BIND|MS_REC' \
+          -k '/run/daemon-store-cache/<daemon_name>,/run/daemon-store-cache/<daemon_name>,none,MS_BIND|MS_REC' \
           ...
 ```
 
@@ -654,12 +733,18 @@ During sign-in, when the user's cryptohome is mounted, Cryptohome creates
 `/etc/daemon-store/<daemon_name>` to the bind target. Since
 `/run/daemon-store/<daemon_name>` is a shared mount outside of the mount
 namespace and a `MS_SLAVE` mount inside, the mount event propagates into the
-daemon.
+daemon. Ditto for `/home/.shadow/<user_hash>/mount/root/.cache/<daemon_name>`
+and `/run/daemon-store-cache/<daemon_name>`
 
 Your daemon can now use `/run/daemon-store/<daemon_name>/<user_hash>` to store
 user data once the user's cryptohome is mounted. Note that even though
 `/run/daemon-store` is on a tmpfs, your data is actually stored on disk and not
 lost on reboot.
+
+`/run/daemon-store-cache/<daemon_name>/<user_hash>` works similarly as above,
+however contents inside this directory are automatically cleaned up when device
+disk space is low, for **logged-out users**. This is the ideal directory to
+store cache contents.
 
 **Be sure not to write to the folder before the cryptohome is mounted**.
 Consider listening to Session Manager's `SessionStateChanged` signal or similar
@@ -672,8 +757,8 @@ D-Bus method.
 
 The following diagram illustrates the mount event propagation:
 
-![Mount propagation diagram](images/sandboxing_daemon_store.png "Mount
-propagation diagram")
+![Mount propagation diagram](sandboxing_daemon_store.png "Mount propagation
+diagram")
 
 ## Landlock unprivileged filesystem access control
 
@@ -753,22 +838,75 @@ way to mock Minijail is to just abstract away the entire sandboxed process
 execution. An example of this can be found in the [SandboxedProcess class] in
 debugd.
 
+## Enforcing Control Flow Integrity
+
+[Control Flow Integrity] is a compiler feature for making certain memory
+corruption bugs much more difficult to exploit for code execution. Examples
+include type confusion, heap use-after-frees, heap buffer overflows, heap double
+frees, etc. Violations trigger crashes through SIGILL.
+
+CFI is already [enabled in debugd](https://crrev.com/c/4611534), and you can use
+that CL as an example for your service. Please note that CFI isn't free so there
+is a ~1% performance cost plus a potential binary size increase. However,
+enabling LTO is a prerequisite of CFI which typically leads to a ~3% performance
+gain and in some cases leads to a binary size decrease.
+
+Control flow integrity support for ChromeOS is available through
+[cros-sanitizers.eclass] which is already inherited for all [ebuild]s that
+inherit [platform.eclass]. This means that for most first party [ebuild]s you
+just need to set the appropriate USE flags and make sure everything still works.
+For things that break with CFI enabled you can add them to a [cfi-ignore.txt]
+file. This will be automatically applied if it is placed in the ebuild's `files`
+directory.
+
+## Troubleshooting
+
+Since CFI might break certain atypical usage of function pointers and type
+casting, it may be necessary to troubleshoot CFI related crashes. A good
+starting point is to enable the diagnostic and recovery modes of CFI and run the
+package's unit tests for example:
+
+```bash
+FEATURES=test USE='cfi cfi_diag cfi_recover thinlto' emerge-${BOARD} debugd
+```
+
+CFI violations will look something like:
+```
+ASAN error detected:
+/build/amd64-generic/usr/include/gtest/gtest-matchers.h:234:12: runtime error: control flow integrity check for type 'bool (const testing::internal::MatcherBase<const std::string &> &, const std::string &, testing::MatchResultListener *)' failed during indirect function call
+(/usr/lib64/libgtest.so.1.13.0+0x603f4): note: (unknown) defined here
+/build/amd64-generic/usr/include/gtest/gtest-matchers.h:234:12: note: check failed in /var/cache/portage/chromeos-base/debugd/out/Default/debugd_testrunner, destination function located in /usr/lib64/libgtest.so.1.13.0
+    #0 0x55fd85b5d9e8 in testing::internal::MatcherBase<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&>::MatchAndExplain(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&, testing::MatchResultListener*) const /build/amd64-generic/usr/include/gtest/gtest-matchers.h:234:12
+    #1 0x55fd85b6106a in testing::internal::MatcherBase<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&>::Matches(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&) const /build/amd64-generic/usr/include/gtest/gtest-matchers.h:240:12
+...
+```
+
+At this point it is up to you to determine if a source change is justified or if
+it is ok to add the particular function or source file to a [cfi-ignore.txt].
+Generally, it is preferable not to exempt code from CFI unless there is a good
+reason such as when the code is only for unit test support.
+
 [ChromeOS sandboxing talk]: https://drive.google.com/file/d/1hJOcKaj8FK2sDLX5rSJcmgjEylviVlb_/view
 [Minijail wrappers]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/libbrillo/brillo/minijail/
 [Minijail library]: https://android.googlesource.com/platform/external/minijail/+/HEAD/libminijail.h
-[User IDs]: #User-IDs
-[Capabilities]: #Capabilities
-[Namespaces]: #Namespaces
+[User IDs]: #user-ids
+[Minijail configuration]: #minijail-configuration
+[Capabilities]: #capabilities
+[Namespaces]: #namespaces
 [Landlock]: #landlock-unprivileged-filesystem-access-control
-[Seccomp filters]: #Seccomp-filters
+[Seccomp filters]: #seccomp-filters
+[enable CFI]: #enforcing-control-flow-integrity
+[ebuild]: portage/ebuild_faq.md
+[cros-sanitizers.eclass]: https://source.chromium.org/chromiumos/chromiumos/codesearch/+/main:src/third_party/chromiumos-overlay/eclass/cros-sanitizers.eclass
+[platform.eclass]: https://source.chromium.org/chromiumos/chromiumos/codesearch/+/main:src/third_party/chromiumos-overlay/eclass/platform.eclass
 [UNIX _abstract_ sockets]: https://man7.org/linux/man-pages/man7/unix.7.html
-[security.SandboxedServices]: https://chromium.googlesource.com/chromiumos/platform/tast-tests/+/HEAD/src/chromiumos/tast/local/bundles/cros/security/sandboxed_services.go
+[security.SandboxedServices]: https://chromium.googlesource.com/chromiumos/platform/tast-tests/+/HEAD/src/go.chromium.org/tast-tests/cros/local/bundles/cros/security/sandboxed_services.go
 
-[SELinux]: https://chromium.googlesource.com/chromiumos/docs/+/HEAD/security/selinux.md
+[SELinux]: https://www.chromium.org/chromium-os/developer-library/reference/security/selinux
 [libchrome]: packages/libchrome.md
 [libbrillo]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/libbrillo
 [shell command-injection bugs]: https://en.wikipedia.org/wiki/Code_injection#Shell_injection
-[ChromeOS user accounts README]: https://chromium.googlesource.com/chromiumos/docs/+/HEAD/account_management.md
+[ChromeOS user accounts README]: https://www.chromium.org/chromium-os/developer-library/reference/build/account-management
 [How do I specify the dependencies of a change?]: contributing.md#CQ-DEPEND
 [Linux capabilities]: https://man7.org/linux/man-pages/man7/capabilities.7.html
 [capability.h]: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/uapi/linux/capability.h
@@ -776,6 +914,7 @@ debugd.
 [namespaces overview]: https://man7.org/linux/man-pages/man7/namespaces.7.html
 [control groups settings]: https://man7.org/linux/man-pages/man7/cgroups.7.html
 [`minijail0(1)`]: https://google.github.io/minijail/minijail0.1.html
+[minijail config]: https://google.github.io/minijail/minijail0.5#configuration-file
 [Linux kernel mount documentation]: https://www.kernel.org/doc/Documentation/filesystems/sharedsubtree.txt
 [Seccomp-BPF]: https://www.kernel.org/doc/Documentation/prctl/seccomp_filter.txt
 [`syscall_filter.c` source]: https://android.googlesource.com/platform/external/minijail/+/HEAD/syscall_filter.c
@@ -791,3 +930,6 @@ debugd.
 [SandboxedProcess class]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/debugd/src/sandboxed_process.h
 [setns(2)]: https://man7.org/linux/man-pages/man2/setns.2.html
 [nsenter(1)]: https://man7.org/linux/man-pages/man1/nsenter.1.html
+[Control Flow Integrity]: https://clang.llvm.org/docs/ControlFlowIntegrity.html
+[cfi-ignore.txt]: https://clang.llvm.org/docs/SanitizerSpecialCaseList.html#format
+[`no_new_privs`]: https://docs.kernel.org/userspace-api/no_new_privs.html

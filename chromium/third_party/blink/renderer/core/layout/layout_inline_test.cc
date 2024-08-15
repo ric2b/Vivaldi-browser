@@ -7,6 +7,7 @@
 #include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/inline/inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
 #include "third_party/blink/renderer/core/layout/physical_box_fragment.h"
@@ -760,8 +761,8 @@ TEST_F(LayoutInlineTest, VisualOverflowRecalcLegacyLayout) {
   )HTML");
 
   auto* span = To<LayoutInline>(GetLayoutObjectByElementId("span"));
-  auto* span_element = GetDocument().getElementById(AtomicString("span"));
-  auto* span2_element = GetDocument().getElementById(AtomicString("span2"));
+  auto* span_element = GetElementById("span");
+  auto* span2_element = GetElementById("span2");
 
   span_element->setAttribute(html_names::kStyleAttr,
                              AtomicString("outline: 50px solid red"));
@@ -804,8 +805,8 @@ TEST_F(LayoutInlineTest, VisualOverflowRecalcLayoutNG) {
   )HTML");
 
   auto* span = To<LayoutInline>(GetLayoutObjectByElementId("span"));
-  auto* span_element = GetDocument().getElementById(AtomicString("span"));
-  auto* span2_element = GetDocument().getElementById(AtomicString("span2"));
+  auto* span_element = GetElementById("span");
+  auto* span2_element = GetElementById("span2");
 
   span_element->setAttribute(html_names::kStyleAttr,
                              AtomicString("outline: 50px solid red"));
@@ -845,7 +846,7 @@ TEST_F(LayoutInlineTest, VisualOverflowRecalcLegacyLayoutPositionRelative) {
   )HTML");
 
   auto* span = To<LayoutInline>(GetLayoutObjectByElementId("span"));
-  auto* span_element = GetDocument().getElementById(AtomicString("span"));
+  auto* span_element = GetElementById("span");
 
   span_element->setAttribute(html_names::kStyleAttr,
                              AtomicString("outline: 50px solid red"));

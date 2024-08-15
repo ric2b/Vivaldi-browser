@@ -19,6 +19,7 @@
 
 #include <glob.h>
 
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>  // NOLINT
 #include <memory>
@@ -28,6 +29,7 @@
 #include <vector>
 
 #include "absl/base/attributes.h"
+#include "absl/base/nullability.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "./centipede/defs.h"
@@ -54,25 +56,30 @@ ABSL_ATTRIBUTE_WEAK void RemoteMkdir(std::string_view path) {
   CHECK(!error) << VV(path) << VV(error);
 }
 
-ABSL_ATTRIBUTE_WEAK RemoteFile *RemoteFileOpen(std::string_view path,
-                                               const char *mode) {
+ABSL_ATTRIBUTE_WEAK absl::Nullable<RemoteFile *> RemoteFileOpen(
+    std::string_view path, const char *mode) {
   CHECK(!path.empty());
   FILE *f = std::fopen(path.data(), mode);
   return reinterpret_cast<RemoteFile *>(f);
 }
 
-ABSL_ATTRIBUTE_WEAK void RemoteFileClose(RemoteFile *f) {
+ABSL_ATTRIBUTE_WEAK void RemoteFileClose(absl::Nonnull<RemoteFile *> f) {
   CHECK(f != nullptr);
   std::fclose(reinterpret_cast<FILE *>(f));
 }
 
-ABSL_ATTRIBUTE_WEAK void RemoteFileAppend(RemoteFile *f, const ByteArray &ba) {
+ABSL_ATTRIBUTE_WEAK void RemoteFileAppend(absl::Nonnull<RemoteFile *> f,
+                                          const ByteArray &ba) {
   CHECK(f != nullptr);
   auto *file = reinterpret_cast<FILE *>(f);
   constexpr auto elt_size = sizeof(ba[0]);
   const auto elts_to_write = ba.size();
   const auto elts_written =
       std::fwrite(ba.data(), elt_size, elts_to_write, file);
+  // Dynamic results of a running pipeline are consumed by itself (shard
+  // cross-pollination) and can be consumed by external processes (monitoring):
+  // ensure files are in valid and readable state after each write.
+  std::fflush(file);
   CHECK_EQ(elts_written, elts_to_write);
 }
 
@@ -84,7 +91,8 @@ void RemoteFileAppend(RemoteFile *f, const std::string &contents) {
   RemoteFileAppend(f, contents_ba);
 }
 
-ABSL_ATTRIBUTE_WEAK void RemoteFileRead(RemoteFile *f, ByteArray &ba) {
+ABSL_ATTRIBUTE_WEAK void RemoteFileRead(absl::Nonnull<RemoteFile *> f,
+                                        ByteArray &ba) {
   CHECK(f != nullptr);
   auto *file = reinterpret_cast<FILE *>(f);
   std::fseek(file, 0, SEEK_END);  // seek to end
@@ -100,7 +108,7 @@ ABSL_ATTRIBUTE_WEAK void RemoteFileRead(RemoteFile *f, ByteArray &ba) {
 
 // Does not need weak attribute as the implementation depends on
 // RemoteFileRead(RemoteFile *, ByteArray).
-void RemoteFileRead(RemoteFile *f, std::string &contents) {
+void RemoteFileRead(absl::Nonnull<RemoteFile *> f, std::string &contents) {
   CHECK(f != nullptr);
   ByteArray contents_ba;
   RemoteFileRead(f, contents_ba);
@@ -129,6 +137,15 @@ void RemoteFileGetContents(const std::filesystem::path &path,
 
 ABSL_ATTRIBUTE_WEAK bool RemotePathExists(std::string_view path) {
   return std::filesystem::exists(path);
+}
+
+ABSL_ATTRIBUTE_WEAK int64_t RemoteFileGetSize(std::string_view path) {
+  FILE *f = std::fopen(path.data(), "r");
+  CHECK(f != nullptr) << VV(path);
+  std::fseek(f, 0, SEEK_END);
+  const auto sz = std::ftell(f);
+  std::fclose(f);
+  return sz;
 }
 
 namespace {

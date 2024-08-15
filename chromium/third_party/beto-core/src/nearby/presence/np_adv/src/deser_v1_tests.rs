@@ -429,7 +429,7 @@ fn fill_plaintext_adv<'a, R: rand::Rng, C: CryptoProvider>(
 /// Populate a random number of sections with randomly chosen identities and random DEs
 fn fill_encrypted_adv<'a, R: rand::Rng, C: CryptoProvider>(
     mut rng: &mut R,
-    identities: &'a Vec<TestIdentity<C>>,
+    identities: &'a [TestIdentity<C>],
     adv_builder: &mut AdvBuilder,
 ) -> Vec<SectionConfig<'a, C>> {
     let mut expected = Vec::new();
@@ -519,7 +519,7 @@ impl<C: CryptoProvider> TestIdentity<C> {
 }
 /// Add several DEs with random types and contents
 fn add_des<I: SectionEncoder, R: rand::Rng>(
-    mut sb: SectionBuilder<I>,
+    mut sb: SectionBuilder<&mut AdvBuilder, I>,
     rng: &mut R,
 ) -> Vec<GenericDataElement> {
     let mut des = Vec::new();

@@ -15,6 +15,7 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.supplier.DestroyableObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.app.download.home.DownloadPage;
 import org.chromium.chrome.browser.bookmarks.BookmarkPage;
@@ -25,12 +26,14 @@ import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.history.HistoryManagerUtils;
 import org.chromium.chrome.browser.history.HistoryPage;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
+import org.chromium.chrome.browser.magic_stack.ModuleRegistry;
 import org.chromium.chrome.browser.management.ManagementPage;
 import org.chromium.chrome.browser.ntp.IncognitoNewTabPage;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.ntp.RecentTabsManager;
 import org.chromium.chrome.browser.ntp.RecentTabsPage;
+import org.chromium.chrome.browser.pdf.PdfPage;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
@@ -74,6 +77,7 @@ public class NativePageFactory {
     private final HomeSurfaceTracker mHomeSurfaceTracker;
     private final ObservableSupplier<TabContentManager> mTabContentManagerSupplier;
     private final ObservableSupplier<Integer> mTabStripHeightSupplier;
+    private final OneshotSupplier<ModuleRegistry> mModuleRegistrySupplier;
     private NewTabPageUma mNewTabPageUma;
 
     private NativePageBuilder mNativePageBuilder;
@@ -92,7 +96,8 @@ public class NativePageFactory {
             @NonNull Supplier<Toolbar> toolbarSupplier,
             @Nullable HomeSurfaceTracker homeSurfaceTracker,
             @Nullable ObservableSupplier<TabContentManager> tabContentManagerSupplier,
-            @NonNull ObservableSupplier<Integer> tabStripHeightSupplier) {
+            @NonNull ObservableSupplier<Integer> tabStripHeightSupplier,
+            @NonNull OneshotSupplier<ModuleRegistry> moduleRegistrySupplier) {
         mActivity = activity;
         mBottomSheetController = sheetController;
         mBrowserControlsManager = browserControlsManager;
@@ -107,6 +112,7 @@ public class NativePageFactory {
         mHomeSurfaceTracker = homeSurfaceTracker;
         mTabContentManagerSupplier = tabContentManagerSupplier;
         mTabStripHeightSupplier = tabStripHeightSupplier;
+        mModuleRegistrySupplier = moduleRegistrySupplier;
     }
 
     private NativePageBuilder getBuilder() {
@@ -127,7 +133,8 @@ public class NativePageFactory {
                             mToolbarSupplier,
                             mHomeSurfaceTracker,
                             mTabContentManagerSupplier,
-                            mTabStripHeightSupplier);
+                            mTabStripHeightSupplier,
+                            mModuleRegistrySupplier);
         }
         return mNativePageBuilder;
     }
@@ -157,6 +164,7 @@ public class NativePageFactory {
         private final HomeSurfaceTracker mHomeSurfaceTracker;
         private final ObservableSupplier<TabContentManager> mTabContentManagerSupplier;
         private final ObservableSupplier<Integer> mTabStripHeightSupplier;
+        private final OneshotSupplier<ModuleRegistry> mModuleRegistrySupplier;
 
         public NativePageBuilder(
                 Activity activity,
@@ -173,7 +181,8 @@ public class NativePageFactory {
                 Supplier<Toolbar> toolbarSupplier,
                 HomeSurfaceTracker homeSurfaceTracker,
                 ObservableSupplier<TabContentManager> tabContentManagerSupplier,
-                ObservableSupplier<Integer> tabStripHeightSupplier) {
+                ObservableSupplier<Integer> tabStripHeightSupplier,
+                OneshotSupplier<ModuleRegistry> moduleRegistrySupplier) {
             mActivity = activity;
             mUma = uma;
             mBottomSheetController = sheetController;
@@ -189,6 +198,7 @@ public class NativePageFactory {
             mHomeSurfaceTracker = homeSurfaceTracker;
             mTabContentManagerSupplier = tabContentManagerSupplier;
             mTabStripHeightSupplier = tabStripHeightSupplier;
+            mModuleRegistrySupplier = moduleRegistrySupplier;
         }
 
         protected NativePage buildNewTabPage(Tab tab, String url) {
@@ -222,7 +232,8 @@ public class NativePageFactory {
                     mToolbarSupplier,
                     mHomeSurfaceTracker,
                     mTabContentManagerSupplier,
-                    mTabStripHeightSupplier);
+                    mTabStripHeightSupplier,
+                    mModuleRegistrySupplier);
         }
 
         protected NativePage buildBookmarksPage(Tab tab) {
@@ -278,6 +289,14 @@ public class NativePageFactory {
                     new TabShim(tab, mBrowserControlsManager, mTabModelSelector), tab.getProfile());
         }
 
+        protected NativePage buildPdfPage(Tab tab, String url) {
+            return new PdfPage(
+                    new TabShim(tab, mBrowserControlsManager, mTabModelSelector),
+                    tab.getProfile(),
+                    mActivity,
+                    url);
+        }
+
         // Vivaldi
         protected NativePage buildSpeedDialPage(Tab tab) {
             if (tab.isIncognito())
@@ -291,28 +310,30 @@ public class NativePageFactory {
     }
 
     /**
-     * Returns a NativePage for displaying the given URL if the URL is a valid chrome-native URL,
-     * or null otherwise. If candidatePage is non-null and corresponds to the URL, it will be
-     * returned. Otherwise, a new NativePage will be constructed.
+     * Returns a NativePage for displaying the given URL if the URL is a valid chrome-native URL, or
+     * represents a pdf file. Otherwise returns null. If candidatePage is non-null and corresponds
+     * to the URL, it will be returned. Otherwise, a new NativePage will be constructed.
      *
      * @param url The URL to be handled.
      * @param candidatePage A NativePage to be reused if it matches the url, or null.
      * @param tab The Tab that will show the page.
+     * @param isPdf Whether the content of the URL is pdf.
      * @return A NativePage showing the specified url or null.
      */
-    public NativePage createNativePage(String url, NativePage candidatePage, Tab tab) {
-        return createNativePageForURL(url, candidatePage, tab, tab.isIncognito());
+    public NativePage createNativePage(
+            String url, NativePage candidatePage, Tab tab, boolean isPdf) {
+        return createNativePageForURL(url, candidatePage, tab, tab.isIncognito(), isPdf);
     }
 
     @VisibleForTesting
     NativePage createNativePageForURL(
-            String url, NativePage candidatePage, Tab tab, boolean isIncognito) {
+            String url, NativePage candidatePage, Tab tab, boolean isIncognito, boolean isPdf) {
         if (ChromeApplicationImpl.isVivaldi() && tab != null)
             return createNativePageForURLVivaldi(url, candidatePage, tab, isIncognito);
 
         NativePage page;
 
-        switch (NativePage.nativePageType(url, candidatePage, isIncognito)) {
+        switch (NativePage.nativePageType(url, candidatePage, isIncognito, isPdf)) {
             case NativePageType.NONE:
                 return null;
             case NativePageType.CANDIDATE:
@@ -335,6 +356,9 @@ public class NativePageFactory {
                 break;
             case NativePageType.MANAGEMENT:
                 page = getBuilder().buildManagementPage(tab);
+                break;
+            case NativePageType.PDF:
+                page = getBuilder().buildPdfPage(tab, url);
                 break;
             default:
                 assert false;
@@ -405,7 +429,7 @@ public class NativePageFactory {
 
     /** Vivaldi **/
     public static boolean isNativeSpeedDialPageUrl(String url, boolean isIncognito) {
-        return NativePage.nativePageType(url, null, isIncognito) == NativePageType.NTP;
+        return NativePage.nativePageType(url, null, isIncognito, false) == NativePageType.NTP;
     }
 
     @VisibleForTesting
@@ -415,7 +439,7 @@ public class NativePageFactory {
                                                      boolean isIncognito) {
         NativePage page;
 
-        switch (NativePage.nativePageType(url, candidatePage, isIncognito)) {
+        switch (NativePage.nativePageType(url, candidatePage, isIncognito, false)) {
             case NativePageType.NONE:
                 return null;
             case NativePageType.CANDIDATE:

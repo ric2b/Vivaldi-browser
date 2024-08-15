@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <algorithm>
+#include <memory>
+#include <utility>
 
 #include "base/task/single_thread_task_runner.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -24,6 +25,106 @@
 namespace blink {
 namespace {
 
+// Collects the worlds present and the last used isolated world id.
+std::pair<Persistent<HeapVector<Member<DOMWrapperWorld>>>, int32_t>
+CollectInitialWorlds(v8::Isolate* isolate) {
+  auto* initial_worlds =
+      MakeGarbageCollected<HeapVector<Member<DOMWrapperWorld>>>();
+  int32_t used_isolated_world_id = DOMWrapperWorld::kMainWorldId;
+  DOMWrapperWorld::AllWorldsInIsolate(isolate, *initial_worlds);
+  for (const auto& world : *initial_worlds) {
+    if (world->IsIsolatedWorld()) {
+      used_isolated_world_id =
+          std::max(used_isolated_world_id, world->GetWorldId());
+    }
+  }
+  return {initial_worlds, used_isolated_world_id};
+}
+
+auto NumberOfWorlds(v8::Isolate* isolate) {
+  HeapVector<Member<DOMWrapperWorld>> worlds;
+  DOMWrapperWorld::AllWorldsInIsolate(isolate, worlds);
+  const auto num_worlds = worlds.size();
+  worlds.clear();
+  return num_worlds;
+}
+
+}  // namespace
+
+TEST(DOMWrapperWorldTest, MainWorld) {
+  test::TaskEnvironment task_environment;
+  V8TestingScope scope;
+  v8::Isolate* isolate = scope.GetIsolate();
+  DOMWrapperWorld& main_world = DOMWrapperWorld::MainWorld(isolate);
+  EXPECT_TRUE(main_world.IsMainWorld());
+  EXPECT_EQ(main_world.GetWorldId(), DOMWrapperWorld::kMainWorldId);
+}
+
+TEST(DOMWrapperWorldTest, IsolatedWorlds) {
+  test::TaskEnvironment task_environment;
+  V8TestingScope scope;
+  v8::Isolate* isolate = scope.GetIsolate();
+
+  const auto [initial_worlds, used_isolated_world_id] =
+      CollectInitialWorlds(isolate);
+  ASSERT_TRUE(DOMWrapperWorld::IsIsolatedWorldId(used_isolated_world_id + 1));
+
+  const auto* isolated_world1 =
+      DOMWrapperWorld::EnsureIsolatedWorld(isolate, used_isolated_world_id + 1);
+  const auto* isolated_world2 =
+      DOMWrapperWorld::EnsureIsolatedWorld(isolate, used_isolated_world_id + 2);
+  EXPECT_TRUE(isolated_world1->IsIsolatedWorld());
+  EXPECT_TRUE(isolated_world2->IsIsolatedWorld());
+  EXPECT_TRUE(DOMWrapperWorld::NonMainWorldsExistInMainThread());
+
+  EXPECT_EQ(NumberOfWorlds(isolate), initial_worlds->size() + 2);
+  // Remove temporary worlds via stackless GC.
+  ThreadState::Current()->CollectAllGarbageForTesting(
+      ThreadState::StackState::kNoHeapPointers);
+  EXPECT_EQ(NumberOfWorlds(isolate), initial_worlds->size());
+}
+
+TEST(DOMWrapperWorldTest, ExplicitDispose) {
+  test::TaskEnvironment task_environment;
+  V8TestingScope scope;
+  v8::Isolate* isolate = scope.GetIsolate();
+
+  const auto [initial_worlds, used_isolated_world_id] =
+      CollectInitialWorlds(isolate);
+  ASSERT_TRUE(DOMWrapperWorld::IsIsolatedWorldId(used_isolated_world_id + 1));
+
+  auto* worker_world1 = DOMWrapperWorld::Create(
+      isolate, DOMWrapperWorld::WorldType::kWorkerOrWorklet);
+  auto* worker_world2 = DOMWrapperWorld::Create(
+      isolate, DOMWrapperWorld::WorldType::kWorkerOrWorklet);
+  auto* worker_world3 = DOMWrapperWorld::Create(
+      isolate, DOMWrapperWorld::WorldType::kWorkerOrWorklet);
+  EXPECT_TRUE(worker_world1->IsWorkerOrWorkletWorld());
+  EXPECT_TRUE(worker_world2->IsWorkerOrWorkletWorld());
+  EXPECT_TRUE(worker_world3->IsWorkerOrWorkletWorld());
+  HashSet<int32_t> worker_world_ids;
+  EXPECT_TRUE(
+      worker_world_ids.insert(worker_world1->GetWorldId()).is_new_entry);
+  EXPECT_TRUE(
+      worker_world_ids.insert(worker_world2->GetWorldId()).is_new_entry);
+  EXPECT_TRUE(
+      worker_world_ids.insert(worker_world3->GetWorldId()).is_new_entry);
+  EXPECT_TRUE(DOMWrapperWorld::NonMainWorldsExistInMainThread());
+
+  EXPECT_EQ(NumberOfWorlds(isolate), initial_worlds->size() + 3);
+  // Explicitly disposing worlds will clear internal state but not remove them.
+  worker_world1->Dispose();
+  worker_world2->Dispose();
+  worker_world3->Dispose();
+  EXPECT_EQ(NumberOfWorlds(isolate), initial_worlds->size() + 3);
+  // GC will remove the worlds.
+  ThreadState::Current()->CollectAllGarbageForTesting(
+      ThreadState::StackState::kNoHeapPointers);
+  EXPECT_EQ(NumberOfWorlds(isolate), initial_worlds->size());
+}
+
+namespace {
+
 void WorkerThreadFunc(
     WorkerBackingThread* thread,
     scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner,
@@ -33,97 +134,37 @@ void WorkerThreadFunc(
 
   v8::Isolate* isolate = thread->GetIsolate();
   // Worlds on the main thread should not be visible from the worker thread.
-  Vector<scoped_refptr<DOMWrapperWorld>> initial_worlds;
+  HeapVector<Member<DOMWrapperWorld>> initial_worlds;
   DOMWrapperWorld::AllWorldsInIsolate(isolate, initial_worlds);
   EXPECT_TRUE(initial_worlds.empty());
 
   // Create worlds on the worker thread and verify them.
-  auto worker_world1 =
-      DOMWrapperWorld::Create(isolate, DOMWrapperWorld::WorldType::kWorker);
-  auto worker_world2 =
-      DOMWrapperWorld::Create(isolate, DOMWrapperWorld::WorldType::kWorker);
-  Vector<scoped_refptr<DOMWrapperWorld>> worlds;
-  DOMWrapperWorld::AllWorldsInIsolate(isolate, worlds);
-  EXPECT_EQ(worlds.size(), initial_worlds.size() + 2);
-  worlds.clear();
+  auto* worker_world1 = DOMWrapperWorld::Create(
+      isolate, DOMWrapperWorld::WorldType::kWorkerOrWorklet);
+  auto* worker_world2 = DOMWrapperWorld::Create(
+      isolate, DOMWrapperWorld::WorldType::kWorkerOrWorklet);
+  EXPECT_EQ(NumberOfWorlds(isolate), initial_worlds.size() + 2);
 
   // Dispose of remaining worlds.
   worker_world1->Dispose();
   worker_world2->Dispose();
-  worker_world1.reset();
-  worker_world2.reset();
 
   thread->ShutdownOnBackingThread();
   PostCrossThreadTask(*main_thread_task_runner, FROM_HERE,
                       CrossThreadBindOnce(std::move(quit_closure)));
 }
 
-TEST(DOMWrapperWorldTest, Basic) {
+}  // namespace
+
+TEST(DOMWrapperWorldTest, NonMainThreadWorlds) {
   test::TaskEnvironment task_environment;
-  // Initial setup
   V8TestingScope scope;
   v8::Isolate* isolate = scope.GetIsolate();
-  DOMWrapperWorld& main_world = DOMWrapperWorld::MainWorld(isolate);
-  EXPECT_TRUE(main_world.IsMainWorld());
-  Vector<scoped_refptr<DOMWrapperWorld>> initial_worlds;
-  DOMWrapperWorld::AllWorldsInIsolate(isolate, initial_worlds);
-  int32_t used_isolated_world_id = DOMWrapperWorld::kMainWorldId;
-  for (const auto& world : initial_worlds) {
-    if (world->IsIsolatedWorld()) {
-      used_isolated_world_id =
-          std::max(used_isolated_world_id, world->GetWorldId());
-    }
-  }
+
+  const auto [initial_worlds, used_isolated_world_id] =
+      CollectInitialWorlds(isolate);
   ASSERT_TRUE(DOMWrapperWorld::IsIsolatedWorldId(used_isolated_world_id + 1));
 
-  // Isolated worlds
-  auto isolated_world1 =
-      DOMWrapperWorld::EnsureIsolatedWorld(isolate, used_isolated_world_id + 1);
-  auto isolated_world2 =
-      DOMWrapperWorld::EnsureIsolatedWorld(isolate, used_isolated_world_id + 2);
-  EXPECT_TRUE(isolated_world1->IsIsolatedWorld());
-  EXPECT_TRUE(isolated_world2->IsIsolatedWorld());
-  Vector<scoped_refptr<DOMWrapperWorld>> worlds;
-  EXPECT_TRUE(DOMWrapperWorld::NonMainWorldsExistInMainThread());
-  DOMWrapperWorld::AllWorldsInIsolate(isolate, worlds);
-  EXPECT_EQ(worlds.size(), initial_worlds.size() + 2);
-  worlds.clear();
-  isolated_world1.reset();
-  isolated_world2.reset();
-  DOMWrapperWorld::AllWorldsInIsolate(isolate, worlds);
-  EXPECT_EQ(worlds.size(), initial_worlds.size());
-  worlds.clear();
-
-  // Worker worlds
-  auto worker_world1 =
-      DOMWrapperWorld::Create(isolate, DOMWrapperWorld::WorldType::kWorker);
-  auto worker_world2 =
-      DOMWrapperWorld::Create(isolate, DOMWrapperWorld::WorldType::kWorker);
-  auto worker_world3 =
-      DOMWrapperWorld::Create(isolate, DOMWrapperWorld::WorldType::kWorker);
-  EXPECT_TRUE(worker_world1->IsWorkerWorld());
-  EXPECT_TRUE(worker_world2->IsWorkerWorld());
-  EXPECT_TRUE(worker_world3->IsWorkerWorld());
-  HashSet<int32_t> worker_world_ids;
-  EXPECT_TRUE(
-      worker_world_ids.insert(worker_world1->GetWorldId()).is_new_entry);
-  EXPECT_TRUE(
-      worker_world_ids.insert(worker_world2->GetWorldId()).is_new_entry);
-  EXPECT_TRUE(
-      worker_world_ids.insert(worker_world3->GetWorldId()).is_new_entry);
-  EXPECT_TRUE(DOMWrapperWorld::NonMainWorldsExistInMainThread());
-  DOMWrapperWorld::AllWorldsInIsolate(isolate, worlds);
-  EXPECT_EQ(worlds.size(), initial_worlds.size() + 3);
-  worlds.clear();
-  worker_world1->Dispose();
-  worker_world2->Dispose();
-  worker_world3->Dispose();
-  worker_world1.reset();
-  worker_world2.reset();
-  worker_world3.reset();
-  DOMWrapperWorld::AllWorldsInIsolate(isolate, worlds);
-  EXPECT_EQ(worlds.size(), initial_worlds.size());
-  worlds.clear();
   base::RunLoop loop;
   // Start a worker thread and create worlds on that.
   std::unique_ptr<WorkerBackingThread> thread =
@@ -141,10 +182,7 @@ TEST(DOMWrapperWorldTest, Basic) {
   loop.Run();
 
   // Worlds on the worker thread should not be visible from the main thread.
-  DOMWrapperWorld::AllWorldsInIsolate(isolate, worlds);
-  EXPECT_EQ(worlds.size(), initial_worlds.size());
-  worlds.clear();
+  EXPECT_EQ(NumberOfWorlds(isolate), initial_worlds->size());
 }
 
-}  // namespace
 }  // namespace blink

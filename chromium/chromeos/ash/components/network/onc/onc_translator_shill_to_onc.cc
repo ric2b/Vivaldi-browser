@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "ash/constants/ash_features.h"
@@ -50,7 +51,7 @@ base::Value ConvertVpnStringToValue(const std::string& str,
 // Returns the string value of |key| from |dict| if found, or the empty string
 // otherwise.
 std::string FindStringKeyOrEmpty(const base::Value::Dict& dict,
-                                 base::StringPiece key) {
+                                 std::string_view key) {
   const std::string* value = dict.FindString(key);
   return value ? *value : std::string();
 }
@@ -614,6 +615,10 @@ void ShillToONCTranslator::TranslateApnProperties() {
   TranslateWithTableAndSet(shill::kApnIpTypeProperty,
                            kApnIpTypeTranslationTable,
                            ::onc::cellular_apn::kIpType);
+
+  TranslateWithTableAndSet(shill::kApnSourceProperty,
+                           kApnSourceTranslationTable,
+                           ::onc::cellular_apn::kSource);
 
   const std::string shill_apn_types =
       FindStringKeyOrEmpty(*shill_dictionary_, shill::kApnTypesProperty);

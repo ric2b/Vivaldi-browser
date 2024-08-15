@@ -11,9 +11,11 @@
 namespace {
 
 using CapabilityResult = SystemIdentityManager::CapabilityResult;
+using DismissViewCallback = SystemIdentityManager::DismissViewCallback;
 
 // Helper function used to extract the capability from `capabilities` in
-// `CanOfferExtendedSyncPromos` and `IsSubjectToParentalControls`.
+// `CanShowHistorySyncOptInsWithoutMinorModeRestrictions()` and
+// `IsSubjectToParentalControls`.
 CapabilityResult FetchCapabilityCompleted(
     std::map<std::string, CapabilityResult> capabilities) {
   DCHECK_EQ(capabilities.size(), 1u);
@@ -28,12 +30,14 @@ SystemIdentityManager::~SystemIdentityManager() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
-void SystemIdentityManager::CanOfferExtendedSyncPromos(
-    id<SystemIdentity> identity,
-    FetchCapabilityCallback callback) {
+void SystemIdentityManager::
+    CanShowHistorySyncOptInsWithoutMinorModeRestrictions(
+        id<SystemIdentity> identity,
+        FetchCapabilityCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   FetchCapabilities(
-      identity, {kCanOfferExtendedChromeSyncPromosCapabilityName},
+      identity,
+      {kCanShowHistorySyncOptInsWithoutMinorModeRestrictionsCapabilityName},
       base::BindOnce(&FetchCapabilityCompleted).Then(std::move(callback)));
 }
 

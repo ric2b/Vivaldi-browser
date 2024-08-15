@@ -13,12 +13,18 @@
 #include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 
+namespace WTF {
+class String;
+}  // namespace WTF
+
 namespace blink {
 
 class Element;
 class LayoutBox;
 class LayoutObject;
 class Node;
+
+#define CHECK_SKIPPED_UPDATE_ON_SCROLL() DCHECK_IS_ON()
 
 // Computes the intersection between an ancestor (root) node and a
 // descendant (target) element, with overflow and CSS clipping applied.
@@ -85,6 +91,22 @@ class CORE_EXPORT IntersectionGeometry {
     bool pre_margin_target_rect_is_empty = false;
     // Invalidation flag
     bool valid = false;
+
+#if CHECK_SKIPPED_UPDATE_ON_SCROLL()
+    // These are here just for debugging crbug.com/1519303.
+    gfx::Vector2dF computed_min_scroll_delta_to_update;
+    gfx::RectF local_root_rect;
+    gfx::RectF root_rect;
+    gfx::RectF target_rect;
+    gfx::RectF intersection_rect;
+    gfx::RectF unclipped_intersection_rect;
+    gfx::Transform target_to_view_transform;
+    gfx::Transform root_to_view_transform;
+    int relationship = 0;
+    bool root_scrolls_target = false;
+
+    WTF::String ToString() const;
+#endif
   };
 
   static const LayoutObject* GetTargetLayoutObject(
@@ -103,7 +125,7 @@ class CORE_EXPORT IntersectionGeometry {
                        const Vector<Length>& target_margin,
                        const Vector<Length>& scroll_margin,
                        unsigned flags,
-                       absl::optional<RootGeometry>& root_geometry,
+                       std::optional<RootGeometry>& root_geometry,
                        CachedRects* cached_rects = nullptr);
 
   IntersectionGeometry(const IntersectionGeometry&) = default;
@@ -208,6 +230,7 @@ class CORE_EXPORT IntersectionGeometry {
                   const Vector<Length>& scroll_margin,
                   CachedRects* cached_rects);
   bool ApplyClip(const LayoutObject* target,
+                 const LayoutBox* local_ancestor,
                  const LayoutObject* root,
                  const gfx::RectF& root_rect,
                  gfx::RectF& unclipped_intersection_rect,

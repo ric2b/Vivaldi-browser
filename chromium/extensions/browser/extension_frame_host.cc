@@ -17,6 +17,7 @@
 #include "extensions/browser/message_service_api.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/common/api/messaging/port_context.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/common/mojom/message_port.mojom.h"
 #include "extensions/common/trace_util.h"
 
@@ -39,7 +40,7 @@ void ExtensionFrameHost::BindLocalFrameHost(
 }
 
 void ExtensionFrameHost::RequestScriptInjectionPermission(
-    const std::string& extension_id,
+    const ExtensionId& extension_id,
     mojom::InjectionType script_type,
     mojom::RunLocation run_location,
     RequestScriptInjectionPermissionCallback callback) {
@@ -183,13 +184,9 @@ void ExtensionFrameHost::OpenChannelToExtension(
   TRACE_EVENT("extensions", "ExtensionFrameHost::OpenChannelToExtension",
               ChromeTrackEvent::kRenderProcessHost, *process);
 
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-  bad_message::ReceivedBadMessage(process, bad_message::LEGACY_IPC_MISMATCH);
-#else
   MessageServiceApi::GetMessageService()->OpenChannelToExtension(
       render_frame_host->GetBrowserContext(), render_frame_host, port_id, *info,
       channel_type, channel_name, std::move(port), std::move(port_host));
-#endif
 }
 
 void ExtensionFrameHost::OpenChannelToNativeApp(
@@ -204,13 +201,9 @@ void ExtensionFrameHost::OpenChannelToNativeApp(
   TRACE_EVENT("extensions", "ExtensionFrameHost::OnOpenChannelToNativeApp",
               ChromeTrackEvent::kRenderProcessHost, *process);
 
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-  bad_message::ReceivedBadMessage(process, bad_message::LEGACY_IPC_MISMATCH);
-#else
   MessageServiceApi::GetMessageService()->OpenChannelToNativeApp(
       render_frame_host->GetBrowserContext(), render_frame_host, port_id,
       native_app_name, std::move(port), std::move(port_host));
-#endif
 }
 
 void ExtensionFrameHost::OpenChannelToTab(
@@ -229,14 +222,10 @@ void ExtensionFrameHost::OpenChannelToTab(
   TRACE_EVENT("extensions", "ExtensionFrameHost::OpenChannelToTab",
               ChromeTrackEvent::kRenderProcessHost, *process);
 
-#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
-  bad_message::ReceivedBadMessage(process, bad_message::LEGACY_IPC_MISMATCH);
-#else
   MessageServiceApi::GetMessageService()->OpenChannelToTab(
       render_frame_host->GetBrowserContext(), render_frame_host, port_id,
       tab_id, frame_id, document_id ? *document_id : std::string(),
       channel_type, channel_name, std::move(port), std::move(port_host));
-#endif
 }
 
 }  // namespace extensions

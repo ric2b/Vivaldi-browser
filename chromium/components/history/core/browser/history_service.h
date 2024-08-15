@@ -116,6 +116,9 @@ class HistoryService : public KeyedService,
     return Init(false, history_database_params);
   }
 
+  // Returns the directory containing the History databases.
+  const base::FilePath& history_dir() const { return history_dir_; }
+
   // Triggers the backend to load if it hasn't already, and then returns whether
   // it's finished loading.
   // Note: Virtual needed for mocking.
@@ -281,6 +284,15 @@ class HistoryService : public KeyedService,
 
   // Querying ------------------------------------------------------------------
 
+  // Returns the most recent visit associated with each url. Similar to
+  // QueryURL but it sends a vector of visits to the caller instead of a
+  // QueryResult.
+  // Note: Virtual needed for mocking.
+  virtual base::CancelableTaskTracker::TaskId GetMostRecentVisitForEachURL(
+      const std::vector<GURL>& urls,
+      base::OnceCallback<void(std::map<GURL, VisitRow>)> callback,
+      base::CancelableTaskTracker* tracker);
+
   // Returns the information about the requested URL. If the URL is found,
   // success will be true and the information will be in the URLRow parameter.
   // On success, the visits, if requested, will be sorted by date. If they have
@@ -301,6 +313,21 @@ class HistoryService : public KeyedService,
       QueryURLCallback callback,
       base::CancelableTaskTracker* tracker);
 
+  using QueryURLsCallback =
+      base::OnceCallback<void(std::vector<QueryURLResult>)>;
+
+  // Queries the basic information about the URLs in the history database. If
+  // the caller is interested in the visits (each time the URL is visited),
+  // set `want_visits` to true. If these are not needed, the function will be
+  // faster by setting this to false. Same as QueryURL but takes a
+  // vector of URLs and returns a vector of results.
+  // Note: Virtual needed for mocking.
+  virtual base::CancelableTaskTracker::TaskId QueryURLs(
+      const std::vector<GURL>& urls,
+      bool want_visits,
+      QueryURLsCallback callback,
+      base::CancelableTaskTracker* tracker);
+
   // Provides the result of a query. See QueryResults in history_types.h.
   // The common use will be to use QueryResults.Swap to suck the contents of
   // the results out of the passed in parameter and take ownership of them.
@@ -315,9 +342,11 @@ class HistoryService : public KeyedService,
       QueryHistoryCallback callback,
       base::CancelableTaskTracker* tracker);
 
-    using DetailedHistoryCallback =
-                base::OnceCallback<void(const
-                history::DetailedHistory::DetailedHistoryList&)>;
+  using TypedHistoryCallback =
+      base::OnceCallback<void(const history::TypedUrlResults&)>;
+
+  using DetailUrlResultsCallback =
+      base::OnceCallback<void(const history::DetailedUrlResults&)>;
 
   // Called when the results of QueryRedirectsFrom are available.
   // The given vector will contain a list of all redirects, not counting
@@ -476,8 +505,10 @@ class HistoryService : public KeyedService,
   // the expiration is complete. You may use null Time values to do an
   // unbounded delete in either direction.
   // If `restrict_urls` is not empty, only visits to the URLs in this set are
-  // removed.
+  // removed. Also, if `restrict_app_id` is present, only visits matching the
+  // passed app_id are removed.
   void ExpireHistoryBetween(const std::set<GURL>& restrict_urls,
+                            std::optional<std::string> restrict_app_id,
                             base::Time begin_time,
                             base::Time end_time,
                             bool user_initiated,
@@ -507,10 +538,12 @@ class HistoryService : public KeyedService,
 
   // Removes all visits to the given URLs in the specified time range. Calls
   // ExpireHistoryBetween() to delete local visits, and handles deletion of
-  // synced visits if appropriate.
+  // synced visits if appropriate. If app_id is present, restrict the visits
+  // to those matching the passed app_id only.
   void DeleteLocalAndRemoteHistoryBetween(WebHistoryService* web_history,
                                           base::Time begin_time,
                                           base::Time end_time,
+                                          std::optional<std::string> app_id,
                                           base::OnceClosure callback,
                                           base::CancelableTaskTracker* tracker);
 
@@ -608,7 +641,18 @@ class HistoryService : public KeyedService,
   virtual base::CancelableTaskTracker::TaskId GetAnnotatedVisits(
       const QueryOptions& options,
       bool compute_redirect_chain_start_properties,
+      bool get_unclustered_visits_only,
       GetAnnotatedVisitsCallback callback,
+      base::CancelableTaskTracker* tracker) const;
+
+  // Does the same as GetAnnotatedVisits above but uses
+  // visits instead of querying for the visits with the options.
+  using ToAnnotatedVisitsCallback =
+      base::OnceCallback<void(std::vector<AnnotatedVisit>)>;
+  virtual base::CancelableTaskTracker::TaskId ToAnnotatedVisits(
+      const VisitVector& visit_rows,
+      bool compute_redirect_chain_start_properties,
+      ToAnnotatedVisitsCallback callback,
       base::CancelableTaskTracker* tracker) const;
 
   // Delete and add 2 sets of clusters. Doing this in one call avoids an
@@ -793,11 +837,18 @@ class HistoryService : public KeyedService,
   }
 
   // Vivaldi
-  base::CancelableTaskTracker::TaskId QueryDetailedHistoryWStatement(
-      const char* sql_statement,
-      const std::string& search_string,
-      int max_hits,
-      DetailedHistoryCallback callback,
+
+  base::CancelableTaskTracker::TaskId GetVivaldiTypedHistory(
+      const std::string query,
+      KeywordID prefix_keyword,
+      int max_results,
+      TypedHistoryCallback callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId GetVivaldiDetailedHistory(
+      const std::string query,
+      int max_results,
+      DetailUrlResultsCallback callback,
       base::CancelableTaskTracker* tracker);
 
   // Computes the |num_hosts| most-visited hostnames. First version uses all
@@ -879,7 +930,7 @@ class HistoryService : public KeyedService,
   // `content::NavigationHandle` and will be populated only during local visits.
   void NotifyURLVisited(const URLRow& url_row,
                         const VisitRow& new_visit,
-                        absl::optional<int64_t> local_navigation_id);
+                        std::optional<int64_t> local_navigation_id);
 
   // Notify all HistoryServiceObservers registered that URLs have been added or
   // modified. `changed_urls` contains the list of affects URLs.
@@ -1119,6 +1170,9 @@ class HistoryService : public KeyedService,
   void LogTransitionMetricsForVisit(ui::PageTransition transition);
 
   SEQUENCE_CHECKER(sequence_checker_);
+
+  // The directory containing the History databases.
+  base::FilePath history_dir_;
 
   // The TaskRunner to which HistoryBackend tasks are posted. Nullptr once
   // Cleanup() is called.

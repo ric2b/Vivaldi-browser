@@ -73,7 +73,7 @@ TEST(OrcaLibrary, BindSharedLibrarySucceeds) {
 
 TEST(OrcaLibrary, BindSharedLibrarySetsUpMojo) {
   base::test::TaskEnvironment task_environment;
-  mojo::PendingAssociatedReceiver<mojom::TextActuator> text_actuator;
+  mojo::PendingAssociatedReceiver<mojom::SystemActuator> system_actuator;
   mojo::PendingAssociatedReceiver<mojom::TextQueryProvider> text_query_provider;
   mojo::PendingAssociatedRemote<mojom::EditorClientConnector> client_connector;
   mojo::PendingAssociatedRemote<mojom::EditorEventSink> event_sink;
@@ -87,10 +87,11 @@ TEST(OrcaLibrary, BindSharedLibrarySetsUpMojo) {
           std::ref(log_result)));
   mojo::Remote<mojom::OrcaService> remote;
   (void)library.BindReceiver(remote.BindNewPipeAndPassReceiver());
-  remote->BindEditor(text_actuator.InitWithNewEndpointAndPassRemote(),
+  remote->BindEditor(system_actuator.InitWithNewEndpointAndPassRemote(),
                      text_query_provider.InitWithNewEndpointAndPassRemote(),
                      client_connector.InitWithNewEndpointAndPassReceiver(),
-                     event_sink.InitWithNewEndpointAndPassReceiver());
+                     event_sink.InitWithNewEndpointAndPassReceiver(),
+                     mojom::EditorConfig::New());
   remote.FlushForTesting();
 
   EXPECT_EQ(log_result, "Success");

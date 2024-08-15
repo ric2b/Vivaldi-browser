@@ -4,13 +4,13 @@
 
 #include <string>
 
+#include "core/fxcrt/check.h"
 #include "core/fxge/cfx_folderfontinfo.h"
 #include "core/fxge/cfx_fontmapper.h"
 #include "core/fxge/cfx_gemodule.h"
 #include "core/fxge/fx_font.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/utils/path_service.h"
-#include "third_party/base/check.h"
 
 TEST(FXFontTest, UnicodeFromAdobeName) {
   EXPECT_EQ(static_cast<wchar_t>(0x0000), UnicodeFromAdobeName("nonesuch"));
@@ -23,13 +23,13 @@ TEST(FXFontTest, UnicodeFromAdobeName) {
 }
 
 TEST(FXFontTest, AdobeNameFromUnicode) {
-  EXPECT_STREQ("", AdobeNameFromUnicode(0x0000).c_str());
-  EXPECT_STREQ("divide", AdobeNameFromUnicode(0x00f7).c_str());
-  EXPECT_STREQ("Lslash", AdobeNameFromUnicode(0x0141).c_str());
-  EXPECT_STREQ("tonos", AdobeNameFromUnicode(0x0384).c_str());
-  EXPECT_STREQ("afii57513", AdobeNameFromUnicode(0x0691).c_str());
-  EXPECT_STREQ("angkhankhuthai", AdobeNameFromUnicode(0x0e5a).c_str());
-  EXPECT_STREQ("Euro", AdobeNameFromUnicode(0x20ac).c_str());
+  EXPECT_EQ("", AdobeNameFromUnicode(0x0000));
+  EXPECT_EQ("divide", AdobeNameFromUnicode(0x00f7));
+  EXPECT_EQ("Lslash", AdobeNameFromUnicode(0x0141));
+  EXPECT_EQ("tonos", AdobeNameFromUnicode(0x0384));
+  EXPECT_EQ("afii57513", AdobeNameFromUnicode(0x0691));
+  EXPECT_EQ("angkhankhuthai", AdobeNameFromUnicode(0x0e5a));
+  EXPECT_EQ("Euro", AdobeNameFromUnicode(0x20ac));
 }
 
 TEST(FXFontTest, ReadFontNameFromMicrosoftEntries) {

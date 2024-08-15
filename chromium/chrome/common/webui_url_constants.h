@@ -15,6 +15,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/common/buildflags.h"
+#include "components/lens/buildflags.h"
 #include "components/supervised_user/core/common/buildflags.h"
 #include "content/public/common/url_constants.h"
 #include "media/media_buildflags.h"
@@ -52,7 +53,6 @@ extern const char kChromeUIChromeURLsHost[];
 extern const char kChromeUIChromeURLsURL[];
 extern const char kChromeUIComponentsHost[];
 extern const char kChromeUIComponentsUrl[];
-extern const char kChromeUIComposeHost[];
 extern const char kChromeUIConflictsHost[];
 extern const char kChromeUIConstrainedHTMLTestURL[];
 extern const char kChromeUICookieSettingsURL[];
@@ -220,12 +220,15 @@ extern const char kChromeUISyncHost[];
 extern const char kChromeUISyncInternalsHost[];
 extern const char kChromeUISyncInternalsUrl[];
 extern const char kChromeUISystemInfoHost[];
+extern const char kChromeUIFeedbackSystemInfoUrl[];
 extern const char kChromeUITermsHost[];
 extern const char kChromeUITermsURL[];
 extern const char kChromeUIThemeHost[];
 extern const char kChromeUIThemeURL[];
 extern const char kChromeUITopChromeDomain[];
 extern const char kChromeUITranslateInternalsHost[];
+extern const char kChromeUIUntrustedComposeHost[];
+extern const char kChromeUIUntrustedComposeUrl[];
 #if !BUILDFLAG(IS_ANDROID)
 extern const char kChromeUIUntrustedHatsHost[];
 extern const char kChromeUIUntrustedHatsURL[];
@@ -269,6 +272,9 @@ extern const char kChromeUICustomizeChromeSidePanelHost[];
 extern const char kChromeUICustomizeChromeSidePanelURL[];
 extern const char kChromeUIHistoryClustersSidePanelHost[];
 extern const char kChromeUIHistoryClustersSidePanelURL[];
+extern const char kChromeUILensHost[];
+extern const char kChromeUILensUntrustedURL[];
+extern const char kChromeUILensUntrustedSidePanelURL[];
 extern const char kChromeUIReadLaterHost[];
 extern const char kChromeUIReadLaterURL[];
 extern const char kChromeUIUntrustedCompanionSidePanelHost[];
@@ -328,6 +334,8 @@ extern const char kChromeUIEmojiPickerURL[];
 extern const char kChromeUIEmojiPickerHost[];
 extern const char kChromeUIEnterpriseReportingHost[];
 extern const char kChromeUIEnterpriseReportingURL[];
+extern const char kChromeUIExtendedUpdatesDialogHost[];
+extern const char kChromeUIExtendedUpdatesDialogURL[];
 extern const char kChromeUIFirmwareUpdaterAppURL[];
 extern const char kChromeUIHealthdInternalsHost[];
 extern const char kChromeUIHealthdInternalsURL[];
@@ -500,8 +508,6 @@ extern const char kChromeUITabStripURL[];
 #endif
 
 #if !BUILDFLAG(IS_ANDROID)
-extern const char kChromeUICommanderHost[];
-extern const char kChromeUICommanderURL[];
 extern const char kChromeUITabSearchHost[];
 extern const char kChromeUITabSearchURL[];
 #endif
@@ -567,10 +573,8 @@ extern const char kCleanupSubPage[];
 extern const char kChromeUICastFeedbackHost[];
 #endif
 
-#if !BUILDFLAG(IS_ANDROID) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
-extern const char kChromeUILensUntrustedURL[];
+#if BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
 extern const char kChromeUILensURL[];
-extern const char kChromeUILensHost[];
 #endif
 
 // Extensions sub pages.

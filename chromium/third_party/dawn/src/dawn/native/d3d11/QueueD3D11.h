@@ -30,6 +30,7 @@
 
 #include "dawn/common/MutexProtected.h"
 #include "dawn/common/SerialMap.h"
+#include "dawn/common/SerialQueue.h"
 #include "dawn/native/SystemEvent.h"
 #include "dawn/native/d3d/QueueD3D.h"
 
@@ -48,13 +49,16 @@ class Queue final : public d3d::Queue {
     ScopedCommandRecordingContext GetScopedPendingCommandContext(SubmitMode submitMode);
     ScopedSwapStateCommandRecordingContext GetScopedSwapStatePendingCommandContext(
         SubmitMode submitMode);
-    MaybeError SubmitPendingCommands();
+    MaybeError SubmitPendingCommands() override;
     MaybeError NextSerial();
     MaybeError WaitForSerial(ExecutionSerial serial);
 
     // Separated from creation because it creates resources, which is not valid before the
     // DeviceBase is fully created.
     MaybeError InitializePendingContext();
+
+    // Register the pending map buffer to be checked.
+    void TrackPendingMapBuffer(Ref<Buffer>&& buffer, ExecutionSerial readySerial);
 
   private:
     using d3d::Queue::Queue;
@@ -70,6 +74,7 @@ class Queue final : public d3d::Queue {
                                size_t size) override;
     MaybeError WriteTextureImpl(const ImageCopyTexture& destination,
                                 const void* data,
+                                size_t dataSize,
                                 const TextureDataLayout& dataLayout,
                                 const Extent3D& writeSizePixel) override;
 
@@ -82,10 +87,15 @@ class Queue final : public d3d::Queue {
     ResultOrError<Ref<d3d::SharedFence>> GetOrCreateSharedFence() override;
     void SetEventOnCompletion(ExecutionSerial serial, HANDLE event) override;
 
+    // Check all pending map buffers, and actually map the ready ones.
+    MaybeError CheckAndMapReadyBuffers(ExecutionSerial completedSerial);
+
     ComPtr<ID3D11Fence> mFence;
     HANDLE mFenceEvent = nullptr;
     Ref<SharedFence> mSharedFence;
-    CommandRecordingContext mPendingCommands;
+    MutexProtected<CommandRecordingContext, CommandRecordingContextGuard> mPendingCommands;
+    std::atomic<bool> mPendingCommandsNeedSubmit = false;
+    SerialQueue<ExecutionSerial, Ref<Buffer>> mPendingMapBuffers;
 };
 
 }  // namespace dawn::native::d3d11

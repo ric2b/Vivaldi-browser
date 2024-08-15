@@ -4,6 +4,7 @@
 
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 
+#include <optional>
 #include <vector>
 
 #include "base/run_loop.h"
@@ -14,6 +15,7 @@
 #include "build/chromeos_buildflags.h"
 #include "components/signin/internal/identity_manager/account_fetcher_service.h"
 #include "components/signin/internal/identity_manager/account_tracker_service.h"
+#include "components/signin/internal/identity_manager/fake_profile_oauth2_token_service.h"
 #include "components/signin/internal/identity_manager/gaia_cookie_manager_service.h"
 #include "components/signin/internal/identity_manager/primary_account_manager.h"
 #include "components/signin/internal/identity_manager/profile_oauth2_token_service.h"
@@ -26,7 +28,6 @@
 #include "components/signin/public/identity_manager/test_identity_manager_observer.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_constants.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "components/account_manager_core/account.h"
@@ -134,8 +135,8 @@ AccountAvailabilityOptions::AccountAvailabilityOptions(base::StringPiece email)
 AccountAvailabilityOptions::AccountAvailabilityOptions(
     base::StringPiece email,
     base::StringPiece gaia_id,
-    absl::optional<ConsentLevel> consent_level,
-    absl::optional<std::string> refresh_token,
+    std::optional<ConsentLevel> consent_level,
+    std::optional<std::string> refresh_token,
     raw_ptr<network::TestURLLoaderFactory> url_loader_factory_for_cookies,
     signin_metrics::AccessPoint access_point)
     : email(email),
@@ -200,7 +201,7 @@ AccountAvailabilityOptionsBuilder::WithRefreshToken(
 
 AccountAvailabilityOptionsBuilder&
 AccountAvailabilityOptionsBuilder::WithoutRefreshToken() {
-  refresh_token_ = absl::nullopt;
+  refresh_token_ = std::nullopt;
   return *this;
 }
 
@@ -238,13 +239,13 @@ void WaitForRefreshTokensLoaded(IdentityManager* identity_manager) {
   DCHECK(identity_manager->AreRefreshTokensLoaded());
 }
 
-absl::optional<signin::ConsentLevel> GetPrimaryAccountConsentLevel(
+std::optional<signin::ConsentLevel> GetPrimaryAccountConsentLevel(
     IdentityManager* identity_manager) {
   if (!identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
-  // TODO(crbug.com/1462978): revisit this once `ConsentLevel::kSync` is
+  // TODO(crbug.com/40067058): revisit this once `ConsentLevel::kSync` is
   // removed.
   return identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync)
              ? signin::ConsentLevel::kSync
@@ -259,6 +260,17 @@ CoreAccountInfo SetPrimaryAccount(IdentityManager* identity_manager,
                                   .AsPrimary(consent_level)
                                   .WithoutRefreshToken()
                                   .Build(email));
+}
+
+void SetAutomaticIssueOfAccessTokens(IdentityManager* identity_manager,
+                                     bool grant) {
+  // Assumes that the given identity manager uses an underlying token service
+  // of type FakeProfileOAuth2TokenService.
+  CHECK(identity_manager->GetTokenService()
+            ->IsFakeProfileOAuth2TokenServiceForTesting());
+  static_cast<FakeProfileOAuth2TokenService*>(
+      identity_manager->GetTokenService())
+      ->set_auto_post_fetch_response_on_message_loop(grant);
 }
 
 void SetRefreshTokenForPrimaryAccount(IdentityManager* identity_manager,
@@ -304,7 +316,7 @@ AccountInfo MakePrimaryAccountAvailable(IdentityManager* identity_manager,
 }
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
-// TODO(crbug.com/1462978): remove this function once `ConsentLevel::kSync` is
+// TODO(crbug.com/40067058): remove this function once `ConsentLevel::kSync` is
 // removed.
 void RevokeSyncConsent(IdentityManager* identity_manager) {
   if (!identity_manager->HasPrimaryAccount(ConsentLevel::kSync))
@@ -322,8 +334,7 @@ void RevokeSyncConsent(IdentityManager* identity_manager) {
       },
       &run_loop));
   identity_manager->GetPrimaryAccountMutator()->RevokeSyncConsent(
-      signin_metrics::ProfileSignout::kTest,
-      signin_metrics::SignoutDelete::kIgnoreMetric);
+      signin_metrics::ProfileSignout::kTest);
   run_loop.Run();
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
@@ -350,8 +361,7 @@ void ClearPrimaryAccount(IdentityManager* identity_manager) {
       },
       &run_loop));
   identity_manager->GetPrimaryAccountMutator()->ClearPrimaryAccount(
-      signin_metrics::ProfileSignout::kTest,
-      signin_metrics::SignoutDelete::kIgnoreMetric);
+      signin_metrics::ProfileSignout::kTest);
 
   run_loop.Run();
 #endif

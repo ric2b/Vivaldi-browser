@@ -93,22 +93,15 @@ const booleanToYesNo = (b: boolean): Common.UIString.LocalizedString =>
 
 function linkifyIcon(iconType: string, title: string, eventHandler: () => (void|Promise<void>)): Element {
   const icon = IconButton.Icon.create(iconType, 'icon-link devtools-link');
-  const span = document.createElement('span');
-  UI.Tooltip.Tooltip.install(span, title);
-  span.classList.add('devtools-link');
-  span.tabIndex = 0;
-  span.appendChild(icon);
-  span.addEventListener('click', event => {
+  const button = document.createElement('button');
+  UI.Tooltip.Tooltip.install(button, title);
+  button.classList.add('devtools-link', 'link-style', 'text-button');
+  button.appendChild(icon);
+  button.addEventListener('click', event => {
     event.consume(true);
     void eventHandler();
   });
-  span.addEventListener('keydown', event => {
-    if (event.key === 'Enter') {
-      event.consume(true);
-      void eventHandler();
-    }
-  });
-  return span;
+  return button;
 }
 
 async function maybeCreateLinkToElementsPanel(opener: Protocol.Page.FrameId|SDK.ResourceTreeModel.ResourceTreeFrame|
@@ -224,8 +217,6 @@ export class WorkerDetailsView extends UI.ThrottledWidget.ThrottledWidget {
   private readonly targetInfo: Protocol.Target.TargetInfo;
   private readonly reportView: UI.ReportView.ReportView;
   private readonly documentSection: UI.ReportView.Section;
-  // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   private readonly isolationSection: UI.ReportView.Section;
   private readonly coepPolicy: HTMLElement;
 

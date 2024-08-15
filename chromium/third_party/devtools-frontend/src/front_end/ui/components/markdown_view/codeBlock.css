@@ -12,7 +12,7 @@
 
 code {
   color: var(--sys-color-on-surface);
-  font-size: 12px;
+  font-size: 11px;
   user-select: text;
   cursor: text;
   background: var(--sys-color-surface1);
@@ -38,13 +38,10 @@ code {
   line-height: 16px;
 }
 
-.codeblock code {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 10px;
-  display: block;
-  overflow: auto;
-  white-space: pre;
+.codeblock .editor-wrapper {
+  color: var(--sys-color-on-surface);
+  background: var(--sys-color-surface1);
+  padding: 10px 5px;
 }
 
 .codeblock .lang {
@@ -75,4 +72,14 @@ code {
   color: var(--sys-color-primary);
 
   --copy-icon-color: var(--sys-color-primary);
+}
+
+.notice {
+  margin-top: 3px;
+  margin-left: 3px;
+
+  .link {
+    color: var(--sys-color-primary);
+    text-decoration-line: underline;
+  }
 }

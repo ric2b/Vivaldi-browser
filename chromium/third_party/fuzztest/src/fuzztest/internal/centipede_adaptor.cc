@@ -17,6 +17,7 @@
 #include <sys/mman.h>
 
 #include <cerrno>
+#include <cinttypes>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -26,6 +27,7 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <random>
 #include <string>
 #include <system_error>  // NOLINT
@@ -35,6 +37,7 @@
 
 #include "absl/algorithm/container.h"
 #include "absl/log/log.h"
+#include "absl/memory/memory.h"
 #include "absl/strings/match.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
@@ -51,9 +54,11 @@
 #include "./centipede/runner_interface.h"
 #include "./centipede/runner_result.h"
 #include "./centipede/shared_memory_blob_sequence.h"
+#include "./centipede/workdir.h"
+#include "./fuzztest/internal/any.h"
 #include "./fuzztest/internal/configuration.h"
 #include "./fuzztest/internal/coverage.h"
-#include "./fuzztest/internal/domains/domain_base.h"
+#include "./fuzztest/internal/domains/domain.h"
 #include "./fuzztest/internal/logging.h"
 #include "./fuzztest/internal/runtime.h"
 
@@ -95,8 +100,10 @@ std::seed_seq GetRandomSeed() {
 
 centipede::Environment CreateDefaultCentipedeEnvironment() {
   centipede::Environment env;
-  // Skip input timeout as we don't yet support it in FuzzTest.
+  // Will be set later using the test configuration.
   env.timeout_per_input = 0;
+  // Will be set later using the test configuration.
+  env.rss_limit_mb = 0;
   // Do not limit the address space as the fuzzing engine needs a
   // lot of address space. rss_limit_mb will be used for OOM
   // detection.
@@ -177,11 +184,10 @@ class CentipedeAdaptorRunnerCallbacks : public centipede::RunnerCallbacks {
       seeds.push_back(*corpus_value);
     }
     absl::c_shuffle(seeds, prng_);
-    if (seeds.empty())
-      seeds.push_back(fuzzer_impl_.params_domain_->UntypedInit(prng_));
+    if (seeds.empty()) seeds.push_back(fuzzer_impl_.params_domain_.Init(prng_));
     for (const auto& seed : seeds) {
       const auto seed_serialized =
-          fuzzer_impl_.params_domain_->UntypedSerializeCorpus(seed).ToString();
+          fuzzer_impl_.params_domain_.SerializeCorpus(seed).ToString();
       seed_callback(
           {reinterpret_cast<const unsigned char*>(seed_serialized.data()),
            seed_serialized.size()});
@@ -199,22 +205,21 @@ class CentipedeAdaptorRunnerCallbacks : public centipede::RunnerCallbacks {
       std::string mutant_data;
       constexpr double kDomainInitRatio = 0.0001;
       if (choice < kDomainInitRatio) {
-        mutant_data = fuzzer_impl_.params_domain_
-                          ->UntypedSerializeCorpus(
-                              fuzzer_impl_.params_domain_->UntypedInit(prng_))
-                          .ToString();
+        mutant_data =
+            fuzzer_impl_.params_domain_
+                .SerializeCorpus(fuzzer_impl_.params_domain_.Init(prng_))
+                .ToString();
       } else {
         const auto& origin =
             inputs[absl::Uniform<size_t>(prng_, 0, inputs.size())].data;
         auto parsed_origin =
             fuzzer_impl_.TryParse({(const char*)origin.data(), origin.size()});
         if (!parsed_origin)
-          parsed_origin = fuzzer_impl_.params_domain_->UntypedInit(prng_);
+          parsed_origin = fuzzer_impl_.params_domain_.Init(prng_);
         auto mutant = FuzzTestFuzzerImpl::Input{*parsed_origin};
         fuzzer_impl_.MutateValue(mutant, prng_);
         mutant_data =
-            fuzzer_impl_.params_domain_->UntypedSerializeCorpus(mutant.args)
-                .ToString();
+            fuzzer_impl_.params_domain_.SerializeCorpus(mutant.args).ToString();
       }
       new_mutant_callback(
           {(unsigned char*)mutant_data.data(), mutant_data.size()});
@@ -223,11 +228,25 @@ class CentipedeAdaptorRunnerCallbacks : public centipede::RunnerCallbacks {
   }
 
   ~CentipedeAdaptorRunnerCallbacks() override {
+    runtime_.UnsetCurrentArgs();
     if (GetExecutionCoverage() == execution_coverage_.get())
       SetExecutionCoverage(nullptr);
   }
 
  private:
+  template <typename T>
+  static void InsertCmpEntryIntoIntegerDictionary(const uint8_t* a,
+                                                  const uint8_t* b) {
+    T a_int;
+    T b_int;
+    memcpy(&a_int, a, sizeof(T));
+    memcpy(&b_int, b, sizeof(T));
+    GetExecutionCoverage()
+        ->GetTablesOfRecentCompares()
+        .GetMutable<sizeof(T)>()
+        .Insert(a_int, b_int);
+  }
+
   void SetMetadata(const centipede::ExecutionMetadata* metadata) {
     if (metadata == nullptr) return;
     metadata->ForEachCmpEntry([](centipede::ByteSpan a, centipede::ByteSpan b) {
@@ -236,8 +255,13 @@ class CentipedeAdaptorRunnerCallbacks : public centipede::RunnerCallbacks {
       const size_t size = a.size();
       if (size < kMinCmpEntrySize) return;
       if (size > kMaxCmpEntrySize) return;
-      // TODO(xinhaoyuan): Consider handling integer comparison and
-      // memcmp entries differently.
+      if (size == 2) {
+        InsertCmpEntryIntoIntegerDictionary<uint16_t>(a.data(), b.data());
+      } else if (size == 4) {
+        InsertCmpEntryIntoIntegerDictionary<uint32_t>(a.data(), b.data());
+      } else if (size == 8) {
+        InsertCmpEntryIntoIntegerDictionary<uint64_t>(a.data(), b.data());
+      }
       GetExecutionCoverage()
           ->GetTablesOfRecentCompares()
           .GetMutable<0>()
@@ -294,9 +318,7 @@ class CentipedeAdaptorEngineCallbacks : public centipede::CentipedeCallbacks {
     for (const auto& input : inputs) {
       if (runtime_.termination_requested()) break;
       if (buffer_offset >= batch_result_buffer_size_) break;
-      CentipedePrepareProcessing();
       runner_callbacks_.Execute(input);
-      CentipedeFinalizeProcessing();
       buffer_offset += CentipedeGetExecutionResult(
           batch_result_buffer_ + buffer_offset,
           batch_result_buffer_size_ - buffer_offset);
@@ -373,31 +395,115 @@ class CentipedeAdaptorEngineCallbacksFactory
   const Configuration* configuration_;
 };
 
+void PopulateTestLimitsToCentipedeRunner(const Configuration& configuration) {
+  if (const size_t stack_limit =
+          GetStackLimitFromEnvOrConfiguration(configuration);
+      stack_limit > 0) {
+    absl::FPrintF(GetStderr(), "[.] Stack limit set to: %zu\n", stack_limit);
+    CentipedeSetStackLimit(/*stack_limit_kb=*/stack_limit >> 10);
+  }
+  if (configuration.rss_limit > 0) {
+    absl::FPrintF(GetStderr(), "[.] RSS limit set to: %zu\n",
+                  configuration.rss_limit);
+    CentipedeSetRssLimit(/*rss_limit_mb=*/configuration.rss_limit >> 20);
+  }
+  if (configuration.time_limit_per_input < absl::InfiniteDuration()) {
+    const int64_t time_limit_seconds =
+        absl::ToInt64Seconds(configuration.time_limit_per_input);
+    if (time_limit_seconds <= 0) {
+      absl::FPrintF(
+          GetStderr(),
+          "[!] Skip setting per-input time limit that is too short: %s\n",
+          absl::FormatDuration(configuration.time_limit_per_input));
+    } else {
+      absl::FPrintF(GetStderr(),
+                    "[.] Per-input time limit set to: %" PRId64 "s\n",
+                    time_limit_seconds);
+      CentipedeSetTimeoutPerInput(time_limit_seconds);
+    }
+  }
+}
+
 }  // namespace
+
+class CentipedeFixtureDriver : public UntypedFixtureDriver {
+ public:
+  CentipedeFixtureDriver(
+      std::unique_ptr<UntypedFixtureDriver> orig_fixture_driver)
+      : orig_fixture_driver_(std::move(orig_fixture_driver)) {}
+
+  void SetUpFuzzTest() override {
+    orig_fixture_driver_->SetUpFuzzTest();
+    FUZZTEST_INTERNAL_CHECK(configuration_ != nullptr,
+                            "Setting up a fuzz test without configuration!");
+    PopulateTestLimitsToCentipedeRunner(*configuration_);
+  }
+
+  void SetUpIteration() override {
+    if (!runner_mode) CentipedePrepareProcessing();
+    orig_fixture_driver_->SetUpIteration();
+  }
+
+  void TearDownIteration() override {
+    orig_fixture_driver_->TearDownIteration();
+    if (!runner_mode) CentipedeFinalizeProcessing();
+  }
+
+  void TearDownFuzzTest() override { orig_fixture_driver_->TearDownFuzzTest(); }
+
+  void Test(MoveOnlyAny&& args_untyped) const override {
+    orig_fixture_driver_->Test(std::move(args_untyped));
+  }
+
+  std::vector<GenericDomainCorpusType> GetSeeds() const override {
+    return orig_fixture_driver_->GetSeeds();
+  }
+
+  UntypedDomain GetDomains() const override {
+    return orig_fixture_driver_->GetDomains();
+  }
+
+  void set_configuration(const Configuration* configuration) {
+    configuration_ = configuration;
+  }
+
+ private:
+  const Configuration* configuration_ = nullptr;
+  const bool runner_mode = getenv("CENTIPEDE_RUNNER_FLAGS") != nullptr;
+  std::unique_ptr<UntypedFixtureDriver> orig_fixture_driver_;
+};
 
 CentipedeFuzzerAdaptor::CentipedeFuzzerAdaptor(
     const FuzzTest& test, std::unique_ptr<UntypedFixtureDriver> fixture_driver)
-    : test_(test), fuzzer_impl_(test_, std::move(fixture_driver)) {}
+    : test_(test),
+      centipede_fixture_driver_(
+          new CentipedeFixtureDriver(std::move(fixture_driver))),
+      fuzzer_impl_(test_, absl::WrapUnique(centipede_fixture_driver_)) {
+  FUZZTEST_INTERNAL_CHECK(centipede_fixture_driver_ != nullptr,
+                          "Invalid fixture driver!");
+}
 
 void CentipedeFuzzerAdaptor::RunInUnitTestMode(
     const Configuration& configuration) {
-  // Run the unit test mode directly without using Centipede.
+  centipede_fixture_driver_->set_configuration(&configuration);
+  CentipedeBeginExecutionBatch();
   fuzzer_impl_.RunInUnitTestMode(configuration);
+  CentipedeEndExecutionBatch();
 }
 
 int CentipedeFuzzerAdaptor::RunInFuzzingMode(
     int* argc, char*** argv, const Configuration& configuration) {
-  FUZZTEST_INTERNAL_CHECK(fuzzer_impl_.fixture_driver_ != nullptr,
-                          "Invalid fixture driver!");
+  centipede_fixture_driver_->set_configuration(&configuration);
   runtime_.SetRunMode(RunMode::kFuzz);
-  runtime_.SetCurrentTest(&test_);
+  runtime_.SetCurrentTest(&test_, &configuration);
   if (IsSilenceTargetEnabled()) SilenceTargetStdoutAndStderr();
   runtime_.EnableReporter(&fuzzer_impl_.stats_, [] { return absl::Now(); });
   fuzzer_impl_.fixture_driver_->SetUpFuzzTest();
   // Always create a new domain input to trigger any domain setup
   // failures here. (e.g. Ineffective Filter)
   FuzzTestFuzzerImpl::PRNG prng;
-  fuzzer_impl_.params_domain_->UntypedInit(prng);
+  fuzzer_impl_.params_domain_.Init(prng);
+  bool print_final_stats = true;
   // When the CENTIPEDE_RUNNER_FLAGS env var exists, the current process is
   // considered a child process spawned by the Centipede binary as the runner,
   // and we should not run CentipedeMain in this process.
@@ -406,6 +512,7 @@ int CentipedeFuzzerAdaptor::RunInFuzzingMode(
     if (runner_mode) {
       CentipedeAdaptorRunnerCallbacks runner_callbacks(&runtime_, &fuzzer_impl_,
                                                        &configuration);
+      print_final_stats = false;
       return centipede::RunnerMain(argc != nullptr ? *argc : 0,
                                    argv != nullptr ? *argv : nullptr,
                                    runner_callbacks);
@@ -415,23 +522,67 @@ int CentipedeFuzzerAdaptor::RunInFuzzingMode(
     // This is fine because it does not require coverage instrumentation.
     if (fuzzer_impl_.ReplayInputsIfAvailable(configuration)) return 0;
     // Run as the fuzzing engine.
-    if (getenv("FUZZTEST_MINIMIZE_TESTSUITE_DIR")) {
-      absl::FPrintF(GetStderr(),
-                    "[!] Corpus minimization is not supported in the "
-                    "single-process mode. Consider using the Centipede binary "
-                    "in corpus distillation mode - see centipede/README.md.");
-      return 1;
-    }
     TempDir workdir("/tmp/fuzztest-workdir-");
     const auto env = CreateCentipedeEnvironmentFromFuzzTestFlags(
         runtime_, workdir.path(), test_.full_name());
     CentipedeAdaptorEngineCallbacksFactory factory(&runtime_, &fuzzer_impl_,
                                                    &configuration);
+    if (const char* minimize_dir_chars =
+            std::getenv("FUZZTEST_MINIMIZE_TESTSUITE_DIR")) {
+      print_final_stats = false;
+      const std::string minimize_dir = minimize_dir_chars;
+      const char* corpus_out_dir_chars =
+          std::getenv("FUZZTEST_TESTSUITE_OUT_DIR");
+      FUZZTEST_INTERNAL_CHECK(corpus_out_dir_chars != nullptr,
+                              "FUZZTEST_TESTSUITE_OUT_DIR must be specified "
+                              "when minimizing testsuite");
+      const std::string corpus_out_dir = corpus_out_dir_chars;
+      absl::FPrintF(
+          GetStderr(),
+          "[!] WARNING: Minimization via FUZZTEST_MINIMIZE_TESTSUITE_DIR is "
+          "intended for compatibility with certain fuzzing infrastructures. "
+          "End users are strongly advised against using it directly.\n");
+      // Minimization with Centipede takes multiple steps:
+      // 1. Import the corpus into the Centipede shard by replaying the corpus.
+      auto replay_env = env;
+      // The first empty path means no output dir.
+      replay_env.corpus_dir = {"", minimize_dir};
+      replay_env.num_runs = 0;
+      FUZZTEST_INTERNAL_CHECK(
+          centipede::CentipedeMain(replay_env, factory) == 0,
+          "Failed to replaying the testsuite for minimization");
+      absl::FPrintF(GetStderr(), "[.] Imported the corpus from %s.\n",
+                    minimize_dir);
+      // 2. Run Centipede distillation on the shard.
+      auto distill_env = env;
+      distill_env.distill = true;
+      FUZZTEST_INTERNAL_CHECK(
+          centipede::CentipedeMain(distill_env, factory) == 0,
+          "Failed to minimize the testsuite");
+      absl::FPrintF(GetStderr(),
+                    "[.] Minimized the corpus using Centipede distillation.\n");
+      // 3. Replace the shard corpus data with the distillation result.
+      auto workdir = centipede::WorkDir(distill_env);
+      FUZZTEST_INTERNAL_CHECK(
+          std::rename(workdir.DistilledCorpusFiles().MyShardPath().c_str(),
+                      workdir.CorpusFiles().MyShardPath().c_str()) == 0,
+          "Failed to replace the corpus data with the minimized result");
+      // 4. Export the corpus of the shard.
+      auto export_env = env;
+      export_env.corpus_to_files = corpus_out_dir;
+      FUZZTEST_INTERNAL_CHECK(
+          centipede::CentipedeMain(export_env, factory) == 0,
+          "Failed to export the corpus to FUZZTEST_MINIMIZE_TESTSUITE_DIR");
+      absl::FPrintF(GetStderr(),
+                    "[.] Exported the minimized the corpus to %s.\n",
+                    corpus_out_dir);
+      return 0;
+    }
     return centipede::CentipedeMain(env, factory);
   })();
   fuzzer_impl_.fixture_driver_->TearDownFuzzTest();
   if (result) std::exit(result);
-  if (!runner_mode) {
+  if (print_final_stats) {
     absl::FPrintF(GetStderr(), "\n[.] Fuzzing was terminated.\n");
     runtime_.PrintFinalStatsOnDefaultSink();
     absl::FPrintF(GetStderr(), "\n");

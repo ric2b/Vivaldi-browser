@@ -21,6 +21,11 @@ export type TestConfig = {
    * Whether or not we're running in compatibility mode.
    */
   compatibility: boolean;
+
+  /**
+   * Whether or not to request a fallback adapter.
+   */
+  forceFallbackAdapter: boolean;
 };
 
 export const globalTestConfig: TestConfig = {
@@ -29,4 +34,5 @@ export const globalTestConfig: TestConfig = {
   noRaceWithRejectOnTimeout: false,
   unrollConstEvalLoops: false,
   compatibility: false,
+  forceFallbackAdapter: false,
 };

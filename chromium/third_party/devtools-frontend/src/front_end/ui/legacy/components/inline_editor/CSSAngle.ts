@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as ComponentHelpers from '../../../components/helpers/helpers.js';
 import * as LitHtml from '../../../lit-html/lit-html.js';
 
 import cssAngleStyles from './cssAngle.css.js';
@@ -167,7 +166,7 @@ export class CSSAngle extends HTMLElement {
     this.render();
   }
 
-  private updateAngle(angle: Angle): void {
+  updateAngle(angle: Angle): void {
     this.displayedAngle = roundAngleByUnit(convertAngleUnit(angle, this.displayedAngle.unit));
     this.angle = this.displayedAngle;
     this.dispatchEvent(new ValueChangedEvent(`${this.angle.value}${this.angle.unit}`));
@@ -234,7 +233,7 @@ export class CSSAngle extends HTMLElement {
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     render(html`
-      <div class="css-angle" @keydown=${this.onKeydown} tabindex="-1">
+      <div class="css-angle" @focusout=${this.minify} @keydown=${this.onKeydown} tabindex="-1">
         <div class="preview">
           <${CSSAngleSwatch.litTagName}
             @click=${this.onMiniIconClick}
@@ -279,10 +278,9 @@ export class CSSAngle extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-css-angle', CSSAngle);
+customElements.define('devtools-css-angle', CSSAngle);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-css-angle': CSSAngle;
   }

@@ -106,7 +106,11 @@ class MailClientService : public KeyedService {
       VersionCallback callback,
       base::CancelableTaskTracker* tracker);
 
-  base::CancelableTaskTracker::TaskId MigrateSerchDB(
+  base::CancelableTaskTracker::TaskId MigrateSearchDB(
+      ResultCallback callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId DeleteMailSearchDB(
       ResultCallback callback,
       base::CancelableTaskTracker* tracker);
 

@@ -18,33 +18,28 @@ File::Info::~Info() = default;
 
 File::File() = default;
 
-File::File(const FilePath& path, uint32_t flags)
-    : error_details_(FILE_OK) {
+File::File(const FilePath& path, uint32_t flags) : error_details_(FILE_OK) {
   Initialize(path, flags);
 }
 
 File::File(ScopedPlatformFile platform_file)
-    : file_(std::move(platform_file)),
-      error_details_(FILE_OK) {
+    : file_(std::move(platform_file)), error_details_(FILE_OK) {
 #if defined(OS_POSIX) || defined(OS_FUCHSIA)
   DCHECK_GE(file_.get(), -1);
 #endif
 }
 
 File::File(PlatformFile platform_file)
-    : file_(platform_file),
-      error_details_(FILE_OK) {
+    : file_(platform_file), error_details_(FILE_OK) {
 #if defined(OS_POSIX) || defined(OS_FUCHSIA)
   DCHECK_GE(platform_file, -1);
 #endif
 }
 
-File::File(Error error_details)
-    : error_details_(error_details) {}
+File::File(Error error_details) : error_details_(error_details) {}
 
 File::File(File&& other)
-    : file_(other.TakePlatformFile()),
-      error_details_(other.error_details()) {}
+    : file_(other.TakePlatformFile()), error_details_(other.error_details()) {}
 
 File::~File() {
   // Go through the AssertIOAllowed logic.

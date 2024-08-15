@@ -5,6 +5,7 @@
 <translation id="1036348656032585052">Turn off</translation>
 <translation id="1044891598689252897">Sites will work normally</translation>
 <translation id="1073417869336441572">Help us improve Chrome by telling us why you allowed third-party cookies. <ph name="BEGIN_LINK" />Send feedback<ph name="END_LINK" /></translation>
+<translation id="1113435009358629918">Hide price drop card</translation>
 <translation id="1178581264944972037">Pause</translation>
 <translation id="1181037720776840403">Remove</translation>
 <translation id="1192844206376121885">This will delete all data and cookies stored by <ph name="ORIGIN" />.</translation>
@@ -21,8 +22,6 @@
 <translation id="1383876407941801731">Search</translation>
 <translation id="1384959399684842514">Download paused</translation>
 <translation id="1415402041810619267">URL truncated</translation>
-<translation id="1426410128494586442">Yes</translation>
-<translation id="1434873037477293673">price drop card</translation>
 <translation id="1448064542941920355">Decrease zoom</translation>
 <translation id="146867109637325312">{COUNT,plural, =1{<ph name="SITE_COUNT" /> site}other{<ph name="SITE_COUNT" /> sites}}</translation>
 <translation id="1510341833810331442">Sites aren't allowed to save data on your device</translation>
@@ -67,6 +66,7 @@
 <translation id="2228071138934252756">To let <ph name="APP_NAME" /> access your camera, also turn on camera in <ph name="BEGIN_LINK" />Android settings<ph name="END_LINK" />.</translation>
 <translation id="2235344399760031203">Third-party cookies are blocked</translation>
 <translation id="2238944249568001759">Suggested searches based on your last tab</translation>
+<translation id="2241587408274973373">New tab page cards</translation>
 <translation id="2241634353105152135">Just once</translation>
 <translation id="2253414712144136228"><ph name="NAME_OF_LIST_ITEM" /> Remove</translation>
 <translation id="2253989982043948086">{NUM_SELECTED,plural, =1{1 site blocked}other{# sites blocked}}</translation>
@@ -93,12 +93,14 @@
 <translation id="2498359688066513246">Help and feedback</translation>
 <translation id="2501278716633472235">Go back</translation>
 <translation id="2546283357679194313">Cookies and site data</translation>
+<translation id="2550801787432930915">Price drop card</translation>
 <translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{1 cookie blocked}other{# cookies blocked}}</translation>
 <translation id="2570922361219980984">Location access is also off for this device. Turn it on in <ph name="BEGIN_LINK" />Android Settings<ph name="END_LINK" />.</translation>
 <translation id="257931822824936280">Expanded – click to collapse.</translation>
 <translation id="2586657967955657006">Clipboard</translation>
 <translation id="2597457036804169544">Don’t apply Dark theme to sites</translation>
 <translation id="2606760465469169465">Auto-verify</translation>
+<translation id="2613007545732217283"><ph name="HOST_NAME" /> <ph name="SEPARATOR" /> <ph name="RECENCY" /></translation>
 <translation id="2621115761605608342">Allow JavaScript for a specific site.</translation>
 <translation id="2653659639078652383">Submit</translation>
 <translation id="2677748264148917807">Leave</translation>
@@ -109,7 +111,6 @@
 <translation id="2750481671343847896">Sites can show sign-in prompts from identity services.</translation>
 <translation id="2790501146643349491">When on, recently closed sites can finish sending and receiving data. When off, recently closed sites can't finish sending or receiving data.</translation>
 <translation id="2822354292072154809">Are you sure that you want to reset all site permissions for <ph name="CHOSEN_OBJECT_NAME" />?</translation>
-<translation id="2836978798613876756"><ph name="ACCESS_TIME" /> <ph name="SEPARATOR" /> <ph name="HOST_NAME" /></translation>
 <translation id="2850913818900871965">Request mobile view</translation>
 <translation id="2870560284913253234">Site</translation>
 <translation id="2874939134665556319">Previous track</translation>
@@ -121,7 +122,6 @@
 <translation id="2968755619301702150">Certificate viewer</translation>
 <translation id="2979365474350987274">Third-party cookies are limited</translation>
 <translation id="3008272652534848354">Reset permissions</translation>
-<translation id="3013291976881901233">MIDI devices</translation>
 <translation id="301521992641321250">Automatically blocked</translation>
 <translation id="3069226013421428034">Allow third-party sign-in for a specific site.</translation>
 <translation id="3082992102194421695">{COUNT,plural, =1{Expires tomorrow}other{Expires in # days}}</translation>
@@ -192,7 +192,7 @@
 <translation id="4169549551965910670">Connected to a USB device</translation>
 <translation id="4194328954146351878">Ask before allowing sites to see and change information on NFC devices (recommended)</translation>
 <translation id="4200726100658658164">Open location settings</translation>
-<translation id="4212246570487010370">Continue browsing</translation>
+<translation id="4206661981211220935"><ph name="RECENCY" /> <ph name="SEPARATOR" /> from <ph name="FROM_DEVICE" /></translation>
 <translation id="4226663524361240545">Notifications may vibrate the device</translation>
 <translation id="4259722352634471385">Navigation is blocked: <ph name="URL" /></translation>
 <translation id="4278390842282768270">Allowed</translation>
@@ -213,6 +213,7 @@
 <translation id="4566417217121906555">Mute microphone</translation>
 <translation id="4570913071927164677">Details</translation>
 <translation id="4598549027014564149">While in Incognito, sites can't use your cookies to see your browsing activity across sites, even related sites. Your browsing activity isn't used for things like personalising ads. Features on some sites may not work.</translation>
+<translation id="4619615317237390068">Tabs from other devices</translation>
 <translation id="4644713492825682049">Delete and reset</translation>
 <translation id="4645575059429386691">Managed by your parent</translation>
 <translation id="4670064810192446073">Virtual reality</translation>
@@ -344,13 +345,13 @@
 <translation id="6612358246767739896">Protected content</translation>
 <translation id="662080504995468778">Stay</translation>
 <translation id="6653342741369270081">Press the back button to exit full screen.</translation>
+<translation id="6670377348676659110">{TILE_COUNT,plural, =1{Hide continue with this tab}other{Hide continue with these tabs}}</translation>
 <translation id="6689172468748959065">Profile photos</translation>
 <translation id="6697925417670533197">Active downloads</translation>
 <translation id="6722828510648505498">Block sign-in prompts from identity services.</translation>
 <translation id="6746124502594467657">Move down</translation>
 <translation id="6749077623962119521">Reset permissions?</translation>
 <translation id="6766622839693428701">Swipe down to close.</translation>
-<translation id="6785959295338971061"><ph name="ACCESS_TIME" /> <ph name="SEPARATOR" /> From <ph name="FROM_DEVICE" /></translation>
 <translation id="6787751205395685251">Select an option for <ph name="SITE_NAME" /></translation>
 <translation id="6790428901817661496">Play</translation>
 <translation id="6818926723028410516">Select items</translation>
@@ -367,8 +368,8 @@
 <translation id="702275896380648118">This site determines things that you like and then suggests ads to other sites. This site also gets your ad topics from Chrome to show you more relevant ads.</translation>
 <translation id="7053983685419859001">Block</translation>
 <translation id="7066151586745993502">{NUM_SELECTED,plural, =1{1 selected}other{# selected}}</translation>
+<translation id="708014373017851679">'<ph name="APP_NAME" />' is out of date. Please update the app.</translation>
 <translation id="7087918508125750058"><ph name="ITEM_COUNT" /> selected. Options available near top of the screen</translation>
-<translation id="7137403271056944713">MIDI device control / reprogram</translation>
 <translation id="7141896414559753902">Block sites from showing pop-ups and redirects (recommended)</translation>
 <translation id="7176368934862295254"><ph name="KILOBYTES" /> KB</translation>
 <translation id="7180611975245234373">Refresh</translation>
@@ -404,9 +405,10 @@
 <translation id="7667547420449112975">The Wonderful Wizard of Oz</translation>
 <translation id="7684642910516280563">Don't allow a site to use third-party cookies</translation>
 <translation id="7719367874908701697">Page zoom</translation>
-<translation id="7770832849480336015">Hide '<ph name="TITLE_OF_MODULE" />'</translation>
+<translation id="7759147511335618829">MIDI device control and reprogramme.</translation>
 <translation id="7781829728241885113">Yesterday</translation>
 <translation id="7791543448312431591">Add</translation>
+<translation id="7801888679188438140">{TILE_COUNT,plural, =1{Continue with this tab}other{Continue with these tabs}}</translation>
 <translation id="780301667611848630">No, thanks</translation>
 <translation id="7804248752222191302">A site is using your camera</translation>
 <translation id="7807060072011926525">Provided by Google</translation>

@@ -5,16 +5,17 @@
 /**
  * @fileoverview ChromeVox commands.
  */
-import {AutomationPredicate} from '../../../common/automation_predicate.js';
-import {AutomationUtil} from '../../../common/automation_util.js';
-import {BrowserUtil} from '../../../common/browser_util.js';
-import {constants} from '../../../common/constants.js';
-import {Cursor, CursorUnit} from '../../../common/cursors/cursor.js';
-import {CursorRange} from '../../../common/cursors/range.js';
-import {EventGenerator} from '../../../common/event_generator.js';
-import {KeyCode} from '../../../common/key_code.js';
-import {LocalStorage} from '../../../common/local_storage.js';
-import {RectUtil} from '../../../common/rect_util.js';
+import {AutomationPredicate} from '/common/automation_predicate.js';
+import {AutomationUtil} from '/common/automation_util.js';
+import {BrowserUtil} from '/common/browser_util.js';
+import {constants} from '/common/constants.js';
+import {Cursor, CursorUnit} from '/common/cursors/cursor.js';
+import {CursorRange} from '/common/cursors/range.js';
+import {EventGenerator} from '/common/event_generator.js';
+import {KeyCode} from '/common/key_code.js';
+import {LocalStorage} from '/common/local_storage.js';
+import {RectUtil} from '/common/rect_util.js';
+
 import {NavBraille} from '../../common/braille/nav_braille.js';
 import {BridgeConstants} from '../../common/bridge_constants.js';
 import {BridgeHelper} from '../../common/bridge_helper.js';
@@ -34,7 +35,6 @@ import {BrailleTranslatorManager} from '../braille/braille_translator_manager.js
 import {ChromeVox} from '../chromevox.js';
 import {ChromeVoxRange} from '../chromevox_range.js';
 import {ChromeVoxState} from '../chromevox_state.js';
-import {ClipboardHandler} from '../clipboard_handler.js';
 import {Color} from '../color.js';
 import {TypingEcho, TypingEchoState} from '../editing/typing_echo.js';
 import {DesktopAutomationInterface} from '../event/desktop_automation_interface.js';
@@ -47,6 +47,7 @@ import {ChromeVoxPrefs} from '../prefs.js';
 import {TtsBackground} from '../tts_background.js';
 
 import {BackgroundKeyboardHandler} from './background_keyboard_handler.js';
+import {ClipboardHandler} from './clipboard_handler.js';
 import {CommandHandlerInterface} from './command_handler_interface.js';
 import {GestureInterface} from './gesture_interface.js';
 import {SmartStickyMode} from './smart_sticky_mode.js';

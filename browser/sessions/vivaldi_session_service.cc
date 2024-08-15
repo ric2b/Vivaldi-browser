@@ -462,7 +462,7 @@ VivaldiSessionService::CollectThumbnailUrls(Browser* browser,
     }
 
     const std::string viv_ext_data = tab->GetVivExtData();
-    absl::optional<base::Value> json =
+    std::optional<base::Value> json =
       base::JSONReader::Read(viv_ext_data, base::JSON_PARSE_RFC);
 
     if (json && json->is_dict()) {
@@ -659,7 +659,7 @@ void VivaldiSessionService::RestoreTabsToBrowser(
       if (!contents)
         continue;
 
-      absl::optional<tab_groups::TabGroupId> group;
+      std::optional<tab_groups::TabGroupId> group;
       SessionRestoreDelegate::RestoredTab restored_tab(
           contents, is_selected_tab, tab.extension_app_id.empty(), tab.pinned,
           group);
@@ -687,7 +687,7 @@ void VivaldiSessionService::RestoreTabsToBrowser(
       content::WebContents* contents =
           RestoreTab(tab, tab_index_offset + i, browser, false);
       if (contents) {
-        absl::optional<tab_groups::TabGroupId> group;
+        std::optional<tab_groups::TabGroupId> group;
         // Sanitize the last active time.
         SessionRestoreDelegate::RestoredTab restored_tab(
             contents, false, tab.extension_app_id.empty(), tab.pinned, group);
@@ -745,7 +745,7 @@ content::WebContents* VivaldiSessionService::RestoreTab(
             ->GetDOMStorageContext()
             ->RecreateSessionStorage(tab.session_storage_persistent_id);
   }
-  absl::optional<tab_groups::TabGroupId> group;
+  std::optional<tab_groups::TabGroupId> group;
   content::WebContents* web_contents = chrome::AddRestoredTab(
       browser, tab.navigations, tab_index, selected_index, tab.extension_app_id,
       group, false,  // select

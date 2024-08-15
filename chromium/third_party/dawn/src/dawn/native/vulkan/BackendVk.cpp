@@ -86,6 +86,9 @@ constexpr SkippedMessage kSkippedMessages[] = {
     // so this is not expected to be worked around.
     // See http://crbug.com/dawn/1225 for more details.
     //
+    {"SYNC-HAZARD-READ-AFTER-WRITE",
+     "Access info (usage: SYNC_FRAGMENT_SHADER_SHADER_SAMPLED_READ, prior_usage: "
+     "SYNC_LATE_FRAGMENT_TESTS_DEPTH_STENCIL_ATTACHMENT_WRITE"},
     // Depth used as storage
     {"SYNC-HAZARD-WRITE-AFTER-READ",
      "depth aspect during store with storeOp VK_ATTACHMENT_STORE_OP_STORE. Access info (usage: "
@@ -143,6 +146,8 @@ constexpr SkippedMessage kSkippedMessages[] = {
     {"UNASSIGNED-CoreValidation-Shader-OutputNotConsumed",
      "fragment shader writes to output location 0 with no matching attachment"},
 
+    // There are various VVL (and other) errors in dawn::native::vulkan::ExternalImage*. Suppress
+    // them for now as everything *should* be fixed by using SharedTextureMemory in the future.
     // http://crbug.com/1499919
     {"VUID-VkMemoryAllocateInfo-allocationSize-01742",
      "vkAllocateMemory(): pAllocateInfo->allocationSize allocationSize (4096) "
@@ -155,6 +160,8 @@ constexpr SkippedMessage kSkippedMessages[] = {
      "does not match pAllocateInfo->pNext<VkImportMemoryFdInfoKHR>"},
     {"VUID-VkMemoryDedicatedAllocateInfo-image-01878",
      "vkAllocateMemory(): pAllocateInfo->pNext<VkMemoryDedicatedAllocateInfo>"},
+    // crbug.com/324282958
+    {"NVIDIA", "vkBindImageMemory: memoryTypeIndex"},
 };
 
 namespace dawn::native::vulkan {
@@ -456,7 +463,7 @@ ResultOrError<VulkanGlobalKnobs> VulkanInstance::CreateVkInstance(const Instance
     appInfo.pNext = nullptr;
     appInfo.pApplicationName = nullptr;
     appInfo.applicationVersion = 0;
-    appInfo.pEngineName = nullptr;
+    appInfo.pEngineName = "Dawn";
     appInfo.engineVersion = 0;
     appInfo.apiVersion = std::min(mGlobalInfo.apiVersion, VK_API_VERSION_1_3);
 

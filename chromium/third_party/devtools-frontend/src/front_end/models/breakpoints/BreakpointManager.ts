@@ -30,7 +30,7 @@
 
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
-import * as Platform from '../../core/platform/platform.js';
+import type * as Platform from '../../core/platform/platform.js';
 import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
@@ -815,7 +815,7 @@ export class Breakpoint implements SDK.TargetManager.SDKModelObserver<SDK.Debugg
       return `${condition}\n\n//# sourceURL=${sourceUrl}` as SDK.DebuggerModel.BackendCondition;
     };
 
-    if (Root.Runtime.experiments.isEnabled('evaluateExpressionsWithSourceMaps') && location) {
+    if (Root.Runtime.experiments.isEnabled('evaluate-expressions-with-source-maps') && location) {
       return SourceMapScopes.NamesResolver.allVariablesAtPosition(location)
           .then(
               nameMap => nameMap.size > 0 ?
@@ -840,10 +840,11 @@ export class Breakpoint implements SDK.TargetManager.SDKModelObserver<SDK.Debugg
 
   updateState(newState: BreakpointStorageState): void {
     // Only 'enabled', 'condition' and 'isLogpoint' can change (except during initialization).
-    Platform.DCHECK(
-        () => !this.#storageState ||
-            (this.#storageState.url === newState.url && this.#storageState.lineNumber === newState.lineNumber &&
-             this.#storageState.columnNumber === newState.columnNumber));
+    if (this.#storageState &&
+        (this.#storageState.url !== newState.url || this.#storageState.lineNumber !== newState.lineNumber ||
+         this.#storageState.columnNumber !== newState.columnNumber)) {
+      throw new Error('Invalid breakpoint state update');
+    }
     if (this.#storageState?.enabled === newState.enabled && this.#storageState?.condition === newState.condition &&
         this.#storageState?.isLogpoint === newState.isLogpoint) {
       return;

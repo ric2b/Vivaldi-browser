@@ -262,20 +262,19 @@
             "type": "integer",
             "name": "windowId",
             "description": "id of the application window."
-          },
-          {
-            "name": "showPopup",
-            "type": "function",
-            "description": "Callback for popup actions.",
-            "parameters": [
-              {
-                "name": "popupUrl",
-                "type": "string",
-                "description": "Relative url for the popup document."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "showPopup",
+          "description": "Callback for popup actions.",
+          "parameters": [
+            {
+              "name": "popupUrl",
+              "type": "string",
+              "description": "Relative url for the popup document."
+            }
+          ]
+        }
       },
       {
         "name": "toggleBrowserActionVisibility",
@@ -365,20 +364,19 @@
             "type": "string",
             "name": "menuId",
             "description": "id of the menu item."
-          },
-          {
-            "name": "result",
-            "type": "function",
-            "description": "Callback for action.",
-            "parameters": [
-              {
-                "name": "success",
-                "type": "boolean",
-                "description": "true on success."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "result",
+          "description": "Callback for action.",
+          "parameters": [
+            {
+              "name": "success",
+              "type": "boolean",
+              "description": "true on success."
+            }
+          ]
+        }
       },
       {
         "name": "showGlobalError",
@@ -530,6 +528,23 @@
           {
             "$ref": "SidePanelOptions",
             "name": "options"
+          }
+        ]
+      },
+      {
+        "name": "onSidePanelActionRequested",
+        "type": "function",
+        "description": "Fired when side panel action requested",
+        "parameters": [
+          {
+            "name": "extendionId",
+            "type": "string",
+            "description": "The unique extension identifier."
+          },
+          {
+            "type": "string",
+            "name": "Action",
+            "description": "The unique action identifier."
           }
         ]
       }

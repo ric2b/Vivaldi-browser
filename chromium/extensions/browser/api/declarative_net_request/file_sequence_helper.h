@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+
 #include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "base/version.h"
@@ -19,11 +20,9 @@
 
 namespace extensions {
 
-namespace api {
-namespace declarative_net_request {
+namespace api::declarative_net_request {
 struct Rule;
-}  // namespace declarative_net_request
-}  // namespace api
+}  // namespace api::declarative_net_request
 
 namespace declarative_net_request {
 enum class DynamicRuleUpdateAction;

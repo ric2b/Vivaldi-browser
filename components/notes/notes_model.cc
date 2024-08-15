@@ -169,7 +169,7 @@ void NotesModel::MigrateAttachmentsRecursive(NoteNode* node) {
     if (separator_pos == std::string::npos)
       continue;
     content.remove_prefix(separator_pos + 1);
-    absl::optional<std::vector<uint8_t>> decoded = base::Base64Decode(content);
+    std::optional<std::vector<uint8_t>> decoded = base::Base64Decode(content);
     AddAttachment(node, node->children().size(), u"migrated", GURL(), *decoded);
   }
 
@@ -253,9 +253,9 @@ const NoteNode* NotesModel::AddNote(
     const std::u16string& title,
     const GURL& url,
     const std::u16string& content,
-    absl::optional<base::Time> creation_time,
-    absl::optional<base::Time> last_modification_time,
-    absl::optional<base::Uuid> uuid) {
+    std::optional<base::Time> creation_time,
+    std::optional<base::Time> last_modification_time,
+    std::optional<base::Uuid> uuid) {
   DCHECK(loaded_);
   DCHECK(!uuid || uuid->is_valid());
   DCHECK(parent);
@@ -309,9 +309,9 @@ const NoteNode* NotesModel::AddFolder(
     const NoteNode* parent,
     size_t index,
     const std::u16string& name,
-    absl::optional<base::Time> creation_time,
-    absl::optional<base::Time> last_modification_time,
-    absl::optional<base::Uuid> uuid) {
+    std::optional<base::Time> creation_time,
+    std::optional<base::Time> last_modification_time,
+    std::optional<base::Uuid> uuid) {
   DCHECK(loaded_);
   DCHECK(!uuid || uuid->is_valid());
 
@@ -336,9 +336,9 @@ const NoteNode* NotesModel::AddFolder(
 const NoteNode* NotesModel::AddSeparator(
     const NoteNode* parent,
     size_t index,
-    absl::optional<std::u16string> name,
-    absl::optional<base::Time> creation_time,
-    absl::optional<base::Uuid> uuid) {
+    std::optional<std::u16string> name,
+    std::optional<base::Time> creation_time,
+    std::optional<base::Uuid> uuid) {
   DCHECK(loaded_);
   DCHECK(!uuid || uuid->is_valid());
 
@@ -365,8 +365,8 @@ const NoteNode* NotesModel::AddAttachmentFromChecksum(
     const std::u16string& title,
     const GURL& url,
     const std::string& checksum,
-    absl::optional<base::Time> creation_time,
-    absl::optional<base::Uuid> uuid) {
+    std::optional<base::Time> creation_time,
+    std::optional<base::Uuid> uuid) {
   DCHECK(loaded_);
   DCHECK(parent);
   DCHECK(parent->is_note());
@@ -401,8 +401,8 @@ const NoteNode* NotesModel::AddAttachment(
     const std::u16string& title,
     const GURL& url,
     std::vector<uint8_t> content,
-    absl::optional<base::Time> creation_time,
-    absl::optional<base::Uuid> uuid) {
+    std::optional<base::Time> creation_time,
+    std::optional<base::Uuid> uuid) {
   DCHECK(loaded_);
   DCHECK(parent);
   DCHECK(parent->is_note());

@@ -8,7 +8,7 @@ load("//lib/builders.star", "os", "reclient")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
 load("//lib/gn_args.star", "gn_args")
-load("//lib/builder_health_indicators.star", "health_spec")
+load("//lib/builder_health_indicators.star", "blank_low_value_thresholds", "health_spec", "modified_default")
 
 ci.defaults.set(
     executable = ci.DEFAULT_EXECUTABLE,
@@ -67,6 +67,9 @@ ci.builder(
         short_name = "msan",
     ),
     execution_timeout = 6 * time.hour,
+    health_spec = modified_default({
+        "Low Value": blank_low_value_thresholds,
+    }),
     reclient_jobs = reclient.jobs.DEFAULT,
 )
 
@@ -91,7 +94,6 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "tsan",
-            "disable_nacl",
             "fail_on_san_warnings",
             "release_builder",
             "reclient",
@@ -103,6 +105,9 @@ ci.builder(
         short_name = "tsan",
     ),
     execution_timeout = 4 * time.hour,
+    health_spec = modified_default({
+        "Low Value": blank_low_value_thresholds,
+    }),
     reclient_jobs = reclient.jobs.DEFAULT,
 )
 
@@ -137,6 +142,9 @@ ci.builder(
         short_name = "fyi",
     ),
     execution_timeout = 6 * time.hour,
+    health_spec = modified_default({
+        "Low Value": blank_low_value_thresholds,
+    }),
     reclient_jobs = reclient.jobs.DEFAULT,
 )
 
@@ -165,7 +173,6 @@ ci.builder(
             "asan",
             "lsan",
             "dcheck_always_on",
-            "disable_nacl",
             "release_builder",
             "reclient",
         ],
@@ -178,6 +185,9 @@ ci.builder(
         short_name = "lsan",
     ),
     execution_timeout = 12 * time.hour,
+    health_spec = modified_default({
+        "Low Value": blank_low_value_thresholds,
+    }),
     reclient_jobs = reclient.jobs.DEFAULT,
 )
 
@@ -195,6 +205,7 @@ ci.builder(
             apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
+            target_platform = builder_config.target_platform.MAC,
         ),
         run_tests_serially = True,
     ),
@@ -202,7 +213,6 @@ ci.builder(
         configs = [
             "ubsan_no_recover",
             "dcheck_always_on",
-            "disable_nacl",
             "release_builder",
             "reclient",
         ],
@@ -215,5 +225,8 @@ ci.builder(
         short_name = "ubsan",
     ),
     execution_timeout = 12 * time.hour,
+    health_spec = modified_default({
+        "Low Value": blank_low_value_thresholds,
+    }),
     reclient_jobs = reclient.jobs.DEFAULT,
 )

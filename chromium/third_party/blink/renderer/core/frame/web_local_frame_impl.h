@@ -139,7 +139,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   WebFrame* FindFrameByName(const WebString& name) override;
   void SetEmbeddingToken(
       const base::UnguessableToken& embedding_token) override;
-  const absl::optional<base::UnguessableToken>& GetEmbeddingToken()
+  const std::optional<base::UnguessableToken>& GetEmbeddingToken()
       const override;
   bool IsInFencedFrameTree() const override;
   void SendPings(const WebURL& destination_url) override;
@@ -151,9 +151,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   void SetReferrerForRequest(WebURLRequest&, const WebURL& referrer) override;
   bool IsNavigationScheduledWithin(base::TimeDelta interval) const override;
   void BlinkFeatureUsageReport(blink::mojom::WebFeature feature) override;
-  PageSizeType GetPageSizeType(uint32_t page_index) override;
-  void GetPageDescription(uint32_t page_index,
-                          WebPrintPageDescription*) override;
+  WebPrintPageDescription GetPageDescription(uint32_t page_index) override;
   void ExecuteScript(const WebScriptSource&) override;
   void ExecuteScriptInIsolatedWorld(
       int32_t world_id,
@@ -224,6 +222,8 @@ class CORE_EXPORT WebLocalFrameImpl final
   void TextSelectionChanged(const WebString& selection_text,
                             uint32_t offset,
                             const gfx::Range& range) override;
+  void VisibleTextSelectionChanged(const WebString& selection_text) override;
+
   bool SelectAroundCaret(mojom::blink::SelectionGranularity granularity,
                          bool should_show_handle,
                          bool should_show_context_menu);
@@ -329,16 +329,13 @@ class CORE_EXPORT WebLocalFrameImpl final
   bool IsAdFrame() const override;
   bool IsAdScriptInStack() const override;
   void SetAdEvidence(const FrameAdEvidence& ad_evidence) override;
-  const absl::optional<blink::FrameAdEvidence>& AdEvidence() override;
+  const std::optional<blink::FrameAdEvidence>& AdEvidence() override;
   bool IsFrameCreatedByAdScript() override;
   gfx::Size SpoolSizeInPixelsForTesting(
-      const WebPrintParams&,
       const WebVector<uint32_t>& pages) override;
-  gfx::Size SpoolSizeInPixelsForTesting(const WebPrintParams&,
-                                        uint32_t page_count) override;
+  gfx::Size SpoolSizeInPixelsForTesting(uint32_t page_count) override;
   void PrintPagesForTesting(
       cc::PaintCanvas*,
-      const WebPrintParams&,
       const gfx::Size& spool_size_in_pixels,
       const WebVector<uint32_t>* pages = nullptr) override;
   gfx::Rect GetSelectionBoundsRectForTesting() const override;
@@ -384,7 +381,7 @@ class CORE_EXPORT WebLocalFrameImpl final
       bool has_transient_user_activation,
       const WebSecurityOrigin& initiator_origin,
       bool is_browser_initiated,
-      absl::optional<scheduler::TaskAttributionId>
+      std::optional<scheduler::TaskAttributionId>
           soft_navigation_heuristics_task_id) override;
   void SetIsNotOnInitialEmptyDocument() override;
   bool IsOnInitialEmptyDocument() override;
@@ -552,7 +549,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   void ShowContextMenu(
       mojo::PendingAssociatedRemote<mojom::blink::ContextMenuClient> client,
       const ContextMenuData& data,
-      const absl::optional<gfx::Point>& host_context_menu_location);
+      const std::optional<gfx::Point>& host_context_menu_location);
 
   virtual void Trace(Visitor*) const;
 

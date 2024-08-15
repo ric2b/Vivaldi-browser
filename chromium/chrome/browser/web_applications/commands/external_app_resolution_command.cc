@@ -32,6 +32,7 @@
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
+#include "chrome/browser/web_applications/web_app_icon_operations.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
@@ -389,7 +390,6 @@ void ExternalAppResolutionCommand::OnInstallFinalized(
     webapps::InstallResultCode code,
     OsHooksErrors os_hooks_errors) {
   CHECK(web_contents_ && !web_contents_->IsBeingDestroyed());
-  CHECK_EQ(app_id, app_id_);
   install_code_ = code;
 
   GetMutableDebugValue().Set("install_code", base::ToString(code));
@@ -399,6 +399,7 @@ void ExternalAppResolutionCommand::OnInstallFinalized(
     return;
   }
 
+  CHECK_EQ(app_id, app_id_);
   RecordWebAppInstallationTimestamp(
       Profile::FromBrowserContext(web_contents_->GetBrowserContext())
           ->GetPrefs(),
@@ -487,7 +488,8 @@ void ExternalAppResolutionCommand::OnAllAppsLockGrantedRemovePlaceholder(
       webapps::WebappUninstallSource::kPlaceholderReplacement, *profile_,
       *GetMutableDebugValue().EnsureDict("remove_placeholder_job"),
       *installed_placeholder_app_id_,
-      ConvertExternalInstallSourceToSource(install_options_.install_source));
+      WebAppManagementTypes({ConvertExternalInstallSourceToSource(
+          install_options_.install_source)}));
 
   remove_placeholder_job_->Start(
       *all_apps_lock_,

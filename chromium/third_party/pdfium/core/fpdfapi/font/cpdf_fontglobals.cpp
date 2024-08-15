@@ -16,8 +16,8 @@
 #include "core/fpdfapi/font/cpdf_cid2unicodemap.h"
 #include "core/fpdfapi/font/cpdf_cmap.h"
 #include "core/fpdfapi/parser/cpdf_document.h"
-#include "third_party/base/check.h"
-#include "third_party/base/containers/contains.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/containers/contains.h"
 
 namespace {
 

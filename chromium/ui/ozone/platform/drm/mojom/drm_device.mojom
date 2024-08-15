@@ -63,7 +63,7 @@ interface DrmDevice {
   // to |modeset_flag| (see display::ModesetFlag).
   ConfigureNativeDisplays(
       array<display.mojom.DisplayConfigurationParams> config_requests,
-      uint32 modeset_flag) =>
+      display.mojom.ModesetFlags modeset_flags) =>
     (bool config_success);
 
   // Sets the HDCP Key Property in the connector attached to the |display_id|.
@@ -108,6 +108,12 @@ interface DrmDevice {
   // Sets the state of the privacy screen feature, returns whether or not the
   // configuration was successful.
   SetPrivacyScreen(int64 display_id, bool enabled) => (bool success);
+
+  // Gets the refresh rate ranges that this display can be configured to
+  // seamlessly. Null if the set of refresh rates cannot be queried for
+  // any reason.
+  GetSeamlessRefreshRates(int64 display_id) =>
+      (array<display.mojom.RefreshRangeNode>? ranges);
 
   // Provides a DeviceCursor interface. The provided interface needs to be
   // associated because the AcceleratedWidgets referenced by its methods are

@@ -7,15 +7,16 @@ import {needsLogging} from './LoggingConfig.js';
 interface ElementWithParent {
   element: Element;
   parent?: Element;
+  slot?: Element;
 }
 
 export function getDomState(documents: Document[]): {loggables: ElementWithParent[], shadowRoots: ShadowRoot[]} {
   const loggables: ElementWithParent[] = [];
   const shadowRoots: ShadowRoot[] = [];
   const queue: ElementWithParent[] = [];
-  const enqueue = (children: HTMLCollection, parent?: Element): void => {
+  const enqueue = (children: HTMLCollection|Element[], parent?: Element, slot?: Element): void => {
     for (const child of children) {
-      queue.push({element: child, parent});
+      queue.push({element: child, parent, slot});
     }
   };
   for (const document of documents) {
@@ -29,13 +30,20 @@ export function getDomState(documents: Document[]): {loggables: ElementWithParen
     if (!top) {
       break;
     }
-    const {element} = top;
+    const {element, slot} = top;
     let {parent} = top;
+    if (element.assignedSlot && element.assignedSlot !== slot) {
+      continue;
+    }
     if (needsLogging(element)) {
       loggables.push({element, parent});
       parent = element;
     }
-    enqueue(element.children, parent);
+    if (element.localName === 'slot' && (element as HTMLSlotElement).assignedElements().length) {
+      enqueue((element as HTMLSlotElement).assignedElements(), parent, element);
+    } else {
+      enqueue(element.children, parent);
+    }
     if (element.shadowRoot) {
       shadowRoots.push(element.shadowRoot);
       enqueue(element.shadowRoot.children, parent);
@@ -46,13 +54,15 @@ export function getDomState(documents: Document[]): {loggables: ElementWithParen
 
 const MIN_ELEMENT_SIZE_FOR_IMPRESSIONS = 10;
 
-export function isVisible(element: Element, viewportRect: DOMRect): boolean {
+export function visibleOverlap(element: Element, viewportRect: DOMRect): DOMRect|null {
   const elementRect = element.getBoundingClientRect();
   const overlap = intersection(viewportRect, elementRect);
 
-  return Boolean(
-      overlap && overlap.width >= MIN_ELEMENT_SIZE_FOR_IMPRESSIONS &&
-      overlap.height >= MIN_ELEMENT_SIZE_FOR_IMPRESSIONS);
+  if (!overlap || overlap.width < MIN_ELEMENT_SIZE_FOR_IMPRESSIONS ||
+      overlap.height < MIN_ELEMENT_SIZE_FOR_IMPRESSIONS) {
+    return null;
+  }
+  return overlap;
 }
 
 function intersection(a: DOMRect, b: DOMRect): DOMRect|null {

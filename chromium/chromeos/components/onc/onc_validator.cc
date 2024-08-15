@@ -18,7 +18,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "chromeos/components/onc/onc_signature.h"
@@ -369,7 +368,7 @@ namespace {
 
 std::string JoinStringRange(const std::vector<const char*>& strings,
                             const std::string& separator) {
-  std::vector<base::StringPiece> string_vector(strings.begin(), strings.end());
+  std::vector<std::string_view> string_vector(strings.begin(), strings.end());
   return base::JoinString(string_vector, separator);
 }
 
@@ -652,6 +651,10 @@ bool Validator::ValidateNetworkConfiguration(base::Value::Dict* result) {
   const std::vector<const char*> valid_ipconfig_types = {
       ::onc::network_config::kIPConfigTypeDHCP,
       ::onc::network_config::kIPConfigTypeStatic};
+  const std::vector<const char*> valid_check_captive_portal_values = {
+      ::onc::check_captive_portal::kTrue,
+      ::onc::check_captive_portal::kFalse,
+      ::onc::check_captive_portal::kHTTPOnly};
   if (FieldExistsAndHasNoValidValue(*result, ::onc::network_config::kType,
                                     valid_types) ||
       FieldExistsAndHasNoValidValue(*result,
@@ -660,6 +663,9 @@ bool Validator::ValidateNetworkConfiguration(base::Value::Dict* result) {
       FieldExistsAndHasNoValidValue(
           *result, ::onc::network_config::kNameServersConfigType,
           valid_ipconfig_types) ||
+      FieldExistsAndHasNoValidValue(*result,
+                                    ::onc::network_config::kCheckCaptivePortal,
+                                    valid_check_captive_portal_values) ||
       FieldExistsAndIsEmpty(*result, ::onc::network_config::kGUID)) {
     return false;
   }

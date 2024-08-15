@@ -525,7 +525,7 @@ func (hs *clientHandshakeState) createClientHello(innerHello *clientHelloMsg, ec
 		customExtension:           c.config.Bugs.CustomExtension,
 		omitExtensions:            c.config.Bugs.OmitExtensions,
 		emptyExtensions:           c.config.Bugs.EmptyExtensions,
-		delegatedCredentials:      !c.config.Bugs.DisableDelegatedCredentials,
+		delegatedCredential:       c.config.DelegatedCredentialAlgorithms,
 	}
 
 	// Translate the bugs that modify ClientHello extension order into a
@@ -1183,7 +1183,7 @@ func (hs *clientHandshakeState) doTLS13Handshake(msg any) error {
 		return err
 	}
 
-	var chainToSend *Certificate
+	var credential *Credential
 	var certReq *certificateRequestMsg
 	if c.didResume {
 		// Copy over authentication from the session.
@@ -1207,15 +1207,11 @@ func (hs *clientHandshakeState) doTLS13Handshake(msg any) error {
 				return errors.New("tls: expected no certificate_authorities extension")
 			}
 
-			if c.config.Bugs.IgnorePeerSignatureAlgorithmPreferences {
-				certReq.signatureAlgorithms = c.config.signSignatureAlgorithms()
-			}
-
 			hs.writeServerHash(certReq.marshal())
 
-			chainToSend, err = selectClientCertificate(c, certReq)
-			if err != nil {
-				return err
+			credential = c.config.Credential
+			if credential != nil && c.config.Bugs.IgnorePeerSignatureAlgorithmPreferences {
+				certReq.signatureAlgorithms = credential.signatureAlgorithms()
 			}
 
 			msg, err = c.readHandshake()
@@ -1303,7 +1299,11 @@ func (hs *clientHandshakeState) doTLS13Handshake(msg any) error {
 
 		c.peerSignatureAlgorithm = certVerifyMsg.signatureAlgorithm
 		input := hs.finishedHash.certificateVerifyInput(serverCertificateVerifyContextTLS13)
-		err = verifyMessage(c.vers, hs.peerPublicKey, c.config, certVerifyMsg.signatureAlgorithm, input, certVerifyMsg.signature)
+		if c.peerDelegatedCredential != nil {
+			err = verifyMessageDC(c.vers, hs.peerPublicKey, c.config, certVerifyMsg.signatureAlgorithm, input, certVerifyMsg.signature)
+		} else {
+			err = verifyMessage(c.vers, hs.peerPublicKey, c.config, certVerifyMsg.signatureAlgorithm, input, certVerifyMsg.signature)
+		}
 		if err != nil {
 			return err
 		}
@@ -1434,8 +1434,8 @@ func (hs *clientHandshakeState) doTLS13Handshake(msg any) error {
 			hasRequestContext: true,
 			requestContext:    certReq.requestContext,
 		}
-		if chainToSend != nil {
-			for _, certData := range chainToSend.Certificate {
+		if credential != nil {
+			for _, certData := range credential.Certificate {
 				certMsg.certificates = append(certMsg.certificates, certificateEntry{
 					data:           certData,
 					extraExtension: c.config.Bugs.SendExtensionOnCertificate,
@@ -1445,21 +1445,20 @@ func (hs *clientHandshakeState) doTLS13Handshake(msg any) error {
 		hs.writeClientHash(certMsg.marshal())
 		c.writeRecord(recordTypeHandshake, certMsg.marshal())
 
-		if chainToSend != nil {
+		if credential != nil {
 			certVerify := &certificateVerifyMsg{
 				hasSignatureAlgorithm: true,
 			}
 
 			// Determine the hash to sign.
-			privKey := chainToSend.PrivateKey
-
 			var err error
-			certVerify.signatureAlgorithm, err = selectSignatureAlgorithm(c.vers, privKey, c.config, certReq.signatureAlgorithms)
+			certVerify.signatureAlgorithm, err = selectSignatureAlgorithm(c.vers, credential, c.config, certReq.signatureAlgorithms)
 			if err != nil {
 				c.sendAlert(alertInternalError)
 				return err
 			}
 
+			privKey := credential.PrivateKey
 			input := hs.finishedHash.certificateVerifyInput(clientCertificateVerifyContextTLS13)
 			certVerify.signature, err = signMessage(c.vers, privKey, c.config, certVerify.signatureAlgorithm, input)
 			if err != nil {
@@ -1691,20 +1690,16 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 		}
 	}
 
-	var chainToSend *Certificate
+	var credential *Credential
 	var certRequested bool
 	certReq, ok := msg.(*certificateRequestMsg)
 	if ok {
 		certRequested = true
-		if c.config.Bugs.IgnorePeerSignatureAlgorithmPreferences {
-			certReq.signatureAlgorithms = c.config.signSignatureAlgorithms()
-		}
-
 		hs.writeServerHash(certReq.marshal())
 
-		chainToSend, err = selectClientCertificate(c, certReq)
-		if err != nil {
-			return err
+		credential = c.config.Credential
+		if credential != nil && c.config.Bugs.IgnorePeerSignatureAlgorithmPreferences {
+			certReq.signatureAlgorithms = credential.signatureAlgorithms()
 		}
 
 		msg, err = c.readHandshake()
@@ -1725,8 +1720,8 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 	// a certificate to send.
 	if certRequested && !c.config.Bugs.SkipClientCertificate {
 		certMsg := new(certificateMsg)
-		if chainToSend != nil {
-			for _, certData := range chainToSend.Certificate {
+		if credential != nil {
+			for _, certData := range credential.Certificate {
 				certMsg.certificates = append(certMsg.certificates, certificateEntry{
 					data: certData,
 				})
@@ -1763,22 +1758,21 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 		hs.masterSecret = masterFromPreMasterSecret(c.vers, hs.suite, preMasterSecret, hs.hello.random, hs.serverHello.random)
 	}
 
-	if chainToSend != nil {
+	if credential != nil {
 		certVerify := &certificateVerifyMsg{
 			hasSignatureAlgorithm: c.vers >= VersionTLS12,
 		}
 
 		// Determine the hash to sign.
-		privKey := c.config.Certificates[0].PrivateKey
-
 		if certVerify.hasSignatureAlgorithm {
-			certVerify.signatureAlgorithm, err = selectSignatureAlgorithm(c.vers, privKey, c.config, certReq.signatureAlgorithms)
+			certVerify.signatureAlgorithm, err = selectSignatureAlgorithm(c.vers, credential, c.config, certReq.signatureAlgorithms)
 			if err != nil {
 				c.sendAlert(alertInternalError)
 				return err
 			}
 		}
 
+		privKey := c.config.Credential.PrivateKey
 		certVerify.signature, err = signMessage(c.vers, privKey, c.config, certVerify.signatureAlgorithm, hs.finishedHash.buffer)
 		if err == nil && c.config.Bugs.SendSignatureAlgorithm != 0 {
 			certVerify.signatureAlgorithm = c.config.Bugs.SendSignatureAlgorithm
@@ -1803,7 +1797,7 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 // delegatedCredentialSignedMessage returns the bytes that are signed in order
 // to authenticate a delegated credential.
 func delegatedCredentialSignedMessage(credBytes []byte, algorithm signatureAlgorithm, leafDER []byte) []byte {
-	// https://tools.ietf.org/html/draft-ietf-tls-subcerts-03#section-3
+	// https://www.rfc-editor.org/rfc/rfc9345.html#section-4
 	ret := make([]byte, 64, 128)
 	for i := range ret {
 		ret[i] = 0x20
@@ -1836,15 +1830,11 @@ func (hs *clientHandshakeState) verifyCertificates(certMsg *certificateMsg) erro
 		certs[i] = cert
 
 		if certEntry.delegatedCredential != nil {
-			if c.config.Bugs.FailIfDelegatedCredentials {
-				c.sendAlert(alertIllegalParameter)
-				return errors.New("tls: unexpected delegated credential")
-			}
 			if i != 0 {
 				c.sendAlert(alertIllegalParameter)
 				return errors.New("tls: non-leaf certificate has a delegated credential")
 			}
-			if c.config.Bugs.DisableDelegatedCredentials {
+			if len(c.config.DelegatedCredentialAlgorithms) == 0 {
 				c.sendAlert(alertIllegalParameter)
 				return errors.New("tls: server sent delegated credential without it being requested")
 			}
@@ -1894,19 +1884,12 @@ func (hs *clientHandshakeState) verifyCertificates(certMsg *certificateMsg) erro
 			return errors.New("tls: failed to parse public key from delegated credential: " + err.Error())
 		}
 
-		verifier, err := getSigner(c.vers, hs.peerPublicKey, c.config, dc.algorithm, true)
-		if err != nil {
-			c.sendAlert(alertBadCertificate)
-			return errors.New("tls: failed to get verifier for delegated credential: " + err.Error())
-		}
-
-		if err := verifier.verifyMessage(leafPublicKey, delegatedCredentialSignedMessage(dc.signedBytes, dc.algorithm, certs[0].Raw), dc.signature); err != nil {
+		signedMsg := delegatedCredentialSignedMessage(dc.signedBytes, dc.algorithm, certs[0].Raw)
+		if err := verifyMessage(c.vers, leafPublicKey, c.config, dc.algorithm, signedMsg, dc.signature); err != nil {
 			c.sendAlert(alertBadCertificate)
 			return errors.New("tls: failed to verify delegated credential: " + err.Error())
 		}
-	} else if c.config.Bugs.ExpectDelegatedCredentials {
-		c.sendAlert(alertInternalError)
-		return errors.New("tls: delegated credentials missing")
+		c.peerDelegatedCredential = dc.raw
 	} else {
 		hs.peerPublicKey = leafPublicKey
 	}
@@ -2176,6 +2159,7 @@ func (hs *clientHandshakeState) processServerHello() (bool, error) {
 		// Restore masterSecret and peerCerts from previous state
 		hs.masterSecret = hs.session.secret
 		c.peerCertificates = hs.session.serverCertificates
+		c.peerDelegatedCredential = hs.session.serverDelegatedCredential
 		c.extendedMasterSecret = hs.session.extendedMasterSecret
 		c.sctList = hs.session.sctList
 		c.ocspResponse = hs.session.ocspResponse
@@ -2228,15 +2212,16 @@ func (hs *clientHandshakeState) readSessionTicket() error {
 	// Create a session with no server identifier. Either a
 	// session ID or session ticket will be attached.
 	session := &ClientSessionState{
-		vers:               c.vers,
-		wireVersion:        c.wireVersion,
-		cipherSuite:        hs.suite,
-		secret:             hs.masterSecret,
-		handshakeHash:      hs.finishedHash.Sum(),
-		serverCertificates: c.peerCertificates,
-		sctList:            c.sctList,
-		ocspResponse:       c.ocspResponse,
-		ticketExpiration:   c.config.time().Add(time.Duration(7 * 24 * time.Hour)),
+		vers:                      c.vers,
+		wireVersion:               c.wireVersion,
+		cipherSuite:               hs.suite,
+		secret:                    hs.masterSecret,
+		handshakeHash:             hs.finishedHash.Sum(),
+		serverCertificates:        c.peerCertificates,
+		serverDelegatedCredential: c.peerDelegatedCredential,
+		sctList:                   c.sctList,
+		ocspResponse:              c.ocspResponse,
+		ticketExpiration:          c.config.time().Add(time.Duration(7 * 24 * time.Hour)),
 	}
 
 	if !hs.serverHello.extensions.ticketSupported {
@@ -2398,23 +2383,6 @@ func (hs *clientHandshakeState) writeClientHash(msg []byte) {
 func (hs *clientHandshakeState) writeServerHash(msg []byte) {
 	// writeServerHash is called after readHandshake.
 	hs.finishedHash.WriteHandshake(msg, hs.c.recvHandshakeSeq-1)
-}
-
-// selectClientCertificate selects a certificate for use with the given
-// certificate, or none if none match. It may return a particular certificate or
-// nil on success, or an error on internal error.
-func selectClientCertificate(c *Conn, certReq *certificateRequestMsg) (*Certificate, error) {
-	if len(c.config.Certificates) == 0 {
-		return nil, nil
-	}
-
-	// The test is assumed to have configured the certificate it meant to
-	// send.
-	if len(c.config.Certificates) > 1 {
-		return nil, errors.New("tls: multiple certificates configured")
-	}
-
-	return &c.config.Certificates[0], nil
 }
 
 // clientSessionCacheKey returns a key used to cache sessionTickets that could

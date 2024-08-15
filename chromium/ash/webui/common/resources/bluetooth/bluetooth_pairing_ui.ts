@@ -7,7 +7,7 @@
  * Root UI element for Bluetooth pairing dialog.
  */
 
-import '//resources/cr_elements/cr_button/cr_button.js';
+import '//resources/ash/common/cr_elements/cr_button/cr_button.js';
 import './bluetooth_pairing_device_selection_page.js';
 import './bluetooth_pairing_enter_code_page.js';
 import './bluetooth_pairing_request_code_page.js';
@@ -307,7 +307,7 @@ export class SettingsBluetoothPairingUiElement extends PolymerElement
    * Returns a promise that will be resolved the next time
    * onBluetoothDiscoveryStarted() is called.
    */
-  private waitForOnBluetoothDiscoveryStartedForTest(): Promise<void> {
+  waitForOnBluetoothDiscoveryStartedForTest(): Promise<void> {
     return new Promise((resolve) => {
       this.onBluetoothDiscoveryStartedCallbackForTest_ = resolve;
     });
@@ -317,7 +317,7 @@ export class SettingsBluetoothPairingUiElement extends PolymerElement
    * Returns a promise that will be resolved the next time
    * handlePairDeviceResult_() is called.
    */
-  private waitForHandlePairDeviceResultForTest(): Promise<void> {
+  waitForHandlePairDeviceResultForTest(): Promise<void> {
     return new Promise((resolve) => {
       this.handlePairDeviceResultCallbackForTest_ = resolve;
     });

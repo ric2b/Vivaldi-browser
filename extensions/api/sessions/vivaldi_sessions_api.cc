@@ -171,10 +171,10 @@ SessionItem MakeAPITreeNode(Index_Node* node, Index_Node* parent) {
   for (const auto& elm : node->workspaces()) {
     const base::Value::Dict* dict = elm.GetIfDict();
     if (dict) {
-      absl::optional<bool> active = dict->FindBool("active");
+      std::optional<bool> active = dict->FindBool("active");
       // Test for has_value() as the flag was not present in the first version.
       if (!active.has_value() || active.value() == true) {
-        absl::optional<double> workspace_id = dict->FindDouble("id");
+        std::optional<double> workspace_id = dict->FindDouble("id");
         if (workspace_id.has_value()) {
           const std::string* name = dict->FindString("name");
           const std::string* icon = dict->FindString("icon");
@@ -237,7 +237,7 @@ void MakeAPIContentModel(content::BrowserContext* browser_context,
   for (const auto& elm : node->workspaces()) {
     const base::Value::Dict* dict = elm.GetIfDict();
     if (dict) {
-      absl::optional<double> workspace_id = dict->FindDouble("id");
+      std::optional<double> workspace_id = dict->FindDouble("id");
       if (workspace_id.has_value()) {
         WorkspaceContent workspace;
         workspace.id = workspace_id.value();
@@ -275,7 +275,7 @@ void MakeAPIContentModel(content::BrowserContext* browser_context,
         }
         unsigned long size = tit->second->navigations.size();
         if (size == 0) {
-          DVLOG(1) << "Content model. No navigation entries for tab";
+          LOG(ERROR) << "Content model. No navigation entries for tab";
           continue;
         }
         if (static_cast<unsigned long>(index) >= size) {
@@ -298,10 +298,10 @@ void MakeAPIContentModel(content::BrowserContext* browser_context,
           }
         }
 
-        absl::optional<double> id = GetTabWorkspaceId(
+        std::optional<double> id = GetTabWorkspaceId(
             tit->second->viv_ext_data);
         if (id.has_value()) {
-          // Add the tab to workspace. Create workspace first if needed.
+          // Add tab to workspace.
           bool match = false;
           for (auto wsit = model.workspaces.begin();
                !match && wsit != model.workspaces.end();
@@ -312,7 +312,12 @@ void MakeAPIContentModel(content::BrowserContext* browser_context,
             }
           }
           if (!match) {
-            DVLOG(1) << "Content model. No workspace for tab";
+            // No workspace. We save the workspace id in the session tab even if
+            // we choose not to save overall workspace information in the
+            // session ("Include All Workspaces" is unchecked in save dialog).
+            // When we load such a tab in the UI it will be opened in the
+            // default workspace. We do the same here.
+            window.tabs.push_back(std::move(tab));
           }
         } else {
           window.tabs.push_back(std::move(tab));
@@ -630,7 +635,7 @@ void SessionsPrivateGetAllFunction::SendResponse(Index_Model* model) {
 ExtensionFunction::ResponseAction SessionsPrivateGetAutosaveIdsFunction::Run() {
   namespace Results = vivaldi::sessions_private::GetAutosaveIds::Results;
   using vivaldi::sessions_private::GetAutosaveIds::Params;
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
 
   std::vector<Index_Node*> nodes;
   sessions::GetExpiredAutoSaveNodes(browser_context(),
@@ -652,7 +657,7 @@ ExtensionFunction::ResponseAction SessionsPrivateGetContentFunction::Run() {
   using extensions::vivaldi::sessions_private::WorkspaceContent;
   using extensions::vivaldi::sessions_private::TabContent;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   ContentModel content_model;
@@ -670,7 +675,7 @@ ExtensionFunction::ResponseAction SessionsPrivateModifyContentFunction::Run() {
   namespace Results = vivaldi::sessions_private::ModifyContent::Results;
   using vivaldi::sessions_private::ModifyContent::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   NodeModel pair = GetNodeAndModel(browser_context(), params->id);
@@ -728,7 +733,7 @@ ExtensionFunction::ResponseAction SessionsPrivateModifyContentFunction::Run() {
         for (auto& elm : workspaces) {
           base::Value::Dict* dict = elm.GetIfDict();
           if (dict) {
-            absl::optional<double> workspace_id = dict->FindDouble("id");
+            std::optional<double> workspace_id = dict->FindDouble("id");
             if (workspace_id.value() == id) {
               // Modify workspace data and put into placeholder.
               dict->Set("name", params->commands.title.value());
@@ -760,7 +765,7 @@ ExtensionFunction::ResponseAction SessionsPrivateModifyContentFunction::Run() {
       int before_tab_id =
         static_cast<int32_t>(params->commands.target.value().before_tab_id);
 
-      absl::optional<int32_t> window_id;
+      std::optional<int32_t> window_id;
       if (params->commands.target.value().window_id.has_value()) {
         window_id = static_cast<int32_t>(
             params->commands.target.value().window_id.value());
@@ -829,7 +834,7 @@ ExtensionFunction::ResponseAction SessionsPrivateModifyContentFunction::Run() {
       for (auto& elm : workspaces) {
         base::Value::Dict* dict = elm.GetIfDict();
         if (dict) {
-          absl::optional<double> id = dict->FindDouble("id");
+          std::optional<double> id = dict->FindDouble("id");
           if (id.has_value() && id.value() == item.id) {
             dict->Set("name", item.name);
             dict->Set("icon", item.icon);
@@ -862,7 +867,7 @@ ExtensionFunction::ResponseAction SessionsPrivateUpdateFunction::Run() {
   namespace Results = vivaldi::sessions_private::Update::Results;
   using vivaldi::sessions_private::Update::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   NodeModel pair = GetNodeAndModel(browser_context(), params->id);
@@ -897,7 +902,8 @@ ExtensionFunction::ResponseAction SessionsPrivateUpdateFunction::Run() {
     std::unique_ptr<Index_Node> tmp = std::make_unique<Index_Node>("", -1);
     SetNodeState(browser_context(), ctl.path, true, tmp.get());
     if (!with_workspaces) {
-      // remove ws from node
+      base::Value::List workspaces;
+      tmp->SetWorkspaces(std::move(workspaces));
     }
     tmp->SetFilename(ctl.filename);
     // Entries we do not want to modify when updating below.
@@ -917,7 +923,7 @@ ExtensionFunction::ResponseAction SessionsPrivateOpenFunction::Run() {
   using vivaldi::sessions_private::Open::Params;
   namespace Results = vivaldi::sessions_private::Open::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
@@ -949,7 +955,7 @@ ExtensionFunction::ResponseAction SessionsPrivateRenameFunction::Run() {
   using vivaldi::sessions_private::Rename::Params;
   namespace Results = vivaldi::sessions_private::Rename::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   int error_code = sessions::kNoError;
@@ -983,7 +989,7 @@ ExtensionFunction::ResponseAction SessionsPrivateMakeContainerFunction::Run() {
   using vivaldi::sessions_private::MakeContainer::Params;
   namespace Results = vivaldi::sessions_private::MakeContainer::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   // This node is the one to be a new container
@@ -1022,7 +1028,7 @@ ExtensionFunction::ResponseAction SessionsPrivateMoveFunction::Run() {
   using vivaldi::sessions_private::Move::Params;
   namespace Results = vivaldi::sessions_private::Move::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   int error_code = sessions::kNoError;
@@ -1050,7 +1056,7 @@ ExtensionFunction::ResponseAction SessionsPrivateDeleteFunction::Run() {
   using vivaldi::sessions_private::Delete::Params;
   namespace Results = vivaldi::sessions_private::Delete::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   int error_code = sessions::kNoError;

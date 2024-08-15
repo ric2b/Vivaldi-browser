@@ -151,15 +151,16 @@ class WebRtcAudioRendererTest : public testing::Test {
             /*is_hidden=*/false,
             /*is_prerendering=*/false,
             /*is_inside_portal=*/false,
-            /*fenced_frame_mode=*/absl::nullopt,
+            /*fenced_frame_mode=*/std::nullopt,
             /*compositing_enabled=*/false,
             /*widgets_never_composited=*/false,
             /*opener=*/nullptr,
             mojo::NullAssociatedReceiver(),
             *agent_group_scheduler_,
-            /*session_storage_namespace_id=*/base::EmptyString(),
-            /*page_base_background_color=*/absl::nullopt,
-            blink::BrowsingContextGroupInfo::CreateUnique())),
+            /*session_storage_namespace_id=*/std::string(),
+            /*page_base_background_color=*/std::nullopt,
+            blink::BrowsingContextGroupInfo::CreateUnique(),
+            /*color_provider_colors=*/nullptr)),
         web_local_frame_(blink::WebLocalFrame::CreateMainFrame(
             web_view_,
             &web_local_frame_client_,
@@ -213,7 +214,7 @@ class WebRtcAudioRendererTest : public testing::Test {
                     int,
                     const base::UnguessableToken&,
                     const std::string&,
-                    const absl::optional<base::UnguessableToken>&));
+                    const std::optional<base::UnguessableToken>&));
 
   media::MockAudioRendererSink* mock_sink() {
     return audio_device_factory_platform_->mock_sink();
@@ -243,7 +244,7 @@ class WebRtcAudioRendererTest : public testing::Test {
       agent_group_scheduler_;
   raw_ptr<WebView, DanglingUntriaged> web_view_ = nullptr;
   WebLocalFrameClient web_local_frame_client_;
-  raw_ptr<WebLocalFrame, ExperimentalRenderer> web_local_frame_ = nullptr;
+  raw_ptr<WebLocalFrame> web_local_frame_ = nullptr;
   scoped_refptr<blink::WebRtcAudioRenderer> renderer_;
   scoped_refptr<blink::WebMediaStreamAudioRenderer> renderer_proxy_;
 };

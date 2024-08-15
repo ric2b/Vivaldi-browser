@@ -25,7 +25,6 @@
 #include "base/sequence_checker.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/thread_annotations.h"
@@ -42,9 +41,9 @@
 #include "components/services/storage/indexed_db/transactional_leveldb/transactional_leveldb_transaction.h"
 #include "components/services/storage/public/mojom/blob_storage_context.mojom.h"
 #include "components/services/storage/public/mojom/file_system_access_context.mojom.h"
+#include "content/browser/indexed_db/file_path_util.h"
 #include "content/browser/indexed_db/indexed_db_active_blob_registry.h"
 #include "content/browser/indexed_db/indexed_db_bucket_context.h"
-#include "content/browser/indexed_db/indexed_db_class_factory.h"
 #include "content/browser/indexed_db/indexed_db_data_format_version.h"
 #include "content/browser/indexed_db/indexed_db_database_error.h"
 #include "content/browser/indexed_db/indexed_db_external_object.h"
@@ -109,33 +108,38 @@ class AutoDidCommitTransaction {
 
 namespace {
 
-base::FilePath GetBlobDirectoryName(const base::FilePath& path_base,
-                                    int64_t database_id) {
-  return path_base.AppendASCII(base::StringPrintf("%" PRIx64, database_id));
-}
-
-base::FilePath GetBlobDirectoryNameForKey(const base::FilePath& path_base,
-                                          int64_t database_id,
-                                          int64_t blob_number) {
-  base::FilePath path = GetBlobDirectoryName(path_base, database_id);
-  path = path.AppendASCII(base::StringPrintf(
-      "%02x", static_cast<int>(blob_number & 0x000000000000ff00) >> 8));
-  return path;
-}
-
-base::FilePath GetBlobFileNameForKey(const base::FilePath& path_base,
-                                     int64_t database_id,
-                                     int64_t blob_number) {
-  base::FilePath path =
-      GetBlobDirectoryNameForKey(path_base, database_id, blob_number);
-  path = path.AppendASCII(base::StringPrintf("%" PRIx64, blob_number));
-  return path;
-}
-
 std::string ComputeOriginIdentifier(
     const storage::BucketLocator& bucket_locator) {
   return storage::GetIdentifierFromOrigin(bucket_locator.storage_key.origin()) +
          "@1";
+}
+
+leveldb::Status GetDBSizeFromEnv(leveldb::Env* env,
+                                 const std::string& path,
+                                 int64_t* total_size_out) {
+  *total_size_out = 0;
+  // Root path should be /, but in MemEnv, a path name is not tailed with '/'.
+  DCHECK_EQ(path.back(), '/');
+  const std::string path_without_slash = path.substr(0, path.length() - 1);
+
+  // This assumes that leveldb will not put a subdirectory into the directory.
+  std::vector<std::string> file_names;
+  leveldb::Status s = env->GetChildren(path_without_slash, &file_names);
+  if (!s.ok()) {
+    return s;
+  }
+
+  for (std::string& file_name : file_names) {
+    file_name.insert(0, path);
+    uint64_t file_size;
+    s = env->GetFileSize(file_name, &file_size);
+    if (!s.ok()) {
+      return s;
+    } else {
+      *total_size_out += static_cast<int64_t>(file_size);
+    }
+  }
+  return s;
 }
 
 // TODO(ericu): Error recovery. If we persistently can't read the
@@ -941,6 +945,7 @@ IndexedDBBackingStore::IndexedDBBackingStore(
     Mode backing_store_mode,
     const storage::BucketLocator& bucket_locator,
     const base::FilePath& blob_path,
+    TransactionalLevelDBFactory& transactional_leveldb_factory,
     std::unique_ptr<TransactionalLevelDBDatabase> db,
     BlobFilesCleanedCallback blob_files_cleaned,
     ReportOutstandingBlobsCallback report_outstanding_blobs,
@@ -951,6 +956,7 @@ IndexedDBBackingStore::IndexedDBBackingStore(
                                                        : blob_path),
       origin_identifier_(ComputeOriginIdentifier(bucket_locator)),
       idb_task_runner_(std::move(idb_task_runner)),
+      transactional_leveldb_factory_(transactional_leveldb_factory),
       db_(std::move(db)),
       blob_files_cleaned_(std::move(blob_files_cleaned)) {
   DCHECK(idb_task_runner_->RunsTasksInCurrentSequence());
@@ -995,6 +1001,10 @@ leveldb::Status IndexedDBBackingStore::Initialize(bool clean_active_journal) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!initialized_);
 #endif
+  base::UmaHistogramEnumeration(
+      indexed_db::kBackingStoreActionUmaName,
+      indexed_db::IndexedDBAction::kBackingStoreOpenAttempt);
+
   const IndexedDBDataFormatVersion latest_known_data_version =
       IndexedDBDataFormatVersion::GetCurrent();
   const std::string schema_version_key = SchemaVersionKey::Encode();
@@ -1027,20 +1037,12 @@ leveldb::Status IndexedDBBackingStore::Initialize(bool clean_active_journal) {
       return IOErrorStatus();
     }
   } else {
-    if (db_schema_version > indexed_db::kLatestKnownSchemaVersion)
+    if (db_schema_version > indexed_db::kLatestKnownSchemaVersion ||
+        db_schema_version < indexed_db::kEarliestSupportedSchemaVersion) {
       return InternalInconsistencyStatus();
+    }
 
     // Upgrade old backing store.
-    if (s.ok() && db_schema_version < 1) {
-      s = MigrateToV1(write_batch.get());
-    }
-    if (s.ok() && db_schema_version < 2) {
-      s = MigrateToV2(write_batch.get());
-      db_data_version = latest_known_data_version;
-    }
-    if (s.ok() && db_schema_version < 3) {
-      s = MigrateToV3(write_batch.get());
-    }
     if (s.ok() && db_schema_version < 4) {
       s = MigrateToV4(write_batch.get());
     }
@@ -1322,44 +1324,6 @@ Status IndexedDBBackingStore::ValidateBlobFiles() {
   return Status::OK();
 }
 
-Status IndexedDBBackingStore::RevertSchemaToV2() {
-#if DCHECK_IS_ON()
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(initialized_);
-#endif
-  const std::string schema_version_key = SchemaVersionKey::Encode();
-  std::string value_buffer;
-  EncodeInt(2, &value_buffer);
-  leveldb::Status s = db_->Put(schema_version_key, &value_buffer);
-  if (!s.ok())
-    INTERNAL_WRITE_ERROR(REVERT_SCHEMA_TO_V2);
-  return s;
-}
-
-V2SchemaCorruptionStatus IndexedDBBackingStore::HasV2SchemaCorruption() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-#if DCHECK_IS_ON()
-  DCHECK(initialized_);
-#endif
-  const std::string schema_version_key = SchemaVersionKey::Encode();
-
-  int64_t db_schema_version = 0;
-  bool found = false;
-  Status s = GetInt(db_.get(), schema_version_key, &db_schema_version, &found);
-  if (!s.ok())
-    return V2SchemaCorruptionStatus::kUnknown;
-  if (db_schema_version != 2)
-    return V2SchemaCorruptionStatus::kNo;
-
-  bool has_blobs = false;
-  s = AnyDatabaseContainsBlobs(&has_blobs);
-  if (!s.ok())
-    return V2SchemaCorruptionStatus::kUnknown;
-  if (!has_blobs)
-    return V2SchemaCorruptionStatus::kNo;
-  return V2SchemaCorruptionStatus::kYes;
-}
-
 std::unique_ptr<IndexedDBBackingStore::Transaction>
 IndexedDBBackingStore::CreateTransaction(
     blink::mojom::IDBTransactionDurability durability,
@@ -1434,9 +1398,7 @@ Status IndexedDBBackingStore::CreateDatabase(
     blink::IndexedDBDatabaseMetadata& metadata) {
   // TODO(jsbell): Don't persist metadata if open fails. http://crbug.com/395472
   std::unique_ptr<LevelDBDirectTransaction> transaction =
-      IndexedDBClassFactory::Get()
-          ->transactional_leveldb_factory()
-          .CreateLevelDBDirectTransaction(db_.get());
+      transactional_leveldb_factory().CreateLevelDBDirectTransaction(db_.get());
 
   int64_t row_id = 0;
   Status s = indexed_db::GetNewDatabaseId(transaction.get(), &row_id);
@@ -1925,19 +1887,27 @@ Status IndexedDBBackingStore::GetRecord(Transaction* transaction,
                                                   record);
 }
 
-int64_t IndexedDBBackingStore::GetInMemoryBlobSize() const {
+int64_t IndexedDBBackingStore::GetInMemorySize() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK(in_memory());
 
-  int64_t total_size = 0;
+  int64_t blob_size = 0;
   for (const auto& kvp : in_memory_external_object_map_) {
     for (const IndexedDBExternalObject& object :
          kvp.second->external_objects()) {
       if (object.object_type() == IndexedDBExternalObject::ObjectType::kBlob) {
-        total_size += object.size();
+        blob_size += object.size();
       }
     }
   }
-  return total_size;
+
+  int64_t level_db_size = 0;
+  leveldb::Status s = GetDBSizeFromEnv(db_->env(), "/", &level_db_size);
+  if (!s.ok()) {
+    LOG(ERROR) << "Failed to GetDBSizeFromEnv: " << s.ToString();
+  }
+
+  return blob_size + level_db_size;
 }
 
 Status IndexedDBBackingStore::PutRecord(
@@ -2292,9 +2262,7 @@ void IndexedDBBackingStore::ReportBlobUnused(int64_t database_id,
   bool all_blobs = blob_number == DatabaseMetaDataKey::kAllBlobsNumber;
   DCHECK(all_blobs || DatabaseMetaDataKey::IsValidBlobNumber(blob_number));
   std::unique_ptr<LevelDBDirectTransaction> transaction =
-      IndexedDBClassFactory::Get()
-          ->transactional_leveldb_factory()
-          .CreateLevelDBDirectTransaction(db_.get());
+      transactional_leveldb_factory().CreateLevelDBDirectTransaction(db_.get());
 
   BlobJournalType active_blob_journal, recovery_journal;
   if (!GetActiveBlobJournal(transaction.get(), &active_blob_journal).ok())
@@ -2397,7 +2365,8 @@ base::FilePath IndexedDBBackingStore::GetBlobFileName(
     int64_t database_id,
     int64_t blob_number) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return GetBlobFileNameForKey(blob_path_, database_id, blob_number);
+  return indexed_db::GetBlobFileNameForKey(blob_path_, database_id,
+                                           blob_number);
 }
 
 bool IndexedDBBackingStore::RemoveBlobFile(int64_t database_id,
@@ -2414,7 +2383,8 @@ bool IndexedDBBackingStore::RemoveBlobFile(int64_t database_id,
 
 bool IndexedDBBackingStore::RemoveBlobDirectory(int64_t database_id) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  base::FilePath path = GetBlobDirectoryName(blob_path_, database_id);
+  base::FilePath path =
+      indexed_db::GetBlobDirectoryName(blob_path_, database_id);
   return base::DeletePathRecursively(path);
 }
 
@@ -2424,9 +2394,7 @@ Status IndexedDBBackingStore::CleanUpBlobJournal(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!committing_transaction_count_);
   std::unique_ptr<LevelDBDirectTransaction> journal_transaction =
-      IndexedDBClassFactory::Get()
-          ->transactional_leveldb_factory()
-          .CreateLevelDBDirectTransaction(db_.get());
+      transactional_leveldb_factory().CreateLevelDBDirectTransaction(db_.get());
   BlobJournalType journal;
 
   Status s = GetBlobJournal(level_db_key, journal_transaction.get(), &journal);
@@ -3846,104 +3814,15 @@ void IndexedDBBackingStore::Transaction::Begin(
   TRACE_EVENT0("IndexedDB", "IndexedDBBackingStore::Transaction::Begin");
 
   transaction_ =
-      IndexedDBClassFactory::Get()
-          ->transactional_leveldb_factory()
-          .CreateLevelDBTransaction(
-              backing_store_->db_.get(),
-              backing_store_->db_->scopes()->CreateScope(std::move(locks)));
+      backing_store_->transactional_leveldb_factory().CreateLevelDBTransaction(
+          backing_store_->db_.get(),
+          backing_store_->db_->scopes()->CreateScope(std::move(locks)));
 
   // If in_memory, this snapshots blobs just as the above transaction_
   // constructor snapshots the leveldb.
   for (const auto& iter : backing_store_->in_memory_external_object_map_) {
     in_memory_external_object_map_[iter.first] = iter.second->Clone();
   }
-}
-
-Status IndexedDBBackingStore::MigrateToV1(LevelDBWriteBatch* write_batch) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  const int64_t db_schema_version = 1;
-  const std::string schema_version_key = SchemaVersionKey::Encode();
-  const std::string data_version_key = DataVersionKey::Encode();
-  Status s;
-
-  std::ignore = PutInt(write_batch, schema_version_key, db_schema_version);
-  const std::string start_key =
-      DatabaseNameKey::EncodeMinKeyForOrigin(origin_identifier_);
-  const std::string stop_key =
-      DatabaseNameKey::EncodeStopKeyForOrigin(origin_identifier_);
-  std::unique_ptr<TransactionalLevelDBIterator> it =
-      db_->CreateIterator(db_->DefaultReadOptions());
-  for (s = it->Seek(start_key);
-       s.ok() && it->IsValid() && CompareKeys(it->Key(), stop_key) < 0;
-       s = it->Next()) {
-    int64_t database_id = 0;
-    bool found = false;
-    s = GetInt(db_.get(), it->Key(), &database_id, &found);
-    if (!s.ok()) {
-      INTERNAL_READ_ERROR(SET_UP_METADATA);
-      return s;
-    }
-    if (!found) {
-      INTERNAL_CONSISTENCY_ERROR(SET_UP_METADATA);
-      return InternalInconsistencyStatus();
-    }
-    std::string version_key = DatabaseMetaDataKey::Encode(
-        database_id, DatabaseMetaDataKey::USER_VERSION);
-    std::ignore = PutVarInt(write_batch, version_key,
-                            IndexedDBDatabaseMetadata::DEFAULT_VERSION);
-  }
-
-  return s;
-}
-
-Status IndexedDBBackingStore::MigrateToV2(LevelDBWriteBatch* write_batch) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  const int64_t db_schema_version = 2;
-  const std::string schema_version_key = SchemaVersionKey::Encode();
-  const std::string data_version_key = DataVersionKey::Encode();
-  Status s;
-
-  std::ignore = PutInt(write_batch, schema_version_key, db_schema_version);
-  std::ignore = PutInt(write_batch, data_version_key,
-                       IndexedDBDataFormatVersion::GetCurrent().Encode());
-  return s;
-}
-
-Status IndexedDBBackingStore::MigrateToV3(LevelDBWriteBatch* write_batch) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  const int64_t db_schema_version = 3;
-  const std::string schema_version_key = SchemaVersionKey::Encode();
-  const std::string data_version_key = DataVersionKey::Encode();
-  Status s;
-
-  // Up until http://crrev.com/3c0d175b, this migration path did not write
-  // the updated schema version to disk. In consequence, any database that
-  // started out as schema version <= 2 will remain at schema version 2
-  // indefinitely. Furthermore, this migration path used to call
-  // "base::DeletePathRecursively(blob_path_)", so databases stuck at
-  // version 2 would lose their stored Blobs on every open call.
-  //
-  // In order to prevent corrupt databases, when upgrading from 2 to 3 this
-  // will consider any v2 databases with BlobEntryKey entries as corrupt.
-  // https://crbug.com/756447, https://crbug.com/829125,
-  // https://crbug.com/829141
-  bool has_blobs = false;
-  s = AnyDatabaseContainsBlobs(&has_blobs);
-  if (!s.ok()) {
-    INTERNAL_CONSISTENCY_ERROR(SET_UP_METADATA);
-    return InternalInconsistencyStatus();
-  }
-  if (has_blobs) {
-    INTERNAL_CONSISTENCY_ERROR(UPGRADING_SCHEMA_CORRUPTED_BLOBS);
-    return InternalInconsistencyStatus();
-  } else {
-    std::ignore = PutInt(write_batch, schema_version_key, db_schema_version);
-  }
-
-  return s;
 }
 
 Status IndexedDBBackingStore::MigrateToV4(LevelDBWriteBatch* write_batch) {
@@ -4006,8 +3885,7 @@ Status IndexedDBBackingStore::Transaction::HandleBlobPreTransaction() {
     return Status::OK();
 
   std::unique_ptr<LevelDBDirectTransaction> direct_txn =
-      IndexedDBClassFactory::Get()
-          ->transactional_leveldb_factory()
+      backing_store_->transactional_leveldb_factory()
           .CreateLevelDBDirectTransaction(backing_store_->db_.get());
 
   int64_t next_blob_number = -1;
@@ -4210,8 +4088,7 @@ Status IndexedDBBackingStore::Transaction::CommitPhaseTwo() {
     // Read the persisted states of the recovery/live blob journals,
     // so that they can be updated correctly by the transaction.
     std::unique_ptr<LevelDBDirectTransaction> journal_transaction =
-        IndexedDBClassFactory::Get()
-            ->transactional_leveldb_factory()
+        backing_store_->transactional_leveldb_factory()
             .CreateLevelDBDirectTransaction(backing_store_->db_.get());
     s = GetRecoveryBlobJournal(journal_transaction.get(), &recovery_journal);
     if (!s.ok())
@@ -4287,8 +4164,7 @@ Status IndexedDBBackingStore::Transaction::CommitPhaseTwo() {
   }
 
   std::unique_ptr<LevelDBDirectTransaction> update_journal_transaction =
-      IndexedDBClassFactory::Get()
-          ->transactional_leveldb_factory()
+      backing_store_->transactional_leveldb_factory()
           .CreateLevelDBDirectTransaction(backing_store_->db_.get());
   UpdateRecoveryBlobJournal(update_journal_transaction.get(),
                             saved_recovery_journal);
@@ -4379,7 +4255,7 @@ leveldb::Status IndexedDBBackingStore::Transaction::WriteNewBlobs(
             continue;
           // If this directory creation fails then the WriteBlobToFile call
           // will fail. So there is no need to special-case handle it here.
-          base::FilePath path = GetBlobDirectoryNameForKey(
+          base::FilePath path = indexed_db::GetBlobDirectoryNameForKey(
               backing_store_->blob_path_, database_id_, entry.blob_number());
           base::CreateDirectory(path);
           // TODO(dmurph): Refactor IndexedDBExternalObject to not use a

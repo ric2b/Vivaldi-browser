@@ -61,13 +61,24 @@
   #avatarContainer {
     --avatar-border-width: 2px;
     --avatar-size: var(--tangible-sync-style-avatar-size);
+
+    align-items: center;
+    background-color: var(--sync-benefits-list-color);
+    border-radius: 50%;
+    display: flex;
     height: var(--avatar-size);
+    justify-content: center;
     left: 0;
     margin: auto;
     position: relative;
     right: 0;
     width: var(--avatar-size);
     z-index: 1;
+  }
+
+  .loading-spinner {
+    height: 50%;
+    width: 50%;
   }
 
   #avatar {
@@ -209,6 +220,10 @@
     animation: 500ms ease-in-out fade-in-animation;
   }
 
+  .visibility-hidden {
+    visibility: hidden;
+  }
+
   @media (prefers-color-scheme: dark) {
     :host {
       --sync-benefits-list-color: var(--google-grey-800);
@@ -246,8 +261,14 @@
       hidden="[[isModalDialog_]]">
   <div id="contentContainer" class$="[[animationClasses_]]">
     <div id="avatarContainer">
-      <img id="avatar" alt="" src="[[accountImageSrc_]]">
-      <div id="badge" class="work-badge" hidden="[[!showEnterpriseBadge_]]">
+      <iron-icon class="loading-spinner"
+        src="chrome://resources/images/throbber_small.svg"
+        hidden="[[!isPending_(screenMode_)]]">
+      </iron-icon>
+      <img id="avatar" alt="" src="[[accountImageSrc_]]"
+        hidden="[[isPending_(screenMode_)]]">
+      <div id="badge" class="work-badge"
+        hidden="[[shouldHideEnterpriseBadge_(screenMode_, showEnterpriseBadge_)]]">
         <iron-icon icon="cr:domain" alt=""></iron-icon>
       </div>
     </div>
@@ -285,7 +306,9 @@
   <paper-spinner-lite active="[[anyButtonClicked_]]"></paper-spinner-lite>
   <div class$="action-container tangible-sync-style
       [[getMaybeDialogClass_(isModalDialog_)]]">
-    <cr-button id="confirmButton" class="action-button" on-click="onConfirm_"
+    <cr-button id="confirmButton"
+        class$="[[getConfirmButtonClass_(screenMode_)]]"
+        on-click="onConfirm_"
         disabled="[[anyButtonClicked_]]" consent-confirmation
         autofocus="[[isModalDialog_]]">
       $i18n{syncConfirmationConfirmLabel}
@@ -296,8 +319,9 @@
         $i18n{syncConfirmationSettingsLabel}
       </cr-button>
     </if>
-    <cr-button id="notNowButton" on-click="onUndo_"
-        disabled="[[anyButtonClicked_]]">
+    <cr-button id="notNowButton"
+        class$="[[getNotNowButtonClass_(screenMode_)]]"
+        on-click="onUndo_" disabled="[[anyButtonClicked_]]">
       $i18n{syncConfirmationUndoLabel}
     </cr-button>
     <if expr="not (is_macosx or is_linux or chromeos_ash or chromeos_lacros)">

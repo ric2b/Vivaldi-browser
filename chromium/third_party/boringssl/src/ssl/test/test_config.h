@@ -24,6 +24,18 @@
 
 #include "test_state.h"
 
+enum class CredentialConfigType { kX509, kDelegated };
+
+struct CredentialConfig {
+  CredentialConfigType type;
+  std::string cert_file;
+  std::string key_file;
+  std::vector<uint16_t> signing_prefs;
+  std::string delegated_credential;
+  std::string ocsp_response;
+  std::string signed_cert_timestamps;
+};
+
 struct TestConfig {
   int port = 0;
   bool ipv6 = false;
@@ -40,6 +52,7 @@ struct TestConfig {
   std::vector<uint16_t> curves;
   std::string key_file;
   std::string cert_file;
+  std::string trust_cert;
   std::string expect_server_name;
   bool enable_ech_grease = false;
   std::vector<std::string> ech_server_configs;
@@ -73,7 +86,6 @@ struct TestConfig {
   std::string host_name;
   std::string advertise_alpn;
   std::string expect_alpn;
-  std::string expect_late_alpn;
   std::string expect_advertised_alpn;
   std::string select_alpn;
   bool decline_alpn = false;
@@ -189,8 +201,6 @@ struct TestConfig {
   bool server_preference = false;
   bool export_traffic_secrets = false;
   bool key_update = false;
-  bool expect_delegated_credential_used = false;
-  std::string delegated_credential;
   std::string expect_early_data_reason;
   bool expect_hrr = false;
   bool expect_no_hrr = false;
@@ -199,6 +209,10 @@ struct TestConfig {
   int early_write_after_message = 0;
   bool fips_202205 = false;
   bool wpa_202304 = false;
+  bool no_check_client_certificate_type = false;
+  bool no_check_ecdsa_curve = false;
+  int expect_selected_credential = -1;
+  std::vector<CredentialConfig> credentials;
 
   std::vector<const char*> handshaker_args;
 

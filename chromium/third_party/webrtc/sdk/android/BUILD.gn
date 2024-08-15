@@ -663,6 +663,7 @@ if (current_os == "linux" || is_android) {
       "../../api:libjingle_peerconnection_api",
       "../../api:media_stream_interface",
       "../../api:sequence_checker",
+      "../../api/environment",
       "../../api/task_queue",
       "../../api/video:encoded_image",
       "../../api/video:render_resolution",
@@ -681,7 +682,6 @@ if (current_os == "linux" || is_android) {
       "../../rtc_base:logging",
       "../../rtc_base:race_checker",
       "../../rtc_base:refcount",
-      "../../rtc_base:rtc_task_queue",
       "../../rtc_base:safe_conversions",
       "../../rtc_base:threading",
       "../../rtc_base:timestamp_aligner",
@@ -689,7 +689,10 @@ if (current_os == "linux" || is_android) {
       "../../rtc_base/synchronization:mutex",
       "//third_party/libyuv",
     ]
-    absl_deps = [ "//third_party/abseil-cpp/absl/types:optional" ]
+    absl_deps = [
+      "//third_party/abseil-cpp/absl/memory",
+      "//third_party/abseil-cpp/absl/types:optional",
+    ]
   }
 
   # Sources here require -lEGL linker flag. It is separated from video_jni
@@ -797,7 +800,6 @@ if (current_os == "linux" || is_android) {
       "../../rtc_base:logging",
       "../../rtc_base:refcount",
       "../../rtc_base:rtc_certificate_generator",
-      "../../rtc_base:rtc_task_queue",
       "../../rtc_base:safe_conversions",
       "../../rtc_base:ssl",
       "../../rtc_base:stringutils",
@@ -854,6 +856,7 @@ if (current_os == "linux" || is_android) {
       ":base_jni",
       ":generated_libvpx_vp8_jni",
       ":video_jni",
+      "../../api/environment",
       "../../modules/video_coding:webrtc_vp8",
     ]
   }
@@ -866,6 +869,7 @@ if (current_os == "linux" || is_android) {
       ":base_jni",
       ":generated_libvpx_vp9_jni",
       ":video_jni",
+      "../../api/environment",
       "../../modules/video_coding:webrtc_vp9",
     ]
   }
@@ -878,6 +882,7 @@ if (current_os == "linux" || is_android) {
       ":base_jni",
       ":generated_libaom_av1_encoder_jni",
       ":video_jni",
+      "../../api/environment",
       "../../modules/video_coding/codecs/av1:libaom_av1_encoder",
     ]
   }
@@ -908,6 +913,7 @@ if (current_os == "linux" || is_android) {
       ":libvpx_vp9_jni",
       ":native_api_jni",
       ":video_jni",
+      "../../api/environment",
       "../../api/video_codecs:builtin_video_decoder_factory",
       "../../api/video_codecs:builtin_video_encoder_factory",
       "../../api/video_codecs:video_codecs_api",
@@ -1641,14 +1647,16 @@ if (is_android) {
       "../../api:enable_media_with_defaults",
       "../../api:field_trials_view",
       "../../api:scoped_refptr",
+      "../../api/environment",
+      "../../api/environment:environment_factory",
       "../../api/rtc_event_log:rtc_event_log_factory",
       "../../api/task_queue:default_task_queue_factory",
       "../../api/video:video_frame",
       "../../api/video:video_rtp_headers",
       "../../media:media_constants",
+      "../../media:media_engine",
       "../../media:rtc_audio_video",
       "../../media:rtc_internal_video_codecs",
-      "../../media:rtc_media_base",
       "../../modules/audio_device",
       "../../modules/audio_device:mock_audio_device",
       "../../modules/audio_processing:api",

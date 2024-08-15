@@ -55,8 +55,10 @@ class MockReceiverDelegate final : public ReceiverDelegate {
                bool(uint64_t request_id,
                     const std::string& id,
                     uint64_t source_id));
-  MOCK_METHOD2(TerminatePresentation,
-               void(const std::string& id, TerminationReason reason));
+  MOCK_METHOD3(TerminatePresentation,
+               void(const std::string& id,
+                    TerminationSource source,
+                    TerminationReason reason));
 };
 
 class PresentationReceiverTest : public ::testing::Test {
@@ -139,7 +141,7 @@ TEST_F(PresentationReceiverTest, QueryAvailability) {
                                    msgs::Type message_type, const uint8_t* buf,
                                    size_t buffer_size, Clock::time_point now) {
         ssize_t result = msgs::DecodePresentationUrlAvailabilityResponse(
-            buf, buffer_size, &response);
+            buf, buffer_size, response);
         return result;
       }));
   quic_bridge_.RunTasksUntilIdle();
@@ -186,7 +188,7 @@ TEST_F(PresentationReceiverTest, StartPresentation) {
                                    msgs::Type message_type, const uint8_t* buf,
                                    size_t buf_size, Clock::time_point now) {
         ssize_t result =
-            msgs::DecodePresentationStartResponse(buf, buf_size, &response);
+            msgs::DecodePresentationStartResponse(buf, buf_size, response);
         return result;
       }));
   quic_bridge_.RunTasksUntilIdle();

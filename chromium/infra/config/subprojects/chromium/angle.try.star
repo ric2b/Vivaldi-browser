@@ -2,10 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-load("//lib/builders.star", "cpu", "os", "reclient", "xcode")
+load("//lib/builders.star", "cpu", "os", "reclient")
 load("//lib/builder_config.star", "builder_config")
 load("//lib/gn_args.star", "gn_args")
 load("//lib/try.star", "try_")
+load("//lib/xcode.star", "xcode")
 
 try_.defaults.set(
     bucket = "try",
@@ -45,7 +46,7 @@ angle_ios_builder(
         "ci/ios-angle-builder",
         "ci/ios-angle-intel",
     ],
-    try_settings = builder_config.try_settings(
+    builder_config_settings = builder_config.try_settings(
         retry_failed_shards = False,
     ),
     gn_args = gn_args.config(

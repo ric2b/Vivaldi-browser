@@ -15,8 +15,15 @@
 #ifndef THIRD_PARTY_NEARBY_SHARING_INTERNAL_PUBLIC_LOGGING_H_
 #define THIRD_PARTY_NEARBY_SHARING_INTERNAL_PUBLIC_LOGGING_H_
 
+#if defined(NEARBY_CHROMIUM)
+// Chromium does not use absl log.  Forward to Chromium native log macros.
+#include "base/check.h"
+#include "base/check_op.h"
+#include "glog/logging.h"
+#else  // defined(NEARBY_CHROMIUM)
 #include "absl/log/check.h"
 #include "absl/log/log.h"
+#endif  // defined(NEARBY_CHROMIUM)
 
 // Public APIs
 // The stream statement must come last, or it won't compile.
@@ -24,6 +31,7 @@
 #define NL_LOG(severity) LOG(severity)
 
 #define NL_DLOG(severity) DLOG(severity)
+#define NL_DVLOG(severity) DVLOG(severity)
 
 #define NL_CHECK(expr) CHECK(expr)
 #define NL_CHECK_EQ(a, b) CHECK_EQ((a), (b))

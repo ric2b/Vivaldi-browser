@@ -24,15 +24,15 @@
 #include "chrome/browser/ash/input_method/field_trial.h"
 #include "chrome/browser/ash/input_method/suggestion_enums.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
+#include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/ash/services/federated/public/mojom/tables.mojom.h"
 #include "chromeos/components/kiosk/kiosk_utils.h"
 #include "components/strings/grit/components_strings.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
-#include "ui/base/ime/ash/extension_ime_util.h"
 #include "ui/base/ime/ash/ime_bridge.h"
-#include "ui/base/ime/ash/input_method_manager.h"
 #include "ui/base/ime/ash/text_input_target.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -53,15 +53,6 @@ constexpr char kUndoWindowShowSettingCount[] = "undo_window.show_setting_count";
 bool IsVkAutocorrect() {
   return ChromeKeyboardControllerClient::HasInstance() &&
          ChromeKeyboardControllerClient::Get()->is_keyboard_enabled();
-}
-
-bool IsCurrentInputMethodExperimentalMultilingual() {
-  auto* input_method_manager = InputMethodManager::Get();
-  if (!input_method_manager) {
-    return false;
-  }
-  return extension_ime_util::IsExperimentalMultilingual(
-      input_method_manager->GetActiveIMEState()->GetCurrentInputMethod().id());
 }
 
 bool IsUsEnglishId(const std::string& engine_id) {
@@ -163,10 +154,6 @@ void LogAutocorrectAppCompatibilityUkm(AutocorrectActions action,
 void LogAssistiveAutocorrectDelay(base::TimeDelta delay) {
   base::UmaHistogramMediumTimes("InputMethod.Assistive.Autocorrect.Delay",
                                 delay);
-  if (IsCurrentInputMethodExperimentalMultilingual()) {
-    base::UmaHistogramMediumTimes(
-        "InputMethod.MultilingualExperiment.Autocorrect.Delay", delay);
-  }
 }
 
 void LogAssistiveAutocorrectActionLatency(
@@ -437,11 +424,6 @@ void AutocorrectManager::ProcessSetAutocorrectRangeDone(
     return;
   }
 
-  in_diacritical_autocorrect_session_ =
-      IsCurrentInputMethodExperimentalMultilingual() &&
-      diacritics_insensitive_string_comparator_.Equal(original_text,
-                                                      current_text);
-
   pending_autocorrect_ = AutocorrectManager::PendingAutocorrectState(
       /*original_text=*/original_text, /*suggested_text=*/current_text,
       /*start_time=*/base::TimeTicks::Now(),
@@ -456,10 +438,12 @@ void AutocorrectManager::ProcessSetAutocorrectRangeDone(
   LogAssistiveAutocorrectAction(AutocorrectActions::kUnderlined);
   RecordAssistiveCoverage(AssistiveType::kAutocorrectUnderlined);
 
-  if (base::FeatureList::IsEnabled(features::kAutocorrectFederatedPhh)) {
+  if (ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled() &&
+      base::FeatureList::IsEnabled(features::kAutocorrectFederatedPhh)) {
     // Report `original_text` to the Federated Service.
     federated_manager_.ReportSingleString(
-        /*client_name*/ "input_autocorrect_phh",
+        /*table_id*/ chromeos::federated::mojom::FederatedExampleTableId::
+            INPUT_AUTOCORRECT,
         /*example_feature_name*/ "original_text",
         /*example_str*/ base::UTF16ToUTF8(original_text));
   }
@@ -535,17 +519,6 @@ void AutocorrectManager::LogAssistiveAutocorrectAction(
     }
     base::UmaHistogramEnumeration(
         "InputMethod.Assistive.AutocorrectV2.Actions.PK", action);
-  }
-
-  if (IsCurrentInputMethodExperimentalMultilingual()) {
-    base::UmaHistogramEnumeration(
-        "InputMethod.MultilingualExperiment.Autocorrect.Actions", action);
-
-    if (in_diacritical_autocorrect_session_) {
-      base::UmaHistogramEnumeration(
-          "InputMethod.MultilingualExperiment.DiacriticalAutocorrect.Actions",
-          action);
-    }
   }
 }
 
@@ -878,8 +851,8 @@ void AutocorrectManager::OnSurroundingTextChanged(
     // TODO(b/161490813): Fix logic for text replace.
 
     // Count characters added between two calls of the event.
-    pending_autocorrect_->num_inserted_chars += text.length() -
-        pending_autocorrect_->text_length;
+    pending_autocorrect_->num_inserted_chars +=
+        text.length() - pending_autocorrect_->text_length;
   }
   pending_autocorrect_->text_length = text.length();
 
@@ -1045,8 +1018,8 @@ void AutocorrectManager::UndoAutocorrect() {
   pending_autocorrect_.reset();
 }
 
-void AutocorrectManager::ShowUndoWindow(
-  gfx::Range range, const std::u16string& text) {
+void AutocorrectManager::ShowUndoWindow(gfx::Range range,
+                                        const std::u16string& text) {
   if (!pending_autocorrect_.has_value() ||
       !pending_autocorrect_->is_validated ||
       pending_autocorrect_->undo_window_visible) {
@@ -1063,8 +1036,7 @@ void AutocorrectManager::ShowUndoWindow(
       pending_autocorrect_->learn_more_button_visible;
   properties.announce_string = l10n_util::GetStringFUTF16(
       IDS_SUGGESTION_AUTOCORRECT_UNDO_WINDOW_SHOWN,
-      pending_autocorrect_->original_text,
-      autocorrected_text);
+      pending_autocorrect_->original_text, autocorrected_text);
   suggestion_handler_->SetAssistiveWindowProperties(context_id_, properties,
                                                     &error);
 
@@ -1191,13 +1163,12 @@ void AutocorrectManager::AcceptOrClearPendingAutocorrect() {
     // Non-empty autocorrect range means that the user has not modified
     // autocorrect suggestion to invalidate it. So, it is considered as
     // accepted.
-    LogAssistiveAutocorrectAction(
-      AutocorrectActions::kUserAcceptedAutocorrect);
+    LogAssistiveAutocorrectAction(AutocorrectActions::kUserAcceptedAutocorrect);
   } else {
     MeasureAndLogAssistiveAutocorrectQualityBreakdown(
         AutocorrectActions::kUserActionClearedUnderline);
     LogAssistiveAutocorrectAction(
-      AutocorrectActions::kUserActionClearedUnderline);
+        AutocorrectActions::kUserActionClearedUnderline);
   }
 
   if (input_context) {
@@ -1254,7 +1225,7 @@ AutocorrectManager::PendingAutocorrectState::PendingAutocorrectState(
       learn_more_button_visible(learn_more_button_visible) {}
 
 AutocorrectManager::PendingAutocorrectState::PendingAutocorrectState(
-  const PendingAutocorrectState& other) = default;
+    const PendingAutocorrectState& other) = default;
 
 AutocorrectManager::PendingAutocorrectState::~PendingAutocorrectState() =
     default;

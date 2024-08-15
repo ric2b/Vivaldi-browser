@@ -6,9 +6,9 @@
 
 #include <algorithm>
 #include <set>
+#include <vector>
 
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/i18n/case_conversion.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
@@ -114,7 +114,8 @@ float MarkMatchesAndGetScore(const query_parser::QueryNodeVector& find_nodes,
 //
 // Note, this should NOT be called for `cluster_visits` with NO matching visits.
 void PromoteMatchingVisitsAboveNonMatchingVisits(
-    std::vector<history::ClusterVisit>& cluster_visits) {
+    std::vector<history::ClusterVisit>& cluster_visits,
+    history::Cluster::LabelSource label_source) {
   for (auto& visit : cluster_visits) {
     if (visit.matches_search_query) {
       // Smash all matching scores into the range that's above the fold.
@@ -124,8 +125,14 @@ void PromoteMatchingVisitsAboveNonMatchingVisits(
               (1 - GetConfig().min_score_to_always_show_above_the_fold);
     } else {
       // Smash all non-matching scores into the range that's below the fold.
-      visit.score =
-          visit.score * GetConfig().min_score_to_always_show_above_the_fold;
+      if (label_source == history::Cluster::LabelSource::kUngroupedVisits) {
+        // When dealing with a fake cluster of ungrouped visits,
+        // completely zero out the score of non-matching visits.
+        visit.score = 0;
+      } else {
+        visit.score =
+            visit.score * GetConfig().min_score_to_always_show_above_the_fold;
+      }
     }
   }
 
@@ -221,7 +228,8 @@ void ApplySearchQuery(const std::string& query,
     DCHECK_GE(total_matching_visit_score, 0);
     if (total_matching_visit_score > 0 &&
         GetConfig().rescore_visits_within_clusters_for_query) {
-      PromoteMatchingVisitsAboveNonMatchingVisits(cluster.visits);
+      PromoteMatchingVisitsAboveNonMatchingVisits(cluster.visits,
+                                                  cluster.label_source);
     }
 
     cluster.search_match_score = total_matching_visit_score;
@@ -262,11 +270,11 @@ void CullNonProminentOrDuplicateClusters(
     // For the empty-query state, only show clusters with
     // `should_show_on_prominent_ui_surfaces` set to true. This restriction is
     // NOT applied when the user is searching for a specific keyword.
-    base::EraseIf(clusters, [](const history::Cluster& cluster) {
+    std::erase_if(clusters, [](const history::Cluster& cluster) {
       return !cluster.should_show_on_prominent_ui_surfaces;
     });
   } else {
-    base::EraseIf(clusters, [&](const history::Cluster& cluster) {
+    std::erase_if(clusters, [&](const history::Cluster& cluster) {
       // Erase all duplicate single-visit non-prominent
       // clusters.
       if (!cluster.should_show_on_prominent_ui_surfaces &&
@@ -289,10 +297,10 @@ void CullVisitsThatShouldBeHidden(std::vector<history::Cluster>& clusters,
   const size_t min_visits = is_zero_query_state ? 2 : 1;
 
   DCHECK_GT(min_visits, 0u);
-  base::EraseIf(clusters, [&](auto& cluster) {
+  std::erase_if(clusters, [&](auto& cluster) {
     int index = -1;
     size_t num_visits_below_fold = 0;
-    base::EraseIf(cluster.visits, [&](auto& visit) {
+    std::erase_if(cluster.visits, [&](auto& visit) {
       index++;
       // Easy cases: cull all zero-score and explicitly Hidden visits.
       if (visit.score == 0.0 ||
@@ -387,8 +395,7 @@ void SortClusters(std::vector<history::Cluster>* clusters) {
 }
 
 bool ShouldUseNavigationContextClustersFromPersistence() {
-  return GetConfig().persist_clusters_in_history_db &&
-         GetConfig().use_navigation_context_clusters;
+  return GetConfig().use_navigation_context_clusters;
 }
 
 bool IsTransitionUserVisible(int32_t transition) {

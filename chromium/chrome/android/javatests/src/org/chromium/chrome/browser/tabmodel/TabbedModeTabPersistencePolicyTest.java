@@ -159,6 +159,9 @@ public class TabbedModeTabPersistencePolicyTest {
                                     profileProviderSupplier,
                                     null,
                                     null,
+                                    (activityAtRequestedIndex,
+                                            isActivityInAppTasks,
+                                            isActivityInSameTask) -> false,
                                     0);
                             TabModelSelector selector = tmpOrchestrator.getTabModelSelector();
                             ((MockTabModelSelector) selector)

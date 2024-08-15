@@ -10,12 +10,16 @@
 namespace blink {
 
 bool IsKnownSearchEngine(const String& url) {
+  // Blink doesn't need the search engines. VB-104297
+  return false;
+  /*
   GURL gurl(url.Utf8());
   if (!gurl.is_valid()) {
     return false;
   }
 
   return SearchEngineUtils::GetEngineType(gurl) > 0;
+  */
 }
 
 }  // namespace blink

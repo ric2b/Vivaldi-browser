@@ -2,48 +2,25 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as Common from '../../../core/common/common.js';
 import * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as Platform from '../../../core/platform/platform.js';
+import * as SDK from '../../../core/sdk/sdk.js';
 import * as Marked from '../../../third_party/marked/marked.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
-import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
+import * as Input from '../../../ui/components/input/input.js';
 import * as MarkdownView from '../../../ui/components/markdown_view/markdown_view.js';
 import * as UI from '../../../ui/legacy/legacy.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
-import {type InsightProvider} from '../InsightProvider.js';
+import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import {type PromptBuilder, type Source, SourceType} from '../PromptBuilder.js';
 
 import styles from './consoleInsight.css.js';
 import listStyles from './consoleInsightSourcesList.css.js';
 
 const UIStrings = {
-  /**
-   * @description The title of the button that allows providing the feebdack that a
-   * console message insight was inaccruate.
-   */
-  inaccurate: 'Inaccurate',
-  /**
-   * @description The title of the button that allows providing the feebdack that a
-   *console message insight was irrelevant.
-   */
-  irrelevant: 'Irrelevant',
-  /**
-   * @description The title of the button that allows providing the feebdack that a
-   *console message insight was inappropriate.
-   */
-  inappropriate: 'Inappropriate',
-  /**
-   * @description The title of the button that allows providing the feebdack that a
-   *console message insight was helpful.
-   */
-  notHelpful: 'Not helpful',
-  /**
-   * @description The title of the button that allows providing the feebdack that a
-   *console message insight was not good for an unknown "other" reason.
-   */
-  other: 'Other',
   /**
    * @description The title of the insight source "Console message".
    */
@@ -61,98 +38,91 @@ const UIStrings = {
    */
   relatedCode: 'Related code',
   /**
-   * @description The title of the insight source "Google search answers".
-   */
-  searchAnswers: 'Google search answers',
-  /**
-   * @description The text appearing before the list of sources that DevTools
-   * could collect based on a console message. If the user clicks the button
-   * related to the text, these sources will be used to generate insights.
-   */
-  refineButtonHint:
-      'Click this button to send the following data to the AI model running on Google\'s servers, so it can generate a more accurate and relevant response:',
-  /**
    * @description The title that is shown while the insight is being generated.
    */
-  generating: 'Generating…',
+  generating: 'Generating explanation…',
   /**
    * @description The header that indicates that the content shown is a console
    * insight.
    */
-  insight: 'Insight',
-  /**
-   * @description The title of the a button that closes the rating form.
-   */
-  close: 'Close',
+  insight: 'Explanation',
   /**
    * @description The title of the a button that closes the insight pane.
    */
-  closeInsight: 'Close insight',
+  closeInsight: 'Close explanation',
   /**
    * @description The title of the list of source data that was used to generate the insight.
    */
-  sources: 'Sources',
-  /**
-   * @description The title of the button that allows the user to include more
-   * sources for the generation of the console insight.
-   */
-  refine: 'Give context to personalize insight',
-  /**
-   * @description The title of the button that is shown while the console
-   * insight is being re-generated.
-   */
-  refining: 'Personalizing insight…',
+  inputData: 'Data used to understand this message',
   /**
    * @description The title of the button that allows submitting positive
    * feedback about the console insight.
    */
-  thumbUp: 'Thumb up',
+  thumbsUp: 'Thumbs up',
   /**
    * @description The title of the button that allows submitting negative
    * feedback about the console insight.
    */
-  thumbDown: 'Thumb down',
+  thumbsDown: 'Thumbs down',
   /**
-   * @description The title of the link that allows submitting more feedback.
+   * @description The title of the button that opens a page to report a legal
+   * issue with the console insight.
    */
-  submitFeedback: 'Submit feedback',
-  /**
-   * @description The title indicating the dogfood phase of the feature.
-   */
-  dogfood: 'Dogfood',
-  /**
-   * @description The title of the rating form that asks for the reason for the rating.
-   */
-  reason: 'Why did you choose this rating? (optional)',
-  /**
-   * @description The placeholder for the textarea for providing additional
-   * feedback.
-   */
-  additionalFeedback: 'Provide additional feedback (optional)',
-  /**
-   * @description The title of the button that submits the feedback.
-   */
-  submit: 'Submit',
+  report: 'Report legal issue',
   /**
    * @description The text of the header inside the console insight pane when there was an error generating an insight.
    */
-  error: 'Something went wrong…',
+  error: 'DevTools has encountered an error',
   /**
-   * @description Title of the info icon button that shows more details about
-   * how refining a console insight will work. It shows a tooltip with
-   * additional info when hovered or pressed.
+   * @description The message shown when an error has been encountered.
    */
-  refineInfo: 'Learn how personalizing of insights works',
-
+  errorBody: 'Something went wrong. Try again.',
   /**
    * @description Label for screenreaders that is added to the end of the link
    * title to indicate that the link will be opened in a new tab.
    */
   opensInNewTab: '(opens in a new tab)',
+  /**
+   * @description The title of a link that allows the user to learn more about
+   * the feature.
+   */
+  learnMore: 'Learn more',
+  /**
+   * @description The title of the message when the console insight is not available for some reason.
+   */
+  notAvailable: 'This feature is not available',
+  /**
+   * @description The error message when the user is not logged in into Chrome.
+   */
+  notLoggedIn: 'This feature is only available when you sign into Chrome with your Google account.',
+  /**
+   * @description The error message when the user is not logged in into Chrome.
+   */
+  syncIsOff: 'This feature requires you to turn on Chrome sync.',
+  /**
+   * @description The title of the button that opens Chrome settings.
+   */
+  updateSettings: 'Update Settings',
+  /**
+   * @description The header shown when the internet connection is not
+   * available.
+   */
+  offlineHeader: 'DevTools can’t reach the internet',
+  /**
+   * @description Message shown when the user is offline.
+   */
+  offline: 'Check your internet connection and try again.',
+  /**
+   * @description The message shown if the user is not logged in.
+   */
+  signInToUse: 'Sign in to use this feature',
+  /**
+   * @description The title of the button that cancels a console insight flow.
+   */
+  cancel: 'Cancel',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/explain/components/ConsoleInsight.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
-const i18nLazyString = i18n.i18n.getLazilyComputedLocalizedString.bind(undefined, str_);
 
 const {render, html, Directives} = LitHtml;
 
@@ -164,17 +134,8 @@ export class CloseEvent extends Event {
   }
 }
 
-type PublicPromptBuilder = Pick<PromptBuilder, 'buildPrompt'>;
-type PublicInsightProvider = Pick<InsightProvider, 'getInsights'>;
-
-// key => localized string.
-const negativeRatingReasons: Array<[string, () => Platform.UIString.LocalizedString]> = [
-  ['inaccurate', i18nLazyString(UIStrings.inaccurate)],
-  ['irrelevant', i18nLazyString(UIStrings.irrelevant)],
-  ['inapproprate', i18nLazyString(UIStrings.inappropriate)],
-  ['not-helpful', i18nLazyString(UIStrings.notHelpful)],
-  ['other', i18nLazyString(UIStrings.other)],
-];
+type PublicPromptBuilder = Pick<PromptBuilder, 'buildPrompt'|'getSearchQuery'>;
+type PublicAidaClient = Pick<Host.AidaClient.AidaClient, 'fetch'>;
 
 function localizeType(sourceType: SourceType): string {
   switch (sourceType) {
@@ -186,12 +147,12 @@ function localizeType(sourceType: SourceType): string {
       return i18nString(UIStrings.networkRequest);
     case SourceType.RELATED_CODE:
       return i18nString(UIStrings.relatedCode);
-    case SourceType.SEARCH_ANSWERS:
-      return i18nString(UIStrings.searchAnswers);
   }
 }
 
-const DOGFOODFEEDBACK_URL = 'http://go/console-insights-experiment-general-feedback';
+const LEARNMORE_URL = 'https://goo.gle/devtools-console-messages-ai' as Platform.DevToolsPath.UrlString;
+const REPORT_URL = 'https://support.google.com/legal/troubleshooter/1114905?hl=en#ts=1115658%2C13380504' as
+    Platform.DevToolsPath.UrlString;
 
 function buildRatingFormLink(
     rating: 'Positive'|'Negative', comment: string, explanation: string, consoleMessage: string, stackTrace: string,
@@ -223,57 +184,98 @@ function buildRatingFormLink(
 const enum State {
   INSIGHT = 'insight',
   LOADING = 'loading',
-  REFINING = 'refining',
   ERROR = 'error',
+  CONSENT_ONBOARDING = 'consent-onboarding',
+  CONSENT_REMINDER = 'consent-reminder',
+  NOT_LOGGED_IN = 'not-logged-in',
+  SYNC_IS_OFF = 'sync-is-off',
+  OFFLINE = 'offline',
+}
+
+const enum ConsentOnboardingPage {
+  PAGE1 = 'private',
+  PAGE2 = 'legal',
 }
 
 type StateData = {
   type: State.LOADING,
+  consentOnboardingFinished: boolean,
+  consentReminderConfirmed: boolean,
 }|{
-  type: State.REFINING | State.INSIGHT,
-  explanation: string,
+  type: State.INSIGHT,
   tokens: MarkdownView.MarkdownView.MarkdownViewData['tokens'],
+  validMarkdown: boolean,
   sources: Source[],
-  refined: boolean,
-}|{
+}&Host.AidaClient.AidaResponse|{
   type: State.ERROR,
   error: string,
+}|{
+  type: State.CONSENT_REMINDER,
+  sources: Source[],
+}|{
+  type: State.CONSENT_ONBOARDING,
+  page: ConsentOnboardingPage,
+}|{
+  type: State.NOT_LOGGED_IN,
+}|{
+  type: State.SYNC_IS_OFF,
+}|{
+  type: State.OFFLINE,
 };
 
-let nextInstanceId = 0;
-
 export class ConsoleInsight extends HTMLElement {
+  static async create(promptBuilder: PublicPromptBuilder, aidaClient: PublicAidaClient): Promise<ConsoleInsight> {
+    const syncData = await new Promise<Host.InspectorFrontendHostAPI.SyncInformation>(resolve => {
+      Host.InspectorFrontendHost.InspectorFrontendHostInstance.getSyncInformation(syncInfo => {
+        resolve(syncInfo);
+      });
+    });
+
+    return new ConsoleInsight(promptBuilder, aidaClient, syncData);
+  }
+
   static readonly litTagName = LitHtml.literal`devtools-console-insight`;
   readonly #shadow = this.attachShadow({mode: 'open'});
 
-  // Flip to false to enable non-dogfood branding. Note that rating is not
-  // implemented.
-  #dogfood = true;
-  // Flip to false to enable a refine button.
-  readonly #refinedByDefault = false;
-
   #promptBuilder: PublicPromptBuilder;
-  #insightProvider: PublicInsightProvider;
+  #aidaClient: PublicAidaClient;
   #renderer = new MarkdownRenderer();
 
   // Main state.
-  #state: StateData = {
-    type: State.LOADING,
-  };
+  #state: StateData;
 
   // Rating sub-form state.
-  #ratingFormOpened = false;
   #selectedRating?: boolean;
-  #selectedRatingReasons = new Set<string>();
 
-  #popover: UI.PopoverHelper.PopoverHelper;
-  #id: number;
-  #popoverInitiatedViaKeyboard = false;
-
-  constructor(promptBuilder: PublicPromptBuilder, insightProvider: PublicInsightProvider) {
+  constructor(
+      promptBuilder: PublicPromptBuilder, aidaClient: PublicAidaClient,
+      syncInfo?: Host.InspectorFrontendHostAPI.SyncInformation) {
     super();
     this.#promptBuilder = promptBuilder;
-    this.#insightProvider = insightProvider;
+    this.#aidaClient = aidaClient;
+    this.#state = {
+      type: State.NOT_LOGGED_IN,
+    };
+    if (syncInfo?.accountEmail && syncInfo.isSyncActive) {
+      this.#state = {
+        type: State.LOADING,
+        consentReminderConfirmed: false,
+        consentOnboardingFinished: this.#getOnboardingCompletedSetting().get(),
+      };
+    } else if (!syncInfo?.accountEmail) {
+      this.#state = {
+        type: State.NOT_LOGGED_IN,
+      };
+    } else if (!syncInfo?.isSyncActive) {
+      this.#state = {
+        type: State.SYNC_IS_OFF,
+      };
+    }
+    if (!navigator.onLine) {
+      this.#state = {
+        type: State.OFFLINE,
+      };
+    }
     this.#render();
     // Stop keyboard event propagation to avoid Console acting on the events
     // inside the insight component.
@@ -286,12 +288,11 @@ export class ConsoleInsight extends HTMLElement {
     this.addEventListener('keypress', e => {
       e.stopPropagation();
     });
+    this.addEventListener('click', e => {
+      e.stopPropagation();
+    });
     this.tabIndex = 0;
-    this.#id = nextInstanceId++;
     this.focus();
-    this.#popover = new UI.PopoverHelper.PopoverHelper(this, this.#onPopoverRequest.bind(this));
-    this.#popover.setTimeout(300);
-    this.#popover.setHasPadding(true);
     // Measure the height of the element after an animation. `--actual-height` can
     // be used as the `from` value for the subsequent animation.
     this.addEventListener('animationend', () => {
@@ -299,109 +300,14 @@ export class ConsoleInsight extends HTMLElement {
     });
   }
 
-  #onPopoverRequest(event: MouseEvent): UI.PopoverHelper.PopoverRequest|null {
-    const hoveredNode = event.composedPath()[0] as Element;
-    if (!hoveredNode || !hoveredNode.isSelfOrDescendant(this.#shadow.querySelector('.info'))) {
-      return null;
-    }
-
-    const trapFocus = this.#popoverInitiatedViaKeyboard || event.type !== 'mousemove';
-
-    return {
-      box: hoveredNode.boxInWindow(),
-      show: async(popover: UI.GlassPane.GlassPane): Promise<boolean> => {
-        const {sources} = await this.#promptBuilder.buildPrompt();
-
-        const dialogId = `dialog-${this.#id}`;
-
-        const container = document.createElement('div');
-        container.style.display = 'flex';
-        container.style.flexDirection = 'column';
-        container.style.fontSize = '13px';
-        container.style.lineHeight = '20px';
-        container.setAttribute('aria-modal', 'true');
-        container.tabIndex = -1;
-        container.role = 'dialog';
-
-        if (trapFocus) {
-          container.addEventListener('keydown', event => {
-            const keyboardEvent = event as KeyboardEvent;
-
-            if (keyboardEvent.key === 'Tab') {
-              const focusableElements = getFocusableElements(popover);
-              const focusedElement = getFocusedElement(popover);
-              // Trap focus for the tab navigation inside the dialog.
-              if (focusedElement) {
-                const focusedItemIdx = focusableElements.indexOf(focusedElement);
-                if (event.shiftKey && focusedItemIdx === 0) {
-                  focusableElements.at(-1)?.focus();
-                  event.preventDefault();
-                } else if (!event.shiftKey && focusedItemIdx === focusableElements.length - 1) {
-                  focusableElements.at(0)?.focus();
-                  event.preventDefault();
-                }
-              }
-            } else if (keyboardEvent.key === 'Escape') {
-              event.consume(true);
-              // Restore focus to the info icon.
-              this.#popover.hidePopover();
-              (this.#shadow.querySelector('.info') as HTMLElement)?.focus();
-            }
-          });
-        }
-
-        const doc = document.createElement('div');
-        doc.role = 'document';
-        doc.tabIndex = 0;
-        doc.setAttribute('aria-describedby', dialogId);
-        container.append(doc);
-
-        const text = document.createElement('p');
-        text.id = dialogId;
-        text.innerText = i18nString(UIStrings.refineButtonHint);
-        text.style.margin = '0';
-        doc.append(text);
-
-        const list = document.createElement('devtools-console-insight-sources-list');
-        list.sources = sources;
-        doc.append(list);
-
-        popover.contentElement.append(container);
-        popover.setAnchorBehavior(UI.GlassPane.AnchorBehavior.PreferBottom);
-
-        if (trapFocus) {
-          const origShow = popover.show;
-          popover.show = (document: Document): void => {
-            origShow.call(popover, document);
-            (popover.contentElement.querySelector('[role=document]') as HTMLElement)?.focus();
-          };
-          const origHide = popover.hide;
-          popover.hide = (): void => {
-            origHide.call(popover);
-            (this.#shadow.querySelector('.info') as HTMLElement)?.focus();
-          };
-        }
-        return true;
-      },
-    };
+  #getOnboardingCompletedSetting(): Common.Settings.Setting<boolean> {
+    return Common.Settings.Settings.instance().createLocalSetting('console-insights-onboarding-finished', false);
   }
 
   connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [styles];
+    this.#shadow.adoptedStyleSheets = [styles, Input.checkboxStyles];
     this.classList.add('opening');
-  }
-
-  disonnectedCallback(): void {
-    this.#popover.dispose();
-  }
-
-  set dogfood(value: boolean) {
-    this.#dogfood = value;
-    this.#render();
-  }
-
-  get dogfood(): boolean {
-    return this.#dogfood;
+    void this.#generateInsightIfNeeded();
   }
 
   #transitionTo(newState: StateData): void {
@@ -413,52 +319,30 @@ export class ConsoleInsight extends HTMLElement {
     this.#render();
   }
 
-  async update(includeContext = this.#refinedByDefault): Promise<void> {
-    this.#transitionTo(
-        this.#state.type === State.INSIGHT ? {
-          ...this.#state,
-          type: State.REFINING,
-        } :
-                                             {
-                                               type: State.LOADING,
-                                             });
-    try {
-      const requestedSources = includeContext ? undefined : [SourceType.MESSAGE];
-      const {prompt, sources} = await this.#promptBuilder.buildPrompt(requestedSources);
-      const explanation = await this.#insightProvider.getInsights(prompt);
+  async #generateInsightIfNeeded(): Promise<void> {
+    if (this.#state.type !== State.LOADING) {
+      return;
+    }
+    if (!this.#state.consentOnboardingFinished) {
       this.#transitionTo({
-        type: State.INSIGHT,
-        tokens: Marked.Marked.lexer(explanation),
-        explanation,
+        type: State.CONSENT_ONBOARDING,
+        page: ConsentOnboardingPage.PAGE1,
+      });
+      return;
+    }
+    if (!this.#state.consentReminderConfirmed) {
+      const {sources} = await this.#promptBuilder.buildPrompt();
+      this.#transitionTo({
+        type: State.CONSENT_REMINDER,
         sources,
-        refined: includeContext,
       });
-    } catch (err) {
-      Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightErrored);
-      this.#transitionTo({
-        type: State.ERROR,
-        error: err.message,
-      });
+      return;
     }
   }
 
   #onClose(): void {
     this.dispatchEvent(new CloseEvent());
     this.classList.add('closing');
-  }
-
-  #onCloseRating(): void {
-    this.#ratingFormOpened = false;
-    this.#selectedRating = undefined;
-    this.#selectedRatingReasons.clear();
-    this.#render();
-  }
-
-  #onSubmit(): void {
-    if (this.#dogfood) {
-      this.#openFeedbackFrom();
-    }
-    this.#onCloseRating();
   }
 
   #openFeedbackFrom(): void {
@@ -476,64 +360,274 @@ export class ConsoleInsight extends HTMLElement {
   }
 
   #onRating(event: Event): void {
+    if (this.#state.type !== State.INSIGHT) {
+      throw new Error('Unexpected state');
+    }
     this.#selectedRating = (event.target as HTMLElement).dataset.rating === 'true';
     if (this.#selectedRating) {
       Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightRatedPositive);
     } else {
       Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightRatedNegative);
     }
-    if (this.#dogfood) {
-      this.#openFeedbackFrom();
+    Host.InspectorFrontendHost.InspectorFrontendHostInstance.registerAidaClientEvent(JSON.stringify({
+      client: 'CHROME_DEVTOOLS',
+      event_time: new Date().toISOString(),
+      corresponding_aida_rpc_global_id: this.#state.metadata?.rpcGlobalId,
+      do_conversation_client_event: {
+        user_feedback: {
+          sentiment: this.#selectedRating ? 'POSITIVE' : 'NEGATIVE',
+        },
+      },
+    }));
+    this.#openFeedbackFrom();
+  }
+
+  #onReport(): void {
+    Host.InspectorFrontendHost.InspectorFrontendHostInstance.openInNewTab(REPORT_URL);
+  }
+
+  #onSearch(): void {
+    const query = this.#promptBuilder.getSearchQuery();
+    Host.InspectorFrontendHost.InspectorFrontendHostInstance.openSearchResultsInNewTab(query);
+  }
+
+  async #onConsentReminderConfirmed(): Promise<void> {
+    this.#transitionTo({
+      type: State.LOADING,
+      consentReminderConfirmed: true,
+      consentOnboardingFinished: this.#getOnboardingCompletedSetting().get(),
+    });
+    try {
+      for await (const {sources, explanation, metadata} of this.#getInsight()) {
+        const tokens = this.#validateMarkdown(explanation);
+        const valid = tokens !== false;
+        this.#transitionTo({
+          type: State.INSIGHT,
+          tokens: valid ? tokens : [],
+          validMarkdown: valid,
+          explanation,
+          sources,
+          metadata,
+        });
+      }
+      Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightGenerated);
+    } catch (err) {
+      Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightErrored);
+      this.#transitionTo({
+        type: State.ERROR,
+        error: err.message,
+      });
+    }
+  }
+
+  /**
+   * Validates the markdown by trying to render it.
+   */
+  #validateMarkdown(text: string): Marked.Marked.TokensList|false {
+    try {
+      const tokens = Marked.Marked.lexer(text);
+      for (const token of tokens) {
+        this.#renderer.renderToken(token);
+      }
+      return tokens;
+    } catch {
+      Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightErroredMarkdown);
+      return false;
+    }
+  }
+
+  async * #getInsight(): AsyncGenerator<{sources: Source[]}&Host.AidaClient.AidaResponse, void, void> {
+    const {prompt, sources} = await this.#promptBuilder.buildPrompt();
+    try {
+      for await (const response of this.#aidaClient.fetch(prompt)) {
+        yield {sources, ...response};
+      }
+    } catch (err) {
+      if (err.message === 'Server responded: permission denied') {
+        Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightErroredPermissionDenied);
+      } else if (err.message.startsWith('Cannot send request:')) {
+        Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightErroredCannotSend);
+      } else if (err.message.startsWith('Request failed:')) {
+        Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightErroredRequestFailed);
+      } else if (err.message.startsWith('Cannot parse chunk:')) {
+        Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightErroredCannotParseChunk);
+      } else if (err.message === 'Unknown chunk result') {
+        Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightErroredUnknownChunk);
+      } else if (err.message.startsWith('Server responded:')) {
+        Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightErroredApi);
+      } else {
+        Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightErroredOther);
+      }
+      throw err;
+    }
+  }
+
+  #onGoToSettings(): void {
+    const rootTarget = SDK.TargetManager.TargetManager.instance().rootTarget();
+    if (rootTarget === null) {
       return;
     }
-    this.#ratingFormOpened = true;
-
-    this.#render();
-  }
-
-  #onReason(event: Event): void {
-    const target = event.target as Buttons.Button.Button;
-    if (!target.active) {
-      this.#selectedRatingReasons.add(target.dataset.reason as string);
-    } else {
-      this.#selectedRatingReasons.delete(target.dataset.reason as string);
-    }
-    this.#render();
-  }
-
-  #onRefine(): void {
-    if (this.#state.type !== State.INSIGHT) {
-      throw new Error('Unexpected state');
-    }
-    Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightRefined);
-    void this.update(true);
-  }
-
-  #onInfoKeyDown(event: Event): void {
-    if (event instanceof KeyboardEvent) {
-      switch (event.key) {
-        case 'Escape':
-          event.consume(true);
-          this.#popover.hidePopover();
-          break;
-        case 'Enter':
-        case ' ':
-          event.consume(true);
-          this.#popoverInitiatedViaKeyboard = true;
-          try {
-            event.target?.dispatchEvent(new MouseEvent('mousedown', {
-              bubbles: true,
-              composed: true,
-              cancelable: true,
-              clientX: (event.target as HTMLElement).getBoundingClientRect().x,
-              clientY: (event.target as HTMLElement).getBoundingClientRect().y,
-            }));
-          } finally {
-            this.#popoverInitiatedViaKeyboard = false;
-          }
-          break;
+    const url = 'chrome://settings' as Platform.DevToolsPath.UrlString;
+    void rootTarget.targetAgent().invoke_createTarget({url}).then(result => {
+      if (result.getError()) {
+        Host.InspectorFrontendHost.InspectorFrontendHostInstance.openInNewTab(url);
       }
+    });
+  }
+
+  #onDisableFeature(): void {
+    try {
+      Common.Settings.moduleSetting('console-insights-enabled').set(false);
+    } finally {
+      this.#onClose();
+      UI.InspectorView.InspectorView.instance().displayReloadRequiredWarning('Reload for the change to apply.');
     }
+  }
+
+  #goToNextPage(): void {
+    this.#transitionTo({
+      type: State.CONSENT_ONBOARDING,
+      page: ConsentOnboardingPage.PAGE2,
+    });
+  }
+
+  #termsChecked(): boolean {
+    const checkbox = this.#shadow.querySelector('.terms') as HTMLInputElement | undefined;
+    if (!checkbox?.checked) {
+      return false;
+    }
+    return true;
+  }
+
+  #onConsentOnboardingConfirmed(): void {
+    if (!this.#termsChecked()) {
+      return;
+    }
+    this.#getOnboardingCompletedSetting().set(true);
+    this.#transitionTo({
+      type: State.LOADING,
+      consentReminderConfirmed: false,
+      consentOnboardingFinished: this.#getOnboardingCompletedSetting().get(),
+    });
+    void this.#generateInsightIfNeeded();
+  }
+
+  #goToPrevPage(): void {
+    this.#transitionTo({
+      type: State.CONSENT_ONBOARDING,
+      page: ConsentOnboardingPage.PAGE1,
+    });
+  }
+
+  #renderCancelButton(): LitHtml.TemplateResult {
+    // clang-format off
+    return html`<${Buttons.Button.Button.litTagName}
+      class="cancel-button"
+      @click=${this.#onClose}
+      .data=${
+        {
+          variant: Buttons.Button.Variant.SECONDARY,
+          jslogContext: 'cancel',
+        } as Buttons.Button.ButtonData
+      }
+    >
+      ${UIStrings.cancel}
+    </${Buttons.Button.Button.litTagName}>`;
+    // clang-format on
+  }
+
+  #renderDisableFeatureButton(): LitHtml.TemplateResult {
+    // clang-format off
+    return html`<${Buttons.Button.Button.litTagName}
+      @click=${this.#onDisableFeature}
+      class="disable-button"
+      .data=${
+        {
+          variant: Buttons.Button.Variant.SECONDARY,
+          jslogContext: 'disable',
+        } as Buttons.Button.ButtonData
+      }
+    >
+      Disable this feature
+    </${Buttons.Button.Button.litTagName}>`;
+    // clang-format on
+  }
+
+  #renderNextButton(): LitHtml.TemplateResult {
+    // clang-format off
+    return html`<${Buttons.Button.Button.litTagName}
+      class="next-button"
+      @click=${this.#goToNextPage}
+      .data=${
+        {
+          variant: Buttons.Button.Variant.PRIMARY,
+          jslogContext: 'next',
+        } as Buttons.Button.ButtonData
+      }
+    >
+      Next
+    </${Buttons.Button.Button.litTagName}>`;
+    // clang-format on
+  }
+
+  #renderBackButton(): LitHtml.TemplateResult {
+    // clang-format off
+    return html`<${Buttons.Button.Button.litTagName}
+      @click=${this.#goToPrevPage}
+      .data=${
+        {
+          variant: Buttons.Button.Variant.SECONDARY,
+          jslogContext: 'back',
+        } as Buttons.Button.ButtonData
+      }
+    >
+      Back
+    </${Buttons.Button.Button.litTagName}>`;
+    // clang-format on
+  }
+
+  #renderContinueButton(handler: (event: Event) => void, disabled = false): LitHtml.TemplateResult {
+    // clang-format off
+    return html`<${Buttons.Button.Button.litTagName}
+      @click=${handler}
+      class="continue-button"
+      .data=${
+        {
+          variant: Buttons.Button.Variant.PRIMARY,
+          disabled,
+          jslogContext: 'continue',
+        } as Buttons.Button.ButtonData
+      }
+    >
+      Continue
+    </${Buttons.Button.Button.litTagName}>`;
+    // clang-format on
+  }
+
+  #renderSearchButton(): LitHtml.TemplateResult {
+    // clang-format off
+    return html`<${Buttons.Button.Button.litTagName}
+      @click=${this.#onSearch}
+      class="search-button"
+      .data=${
+        {
+          variant: Buttons.Button.Variant.SECONDARY,
+        } as Buttons.Button.ButtonData
+      }
+    >
+      Use search instead
+    </${Buttons.Button.Button.litTagName}>`;
+    // clang-format on
+  }
+
+  #renderLearnMoreAboutInsights(): LitHtml.TemplateResult {
+    // clang-format off
+    return html`<x-link href=${LEARNMORE_URL} class="link" jslog=${VisualLogging.link('learn-more').track({click: true})}>Learn more</x-link>`;
+    // clang-format on
+  }
+
+  #onTermsChange(): void {
+    this.#render();
   }
 
   #renderMain(): LitHtml.TemplateResult {
@@ -551,66 +645,167 @@ export class ConsoleInsight extends HTMLElement {
               </svg>
             </div>
           </main>`;
-      case State.REFINING:
       case State.INSIGHT:
         return html`
         <main>
-          <${MarkdownView.MarkdownView.MarkdownView.litTagName}
-            .data=${{tokens: this.#state.tokens, renderer: this.#renderer} as MarkdownView.MarkdownView.MarkdownViewData}>
-          </${MarkdownView.MarkdownView.MarkdownView.litTagName}>
+          ${
+            this.#state.validMarkdown ? html`<${MarkdownView.MarkdownView.MarkdownView.litTagName}
+              .data=${{tokens: this.#state.tokens, renderer: this.#renderer} as MarkdownView.MarkdownView.MarkdownViewData}>
+            </${MarkdownView.MarkdownView.MarkdownView.litTagName}>`: this.#state.explanation
+          }
           <details style="--list-height: ${this.#state.sources.length * 20}px;">
-            <summary>${i18nString(UIStrings.sources)}</summary>
+            <summary>${i18nString(UIStrings.inputData)}</summary>
             <${ConsoleInsightSourcesList.litTagName} .sources=${this.#state.sources}>
             </${ConsoleInsightSourcesList.litTagName}>
           </details>
-          ${!this.#state.refined ? html`<div class="refine-container">
-            <${Buttons.Button.Button.litTagName}
-                class="refine-button"
-                .data=${
-                  {
-                    variant: Buttons.Button.Variant.TONAL,
-                    size: Buttons.Button.Size.MEDIUM,
-                    iconName: 'spark',
-                  } as Buttons.Button.ButtonData
-                }
-                @click=${this.#onRefine}
-              >
-              ${this.#state.type === State.REFINING ? i18nString(UIStrings.refining) : i18nString(UIStrings.refine)}
-            </${Buttons.Button.Button.litTagName}>
-            <${Buttons.Button.Button.litTagName}
-              class="info"
-              .data=${
-                {
-                  variant: Buttons.Button.Variant.ROUND,
-                  size: Buttons.Button.Size.SMALL,
-                  iconName: 'info',
-                  title: i18nString(UIStrings.refineInfo),
-                } as Buttons.Button.ButtonData
-              }
-              @keydown=${this.#onInfoKeyDown}
-            ></${Buttons.Button.Button.litTagName}>
+          <div class="buttons">
+            ${this.#renderSearchButton()}
           </div>
-          ` : ''}
         </main>`;
       case State.ERROR:
         return html`
         <main>
-          <div class="error">${this.#state.error}</div>
+          <div class="error">${i18nString(UIStrings.errorBody)}</div>
         </main>`;
+      case State.CONSENT_REMINDER:
+        return html`
+          <main>
+            <p>The following data will be sent to Google to understand the context for the console message.
+            Human reviewers may process this information for quality purposes.
+            Don’t submit sensitive information. Read Google’s <x-link href="https://policies.google.com/terms" class="link" jslog=${VisualLogging.link('terms-of-service').track({click: true})}>Terms of Service</x-link> and
+            the <x-link href=${'https://policies.google.com/terms/gener' + 'ative-ai'} class="link" jslog=${VisualLogging.link('gener' + 'ative-ai-terms-of-service').track({click: true})}>${'Gener' + 'ative'} AI Additional Terms of Service</x-link>.</p>
+            <${ConsoleInsightSourcesList.litTagName} .sources=${this.#state.sources}>
+            </${ConsoleInsightSourcesList.litTagName}>
+          </main>
+        `;
+      case State.CONSENT_ONBOARDING:
+        switch (this.#state.page) {
+          case ConsentOnboardingPage.PAGE1:
+            return html`<main>
+              <p>This notice and our <x-link href="https://policies.google.com/privacy" class="link" jslog=${VisualLogging.link('privacy-notice').track({click: true})}>privacy notice</x-link> describe how Chrome DevTools handles your data. Please read them carefully.</p>
+
+              <p>Chrome DevTools uses the console message, associated stack trace, related source code, and the associated network headers as input data. When you use "Understand this message", Google collects this input data, generated output, related feature usage information, and your feedback. Google uses this data to provide, improve, and develop Google products and services and machine learning technologies, including Google's enterprise products such as Google Cloud.</p>
+
+              <p>To help with quality and improve our products, human reviewers may read, annotate, and process the above-mentioned input data, generated output, related feature usage information, and your feedback. <strong>Please do not include sensitive (e.g., confidential) or personal information that can be used to identify you or others in your prompts or feedback.</strong> Your data will be stored in a way where Google cannot tell who provided it and can no longer fulfill any deletion requests and will be retained for up to 18 months.</p>
+            </main>`;
+          case ConsentOnboardingPage.PAGE2:
+            return html`<main>
+            <p>As you try "Understand this message", here are key things to know:
+
+            <ul>
+              <li>Chrome DevTools uses console message, associated stack trace, related source code, and the associated network headers to provide answers.</li>
+              <li>Chrome DevTools uses experimental technology, and may generate inaccurate or offensive information that doesn't represent Google's views. Voting on the responses will help make this feature better.</li>
+              <li>This feature is an experimental feature and subject to future changes.</li>
+              <li><strong><x-link class="link" href="https://support.google.com/legal/answer/13505487" jslog=${VisualLogging.link('use-code-with-caution').track({click: true})}>Use generated code snippets with caution</x-link>.</strong></li>
+            </ul>
+            </p>
+
+            <p>
+            <label>
+              <input class="terms" @change=${this.#onTermsChange} type="checkbox" jslog=${VisualLogging.toggle('terms-of-service-accepted')}>
+              <span>I accept my use of "Understand this message" is subject to the <x-link href="https://policies.google.com/terms" class="link" jslog=${VisualLogging.link('terms-of-service').track({click: true})}>Google Terms of Service</x-link> and the <x-link href=${'https://policies.google.com/terms/gener' + 'ative-ai'} class="link" jslog=${VisualLogging.link('gener' + 'ative-ai-terms-of-service').track({click: true})}>${'Gener' + 'ative'} AI Additional Terms of Service</x-link>.</span>
+            </label>
+            </p>
+            </main>`;
+        }
+      case State.NOT_LOGGED_IN:
+        return html`
+          <main>
+            <div class="error">${i18nString(UIStrings.notLoggedIn)}</div>
+          </main>`;
+      case State.SYNC_IS_OFF:
+        return html`
+          <main>
+            <div class="error">${i18nString(UIStrings.syncIsOff)}</div>
+          </main>`;
+      case State.OFFLINE:
+        return html`
+          <main>
+            <div class="error">${i18nString(UIStrings.offline)}</div>
+          </main>`;
     }
     // clang-format on
   }
 
   #renderFooter(): LitHtml.LitTemplate {
-    // clang-format off
+    const disclaimer = LitHtml.html`<span>
+              This feature may display inaccurate or offensive information that doesn't represent Google's views.
+              <x-link href=${LEARNMORE_URL} class="link" jslog=${
+        VisualLogging.link('learn-more').track({click: true})}>${i18nString(UIStrings.learnMore)}</x-link>
+            </span>`;
     switch (this.#state.type) {
       case State.LOADING:
-      case State.ERROR:
         return LitHtml.nothing;
-      case State.INSIGHT:
-      case State.REFINING:
+      case State.ERROR:
+      case State.OFFLINE:
         return html`<footer>
+          <div class="disclaimer">
+            ${disclaimer}
+          </div>
+        </footer>`;
+      case State.NOT_LOGGED_IN:
+      case State.SYNC_IS_OFF:
+        return html`<footer>
+        <div class="filler"></div>
         <div>
+          <${Buttons.Button.Button.litTagName}
+            @click=${this.#onGoToSettings}
+            .data=${
+              {
+                variant: Buttons.Button.Variant.PRIMARY,
+                jslogContext: 'update-settings',
+              } as Buttons.Button.ButtonData
+            }
+          >
+            ${UIStrings.updateSettings}
+          </${Buttons.Button.Button.litTagName}>
+        </div>
+      </footer>`;
+      case State.CONSENT_REMINDER:
+        return html`<footer>
+          <div class="disclaimer">
+            ${disclaimer}
+          </div>
+          <div class="filler"></div>
+          <div class="buttons">
+            ${this.#renderCancelButton()}
+            ${this.#renderContinueButton(this.#onConsentReminderConfirmed)}
+          </div>
+        </footer>`;
+      case State.CONSENT_ONBOARDING:
+        switch (this.#state.page) {
+          case ConsentOnboardingPage.PAGE1:
+            return html`<footer>
+                <div class="disclaimer">
+                  ${this.#renderLearnMoreAboutInsights()}
+                </div>
+                <div class="filler"></div>
+                <div class="buttons">
+                    ${this.#renderCancelButton()}
+                    ${this.#renderDisableFeatureButton()}
+                    ${this.#renderNextButton()}
+                  </div>
+              </footer>`;
+          case ConsentOnboardingPage.PAGE2:
+            return html`<footer>
+            <div class="disclaimer">
+              ${this.#renderLearnMoreAboutInsights()}
+            </div>
+            <div class="filler"></div>
+            <div class="buttons">
+                ${this.#renderBackButton()}
+                ${this.#renderDisableFeatureButton()}
+                ${this.#renderContinueButton(this.#onConsentOnboardingConfirmed, !this.#termsChecked())}
+              </div>
+          </footer>`;
+        }
+      case State.INSIGHT:
+        return html`<footer>
+        <div class="disclaimer">
+          ${disclaimer}
+        </div>
+        <div class="filler"></div>
+        <div class="rating">
           <${Buttons.Button.Button.litTagName}
             data-rating=${'true'}
             .data=${
@@ -619,7 +814,8 @@ export class ConsoleInsight extends HTMLElement {
                 size: Buttons.Button.Size.SMALL,
                 iconName: 'thumb-up',
                 active: this.#selectedRating,
-                title: i18nString(UIStrings.thumbUp),
+                title: i18nString(UIStrings.thumbsUp),
+                jslogContext: 'thumbs-up',
               } as Buttons.Button.ButtonData
             }
             @click=${this.#onRating}
@@ -632,18 +828,26 @@ export class ConsoleInsight extends HTMLElement {
                 size: Buttons.Button.Size.SMALL,
                 iconName: 'thumb-down',
                 active: this.#selectedRating !== undefined && !this.#selectedRating,
-                title: i18nString(UIStrings.thumbDown),
+                title: i18nString(UIStrings.thumbsDown),
+                jslogContext: 'thumbs-down',
               } as Buttons.Button.ButtonData
             }
             @click=${this.#onRating}
           ></${Buttons.Button.Button.litTagName}>
+          <${Buttons.Button.Button.litTagName}
+            .data=${
+              {
+                variant: Buttons.Button.Variant.ROUND,
+                size: Buttons.Button.Size.SMALL,
+                iconName: 'report',
+                title: i18nString(UIStrings.report),
+                jslogContext: 'report',
+              } as Buttons.Button.ButtonData
+            }
+            @click=${this.#onReport}
+          ></${Buttons.Button.Button.litTagName}>
         </div>
-        <div class="filler"></div>
-        ${this.#dogfood ? html`<div class="dogfood-feedback">
-            <${IconButton.Icon.Icon.litTagName} name="dog-paw"></${IconButton.Icon.Icon.litTagName}>
-            <span>${i18nString(UIStrings.dogfood)} - </span>
-            <x-link href=${DOGFOODFEEDBACK_URL} class="link">${i18nString(UIStrings.submitFeedback)}</x-link>
-        </div>`: ''}
+
       </footer>`;
     }
     // clang-format on
@@ -651,32 +855,35 @@ export class ConsoleInsight extends HTMLElement {
 
   #getHeader(): string {
     switch (this.#state.type) {
+      case State.NOT_LOGGED_IN:
+        return i18nString(UIStrings.signInToUse);
+      case State.SYNC_IS_OFF:
+        return i18nString(UIStrings.notAvailable);
+      case State.OFFLINE:
+        return i18nString(UIStrings.offlineHeader);
       case State.LOADING:
         return i18nString(UIStrings.generating);
       case State.INSIGHT:
-      case State.REFINING:
         return i18nString(UIStrings.insight);
       case State.ERROR:
         return i18nString(UIStrings.error);
+      case State.CONSENT_REMINDER:
+        return 'Data used to understand this message';
+      case State.CONSENT_ONBOARDING:
+        switch (this.#state.page) {
+          case ConsentOnboardingPage.PAGE1:
+            return 'Privacy notice';
+          case ConsentOnboardingPage.PAGE2:
+            return 'Legal notice';
+        }
     }
   }
 
   #render(): void {
-    const topWrapper = Directives.classMap({
-      wrapper: true,
-      top: this.#ratingFormOpened,
-    });
-    const bottomWrapper = Directives.classMap({
-      wrapper: true,
-      bottom: this.#ratingFormOpened,
-    });
     // clang-format off
     render(html`
-      <div class=${topWrapper}>
+      <div class="wrapper" jslog=${VisualLogging.pane('console-insights').track({resize: true})}>
         <header>
-          <div>
-            <${IconButton.Icon.Icon.litTagName} name="spark"></${IconButton.Icon.Icon.litTagName}>
-          </div>
           <div class="filler">
             <h2>
               ${this.#getHeader()}
@@ -692,6 +899,7 @@ export class ConsoleInsight extends HTMLElement {
                   title: i18nString(UIStrings.closeInsight),
                 } as Buttons.Button.ButtonData
               }
+              jslog=${VisualLogging.close().track({click: true})}
               @click=${this.#onClose}
             ></${Buttons.Button.Button.litTagName}>
           </div>
@@ -699,67 +907,6 @@ export class ConsoleInsight extends HTMLElement {
         ${this.#renderMain()}
         ${this.#renderFooter()}
       </div>
-      ${this.#ratingFormOpened ? html`
-        <div class=${bottomWrapper}>
-          <header>
-            <div class="filler">${i18nString(UIStrings.reason)}</div>
-            <div>
-              <${Buttons.Button.Button.litTagName}
-                .data=${
-                  {
-                    variant: Buttons.Button.Variant.ROUND,
-                    size: Buttons.Button.Size.SMALL,
-                    iconName: 'cross',
-                    title: i18nString(UIStrings.close),
-                  } as Buttons.Button.ButtonData
-                }
-                @click=${this.#onCloseRating}
-              ></${Buttons.Button.Button.litTagName}>
-            </div>
-          </header>
-          <main>
-            ${!this.#selectedRating ? html`
-                <div class="buttons">
-                  ${Directives.repeat(negativeRatingReasons, ([key, label]) => {
-                    return html`
-                      <${Buttons.Button.Button.litTagName}
-                        data-reason=${key}
-                        @click=${this.#onReason}
-                        .data=${
-                          {
-                            variant: Buttons.Button.Variant.SECONDARY,
-                            size: Buttons.Button.Size.MEDIUM,
-                            active: this.#selectedRatingReasons.has(key),
-                          } as Buttons.Button.ButtonData
-                        }
-                      >
-                        ${label()}
-                      </${Buttons.Button.Button.litTagName}>
-                    `;
-                  })}
-                </div>
-            ` : ''}
-            <textarea placeholder=${i18nString(UIStrings.additionalFeedback)}></textarea>
-          </main>
-          <footer>
-            <div class="filler"></div>
-            <div>
-              <${Buttons.Button.Button.litTagName}
-                .data=${
-                  {
-                    variant: Buttons.Button.Variant.PRIMARY,
-                    size: Buttons.Button.Size.MEDIUM,
-                    title: i18nString(UIStrings.submit),
-                  } as Buttons.Button.ButtonData
-                }
-                @click=${this.#onSubmit}
-              >
-                ${i18nString(UIStrings.submit)}
-              </${Buttons.Button.Button.litTagName}>
-            </div>
-          </footer>
-        </div>
-      ` : ''}
     `, this.#shadow, {
       host: this,
     });
@@ -774,7 +921,7 @@ class ConsoleInsightSourcesList extends HTMLElement {
 
   constructor() {
     super();
-    this.#shadow.adoptedStyleSheets = [listStyles];
+    this.#shadow.adoptedStyleSheets = [listStyles, Input.checkboxStyles];
   }
 
   #render(): void {
@@ -782,9 +929,10 @@ class ConsoleInsightSourcesList extends HTMLElement {
      render(html`
       <ul>
         ${Directives.repeat(this.#sources, item => item.value, item => {
-          const icon = new IconButton.Icon.Icon();
-          icon.data = {iconName: 'open-externally', color: 'var(--sys-color-primary)', width: '14px', height: '14px'};
-          return html`<li><x-link class="link" title="${localizeType(item.type)} ${i18nString(UIStrings.opensInNewTab)}" href=${`data:text/plain,${encodeURIComponent(item.value)}`}>${localizeType(item.type)}${icon}</x-link></li>`;
+          return html`<li><x-link class="link" title="${localizeType(item.type)} ${i18nString(UIStrings.opensInNewTab)}" href="data:text/plain,${encodeURIComponent(item.value)}" jslog=${VisualLogging.link('source-' + item.type).track({click: true})}>
+            <${IconButton.Icon.Icon.litTagName} name="open-externally"></${IconButton.Icon.Icon.litTagName}>
+            ${localizeType(item.type)}
+          </x-link></li>`;
         })}
       </ul>
     `, this.#shadow, {
@@ -799,11 +947,10 @@ class ConsoleInsightSourcesList extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-console-insight', ConsoleInsight);
-ComponentHelpers.CustomElements.defineComponent('devtools-console-insight-sources-list', ConsoleInsightSourcesList);
+customElements.define('devtools-console-insight', ConsoleInsight);
+customElements.define('devtools-console-insight-sources-list', ConsoleInsightSourcesList);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-console-insight': ConsoleInsight;
     'devtools-console-insight-sources-list': ConsoleInsightSourcesList;
@@ -814,8 +961,7 @@ export class MarkdownRenderer extends MarkdownView.MarkdownView.MarkdownLitRende
   override renderToken(token: Marked.Marked.Token): LitHtml.TemplateResult {
     const template = this.templateForToken(token);
     if (template === null) {
-      console.warn(`Markdown token type '${token.type}' not supported.`);
-      return LitHtml.html``;
+      return LitHtml.html`${token.raw}`;
     }
     return template;
   }
@@ -827,53 +973,13 @@ export class MarkdownRenderer extends MarkdownView.MarkdownView.MarkdownLitRende
       case 'link':
       case 'image':
         return LitHtml.html`${UI.XLink.XLink.create(token.href, token.text, undefined, undefined, 'token')}`;
+      case 'code':
+        return LitHtml.html`<${MarkdownView.CodeBlock.CodeBlock.litTagName}
+          .code=${this.unescape(token.text)}
+          .codeLang=${token.lang}
+          .displayNotice=${true}>
+        </${MarkdownView.CodeBlock.CodeBlock.litTagName}>`;
     }
     return super.templateForToken(token);
   }
-}
-
-function getFocusedElement(popover: UI.GlassPane.GlassPane): HTMLElement|undefined {
-  const root = popover.contentElement.getComponentRoot();
-  if (!(root instanceof ShadowRoot)) {
-    throw new Error('Expected a shadow root');
-  }
-  let focusedElement = root.activeElement;
-  while (focusedElement && focusedElement.shadowRoot?.activeElement) {
-    focusedElement = focusedElement.shadowRoot?.activeElement;
-  }
-  return focusedElement as HTMLElement | undefined;
-}
-
-function getFocusableElements(popover: UI.GlassPane.GlassPane): HTMLElement[] {
-  const root = popover.contentElement.getComponentRoot();
-  if (!(root instanceof ShadowRoot)) {
-    throw new Error('Expected a shadow root');
-  }
-
-  const focusableSelectors = [
-    'x-link',
-    '[role=document]',
-  ];
-
-  const result: HTMLElement[] = [];
-
-  function walk(root: Node): void {
-    const iter = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
-    do {
-      const currentNode = iter.currentNode as HTMLElement;
-      if (currentNode.shadowRoot) {
-        walk(currentNode.shadowRoot);
-      }
-      if (currentNode instanceof ShadowRoot) {
-        continue;
-      }
-      if (currentNode !== root && focusableSelectors.some(selector => currentNode.matches(selector))) {
-        result.push(currentNode);
-      }
-    } while (iter.nextNode());
-  }
-
-  walk(root.host);
-
-  return result;
 }

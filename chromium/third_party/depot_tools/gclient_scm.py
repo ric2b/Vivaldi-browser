@@ -134,11 +134,8 @@ class SCMWrapper(object):
 
     @staticmethod
     def _get_first_remote_url(checkout_path):
-        log = scm.GIT.Capture(
-            ['config', '--local', '--get-regexp', r'remote.*.url'],
-            cwd=checkout_path)
-        # Get the second token of the first line of the log.
-        return log.splitlines()[0].split(' ', 1)[1]
+        log = scm.GIT.YieldConfigRegexp(checkout_path, r'remote.*.url')
+        return next(log)[1]
 
     def GetCacheMirror(self):
         if getattr(self, 'cache_dir', None):
@@ -592,26 +589,37 @@ class GitWrapper(SCMWrapper):
         def wrapper(*args):
             return_val = f(*args)
             if os.path.exists(os.path.join(args[0].checkout_path, '.git')):
-                # If diff.ignoreSubmodules is not already set, set it to `all`.
-                config = subprocess2.capture(['git', 'config', '-l'],
-                                             cwd=args[0].checkout_path).decode(
-                                                 'utf-8').strip().splitlines()
-                if 'diff.ignoresubmodules=dirty' not in config:
-                    subprocess2.capture(
-                        ['git', 'config', 'diff.ignoreSubmodules', 'dirty'],
-                        cwd=args[0].checkout_path)
-                if 'fetch.recursesubmodules=off' not in config:
-                    subprocess2.capture(
-                        ['git', 'config', 'fetch.recurseSubmodules', 'off'],
-                        cwd=args[0].checkout_path)
-                if 'push.recursesubmodules=off' not in config:
+                # The config updates to the project are stored in this list
+                # and updated consecutively after the reads. The updates
+                # are done this way because `scm.GIT.GetConfig` caches
+                # the config file and `scm.GIT.SetConfig` evicts the cache.
+                # This ensures we don't interleave reads and writes causing
+                # the cache to set and unset consecutively.
+                config_updates = []
+
+                if scm.GIT.GetConfig(args[0].checkout_path,
+                                     'diff.ignoresubmodules') != 'dirty':
+                    # If diff.ignoreSubmodules is not already set, set it to `all`.
+                    config_updates.append(('diff.ignoreSubmodules', 'dirty'))
+
+                if scm.GIT.GetConfig(args[0].checkout_path,
+                                     'fetch.recursesubmodules') != 'off':
+                    config_updates.append(('fetch.recurseSubmodules', 'off'))
+
+                if scm.GIT.GetConfig(args[0].checkout_path,
+                                     'push.recursesubmodules') != 'off':
                     # The default is off, but if user sets submodules.recurse to
                     # on, this becomes on too. We never want to push submodules
                     # for gclient managed repositories. Push, even if a no-op,
                     # will increase `git cl upload` latency.
-                    subprocess2.capture(
-                        ['git', 'config', 'push.recurseSubmodules', 'off'],
-                        cwd=args[0].checkout_path)
+                    config_updates.append(('push.recurseSubmodules', 'off'))
+
+                for update in config_updates:
+                    scm.GIT.SetConfig(args[0].checkout_path,
+                                      update[0],
+                                      update[1],
+                                      modify_all=True)
+
             return return_val
 
         return wrapper
@@ -739,7 +747,8 @@ class GitWrapper(SCMWrapper):
 
         # See if the url has changed (the unittests use git://foo for the url,
         # let that through).
-        current_url = self._Capture(['config', 'remote.%s.url' % self.remote])
+        current_url = scm.GIT.GetConfig(self.checkout_path,
+                                        f'remote.{self.remote}.url')
         return_early = False
         # TODO(maruel): Delete url != 'git://foo' since it's just to make the
         # unit test pass. (and update the comment above)
@@ -750,12 +759,9 @@ class GitWrapper(SCMWrapper):
         strp_current_url = current_url[:-4] if current_url.endswith(
             '.git') else current_url
         if (strp_current_url.rstrip('/') != strp_url.rstrip('/')
-                and url != 'git://foo' and
-                subprocess2.capture([
-                    'git', 'config',
-                    'remote.%s.gclient-auto-fix-url' % self.remote
-                ],
-                                    cwd=self.checkout_path).strip() != 'False'):
+                and url != 'git://foo' and scm.GIT.GetConfigBool(
+                    self.checkout_path,
+                    f'remote.{self.remote}.gclient-auto-fix-url')):
             self.Print('_____ switching %s from %s to new upstream %s' %
                        (self.relpath, current_url, url))
             if not (options.force or options.reset):
@@ -1553,34 +1559,30 @@ class GitWrapper(SCMWrapper):
     if requested."""
         if options.force or options.reset:
             try:
-                self._Run(
-                    ['config', '--unset-all',
-                     'remote.%s.fetch' % self.remote], options)
-                self._Run([
-                    'config',
-                    'remote.%s.fetch' % self.remote,
-                    '+refs/heads/*:refs/remotes/%s/*' % self.remote
-                ], options)
+                scm.GIT.SetConfig(self.checkout_path,
+                                  f'remote.{self.remote}.fetch',
+                                  modify_all=True)
+                scm.GIT.SetConfig(
+                    self.checkout_path, f'remote.{self.remote}.fetch',
+                    f'+refs/heads/*:refs/remotes/{self.remote}/*')
             except subprocess2.CalledProcessError as e:
                 # If exit code was 5, it means we attempted to unset a config
                 # that didn't exist. Ignore it.
                 if e.returncode != 5:
                     raise
         if hasattr(options, 'with_branch_heads') and options.with_branch_heads:
-            config_cmd = [
-                'config',
-                'remote.%s.fetch' % self.remote,
+            scm.GIT.SetConfig(
+                self.checkout_path,
+                f'remote.{self.remote}.fetch',
                 '+refs/branch-heads/*:refs/remotes/branch-heads/*',
-                '^\\+refs/branch-heads/\\*:.*$'
-            ]
-            self._Run(config_cmd, options)
+                value_pattern='^\\+refs/branch-heads/\\*:.*$',
+                modify_all=True)
         if hasattr(options, 'with_tags') and options.with_tags:
-            config_cmd = [
-                'config',
-                'remote.%s.fetch' % self.remote, '+refs/tags/*:refs/tags/*',
-                '^\\+refs/tags/\\*:.*$'
-            ]
-            self._Run(config_cmd, options)
+            scm.GIT.SetConfig(self.checkout_path,
+                              f'remote.{self.remote}.fetch',
+                              '+refs/tags/*:refs/tags/*',
+                              value_pattern='^\\+refs/tags/\\*:.*$',
+                              modify_all=True)
 
     def _AutoFetchRef(self, options, revision, depth=None):
         """Attempts to fetch |revision| if not available in local repo.
@@ -1909,6 +1911,57 @@ class CipdWrapper(SCMWrapper):
     CIPD packages should be updated at the root by running
     `CipdRoot.run('update')`.
     """
+
+
+class GcsWrapper(SCMWrapper):
+    """Wrapper for GCS.
+
+  Currently only supports content from Google Cloud Storage.
+  """
+    name = 'gcs'
+
+    def __init__(self,
+                 url=None,
+                 root_dir=None,
+                 relpath=None,
+                 out_fh=None,
+                 out_cb=None):
+        super(GcsWrapper, self).__init__(url=url,
+                                         root_dir=root_dir,
+                                         relpath=relpath,
+                                         out_fh=out_fh,
+                                         out_cb=out_cb)
+
+    #override
+    def GetCacheMirror(self):
+        return None
+
+    #override
+    def GetActualRemoteURL(self, options):
+        return None
+
+    #override
+    def DoesRemoteURLMatch(self, options):
+        del options
+        return True
+
+    def revert(self, options, args, file_list):
+        """Does nothing."""
+
+    def diff(self, options, args, file_list):
+        """GCS has no notion of diffing."""
+
+    def pack(self, options, args, file_list):
+        """GCS has no notion of diffing."""
+
+    def revinfo(self, options, args, file_list):
+        """Does nothing"""
+
+    def status(self, options, args, file_list):
+        pass
+
+    def update(self, options, args, file_list):
+        """Does nothing."""
 
 
 class CogWrapper(SCMWrapper):

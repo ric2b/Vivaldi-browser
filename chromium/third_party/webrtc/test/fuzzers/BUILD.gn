@@ -132,6 +132,11 @@ if (rtc_use_h265) {
       "../../modules/video_coding/",
     ]
   }
+
+  webrtc_fuzzer_test("h265_depacketizer_fuzzer") {
+    sources = [ "h265_depacketizer_fuzzer.cc" ]
+    deps = [ "../../modules/rtp_rtcp" ]
+  }
 }
 
 webrtc_fuzzer_test("forward_error_correction_fuzzer") {
@@ -380,7 +385,6 @@ webrtc_fuzzer_test("turn_unwrap_fuzzer") {
   sources = [ "turn_unwrap_fuzzer.cc" ]
   deps = [
     "../../media",
-    "../../media:rtc_media_base",
     "../../media:turn_utils",
   ]
 }
@@ -471,6 +475,7 @@ webrtc_fuzzer_test("stun_validator_fuzzer") {
 webrtc_fuzzer_test("pseudotcp_parser_fuzzer") {
   sources = [ "pseudotcp_parser_fuzzer.cc" ]
   deps = [
+    "../../p2p:pseudo_tcp",
     "../../p2p:rtc_p2p",
     "../../rtc_base:threading",
   ]

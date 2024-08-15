@@ -11,8 +11,11 @@
 
 #include "components/metrics/structured/enums.h"
 #include "components/metrics/structured/event_validator.h"
+#include "third_party/metrics_proto/structured_data.pb.h"
 
 namespace metrics::structured {
+
+using EventType = StructuredEventProto_EventType;
 
 // Interface to be implemented by codegen for every project to validate
 // messages received by the structured metric service.
@@ -26,8 +29,7 @@ class ProjectValidator {
 
   // Returns the event validator if |event_name| is a valid event for this
   // project.
-  std::optional<const EventValidator*> GetEventValidator(
-      base::StringPiece event_name) const;
+  const EventValidator* GetEventValidator(base::StringPiece event_name) const;
 
   std::optional<base::StringPiece> GetEventName(uint64_t event_name_hash) const;
 

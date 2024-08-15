@@ -43,7 +43,7 @@ enum class InstallType {
 
 bool IsVivaldiInstalled(const base::FilePath& install_top_dir);
 
-absl::optional<InstallType> FindInstallType(
+std::optional<InstallType> FindInstallType(
     const base::FilePath& install_top_dir);
 
 bool IsStandaloneBrowser();
@@ -78,7 +78,7 @@ base::Version GetInstallVersion(
 // pending update. If the version cannot be determined, return a non-null
 // optional with the version where IsValid() method return false. Use
 // GetInstallBinaryDir() if install_binary_dir is not given.
-absl::optional<base::Version> GetPendingUpdateVersion(
+std::optional<base::Version> GetPendingUpdateVersion(
     base::FilePath install_binary_dir = base::FilePath());
 
 // Assuming kChromeNewExe exists alongside the browser executable, return the
@@ -123,11 +123,11 @@ std::wstring ReadRegistryString(const wchar_t* name,
                                 const base::win::RegKey& key);
 
 // Return nullopt on errors.
-absl::optional<uint32_t> ReadRegistryUint32(const wchar_t* name,
+std::optional<uint32_t> ReadRegistryUint32(const wchar_t* name,
                                             const base::win::RegKey& key);
 
 // Return nullopt on errors.
-absl::optional<bool> ReadRegistryBool(const wchar_t* name,
+std::optional<bool> ReadRegistryBool(const wchar_t* name,
                                       const base::win::RegKey& key);
 
 // If value is empty, this delete the name.

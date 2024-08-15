@@ -29,19 +29,20 @@
 #include "third_party/skia/include/core/SkDrawable.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/core/SkSurfaceProps.h"
-#include "third_party/skia/include/gpu/GrBackendDrawableInfo.h"
 #include "third_party/skia/include/gpu/GrBackendSemaphore.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/GrTypes.h"
 #include "third_party/skia/include/gpu/MutableTextureState.h"
 #include "third_party/skia/include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "third_party/skia/include/gpu/ganesh/vk/GrBackendDrawableInfo.h"
 #include "third_party/skia/include/gpu/ganesh/vk/GrVkBackendSemaphore.h"
 #include "third_party/skia/include/gpu/ganesh/vk/GrVkBackendSurface.h"
 #include "third_party/skia/include/gpu/ganesh/vk/GrVkDirectContext.h"
 #include "third_party/skia/include/gpu/vk/GrVkBackendContext.h"
 #include "third_party/skia/include/gpu/vk/GrVkExtensions.h"
 #include "third_party/skia/include/gpu/vk/GrVkTypes.h"
+#include "third_party/skia/include/gpu/vk/VulkanMutableTextureState.h"
 #include "ui/gfx/color_space.h"
 
 namespace draw_fn {
@@ -629,8 +630,9 @@ base::android::ScopedJavaLocalRef<jintArray> ContextManagerVulkan::Draw(
           .fSignalSemaphores = &end_semaphore,
       };
       uint32_t queue_index = device_queue_->GetVulkanQueueIndex();
-      skgpu::MutableTextureState state(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                                       queue_index);
+      skgpu::MutableTextureState state =
+          skgpu::MutableTextureStates::MakeVulkan(
+              VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, queue_index);
       GrSemaphoresSubmitted submitted =
           gr_context_->flush(sk_surface.get(), flush_info, &state);
       CHECK_EQ(GrSemaphoresSubmitted::kYes, submitted);

@@ -197,6 +197,9 @@ targets.tests.gtest_test(
 
 targets.tests.gtest_test(
     name = "blink_platform_unittests",
+    mixins = [
+        "skia_gold_test",
+    ],
 )
 
 targets.tests.isolated_script_test(
@@ -216,16 +219,7 @@ targets.tests.gtest_test(
 )
 
 targets.tests.gtest_test(
-    name = "blink_unit_tests_v2",
-    binary = "blink_unittests_v2",
-)
-
-targets.tests.gtest_test(
     name = "blink_unittests",
-)
-
-targets.tests.gtest_test(
-    name = "blink_unittests_v2",
 )
 
 targets.tests.isolated_script_test(
@@ -362,9 +356,12 @@ targets.tests.gtest_test(
     name = "capture_unittests",
 )
 
-targets.tests.gtest_test(
-    name = "cast_display_settings_unittests",
-)
+# TODO(issues.chromium.org/1516671): Eliminate cast_* suites that are no longer
+# needed.
+
+#targets.tests.gtest_test(
+#    name = "cast_display_settings_unittests",
+#)
 
 targets.tests.gtest_test(
     name = "cast_runner_browsertests",
@@ -378,47 +375,47 @@ targets.tests.gtest_test(
     name = "cast_runner_unittests",
 )
 
-targets.tests.gtest_test(
-    name = "cast_audio_backend_unittests",
-)
+#targets.tests.gtest_test(
+#    name = "cast_audio_backend_unittests",
+#)
 
 targets.tests.junit_test(
     name = "cast_base_junit_tests",
     label = "//chromecast/base:cast_base_junit_tests",
 )
 
-targets.tests.gtest_test(
-    name = "cast_base_unittests",
-)
+#targets.tests.gtest_test(
+#    name = "cast_base_unittests",
+#)
 
-targets.tests.gtest_test(
-    name = "cast_cast_core_unittests",
-)
+#targets.tests.gtest_test(
+#    name = "cast_cast_core_unittests",
+#)
 
-targets.tests.gtest_test(
-    name = "cast_crash_unittests",
-)
+#targets.tests.gtest_test(
+#    name = "cast_crash_unittests",
+#)
 
-targets.tests.gtest_test(
-    name = "cast_graphics_unittests",
-)
+#targets.tests.gtest_test(
+#    name = "cast_graphics_unittests",
+#)
 
-targets.tests.gtest_test(
-    name = "cast_media_unittests",
-)
+#targets.tests.gtest_test(
+#    name = "cast_media_unittests",
+#)b
 
-targets.tests.gtest_test(
-    name = "cast_shell_browsertests",
-)
+#targets.tests.gtest_test(
+#    name = "cast_shell_browsertests",
+#)
 
 targets.tests.junit_test(
     name = "cast_shell_junit_tests",
     label = "//chromecast/browser/android:cast_shell_junit_tests",
 )
 
-targets.tests.gtest_test(
-    name = "cast_shell_unittests",
-)
+#targets.tests.gtest_test(
+#    name = "cast_shell_unittests",
+#)
 
 targets.tests.gtest_test(
     name = "cast_unittests",
@@ -470,6 +467,10 @@ targets.tests.gtest_test(
 )
 
 targets.tests.gtest_test(
+    name = "cq_medium_tast_tests",
+)
+
+targets.tests.gtest_test(
     name = "chrome_elf_unittests",
 )
 
@@ -517,44 +518,6 @@ targets.tests.gtest_test(
 )
 
 targets.tests.gtest_test(
-    name = "chrome_public_test_vr_apk-ddready-cardboard",
-    mixins = [
-        "vr_instrumentation_test",
-    ],
-    args = [
-        "--shared-prefs-file=//chrome/android/shared_preference_files/test/vr_cardboard_skipdon_setupcomplete.json",
-    ],
-    binary = "chrome_public_test_vr_apk",
-)
-
-targets.tests.gtest_test(
-    name = "chrome_public_test_vr_apk-ddready-ddview",
-    mixins = [
-        "skia_gold_test",
-        "vr_instrumentation_test",
-    ],
-    args = [
-        "--shared-prefs-file=//chrome/android/shared_preference_files/test/vr_ddview_skipdon_setupcomplete.json",
-        "--additional-apk=//third_party/gvr-android-sdk/test-apks/vr_keyboard/vr_keyboard_current.apk",
-    ],
-    binary = "chrome_public_test_vr_apk",
-)
-
-targets.tests.gtest_test(
-    name = "chrome_public_test_vr_apk-ddready-don-enabled",
-    mixins = [
-        "vr_instrumentation_test",
-    ],
-    args = [
-        "--shared-prefs-file=//chrome/android/shared_preference_files/test/vr_ddview_don_setupcomplete.json",
-        "--additional-apk=//third_party/gvr-android-sdk/test-apks/vr_keyboard/vr_keyboard_current.apk",
-        "--annotation=Restriction=VR_DON_Enabled",
-        "--vr-don-enabled",
-    ],
-    binary = "chrome_public_test_vr_apk",
-)
-
-targets.tests.gtest_test(
     name = "chrome_public_unit_test_apk",
     mixins = [
         "skia_gold_test",
@@ -594,6 +557,22 @@ targets.tests.isolated_script_test(
     mixins = [
         "has_native_resultdb_integration",
     ],
+)
+
+targets.tests.isolated_script_test(
+    name = "chrome_wpt_tests_headful",
+    mixins = [
+        "has_native_resultdb_integration",
+    ],
+    binary = "chrome_wpt_tests",
+)
+
+targets.tests.isolated_script_test(
+    name = "chrome_wpt_tests_old_headless",
+    mixins = [
+        "has_native_resultdb_integration",
+    ],
+    binary = "chrome_wpt_tests",
 )
 
 targets.tests.gtest_test(
@@ -761,56 +740,6 @@ targets.tests.gtest_test(
 )
 
 targets.tests.gtest_test(
-    name = "cr23_browser_tests",
-    mixins = [
-        "chrome-refresh-2023",
-    ],
-    binary = "browser_tests",
-)
-
-targets.tests.gtest_test(
-    name = "cr23_interactive_ui_tests",
-    mixins = [
-        "chrome-refresh-2023",
-    ],
-    binary = "interactive_ui_tests",
-)
-
-targets.tests.gtest_test(
-    name = "cr23_pixel_browser_tests",
-    mixins = [
-        "skia_gold_test",
-        "chrome-refresh-2023",
-    ],
-    args = [
-        "--browser-ui-tests-verify-pixels",
-        "--enable-pixel-output-in-tests",
-    ],
-    binary = "browser_tests",
-)
-
-targets.tests.gtest_test(
-    name = "cr23_pixel_interactive_ui_tests",
-    mixins = [
-        "skia_gold_test",
-        "chrome-refresh-2023",
-    ],
-    args = [
-        "--browser-ui-tests-verify-pixels",
-        "--enable-pixel-output-in-tests",
-    ],
-    binary = "interactive_ui_tests",
-)
-
-targets.tests.gtest_test(
-    name = "cr23_views_unittests",
-    mixins = [
-        "chrome-refresh-2023",
-    ],
-    binary = "views_unittests",
-)
-
-targets.tests.gtest_test(
     name = "crashpad_tests",
 )
 
@@ -944,6 +873,15 @@ targets.tests.gpu_telemetry_test(
 )
 
 targets.tests.gpu_telemetry_test(
+    name = "expected_color_pixel_passthrough_graphite_test",
+    telemetry_test_name = "expected_color",
+    mixins = [
+        "skia_gold_test",
+        "has_native_resultdb_integration",
+    ],
+)
+
+targets.tests.gpu_telemetry_test(
     name = "expected_color_pixel_passthrough_test",
     telemetry_test_name = "expected_color",
     mixins = [
@@ -998,8 +936,8 @@ targets.tests.gtest_test(
         "--env-var",
         "LIBVA_DRIVER_NAME",
         "libfake",
-        "test-25fps.vp9",
-        "test-25fps.vp9.json",
+        "../../media/test/data/test-25fps.vp9",
+        "../../media/test/data/test-25fps.vp9.json",
     ],
 )
 
@@ -1195,6 +1133,10 @@ targets.tests.isolated_script_test(
     args = [
         "--flag-specific=enable-skia-graphite",
         "--skipped=always",
+        # Since there are random timeouts, we have to increase the timeout
+        # threshold for now.
+        # TODO(https://crbug.com/1517847): Remove this once we resolve the timeouts.
+        "--timeout-ms=20000",
         # layout test failures are retried 3 times when '--test-list' is not
         # passed, but 0 times when '--test-list' is passed. We want to always
         # retry 3 times, so we explicitly specify it.
@@ -1214,6 +1156,10 @@ targets.tests.isolated_script_test(
     args = [
         "--flag-specific=enable-skia-graphite",
         "--skipped=always",
+        # Since there are random timeouts, we have to increase the timeout
+        # threshold for now.
+        # TODO(https://crbug.com/1517847): Remove this once we resolve the timeouts.
+        "--timeout-ms=20000",
         # layout test failures are retried 3 times when '--test-list' is not
         # passed, but 0 times when '--test-list' is passed. We want to always
         # retry 3 times, so we explicitly specify it.
@@ -1421,10 +1367,6 @@ targets.tests.gtest_test(
 
 targets.tests.gtest_test(
     name = "lacros_chrome_browsertests",
-)
-
-targets.tests.gtest_test(
-    name = "lacros_chrome_unittests",
 )
 
 targets.tests.gtest_test(
@@ -1641,6 +1583,10 @@ targets.tests.gtest_test(
     name = "notification_helper_unittests",
 )
 
+targets.tests.isolated_script_test(
+    name = "ondevice_stability_tests",
+)
+
 targets.tests.gtest_test(
     name = "oobe_only_browser_tests",
     args = [
@@ -1782,6 +1728,15 @@ targets.tests.gpu_telemetry_test(
 )
 
 targets.tests.gpu_telemetry_test(
+    name = "pixel_skia_gold_passthrough_graphite_test",
+    telemetry_test_name = "pixel",
+    mixins = [
+        "skia_gold_test",
+        "has_native_resultdb_integration",
+    ],
+)
+
+targets.tests.gpu_telemetry_test(
     name = "pixel_skia_gold_passthrough_test",
     telemetry_test_name = "pixel",
     mixins = [
@@ -1893,6 +1848,14 @@ targets.tests.gpu_telemetry_test(
 
 targets.tests.gpu_telemetry_test(
     name = "screenshot_sync_metal_passthrough_graphite_tests",
+    telemetry_test_name = "screenshot_sync",
+    mixins = [
+        "has_native_resultdb_integration",
+    ],
+)
+
+targets.tests.gpu_telemetry_test(
+    name = "screenshot_sync_passthrough_graphite_tests",
     telemetry_test_name = "screenshot_sync",
     mixins = [
         "has_native_resultdb_integration",
@@ -2129,6 +2092,10 @@ targets.tests.gtest_test(
 
 targets.tests.isolated_script_test(
     name = "test_env_py_unittests",
+)
+
+targets.tests.gtest_test(
+    name = "test_sample_jni_apk",
 )
 
 targets.tests.gtest_test(
@@ -2619,7 +2586,7 @@ targets.tests.gpu_telemetry_test(
 )
 
 targets.tests.gpu_telemetry_test(
-    name = "webgpu_cts_dxc_tests",
+    name = "webgpu_cts_fxc_tests",
     telemetry_test_name = "webgpu_cts",
     mixins = [
         "has_native_resultdb_integration",
@@ -2627,7 +2594,7 @@ targets.tests.gpu_telemetry_test(
 )
 
 targets.tests.gpu_telemetry_test(
-    name = "webgpu_cts_dxc_with_validation_tests",
+    name = "webgpu_cts_fxc_with_validation_tests",
     telemetry_test_name = "webgpu_cts",
     mixins = [
         "has_native_resultdb_integration",
@@ -2690,11 +2657,6 @@ targets.tests.script_test(
 targets.tests.gtest_test(
     name = "webkit_unit_tests",
     binary = "blink_unittests",
-)
-
-targets.tests.gtest_test(
-    name = "webkit_unit_tests_v2",
-    binary = "blink_unittests_v2",
 )
 
 targets.tests.gtest_test(

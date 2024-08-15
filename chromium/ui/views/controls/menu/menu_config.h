@@ -5,7 +5,8 @@
 #ifndef UI_VIEWS_CONTROLS_MENU_MENU_CONFIG_H_
 #define UI_VIEWS_CONTROLS_MENU_MENU_CONFIG_H_
 
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include <optional>
+
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/font_list.h"
@@ -54,7 +55,7 @@ struct VIEWS_EXPORT MenuConfig {
   // `rounded_menu_vertical_border_size` if set and fall back to the corner
   // radius otherwise.
   int nonrounded_menu_vertical_border_size = 4;
-  absl::optional<int> rounded_menu_vertical_border_size;
+  std::optional<int> rounded_menu_vertical_border_size;
   int menu_horizontal_border_size = views::RoundRectPainter::kBorderWidth;
 
   // The horizontal overlap between the submenu and its parent menu item.
@@ -77,14 +78,14 @@ struct VIEWS_EXPORT MenuConfig {
   // is the default behavior.
 
   // Horizontal padding between components in a menu item.
-  int item_horizontal_padding = 8;
+  int item_horizontal_padding = 8;  // Vivaldi keep
 
   // Horizontal padding between components in a touchable menu item.
   int touchable_item_horizontal_padding = 16;
 
   // Additional padding between the item left/right and its contents. Note that
   // the final padding will also include `item_horizontal_padding`.
-  int item_horizontal_border_padding = 0;
+  int item_horizontal_border_padding = 0;  // Vivaldi keep
 
   // Horizontal border padding in a menu item for ash system ui layout.
   int ash_item_horizontal_border_padding = 0;
@@ -96,7 +97,7 @@ struct VIEWS_EXPORT MenuConfig {
   int arrow_to_edge_padding = 8;
 
   // Height of a normal separator (ui::NORMAL_SEPARATOR).
-  int separator_height = 11;
+  int separator_height = 11;  // Vivaldi keep
 
   // Height of a double separator (ui::DOUBLE_SEPARATOR).
   int double_separator_height = 18;
@@ -108,7 +109,7 @@ struct VIEWS_EXPORT MenuConfig {
   int separator_lower_height = 4;
 
   // Height of a ui::SPACING_SEPARATOR.
-  int separator_spacing_height = 3;
+  int separator_spacing_height = 3;  // Vivaldi keep
 
   // Thickness of the drawn separator line in pixels.
   int separator_thickness = 1;
@@ -150,10 +151,10 @@ struct VIEWS_EXPORT MenuConfig {
 
   // True if submenu arrows should get their own column, separate from minor
   // text.
-  bool reserve_dedicated_arrow_column = true;
+  bool reserve_dedicated_arrow_column = true;  // Vivaldi keep
 
   // True if the scroll container should add a border stroke around the menu.
-  bool use_outer_border = true;
+  bool use_outer_border = true;  // Vivaldi keep
 
   // True if the icon is part of the label rather than in its own column.
   bool icons_in_label = false;

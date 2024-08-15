@@ -11,6 +11,7 @@
 #if defined(OS_WIN)
 #include <windows.h>
 #include "base/strings/utf_string_conversions.h"
+#include "util/sys_info.h"
 #else
 #include <fcntl.h>
 #include <unistd.h>
@@ -30,14 +31,24 @@ bool FileWriter::Create(const base::FilePath& file_path) {
   // replacing the entire contents of the file) which lets us continue even if
   // another program has the file open for reading. See
   // http://crbug.com/468437
-  file_path_ = base::UTF16ToUTF8(file_path.value());
+  const std::u16string& path = file_path.value();
+
+  file_path_ = base::UTF16ToUTF8(path);
   file_ = base::win::ScopedHandle(::CreateFile(
-      reinterpret_cast<LPCWSTR>(file_path.value().c_str()), GENERIC_WRITE,
+      reinterpret_cast<LPCWSTR>(path.c_str()), GENERIC_WRITE,
       FILE_SHARE_READ, NULL, CREATE_ALWAYS, 0, NULL));
 
   valid_ = file_.IsValid();
   if (!valid_) {
     PLOG(ERROR) << "CreateFile failed for path " << file_path_;
+
+    // Determine whether the path need long path support.
+    if (path.size() >= MAX_PATH && !IsLongPathsSupportEnabled()) {
+      LOG(ERROR) << "You might need to enable Long Path Support on Windows: "
+        << "https://learn.microsoft.com/en-us/windows/win32/fileio/"
+        "maximum-file-path-limitation?tabs=registry#enable-long-paths"
+        "-in-windows-10-version-1607-and-later";
+    }
   }
   return valid_;
 }
@@ -55,8 +66,8 @@ bool FileWriter::Write(std::string_view str) {
     return false;
   }
   if (static_cast<size_t>(written) != str.size()) {
-    PLOG(ERROR) << "wrote " << written << " bytes to "
-                << file_path_ << " expected " << str.size();
+    PLOG(ERROR) << "wrote " << written << " bytes to " << file_path_
+                << " expected " << str.size();
     valid_ = false;
     return false;
   }

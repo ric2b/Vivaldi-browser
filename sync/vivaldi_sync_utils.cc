@@ -26,7 +26,7 @@ std::string GenerateSyncableNotesHash(
   hash_input.append(originator_cache_guid + originator_client_item_id);
 
   std::string encode_output;
-  base::Base64Encode(base::SHA1HashString(hash_input), &encode_output);
+  encode_output = base::Base64Encode(base::SHA1HashString(hash_input));
   return encode_output;
 }
 

@@ -17,15 +17,24 @@
 #include "chrome/browser/sessions/exit_type_service.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "components/sessions/core/session_types.h"
 #include "ui/message_center/public/cpp/notification_delegate.h"
 
 class Profile;
+
+namespace app_restore {
+class RestoreData;
+}  // namespace app_restore
 
 namespace message_center {
 class Notification;
 }  // namespace message_center
 
-namespace ash::full_restore {
+namespace ash {
+
+struct PineContentsData;
+
+namespace full_restore {
 
 class FullRestoreAppLaunchHandler;
 class FullRestoreDataHandler;
@@ -67,6 +76,17 @@ class FullRestoreService : public KeyedService,
                            public message_center::NotificationObserver,
                            public AcceleratorController::Observer {
  public:
+  // Delegate class that talks to ash shell. Ash shell is not created in
+  // unit tests so this should be mocked out for testing those behaviors.
+  class Delegate {
+   public:
+    virtual ~Delegate() = default;
+    // Starts overview with the pine dialog unless overview is already active.
+    virtual void MaybeStartPineOverviewSession(
+        std::unique_ptr<PineContentsData> pine_contents_data) = 0;
+    virtual void MaybeEndPineOverviewSession() = 0;
+  };
+
   static FullRestoreService* GetForProfile(Profile* profile);
   static void MaybeCloseNotification(Profile* profile);
 
@@ -74,6 +94,10 @@ class FullRestoreService : public KeyedService,
   FullRestoreService(const FullRestoreService&) = delete;
   FullRestoreService& operator=(const FullRestoreService&) = delete;
   ~FullRestoreService() override;
+
+  FullRestoreAppLaunchHandler* app_launch_handler() {
+    return app_launch_handler_.get();
+  }
 
   // Initialize the full restore service. |show_notification| indicates whether
   // a full restore notification has been shown.
@@ -100,26 +124,24 @@ class FullRestoreService : public KeyedService,
   void OnAcceleratorControllerWillBeDestroyed(
       AcceleratorController* controller) override;
 
-  FullRestoreAppLaunchHandler* app_launch_handler() {
-    return app_launch_handler_.get();
-  }
-
   void SetAppLaunchHandlerForTesting(
       std::unique_ptr<FullRestoreAppLaunchHandler> app_launch_handler);
 
  private:
-  friend class FullRestoreServiceMultipleUsersTest;
+  friend class FullRestoreTestHelper;
   FRIEND_TEST_ALL_PREFIXES(FullRestoreAppLaunchHandlerChromeAppBrowserTest,
                            RestoreChromeApp);
   FRIEND_TEST_ALL_PREFIXES(FullRestoreAppLaunchHandlerArcAppBrowserTest,
                            RestoreArcApp);
 
-  // KeyedService overrides.
+  using SessionWindows = std::vector<std::unique_ptr<sessions::SessionWindow>>;
+
+  // KeyedService:
   void Shutdown() override;
 
   // Returns true if `Init` can be called to show the notification or restore
   // apps. Otherwise, returns false.
-  bool CanBeInited();
+  bool CanBeInited() const;
 
   // Show the restore notification on startup.
   void MaybeShowRestoreNotification(const std::string& id,
@@ -131,11 +153,36 @@ class FullRestoreService : public KeyedService,
   // Callback used when the pref |kRestoreAppsAndPagesPrefName| changes.
   void OnPreferenceChanged(const std::string& pref_name);
 
-  // Returns true if there are some restore data and this is not the first time
-  // Chrome is run. Otherwise, returns false.
-  bool ShouldShowNotification();
-
   void OnAppTerminating();
+
+  // Callbacks for the pine dialog buttons.
+  void RestoreForForest();
+  void CancelForForest();
+
+  // Callbacks run after querying for data from the session service(s).
+  // `OnGotSession` is run after receiving data from either the normal session
+  // service or app session service. `OnGotAllSessions` is run after receiving
+  // data from both.
+  void OnGotSession(base::OnceCallback<void(SessionWindows)> callback,
+                    SessionWindows session_windows,
+                    SessionID active_window_id,
+                    bool read_error);
+  void OnGotAllSessions(bool last_session_crashed,
+                        const std::vector<SessionWindows>& all_session_windows);
+
+  // Starts overview or the pine onboarding dialog when there is no restore
+  // data.
+  // TODO(sophiewen|sammiequon): Rename this and the `PineController` API.
+  void MaybeStartPineOverviewSession(bool last_session_crashed);
+
+  // Constructs the object needed to show the pine dialog. It will be passed to
+  // ash which will then use its contents to create and display the pine dialog.
+  // `restore_data` is the data read from the full restore file.
+  // `all_session_windows` is the browser info retrieved from session restore.
+  std::unique_ptr<PineContentsData> CreatePineContentsData(
+      ::app_restore::RestoreData* restore_data,
+      const std::vector<SessionWindows>& all_session_windows,
+      bool last_session_crashed);
 
   raw_ptr<Profile> profile_ = nullptr;
   PrefChangeRegistrar pref_change_registrar_;
@@ -172,6 +219,8 @@ class FullRestoreService : public KeyedService,
 
   std::unique_ptr<message_center::Notification> notification_;
 
+  std::unique_ptr<Delegate> delegate_;
+
   base::CallbackListSubscription on_app_terminating_subscription_;
 
   // Browser session restore exit type service lock. This is created when the
@@ -193,6 +242,8 @@ class ScopedRestoreForTesting {
   ~ScopedRestoreForTesting();
 };
 
-}  // namespace ash::full_restore
+}  // namespace full_restore
+
+}  // namespace ash
 
 #endif  // CHROME_BROWSER_ASH_APP_RESTORE_FULL_RESTORE_SERVICE_H_

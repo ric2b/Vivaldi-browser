@@ -4,7 +4,8 @@
 
 import 'chrome://password-manager/password_manager.js';
 
-import {AddPasswordDialogElement, AuthTimedOutDialogElement, Page, PasswordListItemElement, PasswordManagerImpl, PasswordsSectionElement, PasswordViewPageInteractions, PluralStringProxyImpl, Router, SyncBrowserProxyImpl, UrlParam} from 'chrome://password-manager/password_manager.js';
+import type {AddPasswordDialogElement, AuthTimedOutDialogElement, PasswordListItemElement, PasswordsSectionElement} from 'chrome://password-manager/password_manager.js';
+import {Page, PasswordManagerImpl, PasswordViewPageInteractions, PluralStringProxyImpl, Router, SyncBrowserProxyImpl, UrlParam} from 'chrome://password-manager/password_manager.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
@@ -363,6 +364,7 @@ suite('PasswordsSectionTest', function() {
   });
 
   test('move passwords label shown', async function() {
+    loadTimeData.overrideValues({enableButterOnDesktopFollowup: false});
     passwordManager.data.isOptedInAccountStorage = true;
     passwordManager.data.groups = [createCredentialGroup({
       name: 'test.com',
@@ -390,6 +392,7 @@ suite('PasswordsSectionTest', function() {
   });
 
   test('move passwords label hidden if no passwords to move', async function() {
+    loadTimeData.overrideValues({enableButterOnDesktopFollowup: false});
     passwordManager.data.isOptedInAccountStorage = true;
     passwordManager.data.groups = [createCredentialGroup({
       name: 'test.com',
@@ -476,6 +479,7 @@ suite('PasswordsSectionTest', function() {
   });
 
   test('clicking move passwords opens move passwords dialog', async function() {
+    loadTimeData.overrideValues({enableButterOnDesktopFollowup: false});
     passwordManager.data.isOptedInAccountStorage = true;
     passwordManager.data.groups = [createCredentialGroup({
       name: 'test.com',
@@ -529,6 +533,7 @@ suite('PasswordsSectionTest', function() {
   });
 
   test('Move passwords is hidden during search', async function() {
+    loadTimeData.overrideValues({enableButterOnDesktopFollowup: false});
     passwordManager.data.isOptedInAccountStorage = true;
     passwordManager.data.groups = [createCredentialGroup({
       name: 'test.com',

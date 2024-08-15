@@ -45,9 +45,9 @@ class TriView;
 
 // The header of the calendar view, which shows the current month and year.
 class CalendarHeaderView : public views::View {
- public:
-  METADATA_HEADER(CalendarHeaderView);
+  METADATA_HEADER(CalendarHeaderView, views::View)
 
+ public:
   CalendarHeaderView(const std::u16string& month, const std::u16string& year);
   CalendarHeaderView(const CalendarHeaderView& other) = delete;
   CalendarHeaderView& operator=(const CalendarHeaderView& other) = delete;
@@ -72,13 +72,13 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
                                 public CalendarViewController::Observer,
                                 public GlanceableTrayChildBubble,
                                 public views::ViewObserver {
- public:
-  METADATA_HEADER(CalendarView);
+  METADATA_HEADER(CalendarView, GlanceableTrayChildBubble)
 
-  // `for_glanceables_container` - Whether the calendar view is shown as a
+ public:
+  // `use_glanceables_container_style` - Whether the calendar view is shown as a
   // bubble in glanceables container, or a `UnifiedSystemTrayBubble` (which is
   // the case if glanceables feature is not enabled).
-  explicit CalendarView(bool for_glanceables_container);
+  explicit CalendarView(bool use_glanceables_container_style);
   CalendarView(const CalendarView& other) = delete;
   CalendarView& operator=(const CalendarView& other) = delete;
   ~CalendarView() override;

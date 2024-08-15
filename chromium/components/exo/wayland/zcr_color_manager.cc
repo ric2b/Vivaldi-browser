@@ -27,6 +27,7 @@
 #include "third_party/skia/modules/skcms/skcms.h"
 #include "ui/base/wayland/color_manager_util.h"
 #include "ui/display/display.h"
+#include "ui/display/display_features.h"
 #include "ui/display/display_observer.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
@@ -225,11 +226,18 @@ class ColorManagerObserver : public WaylandDisplayObserver {
       LOG(WARNING) << "Wayland output was destroyed and not replaced.";
       return gfx::ColorSpace::CreateSRGB();
     }
-    // Snapshot ColorSpace is only valid for ScreenAsh.
-    return ash::Shell::Get()
-        ->display_manager()
-        ->GetDisplayInfo(wayland_display_handler_->id())
-        .GetSnapshotColorSpace();
+
+    // Lacros only checks if the colorspace is HDR or not. So send display
+    // colorspace if HDR is possible, otherwise just send SRGB.
+    if (base::FeatureList::IsEnabled(
+            display::features::kUseHDRTransferFunction)) {
+      // Snapshot ColorSpace is only valid for ScreenAsh.
+      return ash::Shell::Get()
+          ->display_manager()
+          ->GetDisplayInfo(wayland_display_handler_->id())
+          .GetSnapshotColorSpace();
+    }
+    return gfx::ColorSpace::CreateSRGB();
   }
 
   WaylandDisplayHandler* wayland_display_handler() {
@@ -434,7 +442,7 @@ void color_manager_create_color_space_from_complete_names(
   uint32_t error_flags = 0;
 
   auto chromaticity_id = gfx::ColorSpace::PrimaryID::INVALID;
-  const auto* maybe_primary = ui::wayland::kChromaticityMap.find(chromaticity);
+  const auto maybe_primary = ui::wayland::kChromaticityMap.find(chromaticity);
   if (maybe_primary != std::end(ui::wayland::kChromaticityMap)) {
     chromaticity_id = maybe_primary->second.primary;
   } else {
@@ -443,7 +451,7 @@ void color_manager_create_color_space_from_complete_names(
   }
 
   auto matrix_id = gfx::ColorSpace::MatrixID::INVALID;
-  const auto* maybe_matrix = ui::wayland::kMatrixMap.find(matrix);
+  const auto maybe_matrix = ui::wayland::kMatrixMap.find(matrix);
   if (maybe_matrix != std::end(ui::wayland::kMatrixMap)) {
     matrix_id = maybe_matrix->second.matrix;
   } else {
@@ -454,7 +462,7 @@ void color_manager_create_color_space_from_complete_names(
   }
 
   auto range_id = gfx::ColorSpace::RangeID::INVALID;
-  const auto* maybe_range = ui::wayland::kRangeMap.find(range);
+  const auto maybe_range = ui::wayland::kRangeMap.find(range);
   if (maybe_range != std::end(ui::wayland::kRangeMap)) {
     range_id = maybe_range->second.range;
   } else {
@@ -466,7 +474,7 @@ void color_manager_create_color_space_from_complete_names(
   adjust_matrix_and_range(&matrix_id, &range_id);
 
   auto eotf_id = gfx::ColorSpace::TransferID::INVALID;
-  const auto* maybe_eotf = ui::wayland::kEotfMap.find(eotf);
+  const auto maybe_eotf = ui::wayland::kEotfMap.find(eotf);
   if (maybe_eotf != std::end(ui::wayland::kEotfMap)) {
     eotf_id = maybe_eotf->second.transfer;
   } else if (ui::wayland::kHDRTransferMap.contains(eotf)) {
@@ -556,7 +564,7 @@ void color_manager_create_color_space_from_complete_params(
   }
 
   auto matrix_id = gfx::ColorSpace::MatrixID::INVALID;
-  const auto* maybe_matrix = ui::wayland::kMatrixMap.find(matrix);
+  const auto maybe_matrix = ui::wayland::kMatrixMap.find(matrix);
   if (maybe_matrix != std::end(ui::wayland::kMatrixMap)) {
     matrix_id = maybe_matrix->second.matrix;
   } else {
@@ -567,7 +575,7 @@ void color_manager_create_color_space_from_complete_params(
   }
 
   auto range_id = gfx::ColorSpace::RangeID::INVALID;
-  const auto* maybe_range = ui::wayland::kRangeMap.find(range);
+  const auto maybe_range = ui::wayland::kRangeMap.find(range);
   if (maybe_range != std::end(ui::wayland::kRangeMap)) {
     range_id = maybe_range->second.range;
   } else {
@@ -579,7 +587,7 @@ void color_manager_create_color_space_from_complete_params(
   adjust_matrix_and_range(&matrix_id, &range_id);
 
   auto eotf_id = gfx::ColorSpace::TransferID::INVALID;
-  const auto* maybe_eotf = ui::wayland::kEotfMap.find(eotf);
+  const auto maybe_eotf = ui::wayland::kEotfMap.find(eotf);
   if (maybe_eotf != std::end(ui::wayland::kEotfMap)) {
     eotf_id = maybe_eotf->second.transfer;
   } else {

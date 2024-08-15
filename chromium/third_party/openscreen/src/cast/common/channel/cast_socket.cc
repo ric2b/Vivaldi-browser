@@ -24,7 +24,7 @@ CastSocket::CastSocket(std::unique_ptr<TlsConnection> connection,
     : connection_(std::move(connection)),
       client_(client),
       socket_id_(g_next_socket_id_++) {
-  OSP_DCHECK(client);
+  OSP_CHECK(client);
   connection_->SetClient(this);
 }
 
@@ -51,7 +51,7 @@ Error CastSocket::Send(const CastMessage& message) {
 }
 
 void CastSocket::SetClient(Client* client) {
-  OSP_DCHECK(client);
+  OSP_CHECK(client);
   client_ = client;
 }
 

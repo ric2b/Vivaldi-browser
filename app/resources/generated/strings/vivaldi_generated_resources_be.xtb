@@ -11,6 +11,7 @@
 <translation id="1084824384139382525">Скапіяваць адрас с&amp;пасылкі</translation>
 <translation id="1163931534039071049">&amp;Праглядзець код рамкі</translation>
 <translation id="1165039591588034296">Памылка</translation>
+<translation id="1175364870820465910">&amp;Друкаванне...</translation>
 <translation id="1181037720776840403">Выдаліць</translation>
 <translation id="1187722533808055681">Пераход у актыўны рэжым</translation>
 <translation id="122082903575839559">Алгарытм подпісу сертыфікатаў</translation>
@@ -116,6 +117,7 @@
 <translation id="2932085390869194046">Прапаноўваць пароль...</translation>
 <translation id="2932883381142163287">Паведаміць пра парушэнне</translation>
 <translation id="2941112035454246133">Нізкі</translation>
+<translation id="2972581237482394796">&amp;Паўтарыць</translation>
 <translation id="2993517869960930405">Звесткі пра праграму</translation>
 <translation id="3003623123441819449">Кэш CSS</translation>
 <translation id="3012631534724231212">(iфрэйм)</translation>
@@ -161,8 +163,11 @@
 <translation id="3683524264665795342">Запыт на доступ да экрана ад <ph name="APP_NAME" /></translation>
 <translation id="3708684582558000260">Забараняць закрытым сайтам адпраўляць і атрымліваць даныя</translation>
 <translation id="3711931198657368127">Ус&amp;тавіць і перайсці да <ph name="URL" /></translation>
+<translation id="3719826155360621982">Галоўная старонка</translation>
 <translation id="3727187387656390258">Інспектаваць выплыўное акно</translation>
 <translation id="3760460896538743390">Інспектаваць &amp;фонаваю старонку</translation>
+<translation id="3786224729726357296">Выдаліць даныя і дазволы сайта <ph name="SITE" /></translation>
+<translation id="3797900183766075808">Шукаць <ph name="SEARCH_ENGINE" /> у “<ph name="SEARCH_TERMS" />”</translation>
 <translation id="3798449238516105146">Версія</translation>
 <translation id="3810973564298564668">Кіраванне</translation>
 <translation id="3838085852053358637">Не ўдалося загрузіць пашырэнне</translation>
@@ -172,8 +177,10 @@
 <translation id="3905761538810670789">Аднавіць праграму</translation>
 <translation id="3908501907586732282">Уключыць пашырэнне</translation>
 <translation id="3909701002594999354">Паказаць усе элементы &amp;кіравання</translation>
+<translation id="3909791450649380159">&amp;Выразаць</translation>
 <translation id="3927932062596804919">Адмовіць</translation>
 <translation id="3936390757709632190">&amp;Адкрыць аўдыё ў новай укладцы</translation>
+<translation id="3943582379552582368">&amp;Назад</translation>
 <translation id="3948116654032448504">&amp;Знайсці выяву у <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3979395879372752341">Дададзена новае пашырэнне (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="398477389655464998">Скапіяваць спасылку на абраны тэкст</translation>
@@ -204,12 +211,15 @@
 <translation id="4348766275249686434">Адсочваць памылкі</translation>
 <translation id="4363771538994847871">Прылад для трансляцыі не выяўлена. Патрэбна дапамога?</translation>
 <translation id="4384652540891215547">Актываваць пашырэнне</translation>
+<translation id="4394049700291259645">Адключыць</translation>
 <translation id="4409697491990005945">Палі</translation>
 <translation id="4423376891418188461">Аднавіць налады</translation>
 <translation id="4478664379124702289">Захаваць &amp;спасылку як...</translation>
 <translation id="4520385623207007473">Файлы cookie, якія выкарыстоўваюцца</translation>
+<translation id="4536111748245793305">Профіль <ph name="VALUE" /></translation>
 <translation id="456449593072900590">Выдаляць пры выхадзе</translation>
 <translation id="4580596421317071374">Паролі захоўваюцца ў "<ph name="GOOGLE_PASSWORD_MANAGER" />" на гэтай прыладзе.</translation>
+<translation id="4593021220803146968">&amp;Перайсці да <ph name="URL" /></translation>
 <translation id="4595560905247879544">Змяняць праграмы і пашырэнні можа толькі кіраўнік (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Пашырэнне змяніла старонку, якая паказваецца пры адкрыцці новай укладкі.</translation>
 <translation id="4616405296204756919">Вы можаце выкарыстоўваць захаваныя паролі на любой прыладзе. Яны захоўваюцца ў <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
@@ -258,6 +268,7 @@
 <translation id="5360150013186312835">Адлюстраваць на панэлі</translation>
 <translation id="5362741141255528695">Абярыце файл прыватнага ключа.</translation>
 <translation id="536638840841140142">Няма</translation>
+<translation id="5370819323174483825">&amp;Перазагрузіць</translation>
 <translation id="5398572795982417028">Памер старонкі перавышае дапушчальны, максімальны памер - <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5423753908060469325">Стварыць &amp;цэтлік...</translation>
 <translation id="5425042808445046667">Працягнуць спампоўванне</translation>
@@ -296,6 +307,7 @@
   <ph name="EXPONENT_HEX_DUMP" /></translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> макс.)</translation>
 <translation id="5978277834170881274">&amp;Базавая праверка правапісу</translation>
+<translation id="5979421442488174909">&amp;Перакласці на <ph name="LANGUAGE" /></translation>
 <translation id="6042308850641462728">Падрабязней</translation>
 <translation id="6059652578941944813">Іерархія сертыфікатаў</translation>
 <translation id="6086846494333236931">Усталявана адміністратарам</translation>
@@ -325,6 +337,7 @@
 <translation id="6498249116389603658">&amp;Усе Мовы</translation>
 <translation id="6503077044568424649">Найбольш часта наведаныя</translation>
 <translation id="6508261954199872201">Праграма: <ph name="APP_NAME" /></translation>
+<translation id="6516243500644829484">Новае &amp;прыватнае акно</translation>
 <translation id="6518014396551869914">Скапіява&amp;ць выяву</translation>
 <translation id="6550675742724504774">Параметры</translation>
 <translation id="6579369886355986318">Паказаць усе элементы &amp;кіравання</translation>
@@ -332,6 +345,7 @@
 <translation id="6655190889273724601">Рэжым распрацоўшчыка</translation>
 <translation id="666731172850799929">Адкрываць у <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Захаваць пароль</translation>
+<translation id="6691936601825168937">&amp;Наперад</translation>
 <translation id="6786747875388722282">Пашырэнні</translation>
 <translation id="6787839852456839824">Спалучэнні клавіш</translation>
 <translation id="6798954102094737107">Убудова: <ph name="PLUGIN_NAME" /></translation>
@@ -341,6 +355,7 @@
 <translation id="6886871292305414135">Адкрыць спасылку ў новай &amp;укладцы</translation>
 <translation id="6892812721183419409">Адкрыць спасылку як <ph name="USER" /></translation>
 <translation id="6900284862687837908">Праграма ў фоне: <ph name="BACKGROUND_APP_URL" /></translation>
+<translation id="6916590542764765824">Кіраванне пашырэннямі</translation>
 <translation id="6945221475159498467">Абраць</translation>
 <translation id="6955446738988643816">Інспектаваць выплыўное акно</translation>
 <translation id="6970856801391541997">Надрукаваць абраныя старонкі</translation>
@@ -351,6 +366,7 @@
 <translation id="7070484045139057854">Можа чытаць і змяняць даныя сайтаў</translation>
 <translation id="708060913198414444">С&amp;капіяваць адрас аўдыё</translation>
 <translation id="7121728544325372695">Разумныя пераносы</translation>
+<translation id="7144856456372460176">&amp;Усталяваць <ph name="APP" />...</translation>
 <translation id="7175353351958621980">Загружана з:</translation>
 <translation id="7186088072322679094">Трымаць на панэлі</translation>
 <translation id="7287143125007575591">Доступ забаронены.</translation>
@@ -364,6 +380,7 @@
 <translation id="7564847347806291057">Завяршыць працэс</translation>
 <translation id="7576690715254076113">Сартаваць</translation>
 <translation id="7629827748548208700">Укладка: <ph name="TAB_NAME" /></translation>
+<translation id="7658239707568436148">Скасаваць</translation>
 <translation id="7659154729610375585">Выйсці з рэжыму інкогніта?</translation>
 <translation id="7661259717474717992">Дазволіць сайтам захоўваць і чытаць даныя cookie</translation>
 <translation id="7663719505383602579">Атрымальнік: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -379,6 +396,7 @@
 <translation id="7786889348652477777">&amp;Перазагрузіць праграму</translation>
 <translation id="7791543448312431591">Дадаць</translation>
 <translation id="7800518121066352902">Павярнуць &amp;супраць стрэлкі гадзінніка</translation>
+<translation id="7814458197256864873">&amp;Капіяваць</translation>
 <translation id="7818135753970109980">Дададзена новая тэма ў(<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">С&amp;капіяваць адрас відэа</translation>
 <translation id="7849264908733290972">Адкрыць &amp;выяву ў новай укладцы</translation>
@@ -386,6 +404,7 @@
 <translation id="7903925330883316394">Утыліта: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7947962633355574091">С&amp;капіяваць адрас відэа</translation>
 <translation id="7966241909927244760">С&amp;капіяваць адрас выявы</translation>
+<translation id="7973394300052703468">Новае &amp;прыватнае акно</translation>
 <translation id="7978412674231730200">Прыватны ключ</translation>
 <translation id="7982789257301363584">Сетка</translation>
 <translation id="7997826902155442747">Прыярытэт працэсу</translation>
@@ -402,6 +421,7 @@
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />КБ</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Выконваецца спампоўванне}one{Выконваецца спампоўванне}few{Выконваюцца спампоўванні}many{Выконваюцца спампоўванні}other{Выконваюцца спампоўванні}}</translation>
 <translation id="8230134520748321204">Захаваць пароль для <ph name="ORIGIN" />?</translation>
+<translation id="8248050856337841185">&amp;Уставіць</translation>
 <translation id="8261378640211443080">У <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> няма звестак пра гэтае пашырэнне, яно магло быць усталявана без вашага ведама.</translation>
 <translation id="8351419472474436977">Пашырэнне змяніла налады проксі. Зараз яно можа сачыць ці змяняць даныя, якія вы адпраўляеце, і перапыніць злучэнне. Калі вы не ведалі пра гэта, то адключыце гэтае пашырэнне.</translation>
 <translation id="8382913212082956454">Скапіяваць &amp;адрас электроннай пошты</translation>
@@ -438,16 +458,20 @@
 <translation id="895944840846194039">Памяць JavaScript</translation>
 <translation id="8962083179518285172">Схаваць падрабязнасці</translation>
 <translation id="8973557916016709913">Скінуць маштабаванне</translation>
+<translation id="897939795688207351">На <ph name="ORIGIN" /></translation>
 <translation id="9003647077635673607">Дазволіць для ўсіх сайтаў</translation>
 <translation id="9027459031423301635">Адкрыць спасылку ў новай &amp;ўкладцы</translation>
+<translation id="9033857511263905942">&amp;Уставіць</translation>
 <translation id="9056810968620647706">Нічога не знойдзена.</translation>
 <translation id="9084064520949870008">Адкрыць як акно</translation>
 <translation id="9137916601698928395">Адкрыць спасылку як <ph name="USER" /></translation>
 <translation id="916607977885256133">Рэжым плавальных акон</translation>
+<translation id="9170848237812810038">&amp;Адрабіць</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" дададзена</translation>
 <translation id="9218430445555521422">Зрабіць прадвызначаным браўзерам</translation>
 <translation id="93766956588638423">Аднавіць пашырэнне</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
 <translation id="98515147261107953">Альбомная</translation>
+<translation id="994289308992179865">&amp;Паўтарэнне</translation>
 <translation id="998747458861718449">Інспектаваць</translation>
 </translationbundle>

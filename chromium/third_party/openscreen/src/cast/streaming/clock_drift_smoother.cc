@@ -22,27 +22,27 @@ ClockDriftSmoother::ClockDriftSmoother(Clock::duration time_constant)
     : time_constant_(time_constant),
       last_update_time_(kNullTime),
       estimated_tick_offset_(0.0) {
-  OSP_DCHECK(time_constant_ > decltype(time_constant_)::zero());
+  OSP_CHECK(time_constant_ > decltype(time_constant_)::zero());
 }
 
 ClockDriftSmoother::~ClockDriftSmoother() = default;
 
 Clock::duration ClockDriftSmoother::Current() const {
-  OSP_DCHECK(last_update_time_ != kNullTime);
+  OSP_CHECK_NE(last_update_time_, kNullTime);
   return Clock::duration(
       rounded_saturate_cast<Clock::duration::rep>(estimated_tick_offset_));
 }
 
 void ClockDriftSmoother::Reset(Clock::time_point now,
                                Clock::duration measured_offset) {
-  OSP_DCHECK(now != kNullTime);
+  OSP_CHECK_NE(now, kNullTime);
   last_update_time_ = now;
   estimated_tick_offset_ = static_cast<double>(measured_offset.count());
 }
 
 void ClockDriftSmoother::Update(Clock::time_point now,
                                 Clock::duration measured_offset) {
-  OSP_DCHECK(now != kNullTime);
+  OSP_CHECK_NE(now, kNullTime);
   if (last_update_time_ == kNullTime) {
     Reset(now, measured_offset);
   } else if (now < last_update_time_) {

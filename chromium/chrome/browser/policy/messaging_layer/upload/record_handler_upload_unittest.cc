@@ -17,7 +17,6 @@
 #include "chrome/browser/policy/messaging_layer/upload/file_upload_job.h"
 #include "chrome/browser/policy/messaging_layer/upload/file_upload_job_test_util.h"
 #include "chrome/browser/policy/messaging_layer/upload/record_handler_impl.h"
-#include "chrome/browser/policy/messaging_layer/upload/record_upload_request_builder.h"
 #include "chrome/browser/policy/messaging_layer/upload/server_uploader.h"
 #include "chrome/browser/policy/messaging_layer/util/reporting_server_connector.h"
 #include "chrome/browser/policy/messaging_layer/util/reporting_server_connector_test_util.h"
@@ -193,10 +192,12 @@ class RecordHandlerUploadTest : public ::testing::Test {
     handler_ = std::make_unique<RecordHandlerImpl>(
         base::SequencedTaskRunner::GetCurrentDefault(),
         base::BindRepeating(
-            [](RecordHandlerUploadTest* self)
-                -> std::unique_ptr<FileUploadJob::Delegate> {
-              return std::make_unique<MockFileUploadDelegate::Forwarder>(
-                  &self->mock_delegate_);
+            [](RecordHandlerUploadTest* self) {
+              return FileUploadJob::Delegate::SmartPtr(
+                  new MockFileUploadDelegate::Forwarder(&self->mock_delegate_),
+                  base::OnTaskRunnerDeleter(
+                      FileUploadJob::Manager::GetInstance()
+                          ->sequenced_task_runner()));
             },
             base::Unretained(this)));
 
@@ -246,6 +247,12 @@ class RecordHandlerUploadTest : public ::testing::Test {
   content::BrowserTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
 
+  // Set up this device as a managed device.
+  policy::ScopedManagementServiceOverrideForTesting scoped_management_service_ =
+      policy::ScopedManagementServiceOverrideForTesting(
+          policy::ManagementServiceFactory::GetForPlatform(),
+          policy::EnterpriseManagementAuthority::CLOUD_DOMAIN);
+
   FileUploadJob::TestEnvironment manager_test_env_;
   ReportingServerConnector::TestEnvironment test_env_;
 
@@ -257,12 +264,6 @@ class RecordHandlerUploadTest : public ::testing::Test {
   std::unique_ptr<RecordHandlerImpl> handler_;
 
   scoped_refptr<ResourceManager> memory_resource_;
-
-  // Set up this device as a managed device.
-  policy::ScopedManagementServiceOverrideForTesting scoped_management_service_ =
-      policy::ScopedManagementServiceOverrideForTesting(
-          policy::ManagementServiceFactory::GetForPlatform(),
-          policy::EnterpriseManagementAuthority::CLOUD_DOMAIN);
 };
 
 EncryptedRecord ComposeEncryptedRecord(

@@ -17,6 +17,17 @@ namespace bookmarks {
 class BookmarkModel;
 }
 
+// Note: (prio@vivaldi.com) - Chromium is refactoring the bookmarks model on
+// CR124 for iOS. This requires iOS to use LegacyBookmarkModel instead of
+// BookmarkModel. This might be temporary or not, we don't know yet, depends on
+// Chromium to finish their refactoring.
+#if !BUILDFLAG(IS_IOS)
+using VivaldiBookmarkModelType = bookmarks::BookmarkModel;
+#else
+class LegacyBookmarkModel;
+using VivaldiBookmarkModelType = LegacyBookmarkModel;
+#endif
+
 // A collection of helper classes and utilities to extend Chromium BookmarkModel
 // and BookmarkNode functionality.
 
@@ -29,8 +40,8 @@ using bookmarks::BookmarkNode;
 // will be null when the callback is called while the model was deleted when
 // waiting.
 using RunAfterModelLoadCallback =
-    base::OnceCallback<void(BookmarkModel* model)>;
-void RunAfterModelLoad(BookmarkModel* model,
+    base::OnceCallback<void(VivaldiBookmarkModelType* model)>;
+void RunAfterModelLoad(VivaldiBookmarkModelType* model,
                        RunAfterModelLoadCallback callback);
 
 constexpr auto kNonClonableKeys = base::MakeFixedFlatSet<std::string_view>(
@@ -107,6 +118,27 @@ void SetNodeThumbnail(BookmarkModel* model,
 void SetNodeThemeColor(BookmarkModel* model,
                        const BookmarkNode* node,
                        SkColor theme_color);
+
+#if BUILDFLAG(IS_IOS)
+// iOS-specific functions
+bool DoesNickExists(LegacyBookmarkModel* model,
+                    const std::string& nickname,
+                    const BookmarkNode* updated_node);
+void SetNodeNickname(LegacyBookmarkModel* model,
+                     const BookmarkNode* node,
+                     const std::string& nickname);
+void SetNodeDescription(LegacyBookmarkModel* model,
+                        const BookmarkNode* node,
+                        const std::string& description);
+void SetNodeSpeeddial(LegacyBookmarkModel* model,
+                      const BookmarkNode* node,
+                      bool speeddial);
+void SetNodeThumbnail(LegacyBookmarkModel* model,
+                      const BookmarkNode* node,
+                      const std::string& path);
+void RemovePartnerId(LegacyBookmarkModel* model,
+                     const BookmarkNode* node);
+#endif
 
 typedef base::RepeatingCallback<bool(const std::string&)> BookmarkWriteFunc;
 bool WriteBookmarkData(const base::Value::Dict& value,

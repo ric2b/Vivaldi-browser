@@ -15,7 +15,6 @@
 #include "base/component_export.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback_forward.h"
-#include "ui/base/clipboard/clipboard_content_type.h"
 #include "ui/base/clipboard/file_info.h"
 
 class GURL;
@@ -58,13 +57,12 @@ COMPONENT_EXPORT(UI_BASE_CLIPBOARD)
 STGMEDIUM CreateStorageForFileNames(const std::vector<FileInfo>& filenames);
 
 // Fills a vector of display names of "virtual files" in the data store, but
-// does not actually retrieve the file contents. Display names are assured to
-// be unique. Method is called on drag enter of the Chromium drop target, when
-// only the display names are needed. Method only returns true if |filenames|
-// is not empty.
+// does not actually retrieve the file contents. Display names are assured to be
+// unique. Method is called on drag enter of the Chromium drop target, when only
+// the display names are needed. If there are no display names, returns nullopt.
 COMPONENT_EXPORT(UI_BASE_CLIPBOARD)
-bool GetVirtualFilenames(IDataObject* data_object,
-                         std::vector<base::FilePath>* filenames);
+std::optional<std::vector<base::FilePath>> GetVirtualFilenames(
+    IDataObject* data_object);
 
 // Retrieves "virtual file" contents via creation of intermediary temp files.
 // Method is called on dropping on the Chromium drop target. Since creating
@@ -106,9 +104,7 @@ bool GetWebCustomData(
 // Helper method for converting between MS CF_HTML format and plain
 // text/html.
 COMPONENT_EXPORT(UI_BASE_CLIPBOARD)
-std::string HtmlToCFHtml(base::StringPiece html,
-                         base::StringPiece base_url,
-                         ClipboardContentType content_type);
+std::string HtmlToCFHtml(base::StringPiece html, base::StringPiece base_url);
 COMPONENT_EXPORT(UI_BASE_CLIPBOARD)
 void CFHtmlToHtml(base::StringPiece cf_html,
                   std::string* html,

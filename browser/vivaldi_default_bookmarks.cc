@@ -9,19 +9,22 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
+#include "browser/removed_partners_tracker.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/common/bookmark_metrics.h"
-#include "components/favicon/core/favicon_service.h"
-#include "components/prefs/pref_service.h"
-#include "ui/base/models/tree_node_iterator.h"
-
-#include "browser/removed_partners_tracker.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 #include "components/bookmarks/vivaldi_partners.h"
 #include "components/datasource/resource_reader.h"
 #include "components/datasource/vivaldi_data_url_utils.h"
+#include "components/favicon/core/favicon_service.h"
 #include "components/locale/locale_kit.h"
+#include "components/prefs/pref_service.h"
+#include "ui/base/models/tree_node_iterator.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
+
+#if BUILDFLAG(IS_IOS)
+#include "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
+#endif
 
 namespace vivaldi_default_bookmarks {
 
@@ -93,7 +96,7 @@ class BookmarkUpdater {
 
   BookmarkUpdater(FaviconServiceGetter favicons_getter,
                   const DefaultBookmarkTree* default_bookmark_tree,
-                  BookmarkModel* model);
+                  VivaldiBookmarkModelType* model);
 
   void SetDeletedPartners(PrefService* prefs);
 
@@ -139,7 +142,7 @@ class BookmarkUpdater {
 
   FaviconServiceGetter favicons_getter_;
   const raw_ptr<const DefaultBookmarkTree> default_bookmark_tree_;
-  const raw_ptr<BookmarkModel> model_;
+  const raw_ptr<VivaldiBookmarkModelType> model_;
   std::set<base::Uuid> deleted_partner_uuids_;
 
   std::map<base::Uuid, const BookmarkNode*> uuid_node_map_;
@@ -313,7 +316,7 @@ void DefaultBookmarkParser::ParseJson(base::Value default_bookmarks_value) {
   ParseBookmarkList(0, bookmark_list, &tree->top_items, false);
 }
 
-absl::optional<base::Value> ReadDefaultBookmarks(std::string locale) {
+std::optional<base::Value> ReadDefaultBookmarks(std::string locale) {
   return ResourceReader::ReadJSON(vivaldi_partners::kBookmarkResourceDir,
                                   locale + ".json");
 }
@@ -321,7 +324,7 @@ absl::optional<base::Value> ReadDefaultBookmarks(std::string locale) {
 BookmarkUpdater::BookmarkUpdater(
     FaviconServiceGetter favicons_getter,
     const DefaultBookmarkTree* default_bookmark_tree,
-    BookmarkModel* model)
+    VivaldiBookmarkModelType* model)
     : favicons_getter_(std::move(favicons_getter)),
       default_bookmark_tree_(default_bookmark_tree),
       model_(model) {}
@@ -639,12 +642,12 @@ const BookmarkNode* BookmarkUpdater::AddPartnerNode(
   if (item.url.is_empty()) {
     VLOG(2) << "Adding folder " << item.title << " uuid=" << item.uuid;
     node = model_->AddFolder(parent_node, index, title, custom_meta.map(),
-                             absl::nullopt, item.uuid);
+                             std::nullopt, item.uuid);
     stats_.added_folders++;
   } else {
     VLOG(2) << "Adding url " << item.title << " uuid=" << item.uuid;
     node = model_->AddURL(parent_node, index, title, item.url,
-                          custom_meta.map(), absl::nullopt, item.uuid);
+                          custom_meta.map(), std::nullopt, item.uuid);
     stats_.added_urls++;
 
     SetFavicon(item.url, item.favicon_url, item.favicon);
@@ -676,9 +679,9 @@ void BookmarkUpdater::SetFavicon(const GURL& page_url,
 
 void UpdatePartnersInModel(std::unique_ptr<UpdaterClient> client,
                            const std::string& locale,
-                           absl::optional<base::Value> default_bookmarks_value,
+                           std::optional<base::Value> default_bookmarks_value,
                            UpdateCallback callback,
-                           BookmarkModel* model) {
+                           VivaldiBookmarkModelType* model) {
   bool ok = false;
   bool no_version = false;
   do {
@@ -769,8 +772,8 @@ void UpdatePartnersFromDefaults(
     std::unique_ptr<UpdaterClient> client,
     const std::string& locale,
     UpdateCallback callback,
-    absl::optional<base::Value> default_bookmarks_value) {
-  BookmarkModel* model = client->GetBookmarkModel();
+    std::optional<base::Value> default_bookmarks_value) {
+  VivaldiBookmarkModelType* model = client->GetBookmarkModel();
   if (!model)
     return;
   vivaldi_bookmark_kit::RunAfterModelLoad(

@@ -12,8 +12,9 @@
 #include <vector>
 
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
+#include "cc/base/features.h"
 #include "cc/trees/layer_tree_frame_sink.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/occlusion.h"
@@ -60,7 +61,6 @@ void TextureLayerImpl::PushPropertiesTo(LayerImpl* layer) {
   texture_layer->SetBlendBackgroundColor(blend_background_color_);
   texture_layer->SetForceTextureToOpaque(force_texture_to_opaque_);
   texture_layer->SetNearestNeighbor(nearest_neighbor_);
-  texture_layer->SetHdrMetadata(hdr_metadata_);
   if (own_resource_) {
     texture_layer->SetTransferableResource(transferable_resource_,
                                            std::move(release_callback_));
@@ -165,7 +165,6 @@ void TextureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
                uv_bottom_right_, bg_color, flipped_, nearest_neighbor_,
                /*secure_output=*/false, gfx::ProtectedVideoType::kClear);
   quad->set_resource_size_in_pixels(transferable_resource_.size);
-  quad->hdr_metadata = hdr_metadata_;
   ValidateQuadResources(quad);
 }
 
@@ -214,7 +213,7 @@ void TextureLayerImpl::ReleaseResources() {
 }
 
 gfx::ContentColorUsage TextureLayerImpl::GetContentColorUsage() const {
-  if (hdr_metadata_.extended_range.has_value()) {
+  if (transferable_resource_.hdr_metadata.extended_range.has_value()) {
     return gfx::ContentColorUsage::kHDR;
   }
   return transferable_resource_.color_space.GetContentColorUsage();
@@ -248,10 +247,6 @@ void TextureLayerImpl::SetUVBottomRight(const gfx::PointF& bottom_right) {
   uv_bottom_right_ = bottom_right;
 }
 
-void TextureLayerImpl::SetHdrMetadata(const gfx::HDRMetadata& hdr_metadata) {
-  hdr_metadata_ = hdr_metadata;
-}
-
 void TextureLayerImpl::SetTransferableResource(
     const viz::TransferableResource& resource,
     viz::ReleaseCallback release_callback) {
@@ -275,7 +270,7 @@ void TextureLayerImpl::RegisterSharedBitmapId(
     // AppendQuads().
     to_register_bitmaps_[id] = std::move(bitmap);
   }
-  base::Erase(to_unregister_bitmap_ids_, id);
+  std::erase(to_unregister_bitmap_ids_, id);
 }
 
 void TextureLayerImpl::UnregisterSharedBitmapId(viz::SharedBitmapId id) {
@@ -326,6 +321,27 @@ void TextureLayerImpl::OnResourceEvicted() {
     resource_provider->RemoveImportedResource(resource_id_);
   }
   resource_id_ = viz::kInvalidResourceId;
+}
+
+void TextureLayerImpl::SetInInvisibleLayerTree() {
+  // With canvas hibernation, main will release the resource, which will be
+  // recreated once visibility changes. Don't hold onto it.
+  //
+  // Only do it when the resource has not been imported, meaning that it's not
+  // visible.
+  //
+  // In this case, main is responsible for giving us the transferable resource
+  // (and making sure that the layer properties are pushed) next time the tree
+  // becomes visible. See Canvas2DLayerBridge::PageVisibilityChanged().
+  if (base::FeatureList::IsEnabled(
+          features::kClearCanvasResourcesInBackground) &&
+      transferable_resource_.resource_source ==
+          viz::TransferableResource::ResourceSource::kCanvas &&
+      own_resource_) {
+    if (!transferable_resource_.is_software) {
+      FreeTransferableResource();
+    }
+  }
 }
 
 }  // namespace cc

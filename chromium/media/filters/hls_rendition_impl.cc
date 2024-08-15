@@ -32,7 +32,7 @@ HlsRenditionImpl::HlsRenditionImpl(ManifestDemuxerEngineHost* engine_host,
       media_playlist_uri_(std::move(media_playlist_uri)),
       last_download_time_(base::TimeTicks::Now()) {}
 
-absl::optional<base::TimeDelta> HlsRenditionImpl::GetDuration() {
+std::optional<base::TimeDelta> HlsRenditionImpl::GetDuration() {
   return duration_;
 }
 
@@ -76,7 +76,7 @@ void HlsRenditionImpl::CheckState(
     auto remaining_manifest_time =
         segments_->QueueSize() * segments_->GetMaxDuration();
     auto pause_duration = base::TimeTicks::Now() - *livestream_pause_time_;
-    livestream_pause_time_ = absl::nullopt;
+    livestream_pause_time_ = std::nullopt;
 
     if (pause_duration < remaining_manifest_time) {
       // our pause was so short that we are still within the segments currently
@@ -105,7 +105,7 @@ void HlsRenditionImpl::CheckState(
   if (segments_->Exhausted() && duration_.has_value()) {
     if (!set_stream_end_) {
       set_stream_end_ = true;
-      engine_host_->SetEndOfStream();
+      rendition_host_->SetEndOfStream(true);
     }
     std::move(time_remaining_cb).Run(kNoTimestamp);
     return;
@@ -206,7 +206,8 @@ void HlsRenditionImpl::FetchManifestUpdates(ManifestDemuxer::DelayCallback cb,
 }
 
 void HlsRenditionImpl::OnManifestUpdate(ManifestDemuxer::DelayCallback cb,
-                                       base::TimeDelta delay) {
+                                        base::TimeDelta delay,
+                                        bool success) {
   TRACE_EVENT_NESTABLE_ASYNC_END0("media", "HLS::FetchManifestUpdates", this);
   auto update_duration = base::TimeTicks::Now() - last_download_time_;
   if (update_duration > delay) {
@@ -254,7 +255,7 @@ ManifestDemuxer::SeekResponse HlsRenditionImpl::Seek(
 
   if (set_stream_end_) {
     set_stream_end_ = false;
-    engine_host_->UnsetEndOfStream();
+    rendition_host_->SetEndOfStream(false);
   }
 
   auto ranges = engine_host_->GetBufferedRanges(role_);

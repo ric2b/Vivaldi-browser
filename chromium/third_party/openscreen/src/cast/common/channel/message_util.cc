@@ -162,7 +162,7 @@ std::string MakeUniqueSessionId(const char* prefix) {
 }
 
 bool HasType(const Json::Value& object, CastMessageType type) {
-  OSP_DCHECK(object.isObject());
+  OSP_CHECK(object.isObject());
   const Json::Value& value =
       object.get(kMessageKeyType, Json::Value::nullSingleton());
   return value.isString() && value.asString() == CastMessageTypeToString(type);
@@ -184,7 +184,7 @@ const std::string& GetPayload(const CastMessage& message) {
   // populate either the utf8 or the binary field with the message contents.
   // TODO(https://crbug.com/1429410): CastSocket's CastMessage results have
   // wrong payload field filled out.
-  OSP_DCHECK(message.payload_type() == ::cast::channel::CastMessage::STRING);
+  OSP_CHECK_EQ(message.payload_type(), ::cast::channel::CastMessage::STRING);
   return !message.payload_utf8().empty() ? message.payload_utf8()
                                          : message.payload_binary();
 }

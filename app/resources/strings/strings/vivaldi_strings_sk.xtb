@@ -5,9 +5,12 @@
 <translation id="2611953850925269349">Chcete Vivaldi napriek tomu ukončiť?</translation>
 <translation id="2885378588091291677">Správca úloh</translation>
 <translation id="3642991949832251880">Chcete Vivaldi napriek tomu ukončiť?</translation>
+<translation id="4308441064174569580">&amp;Otvoriť vo Vivaldi</translation>
 <translation id="5167047459440711824">Upozornenie: Vivaldi nemôže zabrániť rozšíreniam v zaznamenávaní vašej histórie prehliadania. Ak chcete dané rozšírenie v súkromnom režime zakázať, zrušte výber tejto možnosti.</translation>
 <translation id="5288672417093782294">Prejsť do nastavení upozornení prehliadača Vivaldi</translation>
 <translation id="5743878272102782872">Správca úloh – Vivaldi</translation>
+<translation id="6524604576097824284">Ak je táto funkcia zapnutá, Vivaldi uvoľní pamäť neaktívnych hárkov. Aktívne listy a iné aplikácie tak získajú viac výpočtových prostriedkov a Vivaldi bude stále rýchly. Neaktívne hárky sa automaticky stanú aktívnymi hneď, ako sa k nim vrátite. <ph name="BEGIN_LINK" />Viac informácií<ph name="END_LINK" /></translation>
 <translation id="6569282126279967574">Prehliadač Vivaldi zlyhal. Chcete ho spustiť znova?</translation>
+<translation id="7642161109152167169">Keď je táto funkcia zapnutá, aplikácia Vivaldi šetrí energiu obmedzením aktivity na pozadí a vizuálnych efektov, ako je plynulé posúvanie a rýchlosť snímok pri videách. <ph name="BEGIN_LINK" />Viac informácií<ph name="END_LINK" /></translation>
 <translation id="8031581238030785388">Vivaldi aplikácie</translation>
 </translationbundle>

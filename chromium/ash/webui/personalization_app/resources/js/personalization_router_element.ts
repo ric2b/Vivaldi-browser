@@ -13,6 +13,7 @@ import 'chrome://resources/polymer/v3_0/iron-location/iron-query-params.js';
 import {assert} from 'chrome://resources/ash/common/assert.js';
 import {isSeaPenEnabled} from 'chrome://resources/ash/common/sea_pen/load_time_booleans.js';
 import {SeaPenQueryParams} from 'chrome://resources/ash/common/sea_pen/sea_pen_router_element.js';
+import {maybeDoPageTransition} from 'chrome://resources/ash/common/sea_pen/transition.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -75,7 +76,7 @@ export function isSeaPenPathNotAllowed(path: string|null): boolean {
 
 export class PersonalizationRouterElement extends PolymerElement {
   static get is() {
-    return 'personalization-router';
+    return 'personalization-router' as const;
   }
 
   static get template() {
@@ -105,14 +106,14 @@ export class PersonalizationRouterElement extends PolymerElement {
       },
     };
   }
+
   private path_: string;
   private query_: string;
   private queryParams_: QueryParams;
   private seaPenBasePath_: string;
 
   static instance(): PersonalizationRouterElement {
-    return document.querySelector(PersonalizationRouterElement.is) as
-        PersonalizationRouterElement;
+    return document.querySelector(PersonalizationRouterElement.is)!;
   }
 
   static reloadAtRoot() {
@@ -171,8 +172,9 @@ export class PersonalizationRouterElement extends PolymerElement {
     this.goToRoute(Paths.AMBIENT_ALBUMS, {topicSource: topicSource.toString()});
   }
 
-  goToRoute(path: Paths, queryParams: QueryParams = {}) {
-    this.setProperties({path_: path, queryParams_: queryParams});
+  async goToRoute(path: Paths, queryParams: QueryParams = {}) {
+    return maybeDoPageTransition(
+        () => this.setProperties({path_: path, queryParams_: queryParams}));
   }
 
   private shouldShowRootPage_(path: string|null): boolean {
@@ -196,6 +198,10 @@ export class PersonalizationRouterElement extends PolymerElement {
 
   private shouldShowSeaPen_(path: string|null): boolean {
     return isSeaPenEnabled() && isSeaPenPath(path);
+  }
+
+  private shouldShowWallpaperSelected_(templateId: string|null): boolean {
+    return !templateId;
   }
 
   private shouldShowBreadcrumb_(path: string|null): boolean {
@@ -258,6 +264,12 @@ export class PersonalizationRouterElement extends PolymerElement {
 
   private onRefuseSeaPenTermsOfService_() {
     this.goToRoute(Paths.COLLECTIONS);
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [PersonalizationRouterElement.is]: PersonalizationRouterElement;
   }
 }
 

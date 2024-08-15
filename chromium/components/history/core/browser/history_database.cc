@@ -132,7 +132,9 @@ sql::InitStatus HistoryDatabase::Init(const base::FilePath& history_name) {
     return LogInitFailure(InitStep::CREATE_TABLES);
   }
   CreateMainURLIndex();
-
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  CreateVivaldiURLsLastVisitIndex();
+#endif
   // Version check.
   sql::InitStatus version_status = EnsureCurrentVersion();
   if (version_status != sql::INIT_OK) {

@@ -166,6 +166,7 @@ WidgetBase::WidgetBase(
       receiver_(this, std::move(widget), task_runner),
       next_previous_flags_(kInvalidNextPreviousFlagsValue),
       is_hidden_(hidden),
+      task_runner_(task_runner),
       request_animation_after_delay_timer_(
           std::move(task_runner),
           this,
@@ -207,7 +208,7 @@ void WidgetBase::InitializeCompositing(
   } else {
     layer_tree_view_ = std::make_unique<LayerTreeView>(this, widget_scheduler_);
 
-    absl::optional<cc::LayerTreeSettings> default_settings;
+    std::optional<cc::LayerTreeSettings> default_settings;
     if (!settings) {
       const display::ScreenInfo& screen_info = screen_infos.current();
       default_settings = GenerateLayerTreeSettings(
@@ -556,6 +557,16 @@ void WidgetBase::CancelSuccessfulPresentationTimeRequest() {
   tab_switch_time_recorder_.TabWasHidden();
 }
 
+void WidgetBase::SetupRenderInputRouterConnections(
+    mojo::PendingReceiver<mojom::blink::RenderInputRouterClient> request) {
+  TRACE_EVENT("renderer", "WidgetBase::SetupRenderInputRouterConnections");
+
+  // TODO(b/322833330): Investigate binding |input_receiver_| on
+  // RendererCompositor to break dependency on CrRendererMain and avoiding
+  // contention with javascript during method calls.
+  input_receiver_.Bind(std::move(request), task_runner_);
+}
+
 void WidgetBase::ApplyViewportChanges(
     const cc::ApplyViewportChangesArgs& args) {
   client_->ApplyViewportChanges(args);
@@ -586,7 +597,7 @@ void WidgetBase::OnDeferMainFrameUpdatesChanged(bool defer) {
 void WidgetBase::OnDeferCommitsChanged(
     bool defer,
     cc::PaintHoldingReason reason,
-    absl::optional<cc::PaintHoldingCommitTrigger> trigger) {
+    std::optional<cc::PaintHoldingCommitTrigger> trigger) {
   // The input handler wants to know about the commit status for metric purposes
   // and to enable/disable input.
   widget_input_handler_manager_->OnDeferCommitsChanged(defer, reason);
@@ -820,11 +831,17 @@ void WidgetBase::FinishRequestNewLayerTreeFrameSink(
   // VideoResourceUpdater is the only usage of gles2 interface from this
   // RasterContextProvider. Thus, if we use RasterInterface in
   // VideoResourceUpdater, enabling gles2 interface is no longer needed.
+  // Note that using RasterInterface in VideoResourceUpdater is definitively
+  // launched on all platforms other than Android.
+#if BUILDFLAG(IS_ANDROID)
   if (base::FeatureList::IsEnabled(
           media::kRasterInterfaceInVideoResourceUpdater)) {
+#endif
     attributes.enable_gles2_interface = false;
     attributes.enable_grcontext = false;
+#if BUILDFLAG(IS_ANDROID)
   }
+#endif
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager =
       Platform::Current()->GetGpuMemoryBufferManager();
 
@@ -1021,7 +1038,7 @@ bool WidgetBase::ShouldRecordBeginMainFrameMetrics() {
 
 void WidgetBase::AddPresentationCallback(
     uint32_t frame_token,
-    base::OnceCallback<void(base::TimeTicks)> callback) {
+    base::OnceCallback<void(const viz::FrameTimingDetails&)> callback) {
   layer_tree_view_->AddPresentationCallback(frame_token, std::move(callback));
 }
 
@@ -1100,8 +1117,8 @@ void WidgetBase::UpdateTextInputStateInternal(bool show_virtual_keyboard,
   ui::mojom::VirtualKeyboardVisibilityRequest last_vk_visibility_request =
       ui::mojom::VirtualKeyboardVisibilityRequest::NONE;
   bool always_hide_ime = false;
-  absl::optional<gfx::Rect> control_bounds;
-  absl::optional<gfx::Rect> selection_bounds;
+  std::optional<gfx::Rect> control_bounds;
+  std::optional<gfx::Rect> selection_bounds;
   if (frame_widget) {
     new_info = frame_widget->TextInputInfo();
     // This will be used to decide whether or not to show VK when VK policy is
@@ -1318,9 +1335,9 @@ void WidgetBase::UpdateCompositionInfo(bool immediate_request) {
   composition_character_bounds_ = character_bounds;
   composition_range_ = range;
 
-  absl::optional<Vector<gfx::Rect>> line_bounds;
+  std::optional<Vector<gfx::Rect>> line_bounds;
   FrameWidget* frame_widget = client_->FrameWidget();
-  if (base::FeatureList::IsEnabled(features::kReportVisibleLineBounds) &&
+  if (RuntimeEnabledFeatures::ReportVisibleLineBoundsEnabled() &&
       frame_widget) {
     line_bounds = frame_widget->GetVisibleLineBoundsOnScreen();
   }
@@ -1860,7 +1877,7 @@ gfx::RectF WidgetBase::BlinkSpaceToDIPs(const gfx::RectF& rect) {
   return gfx::ScaleRect(rect, reverse);
 }
 
-absl::optional<int> WidgetBase::GetMaxRenderBufferBounds() const {
+std::optional<int> WidgetBase::GetMaxRenderBufferBounds() const {
   return Platform::Current()->IsGpuCompositingDisabled()
              ? max_render_buffer_bounds_sw_
              : max_render_buffer_bounds_gpu_;

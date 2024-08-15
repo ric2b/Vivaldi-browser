@@ -28,10 +28,10 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/non_client_view.h"
 
-#if !BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chrome/browser/ui/chromeos/window_pin_util.h"
-#else
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/browser/ui/lacros/window_properties.h"
+#else
+#include "chrome/browser/ui/chromeos/window_pin_util.h"
 #endif
 
 namespace {
@@ -78,15 +78,14 @@ void ImmersiveModeControllerChromeos::Init(BrowserView* browser_view) {
 }
 
 void ImmersiveModeControllerChromeos::SetEnabled(bool enabled) {
-  // If `enabled` is same as the state that has requested previously, do not
-  // request the state change again. Note that we should compare this against
-  // the previously requested state instead of the current state since the state
-  // change happesn asynchronously on Lacros so that the current state might not
-  // yet synchronized to the latest request.
-  if (previous_request_enabled_ == enabled) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // On Ash, state transition happens synchronously, so we can compare it
+  // against the current state. For Lacros, it will be skipped inside
+  // WaylandExtension.
+  if (controller_.IsEnabled() == enabled) {
     return;
   }
-  previous_request_enabled_ = enabled;
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   if (!fullscreen_observer_.IsObserving()) {
     fullscreen_observer_.Observe(browser_view_->browser()
@@ -157,14 +156,13 @@ void ImmersiveModeControllerChromeos::OnWidgetActivationChanged(
   DCHECK_EQ(browser_view_->frame(), widget);
   if (widget->GetNativeWindow()->GetProperty(chromeos::kWindowStateTypeKey) ==
       chromeos::WindowStateType::kFloated) {
-    chromeos::ImmersiveFullscreenController::EnableForWidget(widget, false);
+    SetEnabled(false);
     return;
   }
 
   // Enable immersive mode if the widget is activated. Do not disable immersive
   // mode if the widget deactivates, but is not minimized.
-  chromeos::ImmersiveFullscreenController::EnableForWidget(
-      widget, active || !widget->IsMinimized());
+  SetEnabled(active || !widget->IsMinimized());
 }
 
 int ImmersiveModeControllerChromeos::GetMinimumContentOffset() const {
@@ -175,13 +173,16 @@ int ImmersiveModeControllerChromeos::GetExtraInfobarOffset() const {
   return 0;
 }
 
+void ImmersiveModeControllerChromeos::OnContentFullscreenChanged(
+    bool is_content_fullscreen) {}
+
 void ImmersiveModeControllerChromeos::LayoutBrowserRootView() {
   views::Widget* widget = browser_view_->frame();
   // Update the window caption buttons.
   widget->non_client_view()->frame_view()->ResetWindowControls();
   widget->non_client_view()->frame_view()->InvalidateLayout();
   browser_view_->InvalidateLayout();
-  widget->GetRootView()->Layout();
+  widget->GetRootView()->DeprecatedLayoutImmediately();
 }
 
 void ImmersiveModeControllerChromeos::OnImmersiveRevealStarted() {
@@ -197,7 +198,11 @@ void ImmersiveModeControllerChromeos::OnImmersiveRevealEnded() {
     observer.OnImmersiveRevealEnded();
 }
 
-void ImmersiveModeControllerChromeos::OnImmersiveFullscreenEntered() {}
+void ImmersiveModeControllerChromeos::OnImmersiveFullscreenEntered() {
+  for (Observer& observer : observers_) {
+    observer.OnImmersiveFullscreenEntered();
+  }
+}
 
 void ImmersiveModeControllerChromeos::OnImmersiveFullscreenExited() {
   browser_view_->contents_web_view()->holder()->SetHitTestTopInset(0);
@@ -224,7 +229,7 @@ void ImmersiveModeControllerChromeos::SetVisibleFraction(
   }
   visible_fraction_ = visible_fraction;
   browser_view_->top_container()->OnImmersiveRevealUpdated();
-  browser_view_->Layout();
+  browser_view_->DeprecatedLayoutImmediately();
 }
 
 std::vector<gfx::Rect>

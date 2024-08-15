@@ -105,7 +105,7 @@ class BLINK_PLATFORM_EXPORT SyncLoadContext : public ResourceRequestClient {
   void OnReceivedResponse(
       network::mojom::URLResponseHeadPtr head,
       mojo::ScopedDataPipeConsumerHandle body,
-      absl::optional<mojo_base::BigBuffer> cached_metadata) override;
+      std::optional<mojo_base::BigBuffer> cached_metadata) override;
   void OnTransferSizeUpdated(int transfer_size_diff) override;
   void OnCompletedRequest(
       const network::URLLoaderCompletionStatus& status) override;
@@ -122,7 +122,7 @@ class BLINK_PLATFORM_EXPORT SyncLoadContext : public ResourceRequestClient {
   // This raw pointer will remain valid for the lifetime of this object because
   // it remains on the stack until |event_| is signaled.
   // Set to null after CompleteRequest() is called.
-  raw_ptr<SyncLoadResponse, ExperimentalRenderer> response_;
+  raw_ptr<SyncLoadResponse> response_;
 
   // Used when handling a redirect. It is set in OnReceivedRedirect(), and
   // called when FollowRedirect() is called from the original thread.
@@ -132,7 +132,7 @@ class BLINK_PLATFORM_EXPORT SyncLoadContext : public ResourceRequestClient {
   // independent thread and set to nullptr in `FollowRedirect()` or
   // `CancelRedirect()` on the same thread after `redirect_or_response_event_`
   // is signaled, which protects it against race condition.
-  raw_ptr<SyncLoadContext*, ExperimentalRenderer> context_for_redirect_;
+  raw_ptr<SyncLoadContext*> context_for_redirect_;
 
   enum class Mode { kInitial, kDataPipe, kBlob };
   Mode mode_ = Mode::kInitial;

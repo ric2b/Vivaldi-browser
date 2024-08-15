@@ -7,7 +7,6 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "sync/file_sync/file_store.h"
 #include "sync/file_sync/file_store_factory.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 static jlong JNI_SyncedFileStore_Init(
     JNIEnv* env,
@@ -31,7 +30,7 @@ void SyncedFileStoreAndroid::GetFile(
     const base::android::JavaParamRef<jstring>& checksum,
     const base::android::JavaParamRef<jobject> callback) {
   auto forward_content = [](JNIEnv* env, JavaObjectWeakGlobalRef weak_callback,
-                            absl::optional<base::span<const uint8_t>> content) {
+                            std::optional<base::span<const uint8_t>> content) {
     auto callback = weak_callback.get(env);
     if (!callback)
       return;

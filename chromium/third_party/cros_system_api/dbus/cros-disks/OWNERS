@@ -1,1 +1,1 @@
-include /cros-disks/OWNERS
+include chromiumos/owners:v1:/filesandstorage/OWNERS.filesandstorage

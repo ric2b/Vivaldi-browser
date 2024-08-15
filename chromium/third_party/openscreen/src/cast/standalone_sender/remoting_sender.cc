@@ -52,11 +52,11 @@ RemotingSender::RemotingSender(RpcMessenger& messenger,
       audio_codec_(audio_codec),
       video_codec_(video_codec),
       client_(client) {
-  OSP_DCHECK(client_);
+  OSP_CHECK(client_);
   messenger_.RegisterMessageReceiverCallback(
       RpcMessenger::kAcquireRendererHandle,
       [this](std::unique_ptr<RpcMessage> message) {
-        OSP_DCHECK(message);
+        OSP_CHECK(message);
         this->OnMessage(*message);
       });
 }

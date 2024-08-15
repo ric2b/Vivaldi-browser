@@ -65,7 +65,7 @@ class AsyncSharedStorageDatabase {
   virtual void Destroy(base::OnceCallback<void(bool)> callback) = 0;
 
   // `TrimMemory()`, `Get()`, `Set()`, `Append()`, `Delete()`, `Clear()`,
-  // `Length()`, `Keys()`, `Entries()`, `PurgeMatchingOrigins()`,
+  // `Length()`, `Keys()`, `Entries()`, `BytesUsed()`, `PurgeMatchingOrigins()`,
   // `PurgeStale()`, `FetchOrigins()`, `MakeBudgetWithdrawal()`,
   // `GetRemainingBudget()`, `GetCreationTime()`, `GetMetadata()`,
   // `GetEntriesForDevTools()`, and `ResetBudgetForDevTools() are all async
@@ -78,7 +78,7 @@ class AsyncSharedStorageDatabase {
   // initialize, as there is an alternate code path to handle this case that
   // skips accessing `database_` (as it will be null) and hence performing the
   // intending operation, logs the occurrence of the missing database to UMA,
-  // and runs the callback with a trivial instance of its expected result type).
+  // and runs the callback with a trivial instance of its expected result type.
 
   // Releases all non-essential memory associated with this database connection.
   // `callback` runs once the operation is finished.
@@ -86,12 +86,12 @@ class AsyncSharedStorageDatabase {
 
   // Retrieves the `value` for `context_origin` and `key`. `callback` is called
   // with a struct bundling a string `value` in its data field if one is found,
-  // `absl::nullopt` otherwise, and a OperationResult to indicate whether the
+  // `std::nullopt` otherwise, and a OperationResult to indicate whether the
   // transaction was free of database errors.
   //
   // `key` must be of length at most
-  // `SharedStorageDatabaseOptions::max_string_length`, with the burden on the
-  // caller to handle errors for strings that exceed this length.
+  // `SharedStorageDatabase::max_string_length_`, with the burden on the caller
+  // to handle errors for strings that exceed this length.
   virtual void Get(url::Origin context_origin,
                    std::u16string key,
                    base::OnceCallback<void(GetResult)> callback) = 0;
@@ -102,11 +102,12 @@ class AsyncSharedStorageDatabase {
   // The parameter of `callback` reports whether or not any entry is added, the
   // request is ignored, or if there is an error.
   //
-  // `key` and `value` must be each of length at most
-  // `SharedStorageDatabaseOptions::max_string_length`, with the burden on the
-  // caller to handle errors for strings that exceed this length. Moreover, if
-  // the length retrieved by `Length(context_origin, callback)` equals
-  // `SharedStorageDatabaseOptions::max_entries_per_origin_`, `Set()` will fail
+  // `key` and `value` must each be of length at most
+  // `SharedStorageDatabase::max_string_length_`, with the burden on the caller
+  // to handle errors for strings that exceed these lengths. Moreover, if the
+  // bytes used retrieved by `BytesUsed(context_origin, callback)` plus any
+  // additional bytes to be stored by this call would exceed
+  // `SharedStorageDatabaseOptions::max_bytes_per_origin_`, `Set()` will fail
   // and the table will not be modified.
   virtual void Set(url::Origin context_origin,
                    std::u16string key,
@@ -119,15 +120,16 @@ class AsyncSharedStorageDatabase {
   // with value `value`. The parameter of `callback` reports whether or not any
   // entry is added or modified or if there is an error.
   //
-  // `key` and `value` must be each of length at most
-  // `SharedStorageDatabaseOptions::max_string_length`, with the burden on the
-  // caller to handle errors for strings that exceed this length. Moreover, if
-  // the length of the string obtained by concatening the current `script_value`
-  // (if one exists) and `value` exceeds
-  // `SharedStorageDatabaseOptions::max_string_length`, or if the length
-  // retrieved by `Length(context_origin, callback)` equals
-  // `SharedStorageDatabaseOptions::max_entries_per_origin_`, `Append()` will
-  // fail and the database table will not be modified.
+  // `key` and `value` must each be of length at most
+  // `SharedStorageDatabase::max_string_length_`, with the burden on the caller
+  // to handle errors for strings that exceed these lengths. Moreover, if the
+  // length of the string obtained by concatening the current `script_value` (if
+  // one exists) and `value` exceeds
+  // `SharedStorageDatabase::max_string_length_`, or if the bytes used retrieved
+  // by `ByresUsed(context_origin, callback)` plus any additional bytes to be
+  // stored by this call would exceed
+  // `SharedStorageDatabaseOptions::max_bytes_per_origin_`, `Append()` will fail
+  // and the database table will not be modified.
   virtual void Append(url::Origin context_origin,
                       std::u16string key,
                       std::u16string value,
@@ -137,8 +139,8 @@ class AsyncSharedStorageDatabase {
   // `callback` reports whether the deletion is successful.
   //
   // `key` must be of length at most
-  // `SharedStorageDatabaseOptions::max_string_length`, with the burden on the
-  // caller to handle errors for strings that exceed this length.
+  // `SharedStorageDatabase::max_string_length_`, with the burden on the caller
+  // to handle errors for strings that exceed this length.
   virtual void Delete(url::Origin context_origin,
                       std::u16string key,
                       base::OnceCallback<void(OperationResult)> callback) = 0;
@@ -173,6 +175,12 @@ class AsyncSharedStorageDatabase {
       mojo::PendingRemote<blink::mojom::SharedStorageEntriesListener>
           pending_listener,
       base::OnceCallback<void(OperationResult)> callback) = 0;
+
+  // The parameter of `callback` reports the number of bytes used by
+  // `context_origin` in unexpired entries, 0 if the origin has no unexpired
+  // entries, or -1 on operation failure.
+  virtual void BytesUsed(url::Origin context_origin,
+                         base::OnceCallback<void(int)> callback) = 0;
 
   // Clears all origins that match `storage_key_matcher` run on the owning
   // StoragePartition's `SpecialStoragePolicy` and have any key with

@@ -170,7 +170,7 @@ export class BackgroundServiceView extends UI.Widget.VBox {
     super(true);
 
     this.serviceName = serviceName;
-    const kebabName = serviceName.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+    const kebabName = Platform.StringUtilities.toKebabCase(serviceName);
     this.element.setAttribute('jslog', `${VisualLogging.pane().context(kebabName)}`);
 
     this.model = model;
@@ -199,6 +199,7 @@ export class BackgroundServiceView extends UI.Widget.VBox {
     this.recordAction = UI.ActionRegistry.ActionRegistry.instance().getAction('background-service.toggle-recording');
 
     this.toolbar = new UI.Toolbar.Toolbar('background-service-toolbar', this.contentElement);
+    this.toolbar.element.setAttribute('jslog', `${VisualLogging.toolbar()}`);
     void this.setupToolbar();
 
     /**
@@ -211,6 +212,7 @@ export class BackgroundServiceView extends UI.Widget.VBox {
     this.dataGrid = this.createDataGrid();
 
     this.previewPanel = new UI.Widget.VBox();
+    this.previewPanel.element.setAttribute('jslog', `${VisualLogging.pane('preview').track({resize: true})}`);
 
     this.selectedEventNode = null;
 
@@ -354,15 +356,14 @@ export class BackgroundServiceView extends UI.Widget.VBox {
   }
 
   private createDataGrid(): DataGrid.DataGrid.DataGridImpl<EventData> {
-    const k = Platform.StringUtilities.kebab;
     const columns = ([
-      {id: k('id'), title: '#', weight: 1},
-      {id: k('timestamp'), title: i18nString(UIStrings.timestamp), weight: 7},
-      {id: k('event-name'), title: i18nString(UIStrings.event), weight: 8},
-      {id: k('origin'), title: i18nString(UIStrings.origin), weight: 8},
-      {id: k('storage-key'), title: i18nString(UIStrings.storageKey), weight: 8},
-      {id: k('sw-scope'), title: i18nString(UIStrings.swScope), weight: 4},
-      {id: k('instance-id'), title: i18nString(UIStrings.instanceId), weight: 8},
+      {id: 'id', title: '#', weight: 1},
+      {id: 'timestamp', title: i18nString(UIStrings.timestamp), weight: 7},
+      {id: 'event-name', title: i18nString(UIStrings.event), weight: 8},
+      {id: 'origin', title: i18nString(UIStrings.origin), weight: 8},
+      {id: 'storage-key', title: i18nString(UIStrings.storageKey), weight: 8},
+      {id: 'sw-scope', title: i18nString(UIStrings.swScope), weight: 4},
+      {id: 'instance-id', title: i18nString(UIStrings.instanceId), weight: 8},
     ] as DataGrid.DataGrid.ColumnDescriptor[]);
     const dataGrid = new DataGrid.DataGrid.DataGridImpl({
       displayName: i18nString(UIStrings.backgroundServices),
@@ -531,7 +532,7 @@ export class EventDataNode extends DataGrid.DataGrid.DataGridNode<EventData> {
   createPreview(): UI.Widget.VBox {
     const preview = new UI.Widget.VBox();
     preview.element.classList.add('background-service-metadata');
-    preview.element.setAttribute('jslog', `${VisualLogging.section().context('metadata')}`);
+    preview.element.setAttribute('jslog', `${VisualLogging.section('metadata')}`);
 
     for (const entry of this.eventMetadata) {
       const div = document.createElement('div');

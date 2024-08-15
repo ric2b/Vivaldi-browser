@@ -125,13 +125,13 @@ class WeakPtr {
 
   T& operator*() const {
     T* const pointer = get();
-    OSP_DCHECK(pointer);
+    OSP_CHECK(pointer);
     return *pointer;
   }
 
   T* operator->() const {
     T* const pointer = get();
-    OSP_DCHECK(pointer);
+    OSP_CHECK(pointer);
     return pointer;
   }
 

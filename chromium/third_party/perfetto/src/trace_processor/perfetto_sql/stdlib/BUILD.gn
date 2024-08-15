@@ -22,12 +22,20 @@ perfetto_amalgamated_sql_header("stdlib") {
     "android",
     "chrome:chrome_sql",
     "common",
-    "experimental",
+    "counters",
+    "cpu",
+    "deprecated/v42/common",
+    "graphs",
     "intervals",
     "linux",
+    "memory",
     "pkvm",
     "prelude",
     "sched",
+    "slices",
+    "stack_trace",
+    "time",
+    "v8",
   ]
   generated_header = "stdlib.h"
   namespace = "stdlib"

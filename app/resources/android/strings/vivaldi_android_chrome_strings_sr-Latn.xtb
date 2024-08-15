@@ -16,6 +16,7 @@
 <translation id="2433507940547922241">Izgled</translation>
 <translation id="2501278716633472235">Idi nazad</translation>
 <translation id="2633278372998075009">Privatne kartice</translation>
+<translation id="272026394418727548">Vivaldi-jeva matična stranica</translation>
 <translation id="2951071800649516099">Dodajte stranice na listu za čitanje za kasnije</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> obeleživač}
@@ -26,6 +27,7 @@
 <translation id="3504699618187058974">Grupiši kartice</translation>
 <translation id="3518985090088779359">Prihvati i nastavi</translation>
 <translation id="3571177741182643350">Nepročitani članci - dostupni van mreže:</translation>
+<translation id="3602290021589620013">Pregled</translation>
 <translation id="3700829948786686853">Dobro došli u Vivaldi</translation>
 <translation id="3719826155360621982">Matična stranica</translation>
 <translation id="385051799172605136">Nazad</translation>
@@ -65,7 +67,6 @@ Za podešavanje termina za pretragu, dugo pritisnite da biste ga izabrali. Za pr
 <translation id="7427132068601343474">O Vivaldi pregledaču</translation>
 <translation id="7465104139234185284">Zatvori sve privatne kartice</translation>
 <translation id="7481312909269577407">Napred</translation>
-<translation id="7583262514280211622">Ovde ćete pronaći svoju listu za čitanje</translation>
 <translation id="7968014550143838305">Dodato na listu za čitanje</translation>
 <translation id="804786196054284061">Ugovor o licenciranju sa krajnjim korisnikom</translation>
 <translation id="8127542551745560481">Uredi matičnu stranicu</translation>

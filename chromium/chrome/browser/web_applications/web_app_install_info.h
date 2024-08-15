@@ -42,9 +42,6 @@ namespace web_app {
 // A map of icon urls to the bitmaps provided by that url.
 using IconsMap = std::map<GURL, std::vector<SkBitmap>>;
 
-// A map of icon urls to http status results. `http_status_code` is never 0.
-using DownloadedIconsHttpResults = std::map<GURL, int /*http_status_code*/>;
-
 using SquareSizePx = int;
 // Iterates in ascending order (checked in SortedSizesPxIsAscending test).
 using SortedSizesPx = base::flat_set<SquareSizePx, std::less<>>;
@@ -54,6 +51,19 @@ constexpr std::array<IconPurpose,
                          static_cast<int>(IconPurpose::kMinValue) + 1>
     kIconPurposes{IconPurpose::ANY, IconPurpose::MONOCHROME,
                   IconPurpose::MASKABLE};
+
+struct SizeComparator {
+  constexpr bool operator()(const gfx::Size& left,
+                            const gfx::Size& right) const {
+    if (left.height() != right.height()) {
+      return left.height() < right.height();
+    }
+
+    return left.width() < right.width();
+  }
+};
+
+using SizeSet = base::flat_set<gfx::Size, SizeComparator>;
 
 apps::IconInfo::Purpose ManifestPurposeToIconInfoPurpose(
     IconPurpose manifest_purpose);
@@ -177,6 +187,32 @@ struct WebAppShortcutsMenuItemInfo {
 
   // Sizes of successfully downloaded icons for this shortcut menu item.
   IconSizes downloaded_icon_sizes{};
+};
+
+struct IconsWithSizeAny {
+  IconsWithSizeAny();
+  ~IconsWithSizeAny();
+  IconsWithSizeAny(const IconsWithSizeAny& icons_with_size_any);
+  IconsWithSizeAny& operator=(const IconsWithSizeAny& icons_with_size_any);
+  bool operator==(const IconsWithSizeAny& icons_with_size_any) const;
+
+  base::Value ToDebugValue() const;
+  std::string ToString() const;
+
+  // 4 different maps are needed to keep track of the icons since there is no
+  // guarantee that the icons specified for each component that uses icons (like
+  // file handlers) will exist at the higher level `icons` entry for the
+  // manifest.
+  // A single GURL is stored per IconPurpose since only the last available icon
+  // needs to be considered as per the manifest spec.
+  base::flat_map<IconPurpose, GURL> manifest_icons;
+  SizeSet manifest_icon_provided_sizes;
+  base::flat_map<IconPurpose, GURL> shortcut_menu_icons;
+  SizeSet shortcut_menu_icons_provided_sizes;
+  base::flat_map<IconPurpose, GURL> file_handling_icons;
+  SizeSet file_handling_icon_provided_sizes;
+  base::flat_map<IconPurpose, GURL> home_tab_icons;
+  SizeSet home_tab_icon_provided_sizes;
 };
 
 // Structure used when installing a web page as an app.
@@ -403,6 +439,12 @@ struct WebAppInstallInfo {
   // Bookkeeping details about attempts to fix broken icons from sync installed
   // web apps.
   std::optional<GeneratedIconFix> generated_icon_fix;
+
+  IconsWithSizeAny icons_with_size_any;
+
+  // A DIY app isn't installable or promotable, and the user was able to
+  // customize the title, etc.
+  bool is_diy_app = false;
 
  private:
   // Used this method in Clone() method. Use Clone() to deep copy explicitly.

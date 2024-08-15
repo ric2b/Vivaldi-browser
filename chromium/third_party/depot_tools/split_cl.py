@@ -188,7 +188,7 @@ def GetFilesSplitByOwners(files, max_depth):
 
 
 def PrintClInfo(cl_index, num_cls, directories, file_paths, description,
-                reviewers, enable_auto_submit, topic):
+                reviewers, cq_dry_run, enable_auto_submit, topic):
     """Prints info about a CL.
 
     Args:
@@ -199,6 +199,7 @@ def PrintClInfo(cl_index, num_cls, directories, file_paths, description,
         file_paths: A list of files in this CL.
         description: The CL description.
         reviewers: A set of reviewers for this CL.
+        cq_dry_run: If the CL should also be sent to CQ dry run.
         enable_auto_submit: If the CL should also have auto submit enabled.
         topic: Topic to set for this CL.
     """
@@ -210,6 +211,7 @@ def PrintClInfo(cl_index, num_cls, directories, file_paths, description,
     print('Paths: {}'.format(FormatDirectoriesForPrinting(directories)))
     print('Reviewers: {}'.format(', '.join(reviewers)))
     print('Auto-Submit: {}'.format(enable_auto_submit))
+    print('CQ Dry Run: {}'.format(cq_dry_run))
     print('Topic: {}'.format(topic))
     print('\n' + indented_description + '\n')
     print('\n'.join(file_paths))
@@ -269,13 +271,17 @@ def SplitCl(description_file, comment_file, changelist, cmd_upload, dry_run,
         num_cls = len(files_split_by_reviewers)
         print('Will split current branch (' + refactor_branch + ') into ' +
               str(num_cls) + ' CLs.\n')
-        if cq_dry_run and num_cls > CL_SPLIT_FORCE_LIMIT:
+        if not dry_run and num_cls > CL_SPLIT_FORCE_LIMIT:
             print(
                 'This will generate "%r" CLs. This many CLs can potentially'
-                ' generate too much load on the build infrastructure. Please'
-                ' email infra-dev@chromium.org to ensure that this won\'t break'
-                ' anything. The infra team reserves the right to cancel your'
-                ' jobs if they are overloading the CQ.' % num_cls)
+                ' generate too much load on the build infrastructure.\n\n'
+                'Please email infra-dev@chromium.org to ensure that this won\'t'
+                ' break anything. The infra team reserves the right to cancel'
+                ' your jobs if they are overloading the CQ.\n\n'
+                '(Alternatively, you can reduce the number of CLs created by'
+                ' using the --max-depth option. Pass --dry-run to examine the'
+                ' CLs which will be created until you are happy with the'
+                ' results.)' % num_cls)
             answer = gclient_utils.AskForData('Proceed? (y/n):')
             if answer.lower() != 'y':
                 return 0
@@ -288,7 +294,7 @@ def SplitCl(description_file, comment_file, changelist, cmd_upload, dry_run,
             if dry_run:
                 file_paths = [f for _, f in cl_info.files]
                 PrintClInfo(cl_index, num_cls, cl_info.owners_directories,
-                            file_paths, description, reviewer_set,
+                            file_paths, description, reviewer_set, cq_dry_run,
                             enable_auto_submit, topic)
             else:
                 UploadCl(refactor_branch, refactor_branch_upstream,

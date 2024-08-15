@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Peizazhi 12</translation>
 <translation id="1158503667684816647">Nuk e kërkoj më konfirmimin</translation>
 <translation id="1222195720020481779">Nis instalimin...</translation>
+<translation id="1270785070369717623">Fatkeqësisht, parametrat e Opera GX nuk mund të importohen kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni gjithë dritaret e Opera GX. Pastaj klikoni Vazhdoj.</translation>
 <translation id="1276145862619442150">Tastet e shpejta</translation>
 <translation id="1281950884873973195">Kafsha 6</translation>
 <translation id="1411638389238344450">Dërgoj lidhjen me imejl</translation>
@@ -12,6 +13,7 @@
 <translation id="1462666970065907900">Vërtet do e mbyllni dritaren?</translation>
 <translation id="1480046233931937785">Mirënjohje</translation>
 <translation id="1526344461589023948">Problem me regjistrimin e përditësimit të shkarkuar. Lutemi të kontrolloni hapësirën e nevojshme në kompjuter dhe provojeni më vonë.</translation>
+<translation id="1635542496948266458">Ndërroj profilet</translation>
 <translation id="1657174850639146440">Monstra 9</translation>
 <translation id="1676595396635191120">Dritare private të re</translation>
 <translation id="1702758681952953055">Nëse problemi përsëritet, lutemi ta raportoni bashkë me detajet e mëposhtme:</translation>
@@ -27,12 +29,14 @@
 <translation id="1985669426322966465">Përditësimi i programit</translation>
 <translation id="2079036669923635404">Klikoni që ta përditësoni Vivaldin në versionin <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Ka një problem me shkarkimin e skedarëve të përditësuar. Lutemi të kontrolloni linjën e internetit dhe provojeni më vonë.</translation>
+<translation id="2226825946708954262">⚠ Vazhdoj duke humbur të dhënat</translation>
 <translation id="2339641773402824483">Kontrollon përditësimet...</translation>
 <translation id="2441056087170876076">Monstra 2</translation>
 <translation id="2444387452209867610">Vë shënimin</translation>
 <translation id="2486841023299517366">Kafsha 4</translation>
 <translation id="2612127540243995147">Gati për instalim. Vivaldi do të mbyllet e hapet vetë.</translation>
 <translation id="2613387515621326337">Tregoj uebsajtin e përditësimit</translation>
+<translation id="2645477450146475243">Fatkeqësisht, parametrat e Opera nuk mund të importohen kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni gjithë dritaret e Opera. Pastaj klikoni Vazhdoj.</translation>
 <translation id="2647368062414805334">Fatkeqësisht, parametrat e Edge nuk mund të importohen kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni gjithë dritaret e Edge. Pastaj klikoni Vazhdoj.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Kafsha 3</translation>
@@ -41,11 +45,14 @@
 <translation id="2923448633003185837">Ngjit dhe shfletoj</translation>
 <translation id="2953943267837858202">Nuk lejoj të luajë automatikisht videot</translation>
 <translation id="2977472760057091832">Hap lidhjen në dritare private</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Hap në skedë të re</translation>
 <translation id="3027988479108856431">Fatkeqësisht, parametrat e Yandex nuk mund të importohen kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni gjithë dritaret e Yandex. Pastaj klikoni Vazhdoj.</translation>
 <translation id="3084011186245865060">Peizazhi 6</translation>
+<translation id="3085906383264247940">Opera (Beta)</translation>
 <translation id="3093931836425623631">Vivaldi mundësohet falë projektit Chromium dhe programeve kompjuterike që përdoren lirisht.</translation>
 <translation id="3127383884976966729">Kafsha 7</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">Faqe interesante të re</translation>
 <translation id="3255747772218936245">Instaloj përditësimin</translation>
 <translation id="3259769196742189631">Vlerësoj faqen</translation>
@@ -54,7 +61,6 @@
 <translation id="3334610655141903168">(pa titull)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> është versioni i fundit.</translation>
 <translation id="3383198080133834965">Keni versionin e ri!</translation>
-<translation id="3402602684546832928">Përzgjidhni skedarin e faqeve interesante nga Opera</translation>
 <translation id="3451317331714872347">Peizazhi 8</translation>
 <translation id="3457498675806041407">Konfirmoni daljen</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> është instaluar më parë dhe do të aktivizohet kur shfletuesit të hapet sërish.</translation>
@@ -65,6 +71,7 @@
 <translation id="3588820906588687999">Hap imazhin në skedë të re</translation>
 <translation id="3601066750251199488">Monstra 3</translation>
 <translation id="3620979700683094848">Uebsajtet mund të luajnë automatikisht videot</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Ka dalë versioni i ri i Vivaldit!</translation>
 <translation id="3708982624815781692">Shkarkimi u anulua.</translation>
 <translation id="3732157130969736834">Shtoj lidhjen te faqet interesante</translation>
@@ -76,6 +83,9 @@
 <translation id="3914946330804881301">Të importuara nga Opera</translation>
 <translation id="3921292902397893431">Monstra 8</translation>
 <translation id="3943857333388298514">Ngjit</translation>
+<translation id="3974783668264968389">Vivaldi nuk arriti të hapë vendruajtjen e sigurt. Duke mos e pasur atë do të humbisni të dhënat identifikuese që keni regjistruar, cookies e sigurta dhe funksionet, si Sinkronizuesi, Postieri dhe Kalendari.
+
+    Lutemi ta mbyllni programin tani, hapeni ose riparojeni vendruajtjen dhe provojeni sërish. Nëse keni vendosur të vazhdoni, klikoni kutinë dhe shtypni butonin "Vazhdoj duke humbur të dhënat".</translation>
 <translation id="4005270918754737597">Kaloj këtë version</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4074744496918018786">Hap imazhin në dritare private</translation>
@@ -88,7 +98,6 @@
 <translation id="443008484043213881">Instrumentet</translation>
 <translation id="4456211719108566931">Monstra 6</translation>
 <translation id="4512900838580567989">Hap lidhjen në skedën e re në sfond</translation>
-<translation id="4515472507709384008">Opera version 15+</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Hap imazhin në skedën e re në sfond</translation>
 <translation id="4582480609585453144">Hap lidhjen në skedën në sfond</translation>
@@ -100,16 +109,17 @@
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> nga <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Taste të shpejta të importuara</translation>
 <translation id="5092656712000637858">Shtoj faqen te paneli</translation>
+<translation id="5106275083540628394">Problem me deshifrimin: Rrezikohet humbja e të dhënave</translation>
 <translation id="5177818338935286353">Monstra 7</translation>
 <translation id="5213743983876949565">Kafsha 1</translation>
 <translation id="5238244642230426581">Faqet interesante të importuara</translation>
 <translation id="527605719918376753">Heq zërin e skedës</translation>
 <translation id="5305569355661722298">Konfirmoni mbylljen e dritares</translation>
+<translation id="5322922669477407077">Opera (Developer)</translation>
 <translation id="5388358297987318779">Hap imazhin</translation>
 <translation id="5416008465899576639">Ka dalë versioni i ri i Vivaldit.</translation>
 <translation id="5497042274492038489">Konfirmoni mbylljen e dritares</translation>
 <translation id="5594602170491763400">Monstra 5</translation>
-<translation id="5615637589913244581">Opera versioni 15+ (Beta)</translation>
 <translation id="5648110075441906505">Hap imazhin në dritare të re</translation>
 <translation id="5656371807944747581">Problem me përditësimin!</translation>
 <translation id="5732584064771442623">Ka dalë versioni <ph name="NEW_VERSION" /> i Vivaldit (tani keni <ph name="OLD_VERSION" />). Do e shkarkoni?</translation>
@@ -120,8 +130,8 @@
 <translation id="6040143037577758943">Mbyll</translation>
 <translation id="6229528619562190452">Klikoni këtu që ta përditësoni Vivaldin.</translation>
 <translation id="6234173136417926046">Përdor imazhin në sfondin e faqes fillestare</translation>
-<translation id="630690498669249215">Faqet interesante nga Opera</translation>
 <translation id="6339818817272922368">Konto lokale</translation>
+<translation id="6398710281890660037">Siguroj profilin tim</translation>
 <translation id="6438786710866753178">Peizazhi 4</translation>
 <translation id="6477028720702061455">Përzgjidhni dosjen e profilit të Opera për importim</translation>
 <translation id="6510706699590490869">&amp;Përditësoj Vivaldin</translation>
@@ -131,11 +141,13 @@
 <translation id="6635049669875534328">Të rejat e programit:</translation>
 <translation id="6693585104974197539">Përzgjidhni dosjen e profilit të Edge për importim</translation>
 <translation id="6726279523566323394">Përzgjidhni dosjen e profilit të Brave për importim</translation>
-<translation id="6804831687363620480">Fatkeqësisht, parametrat e Opera 15+ nuk mund të importohen kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni gjithë dritaret e Opera 15+. Pastaj klikoni Vazhdoj.</translation>
 <translation id="6892812721183419409">Hap lidhjen si <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopjoj</translation>
+<translation id="6960139763942959188">Profili është i pasigurt, pasi po ruhet në një format të pashifruar. Vivaldi do e përmirësojë profilin tuaj duke përdorur një format të shifruar. Para se të vazhdoni, mbylleni programin dhe kopjoni të dhënat e profilit tuaj.</translation>
 <translation id="7086554968911045110">Peizazhi 7</translation>
+<translation id="7099506190679014195">Përmirësimi i vendruajtjes së sigurt</translation>
 <translation id="7111492742514999492">Peizazhi 9</translation>
+<translation id="7208252576848052204">Fatkeqësisht, parametrat e Arc nuk mund të importohen kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni gjithë dritaret e Arc. Pastaj klikoni Vazhdoj.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">E pamundur të hapej instaluesi. Lutemi të kontrolloni memorien apo hapësirën e nevojshme në kompjuter dhe provojeni më vonë.</translation>
 <translation id="7658239707568436148">Anuloj</translation>
@@ -162,7 +174,6 @@
 <translation id="8562339533180097902">Mbyll dhe instaloj Vivaldin</translation>
 <translation id="8567452685425968223">Shpaketon përditësimin...</translation>
 <translation id="8624587806981488221">&amp;Freskoj imazhin</translation>
-<translation id="864444594187862076">Opera versioni 15+ (Developer)</translation>
 <translation id="8651348004684669199">Shtoj skedën aktive</translation>
 <translation id="8669345741879513971">Monstra 10</translation>
 <translation id="867544375504146191">Yandex</translation>
@@ -178,6 +189,7 @@
 <translation id="9048058608784130603">Pret përditësimin <ph name="VERSION" /></translation>
 <translation id="9048224371732578627">Lejohet të hapin automatikisht videot</translation>
 <translation id="9065203028668620118">Përpunoj</translation>
+<translation id="9090254883741610153">Më lejo të vazhdoj</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Hap imazhin si <ph name="USER" /></translation>
 <translation id="9157539936604258187">Hap lidhjen</translation>

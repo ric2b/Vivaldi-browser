@@ -519,7 +519,7 @@ TEST(CertVerifierServiceFactoryTest, RootStoreInfoWithUpdatedRootStore) {
   net::SHA256HashValue root_hash =
       net::X509Certificate::CalculateFingerprint256(root->GetCertBuffer());
   EXPECT_EQ(info_ptr->root_cert_info[0]->sha256hash_hex,
-            base::HexEncode(root_hash.data, std::size(root_hash.data)));
+            base::HexEncode(root_hash.data));
 }
 
 TEST(CertVerifierServiceFactoryTest, RootStoreInfoWithCompiledRootStore) {
@@ -819,12 +819,10 @@ class CertVerifierServiceFactoryBuiltinVerifierTest : public ::testing::Test {
 
  private:
   bool SystemUsesBuiltinVerifier() {
-#if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(CHROME_ROOT_STORE_ONLY)
-    return true;
-#elif BUILDFLAG(CHROME_ROOT_STORE_OPTIONAL)
+#if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
     // On CHROME_ROOT_STORE_OPTIONAL platforms, the tests set
     // use_chrome_root_store=true, so the tests will also work on those
-    // platforms even if the kChromeRootStoreUsed default is false.
+    // platforms.
     // (This doesn't result in missing coverage of the
     // use_chrome_root_store=false case since the only non-CRS implementations
     // remaining don't support CRLSets.)

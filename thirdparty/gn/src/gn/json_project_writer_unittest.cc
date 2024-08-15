@@ -251,7 +251,7 @@ TEST_F(JSONWriter, ActionWithResponseFile) {
             "framework_switch": "-framework ",
             "lib_dir_switch": "-L",
             "lib_switch": "-l",
-            "outputs": [ "{{target_out_dir}}/{{module_name}}.swiftmodule" ],
+            "outputs": [ "{{target_gen_dir}}/{{target_output_name}}.h", "{{target_out_dir}}/{{module_name}}.swiftmodule" ],
             "partial_outputs": [ "{{target_out_dir}}/{{source_name_part}}.o" ],
             "weak_framework_switch": "-weak_framework "
          }
@@ -476,7 +476,7 @@ TEST_F(JSONWriter, RustTarget) {
             "framework_switch": "-framework ",
             "lib_dir_switch": "-L",
             "lib_switch": "-l",
-            "outputs": [ "{{target_out_dir}}/{{module_name}}.swiftmodule" ],
+            "outputs": [ "{{target_gen_dir}}/{{target_output_name}}.h", "{{target_out_dir}}/{{module_name}}.swiftmodule" ],
             "partial_outputs": [ "{{target_out_dir}}/{{source_name_part}}.o" ],
             "weak_framework_switch": "-weak_framework "
          }
@@ -725,7 +725,7 @@ TEST_F(JSONWriter, ForEachWithResponseFile) {
             "framework_switch": "-framework ",
             "lib_dir_switch": "-L",
             "lib_switch": "-l",
-            "outputs": [ "{{target_out_dir}}/{{module_name}}.swiftmodule" ],
+            "outputs": [ "{{target_gen_dir}}/{{target_output_name}}.h", "{{target_out_dir}}/{{module_name}}.swiftmodule" ],
             "partial_outputs": [ "{{target_out_dir}}/{{source_name_part}}.o" ],
             "weak_framework_switch": "-weak_framework "
          }

@@ -15,12 +15,12 @@
 import {v4 as uuidv4} from 'uuid';
 
 import {Actions, AddTrackArgs, DeferredAction} from '../../common/actions';
-import {
-  generateSqlWithInternalLayout,
-} from '../../common/internal_layout_utils';
+import {generateSqlWithInternalLayout} from '../../common/internal_layout_utils';
 import {ObjectByKey} from '../../common/state';
 import {featureFlags} from '../../core/feature_flags';
+import {GenericSliceDetailsTabConfig} from '../../frontend/generic_slice_details_tab';
 import {
+  BottomTabToSCSAdapter,
   NUM,
   Plugin,
   PluginContext,
@@ -33,12 +33,15 @@ import {CustomSqlDetailsPanelConfig} from '../custom_sql_table_slices';
 import {NULL_TRACK_URI} from '../null_track';
 
 import {ChromeTasksScrollJankTrack} from './chrome_tasks_scroll_jank_track';
+import {EventLatencySliceDetailsPanel} from './event_latency_details_panel';
 import {
   addLatencyTracks,
   EventLatencyTrack,
   JANKY_LATENCY_NAME,
 } from './event_latency_track';
+import {ScrollDetailsPanel} from './scroll_details_panel';
 import {ScrollJankCauseMap} from './scroll_jank_cause_map';
+import {ScrollJankV3DetailsPanel} from './scroll_jank_v3_details_panel';
 import {
   addScrollJankV3ScrollTrack,
   ScrollJankV3Track,
@@ -66,12 +69,13 @@ export const ENABLE_SCROLL_JANK_PLUGIN_V2 = featureFlags.register({
 export const SCROLL_JANK_GROUP_ID = 'chrome-scroll-jank-track-group';
 
 export type ScrollJankTracks = {
-  tracksToAdd: AddTrackArgs[],
+  tracksToAdd: AddTrackArgs[];
 };
 
 export type ScrollJankTrackGroup = {
-  tracks: ScrollJankTracks; addTrackGroup: DeferredAction
-}
+  tracks: ScrollJankTracks;
+  addTrackGroup: DeferredAction;
+};
 
 export interface ScrollJankTrackSpec {
   key: string;
@@ -97,10 +101,10 @@ export class ScrollJankPluginState {
   }
 
   public registerTrack(args: {
-    kind: string,
-    trackKey: string,
-    tableName: string,
-    detailsPanelConfig: CustomSqlDetailsPanelConfig,
+    kind: string;
+    trackKey: string;
+    tableName: string;
+    detailsPanelConfig: CustomSqlDetailsPanelConfig;
   }): void {
     this.tracks[args.kind] = {
       key: args.trackKey,
@@ -113,13 +117,14 @@ export class ScrollJankPluginState {
     delete this.tracks[kind];
   }
 
-  public getTrack(kind: string): ScrollJankTrackSpec|undefined {
+  public getTrack(kind: string): ScrollJankTrackSpec | undefined {
     return this.tracks[kind];
   }
 }
 
-export async function getScrollJankTracks(engine: Engine):
-    Promise<ScrollJankTrackGroup> {
+export async function getScrollJankTracks(
+  engine: Engine,
+): Promise<ScrollJankTrackGroup> {
   const result: ScrollJankTracks = {
     tracksToAdd: [],
   };
@@ -137,7 +142,7 @@ export async function getScrollJankTracks(engine: Engine):
   result.tracksToAdd.push({
     uri: NULL_TRACK_URI,
     trackSortKey: PrimaryTrackSortKey.ASYNC_SLICE_TRACK,
-    name: '',  // TODO(stevegolton): We should probably put some name here.
+    name: '', // TODO(stevegolton): We should probably put some name here.
     trackGroup: undefined,
     key: summaryTrackKey,
   });
@@ -167,14 +172,15 @@ class ChromeScrollJankPlugin implements Plugin {
       return;
     }
 
-    if (!await isChromeTrace(ctx.engine)) {
+    if (!(await isChromeTrace(ctx.engine))) {
       return;
     }
 
     // Initialise the chrome_tasks_delaying_input_processing table. It will be
     // used in the tracks above.
     await ctx.engine.query(`
-      select RUN_METRIC(
+      INCLUDE PERFETTO MODULE deprecated.v42.common.slices;
+      SELECT RUN_METRIC(
         'chrome/chrome_tasks_delaying_input_processing.sql',
         'duration_causing_jank_ms',
         /* duration_causing_jank_ms = */ '8');`);
@@ -195,13 +201,14 @@ class ChromeScrollJankPlugin implements Plugin {
     ctx.tabs.openQuery(query, 'Scroll Jank: long tasks');
   }
 
-  private async addChromeScrollJankTrack(ctx: PluginContextTrace):
-      Promise<void> {
+  private async addChromeScrollJankTrack(
+    ctx: PluginContextTrace,
+  ): Promise<void> {
     ctx.registerTrack({
       uri: 'perfetto.ChromeScrollJank',
       displayName: 'Scroll Jank causes - long tasks',
       kind: ChromeTasksScrollJankTrack.kind,
-      track: ({trackKey}) => {
+      trackFactory: ({trackKey}) => {
         return new ChromeTasksScrollJankTrack({
           engine: ctx.engine,
           trackKey,
@@ -220,13 +227,32 @@ class ChromeScrollJankPlugin implements Plugin {
       uri: 'perfetto.ChromeScrollJank#toplevelScrolls',
       displayName: 'Chrome Scrolls',
       kind: CHROME_TOPLEVEL_SCROLLS_KIND,
-      track: ({trackKey}) => {
+      trackFactory: ({trackKey}) => {
         return new TopLevelScrollTrack({
           engine: ctx.engine,
           trackKey,
         });
       },
     });
+
+    ctx.registerDetailsPanel(
+      new BottomTabToSCSAdapter({
+        tabFactory: (selection) => {
+          if (
+            selection.kind === 'GENERIC_SLICE' &&
+            selection.detailsPanelConfig.kind === ScrollDetailsPanel.kind
+          ) {
+            const config = selection.detailsPanelConfig.config;
+            return new ScrollDetailsPanel({
+              config: config as GenericSliceDetailsTabConfig,
+              engine: ctx.engine,
+              uuid: uuidv4(),
+            });
+          }
+          return undefined;
+        },
+      }),
+    );
   }
 
   private async addEventLatencyTrack(ctx: PluginContextTrace): Promise<void> {
@@ -249,8 +275,9 @@ class ChromeScrollJankPlugin implements Plugin {
 
     // Table name must be unique - it cannot include '-' characters or begin
     // with a numeric value.
-    const baseTable =
-        `table_${uuidv4().split('-').join('_')}_janky_event_latencies_v3`;
+    const baseTable = `table_${uuidv4()
+      .split('-')
+      .join('_')}_janky_event_latencies_v3`;
     const tableDefSql = `CREATE TABLE ${baseTable} AS
         WITH
         event_latencies AS MATERIALIZED (
@@ -296,35 +323,77 @@ class ChromeScrollJankPlugin implements Plugin {
       FROM latency_stages stage;`;
 
     await ctx.engine.query(
-        `INCLUDE PERFETTO MODULE chrome.scroll_jank.scroll_jank_intervals`);
+      `INCLUDE PERFETTO MODULE chrome.scroll_jank.scroll_jank_intervals`,
+    );
     await ctx.engine.query(tableDefSql);
 
     ctx.registerTrack({
       uri: 'perfetto.ChromeScrollJank#eventLatency',
       displayName: 'Chrome Scroll Input Latencies',
       kind: EventLatencyTrack.kind,
-      track: ({trackKey}) => {
+      trackFactory: ({trackKey}) => {
         return new EventLatencyTrack({engine: ctx.engine, trackKey}, baseTable);
       },
     });
+
+    ctx.registerDetailsPanel(
+      new BottomTabToSCSAdapter({
+        tabFactory: (selection) => {
+          if (
+            selection.kind === 'GENERIC_SLICE' &&
+            selection.detailsPanelConfig.kind ===
+              EventLatencySliceDetailsPanel.kind
+          ) {
+            const config = selection.detailsPanelConfig.config;
+            return new EventLatencySliceDetailsPanel({
+              config: config as GenericSliceDetailsTabConfig,
+              engine: ctx.engine,
+              uuid: uuidv4(),
+            });
+          }
+          return undefined;
+        },
+      }),
+    );
   }
 
-  private async addScrollJankV3ScrollTrack(ctx: PluginContextTrace):
-      Promise<void> {
+  private async addScrollJankV3ScrollTrack(
+    ctx: PluginContextTrace,
+  ): Promise<void> {
     await ctx.engine.query(
-        `INCLUDE PERFETTO MODULE chrome.scroll_jank.scroll_jank_intervals`);
+      `INCLUDE PERFETTO MODULE chrome.scroll_jank.scroll_jank_intervals`,
+    );
 
     ctx.registerTrack({
       uri: 'perfetto.ChromeScrollJank#scrollJankV3',
       displayName: 'Chrome Scroll Janks',
       kind: ScrollJankV3Track.kind,
-      track: ({trackKey}) => {
+      trackFactory: ({trackKey}) => {
         return new ScrollJankV3Track({
           engine: ctx.engine,
           trackKey,
         });
       },
     });
+
+    ctx.registerDetailsPanel(
+      new BottomTabToSCSAdapter({
+        tabFactory: (selection) => {
+          if (
+            selection.kind === 'GENERIC_SLICE' &&
+            selection.detailsPanelConfig.kind === ScrollJankV3DetailsPanel.kind
+          ) {
+            const config = selection.detailsPanelConfig.config;
+            return new ScrollJankV3DetailsPanel({
+              config: config as GenericSliceDetailsTabConfig,
+              engine: ctx.engine,
+              uuid: uuidv4(),
+            });
+          }
+          return undefined;
+        },
+      }),
+    );
   }
 }
 

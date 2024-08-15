@@ -28,6 +28,7 @@
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/public/identity_manager/account_info.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "net/base/host_port_pair.h"
 #include "net/cert/x509_certificate.h"
@@ -189,6 +190,16 @@ bool ProfileCanBeManaged(Profile* profile) {
           ->GetProfileAttributesStorage()
           .GetProfileAttributesWithPath(profile->GetPath());
   return entry && entry->CanBeManaged();
+}
+
+ManagementEnvironment GetManagementEnvironment(
+    Profile* profile,
+    const AccountInfo& account_info) {
+  if (!UserAcceptedAccountManagement(profile)) {
+    return ManagementEnvironment::kNone;
+  }
+  return account_info.IsEduAccount() ? ManagementEnvironment::kSchool
+                                     : ManagementEnvironment::kWork;
 }
 
 bool IsKnownConsumerDomain(const std::string& email_domain) {

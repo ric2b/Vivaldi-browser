@@ -33,6 +33,9 @@ import org.chromium.components.user_prefs.UserPrefs;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * Message service class to show the Incognito re-auth promo inside the incognito
  * tab switcher.
@@ -287,6 +290,8 @@ public class IncognitoReauthPromoMessageService extends MessageService
         // To support lower android versions where we support running the render tests.
         if (sIsPromoEnabledForTesting != null) return sIsPromoEnabledForTesting;
 
+        // Vivaldi Note(simonb@vivaldi.com) Ref VAB-8681 Disabled Promo
+        if (BuildConfig.IS_VIVALDI) return false;
         // The Chrome level Incognito lock setting is already enabled, so no use to show a promo for
         // that.
         if (IncognitoReauthManager.isIncognitoReauthEnabled(profile)) return false;
@@ -337,6 +342,11 @@ public class IncognitoReauthPromoMessageService extends MessageService
                 // This call also unregisters this lifecycle observer.
                 dismiss();
             } else {
+                // Vivaldi Note(simonb@vivaldi.com) Ref VAB-8681 Disabled Promo
+                if (BuildConfig.IS_VIVALDI) {
+                    dismiss();
+                    return;
+                }
                 // For all other cases, we only send an invalidate message but don't disable the
                 // promo card completely.
                 sendInvalidNotification();

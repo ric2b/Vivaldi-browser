@@ -10,7 +10,6 @@
 
 #include "app/vivaldi_apptools.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/public/browser/web_contents.h"
 
 namespace content {
 
@@ -23,12 +22,18 @@ void WebContentsViewDragSecurityInfo::OnDragInitiated(
   did_initiate_ = true;
   site_instance_group_id_ = source_rwh->GetSiteInstanceGroup()->GetId();
   image_accessible_from_frame_ = drop_data.file_contents_image_accessible;
+
+  // Used in Vivaldi.
+  source_rwh_ = source_rwh;
 }
 
 void WebContentsViewDragSecurityInfo::OnDragEnded() {
   did_initiate_ = false;
   site_instance_group_id_ = SiteInstanceGroupId();
   image_accessible_from_frame_ = true;
+
+  // Used in Vivaldi.
+  source_rwh_ = nullptr;
 }
 
 bool WebContentsViewDragSecurityInfo::IsImageAccessibleFromFrame() const {
@@ -56,12 +61,21 @@ bool WebContentsViewDragSecurityInfo::IsValidDragTarget(
   }
 
   if (vivaldi::IsVivaldiRunning()) {
-    auto* web_contents =
+    auto* source_web_contents =
+        content::WebContentsImpl::FromRenderWidgetHostImpl(source_rwh_);
+    auto* target_web_contents =
         content::WebContentsImpl::FromRenderWidgetHostImpl(target_rwh);
-    if (web_contents) {
+
+    if (target_web_contents) {
       // NOTE: In Vivaldi we allow dragging between guests and our app-window.
-      GURL url = web_contents->GetURL();
+      GURL url = target_web_contents->GetURL();
       if (vivaldi::IsVivaldiApp(url.host())) {
+        return true;
+      }
+      // WebViewGuests are top-level WebContents so allow dragging between
+      // them.
+      if (source_web_contents->GetBrowserPluginGuest() &&
+          target_web_contents->GetBrowserPluginGuest()) {
         return true;
       }
     }

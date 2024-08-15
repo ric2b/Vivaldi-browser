@@ -22,7 +22,7 @@ namespace openscreen {
 // be engaged upon creating the first instance, and then held until all
 // instances have been destroyed.
 //
-// TODO(https://issuetracker.google.com/288311411): Implement for Linux.
+// TODO(issuetracker.google.com/288311411): Implement for Linux.
 class ScopedWakeLock {
  public:
   static SerialDeletePtr<ScopedWakeLock> Create(TaskRunner& task_runner);

@@ -24,6 +24,14 @@ class NoteNode;
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)initWithType:(NSInteger)type NS_UNAVAILABLE;
 
+#pragma mark - Helpers
+
+- (NSString*)noteTitle;
+
+- (NSDate*)createdAt;
+
+- (NSDate*)lastModified;
+
 @end
 
 #endif  // IOS_UI_NOTES_CELLS_NOTE_HOME_NODE_ITEM_H_

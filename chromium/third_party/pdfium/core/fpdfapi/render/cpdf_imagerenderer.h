@@ -8,13 +8,13 @@
 #define CORE_FPDFAPI_RENDER_CPDF_IMAGERENDERER_H_
 
 #include <memory>
+#include <optional>
 
 #include "core/fxcrt/fx_coordinates.h"
 #include "core/fxcrt/retain_ptr.h"
 #include "core/fxcrt/unowned_ptr.h"
 #include "core/fxge/dib/cfx_imagerenderer.h"
 #include "core/fxge/dib/fx_dib.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class CFX_DIBBase;
 class CFX_DefaultRenderDevice;
@@ -64,14 +64,15 @@ class CPDF_ImageRenderer {
   bool NotDrawing() const;
   FX_RECT GetDrawRect() const;
   CFX_Matrix GetDrawMatrix(const FX_RECT& rect) const;
-  void CalculateDrawImage(CFX_DefaultRenderDevice* pBitmapDevice1,
-                          CFX_DefaultRenderDevice* pBitmapDevice2,
-                          RetainPtr<CFX_DIBBase> pDIBBase,
-                          const CFX_Matrix& mtNewMatrix,
-                          const FX_RECT& rect) const;
+  // Returns the mask, or nullptr if the mask could not be created.
+  RetainPtr<const CFX_DIBitmap> CalculateDrawImage(
+      CFX_DefaultRenderDevice& bitmap_device,
+      RetainPtr<CFX_DIBBase> pDIBBase,
+      const CFX_Matrix& mtNewMatrix,
+      const FX_RECT& rect) const;
   const CPDF_RenderOptions& GetRenderOptions() const;
   void HandleFilters();
-  absl::optional<FX_RECT> GetUnitRect() const;
+  std::optional<FX_RECT> GetUnitRect() const;
   bool GetDimensionsFromUnitRect(const FX_RECT& rect,
                                  int* left,
                                  int* top,

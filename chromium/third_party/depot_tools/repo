@@ -31,6 +31,8 @@ def _UpdateDepotTools():
     while path != path.parent:
         if (path / '.repo').is_dir() and (path / 'chromite').is_dir():
             return
+        if (path / '.citc').is_dir():
+            return
         path = path.parent
 
     if UPDATE_DEPOT_TOOLS.exists():
@@ -47,9 +49,6 @@ def main(argv):
     # support for sync hooks, we could switch to that.
     if argv and argv[0] == 'sync':
         _UpdateDepotTools()
-
-    # Set the default to our fork.
-    os.environ["REPO_URL"] = "https://chromium.googlesource.com/external/repo"
 
     os.execv(sys.executable, [sys.executable, str(REPO)] + argv)
 

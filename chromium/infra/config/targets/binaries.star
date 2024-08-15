@@ -212,11 +212,6 @@ targets.binaries.console_test_launcher(
     label = "//third_party/blink/renderer/controller:blink_unittests",
 )
 
-targets.binaries.console_test_launcher(
-    name = "blink_unittests_v2",
-    label = "//third_party/blink/renderer/controller:blink_unittests_v2",
-)
-
 targets.binaries.generated_script(
     name = "blink_web_tests",
     label = "//:blink_web_tests",
@@ -289,10 +284,12 @@ targets.binaries.windowed_test_launcher(
     label = "//media/capture:capture_unittests",
 )
 
-targets.binaries.console_test_launcher(
-    name = "cast_display_settings_unittests",
-    label = "//chromecast/ui/display_settings:cast_display_settings_unittests",
-)
+# TODO(issues.chromium.org/1516671): Remove unneeded cast_* suites.
+
+# targets.binaries.console_test_launcher(
+#     name = "cast_display_settings_unittests",
+#     label = "//chromecast/ui/display_settings:cast_display_settings_unittests",
+# )
 
 targets.binaries.console_test_launcher(
     name = "cast_runner_browsertests",
@@ -309,45 +306,45 @@ targets.binaries.console_test_launcher(
     label = "//fuchsia_web/runners:cast_runner_unittests",
 )
 
-targets.binaries.console_test_launcher(
-    name = "cast_audio_backend_unittests",
-    label = "//chromecast/media/cma/backend:cast_audio_backend_unittests",
-)
+# targets.binaries.console_test_launcher(
+#     name = "cast_audio_backend_unittests",
+#     label = "//chromecast/media/cma/backend:cast_audio_backend_unittests",
+# )
 
-targets.binaries.console_test_launcher(
-    name = "cast_base_unittests",
-    label = "//chromecast/base:cast_base_unittests",
-)
+# targets.binaries.console_test_launcher(
+#     name = "cast_base_unittests",
+#     label = "//chromecast/base:cast_base_unittests",
+# )
 
-targets.binaries.console_test_launcher(
-    name = "cast_cast_core_unittests",
-    label = "//chromecast/cast_core:cast_cast_core_unittests",
-)
+# targets.binaries.console_test_launcher(
+#     name = "cast_cast_core_unittests",
+#     label = "//chromecast/cast_core:cast_cast_core_unittests",
+# )
 
-targets.binaries.console_test_launcher(
-    name = "cast_crash_unittests",
-    label = "//chromecast/crash:cast_crash_unittests",
-)
+# targets.binaries.console_test_launcher(
+#     name = "cast_crash_unittests",
+#     label = "//chromecast/crash:cast_crash_unittests",
+# )
 
-targets.binaries.console_test_launcher(
-    name = "cast_graphics_unittests",
-    label = "//chromecast/graphics:cast_graphics_unittests",
-)
+# targets.binaries.console_test_launcher(
+#     name = "cast_graphics_unittests",
+#     label = "//chromecast/graphics:cast_graphics_unittests",
+# )
 
-targets.binaries.console_test_launcher(
-    name = "cast_media_unittests",
-    label = "//chromecast/media:cast_media_unittests",
-)
+# targets.binaries.console_test_launcher(
+#     name = "cast_media_unittests",
+#     label = "//chromecast/media:cast_media_unittests",
+# )
 
-targets.binaries.console_test_launcher(
-    name = "cast_shell_browsertests",
-    label = "//chromecast:cast_shell_browsertests",
-)
+# targets.binaries.console_test_launcher(
+#     name = "cast_shell_browsertests",
+#     label = "//chromecast:cast_shell_browsertests",
+# )
 
-targets.binaries.console_test_launcher(
-    name = "cast_shell_unittests",
-    label = "//chromecast:cast_shell_unittests",
-)
+# targets.binaries.console_test_launcher(
+#     name = "cast_shell_unittests",
+#     label = "//chromecast:cast_shell_unittests",
+# )
 
 targets.binaries.windowed_test_launcher(
     name = "cast_unittests",
@@ -383,6 +380,14 @@ targets.binaries.generated_script(
 targets.binaries.generated_script(
     name = "chrome_disabled_tast_tests",
     label = "//chromeos:chrome_disabled_tast_tests",
+    args = [
+        "--logs-dir=${ISOLATED_OUTDIR}",
+    ],
+)
+
+targets.binaries.generated_script(
+    name = "cq_medium_tast_tests",
+    label = "//chromeos:cq_medium_tast_tests",
     args = [
         "--logs-dir=${ISOLATED_OUTDIR}",
     ],
@@ -1106,11 +1111,6 @@ targets.binaries.windowed_test_launcher(
 )
 
 targets.binaries.console_test_launcher(
-    name = "lacros_chrome_unittests",
-    label = "//chrome/test:lacros_chrome_unittests",
-)
-
-targets.binaries.console_test_launcher(
     name = "latency_unittests",
     label = "//ui/latency:latency_unittests",
 )
@@ -1209,6 +1209,11 @@ targets.binaries.script(
 targets.binaries.console_test_launcher(
     name = "minidump_uploader_test",
     label = "//components/minidump_uploader:minidump_uploader_test",
+)
+
+targets.binaries.console_test_launcher(
+    name = "test_sample_jni_apk",
+    label = "//third_party/jni_zero/sample:test_sample_jni_apk",
 )
 
 targets.binaries.generated_script(
@@ -1328,6 +1333,11 @@ targets.binaries.console_test_launcher(
 targets.binaries.windowed_test_launcher(
     name = "notification_helper_unittests",
     label = "//chrome/notification_helper:notification_helper_unittests",
+)
+
+targets.binaries.generated_script(
+    name = "ondevice_stability_tests",
+    label = "//components/optimization_guide/internal/testing:ondevice_stability_tests",
 )
 
 targets.binaries.console_test_launcher(
@@ -1692,7 +1702,7 @@ targets.binaries.script(
 
 targets.binaries.script(
     name = "telemetry_gpu_integration_test_fuchsia",
-    label = "//chrome/test:telemetry_gpu_integration_test_fuchsia",
+    label = "//content/test:telemetry_gpu_integration_test_fuchsia",
     script = "//testing/scripts/run_gpu_integration_test_as_googletest.py",
     args = [
         "../../content/test/gpu/run_gpu_integration_test_fuchsia.py",
@@ -2123,10 +2133,13 @@ targets.binaries.script(
     args = [
         "--cts-gcs-path",
         "../../android_webview/tools/cts_config/webview_cts_hostside_gcs_path.json",
+        "--skip-expected-failures",
         "--additional-apk",
         "apks/TrichromeLibrary64.apk",
         "--use-webview-provider",
         "apks/TrichromeWebView64.apk",
+        "--module-apk",
+        "CtsHostsideWebViewTests.apk",
     ],
 )
 

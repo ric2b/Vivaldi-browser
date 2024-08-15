@@ -55,7 +55,7 @@ using RefreshTokenRemovedCallback =
 
 // Helper IdentityManager::Observer that forwards some events to the
 // callback passed to the constructor.
-// TODO(crbug.com/1462978): Delete this class when ConsentLevel::kSync is
+// TODO(crbug.com/40067058): Delete this class when ConsentLevel::kSync is
 //     deleted. See ConsentLevel::kSync documentation for details.
 class ClearPrimaryAccountTestObserver
     : public signin::IdentityManager::Observer {
@@ -113,7 +113,7 @@ class ClearPrimaryAccountTestObserver
 // Optionally, it's possible to specify whether a normal auth process will
 // take place, or whether an auth error should happen, useful for some tests.
 //
-// TODO(crbug.com/1462978): Delete this test when ConsentLevel::kSync is
+// TODO(crbug.com/40067058): Delete this test when ConsentLevel::kSync is
 //     deleted. See ConsentLevel::kSync documentation for details.
 void RunRevokeConsentTest(
     RevokeConsentAction action,
@@ -195,13 +195,11 @@ void RunRevokeConsentTest(
   switch (action) {
     case RevokeConsentAction::kRevokeSyncConsent:
       primary_account_mutator->RevokeSyncConsent(
-          signin_metrics::ProfileSignout::kTest,
-          signin_metrics::SignoutDelete::kIgnoreMetric);
+          signin_metrics::ProfileSignout::kTest);
       break;
     case RevokeConsentAction::kClearPrimaryAccount:
       primary_account_mutator->ClearPrimaryAccount(
-          signin_metrics::ProfileSignout::kTest,
-          signin_metrics::SignoutDelete::kIgnoreMetric);
+          signin_metrics::ProfileSignout::kTest);
       break;
   }
   run_loop.Run();
@@ -284,7 +282,7 @@ void RunClearPrimaryAccountTestForSigninOnly() {
       .WillOnce([&](const signin::PrimaryAccountChangeEvent& event) {
         ASSERT_EQ(event.GetEventTypeFor(signin::ConsentLevel::kSignin),
                   signin::PrimaryAccountChangeEvent::Type::kCleared);
-        // TODO(crbug.com/1462978): Delete this assert when ConsentLevel::kSync
+        // TODO(crbug.com/40067058): Delete this assert when ConsentLevel::kSync
         //     is deleted. See ConsentLevel::kSync documentation for details.
         ASSERT_EQ(event.GetEventTypeFor(signin::ConsentLevel::kSync),
                   signin::PrimaryAccountChangeEvent::Type::kNone);
@@ -296,8 +294,7 @@ void RunClearPrimaryAccountTestForSigninOnly() {
                             secondary_account_info.account_id));
 
   primary_account_mutator->ClearPrimaryAccount(
-      signin_metrics::ProfileSignout::kTest,
-      signin_metrics::SignoutDelete::kIgnoreMetric);
+      signin_metrics::ProfileSignout::kTest);
   run_loop.Run();
 
   EXPECT_FALSE(
@@ -352,7 +349,7 @@ TEST_F(PrimaryAccountMutatorTest, SetPrimaryAccount_Signin) {
 }
 
 // Checks that setting the primary account works.
-// TODO(crbug.com/1462978): Delete this test when ConsentLevel::kSync is
+// TODO(crbug.com/40067058): Delete this test when ConsentLevel::kSync is
 //     deleted. See ConsentLevel::kSync documentation for details.
 TEST_F(PrimaryAccountMutatorTest, SetPrimaryAccount_Sync) {
   base::test::TaskEnvironment task_environment;
@@ -449,7 +446,7 @@ TEST_F(PrimaryAccountMutatorTest, SetPrimaryAccount_UnknownAccount) {
 
 // Checks that trying to set the primary account fails when there is already a
 // primary account.
-// TODO(crbug.com/1462978): Delete this test when ConsentLevel::kSync is
+// TODO(crbug.com/40067058): Delete this test when ConsentLevel::kSync is
 //     deleted. See ConsentLevel::kSync documentation for details.
 TEST_F(PrimaryAccountMutatorTest, SetPrimaryAccount_AlreadyHasPrimaryAccount) {
   base::test::TaskEnvironment task_environment;
@@ -641,8 +638,7 @@ TEST_F(PrimaryAccountMutatorTest, ClearPrimaryAccount_NotSignedIn) {
   EXPECT_FALSE(
       identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin));
   EXPECT_FALSE(primary_account_mutator->ClearPrimaryAccount(
-      signin_metrics::ProfileSignout::kTest,
-      signin_metrics::SignoutDelete::kIgnoreMetric));
+      signin_metrics::ProfileSignout::kTest));
 }
 
 // Test that ClearPrimaryAccount() clears the primary account, revokes the

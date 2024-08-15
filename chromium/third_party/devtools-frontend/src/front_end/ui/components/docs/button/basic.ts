@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as FrontendHelpers from '../../../../../test/unittests/front_end/helpers/EnvironmentHelpers.js';
+import * as FrontendHelpers from '../../../../testing/EnvironmentHelpers.js';
 import * as Buttons from '../../buttons/buttons.js';
 import * as ComponentHelpers from '../../helpers/helpers.js';
 
@@ -261,23 +261,6 @@ for (const roundIcon of roundIcons) {
   smallRoundButton.title = 'Small Round Button';
   smallRoundButton.onclick = () => alert('clicked');
   appendButton(smallRoundButton);
-}
-
-// Tiny Round Buttons
-const tinyRoundIcons = [
-  {iconName: plusIcon},
-  {iconName: minusIcon},
-];
-for (const roundIcon of tinyRoundIcons) {
-  const tinyRoundButton = new Buttons.Button.Button();
-  tinyRoundButton.data = {
-    variant: Buttons.Button.Variant.ROUND,
-    size: Buttons.Button.Size.TINY,
-    ...roundIcon,
-  };
-  tinyRoundButton.title = 'Tiny Round Button';
-  tinyRoundButton.onclick = () => alert('clicked');
-  appendButton(tinyRoundButton);
 }
 
 // Small Disabled Round Button

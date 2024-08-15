@@ -6,8 +6,11 @@ import './pref_display.js';
 import './mojo_timedelta.js';
 import 'chrome://resources/cr_elements/cr_tab_box/cr_tab_box.js';
 
-import {PageHandler, PageHandlerRemote} from './privacy_sandbox_internals.mojom-webui.js';
-import {defaultLogicalFn, LogicalFn, timestampLogicalFn} from './value_display.js';
+import {ContentSettingsType} from './content_settings_types.mojom-webui.js';
+import type {PageHandlerRemote} from './privacy_sandbox_internals.mojom-webui.js';
+import {PageHandler} from './privacy_sandbox_internals.mojom-webui.js';
+import type {LogicalFn} from './value_display.js';
+import {defaultLogicalFn, timestampLogicalFn} from './value_display.js';
 
 interface PrefConfig {
   logicalFn?: LogicalFn;
@@ -133,7 +136,8 @@ class DataLoader {
   async load() {
     const cookieParent =
         document.querySelector<HTMLElement>('#cookie-content-settings')!;
-    const cookieSettings = await this.pageHandler.getCookieSettings();
+    const cookieSettings =
+        await this.pageHandler.readContentSettings(ContentSettingsType.COOKIES);
     cookieSettings.contentSettings.forEach((cs) => {
       const item = document.createElement('content-setting-pattern-source');
       cookieParent.appendChild(item);
@@ -153,8 +157,8 @@ class DataLoader {
 
     const tpcdHeuristicsParent =
         document.querySelector<HTMLElement>('#tpcd-heuristics-grants')!;
-    const tpcdHeuristicsGrants =
-        await this.pageHandler.getTpcdHeuristicsGrants();
+    const tpcdHeuristicsGrants = await this.pageHandler.readContentSettings(
+        ContentSettingsType.TPCD_HEURISTICS_GRANTS);
     tpcdHeuristicsGrants.contentSettings.forEach((cs) => {
       const item = document.createElement('content-setting-pattern-source');
       tpcdHeuristicsParent.appendChild(item);
@@ -163,7 +167,8 @@ class DataLoader {
     });
 
     const tpcdTrialParent = document.querySelector<HTMLElement>('#tpcd-trial')!;
-    const tpcdTrial = await this.pageHandler.getTpcdTrial();
+    const tpcdTrial = await this.pageHandler.readContentSettings(
+        ContentSettingsType.TPCD_TRIAL);
     tpcdTrial.contentSettings.forEach((cs) => {
       const item = document.createElement('content-setting-pattern-source');
       tpcdTrialParent.appendChild(item);
@@ -173,7 +178,8 @@ class DataLoader {
 
     const topLevelTpcdTrialParent =
         document.querySelector<HTMLElement>('#top-level-tpcd-trial')!;
-    const topLevelTpcdTrial = await this.pageHandler.getTopLevelTpcdTrial();
+    const topLevelTpcdTrial = await this.pageHandler.readContentSettings(
+        ContentSettingsType.TOP_LEVEL_TPCD_TRIAL);
     topLevelTpcdTrial.contentSettings.forEach((cs) => {
       const item = document.createElement('content-setting-pattern-source');
       topLevelTpcdTrialParent.appendChild(item);

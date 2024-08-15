@@ -30,6 +30,8 @@ const char kVivaldiAppCastUrl[] =
 // This is the public TP/Beta/Final release channel
 #if BUILDFLAG(IS_MAC)
     "https://update.vivaldi.com/update/1.0/public/mac/appcast.xml";
+#elif defined(_WIN64)  && defined(_M_ARM64)
+    "https://update.vivaldi.com/update/1.0/public/appcast.arm64.xml";
 #elif defined(_WIN64)
     "https://update.vivaldi.com/update/1.0/public/appcast.x64.xml";
 #else
@@ -39,6 +41,8 @@ const char kVivaldiAppCastUrl[] =
 // This is the public snapshot release channel
 #if BUILDFLAG(IS_MAC)
     "https://update.vivaldi.com/update/1.0/snapshot/mac/appcast.xml";
+#elif defined(_WIN64) && defined(_M_ARM64)
+    "https://update.vivaldi.com/update/1.0/win/appcast.arm64.xml";
 #elif defined(_WIN64)
     "https://update.vivaldi.com/update/1.0/win/appcast.x64.xml";
 #else
@@ -48,6 +52,8 @@ const char kVivaldiAppCastUrl[] =
 // This is the internal sopranos release channel
 #if BUILDFLAG(IS_MAC)
     "https://update.vivaldi.com/update/1.0/sopranos_new/mac/appcast.xml";
+#elif defined(_WIN64) && defined(_M_ARM64)
+    "https://update.vivaldi.com/update/1.0/sopranos_new/appcast.arm64.xml";
 #elif defined(_WIN64)
     "https://update.vivaldi.com/update/1.0/sopranos_new/appcast.x64.xml";
 #else

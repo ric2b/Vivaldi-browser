@@ -133,10 +133,10 @@ std::optional<IPAddress> GetIPAddressOrNull(struct rtattr* rta,
         return std::nullopt;
       }
     } else if (rta->rta_type == IFA_ADDRESS) {
-      OSP_DCHECK_EQ(expected_address_size, RTA_PAYLOAD(rta));
+      OSP_CHECK_EQ(expected_address_size, RTA_PAYLOAD(rta));
       address = IPAddress(version, static_cast<uint8_t*>(RTA_DATA(rta)));
     } else if (rta->rta_type == IFA_LOCAL) {
-      OSP_DCHECK_EQ(expected_address_size, RTA_PAYLOAD(rta));
+      OSP_CHECK_EQ(expected_address_size, RTA_PAYLOAD(rta));
       have_local = true;
       local = IPAddress(version, static_cast<uint8_t*>(RTA_DATA(rta)));
     }

@@ -10,19 +10,20 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <optional>
 #include <utility>
 #include <vector>
 
 #include "core/fxcrt/fx_coordinates.h"
 #include "core/fxcrt/mask.h"
+#include "core/fxcrt/raw_span.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/unowned_ptr.h"
 #include "core/fxcrt/unowned_ptr_exclusion.h"
 #include "core/fxcrt/widestring.h"
 #include "core/fxge/dib/fx_dib.h"
 #include "fxjs/gc/gced_tree_node_mixin.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/base/containers/span.h"
 #include "v8/include/cppgc/member.h"
 #include "v8/include/cppgc/visitor.h"
 #include "xfa/fxfa/cxfa_ffwidget_type.h"
@@ -234,7 +235,7 @@ class CXFA_Node : public CXFA_Object, public GCedTreeNodeMixin<CXFA_Node> {
   bool HasBindItem() const;
   CXFA_Node* GetContainerNode();
   GCedLocaleIface* GetLocale();
-  absl::optional<WideString> GetLocaleName();
+  std::optional<WideString> GetLocaleName();
   XFA_AttributeValue GetIntact();
   WideString GetNameExpression();
 
@@ -264,12 +265,12 @@ class CXFA_Node : public CXFA_Object, public GCedTreeNodeMixin<CXFA_Node> {
 
   CXFA_Node* GetInstanceMgrOfSubform();
 
-  absl::optional<bool> GetDefaultBoolean(XFA_Attribute attr) const;
-  absl::optional<int32_t> GetDefaultInteger(XFA_Attribute attr) const;
-  absl::optional<CXFA_Measurement> GetDefaultMeasurement(
+  std::optional<bool> GetDefaultBoolean(XFA_Attribute attr) const;
+  std::optional<int32_t> GetDefaultInteger(XFA_Attribute attr) const;
+  std::optional<CXFA_Measurement> GetDefaultMeasurement(
       XFA_Attribute attr) const;
-  absl::optional<WideString> GetDefaultCData(XFA_Attribute attr) const;
-  absl::optional<XFA_AttributeValue> GetDefaultEnum(XFA_Attribute attr) const;
+  std::optional<WideString> GetDefaultCData(XFA_Attribute attr) const;
+  std::optional<XFA_AttributeValue> GetDefaultEnum(XFA_Attribute attr) const;
 
   bool IsOpenAccess() const;
 
@@ -294,7 +295,7 @@ class CXFA_Node : public CXFA_Object, public GCedTreeNodeMixin<CXFA_Node> {
   WideString GetRawValue() const;
 
   int32_t GetRotate() const;
-  absl::optional<float> TryWidth();
+  std::optional<float> TryWidth();
 
   CXFA_Node* GetExclGroupIfExists();
 
@@ -332,9 +333,9 @@ class CXFA_Node : public CXFA_Object, public GCedTreeNodeMixin<CXFA_Node> {
   void StartWidgetLayout(CXFA_FFDoc* doc,
                          float* pCalcWidth,
                          float* pCalcHeight);
-  absl::optional<float> FindSplitPos(CXFA_FFDocView* pDocView,
-                                     size_t szBlockIndex,
-                                     float fCalcHeight);
+  std::optional<float> FindSplitPos(CXFA_FFDocView* pDocView,
+                                    size_t szBlockIndex,
+                                    float fCalcHeight);
 
   bool LoadCaption(CXFA_FFDoc* doc);
   CXFA_TextLayout* GetCaptionTextLayout();
@@ -375,7 +376,7 @@ class CXFA_Node : public CXFA_Object, public GCedTreeNodeMixin<CXFA_Node> {
 
   bool IsChoiceListAllowTextEntry();
   size_t CountChoiceListItems(bool bSaveValue);
-  absl::optional<WideString> GetChoiceListItem(int32_t nIndex, bool bSaveValue);
+  std::optional<WideString> GetChoiceListItem(int32_t nIndex, bool bSaveValue);
   bool IsChoiceListMultiSelect();
   bool IsChoiceListCommitOnSelect();
   std::vector<WideString> GetChoiceListItems(bool bSaveValue);
@@ -404,7 +405,7 @@ class CXFA_Node : public CXFA_Object, public GCedTreeNodeMixin<CXFA_Node> {
 
   bool IsHorizontalScrollPolicyOff();
   bool IsVerticalScrollPolicyOff();
-  absl::optional<int32_t> GetNumberOfCells();
+  std::optional<int32_t> GetNumberOfCells();
 
   bool SetValue(XFA_ValuePicture eValueType, const WideString& wsValue);
   WideString GetValue(XFA_ValuePicture eValueType);
@@ -452,11 +453,11 @@ class CXFA_Node : public CXFA_Object, public GCedTreeNodeMixin<CXFA_Node> {
   bool HasFlag(XFA_NodeFlag dwFlag) const;
   const PropertyData* GetPropertyData(XFA_Element property) const;
   const AttributeData* GetAttributeData(XFA_Attribute attr) const;
-  absl::optional<XFA_Element> GetFirstPropertyWithFlag(
+  std::optional<XFA_Element> GetFirstPropertyWithFlag(
       XFA_PropertyFlag flag) const;
   void OnRemoved(bool bNotify) const;
-  absl::optional<void*> GetDefaultValue(XFA_Attribute attr,
-                                        XFA_AttributeType eType) const;
+  std::optional<void*> GetDefaultValue(XFA_Attribute attr,
+                                       XFA_AttributeType eType) const;
   CXFA_Node* GetChildInternal(size_t index,
                               XFA_Element eType,
                               bool bOnlyChild) const;
@@ -505,16 +506,16 @@ class CXFA_Node : public CXFA_Object, public GCedTreeNodeMixin<CXFA_Node> {
   void SyncValue(const WideString& wsValue, bool bNotify);
   CXFA_Value* GetDefaultValueIfExists();
   CXFA_Bind* GetBindIfExists() const;
-  absl::optional<XFA_AttributeValue> GetIntactFromKeep(
+  std::optional<XFA_AttributeValue> GetIntactFromKeep(
       const CXFA_Keep* pKeep,
       XFA_AttributeValue eLayoutType) const;
   CXFA_Node* GetTransparentParent();
 
-  absl::optional<float> TryHeight();
-  absl::optional<float> TryMinWidth();
-  absl::optional<float> TryMinHeight();
-  absl::optional<float> TryMaxWidth();
-  absl::optional<float> TryMaxHeight();
+  std::optional<float> TryHeight();
+  std::optional<float> TryMinWidth();
+  std::optional<float> TryMinHeight();
+  std::optional<float> TryMaxWidth();
+  std::optional<float> TryMaxHeight();
   XFA_EventError ProcessEventInternal(CXFA_FFDocView* pDocView,
                                       XFA_AttributeValue iActivity,
                                       CXFA_Event* event,
@@ -526,8 +527,8 @@ class CXFA_Node : public CXFA_Object, public GCedTreeNodeMixin<CXFA_Node> {
   bool m_bIsNull = true;
   bool m_bPreNull = true;
   bool is_widget_ready_ = false;
-  const pdfium::span<const PropertyData> m_Properties;
-  const pdfium::span<const AttributeData> m_Attributes;
+  const pdfium::raw_span<const PropertyData> m_Properties;
+  const pdfium::raw_span<const AttributeData> m_Attributes;
   const Mask<XFA_XDPPACKET> m_ValidPackets;
   UnownedPtr<CFX_XMLNode> xml_node_;
   const XFA_PacketType m_ePacket;

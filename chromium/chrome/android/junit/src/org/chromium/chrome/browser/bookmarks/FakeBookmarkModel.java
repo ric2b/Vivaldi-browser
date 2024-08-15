@@ -33,11 +33,11 @@ public class FakeBookmarkModel extends BookmarkModel {
     public static final String READING_LIST_FOLDER_TITLE = "Reading list";
 
     // Factory constructor for the FakeBoomkarkModel
-    public static BookmarkModel createModel() {
+    public static FakeBookmarkModel createModel() {
         // Temporary Jni mock.
         BookmarkBridgeJni.TEST_HOOKS.setInstanceForTesting(
                 Mockito.mock(BookmarkBridge.Natives.class));
-        BookmarkModel fakeBookmarkModel = new FakeBookmarkModel();
+        FakeBookmarkModel fakeBookmarkModel = new FakeBookmarkModel();
         return fakeBookmarkModel;
     }
 
@@ -59,6 +59,7 @@ public class FakeBookmarkModel extends BookmarkModel {
     private BookmarkId mPartnerFolderId;
     private BookmarkId mLocalOrSyncableReadingListFolderId;
     private BookmarkId mAccountReadingListFolderId;
+    private boolean mAreAccountBookmarkFoldersActive;
 
     private FakeBookmarkModel() {
         // The native bookmark bridge pointer will be ignored because the JNI is mocked by
@@ -68,6 +69,19 @@ public class FakeBookmarkModel extends BookmarkModel {
         setupTopLevelFolders();
         bookmarkModelLoaded();
     }
+
+    // Public extensions to the BookmarkModel API for testing.
+
+    /** Adds a managed folder, parent cannot be the root. */
+    public BookmarkId addManagedFolder(BookmarkId parent, String title) {
+        return addFolder(parent, title, /* isManaged= */ true);
+    }
+
+    public void setAreAccountBookmarkFoldersActive(boolean active) {
+        mAreAccountBookmarkFoldersActive = active;
+    }
+
+    // Private functions used internally.
 
     private void setupTopLevelFolders() {
         // Setup the root folder structure.
@@ -150,6 +164,10 @@ public class FakeBookmarkModel extends BookmarkModel {
     }
 
     private BookmarkId addFolder(BookmarkId parent, String title) {
+        return addFolder(parent, title, /* isManaged= */ false);
+    }
+
+    private BookmarkId addFolder(BookmarkId parent, String title, boolean isManaged) {
         assert !parent.equals(mRootFolderId);
         assert parent.getType() == BookmarkType.NORMAL;
         return addBookmarkItem(
@@ -159,7 +177,7 @@ public class FakeBookmarkModel extends BookmarkModel {
                 /* url= */ null,
                 /* isFolder= */ true,
                 /* isEditable= */ true,
-                /* isManaged= */ false,
+                isManaged,
                 /* read= */ false,
                 FakeBookmarkModel.this.isAccountBookmark(parent));
     }
@@ -256,9 +274,21 @@ public class FakeBookmarkModel extends BookmarkModel {
         }
 
         @Override
+        public boolean areAccountBookmarkFoldersActive(long nativeBookmarkBridge) {
+            return FakeBookmarkModel.this.mAreAccountBookmarkFoldersActive;
+        }
+
+        @Override
         public void getImageUrlForBookmark(
-                long nativeBookmarkBridge, GURL url, Callback<GURL> callback) {
-            callback.onResult(null);
+                long nativeBookmarkBridge,
+                GURL url,
+                boolean isAccountBookmark,
+                Callback<GURL> callback) {
+            if (areAccountBookmarkFoldersActive(nativeBookmarkBridge) && isAccountBookmark) {
+                callback.onResult(new GURL("https://fakeimage.com"));
+            } else {
+                callback.onResult(null);
+            }
         }
 
         @Override
@@ -280,7 +310,7 @@ public class FakeBookmarkModel extends BookmarkModel {
             bookmarksList.addAll(FakeBookmarkModel.this.getChildIds(mRootFolderId));
 
             // Remove all account folders if the feature flag is disabled.
-            if (!BookmarkFeatures.isBookmarksAccountStorageEnabled()) {
+            if (!areAccountBookmarkFoldersActive(nativeBookmarkBridge)) {
                 bookmarksList.remove(mAccountOtherFolderId);
                 bookmarksList.remove(mAccountDesktopFolderId);
                 bookmarksList.remove(mAccountMobileFolderId);
@@ -300,7 +330,16 @@ public class FakeBookmarkModel extends BookmarkModel {
 
         @Override
         public BookmarkId getDefaultReadingListFolder(long nativeBookmarkBridge) {
-            return mMobileFolderId;
+            return areAccountBookmarkFoldersActive(nativeBookmarkBridge)
+                    ? mAccountReadingListFolderId
+                    : mLocalOrSyncableReadingListFolderId;
+        }
+
+        @Override
+        public BookmarkId getDefaultBookmarkFolder(long nativeBookmarkBridge) {
+            return areAccountBookmarkFoldersActive(nativeBookmarkBridge)
+                    ? mAccountMobileFolderId
+                    : mMobileFolderId;
         }
 
         @Override

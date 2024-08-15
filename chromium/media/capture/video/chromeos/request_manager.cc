@@ -915,7 +915,7 @@ void RequestManager::RequestStreamBuffers(
         cros::mojom::Camera3StreamBufferReqStatus::CAMERA3_PS_BUF_REQ_OK;
     ret->output_buffers = std::vector<cros::mojom::Camera3StreamBufferPtr>();
     for (size_t i = 0; i < req->num_buffers_requested; ++i) {
-      absl::optional<BufferInfo> buffer_info =
+      std::optional<BufferInfo> buffer_info =
           stream_buffer_manager_->RequestBufferForCaptureRequest(stream_type);
       if (!buffer_info.has_value()) {
         // Return buffers to |stream_buffer_manager_|.
@@ -972,7 +972,7 @@ void RequestManager::SubmitCaptureResult(
   CaptureResult& pending_result = pending_results_[frame_number];
   DVLOG(2) << "Submit capture result of frame " << frame_number
            << " for stream " << static_cast<int>(stream_type);
-  for (auto* observer : result_metadata_observers_) {
+  for (ResultMetadataObserver* observer : result_metadata_observers_) {
     observer->OnResultMetadataAvailable(frame_number, pending_result.metadata);
   }
 
@@ -1046,7 +1046,7 @@ void RequestManager::SubmitCapturedPreviewRecordingBuffer(
 
   if (video_capture_use_gmb_) {
     VideoCaptureFormat format;
-    absl::optional<VideoCaptureDevice::Client::Buffer> buffer =
+    std::optional<VideoCaptureDevice::Client::Buffer> buffer =
         stream_buffer_manager_->AcquireBufferForClientById(
             stream_type, buffer_ipc_id, &format);
     CHECK(buffer);

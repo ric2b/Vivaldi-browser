@@ -9,8 +9,9 @@
 namespace extensions {
 
 VivaldiStandardManagementPolicyProvider::
-    VivaldiStandardManagementPolicyProvider(ExtensionManagement* settings)
-    : StandardManagementPolicyProvider(settings) {}
+    VivaldiStandardManagementPolicyProvider(ExtensionManagement* settings,
+                                            Profile* profile)
+    : StandardManagementPolicyProvider(settings, profile) {}
 
 VivaldiStandardManagementPolicyProvider::
     ~VivaldiStandardManagementPolicyProvider() {}

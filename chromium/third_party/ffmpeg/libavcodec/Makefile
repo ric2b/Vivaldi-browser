@@ -64,6 +64,8 @@ OBJS = ac3_parser.o                                                     \
        xiph.o                                                           \
 
 # subsystems
+include $(SRC_PATH)/libavcodec/vvc/Makefile
+include $(SRC_PATH)/libavcodec/x86/vvc/Makefile
 OBJS-$(CONFIG_AANDCTTABLES)            += aandcttab.o
 OBJS-$(CONFIG_AC3DSP)                  += ac3dsp.o ac3.o ac3tab.o
 OBJS-$(CONFIG_ADTS_HEADER)             += adts_header.o mpeg4audio_sample_rates.o
@@ -340,6 +342,7 @@ OBJS-$(CONFIG_DVVIDEO_ENCODER)         += dvenc.o dv.o dvdata.o
 OBJS-$(CONFIG_DXA_DECODER)             += dxa.o
 OBJS-$(CONFIG_DXTORY_DECODER)          += dxtory.o
 OBJS-$(CONFIG_DXV_DECODER)             += dxv.o
+OBJS-$(CONFIG_DXV_ENCODER)             += dxvenc.o
 OBJS-$(CONFIG_EAC3_DECODER)            += eac3_data.o
 OBJS-$(CONFIG_EAC3_ENCODER)            += eac3enc.o eac3_data.o
 OBJS-$(CONFIG_EACMV_DECODER)           += eacmv.o
@@ -623,6 +626,7 @@ OBJS-$(CONFIG_QCELP_DECODER)           += qcelpdec.o                     \
 OBJS-$(CONFIG_QDM2_DECODER)            += qdm2.o
 OBJS-$(CONFIG_QDMC_DECODER)            += qdmc.o
 OBJS-$(CONFIG_QDRAW_DECODER)           += qdrw.o
+OBJS-$(CONFIG_QOA_DECODER)             += qoadec.o
 OBJS-$(CONFIG_QOI_DECODER)             += qoidec.o
 OBJS-$(CONFIG_QOI_ENCODER)             += qoienc.o
 OBJS-$(CONFIG_QPEG_DECODER)            += qpeg.o
@@ -985,6 +989,7 @@ OBJS-$(CONFIG_ADPCM_ZORK_DECODER)         += adpcm.o adpcm_data.o
 
 # hardware accelerators
 OBJS-$(CONFIG_D3D11VA)                    += dxva2.o
+OBJS-$(CONFIG_D3D12VA)                    += dxva2.o d3d12va_decode.o
 OBJS-$(CONFIG_DXVA2)                      += dxva2.o
 OBJS-$(CONFIG_NVDEC)                      += nvdec.o
 OBJS-$(CONFIG_VAAPI)                      += vaapi_decode.o
@@ -994,14 +999,16 @@ OBJS-$(CONFIG_VULKAN)                     += vulkan.o vulkan_video.o
 
 OBJS-$(CONFIG_AV1_D3D11VA_HWACCEL)        += dxva2_av1.o
 OBJS-$(CONFIG_AV1_DXVA2_HWACCEL)          += dxva2_av1.o
+OBJS-$(CONFIG_AV1_D3D12VA_HWACCEL)        += dxva2_av1.o d3d12va_av1.o
 OBJS-$(CONFIG_AV1_NVDEC_HWACCEL)          += nvdec_av1.o
 OBJS-$(CONFIG_AV1_VAAPI_HWACCEL)          += vaapi_av1.o
 OBJS-$(CONFIG_AV1_VDPAU_HWACCEL)          += vdpau_av1.o
-OBJS-$(CONFIG_AV1_VULKAN_HWACCEL)         += vulkan_av1.o
+OBJS-$(CONFIG_AV1_VULKAN_HWACCEL)         += vulkan_decode.o vulkan_av1.o
 OBJS-$(CONFIG_H263_VAAPI_HWACCEL)         += vaapi_mpeg4.o
 OBJS-$(CONFIG_H263_VIDEOTOOLBOX_HWACCEL)  += videotoolbox.o
 OBJS-$(CONFIG_H264_D3D11VA_HWACCEL)       += dxva2_h264.o
 OBJS-$(CONFIG_H264_DXVA2_HWACCEL)         += dxva2_h264.o
+OBJS-$(CONFIG_H264_D3D12VA_HWACCEL)       += dxva2_h264.o d3d12va_h264.o
 OBJS-$(CONFIG_H264_NVDEC_HWACCEL)         += nvdec_h264.o
 OBJS-$(CONFIG_H264_QSV_HWACCEL)           += qsvdec.o
 OBJS-$(CONFIG_H264_VAAPI_HWACCEL)         += vaapi_h264.o
@@ -1010,6 +1017,7 @@ OBJS-$(CONFIG_H264_VIDEOTOOLBOX_HWACCEL)  += videotoolbox.o
 OBJS-$(CONFIG_H264_VULKAN_HWACCEL)        += vulkan_decode.o vulkan_h264.o
 OBJS-$(CONFIG_HEVC_D3D11VA_HWACCEL)       += dxva2_hevc.o
 OBJS-$(CONFIG_HEVC_DXVA2_HWACCEL)         += dxva2_hevc.o
+OBJS-$(CONFIG_HEVC_D3D12VA_HWACCEL)       += dxva2_hevc.o d3d12va_hevc.o
 OBJS-$(CONFIG_HEVC_NVDEC_HWACCEL)         += nvdec_hevc.o
 OBJS-$(CONFIG_HEVC_QSV_HWACCEL)           += qsvdec.o
 OBJS-$(CONFIG_HEVC_VAAPI_HWACCEL)         += vaapi_hevc.o h265_profile_level.o
@@ -1022,6 +1030,7 @@ OBJS-$(CONFIG_MPEG1_VDPAU_HWACCEL)        += vdpau_mpeg12.o
 OBJS-$(CONFIG_MPEG1_VIDEOTOOLBOX_HWACCEL) += videotoolbox.o
 OBJS-$(CONFIG_MPEG2_D3D11VA_HWACCEL)      += dxva2_mpeg2.o
 OBJS-$(CONFIG_MPEG2_DXVA2_HWACCEL)        += dxva2_mpeg2.o
+OBJS-$(CONFIG_MPEG2_D3D12VA_HWACCEL)      += dxva2_mpeg2.o d3d12va_mpeg2.o
 OBJS-$(CONFIG_MPEG2_NVDEC_HWACCEL)        += nvdec_mpeg12.o
 OBJS-$(CONFIG_MPEG2_QSV_HWACCEL)          += qsvdec.o
 OBJS-$(CONFIG_MPEG2_VAAPI_HWACCEL)        += vaapi_mpeg2.o
@@ -1033,6 +1042,7 @@ OBJS-$(CONFIG_MPEG4_VDPAU_HWACCEL)        += vdpau_mpeg4.o
 OBJS-$(CONFIG_MPEG4_VIDEOTOOLBOX_HWACCEL) += videotoolbox.o
 OBJS-$(CONFIG_VC1_D3D11VA_HWACCEL)        += dxva2_vc1.o
 OBJS-$(CONFIG_VC1_DXVA2_HWACCEL)          += dxva2_vc1.o
+OBJS-$(CONFIG_VC1_D3D12VA_HWACCEL)        += dxva2_vc1.o d3d12va_vc1.o
 OBJS-$(CONFIG_VC1_NVDEC_HWACCEL)          += nvdec_vc1.o
 OBJS-$(CONFIG_VC1_QSV_HWACCEL)            += qsvdec.o
 OBJS-$(CONFIG_VC1_VAAPI_HWACCEL)          += vaapi_vc1.o
@@ -1041,6 +1051,7 @@ OBJS-$(CONFIG_VP8_NVDEC_HWACCEL)          += nvdec_vp8.o
 OBJS-$(CONFIG_VP8_VAAPI_HWACCEL)          += vaapi_vp8.o
 OBJS-$(CONFIG_VP9_D3D11VA_HWACCEL)        += dxva2_vp9.o
 OBJS-$(CONFIG_VP9_DXVA2_HWACCEL)          += dxva2_vp9.o
+OBJS-$(CONFIG_VP9_D3D12VA_HWACCEL)        += dxva2_vp9.o d3d12va_vp9.o
 OBJS-$(CONFIG_VP9_NVDEC_HWACCEL)          += nvdec_vp9.o
 OBJS-$(CONFIG_VP9_VAAPI_HWACCEL)          += vaapi_vp9.o
 OBJS-$(CONFIG_VP9_VDPAU_HWACCEL)          += vdpau_vp9.o
@@ -1223,54 +1234,15 @@ OBJS-$(CONFIG_XMA_PARSER)              += xma_parser.o
 OBJS-$(CONFIG_XWD_PARSER)              += xwd_parser.o
 
 # bitstream filters
-OBJS-$(CONFIG_AAC_ADTSTOASC_BSF)          += aac_adtstoasc_bsf.o
-OBJS-$(CONFIG_AV1_METADATA_BSF)           += av1_metadata_bsf.o
-OBJS-$(CONFIG_AV1_FRAME_MERGE_BSF)        += av1_frame_merge_bsf.o
-OBJS-$(CONFIG_AV1_FRAME_SPLIT_BSF)        += av1_frame_split_bsf.o
-OBJS-$(CONFIG_CHOMP_BSF)                  += chomp_bsf.o
-OBJS-$(CONFIG_DUMP_EXTRADATA_BSF)         += dump_extradata_bsf.o
-OBJS-$(CONFIG_DCA_CORE_BSF)               += dca_core_bsf.o
-OBJS-$(CONFIG_DTS2PTS_BSF)                += dts2pts_bsf.o
-OBJS-$(CONFIG_DV_ERROR_MARKER_BSF)        += dv_error_marker_bsf.o
-OBJS-$(CONFIG_EAC3_CORE_BSF)              += eac3_core_bsf.o
-OBJS-$(CONFIG_EXTRACT_EXTRADATA_BSF)      += extract_extradata_bsf.o    \
-                                             av1_parse.o h2645_parse.o
-OBJS-$(CONFIG_FILTER_UNITS_BSF)           += filter_units_bsf.o
-OBJS-$(CONFIG_H264_METADATA_BSF)          += h264_metadata_bsf.o h264_levels.o \
-                                             h2645data.o
-OBJS-$(CONFIG_H264_MP4TOANNEXB_BSF)       += h264_mp4toannexb_bsf.o
-OBJS-$(CONFIG_H264_REDUNDANT_PPS_BSF)     += h264_redundant_pps_bsf.o
-OBJS-$(CONFIG_HAPQA_EXTRACT_BSF)          += hapqa_extract_bsf.o hap.o
-OBJS-$(CONFIG_HEVC_METADATA_BSF)          += h265_metadata_bsf.o h265_profile_level.o \
-                                             h2645data.o
-OBJS-$(CONFIG_HEVC_MP4TOANNEXB_BSF)       += hevc_mp4toannexb_bsf.o
-OBJS-$(CONFIG_IMX_DUMP_HEADER_BSF)        += imx_dump_header_bsf.o
-OBJS-$(CONFIG_MEDIA100_TO_MJPEGB_BSF)     += media100_to_mjpegb_bsf.o
-OBJS-$(CONFIG_MJPEG2JPEG_BSF)             += mjpeg2jpeg_bsf.o
-OBJS-$(CONFIG_MJPEGA_DUMP_HEADER_BSF)     += mjpega_dump_header_bsf.o
-OBJS-$(CONFIG_MPEG4_UNPACK_BFRAMES_BSF)   += mpeg4_unpack_bframes_bsf.o
-OBJS-$(CONFIG_MOV2TEXTSUB_BSF)            += movsub_bsf.o
-OBJS-$(CONFIG_MP3_HEADER_DECOMPRESS_BSF)  += mp3_header_decompress_bsf.o \
-                                             mpegaudiotabs.o
-OBJS-$(CONFIG_MPEG2_METADATA_BSF)         += mpeg2_metadata_bsf.o
-OBJS-$(CONFIG_NOISE_BSF)                  += noise_bsf.o
-OBJS-$(CONFIG_NULL_BSF)                   += null_bsf.o
-OBJS-$(CONFIG_OPUS_METADATA_BSF)          += opus_metadata_bsf.o
-OBJS-$(CONFIG_PCM_RECHUNK_BSF)            += pcm_rechunk_bsf.o
-OBJS-$(CONFIG_PGS_FRAME_MERGE_BSF)        += pgs_frame_merge_bsf.o
-OBJS-$(CONFIG_PRORES_METADATA_BSF)        += prores_metadata_bsf.o
-OBJS-$(CONFIG_REMOVE_EXTRADATA_BSF)       += remove_extradata_bsf.o av1_parse.o
-OBJS-$(CONFIG_SETTS_BSF)                  += setts_bsf.o
-OBJS-$(CONFIG_TEXT2MOVSUB_BSF)            += movsub_bsf.o
-OBJS-$(CONFIG_TRACE_HEADERS_BSF)          += trace_headers_bsf.o
-OBJS-$(CONFIG_TRUEHD_CORE_BSF)            += truehd_core_bsf.o mlp_parse.o mlp.o
-OBJS-$(CONFIG_VP9_METADATA_BSF)           += vp9_metadata_bsf.o
-OBJS-$(CONFIG_VP9_RAW_REORDER_BSF)        += vp9_raw_reorder_bsf.o
-OBJS-$(CONFIG_VP9_SUPERFRAME_BSF)         += vp9_superframe_bsf.o
-OBJS-$(CONFIG_VP9_SUPERFRAME_SPLIT_BSF)   += vp9_superframe_split_bsf.o
-OBJS-$(CONFIG_VVC_METADATA_BSF)           += h266_metadata_bsf.o
-OBJS-$(CONFIG_VVC_MP4TOANNEXB_BSF)        += vvc_mp4toannexb_bsf.o
-OBJS-$(CONFIG_EVC_FRAME_MERGE_BSF)        += evc_frame_merge_bsf.o
+include $(SRC_PATH)/libavcodec/bsf/Makefile
+
+OBJS-$(CONFIG_EXTRACT_EXTRADATA_BSF)      += av1_parse.o h2645_parse.o
+OBJS-$(CONFIG_H264_METADATA_BSF)          += h264_levels.o h2645data.o
+OBJS-$(CONFIG_HAPQA_EXTRACT_BSF)          += hap.o
+OBJS-$(CONFIG_HEVC_METADATA_BSF)          += h265_profile_level.o h2645data.o
+OBJS-$(CONFIG_MP3_HEADER_DECOMPRESS_BSF)  += mpegaudiotabs.o
+OBJS-$(CONFIG_REMOVE_EXTRADATA_BSF)       += av1_parse.o
+OBJS-$(CONFIG_TRUEHD_CORE_BSF)            += mlp_parse.o mlp.o
 
 # thread libraries
 OBJS-$(HAVE_LIBC_MSVCRT)               += file_open.o
@@ -1290,11 +1262,12 @@ SKIPHEADERS                            += %_tablegen.h                  \
                                           aacenc_quantization.h         \
                                           aacenc_quantization_misc.h    \
                                           bitstream_template.h          \
-                                          vulkan_video_codec_av1std.h   \
+                                          vulkan_video_codec_av1std_mesa.h \
                                           $(ARCH)/vpx_arith.h          \
 
 SKIPHEADERS-$(CONFIG_AMF)              += amfenc.h
 SKIPHEADERS-$(CONFIG_D3D11VA)          += d3d11va.h dxva2_internal.h
+SKIPHEADERS-$(CONFIG_D3D12VA)          += d3d12va_decode.h
 SKIPHEADERS-$(CONFIG_DXVA2)            += dxva2.h dxva2_internal.h
 SKIPHEADERS-$(CONFIG_JNI)              += ffjni.h
 SKIPHEADERS-$(CONFIG_LCMS2)            += fflcms2.h
@@ -1312,7 +1285,7 @@ SKIPHEADERS-$(CONFIG_XVMC)             += xvmc.h
 SKIPHEADERS-$(CONFIG_VAAPI)            += vaapi_decode.h vaapi_hevc.h vaapi_encode.h
 SKIPHEADERS-$(CONFIG_VDPAU)            += vdpau.h vdpau_internal.h
 SKIPHEADERS-$(CONFIG_VIDEOTOOLBOX)     += videotoolbox.h vt_internal.h
-SKIPHEADERS-$(CONFIG_VULKAN)           += vulkan.h vulkan_video.h vulkan_decode.h vulkan_video_codec_av1std_decode.h
+SKIPHEADERS-$(CONFIG_VULKAN)           += vulkan.h vulkan_video.h vulkan_decode.h vulkan_video_codec_av1std_decode_mesa.h
 SKIPHEADERS-$(CONFIG_V4L2_M2M)         += v4l2_buffers.h v4l2_context.h v4l2_m2m.h
 SKIPHEADERS-$(CONFIG_ZLIB)             += zlib_wrapper.h
 

@@ -71,8 +71,14 @@ void VerifyHMACDeviceID(MediaDeviceType device_type,
 blink::StreamControls GetAudioStreamControls(std::string hmac_device_id) {
   blink::StreamControls stream_controls{/*request_audio=*/true,
                                         /*request_video=*/false};
-  stream_controls.audio.device_id = hmac_device_id;
+  stream_controls.audio.device_ids = {hmac_device_id};
   return stream_controls;
+}
+
+blink::mojom::StreamSelectionInfoPtr NewSearchBySessionId(
+    base::flat_map<std::string, base::UnguessableToken> session_id_map) {
+  return blink::mojom::StreamSelectionInfo::NewSearchBySessionId(
+      blink::mojom::SearchBySessionId::New(session_id_map));
 }
 
 }  // namespace
@@ -143,16 +149,14 @@ class MediaDevicesUtilBrowserTest : public ContentBrowserTest {
             controls, salt_and_origin,
             /*user_gesture=*/false,
             /*audio_stream_selection_info_ptr=*/
-            blink::mojom::StreamSelectionInfo::New(
-                /*strategy=*/blink::mojom::StreamSelectionStrategy::
-                    FORCE_NEW_STREAM,
-                std::nullopt),
+            NewSearchBySessionId({}),
             base::BindPostTaskToCurrentDefault(std::move(generate_stream_cb)),
             /*device_stopped_cb=*/base::DoNothing(),
             /*device_changed_cb=*/base::DoNothing(),
             /*device_request_state_change_cb*/ base::DoNothing(),
             /*device_capture_configuration_change_cb=*/base::DoNothing(),
-            /*device_capture_handle_change_cb=*/base::DoNothing()));
+            /*device_capture_handle_change_cb=*/base::DoNothing(),
+            /*zoom_level_change_callback=*/base::DoNothing()));
   }
 
   GlobalRenderFrameHostId frame_id_;

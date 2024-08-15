@@ -129,7 +129,7 @@ if (!is_ios) {
 
     if(is_linux) {
       update_template_instance("//chrome/test:browser_tests") {
-        data_deps -= [ "//third_party/screen-ai:screen_ai_linux" ]
+        data_deps -= [ "//third_party/screen-ai:screen_ai" ]
       }
     }
   }

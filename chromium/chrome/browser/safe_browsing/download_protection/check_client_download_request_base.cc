@@ -139,18 +139,8 @@ void CheckClientDownloadRequestBase::Start() {
   // analysis.
   auto callback = base::BindOnce(
       &CheckClientDownloadRequestBase::OnUrlAllowlistCheckDone, GetWeakPtr());
-  if (base::FeatureList::IsEnabled(kSafeBrowsingOnUIThread)) {
-    database_manager_->MatchDownloadAllowlistUrl(source_url_,
-                                                 std::move(callback));
-  } else {
-    content::GetIOThreadTaskRunner({})->PostTask(
-        FROM_HERE,
-        base::BindOnce(&safe_browsing::SafeBrowsingDatabaseManager::
-                           MatchDownloadAllowlistUrl,
-                       database_manager_, source_url_,
-                       base::BindPostTask(content::GetUIThreadTaskRunner({}),
-                                          std::move(callback))));
-  }
+  database_manager_->MatchDownloadAllowlistUrl(source_url_,
+                                               std::move(callback));
 }
 
 void CheckClientDownloadRequestBase::FinishRequest(
@@ -315,6 +305,25 @@ void CheckClientDownloadRequestBase::GetAdditionalPromptResult(
   // could prompt for deep scanning.
   if (ShouldPromptForDeepScanning(/*server_requests_prompt=*/true)) {
     LogDeepScanningPrompt(deep_scanning_prompt);
+  }
+
+  bool immediate_deep_scan_prompt =
+      ShouldImmediatelyDeepScan(response.request_deep_scan());
+  if (immediate_deep_scan_prompt) {
+    *result = DownloadCheckResult::IMMEDIATE_DEEP_SCAN;
+    *reason = DownloadCheckResultReason::REASON_IMMEDIATE_DEEP_SCAN;
+    // Always set the token if Chrome should prompt for deep scanning.
+    // Otherwise, client Safe Browsing reports may be missed when the
+    // verdict is SAFE. See https://crbug.com/1485218.
+    *token = response.token();
+  }
+
+  // Only record the UMA metric if we're in a population that potentially
+  // could prompt for deep scanning.
+  if (ShouldImmediatelyDeepScan(/*server_requests_prompt=*/true)) {
+    base::UmaHistogramBoolean(
+        "SBClientDownload.ServerRequestsImmediateDeepScan",
+        deep_scanning_prompt);
   }
 }
 
@@ -599,8 +608,11 @@ void CheckClientDownloadRequestBase::OnURLLoaderComplete(
     GetAdditionalPromptResult(response, &result, &reason, &token);
 
     if (!token.empty()) {
-      SetDownloadProtectionData(token, response.verdict(),
-                                response.tailored_verdict());
+      const TailoredVerdictOverrideData& local_override =
+          WebUIInfoSingleton::GetInstance()->tailored_verdict_override();
+      SetDownloadProtectionData(
+          token, response.verdict(),
+          local_override.override_value.value_or(response.tailored_verdict()));
     }
 
     bool upload_requested = response.upload();

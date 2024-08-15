@@ -191,8 +191,21 @@ def RegressionDetection(request):
   ci_lower = statistic.get('lower')
   ci_upper = statistic.get('upper')
   p_value = statistic.get('p_value')
+  control_median = statistic.get('control_median')
+  treatment_median = statistic.get('treatment_median')
 
-  if ci_lower is None or ci_upper is None or p_value is None:
+  # Check improvement, improvement is not regression.
+  improvement_direction = request_json.get('anomaly', {}).get('improvement_dir')
+  is_improvement = IsImprovement(control_median, treatment_median,
+                                 improvement_direction)
+  if is_improvement:
+    print("Found an improvement: job id - %s, anomaly - %s, statistic - %s." %
+          (request_json.get('job_id'), request_json.get('anomaly'), statistic))
+    decision = False
+    return jsonify({'decision': decision})
+
+
+  if (ci_lower is None or ci_upper is None) and p_value is None:
     return ("Bad request; ci_upper: %s, ci_lower: %s, p_value: %s" %  ci_lower,
     ci_upper, p_value), 400
 
@@ -201,7 +214,26 @@ def RegressionDetection(request):
   # TODO(crbug/1455502): Define regression threshold based on story
   # specific attributes such as the anomaly's magnitude or the
   # subscription thresholds.
-  if ci_lower*ci_upper > 0 and p_value < 0.05:
+  # CI values might be Infinity if the result changes from zero to none zero
+  if p_value is None:
+    if (ci_lower != "Infinity" and ci_upper != "Infinity") and (ci_lower * ci_upper > 0):
+      decision = True
+  elif ci_lower is None or ci_upper is None or ci_lower == "Infinity" or ci_upper == "Infinity":
+    if p_value < 0.05:
+      decision = True
+  elif ci_lower * ci_upper > 0 and p_value < 0.05:
     decision = True
 
   return jsonify({'decision': decision})
+
+
+def IsImprovement(control_median, treatment_median, improvement_direction):
+  if (improvement_direction is not None and control_median is not None
+      and control_median != "infinity" and treatment_median is not None
+      and treatment_median != "infinity"):
+    if (treatment_median > control_median and improvement_direction
+        == 'UP') or (treatment_median < control_median
+                     and improvement_direction == 'DOWN'):
+      return True
+
+  return False

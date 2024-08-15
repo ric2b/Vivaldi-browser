@@ -40,7 +40,7 @@ class BrandOverride {
 
 void ClientHintsBrandRegisterProfilePrefs(PrefService*);
 
-void SelectClientHintsBrand(absl::optional<std::string>& brand,
+void SelectClientHintsBrand(std::optional<std::string>& brand,
                             std::string& major_version,
                             std::string& full_version);
 

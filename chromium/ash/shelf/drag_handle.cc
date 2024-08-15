@@ -136,8 +136,9 @@ bool DragHandle::MaybeShowDragHandleNudge() {
   if (!show_drag_handle_nudge_timer_.IsRunning())
     overview_observation_.Reset();
 
-  if (!features::AreContextualNudgesEnabled())
+  if (!features::IsHideShelfControlsInTabletModeEnabled()) {
     return false;
+  }
 
   // Do not show drag handle nudge if it is already shown or drag handle is not
   // visible.
@@ -252,7 +253,7 @@ void DragHandle::UpdateColor() {
 }
 
 void DragHandle::OnGestureEvent(ui::GestureEvent* event) {
-  if (!features::AreContextualNudgesEnabled() ||
+  if (!features::IsHideShelfControlsInTabletModeEnabled() ||
       !gesture_nudge_target_visibility_) {
     return;
   }
@@ -289,7 +290,7 @@ gfx::Rect DragHandle::GetAnchorBoundsInScreen() const {
 void DragHandle::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   // TODO(b/262424972): Remove unwanted ", window" string from the announcement.
   Button::GetAccessibleNodeData(node_data);
-  GetViewAccessibility().OverrideRole(ax::mojom::Role::kPopUpButton);
+  GetViewAccessibility().SetRole(ax::mojom::Role::kPopUpButton);
 
   std::u16string accessible_name = std::u16string();
   switch (shelf_->shelf_layout_manager()->hotseat_state()) {
@@ -305,8 +306,8 @@ void DragHandle::GetAccessibleNodeData(ui::AXNodeData* node_data) {
       // When the hotseat is kHidden, the focus traversal should go to the
       // status area as the next focus and the navigation area as the previous
       // focus.
-      GetViewAccessibility().OverrideNextFocus(shelf_->GetStatusAreaWidget());
-      GetViewAccessibility().OverridePreviousFocus(
+      GetViewAccessibility().SetNextFocus(shelf_->GetStatusAreaWidget());
+      GetViewAccessibility().SetPreviousFocus(
           shelf_->shelf_widget()->navigation_widget());
       break;
     case HotseatState::kExtended:
@@ -314,8 +315,8 @@ void DragHandle::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 
       // When the hotseat is kExtended, the focus traversal should go to the
       // hotseat as both the next and previous focus.
-      GetViewAccessibility().OverrideNextFocus(shelf_->hotseat_widget());
-      GetViewAccessibility().OverridePreviousFocus(shelf_->hotseat_widget());
+      GetViewAccessibility().SetNextFocus(shelf_->hotseat_widget());
+      GetViewAccessibility().SetPreviousFocus(shelf_->hotseat_widget());
 
       // The name should be empty when the hotseat is extended but we cannot
       // hide it.

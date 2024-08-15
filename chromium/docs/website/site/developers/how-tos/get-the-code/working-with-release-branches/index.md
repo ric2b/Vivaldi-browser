@@ -25,7 +25,7 @@ internal documentation (*go/ChromeReleaseBranches*).
 # Make sure you are in 'src'.
 # This part should only need to be done once, but it won't hurt to repeat it.
 # The first time checking out branches and tags might take a while because it
-# fetches an extra 1/2 GB or so of branch commits.
+# fetches an extra 5 GB or so of branch commits.
 gclient sync --with_branch_heads --with_tags
 
 # You may have to explicitly 'git fetch origin' to pull branch-heads/

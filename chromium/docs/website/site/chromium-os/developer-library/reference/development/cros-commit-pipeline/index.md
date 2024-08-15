@@ -36,7 +36,7 @@ As of January 2020, ChromeOS is using the parallel CQ. This documentation has
 been updated to reflect how that behaves.
 
 A gross simplification of the ChromeOS Continous Integration (CI):
-![Simplified diagram of ChromeOS CQ pipeline](images/simplified_cq_pipeline.png)
+![Simplified diagram of ChromeOS CQ pipeline](/chromium-os/developer-library/reference/development/cros-commit-pipeline/simplified_cq_pipeline.png)
 
 The CQ collects all changes in the patch series, along with any changes linked
 via [Cq-Depend] in the commit messages, and applies them to tip of tree (ToT).

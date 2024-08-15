@@ -23,7 +23,7 @@
 
 //! Crate which provides impls for CryptoProvider backed by BoringSSL
 //!
-use bssl_crypto::rand::rand_bytes;
+use bssl_crypto::rand_bytes;
 use crypto_provider::{CryptoProvider, CryptoRng};
 
 /// Implementation of `crypto_provider::aes` types using BoringSSL
@@ -69,18 +69,18 @@ impl CryptoProvider for Boringssl {
     type AesCtr128 = aes::ctr::AesCtr128;
     type AesCtr256 = aes::ctr::AesCtr256;
     type Ed25519 = ed25519::Ed25519;
-    type Aes128GcmSiv = aead::aes_gcm_siv::AesGcmSiv;
-    type Aes256GcmSiv = aead::aes_gcm_siv::AesGcmSiv;
-    type Aes128Gcm = aead::aes_gcm::AesGcm;
-    type Aes256Gcm = aead::aes_gcm::AesGcm;
+    type Aes128GcmSiv = aead::aes_gcm_siv::AesGcmSiv128;
+    type Aes256GcmSiv = aead::aes_gcm_siv::AesGcmSiv256;
+    type Aes128Gcm = aead::aes_gcm::AesGcm128;
+    type Aes256Gcm = aead::aes_gcm::AesGcm256;
     type CryptoRng = BoringSslRng;
 
     fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-        bssl_crypto::mem::crypto_memcmp(a, b)
+        bssl_crypto::constant_time_compare(a, b)
     }
 }
 
-/// OpenSSL implemented random number generator
+/// BoringSSL implemented random number generator
 pub struct BoringSslRng;
 
 impl CryptoRng for BoringSslRng {

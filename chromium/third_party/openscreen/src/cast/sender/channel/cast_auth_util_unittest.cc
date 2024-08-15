@@ -103,7 +103,7 @@ bool ConvertTimeSeconds(const DateTime& time, uint64_t* seconds) {
     year -= first_year;
 
     result += year * kDaysPerYear * kSecondsPerDay;
-    OSP_DCHECK_LE(year, 2);
+    OSP_CHECK_LE(year, 2);
   }
 
   for (int i = 0; i < time.month - 1; ++i) {
@@ -417,7 +417,7 @@ bool RunTest(const DeviceCertTest& test_case) {
   if (!cert_verify_time) {
     cert_verify_time = test_case.crl_verification_time_seconds();
   }
-  OSP_DCHECK(DateTimeFromSeconds(cert_verify_time, &verification_time));
+  OSP_CHECK(DateTimeFromSeconds(cert_verify_time, &verification_time));
 
   std::string crl_bundle = test_case.crl_bundle();
   ErrorOr<CastDeviceCertPolicy> result(CastDeviceCertPolicy::kUnrestricted);

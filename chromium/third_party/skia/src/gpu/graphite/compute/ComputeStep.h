@@ -79,6 +79,13 @@ public:
     enum class ResourceType {
         kUniformBuffer,
         kStorageBuffer,
+        kReadOnlyStorageBuffer,
+
+        // An indirect buffer is a storage buffer populated by this ComputeStep to determine the
+        // global dispatch size of a subsequent ComputeStep within the same DispatchGroup. The
+        // contents of the buffer must be laid out according to the `IndirectDispatchArgs` struct
+        // definition declared in ComputeTypes.h.
+        kIndirectBuffer,
 
         kWriteOnlyStorageTexture,
         kReadOnlyTexture,
@@ -248,7 +255,7 @@ protected:
         kNone                 = 0b00000,
         kSupportsNativeShader = 0b00010,
     };
-    SK_DECL_BITMASK_OPS_FRIENDS(Flags);
+    SK_DECL_BITMASK_OPS_FRIENDS(Flags)
 
     ComputeStep(std::string_view name,
                 WorkgroupSize localDispatchSize,

@@ -8,7 +8,6 @@
 
 #include "base/logging.h"
 #include "base/memory/raw_ptr_exclusion.h"
-#include "base/strings/string_piece.h"
 #include "chromeos/ash/components/network/network_type_pattern.h"
 #include "chromeos/ash/components/network/tether_constants.h"
 #include "components/onc/onc_constants.h"
@@ -21,6 +20,9 @@ namespace ash::onc {
 // stored in Shill.
 
 namespace {
+
+const char kShillApnSourceModem[] = "modem";
+const char kShillApnSourceModb[] = "modb";
 
 const FieldTranslationEntry eap_fields[] = {
     {::onc::eap::kAnonymousIdentity, shill::kEapAnonymousIdentityProperty},
@@ -466,6 +468,18 @@ const StringTranslationEntry kApnIpTypeTranslationTable[] = {
     {::onc::cellular_apn::kIpTypeIpv4Ipv6, shill::kApnIpTypeV4V6},
     {nullptr}};
 
+const StringTranslationEntry kApnSourceTranslationTable[] = {
+    {::onc::cellular_apn::kSourceModem, kShillApnSourceModem},
+    {::onc::cellular_apn::kSourceModb, kShillApnSourceModb},
+    {::onc::cellular_apn::kSourceUi, shill::kApnSourceUi},
+    {nullptr}};
+
+const StringTranslationEntry kCheckCaptivePortalTranslationTable[] = {
+    {::onc::check_captive_portal::kFalse, "false"},
+    {::onc::check_captive_portal::kHTTPOnly, "http-only"},
+    {::onc::check_captive_portal::kTrue, "true"},
+    {nullptr}};
+
 // This must contain only Shill Device properties and no Service properties.
 // For Service properties see cellular_fields.
 const FieldTranslationEntry kCellularDeviceTable[] = {
@@ -511,7 +525,7 @@ const FieldTranslationEntry* GetFieldTranslationTable(
 }
 
 const StringTranslationEntry* GetEapInnerTranslationTableForShillOuter(
-    base::StringPiece shill_eap_outer) {
+    std::string_view shill_eap_outer) {
   if (shill_eap_outer == shill::kEapMethodPEAP) {
     return eap_peap_inner_table;
   }
@@ -523,7 +537,7 @@ const StringTranslationEntry* GetEapInnerTranslationTableForShillOuter(
 }
 
 const StringTranslationEntry* GetEapInnerTranslationTableForOncOuter(
-    base::StringPiece onc_eap_outer) {
+    std::string_view onc_eap_outer) {
   if (onc_eap_outer == ::onc::eap::kPEAP) {
     return eap_peap_inner_table;
   }

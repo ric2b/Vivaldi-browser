@@ -9,7 +9,7 @@ title: Definition of a web-exposed change to Chromium
 ---
 
 Web-exposed is defined as **affecting web API behavior to the point that
-developers using that API need to be aware of it**.
+website (i.e. web pages loaded via the HTTP or HTTPS scheme) developers using that API need to be aware of it**.
 
 Changes that are web-exposed:
 

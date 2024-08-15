@@ -28,13 +28,14 @@
 #include "third_party/blink/renderer/core/animation/property_handle.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/color_scheme_flags.h"
-#include "third_party/blink/renderer/core/css/css_position_fallback_rule.h"
+#include "third_party/blink/renderer/core/css/css_position_try_rule.h"
 #include "third_party/blink/renderer/core/css/element_rule_collector.h"
 #include "third_party/blink/renderer/core/css/resolver/matched_properties_cache.h"
 #include "third_party/blink/renderer/core/css/resolver/style_builder.h"
 #include "third_party/blink/renderer/core/css/selector_checker.h"
 #include "third_party/blink/renderer/core/css/selector_filter.h"
 #include "third_party/blink/renderer/core/css/style_request.h"
+#include "third_party/blink/renderer/core/style/filter_operations.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/wtf/deque.h"
@@ -47,6 +48,8 @@ class CSSPropertyValueSet;
 class CSSValue;
 class Document;
 class Element;
+class Font;
+class FontDescription;
 class Interpolation;
 class MatchResult;
 class PropertyHandle;
@@ -83,9 +86,7 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
   // root element style. In addition to initial values things like zoom, font,
   // forced color mode etc. is set.
   ComputedStyleBuilder InitialStyleBuilderForElement() const;
-  const ComputedStyle* InitialStyleForElement() const {
-    return InitialStyleBuilderForElement().TakeStyle();
-  }
+  const ComputedStyle* InitialStyleForElement() const;
 
   float InitialZoom() const;
 
@@ -126,10 +127,7 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
       EDisplay);
   const ComputedStyle* CreateAnonymousStyleWithDisplay(
       const ComputedStyle& parent_style,
-      EDisplay display) {
-    return CreateAnonymousStyleBuilderWithDisplay(parent_style, display)
-        .TakeStyle();
-  }
+      EDisplay display);
 
   // Create ComputedStyle for anonymous wrappers between text boxes and
   // display:contents elements.
@@ -224,10 +222,9 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
       Element& element,
       const ComputedStyle& base_style,
       ActiveInterpolationsMap& transition_interpolations);
-  StyleRulePositionFallback* ResolvePositionFallbackRule(
-      const TreeScope* tree_scope,
-      AtomicString position_fallback_name);
-  const ComputedStyle* ResolvePositionFallbackStyle(Element&, unsigned index);
+
+  StyleRulePositionTry* ResolvePositionTryRule(const TreeScope* tree_scope,
+                                               AtomicString position_try_name);
 
   // Check if the BODY or HTML element's display or containment stops
   // propagation of BODY style to HTML and viewport.
@@ -291,7 +288,7 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
                             ElementRuleCollector&,
                             bool for_shadow_pseudo = false);
   void MatchPseudoPartRulesForUAHost(const Element&, ElementRuleCollector&);
-  void MatchTryRules(const Element&, ElementRuleCollector&);
+  void MatchPositionTryRules(const Element&, ElementRuleCollector&);
   void MatchAuthorRules(const Element&,
                         ElementRuleCollector&);
   void MatchAllRules(StyleResolverState&,
@@ -366,8 +363,8 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
   MatchedPropertiesCache matched_properties_cache_;
 
   // Both these members are on a hot-path for creating ComputedStyle objects.
-  subtle::UncompressedMember<const ComputedStyle> initial_style_;
-  subtle::UncompressedMember<const ComputedStyle> initial_style_for_img_;
+  const subtle::UncompressedMember<const ComputedStyle> initial_style_;
+  const subtle::UncompressedMember<const ComputedStyle> initial_style_for_img_;
   SelectorFilter selector_filter_;
 
   Member<Document> document_;
@@ -384,7 +381,6 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
   bool print_media_type_ = false;
   bool was_viewport_resized_ = false;
 
-  FRIEND_TEST_ALL_PREFIXES(ComputedStyleTest, ApplyInternalLightDarkColor);
   friend class StyleResolverTest;
   FRIEND_TEST_ALL_PREFIXES(ParameterizedStyleResolverTest,
                            TreeScopedReferences);

@@ -45,10 +45,18 @@ ScriptPromiseResolver::ScriptPromiseResolver(ScriptState* script_state)
 ScriptPromiseResolver::ScriptPromiseResolver(
     ScriptState* script_state,
     const ExceptionContext& exception_context)
+    : ScriptPromiseResolver(script_state,
+                            exception_context,
+                            Resolver(script_state)) {}
+
+ScriptPromiseResolver::ScriptPromiseResolver(
+    ScriptState* script_state,
+    const ExceptionContext& exception_context,
+    Resolver resolver)
     : ExecutionContextLifecycleObserver(ExecutionContext::From(script_state)),
+      resolver_(std::move(resolver)),
       state_(kPending),
       script_state_(script_state),
-      resolver_(script_state),
       exception_context_(exception_context) {
   if (GetExecutionContext()->IsContextDestroyed()) {
     state_ = kDetached;
@@ -56,7 +64,6 @@ ScriptPromiseResolver::ScriptPromiseResolver(
   }
   script_url_ = GetCurrentScriptUrl(script_state->GetIsolate());
 }
-
 ScriptPromiseResolver::~ScriptPromiseResolver() = default;
 
 void ScriptPromiseResolver::Dispose() {
@@ -85,6 +92,26 @@ void ScriptPromiseResolver::Dispose() {
   deferred_resolve_task_.Cancel();
 }
 
+void ScriptPromiseResolver::Reject(DOMException* value) {
+  Reject<DOMException>(value);
+}
+
+void ScriptPromiseResolver::Reject(v8::Local<v8::Value> value) {
+  Reject<IDLAny>(value);
+}
+
+void ScriptPromiseResolver::Reject(const ScriptValue& value) {
+  Reject<IDLAny>(value);
+}
+
+void ScriptPromiseResolver::Reject(const char* value) {
+  Reject<IDLString>(value);
+}
+
+void ScriptPromiseResolver::Reject(bool value) {
+  Reject<IDLBoolean>(value);
+}
+
 void ScriptPromiseResolver::Reject(ExceptionState& exception_state) {
   DCHECK(exception_state.HadException());
   Reject(exception_state.GetException());
@@ -94,25 +121,30 @@ void ScriptPromiseResolver::Reject(ExceptionState& exception_state) {
 void ScriptPromiseResolver::RejectWithDOMException(
     DOMExceptionCode exception_code,
     const String& message) {
+  ScriptState::Scope scope(script_state_.Get());
   ExceptionStateScope(this).ThrowDOMException(exception_code, message);
 }
 
 void ScriptPromiseResolver::RejectWithSecurityError(
     const String& sanitized_message,
     const String& unsanitized_message) {
+  ScriptState::Scope scope(script_state_.Get());
   ExceptionStateScope(this).ThrowSecurityError(sanitized_message,
                                                unsanitized_message);
 }
 
 void ScriptPromiseResolver::RejectWithTypeError(const String& message) {
+  ScriptState::Scope scope(script_state_.Get());
   ExceptionStateScope(this).ThrowTypeError(message);
 }
 
 void ScriptPromiseResolver::RejectWithRangeError(const String& message) {
+  ScriptState::Scope scope(script_state_.Get());
   ExceptionStateScope(this).ThrowRangeError(message);
 }
 
 void ScriptPromiseResolver::RejectWithWasmCompileError(const String& message) {
+  ScriptState::Scope scope(script_state_.Get());
   ExceptionStateScope(this).ThrowWasmCompileError(message);
 }
 
@@ -123,19 +155,24 @@ void ScriptPromiseResolver::Detach() {
   state_ = kDetached;
   resolver_.Clear();
   value_.Reset();
-  keep_alive_.Clear();
 }
 
-void ScriptPromiseResolver::KeepAliveWhilePending() {
-  // keepAliveWhilePending() will be called twice if the resolver
-  // is created in a suspended execution context and the resolver
-  // is then resolved/rejected while in that suspended state.
-  if (state_ == kDetached || keep_alive_)
+void ScriptPromiseResolver::NotifyResolveOrReject() {
+  if (GetExecutionContext()->IsContextPaused()) {
+    ScheduleResolveOrReject();
     return;
-
-  // Keep |this| around while the promise is Pending;
-  // see detach() for the dual operation.
-  keep_alive_ = this;
+  }
+  // TODO(esprehn): This is a hack, instead we should CHECK that
+  // script is allowed, and v8 should be running the entry hooks below and
+  // crashing if script is forbidden. We should then audit all users of
+  // ScriptPromiseResolver and the related specs and switch to an async
+  // resolve.
+  // See: http://crbug.com/663476
+  if (ScriptForbiddenScope::IsScriptForbidden()) {
+    ScheduleResolveOrReject();
+    return;
+  }
+  ResolveOrRejectImmediately();
 }
 
 void ScriptPromiseResolver::ResolveOrRejectImmediately() {

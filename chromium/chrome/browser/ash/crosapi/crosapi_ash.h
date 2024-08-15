@@ -18,6 +18,7 @@
 #include "chromeos/crosapi/mojom/emoji_picker.mojom-forward.h"
 #include "chromeos/crosapi/mojom/firewall_hole.mojom.h"
 #include "chromeos/crosapi/mojom/lacros_shelf_item_tracker.mojom.h"
+#include "chromeos/crosapi/mojom/mahi.mojom-forward.h"
 #include "chromeos/crosapi/mojom/task_manager.mojom.h"
 #include "chromeos/crosapi/mojom/telemetry_diagnostic_routine_service.mojom.h"
 #include "media/gpu/buildflags.h"
@@ -32,7 +33,7 @@ class DigitalGoodsFactoryAsh;
 
 namespace ash {
 class DiagnosticsServiceAsh;
-class MahiManagerAsh;
+class MahiBrowserDelegateAsh;
 class ProbeServiceAsh;
 class SmartReaderManagerAsh;
 class TelemetryDiagnosticsRoutineServiceAsh;
@@ -111,6 +112,7 @@ class NetworkSettingsServiceAsh;
 class NetworkingAttributesAsh;
 class NetworkingPrivateAsh;
 class OneDriveNotificationServiceAsh;
+class OneDriveIntegrationServiceAsh;
 class PasskeyAuthenticator;
 class ParentAccessAsh;
 class PaymentAppInstanceAsh;
@@ -130,6 +132,7 @@ class SelectFileAsh;
 class SharesheetAsh;
 class SpeechRecognitionAsh;
 class StructuredMetricsServiceAsh;
+class SuggestionServiceAsh;
 class TaskManagerAsh;
 class TimeZoneServiceAsh;
 class TtsAsh;
@@ -147,15 +150,16 @@ class VpnExtensionObserverAsh;
 // crosapi clients, such as lacros-chrome, can call into.
 class CrosapiAsh : public mojom::Crosapi {
  public:
-  explicit CrosapiAsh(CrosapiDependencyRegistry* registry);
-  ~CrosapiAsh() override;
-
   // Abstract base class to support dependency injection for tests.
   class TestControllerReceiver {
    public:
+    virtual ~TestControllerReceiver();
     virtual void BindReceiver(
         mojo::PendingReceiver<mojom::TestController> receiver) = 0;
   };
+
+  explicit CrosapiAsh(CrosapiDependencyRegistry* registry);
+  ~CrosapiAsh() override;
 
   // Binds the given receiver to this instance.
   // |disconnected_handler| is called on the connection lost.
@@ -303,6 +307,8 @@ class CrosapiAsh : public mojom::Crosapi {
       mojo::PendingReceiver<
           chromeos::machine_learning::mojom::MachineLearningService> receiver)
       override;
+  void BindMahiBrowserDelegate(
+      mojo::PendingReceiver<mojom::MahiBrowserDelegate> receiver) override;
   void BindMediaUI(mojo::PendingReceiver<mojom::MediaUI> receiver) override;
   void BindMediaSessionAudioFocus(
       mojo::PendingReceiver<media_session::mojom::AudioFocusManager> receiver)
@@ -333,6 +339,9 @@ class CrosapiAsh : public mojom::Crosapi {
       mojo::PendingReceiver<mojom::NetworkingPrivate> receiver) override;
   void BindOneDriveNotificationService(
       mojo::PendingReceiver<mojom::OneDriveNotificationService> receiver)
+      override;
+  void BindOneDriveIntegrationService(
+      mojo::PendingReceiver<mojom::OneDriveIntegrationService> receiver)
       override;
   void BindPasskeyAuthenticator(
       mojo::PendingReceiver<mojom::PasskeyAuthenticator> receiver) override;
@@ -379,6 +388,8 @@ class CrosapiAsh : public mojom::Crosapi {
   void BindStructuredMetricsService(
       ::mojo::PendingReceiver<::crosapi::mojom::StructuredMetricsService>
           receiver) override;
+  void BindSuggestionService(
+      mojo::PendingReceiver<mojom::SuggestionService> receiver) override;
   void BindSyncService(
       mojo::PendingReceiver<mojom::SyncService> receiver) override;
   void BindTaskManager(
@@ -536,6 +547,10 @@ class CrosapiAsh : public mojom::Crosapi {
 
   LoginStateAsh* login_state_ash() { return login_state_ash_.get(); }
 
+  ash::MahiBrowserDelegateAsh* mahi_browser_delegate_ash() {
+    return mahi_browser_delegate_ash_.get();
+  }
+
   MediaUIAsh* media_ui_ash() { return media_ui_ash_.get(); }
 
   MultiCaptureServiceAsh* multi_capture_service_ash() {
@@ -584,6 +599,10 @@ class CrosapiAsh : public mojom::Crosapi {
     return structured_metrics_service_ash_.get();
   }
 
+  SuggestionServiceAsh* suggestion_service_ash() {
+    return suggestion_service_ash_.get();
+  }
+
   TaskManagerAsh* task_manager_ash() { return task_manager_ash_.get(); }
 
   TtsAsh* tts_ash() { return tts_ash_.get(); }
@@ -619,7 +638,8 @@ class CrosapiAsh : public mojom::Crosapi {
   }
 
   // Caller is responsible for ensuring that the pointer stays valid.
-  void SetTestControllerForTesting(TestControllerReceiver* test_controller);
+  void SetTestControllerForTesting(
+      std::unique_ptr<TestControllerReceiver> test_controller);
 
  private:
   // Called when a connection is lost.
@@ -684,7 +704,7 @@ class CrosapiAsh : public mojom::Crosapi {
   std::unique_ptr<LoginAsh> login_ash_;
   std::unique_ptr<LoginScreenStorageAsh> login_screen_storage_ash_;
   std::unique_ptr<LoginStateAsh> login_state_ash_;
-  std::unique_ptr<ash::MahiManagerAsh> mahi_manager_ash_;
+  std::unique_ptr<ash::MahiBrowserDelegateAsh> mahi_browser_delegate_ash_;
   std::unique_ptr<MediaUIAsh> media_ui_ash_;
   std::unique_ptr<MessageCenterAsh> message_center_ash_;
   std::unique_ptr<MetricsAsh> metrics_ash_;
@@ -697,6 +717,8 @@ class CrosapiAsh : public mojom::Crosapi {
   std::unique_ptr<NetworkSettingsServiceAsh> network_settings_service_ash_;
   std::unique_ptr<OneDriveNotificationServiceAsh>
       one_drive_notification_service_ash_;
+  std::unique_ptr<OneDriveIntegrationServiceAsh>
+      one_drive_integration_service_ash_;
   std::unique_ptr<ParentAccessAsh> parent_access_ash_;
   std::unique_ptr<PaymentAppInstanceAsh> payment_app_instance_ash_;
   std::unique_ptr<PolicyServiceAsh> policy_service_ash_;
@@ -723,6 +745,7 @@ class CrosapiAsh : public mojom::Crosapi {
   std::unique_ptr<ash::SmartReaderManagerAsh> smart_reader_manager_ash_;
   std::unique_ptr<SpeechRecognitionAsh> speech_recognition_ash_;
   std::unique_ptr<StructuredMetricsServiceAsh> structured_metrics_service_ash_;
+  std::unique_ptr<SuggestionServiceAsh> suggestion_service_ash_;
   std::unique_ptr<TaskManagerAsh> task_manager_ash_;
   std::unique_ptr<TimeZoneServiceAsh> time_zone_service_ash_;
   std::unique_ptr<TtsAsh> tts_ash_;
@@ -738,8 +761,8 @@ class CrosapiAsh : public mojom::Crosapi {
   std::unique_ptr<WebPageInfoFactoryAsh> web_page_info_factory_ash_;
 
   // Only set in the test ash chrome binary. In production ash this is always
-  // nullptr.
-  raw_ptr<TestControllerReceiver> test_controller_ = nullptr;
+  // unset.
+  std::unique_ptr<TestControllerReceiver> test_controller_;
 
   mojo::ReceiverSet<mojom::Crosapi, CrosapiId> receiver_set_;
   std::map<mojo::ReceiverId, base::OnceClosure> disconnect_handler_map_;

@@ -81,6 +81,14 @@ bool SkColor4Shader::appendStages(const SkStageRec& rec, const SkShaders::Matrix
     return true;
 }
 
+bool SkColor4Shader::onAsLuminanceColor(SkColor4f* lum) const {
+    SkColor4f color = fColor;
+    SkColorSpaceXformSteps(fColorSpace.get(),   kUnpremul_SkAlphaType,
+                           sk_srgb_singleton(), kUnpremul_SkAlphaType).apply(color.vec());
+    *lum = color;
+    return true;
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 void SkRegisterColor4ShaderFlattenable() {

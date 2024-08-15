@@ -17,7 +17,7 @@ class Service : public KeyedService {
   Service();
   ~Service() override;
 
-  virtual absl::optional<int> RegisterWorldForJSInjection(
+  virtual std::optional<int> RegisterWorldForJSInjection(
       mojom::JavascriptWorldInfoPtr world_info) = 0;
 
   virtual bool AddProvider(Provider* provider) = 0;

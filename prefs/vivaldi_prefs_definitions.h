@@ -11,7 +11,6 @@
 #include "base/no_destructor.h"
 #include "base/values.h"
 #include "components/sync_preferences/syncable_prefs_database.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class PrefRegistrySimple;
 class PrefService;
@@ -42,7 +41,7 @@ class VivaldiPrefsDefinitions : public sync_preferences::SyncablePrefsDatabase {
     EnumPrefValues(EnumPrefValues&&);
     EnumPrefValues& operator=(EnumPrefValues&&);
 
-    absl::optional<int> FindValue(base::StringPiece name) const;
+    std::optional<int> FindValue(base::StringPiece name) const;
     const std::string* FindName(int value) const;
 
     std::vector<std::pair<std::string, int>> name_value_pairs;
@@ -67,8 +66,8 @@ class VivaldiPrefsDefinitions : public sync_preferences::SyncablePrefsDatabase {
 
     PrefKind pref_kind = PrefKind::kNone;
     base::Value default_value;
-    absl::optional<SyncedPrefProperties> sync_properties;
-    absl::optional<EnumPrefValues> enum_values;
+    std::optional<SyncedPrefProperties> sync_properties;
+    std::optional<EnumPrefValues> enum_values;
   };
 
   // Preference properties. These are used when registering prefs, in JS
@@ -80,7 +79,7 @@ class VivaldiPrefsDefinitions : public sync_preferences::SyncablePrefsDatabase {
     PrefProperties& operator=(PrefProperties&&);
 
     bool local_pref = false;
-    absl::optional<PrefDefinition> definition;
+    std::optional<PrefDefinition> definition;
   };
 
   using PrefPropertiesMap =
@@ -95,7 +94,7 @@ class VivaldiPrefsDefinitions : public sync_preferences::SyncablePrefsDatabase {
   void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   // Implementing sync_preferences::SyncablePrefsDatabase
-  absl::optional<sync_preferences::SyncablePrefMetadata>
+  std::optional<sync_preferences::SyncablePrefMetadata>
   GetSyncablePrefMetadata(const std::string& pref_name) const override;
 
  private:

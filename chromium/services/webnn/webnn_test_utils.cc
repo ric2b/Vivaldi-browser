@@ -242,8 +242,8 @@ void GraphInfoBuilder::BuildGather(uint64_t input_operand_id,
 
 void GraphInfoBuilder::BuildHardSigmoid(uint64_t input_operand_id,
                                         uint64_t output_operand_id,
-                                        absl::optional<float> alpha,
-                                        absl::optional<float> beta) {
+                                        std::optional<float> alpha,
+                                        std::optional<float> beta) {
   mojom::HardSigmoidPtr hard_sigmoid = mojom::HardSigmoid::New();
   hard_sigmoid->input_operand_id = input_operand_id;
   hard_sigmoid->output_operand_id = output_operand_id;
@@ -255,6 +255,15 @@ void GraphInfoBuilder::BuildHardSigmoid(uint64_t input_operand_id,
   }
   graph_info_->operations.push_back(
       mojom::Operation::NewHardSigmoid(std::move(hard_sigmoid)));
+}
+
+void GraphInfoBuilder::BuildHardSwish(uint64_t input_operand_id,
+                                      uint64_t output_operand_id) {
+  mojom::HardSwishPtr hard_swish = mojom::HardSwish::New();
+  hard_swish->input_operand_id = input_operand_id;
+  hard_swish->output_operand_id = output_operand_id;
+  graph_info_->operations.push_back(
+      mojom::Operation::NewHardSwish(std::move(hard_swish)));
 }
 
 void GraphInfoBuilder::BuildPrelu(uint64_t input_operand_id,
@@ -355,6 +364,16 @@ void GraphInfoBuilder::BuildTranspose(uint64_t input_operand_id,
   transpose->permutation = std::move(permutation);
   graph_info_->operations.push_back(
       mojom::Operation::NewTranspose(std::move(transpose)));
+}
+
+void GraphInfoBuilder::BuildTriangular(uint64_t input_operand_id,
+                                       uint64_t output_operand_id,
+                                       bool upper,
+                                       int32_t diagonal) {
+  mojom::TriangularPtr triangular = mojom::Triangular::New(
+      input_operand_id, output_operand_id, upper, diagonal);
+  graph_info_->operations.push_back(
+      mojom::Operation::NewTriangular(std::move(triangular)));
 }
 
 void GraphInfoBuilder::BuildWhere(uint64_t condition_operand_id,

@@ -5,9 +5,11 @@
 // clang-format off
 import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {flush, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import type {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {ClearBrowsingDataBrowserProxyImpl, ContentSetting, ContentSettingsTypes, CookieControlsMode, SafetyHubBrowserProxyImpl, SafetyHubEvent, SiteSettingsPrefsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
-import {CrLinkRowElement, CrSettingsPrefs, HatsBrowserProxyImpl, MetricsBrowserProxyImpl, PrivacyGuideInteractions, PrivacyPageBrowserProxyImpl, Route, Router, routes, SettingsPrefsElement, SettingsPrivacyPageElement, StatusAction, SyncStatus, TrustSafetyInteraction} from 'chrome://settings/settings.js';
+import type {CrLinkRowElement, Route, SettingsPrefsElement, SettingsPrivacyPageElement, SyncStatus} from 'chrome://settings/settings.js';
+import {CrSettingsPrefs, HatsBrowserProxyImpl, MetricsBrowserProxyImpl, PrivacyGuideInteractions, PrivacyPageBrowserProxyImpl, Router, routes, StatusAction, TrustSafetyInteraction} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertTrue, assertThrows} from 'chrome://webui-test/chai_assert.js';
 import {isChildVisible, isVisible} from 'chrome://webui-test/test_util.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
@@ -37,7 +39,6 @@ const redesignedPages: Route[] = [
   routes.SITE_SETTINGS_JAVASCRIPT,
   routes.SITE_SETTINGS_JAVASCRIPT_JIT,
   routes.SITE_SETTINGS_LOCAL_FONTS,
-  routes.SITE_SETTINGS_LOCATION,
   routes.SITE_SETTINGS_MICROPHONE,
   routes.SITE_SETTINGS_MIDI_DEVICES,
   routes.SITE_SETTINGS_NOTIFICATIONS,
@@ -64,6 +65,7 @@ const redesignedPages: Route[] = [
   // routes.SITE_SETTINGS_WINDOW_MANAGEMENT,
 
   // Doesn't contain toggle or radio buttons
+  // routes.SITE_SETTINGS_AUTOMATIC_FULLSCREEN,
   // routes.SITE_SETTINGS_INSECURE_CONTENT,
   // routes.SITE_SETTINGS_ZOOM_LEVELS,
 ];
@@ -148,8 +150,8 @@ suite('PrivacyPage', function() {
     redesignedPages.forEach(route => Router.getInstance().navigateTo(route));
     await flushTasks();
 
-    // All redesigned pages, except notifications, protocol handlers, pdf
-    // documents and protected content (except chromeos and win), will use a
+    // All redesigned pages, except notifications, location, protocol handlers,
+    // pdf documents and protected content (except chromeos and win), will use a
     // settings-category-default-radio-group.
     // <if expr="is_chromeos or is_win">
     assertEquals(
@@ -177,6 +179,18 @@ suite('PrivacyPage', function() {
     assertTrue(isVisible(categorySettingExceptions));
     assertEquals(
         ContentSettingsTypes.NOTIFICATIONS, categorySettingExceptions.category);
+  });
+
+  test('LocationPage', async function() {
+    Router.getInstance().navigateTo(routes.SITE_SETTINGS_LOCATION);
+    await flushTasks();
+
+    assertTrue(isChildVisible(page, '#locationRadioGroup'));
+    const categorySettingExceptions =
+        page.shadowRoot!.querySelector('category-setting-exceptions')!;
+    assertTrue(isVisible(categorySettingExceptions));
+    assertEquals(
+        ContentSettingsTypes.GEOLOCATION, categorySettingExceptions.category);
   });
 
   test('privacySandboxRestricted', function() {
@@ -221,7 +235,7 @@ suite('PrivacyPage', function() {
     await flushTasks();
 
     const categorySettingExceptions =
-        page.shadowRoot!.querySelectorAll('storage-access-site-list')!;
+        page.shadowRoot!.querySelectorAll('storage-access-site-list');
 
     assertEquals(2, categorySettingExceptions.length);
     assertTrue(isVisible(categorySettingExceptions[0]!));
@@ -231,6 +245,20 @@ suite('PrivacyPage', function() {
     assertTrue(isVisible(categorySettingExceptions[1]!));
     assertEquals(
         ContentSetting.ALLOW, categorySettingExceptions[1]!.categorySubtype);
+  });
+
+  test('AutomaticFullscreenPage', async function() {
+    Router.getInstance().navigateTo(routes.SITE_SETTINGS_AUTOMATIC_FULLSCREEN);
+    await flushTasks();
+
+    assertTrue(isChildVisible(page, '#automaticFullscreenBlock'));
+    const categorySettingExceptions =
+        page.shadowRoot!.querySelector('category-setting-exceptions');
+    assertTrue(!!categorySettingExceptions);
+    assertTrue(isVisible(categorySettingExceptions));
+    assertEquals(
+        ContentSettingsTypes.AUTOMATIC_FULLSCREEN,
+        categorySettingExceptions.category);
   });
 });
 
@@ -902,55 +930,6 @@ suite('NotificationPermissionReviewSafetyHubDisabled', function() {
         oneElementMockData);
     await flushTasks();
     assertTrue(isChildVisible(page, 'review-notification-permissions'));
-  });
-});
-
-// TODO(crbug.com/1443466): Remove the test once Notification Permission Review
-// feature has been rolled out.
-suite('NotificationPermissionReviewDisabled', function() {
-  let page: SettingsPrivacyPageElement;
-  let siteSettingsBrowserProxy: TestSafetyHubBrowserProxy;
-
-  const oneElementMockData = [{
-    origin: 'www.example.com',
-    notificationInfoString: 'About 4 notifications a day',
-  }];
-
-  suiteSetup(function() {
-    loadTimeData.overrideValues({
-      enableSafetyHub: false,
-      safetyCheckNotificationPermissionsEnabled: false,
-    });
-  });
-
-  setup(function() {
-    Router.getInstance().navigateTo(routes.SITE_SETTINGS_NOTIFICATIONS);
-    siteSettingsBrowserProxy = new TestSafetyHubBrowserProxy();
-    SafetyHubBrowserProxyImpl.setInstance(siteSettingsBrowserProxy);
-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
-  });
-
-  teardown(function() {
-    page.remove();
-  });
-
-  function createPage() {
-    page = document.createElement('settings-privacy-page');
-    document.body.appendChild(page);
-    return flushTasks();
-  }
-
-  test('InvisibleWhenFeatureDisabled', async function() {
-    // The element should not be visible if there is no element in the list.
-    await createPage();
-    assertFalse(isChildVisible(page, 'review-notification-permissions'));
-
-    // The element should not be visible even if there is any element in the
-    // list.
-    siteSettingsBrowserProxy.setNotificationPermissionReview(
-        oneElementMockData);
-    await createPage();
-    assertFalse(isChildVisible(page, 'review-notification-permissions'));
   });
 });
 

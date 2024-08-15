@@ -1,3 +1,17 @@
+function(_link_libfuzzer_in_compatibility_mode name)
+  if (FUZZTEST_COMPATIBILITY_MODE STREQUAL "libfuzzer")
+    EXECUTE_PROCESS (
+        COMMAND bash -c "command -v llvm-config || command -v llvm-config-16 || command -v llvm-config-15 || command -v llvm-config-14 || command -v llvm-config-13 || command -v llvm-config-12 || echo"
+        OUTPUT_VARIABLE LLVM_CONFIG OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    EXECUTE_PROCESS(
+      COMMAND bash -c "find $(${LLVM_CONFIG} --libdir) -name libclang_rt.fuzzer_no_main-x86_64.a | head -1"
+      OUTPUT_VARIABLE FUZZER_NO_MAIN OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    target_link_libraries(${name} PRIVATE ${FUZZER_NO_MAIN})
+  endif ()
+endfunction()
+
 get_filename_component(PARENT_DIR ../ ABSOLUTE)
 include_directories(${PARENT_DIR})
 
@@ -11,10 +25,27 @@ fuzztest_cc_library(
     fuzztest
   HDRS
     "fuzztest.h"
-  SRCS
-    "fuzztest.cc"
   DEPS
     fuzztest::domain
+    fuzztest::fuzztest_macros
+)
+
+fuzztest_cc_library(
+  NAME
+    fuzztest_core
+  HDRS
+    "fuzztest_core.h"
+  DEPS
+    fuzztest::domain_core
+    fuzztest::fuzztest_macros
+)
+
+fuzztest_cc_library(
+  NAME
+    fuzztest_macros
+  HDRS
+    "fuzztest_macros.h"
+  DEPS
     fuzztest::io
     fuzztest::registration
     fuzztest::registry
@@ -130,6 +161,7 @@ fuzztest_cc_library(
   SRCS
     "internal/compatibility_mode.cc"
   DEPS
+    fuzztest::domain_core
     fuzztest::fixture_driver
     fuzztest::logging
     fuzztest::runtime
@@ -138,6 +170,8 @@ fuzztest_cc_library(
     absl::str_format
     absl::time
 )
+
+_link_libfuzzer_in_compatibility_mode(fuzztest_compatibility_mode)
 
 fuzztest_cc_library(
   NAME
@@ -192,6 +226,7 @@ fuzztest_cc_library(
     absl::random_random
     absl::random_bit_gen_ref
     absl::random_distributions
+    absl::status
     absl::strings
     absl::synchronization
     absl::span
@@ -207,7 +242,9 @@ fuzztest_cc_library(
     "internal/domains/bit_flag_combination_of_impl.h"
     "internal/domains/container_mutation_helpers.h"
     "internal/domains/container_of_impl.h"
+    "internal/domains/domain.h"
     "internal/domains/domain_base.h"
+    "internal/domains/domain_type_erasure.h"
     "internal/domains/element_of_impl.h"
     "internal/domains/filter_impl.h"
     "internal/domains/flat_map_impl.h"
@@ -220,18 +257,23 @@ fuzztest_cc_library(
     "internal/domains/unique_elements_container_of_impl.h"
     "internal/domains/value_mutation_helpers.h"
     "internal/domains/variant_of_impl.h"
+  SRCS
+    "internal/domains/domain_base.cc"
   DEPS
     fuzztest::absl_helpers
     fuzztest::any
     fuzztest::coverage
     fuzztest::logging
     fuzztest::meta
+    fuzztest::printer
+    fuzztest::seed_seq
     fuzztest::serialization
     fuzztest::status
     fuzztest::table_of_recent_compares
     fuzztest::type_support
     absl::flat_hash_map
     absl::flat_hash_set
+    absl::function_ref
     absl::bits
     absl::int128
     absl::random_random
@@ -253,12 +295,13 @@ fuzztest_cc_library(
     "internal/fixture_driver.cc"
   DEPS
     fuzztest::any
-    fuzztest::domain
     fuzztest::domain_core
     fuzztest::logging
+    fuzztest::meta
+    fuzztest::printer
     fuzztest::registration
     fuzztest::type_support
-    absl::memory
+    absl::status
     absl::str_format
     absl::span
 )
@@ -324,7 +367,7 @@ fuzztest_cc_test(
   SRCS
     "internal/io_test.cc"
   DEPS
-    fuzztest::fuzztest
+    fuzztest::fuzztest_core
     fuzztest::io
     absl::strings
     GTest::gmock_main
@@ -352,6 +395,16 @@ fuzztest_cc_library(
 
 fuzztest_cc_library(
   NAME
+    printer
+  HDRS
+    "internal/printer.h"
+  DEPS
+    fuzztest::meta
+    absl::str_format
+)
+
+fuzztest_cc_library(
+  NAME
     regexp_dfa
   HDRS
     "internal/domains/regexp_dfa.h"
@@ -371,11 +424,12 @@ fuzztest_cc_library(
   HDRS
     "internal/registration.h"
   DEPS
-    fuzztest::domain
     fuzztest::domain_core
     fuzztest::meta
+    fuzztest::printer
     fuzztest::type_support
     absl::any_invocable
+    absl::status
     absl::str_format
     absl::span
 )
@@ -407,12 +461,12 @@ fuzztest_cc_library(
   DEPS
     fuzztest::configuration
     fuzztest::coverage
-    fuzztest::domain
     fuzztest::domain_core
     fuzztest::fixture_driver
     fuzztest::io
     fuzztest::logging
     fuzztest::meta
+    fuzztest::printer
     fuzztest::registration
     fuzztest::seed_seq
     fuzztest::serialization
@@ -435,7 +489,7 @@ fuzztest_cc_test(
   SRCS
     "internal/runtime_test.cc"
   DEPS
-    fuzztest::domain
+    fuzztest::domain_core
     fuzztest::runtime
     test_protobuf
     absl::time
@@ -552,7 +606,6 @@ fuzztest_cc_test(
   SRCS
     "internal/table_of_recent_compares_test.cc"
   DEPS
-    fuzztest::domain
     fuzztest::table_of_recent_compares
     absl::random_random
     GTest::gmock_main
@@ -605,6 +658,8 @@ fuzztest_cc_library(
   DEPS
     fuzztest::absl_helpers
     fuzztest::meta
+    fuzztest::printer
+    absl::function_ref
     absl::symbolize
     absl::int128
     absl::strings
@@ -619,6 +674,8 @@ fuzztest_cc_test(
     "internal/type_support_test.cc"
   DEPS
     fuzztest::domain
+    fuzztest::meta
+    fuzztest::printer
     test_protobuf
     fuzztest::type_support
     absl::int128

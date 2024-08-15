@@ -30,6 +30,7 @@
 #include "content/services/auction_worklet/public/mojom/auction_worklet_service.mojom.h"
 #include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom.h"
 #include "content/services/auction_worklet/public/mojom/private_aggregation_request.mojom-forward.h"
+#include "content/services/auction_worklet/set_bid_bindings.h"
 #include "content/services/auction_worklet/trusted_signals.h"
 #include "content/services/auction_worklet/trusted_signals_request_manager.h"
 #include "content/services/auction_worklet/worklet_loader.h"
@@ -122,10 +123,19 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
   static bool IsKAnon(const mojom::BidderWorkletNonSharedParams*
                           bidder_worklet_non_shared_params,
                       const std::string& key);
-  static bool IsKAnon(const mojom::BidderWorkletNonSharedParams*
-                          bidder_worklet_non_shared_params,
-                      const GURL& script_source_url,
-                      const mojom::BidderWorkletBidPtr& bid);
+
+  // This doesn't look at the component ads.
+  static bool IsMainAdKAnon(const mojom::BidderWorkletNonSharedParams*
+                                bidder_worklet_non_shared_params,
+                            const GURL& script_source_url,
+                            const mojom::BidderWorkletBidPtr& bid);
+
+  static bool IsComponentAdKAnon(
+      const mojom::BidderWorkletNonSharedParams*
+          bidder_worklet_non_shared_params,
+      const blink::AdDescriptor& ad_component_descriptor);
+
+  static bool SupportMultiBid();
 
   // mojom::BidderWorklet implementation:
   void BeginGenerateBid(
@@ -140,6 +150,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
       mojom::BiddingBrowserSignalsPtr bidding_browser_signals,
       base::Time auction_start_time,
       const std::optional<blink::AdSize>& requested_ad_size,
+      uint16_t multi_bid_limit,
       uint64_t trace_id,
       mojo::PendingAssociatedRemote<mojom::GenerateBidClient>
           generate_bid_client,
@@ -174,6 +185,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
       uint8_t browser_signal_recency,
       const url::Origin& browser_signal_seller_origin,
       const std::optional<url::Origin>& browser_signal_top_level_seller_origin,
+      const std::optional<base::TimeDelta> browser_signal_reporting_timeout,
       std::optional<uint32_t> bidding_signals_data_version,
       uint64_t trace_id,
       ReportWinCallback report_win_callback) override;
@@ -214,6 +226,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
     base::TimeDelta browser_signal_recency;
     mojom::BiddingBrowserSignalsPtr bidding_browser_signals;
     std::optional<blink::AdSize> requested_ad_size;
+    uint16_t multi_bid_limit;
     base::Time auction_start_time;
     uint64_t trace_id;
 
@@ -296,6 +309,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
     uint8_t browser_signal_recency;
     url::Origin browser_signal_seller_origin;
     std::optional<url::Origin> browser_signal_top_level_seller_origin;
+    std::optional<base::TimeDelta> browser_signal_reporting_timeout;
     std::optional<uint32_t> bidding_signals_data_version;
     uint64_t trace_id;
 
@@ -352,8 +366,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
     // except the errors vectors are passed by value. They're callbacks that
     // must be invoked on the main sequence, and passed to the V8State.
     using GenerateBidCallbackInternal = base::OnceCallback<void(
-        mojom::BidderWorkletBidPtr bid,
-        mojom::BidderWorkletKAnonEnforcedBidPtr kanon_bid,
+        std::vector<mojom::BidderWorkletBidPtr> bids,
         std::optional<uint32_t> bidding_signals_data_version,
         std::optional<GURL> debug_loss_report_url,
         std::optional<GURL> debug_win_report_url,
@@ -379,7 +392,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
       SingleGenerateBidResult();
       SingleGenerateBidResult(
           std::unique_ptr<ContextRecycler> context_recycler_for_rerun,
-          mojom::BidderWorkletBidPtr bid,
+          std::vector<SetBidBindings::BidAndComponentTarget> bids,
           std::optional<uint32_t> bidding_signals_data_version,
           std::optional<GURL> debug_loss_report_url,
           std::optional<GURL> debug_win_report_url,
@@ -402,7 +415,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
       // it's returned here to be available for any re-run for k-anonymity.
       std::unique_ptr<ContextRecycler> context_recycler_for_rerun;
 
-      mojom::BidderWorkletBidPtr bid;
+      std::vector<SetBidBindings::BidAndComponentTarget> bids;
       std::optional<uint32_t> bidding_signals_data_version;
       std::optional<GURL> debug_loss_report_url;
       std::optional<GURL> debug_win_report_url;
@@ -446,6 +459,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
         const url::Origin& browser_signal_seller_origin,
         const std::optional<url::Origin>&
             browser_signal_top_level_seller_origin,
+        const std::optional<base::TimeDelta> browser_signal_reporting_timeout,
         const std::optional<uint32_t>& bidding_signals_data_version,
         uint64_t trace_id,
         ReportWinCallbackInternal callback);
@@ -473,6 +487,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
         mojom::BiddingBrowserSignalsPtr bidding_browser_signals,
         base::Time auction_start_time,
         const std::optional<blink::AdSize>& requested_ad_size,
+        uint16_t multi_bid_limit,
         scoped_refptr<TrustedSignals::Result> trusted_bidding_signals_result,
         uint64_t trace_id,
         base::ScopedClosureRunner cleanup_generate_bid_task,
@@ -488,7 +503,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
     // Returns nullopt on error.
     // `context_recycler_for_rerun` is permitted to be null, and should only be
     // set if `restrict_to_kanon_ads` is true.
-    std::optional<SingleGenerateBidResult> GenerateSingleBid(
+    std::optional<SingleGenerateBidResult> RunGenerateBidOnce(
         const mojom::BidderWorkletNonSharedParams&
             bidder_worklet_non_shared_params,
         const url::Origin& interest_group_join_origin,
@@ -510,6 +525,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
         const mojom::BiddingBrowserSignalsPtr& bidding_browser_signals,
         base::Time auction_start_time,
         const std::optional<blink::AdSize>& requested_ad_size,
+        uint16_t multi_bid_limit,
         const scoped_refptr<TrustedSignals::Result>&
             trusted_bidding_signals_result,
         uint64_t trace_id,
@@ -642,8 +658,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
   // `task` from `generate_bid_tasks_`.
   void DeliverBidCallbackOnUserThread(
       GenerateBidTaskList::iterator task,
-      mojom::BidderWorkletBidPtr bid,
-      mojom::BidderWorkletKAnonEnforcedBidPtr kanon_bid,
+      std::vector<mojom::BidderWorkletBidPtr> bids,
       std::optional<uint32_t> bidding_signals_data_version,
       std::optional<GURL> debug_loss_report_url,
       std::optional<GURL> debug_win_report_url,

@@ -34,7 +34,7 @@ computer, including the path to where Chrome is installed.
             chrome://settings/advanced using the address bar. Then verify that
             **Automatically send usage statistics and crash reports to Google**
             is checked.
-2.  Open the Task Manager under the **Wrench menu &gt; Tools &gt; Task
+2.  Open the Task Manager under the **Settings menu &gt; Tools &gt; Task
             Manager**.
 3.  If the columns at the top of the Task Manager window do not include
             "Process ID", then right-click on the table header and check the
@@ -50,20 +50,17 @@ computer, including the path to where Chrome is installed.
 
 ## Linux
 
-1.  Depending on your sandboxing configuration and Chrome version, you
-            may need to pass "--allow-sandbox-debugging" when starting Chrome
-            (see [this bug](http://crbug.com/169369)).
-2.  Verify you've turned crash reporting on. Go to the page
+1.  Verify you've turned crash reporting on. Go to the page
             chrome://settings/advanced using the address bar. Then verify that
             **Automatically send usage statistics and crash reports to Google**
             is checked.
-3.  Open the Task Manager under the **Wrench menu &gt; Tools &gt; Task
+2.  Open the Task Manager under the **Settings menu &gt; Tools &gt; Task
             Manager**.
-4.  If the columns at the top of the Task Manager window do not include
+3.  If the columns at the top of the Task Manager window do not include
             "Process ID", then right-click on the window and check the "Process
             ID" box.
-5.  Note the process ID of the hung tab.
-6.  Kill the process in a way that causes it to print a crash dump:
+4.  Note the process ID of the hung tab.
+5.  Kill the process in a way that causes it to print a crash dump:
 
 *   Open a terminal window and `kill -SEGV *<ProcessID>*` where
             `*<ProcessID>*` is the one you noted above. Copy and paste the crash

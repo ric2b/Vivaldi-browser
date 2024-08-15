@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "components/services/app_service/public/cpp/types_util.h"
+
+#include "base/notreached.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
 
 namespace apps_util {
@@ -51,6 +53,7 @@ bool IsHumanLaunch(apps::LaunchSource launch_source) {
     case apps::LaunchSource::kFromProfileMenu:
     case apps::LaunchSource::kFromSysTrayCalendar:
     case apps::LaunchSource::kFromInstaller:
+    case apps::LaunchSource::kFromWelcomeTour:
       return true;
     case apps::LaunchSource::kUnknown:
     case apps::LaunchSource::kFromChromeInternal:
@@ -64,6 +67,7 @@ bool IsHumanLaunch(apps::LaunchSource launch_source) {
     case apps::LaunchSource::kFromOsLogin:
     case apps::LaunchSource::kFromProtocolHandler:
     case apps::LaunchSource::kFromUrlHandler:
+    case apps::LaunchSource::kFromFirstRun:
       return false;
   }
   NOTREACHED();

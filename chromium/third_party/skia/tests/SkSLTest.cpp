@@ -354,6 +354,13 @@ static bool failure_is_expected(std::string_view deviceName,    // "Geforce RTX4
             disables[test].push_back({regex("Quadro P400"), _, _, kLinux});
         }
 
+        // b/318725123
+        for (const char* test : {"UniformArray",
+                                 "TemporaryIndexLookup",
+                                 "MatrixIndexLookup"}) {
+            disables[test].push_back({regex("Quadro P400"), "Dawn Vulkan", Graphite, kWindows});
+        }
+
         // - PowerVR ------------------------------------------------------------------------------
         for (const char* test : {"OutParamsAreDistinct",              // b/40044222
                                  "OutParamsAreDistinctFromGlobal"}) {
@@ -425,6 +432,13 @@ static bool failure_is_expected(std::string_view deviceName,    // "Geforce RTX4
         // Adreno generates the wrong result for this test. (b/40044477)
         disables["StructFieldFolding"].push_back({regex(ADRENO "[56]"), "OpenGL",
                                                         _, kAndroid});
+
+        // b/318726662
+        for (const char* test : {"PrefixExpressionsES2",
+                                 "MatrixToVectorCast",
+                                 "MatrixConstructorsES2"}) {
+            disables[test].push_back({regex(ADRENO "620"), "Vulkan", Graphite, kAndroid});
+        }
 
         // - Intel --------------------------------------------------------------------------------
         // Disable various tests on Intel.
@@ -1059,6 +1073,8 @@ SKSL_TEST(ES3 | GPU_ES3, kNever,      IntrinsicUintBitsToFloat,        "intrinsi
 SKSL_TEST(ES3 | GPU_ES3, kNever,      ArrayNarrowingConversions,       "runtime/ArrayNarrowingConversions.rts")
 SKSL_TEST(ES3 | GPU_ES3, kNever,      Commutative,                     "runtime/Commutative.rts")
 SKSL_TEST(CPU,           kNever,      DivideByZero,                    "runtime/DivideByZero.rts")
+SKSL_TEST(CPU | GPU,     kNextRelease,FunctionParameterAliasingFirst,  "runtime/FunctionParameterAliasingFirst.rts")
+SKSL_TEST(CPU | GPU,     kNextRelease,FunctionParameterAliasingSecond, "runtime/FunctionParameterAliasingSecond.rts")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, LoopFloat,                       "runtime/LoopFloat.rts")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, LoopInt,                         "runtime/LoopInt.rts")
 SKSL_TEST(CPU | GPU,     kApiLevel_U, Ossfuzz52603,                    "runtime/Ossfuzz52603.rts")

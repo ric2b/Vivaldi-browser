@@ -31,8 +31,8 @@ class MockParentDelegate : public Connection::ParentDelegate {
   ~MockParentDelegate() override = default;
 
   MOCK_METHOD2(CloseConnection, Error(Connection*, Connection::CloseReason));
-  MOCK_METHOD2(OnPresentationTerminated,
-               Error(const std::string&, TerminationReason));
+  MOCK_METHOD3(OnPresentationTerminated,
+               Error(const std::string&, TerminationSource, TerminationReason));
   MOCK_METHOD1(OnConnectionDestroyed, void(Connection*));
 };
 
@@ -100,8 +100,9 @@ TEST_F(ConnectionTest, ConnectAndSend) {
                         &mock_controller_delegate, &mock_controller_);
   Connection receiver(Connection::PresentationInfo{id, url},
                       &mock_receiver_delegate, &mock_receiver_);
-  ON_CALL(mock_controller_, OnPresentationTerminated(_, _))
+  ON_CALL(mock_controller_, OnPresentationTerminated(_, _, _))
       .WillByDefault(Invoke([&receiver](const std::string& presentation_id,
+                                        TerminationSource source,
                                         TerminationReason reason) {
         receiver.OnTerminated();
         return Error::None();
@@ -112,8 +113,9 @@ TEST_F(ConnectionTest, ConnectAndSend) {
             receiver.OnClosedByRemote();
             return Error::None();
           }));
-  ON_CALL(mock_receiver_, OnPresentationTerminated(_, _))
+  ON_CALL(mock_receiver_, OnPresentationTerminated(_, _, _))
       .WillByDefault(Invoke([&controller](const std::string& presentation_id,
+                                          TerminationSource source,
                                           TerminationReason reason) {
         controller.OnTerminated();
         return Error::None();

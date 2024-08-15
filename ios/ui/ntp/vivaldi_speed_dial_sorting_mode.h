@@ -11,6 +11,12 @@ typedef NS_ENUM(NSUInteger, SpeedDialSortingMode) {
   SpeedDialSortingByNickname = 3,
   SpeedDialSortingByDescription = 4,
   SpeedDialSortingByDate = 5,
+  SpeedDialSortingByKind = 6,
+};
+
+typedef NS_ENUM(NSUInteger, SpeedDialSortingOrder) {
+  SpeedDialSortingOrderAscending = 0,
+  SpeedDialSortingOrderDescending = 1
 };
 
 #endif  // IOS_UI_NTP_VIVALDI_SPEED_DIAL_SORTING_MODE_H_

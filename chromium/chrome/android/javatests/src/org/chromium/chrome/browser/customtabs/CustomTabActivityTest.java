@@ -26,6 +26,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -51,6 +52,7 @@ import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.os.SystemClock;
 import android.provider.Browser;
 import android.util.DisplayMetrics;
@@ -116,6 +118,7 @@ import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
+import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.AppHooksImpl;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
@@ -149,8 +152,10 @@ import org.chromium.chrome.browser.page_load_metrics.PageLoadMetrics;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.Tab.LoadUrlResult;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabTestUtils;
@@ -355,7 +360,10 @@ public class CustomTabActivityTest {
                     tab.addObserver(
                             new EmptyTabObserver() {
                                 @Override
-                                public void onLoadUrl(Tab tab, LoadUrlParams params, int loadType) {
+                                public void onLoadUrl(
+                                        Tab tab,
+                                        LoadUrlParams params,
+                                        LoadUrlResult loadUrlResult) {
                                     assertTrue(
                                             params.getVerbatimHeaders()
                                                     .contains("bearer-token: Some token"));
@@ -958,7 +966,10 @@ public class CustomTabActivityTest {
                     tab.addObserver(
                             new EmptyTabObserver() {
                                 @Override
-                                public void onLoadUrl(Tab tab, LoadUrlParams params, int loadType) {
+                                public void onLoadUrl(
+                                        Tab tab,
+                                        LoadUrlParams params,
+                                        LoadUrlResult loadUrlResult) {
                                     assertEquals(referrer, params.getReferrer().getUrl());
                                 }
 
@@ -1004,7 +1015,10 @@ public class CustomTabActivityTest {
                     tab.addObserver(
                             new EmptyTabObserver() {
                                 @Override
-                                public void onLoadUrl(Tab tab, LoadUrlParams params, int loadType) {
+                                public void onLoadUrl(
+                                        Tab tab,
+                                        LoadUrlParams params,
+                                        LoadUrlResult loadUrlResult) {
                                     assertEquals(referrer, params.getReferrer().getUrl());
                                 }
 
@@ -1474,7 +1488,7 @@ public class CustomTabActivityTest {
         // Needs the browser process to be initialized.
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    PrefService prefs = UserPrefs.get(Profile.getLastUsedRegularProfile());
+                    PrefService prefs = UserPrefs.get(ProfileManager.getLastUsedRegularProfile());
                     int old_block_pref = prefs.getInteger(COOKIE_CONTROLS_MODE);
                     prefs.setInteger(COOKIE_CONTROLS_MODE, CookieControlsMode.OFF);
                     Assert.assertTrue(connection.maySpeculate(token));
@@ -1909,7 +1923,6 @@ public class CustomTabActivityTest {
         "ignore-certificate-errors",
         "ignore-google-port-numbers"
     })
-    @DisabledTest(message = "https://crbug.com/1238931")
     public void testMayLaunchUrlAddsClientDataHeader() throws Exception {
         TestWebServer webServer = TestWebServer.start();
         webServer.setServerHost("www.google.com");
@@ -2066,6 +2079,7 @@ public class CustomTabActivityTest {
     @MinAndroidSdkLevel(Build.VERSION_CODES.O_MR1)
     // Bug in O that's been fixed in 8.1
     // https://issuetracker.google.com/issues/68427483
+    @DisabledTest(message = "http://crbug/1521989")
     public void testLaunchPartialCustomTabActivity_SideSheet() throws Exception {
         Intent intent = createMinimalCustomTabIntent();
         CustomTabsSessionToken token = CustomTabsSessionToken.getSessionTokenFromIntent(intent);
@@ -2636,8 +2650,12 @@ public class CustomTabActivityTest {
                     intent.putExtra(IntentHandler.EXTRA_CALLING_ACTIVITY_PACKAGE, "spoofed");
                     Activity activity = Mockito.mock(Activity.class);
 
-                    ComponentName component = new ComponentName("com.foo.bar", "className");
-                    when(activity.getCallingActivity()).thenReturn(component);
+                    when(activity.getCallingPackage()).thenReturn("com.foo.bar");
+                    PowerManager powerManager =
+                            (PowerManager)
+                                    ContextUtils.getApplicationContext()
+                                            .getSystemService(Context.POWER_SERVICE);
+                    when(activity.getSystemService(Context.POWER_SERVICE)).thenReturn(powerManager);
 
                     LaunchIntentDispatcher.dispatch(activity, intent);
                     verify(activity, times(1)).startActivity(mIntentCaptor.capture(), any());
@@ -2659,6 +2677,11 @@ public class CustomTabActivityTest {
                     Intent intent = createMinimalCustomTabIntent();
                     intent.putExtra(IntentHandler.EXTRA_CALLING_ACTIVITY_PACKAGE, "spoofed");
                     Activity activity = Mockito.mock(Activity.class);
+                    PowerManager powerManager =
+                            (PowerManager)
+                                    ContextUtils.getApplicationContext()
+                                            .getSystemService(Context.POWER_SERVICE);
+                    when(activity.getSystemService(Context.POWER_SERVICE)).thenReturn(powerManager);
 
                     LaunchIntentDispatcher.dispatch(activity, intent);
                     verify(activity, times(1)).startActivity(mIntentCaptor.capture(), any());
@@ -2785,6 +2808,42 @@ public class CustomTabActivityTest {
         Assert.assertNull(
                 "Share option should be hidden.",
                 mCustomTabActivityTestRule.getActivity().findViewById(R.id.share_row_menu_id));
+    }
+
+    @Test
+    @MediumTest
+    public void omniboxInCCT_testInteractiveOmniboxOnEligibleCCTs() throws Exception {
+        // Permit Omnibox for any upcoming intent(s).
+        var connection = Mockito.mock(CustomTabsConnection.class);
+        doReturn(true).when(connection).shouldEnableOmniboxForIntent(any());
+        CustomTabsConnection.setInstanceForTesting(connection);
+
+        Intent intent = createMinimalCustomTabIntent();
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
+        var tab = getActivity().getActivityTab();
+        ChromeTabUtils.waitForTabPageLoaded(tab, mTestPage);
+
+        var titleBar =
+                mCustomTabActivityTestRule.getActivity().findViewById(R.id.title_url_container);
+        Assert.assertTrue(titleBar.hasOnClickListeners());
+
+        UserActionTester userActionTester = new UserActionTester();
+        TestThreadUtils.runOnUiThreadBlocking(() -> titleBar.performClick());
+        assertThat(userActionTester.getActions(), Matchers.hasItem("CustomTabs.OmniboxClicked"));
+    }
+
+    @Test
+    @MediumTest
+    public void omniboxInCCT_testNonInteractiveOmniboxWhenIntentNotEligible() {
+        // By default, omnibox in CCT is not permitted and no stubbing is necessary.
+        Intent intent = createMinimalCustomTabIntent();
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
+        var tab = getActivity().getActivityTab();
+        ChromeTabUtils.waitForTabPageLoaded(tab, mTestPage);
+
+        var titleBar =
+                mCustomTabActivityTestRule.getActivity().findViewById(R.id.title_url_container);
+        Assert.assertFalse(titleBar.hasOnClickListeners());
     }
 
     private void rotateCustomTabActivity(CustomTabActivity activity, int orientation) {

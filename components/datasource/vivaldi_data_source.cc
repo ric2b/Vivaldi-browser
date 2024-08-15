@@ -48,8 +48,12 @@ VivaldiDataSource::VivaldiDataSource(Profile* profile)
                             VivaldiImageStore::kImageUrl));
   handlers.emplace_back(PathType::kCSSMod,
                         std::make_unique<CSSModsDataClassHandler>());
-#endif // !BUILDFLAG(IS_ANDROID)
-  handlers.emplace_back(PathType::kSyncedStore, std::make_unique<SyncedFileDataClassHandler>());
+  handlers.emplace_back(PathType::kDirectMatch,
+                        std::make_unique<LocalImageDataClassHandler>(
+                            VivaldiImageStore::kDirectMatchImageUrl));
+#endif  // !BUILDFLAG(IS_ANDROID)
+  handlers.emplace_back(PathType::kSyncedStore,
+                        std::make_unique<SyncedFileDataClassHandler>());
 
   data_class_handlers_ =
       base::flat_map<PathType, std::unique_ptr<VivaldiDataClassHandler>>(
@@ -69,7 +73,7 @@ void VivaldiDataSource::StartDataRequest(
     const content::WebContents::Getter& wc_getter,
     content::URLDataSource::GotDataCallback callback) {
   std::string data;
-  absl::optional<PathType> type =
+  std::optional<PathType> type =
       vivaldi_data_url_utils::ParsePath(url.path_piece(), &data);
   if (type) {
     auto it = data_class_handlers_.find(*type);
@@ -86,7 +90,7 @@ std::string VivaldiDataSource::GetMimeType(const GURL& url) {
   // drag the image they get no extension.
   // The |path| received here had its first '/' stripped
   std::string data;
-  absl::optional<PathType> type =
+  std::optional<PathType> type =
       vivaldi_data_url_utils::ParsePath(url.path_piece(), &data);
   if (type) {
     auto it = data_class_handlers_.find(*type);
@@ -99,8 +103,9 @@ std::string VivaldiDataSource::GetMimeType(const GURL& url) {
 }
 
 bool VivaldiDataSource::AllowCaching(const GURL& url) {
-  absl::optional<PathType> type = vivaldi_data_url_utils::ParsePath(url.path());
-  return type == PathType::kLocalPath || type == PathType::kImage;
+  std::optional<PathType> type = vivaldi_data_url_utils::ParsePath(url.path());
+  return type == PathType::kLocalPath || type == PathType::kImage ||
+         type == PathType::kDirectMatch;
 }
 
 /*

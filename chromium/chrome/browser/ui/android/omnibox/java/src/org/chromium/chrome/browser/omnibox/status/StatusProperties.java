@@ -32,6 +32,9 @@ import org.chromium.ui.modelutil.PropertyModel.WritableFloatPropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.WritableIntPropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.WritableObjectPropertyKey;
 
+//Vivaldi
+import org.chromium.build.BuildConfig;
+
 /** Model properties for the Status. */
 public class StatusProperties {
     // TODO(wylieb): Investigate the case where we only want to swap the tint (if any).
@@ -196,6 +199,7 @@ public class StatusProperties {
             int width = ViewUtils.dpToPx(context, OMNIBOX_ICON_DP);
             Bitmap bitmap = Bitmap.createBitmap(width, width, Bitmap.Config.ARGB_8888);
             Canvas canvas = new Canvas(bitmap);
+            if (!BuildConfig.IS_VIVALDI) //Vivaldi Ref. VAB-8539
             drawCircleBackground(canvas, context, resources);
             drawCenteredIcon(context, canvas, icon);
             return new BitmapDrawable(resources, bitmap);

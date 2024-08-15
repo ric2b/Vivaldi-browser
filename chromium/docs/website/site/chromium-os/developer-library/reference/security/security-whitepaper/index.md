@@ -190,7 +190,7 @@ fortify our defenses over time.
 
 ## Layers of ChromeOS security
 
-![Layers of ChromeOS security](/images/security/chromeos_security_layers.png)
+![Layers of ChromeOS security](/chromium-os/developer-library/reference/security/security-whitepaper/chromeos_security_layers.png)
 
 **Figure 1**: High-level view of the ChromeOS software stack.
 

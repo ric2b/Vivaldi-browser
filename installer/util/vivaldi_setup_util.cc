@@ -513,7 +513,7 @@ bool PrepareSetupConfig(HINSTANCE instance) {
 
   // For an existing installation ignore any attempt to change the installation
   // type.
-  absl::optional<vivaldi::InstallType> existing_install_type =
+  std::optional<vivaldi::InstallType> existing_install_type =
       vivaldi::FindInstallType(options.install_dir);
   if (existing_install_type) {
     if (!is_update) {

@@ -218,10 +218,8 @@ bool BinaryTargetGenerator::FillAllowCircularIncludesFrom() {
       }
     }
     if (!found_dep) {
-      bool with_toolchain = scope_->settings()->ShouldShowToolchain({
-        &target_->label(),
-        &cur
-      });
+      bool with_toolchain =
+          scope_->settings()->ShouldShowToolchain({&target_->label(), &cur});
       *err_ = Err(*value, "Label not in deps.",
                   "The label \"" + cur.GetUserVisibleName(with_toolchain) +
                       "\"\nwas not in the deps of this target. "

@@ -98,7 +98,7 @@ class FrameNodeImpl
   bool HadUserEdits() const override;
   bool IsAudible() const override;
   bool IsCapturingMediaStream() const override;
-  absl::optional<bool> IntersectsViewport() const override;
+  std::optional<bool> IntersectsViewport() const override;
   Visibility GetVisibility() const override;
   const RenderFrameHostProxy& GetRenderFrameHostProxy() const override;
   uint64_t GetResidentSetKbEstimate() const override;
@@ -113,10 +113,14 @@ class FrameNodeImpl
   int render_frame_id() const;
 
   // Getters for non-const properties. These are not thread safe.
-  const base::flat_set<FrameNodeImpl*>& child_frame_nodes() const;
-  const base::flat_set<PageNodeImpl*>& opened_page_nodes() const;
-  const base::flat_set<PageNodeImpl*>& embedded_page_nodes() const;
-  const base::flat_set<WorkerNodeImpl*>& child_worker_nodes() const;
+  const base::flat_set<raw_ptr<FrameNodeImpl, CtnExperimental>>&
+  child_frame_nodes() const;
+  const base::flat_set<raw_ptr<PageNodeImpl, CtnExperimental>>&
+  opened_page_nodes() const;
+  const base::flat_set<raw_ptr<PageNodeImpl, CtnExperimental>>&
+  embedded_page_nodes() const;
+  const base::flat_set<raw_ptr<WorkerNodeImpl, CtnExperimental>>&
+  child_worker_nodes() const;
 
   // Setters are not thread safe.
   void SetIsCurrent(bool is_current);
@@ -279,13 +283,13 @@ class FrameNodeImpl
   // UI thread.
   const RenderFrameHostProxy render_frame_host_proxy_;
 
-  base::flat_set<FrameNodeImpl*> child_frame_nodes_;
+  base::flat_set<raw_ptr<FrameNodeImpl, CtnExperimental>> child_frame_nodes_;
 
   // The set of pages that have been opened by this frame.
-  base::flat_set<PageNodeImpl*> opened_page_nodes_;
+  base::flat_set<raw_ptr<PageNodeImpl, CtnExperimental>> opened_page_nodes_;
 
   // The set of pages that have been embedded by this frame.
-  base::flat_set<PageNodeImpl*> embedded_page_nodes_;
+  base::flat_set<raw_ptr<PageNodeImpl, CtnExperimental>> embedded_page_nodes_;
 
   uint64_t resident_set_kb_estimate_ = 0;
 
@@ -325,7 +329,7 @@ class FrameNodeImpl
   DocumentProperties document_;
 
   // The child workers of this frame.
-  base::flat_set<WorkerNodeImpl*> child_worker_nodes_;
+  base::flat_set<raw_ptr<WorkerNodeImpl, CtnExperimental>> child_worker_nodes_;
 
   // Frame priority information. Set via ExecutionContextPriorityDecorator.
   ObservedProperty::NotifiesOnlyOnChangesWithPreviousValue<
@@ -355,7 +359,7 @@ class FrameNodeImpl
   // point in tracking it. To avoid programming mistakes, it is forbidden to
   // query this property for the main frame.
   ObservedProperty::NotifiesOnlyOnChanges<
-      absl::optional<bool>,
+      std::optional<bool>,
       &FrameNodeObserver::OnIntersectsViewportChanged>
       intersects_viewport_;
 

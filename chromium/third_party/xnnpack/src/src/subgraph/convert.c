@@ -13,6 +13,7 @@
 #include <xnnpack/operator.h>
 #include <xnnpack/operator-type.h>
 #include <xnnpack/params.h>
+#include <xnnpack/reshape-helpers.h>
 #include <xnnpack/subgraph.h>
 #include <xnnpack/subgraph-validation.h>
 
@@ -24,7 +25,7 @@ static enum xnn_status create_convert_operator(
   size_t num_values,
   struct xnn_operator_data* opdata,
   struct xnn_code_cache* code_cache,
-  struct xnn_weights_cache* weights_cache)
+  xnn_weights_cache_t weights_cache)
 {
   assert(node->num_inputs == 1);
   const uint32_t input_id = node->inputs[0];
@@ -131,14 +132,17 @@ static enum xnn_status reshape_convert_operator(
   const size_t batch_size = xnn_shape_multiply_non_channel_dims(&values[input_id].shape);
   const size_t num_input_dims = values[input_id].shape.num_dims;
   const size_t channel_dim = num_input_dims == 0 ? 1 : values[input_id].shape.dim[num_input_dims - 1];
+  const size_t old_workspace_size = opdata->workspace_size;
+  enum xnn_status status = xnn_status_invalid_state;
 
   switch (opdata->operator_objects[0]->type) {
     case xnn_operator_type_convert_nc_f32_f16:
-      return xnn_reshape_convert_nc_f32_f16(
+      status = xnn_reshape_convert_nc_f32_f16(
         opdata->operator_objects[0],
         batch_size,
         /*channels=*/channel_dim, /*input_stride=*/channel_dim, /*output_stride=*/channel_dim,
         threadpool);
+      break;
     case xnn_operator_type_convert_nc_f16_qd8: {
        // Channel stride depends on number of non batch dims.
        const uint32_t output_id = opdata->outputs[0];
@@ -147,11 +151,12 @@ static enum xnn_status reshape_convert_operator(
        const size_t num_nonbatch_dims = output_value->quantization.num_nonbatch_dims;
        const size_t dq_batch_size = xnn_shape_multiply_batch_dims(&values[output_id].shape, num_nonbatch_dims);
        const size_t dq_channel_stride = xnn_shape_multiply_trailing_dims(&values[input_id].shape, num_input_dims - num_nonbatch_dims);
-      return xnn_reshape_convert_nc_f16_qd8(
+      status = xnn_reshape_convert_nc_f16_qd8(
         opdata->operator_objects[0],
         dq_batch_size,
         /*channels=*/dq_channel_stride, /*input_stride=*/dq_channel_stride,  /*output_stride=*/dq_channel_stride,
         threadpool);
+      break;
     }
     case xnn_operator_type_convert_nc_f32_qd8: {
        // Channel stride depends on number of non batch dims.
@@ -161,63 +166,76 @@ static enum xnn_status reshape_convert_operator(
        const size_t num_nonbatch_dims = output_value->quantization.num_nonbatch_dims;
        const size_t dq_batch_size = xnn_shape_multiply_batch_dims(&values[output_id].shape, num_nonbatch_dims);
        const size_t dq_channel_stride = xnn_shape_multiply_trailing_dims(&values[input_id].shape, num_input_dims - num_nonbatch_dims);
-      return xnn_reshape_convert_nc_f32_qd8(
+      status = xnn_reshape_convert_nc_f32_qd8(
         opdata->operator_objects[0],
         dq_batch_size,
         /*channels=*/dq_channel_stride, /*input_stride=*/dq_channel_stride,  /*output_stride=*/dq_channel_stride,
         threadpool);
+      break;
     }
     case xnn_operator_type_convert_nc_f32_qs8:
-      return xnn_reshape_convert_nc_f32_qs8(
+      status = xnn_reshape_convert_nc_f32_qs8(
         opdata->operator_objects[0],
         batch_size,
         /*channels=*/channel_dim, /*input_stride=*/channel_dim, /*output_stride=*/channel_dim,
         threadpool);
+      break;
     case xnn_operator_type_convert_nc_f32_qu8:
-      return xnn_reshape_convert_nc_f32_qu8(
+      status = xnn_reshape_convert_nc_f32_qu8(
         opdata->operator_objects[0],
         batch_size,
         /*channels=*/channel_dim, /*input_stride=*/channel_dim, /*output_stride=*/channel_dim,
         threadpool);
+      break;
     case xnn_operator_type_convert_nc_f16_f32:
-      return xnn_reshape_convert_nc_f16_f32(
+      status = xnn_reshape_convert_nc_f16_f32(
         opdata->operator_objects[0],
         batch_size,
         /*channels=*/channel_dim, /*input_stride=*/channel_dim, /*output_stride=*/channel_dim,
         threadpool);
+      break;
     case xnn_operator_type_convert_nc_qs8:
-      return xnn_reshape_convert_nc_qs8(
+      status = xnn_reshape_convert_nc_qs8(
         opdata->operator_objects[0],
         batch_size,
         /*channels=*/channel_dim, /*input_stride=*/channel_dim, /*output_stride=*/channel_dim,
         threadpool);
+      break;
     case xnn_operator_type_convert_nc_qs8_f16:
-      return xnn_reshape_convert_nc_qs8_f16(
+      status = xnn_reshape_convert_nc_qs8_f16(
         opdata->operator_objects[0],
         batch_size,
         /*channels=*/channel_dim, /*input_stride=*/channel_dim, /*output_stride=*/channel_dim,
         threadpool);
+      break;
     case xnn_operator_type_convert_nc_qs8_f32:
-      return xnn_reshape_convert_nc_qs8_f32(
+      status = xnn_reshape_convert_nc_qs8_f32(
         opdata->operator_objects[0],
         batch_size,
         /*channels=*/channel_dim, /*input_stride=*/channel_dim, /*output_stride=*/channel_dim,
         threadpool);
+      break;
     case xnn_operator_type_convert_nc_qu8:
-      return xnn_reshape_convert_nc_qu8(
+      status = xnn_reshape_convert_nc_qu8(
         opdata->operator_objects[0],
         batch_size,
         /*channels=*/channel_dim, /*input_stride=*/channel_dim, /*output_stride=*/channel_dim,
         threadpool);
+      break;
     case xnn_operator_type_convert_nc_qu8_f32:
-      return xnn_reshape_convert_nc_qu8_f32(
+      status = xnn_reshape_convert_nc_qu8_f32(
         opdata->operator_objects[0],
         batch_size,
         /*channels=*/channel_dim, /*input_stride=*/channel_dim, /*output_stride=*/channel_dim,
         threadpool);
+      break;
     default:
       XNN_UNREACHABLE;
   }
+  if (status != xnn_status_success) {
+    return status;
+  }
+  return resize_unary_elementwise_output_tensor(opdata, values, num_values, old_workspace_size, threadpool);
 }
 
 static enum xnn_status setup_convert_operator(
@@ -344,6 +362,8 @@ static inline enum xnn_compute_type validate_datatypes(
       break;
     case xnn_datatype_qint8:
       switch (output_datatype) {
+        case xnn_datatype_fp16:
+          return xnn_compute_type_qs8_to_fp16;
         case xnn_datatype_fp32:
           return xnn_compute_type_qs8_to_fp32;
         case xnn_datatype_qint8:
@@ -431,11 +451,6 @@ enum xnn_status xnn_define_convert(
 
   const struct xnn_value* output_value = &subgraph->values[output_id];
   status = xnn_subgraph_check_output_type_dense(xnn_node_type_convert, output_id, output_value);
-  if (status != xnn_status_success) {
-    return status;
-  }
-
-  status = xnn_subgraph_check_all_dims_match(xnn_node_type_convert, input_id, input_value, output_id, output_value);
   if (status != xnn_status_success) {
     return status;
   }

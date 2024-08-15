@@ -27,7 +27,7 @@ export class HeapProfilerPanel extends ProfilesPanel implements UI.ContextMenu.P
     const registry = instance;
     const profileTypes =
         [registry.heapSnapshotProfileType, registry.trackingHeapSnapshotProfileType, registry.samplingHeapProfileType];
-    super('heap_profiler', profileTypes as ProfileType[], 'profiler.heap-toggle-recording');
+    super('heap-profiler', profileTypes as ProfileType[], 'profiler.heap-toggle-recording');
   }
 
   static instance(): HeapProfilerPanel {
@@ -67,7 +67,8 @@ export class HeapProfilerPanel extends ProfilesPanel implements UI.ContextMenu.P
     }
 
     contextMenu.revealSection().appendItem(
-        i18nString(UIStrings.revealInSummaryView), revealInView.bind(this, 'Summary'));
+        i18nString(UIStrings.revealInSummaryView), revealInView.bind(this, 'Summary'),
+        {jslogContext: 'reveal-in-summary'});
   }
 
   handleAction(_context: UI.Context.Context, _actionId: string): boolean {
@@ -83,7 +84,7 @@ export class HeapProfilerPanel extends ProfilesPanel implements UI.ContextMenu.P
     super.wasShown();
     UI.Context.Context.instance().setFlavor(HeapProfilerPanel, this);
     // Record the memory tool load time.
-    Host.userMetrics.panelLoaded('heap_profiler', 'DevTools.Launch.HeapProfiler');
+    Host.userMetrics.panelLoaded('heap-profiler', 'DevTools.Launch.HeapProfiler');
   }
 
   override willHide(): void {

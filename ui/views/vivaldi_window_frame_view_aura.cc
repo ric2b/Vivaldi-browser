@@ -36,8 +36,6 @@ namespace {
 
 class VivaldiWindowFrameViewAura : public views::NonClientFrameView {
  public:
-  static const char kViewClassName[];
-
   // VivaldiWindowFrameViewAura is used to draw frames for app windows when a
   // non standard frame is needed. This occurs if there is no frame needed, or
   // if there is a frame color.
@@ -62,15 +60,11 @@ class VivaldiWindowFrameViewAura : public views::NonClientFrameView {
 
   // views::View implementation.
   gfx::Size CalculatePreferredSize() const override;
-  const char* GetClassName() const override;
   gfx::Size GetMinimumSize() const override;
   gfx::Size GetMaximumSize() const override;
 
   raw_ptr<VivaldiBrowserWindow> window_;
 };
-
-const char VivaldiWindowFrameViewAura::kViewClassName[] =
-    "ui/views/VivaldiWindowFrameViewAura";
 
 VivaldiWindowFrameViewAura::VivaldiWindowFrameViewAura(
     VivaldiBrowserWindow* window)
@@ -179,14 +173,12 @@ gfx::Size VivaldiWindowFrameViewAura::CalculatePreferredSize() const {
 
 void VivaldiWindowFrameViewAura::OnPaint(gfx::Canvas* canvas) {}
 
-const char* VivaldiWindowFrameViewAura::GetClassName() const {
-  return kViewClassName;
-}
-
 gfx::Size VivaldiWindowFrameViewAura::GetMinimumSize() const {
   views::Widget* widget = window_->GetWidget();
-  if (!widget)
-    return gfx::Size();
+  if (!widget) {
+    LOG(ERROR) << "GetMinimumSize called with no widget";
+    return gfx::Size(1,1);
+  }
   gfx::Size min_size = widget->client_view()->GetMinimumSize();
   min_size.SetToMax(gfx::Size(1, 1));
   return min_size;

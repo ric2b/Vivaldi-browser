@@ -26,7 +26,8 @@ enum class PathType {
   // Windows-specific
   kDesktopWallpaper,
 
-  kLastType = kDesktopWallpaper,
+  kDirectMatch,
+  kLastType = kDirectMatch,
 };
 
 constexpr size_t PathTypeCount = static_cast<size_t>(PathType::kLastType) + 1;
@@ -36,17 +37,16 @@ constexpr char kResourceUrlPrefix[] = "/resources/";
 
 // Parse the path component of chrome://vivaldi-data/ URLs. Typically it is
 // /type/data, but there are few older formats that deviates from it.
-absl::optional<PathType> ParsePath(base::StringPiece path,
+std::optional<PathType> ParsePath(base::StringPiece path,
                                    std::string* data = nullptr);
 
 // Parse the full url.
-absl::optional<PathType> ParseUrl(base::StringPiece url,
+std::optional<PathType> ParseUrl(base::StringPiece url,
                                   std::string* data = nullptr);
 
 // Check if the url points to internal Vivaldi resources. If |subpath| is not
 // null on return |*subpath| holds the resource path.
-bool IsResourceURL(base::StringPiece url,
-                          std::string* subpath = nullptr);
+bool IsResourceURL(base::StringPiece url, std::string* subpath = nullptr);
 
 // Check if path mapping id is really old-format thumbnail, not a path
 // mapping.
@@ -56,7 +56,7 @@ bool IsBookmarkCaptureUrl(base::StringPiece id);
 
 bool IsLocalPathUrl(base::StringPiece id);
 
-absl::optional<std::string> GetSyncedStoreChecksumForUrl(base::StringPiece url);
+std::optional<std::string> GetSyncedStoreChecksumForUrl(base::StringPiece url);
 
 // Construct full vivaldi-data URL from the type and data.
 std::string MakeUrl(PathType type, base::StringPiece data);
@@ -81,10 +81,9 @@ scoped_refptr<base::RefCountedMemory> ReadFileOnBlockingThread(
 
 // Same as above, but passing the results by the vector reference.
 // Returns true on success.
-bool ReadFileToVectorOnBlockingThread(
-    const base::FilePath& file_path,
-    std::vector<unsigned char> &buffer,
-    bool log_not_found = true);
+bool ReadFileToVectorOnBlockingThread(const base::FilePath& file_path,
+                                      std::vector<unsigned char>& buffer,
+                                      bool log_not_found = true);
 }  // namespace vivaldi_data_url_utils
 
 #endif  // COMPONENTS_DATASOURCE_VIVALDI_DATA_URL_UTILS_H_

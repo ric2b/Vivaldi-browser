@@ -15,9 +15,7 @@
 #include "base/power_monitor/power_observer.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/shell_integration.h"
-#include "chrome/services/qrcode_generator/public/cpp/qrcode_generator_service.h"
-#include "chrome/services/qrcode_generator/public/mojom/qrcode_generator.mojom.h"
-// #include "components/password_manager/core/browser/reauth_purpose.h"
+#include "components/download/public/common/download_item.h"
 #include "content/public/browser/download_manager.h"
 #include "extensions/browser/api/file_system/file_system_api.h"
 #include "extensions/browser/app_window/app_window.h"
@@ -30,6 +28,7 @@
 
 #include "browser/translate/vivaldi_translate_server_request.h"
 #include "components/datasource/vivaldi_image_store.h"
+#include "components/direct_match/direct_match_service.h"
 #include "extensions/schema/vivaldi_utilities.h"
 #include "ui/lights/razer_chroma_handler.h"
 
@@ -41,7 +40,8 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
                             public EventRouter::Observer,
                             public base::PowerStateObserver,
                             public base::PowerSuspendObserver,
-                            public content::DownloadManager::Observer {
+                            public content::DownloadManager::Observer,
+                            public download::DownloadItem::Observer {
  public:
   using MutexAvailableCallback = base::OnceCallback<void(int)>;
 
@@ -98,6 +98,11 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
   // DownloadManager::Observer implementation
   void OnManagerInitialized() override;
   void ManagerGoingDown(content::DownloadManager* manager) override;
+  void OnDownloadCreated(content::DownloadManager* manager,
+                                   download::DownloadItem* item) override;
+
+  // DownloadItem::Observer
+  void OnDownloadUpdated(download::DownloadItem* download) override;
 
   void OnPasswordIconStatusChanged(int window_id, bool show);
 
@@ -323,7 +328,7 @@ class UtilitiesSelectLocalImageFunction : public ExtensionFunction {
                       bool cancelled);
 
   void OnContentRead(int64_t bookmark_id,
-                     absl::optional<std::vector<uint8_t>> content);
+                     std::optional<std::vector<uint8_t>> content);
 
   void SendResult(std::string data_url);
 };
@@ -343,7 +348,7 @@ class UtilitiesStoreImageFunction : public ExtensionFunction {
   void SendResult(std::string data_url);
 
   VivaldiImageStore::ImagePlace place_;
-  absl::optional<VivaldiImageStore::ImageFormat> image_format_;
+  std::optional<VivaldiImageStore::ImageFormat> image_format_;
 };
 
 class UtilitiesCleanUnusedImagesFunction : public ExtensionFunction {
@@ -370,14 +375,13 @@ class UtilitiesGetVersionFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
-class UtilitiesGetFFMPEGStateFunction : public ExtensionFunction {
+class UtilitiesGetEnvVarsFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("utilities.getFFMPEGState",
-                             UTILITIES_GET_FFMPEG_STATE)
-  UtilitiesGetFFMPEGStateFunction() = default;
+  DECLARE_EXTENSION_FUNCTION("utilities.getEnvVars", UTILITIES_GET_ENV_VARS)
+  UtilitiesGetEnvVarsFunction() = default;
 
  private:
-  ~UtilitiesGetFFMPEGStateFunction() override = default;
+  ~UtilitiesGetEnvVarsFunction() override = default;
 
   ResponseAction Run() override;
 };
@@ -805,16 +809,8 @@ class UtilitiesGenerateQRCodeFunction : public ExtensionFunction {
   ~UtilitiesGenerateQRCodeFunction() override;
   ResponseAction Run() override;
 
-  void OnCodeGeneratorResponse(
-      const qrcode_generator::mojom::GenerateQRCodeResponsePtr response);
   void RespondOnUiThread(std::string data_url);
   void RespondOnUiThreadForFile(base::FilePath path);
-
-  // Remote to service instance to generate QR code images.
-  std::unique_ptr<qrcode_generator::QRImageGenerator> qr_generator_;
-
-  vivaldi::utilities::CaptureQRDestination dest_ =
-      vivaldi::utilities::CaptureQRDestination::kDataurl;
 };
 
 class UtilitiesGetGAPIKeyFunction : public ExtensionFunction {
@@ -1096,6 +1092,28 @@ class UtilitiesDetectNewCrashesFunction : public ExtensionFunction {
 
   std::string CheckForNewCrashes(const std::string& lastSeenUUID);
   void SendResult(const std::string& lastCrashUUID);
+};
+
+class UtilitiesIsRTLFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.isRTL",
+                             UTILITIES_IS_RTL)
+  UtilitiesIsRTLFunction() = default;
+
+ private:
+  ~UtilitiesIsRTLFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesGetDirectMatchFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getDirectMatch",
+                             UTILITIES_GET_DIRECT_MATCH)
+  UtilitiesGetDirectMatchFunction() = default;
+
+ private:
+  ~UtilitiesGetDirectMatchFunction() override = default;
+  ResponseAction Run() override;
 };
 
 }  // namespace extensions

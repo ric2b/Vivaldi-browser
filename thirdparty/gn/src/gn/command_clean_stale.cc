@@ -78,7 +78,8 @@ int RunCleanStale(const std::vector<std::string>& args) {
   }
 
   const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
-  base::FilePath ninja_executable = cmdline->GetSwitchValuePath(switches::kNinjaExecutable);
+  base::FilePath ninja_executable =
+      cmdline->GetSwitchValuePath(switches::kNinjaExecutable);
   if (ninja_executable.empty()) {
     Err(Location(), "No --ninja-executable provided.",
         "--clean-stale requires a ninja executable to run. You can "

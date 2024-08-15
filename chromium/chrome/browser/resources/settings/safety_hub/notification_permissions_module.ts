@@ -18,8 +18,8 @@ import '../settings_shared.css.js';
 import '../i18n_setup.js';
 import '../icons.html.js';
 
-import {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
-import {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
+import type {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
+import type {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
@@ -29,15 +29,18 @@ import {isUndoKeyboardEvent} from 'chrome://resources/js/util.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BaseMixin} from '../base_mixin.js';
-import {MetricsBrowserProxy, MetricsBrowserProxyImpl, SafetyCheckNotificationsModuleInteractions} from '../metrics_browser_proxy.js';
+import type {MetricsBrowserProxy} from '../metrics_browser_proxy.js';
+import {MetricsBrowserProxyImpl, SafetyCheckNotificationsModuleInteractions} from '../metrics_browser_proxy.js';
 import {routes} from '../route.js';
-import {Route, RouteObserverMixin, Router} from '../router.js';
-import {NotificationPermission, SafetyHubBrowserProxy, SafetyHubBrowserProxyImpl, SafetyHubEvent} from '../safety_hub/safety_hub_browser_proxy.js';
+import type {Route} from '../router.js';
+import {RouteObserverMixin, Router} from '../router.js';
+import type {NotificationPermission, SafetyHubBrowserProxy} from '../safety_hub/safety_hub_browser_proxy.js';
+import {SafetyHubBrowserProxyImpl, SafetyHubEvent} from '../safety_hub/safety_hub_browser_proxy.js';
 import {SiteSettingsMixin} from '../site_settings/site_settings_mixin.js';
 import {TooltipMixin} from '../tooltip_mixin.js';
 
 import {getTemplate} from './notification_permissions_module.html.js';
-import {SettingsSafetyHubModuleElement, SiteInfo, SiteInfoWithTarget} from './safety_hub_module.js';
+import type {SettingsSafetyHubModuleElement, SiteInfo, SiteInfoWithTarget} from './safety_hub_module.js';
 
 export interface SettingsSafetyHubNotificationPermissionsModuleElement {
   $: {
@@ -60,6 +63,7 @@ export interface SettingsSafetyHubNotificationPermissionsModuleElement {
  */
 enum Actions {
   BLOCK = 'block',
+  BLOCK_ALL = 'block_all',
   IGNORE = 'ignore',
   RESET = 'reset',
 }
@@ -184,9 +188,8 @@ export class SettingsSafetyHubNotificationPermissionsModuleElement extends
   }
 
   private async setHeaderToCompletionState_() {
-    this.headerString_ = this.toastText_ ?
-        this.toastText_ :
-        this.i18n('safetyCheckNotificationPermissionReviewDoneLabel');
+    assert(this.toastText_);
+    this.headerString_ = this.toastText_!;
     this.subheaderString_ = '';
     this.headerIconString_ = 'cr:check';
   }
@@ -218,11 +221,32 @@ export class SettingsSafetyHubNotificationPermissionsModuleElement extends
     this.headerIconString_ = 'settings:notifications-none';
   }
 
-  private onBlockClick_(e: CustomEvent<NotificationPermission>) {
+  /** Clears all the changes made by a previous action. */
+  private resetValues_(e: Event) {
     e.stopPropagation();
-    this.lastOrigins_ = [e.detail.origin];
-    this.lastUserAction_ = Actions.BLOCK;
-    this.$.undoToast.show();
+    this.$.undoToast.hide();
+    this.lastOrigins_ = [];
+    this.lastUserAction_ = null;
+  }
+
+  /** Sets all the values needed for an action. */
+  private setValues_(origins: string[], action: Actions) {
+    //  Both lastUserAction_ and lastOrigins_ need to be reset before setting
+    //  new values to prevent triggering updateUndoNotificationText_ twice
+    //  (which can cause issues like "flickering" on the header string, e.g.
+    //  when the wrong header string is shown for a split second before the
+    //  correct one).
+    assert(!this.lastUserAction_);
+    assert(!this.lastOrigins_.length);
+    this.lastOrigins_ = origins;
+    this.lastUserAction_ = action;
+  }
+
+  private onBlockClick_(e: CustomEvent<NotificationPermission>) {
+    this.resetValues_(e);
+    this.setValues_([e.detail.origin], Actions.BLOCK);
+    this.showUndoToast_();
+
     this.$.module.animateHide(
         e.detail.origin,
         this.browserProxy_.blockNotificationPermissionForOrigins.bind(
@@ -234,16 +258,18 @@ export class SettingsSafetyHubNotificationPermissionsModuleElement extends
   }
 
   private onMoreActionClick_(e: CustomEvent<SiteInfoWithTarget>) {
-    e.stopPropagation();
+    this.resetValues_(e);
     this.lastOrigins_ = [e.detail.origin];
     this.$.actionMenu.showAt(e.detail.target as HTMLElement);
   }
 
-  private onIgnoreClick_(e: CustomEvent<NotificationPermission>) {
-    e.stopPropagation();
-    this.lastUserAction_ = Actions.IGNORE;
-    this.$.undoToast.show();
+  private onIgnoreClick_(e: Event) {
+    const tempLastOrigins = this.lastOrigins_;
+    this.resetValues_(e);
+    this.setValues_(tempLastOrigins, Actions.IGNORE);
+    this.showUndoToast_();
     this.$.actionMenu.close();
+
     // |lastOrigins| is set to a 1-item array containing the item on which
     // the context menu with the |reset| option was open,
     // in |onMoreActionClick_|.
@@ -257,11 +283,13 @@ export class SettingsSafetyHubNotificationPermissionsModuleElement extends
             SafetyCheckNotificationsModuleInteractions.IGNORE);
   }
 
-  private onResetClick_(e: CustomEvent<NotificationPermission>) {
-    e.stopPropagation();
-    this.lastUserAction_ = Actions.RESET;
-    this.$.undoToast.show();
+  private onResetClick_(e: Event) {
+    const tempLastOrigins = this.lastOrigins_;
+    this.resetValues_(e);
+    this.setValues_(tempLastOrigins, Actions.RESET);
+    this.showUndoToast_();
     this.$.actionMenu.close();
+
     // |lastOrigins| is set to a 1-item array containing the item on which
     // the context menu with the |reset| option was open,
     // in |onMoreActionClick_|.
@@ -276,18 +304,16 @@ export class SettingsSafetyHubNotificationPermissionsModuleElement extends
   }
 
   private onBlockAllClick_(e: Event) {
-    e.stopPropagation();
+    this.resetValues_(e);
     // To be able to undo the block-all action, we need to keep track of all
     // origins that were blocked.
     assert(this.sites_);
-    this.lastOrigins_ = this.sites_.map(site => site.origin);
+    this.setValues_(this.sites_.map(site => site.origin), Actions.BLOCK_ALL);
 
     this.$.module.animateHide(
         /* all origins */ null,
         this.browserProxy_.blockNotificationPermissionForOrigins.bind(
             this.browserProxy_, this.lastOrigins_));
-    this.lastUserAction_ = Actions.BLOCK;
-    this.$.undoToast.show();
 
     this.metricsBrowserProxy_
         .recordSafetyHubNotificationPermissionsModuleInteractionsHistogram(
@@ -322,16 +348,15 @@ export class SettingsSafetyHubNotificationPermissionsModuleElement extends
     }
     switch (this.lastUserAction_) {
       case Actions.BLOCK:
-        if (this.lastOrigins_!.length === 1) {
-          this.toastText_ = this.i18n(
-              'safetyCheckNotificationPermissionReviewBlockedToastLabel',
-              this.lastOrigins_[0]);
-        } else {
-          this.toastText_ =
-              await PluralStringProxyImpl.getInstance().getPluralString(
-                  'safetyCheckNotificationPermissionReviewBlockAllToastLabel',
-                  this.lastOrigins_.length);
-        }
+        this.toastText_ = this.i18n(
+            'safetyCheckNotificationPermissionReviewBlockedToastLabel',
+            this.lastOrigins_[0]);
+        break;
+      case Actions.BLOCK_ALL:
+        this.toastText_ =
+            await PluralStringProxyImpl.getInstance().getPluralString(
+                'safetyCheckNotificationPermissionReviewBlockAllToastLabel',
+                this.lastOrigins_.length);
         break;
       case Actions.IGNORE:
         this.toastText_ = this.i18n(
@@ -348,6 +373,15 @@ export class SettingsSafetyHubNotificationPermissionsModuleElement extends
     }
   }
 
+  private showUndoToast_() {
+    // Only show Undo toast if there are multiple sites to review. Otherwise,
+    // once the single site is reviewed, the completion state with a permanent
+    // Undo button in the header will be shown.
+    if (this.sites_!.length > 1) {
+      this.$.undoToast.show();
+    }
+  }
+
   private undoLastAction_() {
     switch (this.lastUserAction_) {
       // As BLOCK and RESET actions just change the notification permission,
@@ -355,15 +389,16 @@ export class SettingsSafetyHubNotificationPermissionsModuleElement extends
       case Actions.BLOCK:
         this.browserProxy_.allowNotificationPermissionForOrigins(
             this.lastOrigins_);
-        if (this.lastOrigins_!.length === 1) {
-          this.metricsBrowserProxy_
-              .recordSafetyHubNotificationPermissionsModuleInteractionsHistogram(
-                  SafetyCheckNotificationsModuleInteractions.UNDO_BLOCK);
-        } else {
-          this.metricsBrowserProxy_
-              .recordSafetyHubNotificationPermissionsModuleInteractionsHistogram(
-                  SafetyCheckNotificationsModuleInteractions.UNDO_BLOCK_ALL);
-        }
+        this.metricsBrowserProxy_
+            .recordSafetyHubNotificationPermissionsModuleInteractionsHistogram(
+                SafetyCheckNotificationsModuleInteractions.UNDO_BLOCK);
+        break;
+      case Actions.BLOCK_ALL:
+        this.browserProxy_.allowNotificationPermissionForOrigins(
+            this.lastOrigins_);
+        this.metricsBrowserProxy_
+            .recordSafetyHubNotificationPermissionsModuleInteractionsHistogram(
+                SafetyCheckNotificationsModuleInteractions.UNDO_BLOCK_ALL);
         break;
       case Actions.RESET:
         this.browserProxy_.allowNotificationPermissionForOrigins(
@@ -382,8 +417,6 @@ export class SettingsSafetyHubNotificationPermissionsModuleElement extends
       default:
         assertNotReached();
     }
-
-    this.lastOrigins_ = [];
     this.$.undoToast.hide();
   }
 

@@ -53,11 +53,7 @@ constexpr char kUsbDriverKey[] = "usb_driver";
 std::string EncodeToken(const base::UnguessableToken& token) {
   const uint64_t data[2] = {token.GetHighForSerialization(),
                             token.GetLowForSerialization()};
-  std::string buffer;
-  base::Base64Encode(
-      base::StringPiece(reinterpret_cast<const char*>(&data[0]), sizeof(data)),
-      &buffer);
-  return buffer;
+  return base::Base64Encode(base::as_byte_span(data));
 }
 
 base::UnguessableToken DecodeToken(base::StringPiece input) {
@@ -636,6 +632,13 @@ void SerialChooserContext::OnPortRemoved(
     }
     for (const auto& origin : revoked_origins)
       observer.OnPermissionRevoked(origin);
+  }
+}
+
+void SerialChooserContext::OnPortConnectedStateChanged(
+    device::mojom::SerialPortInfoPtr port) {
+  for (auto& observer : port_observer_list_) {
+    observer.OnPortConnectedStateChanged(*port);
   }
 }
 

@@ -21,6 +21,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/numerics/byte_conversions.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_piece.h"
@@ -203,6 +204,11 @@ class WebSocketChannel::ConnectDelegate
     creator_->OnCreateURLRequest(request);
   }
 
+  void OnURLRequestConnected(URLRequest* request,
+                             const TransportInfo& info) override {
+    creator_->OnURLRequestConnected(request, info);
+  }
+
   void OnSuccess(
       std::unique_ptr<WebSocketStream> stream,
       std::unique_ptr<WebSocketHandshakeResponseInfo> response) override {
@@ -212,7 +218,7 @@ class WebSocketChannel::ConnectDelegate
 
   void OnFailure(const std::string& message,
                  int net_error,
-                 absl::optional<int> response_code) override {
+                 std::optional<int> response_code) override {
     creator_->OnConnectFailure(message, net_error, response_code);
     // |this| has been deleted.
   }
@@ -236,7 +242,7 @@ class WebSocketChannel::ConnectDelegate
                      scoped_refptr<HttpResponseHeaders> headers,
                      const IPEndPoint& remote_endpoint,
                      base::OnceCallback<void(const AuthCredentials*)> callback,
-                     absl::optional<AuthCredentials>* credentials) override {
+                     std::optional<AuthCredentials>* credentials) override {
     return creator_->OnAuthRequired(auth_info, std::move(headers),
                                     remote_endpoint, std::move(callback),
                                     credentials);
@@ -440,8 +446,7 @@ void WebSocketChannel::SendAddChannelRequestWithSuppliedCallback(
   if (!socket_url.SchemeIsWSOrWSS()) {
     // TODO(ricea): Kill the renderer (this error should have been caught by
     // Javascript).
-    event_interface_->OnFailChannel("Invalid scheme", ERR_FAILED,
-                                    absl::nullopt);
+    event_interface_->OnFailChannel("Invalid scheme", ERR_FAILED, std::nullopt);
     // |this| is deleted here.
     return;
   }
@@ -457,6 +462,11 @@ void WebSocketChannel::SendAddChannelRequestWithSuppliedCallback(
 
 void WebSocketChannel::OnCreateURLRequest(URLRequest* request) {
   event_interface_->OnCreateURLRequest(request);
+}
+
+void WebSocketChannel::OnURLRequestConnected(URLRequest* request,
+                                             const TransportInfo& info) {
+  event_interface_->OnURLRequestConnected(request, info);
 }
 
 void WebSocketChannel::OnConnectSuccess(
@@ -479,7 +489,7 @@ void WebSocketChannel::OnConnectSuccess(
 
 void WebSocketChannel::OnConnectFailure(const std::string& message,
                                         int net_error,
-                                        absl::optional<int> response_code) {
+                                        std::optional<int> response_code) {
   DCHECK_EQ(CONNECTING, state_);
 
   // Copy the message before we delete its owner.
@@ -507,7 +517,7 @@ int WebSocketChannel::OnAuthRequired(
     scoped_refptr<HttpResponseHeaders> response_headers,
     const IPEndPoint& remote_endpoint,
     base::OnceCallback<void(const AuthCredentials*)> callback,
-    absl::optional<AuthCredentials>* credentials) {
+    std::optional<AuthCredentials>* credentials) {
   return event_interface_->OnAuthRequired(
       auth_info, std::move(response_headers), remote_endpoint,
       std::move(callback), credentials);
@@ -931,7 +941,7 @@ void WebSocketChannel::FailChannel(const std::string& message,
   // handshake.
   stream_->Close();
   SetState(CLOSED);
-  event_interface_->OnFailChannel(message, ERR_FAILED, absl::nullopt);
+  event_interface_->OnFailChannel(message, ERR_FAILED, std::nullopt);
 }
 
 ChannelState WebSocketChannel::SendClose(uint16_t code,
@@ -949,10 +959,13 @@ ChannelState WebSocketChannel::SendClose(uint16_t code,
     const size_t payload_length = kWebSocketCloseCodeLength + reason.length();
     body = base::MakeRefCounted<IOBufferWithSize>(payload_length);
     size = payload_length;
-    base::WriteBigEndian(body->data(), code);
+    auto [code_span, body_span] =
+        body->span().split_at<kWebSocketCloseCodeLength>();
+    base::as_writable_bytes(code_span).copy_from(
+        base::numerics::U16ToBigEndian(code));
     static_assert(sizeof(code) == kWebSocketCloseCodeLength,
                   "they should both be two");
-    base::ranges::copy(reason, body->data() + kWebSocketCloseCodeLength);
+    body_span.copy_from(reason);
   }
 
   return SendFrameInternal(true, WebSocketFrameHeader::kOpCodeClose,
@@ -981,8 +994,8 @@ bool WebSocketChannel::ParseClose(base::span<const char> payload,
   }
 
   const char* data = payload.data();
-  uint16_t unchecked_code = 0;
-  base::ReadBigEndian(reinterpret_cast<const uint8_t*>(data), &unchecked_code);
+  uint16_t unchecked_code =
+      base::numerics::U16FromBigEndian(base::as_byte_span(payload).first<2>());
   static_assert(sizeof(unchecked_code) == kWebSocketCloseCodeLength,
                 "they should both be two bytes");
 

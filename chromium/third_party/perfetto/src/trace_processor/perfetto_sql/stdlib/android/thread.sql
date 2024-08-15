@@ -13,12 +13,12 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
-CREATE PERFETTO FUNCTION internal_thread_prefix(thread_name STRING)
+CREATE PERFETTO FUNCTION _thread_prefix(thread_name STRING)
 RETURNS STRING AS
 SELECT STR_SPLIT(STR_SPLIT(STR_SPLIT(STR_SPLIT($thread_name, "-", 0), "[", 0), ":", 0), " ", 0);
 
 -- Per process stats of threads created in a process
-CREATE PERFETTO FUNCTION android_thread_creation_spam(
+CREATE PERFETTO FUNCTION _android_thread_creation_spam(
   -- Minimum duration between creating and destroying a thread before their the
   -- thread creation event is considered. If NULL, considers all thread creations.
   min_thread_dur FLOAT,
@@ -40,7 +40,7 @@ x AS (
   SELECT
     pid,
     upid,
-    INTERNAL_THREAD_PREFIX(thread.name) AS thread_name_prefix,
+    _THREAD_PREFIX(thread.name) AS thread_name_prefix,
     process.name AS process_name,
     COUNT(thread.start_ts)
       OVER (

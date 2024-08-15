@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {ActivityLogExtensionPlaceholder, ExtensionsActivityLogElement, navigation, Page} from 'chrome://extensions/extensions.js';
-
+import type {ActivityLogExtensionPlaceholder, ExtensionsActivityLogElement} from 'chrome://extensions/extensions.js';
+import {navigation, Page} from 'chrome://extensions/extensions.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertDeepEquals, assertEquals} from 'chrome://webui-test/chai_assert.js';
+
 import {TestService} from './test_service.js';
 import {createExtensionInfo, testVisible} from './test_util.js';
 
@@ -115,8 +116,8 @@ suite('ExtensionsActivityLogTest', function() {
     boundTestVisible('activity-log-history', true);
 
     // Navigate to the activity log stream.
-    activityLog.shadowRoot!.querySelector('cr-tabs')!.selected = 1;
-    flush();
+    activityLog.$.tabs.selected = 1;
+    await activityLog.$.tabs.updateComplete;
 
     // One activity is recorded and should appear in the stream.
     proxyDelegate.getOnExtensionActivity().callListeners(activity1);
@@ -126,7 +127,7 @@ suite('ExtensionsActivityLogTest', function() {
     assertEquals(1, getStreamItems().length);
 
     // Navigate back to the activity log history tab.
-    activityLog.shadowRoot!.querySelector('cr-tabs')!.selected = 0;
+    activityLog.$.tabs.selected = 0;
 
     // Expect a refresh of the activity log.
     await proxyDelegate.whenCalled('getExtensionActivityLog');
@@ -137,8 +138,8 @@ suite('ExtensionsActivityLogTest', function() {
     // the stream is inactive.
     proxyDelegate.getOnExtensionActivity().callListeners(activity1);
 
-    activityLog.shadowRoot!.querySelector('cr-tabs')!.selected = 1;
-    flush();
+    activityLog.$.tabs.selected = 1;
+    await activityLog.$.tabs.updateComplete;
 
     // The one activity in the stream should have persisted between tab
     // switches.

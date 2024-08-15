@@ -12,7 +12,6 @@
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
-#import "ios/chrome/browser/snapshots/model/snapshot_browser_agent.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
 #import "ios/chrome/test/scoped_key_window.h"
 #import "ios/web/common/crw_web_view_content_view.h"
@@ -54,17 +53,12 @@ class SideSwipeMediatorTest : public PlatformTest {
     browser_state_ = TestChromeBrowserState::Builder().Build();
     browser_ = std::make_unique<TestBrowser>(browser_state_.get());
 
-    browser_->GetWebStateList()->InsertWebState(
-        0, std::move(original_web_state), WebStateList::INSERT_NO_FLAGS,
-        WebStateOpener());
+    browser_->GetWebStateList()->InsertWebState(std::move(original_web_state));
 
     FullscreenController* fullscreen_controller =
         FullscreenController::FromBrowser(browser_.get());
-    SnapshotBrowserAgent* snapshot_browser_agent =
-        SnapshotBrowserAgent::FromBrowser(browser_.get());
     side_swipe_mediator_ = [[SideSwipeMediator alloc]
         initWithFullscreenController:fullscreen_controller
-                snapshotBrowserAgent:snapshot_browser_agent
                         webStateList:browser_->GetWebStateList()];
 
     view_ = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 320, 240)];
@@ -167,9 +161,9 @@ TEST_F(SideSwipeMediatorTest, ObserversTriggerStateUpdate) {
   item->SetURL(GURL(kChromeUINewTabURL));
   // Insert the WebState and make sure it's active. This should trigger
   // the activation WebState change and update edge navigation state.
-  browser_->GetWebStateList()->InsertWebState(1, std::move(fake_web_state),
-                                              WebStateList::INSERT_ACTIVATE,
-                                              WebStateOpener());
+  browser_->GetWebStateList()->InsertWebState(
+      std::move(fake_web_state),
+      WebStateList::InsertionParams::AtIndex(1).Activate());
   EXPECT_TRUE(side_swipe_mediator_.leadingEdgeNavigationEnabled);
   EXPECT_TRUE(side_swipe_mediator_.trailingEdgeNavigationEnabled);
 

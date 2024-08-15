@@ -43,6 +43,7 @@ class RoundedCornersF;
 }  // namespace gfx
 
 namespace ui {
+class MouseEvent;
 class OSExchangeData;
 struct OwnedWindowAnchor;
 }  // namespace ui
@@ -54,7 +55,6 @@ class MenuControllerTest;
 class MenuHostRootView;
 class MenuItemView;
 class MenuPreTargetHandler;
-class MouseEvent;
 class SubmenuView;
 class View;
 class ViewTracker;
@@ -250,6 +250,7 @@ class VIEWS_EXPORT MenuController
 
   // WidgetObserver overrides:
   void OnWidgetDestroying(Widget* widget) override;
+  void OnWidgetShowStateChanged(Widget* widget) override;
 
   // Only used for testing.
   bool IsCancelAllTimerRunningForTest();
@@ -267,7 +268,7 @@ class VIEWS_EXPORT MenuController
   bool use_ash_system_ui_layout() const { return use_ash_system_ui_layout_; }
 
   // The rounded corners of the context menu.
-  absl::optional<gfx::RoundedCornersF> rounded_corners() const {
+  std::optional<gfx::RoundedCornersF> rounded_corners() const {
     return rounded_corners_;
   }
 
@@ -286,7 +287,7 @@ class VIEWS_EXPORT MenuController
   void AnimationProgressed(const gfx::Animation* animation) override;
 
   // Sets the customized rounded corners of the context menu.
-  void SetMenuRoundedCorners(absl::optional<gfx::RoundedCornersF> corners);
+  void SetMenuRoundedCorners(std::optional<gfx::RoundedCornersF> corners);
 
   // Adds an annotation event handler. The subscription should be discarded when
   // the calling code no longer wants to intercept events for the annotation. It
@@ -294,12 +295,12 @@ class VIEWS_EXPORT MenuController
   base::CallbackListSubscription AddAnnotationCallback(
       AnnotationCallback callback);
 
-  void SetShowMenuHostDurationHistogram(absl::optional<std::string> histogram) {
+  void SetShowMenuHostDurationHistogram(std::optional<std::string> histogram) {
     show_menu_host_duration_histogram_ = std::move(histogram);
   }
 
-  absl::optional<std::string> TakeShowMenuHostDurationHistogram() {
-    absl::optional<std::string> value =
+  std::optional<std::string> TakeShowMenuHostDurationHistogram() {
+    std::optional<std::string> value =
         std::move(show_menu_host_duration_histogram_);
     show_menu_host_duration_histogram_.reset();
     return value;
@@ -721,7 +722,8 @@ class VIEWS_EXPORT MenuController
   // When Run is invoked during an active Run, it may be called from a separate
   // MenuControllerDelegate. If not empty it means we are nested, and the
   // stacked delegates should be notified instead of |delegate_|.
-  std::list<internal::MenuControllerDelegate*> delegate_stack_;
+  std::list<raw_ptr<internal::MenuControllerDelegate, CtnExperimental>>
+      delegate_stack_;
 
   // As the mouse moves around submenus are not opened immediately. Instead
   // they open after this timer fires.
@@ -734,7 +736,7 @@ class VIEWS_EXPORT MenuController
   base::OneShotTimer cancel_all_timer_;
 
   // Drop target.
-  raw_ptr<MenuItemView, DanglingUntriaged> drop_target_ = nullptr;
+  raw_ptr<MenuItemView> drop_target_ = nullptr;
   MenuDelegate::DropPosition drop_position_ =
       MenuDelegate::DropPosition::kUnknow;
 
@@ -799,7 +801,7 @@ class VIEWS_EXPORT MenuController
   // cursor if any submenu is opened while the cursor is over that menu. This is
   // used to ignore mouse move events triggered by the menu opening, to avoid
   // auto-selecting the menu item under the mouse.
-  absl::optional<gfx::Point> menu_open_mouse_loc_;
+  std::optional<gfx::Point> menu_open_mouse_loc_;
 
   // Controls behavior differences between a combobox and other types of menu
   // (like a context menu).
@@ -837,10 +839,10 @@ class VIEWS_EXPORT MenuController
   gfx::ThrobAnimation alert_animation_;
 
   // Currently showing alerted menu items. Updated when submenus open and close.
-  base::flat_set<MenuItemView*> alerted_items_;
+  base::flat_set<raw_ptr<MenuItemView, CtnExperimental>> alerted_items_;
 
   // The rounded corners of the context menu.
-  absl::optional<gfx::RoundedCornersF> rounded_corners_ = absl::nullopt;
+  std::optional<gfx::RoundedCornersF> rounded_corners_ = std::nullopt;
 
   // The current annotation callbacks. Callbacks will be wrapped in such a way
   // that a callback list can be used, with the return value as an out
@@ -850,7 +852,7 @@ class VIEWS_EXPORT MenuController
 
   // A histogram name for recording the time from menu host initialization to
   // its successful presentation
-  absl::optional<std::string> show_menu_host_duration_histogram_;
+  std::optional<std::string> show_menu_host_duration_histogram_;
 };
 
 }  // namespace views

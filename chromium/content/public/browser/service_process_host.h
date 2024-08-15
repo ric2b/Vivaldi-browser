@@ -16,7 +16,6 @@
 #include "base/observer_list_types.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_piece.h"
-#include "build/chromecast_buildflags.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/service_process_info.h"
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
@@ -24,11 +23,6 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "sandbox/policy/mojom/sandbox.mojom.h"
 #include "url/gurl.h"
-
-// TODO(crbug.com/1328879): Remove this when fixing the bug.
-#if BUILDFLAG(IS_CASTOS) || BUILDFLAG(IS_CAST_ANDROID)
-#include "mojo/public/cpp/system/message_pipe.h"
-#endif  // BUILDFLAG(IS_CASTOS) || BUILDFLAG(IS_CAST_ANDROID)
 
 #if BUILDFLAG(IS_WIN)
 #include "base/files/file_path.h"
@@ -40,6 +34,8 @@ class Process;
 }  // namespace base
 
 namespace content {
+// Passkeys for service process host Options.
+class ServiceProcessHostGpuClient;
 class ServiceProcessHostPinUser32;
 class ServiceProcessHostPreloadLibraries;
 
@@ -122,6 +118,12 @@ class CONTENT_EXPORT ServiceProcessHost {
     Options& WithPinUser32(base::PassKey<ServiceProcessHostPinUser32> passkey);
 #endif  // BUILDFLAG(IS_WIN)
 
+    // Allows the viz.mojom.Gpu client to be bound via the process host on
+    // platforms where that is supported. This option will be removed in future.
+    // Prefer to avoid setting this option and instead bind the client directly
+    // by passing a `pending_receiver<viz.mojom.Gpu>` to the service via mojo.
+    Options& WithGpuClient(base::PassKey<ServiceProcessHostGpuClient> passkey);
+
     // Passes the contents of this Options object to a newly returned Options
     // value. This must be called when moving a built Options object into a call
     // to |Launch()|.
@@ -134,8 +136,9 @@ class CONTENT_EXPORT ServiceProcessHost {
     base::OnceCallback<void(const base::Process&)> process_callback;
 #if BUILDFLAG(IS_WIN)
     std::vector<base::FilePath> preload_libraries;
-    bool pin_user32;
+    std::optional<bool> pin_user32;
 #endif  // BUILDFLAG(IS_WIN)
+    std::optional<bool> allow_gpu_client;
   };
 
   // An interface which can be implemented and registered/unregistered with
@@ -210,19 +213,6 @@ class CONTENT_EXPORT ServiceProcessHost {
                      Options options,
                      sandbox::mojom::Sandbox sandbox);
 };
-
-// TODO(crbug.com/1328879): Remove this method when fixing the bug.
-#if BUILDFLAG(IS_CASTOS) || BUILDFLAG(IS_CAST_ANDROID)
-// DEPRECATED. DO NOT USE THIS. This is a helper for any remaining service
-// launching code which uses an older code path to launch services in a utility
-// process. All new code must use ServiceProcessHost instead of this API.
-void CONTENT_EXPORT LaunchUtilityProcessServiceDeprecated(
-    const std::string& service_name,
-    const std::u16string& display_name,
-    sandbox::mojom::Sandbox sandbox_type,
-    mojo::ScopedMessagePipeHandle service_pipe,
-    base::OnceCallback<void(base::ProcessId)> callback);
-#endif  // BUILDFLAG(IS_CASTOS) || BUILDFLAG(IS_CAST_ANDROID)
 
 }  // namespace content
 

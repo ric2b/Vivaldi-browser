@@ -5,8 +5,9 @@
 #ifndef UI_VIEWS_CONTROLS_BUTTON_TOGGLE_BUTTON_H_
 #define UI_VIEWS_CONTROLS_BUTTON_TOGGLE_BUTTON_H_
 
+#include <optional>
+
 #include "base/memory/raw_ptr.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/color/color_id.h"
@@ -41,13 +42,18 @@ class VIEWS_EXPORT ToggleButton : public Button {
 
   // Sets and gets custom thumb and track colors.
   void SetThumbOnColor(SkColor thumb_on_color);
-  absl::optional<SkColor> GetThumbOnColor() const;
+  std::optional<SkColor> GetThumbOnColor() const;
   void SetThumbOffColor(SkColor thumb_off_color);
-  absl::optional<SkColor> GetThumbOffColor() const;
+  std::optional<SkColor> GetThumbOffColor() const;
   void SetTrackOnColor(SkColor track_on_color);
-  absl::optional<SkColor> GetTrackOnColor() const;
+  std::optional<SkColor> GetTrackOnColor() const;
   void SetTrackOffColor(SkColor track_off_color);
-  absl::optional<SkColor> GetTrackOffColor() const;
+  std::optional<SkColor> GetTrackOffColor() const;
+
+  // Sets if the inner border is drawn. If `enabled`, it is drawn when the
+  // switch is off. If `enabled` is false, it's never drawn.
+  void SetInnerBorderEnabled(bool enabled);
+  bool GetInnerBorderEnabled() const;
 
   void SetAcceptsEvents(bool accepts_events);
   bool GetAcceptsEvents() const;
@@ -98,8 +104,6 @@ class VIEWS_EXPORT ToggleButton : public Button {
   bool CanAcceptEvent(const ui::Event& event) override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
-  void OnFocus() override;
-  void OnBlur() override;
 
   // Button:
   void PaintButtonContents(gfx::Canvas* canvas) override;
@@ -107,6 +111,8 @@ class VIEWS_EXPORT ToggleButton : public Button {
   // gfx::AnimationDelegate:
   void AnimationEnded(const gfx::Animation* animation) override;
   void AnimationProgressed(const gfx::Animation* animation) override;
+
+  bool inner_border_enabled_ = true;
 
   gfx::SlideAnimation slide_animation_{this};
   gfx::SlideAnimation hover_animation_{this};

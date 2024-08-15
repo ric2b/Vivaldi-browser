@@ -33,6 +33,7 @@
 #include "chrome/browser/ui/views/eye_dropper/eye_dropper.h"
 #include "chrome/browser/ui/webui/settings/site_settings_helper.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/content_settings/common/content_settings_agent.mojom.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/guest_view/browser/guest_view_manager.h"
@@ -231,6 +232,8 @@ static std::string ContentSettingsTypeToString(
       return "sound";
     case ContentSettingsType::AUTOPLAY:
       return "autoplay";
+    case ContentSettingsType::NOTIFICATIONS:
+      return "notifications";
     default:
       // fallthrough
       break;
@@ -773,8 +776,8 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
       // rwhv->IsKeyboardLocked() here and unlock the keyboard as well.
       content::RenderWidgetHostView* rwhv =
           web_contents()->GetPrimaryMainFrame()->GetView();
-      if (rwhv->IsMouseLocked()) {
-        rwhv->UnlockMouse();
+      if (rwhv->IsPointerLocked()) {
+        rwhv->UnlockPointer();
         handled = true;
       }
       if (IsFullscreenForTabOrPending(web_contents())) {
@@ -1135,9 +1138,9 @@ void WebViewGuest::VivaldiCanDownload(const GURL& url,
                                       const std::string& request_method,
                                       base::OnceCallback<void(bool)> callback) {
   GURL tab_url = web_contents()->GetURL();
-  // NOTE(andre@vivaldi.com) : Mimick Chrome download flow and deny download of
-  // mixed-content. (It will be cancelled later on anyways so do not present a
-  // save dialog to the user.) This should be called from CanDownload.
+
+  // Since we do not yet have a DownloadItem we need to mimic the behavior in
+  // |GetInsecureDownloadStatusForDownload|
 
   bool is_redirect_chain_secure = true;
   // Was the download initiated by a secure origin, but delivered insecurely?
@@ -1176,15 +1179,18 @@ void WebViewGuest::VivaldiCanDownload(const GURL& url,
        !download_delivered_securely) &&
       !net::IsLocalhost(url);
 
-  // Block secure tab and not secure download, and redirect from unsecure.
-  if ((is_insecure_download || is_mixed_content)) {
-    std::move(callback).Run(false /*allow*/);
-    return;
-  }
+  download_info_.blocked_mixed = is_insecure_download || is_mixed_content;
 
   // If the download was started by a page mechanism, direct download etc. Allow
   // the download, the user will be asked by the download interceptor.
-  if (download_info_.content_initiated) {
+  // When the download is content_initiated and there is still no suggested
+  // target filename we assume this is a cors-preflight request.
+
+  std::u16string default_filename(
+      l10n_util::GetStringUTF16(IDS_DEFAULT_DOWNLOAD_FILENAME));
+
+  if (download_info_.content_initiated &&
+      download_info_.suggested_filename == default_filename) {
     // Start the download directly without asking.
     std::move(callback).Run(true /*allow*/);
     return;
@@ -1193,6 +1199,15 @@ void WebViewGuest::VivaldiCanDownload(const GURL& url,
   web_view_permission_helper_->SetDownloadInformation(download_info_);
   web_view_permission_helper_->CanDownload(url, request_method,
                                            std::move(callback));
+}
+
+void WebViewGuest::RegisterProtocolHandler(
+    content::RenderFrameHost* requesting_frame,
+    const std::string& protocol,
+    const GURL& url,
+    bool user_gesture) {
+  web_view_permission_helper_->RegisterProtocolHandler(
+      requesting_frame, protocol, url, user_gesture);
 }
 
 }  // namespace extensions

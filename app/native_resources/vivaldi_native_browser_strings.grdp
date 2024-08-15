@@ -206,6 +206,34 @@
   <message name="IDS_VIV_SESSION_AUTOSAVE_FOLDER" desc="Name of folder where sessions are automtically saved.">
     Autosaved Sessions
   </message>
+  <!-- Profile validation -->
+  <message name="IDS_VIVALDI_KEYSTORE_FAILED_TITLE" desc="Message box title for secure storage warnings.">
+    Decryption Failed: Risk of Data Loss
+  </message>
+  <message name="IDS_VIVALDI_KEYSTORE_UNCRYPTED" desc="User is attempting to use profile which used encryption before without encryption now">
+    Vivaldi could not unlock your secure key store. Without the key store, you will lose your saved logins, secure cookies, and some features like Sync, Mail, and Calendar will stop working.
+
+    Please quit now, unlock or repair your key store, and then try again. If you really want to continue, click the checkbox and press "Continue with Data Loss" button.
+  </message>
+  <message name="IDS_VIVALDI_KEYSTORE_CONTINUE_CHECKBOX" desc="User is sure they want to do this">
+    Let me continue
+  </message>
+  <message name="IDS_VIVALDI_KEYSTORE_CONTINUE_DATALOSS" desc="User wants to continue opening the profile, even though data loss will happen">
+    ⚠ Continue with Data Loss
+  </message>
+  <message name="IDS_VIVALDI_KEYSTORE_CANCEL" desc="User wants to cancel profile opening">
+    Switch profiles
+  </message>
+  <message name="IDS_VIVALDI_KEYSTORE_UPGRADE_TITLE" desc="Message box title for secure storage warnings.">
+    Secure keystore upgrade
+  </message>
+  <message name="IDS_VIVALDI_KEYSTORE_UPGRADE" desc="User is about to upgrade keystore to encrypted one">
+    This profile is currently stored insecurely in an unencrypted format. Vivaldi is about to upgrade your profile to a more secure encrypted format. You should quit now and backup your profile before continuing.
+  </message>
+  <message name="IDS_VIVALDI_KEYSTORE_CONTINUE_UPGRADE" desc="User wants to continue opening the profile, upgrade to secure datastore will happen">
+    Secure my profile
+  </message>
+
   <part file="vivaldi_bookmark_strings.grdp" />
   <part file="vivaldi_context_menu_strings.grdp" />
   <part file="vivaldi_importer_strings.grdp" />

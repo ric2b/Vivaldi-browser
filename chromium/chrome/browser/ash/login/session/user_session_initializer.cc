@@ -156,8 +156,9 @@ void UserSessionInitializer::OnUserProfileLoaded(const AccountId& account_id) {
     FamilyUserMetricsServiceFactory::GetForBrowserContext(profile);
   }
 
-  if (user->GetType() == user_manager::USER_TYPE_CHILD)
+  if (user->GetType() == user_manager::UserType::kChild) {
     InitializeChildUserServices(profile);
+  }
 }
 
 void UserSessionInitializer::InitializeChildUserServices(Profile* profile) {
@@ -229,7 +230,7 @@ void UserSessionInitializer::InitializePrimaryProfileServices(
 
   lock_screen_apps::StateController::Get()->SetPrimaryProfile(profile);
 
-  if (user->GetType() == user_manager::USER_TYPE_REGULAR) {
+  if (user->GetType() == user_manager::UserType::kRegular) {
     // App install logs for extensions and ARC++ are uploaded via the user's
     // communication channel with the management server. This channel exists for
     // regular users only. `AppInstallEventLogManagerWrapper` and
@@ -317,6 +318,10 @@ void UserSessionInitializer::OnUserSessionStarted(bool is_primary_user) {
     MediaNotificationProvider::Get()->OnPrimaryUserSessionStarted();
     if (base::FeatureList::IsEnabled(media::kShowForceRespectUiGainsToggle)) {
       CrasAudioHandler::Get()->RefreshForceRespectUiGainsState();
+    }
+
+    if (features::IsAudioHFPMicSRToggleEnabled()) {
+      CrasAudioHandler::Get()->RefreshHfpMicSrState();
     }
   }
 }

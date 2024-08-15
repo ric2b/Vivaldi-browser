@@ -1,29 +1,24 @@
 /**
- * Copyright 2023 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2023 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+import debug from 'debug';
+
 import {
   Browser,
   type BrowserPlatform,
   executablePathByBrowser,
+  getVersionComparator,
 } from './browser-data/browser-data.js';
 import {detectBrowserPlatform} from './detectPlatform.js';
+
+const debugCache = debug('puppeteer:browsers:cache');
 
 /**
  * @public
@@ -67,6 +62,14 @@ export class InstalledBrowser {
       this.buildId
     );
   }
+
+  readMetadata(): Metadata {
+    return this.#cache.readMetadata(this.browser);
+  }
+
+  writeMetadata(metadata: Metadata): void {
+    this.#cache.writeMetadata(this.browser, metadata);
+  }
 }
 
 /**
@@ -88,6 +91,11 @@ export interface ComputeExecutablePathOptions {
    * binaries and they are used for caching.
    */
   buildId: string;
+}
+
+export interface Metadata {
+  // Maps an alias (canary/latest/dev/etc.) to a buildId.
+  aliases: Record<string, string>;
 }
 
 /**
@@ -122,6 +130,39 @@ export class Cache {
     return path.join(this.#rootDir, browser);
   }
 
+  metadataFile(browser: Browser): string {
+    return path.join(this.browserRoot(browser), '.metadata');
+  }
+
+  readMetadata(browser: Browser): Metadata {
+    const metatadaPath = this.metadataFile(browser);
+    if (!fs.existsSync(metatadaPath)) {
+      return {aliases: {}};
+    }
+    // TODO: add type-safe parsing.
+    const data = JSON.parse(fs.readFileSync(metatadaPath, 'utf8'));
+    if (typeof data !== 'object') {
+      throw new Error('.metadata is not an object');
+    }
+    return data;
+  }
+
+  writeMetadata(browser: Browser, metadata: Metadata): void {
+    const metatadaPath = this.metadataFile(browser);
+    fs.mkdirSync(path.dirname(metatadaPath), {recursive: true});
+    fs.writeFileSync(metatadaPath, JSON.stringify(metadata, null, 2));
+  }
+
+  resolveAlias(browser: Browser, alias: string): string | undefined {
+    const metadata = this.readMetadata(browser);
+    if (alias === 'latest') {
+      return Object.values(metadata.aliases || {})
+        .sort(getVersionComparator(browser))
+        .at(-1);
+    }
+    return metadata.aliases[alias];
+  }
+
   installationDir(
     browser: Browser,
     platform: BrowserPlatform,
@@ -144,6 +185,12 @@ export class Cache {
     platform: BrowserPlatform,
     buildId: string
   ): void {
+    const metadata = this.readMetadata(browser);
+    for (const alias of Object.keys(metadata.aliases)) {
+      if (metadata.aliases[alias] === buildId) {
+        delete metadata.aliases[alias];
+      }
+    }
     fs.rmSync(this.installationDir(browser, platform, buildId), {
       force: true,
       recursive: true,
@@ -189,6 +236,12 @@ export class Cache {
       throw new Error(
         `Cannot download a binary for the provided platform: ${os.platform()} (${os.arch()})`
       );
+    }
+    try {
+      options.buildId =
+        this.resolveAlias(options.browser, options.buildId) ?? options.buildId;
+    } catch {
+      debugCache('could not read .metadata file for the browser');
     }
     const installationDir = this.installationDir(
       options.browser,

@@ -161,7 +161,7 @@ MaybeError OwnedCompilationMessages::AddMessage(const tint::diag::Diagnostic& di
     }
 
     AddMessage(
-        diagnostic.message,
+        diagnostic.message.Plain(),
         {nullptr, nullptr, tintSeverityToMessageType(diagnostic.severity), lineNum, linePosInBytes,
          offsetInBytes, lengthInBytes, linePosInUTF16, offsetInUTF16, lengthInUTF16});
 
@@ -217,8 +217,18 @@ const WGPUCompilationInfo* OwnedCompilationMessages::GetCompilationInfo() {
     return &mCompilationInfo;
 }
 
-const std::vector<std::string>& OwnedCompilationMessages::GetFormattedTintMessages() {
+const std::vector<std::string>& OwnedCompilationMessages::GetFormattedTintMessages() const {
     return mFormattedTintMessages;
+}
+
+bool OwnedCompilationMessages::HasWarningsOrErrors() const {
+    for (const auto& message : mMessages) {
+        if (message.type == WGPUCompilationMessageType_Error ||
+            message.type == WGPUCompilationMessageType_Warning) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void OwnedCompilationMessages::AddFormattedTintMessages(const tint::diag::List& diagnostics) {
@@ -231,16 +241,16 @@ void OwnedCompilationMessages::AddFormattedTintMessages(const tint::diag::List& 
             case (tint::diag::Severity::Error):
             case (tint::diag::Severity::InternalCompilerError): {
                 errorCount++;
-                messageList.add(tint::diag::Diagnostic(diag));
+                messageList.Add(diag);
                 break;
             }
             case (tint::diag::Severity::Warning): {
                 warningCount++;
-                messageList.add(tint::diag::Diagnostic(diag));
+                messageList.Add(diag);
                 break;
             }
             case (tint::diag::Severity::Note): {
-                messageList.add(tint::diag::Diagnostic(diag));
+                messageList.Add(diag);
                 break;
             }
             default:
@@ -263,7 +273,7 @@ void OwnedCompilationMessages::AddFormattedTintMessages(const tint::diag::List& 
         t << warningCount << " warning(s) ";
     }
     t << "generated while compiling the shader:" << std::endl
-      << tint::diag::Formatter{style}.format(messageList);
+      << tint::diag::Formatter{style}.Format(messageList).Plain();
     mFormattedTintMessages.push_back(t.str());
 }
 

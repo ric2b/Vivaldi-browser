@@ -117,6 +117,7 @@
 #include <sstream>
 #include <string_view>
 
+#include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
@@ -134,6 +135,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_command_line.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/test_timeouts.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/form_structure.h"
@@ -356,8 +358,8 @@ FormFieldData ParseFieldFromJsonDict(const base::Value::Dict& field_dict,
   field.role = FormFieldData::RoleAttribute::kOther;
   field.origin = form_data.main_frame_origin;
   field.host_frame = form_data.host_frame;
-  field.host_form_id = form_data.unique_renderer_id;
-  field.unique_renderer_id = test::MakeFieldRendererId();
+  field.host_form_id = form_data.renderer_id;
+  field.renderer_id = test::MakeFieldRendererId();
   if (const base::Value::List* options =
           field_dict.FindList("select_options")) {
     for (const base::Value& option : *options) {
@@ -377,7 +379,7 @@ FormFieldData ParseFieldFromJsonDict(const base::Value::Dict& field_dict,
   form_data.url = GURL(site_url);
   form_data.main_frame_origin = url::Origin::Create(form_data.url);
   form_data.host_frame = test::MakeLocalFrameToken();
-  form_data.unique_renderer_id = test::MakeFormRendererId();
+  form_data.renderer_id = test::MakeFormRendererId();
 
   const base::Value::List* fields = form_dict.FindList("fields");
   if (!fields) {
@@ -496,6 +498,21 @@ TEST_P(HeuristicClassificationTests, EndToEnd) {
   base::FilePath input_file = GetParam();
   SCOPED_TRACE(::testing::Message() << input_file);
 
+  if (input_file.DirName().BaseName().MaybeAsASCII() == "internal") {
+    if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+            "run-internal-tests")) {
+      GTEST_SKIP()
+          << "You have internal tests in your checkout but they are skipped by "
+             "default because they are expensive to execute. Start the "
+             "components_unittests with "
+             "--run-internal-tests --test-launcher-timeout 100000 "
+             "to execute these tests.";
+    }
+    ASSERT_GE(TestTimeouts::test_launcher_timeout().InSeconds(), 100)
+        << "This is a long-running test; you must specify "
+           "--test-launcher-timeout to have a value of at least 100000.";
+  }
+
   // Read input file.
   std::string input_json_text;
   ASSERT_TRUE(base::ReadFileToString(input_file, &input_json_text));
@@ -521,6 +538,9 @@ TEST_P(HeuristicClassificationTests, EndToEnd) {
 
   std::vector<base::test::FeatureRef> enabled_features = {
       // Support for new field types.
+      features::kAutofillUseI18nAddressModel,
+      features::kAutofillUseBRAddressModel,
+      features::kAutofillUseMXAddressModel,
       features::kAutofillEnableSupportForBetweenStreets,
       features::kAutofillEnableSupportForAdminLevel2,
       features::kAutofillEnableSupportForAddressOverflow,
@@ -533,10 +553,8 @@ TEST_P(HeuristicClassificationTests, EndToEnd) {
       features::kAutofillEnableParsingOfStreetLocation,
       features::kAutofillEnableRationalizationEngineForMX,
       // Allow local heuristics to take precedence.
-      features::kAutofillStreetNameOrHouseNumberPrecedenceOverAutocomplete,
       features::kAutofillLocalHeuristicsOverrides,
       // Other improvements.
-      features::kAutofillEnableZipOnlyAddressForms,
       features::kAutofillDefaultToCityAndNumber,
       features::kAutofillPreferLabelsInSomeCountries,
       features::kAutofillEnableCacheForRegexMatching};
@@ -616,9 +634,22 @@ TEST_P(HeuristicClassificationTests, EndToEnd) {
   }
 }
 
+// Maps a test file name to a short string that is used in the test name.
+// E.g. a file "internal/DE.json" becomes "DE" such that the test is called
+// AllForms/HeuristicClassificationTests.EndToEnd/DE.
+std::string GenerateTestName(
+    const testing::TestParamInfo<base::FilePath>& info) {
+  std::string name = info.param.BaseName()
+                         .ReplaceExtension(FILE_PATH_LITERAL(""))
+                         .MaybeAsASCII();
+  base::ranges::replace_if(name, [](char c) { return !std::isalnum(c); }, '_');
+  return name;
+}
+
 INSTANTIATE_TEST_SUITE_P(AllForms,
                          HeuristicClassificationTests,
-                         testing::ValuesIn(GetTestFiles()));
+                         testing::ValuesIn(GetTestFiles()),
+                         GenerateTestName);
 
 }  // namespace
 }  // namespace autofill

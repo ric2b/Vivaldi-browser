@@ -41,6 +41,9 @@ class COMPONENT_EXPORT(KCER) SessionChapsClient {
   using SessionId = base::StrongAlias<class TypeTagSessionId, uint64_t>;
   using ObjectHandle = base::StrongAlias<class TypeTagObjectHandle, uint64_t>;
 
+  using GetMechanismListCallback =
+      base::OnceCallback<void(const std::vector<uint64_t>& mechanism_list,
+                              uint32_t result_code)>;
   using CreateObjectCallback =
       base::OnceCallback<void(ObjectHandle object_handle,
                               uint32_t result_code)>;
@@ -62,9 +65,6 @@ class COMPONENT_EXPORT(KCER) SessionChapsClient {
 
   SessionChapsClient();
   virtual ~SessionChapsClient();
-  // Shuts down the client. All methods can still be called after that, but they
-  // will start returning an error.
-  virtual void Shutdown() {}
 
   // Returns true if the `result_code` contains an error related to
   // problems with PKCS#11 session, i.e. if the session cannot be used
@@ -75,6 +75,10 @@ class COMPONENT_EXPORT(KCER) SessionChapsClient {
   // A convenience method for serializing `chaps::AttributeList`.
   static std::vector<uint8_t> SerializeToBytes(
       const chaps::AttributeList& attr_list);
+
+  // PKCS #11 v2.20 section 11.5 page 111.
+  virtual void GetMechanismList(SlotId slot_id,
+                                GetMechanismListCallback callback) = 0;
 
   // PKCS #11 v2.20 section 11.7 page 128.
   virtual void CreateObject(SlotId slot_id,
@@ -137,11 +141,17 @@ class COMPONENT_EXPORT(KCER) SessionChapsClient {
 class COMPONENT_EXPORT(KCER) SessionChapsClientImpl
     : public SessionChapsClient {
  public:
-  explicit SessionChapsClientImpl(crosapi::mojom::ChapsService* chaps_service);
+  // Returns the currently valid ChapsService. Might also return a nullptr if
+  // none is available.
+  using ChapsServiceGetter =
+      base::RepeatingCallback<crosapi::mojom::ChapsService*()>;
+
+  explicit SessionChapsClientImpl(ChapsServiceGetter getter);
   ~SessionChapsClientImpl() override;
 
   // Implements SessionChapsClient.
-  void Shutdown() override;
+  void GetMechanismList(SlotId slot_id,
+                        GetMechanismListCallback callback) override;
   void CreateObject(SlotId slot_id,
                     const std::vector<uint8_t>& attributes,
                     int attempts_left,
@@ -234,8 +244,7 @@ class COMPONENT_EXPORT(KCER) SessionChapsClientImpl
 
   SEQUENCE_CHECKER(sequence_checker_);
 
-  // Will become nullptr after Shutdown, should be checked before using.
-  raw_ptr<crosapi::mojom::ChapsService> chaps_service_;
+  ChapsServiceGetter chaps_service_getter_;
   base::flat_map<SlotId, SessionId> sessions_map_;
   base::WeakPtrFactory<SessionChapsClientImpl> weak_factory_{this};
 };

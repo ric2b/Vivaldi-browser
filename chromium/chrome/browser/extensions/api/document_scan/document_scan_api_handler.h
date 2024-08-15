@@ -14,10 +14,13 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
 #include "chrome/common/extensions/api/document_scan.h"
 #include "chromeos/crosapi/mojom/document_scan.mojom-forward.h"
 #include "content/public/browser/browser_context.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
+#include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_registry_observer.h"
 #include "extensions/common/extension_id.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -38,7 +41,8 @@ class ScannerDiscoveryRunner;
 class StartScanRunner;
 
 // Handles chrome.documentScan API function calls.
-class DocumentScanAPIHandler : public BrowserContextKeyedAPI {
+class DocumentScanAPIHandler : public BrowserContextKeyedAPI,
+                               public ExtensionRegistryObserver {
  public:
   using SimpleScanCallback = base::OnceCallback<void(
       std::optional<api::document_scan::ScanResults> scan_results,
@@ -79,6 +83,14 @@ class DocumentScanAPIHandler : public BrowserContextKeyedAPI {
   // Registers the documentScan API preference with the |registry|.
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
+  // ExtensionRegistryObserver implementation:
+  void OnExtensionUnloaded(content::BrowserContext* browser_context,
+                           const Extension* extension,
+                           UnloadedExtensionReason reason) override;
+
+  // KeyedService implementation:
+  void Shutdown() override;
+
   // Replaces the DocumentScan service with a mock.
   void SetDocumentScanForTesting(crosapi::mojom::DocumentScan* document_scan);
 
@@ -91,15 +103,22 @@ class DocumentScanAPIHandler : public BrowserContextKeyedAPI {
   // If the user approves, gets a list of available scanners that match
   // `filter`.  Explicit approval is obtained through a Chrome dialog or by
   // adding the extension ID to the list of trusted document scan extensions.
+  // `user_gesture` indicates whether the scan was initiated by a user action
+  // and should be passed as the result of `ExtensionFunction::user_gesture()`.
   // The result of the denial or the backend call will be passed to `callback`.
+  // Note that scanner and job handles previously issued by the backend will
+  // become invalid after calling this function.
   void GetScannerList(gfx::NativeWindow native_window,
                       scoped_refptr<const Extension> extension,
+                      bool user_gesture,
                       api::document_scan::DeviceFilter filter,
                       GetScannerListCallback callback);
 
   // Given `scanner_id` previously returned from `GetScannerList`, opens the
   // device for exclusive access.  The result containing a handle and the set of
   // current device options will be passed to `callback`.
+  // Note that job and scanner handles previously returned by the backend for
+  // the same `scanner_id` will automatically be closed.
   void OpenScanner(scoped_refptr<const Extension> extension,
                    const std::string& scanner_id,
                    OpenScannerCallback callback);
@@ -133,10 +152,13 @@ class DocumentScanAPIHandler : public BrowserContextKeyedAPI {
   // configured via `SetOptions`.  Additionally, `options` are used to specify
   // scanner-framework options.  Explicit approval is obtained through a Chrome
   // dialog or by adding the extension ID to the list of trusted document scan
-  // extensions.  The result of the denial or the backend call will be passed to
-  // `callback`.
+  // extensions.  `user_gesture` indicates whether the scan was initiated by a
+  // user action and should be passed as the result of
+  // `ExtensionFunction::user_gesture()`. The result of the denial or the
+  // backend call will be passed to `callback`.
   void StartScan(gfx::NativeWindow native_window,
                  scoped_refptr<const Extension> extension,
+                 bool user_gesture,
                  const std::string& scanner_handle,
                  api::document_scan::StartScanOptions options,
                  StartScanCallback callback);
@@ -175,20 +197,29 @@ class DocumentScanAPIHandler : public BrowserContextKeyedAPI {
     ExtensionState();
     ~ExtensionState();
 
-    // Map from public-facing scanner ID to the scanner's actual ID, which is
-    // the internal connection string used on the backend (the latter can be
-    // used to look up scanner in `scanner_devices_`).
-    std::map<std::string, std::string> scanner_ids;
+    // Map from scanner IDs returned from the most recent call to
+    // GetScannerList() to their matching device info.  Attempting to open any
+    // scanner ID not in this set will fail.
+    std::map<std::string, ScannerDevice> active_scanner_ids;
 
     // Map from scanner handle to scanner's ID (the latter can be used to look
-    // up scanner in `scanner_devices_`).
+    // up scanner in `active_scanner_ids`).
     std::map<std::string, std::string> scanner_handles;
 
-    // Active job handles.
-    std::set<std::string> active_job_handles;
+    // Map from active job handles back to the originating scanner handle.
+    std::map<std::string, std::string> active_job_handles;
 
-    // A set of scanner handles the user has approved for scanning.
-    std::set<std::string> approved_scanners;
+    // A set of scanner IDs the user has approved for scanning.  These can be
+    // used to start new scan jobs from actions triggered by a user gesture.
+    std::set<std::string> approved_scanner_ids;
+
+    // A set of scanner handles the user has approved for scanning.  These can
+    // be used to start new scan jobs until the handles are closed.
+    std::set<std::string> approved_scanner_handles;
+
+    // Whether the user has confirmed that this extension is allowed to discover
+    // scanners.
+    bool discovery_approved;
   };
 
   // BrowserContextKeyedAPI:
@@ -200,6 +231,9 @@ class DocumentScanAPIHandler : public BrowserContextKeyedAPI {
   // Used by CreateForTesting:
   DocumentScanAPIHandler(content::BrowserContext* browser_context,
                          crosapi::mojom::DocumentScan* document_scan);
+
+  // Cleanup all handles and state for the given extension.
+  void ExtensionCleanup(const ExtensionId& id);
 
   void OnSimpleScanNamesReceived(bool force_virtual_usb_printer,
                                  SimpleScanCallback callback,
@@ -224,7 +258,8 @@ class DocumentScanAPIHandler : public BrowserContextKeyedAPI {
   void OnGetOptionGroupsResponse(
       GetOptionGroupsCallback callback,
       crosapi::mojom::GetOptionGroupsResponsePtr response);
-  void OnCloseScannerResponse(CloseScannerCallback callback,
+  void OnCloseScannerResponse(const ExtensionId& extension_id,
+                              CloseScannerCallback callback,
                               crosapi::mojom::CloseScannerResponsePtr response);
   void OnSetOptionsResponse(SetOptionsCallback callback,
                             crosapi::mojom::SetOptionsResponsePtr response);
@@ -242,10 +277,8 @@ class DocumentScanAPIHandler : public BrowserContextKeyedAPI {
   raw_ptr<crosapi::mojom::DocumentScan> document_scan_;
   std::map<ExtensionId, ExtensionState> extension_state_;
 
-  // A global map (across all extensions) from a scanner's ID to its
-  // `ScannerDevice`.  The scanner ID is the connection string used on the
-  // backend to connect to a scanner.
-  std::map<std::string, ScannerDevice> scanner_devices_;
+  base::ScopedObservation<ExtensionRegistry, ExtensionRegistryObserver>
+      extension_registry_observation_{this};
 
   base::WeakPtrFactory<DocumentScanAPIHandler> weak_ptr_factory_{this};
 };

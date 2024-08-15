@@ -13,6 +13,8 @@
 #include <memory>
 #include <utility>
 
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
 #include "core/fxcrt/fx_memory.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/retain_ptr.h"
@@ -22,8 +24,6 @@
 #include "core/fxge/dib/cfx_dibitmap.h"
 #include "core/fxge/render_defines.h"
 #include "core/fxge/text_char_pos.h"
-#include "third_party/base/check.h"
-#include "third_party/base/check_op.h"
 
 CGdiPrinterDriver::CGdiPrinterDriver(HDC hDC)
     : CGdiDeviceDriver(hDC, DeviceType::kPrinter),
@@ -40,28 +40,29 @@ int CGdiPrinterDriver::GetDeviceCaps(int caps_id) const {
   return CGdiDeviceDriver::GetDeviceCaps(caps_id);
 }
 
-bool CGdiPrinterDriver::SetDIBits(const RetainPtr<const CFX_DIBBase>& pSource,
+bool CGdiPrinterDriver::SetDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                                   uint32_t color,
                                   const FX_RECT& src_rect,
                                   int left,
                                   int top,
                                   BlendMode blend_type) {
-  if (pSource->IsMaskFormat()) {
+  if (bitmap->IsMaskFormat()) {
     FX_RECT clip_rect(left, top, left + src_rect.Width(),
                       top + src_rect.Height());
-    int dest_width = pSource->GetWidth();
-    int dest_height = pSource->GetHeight();
-    return StretchDIBits(std::move(pSource), color, left - src_rect.left,
+    int dest_width = bitmap->GetWidth();
+    int dest_height = bitmap->GetHeight();
+    return StretchDIBits(std::move(bitmap), color, left - src_rect.left,
                          top - src_rect.top, dest_width, dest_height,
                          &clip_rect, FXDIB_ResampleOptions(),
                          BlendMode::kNormal);
   }
 
   DCHECK_EQ(blend_type, BlendMode::kNormal);
-  if (pSource->IsAlphaFormat())
+  if (bitmap->IsAlphaFormat()) {
     return false;
+  }
 
-  return GDI_SetDIBits(pSource, src_rect, left, top);
+  return GDI_SetDIBits(std::move(bitmap), src_rect, left, top);
 }
 
 bool CGdiPrinterDriver::StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,

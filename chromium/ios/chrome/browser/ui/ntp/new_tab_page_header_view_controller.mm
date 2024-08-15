@@ -28,7 +28,6 @@
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
 #import "ios/chrome/browser/ui/ntp/logo_vendor.h"
@@ -42,7 +41,6 @@
 #import "ios/chrome/browser/ui/start_surface/start_surface_features.h"
 #import "ios/chrome/browser/ui/toolbar/public/fakebox_focuser.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
-#import "ios/chrome/common/button_configuration_util.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -53,6 +51,9 @@ using base::UserMetricsAction;
 namespace {
 
 NSString* const kScribbleFakeboxElementId = @"fakebox";
+
+// Height margin of the fake location bar.
+const CGFloat kFakeLocationBarHeightMargin = 2;
 
 }  // namespace
 
@@ -113,6 +114,14 @@ NSString* const kScribbleFakeboxElementId = @"fakebox";
       previousTraitCollection.preferredContentSizeCategory !=
           self.traitCollection.preferredContentSizeCategory) {
     [self updateFakeboxDisplay];
+  }
+  if (previousTraitCollection.userInterfaceStyle !=
+      self.traitCollection.userInterfaceStyle) {
+    if (base::FeatureList::IsEnabled(kOmniboxColorIcons)) {
+      [self.headerView
+          updateButtonsForUserInterfaceStyle:self.traitCollection
+                                                 .userInterfaceStyle];
+    }
   }
 }
 
@@ -307,9 +316,22 @@ NSString* const kScribbleFakeboxElementId = @"fakebox";
 // Initialize and add a search field tap target and a voice search button.
 - (void)addFakeOmnibox {
   self.fakeOmnibox = [[UIButton alloc] init];
-  // TODO(crbug.com/1418068): Remove after minimum version required is >=
-  // iOS 15 and refactor with UIButtonConfiguration.
-  SetAdjustsImageWhenHighlighted(self.fakeOmnibox, NO);
+  UIButtonConfiguration* buttonConfiguration =
+      [UIButtonConfiguration plainButtonConfiguration];
+  self.fakeOmnibox.configuration = buttonConfiguration;
+  self.fakeOmnibox.configurationUpdateHandler = ^(UIButton* incomingButton) {
+    UIButtonConfiguration* updatedConfig = incomingButton.configuration;
+    switch (incomingButton.state) {
+      case UIControlStateHighlighted:
+      case UIControlStateNormal:
+        // This overrides default logic which would highlight the image. This
+        // effectively disables highlighting.
+        break;
+      default:
+        break;
+    }
+    incomingButton.configuration = updatedConfig;
+  };
 
   // Set isAccessibilityElement to NO so that Voice Search button is accessible.
   [self.fakeOmnibox setIsAccessibilityElement:NO];
@@ -331,6 +353,11 @@ NSString* const kScribbleFakeboxElementId = @"fakebox";
                              forKeyPath:@"highlighted"
                                 options:NSKeyValueObservingOptionNew
                                 context:NULL];
+
+  CGFloat fakeOmniboxHeight = content_suggestions::FakeOmniboxHeight();
+  self.accessibilityButton.layer.cornerRadius =
+      (fakeOmniboxHeight - kFakeLocationBarHeightMargin) / 2;
+  self.accessibilityButton.clipsToBounds = YES;
   self.accessibilityButton.isAccessibilityElement = YES;
   self.accessibilityButton.accessibilityLabel =
       l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT);
@@ -426,13 +453,14 @@ NSString* const kScribbleFakeboxElementId = @"fakebox";
   self.identityDiscButton.imageView.layer.cornerRadius =
       self.identityDiscImage.size.width / 2;
   self.identityDiscButton.imageView.layer.masksToBounds = YES;
+  self.identityDiscButton.layer.cornerRadius =
+      self.identityDiscImage.size.width;
+  self.identityDiscButton.clipsToBounds = YES;
 }
 
 - (void)openLens {
   [self.NTPMetricsRecorder recordLensTapped];
-  if (IsIOSLargeFakeboxEnabled()) {
-    TriggerHapticFeedbackForSelectionChange();
-  }
+  TriggerHapticFeedbackForSelectionChange();
   OpenLensInputSelectionCommand* command = [[OpenLensInputSelectionCommand
       alloc]
           initWithEntryPoint:LensEntrypoint::NewTabPage
@@ -444,9 +472,7 @@ NSString* const kScribbleFakeboxElementId = @"fakebox";
 - (void)loadVoiceSearch:(id)sender {
   DCHECK(self.voiceSearchIsEnabled);
   [self.NTPMetricsRecorder recordVoiceSearchTapped];
-  if (IsIOSLargeFakeboxEnabled()) {
-    TriggerHapticFeedbackForSelectionChange();
-  }
+  TriggerHapticFeedbackForSelectionChange();
   UIView* voiceSearchButton = base::apple::ObjCCastStrict<UIView>(sender);
   [self.layoutGuideCenter referenceView:voiceSearchButton
                               underName:kVoiceSearchButtonGuide];
@@ -468,9 +494,7 @@ NSString* const kScribbleFakeboxElementId = @"fakebox";
 
 - (void)fakeboxTapped {
   [self.NTPMetricsRecorder recordFakeOmniboxTapped];
-  if (IsIOSLargeFakeboxEnabled()) {
-    TriggerHapticFeedbackForSelectionChange();
-  }
+  TriggerHapticFeedbackForSelectionChange();
   [self.commandHandler fakeboxTapped];
 }
 

@@ -13,15 +13,9 @@ import org.chromium.build.BuildConfig;
 
 /** Self-documenting feature class for bookmarks. */
 public class BookmarkFeatures {
-    /** Returns whether an additional "add bookmark" item should be in the overflow menu. */
-    public static boolean isBookmarkMenuItemAsDedicatedRowEnabled() {
-        return FeatureList.isInitialized()
-                && ShoppingFeatures.isShoppingListEligible();
-    }
-
     /** Returns whether the visual refresh should be used for the bookmark manager. */
     public static boolean isLegacyBookmarksVisualRefreshEnabled() {
-        return isBookmarkMenuItemAsDedicatedRowEnabled();
+        return FeatureList.isInitialized() && ShoppingFeatures.isShoppingListEligible();
     }
 
     /**
@@ -31,9 +25,5 @@ public class BookmarkFeatures {
     public static boolean isAndroidImprovedBookmarksEnabled() {
         if (BuildConfig.IS_VIVALDI) return false;
         return ChromeFeatureList.sAndroidImprovedBookmarks.isEnabled();
-    }
-
-    public static boolean isBookmarksAccountStorageEnabled() {
-        return ChromeFeatureList.sEnableBookmarkFoldersForAccountStorage.isEnabled();
     }
 }

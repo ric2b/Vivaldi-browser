@@ -107,7 +107,8 @@ TEST_F(CSSPrimitiveValueTest, ClampTimeToNonNegative) {
 TEST_F(CSSPrimitiveValueTest, ClampAngleToNonNegative) {
   UnitValue a = {89, UnitType::kDegrees};
   UnitValue b = {0.25, UnitType::kTurns};
-  EXPECT_EQ(0.0, CreateNonNegativeSubtraction(a, b)->ComputeDegrees());
+  EXPECT_EQ(0.0, CreateNonNegativeSubtraction(a, b)->ComputeDegrees(
+                     CSSToLengthConversionData()));
 }
 
 TEST_F(CSSPrimitiveValueTest, IsResolution) {
@@ -261,8 +262,6 @@ TEST_F(CSSPrimitiveValueTest, HasContainerRelativeUnits) {
 }
 
 TEST_F(CSSPrimitiveValueTest, HasStaticViewportUnits) {
-  ScopedCSSViewportUnits4ForTest scoped_feature(true);
-
   // v*
   EXPECT_TRUE(HasStaticViewportUnits("1vw"));
   EXPECT_TRUE(HasStaticViewportUnits("1vh"));
@@ -313,7 +312,6 @@ TEST_F(CSSPrimitiveValueTest, HasStaticViewportUnits) {
 }
 
 TEST_F(CSSPrimitiveValueTest, HasDynamicViewportUnits) {
-  ScopedCSSViewportUnits4ForTest scoped_feature(true);
   // dv*
   EXPECT_TRUE(HasDynamicViewportUnits("1dvw"));
   EXPECT_TRUE(HasDynamicViewportUnits("1dvh"));
@@ -329,6 +327,31 @@ TEST_F(CSSPrimitiveValueTest, HasDynamicViewportUnits) {
   EXPECT_FALSE(HasDynamicViewportUnits("calc(1px + 1px)"));
   EXPECT_FALSE(HasDynamicViewportUnits("calc(1px + 1em)"));
   EXPECT_FALSE(HasDynamicViewportUnits("calc(1px + 1svh)"));
+}
+
+TEST_F(CSSPrimitiveValueTest, ComputeMethodsWithLengthResolver) {
+  {
+    auto* pxs = CSSMathExpressionNumericLiteral::Create(
+        12.0, CSSPrimitiveValue::UnitType::kPixels);
+    auto* ems = CSSMathExpressionNumericLiteral::Create(
+        1.0, CSSPrimitiveValue::UnitType::kEms);
+    auto* subtraction = CSSMathExpressionOperation::CreateArithmeticOperation(
+        pxs, ems, CSSMathOperator::kSubtract);
+    auto* sign = CSSMathExpressionOperation::CreateSignRelatedFunction(
+        {subtraction}, CSSValueID::kSign);
+    auto* degs = CSSMathExpressionNumericLiteral::Create(
+        10.0, CSSPrimitiveValue::UnitType::kDegrees);
+    auto* expression = CSSMathExpressionOperation::CreateArithmeticOperation(
+        sign, degs, CSSMathOperator::kMultiply);
+    CSSPrimitiveValue* value = CSSMathFunctionValue::Create(expression);
+
+    Font font;
+    CSSToLengthConversionData length_resolver = CSSToLengthConversionData();
+    length_resolver.SetFontSizes(
+        CSSToLengthConversionData::FontSizes(10.0f, 10.0f, &font, 1.0f));
+    EXPECT_EQ(10.0, value->ComputeDegrees(length_resolver));
+    EXPECT_EQ("calc(sign(-1em + 12px) * 10deg)", value->CustomCSSText());
+  }
 }
 
 }  // namespace

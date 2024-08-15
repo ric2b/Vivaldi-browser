@@ -436,18 +436,125 @@ using l10n_util::GetNSString;
   };
 }
 
-- (UIAction*)actionToAddTabToNewGroupWithBlock:(ProceduralBlock)block {
-  CHECK(base::FeatureList::IsEnabled(kTabGroupsInGrid))
+- (UIAction*)actionToAddTabsToNewGroupWithTabsNumber:(int)tabsNumber
+                                               block:(ProceduralBlock)block {
+  CHECK(IsTabGroupInGridEnabled())
       << "You should not be able to create a tab group context menu action "
          "outside the Tab Groups experiment.";
   UIImage* image = DefaultSymbolWithPointSize(kNewTabGroupActionSymbol,
                                               kSymbolActionPointSize);
   UIAction* action =
-      [self actionWithTitle:l10n_util::GetNSString(
-                                IDS_IOS_CONTENT_CONTEXT_ADDTABTONEWTABGROUP)
+      [self actionWithTitle:l10n_util::GetPluralNSStringF(
+                                IDS_IOS_CONTENT_CONTEXT_ADDTABTONEWTABGROUP,
+                                tabsNumber)
                       image:image
                        type:MenuActionType::AddTabToNewGroup
                       block:block];
+  return action;
+}
+
+- (UIMenu*)menuToAddTabToGroupWithGroupTitleAndIdentifiers:
+               (NSArray<GroupTitleAndIdentifier*>*)groupTitleAndIdentifiers
+                                                     block:(void (^)(NSString*))
+                                                               block {
+  CHECK(IsTabGroupInGridEnabled())
+      << "You should not be able to create a tab group context menu action "
+         "outside the Tab Groups experiment.";
+
+  UIImage* image = DefaultSymbolWithPointSize(kMoveTabToGroupActionSymbol,
+                                              kSymbolActionPointSize);
+
+  NSMutableArray<UIMenuElement*>* groupsMenu = [[NSMutableArray alloc] init];
+
+  for (GroupTitleAndIdentifier* groupTitleAndIdentifier in
+           groupTitleAndIdentifiers) {
+    NSString* groupID = [groupTitleAndIdentifier.groupID copy];
+    ProceduralBlock groupBlock = ^{
+      if (block) {
+        block(groupID);
+      }
+    };
+
+    UIAction* groupAction =
+        [self actionWithTitle:groupTitleAndIdentifier.groupTitle
+                        image:nil
+                         type:MenuActionType::AddTabToExistingGroup
+                        block:groupBlock];
+    [groupsMenu addObject:groupAction];
+  }
+
+  UIMenu* menu = [UIMenu menuWithTitle:@""
+                                 image:nil
+                            identifier:nil
+                               options:UIMenuOptionsDisplayInline
+                              children:groupsMenu];
+  ProceduralBlock addTabToNewGroupBlock = ^{
+    if (block) {
+      block(nil);
+    }
+  };
+  NSArray<UIMenuElement*>* addToGroupMenuElements = @[
+    [self actionToAddTabsToNewGroupWithTabsNumber:1
+                                            block:addTabToNewGroupBlock],
+    menu
+  ];
+
+  return [UIMenu menuWithTitle:l10n_util::GetNSString(
+                                   IDS_IOS_CONTENT_CONTEXT_ADDTABTOTABGROUP)
+                         image:image
+                    identifier:nil
+                       options:UIMenuOptionsSingleSelection
+                      children:addToGroupMenuElements];
+}
+
+- (UIAction*)actionToRenameTabGroupWithBlock:(ProceduralBlock)block {
+  CHECK(IsTabGroupInGridEnabled());
+  UIImage* image =
+      DefaultSymbolWithPointSize(kEditActionSymbol, kSymbolActionPointSize);
+  UIAction* action =
+      [self actionWithTitle:l10n_util::GetNSString(
+                                IDS_IOS_CONTENT_CONTEXT_RENAMEGROUP)
+                      image:image
+                       type:MenuActionType::RenameTabGroup
+                      block:block];
+  return action;
+}
+
+- (UIAction*)actionToAddNewTabInGroupWithBlock:(ProceduralBlock)block {
+  CHECK(IsTabGroupInGridEnabled());
+  UIImage* image = DefaultSymbolWithPointSize(kNewTabGroupActionSymbol,
+                                              kSymbolActionPointSize);
+  UIAction* action =
+      [self actionWithTitle:l10n_util::GetNSString(
+                                IDS_IOS_CONTENT_CONTEXT_NEWTABINGROUP)
+                      image:image
+                       type:MenuActionType::NewTabInGroup
+                      block:block];
+  return action;
+}
+
+- (UIAction*)actionToUngroupTabGroupWithBlock:(ProceduralBlock)block {
+  CHECK(IsTabGroupInGridEnabled());
+  UIImage* image = DefaultSymbolWithPointSize(kUngroupTabGroupSymbol,
+                                              kSymbolActionPointSize);
+  UIAction* action = [self
+      actionWithTitle:l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_UNGROUP)
+                image:image
+                 type:MenuActionType::UngroupTabGroup
+                block:block];
+  return action;
+}
+
+- (UIAction*)actionToCloseTabGroupWithBlock:(ProceduralBlock)block {
+  CHECK(IsTabGroupInGridEnabled());
+  UIImage* image =
+      DefaultSymbolWithPointSize(kXMarkSymbol, kSymbolActionPointSize);
+  UIAction* action = [self
+      actionWithTitle:l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_CLOSEGROUP)
+                image:image
+                 type:MenuActionType::ClaseTabGroup
+                block:block];
+  action.attributes = UIMenuElementAttributesDestructive;
   return action;
 }
 
@@ -519,6 +626,9 @@ using l10n_util::GetNSString;
                            image:image
                            type:MenuActionType::NewNote
                            block:block];
-  }
+}
 
+@end
+
+@implementation GroupTitleAndIdentifier
 @end

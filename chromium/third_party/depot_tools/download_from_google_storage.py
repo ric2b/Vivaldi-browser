@@ -35,6 +35,7 @@ PLATFORM_MAPPING = {
     'win32': 'win',
     'aix6': 'aix',
     'aix7': 'aix',
+    'zos': 'zos',
 }
 
 
@@ -224,7 +225,14 @@ def _validate_tar_file(tar, prefix):
     def _validate(tarinfo):
         """Returns false if the tarinfo is something we explicitly forbid."""
         if tarinfo.issym() or tarinfo.islnk():
-            return False
+            # For links, check if the destination is valid.
+            if os.path.isabs(tarinfo.linkname):
+                return False
+            link_target = os.path.normpath(
+                os.path.join(os.path.dirname(tarinfo.name), tarinfo.linkname))
+            if not link_target.startswith(prefix):
+                return False
+
         if ('../' in tarinfo.name or '..\\' in tarinfo.name
                 or not tarinfo.name.startswith(prefix)):
             return False

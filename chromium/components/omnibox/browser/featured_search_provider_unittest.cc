@@ -14,10 +14,12 @@
 #include "base/format_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/mock_autocomplete_provider_client.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
+#include "components/omnibox/common/omnibox_features.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_service.h"
@@ -62,9 +64,6 @@ class FeaturedSearchProviderTest : public testing::Test {
       ASSERT_EQ(cases[i].output.size(), matches.size());
       for (size_t j = 0; j < cases[i].output.size(); ++j) {
         EXPECT_EQ(cases[i].output[j], matches[j].destination_url);
-        EXPECT_EQ(matches[j].allowed_to_be_default_match,
-                  matches[j].type == AutocompleteMatchType::STARTER_PACK &&
-                      matches[j].inline_autocompletion.empty());
       }
     }
   }
@@ -98,6 +97,9 @@ TEST_F(FeaturedSearchProviderTest, DoesNotSupportMatchesOnFocus) {
 }
 
 TEST_F(FeaturedSearchProviderTest, StarterPack) {
+  base::test::ScopedFeatureList features;
+  features.InitAndDisableFeature(omnibox::kStarterPackExpansion);
+
   const GURL kBookmarksUrl =
       GURL(TemplateURLStarterPackData::bookmarks.destination_url);
   const GURL kHistoryUrl =
@@ -127,6 +129,10 @@ TEST_F(FeaturedSearchProviderTest, StarterPack) {
       {u"@bookmarksasld", {}},
       {u"tabs", {}},
 
+      // With the expansion flag disabled, typing the `@gemini` keyword should
+      // not provide the Gemini suggestion.
+      {u"@gemini", {}},
+
       // Typing '@' should give all the starter pack suggestions.
       {u"@", {kBookmarksUrl, kHistoryUrl, kTabsUrl}},
 
@@ -144,4 +150,105 @@ TEST_F(FeaturedSearchProviderTest, StarterPack) {
   };
 
   RunTest(typing_scheme_cases, std::size(typing_scheme_cases));
+}
+
+TEST_F(FeaturedSearchProviderTest, StarterPackExpansion) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(omnibox::kStarterPackExpansion);
+
+  const GURL kBookmarksUrl =
+      GURL(TemplateURLStarterPackData::bookmarks.destination_url);
+  const GURL kHistoryUrl =
+      GURL(TemplateURLStarterPackData::history.destination_url);
+  const GURL kTabsUrl = GURL(TemplateURLStarterPackData::tabs.destination_url);
+  const GURL kAskGoogleUrl =
+      GURL(TemplateURLStarterPackData::AskGoogle.destination_url);
+
+  const std::u16string kBookmarksKeyword = u"@bookmarks";
+  const std::u16string kHistoryKeyword = u"@history";
+  const std::u16string kTabsKeyword = u"@tabs";
+  const std::u16string kAskGoogleKeyword = u"@gemini";
+
+  // Populate template URL with starter pack entries
+  std::vector<std::unique_ptr<TemplateURLData>> turls =
+      TemplateURLStarterPackData::GetStarterPackEngines();
+  for (auto& turl : turls) {
+    client_->GetTemplateURLService()->Add(
+        std::make_unique<TemplateURL>(std::move(*turl)));
+  }
+
+  TestData typing_scheme_cases[] = {
+      // Typing the keyword without '@' or past the keyword shouldn't produce
+      // results.
+      {u"b", {}},
+      {u"bookmarks", {}},
+      {u"his", {}},
+      {u"history", {}},
+      {u"@historyasdjflk", {}},
+      {u"@bookmarksasld", {}},
+      {u"tabs", {}},
+      {u"gemi", {}},
+
+      // Typing '@' should give all the starter pack suggestions.
+      {u"@", {kBookmarksUrl, kAskGoogleUrl, kHistoryUrl, kTabsUrl}},
+
+      // Typing a portion of "@bookmarks" should give the bookmarks suggestion.
+      {kBookmarksKeyword.substr(0, 3), {kBookmarksUrl}},
+      {kBookmarksKeyword, {kBookmarksUrl}},
+
+      // Typing a portion of "@history" should give the default urls.
+      {kHistoryKeyword.substr(0, 3), {kHistoryUrl}},
+      {kHistoryKeyword, {kHistoryUrl}},
+
+      // Typing a portion of "@tabs" should give the default urls.
+      {kTabsKeyword.substr(0, 3), {kTabsUrl}},
+      {kTabsKeyword, {kTabsUrl}},
+
+      // Typing a portion of "@gemini" should give the default urls.
+      {kAskGoogleKeyword.substr(0, 3), {kAskGoogleUrl}},
+      {kAskGoogleKeyword, {kAskGoogleUrl}},
+  };
+
+  RunTest(typing_scheme_cases, std::size(typing_scheme_cases));
+}
+
+TEST_F(FeaturedSearchProviderTest, StarterPackExpansionRelevance) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(omnibox::kStarterPackExpansion);
+
+  const GURL kBookmarksUrl =
+      GURL(TemplateURLStarterPackData::bookmarks.destination_url);
+  const GURL kHistoryUrl =
+      GURL(TemplateURLStarterPackData::history.destination_url);
+  const GURL kTabsUrl = GURL(TemplateURLStarterPackData::tabs.destination_url);
+  const GURL kAskGoogleUrl =
+      GURL(TemplateURLStarterPackData::AskGoogle.destination_url);
+
+  // Populate template URL with starter pack entries
+  std::vector<std::unique_ptr<TemplateURLData>> turls =
+      TemplateURLStarterPackData::GetStarterPackEngines();
+  for (auto& turl : turls) {
+    client_->GetTemplateURLService()->Add(
+        std::make_unique<TemplateURL>(std::move(*turl)));
+  }
+
+  AutocompleteInput input(u"@", metrics::OmniboxEventProto::OTHER,
+                          TestSchemeClassifier());
+  input.set_prevent_inline_autocomplete(true);
+  provider_->Start(input, false);
+  EXPECT_TRUE(provider_->done());
+  ACMatches matches = provider_->matches();
+  ASSERT_EQ(turls.size(), matches.size());
+
+  // Sort the matches according to relevances (in descending order), and make
+  // sure that the matches are in the expected order.
+  std::sort(matches.begin(), matches.end(), [](const auto& x, const auto& y) {
+    return x.relevance > y.relevance;
+  });
+
+  GURL expected_match_order[] = {kAskGoogleUrl, kBookmarksUrl, kHistoryUrl,
+                                 kTabsUrl};
+  for (size_t i = 0; i < matches.size(); i++) {
+    EXPECT_EQ(matches[i].destination_url, expected_match_order[i]);
+  }
 }

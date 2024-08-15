@@ -4,12 +4,16 @@
 
 import 'chrome://resources/cr_components/help_bubble/help_bubble.js';
 
-import {IronIconElement} from '//resources/polymer/v3_0/iron-icon/iron-icon.js';
-import {HelpBubbleElement} from 'chrome://resources/cr_components/help_bubble/help_bubble.js';
-import {HelpBubbleArrowPosition, HelpBubbleClientCallbackRouter, HelpBubbleClientRemote, HelpBubbleClosedReason, HelpBubbleHandlerInterface, HelpBubbleParams} from 'chrome://resources/cr_components/help_bubble/help_bubble.mojom-webui.js';
-import {ANCHOR_HIGHLIGHT_CLASS, HelpBubbleController} from 'chrome://resources/cr_components/help_bubble/help_bubble_controller.js';
-import {HelpBubbleMixin, HelpBubbleMixinInterface} from 'chrome://resources/cr_components/help_bubble/help_bubble_mixin.js';
-import {HelpBubbleProxy, HelpBubbleProxyImpl} from 'chrome://resources/cr_components/help_bubble/help_bubble_proxy.js';
+import type {IronIconElement} from '//resources/polymer/v3_0/iron-icon/iron-icon.js';
+import type {HelpBubbleElement} from 'chrome://resources/cr_components/help_bubble/help_bubble.js';
+import type {HelpBubbleClientRemote, HelpBubbleHandlerInterface, HelpBubbleParams} from 'chrome://resources/cr_components/help_bubble/help_bubble.mojom-webui.js';
+import {HelpBubbleArrowPosition, HelpBubbleClientCallbackRouter, HelpBubbleClosedReason} from 'chrome://resources/cr_components/help_bubble/help_bubble.mojom-webui.js';
+import type {HelpBubbleController} from 'chrome://resources/cr_components/help_bubble/help_bubble_controller.js';
+import {ANCHOR_HIGHLIGHT_CLASS} from 'chrome://resources/cr_components/help_bubble/help_bubble_controller.js';
+import type {HelpBubbleMixinInterface} from 'chrome://resources/cr_components/help_bubble/help_bubble_mixin.js';
+import {HelpBubbleMixin} from 'chrome://resources/cr_components/help_bubble/help_bubble_mixin.js';
+import type {HelpBubbleProxy} from 'chrome://resources/cr_components/help_bubble/help_bubble_proxy.js';
+import {HelpBubbleProxyImpl} from 'chrome://resources/cr_components/help_bubble/help_bubble_proxy.js';
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertThrows, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
@@ -273,6 +277,10 @@ suite('CrComponentsHelpBubbleMixinTest', () => {
     bodyIconName: 'lightbulb_outline',
     bodyIconAltText: BODY_ICON_ALT_TEXT,
     buttons: [],
+    focusOnShowHint: null,
+    titleText: null,
+    progress: null,
+    timeout: null,
   };
 
   test('help bubble mixin shows bubble when called directly', () => {
@@ -402,7 +410,7 @@ suite('CrComponentsHelpBubbleMixinTest', () => {
 
   test(
       'help bubble mixin does not use body icon when not defined', async () => {
-        const noIconParams = {...defaultParams, bodyIconName: undefined};
+        const noIconParams = {...defaultParams, bodyIconName: null};
         testProxy.getCallbackRouterRemote().showHelpBubble(noIconParams);
         await waitAfterNextRender(container);
         assertTrue(container.isHelpBubbleShowing());
@@ -459,6 +467,11 @@ suite('CrComponentsHelpBubbleMixinTest', () => {
           position: HelpBubbleArrowPosition.BOTTOM_CENTER,
           bodyText: 'This is a help bubble.',
           buttons: [],
+          bodyIconName: null,
+          focusOnShowHint: null,
+          progress: null,
+          timeout: null,
+          titleText: null,
         };
 
         testProxy.getCallbackRouterRemote().showHelpBubble(params);
@@ -617,6 +630,10 @@ suite('CrComponentsHelpBubbleMixinTest', () => {
     bodyText: 'This is another help bubble.',
     titleText: 'This is a title',
     buttons: [],
+    bodyIconName: null,
+    focusOnShowHint: null,
+    progress: null,
+    timeout: null,
   };
 
   test('help bubble mixin shows multiple bubbles', async () => {
@@ -658,6 +675,10 @@ suite('CrComponentsHelpBubbleMixinTest', () => {
     bodyText: 'This is another help bubble.',
     progress: {current: 1, total: 3},
     buttons: [],
+    bodyIconName: null,
+    focusOnShowHint: null,
+    timeout: null,
+    titleText: null,
   };
 
   test(
@@ -717,6 +738,7 @@ suite('CrComponentsHelpBubbleMixinTest', () => {
     closeButtonAltText: CLOSE_BUTTON_ALT_TEXT,
     bodyIconAltText: BODY_ICON_ALT_TEXT,
     position: HelpBubbleArrowPosition.TOP_CENTER,
+    bodyIconName: null,
     bodyText: 'This is another help bubble.',
     titleText: 'This is a title',
     buttons: [
@@ -729,6 +751,9 @@ suite('CrComponentsHelpBubbleMixinTest', () => {
         isDefault: true,
       },
     ],
+    focusOnShowHint: null,
+    progress: null,
+    timeout: null,
   };
 
   test('help bubble mixin sends action button clicked event', async () => {
@@ -753,11 +778,15 @@ suite('CrComponentsHelpBubbleMixinTest', () => {
   const timeoutParams: HelpBubbleParams = {
     nativeIdentifier: PARAGRAPH_NATIVE_ID,
     closeButtonAltText: CLOSE_BUTTON_ALT_TEXT,
+    bodyIconName: null,
     bodyIconAltText: BODY_ICON_ALT_TEXT,
     position: HelpBubbleArrowPosition.TOP_CENTER,
     bodyText: 'This is another help bubble.',
     titleText: 'This is a title',
     buttons: [],
+    focusOnShowHint: null,
+    progress: null,
+    timeout: null,
   };
 
   // It is hard to guarantee the correct timing on various test systems,

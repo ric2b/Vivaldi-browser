@@ -6,7 +6,7 @@
 
 #include "third_party/blink/renderer/core/css/css_pending_substitution_value.h"
 #include "third_party/blink/renderer/core/css/css_unicode_range_value.h"
-#include "third_party/blink/renderer/core/css/css_variable_reference_value.h"
+#include "third_party/blink/renderer/core/css/css_unparsed_declaration_value.h"
 #include "third_party/blink/renderer/core/css/hash_tools.h"
 #include "third_party/blink/renderer/core/css/parser/at_rule_descriptor_parser.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_local_context.h"
@@ -58,8 +58,8 @@ bool IsPropertyAllowedInRule(const CSSProperty& property,
       return true;
     case StyleRule::kKeyframe:
       return property.IsValidForKeyframe();
-    case StyleRule::kTry:
-      return property.IsValidForPositionFallback();
+    case StyleRule::kPositionTry:
+      return property.IsValidForPositionTry();
     default:
       NOTREACHED();
       return false;
@@ -199,10 +199,10 @@ bool CSSPropertyParser::ParseValueStart(CSSPropertyID unresolved_property,
     }
 
     bool is_animation_tainted = false;
-    auto* variable = MakeGarbageCollected<CSSVariableReferenceValue>(
+    auto* variable = MakeGarbageCollected<CSSUnparsedDeclarationValue>(
         CSSVariableData::Create({original_range, text}, is_animation_tainted,
                                 true),
-        *context_);
+        context_);
 
     if (is_shorthand) {
       const cssvalue::CSSPendingSubstitutionValue& pending_value =
@@ -405,8 +405,9 @@ bool CSSPropertyParser::ConsumeCSSWideKeyword(CSSPropertyID unresolved_property,
   }
 
   if (value->IsRevertValue() || value->IsRevertLayerValue()) {
-    // Declarations in @try are not cascaded and cannot be reverted.
-    if (rule_type == StyleRule::kTry) {
+    // Declarations in @position-try are not cascaded and cannot be
+    // reverted.
+    if (rule_type == StyleRule::kPositionTry) {
       return false;
     }
   }

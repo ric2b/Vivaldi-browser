@@ -26,6 +26,7 @@
 #include "ui/base/test/ui_controls.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/views/test/button_test_api.h"
+#include "ui/views/test/widget_activation_waiter.h"
 #include "ui/views/test/widget_test.h"
 
 enum ChipFeatureConfig {
@@ -53,8 +54,7 @@ class PermissionBubbleInteractiveUITest : public InProcessBrowserTest {
     SCOPED_TRACE(message);
     EXPECT_TRUE(widget);
 
-    views::test::WidgetActivationWaiter waiter(widget, true);
-    waiter.Wait();
+    views::test::WaitForWidgetActive(widget, true);
   }
 
   // Send Ctrl/Cmd+keycode in the key window to the browser.
@@ -172,7 +172,7 @@ IN_PROC_BROWSER_TEST_F(PermissionBubbleInteractiveUITest,
    public:
     NoWidgetsWaiter() {
       EXPECT_NE(views::test::WidgetTest::GetAllWidgets().size(), 0U);
-      for (auto* widget : views::test::WidgetTest::GetAllWidgets()) {
+      for (views::Widget* widget : views::test::WidgetTest::GetAllWidgets()) {
         widget->AddObserver(this);
       }
     }

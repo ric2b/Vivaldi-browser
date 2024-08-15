@@ -16,9 +16,11 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <vector>
 
+#include "base/atomic_ref_count.h"
 #include "base/files/file.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
@@ -26,6 +28,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
+#include "base/types/expected.h"
 #include "build/chromeos_buildflags.h"
 #include "media/gpu/chromeos/fourcc.h"
 #include "media/gpu/media_gpu_export.h"
@@ -33,7 +36,6 @@
 #include "media/gpu/vaapi/vaapi_utils.h"
 #include "media/video/video_decode_accelerator.h"
 #include "media/video/video_encode_accelerator.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace gfx {
@@ -204,7 +206,9 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   // Return an instance of VaapiWrapper initialized for |va_profile| and
   // |mode|. |report_error_to_uma_cb| will be called independently from
   // reporting errors to clients via method return values.
-  static scoped_refptr<VaapiWrapper> Create(
+  // TODO(mcasas): Add and use a VaapiWrapperStatus instead of reusing here
+  // DecoderStatus.
+  static base::expected<scoped_refptr<VaapiWrapper>, DecoderStatus> Create(
       CodecMode mode,
       VAProfile va_profile,
       EncryptionScheme encryption_scheme,
@@ -215,12 +219,14 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   // |profile| to VAProfile.
   // |report_error_to_uma_cb| will be called independently from reporting
   // errors to clients via method return values.
-  static scoped_refptr<VaapiWrapper> CreateForVideoCodec(
-      CodecMode mode,
-      VideoCodecProfile profile,
-      EncryptionScheme encryption_scheme,
-      const ReportErrorToUMACB& report_error_to_uma_cb,
-      bool enforce_sequence_affinity = true);
+  // TODO(mcasas): Add and use a VaapiWrapperStatus instead of reusing here
+  // DecoderStatus.
+  static base::expected<scoped_refptr<VaapiWrapper>, DecoderStatus>
+  CreateForVideoCodec(CodecMode mode,
+                      VideoCodecProfile profile,
+                      EncryptionScheme encryption_scheme,
+                      const ReportErrorToUMACB& report_error_to_uma_cb,
+                      bool enforce_sequence_affinity = true);
 
   VaapiWrapper(const VaapiWrapper&) = delete;
   VaapiWrapper& operator=(const VaapiWrapper&) = delete;
@@ -330,7 +336,7 @@ class MEDIA_GPU_EXPORT VaapiWrapper
       const gfx::Size& size,
       const std::vector<SurfaceUsageHint>& usage_hints,
       size_t num_surfaces,
-      const absl::optional<gfx::Size>& visible_size);
+      const std::optional<gfx::Size>& visible_size);
 
   // Attempts to create a protected session that will be attached to the
   // decoding context to enable encrypted video decoding. If it cannot be
@@ -395,8 +401,8 @@ class MEDIA_GPU_EXPORT VaapiWrapper
       const gfx::Size& size,
       const std::vector<SurfaceUsageHint>& usage_hints,
       size_t num_surfaces,
-      const absl::optional<gfx::Size>& visible_size,
-      const absl::optional<uint32_t>& va_fourcc);
+      const std::optional<gfx::Size>& visible_size,
+      const std::optional<uint32_t>& va_fourcc);
 
   // Creates a self-releasing VASurface from |pixmap|. The created VASurface
   // shares the ownership of the underlying buffer represented by |pixmap|. The
@@ -520,7 +526,7 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   // linear size of the resulted encoded frame is larger than |target_size|.
   [[nodiscard]] virtual bool DownloadFromVABuffer(
       VABufferID buffer_id,
-      absl::optional<VASurfaceID> sync_surface_id,
+      std::optional<VASurfaceID> sync_surface_id,
       uint8_t* target_ptr,
       size_t target_size,
       size_t* coded_data_size);
@@ -558,8 +564,8 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   [[nodiscard]] virtual bool BlitSurface(
       const VASurface& va_surface_src,
       const VASurface& va_surface_dest,
-      absl::optional<gfx::Rect> src_rect = absl::nullopt,
-      absl::optional<gfx::Rect> dest_rect = absl::nullopt
+      std::optional<gfx::Rect> src_rect = std::nullopt,
+      std::optional<gfx::Rect> dest_rect = std::nullopt
 #if BUILDFLAG(IS_CHROMEOS_ASH)
       ,
       VAProtectedSessionID va_protected_session_id = VA_INVALID_ID
@@ -586,16 +592,23 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   friend class VaapiVideoEncodeAcceleratorTest;
 
   FRIEND_TEST_ALL_PREFIXES(VaapiTest, LowQualityEncodingSetting);
+  FRIEND_TEST_ALL_PREFIXES(VaapiTest, TooManyDecoderInstances);
   FRIEND_TEST_ALL_PREFIXES(VaapiUtilsTest, ScopedVAImage);
   FRIEND_TEST_ALL_PREFIXES(VaapiUtilsTest, BadScopedVAImage);
   FRIEND_TEST_ALL_PREFIXES(VaapiUtilsTest, BadScopedVABufferMapping);
   FRIEND_TEST_ALL_PREFIXES(VaapiMinigbmTest, AllocateAndCompareWithMinigbm);
 
+  // There's a limit to the number of simultaneous decoder instances a given SoC
+  // can have, e.g. sometimes the process where VaapiWrapper runs can exhaust
+  // the FDs and subsequently crash (b/181264362). We run into stability
+  // problems for various reasons when that limit is reached; this class method
+  // provides that number to prevent that erroneous behaviour during Create().
+  static int GetMaxNumDecoderInstances();
+
   [[nodiscard]] bool Initialize(VAProfile va_profile,
                                 EncryptionScheme encryption_scheme);
   void Deinitialize();
-  [[nodiscard]] bool VaInitialize(
-      const ReportErrorToUMACB& report_error_to_uma_cb);
+  void VaInitialize(const ReportErrorToUMACB& report_error_to_uma_cb);
 
   // Tries to allocate |num_surfaces| VASurfaceIDs of |size| and |va_format|.
   // Fills |va_surfaces| and returns true if successful, or returns false.
@@ -657,6 +670,9 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   // If a protected session is active, attaches it to the decoding context.
   [[nodiscard]] bool MaybeAttachProtectedSession_Locked()
       EXCLUSIVE_LOCKS_REQUIRED(va_lock_);
+
+  // Tracks the number of decoder instances globally in the process.
+  static base::AtomicRefCount num_decoder_instances_;
 
   const CodecMode mode_;
   const bool enforce_sequence_affinity_;

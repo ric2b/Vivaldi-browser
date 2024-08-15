@@ -59,14 +59,14 @@ constexpr char kErrorDescriptionKey[] = "error_description";
 
 const std::u16string kVivaldiDomain = u"vivaldi.net";
 
-absl::optional<base::Value::Dict> ParseServerResponse(
+std::optional<base::Value::Dict> ParseServerResponse(
     std::unique_ptr<std::string> data) {
   if (!data)
-    return absl::nullopt;
+    return std::nullopt;
 
-  absl::optional<base::Value> value = base::JSONReader::Read(*data);
+  std::optional<base::Value> value = base::JSONReader::Read(*data);
   if (!value || !value->is_dict())
-    return absl::nullopt;
+    return std::nullopt;
 
   return std::move(value->GetDict());
 }
@@ -76,12 +76,12 @@ bool ParseGetAccessTokenSuccessResponse(
     std::string& access_token,
     int& expires_in,
     std::string& refresh_token) {
-  absl::optional<base::Value::Dict> dict =
+  std::optional<base::Value::Dict> dict =
       ParseServerResponse(std::move(response_body));
   if (!dict)
     return false;
   std::string* access_token_value = dict->FindString(kAccessTokenKey);
-  absl::optional<int> expires_in_value = dict->FindInt(kExpiresInKey);
+  std::optional<int> expires_in_value = dict->FindInt(kExpiresInKey);
   std::string* refresh_token_value = dict->FindString(kRefreshTokenKey);
   if (!access_token_value || !expires_in_value || !refresh_token_value)
     return false;
@@ -95,7 +95,7 @@ bool ParseGetAccountInfoSuccessResponse(
     std::unique_ptr<std::string> response_body,
     std::string& account_id,
     std::string& picture_url) {
-  absl::optional<base::Value::Dict> dict =
+  std::optional<base::Value::Dict> dict =
       ParseServerResponse(std::move(response_body));
   if (!dict)
     return false;
@@ -112,7 +112,7 @@ bool ParseGetAccountInfoSuccessResponse(
 }
 
 std::string ParseFailureResponse(std::unique_ptr<std::string> response_body) {
-  absl::optional<base::Value::Dict> dict =
+  std::optional<base::Value::Dict> dict =
       ParseServerResponse(std::move(response_body));
   if (dict) {
     if (std::string* server_message = dict->FindString(kErrorDescriptionKey)) {
@@ -390,7 +390,7 @@ void VivaldiAccountManager::OnTokenRequestDone(
   std::string encrypted_refresh_token;
   if (OSCrypt::EncryptString(refresh_token_, &encrypted_refresh_token)) {
     std::string encoded_refresh_token;
-    base::Base64Encode(encrypted_refresh_token, &encoded_refresh_token);
+    encoded_refresh_token = base::Base64Encode(encrypted_refresh_token);
     prefs_->SetString(vivaldiprefs::kVivaldiAccountRefreshToken,
                       encoded_refresh_token);
   }

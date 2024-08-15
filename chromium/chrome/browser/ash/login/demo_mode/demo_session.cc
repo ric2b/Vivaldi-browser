@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <string_view>
 #include <utility>
 
 #include "ash/constants/ash_features.h"
@@ -42,7 +43,6 @@
 #include "chrome/browser/ash/login/demo_mode/demo_mode_dimensions.h"
 #include "chrome/browser/ash/login/demo_mode/demo_mode_window_closer.h"
 #include "chrome/browser/ash/login/demo_mode/demo_setup_controller.h"
-#include "chrome/browser/ash/login/users/chrome_user_manager.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/browser_process.h"
@@ -66,6 +66,7 @@
 #include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/user_manager/user.h"
+#include "components/user_manager/user_manager.h"
 #include "components/variations/synthetic_trials.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_instance.h"
@@ -135,7 +136,7 @@ void InstallDemoMedia(const base::FilePath& offline_resources_path,
     LOG(ERROR) << "Failed to install demo mode media.";
 }
 
-std::string GetSwitchOrDefault(const base::StringPiece& switch_string,
+std::string GetSwitchOrDefault(std::string_view switch_string,
                                const std::string& default_value) {
   auto* const command_line = base::CommandLine::ForCurrentProcess();
 
@@ -147,7 +148,11 @@ std::string GetSwitchOrDefault(const base::StringPiece& switch_string,
 
 // If the current locale is not the default one, ensure it is reverted to the
 // default when demo session restarts (i.e. user-selected locale is only allowed
-// to be used for a single session).
+// to be used for a single session), unless the restart is triggered by the user
+// explicitly changing the locale. (e.g. if the current locale is de-de and the
+// user changes the locale to fr-fr from the system tray, when the demo session
+// restarts, the system doesn't revert to the default locale en-us, but instead,
+// goes to fr-fr as specified.
 void RestoreDefaultLocaleForNextSession() {
   auto* user = user_manager::UserManager::Get()->GetActiveUser();
   // Tests may not have an active user.
@@ -180,8 +185,8 @@ void RestoreDefaultLocaleForNextSession() {
   if (current_locale != default_locale) {
     // If the user has changed the locale, request to change it back (which will
     // take effect when the session restarts).
-    profile->ChangeAppLocale(default_locale,
-                             Profile::APP_LOCALE_CHANGED_VIA_DEMO_SESSION);
+    profile->ChangeAppLocale(
+        default_locale, Profile::APP_LOCALE_CHANGED_VIA_DEMO_SESSION_REVERT);
   }
 }
 
@@ -402,7 +407,7 @@ bool DemoSession::ShouldShowExtensionInAppLauncher(const std::string& app_id) {
 
 // Static function to default region from VPD.
 static std::string GetDefaultRegion() {
-  const std::optional<base::StringPiece> region_code =
+  const std::optional<std::string_view> region_code =
       system::StatisticsProvider::GetInstance()->GetMachineStatistic(
           system::kRegionKey);
   if (region_code) {
@@ -536,11 +541,11 @@ DemoSession::DemoSession()
         session_manager::SessionManager::Get());
     OnSessionStateChanged();
   }
-  ChromeUserManager::Get()->AddSessionStateObserver(this);
+  user_manager::UserManager::Get()->AddSessionStateObserver(this);
 }
 
 DemoSession::~DemoSession() {
-  ChromeUserManager::Get()->RemoveSessionStateObserver(this);
+  user_manager::UserManager::Get()->RemoveSessionStateObserver(this);
 }
 
 std::vector<CountryCodeAndFullNamePair>

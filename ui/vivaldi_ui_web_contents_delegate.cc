@@ -31,7 +31,6 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_web_contents_observer.h"
-#include "extensions/common/extension_messages.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
 
 #include "app/vivaldi_constants.h"
@@ -235,7 +234,7 @@ void VivaldiUIWebContentsDelegate::RenderFrameCreated(
       if (const base::Value::Dict* host_dict = partition.second.GetIfDict()) {
         // Each entry in host_dict is another dictionary with settings
         if (auto* settings = host_dict->FindDict(::vivaldi::kVivaldiAppId)) {
-          const absl::optional<double> zoom_level =
+          const std::optional<double> zoom_level =
               settings->FindDouble("zoom_level");
           if (zoom_level.has_value()) {
             content::HostZoomMap* zoom_map =

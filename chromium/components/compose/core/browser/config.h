@@ -55,10 +55,22 @@ struct Config {
   // auto-dismissal.
   unsigned int saved_state_timeout_milliseconds = 2000;
 
+  // The delay to wait to show the saved state notification after the compose
+  // dialog loses focus.
+  unsigned int focus_lost_delay_milliseconds = 100;
+
+  // Whether the dialog should prioritize staying within bounds of the browser
+  // window above visibility of the anchor rect.
+  bool stay_in_window_bounds = true;
+
   // The dialog positioning strategy to use if there isn't enough space above or
   // below the anchor element.
   DialogFallbackPositioningStrategy positioning_strategy =
       DialogFallbackPositioningStrategy::kShiftUpUntilMaxSizeIsOnscreen;
+
+  // The threshold for Compose request latency before showing a client-side
+  // error message.
+  unsigned int request_latency_timeout_seconds = 20;
 
   Config();
   Config(const Config& other);

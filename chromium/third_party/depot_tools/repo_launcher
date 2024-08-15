@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # Copyright (C) 2008 The Android Open Source Project
 #
@@ -79,7 +79,7 @@ def check_python_version():
     major = ver.major
     minor = ver.minor
 
-    # Try to re-exec the version specific Python 3 if needed.
+    # Try to re-exec the version specific Python if needed.
     if (major, minor) < MIN_PYTHON_VERSION_SOFT:
         # Python makes releases ~once a year, so try our min version +10 to help
         # bridge the gap.  This is the fallback anyways so perf isn't critical.
@@ -96,36 +96,10 @@ def check_python_version():
                 break
             reexec(f"python{min_major}.{min_minor - inc}")
 
-        # Try the generic Python 3 wrapper, but only if it's new enough.  If it
-        # isn't, we want to just give up below and make the user resolve things.
-        try:
-            proc = subprocess.Popen(
-                [
-                    "python3",
-                    "-c",
-                    "import sys; "
-                    "print(sys.version_info.major, sys.version_info.minor)",
-                ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            (output, _) = proc.communicate()
-            python3_ver = tuple(int(x) for x in output.decode("utf-8").split())
-        except (OSError, subprocess.CalledProcessError):
-            python3_ver = None
-
-        # If the python3 version looks like it's new enough, give it a try.
-        if (
-            python3_ver
-            and python3_ver >= MIN_PYTHON_VERSION_HARD
-            and python3_ver != (major, minor)
-        ):
-            reexec("python3")
-
         # We're still here, so diagnose things for the user.
         if (major, minor) < MIN_PYTHON_VERSION_HARD:
             print(
-                "repo: error: Python 3 version is too old; "
+                "repo: error: Python version is too old; "
                 "Please use Python {}.{} or newer.".format(
                     *MIN_PYTHON_VERSION_HARD
                 ),
@@ -150,7 +124,7 @@ if not REPO_REV:
 BUG_URL = "https://issues.gerritcodereview.com/issues/new?component=1370071"
 
 # increment this whenever we make important changes to this script
-VERSION = (2, 40)
+VERSION = (2, 42)
 
 # increment this if the MAINTAINER_KEYS block is modified
 KEYRING_VERSION = (2, 3)
@@ -1245,7 +1219,6 @@ class Requirements:
             with open(path, "rb") as f:
                 data = f.read()
         except OSError:
-            # NB: EnvironmentError is used for Python 2 & 3 compatibility.
             # If we couldn't open the file, assume it's an old source tree.
             return None
 
@@ -1364,13 +1337,9 @@ def _Version():
     print(f"git {ParseGitVersion().full}")
     print(f"Python {sys.version}")
     uname = platform.uname()
-    if sys.version_info.major < 3:
-        # Python 3 returns a named tuple, but Python 2 is simpler.
-        print(uname)
-    else:
-        print(f"OS {uname.system} {uname.release} ({uname.version})")
-        processor = uname.processor if uname.processor else "unknown"
-        print(f"CPU {uname.machine} ({processor})")
+    print(f"OS {uname.system} {uname.release} ({uname.version})")
+    processor = uname.processor if uname.processor else "unknown"
+    print(f"CPU {uname.machine} ({processor})")
     print("Bug reports:", BUG_URL)
     sys.exit(0)
 

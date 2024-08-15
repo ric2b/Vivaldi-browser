@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Краєвид 12</translation>
 <translation id="1158503667684816647">Більше не показувати</translation>
 <translation id="1222195720020481779">Запуск інсталятора...</translation>
+<translation id="1270785070369717623">На жаль, налаштування Opera GX недоступні, коли цей браузер працює. Щоб імпортувати ці налаштування до Vivaldi, збережіть свою роботу та закрийте всі вікна Opera GX. Потім натисніть Продовжити.</translation>
 <translation id="1276145862619442150">Експрес-панелі</translation>
 <translation id="1281950884873973195">Тварина 6</translation>
 <translation id="1411638389238344450">Надіслати посилання по пошті</translation>
@@ -12,6 +13,7 @@
 <translation id="1462666970065907900">Ви дійсно бажаєте закрити це вікно?</translation>
 <translation id="1480046233931937785">Подяка</translation>
 <translation id="1526344461589023948">Під час збереження завантажених файлів оновлення сталася помилка. Будь ласка, перевірте наявність вільного місця на диску та спробуйте ще раз.</translation>
+<translation id="1635542496948266458">Перемкнути профілі</translation>
 <translation id="1657174850639146440">Монстр 9</translation>
 <translation id="1676595396635191120">Нове приватне вікно</translation>
 <translation id="1702758681952953055">Якщо помилка повторюється, напишіть нам про неї разом з такими деталями:</translation>
@@ -27,12 +29,14 @@
 <translation id="1985669426322966465">Оновлення програми</translation>
 <translation id="2079036669923635404">Натисніть тут, щоб оновити Vivaldi до версії <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Під час завантаження файлів оновлення сталася помилка. Будь ласка, перевірте інтернет-з'єднання та спробуйте ще раз.</translation>
+<translation id="2226825946708954262">⚠ Продовжити зі втратою даних</translation>
 <translation id="2339641773402824483">Перевірка оновлень...</translation>
 <translation id="2441056087170876076">Монстр 2</translation>
 <translation id="2444387452209867610">Вставити нотатку</translation>
 <translation id="2486841023299517366">Тварина 4</translation>
 <translation id="2612127540243995147">Оновлення готове до встановлення. Vivaldi буде перезапущено.</translation>
 <translation id="2613387515621326337">Показати сторінку оновлення</translation>
+<translation id="2645477450146475243">На жаль, налаштування Opera недоступні, коли цей браузер працює. Щоб імпортувати ці налаштування до Vivaldi, збережіть свою роботу та закрийте всі вікна Opera. Потім натисніть Продовжити.</translation>
 <translation id="2647368062414805334">На жаль, налаштування Edge недоступні, коли браузер працює. Для того, щоб імортувати налаштування до Vivaldi, збережіть вашу роботу та закрийте всі вікна Edge. Потім продовжіть процес імпорту.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Тварина 3</translation>
@@ -41,11 +45,14 @@
 <translation id="2923448633003185837">Вставити й перейти</translation>
 <translation id="2953943267837858202">Не дозволено автоматичне відтворення відео</translation>
 <translation id="2977472760057091832">Відкрити посилання в анонімному вікні</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Відкрити у новій вкладці</translation>
 <translation id="3027988479108856431">На жаль, налаштування Yandex браузера недоступні, якщо браузер працює. Для імпортування цих налаштувань до Vivaldi, збережіть свої дані та закрийте всі вікна Yandex браузера. Потім натисніть "Продовжити".</translation>
 <translation id="3084011186245865060">Краєвид 6</translation>
+<translation id="3085906383264247940">Opera (Beta)</translation>
 <translation id="3093931836425623631">Vivaldi створено на базі відкритого проєкту Chromium та іншого ПЗ з відкритим вихідним кодом.</translation>
 <translation id="3127383884976966729">Тварина 7</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">Нова закладка</translation>
 <translation id="3255747772218936245">Установити оновлення</translation>
 <translation id="3259769196742189631">Перевірка на W3C</translation>
@@ -54,7 +61,6 @@
 <translation id="3334610655141903168">(немає заголовку)</translation>
 <translation id="3372505110412186107">Версія Vivaldi <ph name="VERSION" /> є найновішою.</translation>
 <translation id="3383198080133834965">Оновлення завершене!</translation>
-<translation id="3402602684546832928">Виберіть файл закладок Opera</translation>
 <translation id="3451317331714872347">Краєвид 8</translation>
 <translation id="3457498675806041407">Підтвердити вихід</translation>
 <translation id="3470981972195599598">Версію Vivaldi <ph name="VERSION" /> вже встановлено, потрібен перезапуск браузера для застосування змін.</translation>
@@ -65,6 +71,7 @@
 <translation id="3588820906588687999">Відкрити зображення в новій вкладці</translation>
 <translation id="3601066750251199488">Монстр 3</translation>
 <translation id="3620979700683094848">Сайти можуть автоматично відтворювати відео</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Доступна нова версія Vivaldi!</translation>
 <translation id="3708982624815781692">Завантаження було скасовано.</translation>
 <translation id="3732157130969736834">Помістити посилання в закладки</translation>
@@ -76,6 +83,9 @@
 <translation id="3914946330804881301">Імпортовано з Opera</translation>
 <translation id="3921292902397893431">Монстр 8</translation>
 <translation id="3943857333388298514">Вставити</translation>
+<translation id="3974783668264968389">Vivaldi не міг розблокувати ваше захищене сховище ключів. Без сховища ключів ви втратите збережені логіни, захищені файли cookie, а деякі функції, такі як синхронізація, пошта та календар, перестануть працювати.
+
+    Будь ласка, вийдіть, розблокуйте або полагодіть сховище ключів, а потім повторіть спробу. Якщо ви дійсно хочете продовжити, установіть прапорець і натисніть кнопку "Продовжити зі втратою даних".</translation>
 <translation id="4005270918754737597">Пропустити цю версію</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4074744496918018786">Відкрити зображення в анонімному вікні</translation>
@@ -88,7 +98,6 @@
 <translation id="443008484043213881">Інструменти</translation>
 <translation id="4456211719108566931">Монстр 6</translation>
 <translation id="4512900838580567989">Відкрити посилання у фоновій вкладці</translation>
-<translation id="4515472507709384008">Opera 15+</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Відкрити зображення у фоновій вкладці</translation>
 <translation id="4582480609585453144">Відкрити посилання у фоновій вкладці</translation>
@@ -100,16 +109,17 @@
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> з <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Імпортована Експрес-панель</translation>
 <translation id="5092656712000637858">Додати сторінку на веб-панель</translation>
+<translation id="5106275083540628394">Помилка дешифрування: Ризик втрати даних</translation>
 <translation id="5177818338935286353">Монстр 7</translation>
 <translation id="5213743983876949565">Тварина 1</translation>
 <translation id="5238244642230426581">Імпортовані закладки</translation>
 <translation id="527605719918376753">Вимкнути звук</translation>
 <translation id="5305569355661722298">Підтвердіть закриття вікна</translation>
+<translation id="5322922669477407077">Opera (Developer)</translation>
 <translation id="5388358297987318779">Відкрити зображення</translation>
 <translation id="5416008465899576639">Доступна нова версія Vivaldi.</translation>
 <translation id="5497042274492038489">Підтвердіть закриття вікна</translation>
 <translation id="5594602170491763400">Монстр 5</translation>
-<translation id="5615637589913244581">Opera 15+ (Beta)</translation>
 <translation id="5648110075441906505">Відкрити зображення у новому вікні</translation>
 <translation id="5656371807944747581">Помилка оновлення!</translation>
 <translation id="5732584064771442623">Доступна версія Vivaldi <ph name="NEW_VERSION" /> (у вас встановлено <ph name="OLD_VERSION" />). Бажаєте завантажити зараз?</translation>
@@ -120,8 +130,8 @@
 <translation id="6040143037577758943">Закрити</translation>
 <translation id="6229528619562190452">Натисніть тут, щоб оновити Vivaldi.</translation>
 <translation id="6234173136417926046">Установити як фон Експрес-панелі</translation>
-<translation id="630690498669249215">Файл закладок Opera</translation>
 <translation id="6339818817272922368">Локальний обліковий запис</translation>
+<translation id="6398710281890660037">Захистити мій профіль</translation>
 <translation id="6438786710866753178">Краєвид 4</translation>
 <translation id="6477028720702061455">Виберіть папку профілю Opera для імпорту</translation>
 <translation id="6510706699590490869">Оновити Vivaldi</translation>
@@ -131,11 +141,13 @@
 <translation id="6635049669875534328">Що нового:</translation>
 <translation id="6693585104974197539">Виберіть профіль Edge для імпорту</translation>
 <translation id="6726279523566323394">Виберіть профіль Brave для імпорту</translation>
-<translation id="6804831687363620480">На жаль, налаштування Opera 15+ недоступні, якщо браузер працює. Для імпортування цих налаштувань до Vivaldi, збережіть свої дані та закрийте всі вікна Opera 15+. Потім натисніть "Продовжити".</translation>
 <translation id="6892812721183419409">Відкрити посилання як <ph name="USER" /></translation>
 <translation id="6896758677409633944">Копіювати</translation>
+<translation id="6960139763942959188">Наразі цей профіль зберігається у незашифрованому форматі. Vivaldi збирається оновити ваш профіль до більш безпечного формату. Вам слід зараз вийти та створити резервну копію свого профілю, перш ніж продовжувати.</translation>
 <translation id="7086554968911045110">Краєвид 7</translation>
+<translation id="7099506190679014195">Безпечне оновлення сховища ключів</translation>
 <translation id="7111492742514999492">Краєвид 9</translation>
+<translation id="7208252576848052204">На жаль, налаштування Arc недоступні, коли цей браузер працює. Щоб імпортувати його налаштування до Vivaldi, збережіть свою роботу та закрийте всі вікна Arc. Потім натисніть Продовжити.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Сталася помилка запуску інсталятора. Перевірте наявність вільного місця та пам'яті та спробуйте ще раз.</translation>
 <translation id="7658239707568436148">Скасувати</translation>
@@ -162,7 +174,6 @@
 <translation id="8562339533180097902">Закрити Vivaldi та встановити зараз</translation>
 <translation id="8567452685425968223">Розпакування оновлення...</translation>
 <translation id="8624587806981488221">&amp;Перезавантажити зображення</translation>
-<translation id="864444594187862076">Opera 15+ (Developer)</translation>
 <translation id="8651348004684669199">Додати активну вкладку</translation>
 <translation id="8669345741879513971">Монстр 10</translation>
 <translation id="867544375504146191">Яндекс</translation>
@@ -178,6 +189,7 @@
 <translation id="9048058608784130603">Оновлення готове <ph name="VERSION" /></translation>
 <translation id="9048224371732578627">Дозволено автоматично відтворювати відео</translation>
 <translation id="9065203028668620118">Редагувати</translation>
+<translation id="9090254883741610153">Хочу продовжити</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Відкрити зображення як <ph name="USER" /></translation>
 <translation id="9157539936604258187">Відкрити посилання</translation>

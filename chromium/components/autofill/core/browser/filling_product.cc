@@ -6,6 +6,7 @@
 
 #include "base/notreached.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/ui/popup_item_ids.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
 
 namespace autofill {
@@ -61,19 +62,21 @@ FillingProduct GetFillingProductFromPopupItemId(PopupItemId popup_item_id) {
     case PopupItemId::kAutocompleteEntry:
       return FillingProduct::kAutocomplete;
     case PopupItemId::kPasswordEntry:
-    case PopupItemId::kUsernameEntry:
     case PopupItemId::kAllSavedPasswordsEntry:
     case PopupItemId::kGeneratePasswordEntry:
     case PopupItemId::kPasswordAccountStorageOptIn:
     case PopupItemId::kPasswordAccountStorageOptInAndGenerate:
     case PopupItemId::kAccountStoragePasswordEntry:
-    case PopupItemId::kAccountStorageUsernameEntry:
     case PopupItemId::kPasswordAccountStorageReSignin:
     case PopupItemId::kPasswordAccountStorageEmpty:
     case PopupItemId::kWebauthnCredential:
     case PopupItemId::kWebauthnSignInWithAnotherDevice:
+    case PopupItemId::kPasswordFieldByFieldFilling:
+    case PopupItemId::kFillPassword:
+    case PopupItemId::kViewPasswordDetails:
       return FillingProduct::kPassword;
     case PopupItemId::kCompose:
+    case PopupItemId::kComposeSavedStateNotification:
       return FillingProduct::kCompose;
     case PopupItemId::kCreateNewPlusAddress:
     case PopupItemId::kFillExistingPlusAddress:
@@ -101,7 +104,6 @@ FillingProduct GetFillingProductFromFieldTypeGroup(
     case FieldTypeGroup::kCompany:
     case FieldTypeGroup::kAddress:
     case FieldTypeGroup::kPhone:
-    case FieldTypeGroup::kBirthdateField:
       return FillingProduct::kAddress;
     case FieldTypeGroup::kCreditCard:
       return FillingProduct::kCreditCard;

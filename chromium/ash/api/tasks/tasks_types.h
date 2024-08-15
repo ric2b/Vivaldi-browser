@@ -11,6 +11,7 @@
 
 #include "ash/ash_export.h"
 #include "base/time/time.h"
+#include "url/gurl.h"
 
 namespace ash::api {
 
@@ -42,12 +43,13 @@ struct ASH_EXPORT TaskList {
 struct ASH_EXPORT Task {
   Task(const std::string& id,
        const std::string& title,
-       bool completed,
        const std::optional<base::Time>& due,
+       bool completed,
        bool has_subtasks,
        bool has_email_link,
        bool has_notes,
-       const base::Time& updated);
+       const base::Time& updated,
+       const GURL& web_view_link);
   Task(const Task&) = delete;
   Task& operator=(const Task&) = delete;
   ~Task();
@@ -58,12 +60,12 @@ struct ASH_EXPORT Task {
   // Title of the task.
   std::string title;
 
-  // Indicates whether the task is completed (has "status" field equals to
-  // "completed" on the API side).
-  const bool completed;
-
   // Optional due date of the task.
   const std::optional<base::Time> due;
+
+  // Indicates whether the task is completed (has "status" field equals to
+  // "completed" on the API side).
+  bool completed;
 
   // Indicates whether the task has subtasks in it.
   const bool has_subtasks;
@@ -76,6 +78,9 @@ struct ASH_EXPORT Task {
 
   // When the task was last updated.
   base::Time updated;
+
+  // Absolute link to the task in the Google Tasks Web UI.
+  GURL web_view_link;
 };
 
 }  // namespace ash::api

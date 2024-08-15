@@ -4,7 +4,8 @@
 
 #include "third_party/blink/renderer/core/layout/relative_utils.h"
 
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include <optional>
+
 #include "third_party/blink/renderer/core/layout/constraint_space.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_size.h"
@@ -26,22 +27,22 @@ LogicalOffset ComputeRelativeOffset(
 
   // Helper function to correctly resolve insets.
   auto ResolveInset = [](const Length& length,
-                         LayoutUnit size) -> absl::optional<LayoutUnit> {
+                         LayoutUnit size) -> std::optional<LayoutUnit> {
     if (length.IsAuto())
-      return absl::nullopt;
+      return std::nullopt;
     if (length.IsPercentOrCalc() && size == kIndefiniteSize)
-      return absl::nullopt;
+      return std::nullopt;
     return MinimumValueForLength(length, size);
   };
 
-  absl::optional<LayoutUnit> left =
-      ResolveInset(child_style.UsedLeft(), physical_size.width);
-  absl::optional<LayoutUnit> right =
-      ResolveInset(child_style.UsedRight(), physical_size.width);
-  absl::optional<LayoutUnit> top =
-      ResolveInset(child_style.UsedTop(), physical_size.height);
-  absl::optional<LayoutUnit> bottom =
-      ResolveInset(child_style.UsedBottom(), physical_size.height);
+  std::optional<LayoutUnit> left =
+      ResolveInset(child_style.Left(), physical_size.width);
+  std::optional<LayoutUnit> right =
+      ResolveInset(child_style.Right(), physical_size.width);
+  std::optional<LayoutUnit> top =
+      ResolveInset(child_style.Top(), physical_size.height);
+  std::optional<LayoutUnit> bottom =
+      ResolveInset(child_style.Bottom(), physical_size.height);
 
   // Common case optimization.
   if (!left && !right && !top && !bottom)

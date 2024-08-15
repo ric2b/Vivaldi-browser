@@ -4134,8 +4134,8 @@ TEST_F(CanonicalizeEntryPointIOTest, Return_Struct_Index_Attribute_Spirv) {
 enable chromium_internal_dual_source_blending;
 
 struct FragOutput {
-  @location(0) @index(0) color : vec4<f32>,
-  @location(0) @index(1) blend : vec4<f32>,
+  @location(0) @blend_src(0) color : vec4<f32>,
+  @location(0) @blend_src(1) blend : vec4<f32>,
   @builtin(frag_depth) depth : f32,
   @builtin(sample_mask) mask : u32,
 };
@@ -4154,9 +4154,9 @@ fn frag_main() -> FragOutput {
     auto* expect = R"(
 enable chromium_internal_dual_source_blending;
 
-@location(0) @index(0) @internal(disable_validation__ignore_address_space) var<__out> color_1 : vec4<f32>;
+@location(0) @blend_src(0) @internal(disable_validation__ignore_address_space) var<__out> color_1 : vec4<f32>;
 
-@location(0) @index(1) @internal(disable_validation__ignore_address_space) var<__out> blend_1 : vec4<f32>;
+@location(0) @blend_src(1) @internal(disable_validation__ignore_address_space) var<__out> blend_1 : vec4<f32>;
 
 @builtin(frag_depth) @internal(disable_validation__ignore_address_space) var<__out> depth_1 : f32;
 
@@ -4200,8 +4200,8 @@ TEST_F(CanonicalizeEntryPointIOTest, Return_Struct_Index_Attribute_Msl) {
 enable chromium_internal_dual_source_blending;
 
 struct FragOutput {
-  @location(0) @index(0) color : vec4<f32>,
-  @location(0) @index(1) blend : vec4<f32>,
+  @location(0) @blend_src(0) color : vec4<f32>,
+  @location(0) @blend_src(1) blend : vec4<f32>,
   @builtin(frag_depth) depth : f32,
   @builtin(sample_mask) mask : u32,
 };
@@ -4228,9 +4228,9 @@ struct FragOutput {
 }
 
 struct tint_symbol {
-  @location(0) @index(0)
+  @location(0) @blend_src(0)
   color : vec4<f32>,
-  @location(0) @index(1)
+  @location(0) @blend_src(1)
   blend : vec4<f32>,
   @builtin(frag_depth)
   depth : f32,
@@ -4271,8 +4271,8 @@ TEST_F(CanonicalizeEntryPointIOTest, Return_Struct_Index_Attribute_Hlsl) {
 enable chromium_internal_dual_source_blending;
 
 struct FragOutput {
-  @location(0) @index(0) color : vec4<f32>,
-  @location(0) @index(1) blend : vec4<f32>,
+  @location(0) @blend_src(0) color : vec4<f32>,
+  @location(0) @blend_src(1) blend : vec4<f32>,
   @builtin(frag_depth) depth : f32,
   @builtin(sample_mask) mask : u32,
 };
@@ -4299,9 +4299,9 @@ struct FragOutput {
 }
 
 struct tint_symbol {
-  @location(0) @index(0)
+  @location(0) @blend_src(0)
   color : vec4<f32>,
-  @location(0) @index(1)
+  @location(0) @blend_src(1)
   blend : vec4<f32>,
   @builtin(frag_depth)
   depth : f32,
@@ -4415,6 +4415,61 @@ fn frag_main() {
 
     DataMap data;
     data.Add<CanonicalizeEntryPointIO::Config>(CanonicalizeEntryPointIO::ShaderStyle::kHlsl);
+    auto got = Run<Unshadow, CanonicalizeEntryPointIO>(src, data);
+
+    EXPECT_EQ(expect, str(got));
+}
+
+TEST_F(CanonicalizeEntryPointIOTest, F16_Polyfill_Spirv) {
+    auto* src = R"(
+enable f16;
+
+struct Outputs {
+  @location(1) a : f16,
+  @location(2) b : vec4<f16>,
+}
+
+@fragment
+fn frag_main(@location(1) loc1 : f16,
+             @location(2) loc2 : vec4<f16>) -> Outputs {
+  return Outputs(loc1 * 2, loc2 * 3);
+}
+)";
+
+    auto* expect = R"(
+enable f16;
+
+@location(1) @internal(disable_validation__ignore_address_space) var<__in> loc1_1 : f32;
+
+@location(2) @internal(disable_validation__ignore_address_space) var<__in> loc2_1 : vec4<f32>;
+
+@location(1) @internal(disable_validation__ignore_address_space) var<__out> a_1 : f32;
+
+@location(2) @internal(disable_validation__ignore_address_space) var<__out> b_1 : vec4<f32>;
+
+struct Outputs {
+  a : f16,
+  b : vec4<f16>,
+}
+
+fn frag_main_inner(loc1 : f16, loc2 : vec4<f16>) -> Outputs {
+  return Outputs((loc1 * 2), (loc2 * 3));
+}
+
+@fragment
+fn frag_main() {
+  let inner_result = frag_main_inner(f16(loc1_1), vec4<f16>(loc2_1));
+  a_1 = f32(inner_result.a);
+  b_1 = vec4<f32>(inner_result.b);
+}
+)";
+
+    DataMap data;
+
+    data.Add<CanonicalizeEntryPointIO::Config>(CanonicalizeEntryPointIO::ShaderStyle::kSpirv,
+                                               /* fixed_sample_mask */ 0xFFFFFFFF,
+                                               /* emit_vertex_point_size */ false,
+                                               /* polyfill_f16_io */ true);
     auto got = Run<Unshadow, CanonicalizeEntryPointIO>(src, data);
 
     EXPECT_EQ(expect, str(got));

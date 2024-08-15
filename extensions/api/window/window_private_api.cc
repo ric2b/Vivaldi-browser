@@ -279,7 +279,7 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   using vivaldi::window_private::Create::Params;
   namespace Results = vivaldi::window_private::Create::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   int min_width = 0;
@@ -454,7 +454,7 @@ ExtensionFunction::ResponseAction WindowPrivateGetCurrentIdFunction::Run() {
 ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
   using vivaldi::window_private::SetState::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   Browser* browser;
@@ -526,7 +526,7 @@ ExtensionFunction::ResponseAction
 WindowPrivateUpdateMaximizeButtonPositionFunction::Run() {
   using vivaldi::window_private::UpdateMaximizeButtonPosition::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   Browser* browser;
@@ -551,7 +551,7 @@ ExtensionFunction::ResponseAction
 WindowPrivateGetFocusedElementInfoFunction::Run() {
   using vivaldi::window_private::GetFocusedElementInfo::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
@@ -596,7 +596,7 @@ ExtensionFunction::ResponseAction WindowPrivateIsOnScreenWithNotchFunction::Run(
   namespace Results = vivaldi::window_private::IsOnScreenWithNotch::Results;
   using vivaldi::window_private::IsOnScreenWithNotch::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
@@ -607,6 +607,29 @@ ExtensionFunction::ResponseAction WindowPrivateIsOnScreenWithNotchFunction::Run(
 
   return RespondNow(ArgumentList(
     Results::Create(IsWindowOnScreenWithNotch(window))));
+}
+
+ExtensionFunction::ResponseAction
+WindowPrivateSetControlButtonsPaddingFunction::Run() {
+  using vivaldi::window_private::SetControlButtonsPadding::Params;
+
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  Browser* browser;
+  std::string error;
+  if (!windows_util::GetBrowserFromWindowID(
+          this, params->window_id, WindowController::GetAllWindowFilter(),
+          &browser, &error)) {
+    return RespondNow(Error(error));
+  }
+  VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(browser);
+  if (!window) {
+    return RespondNow(Error("No window for browser."));
+  }
+
+  RequestChange(window->GetNativeWindow(), params->padding);
+  return RespondNow(NoArguments());
 }
 
 }  // namespace extensions

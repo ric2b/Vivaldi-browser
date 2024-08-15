@@ -36,13 +36,13 @@ $VerifiedPlatform linux-armv6l linux-mips64 linux-mips64le linux-mipsle
 $VerifiedPlatform windows-arm64
 
 # vpython.
-infra/tools/luci/vpython/${platform} git_revision:0c1a41fa62950eedcaaee58ba7268d3813871e3f
+infra/tools/luci/vpython3/${platform} git_revision:af9140e6917fb97bf808d8a8962dd4a898065432
 
 # LUCI editor
-infra/tools/luci/led/${platform} git_revision:2d4970c1db4df5cf1cc11355326729c3f8e37407
+infra/tools/luci/led/${platform} git_revision:3533cc64973555e09249964c6efbd8ad8a53f53c
 
 # LUCI config generator
-infra/tools/luci/lucicfg/${platform} git_revision:9827af897b3078e2dd69c9c058c2e76ec8c26dc9
+infra/tools/luci/lucicfg/${platform} git_revision:6a4656842fbff0654cb743b53ac95a9b5986509f
 
 # Mac toolchain installer
 infra/tools/mac_toolchain/${os=mac}-${arch} git_revision:05fe195bf77656743f3daa99d463a794260b429b
@@ -54,10 +54,10 @@ infra/tools/prpc/${platform} git_revision:bd3a982ae62b4820b71414b2340e86019a1fbd
 infra/tools/luci-auth/${platform} git_revision:bd3a982ae62b4820b71414b2340e86019a1fbd26
 
 # LUCI Buildbucket CLI
-infra/tools/bb/${platform} git_revision:bd3a982ae62b4820b71414b2340e86019a1fbd26
+infra/tools/bb/${platform} git_revision:b1ef34e3c86269b1261ccbc039ff2cfe3baaa961
 
 # LUCI ResultDB CLI
-infra/tools/rdb/${platform} git_revision:bd3a982ae62b4820b71414b2340e86019a1fbd26
+infra/tools/rdb/${platform} git_revision:cbcb6b9a7008e31d33674b1ce0023db5d018b149
 
 # CHROMEOS Buildjobs CLI
 chromiumos/infra/crosjobs/${platform=linux-amd64} git_revision:ed616d595eb7241d39d34907050d2949121d6ae8
@@ -67,7 +67,7 @@ infra/goma/client/${os=linux,windows}-${arch=amd64} git_revision:603dfba63fe365a
 infra/goma/client/${os=mac}-${arch} git_revision:603dfba63fe365a01879029588b48b6f122fe0b8
 
 # dirmd, a tool to work with DIR_METADATA files
-infra/tools/dirmd/${platform} git_revision:30d0d5f1f2f78aa7ed067542e73f260fdf349954
+infra/tools/dirmd/${platform} git_revision:9558e2c2dc002209753b8e61b83c4a2c81361fbc
 
 # Pinpoint CLI
 infra/chromeperf/pinpoint/${platform} git_revision:bd3a982ae62b4820b71414b2340e86019a1fbd26

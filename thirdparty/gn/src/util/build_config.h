@@ -76,7 +76,7 @@
 #if defined(OS_AIX) || defined(OS_ANDROID) || defined(OS_ASMJS) ||    \
     defined(OS_FREEBSD) || defined(OS_LINUX) || defined(OS_MACOSX) || \
     defined(OS_NACL) || defined(OS_NETBSD) || defined(OS_OPENBSD) ||  \
-    defined(OS_QNX) || defined(OS_SOLARIS) || defined(OS_HAIKU) || \
+    defined(OS_QNX) || defined(OS_SOLARIS) || defined(OS_HAIKU) ||    \
     defined(OS_MSYS) || defined(OS_ZOS) || defined(OS_SERENITY)
 #define OS_POSIX 1
 #endif

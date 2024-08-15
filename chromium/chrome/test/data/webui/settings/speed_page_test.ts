@@ -6,9 +6,11 @@ import 'chrome://settings/lazy_load.js';
 
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {NetworkPredictionOptions} from 'chrome://settings/lazy_load.js';
-import {CrSettingsPrefs, SettingsPrefsElement, SpeedPageElement} from 'chrome://settings/settings.js';
+import type {SettingsPrefsElement, SpeedPageElement} from 'chrome://settings/settings.js';
+import {CrSettingsPrefs} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {FakeSettingsPrivate} from 'chrome://webui-test/fake_settings_private.js';
+import {eventToPromise, microtasksFinished} from 'chrome://webui-test/test_util.js';
 
 suite('SpeedPage', function() {
   function getFakePrefs() {
@@ -32,20 +34,20 @@ suite('SpeedPage', function() {
     CrSettingsPrefs.deferInitialization = true;
   });
 
-  setup(function() {
+  setup(async () => {
     settingsPrefs = document.createElement('settings-prefs');
-    const settingsPrivate = new FakeSettingsPrivate(getFakePrefs()) as
-        unknown as typeof chrome.settingsPrivate;
+    const settingsPrivate = new FakeSettingsPrivate(getFakePrefs());
     settingsPrefs.initialize(settingsPrivate);
 
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
 
     // Wait until settings are initialized to start tests.
-    return CrSettingsPrefs.initialized.then(() => {
-      speedPage = document.createElement('settings-speed-page');
-      speedPage.prefs = settingsPrefs.prefs!;
-      document.body.appendChild(speedPage);
-    });
+    await CrSettingsPrefs.initialized;
+
+    speedPage = document.createElement('settings-speed-page');
+    speedPage.prefs = settingsPrefs.prefs!;
+    document.body.appendChild(speedPage);
+    await microtasksFinished();
   });
 
   test('testPreloadPagesDefault', function() {
@@ -81,14 +83,14 @@ suite('SpeedPage', function() {
     assertTrue(speedPage.$.preloadingStandard.expanded);
   });
 
-  test('testPreloadPagesStandardFromExtended', function() {
+  test('testPreloadPagesStandardFromExtended', async () => {
     // STANDARD is the default value, so this changes the pref to ensure that
     // clicking preloadingToggle actually updates the underlying pref.
     speedPage.setPrefValue(
         'net.network_prediction_options', NetworkPredictionOptions.EXTENDED);
 
     speedPage.$.preloadingStandard.click();
-    flush();
+    await eventToPromise('selected-changed', speedPage.$.preloadingRadioGroup);
 
     assertEquals(
         NetworkPredictionOptions.STANDARD,
@@ -97,9 +99,9 @@ suite('SpeedPage', function() {
     assertTrue(speedPage.$.preloadingStandard.expanded);
   });
 
-  test('testPreloadPagesExtended', function() {
+  test('testPreloadPagesExtended', async () => {
     speedPage.$.preloadingExtended.click();
-    flush();
+    await eventToPromise('selected-changed', speedPage.$.preloadingRadioGroup);
 
     assertEquals(
         NetworkPredictionOptions.EXTENDED,
@@ -108,31 +110,33 @@ suite('SpeedPage', function() {
     assertTrue(speedPage.$.preloadingExtended.expanded);
   });
 
-  test('testPreloadPagesStandardExpand', function() {
+  test('testPreloadPagesStandardExpand', async function() {
     // By default, the preloadingStandard option will be selected and collapsed.
     assertFalse(speedPage.$.preloadingStandard.expanded);
 
-    speedPage.$.preloadingStandard.$.expandButton.click();
-    flush();
+    const expandButton = speedPage.$.preloadingStandard.$.expandButton;
+    expandButton.click();
+    await expandButton.updateComplete;
 
     assertTrue(speedPage.$.preloadingStandard.expanded);
 
-    speedPage.$.preloadingStandard.$.expandButton.click();
-    flush();
+    expandButton.click();
+    await expandButton.updateComplete;
 
     assertFalse(speedPage.$.preloadingStandard.expanded);
   });
 
-  test('testPreloadPagesExtendedExpand', function() {
+  test('testPreloadPagesExtendedExpand', async function() {
     assertFalse(speedPage.$.preloadingExtended.expanded);
 
-    speedPage.$.preloadingExtended.$.expandButton.click();
-    flush();
+    const expandButton = speedPage.$.preloadingExtended.$.expandButton;
+    expandButton.click();
+    await expandButton.updateComplete;
 
     assertTrue(speedPage.$.preloadingExtended.expanded);
 
-    speedPage.$.preloadingExtended.$.expandButton.click();
-    flush();
+    expandButton.click();
+    await expandButton.updateComplete;
 
     assertFalse(speedPage.$.preloadingExtended.expanded);
   });

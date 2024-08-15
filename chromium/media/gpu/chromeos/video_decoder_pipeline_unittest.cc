@@ -65,11 +65,12 @@ class MockVideoFramePool : public DmabufVideoFramePool {
                                               size_t,
                                               bool,
                                               bool));
-  MOCK_METHOD0(GetFrame, scoped_refptr<VideoFrame>());
+  MOCK_METHOD0(GetFrame, scoped_refptr<FrameResource>());
+  MOCK_CONST_METHOD0(GetFrameStorageType, VideoFrame::StorageType());
   MOCK_METHOD0(IsExhausted, bool());
   MOCK_METHOD1(NotifyWhenFrameAvailable, void(base::OnceClosure));
   MOCK_METHOD0(ReleaseAllFrames, void());
-  MOCK_METHOD0(GetGpuBufferLayout, absl::optional<GpuBufferLayout>());
+  MOCK_METHOD0(GetGpuBufferLayout, std::optional<GpuBufferLayout>());
 
   bool IsFakeVideoFramePool() override { return true; }
 };
@@ -87,7 +88,7 @@ class MockDecoder : public VideoDecoderMixin {
                     bool,
                     CdmContext*,
                     InitCB,
-                    const OutputCB&,
+                    const PipelineOutputCB&,
                     const WaitingCB&));
   MOCK_METHOD2(Decode, void(scoped_refptr<DecoderBuffer>, DecodeCB));
   MOCK_METHOD1(Reset, void(base::OnceClosure));
@@ -214,6 +215,7 @@ class VideoDecoderPipelineTest
   ~VideoDecoderPipelineTest() override = default;
 
   void TearDown() override {
+    pool_ = nullptr;
     VideoDecoderPipeline::DestroyAsync(std::move(decoder_));
     task_environment_.RunUntilIdle();
   }
@@ -922,9 +924,9 @@ TEST_F(VideoDecoderPipelineTest, PickDecoderOutputFormat) {
     auto status_or_chosen_candidate = decoder_->PickDecoderOutputFormat(
         test_vector.input_candidates, kVisibleRect,
         /*decoder_natural_size=*/kVisibleRect.size(),
-        /*output_size=*/absl::nullopt,
+        /*output_size=*/std::nullopt,
         /*num_codec_reference_frames=*/kNumCodecReferenceFrames,
-        /*use_protected=*/false, /*need_aux_frame_pool=*/false, absl::nullopt);
+        /*use_protected=*/false, /*need_aux_frame_pool=*/false, std::nullopt);
     ASSERT_TRUE(status_or_chosen_candidate.has_value());
     const PixelLayoutCandidate chosen_candidate =
         std::move(status_or_chosen_candidate).value();
@@ -981,9 +983,9 @@ TEST_F(VideoDecoderPipelineTest, PickDecoderOutputFormatLinearModifier) {
   auto status_or_chosen_candidate = decoder_->PickDecoderOutputFormat(
       {candidate}, kVisibleRect,
       /*decoder_natural_size=*/kVisibleRect.size(),
-      /*output_size=*/absl::nullopt,
+      /*output_size=*/std::nullopt,
       /*num_codec_reference_frames=*/kNumCodecReferenceFrames,
-      /*use_protected=*/false, /*need_aux_frame_pool=*/false, absl::nullopt);
+      /*use_protected=*/false, /*need_aux_frame_pool=*/false, std::nullopt);
 
   EXPECT_TRUE(status_or_chosen_candidate.has_value());
   // Main concern is that the image processor was set.
@@ -1015,9 +1017,9 @@ TEST_F(VideoDecoderPipelineTest, PickDecoderOutputFormatUnsupportedModifier) {
   auto status_or_chosen_candidate = decoder_->PickDecoderOutputFormat(
       {candidate}, kVisibleRect,
       /*decoder_natural_size=*/kVisibleRect.size(),
-      /*output_size=*/absl::nullopt,
+      /*output_size=*/std::nullopt,
       /*num_codec_reference_frames=*/kNumCodecReferenceFrames,
-      /*use_protected=*/false, /*need_aux_frame_pool=*/false, absl::nullopt);
+      /*use_protected=*/false, /*need_aux_frame_pool=*/false, std::nullopt);
 
   EXPECT_FALSE(status_or_chosen_candidate.has_value());
   EXPECT_FALSE(DecoderHasImageProcessor());

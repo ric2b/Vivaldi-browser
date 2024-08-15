@@ -48,6 +48,7 @@ class Widget;
 
 namespace ash {
 
+class BirchBarController;
 class OverviewDelegate;
 class OverviewGrid;
 class OverviewFocusCycler;
@@ -136,7 +137,6 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
 
   // Similar to the above function, but adds the window at the end of the grid.
   // This will use the spawn-item animation.
-  // TODO(afakhry): Expose |use_spawn_animation| if needed.
   void AppendItem(aura::Window* window, bool reposition, bool animate);
 
   // Like |AddItem|, but adds |window| at the correct position according to MRU
@@ -344,6 +344,7 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
 
   // ui::EventHandler:
   void OnMouseEvent(ui::MouseEvent* event) override;
+  void OnTouchEvent(ui::TouchEvent* event) override;
   void OnKeyEvent(ui::KeyEvent* event) override;
 
   // ShellObserver:
@@ -409,6 +410,10 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
     return float_container_stacker_.get();
   }
 
+  BirchBarController* birch_bar_controller() {
+    return birch_bar_controller_.get();
+  }
+
   void set_auto_add_windows_enabled(bool enabled) {
     auto_add_windows_enabled_ = enabled;
   }
@@ -442,12 +447,12 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   // Updates the no windows widget on each `OverviewGrid`.
   void UpdateNoWindowsWidgetOnEachGrid(bool animate, bool is_continuous_enter);
 
-  // Refreshes the bounds of the no windows widget on each OverviewGrid.
-  void RefreshNoWindowsWidgetBoundsOnEachGrid(bool animate);
-
   void OnItemAdded(aura::Window* window);
 
   size_t GetNumWindows() const;
+
+  // Let `SplitViewOverviewSession` handle the `event` if it is alive.
+  void MaybeDelegateEventToSplitViewOverviewSession(ui::LocatedEvent* event);
 
   // Weak pointer to the overview delegate which will be called when a selection
   // is made.
@@ -527,6 +532,9 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   // overview so it can appear under regular windows during several operations,
   // such as scrolling and dragging.
   std::unique_ptr<ScopedFloatContainerStacker> float_container_stacker_;
+
+  // The controller to manage the birch bars.
+  std::unique_ptr<BirchBarController> birch_bar_controller_;
 
   // Boolean to indicate whether chromeVox is enabled or not.
   bool chromevox_enabled_;

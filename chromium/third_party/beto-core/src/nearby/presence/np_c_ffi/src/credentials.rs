@@ -16,9 +16,14 @@
 use crate::{unwrap, PanicReason};
 use core::slice;
 use np_ffi_core::common::*;
-use np_ffi_core::credentials::credential_book::CredentialBook;
-use np_ffi_core::credentials::credential_slab::CredentialSlab;
+use np_ffi_core::credentials::CredentialBook;
+use np_ffi_core::credentials::CredentialSlab;
 use np_ffi_core::credentials::*;
+use np_ffi_core::deserialize::DecryptedMetadata;
+use np_ffi_core::deserialize::{
+    DecryptMetadataResult, DecryptMetadataResultKind, GetMetadataBufferPartsResult,
+    GetMetadataBufferPartsResultKind, MetadataBufferParts,
+};
 use np_ffi_core::utils::FfiEnum;
 
 /// Allocates a new credential-book from the given slab, returning a handle
@@ -122,7 +127,7 @@ pub struct FfiMatchedCredential {
 pub extern "C" fn np_ffi_CredentialSlab_add_v0_credential(
     credential_slab: CredentialSlab,
     v0_cred: V0MatchableCredential,
-) -> AddCredentialToSlabResult {
+) -> AddV0CredentialToSlabResult {
     #[allow(unsafe_code)]
     let metadata_slice = unsafe {
         slice::from_raw_parts(
@@ -145,7 +150,7 @@ pub extern "C" fn np_ffi_CredentialSlab_add_v0_credential(
 pub extern "C" fn np_ffi_CredentialSlab_add_v1_credential(
     credential_slab: CredentialSlab,
     v1_cred: V1MatchableCredential,
-) -> AddCredentialToSlabResult {
+) -> AddV1CredentialToSlabResult {
     #[allow(unsafe_code)]
     let metadata_slice = unsafe {
         slice::from_raw_parts(
@@ -156,4 +161,58 @@ pub extern "C" fn np_ffi_CredentialSlab_add_v1_credential(
 
     let matched_credential = MatchedCredential::new(v1_cred.matched_cred.cred_id, metadata_slice);
     credential_slab.add_v1(v1_cred.discovery_cred, matched_credential)
+}
+
+/// Frees the underlying resources of the decrypted metadata buffer
+#[no_mangle]
+pub extern "C" fn np_ffi_deallocate_DecryptedMetadata(
+    metadata: DecryptedMetadata,
+) -> DeallocateResult {
+    metadata.deallocate_metadata()
+}
+
+/// Gets the tag of a `DecryptMetadataResult` tagged-union. On success the wrapped identity
+/// details may be obtained via `DecryptMetadataResult#into_success`.
+#[no_mangle]
+pub extern "C" fn np_ffi_DecryptMetadataResult_kind(
+    result: DecryptMetadataResult,
+) -> DecryptMetadataResultKind {
+    result.kind()
+}
+
+/// Casts a `DecryptMetadataResult` to the `Success` variant, panicking in the
+/// case where the passed value is of a different enum variant.
+#[no_mangle]
+pub extern "C" fn np_ffi_DecryptMetadataResult_into_SUCCESS(
+    result: DecryptMetadataResult,
+) -> DecryptedMetadata {
+    unwrap(result.into_success(), PanicReason::EnumCastFailed)
+}
+
+/// Gets the pointer and length of the heap allocated byte buffer of decrypted metadata
+#[no_mangle]
+pub extern "C" fn np_ffi_DecryptedMetadata_get_metadata_buffer_parts(
+    metadata: DecryptedMetadata,
+) -> GetMetadataBufferPartsResult {
+    metadata.get_metadata_buffer_parts()
+}
+
+/// Gets the tag of a `GetMetadataBufferPartsResult` tagged-union. On success the wrapped identity
+/// details may be obtained via `GetMetadataBufferPartsResult#into_success`.
+#[no_mangle]
+pub extern "C" fn np_ffi_GetMetadataBufferPartsResult_kind(
+    result: GetMetadataBufferPartsResult,
+) -> GetMetadataBufferPartsResultKind {
+    result.kind()
+}
+
+/// Casts a `GetMetadataBufferPartsResult` to the `Success` variant, panicking in the
+/// case where the passed value is of a different enum variant. This returns the pointer and length
+/// of the byte buffer containing the decrypted metadata.  There can be a data-race between attempts
+/// to access the contents of the buffer and attempts to free the handle from different threads.
+#[no_mangle]
+pub extern "C" fn np_ffi_GetMetadataBufferPartsResult_into_SUCCESS(
+    result: GetMetadataBufferPartsResult,
+) -> MetadataBufferParts {
+    unwrap(result.into_success(), PanicReason::EnumCastFailed)
 }

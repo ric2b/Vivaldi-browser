@@ -802,6 +802,8 @@ bool AcceleratorControllerImpl::CanPerformAction(
     case AcceleratorAction::kScaleUiReset:
     case AcceleratorAction::kScaleUiUp:
       return true;
+    case AcceleratorAction::kTogglePicker:
+      return accelerators::CanTogglePicker();
     case AcceleratorAction::kToggleStylusTools:
       return accelerators::CanShowStylusTools();
     case AcceleratorAction::kStartAssistant:
@@ -1302,6 +1304,9 @@ void AcceleratorControllerImpl::PerformAction(
       base::RecordAction(UserMetricsAction("Accel_Show_Ime_Menu_Bubble"));
       accelerators::ToggleImeMenuBubble();
       break;
+    case AcceleratorAction::kTogglePicker:
+      accelerators::TogglePicker(accelerator.time_stamp());
+      break;
     case AcceleratorAction::kToggleProjectorMarker:
       accelerators::ToggleProjectorMarker();
       break;
@@ -1630,7 +1635,12 @@ void AcceleratorControllerImpl::PerformDebugActionOnDelegateIfEnabled(
     case AcceleratorAction::kDebugPrintLayerHierarchy:
       debug_delegate_->PrintLayerHierarchy();
       break;
-    // TODO(ythjkt): Add PrintWindowHierarchy and PrintViewHierarchy.
+    case AcceleratorAction::kDebugPrintWindowHierarchy:
+      debug_delegate_->PrintWindowHierarchy();
+      break;
+    case AcceleratorAction::kDebugPrintViewHierarchy:
+      debug_delegate_->PrintViewHierarchy();
+      break;
     default:
       break;
   }

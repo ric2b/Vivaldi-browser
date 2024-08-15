@@ -158,17 +158,8 @@ base::span<const PageInfoUI::PermissionUIInfo> GetContentSettingsUIInfo() {
       {ContentSettingsType::AUTOMATIC_DOWNLOADS,
        IDS_SITE_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
        IDS_SITE_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS_MID_SENTENCE},
-      {ContentSettingsType::MIDI, IDS_SITE_SETTINGS_TYPE_MIDI,
-       IDS_SITE_SETTINGS_TYPE_MIDI_MID_SENTENCE},
-      {
-          ContentSettingsType::MIDI_SYSEX,
-          base::FeatureList::IsEnabled(features::kBlockMidiByDefault)
-              ? IDS_SITE_SETTINGS_TYPE_MIDI_SYSEX
-              : IDS_SITE_SETTINGS_TYPE_MIDI,
-          base::FeatureList::IsEnabled(features::kBlockMidiByDefault)
-              ? IDS_SITE_SETTINGS_TYPE_MIDI_SYSEX_MID_SENTENCE
-              : IDS_SITE_SETTINGS_TYPE_MIDI_MID_SENTENCE,
-      },
+      {ContentSettingsType::MIDI_SYSEX, IDS_SITE_SETTINGS_TYPE_MIDI_SYSEX,
+       IDS_SITE_SETTINGS_TYPE_MIDI_SYSEX_MID_SENTENCE},
       {ContentSettingsType::BACKGROUND_SYNC,
        IDS_SITE_SETTINGS_TYPE_BACKGROUND_SYNC,
        IDS_SITE_SETTINGS_TYPE_BACKGROUND_SYNC_MID_SENTENCE},
@@ -219,6 +210,9 @@ base::span<const PageInfoUI::PermissionUIInfo> GetContentSettingsUIInfo() {
       {ContentSettingsType::STORAGE_ACCESS,
        IDS_SITE_SETTINGS_TYPE_STORAGE_ACCESS,
        IDS_SITE_SETTINGS_TYPE_STORAGE_ACCESS_MID_SENTENCE},
+      {ContentSettingsType::AUTOMATIC_FULLSCREEN,
+       IDS_SITE_SETTINGS_TYPE_AUTOMATIC_FULLSCREEN,
+       IDS_SITE_SETTINGS_TYPE_AUTOMATIC_FULLSCREEN_MID_SENTENCE},
 #if !BUILDFLAG(IS_ANDROID)
       // Page Info Permissions that are not defined in Android.
       {ContentSettingsType::AUTO_PICTURE_IN_PICTURE,
@@ -339,9 +333,6 @@ std::u16string GetPermissionAskStateString(ContentSettingsType type) {
       break;
     case ContentSettingsType::NOTIFICATIONS:
       message_id = IDS_PAGE_INFO_STATE_TEXT_NOTIFICATIONS_ASK;
-      break;
-    case ContentSettingsType::MIDI:
-      message_id = IDS_PAGE_INFO_STATE_TEXT_MIDI_ASK;
       break;
     case ContentSettingsType::MIDI_SYSEX:
       message_id = IDS_PAGE_INFO_STATE_TEXT_MIDI_SYSEX_ASK;
@@ -652,7 +643,7 @@ std::u16string PageInfoUI::PermissionTypeToUIStringMidSentence(
 // static
 std::u16string PageInfoUI::PermissionTooltipUiString(
     ContentSettingsType type,
-    const absl::optional<url::Origin>& requesting_origin) {
+    const std::optional<url::Origin>& requesting_origin) {
   switch (type) {
     case ContentSettingsType::STORAGE_ACCESS:
       return l10n_util::GetStringFUTF16(
@@ -869,7 +860,7 @@ std::u16string PageInfoUI::PermissionAutoBlockedToUIString(
               permission.type);
       permission_result = delegate->GetPermissionResult(permission_type);
     } else if (permission.type == ContentSettingsType::FEDERATED_IDENTITY_API) {
-      absl::optional<content::PermissionResult> embargo_result =
+      std::optional<content::PermissionResult> embargo_result =
           delegate->GetEmbargoResult(permission.type);
       if (embargo_result)
         permission_result = *embargo_result;
@@ -903,10 +894,12 @@ void PageInfoUI::ToggleBetweenAllowAndBlock(
       DCHECK_EQ(opposite_to_block_setting, CONTENT_SETTING_ALLOW);
       SetTargetContentSetting(permission, CONTENT_SETTING_BLOCK);
       permission.is_one_time = false;
+      permission.is_in_use = false;
       break;
     case CONTENT_SETTING_BLOCK:
       SetTargetContentSetting(permission, opposite_to_block_setting);
       permission.is_one_time = false;
+      permission.is_in_use = false;
       break;
     case CONTENT_SETTING_DEFAULT: {
       CreateOppositeToDefaultSiteException(permission,
@@ -918,6 +911,7 @@ void PageInfoUI::ToggleBetweenAllowAndBlock(
               permission.type)) {
         permission.is_one_time = true;
       }
+      permission.is_in_use = false;
       break;
     }
     case CONTENT_SETTING_ASK:

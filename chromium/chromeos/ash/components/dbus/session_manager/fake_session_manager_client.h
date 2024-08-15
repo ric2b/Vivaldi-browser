@@ -195,6 +195,11 @@ class COMPONENT_EXPORT(SESSION_MANAGER) FakeSessionManagerClient
   // Notify observers about the session stopping.
   void NotifySessionStopping() const;
 
+  // Configures state key retrieval error used to satisfy
+  // GetServerBackedStateKeys() requests. Only available for
+  // PolicyStorageType::kInMemory.
+  void SetServerBackedStateKeyError(const StateKeyErrorType error_type);
+
   // Sets whether FakeSessionManagerClient should advertise (through
   // |SupportsBrowserRestart|) that it supports restarting Chrome. For example,
   // to apply user-session flags, or to start guest session.
@@ -392,10 +397,11 @@ class COMPONENT_EXPORT(SESSION_MANAGER) FakeSessionManagerClient
   // Callback that will be run, if set, when StopSession() is called.
   base::OnceClosure stop_session_callback_;
 
-  base::ObserverList<Observer>::Unchecked observers_{
+  base::ObserverList<Observer>::UncheckedAndDanglingUntriaged observers_{
       SessionManagerClient::kObserverListPolicy};
   SessionManagerClient::ActiveSessionsMap user_sessions_;
-  std::vector<std::string> server_backed_state_keys_;
+  base::expected<std::vector<std::string>, StateKeyErrorType>
+      server_backed_state_keys_;
 
   std::string psm_device_active_secret_;
 

@@ -8,6 +8,7 @@
 
 #include "base/check_op.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/time/default_tick_clock.h"
 #include "components/performance_manager/graph/frame_node_impl.h"
 #include "components/performance_manager/graph/graph_impl.h"
@@ -132,13 +133,13 @@ bool PageNodeImpl::IsAudible() const {
   return is_audible_.value();
 }
 
-absl::optional<base::TimeDelta> PageNodeImpl::GetTimeSinceLastAudibleChange()
+std::optional<base::TimeDelta> PageNodeImpl::GetTimeSinceLastAudibleChange()
     const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (audible_change_time_.has_value()) {
     return base::TimeTicks::Now() - audible_change_time_.value();
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 bool PageNodeImpl::HasPictureInPicture() const {
@@ -179,6 +180,12 @@ int64_t PageNodeImpl::GetNavigationID() const {
 const std::string& PageNodeImpl::GetContentsMimeType() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return contents_mime_type_;
+}
+
+std::optional<blink::mojom::PermissionStatus>
+PageNodeImpl::GetNotificationPermissionStatus() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return notification_permission_status_;
 }
 
 base::TimeDelta PageNodeImpl::GetTimeSinceLastNavigation() const {
@@ -222,7 +229,7 @@ const WebContentsProxy& PageNodeImpl::GetContentsProxy() const {
   return contents_proxy();
 }
 
-const absl::optional<freezing::FreezingVote>& PageNodeImpl::GetFreezingVote()
+const std::optional<freezing::FreezingVote>& PageNodeImpl::GetFreezingVote()
     const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return freezing_vote_.value();
@@ -370,7 +377,9 @@ void PageNodeImpl::OnMainFrameNavigationCommitted(
     base::TimeTicks navigation_committed_time,
     int64_t navigation_id,
     const GURL& url,
-    const std::string& contents_mime_type) {
+    const std::string& contents_mime_type,
+    std::optional<blink::mojom::PermissionStatus>
+        notification_permission_status) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // This should never be invoked with a null navigation, nor should it be
   // called twice for the same navigation.
@@ -379,6 +388,7 @@ void PageNodeImpl::OnMainFrameNavigationCommitted(
   navigation_committed_time_ = navigation_committed_time;
   navigation_id_ = navigation_id;
   contents_mime_type_ = contents_mime_type;
+  notification_permission_status_ = notification_permission_status;
   main_frame_url_.SetAndMaybeNotify(this, url);
 
   // No mainframe document change notification on same-document navigations.
@@ -387,6 +397,12 @@ void PageNodeImpl::OnMainFrameNavigationCommitted(
 
   for (auto* observer : GetObservers())
     observer->OnMainFrameDocumentChanged(this);
+}
+
+void PageNodeImpl::OnNotificationPermissionStatusChange(
+    blink::mojom::PermissionStatus permission_status) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  notification_permission_status_ = permission_status;
 }
 
 FrameNodeImpl* PageNodeImpl::opener_frame_node() const {
@@ -407,7 +423,7 @@ FrameNodeImpl* PageNodeImpl::main_frame_node() const {
 
   // Return the current frame node if there is one. Iterating over this set is
   // fine because it is almost always of length 1 or 2.
-  for (auto* frame : main_frame_nodes_) {
+  for (FrameNodeImpl* frame : main_frame_nodes_) {
     if (frame->IsCurrent()) {
       return frame;
     }
@@ -417,7 +433,8 @@ FrameNodeImpl* PageNodeImpl::main_frame_node() const {
   return *main_frame_nodes_.begin();
 }
 
-const base::flat_set<FrameNodeImpl*>& PageNodeImpl::main_frame_nodes() const {
+const base::flat_set<raw_ptr<FrameNodeImpl, CtnExperimental>>&
+PageNodeImpl::main_frame_nodes() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return main_frame_nodes_;
 }
@@ -498,7 +515,7 @@ void PageNodeImpl::set_has_nonempty_beforeunload(
 }
 
 void PageNodeImpl::set_freezing_vote(
-    absl::optional<freezing::FreezingVote> freezing_vote) {
+    std::optional<freezing::FreezingVote> freezing_vote) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   freezing_vote_.SetAndMaybeNotify(this, freezing_vote);
 }
@@ -514,15 +531,8 @@ void PageNodeImpl::OnJoiningGraph() {
 
   // Make sure all weak pointers, even `weak_this_` that was created on the UI
   // thread in the constructor, can only be dereferenced on the graph sequence.
-  //
-  // If this is the first pointer dereferenced, it will bind all pointers from
-  // `weak_factory_` to the current sequence. If not, get() will DCHECK.
-  // DCHECK'ing the return value of get() prevents the compiler from optimizing
-  // it away.
-  //
-  // TODO(crbug.com/1134162): Use WeakPtrFactory::BindToCurrentSequence for this
-  // (it's clearer but currently not exposed publicly).
-  DCHECK(GetWeakPtr().get());
+  weak_factory_.BindToCurrentSequence(
+      base::subtle::BindWeakPtrFactoryPassKey());
 }
 
 void PageNodeImpl::OnBeforeLeavingGraph() {
@@ -564,7 +574,7 @@ const FrameNode* PageNodeImpl::GetMainFrameNode() const {
 
 bool PageNodeImpl::VisitMainFrameNodes(const FrameNodeVisitor& visitor) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  for (auto* frame_impl : main_frame_nodes_) {
+  for (FrameNodeImpl* frame_impl : main_frame_nodes_) {
     const FrameNode* frame = frame_impl;
     if (!visitor(frame)) {
       return false;
@@ -573,10 +583,11 @@ bool PageNodeImpl::VisitMainFrameNodes(const FrameNodeVisitor& visitor) const {
   return true;
 }
 
-const base::flat_set<const FrameNode*> PageNodeImpl::GetMainFrameNodes() const {
+const base::flat_set<raw_ptr<const FrameNode, CtnExperimental>>
+PageNodeImpl::GetMainFrameNodes() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  base::flat_set<const FrameNode*> main_frame_nodes(main_frame_nodes_.begin(),
-                                                    main_frame_nodes_.end());
+  base::flat_set<raw_ptr<const FrameNode, CtnExperimental>> main_frame_nodes(
+      main_frame_nodes_.begin(), main_frame_nodes_.end());
   return main_frame_nodes;
 }
 

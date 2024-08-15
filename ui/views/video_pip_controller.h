@@ -42,7 +42,7 @@ class VideoPIPController
 
   // Seek forward or backwards by the given seconds
   void Seek(int seconds);
-  absl::optional<media_session::MediaPosition> GetPosition() {
+  std::optional<media_session::MediaPosition> GetPosition() {
     return position_;
   }
 
@@ -52,16 +52,16 @@ class VideoPIPController
 
   // media_session::mojom::MediaControllerObserver:
   void MediaSessionPositionChanged(
-      const absl::optional<media_session::MediaPosition>& position) override;
+      const std::optional<media_session::MediaPosition>& position) override;
   void MediaSessionActionsChanged(
       const std::vector<media_session::mojom::MediaSessionAction>& action)
       override;
   void MediaSessionInfoChanged(
       media_session::mojom::MediaSessionInfoPtr session_info) override {}
   void MediaSessionMetadataChanged(
-      const absl::optional<media_session::MediaMetadata>&) override {}
+      const std::optional<media_session::MediaMetadata>&) override {}
   void MediaSessionChanged(
-      const absl::optional<base::UnguessableToken>& request_id) override {}
+      const std::optional<base::UnguessableToken>& request_id) override {}
 
   // content::WebContentsObserver:
   void WebContentsDestroyed() override;
@@ -79,7 +79,7 @@ class VideoPIPController
  private:
   // Used to control the active session.
   mojo::Remote<media_session::mojom::MediaController> media_controller_remote_;
-  absl::optional<media_session::MediaPosition> position_;
+  std::optional<media_session::MediaPosition> position_;
   mojo::Receiver<media_session::mojom::MediaControllerObserver>
       media_controller_observer_receiver_{this};
   raw_ptr<Delegate> delegate_ = nullptr;

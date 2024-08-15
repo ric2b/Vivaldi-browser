@@ -30,14 +30,16 @@
 #import "ios/chrome/browser/commerce/model/shopping_persisted_data_tab_helper.h"
 #import "ios/chrome/browser/commerce/model/shopping_service_factory.h"
 #import "ios/chrome/browser/complex_tasks/model/ios_task_tab_helper.h"
+#import "ios/chrome/browser/contextual_panel/model/contextual_panel_tab_helper.h"
 #import "ios/chrome/browser/crash_report/model/breadcrumbs/breadcrumb_manager_tab_helper.h"
 #import "ios/chrome/browser/download/model/ar_quick_look_tab_helper.h"
+#import "ios/chrome/browser/download/model/document_download_tab_helper.h"
 #import "ios/chrome/browser/download/model/download_manager_tab_helper.h"
 #import "ios/chrome/browser/download/model/pass_kit_tab_helper.h"
 #import "ios/chrome/browser/download/model/safari_download_tab_helper.h"
 #import "ios/chrome/browser/download/model/vcard_tab_helper.h"
 #import "ios/chrome/browser/drive/model/drive_tab_helper.h"
-#import "ios/chrome/browser/favicon/favicon_service_factory.h"
+#import "ios/chrome/browser/favicon/model/favicon_service_factory.h"
 #import "ios/chrome/browser/find_in_page/model/find_tab_helper.h"
 #import "ios/chrome/browser/find_in_page/model/java_script_find_tab_helper.h"
 #import "ios/chrome/browser/find_in_page/model/util.h"
@@ -62,6 +64,7 @@
 #import "ios/chrome/browser/optimization_guide/model/optimization_guide_tab_helper.h"
 #import "ios/chrome/browser/optimization_guide/model/optimization_guide_validation_tab_helper.h"
 #import "ios/chrome/browser/overscroll_actions/model/overscroll_actions_tab_helper.h"
+#import "ios/chrome/browser/page_info/about_this_site_tab_helper.h"
 #import "ios/chrome/browser/passwords/model/password_controller.h"
 #import "ios/chrome/browser/passwords/model/password_tab_helper.h"
 #import "ios/chrome/browser/passwords/model/well_known_change_password_tab_helper.h"
@@ -86,6 +89,7 @@
 #import "ios/chrome/browser/supervised_user/model/supervised_user_url_filter_tab_helper.h"
 #import "ios/chrome/browser/tabs/model/ios_chrome_synced_tab_delegate.h"
 #import "ios/chrome/browser/translate/model/chrome_ios_translate_client.h"
+#import "ios/chrome/browser/ui/page_info/features.h"
 #import "ios/chrome/browser/voice/model/voice_search_navigations_tab_helper.h"
 #import "ios/chrome/browser/web/model/annotations/annotations_tab_helper.h"
 #import "ios/chrome/browser/web/model/blocked_popup_tab_helper.h"
@@ -131,14 +135,18 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
   VoiceSearchNavigationTabHelper::CreateForWebState(web_state);
   IOSChromeSyncedTabDelegate::CreateForWebState(web_state);
   InfoBarManagerImpl::CreateForWebState(web_state);
-  BlockedPopupTabHelper::CreateForWebState(web_state);
+  if (!base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
+    BlockedPopupTabHelper::GetOrCreateForWebState(web_state);
+  }
   if (IsNativeFindInPageAvailable()) {
     FindTabHelper::CreateForWebState(web_state);
   } else {
     web::JavaScriptFindInPageManager::CreateForWebState(web_state);
     JavaScriptFindTabHelper::CreateForWebState(web_state);
   }
-  ITunesUrlsHandlerTabHelper::CreateForWebState(web_state);
+  if (!base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
+    ITunesUrlsHandlerTabHelper::GetOrCreateForWebState(web_state);
+  }
   HistoryTabHelper::CreateForWebState(web_state);
   LoadTimingTabHelper::CreateForWebState(web_state);
   OverscrollActionsTabHelper::CreateForWebState(web_state);
@@ -194,9 +202,7 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
 
   // Supervised user services are not supported for off-the-record browser
   // state.
-  if (base::FeatureList::IsEnabled(
-          supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS) &&
-      !is_off_the_record) {
+  if (!is_off_the_record) {
     SupervisedUserURLFilterTabHelper::CreateForWebState(web_state);
     SupervisedUserErrorContainer::CreateForWebState(web_state);
   }
@@ -225,15 +231,22 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
   ukm::InitializeSourceUrlRecorderForWebState(web_state);
 
   // Download tab helpers.
-  ARQuickLookTabHelper::CreateForWebState(web_state);
+  if (!base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
+    ARQuickLookTabHelper::GetOrCreateForWebState(web_state);
+  }
   DownloadManagerTabHelper::CreateForWebState(web_state);
   SafariDownloadTabHelper::CreateForWebState(web_state);
-  PassKitTabHelper::CreateForWebState(web_state);
+  if (!base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
+    PassKitTabHelper::GetOrCreateForWebState(web_state);
+  }
   VcardTabHelper::CreateForWebState(web_state);
 
   // Drive tab helper.
   if (base::FeatureList::IsEnabled(kIOSSaveToDrive)) {
-    DriveTabHelper::CreateForWebState(web_state);
+    if (!base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
+      DriveTabHelper::GetOrCreateForWebState(web_state);
+    }
+    DocumentDownloadTabHelper::CreateForWebState(web_state);
   }
 
   PageloadForegroundDurationTabHelper::CreateForWebState(web_state);
@@ -252,7 +265,9 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
         web_state, SadTabTabHelper::kDefaultRepeatFailureInterval);
     SnapshotTabHelper::CreateForWebState(web_state);
     PagePlaceholderTabHelper::CreateForWebState(web_state);
-    PrintTabHelper::CreateForWebState(web_state);
+    if (!base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
+      PrintTabHelper::GetOrCreateForWebState(web_state);
+    }
     ChromeIOSTranslateClient::CreateForWebState(web_state);
 
     PasswordTabHelper::CreateForWebState(web_state);
@@ -274,7 +289,7 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
     ]);
   }
 
-  InfobarBadgeTabHelper::CreateForWebState(web_state);
+  InfobarBadgeTabHelper::GetOrCreateForWebState(web_state);
 
   if (base::FeatureList::IsEnabled(kSharedHighlightingIOS)) {
     LinkToTextTabHelper::CreateForWebState(web_state);
@@ -291,7 +306,9 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
   PermissionsTabHelper::CreateForWebState(web_state);
 
   RepostFormTabHelper::CreateForWebState(web_state);
-  NetExportTabHelper::CreateForWebState(web_state);
+  if (!base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
+    NetExportTabHelper::GetOrCreateForWebState(web_state);
+  }
 
   if (base::FeatureList::IsEnabled(
           security_interstitials::features::kHttpsOnlyMode) ||
@@ -314,9 +331,19 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
     FollowTabHelper::CreateForWebState(web_state);
   }
 
-  CaptivePortalTabHelper::CreateForWebState(web_state);
+  if (!base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
+    CaptivePortalTabHelper::GetOrCreateForWebState(web_state);
+  }
 
   if (!is_off_the_record) {
     PriceNotificationsTabHelper::CreateForWebState(web_state);
+  }
+
+  if (IsContextualPanelEnabled()) {
+    ContextualPanelTabHelper::CreateForWebState(web_state);
+  }
+
+  if (!is_off_the_record && IsAboutThisSiteFeatureEnabled()) {
+    AboutThisSiteTabHelper::CreateForWebState(web_state);
   }
 }

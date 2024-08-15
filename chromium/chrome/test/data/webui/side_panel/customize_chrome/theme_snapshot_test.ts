@@ -4,13 +4,15 @@
 
 import 'chrome://customize-chrome-side-panel.top-chrome/theme_snapshot.js';
 
-import {CustomizeChromePageCallbackRouter, CustomizeChromePageHandlerRemote, CustomizeChromePageRemote} from 'chrome://customize-chrome-side-panel.top-chrome/customize_chrome.mojom-webui.js';
+import type {CustomizeChromePageRemote} from 'chrome://customize-chrome-side-panel.top-chrome/customize_chrome.mojom-webui.js';
+import {CustomizeChromePageCallbackRouter, CustomizeChromePageHandlerRemote} from 'chrome://customize-chrome-side-panel.top-chrome/customize_chrome.mojom-webui.js';
 import {CustomizeChromeApiProxy} from 'chrome://customize-chrome-side-panel.top-chrome/customize_chrome_api_proxy.js';
-import {CustomizeThemeType, ThemeSnapshotElement} from 'chrome://customize-chrome-side-panel.top-chrome/theme_snapshot.js';
+import type {ThemeSnapshotElement} from 'chrome://customize-chrome-side-panel.top-chrome/theme_snapshot.js';
+import {CustomizeThemeType} from 'chrome://customize-chrome-side-panel.top-chrome/theme_snapshot.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {TestMock} from 'chrome://webui-test/test_mock.js';
+import type {TestMock} from 'chrome://webui-test/test_mock.js';
 
-import {$$, assertStyle, createBackgroundImage, createTheme, installMock} from './test_support.js';
+import {$$, createBackgroundImage, createTheme, installMock} from './test_support.js';
 
 suite('ThemeSnapshotTest', () => {
   let themeSnapshotElement: ThemeSnapshotElement;
@@ -73,7 +75,7 @@ suite('ThemeSnapshotTest', () => {
             themeSnapshotElement, '.snapshot-container img')!.src);
   });
 
-  test('not setting a theme updates preview background color', async () => {
+  test('default chrome updates theme snapshot', async () => {
     // Arrange.
     createThemeSnapshotElement();
     const theme = createTheme();
@@ -107,10 +109,6 @@ suite('ThemeSnapshotTest', () => {
         $$(themeSnapshotElement,
            '.snapshot-container #classicChromeThemeTitle')!.textContent!
             .trim());
-    assertStyle(
-        $$(themeSnapshotElement,
-           '.snapshot-container #classicChromeBackground')!,
-        'background-color', 'rgb(20, 83, 154)');
   });
 
   test('uploading a background updates theme snapshot', async () => {

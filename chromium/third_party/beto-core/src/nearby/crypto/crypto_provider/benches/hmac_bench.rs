@@ -18,8 +18,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 
 use crypto_provider::hmac::Hmac;
 use crypto_provider::{CryptoProvider, CryptoRng};
-use crypto_provider_openssl::Openssl;
-use crypto_provider_rustcrypto::RustCrypto;
+use crypto_provider_default::CryptoProviderImpl;
 use rand_ext::random_bytes;
 
 // simple benchmark, which creates a new hmac, updates once, then finalizes
@@ -53,10 +52,8 @@ fn hmac_sha512_operations<C: CryptoProvider>(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    hmac_sha256_operations::<RustCrypto>,
-    hmac_sha256_operations::<Openssl>,
-    hmac_sha512_operations::<RustCrypto>,
-    hmac_sha512_operations::<Openssl>
+    hmac_sha256_operations::<CryptoProviderImpl>,
+    hmac_sha512_operations::<CryptoProviderImpl>,
 );
 
 criterion_main!(benches);

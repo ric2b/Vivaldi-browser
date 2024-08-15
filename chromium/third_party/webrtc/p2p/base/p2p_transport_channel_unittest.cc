@@ -73,6 +73,7 @@ using ::testing::SetArgPointee;
 using ::testing::SizeIs;
 using ::testing::Values;
 using ::testing::WithParamInterface;
+using ::webrtc::IceCandidateType;
 using ::webrtc::PendingTaskSafetyFlag;
 using ::webrtc::SafeTask;
 
@@ -141,7 +142,6 @@ const cricket::IceParameters kIceParams[4] = {
 
 const uint64_t kLowTiebreaker = 11111;
 const uint64_t kHighTiebreaker = 22222;
-const uint64_t kTiebreakerDefault = 44444;
 
 cricket::IceConfig CreateIceConfig(
     int receiving_timeout,
@@ -154,7 +154,7 @@ cricket::IceConfig CreateIceConfig(
   return config;
 }
 
-cricket::Candidate CreateUdpCandidate(absl::string_view type,
+cricket::Candidate CreateUdpCandidate(IceCandidateType type,
                                       absl::string_view ip,
                                       int port,
                                       int priority,
@@ -286,14 +286,6 @@ class P2PTransportChannelTestBase : public ::testing::Test,
         main_(ss_.get()),
         stun_server_(TestStunServer::Create(ss_.get(), kStunAddr, main_)),
         turn_server_(&main_, ss_.get(), kTurnUdpIntAddr, kTurnUdpExtAddr),
-        socks_server1_(ss_.get(),
-                       kSocksProxyAddrs[0],
-                       ss_.get(),
-                       kSocksProxyAddrs[0]),
-        socks_server2_(ss_.get(),
-                       kSocksProxyAddrs[1],
-                       ss_.get(),
-                       kSocksProxyAddrs[1]),
         force_relay_(false) {
     ep1_.role_ = ICEROLE_CONTROLLING;
     ep2_.role_ = ICEROLE_CONTROLLED;
@@ -307,10 +299,6 @@ class P2PTransportChannelTestBase : public ::testing::Test,
         &ep2_.network_manager_, socket_factory_.get(), stun_servers,
         kTurnUdpIntAddr, rtc::SocketAddress()));
 
-    ep1_.SetIceTiebreaker(kTiebreakerDefault);
-    ep1_.allocator_->SetIceTiebreaker(kTiebreakerDefault);
-    ep2_.SetIceTiebreaker(kTiebreakerDefault);
-    ep2_.allocator_->SetIceTiebreaker(kTiebreakerDefault);
     webrtc::metrics::Reset();
   }
 
@@ -330,14 +318,13 @@ class P2PTransportChannelTestBase : public ::testing::Test,
     BLOCK_UDP_AND_INCOMING_TCP,   // Firewall, UDP in/out and TCP in blocked
     BLOCK_ALL_BUT_OUTGOING_HTTP,  // Firewall, only TCP out on 80/443
     PROXY_HTTPS,                  // All traffic through HTTPS proxy
-    PROXY_SOCKS,                  // All traffic through SOCKS proxy
     NUM_CONFIGS
   };
 
   struct Result {
-    Result(absl::string_view controlling_type,
+    Result(IceCandidateType controlling_type,
            absl::string_view controlling_protocol,
-           absl::string_view controlled_type,
+           IceCandidateType controlled_type,
            absl::string_view controlled_protocol,
            int wait)
         : controlling_type(controlling_type),
@@ -347,10 +334,10 @@ class P2PTransportChannelTestBase : public ::testing::Test,
           connect_wait(wait) {}
 
     // The expected candidate type and protocol of the controlling ICE agent.
-    std::string controlling_type;
+    IceCandidateType controlling_type;
     std::string controlling_protocol;
     // The expected candidate type and protocol of the controlled ICE agent.
-    std::string controlled_type;
+    IceCandidateType controlled_type;
     std::string controlled_protocol;
     // How long to wait before the correct candidate pair is selected.
     int connect_wait;
@@ -491,8 +478,11 @@ class P2PTransportChannelTestBase : public ::testing::Test,
         [this](IceTransportInternal* transport, const Candidates& candidates) {
           OnCandidatesRemoved(transport, candidates);
         });
-    channel->SignalReadPacket.connect(
-        this, &P2PTransportChannelTestBase::OnReadPacket);
+    channel->RegisterReceivedPacketCallback(
+        this, [&](rtc::PacketTransportInternal* transport,
+                  const rtc::ReceivedPacket& packet) {
+          OnReadPacket(transport, packet);
+        });
     channel->SignalRoleConflict.connect(
         this, &P2PTransportChannelTestBase::OnRoleConflict);
     channel->SignalNetworkRouteChanged.connect(
@@ -599,13 +589,13 @@ class P2PTransportChannelTestBase : public ::testing::Test,
     return GetEndpoint(endpoint)->SetAllowTcpListen(allow_tcp_listen);
   }
 
-  // Return true if the approprite parts of the expected Result, based
+  // Return true if the appropriate parts of the expected Result, based
   // on the local and remote candidate of ep1_ch1, match.  This can be
   // used in an EXPECT_TRUE_WAIT.
   bool CheckCandidate1(const Result& expected) {
-    const std::string& local_type = LocalCandidate(ep1_ch1())->type();
+    auto local_type = LocalCandidate(ep1_ch1())->type();
     const std::string& local_protocol = LocalCandidate(ep1_ch1())->protocol();
-    const std::string& remote_type = RemoteCandidate(ep1_ch1())->type();
+    auto remote_type = RemoteCandidate(ep1_ch1())->type();
     const std::string& remote_protocol = RemoteCandidate(ep1_ch1())->protocol();
     return (local_protocol == expected.controlling_protocol &&
             remote_protocol == expected.controlled_protocol &&
@@ -613,7 +603,7 @@ class P2PTransportChannelTestBase : public ::testing::Test,
             remote_type == expected.controlled_type);
   }
 
-  // EXPECT_EQ on the approprite parts of the expected Result, based
+  // EXPECT_EQ on the appropriate parts of the expected Result, based
   // on the local and remote candidate of ep1_ch1.  This is like
   // CheckCandidate1, except that it will provide more detail about
   // what didn't match.
@@ -622,9 +612,9 @@ class P2PTransportChannelTestBase : public ::testing::Test,
       return;
     }
 
-    const std::string& local_type = LocalCandidate(ep1_ch1())->type();
+    auto local_type = LocalCandidate(ep1_ch1())->type();
     const std::string& local_protocol = LocalCandidate(ep1_ch1())->protocol();
-    const std::string& remote_type = RemoteCandidate(ep1_ch1())->type();
+    auto remote_type = RemoteCandidate(ep1_ch1())->type();
     const std::string& remote_protocol = RemoteCandidate(ep1_ch1())->protocol();
     EXPECT_EQ(expected.controlling_type, local_type);
     EXPECT_EQ(expected.controlled_type, remote_type);
@@ -632,13 +622,13 @@ class P2PTransportChannelTestBase : public ::testing::Test,
     EXPECT_EQ(expected.controlled_protocol, remote_protocol);
   }
 
-  // Return true if the approprite parts of the expected Result, based
+  // Return true if the appropriate parts of the expected Result, based
   // on the local and remote candidate of ep2_ch1, match.  This can be
   // used in an EXPECT_TRUE_WAIT.
   bool CheckCandidate2(const Result& expected) {
-    const std::string& local_type = LocalCandidate(ep2_ch1())->type();
+    auto local_type = LocalCandidate(ep2_ch1())->type();
     const std::string& local_protocol = LocalCandidate(ep2_ch1())->protocol();
-    const std::string& remote_type = RemoteCandidate(ep2_ch1())->type();
+    auto remote_type = RemoteCandidate(ep2_ch1())->type();
     const std::string& remote_protocol = RemoteCandidate(ep2_ch1())->protocol();
     return (local_protocol == expected.controlled_protocol &&
             remote_protocol == expected.controlling_protocol &&
@@ -646,7 +636,7 @@ class P2PTransportChannelTestBase : public ::testing::Test,
             remote_type == expected.controlling_type);
   }
 
-  // EXPECT_EQ on the approprite parts of the expected Result, based
+  // EXPECT_EQ on the appropriate parts of the expected Result, based
   // on the local and remote candidate of ep2_ch1.  This is like
   // CheckCandidate2, except that it will provide more detail about
   // what didn't match.
@@ -655,9 +645,9 @@ class P2PTransportChannelTestBase : public ::testing::Test,
       return;
     }
 
-    const std::string& local_type = LocalCandidate(ep2_ch1())->type();
+    auto local_type = LocalCandidate(ep2_ch1())->type();
     const std::string& local_protocol = LocalCandidate(ep2_ch1())->protocol();
-    const std::string& remote_type = RemoteCandidate(ep2_ch1())->type();
+    auto remote_type = RemoteCandidate(ep2_ch1())->type();
     const std::string& remote_protocol = RemoteCandidate(ep2_ch1())->protocol();
     EXPECT_EQ(expected.controlled_type, local_type);
     EXPECT_EQ(expected.controlling_type, remote_type);
@@ -839,7 +829,7 @@ class P2PTransportChannelTestBase : public ::testing::Test,
 
   // We pass the candidates directly to the other side.
   void OnCandidateGathered(IceTransportInternal* ch, const Candidate& c) {
-    if (force_relay_ && c.type() != RELAY_PORT_TYPE)
+    if (force_relay_ && !c.is_relay())
       return;
 
     if (GetEndpoint(ch)->save_candidates_) {
@@ -930,12 +920,11 @@ class P2PTransportChannelTestBase : public ::testing::Test,
   }
 
   void OnReadPacket(rtc::PacketTransportInternal* transport,
-                    const char* data,
-                    size_t len,
-                    const int64_t& /* packet_time_us */,
-                    int flags) {
+                    const rtc::ReceivedPacket& packet) {
     std::list<std::string>& packets = GetPacketList(transport);
-    packets.push_front(std::string(data, len));
+    packets.push_front(
+        std::string(reinterpret_cast<const char*>(packet.payload().data()),
+                    packet.payload().size()));
   }
 
   void OnRoleConflict(IceTransportInternal* channel) {
@@ -1028,8 +1017,6 @@ class P2PTransportChannelTestBase : public ::testing::Test,
       PendingTaskSafetyFlag::Create();
   TestStunServer::StunServerPtr stun_server_;
   TestTurnServer turn_server_;
-  rtc::SocksProxyServer socks_server1_;
-  rtc::SocksProxyServer socks_server2_;
   Endpoint ep1_;
   Endpoint ep2_;
   RemoteIceParameterSource remote_ice_parameter_source_ = FROM_CANDIDATE;
@@ -1041,87 +1028,87 @@ class P2PTransportChannelTestBase : public ::testing::Test,
 
 // The tests have only a few outcomes, which we predefine.
 const P2PTransportChannelTestBase::Result
-    P2PTransportChannelTestBase::kLocalUdpToLocalUdp("local",
+    P2PTransportChannelTestBase::kLocalUdpToLocalUdp(IceCandidateType::kHost,
                                                      "udp",
-                                                     "local",
+                                                     IceCandidateType::kHost,
                                                      "udp",
                                                      1000);
 const P2PTransportChannelTestBase::Result
-    P2PTransportChannelTestBase::kLocalUdpToStunUdp("local",
+    P2PTransportChannelTestBase::kLocalUdpToStunUdp(IceCandidateType::kHost,
                                                     "udp",
-                                                    "stun",
+                                                    IceCandidateType::kSrflx,
                                                     "udp",
                                                     1000);
 const P2PTransportChannelTestBase::Result
-    P2PTransportChannelTestBase::kLocalUdpToPrflxUdp("local",
+    P2PTransportChannelTestBase::kLocalUdpToPrflxUdp(IceCandidateType::kHost,
                                                      "udp",
-                                                     "prflx",
-                                                     "udp",
-                                                     1000);
-const P2PTransportChannelTestBase::Result
-    P2PTransportChannelTestBase::kPrflxUdpToLocalUdp("prflx",
-                                                     "udp",
-                                                     "local",
+                                                     IceCandidateType::kPrflx,
                                                      "udp",
                                                      1000);
 const P2PTransportChannelTestBase::Result
-    P2PTransportChannelTestBase::kStunUdpToLocalUdp("stun",
+    P2PTransportChannelTestBase::kPrflxUdpToLocalUdp(IceCandidateType::kPrflx,
+                                                     "udp",
+                                                     IceCandidateType::kHost,
+                                                     "udp",
+                                                     1000);
+const P2PTransportChannelTestBase::Result
+    P2PTransportChannelTestBase::kStunUdpToLocalUdp(IceCandidateType::kSrflx,
                                                     "udp",
-                                                    "local",
+                                                    IceCandidateType::kHost,
                                                     "udp",
                                                     1000);
 const P2PTransportChannelTestBase::Result
-    P2PTransportChannelTestBase::kStunUdpToStunUdp("stun",
+    P2PTransportChannelTestBase::kStunUdpToStunUdp(IceCandidateType::kSrflx,
                                                    "udp",
-                                                   "stun",
+                                                   IceCandidateType::kSrflx,
                                                    "udp",
                                                    1000);
 const P2PTransportChannelTestBase::Result
-    P2PTransportChannelTestBase::kStunUdpToPrflxUdp("stun",
+    P2PTransportChannelTestBase::kStunUdpToPrflxUdp(IceCandidateType::kSrflx,
                                                     "udp",
-                                                    "prflx",
-                                                    "udp",
-                                                    1000);
-const P2PTransportChannelTestBase::Result
-    P2PTransportChannelTestBase::kPrflxUdpToStunUdp("prflx",
-                                                    "udp",
-                                                    "stun",
+                                                    IceCandidateType::kPrflx,
                                                     "udp",
                                                     1000);
 const P2PTransportChannelTestBase::Result
-    P2PTransportChannelTestBase::kLocalUdpToRelayUdp("local",
+    P2PTransportChannelTestBase::kPrflxUdpToStunUdp(IceCandidateType::kPrflx,
+                                                    "udp",
+                                                    IceCandidateType::kSrflx,
+                                                    "udp",
+                                                    1000);
+const P2PTransportChannelTestBase::Result
+    P2PTransportChannelTestBase::kLocalUdpToRelayUdp(IceCandidateType::kHost,
                                                      "udp",
-                                                     "relay",
+                                                     IceCandidateType::kRelay,
                                                      "udp",
                                                      2000);
 const P2PTransportChannelTestBase::Result
-    P2PTransportChannelTestBase::kPrflxUdpToRelayUdp("prflx",
+    P2PTransportChannelTestBase::kPrflxUdpToRelayUdp(IceCandidateType::kPrflx,
                                                      "udp",
-                                                     "relay",
-                                                     "udp",
-                                                     2000);
-const P2PTransportChannelTestBase::Result
-    P2PTransportChannelTestBase::kRelayUdpToPrflxUdp("relay",
-                                                     "udp",
-                                                     "prflx",
+                                                     IceCandidateType::kRelay,
                                                      "udp",
                                                      2000);
 const P2PTransportChannelTestBase::Result
-    P2PTransportChannelTestBase::kLocalTcpToLocalTcp("local",
+    P2PTransportChannelTestBase::kRelayUdpToPrflxUdp(IceCandidateType::kRelay,
+                                                     "udp",
+                                                     IceCandidateType::kPrflx,
+                                                     "udp",
+                                                     2000);
+const P2PTransportChannelTestBase::Result
+    P2PTransportChannelTestBase::kLocalTcpToLocalTcp(IceCandidateType::kHost,
                                                      "tcp",
-                                                     "local",
+                                                     IceCandidateType::kHost,
                                                      "tcp",
                                                      3000);
 const P2PTransportChannelTestBase::Result
-    P2PTransportChannelTestBase::kLocalTcpToPrflxTcp("local",
+    P2PTransportChannelTestBase::kLocalTcpToPrflxTcp(IceCandidateType::kHost,
                                                      "tcp",
-                                                     "prflx",
+                                                     IceCandidateType::kPrflx,
                                                      "tcp",
                                                      3000);
 const P2PTransportChannelTestBase::Result
-    P2PTransportChannelTestBase::kPrflxTcpToLocalTcp("prflx",
+    P2PTransportChannelTestBase::kPrflxTcpToLocalTcp(IceCandidateType::kPrflx,
                                                      "tcp",
-                                                     "local",
+                                                     IceCandidateType::kHost,
                                                      "tcp",
                                                      3000);
 
@@ -1179,7 +1166,6 @@ class P2PTransportChannelTest : public P2PTransportChannelTestBase {
       case BLOCK_UDP_AND_INCOMING_TCP:
       case BLOCK_ALL_BUT_OUTGOING_HTTP:
       case PROXY_HTTPS:
-      case PROXY_SOCKS:
         AddAddress(endpoint, kPublicAddrs[endpoint]);
         // Block all UDP
         fw()->AddRule(false, rtc::FP_UDP, rtc::FD_ANY, kPublicAddrs[endpoint]);
@@ -1202,13 +1188,6 @@ class P2PTransportChannelTest : public P2PTransportChannelTestBase {
           fw()->AddRule(false, rtc::FP_TCP, rtc::FD_ANY,
                         kPublicAddrs[endpoint]);
           SetProxy(endpoint, rtc::PROXY_HTTPS);
-        } else if (config == PROXY_SOCKS) {
-          // Block all TCP to/from the endpoint except to the proxy server
-          fw()->AddRule(true, rtc::FP_TCP, kPublicAddrs[endpoint],
-                        kSocksProxyAddrs[endpoint]);
-          fw()->AddRule(false, rtc::FP_TCP, rtc::FD_ANY,
-                        kPublicAddrs[endpoint]);
-          SetProxy(endpoint, rtc::PROXY_SOCKS5);
         }
         break;
       default:
@@ -1253,42 +1232,28 @@ class P2PTransportChannelMatrixTest : public P2PTransportChannelTest,
 const P2PTransportChannelMatrixTest::Result*
     P2PTransportChannelMatrixTest::kMatrix[NUM_CONFIGS][NUM_CONFIGS] = {
         //      OPEN  CONE  ADDR  PORT  SYMM  2CON  SCON  !UDP  !TCP  HTTP  PRXH
-        //      PRXS
-        /*OP*/ {LULU, LUSU, LUSU, LUSU, LUPU, LUSU, LUPU, LTPT, LTPT, LSRS,
-                NULL, LTPT},
+        /*OP*/
+        {LULU, LUSU, LUSU, LUSU, LUPU, LUSU, LUPU, LTPT, LTPT, LSRS, NULL},
         /*CO*/
-        {SULU, SUSU, SUSU, SUSU, SUPU, SUSU, SUPU, NULL, NULL, LSRS, NULL,
-         LTRT},
+        {SULU, SUSU, SUSU, SUSU, SUPU, SUSU, SUPU, NULL, NULL, LSRS, NULL},
         /*AD*/
-        {SULU, SUSU, SUSU, SUSU, SUPU, SUSU, SUPU, NULL, NULL, LSRS, NULL,
-         LTRT},
+        {SULU, SUSU, SUSU, SUSU, SUPU, SUSU, SUPU, NULL, NULL, LSRS, NULL},
         /*PO*/
-        {SULU, SUSU, SUSU, SUSU, RUPU, SUSU, RUPU, NULL, NULL, LSRS, NULL,
-         LTRT},
+        {SULU, SUSU, SUSU, SUSU, RUPU, SUSU, RUPU, NULL, NULL, LSRS, NULL},
         /*SY*/
-        {PULU, PUSU, PUSU, PURU, PURU, PUSU, PURU, NULL, NULL, LSRS, NULL,
-         LTRT},
+        {PULU, PUSU, PUSU, PURU, PURU, PUSU, PURU, NULL, NULL, LSRS, NULL},
         /*2C*/
-        {SULU, SUSU, SUSU, SUSU, SUPU, SUSU, SUPU, NULL, NULL, LSRS, NULL,
-         LTRT},
+        {SULU, SUSU, SUSU, SUSU, SUPU, SUSU, SUPU, NULL, NULL, LSRS, NULL},
         /*SC*/
-        {PULU, PUSU, PUSU, PURU, PURU, PUSU, PURU, NULL, NULL, LSRS, NULL,
-         LTRT},
+        {PULU, PUSU, PUSU, PURU, PURU, PUSU, PURU, NULL, NULL, LSRS, NULL},
         /*!U*/
-        {LTPT, NULL, NULL, NULL, NULL, NULL, NULL, LTPT, LTPT, LSRS, NULL,
-         LTRT},
+        {LTPT, NULL, NULL, NULL, NULL, NULL, NULL, LTPT, LTPT, LSRS, NULL},
         /*!T*/
-        {PTLT, NULL, NULL, NULL, NULL, NULL, NULL, PTLT, LTRT, LSRS, NULL,
-         LTRT},
+        {PTLT, NULL, NULL, NULL, NULL, NULL, NULL, PTLT, LTRT, LSRS, NULL},
         /*HT*/
-        {LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, NULL,
-         LSRS},
+        {LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, NULL},
         /*PR*/
-        {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-         NULL},
-        /*PR*/
-        {LTRT, LTRT, LTRT, LTRT, LTRT, LTRT, LTRT, LTRT, LTRT, LSRS, NULL,
-         LTRT},
+        {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL},
 };
 
 // The actual tests that exercise all the various configurations.
@@ -1316,8 +1281,7 @@ const P2PTransportChannelMatrixTest::Result*
   P2P_TEST(x, BLOCK_UDP)                   \
   P2P_TEST(x, BLOCK_UDP_AND_INCOMING_TCP)  \
   P2P_TEST(x, BLOCK_ALL_BUT_OUTGOING_HTTP) \
-  P2P_TEST(x, PROXY_HTTPS)                 \
-  P2P_TEST(x, PROXY_SOCKS)
+  P2P_TEST(x, PROXY_HTTPS)
 
 P2P_TEST_SET(OPEN)
 P2P_TEST_SET(NAT_FULL_CONE)
@@ -1330,7 +1294,6 @@ P2P_TEST_SET(BLOCK_UDP)
 P2P_TEST_SET(BLOCK_UDP_AND_INCOMING_TCP)
 P2P_TEST_SET(BLOCK_ALL_BUT_OUTGOING_HTTP)
 P2P_TEST_SET(PROXY_HTTPS)
-P2P_TEST_SET(PROXY_SOCKS)
 
 INSTANTIATE_TEST_SUITE_P(
     All,
@@ -1571,16 +1534,16 @@ TEST_F(P2PTransportChannelTest, PeerReflexiveCandidateBeforeSignaling) {
   ASSERT_TRUE_WAIT(
       (selected_connection = ep1_ch1()->selected_connection()) != nullptr,
       kMediumTimeout);
-  EXPECT_EQ(PRFLX_PORT_TYPE, selected_connection->remote_candidate().type());
+  EXPECT_TRUE(selected_connection->remote_candidate().is_prflx());
   EXPECT_EQ(kIceUfrag[1], selected_connection->remote_candidate().username());
   EXPECT_EQ(kIcePwd[1], selected_connection->remote_candidate().password());
   EXPECT_EQ(1u, selected_connection->remote_candidate().generation());
 
   ResumeCandidates(1);
   // Verify ep1's selected connection is updated to use the 'local' candidate.
-  EXPECT_EQ_WAIT(LOCAL_PORT_TYPE,
-                 ep1_ch1()->selected_connection()->remote_candidate().type(),
-                 kMediumTimeout);
+  EXPECT_TRUE_WAIT(
+      ep1_ch1()->selected_connection()->remote_candidate().is_local(),
+      kMediumTimeout);
   EXPECT_EQ(selected_connection, ep1_ch1()->selected_connection());
   DestroyChannels();
 }
@@ -1608,15 +1571,15 @@ TEST_F(P2PTransportChannelTest, PeerReflexiveRemoteCandidateIsSanitized) {
   // Check the selected candidate pair.
   auto pair_ep1 = ep1_ch1()->GetSelectedCandidatePair();
   ASSERT_TRUE(pair_ep1.has_value());
-  EXPECT_EQ(PRFLX_PORT_TYPE, pair_ep1->remote_candidate().type());
+  EXPECT_TRUE(pair_ep1->remote_candidate().is_prflx());
   EXPECT_TRUE(pair_ep1->remote_candidate().address().ipaddr().IsNil());
 
   IceTransportStats ice_transport_stats;
   ep1_ch1()->GetStats(&ice_transport_stats);
   // Check the candidate pair stats.
   ASSERT_EQ(1u, ice_transport_stats.connection_infos.size());
-  EXPECT_EQ(PRFLX_PORT_TYPE,
-            ice_transport_stats.connection_infos[0].remote_candidate.type());
+  EXPECT_TRUE(
+      ice_transport_stats.connection_infos[0].remote_candidate.is_prflx());
   EXPECT_TRUE(ice_transport_stats.connection_infos[0]
                   .remote_candidate.address()
                   .ipaddr()
@@ -1626,8 +1589,7 @@ TEST_F(P2PTransportChannelTest, PeerReflexiveRemoteCandidateIsSanitized) {
   ResumeCandidates(1);
   ASSERT_TRUE_WAIT(
       ep1_ch1()->selected_connection() != nullptr &&
-          ep1_ch1()->selected_connection()->remote_candidate().type() ==
-              LOCAL_PORT_TYPE,
+          ep1_ch1()->selected_connection()->remote_candidate().is_local(),
       kMediumTimeout);
 
   // We should be able to reveal the address after it is learnt via
@@ -1636,14 +1598,14 @@ TEST_F(P2PTransportChannelTest, PeerReflexiveRemoteCandidateIsSanitized) {
   // Check the selected candidate pair.
   auto updated_pair_ep1 = ep1_ch1()->GetSelectedCandidatePair();
   ASSERT_TRUE(updated_pair_ep1.has_value());
-  EXPECT_EQ(LOCAL_PORT_TYPE, updated_pair_ep1->remote_candidate().type());
+  EXPECT_TRUE(updated_pair_ep1->remote_candidate().is_local());
   EXPECT_TRUE(HasRemoteAddress(&updated_pair_ep1.value(), kPublicAddrs[1]));
 
   ep1_ch1()->GetStats(&ice_transport_stats);
   // Check the candidate pair stats.
   ASSERT_EQ(1u, ice_transport_stats.connection_infos.size());
-  EXPECT_EQ(LOCAL_PORT_TYPE,
-            ice_transport_stats.connection_infos[0].remote_candidate.type());
+  EXPECT_TRUE(
+      ice_transport_stats.connection_infos[0].remote_candidate.is_local());
   EXPECT_TRUE(ice_transport_stats.connection_infos[0]
                   .remote_candidate.address()
                   .EqualIPs(kPublicAddrs[1]));
@@ -1679,16 +1641,16 @@ TEST_F(P2PTransportChannelTest, PeerReflexiveCandidateBeforeSignalingWithNAT) {
   ASSERT_TRUE_WAIT(
       (selected_connection = ep1_ch1()->selected_connection()) != nullptr,
       kMediumTimeout);
-  EXPECT_EQ(PRFLX_PORT_TYPE, selected_connection->remote_candidate().type());
+  EXPECT_TRUE(selected_connection->remote_candidate().is_prflx());
   EXPECT_EQ(kIceUfrag[1], selected_connection->remote_candidate().username());
   EXPECT_EQ(kIcePwd[1], selected_connection->remote_candidate().password());
   EXPECT_EQ(1u, selected_connection->remote_candidate().generation());
 
   ResumeCandidates(1);
 
-  EXPECT_EQ_WAIT(PRFLX_PORT_TYPE,
-                 ep1_ch1()->selected_connection()->remote_candidate().type(),
-                 kMediumTimeout);
+  EXPECT_TRUE_WAIT(
+      ep1_ch1()->selected_connection()->remote_candidate().is_prflx(),
+      kMediumTimeout);
   EXPECT_EQ(selected_connection, ep1_ch1()->selected_connection());
   DestroyChannels();
 }
@@ -1728,9 +1690,9 @@ TEST_F(P2PTransportChannelTest,
 
   // The caller should have the selected connection connected to the peer
   // reflexive candidate.
-  EXPECT_EQ_WAIT(PRFLX_PORT_TYPE,
-                 ep1_ch1()->selected_connection()->remote_candidate().type(),
-                 kDefaultTimeout);
+  EXPECT_TRUE_WAIT(
+      ep1_ch1()->selected_connection()->remote_candidate().is_prflx(),
+      kDefaultTimeout);
   const Connection* prflx_selected_connection =
       ep1_ch1()->selected_connection();
 
@@ -1744,9 +1706,9 @@ TEST_F(P2PTransportChannelTest,
   // their information to update the peer reflexive candidate.
   ResumeCandidates(1);
 
-  EXPECT_EQ_WAIT(RELAY_PORT_TYPE,
-                 ep1_ch1()->selected_connection()->remote_candidate().type(),
-                 kDefaultTimeout);
+  EXPECT_TRUE_WAIT(
+      ep1_ch1()->selected_connection()->remote_candidate().is_relay(),
+      kDefaultTimeout);
   EXPECT_EQ(prflx_selected_connection, ep1_ch1()->selected_connection());
   DestroyChannels();
 }
@@ -1829,8 +1791,8 @@ TEST_F(P2PTransportChannelTest, CanOnlyMakeOutgoingTcpConnections) {
   fw()->SetUnbindableIps({rtc::GetAnyIP(AF_INET), rtc::GetAnyIP(AF_INET6),
                           kPublicAddrs[0].ipaddr()});
   CreateChannels();
-  // Expect a "prflx" candidate on the side that can only make outgoing
-  // connections, endpoint 0.
+  // Expect a IceCandidateType::kPrflx candidate on the side that can only make
+  // outgoing connections, endpoint 0.
   Test(kPrflxTcpToLocalTcp);
   DestroyChannels();
 }
@@ -2021,10 +1983,10 @@ TEST_F(P2PTransportChannelTest, TestForceTurn) {
   EXPECT_TRUE(ep1_ch1()->selected_connection() &&
               ep2_ch1()->selected_connection());
 
-  EXPECT_EQ(RELAY_PORT_TYPE, RemoteCandidate(ep1_ch1())->type());
-  EXPECT_EQ(RELAY_PORT_TYPE, LocalCandidate(ep1_ch1())->type());
-  EXPECT_EQ(RELAY_PORT_TYPE, RemoteCandidate(ep2_ch1())->type());
-  EXPECT_EQ(RELAY_PORT_TYPE, LocalCandidate(ep2_ch1())->type());
+  EXPECT_TRUE(RemoteCandidate(ep1_ch1())->is_relay());
+  EXPECT_TRUE(LocalCandidate(ep1_ch1())->is_relay());
+  EXPECT_TRUE(RemoteCandidate(ep2_ch1())->is_relay());
+  EXPECT_TRUE(LocalCandidate(ep2_ch1())->is_relay());
 
   TestSendRecv(&clock);
   DestroyChannels();
@@ -2166,14 +2128,14 @@ TEST_F(P2PTransportChannelTest, TurnToTurnPresumedWritable) {
   // Add two remote candidates; a host candidate (with higher priority)
   // and TURN candidate.
   ep1_ch1()->AddRemoteCandidate(
-      CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 100));
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 100));
   ep1_ch1()->AddRemoteCandidate(
-      CreateUdpCandidate(RELAY_PORT_TYPE, "2.2.2.2", 2, 0));
+      CreateUdpCandidate(IceCandidateType::kRelay, "2.2.2.2", 2, 0));
   // Expect that the TURN-TURN candidate pair will be prioritized since it's
   // "probably writable".
   EXPECT_TRUE_WAIT(ep1_ch1()->selected_connection() != nullptr, kShortTimeout);
-  EXPECT_EQ(RELAY_PORT_TYPE, LocalCandidate(ep1_ch1())->type());
-  EXPECT_EQ(RELAY_PORT_TYPE, RemoteCandidate(ep1_ch1())->type());
+  EXPECT_TRUE(LocalCandidate(ep1_ch1())->is_relay());
+  EXPECT_TRUE(RemoteCandidate(ep1_ch1())->is_relay());
   // Also expect that the channel instantly indicates that it's writable since
   // it has a TURN-TURN pair.
   EXPECT_TRUE(ep1_ch1()->writable());
@@ -2220,8 +2182,8 @@ TEST_F(P2PTransportChannelTest, TurnToPrflxPresumedWritable) {
   EXPECT_TRUE_SIMULATED_WAIT(ep1_ch1()->receiving() && ep1_ch1()->writable(),
                              kShortTimeout, fake_clock);
   ASSERT_NE(nullptr, ep1_ch1()->selected_connection());
-  EXPECT_EQ(RELAY_PORT_TYPE, LocalCandidate(ep1_ch1())->type());
-  EXPECT_EQ(PRFLX_PORT_TYPE, RemoteCandidate(ep1_ch1())->type());
+  EXPECT_TRUE(LocalCandidate(ep1_ch1())->is_relay());
+  EXPECT_TRUE(RemoteCandidate(ep1_ch1())->is_prflx());
   // Make sure that at this point the connection is only presumed writable,
   // not fully writable.
   EXPECT_FALSE(ep1_ch1()->selected_connection()->writable());
@@ -2264,9 +2226,9 @@ TEST_F(P2PTransportChannelTest, PresumedWritablePreferredOverUnreliable) {
   // Add a remote TURN candidate. The first channel should still have a TURN
   // port available to make a TURN<->TURN pair that's presumed writable.
   ep1_ch1()->AddRemoteCandidate(
-      CreateUdpCandidate(RELAY_PORT_TYPE, "2.2.2.2", 2, 0));
-  EXPECT_EQ(RELAY_PORT_TYPE, LocalCandidate(ep1_ch1())->type());
-  EXPECT_EQ(RELAY_PORT_TYPE, RemoteCandidate(ep1_ch1())->type());
+      CreateUdpCandidate(IceCandidateType::kRelay, "2.2.2.2", 2, 0));
+  EXPECT_TRUE(LocalCandidate(ep1_ch1())->is_relay());
+  EXPECT_TRUE(RemoteCandidate(ep1_ch1())->is_relay());
   EXPECT_TRUE(ep1_ch1()->writable());
   EXPECT_TRUE(GetEndpoint(0)->ready_to_send_);
   EXPECT_NE(old_selected_connection, ep1_ch1()->selected_connection());
@@ -2290,11 +2252,11 @@ TEST_F(P2PTransportChannelTest, SignalReadyToSendWithPresumedWritable) {
   EXPECT_EQ_WAIT(IceGatheringState::kIceGatheringComplete,
                  ep1_ch1()->gathering_state(), kDefaultTimeout);
   ep1_ch1()->AddRemoteCandidate(
-      CreateUdpCandidate(RELAY_PORT_TYPE, "1.1.1.1", 1, 0));
+      CreateUdpCandidate(IceCandidateType::kRelay, "1.1.1.1", 1, 0));
   // Sanity checking the type of the connection.
   EXPECT_TRUE_WAIT(ep1_ch1()->selected_connection() != nullptr, kShortTimeout);
-  EXPECT_EQ(RELAY_PORT_TYPE, LocalCandidate(ep1_ch1())->type());
-  EXPECT_EQ(RELAY_PORT_TYPE, RemoteCandidate(ep1_ch1())->type());
+  EXPECT_TRUE(LocalCandidate(ep1_ch1())->is_relay());
+  EXPECT_TRUE(RemoteCandidate(ep1_ch1())->is_relay());
 
   // Tell the socket server to block packets (returning EWOULDBLOCK).
   virtual_socket_server()->SetSendingBlocked(true);
@@ -2349,8 +2311,8 @@ TEST_F(P2PTransportChannelTest,
 
   ASSERT_NE(nullptr, ep1_ch1()->selected_connection());
 
-  EXPECT_EQ(RELAY_PORT_TYPE, LocalCandidate(ep1_ch1())->type());
-  EXPECT_EQ(PRFLX_PORT_TYPE, RemoteCandidate(ep1_ch1())->type());
+  EXPECT_TRUE(LocalCandidate(ep1_ch1())->is_relay());
+  EXPECT_TRUE(RemoteCandidate(ep1_ch1())->is_prflx());
 
   DestroyChannels();
 }
@@ -2434,8 +2396,8 @@ class P2PTransportChannelSameNatTest : public P2PTransportChannelTestBase {
 
 TEST_F(P2PTransportChannelSameNatTest, TestConesBehindSameCone) {
   ConfigureEndpoints(NAT_FULL_CONE, NAT_FULL_CONE, NAT_FULL_CONE);
-  Test(
-      P2PTransportChannelTestBase::Result("prflx", "udp", "stun", "udp", 1000));
+  Test(P2PTransportChannelTestBase::Result(
+      IceCandidateType::kPrflx, "udp", IceCandidateType::kSrflx, "udp", 1000));
 }
 
 // Test what happens when we have multiple available pathways.
@@ -3383,7 +3345,6 @@ class P2PTransportChannelPingTest : public ::testing::Test,
  protected:
   void PrepareChannel(P2PTransportChannel* ch) {
     ch->SetIceRole(ICEROLE_CONTROLLING);
-    ch->SetIceTiebreaker(kTiebreakerDefault);
     ch->SetIceParameters(kIceParams[0]);
     ch->SetRemoteIceParameters(kIceParams[1]);
     ch->SignalNetworkRouteChanged.connect(
@@ -3461,7 +3422,7 @@ class P2PTransportChannelPingTest : public ::testing::Test,
                                             int priority,
                                             bool writable) {
     channel->AddRemoteCandidate(
-        CreateUdpCandidate(LOCAL_PORT_TYPE, ip_addr, port, priority));
+        CreateUdpCandidate(IceCandidateType::kHost, ip_addr, port, priority));
     EXPECT_TRUE_SIMULATED_WAIT(
         GetConnectionTo(channel, ip_addr, port) != nullptr, kMediumTimeout,
         *clock);
@@ -3606,8 +3567,10 @@ TEST_F(P2PTransportChannelPingTest, TestTriggeredChecks) {
   P2PTransportChannel ch("trigger checks", 1, &pa, &field_trials_);
   PrepareChannel(&ch);
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 2));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 2));
 
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   Connection* conn2 = WaitForConnectionTo(&ch, "2.2.2.2", 2);
@@ -3631,8 +3594,10 @@ TEST_F(P2PTransportChannelPingTest, TestAllConnectionsPingedSufficiently) {
   P2PTransportChannel ch("ping sufficiently", 1, &pa, &field_trials_);
   PrepareChannel(&ch);
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 2));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 2));
 
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   Connection* conn2 = WaitForConnectionTo(&ch, "2.2.2.2", 2);
@@ -3660,7 +3625,8 @@ TEST_F(P2PTransportChannelPingTest, TestStunPingIntervals) {
   P2PTransportChannel ch("TestChannel", 1, &pa, &field_trials_);
   PrepareChannel(&ch);
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
   Connection* conn = WaitForConnectionTo(&ch, "1.1.1.1", 1);
 
   ASSERT_TRUE(conn != nullptr);
@@ -3751,7 +3717,6 @@ TEST_F(P2PTransportChannelPingTest, PingingStartedAsSoonAsPossible) {
                        &field_trials_);
   P2PTransportChannel ch("TestChannel", 1, &pa, &field_trials_);
   ch.SetIceRole(ICEROLE_CONTROLLING);
-  ch.SetIceTiebreaker(kTiebreakerDefault);
   ch.SetIceParameters(kIceParams[0]);
   ch.MaybeStartGathering();
   EXPECT_EQ_WAIT(IceGatheringState::kIceGatheringComplete, ch.gathering_state(),
@@ -3790,8 +3755,10 @@ TEST_F(P2PTransportChannelPingTest, TestNoTriggeredChecksWhenWritable) {
   P2PTransportChannel ch("trigger checks", 1, &pa, &field_trials_);
   PrepareChannel(&ch);
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 2));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 2));
 
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   Connection* conn2 = WaitForConnectionTo(&ch, "2.2.2.2", 2);
@@ -3817,7 +3784,8 @@ TEST_F(P2PTransportChannelPingTest, TestFailedConnectionNotPingable) {
                          &field_trials_);
   PrepareChannel(&ch);
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
 
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   ASSERT_TRUE(conn1 != nullptr);
@@ -3835,7 +3803,8 @@ TEST_F(P2PTransportChannelPingTest, TestSignalStateChanged) {
   P2PTransportChannel ch("state change", 1, &pa, &field_trials_);
   PrepareChannel(&ch);
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   ASSERT_TRUE(conn1 != nullptr);
   // Pruning the connection reduces the set of active connections and changes
@@ -3858,8 +3827,8 @@ TEST_F(P2PTransportChannelPingTest, TestAddRemoteCandidateWithVariousUfrags) {
   PrepareChannel(&ch);
   ch.MaybeStartGathering();
   // Add a candidate with a future ufrag.
-  ch.AddRemoteCandidate(
-      CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1, kIceUfrag[2]));
+  ch.AddRemoteCandidate(CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1",
+                                           1, 1, kIceUfrag[2]));
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   ASSERT_TRUE(conn1 != nullptr);
   const Candidate& candidate = conn1->remote_candidate();
@@ -3876,15 +3845,15 @@ TEST_F(P2PTransportChannelPingTest, TestAddRemoteCandidateWithVariousUfrags) {
   EXPECT_EQ(conn1, FindNextPingableConnectionAndPingIt(&ch));
 
   // Add a candidate with an old ufrag. No connection will be created.
-  ch.AddRemoteCandidate(
-      CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 2, kIceUfrag[1]));
+  ch.AddRemoteCandidate(CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2",
+                                           2, 2, kIceUfrag[1]));
   rtc::Thread::Current()->ProcessMessages(500);
   EXPECT_TRUE(GetConnectionTo(&ch, "2.2.2.2", 2) == nullptr);
 
   // Add a candidate with the current ufrag, its pwd and generation will be
   // assigned, even if the generation is not set.
-  ch.AddRemoteCandidate(
-      CreateUdpCandidate(LOCAL_PORT_TYPE, "3.3.3.3", 3, 0, kIceUfrag[2]));
+  ch.AddRemoteCandidate(CreateUdpCandidate(IceCandidateType::kHost, "3.3.3.3",
+                                           3, 0, kIceUfrag[2]));
   Connection* conn3 = nullptr;
   ASSERT_TRUE_WAIT((conn3 = GetConnectionTo(&ch, "3.3.3.3", 3)) != nullptr,
                    kMediumTimeout);
@@ -3912,14 +3881,16 @@ TEST_F(P2PTransportChannelPingTest, ConnectionResurrection) {
   ch.MaybeStartGathering();
 
   // Create conn1 and keep track of original candidate priority.
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   ASSERT_TRUE(conn1 != nullptr);
   uint32_t remote_priority = conn1->remote_candidate().priority();
 
   // Create a higher priority candidate and make the connection
   // receiving/writable. This will prune conn1.
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 2));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 2));
   Connection* conn2 = WaitForConnectionTo(&ch, "2.2.2.2", 2);
   ASSERT_TRUE(conn2 != nullptr);
   conn2->ReceivedPing();
@@ -3971,7 +3942,8 @@ TEST_F(P2PTransportChannelPingTest, TestReceivingStateChange) {
   EXPECT_EQ(500, ch.config().receiving_timeout_or_default());
   EXPECT_EQ(50, ch.check_receiving_interval());
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1, &clock);
   ASSERT_TRUE(conn1 != nullptr);
 
@@ -3997,7 +3969,8 @@ TEST_F(P2PTransportChannelPingTest, TestSelectConnectionBeforeNomination) {
   PrepareChannel(&ch);
   ch.SetIceRole(ICEROLE_CONTROLLED);
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   ASSERT_TRUE(conn1 != nullptr);
   // Channel is not ready to send because it is not writable.
@@ -4018,7 +3991,8 @@ TEST_F(P2PTransportChannelPingTest, TestSelectConnectionBeforeNomination) {
 
   // When a higher priority candidate comes in, the new connection is chosen
   // as the selected connection.
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 10));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 10));
   Connection* conn2 = WaitForConnectionTo(&ch, "2.2.2.2", 2);
   ASSERT_TRUE(conn2 != nullptr);
   conn2->ReceivedPingResponse(LOW_RTT, "id");
@@ -4033,7 +4007,8 @@ TEST_F(P2PTransportChannelPingTest, TestSelectConnectionBeforeNomination) {
   // connection will be set as the selected connection, even though
   // its priority is lower.
   EXPECT_EQ(len, SendData(&ch, data, len, ++last_packet_id));
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "3.3.3.3", 3, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "3.3.3.3", 3, 1));
   Connection* conn3 = WaitForConnectionTo(&ch, "3.3.3.3", 3);
   ASSERT_TRUE(conn3 != nullptr);
   // Because it has a lower priority, the selected connection is still conn2.
@@ -4054,7 +4029,8 @@ TEST_F(P2PTransportChannelPingTest, TestSelectConnectionBeforeNomination) {
   // the selected connection because the selected connection is nominated by
   // the controlling side.
   EXPECT_EQ(len, SendData(&ch, data, len, ++last_packet_id));
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "4.4.4.4", 4, 100));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "4.4.4.4", 4, 100));
   Connection* conn4 = WaitForConnectionTo(&ch, "4.4.4.4", 4);
   ASSERT_TRUE(conn4 != nullptr);
   EXPECT_EQ(conn3, ch.selected_connection());
@@ -4089,7 +4065,8 @@ TEST_F(P2PTransportChannelPingTest, TestPingOnNomination) {
   ch.SetIceConfig(ch.config());
   ch.SetIceRole(ICEROLE_CONTROLLED);
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   ASSERT_TRUE(conn1 != nullptr);
 
@@ -4100,7 +4077,8 @@ TEST_F(P2PTransportChannelPingTest, TestPingOnNomination) {
 
   // When a higher priority candidate comes in, the new connection is chosen
   // as the selected connection.
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 10));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 10));
   Connection* conn2 = WaitForConnectionTo(&ch, "2.2.2.2", 2);
   ASSERT_TRUE(conn2 != nullptr);
   conn2->ReceivedPingResponse(LOW_RTT, "id");
@@ -4131,7 +4109,8 @@ TEST_F(P2PTransportChannelPingTest, TestPingOnSwitch) {
   ch.SetIceConfig(ch.config());
   ch.SetIceRole(ICEROLE_CONTROLLING);
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   ASSERT_TRUE(conn1 != nullptr);
 
@@ -4142,7 +4121,8 @@ TEST_F(P2PTransportChannelPingTest, TestPingOnSwitch) {
 
   // When a higher priority candidate comes in, the new connection is chosen
   // as the selected connection.
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 10));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 10));
   Connection* conn2 = WaitForConnectionTo(&ch, "2.2.2.2", 2);
   ASSERT_TRUE(conn2 != nullptr);
 
@@ -4170,7 +4150,8 @@ TEST_F(P2PTransportChannelPingTest, TestPingOnSelected) {
   ch.SetIceConfig(ch.config());
   ch.SetIceRole(ICEROLE_CONTROLLING);
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   ASSERT_TRUE(conn1 != nullptr);
 
@@ -4216,7 +4197,8 @@ TEST_F(P2PTransportChannelPingTest, TestSelectConnectionFromUnknownAddress) {
   EXPECT_EQ_WAIT(conn1, ch.selected_connection(), kDefaultTimeout);
 
   // Another connection is nominated via use_candidate.
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 1));
   Connection* conn2 = WaitForConnectionTo(&ch, "2.2.2.2", 2);
   ASSERT_TRUE(conn2 != nullptr);
   // Because it has a lower priority, the selected connection is still conn1.
@@ -4276,7 +4258,8 @@ TEST_F(P2PTransportChannelPingTest, TestSelectConnectionBasedOnMediaReceived) {
   PrepareChannel(&ch);
   ch.SetIceRole(ICEROLE_CONTROLLED);
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 10));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 10));
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   ASSERT_TRUE(conn1 != nullptr);
   conn1->ReceivedPingResponse(LOW_RTT, "id");
@@ -4285,7 +4268,8 @@ TEST_F(P2PTransportChannelPingTest, TestSelectConnectionBasedOnMediaReceived) {
   // If a data packet is received on conn2, the selected connection should
   // switch to conn2 because the controlled side must mirror the media path
   // chosen by the controlling side.
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 1));
   Connection* conn2 = WaitForConnectionTo(&ch, "2.2.2.2", 2);
   ASSERT_TRUE(conn2 != nullptr);
   conn2->ReceivedPingResponse(LOW_RTT, "id");  // Become writable and receiving.
@@ -4601,8 +4585,8 @@ TEST_F(P2PTransportChannelPingTest, TestAddRemoteCandidateWithAddressReuse) {
   const int port_num = 1;
 
   // kIceUfrag[1] is the current generation ufrag.
-  Candidate candidate = CreateUdpCandidate(LOCAL_PORT_TYPE, host_address,
-                                           port_num, 1, kIceUfrag[1]);
+  Candidate candidate = CreateUdpCandidate(
+      IceCandidateType::kHost, host_address, port_num, 1, kIceUfrag[1]);
   ch.AddRemoteCandidate(candidate);
   Connection* conn1 = WaitForConnectionTo(&ch, host_address, port_num);
   ASSERT_TRUE(conn1 != nullptr);
@@ -4639,7 +4623,8 @@ TEST_F(P2PTransportChannelPingTest, TestDontPruneWhenWeak) {
   PrepareChannel(&ch);
   ch.SetIceRole(ICEROLE_CONTROLLED);
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   ASSERT_TRUE(conn1 != nullptr);
   EXPECT_EQ(nullptr, ch.selected_connection());
@@ -4647,7 +4632,8 @@ TEST_F(P2PTransportChannelPingTest, TestDontPruneWhenWeak) {
 
   // When a higher-priority, nominated candidate comes in, the connections with
   // lower-priority are pruned.
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 10));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 10));
   Connection* conn2 = WaitForConnectionTo(&ch, "2.2.2.2", 2, &clock);
   ASSERT_TRUE(conn2 != nullptr);
   conn2->ReceivedPingResponse(LOW_RTT, "id");  // Becomes writable and receiving
@@ -4658,7 +4644,8 @@ TEST_F(P2PTransportChannelPingTest, TestDontPruneWhenWeak) {
   // Wait until conn2 becomes not receiving.
   EXPECT_TRUE_SIMULATED_WAIT(!conn2->receiving(), kMediumTimeout, clock);
 
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "3.3.3.3", 3, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "3.3.3.3", 3, 1));
   Connection* conn3 = WaitForConnectionTo(&ch, "3.3.3.3", 3, &clock);
   ASSERT_TRUE(conn3 != nullptr);
   // The selected connection should still be conn2. Even through conn3 has lower
@@ -4706,8 +4693,10 @@ TEST_F(P2PTransportChannelPingTest, TestGetState) {
   // any connections yet.
   EXPECT_EQ(webrtc::IceTransportState::kNew, ch.GetIceTransportState());
   EXPECT_EQ(IceTransportState::STATE_INIT, ch.GetState());
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 100));
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 100));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 1));
   // Checking candidates that have been added with gathered candidates.
   ASSERT_GT(ch.connections().size(), 0u);
   EXPECT_EQ(webrtc::IceTransportState::kChecking, ch.GetIceTransportState());
@@ -4746,7 +4735,8 @@ TEST_F(P2PTransportChannelPingTest, TestConnectionPrunedAgain) {
   config.receiving_switching_delay = 800;
   ch.SetIceConfig(config);
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 100));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 100));
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1, &clock);
   ASSERT_TRUE(conn1 != nullptr);
   EXPECT_EQ(nullptr, ch.selected_connection());
@@ -4758,7 +4748,8 @@ TEST_F(P2PTransportChannelPingTest, TestConnectionPrunedAgain) {
   // not be deleted right away. Once the current selected connection becomes not
   // receiving, `conn2` will start to ping and upon receiving the ping response,
   // it will become the selected connection.
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 1));
   Connection* conn2 = WaitForConnectionTo(&ch, "2.2.2.2", 2, &clock);
   ASSERT_TRUE(conn2 != nullptr);
   EXPECT_TRUE_SIMULATED_WAIT(!conn2->active(), kDefaultTimeout, clock);
@@ -4795,7 +4786,8 @@ TEST_F(P2PTransportChannelPingTest, TestDeleteConnectionsIfAllWriteTimedout) {
   PrepareChannel(&ch);
   ch.MaybeStartGathering();
   // Have one connection only but later becomes write-time-out.
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 100));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 100));
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1, &clock);
   ASSERT_TRUE(conn1 != nullptr);
   conn1->ReceivedPing();  // Becomes receiving
@@ -4803,11 +4795,13 @@ TEST_F(P2PTransportChannelPingTest, TestDeleteConnectionsIfAllWriteTimedout) {
   EXPECT_TRUE_SIMULATED_WAIT(ch.connections().empty(), kShortTimeout, clock);
 
   // Have two connections but both become write-time-out later.
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 1));
   Connection* conn2 = WaitForConnectionTo(&ch, "2.2.2.2", 2, &clock);
   ASSERT_TRUE(conn2 != nullptr);
   conn2->ReceivedPing();  // Becomes receiving
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "3.3.3.3", 3, 2));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "3.3.3.3", 3, 2));
   Connection* conn3 = WaitForConnectionTo(&ch, "3.3.3.3", 3, &clock);
   ASSERT_TRUE(conn3 != nullptr);
   conn3->ReceivedPing();  // Becomes receiving
@@ -4828,7 +4822,8 @@ TEST_F(P2PTransportChannelPingTest, TestStopPortAllocatorSessions) {
   PrepareChannel(&ch);
   ch.SetIceConfig(CreateIceConfig(2000, GATHER_ONCE));
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 100));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 100));
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   ASSERT_TRUE(conn1 != nullptr);
   conn1->ReceivedPingResponse(LOW_RTT, "id");  // Becomes writable and receiving
@@ -4845,7 +4840,8 @@ TEST_F(P2PTransportChannelPingTest, TestStopPortAllocatorSessions) {
 
   // But if a new connection created from the new session becomes writable,
   // it will stop the current session.
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 100));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 100));
   Connection* conn2 = WaitForConnectionTo(&ch, "2.2.2.2", 2);
   ASSERT_TRUE(conn2 != nullptr);
   conn2->ReceivedPingResponse(LOW_RTT, "id");  // Becomes writable and receiving
@@ -4865,7 +4861,8 @@ TEST_F(P2PTransportChannelPingTest, TestIceRoleUpdatedOnRemovedPort) {
   IceConfig config = CreateIceConfig(1000, GATHER_CONTINUALLY);
   ch.SetIceConfig(config);
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
 
   Connection* conn = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   ASSERT_TRUE(conn != nullptr);
@@ -4890,7 +4887,8 @@ TEST_F(P2PTransportChannelPingTest, TestIceRoleUpdatedOnPortAfterIceRestart) {
   // Starts with ICEROLE_CONTROLLING.
   PrepareChannel(&ch);
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
 
   Connection* conn = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   ASSERT_TRUE(conn != nullptr);
@@ -4916,7 +4914,8 @@ TEST_F(P2PTransportChannelPingTest, TestPortDestroyedAfterTimeoutAndPruned) {
   PrepareChannel(&ch);
   ch.SetIceRole(ICEROLE_CONTROLLED);
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
 
   Connection* conn = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   ASSERT_TRUE(conn != nullptr);
@@ -4946,8 +4945,10 @@ TEST_F(P2PTransportChannelPingTest, TestMaxOutstandingPingsFieldTrial) {
   ch.SetIceConfig(ch.config());
   PrepareChannel(&ch);
   ch.MaybeStartGathering();
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 2));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 2));
 
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   Connection* conn2 = WaitForConnectionTo(&ch, "2.2.2.2", 2);
@@ -5002,8 +5003,8 @@ class P2PTransportChannelMostLikelyToWorkFirstTest
   // types and, for relay local candidate, the expected relay protocol and ping
   // it.
   void VerifyNextPingableConnection(
-      absl::string_view local_candidate_type,
-      absl::string_view remote_candidate_type,
+      IceCandidateType local_candidate_type,
+      IceCandidateType remote_candidate_type,
       absl::string_view relay_protocol_type = UDP_PROTOCOL_NAME) {
     Connection* conn = FindNextPingableConnectionAndPingIt(channel_.get());
     ASSERT_TRUE(conn != nullptr);
@@ -5030,33 +5031,35 @@ TEST_F(P2PTransportChannelMostLikelyToWorkFirstTest,
   P2PTransportChannel& ch =
       StartTransportChannel(true, max_strong_interval, &field_trials_);
   EXPECT_TRUE_WAIT(ch.ports().size() == 2, kDefaultTimeout);
-  EXPECT_EQ(ch.ports()[0]->Type(), LOCAL_PORT_TYPE);
-  EXPECT_EQ(ch.ports()[1]->Type(), RELAY_PORT_TYPE);
+  EXPECT_EQ(ch.ports()[0]->Type(), IceCandidateType::kHost);
+  EXPECT_EQ(ch.ports()[1]->Type(), IceCandidateType::kRelay);
 
-  ch.AddRemoteCandidate(CreateUdpCandidate(RELAY_PORT_TYPE, "1.1.1.1", 1, 1));
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 2));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kRelay, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 2));
 
   EXPECT_TRUE_WAIT(ch.connections().size() == 4, kDefaultTimeout);
 
   // Relay/Relay should be the first pingable connection.
   Connection* conn = FindNextPingableConnectionAndPingIt(&ch);
   ASSERT_TRUE(conn != nullptr);
-  EXPECT_EQ(conn->local_candidate().type(), RELAY_PORT_TYPE);
-  EXPECT_EQ(conn->remote_candidate().type(), RELAY_PORT_TYPE);
+  EXPECT_TRUE(conn->local_candidate().is_relay());
+  EXPECT_TRUE(conn->remote_candidate().is_relay());
 
   // Unless that we have a trigger check waiting to be pinged.
   Connection* conn2 = WaitForConnectionTo(&ch, "2.2.2.2", 2);
   ASSERT_TRUE(conn2 != nullptr);
-  EXPECT_EQ(conn2->local_candidate().type(), LOCAL_PORT_TYPE);
-  EXPECT_EQ(conn2->remote_candidate().type(), LOCAL_PORT_TYPE);
+  EXPECT_TRUE(conn2->local_candidate().is_local());
+  EXPECT_TRUE(conn2->remote_candidate().is_local());
   conn2->ReceivedPing();
   EXPECT_EQ(conn2, FindNextPingableConnectionAndPingIt(&ch));
 
   // Make conn3 the selected connection.
   Connection* conn3 = WaitForConnectionTo(&ch, "1.1.1.1", 1);
   ASSERT_TRUE(conn3 != nullptr);
-  EXPECT_EQ(conn3->local_candidate().type(), LOCAL_PORT_TYPE);
-  EXPECT_EQ(conn3->remote_candidate().type(), RELAY_PORT_TYPE);
+  EXPECT_TRUE(conn3->local_candidate().is_local());
+  EXPECT_TRUE(conn3->remote_candidate().is_relay());
   conn3->ReceivedPingResponse(LOW_RTT, "id");
   ASSERT_TRUE(conn3->writable());
   conn3->ReceivedPing();
@@ -5089,29 +5092,36 @@ TEST_F(P2PTransportChannelMostLikelyToWorkFirstTest,
        TestRelayRelayFirstWhenEverythingPinged) {
   P2PTransportChannel& ch = StartTransportChannel(true, 500, &field_trials_);
   EXPECT_TRUE_WAIT(ch.ports().size() == 2, kDefaultTimeout);
-  EXPECT_EQ(ch.ports()[0]->Type(), LOCAL_PORT_TYPE);
-  EXPECT_EQ(ch.ports()[1]->Type(), RELAY_PORT_TYPE);
+  EXPECT_EQ(ch.ports()[0]->Type(), IceCandidateType::kHost);
+  EXPECT_EQ(ch.ports()[1]->Type(), IceCandidateType::kRelay);
 
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
   EXPECT_TRUE_WAIT(ch.connections().size() == 2, kDefaultTimeout);
 
   // Initially, only have Local/Local and Local/Relay.
-  VerifyNextPingableConnection(LOCAL_PORT_TYPE, LOCAL_PORT_TYPE);
-  VerifyNextPingableConnection(RELAY_PORT_TYPE, LOCAL_PORT_TYPE);
+  VerifyNextPingableConnection(IceCandidateType::kHost,
+                               IceCandidateType::kHost);
+  VerifyNextPingableConnection(IceCandidateType::kRelay,
+                               IceCandidateType::kHost);
 
   // Remote Relay candidate arrives.
-  ch.AddRemoteCandidate(CreateUdpCandidate(RELAY_PORT_TYPE, "2.2.2.2", 2, 2));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kRelay, "2.2.2.2", 2, 2));
   EXPECT_TRUE_WAIT(ch.connections().size() == 4, kDefaultTimeout);
 
   // Relay/Relay should be the first since it hasn't been pinged before.
-  VerifyNextPingableConnection(RELAY_PORT_TYPE, RELAY_PORT_TYPE);
+  VerifyNextPingableConnection(IceCandidateType::kRelay,
+                               IceCandidateType::kRelay);
 
   // Local/Relay is the final one.
-  VerifyNextPingableConnection(LOCAL_PORT_TYPE, RELAY_PORT_TYPE);
+  VerifyNextPingableConnection(IceCandidateType::kHost,
+                               IceCandidateType::kRelay);
 
   // Now, every connection has been pinged once. The next one should be
   // Relay/Relay.
-  VerifyNextPingableConnection(RELAY_PORT_TYPE, RELAY_PORT_TYPE);
+  VerifyNextPingableConnection(IceCandidateType::kRelay,
+                               IceCandidateType::kRelay);
 }
 
 // Test that when we receive a new remote candidate, they will be tried first
@@ -5120,31 +5130,38 @@ TEST_F(P2PTransportChannelMostLikelyToWorkFirstTest,
        TestNoStarvationOnNonRelayConnection) {
   P2PTransportChannel& ch = StartTransportChannel(true, 500, &field_trials_);
   EXPECT_TRUE_WAIT(ch.ports().size() == 2, kDefaultTimeout);
-  EXPECT_EQ(ch.ports()[0]->Type(), LOCAL_PORT_TYPE);
-  EXPECT_EQ(ch.ports()[1]->Type(), RELAY_PORT_TYPE);
+  EXPECT_EQ(ch.ports()[0]->Type(), IceCandidateType::kHost);
+  EXPECT_EQ(ch.ports()[1]->Type(), IceCandidateType::kRelay);
 
-  ch.AddRemoteCandidate(CreateUdpCandidate(RELAY_PORT_TYPE, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kRelay, "1.1.1.1", 1, 1));
   EXPECT_TRUE_WAIT(ch.connections().size() == 2, kDefaultTimeout);
 
   // Initially, only have Relay/Relay and Local/Relay. Ping Relay/Relay first.
-  VerifyNextPingableConnection(RELAY_PORT_TYPE, RELAY_PORT_TYPE);
+  VerifyNextPingableConnection(IceCandidateType::kRelay,
+                               IceCandidateType::kRelay);
 
   // Next, ping Local/Relay.
-  VerifyNextPingableConnection(LOCAL_PORT_TYPE, RELAY_PORT_TYPE);
+  VerifyNextPingableConnection(IceCandidateType::kHost,
+                               IceCandidateType::kRelay);
 
   // Remote Local candidate arrives.
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 2));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 2));
   EXPECT_TRUE_WAIT(ch.connections().size() == 4, kDefaultTimeout);
 
   // Local/Local should be the first since it hasn't been pinged before.
-  VerifyNextPingableConnection(LOCAL_PORT_TYPE, LOCAL_PORT_TYPE);
+  VerifyNextPingableConnection(IceCandidateType::kHost,
+                               IceCandidateType::kHost);
 
   // Relay/Local is the final one.
-  VerifyNextPingableConnection(RELAY_PORT_TYPE, LOCAL_PORT_TYPE);
+  VerifyNextPingableConnection(IceCandidateType::kRelay,
+                               IceCandidateType::kHost);
 
   // Now, every connection has been pinged once. The next one should be
   // Relay/Relay.
-  VerifyNextPingableConnection(RELAY_PORT_TYPE, RELAY_PORT_TYPE);
+  VerifyNextPingableConnection(IceCandidateType::kRelay,
+                               IceCandidateType::kRelay);
 }
 
 // Test skip_relay_to_non_relay_connections field-trial.
@@ -5156,15 +5173,17 @@ TEST_F(P2PTransportChannelMostLikelyToWorkFirstTest,
       "WebRTC-IceFieldTrials/skip_relay_to_non_relay_connections:true/");
   P2PTransportChannel& ch = StartTransportChannel(true, 500, &field_trials);
   EXPECT_TRUE_WAIT(ch.ports().size() == 2, kDefaultTimeout);
-  EXPECT_EQ(ch.ports()[0]->Type(), LOCAL_PORT_TYPE);
-  EXPECT_EQ(ch.ports()[1]->Type(), RELAY_PORT_TYPE);
+  EXPECT_EQ(ch.ports()[0]->Type(), IceCandidateType::kHost);
+  EXPECT_EQ(ch.ports()[1]->Type(), IceCandidateType::kRelay);
 
   // Remote Relay candidate arrives.
-  ch.AddRemoteCandidate(CreateUdpCandidate(RELAY_PORT_TYPE, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kRelay, "1.1.1.1", 1, 1));
   EXPECT_TRUE_WAIT(ch.connections().size() == 1, kDefaultTimeout);
 
   // Remote Local candidate arrives.
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 2));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 2));
   EXPECT_TRUE_WAIT(ch.connections().size() == 2, kDefaultTimeout);
 }
 
@@ -5180,23 +5199,26 @@ TEST_F(P2PTransportChannelMostLikelyToWorkFirstTest, TestTcpTurn) {
 
   P2PTransportChannel& ch = StartTransportChannel(true, 500, &field_trials_);
   EXPECT_TRUE_WAIT(ch.ports().size() == 3, kDefaultTimeout);
-  EXPECT_EQ(ch.ports()[0]->Type(), LOCAL_PORT_TYPE);
-  EXPECT_EQ(ch.ports()[1]->Type(), RELAY_PORT_TYPE);
-  EXPECT_EQ(ch.ports()[2]->Type(), RELAY_PORT_TYPE);
+  EXPECT_EQ(ch.ports()[0]->Type(), IceCandidateType::kHost);
+  EXPECT_EQ(ch.ports()[1]->Type(), IceCandidateType::kRelay);
+  EXPECT_EQ(ch.ports()[2]->Type(), IceCandidateType::kRelay);
 
   // Remote Relay candidate arrives.
-  ch.AddRemoteCandidate(CreateUdpCandidate(RELAY_PORT_TYPE, "1.1.1.1", 1, 1));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kRelay, "1.1.1.1", 1, 1));
   EXPECT_TRUE_WAIT(ch.connections().size() == 3, kDefaultTimeout);
 
   // UDP Relay/Relay should be pinged first.
-  VerifyNextPingableConnection(RELAY_PORT_TYPE, RELAY_PORT_TYPE);
+  VerifyNextPingableConnection(IceCandidateType::kRelay,
+                               IceCandidateType::kRelay);
 
   // TCP Relay/Relay is the next.
-  VerifyNextPingableConnection(RELAY_PORT_TYPE, RELAY_PORT_TYPE,
-                               TCP_PROTOCOL_NAME);
+  VerifyNextPingableConnection(IceCandidateType::kRelay,
+                               IceCandidateType::kRelay, TCP_PROTOCOL_NAME);
 
   // Finally, Local/Relay will be pinged.
-  VerifyNextPingableConnection(LOCAL_PORT_TYPE, RELAY_PORT_TYPE);
+  VerifyNextPingableConnection(IceCandidateType::kHost,
+                               IceCandidateType::kRelay);
 }
 
 // Test that a resolver is created, asked for a result, and destroyed
@@ -5266,16 +5288,16 @@ TEST_F(P2PTransportChannelTest,
   ASSERT_TRUE_WAIT(
       (selected_connection = ep2_ch1()->selected_connection()) != nullptr,
       kMediumTimeout);
-  EXPECT_EQ(PRFLX_PORT_TYPE, selected_connection->remote_candidate().type());
+  EXPECT_TRUE(selected_connection->remote_candidate().is_prflx());
   EXPECT_EQ(kIceUfrag[0], selected_connection->remote_candidate().username());
   EXPECT_EQ(kIcePwd[0], selected_connection->remote_candidate().password());
   // Set expectation before ep1 signals a hostname candidate.
   resolver_fixture.SetAddressToReturn(local_address);
   ResumeCandidates(0);
   // Verify ep2's selected connection is updated to use the 'local' candidate.
-  EXPECT_EQ_WAIT(LOCAL_PORT_TYPE,
-                 ep2_ch1()->selected_connection()->remote_candidate().type(),
-                 kMediumTimeout);
+  EXPECT_TRUE_WAIT(
+      ep2_ch1()->selected_connection()->remote_candidate().is_local(),
+      kMediumTimeout);
   EXPECT_EQ(selected_connection, ep2_ch1()->selected_connection());
 
   DestroyChannels();
@@ -5328,16 +5350,15 @@ TEST_F(P2PTransportChannelTest,
   // There is a caveat in our implementation associated with this expectation.
   // See the big comment in P2PTransportChannel::OnUnknownAddress.
   ASSERT_TRUE_WAIT(ep2_ch1()->selected_connection() != nullptr, kMediumTimeout);
-  EXPECT_EQ(PRFLX_PORT_TYPE,
-            ep2_ch1()->selected_connection()->remote_candidate().type());
+  EXPECT_TRUE(ep2_ch1()->selected_connection()->remote_candidate().is_prflx());
   // ep2 should also be able resolve the hostname candidate. The resolved remote
   // host candidate should be merged with the prflx remote candidate.
 
   resolver_fixture.FireDelayedResolution();
 
-  EXPECT_EQ_WAIT(LOCAL_PORT_TYPE,
-                 ep2_ch1()->selected_connection()->remote_candidate().type(),
-                 kMediumTimeout);
+  EXPECT_TRUE_WAIT(
+      ep2_ch1()->selected_connection()->remote_candidate().is_local(),
+      kMediumTimeout);
   EXPECT_EQ(1u, ep2_ch1()->remote_candidates().size());
 
   DestroyChannels();
@@ -5380,10 +5401,8 @@ TEST_F(P2PTransportChannelTest, CanConnectWithHostCandidateWithMdnsName) {
   // with a peer reflexive candidate from ep2.
   ASSERT_TRUE_WAIT((ep1_ch1()->selected_connection()) != nullptr,
                    kMediumTimeout);
-  EXPECT_EQ(LOCAL_PORT_TYPE,
-            ep1_ch1()->selected_connection()->local_candidate().type());
-  EXPECT_EQ(PRFLX_PORT_TYPE,
-            ep1_ch1()->selected_connection()->remote_candidate().type());
+  EXPECT_TRUE(ep1_ch1()->selected_connection()->local_candidate().is_local());
+  EXPECT_TRUE(ep1_ch1()->selected_connection()->remote_candidate().is_prflx());
 
   DestroyChannels();
 }
@@ -5640,16 +5659,19 @@ TEST_F(P2PTransportChannelTest,
   // host, srflx and relay types. Note that the candidates differ in their
   // ports.
   cricket::Candidate host_candidate = CreateUdpCandidate(
-      LOCAL_PORT_TYPE, "1.1.1.1", 1 /* port */, 0 /* priority */);
+      IceCandidateType::kHost, "1.1.1.1", 1 /* port */, 0 /* priority */);
   ep1_ch1()->AddRemoteCandidate(host_candidate);
 
   std::vector<cricket::Candidate> mdns_candidates;
-  mdns_candidates.push_back(CreateUdpCandidate(LOCAL_PORT_TYPE, "example.local",
-                                               2 /* port */, 0 /* priority */));
-  mdns_candidates.push_back(CreateUdpCandidate(STUN_PORT_TYPE, "example.local",
-                                               3 /* port */, 0 /* priority */));
-  mdns_candidates.push_back(CreateUdpCandidate(RELAY_PORT_TYPE, "example.local",
-                                               4 /* port */, 0 /* priority */));
+  mdns_candidates.push_back(CreateUdpCandidate(IceCandidateType::kHost,
+                                               "example.local", 2 /* port */,
+                                               0 /* priority */));
+  mdns_candidates.push_back(CreateUdpCandidate(IceCandidateType::kSrflx,
+                                               "example.local", 3 /* port */,
+                                               0 /* priority */));
+  mdns_candidates.push_back(CreateUdpCandidate(IceCandidateType::kRelay,
+                                               "example.local", 4 /* port */,
+                                               0 /* priority */));
   // We just resolve the hostname to 1.1.1.1, and add the candidates with this
   // address directly to simulate the process of adding remote candidates with
   // the name resolution.
@@ -5713,10 +5735,8 @@ TEST_F(P2PTransportChannelTest,
   // We should be able to form a srflx-host connection to ep2.
   ASSERT_TRUE_WAIT((ep1_ch1()->selected_connection()) != nullptr,
                    kMediumTimeout);
-  EXPECT_EQ(STUN_PORT_TYPE,
-            ep1_ch1()->selected_connection()->local_candidate().type());
-  EXPECT_EQ(LOCAL_PORT_TYPE,
-            ep1_ch1()->selected_connection()->remote_candidate().type());
+  EXPECT_TRUE(ep1_ch1()->selected_connection()->local_candidate().is_stun());
+  EXPECT_TRUE(ep1_ch1()->selected_connection()->remote_candidate().is_local());
 
   DestroyChannels();
 }
@@ -5747,31 +5767,25 @@ TEST_F(P2PTransportChannelTest,
                              kDefaultTimeout, clock);
   ASSERT_TRUE_SIMULATED_WAIT(ep2_ch1()->selected_connection() != nullptr,
                              kDefaultTimeout, clock);
-  EXPECT_EQ(RELAY_PORT_TYPE,
-            ep1_ch1()->selected_connection()->local_candidate().type());
-  EXPECT_EQ(RELAY_PORT_TYPE,
-            ep2_ch1()->selected_connection()->local_candidate().type());
+  EXPECT_TRUE(ep1_ch1()->selected_connection()->local_candidate().is_relay());
+  EXPECT_TRUE(ep2_ch1()->selected_connection()->local_candidate().is_relay());
 
   // Loosen the candidate filter at ep1.
   ep1->allocator_->SetCandidateFilter(CF_ALL);
   EXPECT_TRUE_SIMULATED_WAIT(
       ep1_ch1()->selected_connection() != nullptr &&
-          ep1_ch1()->selected_connection()->local_candidate().type() ==
-              LOCAL_PORT_TYPE,
+          ep1_ch1()->selected_connection()->local_candidate().is_local(),
       kDefaultTimeout, clock);
-  EXPECT_EQ(RELAY_PORT_TYPE,
-            ep1_ch1()->selected_connection()->remote_candidate().type());
+  EXPECT_TRUE(ep1_ch1()->selected_connection()->remote_candidate().is_relay());
 
   // Loosen the candidate filter at ep2.
   ep2->allocator_->SetCandidateFilter(CF_ALL);
   EXPECT_TRUE_SIMULATED_WAIT(
       ep2_ch1()->selected_connection() != nullptr &&
-          ep2_ch1()->selected_connection()->local_candidate().type() ==
-              LOCAL_PORT_TYPE,
+          ep2_ch1()->selected_connection()->local_candidate().is_local(),
       kDefaultTimeout, clock);
   // We have migrated to a host-host candidate pair.
-  EXPECT_EQ(LOCAL_PORT_TYPE,
-            ep2_ch1()->selected_connection()->remote_candidate().type());
+  EXPECT_TRUE(ep2_ch1()->selected_connection()->remote_candidate().is_local());
 
   // Block the traffic over non-relay-to-relay routes and expect a route change.
   fw()->AddRule(false, rtc::FP_ANY, kPublicAddrs[0], kPublicAddrs[1]);
@@ -5780,12 +5794,10 @@ TEST_F(P2PTransportChannelTest,
   fw()->AddRule(false, rtc::FP_ANY, kPublicAddrs[1], kTurnUdpExtAddr);
 
   // We should be able to reuse the previously gathered relay candidates.
-  EXPECT_EQ_SIMULATED_WAIT(
-      RELAY_PORT_TYPE,
-      ep1_ch1()->selected_connection()->local_candidate().type(),
+  EXPECT_TRUE_SIMULATED_WAIT(
+      ep1_ch1()->selected_connection()->local_candidate().is_relay(),
       kDefaultTimeout, clock);
-  EXPECT_EQ(RELAY_PORT_TYPE,
-            ep1_ch1()->selected_connection()->remote_candidate().type());
+  EXPECT_TRUE(ep1_ch1()->selected_connection()->remote_candidate().is_relay());
   DestroyChannels();
 }
 
@@ -5824,22 +5836,18 @@ TEST_F(P2PTransportChannelTest,
   ep1->allocator_->SetCandidateFilter(kCandidateFilterNoHost);
   EXPECT_TRUE_SIMULATED_WAIT(
       ep1_ch1()->selected_connection() != nullptr &&
-          ep1_ch1()->selected_connection()->local_candidate().type() ==
-              STUN_PORT_TYPE,
+          ep1_ch1()->selected_connection()->local_candidate().is_stun(),
       kDefaultTimeout, clock);
-  EXPECT_EQ(RELAY_PORT_TYPE,
-            ep1_ch1()->selected_connection()->remote_candidate().type());
+  EXPECT_TRUE(ep1_ch1()->selected_connection()->remote_candidate().is_relay());
 
   // Loosen the candidate filter at ep2.
   ep2->allocator_->SetCandidateFilter(kCandidateFilterNoHost);
   EXPECT_TRUE_SIMULATED_WAIT(
       ep2_ch1()->selected_connection() != nullptr &&
-          ep2_ch1()->selected_connection()->local_candidate().type() ==
-              STUN_PORT_TYPE,
+          ep2_ch1()->selected_connection()->local_candidate().is_stun(),
       kDefaultTimeout, clock);
   // We have migrated to a srflx-srflx candidate pair.
-  EXPECT_EQ(STUN_PORT_TYPE,
-            ep2_ch1()->selected_connection()->remote_candidate().type());
+  EXPECT_TRUE(ep2_ch1()->selected_connection()->remote_candidate().is_stun());
 
   // Block the traffic over non-relay-to-relay routes and expect a route change.
   fw()->AddRule(false, rtc::FP_ANY, kPrivateAddrs[0], kPublicAddrs[1]);
@@ -5847,12 +5855,10 @@ TEST_F(P2PTransportChannelTest,
   fw()->AddRule(false, rtc::FP_ANY, kPrivateAddrs[0], kTurnUdpExtAddr);
   fw()->AddRule(false, rtc::FP_ANY, kPrivateAddrs[1], kTurnUdpExtAddr);
   // We should be able to reuse the previously gathered relay candidates.
-  EXPECT_EQ_SIMULATED_WAIT(
-      RELAY_PORT_TYPE,
-      ep1_ch1()->selected_connection()->local_candidate().type(),
+  EXPECT_TRUE_SIMULATED_WAIT(
+      ep1_ch1()->selected_connection()->local_candidate().is_relay(),
       kDefaultTimeout, clock);
-  EXPECT_EQ(RELAY_PORT_TYPE,
-            ep1_ch1()->selected_connection()->remote_candidate().type());
+  EXPECT_TRUE(ep1_ch1()->selected_connection()->remote_candidate().is_relay());
   DestroyChannels();
 }
 
@@ -5885,13 +5891,11 @@ TEST_F(P2PTransportChannelTest,
   ep1->allocator_->SetCandidateFilter(CF_ALL);
   // Wait for a period for any potential surfacing of new candidates.
   SIMULATED_WAIT(false, kDefaultTimeout, clock);
-  EXPECT_EQ(RELAY_PORT_TYPE,
-            ep1_ch1()->selected_connection()->local_candidate().type());
+  EXPECT_TRUE(ep1_ch1()->selected_connection()->local_candidate().is_relay());
 
   // Loosen the candidate filter at ep2.
   ep2->allocator_->SetCandidateFilter(CF_ALL);
-  EXPECT_EQ(RELAY_PORT_TYPE,
-            ep2_ch1()->selected_connection()->local_candidate().type());
+  EXPECT_TRUE(ep2_ch1()->selected_connection()->local_candidate().is_relay());
   DestroyChannels();
 }
 
@@ -5928,21 +5932,18 @@ TEST_F(P2PTransportChannelTest,
   ResumeCandidates(1);
   ASSERT_TRUE_SIMULATED_WAIT(
       ep1_ch1()->selected_connection() != nullptr &&
-          LOCAL_PORT_TYPE ==
-              ep1_ch1()->selected_connection()->local_candidate().type() &&
+          ep1_ch1()->selected_connection()->local_candidate().is_local() &&
           ep2_ch1()->selected_connection() != nullptr &&
-          LOCAL_PORT_TYPE ==
-              ep1_ch1()->selected_connection()->remote_candidate().type(),
+          ep1_ch1()->selected_connection()->remote_candidate().is_local(),
       kDefaultTimeout, clock);
   ASSERT_TRUE_SIMULATED_WAIT(ep2_ch1()->selected_connection() != nullptr,
                              kDefaultTimeout, clock);
   // Test that we have a host-host candidate pair selected and the number of
   // candidates signaled to the remote peer stays the same.
   auto test_invariants = [this]() {
-    EXPECT_EQ(LOCAL_PORT_TYPE,
-              ep1_ch1()->selected_connection()->local_candidate().type());
-    EXPECT_EQ(LOCAL_PORT_TYPE,
-              ep1_ch1()->selected_connection()->remote_candidate().type());
+    EXPECT_TRUE(ep1_ch1()->selected_connection()->local_candidate().is_local());
+    EXPECT_TRUE(
+        ep1_ch1()->selected_connection()->remote_candidate().is_local());
     EXPECT_THAT(ep2_ch1()->remote_candidates(), SizeIs(3));
   };
 
@@ -6005,11 +6006,9 @@ TEST_F(P2PTransportChannelTest, SurfaceRequiresCoordination) {
   ResumeCandidates(1);
   ASSERT_TRUE_SIMULATED_WAIT(
       ep1_ch1()->selected_connection() != nullptr &&
-          RELAY_PORT_TYPE ==
-              ep1_ch1()->selected_connection()->local_candidate().type() &&
+          ep1_ch1()->selected_connection()->local_candidate().is_relay() &&
           ep2_ch1()->selected_connection() != nullptr &&
-          RELAY_PORT_TYPE ==
-              ep1_ch1()->selected_connection()->remote_candidate().type(),
+          ep1_ch1()->selected_connection()->remote_candidate().is_relay(),
       kDefaultTimeout, clock);
   ASSERT_TRUE_SIMULATED_WAIT(ep2_ch1()->selected_connection() != nullptr,
                              kDefaultTimeout, clock);
@@ -6025,11 +6024,9 @@ TEST_F(P2PTransportChannelTest, SurfaceRequiresCoordination) {
 
   // No p2p connection will be made, it will remain on relay.
   EXPECT_TRUE(ep1_ch1()->selected_connection() != nullptr &&
-              RELAY_PORT_TYPE ==
-                  ep1_ch1()->selected_connection()->local_candidate().type() &&
+              ep1_ch1()->selected_connection()->local_candidate().is_relay() &&
               ep2_ch1()->selected_connection() != nullptr &&
-              RELAY_PORT_TYPE ==
-                  ep1_ch1()->selected_connection()->remote_candidate().type());
+              ep1_ch1()->selected_connection()->remote_candidate().is_relay());
 
   DestroyChannels();
 }
@@ -6049,7 +6046,8 @@ TEST_F(P2PTransportChannelPingTest, TestInitialSelectDampening0) {
   ch.SetIceConfig(ch.config());
   ch.MaybeStartGathering();
 
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 100));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 100));
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1, &clock);
   ASSERT_TRUE(conn1 != nullptr);
   EXPECT_EQ(nullptr, ch.selected_connection());
@@ -6074,7 +6072,8 @@ TEST_F(P2PTransportChannelPingTest, TestInitialSelectDampening) {
   ch.SetIceConfig(ch.config());
   ch.MaybeStartGathering();
 
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 100));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 100));
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1, &clock);
   ASSERT_TRUE(conn1 != nullptr);
   EXPECT_EQ(nullptr, ch.selected_connection());
@@ -6100,7 +6099,8 @@ TEST_F(P2PTransportChannelPingTest, TestInitialSelectDampeningPingReceived) {
   ch.SetIceConfig(ch.config());
   ch.MaybeStartGathering();
 
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 100));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 100));
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1, &clock);
   ASSERT_TRUE(conn1 != nullptr);
   EXPECT_EQ(nullptr, ch.selected_connection());
@@ -6129,7 +6129,8 @@ TEST_F(P2PTransportChannelPingTest, TestInitialSelectDampeningBoth) {
   ch.SetIceConfig(ch.config());
   ch.MaybeStartGathering();
 
-  ch.AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 100));
+  ch.AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 100));
   Connection* conn1 = WaitForConnectionTo(&ch, "1.1.1.1", 1, &clock);
   ASSERT_TRUE(conn1 != nullptr);
   EXPECT_EQ(nullptr, ch.selected_connection());
@@ -6233,8 +6234,10 @@ TEST_F(P2PTransportChannelPingTest, TestForgetLearnedState) {
 
   PrepareChannel(ch.get());
   ch->MaybeStartGathering();
-  ch->AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "1.1.1.1", 1, 1));
-  ch->AddRemoteCandidate(CreateUdpCandidate(LOCAL_PORT_TYPE, "2.2.2.2", 2, 2));
+  ch->AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "1.1.1.1", 1, 1));
+  ch->AddRemoteCandidate(
+      CreateUdpCandidate(IceCandidateType::kHost, "2.2.2.2", 2, 2));
 
   Connection* conn1 = WaitForConnectionTo(ch.get(), "1.1.1.1", 1);
   Connection* conn2 = WaitForConnectionTo(ch.get(), "2.2.2.2", 2);
@@ -6279,7 +6282,7 @@ TEST_F(P2PTransportChannelTest, DisableDnsLookupsWithTransportPolicyRelay) {
   CreateChannels();
 
   ep1_ch1()->AddRemoteCandidate(
-      CreateUdpCandidate(LOCAL_PORT_TYPE, "hostname.test", 1, 100));
+      CreateUdpCandidate(IceCandidateType::kHost, "hostname.test", 1, 100));
 
   DestroyChannels();
 }
@@ -6305,7 +6308,7 @@ TEST_F(P2PTransportChannelTest, DisableDnsLookupsWithTransportPolicyNone) {
   CreateChannels();
 
   ep1_ch1()->AddRemoteCandidate(
-      CreateUdpCandidate(LOCAL_PORT_TYPE, "hostname.test", 1, 100));
+      CreateUdpCandidate(IceCandidateType::kHost, "hostname.test", 1, 100));
 
   DestroyChannels();
 }
@@ -6332,7 +6335,7 @@ TEST_F(P2PTransportChannelTest, EnableDnsLookupsWithTransportPolicyNoHost) {
   CreateChannels();
 
   ep1_ch1()->AddRemoteCandidate(
-      CreateUdpCandidate(LOCAL_PORT_TYPE, "hostname.test", 1, 100));
+      CreateUdpCandidate(IceCandidateType::kHost, "hostname.test", 1, 100));
 
   EXPECT_TRUE(lookup_started);
 

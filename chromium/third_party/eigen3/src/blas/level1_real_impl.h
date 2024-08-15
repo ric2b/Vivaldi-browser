@@ -11,7 +11,7 @@
 
 // computes the sum of magnitudes of all vector elements or, for a complex vector x, the sum
 // res = |Rex1| + |Imx1| + |Rex2| + |Imx2| + ... + |Rexn| + |Imxn|, where x is a vector of order n
-RealScalar EIGEN_BLAS_FUNC(asum)(int *n, RealScalar *px, int *incx) {
+extern "C" RealScalar EIGEN_BLAS_FUNC_NAME(asum)(int *n, Scalar *px, int *incx) {
   //   std::cerr << "_asum " << *n << " " << *incx << "\n";
 
   Scalar *x = reinterpret_cast<Scalar *>(px);
@@ -24,7 +24,7 @@ RealScalar EIGEN_BLAS_FUNC(asum)(int *n, RealScalar *px, int *incx) {
     return make_vector(x, *n, std::abs(*incx)).cwiseAbs().sum();
 }
 
-int EIGEN_CAT(i, EIGEN_BLAS_FUNC(amax))(int *n, RealScalar *px, int *incx) {
+extern "C" int EIGEN_CAT(i, EIGEN_BLAS_FUNC_NAME(amax))(int *n, Scalar *px, int *incx) {
   if (*n <= 0) return 0;
   Scalar *x = reinterpret_cast<Scalar *>(px);
 
@@ -36,7 +36,7 @@ int EIGEN_CAT(i, EIGEN_BLAS_FUNC(amax))(int *n, RealScalar *px, int *incx) {
   return int(ret) + 1;
 }
 
-int EIGEN_CAT(i, EIGEN_BLAS_FUNC(amin))(int *n, RealScalar *px, int *incx) {
+extern "C" int EIGEN_CAT(i, EIGEN_BLAS_FUNC_NAME(amin))(int *n, Scalar *px, int *incx) {
   if (*n <= 0) return 0;
   Scalar *x = reinterpret_cast<Scalar *>(px);
 
@@ -49,7 +49,7 @@ int EIGEN_CAT(i, EIGEN_BLAS_FUNC(amin))(int *n, RealScalar *px, int *incx) {
 }
 
 // computes a vector-vector dot product.
-Scalar EIGEN_BLAS_FUNC(dot)(int *n, RealScalar *px, int *incx, RealScalar *py, int *incy) {
+extern "C" Scalar EIGEN_BLAS_FUNC_NAME(dot)(int *n, Scalar *px, int *incx, Scalar *py, int *incy) {
   //   std::cerr << "_dot " << *n << " " << *incx << " " << *incy << "\n";
 
   if (*n <= 0) return 0;
@@ -73,7 +73,7 @@ Scalar EIGEN_BLAS_FUNC(dot)(int *n, RealScalar *px, int *incx, RealScalar *py, i
 
 // computes the Euclidean norm of a vector.
 // FIXME
-Scalar EIGEN_BLAS_FUNC(nrm2)(int *n, RealScalar *px, int *incx) {
+extern "C" Scalar EIGEN_BLAS_FUNC_NAME(nrm2)(int *n, Scalar *px, int *incx) {
   //   std::cerr << "_nrm2 " << *n << " " << *incx << "\n";
   if (*n <= 0) return 0;
 
@@ -85,9 +85,9 @@ Scalar EIGEN_BLAS_FUNC(nrm2)(int *n, RealScalar *px, int *incx) {
     return make_vector(x, *n, std::abs(*incx)).stableNorm();
 }
 
-int EIGEN_BLAS_FUNC(rot)(int *n, RealScalar *px, int *incx, RealScalar *py, int *incy, RealScalar *pc, RealScalar *ps) {
+EIGEN_BLAS_FUNC(rot)(int *n, Scalar *px, int *incx, Scalar *py, int *incy, Scalar *pc, Scalar *ps) {
   //   std::cerr << "_rot " << *n << " " << *incx << " " << *incy << "\n";
-  if (*n <= 0) return 0;
+  if (*n <= 0) return;
 
   Scalar *x = reinterpret_cast<Scalar *>(px);
   Scalar *y = reinterpret_cast<Scalar *>(py);
@@ -106,13 +106,11 @@ int EIGEN_BLAS_FUNC(rot)(int *n, RealScalar *px, int *incx, RealScalar *py, int 
     internal::apply_rotation_in_the_plane(vx, rvy, JacobiRotation<Scalar>(c, s));
   else
     internal::apply_rotation_in_the_plane(vx, vy, JacobiRotation<Scalar>(c, s));
-
-  return 0;
 }
 
 /*
 // performs rotation of points in the modified plane.
-int EIGEN_BLAS_FUNC(rotm)(int *n, RealScalar *px, int *incx, RealScalar *py, int *incy, RealScalar *param)
+EIGEN_BLAS_FUNC(rotm)(int *n, Scalar *px, int *incx, Scalar *py, int *incy, Scalar *param)
 {
   Scalar* x = reinterpret_cast<Scalar*>(px);
   Scalar* y = reinterpret_cast<Scalar*>(py);
@@ -123,7 +121,7 @@ int EIGEN_BLAS_FUNC(rotm)(int *n, RealScalar *px, int *incx, RealScalar *py, int
 }
 
 // computes the modified parameters for a Givens rotation.
-int EIGEN_BLAS_FUNC(rotmg)(RealScalar *d1, RealScalar *d2, RealScalar *x1, RealScalar *x2, RealScalar *param)
+EIGEN_BLAS_FUNC(rotmg)(Scalar *d1, Scalar *d2, Scalar *x1, Scalar *x2, Scalar *param)
 {
   // TODO
 

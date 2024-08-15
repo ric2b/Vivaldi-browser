@@ -350,7 +350,7 @@ void X11Window::Initialize(PlatformWindowInitProperties properties) {
     }
   }
 
-  workspace_ = absl::nullopt;
+  workspace_ = std::nullopt;
   if (properties.visible_on_all_workspaces) {
     window_properties_.insert(x11::GetAtom("_NET_WM_STATE_STICKY"));
     connection_->SetProperty(xwindow_, x11::GetAtom("_NET_WM_DESKTOP"),
@@ -1132,7 +1132,7 @@ void X11Window::SetDecorationInsets(const gfx::Insets* insets_px) {
 }
 
 void X11Window::SetOpaqueRegion(
-    absl::optional<std::vector<gfx::Rect>> region_px) {
+    std::optional<std::vector<gfx::Rect>> region_px) {
   auto atom = x11::GetAtom("_NET_WM_OPAQUE_REGION");
   if (!region_px) {
     connection_->DeleteProperty(xwindow_, atom);
@@ -1148,8 +1148,9 @@ void X11Window::SetOpaqueRegion(
   connection_->SetArrayProperty(xwindow_, atom, x11::Atom::CARDINAL, value);
 }
 
-void X11Window::SetInputRegion(absl::optional<gfx::Rect> region_px) {
-  if (!region_px) {
+void X11Window::SetInputRegion(
+    std::optional<std::vector<gfx::Rect>> region_px) {
+  if (!region_px.has_value() || region_px->empty()) {
     // Reset the input region.
     connection_->shape().Mask({
         .operation = x11::Shape::So::Set,
@@ -1158,15 +1159,16 @@ void X11Window::SetInputRegion(absl::optional<gfx::Rect> region_px) {
     });
     return;
   }
+  DCHECK_EQ(1u, region_px->size());
   connection_->shape().Rectangles(x11::Shape::RectanglesRequest{
       .operation = x11::Shape::So::Set,
       .destination_kind = x11::Shape::Sk::Input,
       .ordering = x11::ClipOrdering::YXBanded,
       .destination_window = xwindow_,
-      .rectangles = {{static_cast<int16_t>(region_px->x()),
-                      static_cast<int16_t>(region_px->y()),
-                      static_cast<uint16_t>(region_px->width()),
-                      static_cast<uint16_t>(region_px->height())}},
+      .rectangles = {{static_cast<int16_t>((*region_px)[0].x()),
+                      static_cast<int16_t>((*region_px)[0].y()),
+                      static_cast<uint16_t>((*region_px)[0].width()),
+                      static_cast<uint16_t>((*region_px)[0].height())}},
   });
 }
 
@@ -1210,7 +1212,7 @@ void X11Window::NotifyStartupComplete(const std::string& startup_id) {
 }
 
 std::string X11Window::GetWorkspace() const {
-  absl::optional<int> workspace_id = workspace_;
+  std::optional<int> workspace_id = workspace_;
   return workspace_id.has_value() ? base::NumberToString(workspace_id.value())
                                   : std::string();
 }
@@ -1539,20 +1541,20 @@ void X11Window::OnXWindowDragDropEvent(const x11::ClientMessageEvent& xev) {
   drag_drop_client_->HandleXdndEvent(xev);
 }
 
-absl::optional<gfx::Size> X11Window::GetMinimumSizeForXWindow() {
+std::optional<gfx::Size> X11Window::GetMinimumSizeForXWindow() {
   if (auto max_size = platform_window_delegate_->GetMinimumSizeForWindow()) {
     return platform_window_delegate_->ConvertRectToPixels(gfx::Rect(*max_size))
         .size();
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
-absl::optional<gfx::Size> X11Window::GetMaximumSizeForXWindow() {
+std::optional<gfx::Size> X11Window::GetMaximumSizeForXWindow() {
   if (auto max_size = platform_window_delegate_->GetMaximumSizeForWindow()) {
     return platform_window_delegate_->ConvertRectToPixels(gfx::Rect(*max_size))
         .size();
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 SkPath X11Window::GetWindowMaskForXWindow() {
@@ -1620,7 +1622,7 @@ void X11Window::UpdateDragImage(const gfx::ImageSkia& image,
   NOTIMPLEMENTED();
 }
 
-absl::optional<gfx::AcceleratedWidget> X11Window::GetDragWidget() {
+std::optional<gfx::AcceleratedWidget> X11Window::GetDragWidget() {
   DCHECK(drag_location_delegate_);
   return drag_location_delegate_->GetDragWidget();
 }
@@ -1916,6 +1918,10 @@ void X11Window::Map(bool inactive) {
   size_hints.flags |= x11::SIZE_HINT_P_POSITION;
   size_hints.x = bounds_in_pixels_.x();
   size_hints.y = bounds_in_pixels_.y();
+  // Set STATIC_GRAVITY so that the window position is not affected by the
+  // frame width when running with window manager.
+  size_hints.flags |= x11::SIZE_HINT_P_WIN_GRAVITY;
+  size_hints.win_gravity = x11::WIN_GRAVITY_HINT_STATIC_GRAVITY;
   connection_->SetWmNormalHints(xwindow_, size_hints);
 
   ignore_keyboard_input_ = inactive;
@@ -2005,7 +2011,7 @@ void X11Window::OnWorkspaceUpdated() {
   if (GetWindowDesktop(xwindow_, &workspace)) {
     workspace_ = workspace;
   } else {
-    workspace_ = absl::nullopt;
+    workspace_ = std::nullopt;
   }
 
   if (workspace_ != old_workspace) {
@@ -2034,8 +2040,8 @@ void X11Window::SetFlashFrameHint(bool flash_frame) {
 }
 
 void X11Window::UpdateMinAndMaxSize() {
-  absl::optional<gfx::Size> minimum_in_pixels = GetMinimumSizeForXWindow();
-  absl::optional<gfx::Size> maximum_in_pixels = GetMaximumSizeForXWindow();
+  std::optional<gfx::Size> minimum_in_pixels = GetMinimumSizeForXWindow();
+  std::optional<gfx::Size> maximum_in_pixels = GetMaximumSizeForXWindow();
   if ((!minimum_in_pixels ||
        min_size_in_pixels_ == minimum_in_pixels.value()) &&
       (!maximum_in_pixels ||

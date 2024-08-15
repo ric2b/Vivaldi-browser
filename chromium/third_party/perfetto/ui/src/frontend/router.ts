@@ -30,7 +30,7 @@ export const ROUTE_PREFIX = '#!';
 const DEFAULT_ROUTE = '/';
 
 const modes = ['embedded', undefined] as const;
-type Mode = typeof modes[number];
+type Mode = (typeof modes)[number];
 
 // The set of args that can be set on the route via #!/page?a=1&b2.
 // Route args are orthogonal to pages (i.e. should NOT make sense only in a
@@ -66,6 +66,11 @@ const routeArgs = record({
   // For fetching traces from Cloud Storage or local servers
   // as with record_android_trace.
   url: optStr,
+
+  // For connecting to a trace_processor_shell --httpd instance running on a
+  // non-standard port. This requires the CSP_WS_PERMISSIVE_PORT flag to relax
+  // the Content Security Policy.
+  rpc_port: optStr,
 
   // Override the referrer. Useful for scripts such as
   // record_android_trace to record where the trace is coming from.
@@ -129,7 +134,7 @@ export class Router {
 
   // frontend/index.ts calls maybeOpenTraceFromRoute() + redraw here.
   // This event is decoupled for testing and to avoid circular deps.
-  onRouteChanged: (route: Route) => (void) = () => {};
+  onRouteChanged: (route: Route) => void = () => {};
 
   constructor(routes: RoutesMap) {
     assertExists(routes[DEFAULT_ROUTE]);
@@ -145,8 +150,10 @@ export class Router {
     const oldRoute = Router.parseUrl(e.oldURL);
     const newRoute = Router.parseUrl(e.newURL);
 
-    if (newRoute.args.local_cache_key === undefined &&
-        oldRoute.args.local_cache_key) {
+    if (
+      newRoute.args.local_cache_key === undefined &&
+      oldRoute.args.local_cache_key
+    ) {
       // Propagate `local_cache_key across` navigations. When a trace is loaded,
       // the URL becomes #!/viewer?local_cache_key=123. `local_cache_key` allows
       // reopening the trace from cache in the case of a reload or discard.
@@ -259,7 +266,7 @@ export class Router {
   }
 
   private static parseSearchParams(url: string): RouteArgs {
-    const query = (new URL(url)).search;
+    const query = new URL(url).search;
     const rawArgs = Router.parseQueryString(query);
     const args = runValidator(routeArgs, rawArgs).result;
 
@@ -294,13 +301,54 @@ export class Router {
     const WINDOW_MS = 1000;
     const EVENT_LIMIT = 20;
     const now = Date.now();
-    while (this.recentChanges.length > 0 &&
-           now - this.recentChanges[0] > WINDOW_MS) {
+    while (
+      this.recentChanges.length > 0 &&
+      now - this.recentChanges[0] > WINDOW_MS
+    ) {
       this.recentChanges.shift();
     }
     this.recentChanges.push(now);
     if (this.recentChanges.length > EVENT_LIMIT) {
       throw new Error('History rewriting livelock');
     }
+  }
+
+  static getUrlForVersion(versionCode: string): string {
+    const url = `${window.location.origin}/${versionCode}/`;
+    return url;
+  }
+
+  static async isVersionAvailable(
+    versionCode: string,
+  ): Promise<string | undefined> {
+    if (versionCode === '') {
+      return undefined;
+    }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1000);
+    const url = Router.getUrlForVersion(versionCode);
+    let r;
+    try {
+      r = await fetch(url, {signal: controller.signal});
+    } catch (e) {
+      console.error(
+        `No UI version for ${versionCode} at ${url}. This is an error if ${versionCode} is a released Perfetto version`,
+      );
+      return undefined;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    if (!r.ok) {
+      return undefined;
+    }
+    return url;
+  }
+
+  static navigateToVersion(versionCode: string): void {
+    const url = Router.getUrlForVersion(versionCode);
+    if (url === undefined) {
+      throw new Error(`No URL known for UI version ${versionCode}.`);
+    }
+    window.location.replace(url);
   }
 }

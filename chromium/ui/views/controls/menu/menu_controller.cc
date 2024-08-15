@@ -429,14 +429,14 @@ struct MenuController::MenuPart {
   //       but is over a menu (for example, the mouse is over a separator or
   //       empty menu), this is null and parent is the menu the mouse was
   //       clicked on.
-  raw_ptr<MenuItemView> menu = nullptr;
+  raw_ptr<MenuItemView, DanglingUntriaged> menu = nullptr;
 
   // If type is kMenuItem but the mouse is not over a menu item this is the
   // parent of the menu item the user clicked on. Otherwise this is null.
-  raw_ptr<MenuItemView> parent = nullptr;
+  raw_ptr<MenuItemView, DanglingUntriaged> parent = nullptr;
 
   // This is the submenu the mouse is over.
-  raw_ptr<SubmenuView> submenu = nullptr;
+  raw_ptr<SubmenuView, DanglingUntriaged> submenu = nullptr;
 
   // Whether the controller should apply SELECTION_OPEN_SUBMENU to this item.
   bool should_submenu_show = false;
@@ -529,18 +529,18 @@ struct MenuController::SelectByCharDetails {
   SelectByCharDetails() = default;
 
   // Index of the first menu with the specified mnemonic.
-  absl::optional<size_t> first_match;
+  std::optional<size_t> first_match;
 
   // If true there are multiple menu items with the same mnemonic.
   bool has_multiple = false;
 
   // Index of the selected item; may remain nullopt.
-  absl::optional<size_t> index_of_item;
+  std::optional<size_t> index_of_item;
 
   // If there are multiple matches this is the index of the item after the
   // currently selected item whose mnemonic matches. This may remain nullopt
   // even though there are matches.
-  absl::optional<size_t> next_match;
+  std::optional<size_t> next_match;
 };
 
 // MenuController:State ------------------------------------------------------
@@ -559,6 +559,18 @@ MenuController* MenuController::active_instance_ = nullptr;
 // static
 MenuController* MenuController::GetActiveInstance() {
   return active_instance_;
+}
+
+void MenuController::OnWidgetShowStateChanged(Widget* widget) {
+  CHECK_EQ(owner_, widget);
+
+  // See crbug.com/40914555. Whenever browser widget has show state change close
+  // all the open menus, unless the widget is not visible, which can happen in
+  // menu creation tests, which in turn results in menu gets canceled
+  // immediately.
+  if (widget->IsVisible()) {
+    Cancel(ExitType::kAll);
+  }
 }
 
 void MenuController::Run(Widget* parent,
@@ -1827,7 +1839,7 @@ MenuController::MenuController(bool for_drop,
       active_mouse_view_tracker_(std::make_unique<ViewTracker>()),
       delegate_(delegate),
       alert_animation_(this) {
-  delegate_stack_.push_back(delegate_);
+  delegate_stack_.push_back(delegate_.get());
   active_instance_ = this;
 }
 
@@ -2311,7 +2323,6 @@ void MenuController::OpenMenuImpl(MenuItemView* item, bool show) {
       // (crbug.com/1414232) The item to be open is a submenu. Make sure
       // params.context is set.
       DCHECK(params.context);
-      params.menu_type = ui::MenuType::kChildMenu;
     } else if (state_.context_menu) {
       if (!menu_stack_.empty()) {
         auto* last_menu_item = menu_stack_.back().first.item.get();
@@ -2322,10 +2333,8 @@ void MenuController::OpenMenuImpl(MenuItemView* item, bool show) {
       } else {
         params.context = owner_;
       }
-      params.menu_type = ui::MenuType::kRootContextMenu;
     } else {
       params.context = owner_;
-      params.menu_type = ui::MenuType::kRootMenu;
     }
     item->GetSubmenu()->ShowAt(params);
 
@@ -2917,8 +2926,10 @@ void MenuController::SetSelectionIndices(MenuItemView* parent) {
   if (parent->GetProperty(kOrderedMenuChildren)) {
     // Clear any old AX index assignments.
     for (ViewTracker& item : *(parent->GetProperty(kOrderedMenuChildren))) {
-      if (item.view())
-        item.view()->GetViewAccessibility().ClearPosInSetOverride();
+      if (item.view()) {
+        item.view()->GetViewAccessibility().ClearPosInSet();
+        item.view()->GetViewAccessibility().ClearSetSize();
+      }
     }
   }
 
@@ -2950,8 +2961,8 @@ void MenuController::SetSelectionIndices(MenuItemView* parent) {
 
   const size_t set_size = ordering.size();
   for (size_t i = 0; i < set_size; ++i) {
-    ordering[i]->GetViewAccessibility().OverridePosInSet(
-        static_cast<int>(i + 1), static_cast<int>(set_size));
+    ordering[i]->GetViewAccessibility().SetPosInSet(static_cast<int>(i + 1));
+    ordering[i]->GetViewAccessibility().SetSetSize(static_cast<int>(set_size));
   }
 }
 
@@ -3349,7 +3360,7 @@ MenuItemView* MenuController::ExitTopMostMenu() {
     // Even though the menus are nested, there may not be nested delegates.
     if (delegate_stack_.size() > 1) {
       delegate_stack_.pop_back();
-      delegate_ = delegate_stack_.back();
+      delegate_ = delegate_stack_.back().get();
     }
   } else {
 #if defined(USE_AURA)
@@ -3620,7 +3631,7 @@ void MenuController::SetChildMenuOpenDirectionAtDepth(
 }
 
 void MenuController::SetMenuRoundedCorners(
-    absl::optional<gfx::RoundedCornersF> corners) {
+    std::optional<gfx::RoundedCornersF> corners) {
   rounded_corners_ = corners;
 }
 

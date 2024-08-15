@@ -82,7 +82,8 @@ class NinjaCBinaryTargetWriter : public NinjaBinaryTargetWriter {
                     std::vector<SourceFile>* other_files);
   void WriteSwiftSources(const std::vector<OutputFile>& input_deps,
                          const std::vector<OutputFile>& order_only_deps,
-                         std::vector<OutputFile>* object_files);
+                         std::vector<OutputFile>* object_files,
+                         std::vector<OutputFile>* output_files);
 
   // Writes the stamp line for a source set. These are not linked.
   void WriteSourceSetStamp(const std::vector<OutputFile>& object_files);

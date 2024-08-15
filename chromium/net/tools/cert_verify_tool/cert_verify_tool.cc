@@ -205,6 +205,11 @@ class DummySystemTrustStore : public net::SystemTrustStore {
 
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
   int64_t chrome_root_store_version() const override { return 0; }
+
+  base::span<const net::ChromeRootCertConstraints> GetChromeRootConstraints(
+      const bssl::ParsedCertificate* cert) const override {
+    return {};
+  }
 #endif
 
  private:
@@ -506,7 +511,7 @@ int main(int argc, char** argv) {
     bssl::CertificateTrust trust = bssl::CertificateTrust::ForTrustedLeaf();
     std::string trust_str = command_line.GetSwitchValueASCII("trust-leaf-cert");
     if (!trust_str.empty()) {
-      absl::optional<bssl::CertificateTrust> parsed_trust =
+      std::optional<bssl::CertificateTrust> parsed_trust =
           bssl::CertificateTrust::FromDebugString(trust_str);
       if (!parsed_trust) {
         std::cerr << "ERROR: invalid leaf trust string " << trust_str << "\n";
@@ -523,7 +528,7 @@ int main(int argc, char** argv) {
 
   if (command_line.HasSwitch("root-trust")) {
     std::string trust_str = command_line.GetSwitchValueASCII("root-trust");
-    absl::optional<bssl::CertificateTrust> parsed_trust =
+    std::optional<bssl::CertificateTrust> parsed_trust =
         bssl::CertificateTrust::FromDebugString(trust_str);
     if (!parsed_trust) {
       std::cerr << "ERROR: invalid root trust string " << trust_str << "\n";

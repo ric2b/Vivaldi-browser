@@ -111,7 +111,7 @@ class AndroidMetrics(TestSuite):
 
   def test_binder_metric(self):
     return DiffTestBlueprint(
-        trace=DataPath('android_binder_metric_trace.atr'),
+        trace=DataPath('sched_wakeup_trace.atr'),
         query=Metric('android_binder'),
         out=Path('android_binder_metric.out'))
 
@@ -188,16 +188,9 @@ class AndroidMetrics(TestSuite):
 
   def test_android_boot(self):
     return DiffTestBlueprint(
-        trace=DataPath('android_boot.pftrace'),
+        trace=DataPath('android_postboot_unlock.pftrace'),
         query=Metric('android_boot'),
-        out=TextProto(r"""
-        android_boot {
-          system_server_durations {
-            total_dur: 267193980530
-            uninterruptible_sleep_dur: 3843119529
-          }
-        }
-        """))
+        out=Path('android_boot.out'))
 
   def test_ad_services_metric(self):
     return DiffTestBlueprint(
@@ -213,7 +206,33 @@ class AndroidMetrics(TestSuite):
              latency: 0.0001
            }
            ad_id_metric {
-             latency:0.0003
+             latency: 0.0003
+           }
+           odp_metric {
+             managing_service_initialization_latency: 0.00005
+             service_delegate_execute_flow_latency: 0.0001
+             service_delegate_request_surface_package_latency: 0.00015
+             service_delegate_register_web_trigger_latency: 0.0002
            }
          }
         """))
+
+  def test_android_boot_unagg(self):
+    return DiffTestBlueprint(
+      trace=DataPath('android_postboot_unlock.pftrace'),
+      query=Metric("android_boot_unagg"),
+      out=Path('android_boot_unagg.out')
+    )
+
+  def test_android_app_process_starts(self):
+    return DiffTestBlueprint(
+      trace=DataPath('android_postboot_unlock.pftrace'),
+      query=Metric("android_app_process_starts"),
+      out=Path('android_app_process_starts.out')
+    )
+
+  def test_android_garbage_collection(self):
+    return DiffTestBlueprint(
+        trace=DataPath('android_postboot_unlock.pftrace'),
+        query=Metric('android_garbage_collection_unagg'),
+        out=Path('android_garbage_collection_unagg.out'))

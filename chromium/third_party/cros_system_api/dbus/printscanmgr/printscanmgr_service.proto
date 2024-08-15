@@ -8,7 +8,7 @@ option optimize_for = LITE_RUNTIME;
 // This file defines messages used for interacting with printscanmgr, the
 // printing and scanning daemon.
 package printscanmgr;
-option go_package = "chromiumos/system_api/printscanmgr_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/printscanmgr_proto";
 
 // CupsAdd* results.
 enum AddPrinterResult {

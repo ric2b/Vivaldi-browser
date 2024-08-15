@@ -16,6 +16,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_command_line.h"
 #include "base/test/task_environment.h"
@@ -34,6 +35,7 @@
 #include "chrome/browser/ash/crosapi/force_installed_tracker_ash.h"
 #include "chrome/browser/ash/crosapi/idle_service_ash.h"
 #include "chrome/browser/ash/crosapi/test_crosapi_dependency_registry.h"
+#include "chrome/browser/ash/crosapi/test_crosapi_environment.h"
 #include "chrome/browser/ash/login/app_mode/network_ui_controller.h"
 #include "chrome/browser/ash/login/app_mode/test/kiosk_test_helpers.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
@@ -53,6 +55,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chromeos/ash/components/install_attributes/stub_install_attributes.h"
+#include "chromeos/ash/components/login/login_state/login_state.h"
 #include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/standalone_browser/feature_refs.h"
 #include "chromeos/ash/components/standalone_browser/standalone_browser_features.h"
@@ -134,21 +137,6 @@ class FakeNetworkMonitor : public ash::NetworkUiController::NetworkMonitor {
   base::WeakPtrFactory<FakeNetworkMonitor> weak_ptr_factory_{this};
 };
 
-// Helper class to own `KioskController` and the Kiosk managers it depends on.
-class KioskControllerHolder {
- public:
-  KioskControllerHolder()
-      : kiosk_controller(web_kiosk_app_manager_,
-                         chrome_app_manager_,
-                         arc_kiosk_app_manager_) {}
-  ~KioskControllerHolder() = default;
-
-  WebKioskAppManager web_kiosk_app_manager_;
-  KioskChromeAppManager chrome_app_manager_;
-  ArcKioskAppManager arc_kiosk_app_manager_;
-  KioskController kiosk_controller;
-};
-
 class FakeAcceleratorController
     : public KioskLaunchController::AcceleratorController {
  public:
@@ -206,9 +194,6 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
     keyboard_controller_client_ =
         ChromeKeyboardControllerClientTestHelper::InitializeWithFake();
 
-    disable_wait_timer_and_login_operations_for_testing_ =
-        KioskLaunchController::DisableLoginOperationsForTesting();
-
     can_configure_network_for_testing_ =
         NetworkUiController::SetCanConfigureNetworkForTesting(true);
 
@@ -219,7 +204,7 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
         std::make_unique<FakeAcceleratorController>();
     accelerator_controller_ = fake_accelerator_controller.get();
     controller_ = std::make_unique<KioskLaunchController>(
-        /*host=*/nullptr, view_.get(),
+        /*host=*/nullptr, view_.get(), FakeLoadProfileCallback(),
         base::BindRepeating(
             &KioskLaunchControllerTest::BuildFakeKioskAppLauncher,
             base::Unretained(this)),
@@ -241,7 +226,7 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
   void TearDown() override {
     extensions::ExtensionServiceTestBase::TearDown();
 
-    kiosk_controller_holder_.reset();
+    kiosk_controller_.reset();
 
     policy::BrowserPolicyConnectorBase::SetPolicyServiceForTesting(nullptr);
   }
@@ -251,8 +236,6 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
   KioskAppLauncher::NetworkDelegate& network_delegate() {
     return *controller_->GetNetworkUiControllerForTesting();
   }
-
-  KioskProfileLoader::Delegate& profile_controls() { return *controller_; }
 
   FakeKioskAppLauncher& launcher() { return *app_launcher_; }
 
@@ -295,9 +278,16 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
 
   KioskAppId kiosk_app_id() { return kiosk_app_id_; }
 
+  void FinishLoadingProfile() {
+    std::move(on_profile_loaded_callback_).Run(profile());
+  }
+  void FinishLoadingProfileWithError(KioskAppLaunchError::Error error) {
+    std::move(on_profile_loaded_callback_).Run(base::unexpected(error));
+  }
+
   void RunUntilAppPrepared() {
     controller().Start(kiosk_app_id(), /*auto_launch=*/false);
-    profile_controls().OnProfileLoaded(profile());
+    FinishLoadingProfile();
     launcher().observers().NotifyAppInstalling();
     launcher().observers().NotifyAppPrepared();
   }
@@ -328,7 +318,7 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
     AccountId account_id(AccountId::FromUserEmail(email));
     kiosk_app_id_ = KioskAppId::ForWebApp(account_id);
 
-    kiosk_controller_holder_ = std::make_unique<KioskControllerHolder>();
+    kiosk_controller_ = std::make_unique<KioskController>();
     WebKioskAppManager::Get()->AddAppForTesting(kiosk_app_id_.account_id,
                                                 GURL(kInstallUrl));
   }
@@ -343,20 +333,28 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
     return std::move(app_launcher);
   }
 
+  LoadProfileCallback FakeLoadProfileCallback() {
+    return base::BindLambdaForTesting(
+        [&](const AccountId& app_account_id, KioskAppType app_type,
+            KioskProfileLoader::ResultCallback on_done) {
+          on_profile_loaded_callback_ = std::move(on_done);
+          return std::unique_ptr<CancellableJob>{};
+        });
+  }
+
   TestingProfile profile_;
   session_manager::SessionManager session_manager_;
   std::unique_ptr<ChromeKeyboardControllerClientTestHelper>
       keyboard_controller_client_;
-  std::unique_ptr<KioskControllerHolder> kiosk_controller_holder_;
+  std::unique_ptr<KioskController> kiosk_controller_;
 
-  std::unique_ptr<base::AutoReset<std::optional<bool>>>
-      can_configure_network_for_testing_;
+  base::AutoReset<std::optional<bool>> can_configure_network_for_testing_ =
+      NetworkUiController::SetCanConfigureNetworkForTesting(true);
 
   user_manager::TypedScopedUserManager<ash::FakeChromeUserManager>
       fake_user_manager_{std::make_unique<ash::FakeChromeUserManager>()};
 
-  std::unique_ptr<base::AutoReset<bool>>
-      disable_wait_timer_and_login_operations_for_testing_;
+  KioskProfileLoader::ResultCallback on_profile_loaded_callback_;
   std::unique_ptr<FakeAppLaunchSplashScreenHandler> view_;
   raw_ptr<FakeKioskAppLauncher, DanglingUntriaged> app_launcher_ =
       nullptr;  // owned by `controller_`.
@@ -390,20 +388,17 @@ TEST_F(KioskLaunchControllerTest, ProfileLoadedShouldInitializeLauncher) {
   VerifyLaunchStateCrashKey(KioskLaunchState::kLauncherStarted);
   EXPECT_THAT(controller(), HasState(AppState::kCreatingProfile,
                                      NetworkUIState::kNotShowing));
-
-  profile_controls().OnProfileLoaded(profile());
+  FinishLoadingProfile();
   EXPECT_TRUE(launcher().IsInitialized());
 }
 
-// Late profile load should not launch kiosk session.
-// Covers b/304145218.
-TEST_F(KioskLaunchControllerTest, ProfileLoadedAfterCleanUp) {
+TEST_F(KioskLaunchControllerTest, ProfileLoadDoesNotLaunchAppAfterCleanUp) {
   controller().Start(kiosk_app_id(), /*auto_launch=*/false);
   EXPECT_THAT(controller(), HasState(AppState::kCreatingProfile,
                                      NetworkUIState::kNotShowing));
 
   CleanUpController();
-  profile_controls().OnProfileLoaded(profile());
+  FinishLoadingProfile();
 
   EXPECT_EQ(num_launchers_created(), 0);
 }
@@ -411,7 +406,7 @@ TEST_F(KioskLaunchControllerTest, ProfileLoadedAfterCleanUp) {
 TEST_F(KioskLaunchControllerTest, AppInstallingShouldUpdateSplashScreen) {
   controller().Start(kiosk_app_id(), /*auto_launch=*/false);
   VerifyLaunchStateCrashKey(KioskLaunchState::kLauncherStarted);
-  profile_controls().OnProfileLoaded(profile());
+  FinishLoadingProfile();
 
   launcher().observers().NotifyAppInstalling();
 
@@ -461,7 +456,7 @@ TEST_F(KioskLaunchControllerTest, SplashScreenTimeoutShouldBeConfigurable) {
 TEST_F(KioskLaunchControllerTest,
        SplashScreenTimerShouldNotLaunchUnpreparedApp) {
   controller().Start(kiosk_app_id(), /*auto_launch=*/false);
-  profile_controls().OnProfileLoaded(profile());
+  FinishLoadingProfile();
   launcher().observers().NotifyAppInstalling();
 
   FireSplashScreenTimer();
@@ -489,7 +484,7 @@ TEST_F(KioskLaunchControllerTest, AppLaunchedShouldStartSession) {
 TEST_F(KioskLaunchControllerTest,
        NetworkPresentShouldInvokeContinueWithNetworkReady) {
   controller().Start(kiosk_app_id(), /*auto_launch=*/false);
-  profile_controls().OnProfileLoaded(profile());
+  FinishLoadingProfile();
 
   network_delegate().InitializeNetwork();
   EXPECT_THAT(controller(), HasState(AppState::kInitLauncher,
@@ -507,7 +502,7 @@ TEST_F(KioskLaunchControllerTest,
 TEST_F(KioskLaunchControllerTest,
        NetworkInitTimeoutShouldShowNetworkConfigureUI) {
   controller().Start(kiosk_app_id(), /*auto_launch=*/false);
-  profile_controls().OnProfileLoaded(profile());
+  FinishLoadingProfile();
 
   network_delegate().InitializeNetwork();
   EXPECT_THAT(controller(), HasState(AppState::kInitLauncher,
@@ -536,7 +531,7 @@ TEST_F(KioskLaunchControllerTest,
                                      NetworkUIState::kNeedToShow));
   VerifyLaunchStateCrashKey(KioskLaunchState::kLauncherStarted);
 
-  profile_controls().OnProfileLoaded(profile());
+  FinishLoadingProfile();
 
   EXPECT_THAT(controller(),
               HasState(AppState::kInitNetwork, NetworkUIState::kShowing));
@@ -550,7 +545,7 @@ TEST_F(KioskLaunchControllerTest, ConfigureNetworkDuringInstallation) {
   VerifyLaunchStateCrashKey(KioskLaunchState::kLauncherStarted);
   EXPECT_THAT(controller(), HasState(AppState::kCreatingProfile,
                                      NetworkUIState::kNotShowing));
-  profile_controls().OnProfileLoaded(profile());
+  FinishLoadingProfile();
 
   launcher().observers().NotifyAppInstalling();
 
@@ -583,8 +578,7 @@ TEST_F(KioskLaunchControllerTest, KioskProfileLoadFailedObserverShouldBeFired) {
 
   EXPECT_CALL(profile_load_failed_observer, OnKioskProfileLoadFailed())
       .Times(1);
-  profile_controls().OnProfileLoadFailed(
-      KioskAppLaunchError::Error::kUnableToMount);
+  FinishLoadingProfileWithError(KioskAppLaunchError::Error::kUnableToMount);
   VerifyLaunchStateCrashKey(KioskLaunchState::kLaunchFailed);
   EXPECT_EQ(num_launchers_created(), 0);
 
@@ -596,8 +590,7 @@ TEST_F(KioskLaunchControllerTest, KioskProfileLoadFailedObserverShouldBeFired) {
 TEST_F(KioskLaunchControllerTest, KioskProfileLoadErrorShouldBeStored) {
   controller().Start(kiosk_app_id(), /*auto_launch=*/false);
 
-  profile_controls().OnProfileLoadFailed(
-      KioskAppLaunchError::Error::kUnableToMount);
+  FinishLoadingProfileWithError(KioskAppLaunchError::Error::kUnableToMount);
   VerifyLaunchStateCrashKey(KioskLaunchState::kLaunchFailed);
 
   const base::Value::Dict& dict =
@@ -857,7 +850,7 @@ TEST_F(KioskLaunchControllerTest, TestFullFlow) {
 
   EXPECT_EQ(num_launchers_created(), 0);
 
-  profile_controls().OnProfileLoaded(profile());
+  FinishLoadingProfile();
 
   EXPECT_EQ(launcher().initialize_called(), 1);
   EXPECT_FALSE(launcher().HasAppLaunched());
@@ -896,12 +889,11 @@ class KioskLaunchControllerUsingLacrosTest : public testing::Test {
   }
 
   void SetUp() override {
-    ASSERT_TRUE(testing_profile_manager_.SetUp());
-    LoginState::Initialize();
+    crosapi_environment_.SetUp();
     crosapi::IdleServiceAsh::DisableForTesting();
-    profile_ =
-        testing_profile_manager_.CreateTestingProfile("testing_profile@test");
-    crosapi_manager_ = crosapi::CreateCrosapiManagerWithTestRegistry();
+    profile_ = crosapi_environment_.profile_manager()->CreateTestingProfile(
+        "testing_profile@test");
+
     SetUpKioskAppId();
     fake_user_manager_->AddWebKioskAppUser(kiosk_app_id().account_id);
     fake_user_manager_->LoginUser(kiosk_app_id().account_id);
@@ -910,15 +902,9 @@ class KioskLaunchControllerUsingLacrosTest : public testing::Test {
     keyboard_controller_client_ =
         ChromeKeyboardControllerClientTestHelper::InitializeWithFake();
 
-    disable_wait_timer_and_login_operations_for_testing_ =
-        KioskLaunchController::DisableLoginOperationsForTesting();
-
-    can_configure_network_for_testing_ =
-        NetworkUiController::SetCanConfigureNetworkForTesting(true);
-
     view_ = std::make_unique<FakeAppLaunchSplashScreenHandler>();
     controller_ = std::make_unique<KioskLaunchController>(
-        /*host=*/nullptr, view_.get(),
+        /*host=*/nullptr, view_.get(), FakeLoadProfileCallback(),
         base::BindRepeating(
             &KioskLaunchControllerUsingLacrosTest::BuildFakeKioskAppLauncher,
             base::Unretained(this)),
@@ -929,9 +915,9 @@ class KioskLaunchControllerUsingLacrosTest : public testing::Test {
   }
 
   void TearDown() override {
+    profile_ = nullptr;
     controller_.reset();
-    crosapi_manager_.reset();
-    LoginState::Shutdown();
+    crosapi_environment_.TearDown();
   }
 
   auto HasState(AppState app_state, NetworkUIState network_state) {
@@ -945,10 +931,14 @@ class KioskLaunchControllerUsingLacrosTest : public testing::Test {
 
   void RunUntilAppPrepared() {
     controller().Start(kiosk_app_id(), /*auto_launch=*/false);
-    profile_controls().OnProfileLoaded(profile());
+    FinishLoadingProfile();
     EXPECT_TRUE(WaitForNextAppLauncherCreation());
     launcher().observers().NotifyAppInstalling();
     launcher().observers().NotifyAppPrepared();
+  }
+
+  void FinishLoadingProfile() {
+    std::move(on_profile_loaded_callback_).Run(profile());
   }
 
  protected:
@@ -960,14 +950,14 @@ class KioskLaunchControllerUsingLacrosTest : public testing::Test {
 
   KioskLaunchController& controller() { return *controller_; }
 
-  KioskProfileLoader::Delegate& profile_controls() { return *controller_; }
-
   FakeKioskAppLauncher& launcher() { return *app_launcher_; }
 
   Profile* profile() { return profile_; }
 
   crosapi::ForceInstalledTrackerAsh* force_installed_tracker() {
-    return crosapi_manager_->crosapi_ash()->force_installed_tracker_ash();
+    return crosapi::CrosapiManager::Get()
+        ->crosapi_ash()
+        ->force_installed_tracker_ash();
   }
 
   int num_launchers_created() { return app_launchers_created_; }
@@ -986,7 +976,7 @@ class KioskLaunchControllerUsingLacrosTest : public testing::Test {
   }
 
   void SetUpKioskAppInAppManager() {
-    kiosk_controller_holder_ = std::make_unique<KioskControllerHolder>();
+    kiosk_controller_ = std::make_unique<KioskController>();
     WebKioskAppManager::Get()->AddAppForTesting(kiosk_app_id_.account_id,
                                                 GURL(kInstallUrl));
   }
@@ -1002,25 +992,32 @@ class KioskLaunchControllerUsingLacrosTest : public testing::Test {
     return std::move(app_launcher);
   }
 
+  LoadProfileCallback FakeLoadProfileCallback() {
+    return base::BindLambdaForTesting(
+        [&](const AccountId& app_account_id, KioskAppType app_type,
+            KioskProfileLoader::ResultCallback on_done) {
+          on_profile_loaded_callback_ = std::move(on_done);
+          return std::unique_ptr<CancellableJob>{};
+        });
+  }
+
+  FakeChromeUserManager& fake_user_manager() { return *fake_user_manager_; }
+
   content::BrowserTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
-  ScopedTestingLocalState testing_local_state_{
-      TestingBrowserProcess::GetGlobal()};
+  crosapi::TestCrosapiEnvironment crosapi_environment_;
   user_manager::TypedScopedUserManager<ash::FakeChromeUserManager>
       fake_user_manager_{std::make_unique<ash::FakeChromeUserManager>()};
-  TestingProfileManager testing_profile_manager_{
-      TestingBrowserProcess::GetGlobal(), &testing_local_state_};
   raw_ptr<Profile> profile_;
   crosapi::FakeBrowserManager browser_manager_;
 
   std::unique_ptr<ChromeKeyboardControllerClientTestHelper>
       keyboard_controller_client_;
-  std::unique_ptr<KioskControllerHolder> kiosk_controller_holder_;
+  std::unique_ptr<KioskController> kiosk_controller_;
 
   std::unique_ptr<base::AutoReset<std::optional<bool>>>
       can_configure_network_for_testing_;
-  std::unique_ptr<base::AutoReset<bool>>
-      disable_wait_timer_and_login_operations_for_testing_;
+  KioskProfileLoader::ResultCallback on_profile_loaded_callback_;
   std::unique_ptr<FakeAppLaunchSplashScreenHandler> view_;
   raw_ptr<FakeKioskAppLauncher, DanglingUntriaged> app_launcher_ =
       nullptr;  // owned by `controller_`.
@@ -1030,7 +1027,6 @@ class KioskLaunchControllerUsingLacrosTest : public testing::Test {
   KioskAppId kiosk_app_id_;
 
   base::test::ScopedFeatureList scoped_feature_list_;
-  std::unique_ptr<crosapi::CrosapiManager> crosapi_manager_;
 };
 
 TEST_F(KioskLaunchControllerUsingLacrosTest,
@@ -1038,7 +1034,7 @@ TEST_F(KioskLaunchControllerUsingLacrosTest,
   controller().Start(kiosk_app_id(), /*auto_launch=*/false);
 
   EXPECT_FALSE(fake_browser_manager().IsRunning());
-  profile_controls().OnProfileLoaded(profile());
+  FinishLoadingProfile();
 
   EXPECT_TRUE(fake_browser_manager().IsRunning());
 }
@@ -1048,7 +1044,7 @@ TEST_F(KioskLaunchControllerUsingLacrosTest,
   controller().Start(kiosk_app_id(), /*auto_launch=*/false);
 
   EXPECT_EQ(num_launchers_created(), 0);
-  profile_controls().OnProfileLoaded(profile());
+  FinishLoadingProfile();
 
   EXPECT_TRUE(WaitForNextAppLauncherCreation());
   EXPECT_TRUE(launcher().initialize_called());

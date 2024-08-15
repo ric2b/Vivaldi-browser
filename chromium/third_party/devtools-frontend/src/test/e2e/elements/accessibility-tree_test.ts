@@ -15,10 +15,10 @@ import {
 import {describe, it} from '../../shared/mocha-extensions.js';
 import {toggleAccessibilityTree} from '../helpers/elements-helpers.js';
 
-describe('Accessibility Tree in the Elements Tab', async function() {
+describe('Accessibility Tree in the Elements Tab', function() {
   it('displays the fuller accessibility tree', async () => {
-    await enableExperiment('fullAccessibilityTree');
-    await enableExperiment('protocolMonitor');
+    await enableExperiment('full-accessibility-tree');
+    await enableExperiment('protocol-monitor');
     await goToResource('elements/accessibility-simple-page.html');
     await toggleAccessibilityTree();
     await waitForElementWithTextContent('heading\xa0"Title"');
@@ -26,7 +26,7 @@ describe('Accessibility Tree in the Elements Tab', async function() {
   });
 
   it('allows navigating iframes', async () => {
-    await enableExperiment('fullAccessibilityTree');
+    await enableExperiment('full-accessibility-tree');
     await goToResource('elements/accessibility-iframe-page.html');
     await toggleAccessibilityTree();
     const iframeDoc = await waitForElementWithTextContent(
@@ -41,7 +41,7 @@ describe('Accessibility Tree in the Elements Tab', async function() {
 
   it('listens for text changes to DOM and redraws the tree', async () => {
     const {target, frontend} = getBrowserAndPages();
-    await enableExperiment('fullAccessibilityTree');
+    await enableExperiment('full-accessibility-tree');
     await target.bringToFront();
     await goToResource('elements/accessibility-simple-page.html');
     await frontend.bringToFront();
@@ -49,8 +49,7 @@ describe('Accessibility Tree in the Elements Tab', async function() {
     await waitForElementWithTextContent('link\xa0"cats" focusable:\xa0true');
     await target.bringToFront();
     const link = await target.waitForSelector('aria/cats [role="link"]');
-    assertNotNullOrUndefined(link);
-    await link.evaluate(node => {
+    await link!.evaluate(node => {
       (node as HTMLElement).innerText = 'dogs';
     });
     // For some reason a11y tree takes a while to propagate.
@@ -63,7 +62,7 @@ describe('Accessibility Tree in the Elements Tab', async function() {
 
   it('listens for changes to properties and redraws tree', async () => {
     const {target, frontend} = getBrowserAndPages();
-    await enableExperiment('fullAccessibilityTree');
+    await enableExperiment('full-accessibility-tree');
     await target.bringToFront();
     await goToResource('elements/accessibility-simple-page.html');
     await frontend.bringToFront();
@@ -85,18 +84,17 @@ describe('Accessibility Tree in the Elements Tab', async function() {
 
   it('listen for removed nodes and redraw tree', async () => {
     const {target, frontend} = getBrowserAndPages();
-    await enableExperiment('fullAccessibilityTree');
+    await enableExperiment('full-accessibility-tree');
     await target.bringToFront();
     await goToResource('elements/accessibility-simple-page.html');
     await frontend.bringToFront();
     await toggleAccessibilityTree();
     await target.bringToFront();
     const link = await target.waitForSelector('aria/cats [role="link"]');
-    assertNotNullOrUndefined(link);
     await frontend.bringToFront();
     await waitForElementWithTextContent('link\xa0"cats" focusable:\xa0true');
     await target.bringToFront();
-    await link.evaluate(node => node.remove());
+    await link!.evaluate(node => node.remove());
     // For some reason a11y tree takes a while to propagate.
     for (let i = 0; i < 30; i++) {
       await raf(target);

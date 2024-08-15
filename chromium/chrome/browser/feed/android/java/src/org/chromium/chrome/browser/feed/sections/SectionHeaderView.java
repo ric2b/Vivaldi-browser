@@ -25,6 +25,7 @@ import androidx.core.widget.ImageViewCompat;
 
 import com.google.android.material.tabs.TabLayout;
 
+import org.chromium.chrome.browser.feed.FeedFeatures;
 import org.chromium.chrome.browser.feed.FeedUma;
 import org.chromium.chrome.browser.feed.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -550,21 +551,6 @@ public class SectionHeaderView extends LinearLayout {
                         .build());
     }
 
-    /** Shows an IPH on the feed section header title. */
-    public void showHeaderIph(UserEducationHelper helper) {
-        helper.requestShowIPH(
-                new IPHCommandBuilder(
-                                getContext().getResources(),
-                                FeatureConstants
-                                        .FEATURE_NOTIFICATION_GUIDE_NTP_SUGGESTION_CARD_HELP_BUBBLE_FEATURE,
-                                R.string
-                                        .feature_notification_guide_tooltip_message_ntp_suggestion_card,
-                                R.string
-                                        .feature_notification_guide_tooltip_message_ntp_suggestion_card)
-                        .setAnchorView(mTitleView)
-                        .build());
-    }
-
     /** Shows an IPH on the web feed tab in the section header. */
     public void showWebFeedAwarenessIph(
             UserEducationHelper helper, int tabIndex, Runnable scroller) {
@@ -649,7 +635,7 @@ public class SectionHeaderView extends LinearLayout {
         adjustTouchDelegate(tab.view);
 
         // Unread indicator is removed in the updated UI.
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.FEED_FOLLOW_UI_UPDATE)) {
+        if (FeedFeatures.isFeedFollowUiUpdateEnabled()) {
             return;
         }
 

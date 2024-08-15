@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/functional/bind.h"
 #include "base/observer_list.h"
 #include "base/rand_util.h"
@@ -205,7 +204,7 @@ void CastMessageHandler::LaunchSession(
     const std::string& app_id,
     base::TimeDelta launch_timeout,
     const std::vector<std::string>& supported_app_types,
-    const absl::optional<base::Value>& app_params,
+    const std::optional<base::Value>& app_params,
     LaunchSessionCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CastSocket* socket = socket_service_->GetSocket(channel_id);
@@ -241,7 +240,7 @@ void CastMessageHandler::LaunchSession(
 void CastMessageHandler::StopSession(
     int channel_id,
     const std::string& session_id,
-    const absl::optional<std::string>& client_id,
+    const std::optional<std::string>& client_id,
     ResultCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CastSocket* socket = socket_service_->GetSocket(channel_id);
@@ -287,7 +286,7 @@ Result CastMessageHandler::SendAppMessage(int channel_id,
   return SendCastMessage(channel_id, message);
 }
 
-absl::optional<int> CastMessageHandler::SendMediaRequest(
+std::optional<int> CastMessageHandler::SendMediaRequest(
     int channel_id,
     const base::Value::Dict& body,
     const std::string& source_id,
@@ -297,7 +296,7 @@ absl::optional<int> CastMessageHandler::SendMediaRequest(
   CastSocket* socket = socket_service_->GetSocket(channel_id);
   if (!socket) {
     DVLOG(2) << __func__ << ": socket not found: " << channel_id;
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   int request_id = NextRequestId();
@@ -406,7 +405,7 @@ void CastMessageHandler::HandleCastInternalMessage(
     return;
   }
 
-  absl::optional<int> request_id = GetRequestIdFromResponse(*payload);
+  std::optional<int> request_id = GetRequestIdFromResponse(*payload);
   if (request_id) {
     auto requests_it = pending_requests_.find(channel_id);
     if (requests_it != pending_requests_.end())
@@ -578,7 +577,7 @@ void CastMessageHandler::PendingRequests::HandlePendingRequest(
     std::string app_id = (*app_availability_it)->app_id;
     GetAppAvailabilityResult result =
         GetAppAvailabilityResultFromResponse(response, app_id);
-    base::EraseIf(pending_app_availability_requests_,
+    std::erase_if(pending_app_availability_requests_,
                   [&app_id, result](const auto& request_ptr) {
                     if (request_ptr->app_id == app_id) {
                       std::move(request_ptr->callback).Run(app_id, result);

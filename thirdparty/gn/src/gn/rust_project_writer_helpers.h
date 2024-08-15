@@ -154,5 +154,4 @@ std::vector<std::string> FindAllArgValuesAfterPrefix(
     const std::string& prefix,
     const std::vector<std::string>& args);
 
-
 #endif  // TOOLS_GN_RUST_PROJECT_WRITER_HELPERS_H_

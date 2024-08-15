@@ -116,11 +116,14 @@ class NotificationPermissionContext
   void DecidePermission(
       permissions::PermissionRequestData request_data,
       permissions::BrowserPermissionCallback callback) override;
+  void UpdateTabContext(const permissions::PermissionRequestID& id,
+                        const GURL& requesting_frame,
+                        bool allowed) override;
 
   // Vivaldi
-  void UpdateTabContext(const permissions::PermissionRequestID& id,
+  void UpdatePrivateTabContext(const permissions::PermissionRequestID& id,
     const GURL& requesting_frame,
-    bool allowed) override;
+    bool allowed);
 
   base::WeakPtrFactory<NotificationPermissionContext> weak_factory_ui_thread_{
       this};

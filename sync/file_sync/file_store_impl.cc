@@ -343,7 +343,7 @@ void SyncedFileStoreImpl::RemoveAllSyncRefsForType(
 
 void SyncedFileStoreImpl::OnReadContentDone(
     std::string checksum,
-    absl::optional<std::vector<uint8_t>> content) {
+    std::optional<std::vector<uint8_t>> content) {
   if (!base::Contains(files_data_, checksum)) {
     // The file was removed in the interval since the read was required.
     return;
@@ -399,7 +399,7 @@ void SyncedFileStoreImpl::DeleteLocalContent(
     std::pair<const std::string, SyncedFileData>& file_data) {
   DCHECK(file_data.second.has_content_locally);
   // Avoid triggering multiple deletions
-  file_data.second.content = absl::nullopt;
+  file_data.second.content = std::nullopt;
   if (file_data.second.is_deleting)
     return;
 

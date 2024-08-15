@@ -16,6 +16,7 @@
 #include "absl/memory/memory.h"
 #include "api/audio_codecs/builtin_audio_decoder_factory.h"
 #include "api/audio_codecs/builtin_audio_encoder_factory.h"
+#include "api/environment/environment.h"
 #include "api/rtc_event_log/rtc_event_log_factory.h"
 #include "api/task_queue/default_task_queue_factory.h"
 #include "api/test/create_time_controller.h"
@@ -177,26 +178,23 @@ class LambdaSetRemoteDescriptionObserver
 
 class FakeVideoEncoderFactory : public VideoEncoderFactory {
  public:
-  FakeVideoEncoderFactory(Clock* clock) : clock_(clock) {}
   std::vector<SdpVideoFormat> GetSupportedFormats() const override {
-    return {SdpVideoFormat("VP8")};
+    return {SdpVideoFormat::VP8()};
   }
-  std::unique_ptr<VideoEncoder> CreateVideoEncoder(
-      const SdpVideoFormat& format) override {
+  std::unique_ptr<VideoEncoder> Create(const Environment& env,
+                                       const SdpVideoFormat& format) override {
     RTC_CHECK_EQ(format.name, "VP8");
-    return std::make_unique<FakeVp8Encoder>(clock_);
+    return std::make_unique<FakeVp8Encoder>(&env.clock());
   }
-
- private:
-  Clock* const clock_;
 };
+
 class FakeVideoDecoderFactory : public VideoDecoderFactory {
  public:
   std::vector<SdpVideoFormat> GetSupportedFormats() const override {
-    return {SdpVideoFormat("VP8")};
+    return {SdpVideoFormat::VP8()};
   }
-  std::unique_ptr<VideoDecoder> CreateVideoDecoder(
-      const SdpVideoFormat& format) override {
+  std::unique_ptr<VideoDecoder> Create(const Environment& env,
+                                       const SdpVideoFormat& format) override {
     return std::make_unique<FakeDecoder>();
   }
 };
@@ -260,8 +258,8 @@ PeerScenarioClient::PeerScenarioClient(
       TestAudioDeviceModule::CreateDiscardRenderer(config.audio.sample_rate));
 
   if (config.video.use_fake_codecs) {
-    pcf_deps.video_encoder_factory = std::make_unique<FakeVideoEncoderFactory>(
-        net->time_controller()->GetClock());
+    pcf_deps.video_encoder_factory =
+        std::make_unique<FakeVideoEncoderFactory>();
     pcf_deps.video_decoder_factory =
         std::make_unique<FakeVideoDecoderFactory>();
   } else {
@@ -370,10 +368,13 @@ void PeerScenarioClient::CreateAndSetSdp(
 
 void PeerScenarioClient::SetSdpOfferAndGetAnswer(
     std::string remote_offer,
+    std::function<void()> remote_description_set,
     std::function<void(std::string)> answer_handler) {
   if (!signaling_thread_->IsCurrent()) {
-    signaling_thread_->PostTask(
-        [=] { SetSdpOfferAndGetAnswer(remote_offer, answer_handler); });
+    signaling_thread_->PostTask([=] {
+      SetSdpOfferAndGetAnswer(remote_offer, remote_description_set,
+                              answer_handler);
+    });
     return;
   }
   RTC_DCHECK_RUN_ON(signaling_thread_);
@@ -381,6 +382,11 @@ void PeerScenarioClient::SetSdpOfferAndGetAnswer(
       CreateSessionDescription(SdpType::kOffer, remote_offer),
       rtc::make_ref_counted<LambdaSetRemoteDescriptionObserver>([=](RTCError) {
         RTC_DCHECK_RUN_ON(signaling_thread_);
+        if (remote_description_set) {
+          // Allow the caller to modify transceivers
+          // before creating the answer.
+          remote_description_set();
+        }
         peer_connection_->CreateAnswer(
             rtc::make_ref_counted<LambdaCreateSessionDescriptionObserver>(
                 [=](std::unique_ptr<SessionDescriptionInterface> answer) {

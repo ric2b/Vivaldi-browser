@@ -5,7 +5,8 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_BLOCK_NODE_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_BLOCK_NODE_H_
 
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include <optional>
+
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
 #include "third_party/blink/renderer/core/layout/layout_input_node.h"
@@ -85,21 +86,6 @@ class CORE_EXPORT BlockNode : public LayoutInputNode {
   // To be called when we're done repeating a node, when at the last fragment.
   void FinishRepeatableRoot() const;
 
-  // This method is just for use within the |OutOfFlowLayoutPart|.
-  //
-  // As OOF-positioned objects have their position, and size computed
-  // pre-layout, we need a way to quickly determine if we need to perform this
-  // work.
-  //
-  // We have this "first-tier" cache explicitly for this purpose.
-  // This method compares the containing-block size to determine if we can skip
-  // the position, and size calculation.
-  //
-  // If the containing-block size hasn't changed, and we are layout-clean we
-  // can reuse the previous layout result.
-  const LayoutResult* CachedLayoutResultForOutOfFlowPositioned(
-      LogicalSize container_content_size) const;
-
   LayoutInputNode NextSibling() const;
 
   // Computes the value of min-content and max-content for this node's border
@@ -153,7 +139,7 @@ class CORE_EXPORT BlockNode : public LayoutInputNode {
   LogicalSize GetAspectRatio() const;
 
   // Returns the transform to apply to a child (e.g. for scrollable-overflow).
-  absl::optional<gfx::Transform> GetTransformForChildFragment(
+  std::optional<gfx::Transform> GetTransformForChildFragment(
       const PhysicalBoxFragment& child_fragment,
       PhysicalSize size) const;
 
@@ -258,7 +244,7 @@ class CORE_EXPORT BlockNode : public LayoutInputNode {
                     const ConstraintSpace&,
                     const BlockBreakToken*,
                     const LayoutResult*,
-                    const absl::optional<PhysicalSize>& old_box_size) const;
+                    const std::optional<PhysicalSize>& old_box_size) const;
 
   // Update the layout results vector in LayoutBox with the new result.
   void StoreResultInLayoutBox(const LayoutResult*,

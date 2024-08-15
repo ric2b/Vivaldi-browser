@@ -23,6 +23,7 @@
 #include "media/base/video_frame.h"
 #include "media/gpu/accelerated_video_decoder.h"
 #include "media/gpu/chromeos/dmabuf_video_frame_pool.h"
+#include "media/gpu/chromeos/video_frame_resource.h"
 #include "media/gpu/macros.h"
 #include "media/gpu/v4l2/v4l2_device.h"
 #include "media/gpu/v4l2/v4l2_video_decoder_delegate_av1.h"
@@ -153,7 +154,7 @@ bool V4L2StatelessVideoDecoderBackend::Initialize() {
 // static
 void V4L2StatelessVideoDecoderBackend::ReuseOutputBufferThunk(
     scoped_refptr<base::SequencedTaskRunner> task_runner,
-    absl::optional<base::WeakPtr<V4L2StatelessVideoDecoderBackend>> weak_this,
+    std::optional<base::WeakPtr<V4L2StatelessVideoDecoderBackend>> weak_this,
     V4L2ReadableBufferRef buffer) {
   DVLOGF(3);
   DCHECK(weak_this);
@@ -204,7 +205,7 @@ void V4L2StatelessVideoDecoderBackend::OnOutputBufferDequeued(
   if (output_queue_->GetMemoryType() == V4L2_MEMORY_MMAP) {
     // Keep a reference to the V4L2 buffer until the frame is reused, because
     // the frame is backed up by the V4L2 buffer's memory.
-    surface->video_frame()->AddDestructionObserver(std::move(reuse_buffer_cb));
+    surface->frame()->AddDestructionObserver(std::move(reuse_buffer_cb));
   } else {
     // Keep a reference to the V4L2 buffer until the buffer is reused. The
     // reason for this is that the we currently use V4L2 buffer IDs to generate
@@ -223,9 +224,7 @@ V4L2StatelessVideoDecoderBackend::CreateSecureSurface(uint64_t secure_handle) {
   DVLOGF(4);
 
   // Request V4L2 input and output buffers.
-  auto input_buf =
-      secure_handle ? input_queue_->GetFreeBufferForSecureHandle(secure_handle)
-                    : input_queue_->GetFreeBuffer();
+  auto input_buf = input_queue_->GetFreeBuffer();
   auto output_buf = output_queue_->GetFreeBuffer();
   if (!input_buf || !output_buf) {
     DVLOGF(3) << "There is no free V4L2 buffer.";
@@ -233,22 +232,20 @@ V4L2StatelessVideoDecoderBackend::CreateSecureSurface(uint64_t secure_handle) {
   }
 
   DmabufVideoFramePool* pool = client_->GetVideoFramePool();
-  scoped_refptr<VideoFrame> frame;
+  scoped_refptr<FrameResource> frame;
   if (!pool) {
-    // Get VideoFrame from the V4L2 buffer because now we allocate from V4L2
-    // driver via MMAP. The VideoFrame received from V4L2 buffer will remain
+    // Get FrameResource from the V4L2 buffer because now we allocate from V4L2
+    // driver via MMAP. The FrameResource received from V4L2 buffer will remain
     // until deallocating V4L2Queue. But we need to know when the buffer is not
     // used by the client. So we wrap the frame here.
     DCHECK_EQ(output_queue_->GetMemoryType(), V4L2_MEMORY_MMAP);
-    scoped_refptr<VideoFrame> origin_frame = output_buf->GetVideoFrame();
+    scoped_refptr<FrameResource> origin_frame = output_buf->GetFrameResource();
     if (!origin_frame) {
-      LOG(ERROR) << "There is no available VideoFrame from the V4L2 buffer.";
+      LOG(ERROR) << "There is no available FrameResource from the V4L2 buffer.";
       return nullptr;
     }
 
-    frame = VideoFrame::WrapVideoFrame(origin_frame, origin_frame->format(),
-                                       origin_frame->visible_rect(),
-                                       origin_frame->natural_size());
+    frame = origin_frame->CreateWrappingFrame();
   } else {
     // This is used in cases when the video decoder format does not need
     // conversion before being sent to Chrome's Media pipeline. On ChromeOS,
@@ -257,10 +254,10 @@ V4L2StatelessVideoDecoderBackend::CreateSecureSurface(uint64_t secure_handle) {
     frame = pool->GetFrame();
     if (!frame) {
       // We allocate the same number of output buffer slot in V4L2 device and
-      // the output VideoFrame. If there is free output buffer slot but no free
-      // VideoFrame, it means the VideoFrame is not released at client
-      // side. Post DoDecodeWork when the pool has available frames.
-      DVLOGF(3) << "There is no available VideoFrame.";
+      // the output FrameResource. If there is free output buffer slot but no
+      // free FrameResource, it means the FrameResource is not released at
+      // client side. Post DoDecodeWork when the pool has available frames.
+      DVLOGF(3) << "There is no available FrameResource.";
       pool->NotifyWhenFrameAvailable(base::BindOnce(
           base::IgnoreResult(&base::SequencedTaskRunner::PostTask),
           task_runner_, FROM_HERE,
@@ -272,8 +269,7 @@ V4L2StatelessVideoDecoderBackend::CreateSecureSurface(uint64_t secure_handle) {
 
   scoped_refptr<V4L2DecodeSurface> dec_surface;
   CHECK(input_queue_->SupportsRequests());
-  absl::optional<V4L2RequestRef> request_ref =
-      requests_queue_->GetFreeRequest();
+  std::optional<V4L2RequestRef> request_ref = requests_queue_->GetFreeRequest();
   if (!request_ref) {
     DVLOGF(1) << "Could not get free request.";
     return nullptr;
@@ -409,7 +405,7 @@ bool V4L2StatelessVideoDecoderBackend::PumpDecodeTask() {
   while (true) {
     switch (decoder_->Decode()) {
       case AcceleratedVideoDecoder::kConfigChange:
-        if (decoder_->GetBitDepth() != 8u) {
+        if (decoder_->GetBitDepth() != 8u && decoder_->GetBitDepth() != 10u) {
           VLOGF(2) << "Unsupported bit depth: "
                    << base::strict_cast<int>(decoder_->GetBitDepth());
           return false;
@@ -445,7 +441,7 @@ bool V4L2StatelessVideoDecoderBackend::PumpDecodeTask() {
         if (current_decode_request_) {
           std::move(current_decode_request_->decode_cb)
               .Run(DecoderStatus::Codes::kOk);
-          current_decode_request_ = absl::nullopt;
+          current_decode_request_ = std::nullopt;
         }
 
         // Process next decode request.
@@ -468,7 +464,7 @@ bool V4L2StatelessVideoDecoderBackend::PumpDecodeTask() {
 
           output_request_queue_.push(OutputRequest::FlushFence());
           PumpOutputSurfaces();
-          current_decode_request_ = absl::nullopt;
+          current_decode_request_ = std::nullopt;
           return true;
         }
 
@@ -529,12 +525,12 @@ void V4L2StatelessVideoDecoderBackend::PumpOutputSurfaces() {
       case OutputRequest::kSurface:
         scoped_refptr<V4L2DecodeSurface> surface = std::move(request.surface);
 
-        DCHECK(surface->video_frame());
-        client_->OutputFrame(surface->video_frame(), surface->visible_rect(),
+        DCHECK(surface->frame());
+        client_->OutputFrame(surface->frame(), surface->visible_rect(),
                              surface->color_space(), request.timestamp);
 
         {
-          const auto timestamp = surface->video_frame()->timestamp();
+          const auto timestamp = surface->frame()->timestamp();
           const auto flat_timestamp = timestamp.InMilliseconds();
           // TODO(b/190615065) |flat_timestamp| might be repeated with H.264
           // bitstreams, investigate why, and change the if() to DCHECK().
@@ -666,7 +662,7 @@ void V4L2StatelessVideoDecoderBackend::ClearPendingRequests(
   // Clear current_decode_request_ and decode_request_queue_.
   if (current_decode_request_) {
     std::move(current_decode_request_->decode_cb).Run(status);
-    current_decode_request_ = absl::nullopt;
+    current_decode_request_ = std::nullopt;
   }
 
   while (!decode_request_queue_.empty()) {

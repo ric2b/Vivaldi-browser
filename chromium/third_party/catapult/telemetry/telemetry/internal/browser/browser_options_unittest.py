@@ -2,13 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 from __future__ import absolute_import
-import optparse  # pylint: disable=deprecated-module
 import os
 import unittest
+from unittest import mock
 
+from telemetry.core import optparse_argparse_migration as oam
 from telemetry.internal.browser import browser_options
-
-import mock
 
 
 class BrowserOptionsTest(unittest.TestCase):
@@ -24,22 +23,22 @@ class BrowserOptionsTest(unittest.TestCase):
   def testDefaults(self):
     options = browser_options.BrowserFinderOptions()
     parser = options.CreateParser()
-    parser.add_option('-x', action='store', default=3)
+    parser.add_option('-x', action='store', default=3, type=int)
     parser.parse_args(['--browser', 'any'])
     self.assertEqual(options.x, 3)  # pylint: disable=no-member
 
   def testDefaultsPlusOverride(self):
     options = browser_options.BrowserFinderOptions()
     parser = options.CreateParser()
-    parser.add_option('-x', action='store', default=3)
-    parser.parse_args(['--browser', 'any', '-x', 10])
+    parser.add_option('-x', action='store', default=3, type=int)
+    parser.parse_args(['--browser', 'any', '-x', '10'])
     self.assertEqual(options.x, 10)  # pylint: disable=no-member
 
   def testDefaultsDontClobberPresetValue(self):
     options = browser_options.BrowserFinderOptions()
     setattr(options, 'x', 7)
     parser = options.CreateParser()
-    parser.add_option('-x', action='store', default=3)
+    parser.add_option('-x', action='store', default=3, type=int)
     parser.parse_args(['--browser', 'any'])
     self.assertEqual(options.x, 7)  # pylint: disable=no-member
 
@@ -119,7 +118,7 @@ class BrowserOptionsTest(unittest.TestCase):
     options.override_to_true = False
     options.override_to_false = True
 
-    parser = optparse.OptionParser()
+    parser = oam.CreateFromOptparseInputs()
     parser.add_option('--already_true', action='store_true')
     parser.add_option('--already_false', action='store_true')
     parser.add_option('--unset', action='store_true')
@@ -132,7 +131,7 @@ class BrowserOptionsTest(unittest.TestCase):
 
     self.assertTrue(options.already_true)
     self.assertFalse(options.already_false)
-    self.assertTrue(options.unset is None)
+    self.assertFalse(options.unset)
     self.assertTrue(options.default_true)
     self.assertFalse(options.default_false)
     self.assertFalse(options.override_to_true)

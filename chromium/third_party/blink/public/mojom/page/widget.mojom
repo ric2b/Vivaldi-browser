@@ -153,6 +153,13 @@ interface FrameWidget {
   SetViewportIntersection(ViewportIntersectionState intersection_state,
                           VisualProperties? visual_properties);
 
+  // Sent to inform the renderer that fallback contents from the previous
+  // Document, if any, have been cleared. This means that if the current
+  // Document hasn't produced a frame yet we're likely displaying blank right
+  // now. This is used to abort View Transitions, and possibly other optional
+  // work.
+  NotifyClearedDisplayedGraphics();
+
   // Vivaldi: Force a reload of <image> under coordinate.
   LoadImageAt(gfx.mojom.Point point_in_local_root);
   // Vivaldi: Enable or disable images in the current document.

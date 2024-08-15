@@ -87,6 +87,8 @@ class TestShimClient : public chrome::mojom::AppShim {
   void BindNotificationProvider(
       mojo::PendingReceiver<mac_notifications::mojom::MacNotificationProvider>
           provider) override {}
+  void RequestNotificationPermission(
+      RequestNotificationPermissionCallback callback) override {}
 
  private:
   void OnShimConnectedDone(
@@ -214,7 +216,11 @@ class AppShimListenerBrowserTest : public InProcessBrowserTest,
   void OpenAppSettings() override {}
   void UrlsOpened(const std::vector<GURL>& urls) override {}
   void OpenAppWithOverrideUrl(const GURL& override_url) override {}
+  void EnableAccessibilitySupport(
+      chrome::mojom::AppShimScreenReaderSupportMode mode) override {}
   void ApplicationWillTerminate() override {}
+  void NotificationPermissionStatusChanged(
+      mac_notifications::mojom::PermissionStatus status) override {}
 
   std::unique_ptr<base::RunLoop> runner_;
   mojo::Receiver<chrome::mojom::AppShimHost> receiver_{this};

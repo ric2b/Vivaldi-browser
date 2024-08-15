@@ -5,7 +5,7 @@
 #ifndef BASE_MEMORY_RAW_PTR_ASAN_BOUND_ARG_TRACKER_H_
 #define BASE_MEMORY_RAW_PTR_ASAN_BOUND_ARG_TRACKER_H_
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_buildflags.h"
+#include "partition_alloc/partition_alloc_buildflags.h"
 
 #if BUILDFLAG(USE_ASAN_BACKUP_REF_PTR)
 #include <cstddef>
@@ -19,7 +19,7 @@
 
 namespace base {
 namespace internal {
-template <typename, typename>
+template <typename, typename, typename>
 struct Invoker;
 
 template <typename T, typename UnretainedTrait, RawPtrTraits PtrTraits>
@@ -55,7 +55,7 @@ class BASE_EXPORT RawPtrAsanBoundArgTracker {
   static uintptr_t GetProtectedArgPtr(uintptr_t ptr);
 
  private:
-  template <typename, typename>
+  template <typename, typename, typename>
   friend struct internal::Invoker;
 
   void Add(uintptr_t pointer);

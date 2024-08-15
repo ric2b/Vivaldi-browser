@@ -46,7 +46,7 @@ async function validateSourceTabs() {
   });
 }
 
-describe('Multi-Workers', async function() {
+describe('Multi-Workers', function() {
   // The tests in this suite are particularly slow, as they perform a lot of actions
   if (this.timeout() !== 0) {
     this.timeout(10000);
@@ -274,7 +274,7 @@ describe('Multi-Workers', async function() {
 
     describe(`hits breakpoints added to workers ${withOrWithout}`, () => {
       beforeEach(async () => {
-        await enableExperiment('instrumentationBreakpoints');
+        await enableExperiment('instrumentation-breakpoints');
         const {frontend} = getBrowserAndPages();
         await waitForSourceFiles(
             SourceFileEvents.SourceFileLoaded, files => files.some(f => f.endsWith('multi-workers.js')), async () => {

@@ -27,9 +27,9 @@
 #include "core/fpdfdoc/cpdf_formcontrol.h"
 #include "core/fpdfdoc/cpdf_generateap.h"
 #include "core/fpdfdoc/cpdf_interactiveform.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/stl_util.h"
-#include "third_party/base/check.h"
-#include "third_party/base/containers/contains.h"
 
 namespace {
 
@@ -75,12 +75,12 @@ bool HasOptField(CPDF_FormField::Type type) {
 }  // namespace
 
 // static
-absl::optional<FormFieldType> CPDF_FormField::IntToFormFieldType(int value) {
+std::optional<FormFieldType> CPDF_FormField::IntToFormFieldType(int value) {
   if (value >= static_cast<int>(FormFieldType::kUnknown) &&
       value < static_cast<int>(kFormFieldTypeCount)) {
     return static_cast<FormFieldType>(value);
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 // static
@@ -274,7 +274,7 @@ int CPDF_FormField::GetControlIndex(const CPDF_FormControl* pControl) const {
   if (it == controls.end())
     return -1;
 
-  return pdfium::base::checked_cast<int>(it - controls.begin());
+  return pdfium::checked_cast<int>(it - controls.begin());
 }
 
 FormFieldType CPDF_FormField::GetFieldType() const {

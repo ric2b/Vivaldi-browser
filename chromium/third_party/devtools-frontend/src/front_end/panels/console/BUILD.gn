@@ -5,6 +5,7 @@
 import("../../../scripts/build/ninja/devtools_entrypoint.gni")
 import("../../../scripts/build/ninja/devtools_module.gni")
 import("../../../scripts/build/ninja/generate_css.gni")
+import("../../../third_party/typescript/typescript.gni")
 import("../visibility.gni")
 
 generate_css("css_files") {
@@ -70,8 +71,6 @@ devtools_entrypoint("bundle") {
   visibility = [
     ":*",
     "../../../test/e2e/console/*",
-    "../../../test/unittests/front_end/entrypoints/missing_entrypoints/*",
-    "../../../test/unittests/front_end/panels/console/*",
     "../../entrypoints/*",
     "../../panels/explain/*",
   ]
@@ -90,4 +89,29 @@ devtools_entrypoint("meta") {
   ]
 
   visibility = [ "../../entrypoints/*" ]
+}
+
+ts_library("unittests") {
+  testonly = true
+
+  sources = [
+    "ConsoleContextSelector.test.ts",
+    "ConsoleFormat.test.ts",
+    "ConsolePrompt.test.ts",
+    "ConsoleView.test.ts",
+    "ConsoleViewMessage.test.ts",
+    "ErrorStackParser.test.ts",
+  ]
+
+  deps = [
+    ":bundle",
+    "../../core/platform:bundle",
+    "../../core/sdk:bundle",
+    "../../generated:protocol",
+    "../../models/bindings:bundle",
+    "../../models/issues_manager:bundle",
+    "../../models/logs:bundle",
+    "../../testing",
+    "../../ui/legacy/components/utils:bundle",
+  ]
 }

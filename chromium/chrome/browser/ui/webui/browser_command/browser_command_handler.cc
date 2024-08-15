@@ -114,6 +114,13 @@ void BrowserCommandHandler::CanExecuteCommand(
       break;
     case Command::kStartSavedTabGroupTutorial:
       can_execute = TutorialServiceExists() && BrowserSupportsSavedTabGroups();
+      break;
+    case Command::kOpenAISettings:
+      can_execute = true;
+      break;
+    case Command::kOpenSafetyCheckFromWhatsNew:
+      can_execute = true;
+      break;
   }
   std::move(callback).Run(can_execute);
 }
@@ -189,6 +196,13 @@ void BrowserCommandHandler::ExecuteCommandWithDisposition(
     case Command::kStartSavedTabGroupTutorial:
       StartSavedTabGroupTutorial();
       break;
+    case Command::kOpenAISettings:
+      OpenAISettings();
+      break;
+    case Command::kOpenSafetyCheckFromWhatsNew:
+      NavigateToURL(GURL(chrome::GetSettingsUrl(chrome::kSafetyCheckSubPage)),
+                    disposition);
+      break;
     default:
       NOTREACHED() << "Unspecified behavior for command " << id;
       break;
@@ -240,6 +254,11 @@ void BrowserCommandHandler::NavigateToEnhancedProtectionSetting() {
 
 void BrowserCommandHandler::OpenPasswordManager() {
   chrome::ShowPasswordManager(chrome::FindBrowserWithProfile(profile_));
+}
+
+void BrowserCommandHandler::OpenAISettings() {
+  chrome::ShowSettingsSubPage(chrome::FindBrowserWithProfile(profile_),
+                              chrome::kExperimentalAISettingsSubPage);
 }
 
 bool BrowserCommandHandler::BrowserSupportsCustomizeChromeSidePanel() {

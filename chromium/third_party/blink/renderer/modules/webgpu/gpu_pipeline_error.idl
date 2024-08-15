@@ -14,7 +14,7 @@ dictionary GPUPipelineErrorInit {
 };
 
 [
-  Exposed=(Window, DedicatedWorker),
+  Exposed=(Window, Worker),
   SecureContext,
   Serializable
 ]

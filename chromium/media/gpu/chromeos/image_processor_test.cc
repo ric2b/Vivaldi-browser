@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "media/gpu/chromeos/image_processor.h"
+
 #include <sys/mman.h>
 #include <sys/poll.h>
+
 #include <memory>
 #include <string>
 #include <tuple>
@@ -34,23 +37,35 @@
 #include "media/base/video_types.h"
 #include "media/gpu/chromeos/chromeos_compressed_gpu_memory_buffer_video_frame_utils.h"
 #include "media/gpu/chromeos/fourcc.h"
-#include "media/gpu/chromeos/image_processor.h"
+#include "media/gpu/chromeos/gl_image_processor_backend.h"
 #include "media/gpu/chromeos/image_processor_backend.h"
 #include "media/gpu/chromeos/image_processor_factory.h"
+#include "media/gpu/chromeos/libyuv_image_processor_backend.h"
 #include "media/gpu/chromeos/platform_video_frame_utils.h"
 #include "media/gpu/chromeos/vulkan_image_processor.h"
 #include "media/gpu/test/image.h"
 #include "media/gpu/test/image_processor/image_processor_client.h"
+#include "media/gpu/test/image_quality_metrics.h"
 #include "media/gpu/test/video_frame_file_writer.h"
 #include "media/gpu/test/video_frame_helpers.h"
 #include "media/gpu/test/video_frame_validator.h"
 #include "media/gpu/test/video_test_environment.h"
+#if BUILDFLAG(USE_V4L2_CODEC)
+#include "media/gpu/v4l2/v4l2_device.h"
+#include "media/gpu/v4l2/v4l2_image_processor_backend.h"
+#endif
+#if BUILDFLAG(USE_VAAPI)
+#include "media/gpu/vaapi/vaapi_image_processor_backend.h"
+#endif
 #include "media/gpu/video_frame_mapper.h"
 #include "media/gpu/video_frame_mapper_factory.h"
 #include "mojo/core/embedder/embedder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/libyuv/include/libyuv.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/overlay_transform.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_surface.h"
@@ -62,8 +77,8 @@
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
-#define MM21_TILE_WIDTH 32
-#define MM21_TILE_HEIGHT 16
+#define MM21_TILE_WIDTH 32u
+#define MM21_TILE_HEIGHT 16u
 
 namespace media {
 namespace {
@@ -83,11 +98,85 @@ const char* help_msg =
     "  --save_images         write images processed by a image processor to\n"
     "                        the \"<testname>\" folder.\n"
     "  --source_directory    specify the directory that contains test source\n"
-    "                        files. Defaults to the current directory.\n";
+    "                        files. Defaults to the current directory.\n"
+#if defined(ARCH_CPU_ARM_FAMILY)
+    "  --force_gl            use the GL image processor backend.\n"
+#endif  // defined(ARCH_CPU_ARM_FAMILY)
+    "  --force_libyuv        use the LibYUV image processor backend.\n"
+#if BUILDFLAG(USE_V4L2_CODEC)
+    "  --force_v4l2          use the V4L2 image processor backend.\n"
+#endif  // BUILDFLAG(USE_V4L2_CODEC)
+#if BUILDFLAG(USE_VAAPI)
+    "  --force_vaapi         use the VA-API image processor backend.\n"
+#endif  // BUILDFLAG(USE_VAAPI)
+    ;
 
 bool g_save_images = false;
 base::FilePath g_source_directory =
     base::FilePath(base::FilePath::kCurrentDirectory);
+
+// BackendType defines an enum for specifying a particular backend.
+enum class BackendType {
+#if defined(ARCH_CPU_ARM_FAMILY)
+  kGL,
+#endif  // defined(ARCH_CPU_ARM_FAMILY)
+  kLibYUV,
+#if BUILDFLAG(USE_V4L2_CODEC)
+  kV4L2,
+#endif  // BUILDFLAG(USE_V4L2_CODEC)
+#if BUILDFLAG(USE_VAAPI)
+  kVAAPI,
+#endif  // BUILDFLAG(USE_VAAPI)
+};
+
+const char* ToString(BackendType backend) {
+  switch (backend) {
+#if defined(ARCH_CPU_ARM_FAMILY)
+    case BackendType::kGL:
+      return "GL";
+#endif  // defined(ARCH_CPU_ARM_FAMILY)
+    case BackendType::kLibYUV:
+      return "LibYUV";
+#if BUILDFLAG(USE_V4L2_CODEC)
+    case BackendType::kV4L2:
+      return "V4L2";
+#endif  // BUILDFLAG(USE_V4L2_CODEC)
+#if BUILDFLAG(USE_VAAPI)
+    case BackendType::kVAAPI:
+      return "VAAPI";
+#endif  // BUILDFLAG(USE_VAAPI)
+  }
+}
+
+// Creates a CreateBackendCB for the specified BackendType. If backend is not
+// set, then returns std::nullopt.
+std::optional<ImageProcessor::CreateBackendCB> GetCreateBackendCB(
+    std::optional<BackendType> backend) {
+  if (!backend) {
+    return std::nullopt;
+  }
+
+  switch (*backend) {
+#if defined(ARCH_CPU_ARM_FAMILY)
+    case BackendType::kGL:
+      return base::BindRepeating(&media::GLImageProcessorBackend::Create);
+#endif  // defined(ARCH_CPU_ARM_FAMILY)
+    case BackendType::kLibYUV:
+      return base::BindRepeating(&media::LibYUVImageProcessorBackend::Create);
+#if BUILDFLAG(USE_V4L2_CODEC)
+    case BackendType::kV4L2:
+      return base::BindRepeating(&media::V4L2ImageProcessorBackend::Create,
+                                 base::MakeRefCounted<media::V4L2Device>(),
+                                 /*num_buffers=*/1);
+#endif  // BUILDFLAG(USE_V4L2_CODEC)
+#if BUILDFLAG(USE_VAAPI)
+    case BackendType::kVAAPI:
+      return base::BindRepeating(&VaapiImageProcessorBackend::Create);
+#endif  // BUILDFLAG(USE_VAAPI)
+  }
+}
+
+std::optional<BackendType> g_backend_type;
 
 base::FilePath BuildSourceFilePath(const base::FilePath& filename) {
   return media::g_source_directory.Append(filename);
@@ -131,6 +220,14 @@ const base::FilePath::CharType* kI420Image270P =
 // File for MM21 detile and scaling test.
 const base::FilePath::CharType* kMM21Image270P =
     FILE_PATH_LITERAL("puppets-480x270.mm21.yuv");
+
+#if BUILDFLAG(ENABLE_VULKAN)
+// Files for MT2T Vulkan detile test.
+const base::FilePath::CharType* kMT2TImage =
+    FILE_PATH_LITERAL("crowd_run_1080x512.mt2t");
+const base::FilePath::CharType* kP010Image =
+    FILE_PATH_LITERAL("crowd_run_1080x512.p010");
+#endif
 #endif
 
 enum class YuvSubsampling {
@@ -210,10 +307,12 @@ scoped_refptr<VideoFrame> CreateNV12Frame(const gfx::Size& size,
 
 scoped_refptr<VideoFrame> CreateRandomMM21Frame(const gfx::Size& size,
                                                 VideoFrame::StorageType type) {
-  DCHECK_EQ(size.width(), base::bits::AlignUpDeprecatedDoNotUse(
-                              size.width(), MM21_TILE_WIDTH));
-  DCHECK_EQ(size.height(), base::bits::AlignUpDeprecatedDoNotUse(
-                               size.height(), MM21_TILE_HEIGHT));
+  DCHECK_EQ(static_cast<unsigned int>(size.width()),
+            base::bits::AlignUp(static_cast<unsigned int>(size.width()),
+                                MM21_TILE_WIDTH));
+  DCHECK_EQ(static_cast<unsigned int>(size.height()),
+            base::bits::AlignUp(static_cast<unsigned int>(size.height()),
+                                MM21_TILE_HEIGHT));
 
   scoped_refptr<VideoFrame> ret = CreateNV12Frame(size, type);
   if (!ret) {
@@ -416,7 +515,8 @@ class ImageProcessorParamTest
     }
 
     auto ip_client = test::ImageProcessorClient::Create(
-        input_config, output_config, kNumBuffers, std::move(frame_processors));
+        GetCreateBackendCB(g_backend_type), input_config, output_config,
+        kNumBuffers, std::move(frame_processors));
     return ip_client;
   }
 
@@ -443,6 +543,10 @@ TEST_P(ImageProcessorParamTest, ConvertOneTime_MemToMem) {
   auto ip_client = CreateImageProcessorClient(
       input_image, {VideoFrame::STORAGE_OWNED_MEMORY}, &output_image,
       {VideoFrame::STORAGE_OWNED_MEMORY});
+  if (!ip_client && g_backend_type.has_value()) {
+    GTEST_SKIP() << "Forced backend " << ToString(*g_backend_type)
+                 << " does not support this test";
+  }
   ASSERT_TRUE(ip_client);
 
   ip_client->Process(input_image, output_image);
@@ -468,6 +572,10 @@ TEST_P(ImageProcessorParamTest, ConvertOneTime_DmabufToMem) {
   auto ip_client = CreateImageProcessorClient(
       input_image, {VideoFrame::STORAGE_DMABUFS}, &output_image,
       {VideoFrame::STORAGE_OWNED_MEMORY});
+  if (!ip_client && g_backend_type.has_value()) {
+    GTEST_SKIP() << "Forced backend " << ToString(*g_backend_type)
+                 << " does not support this test";
+  }
   ASSERT_TRUE(ip_client);
 
   ip_client->Process(input_image, output_image);
@@ -493,6 +601,10 @@ TEST_P(ImageProcessorParamTest, ConvertOneTime_DmabufToDmabuf) {
   auto ip_client =
       CreateImageProcessorClient(input_image, {VideoFrame::STORAGE_DMABUFS},
                                  &output_image, {VideoFrame::STORAGE_DMABUFS});
+  if (!ip_client && g_backend_type.has_value()) {
+    GTEST_SKIP() << "Forced backend " << ToString(*g_backend_type)
+                 << " does not support this test";
+  }
   ASSERT_TRUE(ip_client);
   ip_client->Process(input_image, output_image);
 
@@ -523,6 +635,10 @@ TEST_P(ImageProcessorParamTest, ConvertOneTime_GmbToGmb) {
   auto ip_client = CreateImageProcessorClient(
       input_image, {VideoFrame::STORAGE_GPU_MEMORY_BUFFER}, &output_image,
       {VideoFrame::STORAGE_GPU_MEMORY_BUFFER});
+  if (!ip_client && g_backend_type.has_value()) {
+    GTEST_SKIP() << "Forced backend " << ToString(*g_backend_type)
+                 << " does not support this test";
+  }
   ASSERT_TRUE(ip_client);
   ip_client->Process(input_image, output_image);
 
@@ -596,6 +712,10 @@ TEST(ImageProcessorBackendTest, CompareLibYUVAndGLBackendsForMM21Image) {
   if (!SupportsNecessaryGLExtension()) {
     GTEST_SKIP() << "Skipping GL Backend test, unsupported platform.";
   }
+  if (g_backend_type.has_value()) {
+    GTEST_SKIP() << "Skipping test since a particular backend was specified in "
+                    "the command line arguments.";
+  }
 
   constexpr gfx::Size kTestImageSize(1920, 1088);
   constexpr gfx::Rect kTestImageVisibleRect(kTestImageSize);
@@ -616,8 +736,8 @@ TEST(ImageProcessorBackendTest, CompareLibYUVAndGLBackendsForMM21Image) {
       },
       client_task_runner, quit_closure, &image_processor_error);
   ImageProcessorFactory::PickFormatCB pick_format_cb = base::BindRepeating(
-      [](const std::vector<Fourcc>&, absl::optional<Fourcc>) {
-        return absl::make_optional<Fourcc>(Fourcc::NV12);
+      [](const std::vector<Fourcc>&, std::optional<Fourcc>) {
+        return std::make_optional<Fourcc>(Fourcc::NV12);
       });
 
   std::unique_ptr<ImageProcessor> libyuv_image_processor =
@@ -791,10 +911,15 @@ TEST(ImageProcessorBackendTest, VulkanDetileScaleTest) {
         gpu::RepresentationAccessMode::kWrite, begin_semaphores,
         end_semaphores);
 
+    // TODO(b/251458823): Add tests for more interesting crop and rotation
+    // parameters.
     vulkan_image_processor->Process(
-        input_access->GetVulkanImage(), coded_size, visible_rect.size(),
-        output_access->GetVulkanImage(), output_size,
-        output_visible_rect.size(), begin_semaphores, end_semaphores);
+        input_access->GetVulkanImage(), visible_rect.size(),
+        output_access->GetVulkanImage(),
+        gfx::RectF(static_cast<float>(output_size.width()),
+                   static_cast<float>(output_size.height())),
+        gfx::RectF(1.0f, 1.0f), gfx::OVERLAY_TRANSFORM_NONE, begin_semaphores,
+        end_semaphores);
   }
 
   // This implicitly waits for all semaphores to signal.
@@ -898,11 +1023,220 @@ TEST(ImageProcessorBackendTest, VulkanDetileScaleTest) {
   munmap(vulkan_output_u, i420_scaled_u_v_size);
   munmap(vulkan_output_v, i420_scaled_u_v_size);
 }
+
+TEST(ImageProcessorBackendTest, VulkanMT2TDetileScaleTest) {
+  constexpr size_t kBppNumerator = 5;
+  constexpr size_t kBppDenom = 4;
+
+  test::Image input_image(BuildSourceFilePath(base::FilePath(kMT2TImage)));
+  ASSERT_TRUE(input_image.Load());
+  test::Image golden_image(BuildSourceFilePath(base::FilePath(kP010Image)));
+  ASSERT_TRUE(golden_image.Load());
+
+  gfx::Rect visible_rect = input_image.VisibleRect();
+  gfx::Size output_size = gfx::Size(1000, 1000);
+  gfx::Size coded_size = gfx::Size(
+      base::bits::AlignUp(static_cast<unsigned int>(visible_rect.width()),
+                          MM21_TILE_WIDTH),
+      base::bits::AlignUp(static_cast<unsigned int>(visible_rect.height()),
+                          MM21_TILE_HEIGHT));
+
+  scoped_refptr<VideoFrame> mt2t_frame = CreateNV12Frame(
+      gfx::Size(coded_size.width(),
+                coded_size.height() * kBppNumerator / kBppDenom),
+      VideoFrame::STORAGE_GPU_MEMORY_BUFFER);
+  ASSERT_TRUE(mt2t_frame);
+
+  ASSERT_FALSE(IsIntelMediaCompressedModifier(mt2t_frame->layout().modifier()));
+  std::unique_ptr<VideoFrameMapper> frame_mapper =
+      VideoFrameMapperFactory::CreateMapper(
+          VideoPixelFormat::PIXEL_FORMAT_NV12,
+          VideoFrame::STORAGE_GPU_MEMORY_BUFFER,
+          /*force_linear_buffer_mapper=*/true,
+          /*must_support_intel_media_compressed_buffers=*/false);
+  scoped_refptr<VideoFrame> mapped_mt2t_frame =
+      frame_mapper->Map(mt2t_frame, PROT_READ | PROT_WRITE);
+  ASSERT_TRUE(mapped_mt2t_frame);
+  memcpy(mapped_mt2t_frame->GetWritableVisibleData(VideoFrame::kYPlane),
+         input_image.Data(), mt2t_frame->coded_size().GetArea());
+  memcpy(mapped_mt2t_frame->GetWritableVisibleData(VideoFrame::kUVPlane),
+         input_image.Data() + mt2t_frame->coded_size().GetArea(),
+         mt2t_frame->coded_size().GetArea() / 2);
+
+  constexpr base::TimeDelta kNullTimestamp;
+  scoped_refptr<VideoFrame> vulkan_output_frame =
+      CreateGpuMemoryBufferVideoFrame(
+          VideoPixelFormat::PIXEL_FORMAT_XR30, output_size,
+          gfx::Rect(output_size.width(), output_size.height()), output_size,
+          kNullTimestamp, gfx::BufferUsage::SCANOUT_CPU_READ_WRITE);
+  ASSERT_TRUE(vulkan_output_frame);
+
+  auto in_gmb = CreateGpuMemoryBufferHandle(mt2t_frame.get());
+  auto out_gmb = CreateGpuMemoryBufferHandle(vulkan_output_frame.get());
+
+  // Initialize shared image infrastructure.
+  auto share_group = base::MakeRefCounted<gl::GLShareGroup>();
+  auto surface =
+      gl::init::CreateOffscreenGLSurface(gl::GetDefaultDisplay(), gfx::Size());
+  auto context = gl::init::CreateGLContext(share_group.get(), surface.get(),
+                                           gl::GLContextAttribs());
+  context->MakeCurrent(surface.get());
+  auto context_state = base::MakeRefCounted<gpu::SharedContextState>(
+      share_group, surface, context, false, base::DoNothing(),
+      gpu::GpuPreferences().gr_context_type);
+  gpu::SharedImageManager shared_image_manager;
+  gpu::GpuPreferences gpu_preferences;
+  gpu::GpuDriverBugWorkarounds gpu_workarounds;
+  gpu::GpuFeatureInfo gpu_info;
+  gpu::SharedImageFactory shared_image_factory(
+      gpu_preferences, gpu_workarounds, gpu_info, context_state.get(),
+      &shared_image_manager, nullptr, false);
+
+  // Wrap input and output frames in shared images.
+  auto input_mailbox = gpu::Mailbox::GenerateForSharedImage();
+  auto output_mailbox = gpu::Mailbox::GenerateForSharedImage();
+  viz::SharedImageFormat format_nv12 = viz::SharedImageFormat::MultiPlane(
+      viz::SharedImageFormat::PlaneConfig::kY_UV,
+      viz::SharedImageFormat::Subsampling::k420,
+      viz::SharedImageFormat::ChannelFormat::k8);
+  format_nv12.SetPrefersExternalSampler();
+  shared_image_factory.CreateSharedImage(
+      input_mailbox, format_nv12, mt2t_frame->coded_size(),
+      gfx::ColorSpace::CreateSRGB(), kTopLeft_GrSurfaceOrigin,
+      kOpaque_SkAlphaType,
+      gpu::SharedImageUsage::SHARED_IMAGE_USAGE_DISPLAY_READ, "TestLabel",
+      std::move(in_gmb));
+  shared_image_factory.CreateSharedImage(
+      output_mailbox, viz::SinglePlaneFormat::kBGRA_1010102, output_size,
+      gfx::ColorSpace::CreateSRGB(), kTopLeft_GrSurfaceOrigin,
+      kUnpremul_SkAlphaType,
+      gpu::SharedImageUsage::SHARED_IMAGE_USAGE_DISPLAY_WRITE |
+          gpu::SharedImageUsage::SHARED_IMAGE_USAGE_SCANOUT,
+      "TestLabel", std::move(out_gmb));
+
+  auto vulkan_image_processor = VulkanImageProcessor::Create(kMT2T);
+  ASSERT_TRUE(vulkan_image_processor);
+
+  auto input_vulkan_representation = shared_image_manager.ProduceVulkan(
+      input_mailbox, nullptr, vulkan_image_processor->GetVulkanDeviceQueue(),
+      vulkan_image_processor->GetVulkanImplementation());
+  auto output_vulkan_representation = shared_image_manager.ProduceVulkan(
+      output_mailbox, nullptr, vulkan_image_processor->GetVulkanDeviceQueue(),
+      vulkan_image_processor->GetVulkanImplementation());
+  {
+    std::vector<VkSemaphore> begin_semaphores;
+    std::vector<VkSemaphore> end_semaphores;
+    auto input_access = input_vulkan_representation->BeginScopedAccess(
+        gpu::RepresentationAccessMode::kRead, begin_semaphores, end_semaphores);
+    auto output_access = output_vulkan_representation->BeginScopedAccess(
+        gpu::RepresentationAccessMode::kWrite, begin_semaphores,
+        end_semaphores);
+
+    // TODO(b/251458823): Add tests for more interesting crop and rotation
+    // parameters.
+    vulkan_image_processor->Process(
+        input_access->GetVulkanImage(), visible_rect.size(),
+        output_access->GetVulkanImage(),
+        gfx::RectF(static_cast<float>(output_size.width()),
+                   static_cast<float>(output_size.height())),
+        gfx::RectF(1.0f, 1.0f), gfx::OVERLAY_TRANSFORM_NONE, begin_semaphores,
+        end_semaphores);
+  }
+
+  // This implicitly waits for all semaphores to signal.
+  vulkan_image_processor->GetVulkanDeviceQueue()
+      ->GetFenceHelper()
+      ->PerformImmediateCleanup();
+
+  // Map output frame.
+  std::unique_ptr<VideoFrameMapper> output_frame_mapper =
+      VideoFrameMapperFactory::CreateMapper(
+          VideoPixelFormat::PIXEL_FORMAT_XR30,
+          VideoFrame::STORAGE_GPU_MEMORY_BUFFER,
+          /*force_linear_buffer_mapper=*/true,
+          /*must_support_intel_media_compressed_buffers=*/false);
+  scoped_refptr<VideoFrame> mapped_output_frame =
+      output_frame_mapper->Map(vulkan_output_frame, PROT_READ | PROT_WRITE);
+
+  // Replicate this operation with LibYUV.
+  uint16_t* i010_y = reinterpret_cast<uint16_t*>(
+      mmap(nullptr, visible_rect.size().GetArea() * 2, PROT_READ | PROT_WRITE,
+           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+  uint16_t* i010_u = reinterpret_cast<uint16_t*>(
+      mmap(nullptr, visible_rect.size().GetArea() / 4 * 2,
+           PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+  uint16_t* i010_v = reinterpret_cast<uint16_t*>(
+      mmap(nullptr, visible_rect.size().GetArea() / 4 * 2,
+           PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+  libyuv::P010ToI010(reinterpret_cast<uint16_t*>(golden_image.Data()),
+                     visible_rect.width(),
+                     reinterpret_cast<uint16_t*>(golden_image.Data()) +
+                         visible_rect.size().GetArea(),
+                     visible_rect.width(), i010_y, visible_rect.width(), i010_u,
+                     visible_rect.width() / 2, i010_v, visible_rect.width() / 2,
+                     visible_rect.width(), visible_rect.height());
+  uint16_t* scaled_i010_y = reinterpret_cast<uint16_t*>(
+      mmap(nullptr, output_size.GetArea() * 2, PROT_READ | PROT_WRITE,
+           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+  uint16_t* scaled_i010_u = reinterpret_cast<uint16_t*>(
+      mmap(nullptr, output_size.GetArea() / 4 * 2, PROT_READ | PROT_WRITE,
+           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+  uint16_t* scaled_i010_v = reinterpret_cast<uint16_t*>(
+      mmap(nullptr, output_size.GetArea() / 4 * 2, PROT_READ | PROT_WRITE,
+           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+  libyuv::I420Scale_16(
+      i010_y, visible_rect.width(), i010_u, visible_rect.width() / 2, i010_v,
+      visible_rect.width() / 2, visible_rect.width(), visible_rect.height(),
+      scaled_i010_y, output_size.width(), scaled_i010_u,
+      output_size.width() / 2, scaled_i010_v, output_size.width() / 2,
+      output_size.width(), output_size.height(), libyuv::kFilterBilinear);
+  uint32_t* libyuv_output = reinterpret_cast<uint32_t*>(
+      mmap(nullptr, output_size.GetArea() * 4, PROT_READ | PROT_WRITE,
+           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+  libyuv::I010ToAR30(
+      scaled_i010_y, output_size.width(), scaled_i010_u,
+      output_size.width() / 2, scaled_i010_v, output_size.width() / 2,
+      reinterpret_cast<uint8_t*>(libyuv_output), output_size.width() * 4,
+      output_size.width(), output_size.height());
+
+  double psnr = test::ComputeAR30PSNR(
+      reinterpret_cast<const uint32_t*>(
+          mapped_output_frame->visible_data(VideoFrame::kARGBPlane)),
+      mapped_output_frame->stride(VideoFrame::kARGBPlane) / 4, libyuv_output,
+      output_size.width(), output_size.width(), output_size.height());
+
+  // TODO(b/328227651): We have to keep this PSNR threshold pretty low because
+  // LibYUV produces innacurate results in the 10-bit YUV->ARGB conversion. We
+  // should try to fix this discrepancy though.
+  constexpr double kPsnrThreshold = 25.0;
+  ASSERT_TRUE(psnr >= kPsnrThreshold);
+
+  munmap(libyuv_output, output_size.GetArea() * 4);
+  munmap(i010_y, visible_rect.size().GetArea() * 2);
+  munmap(i010_u, visible_rect.size().GetArea() / 4 * 2);
+  munmap(i010_v, visible_rect.size().GetArea() / 4 * 2);
+  munmap(scaled_i010_y, output_size.GetArea() * 2);
+  munmap(scaled_i010_u, output_size.GetArea() / 4 * 2);
+  munmap(scaled_i010_v, output_size.GetArea() / 4 * 2);
+}
 #endif
 #endif
 
 }  // namespace
 }  // namespace media
+
+// Argument handler for setting a forced ImageProcessor backend
+static int HandleForcedBackendArgument(const std::string& arg,
+                                       media::BackendType type) {
+  if (media::g_backend_type.has_value() && *media::g_backend_type != type) {
+    std::cout << "error argument --" << arg
+              << " is invalid. ImageProcessor backend was already set to "
+              << media::ToString(*media::g_backend_type) << std::endl;
+    return EXIT_FAILURE;
+  }
+  media::g_backend_type = type;
+  return 0;
+}
 
 int main(int argc, char** argv) {
   base::CommandLine::Init(argc, argv);
@@ -928,6 +1262,32 @@ int main(int argc, char** argv) {
       media::g_save_images = true;
     } else if (it->first == "source_directory") {
       media::g_source_directory = base::FilePath(it->second);
+#if defined(ARCH_CPU_ARM_FAMILY)
+    } else if (it->first == "force_gl") {
+      if (int ret =
+              HandleForcedBackendArgument(it->first, media::BackendType::kGL)) {
+        return ret;
+      }
+#endif  // defined(ARCH_CPU_ARM_FAMILY)
+    } else if (it->first == "force_libyuv") {
+      if (int ret = HandleForcedBackendArgument(it->first,
+                                                media::BackendType::kLibYUV)) {
+        return ret;
+      }
+#if BUILDFLAG(USE_V4L2_CODEC)
+    } else if (it->first == "force_v4l2") {
+      if (int ret = HandleForcedBackendArgument(it->first,
+                                                media::BackendType::kV4L2)) {
+        return ret;
+      }
+#endif  // BUILDFLAG(USE_V4L2_CODEC)
+#if BUILDFLAG(USE_VAAPI)
+    } else if (it->first == "force_vaapi") {
+      if (int ret = HandleForcedBackendArgument(it->first,
+                                                media::BackendType::kVAAPI)) {
+        return ret;
+      }
+#endif  // BUILDFLAG(USE_VAAPI)
     } else {
       std::cout << "unknown option: --" << it->first << "\n"
                 << media::usage_msg;
@@ -945,7 +1305,7 @@ int main(int argc, char** argv) {
 #if BUILDFLAG(IS_OZONE)
   ui::OzonePlatform::InitParams ozone_param;
   ozone_param.single_process = true;
-#if BUILDFLAG(ENABLE_VULKAN)
+#if BUILDFLAG(ENABLE_VULKAN) && BUILDFLAG(USE_V4L2_CODEC)
   ui::OzonePlatform::InitializeForUI(ozone_param);
 #endif
   ui::OzonePlatform::InitializeForGPU(ozone_param);

@@ -40,7 +40,7 @@ TaskRunnerImpl::TaskRunnerImpl(ClockNowFunctionPtr now_function,
 
 TaskRunnerImpl::~TaskRunnerImpl() {
   // Ensure no thread is currently executing inside RunUntilStopped().
-  OSP_DCHECK_EQ(task_runner_thread_id_, std::thread::id());
+  OSP_CHECK_EQ(task_runner_thread_id_, std::thread::id());
 }
 
 void TaskRunnerImpl::PostPackagedTask(Task task) {
@@ -74,7 +74,7 @@ bool TaskRunnerImpl::IsRunningOnTaskRunner() {
 }
 
 void TaskRunnerImpl::RunUntilStopped() {
-  OSP_DCHECK(!is_running_);
+  OSP_CHECK(!is_running_);
   task_runner_thread_id_ = std::this_thread::get_id();
   is_running_ = true;
 
@@ -151,7 +151,7 @@ void TaskRunnerImpl::ScheduleDelayedTasks() {
 }
 
 bool TaskRunnerImpl::GrabMoreRunnableTasks() {
-  OSP_DCHECK(running_tasks_.empty());
+  OSP_CHECK(running_tasks_.empty());
 
   std::unique_lock<std::mutex> lock(task_mutex_);
   if (!tasks_.empty()) {

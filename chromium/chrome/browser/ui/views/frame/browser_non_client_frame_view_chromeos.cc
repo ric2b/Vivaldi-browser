@@ -350,13 +350,6 @@ void BrowserNonClientFrameViewChromeOS::UpdateMinimumSize() {
   GetWidget()->OnSizeConstraintsChanged();
 }
 
-void BrowserNonClientFrameViewChromeOS::OnBrowserViewInitViewsComplete() {
-  // We need to wait till browser views are fully initialized to apply rounded
-  // corners on the frame. This ensure that NativeViewHosts hosting browser's
-  // web contents are initialized.
-  UpdateWindowRoundedCorners();
-}
-
 gfx::Rect BrowserNonClientFrameViewChromeOS::GetBoundsForClientView() const {
   // The ClientView must be flush with the top edge of the widget so that the
   // web contents can take up the entire screen in immersive fullscreen (with
@@ -457,7 +450,7 @@ bool BrowserNonClientFrameViewChromeOS::AppIsPwaWithBorderlessDisplayMode()
          browser_view()->AppUsesBorderlessMode();
 }
 
-void BrowserNonClientFrameViewChromeOS::Layout() {
+void BrowserNonClientFrameViewChromeOS::Layout(PassKey) {
   // The header must be laid out before computing |painted_height| because the
   // computation of |painted_height| for app and popup windows depends on the
   // position of the window controls.
@@ -479,7 +472,7 @@ void BrowserNonClientFrameViewChromeOS::Layout() {
     UpdateBorderlessModeEnabled();
   }
 
-  BrowserNonClientFrameView::Layout();
+  LayoutSuperclass<BrowserNonClientFrameView>(this);
   UpdateTopViewInset();
 
   if (frame_header_) {
@@ -539,10 +532,12 @@ gfx::Size BrowserNonClientFrameViewChromeOS::GetMinimumSize() const {
     min_height = 2 * border_size.height();
   }
 
-  if (chromeos::features::IsRoundedWindowsEnabled()) {
+  const int window_corner_radius = frame()->GetNativeWindow()->GetProperty(
+      aura::client::kWindowCornerRadiusKey);
+  if (chromeos::features::IsRoundedWindowsEnabled() &&
+      window_corner_radius > 0) {
     // Include bottom rounded corners region.
-    min_height =
-        min_height + chromeos::GetFrameCornerRadius(frame()->GetNativeWindow());
+    min_height = min_height + window_corner_radius;
   }
 
   return gfx::Size(min_width, min_height);
@@ -561,7 +556,7 @@ void BrowserNonClientFrameViewChromeOS::ChildPreferredSizeChanged(
     views::View* child) {
   if (browser_view()->initialized()) {
     InvalidateLayout();
-    frame()->GetRootView()->Layout();
+    frame()->GetRootView()->DeprecatedLayoutImmediately();
   }
 }
 
@@ -637,9 +632,9 @@ void BrowserNonClientFrameViewChromeOS::OnDisplayMetricsChanged(
     const display::Display& display,
     uint32_t changed_metrics) {
   // When the display is rotated, the frame header may have invalid snap icons.
-  // For example, when |features::kVerticalSnapState| is enabled, rotating from
-  // landscape display to portrait display layout should update snap icons from
-  // left/right arrows to upward/downward arrows for top and bottom snaps.
+  // For example, rotating from landscape display to portrait display layout
+  // should update snap icons from left/right arrows to upward/downward arrows
+  // for top and bottom snaps.
   if ((changed_metrics & DISPLAY_METRIC_ROTATION) && frame_header_)
     frame_header_->InvalidateLayout();
 }
@@ -689,7 +684,7 @@ void BrowserNonClientFrameViewChromeOS::OnTabletModeToggled(bool enabled) {
   if (frame()->client_view())
     frame()->client_view()->InvalidateLayout();
   if (frame()->GetRootView())
-    frame()->GetRootView()->Layout();
+    frame()->GetRootView()->DeprecatedLayoutImmediately();
 }
 
 bool BrowserNonClientFrameViewChromeOS::ShouldTabIconViewAnimate() const {
@@ -713,6 +708,7 @@ void BrowserNonClientFrameViewChromeOS::OnWindowDestroying(
     aura::Window* window) {
   DCHECK(window_observation_.IsObserving());
   window_observation_.Reset();
+  display_observer_.reset();
 }
 
 void BrowserNonClientFrameViewChromeOS::OnWindowPropertyChanged(
@@ -805,12 +801,12 @@ void BrowserNonClientFrameViewChromeOS::OnImmersiveRevealStarted() {
   auto* container = browser_view()->top_container();
   container->AddChildViewAt(caption_button_container_.get(), 0);
 
-  container->Layout();
+  container->DeprecatedLayoutImmediately();
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   // In Lacros, when entering in immersive fullscreen, it is possible
-  // that chromeos::FrameHeader::painted_height_ is set to '0', when
-  // Layout() is called. This is because the tapstrip gets hidden.
+  // that chromeos::FrameHeader::painted_height_ is set to '0', when layout
+  // occurs. This is because the tapstrip gets hidden.
   //
   // When it happens, PaintFrameImagesInRoundRect() has an empty rect
   // to paint onto, and the TabStrip's new theme is not painted.
@@ -823,7 +819,7 @@ void BrowserNonClientFrameViewChromeOS::OnImmersiveRevealEnded() {
   ResetWindowControls();
   AddChildViewAt(caption_button_container_.get(), 0);
 
-  Layout();
+  DeprecatedLayoutImmediately();
 }
 
 void BrowserNonClientFrameViewChromeOS::OnImmersiveFullscreenExited() {
@@ -1031,26 +1027,31 @@ void BrowserNonClientFrameViewChromeOS::UpdateProfileIcons() {
     if (needs_layout && root_view) {
       // Adding a child does not invalidate the layout.
       InvalidateLayout();
-      root_view->Layout();
+      root_view->DeprecatedLayoutImmediately();
     }
   } else if (profile_indicator_icon_) {
     RemoveChildViewT(std::exchange(profile_indicator_icon_, nullptr));
     if (root_view)
-      root_view->Layout();
+      root_view->DeprecatedLayoutImmediately();
   }
 #endif
 }
 
 void BrowserNonClientFrameViewChromeOS::UpdateWindowRoundedCorners() {
-  const int corner_radius =
-      chromeos::GetFrameCornerRadius(frame()->GetNativeWindow());
+  DCHECK(GetWidget());
+
+  aura::Window* frame_window = GetWidget()->GetNativeWindow();
+
+  const int corner_radius = chromeos::GetFrameCornerRadius(frame_window);
+  frame_window->SetProperty(aura::client::kWindowCornerRadiusKey,
+                            corner_radius);
 
   if (frame_header_) {
     frame_header_->SetHeaderCornerRadius(corner_radius);
   }
 
   if (chromeos::features::IsRoundedWindowsEnabled()) {
-    GetWidget()->client_view()->UpdateWindowRoundedCorners();
+    GetWidget()->client_view()->UpdateWindowRoundedCorners(corner_radius);
   }
 }
 

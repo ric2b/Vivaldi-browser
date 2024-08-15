@@ -44,7 +44,7 @@ class ConstEvalRuntimeSemanticsTest : public ConstEvalTest {
     Eval eval;
 
     /// @returns the contents of the diagnostics list as a string
-    std::string error() { return Diagnostics().str(); }
+    std::string error() { return Diagnostics().Str(); }
 };
 
 TEST_F(ConstEvalRuntimeSemanticsTest, Add_AInt_Overflow) {
@@ -479,8 +479,9 @@ TEST_F(ConstEvalRuntimeSemanticsTest, Pow_F32_Overflow) {
 }
 
 TEST_F(ConstEvalRuntimeSemanticsTest, Unpack2x16Float_OutOfRange) {
+    auto* vec2f = create<core::type::Vector>(create<core::type::F32>(), 2u);
     auto* a = constants.Get(u32(0x51437C00));
-    auto result = eval.unpack2x16float(create<core::type::U32>(), Vector{a}, {});
+    auto result = eval.unpack2x16float(vec2f, Vector{a}, {});
     ASSERT_EQ(result, Success);
     EXPECT_FLOAT_EQ(result.Get()->Index(0)->ValueAs<f32>(), 0.f);
     EXPECT_FLOAT_EQ(result.Get()->Index(1)->ValueAs<f32>(), 42.09375f);
@@ -515,7 +516,7 @@ TEST_F(ConstEvalRuntimeSemanticsTest, Clamp_F32_LowGreaterThanHigh) {
 
 TEST_F(ConstEvalRuntimeSemanticsTest, Bitcast_Infinity) {
     auto* a = constants.Get(u32(0x7F800000));
-    auto result = eval.Bitcast(create<core::type::F32>(), a, {});
+    auto result = eval.bitcast(create<core::type::F32>(), Vector{a}, {});
     ASSERT_EQ(result, Success);
     EXPECT_EQ(result.Get()->ValueAs<f32>(), 0.f);
     EXPECT_EQ(error(), R"(warning: value inf cannot be represented as 'f32')");
@@ -523,7 +524,7 @@ TEST_F(ConstEvalRuntimeSemanticsTest, Bitcast_Infinity) {
 
 TEST_F(ConstEvalRuntimeSemanticsTest, Bitcast_NaN) {
     auto* a = constants.Get(u32(0x7FC00000));
-    auto result = eval.Bitcast(create<core::type::F32>(), a, {});
+    auto result = eval.bitcast(create<core::type::F32>(), Vector{a}, {});
     ASSERT_EQ(result, Success);
     EXPECT_EQ(result.Get()->ValueAs<f32>(), 0.f);
     EXPECT_EQ(error(), R"(warning: value nan cannot be represented as 'f32')");

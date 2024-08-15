@@ -73,3 +73,22 @@ message TokenInfo {
   optional Version hardware_version = 16;
   optional Version firmware_version = 17;
 }
+
+// Proto of CK_PRF_DATA_PARAM.
+message PrfDataParam {
+  // Next ID to use: 3
+
+  optional uint64 type = 1;
+  optional bytes value = 2;
+}
+
+// Proto for CK_SP800_108_KDF_PARAMS.
+message Sp800108KdfParams {
+  // Next ID to use: 3
+
+  optional uint64 prf_type = 1;
+  repeated PrfDataParam data_params = 2;
+  // Current implementation doesn't support deriving additional keys, so we
+  // don't contain field `additional_derived_keys` here since we expect
+  // ulAdditionalDerivedKeys=0 and pAdditionalDerivedKeys=NULL_PTR
+}

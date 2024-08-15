@@ -98,7 +98,7 @@ class Element;
 class HTMLFormElement;
 class HTMLParserReentryPermit;
 class PartRoot;
-enum class DeclarativeShadowRootType;
+enum class DeclarativeShadowRootMode;
 
 class HTMLConstructionSite final {
   DISALLOW_NEW();
@@ -150,7 +150,7 @@ class HTMLConstructionSite final {
   void InsertCommentOnHTMLHtmlElement(AtomicHTMLToken*);
   void InsertDOMPart(AtomicHTMLToken*);
   void InsertHTMLElement(AtomicHTMLToken*);
-  void InsertHTMLTemplateElement(AtomicHTMLToken*, DeclarativeShadowRootType);
+  void InsertHTMLTemplateElement(AtomicHTMLToken*, DeclarativeShadowRootMode);
   void InsertSelfClosingHTMLElementDestroyingToken(AtomicHTMLToken*);
   void InsertFormattingElement(AtomicHTMLToken*);
   void InsertHTMLHeadElement(AtomicHTMLToken*);
@@ -384,9 +384,6 @@ class HTMLConstructionSite final {
 
   // Whether duplicate attribute was reported.
   bool reported_duplicate_attribute_ = false;
-
-  // Whether strings should be canonicalized (deduplicated).
-  bool canonicalize_whitespace_strings_ = true;
 };
 
 }  // namespace blink

@@ -70,8 +70,6 @@ RoleMap BuildSubroleMap() {
       {ax::mojom::Role::kContentInsertion, @"AXInsertStyleGroup"},
       {ax::mojom::Role::kContentInfo, @"AXLandmarkContentInfo"},
       {ax::mojom::Role::kDefinition, @"AXDefinition"},
-      {ax::mojom::Role::kDescriptionListDetail, @"AXDefinition"},
-      {ax::mojom::Role::kDescriptionListTerm, @"AXTerm"},
       {ax::mojom::Role::kDialog, @"AXApplicationDialog"},
       {ax::mojom::Role::kDocument, @"AXDocument"},
       {ax::mojom::Role::kEmphasis, @"AXEmphasisStyleGroup"},
@@ -406,8 +404,6 @@ void CollectAncestorRoles(
     case ax::mojom::Role::kContentInsertion:
     case ax::mojom::Role::kContentInfo:
     case ax::mojom::Role::kDefinition:
-    case ax::mojom::Role::kDescriptionListDetail:
-    case ax::mojom::Role::kDescriptionListTerm:
     case ax::mojom::Role::kDesktop:
     case ax::mojom::Role::kDialog:
     case ax::mojom::Role::kDetails:
@@ -687,6 +683,8 @@ void CollectAncestorRoles(
       // specially by screen readers, can break their ability to find the
       // content window. See http://crbug.com/875843 for more information.
       return NSAccessibilityGroupRole;
+    case ax::mojom::Role::kDescriptionListTermDeprecated:
+    case ax::mojom::Role::kDescriptionListDetailDeprecated:
     case ax::mojom::Role::kPreDeprecated:
       NOTREACHED_NORETURN();
   }
@@ -1472,7 +1470,7 @@ void CollectAncestorRoles(
 - (NSNumber*)AXARIAColumnCount {
   if (![self instanceActive])
     return nil;
-  absl::optional<int> ariaColCount =
+  std::optional<int> ariaColCount =
       _node->GetDelegate()->GetTableAriaColCount();
   if (!ariaColCount)
     return nil;
@@ -1483,7 +1481,7 @@ void CollectAncestorRoles(
   if (![self instanceActive])
     return nil;
 
-  absl::optional<int> ariaColIndex =
+  std::optional<int> ariaColIndex =
       _node->GetDelegate()->GetTableCellAriaColIndex();
   if (!ariaColIndex)
 
@@ -1508,7 +1506,7 @@ void CollectAncestorRoles(
 - (NSNumber*)AXARIARowCount {
   if (![self instanceActive])
     return nil;
-  absl::optional<int> ariaRowCount =
+  std::optional<int> ariaRowCount =
       _node->GetDelegate()->GetTableAriaRowCount();
   if (!ariaRowCount)
     return nil;
@@ -1518,7 +1516,7 @@ void CollectAncestorRoles(
 - (NSNumber*)AXARIARowIndex {
   if (![self instanceActive])
     return nil;
-  absl::optional<int> ariaRowIndex =
+  std::optional<int> ariaRowIndex =
       _node->GetDelegate()->GetTableCellAriaRowIndex();
   if (!ariaRowIndex)
     return nil;
@@ -1951,7 +1949,7 @@ void CollectAncestorRoles(
 - (NSNumber*)AXARIAPosInSet {
   if (![self instanceActive])
     return nil;
-  absl::optional<int> posInSet = _node->GetPosInSet();
+  std::optional<int> posInSet = _node->GetPosInSet();
   if (!posInSet)
     return nil;
   return @(*posInSet);
@@ -1960,7 +1958,7 @@ void CollectAncestorRoles(
 - (NSNumber*)AXARIASetSize {
   if (![self instanceActive])
     return nil;
-  absl::optional<int> setSize = _node->GetSetSize();
+  std::optional<int> setSize = _node->GetSetSize();
   if (!setSize)
     return nil;
   return @(*setSize);
@@ -2334,6 +2332,10 @@ void CollectAncestorRoles(
   return [self AXChildren];
 }
 
+- (id)accessibilityParent {
+  return [self AXParent];
+}
+
 // NSAccessibility: Assigning Roles.
 - (BOOL)isAccessibilityRequired {
   TRACE_EVENT1("accessibility", "accessibilityRequired",
@@ -2465,7 +2467,7 @@ void CollectAncestorRoles(
     return nil;
   }
 
-  absl::optional<int> column = delegate->GetTableCellColIndex();
+  std::optional<int> column = delegate->GetTableCellColIndex();
   if (!column) {
     return nil;
   }

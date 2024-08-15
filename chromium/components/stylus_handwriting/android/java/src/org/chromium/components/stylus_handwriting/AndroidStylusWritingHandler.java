@@ -93,6 +93,8 @@ public class AndroidStylusWritingHandler implements StylusWritingHandler, Stylus
         if (webContents.getViewAndroidDelegate() == null) return;
 
         View view = webContents.getViewAndroidDelegate().getContainerView();
+        // Vivaldi
+        if (view != null)
         view.setAutoHandwritingEnabled(false);
     }
 

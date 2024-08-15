@@ -52,6 +52,13 @@ source_set("test_support") {
     "../:pdfium_noshorten_config",
   ]
   visibility = [ "../*" ]
+  if (is_posix) {
+    sources += [
+      "scoped_locale.cc",
+      "scoped_locale.h",
+    ]
+    deps += [ "//testing/gtest" ]
+  }
   if (pdf_use_partition_alloc) {
     sources += [
       "allocator_shim_config.cpp",
@@ -181,7 +188,6 @@ source_set("embedder_test_support") {
     "../:pdfium_public_headers",
     "../core/fdrm",
     "../core/fxge",
-    "../third_party:pdfium_base",
     "//testing/gmock",
     "//testing/gtest",
   ]

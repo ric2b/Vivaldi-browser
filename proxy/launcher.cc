@@ -13,6 +13,8 @@
 #include "base/apple/bundle_locations.h"
 #endif
 
+#define CERTIFICATENAME "relayproxy.pem"
+
 #if BUILDFLAG(IS_MAC)
   #define PLATFORMSPECIFIC_PROXYNAME "relayproxy-darwin"
 #endif
@@ -59,30 +61,49 @@ bool connect(const ConnectSettings& settings, ConnectState& state) {
     state.message = "Can not locate proxy application (environment variable $HERE not set).";
     return false;
   }
-  std::string filename_with_path = std::string(here) + "/"
+  std::string exe_filename_with_path = std::string(here) + "/"
       + PLATFORMSPECIFIC_PROXYNAME;
-  base::FilePath file_path = base::FilePath(filename_with_path.c_str());
-  if (!base::PathExists(file_path)) {
-    state.message = "No such file " + filename_with_path;
+  base::FilePath exe_file_path = base::FilePath(exe_filename_with_path);
+  if (!base::PathExists(exe_file_path)) {
+    state.message = "No such file " + exe_filename_with_path;
     return false;
   }
   int mode;
   if (
-    !base::GetPosixFilePermissions(file_path, &mode) ||
+    !base::GetPosixFilePermissions(exe_file_path, &mode) ||
     !(mode & base::FILE_PERMISSION_EXECUTE_BY_USER)
   ) {
-    state.message = "Not executable " + filename_with_path;
+    state.message = "Not executable " + exe_filename_with_path;
     return false;
   }
 
-  base::CommandLine launch_command(file_path);
+  std::string cert_filename_with_path = std::string(here) + "/"
+      + CERTIFICATENAME;
+  base::FilePath cert_file_path = base::FilePath(cert_filename_with_path);
+  if (!base::PathExists(cert_file_path)) {
+    state.message = "No such file " + cert_filename_with_path;
+    return false;
+  }
+  mode = 0;
+  if (
+    !base::GetPosixFilePermissions(cert_file_path, &mode) ||
+    !(mode & base::FILE_PERMISSION_READ_BY_USER)
+  ) {
+    state.message = "Not readable " + cert_filename_with_path;
+    return false;
+  }
+
+  base::CommandLine launch_command(exe_file_path);
 #elif BUILDFLAG(IS_MAC)
   base::FilePath framework_bundle_path = base::apple::FrameworkBundlePath();
   base::FilePath file_path =
       framework_bundle_path.Append("Helpers").Append(
           PLATFORMSPECIFIC_PROXYNAME);
+  base::FilePath cert_file_path =
+      framework_bundle_path.Append("Resources").Append(
+          CERTIFICATENAME);
   base::CommandLine launch_command(file_path);
-#else
+#else // IS_WIN
   base::CommandLine launch_command(base::FilePath(PLATFORMSPECIFIC_PROXYNAME));
 #endif
 
@@ -90,11 +111,13 @@ bool connect(const ConnectSettings& settings, ConnectState& state) {
   launch_command.AppendArg("-invisvRelay " + settings.remote_host);
   launch_command.AppendArg("-invisvRelayPort " + settings.remote_port);
   launch_command.AppendArg("-listenPort " + settings.local_port);
+  launch_command.AppendArg("-certDataFile " + std::string(CERTIFICATENAME));
   launch_command.AppendArg("-token " + settings.token);
 #else
   launch_command.AppendSwitchASCII("-invisvRelay", settings.remote_host);
   launch_command.AppendSwitchASCII("-invisvRelayPort", settings.remote_port);
   launch_command.AppendSwitchASCII("-listenPort", settings.local_port);
+  launch_command.AppendSwitchASCII("-certDataFile", cert_file_path.value());
   launch_command.AppendSwitchASCII("-token", settings.token);
 #endif
   process_wrapper.process_ =

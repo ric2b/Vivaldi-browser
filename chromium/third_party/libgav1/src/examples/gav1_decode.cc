@@ -47,6 +47,7 @@ struct Options {
   int threads = 1;
   bool frame_parallel = false;
   bool output_all_layers = false;
+  bool parse_only = false;
   int operating_point = 0;
   int limit = 0;
   int skip = 0;
@@ -80,6 +81,9 @@ void PrintHelp(FILE* const fout) {
   fprintf(fout, "  --raw (Default true).\n");
   fprintf(fout, "  -v logging verbosity, can be used multiple times.\n");
   fprintf(fout, "  --all_layers.\n");
+  fprintf(fout,
+          "  --parse_only, only parses the encoded video without producing "
+          "decoded frames.\n");
   fprintf(fout,
           "  --operating_point <integer between 0 and 31> (Default 0).\n");
   fprintf(fout,
@@ -140,6 +144,8 @@ void ParseOptions(int argc, char* argv[], Options* const options) {
       options->threads = value;
     } else if (strcmp(argv[i], "--frame_parallel") == 0) {
       options->frame_parallel = true;
+    } else if (strcmp(argv[i], "--parse_only") == 0) {
+      options->parse_only = true;
     } else if (strcmp(argv[i], "--all_layers") == 0) {
       options->output_all_layers = true;
     } else if (strcmp(argv[i], "--operating_point") == 0) {
@@ -193,6 +199,15 @@ void ParseOptions(int argc, char* argv[], Options* const options) {
 
   if (argc < 2 || options->input_file_name == nullptr) {
     fprintf(stderr, "Input file is required!\n");
+    PrintHelp(stderr);
+    exit(EXIT_FAILURE);
+  }
+
+  if (options->parse_only &&
+      (options->threads > 1 || options->frame_parallel)) {
+    fprintf(stderr,
+            "Neither --threads nor --frame_parallel can be set together "
+            "with the --parse_only option.\n");
     PrintHelp(stderr);
     exit(EXIT_FAILURE);
   }
@@ -280,6 +295,7 @@ int main(int argc, char* argv[]) {
   settings.post_filter_mask = options.post_filter_mask;
   settings.threads = options.threads;
   settings.frame_parallel = options.frame_parallel;
+  settings.parse_only = options.parse_only;
   settings.output_all_layers = options.output_all_layers;
   settings.operating_point = options.operating_point;
   settings.blocking_dequeue = true;
@@ -309,6 +325,7 @@ int main(int argc, char* argv[]) {
 
   int input_frames = 0;
   int decoded_frames = 0;
+  int parsed_frames = 0;
   Timing timing = {};
   std::vector<FrameTiming> frame_timing;
   const bool record_frame_timing = frame_timing_file != nullptr;
@@ -379,6 +396,26 @@ int main(int argc, char* argv[]) {
               libgav1::GetErrorString(status));
       return EXIT_FAILURE;
     }
+    if (options.parse_only) {
+      // Example of how the QP values per frame in decoding/parsing
+      // order can be obtained.
+      std::vector<int> qp_vec = decoder.GetFramesMeanQpInTemporalUnit();
+      if (qp_vec.empty()) {
+        fprintf(stderr,
+                "The latest temporal unit did not contain any decodable "
+                "frames. Hence, no QP values to show.");
+      } else {
+        fprintf(
+            stderr,
+            "The QP values for the frames in the latest temporal unit are: ");
+      }
+      while (!qp_vec.empty()) {
+        fprintf(stderr, "%d, ", qp_vec.front());
+        qp_vec.erase(qp_vec.begin());
+        ++parsed_frames;
+      }
+      fprintf(stderr, "\n");
+    }
     dequeue_finished = false;
     if (buffer == nullptr) continue;
     ++decoded_frames;
@@ -443,12 +480,21 @@ int main(int argc, char* argv[]) {
   if (options.verbose > 0) {
     fprintf(stderr, "time to read input: %d us\n",
             static_cast<int>(absl::ToInt64Microseconds(timing.input)));
-    const int decode_time_us =
+    const int process_time_us =
         static_cast<int>(absl::ToInt64Microseconds(timing.dequeue));
-    const double decode_fps =
-        (decode_time_us == 0) ? 0.0 : 1.0e6 * decoded_frames / decode_time_us;
-    fprintf(stderr, "time to decode input: %d us (%d frames, %.2f fps)\n",
-            decode_time_us, decoded_frames, decode_fps);
+    if (options.parse_only) {
+      const double parse_fps = (process_time_us == 0)
+                                   ? 0.0
+                                   : 1.0e6 * parsed_frames / process_time_us;
+      fprintf(stderr, "time to parse input: %d us (%d frames, %.2f fps)\n",
+              process_time_us, parsed_frames, parse_fps);
+    } else {
+      const double decode_fps = (process_time_us == 0)
+                                    ? 0.0
+                                    : 1.0e6 * decoded_frames / process_time_us;
+      fprintf(stderr, "time to decode input: %d us (%d frames, %.2f fps)\n",
+              process_time_us, decoded_frames, decode_fps);
+    }
   }
 
   return EXIT_SUCCESS;

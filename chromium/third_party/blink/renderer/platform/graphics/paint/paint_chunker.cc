@@ -13,7 +13,7 @@ namespace blink {
 void PaintChunker::ResetChunks(Vector<PaintChunk>* chunks) {
   if (chunks_) {
     FinalizeLastChunkProperties();
-    SetWillForceNewChunk(true);
+    SetWillForceNewChunk();
     current_properties_ = PropertyTreeState::Uninitialized();
   }
   chunks_ = chunks;
@@ -56,7 +56,7 @@ void PaintChunker::StopMarkingClientsForValidation() {
 void PaintChunker::UpdateCurrentPaintChunkProperties(
     const PropertyTreeStateOrAlias& properties) {
   if (current_properties_ != properties) {
-    next_chunk_id_ = absl::nullopt;
+    next_chunk_id_ = std::nullopt;
     current_properties_ = properties;
   }
 }
@@ -107,7 +107,7 @@ bool PaintChunker::EnsureCurrentChunk(const PaintChunk::Id& id,
     chunks_->emplace_back(begin, begin, next_chunk_id_->second,
                           next_chunk_id_->first, current_properties_,
                           current_effectively_invisible_);
-    next_chunk_id_ = absl::nullopt;
+    next_chunk_id_ = std::nullopt;
     will_force_new_chunk_ = false;
     return true;
   }
@@ -119,9 +119,9 @@ bool PaintChunker::IncrementDisplayItemIndex(const DisplayItemClient& client,
   DCHECK(chunks_);
 
   bool item_forces_new_chunk = item.IsForeignLayer() || item.IsScrollbar();
-  if (item_forces_new_chunk)
-    SetWillForceNewChunk(true);
-
+  if (item_forces_new_chunk) {
+    SetWillForceNewChunk();
+  }
   bool created_new_chunk = EnsureCurrentChunk(item.GetId(), client);
   auto& chunk = chunks_->back();
   chunk.end_index++;
@@ -161,7 +161,7 @@ bool PaintChunker::IncrementDisplayItemIndex(const DisplayItemClient& client,
   DCHECK(!will_force_new_chunk_);
   if (item_forces_new_chunk) {
     DCHECK(created_new_chunk);
-    SetWillForceNewChunk(true);
+    SetWillForceNewChunk();
   }
 
   return created_new_chunk;
@@ -219,8 +219,8 @@ bool PaintChunker::AddRegionCaptureDataToCurrentChunk(
 }
 
 void PaintChunker::AddSelectionToCurrentChunk(
-    absl::optional<PaintedSelectionBound> start,
-    absl::optional<PaintedSelectionBound> end,
+    std::optional<PaintedSelectionBound> start,
+    std::optional<PaintedSelectionBound> end,
     String debug_info) {
   // We should have painted the selection when calling this method.
   DCHECK(chunks_);
@@ -276,7 +276,8 @@ void PaintChunker::CreateScrollHitTestChunk(
     const PaintChunk::Id& id,
     const DisplayItemClient& client,
     const TransformPaintPropertyNode* scroll_translation,
-    const gfx::Rect& rect) {
+    const gfx::Rect& rect,
+    cc::HitTestOpaqueness hit_test_opaqueness) {
 #if DCHECK_IS_ON()
   if (id.type == DisplayItem::Type::kResizerScrollHitTest ||
       id.type == DisplayItem::Type::kPluginScrollHitTest ||
@@ -297,19 +298,16 @@ void PaintChunker::CreateScrollHitTestChunk(
   }
 #endif
 
-  SetWillForceNewChunk(true);
+  SetWillForceNewChunk();
   bool created_new_chunk = EnsureCurrentChunk(id, client);
   DCHECK(created_new_chunk);
 
   auto& chunk = chunks_->back();
-  // Assume all scroll hit tests are opaque to hit test.
-  // TODO(crbug.com/1470484): Consider rounded corners for opaqueness of
-  // scroll hit test.
-  UnionBounds(rect, cc::HitTestOpaqueness::kOpaque);
+  UnionBounds(rect, hit_test_opaqueness);
   auto& hit_test_data = chunk.EnsureHitTestData();
   hit_test_data.scroll_translation = scroll_translation;
   hit_test_data.scroll_hit_test_rect = rect;
-  SetWillForceNewChunk(true);
+  SetWillForceNewChunk();
 }
 
 void PaintChunker::UnionBounds(const gfx::Rect& rect,

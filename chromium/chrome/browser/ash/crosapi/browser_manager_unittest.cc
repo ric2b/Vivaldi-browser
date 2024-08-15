@@ -74,6 +74,10 @@ class MockBrowserService : public mojom::BrowserServiceInterceptorForTesting {
                std::optional<uint64_t> profile_id,
                LaunchCallback callback),
               (override));
+  MOCK_METHOD(void,
+              NewTab,
+              (std::optional<uint64_t> profile_id, NewTabCallback callback),
+              (override));
   MOCK_METHOD(void, OpenForFullRestore, (bool skip_crash_restore), (override));
   MOCK_METHOD(void, UpdateKeepAlive, (bool enabled), (override));
 };
@@ -103,10 +107,12 @@ class BrowserManagerFake : public BrowserManager {
   void SetStatePublic(State state) { SetState(state); }
 
   void SimulateLacrosTermination() {
-    SetStatePublic(State::TERMINATING);
+    // Simulate termination triggered from Lacros.
+    SetStatePublic(State::WAITING_FOR_PROCESS_TERMINATED);
     if (browser_service_.has_value()) {
       OnBrowserServiceDisconnected(*crosapi_id_, browser_service_->mojo_id);
     }
+    crosapi_id_.reset();
     OnLacrosChromeTerminated();
   }
 
@@ -352,7 +358,7 @@ TEST_F(BrowserManagerTest, LacrosKeepAlive) {
   EXPECT_EQ(fake_browser_manager_->start_count(), 0);
 
   // Creating a ScopedKeepAlive does not start Lacros.
-  std::unique_ptr<BrowserManager::ScopedKeepAlive> keep_alive =
+  std::unique_ptr<BrowserManagerScopedKeepAlive> keep_alive =
       fake_browser_manager_->KeepAlive(BrowserManager::Feature::kTestOnly);
   EXPECT_EQ(fake_browser_manager_->start_count(), 0);
 
@@ -393,7 +399,7 @@ TEST_F(BrowserManagerTest, LacrosKeepAliveReloadsWhenUpdateAvailable) {
   version_service_delegate_->set_latest_lauchable_version(
       base::Version("1.0.0"));
 
-  std::unique_ptr<BrowserManager::ScopedKeepAlive> keep_alive =
+  std::unique_ptr<BrowserManagerScopedKeepAlive> keep_alive =
       fake_browser_manager_->KeepAlive(BrowserManager::Feature::kTestOnly);
 
   ExpectCallingLoad(browser_util::LacrosSelection::kStateful,
@@ -464,7 +470,7 @@ TEST_F(BrowserManagerTest, LacrosKeepAliveDoesNotBlockRestart) {
   EXPECT_EQ(fake_browser_manager_->start_count(), 0);
 
   // Creating a ScopedKeepAlive does not start Lacros.
-  std::unique_ptr<BrowserManager::ScopedKeepAlive> keep_alive =
+  std::unique_ptr<BrowserManagerScopedKeepAlive> keep_alive =
       fake_browser_manager_->KeepAlive(BrowserManager::Feature::kTestOnly);
   EXPECT_EQ(fake_browser_manager_->start_count(), 0);
 
@@ -558,6 +564,18 @@ TEST_F(BrowserManagerTest, VerifyProfileIdForLaunch) {
   EXPECT_CALL(mock_browser_service_, Launch(_, _, _)).Times(0);
   fake_browser_manager_->Launch();
   EXPECT_CALL(mock_browser_service_, Launch(_, testing::Eq(std::nullopt), _))
+      .Times(1);
+  fake_browser_manager_->SimulateLacrosStart(&mock_browser_service_);
+}
+
+TEST_F(BrowserManagerTest, VerifyProfileIdForNewTab) {
+  AddUser(UserType::kRegularUser);
+  ExpectCallingLoad();
+  fake_browser_manager_->InitializeAndStartIfNeeded();
+
+  EXPECT_CALL(mock_browser_service_, NewTab(_, _)).Times(0);
+  fake_browser_manager_->NewTab();
+  EXPECT_CALL(mock_browser_service_, NewTab(testing::Eq(std::nullopt), _))
       .Times(1);
   fake_browser_manager_->SimulateLacrosStart(&mock_browser_service_);
 }

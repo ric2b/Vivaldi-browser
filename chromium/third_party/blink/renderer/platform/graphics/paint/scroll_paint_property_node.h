@@ -6,13 +6,13 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_PAINT_SCROLL_PAINT_PROPERTY_NODE_H_
 
 #include <algorithm>
+#include <optional>
 
 #include "base/dcheck_is_on.h"
 #include "base/notreached.h"
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/input/overscroll_behavior.h"
 #include "cc/input/scroll_snap_data.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/platform/graphics/compositor_element_id.h"
 #include "third_party/blink/renderer/platform/graphics/paint/clip_paint_property_node.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_property_node.h"
@@ -45,9 +45,9 @@ enum class CompositedScrollingPreference : uint8_t {
 //
 // The scroll tree differs from the other trees because it does not affect
 // geometry directly.
-class PLATFORM_EXPORT ScrollPaintPropertyNode
-    : public PaintPropertyNode<ScrollPaintPropertyNode,
-                               ScrollPaintPropertyNode> {
+class PLATFORM_EXPORT ScrollPaintPropertyNode final
+    : public PaintPropertyNodeBase<ScrollPaintPropertyNode,
+                                   ScrollPaintPropertyNode> {
  public:
   // To make it less verbose and more readable to construct and update a node,
   // a struct with default values is used to represent the state.
@@ -79,7 +79,7 @@ class PLATFORM_EXPORT ScrollPaintPropertyNode
     CompositorElementId compositor_element_id;
     cc::OverscrollBehavior overscroll_behavior =
         cc::OverscrollBehavior(cc::OverscrollBehavior::Type::kAuto);
-    absl::optional<cc::SnapContainerData> snap_container_data;
+    std::optional<cc::SnapContainerData> snap_container_data;
 
     PaintPropertyChangeType ComputeChange(const State& other) const;
   };
@@ -92,12 +92,6 @@ class PLATFORM_EXPORT ScrollPaintPropertyNode
       State&& state) {
     return base::AdoptRef(
         new ScrollPaintPropertyNode(&parent, std::move(state)));
-  }
-  static scoped_refptr<ScrollPaintPropertyNode> CreateAlias(
-      const ScrollPaintPropertyNode&) {
-    // ScrollPaintPropertyNodes cannot be aliases.
-    NOTREACHED();
-    return nullptr;
   }
 
   // The empty AnimationState struct is to meet the requirement of
@@ -120,6 +114,9 @@ class PLATFORM_EXPORT ScrollPaintPropertyNode
 
   const ScrollPaintPropertyNode& Unalias() const = delete;
 
+  // See PaintPropertyNode::ChangedSequenceNumber().
+  void ClearChangedToRoot(int sequence_number) const;
+
   cc::OverscrollBehavior::Type OverscrollBehaviorX() const {
     return state_.overscroll_behavior.x;
   }
@@ -128,7 +125,7 @@ class PLATFORM_EXPORT ScrollPaintPropertyNode
     return state_.overscroll_behavior.y;
   }
 
-  absl::optional<cc::SnapContainerData> GetSnapContainerData() const {
+  std::optional<cc::SnapContainerData> GetSnapContainerData() const {
     return state_.snap_container_data;
   }
 
@@ -181,11 +178,11 @@ class PLATFORM_EXPORT ScrollPaintPropertyNode
     return state_.compositor_element_id;
   }
 
-  std::unique_ptr<JSONObject> ToJSON() const;
+  std::unique_ptr<JSONObject> ToJSON() const final;
 
  private:
   ScrollPaintPropertyNode(const ScrollPaintPropertyNode* parent, State&& state)
-      : PaintPropertyNode(parent), state_(std::move(state)) {
+      : PaintPropertyNodeBase(parent), state_(std::move(state)) {
     Validate();
   }
 

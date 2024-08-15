@@ -11,6 +11,7 @@
 #import "base/containers/enum_set.h"
 #import "base/containers/fixed_flat_map.h"
 #import "base/i18n/message_formatter.h"
+#import "base/memory/raw_ptr.h"
 #import "base/notreached.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/prefs/pref_service.h"
@@ -46,10 +47,11 @@
 #import "ios/chrome/browser/sync/model/enterprise_utils.h"
 #import "ios/chrome/browser/sync/model/sync_observer_bridge.h"
 #import "ios/chrome/browser/sync/model/sync_setup_service.h"
-#import "ios/chrome/browser/ui/authentication/cells/table_view_central_account_item.h"
+#import "ios/chrome/browser/ui/authentication/cells/central_account_view.h"
 #import "ios/chrome/browser/ui/authentication/history_sync/history_sync_utils.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_image_detail_text_item.h"
 #import "ios/chrome/browser/ui/settings/cells/sync_switch_item.h"
+#import "ios/chrome/browser/ui/settings/google_services/features.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_command_handler.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_consumer.h"
@@ -89,14 +91,6 @@ static const syncer::UserSelectableType kAccountSwitchItems[] = {
     syncer::UserSelectableType::kPayments,
     syncer::UserSelectableType::kPreferences};
 
-// Returns the configuration to be used for the accessory.
-UIImageConfiguration* AccessoryConfiguration() {
-  return [UIImageSymbolConfiguration
-      configurationWithPointSize:kSymbolAccessoryPointSize
-                          weight:UIImageSymbolWeightRegular
-                           scale:UIImageSymbolScaleMedium];
-}
-
 // Enterprise icon.
 NSString* const kGoogleServicesEnterpriseImage = @"google_services_enterprise";
 constexpr CGFloat kErrorSymbolPointSize = 22.;
@@ -134,19 +128,19 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   // Whether Sync State changes should be currently ignored.
   BOOL _ignoreSyncStateChanges;
   // Sync service.
-  syncer::SyncService* _syncService;
+  raw_ptr<syncer::SyncService> _syncService;
   // Observer for `IdentityManager`.
   std::unique_ptr<signin::IdentityManagerObserverBridge>
       _identityManagerObserver;
   // Authentication service.
-  AuthenticationService* _authenticationService;
+  raw_ptr<AuthenticationService> _authenticationService;
   // Account manager service to retrieve Chrome identities.
-  ChromeAccountManagerService* _chromeAccountManagerService;
+  raw_ptr<ChromeAccountManagerService> _chromeAccountManagerService;
   // Chrome account manager service observer bridge.
   std::unique_ptr<ChromeAccountManagerServiceObserverBridge>
-      _accountAccountManagerServiceObserver;
+      _accountManagerServiceObserver;
   // The pref service.
-  PrefService* _prefService;
+  raw_ptr<PrefService> _prefService;
   // Signed-in identity. Note: may be nil while signing out.
   id<SystemIdentity> _signedInIdentity;
 }
@@ -169,13 +163,19 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
                                                                 self);
     _authenticationService = authenticationService;
     _chromeAccountManagerService = accountManagerService;
-    _accountAccountManagerServiceObserver =
+    _accountManagerServiceObserver =
         std::make_unique<ChromeAccountManagerServiceObserverBridge>(
             self, _chromeAccountManagerService);
     _signedInIdentity = _authenticationService->GetPrimaryIdentity(
         signin::ConsentLevel::kSignin);
     _prefService = prefService;
     _initialAccountState = initialAccountState;
+    // Register for font size change notifications
+    [[NSNotificationCenter defaultCenter]
+        addObserver:self
+           selector:@selector(preferredContentSizeChanged:)
+               name:UIContentSizeCategoryDidChangeNotification
+             object:nil];
   }
   return self;
 }
@@ -186,9 +186,10 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   _identityManagerObserver.reset();
   _authenticationService = nullptr;
   _chromeAccountManagerService = nullptr;
-  _accountAccountManagerServiceObserver.reset();
+  _accountManagerServiceObserver.reset();
   _prefService = nullptr;
   _signedInIdentity = nil;
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)autofillAlertConfirmed:(BOOL)value {
@@ -208,31 +209,6 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
 }
 
 #pragma mark - Loads sync data type section
-
-// Loads the centered identity account section.
-- (void)loadIdentityAccountSection {
-  TableViewModel* model = self.consumer.tableViewModel;
-  switch (self.syncAccountState) {
-    case SyncSettingsAccountState::kSignedOut:
-    case SyncSettingsAccountState::kSyncing:
-    case SyncSettingsAccountState::kAdvancedInitialSyncSetup:
-      return;
-    case SyncSettingsAccountState::kSignedIn:
-      [model addSectionWithIdentifier:AccountSectionIdentifier];
-      CHECK(_signedInIdentity);
-      TableViewCentralAccountItem* identityAccountItem =
-          [[TableViewCentralAccountItem alloc]
-              initWithType:IdentityAccountItemType];
-      identityAccountItem.avatarImage =
-          _chromeAccountManagerService->GetIdentityAvatarWithIdentity(
-              _signedInIdentity, IdentityAvatarSize::Large);
-      identityAccountItem.name = _signedInIdentity.userFullName;
-      identityAccountItem.email = _signedInIdentity.userEmail;
-      [model addItem:identityAccountItem
-          toSectionWithIdentifier:AccountSectionIdentifier];
-      break;
-  }
-}
 
 // Loads the sync data type section.
 - (void)loadSyncDataTypeSection {
@@ -345,27 +321,22 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   }
 }
 
-- (void)updateIdentityAccountSection {
-  if (![self.consumer.tableViewModel
-          hasItemForItemType:IdentityAccountItemType
-           sectionIdentifier:AccountSectionIdentifier]) {
-    return;
+// Updates the consumer when the primary account is updated.
+- (void)updatePrimaryAccountDetails {
+  switch (self.syncAccountState) {
+    case SyncSettingsAccountState::kSignedOut:
+    case SyncSettingsAccountState::kSyncing:
+    case SyncSettingsAccountState::kAdvancedInitialSyncSetup:
+      return;
+    case SyncSettingsAccountState::kSignedIn:
+      [self.consumer
+          updatePrimaryAccountWithAvatarImage:
+              _chromeAccountManagerService->GetIdentityAvatarWithIdentity(
+                  _signedInIdentity, IdentityAvatarSize::Large)
+                                         name:_signedInIdentity.userFullName
+                                        email:_signedInIdentity.userEmail];
+      break;
   }
-
-  NSIndexPath* accountCellIndexPath = [self.consumer.tableViewModel
-      indexPathForItemType:IdentityAccountItemType
-         sectionIdentifier:AccountSectionIdentifier];
-  TableViewCentralAccountItem* identityAccountItem =
-      base::apple::ObjCCast<TableViewCentralAccountItem>(
-          [self.consumer.tableViewModel itemAtIndexPath:accountCellIndexPath]);
-  CHECK(identityAccountItem);
-  CHECK(_signedInIdentity);
-  identityAccountItem.avatarImage =
-      _chromeAccountManagerService->GetIdentityAvatarWithIdentity(
-          _signedInIdentity, IdentityAvatarSize::Large);
-  identityAccountItem.name = _signedInIdentity.userFullName;
-  identityAccountItem.email = _signedInIdentity.userEmail;
-  [self.consumer reloadItem:identityAccountItem];
 }
 
 // Updates all the sync data type items, and notify the consumer if
@@ -455,8 +426,8 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
                    kNeedsTrustedVaultKeyForEverything;
   if (hasDisclosureIndicator) {
     self.encryptionItem.accessoryView = [[UIImageView alloc]
-        initWithImage:DefaultSymbolWithConfiguration(kChevronForwardSymbol,
-                                                     AccessoryConfiguration())];
+        initWithImage:DefaultAccessorySymbolConfigurationWithRegularWeight(
+                          kChevronForwardSymbol)];
     self.encryptionItem.accessoryView.tintColor =
         [UIColor colorNamed:kTextQuaternaryColor];
   } else {
@@ -467,28 +438,57 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   [model addItem:self.encryptionItem
       toSectionWithIdentifier:AdvancedSettingsSectionIdentifier];
 
-  // GoogleActivityControlsItemType.
-  TableViewImageItem* googleActivityControlsItem =
-      [[TableViewImageItem alloc] initWithType:GoogleActivityControlsItemType];
-  googleActivityControlsItem.accessoryView = [[UIImageView alloc]
-      initWithImage:DefaultSymbolWithConfiguration(kExternalLinkSymbol,
-                                                   AccessoryConfiguration())];
-  googleActivityControlsItem.accessoryView.tintColor =
-      [UIColor colorNamed:kTextQuaternaryColor];
-  googleActivityControlsItem.title =
-      GetNSString(IDS_IOS_MANAGE_SYNC_GOOGLE_ACTIVITY_CONTROLS_TITLE);
-  googleActivityControlsItem.detailText =
-      GetNSString(IDS_IOS_MANAGE_SYNC_GOOGLE_ACTIVITY_CONTROLS_DESCRIPTION);
-  googleActivityControlsItem.accessibilityTraits |= UIAccessibilityTraitButton;
-  [model addItem:googleActivityControlsItem
-      toSectionWithIdentifier:AdvancedSettingsSectionIdentifier];
+  if (IsLinkedServicesSettingIosEnabled()) {
+    // PersonalizeGoogleServicesItemType.
+    TableViewImageItem* personalizeGoogleServicesItem =
+        [[TableViewImageItem alloc]
+            initWithType:PersonalizeGoogleServicesItemType];
+    if (self.isEEAAccount) {
+      personalizeGoogleServicesItem.accessoryView = [[UIImageView alloc]
+          initWithImage:DefaultAccessorySymbolConfigurationWithRegularWeight(
+                            kChevronForwardSymbol)];
+    } else {
+      personalizeGoogleServicesItem.accessoryView = [[UIImageView alloc]
+          initWithImage:DefaultAccessorySymbolConfigurationWithRegularWeight(
+                            kExternalLinkSymbol)];
+    }
+    personalizeGoogleServicesItem.accessoryView.tintColor =
+        [UIColor colorNamed:kTextQuaternaryColor];
+    personalizeGoogleServicesItem.title =
+        GetNSString(IDS_IOS_MANAGE_SYNC_PERSONALIZE_GOOGLE_SERVICES_TITLE);
+    personalizeGoogleServicesItem.detailText = GetNSString(
+        IDS_IOS_MANAGE_SYNC_PERSONALIZE_GOOGLE_SERVICES_DESCRIPTION);
+    personalizeGoogleServicesItem.accessibilityIdentifier =
+        kPersonalizeGoogleServicesIdentifier;
+    personalizeGoogleServicesItem.accessibilityTraits |=
+        UIAccessibilityTraitButton;
+    [model addItem:personalizeGoogleServicesItem
+        toSectionWithIdentifier:AdvancedSettingsSectionIdentifier];
+  } else {
+    // GoogleActivityControlsItemType.
+    TableViewImageItem* googleActivityControlsItem = [[TableViewImageItem alloc]
+        initWithType:GoogleActivityControlsItemType];
+    googleActivityControlsItem.accessoryView = [[UIImageView alloc]
+        initWithImage:DefaultAccessorySymbolConfigurationWithRegularWeight(
+                          kExternalLinkSymbol)];
+    googleActivityControlsItem.accessoryView.tintColor =
+        [UIColor colorNamed:kTextQuaternaryColor];
+    googleActivityControlsItem.title =
+        GetNSString(IDS_IOS_MANAGE_SYNC_GOOGLE_ACTIVITY_CONTROLS_TITLE);
+    googleActivityControlsItem.detailText =
+        GetNSString(IDS_IOS_MANAGE_SYNC_GOOGLE_ACTIVITY_CONTROLS_DESCRIPTION);
+    googleActivityControlsItem.accessibilityTraits |=
+        UIAccessibilityTraitButton;
+    [model addItem:googleActivityControlsItem
+        toSectionWithIdentifier:AdvancedSettingsSectionIdentifier];
+  }
 
   // AdvancedSettingsSectionIdentifier.
   TableViewImageItem* dataFromChromeSyncItem =
       [[TableViewImageItem alloc] initWithType:DataFromChromeSync];
   dataFromChromeSyncItem.accessoryView = [[UIImageView alloc]
-      initWithImage:DefaultSymbolWithConfiguration(kExternalLinkSymbol,
-                                                   AccessoryConfiguration())];
+      initWithImage:DefaultAccessorySymbolConfigurationWithRegularWeight(
+                        kExternalLinkSymbol)];
   dataFromChromeSyncItem.accessoryView.tintColor =
       [UIColor colorNamed:kTextQuaternaryColor];
   dataFromChromeSyncItem.accessibilityIdentifier =
@@ -618,7 +618,8 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
         NSUInteger sectionIndex =
             [model sectionForSectionIdentifier:SignOutSectionIdentifier];
         [self.consumer
-            insertSections:[NSIndexSet indexSetWithIndex:sectionIndex]];
+            insertSections:[NSIndexSet indexSetWithIndex:sectionIndex]
+              rowAnimation:NO];
       }
       break;
     case SyncSettingsAccountState::kSyncing:
@@ -629,7 +630,8 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
         NSUInteger sectionIndex =
             [model sectionForSectionIdentifier:SignOutSectionIdentifier];
         [self.consumer
-            insertSections:[NSIndexSet indexSetWithIndex:sectionIndex]];
+            insertSections:[NSIndexSet indexSetWithIndex:sectionIndex]
+              rowAnimation:NO];
       }
       break;
     case SyncSettingsAccountState::kAdvancedInitialSyncSetup:
@@ -640,8 +642,8 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
         [model removeSectionWithIdentifier:SignOutSectionIdentifier];
         self.signOutAndTurnOffSyncItem = nil;
         [self.consumer
-              deleteSections:[NSIndexSet indexSetWithIndex:sectionIndex]
-            withRowAnimation:NO];
+            deleteSections:[NSIndexSet indexSetWithIndex:sectionIndex]
+              rowAnimation:NO];
       }
       break;
   }
@@ -706,8 +708,9 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
 
 - (NSString*)itemsToUploadRecommendationString {
   // _localPasswordsToUpload and _localItemsToUpload should be updated by
-  // updateBatchUploadSection before calling this method, which also checks for
-  // the case of having no items to upload, thus this case is not reached here.
+  // updateBatchUploadSectionWithNotifyConsumer before calling this method,
+  // which also checks for the case of having no items to upload, thus this case
+  // is not reached here.
   if (!_localPasswordsToUpload && !_localItemsToUpload) {
     NOTREACHED();
   }
@@ -755,13 +758,13 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   // Drop the batch upload item from a previous loading.
   self.batchUploadItem = nil;
   // Create the batch upload section and item if needed.
-  [self updateBatchUploadSection:NO];
+  [self updateBatchUploadSectionWithNotifyConsumer:NO firstLoad:YES];
 }
 
 // Fetches the local data descriptions from the sync server, and calls
 // `-[ManageSyncSettingsMediator localDataDescriptionsFetchedWithDescription:]`
 // to process those description.
-- (void)fetchLocalDataDescriptionsForBatchUpload {
+- (void)fetchLocalDataDescriptionsForBatchUploadWithFirstLoad:(BOOL)firstLoad {
   if (self.syncAccountState != SyncSettingsAccountState::kSignedIn ||
       !base::FeatureList::IsEnabled(syncer::kSyncEnableBatchUploadLocalData)) {
     return;
@@ -781,13 +784,16 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
       requestedTypes,
       base::BindOnce(^(std::map<syncer::ModelType, syncer::LocalDataDescription>
                            description) {
-        [weakSelf localDataDescriptionsFetchedWithDescription:description];
+        [weakSelf localDataDescriptionsFetchedWithDescription:description
+                                                    firstLoad:firstLoad];
       }));
 }
 
 // Saves the local data description, and update the batch upload section.
 - (void)localDataDescriptionsFetchedWithDescription:
-    (std::map<syncer::ModelType, syncer::LocalDataDescription>)description {
+            (std::map<syncer::ModelType, syncer::LocalDataDescription>)
+                description
+                                          firstLoad:(BOOL)firstLoad {
   self.localPasswordsToUpload = 0;
   self.localItemsToUpload = 0;
 
@@ -799,7 +805,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
       self.localItemsToUpload += type.second.item_count;
     }
   }
-  [self updateBatchUploadSection:YES];
+  [self updateBatchUploadSectionWithNotifyConsumer:YES firstLoad:firstLoad];
 }
 
 // Deletes the batch upload section and notifies the consumer about model
@@ -816,12 +822,14 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
 
   // Remove the batch upload section from the table view model.
   NSIndexSet* indexSet = [NSIndexSet indexSetWithIndex:sectionIndex];
-  [self.consumer deleteSections:indexSet withRowAnimation:YES];
+  [self.consumer deleteSections:indexSet rowAnimation:YES];
 }
 
 // Updates the batch upload section according to data already fetched.
 // `notifyConsummer` if YES, call the consumer to update the table view.
-- (void)updateBatchUploadSection:(BOOL)notifyConsummer {
+// `firstLoad` if YES, load the section without animations.
+- (void)updateBatchUploadSectionWithNotifyConsumer:(BOOL)notifyConsummer
+                                         firstLoad:(BOOL)firstLoad {
   // Batch upload option is not shown if sync is disabled by policy, if the
   // account is in a persistent error state that requires a user action, or if
   // there is no local data to offer the batch upload.
@@ -834,16 +842,16 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   TableViewModel* model = self.consumer.tableViewModel;
   DCHECK(![model hasSectionForSectionIdentifier:SyncErrorsSectionIdentifier]);
 
-  // During some signout flows, it can happen that the Account section doesn't
-  // exist at this point. In that case, there's nothing to update here.
-  if (![model hasSectionForSectionIdentifier:AccountSectionIdentifier]) {
-    return;
+  switch (self.syncAccountState) {
+    case SyncSettingsAccountState::kSignedOut:
+    case SyncSettingsAccountState::kSyncing:
+    case SyncSettingsAccountState::kAdvancedInitialSyncSetup:
+      return;
+    case SyncSettingsAccountState::kSignedIn:
+      break;
   }
 
-  NSInteger previousSection =
-      [model sectionForSectionIdentifier:AccountSectionIdentifier];
-  DCHECK_NE(NSNotFound, previousSection);
-  NSInteger batchUploadSectionIndex = previousSection + 1;
+  NSInteger batchUploadSectionIndex = 0;
 
   BOOL batchUploadSectionAlreadyExists = self.batchUploadItem;
   if (!batchUploadSectionAlreadyExists) {
@@ -869,7 +877,8 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
     // The section should be updated if it already exists.
     [self.consumer reloadSections:indexSet];
   } else {
-    [self.consumer insertSections:indexSet];
+    // The animation is not needed if this is a first time load of the card.
+    [self.consumer insertSections:indexSet rowAnimation:!firstLoad];
   }
 }
 
@@ -933,6 +942,8 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
     case syncer::UserSelectableType::kExtensions:
     case syncer::UserSelectableType::kApps:
     case syncer::UserSelectableType::kSavedTabGroups:
+    case syncer::UserSelectableType::kSharedTabGroupData:
+    case syncer::UserSelectableType::kCompare:
     case syncer::UserSelectableType::kNotes:
       NOTREACHED();
       break;
@@ -968,6 +979,11 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
     button.accessibilityIdentifier = accessibilityIdentifier;
     return button;
   }
+}
+
+// Updates the consumer when the content size is updated.
+- (void)preferredContentSizeChanged:(NSNotification*)notification {
+  [self updatePrimaryAccountDetails];
 }
 
 #pragma mark - Properties
@@ -1050,14 +1066,16 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
     // closing and should not re-load the model.
     return;
   }
-  [self loadIdentityAccountSection];
   [self loadSyncErrorsSection];
   [self loadBatchUploadSection];
   [self loadSyncDataTypeSection];
   [self loadSignOutAndTurnOffSyncSection];
   [self loadAdvancedSettingsSection];
   [self loadSignOutAndManageAccountsSection];
-  [self fetchLocalDataDescriptionsForBatchUpload];
+  [self fetchLocalDataDescriptionsForBatchUploadWithFirstLoad:YES];
+  // Loading the header asks the consumer to reload the data, so it should be
+  // done after all sections are initially loaded.
+  [self updatePrimaryAccountDetails];
 }
 
 #pragma mark - SyncObserverModelBridge
@@ -1068,12 +1086,12 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
     return;
   }
   [self updateSyncErrorsSection:YES];
-  [self updateBatchUploadSection:YES];
+  [self updateBatchUploadSectionWithNotifyConsumer:YES firstLoad:NO];
   [self updateSyncEverythingItemNotifyConsumer:YES];
   [self updateSyncItemsNotifyConsumer:YES];
   [self updateEncryptionItem:YES];
   [self updateSignOutSection];
-  [self fetchLocalDataDescriptionsForBatchUpload];
+  [self fetchLocalDataDescriptionsForBatchUploadWithFirstLoad:NO];
 }
 
 #pragma mark - IdentityManagerObserverBridgeDelegate
@@ -1084,7 +1102,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
     case signin::PrimaryAccountChangeEvent::Type::kSet:
       _signedInIdentity = _authenticationService->GetPrimaryIdentity(
           signin::ConsentLevel::kSignin);
-      [self updateIdentityAccountSection];
+      [self updatePrimaryAccountDetails];
       break;
     case signin::PrimaryAccountChangeEvent::Type::kCleared:
       // Temporary state, we can ignore this event, until the UI is signed out.
@@ -1097,12 +1115,12 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
 
 - (void)identityUpdated:(id<SystemIdentity>)identity {
   if ([_signedInIdentity isEqual:identity]) {
-    [self updateIdentityAccountSection];
+    [self updatePrimaryAccountDetails];
     [self updateSyncItemsNotifyConsumer:YES];
     [self updateSyncErrorsSection:YES];
-    [self updateBatchUploadSection:YES];
+    [self updateBatchUploadSectionWithNotifyConsumer:YES firstLoad:NO];
     [self updateEncryptionItem:YES];
-    [self fetchLocalDataDescriptionsForBatchUpload];
+    [self fetchLocalDataDescriptionsForBatchUploadWithFirstLoad:NO];
   }
 }
 
@@ -1204,6 +1222,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
       case EncryptionItemType:
       case GoogleActivityControlsItemType:
       case DataFromChromeSync:
+      case PersonalizeGoogleServicesItemType:
       case PrimaryAccountReauthErrorItemType:
       case ShowPassphraseDialogErrorItemType:
       case SyncNeedsTrustedVaultKeyErrorItemType:
@@ -1211,7 +1230,6 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
       case SyncDisabledByAdministratorErrorItemType:
       case SignOutItemFooterType:
       case TypesListHeaderOrFooterType:
-      case IdentityAccountItemType:
       case AccountErrorMessageItemType:
       case BatchUploadButtonItemType:
       case BatchUploadRecommendationItemType:
@@ -1222,7 +1240,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   [self updateSyncEverythingItemNotifyConsumer:YES];
   [self updateSyncItemsNotifyConsumer:YES];
   // Switching toggles might affect the batch upload recommendation.
-  [self fetchLocalDataDescriptionsForBatchUpload];
+  [self fetchLocalDataDescriptionsForBatchUploadWithFirstLoad:NO];
 }
 
 - (void)didSelectItem:(TableViewItem*)item cellRect:(CGRect)cellRect {
@@ -1238,7 +1256,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
         [self.syncErrorHandler openTrustedVaultReauthForFetchKeys];
         break;
       }
-      [self.syncErrorHandler openPassphraseDialog];
+      [self.syncErrorHandler openPassphraseDialogWithModalPresentation:NO];
       break;
     }
     case GoogleActivityControlsItemType:
@@ -1246,6 +1264,13 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
       break;
     case DataFromChromeSync:
       [self.commandHandler openDataFromChromeSyncWebPage];
+      break;
+    case PersonalizeGoogleServicesItemType:
+      if (self.isEEAAccount) {
+        [self.commandHandler openPersonalizeGoogleServices];
+      } else {
+        [self.commandHandler openWebAppActivityDialog];
+      }
       break;
     case PrimaryAccountReauthErrorItemType: {
       id<SystemIdentity> identity = _authenticationService->GetPrimaryIdentity(
@@ -1258,7 +1283,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
       break;
     }
     case ShowPassphraseDialogErrorItemType:
-      [self.syncErrorHandler openPassphraseDialog];
+      [self.syncErrorHandler openPassphraseDialogWithModalPresentation:YES];
       break;
     case SyncNeedsTrustedVaultKeyErrorItemType:
       [self.syncErrorHandler openTrustedVaultReauthForFetchKeys];
@@ -1291,7 +1316,6 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
     case SyncDisabledByAdministratorErrorItemType:
     case SignOutItemFooterType:
     case TypesListHeaderOrFooterType:
-    case IdentityAccountItemType:
     case AccountErrorMessageItemType:
     case BatchUploadRecommendationItemType:
       // Nothing to do.
@@ -1400,7 +1424,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   // Remove the sync error section from the table view model.
   if (notifyConsumer) {
     NSIndexSet* indexSet = [NSIndexSet indexSetWithIndex:sectionIndex];
-    [self.consumer deleteSections:indexSet withRowAnimation:NO];
+    [self.consumer deleteSections:indexSet rowAnimation:NO];
   }
 }
 
@@ -1468,10 +1492,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
         [self createSyncErrorIconItemWithItemType:type.value()];
   }
 
-  NSInteger syncErrorSectionIndex =
-      self.syncAccountState == SyncSettingsAccountState::kSignedIn
-          ? [model sectionForSectionIdentifier:AccountSectionIdentifier] + 1
-          : 0;
+  NSInteger syncErrorSectionIndex = 0;
   if (!errorSectionAlreadyExists) {
     if (self.syncAccountState == SyncSettingsAccountState::kSignedIn &&
         type.value() != SyncDisabledByAdministratorErrorItemType) {
@@ -1498,7 +1519,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
     if (errorSectionAlreadyExists) {
       [self.consumer reloadSections:indexSet];
     } else {
-      [self.consumer insertSections:indexSet];
+      [self.consumer insertSections:indexSet rowAnimation:NO];
     }
   }
 }

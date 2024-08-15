@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "core/fxcrt/cfx_memorystream.h"
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/fx_codepage.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/widetext_buffer.h"
@@ -18,7 +19,6 @@
 #include "core/fxcrt/xml/cfx_xmlnode.h"
 #include "core/fxcrt/xml/cfx_xmltext.h"
 #include "fxjs/xfa/cjx_object.h"
-#include "third_party/base/check.h"
 #include "xfa/fxfa/parser/cxfa_document.h"
 #include "xfa/fxfa/parser/cxfa_localemgr.h"
 #include "xfa/fxfa/parser/cxfa_measurement.h"
@@ -112,7 +112,7 @@ bool AttributeSaveInDataModel(CXFA_Node* pNode, XFA_Attribute eAttribute) {
 }
 
 bool ContentNodeNeedtoExport(CXFA_Node* pContentNode) {
-  absl::optional<WideString> wsContent =
+  std::optional<WideString> wsContent =
       pContentNode->JSObject()->TryContent(false, false);
   if (!wsContent.has_value())
     return false;
@@ -139,7 +139,7 @@ WideString SaveAttribute(CXFA_Node* pNode,
   if (!bProto && !pNode->JSObject()->HasAttribute(eName))
     return WideString();
 
-  absl::optional<WideString> value =
+  std::optional<WideString> value =
       pNode->JSObject()->TryAttribute(eName, false);
   if (!value.has_value())
     return WideString();
@@ -181,7 +181,7 @@ void RegenerateFormFile_Changed(CXFA_Node* pNode,
       if (!pRawValueNode)
         break;
 
-      absl::optional<WideString> contentType =
+      std::optional<WideString> contentType =
           pNode->JSObject()->TryAttribute(XFA_Attribute::ContentType, false);
       if (pRawValueNode->GetElementType() == XFA_Element::SharpxHTML &&
           contentType.has_value() &&
@@ -201,7 +201,7 @@ void RegenerateFormFile_Changed(CXFA_Node* pNode,
       } else if (pRawValueNode->GetElementType() == XFA_Element::Sharpxml &&
                  contentType.has_value() &&
                  contentType.value().EqualsASCII("text/xml")) {
-        absl::optional<WideString> rawValue =
+        std::optional<WideString> rawValue =
             pRawValueNode->JSObject()->TryAttribute(XFA_Attribute::Value,
                                                     false);
         if (!rawValue.has_value() || rawValue->IsEmpty())
@@ -338,7 +338,7 @@ WideString RecognizeXFAVersionNumber(CXFA_Node* pTemplateRoot) {
   if (!pTemplateRoot)
     return WideString();
 
-  absl::optional<WideString> templateNS =
+  std::optional<WideString> templateNS =
       pTemplateRoot->JSObject()->TryNamespace();
   if (!templateNS.has_value())
     return WideString();

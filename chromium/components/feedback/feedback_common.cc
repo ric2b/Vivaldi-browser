@@ -30,6 +30,7 @@ namespace {
 constexpr int kChromeOSProductId = 208;
 #endif
 constexpr int kChromeBrowserProductId = 237;
+constexpr int kMahiProductId = 5329991;
 
 // The below thresholds were chosen arbitrarily to conveniently show small data
 // as part of the report itself without having to look into the system_logs.zip
@@ -222,7 +223,7 @@ void FeedbackCommon::PrepareReport(
   }
   if (!ai_metadata_.empty()) {
     // Add feedback data for each key/value pair.
-    absl::optional<base::Value::Dict> dict =
+    std::optional<base::Value::Dict> dict =
         base::JSONReader::ReadDict(ai_metadata_);
     CHECK(dict);
     for (auto pair : dict.value()) {
@@ -245,6 +246,11 @@ bool FeedbackCommon::IncludeInSystemLogs(const std::string& key,
 // static
 int FeedbackCommon::GetChromeBrowserProductId() {
   return kChromeBrowserProductId;
+}
+
+// static
+int FeedbackCommon::GetMahiProductId() {
+  return kMahiProductId;
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)

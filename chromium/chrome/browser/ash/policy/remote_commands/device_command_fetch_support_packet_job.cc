@@ -9,6 +9,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -25,7 +26,6 @@
 #include "base/sequence_checker.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/syslog_logging.h"
@@ -76,7 +76,6 @@ constexpr char kIssueCaseIdKey[] = "issueCaseId";
 constexpr char kIssueDescriptionKey[] = "issueDescription";
 constexpr char kRequestedDataCollectorsKey[] = "requestedDataCollectors";
 constexpr char kRequestedPiiTypesKey[] = "requestedPiiTypes";
-constexpr char kRequesterId[] = "requesterMetadata";
 
 // JSON keys and values used for creating the upload metadata to File Storage
 // Server (go/crosman_fss_action#scotty-upload-agent).
@@ -153,7 +152,7 @@ std::set<redaction::PIIType> GetPiiTypes(
 }
 
 std::string ErrorsToString(const std::set<SupportToolError>& errors) {
-  std::vector<base::StringPiece> error_messages;
+  std::vector<std::string_view> error_messages;
   error_messages.reserve(errors.size());
   for (const auto& error : errors) {
     error_messages.push_back(error.error_message);
@@ -290,11 +289,6 @@ bool DeviceCommandFetchSupportPacketJob::ParseCommandPayloadImpl(
     support_packet_details_.requested_pii_types =
         GetPiiTypes(*requested_pii_types);
   }
-
-  const std::string* requester_metadata =
-      details_dict->FindString(kRequesterId);
-  support_packet_details_.requester_metadata =
-      requester_metadata ? *requester_metadata : std::string();
 
   return true;
 }

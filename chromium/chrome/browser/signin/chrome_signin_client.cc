@@ -102,6 +102,7 @@
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
 #include "chrome/browser/signin/bound_session_credentials/bound_session_cookie_refresh_service.h"
 #include "chrome/browser/signin/bound_session_credentials/bound_session_cookie_refresh_service_factory.h"
+#include "chrome/browser/signin/bound_session_credentials/bound_session_oauth_multilogin_delegate_impl.h"
 #include "chrome/browser/signin/bound_session_credentials/bound_session_request_throttled_handler_browser_impl.h"
 #include "chrome/browser/signin/bound_session_credentials/throttled_gaia_auth_fetcher.h"
 #endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
@@ -134,6 +135,12 @@ signin_metrics::ProfileSignout kAlwaysAllowedSignoutSources[] = {
     // to the web only before showing the sync confirmation dialog. The account
     // was signed in to the profile in order to show the sync confirmation.
     signin_metrics::ProfileSignout::kCancelSyncConfirmationOnWebOnlySignedIn,
+    // Allowed as the user wasn't signed in initially and data has not been
+    // synced yet.
+    signin_metrics::ProfileSignout::kCancelSyncConfirmationRemoveAccount,
+    // Data not synced yet.
+    // Used when moving the primary account (e.g. profile switch).
+    signin_metrics::ProfileSignout::kMovePrimaryAccount,
 };
 
 // Returns the histogram suffix name per group of `signin_metrics::AccessPoint`.
@@ -250,6 +257,10 @@ network::mojom::CookieManager* ChromeSigninClient::GetCookieManager() {
       ->GetCookieManagerForBrowserProcess();
 }
 
+network::mojom::NetworkContext* ChromeSigninClient::GetNetworkContext() {
+  return profile_->GetDefaultStoragePartition()->GetNetworkContext();
+}
+
 bool ChromeSigninClient::AreSigninCookiesAllowed() {
   return ProfileAllowsSigninCookies(profile_);
 }
@@ -357,7 +368,7 @@ std::unique_ptr<GaiaAuthFetcher> ChromeSigninClient::CreateGaiaAuthFetcher(
   if (BoundSessionCookieRefreshService* bound_session_cookie_refresh_service =
           BoundSessionCookieRefreshServiceFactory::GetForProfile(profile_);
       bound_session_cookie_refresh_service) {
-    CHECK(switches::IsBoundSessionCredentialsEnabled());
+    CHECK(switches::IsBoundSessionCredentialsEnabled(profile_->GetPrefs()));
     return std::make_unique<ThrottledGaiaAuthFetcher>(
         consumer, source, GetURLLoaderFactory(),
         bound_session_cookie_refresh_service->GetBoundSessionThrottlerParams(),
@@ -373,10 +384,8 @@ version_info::Channel ChromeSigninClient::GetClientChannel() {
   return chrome::GetChannel();
 }
 
-void ChromeSigninClient::OnPrimaryAccountChangedWithEventSource(
-    signin::PrimaryAccountChangeEvent event_details,
-    absl::variant<signin_metrics::AccessPoint, signin_metrics::ProfileSignout>
-        event_source) {
+void ChromeSigninClient::OnPrimaryAccountChanged(
+    signin::PrimaryAccountChangeEvent event_details) {
   for (signin::ConsentLevel consent_level :
        {signin::ConsentLevel::kSignin, signin::ConsentLevel::kSync}) {
     switch (event_details.GetEventTypeFor(consent_level)) {
@@ -384,10 +393,9 @@ void ChromeSigninClient::OnPrimaryAccountChangedWithEventSource(
       case signin::PrimaryAccountChangeEvent::Type::kCleared:
         break;
       case signin::PrimaryAccountChangeEvent::Type::kSet:
-        CHECK(
-            absl::holds_alternative<signin_metrics::AccessPoint>(event_source));
+        CHECK(event_details.GetAccessPoint().has_value());
         signin_metrics::AccessPoint access_point =
-            absl::get<signin_metrics::AccessPoint>(event_source);
+            event_details.GetAccessPoint().value();
 
         // Only record metrics when setting the primary account.
         std::optional<size_t> all_bookmarks_count = GetAllBookmarksCount();
@@ -409,6 +417,19 @@ void ChromeSigninClient::OnPrimaryAccountChangedWithEventSource(
     }
   }
 }
+
+#if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+std::unique_ptr<signin::BoundSessionOAuthMultiLoginDelegate>
+ChromeSigninClient::CreateBoundSessionOAuthMultiloginDelegate() const {
+  if (BoundSessionCookieRefreshService* bound_session_cookie_refresh_service =
+          BoundSessionCookieRefreshServiceFactory::GetForProfile(profile_);
+      bound_session_cookie_refresh_service) {
+    return std::make_unique<BoundSessionOAuthMultiLoginDelegateImpl>(
+        bound_session_cookie_refresh_service->GetWeakPtr());
+  }
+  return nullptr;
+}
+#endif
 
 SigninClient::SignoutDecision ChromeSigninClient::GetSignoutDecision(
     bool has_sync_account,
@@ -445,6 +466,8 @@ SigninClient::SignoutDecision ChromeSigninClient::GetSignoutDecision(
   }
 #endif
 
+// Android allows signing out of Managed accounts.
+#if !BUILDFLAG(IS_ANDROID)
   // Check if managed user.
   if (chrome::enterprise_util::UserAcceptedAccountManagement(profile_)) {
     if (base::FeatureList::IsEnabled(kDisallowManagedProfileSignout)) {
@@ -458,6 +481,7 @@ SigninClient::SignoutDecision ChromeSigninClient::GetSignoutDecision(
       return SigninClient::SignoutDecision::REVOKE_SYNC_DISALLOWED;
     }
   }
+#endif
   return SigninClient::SignoutDecision::ALLOW;
 }
 

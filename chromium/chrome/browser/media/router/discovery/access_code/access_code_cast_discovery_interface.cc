@@ -41,7 +41,7 @@ constexpr char kLoggerComponent[] = "AccessCodeCastDiscoveryInterface";
 
 using AddSinkResultCode = access_code_cast::mojom::AddSinkResultCode;
 
-const int64_t kTimeoutMs = 30000;
+constexpr base::TimeDelta kTimeout = base::Milliseconds(30000);
 
 const net::NetworkTrafficAnnotationTag kTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation("chrome_cast_discovery_api",
@@ -101,20 +101,6 @@ AccessCodeCastDiscoveryInterface::AccessCodeCastDiscoveryInterface(
       endpoint_fetcher_(CreateEndpointFetcher(access_code)) {
   DCHECK(profile_);
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-}
-
-AccessCodeCastDiscoveryInterface::AccessCodeCastDiscoveryInterface(
-    Profile* profile,
-    const std::string& access_code,
-    LoggerImpl* logger,
-    signin::IdentityManager* identity_manager,
-    std::unique_ptr<EndpointFetcher> endpoint_fetcher)
-    : profile_(profile),
-      access_code_(access_code),
-      logger_(logger),
-      identity_manager_(identity_manager),
-      endpoint_fetcher_(std::move(endpoint_fetcher)) {
-  DCHECK(profile_);
 }
 
 AccessCodeCastDiscoveryInterface::~AccessCodeCastDiscoveryInterface() = default;
@@ -258,14 +244,14 @@ AccessCodeCastDiscoveryInterface::CreateEndpointFetcher(
   std::vector<std::string> discovery_scopes;
   discovery_scopes.push_back(kDiscoveryOAuth2Scope);
 
-  // TODO(crbug.com/1466447): ConsentLevel::kSync is deprecated and should be
+  // TODO(crbug.com/40067771): ConsentLevel::kSync is deprecated and should be
   //     removed. See ConsentLevel::kSync documentation for details.
   return std::make_unique<EndpointFetcher>(
       profile_->GetDefaultStoragePartition()
           ->GetURLLoaderFactoryForBrowserProcess(),
       kDiscoveryOAuthConsumerName,
       GURL(base::StrCat({GetDiscoveryUrl(), "/", access_code})), kGetMethod,
-      kContentType, discovery_scopes, kTimeoutMs, kEmptyPostData,
+      kContentType, discovery_scopes, kTimeout, kEmptyPostData,
       kTrafficAnnotation, identity_manager_, signin::ConsentLevel::kSync);
 }
 
@@ -279,6 +265,17 @@ void AccessCodeCastDiscoveryInterface::ValidateDiscoveryAccessCode(
   fetcher_ptr->Fetch(
       base::BindOnce(&AccessCodeCastDiscoveryInterface::HandleServerResponse,
                      weak_ptr_factory_.GetWeakPtr()));
+}
+
+std::unique_ptr<EndpointFetcher>
+AccessCodeCastDiscoveryInterface::CreateEndpointFetcherForTesting(
+    const std::string& access_code) {
+  return CreateEndpointFetcher(access_code);
+}
+
+void AccessCodeCastDiscoveryInterface::HandleServerErrorForTesting(
+    std::unique_ptr<EndpointResponse> endpoint_response) {
+  HandleServerError(std::move(endpoint_response));
 }
 
 void AccessCodeCastDiscoveryInterface::HandleServerResponse(

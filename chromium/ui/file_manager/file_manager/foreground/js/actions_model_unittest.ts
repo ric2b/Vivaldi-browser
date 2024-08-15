@@ -9,16 +9,17 @@ import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeo
 import {MockVolumeManager} from '../../background/js/mock_volume_manager.js';
 import type {VolumeManager} from '../../background/js/volume_manager.js';
 import {installMockChrome, MockMetrics} from '../../common/js/mock_chrome.js';
-import {MockDirectoryEntry, MockFileEntry, MockFileSystem} from '../../common/js/mock_entry.js';
+import type {MockFileSystem} from '../../common/js/mock_entry.js';
+import {MockDirectoryEntry, MockFileEntry} from '../../common/js/mock_entry.js';
 import {VolumeType} from '../../common/js/volume_manager_types.js';
 
 import {ActionsModel, CommonActionId, InternalActionId} from './actions_model.js';
-import {FolderShortcutsDataModel} from './folder_shortcuts_data_model.js';
-import {MetadataModel} from './metadata/metadata_model.js';
+import type {FolderShortcutsDataModel} from './folder_shortcuts_data_model.js';
+import type {MetadataModel} from './metadata/metadata_model.js';
 import {MockMetadataModel} from './metadata/mock_metadata.js';
 import type {ActionModelUi} from './ui/action_model_ui.js';
-import {FilesAlertDialog} from './ui/files_alert_dialog.js';
-import {ListContainer} from './ui/list_container.js';
+import type {FilesAlertDialog} from './ui/files_alert_dialog.js';
+import type {ListContainer} from './ui/list_container.js';
 
 type GetCustomActionsCallback =
     (actions: chrome.fileManagerPrivate.FileSystemProviderAction[]) => void;
@@ -143,20 +144,15 @@ export async function testDriveDirectoryEntry() {
 
   await model.initialize();
   let actions = model.getActions();
-  assertEquals(5, Object.keys(actions).length);
-
-  // 'Share' should be disabled in offline mode.
-  const shareAction = actions[CommonActionId.SHARE]!;
-  assertTrue(!!shareAction);
-  mockVolumeManager.driveConnectionState = {
-    type: chrome.fileManagerPrivate.DriveConnectionStateType.OFFLINE,
-    reason: undefined,
-  };
-  assertFalse(shareAction.canExecute());
+  assertEquals(4, Object.keys(actions).length);
 
   // 'Manage in Drive' should be disabled in offline mode.
   const manageInDriveAction = actions[InternalActionId.MANAGE_IN_DRIVE]!;
   assertTrue(!!manageInDriveAction);
+  mockVolumeManager.driveConnectionState = {
+    type: chrome.fileManagerPrivate.DriveConnectionStateType.OFFLINE,
+    reason: undefined,
+  };
   assertFalse(manageInDriveAction.canExecute());
 
   // 'Create Shortcut' should be enabled, until it's executed, then
@@ -179,8 +175,7 @@ export async function testDriveDirectoryEntry() {
   });
   await model.initialize();
   actions = model.getActions();
-  assertEquals(6, Object.keys(actions).length);
-  assertTrue(!!actions[CommonActionId.SHARE]);
+  assertEquals(5, Object.keys(actions).length);
   assertTrue(!!actions[InternalActionId.MANAGE_IN_DRIVE]);
   assertTrue(!!actions[InternalActionId.REMOVE_FOLDER_SHORTCUT]);
 
@@ -212,8 +207,7 @@ export async function testDriveFileEntry() {
 
   await model.initialize();
   let actions = model.getActions();
-  assertEquals(3, Object.keys(actions).length);
-  assertTrue(!!actions[CommonActionId.SHARE]);
+  assertEquals(2, Object.keys(actions).length);
 
   // 'Save for Offline' should be enabled.
   const saveForOfflineAction = actions[CommonActionId.SAVE_FOR_OFFLINE]!;
@@ -255,8 +249,7 @@ export async function testDriveFileEntry() {
       ui, [driveFileSystem.entries!['/test.txt']]);
   await model.initialize();
   actions = model.getActions();
-  assertEquals(3, Object.keys(actions).length);
-  assertTrue(!!actions[CommonActionId.SHARE]);
+  assertEquals(2, Object.keys(actions).length);
 
   // 'Offline not Necessary' should be enabled.
   const offlineNotNecessaryAction =
@@ -502,12 +495,7 @@ export async function testTeamDriveRootEntry() {
 
   await model.initialize();
   const actions = model.getActions();
-  assertEquals(4, Object.keys(actions).length);
-
-  // "share" action is enabled for Team Drive Root entries.
-  const shareAction = actions[CommonActionId.SHARE]!;
-  assertTrue(!!shareAction);
-  assertTrue(shareAction.canExecute());
+  assertEquals(3, Object.keys(actions).length);
 
   // "manage in drive" action is disabled for Team Drive Root entries.
   const manageAction = actions[InternalActionId.MANAGE_IN_DRIVE]!;
@@ -534,12 +522,7 @@ export async function testTeamDriveDirectoryEntry() {
 
   await model.initialize();
   const actions = model.getActions();
-  assertEquals(5, Object.keys(actions).length);
-
-  // "Share" is enabled for Team Drive directories.
-  const shareAction = actions[CommonActionId.SHARE]!;
-  assertTrue(!!shareAction);
-  assertTrue(shareAction.canExecute());
+  assertEquals(4, Object.keys(actions).length);
 
   // "Available Offline" toggle is enabled for Team Drive directories.
   const saveForOfflineAction = actions[CommonActionId.SAVE_FOR_OFFLINE]!;
@@ -585,17 +568,12 @@ export async function testTeamDriveFileEntry() {
 
   await model.initialize();
   const actions = model.getActions();
-  assertEquals(3, Object.keys(actions).length);
+  assertEquals(2, Object.keys(actions).length);
 
   // "save for offline" action is enabled for Team Drive file entries.
   const saveForOfflineAction = actions[CommonActionId.SAVE_FOR_OFFLINE]!;
   assertTrue(!!saveForOfflineAction);
   assertTrue(saveForOfflineAction.canExecute());
-
-  // "share" action is enabled for Team Drive file entries.
-  const shareAction = actions[CommonActionId.SHARE]!;
-  assertTrue(!!shareAction);
-  assertTrue(shareAction.canExecute());
 
   // "manage in drive" action is enabled for Team Drive file entries.
   const manageAction = actions[InternalActionId.MANAGE_IN_DRIVE]!;

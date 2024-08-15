@@ -19,7 +19,6 @@
 #include <vector>
 
 #include "absl/types/optional.h"
-#include "api/crypto_params.h"
 #include "api/field_trials_view.h"
 #include "api/rtc_error.h"
 #include "p2p/base/packet_transport_internal.h"
@@ -118,10 +117,8 @@ class SrtpTransport : public RtpTransport {
   void ConnectToRtpTransport();
   void CreateSrtpSessions();
 
-  void OnRtpPacketReceived(rtc::CopyOnWriteBuffer packet,
-                           int64_t packet_time_us) override;
-  void OnRtcpPacketReceived(rtc::CopyOnWriteBuffer packet,
-                            int64_t packet_time_us) override;
+  void OnRtpPacketReceived(const rtc::ReceivedPacket& packet) override;
+  void OnRtcpPacketReceived(const rtc::ReceivedPacket& packet) override;
   void OnNetworkRouteChanged(
       absl::optional<rtc::NetworkRoute> network_route) override;
 
@@ -154,8 +151,6 @@ class SrtpTransport : public RtpTransport {
   std::unique_ptr<cricket::SrtpSession> send_rtcp_session_;
   std::unique_ptr<cricket::SrtpSession> recv_rtcp_session_;
 
-  absl::optional<cricket::CryptoParams> send_params_;
-  absl::optional<cricket::CryptoParams> recv_params_;
   absl::optional<int> send_crypto_suite_;
   absl::optional<int> recv_crypto_suite_;
   rtc::ZeroOnFreeBuffer<uint8_t> send_key_;

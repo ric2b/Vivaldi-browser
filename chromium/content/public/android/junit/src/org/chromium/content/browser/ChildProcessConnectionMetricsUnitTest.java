@@ -9,7 +9,6 @@ import android.os.Build;
 
 import androidx.test.filters.SmallTest;
 
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -18,9 +17,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.ChildBindingState;
-import org.chromium.base.FeatureList;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.base.metrics.UmaRecorderHolder;
 import org.chromium.base.process_launcher.ChildProcessConnection;
 import org.chromium.base.process_launcher.TestChildProcessConnection;
 import org.chromium.base.test.BaseRobolectricTestRunner;
@@ -37,7 +34,6 @@ public class ChildProcessConnectionMetricsUnitTest {
 
     @Before
     public void setUp() {
-        UmaRecorderHolder.resetForTesting();
         LauncherThread.setCurrentThreadAsLauncherThread();
         mRanking = new LinkedList<ChildProcessConnection>();
         mBindingManager =
@@ -45,11 +41,6 @@ public class ChildProcessConnectionMetricsUnitTest {
                         RuntimeEnvironment.application, BindingManager.NO_MAX_SIZE, mRanking);
         mConnectionMetrics = new ChildProcessConnectionMetrics();
         mConnectionMetrics.setBindingManager(mBindingManager);
-    }
-
-    @After
-    public void tearDown() {
-        FeatureList.setTestValues(null);
     }
 
     @Test

@@ -105,7 +105,9 @@ suite('<settings-privacy-hub-camera-subpage>', () => {
     assertTrue(cameraToggle.checked);
     assertEquals(privacyHubCameraSubpage.i18n('deviceOn'), getOnOffText());
     assertEquals(
-        privacyHubCameraSubpage.i18n('cameraToggleSubtext'), getOnOffSubtext());
+        privacyHubCameraSubpage.i18n(
+            'privacyHubCameraSubpageCameraToggleSubtext'),
+        getOnOffSubtext());
     assertTrue(isCameraListSectionVisible());
     assertFalse(isBlockedSuffixDisplayedAfterCameraName());
   });
@@ -442,6 +444,21 @@ suite('<settings-privacy-hub-camera-subpage>', () => {
             'ChromeOS.PrivacyHub.CameraSubpage.UserAction',
             PrivacyHubSensorSubpageUserAction.WEBSITE_PERMISSION_LINK_CLICKED));
   });
+
+  test(
+      'Clicking Chrome row opens Chrome browser camera permission settings',
+      async () => {
+        assertEquals(
+            PermissionType.kUnknown,
+            fakeHandler.getLastOpenedBrowserPermissionSettingsType());
+
+        getManagePermissionsInChromeRow()!.click();
+        await fakeHandler.whenCalled('openBrowserPermissionSettings');
+
+        assertEquals(
+            PermissionType.kCamera,
+            fakeHandler.getLastOpenedBrowserPermissionSettingsType());
+      });
 
   test('System services section when camera is allowed', async () => {
     assertEquals(

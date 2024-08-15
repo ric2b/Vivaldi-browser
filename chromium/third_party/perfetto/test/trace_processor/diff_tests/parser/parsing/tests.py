@@ -643,6 +643,14 @@ class Parsing(TestSuite):
             }
             chrome_version_code: 101
             enabled_categories: "cat1,cat2,cat3"
+            field_trial_hashes {
+              name: 123
+              group: 456
+            }
+            field_trial_hashes {
+              name: 789
+              group: 120
+            }
           }
         }
         """),
@@ -650,6 +658,69 @@ class Parsing(TestSuite):
         SELECT * FROM metadata;
         """,
         out=Path('chrome_metadata.out'))
+
+  def test_chrome_metadata_multiple(self):
+    return DiffTestBlueprint(
+        trace=TextProto(r"""
+        packet {
+          clock_snapshot {
+            clocks {
+              clock_id: 6
+              timestamp: 101000002
+            }
+          }
+          trusted_packet_sequence_id: 1
+          timestamp: 101000002
+        }
+        packet {
+          trusted_packet_sequence_id: 1
+          timestamp: 101000002
+          chrome_metadata {
+            chrome_version_code: 101
+            enabled_categories: "cat1,cat2,cat3"
+            field_trial_hashes {
+              name: 123
+              group: 456
+            }
+            field_trial_hashes {
+              name: 789
+              group: 120
+            }
+          }
+        }
+        packet {
+          trusted_packet_sequence_id: 1
+          timestamp: 101000002
+          chrome_metadata {
+            chrome_version_code: 102
+            enabled_categories: "cat3,cat4,cat5"
+            field_trial_hashes {
+              name: 1234
+              group: 5678
+            }
+            field_trial_hashes {
+              name: 9012
+              group: 3456
+            }
+          }
+        }
+        """),
+        query="""
+        SELECT * FROM metadata;
+        """,
+        out=Csv("""
+        "id","type","name","key_type","int_value","str_value"
+        0,"metadata","trace_uuid","single","[NULL]","00000000-0000-0000-0de8-df55233147f0"
+        1,"metadata","trace_time_clock_id","single",6,"[NULL]"
+        2,"metadata","cr-a-playstore_version_code","single",101,"[NULL]"
+        3,"metadata","cr-a-enabled_categories","single","[NULL]","cat1,cat2,cat3"
+        4,"metadata","cr-a-field_trial_hashes","single","[NULL]","{ name: 123, group: 456 } { name: 789, group: 120 } "
+        5,"metadata","cr-b-playstore_version_code","single",102,"[NULL]"
+        6,"metadata","cr-b-enabled_categories","single","[NULL]","cat3,cat4,cat5"
+        7,"metadata","cr-b-field_trial_hashes","single","[NULL]","{ name: 1234, group: 5678 } { name: 9012, group: 3456 } "
+        8,"metadata","trace_size_bytes","single",110,"[NULL]"
+        9,"metadata","trace_type","single","[NULL]","proto"
+        """))
 
   # CPU info
   def test_cpu(self):
@@ -1246,4 +1317,40 @@ class Parsing(TestSuite):
         "name","int_value"
         "all_data_source_flushed_ns",12344
         "all_data_source_flushed_ns",12345
+        """))
+
+  def test_ftrace_abi_errors_skipped_zero_data_length(self):
+    return DiffTestBlueprint(
+        trace=TextProto(r"""
+        packet {
+          ftrace_stats {
+            phase: END_OF_TRACE
+            cpu_stats {
+              cpu: 0
+              entries: 14
+              overrun: 0
+              commit_overrun: 0
+              bytes_read: 840
+              oldest_event_ts: 86557.552705
+              now_ts: 86557.574310
+              dropped_events: 0
+              read_events: 199966062
+            }
+            kernel_symbols_parsed: 128611
+            kernel_symbols_mem_kb: 1322
+            ftrace_parse_errors: FTRACE_STATUS_ABI_ZERO_DATA_LENGTH
+          }
+          trusted_uid: 9999
+          trusted_packet_sequence_id: 2
+          trusted_pid: 1069
+        }
+        """),
+        query="""
+        select name, severity, value
+        from stats
+        where name = "ftrace_abi_errors_skipped_zero_data_length"
+        """,
+        out=Csv("""
+        "name","severity","value"
+        "ftrace_abi_errors_skipped_zero_data_length","info",1
         """))

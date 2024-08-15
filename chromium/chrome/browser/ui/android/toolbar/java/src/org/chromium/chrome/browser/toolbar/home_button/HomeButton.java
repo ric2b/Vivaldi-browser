@@ -10,8 +10,15 @@ import android.util.AttributeSet;
 import org.chromium.base.TraceEvent;
 import org.chromium.ui.listmenu.ListMenuButton;
 
+// Vivaldi
+import android.content.res.ColorStateList;
+import androidx.core.widget.ImageViewCompat;
+import org.chromium.chrome.browser.theme.ThemeColorProvider;
+
 /** The home button. */
-public class HomeButton extends ListMenuButton {
+public class HomeButton extends ListMenuButton implements ThemeColorProvider.TintObserver {
+    /** A provider that notifies components when the theme color changes.*/
+    private ThemeColorProvider mThemeColorProvider;
     public HomeButton(Context context, AttributeSet attrs) {
         super(context, attrs);
     }
@@ -28,5 +35,23 @@ public class HomeButton extends ListMenuButton {
         try (TraceEvent e = TraceEvent.scoped("HomeButton.onLayout")) {
             super.onLayout(changed, left, top, right, bottom);
         }
+    }
+
+    @Override
+    public void onTintChanged(ColorStateList tint, int brandedColorScheme) {
+        ImageViewCompat.setImageTintList(this, tint); // Ref. VAB-7901
+    }
+
+    public void destroy() {
+        if (mThemeColorProvider != null) {
+            mThemeColorProvider.removeTintObserver(this);
+            mThemeColorProvider = null;
+        }
+    }
+
+    public void setThemeColorProvider(ThemeColorProvider themeColorProvider) {
+        mThemeColorProvider = themeColorProvider;
+        mThemeColorProvider.addTintObserver(this);
+        ImageViewCompat.setImageTintList(this, mThemeColorProvider.getTint());
     }
 }

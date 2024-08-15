@@ -1,8 +1,36 @@
-# Copyright 2018 The Chromium Authors. All rights reserved.
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
+# Copyright 2022 Vivaldi Technologies AS. All rights reserved.
 
 import("//build/config/ios/asset_catalog.gni")
+
+group("resources") {
+  deps = [
+    ":vivaldi_ntp_background_color",
+    ":vivaldi_private_ntp_background_color",
+    ":vivaldi_ntp_searchbar_background_color",
+    ":vivaldi_regular_toolbar_background_color",
+    ":vivaldi_private_toolbar_background_color",
+    ":vivaldi_private_tabview_selected_background_color",
+    ":vivaldi_ntp_speed_dial_container_background_color",
+    ":vivaldi_ntp_speed_dial_cell_background_color",
+    ":vivaldi_ntp_speed_dial_cell_shadow_color",
+    ":vivaldi_ntp_speed_dial_domain_text_color",
+    ":vivaldi_ntp_toolbar_selectionline_color",
+    ":vivaldi_ntp_toolbar_text_color",
+    ":vivaldi_ntp_toolbar_text_highlighted_color",
+    ":vivaldi_ntp_toolbar_more_dark_color",
+    ":vivaldi_ntp_toolbar_more_light_color",
+    ":vivaldi_ntp_search",
+    ":vivaldi_ntp_toolbar_sort",
+    ":vivaldi_ntp_toolbar_more",
+    ":vivaldi_ntp_add_new_speed_dial",
+    ":vivaldi_ntp_add_new_speed_dial_folder",
+    ":vivaldi_private_tab_bg",
+    ":vivaldi_open_in_private_tab",
+    ":vivaldi_private_tab_ghost",
+    ":vivaldi_ntp_fallback_favicon",
+    ":vivaldi_ntp_internal_favicon",
+  ]
+}
 
 colorset("vivaldi_ntp_background_color") {
   sources = [ "vivaldi_ntp_background_color.colorset/Contents.json" ]
@@ -56,6 +84,14 @@ colorset("vivaldi_private_tabview_selected_background_color") {
   sources = [ "vivaldi_private_tabview_selected_background_color.colorset/Contents.json" ]
 }
 
+colorset("vivaldi_ntp_toolbar_more_dark_color") {
+  sources = [ "vivaldi_ntp_toolbar_more_dark_color.colorset/Contents.json" ]
+}
+
+colorset("vivaldi_ntp_toolbar_more_light_color") {
+  sources = [ "vivaldi_ntp_toolbar_more_light_color.colorset/Contents.json" ]
+}
+
 imageset("vivaldi_ntp_search") {
   sources = [
     "vivaldi_ntp_search.imageset/Contents.json",
@@ -69,6 +105,13 @@ imageset("vivaldi_ntp_toolbar_sort") {
     "vivaldi_ntp_toolbar_sort.imageset/Contents.json",
     "vivaldi_ntp_toolbar_sort.imageset/vivaldi_ntp_toolbar_sort.pdf",
     "vivaldi_ntp_toolbar_sort.imageset/vivaldi_ntp_toolbar_sort_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_ntp_toolbar_more") {
+  sources = [
+    "vivaldi_ntp_toolbar_more.imageset/Contents.json",
+    "vivaldi_ntp_toolbar_more.imageset/vivaldi_ntp_toolbar_more.pdf"
   ]
 }
 

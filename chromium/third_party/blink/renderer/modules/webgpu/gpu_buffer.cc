@@ -46,8 +46,8 @@ WGPUBufferDescriptor AsDawnType(const GPUBufferDescriptor* webgpu_desc,
   dawn_desc.usage = AsDawnFlags<WGPUBufferUsage>(webgpu_desc->usage());
   dawn_desc.size = webgpu_desc->size();
   dawn_desc.mappedAtCreation = webgpu_desc->mappedAtCreation();
-  if (webgpu_desc->hasLabel()) {
-    *label = webgpu_desc->label().Utf8();
+  *label = webgpu_desc->label().Utf8();
+  if (!label->empty()) {
     dawn_desc.label = label->c_str();
   }
 
@@ -149,10 +149,8 @@ GPUBuffer* GPUBuffer::Create(GPUDevice* device,
     return nullptr;
   }
 
-  GPUBuffer* buffer =
-      MakeGarbageCollected<GPUBuffer>(device, buffer_size, wgpuBuffer);
-  if (webgpu_desc->hasLabel())
-    buffer->setLabel(webgpu_desc->label());
+  GPUBuffer* buffer = MakeGarbageCollected<GPUBuffer>(
+      device, buffer_size, wgpuBuffer, webgpu_desc->label());
 
   if (is_mappable) {
     GPU* gpu = device->adapter()->gpu();
@@ -166,9 +164,9 @@ GPUBuffer* GPUBuffer::Create(GPUDevice* device,
 
 GPUBuffer::GPUBuffer(GPUDevice* device,
                      uint64_t size,
-                     WGPUBuffer buffer)
-    : DawnObject<WGPUBuffer>(device, buffer), size_(size) {
-}
+                     WGPUBuffer buffer,
+                     const String& label)
+    : DawnObject<WGPUBuffer>(device, buffer, label), size_(size) {}
 
 GPUBuffer::~GPUBuffer() {
   if (mappable_buffer_handles_) {
@@ -185,7 +183,7 @@ ScriptPromise GPUBuffer::mapAsync(ScriptState* script_state,
                                   uint32_t mode,
                                   uint64_t offset,
                                   ExceptionState& exception_state) {
-  return MapAsyncImpl(script_state, mode, offset, absl::nullopt,
+  return MapAsyncImpl(script_state, mode, offset, std::nullopt,
                       exception_state);
 }
 
@@ -200,7 +198,7 @@ ScriptPromise GPUBuffer::mapAsync(ScriptState* script_state,
 DOMArrayBuffer* GPUBuffer::getMappedRange(ScriptState* script_state,
                                           uint64_t offset,
                                           ExceptionState& exception_state) {
-  return GetMappedRangeImpl(script_state, offset, absl::nullopt,
+  return GetMappedRangeImpl(script_state, offset, std::nullopt,
                             exception_state);
 }
 
@@ -242,7 +240,7 @@ String GPUBuffer::mapState() const {
 ScriptPromise GPUBuffer::MapAsyncImpl(ScriptState* script_state,
                                       uint32_t mode,
                                       uint64_t offset,
-                                      absl::optional<uint64_t> size,
+                                      std::optional<uint64_t> size,
                                       ExceptionState& exception_state) {
   // Compute the defaulted size which is "until the end of the buffer" or 0 if
   // offset is past the end of the buffer.
@@ -282,7 +280,7 @@ ScriptPromise GPUBuffer::MapAsyncImpl(ScriptState* script_state,
 
 DOMArrayBuffer* GPUBuffer::GetMappedRangeImpl(ScriptState* script_state,
                                               uint64_t offset,
-                                              absl::optional<uint64_t> size,
+                                              std::optional<uint64_t> size,
                                               ExceptionState& exception_state) {
   // Compute the defaulted size which is "until the end of the buffer" or 0 if
   // offset is past the end of the buffer.
@@ -407,7 +405,11 @@ void GPUBuffer::OnMapAsyncCallback(ScriptPromiseResolver* resolver,
                                        "The size is out of range");
       break;
     default:
-      NOTREACHED();
+      // TODO(dawn:1987): Remove the default case after handling
+      // InstanceDropped.
+      resolver->RejectWithDOMException(DOMExceptionCode::kAbortError,
+                                       "Device is lost");
+      break;
   }
 }
 

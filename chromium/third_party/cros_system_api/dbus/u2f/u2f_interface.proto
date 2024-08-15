@@ -6,7 +6,7 @@ syntax = "proto3";
 option optimize_for = LITE_RUNTIME;
 
 package u2f;
-option go_package = "chromiumos/system_api/u2f_proto";
+option go_package = "go.chromium.org/chromiumos/system_api/u2f_proto";
 
 // UserNotification signal payload.
 message UserNotification {

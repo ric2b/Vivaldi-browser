@@ -11,6 +11,7 @@
 <translation id="1084824384139382525">Kopier lenkadr&amp;esse</translation>
 <translation id="1163931534039071049">&amp;Vis rammekilde</translation>
 <translation id="1165039591588034296">Feil</translation>
+<translation id="1175364870820465910">&amp;Skriv ut...</translation>
 <translation id="1181037720776840403">Fjern</translation>
 <translation id="1187722533808055681">Oppvåkninger fra inaktiv</translation>
 <translation id="122082903575839559">Signaturalgoritme for sertifikat</translation>
@@ -116,6 +117,7 @@
 <translation id="2932085390869194046">Foreslå passord...</translation>
 <translation id="2932883381142163287">Rapporter misbruk</translation>
 <translation id="2941112035454246133">Lav</translation>
+<translation id="2972581237482394796">&amp;Gjør om</translation>
 <translation id="2993517869960930405">Appinformasjon</translation>
 <translation id="3003623123441819449">CSS-buffer</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -161,8 +163,10 @@
 <translation id="3683524264665795342"><ph name="APP_NAME" /> spør om å dele skjermen</translation>
 <translation id="3708684582558000260">Ikke la lukkede nettsteder fullføre sending eller mottak av data</translation>
 <translation id="3711931198657368127">Lim inn og gå til <ph name="URL" /></translation>
+<translation id="3719826155360621982">Startside</translation>
 <translation id="3727187387656390258">Inspiser oppsprett</translation>
 <translation id="3760460896538743390">Inspiser &amp;bakgrunnsside</translation>
+<translation id="3786224729726357296">Slett nettstedsdata og tillatelser for <ph name="SITE" /></translation>
 <translation id="3798449238516105146">Versjon</translation>
 <translation id="3810973564298564668">Håndter</translation>
 <translation id="3838085852053358637">Utvidelsen kunne ikke lastes inn</translation>
@@ -172,8 +176,10 @@
 <translation id="3905761538810670789">Reparer app</translation>
 <translation id="3908501907586732282">Aktiver utvidelse</translation>
 <translation id="3909701002594999354">Vis alle &amp;kontroller</translation>
+<translation id="3909791450649380159">Klipp u&amp;t</translation>
 <translation id="3927932062596804919">Ikke tillat</translation>
 <translation id="3936390757709632190">&amp;Åpne lyd i ny fane</translation>
+<translation id="3943582379552582368">&amp;Tilbake</translation>
 <translation id="3948116654032448504">&amp;Søk etter bilder med <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3979395879372752341">Ny utvidelse lagt til (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="398477389655464998">Kopier lenke til markert tekst</translation>
@@ -204,10 +210,12 @@
 <translation id="4348766275249686434">Samle feil</translation>
 <translation id="4363771538994847871">Ingen Cast-mål funnet. Trenger du hjelp?</translation>
 <translation id="4384652540891215547">Aktiver utvidelsen</translation>
+<translation id="4394049700291259645">Deaktiver</translation>
 <translation id="4409697491990005945">Marger</translation>
 <translation id="4423376891418188461">Gjenopprett innstillingene</translation>
 <translation id="4478664379124702289">Lagre len&amp;ken som...</translation>
 <translation id="4520385623207007473">Informasjonskapsler i bruk</translation>
+<translation id="4536111748245793305">Profil <ph name="VALUE" /></translation>
 <translation id="456449593072900590">Slett ved avslutning</translation>
 <translation id="4580596421317071374">Passord lagres i <ph name="GOOGLE_PASSWORD_MANAGER" /> på denne enheten.</translation>
 <translation id="4595560905247879544">Apper og utvidelser kan bare bli endret av administratoren (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -258,6 +266,7 @@
 <translation id="5360150013186312835">Vis i verktøylinjen</translation>
 <translation id="5362741141255528695">Velg fil med privat nøkkel.</translation>
 <translation id="536638840841140142">Ingen</translation>
+<translation id="5370819323174483825">&amp;Oppdater</translation>
 <translation id="5398572795982417028">Sidetall utenfor gyldig område, grensen er <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5423753908060469325">Opprett &amp;snarvei…</translation>
 <translation id="5425042808445046667">Fortsett nedlastingen</translation>
@@ -296,6 +305,7 @@
   <ph name="EXPONENT_HEX_DUMP" /></translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (maksimalt <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5978277834170881274">&amp;Bruk enkel stavekontroll</translation>
+<translation id="5979421442488174909">&amp;Oversett til <ph name="LANGUAGE" /></translation>
 <translation id="6042308850641462728">Mer</translation>
 <translation id="6059652578941944813">Sertifikathierarki</translation>
 <translation id="6086846494333236931">Installert av administratoren din</translation>
@@ -325,6 +335,7 @@
 <translation id="6498249116389603658">&amp;Alle dine språk</translation>
 <translation id="6503077044568424649">Mest besøkt</translation>
 <translation id="6508261954199872201">App: <ph name="APP_NAME" /></translation>
+<translation id="6516243500644829484">Nytt &amp;privatvindu</translation>
 <translation id="6518014396551869914">Kop&amp;ier bilde</translation>
 <translation id="6550675742724504774">Valg</translation>
 <translation id="6579369886355986318">Vis alle &amp;kontroller</translation>
@@ -332,6 +343,7 @@
 <translation id="6655190889273724601">Utviklermodus</translation>
 <translation id="666731172850799929">Åpne i <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Lagre passordet</translation>
+<translation id="6691936601825168937">&amp;Frem</translation>
 <translation id="6786747875388722282">Utvidelser</translation>
 <translation id="6787839852456839824">Hurtigtaster</translation>
 <translation id="6798954102094737107">Programtillegg: <ph name="PLUGIN_NAME" /></translation>
@@ -341,6 +353,7 @@
 <translation id="6886871292305414135">Åpne lenken i en ny &amp;fane</translation>
 <translation id="6892812721183419409">Åpne lenken som <ph name="USER" /></translation>
 <translation id="6900284862687837908">Bakgrunns-app: <ph name="BACKGROUND_APP_URL" /></translation>
+<translation id="6916590542764765824">Administrer utvidelser</translation>
 <translation id="6945221475159498467">Velg</translation>
 <translation id="6955446738988643816">Inspiser oppsprett</translation>
 <translation id="6970856801391541997">Skriv ut bestemte sider</translation>
@@ -364,6 +377,7 @@
 <translation id="7564847347806291057">Avslutt prosess</translation>
 <translation id="7576690715254076113">Samle</translation>
 <translation id="7629827748548208700">Fane: <ph name="TAB_NAME" /></translation>
+<translation id="7658239707568436148">Avbryt</translation>
 <translation id="7659154729610375585">Vil du avslutte privatmodus likevel?</translation>
 <translation id="7661259717474717992">Tillat sider å lagre og lese infokapsler</translation>
 <translation id="7663719505383602579">Mottaker: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -379,6 +393,7 @@
 <translation id="7786889348652477777">&amp;Last inn appen på nytt</translation>
 <translation id="7791543448312431591">Legg til</translation>
 <translation id="7800518121066352902">Roter mot klokken</translation>
+<translation id="7814458197256864873">&amp;Kopier</translation>
 <translation id="7818135753970109980">Nytt tema lagt til (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">K&amp;opier videoadressen</translation>
 <translation id="7849264908733290972">Åpne b&amp;ilde i ny fane</translation>
@@ -386,6 +401,7 @@
 <translation id="7903925330883316394">Verktøy: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7947962633355574091">K&amp;opier videoadressen</translation>
 <translation id="7966241909927244760">K&amp;opier bildeadressen</translation>
+<translation id="7973394300052703468">Nytt &amp;privatvindu</translation>
 <translation id="7978412674231730200">Privat nøkkel</translation>
 <translation id="7982789257301363584">Nettverk</translation>
 <translation id="7997826902155442747">Prosessprioritet</translation>
@@ -403,6 +419,7 @@ Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av ut
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Nedlasting pågår} other {Nedlastinger pågår}}</translation>
 <translation id="8230134520748321204">Lagre passord for <ph name="ORIGIN" />?</translation>
+<translation id="8248050856337841185">&amp;Lim inn</translation>
 <translation id="8261378640211443080">Denne utvidelsen finnes ikke i <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />, og kan ha blitt lagt til uten at du fikk vite om det.</translation>
 <translation id="8351419472474436977">Denne utvidelsen har tatt kontroll over proxy-innstillingene dine, noe som betyr at den kan endre, sabotere eller tjuvlytte på alt du gjør på nettet. Hvis du ikke vet hvorfor endringen skjedde, er endringen trolig uønsket.</translation>
 <translation id="8382913212082956454">Kopier &amp;e-postadresse</translation>
@@ -441,14 +458,17 @@ Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av ut
 <translation id="8973557916016709913">Opphev forstørrelsesnivå</translation>
 <translation id="9003647077635673607">Tillat på alle nettsider</translation>
 <translation id="9027459031423301635">Åpne lenken i ny &amp;fane</translation>
+<translation id="9033857511263905942">&amp;Lim inn</translation>
 <translation id="9056810968620647706">Ingen treff.</translation>
 <translation id="9084064520949870008">Åpne som vindu</translation>
 <translation id="9137916601698928395">Åpne lenken som <ph name="USER" /></translation>
 <translation id="916607977885256133">Bilde-i-bilde</translation>
+<translation id="9170848237812810038">&amp;Angre</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" ble lagt til</translation>
 <translation id="9218430445555521422">Sett som standard</translation>
 <translation id="93766956588638423">Reparer utvidelse</translation>
 <translation id="961012016278832836">Microsoft Edge (gammel)</translation>
 <translation id="98515147261107953">Liggende</translation>
+<translation id="994289308992179865">&amp;Gjenta</translation>
 <translation id="998747458861718449">I&amp;nspiser</translation>
 </translationbundle>

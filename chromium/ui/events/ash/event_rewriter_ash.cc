@@ -610,6 +610,130 @@ void RecordSixPackEventRewrites(EventRewriterAsh::Delegate* delegate,
   }
 }
 
+void RecordFunctionKeyFromKeyCode(ui::KeyboardCode key_code,
+                                  ui::InputKeyEventToFunctionKey event_enum) {
+  DCHECK(key_code >= VKEY_F1);
+  DCHECK(key_code <= VKEY_F15);
+
+  switch (key_code) {
+    case VKEY_F1:
+      UMA_HISTOGRAM_ENUMERATION("ChromeOS.Inputs.Keyboard.F1Pressed",
+                                event_enum);
+      break;
+    case VKEY_F2:
+      UMA_HISTOGRAM_ENUMERATION("ChromeOS.Inputs.Keyboard.F2Pressed",
+                                event_enum);
+      break;
+    case VKEY_F3:
+      UMA_HISTOGRAM_ENUMERATION("ChromeOS.Inputs.Keyboard.F3Pressed",
+                                event_enum);
+      break;
+    case VKEY_F4:
+      UMA_HISTOGRAM_ENUMERATION("ChromeOS.Inputs.Keyboard.F4Pressed",
+                                event_enum);
+      break;
+    case VKEY_F5:
+      UMA_HISTOGRAM_ENUMERATION("ChromeOS.Inputs.Keyboard.F5Pressed",
+                                event_enum);
+      break;
+    case VKEY_F6:
+      UMA_HISTOGRAM_ENUMERATION("ChromeOS.Inputs.Keyboard.F6Pressed",
+                                event_enum);
+      break;
+    case VKEY_F7:
+      UMA_HISTOGRAM_ENUMERATION("ChromeOS.Inputs.Keyboard.F7Pressed",
+                                event_enum);
+      break;
+    case VKEY_F8:
+      UMA_HISTOGRAM_ENUMERATION("ChromeOS.Inputs.Keyboard.F8Pressed",
+                                event_enum);
+      break;
+    case VKEY_F9:
+      UMA_HISTOGRAM_ENUMERATION("ChromeOS.Inputs.Keyboard.F9Pressed",
+                                event_enum);
+      break;
+    case VKEY_F10:
+      UMA_HISTOGRAM_ENUMERATION("ChromeOS.Inputs.Keyboard.F10Pressed",
+                                event_enum);
+      break;
+    case VKEY_F11:
+      UMA_HISTOGRAM_ENUMERATION("ChromeOS.Inputs.Keyboard.F11Pressed",
+                                event_enum);
+      break;
+    case VKEY_F12:
+      UMA_HISTOGRAM_ENUMERATION("ChromeOS.Inputs.Keyboard.F12Pressed",
+                                event_enum);
+      break;
+    case VKEY_F13:
+      UMA_HISTOGRAM_ENUMERATION("ChromeOS.Inputs.Keyboard.F13Pressed",
+                                event_enum);
+      break;
+    case VKEY_F14:
+      UMA_HISTOGRAM_ENUMERATION("ChromeOS.Inputs.Keyboard.F14Pressed",
+                                event_enum);
+      break;
+    case VKEY_F15:
+      UMA_HISTOGRAM_ENUMERATION("ChromeOS.Inputs.Keyboard.F15Pressed",
+                                event_enum);
+      break;
+    default:
+      NOTREACHED();
+      break;
+  }
+}
+
+void RecordRewritingToFunctionKeys(
+    const KeyEvent& key_event,
+    const EventRewriterAsh::MutableKeyState* rewritten_state) {
+  if (key_event.type() != ET_KEY_PRESSED && !key_event.is_repeat()) {
+    return;
+  }
+
+  // Only record key events rewritten to F1 - F15.
+  if (rewritten_state->key_code < VKEY_F1 ||
+      rewritten_state->key_code > VKEY_F15) {
+    return;
+  }
+
+  const bool search_is_pressed = (key_event.flags() & EF_COMMAND_DOWN) != 0;
+  const bool search_in_rewritten_event =
+      (rewritten_state->flags & EF_COMMAND_DOWN) != 0;
+  if (search_is_pressed == search_in_rewritten_event) {
+    if (key_event.key_code() >= VKEY_F1 && key_event.key_code() <= VKEY_F15) {
+      // Case 1: When the keyboard sends Function key and we do not touch it.
+      RecordFunctionKeyFromKeyCode(
+          rewritten_state->key_code,
+          InputKeyEventToFunctionKey::kDirectlyFromKeyboard);
+    } else {
+      // Case 2: When the keyboard sends Top row key and we remap it to
+      // Function key.
+      RecordFunctionKeyFromKeyCode(
+          rewritten_state->key_code,
+          InputKeyEventToFunctionKey::kTopRowAutoTranslated);
+    }
+  } else if (search_is_pressed && !search_in_rewritten_event) {
+    if (key_event.key_code() >= VKEY_F1 && key_event.key_code() <= VKEY_F15) {
+      // Case 3: When Function key + Search and get Function key with no
+      // search.
+      RecordFunctionKeyFromKeyCode(
+          rewritten_state->key_code,
+          InputKeyEventToFunctionKey::kDirectlyWithSearch);
+    } else if (key_event.key_code() >= VKEY_0 &&
+               key_event.key_code() <= VKEY_9) {
+      // Case 4: When search + digit results in Function key.
+      RecordFunctionKeyFromKeyCode(
+          rewritten_state->key_code,
+          InputKeyEventToFunctionKey::kSearchDigitTranslated);
+    } else {
+      // Case 5: When the keyboard sends Top row key + search and we remap it
+      // to Function key.
+      RecordFunctionKeyFromKeyCode(
+          rewritten_state->key_code,
+          InputKeyEventToFunctionKey::kSearchTopRowTranslated);
+    }
+  }
+}
+
 bool SkipSearchKeyRemapping(EventRewriterAsh::Delegate* delegate,
                             ui::mojom::SixPackShortcutModifier modifier) {
   return delegate && delegate->IsSearchKeyAcceleratorReserved() &&
@@ -1420,7 +1544,9 @@ EventRewriteStatus EventRewriterAsh::RewriteKeyEvent(
 
   // Records metric if the `key_event` is for a modifier key press event.
   const bool should_record_modifier_key_press_metrics =
-      !(key_event.flags() & EF_IS_REPEAT) && key_event.type() == ET_KEY_PRESSED;
+      !(key_event.flags() & EF_IS_REPEAT) &&
+      key_event.type() == ET_KEY_PRESSED &&
+      !ash::features::IsKeyboardRewriterFixEnabled();
   if (should_record_modifier_key_press_metrics) {
     RecordModifierKeyPressedBeforeRemapping(*keyboard_capability_, device_id,
                                             key_event.code());
@@ -1432,17 +1558,19 @@ EventRewriteStatus EventRewriterAsh::RewriteKeyEvent(
   // Do not rewrite an event sent by ui_controls::SendKeyPress(). See
   // crbug.com/136465.
   if (!(key_event.flags() & EF_FINAL)) {
-    // If RewriteModifierKeys() returns true there should be no more processing
-    // done to the key event. It will only return true if the key event is
-    // rewritten to ALTGR. A false return is not an error.
-    if (RewriteModifierKeys(key_event, device_id, &state)) {
-      if (should_record_modifier_key_press_metrics) {
-        RecordModifierKeyPressedAfterRemapping(*keyboard_capability_, device_id,
-                                               state.code);
+    if (!ash::features::IsKeyboardRewriterFixEnabled()) {
+      // If RewriteModifierKeys() returns true there should be no more
+      // processing done to the key event. It will only return true if the key
+      // event is rewritten to ALTGR. A false return is not an error.
+      if (RewriteModifierKeys(key_event, device_id, &state)) {
+        if (should_record_modifier_key_press_metrics) {
+          RecordModifierKeyPressedAfterRemapping(*keyboard_capability_,
+                                                 device_id, state.code);
+        }
+        // Early exit with completed event.
+        BuildRewrittenKeyEvent(key_event, state, rewritten_event);
+        return EVENT_REWRITE_REWRITTEN;
       }
-      // Early exit with completed event.
-      BuildRewrittenKeyEvent(key_event, state, rewritten_event);
-      return EVENT_REWRITE_REWRITTEN;
     }
     RewriteNumPadKeys(key_event, &state);
   }
@@ -1501,12 +1629,16 @@ EventRewriteStatus EventRewriterAsh::RewriteKeyEvent(
       RewriteExtendedFunctionKeys(delegate_, key_event,
                                   last_keyboard_device_id_, &state);
     }
+
+    RecordRewritingToFunctionKeys(key_event, &state);
   }
+
   if ((key_event.flags() == state.flags) &&
       (key_event.key_code() == state.key_code) &&
       (status == EVENT_REWRITE_CONTINUE)) {
     return EVENT_REWRITE_CONTINUE;
   }
+
   // Sticky keys may have returned a result other than |EVENT_REWRITE_CONTINUE|,
   // in which case we need to preserve that return status. Alternatively, we
   // might be here because key_event changed, in which case we need to
@@ -1896,6 +2028,12 @@ int EventRewriterAsh::RewriteLocatedEvent(const Event& event) {
     return event.flags();
   }
 
+  if (ash::features::IsKeyboardRewriterFixEnabled()) {
+    // Return the events flags as modifiers should already be remapped via
+    // the KeyboardModifierEventRewriter.
+    return event.flags();
+  }
+
   // Use the keyboard device_id for the last KeyEvent.
   return GetRemappedModifierMasks(last_keyboard_device_id_, event.flags());
 }
@@ -1948,6 +2086,67 @@ EventDispatchDetails EventRewriterAsh::RewriteKeyEventInContext(
     const Continuation continuation) {
   if (status == EventRewriteStatus::EVENT_REWRITE_DISCARD) {
     return DiscardEvent(continuation);
+  }
+
+  if (ash::features::IsKeyboardRewriterFixEnabled()) {
+    internal::PhysicalKey key = {
+        key_event.code(),
+        key_event.source_device_id(),
+    };
+    MutableKeyState key_state(rewritten_event ? rewritten_event->AsKeyEvent()
+                                              : &key_event);
+    auto it = pressed_physical_keys_.find(key);
+    bool is_rewritten_differently =
+        it != pressed_physical_keys_.end() &&
+        (it->second.code != key_state.code || it->second.key != key_state.key ||
+         it->second.key_code != key_state.key_code);
+
+    if (key_event.type() == ET_KEY_PRESSED) {
+      // If a key press event for an already pressed key is rewritten in
+      // a different way, we send an release event, just before dispatching
+      // the (newly) rewritten pressed key, so that following stage can
+      // make pairs of key-pressed/-released events or rewritten ones.
+      if (is_rewritten_differently) {
+        auto dispatched_event = std::make_unique<KeyEvent>(
+            ui::ET_KEY_RELEASED, it->second.key_code, it->second.code,
+            key_event.flags() & ~it->second.flags, it->second.key,
+            key_event.time_stamp());
+        dispatched_event->set_source_device_id(key_event.source_device_id());
+        std::ignore = SendEventFinally(continuation, dispatched_event.get());
+      }
+      // Remember consumed flags on rewriting.
+      key_state.flags = key_event.flags() & ~key_state.flags;
+      pressed_physical_keys_.insert_or_assign(key, key_state);
+    } else {
+      if (is_rewritten_differently) {
+        // Restore the originally rewritten key under the current modifiers.
+        // Note that modifier flags cannot be restored (and that's why the
+        // key is rewritten differently), so here as a best effort just
+        // mask the consumed key from the current key event flags.
+        auto rewritten_key_event = std::make_unique<KeyEvent>(
+            ui::ET_KEY_RELEASED, it->second.key_code, it->second.code,
+            key_event.flags() & ~key_state.flags, it->second.key,
+            key_event.time_stamp());
+        rewritten_key_event->set_source_device_id(key_event.source_device_id());
+        rewritten_key_event->set_scan_code(key_event.scan_code());
+        rewritten_event = std::move(rewritten_key_event);
+        status = EventRewriteStatus::EVENT_REWRITE_REWRITTEN;
+      }
+      pressed_physical_keys_.erase(key);
+    }
+
+    if (status == EventRewriteStatus::EVENT_REWRITE_CONTINUE) {
+      return SendEvent(continuation, &key_event);
+    }
+
+    EventDispatchDetails details =
+        SendEventFinally(continuation, rewritten_event.get());
+    if (status == EventRewriteStatus::EVENT_REWRITE_DISPATCH_ANOTHER &&
+        !details.dispatcher_destroyed) {
+      return SendStickyKeysReleaseEvents(std::move(rewritten_event),
+                                         continuation);
+    }
+    return details;
   }
 
   MutableKeyState current_key_state;

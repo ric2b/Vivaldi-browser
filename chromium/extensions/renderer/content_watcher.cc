@@ -14,7 +14,6 @@
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_frame_observer_tracker.h"
 #include "content/public/renderer/render_frame_visitor.h"
-#include "extensions/common/extension_messages.h"
 #include "extensions/renderer/extension_frame_helper.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_element.h"
@@ -175,9 +174,7 @@ void ContentWatcher::OnWatchPages(
       return true;  // Continue visiting.
     }
 
-    const raw_ref<const blink::WebVector<blink::WebString>,
-                  ExperimentalRenderer>
-        css_selectors;
+    const raw_ref<const blink::WebVector<blink::WebString>> css_selectors;
   };
   WatchSelectors visitor(css_selectors_);
   content::RenderFrame::ForEach(&visitor);

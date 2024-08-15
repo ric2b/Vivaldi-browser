@@ -5,11 +5,20 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkPaint.h"
-
-#include "src/core/SkBlenderBase.h"
-#include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkPaintPriv.h"
+
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkBlender.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkMaskFilter.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPathEffect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkShader.h"
+#include "include/private/base/SkAssert.h"
+#include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkPicturePriv.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkSafeRange.h"
@@ -17,6 +26,11 @@
 #include "src/effects/colorfilters/SkColorFilterBase.h"
 #include "src/shaders/SkColorFilterShader.h"
 #include "src/shaders/SkShaderBase.h"
+
+#include <cstdint>
+#include <optional>
+
+class SkColorSpace;
 
 static bool changes_alpha(const SkPaint& paint) {
     SkColorFilter* cf = paint.getColorFilter();
@@ -117,15 +131,17 @@ bool SkPaintPriv::ShouldDither(const SkPaint& p, SkColorType dstCT) {
 
 // return true if the paint is just a single color (i.e. not a shader). If its
 // a shader, then we can't compute a const luminance for it :(
-static bool just_a_color(const SkPaint& paint, SkColor* color) {
-    SkColor c = paint.getColor();
+static bool just_a_color(const SkPaint& paint, SkColor4f* color) {
+    SkColor4f c = paint.getColor4f();
 
     const auto* shader = as_SB(paint.getShader());
     if (shader && !shader->asLuminanceColor(&c)) {
         return false;
     }
     if (paint.getColorFilter()) {
-        c = paint.getColorFilter()->filterColor(c);
+        // TODO: This colorspace is meaningless, replace it with something else
+        SkColorSpace* cs = nullptr;
+        c = paint.getColorFilter()->filterColor4f(c, cs, cs);
     }
     if (color) {
         *color = c;
@@ -134,11 +150,11 @@ static bool just_a_color(const SkPaint& paint, SkColor* color) {
 }
 
 SkColor SkPaintPriv::ComputeLuminanceColor(const SkPaint& paint) {
-    SkColor c;
+    SkColor4f c;
     if (!just_a_color(paint, &c)) {
-        c = SkColorSetRGB(0x7F, 0x80, 0x7F);
+        c = { 0.5f, 0.5f, 0.5f, 1.0f};
     }
-    return c;
+    return c.toSkColor();
 }
 
 void SkPaintPriv::RemoveColorFilter(SkPaint* p, SkColorSpace* dstCS) {

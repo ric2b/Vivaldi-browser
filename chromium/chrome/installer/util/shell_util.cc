@@ -10,6 +10,7 @@
 #include "chrome/installer/util/shell_util.h"
 
 #include <objbase.h>
+#include <shellapi.h>
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <wrl/client.h>
@@ -22,6 +23,7 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/containers/span.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -184,7 +186,7 @@ UserSpecificRegistrySuffix::UserSpecificRegistrySuffix() {
   static_assert(sizeof(base::MD5Digest) == 16, "size of MD5 not as expected");
   base::MD5Digest md5_digest;
   std::string user_sid_ascii(base::WideToASCII(user_sid));
-  base::MD5Sum(user_sid_ascii.c_str(), user_sid_ascii.length(), &md5_digest);
+  base::MD5Sum(base::as_byte_span(user_sid_ascii), &md5_digest);
   std::string base32_md5 = base32::Base32Encode(
       md5_digest.a, base32::Base32EncodePolicy::OMIT_PADDING);
   // The value returned by the base32 algorithm above must never change.
@@ -1830,7 +1832,8 @@ bool ShellUtil::CreateOrUpdateShortcut(ShortcutLocation location,
 
   // NOTE(andre@vivaldi.com) : Do not try to pin the shortcut if it is already
   // pinned. VB-97113
-  absl::optional<bool> override_pinning = IsShortcutPinnedToTaskbar(shortcut_path);
+  std::optional<bool> override_pinning =
+      IsShortcutPinnedToTaskbar(shortcut_path);
   if (shortcut_operation == base::win::ShortcutOperation::kCreateAlways &&
         properties.pin_to_taskbar && CanPinShortcutToTaskbar() &&
         !(override_pinning == true)) {
@@ -2143,23 +2146,26 @@ bool ShellUtil::ShowMakeChromeDefaultSystemUI(
 
   bool succeeded = true;
   bool is_default = (GetChromeDefaultState() == IS_DEFAULT);
+  bool is_win11_or_greater =
+      base::win::GetVersion() >= base::win::Version::WIN10_21H2; // Vivadi include older windows
   if (!is_default) {
-    // Launch the Windows Apps Settings dialog.
-    // VB-101575:
-    // https://learn.microsoft.com/en-us/windows/uwp/launch-resume/launch-default-apps-settings
-    if (base::win::GetVersion() >= base::win::Version::WIN10_21H2) {
-    const std::wstring suffix(
-          ShellUtil::GetCurrentInstallationSuffix(chrome_exe));
-      std::wstring defaultbrowserurl =
-          !InstallUtil::IsPerUserInstall()
-              ? L"ms-settings:defaultapps?registeredAppMachine=Vivaldi" + suffix
-              : L"ms-settings:defaultapps?registeredAppUser=Vivaldi" + suffix;
-      ShellExecute(NULL, NULL, defaultbrowserurl.c_str(), NULL, NULL, SW_SHOWNORMAL);
-      succeeded = true;
-    } else {
-    succeeded = base::win::LaunchDefaultAppsSettingsModernDialog(L"http");
+    if (is_win11_or_greater) {
+      // Launch the Windows Apps Settings dialog and navigate to the settings
+      // page for Chrome.
+      bool is_per_user_install = InstallUtil::IsPerUserInstall();
+      std::wstring settings_url =
+          base::StrCat({L"ms-settings:defaultapps?",
+                        is_per_user_install ? L"registeredAppUser="
+                                            : L"registeredAppMachine=",
+                        GetApplicationName(chrome_exe)});
+      succeeded = reinterpret_cast<intptr_t>(
+                      ShellExecute(nullptr, L"open", settings_url.c_str(),
+                                   nullptr, nullptr, SW_SHOWNORMAL)) > 32;
     }
-    is_default = (succeeded && GetChromeDefaultState() == IS_DEFAULT);
+    if (!is_win11_or_greater || !succeeded) {
+      // Launch the Windows Apps Settings dialog.
+      succeeded = base::win::LaunchDefaultAppsSettingsModernDialog(L"http");
+    }
   }
   if (succeeded && is_default)
     RegisterChromeAsDefaultXPStyle(CURRENT_USER, chrome_exe);
@@ -2225,6 +2231,8 @@ bool ShellUtil::ShowMakeChromeDefaultProtocolClientSystemUI(
           GetBrowserProtocolAssociation(protocol, chrome_exe), true)) {
     return false;
   }
+
+  ::SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 
   bool succeeded = true;
   bool is_default =
@@ -2346,6 +2354,16 @@ bool ShellUtil::RegisterChromeForProtocols(
     // Write in the capability for the protocol.
     std::vector<std::unique_ptr<RegistryEntry>> entries;
     GetProtocolCapabilityEntries(suffix, protocol_associations, &entries);
+
+    // This registry value tells Windows that this 'class' is a URL scheme.
+    // HKEY_CURRENT_USER\Software\Classes\<protocol>\URL Protocol
+    for (const auto& association : protocol_associations.associations) {
+      std::wstring url_key = base::StrCat(
+          {ShellUtil::kRegClasses, kFilePathSeparator, association.first});
+      entries.push_back(std::make_unique<RegistryEntry>(
+          url_key, ShellUtil::kRegUrlProtocol, std::wstring()));
+    }
+
     return AddRegistryEntries(root, entries);
   } else if (elevate_if_not_admin) {
     // Elevate to do the whole job

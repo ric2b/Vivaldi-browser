@@ -55,29 +55,19 @@ using google_breakpad::scoped_ptr;
 using std::vector;
 
 struct Options {
-  Options()
-      : srcPath(),
-        dsymPath(),
-        arch(),
-        header_only(false),
-        cfi(true),
-        handle_inter_cu_refs(true),
-        handle_inlines(false),
-        enable_multiple(false),
-        module_name(),
-        prefer_extern_name(false) {}
+  Options() = default;
 
   string srcPath;
   string dsymPath;
   std::optional<ArchInfo> arch;
-  bool header_only;
-  bool cfi;
-  bool handle_inter_cu_refs;
-  bool handle_inlines;
-  bool enable_multiple;
+  bool header_only = false;
+  bool cfi = true;
+  bool handle_inter_cu_refs = true;
+  bool handle_inlines = false;
+  bool enable_multiple = false;
   string module_name;
-  bool prefer_extern_name;
-  bool report_warnings;
+  bool prefer_extern_name = false;
+  bool report_warnings = false;
 };
 
 static bool StackFrameEntryComparator(const Module::StackFrameEntry* a,

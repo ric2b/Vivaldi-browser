@@ -6,8 +6,8 @@
 #define CC_INPUT_SCROLLBAR_CONTROLLER_H_
 
 #include <memory>
-
 #include <optional>
+
 #include "base/cancelable_callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
@@ -157,7 +157,8 @@ class CC_EXPORT ScrollbarController {
   ScrollbarLayerImplBase* ScrollbarLayer() const;
   void WillBeginImplFrame();
   void ResetState();
-  PointerResultType HitTest(const gfx::PointF position_in_widget) const;
+  const ScrollbarLayerImplBase* HitTest(
+      const gfx::PointF position_in_widget) const;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(LayerTreeHostImplTest, ThumbDragAfterJumpClick);

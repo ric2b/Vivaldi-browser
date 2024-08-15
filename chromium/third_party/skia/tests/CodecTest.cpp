@@ -8,6 +8,8 @@
 #include "include/codec/SkAndroidCodec.h"
 #include "include/codec/SkCodec.h"
 #include "include/codec/SkEncodedImageFormat.h"
+#include "include/codec/SkGifDecoder.h"
+#include "include/codec/SkJpegDecoder.h"
 #include "include/codec/SkPngChunkReader.h"
 #include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
@@ -1746,56 +1748,9 @@ DEF_TEST(Codec_ossfuzz6274, r) {
     const char* file = "invalid_images/ossfuzz6274.gif";
     auto image = ToolUtils::GetResourceAsImage(file);
 
-#ifdef SK_HAS_WUFFS_LIBRARY
-    // We are transitioning from an old GIF implementation to a new (Wuffs) GIF
-    // implementation.
-    //
-    // This test (without SK_HAS_WUFFS_LIBRARY) is overly specific to the old
-    // implementation. In the new implementation, the MakeFromStream factory
-    // method returns a nullptr SkImage*, instead of returning a non-null but
-    // otherwise all-transparent SkImage*.
-    //
-    // Either way, the end-to-end result is the same - the source input is
-    // rejected as an invalid GIF image - but the two implementations differ in
-    // how that's represented.
-    //
-    // Once the transition is complete, we can remove the #ifdef and delete the
-    // rest of the test function.
-    //
-    // See Codec_GifTruncated3 for the equivalent of the rest of the test
-    // function, on different (but still truncated) source data.
     if (image) {
         ERRORF(r, "Invalid data gave non-nullptr image");
     }
-    return;
-#else
-    if (!image) {
-        ERRORF(r, "Missing %s", file);
-        return;
-    }
-
-    REPORTER_ASSERT(r, image->width()  == 32);
-    REPORTER_ASSERT(r, image->height() == 32);
-
-    SkBitmap bm;
-    if (!bm.tryAllocPixels(SkImageInfo::MakeN32Premul(32, 32))) {
-        ERRORF(r, "Failed to allocate pixels");
-        return;
-    }
-
-    bm.eraseColor(SK_ColorTRANSPARENT);
-
-    SkCanvas canvas(bm);
-    canvas.drawImage(image, 0, 0);
-
-    for (int i = 0; i < image->width();  ++i)
-    for (int j = 0; j < image->height(); ++j) {
-        SkColor actual = SkUnPreMultiply::PMColorToColor(*bm.getAddr32(i, j));
-        if (actual != SK_ColorTRANSPARENT) {
-            ERRORF(r, "did not initialize pixels! %i, %i is %x", i, j, actual);
-        }
-    }
-#endif
 }
 
 DEF_TEST(Codec_78329453, r) {
@@ -1961,4 +1916,168 @@ DEF_TEST(Codec_kBGR_101010x_XR_SkColorType_supported, r) {
     dstBm.allocPixels(dstInfo);
     bool success = codec->getPixels(dstInfo, dstBm.getPixels(), dstBm.rowBytes());
     REPORTER_ASSERT(r, SkCodec::kSuccess == success);
+}
+
+DEF_TEST(Codec_gif_notseekable, r) {
+    constexpr char path[] = "images/flightAnim.gif";
+    sk_sp<SkData> data(GetResourceAsData(path));
+    if (!data) {
+        SkDebugf("Missing resource '%s'\n", path);
+        return;
+    }
+
+    // Verify that using a non-seekable stream works the same as a seekable one for
+    // decoding the first frame.
+    const SkMD5::Digest goodDigest = [data, &r]() {
+        auto codec = SkCodec::MakeFromStream(std::make_unique<SkMemoryStream>(data),
+                                             nullptr, nullptr,
+                                             SkCodec::SelectionPolicy::kPreferAnimation);
+        REPORTER_ASSERT(r, codec->getFrameCount() == 60);
+        const auto info = codec->getInfo();
+
+        SkBitmap bm;
+        bm.allocPixels(info);
+
+        SkCodec::Result result = codec->getPixels(info, bm.getPixels(), bm.rowBytes());
+        REPORTER_ASSERT(r, result == SkCodec::kSuccess);
+        return md5(bm);
+    }();
+
+    auto codec = SkCodec::MakeFromStream(std::make_unique<NonseekableStream>(std::move(data)),
+                                         nullptr, nullptr,
+                                         SkCodec::SelectionPolicy::kPreferStillImage);
+    REPORTER_ASSERT(r, codec->getFrameCount() == 1);
+
+    test_info(r, codec.get(), codec->getInfo(), SkCodec::kSuccess, &goodDigest);
+}
+
+DEF_TEST(Codec_gif_notseekable2, r) {
+    constexpr char path[] = "images/flightAnim.gif";
+    sk_sp<SkData> data(GetResourceAsData(path));
+    if (!data) {
+        SkDebugf("Missing resource '%s'\n", path);
+        return;
+    }
+
+    // Verify that using a non-seekable stream works the same as a seekable one for
+    // decoding a later frame.
+    SkCodec::Options options;
+    options.fFrameIndex = 5;
+
+    const SkMD5::Digest goodDigest = [data, &r, &options]() {
+        auto codec = SkCodec::MakeFromStream(std::make_unique<SkMemoryStream>(data),
+                                             nullptr, nullptr,
+                                             SkCodec::SelectionPolicy::kPreferAnimation);
+        REPORTER_ASSERT(r, codec->getFrameCount() == 60);
+        const auto info = codec->getInfo();
+
+        SkBitmap bm;
+        bm.allocPixels(info);
+
+        SkCodec::Result result = codec->getPixels(info, bm.getPixels(), bm.rowBytes(), &options);
+        REPORTER_ASSERT(r, result == SkCodec::kSuccess);
+        return md5(bm);
+    }();
+
+    // This should copy the non seekable stream.
+    auto codec = SkCodec::MakeFromStream(std::make_unique<NonseekableStream>(std::move(data)),
+                                         nullptr, nullptr,
+                                         SkCodec::SelectionPolicy::kPreferAnimation);
+    REPORTER_ASSERT(r, codec->getFrameCount() == 60);
+
+    SkBitmap bm;
+    bm.allocPixels(codec->getInfo());
+
+    SkCodec::Result result = codec->getPixels(codec->getInfo(), bm.getPixels(), bm.rowBytes(),
+                                              &options);
+    REPORTER_ASSERT(r, result == SkCodec::kSuccess);
+    compare_to_good_digest(r, goodDigest, bm);
+}
+
+DEF_TEST(Codec_gif_null_param, r) {
+    constexpr char path[] = "images/flightAnim.gif";
+    sk_sp<SkData> data(GetResourceAsData(path));
+    if (!data) {
+        SkDebugf("Missing resource '%s'\n", path);
+        return;
+    }
+
+    SkCodec::Result result;
+    auto codec = SkGifDecoder::Decode(std::make_unique<SkMemoryStream>(std::move(data)),
+                                      &result, nullptr);
+    REPORTER_ASSERT(r, result == SkCodec::kSuccess);
+    REPORTER_ASSERT(r, codec);
+
+    auto [image, res] = codec->getImage();
+    REPORTER_ASSERT(r, res == SkCodec::kSuccess);
+    REPORTER_ASSERT(r, image);
+    REPORTER_ASSERT(r, image->width() == 320, "width %d != 320", image->width());
+    REPORTER_ASSERT(r, image->height() == 240, "height %d != 240", image->height());
+
+    // Decoding the image this way loses the original data.
+    REPORTER_ASSERT(r, !image->refEncodedData());
+}
+
+DEF_TEST(Codec_gif_can_preserve_original_data, r) {
+    constexpr char path[] = "images/flightAnim.gif";
+    sk_sp<SkData> data(GetResourceAsData(path));
+    if (!data) {
+        SkDebugf("Missing resource '%s'\n", path);
+        return;
+    }
+
+    SkCodec::Result result;
+    auto codec = SkGifDecoder::Decode(data, &result, nullptr);
+    REPORTER_ASSERT(r, result == SkCodec::kSuccess);
+    REPORTER_ASSERT(r, codec);
+
+    sk_sp<SkImage> image = SkCodecs::DeferredImage(std::move(codec), kPremul_SkAlphaType);
+    REPORTER_ASSERT(r, image);
+    REPORTER_ASSERT(r, image->width() == 320, "width %d != 320", image->width());
+    REPORTER_ASSERT(r, image->height() == 240, "height %d != 240", image->height());
+    REPORTER_ASSERT(r,
+                    image->alphaType() == kPremul_SkAlphaType,
+                    "AlphaType is wrong %d",
+                    image->alphaType());
+
+    // The whole point of DeferredFromCodec is that it allows the client
+    // to hold onto the original image data for later.
+    sk_sp<SkData> encodedData = image->refEncodedData();
+    REPORTER_ASSERT(r, encodedData != nullptr);
+    // The returned data should the same as what went in.
+    REPORTER_ASSERT(r, encodedData->size() == data->size());
+    REPORTER_ASSERT(r, encodedData->bytes() == data->bytes());
+}
+
+DEF_TEST(Codec_jpeg_can_return_data_from_original_stream, r) {
+    constexpr char path[] = "images/dog.jpg";
+    // stream will be an SkFILEStream, not a SkMemoryStream (exercised above)
+    std::unique_ptr<SkStreamAsset> stream = GetResourceAsStream(path, true);
+    if (!stream) {
+        SkDebugf("Missing resource '%s'\n", path);
+        return;
+    }
+    size_t expectedBytes = stream->getLength();
+
+    SkCodec::Result result;
+    auto codec = SkJpegDecoder::Decode(std::move(stream), &result, nullptr);
+    REPORTER_ASSERT(r, result == SkCodec::kSuccess);
+    REPORTER_ASSERT(r, codec);
+
+    sk_sp<SkImage> image = SkCodecs::DeferredImage(std::move(codec), kUnpremul_SkAlphaType);
+    REPORTER_ASSERT(r, image);
+    REPORTER_ASSERT(r, image->width() == 180, "width %d != 180", image->width());
+    REPORTER_ASSERT(r, image->height() == 180, "height %d != 180", image->height());
+    REPORTER_ASSERT(r,
+                    image->alphaType() == kUnpremul_SkAlphaType,
+                    "AlphaType is wrong %d",
+                    image->alphaType());
+
+    // The whole point of DeferredFromCodec is that it allows the client
+    // to hold onto the original image data for later.
+    sk_sp<SkData> encodedData = image->refEncodedData();
+    REPORTER_ASSERT(r, encodedData != nullptr);
+    // The returned data should the same as what went in.
+    REPORTER_ASSERT(r, encodedData->size() == expectedBytes);
+    REPORTER_ASSERT(r, SkJpegDecoder::IsJpeg(encodedData->data(), encodedData->size()));
 }

@@ -4,5 +4,5 @@ exports.packageVersion = void 0;
 /**
  * @internal
  */
-exports.packageVersion = '21.7.0';
+exports.packageVersion = '22.4.1';
 //# sourceMappingURL=version.js.map

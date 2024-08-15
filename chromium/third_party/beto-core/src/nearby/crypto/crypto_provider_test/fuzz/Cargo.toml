@@ -15,7 +15,7 @@ arbitrary = { version = "1.2.3", features = ["derive"] }
 
 [features]
 default = ["crypto_provider_default/default"]
-openssl = ["crypto_provider_default/openssl"]
+boringssl = ["crypto_provider_default/boringssl"]
 
 # Prevent this from interfering with workspaces
 [workspace]

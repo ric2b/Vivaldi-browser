@@ -24,13 +24,13 @@
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "media/base/media_export.h"
 #include "media/base/video_frame.h"
-#include "media/video/half_float_maker.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace gfx {
 class Rect;
 class Transform;
+class MaskFilterInfo;
 }  // namespace gfx
 
 namespace viz {
@@ -40,9 +40,9 @@ class CompositorRenderPass;
 class SharedBitmapReporter;
 }  // namespace viz
 
-namespace gfx {
-class MaskFilterInfo;
-}
+namespace gpu {
+class ClientSharedImageInterface;
+}  // namespace gpu
 
 namespace media {
 class PaintCanvasVideoRenderer;
@@ -69,10 +69,6 @@ class MEDIA_EXPORT VideoFrameExternalResources {
   std::vector<viz::TransferableResource> resources;
   std::vector<viz::ReleaseCallback> release_callbacks;
 
-  // Used by hardware textures which do not return values in the 0-1 range.
-  // After a lookup, subtract offset and multiply by multiplier.
-  float offset = 0.f;
-  float multiplier = 1.f;
   uint32_t bits_per_channel = 8;
 
   VideoFrameExternalResources();
@@ -89,12 +85,14 @@ class MEDIA_EXPORT VideoResourceUpdater
   // For GPU compositing |context_provider| should be provided and for software
   // compositing |shared_bitmap_reporter| should be provided. If there is a
   // non-null |context_provider| we assume GPU compositing.
-  VideoResourceUpdater(viz::RasterContextProvider* context_provider,
-                       viz::SharedBitmapReporter* shared_bitmap_reporter,
-                       viz::ClientResourceProvider* resource_provider,
-                       bool use_stream_video_draw_quad,
-                       bool use_gpu_memory_buffer_resources,
-                       int max_resource_size);
+  VideoResourceUpdater(
+      viz::RasterContextProvider* context_provider,
+      viz::SharedBitmapReporter* shared_bitmap_reporter,
+      viz::ClientResourceProvider* resource_provider,
+      scoped_refptr<gpu::ClientSharedImageInterface> shared_image_interface,
+      bool use_stream_video_draw_quad,
+      bool use_gpu_memory_buffer_resources,
+      int max_resource_size);
 
   VideoResourceUpdater(const VideoResourceUpdater&) = delete;
   VideoResourceUpdater& operator=(const VideoResourceUpdater&) = delete;
@@ -121,7 +119,7 @@ class MEDIA_EXPORT VideoResourceUpdater
                    gfx::Rect quad_rect,
                    gfx::Rect visible_quad_rect,
                    const gfx::MaskFilterInfo& mask_filter_info,
-                   absl::optional<gfx::Rect> clip_rect,
+                   std::optional<gfx::Rect> clip_rect,
                    bool context_opaque,
                    float draw_opacity,
                    int sorting_context_id);
@@ -131,6 +129,7 @@ class MEDIA_EXPORT VideoResourceUpdater
       scoped_refptr<VideoFrame> video_frame);
 
   viz::SharedImageFormat YuvSharedImageFormat(int bits_per_channel);
+  scoped_refptr<gpu::ClientSharedImageInterface> shared_image_interface() const;
 
  private:
   class PlaneResource;
@@ -150,7 +149,7 @@ class MEDIA_EXPORT VideoResourceUpdater
   bool software_compositor() const { return context_provider_ == nullptr; }
 
   // Reallocate |upload_pixels_| with the requested size.
-  bool ReallocateUploadPixels(size_t needed_size);
+  bool ReallocateUploadPixels(size_t needed_size, size_t plane);
 
   // Obtain a resource of the right format by either recycling an
   // unreferenced but appropriately formatted resource, or by
@@ -189,12 +188,14 @@ class MEDIA_EXPORT VideoResourceUpdater
   viz::SharedImageFormat GetSoftwareOutputFormat(
       VideoPixelFormat input_frame_format,
       int bits_per_channel,
+      const gfx::ColorSpace& input_frame_color_space,
       bool& texture_needs_rgb_conversion_out);
 
   // Get the subplane shared image format used for creating
   // SoftwarePlaneResource per plane for multiplanar formats.
   std::optional<viz::SharedImageFormat> GetSoftwareSubplaneFormat(
       VideoPixelFormat input_frame_format,
+      const gfx::ColorSpace& input_frame_color_space,
       viz::SharedImageFormat output_si_format);
 
   // Transfer RGB pixels from the video frame to software resource through
@@ -215,8 +216,16 @@ class MEDIA_EXPORT VideoResourceUpdater
   bool WriteYUVPixelsPerPlaneToPerTexture(scoped_refptr<VideoFrame> video_frame,
                                           HardwarePlaneResource* plane_resource,
                                           size_t bits_per_channel,
-                                          size_t plane_index,
-                                          HalfFloatMaker* half_float_maker);
+                                          size_t plane_index);
+
+  // Write/copy YUV pixels for all planes from video frame to hardware resource
+  // through WritePixelsYUV. Also perform bit downshifting for
+  // channel format mismatch between input frame and supported shared image
+  // format.
+  bool WriteYUVPixelsForAllPlanesToTexture(
+      scoped_refptr<VideoFrame> video_frame,
+      HardwarePlaneResource* resource,
+      size_t bits_per_channel);
 
   // Get resources ready to be appended into DrawQuads. This is always used for
   // software compositing. This is also used for GPU compositing when the input
@@ -242,6 +251,7 @@ class MEDIA_EXPORT VideoResourceUpdater
 
   const raw_ptr<viz::RasterContextProvider> context_provider_;
   const raw_ptr<viz::SharedBitmapReporter> shared_bitmap_reporter_;
+  scoped_refptr<gpu::ClientSharedImageInterface> shared_image_interface_;
   const raw_ptr<viz::ClientResourceProvider, DanglingUntriaged>
       resource_provider_;
   const bool use_stream_video_draw_quad_;
@@ -251,14 +261,13 @@ class MEDIA_EXPORT VideoResourceUpdater
   std::unique_ptr<PaintCanvasVideoRenderer> video_renderer_;
   uint32_t next_plane_resource_id_ = 1;
 
-  // Temporary pixel buffer when converting between formats.
-  std::unique_ptr<uint8_t[], base::UncheckedFreeDeleter> upload_pixels_;
-  size_t upload_pixels_size_ = 0;
+  // Temporary pixel buffers when converting between formats.
+  std::unique_ptr<uint8_t[], base::UncheckedFreeDeleter>
+      upload_pixels_[SkYUVAInfo::kMaxPlanes] = {};
+  size_t upload_pixels_size_[SkYUVAInfo::kMaxPlanes] = {};
 
   VideoFrameResourceType frame_resource_type_;
 
-  float frame_resource_offset_;
-  float frame_resource_multiplier_;
   uint32_t frame_bits_per_channel_;
 
   // Resources that will be placed into quads by the next call to

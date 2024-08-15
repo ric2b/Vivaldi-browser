@@ -5,23 +5,25 @@
 package org.chromium.chrome.browser.firstrun;
 
 import android.content.Context;
-import android.os.Bundle;
 import android.view.View;
 import android.view.accessibility.AccessibilityEvent;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
+import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.signin.services.SigninPreferencesManager;
+import org.chromium.chrome.browser.ui.signin.SyncConsentDelegate;
 import org.chromium.chrome.browser.ui.signin.SyncConsentFragmentBase;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountUtils;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
+import org.chromium.ui.base.WindowAndroid;
 
 import java.util.List;
 
@@ -32,9 +34,36 @@ public class SyncConsentFirstRunFragment extends SyncConsentFragmentBase
     // TODO(crbug/1168516): Remove IS_CHILD_ACCOUNT
     public static final String IS_CHILD_ACCOUNT = "IsChildAccount";
 
+    private final SyncConsentDelegate mSyncConsentDelegate;
+
     // Do not remove. Empty fragment constructor is required for re-creating the fragment from a
     // saved state bundle. See crbug.com/1225102
-    public SyncConsentFirstRunFragment() {}
+    public SyncConsentFirstRunFragment() {
+        mSyncConsentDelegate =
+                new SyncConsentDelegate() {
+                    @Nullable
+                    @Override
+                    public WindowAndroid getWindowAndroid() {
+                        FirstRunPageDelegate delegate = getPageDelegate();
+                        if (delegate == null) return null;
+                        return delegate.getWindowAndroid();
+                    }
+
+                    @Nullable
+                    @Override
+                    public Profile getProfile() {
+                        FirstRunPageDelegate delegate = getPageDelegate();
+                        if (delegate == null) return null;
+                        return delegate.getProfileProviderSupplier().get().getOriginalProfile();
+                    }
+                };
+    }
+
+    @NonNull
+    @Override
+    protected SyncConsentDelegate getDelegate() {
+        return mSyncConsentDelegate;
+    }
 
     @Override
     public void onAttach(Context context) {
@@ -45,15 +74,9 @@ public class SyncConsentFirstRunFragment extends SyncConsentFragmentBase
         final @Nullable String accountEmail =
                 defaultAccount == null ? null : defaultAccount.getEmail();
         boolean isChild = getPageDelegate().getProperties().getBoolean(IS_CHILD_ACCOUNT, false);
-        final Bundle arguments;
         // TODO(crbug.com/1491387): Avoid sending `accountEmail` to create arguments. This class
         // uses the primary account from IdentityManager.
-        if (!isChild && ChromeFeatureList.isEnabled(ChromeFeatureList.TANGIBLE_SYNC)) {
-            arguments = createArgumentsForTangibleSync(SigninAccessPoint.START_PAGE, accountEmail);
-        } else {
-            arguments = createArguments(SigninAccessPoint.START_PAGE, accountEmail, isChild);
-        }
-        setArguments(arguments);
+        setArguments(createArguments(SigninAccessPoint.START_PAGE, accountEmail, isChild));
     }
 
     @Override
@@ -64,7 +87,8 @@ public class SyncConsentFirstRunFragment extends SyncConsentFragmentBase
     }
 
     @Override
-    protected void onSyncAccepted(String accountName, boolean settingsClicked, Runnable callback) {
+    protected void onSyncAccepted(
+            String accountName, boolean settingsClicked, SigninManager.SignInCallback callback) {
         // TODO(crbug.com/1302635): Once ENABLE_SYNC_IMMEDIATELY_IN_FRE launches, move these metrics
         // elsewhere, so onSyncAccepted() is replaced with signinAndEnableSync() (common code).
         getPageDelegate().recordFreProgressHistogram(MobileFreProgress.SYNC_CONSENT_ACCEPTED);
@@ -100,12 +124,13 @@ public class SyncConsentFirstRunFragment extends SyncConsentFragmentBase
 
                             if (!accountName.equals(syncingAccount.getEmail())) {
                                 throw new IllegalStateException(
-                                        "Child accounts should only be allowed to sync with a single account");
+                                        "Child accounts should only be allowed to sync with a"
+                                                + " single account");
                             }
 
                             // SigninChecker enabled sync already. Just open settings if needed.
                             closeAndMaybeOpenSyncSettings(settingsClicked);
-                            callback.run();
+                            callback.onSignInComplete();
                         });
     }
 
@@ -124,10 +149,7 @@ public class SyncConsentFirstRunFragment extends SyncConsentFragmentBase
         // Ignore calls before view is created.
         if (getView() == null) return;
 
-        @Nullable View title = getView().findViewById(R.id.signin_title);
-        if (title == null) {
-            title = getView().findViewById(R.id.sync_consent_title);
-        }
+        View title = getView().findViewById(R.id.signin_title);
         title.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_FOCUSED);
     }
 

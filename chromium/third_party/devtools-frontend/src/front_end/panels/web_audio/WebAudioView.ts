@@ -34,7 +34,7 @@ export class WebAudioView extends UI.ThrottledWidget.ThrottledWidget implements
   private readonly summaryBarContainer: HTMLElement;
   constructor() {
     super(true, 1000);
-    this.element.setAttribute('jslog', `${VisualLogging.panel().context('web-audio')}`);
+    this.element.setAttribute('jslog', `${VisualLogging.panel('web-audio').track({resize: true})}`);
     this.element.classList.add('web-audio-drawer');
 
     // Creates the toolbar.
@@ -44,6 +44,7 @@ export class WebAudioView extends UI.ThrottledWidget.ThrottledWidget implements
     toolbar.appendToolbarItem(UI.Toolbar.Toolbar.createActionButtonForId('components.collect-garbage'));
     toolbar.appendSeparator();
     toolbar.appendToolbarItem(this.contextSelector.toolbarItem());
+    toolbar.element.setAttribute('jslog', `${VisualLogging.toolbar()}`);
 
     // Create content container
     this.contentContainer = this.contentElement.createChild('div', 'web-audio-content-container vbox flex-auto');
@@ -68,7 +69,7 @@ export class WebAudioView extends UI.ThrottledWidget.ThrottledWidget implements
 
     this.contextSelector.addEventListener(
         SelectorEvents.ContextSelected,
-        (event: Common.EventTarget.EventTargetEvent<Protocol.WebAudio.BaseAudioContext|null>): void => {
+        (event: Common.EventTarget.EventTargetEvent<Protocol.WebAudio.BaseAudioContext|null>) => {
           const context = event.data;
           if (context) {
             this.updateDetailView(context);

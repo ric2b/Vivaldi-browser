@@ -32,6 +32,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
@@ -44,7 +45,6 @@
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/web_client_hints_types.mojom-blink.h"
 #include "services/network/public/mojom/web_client_hints_types.mojom-shared.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/client_hints/client_hints.h"
 #include "third_party/blink/public/common/device_memory/approximated_device_memory.h"
@@ -201,7 +201,7 @@ struct FrameFetchContext::FrozenState final : GarbageCollected<FrozenState> {
   const ClientHintsPreferences client_hints_preferences;
   const float device_pixel_ratio;
   const String user_agent;
-  const absl::optional<UserAgentMetadata> user_agent_metadata;
+  const std::optional<UserAgentMetadata> user_agent_metadata;
   const bool is_svg_image_chrome_client;
   const bool is_prerendering;
   const String reduced_accept_language;
@@ -242,7 +242,6 @@ ResourceFetcher* FrameFetchContext::CreateFetcherForCommittedDocument(
   fetcher->SetResourceLoadObserver(
       MakeGarbageCollected<ResourceLoadObserverForFrame>(
           loader, document, fetcher->GetProperties()));
-  fetcher->SetImagesEnabled(frame->GetSettings()->GetImagesEnabled());
   fetcher->SetAutoLoadImages(
       frame->GetSettings()->GetLoadsImagesAutomatically());
   fetcher->SetEarlyHintsPreloadedResources(
@@ -404,11 +403,16 @@ void FrameFetchContext::AddResourceTiming(
       ->AddResourceTiming(std::move(info), initiator_type);
 }
 
-bool FrameFetchContext::AllowImage(bool images_enabled, const KURL& url) const {
+bool FrameFetchContext::AllowImage() const {
   if (GetResourceFetcherProperties().IsDetached())
     return true;
-  if (auto* settings_client = GetContentSettingsClient())
-    images_enabled = settings_client->AllowImage(images_enabled, url);
+
+  bool images_enabled = GetFrame()->ImagesEnabled();
+  if (!images_enabled) {
+    if (auto* settings_client = GetContentSettingsClient()) {
+      settings_client->DidNotAllowImage();
+    }
+  }
   return images_enabled;
 }
 
@@ -423,8 +427,12 @@ void FrameFetchContext::ModifyRequestForCSP(ResourceRequest& resource_request) {
 }
 
 void FrameFetchContext::AddClientHintsIfNecessary(
-    const absl::optional<float> resource_width,
+    const std::optional<float> resource_width,
     ResourceRequest& request) {
+  if (GetResourceFetcherProperties().IsDetached()) {
+    return;
+  }
+
   // If the feature is enabled, then client hints are allowed only on secure
   // URLs.
   if (!ClientHintsPreferences::IsClientHintsAllowed(request.Url()))
@@ -432,8 +440,7 @@ void FrameFetchContext::AddClientHintsIfNecessary(
 
   // Check if |url| is allowed to run JavaScript. If not, client hints are not
   // attached to the requests that initiate on the render side.
-  if (!AllowScriptFromSourceWithoutNotifying(
-          request.Url(), GetContentSettingsClient(), GetSettings())) {
+  if (!GetFrame()->ScriptEnabled()) {
     return;
   }
 
@@ -448,12 +455,12 @@ void FrameFetchContext::AddClientHintsIfNecessary(
       SecurityOrigin::Create(request.Url())->ToUrlOrigin();
   bool is_1p_origin = IsFirstPartyOrigin(request.Url());
 
-  absl::optional<UserAgentMetadata> ua = GetUserAgentMetadata();
+  std::optional<UserAgentMetadata> ua = GetUserAgentMetadata();
 
-  absl::optional<ClientHintImageInfo> image_info;
-  absl::optional<WTF::AtomicString> prefers_color_scheme;
-  absl::optional<WTF::AtomicString> prefers_reduced_motion;
-  absl::optional<WTF::AtomicString> prefers_reduced_transparency;
+  std::optional<ClientHintImageInfo> image_info;
+  std::optional<WTF::AtomicString> prefers_color_scheme;
+  std::optional<WTF::AtomicString> prefers_reduced_motion;
+  std::optional<WTF::AtomicString> prefers_reduced_transparency;
 
   if (document_) {  // Only get frame info if the frame is not detached
     image_info = ClientHintImageInfo();
@@ -518,7 +525,7 @@ void FrameFetchContext::AddReducedAcceptLanguageIfNecessary(
 
 void FrameFetchContext::PopulateResourceRequest(
     ResourceType type,
-    const absl::optional<float> resource_width,
+    const std::optional<float> resource_width,
     ResourceRequest& request,
     const ResourceLoaderOptions& options) {
   if (!GetResourceFetcherProperties().IsDetached())
@@ -555,26 +562,15 @@ void FrameFetchContext::SetFirstPartyCookie(ResourceRequest& request) {
     request.SetSiteForCookies(GetSiteForCookies());
 }
 
-bool FrameFetchContext::AllowScriptFromSource(const KURL& url) const {
-  if (AllowScriptFromSourceWithoutNotifying(url, GetContentSettingsClient(),
-                                            GetSettings())) {
-    return true;
+bool FrameFetchContext::AllowScript() const {
+  bool script_enabled = GetFrame()->ScriptEnabled();
+  if (!script_enabled) {
+    WebContentSettingsClient* settings_client = GetContentSettingsClient();
+    if (settings_client) {
+      settings_client->DidNotAllowScript();
+    }
   }
-  WebContentSettingsClient* settings_client = GetContentSettingsClient();
-  if (settings_client)
-    settings_client->DidNotAllowScript();
-  return false;
-}
-
-// static
-bool FrameFetchContext::AllowScriptFromSourceWithoutNotifying(
-    const KURL& url,
-    WebContentSettingsClient* settings_client,
-    Settings* settings) {
-  bool allow_script = !settings || settings->GetScriptEnabled();
-  if (settings_client)
-    allow_script = settings_client->AllowScriptFromSource(allow_script, url);
-  return allow_script;
+  return script_enabled;
 }
 
 bool FrameFetchContext::IsFirstPartyOrigin(const KURL& url) const {
@@ -741,7 +737,7 @@ String FrameFetchContext::GetUserAgent() const {
   return GetFrame()->Loader().UserAgent();
 }
 
-absl::optional<UserAgentMetadata> FrameFetchContext::GetUserAgentMetadata()
+std::optional<UserAgentMetadata> FrameFetchContext::GetUserAgentMetadata()
     const {
   if (GetResourceFetcherProperties().IsDetached())
     return frozen_state_->user_agent_metadata;
@@ -856,7 +852,7 @@ ExecutionContext* FrameFetchContext::GetExecutionContext() const {
   return document_->GetExecutionContext();
 }
 
-absl::optional<ResourceRequestBlockedReason> FrameFetchContext::CanRequest(
+std::optional<ResourceRequestBlockedReason> FrameFetchContext::CanRequest(
     ResourceType type,
     const ResourceRequest& resource_request,
     const KURL& url,

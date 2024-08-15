@@ -104,6 +104,7 @@
   #define XNN_PLATFORM_MAC 0
 #endif
 
+// Mobile build x86 versions for debugging
 #if XNN_PLATFORM_ANDROID || XNN_PLATFORM_IOS
   #define XNN_PLATFORM_MOBILE 1
 #else
@@ -281,6 +282,12 @@
 #endif
 
 #define XNN_OOB_READS XNN_DISABLE_TSAN XNN_DISABLE_MSAN XNN_DISABLE_HWASAN
+
+#if defined(__GNUC__)
+  #define XNN_FALLTHROUGH __attribute__((fallthrough));
+#else
+  #define XNN_FALLTHROUGH /* fall through */
+#endif
 
 #if defined(__GNUC__)
   #define XNN_INTRINSIC inline __attribute__((__always_inline__, __artificial__))

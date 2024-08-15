@@ -5,8 +5,9 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/favicon/favicon_loader.h"
+#import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_container_delegate.h"
+#import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_column.h"
 #import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_style.h"
 
 // A view to hold the top menu items of the start page.
@@ -24,9 +25,13 @@
 - (void)configureWith:(NSArray*)speedDials
                parent:(VivaldiSpeedDialItem*)parent
         faviconLoader:(FaviconLoader*)faviconLoader
-          layoutStyle:(VivaldiStartPageLayoutStyle)style;
+          layoutStyle:(VivaldiStartPageLayoutStyle)style
+         layoutColumn:(VivaldiStartPageLayoutColumn)column
+         showAddGroup:(BOOL)showAddGroup
+    verticalSizeClass:(UIUserInterfaceSizeClass)verticalSizeClass;
 
-- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style;
+- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style
+                 layoutColumn:(VivaldiStartPageLayoutColumn)column;
 
 @end
 

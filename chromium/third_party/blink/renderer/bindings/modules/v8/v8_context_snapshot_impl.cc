@@ -15,6 +15,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_window.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/html/html_document.h"
+#include "third_party/blink/renderer/platform/bindings/dom_data_store.h"
 #include "third_party/blink/renderer/platform/bindings/dom_wrapper_world.h"
 #include "third_party/blink/renderer/platform/bindings/v8_dom_wrapper.h"
 #include "third_party/blink/renderer/platform/bindings/v8_object_constructor.h"
@@ -71,10 +72,8 @@ namespace {
 
 constexpr const size_t kNumOfWorlds = 2;
 
-inline scoped_refptr<DOMWrapperWorld> IndexToWorld(v8::Isolate* isolate,
-                                                   size_t index) {
-  return index == 0 ? scoped_refptr<DOMWrapperWorld>(
-                          &DOMWrapperWorld::MainWorld(isolate))
+inline DOMWrapperWorld* IndexToWorld(v8::Isolate* isolate, size_t index) {
+  return index == 0 ? &DOMWrapperWorld::MainWorld(isolate)
                     : DOMWrapperWorld::EnsureIsolatedWorld(
                           isolate, DOMWrapperWorld::WorldId::kMainWorldId + 1);
 }
@@ -245,9 +244,10 @@ void DeserializeInternalFieldCallback(v8::Local<v8::Object> object,
       V8DOMWrapper::SetNativeInfo(deserializer_data->isolate, object,
                                   V8HTMLDocument::GetWrapperTypeInfo(),
                                   deserializer_data->html_document);
-      bool result = deserializer_data->html_document->SetWrapper(
-          deserializer_data->isolate, V8HTMLDocument::GetWrapperTypeInfo(),
-          object);
+      const bool result =
+          DOMDataStore::SetWrapperInInlineStorage</*entered_context=*/false>(
+              deserializer_data->isolate, deserializer_data->html_document,
+              V8HTMLDocument::GetWrapperTypeInfo(), object);
       CHECK(result);
       break;
     }
@@ -401,7 +401,7 @@ void V8ContextSnapshotImpl::InstallInterfaceTemplates(v8::Isolate* isolate) {
   v8::HandleScope handle_scope(isolate);
 
   for (size_t world_index = 0; world_index < kNumOfWorlds; ++world_index) {
-    scoped_refptr<DOMWrapperWorld> world = IndexToWorld(isolate, world_index);
+    DOMWrapperWorld* world = IndexToWorld(isolate, world_index);
     for (size_t i = 0; i < std::size(type_info_table); ++i) {
       const auto& type_info = type_info_table[i];
       v8::Local<v8::FunctionTemplate> interface_template =
@@ -439,7 +439,7 @@ v8::StartupData V8ContextSnapshotImpl::TakeSnapshot(v8::Isolate* isolate) {
     v8::HandleScope handle_scope(isolate);
     snapshot_creator->SetDefaultContext(v8::Context::New(isolate));
     for (size_t i = 0; i < kNumOfWorlds; ++i) {
-      scoped_refptr<DOMWrapperWorld> world = IndexToWorld(isolate, i);
+      DOMWrapperWorld* world = IndexToWorld(isolate, i);
       TakeSnapshotForWorld(snapshot_creator, *world);
     }
   }

@@ -15,8 +15,8 @@
 use ed25519_dalek::Signer;
 
 use crypto_provider::ed25519::{
-    InvalidBytes, RawPrivateKey, RawPrivateKeyPermit, RawPublicKey, RawSignature, Signature as _,
-    SignatureError, PRIVATE_KEY_LENGTH, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH,
+    InvalidPublicKeyBytes, RawPrivateKey, RawPrivateKeyPermit, RawPublicKey, RawSignature,
+    Signature as _, SignatureError, PRIVATE_KEY_LENGTH, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH,
 };
 
 pub struct Ed25519;
@@ -76,11 +76,13 @@ pub struct PublicKey(ed25519_dalek::VerifyingKey);
 impl crypto_provider::ed25519::PublicKey for PublicKey {
     type Signature = Signature;
 
-    fn from_bytes(bytes: &RawPublicKey) -> Result<Self, InvalidBytes>
+    fn from_bytes(bytes: &RawPublicKey) -> Result<Self, InvalidPublicKeyBytes>
     where
         Self: Sized,
     {
-        ed25519_dalek::VerifyingKey::from_bytes(bytes).map(PublicKey).map_err(|_| InvalidBytes)
+        ed25519_dalek::VerifyingKey::from_bytes(bytes)
+            .map(PublicKey)
+            .map_err(|_| InvalidPublicKeyBytes)
     }
 
     fn to_bytes(&self) -> [u8; PUBLIC_KEY_LENGTH] {

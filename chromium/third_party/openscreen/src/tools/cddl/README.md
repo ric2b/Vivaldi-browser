@@ -1,21 +1,21 @@
 # CDDL Compiler
 
 This CDDL compiler takes a CDDL specification as input and produces a C++ header
-and source file which contain structs, enums, encode functions, and decode
+and source file which contain structs, enum classes, encode functions, and decode
 functions.  This simplifies the process of taking a CDDL message definition from
-the OSP control protocol spec and making it usable in C++.  Additionally, it
-simplifies adding new messages or changing existing messages during development.
+the [Open Screen Protocol spec](https://w3c.github.io/openscreenprotocol/#appendix-a)
+and making it usable in C++.  Additionally, it simplifies adding new messages or
+changing existing messages during development.
 
-This compiler is not intended to support all or even most of the CDDL spec.
-CDDL allows many patterns that are not useful, practical, or efficient when
-considering a C++ implementation of CDDL messages.  Our specialization for enums
-is a good example, but more details are given below.
+This compiler is not intended to support all or even most of the CDDL spec, because
+many patterns allowed by CDDL are not useful, practical, or efficient when considering
+a C++ implementation of CDDL messages.
 
 ## Usage Overview
 
 This section gives some examples of CDDL syntax that is supported and what the
 generated C++ looks like.  For the complete set of messages currently supported
-for OSP, see [//msgs/osp.cddl](../../msgs/osp.cddl).
+for OSP, see [//osp/msgs/osp_messages.cddl](../../osp/msgs/osp_messages.cddl).
 
 ### Maps
 
@@ -27,31 +27,47 @@ x = {
 }
 ```
 
-This translates into a normal C++ struct (i.e. not `std::map`):
+Another equivalent way to write it is:
+``` cddl
+x = {
+  0: uint; alpha,
+  1: text; beta,
+}
+```
+
+These translate into a normal C++ struct (i.e. not `std::map`):
 ``` c++
 struct X {
- uint64_t alpha;
- std::string beta;
+  bool operator==(const X& other) const;
+  bool operator!=(const X& other) const;
+
+  uint64_t alpha = 0ull;
+  std::string beta;
 };
 ```
 
-The string keys are handled only by the encoding and decoding functions.
+Default values are used for basic types to avoid undefined behavior when the struct
+is initialized on the stack.  The string keys are handled only by the encoding and
+decoding functions.
 
 ### Heterogenous Arrays
 
 An array of heterogeneous (or indeed a fixed number of homogeneous types) such
-as
+as:
 ``` cddl
 x = [
   alpha: uint,
   beta: text,
 ]
 ```
-also translates into a plain C++ struct.
+also translates into a plain C++ struct:
 ``` c++
 struct X {
- uint64_t alpha;
- std::string beta;
+  bool operator==(const X& other) const;
+  bool operator!=(const X& other) const;
+
+  uint64_t alpha = 0ull;
+  std::string beta;
 };
 ```
 In the array case, the field keys are only used as variable names and no strings
@@ -75,8 +91,9 @@ An array of unspecified length containing only one type:
 x = [* uint]
 ```
 is translated to a `std::vector`.  In this case, a key for the single array
-field isn't necessary.  It's currently not supported to put length constraints
-(e.g. `x = [2*5 uint]`) on the array length.
+field isn't necessary.  It also supports putting length constraints
+(e.g. `x = [2*5 uint]`) on the array length.  Encode functions will check the
+length constraints.
 
 ### Group Inclusion
 
@@ -92,12 +109,15 @@ y = {
 will translate to the following C++ struct:
 ``` c++
 struct Y {
-  uint64_t alpha;
+  bool operator==(const Y& other) const;
+  bool operator!=(const Y& other) const;
+
+  uint64_t alpha = 0ull;
   std::string beta;
 };
 ```
 If you prefer that a group is included explicitly as its own struct type, you
-should make it a map or array.  For example,
+should make it a map or array.  For example:
 ``` cddl
 x = {alpha: uint}
 y = {
@@ -108,9 +128,16 @@ y = {
 will translate to the following C++ struct:
 ``` c++
 struct X {
-  uint64_t alpha;
+  bool operator==(const X& other) const;
+  bool operator!=(const X& other) const;
+
+  uint64_t alpha = 0ull;
 };
+
 struct Y {
+  bool operator==(const Y& other) const;
+  bool operator!=(const Y& other) const;
+
   X x;
   std::string beta;
 };
@@ -118,15 +145,18 @@ struct Y {
 
 ### Optional Fields
 
-Fields that are not required are prefixed with a '?' in CDDL.
+Fields that are not required are prefixed with a '?' in CDDL:
 ``` cddl
 x = { ? alpha: uint }
 ```
 These are translated to a bool flag and value pair:
 ``` c++
 struct X {
-  bool has_alpha;
-  uint64_t alpha;
+  bool operator==(const X& other) const;
+  bool operator!=(const X& other) const;
+
+  bool has_alpha = false;
+  uint64_t alpha = 0ull;
 };
 ```
 
@@ -139,60 +169,74 @@ x = &(
   beta: 1,
 )
 ```
-This is implemented as an enum in C++:
+This is implemented as an enum class in C++:
 ``` c++
-enum X {
-  kAlpha = 0,
-  kBeta = 1,
+enum class X : uint64_t {
+  kAlpha = 0ull,
+  kBeta = 1ull,
 };
 ```
-Recursive group inclusion in choices handled by the simple fact that plain enum
-constants are global and not type-checked.  This leads to a global definition
-caveat that is explained below, but here is an example of such an inclusion:
+Recursive group inclusion in choices is also supported. Here is an
+example of such an inclusion:
 ``` cddl
 x = ( alpha: 0, beta: 1 )
 y = &( x, gamma: 2 )
 ```
+These are translated to two enum classes:
 ``` c++
-enum X {
-  kAlpha = 0,
-  kBeta = 1,
+enum class X : uint64_t {
+  kAlpha = 0ull,
+  kBeta = 1ull,
 };
-enum Y {
-  // union: enum X
-  kGamma = 2,
+
+enum class Y : uint64_t {
+  kAlpha = 0ull,
+  kBeta = 1ull,
+  kGamma = 2ull,
 };
 ```
 
 ### Type Choice as a Discriminated Union
 
-Specifying multiple possible types for a value in CDDL
+Specifying multiple possible types for a value in CDDL:
 ``` cddl
 x = { alpha: text / uint }
 ```
 is translated to a discriminated union in C++:
 ``` c++
 struct X {
-  X();
-  ~X();  // NOTE: This requires defining a ctor/dtor to deal with the union.
-  enum class WhichAlpha {
-    kString,
-    kUint64,
-  } which_alpha;
-  union {
-    std::string str;
-    uint64_t uint;
-  } alpha;
+  bool operator==(const X& other) const;
+  bool operator!=(const X& other) const;
+
+  struct Alpha {
+    Alpha();
+    ~Alpha();  // NOTE: This requires defining a ctor/dtor to deal with the union.
+
+    bool operator==(const Alpha& other) const;
+    bool operator!=(const Alpha& other) const;
+
+    enum class Which {
+      kString,
+      kUint64,
+      kUninitialized,
+    } which;
+    union {
+      std::string str;
+      uint64_t uint;
+      bool placeholder_;
+    };
+  };
+  Alpha alpha;
 };
 ```
-Currently, only `uint`, `text`, and `bytes` are allowed here.  Additionally, as
-an implementation note, a placeholder `bool` is also included in the union so it
-can always be created as "uninitialized".  This means that no destructor is
-necessary before the first proper member assignment.
+Currently, `uint`, `text`, `bytes`, `bool`, `float` and `int` are allowed here.
+Additionally, as an implementation note, a placeholder `bool` is also included in
+the union so it can always be created as "uninitialized".  This means that no
+destructor is necessary before the first proper member assignment.
 
 ### Tagged Types
 
-This example
+This example:
 ``` cddl
 x = #6.1234(uint)
 ```
@@ -219,12 +263,8 @@ C++ identifier/typename.
 
 #### Enums
 
-In order to simplify the sharing of enumeration values across messages (see
-example below), they are implemented in C++ as enums and not enum classes.  As a
-result, the enum constant names are global and cannot be defined more than once.
-The example below illustrates how to handle a case where you have odd enum set
-intersections.
-
+Enumeration values are implemented in C++ as enum classes, so the same enum
+constant name can be defined more than once. The example below:
 ``` cddl
 result = (
   success: 0,
@@ -233,54 +273,59 @@ result = (
 )
 
 message1 = {
-  result: &(
+  0: &(
     result,
     invalid-input: 10,
     internal-error: 20,
-  )
+  ) ; result
 }
 
 message2 = {
-  result: &(
+  0: &(
     result,
-    invalid-input: 10,  ; ERROR - redefinition of enum constant in resulting C++
+    invalid-input: 10,  ; The same enum constant name works here
     cancelled: 30,
-  )
+  ) ; result
 }
 ```
+translates to following form:
+``` c++
+enum class Result : uint64_t {
+  kSuccess = 0ull,
+  kTimeout = 1ull,
+  kUnknownError = 2ull,
+};
 
-``` cddl
-result = (
-  success: 0,
-  timeout: 1,
-  unknown-error: 2,
-)
+enum class Message1_result : uint64_t {
+  kSuccess = 0ull,
+  kTimeout = 1ull,
+  kUnknownError = 2ull,
+  kInvalidInput = 10ull,
+  kInternalError = 20ull,
+};
 
-invalid-input = (
-  invalid-input: 10,
-)
+struct Message1 {
+  bool operator==(const Message1& other) const;
+  bool operator!=(const Message1& other) const;
 
-message1 = {
-  result: &(
-    result,
-    invalid-input,
-    internal-error: 20,
-  )
-}
+  Message1_result result;
+};
 
-message2 = {
-  result: &(
-    result,
-    invalid-input,  ; OK - reference existing enum in resulting C++
-    cancelled: 30,
-  )
-}
+enum class Message2_result : uint64_t {
+  kSuccess = 0ull,
+  kTimeout = 1ull,
+  kUnknownError = 2ull,
+  kInvalidInput = 10ull,
+  kCancelled = 30ull,
+};
+
+struct Message2 {
+  bool operator==(const Message2& other) const;
+  bool operator!=(const Message2& other) const;
+
+  Message2_result result;
+};
 ```
-
-As a corollary, care should be taken to not allow duplicate enum constant
-_values_ in enums that are used together.
-
-**TODO(btolsch): Make this a compiler check.**
 
 ## Implementation Overview
 

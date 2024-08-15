@@ -2,8 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/data_headers_template.gni")
 import("//build_overrides/build.gni")
+import("//build_overrides/data_headers_template.gni")
+import("../../gni/openscreen.gni")
+
 assert(!build_with_chromium)
 
 visibility = [ "./*" ]
@@ -16,7 +18,7 @@ data_headers("castv2_schema_headers") {
   ]
 }
 
-source_set("castv2") {
+openscreen_source_set("castv2") {
   visibility += [ "../streaming:common" ]
   public = []
   sources = [
@@ -31,8 +33,6 @@ source_set("castv2") {
     "../../util",
     "//third_party/valijson",
   ]
-
-  public_configs = [ "../../build:openscreen_include_dirs" ]
 
   friend = [ ":unittests" ]
 }
@@ -62,7 +62,7 @@ data_headers("receiver_examples") {
   ]
 }
 
-source_set("unittests") {
+openscreen_source_set("unittests") {
   testonly = true
   visibility += [ "../test:unittests" ]
   public = []

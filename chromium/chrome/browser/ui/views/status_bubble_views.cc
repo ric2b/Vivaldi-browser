@@ -47,7 +47,6 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/style/typography_provider.h"
-#include "ui/views/views_features.h"
 #include "ui/views/widget/root_view.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
@@ -129,9 +128,9 @@ class StatusBubbleViews::StatusViewAnimation
 // StatusView manages the display of the bubble, applying text changes and
 // fading in or out the bubble as required.
 class StatusBubbleViews::StatusView : public views::View {
- public:
-  METADATA_HEADER(StatusView);
+  METADATA_HEADER(StatusView, views::View)
 
+ public:
   // The bubble can be in one of many states:
   enum class BubbleState {
     kHidden,
@@ -570,7 +569,7 @@ DEFINE_ENUM_CONVERTERS(StatusView::BubbleStyle,
                        {StatusView::BubbleStyle::kStandardRight,
                         u"kStandardRight"})
 
-BEGIN_METADATA(StatusView, views::View)
+BEGIN_METADATA(StatusView)
 ADD_PROPERTY_METADATA(std::u16string, Text)
 ADD_READONLY_PROPERTY_METADATA(StatusView::BubbleState, State)
 ADD_PROPERTY_METADATA(StatusView::BubbleStyle, Style)
@@ -743,11 +742,7 @@ void StatusBubbleViews::InitPopup() {
 #if !BUILDFLAG(IS_MAC)
     // Stack the popup above the base widget and below higher z-order windows.
     // This is unnecessary and even detrimental on Mac, see CreateBubbleWidget.
-    if (base::FeatureList::IsEnabled(views::features::kWidgetLayering)) {
-      popup_->SetZOrderSublevel(ChromeWidgetSublevel::kSublevelHoverable);
-    } else {
-      popup_->StackAboveWidget(frame);
-    }
+    popup_->SetZOrderSublevel(ChromeWidgetSublevel::kSublevelHoverable);
 #endif
     RepositionPopup();
   }

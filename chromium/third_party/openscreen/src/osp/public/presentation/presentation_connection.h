@@ -24,11 +24,14 @@ namespace openscreen::osp {
 
 class ProtocolConnection;
 
+enum class TerminationSource {
+  kController = 0,
+  kReceiver,
+};
+
 enum class TerminationReason {
-  kReceiverTerminateCalled = 0,
-  kReceiverUserTerminated,
-  kControllerTerminateCalled,
-  kControllerUserTerminated,
+  kApplicationTerminated = 0,
+  kUserTerminated,
   kReceiverPresentationReplaced,
   kReceiverIdleTooLong,
   kReceiverPresentationUnloaded,
@@ -102,6 +105,7 @@ class Connection {
     virtual Error CloseConnection(Connection* connection,
                                   CloseReason reason) = 0;
     virtual Error OnPresentationTerminated(const std::string& presentation_id,
+                                           TerminationSource source,
                                            TerminationReason reason) = 0;
     virtual void OnConnectionDestroyed(Connection* connection) = 0;
 
@@ -151,7 +155,7 @@ class Connection {
   Error Close(CloseReason reason);
 
   // Terminates the presentation associated with this connection.
-  void Terminate(TerminationReason reason);
+  void Terminate(TerminationSource source, TerminationReason reason);
 
   void OnConnecting();
 
@@ -200,6 +204,7 @@ class ConnectionManager final : public MessageDemuxer::MessageCallback {
                                   Clock::time_point now) override;
 
   Connection* GetConnection(uint64_t connection_id);
+  size_t ConnectionCount() const;
 
  private:
   // TODO(btolsch): Connection IDs were changed to be per-endpoint, but this

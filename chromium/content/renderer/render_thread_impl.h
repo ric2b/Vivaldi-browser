@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <deque>
 #include <map>
 #include <memory>
 #include <optional>
@@ -80,6 +81,7 @@ class RasterDarkModeFilter;
 
 namespace gpu {
 class GpuChannelHost;
+class ClientSharedImageInterface;
 }
 
 namespace media {
@@ -282,6 +284,9 @@ class CONTENT_EXPORT RenderThreadImpl
       GetVideoFrameCompositorContextProvider(
           scoped_refptr<viz::RasterContextProvider>);
 
+  scoped_refptr<gpu::ClientSharedImageInterface>
+  GetVideoFrameCompositorSharedImageInterface();
+
   // Returns a worker context provider that will be bound on the compositor
   // thread.
   scoped_refptr<cc::RasterContextProviderWrapper>
@@ -292,9 +297,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   scoped_refptr<viz::ContextProviderCommandBuffer>
   SharedMainThreadContextProvider();
-
-  scoped_refptr<viz::ContextProviderCommandBuffer>
-  PepperVideoDecodeContextProvider();
 
   // For producing custom V8 histograms. Custom histograms are produced if all
   // `blink::WebView`s share the same host, and the host is in the pre-specified
@@ -464,6 +466,9 @@ class CONTENT_EXPORT RenderThreadImpl
       bool enable_video_encode_accelerator);
 
   mojom::RenderMessageFilter* render_message_filter();
+  void RequestNewItemsForFrameRoutingCache();
+  void PopulateFrameRoutingCacheWithItems(
+      std::vector<mojom::FrameRoutingInfoPtr> infos);
 
   scoped_refptr<discardable_memory::ClientDiscardableSharedMemoryManager>
       discardable_memory_allocator_;
@@ -525,9 +530,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   scoped_refptr<viz::ContextProviderCommandBuffer> shared_main_thread_contexts_;
 
-  scoped_refptr<viz::ContextProviderCommandBuffer>
-      pepper_video_decode_contexts_;
-
   base::ObserverList<RenderThreadObserver>::Unchecked observers_;
 
   scoped_refptr<viz::RasterContextProvider>
@@ -535,6 +537,8 @@ class CONTENT_EXPORT RenderThreadImpl
 
   scoped_refptr<cc::RasterContextProviderWrapper>
       shared_worker_context_provider_wrapper_;
+
+  scoped_refptr<gpu::ClientSharedImageInterface> shared_image_interface_;
 
   HistogramCustomizer histogram_customizer_;
 
@@ -580,6 +584,17 @@ class CONTENT_EXPORT RenderThreadImpl
 
   // Tracks the time the run loop started for this thread.
   base::TimeTicks run_loop_start_time_;
+
+  // A small cache of pending frame routing IDs/tokens so we do not need to make
+  // a synchronous IPC call to retrieve one most of the time. If the cache is
+  // empty a synchronous IPC call will be made. Once the cache only has two
+  // items an asynchronous request to populate it will also be made.
+  std::deque<mojom::FrameRoutingInfoPtr> cached_frame_routing_;
+
+  // Keep track of it we have requested items or not as we do not want to fire
+  // off only one asynchronous request.
+  bool cached_items_requested_ = false;
+  bool use_cached_routing_table_ = false;
 
   base::WeakPtrFactory<RenderThreadImpl> weak_factory_{this};
 };

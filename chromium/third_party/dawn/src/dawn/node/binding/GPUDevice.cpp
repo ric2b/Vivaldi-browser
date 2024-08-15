@@ -149,10 +149,13 @@ class InternalError : public interop::GPUInternalError {
 ////////////////////////////////////////////////////////////////////////////////
 // wgpu::bindings::GPUDevice
 ////////////////////////////////////////////////////////////////////////////////
-GPUDevice::GPUDevice(Napi::Env env, const wgpu::DeviceDescriptor& desc, wgpu::Device device)
+GPUDevice::GPUDevice(Napi::Env env,
+                     const wgpu::DeviceDescriptor& desc,
+                     wgpu::Device device,
+                     std::shared_ptr<AsyncRunner> async)
     : env_(env),
       device_(device),
-      async_(std::make_shared<AsyncRunner>(env, device)),
+      async_(async),
       lost_promise_(env, PROMISE_INFO),
       label_(desc.label ? desc.label : "") {
     device_.SetLoggingCallback(
@@ -369,6 +372,16 @@ interop::Interface<interop::GPUShaderModule> GPUDevice::createShaderModule(
     }
     sm_desc.nextInChain = &wgsl_desc;
 
+    // Special case for a source containing a \0. This should be an error instead of just truncating
+    // the source.
+    if (descriptor.code.find('\0') != std::string::npos) {
+        return interop::GPUShaderModule::Create<GPUShaderModule>(
+            env, sm_desc,
+            device_.CreateErrorShaderModule(&sm_desc,
+                                            "The WGSL shader contains an illegal character '\\0'"),
+            async_);
+    }
+
     return interop::GPUShaderModule::Create<GPUShaderModule>(
         env, sm_desc, device_.CreateShaderModule(&sm_desc), async_);
 }
@@ -419,7 +432,7 @@ GPUDevice::createComputePipelineAsync(Napi::Env env,
         AsyncTask task;
         std::string label;
     };
-    auto ctx = new Context{env, Promise(env, PROMISE_INFO), AsyncTask(async_),
+    auto ctx = new Context{env, Promise(env, PROMISE_INFO), AsyncTask(env, async_),
                            desc.label ? desc.label : ""};
     auto promise = ctx->promise;
 
@@ -462,7 +475,7 @@ GPUDevice::createRenderPipelineAsync(Napi::Env env,
         AsyncTask task;
         std::string label;
     };
-    auto ctx = new Context{env, Promise(env, PROMISE_INFO), AsyncTask(async_),
+    auto ctx = new Context{env, Promise(env, PROMISE_INFO), AsyncTask(env, async_),
                            desc.label ? desc.label : ""};
     auto promise = ctx->promise;
 
@@ -563,7 +576,7 @@ interop::Promise<std::optional<interop::Interface<interop::GPUError>>> GPUDevice
         Promise promise;
         AsyncTask task;
     };
-    auto* ctx = new Context{env, Promise(env, PROMISE_INFO), AsyncTask(async_)};
+    auto* ctx = new Context{env, Promise(env, PROMISE_INFO), AsyncTask(env, async_)};
     auto promise = ctx->promise;
 
     device_.PopErrorScope(

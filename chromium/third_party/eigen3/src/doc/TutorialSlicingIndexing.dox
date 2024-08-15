@@ -72,12 +72,12 @@ Here are some examples for a 2D array/matrix \c A and a 1D array/vector \c v.
 </tr>
 <tr>
   <td>%Block starting at \c i,j having \c m rows, and \c n columns</td>
-  <td>\code A(seqN(i,m), seqN(i,n)) \endcode</td>
+  <td>\code A(seqN(i,m), seqN(j,n)) \endcode</td>
   <td>\code A.block(i,j,m,n) \endcode</td>
 </tr>
 <tr>
   <td>%Block starting at \c i0,j0 and ending at \c i1,j1</td>
-  <td>\code A(seq(i0,i1), seq(j0,j1) \endcode</td>
+  <td>\code A(seq(i0,i1), seq(j0,j1)) \endcode</td>
   <td>\code A.block(i0,j0,i1-i0+1,j1-j0+1) \endcode</td>
 </tr>
 <tr>
@@ -97,7 +97,7 @@ Here are some examples for a 2D array/matrix \c A and a 1D array/vector \c v.
 </tr>
 <tr>
   <td>The middle row</td>
-  <td>\code A(last/2,all) \endcode</td>
+  <td>\code A(last/2, all) \endcode</td>
   <td>\code A.row((A.rows()-1)/2) \endcode</td>
 </tr>
 <tr>

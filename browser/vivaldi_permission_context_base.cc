@@ -13,7 +13,7 @@
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #endif
 
-void NotificationPermissionContext::UpdateTabContext(
+void NotificationPermissionContext::UpdatePrivateTabContext(
     const permissions::PermissionRequestID& id,
     const GURL& requesting_frame,
     bool allowed) {

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <string>
 #include <string_view>
 
 #include "base/logging.h"
@@ -66,7 +67,7 @@ bool EqualDriveLetterCaseInsensitive(StringViewType a, StringViewType b) {
 
   StringViewType a_letter(a.substr(0, a_letter_pos + 1));
   StringViewType b_letter(b.substr(0, b_letter_pos + 1));
-  if (!StartsWith(a_letter, b_letter, CompareCase::INSENSITIVE_ASCII))
+  if (!StartsWithCaseInsensitiveASCII(a_letter, b_letter))
     return false;
 
   StringViewType a_rest(a.substr(a_letter_pos + 1));
@@ -270,7 +271,7 @@ bool FilePath::AppendRelativePath(const FilePath& child, FilePath* path) const {
   // never case sensitive.
   if ((FindDriveLetter(*parent_comp) != StringType::npos) &&
       (FindDriveLetter(*child_comp) != StringType::npos)) {
-    if (!StartsWith(*parent_comp, *child_comp, CompareCase::INSENSITIVE_ASCII))
+    if (!StartsWithCaseInsensitiveASCII(*parent_comp, *child_comp))
       return false;
     ++parent_comp;
     ++child_comp;
@@ -623,8 +624,9 @@ FilePath FilePath::NormalizePathSeparators() const {
 
 FilePath FilePath::NormalizePathSeparatorsTo(CharType separator) const {
 #if defined(FILE_PATH_USES_WIN_SEPARATORS)
-  DCHECK_NE(kSeparators + kSeparatorsLength,
-            std::find(kSeparators, kSeparators + kSeparatorsLength, separator));
+  DCHECK_NE(static_cast<const void*>(kSeparators + kSeparatorsLength),
+            static_cast<const void*>(std::find(
+                kSeparators, kSeparators + kSeparatorsLength, separator)));
   StringType copy = path_;
   for (size_t i = 0; i < kSeparatorsLength; ++i) {
     std::replace(copy.begin(), copy.end(), kSeparators[i], separator);

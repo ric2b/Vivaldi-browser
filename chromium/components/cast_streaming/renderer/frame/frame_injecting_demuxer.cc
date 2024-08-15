@@ -59,7 +59,7 @@ class StreamTimestampOffsetTracker
 
   base::TimeDelta audio_position_ = {};
   base::TimeDelta offset_ = {};
-  raw_ptr<media::DemuxerHost, ExperimentalRenderer> demuxer_host_ = nullptr;
+  raw_ptr<media::DemuxerHost> demuxer_host_ = nullptr;
 };
 
 namespace {
@@ -497,10 +497,10 @@ int64_t FrameInjectingDemuxer::GetMemoryUsage() const {
   return 0;
 }
 
-absl::optional<media::container_names::MediaContainerName>
+std::optional<media::container_names::MediaContainerName>
 FrameInjectingDemuxer::GetContainerForMetrics() const {
   // Cast Streaming frames have no container.
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 // Not supported.

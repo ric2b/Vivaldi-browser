@@ -58,11 +58,11 @@ TlsConnectionFactoryPosix::TlsConnectionFactoryPosix(
     : client_(client),
       task_runner_(task_runner),
       platform_client_(platform_client) {
-  OSP_DCHECK(client_);
+  OSP_CHECK(client_);
 }
 
 TlsConnectionFactoryPosix::~TlsConnectionFactoryPosix() {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
   if (platform_client_) {
     platform_client_->tls_data_router()->DeregisterAcceptObserver(this);
   }
@@ -72,7 +72,7 @@ TlsConnectionFactoryPosix::~TlsConnectionFactoryPosix() {
 // TODO(issuetracker.google.com/281741213): Integrate with Auth.
 void TlsConnectionFactoryPosix::Connect(const IPEndpoint& remote_address,
                                         const TlsConnectOptions& options) {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
   TRACE_SCOPED1(TraceCategory::kSsl, "TlsConnectionFactoryPosix::Connect",
                 "remote_address", remote_address.ToString());
   IPAddress::Version version = remote_address.address.version();
@@ -102,7 +102,7 @@ void TlsConnectionFactoryPosix::Connect(const IPEndpoint& remote_address,
 
 void TlsConnectionFactoryPosix::SetListenCredentials(
     const TlsCredentials& credentials) {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
   EnsureInitialized();
 
   ErrorOr<bssl::UniquePtr<X509>> cert = ImportCertificate(
@@ -124,9 +124,9 @@ void TlsConnectionFactoryPosix::SetListenCredentials(
 
 void TlsConnectionFactoryPosix::Listen(const IPEndpoint& local_address,
                                        const TlsListenOptions& options) {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
   // Credentials must be set before Listen() is called.
-  OSP_DCHECK(listen_credentials_set_);
+  OSP_CHECK(listen_credentials_set_);
 
   auto socket = std::make_unique<StreamSocketPosix>(local_address);
   socket->Bind();
@@ -136,9 +136,9 @@ void TlsConnectionFactoryPosix::Listen(const IPEndpoint& local_address,
     TRACE_SET_RESULT(Error::Code::kSocketListenFailure);
     return;
   }
-  OSP_DCHECK(socket->state() == TcpSocketState::kListening);
+  OSP_CHECK(socket->state() == TcpSocketState::kListening);
 
-  OSP_DCHECK(platform_client_);
+  OSP_CHECK(platform_client_);
   if (platform_client_) {
     platform_client_->tls_data_router()->RegisterAcceptObserver(
         std::move(socket), this);
@@ -173,7 +173,7 @@ void TlsConnectionFactoryPosix::OnConnectionPending(StreamSocketPosix* socket) {
 
 void TlsConnectionFactoryPosix::OnSocketAccepted(
     std::unique_ptr<StreamSocket> socket) {
-  OSP_DCHECK(task_runner_.IsRunningOnTaskRunner());
+  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 
   TRACE_SCOPED(TraceCategory::kSsl,
                "TlsConnectionFactoryPosix::OnSocketAccepted");
@@ -241,7 +241,7 @@ void TlsConnectionFactoryPosix::Connect(
   if (connection->socket_->state() == TcpSocketState::kClosed) {
     return;
   }
-  OSP_DCHECK(connection->socket_->state() == TcpSocketState::kConnected);
+  OSP_CHECK(connection->socket_->state() == TcpSocketState::kConnected);
   ClearOpenSSLERRStack(CURRENT_LOCATION);
   const int connection_status = SSL_connect(connection->ssl_.get());
   if (connection_status != 1) {
@@ -286,7 +286,7 @@ void TlsConnectionFactoryPosix::Accept(
   if (connection->socket_->state() == TcpSocketState::kClosed) {
     return;
   }
-  OSP_DCHECK(connection->socket_->state() == TcpSocketState::kConnected);
+  OSP_CHECK(connection->socket_->state() == TcpSocketState::kConnected);
 
   ClearOpenSSLERRStack(CURRENT_LOCATION);
   const int connection_status = SSL_accept(connection->ssl_.get());

@@ -11,13 +11,12 @@
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "base/task/sequenced_task_runner.h"
+#include "components/metrics/structured/delegating_events_processor.h"
 #include "components/metrics/structured/event.h"
+#include "components/metrics/structured/events_processor_interface.h"
 #include "components/metrics/structured/structured_metrics_client.h"
 #include "components/metrics/structured/structured_metrics_validator.h"
-
-namespace base {
-class FilePath;
-}
+#include "third_party/metrics_proto/chrome_user_metrics_extension.pb.h"
 
 namespace metrics::structured {
 namespace {
@@ -52,8 +51,6 @@ class Recorder {
    public:
     // Called on a call to Record.
     virtual void OnEventRecord(const Event& event) = 0;
-    // Called on a call to ProfileAdded.
-    virtual void OnProfileAdded(const base::FilePath& profile_path) = 0;
     // Called when SystemProfile has finished loading
     virtual void OnSystemProfileInitialized() {}
   };
@@ -66,15 +63,6 @@ class Recorder {
   // This signals to StructuredMetricsProvider that the event should be
   // recorded.
   void RecordEvent(Event&& event);
-
-  // Notifies the StructuredMetricsProvider that a profile has been added with
-  // path |profile_path|. The first call to ProfileAdded initializes the
-  // provider using the keys stored in |profile_path|, so care should be taken
-  // to ensure the first call provides a |profile_path| suitable for metrics
-  // collection.
-  // TODO(crbug.com/1016655): When structured metrics expands beyond Chrome OS,
-  // investigate whether initialization can be simplified for Chrome.
-  void ProfileAdded(const base::FilePath& profile_path);
 
   // Notifies observers that system profile has been loaded.
   void OnSystemProfileInitialized();

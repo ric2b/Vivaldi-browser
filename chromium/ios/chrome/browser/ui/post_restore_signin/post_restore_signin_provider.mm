@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/ui/post_restore_signin/post_restore_signin_provider.h"
 
 #import "base/check_op.h"
+#import "base/memory/raw_ptr.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/notreached.h"
 #import "base/strings/sys_string_conversions.h"
@@ -13,8 +14,8 @@
 #import "components/sync/base/features.h"
 #import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_user_settings.h"
-#import "ios/chrome/browser/promos_manager/constants.h"
-#import "ios/chrome/browser/promos_manager/promo_config.h"
+#import "ios/chrome/browser/promos_manager/model/constants.h"
+#import "ios/chrome/browser/promos_manager/model/promo_config.h"
 #import "ios/chrome/browser/search_engine_choice/model/search_engine_choice_util.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
@@ -48,10 +49,10 @@
 @end
 
 @implementation PostRestoreSignInProvider {
-  syncer::SyncUserSettings* _syncUserSettings;
+  raw_ptr<syncer::SyncUserSettings> _syncUserSettings;
   std::optional<AccountInfo> _accountInfo;
   bool _historySyncEnabled;
-  Browser* _browser;
+  raw_ptr<Browser> _browser;
   SearchEngineChoiceCoordinator* _searchEngineChoiceCoordinator;
 }
 
@@ -198,7 +199,8 @@
 }
 
 - (void)maybeDisplayChoiceScreen {
-  if (ShouldDisplaySearchEngineChoiceScreen(_browser)) {
+  if (ShouldDisplaySearchEngineChoiceScreen(
+          *_browser->GetBrowserState(), search_engines::ChoicePromo::kDialog)) {
     // If the user is eligible for the search engine choice screen, it should
     // be displayed right after the post-restore sign-in promo.
     SceneState* sceneState = _browser->GetSceneState();

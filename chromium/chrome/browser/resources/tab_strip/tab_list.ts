@@ -13,12 +13,15 @@ import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import {FocusOutlineManager} from 'chrome://resources/js/focus_outline_manager.js';
 import {isRTL} from 'chrome://resources/js/util.js';
 
-import {DragManager, DragManagerDelegate} from './drag_manager.js';
+import type {DragManagerDelegate} from './drag_manager.js';
+import {DragManager} from './drag_manager.js';
 import {isTabElement, TabElement} from './tab.js';
-import {isDragHandle, isTabGroupElement, TabGroupElement} from './tab_group.js';
+import type {TabGroupElement} from './tab_group.js';
+import {isDragHandle, isTabGroupElement} from './tab_group.js';
 import {getTemplate} from './tab_list.html.js';
-import {Tab, TabGroupVisualData} from './tab_strip.mojom-webui.js';
-import {TabsApiProxy, TabsApiProxyImpl} from './tabs_api_proxy.js';
+import type {Tab, TabGroupVisualData} from './tab_strip.mojom-webui.js';
+import type {TabsApiProxy} from './tabs_api_proxy.js';
+import {TabsApiProxyImpl} from './tabs_api_proxy.js';
 
 /**
  * The amount of padding to leave between the edge of the screen and the active
@@ -662,7 +665,8 @@ export class TabListElement extends CustomElement implements
   }
 
   placeTabElement(
-      element: TabElement, index: number, pinned: boolean, groupId?: string) {
+      element: TabElement, index: number, pinned: boolean,
+      groupId: string|null) {
     const isInserting = !element.isConnected;
 
     const previousIndex = isInserting ? -1 : this.getIndexOfTab(element);
@@ -779,7 +783,8 @@ export class TabListElement extends CustomElement implements
   }
 
   private updateTabElementDomPosition_(
-      element: TabElement, index: number, pinned: boolean, groupId?: string) {
+      element: TabElement, index: number, pinned: boolean,
+      groupId: string|null) {
     // Remove the element if it already exists in the DOM. This simplifies
     // the way indices work as it does not have to count its old index in
     // the initial layout of the DOM.

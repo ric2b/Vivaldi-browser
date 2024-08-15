@@ -813,7 +813,6 @@ export class SecurityPanelSidebarTree extends UI.TreeOutline.TreeOutlineInShadow
 
   constructor(mainViewElement: SecurityPanelSidebarTreeElement, showOriginInPanel: (arg0: Origin) => void) {
     super();
-    this.element.setAttribute('jslog', `${VisualLogging.pane().context('security.sidebar')}`);
 
     this.appendChild(mainViewElement);
 
@@ -1004,7 +1003,7 @@ export class SecurityMainView extends UI.Widget.VBox {
   private securityState: Protocol.Security.SecurityState|null;
   constructor(panel: SecurityPanel) {
     super(true);
-    this.element.setAttribute('jslog', `${VisualLogging.pane().context('security.main-view')}`);
+    this.element.setAttribute('jslog', `${VisualLogging.pane('security.main-view')}`);
 
     this.setMinimumSize(200, 100);
 
@@ -1424,17 +1423,13 @@ export class SecurityMainView extends UI.Widget.VBox {
       return;
     }
 
-    const requestsAnchor = element.createChild('div', 'security-mixed-content devtools-link') as HTMLElement;
+    const requestsAnchor =
+        element.createChild('button', 'security-mixed-content devtools-link text-button link-style') as HTMLElement;
     UI.ARIAUtils.markAsLink(requestsAnchor);
     requestsAnchor.tabIndex = 0;
     requestsAnchor.textContent = i18nString(UIStrings.viewDRequestsInNetworkPanel, {n: filterRequestCount});
 
     requestsAnchor.addEventListener('click', this.showNetworkFilter.bind(this, filterKey));
-    requestsAnchor.addEventListener('keydown', event => {
-      if (event.key === 'Enter') {
-        this.showNetworkFilter(filterKey, event);
-      }
-    });
   }
 
   showNetworkFilter(filterKey: string, e: Event): void {
@@ -1453,7 +1448,7 @@ export class SecurityOriginView extends UI.Widget.VBox {
   private readonly originLockIcon: HTMLElement;
   constructor(panel: SecurityPanel, origin: Platform.DevToolsPath.UrlString, originState: OriginState) {
     super();
-    this.element.setAttribute('jslog', `${VisualLogging.pane().context('security.origin-view')}`);
+    this.element.setAttribute('jslog', `${VisualLogging.pane('security.origin-view')}`);
     this.panel = panel;
     this.setMinimumSize(200, 100);
 
@@ -1478,7 +1473,7 @@ export class SecurityOriginView extends UI.Widget.VBox {
         {filterType: NetworkForward.UIFilter.FilterType.Domain, filterValue: parsedURL.host},
         {filterType: NetworkForward.UIFilter.FilterType.Scheme, filterValue: parsedURL.scheme},
       ]));
-    }, {jslogContext: 'security.view-requests-in-network-panel'});
+    }, {jslogContext: 'reveal-in-network'});
     originNetworkDiv.appendChild(originNetworkButton);
     UI.ARIAUtils.markAsLink(originNetworkButton);
 

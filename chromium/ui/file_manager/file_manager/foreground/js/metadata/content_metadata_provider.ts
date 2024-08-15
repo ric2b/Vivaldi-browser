@@ -3,18 +3,19 @@
 // found in the LICENSE file.
 
 import {ImageLoaderClient} from 'chrome-extension://pmfjbimdmchhbnneeidfognadeopoehp/image_loader_client.js';
-import {LoadImageRequest, type LoadImageResponse, LoadImageResponseStatus} from 'chrome-extension://pmfjbimdmchhbnneeidfognadeopoehp/load_image_request.js';
+import {createForUrl, type LoadImageResponse, LoadImageResponseStatus} from 'chrome-extension://pmfjbimdmchhbnneeidfognadeopoehp/load_image_request.js';
 import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
 
 import {getContentMetadata, getContentMimeType} from '../../../common/js/api.js';
 import {unwrapEntry} from '../../../common/js/entry_utils.js';
 import {getType} from '../../../common/js/file_type.js';
-import {FilesAppEntry} from '../../../common/js/files_app_entry_types.js';
+import type {FilesAppEntry} from '../../../common/js/files_app_entry_types.js';
 import {getSanitizedScriptUrl} from '../../../common/js/trusted_script_url_policy_util.js';
 import {testSendMessage} from '../../../common/js/util.js';
 import {THUMBNAIL_MAX_HEIGHT, THUMBNAIL_MAX_WIDTH} from '../thumbnail_loader.js';
 
-import {MetadataItem, ParserMetadata} from './metadata_item.js';
+import type {ParserMetadata} from './metadata_item.js';
+import {MetadataItem} from './metadata_item.js';
 import {MetadataProvider} from './metadata_provider.js';
 import type {MetadataRequest} from './metadata_request.js';
 
@@ -168,7 +169,7 @@ export class ContentMetadataProvider extends MetadataProvider {
         (entry as FileEntry)
             .file(
                 file => {
-                  const request = LoadImageRequest.createForUrl(entry.toURL());
+                  const request = createForUrl(entry.toURL());
                   request.maxWidth = THUMBNAIL_MAX_WIDTH;
                   request.maxHeight = THUMBNAIL_MAX_HEIGHT;
                   request.timestamp = file.lastModified;

@@ -617,11 +617,11 @@ void ProxyImpl::DidPresentCompositorFrameOnImplThread(
       details);
 
   MainThreadTaskRunner()->PostTask(
-      FROM_HERE, base::BindOnce(&ProxyMain::DidPresentCompositorFrame,
-                                proxy_main_weak_ptr_, frame_token,
-                                std::move(activated.main_callbacks),
-                                std::move(activated.main_successful_callbacks),
-                                details.presentation_feedback));
+      FROM_HERE,
+      base::BindOnce(&ProxyMain::DidPresentCompositorFrame,
+                     proxy_main_weak_ptr_, frame_token,
+                     std::move(activated.main_callbacks),
+                     std::move(activated.main_successful_callbacks), details));
   if (scheduler_)
     scheduler_->DidPresentCompositorFrame(frame_token, details);
 }
@@ -716,8 +716,7 @@ void ProxyImpl::ScheduledActionSendBeginMainFrame(
   {
     TRACE_EVENT(
         "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
-        perfetto::TerminatingFlow::Global(args.trace_id),
-        [&](perfetto::EventContext ctx) {
+        perfetto::Flow::Global(args.trace_id), [&](perfetto::EventContext ctx) {
           auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
           auto* data = event->set_chrome_graphics_pipeline();
           data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::

@@ -21,7 +21,7 @@ constexpr std::chrono::seconds kSimultaneousProbeDelay =
     std::chrono::seconds(1);
 
 DomainName CreateRetryDomainName(const DomainName& name, int attempt) {
-  OSP_DCHECK(name.labels().size());
+  OSP_CHECK(!name.labels().empty());
   std::vector<std::string> labels = name.labels();
   std::string& label = labels[0];
   std::string attempts_str = std::to_string(attempt);
@@ -47,9 +47,9 @@ MdnsProbeManagerImpl::MdnsProbeManagerImpl(MdnsSender* sender,
       random_delay_(random_delay),
       task_runner_(task_runner),
       now_function_(now_function) {
-  OSP_DCHECK(sender_);
-  OSP_DCHECK(receiver_);
-  OSP_DCHECK(random_delay_);
+  OSP_CHECK(sender_);
+  OSP_CHECK(receiver_);
+  OSP_CHECK(random_delay_);
 }
 
 MdnsProbeManagerImpl::~MdnsProbeManagerImpl() = default;
@@ -92,7 +92,7 @@ bool MdnsProbeManagerImpl::IsDomainClaimed(const DomainName& domain) const {
 
 void MdnsProbeManagerImpl::RespondToProbeQuery(const MdnsMessage& message,
                                                const IPEndpoint& src) {
-  OSP_DCHECK(!message.questions().empty());
+  OSP_CHECK(!message.questions().empty());
 
   const std::vector<MdnsQuestion>& questions = message.questions();
   MdnsMessage send_message(CreateMessageId(), MessageType::Response);
@@ -123,8 +123,8 @@ void MdnsProbeManagerImpl::RespondToProbeQuery(const MdnsMessage& message,
 
 void MdnsProbeManagerImpl::TiebreakSimultaneousProbes(
     const MdnsMessage& message) {
-  OSP_DCHECK(!message.questions().empty());
-  OSP_DCHECK(!message.authority_records().empty());
+  OSP_CHECK(!message.questions().empty());
+  OSP_CHECK(!message.authority_records().empty());
 
   for (const auto& question : message.questions()) {
     for (auto it = ongoing_probes_.begin(); it != ongoing_probes_.end(); it++) {

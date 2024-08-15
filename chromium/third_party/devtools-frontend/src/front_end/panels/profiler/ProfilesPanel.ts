@@ -35,6 +35,7 @@ import * as SDK from '../../core/sdk/sdk.js';
 // eslint-disable-next-line rulesdir/es_modules_import
 import objectValueStyles from '../../ui/legacy/components/object_ui/objectValue.css.js';
 import * as UI from '../../ui/legacy/legacy.js';
+import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import heapProfilerStyles from './heapProfiler.css.js';
 import {
@@ -141,6 +142,7 @@ export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisp
     this.panelSidebarElement().classList.add('profiles-tree-sidebar');
     const toolbarContainerLeft = document.createElement('div');
     toolbarContainerLeft.classList.add('profiles-toolbar');
+    toolbarContainerLeft.setAttribute('jslog', `${VisualLogging.toolbar('profiles-sidebar')}`);
     this.panelSidebarElement().insertBefore(toolbarContainerLeft, this.panelSidebarElement().firstChild);
     const toolbar = new UI.Toolbar.Toolbar('', toolbarContainerLeft);
     toolbar.makeWrappable(true);
@@ -159,6 +161,7 @@ export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisp
 
     this.profileViewToolbar = new UI.Toolbar.Toolbar('', this.toolbarElement);
     this.profileViewToolbar.makeWrappable(true);
+    this.profileViewToolbar.element.setAttribute('jslog', `${VisualLogging.toolbar('profile-view')}`);
 
     this.profileGroups = {};
     this.launcherView = new ProfileLauncherView(this);
@@ -237,7 +240,8 @@ export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisp
 
     const error = await profileType.loadFromFile(file);
     if (error && 'message' in error) {
-      void UI.UIUtils.MessageDialog.show(i18nString(UIStrings.profileLoadingFailedS, {PH1: error.message}));
+      void UI.UIUtils.MessageDialog.show(
+          i18nString(UIStrings.profileLoadingFailedS, {PH1: error.message}), undefined, 'profile-loading-failed');
     }
   }
 
@@ -683,7 +687,7 @@ let jsProfilerPanelInstance: JSProfilerPanel;
 export class JSProfilerPanel extends ProfilesPanel implements UI.ActionRegistration.ActionDelegate {
   constructor() {
     const registry = instance;
-    super('js_profiler', [registry.cpuProfileType], 'profiler.js-toggle-recording');
+    super('js-profiler', [registry.cpuProfileType], 'profiler.js-toggle-recording');
     this.splitWidget().mainWidget()?.setMinimumSize(350, 0);
     this.#showDeprecationInfobar();
   }
@@ -709,23 +713,28 @@ export class JSProfilerPanel extends ProfilesPanel implements UI.ActionRegistrat
     }
 
     const infobar = new UI.Infobar.Infobar(
-        UI.Infobar.Type.Warning, /* text */ i18nString(UIStrings.deprecationWarnMsg), /* actions? */
+        UI.Infobar.Type.Warning,
+        /* text */ i18nString(UIStrings.deprecationWarnMsg), /* actions? */
         [
           {
             text: i18nString(UIStrings.feedback),
             highlight: false,
             delegate: openFeedbackLink,
             dismiss: false,
+            jslogContext: 'feedback',
           },
           {
             text: i18nString(UIStrings.goToPerformancePanel),
             highlight: true,
             delegate: openPerformancePanel,
             dismiss: false,
+            jslogContext: 'go-to-performance-panel',
           },
         ],
         /* disableSetting? */ undefined,
-        /* isCloseable TODO(crbug.com/1354548) Remove the prop from infobar with JS Profiler deprecation */ false);
+        /* isCloseable TODO(crbug.com/1354548) Remove the prop from infobar with JS Profiler deprecation */ false,
+        'panel-deprecated',
+    );
     infobar.setParentView(this);
     this.splitWidget().mainWidget()?.element.prepend(infobar.element);
   }

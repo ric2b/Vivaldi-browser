@@ -293,13 +293,6 @@ void AutofillWebDataService::UnmaskServerCreditCard(
                      autofill_backend_, credit_card, full_number));
 }
 
-void AutofillWebDataService::MaskServerCreditCard(const std::string& id) {
-  wdbs_->ScheduleDBTask(
-      FROM_HERE,
-      base::BindOnce(&AutofillWebDataBackendImpl::MaskServerCreditCard,
-                     autofill_backend_, id));
-}
-
 WebDataServiceBase::Handle AutofillWebDataService::GetPaymentsCustomerData(
     WebDataServiceConsumer* consumer) {
   return wdbs_->ScheduleDBTaskWithResult(
@@ -335,6 +328,31 @@ WebDataServiceBase::Handle AutofillWebDataService::GetVirtualCardUsageData(
           &AutofillWebDataBackendImpl::GetAutofillVirtualCardUsageData,
           autofill_backend_),
       consumer);
+}
+
+WebDataServiceBase::Handle AutofillWebDataService::GetCreditCardBenefits(
+    WebDataServiceConsumer* consumer) {
+  return wdbs_->ScheduleDBTaskWithResult(
+      FROM_HERE,
+      base::BindOnce(&AutofillWebDataBackendImpl::GetCreditCardBenefits,
+                     autofill_backend_),
+      consumer);
+}
+
+WebDataServiceBase::Handle AutofillWebDataService::GetMaskedBankAccounts(
+    WebDataServiceConsumer* consumer) {
+  return wdbs_->ScheduleDBTaskWithResult(
+      FROM_HERE,
+      base::BindOnce(&AutofillWebDataBackendImpl::GetMaskedBankAccounts,
+                     autofill_backend_),
+      consumer);
+}
+
+void AutofillWebDataService::ClearAllCreditCardBenefits() {
+  wdbs_->ScheduleDBTask(
+      FROM_HERE,
+      base::BindOnce(&AutofillWebDataBackendImpl::ClearAllCreditCardBenefits,
+                     autofill_backend_));
 }
 
 void AutofillWebDataService::ClearAllServerData() {

@@ -112,12 +112,15 @@ Debug and Release are available on
 
 ## Development Notes
 
-libavif is written in C99.
+Please check the [wiki](https://github.com/AOMediaCodec/libavif/wiki) for extra
+resources on libavif, such as the Release Checklist.
+
+The libavif library is written in C99. Most of the tests are written in C++14.
 
 ### Formatting
 
 Use [clang-format](https://clang.llvm.org/docs/ClangFormat.html) to format the C
-sources from the top-level folder:
+sources from the top-level folder (`clang-format-16` preferred):
 
 ```sh
 clang-format -style=file -i \

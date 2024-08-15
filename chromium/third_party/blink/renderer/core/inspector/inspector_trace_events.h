@@ -6,9 +6,9 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_INSPECTOR_INSPECTOR_TRACE_EVENTS_H_
 
 #include <memory>
+#include <optional>
 
 #include "base/trace_event/trace_event.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_streamer.h"
 #include "third_party/blink/renderer/core/animation/compositor_animations.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -49,6 +49,7 @@ class DocumentLoader;
 class Element;
 class EncodedFormData;
 class Event;
+class MessageEvent;
 class ExecutionContext;
 class HitTestLocation;
 class HitTestRequest;
@@ -320,7 +321,9 @@ void Data(perfetto::TracedValue context,
           uint64_t identifier,
           LocalFrame*,
           const ResourceRequest&,
-          RenderBlockingBehavior);
+          ResourceType resource_type,
+          RenderBlockingBehavior,
+          const ResourceLoaderOptions&);
 }
 
 namespace inspector_change_render_blocking_behavior_event {
@@ -507,7 +510,7 @@ struct V8ConsumeCacheResult {
 void Data(perfetto::TracedValue context,
           const String& url,
           const WTF::TextPosition&,
-          absl::optional<V8ConsumeCacheResult>,
+          std::optional<V8ConsumeCacheResult>,
           bool eager,
           bool streamed,
           ScriptStreamer::NotStreamingReason);
@@ -587,6 +590,18 @@ void EndData(perfetto::TracedValue context,
 
 namespace inspector_async_task {
 void Data(perfetto::TracedValue context, const StringView&);
+}
+
+namespace inspector_schedule_post_message_event {
+void Data(perfetto::TracedValue context,
+          ExecutionContext* execution_context,
+          uint64_t trace_id);
+}
+
+namespace inspector_handle_post_message_event {
+void Data(perfetto::TracedValue context,
+          ExecutionContext* execution_context,
+          const MessageEvent& event);
 }
 
 CORE_EXPORT String ToHexString(const void* p);

@@ -123,10 +123,10 @@ CacheableWithoutContentLengthHandler(
   return response;
 }
 
-// Used for cross origin read blocking check.
-std::unique_ptr<net::test_server::HttpResponse> CorbCheckHandler(
+// Used for Opaque Response Blocking (ORB) check.
+std::unique_ptr<net::test_server::HttpResponse> OrbCheckHandler(
     const net::test_server::HttpRequest& request) {
-  if (request.GetURL().path_piece() == "/corb_nosniff") {
+  if (request.GetURL().path_piece() == "/orb_nosniff") {
     auto response = std::make_unique<net::test_server::BasicHttpResponse>();
     response->AddCustomHeader("cache-control", "max-age=60");
     response->AddCustomHeader("x-content-type-options", "nosniff");
@@ -135,7 +135,7 @@ std::unique_ptr<net::test_server::HttpResponse> CorbCheckHandler(
     return response;
   }
 
-  if (request.GetURL().path_piece() == "/corb_sniff") {
+  if (request.GetURL().path_piece() == "/orb_sniff") {
     auto response = std::make_unique<net::test_server::BasicHttpResponse>();
     response->AddCustomHeader("cache-control", "max-age=60");
     response->AddCustomHeader("content-type", "text/html");
@@ -170,7 +170,7 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
     mojo::Remote<mojom::URLLoaderClient> client(std::move(pending_client));
     mojom::URLResponseHeadPtr response_head = CreateCacheableURLResponseHead();
     client->OnReceiveResponse(std::move(response_head), /*body=*/{},
-                              absl::nullopt);
+                              std::nullopt);
     client->OnComplete(URLLoaderCompletionStatus(net::OK));
   }
   void Clone(mojo::PendingReceiver<mojom::URLLoaderFactory> receiver) override {
@@ -184,7 +184,7 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
         const std::vector<std::string>& removed_headers,
         const net::HttpRequestHeaders& modified_headers,
         const net::HttpRequestHeaders& modified_cors_exempt_headers,
-        const absl::optional<GURL>& new_url) override {}
+        const std::optional<GURL>& new_url) override {}
     void SetPriority(net::RequestPriority priority,
                      int32_t intra_priority_value) override {}
     void PauseReadingBodyFromNet() override {}
@@ -218,7 +218,7 @@ class NetworkServiceMemoryCacheTest : public testing::Test {
         base::BindRepeating(&CacheableResponseHandler));
     test_server_.RegisterRequestHandler(
         base::BindRepeating(&CacheableWithoutContentLengthHandler));
-    test_server_.RegisterRequestHandler(base::BindRepeating(&CorbCheckHandler));
+    test_server_.RegisterRequestHandler(base::BindRepeating(&OrbCheckHandler));
     test_server_.RegisterRequestHandler(base::BindRepeating(
         &NetworkServiceMemoryCacheTest::CacheableOrRedirectHandler,
         base::Unretained(this)));
@@ -262,7 +262,7 @@ class NetworkServiceMemoryCacheTest : public testing::Test {
         network_context_.get(), std::move(factory_params),
         /*resource_scheduler_client=*/nullptr,
         cors_url_loader_factory_remote_.BindNewPipeAndPassReceiver(),
-        &origin_access_list_, /*resource_block_list=*/nullptr);
+        &origin_access_list_);
   }
 
   base::test::TaskEnvironment& task_environment() { return task_environment_; }
@@ -737,8 +737,8 @@ TEST_F(NetworkServiceMemoryCacheTest, CanServe_CorpBlocked) {
                                        cross_origin_embedder_policy));
 }
 
-TEST_F(NetworkServiceMemoryCacheTest, CanServe_CorbBlockedNoSniff) {
-  ResourceRequest request = CreateRequest("/corb_nosniff");
+TEST_F(NetworkServiceMemoryCacheTest, CanServe_OrbBlockedNoSniff) {
+  ResourceRequest request = CreateRequest("/orb_nosniff");
   StoreResponseToMemoryCache(request);
   ASSERT_TRUE(CanServeFromMemoryCache(request));
 
@@ -753,8 +753,8 @@ TEST_F(NetworkServiceMemoryCacheTest, CanServe_CorbBlockedNoSniff) {
   ASSERT_FALSE(CanServeFromMemoryCache(request, network_isolation_key));
 }
 
-TEST_F(NetworkServiceMemoryCacheTest, CanServe_CorbBlockedSniff) {
-  ResourceRequest request = CreateRequest("/corb_sniff");
+TEST_F(NetworkServiceMemoryCacheTest, CanServe_OrbBlockedSniff) {
+  ResourceRequest request = CreateRequest("/orb_sniff");
   StoreResponseToMemoryCache(request);
   ASSERT_TRUE(CanServeFromMemoryCache(request));
 
@@ -821,9 +821,6 @@ TEST_F(NetworkServiceMemoryCacheTest, CanServe_UnsupportedMultipleVaryHeader) {
 }
 
 TEST_F(NetworkServiceMemoryCacheTest, CanServe_DevToolsAttached) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(net::features::kPartitionedCookies);
-
   ResourceRequest request = CreateRequest("/cacheable?max-age=120");
   request.devtools_request_id = "fake-id";
   StoreResponseToMemoryCache(request);
@@ -884,7 +881,7 @@ TEST_F(NetworkServiceMemoryCacheTest, UpdateStoredCache) {
   net::NetworkIsolationKey network_isolation_key(/*top_frame_site=*/site,
                                                  /*frame_site=*/site);
 
-  absl::optional<std::string> cache_key = memory_cache().CanServe(
+  std::optional<std::string> cache_key = memory_cache().CanServe(
       mojom::kURLLoadOptionNone, request, network_isolation_key,
       CrossOriginEmbedderPolicy(),
       /*client_security_state=*/nullptr);
@@ -944,7 +941,7 @@ TEST_F(NetworkServiceMemoryCacheTest, CachedAfterRedirect) {
   pair.client->RunUntilRedirectReceived();
   pair.loader_remote->FollowRedirect(
       /*removed_headers=*/{}, /*modified_headers=*/{},
-      /*modified_cors_exempt_headers=*/{}, /*new_url=*/absl::nullopt);
+      /*modified_cors_exempt_headers=*/{}, /*new_url=*/std::nullopt);
   pair.client->RunUntilComplete();
 
   request.load_flags &= ~net::LOAD_BYPASS_CACHE;

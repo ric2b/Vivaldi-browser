@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import * as UI from '../../ui/legacy/legacy.js';
+import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import type * as Actions from './recorder-actions/recorder-actions.js';
 import {RecorderController} from './RecorderController.js';
@@ -10,12 +11,13 @@ import {RecorderController} from './RecorderController.js';
 let recorderPanelInstance: RecorderPanel;
 
 export class RecorderPanel extends UI.Panel.Panel {
-  static panelName = 'chrome_recorder';
+  static panelName = 'chrome-recorder';
 
   #controller: RecorderController;
 
   constructor() {
     super(RecorderPanel.panelName);
+    this.element.setAttribute('jslog', `${VisualLogging.panel('chrome-recorder').track({resize: true})}`);
     this.#controller = new RecorderController();
     this.contentElement.append(this.#controller);
     this.contentElement.style.minWidth = '400px';
@@ -56,7 +58,7 @@ export class ActionDelegate implements UI.ActionRegistration.ActionDelegate {
       _context: UI.Context.Context,
       actionId: Actions.RecorderActions,
       ): boolean {
-    void (async(): Promise<void> => {
+    void (async () => {
       await UI.ViewManager.ViewManager.instance().showView(
           RecorderPanel.panelName,
       );

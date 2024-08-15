@@ -48,6 +48,7 @@
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/html_body_element.h"
 #include "third_party/blink/renderer/core/html/html_html_element.h"
 #include "third_party/blink/renderer/core/html/html_progress_element.h"
@@ -96,6 +97,7 @@
 #include "third_party/blink/renderer/platform/wtf/text/case_map.h"
 #include "third_party/blink/renderer/platform/wtf/text/math_transform.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_offset_map.h"
+#include "third_party/blink/renderer/platform/wtf/thread_specific.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/geometry/point_f.h"
 
@@ -160,8 +162,44 @@ PseudoElementStyleCache& ComputedStyle::EnsurePseudoElementStyleCache() const {
   return *cached_data_->pseudo_element_styles_;
 }
 
-const ComputedStyle* ComputedStyle::CreateInitialStyleSingleton() {
-  return MakeGarbageCollected<ComputedStyle>(PassKey());
+const ComputedStyle* ComputedStyle::GetInitialStyleSingleton() {
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(
+      ThreadSpecific<Persistent<const ComputedStyle>>,
+      thread_specific_initial_style, ());
+  Persistent<const ComputedStyle>& persistent = *thread_specific_initial_style;
+  if (UNLIKELY(!persistent)) {
+    persistent = MakeGarbageCollected<ComputedStyle>(PassKey());
+    LEAK_SANITIZER_IGNORE_OBJECT(&persistent);
+  }
+  return persistent.Get();
+}
+
+namespace {
+
+const ComputedStyle* BuildInitialStyleForImg(
+    const ComputedStyle& initial_style) {
+  // This matches the img {} declarations in html.css to avoid copy-on-write
+  // when only UA styles apply for these properties. See crbug.com/1369454
+  // for details.
+  ComputedStyleBuilder builder(initial_style);
+  builder.SetOverflowX(EOverflow::kClip);
+  builder.SetOverflowY(EOverflow::kClip);
+  builder.SetOverflowClipMargin(StyleOverflowClipMargin::CreateContent());
+  return builder.TakeStyle();
+}
+
+}  // namespace
+
+const ComputedStyle* ComputedStyle::GetInitialStyleForImgSingleton() {
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(
+      ThreadSpecific<Persistent<const ComputedStyle>>,
+      thread_specific_initial_style, ());
+  Persistent<const ComputedStyle>& persistent = *thread_specific_initial_style;
+  if (UNLIKELY(!persistent)) {
+    persistent = BuildInitialStyleForImg(*GetInitialStyleSingleton());
+    LEAK_SANITIZER_IGNORE_OBJECT(&persistent);
+  }
+  return persistent.Get();
 }
 
 Vector<AtomicString>* ComputedStyle::GetVariableNamesCache() const {
@@ -1020,7 +1058,7 @@ void ComputedStyle::AdjustDiffForNeedsPaintInvalidation(
   }
 
   if (PaintImagesInternal()) {
-    for (const auto& image : *PaintImagesInternal()) {
+    for (const auto& image : PaintImagesInternal()->Images()) {
       DCHECK(image);
       if (DiffNeedsPaintInvalidationForPaintImage(*image, other, document)) {
         diff.SetNeedsNormalPaintInvalidation();
@@ -1241,7 +1279,7 @@ bool ComputedStyle::HasCSSPaintImagesUsingCustomProperty(
     const AtomicString& custom_property_name,
     const Document& document) const {
   if (PaintImagesInternal()) {
-    for (const auto& image : *PaintImagesInternal()) {
+    for (const auto& image : PaintImagesInternal()->Images()) {
       DCHECK(image);
       // IsPaintImage is true for CSS Paint images only, please refer to the
       // constructor of StyleGeneratedImage.
@@ -1406,6 +1444,49 @@ void ComputedStyle::LoadDeferredImages(Document& document) const {
       }
     }
   }
+}
+
+ETransformBox ComputedStyle::UsedTransformBox(
+    TransformBoxContext box_context) const {
+  ETransformBox transform_box = TransformBox();
+  if (box_context == TransformBoxContext::kSvg) {
+    // For SVG elements without associated CSS layout box, the used value for
+    // content-box is fill-box and for border-box is stroke-box.
+    switch (transform_box) {
+      case ETransformBox::kContentBox:
+        transform_box = ETransformBox::kFillBox;
+        break;
+      case ETransformBox::kBorderBox:
+        transform_box = ETransformBox::kStrokeBox;
+        break;
+      case ETransformBox::kFillBox:
+      case ETransformBox::kStrokeBox:
+      case ETransformBox::kViewBox:
+        break;
+    }
+    // If transform-box is stroke-box and the element has "vector-effect:
+    // non-scaling-stroke", then the used transform-box is fill-box.
+    if (transform_box == ETransformBox::kStrokeBox &&
+        VectorEffect() == EVectorEffect::kNonScalingStroke) {
+      transform_box = ETransformBox::kFillBox;
+    }
+  } else {
+    // For elements with associated CSS layout box, the used value for fill-box
+    // is content-box and for stroke-box and view-box is border-box.
+    switch (transform_box) {
+      case ETransformBox::kContentBox:
+      case ETransformBox::kBorderBox:
+        break;
+      case ETransformBox::kFillBox:
+        transform_box = ETransformBox::kContentBox;
+        break;
+      case ETransformBox::kStrokeBox:
+      case ETransformBox::kViewBox:
+        transform_box = ETransformBox::kBorderBox;
+        break;
+    }
+  }
+  return transform_box;
 }
 
 void ComputedStyle::ApplyTransform(
@@ -1674,8 +1755,6 @@ void ComputedStyle::ApplyMotionPathTransform(float origin_x,
       case BasicShape::kBasicShapeCircleType:
       case BasicShape::kBasicShapeEllipseType:
       case BasicShape::kBasicShapeInsetType:
-      case BasicShape::kBasicShapeXYWHType:
-      case BasicShape::kBasicShapeRectType:
       case BasicShape::kBasicShapePolygonType: {
         const gfx::RectF reference_box = GetReferenceBox(box, coord_box);
         const gfx::PointF offset_from_reference_box =
@@ -2179,7 +2258,7 @@ template <typename T>
 CSSVariableData* GetVariableData(
     const T& style_or_builder,
     const AtomicString& name,
-    absl::optional<bool> inherited_hint = absl::nullopt) {
+    std::optional<bool> inherited_hint = std::nullopt) {
   if (inherited_hint.value_or(true) && style_or_builder.InheritedVariables()) {
     if (auto data = style_or_builder.InheritedVariables()->GetData(name)) {
       return *data;
@@ -2201,7 +2280,7 @@ template <typename T>
 const CSSValue* GetVariableValue(
     const T& style_or_builder,
     const AtomicString& name,
-    absl::optional<bool> inherited_hint = absl::nullopt) {
+    std::optional<bool> inherited_hint = std::nullopt) {
   if (inherited_hint.value_or(true) && style_or_builder.InheritedVariables()) {
     if (auto data = style_or_builder.InheritedVariables()->GetValue(name)) {
       return *data;
@@ -2243,6 +2322,24 @@ const CSSValue* ComputedStyle::GetVariableValue(
   return blink::GetVariableValue(*this, name, is_inherited_property);
 }
 
+bool ComputedStyle::HasCustomScrollbarStyle(const Document& document) const {
+
+  // Ignore ::-webkit-scrollbar when the web setting to prefer default scrollbar
+  // styling is true. This web setting ignores both ::-webkit-scrollbar styling
+  // and standard properties.
+  if (RuntimeEnabledFeatures::PreferDefaultScrollbarStylesEnabled()) {
+    const Settings* settings = document.GetSettings();
+    if (settings && settings->GetPrefersDefaultScrollbarStyles()) {
+      return false;
+    }
+  }
+
+  // Ignore non-standard ::-webkit-scrollbar when standard properties are in
+  // use.
+  return HasPseudoElementStyle(kPseudoIdScrollbar) &&
+         !UsesStandardScrollbarStyle();
+}
+
 Length ComputedStyle::LineHeight() const {
   const Length& lh = LineHeightInternal();
   // Unlike getFontDescription().computedSize() and hence fontSize(), this is
@@ -2259,10 +2356,12 @@ Length ComputedStyle::LineHeight() const {
 }
 
 float ComputedStyle::ComputedLineHeight(const Length& lh, const Font& font) {
-  // Negative value means the line height is not set. Use the font's built-in
-  // spacing, if available.
-  if (lh.IsNegative() && font.PrimaryFont()) {
-    return font.PrimaryFont()->GetFontMetrics().LineSpacing();
+  // For "normal" line-height use the font's built-in spacing if available.
+  if (lh.IsAuto()) {
+    if (font.PrimaryFont()) {
+      return font.PrimaryFont()->GetFontMetrics().LineSpacing();
+    }
+    return 0.0f;
   }
 
   if (lh.IsPercentOrCalc()) {
@@ -2280,10 +2379,12 @@ float ComputedStyle::ComputedLineHeight() const {
 LayoutUnit ComputedStyle::ComputedLineHeightAsFixed(const Font& font) const {
   const Length& lh = LineHeight();
 
-  // Negative value means the line height is not set. Use the font's built-in
-  // spacing, if available.
-  if (lh.IsNegative() && font.PrimaryFont()) {
-    return font.PrimaryFont()->GetFontMetrics().FixedLineSpacing();
+  // For "normal" line-height use the font's built-in spacing if available.
+  if (lh.IsAuto()) {
+    if (font.PrimaryFont()) {
+      return font.PrimaryFont()->GetFontMetrics().FixedLineSpacing();
+    }
+    return LayoutUnit();
   }
 
   if (lh.IsPercentOrCalc()) {
@@ -2381,6 +2482,42 @@ Color ComputedStyle::VisitedDependentColor(const Longhand& color_property,
   return Color::FromColorSpace(visited_color.GetColorSpace(),
                                visited_color.Param0(), visited_color.Param1(),
                                visited_color.Param2(), unvisited_color.Alpha());
+}
+
+blink::Color ComputedStyle::VisitedDependentContextFill(
+    const SVGPaint& context_paint,
+    const ComputedStyle& context_style) const {
+  return VisitedDependentContextPaint(context_paint,
+                                      context_style.InternalVisitedFillPaint());
+}
+
+blink::Color ComputedStyle::VisitedDependentContextStroke(
+    const SVGPaint& context_paint,
+    const ComputedStyle& context_style) const {
+  return VisitedDependentContextPaint(
+      context_paint, context_style.InternalVisitedStrokePaint());
+}
+
+blink::Color ComputedStyle::VisitedDependentContextPaint(
+    const SVGPaint& context_paint,
+    const SVGPaint& context_visited_paint) const {
+  blink::Color unvisited_color =
+      ShouldForceColor(context_paint.GetColor())
+          ? GetInternalForcedCurrentColor(nullptr)
+          : context_paint.GetColor().Resolve(GetCurrentColor(),
+                                             UsedColorScheme(), nullptr);
+  if (InsideLink() != EInsideLink::kInsideVisitedLink) {
+    return unvisited_color;
+  }
+
+  if (!context_visited_paint.HasColor()) {
+    return unvisited_color;
+  }
+  if (ShouldForceColor(context_visited_paint.GetColor())) {
+    return GetInternalForcedVisitedCurrentColor(nullptr);
+  }
+  return context_visited_paint.GetColor().Resolve(
+      GetInternalVisitedCurrentColor(), UsedColorScheme(), nullptr);
 }
 
 blink::Color ComputedStyle::ResolvedColor(const StyleColor& color,
@@ -2528,8 +2665,7 @@ blink::Color ComputedStyle::GetInternalForcedCurrentColor(
     return GetCurrentColor(is_current_color);
   }
   return InternalForcedColor().Resolve(blink::Color(), UsedColorScheme(),
-                                       is_current_color,
-                                       /* is_forced_color */ true);
+                                       is_current_color);
 }
 
 blink::Color ComputedStyle::GetInternalForcedVisitedCurrentColor(
@@ -2539,8 +2675,7 @@ blink::Color ComputedStyle::GetInternalForcedVisitedCurrentColor(
     return GetInternalVisitedCurrentColor(is_current_color);
   }
   return InternalForcedVisitedColor().Resolve(blink::Color(), UsedColorScheme(),
-                                              is_current_color,
-                                              /* is_forced_color */ true);
+                                              is_current_color);
 }
 
 bool ComputedStyle::ShadowListHasCurrentColor(const ShadowList* shadow_list) {
@@ -2568,32 +2703,30 @@ bool ComputedStyle::MarkerShouldBeInside(const Element& parent) const {
          (IsA<HTMLLIElement>(parent) && !IsInsideListElement());
 }
 
-absl::optional<blink::Color> ComputedStyle::AccentColorResolved() const {
+std::optional<blink::Color> ComputedStyle::AccentColorResolved() const {
   const StyleAutoColor& auto_color = AccentColor();
   if (auto_color.IsAutoColor()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   return auto_color.Resolve(GetCurrentColor(), UsedColorScheme());
 }
 
-absl::optional<blink::Color> ComputedStyle::ScrollbarThumbColorResolved()
-    const {
-  const absl::optional<StyleScrollbarColor>& scrollbar_color = ScrollbarColor();
+std::optional<blink::Color> ComputedStyle::ScrollbarThumbColorResolved() const {
+  const std::optional<StyleScrollbarColor>& scrollbar_color = ScrollbarColor();
   if (scrollbar_color.has_value()) {
     return scrollbar_color.value().GetThumbColor().Resolve(GetCurrentColor(),
                                                            UsedColorScheme());
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
-absl::optional<blink::Color> ComputedStyle::ScrollbarTrackColorResolved()
-    const {
-  const absl::optional<StyleScrollbarColor>& scrollbar_color = ScrollbarColor();
+std::optional<blink::Color> ComputedStyle::ScrollbarTrackColorResolved() const {
+  const std::optional<StyleScrollbarColor>& scrollbar_color = ScrollbarColor();
   if (scrollbar_color.has_value()) {
     return scrollbar_color.value().GetTrackColor().Resolve(GetCurrentColor(),
                                                            UsedColorScheme());
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 bool ComputedStyle::ShouldApplyAnyContainment(const Element& element,
@@ -2633,7 +2766,8 @@ bool ComputedStyle::CanMatchSizeContainerQueries(const Element& element) const {
 bool ComputedStyle::IsInterleavingRoot(const ComputedStyle* style) {
   const ComputedStyle* unensured = ComputedStyle::NullifyEnsured(style);
   return unensured && (unensured->IsContainerForSizeContainerQueries() ||
-                       unensured->PositionFallback());
+                       unensured->GetPositionTryOptions() ||
+                       unensured->HasAnchorFunctions());
 }
 
 bool ComputedStyle::CalculateIsStackingContextWithoutContainment() const {

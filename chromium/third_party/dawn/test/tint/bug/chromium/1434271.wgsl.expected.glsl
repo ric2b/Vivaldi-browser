@@ -60,6 +60,7 @@ void main() {
 #version 310 es
 #extension GL_AMD_gpu_shader_half_float : require
 precision highp float;
+precision highp int;
 
 void asinh_468a48() {
   float16_t arg_0 = 0.0hf;
@@ -279,8 +280,8 @@ struct Particle {
   float lifetime;
   vec4 color;
   vec2 velocity;
-  uint pad_3;
-  uint pad_4;
+  uint pad;
+  uint pad_1;
 };
 
 layout(binding = 0, std140) uniform sim_params_block_ubo {

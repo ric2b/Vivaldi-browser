@@ -27,7 +27,6 @@
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_get_inner_html_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_observable_array_css_style_sheet.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
@@ -57,7 +56,9 @@ struct SameSizeAsShadowRoot : public DocumentFragment,
 
 ASSERT_SIZE(ShadowRoot, SameSizeAsShadowRoot);
 
-ShadowRoot::ShadowRoot(Document& document, ShadowRootType type)
+ShadowRoot::ShadowRoot(Document& document,
+                       ShadowRootMode mode,
+                       SlotAssignmentMode assignment_mode)
     : DocumentFragment(nullptr, kCreateShadowRoot),
       TreeScope(
           *this,
@@ -67,13 +68,11 @@ ShadowRoot::ShadowRoot(Document& document, ShadowRootType type)
           static_cast<V8ObservableArrayCSSStyleSheet::DeleteAlgorithmCallback>(
               &ShadowRoot::OnAdoptedStyleSheetDelete)),
       child_shadow_root_count_(0),
-      type_(static_cast<unsigned>(type)),
+      mode_(static_cast<unsigned>(mode)),
       registered_with_parent_shadow_root_(false),
       delegates_focus_(false),
-      slot_assignment_mode_(static_cast<unsigned>(SlotAssignmentMode::kNamed)),
-      needs_dir_auto_attribute_update_(false),
-      has_focusgroup_attribute_on_descendant_(false),
-      unused_(0) {}
+      slot_assignment_mode_(static_cast<unsigned>(assignment_mode)),
+      has_focusgroup_attribute_on_descendant_(false) {}
 
 ShadowRoot::~ShadowRoot() = default;
 
@@ -108,10 +107,6 @@ Node* ShadowRoot::Clone(Document&,
   return nullptr;
 }
 
-void ShadowRoot::SetSlotAssignmentMode(SlotAssignmentMode assignment_mode) {
-  slot_assignment_mode_ = static_cast<unsigned>(assignment_mode);
-}
-
 String ShadowRoot::innerHTML() const {
   return CreateMarkup(this, kChildrenOnly);
 }
@@ -137,28 +132,13 @@ void ShadowRoot::OnAdoptedStyleSheetDelete(
                                        exception_state);
 }
 
-String ShadowRoot::getInnerHTML(const GetInnerHTMLOptions* options) const {
-  ClosedRootsSet include_closed_roots;
-  if (options->hasClosedRoots()) {
-    for (auto& shadow_root : options->closedRoots()) {
-      include_closed_roots.insert(shadow_root);
-    }
-  }
-  return CreateMarkup(
-      this, kChildrenOnly, kDoNotResolveURLs,
-      options->includeShadowRoots() ? kIncludeShadowRoots : kNoShadowRoots,
-      include_closed_roots);
-}
-
 void ShadowRoot::setInnerHTML(const String& html,
                               ExceptionState& exception_state) {
   if (DocumentFragment* fragment = CreateFragmentForInnerOuterHTML(
           html, &host(), kAllowScriptingContent,
-          Element::IncludeShadowRoots::kDontInclude,
+          Element::ParseDeclarativeShadowRoots::kDontParse,
           Element::ForceHtml::kDontForce, exception_state)) {
     ReplaceChildrenWithFragment(this, fragment, exception_state);
-    if (auto* element = DynamicTo<HTMLElement>(host()))
-      element->AdjustDirectionalityIfNeededAfterShadowRootChanged();
   }
 }
 
@@ -166,12 +146,9 @@ void ShadowRoot::setHTMLUnsafe(const String& html,
                                ExceptionState& exception_state) {
   if (DocumentFragment* fragment = CreateFragmentForInnerOuterHTML(
           html, &host(), kAllowScriptingContent,
-          Element::IncludeShadowRoots::kInclude, Element::ForceHtml::kDontForce,
-          exception_state)) {
+          Element::ParseDeclarativeShadowRoots::kParse,
+          Element::ForceHtml::kDontForce, exception_state)) {
     ReplaceChildrenWithFragment(this, fragment, exception_state);
-    if (auto* element = DynamicTo<HTMLElement>(host())) {
-      element->AdjustDirectionalityIfNeededAfterShadowRootChanged();
-    }
   }
 }
 
@@ -270,8 +247,7 @@ void ShadowRoot::ChildrenChanged(const ChildrenChange& change) {
 
   // In the case of input types like button where the child element is not
   // in a container, we need to explicit adjust directionality.
-  if (RuntimeEnabledFeatures::CSSPseudoDirEnabled() &&
-      RuntimeEnabledFeatures::DirnameMoreInputTypesEnabled()) {
+  if (RuntimeEnabledFeatures::DirnameMoreInputTypesEnabled()) {
     if (TextControlElement* text_element =
             HTMLElement::ElementIfAutoDirectionalityFormAssociatedOrNull(
                 &host())) {
@@ -298,15 +274,15 @@ void ShadowRoot::Trace(Visitor* visitor) const {
   DocumentFragment::Trace(visitor);
 }
 
-std::ostream& operator<<(std::ostream& ostream, const ShadowRootType& type) {
-  switch (type) {
-    case ShadowRootType::kUserAgent:
+std::ostream& operator<<(std::ostream& ostream, const ShadowRootMode& mode) {
+  switch (mode) {
+    case ShadowRootMode::kUserAgent:
       ostream << "UserAgent";
       break;
-    case ShadowRootType::kOpen:
+    case ShadowRootMode::kOpen:
       ostream << "Open";
       break;
-    case ShadowRootType::kClosed:
+    case ShadowRootMode::kClosed:
       ostream << "Closed";
       break;
   }

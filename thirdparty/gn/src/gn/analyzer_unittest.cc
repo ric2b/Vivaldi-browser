@@ -4,9 +4,9 @@
 
 #include "gn/analyzer.h"
 
-#include "gn/c_tool.h"
 #include "gn/build_settings.h"
 #include "gn/builder.h"
+#include "gn/c_tool.h"
 #include "gn/config.h"
 #include "gn/general_tool.h"
 #include "gn/loader.h"

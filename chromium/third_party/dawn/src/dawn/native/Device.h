@@ -28,6 +28,8 @@
 #ifndef SRC_DAWN_NATIVE_DEVICE_H_
 #define SRC_DAWN_NATIVE_DEVICE_H_
 
+#include <shared_mutex>
+
 #include <memory>
 #include <string>
 #include <utility>
@@ -50,6 +52,7 @@
 #include "dawn/native/RefCountedWithExternalCount.h"
 #include "dawn/native/Toggles.h"
 #include "dawn/native/UsageValidationMode.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 
 #include "dawn/native/DawnNative.h"
 #include "dawn/native/dawn_platform.h"
@@ -72,7 +75,6 @@ class OwnedCompilationMessages;
 struct CallbackTask;
 struct InternalPipelineStore;
 struct ShaderModuleParseResult;
-struct TrackedFutureWaitInfo;
 
 class DeviceBase : public RefCountedWithExternalCount {
   public:
@@ -204,7 +206,7 @@ class DeviceBase : public RefCountedWithExternalCount {
     // cache, then the descriptor is used to make a new object.
     ResultOrError<Ref<BindGroupLayoutBase>> GetOrCreateBindGroupLayout(
         const BindGroupLayoutDescriptor* descriptor,
-        PipelineCompatibilityToken pipelineCompatibilityToken = PipelineCompatibilityToken(0));
+        PipelineCompatibilityToken pipelineCompatibilityToken = kExplicitPCT);
 
     BindGroupLayoutBase* GetEmptyBindGroupLayout();
     PipelineLayoutBase* GetEmptyPipelineLayout();
@@ -223,7 +225,7 @@ class DeviceBase : public RefCountedWithExternalCount {
     ResultOrError<Ref<ShaderModuleBase>> GetOrCreateShaderModule(
         const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
         ShaderModuleParseResult* parseResult,
-        OwnedCompilationMessages* compilationMessages);
+        std::unique_ptr<OwnedCompilationMessages>* compilationMessages);
 
     Ref<AttachmentState> GetOrCreateAttachmentState(AttachmentState* blueprint);
     Ref<AttachmentState> GetOrCreateAttachmentState(
@@ -251,7 +253,8 @@ class DeviceBase : public RefCountedWithExternalCount {
     ResultOrError<Ref<ComputePipelineBase>> CreateUninitializedComputePipeline(
         const ComputePipelineDescriptor* descriptor);
     ResultOrError<Ref<PipelineLayoutBase>> CreatePipelineLayout(
-        const PipelineLayoutDescriptor* rawDescriptor);
+        const PipelineLayoutDescriptor* rawDescriptor,
+        PipelineCompatibilityToken pipelineCompatibilityToken = kExplicitPCT);
     ResultOrError<Ref<QuerySetBase>> CreateQuerySet(const QuerySetDescriptor* descriptor);
     ResultOrError<Ref<RenderBundleEncoder>> CreateRenderBundleEncoder(
         const RenderBundleEncoderDescriptor* descriptor);
@@ -262,7 +265,7 @@ class DeviceBase : public RefCountedWithExternalCount {
     ResultOrError<Ref<SamplerBase>> CreateSampler(const SamplerDescriptor* descriptor = nullptr);
     ResultOrError<Ref<ShaderModuleBase>> CreateShaderModule(
         const ShaderModuleDescriptor* descriptor,
-        OwnedCompilationMessages* compilationMessages = nullptr);
+        std::unique_ptr<OwnedCompilationMessages>* compilationMessages = nullptr);
     ResultOrError<Ref<SwapChainBase>> CreateSwapChain(Surface* surface,
                                                       const SwapChainDescriptor* descriptor);
     ResultOrError<Ref<TextureBase>> CreateTexture(const TextureDescriptor* rawDescriptor);
@@ -282,13 +285,20 @@ class DeviceBase : public RefCountedWithExternalCount {
     void APICreateComputePipelineAsync(const ComputePipelineDescriptor* descriptor,
                                        WGPUCreateComputePipelineAsyncCallback callback,
                                        void* userdata);
+    Future APICreateComputePipelineAsyncF(
+        const ComputePipelineDescriptor* descriptor,
+        const CreateComputePipelineAsyncCallbackInfo& callbackInfo);
     void APICreateRenderPipelineAsync(const RenderPipelineDescriptor* descriptor,
                                       WGPUCreateRenderPipelineAsyncCallback callback,
                                       void* userdata);
+    Future APICreateRenderPipelineAsyncF(const RenderPipelineDescriptor* descriptor,
+                                         const CreateRenderPipelineAsyncCallbackInfo& callbackInfo);
     RenderBundleEncoder* APICreateRenderBundleEncoder(
         const RenderBundleEncoderDescriptor* descriptor);
     RenderPipelineBase* APICreateRenderPipeline(const RenderPipelineDescriptor* descriptor);
     ExternalTextureBase* APICreateExternalTexture(const ExternalTextureDescriptor* descriptor);
+    SharedBufferMemoryBase* APIImportSharedBufferMemory(
+        const SharedBufferMemoryDescriptor* descriptor);
     SharedTextureMemoryBase* APIImportSharedTextureMemory(
         const SharedTextureMemoryDescriptor* descriptor);
     SharedFenceBase* APIImportSharedFence(const SharedFenceDescriptor* descriptor);
@@ -323,10 +333,11 @@ class DeviceBase : public RefCountedWithExternalCount {
     void APISetLoggingCallback(wgpu::LoggingCallback callback, void* userdata);
     void APIPushErrorScope(wgpu::ErrorFilter filter);
     void APIPopErrorScope(wgpu::ErrorCallback callback, void* userdata);
+    Future APIPopErrorScopeF(const PopErrorScopeCallbackInfo& callbackInfo);
 
     MaybeError ValidateIsAlive() const;
 
-    BlobCache* GetBlobCache();
+    BlobCache* GetBlobCache() const;
     Blob LoadCachedBlob(const CacheKey& key);
     void StoreCachedBlob(const CacheKey& key, const Blob& blob);
 
@@ -369,9 +380,11 @@ class DeviceBase : public RefCountedWithExternalCount {
     std::vector<const char*> GetTogglesUsed() const;
     const tint::wgsl::AllowedFeatures& GetWGSLAllowedFeatures() const;
     bool IsToggleEnabled(Toggle toggle) const;
+    const TogglesState& GetTogglesState() const;
     bool IsValidationEnabled() const;
     bool IsRobustnessEnabled() const;
     bool IsCompatibilityMode() const;
+    bool IsImmediateErrorHandlingEnabled() const;
 
     size_t GetLazyClearCountForTesting();
     void IncrementLazyClearCountForTesting();
@@ -380,6 +393,7 @@ class DeviceBase : public RefCountedWithExternalCount {
     void EmitWarningOnce(const std::string& message);
     void EmitLog(const char* message);
     void EmitLog(WGPULoggingType loggingType, const char* message);
+    void EmitCompilationLog(const ShaderModuleBase* module);
     void APIForceLoss(wgpu::DeviceLostReason reason, const char* message);
     QueueBase* GetQueue() const;
 
@@ -402,6 +416,12 @@ class DeviceBase : public RefCountedWithExternalCount {
 
     virtual bool ShouldDuplicateParametersForDrawIndirect(
         const RenderPipelineBase* renderPipelineBase) const;
+
+    // For OpenGL/OpenGL ES, we must apply the index buffer offset from SetIndexBuffer to the
+    // firstIndex parameter in indirect buffers. This happens in the validation since it
+    // copies the indirect buffers and updates them while validating.
+    // See https://crbug.com/dawn/161
+    virtual bool ShouldApplyIndexBufferOffsetToFirstIndex() const;
 
     // Whether the backend supports blitting the resolve texture with draw calls in the same render
     // pass that it will be resolved into.
@@ -505,6 +525,8 @@ class DeviceBase : public RefCountedWithExternalCount {
         const UnpackedPtr<RenderPipelineDescriptor>& descriptor) = 0;
     virtual ResultOrError<Ref<SharedTextureMemoryBase>> ImportSharedTextureMemoryImpl(
         const SharedTextureMemoryDescriptor* descriptor);
+    virtual ResultOrError<Ref<SharedBufferMemoryBase>> ImportSharedBufferMemoryImpl(
+        const SharedBufferMemoryDescriptor* descriptor);
     virtual ResultOrError<Ref<SharedFenceBase>> ImportSharedFenceImpl(
         const SharedFenceDescriptor* descriptor);
     virtual void SetLabelImpl();
@@ -558,13 +580,17 @@ class DeviceBase : public RefCountedWithExternalCount {
                                                     const Extent3D& copySizePixels) = 0;
 
     wgpu::ErrorCallback mUncapturedErrorCallback = nullptr;
-    void* mUncapturedErrorUserdata = nullptr;
+    // TODO(https://crbug.com/dawn/2349): Investigate DanglingUntriaged in dawn/native.
+    raw_ptr<void, DanglingUntriaged> mUncapturedErrorUserdata = nullptr;
 
+    std::shared_mutex mLoggingMutex;
     wgpu::LoggingCallback mLoggingCallback = nullptr;
-    void* mLoggingUserdata = nullptr;
+    // TODO(https://crbug.com/dawn/2349): Investigate DanglingUntriaged in dawn/native.
+    raw_ptr<void, DanglingUntriaged> mLoggingUserdata = nullptr;
 
     wgpu::DeviceLostCallback mDeviceLostCallback = nullptr;
-    void* mDeviceLostUserdata = nullptr;
+    // TODO(https://crbug.com/dawn/2349): Investigate DanglingUntriaged in dawn/native.
+    raw_ptr<void, DanglingUntriaged> mDeviceLostUserdata = nullptr;
 
     std::unique_ptr<ErrorScopeStack> mErrorScopeStack;
 
@@ -586,6 +612,7 @@ class DeviceBase : public RefCountedWithExternalCount {
 
     struct DeprecationWarnings;
     std::unique_ptr<DeprecationWarnings> mDeprecationWarnings;
+    std::atomic<uint32_t> mEmittedCompilationLogCount = 0;
 
     absl::flat_hash_set<std::string> mWarnings;
 
@@ -609,7 +636,12 @@ class DeviceBase : public RefCountedWithExternalCount {
     Ref<CallbackTaskManager> mCallbackTaskManager;
     std::unique_ptr<dawn::platform::WorkerTaskPool> mWorkerTaskPool;
     std::string mLabel;
+
     CacheKey mDeviceCacheKey;
+    std::unique_ptr<BlobCache> mBlobCache;
+
+    // We cache this toggle so that we can check it without locking the device.
+    bool mIsImmediateErrorHandlingEnabled = false;
 
     // This pointer is non-null if Feature::ImplicitDeviceSynchronization is turned on.
     Ref<Mutex> mMutex = nullptr;
@@ -634,7 +666,7 @@ class IgnoreLazyClearCountScope : public NonMovable {
     // Disable heap allocation
     void* operator new(size_t) = delete;
 
-    DeviceBase* mDevice;
+    raw_ptr<DeviceBase> mDevice;
     size_t mLazyClearCountForTesting;
 };
 

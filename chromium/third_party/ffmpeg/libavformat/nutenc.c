@@ -1063,21 +1063,21 @@ static int nut_write_packet(AVFormatContext *s, AVPacket *pkt)
         ffio_free_dyn_buf(&dyn_bc);
 
         if (nut->write_index) {
-        if ((ret = ff_nut_add_sp(nut, nut->last_syncpoint_pos, 0 /*unused*/, pkt->dts)) < 0)
-            goto fail;
+            if ((ret = ff_nut_add_sp(nut, nut->last_syncpoint_pos, 0 /*unused*/, pkt->dts)) < 0)
+                goto fail;
 
-        if ((1ll<<60) % nut->sp_count == 0)
-            for (i=0; i<s->nb_streams; i++) {
-                int j;
-                StreamContext *nus = &nut->stream[i];
-                av_reallocp_array(&nus->keyframe_pts, 2*nut->sp_count, sizeof(*nus->keyframe_pts));
-                if (!nus->keyframe_pts) {
-                    ret = AVERROR(ENOMEM);
-                    goto fail;
-                }
-                for (j=nut->sp_count == 1 ? 0 : nut->sp_count; j<2*nut->sp_count; j++)
-                    nus->keyframe_pts[j] = AV_NOPTS_VALUE;
-        }
+            if ((1ll<<60) % nut->sp_count == 0)
+                for (unsigned i = 0; i < s->nb_streams; i++) {
+                    StreamContext *nus = &nut->stream[i];
+                    av_reallocp_array(&nus->keyframe_pts, 2*nut->sp_count, sizeof(*nus->keyframe_pts));
+                    if (!nus->keyframe_pts) {
+                        ret = AVERROR(ENOMEM);
+                        goto fail;
+                    }
+                    for (int j = nut->sp_count == 1 ? 0 : nut->sp_count;
+                         j < 2 * nut->sp_count; j++)
+                        nus->keyframe_pts[j] = AV_NOPTS_VALUE;
+            }
         }
     }
     av_assert0(nus->last_pts != AV_NOPTS_VALUE);
@@ -1238,10 +1238,10 @@ static void nut_write_deinit(AVFormatContext *s)
 #define OFFSET(x) offsetof(NUTContext, x)
 #define E AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption options[] = {
-    { "syncpoints",  "NUT syncpoint behaviour",                         OFFSET(flags), AV_OPT_TYPE_FLAGS, {.i64 = 0},             INT_MIN, INT_MAX, E, "syncpoints" },
-    { "default",     "",                                                0,             AV_OPT_TYPE_CONST, {.i64 = 0},             INT_MIN, INT_MAX, E, "syncpoints" },
-    { "none",        "Disable syncpoints, low overhead and unseekable", 0,             AV_OPT_TYPE_CONST, {.i64 = NUT_PIPE},      INT_MIN, INT_MAX, E, "syncpoints" },
-    { "timestamped", "Extend syncpoints with a wallclock timestamp",    0,             AV_OPT_TYPE_CONST, {.i64 = NUT_BROADCAST}, INT_MIN, INT_MAX, E, "syncpoints" },
+    { "syncpoints",  "NUT syncpoint behaviour",                         OFFSET(flags), AV_OPT_TYPE_FLAGS, {.i64 = 0},             INT_MIN, INT_MAX, E, .unit = "syncpoints" },
+    { "default",     "",                                                0,             AV_OPT_TYPE_CONST, {.i64 = 0},             INT_MIN, INT_MAX, E, .unit = "syncpoints" },
+    { "none",        "Disable syncpoints, low overhead and unseekable", 0,             AV_OPT_TYPE_CONST, {.i64 = NUT_PIPE},      INT_MIN, INT_MAX, E, .unit = "syncpoints" },
+    { "timestamped", "Extend syncpoints with a wallclock timestamp",    0,             AV_OPT_TYPE_CONST, {.i64 = NUT_BROADCAST}, INT_MIN, INT_MAX, E, .unit = "syncpoints" },
     { "write_index", "Write index",                               OFFSET(write_index), AV_OPT_TYPE_BOOL,  {.i64 = 1},                   0,       1, E, },
     { NULL },
 };

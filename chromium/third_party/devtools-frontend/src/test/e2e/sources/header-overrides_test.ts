@@ -87,7 +87,7 @@ async function editHeaderItem(newValue: string, previousValue: string): Promise<
   await pressKey('Tab');
 }
 
-describe('The Overrides Panel', async function() {
+describe('The Overrides Panel', function() {
   this.timeout(10000);
 
   afterEach(async () => {
@@ -97,8 +97,7 @@ describe('The Overrides Panel', async function() {
     await waitFor(ENABLE_OVERRIDES_SELECTOR);
   });
 
-  // Skip until flake is fixed
-  it.skip('[crbug.com/1432925]: can create header overrides', async () => {
+  it('can create header overrides', async () => {
     await goToResource('empty.html');
     await openSourcesPanel();
     await enableLocalOverrides();

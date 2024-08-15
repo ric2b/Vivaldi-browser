@@ -3,9 +3,30 @@
 # found in the LICENSE file.
 
 import("//build_overrides/build.gni")
+import("./build_overrides/data_headers_template.gni")
+import("./gni/openscreen.gni")
+
+# Used to ensure that relative includes still work while built with an embedder.
+config("include_dirs") {
+  root = rebase_path("./", "//")
+  include_dirs = [
+    "//$root",
+    "$root_gen_dir/$root",
+  ]
+}
+
+# Put defines here that are only used in our internal files and NEVER in
+# external headers that embedders (such as chromium and node) might include.
+config("features") {
+  # Only targets in this file and its subdirs can depend on this.
+  visibility = [ "./*" ]
+
+  root = rebase_path("./", "//")
+  defines = [ "OPENSCREEN_TEST_DATA_DIR=\"$root/test/data/\"" ]
+}
 
 # All compilable non-test targets in the repository (both executables and
-# source_sets).
+# source_sets)
 group("gn_all") {
   testonly = true
   deps = [
@@ -26,15 +47,16 @@ group("gn_all") {
     "third_party/jsoncpp",
     "third_party/quiche",
     "third_party/tinycbor",
-    "tools/cddl($host_toolchain)",
     "util",
   ]
 
-  # Mac OS X 10.15 is incompatible with the current version of QUIC.
-  if (!is_mac) {
+  # TODO(issuetracker.google.com/169447969): Re-enable OSP builds for Mac.
+  # TODO(issuetracker.google.com/236160471): CDDL does not compile on Windows.
+  if (!is_mac && !is_win) {
     deps += [
       "osp",
       "osp/msgs",
+      "tools/cddl($host_toolchain)",
     ]
   }
 
@@ -48,7 +70,7 @@ group("gn_all") {
   }
 }
 
-source_set("openscreen_unittests_all") {
+openscreen_source_set("openscreen_unittests_all") {
   testonly = true
   public_deps = [
     "cast/common:unittests",
@@ -70,14 +92,18 @@ source_set("openscreen_unittests_all") {
     ]
   }
 
-  public_deps += [
-    "osp:unittests",
-    "osp/msgs:unittests",
-  ]
+  # TODO(issuetracker.google.com/169447969): Re-enable OSP builds for Mac.
+  # TODO(issuetracker.google.com/236160471): CDDL does not compile on Windows.
+  if (!is_mac && !is_win) {
+    public_deps += [
+      "osp:unittests",
+      "osp/msgs:unittests",
+    ]
+  }
 }
 
 if (!build_with_chromium) {
-  executable("openscreen_unittests") {
+  openscreen_executable("openscreen_unittests") {
     testonly = true
     deps = [
       ":openscreen_unittests_all",
@@ -88,16 +114,19 @@ if (!build_with_chromium) {
 }
 
 if (!build_with_chromium && is_posix) {
-  source_set("e2e_tests_all") {
+  openscreen_source_set("e2e_tests_all") {
     testonly = true
     public_deps = [
-      "cast/common:discovery_e2e_test",
       "cast/test:e2e_tests",
       "cast/test:make_crl_tests($host_toolchain)",
     ]
+
+    if (is_linux) {
+      public_deps += [ "cast/common:discovery_e2e_test" ]
+    }
   }
 
-  executable("e2e_tests") {
+  openscreen_executable("e2e_tests") {
     testonly = true
     deps = [
       ":e2e_tests_all",
@@ -107,7 +136,7 @@ if (!build_with_chromium && is_posix) {
 }
 
 if (!build_with_chromium) {
-  source_set("fuzzer_tests_all") {
+  openscreen_source_set("fuzzer_tests_all") {
     testonly = true
     deps = [
       "//cast/common:message_framer_fuzzer",

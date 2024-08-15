@@ -50,6 +50,9 @@ import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 import org.vivaldi.browser.suggestions.SearchEngineSuggestionView.LayoutMargins;
 
+import android.view.Display;
+import android.view.WindowManager;
+import static org.chromium.chrome.browser.omnibox.OmniboxSuggestionsDropdownEmbedderImpl.calculateControlsHeight;
 
 /** A widget for showing a list of omnibox suggestions. */
 public class OmniboxSuggestionsDropdown extends RecyclerView {
@@ -259,8 +262,9 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
         final Resources resources = context.getResources();
         int paddingBottom =
                 resources.getDimensionPixelOffset(R.dimen.omnibox_suggestion_list_padding_bottom);
-        int paddingTop =
-                resources.getDimensionPixelOffset(R.dimen.omnibox_suggestion_list_padding_top);
+        int paddingTop = shouldAnchorToBottom()
+                ? resources.getDimensionPixelOffset(R.dimen.omnibox_suggestion_list_padding_top)
+                : resources.getDimensionPixelOffset(R.dimen.search_accelerator_height_padding);
         ViewCompat.setPaddingRelative(this, 0, paddingTop, 0, paddingBottom);
 
         mStandardBgColor =
@@ -444,13 +448,15 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
             // the search engine suggestion layout
             if (mEmbedder != null) {
                 // Inform the embedder about the controls height.
+                View controlView = ((OmniboxSuggestionsDropdownEmbedderImpl) mEmbedder).mAnchorView;
                 ((OmniboxSuggestionsDropdownEmbedderImpl) mEmbedder)
-                        .setControlsHeight(getBottomControlsHeight()
-                                + getSearchEngineSuggestionLayoutHeight());
+                        .setControlsHeight(calculateControlsHeight(getContext(),controlView,
+                                OmniboxSuggestionsDropdownEmbedderImpl.CalculationType.COMBINED));
                 if (mSearchEngineSuggestionCallback != null) {
                     layoutMargins.leftMargin = mEmbedder.getCurrentAlignment().left;
                     layoutMargins.topMargin = mEmbedder.getCurrentAlignment().top;
-                    layoutMargins.bottomMargin = getBottomControlsHeight();
+                    layoutMargins.bottomMargin = calculateControlsHeight(getContext(),controlView,
+                            OmniboxSuggestionsDropdownEmbedderImpl.CalculationType.BOTTOM_CONTROLS);
                     mSearchEngineSuggestionCallback.onResult(layoutMargins);
                 }
             }
@@ -462,17 +468,28 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
         // under the anchor view.
         ViewGroup.LayoutParams layoutParams = getLayoutParams();
         if (layoutParams != null && layoutParams instanceof ViewGroup.MarginLayoutParams) {
+            View controlView = mEmbedder != null ?
+                    ((OmniboxSuggestionsDropdownEmbedderImpl) mEmbedder).mAnchorView : null;
             // Note(david@vivaldi.com): We consider the bottomMargin when we can anchor to the
             // bottom.
             if (shouldAnchorToBottom()) {
-                int margin = getBottomControlsHeight() + getSearchEngineSuggestionLayoutHeight();
+                int margin = calculateControlsHeight(getContext(),controlView,
+                        OmniboxSuggestionsDropdownEmbedderImpl.CalculationType.COMBINED);
                 ((ViewGroup.MarginLayoutParams) layoutParams).bottomMargin = margin;
-                if (mAdapter != null && mAdapter.getItemCount() > 1) // ref. VAB-8487
-                  margin = 0;
-                ((ViewGroup.MarginLayoutParams) layoutParams).topMargin = margin;
+                if (!mEmbedder.isTablet()) {
+                    Display display =
+                            ((WindowManager) getContext().getSystemService(Context.WINDOW_SERVICE))
+                                    .getDefaultDisplay();
+                    if (display != null) this.setMinimumHeight(display.getHeight());
+                } else {
+                    if (mAdapter != null && mAdapter.getItemCount() > 1) // ref. VAB-8487
+                        margin = 0;
+                    ((ViewGroup.MarginLayoutParams) layoutParams).topMargin = margin;
+                }
             } else
             ((ViewGroup.MarginLayoutParams) layoutParams).topMargin = topMargin
-                + getSearchEngineSuggestionLayoutHeight();
+                    + calculateControlsHeight(getContext(),controlView,
+                    OmniboxSuggestionsDropdownEmbedderImpl.CalculationType.SEARCH_ENGINE_SUGGESTION);
         }
     }
 
@@ -676,15 +693,6 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
         mSearchEngineSuggestionCallback = callback;
     }
 
-    /** Vivaldi: Returns the height of Search Engine suggestion layout if the option is
-     * enabled or 0 otherwise */
-    private int getSearchEngineSuggestionLayoutHeight() {
-        if (showSearchEngineSuggestionBar())
-            return (int) getResources().getDimension(R.dimen.search_engine_suggestion_view_height);
-        // Note(nagamani@vivaldi.com): Search Engine suggestion layout shouldn't occupy any space if
-        // the option is not enabled
-        return 0;
-    }
 
     /** Vivaldi: Returns the total occupied height on the screen (Like Address bar, Bottom toolbar,
      * Search engine suggestion bar) */
@@ -712,27 +720,6 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
                 "reverse_search_suggestion", false) && shouldAnchorToBottom();
     }
 
-    /** Vivaldi: Returns the bottom controls height including address bar, tab strip(if enabled) */
-    public int getBottomControlsHeight() {
-        if (!isAddressBarAtBottom()) return 0;
-        if (mEmbedder == null) return 0;
-        // To adjust the gap between url field and search engine suggestion layout
-        int bottomPadding = 10;
-        int bottomControlsHeight =
-                ((OmniboxSuggestionsDropdownEmbedderImpl) mEmbedder).mAnchorView.getHeight()
-                        - bottomPadding;
-        boolean isTabStripOn = ChromeSharedPreferences.getInstance().readBoolean(
-                "show_tab_strip", true);
-        boolean isTabStackToolbarOn = ChromeSharedPreferences.getInstance().readBoolean(
-                "tab_stack_toolbar_visible", false);
-        boolean isTabStackActive = ChromeSharedPreferences.getInstance().readBoolean(
-                "tab_stack_visible", false);
-        if (isTabStripOn)
-            bottomControlsHeight += (int) getResources().getDimension(R.dimen.tab_strip_height);
-        if (isTabStackActive || isTabStackToolbarOn)
-            bottomControlsHeight += (int) getResources().getDimension(R.dimen.tab_strip_height);
-        return bottomControlsHeight;
-    }
 
     /** Vivaldi: Helps acquiring instance of LocationBarLayout to check if the search is from widget */
     public void setLocationBarModel(ViewGroup locationBarLayout) {

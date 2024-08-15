@@ -40,12 +40,8 @@ if (build_with_chromium) {
     }
   }
 
-  # NOTE: StrFormat is specifically excluded from the Abseil source set due
-  # to binary size concerns.
-  source_set("abseil") {
+  source_set("internal") {
     sources = [
-      "src/absl/base/attributes.h",
-      "src/absl/base/config.h",
       "src/absl/base/internal/atomic_hook.h",
       "src/absl/base/internal/identity.h",
       "src/absl/base/internal/inline_variable.h",
@@ -54,14 +50,7 @@ if (build_with_chromium) {
       "src/absl/base/internal/raw_logging.h",
       "src/absl/base/internal/throw_delegate.cc",
       "src/absl/base/internal/throw_delegate.h",
-      "src/absl/base/log_severity.h",
-      "src/absl/base/macros.h",
-      "src/absl/base/optimization.h",
-      "src/absl/base/policy_checks.h",
-      "src/absl/base/port.h",
       "src/absl/container/internal/common.h",
-      "src/absl/hash/hash.h",
-      "src/absl/hash/hash_testing.h",
       "src/absl/hash/internal/city.cc",
       "src/absl/hash/internal/city.h",
       "src/absl/hash/internal/hash.cc",
@@ -69,19 +58,6 @@ if (build_with_chromium) {
       "src/absl/hash/internal/low_level_hash.cc",
       "src/absl/hash/internal/low_level_hash.h",
       "src/absl/hash/internal/spy_hash_state.h",
-      "src/absl/memory/memory.h",
-      "src/absl/meta/type_traits.h",
-      "src/absl/numeric/int128.cc",
-      "src/absl/numeric/int128.h",
-
-      # ascii and match are not used by Open Screen code, but are required by
-      # other abseil files.
-      "src/absl/strings/ascii.cc",
-      "src/absl/strings/ascii.h",
-      "src/absl/strings/charconv.cc",
-      "src/absl/strings/charconv.h",
-      "src/absl/strings/escaping.cc",
-      "src/absl/strings/escaping.h",
       "src/absl/strings/internal/charconv_bigint.cc",
       "src/absl/strings/internal/charconv_bigint.h",
       "src/absl/strings/internal/charconv_parse.cc",
@@ -93,6 +69,32 @@ if (build_with_chromium) {
       "src/absl/strings/internal/str_join_internal.h",
       "src/absl/strings/internal/utf8.cc",
       "src/absl/strings/internal/utf8.h",
+    ]
+    configs += [ ":private_abseil_config" ]
+    public_configs = [ ":abseil_config" ]
+  }
+
+  # NOTE: StrFormat is specifically excluded from the Abseil source set due
+  # to binary size concerns.
+  source_set("abseil") {
+    sources = [
+      "src/absl/base/log_severity.h",
+      "src/absl/base/macros.h",
+      "src/absl/base/optimization.h",
+      "src/absl/base/policy_checks.h",
+      "src/absl/base/port.h",
+      "src/absl/hash/hash.h",
+      "src/absl/hash/hash_testing.h",
+      "src/absl/memory/memory.h",
+      "src/absl/meta/type_traits.h",
+      "src/absl/numeric/int128.cc",
+      "src/absl/numeric/int128.h",
+      "src/absl/strings/ascii.cc",
+      "src/absl/strings/ascii.h",
+      "src/absl/strings/charconv.cc",
+      "src/absl/strings/charconv.h",
+      "src/absl/strings/escaping.cc",
+      "src/absl/strings/escaping.h",
       "src/absl/strings/match.cc",
       "src/absl/strings/match.h",
       "src/absl/strings/numbers.cc",
@@ -115,6 +117,7 @@ if (build_with_chromium) {
 
     configs += [ ":private_abseil_config" ]
     public_configs = [ ":abseil_config" ]
+    public_deps = [ ":internal" ]
   }
 
   config("private_abseil_quiche_config") {
@@ -126,9 +129,7 @@ if (build_with_chromium) {
     cflags_cc = [ "-Wno-exit-time-destructors" ]
   }
 
-  source_set("abseil_quiche") {
-    visibility = [ "//third_party/quiche" ]
-
+  source_set("abseil_quiche_internal") {
     sources = [
       "src/absl/base/internal/cycleclock.cc",
       "src/absl/base/internal/cycleclock.h",
@@ -148,8 +149,6 @@ if (build_with_chromium) {
       "src/absl/base/internal/unscaledcycleclock.h",
       "src/absl/container/internal/raw_hash_set.cc",
       "src/absl/container/internal/raw_hash_set.h",
-      "src/absl/crc/crc32c.cc",
-      "src/absl/crc/crc32c.h",
       "src/absl/crc/internal/crc.cc",
       "src/absl/crc/internal/crc.h",
       "src/absl/crc/internal/crc_cord_state.cc",
@@ -157,7 +156,6 @@ if (build_with_chromium) {
       "src/absl/crc/internal/crc_internal.h",
       "src/absl/crc/internal/crc_memcpy.h",
       "src/absl/crc/internal/crc_memcpy_fallback.cc",
-      "src/absl/crc/internal/crc_memcpy_x86_64.cc",
       "src/absl/crc/internal/crc_x86_arm_combined.cc",
       "src/absl/debugging/internal/address_is_readable.cc",
       "src/absl/debugging/internal/address_is_readable.h",
@@ -169,12 +167,6 @@ if (build_with_chromium) {
       "src/absl/debugging/internal/examine_stack.h",
       "src/absl/debugging/internal/vdso_support.cc",
       "src/absl/debugging/internal/vdso_support.h",
-      "src/absl/debugging/stacktrace.cc",
-      "src/absl/debugging/stacktrace.h",
-      "src/absl/debugging/symbolize.cc",
-      "src/absl/debugging/symbolize.h",
-      "src/absl/flags/commandlineflag.cc",
-      "src/absl/flags/commandlineflag.h",
       "src/absl/flags/internal/commandlineflag.cc",
       "src/absl/flags/internal/commandlineflag.h",
       "src/absl/flags/internal/flag.cc",
@@ -186,21 +178,6 @@ if (build_with_chromium) {
       "src/absl/flags/internal/registry.h",
       "src/absl/flags/internal/usage.cc",
       "src/absl/flags/internal/usage.h",
-      "src/absl/flags/marshalling.cc",
-      "src/absl/flags/marshalling.h",
-      "src/absl/flags/parse.cc",
-      "src/absl/flags/parse.h",
-      "src/absl/flags/reflection.cc",
-      "src/absl/flags/reflection.h",
-      "src/absl/flags/usage.cc",
-      "src/absl/flags/usage.h",
-      "src/absl/flags/usage_config.cc",
-      "src/absl/flags/usage_config.h",
-      "src/absl/log/absl_log.h",
-      "src/absl/log/globals.cc",
-      "src/absl/log/globals.h",
-      "src/absl/log/initialize.cc",
-      "src/absl/log/initialize.h",
       "src/absl/log/internal/check_op.cc",
       "src/absl/log/internal/check_op.h",
       "src/absl/log/internal/conditions.cc",
@@ -218,18 +195,10 @@ if (build_with_chromium) {
       "src/absl/log/internal/nullguard.h",
       "src/absl/log/internal/proto.cc",
       "src/absl/log/internal/proto.h",
-      "src/absl/log/log_sink.cc",
-      "src/absl/log/log_sink.h",
       "src/absl/profiling/internal/exponential_biased.cc",
       "src/absl/profiling/internal/exponential_biased.h",
-      "src/absl/status/status.cc",
-      "src/absl/status/status.h",
-      "src/absl/status/status_payload_printer.cc",
-      "src/absl/status/status_payload_printer.h",
-      "src/absl/status/statusor.cc",
-      "src/absl/status/statusor.h",
-      "src/absl/strings/cord.cc",
-      "src/absl/strings/cord.h",
+      "src/absl/status/internal/status_internal.cc",
+      "src/absl/status/internal/status_internal.h",
       "src/absl/strings/internal/cord_internal.cc",
       "src/absl/strings/internal/cord_internal.h",
       "src/absl/strings/internal/cord_rep_btree.cc",
@@ -242,7 +211,6 @@ if (build_with_chromium) {
       "src/absl/strings/internal/cord_rep_consume.h",
       "src/absl/strings/internal/cord_rep_crc.cc",
       "src/absl/strings/internal/cord_rep_crc.h",
-      "src/absl/strings/internal/cord_rep_ring.cc",
       "src/absl/strings/internal/cord_rep_ring.h",
       "src/absl/strings/internal/cordz_functions.cc",
       "src/absl/strings/internal/cordz_functions.h",
@@ -264,21 +232,23 @@ if (build_with_chromium) {
       "src/absl/strings/internal/str_format/output.h",
       "src/absl/strings/internal/str_format/parser.cc",
       "src/absl/strings/internal/str_format/parser.h",
-      "src/absl/strings/string_view.cc",
-      "src/absl/strings/string_view.h",
+      "src/absl/strings/internal/stringify_sink.cc",
+      "src/absl/strings/internal/stringify_sink.h",
       "src/absl/synchronization/internal/create_thread_identity.cc",
       "src/absl/synchronization/internal/create_thread_identity.h",
+      "src/absl/synchronization/internal/futex_waiter.cc",
+      "src/absl/synchronization/internal/futex_waiter.h",
       "src/absl/synchronization/internal/graphcycles.cc",
       "src/absl/synchronization/internal/graphcycles.h",
+      "src/absl/synchronization/internal/kernel_timeout.cc",
+      "src/absl/synchronization/internal/kernel_timeout.h",
       "src/absl/synchronization/internal/per_thread_sem.cc",
       "src/absl/synchronization/internal/per_thread_sem.h",
-      "src/absl/synchronization/internal/waiter.cc",
+      "src/absl/synchronization/internal/pthread_waiter.cc",
+      "src/absl/synchronization/internal/pthread_waiter.h",
       "src/absl/synchronization/internal/waiter.h",
-      "src/absl/synchronization/mutex.cc",
-      "src/absl/synchronization/mutex.h",
-      "src/absl/time/clock.cc",
-      "src/absl/time/clock.h",
-      "src/absl/time/duration.cc",
+      "src/absl/synchronization/internal/waiter_base.cc",
+      "src/absl/synchronization/internal/waiter_base.h",
       "src/absl/time/internal/cctz/include/cctz/civil_time.h",
       "src/absl/time/internal/cctz/include/cctz/civil_time_detail.h",
       "src/absl/time/internal/cctz/include/cctz/time_zone.h",
@@ -298,6 +268,57 @@ if (build_with_chromium) {
       "src/absl/time/internal/cctz/src/time_zone_posix.cc",
       "src/absl/time/internal/cctz/src/time_zone_posix.h",
       "src/absl/time/internal/cctz/src/zone_info_source.cc",
+    ]
+
+    deps = [ ":abseil" ]
+    public_configs = [ ":abseil_config" ]
+    configs += [ ":private_abseil_quiche_config" ]
+  }
+
+  source_set("abseil_quiche") {
+    visibility = [ "//third_party/quiche" ]
+
+    sources = [
+      "src/absl/crc/crc32c.cc",
+      "src/absl/crc/crc32c.h",
+      "src/absl/debugging/stacktrace.cc",
+      "src/absl/debugging/stacktrace.h",
+      "src/absl/debugging/symbolize.cc",
+      "src/absl/debugging/symbolize.h",
+      "src/absl/flags/commandlineflag.cc",
+      "src/absl/flags/commandlineflag.h",
+      "src/absl/flags/marshalling.cc",
+      "src/absl/flags/marshalling.h",
+      "src/absl/flags/parse.cc",
+      "src/absl/flags/parse.h",
+      "src/absl/flags/reflection.cc",
+      "src/absl/flags/reflection.h",
+      "src/absl/flags/usage.cc",
+      "src/absl/flags/usage.h",
+      "src/absl/flags/usage_config.cc",
+      "src/absl/flags/usage_config.h",
+      "src/absl/log/absl_log.h",
+      "src/absl/log/globals.cc",
+      "src/absl/log/globals.h",
+      "src/absl/log/initialize.cc",
+      "src/absl/log/initialize.h",
+      "src/absl/log/log_sink.cc",
+      "src/absl/log/log_sink.h",
+      "src/absl/status/status.cc",
+      "src/absl/status/status.h",
+      "src/absl/status/status_payload_printer.cc",
+      "src/absl/status/status_payload_printer.h",
+      "src/absl/status/statusor.cc",
+      "src/absl/status/statusor.h",
+      "src/absl/strings/cord.cc",
+      "src/absl/strings/cord.h",
+      "src/absl/strings/string_view.cc",
+      "src/absl/strings/string_view.h",
+      "src/absl/synchronization/mutex.cc",
+      "src/absl/synchronization/mutex.h",
+      "src/absl/time/clock.cc",
+      "src/absl/time/clock.h",
+      "src/absl/time/duration.cc",
       "src/absl/time/time.cc",
       "src/absl/time/time.h",
       "src/absl/types/optional.h",
@@ -307,7 +328,10 @@ if (build_with_chromium) {
       frameworks = [ "CoreFoundation.framework" ]
     }
 
-    deps = [ ":abseil" ]
+    deps = [
+      ":abseil",
+      ":abseil_quiche_internal",
+    ]
     configs += [ ":private_abseil_quiche_config" ]
   }
 }

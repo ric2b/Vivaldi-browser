@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 import * as i18n from '../../../core/i18n/i18n.js';
-import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
@@ -168,7 +167,9 @@ export class LinearMemoryNavigator extends HTMLElement {
     };
     return html`
       <input class=${LitHtml.Directives.classMap(classMap)} data-input="true" .value=${this.#address}
-        jslog=${VisualLogging.textField().track({keydown: true}).context('linear-memory-inspector.address')}
+        jslog=${VisualLogging.textField('linear-memory-inspector.address').track({
+      keydown: true,
+    })}
         title=${this.#valid ? i18nString(UIStrings.enterAddress) : this.#error} @change=${
         this.#onAddressChange.bind(this, Mode.Submitted)} @input=${this.#onAddressChange.bind(this, Mode.Edit)}/>`;
   }
@@ -190,10 +191,9 @@ export class LinearMemoryNavigator extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-linear-memory-inspector-navigator', LinearMemoryNavigator);
+customElements.define('devtools-linear-memory-inspector-navigator', LinearMemoryNavigator);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-linear-memory-inspector-navigator': LinearMemoryNavigator;
   }

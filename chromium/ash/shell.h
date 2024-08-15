@@ -144,6 +144,7 @@ class DisplayConfigurationController;
 class DisplayConfigurationObserver;
 class DisplayErrorObserver;
 class DisplayHighlightController;
+class DisplayPerformanceModeController;
 class DisplayPrefs;
 class DisplayShutdownObserver;
 class DisplaySpeakerController;
@@ -152,7 +153,6 @@ class DragDropController;
 class EventClientImpl;
 class EventRewriterControllerImpl;
 class EventTransformationHandler;
-class WindowRestoreController;
 class FirmwareUpdateManager;
 class FirmwareUpdateNotificationController;
 class FloatController;
@@ -187,11 +187,11 @@ class LoginScreenController;
 class LoginUnlockThroughputRecorder;
 class MediaNotificationProvider;
 class TabClusterUIController;
-class TabletModeController;
 class MediaControllerImpl;
 class MessageCenterAshImpl;
 class MessageCenterController;
 class MouseCursorEventFilter;
+class MouseKeysController;
 class MruWindowTracker;
 class MultiDeviceNotificationPresenter;
 class MultiDisplayMetricsController;
@@ -209,6 +209,7 @@ class PeripheralBatteryListener;
 class PeripheralBatteryNotifier;
 class PersistentWindowController;
 class PickerController;
+class PineController;
 class PipController;
 class PolicyRecommendationRestorer;
 class PostLoginGlanceablesMetricsRecorder;
@@ -219,6 +220,7 @@ class PrivacyHubController;
 class PrivacyScreenController;
 class ProjectingObserver;
 class ProjectorControllerImpl;
+class RapidKeySequenceRecorder;
 class RasterScaleController;
 class RgbKeyboardManager;
 class ResizeShadowController;
@@ -252,6 +254,7 @@ class SystemNudgePauseManagerImpl;
 class SystemSoundsDelegate;
 class SystemTrayModel;
 class SystemTrayNotifier;
+class TabletModeController;
 class ToastManagerImpl;
 class ToplevelWindowEventHandler;
 class ClipboardHistoryControllerImpl;
@@ -264,6 +267,7 @@ class VideoDetector;
 class WallpaperControllerImpl;
 class WindowBoundsTracker;
 class WindowCycleController;
+class WindowRestoreController;
 class WindowTilingController;
 class WindowTreeHostManager;
 class WmModeController;
@@ -520,6 +524,10 @@ class ASH_EXPORT Shell : public SessionObserver,
     return display_highlight_controller_.get();
   }
 
+  DisplayPerformanceModeController* display_performance_mode_controller() {
+    return display_performance_mode_controller_.get();
+  }
+
   DockedMagnifierController* docked_magnifier_controller() {
     return docked_magnifier_controller_.get();
   }
@@ -641,6 +649,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   MouseCursorEventFilter* mouse_cursor_filter() {
     return mouse_cursor_filter_.get();
   }
+  MouseKeysController* mouse_keys_controller() {
+    return mouse_keys_controller_.get();
+  }
   MruWindowTracker* mru_window_tracker() { return mru_window_tracker_.get(); }
   MultiDeviceNotificationPresenter* multidevice_notification_presenter() {
     return multidevice_notification_presenter_.get();
@@ -667,6 +678,7 @@ class ASH_EXPORT Shell : public SessionObserver,
     return peripheral_battery_listener_.get();
   }
   PickerController* picker_controller() { return picker_controller_.get(); }
+  PineController* pine_controller() { return pine_controller_.get(); }
   PipController* pip_controller() { return pip_controller_.get(); }
   PolicyRecommendationRestorer* policy_recommendation_restorer() {
     return policy_recommendation_restorer_.get();
@@ -733,6 +745,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   }
   ModifierKeyComboRecorder* modifier_key_combo_recorder() {
     return modifier_key_combo_recorder_.get();
+  }
+  RapidKeySequenceRecorder* rapid_key_sequence_recorder() {
+    return rapid_key_sequence_recorder_.get();
   }
   ShutdownControllerImpl* shutdown_controller() {
     return shutdown_controller_.get();
@@ -967,6 +982,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<InputDeviceSettingsControllerImpl>
       input_device_settings_controller_;
   std::unique_ptr<ModifierKeyComboRecorder> modifier_key_combo_recorder_;
+  std::unique_ptr<RapidKeySequenceRecorder> rapid_key_sequence_recorder_;
   std::unique_ptr<InputDeviceSettingsDispatcher>
       input_device_settings_dispatcher_;
   std::unique_ptr<InputDeviceTracker> input_device_tracker_;
@@ -1016,6 +1032,8 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<diagnostics::DiagnosticsLogController>
       diagnostics_log_controller_;
   std::unique_ptr<DisplayHighlightController> display_highlight_controller_;
+  std::unique_ptr<DisplayPerformanceModeController>
+      display_performance_mode_controller_;
   std::unique_ptr<DisplaySpeakerController> display_speaker_controller_;
   std::unique_ptr<DragDropController> drag_drop_controller_;
   std::unique_ptr<FirmwareUpdateManager> firmware_update_manager_;
@@ -1078,6 +1096,7 @@ class ASH_EXPORT Shell : public SessionObserver,
       feature_discover_reporter_;
   std::unique_ptr<AshColorProvider> ash_color_provider_;
   std::unique_ptr<NightLightControllerImpl> night_light_controller_;
+  std::unique_ptr<PineController> pine_controller_;
   std::unique_ptr<PipController> pip_controller_;
   std::unique_ptr<PrivacyScreenController> privacy_screen_controller_;
   std::unique_ptr<PolicyRecommendationRestorer> policy_recommendation_restorer_;
@@ -1125,6 +1144,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<FullscreenMagnifierController>
       fullscreen_magnifier_controller_;
   std::unique_ptr<AutoclickController> autoclick_controller_;
+  std::unique_ptr<MouseKeysController> mouse_keys_controller_;
   std::unique_ptr<::wm::FocusController> focus_controller_;
 
   std::unique_ptr<MouseCursorEventFilter> mouse_cursor_filter_;

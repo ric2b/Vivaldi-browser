@@ -11,4 +11,4 @@ workspace = true
 crypto_provider_rustcrypto = { workspace = true, features = [ "alloc" ] }
 ukey2_rs = { version = "0.1.0", path = "../ukey2" }
 ukey2_connections = { version = "0.1.0", path = "../ukey2_connections" }
-clap = { version = "4.0.17", default-features = false, features = ["std", "derive"] }
+clap = { workspace = true, features = ["std", "derive"] }

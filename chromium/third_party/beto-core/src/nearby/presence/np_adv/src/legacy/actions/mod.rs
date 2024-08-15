@@ -439,5 +439,5 @@ macros::boolean_element!(NearbyShare, 9, plaintext_and_ciphertext);
 macros::boolean_element!(InstantTethering, 10, ciphertext_only);
 macros::boolean_element!(PhoneHub, 11, ciphertext_only);
 macros::boolean_element!(PresenceManager, 12, ciphertext_only);
-macros::boolean_element!(Finder, 13, plaintext_only);
-macros::boolean_element!(FastPairSass, 14, plaintext_only);
+macros::boolean_element!(Finder, 13, plaintext_and_ciphertext);
+macros::boolean_element!(FastPairSass, 14, plaintext_and_ciphertext);

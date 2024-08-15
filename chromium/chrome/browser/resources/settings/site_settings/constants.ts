@@ -18,6 +18,7 @@ export enum ContentSettingsTypes {
   AR = 'ar',
   AUTO_PICTURE_IN_PICTURE = 'auto-picture-in-picture',
   AUTOMATIC_DOWNLOADS = 'multiple-automatic-downloads',
+  AUTOMATIC_FULLSCREEN = 'automatic-fullscreen',
   BACKGROUND_SYNC = 'background-sync',
   BLUETOOTH_DEVICES = 'bluetooth-devices',
   BLUETOOTH_SCANNING = 'bluetooth-scanning',
@@ -34,7 +35,6 @@ export enum ContentSettingsTypes {
   JAVASCRIPT_JIT = 'javascript-jit',
   LOCAL_FONTS = 'local-fonts',
   MIC = 'media-stream-mic',  // AKA Microphone.
-  MIDI = 'midi',
   MIDI_DEVICES = 'midi-sysex',
   MIXEDSCRIPT = 'mixed-script',
   NOTIFICATIONS = 'notifications',

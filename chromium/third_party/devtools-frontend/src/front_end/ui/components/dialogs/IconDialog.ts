@@ -6,11 +6,12 @@ import * as i18n from '../../../core/i18n/i18n.js';
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
 import {
   Dialog as DialogElement,
-  type DialogVerticalPosition,
   type DialogHorizontalAlignment,
+  type DialogVerticalPosition,
 } from './Dialog.js';
 import iconDialogStyles from './iconDialog.css.js';
 
@@ -25,7 +26,6 @@ const str_ = i18n.i18n.registerUIStrings('ui/components/dialogs/IconDialog.ts', 
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-icon-dialog': IconDialog;
   }
@@ -112,6 +112,7 @@ export class IconDialog extends HTMLElement {
                 width: '16px',
                 height: '16px',
               } as IconButton.Icon.IconWithName}
+              jslog=${VisualLogging.close().track({click: true})}
               title=${i18nString(UIStrings.close)}
             ></${IconButton.Icon.Icon.litTagName}>
           </div>
@@ -132,7 +133,7 @@ export class IconDialog extends HTMLElement {
       <${DialogElement.litTagName}
         @clickoutsidedialog=${this.#closeDialog}
         .showConnector=${true}
-        .origin=${(): IconButton.Icon.Icon => {
+        .origin=${() => {
           if (!this.#icon) {
             throw new Error('Icon not found');
           }
@@ -156,4 +157,4 @@ export class IconDialog extends HTMLElement {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-icon-dialog', IconDialog);
+customElements.define('devtools-icon-dialog', IconDialog);

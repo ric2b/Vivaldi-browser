@@ -13,6 +13,7 @@
 #include <xnnpack/log.h>
 #include <xnnpack/operator.h>
 #include <xnnpack/params.h>
+#include <xnnpack/reshape-helpers.h>
 #include <xnnpack/subgraph.h>
 #include <xnnpack/subgraph-validation.h>
 
@@ -23,7 +24,7 @@ static enum xnn_status create_minimum_operator(
   size_t num_values,
   struct xnn_operator_data* opdata,
   struct xnn_code_cache* code_cache,
-  struct xnn_weights_cache* weights_cache)
+  xnn_weights_cache_t weights_cache)
 {
   assert(node->num_inputs == 2);
   assert(node->num_outputs == 1);
@@ -82,26 +83,34 @@ static enum xnn_status reshape_minimum_operator(
     memcpy(opdata->shape2.dim, values[input2_id].shape.dim, values[input2_id].shape.num_dims * sizeof(size_t));
   }
 
+  const size_t old_workspace_size = opdata->workspace_size;
+  enum xnn_status status = xnn_status_invalid_state;
   switch (opdata->operator_objects[0]->type) {
     case xnn_operator_type_minimum_nd_f16:
-      return xnn_reshape_minimum_nd_f16(
+      status = xnn_reshape_minimum_nd_f16(
         opdata->operator_objects[0],
         opdata->shape1.num_dims,
         opdata->shape1.dim,
         opdata->shape2.num_dims,
         opdata->shape2.dim,
         threadpool);
+      break;
     case xnn_operator_type_minimum_nd_f32:
-      return xnn_reshape_minimum_nd_f32(
+      status = xnn_reshape_minimum_nd_f32(
         opdata->operator_objects[0],
         opdata->shape1.num_dims,
         opdata->shape1.dim,
         opdata->shape2.num_dims,
         opdata->shape2.dim,
         threadpool);
+      break;
     default:
       XNN_UNREACHABLE;
   }
+  if (status != xnn_status_success) {
+    return status;
+  }
+  return resize_binary_elementwise_output_tensor(opdata, values, num_values, old_workspace_size, threadpool);
 }
 
 static enum xnn_status setup_minimum_operator(
@@ -172,6 +181,8 @@ enum xnn_status xnn_define_minimum2(
   }
 
   switch (input1_value->datatype) {
+    case xnn_datatype_fp16:
+      break;
     case xnn_datatype_fp32:
       break;
     default:
@@ -194,6 +205,8 @@ enum xnn_status xnn_define_minimum2(
   }
 
   switch (input2_value->datatype) {
+    case xnn_datatype_fp16:
+      break;
     case xnn_datatype_fp32:
       break;
     default:
@@ -215,8 +228,13 @@ enum xnn_status xnn_define_minimum2(
     return status;
   }
 
+  enum xnn_compute_type compute_type = xnn_compute_type_invalid;
   switch (output_value->datatype) {
+    case xnn_datatype_fp16:
+      compute_type = xnn_compute_type_fp16;
+      break;
     case xnn_datatype_fp32:
+      compute_type = xnn_compute_type_fp32;
       break;
     default:
       xnn_log_error(
@@ -232,7 +250,7 @@ enum xnn_status xnn_define_minimum2(
   }
 
   node->type = xnn_node_type_minimum2;
-  node->compute_type = xnn_compute_type_fp32;
+  node->compute_type = compute_type;
   node->num_inputs = 2;
   node->inputs[0] = input1_id;
   node->inputs[1] = input2_id;

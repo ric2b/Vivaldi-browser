@@ -5,8 +5,9 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_CONTENT_EXTRACTION_INNER_TEXT_BUILDER_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_CONTENT_EXTRACTION_INNER_TEXT_BUILDER_H_
 
+#include <optional>
+
 #include "base/memory/stack_allocated.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/content_extraction/inner_text.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/text_visitor.h"
@@ -67,10 +68,31 @@ class MODULES_EXPORT InnerTextBuilder final : public TextVisitor {
   const mojom::blink::InnerTextParams& params_;
 
   // Set if `params` contained a `InnerTextDomNodeId` and the node was found.
-  absl::optional<unsigned> matching_node_location_;
+  std::optional<unsigned> matching_node_location_;
 
   // Child iframes encountered.
   HeapVector<Member<ChildIFrame>>& child_iframes_;
+};
+
+// An alternative implementation wrapping DocumentChunker passage extraction.
+// This will be used only when one or more of the relevant optional parameters
+// are specified on InnerTextParams.
+class MODULES_EXPORT InnerTextPassagesBuilder final {
+  STACK_ALLOCATED();
+
+ public:
+  InnerTextPassagesBuilder(const InnerTextPassagesBuilder&) = delete;
+  InnerTextPassagesBuilder& operator=(const InnerTextPassagesBuilder&) = delete;
+
+  static mojom::blink::InnerTextFramePtr Build(
+      LocalFrame& frame,
+      const mojom::blink::InnerTextParams& params);
+
+ private:
+  explicit InnerTextPassagesBuilder(
+      const mojom::blink::InnerTextParams& params);
+
+  const mojom::blink::InnerTextParams& params_;
 };
 
 }  // namespace blink

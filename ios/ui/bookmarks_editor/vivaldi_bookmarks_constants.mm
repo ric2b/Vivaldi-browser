@@ -2,10 +2,6 @@
 
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_constants.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 #pragma mark - ICONS
 // Image name for the bookmark folder icon.
 NSString* vBookmarksFolderIcon = @"vivaldi_bookmarks_folder";
@@ -22,6 +18,9 @@ NSString* vBookmarkFolderSelectionCheckmark =
 // Image name for add folder
 NSString* vBookmarkAddFolder =
   @"vivaldi_bookmark_add_new_folder";
+// Image name for add group illustration
+NSString* vBookmarkAddGroupIllustration =
+  @"vivaldi_bookmark_add_group_illustration";
 
 #pragma mark - COLOR
 // Underline color for bookmark text field underline

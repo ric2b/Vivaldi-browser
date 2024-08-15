@@ -51,8 +51,10 @@
 #include "src/tint/lang/wgsl/program/program.h"
 #include "src/tint/lang/wgsl/sem/variable.h"
 #include "src/tint/utils/diagnostic/formatter.h"
-#include "src/tint/utils/diagnostic/printer.h"
 #include "src/tint/utils/math/hash.h"
+#include "src/tint/utils/text/styled_text.h"
+#include "src/tint/utils/text/styled_text_printer.h"
+#include "src/tint/utils/text/text_style.h"
 
 #if TINT_BUILD_SPV_WRITER
 #include "src/tint/lang/spirv/writer/helpers/ast_generate_bindings.h"
@@ -60,6 +62,10 @@
 
 #if TINT_BUILD_MSL_WRITER
 #include "src/tint/lang/msl/writer/helpers/generate_bindings.h"
+#endif  // TINT_BUILD_MSL_WRITER
+
+#if TINT_BUILD_HLSL_WRITER
+#include "src/tint/lang/hlsl/writer/helpers/generate_bindings.h"
 #endif  // TINT_BUILD_MSL_WRITER
 
 namespace tint::fuzzers {
@@ -70,15 +76,14 @@ namespace {
 // to better de-duplication of bug reports, because ClusterFuzz only uses the
 // top few stack frames for de-duplication, and a FATAL_ERROR stack frame
 // provides no useful information.
-#define FATAL_ERROR(diags, msg_string)                             \
-    do {                                                           \
-        std::string msg = msg_string;                              \
-        auto printer = tint::diag::Printer::create(stderr, true);  \
-        if (!msg.empty()) {                                        \
-            printer->write(msg + "\n", {diag::Color::kRed, true}); \
-        }                                                          \
-        tint::diag::Formatter().format(diags, printer.get());      \
-        __builtin_trap();                                          \
+#define FATAL_ERROR(diags, msg_string)                          \
+    do {                                                        \
+        StyledText msg;                                         \
+        msg << (style::Error + style::Bold) << msg_string;      \
+        auto printer = tint::StyledTextPrinter::Create(stderr); \
+        printer->Print(msg);                                    \
+        printer->Print(tint::diag::Formatter().Format(diags));  \
+        __builtin_trap();                                       \
     } while (false)
 
 [[noreturn]] void TintInternalCompilerErrorReporter(const InternalCompilerError& err) {
@@ -113,13 +118,13 @@ bool SPIRVToolsValidationCheck(const tint::Program& program, const std::vector<u
     const tint::diag::List& diags = program.Diagnostics();
     tools.SetMessageConsumer(
         [diags](spv_message_level_t, const char*, const spv_position_t& pos, const char* msg) {
-            std::stringstream out;
+            StyledText out;
             out << "Unexpected spirv-val error:\n"
-                << (pos.line + 1) << ":" << (pos.column + 1) << ": " << msg << std::endl;
+                << (pos.line + 1) << ":" << (pos.column + 1) << ": " << msg;
 
-            auto printer = tint::diag::Printer::create(stderr, true);
-            printer->write(out.str(), {diag::Color::kYellow, false});
-            tint::diag::Formatter().format(diags, printer.get());
+            auto printer = tint::StyledTextPrinter::Create(stderr);
+            printer->Print(out);
+            printer->Print(tint::diag::Formatter().Format(diags));
         });
 
     return tools.Validate(spirv.data(), spirv.size(), spvtools::ValidatorOptions());
@@ -272,6 +277,9 @@ int CommonFuzzer::Run(const uint8_t* data, size_t size) {
 #endif  // TINT_BUILD_MSL_WRITER
             break;
         case OutputFormat::kHLSL:
+#if TINT_BUILD_HLSL_WRITER
+            options_hlsl_.bindings = tint::hlsl::writer::GenerateBindings(program);
+#endif  // TINT_BUILD_HLSL_WRITER
             break;
         case OutputFormat::kSpv:
 #if TINT_BUILD_SPV_WRITER
@@ -280,51 +288,6 @@ int CommonFuzzer::Run(const uint8_t* data, size_t size) {
             break;
         case OutputFormat::kWGSL:
             break;
-    }
-
-    // For the generates which use MultiPlanar, make sure the configuration options are provided so
-    // that the transformer will execute.
-    if (output_ == OutputFormat::kHLSL) {
-        // Gather external texture binding information
-        // Collect next valid binding number per group
-        std::unordered_map<uint32_t, uint32_t> group_to_next_binding_number;
-        std::vector<BindingPoint> ext_tex_bps;
-        for (auto* var : program.AST().GlobalVariables()) {
-            if (auto* sem_var = program.Sem().Get(var)->As<sem::GlobalVariable>()) {
-                if (auto bp = sem_var->Attributes().binding_point) {
-                    auto& n = group_to_next_binding_number[bp->group];
-                    n = std::max(n, bp->binding + 1);
-
-                    if (sem_var->Type()->UnwrapRef()->Is<core::type::ExternalTexture>()) {
-                        ext_tex_bps.emplace_back(*bp);
-                    }
-                }
-            }
-        }
-
-        ExternalTextureOptions::BindingsMap new_bindings_map;
-        for (auto bp : ext_tex_bps) {
-            uint32_t g = bp.group;
-            uint32_t& next_num = group_to_next_binding_number[g];
-            auto new_bps = ExternalTextureOptions::BindingPoints{{g, next_num++}, {g, next_num++}};
-
-            new_bindings_map[bp] = new_bps;
-        }
-
-        switch (output_) {
-            case OutputFormat::kMSL: {
-                break;
-            }
-            case OutputFormat::kHLSL: {
-                options_hlsl_.external_texture_options.bindings_map = new_bindings_map;
-                break;
-            }
-            case OutputFormat::kSpv: {
-                break;
-            }
-            default:
-                break;
-        }
     }
 
     switch (output_) {

@@ -9,7 +9,7 @@ import '//resources/cr_elements/cr_shared_style.css.js';
 import '//resources/polymer/v3_0/iron-location/iron-location.js';
 
 import {ColorChangeUpdater, COLORS_CSS_SELECTOR} from '//resources/cr_components/color_change_listener/colors_css_updater.js';
-import {CrMenuSelector} from '//resources/cr_elements/cr_menu_selector/cr_menu_selector.js';
+import type {CrMenuSelector} from '//resources/cr_elements/cr_menu_selector/cr_menu_selector.js';
 import {assert} from '//resources/js/assert.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -129,12 +129,12 @@ export class WebuiGalleryAppElement extends PolymerElement {
               src: 'cr_slider/cr_slider_demo.js',
             },
             {
-              name: 'Tabs, non-Polymer',
+              name: 'Tabs, native',
               path: 'tabs1',
               src: 'cr_tab_box/cr_tab_box_demo.js',
             },
             {
-              name: 'Tabs, Polymer',
+              name: 'Tabs, Lit',
               path: 'tabs2',
               src: 'cr_tabs/cr_tabs_demo.js',
             },

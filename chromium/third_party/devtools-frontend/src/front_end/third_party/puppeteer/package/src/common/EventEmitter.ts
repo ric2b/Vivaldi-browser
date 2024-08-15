@@ -4,10 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import mitt, {
-  type Emitter,
-  type EventHandlerMap,
-} from '../../third_party/mitt/mitt.js';
+import mitt, {type Emitter} from '../../third_party/mitt/mitt.js';
 import {disposeSymbol} from '../util/disposable.js';
 
 /**
@@ -30,18 +27,6 @@ export interface CommonEventEmitter<Events extends Record<EventType, unknown>> {
     handler?: Handler<Events[Key]>
   ): this;
   emit<Key extends keyof Events>(type: Key, event: Events[Key]): boolean;
-  /* To maintain parity with the built in NodeJS event emitter which uses removeListener
-   * rather than `off`.
-   * If you're implementing new code you should use `off`.
-   */
-  addListener<Key extends keyof Events>(
-    type: Key,
-    handler: Handler<Events[Key]>
-  ): this;
-  removeListener<Key extends keyof Events>(
-    type: Key,
-    handler: Handler<Events[Key]>
-  ): this;
   once<Key extends keyof Events>(
     type: Key,
     handler: Handler<Events[Key]>
@@ -74,14 +59,20 @@ export type EventsWithWildcard<Events extends Record<EventType, unknown>> =
 export class EventEmitter<Events extends Record<EventType, unknown>>
   implements CommonEventEmitter<EventsWithWildcard<Events>>
 {
-  #emitter: Emitter<Events & {'*': Events[keyof Events]}>;
-  #handlers: EventHandlerMap<Events & {'*': Events[keyof Events]}> = new Map();
+  #emitter: Emitter<EventsWithWildcard<Events>> | EventEmitter<Events>;
+  #handlers = new Map<keyof Events | '*', Array<Handler<any>>>();
 
   /**
+   * If you pass an emitter, the returned emitter will wrap the passed emitter.
+   *
    * @internal
    */
-  constructor() {
-    this.#emitter = mitt(this.#handlers);
+  constructor(
+    emitter: Emitter<EventsWithWildcard<Events>> | EventEmitter<Events> = mitt(
+      new Map()
+    )
+  ) {
+    this.#emitter = emitter;
   }
 
   /**
@@ -94,6 +85,13 @@ export class EventEmitter<Events extends Record<EventType, unknown>>
     type: Key,
     handler: Handler<EventsWithWildcard<Events>[Key]>
   ): this {
+    const handlers = this.#handlers.get(type);
+    if (handlers === undefined) {
+      this.#handlers.set(type, [handler]);
+    } else {
+      handlers.push(handler);
+    }
+
     this.#emitter.on(type, handler);
     return this;
   }
@@ -108,33 +106,18 @@ export class EventEmitter<Events extends Record<EventType, unknown>>
     type: Key,
     handler?: Handler<EventsWithWildcard<Events>[Key]>
   ): this {
-    this.#emitter.off(type, handler);
-    return this;
-  }
-
-  /**
-   * Remove an event listener.
-   *
-   * @deprecated please use {@link EventEmitter.off} instead.
-   */
-  removeListener<Key extends keyof EventsWithWildcard<Events>>(
-    type: Key,
-    handler: Handler<EventsWithWildcard<Events>[Key]>
-  ): this {
-    this.off(type, handler);
-    return this;
-  }
-
-  /**
-   * Add an event listener.
-   *
-   * @deprecated please use {@link EventEmitter.on} instead.
-   */
-  addListener<Key extends keyof EventsWithWildcard<Events>>(
-    type: Key,
-    handler: Handler<EventsWithWildcard<Events>[Key]>
-  ): this {
-    this.on(type, handler);
+    const handlers = this.#handlers.get(type) ?? [];
+    if (handler === undefined) {
+      for (const handler of handlers) {
+        this.#emitter.off(type, handler);
+      }
+      this.#handlers.delete(type);
+      return this;
+    }
+    const index = handlers.lastIndexOf(handler);
+    if (index > -1) {
+      this.#emitter.off(type, ...handlers.splice(index, 1));
+    }
     return this;
   }
 
@@ -189,12 +172,23 @@ export class EventEmitter<Events extends Record<EventType, unknown>>
    * @returns `this` to enable you to chain method calls.
    */
   removeAllListeners(type?: keyof EventsWithWildcard<Events>): this {
-    if (type === undefined || type === '*') {
-      this.#handlers.clear();
-    } else {
-      this.#handlers.delete(type);
+    if (type !== undefined) {
+      return this.off(type);
     }
+    this[disposeSymbol]();
     return this;
+  }
+
+  /**
+   * @internal
+   */
+  [disposeSymbol](): void {
+    for (const [type, handlers] of this.#handlers) {
+      for (const handler of handlers) {
+        this.#emitter.off(type, handler);
+      }
+    }
+    this.#handlers.clear();
   }
 }
 

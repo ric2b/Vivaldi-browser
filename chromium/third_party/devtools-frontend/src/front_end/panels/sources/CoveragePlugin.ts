@@ -51,7 +51,8 @@ export class CoveragePlugin extends Plugin {
     super(uiSourceCode);
     this.originalSourceCode = this.uiSourceCode;
     this.#transformer = transformer;
-    this.infoInToolbar = new UI.Toolbar.ToolbarButton(i18nString(UIStrings.clickToShowCoveragePanel));
+    this.infoInToolbar = new UI.Toolbar.ToolbarButton(
+        i18nString(UIStrings.clickToShowCoveragePanel), undefined, undefined, 'debugger.show-coverage');
     this.infoInToolbar.setSecondary();
     this.infoInToolbar.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, () => {
       void UI.ViewManager.ViewManager.instance().showView('coverage');
@@ -212,7 +213,7 @@ const coverageState = CodeMirror.StateField.define<CodeMirror.RangeSet<CodeMirro
 
 function coverageGutter(url: Platform.DevToolsPath.UrlString): CodeMirror.Extension {
   return CodeMirror.gutter({
-    markers: (view): CodeMirror.RangeSet<CodeMirror.GutterMarker> => view.state.field(coverageState),
+    markers: view => view.state.field(coverageState),
 
     domEventHandlers: {
       click() {
@@ -243,9 +244,9 @@ const theme = CodeMirror.EditorView.baseTheme({
     marginLeft: '3px',
   },
   '.cm-coverageUnused': {
-    backgroundColor: 'var(--sys-color-error-bright)',
+    backgroundColor: 'var(--app-color-coverage-unused)',
   },
   '.cm-coverageUsed': {
-    backgroundColor: 'var(--sys-color-green-bright)',
+    backgroundColor: 'var(--app-color-coverage-used)',
   },
 });

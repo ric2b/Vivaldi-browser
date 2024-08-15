@@ -62,7 +62,7 @@ class TabGroupModelFactory {
 struct DetachedWebContents {
   DetachedWebContents(int index_before_any_removals,
                       int index_at_time_of_removal,
-                      std::unique_ptr<TabModel> tab,
+                      std::unique_ptr<tabs::TabModel> tab,
                       content::WebContents* contents,
                       TabStripModelChange::RemoveReason remove_reason,
                       std::optional<SessionID> id);
@@ -77,7 +77,7 @@ struct DetachedWebContents {
   // non-null. In other words, all observers should use `contents`, it is
   // guaranteed to be valid for the life time of the notification (and
   // possibly longer).
-  std::unique_ptr<TabModel> tab;
+  std::unique_ptr<tabs::TabModel> tab;
   raw_ptr<content::WebContents, AcrossTasksDanglingUntriaged> contents;
 
   // The index of the WebContents in the original selection model of the tab
@@ -165,15 +165,15 @@ class TabStripModel : public TabGroupController {
   int count() const { return static_cast<int>(contents_data_.size()); }
   bool empty() const { return contents_data_.empty(); }
 
-  int GetIndexOfTab(TabHandle tab) const;
-  TabHandle GetTabHandleAt(int index) const;
+  int GetIndexOfTab(tabs::TabHandle tab) const;
+  tabs::TabHandle GetTabHandleAt(int index) const;
 
   // Retrieve the Profile associated with this TabStripModel.
   Profile* profile() const { return profile_; }
 
-  // Retrieve the index of the currently active WebContents. This will be
-  // kNoTab if no tab is currently selected (this happens while the tab strip is
-  // being initialized or is empty).
+  // Retrieve the index of the currently active WebContents. The only time this
+  // is kNoTab is if the tab strip is being initialized or destroyed. Note that
+  // tab strip destruction is an asynchronous process.
   int active_index() const {
     return selection_model_.active().has_value()
                ? static_cast<int>(selection_model_.active().value())
@@ -193,8 +193,15 @@ class TabStripModel : public TabGroupController {
 
   // Adds the specified WebContents in the default location. Tabs opened
   // in the foreground inherit the opener of the previously active tab.
+  // Use of the detached tab is preferred over webcontents, so when possible
+  // use AppendTab instead of this method.
   void AppendWebContents(std::unique_ptr<content::WebContents> contents,
                          bool foreground);
+
+  // Adds the specified Tab at the end of the Tabstrip. Tabs opened
+  // in the foreground inherit the opener of the previously active tab and
+  // become the active tab.
+  void AppendTab(std::unique_ptr<tabs::TabModel> tab, bool foreground);
 
   // Adds the specified WebContents at the specified location.
   // |add_types| is a bitmask of AddTabTypes; see it for details.
@@ -217,7 +224,7 @@ class TabStripModel : public TabGroupController {
   // InsertWebContentsAt.
   int InsertDetachedTabAt(
       int index,
-      std::unique_ptr<TabModel> tab,
+      std::unique_ptr<tabs::TabModel> tab,
       int add_types,
       std::optional<tab_groups::TabGroupId> group = std::nullopt);
 
@@ -235,7 +242,7 @@ class TabStripModel : public TabGroupController {
 
   // Detaches the tab at the specified index for reinsertion into another tab
   // strip. Returns the detached tab.
-  std::unique_ptr<TabModel> DetachTabAtForInsertion(int index);
+  std::unique_ptr<tabs::TabModel> DetachTabAtForInsertion(int index);
 
   // Detaches the WebContents at the specified index for reinsertion into
   // another tab strip. Returns the detached WebContents.
@@ -290,6 +297,9 @@ class TabStripModel : public TabGroupController {
 
   // Returns the currently active WebContents, or NULL if there is none.
   content::WebContents* GetActiveWebContents() const;
+
+  // Returns the currently active Tab, or NULL if there is none.
+  tabs::TabModel* GetActiveTab() const;
 
   // Returns the WebContents at the specified index, or NULL if there is
   // none.
@@ -351,6 +361,8 @@ class TabStripModel : public TabGroupController {
   // Returns true if the tab at |index| is pinned.
   // See description above class for details on pinned tabs.
   bool IsTabPinned(int index) const;
+
+  bool IsVivPanel(int index) const;
 
   bool IsTabCollapsed(int index) const;
 
@@ -645,9 +657,11 @@ class TabStripModel : public TabGroupController {
   bool RunUnloadListenerBeforeClosing(content::WebContents* contents);
   bool ShouldRunUnloadListenerBeforeClosing(content::WebContents* contents);
 
-  int ConstrainInsertionIndex(int index, bool pinned_tab) const;
+  int ConstrainInsertionIndex(int index, bool pinned_tab, bool is_viv_panel) const;
 
-  int ConstrainMoveIndex(int index, bool pinned_tab) const;
+  int ConstrainMoveIndex(int index, bool pinned_tab, bool is_viv_panel) const;
+
+  int ConstrainVivaldiIndex(int index, bool is_viv_panel) const;
 
   // If |index| is selected all the selected indices are returned, otherwise a
   // vector with |index| is returned. This is used when executing commands to
@@ -679,7 +693,7 @@ class TabStripModel : public TabGroupController {
   // constraint that all pinned tabs occur before non-pinned tabs. It returns
   // the index the tab is actually inserted to. See also AddWebContents.
   int InsertTabAtImpl(int index,
-                      std::unique_ptr<TabModel> tab,
+                      std::unique_ptr<tabs::TabModel> tab,
                       int add_types,
                       std::optional<tab_groups::TabGroupId> group);
 
@@ -825,7 +839,7 @@ class TabStripModel : public TabGroupController {
 
   // The WebContents data currently hosted within this TabStripModel. This must
   // be kept in sync with |selection_model_|.
-  std::vector<std::unique_ptr<TabModel>> contents_data_;
+  std::vector<std::unique_ptr<tabs::TabModel>> contents_data_;
 
   // The model for tab groups hosted within this TabStripModel.
   std::unique_ptr<TabGroupModel> group_model_;
@@ -834,7 +848,8 @@ class TabStripModel : public TabGroupController {
 
   bool tab_strip_ui_was_set_ = false;
 
-  base::ObserverList<TabStripModelObserver>::Unchecked observers_;
+  base::ObserverList<TabStripModelObserver>::UncheckedAndDanglingUntriaged
+      observers_;
 
   // A profile associated with this TabStripModel.
   raw_ptr<Profile, AcrossTasksDanglingUntriaged> profile_;

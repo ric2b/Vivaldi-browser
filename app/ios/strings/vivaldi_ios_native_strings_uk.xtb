@@ -21,7 +21,9 @@
 <translation id="1315107593850379616">Пошта для відновлення</translation>
 <translation id="1325473901257014816">Ви можете синхронізувати усі вкладки Vivaldi між усіма пристроями.</translation>
 <translation id="132683371494960526">Двічі тапніть, щоб змінити батьківську теку.</translation>
+<translation id="1341156196125040601">Виберіть розташування панелі адреси.</translation>
 <translation id="1354002567845495520">Синхронізуйте Нотатки Vivaldi (без вкладень)</translation>
+<translation id="1365181765792690850">Увімкнення цієї опції може призвести до несправності деяких сайтів і/або зображень. Потребує перезапуску.</translation>
 <translation id="1379470994139227452">Призначити Vivaldi типовим</translation>
 <translation id="1381484244248892686">Використовуйте паролі, збережені на інших пристроях. Вони збережені у менеджері паролів для <ph name="EMAIL" /></translation>
 <translation id="1383876407941801731">Пошук</translation>
@@ -38,6 +40,7 @@
 <translation id="1659112017960130179">Корейська (<ph name="ORIGIN" />)</translation>
 <translation id="1689333818294560261">Коротке ім'я</translation>
 <translation id="1711184756728070210"><ph name="BEGIN_LINK" />Умови використання ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />Політика конфіденційності ➔<ph name="END_LINK2" /></translation>
+<translation id="1717473843091433383">Примусово застосовувати темну тему до всіх сайтів</translation>
 <translation id="1721552494230946796">Нова тека Експрес-панелі</translation>
 <translation id="173924678149983125">Введіть адресу для імпортування правил блокування</translation>
 <translation id="1751280147639351837">Блокувальник реклами та трекерів</translation>
@@ -72,15 +75,16 @@
 <translation id="2391028308389203648">Турецька (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">Активувати</translation>
 <translation id="2414886740292270097">Темна</translation>
-<translation id="2433507940547922241">Вигляд</translation>
 <translation id="2434910957904013691">Все</translation>
 <translation id="2448144008809286557">Забули <ph name="BEGIN_LINK" />Ім'я користувача<ph name="END_LINK" /> або <ph name="BEGIN_LINK" />Пароль<ph name="END_LINK" />?</translation>
+<translation id="2478478121390627077">Поточний вибраний колір</translation>
 <translation id="2536780277491102902">ВИНЯТКИ</translation>
 <translation id="2558801801411970131">Блокування трекерів</translation>
 <translation id="2562040727226360285">Блокування може порушити роботу сайтів <ph name="ORIGIN" /></translation>
 <translation id="2577446409661931381">Нова нотатка</translation>
+<translation id="261264557609353020">Початкова сторінка</translation>
 <translation id="2619628557366098325">Португальська (<ph name="ORIGIN" />)</translation>
-<translation id="2620436844016719705">Як у системі</translation>
+<translation id="2620436844016719705">Системна</translation>
 <translation id="2666092431469916601">Вгорі</translation>
 <translation id="2677862276555105603">Реклама
 блокована</translation>
@@ -127,6 +131,7 @@
 <translation id="3527085408025491307">Тека</translation>
 <translation id="3530991200302302959">Болгарська (<ph name="ORIGIN" />)</translation>
 <translation id="3601414719864711130">За датою</translation>
+<translation id="3602290021589620013">Превью</translation>
 <translation id="3607176258839749451">Відбулася помилка при реєстрації. Повторіть пізніше.</translation>
 <translation id="3646647753063635401">Синхронізувати всі дані та усі нові типи даних</translation>
 <translation id="3682791711395736890">Показати повну версію</translation>
@@ -173,6 +178,7 @@
 <translation id="4413780690230851155">Видалення історії перегляду</translation>
 <translation id="4452878871193896747">Індонезійська (<ph name="ORIGIN" />)</translation>
 <translation id="445620040230332178">Стиль вкладок</translation>
+<translation id="4461652107878667683">Вперед по історії</translation>
 <translation id="4474581062946673155">Наразі у вас немає синхронізованих вкладок з інших пристроїв.</translation>
 <translation id="4488900295693536220">Застосовується, коли рядок адреси внизу, що спрощує доступ до кращих підказок.</translation>
 <translation id="4493850495402472953">і</translation>
@@ -181,6 +187,7 @@
 <translation id="4515084385531683114">Паролі збережені в менеджері на цьому пристрої.</translation>
 <translation id="4525945044609022380">Ця пошта використовується іншим обліковим записом.</translation>
 <translation id="4526803704855831732">Приватні вкладки</translation>
+<translation id="4553717494760925411">Назад по історії</translation>
 <translation id="4563480492836333884">Пошта не підходить. Виберіть інший варіант.</translation>
 <translation id="457386861538956877">Більше...</translation>
 <translation id="460370326897402035">Неправильний пароль.</translation>
@@ -189,6 +196,7 @@
 <translation id="4654578955713250802">Блокувати трекери та рекламу</translation>
 <translation id="4655510151391078468">Код не збігається з надісланим вам.
          У вас залишилось  <ph name="ATTEMPTS" /> спроб.</translation>
+<translation id="46613249405673440">Установити як шпалери</translation>
 <translation id="466494460776294423">Потрібен код підтвердження</translation>
 <translation id="4714431804859029826">Відновити типові</translation>
 <translation id="4727698999970341158">Ісландська (<ph name="ORIGIN" />)</translation>
@@ -197,8 +205,10 @@
 <translation id="4780953868408193639">Трекер
 блокований</translation>
 <translation id="4807415245238822255">Паролі повинні збігатися.</translation>
+<translation id="4818836520802586445">Підсвітка кольором</translation>
 <translation id="4821701638681626529">Vivaldi не зберігає історію перегляду у Приватних вкладках</translation>
 <translation id="4833044618885331665">Оновіть Vivaldi для використання синхронізації.</translation>
+<translation id="484462545196658690">Авто</translation>
 <translation id="4852383705713307704">Реклама заблокована</translation>
 <translation id="4871370605780490696">Додати закладку</translation>
 <translation id="4903325570808402486">Синхронізуйте налаштування Vivaldi (поки що не всі)</translation>
@@ -209,6 +219,8 @@
 <translation id="497942794017668482">Блокування трекерів і реклами</translation>
 <translation id="5037761343305489956">Скопійовано до нотаток</translation>
 <translation id="504986598654589766">Приватний перегляд дозволяє не зберігати в браузері історію перегляду та пошуку, тимчасові файли. Ніякого приховування або шифрування даних не відбувається.</translation>
+<translation id="505774819758747674">Превью панелі з обраним кольором</translation>
+<translation id="5094183365876568934">Деякі сайти дозволяють налаштовувати колірну схему. Виберіть колірну схему, яку ви хочете використовувати на таких сайтах.</translation>
 <translation id="5094376253685335202">Увімкнути синхронізацію</translation>
 <translation id="5116316489033177455">Синхронізуйте закладки та Експрес-панелі</translation>
 <translation id="5122095890854520072">Латвійська (<ph name="ORIGIN" />)</translation>
@@ -231,7 +243,6 @@
 <translation id="5439835075346716808">Реєстрацію з цієї IP-адреси тимчасово заблоковано. Спробуйте пізніше.</translation>
 <translation id="5486261815000869482">Підтвердіть пароль</translation>
 <translation id="5494016731375030300">Нещодавно закриті вкладки</translation>
-<translation id="5569279496588266002">Вигляд Експрес-панелі</translation>
 <translation id="5639137028584114536">Якщо вам потрібна приватність, скористуйтеся приватними вкладками.
         <ph name="BEGIN_LINK" />Детальніше<ph name="END_LINK" /></translation>
 <translation id="5684277895745049190">Список</translation>
@@ -252,7 +263,7 @@
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> нотаток перенесено</translation>
 <translation id="6147094071357011481">Нещодавно закриті вкладки недоступні</translation>
 <translation id="6193995664633100765">Індійська (<ph name="ORIGIN" />)</translation>
-<translation id="6278428485366576908">Тема</translation>
+<translation id="6224086034182508647">Налаштування вигляду сайта</translation>
 <translation id="6365929278691047681">Німецька (<ph name="ORIGIN" />)</translation>
 <translation id="6404511346730675251">Редагувати закладку</translation>
 <translation id="6406506848690869874">Синхронізація</translation>
@@ -263,6 +274,7 @@
 <translation id="6527303717912515753">Поділитися</translation>
 <translation id="6535988230515403205">Польська (<ph name="ORIGIN" />)</translation>
 <translation id="659351303388691480">Очистити дані перегляду...</translation>
+<translation id="6602272356389933803">Вигляд і теми</translation>
 <translation id="6614744450826097546">Подробиці</translation>
 <translation id="6627583120233659107">Редагувати теку</translation>
 <translation id="6631760746795162665">Колумбійська (<ph name="ORIGIN" />)</translation>
@@ -273,6 +285,8 @@
 <translation id="6657585470893396449">Пароль</translation>
 <translation id="6690955457036363013">Керування рівнями блокування по сайтах</translation>
 <translation id="6703516503311038964">Я хочу отримувати новини Vivaldi</translation>
+<translation id="6724024423419410528">Кольори</translation>
+<translation id="6745857330065678428">Наслідувати колір вкладки</translation>
 <translation id="6757792528048321576">Блокувальник реклами та трекерів</translation>
 <translation id="6798469570047202628">Неправильний пароль</translation>
 <translation id="681368974849482173">Нотатку створено</translation>
@@ -280,10 +294,12 @@
 <translation id="6875510405870945573">Виберіть бажаний рівень блокування.</translation>
 <translation id="6885837502028760851">Показувати тільки теки Експрес-панелі</translation>
 <translation id="6887143077297974801">Помилка запуску.</translation>
+<translation id="691132463664340655">Тема браузера</translation>
 <translation id="6937750621455385628">Ви повинні використовувати обліковий запис Vivaldi для входу.</translation>
 <translation id="6945221475159498467">Вибрати</translation>
 <translation id="6946395294519639514">За допомогою Панелей ви зможете тримати під рукою корисні інструменти.</translation>
 <translation id="6951435330868954105">Змінити типові налаштування</translation>
+<translation id="6951948201878750661">Торкніться, щоб вибрати колір</translation>
 <translation id="6967884871145366229">Налаштування приватності</translation>
 <translation id="6973630695168034713">Теки</translation>
 <translation id="7006864796794806241">Відновити пароль</translation>
@@ -306,11 +322,14 @@
 <translation id="7417521636956146248">Пошукові системи будуть повернуті до початкових налаштувань, в додані вами будуть теж вилучені.</translation>
 <translation id="7454640759045234067">Трекерів заблоковано</translation>
 <translation id="7461899062138731833">ДЖЕРЕЛА</translation>
+<translation id="7490291412537629707">Відкрити у новій фоновій вкладці</translation>
 <translation id="750493650310597496">Вибрано 0 нотаток</translation>
 <translation id="7525067979554623046">Створити</translation>
+<translation id="753732157349120914">Екран вкладок</translation>
 <translation id="7573518470897278603">Показати мобільну версію</translation>
 <translation id="7574321014880720413">Додати новий домен</translation>
 <translation id="7587132259180664054">Листа надіслано</translation>
+<translation id="7587287726969638956">Вигляд сайта</translation>
 <translation id="7602336701644200880">Помилка при надсиланні листа. Повторіть ще раз.</translation>
 <translation id="7606108789437688910">Відкрити адреси нотатки у приватному режимі</translation>
 <translation id="7622661618259256505">Виберіть пароль довжиною щонайменше 12 символів.</translation>
@@ -320,20 +339,24 @@
 <translation id="7730831244010940855">Призначити Vivaldi типовим на iPad?</translation>
 <translation id="7732622593814325274">Керування правилами блокування трекерів</translation>
 <translation id="7765158879357617694">Перемістити</translation>
+<translation id="7771452384635174008">Оформлення</translation>
 <translation id="7801204999757211519">Уже є обліковий запис? <ph name="BEGIN_LINK" />Увійдіть ➔<ph name="END_LINK" /></translation>
 <translation id="7914995060146784406">Редагувати нотатку</translation>
 <translation id="7925340978147141704">Показати пароль</translation>
 <translation id="8008214489230610096">Підтвердіть пошту для відновлення</translation>
+<translation id="8046542428651654244">Оновити ескіз</translation>
 <translation id="804786196054284061">Умови використання Vivaldi</translation>
 <translation id="8053851743673939284">Французька (<ph name="ORIGIN" />)</translation>
 <translation id="8066170816074394954">Помилка сервера.</translation>
 <translation id="8076492880354921740">Вкладки</translation>
 <translation id="8112996065264879835">Код не збігається з надісланим вам.
          Ви досягли максимуму невдалих спроб. Запитайте новий код за допомогою повторного надсилання.</translation>
+<translation id="8134672010161840864">Обрізати чи змінити положення</translation>
 <translation id="8142291334394582384">Змінити порядок у списку підказок</translation>
 <translation id="8147118677117542370">Вкажіть свій вік.</translation>
 <translation id="8165573437634525334">Дані захищені паролем для шифрування</translation>
 <translation id="8182979418912184986">Нова приватна вкладка</translation>
+<translation id="8237090677709100373">Власний код кольору</translation>
 <translation id="8257908958623224237">Конфлікт з даними іншого клієнта.</translation>
 <translation id="8261506727792406068">Видалити</translation>
 <translation id="8273666073173891138">Нотатку збережено до <ph name="FOLDER_TITLE" /></translation>
@@ -364,8 +387,8 @@
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> нотаток видалено</translation>
 <translation id="8763006697839582351">Відкрити у приватному режимі Vivaldi</translation>
 <translation id="8765173886020357878">Пошукові підказки</translation>
-<translation id="8786689981011401964">Шпалери</translation>
 <translation id="8804164990146287819">Політика конфіденційності</translation>
+<translation id="8818152010000655963">Шпалери</translation>
 <translation id="8819841443522803117">Хочете поміняти типовий браузер? Спробуйте Vivaldi.</translation>
 <translation id="8820817407110198400">Закладки</translation>
 <translation id="8855707633300847215">Показувати панель вкладок</translation>

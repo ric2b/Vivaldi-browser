@@ -139,19 +139,20 @@ class StreamingVpxEncoder : public StreamingVideoEncoder {
   std::mutex mutex_;
 
   // Used by the encode thread to sleep until more work is available.
-  std::condition_variable cv_ ABSL_GUARDED_BY(mutex_);
+  std::condition_variable cv_;  // ABSL_GUARDED_BY(mutex_)
 
   // These encode parameters not passed in the WorkUnit struct because it is
   // desirable for them to be applied as soon as possible, with the very next
   // WorkUnit popped from the |encode_queue_| on the encode thread, and not to
   // wait until some later WorkUnit is processed.
-  bool needs_key_frame_ ABSL_GUARDED_BY(mutex_) = true;
-  int target_bitrate_ ABSL_GUARDED_BY(mutex_) = 2 << 20;  // Default: 2 Mbps.
+  bool needs_key_frame_ /* ABSL_GUARDED_BY(mutex_) */ = true;
+  int target_bitrate_ /* ABSL_GUARDED_BY(mutex_) */ =
+      2 << 20;  // Default: 2 Mbps.
 
   // The queue of frame encodes. The size of this queue is implicitly bounded by
   // EncodeAndSend(), where it checks for the total in-flight media duration and
   // maybe drops a frame.
-  std::queue<WorkUnit> encode_queue_ ABSL_GUARDED_BY(mutex_);
+  std::queue<WorkUnit> encode_queue_;  // ABSL_GUARDED_BY(mutex_)
 
   // Current VP8 encoder configuration. Most of the fields are unchanging, and
   // are populated in the ctor; but thereafter, only the encode thread accesses

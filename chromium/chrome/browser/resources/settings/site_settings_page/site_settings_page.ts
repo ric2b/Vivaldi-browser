@@ -13,7 +13,7 @@ import 'chrome://resources/cr_elements/cr_expand_button/cr_expand_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
-import '/shared/settings/controls/settings_toggle_button.js';
+import '../controls/settings_toggle_button.js';
 import '../settings_shared.css.js';
 import './recent_site_permissions.js';
 import './unused_site_permissions.js';
@@ -24,15 +24,17 @@ import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
 import {PluralStringProxyImpl} from 'chrome://resources/js/plural_string_proxy.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {FocusConfig} from '../focus_config.js';
+import type {FocusConfig} from '../focus_config.js';
 import {loadTimeData} from '../i18n_setup.js';
-import {MetricsBrowserProxy, MetricsBrowserProxyImpl, SafetyHubEntryPoint} from '../metrics_browser_proxy.js';
+import type {MetricsBrowserProxy} from '../metrics_browser_proxy.js';
+import {MetricsBrowserProxyImpl, SafetyHubEntryPoint} from '../metrics_browser_proxy.js';
 import {routes} from '../route.js';
 import {RouteObserverMixin, Router} from '../router.js';
-import {SafetyHubBrowserProxy, SafetyHubBrowserProxyImpl, SafetyHubEvent, UnusedSitePermissions} from '../safety_hub/safety_hub_browser_proxy.js';
+import type {SafetyHubBrowserProxy, UnusedSitePermissions} from '../safety_hub/safety_hub_browser_proxy.js';
+import {SafetyHubBrowserProxyImpl, SafetyHubEvent} from '../safety_hub/safety_hub_browser_proxy.js';
 import {ContentSettingsTypes} from '../site_settings/constants.js';
 
-import {CategoryListItem} from './site_settings_list.js';
+import type {CategoryListItem} from './site_settings_list.js';
 import {getTemplate} from './site_settings_page.html.js';
 
 const Id = ContentSettingsTypes;
@@ -235,6 +237,15 @@ function getCategoryItemMap(): Map<ContentSettingsTypes, CategoryListItem> {
       disabledLabel: 'siteSettingsFileSystemWriteBlocked',
     },
     {
+      route: routes.SITE_SETTINGS_AUTOMATIC_FULLSCREEN,
+      id: Id.AUTOMATIC_FULLSCREEN,
+      label: 'siteSettingsAutomaticFullscreen',
+      icon: 'cr:fullscreen',
+      disabledLabel: 'siteSettingsAutomaticFullscreenBlock',
+      shouldShow: () =>
+          loadTimeData.getBoolean('enableAutomaticFullscreenContentSetting'),
+    },
+    {
       route: routes.SITE_SETTINGS_LOCAL_FONTS,
       id: Id.LOCAL_FONTS,
       label: 'fonts',
@@ -328,8 +339,6 @@ function getCategoryItemMap(): Map<ContentSettingsTypes, CategoryListItem> {
       icon: 'settings:storage-access',
       enabledLabel: 'storageAccessAllowed',
       disabledLabel: 'storageAccessBlocked',
-      shouldShow: () =>
-          loadTimeData.getBoolean('enablePermissionStorageAccessApi'),
     },
     {
       route: routes.SITE_SETTINGS_USB_DEVICES,
@@ -447,48 +456,38 @@ export class SettingsSiteSettingsPageElement extends
       lists_: {
         type: Object,
         value: function() {
-          // Move `BACKGROUND_SYNC` to the sixth position under the fold if
-          // `STORAGE_ACCESS` is present.
-          const enablePermissionStorageAccessApi =
-              loadTimeData.getBoolean('enablePermissionStorageAccessApi');
-          const basic = enablePermissionStorageAccessApi ? Id.STORAGE_ACCESS :
-                                                           Id.BACKGROUND_SYNC;
-          const advanced: ContentSettingsTypes[] =
-              enablePermissionStorageAccessApi ? [Id.BACKGROUND_SYNC] : [];
-
           return {
             permissionsBasic: buildItemListFromIds([
               Id.GEOLOCATION,
               Id.CAMERA,
               Id.MIC,
               Id.NOTIFICATIONS,
-              basic,
+              Id.STORAGE_ACCESS,
             ]),
             permissionsAdvanced: buildItemListFromIds([
-              ...advanced,
-              ...[Id.SENSORS,
-                  Id.AUTOMATIC_DOWNLOADS,
-                  Id.PROTOCOL_HANDLERS,
-                  Id.MIDI_DEVICES,
-                  Id.USB_DEVICES,
-                  Id.SERIAL_PORTS,
-                  Id.BLUETOOTH_DEVICES,
-                  Id.FILE_SYSTEM_WRITE,
-                  Id.HID_DEVICES,
-                  Id.CLIPBOARD,
-                  Id.PAYMENT_HANDLER,
-                  Id.BLUETOOTH_SCANNING,
-                  Id.AR,
-                  Id.VR,
-                  Id.IDLE_DETECTION,
-                  Id.WEB_PRINTING,
-                  Id.WINDOW_MANAGEMENT,
-                  Id.LOCAL_FONTS,
-                  Id.AUTO_PICTURE_IN_PICTURE,
+              Id.BACKGROUND_SYNC,
+              Id.SENSORS,
+              Id.AUTOMATIC_DOWNLOADS,
+              Id.PROTOCOL_HANDLERS,
+              Id.MIDI_DEVICES,
+              Id.USB_DEVICES,
+              Id.SERIAL_PORTS,
+              Id.BLUETOOTH_DEVICES,
+              Id.FILE_SYSTEM_WRITE,
+              Id.HID_DEVICES,
+              Id.CLIPBOARD,
+              Id.PAYMENT_HANDLER,
+              Id.BLUETOOTH_SCANNING,
+              Id.AR,
+              Id.VR,
+              Id.IDLE_DETECTION,
+              Id.WEB_PRINTING,
+              Id.WINDOW_MANAGEMENT,
+              Id.LOCAL_FONTS,
+              Id.AUTO_PICTURE_IN_PICTURE,
 
-                  // Vivaldi
-                  Id.AUTOPLAY,
-          ],
+              // Vivaldi
+              Id.AUTOPLAY,
             ]),
             contentBasic: buildItemListFromIds([
               Id.COOKIES,
@@ -508,6 +507,7 @@ export class SettingsSiteSettingsPageElement extends
               Id.SITE_DATA,
               Id.PERFORMANCE,
               Id.JAVASCRIPT_JIT,
+              Id.AUTOMATIC_FULLSCREEN,
             ]),
           };
         },

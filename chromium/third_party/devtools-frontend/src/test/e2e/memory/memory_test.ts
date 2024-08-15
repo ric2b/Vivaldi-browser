@@ -3,18 +3,19 @@
 // found in the LICENSE file.
 
 import {assert} from 'chai';
-
 import type * as puppeteer from 'puppeteer-core';
 
 import {
-  $$,
   $,
+  $$,
   assertNotNullOrUndefined,
+  clickElement,
+  disableExperiment,
+  enableExperiment,
   getBrowserAndPages,
   goToResource,
   step,
   waitFor,
-  clickElement,
   waitForElementsWithTextContent,
   waitForElementWithTextContent,
   waitForFunction,
@@ -24,8 +25,13 @@ import {describe, it} from '../../shared/mocha-extensions.js';
 import {
   changeAllocationSampleViewViaDropdown,
   changeViewViaDropdown,
+  expandFocusedRow,
   findSearchResult,
+  focusTableRow,
   getDataGridRows,
+  getDistanceFromCategoryRow,
+  getSizesFromCategoryRow,
+  getSizesFromSelectedRow,
   navigateToMemoryTab,
   setClassFilter,
   setSearchFilter,
@@ -38,7 +44,7 @@ import {
   waitUntilRetainerChainSatisfies,
 } from '../helpers/memory-helpers.js';
 
-describe('The Memory Panel', async function() {
+describe('The Memory Panel', function() {
   // These tests render large chunks of data into DevTools and filter/search
   // through it. On bots with less CPU power, these can fail because the
   // rendering takes a long time, so we allow a much larger timeout.
@@ -51,8 +57,7 @@ describe('The Memory Panel', async function() {
     await navigateToMemoryTab();
   });
 
-  // Flaky test
-  it.skip('[crbug.com/1435436] Can take several heap snapshots ', async () => {
+  it('Can take several heap snapshots ', async () => {
     await goToResource('memory/default.html');
     await navigateToMemoryTab();
     await takeHeapSnapshot();
@@ -270,10 +275,15 @@ describe('The Memory Panel', async function() {
     });
     const rows = await getDataGridRows('.retaining-paths-view table.data');
     const propertyNameElement = await rows[0].$('span.property-name');
-    assertNotNullOrUndefined(propertyNameElement);
-    propertyNameElement.hover();
+    propertyNameElement!.hover();
     const el = await waitFor('div.vbox.flex-auto.no-pointer-events');
     await waitFor('.source-code', el);
+
+    await setSearchFilter('system / descriptorarray');
+    await findSearchResult('system / DescriptorArray');
+    const searchResultElement = await waitFor('.selected.data-grid-data-grid-node span.object-value-null');
+    searchResultElement!.hover();
+    await waitFor('.widget .object-popover-footer');
   });
 
   it('shows the flamechart for an allocation sample', async () => {
@@ -398,5 +408,71 @@ describe('The Memory Panel', async function() {
           await waitForFunction(async () => element?.evaluate(e => e.querySelector('.devtools-link')?.textContent));
       assert.strictEqual(linkText, entry.link);
     }
+  });
+
+  async function runJSSetTest() {
+    await navigateToMemoryTab();
+    await takeHeapSnapshot();
+    await waitForNonEmptyHeapSnapshotData();
+    await setSearchFilter('Retainer');
+    await waitForSearchResultNumber(4);
+    await findSearchResult('Retainer()');
+    await focusTableRow('Retainer()');
+    await expandFocusedRow();
+    await focusTableRow('customProperty');
+    const sizesForSet = await getSizesFromSelectedRow();
+    await expandFocusedRow();
+    await focusTableRow('(internal array)[]');
+    const sizesForBackingStorage = await getSizesFromSelectedRow();
+    return {sizesForSet, sizesForBackingStorage};
+  }
+
+  it('Does not include backing store size in the shallow size of a JS Set', async () => {
+    await goToResource('memory/set.html');
+    await disableExperiment('heap-snapshot-treat-backing-store-as-containing-object');
+    const sizes = await runJSSetTest();
+
+    // The Set object is small, regardless of the contained content.
+    assert.isTrue(sizes.sizesForSet.shallowSize <= 100);
+    // The Set retains its backing storage.
+    assert.isTrue(
+        sizes.sizesForSet.retainedSize >= sizes.sizesForSet.shallowSize + sizes.sizesForBackingStorage.retainedSize);
+    // The backing storage contains 100 items, which occupy at least one pointer per item.
+    assert.isTrue(sizes.sizesForBackingStorage.shallowSize >= 400);
+    // The backing storage retains 100 strings, which occupy at least 16 bytes each.
+    assert.isTrue(sizes.sizesForBackingStorage.retainedSize >= sizes.sizesForBackingStorage.shallowSize + 1600);
+  });
+
+  it('Includes backing store size in the shallow size of a JS Set', async () => {
+    await goToResource('memory/set.html');
+    await enableExperiment('heap-snapshot-treat-backing-store-as-containing-object');
+    const sizes = await runJSSetTest();
+
+    // The Set is reported as containing at least 100 pointers.
+    assert.isTrue(sizes.sizesForSet.shallowSize >= 400);
+    // The Set retains its backing storage.
+    assert.isTrue(
+        sizes.sizesForSet.retainedSize >= sizes.sizesForSet.shallowSize + sizes.sizesForBackingStorage.retainedSize);
+    // The backing storage is reported as zero size.
+    assert.strictEqual(sizes.sizesForBackingStorage.shallowSize, 0);
+    // The backing storage retains 100 strings, which occupy at least 16 bytes each.
+    assert.isTrue(sizes.sizesForBackingStorage.retainedSize >= 1600);
+  });
+
+  it('Computes distances and sizes for WeakMap values correctly', async () => {
+    await goToResource('memory/weakmap.html');
+    await navigateToMemoryTab();
+    await takeHeapSnapshot();
+    await waitForNonEmptyHeapSnapshotData();
+    await setClassFilter('CustomClass');
+    assert.strictEqual(5, await getDistanceFromCategoryRow('CustomClass1'));
+    assert.strictEqual(6, await getDistanceFromCategoryRow('CustomClass2'));
+    assert.strictEqual(2, await getDistanceFromCategoryRow('CustomClass3'));
+    assert.strictEqual(8, await getDistanceFromCategoryRow('CustomClass4'));
+    assert.isTrue((await getSizesFromCategoryRow('CustomClass1Key')).retainedSize >= 2 ** 15);
+    assert.isTrue((await getSizesFromCategoryRow('CustomClass2Key')).retainedSize >= 2 ** 15);
+    assert.isTrue((await getSizesFromCategoryRow('CustomClass3Key')).retainedSize < 2 ** 15);
+    assert.isTrue((await getSizesFromCategoryRow('CustomClass4Key')).retainedSize < 2 ** 15);
+    assert.isTrue((await getSizesFromCategoryRow('CustomClass4Retainer')).retainedSize >= 2 ** 15);
   });
 });

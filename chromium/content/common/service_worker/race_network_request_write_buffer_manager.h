@@ -5,6 +5,8 @@
 #ifndef CONTENT_COMMON_SERVICE_WORKER_RACE_NETWORK_REQUEST_WRITE_BUFFER_MANAGER_H_
 #define CONTENT_COMMON_SERVICE_WORKER_RACE_NETWORK_REQUEST_WRITE_BUFFER_MANAGER_H_
 
+#include <optional>
+
 #include "base/containers/span.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/system/data_pipe.h"
@@ -27,13 +29,15 @@ class CONTENT_EXPORT RaceNetworkRequestWriteBufferManager {
   mojo::ScopedDataPipeConsumerHandle ReleaseConsumerHandle();
   void Abort();
   void ResetProducer();
-  void Watch(mojo::SimpleWatcher::ReadyCallback callback);
+  void Watch(mojo::SimpleWatcher::ReadyCallbackWithState callback);
   bool IsWatching() const { return watcher_.IsWatching(); }
   void CancelWatching();
   MojoResult BeginWriteData();
   MojoResult EndWriteData(uint32_t num_bytes_written);
+  std::tuple<MojoResult, size_t> WriteData(base::span<const char> read_buffer);
   void ArmOrNotify();
   size_t buffer_size() const { return buffer_.size(); }
+  size_t num_bytes_written() const { return num_bytes_written_; }
   size_t CopyAndCompleteWriteData(base::span<const char> read_buffer);
   size_t CopyAndCompleteWriteDataWithSize(base::span<const char> read_buffer,
                                           size_t max_num_bytes_to_consume);
@@ -51,6 +55,7 @@ class CONTENT_EXPORT RaceNetworkRequestWriteBufferManager {
   mojo::ScopedDataPipeConsumerHandle consumer_;
   base::span<char> buffer_;
   mojo::SimpleWatcher watcher_;
+  size_t num_bytes_written_ = 0;
 };
 }  // namespace content
 

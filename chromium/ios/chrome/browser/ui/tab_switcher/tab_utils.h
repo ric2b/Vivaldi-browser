@@ -10,6 +10,7 @@
 #import "ios/web/public/web_state_id.h"
 
 @class TabSwitcherItem;
+@class GridItemIdentifier;
 @class TabItem;
 class WebStateList;
 
@@ -63,7 +64,16 @@ int SetWebStatePinnedState(WebStateList* web_state_list,
                            web::WebStateID identifier,
                            bool pin_state);
 
+// Returns whether `items` has items (of type group or tab) with the same
+// identifier.
+bool HasDuplicateGroupsAndTabsIdentifiers(NSArray<GridItemIdentifier*>* items);
+
 // Returns whether `items` has items with the same identifier.
 bool HasDuplicateIdentifiers(NSArray<TabSwitcherItem*>* items);
+
+// Closes all non-pinned WebStates whose index is not `index_to_keep`.
+void CloseOtherWebStates(WebStateList* web_state_list,
+                         int index_to_keep,
+                         int close_flags);
 
 #endif  // IOS_CHROME_BROWSER_UI_TAB_SWITCHER_TAB_UTILS_H_

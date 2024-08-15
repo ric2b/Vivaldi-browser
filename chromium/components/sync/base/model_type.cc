@@ -151,6 +151,9 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
     {WEB_APPS, "WEB_APP", "web_apps", "Web Apps",
      sync_pb::EntitySpecifics::kWebAppFieldNumber,
      ModelTypeForHistograms::kWebApps},
+    {WEB_APKS, "WEB_APK", "web_apks", "Web Apks",
+     sync_pb::EntitySpecifics::kWebApkFieldNumber,
+     ModelTypeForHistograms::kWebApks},
     {OS_PREFERENCES, "OS_PREFERENCE", "os_preferences", "OS Preferences",
      sync_pb::EntitySpecifics::kOsPreferenceFieldNumber,
      ModelTypeForHistograms::kOsPreferences},
@@ -196,6 +199,20 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
      "Outgoing Password Sharing Invitations",
      sync_pb::EntitySpecifics::kOutgoingPasswordSharingInvitationFieldNumber,
      ModelTypeForHistograms::kOutgoingPasswordSharingInvitations},
+    {SHARED_TAB_GROUP_DATA, "SHARED_TAB_GROUP_DATA", "shared_tab_group_data",
+     "Shared Tab Group Data",
+     sync_pb::EntitySpecifics::kSharedTabGroupDataFieldNumber,
+     ModelTypeForHistograms::kSharedTabGroupData},
+    {COLLABORATION_GROUP, "COLLABORATION_GROUP", "collaboration_group",
+     "Collaboration Group",
+     sync_pb::EntitySpecifics::kCollaborationGroupFieldNumber,
+     ModelTypeForHistograms::kCollaborationGroup},
+    {PLUS_ADDRESS, "PLUS_ADDRESS", "plus_address", "Plus Address",
+     sync_pb::EntitySpecifics::kPlusAddressFieldNumber,
+     ModelTypeForHistograms::kPlusAddresses},
+    {COMPARE, "COMPARE", "compare", "Compare",
+     sync_pb::EntitySpecifics::kCompareFieldNumber,
+     ModelTypeForHistograms::kCompare},
     {NOTES, "NOTES", "vivaldi_notes", "Notes",
      sync_pb::EntitySpecifics::kNotesFieldNumber,
      ModelTypeForHistograms::kNotes},
@@ -208,9 +225,14 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
 static_assert(std::size(kModelTypeInfoMap) == GetNumModelTypes(),
               "kModelTypeInfoMap should have GetNumModelTypes() elements");
 
-static_assert(47 + 1 /* notes */ == syncer::GetNumModelTypes(),
+static_assert(52 + 1 /* notes */ == syncer::GetNumModelTypes(),
               "When adding a new type, update enum SyncModelTypes in enums.xml "
               "and suffix SyncModelType in histograms.xml.");
+
+static_assert(52 + 1 /* notes */ == syncer::GetNumModelTypes(),
+              "When adding a new type, follow the integration checklist in "
+              "https://www.chromium.org/developers/design-documents/sync/"
+              "integration-checklist/");
 
 // kSpecificsFieldNumberToModelTypeMap must exactly match the kModelTypeInfoMap,
 // so its size must be syncer::GetNumModelTypes().
@@ -266,6 +288,7 @@ constexpr kSpecificsFieldNumberToModelTypeMap
         {sync_pb::EntitySpecifics::kWifiConfigurationFieldNumber,
          WIFI_CONFIGURATIONS},
         {sync_pb::EntitySpecifics::kWebAppFieldNumber, WEB_APPS},
+        {sync_pb::EntitySpecifics::kWebApkFieldNumber, WEB_APKS},
         {sync_pb::EntitySpecifics::kOsPreferenceFieldNumber, OS_PREFERENCES},
         {sync_pb::EntitySpecifics::kOsPriorityPreferenceFieldNumber,
          OS_PRIORITY_PREFERENCES},
@@ -285,6 +308,12 @@ constexpr kSpecificsFieldNumberToModelTypeMap
         {sync_pb::EntitySpecifics::
              kOutgoingPasswordSharingInvitationFieldNumber,
          OUTGOING_PASSWORD_SHARING_INVITATION},
+        {sync_pb::EntitySpecifics::kSharedTabGroupDataFieldNumber,
+         SHARED_TAB_GROUP_DATA},
+        {sync_pb::EntitySpecifics::kCollaborationGroupFieldNumber,
+         COLLABORATION_GROUP},
+        {sync_pb::EntitySpecifics::kPlusAddressFieldNumber, PLUS_ADDRESS},
+        {sync_pb::EntitySpecifics::kCompareFieldNumber, COMPARE},
         // ---- Control Types ----
         {sync_pb::EntitySpecifics::kNigoriFieldNumber, NIGORI},
 
@@ -399,6 +428,9 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
     case WEB_APPS:
       specifics->mutable_web_app();
       break;
+    case WEB_APKS:
+      specifics->mutable_web_apk();
+      break;
     case WIFI_CONFIGURATIONS:
       specifics->mutable_wifi_configuration();
       break;
@@ -438,6 +470,19 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
     case OUTGOING_PASSWORD_SHARING_INVITATION:
       specifics->mutable_outgoing_password_sharing_invitation();
       break;
+    case SHARED_TAB_GROUP_DATA:
+      specifics->mutable_shared_tab_group_data();
+      break;
+    case COLLABORATION_GROUP:
+      specifics->mutable_collaboration_group();
+      break;
+    case PLUS_ADDRESS:
+      specifics->mutable_plus_address();
+      break;
+    case COMPARE:
+      specifics->mutable_compare();
+      break;
+
 
     // <Vivaldi
     case NOTES:
@@ -472,7 +517,7 @@ void internal::GetModelTypeSetFromSpecificsFieldNumberListHelper(
 }
 
 ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
-  static_assert(47 + 1 /* notes */ == syncer::GetNumModelTypes(),
+  static_assert(52 + 1 /* notes */ == syncer::GetNumModelTypes(),
                 "When adding new protocol types, the following type lookup "
                 "logic must be updated.");
   if (specifics.has_bookmark())
@@ -533,6 +578,9 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
     return SECURITY_EVENTS;
   if (specifics.has_web_app())
     return WEB_APPS;
+  if (specifics.has_web_apk()) {
+    return WEB_APKS;
+  }
   if (specifics.has_wifi_configuration())
     return WIFI_CONFIGURATIONS;
   if (specifics.has_os_preference())
@@ -571,6 +619,18 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
   if (specifics.has_autofill_wallet_credential()) {
     return AUTOFILL_WALLET_CREDENTIAL;
   }
+  if (specifics.has_shared_tab_group_data()) {
+    return SHARED_TAB_GROUP_DATA;
+  }
+  if (specifics.has_collaboration_group()) {
+    return COLLABORATION_GROUP;
+  }
+  if (specifics.has_plus_address()) {
+    return PLUS_ADDRESS;
+  }
+  if (specifics.has_compare()) {
+    return COMPARE;
+  }
 
   if (specifics.has_notes())
     return NOTES;
@@ -581,7 +641,7 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
 }
 
 ModelTypeSet EncryptableUserTypes() {
-  static_assert(47 + 1 /* notes */ == syncer::GetNumModelTypes(),
+  static_assert(52 + 1 /* notes */ == syncer::GetNumModelTypes(),
                 "If adding an unencryptable type, remove from "
                 "encryptable_user_types below.");
   ModelTypeSet encryptable_user_types = UserTypes();
@@ -596,6 +656,9 @@ ModelTypeSet EncryptableUserTypes() {
   // encryptable_user_types.Remove(AUTOFILL_WALLET_DATA);
   // encryptable_user_types.Remove(AUTOFILL_WALLET_OFFER);
   // encryptable_user_types.Remove(AUTOFILL_WALLET_USAGE);
+  // // Similarly, collaboration group is not encrypted since it originates on the
+  // // server.
+  // encryptable_user_types.Remove(COLLABORATION_GROUP);
   // // Similarly, contact info is not encrypted since it originates on the server.
   // encryptable_user_types.Remove(CONTACT_INFO);
   // // Commit-only types are never encrypted since they are consumed server-side.
@@ -614,6 +677,11 @@ ModelTypeSet EncryptableUserTypes() {
   // // Password sharing invitations have different encryption implementation.
   // encryptable_user_types.Remove(INCOMING_PASSWORD_SHARING_INVITATION);
   // encryptable_user_types.Remove(OUTGOING_PASSWORD_SHARING_INVITATION);
+  // // Never encrypted because consumed server-side.
+  // encryptable_user_types.Remove(SHARED_TAB_GROUP_DATA);
+  // // Plus addresses are never encrypted because the originate from outside
+  // // Chrome.
+  // encryptable_user_types.Remove(PLUS_ADDRESS);
   //
   return encryptable_user_types;
 }

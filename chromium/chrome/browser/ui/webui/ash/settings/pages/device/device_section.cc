@@ -704,6 +704,10 @@ bool IsUnifiedDesktopAvailable() {
       ::switches::kEnableUnifiedDesktop);
 }
 
+bool IsDisplayPerformanceSupported() {
+  return ash::features::IsDisplayPerformanceModeEnabled();
+}
+
 bool DoesDeviceSupportAmbientColor() {
   return ash::features::IsAllowAmbientEQEnabled();
 }
@@ -953,6 +957,8 @@ void AddDeviceAudioStrings(content::WebUIDataSource* html_source) {
       {"audioDeviceUsbLabel", IDS_SETTINGS_AUDIO_DEVICE_USB_LABEL},
       {"audioInputDeviceTitle", IDS_SETTINGS_AUDIO_INPUT_DEVICE_TITLE},
       {"audioInputAllowAGCTitle", IDS_SETTINGS_AUDIO_INPUT_ALLOW_AGC_TITLE},
+      {"audioHfpMicSrTitle", IDS_SETTINGS_AUDIO_HFP_MIC_SR_TITLE},
+      {"audioHfpMicSrDescription", IDS_SETTINGS_AUDIO_HFP_MIC_SR_DESCRIPTION},
       {"audioInputGainTitle", IDS_SETTINGS_AUDIO_INPUT_GAIN_TITLE},
       {"audioInputMuteButtonAriaLabelMuted",
        IDS_SETTINGS_AUDIO_INPUT_MUTE_BUTTON_ARIA_LABEL_MUTED},
@@ -987,9 +993,6 @@ void AddDeviceAudioStrings(content::WebUIDataSource* html_source) {
   };
 
   html_source->AddLocalizedStrings(kAudioStrings);
-
-  html_source->AddBoolean("areSystemSoundsEnabled",
-                          ash::features::AreSystemSoundsEnabled());
 }
 
 // Mirrors enum of the same name in enums.xml.
@@ -1052,11 +1055,7 @@ DeviceSection::DeviceSection(Profile* profile,
     updater.AddSearchTags(GetKeyboardSearchConcepts());
   }
 
-  // Only when the feature is enabled, the toggle buttons for charging sounds
-  // and the low battery sound will be shown up.
-  if (ash::features::AreSystemSoundsEnabled()) {
-    updater.AddSearchTags(GetAudioPowerSoundsSearchConcepts());
-  }
+  updater.AddSearchTags(GetAudioPowerSoundsSearchConcepts());
 
   // Keyboard/mouse search tags are added/removed dynamically.
   pointer_device_observer_.Init();
@@ -1770,16 +1769,30 @@ void DeviceSection::AddCustomizeButtonsPageStrings(
        IDS_SETTINGS_CUSTOMIZE_BUTTONS_RENAMING_DIALOG_INPUT_CHARACTER_COUNT},
       {"buttonRenamingDialogTitle",
        IDS_SETTINGS_CUSTOMIZE_BUTTONS_RENAMING_DIALOG_TITLE},
+      {"buttonReorderingAriaLabel",
+       IDS_SETTINGS_CUSTOMIZE_BUTTONS_REORDER_ARIA_LABEL},
+      {"buttonReorderingAriaAnnouncement",
+       IDS_SETTINGS_CUSTOMIZE_BUTTONS_REORDER_ARIA_ANNOUNCEMENT},
       {"customizeButtonSubpageDescription",
        IDS_SETTINGS_CUSTOMIZE_BUTTONS_SUBPAGE_DESCRIPTION},
+      {"customizeTabletButtonSubpageDescription",
+       IDS_SETTINGS_CUSTOMIZE_TABLET_BUTTONS_SUBPAGE_DESCRIPTION},
       {"customizeMouseButtonsNudgeHeader",
        IDS_SETTINGS_CUSTOMIZE_MOUSE_BUTTONS_NUDGE_HEADER},
+      {"customizeTabletButtonsNudgeHeader",
+       IDS_SETTINGS_CUSTOMIZE_TABLET_BUTTONS_NUDGE_HEADER},
+      {"customizePenButtonsNudgeHeader",
+       IDS_SETTINGS_CUSTOMIZE_PEN_BUTTONS_NUDGE_HEADER},
       {"customizeMouseButtonsTitle",
        IDS_SETTINGS_CUSTOMIZE_MOUSE_BUTTONS_TITLE},
       {"disbableOptionLabel", IDS_SETTINGS_DISABLE_OPTION_LABEL},
       {"keyCombinationDialogTitle", IDS_SETTINGS_KEY_COMBINATION_DIALOG_TITLE},
       {"keyCombinationOptionLabel", IDS_SETTINGS_KEY_COMBINATION_OPTION_LABEL},
       {"noRemappingOptionLabel", IDS_SETTINGS_NO_REMAPPING_OPTION_LABEL},
+      {"renameIconLabel", IDS_SETTINGS_CUSTOMIZATION_RENAME_ICON_LABEL},
+      {"buttonRemappingRenamingDialogInputDescription",
+       IDS_SETTINGS_RENAMING_DIALOG_INPUT_DESCRIPTION},
+
   };
   html_source->AddLocalizedStrings(kCustomizeButtonsPageStrings);
   ash::common::AddShortcutInputKeyStrings(html_source);
@@ -1795,6 +1808,7 @@ void DeviceSection::AddDeviceDisplayStrings(
       {"displayAmbientColorSubtitle",
        IDS_SETTINGS_DISPLAY_AMBIENT_COLOR_SUBTITLE},
       {"displayArrangementTitle", IDS_SETTINGS_DISPLAY_ARRANGEMENT_TITLE},
+      {"displayBrightnessLabel", IDS_SETTINGS_DISPLAY_BRIGHTNESS_LABEL},
       {"displayMirror", IDS_SETTINGS_DISPLAY_MIRROR},
       {"displayMirrorDisplayName", IDS_SETTINGS_DISPLAY_MIRROR_DISPLAY_NAME},
       {"displayNightLightLabel", IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_LABEL},
@@ -1860,6 +1874,8 @@ void DeviceSection::AddDeviceDisplayStrings(
       {"displayScreenExtended", IDS_SETTINGS_DISPLAY_SCREEN_EXTENDED},
       {"displayScreenPrimary", IDS_SETTINGS_DISPLAY_SCREEN_PRIMARY},
       {"displayScreenTitle", IDS_SETTINGS_DISPLAY_SCREEN},
+      {"displayShinyPerformanceLabel",
+       IDS_SETTINGS_DISPLAY_SHINY_PERFORMANCE_LABEL},
       {"displaySizeSliderMaxLabel", IDS_SETTINGS_DISPLAY_ZOOM_SLIDER_MAXIMUM},
       {"displaySizeSliderMinLabel", IDS_SETTINGS_DISPLAY_ZOOM_SLIDER_MINIMUM},
       {"displayTitle", kIsRevampEnabled ? IDS_OS_SETTINGS_REVAMP_DISPLAY_TITLE
@@ -1907,6 +1923,9 @@ void DeviceSection::AddDeviceDisplayStrings(
   html_source->AddBoolean("enableForceRespectUiGainsToggle",
                           IsShowForceRespectUiGainsToggleEnabled());
 
+  html_source->AddBoolean("enableAudioHfpMicSRToggle",
+                          features::IsAudioHFPMicSRToggleEnabled());
+
   html_source->AddBoolean("enableTouchCalibrationSetting",
                           IsTouchCalibrationAvailable());
 
@@ -1920,6 +1939,12 @@ void DeviceSection::AddDeviceDisplayStrings(
   html_source->AddBoolean(
       "allowDisplayAlignmentApi",
       base::FeatureList::IsEnabled(ash::features::kDisplayAlignAssist));
+
+  html_source->AddBoolean("isDisplayPerformanceSupported",
+                          IsDisplayPerformanceSupported());
+
+  html_source->AddBoolean("enableDisplayBrightnessControlInSettings",
+                          features::IsBrightnessControlInSettingsEnabled());
 }
 
 }  // namespace ash::settings

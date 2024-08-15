@@ -64,7 +64,7 @@ class ASH_EXPORT DeskBarViewBase : public views::View,
   static int GetPreferredBarHeight(aura::Window* root, Type type, State state);
 
   // Return the preferred state for the desk bar given `type`.
-  static State GetPerferredState(Type type);
+  static State GetPreferredState(Type type);
 
   // Create and returns the widget that contains the desk bar view of `type`.
   // The returned widget has no contents view yet, and hasn't been shown yet.
@@ -132,7 +132,7 @@ class ASH_EXPORT DeskBarViewBase : public views::View,
   }
 
   // views::View:
-  void Layout() override;
+  void Layout(PassKey) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
 
@@ -177,7 +177,7 @@ class ASH_EXPORT DeskBarViewBase : public views::View,
   // and the `zero_state_default_desk_button_`.
   void UpdateButtonsForSavedDeskGrid();
 
-  // Udate the visibility of the `default_desk_button_` on the desk bar's
+  // Update the visibility of the `default_desk_button_` on the desk bar's
   // state.
   void UpdateDeskButtonsVisibility();
 
@@ -348,6 +348,9 @@ class ASH_EXPORT DeskBarViewBase : public views::View,
   // scroll. Return true if the scroll is triggered. Return false if the scroll
   // is ended.
   bool MaybeScrollByDraggedDesk();
+
+  // Records UMA histograms on desk profile adoption.
+  void RecordDeskProfileAdoption();
 
   const Type type_ = Type::kOverview;
 

@@ -6,6 +6,7 @@
 
 #include <optional>
 
+#include "ash/display/display_performance_mode_controller.h"
 #include "ash/display/display_prefs.h"
 #include "ash/public/cpp/tablet_mode.h"
 #include "ash/shell.h"
@@ -109,6 +110,11 @@ void DisplaySettingsProvider::OnDidProcessDisplayChanges(
 
 void DisplaySettingsProvider::OnDisplayAdded(
     const display::Display& new_display) {
+  // Do not count new display connected when turning on unified desk mode.
+  if (new_display.id() == display::kUnifiedDisplayId) {
+    return;
+  }
+
   // Check with prefs service to see if this display is firstly seen or was
   // saved to prefs before.
   if (Shell::HasInstance() && Shell::Get()->display_prefs() &&
@@ -137,6 +143,35 @@ void DisplaySettingsProvider::RecordChangingDisplaySettings(
   }
   base::UmaHistogramEnumeration(histogram_name, type);
 
+  // Record settings change in details.
+  if (type == mojom::DisplaySettingsType::kOrientation) {
+    CHECK(value->orientation.has_value());
+    histogram_name.append(".Orientation");
+    base::UmaHistogramEnumeration(histogram_name, value->orientation.value());
+  } else if (type == mojom::DisplaySettingsType::kNightLight) {
+    CHECK(value->night_light_status.has_value());
+    histogram_name.append(".NightLightStatus");
+    base::UmaHistogramBoolean(histogram_name,
+                              value->night_light_status.value());
+  } else if (type == mojom::DisplaySettingsType::kNightLightSchedule) {
+    CHECK(value->night_light_schedule.has_value());
+    histogram_name.append(".NightLightSchedule");
+    base::UmaHistogramEnumeration(histogram_name,
+                                  value->night_light_schedule.value());
+  } else if (type == mojom::DisplaySettingsType::kMirrorMode) {
+    CHECK(value->mirror_mode_status.has_value());
+    CHECK(!value->is_internal_display.has_value());
+    histogram_name.append(".MirrorModeStatus");
+    base::UmaHistogramBoolean(histogram_name,
+                              value->mirror_mode_status.value());
+  } else if (type == mojom::DisplaySettingsType::kUnifiedMode) {
+    CHECK(value->unified_mode_status.has_value());
+    CHECK(!value->is_internal_display.has_value());
+    histogram_name.append(".UnifiedModeStatus");
+    base::UmaHistogramBoolean(histogram_name,
+                              value->unified_mode_status.value());
+  }
+
   // Record default display settings performance metrics.
   if (value->display_id.has_value() &&
       (type == mojom::DisplaySettingsType::kResolution ||
@@ -160,6 +195,18 @@ void DisplaySettingsProvider::RecordChangingDisplaySettings(
       displays_connection_timestamp_map_.erase(id);
     }
   }
+}
+
+void DisplaySettingsProvider::SetShinyPerformance(bool enabled) {
+  // The provider could outlive the shell so check if it's still valid.
+  if (!Shell::HasInstance() ||
+      !Shell::Get()->display_performance_mode_controller()) {
+    return;
+  }
+
+  Shell::Get()
+      ->display_performance_mode_controller()
+      ->SetHighPerformanceModeByUser(enabled);
 }
 
 }  // namespace ash::settings

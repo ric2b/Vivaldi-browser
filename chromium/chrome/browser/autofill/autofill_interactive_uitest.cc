@@ -78,6 +78,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_mock_cert_verifier.h"
 #include "content/public/test/fenced_frame_test_util.h"
+#include "content/public/test/scoped_accessibility_mode_override.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/test_utils.h"
 #include "content/public/test/url_loader_interceptor.h"
@@ -161,28 +162,8 @@ constexpr char kTestShippingFormString[] = R"(
     </form>
     )";
 
-constexpr std::string_view kNumElementsMatchesNumFields =
-    "Autofill.NumElementsMatchesNumFields";
-
 ACTION_P(InvokeClosure, closure) {
   closure.Run();
-}
-
-// Continuously merges histograms from all subprocesses and checks if the
-// histogram `histogram_name` got observed with `expected_count` and
-// `expected_sample`. Then runs `base::HistogramTester::ExpectUniqueSample`.
-bool WaitAndExpectUniqueSample(const base::HistogramTester* histogram_tester,
-                               const std::string_view histogram_name,
-                               const bool expected_sample,
-                               const int expected_count) {
-  bool expected_count_observed = base::test::RunUntil([&]() {
-    ::metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
-    return histogram_tester->GetBucketCount(histogram_name, expected_sample) ==
-           expected_count;
-  });
-  histogram_tester->ExpectUniqueSample(kNumElementsMatchesNumFields,
-                                       expected_sample, expected_count);
-  return expected_count_observed;
 }
 
 // Version of `kTestShippingFormString` which uses <selectlist> instead of
@@ -1031,6 +1012,18 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveDisableAutofillSelectListTest,
                          {"state", ""}}));
 }
 
+class AutofillInteractiveTest_PrefillFormAndFill
+    : public AutofillInteractiveTest {
+ public:
+  AutofillInteractiveTest_PrefillFormAndFill() {
+    scoped_feature_list_.InitAndDisableFeature(
+        features::kAutofillSkipPreFilledFields);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
 class AutofillInteractiveTest_UndoAutofill : public AutofillInteractiveTest {
   base::test::ScopedFeatureList scoped_feature_list_{features::kAutofillUndo};
 };
@@ -1265,7 +1258,8 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, ModifySelectListFieldAndFill) {
 }
 
 // Test that autofill works when the website prefills the form.
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, PrefillFormAndFill) {
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest_PrefillFormAndFill,
+                       PrefillFormAndFill) {
   const char kPrefillScript[] =
       R"( <script>
             document.getElementById('firstname').value = 'Seb';
@@ -2581,12 +2575,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, NoAutocomplete) {
 
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
 
-  // If only some form fields are tagged with autocomplete types, then the
-  // number of input elements will not match the number of fields when autofill
-  // tries to preview or fill.
-  ASSERT_TRUE(WaitAndExpectUniqueSample(&histogram_tester(),
-                                        kNumElementsMatchesNumFields, true, 2));
-
   EXPECT_EQ("Milton", GetFieldValueById("firstname"));
   EXPECT_EQ("4120 Freidrich Lane", GetFieldValueById("address"));
   EXPECT_EQ("TX", GetFieldValueById("state"));
@@ -2609,12 +2597,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, SomeAutocomplete) {
 
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
 
-  // If only some form fields are tagged with autocomplete types, then the
-  // number of input elements will not match the number of fields when autofill
-  // tries to preview or fill.
-  ASSERT_TRUE(WaitAndExpectUniqueSample(&histogram_tester(),
-                                        kNumElementsMatchesNumFields, true, 2));
-
   EXPECT_EQ("Milton", GetFieldValueById("firstname"));
   EXPECT_EQ("4120 Freidrich Lane", GetFieldValueById("address"));
   EXPECT_EQ("TX", GetFieldValueById("state"));
@@ -2633,11 +2615,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, AllAutocomplete) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
 
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
-
-  // If all form fields are tagged with autocomplete types, we make them all
-  // available to be filled.
-  ASSERT_TRUE(WaitAndExpectUniqueSample(&histogram_tester(),
-                                        kNumElementsMatchesNumFields, true, 2));
 
   EXPECT_EQ("Milton", GetFieldValueById("firstname"));
   EXPECT_EQ("4120 Freidrich Lane", GetFieldValueById("address"));
@@ -2767,8 +2744,14 @@ INSTANTIATE_TEST_SUITE_P(AutofillInteractiveTest,
                                            FrameType::kIFrame));
 
 // TODO(https://crbug.com/1175735): Check back if flakiness is fixed now.
+// TODO(crbug.com/41495558): Flaky on MSan.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_SimpleCrossSiteFill DISABLED_SimpleCrossSiteFill
+#else
+#define MAYBE_SimpleCrossSiteFill SimpleCrossSiteFill
+#endif
 IN_PROC_BROWSER_TEST_P(AutofillInteractiveFencedFrameTest,
-                       SimpleCrossSiteFill) {
+                       MAYBE_SimpleCrossSiteFill) {
   test_delegate()->SetIgnoreBackToBackMessages(
       ObservedUiEvents::kPreviewFormData, true);
   CreateTestProfile();
@@ -2825,8 +2808,14 @@ IN_PROC_BROWSER_TEST_P(AutofillInteractiveFencedFrameTest,
 // Tests that deleting the subframe that has opened the Autofill popup closes
 // the popup.
 // TODO(https://crbug.com/1175735): Check back if flakiness is fixed now.
+// TODO(crbug.com/41495632): Flaky on MSan.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_DeletingFrameClosesPopup DISABLED_DeletingFrameClosesPopup
+#else
+#define MAYBE_DeletingFrameClosesPopup DeletingFrameClosesPopup
+#endif
 IN_PROC_BROWSER_TEST_P(AutofillInteractiveFencedFrameTest,
-                       DeletingFrameClosesPopup) {
+                       MAYBE_DeletingFrameClosesPopup) {
   CreateTestProfile();
 
   // Main frame is on a.com, fenced frame is on b.com.
@@ -2899,7 +2888,7 @@ class AutofillInteractiveTestDynamicForm : public AutofillInteractiveTest {
   void SetUpOnMainThread() override {
     AutofillInteractiveTest::SetUpOnMainThread();
     test_api(*GetBrowserAutofillManager())
-        .set_limit_before_refill(base::Minutes(1));
+        .set_limit_before_refill(base::Hours(1));
   }
 
   ValueWaiter ListenForRefill(
@@ -3158,9 +3147,17 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 // Test that we can autofill forms that dynamically change the element that
 // has been clicked on, even though there are multiple forms with identical
 // names.
+// TODO(crbug.com/1521229) flaky on win-asan
+#if BUILDFLAG(IS_WIN) && defined(ADDRESS_SANITIZER)
+#define MAYBE_DynamicFormFill_FirstElementDisappearsMultipleBadNameForms \
+  DISABLED_DynamicFormFill_FirstElementDisappearsMultipleBadNameForms
+#else
+#define MAYBE_DynamicFormFill_FirstElementDisappearsMultipleBadNameForms \
+  DynamicFormFill_FirstElementDisappearsMultipleBadNameForms
+#endif
 IN_PROC_BROWSER_TEST_F(
     AutofillInteractiveTestDynamicForm,
-    DynamicFormFill_FirstElementDisappearsMultipleBadNameForms) {
+    MAYBE_DynamicFormFill_FirstElementDisappearsMultipleBadNameForms) {
   CreateTestProfile();
   GURL url = embedded_test_server()->GetURL(
       "a.com",
@@ -3426,8 +3423,16 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
 // Test that we can Autofill dynamically changing selects that have options
 // added and removed only once.
+// TODO(crbug.com/1481004) Flaky on win-asan.
+#if defined(ADDRESS_SANITIZER) && BUILDFLAG(IS_WIN)
+#define MAYBE_DynamicChangingFormFill_DoubleSelectUpdated \
+  DISABLED_DynamicChangingFormFill_DoubleSelectUpdated
+#else
+#define MAYBE_DynamicChangingFormFill_DoubleSelectUpdated \
+  DynamicChangingFormFill_DoubleSelectUpdated
+#endif
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
-                       DynamicChangingFormFill_DoubleSelectUpdated) {
+                       MAYBE_DynamicChangingFormFill_DoubleSelectUpdated) {
   CreateTestProfile();
   GURL url = embedded_test_server()->GetURL(
       "a.com", "/autofill/dynamic_form_double_select_options_change.html");
@@ -3525,8 +3530,17 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
 // Test that we can Autofill dynamically synthetic forms when the select options
 // change if the NameForAutofill of the first field matches
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
-                       DynamicChangingFormFill_SelectUpdated_SyntheticForm) {
+// TODO(crbug.com/1481004) Flaky on win-asan.
+#if defined(ADDRESS_SANITIZER) && BUILDFLAG(IS_WIN)
+#define MAYBE_DynamicChangingFormFill_SelectUpdated_SyntheticForm \
+  DISABLED_DynamicChangingFormFill_SelectUpdated_SyntheticForm
+#else
+#define MAYBE_DynamicChangingFormFill_SelectUpdated_SyntheticForm \
+  DynamicChangingFormFill_SelectUpdated_SyntheticForm
+#endif
+IN_PROC_BROWSER_TEST_F(
+    AutofillInteractiveTestDynamicForm,
+    MAYBE_DynamicChangingFormFill_SelectUpdated_SyntheticForm) {
   CreateTestProfile();
   GURL url = embedded_test_server()->GetURL(
       "a.com", "/autofill/dynamic_synthetic_form_select_options_change.html");
@@ -3602,8 +3616,8 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   expect_count("Autofill.NumberOfEditedAutofilledFieldsAtSubmission", 0, 1);
   expect_count("Autofill.PerfectFilling.CreditCards", 1, 1);
   // Bucket 0 = edited, 1 = accepted; 3 samples for 3 fields.
-  expect_count("Autofill.EditedAutofilledFieldAtSubmission.Aggregate", 0, 0);
-  expect_count("Autofill.EditedAutofilledFieldAtSubmission.Aggregate", 1, 3);
+  expect_count("Autofill.EditedAutofilledFieldAtSubmission2.Aggregate", 0, 0);
+  expect_count("Autofill.EditedAutofilledFieldAtSubmission2.Aggregate", 1, 3);
 }
 
 // Shadow DOM tests consist of two cases:
@@ -3724,7 +3738,8 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestChromeVox,
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetTestUrl()));
 
   EnableChromeVox();
-  content::EnableAccessibilityForWebContents(web_contents());
+  content::ScopedAccessibilityModeOverride scoped_accessibility_mode(
+      web_contents(), ui::kAXModeComplete);
 
   // The following contains a sequence of calls to
   // sm_.ExpectSpeechPattern() and test_delegate()->Wait(). It is essential
@@ -3776,8 +3791,8 @@ class MAYBE_AutofillInteractiveFormSubmissionTest
  public:
   class MockAutofillManager : public BrowserAutofillManager {
    public:
-    MockAutofillManager(ContentAutofillDriver* driver, AutofillClient* client)
-        : BrowserAutofillManager(driver, client, "en-US") {}
+    explicit MockAutofillManager(ContentAutofillDriver* driver)
+        : BrowserAutofillManager(driver, "en-US") {}
     MOCK_METHOD(void,
                 OnFormSubmittedImpl,
                 (const FormData&, bool, mojom::SubmissionSource),
@@ -3954,6 +3969,8 @@ IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionTest,
       // Hide form, which is the trigger for the submission event.
       document.getElementById('shipping').style.display = 'none';
       )");
+  // This forces layout update.
+  RunUntilInputProcessed(GetRenderViewHost()->GetWidget());
   run_loop.Run();
 }
 
@@ -3984,13 +4001,16 @@ IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionTest,
       xhr.open('GET', '/xhr', true);
       xhr.send(null);
       )");
+  // This forces layout update.
+  RunUntilInputProcessed(GetRenderViewHost()->GetWidget());
   run_loop.Run();
 }
 
 // Tests that an XHR request can indicate a form submission - even if the form
 // is deleted from the DOM.
+// TODO(crbug.com/41493168): Flaky on multiple platforms.
 IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionTest,
-                       XhrSucceededAndDeleteForm) {
+                       DISABLED_XhrSucceededAndDeleteForm) {
   EnterValues();
 
   base::RunLoop run_loop;
@@ -4016,6 +4036,8 @@ IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionTest,
       xhr.open('GET', '/xhr', true);
       xhr.send(null);
       )");
+  // This forces layout update.
+  RunUntilInputProcessed(GetRenderViewHost()->GetWidget());
   run_loop.Run();
 }
 
@@ -4047,6 +4069,8 @@ IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionTest,
       }
       xhr.send(null);
       )");
+  // This forces layout update.
+  RunUntilInputProcessed(GetRenderViewHost()->GetWidget());
   run_loop.Run();
 }
 
@@ -4204,12 +4228,6 @@ IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionClearFormTest,
 class MAYBE_AutofillInteractiveFormlessFormSubmissionTest
     : public MAYBE_AutofillInteractiveFormSubmissionTest {
  public:
-  MAYBE_AutofillInteractiveFormlessFormSubmissionTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        features::
-            kAutofillDontCheckForDisappearingFormlessElementsForSubmission);
-  }
-
   void SetUpOnMainThread() override {
     AutofillInteractiveTestBase::SetUpOnMainThread();
 

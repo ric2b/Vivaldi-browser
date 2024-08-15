@@ -418,7 +418,7 @@ std::unique_ptr<protocol::DictionaryValue> BuildTextNodeInfo(Text* text_node) {
 }
 
 void AppendLineStyleConfig(
-    const absl::optional<LineStyle>& line_style,
+    const std::optional<LineStyle>& line_style,
     std::unique_ptr<protocol::DictionaryValue>& parent_config,
     String line_name) {
   if (!line_style || line_style->IsFullyTransparent()) {
@@ -434,7 +434,7 @@ void AppendLineStyleConfig(
 }
 
 void AppendBoxStyleConfig(
-    const absl::optional<BoxStyle>& box_style,
+    const std::optional<BoxStyle>& box_style,
     std::unique_ptr<protocol::DictionaryValue>& parent_config,
     String box_name) {
   if (!box_style || box_style->IsFullyTransparent()) {
@@ -860,7 +860,7 @@ std::unique_ptr<protocol::DictionaryValue> BuildAreaNamePaths(
     float scale,
     const Vector<LayoutUnit>& rows,
     const Vector<LayoutUnit>& columns) {
-  auto* grid = To<LayoutGrid>(node->GetLayoutObject());
+  const auto* grid = To<LayoutGrid>(node->GetLayoutObject());
   LocalFrameView* containing_view = node->GetDocument().View();
   bool is_rtl = !grid->StyleRef().IsLeftToRightDirection();
 
@@ -874,9 +874,8 @@ std::unique_ptr<protocol::DictionaryValue> BuildAreaNamePaths(
   LayoutUnit row_gap = grid->GridGap(kForRows);
   LayoutUnit column_gap = grid->GridGap(kForColumns);
 
-  absl::optional<NamedGridAreaMap> named_area_map =
-      grid->CachedPlacementData().line_resolver.NamedAreasMap();
-  if (named_area_map) {
+  if (const NamedGridAreaMap* named_area_map =
+          grid->CachedPlacementData().line_resolver.NamedAreasMap()) {
     for (const auto& item : *named_area_map) {
       const GridArea& area = item.value;
       const String& name = item.key;
@@ -1221,8 +1220,8 @@ std::unique_ptr<protocol::DictionaryValue> BuildFlexItemInfo(
   Length base_size = Length::Auto();
 
   const Length& flex_basis = layout_object->StyleRef().FlexBasis();
-  const Length& size = is_horizontal ? layout_object->StyleRef().UsedWidth()
-                                     : layout_object->StyleRef().UsedHeight();
+  const Length& size = is_horizontal ? layout_object->StyleRef().Width()
+                                     : layout_object->StyleRef().Height();
 
   if (flex_basis.IsFixed()) {
     base_size = flex_basis;
@@ -2517,21 +2516,21 @@ InspectorFlexContainerHighlightConfig
 InspectorHighlight::DefaultFlexContainerConfig() {
   InspectorFlexContainerHighlightConfig config;
   config.container_border =
-      absl::optional<LineStyle>(InspectorHighlight::DefaultLineStyle());
+      std::optional<LineStyle>(InspectorHighlight::DefaultLineStyle());
   config.line_separator =
-      absl::optional<LineStyle>(InspectorHighlight::DefaultLineStyle());
+      std::optional<LineStyle>(InspectorHighlight::DefaultLineStyle());
   config.item_separator =
-      absl::optional<LineStyle>(InspectorHighlight::DefaultLineStyle());
+      std::optional<LineStyle>(InspectorHighlight::DefaultLineStyle());
   config.main_distributed_space =
-      absl::optional<BoxStyle>(InspectorHighlight::DefaultBoxStyle());
+      std::optional<BoxStyle>(InspectorHighlight::DefaultBoxStyle());
   config.cross_distributed_space =
-      absl::optional<BoxStyle>(InspectorHighlight::DefaultBoxStyle());
+      std::optional<BoxStyle>(InspectorHighlight::DefaultBoxStyle());
   config.row_gap_space =
-      absl::optional<BoxStyle>(InspectorHighlight::DefaultBoxStyle());
+      std::optional<BoxStyle>(InspectorHighlight::DefaultBoxStyle());
   config.column_gap_space =
-      absl::optional<BoxStyle>(InspectorHighlight::DefaultBoxStyle());
+      std::optional<BoxStyle>(InspectorHighlight::DefaultBoxStyle());
   config.cross_alignment =
-      absl::optional<LineStyle>(InspectorHighlight::DefaultLineStyle());
+      std::optional<LineStyle>(InspectorHighlight::DefaultLineStyle());
   return config;
 }
 
@@ -2539,11 +2538,11 @@ InspectorHighlight::DefaultFlexContainerConfig() {
 InspectorFlexItemHighlightConfig InspectorHighlight::DefaultFlexItemConfig() {
   InspectorFlexItemHighlightConfig config;
   config.base_size_box =
-      absl::optional<BoxStyle>(InspectorHighlight::DefaultBoxStyle());
+      std::optional<BoxStyle>(InspectorHighlight::DefaultBoxStyle());
   config.base_size_border =
-      absl::optional<LineStyle>(InspectorHighlight::DefaultLineStyle());
+      std::optional<LineStyle>(InspectorHighlight::DefaultLineStyle());
   config.flexibility_arrow =
-      absl::optional<LineStyle>(InspectorHighlight::DefaultLineStyle());
+      std::optional<LineStyle>(InspectorHighlight::DefaultLineStyle());
   return config;
 }
 

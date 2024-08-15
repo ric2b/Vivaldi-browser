@@ -15,11 +15,11 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include <optional>
 #include "base/fuchsia/scoped_fx_logger.h"
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
@@ -45,6 +45,7 @@
 
 namespace content {
 class FromRenderFrameHost;
+class ScopedAccessibilityMode;
 }  // namespace content
 
 class ContextImpl;
@@ -430,6 +431,8 @@ class WEB_ENGINE_EXPORT FrameImpl : public fuchsia::web::Frame,
 
   // Used to implement graceful `Close()` with `timeout` specified.
   base::OneShotTimer close_page_timeout_;
+
+  std::unique_ptr<content::ScopedAccessibilityMode> scoped_accessibility_mode_;
 
   base::WeakPtrFactory<FrameImpl> weak_factory_{this};
 };

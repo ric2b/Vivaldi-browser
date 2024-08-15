@@ -160,9 +160,8 @@ export class ThreadAppender implements TrackAppender {
   #headerAppended: boolean = false;
   readonly threadType: TraceEngine.Handlers.Threads.ThreadType = TraceEngine.Handlers.Threads.ThreadType.MAIN_THREAD;
   readonly isOnMainFrame: boolean;
-  #ignoreListingEnabled = Root.Runtime.experiments.isEnabled('ignoreListJSFramesOnTimeline');
-  #showAllEventsEnabled = Root.Runtime.experiments.isEnabled('timelineShowAllEvents');
-  #entriesFilter?: TraceEngine.EntriesFilter.EntriesFilter;
+  #ignoreListingEnabled = Root.Runtime.experiments.isEnabled('ignore-list-js-frames-on-timeline');
+  #showAllEventsEnabled = Root.Runtime.experiments.isEnabled('timeline-show-all-events');
   #url: string = '';
   #headerNestingLevel: number|null = null;
   constructor(
@@ -206,34 +205,7 @@ export class ThreadAppender implements TrackAppender {
     if (this.#traceParsedData.AuctionWorklets.worklets.has(processId)) {
       this.appenderName = 'Thread_AuctionWorklet';
     }
-
-    this.#entriesFilter = new TraceEngine.EntriesFilter.EntriesFilter(
-        this.threadType === TraceEngine.Handlers.Threads.ThreadType.CPU_PROFILE ? traceParsedData.Samples.entryToNode :
-                                                                                  traceParsedData.Renderer.entryToNode);
-
     this.#url = this.#traceParsedData.Renderer?.processes.get(this.#processId)?.url || '';
-  }
-
-  modifyTree(
-      traceEvent: TraceEngine.Types.TraceEvents.SyntheticTraceEntry,
-      action: TraceEngine.EntriesFilter.FilterAction): void {
-    if (this.#entriesFilter) {
-      this.#entriesFilter.applyAction({type: action, entry: traceEvent});
-    } else {
-      console.warn('Could not modify tree because entriesFilter does not exist');
-    }
-  }
-
-  findPossibleContextMenuActions(traceEvent: TraceEngine.Types.TraceEvents.SyntheticTraceEntry):
-      TraceEngine.EntriesFilter.PossibleFilterActions|void {
-    return this.#entriesFilter?.findPossibleActions(traceEvent);
-  }
-
-  findHiddenDescendantsAmount(traceEvent: TraceEngine.Types.TraceEvents.SyntheticTraceEntry): number|void {
-    if ((this.#entriesFilter)) {
-      return this.#entriesFilter?.findHiddenDescendantsAmount(traceEvent);
-    }
-    console.warn('Could not find hidden entries because entriesFilter does not exist');
   }
 
   processId(): TraceEngine.Types.TraceEvents.ProcessID {
@@ -472,7 +444,7 @@ export class ThreadAppender implements TrackAppender {
   #appendNodesAtLevel(
       nodes: Iterable<TraceEngine.Helpers.TreeHelpers.TraceEntryNode>, startingLevel: number,
       parentIsIgnoredListed: boolean = false): number {
-    const invisibleEntries = this.#entriesFilter?.invisibleEntries() ?? [];
+    const invisibleEntries = TraceEngine.EntriesFilter.EntriesFilter.maybeInstance()?.invisibleEntries() ?? [];
     let maxDepthInTree = startingLevel;
     for (const node of nodes) {
       let nextLevel = startingLevel;
@@ -486,9 +458,8 @@ export class ThreadAppender implements TrackAppender {
       // another traversal to the entries array (which could grow
       // large). To avoid the extra cost we  add the check in the
       // traversal we already need to append events.
-      const entryIsVisible =
-          (!invisibleEntries.includes(entry) && this.#compatibilityBuilder.entryIsVisibleInTimeline(entry)) ||
-          this.#showAllEventsEnabled;
+      const entryIsVisible = !invisibleEntries.includes(entry) &&
+          (this.#compatibilityBuilder.entryIsVisibleInTimeline(entry) || this.#showAllEventsEnabled);
       // For ignore listing support, these two conditions need to be met
       // to not append a profile call to the flame chart:
       // 1. It is ignore listed
@@ -503,7 +474,7 @@ export class ThreadAppender implements TrackAppender {
       // stack.
       const skipEventDueToIgnoreListing = entryIsIgnoreListed && parentIsIgnoredListed;
       if (entryIsVisible && !skipEventDueToIgnoreListing) {
-        this.#appendEntryAtLevel(entry, startingLevel, this.#entriesFilter?.isEntryModified(entry));
+        this.#appendEntryAtLevel(entry, startingLevel);
         nextLevel++;
       }
 
@@ -513,17 +484,15 @@ export class ThreadAppender implements TrackAppender {
     return maxDepthInTree;
   }
 
-  #appendEntryAtLevel(entry: TraceEngine.Types.TraceEvents.TraceEventData, level: number, childrenCollapsed?: boolean):
-      void {
+  #appendEntryAtLevel(entry: TraceEngine.Types.TraceEvents.TraceEventData, level: number): void {
     this.#ensureTrackHeaderAppended(level);
     const index = this.#compatibilityBuilder.appendEventAtLevel(entry, level, this);
-    this.#addDecorationsToEntry(entry, index, childrenCollapsed);
+    this.#addDecorationsToEntry(entry, index);
   }
 
-  #addDecorationsToEntry(
-      entry: TraceEngine.Types.TraceEvents.TraceEventData, index: number, childrenCollapsed?: boolean): void {
+  #addDecorationsToEntry(entry: TraceEngine.Types.TraceEvents.TraceEventData, index: number): void {
     const flameChartData = this.#compatibilityBuilder.getFlameChartTimelineData();
-    if (childrenCollapsed) {
+    if (TraceEngine.EntriesFilter.EntriesFilter.maybeInstance()?.isEntryModified(entry)) {
       addDecorationToEvent(
           flameChartData, index, {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW});
     }
@@ -574,19 +543,19 @@ export class ThreadAppender implements TrackAppender {
 
     if (TraceEngine.Types.TraceEvents.isProfileCall(event)) {
       if (event.callFrame.functionName === '(idle)') {
-        return getCategoryStyles().Idle.getComputedColorValue();
+        return getCategoryStyles().idle.getComputedColorValue();
       }
       if (event.callFrame.scriptId === '0') {
         // If we can not match this frame to a script, return the
         // generic "scripting" color.
-        return getCategoryStyles().Scripting.getComputedColorValue();
+        return getCategoryStyles().scripting.getComputedColorValue();
       }
       // Otherwise, return a color created based on its URL.
       return this.#colorGenerator.colorForID(event.callFrame.url);
     }
     const defaultColor =
         getEventStyle(event.name as TraceEngine.Types.TraceEvents.KnownEventName)?.category.getComputedColorValue();
-    return defaultColor || getCategoryStyles().Other.getComputedColorValue();
+    return defaultColor || getCategoryStyles().other.getComputedColorValue();
   }
 
   /**
@@ -631,7 +600,7 @@ export class ThreadAppender implements TrackAppender {
    * Returns the info shown when an event added by this appender
    * is hovered in the timeline.
    */
-  highlightedEntryInfo(event: TraceEngine.Types.TraceEvents.SyntheticEventWithSelfTime): HighlightedEntryInfo {
+  highlightedEntryInfo(event: TraceEngine.Types.TraceEvents.SyntheticTraceEntry): HighlightedEntryInfo {
     let title = this.titleForEvent(event);
     if (TraceEngine.Types.TraceEvents.isTraceEventParseHTML(event)) {
       const startLine = event.args['beginData']['startLine'];

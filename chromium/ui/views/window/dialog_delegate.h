@@ -6,6 +6,7 @@
 #define UI_VIEWS_WINDOW_DIALOG_DELEGATE_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -47,9 +48,9 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   struct Params {
     Params();
     ~Params();
-    absl::optional<int> default_button = absl::nullopt;
+    std::optional<int> default_button = std::nullopt;
     bool round_corners = true;
-    absl::optional<int> corner_radius = absl::nullopt;
+    std::optional<int> corner_radius = std::nullopt;
 
     bool draggable = false;
 
@@ -70,7 +71,7 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
     std::u16string button_labels[ui::DIALOG_BUTTON_LAST + 1];
 
     // Styles of each button on this dialog. If empty a style will be derived.
-    absl::optional<ui::ButtonStyle> button_styles[ui::DIALOG_BUTTON_LAST + 1];
+    std::optional<ui::ButtonStyle> button_styles[ui::DIALOG_BUTTON_LAST + 1];
 
     // A bitmask of buttons (from ui::DialogButton) that are enabled in this
     // dialog. It's legal for a button to be marked enabled that isn't present
@@ -173,7 +174,7 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   void set_fixed_width(int fixed_width) { fixed_width_ = fixed_width; }
   int fixed_width() const { return fixed_width_; }
 
-  template <typename T>
+  template <typename T = View>
   T* SetExtraView(std::unique_ptr<T> extra_view) {
     T* view = extra_view.get();
     extra_view_ = std::move(extra_view);
@@ -233,7 +234,7 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   void set_corner_radius(int corner_radius) {
     params_.corner_radius = corner_radius;
   }
-  const absl::optional<int> corner_radius() const {
+  const std::optional<int> corner_radius() const {
     return params_.corner_radius;
   }
   void set_draggable(bool draggable) { params_.draggable = draggable; }
@@ -247,7 +248,7 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   void SetButtons(int buttons);
   void SetButtonLabel(ui::DialogButton button, std::u16string label);
   void SetButtonStyle(ui::DialogButton button,
-                      absl::optional<ui::ButtonStyle> style);
+                      std::optional<ui::ButtonStyle> style);
   void SetButtonEnabled(ui::DialogButton button, bool enabled);
 
   // Called when the user presses the dialog's "OK" button or presses the dialog
@@ -260,14 +261,14 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   // dialog, false to leave the dialog open.
   void SetAcceptCallbackWithClose(base::RepeatingCallback<bool()> callback);
 
-  // Called when the user presses the dialog's "Cancel" button or presses the
-  // dialog close accelerator (which is always VKEY_ESCAPE). The dialog is
-  // closed after the callback is run.
+  // Called when the user cancels the dialog, which can happen either by:
+  //   * Clicking the Cancel button, if there is one, or
+  //   * Closing the dialog with the Esc key, if the dialog has a close button
+  //     but no close callback
+  // The dialog is closed after the callback is run. The callback variant which
+  // returns a bool decides whether the dialog actually closes or not; returning
+  // false prevents closing, returning true allows closing.
   void SetCancelCallback(base::OnceClosure callback);
-
-  // Called when the user presses the dialog's "Cancel" button or presses the
-  // dialog close accelerator (which is always VKEY_ESCAPE). Callbacks can
-  // return true to close the dialog, false to leave the dialog open.
   void SetCancelCallbackWithClose(base::RepeatingCallback<bool()> callback);
 
   // Called when:
@@ -314,7 +315,7 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   //    bounds, by not trying to deliver mouse events to it somehow, or
   // 3) DCV::SetupLayout could always force an explicit Layout, ignoring the
   //    lazy layout system in View::InvalidateLayout
-  std::unique_ptr<View> DisownExtraView();
+  std::optional<std::unique_ptr<View>> DisownExtraView();
 
   // Accept or cancel the dialog, as though the user had pressed the
   // Accept/Cancel buttons. These methods:
@@ -381,13 +382,14 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   Params params_;
 
   // The extra view for this dialog, if there is one.
-  std::unique_ptr<View> extra_view_;
+  std::optional<std::unique_ptr<View>> extra_view_;
 
   // The footnote view for this dialog, if there is one.
   std::unique_ptr<View> footnote_view_;
 
   // Observers for DialogModel changes.
-  base::ObserverList<DialogObserver>::Unchecked observer_list_;
+  base::ObserverList<DialogObserver>::UncheckedAndDanglingUntriaged
+      observer_list_;
 
   // Callbacks for the dialog's actions:
   absl::variant<base::OnceClosure, base::RepeatingCallback<bool()>>

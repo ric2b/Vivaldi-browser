@@ -39,6 +39,10 @@ class MEDIA_EXPORT AudioOutputDeviceThreadCallback
   // Called whenever we receive notifications about pending data.
   void Process(uint32_t control_signal) override;
 
+  // Called when the AudioDeviceThread shuts down. Unexpected calls are treated
+  // as errors.
+  void OnSocketError() override;
+
   // Returns whether the current thread is the audio device thread or not.
   // Will always return true if DCHECKs are not enabled.
   bool CurrentThreadIsAudioDeviceThread();
@@ -63,7 +67,7 @@ class MEDIA_EXPORT AudioOutputDeviceThreadCallback
   const base::TimeTicks create_time_;
 
   // If set, used to record the startup duration UMA stat.
-  absl::optional<base::TimeTicks> first_play_start_time_;
+  std::optional<base::TimeTicks> first_play_start_time_;
 
   AudioDeviceStatsReporter stats_reporter_;
 };

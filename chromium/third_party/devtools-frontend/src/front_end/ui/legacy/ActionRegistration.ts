@@ -219,7 +219,11 @@ export class Action extends Common.ObjectWrapper.ObjectWrapper<EventTypes> {
     return this.actionRegistration.experiment;
   }
 
-  condition(): string|undefined {
+  setting(): string|undefined {
+    return this.actionRegistration.setting;
+  }
+
+  condition(): Root.Runtime.Condition|undefined {
     return this.actionRegistration.condition;
   }
 
@@ -247,9 +251,21 @@ export function reset(): void {
 
 export function getRegisteredActionExtensions(): Array<Action> {
   return Array.from(registeredActions.values())
-      .filter(
-          action => Root.Runtime.Runtime.isDescriptorEnabled(
-              {experiment: action.experiment(), condition: action.condition()}))
+      .filter(action => {
+        const settingName = action.setting();
+        try {
+          if (settingName && !Common.Settings.moduleSetting(settingName).get()) {
+            return false;
+          }
+        } catch (err) {
+          if (err.message.startsWith('No setting registered')) {
+            return false;
+          }
+        }
+
+        return Root.Runtime.Runtime.isDescriptorEnabled(
+            {experiment: action.experiment(), condition: action.condition()});
+      })
       .sort((firstAction, secondAction) => {
         const order1 = firstAction.order() || 0;
         const order2 = secondAction.order() || 0;
@@ -520,12 +536,19 @@ export interface ActionRegistration {
    */
   experiment?: Root.Runtime.ExperimentName;
   /**
-   * A condition represented as a string the action's availability depends on. Conditions come
-   * from the queryParamsObject defined in Runtime and just as the experiment field, they determine the availability
-   * of the setting. A condition can be negated by prepending a ‘!’ to the value of the condition
-   * property and in that case the behaviour of the action's availability will be inverted.
+   * The name of the setting an action is associated with. Enabling and
+   * disabling the declared setting will enable and disable the action
+   * respectively. Note that changing the setting requires a reload for it to
+   * apply to action registration.
    */
-  condition?: Root.Runtime.ConditionName;
+  setting?: string;
+  /**
+   * A condition is a function that will make the action available if it
+   * returns true, and not available, otherwise. Make sure that objects you
+   * access from inside the condition function are ready at the time when the
+   * setting conditions are checked.
+   */
+  condition?: Root.Runtime.Condition;
   /**
    * Used to sort actions when all registered actions are queried.
    */

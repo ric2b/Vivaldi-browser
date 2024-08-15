@@ -14,6 +14,7 @@
 #include "ash/app_list/views/app_list_nudge_controller.h"
 #include "ash/app_list/views/search_notifier_controller.h"
 #include "ash/assistant/assistant_controller_impl.h"
+#include "ash/birch/birch_model.h"
 #include "ash/calendar/calendar_controller.h"
 #include "ash/capture_mode/capture_mode_controller.h"
 #include "ash/capture_mode/capture_mode_education_controller.h"
@@ -24,6 +25,7 @@
 #include "ash/detachable_base/detachable_base_handler.h"
 #include "ash/display/display_prefs.h"
 #include "ash/display/privacy_screen_controller.h"
+#include "ash/game_dashboard/game_dashboard_controller.h"
 #include "ash/glanceables/glanceables_controller.h"
 #include "ash/keyboard/keyboard_controller_impl.h"
 #include "ash/login/login_screen_controller.h"
@@ -32,6 +34,7 @@
 #include "ash/metrics/feature_discovery_duration_reporter_impl.h"
 #include "ash/projector/projector_controller_impl.h"
 #include "ash/public/cpp/holding_space/holding_space_prefs.h"
+#include "ash/quick_pair/feature_status_tracker/scanning_enabled_provider.h"
 #include "ash/quick_pair/keyed_service/quick_pair_mediator.h"
 #include "ash/session/fullscreen_controller.h"
 #include "ash/session/session_controller_impl.h"
@@ -52,10 +55,10 @@
 #include "ash/system/input_device_settings/keyboard_modifier_metrics_recorder.h"
 #include "ash/system/keyboard_brightness/keyboard_backlight_color_controller.h"
 #include "ash/system/media/media_tray.h"
-#include "ash/system/notification_center/message_center_controller.h"
 #include "ash/system/network/cellular_setup_notifier.h"
 #include "ash/system/network/vpn_detailed_view.h"
 #include "ash/system/night_light/night_light_controller_impl.h"
+#include "ash/system/notification_center/message_center_controller.h"
 #include "ash/system/palette/palette_tray.h"
 #include "ash/system/palette/palette_welcome_bubble.h"
 #include "ash/system/pcie_peripheral/pcie_peripheral_notification_controller.h"
@@ -79,6 +82,7 @@
 #include "ash/wm/float/tablet_mode_tuck_education.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/window_cycle/window_cycle_controller.h"
+#include "ash/wm/window_util.h"
 #include "chromeos/ash/services/assistant/public/cpp/assistant_prefs.h"
 #include "chromeos/components/quick_answers/public/cpp/quick_answers_prefs.h"
 #include "chromeos/ui/frame/multitask_menu/multitask_menu_nudge_controller.h"
@@ -105,6 +109,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry,
   AutozoomControllerImpl::RegisterProfilePrefs(registry);
   AutozoomNudgeController::RegisterProfilePrefs(registry);
   AmbientController::RegisterProfilePrefs(registry);
+  BirchModel::RegisterProfilePrefs(registry);
   CalendarController::RegisterProfilePrefs(registry);
   camera_app_prefs::RegisterProfilePrefs(registry);
   CameraEffectsController::RegisterProfilePrefs(registry);
@@ -118,10 +123,12 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry,
   DarkLightModeControllerImpl::RegisterProfilePrefs(registry);
   desks_restore_util::RegisterProfilePrefs(registry);
   saved_desk_util::RegisterProfilePrefs(registry);
+  window_util::RegisterProfilePrefs(registry);
   DockedMagnifierController::RegisterProfilePrefs(registry);
   FeatureDiscoveryDurationReporterImpl::RegisterProfilePrefs(registry);
   FocusModeController::RegisterProfilePrefs(registry);
   FullscreenController::RegisterProfilePrefs(registry);
+  GameDashboardController::RegisterProfilePrefs(registry);
   GeolocationController::RegisterProfilePrefs(registry);
   GlanceablesController::RegisterUserProfilePrefs(registry);
   holding_space_prefs::RegisterProfilePrefs(registry);
@@ -184,6 +191,9 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry,
     registry->RegisterIntegerPref(prefs::kKeyEventRemappedToSixPackHome, 0);
     registry->RegisterIntegerPref(prefs::kKeyEventRemappedToSixPackPageUp, 0);
     registry->RegisterIntegerPref(prefs::kKeyEventRemappedToSixPackPageDown, 0);
+    registry->RegisterBooleanPref(prefs::kShouldShowPineOnboarding, false);
+    registry->RegisterIntegerPref(prefs::kPineNudgeShownCount, 0);
+    registry->RegisterTimePref(prefs::kPineNudgeLastShown, base::Time());
   }
 }
 
@@ -204,6 +214,7 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry, bool for_test) {
   KeyboardBacklightColorController::RegisterPrefs(registry);
   BatterySaverController::RegisterLocalStatePrefs(registry);
   PowerSoundsController::RegisterLocalStatePrefs(registry);
+  quick_pair::ScanningEnabledProvider::RegisterLocalStatePrefs(registry);
 
   if (for_test) {
     registry->RegisterBooleanPref(prefs::kOwnerPrimaryMouseButtonRight, false);

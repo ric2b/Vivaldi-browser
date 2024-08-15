@@ -90,19 +90,19 @@ export class ServiceWorkerUpdateCycleView {
       while (state) {
         // find the earliest timestamp of different stage on record.
         if (state.status === Protocol.ServiceWorker.ServiceWorkerVersionStatus.Activated) {
-          endActivateTime = state.last_updated_timestamp;
+          endActivateTime = state.lastUpdatedTimestamp;
         } else if (state.status === Protocol.ServiceWorker.ServiceWorkerVersionStatus.Activating) {
           if (endActivateTime === 0) {
-            endActivateTime = state.last_updated_timestamp;
+            endActivateTime = state.lastUpdatedTimestamp;
           }
-          beginActivateTime = state.last_updated_timestamp;
+          beginActivateTime = state.lastUpdatedTimestamp;
         } else if (state.status === Protocol.ServiceWorker.ServiceWorkerVersionStatus.Installed) {
-          endInstallTime = state.last_updated_timestamp;
+          endInstallTime = state.lastUpdatedTimestamp;
         } else if (state.status === Protocol.ServiceWorker.ServiceWorkerVersionStatus.Installing) {
           if (endInstallTime === 0) {
-            endInstallTime = state.last_updated_timestamp;
+            endInstallTime = state.lastUpdatedTimestamp;
           }
-          beginInstallTime = state.last_updated_timestamp;
+          beginInstallTime = state.lastUpdatedTimestamp;
         }
         state = state.previousState;
       }
@@ -133,7 +133,7 @@ export class ServiceWorkerUpdateCycleView {
 
   private createTimingTable(): void {
     this.tableElement.classList.add('service-worker-update-timing-table');
-    this.tableElement.setAttribute('jslog', `${VisualLogging.tree().context('update-timing-table')}`);
+    this.tableElement.setAttribute('jslog', `${VisualLogging.tree('update-timing-table')}`);
     const timeRanges = this.calculateServiceWorkerUpdateRanges();
     this.updateTimingTable(timeRanges);
   }
@@ -177,7 +177,10 @@ export class ServiceWorkerUpdateCycleView {
       const right = (scale * (endTime - range.end));
 
       const tr = this.tableElement.createChild('tr', 'service-worker-update-timeline');
-      tr.setAttribute('jslog', `${VisualLogging.treeItem().context('update-timeline')}`);
+      tr.setAttribute('jslog', `${VisualLogging.treeItem('update-timeline').track({
+                        click: true,
+                        keydown: 'ArrowLeft|ArrowRight|ArrowUp|ArrowDown|Enter|Space',
+                      })}`);
       this.rows.push(tr as HTMLTableRowElement);
       const timingBarVersionElement = tr.createChild('td');
       UI.UIUtils.createTextChild(timingBarVersionElement, '#' + range.id);
@@ -187,8 +190,7 @@ export class ServiceWorkerUpdateCycleView {
       timingBarVersionElement.addEventListener('focus', (event: Event) => {
         this.onFocus(event);
       });
-      timingBarVersionElement.setAttribute(
-          'jslog', `${VisualLogging.treeItemExpand().track({click: true}).context('timing-info')}`);
+      timingBarVersionElement.setAttribute('jslog', `${VisualLogging.expand('timing-info').track({click: true})}`);
       UI.ARIAUtils.setChecked(timingBarVersionElement, false);
       const timingBarTitleElement = tr.createChild('td');
       UI.UIUtils.createTextChild(timingBarTitleElement, phaseName);

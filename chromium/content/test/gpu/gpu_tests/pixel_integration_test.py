@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import logging
 import os
 import posixpath
 import sys
@@ -13,10 +14,11 @@ from gpu_tests import common_typing as ct
 from gpu_tests import gpu_integration_test
 from gpu_tests import pixel_test_pages
 from gpu_tests import skia_gold_heartbeat_integration_test_base as sghitb
+from gpu_tests.util import host_information
 
 import gpu_path_util
 
-from telemetry.util import image_util
+from telemetry.util import image_util, screenshot
 
 # We're not sure if this is actually a fixed value or not, but it's 10 pixels
 # wide on the only device we've had issues with so far (Pixel 4), so assume
@@ -42,12 +44,18 @@ class PixelIntegrationTest(sghitb.SkiaGoldHeartbeatIntegrationTestBase):
 
   def _GetSerialGlobs(self) -> Set[str]:
     serial_globs = set()
-    if sys.platform == 'darwin':
+    if host_information.IsMac():
       serial_globs |= {
           # Flakily produces only half the image when run in parallel on Mac.
           'Pixel_OffscreenCanvasWebGL*',
           # Flakily fails to capture a screenshot when run in parallel on Mac.
           'Pixel_VideoStreamFrom*',
+      }
+    if host_information.IsWindows():
+      serial_globs |= {
+          # Serialized for the same reasons as in trace_integration_test.
+          'Pixel_DirectComposition_Underlay*',
+          'Pixel_DirectComposition_Video*',
       }
     return serial_globs
 
@@ -62,12 +70,22 @@ class PixelIntegrationTest(sghitb.SkiaGoldHeartbeatIntegrationTestBase):
         'Pixel_WebGLLowToHighPowerAlphaFalse',
     }
 
-    if sys.platform.startswith('linux'):
+    if host_information.IsLinux() and host_information.IsAmdGpu():
       serial_tests |= {
           # Flakily produces slightly incorrect images when run in parallel on
           # AMD.
           'Pixel_OffscreenCanvasWebGLSoftwareCompositingWorker',
       }
+
+    if host_information.IsWindows() and host_information.IsArmCpu():
+      serial_tests |= {
+          # Context loss tests don't like being run in parallel on Windows
+          # arm64.
+          'Pixel_Video_Context_Loss_VP9',
+          'Pixel_WebGLContextRestored',
+          'Pixel_WebGLSadCanvas',
+      }
+
     return serial_tests
 
   @classmethod
@@ -85,13 +103,13 @@ class PixelIntegrationTest(sghitb.SkiaGoldHeartbeatIntegrationTestBase):
     # The following pages should run only on platforms where SwiftShader is
     # enabled. They are skipped on other platforms through test expectations.
     # pages += namespace.SwiftShaderPages(cls.test_base_name)
-    if sys.platform.startswith('darwin'):
+    if host_information.IsMac():
       pages += namespace.MacSpecificPages(cls.test_base_name)
       # Unfortunately we don't have a browser instance here so can't tell
       # whether we should really run these tests. They're short-circuited to a
       # certain degree on the other platforms.
       pages += namespace.DualGPUMacSpecificPages(cls.test_base_name)
-    if sys.platform.startswith('win'):
+    if host_information.IsWindows():
       pages += namespace.DirectCompositionPages(cls.test_base_name)
       pages += namespace.HdrTestPages(cls.test_base_name)
     for p in pages:
@@ -150,14 +168,26 @@ class PixelIntegrationTest(sghitb.SkiaGoldHeartbeatIntegrationTestBase):
       test_case: the GPU PixelTestPage object for the test.
     """
     tab = self.tab
+    if test_case.RequiresFullScreenOSScreenshot():
+      if not self.browser.platform.CanTakeScreenshot():
+        logging.warning('Skipping the test because the platform does not '
+                        'support OS screenshots')
+        self.skipTest('The platform does not support fullscreen OS screenshot')
 
-    if test_case.ShouldCaptureFullScreenshot(self.browser):
+      fh = screenshot.TryCaptureScreenShot(self.browser.platform, None,
+                                           self._GetScreenshotTimeout())
+      if fh is None:
+        self.fail('Unable to get file handle of the screenshot')
+      screen_shot = image_util.FromPngFile(fh.GetAbsPath())
+    elif test_case.ShouldCaptureFullScreenshot(self.browser):
       # Screenshot on Fuchsia can take a long time. See crbug.com/1376684.
-      screenshot = tab.FullScreenshot(15)
+      screen_shot = tab.FullScreenshot(15)
     else:
-      screenshot = tab.Screenshot(self._GetScreenshotTimeout())
-    if screenshot is None:
+      screen_shot = tab.Screenshot(self._GetScreenshotTimeout())
+
+    if screen_shot is None:
       self.fail('Could not capture screenshot')
+
     dpr = tab.EvaluateJavaScript('window.devicePixelRatio')
     if test_case.test_rect:
       start_x = int(test_case.test_rect[0] * dpr)
@@ -165,16 +195,16 @@ class PixelIntegrationTest(sghitb.SkiaGoldHeartbeatIntegrationTestBase):
       # When actually clamping the value, it's possible we'll catch the
       # scrollbar, so account for its width in the clamp.
       end_x = min(int(test_case.test_rect[2] * dpr),
-                  image_util.Width(screenshot) - SCROLLBAR_WIDTH)
+                  image_util.Width(screen_shot) - SCROLLBAR_WIDTH)
       end_y = min(int(test_case.test_rect[3] * dpr),
-                  image_util.Height(screenshot))
+                  image_util.Height(screen_shot))
       crop_width = end_x - start_x
       crop_height = end_y - start_y
-      screenshot = image_util.Crop(screenshot, start_x, start_y, crop_width,
-                                   crop_height)
+      screen_shot = image_util.Crop(screen_shot, start_x, start_y, crop_width,
+                                    crop_height)
 
     image_name = self._UrlToImageName(test_case.name)
-    self._UploadTestResultToSkiaGold(image_name, screenshot, test_case)
+    self._UploadTestResultToSkiaGold(image_name, screen_shot, test_case)
 
   def _GetScreenshotTimeout(self):
     multiplier = 1

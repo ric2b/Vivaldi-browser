@@ -97,6 +97,8 @@ downloads::mojom::DangerType GetDangerType(
       return downloads::mojom::DangerType::kDeepScannedOpenedDangerous;
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_UNSUPPORTED_FILETYPE:
       return downloads::mojom::DangerType::kBlockedUnsupportedFileType;
+    case download::DOWNLOAD_DANGER_TYPE_BLOCKED_SCAN_FAILED:
+      return downloads::mojom::DangerType::kBlockedScanFailed;
     case download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING:
     case download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_LOCAL_PASSWORD_SCANNING:
     case download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
@@ -140,9 +142,14 @@ std::u16string GetFormattedDisplayUrl(const GURL& url) {
   // crbug.com/1070451). If it's really this long, the user won't be able to see
   // the whole thing anyway. We truncate the beginning so that the end of it is
   // shown, which contains the eTLD+1.
-  // Note: This may truncate the scheme part of the URL.
-  if (result.size() > url::kMaxURLChars) {
-    result = result.substr(result.size() - url::kMaxURLChars);
+  // Note:
+  // - This may truncate the scheme part of the URL.
+  // - Use a much smaller limit than url::kMaxURLChars (2M) since this is for
+  //   display only, and long URLs will affect page load speed and may cause
+  //   JavaScript errors (https://crbug.com/1522764).
+  const size_t kMaxDisplayURLChars = 16 * 1024;
+  if (result.size() > kMaxDisplayURLChars) {
+    result = result.substr(result.size() - kMaxDisplayURLChars);
   }
   return result;
 }
@@ -397,7 +404,7 @@ downloads::mojom::DataPtr DownloadsListTracker::CreateDownloadData(
       enterprise_connectors::ShouldPromptReviewForDownload(
           Profile::FromBrowserContext(
               content::DownloadItemUtils::GetBrowserContext(download_item)),
-          download_item->GetDangerType());
+          download_item);
 
   file_value->last_reason_text = base::UTF16ToUTF8(last_reason_text);
   file_value->percent = percent;

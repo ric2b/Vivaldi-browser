@@ -12,6 +12,7 @@ update_target("//chrome/browser:browser") {
     "//vivaldi/components/request_filter",
     "//vivaldi/components/ad_blocker",
     "//vivaldi/components/page_actions",
+    "//vivaldi/components/signature:signature",
   ]
   allow_circular_includes_from += [
     "//vivaldi/components:adverse_adblocking",
@@ -47,6 +48,7 @@ if (vivaldi_build_tests) {
         "//vivaldi/components/ad_blocker:unit_tests",
         "//vivaldi/components/datasource:dataurl_unit_tests",
         "//vivaldi/components/notes:unit_tests",
+        "//vivaldi/components/direct_match:unit_tests"
       ]
   }
 }

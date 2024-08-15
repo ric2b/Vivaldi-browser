@@ -18,6 +18,7 @@ use crate::credential::{
     protocol_version_seal, BroadcastCryptoMaterial, DiscoveryCryptoMaterial, ProtocolVersion,
 };
 use crate::MetadataKey;
+use crypto_provider::ed25519::InvalidPublicKeyBytes;
 use crypto_provider::{aes::Aes128Key, ed25519, ed25519::PublicKey, CryptoProvider, CryptoRng};
 use np_hkdf::UnsignedSectionKeys;
 
@@ -28,22 +29,52 @@ pub struct V1DiscoveryCredential {
     key_seed: [u8; 32],
     expected_unsigned_metadata_key_hmac: [u8; 32],
     expected_signed_metadata_key_hmac: [u8; 32],
-    pub_key: ed25519::RawPublicKey,
+    validated_pub_key: sealed::ValidatedPublicKey,
 }
+
+mod sealed {
+    use crypto_provider::ed25519::InvalidPublicKeyBytes;
+    use crypto_provider::{ed25519, CryptoProvider};
+
+    // Wrapper of raw public ed25519 key bytes indicating the bytes stored
+    // actually represent a valid "edwards y" format and that said compressed
+    // point is actually a point on the curve.
+    #[derive(Clone, Copy)]
+    pub(crate) struct ValidatedPublicKey(ed25519::RawPublicKey);
+
+    impl ValidatedPublicKey {
+        pub(crate) fn from_raw_bytes<C: CryptoProvider>(
+            bytes: ed25519::RawPublicKey,
+        ) -> Result<Self, InvalidPublicKeyBytes> {
+            np_ed25519::PublicKey::<C>::from_bytes(&bytes)
+                .map(|_| Self(bytes))
+                .map_err(|_| InvalidPublicKeyBytes)
+        }
+
+        pub(crate) fn to_public_key<C: CryptoProvider>(self) -> np_ed25519::PublicKey<C> {
+            np_ed25519::PublicKey::<C>::from_bytes(&self.0)
+                .expect("The public key bytes were validated on construction")
+        }
+    }
+}
+pub(crate) use sealed::ValidatedPublicKey;
+
 impl V1DiscoveryCredential {
     /// Construct a V1 discovery credential from the provided identity data.
-    pub fn new(
+    pub fn new<C: CryptoProvider>(
         key_seed: [u8; 32],
         expected_unsigned_metadata_key_hmac: [u8; 32],
         expected_signed_metadata_key_hmac: [u8; 32],
         pub_key: ed25519::RawPublicKey,
-    ) -> Self {
-        Self {
-            key_seed,
-            expected_unsigned_metadata_key_hmac,
-            expected_signed_metadata_key_hmac,
-            pub_key,
-        }
+    ) -> Result<Self, InvalidPublicKeyBytes> {
+        ValidatedPublicKey::from_raw_bytes::<C>(pub_key)
+            .map(|validated_pub_key| Self {
+                key_seed,
+                expected_unsigned_metadata_key_hmac,
+                expected_signed_metadata_key_hmac,
+                validated_pub_key,
+            })
+            .map_err(|_| InvalidPublicKeyBytes)
     }
 
     /// Constructs pre-calculated crypto material from this discovery credential.
@@ -94,7 +125,7 @@ impl V1DiscoveryCryptoMaterial for V1DiscoveryCredential {
     }
 
     fn signed_verification_material<C: CryptoProvider>(&self) -> SignedSectionVerificationMaterial {
-        SignedSectionVerificationMaterial { pub_key: self.pub_key }
+        SignedSectionVerificationMaterial { validated_public_key: self.validated_pub_key }
     }
 
     fn unsigned_verification_material<C: CryptoProvider>(
@@ -229,7 +260,7 @@ impl UnsignedSectionIdentityResolutionMaterial {
 pub struct SignedSectionVerificationMaterial {
     /// The np_ed25519 public key to be
     /// used for signature verification of signed sections.
-    pub(crate) pub_key: ed25519::RawPublicKey,
+    pub(crate) validated_public_key: sealed::ValidatedPublicKey,
 }
 
 impl SignedSectionVerificationMaterial {
@@ -238,7 +269,7 @@ impl SignedSectionVerificationMaterial {
     pub(crate) fn signature_verification_public_key<C: CryptoProvider>(
         &self,
     ) -> np_ed25519::PublicKey<C> {
-        np_ed25519::PublicKey::from_bytes(&self.pub_key).expect("Should only contain valid keys")
+        self.validated_public_key.to_public_key()
     }
 }
 
@@ -408,7 +439,7 @@ pub trait SignedBroadcastCryptoMaterial: BroadcastCryptoMaterial<V1> {
             .calculate_hmac(metadata_key.0.as_slice());
         let signed =
             hkdf.extended_signed_metadata_key_hmac_key().calculate_hmac(metadata_key.0.as_slice());
-        V1DiscoveryCredential::new(key_seed, unsigned, signed, pub_key)
+        V1DiscoveryCredential::new::<C>(key_seed, unsigned, signed, pub_key).expect("The public key bytes are guaranteed to be valid since they come from the key_pair construction above")
     }
 }
 

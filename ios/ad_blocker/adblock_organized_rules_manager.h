@@ -49,10 +49,10 @@ class OrganizedRulesManager : public RuleManager::Observer {
 
   RuleGroup group() const { return group_; }
   std::string organized_rules_checksum() const {
-    return organized_rules_checksum_;
+    return IsApplyingRules() ? "" : organized_rules_checksum_;
   }
 
-  bool IsApplyingRules();
+  bool IsApplyingRules() const;
 
   RuleService::IndexBuildResult build_result() const { return build_result_; }
 
@@ -71,8 +71,10 @@ class OrganizedRulesManager : public RuleManager::Observer {
   void UpdateExceptions();
   void ReorganizeRules();
 
-  void OnOrganizedRulesLoaded(std::string checksum,
-                              std::unique_ptr<base::Value> rules);
+  void OnOrganizedRulesLoaded(std::unique_ptr<base::Value> rules);
+  bool CheckOrganizedRules(base::Value* rules);
+  void OnAllRulesLoaded(bool should_reorganize_rules);
+
   void OnOrganizedRulesReady(base::Value rules);
   void Disable();
 

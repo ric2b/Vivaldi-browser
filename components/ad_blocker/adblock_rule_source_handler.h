@@ -61,7 +61,7 @@ class RuleSourceHandler {
   void OnRulesDownloaded(base::FilePath file);
   void ReadRulesFromFile(const base::FilePath& file, bool delete_after_read);
   void OnRulesRead(RulesReadResult result);
-  void OnTrackerInfosLoaded(absl::optional<base::Value::Dict> tracker_infos);
+  void OnTrackerInfosLoaded(std::optional<base::Value::Dict> tracker_infos);
 
   static RulesReadResult ReadRules(
       const base::FilePath& source_path,

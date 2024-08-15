@@ -13,7 +13,6 @@
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
-#import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
 #import "ios/chrome/browser/tab_insertion/model/tab_insertion_browser_agent.h"
 #import "ios/chrome/browser/web/model/blocked_popup_tab_helper.h"
@@ -53,15 +52,14 @@ class WebStateDelegateBrowserAgentTest : public PlatformTest {
 
     std::unique_ptr<web::WebState> web_state =
         web::WebState::Create(create_params);
-    BlockedPopupTabHelper::CreateForWebState(web_state.get());
+    BlockedPopupTabHelper::GetOrCreateForWebState(web_state.get());
     SnapshotTabHelper::CreateForWebState(web_state.get());
     web_state->GetNavigationManager()->LoadURLWithParams(load_params);
 
-    WebStateOpener opener;
     WebStateList* web_state_list = browser_->GetWebStateList();
     web_state_list->InsertWebState(
-        web_state_list->count(), std::move(web_state),
-        WebStateList::InsertionFlags::INSERT_ACTIVATE, opener);
+        std::move(web_state),
+        WebStateList::InsertionParams::Automatic().Activate());
     return web_state_list->GetActiveWebState();
   }
 
@@ -90,7 +88,7 @@ TEST_F(WebStateDelegateBrowserAgentTest, CreateNewWebStateAndPopup) {
 
   // Verify that this webstate's popups are blocked
   BlockedPopupTabHelper* popup_helper =
-      BlockedPopupTabHelper::FromWebState(web_state);
+      BlockedPopupTabHelper::GetOrCreateForWebState(web_state);
   EXPECT_TRUE(popup_helper->ShouldBlockPopup(GURL(kURL1)));
   // Create a new webstate without user initiation.
   web::WebState* web_state2 =

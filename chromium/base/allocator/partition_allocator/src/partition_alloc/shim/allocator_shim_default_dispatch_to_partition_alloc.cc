@@ -493,8 +493,10 @@ void ConfigurePartitions(
     BucketDistribution distribution,
     SchedulerLoopQuarantine scheduler_loop_quarantine,
     size_t scheduler_loop_quarantine_capacity_in_bytes,
-    size_t scheduler_loop_quarantine_capacity_count,
-    ZappingByFreeFlags zapping_by_free_flags) {
+    ZappingByFreeFlags zapping_by_free_flags,
+    UsePoolOffsetFreelists use_pool_offset_freelists
+
+) {
   // Calling Get() is actually important, even if the return value isn't
   // used, because it has a side effect of initializing the variable, if it
   // wasn't already.
@@ -528,13 +530,15 @@ void ConfigurePartitions(
                 : partition_alloc::PartitionOptions::kDisabled;
         opts.scheduler_loop_quarantine_capacity_in_bytes =
             scheduler_loop_quarantine_capacity_in_bytes;
-        opts.scheduler_loop_quarantine_capacity_count =
-            scheduler_loop_quarantine_capacity_count;
         opts.memory_tagging = {
             .enabled = enable_memory_tagging
                            ? partition_alloc::PartitionOptions::kEnabled
                            : partition_alloc::PartitionOptions::kDisabled,
             .reporting_mode = memory_tagging_reporting_mode};
+        opts.use_pool_offset_freelists =
+            use_pool_offset_freelists
+                ? partition_alloc::PartitionOptions::kEnabled
+                : partition_alloc::PartitionOptions::kDisabled;
         return opts;
       }());
   partition_alloc::PartitionRoot* new_root = new_main_allocator->root();
@@ -585,6 +589,15 @@ void EnablePCScan(partition_alloc::internal::PCScan::InitConfig config) {
   allocator_shim::NonQuarantinableAllocator::Instance().NotifyPCScanEnabled();
 }
 #endif  // BUILDFLAG(USE_STARSCAN)
+
+void AdjustDefaultAllocatorForForeground() {
+  Allocator()->AdjustForForeground();
+}
+
+void AdjustDefaultAllocatorForBackground() {
+  Allocator()->AdjustForBackground();
+}
+
 }  // namespace allocator_shim
 
 const AllocatorDispatch AllocatorDispatch::default_dispatch = {

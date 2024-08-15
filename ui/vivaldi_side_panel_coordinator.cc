@@ -38,15 +38,24 @@ Profile * SidePanelCoordinator::GetProfile() {
   return browser_window_->GetProfile();
 }
 
+void SidePanelCoordinator::Close() {}
+
 void SidePanelCoordinator::Show(
-    absl::optional<SidePanelEntryId> entry_id,
-    absl::optional<SidePanelOpenTrigger> open_trigger) {}
+    std::optional<SidePanelEntryId> entry_id,
+    std::optional<SidePanelOpenTrigger> open_trigger) {}
 
 void SidePanelCoordinator::Show(
     SidePanelEntryKey entry_key,
-    absl::optional<SidePanelOpenTrigger> open_trigger) {}
-
-void SidePanelCoordinator::Close() {}
+    std::optional<SidePanelOpenTrigger> open_trigger) {
+  auto extension_id = entry_key.extension_id();
+  if (extension_id) {
+    namespace action_utils = ::extensions::vivaldi::extension_action_utils;
+    ::vivaldi::BroadcastEvent(
+        action_utils::OnSidePanelActionRequested::kEventName,
+        action_utils::OnSidePanelActionRequested::Create(*extension_id, "show"),
+        GetProfile());
+  }
+}
 
 void SidePanelCoordinator::Toggle() {}
 
@@ -57,9 +66,9 @@ void SidePanelCoordinator::OpenInNewTab() {}
 
 void SidePanelCoordinator::UpdatePinState() {}
 
-absl::optional<SidePanelEntryId> SidePanelCoordinator::GetCurrentEntryId()
+std::optional<SidePanelEntryId> SidePanelCoordinator::GetCurrentEntryId()
     const {
-  return absl::optional<SidePanelEntryId>();
+  return std::optional<SidePanelEntryId>();
 }
 
 bool SidePanelCoordinator::IsSidePanelShowing() const {
@@ -79,7 +88,7 @@ bool SidePanelCoordinator::IsSidePanelEntryShowing(
 void SidePanelCoordinator::OnPanelOptionsChanged(
     const ExtensionId& extension_id,
     const api::side_panel::PanelOptions& updated_options) {
-  namespace exu = ::extensions::vivaldi::extension_action_utils;
+  namespace action_utils = ::extensions::vivaldi::extension_action_utils;
   const Extension* extension =
       extensions::ExtensionRegistry::Get(GetProfile())
           ->GetExtensionById(extension_id,
@@ -88,7 +97,7 @@ void SidePanelCoordinator::OnPanelOptionsChanged(
     return;
   }
 
-  exu::SidePanelOptions options;
+  action_utils::SidePanelOptions options;
   options.tab_id = updated_options.tab_id;
 
   if (updated_options.path) {
@@ -99,8 +108,8 @@ void SidePanelCoordinator::OnPanelOptionsChanged(
   options.enabled = updated_options.enabled;
 
   ::vivaldi::BroadcastEvent(
-      exu::OnSidePanelOptionChanged::kEventName,
-      exu::OnSidePanelOptionChanged::Create(extension_id, options),
+      action_utils::OnSidePanelOptionChanged::kEventName,
+      action_utils::OnSidePanelOptionChanged::Create(extension_id, options),
       GetProfile());
 }
 

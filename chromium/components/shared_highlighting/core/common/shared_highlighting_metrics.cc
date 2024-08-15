@@ -17,10 +17,14 @@ namespace {
 constexpr char kUmaPrefix[] = "SharedHighlights.LinkGenerated";
 
 TextFragmentLinkOpenSource GetLinkSource(const GURL& referrer) {
+  // Don't need the search engines here. VB-104297
+  return TextFragmentLinkOpenSource::kUnknown;
+  /*
   bool from_search_engine =
       referrer.is_valid() && SearchEngineUtils::GetEngineType(referrer) > 0;
   return from_search_engine ? TextFragmentLinkOpenSource::kSearchEngine
                             : TextFragmentLinkOpenSource::kUnknown;
+  */
 }
 
 }  // namespace

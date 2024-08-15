@@ -18,6 +18,7 @@ from typing import Callable, Dict, List, Optional
 from enum import Enum
 
 from gpu_tests import common_browser_args as cba
+from gpu_tests import overlay_support
 from gpu_tests import skia_gold_heartbeat_integration_test_base as sghitb
 from gpu_tests import skia_gold_matching_algorithms as algo
 from gpu_tests.util import websocket_server as wss
@@ -43,10 +44,14 @@ VERY_PERMISSIVE_SOBEL_ALGO = algo.SobelMatchingAlgorithm(
 
 # The optimizer script spat out pretty similar values for most MP4 tests, so
 # combine into a single set of parameters.
-GENERAL_MP4_ALGO = algo.SobelMatchingAlgorithm(max_different_pixels=56300,
-                                               pixel_delta_threshold=35,
-                                               edge_threshold=80,
-                                               ignored_border_thickness=1)
+GENERAL_MP4_ALGO = algo.SobelMatchingAlgorithm(
+    max_different_pixels=56300,
+    pixel_per_channel_delta_threshold=15,
+    edge_threshold=80,
+    ignored_border_thickness=1)
+
+ROUNDING_ERROR_ALGO = algo.FuzzyMatchingAlgorithm(
+    max_different_pixels=100000000, pixel_per_channel_delta_threshold=1)
 
 BrowserArgType = List[str]
 
@@ -69,6 +74,8 @@ class PixelTestPage(sghitb.SkiaGoldHeartbeatTestCase):
       timeout: int = 300,
       should_capture_full_screenshot_func: Optional[Callable[
           [browser_module.Browser], bool]] = None,
+      requires_fullscreen_os_screenshot_func: Optional[Callable[[],
+                                                                bool]] = None,
       **kwargs):
     # Video tests can result in non-hermetic test behavior due to overlays, so
     # do a full refresh after each one. See crbug.com/1484212.
@@ -98,6 +105,13 @@ class PixelTestPage(sghitb.SkiaGoldHeartbeatTestCase):
     if should_capture_full_screenshot_func is None:
       should_capture_full_screenshot_func = lambda _: False
     self.ShouldCaptureFullScreenshot = should_capture_full_screenshot_func
+    # Some tests may require to capture a full OS screenshot to exercise
+    # end-to-end integration. That is, such browsers as LaCros do delegated
+    # compositing and they are interested in comparing the result produced
+    # by the OS compositor rather than Chromium's one.
+    if requires_fullscreen_os_screenshot_func is None:
+      requires_fullscreen_os_screenshot_func = lambda: False
+    self.RequiresFullScreenOSScreenshot = requires_fullscreen_os_screenshot_func
 
 
 class TestActionCrashGpuProcess(sghitb.TestAction):
@@ -239,6 +253,10 @@ def GetMediaStreamTestBrowserArgs(media_stream_source_relpath: str
   ]
 
 
+def RequiresFullScreenOSScreenshot() -> bool:
+  return True
+
+
 def CaptureFullScreenshotOnFuchsia(browser: browser_module.Browser) -> bool:
   return browser.platform.GetOSName() == 'fuchsia'
 
@@ -268,7 +286,8 @@ class PixelTestPages():
             test_rect=[20, 20, 370, 370],
             # Small Fuchsia screens result in an incomplete capture
             # without this.
-            should_capture_full_screenshot_func=CaptureFullScreenshotOnFuchsia),
+            should_capture_full_screenshot_func=CaptureFullScreenshotOnFuchsia,
+            matching_algorithm=ROUNDING_ERROR_ALGO),
         PixelTestPage('pixel_reflected_div.html',
                       base_name + '_ReflectedDiv',
                       test_rect=[0, 0, 100, 300]),
@@ -276,7 +295,8 @@ class PixelTestPages():
                       base_name + '_Canvas2DRedBox',
                       test_rect=[0, 0, 300, 300],
                       matching_algorithm=algo.FuzzyMatchingAlgorithm(
-                          max_different_pixels=130, pixel_delta_threshold=3)),
+                          max_different_pixels=130,
+                          pixel_per_channel_delta_threshold=2)),
         PixelTestPage('pixel_canvas2d_untagged.html',
                       base_name + '_Canvas2DUntagged',
                       test_rect=[0, 0, 257, 257]),
@@ -351,7 +371,7 @@ class PixelTestPages():
             test_rect=[0, 0, 240, 135],
             matching_algorithm=algo.SobelMatchingAlgorithm(
                 max_different_pixels=41700,
-                pixel_delta_threshold=15,
+                pixel_per_channel_delta_threshold=5,
                 edge_threshold=40,
                 ignored_border_thickness=1)),
         PixelTestPage(
@@ -379,7 +399,7 @@ class PixelTestPages():
             test_rect=[0, 0, 240, 135],
             matching_algorithm=algo.SobelMatchingAlgorithm(
                 max_different_pixels=30500,
-                pixel_delta_threshold=15,
+                pixel_per_channel_delta_threshold=5,
                 edge_threshold=70,
                 ignored_border_thickness=1)),
         PixelTestPage('pixel_video_vp9.html?width=240&height=135&use_timer=1',
@@ -387,7 +407,7 @@ class PixelTestPages():
                       test_rect=[0, 0, 240, 135],
                       matching_algorithm=algo.SobelMatchingAlgorithm(
                           max_different_pixels=114000,
-                          pixel_delta_threshold=30,
+                          pixel_per_channel_delta_threshold=15,
                           edge_threshold=20,
                           ignored_border_thickness=1)),
         PixelTestPage('pixel_video_av1.html?width=240&height=135&use_timer=1',
@@ -395,7 +415,7 @@ class PixelTestPages():
                       test_rect=[0, 0, 240, 135],
                       matching_algorithm=algo.SobelMatchingAlgorithm(
                           max_different_pixels=114000,
-                          pixel_delta_threshold=30,
+                          pixel_per_channel_delta_threshold=15,
                           edge_threshold=20,
                           ignored_border_thickness=1)),
         PixelTestPage('pixel_video_hevc.html?width=240&height=135&use_timer=1',
@@ -403,7 +423,7 @@ class PixelTestPages():
                       test_rect=[0, 0, 240, 135],
                       matching_algorithm=algo.SobelMatchingAlgorithm(
                           max_different_pixels=114000,
-                          pixel_delta_threshold=30,
+                          pixel_per_channel_delta_threshold=15,
                           edge_threshold=20,
                           ignored_border_thickness=1)),
         PixelTestPage(
@@ -424,7 +444,8 @@ class PixelTestPages():
             # threshold, so use fuzzy for now since it's slightly more
             # efficient.
             matching_algorithm=algo.FuzzyMatchingAlgorithm(
-                max_different_pixels=31700, pixel_delta_threshold=20),
+                max_different_pixels=31700,
+                pixel_per_channel_delta_threshold=10),
             expected_per_process_crashes={
                 CRASH_TYPE_GPU: 1,
             }),
@@ -436,7 +457,7 @@ class PixelTestPages():
                       test_rect=[0, 0, 240, 135],
                       matching_algorithm=algo.SobelMatchingAlgorithm(
                           max_different_pixels=54400,
-                          pixel_delta_threshold=30,
+                          pixel_per_channel_delta_threshold=15,
                           edge_threshold=250,
                           ignored_border_thickness=1),
                       expected_per_process_crashes={
@@ -448,7 +469,7 @@ class PixelTestPages():
             test_rect=[0, 0, 240, 135],
             matching_algorithm=algo.SobelMatchingAlgorithm(
                 max_different_pixels=1000,
-                pixel_delta_threshold=20,
+                pixel_per_channel_delta_threshold=10,
                 edge_threshold=40,
                 ignored_border_thickness=1)),
         PixelTestPage('pixel_webgl_premultiplied_alpha_false.html',
@@ -520,6 +541,18 @@ class PixelTestPages():
                       base_name + '_OffscreenCanvasIBRCWorker',
                       test_rect=[0, 0, 100, 100],
                       grace_period_end=date(2023, 8, 5)),
+        PixelTestPage('pixel_webgl_resized_canvas.html',
+                      base_name + '_WebglResizedCanvas',
+                      test_rect=[0, 0, 300, 300],
+                      grace_period_end=date(2024, 3, 5)),
+        PixelTestPage(
+            'pixel_render_passes.html',
+            base_name + '_RenderPasses',
+            test_rect=[0, 80, 485, 245],
+            grace_period_end=date(2024, 5, 1),
+            requires_fullscreen_os_screenshot_func=
+              RequiresFullScreenOSScreenshot
+        ),
     ]
 
   @staticmethod
@@ -697,7 +730,7 @@ class PixelTestPages():
             browser_args=browser_args,
             matching_algorithm=algo.SobelMatchingAlgorithm(
                 max_different_pixels=10,
-                pixel_delta_threshold=30,
+                pixel_per_channel_delta_threshold=15,
                 edge_threshold=100),
             # Small Fuchsia screens result in an incomplete capture
             # without this.
@@ -740,8 +773,13 @@ class PixelTestPages():
 
     # The sRGB tests have been observed to create a large number
     # (~15,000) of pixels with difference ~3.
-    srgb_fuzzy_algo = algo.FuzzyMatchingAlgorithm(max_different_pixels=20000,
-                                                  pixel_delta_threshold=3)
+    srgb_fuzzy_algo = algo.FuzzyMatchingAlgorithm(
+        max_different_pixels=20000, pixel_per_channel_delta_threshold=2)
+
+    # Small number of differing pixels. May need to be upgraded to sobel in the
+    # future since there are a number of hard edges in the image.
+    offscreen_canvas_algo = algo.FuzzyMatchingAlgorithm(
+        max_different_pixels=100, pixel_per_channel_delta_threshold=3)
 
     return [
         PixelTestPage('pixel_offscreenCanvas_transfer_after_style_resize.html',
@@ -791,11 +829,13 @@ class PixelTestPages():
         PixelTestPage('pixel_offscreenCanvas_2d_commit_main.html',
                       base_name + '_OffscreenCanvasAccelerated2D',
                       test_rect=[0, 0, 360, 200],
-                      browser_args=browser_args + accelerated_args),
+                      browser_args=browser_args + accelerated_args,
+                      matching_algorithm=offscreen_canvas_algo),
         PixelTestPage('pixel_offscreenCanvas_2d_commit_worker.html',
                       base_name + '_OffscreenCanvasAccelerated2DWorker',
                       test_rect=[0, 0, 360, 200],
-                      browser_args=browser_args + accelerated_args),
+                      browser_args=browser_args + accelerated_args,
+                      matching_algorithm=offscreen_canvas_algo),
         PixelTestPage('pixel_offscreenCanvas_2d_commit_main.html',
                       base_name + '_OffscreenCanvasUnaccelerated2D',
                       test_rect=[0, 0, 360, 200],
@@ -877,7 +917,8 @@ class PixelTestPages():
                       test_rect=[0, 0, 200, 100]),
         PixelTestPage('pixel_canvas_low_latency_webgl_rounded_corners.html',
                       base_name + '_CanvasLowLatencyWebGLRoundedCorners',
-                      test_rect=[0, 0, 100, 100]),
+                      test_rect=[0, 0, 100, 100],
+                      matching_algorithm=ROUNDING_ERROR_ALGO),
         PixelTestPage('pixel_canvas_low_latency_webgl_occluded.html',
                       base_name + '_CanvasLowLatencyWebGLOccluded',
                       test_rect=[0, 0, 100, 100],
@@ -950,7 +991,7 @@ class PixelTestPages():
     # portions of the image are prone to noise, hence the large max different
     # pixels value.
     filter_effect_fuzzy_algo = algo.FuzzyMatchingAlgorithm(
-        max_different_pixels=57500, pixel_delta_threshold=15)
+        max_different_pixels=57500, pixel_per_channel_delta_threshold=10)
 
     return [
         PixelTestPage('pixel_canvas2d_webgl.html',
@@ -1149,57 +1190,78 @@ class PixelTestPages():
     # and similar values combined into a single set using the most permissive
     # value for each parameter in that tier.
     strict_dc_sobel_algorithm = algo.SobelMatchingAlgorithm(
-        max_different_pixels=1000,
-        pixel_delta_threshold=5,
+        max_different_pixels=2000,
+        pixel_per_channel_delta_threshold=3,
         edge_threshold=250,
         ignored_border_thickness=1)
     permissive_dc_sobel_algorithm = algo.SobelMatchingAlgorithm(
         max_different_pixels=16800,
-        pixel_delta_threshold=20,
+        pixel_per_channel_delta_threshold=10,
         edge_threshold=30,
         ignored_border_thickness=1)
     very_permissive_dc_sobel_algorithm = algo.SobelMatchingAlgorithm(
         max_different_pixels=30400,
-        pixel_delta_threshold=45,
+        pixel_per_channel_delta_threshold=20,
         edge_threshold=10,
         ignored_border_thickness=1,
     )
+
+    h264 = overlay_support.ZeroCopyCodec.H264
+    vp9 = overlay_support.ZeroCopyCodec.VP9
 
     return [
         PixelTestPage(f'pixel_video_mp4.html?width=240&height=135&{swap_param}',
                       base_name + '_DirectComposition_Video_MP4',
                       test_rect=[0, 0, 240, 135],
                       browser_args=browser_args,
+                      other_args={
+                          'codec': h264,
+                      },
                       matching_algorithm=permissive_dc_sobel_algorithm),
         PixelTestPage(f'pixel_video_mp4.html?width=960&height=540&{swap_param}',
                       base_name + '_DirectComposition_Video_MP4_Fullsize',
                       browser_args=browser_args,
-                      other_args={'full_size': True},
+                      other_args={
+                          'full_size': True,
+                          'codec': h264,
+                      },
                       test_rect=[0, 0, 960, 540],
                       matching_algorithm=strict_dc_sobel_algorithm),
         PixelTestPage(f'pixel_video_mp4.html?width=240&height=135&{swap_param}',
                       base_name + '_DirectComposition_Video_MP4_NV12',
                       test_rect=[0, 0, 240, 135],
                       browser_args=browser_args_NV12,
-                      other_args={'pixel_format': 'NV12'},
+                      other_args={
+                          'pixel_format': overlay_support.PixelFormat.NV12,
+                          'codec': h264,
+                      },
                       matching_algorithm=permissive_dc_sobel_algorithm),
         PixelTestPage(f'pixel_video_mp4.html?width=240&height=135&{swap_param}',
                       base_name + '_DirectComposition_Video_MP4_YUY2',
                       test_rect=[0, 0, 240, 135],
                       browser_args=browser_args_YUY2,
-                      other_args={'pixel_format': 'YUY2'},
+                      other_args={
+                          'pixel_format': overlay_support.PixelFormat.YUY2,
+                          'codec': h264,
+                      },
                       matching_algorithm=permissive_dc_sobel_algorithm),
         PixelTestPage(f'pixel_video_mp4.html?width=960&height=540&{swap_param}',
                       base_name + '_DirectComposition_Video_MP4_BGRA',
                       test_rect=[0, 0, 960, 540],
                       browser_args=browser_args_BGRA,
-                      other_args={'pixel_format': 'BGRA'},
+                      other_args={
+                          'pixel_format': overlay_support.PixelFormat.BGRA8,
+                          'codec': h264,
+                      },
                       matching_algorithm=permissive_dc_sobel_algorithm),
         PixelTestPage(f'pixel_video_mp4.html?width=240&height=135&{swap_param}',
                       base_name + '_DirectComposition_Video_MP4_VP_SCALING',
                       test_rect=[0, 0, 240, 135],
                       browser_args=browser_args_vp_scaling,
-                      other_args={'zero_copy': False},
+                      other_args={
+                          'zero_copy': False,
+                          'codec': h264,
+                      },
                       matching_algorithm=permissive_dc_sobel_algorithm),
         PixelTestPage(
             (f'pixel_video_mp4_four_colors_aspect_4x3.html?'
@@ -1207,6 +1269,9 @@ class PixelTestPages():
             base_name + '_DirectComposition_Video_MP4_FourColors_Aspect_4x3',
             test_rect=[0, 0, 240, 135],
             browser_args=browser_args,
+            other_args={
+                'codec': h264,
+            },
             matching_algorithm=permissive_dc_sobel_algorithm),
         PixelTestPage(
             (f'pixel_video_mp4_four_colors_rot_90.html?'
@@ -1214,7 +1279,10 @@ class PixelTestPages():
             base_name + '_DirectComposition_Video_MP4_FourColors_Rot_90',
             test_rect=[0, 0, 270, 240],
             browser_args=browser_args,
-            other_args={'video_is_rotated': True},
+            other_args={
+                'video_rotation': overlay_support.VideoRotation.ROT90,
+                'codec': h264,
+            },
             matching_algorithm=strict_dc_sobel_algorithm),
         PixelTestPage(
             (f'pixel_video_mp4_four_colors_rot_180.html?'
@@ -1222,7 +1290,10 @@ class PixelTestPages():
             base_name + '_DirectComposition_Video_MP4_FourColors_Rot_180',
             test_rect=[0, 0, 240, 135],
             browser_args=browser_args,
-            other_args={'video_is_rotated': True},
+            other_args={
+                'video_rotation': overlay_support.VideoRotation.ROT180,
+                'codec': h264,
+            },
             matching_algorithm=strict_dc_sobel_algorithm),
         PixelTestPage(
             (f'pixel_video_mp4_four_colors_rot_270.html?'
@@ -1230,23 +1301,32 @@ class PixelTestPages():
             base_name + '_DirectComposition_Video_MP4_FourColors_Rot_270',
             test_rect=[0, 0, 270, 240],
             browser_args=browser_args,
-            other_args={'video_is_rotated': True},
+            other_args={
+                'video_rotation': overlay_support.VideoRotation.ROT270,
+                'codec': h264,
+            },
             matching_algorithm=strict_dc_sobel_algorithm),
         PixelTestPage(f'pixel_video_vp9.html?width=240&height=135&{swap_param}',
                       base_name + '_DirectComposition_Video_VP9',
                       test_rect=[0, 0, 240, 135],
                       browser_args=browser_args,
+                      other_args={
+                          'codec': vp9,
+                      },
                       matching_algorithm=very_permissive_dc_sobel_algorithm),
         PixelTestPage(
             f'pixel_video_vp9.html?width=960&height=540&{swap_param}',
             base_name + '_DirectComposition_Video_VP9_Fullsize',
             test_rect=[0, 0, 960, 540],
             browser_args=browser_args,
-            other_args={'full_size': True},
+            other_args={
+                'full_size': True,
+                'codec': vp9,
+            },
             # Much larger image than other VP9 tests.
             matching_algorithm=algo.SobelMatchingAlgorithm(
                 max_different_pixels=504000,
-                pixel_delta_threshold=10,
+                pixel_per_channel_delta_threshold=5,
                 edge_threshold=10,
                 ignored_border_thickness=1,
             )),
@@ -1255,59 +1335,89 @@ class PixelTestPages():
                       test_rect=[0, 0, 240, 135],
                       browser_args=browser_args_NV12,
                       other_args={
-                          'pixel_format': 'NV12',
+                          'pixel_format': overlay_support.PixelFormat.NV12,
+                          'codec': vp9,
                       },
                       matching_algorithm=very_permissive_dc_sobel_algorithm),
         PixelTestPage(f'pixel_video_vp9.html?width=240&height=135&{swap_param}',
                       base_name + '_DirectComposition_Video_VP9_YUY2',
                       test_rect=[0, 0, 240, 135],
                       browser_args=browser_args_YUY2,
-                      other_args={'pixel_format': 'YUY2'},
+                      other_args={
+                          'pixel_format': overlay_support.PixelFormat.YUY2,
+                          'codec': vp9,
+                      },
                       matching_algorithm=very_permissive_dc_sobel_algorithm),
         PixelTestPage(f'pixel_video_vp9.html?width=960&height=540&{swap_param}',
                       base_name + '_DirectComposition_Video_VP9_BGRA',
                       test_rect=[0, 0, 960, 540],
                       browser_args=browser_args_BGRA,
-                      other_args={'pixel_format': 'BGRA'},
+                      other_args={
+                          'pixel_format': overlay_support.PixelFormat.BGRA8,
+                          'codec': vp9
+                      },
                       matching_algorithm=very_permissive_dc_sobel_algorithm),
         PixelTestPage((f'pixel_video_vp9_i420a.html?'
                        f'width=240&height=135&{swap_param}'),
                       base_name + '_DirectComposition_Video_VP9_I420A',
                       test_rect=[0, 0, 240, 135],
                       browser_args=browser_args,
-                      other_args={'no_overlay': True},
+                      other_args={
+                          'no_overlay': True,
+                          'codec': vp9
+                      },
                       matching_algorithm=strict_dc_sobel_algorithm),
         PixelTestPage(f'pixel_video_vp9.html?width=240&height=135&{swap_param}',
                       base_name + '_DirectComposition_Video_VP9_VP_SCALING',
                       test_rect=[0, 0, 240, 135],
                       browser_args=browser_args_vp_scaling,
-                      other_args={'zero_copy': False},
+                      other_args={
+                          'zero_copy': False,
+                          'codec': vp9,
+                      },
                       matching_algorithm=very_permissive_dc_sobel_algorithm),
-        PixelTestPage((f'pixel_video_underlay.html?'
-                       f'width=240&height=136&{swap_param}'),
-                      base_name + '_DirectComposition_Underlay',
-                      test_rect=[0, 0, 240, 136],
-                      browser_args=browser_args,
-                      matching_algorithm=permissive_dc_sobel_algorithm),
-        PixelTestPage((f'pixel_video_underlay.html?'
-                       f'width=960&height=540&{swap_param}'),
-                      base_name + '_DirectComposition_Underlay_Fullsize',
-                      test_rect=[0, 0, 960, 540],
-                      browser_args=browser_args,
-                      other_args={'full_size': True},
-                      matching_algorithm=strict_dc_sobel_algorithm),
+        PixelTestPage(
+            (f'pixel_video_underlay.html?'
+             f'width=240&height=136&{swap_param}'),
+            base_name + '_DirectComposition_Underlay',
+            test_rect=[0, 0, 240, 136],
+            browser_args=browser_args,
+            # Underlay zero copy usage seems to track H.264 zero copy
+            # support.
+            other_args={
+                'codec': h264,
+            },
+            matching_algorithm=permissive_dc_sobel_algorithm),
+        PixelTestPage(
+            (f'pixel_video_underlay.html?'
+             f'width=960&height=540&{swap_param}'),
+            base_name + '_DirectComposition_Underlay_Fullsize',
+            test_rect=[0, 0, 960, 540],
+            browser_args=browser_args,
+            # Underlay zero copy usage seems to track H.264 zero copy
+            # support.
+            other_args={
+                'full_size': True,
+                'codec': h264,
+            },
+            matching_algorithm=strict_dc_sobel_algorithm),
         PixelTestPage((f'pixel_video_mp4_rounded_corner.html?'
                        f'width=240&height=135&{swap_param}'),
                       base_name + '_DirectComposition_Video_MP4_Rounded_Corner',
                       test_rect=[0, 0, 240, 135],
                       browser_args=browser_args,
+                      other_args={
+                          'codec': h264,
+                      },
                       matching_algorithm=permissive_dc_sobel_algorithm),
         PixelTestPage((f'pixel_video_backdrop_filter.html?'
                        f'width=240&height=135&{swap_param}'),
                       base_name + '_DirectComposition_Video_BackdropFilter',
                       test_rect=[0, 0, 240, 135],
                       browser_args=browser_args,
-                      other_args={'no_overlay': True}),
+                      other_args={
+                          'no_overlay': True,
+                      }),
         PixelTestPage(
             f'pixel_video_mp4.html?width=240&height=135&{swap_param}',
             base_name + '_DirectComposition_Video_Disable_Overlays',
@@ -1319,6 +1429,9 @@ class PixelTestPages():
                       base_name + '_DirectComposition_Video_SW_Decode',
                       test_rect=[0, 0, 240, 135],
                       browser_args=browser_args_sw_decode,
+                      other_args={
+                          'zero_copy': False,
+                      },
                       matching_algorithm=very_permissive_dc_sobel_algorithm),
         PixelTestPage(
             'pixel_media_foundation_clear_dcomp.html?src='

@@ -68,7 +68,7 @@ bool MenuCodec::Decode(Menu_Node* root,
       if (guid_valid && type && *type == "menu") {
         const std::string* action = menu.GetDict().FindString("action");
         const std::string* role = menu.GetDict().FindString("role");
-        const absl::optional<bool> showShortcut =
+        const std::optional<bool> showShortcut =
             menu.GetDict().FindBool("showshortcut");
         if (action && role) {
           std::unique_ptr<Menu_Node> node =

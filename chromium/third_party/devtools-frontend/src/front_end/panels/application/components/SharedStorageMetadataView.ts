@@ -5,7 +5,6 @@
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as Protocol from '../../../generated/protocol.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
-import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 
@@ -41,6 +40,10 @@ const UIStrings = {
    *@description Label for a button which when clicked causes the budget to be reset to the max.
    */
   resetBudget: 'Reset Budget',
+  /**
+   *@description The number of bytes used by entries currently in the origin's database
+   */
+  numBytesUsed: 'Number of Bytes Used',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/application/components/SharedStorageMetadataView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -55,6 +58,7 @@ export class SharedStorageMetadataView extends StorageMetadataView {
   #sharedStorageMetadataGetter: SharedStorageMetadataGetter;
   #creationTime: Protocol.Network.TimeSinceEpoch|null = null;
   #length: number = 0;
+  #bytesUsed: number = 0;
   #remainingBudget: number = 0;
 
   constructor(sharedStorageMetadataGetter: SharedStorageMetadataGetter, owner: string) {
@@ -81,6 +85,7 @@ export class SharedStorageMetadataView extends StorageMetadataView {
     const metadata = await this.#sharedStorageMetadataGetter.getMetadata();
     this.#creationTime = metadata?.creationTime ?? null;
     this.#length = metadata?.length ?? 0;
+    this.#bytesUsed = metadata?.bytesUsed ?? 0;
     this.#remainingBudget = metadata?.remainingBudget ?? 0;
 
     // Disabled until https://crbug.com/1079231 is fixed.
@@ -91,6 +96,8 @@ export class SharedStorageMetadataView extends StorageMetadataView {
       ${this.value(this.#renderDateForCreationTime())}
       ${this.key(i18nString(UIStrings.numEntries))}
       ${this.value(String(this.#length))}
+      ${this.key(i18nString(UIStrings.numBytesUsed))}
+      ${this.value(String(this.#bytesUsed))}
       ${this.key(LitHtml.html`${i18nString(UIStrings.entropyBudget)}<${IconButton.Icon.Icon.litTagName} name="info" title=${i18nString(UIStrings.budgetExplanation)}></${IconButton.Icon.Icon.litTagName}>`)}
       ${this.value(LitHtml.html`${this.#remainingBudget}${this.#renderResetBudgetButton()}`)}`;
     // clang-format on
@@ -118,10 +125,9 @@ export class SharedStorageMetadataView extends StorageMetadataView {
   }
 }
 
-ComponentHelpers.CustomElements.defineComponent('devtools-shared-storage-metadata-view', SharedStorageMetadataView);
+customElements.define('devtools-shared-storage-metadata-view', SharedStorageMetadataView);
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface HTMLElementTagNameMap {
     'devtools-shared-storage-metadata-view': SharedStorageMetadataView;
   }

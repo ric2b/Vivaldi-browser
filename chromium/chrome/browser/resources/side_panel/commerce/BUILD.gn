@@ -25,6 +25,7 @@ build_webui("build") {
     "../shared:build_ts",
     "//third_party/polymer/v3_0:library",
     "//ui/webui/resources/cr_components/color_change_listener:build_ts",
+    "//ui/webui/resources/cr_components/commerce:build_ts",
     "//ui/webui/resources/cr_elements:build_ts",
     "//ui/webui/resources/js:build_ts",
     "//ui/webui/resources/mojo:build_ts",
@@ -35,4 +36,6 @@ build_webui("build") {
         rebase_path(
             "$root_gen_dir/chrome/browser/resources/side_panel/shared/tsc/*",
             target_gen_dir) ]
+
+  webui_host = "shopping-insights-side-panel.top-chrome"
 }

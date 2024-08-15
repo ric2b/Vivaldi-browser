@@ -15,6 +15,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/page_info/page_info_features.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/page_info/chrome_page_info_ui_delegate.h"
 #include "chrome/browser/ui/view_ids.h"
@@ -250,7 +251,8 @@ std::unique_ptr<views::View> PageInfoViewFactory::CreateSubpageHeader(
 
 // static
 const ui::ImageModel PageInfoViewFactory::GetPermissionIcon(
-    const PageInfo::PermissionInfo& info) {
+    const PageInfo::PermissionInfo& info,
+    bool blocked_on_system_level) {
   ContentSetting setting = info.setting == CONTENT_SETTING_DEFAULT
                                ? info.default_setting
                                : info.setting;
@@ -320,7 +322,6 @@ const ui::ImageModel PageInfoViewFactory::GetPermissionIcon(
                    : &vector_icons::kCertificateChromeRefreshIcon;
         break;
 #endif
-      case ContentSettingsType::MIDI:
       case ContentSettingsType::MIDI_SYSEX:
         icon = show_blocked_badge ? &vector_icons::kMidiOffChromeRefreshIcon
                                   : &vector_icons::kMidiChromeRefreshIcon;
@@ -408,6 +409,16 @@ const ui::ImageModel PageInfoViewFactory::GetPermissionIcon(
     // If there is no ChromeRefreshIcon currently defined, continue to the rest
     // of the function.
     if (icon != nullptr) {
+      if (blocked_on_system_level) {
+        return ui::ImageModel::FromVectorIcon(
+            *icon, kColorPageInfoPermissionBlockedOnSystemLevelDisabled,
+            GetIconSize());
+      }
+
+      if (info.is_in_use && !show_blocked_badge) {
+        return ui::ImageModel::FromVectorIcon(
+            *icon, kColorPageInfoPermissionUsedIcon, GetIconSize());
+      }
       return ui::ImageModel::FromVectorIcon(*icon, ui::kColorIcon,
                                             GetIconSize());
     }
@@ -451,7 +462,6 @@ const ui::ImageModel PageInfoViewFactory::GetPermissionIcon(
       icon = &vector_icons::kProtectedContentIcon;
       break;
 #endif
-    case ContentSettingsType::MIDI:
     case ContentSettingsType::MIDI_SYSEX:
       icon = &vector_icons::kMidiIcon;
       break;
@@ -507,6 +517,10 @@ const ui::ImageModel PageInfoViewFactory::GetPermissionIcon(
     case ContentSettingsType::AUTO_PICTURE_IN_PICTURE:
       icon = &vector_icons::kPictureInPictureIcon;
       break;
+    case ContentSettingsType::AUTOMATIC_FULLSCREEN:
+      icon = &kFullscreenIcon;
+      break;
+
 #if defined(VIVALDI_BUILD)
     case ContentSettingsType::AUTOPLAY:
       icon = &vector_icons::kVolumeUpIcon;

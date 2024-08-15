@@ -11,6 +11,10 @@
 // Dismisses all bubbles.
 - (void)hideAllHelpBubbles;
 
+// Invoked when a gestural in-product help view is visible but the user has
+// tapped outside of it. Do nothing if invoked when there is no IPH view.
+- (void)handleTapOutsideOfVisibleGestureInProductHelp;
+
 // Shows a help bubble for the share button, if eligible.
 // The eligibility can depend on the UI hierarchy at the moment, the
 // configuration and the display history of the bubble, etc.
@@ -32,18 +36,22 @@
 // is not NULL.
 - (void)presentNewTabToolbarItemBubble;
 
-// Optionally presents a full screen IPH associated with
+// Optionally presents a gesture IPH associated with
 // the pull-to-refresh feature. If the feature engagement tracker determines the
 // pull-to-refresh tip should be shown, then it initializes
-// `pullToRefreshSideSwipeBubble` and presents a SideSwipeBubbleView, otherwise
-// it sets `pullToRefreshSideSwipeBubble` to `nil` and no gestural tip is shown.
-- (void)presentPullToRefreshSideSwipeBubble;
+// `pullToRefreshGestureIPH` and presents a GestureInProductHelpView,
+// otherwise it sets `pullToRefreshGestureIPH` to `nil` and no gestural tip
+// is shown.
+- (void)presentPullToRefreshGestureInProductHelp;
 
-// Removes the IPH shown by `presentPullToRefreshSideSwipeBubble` if it exists,
-// but does nothing otherwise. The presenter of the pull-to-refresh IPH should
-// make sure it's called when the user leaves the refreshed website, especially
-// while the IPH is still visible.
-- (void)removePullToRefreshSideSwipeBubble;
+// Optionally presents a full screen IPH associated with the swipe to navigate
+// back/forward feature. If the feature engagement tracker determines this tip
+// should be shown, then it initializes `backForwardSwipeGestureIPH` and
+// presents a GestureInProductHelpView, otherwise it sets
+// `backForwardSwipeGestureIPH` to `nil` and no gestural tip is shown.
+// TODO(crbug.com/1467873): Rewrite comment; the displayed IPH might NOT be a
+// GestureInProductHelpView.
+- (void)presentBackForwardSwipeGestureInProductHelp;
 
 @end
 

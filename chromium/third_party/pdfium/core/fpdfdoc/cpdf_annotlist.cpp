@@ -29,7 +29,7 @@
 #include "core/fpdfdoc/cpdf_formfield.h"
 #include "core/fpdfdoc/cpdf_generateap.h"
 #include "core/fpdfdoc/cpdf_interactiveform.h"
-#include "core/fxge/cfx_renderdevice.h"
+#include "core/fxcrt/check.h"
 
 namespace {
 
@@ -83,7 +83,7 @@ std::unique_ptr<CPDF_Annot> CreatePopupAnnot(CPDF_Document* pDocument,
   // /Contents is empty or not. If so, optimize decoding for empty check.
   ByteString contents =
       pParentDict->GetByteStringFor(pdfium::annotation::kContents);
-  if (PDF_DecodeText(contents.raw_span()).IsEmpty()) {
+  if (PDF_DecodeText(contents.unsigned_span()).IsEmpty()) {
     return nullptr;
   }
 
@@ -172,8 +172,8 @@ void GenerateAP(CPDF_Document* pDoc, CPDF_Dictionary* pAnnotDict) {
 }  // namespace
 
 CPDF_AnnotList::CPDF_AnnotList(CPDF_Page* pPage)
-    : m_pDocument(pPage->GetDocument()) {
-  RetainPtr<CPDF_Array> pAnnots = pPage->GetMutableAnnotsArray();
+    : m_pPage(pPage), m_pDocument(m_pPage->GetDocument()) {
+  RetainPtr<CPDF_Array> pAnnots = m_pPage->GetMutableAnnotsArray();
   if (!pAnnots)
     return;
 
@@ -205,7 +205,7 @@ CPDF_AnnotList::CPDF_AnnotList(CPDF_Page* pPage)
   m_nAnnotCount = m_AnnotList.size();
   for (size_t i = 0; i < m_nAnnotCount; ++i) {
     std::unique_ptr<CPDF_Annot> pPopupAnnot =
-        CreatePopupAnnot(m_pDocument, pPage, m_AnnotList[i].get());
+        CreatePopupAnnot(m_pDocument, m_pPage, m_AnnotList[i].get());
     if (pPopupAnnot)
       m_AnnotList.push_back(std::move(pPopupAnnot));
   }
@@ -230,12 +230,11 @@ bool CPDF_AnnotList::Contains(const CPDF_Annot* pAnnot) const {
   return it != m_AnnotList.end();
 }
 
-void CPDF_AnnotList::DisplayPass(CPDF_Page* pPage,
-                                 CFX_RenderDevice* pDevice,
-                                 CPDF_RenderContext* pContext,
+void CPDF_AnnotList::DisplayPass(CPDF_RenderContext* pContext,
                                  bool bPrinting,
                                  const CFX_Matrix& mtMatrix,
                                  bool bWidgetPass) {
+  CHECK(pContext);
   for (const auto& pAnnot : m_AnnotList) {
     bool bWidget = pAnnot->GetSubtype() == CPDF_Annot::Subtype::WIDGET;
     if ((bWidgetPass && !bWidget) || (!bWidgetPass && bWidget))
@@ -251,23 +250,17 @@ void CPDF_AnnotList::DisplayPass(CPDF_Page* pPage,
     if (!bPrinting && (annot_flags & pdfium::annotation_flags::kNoView))
       continue;
 
-    if (pContext) {
-      pAnnot->DrawInContext(pPage, pContext, mtMatrix,
-                            CPDF_Annot::AppearanceMode::kNormal);
-    } else if (!pAnnot->DrawAppearance(pPage, pDevice, mtMatrix,
-                                       CPDF_Annot::AppearanceMode::kNormal)) {
-      pAnnot->DrawBorder(pDevice, &mtMatrix);
-    }
+    pAnnot->DrawInContext(m_pPage, pContext, mtMatrix,
+                          CPDF_Annot::AppearanceMode::kNormal);
   }
 }
 
-void CPDF_AnnotList::DisplayAnnots(CPDF_Page* pPage,
-                                   CFX_RenderDevice* pDevice,
-                                   CPDF_RenderContext* pContext,
+void CPDF_AnnotList::DisplayAnnots(CPDF_RenderContext* pContext,
                                    bool bPrinting,
                                    const CFX_Matrix& mtUser2Device,
                                    bool bShowWidget) {
-  DisplayPass(pPage, pDevice, pContext, bPrinting, mtUser2Device, false);
+  CHECK(pContext);
+  DisplayPass(pContext, bPrinting, mtUser2Device, false);
   if (bShowWidget)
-    DisplayPass(pPage, pDevice, pContext, bPrinting, mtUser2Device, true);
+    DisplayPass(pContext, bPrinting, mtUser2Device, true);
 }

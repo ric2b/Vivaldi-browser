@@ -35,15 +35,15 @@ where arguments.txt is a file containing a list of arguments prefixes to both ge
 in the expectations. The entire variant list generation runs *once per prefix*, so this
 multiplies the size of the variant list.
 
-  ?worker=0&q=
-  ?worker=1&q=
+  ?debug=0&q=
+  ?debug=1&q=
 
 and myexpectations.txt is a file containing a list of WPT paths to suppress, e.g.:
 
-  path/to/cts.https.html?worker=0&q=webgpu:a/foo:bar={"x":1}
-  path/to/cts.https.html?worker=1&q=webgpu:a/foo:bar={"x":1}
+  path/to/cts.https.html?debug=0&q=webgpu:a/foo:bar={"x":1}
+  path/to/cts.https.html?debug=1&q=webgpu:a/foo:bar={"x":1}
 
-  path/to/cts.https.html?worker=1&q=webgpu:a/foo:bar={"x":3}
+  path/to/cts.https.html?debug=1&q=webgpu:a/foo:bar={"x":3}
 `);
   process.exit(rc);
 }
@@ -224,7 +224,7 @@ ${queryString}`
       }
 
       lines.push({
-        urlQueryString: prefix + query.toString(), // "?worker=0&q=..."
+        urlQueryString: prefix + query.toString(), // "?debug=0&q=..."
         comment: useChunking ? `estimated: ${subtreeCounts?.totalTimeMS.toFixed(3)} ms` : undefined,
       });
 

@@ -129,10 +129,8 @@ ColorConversionSkFilterCache::Value::~Value() = default;
 sk_sp<SkColorFilter> ColorConversionSkFilterCache::Get(
     const gfx::ColorSpace& src,
     const gfx::ColorSpace& dst,
-    float resource_offset,
-    float resource_multiplier,
-    absl::optional<uint32_t> src_bit_depth,
-    absl::optional<gfx::HDRMetadata> src_hdr_metadata,
+    std::optional<uint32_t> src_bit_depth,
+    std::optional<gfx::HDRMetadata> src_hdr_metadata,
     float dst_sdr_max_luminance_nits,
     float dst_max_luminance_relative) {
   // Set unused parameters to bogus values, so that they do not result in
@@ -141,7 +139,7 @@ sk_sp<SkColorFilter> ColorConversionSkFilterCache::Get(
     // If the source is not going to be tone mapped, then `src_hdr_metadata`
     // and `dst_max_luminance_relative` will not be used, so set them nonsense
     // values.
-    src_hdr_metadata = absl::nullopt;
+    src_hdr_metadata = std::nullopt;
     dst_max_luminance_relative = 0;
 
     // If neither source nor destination will use `dst_sdr_max_luminance_nits`,
@@ -166,8 +164,8 @@ sk_sp<SkColorFilter> ColorConversionSkFilterCache::Get(
   }
 
   gfx::ColorTransform::RuntimeOptions options;
-  options.offset = resource_offset;
-  options.multiplier = resource_multiplier;
+  options.offset = 0.0f;
+  options.multiplier = 1.0f;
   options.src_hdr_metadata = src_hdr_metadata;
   options.dst_sdr_max_luminance_nits = dst_sdr_max_luminance_nits;
   options.dst_max_luminance_relative = dst_max_luminance_relative;
@@ -265,7 +263,7 @@ bool ColorConversionSkFilterCache::UseToneCurve(sk_sp<SkImage> image) {
 
 sk_sp<SkImage> ColorConversionSkFilterCache::ApplyToneCurve(
     sk_sp<SkImage> image,
-    absl::optional<HDRMetadata> src_hdr_metadata,
+    std::optional<HDRMetadata> src_hdr_metadata,
     float dst_sdr_max_luminance_nits,
     float dst_max_luminance_relative,
     GrDirectContext* gr_context,
@@ -292,8 +290,7 @@ sk_sp<SkImage> ColorConversionSkFilterCache::ApplyToneCurve(
                                 ColorSpace::TransferID::LINEAR_HDR);
   sk_sp<SkColorFilter> filter =
       Get(image_color_space, target_color_space,
-          /*resource_offset=*/0, /*resource_multiplier=*/1,
-          /*src_bit_depth=*/absl::nullopt, src_hdr_metadata,
+          /*src_bit_depth=*/std::nullopt, src_hdr_metadata,
           dst_sdr_max_luminance_nits, dst_max_luminance_relative);
   SkPaint paint;
   paint.setBlendMode(SkBlendMode::kSrc);

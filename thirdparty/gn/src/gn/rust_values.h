@@ -11,6 +11,8 @@
 #include "gn/label.h"
 #include "gn/source_file.h"
 
+class Target;
+
 // Holds the values (outputs, args, script name, etc.) for either an action or
 // an action_foreach target.
 class RustValues {

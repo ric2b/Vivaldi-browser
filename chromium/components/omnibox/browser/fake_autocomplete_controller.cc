@@ -17,7 +17,6 @@
 #include "components/omnibox/browser/fake_autocomplete_controller.h"
 #include "components/omnibox/browser/fake_autocomplete_provider.h"
 #include "components/omnibox/browser/fake_autocomplete_provider_client.h"
-#include "components/omnibox/browser/fake_autocomplete_scoring_model_service.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -43,6 +42,20 @@ FakeAutocompleteController::FakeAutocompleteController(
 
   providers_.push_back(base::MakeRefCounted<FakeAutocompleteProvider>(
       AutocompleteProvider::Type::TYPE_BOOKMARK));
+  providers_.push_back(base::MakeRefCounted<FakeAutocompleteProvider>(
+      AutocompleteProvider::Type::TYPE_BUILTIN));
+  providers_.push_back(base::MakeRefCounted<FakeAutocompleteProvider>(
+      AutocompleteProvider::Type::TYPE_HISTORY_QUICK));
+  providers_.push_back(base::MakeRefCounted<FakeAutocompleteProvider>(
+      AutocompleteProvider::Type::TYPE_KEYWORD));
+  providers_.push_back(base::MakeRefCounted<FakeAutocompleteProvider>(
+      AutocompleteProvider::Type::TYPE_SEARCH));
+  providers_.push_back(base::MakeRefCounted<FakeAutocompleteProvider>(
+      AutocompleteProvider::Type::TYPE_HISTORY_URL));
+  providers_.push_back(base::MakeRefCounted<FakeAutocompleteProvider>(
+      AutocompleteProvider::Type::TYPE_DOCUMENT));
+  providers_.push_back(base::MakeRefCounted<FakeAutocompleteProvider>(
+      AutocompleteProvider::Type::TYPE_HISTORY_CLUSTER_PROVIDER));
 
   observer_ = std::make_unique<FakeAutocompleteControllerObserver>();
   AddObserver(observer_.get());
@@ -92,7 +105,7 @@ std::vector<std::string> FakeAutocompleteController::SimulateAutocompletePass(
 std::vector<std::string>
 FakeAutocompleteController::SimulateCleanAutocompletePass(
     std::vector<AutocompleteMatch> matches) {
-  internal_result_.Reset();
+  internal_result_.ClearMatches();
   return SimulateAutocompletePass(true, true, matches);
 }
 

@@ -174,19 +174,6 @@ public class BookmarkModel extends BookmarkBridge {
     }
 
     /**
-     * @return The id of the default folder to save bookmarks/folders to.
-     */
-    public BookmarkId getDefaultFolder() {
-        /*
-          Vivaldi: Vivaldi uses the Desktop folder aka the "Bookmark bar node" as
-          the root shown in Bookmarks manager/panel
-         */
-        if (ChromeApplicationImpl.isVivaldi())
-            return getDesktopFolderId();
-        return getMobileFolderId();
-    }
-
-    /**
      * @return The id of the default folder to view bookmarks.
      */
     public BookmarkId getDefaultFolderViewLocation() {
@@ -273,5 +260,12 @@ public class BookmarkModel extends BookmarkBridge {
         for (BookmarkDeleteObserver observer : mDeleteObservers) {
             observer.onDeleteBookmarks(titles.toArray(new String[titles.size()]), false);
         }
+    }
+
+    /*
+     Vivaldi
+     */
+    public BookmarkId getDefaultFolder() {
+        return getDesktopFolderId();
     }
 }

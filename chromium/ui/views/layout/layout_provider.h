@@ -33,6 +33,8 @@ enum InsetsMetric {
   // The margins around the icon/title of a dialog. The bottom margin is implied
   // by the content insets and the other margins overlap with INSETS_DIALOG.
   INSETS_DIALOG_TITLE,
+  // The margins for the dialog footnote content.
+  INSETS_DIALOG_FOOTNOTE,
   // The margins around the edges of a tooltip bubble.
   INSETS_TOOLTIP_BUBBLE,
   // Padding to add to vector image buttons to increase their click and touch
@@ -105,6 +107,8 @@ enum DistanceMetric {
   DISTANCE_TABLE_CELL_HORIZONTAL_MARGIN,
   // Horizontal padding applied to text in a textfield.
   DISTANCE_TEXTFIELD_HORIZONTAL_TEXT_PADDING,
+  // Horizontal spacing between controls that are logically unrelated.
+  DISTANCE_UNRELATED_CONTROL_HORIZONTAL,
   // Vertical spacing between controls that are logically unrelated.
   DISTANCE_UNRELATED_CONTROL_VERTICAL,
   // Padding in vector icons. This is a general number for more vector icons.

@@ -960,7 +960,8 @@ TEST_F(NavigationRequestTest, IsolatedAppPolicyInjection) {
   EXPECT_EQ("'self'", csp->raw_directives[Directive::DefaultSrc]);
   EXPECT_EQ("'self' https: blob: data:",
             csp->raw_directives[Directive::FrameSrc]);
-  EXPECT_EQ("'self' https: wss:", csp->raw_directives[Directive::ConnectSrc]);
+  EXPECT_EQ("'self' https: wss: blob: data:",
+            csp->raw_directives[Directive::ConnectSrc]);
   EXPECT_EQ("'self' 'wasm-unsafe-eval'",
             csp->raw_directives[Directive::ScriptSrc]);
   EXPECT_EQ("'self' https: blob: data:",
@@ -1465,6 +1466,19 @@ TEST_F(NavigationRequestResponseBodyTest, PipeClosed) {
       NavigationRequest::From(navigation->GetNavigationHandle())->state());
   EXPECT_TRUE(was_callback_called());
   EXPECT_EQ(std::string(), response_body());
+}
+
+TEST_F(NavigationRequestTest, ViewTransitionForceEnablesPageSwap) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures({blink::features::kViewTransitionOnNavigation},
+                                {});
+
+  GURL main_url = GURL("https://main.com");
+  auto main_navigation =
+      NavigationSimulatorImpl::CreateBrowserInitiated(main_url, contents());
+  main_navigation->Start();
+  ASSERT_TRUE(
+      main_navigation->GetNavigationHandle()->ShouldDispatchPageSwapEvent());
 }
 
 }  // namespace content

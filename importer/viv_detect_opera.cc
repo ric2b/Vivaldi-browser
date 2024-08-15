@@ -17,11 +17,12 @@ void DetectOperaMailProfiles(std::vector<importer::SourceProfile>* profiles) {
   importer::SourceProfile opera;
   opera.importer_name = l10n_util::GetStringUTF16(IDS_IMPORT_FROM_OPERA_MAIL);
   opera.importer_type = importer::TYPE_OPERA;
-  opera.source_path = GetProfileDir(true);
-  opera.mail_path = GetMailDirectory(true);
-  opera.services_supported = importer::EMAIL;
-
-  profiles->push_back(opera);
+  opera.source_path = GetProfileDir();
+  opera.mail_path = GetMailDirectory();
+  if (!opera.mail_path.empty()) {
+    opera.services_supported = importer::EMAIL;
+    profiles->push_back(opera);
+  }
 }
 
 void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles) {
@@ -34,8 +35,9 @@ void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles) {
   opera.app_path = GetOperaInstallPathFromRegistry();
 #endif
   opera.services_supported = importer::SPEED_DIAL | importer::FAVORITES |
-                             importer::NOTES | importer::PASSWORDS |
-                             importer::EMAIL;
+                             importer::NOTES | importer::PASSWORDS;
+  if (!opera.mail_path.empty())
+    opera.services_supported |= importer::EMAIL;
 
 #if 0
   // Check if this profile need the master password
@@ -44,7 +46,7 @@ void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles) {
   ini_file = ini_file.AppendASCII(OPERA_PREFS_NAME);
   if (ReadOperaIniFile(ini_file, inifile_parser)) {
     const base::Value::Dict& inifile = inifile_parser.root();
-    absl::optional<int> val = inifile.FindInt("Security Prefs.Use Paranoid Mailpassword");
+    std::optional<int> val = inifile.FindInt("Security Prefs.Use Paranoid Mailpassword");
     if (val && *val) {
       opera.services_supported |= importer::MASTER_PASSWORD;
     }
@@ -55,7 +57,8 @@ void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles) {
   // profile prefs file. Disable it for now until we have a better solution.
   opera.services_supported |= importer::MASTER_PASSWORD;
 #endif
-  profiles->push_back(opera);
+  if (!opera.source_path.empty())
+    profiles->push_back(opera);
 
   DetectOperaMailProfiles(profiles);
 }

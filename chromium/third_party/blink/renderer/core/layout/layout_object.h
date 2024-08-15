@@ -45,7 +45,6 @@
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
 #include "third_party/blink/renderer/core/layout/geometry/transform_state.h"
 #include "third_party/blink/renderer/core/layout/hit_test_phase.h"
-#include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_object_child_list.h"
 #include "third_party/blink/renderer/core/layout/map_coordinates_flags.h"
 #include "third_party/blink/renderer/core/layout/min_max_sizes.h"
@@ -80,6 +79,7 @@ class AccompaniedFragmentIterator;
 class AffineTransform;
 class HitTestLocation;
 class HitTestRequest;
+class HitTestResult;
 class LayoutBlock;
 class LayoutBlockFlow;
 class LayoutFlowThread;
@@ -1004,6 +1004,12 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     NOT_DESTROYED();
     return false;
   }
+  // For line-breakable ruby. This returns true only if RubyLineBreakable
+  // flag is enabled.
+  bool IsInlineRuby() const;
+  // For line-breakable ruby. This returns true only if RubyLineBreakable
+  // flag is enabled.
+  bool IsInlineRubyText() const;
   virtual bool IsTable() const {
     NOT_DESTROYED();
     return false;
@@ -1788,7 +1794,9 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     // <rt> had display:block, and :first-letter worked accidentally.
     // Test: fast/ruby/ruby-first-letter.html.
     // TODO(crbug.com/1501719): Remove rt:first-letter support.
-    if (IsRubyText() && IsA<HTMLRTElement>(GetNode())) {
+    if (!RuntimeEnabledFeatures::RtNoFirstLetterFirstLineEnabled() &&
+        IsRubyText() && GetNode() &&
+        GetNode()->HasTagName(html_names::kRtTag)) {
       return true;
     }
     return (IsLayoutBlockFlow() && StyleRef().IsDisplayBlockContainer()) ||
@@ -1907,7 +1915,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   }
   void SetNeedsCollectInlines(bool b) {
     NOT_DESTROYED();
-    DCHECK(!GetDocument().InPostLifecycleSteps());
+    DCHECK(!GetDocument().InvalidationDisallowed());
     bitfields_.SetNeedsCollectInlines(b);
   }
 
@@ -1952,12 +1960,12 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
 
   void DeprecatedInvalidateIntersectionObserverCachedRects();
 
-  // Mark elements with a principal box and a computed position-fallback
-  // different from 'none' for layout when @position-fallback rules are removed
-  // or added. mark_style_dirty is true if the element should be marked dirty as
+  // Mark elements with a principal box and a computed position-try-options
+  // different from 'none' for layout when @position-try rules are removed or
+  // added. mark_style_dirty is true if the element should be marked dirty as
   // well. mark_style_dirty is typically set to false if we are inside a subtree
   // which is already marked for subtree recalc.
-  void InvalidateSubtreePositionFallback(bool mark_style_dirty);
+  void InvalidateSubtreePositionTry(bool mark_style_dirty);
 
  private:
   enum PositionedState {
@@ -2292,17 +2300,6 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // See layout_block.h for some extra explanations on containing blocks.
   LayoutBlock* ContainingBlock(AncestorSkipInfo* = nullptr) const;
 
-  bool IsAnonymousNGMulticolInlineWrapper() const;
-
-  // Returns |container|'s containing block.
-  static LayoutBlock* FindNonAnonymousContainingBlock(
-      LayoutObject* container,
-      AncestorSkipInfo* = nullptr);
-
-  // Returns the nearest ancestor in the layout tree that is not anonymous,
-  // or null if there is none.
-  LayoutObject* NonAnonymousAncestor() const;
-
   // Returns the nearest ancestor in the layout tree that IsForElement(),
   // or null if there is none.
   LayoutObject* NearestAncestorForElement() const;
@@ -2622,10 +2619,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
 
   // Do a rect-based hit test with this object as the stop node.
   HitTestResult HitTestForOcclusion(const PhysicalRect&) const;
-  HitTestResult HitTestForOcclusion() const {
-    NOT_DESTROYED();
-    return HitTestForOcclusion(VisualRectInDocument());
-  }
+  HitTestResult HitTestForOcclusion() const;
 
   // Return the offset to the column in which the specified point (in
   // flow-thread coordinates) lives. This is used to convert a flow-thread point
@@ -3147,7 +3141,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     // Same as LayoutObject::SetNeedsPaintPropertyUpdate(), but does not mark
     // ancestors as having a descendant needing a paint property update.
     void SetOnlyThisNeedsPaintPropertyUpdate() {
-      DCHECK(!layout_object_.GetDocument().InPostLifecycleSteps());
+      DCHECK(!layout_object_.GetDocument().InvalidationDisallowed());
       layout_object_.bitfields_.SetNeedsPaintPropertyUpdate(true);
     }
 
@@ -3350,6 +3344,16 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     bitfields_.SetIsGridPlacementDirty(b);
   }
 
+  bool IsSubgridMinMaxSizesCacheDirty() const {
+    NOT_DESTROYED();
+    return bitfields_.IsSubgridMinMaxSizesCacheDirty();
+  }
+
+  void SetSubgridMinMaxSizesCacheDirty(bool b) {
+    NOT_DESTROYED();
+    bitfields_.SetIsSubgridMinMaxSizesCacheDirty(b);
+  }
+
   DisplayLockContext* GetDisplayLockContext() const {
     NOT_DESTROYED();
     auto* element = DynamicTo<Element>(GetNode());
@@ -3457,8 +3461,20 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // have changed (or from SetStyle).
   void SetStyleInternal(const ComputedStyle* style) {
     NOT_DESTROYED();
+    CHECK(style);
     style_ = std::move(style);
   }
+
+  // Set style to null. This is needed during object construction in some
+  // cases. CreateObject() is expected to return a layout object with nullptr
+  // style, but in some cases, during construction, we need to set style
+  // temporarily (and then call this function to reset it again before
+  // returning).
+  void ResetStyle() {
+    NOT_DESTROYED();
+    style_ = nullptr;
+  }
+
   // Overrides should call the superclass at the end. style_ will be 0 the
   // first time this function will be called.
   virtual void StyleWillChange(StyleDifference, const ComputedStyle& new_style);
@@ -3810,6 +3826,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
           being_destroyed_(false),
           is_table_column_constraints_dirty_(false),
           is_grid_placement_dirty_(true),
+          is_subgrid_min_max_sizes_cache_dirty_(true),
           transform_affects_vector_effect_(false),
           svg_descendant_may_have_transform_related_animation_(false),
           is_layout_ng_object_for_formatted_text(false),
@@ -4084,9 +4101,14 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     ADD_BOOLEAN_BITFIELD(is_table_column_constraints_dirty_,
                          IsTableColumnsConstraintsDirty);
 
-    // Grid item placement is cached on LayoutGrid.
+    // Grid item placement is cached on `LayoutGrid`.
     // When this flag is set, any cached item placements are invalid.
     ADD_BOOLEAN_BITFIELD(is_grid_placement_dirty_, IsGridPlacementDirty);
+
+    // Subgrid `MinMaxSizes` are cached on `LayoutGrid`.
+    // When this flag is set, a subgrid's cached `MinMaxSizes` are invalid.
+    ADD_BOOLEAN_BITFIELD(is_subgrid_min_max_sizes_cache_dirty_,
+                         IsSubgridMinMaxSizesCacheDirty);
 
     // For transformable SVG child objects, indicates if this object or any
     // descendant has special vector effect that is affected by transform on
@@ -4170,14 +4192,14 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   }
   void SetChildNeedsFullLayout(bool b) {
     NOT_DESTROYED();
-    DCHECK(!GetDocument().InPostLifecycleSteps());
+    DCHECK(!GetDocument().InvalidationDisallowed());
     bitfields_.SetChildNeedsFullLayout(b);
     if (b)
       bitfields_.SetIsTableColumnsConstraintsDirty(true);
   }
   void SetNeedsSimplifiedLayout(bool b) {
     NOT_DESTROYED();
-    DCHECK(!GetDocument().InPostLifecycleSteps());
+    DCHECK(!GetDocument().InvalidationDisallowed());
     bitfields_.SetNeedsSimplifiedLayout(b);
   }
 
@@ -4333,7 +4355,7 @@ inline void LayoutObject::SetNeedsSimplifiedLayout() {
 // TODO(1229581): Get rid of this.
 inline void LayoutObject::SetIsInLayoutNGInlineFormattingContext(
     bool new_value) {
-  DCHECK(!GetDocument().InPostLifecycleSteps());
+  DCHECK(!GetDocument().InvalidationDisallowed());
   if (IsInLayoutNGInlineFormattingContext() == new_value)
     return;
   InLayoutNGInlineFormattingContextWillChange(new_value);
@@ -4345,7 +4367,7 @@ inline void LayoutObject::SetIsInLayoutNGInlineFormattingContext(
 }
 
 inline void LayoutObject::SetHasBoxDecorationBackground(bool b) {
-  DCHECK(!GetDocument().InPostLifecycleSteps());
+  DCHECK(!GetDocument().InvalidationDisallowed());
   if (b == bitfields_.HasBoxDecorationBackground())
     return;
 

@@ -151,7 +151,7 @@ void MockModelTypeWorker::UpdateModelTypeState(
 
 void MockModelTypeWorker::UpdateFromServer() {
   processor_->OnUpdateReceived(model_type_state_, UpdateResponseDataList(),
-                               /*gc_directive=*/absl::nullopt);
+                               /*gc_directive=*/std::nullopt);
 }
 
 void MockModelTypeWorker::UpdateFromServer(
@@ -181,7 +181,7 @@ void MockModelTypeWorker::UpdateFromServer(
 
 void MockModelTypeWorker::UpdateFromServer(UpdateResponseDataList updates) {
   processor_->OnUpdateReceived(model_type_state_, std::move(updates),
-                               /*gc_directive=*/absl::nullopt);
+                               /*gc_directive=*/std::nullopt);
 }
 
 syncer::UpdateResponseData MockModelTypeWorker::GenerateUpdateData(
@@ -221,6 +221,16 @@ syncer::UpdateResponseData MockModelTypeWorker::GenerateUpdateData(
     const sync_pb::EntitySpecifics& specifics) {
   return GenerateUpdateData(tag_hash, specifics, 1,
                             model_type_state_.encryption_key_name());
+}
+
+syncer::UpdateResponseData MockModelTypeWorker::GenerateSharedUpdateData(
+    const ClientTagHash& tag_hash,
+    const sync_pb::EntitySpecifics& specifics,
+    const std::string& collaboration_id) {
+  syncer::UpdateResponseData response_data =
+      GenerateUpdateData(tag_hash, specifics);
+  response_data.entity.collaboration_id = collaboration_id;
+  return response_data;
 }
 
 syncer::UpdateResponseData MockModelTypeWorker::GenerateTypeRootUpdateData(
@@ -269,7 +279,7 @@ void MockModelTypeWorker::TombstoneFromServer(const ClientTagHash& tag_hash) {
   UpdateResponseDataList list;
   list.push_back(GenerateTombstoneUpdateData(tag_hash));
   processor_->OnUpdateReceived(model_type_state_, std::move(list),
-                               /*gc_directive=*/absl::nullopt);
+                               /*gc_directive=*/std::nullopt);
 }
 
 void MockModelTypeWorker::AckOnePendingCommit() {
@@ -360,7 +370,7 @@ void MockModelTypeWorker::UpdateWithEncryptionKey(
     UpdateResponseDataList update) {
   model_type_state_.set_encryption_key_name(ekn);
   processor_->OnUpdateReceived(model_type_state_, std::move(update),
-                               /*gc_directive=*/absl::nullopt);
+                               /*gc_directive=*/std::nullopt);
 }
 
 void MockModelTypeWorker::UpdateWithGarbageCollection(

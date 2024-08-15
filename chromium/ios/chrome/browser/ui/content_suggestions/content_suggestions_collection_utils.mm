@@ -16,7 +16,6 @@
 #import "ios/chrome/browser/ui/start_surface/start_surface_features.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
-#import "ios/chrome/common/button_configuration_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
@@ -105,10 +104,8 @@ CGFloat FakeToolbarVerticalMargin() {
 UIColor* FakeboxIconColor() {
   if (IsIOSLargeFakeboxEnabled()) {
     return [UIColor colorNamed:kGrey700Color];
-  } else if (IsMagicStackEnabled()) {
-    return [UIColor colorNamed:@"fake_omnibox_placeholder_color"];
   }
-  return [UIColor colorNamed:kTextfieldPlaceholderColor];
+  return [UIColor colorNamed:@"fake_omnibox_placeholder_color"];
 }
 
 // Sets up fakebox button with a symbol and a round background.
@@ -261,7 +258,8 @@ CGFloat HeightForLogoHeader(BOOL logo_is_showing,
     // Returns sufficient vertical space for the Identity Disc to be
     // displayed.
     return ntp_home::kIdentityAvatarDimension +
-           2 * ntp_home::kIdentityAvatarMargin;
+           2 * (ntp_home::kIdentityAvatarMargin +
+                ntp_home::kIdentityAvatarPadding);
   }
 
   header_height += kTopSpacingMaterial;
@@ -271,20 +269,6 @@ CGFloat HeightForLogoHeader(BOOL logo_is_showing,
 
 CGFloat HeaderBottomPadding() {
   return kNTPShrunkLogoSearchFieldBottomPadding;
-}
-
-UIImageView* CreateMagnifyingGlassView() {
-  UIImageView* image_view = [[UIImageView alloc] init];
-  image_view.translatesAutoresizingMaskIntoConstraints = NO;
-  image_view.contentMode = UIViewContentModeScaleAspectFit;
-  image_view.userInteractionEnabled = NO;
-
-  UIImage* magnifying_glass_image = DefaultSymbolWithPointSize(
-      kMagnifyingglassSymbol, kSymbolContentSuggestionsPointSize);
-  image_view.tintColor = [UIColor colorNamed:kGrey500Color];
-
-  [image_view setImage:magnifying_glass_image];
-  return image_view;
 }
 
 void ConfigureSearchHintLabel(UILabel* search_hint_label,
@@ -302,19 +286,19 @@ void ConfigureSearchHintLabel(UILabel* search_hint_label,
 }
 
 void ConfigureVoiceSearchButton(UIButton* voice_search_button,
-                                UIView* search_tab_target) {
+                                BOOL use_color_icon) {
   [voice_search_button setTranslatesAutoresizingMaskIntoConstraints:NO];
-  [search_tab_target addSubview:voice_search_button];
 
   UIButtonConfiguration* buttonConfig =
       [UIButtonConfiguration plainButtonConfiguration];
   buttonConfig.contentInsets = NSDirectionalEdgeInsetsMake(0, 0, 0, 0);
   voice_search_button.configuration = buttonConfig;
 
-  UIImage* mic_image = DefaultSymbolWithPointSize(
-      kMicrophoneSymbol, kSymbolContentSuggestionsPointSize);
   voice_search_button.tintColor = FakeboxIconColor();
-
+  UIImage* mic_image = CustomSymbolWithPointSize(
+      kVoiceSymbol, kSymbolContentSuggestionsPointSize);
+  mic_image = use_color_icon ? MakeSymbolMulticolor(mic_image)
+                             : MakeSymbolMonochrome(mic_image);
   [voice_search_button setImage:mic_image forState:UIControlStateNormal];
   [voice_search_button setAccessibilityLabel:l10n_util::GetNSString(
                                                  IDS_IOS_ACCNAME_VOICE_SEARCH)];
@@ -326,7 +310,9 @@ void ConfigureVoiceSearchButton(UIButton* voice_search_button,
       CreateLiftEffectCirclePointerStyleProvider();
 }
 
-void ConfigureLensButtonAppearance(UIButton* lens_button, BOOL use_new_badge) {
+void ConfigureLensButtonAppearance(UIButton* lens_button,
+                                   BOOL use_new_badge,
+                                   BOOL use_color_icon) {
   lens_button.translatesAutoresizingMaskIntoConstraints = NO;
 
   UIButtonConfiguration* buttonConfig =
@@ -345,9 +331,11 @@ void ConfigureLensButtonAppearance(UIButton* lens_button, BOOL use_new_badge) {
     // Show the "New" badge and colored symbol.
     SetUpButtonWithNewFeatureBadge(lens_button, kCameraLensSymbol);
   } else {
-    // Use a monochrome symbol with no background.
+    // Use a monochrome or colored symbol with no background.
     UIImage* camera_image = CustomSymbolWithPointSize(
         kCameraLensSymbol, kSymbolContentSuggestionsPointSize);
+    camera_image = use_color_icon ? MakeSymbolMulticolor(camera_image)
+                                  : MakeSymbolMonochrome(camera_image);
     [lens_button setImage:camera_image forState:UIControlStateNormal];
     lens_button.tintColor = FakeboxIconColor();
   }
@@ -363,22 +351,11 @@ UIView* NearestAncestor(UIView* view, Class of_class) {
   return NearestAncestor([view superview], of_class);
 }
 
-BOOL ShouldShowWiderMagicStackLayer(UITraitCollection* traitCollection,
-                                    UIWindow* window) {
-  // Some iphone devices in landscape mode are still small enough to have a
-  // Compact  UIUserInterfaceSizeClass.
-  return traitCollection.horizontalSizeClass ==
-             UIUserInterfaceSizeClassRegular ||
-         IsLandscape(window);
-}
-
 UIColor* SearchHintLabelColor() {
   if (IsIOSLargeFakeboxEnabled()) {
     return [UIColor colorNamed:kGrey800Color];
-  } else if (IsMagicStackEnabled()) {
-    return [UIColor colorNamed:@"fake_omnibox_placeholder_color"];
   }
-  return [UIColor colorNamed:kTextfieldPlaceholderColor];
+  return [UIColor colorNamed:@"fake_omnibox_placeholder_color"];
 }
 
 int SetUpListTitleStringID() {

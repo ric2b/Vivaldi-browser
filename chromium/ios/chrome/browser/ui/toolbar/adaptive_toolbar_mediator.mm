@@ -397,9 +397,7 @@ using vivaldi::IsVivaldiRunning;
         setLoadingProgressFraction:self.webState->GetLoadingProgress()];
   }
   [self updateShareMenuForWebState:self.webState];
-  if (base::FeatureList::IsEnabled(kThemeColorInTopToolbar) ||
-      base::FeatureList::IsEnabled(kDynamicThemeColor) ||
-      base::FeatureList::IsEnabled(kDynamicBackgroundColor)) {
+  if (base::FeatureList::IsEnabled(kThemeColorInTopToolbar)) {
     [self.consumer setPageThemeColor:self.webState->GetThemeColor()];
     [self.consumer
         setUnderPageBackgroundColor:self.webState
@@ -407,11 +405,11 @@ using vivaldi::IsVivaldiRunning;
   }
 
   // Vivaldi
-  [self.consumer setIsTabBarEnabled:[_tabBarEnabled value]];
-  [self.consumer setIsBottomOmniboxEnabled:[_bottomOmniboxEnabled value]];
+  [self.consumer setIsTabBarEnabled:[self isTabBarEnabled]];
+  [self.consumer setIsBottomOmniboxEnabled:[self isBottomOmniboxEnabled]];
   [self.consumer setPageThemeColor:self.webState->GetThemeColor()];
   [self.consumer
-      setIsDynamicAccentColorEnabled:[_dynamicAccentColorEnabled value]];
+      setIsDynamicAccentColorEnabled:[self isDynamicAccentColorEnabled]];
   [self.consumer setCustomAccentColor:[self customAccentColor]];
   // End Vivaldi
 
@@ -484,16 +482,10 @@ using vivaldi::IsVivaldiRunning;
         image = [UIImage imageNamed:vMenuPrivateTab];
       } else {
       title = l10n_util::GetNSStringWithFixup(IDS_IOS_NEW_INCOGNITO_TAB);
-      if (@available(iOS 15, *)) {
-        image =
-            SymbolWithPalette(CustomSymbolWithPointSize(
-                                  kIncognitoSymbol, kInfobarSymbolPointSize),
-                              @[ UIColor.whiteColor ]);
-      } else {
-        image = [UIImage imageNamed:@"incognito_badge_ios14"];
-      }
+      image = SymbolWithPalette(
+          CustomSymbolWithPointSize(kIncognitoSymbol, kInfobarSymbolPointSize),
+          @[ UIColor.whiteColor ]);
       } // End Vivaldi
-
     } else {
       title = base::SysUTF16ToNSString(navigationItem->GetTitleForDisplay());
       const gfx::Image& gfxImage = navigationItem->GetFaviconStatus().image;
@@ -700,7 +692,28 @@ using vivaldi::IsVivaldiRunning;
   if (!_forceDarkWebPagesEnabled)
     return NO;
   return [_forceDarkWebPagesEnabled value] &&
-      [self websiteAppearanceStyle] == VivaldiWebsiteAppearanceStyleDark;
+      [self websiteAppearanceStyle] != VivaldiWebsiteAppearanceStyleLight;
+}
+
+- (BOOL)isBottomOmniboxEnabled {
+  if (!_bottomOmniboxEnabled) {
+    return NO;
+  }
+  return [_bottomOmniboxEnabled value];
+}
+
+- (BOOL)isDynamicAccentColorEnabled {
+  if (!_dynamicAccentColorEnabled) {
+    return YES;
+  }
+  return [_dynamicAccentColorEnabled value];
+}
+
+- (BOOL)isTabBarEnabled {
+  if ([VivaldiGlobalHelpers isDeviceTablet] || !_tabBarEnabled) {
+    return YES;
+  }
+  return [_tabBarEnabled value];
 }
 
 - (VivaldiWebsiteAppearanceStyle)websiteAppearanceStyle {

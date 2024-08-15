@@ -108,7 +108,7 @@ There is a checked-in script called
 that uses the output of the build_ts command to generate a local `tsconfig.json`
 file.
 
-**Use the following tool to generate a shell command for you!**
+Here's how to run that script:
 
 ```shell
 $ ash/webui/personalization_app/tools/gen_tsconfig.py \
@@ -123,7 +123,7 @@ Note: The `gen_tsconfig.py` script happens to exist in the
 matter where your project exists.
 
 After running this command, you should see a new `tsconfig.json` file appear in
-your project's directory. 
+your project's directory.
 
 You'll probably also want to create a new `.gitignore`
 file in your project's directory with the following contents

@@ -137,11 +137,7 @@ class BrowserTabStripController::TabContextMenuContents
         tab_);
   }
 
-  bool IsCommandIdAlerted(int command_id) const override {
-    return command_id == TabStripModel::CommandAddToNewGroup &&
-           controller_->GetBrowser()->window()->IsFeaturePromoActive(
-               feature_engagement::kIPHDesktopTabGroupsNewGroupFeature);
-  }
+  bool IsCommandIdAlerted(int command_id) const override { return false; }
 
   bool GetAcceleratorForCommandId(int command_id,
                                   ui::Accelerator* accelerator) const override {
@@ -293,7 +289,7 @@ void BrowserTabStripController::SelectTab(int model_index,
       ->GetCompositor()
       ->RequestSuccessfulPresentationTimeForNextFrame(base::BindOnce(
           [](std::unique_ptr<content::PeakGpuMemoryTracker> tracker,
-             base::TimeTicks presentation_timestamp) {
+             const viz::FrameTimingDetails& frame_timing_details) {
             // This callback will be ran once the ui::Compositor presents the
             // next frame for the |tabstrip_|. The destruction of |tracker| will
             // get the peak GPU memory and record a histogram.

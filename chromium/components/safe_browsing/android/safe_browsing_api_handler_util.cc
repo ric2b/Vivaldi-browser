@@ -80,6 +80,7 @@ int GetThreatSeverity(SafetyNetJavaThreatType threat_type) {
 
 SBThreatType SafetyNetJavaToSBThreatType(
     SafetyNetJavaThreatType java_threat_num) {
+  using enum SBThreatType;
   switch (java_threat_num) {
     case SafetyNetJavaThreatType::POTENTIALLY_HARMFUL_APPLICATION:
       return SB_THREAT_TYPE_URL_MALWARE;
@@ -109,14 +110,15 @@ SBThreatType SafetyNetJavaToSBThreatType(
 UmaRemoteCallResult ParseJsonFromGMSCore(const std::string& metadata_str,
                                          SBThreatType* worst_sb_threat_type,
                                          ThreatMetadata* metadata) {
-  *worst_sb_threat_type = SB_THREAT_TYPE_SAFE;  // Default to safe.
+  *worst_sb_threat_type =
+      SBThreatType::SB_THREAT_TYPE_SAFE;        // Default to safe.
   *metadata = ThreatMetadata();                 // Default values.
 
   if (metadata_str.empty())
     return UmaRemoteCallResult::JSON_EMPTY;
 
   // Pick out the "matches" list.
-  absl::optional<base::Value> value = base::JSONReader::Read(metadata_str);
+  std::optional<base::Value> value = base::JSONReader::Read(metadata_str);
   const base::Value::List* matches = nullptr;
   {
     if (!value.has_value())
@@ -161,12 +163,15 @@ UmaRemoteCallResult ParseJsonFromGMSCore(const std::string& metadata_str,
   }
 
   *worst_sb_threat_type = SafetyNetJavaToSBThreatType(worst_threat_type);
-  if (*worst_sb_threat_type == SB_THREAT_TYPE_SAFE || !worst_match)
+  if (*worst_sb_threat_type == SBThreatType::SB_THREAT_TYPE_SAFE ||
+      !worst_match) {
     return UmaRemoteCallResult::JSON_UNKNOWN_THREAT;
+  }
 
   // Fill in the metadata
   metadata->population_id = ParseUserPopulation(*worst_match);
-  if (*worst_sb_threat_type == SB_THREAT_TYPE_SUBRESOURCE_FILTER) {
+  if (*worst_sb_threat_type ==
+      SBThreatType::SB_THREAT_TYPE_SUBRESOURCE_FILTER) {
     metadata->subresource_filter_match =
         ParseSubresourceFilterMatch(*worst_match);
   }

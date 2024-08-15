@@ -10,6 +10,7 @@
 #include "ash/constants/ash_switches.h"
 #include "base/check.h"
 #include "base/feature_list.h"
+#include "base/i18n/time_formatting.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "build/branding_buildflags.h"
@@ -17,6 +18,7 @@
 #include "chrome/browser/ash/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/ash/privacy_hub/privacy_hub_util.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
+#include "chrome/browser/ash/system/timezone_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/ash/auth/legacy_fingerprint_engine.h"
 #include "chrome/browser/ui/webui/ash/settings/os_settings_features_util.h"
@@ -46,6 +48,7 @@ using ::chromeos::settings::mojom::kFingerprintSubpagePathV2;
 using ::chromeos::settings::mojom::kManageOtherPeopleSubpagePathV2;
 using ::chromeos::settings::mojom::kPrivacyAndSecuritySectionPath;
 using ::chromeos::settings::mojom::kPrivacyHubCameraSubpagePath;
+using ::chromeos::settings::mojom::kPrivacyHubGeolocationAdvancedSubpagePath;
 using ::chromeos::settings::mojom::kPrivacyHubGeolocationSubpagePath;
 using ::chromeos::settings::mojom::kPrivacyHubMicrophoneSubpagePath;
 using ::chromeos::settings::mojom::kPrivacyHubSubpagePath;
@@ -67,7 +70,9 @@ const std::vector<SearchConcept>& GetPrivacySearchConcepts() {
          mojom::SearchResultDefaultRank::kMedium,
          mojom::SearchResultType::kSetting,
          {.setting = mojom::Setting::kVerifiedAccess}},
-        {IDS_OS_SETTINGS_TAG_SECURITY_AND_PRIVACY,
+        {ash::features::IsOsSettingsRevampWayfindingEnabled()
+             ? IDS_OS_SETTINGS_TAG_PRIVACY_AND_SECURITY
+             : IDS_OS_SETTINGS_TAG_SECURITY_AND_PRIVACY,
          mojom::kPrivacyAndSecuritySectionPath,
          mojom::SearchResultIcon::kShield,
          mojom::SearchResultDefaultRank::kMedium,
@@ -250,7 +255,7 @@ const std::vector<SearchConcept>& GetSmartPrivacySearchConcepts() {
 const std::vector<SearchConcept>& GetPrivacyGoogleChromeSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_PRIVACY_CRASH_REPORTS,
-       mojom::kPrivacyAndSecuritySectionPath,
+       mojom::kPrivacyHubSubpagePath,
        mojom::SearchResultIcon::kShield,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -270,7 +275,6 @@ const std::vector<SearchConcept>& GetPrivacyControlsSearchConcepts() {
       return init_tags;
     }
 
-    if (ash::features::IsCrosPrivacyHubV0Enabled()) {
       init_tags.push_back({IDS_OS_SETTINGS_TAG_PRIVACY_CONTROLS,
                            mojom::kPrivacyHubSubpagePath,
                            ash::features::IsOsSettingsRevampWayfindingEnabled()
@@ -309,7 +313,6 @@ const std::vector<SearchConcept>& GetPrivacyControlsSearchConcepts() {
                              mojom::SearchResultType::kSetting,
                              {.setting = mojom::Setting::kMicrophoneOnOff}});
       }
-    }
 
     if (ash::features::IsCrosPrivacyHubLocationEnabled()) {
       init_tags.push_back(
@@ -319,6 +322,13 @@ const std::vector<SearchConcept>& GetPrivacyControlsSearchConcepts() {
            mojom::SearchResultDefaultRank::kMedium,
            mojom::SearchResultType::kSubpage,
            {.subpage = mojom::Subpage::kPrivacyHubGeolocation}});
+      init_tags.push_back(
+          {IDS_OS_SETTINGS_TAG_GEOLOCATION_ACCURACY,
+           mojom::kPrivacyHubGeolocationAdvancedSubpagePath,
+           mojom::SearchResultIcon::kGeolocation,
+           mojom::SearchResultDefaultRank::kMedium,
+           mojom::SearchResultType::kSubpage,
+           {.subpage = mojom::Subpage::kPrivacyHubGeolocationAdvanced}});
     }
     return init_tags;
   }());
@@ -474,12 +484,28 @@ void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_OS_SETTINGS_PRIVACY_HUB_CAMERA_TOGGLE_SUBTEXT},
       {"cameraToggleFallbackSubtext",
        IDS_OS_SETTINGS_PRIVACY_HUB_FALLBACK_CAMERA_TOGGLE_SUBTEXT},
+      {"privacyHubPageCameraRowSubtext",
+       IDS_OS_SETTINGS_PRIVACY_HUB_PAGE_CAMERA_ROW_SUBTEXT},
+      {"privacyHubPageCameraRowFallbackSubtext",
+       IDS_OS_SETTINGS_PRIVACY_HUB_PAGE_CAMERA_ROW_FALLBACK_SUBTEXT},
+      {"privacyHubCameraSubpageCameraToggleSubtext",
+       IDS_OS_SETTINGS_PRIVACY_HUB_CAMERA_SUBPAGE_CAMERA_TOGGLE_SUBTEXT},
+      {"privacyHubCameraSubpageCameraToggleFallbackSubtext",
+       IDS_OS_SETTINGS_PRIVACY_HUB_CAMERA_SUBPAGE_CAMERA_TOGGLE_FALLBACK_SUBTEXT},
+      {"privacyHubCameraAccessBlockedText",
+       IDS_OS_SETTINGS_PRIVACY_HUB_CAMERA_ACCESS_BLOCKED_TEXT},
       {"noCameraConnectedText",
        IDS_OS_SETTINGS_PRIVACY_HUB_NO_CAMERA_CONNECTED_TEXT},
       {"microphoneToggleTitle",
        IDS_OS_SETTINGS_PRIVACY_HUB_MICROPHONE_TOGGLE_TITLE},
       {"microphoneToggleSubtext",
        IDS_OS_SETTINGS_PRIVACY_HUB_MICROPHONE_TOGGLE_SUBTEXT},
+      {"privacyHubPageMicrophoneRowSubtext",
+       IDS_OS_SETTINGS_PRIVACY_HUB_PAGE_MICROPHONE_ROW_SUBTEXT},
+      {"privacyHubMicrophoneSubpageMicrophoneToggleSubtext",
+       IDS_OS_SETTINGS_PRIVACY_HUB_MICROPHONE_SUBPAGE_MICROPHONE_TOGGLE_SUBTEXT},
+      {"privacyHubMicrophoneAccessBlockedText",
+       IDS_OS_SETTINGS_PRIVACY_HUB_MICROPHONE_ACCESS_BLOCKED_TEXT},
       {"noMicrophoneConnectedText",
        IDS_OS_SETTINGS_PRIVACY_HUB_NO_MICROPHONE_CONNECTED_TEXT},
       {"speakOnMuteDetectionToggleTitle",
@@ -490,12 +516,26 @@ void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_AREA_TITLE},
       {"geolocationAreaDescription",
        IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_AREA_DESCRIPTION},
+      {"geolocationControlledByPrimaryUserText",
+       IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_PRIMARY_USER_CONTROLLED},
       {"geolocationAccessLevelAllowed",
        IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_ACCESS_LEVEL_ALLOWED},
       {"geolocationAccessLevelOnlyAllowedForSystem",
        IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_ACCESS_LEVEL_ONLY_ALLOWED_FOR_SYSTEM},
       {"geolocationAccessLevelDisallowed",
        IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_ACCESS_LEVEL_DISALLOWED},
+      {"geolocationAllowedModeDescription",
+       IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_ACCESS_LEVEL_DESCRIPTION_ALLOWED},
+      {"geolocationOnlyAllowedForSystemModeDescription",
+       IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_ACCESS_LEVEL_DESCRIPTION_ONLY_ALLOWED_FOR_SYSTEM},
+      {"geolocationBlockedModeDescription",
+       IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_ACCESS_LEVEL_DESCRIPTION_DISALLOWED},
+      {"geolocationAccuracyToggleText",
+       IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_ACCURACY_TOGGLE_TEXT},
+      {"geolocationAccuracyToggleTitle",
+       IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_ACCURACY_TOGGLE_TITLE},
+      {"geolocationAdvancedAreaTitle",
+       IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_ADVANCED_AREA_TITLE},
       {"systemGeolocationDialogTitle",
        IDS_SETTINGS_PRIVACY_HUB_GEOLOCATION_DIALOG_TITLE},
       {"systemGeolocationDialogBody",
@@ -534,10 +574,6 @@ void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_OS_SETTINGS_PRIVACY_HUB_NO_APP_CAN_USE_CAMERA_TEXT},
       {"noAppCanUseGeolocationText",
        IDS_OS_SETTINGS_PRIVACY_HUB_NO_APP_CAN_USE_LOCATION_TEXT},
-      {"privacyHubCameraAccessBlockedText",
-       IDS_OS_SETTINGS_PRIVACY_HUB_CAMERA_ACCESS_BLOCKED_TEXT},
-      {"privacyHubMicrophoneAccessBlockedText",
-       IDS_OS_SETTINGS_PRIVACY_HUB_MICROPHONE_ACCESS_BLOCKED_TEXT},
       {"privacyHubSystemServicesSectionTitle",
        IDS_OS_SETTINGS_PRIVACY_HUB_SYSTEM_SERVICES_SECTION_TITLE},
       {"privacyHubSystemServicesAllowedText",
@@ -556,6 +592,10 @@ void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_OS_SETTINGS_PRIVACY_HUB_APP_PERMISSION_ROW_ARIA_DESCRIPTION},
       {"privacyHubAppPermissionRowAndroidSettingsLinkAriaDescription",
        IDS_OS_SETTINGS_PRIVACY_HUB_APP_PERMISSION_ROW_ANDROID_SETTINGS_LINK_ARIA_DESCRIPTION},
+      {"privacyHubSystemServicesAutomaticTimeZoneBlockedText",
+       IDS_OS_SETTINGS_PRIVACY_HUB_SYSTEM_SERVICES_AUTOMATIC_TIME_ZONE_BLOCKED_TEXT},
+      {"privacyHubSystemServicesSunsetScheduleBlockedText",
+       IDS_OS_SETTINGS_PRIVACY_HUB_SYSTEM_SERVICES_SUNSET_SCHEDULE_BLOCKED_TEXT},
       {"privacyHubSystemServicesAutomaticTimeZoneName",
        IDS_OS_SETTINGS_PRIVACY_HUB_SYSTEM_SERVICES_AUTOMATIC_TIME_ZONE_NAME},
       {"privacyHubSystemServicesSunsetScheduleName",
@@ -564,12 +604,6 @@ void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_OS_SETTINGS_PRIVACY_HUB_SYSTEM_SERVICES_LOCAL_WEATHER_NAME},
       {"privacyHubSystemServicesDarkThemeName",
        IDS_OS_SETTINGS_PRIVACY_HUB_SYSTEM_SERVICES_DARK_THEME_NAME},
-      {"privacyHubPageCameraRowSubtext",
-       IDS_OS_SETTINGS_PRIVACY_HUB_PAGE_CAMERA_ROW_SUBTEXT},
-      {"privacyHubPageCameraRowFallbackSubtext",
-       IDS_OS_SETTINGS_PRIVACY_HUB_PAGE_CAMERA_ROW_FALLBACK_SUBTEXT},
-      {"privacyHubPageMicrophoneRowSubtext",
-       IDS_OS_SETTINGS_PRIVACY_HUB_PAGE_MICROPHONE_ROW_SUBTEXT},
       {"privacyHubNoCameraConnectedTooltipText",
        IDS_OS_SETTINGS_PRIVACY_HUB_CAMERA_TOGGLE_NO_CAMERA_CONNECTED_TOOLTIP_TEXT},
       {"privacyHubNoMicrophoneConnectedTooltipText",
@@ -578,10 +612,19 @@ void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
 
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
+  auto [sunrise_time, sunset_time] =
+      ash::privacy_hub_util::SunriseSunsetSchedule();
+  html_source->AddString("privacyHubSystemServicesInitSunRiseTime",
+                         base::TimeFormatTimeOfDay(sunrise_time));
+  html_source->AddString("privacyHubSystemServicesInitSunSetTime",
+                         base::TimeFormatTimeOfDay(sunset_time));
+
   html_source->AddBoolean("isSnoopingProtectionEnabled",
                           ash::features::IsSnoopingProtectionEnabled());
   html_source->AddBoolean("isQuickDimEnabled",
                           ash::features::IsQuickDimEnabled());
+  html_source->AddBoolean("isAuthPanelEnabled",
+                          ash::features::IsUseAuthPanelInSettingsEnabled());
 
   html_source->AddBoolean(
       "isPrivacyHubHatsEnabled",
@@ -590,8 +633,6 @@ void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   html_source->AddBoolean(
       "showAppPermissionsInsidePrivacyHub",
       ash::features::IsCrosPrivacyHubAppPermissionsEnabled());
-  html_source->AddBoolean("showPrivacyHubPage",
-                          ash::features::IsCrosPrivacyHubEnabled());
   html_source->AddBoolean("showPrivacyHubLocationControl",
                           ash::features::IsCrosPrivacyHubLocationEnabled());
   html_source->AddBoolean("showSpeakOnMuteDetectionPage",
@@ -619,12 +660,15 @@ void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
                          chrome::kSpeakOnMuteDetectionLearnMoreURL);
 
   html_source->AddString("geolocationAreaLearnMoreURL",
-                         chrome::kGeolocationAreaLearnMoreURL);
+                         chrome::kPrivacyHubGeolocationLearnMoreURL);
 
   html_source->AddString("osSettingsAppId", web_app::kOsSettingsAppId);
 
   html_source->AddBoolean("showSecureDnsSetting", IsSecureDnsAvailable());
   html_source->AddBoolean("showSecureDnsOsSettingLink", false);
+  html_source->AddBoolean(
+      "isDeprecateDnsDialogEnabled",
+      ash::features::IsOsSettingsDeprecateDnsDialogEnabled());
 
   ::settings::AddSecureDnsStrings(html_source);
 
@@ -690,8 +734,6 @@ bool PrivacySection::LogMetric(mojom::Setting setting,
 void PrivacySection::RegisterHierarchy(HierarchyGenerator* generator) const {
   generator->RegisterTopLevelSetting(mojom::Setting::kVerifiedAccess);
   generator->RegisterTopLevelSetting(mojom::Setting::kRevenEnableHwDataUsage);
-  generator->RegisterTopLevelSetting(
-      mojom::Setting::kUsageStatsAndCrashReports);
 
   // Security and sign-in.
   generator->RegisterTopLevelSubpage(
@@ -758,7 +800,8 @@ void PrivacySection::RegisterHierarchy(HierarchyGenerator* generator) const {
       mojom::Subpage::kPrivacyHub,
       {{mojom::Setting::kCameraOnOff, mojom::Setting::kMicrophoneOnOff,
         mojom::Setting::kGeolocationOnOff,
-        mojom::Setting::kSpeakOnMuteDetectionOnOff}},
+        mojom::Setting::kSpeakOnMuteDetectionOnOff,
+        mojom::Setting::kUsageStatsAndCrashReports}},
       generator);
 
   // Privacy hub microphone.
@@ -776,6 +819,18 @@ void PrivacySection::RegisterHierarchy(HierarchyGenerator* generator) const {
       mojom::SearchResultIcon::kGeolocation,
       mojom::SearchResultDefaultRank::kMedium,
       mojom::kPrivacyHubGeolocationSubpagePath);
+
+  // Privacy hub geolocation advanced.
+  generator->RegisterNestedSubpage(
+      IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_ACCURACY_TOGGLE_TITLE,
+      mojom::Subpage::kPrivacyHubGeolocationAdvanced,
+      mojom::Subpage::kPrivacyHubGeolocation,
+      mojom::SearchResultIcon::kGeolocation,
+      mojom::SearchResultDefaultRank::kMedium,
+      mojom::kPrivacyHubGeolocationAdvancedSubpagePath);
+  RegisterNestedSettingBulk(mojom::Subpage::kPrivacyHubGeolocation,
+                            {{mojom::Setting::kGeolocationAdvanced}},
+                            generator);
 
   // Privacy hub camera.
   generator->RegisterNestedSubpage(

@@ -48,8 +48,6 @@ scoped_refptr<Importer> CreateImporterByType(ImporterType type) {
 #endif
     case TYPE_OPERA:
       return new OperaImporter();
-    case TYPE_OPERA_BOOKMARK_FILE:
-      return new OperaImporter();
     case TYPE_CHROME:
     case TYPE_CHROMIUM:
     case TYPE_YANDEX:
@@ -59,6 +57,8 @@ scoped_refptr<Importer> CreateImporterByType(ImporterType type) {
     case TYPE_VIVALDI:
     case TYPE_BRAVE:
     case TYPE_EDGE_CHROMIUM:
+    case TYPE_ARC:
+    case TYPE_OPERA_GX:
       return new ChromiumImporter();
     default:
       NOTREACHED();

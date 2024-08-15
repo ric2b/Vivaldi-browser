@@ -45,12 +45,6 @@ void ErrorCallback(leveldb::Status* status_out, leveldb::Status status) {
   *status_out = status;
 }
 
-// The leveldb::Env used by the Indexed DB backend.
-class LevelDBEnv : public leveldb_env::ChromiumEnv {
- public:
-  LevelDBEnv() : ChromiumEnv("LevelDBEnv.SessionStorageMetadataTest") {}
-};
-
 class SessionStorageMetadataTest : public testing::Test {
  public:
   SessionStorageMetadataTest()
@@ -60,7 +54,7 @@ class SessionStorageMetadataTest : public testing::Test {
             base::Uuid::GenerateRandomV4().AsLowercaseString()) {
     base::RunLoop loop;
     database_ = AsyncDomStorageDatabase::OpenInMemory(
-        absl::nullopt, "SessionStorageMetadataTest",
+        std::nullopt, "SessionStorageMetadataTest",
         base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()}),
         base::BindLambdaForTesting([&](leveldb::Status) { loop.Quit(); }));
     loop.Run();
@@ -458,7 +452,7 @@ class SessionStorageMetadataMigrationTest : public testing::Test {
  protected:
   base::test::TaskEnvironment task_environment_;
   base::ScopedTempDir temp_path_;
-  LevelDBEnv leveldb_env_;
+  leveldb_env::ChromiumEnv leveldb_env_;
   std::string test_namespace1_id_;
   std::string test_namespace2_id_;
   blink::StorageKey test_storage_key1_;
@@ -508,7 +502,7 @@ TEST_F(SessionStorageMetadataMigrationTest, MigrateV0ToV1) {
   leveldb::Status s = db()->Get(options, leveldb::Slice("version"), &db_value);
   EXPECT_TRUE(s.IsNotFound());
   std::vector<AsyncDomStorageDatabase::BatchDatabaseTask> migration_tasks;
-  EXPECT_TRUE(metadata.ParseDatabaseVersion(absl::nullopt, &migration_tasks));
+  EXPECT_TRUE(metadata.ParseDatabaseVersion(std::nullopt, &migration_tasks));
   EXPECT_FALSE(migration_tasks.empty());
   EXPECT_EQ(1ul, migration_tasks.size());
 

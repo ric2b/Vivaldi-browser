@@ -19,6 +19,7 @@
 #include "RecordInfo.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Sema/Sema.h"
+#include "llvm/Support/TimeProfiler.h"
 
 using namespace clang;
 
@@ -102,6 +103,8 @@ BlinkGCPluginConsumer::BlinkGCPluginConsumer(
 }
 
 void BlinkGCPluginConsumer::HandleTranslationUnit(ASTContext& context) {
+  llvm::TimeTraceScope TimeScope(
+      "BlinkGCPluginConsumer::HandleTranslationUnit");
   // Don't run the plugin if the compilation unit is already invalid.
   if (reporter_.hasErrorOccurred())
     return;
@@ -202,11 +205,7 @@ void BlinkGCPluginConsumer::CheckClass(RecordInfo* info) {
   if (CXXMethodDecl* trace = info->GetTraceMethod()) {
     if (info->IsStackAllocated())
       reporter_.TraceMethodForStackAllocatedClass(info, trace);
-#if defined(LLVM_FORCE_HEAD_REVISION)
     if (trace->isPureVirtual())
-#else
-    if (trace->isPure())
-#endif
       reporter_.ClassDeclaresPureVirtualTrace(info, trace);
   } else if (info->RequiresTraceMethod()) {
     reporter_.ClassRequiresTraceMethod(info);
@@ -403,11 +402,7 @@ CXXRecordDecl* BlinkGCPluginConsumer::GetLeftMostBase(
 bool BlinkGCPluginConsumer::DeclaresVirtualMethods(CXXRecordDecl* decl) {
   CXXRecordDecl::method_iterator it = decl->method_begin();
   for (; it != decl->method_end(); ++it)
-#if defined(LLVM_FORCE_HEAD_REVISION)
     if (it->isVirtual() && !it->isPureVirtual())
-#else
-    if (it->isVirtual() && !it->isPure())
-#endif
       return true;
   return false;
 }

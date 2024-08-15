@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{panic, unwrap, PanicReason};
+use crate::{unwrap, PanicReason};
 use np_ffi_core::common::DeallocateResult;
-use np_ffi_core::deserialize::v0::v0_payload::V0Payload;
+use np_ffi_core::deserialize::v0::V0Payload;
 use np_ffi_core::deserialize::v0::*;
+use np_ffi_core::deserialize::DecryptMetadataResult;
 use np_ffi_core::utils::FfiEnum;
+use np_ffi_core::v0::*;
 
 /// Gets the tag of a `DeserializedV0Advertisement` tagged-union.
 #[no_mangle]
@@ -74,6 +76,39 @@ pub extern "C" fn np_ffi_V0Payload_get_de(payload: V0Payload, index: u8) -> GetV
     payload.get_de(index)
 }
 
+/// Attempts to decrypt the metadata for the matched credential for this V0 payload (if any)
+#[no_mangle]
+pub extern "C" fn np_ffi_V0Payload_decrypt_metadata(payload: V0Payload) -> DecryptMetadataResult {
+    payload.decrypt_metadata()
+}
+
+/// Gets the identity details for this V0 payload, or returns an error if this payload does not have
+/// any associated identity (public advertisement)
+#[no_mangle]
+pub extern "C" fn np_ffi_V0Payload_get_identity_details(
+    payload: V0Payload,
+) -> GetV0IdentityDetailsResult {
+    payload.get_identity_details()
+}
+
+/// Gets the tag of a `GetV0IdentityDetailsResult` tagged-union. On success the wrapped identity
+/// details may be obtained via `GetV0IdentityDetailsResult#into_success`.
+#[no_mangle]
+pub extern "C" fn np_ffi_GetV0IdentityDetailsResult_kind(
+    result: GetV0IdentityDetailsResult,
+) -> GetV0IdentityDetailsResultKind {
+    result.kind()
+}
+
+/// Casts a `GetV0IdentityDetailsResult` to the `Success` variant, panicking in the
+/// case where the passed value is of a different enum variant.
+#[no_mangle]
+pub extern "C" fn np_ffi_GetV0IdentityDetailsResult_into_SUCCESS(
+    result: GetV0IdentityDetailsResult,
+) -> DeserializedV0IdentityDetails {
+    unwrap(result.into_success(), PanicReason::EnumCastFailed)
+}
+
 /// Deallocates any internal data of a `V0Payload`
 #[no_mangle]
 pub extern "C" fn np_ffi_deallocate_v0_payload(payload: V0Payload) -> DeallocateResult {
@@ -91,51 +126,4 @@ pub extern "C" fn np_ffi_GetV0DEResult_kind(result: GetV0DEResult) -> GetV0DERes
 #[no_mangle]
 pub extern "C" fn np_ffi_GetV0DEResult_into_SUCCESS(result: GetV0DEResult) -> V0DataElement {
     unwrap(result.into_success(), PanicReason::EnumCastFailed)
-}
-
-/// Gets the tag of a `V0DataElement` tagged-union.
-#[no_mangle]
-pub extern "C" fn np_ffi_V0DataElement_kind(de: V0DataElement) -> V0DataElementKind {
-    de.kind()
-}
-
-/// Casts a `V0DataElement` to the `TxPower` variant, panicking in the
-/// case where the passed value is of a different enum variant.
-#[no_mangle]
-pub extern "C" fn np_ffi_V0DataElement_into_TX_POWER(de: V0DataElement) -> TxPower {
-    unwrap(de.into_tx_power(), PanicReason::EnumCastFailed)
-}
-
-/// Casts a `V0DataElement` to the `Actions` variant, panicking in the
-/// case where the passed value is of a different enum variant.
-#[no_mangle]
-pub extern "C" fn np_ffi_V0DataElement_into_ACTIONS(de: V0DataElement) -> V0Actions {
-    unwrap(de.into_actions(), PanicReason::EnumCastFailed)
-}
-
-/// Return whether a boolean action type is set in this data element
-#[no_mangle]
-pub extern "C" fn np_ffi_V0Actions_has_action(
-    actions: V0Actions,
-    action_type: BooleanActionType,
-) -> bool {
-    match actions.has_action(&action_type) {
-        Ok(b) => b,
-        Err(_) => panic(PanicReason::InvalidActionBits),
-    }
-}
-
-/// Gets the 4 bit context sync sequence number as a u8 from this data element
-#[no_mangle]
-pub extern "C" fn np_ffi_V0Actions_get_context_sync_sequence_number(actions: V0Actions) -> u8 {
-    match actions.get_context_sync_seq_num() {
-        Ok(b) => b,
-        Err(_) => panic(PanicReason::InvalidActionBits),
-    }
-}
-
-/// Return whether a boolean action type is set in this data element
-#[no_mangle]
-pub extern "C" fn np_ffi_V0Actions_as_u32(actions: V0Actions) -> u32 {
-    actions.as_u32()
 }

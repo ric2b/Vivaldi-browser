@@ -126,7 +126,7 @@ std::string EncodeBitmapToPng(const SkBitmap* bitmap) {
   base::StringPiece base64_input(reinterpret_cast<const char*>(&png_data[0]),
                                  png_data.size());
   std::string base64_output;
-  base::Base64Encode(base64_input, &base64_output);
+  base64_output = base::Base64Encode(base64_input);
   base64_output.insert(0, "data:image/png;base64,");
 
   return base64_output;
@@ -717,7 +717,7 @@ ExtensionActionUtilsExecuteExtensionActionFunction::Run() {
   namespace Results =
       vivaldi::extension_action_utils::ExecuteExtensionAction::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const Extension* extension =
@@ -757,7 +757,7 @@ ExtensionFunction::ResponseAction
 ExtensionActionUtilsToggleBrowserActionVisibilityFunction::Run() {
   using vivaldi::extension_action_utils::ToggleBrowserActionVisibility::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const Extension* extension =
@@ -836,7 +836,7 @@ ExtensionFunction::ResponseAction
 ExtensionActionUtilsRemoveExtensionFunction::Run() {
   using vivaldi::extension_action_utils::RemoveExtension::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const Extension* extension =
@@ -859,7 +859,7 @@ ExtensionFunction::ResponseAction
 ExtensionActionUtilsShowExtensionOptionsFunction::Run() {
   using vivaldi::extension_action_utils::ShowExtensionOptions::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const Extension* extension =
@@ -884,7 +884,7 @@ ExtensionFunction::ResponseAction
 ExtensionActionUtilsShowGlobalErrorFunction::Run() {
   using vivaldi::extension_action_utils::ShowGlobalError::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   GlobalError* error =
@@ -1035,7 +1035,7 @@ ExtensionActionUtilsGetExtensionMenuFunction::Run() {
   namespace Results =
       vivaldi::extension_action_utils::GetExtensionMenu::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const Extension* extension =
@@ -1058,7 +1058,7 @@ ExtensionActionUtilsExecuteMenuActionFunction::Run() {
   namespace Results =
       vivaldi::extension_action_utils::ExecuteMenuAction::Results;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const Extension* extension =

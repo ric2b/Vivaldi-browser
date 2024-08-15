@@ -142,6 +142,9 @@ void ExpectInstalled(UpdaterScope scope);
 // Installs the updater.
 void Install(UpdaterScope scope);
 
+// Installs the updater in EULA-required mode.
+void InstallEulaRequired(UpdaterScope scope);
+
 // Installs the updater and an app via the command line.
 void InstallUpdaterAndApp(UpdaterScope scope,
                           const std::string& app_id,
@@ -283,7 +286,8 @@ void ExpectLegacyUpdate3WebSucceeds(
     const std::string& app_id,
     AppBundleWebCreateMode app_bundle_web_create_mode,
     int expected_final_state,
-    int expected_error_code);
+    int expected_error_code,
+    bool cancel_when_downloading);
 void ExpectLegacyProcessLauncherSucceeds(UpdaterScope scope);
 void ExpectLegacyAppCommandWebSucceeds(UpdaterScope scope,
                                        const std::string& app_id,
@@ -308,7 +312,7 @@ int CountDirectoryFiles(const base::FilePath& dir);
 
 void ExpectSelfUpdateSequence(UpdaterScope scope, ScopedServer* test_server);
 
-void ExpectUninstallPing(UpdaterScope scope, ScopedServer* test_server);
+void ExpectPing(UpdaterScope scope, ScopedServer* test_server, int event_type);
 
 void ExpectUpdateCheckRequest(UpdaterScope scope, ScopedServer* test_server);
 
@@ -417,6 +421,14 @@ void ExpectDeviceManagementPolicyFetchRequest(
     const std::string& dm_token,
     const ::wireless_android_enterprise_devicemanagement::
         OmahaSettingsClientProto& omaha_settings);
+void ExpectDeviceManagementPolicyFetchWithNewPublicKeyRequest(
+    ScopedServer* test_server,
+    const std::string& dm_token,
+    const ::wireless_android_enterprise_devicemanagement::
+        OmahaSettingsClientProto& omaha_settings);
+void ExpectDeviceManagementTokenDeletionRequest(ScopedServer* test_server,
+                                                const std::string& dm_token,
+                                                bool invalidate_token);
 void ExpectDeviceManagementPolicyValidationRequest(ScopedServer* test_server,
                                                    const std::string& dm_token);
 

@@ -35,8 +35,9 @@ const placeholderElement = document.createElement('span');
 // reordered between each other by using drag'n'drop.
 //
 // On completed reorder, a callback is fired.
-export class ReorderableCellGroup implements
-    m.ClassComponent<ReorderableCellGroupAttrs> {
+export class ReorderableCellGroup
+  implements m.ClassComponent<ReorderableCellGroupAttrs>
+{
   // Index of a cell being dragged.
   draggingFrom: number = -1;
 
@@ -57,92 +58,101 @@ export class ReorderableCellGroup implements
       return 'dragged';
     }
     if (this.draggingTo === index) {
-      return this.dropDirection === 'left' ? 'highlight-left' :
-                                             'highlight-right';
+      return this.dropDirection === 'left'
+        ? 'highlight-left'
+        : 'highlight-right';
     }
     return '';
   }
 
   view(vnode: m.Vnode<ReorderableCellGroupAttrs>): m.Children {
-    return vnode.attrs.cells.map(
-        (cell, index) => m(
-            `td.reorderable-cell${cell.extraClass ?? ''}`,
-            {
-              draggable: 'draggable',
-              class: this.getClassForIndex(index),
-              ondragstart: (e: DragEvent) => {
-                this.draggingFrom = index;
-                if (e.dataTransfer !== null) {
-                  e.dataTransfer.setDragImage(placeholderElement, 0, 0);
-                }
+    return vnode.attrs.cells.map((cell, index) =>
+      m(
+        `td.reorderable-cell${cell.extraClass ?? ''}`,
+        {
+          draggable: 'draggable',
+          class: this.getClassForIndex(index),
+          ondragstart: (e: DragEvent) => {
+            this.draggingFrom = index;
+            if (e.dataTransfer !== null) {
+              e.dataTransfer.setDragImage(placeholderElement, 0, 0);
+            }
 
-                raf.scheduleFullRedraw();
-              },
-              ondragover: (e: DragEvent) => {
-                let target = e.target as HTMLElement;
-                if (this.draggingFrom === index || this.draggingFrom === -1) {
-                  // Don't do anything when hovering on the same cell that's
-                  // been dragged, or when dragging something other than the
-                  // cell from the same group
-                  return;
-                }
+            raf.scheduleFullRedraw();
+          },
+          ondragover: (e: DragEvent) => {
+            let target = e.target as HTMLElement;
+            if (this.draggingFrom === index || this.draggingFrom === -1) {
+              // Don't do anything when hovering on the same cell that's
+              // been dragged, or when dragging something other than the
+              // cell from the same group
+              return;
+            }
 
-                while (target.tagName.toLowerCase() !== 'td' &&
-                       target.parentElement !== null) {
-                  target = target.parentElement;
-                }
+            while (
+              target.tagName.toLowerCase() !== 'td' &&
+              target.parentElement !== null
+            ) {
+              target = target.parentElement;
+            }
 
-                // When hovering over cell on the right half, the cell will be
-                // moved to the right of it, vice versa for the left side. This
-                // is done such that it's possible to put dragged cell to every
-                // possible position.
-                const offset = e.clientX - target.getBoundingClientRect().x;
-                const newDropDirection =
-                    (offset > target.clientWidth / 2) ? 'right' : 'left';
-                const redraw = (newDropDirection !== this.dropDirection) ||
-                    (index !== this.draggingTo);
-                this.dropDirection = newDropDirection;
-                this.draggingTo = index;
+            // When hovering over cell on the right half, the cell will be
+            // moved to the right of it, vice versa for the left side. This
+            // is done such that it's possible to put dragged cell to every
+            // possible position.
+            const offset = e.clientX - target.getBoundingClientRect().x;
+            const newDropDirection =
+              offset > target.clientWidth / 2 ? 'right' : 'left';
+            const redraw =
+              newDropDirection !== this.dropDirection ||
+              index !== this.draggingTo;
+            this.dropDirection = newDropDirection;
+            this.draggingTo = index;
 
+            if (redraw) {
+              raf.scheduleFullRedraw();
+            }
+          },
+          ondragenter: (e: DragEvent) => {
+            this.enterCounters[index]++;
 
-                if (redraw) {
-                  raf.scheduleFullRedraw();
-                }
-              },
-              ondragenter: (e: DragEvent) => {
-                this.enterCounters[index]++;
+            if (this.enterCounters[index] === 1 && e.dataTransfer !== null) {
+              e.dataTransfer.dropEffect = 'move';
+            }
+          },
+          ondragleave: (e: DragEvent) => {
+            this.enterCounters[index]--;
+            if (this.draggingFrom === -1 || this.enterCounters[index] > 0) {
+              return;
+            }
 
-                if (this.enterCounters[index] === 1 &&
-                    e.dataTransfer !== null) {
-                  e.dataTransfer.dropEffect = 'move';
-                }
-              },
-              ondragleave: (e: DragEvent) => {
-                this.enterCounters[index]--;
-                if (this.draggingFrom === -1 || this.enterCounters[index] > 0) {
-                  return;
-                }
+            if (e.dataTransfer !== null) {
+              e.dataTransfer.dropEffect = 'none';
+            }
 
-                if (e.dataTransfer !== null) {
-                  e.dataTransfer.dropEffect = 'none';
-                }
+            this.draggingTo = -1;
+            raf.scheduleFullRedraw();
+          },
+          ondragend: () => {
+            if (
+              this.draggingTo !== this.draggingFrom &&
+              this.draggingTo !== -1
+            ) {
+              vnode.attrs.onReorder(
+                this.draggingFrom,
+                this.draggingTo,
+                this.dropDirection,
+              );
+            }
 
-                this.draggingTo = -1;
-                raf.scheduleFullRedraw();
-              },
-              ondragend: () => {
-                if (this.draggingTo !== this.draggingFrom &&
-                    this.draggingTo !== -1) {
-                  vnode.attrs.onReorder(
-                      this.draggingFrom, this.draggingTo, this.dropDirection);
-                }
-
-                this.draggingFrom = -1;
-                this.draggingTo = -1;
-                raf.scheduleFullRedraw();
-              },
-            },
-            cell.content));
+            this.draggingFrom = -1;
+            this.draggingTo = -1;
+            raf.scheduleFullRedraw();
+          },
+        },
+        cell.content,
+      ),
+    );
   }
 
   oncreate(vnode: m.VnodeDOM<ReorderableCellGroupAttrs, this>) {
